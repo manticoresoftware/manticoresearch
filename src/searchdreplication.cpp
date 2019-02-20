@@ -1052,8 +1052,8 @@ bool HandleCmdReplicated ( ReplicationCommand_t & tCmd )
 
 	case RCOMMAND_TRUNCATE:
 		sphLogDebugRpl ( "pq-truncate-commit, index '%s'", tCmd.m_sIndex.cstr() );
-		pIndex->Truncate ( sError );
-		sphWarning ( "%s", sError.cstr() );
+		if ( !pIndex->Truncate ( sError ) )
+			sphWarning ( "%s", sError.cstr() );
 		break;
 
 	default:
@@ -1507,7 +1507,7 @@ bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName
 {
 	// delete existed index first, does not allow to save it's data that breaks sync'ed index files
 	// need a scope for RefRtr's to work
-	bool bJson = false;
+	bool bJson = true;
 	{
 		ServedIndexRefPtr_c pServedCur = GetServed ( sIndexName );
 		if ( pServedCur )
@@ -2559,6 +2559,14 @@ bool RemoteClusterDelete ( const CSphString & sCluster, CSphString & sError )
 		// remove cluster from cache without delete of cluster itself
 		g_hClusters.AddUnique ( sCluster ) = nullptr;
 		g_hClusters.Delete ( sCluster );
+
+		for ( const CSphString & sIndex : pCluster->m_dIndexes )
+		{
+			if ( !SetIndexCluster ( sIndex, CSphString(), sError ) )
+				return false;
+		}
+		pCluster->m_dIndexes.Reset();
+		pCluster->m_dIndexHashes.Reset();
 	}
 
 	ReplicateClusterDone ( pCluster );
@@ -2766,6 +2774,8 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 			return false;
 		}
 	}
+
+	sphLogDebugRpl ( "loading index '%s' from %s", tCmd.m_sIndex.cstr(), tCmd.m_sIndexPath.cstr() );
 
 	CSphConfigSection hIndex;
 	hIndex.Add ( CSphVariant ( tCmd.m_sIndexPath.cstr(), 0 ), "path" );
@@ -3028,18 +3038,21 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 		return false;
 
 	{
-		PQRemoteData_t tAgentData;
-		tAgentData.m_sCluster = sCluster;
-		tAgentData.m_sIndex = sIndex;
-		tAgentData.m_sFileHash = sFileHash;
-		tAgentData.m_iIndexFileSize = iFileSize;
-
+		CSphFixedVector<PQRemoteData_t> dAgentData ( dSendStates.GetLength() );
 		VecRefPtrs_t<AgentConn_t *> dNodes;
 		dNodes.Resize ( dSendStates.GetLength() );
 		ARRAY_FOREACH ( i, dSendStates )
 		{
-			tAgentData.m_sIndexPath = dSendStates[i].m_sRemoteIndexPath;
-			dNodes[i] = CreateAgent ( *dDesc[i], tAgentData );
+			const RemoteFileState_t & tState = dSendStates[i];
+
+			PQRemoteData_t & tAgentData = dAgentData[i];
+			tAgentData.m_sCluster = sCluster;
+			tAgentData.m_sIndex = sIndex;
+			tAgentData.m_sFileHash = sFileHash;
+			tAgentData.m_iIndexFileSize = iFileSize;
+			tAgentData.m_sIndexPath = tState.m_sRemoteIndexPath;
+
+			dNodes[i] = CreateAgent ( *tState.m_pAgentDesc, tAgentData );
 		}
 
 		PQRemoteIndexAdd_t tReq;
@@ -3256,14 +3269,18 @@ bool RemoteClusterSynced ( const PQRemoteData_t & tCmd, CSphString & sError )
 		if ( !ppCluster )
 		{
 			sError.SetSprintf ( "unknown cluster '%s'", tCmd.m_sCluster.cstr() );
-			return false;
+			bValid = false;
 		}
 
+		int iRes = 0;
 		if ( !bValid )
+		{
 			tGtid.seqno = WSREP_SEQNO_UNDEFINED;
+			iRes = -ECANCELED;
+		}
 
 		wsrep_t * pProvider = (*ppCluster)->m_pProvider;
-		pProvider->sst_received ( pProvider, &tGtid, nullptr, 0, bValid ? 0 : -ECANCELED );
+		pProvider->sst_received ( pProvider, &tGtid, nullptr, 0, iRes );
 	}
 
 	return bValid;

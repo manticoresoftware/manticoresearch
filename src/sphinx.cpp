@@ -1239,7 +1239,7 @@ public:
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const;
 	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const { return true; }
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & , int , CSphString & , CSphString & ) { return -1; }
-	virtual bool				SaveAttributes ( CSphString & ) const { return false; }
+	virtual bool				SaveAttributes ( CSphString & ) const { return true; }
 	virtual DWORD				GetAttributeStatus () const { return 0; }
 	virtual bool				CreateModifiedFiles ( bool , const CSphString & , ESphAttr , int , CSphString & ) { return true; }
 	virtual bool				AddRemoveAttribute ( bool, const CSphString &, ESphAttr, CSphString & ) { return true; }

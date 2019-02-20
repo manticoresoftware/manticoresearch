@@ -20,6 +20,19 @@ index pq
 	rt_attr_json	= json_data
 }
 
+index pq1
+{
+	type = percolate
+	path			= <data_path/>/pq_1
+	rt_field 		= title
+	rt_field 		= content
+	rt_attr_json	= json_data
+	
+    html_strip		= 1
+    html_remove_elements = style, script
+    charset_table 	= english
+}
+
 </config>
 
 <sphqueries>
@@ -56,6 +69,12 @@ index pq
 <sphinxql>INSERT INTO pq (query, filters) VALUES ('test', 'json_data.text.status.staff=\'got some\'')</sphinxql>
 <sphinxql>INSERT INTO pq (query, filters) VALUES ('test', 'json_data.text.status.state=0')</sphinxql>
 <sphinxql>CALL PQ ('pq', ('{"id":21,"json_data":{"text":{"status":{"state":0}}}, "title":"test me"}'), 1 as docs, 1 as query, 'id' as docs_id)</sphinxql>
+
+<!-- regression - stripper alter field -->
+<sphinxql>INSERT INTO pq1 (query) VALUES ('@title c')</sphinxql>
+<sphinxql>CALL PQ('pq1', ('{\"title\":\"a\",\"content\":\"c\"}'),1 as docs,1 as query)</sphinxql>
+<sphinxql>CALL PQ('pq1', ('{\"content\":\"c\"}'),1 as docs,1 as query)</sphinxql>
+<sphinxql>CALL PQ('pq1', ('{\"title\":\"c\"}'),1 as docs,1 as query)</sphinxql>
 
 </sphqueries>
 

@@ -12588,7 +12588,25 @@ static bool ParseBsonDocument ( const VecTraits_T<BYTE>& dDoc, const CSphHash<Sc
 		{
 			if ( pItem->m_iField!=-1 && dChild.IsString () )
 			{
-				dFields[pItem->m_iField] = Vector<const char> ( dChild );
+				// stripper prior to build hits does not preserve field length
+				// but works with \0 strings and could walk all document and modifies it and alter field length
+				const VecTraits_T<const char> tField = Vector<const char> ( dChild );
+				if ( tField.GetLength() )
+				{
+					int64_t iOff = tStrings.m_dPackedData.GetLength();
+
+					// copy field content with tail zeroes
+					BYTE * pDst = tStrings.m_dPackedData.AddN ( tField.GetLength() + 1 + CSphString::GetGap() );
+					memcpy ( pDst, tField.Begin(), tField.GetLength() );
+					memset ( pDst + tField.GetLength(), 0, 1 + CSphString::GetGap() );
+
+					// pack offset into pointer then restore pointer after m_dPackedData filed
+					dFields[pItem->m_iField] = VecTraits_T<const char> ( (const char *)iOff, tField.GetLength() );
+				} else
+				{
+					dFields[pItem->m_iField] = tField;
+				}
+
 				if ( pItem==pId )
 					sMsg.Warn ( "field '%s' requested as docs_id identifier, but it is field!", sName.cstr() );
 			} else
@@ -13077,7 +13095,7 @@ static void PQLocalMatch ( const BlobVec_t &dDocs, const CSphString& sIndex, con
 		}
 	} else
 	{
-		// even withoout JSON docs MVA should match to schema definition on inserting data into accumulator
+		// even without JSON docs MVA should match to schema definition on inserting data into accumulator
 		for ( int i = 0; i<iAttrsCount; ++i )
 		{
 			const CSphColumnInfo &tCol = tSchema.GetAttr ( i );
@@ -13135,6 +13153,17 @@ static void PQLocalMatch ( const BlobVec_t &dDocs, const CSphString& sIndex, con
 			}
 
 			tStrings.SavePointersTo ( dStrings, false );
+
+			// convert back offset into tStrings buffer into pointers
+			for ( VecTraits_T<const char> & tField : dFields )
+			{
+				if ( !tField.GetLength() )
+					continue;
+
+				int64_t iOff = int64_t( tField.Begin() );
+				int iLen = tField.GetLength();
+				tField = VecTraits_T<const char> ( (const char *)( tStrings.m_dPackedData.Begin()+iOff ), iLen );
+			}
 		}
 		FixParsedMva ( dMvaParsed, dMva, iMvaCounter );
 

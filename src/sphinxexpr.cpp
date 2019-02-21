@@ -1251,7 +1251,13 @@ public:
 	{
 		const BYTE * pVal = nullptr;
 		ESphJsonType eJson = GetKey ( &pVal, tMatch );
-		return ( eJson==JSON_STRING ) ? sphUnpackStr ( pVal, ppStr ) : 0;
+		if ( eJson!=JSON_STRING)
+			return 0;
+
+		//      using sphUnpackStr() is wrong, because BSON uses different store format of string length
+		int iLen = sphJsonUnpackInt ( &pVal );
+		*ppStr = pVal;
+		return iLen;
 	}
 
 	float Eval ( const CSphMatch & tMatch ) const override { return DoEval<float> ( tMatch ); }

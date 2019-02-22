@@ -1686,6 +1686,257 @@ struct Expr_TimeDiff_c : public Expr_Binary_c
 };
 
 
+class Expr_SubstringIndex_c : public ISphStringExpr
+{
+private:
+	CSphRefcountedPtr<ISphExpr> m_pArg;
+	CSphString m_sDelim;
+	int m_iCount = 0;
+	int m_iLenDelim = 0;
+	bool m_bFreeResPtr = false;
+
+public:
+	explicit Expr_SubstringIndex_c ( ISphExpr * pArg, ISphExpr * pDelim, ISphExpr * pCount )
+		: m_pArg ( pArg )
+		, m_iCount ( 0 )
+		, m_bFreeResPtr ( false )
+	{
+		assert ( pArg && pDelim && pCount );
+		SafeAddRef ( pArg );
+		m_bFreeResPtr = m_pArg->IsDataPtrAttr();
+
+		const BYTE * pBuf = nullptr;
+		CSphMatch tTmp;
+		
+		m_iLenDelim = pDelim->StringEval ( tTmp, &pBuf );
+		m_sDelim.SetBinary ( (const char *)pBuf, m_iLenDelim );
+		if ( pDelim->IsDataPtrAttr() )
+			SafeDeleteArray ( pBuf );
+
+		m_iCount = pCount->IntEval ( tTmp );
+	}
+
+	void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override
+	{
+		if ( m_pArg )
+			m_pArg->FixupLocator ( pOldSchema, pNewSchema );
+	}
+
+	void Command ( ESphExprCommand eCmd, void * pArg ) override
+	{
+		if ( m_pArg )
+			m_pArg->Command ( eCmd, pArg );
+	}
+
+	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final
+	{
+		const char* pDoc = nullptr;
+		int iDocLen = m_pArg->StringEval ( tMatch, (const BYTE **)&pDoc );
+		int iLength = 0;
+		*ppStr = NULL;
+
+		if ( pDoc && iDocLen>0 && m_iLenDelim>0 && m_iCount!=0 )
+		{
+			if ( m_iCount>0 )
+				LeftSearch ( pDoc, iDocLen, m_iCount, false, ppStr, &iLength );
+			else
+				RightSearch ( pDoc, iDocLen, m_iCount, ppStr, &iLength );
+		}
+
+		if ( m_pArg->IsDataPtrAttr() )
+			SafeDeleteArray ( pDoc );
+
+		return iLength;
+	}
+
+	bool IsDataPtrAttr() const final
+	{
+		return m_bFreeResPtr;
+	}
+
+	//	base class does not convert string to float
+	float Eval ( const CSphMatch & tMatch ) const final
+	{
+		float fVal = 0.f;
+		const char * pBuf = nullptr;
+		int  iLen = StringEval ( tMatch, (const BYTE **) &pBuf );
+
+		const char * pMax = sphFindLastNumeric ( pBuf, iLen );
+		if ( pBuf<pMax )
+		{
+			fVal = (float) strtod ( pBuf, NULL );
+		}
+		else
+		{
+			CSphString sBuf;
+			sBuf.SetBinary ( pBuf, iLen );
+			fVal = (float) strtod ( sBuf.cstr(), NULL );
+		}
+
+		if ( IsDataPtrAttr() )
+			SafeDeleteArray ( pBuf );
+		return fVal;
+	}
+
+	//	base class does not convert string to int
+	int IntEval ( const CSphMatch & tMatch ) const final
+	{
+		int iVal = 0;
+		const char * pBuf = nullptr;
+		int  iLen = StringEval ( tMatch, (const BYTE **) &pBuf );
+
+		const char * pMax = sphFindLastNumeric ( pBuf, iLen );
+		if ( pBuf<pMax )
+		{
+			iVal = strtol ( pBuf, NULL, 10 );
+		}
+		else
+		{
+			CSphString sBuf;
+			sBuf.SetBinary ( pBuf, iLen );
+			iVal = strtol ( sBuf.cstr(), NULL, 10 );
+		}
+
+		if ( IsDataPtrAttr() )
+			SafeDeleteArray ( pBuf );
+		return iVal;
+	}
+
+	//	base class does not convert string to int64
+	int64_t Int64Eval ( const CSphMatch & tMatch ) const final
+	{
+		int64_t iVal = 0;
+		const char * pBuf = nullptr;
+		int  iLen = StringEval ( tMatch, (const BYTE **) &pBuf );
+
+		const char * pMax = sphFindLastNumeric ( pBuf, iLen );
+		if ( pBuf<pMax )
+		{
+			iVal = strtoll ( pBuf, NULL, 10 );
+		}
+		else
+		{
+			CSphString sBuf;
+			sBuf.SetBinary ( pBuf, iLen );
+			iVal = strtoll ( sBuf.cstr(), NULL, 10 );
+		}
+
+		if ( IsDataPtrAttr() )
+			SafeDeleteArray ( pBuf );
+		return iVal;
+	}
+
+	bool IsConst () const final { return true; }
+
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
+	{
+		EXPR_CLASS_NAME("Expr_SubstringIndex_c");
+		CALC_CHILD_HASH(m_pArg);
+		CALC_POD_HASH(m_sDelim);
+		CALC_POD_HASH(m_iCount);
+		return CALC_DEP_HASHES();
+	}
+
+private:
+	int SetResultString ( const char * pDoc, int iDocLen, const BYTE ** ppResStr ) const;
+	int LeftSearch ( const char * pDoc, int iDocLen, int iCount, bool bGetRight, const BYTE ** ppResStr, int * pResLen ) const;
+	int RightSearch ( const char * pDoc, int iDocLen, int iCount, const BYTE ** ppResStr, int * pResLen ) const;
+};
+
+//	in case of input static string, function returns only pointer and length of substring. buffer is not allocated
+//	in case of input dynamic string, function allocates buffer for substring and copy substring to it
+int Expr_SubstringIndex_c::SetResultString ( const char * pDoc, int iDocLen, const BYTE ** ppResStr ) const
+{
+	if ( IsDataPtrAttr()==false )
+	{
+		*ppResStr = (const BYTE *) pDoc;
+	}
+	else
+	{
+		CSphString  sRetVal;
+		sRetVal.SetBinary ( pDoc, iDocLen );
+		*ppResStr = (const BYTE *) sRetVal.Leak();
+	}
+	return iDocLen;
+}
+
+int Expr_SubstringIndex_c::LeftSearch ( const char * pDoc, int iDocLen, int iCount, bool bGetRight, const BYTE ** ppResStr, int * pResLen ) const
+{
+	int	  iTotalDelim = 0;
+	const char * pDelBeg = m_sDelim.cstr();
+	const char * pDelEnd = pDelBeg + m_iLenDelim;
+	const char * pStrBeg = pDoc;
+	const char * pStrEnd = (pStrBeg + iDocLen) - m_iLenDelim + 1;
+
+	while ( pStrBeg<pStrEnd )
+	{
+		//	check first delimer string's char with current char from pStr
+		if ( *pStrBeg==*pDelBeg )
+		{
+			//	first char is found, now we compare next chars in delimer string
+			bool	bMatched = true;
+			const char * p1 = pStrBeg + 1;
+			const char * p2 = pDelBeg + 1;
+			while ( bMatched && p2!=pDelEnd )
+			{
+				if ( *p1!=*p2 )
+					bMatched = false;
+				p1++;
+				p2++;
+			}
+
+			//	if we found matched delimer string, then return left substring or search next delimer string
+			if ( bMatched )
+			{
+				iTotalDelim++;
+				iCount--;
+
+				if ( iCount==0 )
+				{
+					if ( ppResStr && !bGetRight )
+						*pResLen = SetResultString ( pDoc, pStrBeg - pDoc, ppResStr );
+
+					if ( ppResStr && bGetRight )
+					{
+						pStrBeg += m_iLenDelim;
+						*pResLen = SetResultString ( pStrBeg, iDocLen - (pStrBeg - pDoc), ppResStr );
+					}
+
+					return iTotalDelim;
+				}
+				pStrBeg += m_iLenDelim;
+				continue;
+			}
+		}
+
+		//	delimer string does not maatch with current ptr, goto to next char and repeat comparation
+		int  iCharLen = sphUTF8Len ( pStrBeg, 1 );
+		pStrBeg += ( iCharLen > 0 ) ? iCharLen : 1;
+	}
+
+	//	not found, return original string
+	if ( iCount && ppResStr )
+		*pResLen = SetResultString ( pDoc, iDocLen, ppResStr );
+
+	return iTotalDelim;
+}
+
+int Expr_SubstringIndex_c::RightSearch ( const char * pDoc, int iDocLen, int iCount, const BYTE ** ppResStr, int * pResLen ) const
+{
+	//	find and count (iNumFoundDelim) of all delimer sub strings
+	int  iNumFoundDelim = LeftSearch ( pDoc, iDocLen, iDocLen+1, false, NULL, NULL );
+
+	//	correct iCount (which is negative) to positive index from left to right
+	iCount += iNumFoundDelim + 1;
+
+	//	if not found, return original string
+	if ( iCount<=0 )
+		*pResLen = SetResultString ( pDoc, iDocLen, ppResStr );
+
+	//	find delimer sub string according to iCount and return result
+	return LeftSearch ( pDoc, iDocLen, iCount, true, ppResStr, pResLen );
+}
+
 struct Expr_Iterator_c : Expr_JsonField_c
 {
 	SphAttr_t * m_pData;
@@ -2453,7 +2704,9 @@ enum Func_e
 	FUNC_ATAN2,
 	FUNC_RAND,
 
-	FUNC_REGEX
+	FUNC_REGEX,
+
+	FUNC_SUBSTRING_INDEX
 };
 
 
@@ -2542,7 +2795,9 @@ static FuncDesc_t g_dFuncs[] =
 	{ "atan2",			2,	FUNC_ATAN2,			SPH_ATTR_FLOAT },
 	{ "rand",			-1,	FUNC_RAND,			SPH_ATTR_FLOAT },
 
-	{ "regex",			2,	FUNC_REGEX,			SPH_ATTR_INTEGER }
+	{ "regex",			2,	FUNC_REGEX,			SPH_ATTR_INTEGER },
+
+	{ "substring_index",	3,	FUNC_SUBSTRING_INDEX,	SPH_ATTR_STRINGPTR }
 };
 
 
@@ -2586,32 +2841,32 @@ static int FuncHashLookup ( const char * sKey )
 
 	static BYTE dAsso[] =
     {
-      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
-      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
-      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
-      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
-      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
-        0, 134, 134, 134, 134, 134, 134, 134, 134, 134,
-      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
-      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
-      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
-      134, 134, 134, 134, 134,  50, 134,  15,  50,   0,
-       75,  10,   0,  10,  15,   0, 134, 134,   5,   0,
-       10,   0,  45,   0,  25,  35,  25,  25, 134,  75,
-       60,  40,  10, 134, 134, 134, 134, 134, 134, 134,
-      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
-      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
-      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
-      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
-      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
-      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
-      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
-      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
-      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
-      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
-      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
-      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
-      134, 134, 134, 134, 134, 134
+		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
+		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
+		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
+		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
+		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
+		 15, 139, 139, 139, 139, 139, 139, 139, 139, 139,
+		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
+		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
+		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
+		139, 139, 139, 139, 139,  25, 139,	15,  25,   0,
+		 75,  10,  65,	10,  15,   0, 139, 139,   5,   0,
+		 10,   0,  55,	 0,  25,  35,  25,	25, 139,  80,
+		 55,  40,	0, 139, 139, 139, 139, 139, 139, 139,
+		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
+		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
+		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
+		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
+		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
+		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
+		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
+		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
+		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
+		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
+		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
+		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
+		139, 139, 139, 139, 139, 139
     };
 
 	auto * s = (const BYTE*) sKey;
@@ -2625,20 +2880,20 @@ static int FuncHashLookup ( const char * sKey )
 
 	static int dIndexes[] =
 	{
-		-1, -1, 27, -1, -1, -1, -1, -1, -1, -1,
-		3, -1, 31, 23, 2, 16, 21, 6, 38, 7,
-		8, -1, 43, 56, 60, 61, -1, 34, 57, 37,
-		13, 47, 39, 54, 29, 48, -1, -1, 5, 50,
-		33, -1, 45, 30, 20, -1, -1, -1, 4, 12,
-		64, 22, -1, 49, 63, 44, 36, 51, 52, 14,
-		62, 41, 55, 53, 10, -1, 11, -1, 58, 17,
-		-1, -1, -1, 42, 18, 35, -1, 19, 24, 26,
-		-1, 32, -1, -1, 40, -1, -1, -1, 0, -1,
-		-1, -1, 59, -1, 28, -1, -1, -1, -1, -1,
-		-1, -1, -1, 1, -1, -1, 46, -1, -1, -1,
-		-1, -1, -1, -1, -1, -1, -1, -1, 9, -1,
-		-1, -1, -1, 25, -1, -1, -1, -1, -1, -1,
-		-1, -1, -1, 15
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, 31, 23, 2, 16, 21, 6, 38, 7,
+		8, -1, 39, 56, 60, 61, -1, 34, 57, 37,
+		13, 47, -1, 54, 29, 48, -1, -1, 5, 50,
+		33, 11, 45, 30, 20, 44, -1, -1, 4, 12,
+		64, 22, -1, 49, 63, -1, 32, 51, 52, 40,
+		62, 41, 55, 53, 10, -1, 36, 27, 58, 17,
+		35, -1, -1, 24, 18, 3, -1, 19, 1, 26,
+		-1, -1, -1, 42, -1, -1, -1, 43, -1, -1,
+		-1, -1, 59, 0, 28, -1, -1, -1, -1, 14,
+		65, -1, -1, -1, -1, -1, 46, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, 9, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, 15, -1, -1, -1, -1, 25,
 	};
 
 	if ( iHash>=(int)(sizeof(dIndexes)/sizeof(dIndexes[0])) )
@@ -4969,6 +5224,10 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 						return CreateRegexNode ( dArgs[0], dArgs[1] );
 						break;
 
+					case FUNC_SUBSTRING_INDEX:
+						return new Expr_SubstringIndex_c ( dArgs[0], dArgs[1], dArgs[2] );
+						break;
+
 					default: // just make gcc happy
 						break;
 				}
@@ -7015,7 +7274,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 		bGotString |= ( dRetTypes[i]==SPH_ATTR_STRING );
 		bGotMva |= ( dRetTypes[i]==SPH_ATTR_UINT32SET || dRetTypes[i]==SPH_ATTR_INT64SET );
 	}
-	if ( bGotString && !( eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST || eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D || eFunc==FUNC_REGEX ) )
+	if ( bGotString && !( eFunc==FUNC_SUBSTRING_INDEX || eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST || eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D || eFunc==FUNC_REGEX ) )
 	{
 		m_sParserError.SetSprintf ( "%s() arguments can not be string", sFuncName );
 		return -1;
@@ -7142,6 +7401,32 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 		if ( dRetTypes.GetLength ()==3 && dRetTypes[2]!=SPH_ATTR_MAPARG )
 		{
 			m_sParserError.SetSprintf ( "%s() argument 3 must be map", sFuncName );
+			return -1;
+		}
+		break;
+	case FUNC_SUBSTRING_INDEX:
+		if ( dRetTypes.GetLength()!=3 )
+		{
+			m_sParserError.SetSprintf ( "%s() called with %d args, but 3 args expected", sFuncName
+				, dRetTypes.GetLength () );
+			return -1;
+		}
+		
+		if ( dRetTypes[0]!=SPH_ATTR_STRING && dRetTypes[0]!=SPH_ATTR_JSON && dRetTypes[0]!=SPH_ATTR_JSON_FIELD )
+		{
+			m_sParserError.SetSprintf ( "%s() arguments 1 must be string or json", sFuncName );
+			return -1;
+		}
+
+		if ( dRetTypes[1]!=SPH_ATTR_STRING )
+		{
+			m_sParserError.SetSprintf ( "%s() arguments 2 must be string", sFuncName );
+			return -1;
+		}
+
+		if ( dRetTypes[2]!=SPH_ATTR_INTEGER )
+		{
+			m_sParserError.SetSprintf ( "%s() arguments 3 must be numeric", sFuncName );
 			return -1;
 		}
 		break;

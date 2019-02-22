@@ -2223,7 +2223,7 @@ public:
 		CSphVector<SphExpanded_t>	m_dExpanded;
 		const bool					m_bPayload;
 		int							m_iExpansionLimit;
-		const bool					m_bHasMorphology;
+		const bool					m_bHasExactForms;
 		const ESphHitless			m_eHitless;
 
 		ISphSubstringPayload *		m_pPayload;
@@ -2231,7 +2231,7 @@ public:
 		int							m_iTotalHits;
 		const void *				m_pIndexData;
 
-		Args_t ( bool bPayload, int iExpansionLimit, bool bHasMorphology, ESphHitless eHitless, const void * pIndexData );
+		Args_t ( bool bPayload, int iExpansionLimit, bool bHasExactForms, ESphHitless eHitless, const void * pIndexData );
 		~Args_t ();
 		void AddExpanded ( const BYTE * sWord, int iLen, int iDocs, int iHits );
 		const char * GetWordExpanded ( int iIndex ) const;
@@ -2270,7 +2270,7 @@ struct ExpansionContext_t
 	int m_iMinPrefixLen					= 0;
 	int m_iMinInfixLen					= 0;
 	int m_iExpansionLimit				= 0;
-	bool m_bHasMorphology				= false;
+	bool m_bHasExactForms				= false;
 	bool m_bMergeSingles				= false;
 	CSphScopedPayload * m_pPayloads		= nullptr;
 	ESphHitless m_eHitless				{SPH_HITLESS_NONE};

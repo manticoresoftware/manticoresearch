@@ -16613,7 +16613,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 		{
 			dQposWildcards.Add ( iQpos );
 
-			ISphWordlist::Args_t tWordlist ( false, tCtx.m_iExpansionLimit, tCtx.m_bHasMorphology, tCtx.m_eHitless, tCtx.m_pIndexData );
+			ISphWordlist::Args_t tWordlist ( false, tCtx.m_iExpansionLimit, tCtx.m_bHasExactForms, tCtx.m_eHitless, tCtx.m_pIndexData );
 			bool bExpanded = sphExpandGetWords ( (const char *)sWord, tCtx, tWordlist );
 
 			int iDocs = 0;
@@ -16903,7 +16903,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	tExpCtx.m_pWordlist = &m_tWordlist;
 	tExpCtx.m_iMinPrefixLen = m_tSettings.m_iMinPrefixLen;
 	tExpCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
-	tExpCtx.m_bHasMorphology = m_pDict->HasMorphology();
+	tExpCtx.m_bHasExactForms = ( m_pDict->HasMorphology() || m_tSettings.m_bIndexExactWords );
 	tExpCtx.m_bMergeSingles = false;
 	tExpCtx.m_eHitless = m_tSettings.m_eHitless;
 
@@ -17302,7 +17302,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 		return pNode;
 
 	bool bUseTermMerge = ( tCtx.m_bMergeSingles && pNode->m_dSpec.m_dZones.GetLength()==0 );
-	ISphWordlist::Args_t tWordlist ( bUseTermMerge, tCtx.m_iExpansionLimit, tCtx.m_bHasMorphology, tCtx.m_eHitless, tCtx.m_pIndexData );
+	ISphWordlist::Args_t tWordlist ( bUseTermMerge, tCtx.m_iExpansionLimit, tCtx.m_bHasExactForms, tCtx.m_eHitless, tCtx.m_pIndexData );
 
 	if ( !sphExpandGetWords ( sFull, tCtx, tWordlist ) )
 	{
@@ -17409,7 +17409,7 @@ bool sphExpandGetWords ( const char * sWord, const ExpansionContext_t & tCtx, IS
 		int iBytes = sCodes - sPrefix;
 		// prefix expansion should work on nonstemmed words only
 		char sFixed[MAX_KEYWORD_BYTES];
-		if ( tCtx.m_bHasMorphology )
+		if ( tCtx.m_bHasExactForms )
 		{
 			sFixed[0] = MAGIC_WORD_HEAD_NONSTEMMED;
 			memcpy ( sFixed+1, sPrefix, iBytes );
@@ -17480,7 +17480,7 @@ XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta *
 	tCtx.m_iMinPrefixLen = m_tSettings.m_iMinPrefixLen;
 	tCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
 	tCtx.m_iExpansionLimit = m_iExpansionLimit;
-	tCtx.m_bHasMorphology = m_pDict->HasMorphology();
+	tCtx.m_bHasExactForms = ( m_pDict->HasMorphology() || m_tSettings.m_bIndexExactWords );
 	tCtx.m_bMergeSingles = ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_INLINE && ( uQueryDebugFlags & QUERY_DEBUG_NO_PAYLOAD )==0 );
 	tCtx.m_pPayloads = pPayloads;
 	tCtx.m_eHitless = m_tSettings.m_eHitless;
@@ -30745,10 +30745,10 @@ const BYTE * CWordlist::AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint
 }
 
 
-ISphWordlist::Args_t::Args_t ( bool bPayload, int iExpansionLimit, bool bHasMorphology, ESphHitless eHitless, const void * pIndexData )
+ISphWordlist::Args_t::Args_t ( bool bPayload, int iExpansionLimit, bool bHasExactForms, ESphHitless eHitless, const void * pIndexData )
 	: m_bPayload ( bPayload )
 	, m_iExpansionLimit ( iExpansionLimit )
-	, m_bHasMorphology ( bHasMorphology )
+	, m_bHasExactForms ( bHasExactForms )
 	, m_eHitless ( eHitless )
 	, m_pIndexData ( pIndexData )
 {
@@ -31090,7 +31090,7 @@ void CWordlist::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 		return;
 
 	DictEntryDiskPayload_t tDict2Payload ( tArgs.m_bPayload, tArgs.m_eHitless );
-	const int iSkipMagic = ( tArgs.m_bHasMorphology ? 1 : 0 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
+	const int iSkipMagic = ( tArgs.m_bHasExactForms ? 1 : 0 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
 
 	int dWildcard [ SPH_MAX_WORD_LEN + 1 ];
 	int * pWildcard = ( sphIsUTF8 ( sWildcard ) && sphUTF8ToWideChar ( sWildcard, dWildcard, SPH_MAX_WORD_LEN ) ) ? dWildcard : NULL;
@@ -31106,7 +31106,7 @@ void CWordlist::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 				break;
 
 			// stemmed terms should not match suffixes
-			if ( tArgs.m_bHasMorphology && *tDictReader.m_sKeyword!=MAGIC_WORD_HEAD_NONSTEMMED )
+			if ( tArgs.m_bHasExactForms && *tDictReader.m_sKeyword!=MAGIC_WORD_HEAD_NONSTEMMED )
 				continue;
 
 			if ( sphWildcardMatch ( (const char *)tDictReader.m_sKeyword+iSkipMagic, sWildcard, pWildcard ) )

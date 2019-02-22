@@ -44,6 +44,29 @@ index ord2
 	path				= <data_path/>/ord2
 	wordforms			= <this_test/>/wf2.txt
 }
+
+source test1
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= select *, 11 as gid from test_table1
+	sql_attr_uint		= gid
+}
+
+index idx_pre1
+{
+	source				= test1
+	path				= <data_path/>/idx_pre1
+	index_exact_words   = 1	
+	min_prefix_len 		= 1
+}
+
+index idx_pre2 : idx_pre1
+{
+	path				= <data_path/>/idx_pre2
+	wordforms			= <this_test/>/wf_pre.txt
+}
+
 </config>
 
 <db_create>
@@ -69,6 +92,16 @@ INSERT INTO test_table VALUES
 ( 120, 'wound care and ostomy' )
 </db_insert>
 
+<db_create>
+CREATE TABLE test_table1
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	content VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table1</db_drop>
+<db_insert>INSERT INTO test_table1 VALUES ( 100, 'forty' ), ( 101, 'fortyfour' )</db_insert>
+
 <sphqueries>
 <sphinxql>select * from test where match('multi_before')</sphinxql>
 <sphinxql>select * from test where match('wordform')</sphinxql>
@@ -85,6 +118,10 @@ INSERT INTO test_table VALUES
 <!-- regression for multiforms applied in the wrong order -->
 <sphinxql>select * from ord1 where match('^wound$')</sphinxql>
 <sphinxql>select * from ord2 where match('^wound$')</sphinxql>
+
+<!-- regression prefix matches no wordform only index -->
+<sphinxql>select id from idx_pre1 where match('forty*') order by id asc</sphinxql>
+<sphinxql>select id from idx_pre2 where match('forty*') order by id asc</sphinxql>
 </sphqueries>
 
 </test>

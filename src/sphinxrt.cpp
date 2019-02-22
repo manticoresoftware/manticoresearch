@@ -6362,7 +6362,7 @@ void RtIndex_t::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 
 	// find those prefixes
 	CSphVector<DWORD> dPoints;
-	const int iSkipMagic = ( tArgs.m_bHasMorphology ? 1 : 0 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
+	const int iSkipMagic = ( tArgs.m_bHasExactForms ? 1 : 0 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
 	const CSphFixedVector<RtSegment_t*> & dSegments = *((CSphFixedVector<RtSegment_t*> *)tArgs.m_pIndexData);
 
 	DictEntryRtPayload_t tDict2Payload ( tArgs.m_bPayload, dSegments.GetLength() );
@@ -6393,7 +6393,7 @@ void RtIndex_t::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 			const RtWord_t * pWord = NULL;
 			while ( ( pWord = tReader.UnzipWord() )!=NULL )
 			{
-				if ( tArgs.m_bHasMorphology && pWord->m_sWord[1]!=MAGIC_WORD_HEAD_NONSTEMMED )
+				if ( tArgs.m_bHasExactForms && pWord->m_sWord[1]!=MAGIC_WORD_HEAD_NONSTEMMED )
 					continue;
 
 				// check it
@@ -7089,7 +7089,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			tExpCtx.m_iMinPrefixLen = m_tSettings.m_iMinPrefixLen;
 			tExpCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
 			tExpCtx.m_iExpansionLimit = m_iExpansionLimit;
-			tExpCtx.m_bHasMorphology = m_pDict->HasMorphology();
+			tExpCtx.m_bHasExactForms = ( m_pDict->HasMorphology() || m_tSettings.m_bIndexExactWords );
 			tExpCtx.m_bMergeSingles = ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_INLINE && ( pQuery->m_uDebugFlags & QUERY_DEBUG_NO_PAYLOAD )==0 );
 			tExpCtx.m_pPayloads = &tPayloads;
 			tExpCtx.m_pIndexData = &tGuard.m_dRamChunks;
@@ -7540,7 +7540,7 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		tExpCtx.m_pWordlist = this;
 		tExpCtx.m_iMinPrefixLen = m_tSettings.m_iMinPrefixLen;
 		tExpCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
-		tExpCtx.m_bHasMorphology = m_pDict->HasMorphology();
+		tExpCtx.m_bHasExactForms = ( m_pDict->HasMorphology() || m_tSettings.m_bIndexExactWords );
 		tExpCtx.m_bMergeSingles = false;
 		tExpCtx.m_pIndexData = &tGuard.m_dRamChunks;
 

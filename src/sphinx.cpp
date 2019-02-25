@@ -4006,6 +4006,7 @@ void CSphTokenizerBase::CloneBase ( const CSphTokenizerBase * pFrom, ESphTokeniz
 	m_uBlendVariants = pFrom->m_uBlendVariants;
 	m_bBlendSkipPure = pFrom->m_bBlendSkipPure;
 	m_bShortTokenFilter = ( eMode!=SPH_CLONE_INDEX );
+	m_bDetectSentences = pFrom->m_bDetectSentences;
 
 	switch ( eMode )
 	{

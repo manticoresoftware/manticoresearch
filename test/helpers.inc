@@ -408,7 +408,7 @@ function GetSearchd ( &$searchd, &$error )
 
 function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watchdog = false, $addr=false, $port=false )
 {
-	global $g_locals, $windows, $action_wait_timeout, $sd_address, $sd_port;
+	global $g_locals, $windows, $action_wait_timeout, $sd_address, $sd_port, $g_repli_path;
 
 
 	$abs_config_file = testdir($config_file);
@@ -451,8 +451,13 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 		$process = popen ("start /min cmd /c \"$path --config $abs_config_file --pidfile --console $extra_params > $abs_error_file\"", "r" );
 		pclose ( $process );
 	}
-	else
+	else if ( $g_repli_path )
+	{
+		system ( "LD_LIBRARY_PATH=$g_repli_path $path --config $abs_config_file $extra_params > $abs_error_file", $retval );
+	} else
+	{
 		system ( "$path --config $abs_config_file $extra_params > $abs_error_file", $retval );
+	}
 
 	if ($cd)
 		chdir($backdir);
@@ -868,6 +873,11 @@ class QLClient
 		}
 		$res .= "$n rows";
 		return $res;
+	}
+	
+	function SetConnection($conn)
+	{
+		$this->_conn = $conn;
 	}
 }
 
@@ -1693,7 +1703,7 @@ class SphinxConfig
 
 	function RunQuerySphinxQL ( &$error, $bench=false )
 	{
-		global $g_pick_query;
+		global $g_pick_query, $agents, $index_data_path;
 
 		$total = $done = 0;
 		$qcount = count($this->_sphqueries);
@@ -1724,12 +1734,16 @@ class SphinxConfig
 				else
 					$query = 'show meta';
 			}
+			$query_ref;
 			$sleep_agent=0;
 			$use_agent=0;
 			$vip_connection=0;
 			$system_cmd = "";
 			if (is_array($query))
 			{
+				$cluster_listen = -1;
+				$cluster_connect = -1;
+				$cluster_path;
 				foreach ( $query[1] as $k => $v )
 				{
 					if ($k=="d")
@@ -1738,10 +1752,123 @@ class SphinxConfig
 						$sleep_agent = $v;
 					elseif ($k=="vip")
 						$vip_connection = $v;
-					elseif ($k="system")
+					elseif ($k=="system")
 						$system_cmd = $v;
+					elseif ($k=="cluster_listen")
+						$cluster_listen = $v;
+					elseif ($k=="cluster_connect")
+						$cluster_connect = $v;
+					elseif ($k=="cluster_path")
+						$cluster_path = $v;
 				}
 				$query = $query[0];
+				if ( $cluster_listen !== -1 || $cluster_connect !== -1 )
+				{
+					$query_ref = $query;
+				}
+					
+				if ( $cluster_listen !== -1 )
+				{
+					if ( !array_key_exists ( "cluster", $agents[$cluster_listen] ) )
+					{
+						$agents[$cluster_listen]["cluster"] = array();
+						$agents[$cluster_listen]["cluster"]["address"] = $agents[$cluster_listen]["address"];
+						$agents[$cluster_listen]["cluster"]["port"] = $agents[$cluster_listen]["port"] + 100 + $cluster_listen * 20;
+					} else
+					{
+						$agents[$cluster_listen]["cluster"]["port"] = $agents[$cluster_listen]["cluster"]["port"] + 3;
+					}
+					$address = $agents[$cluster_listen]["cluster"]["address"] . ":" . $agents[$cluster_listen]["cluster"]["port"];
+					
+					$query = str_replace ( "%addr_listen%", $address, $query );
+				}
+				if ( $cluster_connect !== -1 )
+				{
+					$address = $agents[$cluster_connect]["cluster"]["address"] . ":" . $agents[$cluster_connect]["cluster"]["port"];
+					$query = str_replace ( "%addr_connect%", $address, $query );
+				}
+				if ( isset ( $cluster_path ) )
+				{
+					$data_path = $agents[$use_agent]["data_path"];
+					$cluster_dir = "$index_data_path/$data_path/$cluster_path";
+					if ( !file_exists ( $cluster_dir ) )
+						mkdir ( $cluster_dir );
+						
+					$query = str_replace ( "%cluster_path%", $cluster_path, $query );
+					unset ( $cluster_path );
+				}
+			}
+			
+			if ( !empty($system_cmd) )
+			{
+				$wait_cmd_name = "wait-cluster-ready-";
+				$status = '';
+				if ( $system_cmd=="restart-daemon" )
+				{
+					mysqli_close($connection);
+					$status = RestartDaemon ($status);
+					$connection = ConnectSpecificQL($use_agent);
+				} else if ( $system_cmd=="start-agent" )
+				{
+					$start = StartSearchd ( $agents[$use_agent]["daemon"]["config"], $agents[$use_agent]["daemon"]["error"], $agents[$use_agent]["daemon"]["pid"], $error,
+						$agents[$use_agent]["daemon"]["watchdog"], $agents[$use_agent]["daemon"]["address"], $agents[$use_agent]["daemon"]["port"] );
+					if ( $start == 0 || $start == 2 )
+					{
+						$status .= "; start=ok" . ', return code=' . $start;
+					} else
+					{
+						$status .=  "; start=failed, return code=" . $start . ", error=" . $error;
+					}
+					mysqli_close($connection);				
+					$old_agent = -1;
+				} else if ( $system_cmd=="stop-agent" )
+				{
+					$stop = StopWaitSearchd ($agents[$use_agent]["daemon"]["config"], $agents[$use_agent]["daemon"]["pid"]);
+					$status = 'stop=' . ( $stop==0 ? 'ok' : 'error' ) . ', return code=' . $stop;
+					mysqli_close($connection);
+					$old_agent = -1;
+				} else if ( strpos($system_cmd, $wait_cmd_name)===0 )
+				{
+					$name = substr ($system_cmd, strlen($wait_cmd_name));
+					$ql = new QLClient();
+					$ql->SetConnection($connection);
+					$like_name = "cluster_" . $name . "_node_state";
+					$wait_started = MyMicrotime();
+					while ( true ) {
+						$status = $ql->Query("show status like '$like_name'");
+						$name_pos = strpos($status, $like_name);
+						$delim_pos = strpos($status, "|" );
+						if ( $name_pos===0 && $delim_pos>0 )
+						{
+							$node_state = trim(explode("\n", substr($status, $delim_pos+1))[0]);
+							if ($node_state==="synced" || $node_state==="donor" )
+							{
+								break;
+							} else
+							{
+								usleep(500);
+							}
+						} else
+						{
+							break;
+						}
+						
+						$tm_delta = MyMicrotime()-$wait_started;
+						if ( $tm_delta>3 )
+						{
+							$status .= sprintf( "; timeout %.3f sec", $tm_delta );
+							break;
+						}
+					}
+				} else 
+				{
+					$status = "unsupported command " . $system_cmd;
+				}
+				$r = array("sphinxql"=>$system_cmd . " => " . $status);
+				$this->_results[] = $r;
+				if ( IsModelGenMode () )
+					$this->_results_model[$this->SubtestNo ()][] = $r;
+				continue;
 			}
 
 			if ($old_agent!=$use_agent)
@@ -1788,28 +1915,11 @@ class SphinxConfig
 				continue;
 			}
 			
-			if ( !empty($system_cmd) )
-			{
-				$status = '';
-				if ( $system_cmd=="restart-daemon" )
-				{
-					mysqli_close($connection);
-					$status = RestartDaemon ($status);
-					$connection = ConnectSpecificQL($use_agent);
-				} else 
-				{
-					$status = "unsupported command " . $system_cmd;
-				}
-				$r = array("sphinxql"=>$system_cmd . " => " . $status);
-				$this->_results[] = $r;
-				if ( IsModelGenMode () )
-					$this->_results_model[$this->SubtestNo ()][] = $r;
-				continue;
-			}
-
 			$query_result = array ();
 			if ( $vip_connection )
 				$query_result["vip"]=1;
+			if ( $use_agent>0 )
+				$query_result["agent"]=$use_agent;
 			
 			$no_time = false;
 			if ( $bench===false && ( stripos ( $query, 'show' )!==false ) && ( stripos ( $query, 'meta' )!==false ) )
@@ -1818,7 +1928,15 @@ class SphinxConfig
 			if ( strpos ($query, ";")===FALSE ) // process a single-query line
 				// FIXME! If a query contains ';' it would be false positive for such codepath.
 			{
-				$query_result["sphinxql"]=$query;
+				if ( isset ( $query_ref ) )
+				{
+					$query_result["sphinxql"]=$query_ref;
+					unset ( $query_ref );
+				} else
+				{
+					$query_result["sphinxql"]=$query;
+				}
+					
 				$result = mysqli_wr ($query,$connection);
 				if ($result===true)
 					$query_result["total_affected"] = mysqli_affected_rows($connection);
@@ -2311,6 +2429,8 @@ class SphinxConfig
 			$str = "sphinxql-$nquery";
 			if ( array_key_exists ("vip", $result ) )
 				$str.=" (vip)";
+			if ( array_key_exists ("agent", $result ) )
+				$str.=" (agent-" . $result["agent"] . ")" ;
 			$str.= "> $result[sphinxql];\n";
 			if ( array_key_exists ("total_affected", $result) )
 			{
@@ -3255,6 +3375,7 @@ class SphinxConfig
 					mkdir ( $path );
 				EraseDirContents($path);
 				fwrite($fp, $path);
+				$agents[$agentid]["data_path"] = $subdir->nodeValue;
 				return;
 			}
 
@@ -3335,7 +3456,7 @@ function CopyDirContents ( $from, $to )
 
 function CheckConfig ( $config, $path )
 {
-	global $g_re2, $g_rlp, $g_odbc, $windows, $g_locals, $mysql_simulated;
+	global $g_re2, $g_rlp, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli;
 	
 	if ( $config->Requires("non-windows") && $windows )
 	{
@@ -3396,6 +3517,12 @@ function CheckConfig ( $config, $path )
 	if ( $config->Requires("lemmatizer_base") && !isset($g_locals["lemmatizer_base"]) )
 	{
 		printf ( "SKIPPING %s, %s - lemmatizer_base required, add it to your ~/.sphinx\n", $path, $config->Name () );
+		return false;
+	}
+	
+	if ( $config->Requires("replication") && !$g_repli )
+	{
+		printf ( "SKIPPING %s, %s - compile with replication support to run this test\n", $path, $config->Name () );
 		return false;
 	}
 
@@ -3592,15 +3719,19 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 				$abs_pid_file = testdir($pid_file);
 				$stop[$abs_config_file] = $abs_pid_file;
 				$msg = '';
+				$error_agent = "error_".$agent_id.".txt";
 				$config->SetAgent ( $agents [$i] );
 				$config->SetPIDFile ( $abs_pid_file );
 				if ( !$config->WriteConfig ( $abs_config_file, $i, $msg ) )
 					continue;
 
+				$agents[$i]["daemon"] = array ( "config"=>$config_file, "error"=>$error_agent, "pid"=>$pid_file,
+					"watchdog"=>$config->Requires ( "watchdog" ), "address"=>$config->AddressAPI(), "port"=>$config->Port() );
+
                 if ( $sd_managed_searchd )
                     $searchd_ret = 0;
                 else
-                    $searchd_ret = StartSearchd ( $config_file, "error_".$agent_id.".txt", $pid_file, $error, $config->Requires ( "watchdog" ), $config->AddressAPI(), $config->Port() );
+                    $searchd_ret = StartSearchd ( $config_file, $error_agent, $pid_file, $error, $config->Requires ( "watchdog" ), $config->AddressAPI(), $config->Port() );
 
 				if ( $searchd_ret == 1 )
 				{

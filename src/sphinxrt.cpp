@@ -10361,7 +10361,15 @@ void RtBinlog_c::UpdateIndexInfo ( BinlogIndexInfo_t & tIndex, int64_t iTID, int
 bool RtBinlog_c::PreOp ( Blop_e eOp, int64_t * pTID, const char * sIndexName )
 {
 	if ( m_bReplayMode || m_bDisabled )
+	{
+		// still need to advance TID as index flush according to it
+		if ( m_bDisabled )
+		{
+			ScopedMutex_t tLock ( m_tWriteLock );
+			(*pTID)++;
+		}
 		return false;
+	}
 
 	Verify ( m_tWriteLock.Lock() );
 

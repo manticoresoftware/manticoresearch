@@ -2895,6 +2895,7 @@ be applied after morphology, instead of before.
     core 2 duo > c2d
     e6600 > c2d
     core 2duo => c2d # Some people write '2duo' together...
+    ~run > walk # Along with stem_en morphology enabled replaces 'run', 'running', 'runs' (and any other words that stem to just 'run') to 'walk'
 
 You can specify multiple destination tokens:
 

@@ -116,6 +116,8 @@ for quick access.
 
 -  :ref:`SQRT() <expr-func-sqrt>`
 
+-  :ref:`SUBSTRING_INDEX() <expr-func-substring-index>`
+
 -  :ref:`TO_STRING() <expr-func-to-string>`
 
 -  :ref:`UINT() <expr-func-uint>`
@@ -901,6 +903,23 @@ Miscellaneous functions
        SELECT REGEX(content, 'box?') FROM test;
        SELECT REGEX(j.color, 'red | pink') FROM test;
    
+.. _expr-func-substring-index:
+
+-  SUBSTRING_INDEX()
+
+   SUBSTRING_INDEX(string,delimiter,number) Return a substring of a string before a specified number of delimiter occurs
+   string - The original string. Can be a field from SQL table or index.
+   delimiter - The delimiter to search for
+   number - The number of times to search for the delimiter. Can be both a positive or negative number.
+            If it is a positive number, this function returns all to the left of the delimiter. 
+            If it is a negative number, this function returns all to the right of the delimiter.
+
+.. code-block:: mysql
+
+
+       SELECT SUBSTRING_INDEX('www.w3schools.com', '.', 2) FROM test;
+       SELECT SUBSTRING_INDEX(j.coord, ' ', 1) FROM test;
+
 .. _expr-func-weight:
 
 -  WEIGHT()

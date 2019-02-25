@@ -167,6 +167,8 @@ static const char * g_sStatusDesc[] = {
  "feature not implemented"
 };
 
+static const char * g_sNodeStateDesc[] = { "undefined", "joiner", "donor", "joined", "synced", "error" };
+
 static const char * GetStatus ( wsrep_status_t tStatus )
 {
 	if ( tStatus>=WSREP_OK && tStatus<=WSREP_NOT_IMPLEMENTED )
@@ -217,6 +219,24 @@ static void LogGroupView ( const wsrep_view_info_t * pView )
 		sBuf.Appendf ( "'%s', '%s' %s\n", pBoxes[i].name, pBoxes[i].incoming, ( i==pView->my_idx ? "*" : "" ) );
 
 	sphLogDebugRpl ( "%s", sBuf.cstr() );
+}
+
+static bool CheckClasterState ( ClusterState_e eState, const CSphString & sCluster, CSphString & sError )
+{
+	if ( eState!=WSREP_MEMBER_SYNCED && eState!=WSREP_MEMBER_DONOR )
+	{
+		sError.SetSprintf ( "cluster '%s' not ready, current state %s", sCluster.cstr(), g_sNodeStateDesc[eState] );
+		return false;
+	}
+
+	return true;
+}
+
+static bool CheckClasterState ( const ReplicationCluster_t * pCluster, CSphString & sError )
+{
+	assert ( pCluster );
+	ClusterState_e eState = (ClusterState_e)pCluster->m_eState.GetValue();
+	return CheckClasterState ( eState, pCluster->m_sName, sError );
 }
 
 static void UpdateGroupView ( const wsrep_view_info_t * pView, ReplicationCluster_t * pCluster )
@@ -673,6 +693,8 @@ static void ReplicateClusterStats ( ReplicationCluster_t * pCluster, VectorLike 
 		dOut.Add().SetSprintf ( "%d", pCluster->m_iSize );
 	if ( dOut.MatchAddVa ( "cluster_%s_local_index", sName ) )
 		dOut.Add().SetSprintf ( "%d", pCluster->m_iIdx );
+	if ( dOut.MatchAddVa ( "cluster_%s_node_state", sName ) )
+		dOut.Add() = g_sNodeStateDesc[pCluster->m_eState];
 
 	// cluster indexes
 	if ( dOut.MatchAddVa ( "cluster_%s_indexes_count", sName ) )
@@ -1072,14 +1094,19 @@ bool HandleCmdReplicate ( ReplicationCommand_t & tCmd, CSphString & sError, int 
 	if ( tCmd.m_sCluster.IsEmpty() )
 		return tMonitor.Commit ( sError );
 
+	ClusterState_e eClusterState = WSREP_MEMBER_UNDEFINED;
 	g_tClustersLock.ReadLock();
 	ReplicationCluster_t ** ppCluster = g_hClusters ( tCmd.m_sCluster );
+	if ( ppCluster )
+		eClusterState = (ClusterState_e)(*ppCluster)->m_eState.GetValue();
 	g_tClustersLock.Unlock();
 	if ( !ppCluster )
 	{
 		sError.SetSprintf ( "unknown cluster %s", tCmd.m_sCluster.cstr() );
 		return false;
 	}
+	if ( !CheckClasterState ( eClusterState, tCmd.m_sCluster, sError ) )
+		return false;
 
 	if ( tCmd.m_eCommand==RCOMMAND_TRUNCATE && tCmd.m_bReconfigure )
 	{
@@ -2556,6 +2583,9 @@ bool RemoteClusterDelete ( const CSphString & sCluster, CSphString & sError )
 		}
 
 		pCluster = *ppCluster;
+		if ( !CheckClasterState ( pCluster, sError ) )
+			return false;
+
 		// remove cluster from cache without delete of cluster itself
 		g_hClusters.AddUnique ( sCluster ) = nullptr;
 		g_hClusters.Delete ( sCluster );
@@ -2590,6 +2620,8 @@ bool ClusterDelete ( const CSphString & sCluster, CSphString & sError, CSphStrin
 			sError.SetSprintf ( "unknown cluster '%s'", sCluster.cstr() );
 			return false;
 		}
+		if ( !CheckClasterState ( *ppCluster, sError ) )
+			return false;
 
 		// copy nodes with lock as change of cluster view would change node list string
 		{
@@ -3075,6 +3107,8 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 			sError.SetSprintf ( "unknown cluster '%s'", sCluster.cstr() );
 			return false;
 		}
+		if ( !CheckClasterState ( *ppCluster, sError ) )
+			return false;
 
 		// copy nodes with lock as change of cluster view would change node list string
 		{

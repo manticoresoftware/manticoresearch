@@ -180,6 +180,7 @@ if ( !$g_guesscached ) {
 	GuessRE2();
 	GuessRLP();
 	GuessODBC();
+	GuessReplication();
 	if ( !$force_guess )
 		CacheGuesses();
 }

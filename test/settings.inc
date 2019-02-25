@@ -97,7 +97,7 @@ function LoadCachedGuesses ()
 function CacheGuesses ()
 {
 	global $g_locals;
-	global $g_re2, $g_rlp, $g_odbc;
+	global $g_re2, $g_rlp, $g_odbc, $g_repli, $g_repli_path;
 
 	$guessfile = $g_locals['testdir'].'guess.txt';
 
@@ -105,6 +105,8 @@ function CacheGuesses ()
 	if ( $g_re2 ) $text .= "global \$g_re2; \$g_re2 = true;\n";
 	if ( $g_rlp ) $text .= "global \$g_rlp; \$g_rlp = true;\n";
 	if ( $g_odbc ) $text .= "global \$g_odbc; \$g_odbc = true;\n";
+	if ( $g_repli ) $text .= "global \$g_repli; \$g_repli = true;\n";
+	if ( $g_repli_path ) $text .= "global \$g_repli_path; \$g_repli_path = true;\n";
 
 	file_put_contents ( $guessfile, $text );
 }
@@ -167,6 +169,63 @@ function GetVersion ()
 {
 	$banner = GetBanner();
 	return $banner[0];
+}
+
+function GuessReplication()
+{
+	$repli_path_name = 'DREPLICATION_LIB_PATH=';
+	$repli_on = 'DWITH_REPLICATION=ON';
+	$galera_name = 'libgalera_smm.so';
+	
+	global $g_repli, $g_repli_path, $g_locals;
+	$banner = GetBanner();
+	foreach ( $banner as $line )
+	{
+		if ( strpos ( $line, $repli_on ) !== false )
+		{
+			$g_repli = true;
+		}
+		
+		if ( !$g_repli_path )
+		{
+			$path_pos = strpos ( $line, $repli_path_name );
+			if ( $path_pos !== false )
+			{
+				$path_start = $path_pos + count($repli_path_name);
+				$path_end = strpos ( $line, ' ', $path_start );
+				if ( $path_end !== false )
+				{
+					$g_repli_path = substr ( $line, $path_start, $path_end - $path_start );
+				} else
+				{
+					$g_repli_path = substr ( $line, $path_start );
+				}
+			}
+		}
+	}
+	
+	// in case build with replication Galera library should be available
+	if ( $g_repli )
+	{
+		if ( $g_repli_path && is_file ( $g_repli_path . '/' . $galera_name ) === false )
+		{
+			$g_repli_path = false;
+		}
+			
+		if ( !$g_repli_path && is_file ( $g_locals['bin'] . '../../galera/' . $galera_name ) !== false )
+		{
+			$g_repli_path = $g_locals['bin'] . '../../galera/';
+		}
+		
+		if ( $g_repli_path )
+		{
+			$g_repli_path = realpath  ( $g_repli_path );
+		} else 
+		{
+			print ( "build with REPLICATION but failed to create LD_LIBRARY_PATH path to " . $galera_name . "\n\n" );
+			exit ( 1 );
+		}
+	}
 }
 
 function PublishLocals ( &$locals, $benchmark )

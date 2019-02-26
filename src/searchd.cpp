@@ -16807,7 +16807,8 @@ void HandleMysqlSelectDual ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 		case SPH_ATTR_STRINGPTR:
 			pExpr->StringEval ( tMatch, &pStr );
 			tOut.PutString ( pStr );
-			SafeDelete ( pStr );
+			if ( pExpr->IsDataPtrAttr() )
+				SafeDeleteArray ( pStr );
 			break;
 		case SPH_ATTR_INTEGER: tOut.PutNumAsString ( pExpr->IntEval ( tMatch ) ); break;
 		case SPH_ATTR_BIGINT: tOut.PutNumAsString ( pExpr->Int64Eval ( tMatch ) ); break;

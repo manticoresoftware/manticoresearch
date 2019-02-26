@@ -16805,11 +16805,13 @@ void HandleMysqlSelectDual ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	switch ( eAttrType )
 	{
 		case SPH_ATTR_STRINGPTR:
-			pExpr->StringEval ( tMatch, &pStr );
-			tOut.PutString ( pStr );
+		{
+			int  iLen = pExpr->StringEval ( tMatch, &pStr );
+			tOut.PutArray ( pStr, iLen );
 			if ( pExpr->IsDataPtrAttr() )
 				SafeDeleteArray ( pStr );
 			break;
+		}
 		case SPH_ATTR_INTEGER: tOut.PutNumAsString ( pExpr->IntEval ( tMatch ) ); break;
 		case SPH_ATTR_BIGINT: tOut.PutNumAsString ( pExpr->Int64Eval ( tMatch ) ); break;
 		case SPH_ATTR_FLOAT:	tOut.PutFloatAsString ( pExpr->Eval ( tMatch ) ); break;

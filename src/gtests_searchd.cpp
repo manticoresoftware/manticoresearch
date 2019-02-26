@@ -252,3 +252,12 @@ TEST ( searchd_stuff, iovec_behaviour )
 	tIO.StepForward (4);
 	ASSERT_EQ ( tIO.IOSize (), 0 );
 }
+
+TEST ( searchd_stuff, prepare_emulation )
+{
+	CSphQuery tQuery;
+	tQuery.m_eMode = SPH_MATCH_ALL;
+	PrepareQueryEmulation ( &tQuery );
+
+	ASSERT_EQ ( tQuery.m_eRanker, SPH_RANK_PROXIMITY );
+}

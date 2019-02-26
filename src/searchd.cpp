@@ -3756,7 +3756,7 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 		return;
 
 	const char * szQuery = pQuery->m_sRawQuery.cstr ();
-	int iQueryLen = strlen(szQuery);
+	int iQueryLen = ( szQuery ? strlen(szQuery) : 0 );
 
 	pQuery->m_sQuery.Reserve ( iQueryLen*2+8 );
 	char * szRes = (char*) pQuery->m_sQuery.cstr ();

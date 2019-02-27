@@ -1314,8 +1314,6 @@ public:
 
 	bool				IsStarDict() const final;
 
-	const CSphSchema &	GetMatchSchema () const final { return m_tSchema; }
-	const CSphSchema &	GetInternalSchema () const final { return m_tSchema; }
 	int64_t				GetUsedRam () const;
 	static int64_t		GetUsedRam ( const SphChunkGuard_t & tGuard );
 

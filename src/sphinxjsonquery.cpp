@@ -1596,6 +1596,29 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes
 	{
 		const auto * pString = ( const BYTE * ) tMatch.GetAttr ( tLoc );
 		int iLen = sphUnpackPtrAttr ( pString, &pString );
+
+		// special process for legacy typed strings
+		if ( pString && iLen>1 && pString[iLen-2]=='\0')
+		{
+			auto uSubtype = pString[iLen-1];
+			iLen -= 2;
+			switch ( uSubtype)
+			{
+				case 1: // ql
+				{
+					ScopedComma_c sBrackets ( tOut, nullptr, R"({"ql":)", "}" );
+					tOut.AppendEscaped (( const char* ) pString, EscBld::eEscape, iLen );
+					break;
+				}
+				case 0: // json
+					tOut << ( const char* ) pString;
+					break;
+
+				default:
+					tOut.Sprintf ("\"internal error! wrong subtype of stringptr %d\"", uSubtype );
+			}
+			break;
+		}
 		tOut.AppendEscaped ( ( const char * ) pString, EscBld::eEscape, iLen );
 	}
 		break;

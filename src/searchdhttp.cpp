@@ -608,7 +608,7 @@ void HttpErrorReporter_c::Error ( const char * /*sStmt*/, const char * sError, M
 class HttpHandler_c
 {
 public:
-	HttpHandler_c ( const CSphString & sQuery, const ThdDesc_t & tThd, bool bNeedHttpResponse )
+	HttpHandler_c ( const char * sQuery, const ThdDesc_t & tThd, bool bNeedHttpResponse )
 		: m_sQuery ( sQuery )
 		, m_bNeedHttpResponse ( bNeedHttpResponse )
 		, m_tThd ( tThd )
@@ -625,7 +625,7 @@ public:
 	}
 
 protected:
-	const CSphString &	m_sQuery;
+	const char *		m_sQuery;
 	bool				m_bNeedHttpResponse {false};
 	CSphVector<BYTE>	m_dData;
 	const ThdDesc_t &	m_tThd;
@@ -717,7 +717,7 @@ protected:
 class HttpSearchHandler_c : public HttpHandler_c, public HttpOptionsTraits_c
 {
 public:
-	HttpSearchHandler_c ( const CSphString & sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd, bool bNeedHttpResponse )
+	HttpSearchHandler_c ( const char * sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd, bool bNeedHttpResponse )
 		: HttpHandler_c ( sQuery, tThd, bNeedHttpResponse )
 		, HttpOptionsTraits_c ( tOptions )
 	{}
@@ -777,7 +777,7 @@ protected:
 class HttpSearchHandler_Plain_c : public HttpSearchHandler_c
 {
 public:
-	HttpSearchHandler_Plain_c ( const CSphString & sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd, bool bNeedHttpResponse )
+	HttpSearchHandler_Plain_c ( const char * sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd, bool bNeedHttpResponse )
 		: HttpSearchHandler_c ( sQuery, tOptions, tThd, bNeedHttpResponse )
 	{}
 
@@ -812,7 +812,7 @@ protected:
 class HttpSearchHandler_SQL_c : public HttpSearchHandler_Plain_c
 {
 public:
-	HttpSearchHandler_SQL_c ( const CSphString & sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd, bool bNeedHttpResponse )
+	HttpSearchHandler_SQL_c ( const char * sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd, bool bNeedHttpResponse )
 		: HttpSearchHandler_Plain_c ( sQuery, tOptions, tThd, bNeedHttpResponse )
 	{}
 
@@ -869,14 +869,14 @@ protected:
 class HttpHandler_JsonSearch_c : public HttpSearchHandler_c
 {
 public:	
-	HttpHandler_JsonSearch_c ( const CSphString & sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd, bool bNeedHttpResponse )
+	HttpHandler_JsonSearch_c ( const char * sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd, bool bNeedHttpResponse )
 		: HttpSearchHandler_c ( sQuery, tOptions, tThd, bNeedHttpResponse )
 	{}
 
 	QueryParser_i * PreParseQuery() override
 	{
 		CSphString sError;
-		if ( !sphParseJsonQuery ( m_sQuery.cstr(), m_tQuery, m_bProfile, m_bAttrHighlight, sError, m_sWarning ) )
+		if ( !sphParseJsonQuery ( m_sQuery, m_tQuery, m_bProfile, m_bAttrHighlight, sError, m_sWarning ) )
 		{
 			sError.SetSprintf( "Error parsing json query: %s", sError.cstr() );
 			ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
@@ -919,7 +919,7 @@ protected:
 class HttpHandler_JsonInsert_c : public HttpHandler_c, public HttpJsonInsertTraits_c
 {
 public:
-	HttpHandler_JsonInsert_c ( const CSphString & sQuery, bool bReplace, bool bNeedHttpResponse, const ThdDesc_t & tThd )
+	HttpHandler_JsonInsert_c ( const char * sQuery, bool bReplace, bool bNeedHttpResponse, const ThdDesc_t & tThd )
 		: HttpHandler_c ( sQuery, tThd, bNeedHttpResponse )
 		, m_bReplace ( bReplace )
 	{}
@@ -929,7 +929,7 @@ public:
 		SqlStmt_t tStmt;
 		SphDocID_t tDocId = DOCID_MAX;
 		CSphString sError;
-		if ( !sphParseJsonInsert ( m_sQuery.cstr(), tStmt, tDocId, m_bReplace, sError ) )
+		if ( !sphParseJsonInsert ( m_sQuery, tStmt, tDocId, m_bReplace, sError ) )
 		{
 			sError.SetSprintf( "Error parsing json query: %s", sError.cstr() );
 			ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
@@ -973,7 +973,7 @@ protected:
 class HttpHandler_JsonUpdate_c : public HttpHandler_c, HttpJsonUpdateTraits_c
 {
 public:
-	HttpHandler_JsonUpdate_c ( const CSphString & sQuery, const ThdDesc_t & tThd, bool bNeedHttpResponse )
+	HttpHandler_JsonUpdate_c ( const char * sQuery, const ThdDesc_t & tThd, bool bNeedHttpResponse )
 		: HttpHandler_c ( sQuery, tThd, bNeedHttpResponse )
 	{}
 
@@ -999,12 +999,12 @@ public:
 protected:
 	virtual bool ParseQuery ( SqlStmt_t & tStmt, SphDocID_t & tDocId, CSphString & sError )
 	{
-		return sphParseJsonUpdate ( m_sQuery.cstr(), tStmt, tDocId, sError );
+		return sphParseJsonUpdate ( m_sQuery, tStmt, tDocId, sError );
 	}
 
 	virtual bool ProcessQuery ( const SqlStmt_t & tStmt, SphDocID_t tDocId, JsonObj_c & tResult )
 	{
-		return ProcessUpdate ( m_sQuery.cstr(), tStmt, tDocId, m_tThd, tResult );
+		return ProcessUpdate ( m_sQuery, tStmt, tDocId, m_tThd, tResult );
 	}
 };
 
@@ -1033,19 +1033,19 @@ protected:
 class HttpHandler_JsonDelete_c : public HttpHandler_JsonUpdate_c, public HttpJsonDeleteTraits_c
 {
 public:
-	HttpHandler_JsonDelete_c ( const CSphString & sQuery, const ThdDesc_t & tThd, bool bNeedHttpResponse )
+	HttpHandler_JsonDelete_c ( const char * sQuery, const ThdDesc_t & tThd, bool bNeedHttpResponse )
 		: HttpHandler_JsonUpdate_c ( sQuery, tThd, bNeedHttpResponse )
 	{}
 
 protected:
 	bool ParseQuery ( SqlStmt_t & tStmt, SphDocID_t & tDocId, CSphString & sError ) override
 	{
-		return sphParseJsonDelete ( m_sQuery.cstr(), tStmt, tDocId, sError );
+		return sphParseJsonDelete ( m_sQuery, tStmt, tDocId, sError );
 	}
 
 	bool ProcessQuery ( const SqlStmt_t & tStmt, SphDocID_t tDocId, JsonObj_c & tResult ) override
 	{
-		return ProcessDelete ( m_sQuery.cstr(), tStmt, tDocId, m_tThd, tResult );
+		return ProcessDelete ( m_sQuery, tStmt, tDocId, m_tThd, tResult );
 	}
 };
 
@@ -1053,7 +1053,7 @@ protected:
 class HttpHandler_JsonBulk_c : public HttpHandler_c, public HttpOptionsTraits_c, public HttpJsonInsertTraits_c, public HttpJsonUpdateTraits_c, public HttpJsonDeleteTraits_c
 {
 public:
-	HttpHandler_JsonBulk_c ( const CSphString & sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd, bool bNeedHttpResponse )
+	HttpHandler_JsonBulk_c ( const char * sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd, bool bNeedHttpResponse )
 		: HttpHandler_c ( sQuery, tThd, bNeedHttpResponse )
 		, HttpOptionsTraits_c ( tOptions )
 	{}
@@ -1076,7 +1076,7 @@ public:
 		JsonObj_c tItems(true);
 
 		// fixme: we're modifying the original query at this point
-		char * p = const_cast<char*>(m_sQuery.cstr());
+		char * p = const_cast<char*>(m_sQuery);
 
 		bool bResult = false;
 		while ( p && *p )
@@ -1156,25 +1156,27 @@ private:
 class HttpHandlerPQ_c : public HttpHandler_c
 {
 public:	
-	HttpHandlerPQ_c (  const CSphString & sQuery, const ThdDesc_t & tThd, bool bNeedHttpResponse, const OptionsHash_t & tOptions )
+	HttpHandlerPQ_c (  const char * sQuery, const OptionsHash_t& tOptions,
+		const ThdDesc_t& tThd, bool bNeedHttpResponse )
 		: HttpHandler_c ( sQuery, tThd, bNeedHttpResponse )
 		, m_tOptions ( tOptions )
 	{}
 
-	virtual bool Process () override;
+	bool Process () final;
 
 private:
 	const OptionsHash_t & m_tOptions;
 
-	// FIXME!!! handle replication for GotQuery and Delete
+	// FIXME!!! handle replication for InsertOrReplaceQuery and Delete
 	bool DoCallPQ ( const CSphString & sIndex, const JsonObj_c & tPercolate, bool bVerbose );
-	bool GotQuery ( const CSphString & sIndex, const JsonObj_c & tJsonQuery, const JsonObj_c & tRoot, CSphString * pUID, bool bReplace );
+	bool InsertOrReplaceQuery ( const CSphString& sIndex, const JsonObj_c& tJsonQuery, const JsonObj_c& tRoot,
+		CSphString* pUID, bool bReplace );
 	bool ListQueries ( const CSphString & sIndex );
 	bool Delete ( const CSphString & sIndex, const JsonObj_c & tRoot );
 };
 
 
-static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const CSphString & sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd, bool bNeedHttpResonse, http_method eRequestType )
+static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const char * sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd, bool bNeedHttpResonse, http_method eRequestType )
 {
 	switch ( eEndpoint )
 	{
@@ -1203,7 +1205,7 @@ static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const CSp
 		return new HttpHandler_JsonBulk_c ( sQuery, tOptions, tThd, bNeedHttpResonse );
 
 	case SPH_HTTP_ENDPOINT_PQ:
-		return new HttpHandlerPQ_c ( sQuery, tThd, bNeedHttpResonse, tOptions );
+		return new HttpHandlerPQ_c ( sQuery, tOptions, tThd, bNeedHttpResonse );
 
 	default:
 		break;
@@ -1213,10 +1215,10 @@ static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const CSp
 }
 
 
-static bool sphProcessHttpQuery ( ESphHttpEndpoint eEndpoint, const CSphString & sQuery, const SmallStringHash_T<CSphString> & tOptions, const ThdDesc_t & tThd, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
+static bool sphProcessHttpQuery ( ESphHttpEndpoint eEndpoint, const char * sQuery, const SmallStringHash_T<CSphString> & tOptions, const ThdDesc_t & tThd, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
 {
 	CSphScopedPtr<HttpHandler_c> pHandler ( CreateHttpHandler ( eEndpoint, sQuery, tOptions, tThd, bNeedHttpResponse, eRequestType ) );
-	if ( !pHandler.Ptr() )
+	if ( !pHandler )
 		return false;
 
 	pHandler->Process();
@@ -1225,7 +1227,7 @@ static bool sphProcessHttpQuery ( ESphHttpEndpoint eEndpoint, const CSphString &
 }
 
 
-bool sphProcessHttpQueryNoResponce ( ESphHttpEndpoint eEndpoint, const CSphString & sQuery, const SmallStringHash_T<CSphString> & tOptions, const ThdDesc_t & tThd, CSphVector<BYTE> & dResult )
+bool sphProcessHttpQueryNoResponce ( ESphHttpEndpoint eEndpoint, const char * sQuery, const SmallStringHash_T<CSphString> & tOptions, const ThdDesc_t & tThd, CSphVector<BYTE> & dResult )
 {
 	return sphProcessHttpQuery ( eEndpoint, sQuery, tOptions, tThd, dResult, false, HTTP_GET );
 }
@@ -1241,7 +1243,7 @@ bool sphLoopClientHttp ( const BYTE * pRequest, int iRequestLen, CSphVector<BYTE
 	}
 
 	ESphHttpEndpoint eEndpoint = tParser.GetEndpoint();
-	if ( !sphProcessHttpQuery ( eEndpoint, tParser.GetBody(), tParser.GetOptions(), tThd, dResult, true, tParser.GetRequestType() ) )
+	if ( !sphProcessHttpQuery ( eEndpoint, tParser.GetBody().cstr(), tParser.GetOptions(), tThd, dResult, true, tParser.GetRequestType() ) )
 	{
 		if ( eEndpoint==SPH_HTTP_ENDPOINT_INDEX )
 			HttpHandlerIndexPage ( dResult );
@@ -1406,7 +1408,8 @@ static void EncodePercolateQueryResult ( bool bReplace, const CSphString & sInde
 }
 
 
-bool HttpHandlerPQ_c::GotQuery ( const CSphString & sIndex, const JsonObj_c & tJsonQuery, const JsonObj_c & tRoot, CSphString * pUID, bool bReplace )
+bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const JsonObj_c& tJsonQuery,
+	const JsonObj_c& tRoot, CSphString* pUID, bool bReplace )
 {
 	CSphString sTmp, sError, sWarning;
 
@@ -1528,37 +1531,18 @@ bool HttpHandlerPQ_c::GotQuery ( const CSphString & sIndex, const JsonObj_c & tJ
 	return bOk;
 }
 
+// for now - forcibly route query as /json/search POST {"index":"<idx>"}. Later matter of deprecate/delete
 bool HttpHandlerPQ_c::ListQueries ( const CSphString & sIndex )
 {
-	// FIXME!!! provide filters
-	const char * sFilterTags = nullptr;
-	const CSphFilterSettings * pUID = nullptr;
-
-	ServedDescPtr_c pServed ( GetIndex ( sIndex, IndexType_e::PERCOLATE ) );
-	if ( !pServed )
+	StringBuilder_c sQuery;
+	sQuery.Sprintf(R"({"index":"%s"})", sIndex.scstr());
+	CSphScopedPtr<HttpHandler_c> pHandler (
+		new HttpHandler_JsonSearch_c ( sQuery.cstr(), m_tOptions, m_tThd, m_bNeedHttpResponse ));
+	if ( !pHandler )
 		return false;
 
-	auto pIndex = (PercolateIndex_i *)pServed->m_pIndex;
-
-	uint64_t tmStart = sphMicroTimer();
-
-	CSphVector<PercolateQueryDesc> dQueries;
-	pIndex->GetQueries ( sFilterTags, true, pUID, 0, 0, dQueries );
-
-	PercolateMatchResult_t tRes;
-	tRes.m_bGetDocs = false;
-	tRes.m_dQueryDesc.Set ( dQueries.Begin(), dQueries.GetLength() );
-	dQueries.LeakData();
-	tRes.m_dDocs.Reset ( tRes.m_dQueryDesc.GetLength() );
-	tRes.m_dDocs.Fill ( 0 );
-
-	tRes.m_tmTotal = sphMicroTimer() - tmStart;
-
-	CSphFixedVector<int64_t> dTmpids ( 0 );
-	JsonEscapedBuilder sRes;
-	EncodePercolateMatchResult ( tRes, dTmpids, sIndex, sRes );
-	BuildReply ( sRes, SPH_HTTP_STATUS_200 );
-
+	pHandler->Process ();
+	m_dData = std::move ( pHandler->GetResult ());
 	return true;
 }
 
@@ -1649,10 +1633,10 @@ bool HttpHandlerPQ_c::Process()
 	else if ( sOp!="doc" )
 		bMatch = true;
 
-	if ( m_sQuery.IsEmpty() )
+	if ( !m_sQuery || !m_sQuery[0] )
 		return ListQueries ( sIndex );
 
-	const JsonObj_c tRoot ( m_sQuery.cstr() );
+	const JsonObj_c tRoot ( m_sQuery );
 	if ( !tRoot )
 	{
 		ReportError ( "bad JSON object", SPH_HTTP_STATUS_400 );
@@ -1705,7 +1689,7 @@ bool HttpHandlerPQ_c::Process()
 				bRefresh = true;
 		}
 
-		return GotQuery ( sIndex, tQuery, tRoot, pUID, bRefresh );
+		return InsertOrReplaceQuery ( sIndex, tQuery, tRoot, pUID, bRefresh );
 	}
 }
 

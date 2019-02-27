@@ -3504,8 +3504,8 @@ ISphMatchSorter *	sphCreateQueue ( SphQueueSettings_t & tQueue );
 /// convert queue to sorted array, and add its entries to result's matches array
 int					sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag );
 
-/// setup per-keyword read buffer sizes
-void				sphSetReadBuffers ( int iReadBuffer, int iReadUnhinted );
+/// setup per-keyword read buffer sizes (deprecated, not used)
+//void				sphSetReadBuffers ( int iReadBuffer, int iReadUnhinted ) {}
 
 /// check query for expressions
 bool				sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema );
@@ -3522,7 +3522,7 @@ BYTE *				sphPackPtrAttr ( const BYTE * pData, int iLengthBytes );
 void				sphPackPtrAttr ( BYTE * pPrealloc, const BYTE * pData, int iLengthBytes );
 
 // allocate buffer, store zipped length, set pointer to free space in buffer
-BYTE *				sphPackPtrAttr ( int iLengthBytes, BYTE * & pData );
+BYTE *				sphPackPtrAttr ( int iLengthBytes, BYTE ** ppData );
 
 // unpack data pointer attr, return length
 int					sphUnpackPtrAttr ( const BYTE * pData, const BYTE ** ppUnpacked=NULL );

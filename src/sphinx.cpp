@@ -177,9 +177,6 @@ static const int	MIN_READ_BUFFER			= 8192;
 static const int	MIN_READ_UNHINTED		= 1024;
 #define READ_NO_SIZE_HINT 0
 
-static int			g_iReadBuffer			= DEFAULT_READ_BUFFER;
-static int			g_iReadUnhinted			= DEFAULT_READ_UNHINTED;
-
 #ifndef FULL_SHARE_DIR
 #define FULL_SHARE_DIR "."
 #endif
@@ -603,15 +600,17 @@ class CSphIndex_VLN;
 /// everything required to setup search term
 class DiskIndexQwordSetup_c : public ISphQwordSetup
 {
+	const BYTE * m_tDoclist;
+	const BYTE * m_tHitlist;
 public:
-	const CSphAutofile &	m_tDoclist;
-	const CSphAutofile &	m_tHitlist;
+
 	bool					m_bSetupReaders = false;
 	const BYTE *			m_pSkips;
 	CSphQueryProfile *		m_pProfile;
 
 public:
-	DiskIndexQwordSetup_c ( const CSphAutofile & tDoclist, const CSphAutofile & tHitlist, const BYTE * pSkips, CSphQueryProfile * pProfile )
+	DiskIndexQwordSetup_c ( const BYTE * tDoclist, const BYTE * tHitlist,
+		const BYTE * pSkips, CSphQueryProfile * pProfile )
 		: m_tDoclist ( tDoclist )
 		, m_tHitlist ( tHitlist )
 		, m_pSkips ( pSkips )
@@ -624,6 +623,58 @@ public:
 	bool						Setup ( ISphQword * ) const;
 };
 
+// imitate CSphReader but fully in memory (intended to use with mmap)
+class ThinMMapReader_c
+{
+	const BYTE *	m_pBase = nullptr;
+	const BYTE *	m_pPointer = nullptr;
+	SphOffset_t		m_iSize = 0;
+
+public:
+	void Reset () {};
+
+	SphOffset_t GetPos () const
+	{
+		if ( !m_pPointer )
+			return 0;
+		assert ( m_pBase );
+		return m_pPointer - m_pBase;
+	}
+
+	SphOffset_t GetFilesize () const { return m_iSize; }
+	void SeekTo ( SphOffset_t iPos, int /*iSizeHint*/ =0) { m_pPointer = m_pBase + iPos; }
+
+	void SkipBytes ( int iCount )
+	{
+		assert ( m_pPointer );
+		m_pPointer += iCount;
+	}
+
+	void SetArena ( const BYTE * pArena, SphOffset_t iSize=0 )
+	{
+		m_pPointer = m_pBase = pArena;
+		m_iSize = iSize;
+	}
+
+	DWORD UnzipInt ();
+	uint64_t UnzipOffset ();
+
+	SphDocID_t UnzipDocid () { return UnzipOffset (); }
+	SphWordID_t UnzipWordid () { return UnzipOffset (); }
+
+	BYTE GetByte() {
+		assert ( m_pPointer );
+		return *m_pPointer++;
+	}
+
+	void GetBytes ( void* pData, int iSize )
+	{
+		assert ( m_pPointer );
+		memcpy ( pData, m_pPointer, iSize );
+		SkipBytes ( iSize );
+	}
+
+};
 
 /// query word from the searcher's point of view
 class DiskIndexQwordTraits_c : public ISphQword
@@ -642,10 +693,8 @@ public:
 	CSphMatch		m_tDoc;			///< current match (partial)
 	Hitpos_t		m_iHitPos {EMPTY_HIT};	///< current hit postition, from hitlist
 
-	BYTE			m_dDoclistBuf [ MINIBUFFER_LEN ];
-	BYTE			m_dHitlistBuf [ MINIBUFFER_LEN ];
-	CSphReader		m_rdDoclist;	///< my doclist reader
-	CSphReader		m_rdHitlist;	///< my hitlist reader
+	ThinMMapReader_c	m_rdDoclist;	///< my doclist reader
+	ThinMMapReader_c	m_rdHitlist;	///< my hitlist reader
 
 	SphDocID_t		m_iMinID = 0;		///< min ID to fixup
 	int				m_iInlineAttrs = 0;	///< inline attributes count
@@ -657,9 +706,7 @@ public:
 #endif
 
 public:
-	explicit DiskIndexQwordTraits_c ( bool bUseMini, bool bExcluded )
-		: m_rdDoclist ( bUseMini ? m_dDoclistBuf : nullptr, bUseMini ? MINIBUFFER_LEN : 0 )
-		, m_rdHitlist ( bUseMini ? m_dHitlistBuf : nullptr, bUseMini ? MINIBUFFER_LEN : 0 )
+	explicit DiskIndexQwordTraits_c ( bool bExcluded )
 	{
 		m_bExcluded = bExcluded;
 	}
@@ -688,14 +735,14 @@ template < bool INLINE_HITS, bool INLINE_DOCINFO, bool DISABLE_HITLIST_SEEK >
 class DiskIndexQword_c : public DiskIndexQwordTraits_c
 {
 public:
-	DiskIndexQword_c ( bool bUseMinibuffer, bool bExcluded )
-		: DiskIndexQwordTraits_c ( bUseMinibuffer, bExcluded )
+	DiskIndexQword_c ( bool bExcluded )
+		: DiskIndexQwordTraits_c ( bExcluded )
 	{}
 
 	virtual void Reset ()
 	{
 		m_rdDoclist.Reset ();
-		m_rdDoclist.Reset ();
+		m_rdHitlist.Reset ();
 		m_iInlineAttrs = 0;
 		ResetDecoderState();
 	}
@@ -881,23 +928,16 @@ class DiskPayloadQword_c : public DiskIndexQword_c<INLINE_HITS, false, false>
 
 public:
 	explicit DiskPayloadQword_c ( const DiskSubstringPayload_t * pPayload, bool bExcluded,
-		const CSphAutofile & tDoclist, const CSphAutofile & tHitlist, CSphQueryProfile * pProfile )
-		: BASE ( true, bExcluded )
+		const BYTE * tDoclist, const BYTE* tHitlist, CSphQueryProfile * pProfile )
+		: BASE ( bExcluded )
 	{
 		m_pPayload = pPayload;
 		this->m_iDocs = m_pPayload->m_iTotalDocs;
 		this->m_iHits = m_pPayload->m_iTotalHits;
 		m_iDoclist = 0;
 
-		this->m_rdDoclist.SetFile ( tDoclist );
-		this->m_rdDoclist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
-		this->m_rdDoclist.m_pProfile = pProfile;
-		this->m_rdDoclist.m_eProfileState = SPH_QSTATE_READ_DOCS;
-
-		this->m_rdHitlist.SetFile ( tHitlist );
-		this->m_rdHitlist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
-		this->m_rdHitlist.m_pProfile = pProfile;
-		this->m_rdHitlist.m_eProfileState = SPH_QSTATE_READ_HITS;
+		this->m_rdDoclist.SetArena ( tDoclist );
+		this->m_rdHitlist.SetArena ( tHitlist );
 	}
 
 	virtual const CSphMatch & GetNextDoc ( DWORD * pDocinfo )
@@ -928,10 +968,9 @@ private:
 	void SetupReader ()
 	{
 		uint64_t uDocOff = m_pPayload->m_dDoclist[m_iDoclist].m_uOff;
-		int iHint = m_pPayload->m_dDoclist[m_iDoclist].m_iLen;
 		m_iDoclist++;
 
-		this->m_rdDoclist.SeekTo ( uDocOff, iHint );
+		this->m_rdDoclist.SeekTo ( uDocOff );
 	}
 
 	const DiskSubstringPayload_t *	m_pPayload;
@@ -1062,7 +1101,7 @@ public:
 public:
 										~CWordlist () override;
 	void								Reset();
-	bool								Preread ( const char * sName, DWORD uVersion, bool bWordDict, CSphString & sError );
+	bool								Preread ( const CSphString & sName, DWORD uVersion, bool bWordDict, CSphString & sError );
 
 	const CSphWordlistCheckpoint *		FindCheckpoint ( const char * sWord, int iWordLen, SphWordID_t iWordID, bool bStarMode ) const;
 	bool								GetWord ( const BYTE * pBuf, SphWordID_t iWordID, CSphDictEntry & tWord ) const;
@@ -1461,8 +1500,8 @@ private:
 	int							m_iIndexTag;			///< my ids for MVA updates pool
 	static volatile int			m_iIndexTagSeq;			///< static ids sequence
 
-	CSphAutofile				m_tDoclistFile;			///< doclist file
-	CSphAutofile				m_tHitlistFile;			///< hitlist file
+	CSphMappedBuffer<BYTE>		m_tDoclistFile;			///< doclist file
+	CSphMappedBuffer<BYTE>		m_tHitlistFile;			///< hitlist file
 
 private:
 	CSphString					GetIndexFileName ( const char * sExt ) const;
@@ -1859,18 +1898,6 @@ int64_t sphGetFileSize ( const CSphString& sFile, CSphString * sError )
 	}
 
 	return st.st_size;
-}
-
-
-void sphSetReadBuffers ( int iReadBuffer, int iReadUnhinted )
-{
-	if ( iReadBuffer<=0 )
-		iReadBuffer = DEFAULT_READ_BUFFER;
-	g_iReadBuffer = Max ( iReadBuffer, MIN_READ_BUFFER );
-
-	if ( iReadUnhinted<=0 )
-		iReadUnhinted = DEFAULT_READ_UNHINTED;
-	g_iReadUnhinted = Max ( iReadUnhinted, MIN_READ_UNHINTED );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -5816,12 +5843,12 @@ void sphPackPtrAttr ( BYTE * pPrealloc, const BYTE * pData, int iLengthBytes )
 }
 
 
-BYTE * sphPackPtrAttr ( int iLengthBytes, BYTE * & pData )
+BYTE * sphPackPtrAttr ( int iLengthBytes, BYTE ** ppData )
 {
 	// BYTE * pPacked = new BYTE [sphCalcPackedLength(iLengthBytes)];
 	BYTE * pPacked = sphAllocateSmall ( sphCalcPackedLength ( iLengthBytes ) );
-	pData = pPacked;
-	pData += sphZipToPtr ( iLengthBytes, pPacked );
+	*ppData = pPacked;
+	*ppData += sphZipToPtr ( iLengthBytes, pPacked );
 	return pPacked;
 }
 
@@ -6816,18 +6843,9 @@ void CSphWriter::SeekTo ( SphOffset_t iPos )
 ///////////////////////////////////////////////////////////////////////////////
 
 CSphReader::CSphReader ( BYTE * pBuf, int iSize )
-	: m_pProfile ( NULL )
-	, m_eProfileState ( SPH_QSTATE_IO )
-	, m_iFD ( -1 )
-	, m_iPos ( 0 )
-	, m_iBuffPos ( 0 )
-	, m_iBuffUsed ( 0 )
-	, m_pBuff ( pBuf )
-	, m_iSizeHint ( 0 )
+	: m_pBuff ( pBuf )
 	, m_iBufSize ( iSize )
-	, m_bBufOwned ( false )
 	, m_iReadUnhinted ( DEFAULT_READ_UNHINTED )
-	, m_bError ( false )
 {
 	assert ( pBuf==NULL || iSize>0 );
 }
@@ -7216,11 +7234,14 @@ SphOffset_t sphUnzipOffset ( const BYTE * & pBuf )	{ SPH_VARINT_DECODE ( SphOffs
 DWORD CSphReader::UnzipInt ()			{ SPH_VARINT_DECODE ( DWORD, GetByte() ); }
 uint64_t CSphReader::UnzipOffset ()	{ SPH_VARINT_DECODE ( uint64_t, GetByte() ); }
 
+DWORD ThinMMapReader_c::UnzipInt ()			{ SPH_VARINT_DECODE ( DWORD, *m_pPointer++ ); }
+uint64_t ThinMMapReader_c::UnzipOffset ()		{ SPH_VARINT_DECODE ( uint64_t, *m_pPointer++ ); }
+
 #define sphUnzipWordid sphUnzipOffset
 
 /////////////////////////////////////////////////////////////////////////////
 
-const CSphReader & CSphReader::operator = ( const CSphReader & rhs )
+CSphReader & CSphReader::operator = ( const CSphReader & rhs )
 {
 	SetFile ( rhs.m_iFD, rhs.m_sFilename.cstr() );
 	SeekTo ( rhs.m_iPos + rhs.m_iBuffPos, rhs.m_iSizeHint );
@@ -8590,7 +8611,7 @@ void MatchesToNewSchema_c::Process ( CSphMatch * pMatch )
 					int iLengthBytes = sphJsonNodeSize ( eJson, pStr );
 
 					BYTE * pData = nullptr;
-					BYTE * pPacked = sphPackPtrAttr ( iLengthBytes+1, pData );
+					BYTE * pPacked = sphPackPtrAttr ( iLengthBytes+1, &pData );
 
 					// store field type before the field
 					*pData = (BYTE)eJson;
@@ -9714,7 +9735,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttr
 
 	m_tAttr.Reset();
 
-	if ( !m_tAttr.Setup ( GetIndexFileName("spa").cstr(), sError, true ) )
+	if ( !m_tAttr.Setup ( GetIndexFileName("spa"), sError, true ) )
 		return false;
 
 	m_tSchema = tNewSchema;
@@ -13407,17 +13428,17 @@ public:
 	}
 
 	template < typename QWORD >
-	static inline void ConfigureQword ( QWORD & tQword, const CSphAutofile & tHits, const CSphAutofile & tDocs,
+	static inline void ConfigureQword ( QWORD & tQword, const BYTE * tHits, const BYTE * tDocs,
 		int iDynamic, int iInline, const CSphRowitem * pMin )
 	{
 		tQword.m_iInlineAttrs = iInline;
-		tQword.m_pInlineFixup = iInline ? pMin : NULL;
+		tQword.m_pInlineFixup = iInline ? pMin : nullptr;
 
-		tQword.m_rdHitlist.SetFile ( tHits );
-		tQword.m_rdHitlist.GetByte();
+		tQword.m_rdHitlist.SetArena ( tHits );
+		tQword.m_rdHitlist.SeekTo(1);
 
-		tQword.m_rdDoclist.SetFile ( tDocs );
-		tQword.m_rdDoclist.GetByte();
+		tQword.m_rdDoclist.SetArena ( tDocs );
+		tQword.m_rdDoclist.SeekTo(1);
 
 		tQword.m_tDoc.Reset ( iDynamic );
 	}
@@ -13461,16 +13482,16 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 	/// setup qwords
 
-	QWORDDST tDstQword ( false, false );
-	QWORDSRC tSrcQword ( false, false );
+	QWORDDST tDstQword ( false );
+	QWORDSRC tSrcQword ( false );
 
-	CSphAutofile tSrcDocs, tSrcHits;
-	tSrcDocs.Open ( pSrcIndex->GetIndexFileName("spd"), SPH_O_READ, sError );
-	tSrcHits.Open ( pSrcIndex->GetIndexFileName("spp"), SPH_O_READ, sError );
+	CSphMappedBuffer<BYTE> tSrcDocs, tSrcHits;
+	tSrcDocs.Setup ( pSrcIndex->GetIndexFileName("spd"), sError );
+	tSrcHits.Setup ( pSrcIndex->GetIndexFileName("spp"), sError );
 
-	CSphAutofile tDstDocs, tDstHits;
-	tDstDocs.Open ( pDstIndex->GetIndexFileName("spd"), SPH_O_READ, sError );
-	tDstHits.Open ( pDstIndex->GetIndexFileName("spp"), SPH_O_READ, sError );
+	CSphMappedBuffer<BYTE> tDstDocs, tDstHits;
+	tDstDocs.Setup ( pDstIndex->GetIndexFileName("spd"), sError );
+	tDstHits.Setup ( pDstIndex->GetIndexFileName("spp"), sError );
 
 	if ( !sError.IsEmpty() || g_bShutdown || *pLocalStop )
 		return false;
@@ -13480,10 +13501,10 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 	CSphMerger tMerger ( pHitBuilder, Max ( iDstInlineSize, iSrcInlineSize ), uMinID );
 
-	CSphMerger::ConfigureQword<QWORDDST> ( tDstQword, tDstHits, tDstDocs,
+	CSphMerger::ConfigureQword<QWORDDST> ( tDstQword, tDstHits.GetWritePtr (), tDstDocs.GetWritePtr (),
 		pDstIndex->m_tSchema.GetDynamicSize(), iDstInlineSize,
 		pDstIndex->m_dMinRow.Begin() );
-	CSphMerger::ConfigureQword<QWORDSRC> ( tSrcQword, tSrcHits, tSrcDocs,
+	CSphMerger::ConfigureQword<QWORDSRC> ( tSrcQword, tSrcHits.GetWritePtr (), tSrcDocs.GetWritePtr (),
 		pSrcIndex->m_tSchema.GetDynamicSize(), iSrcInlineSize,
 		pSrcIndex->m_dMinRow.Begin() );
 
@@ -14370,7 +14391,7 @@ bool CSphIndex_VLN::ReplaceKillList ( const SphDocID_t * pKillist, int iCount )
 		return false;
 
 	m_tKillList.Reset();
-	if ( !m_tKillList.Setup ( GetIndexFileName("spk").cstr(), m_sLastError, true ) )
+	if ( !m_tKillList.Setup ( GetIndexFileName("spk"), m_sLastError, true ) )
 		return false;
 
 	PrereadMapping ( m_sIndexName.cstr(), "kill-list", m_bMlock, m_bOndiskAllAttr, m_tKillList );
@@ -15118,7 +15139,7 @@ ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & tWord ) cons
 {
 	if ( !tWord.m_pPayload )
 	{
-		WITH_QWORD ( m_pIndex, false, Qword, return new Qword ( tWord.m_bExpanded, tWord.m_bExcluded ) );
+		WITH_QWORD ( m_pIndex, false, Qword, return new Qword ( tWord.m_bExcluded ) );
 	} else
 	{
 		if ( m_pIndex->GetSettings().m_eHitFormat==SPH_HIT_FORMAT_INLINE )
@@ -15129,13 +15150,13 @@ ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & tWord ) cons
 			return new DiskPayloadQword_c<false> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_tDoclist, m_tHitlist, m_pProfile );
 		}
 	}
-	return NULL;
+	return nullptr;
 }
 
 
 bool DiskIndexQwordSetup_c::QwordSetup ( ISphQword * pWord ) const
 {
-	DiskIndexQwordTraits_c * pMyWord = (DiskIndexQwordTraits_c*)pWord;
+	auto * pMyWord = (DiskIndexQwordTraits_c*)pWord;
 
 	// setup attrs
 	pMyWord->m_tDoc.Reset ( m_iDynamicRowitems );
@@ -15150,7 +15171,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 {
 	// there was a dynamic_cast here once but it's not necessary
 	// maybe it worth to rewrite class hierarchy to avoid c-cast here?
-	DiskIndexQwordTraits_c & tWord = *(DiskIndexQwordTraits_c*)pWord;
+	auto & tWord = *(DiskIndexQwordTraits_c*)pWord;
 
 	if ( m_eDocinfo==SPH_DOCINFO_INLINE )
 	{
@@ -15166,7 +15187,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 	tWord.m_iDocs = 0;
 	tWord.m_iHits = 0;
 
-	CSphIndex_VLN * pIndex = (CSphIndex_VLN *)m_pIndex;
+	auto * pIndex = (CSphIndex_VLN *)m_pIndex;
 
 	// !COMMIT FIXME!
 	// the below stuff really belongs in wordlist
@@ -15252,10 +15273,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 
 	if ( m_bSetupReaders )
 	{
-		tWord.m_rdDoclist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
-		tWord.m_rdDoclist.SetFile ( m_tDoclist );
-		tWord.m_rdDoclist.m_pProfile = m_pProfile;
-		tWord.m_rdDoclist.m_eProfileState = SPH_QSTATE_READ_DOCS;
+		tWord.m_rdDoclist.SetArena ( m_tDoclist );
 
 		// read in skiplist
 		// OPTIMIZE? maybe cache hot decompressed lists?
@@ -15281,10 +15299,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 
 		tWord.m_rdDoclist.SeekTo ( tRes.m_iDoclistOffset, tRes.m_iDoclistHint );
 
-		tWord.m_rdHitlist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
-		tWord.m_rdHitlist.SetFile ( m_tHitlist );
-		tWord.m_rdHitlist.m_pProfile = m_pProfile;
-		tWord.m_rdHitlist.m_eProfileState = SPH_QSTATE_READ_HITS;
+		tWord.m_rdHitlist.SetArena ( m_tHitlist );
 	}
 
 	return true;
@@ -15348,8 +15363,8 @@ void CSphIndex_VLN::Dealloc ()
 	if ( !m_bPassedAlloc )
 		return;
 
-	m_tDoclistFile.Close ();
-	m_tHitlistFile.Close ();
+	m_tDoclistFile.Reset ();
+	m_tHitlistFile.Reset ();
 
 	m_tAttr.Reset ();
 	m_tMva.Reset ();
@@ -15637,8 +15652,7 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 	CSphString sWarning;
 	if ( !LoadHeader ( sHeaderName, false, tEmbeddedFiles, sWarning ) )
 	{
-		fprintf ( fp, "FATAL: failed to load header: %s.\n", m_sLastError.cstr() );
-		return;
+		sphDie ( "failed to load header: %s", m_sLastError.cstr ());
 	}
 
 	if ( !sWarning.IsEmpty () )
@@ -15892,8 +15906,7 @@ void CSphIndex_VLN::DebugDumpDocids ( FILE * fp )
 {
 	if ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN )
 	{
-		fprintf ( fp, "FATAL: docids dump only supported for docinfo=extern\n" );
-		return;
+		sphDie ( "docids dump only supported for docinfo=extern" );
 	}
 
 	const int iRowStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
@@ -15959,15 +15972,16 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 	}
 
 	// open files
-	CSphAutofile tDoclist, tHitlist;
-	if ( tDoclist.Open ( GetIndexFileName("spd"), SPH_O_READ, m_sLastError ) < 0 )
+	CSphMappedBuffer<BYTE> tDoclist, tHitlist;
+	if ( !tDoclist.Setup ( GetIndexFileName("spd"), m_sLastError ) )
 		sphDie ( "failed to open doclist: %s", m_sLastError.cstr() );
 
-	if ( tHitlist.Open ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), SPH_O_READ, m_sLastError ) < 0 )
+	if ( !tHitlist.Setup ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), m_sLastError ) )
 		sphDie ( "failed to open hitlist: %s", m_sLastError.cstr() );
 
 	// aim
-	DiskIndexQwordSetup_c tTermSetup ( tDoclist, tHitlist, m_tSkiplists.GetWritePtr(), NULL );
+	DiskIndexQwordSetup_c tTermSetup ( tDoclist.GetWritePtr(), tHitlist.GetWritePtr (),
+		m_tSkiplists.GetWritePtr(), nullptr );
 	tTermSetup.SetDict ( m_pDict );
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
@@ -15975,7 +15989,7 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 	tTermSetup.m_pMinRow = m_dMinRow.Begin();
 	tTermSetup.m_bSetupReaders = true;
 
-	Qword tKeyword ( false, false );
+	Qword tKeyword ( false );
 	tKeyword.m_tDoc.m_uDocID = m_uMinDocid;
 	tKeyword.m_uWordID = uWordID;
 	tKeyword.m_sWord = sKeyword;
@@ -16016,8 +16030,7 @@ void CSphIndex_VLN::DebugDumpDict ( FILE * fp )
 {
 	if ( !m_pDict->GetSettings().m_bWordDict )
 	{
-		fprintf ( fp, "sorry, DebugDumpDict() only supports dict=keywords for now\n" );
-		return;
+		sphDie ( "DebugDumpDict() only supports dict=keywords for now" );
 	}
 
 	fprintf ( fp, "keyword,docs,hits,offset\n" );
@@ -16060,10 +16073,10 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 	// preopen
 	if ( m_bKeepFilesOpen )
 	{
-		if ( m_tDoclistFile.Open ( GetIndexFileName("spd"), SPH_O_READ, m_sLastError ) < 0 )
+		if ( !m_tDoclistFile.Setup ( GetIndexFileName("spd"), m_sLastError ) )
 			return false;
 
-		if ( m_tHitlistFile.Open ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), SPH_O_READ, m_sLastError ) < 0 )
+		if ( !m_tHitlistFile.Setup ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), m_sLastError ) )
 			return false;
 	}
 
@@ -16078,7 +16091,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 	bool bWordDict = m_pDict && m_pDict->GetSettings().m_bWordDict;
 
 	// only checkpoint and wordlist infixes are actually read here; dictionary itself is just mapped
-	if ( !m_tWordlist.Preread ( GetIndexFileName("spi").cstr() , m_uVersion, bWordDict, m_sLastError ) )
+	if ( !m_tWordlist.Preread ( GetIndexFileName("spi") , m_uVersion, bWordDict, m_sLastError ) )
 		return false;
 
 	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN )
@@ -16110,7 +16123,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 
 		int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 
-		if ( !m_tAttr.Setup ( GetIndexFileName("spa").cstr(), m_sLastError, true ) )
+		if ( !m_tAttr.Setup ( GetIndexFileName("spa"), m_sLastError, true ) )
 			return false;
 
 		int64_t iDocinfoSize = m_tAttr.GetLengthBytes();
@@ -16147,7 +16160,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 
 		if ( m_uVersion>=4 )
 		{
-			if ( !m_tMva.Setup ( GetIndexFileName("spm").cstr(), m_sLastError, false ) )
+			if ( !m_tMva.Setup ( GetIndexFileName("spm"), m_sLastError ) )
 				return false;
 
 			if ( m_tMva.GetLength64()>INT_MAX )
@@ -16161,7 +16174,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 		// string data
 		///////////////
 
-		if ( m_uVersion>=17 && !m_tString.Setup ( GetIndexFileName("sps").cstr(), m_sLastError, true ) )
+		if ( m_uVersion>=17 && !m_tString.Setup ( GetIndexFileName("sps"), m_sLastError, true ) )
 				return false;
 	}
 
@@ -16195,12 +16208,12 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 	if ( m_uVersion>=10 )
 	{
 		// FIXME!!! m_bId32to64
-		if ( !m_tKillList.Setup ( GetIndexFileName("spk").cstr(), m_sLastError, false ) )
+		if ( !m_tKillList.Setup ( GetIndexFileName("spk"), m_sLastError ) )
 			return false;
 	}
 
 	// prealloc skiplist
-	if ( m_bHaveSkips && !m_tSkiplists.Setup ( GetIndexFileName("spe").cstr(), m_sLastError, false ) )
+	if ( m_bHaveSkips && !m_tSkiplists.Setup ( GetIndexFileName("spe"), m_sLastError ) )
 			return false;
 
 	// almost done
@@ -16841,14 +16854,12 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	// FIXME!!! missed bigram, add flags to fold blended parts, show expanded terms
 
 	// prepare for setup
-	CSphAutofile tDummy1, tDummy2;
-
-	DiskIndexQwordSetup_c tTermSetup ( tDummy1, tDummy2, m_tSkiplists.GetWritePtr(), NULL );
+	DiskIndexQwordSetup_c tTermSetup ( nullptr, nullptr, m_tSkiplists.GetWritePtr(), NULL );
 	tTermSetup.SetDict ( pDict );
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
 
-	Qword tQueryWord ( false, false );
+	Qword tQueryWord ( false );
 
 	if ( bFillOnly )
 	{
@@ -18112,26 +18123,27 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
 
 	// open files
-	CSphAutofile tDoclist, tHitlist;
+	CSphMappedBuffer<BYTE> tDoclist, tHitlist;
 	if ( !m_bKeepFilesOpen )
 	{
 		if ( pProfile )
 			pProfile->Switch ( SPH_QSTATE_OPEN );
 
-		if ( tDoclist.Open ( GetIndexFileName("spd"), SPH_O_READ, pResult->m_sError ) < 0 )
+		if ( !tDoclist.Setup ( GetIndexFileName("spd"), pResult->m_sError ) )
 			return false;
 
-		if ( tHitlist.Open ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), SPH_O_READ, pResult->m_sError ) < 0 )
+		if ( !tHitlist.Setup ( GetIndexFileName ( m_uVersion>=3 ? "spp" : "spd" ), pResult->m_sError ) )
 			return false;
 	}
 
 	if ( pProfile )
 		pProfile->Switch ( SPH_QSTATE_INIT );
 
+	const BYTE* pDoclist = m_bKeepFilesOpen ? m_tDoclistFile.GetWritePtr () : tDoclist.GetWritePtr ();
+	const BYTE* pHitlist = m_bKeepFilesOpen ? m_tHitlistFile.GetWritePtr () : tHitlist.GetWritePtr ();
+
 	// setup search terms
-	DiskIndexQwordSetup_c tTermSetup ( m_bKeepFilesOpen ? m_tDoclistFile : tDoclist,
-		m_bKeepFilesOpen ? m_tHitlistFile : tHitlist,
-		m_tSkiplists.GetWritePtr(), pProfile );
+	DiskIndexQwordSetup_c tTermSetup ( pDoclist, pHitlist, m_tSkiplists.GetWritePtr(), pProfile );
 
 	tTermSetup.SetDict ( pDict );
 	tTermSetup.m_pIndex = this;
@@ -18830,18 +18842,18 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	//////////////
 
 	CSphString sError;
-	CSphAutoreader rdDocs, rdHits;
+	CSphMappedBuffer<BYTE> dDocsMap, dHitsMap;
 	CSphAutoreader rdDict;
 	CSphAutoreader rdSkips;
 	int64_t iSkiplistLen = 0;
 
-	if ( !rdDict.Open ( GetIndexFileName("spi").cstr(), sError ) )
+	if ( !rdDict.Open ( GetIndexFileName("spi"), sError ) )
 		LOC_FAIL(( fp, "unable to open dictionary: %s", sError.cstr() ));
 
-	if ( !rdDocs.Open ( GetIndexFileName("spd"), sError ) )
+	if ( !dDocsMap.Setup ( GetIndexFileName("spd"), sError ) )
 		LOC_FAIL(( fp, "unable to open doclist: %s", sError.cstr() ));
 
-	if ( !rdHits.Open ( GetIndexFileName("spp"), sError ) )
+	if ( !dHitsMap.Setup ( GetIndexFileName("spp"), sError ) )
 		LOC_FAIL(( fp, "unable to open hitlist: %s", sError.cstr() ));
 
 	if ( m_bHaveSkips )
@@ -18850,6 +18862,10 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			LOC_FAIL ( ( fp, "unable to open skiplist: %s", sError.cstr () ) );
 		iSkiplistLen = rdSkips.GetFilesize();
 	}
+
+	ThinMMapReader_c rdDocs, rdHits;
+	rdDocs.SetArena ( dDocsMap.GetWritePtr (), dDocsMap.GetLength64 () );
+	rdHits.SetArena ( dHitsMap.GetWritePtr (), dHitsMap.GetLength64 () );
 
 	CSphAutoreader rdAttr;
 	CSphAutoreader rdString;
@@ -19264,10 +19280,10 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		DWORD uInlineDocinfo = ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE );
 		switch ( ( uInlineHits<<1 ) | uInlineDocinfo )
 		{
-		case 0: { typedef DiskIndexQword_c < false, false, false > T; pQword = new T ( false, false ); break; }
-		case 1: { typedef DiskIndexQword_c < false, true, false > T; pQword = new T ( false, false ); break; }
-		case 2: { typedef DiskIndexQword_c < true, false, false > T; pQword = new T ( false, false ); break; }
-		case 3: { typedef DiskIndexQword_c < true, true, false > T; pQword = new T ( false, false ); break; }
+		case 0: { typedef DiskIndexQword_c < false, false, false > T; pQword = new T ( false ); break; }
+		case 1: { typedef DiskIndexQword_c < false, true, false > T; pQword = new T ( false ); break; }
+		case 2: { typedef DiskIndexQword_c < true, false, false > T; pQword = new T ( false ); break; }
+		case 3: { typedef DiskIndexQword_c < true, true, false > T; pQword = new T ( false ); break; }
 		}
 		if ( !pQword )
 			sphDie ( "INTERNAL ERROR: impossible qword settings" );
@@ -19282,14 +19298,12 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		} else
 		{
 			pQword->m_iInlineAttrs = 0;
-			pQword->m_pInlineFixup = NULL;
+			pQword->m_pInlineFixup = nullptr;
 		}
 		pQword->m_iDocs = 0;
 		pQword->m_iHits = 0;
-		pQword->m_rdDoclist.SetFile ( rdDocs.GetFD(), rdDocs.GetFilename().cstr() );
-		pQword->m_rdDoclist.SeekTo ( rdDocs.GetPos(), READ_NO_SIZE_HINT );
-		pQword->m_rdHitlist.SetFile ( rdHits.GetFD(), rdHits.GetFilename().cstr() );
-		pQword->m_rdHitlist.SeekTo ( rdHits.GetPos(), READ_NO_SIZE_HINT );
+		pQword->m_rdDoclist = rdDocs;
+		pQword->m_rdHitlist = rdHits;
 
 		CSphRowitem * pInlineStorage = nullptr;
 		if ( pQword->m_iInlineAttrs )
@@ -30453,7 +30467,7 @@ struct MappedCheckpoint_fn : public ISphNoncopyable
 };
 
 
-bool CWordlist::Preread ( const char * sName, DWORD uVersion, bool bWordDict, CSphString & sError )
+bool CWordlist::Preread ( const CSphString & sName, DWORD uVersion, bool bWordDict, CSphString & sError )
 {
 	assert ( ( uVersion>=21 && bWordDict ) || !bWordDict );
 	assert ( m_iDictCheckpointsOffset>0 );
@@ -30470,7 +30484,7 @@ bool CWordlist::Preread ( const char * sName, DWORD uVersion, bool bWordDict, CS
 	// fast path for CRC checkpoints - just maps data and use inplace CP reader
 	if ( !bWordDict )
 	{
-		if ( !m_tBuf.Setup ( sName, sError, false ) )
+		if ( !m_tBuf.Setup ( sName, sError ) )
 			return false;
 
 		// read v.14 checkpoints
@@ -30574,7 +30588,7 @@ bool CWordlist::Preread ( const char * sName, DWORD uVersion, bool bWordDict, CS
 	tReader.Close();
 
 	// mapping up only wordlist without meta (checkpoints, infixes, etc)
-	if ( !m_tBuf.Setup ( sName, sError, false ) )
+	if ( !m_tBuf.Setup ( sName, sError ) )
 		return false;
 
 	return true;

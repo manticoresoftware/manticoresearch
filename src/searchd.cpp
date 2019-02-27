@@ -13419,7 +13419,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
 	if ( !pServed )
 	{
-		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
+		sError.SetSprintf ( "no such local index '%s'", tStmt.m_sIndex.cstr() );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}

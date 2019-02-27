@@ -365,8 +365,8 @@ class SphinxClient:
 	def SetMatchMode (self, mode):
 		"""
 		Set matching mode.
-		"""
 		print('DEPRECATED: Do not call this method or, even better, use SphinxQL instead of an API', file=sys.stderr)
+		"""
 		assert(mode in [SPH_MATCH_ALL, SPH_MATCH_ANY, SPH_MATCH_PHRASE, SPH_MATCH_BOOLEAN, SPH_MATCH_EXTENDED, SPH_MATCH_FULLSCAN, SPH_MATCH_EXTENDED2])
 		self._mode = mode
 
@@ -521,7 +521,9 @@ class SphinxClient:
 
 
 	def SetOverride (self, name, type, values):
+		"""
 		print('DEPRECATED: Do not call this method. Use SphinxQL REMAP() function instead.', file=sys.stderr)
+		"""
 		assert(isinstance(name, str))
 		assert(type in SPH_ATTR_TYPES)
 		assert(isinstance(values, dict))

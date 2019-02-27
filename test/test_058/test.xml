@@ -137,11 +137,11 @@ insert into test_table values
 
 <custom_test><![CDATA[
 
-$query = create_function('$client,$words','
+$query = function($client,$words) { //$query = create_function('$client,$words','
 $result = $client->Query ( $words, "index" );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError();
-');
+}; //');
 
-$mquery = create_function('$client','
+$mquery = function($client) { // $mquery = create_function('$client','
 $client->AddQuery ( "second", "loc1" );
 $client->AddQuery ( "fifth", "loc2" );
 $client->AddQuery ( "third", "loc3" );
@@ -157,11 +157,12 @@ for ( $i=0; $i<count($res); $i++ )
 	$result[] = $res[$i];
 }
 return $result;
-');
+}; // ');
 
-$q1 = create_function('$client,$words,$index','
-$result = $client->Query ( $words, $index );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError();
-');
+$q1 = function($client,$words,$index)
+{
+	$result = $client->Query ( $words, $index );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError();
+};
 
 $results = array();
 $errors = '';

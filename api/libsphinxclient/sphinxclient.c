@@ -529,7 +529,7 @@ sphinx_bool sphinx_set_max_query_time ( sphinx_client * client, int max_query_ti
 // DEPRECATED
 sphinx_bool sphinx_set_match_mode ( sphinx_client * client, int mode )
 {
-	fprintf ( stderr, "DEPRECATED: Do not call this method or, even better, use SphinxQL instead of an API\n" );
+	//fprintf ( stderr, "DEPRECATED: Do not call this method or, even better, use SphinxQL instead of an API\n" );
 
 	if ( !client || mode<SPH_MATCH_ALL || mode>SPH_MATCH_EXTENDED2 ) // FIXME?
 	{
@@ -866,7 +866,7 @@ sphinx_bool sphinx_add_override ( sphinx_client * client, const char * attr, con
 {
 	struct st_override * p;
 
-	fprintf ( stderr, "DEPRECATED: Do not call this method. Use SphinxQL REMAP() function instead.\n" );
+	//fprintf ( stderr, "DEPRECATED: Do not call this method. Use SphinxQL REMAP() function instead.\n" );
 
 	if ( !client )
 		return SPH_FALSE;

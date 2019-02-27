@@ -15637,8 +15637,7 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 	CSphString sWarning;
 	if ( !LoadHeader ( sHeaderName, false, tEmbeddedFiles, sWarning ) )
 	{
-		fprintf ( fp, "FATAL: failed to load header: %s.\n", m_sLastError.cstr() );
-		return;
+		sphDie ( "failed to load header: %s", m_sLastError.cstr ());
 	}
 
 	if ( !sWarning.IsEmpty () )
@@ -15892,8 +15891,7 @@ void CSphIndex_VLN::DebugDumpDocids ( FILE * fp )
 {
 	if ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN )
 	{
-		fprintf ( fp, "FATAL: docids dump only supported for docinfo=extern\n" );
-		return;
+		sphDie ( "docids dump only supported for docinfo=extern" );
 	}
 
 	const int iRowStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
@@ -16016,8 +16014,7 @@ void CSphIndex_VLN::DebugDumpDict ( FILE * fp )
 {
 	if ( !m_pDict->GetSettings().m_bWordDict )
 	{
-		fprintf ( fp, "sorry, DebugDumpDict() only supports dict=keywords for now\n" );
-		return;
+		sphDie ( "DebugDumpDict() only supports dict=keywords for now" );
 	}
 
 	fprintf ( fp, "keyword,docs,hits,offset\n" );

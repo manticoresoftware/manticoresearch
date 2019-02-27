@@ -1067,11 +1067,11 @@ incoming queries at some point with a “maxed out” message.
 read_buffer
 ~~~~~~~~~~~
 
-Per-keyword read buffer size. Optional, default is 256K.
+Per-keyword read buffer size. Optional, default is 256K. Deprecated. Unused.
 
-For every keyword occurrence in every search query, there are two
+In past, for every keyword occurrence in every search query, there were two
 associated read buffers (one for document list and one for hit list).
-This setting lets you control their sizes, increasing per-query RAM use,
+This setting let you control their sizes, increasing per-query RAM use,
 but possibly decreasing IO time.
 
 Example:
@@ -1081,6 +1081,13 @@ Example:
 
 
     read_buffer = 1M
+
+NOTE: At this moment instead of reading files with document and hit lists we map them into address space and then just
+directly access the content. It eliminates explicit calls for 'seek' and 'read' operations, which may need to switch from
+userspace to kernel, and also eliminates redundand copying of buffers (when we call 'read', system fills a read buffer
+internally, then our read routine copy that blob into own internal buffer, and finally it settles into operative buffer
+used directly for computations. With mapping the file we just copy once from mapped area to operative buffer).
+Such approach made the param deprecated; it is no more used, but kept for a while to avoid breaking existing configs.
 
 .. _read_timeout:
 
@@ -1104,14 +1111,14 @@ Example:
 read_unhinted
 ~~~~~~~~~~~~~
 
-Unhinted read size. Optional, default is 32K.
+Unhinted read size. Optional, default is 32K. Deprecated. Unused.
 
-When querying, some reads know in advance exactly how much data is there
+In past, when querying, some reads knew in advance exactly how much data is there
 to be read, but some currently do not. Most prominently, hit list size
-in not currently known in advance. This setting lest you control how
-much data to read in such cases. It will impact hit list IO time,
+in not currently known in advance. This setting let you control how
+much data to read in such cases. It impacted hit list IO time,
 reducing it for lists larger than unhinted read size, but raising it for
-smaller lists. It will **not** affect RAM use because read buffer
+smaller lists. It **not** affected RAM use because read buffer
 will be already allocated. So it should be not greater than
 read_buffer.
 
@@ -1122,6 +1129,14 @@ Example:
 
 
     read_unhinted = 32K
+
+
+NOTE: At this moment instead of reading files with document and hit lists we map them into address space and then just
+directly access the content. It eliminates explicit calls for 'seek' and 'read' operations, which may need to switch from
+userspace to kernel, and also eliminates redundand copying of buffers (when we call 'read', system fills a read buffer
+internally, then our read routine copy that blob into own internal buffer, and finally it settles into operative buffer
+used directly for computations. With mapping the file we just copy once from mapped area to operative buffer).
+Such approach made the param deprecated; it is no more used, but kept for a while to avoid breaking existing configs.
 
 .. _rt_flush_period:
 

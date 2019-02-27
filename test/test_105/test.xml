@@ -87,7 +87,7 @@ insert into test_table values
 
 <custom_test><![CDATA[
 
-$query = create_function('$client,$words','$result = $client->Query ( $words, "index" );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError(); ');
+$query = function($client,$words) { $result = $client->Query ( $words, "index" );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError(); };
 
 $results = array();
 $errors = '';

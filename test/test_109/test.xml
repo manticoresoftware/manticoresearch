@@ -222,9 +222,9 @@ for ( $i=0; $i<50; $i++ )
 $results[] = "segments merge: replaced=$replaced, queried=$queried";
 
 // issues with merge+rotate and merge of indexes v31
-$queryAPI = create_function('$client,$words,$idx', '
+$queryAPI = function($client,$words,$idx) {
 $result = $client->Query ( $words, $idx );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError();
-');
+};
 
 usleep ( 100000 );
 $client->SetLimits ( 0, 1 );

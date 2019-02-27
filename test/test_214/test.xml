@@ -64,8 +64,8 @@ INSERT INTO `test_table` VALUES
 </db_insert>
 
 <custom_test><![CDATA[
-$query = create_function('$query,$sock,&$results',
-'
+$query = function ( $query,$sock,&$results )
+{
 $results[] = "running query [$query]";
 
 $res = @mysql_query ( $query, $sock );
@@ -88,7 +88,7 @@ else
 		$results[] = $foo;
 	}	
 }
-');
+};
 
 global $g_locals, $sd_address, $sd_sphinxql_port;
 $results = array();

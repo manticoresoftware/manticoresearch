@@ -66,8 +66,8 @@ index test
 
 $results = array();
 
-$make_sock = create_function ( '&$results', '
-
+$make_sock = function ( &$results )
+{
 	global $sd_address, $sd_sphinxql_port, $error;
 
 	$sockStr = "$sd_address:$sd_sphinxql_port";
@@ -80,10 +80,10 @@ $make_sock = create_function ( '&$results', '
 		$results[] = "error: can not connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
 	}
 	return $sock;
-');
+};
 
-$query = create_function ( '&$results, $q, $sock', '
-	
+$query = function ( &$results, $q, $sock )
+{
 	$res = @mysql_query ( $q, $sock );
 	if ($res===true)
 	{
@@ -106,7 +106,7 @@ $query = create_function ( '&$results, $q, $sock', '
 			}
 		}	
 	}
-');
+};
 
 $sock = $make_sock( $results );
 if ( $sock === false )

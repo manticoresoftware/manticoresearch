@@ -44,7 +44,8 @@ index rt_stem
 
 <custom_test><![CDATA[
 
-$restartDaemon = create_function('$client','
+$restartDaemon = function ( $client )
+{
 	$results = array ();
 	StopSearchd ( "config.conf", "searchd.pid" );
 	usleep ( 50000 );
@@ -62,10 +63,10 @@ $restartDaemon = create_function('$client','
 	}
 		
 	return $results;
-');
+};
 
-$query = create_function ( '$q, $sock','
-	
+$query = function ( $q, $sock )
+{
 	$results = array( $q );
 	$res = @mysql_query ( $q, $sock );
 	if ( $res===false )
@@ -97,10 +98,10 @@ $query = create_function ( '$q, $sock','
 	}
 	
 	return $results;
-');
+};
 
-$insert = create_function ( '$idx, $from, $to, $query, $sock','
-
+$insert = function ( $idx, $from, $to, $query, $sock )
+{
 	$insert = "REPLACE INTO $idx ( id, idd, content ) VALUES";
 	$lastword = 1;
 	for ( $doc=$from; $doc<$to; $doc++ )
@@ -124,19 +125,19 @@ $insert = create_function ( '$idx, $from, $to, $query, $sock','
 	
 	$res = $query ( substr ( $insert, 0, -1 ), $sock ); // remove trailing ,
 	return array();
-');
+};
 
-$open = create_function ( '', '
-
+$open = function ()
+{
 	global $sd_address, $sd_sphinxql_port;
 	$sockStr = "$sd_address:$sd_sphinxql_port";
 	if ($sd_address == "localhost")
 		$sockStr = "127.0.0.1:$sd_sphinxql_port";
 	$sock = @mysql_connect ($sockStr,"","",	true );
 	return $sock;
-');
+};
 
-$close = create_function ( '$sock', '@mysql_close ( $sock );' );
+$close = function ( $sock ) { eval ('@mysql_close ( $sock );'); };
 
 $results = array ();
 

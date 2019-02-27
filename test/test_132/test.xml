@@ -95,8 +95,8 @@ index mva_save
 <custom_test><![CDATA[
 $results = array ();
 
-$query = create_function ( '$q, $sock','
-	
+$query = function ($q, $sock)
+{
 	$results = array( $q );
 	$res = @mysql_query ( $q, $sock );
 	if ( $res===false )
@@ -128,7 +128,7 @@ $query = create_function ( '$q, $sock','
 	}
 	
 	return $results;
-');
+};
 
 global $sd_address, $sd_sphinxql_port;
 $sockStr = "$sd_address:$sd_sphinxql_port";

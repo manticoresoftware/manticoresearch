@@ -314,7 +314,6 @@ foreach ( $tests as $test )
 	}
 	elseif ( file_exists ( $test."/test.inc" ) )
 	{
-		//$run_func = create_function ( '$test_path', file_get_contents ( $test."/test.inc" ) );
 		$run_func = function ( $test_path ) use ($test) { return file_get_contents ( $test."/test.inc" ); };
 
 		$total_tests++;

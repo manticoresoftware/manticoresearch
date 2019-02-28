@@ -2,6 +2,10 @@
 <test>
 <name>Indexes autoreload</name>
 
+<requires>
+<non-rt/>
+</requires>
+
 <config>
 indexer
 {

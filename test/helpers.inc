@@ -3524,7 +3524,7 @@ function CheckConfig ( $config, $path )
 	
 	if ( $config->Requires("replication") && !$g_repli )
 	{
-		printf ( "SKIPPING %s, %s - compile with replication support to run this test\n", $path, $config->Name () );
+		printf ( "SKIPPING %s, %s - compile with replication support, add galera_lib_path to your ~/.sphinx to run this test\n", $path, $config->Name () );
 		return false;
 	}
 

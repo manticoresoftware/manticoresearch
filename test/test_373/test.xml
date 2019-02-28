@@ -42,7 +42,7 @@ index idx1
 
 $ql->Reconnect();
 $results  	= array();
-$results[] 	= $ql->Query ( 'SHOW INDEX idx1 STATUS' );
+$results[] 	= explode( PHP_EOL, $ql->Query ( 'SHOW INDEX idx1 STATUS' ))[0];
 $results[]	= $ql->Query ( 'SHOW INDEX idx2 STATUS' );
 
 $config = file(testdir('config.conf'));
@@ -60,7 +60,7 @@ sleep(1);
 
 $results[] = 'Indexes reloaded';
 $results[] 	= $ql->Query ( 'SHOW INDEX idx1 STATUS' );
-$results[]	= $ql->Query ( 'SHOW INDEX idx2 STATUS' );
+$results[] 	= explode( PHP_EOL, $ql->Query ( 'SHOW INDEX idx2 STATUS' ))[0];
 
 ]]></custom_test>
 

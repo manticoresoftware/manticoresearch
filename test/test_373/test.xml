@@ -42,7 +42,18 @@ $query 		= mysql_query('SHOW INDEX idx1 STATUS');
 $results[] 	= implode(',', mysql_fetch_assoc($query));
 $query 		= mysql_query('SHOW INDEX idx2 STATUS');
 $results[] 	= mysql_error($conn); 
-shell_exec('cp test_373/config.conf  ../build/test/config.conf && pkill -SIGHUP  searchd');
+
+$config = file(testdir('config.conf'));
+$updatedConfig = '';
+foreach ( $config as $line ) {
+	if ( strpos ( $line, 'index idx1') !== false) {
+		$line = str_replace ('idx1', 'idx2', $line) ;
+	}
+	$updatedConfig .= $line;
+}
+file_put_contents(testdir('config.conf'), $updatedConfig);
+
+shell_exec('pkill -SIGHUP  searchd');
 sleep(1);
 $query 		= mysql_query('SHOW INDEX idx2 STATUS');
 $results[] 	= implode(',', mysql_fetch_assoc($query));

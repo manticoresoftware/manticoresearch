@@ -39,13 +39,11 @@ index idx1
 <db_drop>DROP TABLE IF EXISTS `test_table`</db_drop>
 
 <custom_test><![CDATA[
-global $sd_address, $sd_sphinxql_port, $g_locals;
-$conn 		= @mysql_connect ( sprintf ( "%s:%s", $sd_address, $sd_sphinxql_port ) , $g_locals["db-user"], $g_locals["db-password"] , true );
+
+$ql->Reconnect();
 $results  	= array();
-$query 		= mysql_query('SHOW INDEX idx1 STATUS');
-$results[] 	= implode(',', mysql_fetch_assoc($query));
-$query 		= mysql_query('SHOW INDEX idx2 STATUS');
-$results[] 	= mysql_error($conn); 
+$results[] 	= $ql->Query ( 'SHOW INDEX idx1 STATUS' );
+$results[]	= $ql->Query ( 'SHOW INDEX idx2 STATUS' );
 
 $config = file(testdir('config.conf'));
 $updatedConfig = '';
@@ -57,11 +55,13 @@ foreach ( $config as $line ) {
 }
 file_put_contents(testdir('config.conf'), $updatedConfig);
 
-shell_exec('pkill -SIGHUP  searchd');
+RunIndexer ( $errors, '--rotate --all' ); 
 sleep(1);
-$query 		= mysql_query('SHOW INDEX idx2 STATUS');
-$results[] 	= implode(',', mysql_fetch_assoc($query));
-mysql_close($conn);
+
+$results[] = 'Indexes reloaded';
+$results[] 	= $ql->Query ( 'SHOW INDEX idx1 STATUS' );
+$results[]	= $ql->Query ( 'SHOW INDEX idx2 STATUS' );
+
 ]]></custom_test>
 
 </test>

@@ -1,1 +1,27 @@
-a:1:{i:0;a:1:{i:0;a:3:{i:0;s:15:"index_type,disk";i:1;s:44:"SHOW INDEX STATUS requires an existing index";i:2;s:15:"index_type,disk";}}}
+a:1:{i:0;a:1:{i:0;a:5:{i:0;s:831:"index_type | disk
+indexed_documents | 0
+indexed_bytes | 0
+ram_bytes | 3798
+disk_bytes | 315
+query_time_1min | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}
+query_time_5min | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}
+query_time_15min | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}
+query_time_total | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}
+found_rows_1min | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}
+found_rows_5min | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}
+found_rows_15min | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}
+found_rows_total | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}
+13 rows";i:1;s:51:"ERROR: SHOW INDEX STATUS requires an existing index";i:2;s:16:"Indexes reloaded";i:3;s:51:"ERROR: SHOW INDEX STATUS requires an existing index";i:4;s:831:"index_type | disk
+indexed_documents | 0
+indexed_bytes | 0
+ram_bytes | 3798
+disk_bytes | 315
+query_time_1min | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}
+query_time_5min | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}
+query_time_15min | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}
+query_time_total | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}
+found_rows_1min | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}
+found_rows_5min | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}
+found_rows_15min | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}
+found_rows_total | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}
+13 rows";}}}

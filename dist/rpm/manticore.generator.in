@@ -67,6 +67,7 @@ KillMode=process
 KillSignal=SIGTERM
 SendSIGKILL=no
 LimitNOFILE=infinity
+LimitCORE=infinity
 TimeoutStartSec=0
 PIDFile=/var/run/manticore/searchd.pid
 

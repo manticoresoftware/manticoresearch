@@ -468,12 +468,6 @@ static CSphAtomic							g_iPersistentInUse;
 
 static ServiceThread_t						g_tPrereadThread;
 
-/// master-agent API protocol extensions version
-enum
-{
-	VER_MASTER = 17
-};
-
 
 /// command names
 static const char * g_dApiCommands[] =
@@ -3361,7 +3355,7 @@ void SearchRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedOu
 {
 	APICommand_t tWr { tOut, SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH }; // API header
 
-	tOut.SendInt ( VER_MASTER );
+	tOut.SendInt ( VER_COMMAND_SEARCH_MASTER );
 	tOut.SendInt ( m_iEnd-m_iStart+1 );
 	for ( int i=m_iStart; i<=m_iEnd; ++i )
 		SendQuery ( tAgent.m_tDesc.m_sIndexes.cstr (), tOut, m_dQueries[i], tAgent.m_iWeight, tAgent.m_iMyQueryTimeout );
@@ -8132,7 +8126,7 @@ void HandleCommandSearch ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c
 	}
 
 	int iMasterVer = tReq.GetInt();
-	if ( iMasterVer<0 || iMasterVer>VER_MASTER )
+	if ( iMasterVer<0 || iMasterVer>VER_COMMAND_SEARCH_MASTER )
 	{
 		SendErrorReply ( tOut, "master-agent version mismatch; update me first, then update master!" );
 		return;

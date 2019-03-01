@@ -158,6 +158,13 @@ enum SearchdCommand_e : WORD
 	SEARCHD_COMMAND_WRONG = SEARCHD_COMMAND_TOTAL,
 };
 
+/// master-agent API SEARCH command protocol extensions version
+enum
+{
+	VER_COMMAND_SEARCH_MASTER = 16
+};
+
+
 /// known command versions
 /// (shared here because of REPLICATE)
 enum SearchdCommandV_e : WORD

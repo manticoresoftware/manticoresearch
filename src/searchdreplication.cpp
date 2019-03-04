@@ -807,14 +807,6 @@ void JsonLoadConfig ( const CSphConfigSection & hSearchd )
 		sIncomingAddrs += sListen.cstr();
 	}
 
-	if ( sIncomingAddrs.IsEmpty() )
-	{
-		if ( iCountApi && iCountApi==iCountEmpty )
-			sphWarning ( "all listen have empty address, can not set incoming addresses, replication disabled" );
-		else
-			sphWarning ( "no listen found, can not set incoming addresses, replication disabled" );
-		return;
-	}
 	g_sIncomingAddr = sIncomingAddrs.cstr();
 
 	g_sDataDir = hSearchd.GetStr ( "data_dir", "" );
@@ -833,6 +825,15 @@ void JsonLoadConfig ( const CSphConfigSection & hSearchd )
 	g_sConfigPath.SetSprintf ( "%s/manticoresearch.json", g_sDataDir.cstr() );
 	if ( !JsonConfigRead ( g_sConfigPath, g_dCfgClusters, g_dCfgIndexes, sError ) )
 		sphDie ( "failed to use JSON config, %s", sError.cstr() );
+
+	if ( sIncomingAddrs.IsEmpty() && GetReplicationDL() )
+	{
+		if ( iCountApi && iCountApi==iCountEmpty )
+			sphWarning ( "all listen have empty address, can not set incoming addresses, replication disabled" );
+		else
+			sphWarning ( "no listen found, can not set incoming addresses, replication disabled" );
+		return;
+	}
 }
 
 void JsonDoneConfig()

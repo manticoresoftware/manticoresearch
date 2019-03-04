@@ -484,8 +484,8 @@ If no ``listen`` directives are found then the server will listen on all availab
 interfaces using the default SphinxAPI port **9312**, and also on default
 SphinxQL port **9306**. Both port numbers are assigned by IANA (see
 http://www.iana.org/assignments/port-numbers for details) and should
-therefore be available. For HTTP port **9308** should be considered, however please note that the port is not assigned by IANA, therefor 
-it should be checked if it's available.
+therefor be available. For HTTP the port **9308** is considered the default one, however please note that this port is not assigned by IANA and 
+should be checked first if it's available.
 
 Unix-domain sockets are not supported on Windows.
 
@@ -1082,12 +1082,15 @@ Example:
 
     read_buffer = 1M
 
-NOTE: At this moment instead of reading files with document and hit lists we map them into address space and then just
-directly access the content. It eliminates explicit calls for 'seek' and 'read' operations, which may need to switch from
-userspace to kernel, and also eliminates redundand copying of buffers (when we call 'read', system fills a read buffer
-internally, then our read routine copy that blob into own internal buffer, and finally it settles into operative buffer
-used directly for computations. With mapping the file we just copy once from mapped area to operative buffer).
-Such approach made the param deprecated; it is no more used, but kept for a while to avoid breaking existing configs.
+.. note::
+
+    At this moment instead of reading files with document and hit lists we map them into address space and then just
+    directly access the content. It eliminates explicit calls for 'seek' and 'read' operations, which may need to switch from
+    userspace to kernel, and also eliminates redundand copying of buffers (when we call 'read', system fills a read buffer
+    internally, then our read routine copy that blob into own internal buffer, and finally it settles into operative buffer
+    used directly for computations. With mapping the file we just copy once from mapped area to operative buffer).
+    Such approach made the param deprecated; it is no more used, but kept for a while to avoid breaking existing configs.
+	
 
 .. _read_timeout:
 
@@ -1131,12 +1134,14 @@ Example:
     read_unhinted = 32K
 
 
-NOTE: At this moment instead of reading files with document and hit lists we map them into address space and then just
-directly access the content. It eliminates explicit calls for 'seek' and 'read' operations, which may need to switch from
-userspace to kernel, and also eliminates redundand copying of buffers (when we call 'read', system fills a read buffer
-internally, then our read routine copy that blob into own internal buffer, and finally it settles into operative buffer
-used directly for computations. With mapping the file we just copy once from mapped area to operative buffer).
-Such approach made the param deprecated; it is no more used, but kept for a while to avoid breaking existing configs.
+.. note::
+    At this moment instead of reading files with document and hit lists we map them into address space and then just
+    directly access the content. It eliminates explicit calls for 'seek' and 'read' operations, which may need to switch from
+    userspace to kernel, and also eliminates redundand copying of buffers (when we call 'read', system fills a read buffer
+    internally, then our read routine copy that blob into own internal buffer, and finally it settles into operative buffer
+    used directly for computations. With mapping the file we just copy once from mapped area to operative buffer).
+    Such approach made the param deprecated; it is no more used, but kept for a while to avoid breaking existing configs.
+
 
 .. _rt_flush_period:
 

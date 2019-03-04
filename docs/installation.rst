@@ -214,7 +214,7 @@ Docker images of Manticore Search are hosted publicly on Docker Hub at https://h
 
 For more information about using Docker, see the `Docker Docs <https://docs.docker.com/>`__.
 
-The searchd daemon runs in nodetach mode inside the container. Default configuration includes a simple Real-Time index and listen on the default ports ( 9306 for SphinxQL, 9312 for SphinxAPI and 9308 for HTTP).
+The searchd daemon runs in nodetach mode inside the container. Default configuration includes a simple Real-Time index and listens on the default ports (9306 for SphinxQL, 9312 for SphinxAPI and 9308 for HTTP).
 
 The image comes with MySQL and PostgreSQL client libraries for indexing data from these databases, as well as with the expat library for XML indexing.
 

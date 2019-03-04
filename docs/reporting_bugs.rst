@@ -85,6 +85,20 @@ manually build Manticore from the source tarball, do not run ``strip``
 utility on that binary, and/or do not let your build/packaging system do
 that!
 
+Core dumps
+----------
+
+Sometimes the backtrace doesn't provide enough information about the cause of a crash or the crash cannot be easily reproduced and core files are requires for troubleshooting.
+
+For the searchd daemon to record a core dump in case of a crash, the followings needs to be ensured:
+
+* core dumping to be enabled on the running operating systems. Some operating systems not have core dumping enabled by default.
+
+* searchd needs be started with ``--coredump`` option.
+
+Please note that searchd core files can use a lot of space as they include data from loaded indexes and each crash creates a new core file.
+Free space should be monitored while searchd runs with ``--coredump`` option enabled to avoid filling the storage.
+
 Uploading your data
 -------------------
 

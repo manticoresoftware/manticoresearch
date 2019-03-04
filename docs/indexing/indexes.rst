@@ -91,7 +91,7 @@ Plain indexes and RealTime indexes chunks:
 +===========+==============================+=========================================+
 | spa       | scalar attrs                 | see :ref:`ondisk_attrs`                 |
 +-----------+------------------------------+-----------------------------------------+
-| spd       | document lists               | on disk, gets cached by OS              |
+| spd       | document lists               | on disk, gets cached by OS  :sup:`[2]`  |
 +-----------+------------------------------+-----------------------------------------+
 | spi       | dictionary                   | always loaded in memory                 |
 +-----------+------------------------------+-----------------------------------------+
@@ -103,14 +103,16 @@ Plain indexes and RealTime indexes chunks:
 +-----------+------------------------------+-----------------------------------------+
 | spm       | MVA attrs                    | see :ref:`ondisk_attrs`                 |
 +-----------+------------------------------+-----------------------------------------+
-| spp       | keyword positions            | on disk, gets cached by OS              |
+| spp       | keyword positions            | on disk, gets cached by OS :sup:`[2]`   |
 +-----------+------------------------------+-----------------------------------------+
 | sps       | string/json attrs            | see :ref:`ondisk_attrs`                 |
 +-----------+------------------------------+-----------------------------------------+
 | mvp       | MVA attrs updates :sup:`[1]` | always loaded in memory                 |
 +-----------+------------------------------+-----------------------------------------+
 
-:sup:`[1]` - created only in case MVA persistent updates
+:sup:`[1]` - created only in case of MVA persistent updates
+
+:sup:`[2]` -  starting with 2.8.1 file is accessed using mmap instead of file reading
 
 RealTime indexes also have:
 
@@ -130,3 +132,38 @@ RealTime indexes also have:
 :sup:`[1]` RT kill -  documents that gets REPLACEd. Gets cleared when RAM chunk is dumped as disk chunk.
 
 :sup:`[2]` RAM chunk copy - created when RAM chunk is flushed to disk. Cleared when RAM chunk is dumped as disk chunk.
+
+Operations on indexes
+~~~~~~~~~~~~~~~~~~~~~
+
+Declaration
+^^^^^^^^^^^
+
+Plain indexes can only created by **indexer** tool. 
+If a plain index is only declared in configuration and not created, the daemon will print a warning about.
+It must be also noted that the daemon requires at least an operational index in order to start.
+
+Real-Time,percolate and template indexes can be declared in the configuration and they will be created (with empty data) at daemon start.
+
+Loading or discarding indexes
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+At startup, daemon will try to load and make available all indexes found in the configuration file.
+
+HUP signal is used to issue configuration reload by the daemon. This way new indexes can be loaded or existing indexes can be discarded while daemon is running.
+Changing the type of an index, for example from template to Real-Time, can also be performed during a configuration reload.
+
+Alternative to signaling HUP to searchd daemon, the :ref:`RELOAD INDEXES<reload_indexes_syntax>` SphinxQL command can be used.
+
+Refreshing a plain index already loaded by daemon requires running *indexer* with *--rotate* parameter. 
+In this case, a new version of the plain index is created and when ready, a HUP is send to daemon, which will load the new version of the index in the memory and discard the old one.
+
+Index changes
+^^^^^^^^^^^^^
+Index schema can be changed on-the-fly in case of attribute. Full-text fields however require re-creating the index.
+
+Change of tokenization settings requires a remaking in case of plain indexes. For Real-Time indexes, these can be made on-the-fly using
+:ref:`ALTER RECONFIGURE<alter_syntax>` but they will affect only new content added to index, as it's not possible yet to re-tokenize already indexed texts.
+
+Some settings like :ref:`mlock` and :ref:`ondisk_attrs`, which don't alter in any way the index, don't require an index rebuild, just a reload.
+

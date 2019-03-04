@@ -911,10 +911,9 @@ Miscellaneous functions
    
    - string - The original string. Can be a constant string or a string from a string/json attribute.
    - delimiter - The delimiter to search for
-   - number - The number of times to search for the delimiter. Can be both a positive or negative number.
-   If it is a positive number, this function will return all to the left of the delimiter. 
-   If it is a negative number, this function will return all to the right of the delimiter.
+   - number - The number of times to search for the delimiter. Can be both a positive or negative number.If it is a positive number, this function will return all to the left of the delimiter. If it is a negative number, this function will return all to the right of the delimiter.
 
+   
 .. code-block:: mysql
 
 

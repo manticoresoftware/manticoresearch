@@ -1,3 +1,5 @@
+.. _sphinxse_storage_engine:
+
 MySQL storage engine (SphinxSE)
 -------------------------------
 

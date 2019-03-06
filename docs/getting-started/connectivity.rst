@@ -38,7 +38,7 @@ or libraries implementing prepared statements. In these cases, the MVA values wi
 
 
 Manticore Search does not have the concept of database like MySQL and no user access control is yet implemented.
-However some MySQL clients/connectors demand values set for user/password or database name. These can be set arbitrary as Manticore will simply ignore the values.
+However some MySQL clients/connectors demand values set for user/password or database name. These can be set arbitrarily as Manticore will simply ignore the values.
 
 The default port (and assigned by IANA) for SphinxQL protocol is 9306.
 
@@ -62,12 +62,12 @@ ODBC
 Manticore can be accessed using ODBC. It's recommended to set `charset=UTF8` in the ODBC string. 
 Some ODBC drivers will not like the reported version by the Manticore daemon. This can be overridden with :ref:`mysql_version_string` option.
 
-The SphinxQL protocol can be also be used by a MYSQL server to connect to Manticore using the FEDERATED engine.  
+The SphinxQL protocol can also be used by a MYSQL server to connect to Manticore using FEDERATED engine.  
 For more details about how to connect to Manticore using FEDERATED consult :ref:`federated_storage_engine`.
 
 HTTP API protocol
 ~~~~~~~~~~~~~~~~~
 
-Recommend port for the HTTP protocol is 9308. Please note this port is not assigned by IANA, while there is no known application to use it, it should be checked if it's available.
+Recommended port for the HTTP protocol is 9308. Please note this port is not assigned by IANA, while there is no known application to use it, it should be checked if it's available.
 
 There are no special requirements and any HTTP client can be used to connect to Manticore. Some endpoints may require specific headers set, for more information consult :ref:`httpapi_reference`.

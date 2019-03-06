@@ -6682,7 +6682,7 @@ static void TransformSorterSchema ( ISphMatchSorter * pSorter, const SphChunkGua
 	RTMatchesToNewSchema_c fnFinal ( pOldSchema, pNewSchema, tGuard, dMVA, dStrings, tMvaArenaFlag );
 	pSorter->Finalize ( fnFinal, false );
 
-	pSorter->SetSchema ( pNewSchema );
+	pSorter->SetSchema ( pNewSchema, true );
 	SafeDelete ( pOldSchema );
 }
 

@@ -2472,6 +2472,7 @@ private:
 	const ISphSchema *		m_pNewSchema;
 	CSphVector<CSphAttrLocator>	m_dNewAttrs;
 	CSphVector<int>			m_dOld2New;
+	CSphVector<SphStringSorterRemap_t> m_dRemapStringCmp;
 
 	virtual const DWORD *	GetMVAPool ( const CSphMatch * pMatch ) = 0;
 	virtual const BYTE *	GetStringPool ( const CSphMatch * pMatch ) = 0;

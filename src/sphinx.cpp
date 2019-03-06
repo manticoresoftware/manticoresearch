@@ -8573,6 +8573,11 @@ MatchesToNewSchema_c::MatchesToNewSchema_c ( const ISphSchema * pOldSchema, cons
 	m_dOld2New.Resize ( m_pOldSchema->GetAttrsCount() );
 	for ( int i=0; i < m_pOldSchema->GetAttrsCount(); i++ )
 		m_dOld2New[i] = m_pNewSchema->GetAttrIndex ( m_pOldSchema->GetAttr(i).m_sName.cstr() );
+
+	// need to update @int_str2ptr_ locator to use new schema
+	// no need to pass pOldSchema as we remapping only new schema pointers
+	// also need to update group sorter keypart to be str_ptr in caller code SetSchema
+	sphSortGetStringRemap ( *pNewSchema, *pNewSchema, m_dRemapStringCmp );
 }
 
 
@@ -8659,6 +8664,9 @@ void MatchesToNewSchema_c::Process ( CSphMatch * pMatch )
 	for ( const auto & i : m_dNewAttrs )
 		tResult.SetAttr ( i, 0 );
 
+	for ( const SphStringSorterRemap_t & tRemap : m_dRemapStringCmp )
+		tResult.SetAttr ( tRemap.m_tDst, tResult.GetAttr ( tRemap.m_tSrc ) );
+
 	Swap ( pMatch->m_pDynamic, tResult.m_pDynamic );
 	pMatch->m_pStatic = nullptr;
 }
@@ -8742,7 +8750,7 @@ static void PooledAttrsToPtrAttrs ( ISphMatchSorter ** ppSorters, int nSorters, 
 		DiskMatchesToNewSchema_c fnFinal ( pOldSchema, pNewSchema, pMVA, pStrings, bArenaProhibit );
 		pSorter->Finalize ( fnFinal, false );
 
-		pSorter->SetSchema ( pNewSchema );
+		pSorter->SetSchema ( pNewSchema, true );
 		SafeDelete ( pOldSchema );
 	}
 }
@@ -14284,10 +14292,20 @@ SphWordID_t CSphDictExact::GetWordID ( BYTE * pWord )
 
 /////////////////////////////////////////////////////////////////////////////
 
-void CSphMatchComparatorState::FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+void CSphMatchComparatorState::FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema, bool bRemapKeyparts )
 {
 	for ( auto & i : m_tLocator )
 		sphFixupLocator ( i, pOldSchema, pNewSchema );
+
+	// update string keypart into str_ptr
+	if ( bRemapKeyparts )
+	{
+		for ( int iAttr=0; iAttr<MAX_ATTRS; iAttr++ )
+		{
+			if ( m_eKeypart[iAttr]==SPH_KEYPART_STRING )
+				m_eKeypart[iAttr] = SPH_KEYPART_STRINGPTR;
+		}
+	}
 }
 
 

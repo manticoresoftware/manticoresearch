@@ -57,12 +57,10 @@ ISphMatchSorter::~ISphMatchSorter()
 }
 
 
-void ISphMatchSorter::SetSchema ( ISphSchema * pSchema )
+void ISphMatchSorter::SetSchema ( ISphSchema * pSchema, bool bRemapCmp )
 {
 	assert ( pSchema );
-
-	for ( auto & i : m_tState.m_tLocator )
-		sphFixupLocator ( i, m_pSchema, pSchema );
+	m_tState.FixupLocators ( m_pSchema, pSchema, bRemapCmp );
 
 	m_pSchema = pSchema;
 }
@@ -1691,7 +1689,7 @@ static SphAttr_t GetDistinctKey ( const CSphMatch & tEntry, const CSphAttrLocato
 template <typename COMPGROUP>
 static void FixupSorterLocators ( CSphGroupSorterSettings & tSettings, ISphSchema * pOldSchema,
 	const ISphSchema * pNewSchema, GroupSorter_fn<COMPGROUP> * pGroupSorter,
-	CSphVector<IAggrFunc *> & dAggregates, MatchCloner_t & tPregroup )
+	CSphVector<IAggrFunc *> & dAggregates, MatchCloner_t & tPregroup, bool bRemapCmp )
 {
 	// this is the case when we are moving to a new schema with non-pooled attrs
 	if ( !pOldSchema )
@@ -1699,7 +1697,7 @@ static void FixupSorterLocators ( CSphGroupSorterSettings & tSettings, ISphSchem
 
 	tSettings.FixupLocators ( pOldSchema, pNewSchema );
 	if ( pGroupSorter )
-		pGroupSorter->FixupLocators ( pOldSchema, pNewSchema );
+		pGroupSorter->FixupLocators ( pOldSchema, pNewSchema, bRemapCmp );
 
 	for ( auto i : dAggregates )
 		SafeDelete(i);
@@ -1870,10 +1868,10 @@ public:
 	}
 
 	/// schema setup
-	void SetSchema ( ISphSchema * pSchema ) override
+	void SetSchema ( ISphSchema * pSchema, bool bRemapCmp ) override
 	{
-		FixupSorterLocators ( *this, m_pSchema, pSchema, &m_tGroupSorter, m_dAggregates, m_tPregroup );
-		ISphMatchSorter::SetSchema ( pSchema );
+		FixupSorterLocators ( *this, m_pSchema, pSchema, &m_tGroupSorter, m_dAggregates, m_tPregroup, bRemapCmp );
+		ISphMatchSorter::SetSchema ( pSchema, bRemapCmp );
 		m_dAvgs.Resize ( 0 );
 		SetupBaseGrouper<DISTINCT> ( pSchema, m_tGroupSorter.m_eKeypart, m_tGroupSorter.m_tLocator, &m_dAvgs );
 	}
@@ -2317,10 +2315,10 @@ public:
 	}
 
 	/// schema setup
-	void SetSchema ( ISphSchema * pSchema ) override
+	void SetSchema ( ISphSchema * pSchema, bool bRemapCmp ) override
 	{
-		FixupSorterLocators ( *this, m_pSchema, pSchema, &m_tGroupSorter, m_dAggregates, m_tPregroup );
-		ISphMatchSorter::SetSchema ( pSchema );
+		FixupSorterLocators ( *this, m_pSchema, pSchema, &m_tGroupSorter, m_dAggregates, m_tPregroup, bRemapCmp );
+		ISphMatchSorter::SetSchema ( pSchema, bRemapCmp );
 		m_dAvgs.Resize ( 0 );
 		SetupBaseGrouper<DISTINCT> ( pSchema, m_tGroupSorter.m_eKeypart, m_tGroupSorter.m_tLocator, &m_dAvgs );
 	}
@@ -3235,10 +3233,10 @@ public:
 	}
 
 	/// schema setup
-	void SetSchema ( ISphSchema * pSchema ) override
+	void SetSchema ( ISphSchema * pSchema, bool bRemapCmp ) override
 	{
-		FixupSorterLocators<void> ( *this, m_pSchema, pSchema, nullptr, m_dAggregates, m_tPregroup );
-		ISphMatchSorter::SetSchema ( pSchema );
+		FixupSorterLocators<void> ( *this, m_pSchema, pSchema, nullptr, m_dAggregates, m_tPregroup, bRemapCmp );
+		ISphMatchSorter::SetSchema ( pSchema, bRemapCmp );
 		SetupBaseGrouper<DISTINCT> ( pSchema );
 	}
 
@@ -4649,6 +4647,7 @@ static void SetupSortRemap ( CSphRsetSchema & tSorterSchema, CSphMatchComparator
 			tSorterSchema.AddAttr ( tRemapCol, true );
 		}
 		tState.m_tLocator[i] = tSorterSchema.GetAttr ( iRemap ).m_tLocator;
+		tState.m_dAttrs[i] = iRemap;
 	}
 }
 
@@ -5781,7 +5780,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	assert ( pTop );
 	pTop->SetState ( tStateMatch );
 	pTop->SetGroupState ( tStateGroup );
-	pTop->SetSchema ( pSorterSchema.LeakPtr() );
+	pTop->SetSchema ( pSorterSchema.LeakPtr(), false );
 	pTop->m_bRandomize = bRandomize;
 
 	if ( bRandomize )

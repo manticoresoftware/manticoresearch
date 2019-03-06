@@ -3031,7 +3031,7 @@ struct CSphMatchComparatorState
 		return m_fnStrCmp ( aa, bb, eStrSource, 0, 0 );
 	}
 
-	void FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema );
+	void FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema, bool bRemapKeyparts );
 };
 
 
@@ -3090,7 +3090,7 @@ public:
 	virtual void		SetStringPool ( const BYTE * ) {}
 
 	/// set sorter schema
-	virtual void		SetSchema ( ISphSchema * pSchema );
+	virtual void		SetSchema ( ISphSchema * pSchema, bool bRemapCmp );
 
 	/// get incoming schema
 	virtual const ISphSchema * GetSchema () const { return m_pSchema; }

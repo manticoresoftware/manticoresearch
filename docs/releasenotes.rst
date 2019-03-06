@@ -1,6 +1,35 @@
 Release notes
 =============
 
+Version 2.8.1 GA, 6 March 2019
+---------------------------------
+
+Features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* SUBSTRING_INDEX()
+* SENTENCE and PARAGRAPH support for percolate queries
+* systemd generator for Debian/Ubuntu; also added LimitCORE to allow core dumping
+
+Bugfixes
+~~~~~~~~
+
+* `84fe7405 <https://github.com/manticoresoftware/manticoresearch/commit/84fe7405d17b59f4dcde15a6c8e8503923503def>`__ fixed crash of daemon on match mode all and empty full text query
+* `daa88b57 <https://github.com/manticoresoftware/manticoresearch/commit/daa88b579fa373d5d2e869e43a2e178363b0fef1>`__ fixed crash on deleting of static string
+* `22078537 <https://github.com/manticoresoftware/manticoresearch/commit/22078537dddbd9ce81a182dcc879f235b6e87004>`__ fixed exit code when indextool failed with FATAL
+* `0721696d <https://github.com/manticoresoftware/manticoresearch/commit/0721696d6780c200c65d596624a8187983fb7fcb>`__ fixed `#109 <https://github.com/manticoresoftware/manticoresearch/issues/109>`__ no matches for prefixes due to wrong exact form check
+* `8af81011 <https://github.com/manticoresoftware/manticoresearch/commit/8af810111b8e2f87bc9f378172eff1ab9725c7e7>`__ fixed `#161 <https://github.com/manticoresoftware/manticoresearch/issues/161>`__ reload of config settings for RT indexes
+* `e2d59277 <https://github.com/manticoresoftware/manticoresearch/commit/e2d592773f4fd702ace90070a793a842a0fec6ab>`__ fixed crash of daemon on access of large JSON string
+* `75cd1342 <https://github.com/manticoresoftware/manticoresearch/commit/75cd1342d05cdc352e3dd145cdbc6f79394a165b>`__ fixed PQ field at JSON document altered by index stripper causes wrong match from sibling field
+* `e2f77543 <https://github.com/manticoresoftware/manticoresearch/commit/e2f775437df922674d772ed4417780492502e65a>`__ fixed crash of daemon at parse JSON on RHEL7 builds
+* `3a25a580 <https://github.com/manticoresoftware/manticoresearch/commit/3a25a5808feb3f8b80866991b436d6c1241618c2>`__ fixed crash of json unescaping when slash is on the edge
+* `be9f4978 <https://github.com/manticoresoftware/manticoresearch/commit/be9f497872bea62dbdccd64fc28294fd7776c289>`__ fixed option 'skip_empty' to skip empty docs and not warn they're not valid json
+* `266e0e7b <https://github.com/manticoresoftware/manticoresearch/commit/266e0e7b088549722a805fc837bf101ff681a5e8>`__ fixed `#140 <https://github.com/manticoresoftware/manticoresearch/issues/161>`__ output 8 digits on floats when 6 is not enough to be precise
+* `3f6d2389 <https://github.com/manticoresoftware/manticoresearch/commit/3f6d23891064ee8e94030c4231497cdd7da33a6a>`__ fixed empty jsonobj creation
+* `f3c7848a <https://github.com/manticoresoftware/manticoresearch/commit/f3c7848a59b7eedc67c3403d6d4b37ce6fa94dc8>`__ fixed `#160 <https://github.com/manticoresoftware/manticoresearch/issues/161>`__ empty mva outputs NULL instead of an empty string
+* `0afa2ed0 <https://github.com/manticoresoftware/manticoresearch/commit/0afa2ed058e5759470b1d7354c722faab34f98bb>`__ fixed fail to build without pthread_getname_np
+* `9405fccd <https://github.com/manticoresoftware/manticoresearch/commit/9405fccdeb27f0302a8d9a848981d30080216777>`__ fixed crash on daemon shutdown with thread_pool workers
+
 Version 2.8.0 GA, 28 January 2019
 ---------------------------------
 

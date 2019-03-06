@@ -9663,6 +9663,12 @@ void RtBinlog_c::SaveMeta ()
 
 	wrMeta.CloseFile();
 
+	if ( wrMeta.IsError() )
+	{
+		sphWarning ( "%s", sError.cstr() );
+		return;
+	}
+
 	if ( sph::rename ( sMeta.cstr(), sMetaOld.cstr() ) )
 		sphDie ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)",
 			sMeta.cstr(), sMetaOld.cstr(), errno, strerrorm(errno) ); // !COMMIT handle this gracefully

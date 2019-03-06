@@ -1082,15 +1082,6 @@ Example:
 
     read_buffer = 1M
 
-.. note::
-
-    At this moment instead of reading files with document and hit lists we map them into address space and then just
-    directly access the content. It eliminates explicit calls for 'seek' and 'read' operations, which may need to switch from
-    userspace to kernel, and also eliminates redundand copying of buffers (when we call 'read', system fills a read buffer
-    internally, then our read routine copy that blob into own internal buffer, and finally it settles into operative buffer
-    used directly for computations. With mapping the file we just copy once from mapped area to operative buffer).
-    Such approach made the param deprecated; it is no more used, but kept for a while to avoid breaking existing configs.
-	
 
 .. _read_timeout:
 
@@ -1133,14 +1124,6 @@ Example:
 
     read_unhinted = 32K
 
-
-.. note::
-    At this moment instead of reading files with document and hit lists we map them into address space and then just
-    directly access the content. It eliminates explicit calls for 'seek' and 'read' operations, which may need to switch from
-    userspace to kernel, and also eliminates redundand copying of buffers (when we call 'read', system fills a read buffer
-    internally, then our read routine copy that blob into own internal buffer, and finally it settles into operative buffer
-    used directly for computations. With mapping the file we just copy once from mapped area to operative buffer).
-    Such approach made the param deprecated; it is no more used, but kept for a while to avoid breaking existing configs.
 
 
 .. _rt_flush_period:

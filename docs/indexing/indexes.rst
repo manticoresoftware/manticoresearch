@@ -91,7 +91,7 @@ Plain indexes and RealTime indexes chunks:
 +===========+==============================+=========================================+
 | spa       | scalar attrs                 | see :ref:`ondisk_attrs`                 |
 +-----------+------------------------------+-----------------------------------------+
-| spd       | document lists               | on disk, gets cached by OS  :sup:`[2]`  |
+| spd       | document lists               | on disk, gets cached by OS              |
 +-----------+------------------------------+-----------------------------------------+
 | spi       | dictionary                   | always loaded in memory                 |
 +-----------+------------------------------+-----------------------------------------+
@@ -103,7 +103,7 @@ Plain indexes and RealTime indexes chunks:
 +-----------+------------------------------+-----------------------------------------+
 | spm       | MVA attrs                    | see :ref:`ondisk_attrs`                 |
 +-----------+------------------------------+-----------------------------------------+
-| spp       | keyword positions            | on disk, gets cached by OS :sup:`[2]`   |
+| spp       | keyword positions            | on disk, gets cached by OS              |
 +-----------+------------------------------+-----------------------------------------+
 | sps       | string/json attrs            | see :ref:`ondisk_attrs`                 |
 +-----------+------------------------------+-----------------------------------------+
@@ -112,7 +112,6 @@ Plain indexes and RealTime indexes chunks:
 
 :sup:`[1]` - created only in case of MVA persistent updates
 
-:sup:`[2]` -  starting with 2.8.1 file is accessed using mmap instead of file reading
 
 RealTime indexes also have:
 
@@ -139,18 +138,18 @@ Operations on indexes
 Declaration
 ^^^^^^^^^^^
 
-Plain indexes can only created by **indexer** tool. 
-If a plain index is only declared in configuration and not created, the daemon will print a warning about.
-It must be also noted that the daemon requires at least an operational index in order to start.
+Plain indexes can only be created by **indexer** tool. 
+If a plain index is only declared in configuration,but not created, the daemon will print a warning about that.
+It must be also noted that the daemon requires at least one index of type RT, percolate or plain in order to start.
 
-Real-Time,percolate and template indexes can be declared in the configuration and they will be created (with empty data) at daemon start.
+Real-Time, percolate and template indexes can be declared in the configuration and they will be created (with empty data) at daemon start.
 
 Loading or discarding indexes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 At startup, daemon will try to load and make available all indexes found in the configuration file.
 
-HUP signal is used to issue configuration reload by the daemon. This way new indexes can be loaded or existing indexes can be discarded while daemon is running.
+HUP signal can be used to make the daemon reload the configuration. This way new indexes can be loaded or existing indexes can be discarded while the daemon is running.
 Changing the type of an index, for example from template to Real-Time, can also be performed during a configuration reload.
 
 Alternative to signaling HUP to searchd daemon, the :ref:`RELOAD INDEXES<reload_indexes_syntax>` SphinxQL command can be used.

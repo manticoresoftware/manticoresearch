@@ -3,6 +3,8 @@
 
 <name>phrase boundaries</name>
 
+<requires><non-rt/></requires>
+
 <config>
 indexer
 {
@@ -29,6 +31,36 @@ index test
     phrase_boundary = .
     phrase_boundary_step = 10
 }
+
+
+source src1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT *, 11 as gid FROM test_table
+	sql_attr_uint	= gid
+}
+
+index disk1
+{
+	source			= src1
+	path			= <data_path/>/disk1
+
+    phrase_boundary = .
+    phrase_boundary_step = 10
+}
+
+index rt1
+{
+	type			= rt
+	path			= <data_path/>/rt1
+	rt_field		= text
+	rt_attr_uint	= gid
+	charset_table	= a..z, A..Z->a..z, _
+	
+    phrase_boundary = .
+    phrase_boundary_step = 10
+} 
 </config>
 
 <db_create>
@@ -52,10 +84,33 @@ INSERT INTO `test_table` VALUES
 </db_insert>
 
 <queries>
-<query mode="extended2">^second</query>
-<query mode="extended2">"one two"</query>
-<query mode="extended2">"one two"~10</query>
-<query mode="extended2">"one two"~11</query>
+<query mode="extended2" index="test">^second</query>
+<query mode="extended2" index="test">"one two"</query>
+<query mode="extended2" index="test">"one two"~10</query>
+<query mode="extended2" index="test">"one two"~11</query>
 </queries>
+
+<sphqueries>
+<!-- regression rt index phrase_boundary setting -->
+<sphinxql>INSERT INTO rt1 VALUES
+( 1, 'first.', 11 ),
+( 2, ' second', 11 ),
+( 3, 'one. two three', 11 ),
+( 4, 'one two three', 11 )
+</sphinxql>
+<!-- RAM part -->
+<sphinxql>SELECT * FROM rt1 WHERE MATCH ( '"one two"~10' )</sphinxql>
+<sphinxql>SELECT * FROM rt1 WHERE MATCH ( '"one two"~11' )</sphinxql>
+<sphinxql>FLUSH RAMCHUNK rt1</sphinxql>
+<!-- disk chunk -->
+<sphinxql>SELECT * FROM rt1 WHERE MATCH ( '"one two"~10' )</sphinxql>
+<sphinxql>SELECT * FROM rt1 WHERE MATCH ( '"one two"~11' )</sphinxql>
+<sphinxql>ATTACH INDEX disk1 TO RTINDEX rt1 WITH TRUNCATE</sphinxql>
+<!-- plain attached as disk chunk -->
+<sphinxql>SELECT * FROM rt1 WHERE MATCH ( '"one two"~10' )</sphinxql>
+<sphinxql>SELECT * FROM rt1 WHERE MATCH ( '"one two"~11' )</sphinxql>
+
+</sphqueries>
+
 
 </test>

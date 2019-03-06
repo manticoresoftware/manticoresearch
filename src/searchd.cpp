@@ -16328,25 +16328,30 @@ void HandleMysqlAttach ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	auto pServedFrom = GetServed ( sFrom );
 	auto pServedTo = GetServed ( sTo );
 
-	ServedDescWPtr_c pFrom ( pServedFrom ); // write-lock
-	ServedDescWPtr_c pTo ( pServedTo ) ; // write-lock
-
-	if ( !pFrom
-		|| !pTo
-		|| pFrom->m_eType!=IndexType_e::PLAIN
-		|| pTo->m_eType!=IndexType_e::RT )
+	// need just read lock for initial checks and prevent deadlock of attaching index to itself
 	{
-		if ( !pFrom )
-			tOut.ErrorEx ( MYSQL_ERR_PARSE_ERROR, "no such index '%s'", sFrom.cstr() );
-		else if ( !pTo )
-			tOut.ErrorEx ( MYSQL_ERR_PARSE_ERROR, "no such index '%s'", sTo.cstr() );
-		else if ( pFrom->m_eType!=IndexType_e::PLAIN )
-			tOut.Error ( tStmt.m_sStmt, "1st argument to ATTACH must be a plain index" );
-		else if ( pTo->m_eType!=IndexType_e::RT )
-			tOut.Error ( tStmt.m_sStmt, "2nd argument to ATTACH must be a RT index" );
-		return;
+		ServedDescRPtr_c pFrom ( pServedFrom );
+		ServedDescRPtr_c pTo ( pServedTo ) ;
+
+		if ( !pFrom
+			|| !pTo
+			|| pFrom->m_eType!=IndexType_e::PLAIN
+			|| pTo->m_eType!=IndexType_e::RT )
+		{
+			if ( !pFrom )
+				tOut.ErrorEx ( MYSQL_ERR_PARSE_ERROR, "no such index '%s'", sFrom.cstr() );
+			else if ( !pTo )
+				tOut.ErrorEx ( MYSQL_ERR_PARSE_ERROR, "no such index '%s'", sTo.cstr() );
+			else if ( pFrom->m_eType!=IndexType_e::PLAIN )
+				tOut.Error ( tStmt.m_sStmt, "1st argument to ATTACH must be a plain index" );
+			else if ( pTo->m_eType!=IndexType_e::RT )
+				tOut.Error ( tStmt.m_sStmt, "2nd argument to ATTACH must be a RT index" );
+			return;
+		}
 	}
 
+	ServedDescWPtr_c pFrom ( pServedFrom ); // write-lock
+	ServedDescWPtr_c pTo ( pServedTo ) ; // write-lock
 
 	auto * pRtTo = ( ISphRtIndex * ) pTo->m_pIndex;
 

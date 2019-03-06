@@ -146,6 +146,21 @@ index disk_trunc
 	charset_table	= english, russian
 }
 
+index disk10
+{
+	source			= disk
+	path			= <data_path/>/disk10
+	charset_table	= english
+}
+
+index rt10
+{
+	type			= rt
+	path			= data/rt10
+	rt_field		= title
+	rt_attr_uint	= gid
+} 
+
 </config>
 
 <db_create>
@@ -205,6 +220,13 @@ INSERT INTO test_table VALUES
 <sphinxql>SELECT * FROM rt_trunc</sphinxql>
 <sphinxql>ATTACH INDEX disk_trunc TO RTINDEX rt_trunc WITH TRUNCATE</sphinxql>
 <sphinxql>SELECT * FROM rt_trunc</sphinxql>
+
+<!-- regression hung of daemon on attach index to itself -->
+<sphinxql>ATTACH INDEX disk10 TO RTINDEX disk10 WITH TRUNCATE</sphinxql>
+<sphinxql>ATTACH INDEX rt10 TO RTINDEX rt10 WITH TRUNCATE</sphinxql>
+<sphinxql>ATTACH INDEX disk10 TO RTINDEX rt10 WITH TRUNCATE</sphinxql>
+<sphinxql>SELECT * FROM rt10</sphinxql>
+
 </sphqueries>
 
 </test>

@@ -210,6 +210,12 @@ The options available to ``searchd`` on all builds are:
 
        $ searchd --config /home/myuser/sphinx.conf --coredump
 
+-  ``--new-cluster`` is used to start daemon as reference node for 
+   for a cluster bootstrap with :ref:`cluster restart <repliation_restart>` protection
+
+-  ``--new-cluster-force`` is used to start daemon as reference node for 
+   for a cluster bootstrap and ovverride :ref:`cluster restart <repliation_restart>` protection
+
 There are some options for ``searchd`` that are specific to Windows
 platforms, concerning handling as a service, are only be available on
 Windows binaries.

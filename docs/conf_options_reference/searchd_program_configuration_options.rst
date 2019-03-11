@@ -235,6 +235,26 @@ Example:
 
     collation_server = utf8_ci
 
+.. _data_dir:
+
+data_dir
+~~~~~~~~~~~~
+
+Path of replication internal files, optional.
+
+Daemon stores replication state such as cluster descriptions and indexes list
+replicated to this node as ``maticore.json`` file in this directory and uses it
+as default directory for cluster content.
+
+Example:
+
+
+.. code-block:: ini
+
+
+    data_dir = /var/manticore
+
+
 .. _dist_threads:
 
 dist_threads

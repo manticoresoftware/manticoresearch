@@ -15,6 +15,8 @@ indexer
 searchd
 {
 	<searchd_settings/>
+	seamless_rotate = 1
+	binlog_path = <data_path/>
 }
 
 source src1
@@ -42,6 +44,29 @@ index dummy
 	docinfo			= extern
 	dict 			= keywords
 }
+
+index rt1
+{
+	type			= rt
+	path			= <data_path/>/rt1
+	docinfo			= extern
+	dict 			= keywords
+	
+	rt_field		= title
+	rt_attr_uint	= idd
+}
+
+index rt2 									
+{											
+	type			= rt					#delete2
+	path			= <data_path/>/rt2      #delete2
+	docinfo			= extern                
+	dict 			= keywords              
+	                                        
+	rt_field		= title                 
+	rt_attr_uint	= idd                   
+}			                                
+
 </config>
 
 <db_create>CREATE TABLE `test_table` ( `id` int(11) NOT NULL, `text` varchar(16384) CHARACTER SET utf8 NOT NULL )</db_create>
@@ -70,6 +95,34 @@ sleep(1);
 $results[] = 'Indexes reloaded';
 $results[] 	= $ql->Query ( 'SHOW TABLES' );
 $results[] 	= $ql->Query ( 'SHOW INDEX idx1 STATUS' );
+
+// regression whole binlog remove on RT index delete
+$results[] = "binlog removal";
+$results[] 	= $ql->Query ( "INSERT INTO rt1 VALUES ( 1, 'test', 11)" );
+$results[] 	= $ql->Query ( "INSERT INTO rt2 VALUES ( 1, 'test', 11)" );
+
+// save rt1 to free binlog from it
+$results[] = "flush rt1";
+$results[] 	= $ql->Query ( "FLUSH RTINDEX rt1" );
+
+$config = file(testdir('config.conf'));
+$updatedConfig = '';
+foreach ( $config as $line ) {
+	if ( strpos ( $line, '#delete2') !== false) {
+		continue;
+	}
+	$updatedConfig .= $line;
+}
+file_put_contents(testdir('config.conf'), $updatedConfig);
+
+RunIndexer ( $errors, '--rotate dummy' ); 
+sleep(1);
+
+$results[] = "inserting into rt1";
+$results[] 	= $ql->Query ( "INSERT INTO rt1 VALUES ( 2, 'test', 12)" );
+$results[] = "check of rt index";
+$results[] 	= $ql->Query ( "SELECT * FROM rt1" );
+$results[] 	= $ql->Query ( "SHOW TABLES" );
 
 ]]></custom_test>
 

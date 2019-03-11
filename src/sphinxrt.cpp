@@ -1406,7 +1406,7 @@ RtIndex_t::~RtIndex_t ()
 
 	// might be NULL during startup
 	if ( g_pBinlog )
-		g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, true );
+		g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, g_bShutdown );
 
 	tmSave = sphMicroTimer() - tmSave;
 	if ( tmSave>=1000 && bValid )

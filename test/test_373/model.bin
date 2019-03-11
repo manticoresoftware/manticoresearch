@@ -1,1 +1,5 @@
-a:1:{i:0;a:1:{i:0;a:5:{i:0;s:17:"index_type | disk";i:1;s:51:"ERROR: SHOW INDEX STATUS requires an existing index";i:2;s:16:"Indexes reloaded";i:3;s:51:"ERROR: SHOW INDEX STATUS requires an existing index";i:4;s:17:"index_type | disk";}}}
+a:1:{i:0;a:1:{i:0;a:5:{i:0;s:33:"dummy | local
+idx1 | local
+2 rows";i:1;s:51:"ERROR: SHOW INDEX STATUS requires an existing index";i:2;s:16:"Indexes reloaded";i:3;s:33:"dummy | local
+idx2 | local
+2 rows";i:4;s:51:"ERROR: SHOW INDEX STATUS requires an existing index";}}}

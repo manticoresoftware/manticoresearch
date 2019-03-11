@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
-<name>Indexes autoreload</name>
+<name>indexes autoreload</name>
 
 <requires>
 <non-rt/>
@@ -33,6 +33,15 @@ index idx1
 	docinfo			= extern
 	dict 			= keywords
 }
+
+
+index dummy
+{
+	source			= src1
+	path			= <data_path/>/dummy
+	docinfo			= extern
+	dict 			= keywords
+}
 </config>
 
 <db_create>CREATE TABLE `test_table` ( `id` int(11) NOT NULL, `text` varchar(16384) CHARACTER SET utf8 NOT NULL )</db_create>
@@ -42,7 +51,7 @@ index idx1
 
 $ql->Reconnect();
 $results  	= array();
-$results[] 	= explode( PHP_EOL, $ql->Query ( 'SHOW INDEX idx1 STATUS' ))[0];
+$results[] 	= $ql->Query ( 'SHOW TABLES' );
 $results[]	= $ql->Query ( 'SHOW INDEX idx2 STATUS' );
 
 $config = file(testdir('config.conf'));
@@ -55,12 +64,12 @@ foreach ( $config as $line ) {
 }
 file_put_contents(testdir('config.conf'), $updatedConfig);
 
-RunIndexer ( $errors, '--rotate --all' ); 
+RunIndexer ( $errors, '--rotate dummy' ); 
 sleep(1);
 
 $results[] = 'Indexes reloaded';
+$results[] 	= $ql->Query ( 'SHOW TABLES' );
 $results[] 	= $ql->Query ( 'SHOW INDEX idx1 STATUS' );
-$results[] 	= explode( PHP_EOL, $ql->Query ( 'SHOW INDEX idx2 STATUS' ))[0];
 
 ]]></custom_test>
 

@@ -94,7 +94,7 @@ Known global server variables are:
 -  ``QUERY_LOG_FORMAT = {plain | sphinxql}``
    Changes the current log format.
 
--  ``LOG_LEVEL = {info | debug | debugv | debugvv}``
+-  ``LOG_LEVEL = {info | debug | replication | debugv | debugvv}``
    Changes the current log verboseness level.
 
 -  ``QCACHE_MAX_BYTES = <value>``

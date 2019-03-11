@@ -526,6 +526,7 @@ Replication
 ---------
 
 .. toctree::
-	:maxdepth: 1
-	
-	extending/*
+    :maxdepth: 1
+    :glob:
+
+    extending/extending_replication.rst

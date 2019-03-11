@@ -31,7 +31,7 @@ Daemon uses Galera library from Percona fork with following benefits:
 To use replication daemon with replication plugin should be installed from release packages or build from source
 as described at :ref:`Compiling Manticore from source <compiling_from_source>` . :ref:`data_dir <data_dir>` option
 should be set in :ref:`searchd <searchd>` section of config. At least one :ref:`listen <listen>` at daemon
-should have external IP address and not `0.0.0.0`.
+should have external IP address and not ``0.0.0.0``.
 
 
 .. _repliation_cluster:
@@ -60,7 +60,7 @@ listen
 ~~~~~~
 
 This setting lets you specify IP address and port that replication plugin will listen on. Should be external IP
-address and not `0.0.0.0`. Should be unique among the other clusters at node. Replication plugin also binds to
+address and not ``0.0.0.0``. Should be unique among the other clusters at node. Replication plugin also binds to
 next port for incremental state transfer communications.
 
 .. _cluster_uri:
@@ -94,7 +94,7 @@ For all subsequent clusters :ref:`path <cluster_path>` should be set and should 
 
 
     CREATE CLUSTER posts '10.12.1.35:9321' as listen
-	CREATE CLUSTER click_query 'clicks_mirror1:9351' as listen, '/var/data/click_query/' as path
+    CREATE CLUSTER click_query 'clicks_mirror1:9351' as listen, '/var/data/click_query/' as path
 
 
 .. _repliation_join:
@@ -195,18 +195,18 @@ displays
 
 
     mysql> SHOW STATUS;
-    +-----------------------------------------+---------------------------------------------------+
-    | Counter                                 | Value                                             |
-    +-----------------------------------------+---------------------------------------------------+
-    | cluster_name                            | post                                              |
-    | cluster_post_state_uuid                 | fba97c45-36df-11e9-a84e-eb09d14b8ea7              |
-    | cluster_post_conf_id                    | 1                                                 |
-    | cluster_post_status                     | primary                                           |
-    | cluster_post_size                       | 5                                                 |
-    | cluster_post_local_index                | 0                                                 |
-    | cluster_post_node_state                 | synced                                            |
-    | cluster_post_indexes_count              | 2                                                 |
-    | cluster_post_indexes                    | pq1,pq_posts                                      |
+    +----------------------------+--------------------------------------+
+    | Counter                    | Value                                |
+    +----------------------------+--------------------------------------+
+    | cluster_name               | post                                 |
+    | cluster_post_state_uuid    | fba97c45-36df-11e9-a84e-eb09d14b8ea7 |
+    | cluster_post_conf_id       | 1                                    |
+    | cluster_post_status        | primary                              |
+    | cluster_post_size          | 5                                    |
+    | cluster_post_local_index   | 0                                    |
+    | cluster_post_node_state    | synced                               |
+    | cluster_post_indexes_count | 2                                    |
+    | cluster_post_indexes       | pq1,pq_posts                         |
 
 
 

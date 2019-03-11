@@ -108,7 +108,7 @@ The options available to ``searchd`` on all builds are:
 
        $ searchd --config /home/myuser/sphinx.conf --console
 
--  ``--logdebug``, ``--logdebugv``, and ``--logdebugvv`` options enable
+-  ``--logdebug``, ``--logreplication``, ``--logdebugv``, and ``--logdebugvv`` options enable
    additional debug output in the daemon log. They differ by the logging
    verboseness level. These are debugging options, they pollute the log
    a lot, and thus they should *not* be normally enabled. (The normal

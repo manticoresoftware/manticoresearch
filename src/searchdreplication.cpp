@@ -2100,7 +2100,9 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 	}
 
 
-	return WaitClusterState ( sCluster, WSREP_MEMBER_SYNCED, sError );
+	bool bCreated = WaitClusterState ( sCluster, WSREP_MEMBER_SYNCED, sError );
+	SaveConfig();
+	return bCreated;
 }
 
 /////////////////////////////////////////////////////////////////////////////

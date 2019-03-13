@@ -303,7 +303,7 @@ FUNCTION <create_function_syntax>` statement. It lets you
 specify the return type neatly so there was especially little reason to
 ruin backwards compatibility *and* change the syntax.
 
-Dynamic plugins are supported in threads and thread_pool workers. 
+Dynamic plugins are supported in threads and thread_pool workers.
 Multiple plugins (and/or UDFs) may reside in a single library
 file. So you might choose to either put all your project-specific
 plugins in a single common big library; or you might choose to have a
@@ -456,7 +456,7 @@ The call workflow for index-time token filter is as follows:
 1. ``XXX_init()`` gets called right after indexer creates token filter with
    empty fields list then after indexer got index schema with actual fields list.
    It must return zero for successful initialization or error description otherwise.
-   
+
 2. ``XXX_begin_document`` gets called only for RT index INSERT/REPLACE for every document. It must return zero for
    successful call or error description otherwise. Using OPTION ``token_filter_options`` additional parameters/settings can be passed to the function.
 
@@ -464,8 +464,8 @@ The call workflow for index-time token filter is as follows:
 
 
        INSERT INTO rt (id, title) VALUES (1, 'some text corp@space.io') OPTION token_filter_options='.io'
-   
-   
+
+
 3. ``XXX_begin_field`` gets called once for each field prior to processing
    field with base tokenizer with field number as its parameter.
 
@@ -492,26 +492,26 @@ every index involved.
 
 The call workflow for query-time token filter is as follows:
 
-1. ``XXX_init()`` gets called once per index prior to parsing query with 
+1. ``XXX_init()`` gets called once per index prior to parsing query with
    parameters - max token length and string set by ``token_filter`` option
 
    .. code-block:: mysql
 
 
      SELECT * FROM index WHERE MATCH ('test') OPTION token_filter='my_lib.so:query_email_process:io'
-   
+
    It must return zero for successful initialization or error description otherwise.
-   
+
 2. ``XXX_push_token()`` gets called once for each new token produced by base tokenizer
    with parameters: token produced by base tokenizer, pointer to raw token at
-   source query string and raw token length. It must return token and delta 
+   source query string and raw token length. It must return token and delta
    position for token.
 
-3. ``XXX_pre_morph()`` gets called once for token right before it got passed to 
+3. ``XXX_pre_morph()`` gets called once for token right before it got passed to
    morphology processor with reference to token and stopword flag. It might
    set stopword flag to mark token as stopword.
 
-4. ``XXX_post_morph()`` gets called once for token after it processed by 
+4. ``XXX_post_morph()`` gets called once for token after it processed by
    morphology processor with reference to token and stopword flag. It might
    set stopword flag to mark token as stopword. It must return flag non-zero
    value of which means to use token prior to morphology processing.
@@ -519,11 +519,11 @@ The call workflow for query-time token filter is as follows:
 5. ``XXX_deinit()`` gets called in the very end of query processing.
 
 
-Absence of any of the functions is tolerated. 
+Absence of any of the functions is tolerated.
 
 
 Replication
----------
+-----------
 
 .. toctree::
     :maxdepth: 1

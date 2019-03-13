@@ -1,4 +1,4 @@
-.. _searchd program configuration options:
+.. _searchd_program_configuration_options:
 
 ``searchd`` program configuration options
 -----------------------------------------
@@ -240,11 +240,11 @@ Example:
 data_dir
 ~~~~~~~~~~~~
 
-Path of replication internal files, optional.
+For now - just path to the dir for replication internal files, optional.
 
-Daemon stores replication state such as cluster descriptions and indexes list
-replicated to this node as ``maticore.json`` file in this directory and uses it
-as default directory for cluster content.
+In this directory daemon stores replication meta info and state such as cluster
+descriptions and list of indexes replicated to the current node in ``manticore.json``
+file in this directory and uses it as a default directory for cluster contents.
 
 Example:
 
@@ -499,12 +499,12 @@ Examples:
 	listen = 127.0.0.1:9308:http
 
 There can be multiple listen directives, ``searchd`` will listen for
-client connections on all specified ports and sockets. 
+client connections on all specified ports and sockets.
 If no ``listen`` directives are found then the server will listen on all available
 interfaces using the default SphinxAPI port **9312**, and also on default
 SphinxQL port **9306**. Both port numbers are assigned by IANA (see
 http://www.iana.org/assignments/port-numbers for details) and should
-therefor be available. For HTTP the port **9308** is considered the default one, however please note that this port is not assigned by IANA and 
+therefor be available. For HTTP the port **9308** is considered the default one, however please note that this port is not assigned by IANA and
 should be checked first if it's available.
 
 Unix-domain sockets are not supported on Windows.
@@ -613,7 +613,7 @@ until there are free worker threads. The queries will only start failing
 with a temporary. Thus, in thread_pool mode it makes little sense to
 raise max_children much higher than the amount of CPU cores. Usually
 that will only hurt CPU contention and *decrease* the general
-throughput. The threads are created at startup to initialized the thread pool, 
+throughput. The threads are created at startup to initialized the thread pool,
 using extreme high values can lead to a slow daemon startup.
 
 Example:
@@ -1058,7 +1058,7 @@ query_log_mode
 ~~~~~~~~~~~~~~
 
 By default the searchd and query log files are created with 600 permission, so only the user under which daemon runs and root users can read the log files.
-query_log_mode allows settings a different permission. 
+query_log_mode allows settings a different permission.
 This can be handy to allow other users to be able to read the log files (for example monitoring solutions running on non-root users).
 
 Example:
@@ -1068,8 +1068,8 @@ Example:
 
     query_log_mode  = 666
 
-   
-	
+
+
 .. _queue_max_length:
 
 queue_max_length
@@ -1527,4 +1527,3 @@ Example:
 
 
     workers = thread_pool
-

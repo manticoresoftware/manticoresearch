@@ -2,7 +2,7 @@
 .. _replication:
 
 Replication
------------
+===========
   Please note that this feature is in preview stage. Some functionality may be not yet complete and may suffer changes.
   Read carefully changelogs of future updates to avoid possible breakages.
 

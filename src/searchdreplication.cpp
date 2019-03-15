@@ -41,7 +41,7 @@ typedef wsrep_member_status_t ClusterState_e;
 struct ClusterDesc_t
 {
 	CSphString	m_sName;
-	CSphString	m_sURI;
+	CSphString	m_sConnectNodes;
 	CSphString	m_sListen; // +1 after listen is IST port
 	CSphString	m_sPath; // path relative to data_dir
 	CSphString	m_sOptions;
@@ -492,7 +492,7 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	}
 
 	// Connect to cluster
-	eRes = pWsrep->connect ( pWsrep, tArgs.m_pCluster->m_sName.cstr(), tArgs.m_pCluster->m_sURI.cstr(), "", tArgs.m_bNewCluster );
+	eRes = pWsrep->connect ( pWsrep, tArgs.m_pCluster->m_sName.cstr(), tArgs.m_pCluster->m_sConnectNodes.cstr(), "", tArgs.m_bNewCluster );
 	if ( eRes!=WSREP_OK )
 	{
 		sError.SetSprintf ( "replication connect failed: %d '%s'", (int)eRes, GetStatus ( eRes ) );
@@ -1309,7 +1309,7 @@ bool JsonLoadIndexDesc ( const JsonObj_c & tJson, CSphString & sError, IndexDesc
 	return true;
 }
 
-static const CSphString g_sDefaultReplicationURI = "gcomm://";
+static const CSphString g_sDefaultReplicationNodes = "gcomm://";
 
 bool JsonConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> & dClusters, CSphVector<IndexDesc_t> & dIndexes, CSphString & sError )
 {
@@ -1372,8 +1372,8 @@ bool JsonConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> 
 		if ( !i.FetchStrItem ( tCluster.m_sOptions, "options", sError, true ) )
 			sphWarning ( "cluster '%s'(%d): %s", tCluster.m_sName.cstr(), iCluster, sError.cstr() );
 
-		tCluster.m_sURI = g_sDefaultReplicationURI;
-		bGood &= i.FetchStrItem ( tCluster.m_sURI, "uri", sError, true );
+		tCluster.m_sConnectNodes = g_sDefaultReplicationNodes;
+		bGood &= i.FetchStrItem ( tCluster.m_sConnectNodes, "nodes", sError, true );
 		bGood &= i.FetchStrItem ( tCluster.m_sPath, "path", sError, true );
 		// must have cluster desc
 		bGood &= i.FetchStrItem ( tCluster.m_sListen, "listen", sError, false );
@@ -1485,7 +1485,7 @@ void JsonConfigDumpClusters ( const SmallStringHash_T<ReplicationCluster_t *> & 
 		JsonObj_c tItem;
 		tItem.AddStr ( "path", pCluster->m_sPath );
 		tItem.AddStr ( "listen", pCluster->m_sListen );
-		tItem.AddStr ( "uri", pCluster->m_sURI );
+		tItem.AddStr ( "nodes", pCluster->m_sConnectNodes );
 		tItem.AddStr ( "options", pCluster->m_sOptions );
 
 		// index array
@@ -1843,7 +1843,7 @@ bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bo
 		GetNodeAddress ( tDesc, tArgs.m_sIncomingAdresses );
 
 		CSphScopedPtr<ReplicationCluster_t> pElem ( new ReplicationCluster_t );
-		pElem->m_sURI = tDesc.m_sURI;
+		pElem->m_sConnectNodes = tDesc.m_sConnectNodes;
 		pElem->m_sName = tDesc.m_sName;
 		pElem->m_sListen = tDesc.m_sListen;
 		pElem->m_sPath = tDesc.m_sPath;
@@ -1859,11 +1859,11 @@ bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bo
 			continue;
 		}
 
-		bool bUriEmpty = ( pElem->m_sURI==g_sDefaultReplicationURI );
-		if ( bUriEmpty )
+		bool bNodesEmpty = ( pElem->m_sConnectNodes==g_sDefaultReplicationNodes );
+		if ( bNodesEmpty )
 		{
 			if ( !tArgs.m_bNewCluster )
-				sphWarning ( "uri property is empty, force new cluster '%s'", pElem->m_sName.cstr() );
+				sphWarning ( "nodes property is empty, force new cluster '%s'", pElem->m_sName.cstr() );
 			tArgs.m_bNewCluster = true;
 		}
 
@@ -1877,7 +1877,7 @@ bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bo
 		CSphString sClusterPath = GetClusterPath ( pElem->m_sPath );
 
 		// set safe_to_bootstrap to 1 into grastate.dat file at cluster path
-		if ( ( bForce || bUriEmpty ) && !NewClusterForce ( sClusterPath, sError ) )
+		if ( ( bForce || bNodesEmpty ) && !NewClusterForce ( sClusterPath, sError ) )
 		{
 			sphWarning ( "%s, cluster '%s' skipped", sError.cstr(), pElem->m_sName.cstr() );
 			continue;
@@ -1957,7 +1957,7 @@ static bool CheckClusterStatement ( const CSphString & sCluster, bool bCheckClus
 	return true;
 }
 
-static bool CheckClusterStatement ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphString & sError, CSphScopedPtr<ReplicationCluster_t> & pElem )
+static bool CheckClusterStatement ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, bool bJoin, CSphString & sError, CSphScopedPtr<ReplicationCluster_t> & pElem )
 {
 	if ( !CheckClusterStatement ( sCluster, true, sError ) )
 		return false;
@@ -1976,7 +1976,7 @@ static bool CheckClusterStatement ( const CSphString & sCluster, const StrVec_t 
 	pElem->m_sListen = sListen;
 
 	// optional items
-	if ( !CheckClusterOption ( hValues, "uri", true, pElem->m_sURI, sError ) )
+	if ( !CheckClusterOption ( hValues, "nodes", !bJoin, pElem->m_sConnectNodes, sError ) )
 		return false;
 	if ( !CheckClusterOption ( hValues, "path", true, pElem->m_sPath, sError ) )
 		return false;
@@ -2030,12 +2030,12 @@ static bool WaitClusterState ( const CSphString & sCluster, ClusterState_e eStat
 bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphString & sError )
 {
 	CSphScopedPtr<ReplicationCluster_t> pElem ( nullptr );
-	if ( !CheckClusterStatement ( sCluster, dNames, dValues, sError, pElem ) )
+	if ( !CheckClusterStatement ( sCluster, dNames, dValues, true, sError, pElem ) )
 		return false;
 
-	// uri should start with gcomm://
-	if ( !pElem->m_sURI.Begins ( "gcomm://" ) )
-		pElem->m_sURI.SetSprintf ( "gcomm://%s", pElem->m_sURI.cstr() );
+	// nodes should start with gcomm://
+	if ( !pElem->m_sConnectNodes.Begins ( "gcomm://" ) )
+		pElem->m_sConnectNodes.SetSprintf ( "gcomm://%s", pElem->m_sConnectNodes.cstr() );
 
 	ReplicationArgs_t tArgs;
 	// global options
@@ -2070,11 +2070,11 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphString & sError )
 {
 	CSphScopedPtr<ReplicationCluster_t> pElem ( nullptr );
-	if ( !CheckClusterStatement ( sCluster, dNames, dValues, sError, pElem ) )
+	if ( !CheckClusterStatement ( sCluster, dNames, dValues, false, sError, pElem ) )
 		return false;
 
-	// uri should start with gcomm://
-	pElem->m_sURI.SetSprintf ( "gcomm://" );
+	// nodes to connect should start with gcomm://
+	pElem->m_sConnectNodes = g_sDefaultReplicationNodes;
 
 	ReplicationArgs_t tArgs;
 	// global options

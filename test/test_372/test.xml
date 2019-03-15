@@ -55,9 +55,9 @@ searchd
 <!-- request to node 0 -->
 <sphinxql d="0" cluster_listen="0">create cluster test '%addr_listen%' as listen</sphinxql>
 <!-- request to node 1 -->
-<sphinxql d="1" cluster_listen="1" cluster_connect="0">join cluster test '%addr_listen%' as listen, '%addr_connect%' as uri</sphinxql>
+<sphinxql d="1" cluster_listen="1" cluster_connect="0">join cluster test '%addr_listen%' as listen, '%addr_connect%' as nodes</sphinxql>
 <!-- request to node 2 -->
-<sphinxql d="2" cluster_listen="2" cluster_connect="0">join cluster test '%addr_listen%' as listen, '%addr_connect%' as uri</sphinxql>
+<sphinxql d="2" cluster_listen="2" cluster_connect="0">join cluster test '%addr_listen%' as listen, '%addr_connect%' as nodes</sphinxql>
 
 <!-- stream to node 0 -->
 <sphinxql d="0">INSERT INTO pq1 VALUES('test 101')</sphinxql>
@@ -130,7 +130,7 @@ searchd
 <sphinxql d="2">ALTER CLUSTER nextc ADD pq2</sphinxql>
 
 <!-- stream to node 0 -->
-<sphinxql d="0" cluster_listen="0" cluster_connect="2" cluster_path="nextc">join cluster nextc '%addr_listen%' as listen, '%addr_connect%' as uri, '%cluster_path%' as path</sphinxql>
+<sphinxql d="0" cluster_listen="0" cluster_connect="2" cluster_path="nextc">join cluster nextc '%addr_listen%' as listen, '%addr_connect%' as nodes, '%cluster_path%' as path</sphinxql>
 <sphinxql d="0">INSERT INTO nextc:pq2 VALUES('test 241')</sphinxql>
 <sphinxql d="0">SELECT * FROM pq2</sphinxql>
 

@@ -21,6 +21,7 @@ Welcome to Manticore Search's  Documentation
    real-time_indexes
    searching
    extending
+   replication
    command_line_tools_reference
    sphinxql_reference
    httpapi_reference

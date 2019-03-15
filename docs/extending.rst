@@ -520,13 +520,3 @@ The call workflow for query-time token filter is as follows:
 
 
 Absence of any of the functions is tolerated.
-
-
-Replication
------------
-
-.. toctree::
-    :maxdepth: 1
-    :glob:
-
-    extending/extending_replication.rst

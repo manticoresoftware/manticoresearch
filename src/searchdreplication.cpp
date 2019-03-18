@@ -36,7 +36,17 @@ static bool			g_bCfgHasData = false;
 static int			g_iRemoteTimeout = 120 * 1000; // 2 minutes in msec
 static const char * g_sDebugOptions = "debug=on;cert.log_conflicts=yes";
 
-typedef wsrep_member_status_t ClusterState_e;
+enum class ClusterState_e
+{
+	// stop terminal states
+	CLOSED,				// node shut well or not started
+	DESTROYED,			// node closed with error
+	// transaction states
+	JOINING,			// node joining cluster
+	DONOR,				// node is donor for another node joining cluster
+	// ready terminal state 
+	SYNCED				// node works as usual
+};
 
 struct ClusterDesc_t
 {
@@ -52,13 +62,17 @@ struct ReplicationCluster_t : public ClusterDesc_t
 {
 	// replicator
 	wsrep_t *	m_pProvider = nullptr;
+
+	// receiver thread
+	bool		m_bRecvStarted = false;
 	SphThread_t	m_tRecvThd;
+
+	// nodes at cluster
 	CSphString	m_sNodes; // raw nodes addresses (API and replication) from whole cluster
 	RwLock_t m_tNodesLock;
 	CSphVector<uint64_t> m_dIndexHashes;
-	CSphAtomicL m_eState { WSREP_MEMBER_UNDEFINED };
 
-	// state
+	// state from plugin
 	CSphFixedVector<BYTE>	m_dUUID { 0 };
 	int						m_iConfID = 0;
 	int						m_iStatus = 0;
@@ -66,6 +80,25 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	int						m_iIdx = 0;
 
 	void					UpdateIndexHashes();
+
+	// state of node
+	void					SetNodeState ( ClusterState_e eNodeState )
+	{
+		m_eNodeState = eNodeState;
+		m_tStateChanged.SetEvent();
+	}
+	ClusterState_e			GetNodeState() const { return m_eNodeState; }
+	ClusterState_e			WaitReady()
+	{
+		while ( m_eNodeState==ClusterState_e::JOINING ||  m_eNodeState==ClusterState_e::DONOR )
+			m_tStateChanged.WaitEvent();
+
+		return m_eNodeState;
+	}
+
+private:
+	CSphAutoEvent m_tStateChanged;
+	ClusterState_e m_eNodeState { ClusterState_e::CLOSED };
 };
 
 struct IndexDesc_t
@@ -79,7 +112,6 @@ struct ReplicationArgs_t
 {
 	ReplicationCluster_t *	m_pCluster = nullptr;
 	bool					m_bNewCluster = false;
-	bool					m_bJoin = false;
 	CSphString				m_sIncomingAdresses;
 };
 
@@ -103,6 +135,7 @@ private:
 static SmallStringHash_T<ReplicationCluster_t *> g_hClusters;
 static CSphString g_sIncomingAddr;
 static RwLock_t g_tClustersLock;
+static SphThreadKey_t g_tClusterKey;
 
 // description of clusters and indexes loaded from JSON config
 static CSphVector<ClusterDesc_t> g_dCfgClusters;
@@ -139,7 +172,6 @@ static bool HandleCmdReplicated ( ReplicationCommand_t & tCmd );
 struct ReceiverCtx_t : ISphRefcounted
 {
 	ReplicationCluster_t *	m_pCluster = nullptr;
-	bool					m_bJoin = false;
 	CSphAutoEvent			m_tStarted;
 
 	ReplicationCommand_t	m_tCmd;
@@ -167,7 +199,19 @@ static const char * g_sStatusDesc[] = {
  "feature not implemented"
 };
 
-static const char * g_sNodeStateDesc[] = { "undefined", "joiner", "donor", "joined", "synced", "error" };
+static const char * GetNodeState ( ClusterState_e eState )
+{
+	switch ( eState )
+	{
+		case ClusterState_e::CLOSED: return "closed";
+		case ClusterState_e::DESTROYED: return "destroyed";
+		case ClusterState_e::JOINING: return "joining";
+		case ClusterState_e::DONOR: return "donor";
+		case ClusterState_e::SYNCED: return "synced";
+
+		default: return "undefined";
+	}
+};
 
 static const char * GetStatus ( wsrep_status_t tStatus )
 {
@@ -223,9 +267,9 @@ static void LogGroupView ( const wsrep_view_info_t * pView )
 
 static bool CheckClasterState ( ClusterState_e eState, const CSphString & sCluster, CSphString & sError )
 {
-	if ( eState!=WSREP_MEMBER_SYNCED && eState!=WSREP_MEMBER_DONOR )
+	if ( eState!=ClusterState_e::SYNCED && eState!=ClusterState_e::DONOR )
 	{
-		sError.SetSprintf ( "cluster '%s' not ready, current state %s", sCluster.cstr(), g_sNodeStateDesc[eState] );
+		sError.SetSprintf ( "cluster '%s' not ready, current state %s", sCluster.cstr(), GetNodeState ( eState ) );
 		return false;
 	}
 
@@ -235,7 +279,7 @@ static bool CheckClasterState ( ClusterState_e eState, const CSphString & sClust
 static bool CheckClasterState ( const ReplicationCluster_t * pCluster, CSphString & sError )
 {
 	assert ( pCluster );
-	ClusterState_e eState = (ClusterState_e)pCluster->m_eState.GetValue();
+	ClusterState_e eState = pCluster->GetNodeState();
 	return CheckClasterState ( eState, pCluster->m_sName, sError );
 }
 
@@ -286,7 +330,7 @@ static wsrep_cb_status_t ViewChanged_fn ( void * pAppCtx, void * pRecvCtx, const
 
 		*pSstReqLen = sAddr.Length() + 1;
 		*ppSstReq = sAddr.Leak();
-		pCluster->m_eState = WSREP_MEMBER_JOINER;
+		pCluster->SetNodeState ( ClusterState_e::JOINING );
 	}
 
 	return WSREP_CB_SUCCESS;
@@ -301,16 +345,16 @@ static wsrep_cb_status_t SstDonate_fn ( void * pAppCtx, void * pRecvCtx, const v
 
 	wsrep_gtid_t tGtid = *pStateID;
 	char sGtid[WSREP_GTID_STR_LEN];
-	Verify ( wsrep_gtid_print ( &tGtid, sGtid, sizeof(sGtid) )>0 );
+	wsrep_gtid_print ( &tGtid, sGtid, sizeof(sGtid) );
 
 	ReplicationCluster_t * pCluster = pLocalCtx->m_pCluster;
 	sphLogDebugRpl ( "donate %s to %s, gtid %s, bypass %d", pCluster->m_sName.cstr(), sNode.cstr(), sGtid, (int)bBypass );
 
 	CSphString sError;
 
-	pCluster->m_eState = WSREP_MEMBER_DONOR;
+	pCluster->SetNodeState ( ClusterState_e::DONOR );
 	const bool bOk = SendClusterIndexes ( pCluster, sNode, bBypass, tGtid, sError );
-	pCluster->m_eState = WSREP_MEMBER_SYNCED;
+	pCluster->SetNodeState ( ClusterState_e::SYNCED );
 
 	if ( !bOk )
 	{
@@ -331,7 +375,7 @@ static void Synced_fn ( void * pAppCtx )
 
 	assert ( pLocalCtx );
 	ReplicationCluster_t * pCluster = pLocalCtx->m_pCluster;
-	pCluster->m_eState = WSREP_MEMBER_SYNCED;
+	pCluster->SetNodeState ( ClusterState_e::SYNCED );
 
 	sphLogDebugRpl ( "synced cluster %s", pCluster->m_sName.cstr() );
 }
@@ -401,6 +445,13 @@ static void ReplicationRecv_fn ( void * pArgs )
 
 	// grab ownership and release master thread
 	pCtx->AddRef();
+
+	// set cluster state
+	pCtx->m_pCluster->m_bRecvStarted = true;
+	sphThreadSet ( g_tClusterKey, pCtx->m_pCluster );
+	pCtx->m_pCluster->SetNodeState ( ClusterState_e::JOINING );
+
+	// send event to free main thread
 	pCtx->m_tStarted.SetEvent();
 	sphLogDebugRpl ( "receiver thread started" );
 
@@ -408,15 +459,13 @@ static void ReplicationRecv_fn ( void * pArgs )
 	wsrep_status_t eState = pWsrep->recv ( pWsrep, pCtx );
 
 	sphLogDebugRpl ( "receiver done, code %d, %s", eState, GetStatus ( eState ) );
-
-	// join thread shut with event set but start up sequence should shutdown daemon
-	if ( !pCtx->m_bJoin && ( eState==WSREP_CONN_FAIL || eState==WSREP_NODE_FAIL || eState==WSREP_FATAL ) )
+	if ( eState==WSREP_CONN_FAIL || eState==WSREP_NODE_FAIL || eState==WSREP_FATAL )
 	{
-		pCtx->Release();
-		ReplicationAbort();
-		return;
+		pCtx->m_pCluster->SetNodeState ( ClusterState_e::DESTROYED );
+	} else
+	{
+		pCtx->m_pCluster->SetNodeState ( ClusterState_e::CLOSED );
 	}
-
 	pCtx->Release();
 }
 
@@ -446,7 +495,6 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 
 	ReceiverCtx_t * pRecvArgs = new ReceiverCtx_t();
 	pRecvArgs->m_pCluster = tArgs.m_pCluster;
-	pRecvArgs->m_bJoin = tArgs.m_bJoin;
 	CSphString sFullClusterPath = GetClusterPath ( tArgs.m_pCluster->m_sPath );
 	CSphString sOptions = tArgs.m_pCluster->m_sOptions;
 	if ( g_eLogLevel>=SPH_LOG_RPL_DEBUG )
@@ -501,7 +549,7 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	}
 
 	// let's start listening thread with proper provider set
-	if ( !sphThreadCreate ( &tArgs.m_pCluster->m_tRecvThd, ReplicationRecv_fn, pRecvArgs, false ) )
+	if ( !sphThreadCreate ( &tArgs.m_pCluster->m_tRecvThd, ReplicationRecv_fn, pRecvArgs, false, sMyName.cstr() ) )
 	{
 		pRecvArgs->Release();
 		sError.SetSprintf ( "failed to start thread %d (%s)", errno, strerror(errno) );
@@ -509,7 +557,7 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	}
 
 	// need to transfer ownership after thread started
-	// freed at recv thread normaly
+	// freed at recv thread normally
 	pRecvArgs->m_tStarted.WaitEvent();
 	pRecvArgs->Release();
 
@@ -523,13 +571,19 @@ void ReplicateClusterDone ( ReplicationCluster_t * pCluster )
 	if ( !pCluster )
 		return;
 
-	assert ( pCluster->m_pProvider );
-
-	pCluster->m_pProvider->disconnect ( pCluster->m_pProvider );
+	if ( pCluster->m_pProvider )
+	{
+		pCluster->m_pProvider->disconnect ( pCluster->m_pProvider );
+		pCluster->m_pProvider = nullptr;
+	}
 
 	// Listening thread are now running and receiving writesets. Wait for them
 	// to join. Thread will join after signal handler closes wsrep connection
-	sphThreadJoin ( &pCluster->m_tRecvThd );
+	if ( pCluster->m_bRecvStarted )
+	{
+		sphThreadJoin ( &pCluster->m_tRecvThd );
+		pCluster->m_bRecvStarted = false;
+	}
 }
 
 // FIXME!!! handle more status codes properly
@@ -694,7 +748,7 @@ static void ReplicateClusterStats ( ReplicationCluster_t * pCluster, VectorLike 
 	if ( dOut.MatchAddVa ( "cluster_%s_local_index", sName ) )
 		dOut.Add().SetSprintf ( "%d", pCluster->m_iIdx );
 	if ( dOut.MatchAddVa ( "cluster_%s_node_state", sName ) )
-		dOut.Add() = g_sNodeStateDesc[pCluster->m_eState];
+		dOut.Add() = GetNodeState ( pCluster->GetNodeState() );
 
 	// cluster indexes
 	if ( dOut.MatchAddVa ( "cluster_%s_indexes_count", sName ) )
@@ -758,10 +812,10 @@ bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sOpt, 
 
 void ReplicationAbort()
 {
-	sphWarning ( "shutting down due to abort" );
-	// no need to shutdown cluster properly in case of cluster signaled abort
-	g_hClusters.Reset();
-	Shutdown();
+	ReplicationCluster_t * pCluster = (ReplicationCluster_t *)sphThreadGet ( g_tClusterKey );
+	sphWarning ( "abort from cluster '%s'", ( pCluster ? pCluster->m_sName.cstr() : "" ) );
+	if ( pCluster )
+		pCluster->SetNodeState ( ClusterState_e::DESTROYED );
 }
 
 void ReplicateClustersDelete()
@@ -1095,11 +1149,11 @@ bool HandleCmdReplicate ( ReplicationCommand_t & tCmd, CSphString & sError, int 
 	if ( tCmd.m_sCluster.IsEmpty() )
 		return tMonitor.Commit ( sError );
 
-	ClusterState_e eClusterState = WSREP_MEMBER_UNDEFINED;
+	ClusterState_e eClusterState = ClusterState_e::CLOSED;
 	g_tClustersLock.ReadLock();
 	ReplicationCluster_t ** ppCluster = g_hClusters ( tCmd.m_sCluster );
 	if ( ppCluster )
-		eClusterState = (ClusterState_e)(*ppCluster)->m_eState.GetValue();
+		eClusterState = (*ppCluster)->GetNodeState();
 	g_tClustersLock.Unlock();
 	if ( !ppCluster )
 	{
@@ -1833,6 +1887,7 @@ bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bo
 		return false;
 	}
 
+	sphThreadKeyCreate ( &g_tClusterKey );
 	CSphString sError;
 
 	for ( const ClusterDesc_t & tDesc : g_dCfgClusters )
@@ -1894,15 +1949,20 @@ bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bo
 			pElem->m_dIndexes.Add ( sIndexName );
 		}
 		pElem->UpdateIndexHashes();
-
 		tArgs.m_pCluster = pElem.Ptr();
+
+		{
+			ScWL_t tLock ( g_tClustersLock );
+			g_hClusters.Add ( pElem.LeakPtr(), tDesc.m_sName );
+		}
 
 		CSphString sError;
 		if ( !ReplicateClusterInit ( tArgs, sError ) )
-			sphDie ( "%s", sError.cstr() );
-
-		assert ( pElem->m_pProvider );
-		g_hClusters.Add ( pElem.LeakPtr(), tDesc.m_sName );
+		{
+			sphLogFatal ( "%s", sError.cstr() );
+			ScWL_t tLock ( g_tClustersLock );
+			g_hClusters.Delete ( tDesc.m_sName );
+		}
 	}
 	return true;
 }
@@ -2001,28 +2061,6 @@ static bool CheckClusterStatement ( const CSphString & sCluster, const StrVec_t 
 	return true;
 }
 
-static bool WaitClusterState ( const CSphString & sCluster, ClusterState_e eState, CSphString & sError )
-{
-	while ( true )
-	{
-		ScRL_t tLock ( g_tClustersLock );
-
-		ReplicationCluster_t ** ppCluster = g_hClusters ( sCluster );
-		if ( !ppCluster )
-		{
-			sError.SetSprintf ( "no cluster '%s' found", sCluster.cstr() );
-			return false;
-		}
-
-		if ( (*ppCluster)->m_eState==WSREP_MEMBER_SYNCED )
-			break;
-
-		sphSleepMsec ( 100 );
-	}
-
-	return true;
-}
-
 /////////////////////////////////////////////////////////////////////////////
 // cluster join to existed
 /////////////////////////////////////////////////////////////////////////////
@@ -2040,7 +2078,6 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	ReplicationArgs_t tArgs;
 	// global options
 	tArgs.m_bNewCluster = false;
-	tArgs.m_bJoin = true;
 	GetNodeAddress ( *pElem.Ptr(), tArgs.m_sIncomingAdresses );
 	tArgs.m_pCluster = pElem.Ptr();
 
@@ -2060,7 +2097,8 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 		return false;
 	}
 
-	return WaitClusterState ( sCluster, WSREP_MEMBER_SYNCED, sError );
+	ClusterState_e eState = tArgs.m_pCluster->WaitReady();
+	return ( eState==ClusterState_e::DONOR || eState==ClusterState_e::SYNCED );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2079,7 +2117,6 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 	ReplicationArgs_t tArgs;
 	// global options
 	tArgs.m_bNewCluster = true;
-	tArgs.m_bJoin = false;
 	GetNodeAddress ( *pElem.Ptr(), tArgs.m_sIncomingAdresses );
 	tArgs.m_pCluster = pElem.Ptr();
 
@@ -2099,10 +2136,9 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 		return false;
 	}
 
-
-	bool bCreated = WaitClusterState ( sCluster, WSREP_MEMBER_SYNCED, sError );
+	ClusterState_e eState = tArgs.m_pCluster->WaitReady();
 	SaveConfig();
-	return bCreated;
+	return ( eState==ClusterState_e::DONOR || eState==ClusterState_e::SYNCED );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2586,8 +2622,6 @@ bool RemoteClusterDelete ( const CSphString & sCluster, CSphString & sError )
 		}
 
 		pCluster = *ppCluster;
-		if ( !CheckClasterState ( pCluster, sError ) )
-			return false;
 
 		// remove cluster from cache without delete of cluster itself
 		g_hClusters.AddUnique ( sCluster ) = nullptr;
@@ -2623,8 +2657,6 @@ bool ClusterDelete ( const CSphString & sCluster, CSphString & sError, CSphStrin
 			sError.SetSprintf ( "unknown cluster '%s'", sCluster.cstr() );
 			return false;
 		}
-		if ( !CheckClasterState ( *ppCluster, sError ) )
-			return false;
 
 		// copy nodes with lock as change of cluster view would change node list string
 		{
@@ -3246,7 +3278,7 @@ bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphStrin
 	}
 
 	char sGTID[WSREP_GTID_STR_LEN];
-	Verify ( wsrep_gtid_print ( &tStateID, sGTID, sizeof(sGTID) )>0 );
+	wsrep_gtid_print ( &tStateID, sGTID, sizeof(sGTID) );
 
 	if ( bBypass )
 		return SendClusterSynced ( pCluster->m_sName, pCluster->m_dIndexes, dDesc, sGTID, sError );

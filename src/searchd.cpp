@@ -23592,7 +23592,7 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const StrVec_t & dOptIndexe
 
 	tmLoad += sphMicroTimer();
 	if ( !iValidIndexes )
-		sphWarning ( "no valid indexes to serve" );
+		sphLogDebug ( "no valid indexes to serve" );
 	else
 		fprintf ( stdout, "precached %d indexes in %0.3f sec\n", iCounter, float(tmLoad)/1000000 );
 }

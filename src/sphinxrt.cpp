@@ -1195,6 +1195,7 @@ private:
 	int64_t						m_iSavedTID;
 	int64_t						m_tmSaved;
 	mutable DWORD				m_uDiskAttrStatus = 0;
+	bool						m_bMvaUpdated = false;				///< optimize prohibited for disk chunks with MVA updated
 
 	bool						m_bKeywordDict;
 	int							m_iWordsCheckpoint { RTDICT_CHECKPOINT_V5 };
@@ -4077,6 +4078,13 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( const char * sChunk, CSphString & sError 
 	return pDiskChunk;
 }
 
+bool HasMvaUpdated ( const CSphString & sIndexPath )
+{
+	CSphString sChunkMVP;
+	sChunkMVP.SetSprintf ( "%s.mvp", sIndexPath.cstr() );
+	return sphIsReadable ( sChunkMVP.cstr() );
+}
+
 
 bool RtIndex_t::Prealloc ( bool bStripPath )
 {
@@ -4263,6 +4271,7 @@ bool RtIndex_t::Prealloc ( bool bStripPath )
 			sphDie ( "%s", m_sLastError.cstr() );
 
 		m_dDiskChunks.Add ( pIndex );
+		m_bMvaUpdated |= HasMvaUpdated ( sChunk );
 
 		// tricky bit
 		// outgoing match schema on disk chunk should be identical to our internal (!) schema
@@ -7677,7 +7686,6 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 	assert ( tUpd.m_dDocids.GetLength()==tUpd.m_dRows.GetLength() );
 	assert ( tUpd.m_dDocids.GetLength()==tUpd.m_dRowOffset.GetLength() );
 	int iRows = tUpd.m_dDocids.GetLength();
-	bool bHasMva = false;
 
 	if ( !iRows )
 		return 0;
@@ -7754,7 +7762,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 			}
 
 			dLocators[i] = tCol.m_tLocator;
-			bHasMva |= ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET );
+			m_bMvaUpdated |= ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET );
 		} else if ( tUpd.m_bIgnoreNonexistent )
 		{
 			continue;
@@ -8308,6 +8316,7 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 	sName.SetSprintf ( "%s_%d", m_sIndexName.cstr(), m_dDiskChunks.GetLength() );
 	pIndex->SetName ( sName.cstr() );
 	pIndex->SetBinlog ( false );
+	m_bMvaUpdated |= HasMvaUpdated ( sChunk );
 
 	// FIXME? what about copying m_TID etc?
 
@@ -8383,6 +8392,12 @@ bool RtIndex_t::Truncate ( CSphString & )
 
 void RtIndex_t::Optimize ( )
 {
+	if ( m_bMvaUpdated )
+	{
+		sphWarning ( "rt: index %s: optimization prohibited due to updated MVA", m_sIndexName.cstr() );
+		return;
+	}
+
 	if ( g_bProgressiveMerge )
 	{
 		ProgressiveMerge ( );

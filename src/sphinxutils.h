@@ -359,5 +359,6 @@ public:
 
 // extract basename from path
 const char * GetBaseName ( const CSphString & sFullPath );
+bool HasMvaUpdated ( const CSphString & sIndexPath );
 
 #endif // _sphinxutils_

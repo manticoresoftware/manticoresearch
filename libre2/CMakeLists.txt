@@ -1,6 +1,6 @@
 cmake_minimum_required ( VERSION 2.8 )
 
-PROJECT ( RE2 )
+PROJECT ( RE2 CXX C )
 #Parses Makefile and creates the own project based on it
 #(actually we only use OFILES var from there)
 
@@ -51,13 +51,12 @@ else ( _OBJ )
 endif ( _OBJ )
 
 
-include_directories ( "." )
-IF ( CMAKE_COMPILER_IS_GNUCXX )
-	SET ( CMAKE_CXX_FLAGS "-Wall -O3 -g -pthread -Wsign-compare -c " )
-ELSEIF ( MSVC )
-	set ( CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} /Oi /GL" )
-	add_definitions ( "/D NOMINMAX" )
-ENDIF ()
-add_definitions ( "-DNDEBUG" )
 add_library ( RE2 STATIC ${SOURCES} ${_HF} ${_IHF} )
-
+target_include_directories( RE2 PRIVATE . )
+add_definitions ( "-DNDEBUG" )
+if ( CMAKE_CXX_COMPILER_ID MATCHES MSVC )
+	target_compile_options ( RE2 PRIVATE /Oi /GL )
+	add_definitions ( "-DNOMINMAX" )
+else()
+	target_compile_options ( RE2 PRIVATE -Wall -O3 -g -pthread -Wsign-compare -c )
+endif()

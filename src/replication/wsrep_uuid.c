@@ -19,7 +19,6 @@
 #include <errno.h>
 #include <ctype.h>
 #include <stdio.h>
-#include <string.h>
 
 #include "wsrep_api.h"
 

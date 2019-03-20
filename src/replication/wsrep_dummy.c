@@ -16,7 +16,6 @@
 
 /*! @file Dummy wsrep API implementation. */
 
-#include "../sphinx.h"
 #include "wsrep_api.h"
 
 #include <errno.h>

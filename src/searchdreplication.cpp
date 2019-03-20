@@ -6,6 +6,12 @@
 #include "sphinxpq.h"
 #include "searchdreplication.h"
 #include "sphinxjson.h"
+
+#if !HAVE_WSREP
+#include "replication/wsrep_api_stub.h"
+// it also populates header guard, so next including of 'normal' wsrep_api will break nothing
+#endif
+
 #include "replication/wsrep_api.h"
 
 #define USE_PSI_INTERFACE 1
@@ -547,6 +553,130 @@ static void ReplicationRecv_fn ( void * pArgs )
 
 void Instr_fn ( wsrep_pfs_instr_type_t , wsrep_pfs_instr_ops_t , wsrep_pfs_instr_tag_t , void ** , void ** , const void * );
 
+// @brief a callback to create PFS instrumented mutex/condition variables
+//
+// @param type			mutex or condition variable
+// @param ops			add/init or remove/destory mutex/condition variable
+// @param tag			tag/name of instrument to monitor
+// @param value			created mutex or condition variable
+// @param alliedvalue	allied value for supporting operation.
+//						for example: while waiting for cond-var corresponding
+//						mutex is passes through this variable.
+// @param ts			time to wait for condition.
+
+void Instr_fn ( wsrep_pfs_instr_type_t type, wsrep_pfs_instr_ops_t ops, wsrep_pfs_instr_tag_t tag, void** value,
+	void** alliedvalue, const void* ts )
+{
+	if ( type==WSREP_PFS_INSTR_TYPE_THREAD || type==WSREP_PFS_INSTR_TYPE_FILE )
+		return;
+
+#if !USE_WINDOWS
+	if ( type==WSREP_PFS_INSTR_TYPE_MUTEX )
+	{
+		switch ( ops )
+		{
+			case WSREP_PFS_INSTR_OPS_INIT:
+			{
+				pthread_mutex_t* pMutex = new pthread_mutex_t;
+				pthread_mutex_init ( pMutex, nullptr );
+				*value = pMutex;
+			}
+				break;
+
+			case WSREP_PFS_INSTR_OPS_DESTROY:
+			{
+				pthread_mutex_t* pMutex = ( pthread_mutex_t* ) ( *value );
+				assert ( pMutex );
+				pthread_mutex_destroy ( pMutex );
+				delete ( pMutex );
+				*value = nullptr;
+			}
+				break;
+
+			case WSREP_PFS_INSTR_OPS_LOCK:
+			{
+				pthread_mutex_t* pMutex = ( pthread_mutex_t* ) ( *value );
+				assert ( pMutex );
+				pthread_mutex_lock ( pMutex );
+			}
+				break;
+
+			case WSREP_PFS_INSTR_OPS_UNLOCK:
+			{
+				pthread_mutex_t* pMutex = ( pthread_mutex_t* ) ( *value );
+				assert ( pMutex );
+				pthread_mutex_unlock ( pMutex );
+			}
+				break;
+
+			default: assert( 0 );
+				break;
+		}
+	} else if ( type==WSREP_PFS_INSTR_TYPE_CONDVAR )
+	{
+		switch ( ops )
+		{
+			case WSREP_PFS_INSTR_OPS_INIT:
+			{
+				pthread_cond_t* pCond = new pthread_cond_t;
+				pthread_cond_init ( pCond, nullptr );
+				*value = pCond;
+			}
+				break;
+
+			case WSREP_PFS_INSTR_OPS_DESTROY:
+			{
+				pthread_cond_t* pCond = ( pthread_cond_t* ) ( *value );
+				assert ( pCond );
+				pthread_cond_destroy ( pCond );
+				delete ( pCond );
+				*value = nullptr;
+			}
+				break;
+
+			case WSREP_PFS_INSTR_OPS_WAIT:
+			{
+				pthread_cond_t* pCond = ( pthread_cond_t* ) ( *value );
+				pthread_mutex_t* pMutex = ( pthread_mutex_t* ) ( *alliedvalue );
+				assert ( pCond && pMutex );
+				pthread_cond_wait ( pCond, pMutex );
+			}
+				break;
+
+			case WSREP_PFS_INSTR_OPS_TIMEDWAIT:
+			{
+				pthread_cond_t* pCond = ( pthread_cond_t* ) ( *value );
+				pthread_mutex_t* pMutex = ( pthread_mutex_t* ) ( *alliedvalue );
+				const timespec* wtime = ( const timespec* ) ts;
+				assert ( pCond && pMutex );
+				pthread_cond_timedwait ( pCond, pMutex, wtime );
+			}
+				break;
+
+			case WSREP_PFS_INSTR_OPS_SIGNAL:
+			{
+				pthread_cond_t* pCond = ( pthread_cond_t* ) ( *value );
+				assert ( pCond );
+				pthread_cond_signal ( pCond );
+			}
+				break;
+
+			case WSREP_PFS_INSTR_OPS_BROADCAST:
+			{
+				pthread_cond_t* pCond = ( pthread_cond_t* ) ( *value );
+				assert ( pCond );
+				pthread_cond_broadcast ( pCond );
+			}
+				break;
+
+			default: assert( 0 );
+				break;
+		}
+	}
+#endif
+}
+
+
 bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 {
 	assert ( !g_sDataDir.IsEmpty() );
@@ -878,7 +1008,7 @@ static void ReplicateClusterStats ( ReplicationCluster_t * pCluster, VectorLike 
 
 			default:
 			case WSREP_VAR_INT64:
-				dOut.Add().SetSprintf ( INT64_FMT, pVars->value.i64 );
+				dOut.Add().SetSprintf ( INT64_FMT, pVars->value._int64 );
 				break;
 			}
 		}

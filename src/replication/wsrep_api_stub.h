@@ -1,57 +1,13 @@
-/* Copyright (C) 2009-2013 Codership Oy <info@codership.com>
+//
+// Copyright (c) 2019, Manticore Software LTD (http://manticoresearch.com)
+//
+// This is pure stub header, it does nothing and just make it possible to make build
+// under windows. All other files in this folder also useless on win.
+// (every necessary functions just return 'not implemented' status)
 
-   This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; version 2 of the License.
 
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
-
-   You should have received a copy of the GNU General Public License along
-   with this program; if not, write to the Free Software Foundation, Inc.,
-   51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
- */
-
-/*!
-  @file wsrep API declaration.
-
-  HOW TO READ THIS FILE.
-
-  Due to C language rules this header layout doesn't lend itself to intuitive
-  reading. So here's the scoop: in the end this header declares two main types:
-
-  * struct wsrep_init_args
-
-  and
-
-  * struct wsrep
-
-  wsrep_init_args contains initialization parameters for wsrep provider like
-  names, addresses, etc. and pointers to callbacks. The callbacks will be called
-  by provider when it needs to do something application-specific, like log a
-  message or apply a writeset. It should be passed to init() call from
-  wsrep API. It is an application part of wsrep API contract.
-
-  struct wsrep is the interface to wsrep provider. It contains all wsrep API
-  calls. It is a provider part of wsrep API contract.
-
-  Finally, wsrep_load() method loads (dlopens) wsrep provider library. It is
-  defined in wsrep_loader.c unit and is part of libwsrep.a (which is not a
-  wsrep provider, but a convenience library).
-
-  wsrep_unload() does the reverse.
-
-*/
 #ifndef WSREP_H
 #define WSREP_H
-
-#include <stdint.h>
-#include <stdbool.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <time.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -190,19 +146,8 @@ static const wsrep_uuid_t WSREP_UUID_UNDEFINED = {{0,}};
 /*! UUID string representation length, terminating '\0' not included */
 #define WSREP_UUID_STR_LEN 36
 
-/*!
- * Scan UUID from string
- * @return length of UUID string representation or negative error code
- */
-extern int
-wsrep_uuid_scan (const char* str, size_t str_len, wsrep_uuid_t* uuid);
-
-/*!
- * Print UUID to string
- * @return length of UUID string representation or negative error code
- */
-extern int
-wsrep_uuid_print (const wsrep_uuid_t* uuid, char* str, size_t str_len);
+static int wsrep_uuid_scan ( const char* str, size_t str_len, wsrep_uuid_t* uuid ) { return WSREP_NOT_IMPLEMENTED; }
+static int wsrep_uuid_print ( const wsrep_uuid_t* uuid, char* str, size_t str_len ) { return WSREP_NOT_IMPLEMENTED; }
 
 #define WSREP_MEMBER_NAME_LEN 32  //!< maximum logical member name length
 #define WSREP_INCOMING_LEN    256 //!< max Domain Name length + 0x00
@@ -224,20 +169,8 @@ static const wsrep_gtid_t WSREP_GTID_UNDEFINED = {{{0, }}, -1};
  * terminating '\0' not included (36 + 1 + 20) */
 #define WSREP_GTID_STR_LEN 57
 
-
-/*!
- * Scan GTID from string
- * @return length of GTID string representation or negative error code
- */
-extern int
-wsrep_gtid_scan(const char* str, size_t str_len, wsrep_gtid_t* gtid);
-
-/*!
- * Print GTID to string
- * @return length of GTID string representation or negative error code
- */
-extern int
-wsrep_gtid_print(const wsrep_gtid_t* gtid, char* str, size_t str_len);
+static int wsrep_gtid_scan ( const char* str, size_t str_len, wsrep_gtid_t* gtid ) { return WSREP_NOT_IMPLEMENTED; }
+static int wsrep_gtid_print ( const wsrep_gtid_t* gtid, char* str, size_t str_len ) { return WSREP_NOT_IMPLEMENTED; }
 
 
 /*!
@@ -639,6 +572,8 @@ typedef enum wsrep_var_type
     WSREP_VAR_DOUBLE  //!< double
 }
 wsrep_var_type_t;
+
+#define _int64 i64
 
 /*! Generalized stats variable representation */
 struct wsrep_stats_var
@@ -1381,14 +1316,8 @@ struct wsrep {
  *
  * @return zero on success, errno on failure
  */
-int wsrep_load(const char* spec, wsrep_t** hptr, wsrep_log_cb_t log_cb);
-
-/*!
- * @brief Unloads wsrep library and frees associated resources
- *
- * @param hptr wsrep handler pointer
- */
-void wsrep_unload(wsrep_t* hptr);
+int wsrep_load ( const char* spec, wsrep_t** hptr, wsrep_log_cb_t log_cb ) { return WSREP_NOT_IMPLEMENTED; }
+void wsrep_unload ( wsrep_t* hptr ) {}
 
 #ifdef __cplusplus
 }

@@ -18,7 +18,7 @@ set ( LIBSPHINX_SRCS sphinx.cpp sphinxexcerpt.cpp
 		json/cJSON.c sphinxpq.cpp )
 set ( INDEXER_SRCS indexer.cpp )
 set ( INDEXTOOL_SRCS indextool.cpp )
-set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp searchdreplication.cpp replication/wsrep_loader.cpp replication/wsrep_dummy.cpp replication/wsrep_uuid.cpp replication/wsrep_gtid.cpp )
+set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp searchdreplication.cpp )
 set ( SEARCHD_SRCS searchd.cpp ${SEARCHD_SRCS_TESTABLE} )
 set ( SPELLDUMP_SRCS spelldump.cpp )
 set ( TESTS_SRCS tests.cpp )
@@ -30,8 +30,19 @@ set ( SEARCHD_FLEX sphinxql.l )
 
 # The headers is not neccessary for executable build, but nesessary for MSVC and other projects
 # all the (non-generated) headers
+
 file ( GLOB HEADERS "sphinx*.h" lz4.h lz4hc.h http/http_parser.h )
-file ( GLOB SEARCHD_H "searchd*.h" replication/wsrep_api.h )
+file ( GLOB SEARCHD_H "searchd*.h" )
+
+if ( UNIX AND NOT APPLE )
+	add_subdirectory ( replication )
+	add_compile_definitions( HAVE_WSREP )
+	set ( WSREP "wsrep")
+	LIST (APPEND SEARCHD_H "replication/wsrep_api.h" )
+else()
+	set ( WSREP "" )
+	LIST ( APPEND SEARCHD_H "replication/wsrep_api_stub.h" )
+endif()
 
 file ( GLOB GHEADERS "yysphinx*.h" )
 source_group ( "Generated Header Files" FILES ${GHEADERS} )
@@ -161,7 +172,7 @@ add_executable ( wordbreaker ${WORDBREAKER_SRCS} )
 add_dependencies ( wordbreaker vergen )
 target_link_libraries ( indexer libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( indextool libsphinx ${EXTRA_LIBRARIES} )
-target_link_libraries ( searchd libsphinx ${EXTRA_LIBRARIES} ${EXTRA_SEARCHD_LIBRARIES} )
+target_link_libraries ( searchd libsphinx ${EXTRA_LIBRARIES} ${EXTRA_SEARCHD_LIBRARIES} ${WSREP})
 target_link_libraries ( spelldump libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( wordbreaker libsphinx ${EXTRA_LIBRARIES} )
 
@@ -191,7 +202,7 @@ if ( NOT DISABLE_TESTING )
 					gtests_functions.cpp gtests_globalstate.cpp gtests_searchd.cpp gtests_filter.cpp gtests_searchdaemon.cpp
 					gtests_pqstuff.cpp gtests_json.cpp json/cJSON_test.c )
 			add_executable ( gmanticoretest ${GTESTS_SRC} )
-			target_link_libraries ( gmanticoretest gmock_main libsphinx ${EXTRA_LIBRARIES} )
+			target_link_libraries ( gmanticoretest gmock_main libsphinx ${EXTRA_LIBRARIES} ${WSREP} )
 			if ( CMAKE_VERSION VERSION_LESS 3.9.0 )# freshest cmake able to discover google-tests
 				find_package ( GTest QUIET )
 				GTEST_ADD_TESTS ( gmanticoretest "" ${GTESTS_SRC} )

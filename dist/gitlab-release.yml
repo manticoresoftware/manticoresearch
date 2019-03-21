@@ -54,22 +54,20 @@ windows:
   script:
     - mkdir sphinxbin-x32
     - cd sphinxbin-x32
-    - cmake -G "Visual Studio 14" -DSPHINX_TAG=$RELEASE_TAG -DLIBS_BUNDLE="c:/bundle" -DSPLIT_SYMBOLS=1 -DDISABLE_TESTING=1 ..
+    - cmake -G "Visual Studio 14" -DSPHINX_TAG=$RELEASE_TAG -DLIBS_BUNDLE="c:/bundle" -DDISTR_BUILD=default ..
     - cmake --build . --target package --config RelWithDebInfo
     - cmake -DWITH_PGSQL=1 .
     - cmake --build . --target package --config RelWithDebInfo --clean-first
-    #- cmake -DWITH_PGSQL=1 -DWITH_STEMMER=1 .
     - cmake -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 .
     - cmake --build . --target package --config RelWithDebInfo --clean-first
     - cp manticore-*.zip ..
     - cd ..
     - mkdir sphinxbin-x64
     - cd sphinxbin-x64
-    - cmake -G "Visual Studio 14 Win64" -DSPHINX_TAG=$RELEASE_TAG -DLIBS_BUNDLE="c:/bundle" -DSPLIT_SYMBOLS=1 -DDISABLE_TESTING=1 ..
+    - cmake -G "Visual Studio 14 Win64" -DSPHINX_TAG=$RELEASE_TAG -DLIBS_BUNDLE="c:/bundle" -DDISTR_BUILD=default ..
     - cmake --build . --target package --config RelWithDebInfo
     - cmake -DWITH_PGSQL=1 .
     - cmake --build . --target package --config RelWithDebInfo --clean-first
-    #- cmake -DWITH_PGSQL=1 -DWITH_STEMMER=1 .
     - cmake -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 .
     - cmake --build . --target package --config RelWithDebInfo --clean-first
     - cp manticore-*.zip ..
@@ -79,160 +77,109 @@ windows:
     when: on_success
     expire_in: 12 hrs
 
+.redhat_based: &redhat
+  stage: build
+  dependencies: []
+  tags:
+    - docker
+  script:
+    - ln -s $(pwd) /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
+    - cd /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
+    - mkdir build && cd build
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=$DISTR ..
+    - make -j4 package
+    - cp manticore*.rpm ..
+  artifacts:
+    paths:
+      - manticore*.rpm
+    when: on_success
+    expire_in: 12 hrs
+
+.debian_based: &debian
+  stage: build
+  dependencies: []
+  tags:
+    - docker
+  script:
+    - mkdir build && cd build
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=$DISTR ..
+    - make -j4 package
+    - cp manticore*deb ..
+  artifacts:
+    paths:
+      - manticore*deb
+    when: on_success
+    expire_in: 12 hrs
 
 rhel6:
-  stage: build
+  <<: *redhat
+  variables:
+    DISTR: "rhel6"
   only:
     variables:
       - $WHAT == "all"
       - $WHAT =~ /rhel6/
-  dependencies: []
-  tags:
-    - docker
   image: registry.gitlab.com/manticoresearch/dev/centos6_cmake314:latest
-  script:
-    - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=rhel6 ..
-    - make -j4 package
-    - cp manticore*.rpm ..
-  artifacts:
-    paths:
-      - manticore*.rpm
-    when: on_success
-    expire_in: 12 hrs
-
 
 rhel7:
-  stage: build
+  <<: *redhat
+  variables:
+    DISTR: "rhel7"
   only:
     variables:
       - $WHAT == "all"
       - $WHAT =~ /rhel7/
-  dependencies: []
-  tags:
-    - docker
   image: registry.gitlab.com/manticoresearch/dev/centos7_cmake314:latest
-  script:
-    - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=rhel7 ..
-    - make -j4 package
-    - cp manticore*.rpm ..
-  artifacts:
-    paths:
-      - manticore*.rpm
-    when: on_success
-    expire_in: 12 hrs
-
 
 jessie:
-  stage: build
+  <<: *debian
+  variables:
+    DISTR: "jessie"
   only:
     variables:
       - $WHAT == "all"
       - $WHAT =~ /jessie/
-  dependencies: []
-  tags:
-    - docker
   image: registry.gitlab.com/manticoresearch/dev/jessie_cmake314:latest
-  script:
-    - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=jessie ..
-    - make -j4 package
-    - cp manticore*.deb ..
-  artifacts:
-    paths:
-      - manticore*.deb
-    when: on_success
-    expire_in: 12 hrs
-
 
 stretch:
-  stage: build
+  <<: *debian
+  variables:
+    DISTR: "stretch"
   only:
     variables:
       - $WHAT == "all"
       - $WHAT =~ /stretch/
-  dependencies: []
-  tags:
-    - docker
   image: registry.gitlab.com/manticoresearch/dev/stretch_cmake314:latest
-  script:
-    - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=stretch ..
-    - make -j4 package
-    - cp manticore*.deb ..
-  artifacts:
-    paths:
-      - manticore*.deb
-    when: on_success
-    expire_in: 12 hrs
-
 
 trusty:
-  stage: build
+  <<: *debian
+  variables:
+    DISTR: "trusty"
   only:
     variables:
       - $WHAT == "all"
       - $WHAT =~ /trusty/
-  dependencies: []
-  tags:
-    - docker
   image: registry.gitlab.com/manticoresearch/dev/trusty_cmake314:latest
-  script:
-    - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=trusty ..
-    - make -j4 package
-    - cp manticore*.deb ..
-  artifacts:
-    paths:
-      - manticore*.deb
-    when: on_success
-    expire_in: 12 hrs
-
 
 xenial:
-  stage: build
+  <<: *debian
+  variables:
+    DISTR: "xenial"
   only:
     variables:
       - $WHAT == "all"
       - $WHAT =~ /xenial/
-  dependencies: []
-  tags:
-    - docker
   image: registry.gitlab.com/manticoresearch/dev/xenial_cmake314:latest
-  script:
-    - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=xenial ..
-    - make -j4 package
-    - cp manticore*.deb ..
-  artifacts:
-    paths:
-      - manticore*.deb
-    when: on_success
-    expire_in: 12 hrs
-
 
 bionic:
-  stage: build
+  <<: *debian
+  variables:
+    DISTR: "bionic"
   only:
     variables:
       - $WHAT == "all"
       - $WHAT =~ /bionic/
-  dependencies: []
-  tags:
-    - docker
   image: registry.gitlab.com/manticoresearch/dev/bionic_cmake314:latest
-  script:
-    - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=bionic ..
-    - make -j4 package
-    - cp manticore*.deb ..
-  artifacts:
-    paths:
-      - manticore*.deb
-    when: on_success
-    expire_in: 12 hrs
-
 
 # collect artifacts from all previous jobs.
 # m.b. it has sense to also publish them in one click to github release?

@@ -118,6 +118,22 @@ index rt
 	rt_field		= title
 	rt_attr_uint	= gid
 }
+
+index rt1
+{
+	type = rt
+	path			= <data_path/>/rt1
+	docinfo = extern
+	rt_mem_limit = 128M
+    rt_field = title
+    rt_field = content
+    rt_field = gidkey
+    rt_attr_uint = gid
+    rt_attr_float = price
+    rt_attr_bigint = big
+    rt_attr_timestamp = createdon
+    rt_attr_multi = categories
+}
 </agent0>
 </config>
 
@@ -163,6 +179,15 @@ $ql->Reconnect();
 $results[] = $ql->Query ( "SHOW STATUS LIKE 'connections'" );
 $results[] = $ql->Query ( "SHOW STATUS LIKE 'command_status'" );
 $results[] = $ql->Query ( "SHOW STATUS LIKE 'queries'" );
+
+// regression large packet via SphinxQL
+
+$icontent = "";
+for ( $i=0; $i<8389004; $i++ )
+	$icontent .= "sc";
+$iquery = "REPLACE INTO rt1 (id, title, content, gid, price, big, categories, createdon, gidkey) VALUES (1, 'Title1', '" . $icontent . "', 0, 0, 0, (), 1553088425, '0Key')";
+$results[] = $ql->Query ( $iquery );
+$results[] = $ql->Query ( "SELECT * FROM rt1" );
 
 ]]></custom_test>
 

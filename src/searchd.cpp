@@ -3001,10 +3001,12 @@ bool NetInputBuffer_c::ReadFrom ( int iLen, int iTimeout, bool bIntr, bool bAppe
 	if ( iLen<=0 || iLen>g_iMaxPacketSize || m_iSock<0 )
 		return false;
 
+	int iOff = m_pCur - m_pBuf;
 	Resize ( m_iLen );
 	Reserve ( iTail + iLen );
 	BYTE * pBuf = m_pData + iTail;
-	m_pCur = m_pBuf = pBuf;
+	m_pBuf = m_pData;
+	m_pCur = bAppend ? m_pData + iOff : m_pData;
 	int iGot = sphSockRead ( m_iSock, pBuf , iLen, iTimeout, bIntr );
 	if ( g_bGotSigterm )
 	{

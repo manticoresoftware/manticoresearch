@@ -16298,7 +16298,7 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 
 	case SET_CLUSTER_UVAR:
 	{
-		if ( !ReplicateSetOption ( tStmt.m_sIndex, tStmt.m_sSetValue, sError ) )
+		if ( !ReplicateSetOption ( tStmt.m_sIndex, tStmt.m_sSetName, tStmt.m_sSetValue, sError ) )
 		{
 			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 			return;

@@ -240,7 +240,7 @@ Replication plugin options can be changed using :ref:`SET <set_syntax>` statemen
 
 .. code-block:: sql
 
-     SET CLUSTER click_query GLOBAL 'pc.bootstrap=1'
+     SET CLUSTER click_query GLOBAL 'pc.bootstrap' = 1
 
 
 .. _replication_restart:

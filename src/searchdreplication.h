@@ -56,7 +56,7 @@ struct ReplicationCommand_t
 	bool					m_bIsolated = false;
 };
 
-bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sOpt, CSphString & sError );
+bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sName, const CSphString & sVal, CSphString & sError );
 bool HandleCmdReplicate ( ReplicationCommand_t & tCmd, CSphString & sError, int * pDeletedCount );
 
 void Shutdown ();

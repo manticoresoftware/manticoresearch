@@ -54,8 +54,9 @@ struct ClusterDesc_t
 	CSphString	m_sConnectNodes;
 	CSphString	m_sListen; // +1 after listen is IST port
 	CSphString	m_sPath; // path relative to data_dir
-	CSphString	m_sOptions;
 	CSphVector<CSphString> m_dIndexes;
+
+	SmallStringHash_T<CSphString> m_hOptions;
 };
 
 struct ReplicationCluster_t : public ClusterDesc_t
@@ -71,6 +72,8 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	CSphString	m_sNodes; // raw nodes addresses (API and replication) from whole cluster
 	RwLock_t m_tNodesLock;
 	CSphVector<uint64_t> m_dIndexHashes;
+
+	CSphMutex m_tOptsLock;
 
 	// state from plugin
 	CSphFixedVector<BYTE>	m_dUUID { 0 };
@@ -195,7 +198,7 @@ static const char * g_sStatusDesc[] = {
  "transaction was victim of brute force abort",
  "data exceeded maximum supported size",
  "error in client connection, must abort",
- "error in node state, wsrep must reinit",
+ "error in node state, must reinit",
  "fatal error, server must abort",
  "transaction was aborted before commencing pre-commit",
  "feature not implemented"
@@ -295,6 +298,65 @@ static void GetNodeReplicationAddress ( const CSphString & sListen, CSphString &
 {
 	ListenerDesc_t tListen = ParseListener ( sListen.cstr() );
 	sAddr.SetSprintf ( "%s:%d", g_sIncomingIP.cstr(), tListen.m_iPort );
+}
+
+static CSphString GetOptions ( const SmallStringHash_T<CSphString> & hOptions )
+{
+	StringBuilder_c tBuf ( ";" );
+	void * pIt = nullptr;
+	while ( hOptions.IterateNext ( &pIt ) )
+	{
+		tBuf.Appendf ( "%s=%s", hOptions.IterateGetKey ( &pIt ).cstr(), hOptions.IterateGet ( &pIt ).cstr() );
+	}
+
+	return tBuf.cstr();
+}
+
+static void SetOptions ( const CSphString & sOptions, SmallStringHash_T<CSphString> & hOptions )
+{
+	if ( sOptions.IsEmpty() )
+		return;
+
+	const char * sCur = sOptions.cstr();
+	while ( *sCur )
+	{
+		// skip leading spaces
+		while ( *sCur && sphIsSpace ( *sCur ) )
+			sCur++;
+
+		if ( !*sCur )
+			break;
+
+		// skip all name characters
+		const char * sNameStart = sCur;
+		while ( *sCur && !sphIsSpace ( *sCur ) && *sCur!='=' )
+			sCur++;
+
+		if ( !*sCur )
+			break;
+
+		// set name
+		CSphString sName;
+		sName.SetBinary ( sNameStart, sCur - sNameStart );
+
+		// skip set char and space prior to values
+		while ( *sCur && ( sphIsSpace ( *sCur ) || *sCur=='=' ) )
+			sCur++;
+
+		// skip all value characters and delimiter
+		const char * sValStart = sCur;
+		while ( *sCur && !sphIsSpace ( *sCur ) && *sCur!=';' )
+			sCur++;
+
+		CSphString sVal;
+		sVal.SetBinary ( sValStart, sCur - sValStart );
+
+		hOptions.Add ( sVal, sName );
+
+		// skip delimiter
+		if ( *sCur )
+			sCur++;
+	}
 }
 
 static void UpdateGroupView ( const wsrep_view_info_t * pView, ReplicationCluster_t * pCluster )
@@ -510,16 +572,32 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	ReceiverCtx_t * pRecvArgs = new ReceiverCtx_t();
 	pRecvArgs->m_pCluster = tArgs.m_pCluster;
 	CSphString sFullClusterPath = GetClusterPath ( tArgs.m_pCluster->m_sPath );
-	CSphString sOptions = tArgs.m_pCluster->m_sOptions;
+	
+	StringBuilder_c sOptions ( ";" );
+	sOptions += GetOptions ( tArgs.m_pCluster->m_hOptions ).cstr();
+	
+	// all replication options below have not stored into cluster config
+
+	// set incoming address
+	if ( g_bHasIncoming )
+	{
+		sOptions.Appendf ( "ist.recv_addr=%s", g_sIncomingIP.cstr() );
+	}
+
+	// change default cache size to 16Mb per added index but not more than default value
+	if ( !tArgs.m_pCluster->m_hOptions.Exists ( "gcache.size" ) )
+	{
+		const int CACHE_PER_INDEX = 16;
+		int iCount = Max ( 1, tArgs.m_pCluster->m_dIndexes.GetLength() );
+		int iSize = Min ( iCount * CACHE_PER_INDEX, 128 );
+		sOptions.Appendf ( "gcache.size=%dM", iSize );
+	}
+
+	// set debug log option
 	if ( g_eLogLevel>=SPH_LOG_RPL_DEBUG )
 	{
-		if ( sOptions.IsEmpty() )
-			sOptions = g_sDebugOptions;
-		else
-			sOptions.SetSprintf ( "%s;%s", sOptions.cstr(), g_sDebugOptions );
+		sOptions += g_sDebugOptions;
 	}
-	if ( g_bHasIncoming )
-		sOptions.SetSprintf ( "%s ist.recv_addr=%s", ( sOptions.IsEmpty() ? "" : ";" ), g_sIncomingIP.cstr() );
 
 	// wsrep provider initialization arguments
 	wsrep_init_args wsrep_args;
@@ -530,7 +608,7 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	// must to be set otherwise node works as GARB - does not affect FC and might hung 
 	wsrep_args.node_incoming = tArgs.m_sIncomingAdresses.cstr();
 	wsrep_args.data_dir		= sFullClusterPath.cstr(); // working directory
-	wsrep_args.options		= sOptions.scstr();
+	wsrep_args.options		= sOptions.cstr();
 	wsrep_args.proto_ver	= 127; // maximum supported application event protocol
 
 	wsrep_args.state_id		= &tStateID;
@@ -811,7 +889,7 @@ static void ReplicateClusterStats ( ReplicationCluster_t * pCluster, VectorLike 
 	pCluster->m_pProvider->stats_free ( pCluster->m_pProvider, pVarsStart );
 }
 
-bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sOpt, CSphString & sError )
+bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sName, const CSphString & sVal, CSphString & sError )
 {
 	ScRL_t tClusterGuard ( g_tClustersLock );		
 	ReplicationCluster_t ** ppCluster = g_hClusters ( sCluster );
@@ -821,8 +899,20 @@ bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sOpt, 
 		return false;
 	}
 
-	const ReplicationCluster_t * pCluster = *ppCluster;
+	ReplicationCluster_t * pCluster = *ppCluster;
+	CSphString sOpt;
+	sOpt.SetSprintf ( "%s=%s", sName.cstr(), sVal.cstr() );
+
 	wsrep_status_t tOk = pCluster->m_pProvider->options_set ( pCluster->m_pProvider, sOpt.cstr() );
+	if ( tOk==WSREP_OK )
+	{
+		ScopedMutex_t tLock ( pCluster->m_tOptsLock );
+		pCluster->m_hOptions.Add ( sVal, sName );
+	} else
+	{
+		sError = GetStatus ( tOk );
+	}
+
 	return ( tOk==WSREP_OK );
 }
 
@@ -1444,8 +1534,14 @@ bool JsonConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> 
 		}
 
 		// optional items such as: options and skipSst
-		if ( !i.FetchStrItem ( tCluster.m_sOptions, "options", sError, true ) )
+		CSphString sOptions;
+		if ( !i.FetchStrItem ( sOptions, "options", sError, true ) )
+		{
 			sphWarning ( "cluster '%s'(%d): %s", tCluster.m_sName.cstr(), iCluster, sError.cstr() );
+		} else
+		{
+			SetOptions ( sOptions, tCluster.m_hOptions );
+		}
 
 		tCluster.m_sConnectNodes = g_sDefaultReplicationNodes;
 		bGood &= i.FetchStrItem ( tCluster.m_sConnectNodes, "nodes", sError, true );
@@ -1557,11 +1653,13 @@ void JsonConfigDumpClusters ( const SmallStringHash_T<ReplicationCluster_t *> & 
 	{
 		const ReplicationCluster_t * pCluster = hClusters.IterateGet ( &pIt );
 
+		CSphString sOptions = GetOptions ( pCluster->m_hOptions );
+
 		JsonObj_c tItem;
 		tItem.AddStr ( "path", pCluster->m_sPath );
 		tItem.AddStr ( "listen", pCluster->m_sListen );
 		tItem.AddStr ( "nodes", pCluster->m_sConnectNodes );
-		tItem.AddStr ( "options", pCluster->m_sOptions );
+		tItem.AddStr ( "options", sOptions );
 
 		// index array
 		JsonObj_c tIndexes ( true );
@@ -1918,7 +2016,7 @@ bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bo
 		pElem->m_sName = tDesc.m_sName;
 		pElem->m_sListen = tDesc.m_sListen;
 		pElem->m_sPath = tDesc.m_sPath;
-		pElem->m_sOptions = tDesc.m_sOptions;
+		pElem->m_hOptions = tDesc.m_hOptions;
 
 		// check listen IP address
 		ListenerDesc_t tListen = ParseListener ( pElem->m_sListen.cstr() );
@@ -2056,8 +2154,11 @@ static bool CheckClusterStatement ( const CSphString & sCluster, const StrVec_t 
 		return false;
 	if ( !CheckClusterOption ( hValues, "path", true, pElem->m_sPath, sError ) )
 		return false;
-	if ( !CheckClusterOption ( hValues, "options", true, pElem->m_sOptions, sError ) )
+
+	CSphString sOptions;
+	if ( !CheckClusterOption ( hValues, "options", true, sOptions, sError ) )
 		return false;
+	SetOptions ( sOptions, pElem->m_hOptions );
 
 	// check cluster path is unique
 	bool bValidPath = ClusterCheckPath ( pElem->m_sPath, pElem->m_sName, true, sError );

@@ -1150,11 +1150,19 @@ set_global_stmt:
 			pParser->m_pStmt->m_dSetValues = *$8.m_pValues;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3 );
 		}
-	| TOK_SET TOK_CLUSTER ident TOK_GLOBAL set_string_value
+	| TOK_SET TOK_CLUSTER ident TOK_GLOBAL TOK_QUOTED_STRING '=' set_string_value
 		{
 			pParser->SetStatement ( $5, SET_CLUSTER_UVAR );
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3 );
-			pParser->ToString ( pParser->m_pStmt->m_sSetValue, $5 ).Unquote();
+			pParser->ToString ( pParser->m_pStmt->m_sSetName, $5 ).Unquote();
+			pParser->ToString ( pParser->m_pStmt->m_sSetValue, $7 ).Unquote();
+		}
+	| TOK_SET TOK_CLUSTER ident TOK_GLOBAL TOK_QUOTED_STRING '=' const_int
+		{
+			pParser->SetStatement ( $5, SET_CLUSTER_UVAR );
+			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3 );
+			pParser->ToString ( pParser->m_pStmt->m_sSetName, $5 ).Unquote();
+			pParser->m_pStmt->m_sSetValue.SetSprintf ( INT64_FMT, $7.m_iValue );
 		}
 	;
 

@@ -132,8 +132,11 @@ private:
 	int * m_pDeletedCount = nullptr;
 };
 
-static SmallStringHash_T<ReplicationCluster_t *> g_hClusters;
 static CSphString g_sIncomingAddr;
+static CSphString g_sIncomingIP;
+static bool g_bHasIncoming = false;
+
+static SmallStringHash_T<ReplicationCluster_t *> g_hClusters;
 static RwLock_t g_tClustersLock;
 static SphThreadKey_t g_tClusterKey;
 
@@ -153,7 +156,6 @@ static void JsonConfigDumpIndexes ( const CSphVector<IndexDesc_t> & dIndexes, St
 
 static bool CheckPath ( const CSphString & sPath, bool bCheckWrite, CSphString & sError, const char * sCheckFileName="tmp" );
 static CSphString GetClusterPath ( const CSphString & sPath );
-static void GetNodeAddress ( const ClusterDesc_t & tCluster, CSphString & sAddr );
 
 struct PQRemoteReply_t;
 struct PQRemoteData_t;
@@ -283,6 +285,18 @@ static bool CheckClasterState ( const ReplicationCluster_t * pCluster, CSphStrin
 	return CheckClasterState ( eState, pCluster->m_sName, sError );
 }
 
+static void GetNodeFullAddress ( const CSphString & sListen, CSphString & sAddr )
+{
+	ListenerDesc_t tListen = ParseListener ( sListen.cstr() );
+	sAddr.SetSprintf ( "%s,%s:%d:replication", g_sIncomingAddr.cstr(), g_sIncomingIP.cstr(), tListen.m_iPort );
+}
+
+static void GetNodeReplicationAddress ( const CSphString & sListen, CSphString & sAddr )
+{
+	ListenerDesc_t tListen = ParseListener ( sListen.cstr() );
+	sAddr.SetSprintf ( "%s:%d", g_sIncomingIP.cstr(), tListen.m_iPort );
+}
+
 static void UpdateGroupView ( const wsrep_view_info_t * pView, ReplicationCluster_t * pCluster )
 {
 	StringBuilder_c sBuf ( ";" );
@@ -325,7 +339,7 @@ static wsrep_cb_status_t ViewChanged_fn ( void * pAppCtx, void * pRecvCtx, const
 	if ( pView->state_gap )
 	{
 		CSphString sAddr;
-		GetNodeAddress ( *pCluster, sAddr );
+		GetNodeFullAddress ( pCluster->m_sListen, sAddr );
 		sphLogDebugRpl ( "join %s to %s", sAddr.cstr(), pCluster->m_sName.cstr() );
 
 		*pSstReqLen = sAddr.Length() + 1;
@@ -491,7 +505,7 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	CSphString sMyName;
 	sMyName.SetSprintf ( "daemon_%d_%s", GetOsThreadId(), tArgs.m_pCluster->m_sName.cstr() );
 
-	sphLogDebugRpl ( "listen IP '%s', '%s'", tArgs.m_pCluster->m_sListen.cstr(), sMyName.cstr() );
+	sphLogDebugRpl ( "node incoming '%s', listen '%s', name '%s'", tArgs.m_sIncomingAdresses.cstr(), tArgs.m_pCluster->m_sListen.cstr(), sMyName.cstr() );
 
 	ReceiverCtx_t * pRecvArgs = new ReceiverCtx_t();
 	pRecvArgs->m_pCluster = tArgs.m_pCluster;
@@ -504,6 +518,8 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 		else
 			sOptions.SetSprintf ( "%s;%s", sOptions.cstr(), g_sDebugOptions );
 	}
+	if ( g_bHasIncoming )
+		sOptions.SetSprintf ( "%s ist.recv_addr=%s", ( sOptions.IsEmpty() ? "" : ";" ), g_sIncomingIP.cstr() );
 
 	// wsrep provider initialization arguments
 	wsrep_init_args wsrep_args;
@@ -837,10 +853,12 @@ void JsonLoadConfig ( const CSphConfigSection & hSearchd )
 {
 	g_sLogFile = hSearchd.GetStr ( "log", "" );
 
-	StringBuilder_c sIncomingAddrs ( "," );
-	int iCountEmpty = 0;
-	int iCountApi = 0;
-	
+	g_sIncomingIP = hSearchd.GetStr ( "node_address" );
+	g_bHasIncoming = !g_sIncomingIP.IsEmpty();
+	DWORD uIP = 0;
+	int iPort = 9320;
+	bool bNoListen = true;
+
 	// node with empty incoming addresses works as GARB - does not affect FC
 	// might hung on pushing 1500 transactions
 	for ( const CSphVariant * pOpt = hSearchd("listen"); pOpt; pOpt = pOpt->m_pNext )
@@ -848,20 +866,14 @@ void JsonLoadConfig ( const CSphConfigSection & hSearchd )
 		const CSphString & sListen = pOpt->strval();
 		// check for valid address of API protocol but not local or port only
 		ListenerDesc_t tListen = ParseListener ( sListen.cstr() );
-		if ( tListen.m_eProto!=PROTO_SPHINX )
+		if ( tListen.m_eProto!=PROTO_SPHINX || tListen.m_uIP==0 )
 			continue;
 
-		iCountApi++;
-		if ( tListen.m_uIP==0 )
-		{
-			iCountEmpty++;
-			continue;
-		}
-
-		sIncomingAddrs += sListen.cstr();
+		uIP = tListen.m_uIP;
+		iPort = tListen.m_iPort;
+		bNoListen = false;
+		break;
 	}
-
-	g_sIncomingAddr = sIncomingAddrs.cstr();
 
 	g_sDataDir = hSearchd.GetStr ( "data_dir", "" );
 	if ( g_sDataDir.IsEmpty() )
@@ -880,13 +892,22 @@ void JsonLoadConfig ( const CSphConfigSection & hSearchd )
 	if ( !JsonConfigRead ( g_sConfigPath, g_dCfgClusters, g_dCfgIndexes, sError ) )
 		sphDie ( "failed to use JSON config, %s", sError.cstr() );
 
-	if ( sIncomingAddrs.IsEmpty() && GetReplicationDL() )
+	if ( bNoListen )
 	{
-		if ( iCountApi && iCountApi==iCountEmpty )
-			sphWarning ( "all listen have empty address, can not set incoming addresses, replication disabled" );
-		else
+		if ( GetReplicationDL() )
 			sphWarning ( "no listen found, can not set incoming addresses, replication disabled" );
 		return;
+	}
+
+	if ( !g_bHasIncoming )
+	{
+		char sListenBuf [ SPH_ADDRESS_SIZE ];
+		sphFormatIP ( sListenBuf, sizeof(sListenBuf), uIP );
+		g_sIncomingIP = sListenBuf;
+		g_sIncomingAddr.SetSprintf ( "%s:%d", sListenBuf, iPort );
+	} else
+	{
+		g_sIncomingAddr.SetSprintf ( "%s:%d", g_sIncomingIP.cstr(), iPort );
 	}
 }
 
@@ -1860,11 +1881,6 @@ static void NewClusterClean ( const CSphString & sPath )
 	}
 }
 
-void GetNodeAddress ( const ClusterDesc_t & tCluster, CSphString & sAddr )
-{
-	sAddr.SetSprintf ( "%s,%s:replication", g_sIncomingAddr.cstr(), tCluster.m_sListen.cstr() );
-}
-
 bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bool bForce )
 {
 	if ( !GetReplicationDL() )
@@ -1895,7 +1911,7 @@ bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bo
 		ReplicationArgs_t tArgs;
 		// global options
 		tArgs.m_bNewCluster = ( bNewCluster || bForce );
-		GetNodeAddress ( tDesc, tArgs.m_sIncomingAdresses );
+		GetNodeFullAddress ( tDesc.m_sListen, tArgs.m_sIncomingAdresses );
 
 		CSphScopedPtr<ReplicationCluster_t> pElem ( new ReplicationCluster_t );
 		pElem->m_sConnectNodes = tDesc.m_sConnectNodes;
@@ -2078,7 +2094,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	ReplicationArgs_t tArgs;
 	// global options
 	tArgs.m_bNewCluster = false;
-	GetNodeAddress ( *pElem.Ptr(), tArgs.m_sIncomingAdresses );
+	GetNodeFullAddress ( pElem->m_sListen, tArgs.m_sIncomingAdresses );
 	tArgs.m_pCluster = pElem.Ptr();
 
 	// need to clean up Galera system files left from previous cluster
@@ -2117,7 +2133,7 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 	ReplicationArgs_t tArgs;
 	// global options
 	tArgs.m_bNewCluster = true;
-	GetNodeAddress ( *pElem.Ptr(), tArgs.m_sIncomingAdresses );
+	GetNodeFullAddress ( pElem->m_sListen, tArgs.m_sIncomingAdresses );
 	tArgs.m_pCluster = pElem.Ptr();
 
 	// need to clean up Galera system files left from previous cluster

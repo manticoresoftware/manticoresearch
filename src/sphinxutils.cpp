@@ -740,6 +740,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "prefer_rotate",			KEY_DEPRECATED, "seamless_rotate" },
 	{ "shutdown_token",			0, NULL },
 	{ "data_dir",				0, NULL },
+	{ "node_address",			0, NULL },
 	{ NULL,						0, NULL }
 };
 

@@ -89,7 +89,7 @@ rhel6:
   dependencies: []
   tags:
     - docker
-  image: registry.gitlab.com/manticoresearch/dev/buildcentos6:latest
+  image: registry.gitlab.com/manticoresearch/dev/centos6_cmake314:latest
   script:
     - mkdir build && cd build
     - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=rhel6 ..
@@ -111,7 +111,7 @@ rhel7:
   dependencies: []
   tags:
     - docker
-  image: registry.gitlab.com/manticoresearch/dev/buildcentos7:latest
+  image: registry.gitlab.com/manticoresearch/dev/centos7_cmake314:latest
   script:
     - mkdir build && cd build
     - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=rhel7 ..
@@ -133,7 +133,7 @@ jessie:
   dependencies: []
   tags:
     - docker
-  image: registry.gitlab.com/manticoresearch/dev/buildjessie:latest
+  image: registry.gitlab.com/manticoresearch/dev/jessie_cmake314:latest
   script:
     - mkdir build && cd build
     - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=jessie ..
@@ -155,7 +155,7 @@ stretch:
   dependencies: []
   tags:
     - docker
-  image: registry.gitlab.com/manticoresearch/dev/buildstretch:latest
+  image: registry.gitlab.com/manticoresearch/dev/stretch_cmake314:latest
   script:
     - mkdir build && cd build
     - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=stretch ..
@@ -177,7 +177,7 @@ trusty:
   dependencies: []
   tags:
     - docker
-  image: registry.gitlab.com/manticoresearch/dev/buildtrusty:latest
+  image: registry.gitlab.com/manticoresearch/dev/trusty_cmake314:latest
   script:
     - mkdir build && cd build
     - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=trusty ..
@@ -199,7 +199,7 @@ xenial:
   dependencies: []
   tags:
     - docker
-  image: registry.gitlab.com/manticoresearch/dev/buildxenial:latest
+  image: registry.gitlab.com/manticoresearch/dev/xenial_cmake314:latest
   script:
     - mkdir build && cd build
     - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=xenial ..
@@ -221,7 +221,7 @@ bionic:
   dependencies: []
   tags:
     - docker
-  image: registry.gitlab.com/manticoresearch/dev/buildbionic:latest
+  image: registry.gitlab.com/manticoresearch/dev/bionic_cmake314:latest
   script:
     - mkdir build && cd build
     - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=bionic ..

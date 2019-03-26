@@ -2657,7 +2657,8 @@ enum QueryOption_e
 {
 	QUERY_OPT_DEFAULT = 0,
 	QUERY_OPT_DISABLED,
-	QUERY_OPT_ENABLED
+	QUERY_OPT_ENABLED,
+	QUERY_OPT_MORPH_NONE
 };
 
 const int DEFAULT_MAX_MATCHES = 1000;
@@ -3246,6 +3247,7 @@ enum KeywordExpansion_e
 	KWE_DISABLED	=	0,
 	KWE_EXACT	=		( 1UL << 0 ),
 	KWE_STAR	=		( 1UL << 1 ),
+	KWE_MORPH_NONE	=	( 1UL << 2 ),
 
 	KWE_ENABLED = ( KWE_EXACT | KWE_STAR ),
 };

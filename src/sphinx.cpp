@@ -5785,15 +5785,24 @@ int ExpandKeywords ( int iIndexOpt, QueryOption_e eQueryOpt, const CSphIndexSett
 
 	int iOpt = KWE_DISABLED;
 	if ( eQueryOpt==QUERY_OPT_DEFAULT )
+	{
 		iOpt = iIndexOpt;
-	else
+	} else if ( eQueryOpt==QUERY_OPT_MORPH_NONE )
+	{
+		iOpt = KWE_MORPH_NONE;
+	} else
+	{
 		iOpt = ( eQueryOpt==QUERY_OPT_ENABLED ? KWE_ENABLED : KWE_DISABLED );
+	}
 
 	if ( ( iOpt & KWE_STAR )==KWE_STAR && tSettings.m_iMinInfixLen<=0 && tSettings.m_iMinPrefixLen<=0 )
 		iOpt ^= KWE_STAR;
 
 	if ( ( iOpt & KWE_EXACT )==KWE_EXACT && !tSettings.m_bIndexExactWords )
 		iOpt ^= KWE_EXACT;
+
+	if ( ( iOpt & KWE_MORPH_NONE )==KWE_MORPH_NONE && !tSettings.m_bIndexExactWords )
+		iOpt ^= KWE_MORPH_NONE;
 
 	return iOpt;
 }
@@ -17127,6 +17136,12 @@ static XQNode_t * CloneKeyword ( const XQNode_t * pNode )
 static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tSettings, int iExpandKeywords )
 {
 	assert ( pNode );
+
+	if ( tSettings.m_bIndexExactWords && ( iExpandKeywords & KWE_MORPH_NONE )==KWE_MORPH_NONE )
+	{
+		pNode->m_dWords[0].m_sWord.SetSprintf ( "=%s", pNode->m_dWords[0].m_sWord.cstr() );
+		return pNode;
+	}
 
 	XQNode_t * pExpand = new XQNode_t ( pNode->m_dSpec );
 	pExpand->SetOp ( SPH_QUERY_OR, pNode );

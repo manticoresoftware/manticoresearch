@@ -452,6 +452,10 @@ Supported options and respectively allowed values are:
       according to custom rules. 
       ``SELECT * FROM index WHERE MATCH ('yes@no') OPTION token_filter='mylib.so:blend:@'``
 
+   -  ``morphology`` - ``none``, replaces keywords with exact forms
+      when possible. If index was built with :ref:`index_exact_words <index_exact_words>` enabled,
+	  exact form repaces terms in query to prevent stemming or lemmatizing.
+
 Example:
 
 .. code-block:: mysql

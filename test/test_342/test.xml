@@ -61,6 +61,20 @@ index dist_off
 	agent					= <my_address/>:exp_off
 }
 
+index exp_1
+{
+	source			= srctest
+	path			= <data_path/>/test_1
+	morphology 		= stem_en
+	index_exact_words = 1
+}
+
+index dist_1
+{
+	type					= distributed
+	agent					= <my_address/>:exp_1
+}
+
 </config>
 
 <sphqueries>
@@ -88,6 +102,15 @@ index dist_off
 <sphinxql>select * from dist_off where match ( 'run' ) option expand_keywords=1</sphinxql>
 <sphinxql>show meta</sphinxql>
 
+<!-- new option morphology none -->
+<sphinxql>select * from exp_1 where match ( 'runs' ) order by id asc option morphology = none</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from dist_1 where match ( 'runs' ) order by id asc option morphology = none</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from dist_1 where match ( 'runs' ) order by id asc</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from dist_1 where match ( 'runs' ) order by id asc option expand_keywords=1</sphinxql>
+<sphinxql>show meta</sphinxql>
 
 </sphqueries>
 

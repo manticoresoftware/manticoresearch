@@ -4452,8 +4452,10 @@ static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
 	if ( tQuery.m_bStrict )
 		tBuf << "strict=1";
 
-	if ( tQuery.m_eExpandKeywords!=QUERY_OPT_DEFAULT )
+	if ( tQuery.m_eExpandKeywords!=QUERY_OPT_DEFAULT && tQuery.m_eExpandKeywords!=QUERY_OPT_MORPH_NONE )
 		tBuf.Appendf ( "expand_keywords=%d", ( tQuery.m_eExpandKeywords==QUERY_OPT_ENABLED ? 1 : 0 ) );
+	if ( tQuery.m_eExpandKeywords==QUERY_OPT_MORPH_NONE )
+		tBuf.Appendf ( "morphology=none" );
 }
 
 static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const CSphVector<int64_t> & dAgentTimes, int iCid )
@@ -8964,6 +8966,17 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 	} else if ( sOpt=="format" ) // for SHOW THREADS
 	{
 		m_pStmt->m_sThreadFormat = sVal;
+
+	} else if ( sOpt=="morphology" )
+	{
+		if ( sVal=="none" )
+		{
+			m_pQuery->m_eExpandKeywords = QUERY_OPT_MORPH_NONE;
+		} else
+		{
+			m_pParseError->SetSprintf ( "morphology could be only disabled with option none, got %s", sVal.cstr() );
+			return false;
+		}
 
 	} else
 	{

@@ -29,7 +29,7 @@ You can install Manticore with command:
 	$ wget https://github.com/manticoresoftware/manticore/releases/download/2.4.1/manticore_2.4.1-171017-3b31a97-release-stemmer.jessie_amd64-bin.deb
 	$ sudo dpkg -i manticore_2.4.1-171017-3b31a97-release-stemmer.jessie_amd64-bin.deb
 
-Manticore requires no extra libraries to be installed on Debian/Ubuntu.
+Manticore package depends from zlib and ssl libraries, nothing else strictly required.
 However if you plan to use 'indexer' tool to create indexes from different sources,
 you'll need to install appropriate client libraries.
 To know what exactly libraries, run `indexer` tool from Manticore and look at the top of it's output:
@@ -116,7 +116,7 @@ Supported platforms:
 * x86
 * x86_64
 
-Manticore requires no extra libraries to be installed on RedHat/CentOS.
+Manticore package depends from zlib and ssl libraries, nothing else strictly required.
 However if you plan to use 'indexer' tool to create indexes from different sources,
 you'll need to install appropriate client libraries. Use yum to download and install these dependencies:
 
@@ -275,7 +275,14 @@ Required tools
 	* on Windows - Microsoft Visual Studio 2015 and above (community edition is enough)
 	* on Mac OS - XCode
 
-* cmake - used on all plaftorms (version 2.8 or above)
+* cmake - used on all plaftorms (version 3.13 or above)
+
+Required libraries/packages on Linux
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Development version of 'ssl' lib. Usually came in package named like `libssl-dev` or `openssl-devel`.
+* Development version of 'boost'. On debian packages `libboost-system-dev` and `libboost-program-options-dev`
+are enough; on redhat it is `boost-devel`.
 
 Optional dependencies
 ~~~~~~~~~~~~~~~~~~~~~
@@ -286,12 +293,6 @@ Optional dependencies
 * development version of libexpat for the XMLpipe source driver
 * RE2 (bundled in the source tarball) for :ref:`regexp_filter` feature
 * lib stemmer (bundled in the source tarball ) for additional language stemmers 
-
-Optional dependencies for build with replcaion
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-* boost, check, ssl libraries needed to build Galera replication plugin
-* scons build tool that builds Galera replication plugin
 
 General building options
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -349,7 +350,7 @@ To install all dependencies on Debian/Ubuntu:
 
 .. code-block:: bash
 
-   $ apt-get install build-essential cmake unixodbc-dev libpq-dev libexpat-dev libmysqlclient-dev git flex bison
+   $ apt-get install build-essential cmake unixodbc-dev libpq-dev libexpat-dev libmysqlclient-dev libssl-dev libboost-system-dev libboost-program-options-dev git flex bison
 
 Note: on Debian 9 (stretch) package ``libmysqlclient-dev`` is absent. Use ``default-libmysqlclient-dev`` there instead.
 
@@ -357,7 +358,7 @@ To install all dependencies on CentOS/RHEL:
 
 .. code-block:: bash
 
-   $ yum install gcc gcc-c++ make cmake mysql-devel expat-devel postgresql-devel unixODBC-devel rpm-build systemd-units git flex bison
+   $ yum install gcc gcc-c++ make cmake mysql-devel expat-devel postgresql-devel unixODBC-devel openssl-devel boost-devel rpm-build systemd-units  git flex bison
 
 (git, flex, bison doesn't necessary if you build from tarball)
 

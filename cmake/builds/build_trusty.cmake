@@ -34,7 +34,7 @@ configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/manticore.generator.in"
 		"${MANTICORE_BINARY_DIR}/manticore-generator" @ONLY )
 
 install ( FILES "${MANTICORE_BINARY_DIR}/manticore.upstart"
-                DESTINATION ${SYSCONFDIR}/init COMPONENT adm RENAME manticore.conf )
+                DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/init COMPONENT adm RENAME manticore.conf )
 
 install ( FILES "${MANTICORE_BINARY_DIR}/manticore-generator"
 		DESTINATION  /lib/systemd/system-generators  PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ

@@ -1,0 +1,33 @@
+# create user/group, and update permissions
+groupadd -r %{manticore_group} 2>/dev/null || true
+useradd -M -r -d /var/lib/sphinx -s /bin/bash -c "Manticore server" -g %{manticore_group} %{manticore_user} 2>/dev/null || true
+usermod -g %{manticore_group} %{manticore_user} 2>/dev/null || true
+chown -R %{manticore_user}:%{manticore_group} /var/lib/manticore /var/log/manticore /var/run/manticore
+
+if [ $1 == 1 ]; then
+    /sbin/chkconfig --add searchd
+fi
+
+# print some further pointers
+echo
+echo "Manticore installed!"
+echo "Now create a full-text index, start the search daemon, and you're all set."
+echo
+echo "To manage indexes:"
+echo "    editor %{_sysconfdir}/sphinx/sphinx.conf"
+echo
+echo "To rebuild all disk indexes:"
+echo "    sudo -u manticore indexer --all --rotate"
+echo
+echo "To start/stop search daemon:"
+echo "    service searchd start/stop"
+echo
+echo "To query search daemon using MySQL client:"
+echo "    mysql -h 0 -P 9306"
+echo "    mysql> SELECT * FROM test1 WHERE MATCH('test');"
+echo
+echo "See the manual at /usr/share/doc/manticore-%{version} for details."
+echo
+echo "For commercial support please contact Manticore Software Ltd at"
+echo "https://manticoresearch.com/contact/"
+echo

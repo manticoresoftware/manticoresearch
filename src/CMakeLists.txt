@@ -182,14 +182,14 @@ include ( helpers )
 
 
 if ( SPLIT_SYMBOLS )
-	install_dbg ( indexer )
-	install_dbg ( indextool )
-	install_dbg ( searchd )
-	install_dbg ( spelldump )
-	install_dbg ( wordbreaker )
-else()
-	INSTALL ( TARGETS indexer indextool searchd spelldump wordbreaker RUNTIME DESTINATION bin COMPONENT APPLICATIONS )
-endif ( SPLIT_SYMBOLS )
+	split_dbg ( indexer )
+	split_dbg ( indextool )
+	split_dbg ( searchd )
+	split_dbg ( spelldump )
+	split_dbg ( wordbreaker )
+endif()
+
+INSTALL ( TARGETS indexer indextool searchd spelldump wordbreaker RUNTIME DESTINATION ${BINPREFIX}bin COMPONENT applications )
 
 if ( NOT DISABLE_TESTING )
 	# Read docs at https://github.com/google/googletest.git
@@ -223,7 +223,7 @@ if ( NOT DISABLE_TESTING )
 	add_executable ( tests ${TESTS_SRCS} )
 	target_link_libraries ( tests libsphinx ${EXTRA_LIBRARIES} )
 	if ( SPLIT_SYMBOLS )
-		install_dbg ( tests )
+		split_dbg_noinstall ( tests )
 	endif()
 
 	# compile rtestconfig.h

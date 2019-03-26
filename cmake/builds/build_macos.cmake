@@ -3,6 +3,7 @@
 # rules to build tgz archive for Mac OS X
 
 message ( STATUS "Will create TGZ with build for Mac Os X" )
+set ( SPLIT_SYMBOLS 1 )
 
 # configure specific stuff
 set ( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -arch x86_64" )

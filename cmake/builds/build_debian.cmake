@@ -2,7 +2,6 @@
 # Above line is mandatory!
 # rules to build general deb package for Debian
 
-SET ( SPLIT_SYMBOLS OFF )
 SET ( NOAPI ON )
 message ( STATUS "Will create DEB for Debian (sid)" )
 

@@ -3,5 +3,6 @@
 # rules to build rpm package for Red Hat linux 7 / Centos 7
 
 message ( STATUS "Will create RPM for RedHat/Centos 7" )
+set ( WITH_SYSTEMD ON )
 include ( builds/CommonRpm )
 LIST ( APPEND PKGSUFFIXES "rhel7" )

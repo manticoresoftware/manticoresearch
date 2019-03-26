@@ -1,9 +1,14 @@
 
-# versions below 3.3.2 doesn't correctly pack debian control extra.
-cmake_minimum_required ( VERSION 3.3.2 )
+# only cmake since 3.13 supports packaging of debuginfo
+cmake_minimum_required ( VERSION 3.13 )
 
 # Common debian-specific build variables
 set ( CPACK_GENERATOR "DEB" )
+
+set ( CPACK_PACKAGING_INSTALL_PREFIX "/" )
+set ( BINPREFIX "usr/" )
+
+set ( CPACK_DEBIAN_DEBUGINFO_PACKAGE ON )
 
 find_program ( DPKG_PROGRAM dpkg )
 if ( DPKG_PROGRAM )
@@ -63,31 +68,30 @@ set ( CPACK_COMPONENT_ADM_DISPLAY_NAME "Helper scripts" )
 
 # Copy a default configuration file
 INSTALL ( FILES ${MANTICORE_BINARY_DIR}/sphinx.conf.dist
-		DESTINATION ${SYSCONFDIR}/sphinxsearch COMPONENT doc RENAME sphinx.conf )
+		DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/sphinxsearch COMPONENT doc RENAME sphinx.conf )
 
 install ( FILES doc/indexer.1 doc/indextool.1 doc/searchd.1 doc/spelldump.1 doc/wordbreaker.1
-		DESTINATION ${MANDIR}/man1 COMPONENT doc )
+		DESTINATION usr/${CMAKE_INSTALL_MANDIR}/man1 COMPONENT doc )
 
 if (NOT NOAPI)
-               install ( DIRECTORY api DESTINATION ${SHAREDIR}/${PACKAGE_NAME} COMPONENT doc )
+     install ( DIRECTORY api DESTINATION usr/${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME} COMPONENT doc )
 endif ()
 
 
-install ( FILES
-		"${MANTICORE_BINARY_DIR}/README.Debian"
-		DESTINATION ${SHAREDIR}/doc/${PACKAGE_NAME} COMPONENT doc )
+install ( FILES "${MANTICORE_BINARY_DIR}/README.Debian"
+		DESTINATION usr/${CMAKE_INSTALL_DATADIR}/doc/${PACKAGE_NAME} COMPONENT doc )
 
 install ( FILES "${MANTICORE_BINARY_DIR}/manticore"
-		DESTINATION ${SYSCONFDIR}/default COMPONENT adm)
+		DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/default COMPONENT adm)
 
 install ( FILES "${MANTICORE_BINARY_DIR}/manticore.init"
-		DESTINATION ${SYSCONFDIR}/init.d PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
-                      GROUP_EXECUTE GROUP_READ COMPONENT adm RENAME manticore )
+		DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/init.d PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
+        GROUP_EXECUTE GROUP_READ COMPONENT adm RENAME manticore )
 
-install ( DIRECTORY misc/stopwords DESTINATION ${SHAREDIR}/${PACKAGE_NAME} COMPONENT doc)
+install ( DIRECTORY misc/stopwords DESTINATION usr/${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME} COMPONENT doc)
 
-install ( DIRECTORY DESTINATION ${LOCALSTATEDIR}/lib/manticore/data COMPONENT adm)
-install ( DIRECTORY DESTINATION ${LOCALSTATEDIR}/log/manticore COMPONENT adm )
+install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore/data COMPONENT adm)
+install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COMPONENT adm )
 
 # tickets per components
 set ( CPACK_DEBIAN_PACKAGE_DESCRIPTION "Fast standalone full-text SQL search engine
@@ -101,26 +105,20 @@ set ( CPACK_DEBIAN_PACKAGE_DESCRIPTION "Fast standalone full-text SQL search eng
  .
  Sphinx is an acronym which is officially decoded as SQL Phrase Index." )
 
-# component 'bin'
-set ( CPACK_DEBIAN_BIN_PACKAGE_NAME "manticore" )
+
+set ( CPACK_DEBIAN_PACKAGE_NAME "manticore" )
 # version
 # arch
 
 # dependencies will be auto calculated. FIXME! M.b. point them directly?
 #set ( CPACK_DEBIAN_BIN_PACKAGE_DEPENDS "libc6 (>= 2.15), libexpat (>= 2.0.1), libgcc1 (>= 1:3.0), libstdc++6 (>= 5.2), zlib1g (>= 1:1.1.4), lsb-base (>= 4.1+Debian11ubuntu7)" )
-set ( CPACK_DEBIAN_BIN_PACKAGE_SHLIBDEPS "ON" )
-set ( CPACK_DEBIAN_BIN_PACKAGE_SECTION "misc" )
-set ( CPACK_DEBIAN_BIN_PACKAGE_PRIORITY "optional" )
-set ( CPACK_DEBIAN_BIN_PACKAGE_CONTROL_EXTRA "${MANTICORE_BINARY_DIR}/conffiles;${MANTICORE_BINARY_DIR}/postinst;${MANTICORE_BINARY_DIR}/prerm;${EXTRA_SCRIPTS}" )
-set ( CPACK_DEBIAN_BIN_PACKAGE_CONTROL_STRICT_PERMISSION "ON" )
-set ( CPACK_DEBIAN_BIN_PACKAGE_REPLACES "sphinxsearch" )
 
-# component 'dbg' (debug symbols)
-set ( CPACK_DEBIAN_DBG_PACKAGE_NAME "manticore-dbg" )
-# no dependencies
-set ( CPACK_DEBIAN_DBG_PACKAGE_DEPENDS "" )
-set ( CPACK_DEBIAN_DBG_PACKAGE_SECTION "debug" )
-set ( CPACK_DEBIAN_DBG_PACKAGE_PRIORITY "extra" )
+set ( CPACK_DEBIAN_PACKAGE_SHLIBDEPS "ON" )
+set ( CPACK_DEBIAN_PACKAGE_SECTION "misc" )
+set ( CPACK_DEBIAN_PACKAGE_PRIORITY "optional" )
+set ( CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${MANTICORE_BINARY_DIR}/conffiles;${MANTICORE_BINARY_DIR}/postinst;${MANTICORE_BINARY_DIR}/prerm;${EXTRA_SCRIPTS}" )
+set ( CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION "ON" )
+set ( CPACK_DEBIAN_PACKAGE_REPLACES "sphinxsearch" )
 
 set ( CONFFILEDIR "${SYSCONFDIR}/sphinxsearch" )
 

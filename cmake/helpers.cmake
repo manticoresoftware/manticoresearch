@@ -238,16 +238,6 @@ macro( OPTION_MENU PACKAGE PROMPT OUTVAR LIB_DIR )
 	ENDIF ( WITH_${PACKAGE} )
 endmacro()
 
-# old cmake doesn't understand $<TARGET_FILE:${BINARYNAME}>
-function ( INSTALL_BINARY BINARYNAME )
-	if ( CMAKE_VERSION VERSION_LESS 3.5.1 )
-		INSTALL ( TARGETS ${BINARYNAME} RUNTIME DESTINATION ${BINDIR} COMPONENT APPLICATIONS )
-	else ()
-		INSTALL ( PROGRAMS $<TARGET_FILE:${BINARYNAME}> DESTINATION ${BINDIR} COMPONENT APPLICATIONS )
-	endif ()
-endfunction()
-
-
 function ( GET_SONAME RAWLIB OUTVAR )
 	if ( NOT MSVC )
 		if ( APPLE )
@@ -278,51 +268,77 @@ function ( GET_SONAME RAWLIB OUTVAR )
 	endif()
 endfunction()
 
+# windows case. The pdbs are located in bin/config/*.pdb
+function( __split_win_dbg BINARYNAME )
+	set ( PDB_PATH "${CMAKE_CURRENT_BINARY_DIR}/\${CMAKE_INSTALL_CONFIG_NAME}" )
+	INSTALL ( FILES ${PDB_PATH}/${BINARYNAME}.pdb DESTINATION debug COMPONENT dbgsymbols )
+endfunction()
 
-# add debug symbols to the target
-function( INSTALL_DBG BINARYNAME )
-	if ( MSVC )
-		# windows case. The pdbs are located in bin/config/*.pdb
-		set ( PDB_PATH "${CMAKE_CURRENT_BINARY_DIR}/\${CMAKE_INSTALL_CONFIG_NAME}" )
-		INSTALL ( FILES ${PDB_PATH}/${BINARYNAME}.pdb DESTINATION debug COMPONENT DBGSYMBOLS )
-	elseif ( APPLE )
-		# Mac OS case. We have to explicitly extract dSYM and then strip the binary
-		if ( NOT DEFINED CMAKE_DSYMUTIL )
-			find_program ( CMAKE_DSYMUTIL dsymutil )
-		endif ()
-		if ( NOT DEFINED CMAKE_DSYMUTIL )
-			message ( SEND_ERROR "Missed objcopy prog. Can't split symbols!" )
-			unset ( SPLIT_SYMBOLS CACHE )
-		endif ()
-		mark_as_advanced ( CMAKE_DSYMUTIL )
-
-		ADD_CUSTOM_COMMAND ( TARGET ${BINARYNAME} POST_BUILD
-				COMMAND ${CMAKE_DSYMUTIL} -f $<TARGET_FILE:${BINARYNAME}> -o $<TARGET_FILE:${BINARYNAME}>.dSYM
-				COMMAND strip -S $<TARGET_FILE:${BINARYNAME}>
-				)
-		INSTALL ( FILES ${MANTICORE_BINARY_DIR}/src/${BINARYNAME}.dSYM
-				DESTINATION ${LIBDIR}/debug/usr/bin COMPONENT DBGSYMBOLS )
-	else ()
-		# non-windows case. For linux - use objcopy to make 'clean' and 'debug' binaries
-		if ( NOT DEFINED CMAKE_OBJCOPY )
-			find_package ( BinUtils QUIET )
-		endif ()
-		if ( NOT DEFINED CMAKE_OBJCOPY )
-			find_program ( CMAKE_OBJCOPY objcopy )
-		endif ()
-		if ( NOT DEFINED CMAKE_OBJCOPY )
-			message ( SEND_ERROR "Missed objcopy prog. Can't split symbols!" )
-			unset ( SPLIT_SYMBOLS CACHE )
-		endif ( NOT DEFINED CMAKE_OBJCOPY )
-		mark_as_advanced ( CMAKE_OBJCOPY BinUtils_DIR )
-
-		ADD_CUSTOM_COMMAND ( TARGET ${BINARYNAME} POST_BUILD
-				COMMAND ${CMAKE_OBJCOPY} --only-keep-debug $<TARGET_FILE:${BINARYNAME}> $<TARGET_FILE:${BINARYNAME}>.dbg
-				COMMAND ${CMAKE_OBJCOPY} --strip-all $<TARGET_FILE:${BINARYNAME}>
-				COMMAND ${CMAKE_OBJCOPY} --add-gnu-debuglink=$<TARGET_FILE:${BINARYNAME}>.dbg $<TARGET_FILE:${BINARYNAME}>
-				)
-		INSTALL ( FILES ${MANTICORE_BINARY_DIR}/src/${BINARYNAME}.dbg
-				DESTINATION ${LIBDIR}/debug/usr/bin COMPONENT DBGSYMBOLS RENAME ${BINARYNAME} )
+# Mac OS case. We have to explicitly extract dSYM and then strip the binary
+function ( __split_apple_dbg BINARYNAME DOINSTALL )
+	if ( NOT DEFINED CMAKE_DSYMUTIL )
+		find_program ( CMAKE_DSYMUTIL dsymutil )
 	endif ()
-	INSTALL_BINARY ( ${BINARYNAME} )
+	if ( NOT DEFINED CMAKE_DSYMUTIL )
+		message ( SEND_ERROR "Missed objcopy prog. Can't split symbols!" )
+		unset ( SPLIT_SYMBOLS CACHE )
+	endif ()
+	mark_as_advanced ( CMAKE_DSYMUTIL )
+
+	ADD_CUSTOM_COMMAND ( TARGET ${BINARYNAME} POST_BUILD
+			COMMAND ${CMAKE_DSYMUTIL} -f $<TARGET_FILE:${BINARYNAME}> -o $<TARGET_FILE:${BINARYNAME}>.dSYM
+			COMMAND strip -S $<TARGET_FILE:${BINARYNAME}>
+			)
+	if ( DOINSTALL )
+		INSTALL ( FILES ${MANTICORE_BINARY_DIR}/src/${BINARYNAME}.dSYM
+				DESTINATION ${LIBDIR}/debug/usr/bin COMPONENT dbgsymbols )
+	endif()
+endfunction()
+
+# non-windows case. For linux - use objcopy to make 'clean' and 'debug' binaries
+function( __split_linux_dbg BINARYNAME DOINSTALL )
+	if ( NOT DEFINED CMAKE_OBJCOPY )
+		find_package ( BinUtils QUIET )
+	endif ()
+	if ( NOT DEFINED CMAKE_OBJCOPY )
+		find_program ( CMAKE_OBJCOPY objcopy )
+	endif ()
+	if ( NOT DEFINED CMAKE_OBJCOPY )
+		message ( SEND_ERROR "Missed objcopy prog. Can't split symbols!" )
+		unset ( SPLIT_SYMBOLS CACHE )
+	endif ( NOT DEFINED CMAKE_OBJCOPY )
+	mark_as_advanced ( CMAKE_OBJCOPY BinUtils_DIR )
+
+	ADD_CUSTOM_COMMAND ( TARGET ${BINARYNAME} POST_BUILD
+			COMMAND ${CMAKE_OBJCOPY} --only-keep-debug $<TARGET_FILE:${BINARYNAME}> $<TARGET_FILE:${BINARYNAME}>.dbg
+			COMMAND ${CMAKE_OBJCOPY} --strip-all $<TARGET_FILE:${BINARYNAME}>
+			COMMAND ${CMAKE_OBJCOPY} --add-gnu-debuglink=$<TARGET_FILE:${BINARYNAME}>.dbg $<TARGET_FILE:${BINARYNAME}>
+			COMMENT "Splitting symbols from ${BINARYNAME}"
+			VERBATIM
+			)
+	if ( DOINSTALL )
+		INSTALL ( FILES $<TARGET_FILE:${BINARYNAME}>.dbg
+				DESTINATION ${CMAKE_INSTALL_LIBDIR}/debug/usr/bin
+				COMPONENT dbgsymbols )
+	endif()
+endfunction()
+
+# split debug symbols from target, return path with dbg
+function( split_dbg_noinstall BINARYNAME )
+	if ( APPLE )
+		__split_apple_dbg ( ${BINARYNAME} FALSE )
+	elseif ( NOT MSVC )
+		__split_linux_dbg ( ${BINARYNAME} FALSE )
+	endif ()
+endfunction()
+
+# split debug symbols from target, install them
+function( split_dbg BINARYNAME )
+	if ( MSVC )
+		__split_win_dbg ( ${BINARYNAME} TRUE )
+	elseif ( APPLE )
+		__split_apple_dbg ( ${BINARYNAME} TRUE )
+	else ()
+		__split_linux_dbg ( ${BINARYNAME} TRUE )
+	endif ()
 endfunction()

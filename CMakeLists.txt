@@ -42,13 +42,12 @@ if ( DISTR_BUILD )
 	# set default options to be included into build
 	set ( DISTR "${DISTR_BUILD}" CACHE STRING "Choose the distr." )
 	set ( CMAKE_BUILD_TYPE "RelWithDebInfo" )
-	set ( SPLIT_SYMBOLS ON CACHE BOOLEAN "Forced debuginfo" )
-	set ( WITH_MYSQL ON CACHE BOOLEAN "Forced Mysql" )
-	set ( WITH_EXPAT ON CACHE BOOLEAN "Forced Expat" )
-	set ( WITH_PGSQL ON CACHE BOOLEAN "Forced Pgsql" )
-	set ( WITH_RE2 ON CACHE BOOLEAN "Forced RE2" )
-	set ( WITH_STEMMER ON CACHE BOOLEAN "Forced Stemmer" )
-	SET ( DISABLE_TESTING 1 CACHE BOOLEAN "Forced no testing" FORCE )
+	set ( WITH_MYSQL 1 CACHE BOOL "Forced Mysql" )
+	set ( WITH_EXPAT 1 CACHE BOOL "Forced Expat" )
+	set ( WITH_PGSQL 1 CACHE BOOL "Forced Pgsql" )
+	set ( WITH_RE2 1 CACHE BOOL "Forced RE2" )
+	set ( WITH_STEMMER 1 CACHE BOOL "Forced Stemmer" )
+	SET ( DISABLE_TESTING 1 CACHE BOOL "Forced no testing" FORCE )
 	SET ( CMAKE_INSTALL_PREFIX "/usr" CACHE FILEPATH "Forced install to /usr" FORCE )
 	message ( STATUS "DISTR_BUILD applied.
 Package will be set to ${DISTR_BUILD},
@@ -115,7 +114,7 @@ if ( WIN32 )
 			else ( DL_EXPAT )
 				list ( APPEND EXTRA_LIBRARIES ${expat_LIB} )
 			endif ()
-			install ( FILES ${expat_ROOT}/libs/libexpat.dll DESTINATION bin COMPONENT APPLICATIONS )
+			install ( FILES ${expat_ROOT}/libs/libexpat.dll DESTINATION bin COMPONENT applications )
 		endif ()
 	endif ()
 
@@ -125,7 +124,7 @@ if ( WIN32 )
 			set ( USE_LIBICONV 1 )
 			include_directories ( ${iconv_INCLUDE} )
 			list ( APPEND EXTRA_LIBRARIES ${iconv_LIB} )
-			install ( FILES ${iconv_ROOT}/bin/iconv.dll DESTINATION bin COMPONENT APPLICATIONS )
+			install ( FILES ${iconv_ROOT}/bin/iconv.dll DESTINATION bin COMPONENT applications )
 		endif ()
 	endif ()
 
@@ -142,7 +141,7 @@ if ( WIN32 )
 			else ( DL_MYSQL )
 				list ( APPEND EXTRA_LIBRARIES ${mysql_LIB} )
 			endif ()
-			install ( FILES ${mysql_ROOT}/bin/libmysql.dll DESTINATION bin COMPONENT APPLICATIONS )
+			install ( FILES ${mysql_ROOT}/bin/libmysql.dll DESTINATION bin COMPONENT applications )
 		endif ()
 	endif ()
 
@@ -167,7 +166,7 @@ if ( WIN32 )
 						${pq_ROOT}/bin/libintl-8.dll
 						${pq_ROOT}/bin/libpq.dll
 						${pq_ROOT}/bin/ssleay32.dll
-						DESTINATION bin COMPONENT APPLICATIONS )
+						DESTINATION bin COMPONENT applications )
 			else ()
 				install ( FILES
 						${pq_ROOT}/bin/libeay32.dll
@@ -175,7 +174,7 @@ if ( WIN32 )
 						${pq_ROOT}/bin/libintl.dll
 						${pq_ROOT}/bin/libpq.dll
 						${pq_ROOT}/bin/ssleay32.dll
-						DESTINATION bin COMPONENT APPLICATIONS )
+						DESTINATION bin COMPONENT applications )
 			endif ()
 		endif ()
 	endif ()
@@ -200,12 +199,10 @@ else ( WIN32 )
 			add_definitions ( "-DNDEBUG" )
 		elseif ( CMAKE_BUILD_TYPE STREQUAL Release )
 			set ( CFLAGS "-fno-strict-aliasing -Wall -O3" )
-			set ( SPLIT_SYMBOLS OFF )
 			add_definitions ( "-DNDEBUG" )
 		elseif ( CMAKE_BUILD_TYPE STREQUAL Debug )
 			#set ( CLANGFLAGS "-Wthread-safety" ) # made a different option, off by default
 			add_definitions ( "-D_DEBUG" )
-			set ( SPLIT_SYMBOLS OFF )
 		else ()
 			set ( CFLAGS "${CFLAGS} -O3" )
 			add_definitions ( "-DNDEBUG" )
@@ -580,9 +577,7 @@ if ( HAVE_GCC_LIKE AND CMAKE_BUILD_TYPE STREQUAL Debug )
 	set ( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${POSTCFLAGS}" )
 endif ()
 
-option ( SPLIT_SYMBOLS "whether to split debug symbols from binaries" ${SPLIT_SYMBOLS} )
-
-memcfgvalues ( SPLIT_SYMBOLS USE_BISON USE_FLEX USE_SYSLOG WITH_EXPAT WITH_ICONV WITH_MYSQL
+memcfgvalues ( USE_BISON USE_FLEX USE_SYSLOG WITH_EXPAT WITH_ICONV WITH_MYSQL
 		WITH_MYSQL_INCLUDES WITH_MYSQL_LIBS WITH_MYSQL_ROOT WITH_ODBC WITH_PGSQL
 		WITH_PGSQL_INCLUDES WITH_PGSQL_LIBS WITH_RE2 WITH_RE2_INCLUDES WITH_RE2_LIBS
 		WITH_RE2_ROOT WITH_RLP WITH_STEMMER WITH_ZLIB GALERA_SOVERSION )
@@ -618,19 +613,20 @@ set ( CPACK_PACKAGE_CONTACT "${PACKAGE_NAME} package builds <build@manticoresear
 set ( CPACK_PACKAGE_NAME "${PACKAGE_NAME}" )
 set ( CPACK_PACKAGE_VENDOR "${COMPANY_NAME}" )
 set ( CPACK_RESOURCE_FILE_LICENSE "${MANTICORE_BINARY_DIR}/COPYING.txt" )
+set ( CPACK_PACKAGE_DESCRIPTION_SUMMARY "Manticore full-text search server")
+
+# binaries, config and docs
 set ( CPACK_COMPONENT_APPLICATIONS_GROUP "bin" )
 set ( CPACK_COMPONENT_GROUP_BIN_DISPLAY_NAME "Runtime" )
 set ( CPACK_COMPONENT_APPLICATIONS_DISPLAY_NAME "${PACKAGE_NAME} applications" )
+
 set ( CPACK_COMPONENT_CONFIG_GROUP "bin" )
 set ( CPACK_COMPONENT_CONFIG_DISPLAY_NAME "Configuration examples" )
+
 set ( CPACK_COMPONENT_DOC_GROUP "bin" )
 set ( CPACK_COMPONENT_DOC_DISPLAY_NAME "Documentation" )
-set ( CPACK_COMPONENT_DBGSYMBOLS_GROUP "dbg" )
-set ( CPACK_COMPONENT_GROUP_DBG_DISPLAY_NAME "Development" )
-set ( CPACK_COMPONENT_DBGSYMBOLS_DISPLAY_NAME "Debug symbols" )
-set ( CPACK_COMPONENT_DBGSYMBOLS_DEPENDS applications )
 
-set ( CPACK_RPM_COMPONENT_INSTALL 1 )
+#set ( CPACK_RPM_COMPONENT_INSTALL 1 )
 set ( CPACK_DEB_COMPONENT_INSTALL 1 )
 set ( CPACK_ARCHIVE_COMPONENT_INSTALL 1 )
 

@@ -1,4 +1,0 @@
-[submodule "galera"]
-	path = galera
-	url = https://github.com/manticoresoftware/galera.git
-	branch = master

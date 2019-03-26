@@ -56,6 +56,8 @@ also option forced to ON values: WITH_MYSQL, WITH_EXPAT, WITH_PGSQL, WITH_RE2, W
 Also LIBS_BUNDLE is automatically set to folder 'bundle' placed one level above the sources" )
 endif ()
 
+include ( GetGALERA )
+
 
 # Collect build info which will be embedded into binaries
 SET ( BANNER )
@@ -396,9 +398,6 @@ else ( WIN32 )
 	endif ( WITH_PGSQL )
 endif ( WIN32 )
 
-message ( STATUS "Option WITH_REPLICATION ${WITH_REPLICATION}" )
-option ( WITH_REPLICATION "compile with replicaiton support" OFF )
-include ( GetGALERA )
 
 message ( STATUS "Option WITH_RLP ${WITH_RLP}" )
 option ( WITH_RLP "compile with RLP library support" OFF )
@@ -586,7 +585,7 @@ option ( SPLIT_SYMBOLS "whether to split debug symbols from binaries" ${SPLIT_SY
 memcfgvalues ( SPLIT_SYMBOLS USE_BISON USE_FLEX USE_SYSLOG WITH_EXPAT WITH_ICONV WITH_MYSQL
 		WITH_MYSQL_INCLUDES WITH_MYSQL_LIBS WITH_MYSQL_ROOT WITH_ODBC WITH_PGSQL
 		WITH_PGSQL_INCLUDES WITH_PGSQL_LIBS WITH_RE2 WITH_RE2_INCLUDES WITH_RE2_LIBS
-		WITH_RE2_ROOT WITH_RLP WITH_STEMMER WITH_ZLIB WITH_REPLICATION REPLICATION_LIB_PATH )
+		WITH_RE2_ROOT WITH_RLP WITH_STEMMER WITH_ZLIB GALERA_SOVERSION )
 
 if ( WIN32 )
 	IF ( CMAKE_EXE_LINKER_FLAGS MATCHES "x64" )

@@ -25,10 +25,10 @@
 
 const char * GetReplicationDL()
 {
-#ifndef REPLICATION_LIB
-	return nullptr;
+#ifdef GALERA_SOVERSION
+	return "libgalera_manticore.so." GALERA_SOVERSION;
 #else
-	return REPLICATION_LIB;
+	return "libgalera_smm.so";
 #endif
 }
 
@@ -702,10 +702,10 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	ReceiverCtx_t * pRecvArgs = new ReceiverCtx_t();
 	pRecvArgs->m_pCluster = tArgs.m_pCluster;
 	CSphString sFullClusterPath = GetClusterPath ( tArgs.m_pCluster->m_sPath );
-	
+
 	StringBuilder_c sOptions ( ";" );
 	sOptions += GetOptions ( tArgs.m_pCluster->m_hOptions ).cstr();
-	
+
 	// all replication options below have not stored into cluster config
 
 	// set incoming address
@@ -2111,14 +2111,6 @@ static void NewClusterClean ( const CSphString & sPath )
 
 bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bool bForce )
 {
-	if ( !GetReplicationDL() )
-	{
-		// warning only in case clusters declared
-		if ( g_dCfgClusters.GetLength() )
-			sphWarning ( "got cluster but provider not set, replication disabled" );
-		return false;
-	}
-
 	if ( g_sDataDir.IsEmpty() )
 	{
 		sphWarning ( "data_dir option is missed, replication disabled" );
@@ -2234,12 +2226,6 @@ static bool CheckClusterOption ( const SmallStringHash_T<SqlInsert_t *> & hValue
 
 static bool CheckClusterStatement ( const CSphString & sCluster, bool bCheckCluster, CSphString & sError )
 {
-	if ( !GetReplicationDL() )
-	{
-		sError = "provider not set, recompile with cmake option WITH_REPLICATION=1";
-		return false;
-	}
-
 	if ( g_sIncomingAddr.IsEmpty() )
 	{
 		sError = "incoming addresses not set";

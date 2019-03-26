@@ -179,8 +179,8 @@
 /* define if mincore has unsigned 3-rd param */
 #cmakedefine HAVE_UNSIGNED_MINCORE ${HAVE_UNSIGNED_MINCORE}
 
-/* define if you want runtime load replication library using dlopen */
-#cmakedefine REPLICATION_LIB "${REPLICATION_LIB}"
+/* soversion of replication lib */
+#define GALERA_SOVERSION "${GALERA_SOVERSION}"
 
 /* define to set custom directory for shared files */
 #define FULL_SHARE_DIR "${FULL_SHARE_DIR}"

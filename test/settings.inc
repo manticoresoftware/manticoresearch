@@ -173,9 +173,8 @@ function GetVersion ()
 
 function GuessReplication()
 {
-	$repli_on = 'DWITH_REPLICATION=ON';
-	$galera_name = 'libgalera_smm.so';
-	global $g_repli, $g_repli_path, $g_locals;
+	$repli_on = 'DGALERA_SOVERSION';
+	global $g_repli;
 	
 	$banner = GetBanner();
 	foreach ( $banner as $line )
@@ -184,17 +183,6 @@ function GuessReplication()
 		{
 			$g_repli = true;
 			break;
-		}
-	}
-
-	// build with replication and galera_lib_path set at .sphinx
-	if ( $g_repli )
-	{
-		$g_repli = false;
-		if ( isset ( $g_locals['galera_lib_path'] ) && is_file ( $g_locals['galera_lib_path'] . $galera_name ) !== false )
-		{
-			$g_repli = true;
-			$g_repli_path = $g_locals['galera_lib_path'];
 		}
 	}
 }

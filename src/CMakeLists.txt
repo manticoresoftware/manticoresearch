@@ -176,7 +176,7 @@ target_link_libraries ( searchd libsphinx ${EXTRA_LIBRARIES} ${EXTRA_SEARCHD_LIB
 target_link_libraries ( spelldump libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( wordbreaker libsphinx ${EXTRA_LIBRARIES} )
 
-SET_RPATH ( searchd )
+SET_SEARCHD_RPATH ()
 
 include ( helpers )
 

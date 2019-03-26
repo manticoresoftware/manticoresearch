@@ -340,9 +340,6 @@ Next step is to configure the building with cmake. Available list of configurati
 * ``WITH_ODBC`` (bool)	 enabled compiling with ODBC client library, used by ODBC source driver
 * ``WITH_PGSQL`` (bool)	 enabled compiling with PostgreSQL client library, used by PostgreSQL source driver
 * ``DISTR_BUILD``  -  in case the target is packaging, it specifies the target operating system. Supported values are: `centos6`, `centos7`, `wheezy`, `jessie`, `stretch`, `trusty`, `xenial`, `bionic`, `macos`, `default`.
-* ``WITH_REPLICATION`` (bool) - specifies to build and install replication plugin. After plugin got compiled it has set into daemon binary attribute ``RPATH``. That allows daemon to load replication plugin after package got installed.
-
-	* ``REPLICATION_LIB_PATH`` defines folder with replication plugin binary used instead of compiling replication plugin.
 
 Compiling on UNIX systems
 ~~~~~~~~~~~~~~~~~~~~~~~~~

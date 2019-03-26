@@ -1,42 +1,3 @@
-repli_base_ubuntu:
-  stage: pre_build
-  only:
-    variables:
-      - $REPLICATION == "ON"
-  dependencies: []
-  tags:
-    - docker
-  image: registry.gitlab.com/manticoresearch/dev/build_repli_jessie:latest
-  script:
-    - cp -R /manticoresearch/galera galera_build
-  artifacts:
-    paths:
-      - galera_build
-    when: on_success
-    expire_in: 12 hrs
-  variables:
-    GIT_STRATEGY: none    
-
-repli_rhel6:
-  extends: repli_base_ubuntu
-  image: registry.gitlab.com/manticoresearch/dev/build_repli_centos6:latest
-  
-repli_rhel7:
-  extends: repli_base_ubuntu
-  image: registry.gitlab.com/manticoresearch/dev/build_repli_centos7:latest
-
-repli_stretch:
-  extends: repli_base_ubuntu
-  image: registry.gitlab.com/manticoresearch/dev/build_repli_stretch:latest
-
-repli_trusty:
-  extends: repli_base_ubuntu
-  image: registry.gitlab.com/manticoresearch/dev/build_repli_trusty:latest
-
-repli_bionic:
-  extends: repli_base_ubuntu
-  image: registry.gitlab.com/manticoresearch/dev/build_repli_bionic:latest
-
 tarball:
   stage: build
   only:
@@ -48,7 +9,7 @@ tarball:
     - dev-host
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISABLE_TESTING=1 ..
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISABLE_TESTING=1 $EXTRA_FLAGS ..
     - make tarball
     - cp manticore-*.tar.gz ..
   artifacts:
@@ -70,7 +31,7 @@ osx:
     - build
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=macos -DLIBS_BUNDLE=/work ..
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=macos -DLIBS_BUNDLE=/work $EXTRA_FLAGS ..
     - make -j2 package
     - cp manticore-*.tar.gz ..
   artifacts:
@@ -93,7 +54,7 @@ windows:
   script:
     - mkdir sphinxbin-x32
     - cd sphinxbin-x32
-    - cmake -G "Visual Studio 14" -DSPHINX_TAG=$RELEASE_TAG -DLIBS_BUNDLE="c:/bundle" -DSPLIT_SYMBOLS=1 -DDISABLE_TESTING=1 ..
+    - cmake -G "Visual Studio 14" -DSPHINX_TAG=$RELEASE_TAG -DLIBS_BUNDLE="c:/bundle" -DSPLIT_SYMBOLS=1 -DDISABLE_TESTING=1 $EXTRA_FLAGS ..
     - cmake --build . --target package --config RelWithDebInfo
     - cmake -DWITH_PGSQL=1 .
     - cmake --build . --target package --config RelWithDebInfo --clean-first
@@ -104,7 +65,7 @@ windows:
     - cd ..
     - mkdir sphinxbin-x64
     - cd sphinxbin-x64
-    - cmake -G "Visual Studio 14 Win64" -DSPHINX_TAG=$RELEASE_TAG -DLIBS_BUNDLE="c:/bundle" -DSPLIT_SYMBOLS=1 -DDISABLE_TESTING=1 ..
+    - cmake -G "Visual Studio 14 Win64" -DSPHINX_TAG=$RELEASE_TAG -DLIBS_BUNDLE="c:/bundle" -DSPLIT_SYMBOLS=1 -DDISABLE_TESTING=1 $EXTRA_FLAGS ..
     - cmake --build . --target package --config RelWithDebInfo
     - cmake -DWITH_PGSQL=1 .
     - cmake --build . --target package --config RelWithDebInfo --clean-first
@@ -125,14 +86,13 @@ rhel6:
     variables:
       - $WHAT == "all"
       - $WHAT =~ /rhel6/
-  dependencies:
-    - repli_rhel6
+  dependencies: []
   tags:
     - docker
   image: registry.gitlab.com/manticoresearch/dev/buildcentos6:latest
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=rhel6 -DREPLICATION_LIB_PATH=galera_build -DWITH_REPLICATION=$REPLICATION ..
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=rhel6 $EXTRA_FLAGS ..
     - make -j4 package
     - cp manticore*.rpm ..
   artifacts:
@@ -148,14 +108,13 @@ rhel7:
     variables:
       - $WHAT == "all"
       - $WHAT =~ /rhel7/
-  dependencies:
-    - repli_rhel7
+  dependencies: []
   tags:
     - docker
   image: registry.gitlab.com/manticoresearch/dev/buildcentos7:latest
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=rhel7 -DREPLICATION_LIB_PATH=galera_build -DWITH_REPLICATION=$REPLICATION ..
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=rhel7 $EXTRA_FLAGS ..
     - make -j4 package
     - cp manticore*.rpm ..
   artifacts:
@@ -171,14 +130,13 @@ jessie:
     variables:
       - $WHAT == "all"
       - $WHAT =~ /jessie/
-  dependencies:
-    - repli_base_ubuntu
+  dependencies: []
   tags:
     - docker
   image: registry.gitlab.com/manticoresearch/dev/buildjessie:latest
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=jessie -DREPLICATION_LIB_PATH=galera_build -DWITH_REPLICATION=$REPLICATION ..
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=jessie $EXTRA_FLAGS ..
     - make -j4 package
     - cp manticore*.deb ..
   artifacts:
@@ -194,14 +152,13 @@ stretch:
     variables:
       - $WHAT == "all"
       - $WHAT =~ /stretch/
-  dependencies:
-    - repli_stretch
+  dependencies: []
   tags:
     - docker
   image: registry.gitlab.com/manticoresearch/dev/buildstretch:latest
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=stretch -DREPLICATION_LIB_PATH=galera_build -DWITH_REPLICATION=$REPLICATION ..
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=stretch $EXTRA_FLAGS ..
     - make -j4 package
     - cp manticore*.deb ..
   artifacts:
@@ -217,14 +174,13 @@ trusty:
     variables:
       - $WHAT == "all"
       - $WHAT =~ /trusty/
-  dependencies:
-    - repli_trusty
+  dependencies: []
   tags:
     - docker
   image: registry.gitlab.com/manticoresearch/dev/buildtrusty:latest
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=trusty -DREPLICATION_LIB_PATH=galera_build -DWITH_REPLICATION=$REPLICATION ..
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=trusty $EXTRA_FLAGS ..
     - make -j4 package
     - cp manticore*.deb ..
   artifacts:
@@ -240,14 +196,13 @@ xenial:
     variables:
       - $WHAT == "all"
       - $WHAT =~ /xenial/
-  dependencies:
-    - repli_base_ubuntu
+  dependencies: []
   tags:
     - docker
   image: registry.gitlab.com/manticoresearch/dev/buildxenial:latest
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=xenial -DREPLICATION_LIB_PATH=galera_build -DWITH_REPLICATION=$REPLICATION ..
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=xenial $EXTRA_FLAGS ..
     - make -j4 package
     - cp manticore*.deb ..
   artifacts:
@@ -263,14 +218,13 @@ bionic:
     variables:
       - $WHAT == "all"
       - $WHAT =~ /bionic/
-  dependencies:
-    - repli_bionic
+  dependencies: []
   tags:
     - docker
   image: registry.gitlab.com/manticoresearch/dev/buildbionic:latest
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=bionic -DREPLICATION_LIB_PATH=galera_build -DWITH_REPLICATION=$REPLICATION ..
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=bionic $EXTRA_FLAGS ..
     - make -j4 package
     - cp manticore*.deb ..
   artifacts:

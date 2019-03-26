@@ -1114,8 +1114,7 @@ void JsonLoadConfig ( const CSphConfigSection & hSearchd )
 
 	if ( bNoListen )
 	{
-		if ( GetReplicationDL() )
-			sphWarning ( "no listen found, can not set incoming addresses, replication disabled" );
+		sphWarning ( "no listen found, can not set incoming addresses, replication disabled" );
 		return;
 	}
 

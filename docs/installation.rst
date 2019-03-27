@@ -29,7 +29,7 @@ You can install Manticore with command:
 	$ wget https://github.com/manticoresoftware/manticore/releases/download/2.4.1/manticore_2.4.1-171017-3b31a97-release-stemmer.jessie_amd64-bin.deb
 	$ sudo dpkg -i manticore_2.4.1-171017-3b31a97-release-stemmer.jessie_amd64-bin.deb
 
-Manticore package depends from zlib and ssl libraries, nothing else strictly required.
+Manticore package depends on zlib and ssl libraries, nothing else is strictly required.
 However if you plan to use 'indexer' tool to create indexes from different sources,
 you'll need to install appropriate client libraries.
 To know what exactly libraries, run `indexer` tool from Manticore and look at the top of it's output:
@@ -116,7 +116,7 @@ Supported platforms:
 * x86
 * x86_64
 
-Manticore package depends from zlib and ssl libraries, nothing else strictly required.
+Manticore package depends on zlib and ssl libraries, nothing else is strictly required.
 However if you plan to use 'indexer' tool to create indexes from different sources,
 you'll need to install appropriate client libraries. Use yum to download and install these dependencies:
 
@@ -280,7 +280,7 @@ Required tools
 Required libraries/packages on Linux
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-* Development version of 'ssl' lib. Usually came in package named like `libssl-dev` or `openssl-devel`.
+* Development version of 'ssl' lib. Usually comes in package named like `libssl-dev` or `openssl-devel`.
 * Development version of 'boost'. On debian packages `libboost-system-dev` and `libboost-program-options-dev`
 are enough; on redhat it is `boost-devel`.
 

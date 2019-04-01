@@ -9,17 +9,22 @@ it works opposite to a regular search where documents are stored in an index and
 Queries are stored in special kind index and they can be added, deleted and listed using INSERT/DELETE/SELECT statements
 similar way as it's done for a regular index.
 
-Checking if a document matches any of the predefined criterias (queries) performed via sphinxql ``CALL PQ`` function, or via http
+Checking if a document matches any of the predefined criterias (queries) performed via sphinxql :ref:`CALL PQ<call_pq_syntax>`  function, or via http
 ``/json/pq/<index>/_search`` endpoint. They returns list of matched queries and may be additional info as matching clause, filters, and tags.
+
+The workflow of using percolate queries is the following:
+
+* a percolate index is defined in the configuration
+* queries are inserted in the percolate index in same way as documents for a Real-Time index
+* documents can be tested against the stored queries with CALL PQ statement
 
 .. _percolate_query_index:
 
 The percolate index
 ~~~~~~~~~~~~~~~~~~~
 
-A percolate query works only for ``percolate`` index :ref:`type <type>`.  The percolate index internaly is a modified  Real-Time index
-and shares a similar configuration. The schema provided in config (list of fields and attributes) describes documents which
-you'll provide for matching. If the schema is omited, index will imply default field ``text`` and an integer attribute ``gid``.
+A percolate query works only for ``percolate`` index :ref:`type <type>`.  
+The percolate index internaly is a modified  Real-Time index and shares a similar configuration. 
 
 .. code-block:: ini
 
@@ -28,17 +33,27 @@ you'll provide for matching. If the schema is omited, index will imply default f
         type = percolate
         path = path/index_name
         min_infix_len   = 4
+        rt_field = title
+        rt_field = body
+        rt_attr_uint = author_id
     }
 
-The percolate index has several particularities over regular Real-Time indexes:
 
-The doc `id` has autoincrement functionality.
 
-The declared fields and attributes are not used for storing data, they define the document schema used by percolate queries
-and incoming documents.
+The fields and attributes  declared in the configuration  define the document schema used by percolate queries
+and documents that will be tested against stored queries using :ref:`CALL PQ <call_pq_syntax>`  command. The schema can be viewed with :ref:`DESCRIBE table_name TABLE<describe_syntax>` statement.
+If the schema is omited, index will imply default field ``text`` and an integer attribute ``gid``.
+The default field and attribute are removed  when defining explicit a schema, but their name can be reused if needed.
 
-Besided regular fields and attributes, the percolate index has 3 specific properties that are enabled by default and these are
-used in INSERT statements:
+The stored queries and the tested documents must respect the defined schema in the percolate index configuration. Trying to use fields/attributes not declared in the schema will give results with no matches.
+
+The schema of the percolate index itself which can be viewed with :ref:`DESCRIBE table_name<describe_syntax>`  and which will be used in INSERT statements to add queries in the percolate index  uses a fixed structure 
+and contain the following elements:
+
+ID
+^^
+
+The "id" is an unsigned 64-bit integer with **autoincrement** functionality therefor it can be ommited in INSERT statements.
 
 .. _percolate_query_query:
 
@@ -72,6 +87,7 @@ The tags  can be returned in the CALL PQ result set.
 
 Index schemas
 ~~~~~~~~~~~~~
+
 
 Usual sphinxql command :ref:`DESCRIBE<describe_syntax>` will reveal you both internal (schema for call pq) and external (schema for select).
 

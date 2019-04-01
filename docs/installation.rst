@@ -281,8 +281,8 @@ Required libraries/packages on Linux
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 * Development version of 'ssl' lib. Usually comes in package named like `libssl-dev` or `openssl-devel`.
-* Development version of 'boost'. On debian packages `libboost-system-dev` and `libboost-program-options-dev`
-are enough; on redhat it is `boost-devel`.
+* Development version of 'boost'. On debian packages `libboost-system-dev` and `libboost-program-options-dev` are enough; on redhat it is `boost-devel`.
+
 
 Optional dependencies
 ~~~~~~~~~~~~~~~~~~~~~

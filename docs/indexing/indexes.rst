@@ -84,14 +84,18 @@ Index files
 
 Each index consists of a number of files. 
 
+Small index components are fully loaded into memory. 
+Big index components  are read from disk as needed.  Currently these use seek+read to retrieve data from disk.
+Attribute components are opened and mapped with mmap(). They can be loaded fully in memory or left on disk and read when needed.
+
 Plain indexes and RealTime indexes chunks:
 
 +-----------+------------------------------+-----------------------------------------+
 | Extension |  Stores                      | Memory management                       |
 +===========+==============================+=========================================+
-| spa       | scalar attrs                 | see :ref:`ondisk_attrs`                 |
+| spa       | scalar attrs                 | mmap(), also see :ref:`ondisk_attrs`    |
 +-----------+------------------------------+-----------------------------------------+
-| spd       | document lists               | on disk, gets cached by OS              |
+| spd       | document lists               | read, on disk, gets cached by OS        |
 +-----------+------------------------------+-----------------------------------------+
 | spi       | dictionary                   | always loaded in memory                 |
 +-----------+------------------------------+-----------------------------------------+
@@ -101,11 +105,11 @@ Plain indexes and RealTime indexes chunks:
 +-----------+------------------------------+-----------------------------------------+
 | spl       | index lock file              | on disk only                            |
 +-----------+------------------------------+-----------------------------------------+
-| spm       | MVA attrs                    | see :ref:`ondisk_attrs`                 |
+| spm       | MVA attrs                    | mmap(), also see :ref:`ondisk_attrs`    |
 +-----------+------------------------------+-----------------------------------------+
-| spp       | keyword positions            | on disk, gets cached by OS              |
+| spp       | keyword positions            | read, on disk, gets cached by OS        |
 +-----------+------------------------------+-----------------------------------------+
-| sps       | string/json attrs            | see :ref:`ondisk_attrs`                 |
+| sps       | string/json attrs            | mmap(), also see :ref:`ondisk_attrs`    |
 +-----------+------------------------------+-----------------------------------------+
 | mvp       | MVA attrs updates :sup:`[1]` | always loaded in memory                 |
 +-----------+------------------------------+-----------------------------------------+

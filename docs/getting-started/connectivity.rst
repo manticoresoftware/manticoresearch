@@ -47,7 +47,7 @@ MySQL Connectors
 The official MySQL connectors can be used to connect to Manticore Search, however they might require certain settings passed in the DSN string as the connector 
 can try running certain SQL commands not implemented yet in Manticore. 
 
-JDBC Connector 6.x and above require Manticore Search 2.8.1 or greater and the DSN string should contain the following options:
+JDBC Connector 6.x and above require Manticore Search 2.8.2 or greater and the DSN string should contain the following options:
 
 .. code-block:: none
 

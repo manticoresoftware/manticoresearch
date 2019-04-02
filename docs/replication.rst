@@ -3,6 +3,8 @@
 
 Replication
 ===========
+
+.. warning::
   Please note that this feature is in preview stage. Some functionality may be not yet complete and may suffer changes.
   Read carefully changelogs of future updates to avoid possible breakages.
 
@@ -31,7 +33,7 @@ To use replication in the daemon:
 
 - :ref:`data_dir <data_dir>` option should be set in :ref:`searchd <searchd_program_configuration_options>` section of config
 
-- there should be at least one value of :ref:`listen <listen>` directive containing an external IP address and it should not be 0.0.0.0
+- there should be at least one value of :ref:`listen <listen>` for SphinxAPI protocol directive containing an external IP address and it should not be 0.0.0.0
 
 
 .. _replication_cluster:
@@ -69,9 +71,9 @@ Should be unique among other clusters in the node. Default is :ref:`data_dir <da
 listen
 ~~~~~~
 
-Specifies cluster's IP address and port. The address should be an external IP
+Specifies cluster's IP address and port for the replication protocol (not the same as SphinxAPI port). The address should be an external IP
 and cannot be ``0.0.0.0``. The value should be unique among other clusters in the node. The daemon will also occupy
-``port+1`` for incremental state transfer communications.
+``port+1`` for incremental state transfer communications. 
 
 .. _cluster_nodes:
 

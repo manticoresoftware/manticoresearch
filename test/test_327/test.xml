@@ -135,6 +135,9 @@ insert into facetdemo2 (id,price,brand_id,title,brand_name,property,categories,j
 <!-- empty result set with FACET -->
 <sphinxql>select * from facetdemo1 where price=1 facet brand_id;</sphinxql>
 
+<!-- crash on multiple expansion to multiple distributed indexes -->
+<sphinxql>select *,* from facetdemo12, facetdemo12</sphinxql>
+
 </sphqueries>
 
 </test>

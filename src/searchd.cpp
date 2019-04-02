@@ -5217,10 +5217,17 @@ const CSphVector<CSphQueryItem> & ExpandAsterisk ( const ISphSchema & tSchema,
 			dItemsLeftInSchema.Add(i);
 	}
 
+	bool bExpandedAsterisk = false;
 	ARRAY_FOREACH ( i, tItems )
 	{
 		if ( tItems[i].m_sExpr=="*" )
-		{ // asterisk expands to 'id' + all the items from the schema
+		{
+			if ( bExpandedAsterisk )
+				continue;
+
+			bExpandedAsterisk = true;
+
+			// asterisk expands to 'id' + all the items from the schema
 			if ( tSchema.GetAttrIndex ( "id" )<0 && !bNoID )
 				tExpanded.Add().m_sExpr = "id";
 
@@ -5233,7 +5240,9 @@ const CSphVector<CSphQueryItem> & ExpandAsterisk ( const ISphSchema & tSchema,
 				tExpanded.Add().m_sExpr = sName;
 			}
 		} else
+		{
 			tExpanded.Add ( tItems[i] );
+		}
 	}
 
 	return tExpanded;

@@ -1913,6 +1913,15 @@ bool PercolateIndex_c::MultiQueryEx ( int iQueries, const CSphQuery * ppQueries,
 	return bResult;
 }
 
+struct LoadedQuerySort_fn
+{
+	bool IsLess ( const StoredQueryDesc_t * pA, const StoredQueryDesc_t * pB ) const
+	{
+		return ( pA->m_uQUID<pB->m_uQUID );
+	}
+};
+
+
 void PercolateIndex_c::PostSetup()
 {
 	PercolateIndex_i::PostSetup();
@@ -1961,10 +1970,23 @@ void PercolateIndex_c::PostSetup()
 	if ( m_tSettings.m_bIndexExactWords )
 		SetupExactDict ( pDict, pTokenizer );
 
-	CSphString sError;
+	bool bSorted = true;
+	uint64_t uLast = 0;
+	CSphFixedVector<StoredQueryDesc_t *> dStored ( m_dLoadedQueries.GetLength() );
 	ARRAY_FOREACH ( i, m_dLoadedQueries )
 	{
-		const StoredQueryDesc_t & tQuery = m_dLoadedQueries[i];
+		dStored[i] = m_dLoadedQueries.Begin() + i;
+		bSorted &= ( uLast<dStored[i]->m_uQUID );
+		uLast = dStored[i]->m_uQUID;
+	}
+
+	if ( !bSorted )
+		dStored.Sort ( LoadedQuerySort_fn() );
+
+	CSphString sError;
+	ARRAY_FOREACH ( i, dStored )
+	{
+		const StoredQueryDesc_t & tQuery = *dStored[i];
 		const ISphTokenizer * pTok = tQuery.m_bQL ? pTokenizer : pTokenizerJson;
 		PercolateQueryArgs_t tArgs ( tQuery );
 		StoredQuery_i * pQuery = AddQuery ( tArgs, pTok, pDict, sError );

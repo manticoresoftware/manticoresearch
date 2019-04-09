@@ -13,6 +13,7 @@
 #include <gtest/gtest.h>
 
 #include "sphinxint.h"
+#include "attribute.h"
 #include "sphinxrt.h"
 
 #include <gmock/gmock.h>
@@ -25,8 +26,7 @@ static void DeleteIndexFiles ( const char * sIndex )
 		return;
 
 	const char * sExts[] = {
-		"kill", "lock", "meta", "ram", "0.spa", "0.spd", "0.spe", "0.sph", "0.spi", "0.spk", "0.spm", "0.spp"
-		, "0.sps" };
+		"kill", "lock", "meta", "ram", "0.spa", "0.spd", "0.spe", "0.sph", "0.spi", "0.spk", "0.spm", "0.spp" };
 
 	CSphString sName;
 	for ( int i = 0; i<( int ) ( sizeof ( sExts ) / sizeof ( sExts[0] ) ); i++ )
@@ -64,31 +64,34 @@ public:
 		m_dFields.Reserve ( iFields );
 	}
 
-	virtual BYTE ** NextDocument ( CSphString & )
+	BYTE ** NextDocument ( bool & bEOF, CSphString & ) override
 	{
-		if ( m_tDocInfo.m_uDocID>=( SphDocID_t ) m_iDocCount )
+		bEOF = false;
+		int iDoc = (int)++m_tDocInfo.m_tRowID;
+		if ( iDoc>=m_iDocCount )
 		{
-			m_tDocInfo.m_uDocID = 0;
+			bEOF = true;
 			return nullptr;
 		}
 
-		int iDoc = ( int ) m_tDocInfo.m_uDocID;
-		++m_tDocInfo.m_uDocID;
 		for ( int i = 0; i<m_iFields; i++ )
 		{
 			char * szField = ( char * ) ( m_ppDocs + iDoc * m_iFields )[i];
 			m_dFieldLengths[i] = strlen ( szField );
 		}
 
+		const CSphColumnInfo * pId = m_tSchema.GetAttr ( sphGetDocidName() );
+		assert ( pId );
+		m_tDocInfo.SetAttr( pId->m_tLocator, iDoc+1 );
+
 		return m_ppDocs + iDoc * m_iFields;
 	}
 
-	MOCK_CONST_METHOD0( GetFieldLengths, const int *() ); // return m_dFieldLengths.Begin();
+	const int * GetFieldLengths() const override { return m_dFieldLengths.Begin(); }
 	MOCK_METHOD1 ( Connect, bool ( CSphString & ) ); // return true;
 	MOCK_METHOD0 ( Disconnect, void() );
-	MOCK_METHOD0 ( HasAttrsConfigured, bool() ); // return true
 
-	bool IterateStart ( CSphString & )
+	bool IterateStart ( CSphString & ) final
 	{
 		m_tDocInfo.Reset ( m_tSchema.GetRowSize () );
 		m_iPlainFieldsLength = m_tSchema.GetFieldsCount();
@@ -96,11 +99,9 @@ public:
 	}
 
 	MOCK_METHOD2 ( IterateMultivaluedStart, bool ( int, CSphString& )); // return false;
-	MOCK_METHOD0 ( IterateMultivaluedNext, bool()); // return false;
-	MOCK_METHOD1 ( IterateFieldMVAStart, SphRange_t ( int ) ); // return false
-	MOCK_METHOD0 ( IterateFieldMVANext, bool() ); // return false;
+	MOCK_METHOD2 ( IterateMultivaluedNext, bool(int64_t &, int64_t &)); // return false;
 	MOCK_METHOD1 ( IterateKillListStart, bool (CSphString & ) ); // return false;
-	MOCK_METHOD1 ( IterateKillListNext, bool (SphDocID_t & ) ) ; // return false
+	MOCK_METHOD1 ( IterateKillListNext, bool (DocID_t & ) ) ; // return false
 	int GetFieldCount () const { return m_iFields; }
 
 	VecTraits_T<VecTraits_T<const char>> GetFields ()
@@ -108,7 +109,7 @@ public:
 		m_dFields.Resize(0);
 		for ( int i=0; i<m_iFields; ++i)
 		{
-			auto pStr = (const char*) m_ppDocs[ (m_tDocInfo.m_uDocID - 1 ) * m_iFields + i];
+			auto pStr = (const char*) m_ppDocs[m_tDocInfo.m_tRowID*m_iFields + i];
 			m_dFields.Add ( VecTraits_T<const char> (pStr,strlen(pStr)));
 		}
 		return m_dFields;
@@ -140,17 +141,18 @@ public:
 			m_ppFields[i] = (char *)&m_dFields[i];
 	}
 
-	virtual BYTE ** NextDocument ( CSphString & )
+	BYTE ** NextDocument ( bool & bEOF, CSphString & ) override
 	{
-		if ( m_tDocInfo.m_uDocID>800 )
+		bEOF = false;
+		if ( m_tDocInfo.m_tRowID>800 )
 		{
-			m_tDocInfo.m_uDocID = 0;
-			return NULL;
+			bEOF = true;
+			return nullptr;
 		}
 
-		m_tDocInfo.m_uDocID++;
+		m_tDocInfo.m_tRowID++;
 
-		m_tDocInfo.SetAttr ( m_tSchema.GetAttr(0).m_tLocator, m_tDocInfo.m_uDocID+1000 );
+		m_tDocInfo.SetAttr ( m_tSchema.GetAttr(0).m_tLocator, m_tDocInfo.m_tRowID+1000 );
 		m_tDocInfo.SetAttr ( m_tSchema.GetAttr(1).m_tLocator, 1313 );
 
 		snprintf ( m_dFields[0], m_iMaxFieldLen, "cat title%d title%d title%d title%d title%d"
@@ -169,9 +171,8 @@ public:
 	MOCK_CONST_METHOD0( GetFieldLengths, const int *() ); // return m_dFieldLengths.Begin();
 	MOCK_METHOD1 ( Connect, bool ( CSphString & ) ); // return true;
 	MOCK_METHOD0 ( Disconnect, void () );
-	MOCK_METHOD0 ( HasAttrsConfigured, bool () ); // return true
 
-	bool IterateStart ( CSphString & )
+	bool IterateStart ( CSphString & ) final
 	{
 		m_tDocInfo.Reset ( m_tSchema.GetRowSize () );
 		m_iPlainFieldsLength = m_tSchema.GetFieldsCount();
@@ -179,11 +180,9 @@ public:
 	}
 
 	MOCK_METHOD2 ( IterateMultivaluedStart, bool ( int, CSphString & ) ); // return false;
-	MOCK_METHOD0 ( IterateMultivaluedNext, bool () ); // return false;
-	MOCK_METHOD1 ( IterateFieldMVAStart, SphRange_t ( int ) ); // return false
-	MOCK_METHOD0 ( IterateFieldMVANext, bool () ); // return false;
+	MOCK_METHOD2 ( IterateMultivaluedNext, bool (int64_t &, int64_t &) ); // return false;
 	MOCK_METHOD1 ( IterateKillListStart, bool (CSphString & ) ); // return false;
-	MOCK_METHOD1 ( IterateKillListNext, bool (SphDocID_t & ) ); // return false
+	MOCK_METHOD1 ( IterateKillListNext, bool (DocID_t & ) ); // return false
 	int  GetFieldCount () const { return m_iMaxFields; }
 
 	VecTraits_T<VecTraits_T<const char>> GetFields ()
@@ -238,7 +237,11 @@ class RTN : public RT, public ::testing::WithParamInterface<DWORD>
 TEST_P ( RTN, WeightBoundary )
 {
 	using namespace testing;
-	CSphDictRefPtr_c pDict { sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "weight", false, sError ) };
+	CSphDictRefPtr_c pDict { sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "weight", false, 32, sError ) };
+
+	tCol.m_sName = "id";
+	tCol.m_eAttrType = SPH_ATTR_BIGINT;
+	tSrcSchema.AddAttr ( tCol, true );
 
 	tCol.m_sName = "channel_id";
 	tCol.m_eAttrType = SPH_ATTR_INTEGER;
@@ -249,7 +252,7 @@ TEST_P ( RTN, WeightBoundary )
 	MockTestDoc_c * pSrc = new MockTestDoc_c ( tSrcSchema, ( BYTE ** ) dFields, 1, 2 );
 
 	EXPECT_CALL ( *pSrc, Connect ( _ ) ).WillOnce ( Return ( true ) );
-	EXPECT_CALL ( *pSrc, GetFieldLengths () ).WillOnce ( Return ( pSrc->m_dFieldLengths.Begin () ) );
+//	EXPECT_CALL ( *pSrc, GetFieldLengths () ).WillOnce ( Return ( pSrc->m_dFieldLengths.Begin () ) );
 	EXPECT_CALL ( *pSrc, Disconnect () );
 
 	pSrc->SetTokenizer ( pTok );
@@ -267,7 +270,7 @@ TEST_P ( RTN, WeightBoundary )
 	for ( int i=0; i<tSrcSchema.GetAttrsCount(); i++ )
 		tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
 
-	ISphRtIndex * pIndex = sphCreateIndexRT ( tSchema, "testrt", 32 * 1024 * 1024, RT_INDEX_FILE_NAME, false );
+	RtIndex_i * pIndex = sphCreateIndexRT ( tSchema, "testrt", 32 * 1024 * 1024, RT_INDEX_FILE_NAME, false );
 
 	// tricky bit
 	// index owns its tokenizer/dict pair, and MAY do whatever it wants
@@ -280,16 +283,16 @@ TEST_P ( RTN, WeightBoundary )
 	pIndex->PostSetup ();
 	EXPECT_TRUE ( pIndex->Prealloc ( false ) );
 
-	CSphVector<DWORD> dMvas;
+	CSphVector<int64_t> dMvas;
 	CSphString sFilter;
+	bool bEOF = false;
 	while (true)
 	{
-		EXPECT_TRUE ( pSrc->IterateDocument ( sError ) );
-		if ( !pSrc->m_tDocInfo.m_uDocID )
+		EXPECT_TRUE ( pSrc->IterateDocument ( bEOF, sError ) );
+		if ( bEOF )
 			break;
 
-		pIndex->AddDocument ( pSrc->GetFields ()
-							  , pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
+		pIndex->AddDocument ( pSrc->GetFields(), pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
 		pIndex->Commit ( NULL, NULL );
 	}
 
@@ -299,8 +302,7 @@ TEST_P ( RTN, WeightBoundary )
 
 	CSphQuery tQuery;
 	CSphQueryResult tResult;
-	KillListVector kList;
-	CSphMultiQueryArgs tArgs ( kList, 1) ;
+	CSphMultiQueryArgs tArgs ( 1 );
 	tQuery.m_sQuery = "@title cat";
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
 
@@ -311,7 +313,7 @@ TEST_P ( RTN, WeightBoundary )
 	ASSERT_TRUE ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, tArgs ) );
 	sphFlattenQueue ( pSorter, &tResult, 0 );
 	ASSERT_EQ ( tResult.m_dMatches.GetLength (), 1 ) << "results found";
-	ASSERT_EQ ( tResult.m_dMatches[0].m_uDocID, 1 ) << "docID" ;
+	ASSERT_EQ ( tResult.m_dMatches[0].m_tRowID, 0 ) << "rowID" ;
 	ASSERT_EQ ( tResult.m_dMatches[0].m_iWeight, GetParam ()) << "weight" ;
 
 	SafeDelete ( pSorter );
@@ -339,17 +341,21 @@ TEST_F ( RT, RankerFactors )
 		"(the who) | (the foo)", // matched by 6
 	};
 
+	tCol.m_sName = "id";
+	tCol.m_eAttrType = SPH_ATTR_BIGINT;
+	tSrcSchema.AddAttr ( tCol, true );
+
 	tCol.m_sName = "idd";
 	tCol.m_eAttrType = SPH_ATTR_INTEGER;
 	tSrcSchema.AddAttr ( tCol, true );
 
-	auto pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", false, sError );
+	auto pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", false, 32, sError );
 
 	auto pSrc = new MockTestDoc_c ( tSrcSchema, ( BYTE ** ) dFields, sizeof ( dFields ) / sizeof ( dFields[0] ) / 2
 									, 2 );
 
 	EXPECT_CALL ( *pSrc, Connect ( _ ) ).WillOnce ( Return ( true ) );
-	EXPECT_CALL ( *pSrc, GetFieldLengths () ).Times ( 7 ).WillRepeatedly ( Return ( pSrc->m_dFieldLengths.Begin () ) );
+//	EXPECT_CALL ( *pSrc, GetFieldLengths () ).Times ( 7 ).WillRepeatedly ( Return ( pSrc->m_dFieldLengths.Begin () ) );
 	EXPECT_CALL ( *pSrc, Disconnect () );
 
 	pSrc->SetTokenizer ( pTok );
@@ -371,20 +377,20 @@ TEST_F ( RT, RankerFactors )
 	auto pIndex = sphCreateIndexRT ( tSchema, "testrt", 128 * 1024, RT_INDEX_FILE_NAME, false );
 
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
-	pIndex->SetDictionary ( sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", false, sError ) );
+	pIndex->SetDictionary ( sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", false, 32, sError ) );
 	pIndex->PostSetup ();
 	Verify ( pIndex->Prealloc ( false ) );
 
 	CSphString sFilter;
-	CSphVector<DWORD> dMvas;
+	CSphVector<int64_t> dMvas;
+	bool bEOF = false;
 	while (true)
 	{
-		Verify ( pSrc->IterateDocument ( sError ) );
-		if ( !pSrc->m_tDocInfo.m_uDocID )
+		Verify ( pSrc->IterateDocument ( bEOF, sError ) );
+		if ( bEOF )
 			break;
 
-		pIndex->AddDocument ( pSrc->GetFields ()
-							  , pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
+		pIndex->AddDocument ( pSrc->GetFields (), pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
 	}
 	pIndex->Commit ( NULL, NULL );
 	pSrc->Disconnect ();
@@ -401,8 +407,7 @@ TEST_F ( RT, RankerFactors )
 	tQuery.m_sOrderBy = "@weight desc";
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
 	CSphQueryResult tResult;
-	KillListVector tKill;
-	CSphMultiQueryArgs tArgs ( tKill, 1 );
+	CSphMultiQueryArgs tArgs ( 1 );
 	SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema (), tResult.m_sError );
 	tQueueSettings.m_bComputeItems = true;
 	tArgs.m_uPackedFactorFlags = SPH_FACTOR_ENABLE | SPH_FACTOR_CALC_ATC;
@@ -509,7 +514,11 @@ TEST_F ( RT, SendVsMerge )
 {
 	using namespace testing;
 
-	auto pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", false, sError );
+	auto pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", false, 32, sError );
+
+	tCol.m_sName = "id";
+	tCol.m_eAttrType = SPH_ATTR_BIGINT;
+	tSrcSchema.AddAttr ( tCol, true );
 
 	tCol.m_sName = "tag1";
 	tCol.m_eAttrType = SPH_ATTR_INTEGER;
@@ -522,7 +531,7 @@ TEST_F ( RT, SendVsMerge )
 	auto pSrc = new MockDocRandomizer_c ( tSrcSchema );
 
 	EXPECT_CALL ( *pSrc, Connect ( _ ) ).WillOnce ( Return ( true ) );
-	EXPECT_CALL ( *pSrc, GetFieldLengths () ).Times ( 801 ).WillRepeatedly ( Return ( pSrc->m_dFieldLengths ) );
+//	EXPECT_CALL ( *pSrc, GetFieldLengths () ).Times ( 801 ).WillRepeatedly ( Return ( pSrc->m_dFieldLengths ) );
 	EXPECT_CALL ( *pSrc, Disconnect () );
 
 	pSrc->SetTokenizer ( pTok );
@@ -541,7 +550,7 @@ TEST_F ( RT, SendVsMerge )
 	for ( int i=0; i<tSrcSchema.GetAttrsCount(); i++ )
 		tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
 
-	ISphRtIndex * pIndex = sphCreateIndexRT ( tSchema, "testrt", 128 * 1024, RT_INDEX_FILE_NAME, false );
+	RtIndex_i * pIndex = sphCreateIndexRT ( tSchema, "testrt", 128 * 1024, RT_INDEX_FILE_NAME, false );
 
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( pDict );
@@ -550,8 +559,7 @@ TEST_F ( RT, SendVsMerge )
 
 	CSphQuery tQuery;
 	CSphQueryResult tResult;
-	KillListVector tKill;
-	CSphMultiQueryArgs tArgs ( tKill, 1 );
+	CSphMultiQueryArgs tArgs ( 1 );
 	tQuery.m_sQuery = "@title cat";
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
 
@@ -561,16 +569,16 @@ TEST_F ( RT, SendVsMerge )
 	ASSERT_TRUE ( pSorter );
 
 	CSphString sFilter;
-	CSphVector<DWORD> dMvas;
+	CSphVector<int64_t> dMvas;
+	bool bEOF = false;
 	while (true)
 	{
-		ASSERT_TRUE ( pSrc->IterateDocument ( sError ) );
-		if ( !pSrc->m_tDocInfo.m_uDocID )
+		ASSERT_TRUE ( pSrc->IterateDocument ( bEOF, sError ) );
+		if ( bEOF )
 			break;
 
-		pIndex->AddDocument ( pSrc->GetFields ()
-							  , pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
-		if ( pSrc->m_tDocInfo.m_uDocID==350 )
+		pIndex->AddDocument ( pSrc->GetFields (), pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
+		if ( pSrc->m_tDocInfo.m_tRowID==350 )
 		{
 			pIndex->Commit ( NULL, NULL );
 			EXPECT_TRUE ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, tArgs ) );
@@ -585,10 +593,10 @@ TEST_F ( RT, SendVsMerge )
 
 	for ( int i = 0; i<tResult.m_dMatches.GetLength (); i++ )
 	{
-		const SphDocID_t uID = tResult.m_dMatches[i].m_uDocID;
+		const RowID_t uID = tResult.m_dMatches[i].m_tRowID;
 		const SphAttr_t tTag1 = tResult.m_dMatches[i].GetAttr ( tResult.m_tSchema.GetAttr ( 0 ).m_tLocator );
 		const SphAttr_t tTag2 = tResult.m_dMatches[i].GetAttr ( tResult.m_tSchema.GetAttr ( 1 ).m_tLocator );
-		ASSERT_TRUE ( ( SphDocID_t ) tTag1==uID + 1000 );
+		ASSERT_TRUE ( ( RowID_t ) tTag1==uID + 1000 );
 		ASSERT_TRUE ( tTag2==1313 );
 	}
 

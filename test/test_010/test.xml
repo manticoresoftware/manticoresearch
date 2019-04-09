@@ -34,7 +34,6 @@ index lj
 {
 	source			= srclj
 	path			= <Data_Path/>/lj
-	docinfo			= extern
 	min_word_len	= 1
 }
   </Config>

@@ -14,6 +14,7 @@
 #include "sphinxint.h"
 #include "sphinxjson.h"
 #include "sphinxjsonquery.h"
+#include "attribute.h"
 #include "sphinxpq.h"
 
 #include "http/http_parser.h"
@@ -26,14 +27,16 @@ static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & t
 	const ISphSchema & tSchema = tRes.m_tSchema;
 	StringBuilder_c sTmp;
 
-	int iAttrsCount = sphSendGetAttrCount(tSchema);
+	CSphBitvec tAttrsToSend;
+	sphGetAttrsToSend ( tSchema, false, true, tAttrsToSend );
 
 	tOut.StartBlock ( ",", "{", "}");
 
 	// column names
 	tOut.StartBlock (",", R"("attrs":[)","]");
-	for ( int i=0; i<iAttrsCount; ++i )
-		tOut.AppendString ( tSchema.GetAttr(i).m_sName, '"');
+	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
+		if ( tAttrsToSend.BitGet(i) )
+			tOut.AppendString ( tSchema.GetAttr(i).m_sName, '"');
 	tOut.FinishBlock(false); // attrs
 
 	// attribute values
@@ -43,8 +46,10 @@ static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & t
 		tOut.StartBlock ( ",", "[", "]");
 
 		const CSphMatch & tMatch = tRes.m_dMatches [ iMatch ];
-		for ( int iAttr=0; iAttr<iAttrsCount; ++iAttr )
+		for ( int iAttr=0; iAttr<tSchema.GetAttrsCount(); ++iAttr )
 		{
+			if ( !tAttrsToSend.BitGet(iAttr) )
+				continue;
 
 			CSphAttrLocator tLoc = tSchema.GetAttr(iAttr).m_tLocator;
 			ESphAttr eAttrType = tSchema.GetAttr(iAttr).m_eAttrType;
@@ -899,7 +904,7 @@ protected:
 class HttpJsonInsertTraits_c
 {
 protected:
-	bool ProcessInsert ( SqlStmt_t & tStmt, SphDocID_t tDocId, bool bReplace, JsonObj_c & tResult )
+	bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t tDocId, bool bReplace, JsonObj_c & tResult )
 	{
 		CSphSessionAccum tAcc ( false );
 		CSphString sWarning;
@@ -927,7 +932,7 @@ public:
 	bool Process () override
 	{
 		SqlStmt_t tStmt;
-		SphDocID_t tDocId = DOCID_MAX;
+		DocID_t tDocId = 0;
 		CSphString sError;
 		if ( !sphParseJsonInsert ( m_sQuery, tStmt, tDocId, m_bReplace, sError ) )
 		{
@@ -953,7 +958,7 @@ private:
 class HttpJsonUpdateTraits_c
 {
 protected:
-	bool ProcessUpdate ( const char * szRawRequest, const SqlStmt_t & tStmt, SphDocID_t tDocId, const ThdDesc_t & tThd, JsonObj_c & tResult )
+	bool ProcessUpdate ( const char * szRawRequest, const SqlStmt_t & tStmt, DocID_t tDocId, const ThdDesc_t & tThd, JsonObj_c & tResult )
 	{
 		HttpErrorReporter_c tReporter;
 		CSphString sWarning;
@@ -980,7 +985,7 @@ public:
 	bool Process () override
 	{
 		SqlStmt_t tStmt;
-		SphDocID_t tDocId = DOCID_MAX;
+		DocID_t tDocId = 0;
 		CSphString sError;
 		if ( !ParseQuery ( tStmt, tDocId, sError ) )
 		{
@@ -997,12 +1002,12 @@ public:
 	}
 
 protected:
-	virtual bool ParseQuery ( SqlStmt_t & tStmt, SphDocID_t & tDocId, CSphString & sError )
+	virtual bool ParseQuery ( SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError )
 	{
 		return sphParseJsonUpdate ( m_sQuery, tStmt, tDocId, sError );
 	}
 
-	virtual bool ProcessQuery ( const SqlStmt_t & tStmt, SphDocID_t tDocId, JsonObj_c & tResult )
+	virtual bool ProcessQuery ( const SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult )
 	{
 		return ProcessUpdate ( m_sQuery, tStmt, tDocId, m_tThd, tResult );
 	}
@@ -1012,7 +1017,7 @@ protected:
 class HttpJsonDeleteTraits_c
 {
 protected:
-	bool ProcessDelete ( const char * szRawRequest, const SqlStmt_t & tStmt, SphDocID_t tDocId, const ThdDesc_t & tThd, JsonObj_c & tResult )
+	bool ProcessDelete ( const char * szRawRequest, const SqlStmt_t & tStmt, DocID_t tDocId, const ThdDesc_t & tThd, JsonObj_c & tResult )
 	{
 		CSphSessionAccum tAcc ( false );
 		HttpErrorReporter_c tReporter;
@@ -1038,12 +1043,12 @@ public:
 	{}
 
 protected:
-	bool ParseQuery ( SqlStmt_t & tStmt, SphDocID_t & tDocId, CSphString & sError ) override
+	bool ParseQuery ( SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError ) override
 	{
 		return sphParseJsonDelete ( m_sQuery, tStmt, tDocId, sError );
 	}
 
-	bool ProcessQuery ( const SqlStmt_t & tStmt, SphDocID_t tDocId, JsonObj_c & tResult ) override
+	bool ProcessQuery ( const SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult ) override
 	{
 		return ProcessDelete ( m_sQuery, tStmt, tDocId, m_tThd, tResult );
 	}
@@ -1093,7 +1098,7 @@ public:
 
 			*p++ = '\0';
 			SqlStmt_t tStmt;
-			SphDocID_t tDocId = DOCID_MAX;
+			DocID_t tDocId = 0;
 			CSphString sStmt;
 			CSphString sError;
 			CSphString sQuery;
@@ -1288,6 +1293,7 @@ CSphString sphHttpEndpointToStr ( ESphHttpEndpoint eEndpoint )
 }
 
 
+
 static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, const CSphFixedVector<int64_t> & dDocids,
 	const CSphString & sIndex, JsonEscapedBuilder & tOut )
 {
@@ -1323,12 +1329,13 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 		if ( tRes.m_bGetDocs )
 		{
 			ScopedComma_c sFields ( tOut, ",",R"("fields":{"_percolator_document_slot": [)", "] }");
-			for ( int iDoc = 1; iDoc<=tRes.m_dDocs[iDocOff]; ++iDoc )
+			int iDocs = tRes.m_dDocs[iDocOff];
+			for ( int iDoc = 1; iDoc<=iDocs; ++iDoc )
 			{
-				int iRow = tRes.m_dDocs[iDocOff + iDoc];
-				tOut.Sprintf ("%U", ( dDocids.GetLength () ? dDocids[iRow] : iRow ) ); // docid
+				auto iRow = tRes.m_dDocs[iDocOff + iDoc];
+				tOut.Sprintf ("%l", DocID_t ( dDocids.IsEmpty () ? iRow : dDocids[iRow] ) );
 			}
-			iDocOff += tRes.m_dDocs[iDocOff] + 1;
+			iDocOff += iDocs + 1;
 		}
 	}
 

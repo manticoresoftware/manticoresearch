@@ -98,11 +98,11 @@ INSERT INTO test_table (id, a, n) VALUES
 
 	<query select="idiv(abs(n), 10000000000) as sel, *"
 		groupfunc="attr" groupattr="sel"
-		id_range="1 6" index="test"/>
+		filter="id" filter_range="1 6" index="test"/>
 
 	<query select="idiv(70000000000, 10000000000) as sel, *"
 		groupfunc="attr" groupattr="sel"
-		id_range="1 6" index="test"/>
+		filter="id" filter_range="1 6" index="test"/>
 
 	<query select="min(a, n) as sel, *" index="test"/>
 

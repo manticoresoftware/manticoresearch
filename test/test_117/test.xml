@@ -14,7 +14,6 @@ searchd
 
 index rt0
 {
-    docinfo			= extern
     morphology		= none
 
 	type			= rt
@@ -33,7 +32,6 @@ index rt_mva
 	type			= rt
 	path = <data_path/>/mva
 	rt_mem_limit      		= 128K
-    docinfo			= extern
 
 	rt_field		= title
 	rt_field		= content

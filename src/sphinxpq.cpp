@@ -13,12 +13,8 @@
 #include "sphinxpq.h"
 #include "sphinxrlp.h"
 
-#if USE_WINDOWS
-#include <io.h> // for open(), close()
-#endif
-
 /// protection from concurrent changes during binlog replay
-static auto&	g_bRTChangesAllowed		= RTChangesAllowed ();
+static auto &g_bRTChangesAllowed = RTChangesAllowed ();
 
 //////////////////////////////////////////////////////////////////////////
 // percolate index
@@ -77,8 +73,8 @@ public:
 	explicit PercolateIndex_c ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath );
 	~PercolateIndex_c () override;
 
-	bool AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFields, const CSphMatch & tDoc,
-		bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const VecTraits_T<DWORD> & dMvas,
+	bool AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFields, CSphMatch & tDoc,
+		bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const VecTraits_T<int64_t> & dMvas,
 		CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt ) override;
 	bool MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchResult_t &tRes ) override;
 	void RollBack ( ISphRtAccum * pAccExt ) override;
@@ -104,7 +100,7 @@ public:
 	bool MultiQueryEx ( int, const CSphQuery *, CSphQueryResult **, ISphMatchSorter **, const CSphMultiQueryArgs & ) const override;
 	virtual bool AddDocument ( ISphHits * , const CSphMatch & , const char ** , const CSphVector<DWORD> & , CSphString & , CSphString & ) { return true; }
 	void Commit ( int * , ISphRtAccum * pAccExt ) override { RollBack ( pAccExt ); }
-	bool DeleteDocument ( const SphDocID_t * , int , CSphString & , ISphRtAccum * pAccExt ) override { RollBack ( pAccExt ); return true; }
+	bool DeleteDocument ( const DocID_t * , int , CSphString & , ISphRtAccum * pAccExt ) override { RollBack ( pAccExt ); return true; }
 	void CheckRamFlush () override;
 	void ForceRamFlush ( bool bPeriodic ) override;
 	void ForceDiskChunk () override;
@@ -115,12 +111,12 @@ public:
 	CSphIndex * GetDiskChunk ( int ) override { return NULL; } // NOLINT
 	int64_t GetFlushAge() const override { return 0; }
 
+	int					Kill ( DocID_t ) override { return 0; }
+	int					KillMulti ( const DocID_t * pKlist, int iKlistSize ) override { return 0; }
+
 	// plain index stub
-	SphDocID_t *		GetKillList () const override { return NULL; }
-	int					GetKillListSize () const override { return 0 ; }
-	bool				HasDocid ( SphDocID_t ) const override { return false; }
 	int					Build ( const CSphVector<CSphSource*> & , int , int ) override { return 0; }
-	bool				Merge ( CSphIndex * , const CSphVector<CSphFilterSettings> & , bool ) override {return false; }
+	bool				Merge ( CSphIndex * , const CSphVector<CSphFilterSettings> &, bool ) override {return false; }
 	void				SetBase ( const char * ) override {}
 	bool				Rename ( const char * ) override { return false; }
 	bool				Lock () override { return true; }
@@ -131,9 +127,10 @@ public:
 	void				GetStatus ( CSphIndexStatus* pRes ) const override { assert (pRes); if ( pRes ) { pRes->m_iDiskUse = 0; pRes->m_iRamUse = 0;}}
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & , CSphString * pError ) const override { return NotImplementedError(pError); }
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const override { return false; }
-	int					UpdateAttributes ( const CSphAttrUpdate & , int , CSphString & sError, CSphString & ) override { NotImplementedError ( &sError ); return -1; }
+	int					UpdateAttributes ( const CSphAttrUpdate & /*tUpd*/, int /*iIndex*/, bool & /*bCritical*/, CSphString & sError, CSphString & /*sWarning*/ ) override { NotImplementedError ( &sError ); return -1; }
 	bool				SaveAttributes ( CSphString & ) const override { return true; }
 	DWORD				GetAttributeStatus () const override { return 0; }
+
 	virtual bool		CreateModifiedFiles ( bool , const CSphString & , ESphAttr , int , CSphString & ) { return true; }
 	bool				AddRemoveAttribute ( bool , const CSphString & , ESphAttr , CSphString & sError ) override { return NotImplementedError ( &sError ); }
 	void				DebugDumpHeader ( FILE *, const char *, bool ) override {}
@@ -191,14 +188,14 @@ PercolateIndex_i * CreateIndexPercolate ( const CSphSchema & tSchema, const char
 
 static void SegmentGetRejects ( const RtSegment_t * pSeg, bool bBuildInfix, bool bUtf8, SegmentReject_t & tReject )
 {
-	tReject.m_iRows = pSeg->m_iRows;
-	const bool bMultiDocs = ( pSeg->m_iRows>1 );
+	tReject.m_iRows = pSeg->m_uRows;
+	const bool bMultiDocs = ( pSeg->m_uRows>1 );
 	if ( bMultiDocs )
 	{
-		tReject.m_dPerDocTerms.Reset ( pSeg->m_iRows );
+		tReject.m_dPerDocTerms.Reset ( pSeg->m_uRows );
 		if ( bBuildInfix )
 		{
-			tReject.m_dPerDocWilds.Reset ( pSeg->m_iRows * PERCOLATE_BLOOM_SIZE );
+			tReject.m_dPerDocWilds.Reset ( pSeg->m_uRows * PERCOLATE_BLOOM_SIZE );
 			tReject.m_dPerDocWilds.Fill ( 0 );
 		}
 	}
@@ -236,14 +233,12 @@ static void SegmentGetRejects ( const RtSegment_t * pSeg, bool bBuildInfix, bool
 					if ( !pDoc )
 						break;
 
-					// Docid - should be row-based started from 1
-					assert ( pDoc->m_uDocID>=1 && (int)pDoc->m_uDocID<pSeg->m_iRows+1 );
-					int iDoc = (int)pDoc->m_uDocID - 1;
-					tReject.m_dPerDocTerms[iDoc].Add ( uHash );
+					assert ( pDoc->m_tRowID<pSeg->m_uRows );
+					tReject.m_dPerDocTerms[pDoc->m_tRowID].Add ( uHash );
 
 					if ( bBuildInfix )
 					{
-						uint64_t * pBloom = tReject.m_dPerDocWilds.Begin() + iDoc * PERCOLATE_BLOOM_SIZE;
+						uint64_t * pBloom = tReject.m_dPerDocWilds.Begin() + pDoc->m_tRowID * PERCOLATE_BLOOM_SIZE;
 						BloomGenTraits_t tBloom2Doc0 ( pBloom );
 						BloomGenTraits_t tBloom2Doc1 ( pBloom + PERCOLATE_BLOOM_WILD_COUNT );
 						BuildBloom ( pDictWord, iLen, BLOOM_NGRAM_0, bUtf8, PERCOLATE_BLOOM_WILD_COUNT, tBloom2Doc0 );
@@ -693,6 +688,11 @@ PercolateIndex_c::PercolateIndex_c ( const CSphSchema & tSchema, const char * sI
 {
 	m_tSchema = tSchema;
 
+	// add id column
+	CSphColumnInfo tCol ( sphGetDocidName () );
+	tCol.m_eAttrType = SPH_ATTR_BIGINT;
+	m_tMatchSchema.AddAttr ( tCol, true );
+
 	// fill match schema
 	m_tMatchSchema.AddAttr ( CSphColumnInfo ( "query", SPH_ATTR_STRINGPTR ), true );
 	m_tMatchSchema.AddAttr ( CSphColumnInfo ( "tags", SPH_ATTR_STRINGPTR ), true );
@@ -718,8 +718,9 @@ ISphRtAccum * PercolateIndex_c::CreateAccum ( CSphString & sError )
 	return AcquireAccum ( m_pDict, nullptr, true, false, &sError );
 }
 
+
 bool PercolateIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFields,
-	const CSphMatch & tDoc, bool , const CSphString & , const char ** ppStr, const VecTraits_T<DWORD> & dMvas,
+	CSphMatch & tDoc, bool , const CSphString & , const char ** ppStr, const VecTraits_T<int64_t> & dMvas,
 	CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt )
 {
 	auto pAcc = ( RtAccum_t * ) AcquireAccum ( m_pDict, pAccExt, true, true, &sError );
@@ -753,7 +754,8 @@ bool PercolateIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >>
 
 	m_tSchema.CloneWholeMatch ( &tSrc.m_tDocInfo, tDoc );
 
-	if ( !tSrc.IterateStart ( sError ) || !tSrc.IterateDocument ( sError ) )
+	bool bEOF = false;
+	if ( !tSrc.IterateStart ( sError ) || !tSrc.IterateDocument ( bEOF, sError ) )
 		return false;
 
 	ISphHits * pHits = tSrc.IterateHits ( sError );
@@ -775,7 +777,7 @@ public:
 	{
 	}
 
-	const CSphMatch & GetNextDoc ( DWORD * ) final
+	const CSphMatch & GetNextDoc() final
 	{
 		m_iHits = 0;
 		while (true)
@@ -783,7 +785,7 @@ public:
 			const RtDoc_t * pDoc = m_tDocReader.UnzipDoc();
 			if ( !pDoc && m_iDoc>=m_dDoclist.GetLength() )
 			{
-				m_tMatch.m_uDocID = 0;
+				m_tMatch.m_tRowID = INVALID_ROWID;
 				return m_tMatch;
 			}
 
@@ -794,7 +796,7 @@ public:
 				assert ( pDoc );
 			}
 
-			m_tMatch.m_uDocID = pDoc->m_uDocID;
+			m_tMatch.m_tRowID = pDoc->m_tRowID;
 			m_dQwordFields.Assign32 ( pDoc->m_uDocFields );
 			m_uMatchHits = pDoc->m_uHits;
 			m_iHitlistPos = (uint64_t(pDoc->m_uHits)<<32) + pDoc->m_uHit;
@@ -1011,8 +1013,7 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 		return;
 
 	const RtSegment_t * pSeg = (RtSegment_t *)tMatchCtx.m_pCtx->m_pIndexData;
-	const BYTE * pStrings = pSeg->m_dStrings.Begin();
-	const DWORD * pMva = pSeg->m_dMvas.Begin();
+	const BYTE * pBlobs = pSeg->m_dBlobs.Begin();
 
 	++tMatchCtx.m_iEarlyPassed;
 	tMatchCtx.m_pCtx->ResetFilters();
@@ -1025,9 +1026,7 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 	tFlx.m_pFilters = &pStored->m_dFilters;
 	tFlx.m_pFilterTree = &pStored->m_dFilterTree;
 	tFlx.m_pSchema = &tMatchCtx.m_tSchema;
-	tFlx.m_pMvaPool = pMva;
-	tFlx.m_pStrings = pStrings;
-	tFlx.m_bArenaProhibit = true;
+	tFlx.m_pBlobPool = pBlobs;
 
 	bool bRes = tMatchCtx.m_pCtx->CreateFilters ( tFlx, sError, sWarning );
 	tMatchCtx.m_dMsg.Err ( sError );
@@ -1070,7 +1069,10 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 				// docs encoding: docs-count (reserved above); docs matched
 				int * pDocids = tMatchCtx.m_dDocsMatched.AddN ( iMatches );
 				for ( int iMatch=0; iMatch<iMatches; ++iMatch )
-					pDocids[iMatch] = ( int ) pMatch[iMatch].m_uDocID;
+				{
+					auto pData = pSeg->GetDocinfoByRowID ( pMatch[iMatch].m_tRowID );
+					pDocids[iMatch] = sphGetDocID ( pData );
+				}
 			}
 
 			iMatchCount += iMatches;
@@ -1078,19 +1080,20 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 	} else // full-scan path
 	{
 		CSphMatch tDoc;
-		int iStride = DOCINFO_IDSIZE + tMatchCtx.m_tSchema.GetRowSize();
+		int iStride = tMatchCtx.m_tSchema.GetRowSize();
 		const CSphIndex * pIndex = tMatchCtx.m_pTermSetup->m_pIndex;
 		const CSphRowitem * pRow = pSeg->m_dRows.Begin();
-		for ( int i = 0; i<pSeg->m_iRows; ++i )
+		for ( DWORD i = 0; i<pSeg->m_uRows; ++i )
 		{
-			tDoc.m_uDocID = DOCINFO2ID ( pRow );
+			tDoc.m_tRowID = i;
+			auto pData = pRow;
 			pRow += iStride;
 			if ( pIndex->EarlyReject ( tMatchCtx.m_pCtx.Ptr(), tDoc ) )
 				continue;
 
 			++iMatchCount;
 			if ( bCollectDocs ) // keep matched docs
-				tMatchCtx.m_dDocsMatched.Add ( tDoc.m_uDocID );
+				tMatchCtx.m_dDocsMatched.Add ( sphGetDocID ( pData ) );
 		}
 	}
 
@@ -1154,6 +1157,7 @@ struct PercolateMatchJob_t : public ISphJob
 			MatchingWork ( m_dStored[iQuery].m_pQuery, m_tMatchCtx );
 	}
 };
+
 
 void PercolateQueryDesc::Swap ( PercolateQueryDesc & tOther )
 {
@@ -1392,7 +1396,7 @@ bool PercolateIndex_c::MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchRes
 	// empty txn or no queries just ignore
 	{
 		ScRL_t rLock ( m_tLock );
-		if ( !pAcc->m_iAccumDocs || m_dStored.IsEmpty() )
+		if ( !pAcc->m_uAccumDocs || !m_dStored.GetLength () )
 		{
 			pAcc->Cleanup ();
 			return true;
@@ -1402,9 +1406,8 @@ bool PercolateIndex_c::MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchRes
 	pAcc->Sort();
 
 	RtSegment_t * pSeg = pAcc->CreateSegment ( m_tSchema.GetRowSize(), PERCOLATE_WORDS_PER_CP );
-	assert ( !pSeg || pSeg->m_iRows>0 );
-	assert ( !pSeg || pSeg->m_iAliveRows>0 );
-	assert ( !pSeg || !pSeg->m_bTlsKlist );
+	assert ( !pSeg || pSeg->m_uRows>0 );
+	assert ( !pSeg || pSeg->m_tAliveRows>0 );
 	BuildSegmentInfixes ( pSeg, m_pDict->HasMorphology(), true, m_tSettings.m_iMinInfixLen,
 		PERCOLATE_WORDS_PER_CP, ( m_iMaxCodepointLength>1 ) );
 
@@ -1432,16 +1435,14 @@ void PercolateIndex_c::RollBack ( ISphRtAccum * pAccExt )
 	pAcc->Cleanup ();
 }
 
+
 bool PercolateIndex_c::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const
 {
 	if ( !pCtx->m_pFilter )
 		return false;
 
-	int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-	const CSphRowitem * pRow = FindDocinfo ( (RtSegment_t*)pCtx->m_pIndexData, tMatch.m_uDocID, iStride );
-	if ( !pRow )
-		return true;
-	CopyDocinfo ( tMatch, pRow );
+	auto pSegment = (RtSegment_t*)pCtx->m_pIndexData;
+	tMatch.m_pStatic = pSegment->GetDocinfoByRowID ( tMatch.m_tRowID );
 
 	return !pCtx->m_pFilter->Eval ( tMatch );
 }
@@ -1729,7 +1730,7 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );
-	if ( !tCtx.SetupCalc ( pResult, tMaxSorterSchema, m_tMatchSchema, nullptr, false, dSorterSchemas ) )
+	if ( !tCtx.SetupCalc ( pResult, tMaxSorterSchema, m_tMatchSchema, nullptr, dSorterSchemas ) )
 		return false;
 
 	// setup filters
@@ -1744,18 +1745,25 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 		return false;
 
 	// setup lookup
-	tCtx.m_bLookupFilter = false;
-	tCtx.m_bLookupSort = true;
+//	tCtx.m_bLookupFilter = false;
+//	tCtx.m_bLookupSort = true;
 
 
 	// setup overrides
-	if ( !tCtx.SetupOverrides ( pQuery, pResult, m_tMatchSchema, tMaxSorterSchema ) )
-		return false;
+//	if ( !tCtx.SetupOverrides ( pQuery, pResult, m_tMatchSchema, tMaxSorterSchema ) )
+//		return false;
 
 	// get all locators
-	const CSphColumnInfo & dColQuery = m_tMatchSchema.GetAttr ( 0 );
-	const CSphColumnInfo & dColTags = m_tMatchSchema.GetAttr ( 1 );
-	const CSphColumnInfo & dColFilters = m_tMatchSchema.GetAttr ( 2 );
+	auto iIDidx = m_tMatchSchema.GetAttrIndex ( "id" );
+	const CSphColumnInfo & dID = m_tMatchSchema.GetAttr ( iIDidx );
+	const CSphColumnInfo & dColQuery = m_tMatchSchema.GetAttr ( iIDidx+1 );
+	const CSphColumnInfo & dColTags = m_tMatchSchema.GetAttr ( iIDidx+2 );
+	const CSphColumnInfo & dColFilters = m_tMatchSchema.GetAttr ( iIDidx+3 );
+#if PARANOID
+	assert ( m_tMatchSchema.GetAttrIndex ( "query" )==iIDidx + 1 );
+	assert ( m_tMatchSchema.GetAttrIndex ( "tags" )==iIDidx + 2 );
+	assert ( m_tMatchSchema.GetAttrIndex ( "filters" )==iIDidx + 3 );
+#endif
 	StringBuilder_c sFilters;
 
 	// prepare to work them rows
@@ -1782,7 +1790,7 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 	{
 		auto * pQuery = dQuery.m_pQuery;
 
-		tMatch.m_uDocID = dQuery.m_uQUID;
+		tMatch.SetAttr ( dID.m_tLocator, dQuery.m_uQUID );
 
 		int iLen = pQuery->m_sQuery.Length ();
 		tMatch.SetAttr ( dColQuery.m_tLocator, (SphAttr_t) sphPackPtrAttr ( iLen+2, &pData ) );
@@ -2055,11 +2063,12 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath )
 	CSphEmbeddedFiles tEmbeddedFiles;
 
 	// load settings
-	ReadSchema ( rdMeta, m_tSchema, uIndexVersion, false );
+	ReadSchema ( rdMeta, m_tSchema );
 	LoadIndexSettings ( m_tSettings, rdMeta, uIndexVersion );
-	if ( !LoadTokenizerSettings ( rdMeta, tTokenizerSettings, tEmbeddedFiles, uIndexVersion, m_sLastError ) )
+	if ( !LoadTokenizerSettings ( rdMeta, tTokenizerSettings, tEmbeddedFiles, m_sLastError ) )
 		return false;
-	LoadDictionarySettings ( rdMeta, tDictSettings, tEmbeddedFiles, uIndexVersion, m_sLastWarning );
+
+	LoadDictionarySettings ( rdMeta, tDictSettings, tEmbeddedFiles, m_sLastWarning );
 
 	// initialize AOT if needed
 	DWORD uPrevAot = m_tSettings.m_uAotFilterMask;
@@ -2080,7 +2089,7 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath )
 		return false;
 
 	// recreate dictionary
-	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), bStripPath, m_sLastError );
+	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, m_sLastError );
 	if ( !m_pDict )
 	{
 		m_sLastError.SetSprintf ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
@@ -2277,13 +2286,6 @@ void FixPercolateSchema ( CSphSchema & tSchema )
 {
 	if ( !tSchema.GetFieldsCount() )
 		tSchema.AddField ( CSphColumnInfo ( "text" ) );
-
-	if ( !tSchema.GetAttrsCount() )
-	{
-		CSphColumnInfo tCol ( "gid", SPH_ATTR_INTEGER );
-		tCol.m_tLocator = CSphAttrLocator();
-		tSchema.AddAttr ( tCol, false );
-	}
 }
 
 bool PercolateIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const
@@ -2496,7 +2498,7 @@ void MergePqResults ( const VecTraits_T<CPqResult *> &dChunks, CPqResult &dRes, 
 		assert ( pDocs );
 	}
 
-	CSphHash<int> hDocids ( iGotDocids+1 );
+	OpenHash_T<int, int64_t, HashFunc_Int64_t> hDocids ( iGotDocids + 1 );
 	bool bHasDocids = iGotDocids!=0;
 	if ( bHasDocids )
 		hDocids.Add ( iGotDocids, 0 );

@@ -27,7 +27,6 @@ index test
 {
 	source			= srctest
 	path			= <data_path/>/test
-	docinfo			= extern
 }
 </config>
 

@@ -38,7 +38,6 @@ source src_master
 index master
 {
 	source			= src_master
-    docinfo			= extern
 	path			= <data_path/>/master
 }
 
@@ -65,7 +64,6 @@ source src_a1
 index a1
 {
 	source			= src_a1
-    docinfo			= extern
 	path			= <data_path/>/a1
 }
 </agent1>
@@ -84,7 +82,6 @@ source src_a2
 index  a2
 {
 	source			= src_a2
-    docinfo			= extern
 	path			= <data_path/>/a2
 }
 </agent2>

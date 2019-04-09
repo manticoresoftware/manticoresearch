@@ -27,7 +27,6 @@ index plain1
 {
 	source = sql1
 	path = <data_path/>/plain1
-	docinfo = extern
 }
 
 source sql2
@@ -44,7 +43,6 @@ index plain2
 {
 	source = sql2
 	path = <data_path/>/plain2
-	docinfo = extern
 }
 
 source sql3
@@ -61,7 +59,6 @@ index plain3
 {
 	source = sql3
 	path = <data_path/>/plain3
-	docinfo = extern
 }
 
 <!-- daemon hungs due to leaked statistics lock on updating distributed index after config got changed -->

@@ -39,6 +39,7 @@ index delta
 {
 	source			= srcdelta
 	path			= <data_path/>/delta
+	killlist_target	= main:kl
 }
 
 source srcm1
@@ -67,6 +68,7 @@ index d1
 {
 	source			= srcd1
 	path			= <data_path/>/d1
+	killlist_target	= m1:kl,mmk:kl
 }
 
 index mmk
@@ -80,7 +82,7 @@ index mmk
 <indexer>
 <run>--merge main delta</run>
 <run>--merge m1 d1</run>
-<run>--merge mmk d1 --merge-killlists</run>
+<run>--merge mmk d1</run>
 <run>--merge m1 d1 --merge-dst-range xid 1 1</run>
 </indexer>
 

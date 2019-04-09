@@ -42,21 +42,18 @@ index idx1
 {
 	source				= src1
 	path				= <data_path/>/idx1
-	docinfo 			= extern
 }
 
 index idx2
 {
 	source				= src2
 	path				= <data_path/>/idx2
-	docinfo 			= extern
 }
 
 index idx3
 {
 	source				= src3
 	path				= <data_path/>/idx3
-	docinfo 			= extern	
 }
 
 index dist

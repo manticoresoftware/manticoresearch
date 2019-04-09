@@ -112,14 +112,6 @@ valid and will search the same two indexes:
     $cl->Query ( "test query", "main;delta" );
     $cl->Query ( "test query", "main, delta" );
 
-Index specification order matters. If document with identical IDs are
-found in two or more indexes, weight and attribute values from the very
-last matching index will be used for sorting and returning to client
-(unless explicitly overridden with
-:ref:`SetIndexWeights() <set_index_weights>`).
-Therefore, in the example above, matches from “delta” index will always
-win over matches from “main”.
-
 On success, ``Query()`` returns a result set that contains some of the
 found matches (as requested by
 :ref:`SetLimits() <set_limits>`) and

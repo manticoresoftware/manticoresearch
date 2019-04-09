@@ -26,7 +26,6 @@ searchd
 index rt
 {
 	type			= rt
-	docinfo			= extern
 	path			= <data_path/>/rt
 	wordforms		= wordforms.txt
 

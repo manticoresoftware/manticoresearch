@@ -56,7 +56,6 @@ index test
 {
 	source			= src_test
 	path			= <data_path/>/test
-    docinfo			= extern
 	dict = crc
 }
 

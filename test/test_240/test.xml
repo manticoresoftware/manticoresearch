@@ -56,22 +56,21 @@ source src_delta2
 index main
 {
 	source			= src_main
-    docinfo			= extern
 	path			= <data_path/>/main
 }
 
 index delta1
 {
 	source			= src_delta1
-    docinfo			= extern
 	path			= <data_path/>/delta1
+	killlist_target	= main:kl
 }
 
 index delta2
 {
 	source			= src_delta2
-    docinfo			= extern
 	path			= <data_path/>/delta2
+	killlist_target	= main:kl
 }
 
 index loc_dist1

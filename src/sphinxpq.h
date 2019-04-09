@@ -97,10 +97,10 @@ struct PercolateQueryArgs_t
 	PercolateQueryArgs_t ( const StoredQueryDesc_t & tDesc );
 };
 
-class PercolateIndex_i : public ISphRtIndex
+class PercolateIndex_i : public RtIndex_i
 {
 public:
-	PercolateIndex_i ( const char * sIndexName, const char * sFileName ) : ISphRtIndex ( sIndexName, sFileName ) {}
+	PercolateIndex_i ( const char * sIndexName, const char * sFileName ) : RtIndex_i ( sIndexName, sFileName ) {}
 	virtual bool	MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchResult_t & tResult ) = 0;
 	virtual int		DeleteQueries ( const uint64_t * pQueries, int iCount ) = 0;
 	virtual int		DeleteQueries ( const char * sTags ) = 0;
@@ -140,13 +140,15 @@ struct DictTerm_t
 
 struct DictMap_t
 {
-	CSphHash<DictTerm_t> m_hTerms;
+	OpenHash_T<DictTerm_t, int64_t, HashFunc_Int64_t> m_hTerms;
 	CSphVector<BYTE> m_dKeywords;
 
 	SphWordID_t GetTerm ( BYTE * pWord ) const;
 };
 
+
 struct StoredQuery_t;
+
 
 struct SegmentReject_t
 {
@@ -283,7 +285,7 @@ void PercolateMergeResults ( const VecTraits_T<PQMatchContextResult_t *> &dMatch
 struct CPqResult : public iQueryResult
 {
 	PercolateMatchResult_t m_dResult;
-	CSphFixedVector<int64_t> m_dDocids { 0 }; // check whether it necessary at all or not
+	CSphFixedVector<DocID_t> m_dDocids { 0 }; // check whether it necessary at all or not
 
 	CPqResult () = default;
 

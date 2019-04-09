@@ -47,14 +47,12 @@ index i1
 {
 	source = sql1
 	path = <data_path/>/index1
-	docinfo = inline
 }
 
 index i2
 {
 	source = sql2
 	path = <data_path/>/index2
-	docinfo = inline
 }
 
 </config>

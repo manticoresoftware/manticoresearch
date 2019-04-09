@@ -102,12 +102,6 @@ struct DocQueryZonePair_t
 class SnippetZoneChecker_c : public ISphZoneCheck
 {
 private:
-	struct ZoneHits_t
-	{
-		CSphVector<Hitpos_t> m_dOpen;
-		CSphVector<Hitpos_t> m_dClose;
-	};
-
 	CSphVector<ZoneHits_t> m_dZones;
 
 public:
@@ -159,21 +153,21 @@ public:
 			DWORD uClosePos = ( (int)( uClosePacked>>32 ) & UINT32_MASK );
 
 			ZoneHits_t & tZone = m_dZones[pPair->m_iQuery];
-			tZone.m_dOpen.Add ( uPos );
-			tZone.m_dClose.Add ( uClosePos );
+			tZone.m_dStarts.Add ( uPos );
+			tZone.m_dEnds.Add ( uClosePos );
 		}
 
 #ifndef NDEBUG
 		ARRAY_FOREACH ( i, m_dZones )
 		{
 			const ZoneHits_t & tZone = m_dZones[i];
-			assert ( tZone.m_dOpen.GetLength()==tZone.m_dClose.GetLength() );
-			const Hitpos_t * pHit = tZone.m_dOpen.Begin()+1;
-			const Hitpos_t * pMax = tZone.m_dOpen.Begin()+tZone.m_dOpen.GetLength();
+			assert ( tZone.m_dStarts.GetLength()==tZone.m_dEnds.GetLength() );
+			const Hitpos_t * pHit = tZone.m_dStarts.Begin()+1;
+			const Hitpos_t * pMax = tZone.m_dStarts.Begin()+tZone.m_dStarts.GetLength();
 			for ( ; pHit<pMax; pHit++ )
 				assert ( pHit[-1]<pHit[0] );
-			pHit = tZone.m_dClose.Begin()+1;
-			pMax = tZone.m_dClose.Begin()+tZone.m_dClose.GetLength();
+			pHit = tZone.m_dEnds.Begin()+1;
+			pMax = tZone.m_dEnds.Begin()+tZone.m_dEnds.GetLength();
 			for ( ; pHit<pMax; pHit++ )
 				assert ( pHit[-1]<pHit[0] );
 		}
@@ -183,10 +177,10 @@ public:
 	virtual SphZoneHit_e IsInZone ( int iZone, const ExtHit_t * pHit, int * pLastSpan )
 	{
 		DWORD uPosWithField = HITMAN::GetPosWithField ( pHit->m_uHitpos );
-		int iOpen = FindSpan ( m_dZones[iZone].m_dOpen, uPosWithField );
+		int iOpen = FindSpan ( m_dZones[iZone].m_dStarts, uPosWithField );
 		if ( pLastSpan )
 			* pLastSpan = iOpen;
-		return ( iOpen>=0 && uPosWithField<=m_dZones[iZone].m_dClose[iOpen] ) ? SPH_ZONE_FOUND : SPH_ZONE_NO_SPAN;
+		return ( iOpen>=0 && uPosWithField<=m_dZones[iZone].m_dEnds[iOpen] ) ? SPH_ZONE_FOUND : SPH_ZONE_NO_SPAN;
 	}
 };
 
@@ -3333,14 +3327,14 @@ public:
 		return m_pHits && m_uMatchHits<(DWORD)m_pHits->GetLength();
 	}
 
-	virtual const CSphMatch & GetNextDoc ( DWORD * )
+	const CSphMatch & GetNextDoc() override
 	{
 		m_dQwordFields.SetAll();
-		m_tMatch.m_uDocID = !m_tMatch.m_uDocID && HasHits() ? 1 : 0;
+		m_tMatch.m_tRowID = m_tMatch.m_tRowID==INVALID_ROWID && HasHits() ? 0 : INVALID_ROWID;
 		return m_tMatch;
 	}
 
-	virtual Hitpos_t GetNextHit ()
+	Hitpos_t GetNextHit () override
 	{
 		if ( !HasHits() )
 			return EMPTY_HIT;
@@ -3349,7 +3343,8 @@ public:
 		return HITMAN::Create ( 0, iPosition, (m_uLastPos==(DWORD)iPosition) );
 	}
 
-	virtual void SeekHitlist ( SphOffset_t ) {}
+	void SeekHitlist ( SphOffset_t ) override
+	{}
 };
 
 
@@ -3631,7 +3626,6 @@ static void DoHighlighting ( ExcerptQuery_t & tQuerySettings,
 
 		SnippetsFastQwordSetup_c tQwordSetup ( &tHitCollector );
 		tQwordSetup.SetDict ( pDict );
-		tQwordSetup.m_eDocinfo = SPH_DOCINFO_EXTERN;
 		tQwordSetup.m_pWarning = &sError;
 		tQwordSetup.m_pZoneChecker = &tZoneChecker;
 

@@ -342,11 +342,9 @@ will be wrapped around to 2^32-1 or 4,294,967,295.
 You can specify bit count for integer attributes by appending
 ‘:BITCOUNT’ to attribute name (see example below). Attributes with less
 than default 32-bit size, or bitfields, perform slower. But they require
-less RAM when using :ref:`extern
-storage <docinfo>`: such
+less RAM: such
 bitfields are packed together in 32-bit chunks in ``.spa`` attribute
-data file. Bit size settings are ignored if using :ref:`inline
-storage <docinfo>`.
+data file.
 
 Example:
 
@@ -630,7 +628,8 @@ within an index. Kill-list for a given index suppresses results from
 *other* indexes, depending on index order in the query. The intended use
 is to help implement deletions and updates on existing indexes without
 rebuilding (actually even touching them), and especially to fight
-phantom results problem.
+phantom results problem. The indexes where the results should be suppressed
+are specified in the ``killlist_target`` index setting.
 
 Let us dissect an example. Assume we have two indexes, ‘main’ and
 ‘delta’. Assume that documents 2, 3, and 5 were deleted since last
@@ -638,8 +637,16 @@ reindex of ‘main’, and documents 7 and 11 were updated (ie. their text
 contents were changed). Assume that a keyword ‘test’ occurred in all
 these mentioned documents when we were indexing ‘main’; still occurs in
 document 7 as we index ‘delta’; but does not occur in document 11 any
-more. We now reindex delta and then search through both these indexes in
-proper (least to most recent) order:
+more. Index 'delta' has index 'main' specified as a target for suppression:
+
+
+.. code-block:: ini
+
+
+    killlist_target = main:kl
+
+
+We now reindex delta and then search through both these indexes:
 
 .. code-block:: ini
 
@@ -653,15 +660,18 @@ search results! It will be found in ‘main’ (but not ‘delta’). And it
 will make it to the final result set unless something stops it.
 
 Kill-list, or K-list for short, is that something. Kill-list attached to
-‘delta’ will suppress the specified rows from **all** the preceding
-indexes, in this case just ‘main’. So to get the expected results, we
-should put all the updated *and* deleted document IDs into it.
+‘delta’ will suppress the specified rows from all the indexes specified
+in ``killlist_target`` option of this 'delta' index. So to get the expected
+results, we should put all the updated *and* deleted document IDs into it.
 
 Note that in the distributed index setup, K-lists are **local to every
-node in the cluster**. They are **not** get transmitted over the
+node in the cluster**. They do **not** get transmitted over the
 network when sending queries. (Because that might be too much of an
 impact when the K-list is huge.) You will need to setup a separate
 per-server K-lists in that case.
+
+Also note that you have to specify ``killlist_target`` in the 'delta' index,
+otherwise the kill-list will not be applied.
 
 Example:
 

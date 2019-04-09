@@ -76,3 +76,11 @@ warnings regarding the keyword sets mismatch.
     +------------+-----------+
     4 rows in set (0.00 sec)
 
+
+ALTER can be used to change killlist_target settings of an index:
+
+.. code-block:: mysql
+
+    ALTER TABLE delta KILLLIST_TARGET='main'
+
+Kill-list is applied to indexes listed in ``killlist_target`` immediately.

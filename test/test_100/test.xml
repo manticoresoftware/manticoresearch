@@ -22,7 +22,6 @@ index test_idx
 {
 	source = main
 	path			= <data_path/>/main
-	docinfo			= extern
 	min_word_len	= 1
 }
 </config>

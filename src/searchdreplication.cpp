@@ -1846,7 +1846,7 @@ bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName
 			ServedDescWPtr_c pDesc ( pServedCur );
 			if ( pDesc->IsMutable() )
 			{
-				ISphRtIndex * pIndex = (ISphRtIndex *)pDesc->m_pIndex;
+				RtIndex_i * pIndex = (RtIndex_i*)pDesc->m_pIndex;
 				pIndex->ProhibitSave();
 				bJson = pDesc->m_bJson;
 			}

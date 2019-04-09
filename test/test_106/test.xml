@@ -26,7 +26,6 @@ index test
 {
 	source			= srctest
 	path			= <Data_Path/>/test
-    docinfo			= extern
 }
 </Config>
 
@@ -58,7 +57,7 @@ INSERT INTO `test_table` VALUES
 <queries>
 	<query mode="extended2" sortmode="extended" sortby="date_added DESC">one|two|three</query>
 	<query mode="extended2" sortmode="extended" sortby="@weight DESC, date_added DESC">one|two|three</query>
-	<query mode="extended2" sortmode="extended" sortby="@weight DESC, date_added DESC, @id DESC">one|two|three</query>
+	<query mode="extended2" sortmode="extended" sortby="@weight DESC, date_added DESC, id DESC">one|two|three</query>
 </queries>
 
 </Test>

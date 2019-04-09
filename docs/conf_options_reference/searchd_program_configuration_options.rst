@@ -67,9 +67,10 @@ attr_flush_period
 ~~~~~~~~~~~~~~~~~
 
 When calling ``UpdateAttributes()`` to update document attributes in
-real-time, changes are first written to the in-memory copy of attributes
-(``docinfo`` must be set to ``extern``). Then, once ``searchd`` shuts
-down normally (via ``SIGTERM`` being sent), the changes are written to
+real-time, changes are first written to the in-memory copy of attributes.
+Updates work on a memory mapped file, which means that the OS decides
+when to write these changes to disk. Once ``searchd`` shuts
+down normally (via ``SIGTERM`` being sent), all the changes are written to
 disk.
 
 It is possible to tell ``searchd`` to periodically write these changes
@@ -714,33 +715,6 @@ Example:
 
     max_packet_size = 32M
 
-.. _mva_updates_pool:
-
-mva_updates_pool
-~~~~~~~~~~~~~~~~
-
-Shared pool size for in-memory MVA updates storage. Optional, default
-size is 1M.
-
-This setting controls the size of the shared storage pool for updated
-MVA values. Specifying 0 for the size disable MVA updates at all. Once
-the pool size limit is hit, MVA update attempts will result in an error.
-However, updates on regular (scalar) attributes will still work. Due to
-internal technical difficulties, currently it is **not** possible to
-store (flush) **any** updates on indexes where MVA were updated;
-though this might be implemented in the future. In the meantime, MVA
-updates are intended to be used as a measure to quickly catchup with
-latest changes in the database until the next index rebuild; not as a
-persistent storage mechanism.
-
-Example:
-
-
-.. code-block:: ini
-
-
-    mva_updates_pool = 16M
-
 .. _mysql_version_string:
 
 mysql_version_string
@@ -1226,8 +1200,8 @@ data to precache. Optional, default is 1 (enable seamless rotation). On
 Windows systems seamless rotation is disabled by default.
 
 Indexes may contain some data that needs to be precached in RAM. At the
-moment, ``.spa``, ``.spi`` and ``.spm`` files are fully precached (they
-contain attribute data, MVA data, and keyword index, respectively.)
+moment, ``.spa``, ``.spb``, ``.spi`` and ``.spm`` files are fully precached (they
+contain attribute data, blob attribute data, keyword index and killed row map, respectively.)
 Without seamless rotate, rotating an index tries to use as little RAM as
 possible and works as follows:
 
@@ -1263,7 +1237,7 @@ With seamless rotate enabled, rotation works as follows:
    copy.
 
 Seamless rotate comes at the cost of higher **peak** memory usage during
-the rotation (because both old and new copies of ``.spa/.spi/.spm`` data
+the rotation (because both old and new copies of ``.spa/.spb/.spi/.spm`` data
 need to be in RAM while preloading new copy). Average usage stays the
 same.
 

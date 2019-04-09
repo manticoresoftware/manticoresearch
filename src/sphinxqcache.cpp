@@ -60,7 +60,7 @@ protected:
 	CSphMatch					m_dMatches [ QcacheEntry_c::MAX_FRAME_SIZE ];	///< matches buffer
 	BYTE *						m_pCur;											///< current position in compressed data
 	BYTE *						m_pMax;											///< max position in compressed data
-	SphDocID_t					m_uLastId;										///< docid delta decoder state
+	RowID_t						m_uLastId = INVALID_ROWID;						///< docid delta decoder state
 	const CSphIndex *			m_pIndex;
 	CSphQueryContext *			m_pCtx;
 
@@ -78,12 +78,12 @@ public:
 Qcache_c						g_Qcache;
 
 //////////////////////////////////////////////////////////////////////////
-void QcacheEntry_c::Append ( SphDocID_t uDocid, DWORD uWeight )
+void QcacheEntry_c::Append ( RowID_t uRowid, DWORD uWeight )
 {
 	m_iTotalMatches++;
 
 	QcacheMatch_t & m = m_dFrame.Add();
-	m.m_uDocid = uDocid;
+	m.m_tRowID = uRowid;
 	m.m_uWeight = uWeight;
 
 	if ( m_dFrame.GetLength()==MAX_FRAME_SIZE )
@@ -91,12 +91,12 @@ void QcacheEntry_c::Append ( SphDocID_t uDocid, DWORD uWeight )
 }
 
 
-static inline int NumBytes ( SphDocID_t uValue )
+static inline int NumBytes ( RowID_t tValue )
 {
 	int iRes = 0;
-	while ( uValue!=0 )
+	while ( tValue!=0 )
 	{
-		uValue >>= 8;
+		tValue >>= 8;
 		iRes++;
 	}
 	return iRes;
@@ -109,7 +109,7 @@ void QcacheEntry_c::RankerReset()
 
 	// 01000000 is a delta restart marker
 	m_dData.Add(0x40);
-	m_uLastDocid = 0;
+	m_tLastRowID = INVALID_ROWID;
 }
 
 
@@ -131,12 +131,12 @@ void QcacheEntry_c::FlushFrame()
 		// lllll = 1..31 {delta,weight} pairs
 		int iDeltaBytes = 1;
 		int iWeightBytes = 1;
-		SphDocID_t uLastId = m_uLastDocid;
+		RowID_t tLastId = m_tLastRowID;
 		ARRAY_FOREACH ( i, m_dFrame )
 		{
-			SphDocID_t uDelta = m_dFrame[i].m_uDocid - uLastId - 1;
-			uLastId = m_dFrame[i].m_uDocid;
-			iDeltaBytes = Max ( iDeltaBytes, NumBytes ( uDelta ) );
+			RowID_t tDelta = m_dFrame[i].m_tRowID - tLastId - 1;
+			tLastId = m_dFrame[i].m_tRowID;
+			iDeltaBytes = Max ( iDeltaBytes, NumBytes ( tDelta ) );
 			iWeightBytes = Max ( iWeightBytes, NumBytes ( m_dFrame[i].m_uWeight ) );
 		}
 
@@ -146,11 +146,11 @@ void QcacheEntry_c::FlushFrame()
 		m_dData.Add ( (BYTE)m_dFrame.GetLength() );
 
 		BYTE * p = m_dData.AddN ( m_dFrame.GetLength()*( iDeltaBytes + iWeightBytes ) );
-		uLastId = m_uLastDocid;
+		tLastId = m_tLastRowID;
 		ARRAY_FOREACH ( i, m_dFrame )
 		{
-			SphDocID_t uDelta = m_dFrame[i].m_uDocid - uLastId - 1;
-			uLastId = m_dFrame[i].m_uDocid;
+			RowID_t uDelta = m_dFrame[i].m_tRowID - tLastId - 1;
+			tLastId = m_dFrame[i].m_tRowID;
 			memcpy ( p, &uDelta, iDeltaBytes );
 			p += iDeltaBytes;
 			memcpy ( p, &m_dFrame[i].m_uWeight, iWeightBytes );
@@ -174,7 +174,7 @@ void QcacheEntry_c::FlushFrame()
 	// ww = weight values (when i==0) can use 1..4 bytes per weight
 	// ddd = docid deltas can use 0..7 bytes per delta
 
-	SphDocID_t uLastId = m_uLastDocid;
+	RowID_t uLastId = m_tLastRowID;
 	int iDeltaBytes = 1;
 
 	bool bIndexWeights = ( m_hWeights.GetLength() + MAX_FRAME_SIZE )<=0xffff;
@@ -182,10 +182,9 @@ void QcacheEntry_c::FlushFrame()
 
 	ARRAY_FOREACH ( i, m_dFrame )
 	{
-		assert ( m_dFrame[i].m_uDocid > uLastId );
-		SphDocID_t uDelta = m_dFrame[i].m_uDocid - uLastId - 1;
-		iDeltaBytes = Max ( iDeltaBytes, NumBytes ( uDelta ) );
-		uLastId = m_dFrame[i].m_uDocid;
+		RowID_t tDelta = m_dFrame[i].m_tRowID - uLastId - 1;
+		iDeltaBytes = Max ( iDeltaBytes, NumBytes ( tDelta ) );
+		uLastId = m_dFrame[i].m_tRowID;
 
 		if ( bIndexWeights )
 			m_dFrame[i].m_uWeight = m_hWeights.FindOrAdd ( m_dFrame[i].m_uWeight, m_hWeights.GetLength() );
@@ -199,19 +198,19 @@ void QcacheEntry_c::FlushFrame()
 
 	// encode data
 	BYTE * p = m_dData.AddN ( MAX_FRAME_SIZE*( iDeltaBytes + iWeightBytes ) );
-	uLastId = m_uLastDocid;
+	uLastId = m_tLastRowID;
 	ARRAY_FOREACH ( i, m_dFrame )
 	{
-		SphDocID_t uDelta = m_dFrame[i].m_uDocid - uLastId - 1;
-		memcpy ( p, &uDelta, iDeltaBytes );
+		RowID_t tDelta = m_dFrame[i].m_tRowID - uLastId - 1;
+		memcpy ( p, &tDelta, iDeltaBytes );
 		p += iDeltaBytes;
-		uLastId = m_dFrame[i].m_uDocid;
+		uLastId = m_dFrame[i].m_tRowID;
 
 		memcpy ( p, &m_dFrame[i].m_uWeight, iWeightBytes );
 		p += iWeightBytes;
 	}
 	assert ( p==( m_dData.Begin() + m_dData.GetLength() ) );
-	m_uLastDocid = m_dFrame.Last().m_uDocid;
+	m_tLastRowID = m_dFrame.Last().m_tRowID;
 
 	m_dFrame.Resize(0);
 }
@@ -227,12 +226,12 @@ void QcacheEntry_c::Finish()
 	m_dWeights.Fill ( -1 );
 
 	int i = 0;
-	int64_t iWeight;
+	int iWeight;
 	int * pIndex;
 	while ( ( pIndex = m_hWeights.Iterate ( &i, &iWeight ) )!=NULL )
 	{
 		assert ( *pIndex>=0 && *pIndex<m_dWeights.GetLength() );
-		m_dWeights [ *pIndex ] = (int)iWeight;
+		m_dWeights [ *pIndex ] = iWeight;
 	}
 
 #ifndef NDEBUG
@@ -602,7 +601,7 @@ void QcacheRanker_c::Reset ( const ISphQwordSetup & tSetup )
 {
 	m_pCur = m_pEntry->m_dData.Begin();
 	m_pMax = m_pCur + m_pEntry->m_dData.GetLength();
-	m_uLastId = 0;
+	m_uLastId = INVALID_ROWID;
 	m_pIndex = tSetup.m_pIndex;
 	m_pCtx = tSetup.m_pCtx;
 
@@ -623,7 +622,7 @@ int QcacheRanker_c::GetMatches()
 		// handle delta restart
 		if ( *p==0x40 )
 		{
-			m_uLastId = 0;
+			m_uLastId = INVALID_ROWID;
 			m_pCur++;
 			continue;
 		}
@@ -653,7 +652,7 @@ int QcacheRanker_c::GetMatches()
 		// decode frame data
 		for ( int i=0; i<iMatches; i++ )
 		{
-			SphDocID_t uDelta = 0;
+			RowID_t uDelta = 0;
 			memcpy ( &uDelta, p, iDeltaBytes );
 			p += iDeltaBytes;
 			m_uLastId += uDelta + 1;
@@ -665,7 +664,7 @@ int QcacheRanker_c::GetMatches()
 				iWeight = m_pEntry->m_dWeights [ iWeight ];
 
 			CSphMatch & m = m_dMatches[iRes];
-			m.m_uDocID = m_uLastId;
+			m.m_tRowID = m_uLastId;
 			m.m_iWeight = iWeight;
 
 			// re-filter the cached match with new filters

@@ -26,7 +26,6 @@ source src
 index idx
 {
 	source				= src
-	docinfo			= extern
 	path					= <data_path/>/main
 	blend_chars		= .
 }
@@ -34,7 +33,6 @@ index idx
 index idx2
 {
 	source				= src
-	docinfo			= extern
 	path					= <data_path/>/idx2
 	morphology			= stem_en
 	charset_table = 0..9, a..z, A..Z->a..z

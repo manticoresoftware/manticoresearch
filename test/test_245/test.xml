@@ -26,7 +26,6 @@ index idx_factors
 {
 	source			= src_xml1
 	path			= <data_path/>/idx_factors
-	docinfo			= extern
 }
 
 source src_xml_rev
@@ -39,7 +38,6 @@ index idx_factors_rev
 {
 	source			= src_xml_rev
 	path			= <data_path/>/idx_factors_rev
-	docinfo			= extern
 }
 
 

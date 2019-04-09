@@ -27,7 +27,6 @@ index test0doc
 {
 	source			= src0doc
 	path			= <data_path/>/test0doc
-	docinfo	= extern
 }
 
 source src1doc
@@ -43,7 +42,6 @@ index test1doc
 {
 	source			= src1doc
 	path			= <data_path/>/test1doc
-	docinfo	= extern
 }
 </config>
 

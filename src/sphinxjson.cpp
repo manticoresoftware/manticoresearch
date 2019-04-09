@@ -1141,19 +1141,55 @@ JsonKey_t::JsonKey_t ( const char * sKey, int iLen )
 	m_sKey.SetBinary ( sKey, m_iLen );
 }
 
-bool sphJsonInplaceUpdate ( ESphJsonType eValueType, int64_t iValue, ISphExpr * pExpr, BYTE * pStrings, const CSphRowitem * pRow, bool bUpdate )
+
+void JsonStoreInt ( BYTE * p, int v )
 {
-	if ( !pExpr || !pStrings )
+	*p++ = BYTE(DWORD(v));
+	*p++ = BYTE(DWORD(v) >> 8);
+	*p++ = BYTE(DWORD(v) >> 16);
+	*p   = BYTE(DWORD(v) >> 24);
+}
+
+
+void JsonStoreBigint ( BYTE * p, int64_t v )
+{
+	JsonStoreInt ( p, (DWORD)( v & 0xffffffffUL ) );
+	JsonStoreInt ( p+4, (int)( v>>32 ) );
+}
+
+
+uint64_t sphJsonUnpackOffset ( uint64_t uPacked )
+{
+	return uPacked & 0x00ffffffffffffffULL;
+}
+
+
+ESphJsonType sphJsonUnpackType ( uint64_t uPacked )
+{
+	return (ESphJsonType)( uPacked >> 56 );
+}
+
+
+uint64_t sphJsonPackTypeOffset ( ESphJsonType eType, uint64_t uOffset )
+{
+	assert ( uOffset<=0x00ffffffffffffffULL );
+	return uOffset | ( ((uint64_t)eType)<<56 );
+}
+
+
+bool sphJsonInplaceUpdate ( ESphJsonType eValueType, int64_t iValue, ISphExpr * pExpr, BYTE * pBlobPool, const CSphRowitem * pRow, bool bUpdate )
+{
+	if ( !pExpr || !pBlobPool )
 		return false;
 
-	pExpr->Command ( SPH_EXPR_SET_STRING_POOL, (void*)pStrings );
+	pExpr->Command ( SPH_EXPR_SET_BLOB_POOL, (void*)pBlobPool );
 
 	CSphMatch tMatch;
 	tMatch.m_pStatic = pRow;
 
-	auto uPacked = (uint64_t)pExpr->Int64Eval ( tMatch );
-	BYTE * pData = pStrings + ( uPacked & 0xffffffff );
-	auto eType = (ESphJsonType)( uPacked >> 32 );
+	uint64_t uPacked = pExpr->Int64Eval ( tMatch );
+	BYTE * pData = pBlobPool + sphJsonUnpackOffset ( uPacked );
+	ESphJsonType eType = sphJsonUnpackType ( uPacked );
 
 	switch ( eType )
 	{

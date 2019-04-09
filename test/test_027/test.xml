@@ -3,8 +3,6 @@
 
 <name>merge vs docinfo, range, mva</name>
 
-<requires> <variant_match /> </requires>
-
 <config>
 indexer
 {
@@ -50,21 +48,12 @@ index main
 {
 	source			= srcmain
 	path			= <data_path/>/main
-
-    <Dynamic>
-      <Variant>	docinfo	= inline </Variant>
-      <Variant>	docinfo	= extern </Variant>
-    </Dynamic>
 }
 
 index delta
 {
 	source			= srcdelta
 	path			= <data_path/>/delta
-    <Dynamic>
-      <Variant>	docinfo	= inline </Variant>
-      <Variant>	docinfo	= extern </Variant>
-    </Dynamic>
 }
 </config>
 

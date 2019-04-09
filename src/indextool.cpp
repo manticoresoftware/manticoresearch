@@ -11,17 +11,13 @@
 //
 
 #include "sphinx.h"
+#include "sphinxstd.h"
 #include "sphinxutils.h"
 #include "sphinxint.h"
 #include "sphinxrt.h"
+#include "killlist.h"
+#include "secondaryindex.h"
 #include <time.h>
-
-#if USE_WINDOWS
-#include <io.h> // for setmode(). open() on windows
-#define sphSeek		_lseeki64
-#else
-#define sphSeek		lseek
-#endif
 
 
 void StripStdin ( const char * sIndexAttrs, const char * sRemoveElements )
@@ -165,183 +161,6 @@ void CharsetFold ( CSphIndex * pIndex, FILE * fp )
 		}
 	}
 }
-
-//////////////////////////////////////////////////////////////////////////
-
-bool FixupFiles ( const StrVec_t & dFiles, CSphString & sError )
-{
-	ARRAY_FOREACH ( i, dFiles )
-	{
-		const CSphString & sPath = dFiles[i];
-		CSphString sKlistOld, sKlistNew, sHeader;
-		sKlistOld.SetSprintf ( "%s.spk", sPath.cstr() );
-		sKlistNew.SetSprintf ( "%s.new.spk", sPath.cstr() );
-		sHeader.SetSprintf ( "%s.sph", sPath.cstr() );
-
-		DWORD iCount = 0;
-		{
-			CSphAutoreader rdHeader, rdKlistNew, rdKlistOld;
-			if ( !rdHeader.Open ( sHeader, sError ) || !rdKlistNew.Open ( sKlistNew, sError ) || !rdKlistOld.Open ( sKlistOld, sError ) )
-				return false;
-
-			const SphOffset_t iSize = rdKlistNew.GetFilesize();
-			iCount = (DWORD)( iSize / sizeof(SphAttr_t) );
-		}
-
-		if ( ::unlink ( sKlistOld.cstr() )!=0 )
-		{
-			sError.SetSprintf ( "file: '%s', error: '%s'", sKlistOld.cstr(), strerrorm(errno) );
-			return false;
-		}
-
-		if ( ::rename ( sKlistNew.cstr(), sKlistOld.cstr() )!=0 )
-		{
-			sError.SetSprintf ( "files: '%s'->'%s', error: '%s'", sKlistNew.cstr(), sKlistOld.cstr(), strerrorm(errno) );
-			return false;
-		}
-
-		int iFD = ::open ( sHeader.cstr(), SPH_O_BINARY | O_RDWR, 0644 );
-		if ( iFD<0 )
-		{
-			sError.SetSprintf ( "file: '%s', error: '%s'", sHeader.cstr(), strerrorm(errno) );
-			return false;
-		}
-
-		if ( sphSeek ( iFD, -4, SEEK_END )==-1L )
-		{
-			sError.SetSprintf ( "file: '%s', error: '%s'", sHeader.cstr(), strerrorm(errno) );
-			SafeClose ( iFD );
-			return false;
-		}
-
-		if ( ::write ( iFD, &iCount, 4 )==-1 )
-		{
-			sError.SetSprintf ( "file: '%s', error: '%s'", sHeader.cstr(), strerrorm(errno) );
-			SafeClose ( iFD );
-			return false;
-		}
-
-		SafeClose ( iFD );
-	}
-
-	return true;
-}
-
-
-bool DoKlistsOptimization ( int iRowSize, const char * sPath, int iChunkCount, StrVec_t & dFiles )
-{
-	CSphTightVector<SphDocID_t> dLiveID;
-
-	CSphString sError;
-
-	for ( int iChunk=0; iChunk<iChunkCount; iChunk++ )
-	{
-		const int64_t tmStart = sphMicroTimer();
-
-		fprintf ( stdout, "\nprocessing '%s.%d'...", sPath, iChunk );
-
-		CSphString sKlist, sAttr, sNew;
-		sKlist.SetSprintf ( "%s.%d.spk", sPath, iChunk );
-		sAttr.SetSprintf ( "%s.%d.spa", sPath, iChunk );
-		sNew.SetSprintf ( "%s.%d.new.spk", sPath, iChunk );
-
-		CSphAutoreader rdKList, rdAttr;
-		CSphWriter wrNew;
-		if ( !rdKList.Open ( sKlist, sError ) || !rdAttr.Open ( sAttr, sError ) || !wrNew.OpenFile ( sNew, sError ) )
-		{
-			fprintf ( stdout, "\n%s\n", sError.cstr() );
-			return false;
-		}
-
-		CSphTightVector<SphAttr_t> dKlist;
-
-		if ( dLiveID.GetLength()>0 )
-		{
-			auto uFsize = rdKList.GetFilesize ();
-			assert ( uFsize<INT_MAX );
-			if ( uFsize<0 )
-			{
-				fprintf ( stdout, "\nfailed to stat kill-list file, error %s\n", strerrorm ( errno ) );
-				return false;
-			}
-
-			dKlist.Resize ( (int)(uFsize/sizeof(SphAttr_t) ) );
-			rdKList.GetBytes ( dKlist.Begin(), (int)uFsize );
-
-			// 1nd step kill all k-list ids not in live ids
-
-			ARRAY_FOREACH ( i, dKlist )
-			{
-				if ( !dLiveID.BinarySearch ( dKlist[i] ) )
-					dKlist.RemoveFast ( i-- );
-			}
-			dKlist.Sort();
-
-			// 2nd step kill all prev ids by this fresh k-list
-
-			SphDocID_t * pFirstLive = dLiveID.begin();
-			SphDocID_t * pLastLive = dLiveID.end()-1;
-
-			for ( SphDocID_t uID : dKlist )
-			{
-				SphDocID_t * pKilled = sphBinarySearch ( pFirstLive, pLastLive, uID );
-
-				assert ( pKilled );
-				pFirstLive = pKilled+1;
-				*pKilled = 0;
-			}
-
-#ifndef NDEBUG
-			const int iWasLive = dLiveID.GetLength();
-#endif
-
-			if ( dKlist.GetLength()>0 )
-				ARRAY_FOREACH ( i, dLiveID )
-				if ( dLiveID[i]==0 )
-					dLiveID.RemoveFast ( i-- );
-
-			assert ( dLiveID.GetLength()+dKlist.GetLength()==iWasLive );
-
-			dLiveID.Sort();
-		}
-
-		// 3d step write new k-list
-
-		if ( dKlist.GetLength()>0 )
-			wrNew.PutBytes ( dKlist.Begin(), dKlist.GetLengthBytes() );
-
-		dKlist.Reset();
-		wrNew.CloseFile();
-
-		// 4th step merge ID from this segment into live ids
-		if ( iChunk!=iChunkCount-1 )
-		{
-			const int iWasLive = Max ( dLiveID.GetLength()-1, 0 );
-			const int iRowCount = (int)( rdAttr.GetFilesize() / ( (DOCINFO_IDSIZE+iRowSize)*4 ) );
-
-			for ( int i=0; i<iRowCount; i++ )
-			{
-				SphDocID_t uID = 0;
-				rdAttr.GetBytes ( &uID, DOCINFO_IDSIZE*4 );
-				rdAttr.SkipBytes ( iRowSize*4 );
-
-				if ( !sphBinarySearch ( dLiveID.Begin(), dLiveID.Begin()+iWasLive, uID ) )
-					dLiveID.Add ( uID );
-			}
-
-			dLiveID.Sort();
-		}
-
-		CSphString & sFile = dFiles.Add();
-		sFile.SetSprintf ( "%s.%d", sPath, iChunk );
-
-		const int64_t tmEnd = sphMicroTimer();
-		fprintf ( stdout, "\rprocessed '%s.%d' in %.3f sec", sPath, iChunk, float(tmEnd-tmStart )/1000000.0f );
-	}
-
-	return true;
-}
-
 
 #pragma pack(push,4)
 struct IDFWord_t
@@ -647,125 +466,36 @@ bool MergeIDF ( const CSphString & sFilename, const StrVec_t & dFiles, CSphStrin
 }
 
 
-void OptimizeRtKlists ( const CSphString & sIndex, const CSphConfig & hConf )
-{
-	const int64_t tmStart = sphMicroTimer();
-
-	int iDone = 0;
-	StrVec_t dFiles;
-
-	hConf["index"].IterateStart ();
-	while ( hConf["index"].IterateNext () )
-	{
-		CSphString sError;
-
-		const CSphConfigSection & hIndex = hConf["index"].IterateGet ();
-		const char * sIndexName = hConf["index"].IterateGetKey().cstr();
-
-		if ( !hIndex("type") || hIndex["type"]!="rt" )
-			continue;
-
-		if ( !sIndex.IsEmpty() && sIndex!=sIndexName )
-			continue;
-
-		if ( !hIndex.Exists ( "path" ) )
-		{
-			fprintf ( stdout, "key 'path' not found in index '%s' - skipped\n", sIndexName );
-			continue;
-		}
-
-		const int64_t tmIndexStart = sphMicroTimer();
-
-		CSphSchema tSchema ( sIndexName );
-		CSphColumnInfo tCol;
-
-		// fields
-		for ( CSphVariant * v=hIndex("rt_field"); v; v=v->m_pNext )
-			tSchema.AddField ( v->cstr() );
-
-		if ( !tSchema.GetFieldsCount() )
-		{
-			fprintf ( stdout, "index '%s': no fields configured (use rt_field directive) - skipped\n", sIndexName );
-			continue;
-		}
-
-		// attrs
-		const int iNumTypes = 5;
-		const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_float", "rt_attr_timestamp", "rt_attr_string" };
-		const ESphAttr iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_FLOAT, SPH_ATTR_TIMESTAMP, SPH_ATTR_STRING };
-
-		for ( int iType=0; iType<iNumTypes; iType++ )
-		{
-			for ( CSphVariant * v = hIndex ( sTypes[iType] ); v; v = v->m_pNext )
-			{
-				tCol.m_sName = v->cstr();
-				tCol.m_eAttrType = iTypes[iType];
-				tSchema.AddAttr ( tCol, false );
-			}
-		}
-
-		const char * sPath = hIndex["path"].cstr();
-
-		CSphString sMeta;
-		sMeta.SetSprintf ( "%s.meta", sPath );
-		CSphAutoreader rdMeta;
-		if ( !rdMeta.Open ( sMeta.cstr(), sError ) )
-		{
-			fprintf ( stdout, "%s\n", sError.cstr() );
-			continue;
-		}
-
-		rdMeta.SeekTo ( 8, 4 );
-		const int iDiskCunkCount = rdMeta.GetDword();
-
-		if ( !DoKlistsOptimization ( tSchema.GetRowSize(), sPath, iDiskCunkCount, dFiles ) )
-			sphDie ( "can't cook k-list '%s'", sPath );
-
-		const int64_t tmIndexDone = sphMicroTimer();
-		fprintf ( stdout, "\nindex '%s' done in %.3f sec\n", sIndexName, float(tmIndexDone-tmIndexStart )/1000000.0f );
-		iDone++;
-	}
-
-	const int64_t tmIndexesDone = sphMicroTimer();
-	fprintf ( stdout, "\ntotal processed=%d in %.3f sec\n", iDone, float(tmIndexesDone-tmStart )/1000000.0f );
-
-	CSphString sError("none");
-	if ( !FixupFiles ( dFiles, sError ) )
-		fprintf ( stdout, "error during files fixup: %s\n", sError.cstr() );
-
-	const int64_t tmDone = sphMicroTimer();
-	fprintf ( stdout, "\nfinished in %.3f sec\n", float(tmDone-tmStart )/1000000.0f );
-}
-
 //////////////////////////////////////////////////////////////////////////
 static const DWORD META_HEADER_MAGIC = 0x54525053;    ///< my magic 'SPRT' header
 static const DWORD META_VERSION = 13;
 
-const char* sAttr (ESphAttr param)
+const char * AttrType2Str ( ESphAttr eAttrType )
 {
-	switch (param)
+	switch ( eAttrType )
 	{
-	case SPH_ATTR_NONE: return "SPH_ATTR_NONE";
-	case SPH_ATTR_INTEGER: return "SPH_ATTR_INTEGER";
-	case SPH_ATTR_TIMESTAMP: return "SPH_ATTR_TIMESTAMP";
-	case SPH_ATTR_BOOL: return "SPH_ATTR_BOOL";
-	case SPH_ATTR_FLOAT: return "SPH_ATTR_FLOAT";
-	case SPH_ATTR_BIGINT: return "SPH_ATTR_BIGINT";
-	case SPH_ATTR_STRING: return "SPH_ATTR_STRING";
-	case SPH_ATTR_POLY2D: return "SPH_ATTR_POLY2D";
-	case SPH_ATTR_STRINGPTR: return "SPH_ATTR_STRINGPTR";
-	case SPH_ATTR_TOKENCOUNT: return "SPH_ATTR_TOKENCOUNT";
-	case SPH_ATTR_JSON: return "SPH_ATTR_JSON";
-	case SPH_ATTR_UINT32SET: return "SPH_ATTR_UINT32SET";
-	case SPH_ATTR_INT64SET: return "SPH_ATTR_INT64SET";
-	case SPH_ATTR_MAPARG: return "SPH_ATTR_MAPARG";
-	case SPH_ATTR_FACTORS: return "SPH_ATTR_FACTORS";
-	case SPH_ATTR_JSON_FIELD: return "SPH_ATTR_JSON_FIELD";
-	case SPH_ATTR_FACTORS_JSON: return "SPH_ATTR_FACTORS_JSON";
-	case SPH_ATTR_UINT32SET_PTR: return "SPH_ATTR_UINT32SET_PTR";
-	case SPH_ATTR_INT64SET_PTR: return "SPH_ATTR_INT64SET_PTR";
-	case SPH_ATTR_JSON_PTR: return "SPH_ATTR_JSON_PTR";
-	case SPH_ATTR_JSON_FIELD_PTR: return "SPH_ATTR_JSON_FIELD_PTR";
+	case SPH_ATTR_NONE:				return "SPH_ATTR_NONE";
+	case SPH_ATTR_INTEGER:			return "SPH_ATTR_INTEGER";
+	case SPH_ATTR_TIMESTAMP:		return "SPH_ATTR_TIMESTAMP";
+	case SPH_ATTR_BOOL:				return "SPH_ATTR_BOOL";
+	case SPH_ATTR_FLOAT:			return "SPH_ATTR_FLOAT";
+	case SPH_ATTR_BIGINT:			return "SPH_ATTR_BIGINT";
+	case SPH_ATTR_STRING:			return "SPH_ATTR_STRING";
+	case SPH_ATTR_POLY2D:			return "SPH_ATTR_POLY2D";
+	case SPH_ATTR_STRINGPTR:		return "SPH_ATTR_STRINGPTR";
+	case SPH_ATTR_TOKENCOUNT:		return "SPH_ATTR_TOKENCOUNT";
+	case SPH_ATTR_JSON:				return "SPH_ATTR_JSON";
+	case SPH_ATTR_UINT32SET:		return "SPH_ATTR_UINT32SET";
+	case SPH_ATTR_INT64SET:			return "SPH_ATTR_INT64SET";
+	case SPH_ATTR_MAPARG:			return "SPH_ATTR_MAPARG";
+	case SPH_ATTR_FACTORS:			return "SPH_ATTR_FACTORS";
+	case SPH_ATTR_JSON_FIELD:		return "SPH_ATTR_JSON_FIELD";
+	case SPH_ATTR_FACTORS_JSON:		return "SPH_ATTR_FACTORS_JSON";
+	case SPH_ATTR_UINT32SET_PTR:	return "SPH_ATTR_UINT32SET_PTR";
+	case SPH_ATTR_INT64SET_PTR:		return "SPH_ATTR_INT64SET_PTR";
+	case SPH_ATTR_JSON_PTR:			return "SPH_ATTR_JSON_PTR";
+	case SPH_ATTR_JSON_FIELD_PTR:	return "SPH_ATTR_JSON_FIELD_PTR";
+	default: return "";
 	}
 
 	return "SPH_ATTR_NONE";
@@ -775,7 +505,7 @@ static void InfoMetaSchemaColumn ( CSphReader &rdInfo,  DWORD uVersion )
 {
 	CSphString sName = rdInfo.GetString ();
 	fprintf ( stdout, "%s", sName.cstr());
-	fprintf ( stdout, " %s", sAttr(( ESphAttr)rdInfo.GetDword ()));
+	fprintf ( stdout, " %s", AttrType2Str ((ESphAttr)rdInfo.GetDword ()) );
 
 	if ( uVersion>=5 ) // m_uVersion for searching
 	{
@@ -883,9 +613,9 @@ void InfoMetaIndexSettings ( CSphReader &tReader, DWORD uVersion )
 static void InfoMetaFileInfo ( CSphReader &tReader )
 {
 	fprintf ( stdout, "\n  ======== FILE INFO ========" );
-	fprintf ( stdout, "\nuSize: " INT64_FMT, (int64_t)tReader.GetOffset() );
-	fprintf ( stdout, "\nuCTime: " INT64_FMT, (int64_t)tReader.GetOffset() );
-	fprintf ( stdout, "\nuMTime: " INT64_FMT, (int64_t)tReader.GetOffset() );
+	fprintf ( stdout, "\nuSize: " INT64_FMT, tReader.GetOffset () );
+	fprintf ( stdout, "\nuCTime: " INT64_FMT, tReader.GetOffset () );
+	fprintf ( stdout, "\nuMTime: " INT64_FMT, tReader.GetOffset () );
 	fprintf ( stdout, "\nuCRC32: %d", tReader.GetDword () );
 }
 
@@ -955,7 +685,7 @@ void InfoMetaDictionarySettings ( CSphReader &tReader, DWORD uVersion )
 			int nStopwords = ( int ) tReader.GetDword ();
 			fprintf ( stdout, "\nnStopwords : %d", nStopwords );
 			for ( int i = 0; i<nStopwords; ++i )
-				fprintf ( stdout, "\nEmbedded Stp(%d): " INT64_FMT, i, (int64_t)tReader.UnzipOffset() );
+				fprintf ( stdout, "\nEmbedded Stp(%d): " INT64_FMT, i, tReader.UnzipOffset () );
 		}
 	}
 
@@ -1061,9 +791,9 @@ void InfoMeta ( const CSphString &sMeta )
 	} else
 		fprintf ( stdout, "\ndisk base assumed 0 (not written in this ver of meta)" );
 	fprintf ( stdout, "\nTotal documents: %d", rdMeta.GetDword());
-	fprintf ( stdout, "\nTotal bytes: " INT64_FMT, (int64_t)rdMeta.GetOffset() );
+	fprintf ( stdout, "\nTotal bytes: " INT64_FMT, rdMeta.GetOffset () );
 	if ( uVersion>=2 )
-		fprintf ( stdout, "\nTID: " INT64_FMT, (int64_t)rdMeta.GetOffset() );
+		fprintf ( stdout, "\nTID: " INT64_FMT, rdMeta.GetOffset () );
 
 	if ( uVersion>=4 )
 	{
@@ -1105,8 +835,170 @@ void InfoMeta ( const CSphString &sMeta )
 
 }
 
-extern void sphDictBuildInfixes ( const char * sPath );
-extern void sphDictBuildSkiplists ( const char * sPath );
+
+struct IndexInfo_t 
+{
+	bool							m_bEnabled {false};
+	DWORD							m_nDocs {0};
+	CSphString						m_sName;
+	CSphString						m_sPath;
+	CSphFixedVector<DocID_t>		m_dKilllist;
+	CSphVector<KillListTarget_t>	m_dTargets;
+	CSphMappedBuffer<BYTE>			m_tLookup;
+	DeadRowMap_Disk_c 				m_tDeadRowMap;
+
+
+	IndexInfo_t()
+		: m_dKilllist ( 0 )
+	{}
+};
+
+
+void ApplyKilllist ( IndexInfo_t & tTarget, const IndexInfo_t & tKiller, const KillListTarget_t & tSettings )
+{
+	if ( tSettings.m_uFlags & KillListTarget_t::USE_DOCIDS )
+	{
+		LookupReader_c tTargetReader ( tTarget.m_tLookup.GetWritePtr() );
+		LookupReader_c tKillerReader ( tKiller.m_tLookup.GetWritePtr() );
+
+		KillByLookup ( tTargetReader, tKillerReader, tTarget.m_tDeadRowMap );
+	}
+
+	if ( tSettings.m_uFlags & KillListTarget_t::USE_KLIST )
+	{
+		LookupReader_c tTargetReader ( tTarget.m_tLookup.GetWritePtr() );
+		DocidListReader_c tKillerReader ( tKiller.m_dKilllist );
+
+		KillByLookup ( tTargetReader, tKillerReader, tTarget.m_tDeadRowMap );
+	}
+}
+
+
+void ApplyKilllists ( CSphConfig & hConf )
+{
+	int nIndexes = 0;
+	hConf["index"].IterateStart();
+	while ( hConf["index"].IterateNext() )
+		nIndexes++;
+
+	CSphFixedVector<IndexInfo_t> dIndexes ( nIndexes );
+
+	int iIndex = 0;
+
+	hConf["index"].IterateStart();
+	while ( hConf["index"].IterateNext() )
+	{
+		CSphConfigSection & hIndex = hConf["index"].IterateGet();
+		if ( !hIndex("path") )
+			continue;
+
+		const CSphVariant * pType = hIndex ( "type" );
+		if ( pType && ( *pType=="rt" || *pType=="distributed" || *pType=="percolate" ) )
+			continue;
+
+		IndexInfo_t & tIndex = dIndexes[iIndex++];
+		tIndex.m_sName = hConf["index"].IterateGetKey().cstr();
+		tIndex.m_sPath = hIndex["path"].cstr();
+
+		IndexFiles_c tIndexFiles ( tIndex.m_sPath );
+		tIndexFiles.SetName ( tIndex.m_sName.cstr() );
+
+		if ( !tIndexFiles.ReadVersion("") )
+		{
+			fprintf ( stdout, "WARNING: unable to index header for index %s\n", tIndex.m_sName.cstr() );
+			continue;
+		}
+
+		// no lookups prior to v.54
+		if ( tIndexFiles.GetVersion() < 54 )
+		{
+			fprintf ( stdout, "WARNING: index '%s' version: %u, min supported is 54\n", tIndex.m_sName.cstr(), tIndexFiles.GetVersion() );
+			continue;
+		}
+
+		CSphString sError;
+		{
+			CSphScopedPtr<CSphIndex> pIndex ( sphCreateIndexPhrase ( nullptr, tIndex.m_sPath.cstr() ) );
+			if ( !pIndex->LoadKillList ( &tIndex.m_dKilllist, tIndex.m_dTargets, sError ) )
+			{
+				fprintf ( stdout, "WARNING: unable to load kill-list for index %s: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
+				continue;
+			}
+
+			if ( !pIndex->Prealloc(false) )
+			{
+				fprintf ( stdout, "WARNING: unable to prealloc index %s: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
+				continue;
+			}
+
+			tIndex.m_nDocs = pIndex->GetStats().m_iTotalDocuments;
+		}
+
+		CSphString sLookup;
+		sLookup.SetSprintf ( "%s.spt", tIndex.m_sPath.cstr() );
+		if ( !tIndex.m_tLookup.Setup ( sLookup.cstr(), sError, false ) )
+		{
+			fprintf ( stdout, "WARNING: unable to load lookup for index %s: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
+			continue;
+		}
+
+		CSphString sDeadRowMap;
+		sDeadRowMap.SetSprintf ( "%s.spm", tIndex.m_sPath.cstr() );		
+		if ( !tIndex.m_tDeadRowMap.Prealloc ( tIndex.m_nDocs, sDeadRowMap, sError ) )
+		{
+			fprintf ( stdout, "WARNING: unable to load dead row map for index %s: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
+			continue;
+		}
+
+		tIndex.m_bEnabled = true;
+	}
+
+	for ( const auto & tIndex : dIndexes )
+	{
+		if ( !tIndex.m_bEnabled || !tIndex.m_dTargets.GetLength() )
+			continue;
+
+		fprintf ( stdout, "applying kill-list of index %s\n", tIndex.m_sName.cstr() );
+
+		for ( const auto & tTarget : tIndex.m_dTargets )
+		{
+			if ( tTarget.m_sIndex==tIndex.m_sName )
+			{
+				fprintf ( stdout, "WARNING: index '%s': appying killlist to itself\n", tIndex.m_sName.cstr() );
+				continue;
+			}
+
+			for ( auto & tTargetIndex : dIndexes )
+			{
+				if ( !tTargetIndex.m_bEnabled || tTarget.m_sIndex!=tTargetIndex.m_sName )
+					continue;
+
+				ApplyKilllist ( tTargetIndex, tIndex, tTarget );
+			}
+		}
+	}
+
+	for ( auto & tIndex : dIndexes )
+	{
+		if ( !tIndex.m_bEnabled )
+			continue;
+
+		// flush maps
+		CSphString sError;
+		if ( !tIndex.m_tDeadRowMap.Flush ( true, sError ) )
+			fprintf ( stdout, "WARNING: index '%s': unable to flush dead row map: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
+
+		// delete killlists
+		CSphString sKilllist;
+		sKilllist.SetSprintf ( "%s.spk", tIndex.m_sPath.cstr() );
+
+		if ( !sphIsReadable(sKilllist) )
+			continue;
+
+		::unlink ( sKilllist.cstr() );
+	}
+}
+
 
 static void ShowVersion ()
 {
@@ -1121,10 +1013,6 @@ static void ShowHelp ()
 		"Commands are:\n"
 		"-h, --help\t\tdisplay this help message\n"
 		"-v\t\t\tdisplay version information\n"
-		"--build-infixes <INDEX>\tbuild infixes for an existing dict=keywords index\n"
-		"\t\t\t(upgrades .sph, .spi in place)\n"
-		"--build-skips <INDEX>\tbuild skiplists for an existing index (builds .spe and\n"
-		"\t\t\tupgrades .sph, .spi in place)\n"
 		"--check <INDEX>\t\tperform index consistency check\n"
 		"--checkconfig\t\tperform config consistency check\n"
 		"--dumpconfig <SPH-FILE>\tdump index header in config format by file name\n"
@@ -1138,13 +1026,11 @@ static void ShowHelp ()
 		"\t\t\tdump hits for a given keyword\n"
 		"--fold <INDEX> [FILE]\tfold FILE or stdin using INDEX charset_table\n"
 		"--htmlstrip <INDEX>\tfilter stdin using index HTML stripper settings\n"
-		"--optimize-rt-klists <INDEX>\n"
-		"\t\t\toptimize kill list memory use in RT index disk chunks;\n"
-		"\t\t\teither for a given index or --all\n"
 		"--buildidf <INDEX1.dict> [INDEX2.dict ...] [--skip-uniq] --out <GLOBAL.idf>\n"
 		"\t\t\tjoin --stats dictionary dumps into global.idf file\n"
 		"--mergeidf <NODE1.idf> [NODE2.idf ...] [--skip-uniq] --out <GLOBAL.idf>\n"
 		"\t\t\tmerge several .idf files into one file\n"
+		"--apply-killlists\t\tapply index killlists\n"
 		"\n"
 		"Options are:\n"
 		"-c, --config <file>\tuse given config file instead of defaults\n"
@@ -1194,14 +1080,12 @@ int main ( int argc, char ** argv )
 		CMD_DUMPDICT,
 		CMD_CHECK,
 		CMD_STRIP,
-		CMD_OPTIMIZEKLISTS,
-		CMD_BUILDINFIXES,
 		CMD_MORPH,
-		CMD_BUILDSKIPS,
 		CMD_BUILDIDF,
 		CMD_MERGEIDF,
 		CMD_CHECKCONFIG,
-		CMD_FOLD
+		CMD_FOLD,
+		CMD_APPLYKLISTS
 	} eCommand = CMD_NOTHING;
 
 	int i;
@@ -1215,6 +1099,7 @@ int main ( int argc, char ** argv )
 		OPT1 ( "--rotate" )			{ bRotate = true; continue; }
 		OPT1 ( "-v" )				{ ShowVersion(); exit(0); }
 		OPT ( "-h", "--help" )		{ ShowVersion(); ShowHelp(); exit(0); }
+		OPT1 ( "--apply-killlists" ){ eCommand = CMD_APPLYKLISTS; continue; }
 
 		// handle options/commands with 1+ args
 		if ( (i+1)>=argc )			break;
@@ -1224,16 +1109,7 @@ int main ( int argc, char ** argv )
 		OPT1 ( "--dumpdocids" )		{ eCommand = CMD_DUMPDOCIDS; sIndex = argv[++i]; }
 		OPT1 ( "--check" )			{ eCommand = CMD_CHECK; sIndex = argv[++i]; }
 		OPT1 ( "--htmlstrip" )		{ eCommand = CMD_STRIP; sIndex = argv[++i]; }
-		OPT1 ( "--build-infixes" )	{ eCommand = CMD_BUILDINFIXES; sIndex = argv[++i]; }
-		OPT1 ( "--build-skips" )	{ eCommand = CMD_BUILDSKIPS; sIndex = argv[++i]; }
 		OPT1 ( "--morph" )			{ eCommand = CMD_MORPH; sIndex = argv[++i]; }
-		OPT1 ( "--optimize-rt-klists" )
-		{
-			eCommand = CMD_OPTIMIZEKLISTS;
-			sIndex = argv[++i];
-			if ( sIndex=="--all" )
-				sIndex = "";
-		}
 		OPT1 ( "--dumpdict" )
 		{
 			eCommand = CMD_DUMPDICT;
@@ -1345,16 +1221,6 @@ int main ( int argc, char ** argv )
 	///////////
 	// action!
 	///////////
-	int iMvaDefault = 1048576;
-	if ( hConf.Exists ( "searchd" ) && hConf["searchd"].Exists ( "searchd" ) )
-	{
-		const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
-		iMvaDefault = hSearchd.GetSize ( "mva_updates_pool", iMvaDefault );
-	}
-	const char * sArenaError = sphArenaInit ( iMvaDefault );
-	if ( sArenaError )
-		sphWarning ( "process shared mutex unsupported, persist MVA disabled ( %s )", sArenaError );
-
 
 	if ( eCommand==CMD_CHECKCONFIG )
 	{
@@ -1402,12 +1268,18 @@ int main ( int argc, char ** argv )
 		}
 	}
 
+	if ( eCommand==CMD_APPLYKLISTS )
+	{
+		ApplyKilllists ( hConf );
+		exit (0);
+	}
+
 	// configure common settings (as of time of this writing, AOT and RLP setup)
 	sphConfigureCommon ( hConf );
 
 	// common part for several commands, check and preload index
 	CSphIndex * pIndex = nullptr;
-	while ( !sIndex.IsEmpty() && eCommand!=CMD_OPTIMIZEKLISTS )
+	while ( !sIndex.IsEmpty() )
 	{
 		// check config
 		if ( !hConf["index"].Exists(sIndex) )
@@ -1424,10 +1296,6 @@ int main ( int argc, char ** argv )
 		if ( !hConf["index"][sIndex]("path") )
 			sphDie ( "index '%s': missing 'path' in config'\n", sIndex.cstr() );
 
-		// only need path for --build-infixes, it will access the files directly
-		if ( eCommand==CMD_BUILDINFIXES )
-			break;
-
 		// preload that index
 		bool bDictKeywords = true;
 		if ( hConf["index"][sIndex].Exists ( "dict" ) )
@@ -1436,7 +1304,7 @@ int main ( int argc, char ** argv )
 		if ( hConf["index"][sIndex]("type") && hConf["index"][sIndex]["type"]=="rt" )
 		{
 			CSphSchema tSchema;
-			if ( sphRTSchemaConfigure ( hConf["index"][sIndex], &tSchema, &sError, false ) )
+			if ( sphRTSchemaConfigure ( hConf["index"][sIndex], tSchema, sError, false ) )
 				pIndex = sphCreateIndexRT ( tSchema, sIndex.cstr(), 32*1024*1024, hConf["index"][sIndex]["path"].cstr(), bDictKeywords );
 		} else
 		{
@@ -1567,34 +1435,6 @@ int main ( int argc, char ** argv )
 				if ( hIndex.GetInt ( "html_strip" )==0 )
 					sphDie ( "HTML stripping is not enabled in index '%s'", sIndex.cstr() );
 				StripStdin ( hIndex.GetStr ( "html_index_attrs" ), hIndex.GetStr ( "html_remove_elements" ) );
-			}
-			break;
-
-		case CMD_OPTIMIZEKLISTS:
-			OptimizeRtKlists ( sIndex, hConf );
-			break;
-
-		case CMD_BUILDINFIXES:
-			{
-				const CSphConfigSection & hIndex = hConf["index"][sIndex];
-				if ( hIndex("type") && hIndex["type"]=="rt" )
-					sphDie ( "build-infixes requires a disk index" );
-				if ( !hIndex("dict") || hIndex["dict"]!="keywords" )
-					sphDie ( "build-infixes requires dict=keywords" );
-
-				fprintf ( stdout, "building infixes for index %s...\n", sIndex.cstr() );
-				sphDictBuildInfixes ( hIndex["path"].cstr() );
-			}
-			break;
-
-		case CMD_BUILDSKIPS:
-			{
-				const CSphConfigSection & hIndex = hConf["index"][sIndex];
-				if ( hIndex("type") && hIndex["type"]=="rt" )
-					sphDie ( "build-infixes requires a disk index" );
-
-				fprintf ( stdout, "building skiplists for index %s...\n", sIndex.cstr() );
-				sphDictBuildSkiplists ( hIndex["path"].cstr() );
 			}
 			break;
 

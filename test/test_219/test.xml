@@ -91,7 +91,6 @@ index aot_plain
 {
 	source			= test1
 	path			= <data_path/>/aot_plain
-	docinfo			= extern
 	morphology 		= lemmatize_ru_all
     blend_chars 	= .
 }
@@ -100,7 +99,6 @@ index aot_exact
 {
 	source			= test1
 	path			= <data_path/>/aot_exact
-	docinfo			= extern
 	morphology		= lemmatize_ru_all
     blend_chars 	= .
 	index_exact_words = 1

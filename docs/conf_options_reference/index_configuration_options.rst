@@ -323,6 +323,23 @@ Example:
     # config on box3, box4
     agent = box1:9312|box2:9312:chunk1
 
+
+.. _attr_update_reserve:
+
+attr_update_reserve
+~~~~~~~~~~~~~~~~~~~
+
+Sets the space to be reserved for blob attribute updates. Optional, default value is 128k.
+
+When blob attributes (MVAs, strings, JSON), are updated, their length may change. If the updated string (or MVA, or JSON) is shorter than the old one, it overwrites the old one in the .SPB file. But if the updated string is longer, updates are written to the end of the .SPB file. This file is memory mapped, that's why resizing it may be a rather slow process, depending on the OS implementation of memory mapped files.
+
+To avoid frequent resizes, you can specify the extra space to be reserved at the end of the .SPB file by using
+
+.. code-block:: ini
+
+    attr_update_reserve=1M
+
+
 .. _bigram_freq_words:
 
 bigram_freq_words
@@ -718,37 +735,6 @@ Example:
 
 
     dict = keywords
-
-.. _docinfo:
-
-docinfo
-~~~~~~~
-
-Document attribute values (docinfo) storage mode. Optional, default is
-‘extern’. Known values are ‘none’, ‘extern’ and ‘inline’.
-
-Docinfo storage mode defines how exactly docinfo will be physically
-stored on disk and RAM. “none” means that there will be no docinfo at
-all (ie. no attributes). Normally you need not to set “none” explicitly
-because Manticore will automatically select “none” when there are no
-attributes configured. “inline” means that the docinfo will be stored in
-the ``.spd`` file, along with the document ID lists. “extern” means that
-the docinfo will be stored separately (externally) from document ID
-lists, in a special ``.spa`` file.
-
-Basically, externally stored docinfo must be kept in RAM when querying.
-for performance reasons. So in some cases “inline” might be the only
-option. However, such cases are infrequent, and docinfo defaults to
-“extern”. Refer to :ref:`attributes` for in-depth discussion and RAM
-usage estimates.
-
-Example:
-
-
-.. code-block:: ini
-
-
-    docinfo = inline
 
 .. _embedded_limit:
 
@@ -1428,26 +1414,6 @@ Example:
 
     infix_fields = url, domain
 
-.. _inplace_docinfo_gap:
-
-inplace_docinfo_gap
-~~~~~~~~~~~~~~~~~~~
-
-:ref:`In-place
-inversion <inplace_enable>`
-fine-tuning option. Controls preallocated docinfo gap size. Optional,
-default is 0.
-
-This directive does not affect ``searchd`` in any way, it only affects
-``indexer``.
-
-Example:
-
-
-.. code-block:: ini
-
-
-    inplace_docinfo_gap = 1M
 
 .. _inplace_enable:
 
@@ -1547,6 +1513,47 @@ Example:
 
 
     inplace_write_factor = 0.1
+
+
+.. _killlist_target:
+
+killlist_target
+~~~~~~~~~~~~~~~
+
+Sets the index(es) that the kill-list will be applied to.
+Optional, default value is empty.
+
+In order to supress matches in the older (**main**) index that were updated or deleted in the newer (**delta**) index you need to
+
+1. Create a kill-list in the **delta** index using :ref:`sql_query_killlist`
+2. Specify **main** index as ``killlist_target`` in **delta** index settings:
+
+.. code-block:: ini
+
+
+    index delta
+    {
+        killlist_target = main:kl
+    }
+
+
+When ``killlist_target`` is specified, kill-list is applied to all the indexes listed in it on ``searchd`` startup. If any of the indexes from ``killlist_target`` are rotated, kill-list is reapplied to these indexes. When kill-list is applied, indexes that were affected save these changes to disk.
+
+``killlist_target`` has 3 modes of operation:
+
+1. ``killlist_target = main:kl``. Document ids from the kill-list of the **delta** index are supressed in the **main** index (see ``sql_query_killlist``).
+2. ``killlist_target = main:id``. All document ids from **delta** index are supressed in the **main** index. Kill-list is ignored.
+3. ``killlist_target = main``. Both document ids from **delta** index and its kill-list are supressed in the **main** index.
+
+Multiple targets can be specified separated by comma like ``killlist_target = index_one:kl,index_two:k1``.
+
+You can change ``killlist_target`` settings for an index without reindexing it by using ``ALTER``:
+
+.. code-block:: mysql
+
+    ALTER TABLE delta KILLLIST_TARGET='new_main_index:kl'
+
+But since the 'old' main index has already written the changes to disk, the documents that were deleted in it will **remain** deleted even if it is no longer in the ``killlist_target`` of the **delta** index.
 
 .. _local:
 
@@ -2093,13 +2100,10 @@ ondisk_attrs
 Allows for fine-grain control over how attributes are loaded into memory
 when using indexes with external storage. It is possible to keep
 attributes on disk. Although, the daemon does map them to memory and the
-OS loads small chunks of data on demand. This allows use of docinfo =
-extern instead of docinfo = inline, but still leaves plenty of free
+OS loads small chunks of data on demand. This leaves plenty of free
 memory for cases when you have large collections of pooled attributes
 (string/JSON/MVA) or when you're using many indexes per daemon that
-don't consume memory. It is not possible to update attributes left on
-disk when this option is enabled and the constraint of 4Gb of entries
-per pool is still in effect.
+don't consume memory.
 
 Note that this option also affects RT indexes. When it is enabled, all
 attribute updates will be disabled, and also all disk chunks of RT
@@ -2111,12 +2115,12 @@ Possible values:
 
 -  0 - disabled and default value, all attributes are loaded in memory
    (the normal behaviour of docinfo = extern)
--  1 - all attributes stay on disk. Daemon loads no files (spa, spm,
-   sps). This is the most memory conserving mode, however it is also the
+-  1 - all attributes stay on disk. Daemon loads no files (.spa, .spb).
+   This is the most memory conserving mode, however it is also the
    slowest as the whole doc-id-list and block index doesn't load.
 -  pool - only pooled attributes stay on disk. Pooled attributes are
-   string, MVA, and JSON attributes (sps, spm files). Scalar attributes
-   stored in docinfo (spa file) load as usual.
+   string, MVA, and JSON attributes (.spb file). Scalar attributes
+   stored in docinfo (.spa file) load as usual.
 
 This option does not affect indexing in any way, it only requires daemon
 restart.
@@ -2165,24 +2169,26 @@ remove ``.tmp*`` files is if indexer fails to remove them automatically.
 
 For reference, different index files store the following data:
 
--  ``.spa`` stores document attributes (used in :ref:`extern
-   docinfo <docinfo>` storage
-   mode only);
+-  ``.spa`` stores document attributes 
+
+-  ``.spb`` stores blob attributes: strings, MVA, json
 
 -  ``.spd`` stores matching document ID lists for each word ID;
 
 -  ``.sph`` stores index header information;
 
+-  ``.sphi`` stores histograms of attribute values;
+
 -  ``.spi`` stores word lists (word IDs and pointers to ``.spd`` file);
 
 -  ``.spk`` stores kill-lists;
 
--  ``.spm`` stores MVA data;
+-  ``.spm`` stores a bitmap of killed documents;
 
 -  ``.spp`` stores hit (aka posting, aka word occurrence) lists for each
    word ID;
 
--  ``.sps`` stores string attribute data.
+-  ``.spt`` stores additional data structures to speed up lookups by document ids;
 
 -  ``.spe`` stores skip-lists to speed up doc-list filtering
 
@@ -2926,3 +2932,5 @@ ascending order. (If multi-byte codepages are used, and file names can
 include foreign characters, the resulting order may not be exactly
 alphabetic.) If a same wordform definition is found in several files,
 the latter one is used, and it overrides previous definitions.
+
+

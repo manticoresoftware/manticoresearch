@@ -167,6 +167,60 @@ insert into test_table values
 }
 </query>
 
+<!-- query_string, mixed QL and JSON -->
+<query endpoint="json/search">
+{
+  "index": "test1",
+  "query":
+  {
+    "match": { "_all": "3rd fourth" } }
+  }
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "index": "test1",
+  "query":
+  {
+    "query_string": "3rd | fourth"
+  }
+}
+</query>
+
+<!-- query_string vs bool queries -->
+<query endpoint="json/search">
+{
+  "index": "test1",
+  "query":
+  {
+    "bool" :
+    {
+      "must":
+      [
+        { "query_string": "3rd | fourth" },
+        { "query_string": "4th" }
+      ]
+    }
+  }
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "index": "test1",
+  "query":
+  {
+    "bool" :
+    {
+      "must": { "query_string": "3rd | fourth" },
+      "must_not": { "query_string": "fourth" }
+    }
+  }
+}
+</query>
+
+
 </httpqueries>
 
 </test>

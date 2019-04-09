@@ -59,18 +59,21 @@ index idx_delta1
 {
 	source				= src_delta1
 	path				= <data_path/>/test_delta1
+	killlist_target		= idx_main:kl
 }
 
 index idx_delta2
 {
 	source				= src_delta2
 	path				= <data_path/>/test_delta2
+	killlist_target		= idx_main:kl
 }
 
 index idx_delta3
 {
 	source				= src_delta3
 	path				= <data_path/>/test_delta3
+	killlist_target		= idx_main:kl
 }
 </config>
 
@@ -99,14 +102,14 @@ INSERT INTO test_table VALUES
 </db_insert>
 
 <custom_test><![CDATA[
-$client->SetFilter ( "@id", array(1,2,3,4) );
+$client->SetFilter ( "id", array(1,2,3,4) );
 $client->AddQuery ( "test", "idx_main idx_delta1 idx_delta2 idx_delta3" );
 $client->ResetFilters ();
-$client->SetFilter ( "@id", array(5,6,7,8) );
+$client->SetFilter ( "id", array(5,6,7,8) );
 $client->AddQuery ( "test", "idx_main idx_delta1 idx_delta2 idx_delta3" );
 $client->ResetFilters ();
-$client->SetFilter ( "@id", array(1,2,3,4,5,6,7,8), "idx_main idx_delta1 idx_delta2 idx_delta3" );
-$client->SetSortMode ( SPH_SORT_EXTENDED, "@id DESC" );
+$client->SetFilter ( "id", array(1,2,3,4,5,6,7,8), "idx_main idx_delta1 idx_delta2 idx_delta3" );
+$client->SetSortMode ( SPH_SORT_EXTENDED, "id DESC" );
 $client->AddQuery ( "test" );
 $results = $client->RunQueries ();
 

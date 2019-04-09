@@ -892,9 +892,9 @@ class APIClient extends SphinxClient
 		return $res;
 	}
 
-	function XUpdateAttributes ( $index, $attrs, $values, $mva=false, $ignorenonexistent=false )
+	function XUpdateAttributes ( $index, $attrs, $values, $type=SPH_UPDATE_INT, $ignorenonexistent=false )
 	{
-		$res = $this->UpdateAttributes ( $index, $attrs, $values, $mva, $ignorenonexistent );
+		$res = $this->UpdateAttributes ( $index, $attrs, $values, $type, $ignorenonexistent );
 		if ($res===false)
 			return $this->GetLastError();
 		return $res;
@@ -1485,7 +1485,6 @@ class SphinxConfig
 				$res["resarray"] = $q->getAttribute("resarray");
 				$res["index"] = $q->getAttribute("index");
 				$res["select"] = $q->getAttribute("select");
-				$res["id_range"] = $this->ParseRange ( $q->getAttribute("id_range") );
 				$res["index_weights"] = $this->ParseIndexWeights ( $q->getAttribute("index_weights") );
 				$res["roundoff"] = $q->getAttribute("roundoff");
 				$res["expect_error"] = $q->getAttribute("expect_error");
@@ -2108,7 +2107,6 @@ class SphinxConfig
 						if ( @$qinfo["groupdistinct"] )	$cl->SetGroupDistinct ( $qinfo["groupdistinct"] );
 						if ( @$qinfo["resarray"] )	$cl->SetArrayResult ( true );
 						if ( @$qinfo["select"] )	$cl->SetSelect ( $qinfo["select"] );
-						if ( @$qinfo["id_range"] )	$cl->SetIDRange ( $qinfo["id_range"]["min"], $qinfo["id_range"]["max"] );
 						if ( @$qinfo["index"] )		$my_index = $qinfo["index"];
 						if ( @$qinfo["index_weights"] ) $cl->SetIndexWeights ( $qinfo["index_weights"] );
 						if ( @$qinfo["cutoff"] )		$cl->SetLimits ( 0, 20, 0, $qinfo["cutoff"] );

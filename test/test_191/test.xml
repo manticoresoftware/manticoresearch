@@ -51,14 +51,12 @@ index main
 {
 	source				= test1
 	path				= <data_path/>/test1
-	docinfo				= inline
 }
 
 index delta
 {
 	source				= test2
 	path				= <data_path/>/test2
-	docinfo				= inline
 }
 
 index rt

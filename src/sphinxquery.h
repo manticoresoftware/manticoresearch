@@ -301,6 +301,9 @@ public:
 	bool			Error ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 	void			Warning ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 	XQNode_t *		FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec );
+
+	const CSphSchema * GetSchema() const { return m_pSchema; }
+	CSphDict *		GetDict() { return m_pDict; }
 	
 	bool			IsError() { return m_bError; }
 	virtual void	Cleanup();

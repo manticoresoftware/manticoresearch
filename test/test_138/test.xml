@@ -27,7 +27,6 @@ index test1
 {
 	source	= test1
 	path	= <data_path/>/test1
-	docinfo	= extern
 }
 
 source test2
@@ -41,7 +40,6 @@ index test2
 {
 	source	= test2
 	path	= <data_path/>/test2
-	docinfo	= extern
 }
 
 source test_kw
@@ -59,7 +57,6 @@ index test_kw
 	source	= test_kw
 	path	= <data_path/>/test_kw
 
-	docinfo					= extern
 	dict = keywords
 }
 </config>

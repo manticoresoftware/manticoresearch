@@ -30,7 +30,6 @@ index plain1
 {
 	source			= test
 	path = <data_path/>/plain1
-	docinfo			= extern
 	dict = keywords
     charset_table = a..z, _, A..Z->a..z, russian
 	min_infix_len = 3
@@ -40,7 +39,6 @@ index rt1
 {
 	type = rt
 	path			= <data_path/>/rt1
-	docinfo = extern
 	rt_mem_limit = 128M
 	rt_field		= body
 	rt_attr_uint	= idd
@@ -63,7 +61,6 @@ index plain2
 {
 	source			= test2
 	path = <data_path/>/plain2
-	docinfo			= extern
 	dict = keywords
     charset_table = a..z, _, A..Z->a..z
 	min_infix_len = 3
@@ -75,7 +72,6 @@ index rt2
 {
 	type = rt
 	path			= <data_path/>/rt2
-	docinfo = extern
 	rt_mem_limit = 128M
 	rt_field		= body
 	rt_attr_uint	= idd

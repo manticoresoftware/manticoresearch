@@ -65,7 +65,6 @@ enum ESphAttr
 enum ESphEvalStage
 {
 	SPH_EVAL_STATIC = 0,		///< static data, no real evaluation needed
-	SPH_EVAL_OVERRIDE,			///< static but possibly overridden
 	SPH_EVAL_PREFILTER,			///< expression needed for candidate matches filtering
 	SPH_EVAL_PRESORT,			///< expression needed for final matches sorting
 	SPH_EVAL_SORTER,			///< expression evaluated by sorter object
@@ -77,8 +76,7 @@ enum ESphEvalStage
 /// FIXME? maybe merge with ExtraData_e?
 enum ESphExprCommand
 {
-	SPH_EXPR_SET_MVA_POOL,
-	SPH_EXPR_SET_STRING_POOL,
+	SPH_EXPR_SET_BLOB_POOL,
 	SPH_EXPR_SET_EXTRA_DATA,
 	SPH_EXPR_GET_DEPENDENT_COLS, ///< used to determine proper evaluating stage
 	SPH_EXPR_GET_UDF
@@ -109,13 +107,13 @@ public:
 	virtual const BYTE * StringEvalPacked ( const CSphMatch & tMatch ) const;
 
 	/// evaluate MVA attr
-	virtual const DWORD * MvaEval ( const CSphMatch & ) const { assert ( 0 ); return NULL; }
+	virtual const BYTE * MvaEval ( const CSphMatch &, int & iLengthBytes ) const { assert(0); return nullptr; }
 
 	/// evaluate PACKEDFACTORS
-	virtual const BYTE * FactorEval ( const CSphMatch & ) const { assert ( 0 ); return NULL; }
+	virtual const BYTE * FactorEval ( const CSphMatch & ) const { assert ( 0 ); return nullptr; }
 
 	/// evaluate PACKEDFACTORS as a packed data ptr attr
-	virtual const BYTE * FactorEvalPacked ( const CSphMatch & ) const { assert ( 0 ); return NULL; }
+	virtual const BYTE * FactorEvalPacked ( const CSphMatch & ) const { assert ( 0 ); return nullptr; }
 
 	/// check for arglist subtype
 	/// FIXME? replace with a single GetType() call?

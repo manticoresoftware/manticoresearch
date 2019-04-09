@@ -11,8 +11,7 @@ UPDATE syntax
 Multiple attributes and values can be specified in a single statement.
 Both RT and disk indexes are supported.
 
-All attributes types (int, bigint, float, MVA, JSON(see below)), except for strings 
-attributes, can be dynamically updated.
+All attributes types (int, bigint, float, strings, MVA, JSON) can be dynamically updated.
 
 ``where_condition`` has the same syntax as in the SELECT statement (see
 :ref:`select_syntax` for
@@ -29,8 +28,8 @@ MVA values sets for updating (and also for INSERT or REPLACE, refer to
 comma-separated lists in parentheses. To erase the MVA value, just
 assign () to it.
 
-UPDATE can be used to update integer and float values in JSON array. No
-strings, arrays and other types yet.
+UPDATE can be used to perform partial JSON updates, like updating integer
+and float values in a JSON array. Full json updates are supported too.
 
 .. code-block:: mysql
 

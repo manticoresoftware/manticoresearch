@@ -43,6 +43,19 @@ index idx2
 	path = <data_path/>/idx2
 }
 
+source src3
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data3.xml
+}
+
+index idx3
+{
+	source = src3
+	path = <data_path/>/idx3
+}
+
+
 </config>
 
 <queries>
@@ -54,6 +67,8 @@ index idx2
 <query index="idx2">ord2</query>
 <query index="idx2">orddf</query>
 <query index="idx2">test2</query>
+
+<query index="idx3" filter_value="10" filter="mva"></query>
 </queries>
 
 </test>

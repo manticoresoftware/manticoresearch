@@ -29,7 +29,6 @@ index xml11
 {
 	source = src11
 	path = <data_path/>/xml11
-	docinfo = extern
     dict = keywords
 }
 
@@ -47,7 +46,6 @@ index xml12
 {
 	source = src12
 	path = <data_path/>/xml12
-	docinfo = extern
     dict = keywords
 }
 
@@ -66,7 +64,6 @@ index tsv21
 {
 	source = src21
 	path = <data_path/>/tsv21
-	docinfo = extern
     dict = keywords
 }
 
@@ -84,7 +81,6 @@ index tsv22
 {
 	source = src22
 	path = <data_path/>/tsv22
-	docinfo = extern
     dict = keywords
 }
 
@@ -103,7 +99,6 @@ index csv31
 {
 	source = src31
 	path = <data_path/>/csv31
-	docinfo = extern
     dict = keywords
 }
 
@@ -121,7 +116,6 @@ index csv32
 {
 	source = src32
 	path = <data_path/>/csv32
-	docinfo = extern
     dict = keywords
 }
 </config>

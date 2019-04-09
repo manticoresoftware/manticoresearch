@@ -32,8 +32,6 @@ index pure
 {
 	source	= pure
 	path	= <data_path/>/pure
-
-    docinfo					= extern
 }
 
 source test
@@ -51,8 +49,6 @@ index test
 	source	= test
 	path	= <data_path/>/test
 
-    docinfo					= extern
-	
     phrase_boundary			= .
     phrase_boundary_step	= 2
 	stopwords				= <this_test/>/stopwords.txt
@@ -91,7 +87,6 @@ index multi_joined
 	source = multi_joined
 	path = <data_path/>/multi_joined
 	
-	docinfo			= extern
  	charset_table		= 0..9, a..z, A..Z->a..z, _
 }
 
@@ -136,22 +131,22 @@ insert into test_joined (id, text) values
 </db_insert>
 
 <queries>
-	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">aaa</query>
-	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">bbb</query>
-	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">aaa | bbb</query>
-	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">"aaa bbb"</query>
-	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">( kkk zzz ) | "do dog"</query>
-	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">( kkk zzz ) | "do not as dog"</query>
-	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">"kkk zzz"</query>
-	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">"zzz not as not cool"</query>
-	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">"zzz do dog look cool"/2</query>
-	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">dog not as do sleepy</query>
-	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">"dog not as do sleepy"</query>
-	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">"do not as dog sleepy"</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="id asc">aaa</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="id asc">bbb</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="id asc">aaa | bbb</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="id asc">"aaa bbb"</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="id asc">( kkk zzz ) | "do dog"</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="id asc">( kkk zzz ) | "do not as dog"</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="id asc">"kkk zzz"</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="id asc">"zzz not as not cool"</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="id asc">"zzz do dog look cool"/2</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="id asc">dog not as do sleepy</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="id asc">"dog not as do sleepy"</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="id asc">"do not as dog sleepy"</query>
 	<!-- regression crash on pure joined fields index indexing -->
-	<query mode="extended2" index="pure" sortmode="extended" sortby="@id asc">( dog sleepy ) | my</query>
+	<query mode="extended2" index="pure" sortmode="extended" sortby="id asc">( dog sleepy ) | my</query>
 	<!-- regression crash on joined fields index indexing with docid==0 and dupes -->
-	<query mode="extended2" index="multi_joined" sortmode="extended" sortby="@id asc"></query>
+	<query mode="extended2" index="multi_joined" sortmode="extended" sortby="id asc"></query>
 </queries>
 
 </test>

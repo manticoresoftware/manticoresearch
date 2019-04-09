@@ -57,9 +57,7 @@ The commands are as follows:
 -  ``--dumpdict INDEXNAME`` dumps dictionary. 
    Additional ``-stats`` switch will dump to dictionary the total number of documents. It is required for dictionary files that are used  for creation of IDF files.
 
--  ``--dumpdocids INDEXNAME`` dumps document IDs by index name. It takes
-   the data from attribute (.spa) file and therefore requires
-   docinfo=extern to work.
+-  ``--dumpdocids INDEXNAME`` dumps document IDs by index name.
 
 -  ``--dumphitlist INDEXNAME KEYWORD`` dumps all the hits (occurrences)
    of a given keyword in a given index, with keyword specified as text.
@@ -96,12 +94,11 @@ The commands are as follows:
    This is useful for checking indexes built on another machine with
    possibly different path layouts.
 
--  ``--optimize-rt-klists`` optimizes the kill list memory use in the
-   disk chunk of a given RT index. That is a one-off optimization
-   intended for rather old RT indexes. In last releases this kill list
-   optimization (purging) should happen automatically, and there should
-   never be a need to use this option.
-
 -  ``--rotate`` works only with ``--check`` and defines whether to check
    index waiting for rotation, i.e. with .new extension. This is useful
    when you want to check your index before actually using it.
+
+-  ``--apply-killlists`` loads and applies kill-lists for all indexes listed
+   in the config file. Changes are saved in .SPM files. Kill-list files (.SPK)
+   are deleted. This can be useful if you want to move applying indexes from
+   daemon startup to indexing stage.

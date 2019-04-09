@@ -246,7 +246,7 @@ void BenchExpr ()
 		pRow[i] = 1+i;
 
 	CSphMatch tMatch;
-	tMatch.m_uDocID = 123;
+	tMatch.m_tRowID = 123;
 	tMatch.m_iWeight = 456;
 	tMatch.m_pStatic = pRow;
 
@@ -604,8 +604,8 @@ inline bool operator < ( const CSphWordHit & a, const CSphWordHit & b )
 {
 	return
 		( a.m_uWordID<b.m_uWordID || \
-		( a.m_uWordID==b.m_uWordID && a.m_uDocID<b.m_uDocID ) || \
-		( a.m_uWordID==b.m_uWordID && a.m_uDocID==b.m_uDocID && a.m_uWordPos<b.m_uWordPos ) );
+		( a.m_uWordID==b.m_uWordID && a.m_tRowID<b.m_tRowID ) || \
+		( a.m_uWordID==b.m_uWordID && a.m_tRowID==b.m_tRowID && a.m_uWordPos<b.m_uWordPos ) );
 }
 
 template < typename T >

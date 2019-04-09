@@ -83,6 +83,17 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 #include <semaphore.h>
 #endif
 
+#if USE_WINDOWS
+	#include <io.h>
+	#define sphSeek		_lseeki64
+	typedef __int64		SphOffset_t;
+#else
+	#include <unistd.h>
+	#define sphSeek		lseek
+	typedef off_t		SphOffset_t;
+#endif
+
+
 /////////////////////////////////////////////////////////////////////////////
 // COMPILE-TIME CHECKS
 /////////////////////////////////////////////////////////////////////////////
@@ -310,7 +321,7 @@ extern const char * strerrorm ( int errnum ); // defined in sphinxint.h
 // HELPERS
 /////////////////////////////////////////////////////////////////////////////
 
-// magick to determine widest from provided types and initialize a whole unions
+// magic to determine widest from provided types and initialize whole unions
 // for example,
 /*
  *	union foo {
@@ -757,6 +768,17 @@ struct SphIdentityFunctor_T
 	const T &			operator () ( const T & arg ) const			{ return arg; }
 };
 
+/// equality functor
+template < typename T >
+struct SphEqualityFunctor_T
+{
+	bool IsEq ( const T & a, const T & b )
+	{
+		return a==b;
+	}
+};
+
+
 //////////////////////////////////////////////////////////////////////////
 
 /// generic binary search
@@ -792,6 +814,29 @@ T * sphBinarySearch ( T * pStart, T * pEnd, const PRED & tPred, U tRef )
 }
 
 
+// returns first (leftmost) occurrence of the value
+// returns -1 if not found
+template < typename T, typename U, typename PRED >
+int sphBinarySearchFirst ( T * pValues, int iStart, int iEnd, const PRED & tPred, U tRef )
+{
+	assert ( iStart<=iEnd );
+
+	while ( iEnd-iStart>1 )
+	{
+		if ( tRef<tPred(pValues[iStart]) || tRef>tPred(pValues[iEnd]) )
+			return -1;
+
+		int iMid = iStart + (iEnd-iStart)/2;
+		if ( tPred(pValues[iMid])>=tRef )
+			iEnd = iMid;
+		else
+			iStart = iMid;
+	}
+
+	return iEnd;
+}
+
+
 /// generic binary search
 template < typename T >
 T * sphBinarySearch ( T * pStart, T * pEnd, T & tRef )
@@ -799,9 +844,29 @@ T * sphBinarySearch ( T * pStart, T * pEnd, T & tRef )
 	return sphBinarySearch ( pStart, pEnd, SphIdentityFunctor_T<T>(), tRef );
 }
 
-/// generic uniq
-template < typename T, typename T_COUNTER >
-T_COUNTER sphUniq ( T * pData, T_COUNTER iCount )
+
+// find the first entry that is greater than tRef
+template < typename T, typename U, typename PRED >
+T * sphBinarySearchFirst ( T * pStart, T * pEnd, const PRED & tPred, U tRef )
+{
+	if ( !pStart || pEnd<pStart )
+		return NULL;
+
+	while ( pStart!=pEnd )
+	{
+		T * pMid = pStart + (pEnd-pStart)/2;
+		if ( tRef>tPred(*pMid) )
+			pStart = pMid+1;
+		else
+			pEnd = pMid;
+	}
+
+	return pStart;
+}
+
+
+template < typename T, typename T_COUNTER, typename COMP >
+T_COUNTER sphUniq ( T * pData, T_COUNTER iCount, COMP tComp )
 {
 	if ( !iCount )
 		return 0;
@@ -809,13 +874,86 @@ T_COUNTER sphUniq ( T * pData, T_COUNTER iCount )
 	T_COUNTER iSrc = 1, iDst = 1;
 	while ( iSrc<iCount )
 	{
-		if ( pData[iDst-1]==pData[iSrc] )
+		if ( tComp.IsEq ( pData[iDst-1], pData[iSrc] ) )
 			iSrc++;
 		else
 			pData[iDst++] = pData[iSrc++];
 	}
 	return iDst;
 }
+
+
+/// generic uniq
+template < typename T, typename T_COUNTER >
+T_COUNTER sphUniq ( T * pData, T_COUNTER iCount )
+{
+	return sphUniq ( pData, iCount, SphEqualityFunctor_T<T>() );
+}
+
+
+//////////////////////////////////////////////////////////////////////////
+/// Copy/move vec of a data item-by-item
+template < typename T, bool = std::is_pod<T>::value >
+class DataMover_T
+{
+public:
+	static inline void Copy ( T * pNew, T * pData, int iLength )
+	{
+		for ( int i = 0; i<iLength; ++i )
+			pNew[i] = pData[i];
+	}
+
+	static inline void Move ( T * pNew, T * pData, int iLength )
+	{
+		for ( int i = 0; i<iLength; ++i )
+			pNew[i] = std::move ( pData[i] );
+	}
+};
+
+template < typename T> /// Copy/move vec of POD data using memmove
+class DataMover_T<T, true>
+{
+public:
+	static inline void Copy ( T * pNew, const T * pData, int iLength )
+	{
+		if ( iLength ) // m.b. work without this check, but sanitize for paranoids.
+			memmove ( ( void * ) pNew, ( const void * ) pData, iLength * sizeof ( T ) );
+	}
+
+	static inline void Move ( T * pNew, const T * pData, int iLength )
+	{ Copy ( pNew, pData, iLength); }
+
+	// append raw blob: defined ONLY in POD specialization.
+	static inline void CopyVoid ( T * pNew, const void * pData, int iLength )
+	{ Copy ( pNew, (T*)pData, iLength ); }
+};
+
+/// default vector policy
+/// grow 2x and copy using assignment operator on resize
+template < typename T >
+class CSphVectorPolicy : public DataMover_T<T>
+{
+protected:
+	static const int MAGIC_INITIAL_LIMIT = 8;
+
+public:
+	static inline void CopyOrSwap ( T & pLeft, const T & pRight )
+	{
+		pLeft = pRight;
+	}
+
+	static inline int Relimit ( int iLimit, int iNewLimit )
+	{
+		if ( !iLimit )
+			iLimit = MAGIC_INITIAL_LIMIT;
+		while ( iLimit<iNewLimit )
+		{
+			iLimit *= 2;
+			assert ( iLimit>0 );
+		}
+		return iLimit;
+	}
+};
 
 /// buffer traits - provides generic ops over a typed blob (vector).
 /// just provide common operators; doesn't manage buffer anyway
@@ -929,6 +1067,12 @@ public:
 	size_t GetLengthBytes () const
 	{
 		return sizeof ( T ) * ( size_t ) m_iCount;
+	}
+
+	/// get length in bytes
+	int64_t GetLengthBytes64 () const
+	{
+		return m_iCount * sizeof ( T );
 	}
 
 	/// default sort
@@ -1328,13 +1472,18 @@ public:
 			m_pData[m_iCount++] = tValue;
 	}
 
-
-	/// remove element by index
-	void Remove ( int iIndex )
+	/// remove several elements by index
+	void Remove ( int iIndex, int iCount=1 )
 	{
+		if ( !iCount )
+			return;
+
 		assert ( iIndex>=0 && iIndex<m_iCount );
-		if ( --m_iCount>iIndex )
-			POLICY::Move ( m_pData + iIndex, m_pData + iIndex + 1, m_iCount - iIndex );
+		assert ( iIndex+iCount<=m_iCount );
+
+		m_iCount -= iCount;
+		if ( m_iCount>iIndex )
+			POLICY::Move ( m_pData + iIndex, m_pData + iIndex + iCount, m_iCount - iIndex );
 	}
 
 	/// remove element by index, swapping it with the tail
@@ -1651,8 +1800,11 @@ public:
 
 	void Reset ( int iSize )
 	{
-		SafeDeleteArray ( m_pData );
 		assert ( iSize>=0 );
+		if ( iSize==m_iCount )
+			return;
+
+		SafeDeleteArray ( m_pData );
 		m_pData = ( iSize>0 ) ? new T [ iSize ] : nullptr;
 		m_iCount = iSize;
 	}
@@ -3005,6 +3157,10 @@ int				sphOpenFile ( const char * sFile, CSphString & sError, bool bWrite );
 int64_t			sphGetFileSize ( int iFD, CSphString * sError = nullptr );
 int64_t			sphGetFileSize ( const CSphString & sFile, CSphString * sError = nullptr );
 
+/// truncate file
+bool			sphTruncate ( int iFD );
+
+
 /// buffer trait that neither own buffer nor clean-up it on destroy
 template < typename T >
 class CSphBufferTrait : public ISphNoncopyable, public VecTraits_T<T>
@@ -3205,9 +3361,11 @@ public:
 		this->Reset();
 	}
 
-	bool Setup ( const CSphString & sFileStr, CSphString & sError, bool bWrite = false )
+	bool Setup ( const CSphString & sFile, CSphString & sError, bool bWrite = false )
 	{
-		const char * sFile = sFileStr.cstr();
+		m_sFilename = sFile;
+		m_bWrite = bWrite;
+
 #if USE_WINDOWS
 		assert ( m_iFD==INVALID_HANDLE_VALUE );
 #else
@@ -3227,7 +3385,7 @@ public:
 		if ( bWrite )
 			uShare |= FILE_SHARE_WRITE; // wo this flag indexer and indextool unable to open attribute file that was opened by daemon
 
-		HANDLE iFD = CreateFile ( sFile, iAccessMode, uShare, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0 );
+		HANDLE iFD = CreateFile ( sFile.cstr(), iAccessMode, uShare, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0 );
 		if ( iFD==INVALID_HANDLE_VALUE )
 		{
 			sError.SetSprintf ( "failed to open file '%s' (errno %d)", sFile, ::GetLastError() );
@@ -3266,7 +3424,7 @@ public:
 		}
 #else
 
-		int iFD = sphOpenFile ( sFile, sError, bWrite );
+		int iFD = sphOpenFile ( sFile.cstr(), sError, bWrite );
 		if ( iFD<0 )
 			return false;
 		m_iFD = iFD;
@@ -3282,15 +3440,14 @@ public:
 		if ( iFileSize>0 )
 		{
 			int iProt = PROT_READ;
-			int iFlags = MAP_PRIVATE;
 
 			if ( bWrite )
 				iProt |= PROT_WRITE;
 
-			pData = (T *)mmap ( NULL, iFileSize, iProt, iFlags, iFD, 0 );
+			pData = (T *)mmap ( NULL, iFileSize, iProt, MAP_SHARED, iFD, 0 );
 			if ( pData==MAP_FAILED )
 			{
-				sError.SetSprintf ( "failed to mmap file '%s': %s (length=" INT64_FMT ")", sFile, strerrorm(errno), iFileSize );
+				sError.SetSprintf ( "failed to mmap file '%s': %s (length=" INT64_FMT ")", sFile.cstr(), strerrorm(errno), iFileSize );
 				Reset();
 				return false;
 			}
@@ -3331,6 +3488,112 @@ public:
 		this->Set ( NULL, 0 );
 	}
 
+	bool Resize ( uint64_t uNewSize, CSphString & sWarning, CSphString & sError )
+	{
+		if ( !this->GetWritePtr() )
+			return false;
+
+		bool bMlock = this->m_bMemLocked;
+		if ( bMlock )
+			this->MemUnlock();
+
+#if USE_WINDOWS
+		assert ( m_iMap );
+
+		::UnmapViewOfFile ( this->GetWritePtr() );
+		::CloseHandle ( m_iMap );
+
+		m_iMap = ::CreateFileMapping ( m_iFD, nullptr, m_bWrite ? PAGE_READWRITE : PAGE_READONLY, (DWORD)( uNewSize >> 32 ), (DWORD) ( uNewSize & 0xFFFFFFFFULL ), nullptr );
+		if ( !m_iMap )
+		{
+			sError.SetSprintf ( "CreateFileMapping failed for '%s': (errno %d, length=" UINT64_FMT ")", m_sFilename.cstr(), ::GetLastError(), uNewSize );
+			Reset();
+			return false;
+		}
+
+		void * pMapped = (T *)::MapViewOfFile ( m_iMap, FILE_MAP_READ | ( m_bWrite ? FILE_MAP_WRITE : 0 ), 0, 0, 0 );
+		if ( !pMapped )
+		{
+			sError.SetSprintf ( "MapViewOfFile failed for '%s': (errno %d, length=" UINT64_FMT ")", m_sFilename.cstr(), ::GetLastError(), uNewSize );
+			Reset();
+			return false;
+		}
+#endif
+
+#if !USE_WINDOWS
+		if ( sphSeek ( m_iFD, uNewSize, SEEK_SET ) < 0 )
+		{
+			sError.SetSprintf ( "failed to seek '%s': %s (length=" UINT64_FMT ")", m_sFilename.cstr(), strerror(errno), uNewSize );
+			Reset();
+			return false;
+		}
+
+		if ( !sphTruncate(m_iFD) )
+		{
+			sError.SetSprintf ( "failed to truncate '%s': %s (length=" UINT64_FMT ")", m_sFilename.cstr(), strerror(errno), uNewSize );
+			Reset();
+			return false;
+		}
+
+	#if HAVE_MREMAP
+		void * pMapped = mremap ( this->GetWritePtr(), this->GetLengthBytes(), uNewSize, MREMAP_MAYMOVE );
+		if ( pMapped==MAP_FAILED )
+		{
+			sError.SetSprintf ( "mremap failed for '%s': %s (length=" UINT64_FMT ")", m_sFilename.cstr(), strerror(errno), uNewSize );
+			Reset();
+			return false;
+		}
+	#else
+		void * pMapped = mmap ( nullptr, uNewSize, PROT_READ | ( m_bWrite ? PROT_WRITE : 0 ), MAP_SHARED, m_iFD, 0 );
+		if ( pMapped==MAP_FAILED )
+		{
+			sError.SetSprintf ( "mmap failed for '%s': %s (length=" UINT64_FMT ")", m_sFilename.cstr(), strerror(errno), uNewSize );
+			Reset();
+			return false;
+		}
+
+		if ( this->GetWritePtr() )
+			::munmap ( this->GetWritePtr(), this->GetLengthBytes() );
+	#endif
+#endif
+
+		if ( bMlock )
+			this->MemLock ( sWarning );
+
+		this->Set ( (T*)pMapped, uNewSize / sizeof(T) );
+
+		return true;
+	}
+
+
+	bool Flush ( bool bWaitComplete, CSphString & sError ) const
+	{
+		if ( !this->GetWritePtr() )
+			return true;
+
+#if USE_WINDOWS
+		if ( !::FlushViewOfFile ( this->GetWritePtr(), this->GetLengthBytes() ) )
+		{
+			sError.SetSprintf ( "FlushViewOfFile failed for '%s': errno %d", m_sFilename.cstr(), ::GetLastError() );
+			return false;
+		}
+
+		if ( bWaitComplete && !::FlushFileBuffers(m_iFD) )
+		{
+			sError.SetSprintf ( "FlushFileBuffers failed for '%s': errno %d", m_sFilename.cstr(), ::GetLastError() );
+			return false;
+		}
+#else
+		if ( ::msync ( this->GetWritePtr(), this->GetLengthBytes(), bWaitComplete ? MS_SYNC : MS_ASYNC ) )
+		{
+			sError.SetSprintf ( "msync failed for '%s': %s", m_sFilename.cstr(), strerror(errno) );
+			return false;
+		}
+#endif
+
+		return true;
+	}
+
 private:
 #if USE_WINDOWS
 	HANDLE		m_iFD;
@@ -3338,6 +3601,9 @@ private:
 #else
 	int			m_iFD;
 #endif
+
+	bool		m_bWrite {false};
+	CSphString	m_sFilename;
 };
 
 
@@ -4119,36 +4385,29 @@ ISphThdPool * sphThreadPoolCreate ( int iThreads, const char * sName, CSphString
 int sphCpuThreadsCount ();
 
 //////////////////////////////////////////////////////////////////////////
+struct HashFunc_Int64_t
+{
+	static DWORD GetHash ( int64_t k )
+	{
+		return ( DWORD(k) * 0x607cbb77UL ) ^ ( k>>32 );
+	}
+};
+
 
 /// simple open-addressing hash
-/// for now, with int64_t keys (for docids), maybe i will templatize this later
-template < typename VALUE >
-class CSphHash
+template < typename VALUE, typename KEY, typename HASHFUNC=HashFunc_Int64_t >
+class OpenHash_T
 {
-protected:
-	typedef int64_t		KEY;
-	static const KEY	NO_ENTRY = LLONG_MAX;		///< final entry in a chain, we can now safely stop searching
-	static const KEY	DEAD_ENTRY = LLONG_MAX-1;	///< dead entry in a chain, more alive entries may follow
-
-	struct Entry
-	{
-		KEY		m_Key;
-		VALUE	m_Value;
-
-		Entry() : m_Key ( NO_ENTRY ) {}
-	};
-
-	Entry *		m_pHash;	///< hash entries
-	int			m_iSize;	///< total hash size
-	int			m_iUsed;	///< how many entries are actually used
-	int			m_iMaxUsed;	///< resize threshold
-
 public:
 	/// initialize hash of a given initial size
-	explicit CSphHash ( int iSize=256 )
+	explicit OpenHash_T ( int iSize=256 )
 	{
-		m_pHash = NULL;
 		Reset ( iSize );
+	}
+
+	~OpenHash_T()
+	{
+		SafeDeleteArray ( m_pHash );
 	}
 
 	/// reset to a given size
@@ -4160,8 +4419,9 @@ public:
 			m_iSize = m_iUsed = m_iMaxUsed = 0;
 			return;
 		}
+
 		iSize = ( 1<<sphLog2 ( iSize-1 ) );
-		m_pHash = new Entry[iSize];
+		m_pHash = new Entry_t[iSize];
 		m_iSize = iSize;
 		m_iUsed = 0;
 		m_iMaxUsed = GetMaxLoad ( iSize );
@@ -4170,38 +4430,27 @@ public:
 	void Clear()
 	{
 		for ( int i=0; i<m_iSize; i++ )
-			m_pHash[i] = Entry();
+			m_pHash[i] = Entry_t();
 
 		m_iUsed = 0;
-	}
-
-	~CSphHash()
-	{
-		SafeDeleteArray ( m_pHash );
-	}
-
-	/// hash me the key, quick!
-	static inline DWORD GetHash ( KEY k )
-	{
-		return ( DWORD(k) * 0x607cbb77UL ) ^ ( k>>32 );
 	}
 
 	/// acquire value by key (ie. get existing hashed value, or add a new default value)
 	VALUE & Acquire ( KEY k )
 	{
-		assert ( k!=NO_ENTRY && k!=DEAD_ENTRY );
-		DWORD uHash = GetHash(k);
+		DWORD uHash = HASHFUNC::GetHash(k);
 		int iIndex = uHash & ( m_iSize-1 );
+
 		int iDead = -1;
 		while (true)
 		{
 			// found matching key? great, return the value
-			Entry * p = m_pHash + iIndex;
-			if ( p->m_Key==k )
+			Entry_t * p = m_pHash + iIndex;
+			if ( p->m_Key==k && p->m_uState==ENTRY_USED )
 				return p->m_Value;
 
 			// no matching keys? add it
-			if ( p->m_Key==NO_ENTRY )
+			if ( p->m_uState==ENTRY_EMPTY )
 			{
 				// not enough space? grow the hash and force rescan
 				if ( m_iUsed>=m_iMaxUsed )
@@ -4218,12 +4467,13 @@ public:
 
 				// store the newly added key
 				p->m_Key = k;
+				p->m_uState = ENTRY_USED;
 				m_iUsed++;
 				return p->m_Value;
 			}
 
 			// is this a dead entry? store its index for (possible) reuse
-			if ( p->m_Key==DEAD_ENTRY )
+			if ( p->m_uState==ENTRY_DELETED )
 				iDead = iIndex;
 
 			// no match so far, keep probing
@@ -4234,8 +4484,8 @@ public:
 	/// find an existing value by key
 	VALUE * Find ( KEY k ) const
 	{
-		Entry * e = FindEntry(k);
-		return e ? &e->m_Value : NULL;
+		Entry_t * e = FindEntry(k);
+		return e ? &e->m_Value : nullptr;
 	}
 
 	/// add or fail (if key already exists)
@@ -4246,6 +4496,7 @@ public:
 		if ( u==m_iUsed )
 			return false; // found an existing value by k, can not add v
 		x = v;
+
 		return true;
 	}
 
@@ -4256,16 +4507,18 @@ public:
 		VALUE & x = Acquire(k);
 		if ( u!=m_iUsed )
 			x = v; // did not find an existing value by k, so add v
+
 		return x;
 	}
 
 	/// delete by key
 	bool Delete ( KEY k )
 	{
-		Entry * e = FindEntry(k);
+		Entry_t * e = FindEntry(k);
 		if ( e )
-			e->m_Key = DEAD_ENTRY;
-		return e!=NULL;
+			e->m_uState = ENTRY_DELETED;
+
+		return e!=nullptr;
 	}
 
 	/// get number of inserted key-value pairs
@@ -4281,72 +4534,101 @@ public:
 	VALUE * Iterate ( int * pIndex, KEY * pKey ) const
 	{
 		if ( !pIndex || *pIndex<0 )
-			return NULL;
+			return nullptr;
+
 		for ( int i = *pIndex; i < m_iSize; i++ )
-		{
-			if ( m_pHash[i].m_Key!=NO_ENTRY && m_pHash[i].m_Key!=DEAD_ENTRY )
+			if ( m_pHash[i].m_uState==ENTRY_USED )
 			{
 				*pIndex = i+1;
 				if ( pKey )
 					*pKey = m_pHash[i].m_Key;
+
 				return &m_pHash[i].m_Value;
 			}
-		}
-		return NULL;
+
+		return nullptr;
 	}
 
 protected:
-	/// get max load, ie. max number of actually used entries at given size
+	enum
+	{
+		ENTRY_EMPTY,
+		ENTRY_USED,
+		ENTRY_DELETED
+	};
+
+#pragma pack(push,4)
+	struct Entry_t
+	{
+		KEY		m_Key;
+		VALUE	m_Value;
+		BYTE	m_uState;
+
+		Entry_t() : m_uState ( ENTRY_EMPTY ) {}
+	};
+#pragma pack(pop)
+
+	int			m_iSize {0};					// total hash size
+	int			m_iUsed {0};					// how many entries are actually used
+	int			m_iMaxUsed {0};					// resize threshold
+
+	Entry_t *	m_pHash {nullptr};	///< hash entries
+
+									/// get max load, ie. max number of actually used entries at given size
 	int GetMaxLoad ( int iSize ) const
 	{
-		return (int)( iSize*0.95f );
+		return (int)( iSize*LOAD_FACTOR );
 	}
 
 	/// we are overloaded, lets grow 2x and rehash
 	void Grow()
 	{
-		Entry * pNew = new Entry [ 2*Max(m_iSize,8) ];
+		int iNewSize = 2*Max(m_iSize,8);
+		Entry_t * pNew = new Entry_t[iNewSize];
 
 		for ( int i=0; i<m_iSize; i++ )
-			if ( m_pHash[i].m_Key!=NO_ENTRY && m_pHash[i].m_Key!=DEAD_ENTRY )
+			if ( m_pHash[i].m_uState==ENTRY_USED )
 			{
-				int j = GetHash ( m_pHash[i].m_Key ) & ( 2*m_iSize-1 );
-				while ( pNew[j].m_Key!=NO_ENTRY )
-					j = ( j+1 ) & ( 2*m_iSize-1 );
+				int j = HASHFUNC::GetHash ( m_pHash[i].m_Key ) & ( iNewSize-1 );
+				while ( pNew[j].m_uState==ENTRY_USED )
+					j = ( j+1 ) & ( iNewSize-1 );
+
 				pNew[j] = m_pHash[i];
 			}
 
-			SafeDeleteArray ( m_pHash );
-			m_pHash = pNew;
-			m_iSize *= 2;
-			m_iMaxUsed = GetMaxLoad ( m_iSize );
+		SafeDeleteArray ( m_pHash );
+		m_pHash = pNew;
+		m_iSize = iNewSize;
+		m_iMaxUsed = GetMaxLoad ( m_iSize );
 	}
 
 	/// find (and do not touch!) entry by key
-	inline Entry * FindEntry ( KEY k ) const
+	inline Entry_t * FindEntry ( KEY k ) const
 	{
-		assert ( k!=NO_ENTRY && k!=DEAD_ENTRY );
-		DWORD uHash = GetHash(k);
+		DWORD uHash = (DWORD)HASHFUNC::GetHash(k);
 		int iIndex = uHash & ( m_iSize-1 );
-		while (true)
+
+		while ( m_pHash[iIndex].m_uState!=ENTRY_EMPTY )
 		{
-			Entry * p = m_pHash + iIndex;
-			if ( p->m_Key==k )
-				return p;
-			if ( p->m_Key==NO_ENTRY )
-				return NULL;
+			Entry_t & tEntry = m_pHash[iIndex];
+			if ( tEntry.m_Key==k && tEntry.m_uState!=ENTRY_DELETED )
+				return &tEntry;
+
 			iIndex = ( iIndex+1 ) & ( m_iSize-1 );
 		}
+
+		return nullptr;
 	}
+
+private:
+	static constexpr float LOAD_FACTOR = 0.95f;
 };
 
-
-template<> inline CSphHash<int>::Entry::Entry() : m_Key ( NO_ENTRY ), m_Value ( 0 ) {}
-template<> inline CSphHash<DWORD>::Entry::Entry() : m_Key ( NO_ENTRY ), m_Value ( 0 ) {}
-template<> inline CSphHash<float>::Entry::Entry() : m_Key ( NO_ENTRY ), m_Value ( 0.0f ) {}
-template<> inline CSphHash<int64_t>::Entry::Entry() : m_Key ( NO_ENTRY ), m_Value ( 0 ) {}
-template<> inline CSphHash<uint64_t>::Entry::Entry() : m_Key ( NO_ENTRY ), m_Value ( 0 ) {}
-
+template<> inline OpenHash_T<int,int64_t>::Entry_t::Entry_t() : m_Key(0), m_Value(0), m_uState(ENTRY_EMPTY) {}
+template<> inline OpenHash_T<DWORD,int64_t>::Entry_t::Entry_t() : m_Key(0), m_Value(0), m_uState(ENTRY_EMPTY) {}
+template<> inline OpenHash_T<float,int64_t>::Entry_t::Entry_t() : m_Key(0), m_Value(0.0f), m_uState(ENTRY_EMPTY) {}
+template<> inline OpenHash_T<int64_t,int64_t>::Entry_t::Entry_t() : m_Key(0), m_Value(0), m_uState(ENTRY_EMPTY) {}
+template<> inline OpenHash_T<uint64_t,int64_t>::Entry_t::Entry_t() : m_Key(0), m_Value(0), m_uState(ENTRY_EMPTY) {}
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -4719,5 +5001,8 @@ inline size_t sphGetSmallReservedSize() {return 0;};    // how many pooled from 
 #endif // USE_SMALLALLOC
 
 void sphDeallocatePacked ( BYTE * pBlob );
+
+DWORD		sphUnzipInt ( const BYTE * & pBuf );
+SphOffset_t sphUnzipOffset ( const BYTE * & pBuf );
 
 #endif // _sphinxstd_

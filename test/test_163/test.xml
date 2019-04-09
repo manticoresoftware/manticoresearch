@@ -58,7 +58,6 @@ source src_delta2
 index main
 {
 	source			= src_main
-    docinfo			= extern
 	path			= <data_path/>/main
 }
 
@@ -66,7 +65,6 @@ index main
 index delta2
 {
 	source			= src_delta2
-    docinfo			= extern
 	path			= <data_path/>/delta2
 }
 
@@ -123,25 +121,21 @@ source src_bigint
 index u_bool
 {
 	source			= src_bool
-    docinfo			= extern
 	path			= <data_path/>/u_bool
 }
 index u_uint
 {
 	source			= src_uint
-    docinfo			= extern
 	path			= <data_path/>/u_uint
 }
 index u_float
 {
 	source			= src_float
-    docinfo			= extern
 	path			= <data_path/>/u_float
 }
 index u_bigint
 {
 	source			= src_bigint
-    docinfo			= extern
 	path			= <data_path/>/u_bigint
 }
 
@@ -205,13 +199,11 @@ source src_attr2
 index idx_attr1
 {
 	source			= src_attr1
-    docinfo			= extern
 	path			= <data_path/>/idx_attr1
 }
 index idx_attr2
 {
 	source			= src_attr2
-    docinfo			= extern
 	path			= <data_path/>/idx_attr2
 }
 index u_dist_aa
@@ -233,7 +225,6 @@ source src_mva
 index idx_mva
 {
 	source			= src_mva
-	docinfo			= extern
 	path			= <data_path/>/idx_mva
 }
 
@@ -256,14 +247,12 @@ source src_count2
 index count1
 {
 	source			= src_count1
-	docinfo			= extern
 	path			= <data_path/>/count1
 }
 
 index count2
 {
 	source			= src_count2
-	docinfo			= extern
 	path			= <data_path/>/count2
 }
 
@@ -287,14 +276,12 @@ index dist_count2
 index agent1_main
 {
 	source			= src_main
-    docinfo			= extern
 	path			= <data_path/>/agent1_main
 }
 
 index agent1_delta2
 {
 	source			= src_delta2
-    docinfo			= extern
 	path			= <data_path/>/agent1_delta2
 }
 </agent1>
@@ -303,7 +290,6 @@ index agent1_delta2
 index agent2_delta1
 {
 	source			= src_delta1
-    docinfo			= extern
 	path			= <data_path/>/agent2_delta1
 }
 </agent2>

@@ -39,7 +39,6 @@ index i1
 {
 	source			= src_1
 	path			= <data_path/>/i1
-	docinfo			= extern
 	
 }
 
@@ -47,7 +46,6 @@ index i2
 {
 	source			= src_2
 	path			= <data_path/>/i2
-	docinfo			= extern
 	
 }
 

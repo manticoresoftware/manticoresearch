@@ -338,22 +338,32 @@ TEST ( Wildcards, many )
 TEST ( Text, expression_parser )
 {
 	CSphColumnInfo tCol;
-	tCol.m_eAttrType = SPH_ATTR_INTEGER;
 
 	CSphSchema tSchema;
+	tCol.m_sName = "id";
+	tCol.m_eAttrType = SPH_ATTR_BIGINT;
+	tSchema.AddAttr ( tCol, false );
+
 	tCol.m_sName = "aaa";
+	tCol.m_eAttrType = SPH_ATTR_INTEGER;
 	tSchema.AddAttr ( tCol, false );
+
 	tCol.m_sName = "bbb";
+	tCol.m_eAttrType = SPH_ATTR_INTEGER;
 	tSchema.AddAttr ( tCol, false );
+
 	tCol.m_sName = "ccc";
+	tCol.m_eAttrType = SPH_ATTR_INTEGER;
 	tSchema.AddAttr ( tCol, false );
 
 	auto * pRow = new CSphRowitem[tSchema.GetRowSize ()];
-	for ( auto i = 0; i<tSchema.GetRowSize (); ++i )
-		pRow[i] = 1 + i;
+	for ( int i = 1; i<tSchema.GetAttrsCount(); i++ )
+		sphSetRowAttr ( pRow, tSchema.GetAttr(i).m_tLocator, i );
+
+	sphSetRowAttr ( pRow, tSchema.GetAttr(0).m_tLocator, 123 );
 
 	CSphMatch tMatch;
-	tMatch.m_uDocID = 123;
+	tMatch.m_tRowID = 123;
 	tMatch.m_iWeight = 456;
 	tMatch.m_pStatic = pRow;
 
@@ -376,7 +386,7 @@ TEST ( Text, expression_parser )
 			, { "min(3,15)"                   , 3.0f }
 			, { "max(3,15)"                   , 15.0f }
 			, { "if(3<15,bbb,ccc)"            , 2.0f }
-			, { "@id+@weight"                 , 579.0f }
+			, { "id+@weight"                 , 579.0f }
 			, { "abs(-3-ccc)"                 , 6.0f }
 			, { "(aaa+bbb)*(ccc-aaa)"         , 6.0f }
 			, { "(((aaa)))"                   , 1.0f }
@@ -405,53 +415,6 @@ TEST ( Text, expression_parser )
 		ASSERT_TRUE ( pExpr.Ptr () ) << sError.cstr ();
 		ASSERT_FLOAT_EQ ( dTest.m_fValue, pExpr->Eval ( tMatch ) );
 	}
-
-	SafeDeleteArray ( pRow );
-}
-
-TEST ( Text, string_expressions_parser )
-{
-	CSphSchema tSchema;
-
-	CSphColumnInfo tCol;
-	tCol.m_eAttrType = SPH_ATTR_STRING;
-	tCol.m_sName = "str";
-	tSchema.AddAttr ( tCol, false );
-
-	auto* pRow = new CSphRowitem[tSchema.GetRowSize ()];
-	pRow[0] = 1; // offset to stringpool
-
-	// first byte is skipped zero (we look at offset=1)
-	// then string 8 symbols len, '11111 22', NOT null-terminated
-	const char* sStringPool = "\0\01011 11 2222222";
-
-	CSphMatch tMatch;
-	tMatch.m_uDocID = 123;
-	tMatch.m_iWeight = 456;
-	tMatch.m_pStatic = ( CSphRowitem* )pRow;
-
-	const char * sExpr = "substring_index(str,' ',-1)";
-
-	CSphString sError;
-	CSphScopedPtr<ISphExpr> pExpr ( sphExprParse ( sExpr, tSchema, NULL, NULL, sError, NULL ));
-
-	ASSERT_TRUE ( pExpr.Ptr ()) << sError.cstr ();
-	pExpr->Command ( SPH_EXPR_SET_STRING_POOL, ( void* ) sStringPool );
-
-	auto fRes = pExpr->Eval ( tMatch );
-	auto iRes = pExpr->IntEval ( tMatch );
-	auto iRes64 = pExpr->Int64Eval ( tMatch );
-	const BYTE * sRes = nullptr;
-	auto iFoo = pExpr->StringEval ( tMatch, &sRes );
-	CSphString strRes;
-	strRes.SetBinary ( (const char*) sRes, iFoo );
-	ASSERT_EQ ( fRes, 22.0);
-	ASSERT_EQ ( iRes, 22 );
-	ASSERT_EQ ( iRes64, 22 );
-	ASSERT_STREQ ( strRes.cstr(), "22");
-
-	if ( pExpr->IsDataPtrAttr () )
-		SafeDeleteArray ( sRes );
 
 	SafeDeleteArray ( pRow );
 }
@@ -627,9 +590,10 @@ TEST ( Text, cvs_source )
 	// check parsed fields
 	for ( int iTest = 1;; )
 	{
-		BYTE ** pFields = pCSV->NextDocument ( sError );
-		ASSERT_TRUE ( pFields || pCSV->m_tDocInfo.m_uDocID==0 );
-		if ( pCSV->m_tDocInfo.m_uDocID==0 )
+		bool bEOF = false;
+		BYTE ** pFields = pCSV->NextDocument ( bEOF, sError );
+		ASSERT_TRUE ( pFields || bEOF );
+		if ( bEOF )
 			break;
 
 		for ( int i = 0; i<iColumns; i++ )

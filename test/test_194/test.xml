@@ -60,7 +60,6 @@ index rt1
 {
 	type 			= rt
 	path			= <data_path/>/rt1
-	docinfo = extern
 	rt_mem_limit = 8M
 	rt_attr_uint	= idd
 	rt_field		= title

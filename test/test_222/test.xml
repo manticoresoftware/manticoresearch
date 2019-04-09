@@ -99,7 +99,6 @@ index testple
 {
 	source			= test1
 	path			= <data_path/>/testple
-	docinfo			= extern
 	dict			= keywords
 	expand_keywords	= 1
 	min_infix_len	= 2

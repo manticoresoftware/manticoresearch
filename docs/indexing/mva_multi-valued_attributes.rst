@@ -13,7 +13,7 @@ MVA values can either be unsigned 32-bit integers (UNSIGNED INTEGER) or
 signed 64-bit integers (BIGINT).
 
 The set size is not limited, you can have an arbitrary number of values
-attached to each document as long as RAM permits (``.spm`` file that
+attached to each document as long as RAM permits (``.spb`` file that
 contains the MVA values will be precached in RAM by ``searchd``). The
 source data can be taken either from a separate query, or from a
 document field; see source type in

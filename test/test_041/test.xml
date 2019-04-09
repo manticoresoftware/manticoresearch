@@ -208,7 +208,6 @@ index plain_nostar1
 {
 	source			= src_nostar1
 	path			= <data_path/>/plain_nostar1
-	docinfo			= extern
 	charset_table = 0..9, a..z, A..Z->a..z
 	dict = keywords
 	min_prefix_len = 0
@@ -219,7 +218,6 @@ index rt_nostar1
 {
 	type = rt
 	path			= <data_path/>/rt_nostar1
-	docinfo = extern
 	rt_mem_limit = 32M
 	rt_attr_uint	= idd
 	rt_field		= title

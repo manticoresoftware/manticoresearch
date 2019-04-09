@@ -18,7 +18,6 @@ searchd
 index rt1
 {
 	type			= rt
-    docinfo			= extern
 	path			= <data_path/>/rt1
 
 	rt_attr_uint	= idd
@@ -48,12 +47,12 @@ index rt1
 <sphinxql>select * from rt1 group by mva1 within group order by id desc</sphinxql>
 <sphinxql>select * from rt1 where match ('the') group by mva1 within group order by id desc</sphinxql>
 <sphinxql>insert into rt1 (id, idd, str1, mva1, mva2, body) values ( 4, 4, '', ( 200, 210),  (100, 101, 102), 'the' )</sphinxql>
-<sphinxql>select *, count (*) as c from rt1 group by mva1 within group order by id desc</sphinxql>
+<sphinxql>select *, count (*) as c, groupby() from rt1 group by mva1 within group order by id desc</sphinxql>
 <sphinxql>select *, count (*) as c from rt1 where match ('the') group by mva1 within group order by id desc</sphinxql>
-<sphinxql>select *, count (distinct mva2) as c from rt1 group by mva1 within group order by id desc</sphinxql>
+<sphinxql>select *, count (distinct mva2) as c, groupby() from rt1 group by mva1 within group order by id desc</sphinxql>
 <sphinxql>select *, count (*) as c from rt1 where match ('the') group by mva1 within group order by id desc</sphinxql>
-<sphinxql>select *, count (distinct mva1) as c from rt1 group by mva1 within group order by id desc</sphinxql>
-<sphinxql>select *, count (distinct mva2) as c from rt1 where match ('the') group by mva1 within group order by id desc</sphinxql>
+<sphinxql>select *, count (distinct mva1) as c, groupby() from rt1 group by mva1 within group order by id desc</sphinxql>
+<sphinxql>select *, count (distinct mva2) as c, groupby() from rt1 where match ('the') group by mva1 within group order by id desc</sphinxql>
 <!-- checking mva aliases -->
 <sphinxql>select mva1 as somemva from rt1</sphinxql>
 

@@ -19,8 +19,8 @@
 /// cached match is a simple {docid,weight} pair
 struct QcacheMatch_t
 {
-	SphDocID_t		m_uDocid;
-	DWORD			m_uWeight;
+	RowID_t		m_tRowID;
+	DWORD		m_uWeight;
 };
 
 /// query cache entry
@@ -49,12 +49,12 @@ private:
 
 	// entry build-time only members
 	CSphVector<QcacheMatch_t>	m_dFrame;			///< current compression frame
-	CSphHash<int>				m_hWeights;			///< hashed weights
-	SphDocID_t					m_uLastDocid = 0;	///< last encoded docid
+	OpenHash_T<int, int,HashFunc_Int64_t> m_hWeights; ///< hashed weights
+	RowID_t						m_tLastRowID = INVALID_ROWID;	///< last encoded rowid
 
 public:
 
-	void						Append ( SphDocID_t uDocid, DWORD uWeight );
+	void						Append ( RowID_t uRowid, DWORD uWeight );
 	void						Finish();
 	int							GetSize() const { return sizeof(*this) + m_dFilters.AllocatedBytes () + m_dData.AllocatedBytes () + m_dWeights.AllocatedBytes (); }
 	void						RankerReset();

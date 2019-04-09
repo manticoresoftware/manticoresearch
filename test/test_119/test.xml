@@ -70,7 +70,6 @@ index final
 {
 	source			= src_final
 	path			= <data_path/>/final
-	docinfo = extern
 }
 
 </config>

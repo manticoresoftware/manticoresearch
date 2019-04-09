@@ -16,7 +16,6 @@ index rt_re
 {
 	type = rt
 	path			= <data_path/>/rt_re
-	docinfo = extern
 	rt_mem_limit = 128k
 	rt_field		= title
 	rt_attr_uint	= idd

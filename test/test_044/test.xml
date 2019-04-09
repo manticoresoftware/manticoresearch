@@ -59,18 +59,21 @@ index idx_delta1
 {
 	source				= src_delta1
 	path				= <data_path/>/test_delta1
+	killlist_target		= idx_main:kl
 }
 
 index idx_delta2
 {
 	source				= src_delta2
 	path				= <data_path/>/test_delta2
+	killlist_target		= idx_main:kl
 }
 
 index idx_delta3
 {
 	source				= src_delta3
 	path				= <data_path/>/test_delta3
+	killlist_target		= idx_main:kl
 }
 </config>
 
@@ -102,11 +105,11 @@ INSERT INTO test_table VALUES
 <query index="idx_main">test</query>
 <query index="idx_main idx_delta1">test</query>
 <query index="idx_main idx_delta2">test</query>
-<query sortmode="extended" sortby="@id DESC" index="idx_main idx_delta3">test</query>
+<query sortmode="extended" sortby="id DESC" index="idx_main idx_delta3">test</query>
 <query index="idx_main idx_delta1 idx_delta2">test</query>
-<query sortmode="extended" sortby="@id DESC" index="idx_main idx_delta2 idx_delta1">test</query>
+<query sortmode="extended" sortby="id DESC" index="idx_main idx_delta2 idx_delta1">test</query>
 <query index="idx_main idx_delta1 idx_delta2 idx_delta3">test</query>
-<query sortmode="extended" sortby="@id DESC" index="idx_main idx_delta3 idx_delta2 idx_delta1">test</query>
+<query sortmode="extended" sortby="id DESC" index="idx_main idx_delta3 idx_delta2 idx_delta1">test</query>
 </queries>
 
 </test>

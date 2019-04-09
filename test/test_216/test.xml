@@ -46,7 +46,6 @@ index idx_full
 {
 	source			= src_full
 	path			= <data_path/>/idx_full
-	docinfo			= extern
 }
 
 index idx_half1 : idx_full

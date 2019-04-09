@@ -21,8 +21,7 @@ struct ISphFilter
 	virtual void SetRange ( SphAttr_t, SphAttr_t ) {}
 	virtual void SetRangeFloat ( float, float ) {}
 	virtual void SetValues ( const SphAttr_t *, int ) {}
-	virtual void SetMVAStorage ( const DWORD *, bool ) {}
-	virtual void SetStringStorage ( const BYTE * ) {}
+	virtual void SetBlobStorage ( const BYTE * ) {}
 	virtual void SetRefString ( const CSphString * , int ) {}
 
 	virtual ~ISphFilter () {}
@@ -44,30 +43,22 @@ struct ISphFilter
 
 	virtual ISphFilter * Join ( ISphFilter * pFilter );
 
-	bool UsesAttrs() const { return m_bUsesAttrs; }
-
-	ISphFilter() : m_bUsesAttrs ( true ) {}
-
-protected:
-	bool m_bUsesAttrs;
+	ISphFilter() {}
 };
 
 // fwd
 class UservarIntSet_c;
+class HistogramContainer_c;
 
 struct CreateFilterContext_t
 {
 	const CSphVector<CSphFilterSettings> * m_pFilters = nullptr;
 	const CSphVector<FilterTreeItem_t> * m_pFilterTree = nullptr;
-	const KillListVector * m_pKillList = nullptr;
 
 	const ISphSchema * m_pSchema = nullptr;
-	const DWORD * m_pMvaPool = nullptr;
-	const BYTE * m_pStrings = nullptr;
-
+	const BYTE * m_pBlobPool { nullptr };
 	ESphCollation m_eCollation { SPH_COLLATION_DEFAULT };
 	bool m_bScan = false;
-	bool m_bArenaProhibit = false;
 
 	ISphFilter * m_pFilter = nullptr;
 	ISphFilter * m_pWeightFilter = nullptr;
@@ -75,14 +66,16 @@ struct CreateFilterContext_t
 
 	CreateFilterContext_t ( const ISphSchema * pSchema=nullptr )
 		: m_pSchema ( pSchema ) {};
-	~CreateFilterContext_t ();
-};
 
+	const HistogramContainer_c * m_pHistograms = nullptr;
+
+	~CreateFilterContext_t();
+};
 
 ISphFilter * sphCreateFilter ( const CSphFilterSettings &tSettings, const CreateFilterContext_t &tCtx, CSphString &sError, CSphString &sWarning);
 ISphFilter * sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const CSphString & sAttrName, const ISphSchema & tSchema, CSphString & sError );
-ISphFilter * sphCreateFilter ( const KillListVector & dKillList );
 ISphFilter * sphJoinFilters ( ISphFilter *, ISphFilter * );
+
 
 
 bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphString & sWarning );

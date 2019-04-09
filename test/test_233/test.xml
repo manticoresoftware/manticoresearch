@@ -49,7 +49,7 @@ CREATE TABLE test_table
 global $this_test, $index_data_path;
 $results = array();
 $ql->Reconnect();
-$extensions = array ( 'spa', 'spd', 'spe', 'sph', 'spi', 'spk', 'spm', 'spp', 'sps' );
+$extensions = array ( 'spa', 'spb', 'spd', 'spe', 'spi', 'spm', 'spp', 'spt', 'sph' );
 
 $results[] = $ql->Query ( "SELECT * FROM test" );
 
@@ -64,7 +64,6 @@ foreach ( $extensions as $e )
 	copy ( "$this_test/data/test.$e", "$index_data_path/test.new.$e" );
 $results[] = $ql->Query ( "RELOAD INDEX test" );
 $results[] = $ql->Query ( "SELECT * FROM test" );
-
 ]]></custom_test>
 
 </test>

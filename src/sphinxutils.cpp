@@ -153,7 +153,9 @@ void sphSplit ( StrVec_t & dOut, const char * sIn, const char * sBounds )
 
 		// add the token, skip the char
 		dOut.Add().SetBinary ( sNext, int (p-sNext) );
-		if ( *p )
+
+		// skip all boundaries
+		while ( *p && strchr ( sBounds, *p ) )
 			++p;
 	}
 }
@@ -568,7 +570,7 @@ static KeyDesc_t g_dKeysIndex[] =
 {
 	{ "source",					KEY_LIST, NULL },
 	{ "path",					0, NULL },
-	{ "docinfo",				0, NULL },
+	{ "docinfo",				KEY_REMOVED, NULL },
 	{ "mlock",					0, NULL },
 	{ "morphology",				0, NULL },
 	{ "stopwords",				0, NULL },
@@ -606,7 +608,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "preopen",				0, NULL },
 	{ "inplace_enable",			0, NULL },
 	{ "inplace_hit_gap",		0, NULL },
-	{ "inplace_docinfo_gap",	0, NULL },
+	{ "inplace_docinfo_gap",	KEY_REMOVED, NULL },
 	{ "inplace_reloc_factor",	0, NULL },
 	{ "inplace_write_factor",	0, NULL },
 	{ "index_exact_words",		0, NULL },
@@ -643,7 +645,8 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "ondisk_attrs",			0, NULL },
 	{ "index_token_filter",		0, NULL },
 	{ "morphology_skip_fields",	0, NULL },
-	{ NULL,						0, NULL }
+	{ "killlist_target",		0, nullptr },
+	{ nullptr,					0, nullptr }
 };
 
 /// allowed keys for indexer section
@@ -682,7 +685,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "ondisk_dict_default",	KEY_REMOVED, NULL },
 	{ "attr_flush_period",		0, NULL },
 	{ "max_packet_size",		0, NULL },
-	{ "mva_updates_pool",		0, NULL },
+	{ "mva_updates_pool",		KEY_REMOVED, NULL },
+	{ "attr_update_reserve",	0, NULL },
 	{ "max_filters",			0, NULL },
 	{ "max_filter_values",		0, NULL },
 	{ "max_open_files",			0, NULL },
@@ -1490,7 +1494,49 @@ const char * sphBigramName ( ESphBigram eType )
 	}
 }
 
-bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings, CSphString & sError )
+
+bool ParseKillListTargets ( const CSphString & sTargets, CSphVector<KillListTarget_t> & dTargets, const char * szIndexName, CSphString & sError )
+{
+	StrVec_t dIndexes;
+	sphSplit ( dIndexes, sTargets.cstr(), " \t," );
+
+	dTargets.Resize(dIndexes.GetLength());
+	ARRAY_FOREACH ( i, dTargets )
+	{
+		KillListTarget_t & tTarget = dTargets[i];
+		const char * szTargetName = dIndexes[i].cstr();
+		const char * sSplit = strstr ( szTargetName, ":" );
+		if ( sSplit )
+		{
+			CSphString sOptions = sSplit+1;
+
+			if ( sOptions=="kl" )
+				tTarget.m_uFlags = KillListTarget_t::USE_KLIST;
+			else if ( sOptions=="id" )
+				tTarget.m_uFlags = KillListTarget_t::USE_DOCIDS;
+			else
+			{
+				sError.SetSprintf ( "unknown kill list target option near '%s'\n", dIndexes[i].cstr() );
+				return false;
+			}
+
+			tTarget.m_sIndex = dIndexes[i].SubString ( 0, sSplit-szTargetName );
+		}
+		else
+			tTarget.m_sIndex = szTargetName;
+
+		if ( tTarget.m_sIndex==szIndexName )
+		{
+			sError.SetSprintf ( "cannot apply kill list to myself: killlist_target=%s\n", sTargets.cstr() );
+			return false;
+		}
+	}
+
+	return true;
+}
+
+
+bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings, const char * szIndexName, CSphString & sError )
 {
 	// misc settings
 	tSettings.m_iMinPrefixLen = Max ( hIndex.GetInt ( "min_prefix_len" ), 0 );
@@ -1503,6 +1549,10 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 	tSettings.m_iEmbeddedLimit = hIndex.GetSize ( "embedded_limit", 16384 );
 	tSettings.m_bIndexFieldLens = hIndex.GetInt ( "index_field_lengths" )!=0;
 	tSettings.m_sIndexTokenFilter = hIndex.GetStr ( "index_token_filter" );
+	tSettings.m_tBlobUpdateSpace = hIndex.GetSize64 ( "attr_update_reserve", 131072 );
+
+	if ( !ParseKillListTargets ( hIndex.GetStr ( "killlist_target" ), tSettings.m_dKlistTargets, szIndexName, sError ) )
+		return false;
 
 	// prefix/infix fields
 	CSphString sFields;
@@ -1579,26 +1629,6 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 		tSettings.m_bHtmlStrip = hIndex.GetInt ( "html_strip" )!=0;
 		tSettings.m_sHtmlIndexAttrs = hIndex.GetStr ( "html_index_attrs" );
 		tSettings.m_sHtmlRemoveElements = hIndex.GetStr ( "html_remove_elements" );
-	}
-
-	// docinfo
-	tSettings.m_eDocinfo = SPH_DOCINFO_EXTERN;
-	if ( hIndex("docinfo") )
-	{
-		if ( hIndex["docinfo"]=="none" )		tSettings.m_eDocinfo = SPH_DOCINFO_NONE;
-		else if ( hIndex["docinfo"]=="inline" )	tSettings.m_eDocinfo = SPH_DOCINFO_INLINE;
-		else if ( hIndex["docinfo"]=="extern" )	tSettings.m_eDocinfo = SPH_DOCINFO_EXTERN;
-		else
-			fprintf ( stdout, "WARNING: unknown docinfo=%s, defaulting to extern\n", hIndex["docinfo"].cstr() );
-
-		if ( tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
-			fprintf ( stdout, "WARNING: docinfo=inline is deprecated, use ondisk_attrs=1 instead\n" );
-
-		if ( tSettings.m_eDocinfo==SPH_DOCINFO_INLINE && tSettings.m_bIndexFieldLens )
-		{
-			sError.SetSprintf ( "index_field_lengths must be disabled for docinfo=inline" );
-			return false;
-		}
 	}
 
 	// hit format
@@ -1729,7 +1759,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		} else*/
 		{
 			sphConfDictionary ( hIndex, tSettings );
-			pDict = sphCreateDictionaryCRC ( tSettings, nullptr, pIndex->GetTokenizer (), pIndex->GetName(), bStripPath, sError );
+			pDict = sphCreateDictionaryCRC ( tSettings, nullptr, pIndex->GetTokenizer (), pIndex->GetName(), bStripPath, pIndex->GetSettings().m_iSkiplistBlockSize, sError );
 		}
 		if ( !pDict )
 		{

@@ -30,7 +30,6 @@ index idx
 {
 	source			= src
 	path			= <data_path/>/idx
-    docinfo			= extern
 }
 
 index rt1
@@ -39,7 +38,6 @@ index rt1
 	stopwords = <this_test/>/stopwords.txt
 	path			=<data_path/>/rt1
 	stopword_step = 0
-	docinfo = extern
 	morphology = stem_en
 	min_word_len = 1
 	min_prefix_len = 0
@@ -54,7 +52,6 @@ index rt2
 	stopwords = <this_test/>/stopwords.txt
 	path			=<data_path/>/rt2
 	stopword_step = 0
-	docinfo = extern
 	morphology = stem_en
 	min_word_len = 1
 	min_prefix_len = 0
@@ -77,7 +74,6 @@ index i1
 	stopwords = <this_test/>/stopwords.txt
 	path			=<data_path/>/i1
 	stopword_step = 0
-	docinfo = extern
 	morphology = stem_en
 	min_word_len = 1
 	min_prefix_len = 0
@@ -90,7 +86,6 @@ index i2
 	stopwords = <this_test/>/stopwords.txt
 	path			=<data_path/>/i2
 	stopword_step = 0
-	docinfo = extern
 	morphology = stem_en
 	min_word_len = 1
 	min_prefix_len = 0

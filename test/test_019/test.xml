@@ -45,7 +45,6 @@ index fld
 {
 	source			= src_fld
 	path			= <data_path/>/fld
-	docinfo	= extern
 }
 
 </config>

@@ -54,7 +54,6 @@ index block1
 {
 	source			= src1
 	path			= <data_path/>/block1
-	docinfo			= extern
 	min_word_len	= 1
 }
 </agent0>
@@ -64,7 +63,6 @@ index block2
 {
 	source			= src2
 	path			= <data_path/>/block2
-	docinfo			= extern
 	min_word_len	= 1
 }
 
@@ -72,7 +70,6 @@ index dist_agent_2
 {
 	source			= src1
 	path			= <data_path/>/dist_agent_2
-	docinfo			= extern
 }
 
 </agent1>
@@ -99,22 +96,19 @@ index i1
 {
 	source			= src_i1
 	path			= <data_path/>/i1
-    docinfo			= extern
 }
 
 index i2
 {
 	source			= src_i2
 	path			= <data_path/>/i2
-    docinfo			= extern
 }
 
 index rt
 {
-	type = rt
+	type 			= rt
 	path			= <data_path/>/rt
-	docinfo = extern
-	rt_mem_limit = 128k
+	rt_mem_limit 	= 128k
 	rt_field		= title
 	rt_attr_uint	= gid
 }
@@ -145,7 +139,7 @@ $results = array ();
 
 $results[] = $client->XQuery ( "", "dist" );
 $results[] = $client->XUpdateAttributes ( "dist", array("group_id"), array(11=>array(123)) );
-$results[] = $client->XUpdateAttributes ( "dist", array("mva"), array ( 4=>array(array(1001, 1002)), 11=>array(array(1011, 1012)) ), true );
+$results[] = $client->XUpdateAttributes ( "dist", array("mva"), array ( 4=>array(array(1001, 1002)), 11=>array(array(1011, 1012)) ), SPH_UPDATE_MVA );
 $results[] = $client->XQuery ( "", "dist" );
 
 // here is going regression master fails to send 4k attributes to agent

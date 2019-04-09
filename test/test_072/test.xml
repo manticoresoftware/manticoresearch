@@ -43,7 +43,6 @@ index str
 {
 	source			= src_str
 	path			= <Data_Path/>/str
-	docinfo			= extern
 }
 
 </Config>

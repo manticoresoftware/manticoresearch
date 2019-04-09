@@ -138,8 +138,6 @@ known usage quirks. Those quirks are listed in this section.
    lead to poor performance on bigger indexes, you should raise it to
    256..1024M if you're planning to index gigabytes.
 
--  The only attribute storage mode is ‘extern’ which requires at least
-   one attribute to be present.
 -  High DELETE/REPLACE rate can lead to kill-list fragmentation and
    impact searching performance.
 

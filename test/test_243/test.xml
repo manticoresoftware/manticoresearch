@@ -44,7 +44,6 @@ index idx
 {
 	source			= src
 	path			= <data_path/>/idx
-	docinfo			= extern
 	min_word_len	= 1
 }
 

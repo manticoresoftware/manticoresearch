@@ -29,7 +29,6 @@ index plain1
 {
 	source = sql1
 	path = <data_path/>/plain1
-	docinfo = extern
 }
 
 source sql2 : sql1
@@ -42,7 +41,6 @@ index plain2
 {
 	source = sql2
 	path = <data_path/>/plain2
-	docinfo = extern
 }
 
 source sql3 : sql1
@@ -55,7 +53,6 @@ index plain3
 {
 	source = sql3
 	path = <data_path/>/plain_old_location_3
-	docinfo = extern
 }
 
 source sql4 : sql1
@@ -68,7 +65,6 @@ index plain4
 {
 	source = sql4
 	path = <data_path/>/plain_old_location_4
-	docinfo = extern
 }
 </config>
 
@@ -127,7 +123,7 @@ file_put_contents(testdir('config.conf'), $new_conf);
 
 global $this_test, $index_data_path;
 
-$extensions = array ( 'spa', 'spd', 'spe', 'sph', 'spi', 'spk', 'spm', 'spp', 'sps' );
+$extensions = array ( 'spa', 'spd', 'spe', 'spi', 'spm', 'spp', 'spt', 'sph' );
 foreach ( $extensions as $e )
 	copy ( "$this_test/data/plain2.$e", "$index_data_path/plain_new_location_3.new.$e" );
 foreach ( $extensions as $e )

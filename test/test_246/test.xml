@@ -34,7 +34,6 @@ index plain1
 {
 	source = sql1
 	path = <data_path/>/plain1
-	docinfo = extern
 }
 
 source sql2
@@ -51,7 +50,6 @@ index plain2
 {
 	source = sql2
 	path = <data_path/>/plain2
-	docinfo = extern
 }
 </config>
 

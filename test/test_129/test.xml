@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>MVA updates</name>
+<name>MVA, string updates</name>
 
 <requires>
 <non-rt/>
-<variant_match/>
 </requires>
 
 <config>
@@ -23,20 +22,21 @@ source src
 {
 	type			= mysql
 	<sql_settings/>
-	sql_query = SELECT id, text, mva, tag FROM test_table
+	sql_query = SELECT id, text, '' as json_col, mva, tag FROM test_table
 
 <Dynamic>	
 	<Variant>sql_attr_multi = uint mva from field</Variant>
 	<Variant>sql_attr_multi = bigint mva from field</Variant>
 </Dynamic>	
 	sql_attr_uint	= tag
+	sql_field_string = text
+	sql_attr_json = json_col
 }
 
 index idx
 {
 	source			= src
 	path			= <data_path/>/main
-    docinfo			= extern
 }
 
 </config>
@@ -49,21 +49,31 @@ if ( !$results[0] )
 	return;
 }
 
-for ( $i=0; $i<2; $i++ )
-{
-	$updata = null;
-	if ( $i==0 )
-		$updata = array(1=>array(1001), 3=>array(3001), 2=>array(2001));
-	else
-		$updata = array(1=>array(array(101)), 3=>array(array(301, 302, 303)),2=>array(array(201, 202)));
-		
-	$up = $client->UpdateAttributes ( "idx", array("mva"), $updata, $i==1 );
+$updata = array(1=>array(1001), 3=>array(3001), 2=>array(2001));
+$up = $client->UpdateAttributes ( "idx", array("mva"), $updata, SPH_UPDATE_INT );
+$results[] = sprintf("up.count=%d", $up);
+$results[] = $client->Query ( "" );
+
+$updata = array(1=>array(array(101)), 3=>array(array(301, 302, 303)),2=>array(array(201, 202)));
+$up = $client->UpdateAttributes ( "idx", array("mva"), $updata, SPH_UPDATE_MVA );
+$results[] = sprintf("up.count=%d", $up);
+$results[] = $client->Query ( "" );
+
+$updata = array( 1=>array("updated str1"), 3=>array("updated str3"),2=>array("updated str2") );
+$up = $client->UpdateAttributes ( "idx", array("text"), $updata, SPH_UPDATE_STRING );
+$results[] = sprintf("up.count=%d", $up);
+$results[] = $client->Query ( "" );
+
+$updata = array( 1=>array("updated twice str1"), 3=>array("updated twice str3"),2=>array("updated twice str2") );
+$up = $client->UpdateAttributes ( "idx", array("text"), $updata, SPH_UPDATE_STRING );
+$results[] = sprintf("up.count=%d", $up);
+$results[] = $client->Query ( "" );
+
+$updata = array( 1=>array("{\"a\":[1,2,3]}"), 3=>array("{\"str1\":\"val1\"}"),2=>array("{}") );
+$up = $client->UpdateAttributes ( "idx", array("json_col"), $updata, SPH_UPDATE_JSON );
+$results[] = sprintf("up.count=%d", $up);
+$results[] = $client->Query ( "" );
 	
-	$results[] = sprintf("up.count=%d", $up);
-
-	$results[] = $client->Query ( "" );
-}
-
 // final fixup; we don't want to compare times
 for ( $i=0; $i<count($results); $i++ )
 	CompareResultSetFixup ( $results[$i], 0, true );

@@ -15,7 +15,7 @@ set ( LIBSPHINX_SRCS sphinx.cpp sphinxexcerpt.cpp
 		sphinxsearch.cpp sphinxrt.cpp sphinxjson.cpp
 		sphinxaot.cpp sphinxplugin.cpp sphinxudf.c
 		sphinxqcache.cpp sphinxrlp.cpp sphinxjsonquery.cpp
-		json/cJSON.c sphinxpq.cpp )
+		attribute.cpp secondaryindex.cpp killlist.cpp searchnode.cpp json/cJSON.c sphinxpq.cpp )
 set ( INDEXER_SRCS indexer.cpp )
 set ( INDEXTOOL_SRCS indextool.cpp )
 set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp searchdreplication.cpp )
@@ -23,10 +23,12 @@ set ( SEARCHD_SRCS searchd.cpp ${SEARCHD_SRCS_TESTABLE} )
 set ( SPELLDUMP_SRCS spelldump.cpp )
 set ( TESTS_SRCS tests.cpp )
 set ( WORDBREAKER_SRCS sphinxstd.cpp wordbreaker.cpp)
+set ( INDEX_CONVERTER_SRCS sphinxstd.cpp index_converter.cpp)
 set ( LIBSPHINX_BISON sphinxexpr.y sphinxselect.y sphinxquery.y sphinxjson.y )
 set ( LIBSPHINX_FLEX sphinxjson.l )
 set ( SEARCHD_BISON sphinxql.y )
 set ( SEARCHD_FLEX sphinxql.l )
+set ( INDEX_CONV_SRCS index_converter.cpp )
 
 # The headers is not neccessary for executable build, but nesessary for MSVC and other projects
 # all the (non-generated) headers
@@ -169,12 +171,14 @@ add_executable ( indextool ${INDEXTOOL_SRCS} )
 add_executable ( searchd ${SEARCHD_SRCS} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
 add_executable ( spelldump ${SPELLDUMP_SRCS} )
 add_executable ( wordbreaker ${WORDBREAKER_SRCS} )
+add_executable ( index_converter ${INDEX_CONV_SRCS} )
 add_dependencies ( wordbreaker vergen )
 target_link_libraries ( indexer libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( indextool libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( searchd libsphinx ${EXTRA_LIBRARIES} ${EXTRA_SEARCHD_LIBRARIES} ${WSREP})
 target_link_libraries ( spelldump libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( wordbreaker libsphinx ${EXTRA_LIBRARIES} )
+target_link_libraries ( index_converter libsphinx ${EXTRA_LIBRARIES} )
 
 SET_SEARCHD_RPATH ()
 
@@ -187,6 +191,7 @@ if ( SPLIT_SYMBOLS )
 	split_dbg ( searchd )
 	split_dbg ( spelldump )
 	split_dbg ( wordbreaker )
+	split_dbg ( index_converter )
 endif()
 
 INSTALL ( TARGETS indexer indextool searchd spelldump wordbreaker RUNTIME DESTINATION ${BINPREFIX}bin COMPONENT applications )

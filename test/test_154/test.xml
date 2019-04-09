@@ -27,7 +27,6 @@ source src
 index plain
 {
 	source			= src
-    docinfo			= extern
 	path			= <data_path/>/plain
 	stopwords		= <this_test/>/stopwords.txt
 	blend_chars = .
@@ -37,7 +36,6 @@ index plain
 index rt
 {
 	type			= rt
-    docinfo			= extern
 	path			= <data_path/>/rt
 	stopwords		= <this_test/>/stopwords.txt
 

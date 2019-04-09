@@ -44,7 +44,7 @@ define ( "SEARCHD_COMMAND_FLUSHATTRS",	7 );
 /// current client-side command implementation versions
 define ( "VER_COMMAND_SEARCH",		0x120 );
 define ( "VER_COMMAND_EXCERPT",		0x104 );
-define ( "VER_COMMAND_UPDATE",		0x103 );
+define ( "VER_COMMAND_UPDATE",		0x104 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );
 define ( "VER_COMMAND_STATUS",		0x101 );
 define ( "VER_COMMAND_QUERY",		0x100 );
@@ -111,6 +111,13 @@ define ( "SPH_GROUPBY_MONTH",		2 );
 define ( "SPH_GROUPBY_YEAR",		3 );
 define ( "SPH_GROUPBY_ATTR",		4 );
 define ( "SPH_GROUPBY_ATTRPAIR",	5 );
+
+
+/// known update types
+define ( "SPH_UPDATE_INT",			0 );
+define ( "SPH_UPDATE_MVA",			1 );
+define ( "SPH_UPDATE_STRING",		2 );
+define ( "SPH_UPDATE_JSON",			3 );
 
 // important properties of PHP's integers:
 //  - always signed (one bit short of PHP_INT_SIZE)
@@ -1689,11 +1696,11 @@ class SphinxClient
 
 	/// batch update given attributes in given rows in given indexes
 	/// returns amount of updated documents (0 or more) on success, or -1 on failure
-	function UpdateAttributes ( $index, $attrs, $values, $mva=false, $ignorenonexistent=false )
+	function UpdateAttributes ( $index, $attrs, $values, $type=SPH_UPDATE_INT, $ignorenonexistent=false )
 	{
 		// verify everything
 		assert ( is_string($index) );
-		assert ( is_bool($mva) );
+		assert ( $type==SPH_UPDATE_INT || $type==SPH_UPDATE_MVA || $type==SPH_UPDATE_STRING || $type==SPH_UPDATE_JSON );
 		assert ( is_bool($ignorenonexistent) );
 
 		assert ( is_array($attrs) );
@@ -1708,12 +1715,14 @@ class SphinxClient
 			assert ( count($entry)==count($attrs) );
 			foreach ( $entry as $v )
 			{
-				if ( $mva )
+				if ( $type==SPH_UPDATE_MVA )
 				{
 					assert ( is_array($v) );
 					foreach ( $v as $vv )
 						assert ( is_int($vv) );
-				} else
+				} elseif ( $type==SPH_UPDATE_STRING || $type==SPH_UPDATE_JSON )
+					assert ( is_string($v) );
+				else
 					assert ( is_int($v) );
 			}
 		}
@@ -1727,7 +1736,7 @@ class SphinxClient
 		foreach ( $attrs as $attr )
 		{
 			$req .= pack ( "N", strlen($attr) ) . $attr;
-			$req .= pack ( "N", $mva ? 1 : 0 );
+			$req .= pack ( "N", $type );
 		}
 
 		$req .= pack ( "N", count($values) );
@@ -1736,10 +1745,17 @@ class SphinxClient
 			$req .= sphPackU64 ( $id );
 			foreach ( $entry as $v )
 			{
-				$req .= pack ( "N", $mva ? count($v) : $v );
-				if ( $mva )
+				if ( $type==SPH_UPDATE_MVA )
+				{
+					$req .= pack ( "N", count($v) );
 					foreach ( $v as $vv )
 						$req .= pack ( "N", $vv );
+				} elseif ( $type==SPH_UPDATE_STRING || $type==SPH_UPDATE_JSON )
+				{
+					$req .= pack ( "N", strlen($v) );
+					$req .= $v;
+				} else
+					$req .= pack ( "N", $v );
 			}
 		}
 

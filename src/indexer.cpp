@@ -15,6 +15,7 @@
 #include "sphinxutils.h"
 #include "sphinxstem.h"
 #include "sphinxplugin.h"
+#include "attribute.h"
 #include "sphinxrlp.h"
 
 #include <sys/stat.h>
@@ -28,7 +29,6 @@
 	#define popen		_popen
 	#define RMODE "rb"
 
-	#include <io.h>
 	#include <tlhelp32.h>
 #else
 	#include <unistd.h>
@@ -921,7 +921,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	// (need bigram settings to spawn a proper indexing tokenizer)
 	CSphString sError;
 	CSphIndexSettings tSettings;
-	if ( !sphConfIndex ( hIndex, tSettings, sError ) )
+	if ( !sphConfIndex ( hIndex, tSettings, sIndexName, sError ) )
 		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
 	///////////////////
@@ -965,8 +965,8 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 
 		// multiforms filter
 		pDict = tDictSettings.m_bWordDict
-			? sphCreateDictionaryKeywords ( tDictSettings, NULL, pTokenizer, sIndexName, false, sError )
-			: sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, sIndexName, false, sError );
+			? sphCreateDictionaryKeywords ( tDictSettings, NULL, pTokenizer, sIndexName, false, tSettings.m_iSkiplistBlockSize, sError )
+			: sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, sIndexName, false, tSettings.m_iSkiplistBlockSize, sError );
 		if ( !pDict )
 			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
@@ -1009,7 +1009,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	// boundary
 	bool bInplaceEnable = hIndex.GetInt ( "inplace_enable", 0 )!=0;
 	int iHitGap = hIndex.GetSize ( "inplace_hit_gap", 0 );
-	int iDocinfoGap = hIndex.GetSize ( "inplace_docinfo_gap", 0 );
 	float fRelocFactor = hIndex.GetFloat ( "inplace_reloc_factor", 0.1f );
 	float fWriteFactor = hIndex.GetFloat ( "inplace_write_factor", 0.1f );
 
@@ -1059,7 +1058,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 
 	// parse all sources
 	CSphVector<CSphSource*> dSources;
-	bool bGotAttrs = false;
 	bool bSpawnFailed = false;
 
 	for ( CSphVariant * pSourceName = hIndex("source"); pSourceName; pSourceName = pSourceName->m_pNext )
@@ -1077,9 +1075,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 			bSpawnFailed = true;
 			continue;
 		}
-
-		if ( pSource->HasAttrsConfigured() )
-			bGotAttrs = true;
 
 		if ( bHtmlStrip )
 		{
@@ -1137,11 +1132,11 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 					fprintf ( stdout, "ERROR: index '%s': %s\n", sIndexName, sError.cstr() );
 				continue;
 			}
-			while ( dSources[i]->IterateDocument ( sError ) && dSources[i]->m_tDocInfo.m_uDocID )
+
+			bool bEOF = false;
+			while ( dSources[i]->IterateDocument ( bEOF, sError ) && !bEOF )
 			{
-				while ( dSources[i]->IterateHits ( sError ) )
-				{
-				}
+				while ( dSources[i]->IterateHits ( sError ) );
 				if ( !sError.IsEmpty() )
 				{
 					fprintf ( stdout, "ERROR: index '%s': %s\n", sIndexName, sError.cstr() );
@@ -1151,6 +1146,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 			if ( !sError.IsEmpty() )
 				fprintf ( stdout, "ERROR: index '%s': %s\n", sIndexName, sError.cstr() );
 		}
+
 		tDict->Save ( g_sBuildStops, g_iTopStops, g_bBuildFreqs );
 		bOK = true;
 
@@ -1177,12 +1173,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 
 		tSettings.m_bVerbose = bVerbose;
 
-		if ( bGotAttrs && tSettings.m_eDocinfo==SPH_DOCINFO_NONE )
-		{
-			fprintf ( stdout, "FATAL: index '%s': got attributes, but docinfo is 'none' (fix your config file).\n", sIndexName );
-			exit ( 1 );
-		}
-
 		if ( pDict->GetSettings().m_bWordDict && ( tSettings.m_dPrefixFields.GetLength() || tSettings.m_dInfixFields.GetLength() ) )
 		{
 			fprintf ( stdout, "WARNING: index '%s': prefix_fields and infix_fields has no effect with dict=keywords, ignoring\n", sIndexName );
@@ -1190,20 +1180,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 
 		pIndex->SetProgressCallback ( ShowProgress );
 		if ( bInplaceEnable )
-		{
-			pIndex->SetInplaceSettings ( iHitGap, iDocinfoGap, fRelocFactor, fWriteFactor );
-			if ( g_bKeepAttrs )
-			{
-				fprintf ( stdout, "WARNING: index '%s': inplace_enable=1: --keep-attrs has no effect, ignoring\n", sIndexName );
-				g_bKeepAttrs = false;
-			}
-		}
-
-		if ( g_bKeepAttrs && tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
-		{
-			fprintf ( stdout, "WARNING: index '%s': docinfo=inline: --keep-attrs has no effect, ignoring\n", sIndexName );
-			g_bKeepAttrs = false;
-		}
+			pIndex->SetInplaceSettings ( iHitGap, fRelocFactor, fWriteFactor );
 
 		pIndex->SetFieldFilter ( pFieldFilter );
 		pIndex->SetTokenizer ( pTokenizer );
@@ -1270,7 +1247,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 //////////////////////////////////////////////////////////////////////////
 
 bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
-	const CSphConfigSection & hSrc, const char * sSrc, CSphVector<CSphFilterSettings> & tPurge, bool bRotate, bool bMergeKillLists )
+	const CSphConfigSection & hSrc, const char * sSrc, CSphVector<CSphFilterSettings> & tPurge, bool bRotate )
 {
 	// progress bar
 	if ( !g_bQuiet )
@@ -1337,10 +1314,37 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 		}
 	}
 
+	// if src index has dst index as its killlist_target, we should use this killlist
+	CSphFixedVector<DocID_t> dKillList(0);
+	CSphVector<KillListTarget_t> dTargets;
+	if ( !pSrc->LoadKillList ( &dKillList, dTargets, sError ) )
+	{
+		fprintf ( stdout, "ERROR: %s\n", sError.cstr() );
+		return false;
+	}
+
+	if ( dKillList.GetLength() )
+	{
+		for ( const auto & tTarget : dTargets )
+			if ( tTarget.m_sIndex==sDst )
+			{
+				if ( tTarget.m_uFlags & KillListTarget_t::USE_KLIST )
+				{
+					CSphFilterSettings & dLast = tPurge.Add();
+					dLast.m_eType = SPH_FILTER_VALUES;
+					dLast.m_bExclude = true;
+					dLast.m_sAttrName = sphGetDocidName();
+					dLast.SetExternalValues ( dKillList.Begin(), dKillList.GetLength() );
+				}
+
+				break;
+			}
+	}
+
 	pDst->SetProgressCallback ( ShowProgress );
 
 	int64_t tmMergeTime = sphMicroTimer();
-	if ( !pDst->Merge ( pSrc, tPurge, bMergeKillLists ) )
+	if ( !pDst->Merge ( pSrc, tPurge, true ) )
 		sphDie ( "failed to merge index '%s' into index '%s': %s", sSrc, sDst, pDst->GetLastError().cstr() );
 	if ( !pDst->GetLastWarning().IsEmpty() )
 		fprintf ( stdout, "WARNING: index '%s': %s\n", sDst, pDst->GetLastWarning().cstr() );
@@ -1615,12 +1619,9 @@ static void ShowHelp ()
 		"--merge-dst-range <attr> <min> <max>\n"
 		"\t\t\tfilter 'dst-index' on merge, keep only those documents\n"
 		"\t\t\twhere 'attr' is between 'min' and 'max' (inclusive)\n"
-		"--merge-klists\n"
-		"--merge-killlists\tmerge src and dst k-lists (default is to discard them\n"
-		"\t\t\tafter merge; note that src k-list applies anyway)\n"
 		"--dump-rows <FILE>\tdump indexed rows into FILE\n"
 		"--print-queries\t\tprint SQL queries (for debugging)\n"
-		"--keep-attrs\t\tretain attributes from the old index"
+		"--keep-attrs\t\tretain attributes from the old index\n"
 		"\n"
 		"Examples:\n"
 		"indexer --quiet myidx1\treindex 'myidx1' defined in 'sphinx.conf'\n"
@@ -1637,7 +1638,6 @@ int main ( int argc, char ** argv )
 	CSphVector<const char *> dIndexes;
 	CSphVector<const char *> dWildIndexes;
 	bool bIndexAll = false;
-	bool bMergeKillLists = false;
 	bool bVerbose = false;
 	CSphString sDumpRows;
 
@@ -1701,10 +1701,6 @@ int main ( int argc, char ** argv )
 		{
 			bIndexAll = true;
 
-		} else if ( strcasecmp ( argv[i], "--merge-killlists" )==0 || strcasecmp ( argv[i], "--merge-klists" )==0 )
-		{
-			bMergeKillLists = true;
-
 		} else if ( strcasecmp ( argv[i], "--verbose" )==0 )
 		{
 			bVerbose = true;
@@ -1752,34 +1748,24 @@ int main ( int argc, char ** argv )
 		{
 			g_bPrintQueries = true;
 
-		} else if ( strncmp ( argv[i], "--keep-attrs", sizeof ( "--keep-attrs" )-1 )==0 )
+		} else if ( strcasecmp ( argv[i], "--keep-attrs" )>=0 )
 		{
-			if ( strncmp ( argv[i], "--keep-attrs=", sizeof ( "--keep-attrs=" )-1 )==0 )
+			CSphString sArg ( argv[i] );
+			if ( sArg.Begins ( "--keep-attrs=" ) )
 			{
 				int iKeyLen = sizeof ( "--keep-attrs=" )-1;
-				g_sKeepAttrsPath = argv[i] + iKeyLen;
+				g_sKeepAttrsPath = sArg.cstr() + iKeyLen;
 			}
-			if ( strncmp ( argv[i], "--keep-attrs-names=", sizeof ( "--keep-attrs-names=" )-1 )==0 )
+			if ( sArg.Begins ( "--keep-attrs-names=" ) )
 			{
 				int iKeyLen = sizeof ( "--keep-attrs-names=" )-1;
-				sphSplit ( g_dKeepAttrs, argv[i] + iKeyLen, "," );
+				sphSplit ( g_dKeepAttrs, sArg.cstr() + iKeyLen, "," );
 			}
 
 			g_bKeepAttrs = true;
 
-		} else if ( strcasecmp ( argv[i], "-h" )==0 || strcasecmp ( argv[i], "--help" )==0 )
-		{
-			ShowVersion();
-			ShowHelp();
-			return 0;
-		} else if ( strcasecmp ( argv[i], "-v" )==0 )
-		{
-			ShowVersion();
-			return 0;
 		} else
-		{
 			break;
-		}
 	}
 
 	if ( !g_bQuiet )
@@ -1802,9 +1788,7 @@ int main ( int argc, char ** argv )
 			fprintf ( stdout, "ERROR: malformed or unknown option near '%s'.\n", argv[i] );
 
 		} else
-		{
 			ShowHelp();
-		}
 
 		return 1;
 	}
@@ -1934,7 +1918,7 @@ int main ( int argc, char ** argv )
 
 		bool bLastOk = DoMerge (
 			hConf["index"][dIndexes[0]], dIndexes[0],
-			hConf["index"][dIndexes[1]], dIndexes[1], dMergeDstFilters, g_bRotate, bMergeKillLists );
+			hConf["index"][dIndexes[1]], dIndexes[1], dMergeDstFilters, g_bRotate );
 		if ( bLastOk )
 			iIndexed++;
 		else

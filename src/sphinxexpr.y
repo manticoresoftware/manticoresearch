@@ -38,9 +38,7 @@
 %token <iAttrLocator>	TOK_ATTR_JSON
 
 
-%token	TOK_ATID
 %token	TOK_ATWEIGHT
-%token	TOK_ID
 %token	TOK_GROUPBY
 %token	TOK_WEIGHT
 %token	TOK_COUNT
@@ -111,9 +109,7 @@ expr:
 	| TOK_CONST_INT					{ $$ = pParser->AddNodeInt ( $1 ); }
 	| TOK_CONST_FLOAT				{ $$ = pParser->AddNodeFloat ( $1 ); }
 	| TOK_DOT_NUMBER				{ $$ = pParser->AddNodeDotNumber ( $1 ); }
-	| TOK_ATID						{ $$ = pParser->AddNodeID(); }
 	| TOK_ATWEIGHT					{ $$ = pParser->AddNodeWeight(); }
-	| TOK_ID						{ $$ = pParser->AddNodeID(); }
 	| TOK_WEIGHT '(' ')'			{ $$ = pParser->AddNodeWeight(); }
 	| TOK_HOOK_IDENT				{ $$ = pParser->AddNodeHookIdent ( $1 ); }
 	| '-' expr %prec TOK_NEG		{ $$ = pParser->AddNodeOp ( TOK_NEG, $2, -1 ); }

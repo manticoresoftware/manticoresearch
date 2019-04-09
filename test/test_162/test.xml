@@ -28,7 +28,6 @@ source src
 index plain
 {
 	source			= src
-    docinfo			= extern
 	path			= <data_path/>/plain
 }
 
@@ -39,7 +38,6 @@ index rt
 	rt_attr_uint	= idd1
 	rt_attr_string	= str1
 	rt_field	= body
-	docinfo	= extern
 	path			= <data_path/>/rt
 }
 </config>

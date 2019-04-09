@@ -34,9 +34,9 @@ enum TermPosFilter_e
 /// decoder state saved at a certain offset
 struct SkiplistEntry_t
 {
-	SphDocID_t		m_iBaseDocid;		///< delta decoder docid base (aka docid infinum)
-	int64_t			m_iOffset;			///< offset in the doclist file (relative to the doclist start)
-	int64_t			m_iBaseHitlistPos;	///< delta decoder hitlist offset base
+	RowID_t		m_tBaseRowIDPlus1;	///< delta decoder rowid base (stored as base rowid + 1)
+	int64_t		m_iOffset;			///< offset in the doclist file (relative to the doclist start)
+	int64_t		m_iBaseHitlistPos;	///< delta decoder hitlist offset base
 };
 
 
@@ -58,10 +58,10 @@ public:
 	int				m_iDocs = 0;	///< document count, from wordlist
 	int				m_iHits = 0;	///< hit count, from wordlist
 	bool			m_bHasHitlist = true;	///< hitlist presence flag
-	CSphVector<SkiplistEntry_t>		m_dSkiplist;	///< skiplist for quicker document list seeks
+	CSphVector<SkiplistEntry_t>	m_dSkiplist;	///< skiplist for quicker document list seeks
 
 	// iterator state
-	FieldMask_t m_dQwordFields;	///< current match fields
+	FieldMask_t		m_dQwordFields;	///< current match fields
 	DWORD			m_uMatchHits = 0;	///< current match hits count
 	SphOffset_t		m_iHitlistPos = 0;	///< current position in hitlist, from doclist
 
@@ -75,21 +75,15 @@ public:
 	}
 	virtual ~ISphQword () {}
 
-	virtual void				HintDocid ( SphDocID_t ) {}
-	virtual const CSphMatch &	GetNextDoc ( DWORD * pInlineDocinfo ) = 0;
+	virtual RowID_t				AdvanceTo ( RowID_t tRowID );
+	virtual void				HintRowID ( RowID_t ) {}
+	virtual const CSphMatch &	GetNextDoc() = 0;
 	virtual void				SeekHitlist ( SphOffset_t uOff ) = 0;
 	virtual Hitpos_t			GetNextHit () = 0;
 	virtual void				CollectHitMask ();
+	virtual void				Reset();
 
-	virtual void Reset ()
-	{
-		m_iDocs = 0;
-		m_iHits = 0;
-		m_dQwordFields.UnsetAll();
-		m_bAllFieldsKnown = false;
-		m_uMatchHits = 0;
-		m_iHitlistPos = 0;
-	}
+	int							GetAtomPos() const;
 };
 
 
@@ -100,21 +94,16 @@ struct CSphQueryStats;
 class ISphQwordSetup : ISphNoncopyable
 {
 public:
+	const CSphIndex *		m_pIndex		{nullptr};
+	int						m_iDynamicRowitems {0};
+	int64_t					m_iMaxTimer		{0};
+	CSphString *			m_pWarning		{nullptr};
+	CSphQueryContext *		m_pCtx			{nullptr};
+	CSphQueryNodeCache *	m_pNodeCache	{nullptr};
+	mutable ISphZoneCheck *	m_pZoneChecker	{nullptr};
+	CSphQueryStats *		m_pStats		{nullptr};
+	mutable bool			m_bSetQposMask	{false};
 	CSphDictRefPtr_c		m_pDict;
-public:
-	const CSphIndex *		m_pIndex = nullptr;
-	ESphDocinfo				m_eDocinfo { SPH_DOCINFO_NONE };
-	const CSphRowitem *		m_pMinRow = nullptr;
-	SphDocID_t				m_uMinDocid = 0;
-	int						m_iInlineRowitems = 0;		///< inline rowitems count
-	int						m_iDynamicRowitems = 0;		///< dynamic rowitems counts (including (!) inline)
-	int64_t					m_iMaxTimer = 0;
-	CSphString *			m_pWarning = nullptr;
-	CSphQueryContext *		m_pCtx = nullptr;
-	CSphQueryNodeCache *	m_pNodeCache = nullptr;
-	mutable ISphZoneCheck *	m_pZoneChecker = nullptr;
-	CSphQueryStats *		m_pStats = nullptr;
-	mutable bool			m_bSetQposMask = false;
 
 	virtual ~ISphQwordSetup () {}
 
@@ -169,25 +158,6 @@ public:
 
 	void					Mark ( CSphVector<SphHitMark_t> & );
 	static CSphHitMarker *	Create ( const XQNode_t * pRoot, const ISphQwordSetup & tSetup );
-};
-
-//////////////////////////////////////////////////////////////////////////
-
-/// intra-batch node cache
-class CSphQueryNodeCache
-{
-	friend class NodeCacheContainer_t;
-
-protected:
-	class NodeCacheContainer_t *	m_pPool;
-	int								m_iMaxCachedDocs;
-	int								m_iMaxCachedHits;
-
-public:
-									CSphQueryNodeCache ( int iCells, int MaxCachedDocs, int MaxCachedHits );
-									~CSphQueryNodeCache ();
-
-	ExtNode_i *						CreateProxy ( ExtNode_i * pChild, const XQNode_t * pRawChild, const ISphQwordSetup & tSetup );
 };
 
 //////////////////////////////////////////////////////////////////////////

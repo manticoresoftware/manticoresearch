@@ -128,9 +128,9 @@ namespace {
 void te (const char* src, const char* target)
 {
 	char buf[100];
-	auto iRes = JsonUnescape ( buf, src, strlen(src) );
+	int iRes = JsonUnescape ( buf, src, strlen(src) );
 	buf[iRes]='\0';
-	assert ( iRes<=strlen(src));
+	assert ( iRes<=(int)strlen(src));
 	ASSERT_STREQ (target,buf);
 }
 }
@@ -138,7 +138,6 @@ void te (const char* src, const char* target)
 TEST (integrity, JsonUnescape)
 {
 	char buf[100];
-	const char* sbuf = buf;
 
 	// autoremove heading and trailing quotes "
 	JsonStrUnescape(buf,"\"Hello world\"");

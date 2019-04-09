@@ -48,8 +48,8 @@ class tstlogger
 		case SPH_LOG_INFO: lvl = "WARNING: ";
 			break;
 		case SPH_LOG_DEBUG:
-		case SPH_LOG_VERBOSE_DEBUG:
 		case SPH_LOG_RPL_DEBUG:
+		case SPH_LOG_VERBOSE_DEBUG:
 		case SPH_LOG_VERY_VERBOSE_DEBUG:
 		default:
 			lvl = "DEBUG: ";

@@ -51,7 +51,6 @@ index expanded_plain
 {
 	source			= srctest
 	path			= <data_path/>/expanded-plain
-	docinfo = extern
 	dict = keywords
 	expand_keywords	= 1
 	min_infix_len = 3
@@ -99,7 +98,6 @@ index plain_inline
 {
 	source			= src_inline
 	path			= <data_path/>/plain-inline
-	docinfo = inline
 	dict = keywords
 	min_prefix_len = 1
 }

@@ -27,7 +27,6 @@ index plain1
 {
 	source = sql1
 	charset_table	= 0..9, A..Z->a..z, _, a..z
-	docinfo = extern
 	# replace_path1
 }
 
@@ -35,7 +34,6 @@ index plain2
 {
 	source = sql1
 	charset_table	= 0..9, A..Z->a..z, _, a..z
-	docinfo = extern
 	# replace_path2
 }
 

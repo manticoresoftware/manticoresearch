@@ -35,16 +35,14 @@ index idx
 {
 	source			= src
 	path			= <data_path/>/main132
-    docinfo			= extern
 }
 
 index rt
 {
 	type = rt
 	path			= <data_path/>/rt
-	docinfo			= extern
 
-	rt_field			= body
+	rt_field		= body
 	rt_attr_multi	= mva1
 	rt_attr_uint	= gid
 	rt_attr_multi	= mva2
@@ -56,7 +54,7 @@ index hung
 	path			= <data_path/>/hung
 	docinfo			= extern
 
-	rt_field			= body
+	rt_field		= body
 	rt_attr_multi	= mva1
 	rt_attr_uint	= gid
 	rt_attr_multi	= mva2
@@ -66,10 +64,9 @@ index rt_mva
 {
 	type = rt
 	path			= <data_path/>/rt_mva
-	docinfo			= extern
-	rt_mem_limit = 128k
+	rt_mem_limit 	= 128k
 
-	rt_field			= text
+	rt_field		= text
 	rt_attr_multi	= mva
 }
 
@@ -86,7 +83,6 @@ index mva_save
 {
 	source			= src_save
 	path			= <data_path/>/mva_save
-	docinfo			= extern
 }
 
 
@@ -148,7 +144,7 @@ for ( $i = 0; $i < 4; $i++)
 {
 	$results[] = sprintf( "iteration=%d", $i );
 	
-	$up = $client->UpdateAttributes ( "idx", array("mva1"), array(1=>array(array(2,3,4)), 3=>array(array(6,7,8))),true);
+	$up = $client->UpdateAttributes ( "idx", array("mva1"), array(1=>array(array(2,3,4)), 3=>array(array(6,7,8))), SPH_UPDATE_MVA );
 	if ( $up >= 0 )
 		$results[] = sprintf("up.ok=%d", $up);
 	else	

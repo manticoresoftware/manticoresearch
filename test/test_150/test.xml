@@ -41,7 +41,6 @@ index rt
 {
 	type			= rt
 	path			= <data_path/>/rt
-	docinfo			= extern
 	rt_field		= data
 	rt_attr_uint		= idd
 	dict			= keywords
@@ -68,7 +67,6 @@ index rt_prefix
 {
 	type			= rt
 	path			= <data_path/>/rt_prefix
-	docinfo			= extern
 	rt_field		= data
 	rt_attr_uint		= idd
 	dict			= keywords
@@ -109,7 +107,6 @@ index kw_infix
 {
 	source	= kw_infix
 	path	= <data_path/>/kw_infix
-	docinfo	= extern
 	min_infix_len = 3
 	dict = keywords	
 }
@@ -126,7 +123,6 @@ index kw_infix_morph
 {
 	source	= kw_infix_morph
 	path	= <data_path/>/kw_infix_morph
-	docinfo	= extern
 	min_infix_len = 1
 	dict = keywords
 	morphology = stem_en
@@ -151,7 +147,6 @@ index rt_prefix_limit
 {
 	type			= rt
 	path			= <data_path/>/rt_prefix_limit
-	docinfo			= extern
 	rt_field		= data
 	rt_attr_uint	= idd
 	dict			= keywords

@@ -686,7 +686,7 @@ protected:
 
 		CSphDictSettings tDictSettings;
 		tDictSettings.m_bWordDict = false;
-		pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, "query", false, sError );
+		pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, "query", false, 32, sError );
 
 		ASSERT_TRUE ( pTokenizer );
 		ASSERT_TRUE ( pDict );
@@ -802,11 +802,11 @@ class CSphDummyIndex : public CSphIndex
 {
 public:
 	CSphDummyIndex () : CSphIndex ( NULL, NULL ) {}
-	SphDocID_t *		GetKillList () const override { return NULL; }
-	int					GetKillListSize () const override { return 0 ; }
-	bool				HasDocid ( SphDocID_t ) const override { return false; }
+
+	int					Kill ( DocID_t /*tDocID*/ ) override { return 0; }
+
 	int					Build ( const CSphVector<CSphSource*> & , int , int ) override { return 0; }
-	bool				Merge ( CSphIndex * , const CSphVector<CSphFilterSettings> & , bool ) override {return false; }
+	bool				Merge ( CSphIndex * , const CSphVector<CSphFilterSettings> &, bool ) override {return false; }
 	bool				Prealloc ( bool ) override { return false; }
 	void				Dealloc () override {}
 	void				Preread () override {}
@@ -823,7 +823,7 @@ public:
 	bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult ** , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const override { return false; }
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & , CSphString * ) const override { return false; }
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const override ;
-	int					UpdateAttributes ( const CSphAttrUpdate & , int , CSphString &, CSphString & ) override { return -1; }
+	int					UpdateAttributes ( const CSphAttrUpdate & , int, bool &, CSphString &, CSphString & ) override { return -1; }
 	bool				SaveAttributes ( CSphString & ) const override { return false; }
 	DWORD				GetAttributeStatus () const override { return 0; }
 	bool				AddRemoveAttribute ( bool, const CSphString &, ESphAttr, CSphString & ) override { return true; }

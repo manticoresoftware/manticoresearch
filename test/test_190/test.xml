@@ -41,7 +41,6 @@ source src
 index idx
 {
 	source				= src
-	docinfo			= extern
 	path					= <data_path/>/idx
 }
 
@@ -63,7 +62,6 @@ index distl0
 index idx1
 {
 	source				= src
-	docinfo			= extern
 	path					= <data_path/>/idx1
 }
 
@@ -77,7 +75,6 @@ index distl1
 index idx2
 {
 	source				= src
-	docinfo			= extern
 	path					= <data_path/>/idx2
 }
 

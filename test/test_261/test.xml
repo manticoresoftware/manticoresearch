@@ -35,7 +35,6 @@ index block1
 {
 	source			= src1
 	path			= <data_path/>/block1
-	docinfo			= extern
 	min_word_len	= 1
 }
 
@@ -43,7 +42,6 @@ index rt
 {
 	type = rt
 	path			= <data_path/>/rt
-	docinfo = extern
 	rt_mem_limit = 128k
 	rt_field		= title
 	rt_attr_uint	= gid

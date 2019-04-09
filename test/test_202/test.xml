@@ -109,7 +109,8 @@ $query = function ( $client, $index )
 global $index_data_path;
 
 StopSearchd ('config.conf', 'searchd.pid');
-foreach ( array ( 'spa', 'spd', 'spe', 'spi', 'spk', 'spm', 'spp', 'sps', 'sph' ) as $ext )
+$exts = array ( 'spa', 'spb', 'spd', 'spe', 'spi', 'spk', 'spm', 'spp', 'spt', 'sph' );
+foreach ( $exts as $ext )
 {
 	$path = "$index_data_path/plain2.$ext";
 	if ( file_exists ( $path ) )

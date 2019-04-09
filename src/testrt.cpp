@@ -51,8 +51,7 @@ void DoSearch ( CSphIndex * pIndex )
 
 	CSphQuery tQuery;
 	CSphQueryResult tResult;
-	KillListVector dDummyKlist;
-	CSphMultiQueryArgs tArgs ( dDummyKlist, 1 );
+	CSphMultiQueryArgs tArgs ( 1 );
 	tQuery.m_sQuery = "@title cat";
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser ();
 
@@ -72,7 +71,7 @@ void DoSearch ( CSphIndex * pIndex )
 		sphFlattenQueue ( pSorter, &tResult, 0 );
 		printf ( "%d results found in %d.%03d sec!\n", tResult.m_dMatches.GetLength(), tResult.m_iQueryTime/1000, tResult.m_iQueryTime%1000 );
 		ARRAY_FOREACH ( i, tResult.m_dMatches )
-			printf ( "%d. id=" DOCID_FMT ", weight=%d\n", 1+i, tResult.m_dMatches[i].m_uDocID, tResult.m_dMatches[i].m_iWeight );
+			printf ( "%d. rowid=%u, weight=%d\n", 1+i, tResult.m_dMatches[i].m_tRowID, tResult.m_dMatches[i].m_iWeight );
 	}
 
 	SafeDelete ( pSorter );
@@ -81,10 +80,10 @@ void DoSearch ( CSphIndex * pIndex )
 
 static int g_iFieldsCount = 0;
 
-void DoIndexing ( CSphSource_MySQL * pSrc, ISphRtIndex * pIndex )
+void DoIndexing ( CSphSource_MySQL * pSrc, RtIndex_i * pIndex )
 {
 	CSphString sError, sWarning, sFilter;
-	CSphVector<DWORD> dMvas;
+	CSphVector<int64_t> dMvas;
 
 	int64_t tmStart = sphMicroTimer ();
 	int64_t tmAvgCommit = 0;
@@ -92,7 +91,8 @@ void DoIndexing ( CSphSource_MySQL * pSrc, ISphRtIndex * pIndex )
 	int iCommits = 0;
 	while (true)
 	{
-		const char ** pFields = (const char **)pSrc->NextDocument ( sError );
+		bool bEOF = false;
+		const char ** pFields = (const char **)pSrc->NextDocument ( bEOF, sError );
 		if ( !pFields )
 			break;
 
@@ -100,13 +100,13 @@ void DoIndexing ( CSphSource_MySQL * pSrc, ISphRtIndex * pIndex )
 		ARRAY_FOREACH (i, dFields)
 			dFields[i] = VecTraits_T<const char> ( pFields[i], strlen ( pFields[i] ) );
 
-		if ( pSrc->m_tDocInfo.m_uDocID )
+		if ( !bEOF )
 			pIndex->AddDocument ( dFields, pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
 
 		auto& const_stat = pSrc->GetStats ();
 		++const_cast<CSphSourceStats&>(const_stat).m_iTotalDocuments;
 
-		if ( ( pSrc->GetStats().m_iTotalDocuments % COMMIT_STEP )==0 || !pSrc->m_tDocInfo.m_uDocID )
+		if ( ( pSrc->GetStats().m_iTotalDocuments % COMMIT_STEP )==0 || bEOF )
 		{
 			int64_t tmCommit = sphMicroTimer();
 			pIndex->Commit ( NULL, NULL );
@@ -116,7 +116,7 @@ void DoIndexing ( CSphSource_MySQL * pSrc, ISphRtIndex * pIndex )
 			tmAvgCommit += tmCommit;
 			tmMaxCommit = Max ( tmMaxCommit, tmCommit );
 
-			if ( !pSrc->m_tDocInfo.m_uDocID )
+			if ( bEOF )
 			{
 				tmAvgCommit /= iCommits;
 				break;
@@ -563,7 +563,7 @@ CSphSource_MySQL * SpawnSource ( const char * sSourceName, const CSphConfigType 
 }
 
 
-static ISphRtIndex * g_pIndex = NULL;
+static RtIndex_i * g_pIndex = NULL;
 
 
 void IndexingThread ( void * pArg )
@@ -593,11 +593,11 @@ int main ( int argc, char ** argv )
 	tDictSettings.m_bWordDict = false;
 
 	ISphTokenizerRefPtr_c pTok {sphCreateUTF8Tokenizer()};
-	CSphDictRefPtr_c pDict {sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt1", false, sError )};
+	CSphDictRefPtr_c pDict {sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt1", false, 32, sError )};
 	CSphSource_MySQL * pSrc = SpawnSource ( "test1", hSources, pTok, pDict );
 
 	ISphTokenizerRefPtr_c pTok2 {sphCreateUTF8Tokenizer()};
-	CSphDictRefPtr_c pDict2 {sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt2", false, sError )};
+	CSphDictRefPtr_c pDict2 {sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt2", false, 32, sError )};
 	CSphSource_MySQL * pSrc2 = SpawnSource ( "test2", hSources, pTok2, pDict2 );
 
 	CSphSchema tSrcSchema;
@@ -619,7 +619,7 @@ int main ( int argc, char ** argv )
 	SmallStringHash_T< CSphIndex * > dTemp;
 	BinlogFlushInfo_t tBinlogFlush;
 	sphReplayBinlog ( dTemp, 0, NULL, tBinlogFlush );
-	ISphRtIndex * pIndex = sphCreateIndexRT ( tSchema, "testrt", 32*1024*1024, DATAFLD "dump", false );
+	RtIndex_i * pIndex = sphCreateIndexRT ( tSchema, "testrt", 32*1024*1024, DATAFLD "dump", false );
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( pDict );
 	if ( !pIndex->Prealloc ( false ) )

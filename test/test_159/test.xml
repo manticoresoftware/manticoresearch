@@ -28,14 +28,12 @@ source src
 index plain
 {
 	source			= src
-    docinfo			= extern
 	path			= <data_path/>/plain
 }
 
 index rt
 {
 	type			= rt
-    docinfo			= extern
 	path			= <data_path/>/rt
 
 	rt_attr_uint	= IDD1
@@ -50,7 +48,6 @@ index rt
 index rt1
 {
 	type			= rt
-    docinfo			= extern
 	path			= <data_path/>/rt1
 
 	rt_attr_uint	= IDD1

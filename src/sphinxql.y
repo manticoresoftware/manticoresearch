@@ -63,6 +63,7 @@
 %token	TOK_FLOAT
 %token	TOK_FLUSH
 %token	TOK_FOR
+%token	TOK_FORCE
 %token	TOK_FROM
 %token	TOK_FUNCTION
 %token	TOK_GLOBAL
@@ -71,7 +72,7 @@
 %token	TOK_GROUP_CONCAT
 %token	TOK_HAVING
 %token	TOK_HOSTNAMES
-%token	TOK_ID
+%token	TOK_IGNORE
 %token	TOK_IN
 %token	TOK_INDEX
 %token	TOK_INDEXES
@@ -84,6 +85,7 @@
 %token	TOK_ISOLATION
 %token	TOK_JOIN
 %token	TOK_JSON
+%token	TOK_KILLLIST_TARGET
 %token	TOK_LEVEL
 %token	TOK_LIKE
 %token	TOK_LIMIT
@@ -138,6 +140,7 @@
 %token	TOK_TYPE
 %token	TOK_UNCOMMITTED
 %token	TOK_UPDATE
+%token	TOK_USE
 %token	TOK_VALUES
 %token	TOK_VARIABLES
 %token  TOK_WAITTIMEOUT
@@ -326,7 +329,6 @@ tablefunc_args_list:
 tablefunc_arg:
 	ident
 	| TOK_CONST_INT
-	| TOK_ID
 	;
 
 subselect_start:
@@ -375,6 +377,7 @@ select_from:
 	opt_order_clause
 	opt_limit_clause
 	opt_option_clause
+	opt_hint_clause
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SELECT;
 			pParser->ToString ( pParser->m_pQuery->m_sIndexes, $4 );
@@ -482,32 +485,32 @@ filter_item:
 		}
 	| expr_ident TOK_IN '(' string_list ')'
 		{
-			if ( !pParser->AddStringListFilter ( $1, $4, STRLIST::IN_ ) )
+			if ( !pParser->AddStringListFilter ( $1, $4, StrList_e::STR_IN ) )
 				YYERROR;
 		}
 	| expr_ident TOK_NOT TOK_IN '(' string_list ')'
 		{
-			if ( !pParser->AddStringListFilter ( $1, $5, STRLIST::IN_, true ) )
+			if ( !pParser->AddStringListFilter ( $1, $5, StrList_e::STR_IN, true ) )
 				YYERROR;
 		}
 	| expr_ident TOK_ANY '(' string_list ')'
 		{
-			if ( !pParser->AddStringListFilter ( $1, $4, STRLIST::ANY ) )
+			if ( !pParser->AddStringListFilter ( $1, $4, StrList_e::STR_ANY ) )
 				YYERROR;
 		}
 	| expr_ident TOK_NOT TOK_ANY '(' string_list ')'
     	{
-    		if ( !pParser->AddStringListFilter ( $1, $5, STRLIST::ANY, true ) )
+    		if ( !pParser->AddStringListFilter ( $1, $5, StrList_e::STR_ANY, true ) )
     			YYERROR;
     	}
 	| expr_ident TOK_ALL '(' string_list ')'
 		{
-			if ( !pParser->AddStringListFilter ( $1, $4, STRLIST::ALL ) )
+			if ( !pParser->AddStringListFilter ( $1, $4, StrList_e::STR_ALL ) )
 				YYERROR;
 		}
 	| expr_ident TOK_NOT TOK_ALL '(' string_list ')'
 		{
-			if ( !pParser->AddStringListFilter ( $1, $5, STRLIST::ALL, true ) )
+			if ( !pParser->AddStringListFilter ( $1, $5, StrList_e::STR_ALL, true ) )
 				YYERROR;
 		}
 	| expr_ident TOK_IN TOK_USERVAR
@@ -527,7 +530,7 @@ filter_item:
 		}
 	| expr_ident TOK_NOT TOK_BETWEEN const_int TOK_AND const_int
 		{
-			if ( !pParser->AddIntRangeFilter ( $1, $3.m_iValue, $5.m_iValue, true ) )
+			if ( !pParser->AddIntRangeFilter ( $1, $4.m_iValue, $6.m_iValue, true ) )
 				YYERROR;
 		}
 	| expr_ident '>' const_int
@@ -728,12 +731,6 @@ expr_ident:
 			if ( !pParser->SetNewSyntax() )
 				YYERROR;
 		}
-	| TOK_ID
-		{
-			$$.m_iType = SPHINXQL_TOK_ID;
-			if ( !pParser->SetNewSyntax() )
-				YYERROR;
-		}
 	| json_expr
 	| TOK_INTEGER '(' json_expr ')'	{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	| TOK_DOUBLE '(' json_expr ')'	{ TRACK_BOUNDS ( $$, $1, $4 ); }
@@ -747,7 +744,14 @@ mva_aggr:
 	;
 
 const_int:
-	TOK_CONST_INT			{ $$.m_iType = TOK_CONST_INT; $$.m_iValue = $1.m_iValue; }
+	TOK_CONST_INT
+		{
+			$$.m_iType = TOK_CONST_INT;
+			if ( (uint64_t)$1.m_iValue > (uint64_t)LLONG_MAX )
+				$$.m_iValue = LLONG_MAX;
+			else
+				$$.m_iValue = $1.m_iValue;
+		}
 	| '-' TOK_CONST_INT
 		{
 			$$.m_iType = TOK_CONST_INT;
@@ -950,12 +954,37 @@ named_const:
 		}
 	;
 
+opt_hint_clause:
+	// empty
+	| hint_list
+	;
+
+hint_list:
+	hint_item
+	| hint_list hint_item
+	;
+
+hint_item:
+	TOK_FORCE TOK_INDEX '(' ident_list ')'
+		{
+			pParser->AddIndexHint ( INDEX_HINT_FORCE, $4 );
+		}
+	| TOK_USE TOK_INDEX '(' ident_list ')'
+		{
+			pParser->AddIndexHint ( INDEX_HINT_USE, $4 );
+		}
+	| TOK_IGNORE TOK_INDEX '(' ident_list ')'
+		{
+			pParser->AddIndexHint ( INDEX_HINT_IGNORE, $4 );
+		}
+	;
+
+
 //////////////////////////////////////////////////////////////////////////
 
 expr:
 	ident
 	| TOK_ATIDENT				{ if ( !pParser->SetOldSyntax() ) YYERROR; }
-	| TOK_ID					{ if ( !pParser->SetNewSyntax() ) YYERROR; }
 	| TOK_CONST_INT
 	| TOK_CONST_FLOAT
 	| TOK_DOT_NUMBER
@@ -1234,7 +1263,6 @@ opt_column_list:
 
 column_ident:
 	ident
-	| TOK_ID
 	;
 
 column_list:
@@ -1462,6 +1490,10 @@ update_item:
 			pParser->m_pStmt->m_tUpdate.m_dPool.Add ( sphF2DW ( $3.m_fValue ) );
 			pParser->AddUpdatedAttr ( $1, SPH_ATTR_FLOAT );
 		}
+	| ident '=' TOK_QUOTED_STRING
+		{
+			pParser->UpdateStringAttr ( $1, $3 );
+		}
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -1499,6 +1531,13 @@ alter:
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ALTER_RECONFIGURE;
 			pParser->ToString ( tStmt.m_sIndex, $3 );
+		}
+	| TOK_ALTER TOK_TABLE ident TOK_KILLLIST_TARGET '=' TOK_QUOTED_STRING
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_ALTER_KLIST_TARGET;
+			pParser->ToString ( tStmt.m_sIndex, $3 );
+			pParser->ToString ( tStmt.m_sAlterOption, $6 ).Unquote();
 		}
 	| TOK_ALTER TOK_CLUSTER ident TOK_ADD ident
 		{

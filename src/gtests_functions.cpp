@@ -756,10 +756,15 @@ TEST ( functions, Cleanup )
 
 //////////////////////////////////////////////////////////////////////////
 
+#ifdef _WIN32
+#pragma warning(push) // store current warning values
+#pragma warning(disable:4101)
+#endif
+
 TEST ( functions, Hash_simple )
 {
 	// add and verify a couple keys manually
-	CSphHash<int> h;
+	OpenHash_T<int, int64_t, HashFunc_Int64_t> h;
 	int &a = h.Acquire ( 123 );
 	ASSERT_FALSE ( a );
 	a = 1;
@@ -784,9 +789,11 @@ TEST ( functions, Hash_simple )
 		36013093500, 57976719271,
 		35732429300, 67391785901
 	};
+
+	HashFunc_Int64_t tHashFunc;
 	for ( int i = 0; i<2 * DUPES; i++ )
 	{
-		ASSERT_EQ ( h.GetHash ( dupes[i] ), h.GetHash ( dupes[( i >> 1 ) << 1] ) );
+		ASSERT_EQ ( tHashFunc.GetHash ( dupes[i] ), tHashFunc.GetHash ( dupes[( i >> 1 ) << 1] ) );
 		int &x = h.Acquire ( dupes[i] );
 		ASSERT_FALSE ( x );
 		x = 100 + i;
@@ -813,11 +820,15 @@ TEST ( functions, Hash_simple )
 		ASSERT_EQ ( *h.Find ( dupes[i] ), 100 + i );
 }
 
+#ifdef _WIN32
+#pragma warning(pop) // restore warnings
+#endif
+
 TEST ( functions, HASH_randomized )
 
 // big randomized test
 {
-	CSphHash<int> h;
+	OpenHash_T<int, int64_t, HashFunc_Int64_t> h;
 	const int NVALS = 996146; // 0.95f out of 1M
 
 	// add N numbers
@@ -862,24 +873,6 @@ TEST ( functions, HASH_randomized )
 }
 
 //////////////////////////////////////////////////////////////////////////
-
-TEST ( functions, str_attr_packer_unpacker )
-{
-	BYTE dBuffer[128];
-	int dValues[] = { 16383, 0, 1, 127, 128, 129, 256, 4095, 4096, 4097, 8192, 16383, 16384, 16385, 123456, 4194303
-					  , -1 };
-
-	BYTE * pRow = dBuffer;
-	for ( int i = 0; dValues[i]>=0; i++ )
-		pRow += sphPackStrlen ( pRow, dValues[i] );
-
-	const BYTE * pUnp = dBuffer;
-	for ( int i = 0; dValues[i]>=0; i++ )
-	{
-		int iUnp = sphUnpackStr ( pUnp, &pUnp );
-		ASSERT_EQ ( iUnp, dValues[i] );
-	}
-}
 
 TEST ( functions, string_split )
 {
@@ -1184,7 +1177,7 @@ TEST ( functions, Rebalance )
 						 , { 0.0031f, 0, 3.3333f }, { 0.0046f, 18469, 90.0000f } };
 	TestRebalance_fn ( dData3, sizeof ( dData3 ) / sizeof ( tstcase ), 4 );
 
-	tstcase dData4[] = { { 0.000000f, 7100, 65.0088f }, { 0.0015f, 0, 10.0f }, { .0031f, 18469, 24.9912f } };
+	tstcase dData4[] = { { 0.000000f, 7100, 65.0088f }, { 0.0015f, 0, 10.0f }, { 0.0031f, 18469, 24.9912f } };
 	TestRebalance_fn ( dData4, sizeof ( dData4 ) / sizeof ( tstcase ), 3 );
 }
 

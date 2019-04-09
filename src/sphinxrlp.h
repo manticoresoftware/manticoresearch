@@ -29,7 +29,7 @@ struct StoredDoc_t
 {
 	CSphMatch							m_tDocInfo;
 	StrVec_t							m_dStrAttrs;
-	CSphVector<DWORD>					m_dMva;
+	CSphVector<CSphVector<int64_t>>		m_dMvas;
 	CSphTightVector<BYTE*>				m_dFields;
 	CSphVector<int>						m_dFieldLengths;
 	CSphTightVector< CSphVector<BYTE> >	m_dFieldStorage;
@@ -93,8 +93,9 @@ public:
 	}
 
 
-	BYTE ** NextDocument ( CSphString & sError ) final
+	BYTE ** NextDocument ( bool & bEOF, CSphString & sError ) final
 	{
+		bEOF = false;
 		if ( !IsDocCacheEmpty() )
 			return CopyDoc();
 
@@ -110,7 +111,8 @@ public:
 
 		while ( !IsDocCacheFull() && m_dDocBuffer.GetLength()<g_iRLPMaxBatchSize )
 		{
-			BYTE ** pFields = T::NextDocument ( sError );
+			bool bInternalEOF = false;
+			BYTE ** pFields = T::NextDocument ( bInternalEOF, sError );
 			if ( !pFields )
 				break;
 
@@ -143,7 +145,7 @@ public:
 			StoredDoc_t * pDoc = Push_back ( &iCurDoc );
 			int nFields = T::m_tSchema.GetFieldsCount();
 			CopyDocInfo ( pDoc->m_tDocInfo, T::m_tDocInfo );
-			pDoc->m_dMva = T::m_dMva;
+			pDoc->m_dMvas = T::m_dMvas;
 			pDoc->m_dStrAttrs = T::m_dStrAttrs;
 			pDoc->m_dFields.Resize ( nFields );
 			pDoc->m_dFieldLengths.Resize ( nFields );
@@ -196,7 +198,10 @@ public:
 		}
 
 		if ( IsDocCacheEmpty() )
+		{
+			bEOF = true;
 			return nullptr;
+		}
 
 		assert ( m_pBatchFieldFilter && !T::m_pFieldFilter );
 		int iResultLen = m_pBatchFieldFilter->Apply ( m_dDocBuffer.Begin(), m_dDocBuffer.GetLength(), m_dResult, false );
@@ -309,7 +314,7 @@ private:
 		CopyDocInfo ( T::m_tDocInfo, pDoc->m_tDocInfo );
 		T::m_tState.m_dFields = pDoc->m_dFields.Begin();
 		T::m_tState.m_dFieldLengths.SwapData ( pDoc->m_dFieldLengths );
-		T::m_dMva.SwapData ( pDoc->m_dMva );
+		T::m_dMvas.SwapData ( pDoc->m_dMvas );
 		T::m_dStrAttrs.SwapData ( pDoc->m_dStrAttrs );
 
 		return T::m_tState.m_dFields;
@@ -329,7 +334,7 @@ private:
 		}
 
 		tTo.m_pStatic = nullptr;
-		tTo.m_uDocID = tFrom.m_uDocID;
+		tTo.m_tRowID = tFrom.m_tRowID;
 		tTo.m_iWeight = tFrom.m_iWeight;
 		tTo.m_iTag = tFrom.m_iTag;
 	}

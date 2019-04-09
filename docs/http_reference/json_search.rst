@@ -43,7 +43,18 @@ In case the index contains json attributes, they will be injected into output js
 Fulltext queries
 """"""""""""""""
 
-The following fulltext queries are supported:
+Fulltext queries can be specified either in SphinxQL or in JSON format.
+One option is to use ``"query_string"`` and write queries in SphinxQL:
+
+::
+
+    "query":
+    {
+      "query_string": "Church NOTNEAR/3 street"
+    }
+
+
+Another option is to explicitly specify the query tree in JSON. The following fulltext queries are supported:
 
 ``match``
 
@@ -185,6 +196,26 @@ Example:
         }
       }
     }
+
+Queries in SphinxQL format (``"query_string"``) can also be used in bool queries. Example:
+
+.. code-block:: json
+
+    {
+      "index": "test1",
+      "query":
+      {
+        "bool":
+        {
+          "must":
+          [
+            { "query_string" : "product" },
+            { "query_string" : "good" }
+          ]
+        }
+      }
+    }
+
 
 Filters
 """""""

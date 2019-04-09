@@ -20,7 +20,6 @@ searchd
 index rt
 {
 	type			= rt
-	docinfo			= extern
 	path			= <data_path/>/rt
 
 	rt_attr_uint	= idd

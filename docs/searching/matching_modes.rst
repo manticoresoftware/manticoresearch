@@ -36,12 +36,8 @@ There are the following matching modes available:
    text-matching.
 
 The SPH_MATCH_FULLSCAN mode will be automatically activated in place
-of the specified matching mode when the following conditions are met:
-
-1. The query string is empty (ie. its length is zero).
-
-2. :ref:`docinfo <docinfo>` storage is
-   set to ``extern``.
+of the specified matching mode when the query string is empty
+(ie. its length is zero).
 
 In full scan mode, all the indexed documents will be considered as
 matching. Such queries will still apply filters, sorting, and group by,

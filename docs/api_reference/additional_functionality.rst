@@ -235,9 +235,10 @@ success. Returns -1 and sets an error message on error.
 
 Attribute values updated using
 :ref:`UpdateAttributes() <update_attributes>`
-API call are only kept in RAM until a so-called flush (which writes the
-current, possibly updated attribute values back to disk).
-FlushAttributes() call lets you enforce a flush. The call will block
+API call are done in a memory mapped file. Which means the OS
+decides when the updates are actually written to disk.
+FlushAttributes() call lets you enforce a flush, which writes all the
+changes to disk. The call will block
 until ``searchd`` finishes writing the data to disk, which might take
 seconds or even minutes depending on the total data size (.spa file
 size). All the currently updated indexes will be flushed.
@@ -286,7 +287,7 @@ UpdateAttributes
 ~~~~~~~~~~~~~~~~
 
 **Prototype:** function UpdateAttributes ( $index, $attrs, $values,
-$mva=false, $ignorenonexistent=false )
+$type=SPH_UPDATE_INT, $ignorenonexistent=false )
 
 Instantly updates given attribute values in given documents. Returns
 number of actually updated documents (0 or more) on success, or -1 on
@@ -294,10 +295,28 @@ failure.
 
 ``$index`` is a name of the index (or indexes) to be updated. ``$attrs``
 is a plain array with string attribute names, listing attributes that
-are updated. ``$values`` is a hash where key is document ID, and value
-is a plain array of new attribute values. Optional boolean parameter
-``mva`` points that there is update of MVA attributes. In this case the
-values must be a dict with int key (document ID) and list of lists of int values (new MVA attribute values). Optional boolean parameter ``$ignorenonexistent``
+are updated.
+
+``$values`` is a hash with documents IDs as keys and new attribute values,
+see below.
+
+Optional ``$type`` parameter can have the following values:
+
+1. ``SPH_UPDATE_INT``. This is the default value. ``$values`` hash holds 
+documents IDs as keys and a plain arrays of new attribute values.
+
+2. ``SPH_UPDATE_MVA``. Points that MVA attributes are being updated. In this
+case the ``$values`` must be a hash with document IDs as keys and array of
+arrays of int values (new MVA attribute values).
+
+3. ``SPH_UPDATE_STRING``. Points that string attributes are being updated.
+``$values`` must be a hash with document IDs as keys and array of strings
+as values.
+
+4. ``SPH_UPDATE_JSON``. Works the same as ``SPH_UPDATE_STRING``, but for
+JSON attribute updates.
+
+Optional boolean parameter ``$ignorenonexistent``
 points that the update will silently ignore any warnings about trying to
 update a column which is not exists in current index schema.
 
@@ -306,14 +325,6 @@ update a column which is not exists in current index schema.
 indexes to update must be specified explicitly. The list of indexes can
 include distributed index names. Updates on distributed indexes will be
 pushed to all agents.
-
-The updates only work with ``docinfo=extern`` storage strategy. They are
-very fast because they're working fully in RAM, but they can also be
-made persistent: updates are saved on disk on clean ``searchd`` shutdown
-initiated by SIGTERM signal. With additional restrictions, updates are
-also possible on MVA attributes; refer to
-:ref:`mva_updates_pool <mva_updates_pool>`
-directive for details.
 
 Usage example:
 

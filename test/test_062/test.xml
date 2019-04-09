@@ -37,7 +37,6 @@ index hi1
 {
 	source = test
 	path = <data_path/>/hi1
-	docinfo			= extern
 	dict = keywords
 }
 
@@ -45,7 +44,6 @@ index hi2
 {
 	source = test
 	path = <data_path/>/hi2
-	docinfo			= extern
 	dict = keywords
 	morphology		= stem_enru
 	min_prefix_len	= 1
@@ -67,7 +65,6 @@ index test_utf
 {
 	source = test_utf
 	path = <data_path/>/test_utf
-	docinfo			= extern
 	dict = keywords
     charset_table	= 0->U+043E, 1..2, 3->U+0437, 4..9, A..Z->a..z, _, a..z
 	min_infix_len	= 2

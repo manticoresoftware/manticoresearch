@@ -96,30 +96,18 @@ Currently supported attribute types are:
 -  :ref:`JSON <sql_attr_json>`;
 
 -  :ref:`MVA <mva_multi-valued_attributes>`, multi-value attributes
-   (variable-length lists of 32-bit unsigned integers).
+   (variable-length lists of 32-bit unsigned or 64-bit signed integers).
 
 The complete set of per-document attribute values is sometimes referred
-to as *docinfo*. Docinfos can either be
+to as *docinfo*. Docinfos are stored separately from the main full-text
+index data in ``.spa`` file.
 
--  stored separately from the main full-text index data (“extern”
-   storage, in ``.spa`` file), or
-
--  attached to each occurrence of document ID in full-text index data
-   (“inline” storage, in ``.spd`` file).
-
-When using extern storage, a copy of ``.spa`` file (with all the
+A copy of ``.spa`` file (with all the
 attribute values for all the documents) is kept in RAM by ``searchd`` at
 all times. This is for performance reasons; random disk I/O would be too
-slow. On the contrary, inline storage does not require any additional
-RAM at all, but that comes at the cost of greatly inflating the index
-size: remember that it copies *all* attribute value *every* time when
-the document ID is mentioned, and that is exactly as many times as there
-are different keywords in the document. Inline may be the only viable
-option if you have only a few attributes and need to work with big
-datasets in limited RAM. However, in most cases extern storage makes
-both indexing and searching *much* more efficient.
+slow.
 
-Search-time memory requirements for extern storage are
+Search-time memory requirements for are
 (1+number_of_attrs)*number_of_docs*\ 4 bytes, ie. 10 million docs
 with 2 groups and 1 timestamp will take (1+2+1)*10M*\ 4 = 160 MB of RAM.
 This is *PER DAEMON*, not per query. ``searchd`` will allocate 160 MB on

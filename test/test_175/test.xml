@@ -44,7 +44,6 @@ index test2
 {
 	source			= test2
 	path			= <data_path/>/test2
-	docinfo		= extern
 	html_strip		= 1
 	index_sp		= 1
 }
@@ -60,7 +59,6 @@ index test3
 {
 	source			= test3
 	path			= <data_path/>/test3
-	docinfo		= extern
 }
 
 index rt
@@ -104,7 +102,6 @@ index hits_plain
 {
 	source			= src_hits
 	path			= <data_path/>/plain
-	docinfo			= extern
 	hit_format = plain
 }
 
@@ -112,7 +109,6 @@ index hits_inline
 {
 	source			= src_hits
 	path			= <data_path/>/inline
-	docinfo			= extern
 }
 
 <!-- flushing hits+docinfo in inline mode (bug #1310) -->
@@ -128,7 +124,6 @@ index idx_inline
 {
 	source			= src_inline
 	path			= <data_path/>/idx_inline
-	docinfo = inline
 }
 
 source src_inline2
@@ -151,7 +146,6 @@ index idx_inline2
 {
 	source			= src_inline2
 	path			= <data_path/>/idx_inline2
-	docinfo = inline
 	dict = keywords
 }
 
@@ -167,7 +161,6 @@ index idx_qt
 {
 	source			= src_quorum_tail
 	path			= <data_path/>/idx_quorum_tail
-	docinfo = extern
 }
 
 source src_quorum_tail_2
@@ -181,7 +174,6 @@ index idx_qt_2
 {
 	source			= src_quorum_tail_2
 	path			= <data_path/>/idx_quorum_tail_2
-	docinfo = extern
 }
 
 index rt_auto_expand
@@ -213,7 +205,6 @@ index idx_xml1
 {
 	source = src_xml1
 	path = <data_path/>/idx_xml1
-	docinfo = extern
 }
 
 </config>

@@ -45,7 +45,6 @@ index i1
 {
 	source = s1
 	path = <data_path/>/i1
-	docinfo = extern
  
 	html_strip = 1
 	index_zones = h1

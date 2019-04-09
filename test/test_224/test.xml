@@ -21,9 +21,7 @@ index rt
 {
 	type = rt
 	path			= <data_path/>/rt
-	docinfo			= extern
-
-	rt_field			= body
+	rt_field		= body
 	rt_attr_multi	= mva1
 	rt_attr_uint	= gid
 	rt_attr_multi	= mva2

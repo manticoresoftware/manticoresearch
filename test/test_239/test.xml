@@ -31,7 +31,6 @@ index test_rs
 {
 	source			= test_rs
 	path			= <data_path/>/test_rs
-	docinfo = extern
 }
 </config>
 

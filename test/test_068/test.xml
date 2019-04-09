@@ -43,6 +43,7 @@ index idx2
 {
 	source = src2
 	path = <data_path/>/idx2
+	killlist_target = idx1:kl
 }
 
 index idx3

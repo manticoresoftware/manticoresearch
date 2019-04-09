@@ -38,7 +38,6 @@ index main
 {
 	path			= <data_path/>/main1
 	source			= src1
-	docinfo			= extern
 	min_word_len	= 1
 }
 </config>

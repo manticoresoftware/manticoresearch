@@ -26,7 +26,6 @@ index test
 {
 	source	= test
 	path	= <data_path/>/test
-	docinfo	= extern
 }
 
 source utf1
@@ -41,7 +40,6 @@ index utf1
 {
 	source	= utf1
 	path	= <data_path/>/utf1
-	docinfo	= extern
 	min_infix_len = 3
 	dict = keywords	
 }

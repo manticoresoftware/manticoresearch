@@ -26,7 +26,6 @@ index plain_stem
 {
 	source			= plain_stem_src
 	path			= <data_path/>/plain_stem
-	docinfo			= extern
 	morphology 		= stem_en
 	dict			= crc
 }

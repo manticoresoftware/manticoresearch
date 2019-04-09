@@ -26,7 +26,6 @@ index idx
 {
 	source			= src
 	path			= <data_path/>/main
-    docinfo			= extern
 }
 
 source src1
@@ -42,7 +41,6 @@ index idx1
 {
 	source			= src1
 	path			= <data_path/>/main1
-    docinfo			= extern
 }
 
 </config>
@@ -54,7 +52,7 @@ $idlist = "";
 for ( $i=10000; $i<20000; $i++ )
 	$idlist .= "$i,";
 
-$client->SetSelect ( "*, IN(@id,1," . $idlist . "3) AS q, crc32('the') as crc" );
+$client->SetSelect ( "*, IN(id,1," . $idlist . "3) AS q, crc32('the') as crc" );
 $client->SetFilter ( "q", array(1) );
 
 $r = $client->Query ( "", "idx" );

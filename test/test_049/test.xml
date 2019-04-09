@@ -167,8 +167,8 @@ INSERT INTO test_table (id, a, b, c, mva, idx) VALUES
 	<query index="a b c">text</query>
 	<query index="c b a">text</query>
 
-	<query index="a delta" index_weights="a:1 delta:100" sortmode="extended" sortby="@id ASC">text</query>
-	<query index="delta a" index_weights="a:100 delta:1" sortmode="extended" sortby="@id ASC">text</query>
+	<query index="a delta" index_weights="a:1 delta:100" sortmode="extended" sortby="id ASC">text</query>
+	<query index="delta a" index_weights="a:100 delta:1" sortmode="extended" sortby="id ASC">text</query>
 </queries>
 
 </test>

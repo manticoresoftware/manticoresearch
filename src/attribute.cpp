@@ -1,0 +1,1034 @@
+//
+// $Id$
+//
+
+//
+// Copyright (c) 2017-2018, Manticore Software LTD (http://manticoresearch.com)
+// All rights reserved
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License. You should have
+// received a copy of the GPL license along with this program; if you
+// did not, you can find it at http://www.gnu.org/
+//
+
+#include "attribute.h"
+
+#include "sphinxint.h"
+#include "sphinxjson.h"
+
+//////////////////////////////////////////////////////////////////////////
+// blob attributes
+
+enum
+{
+	BLOB_ROW_LEN_BYTE = 0,
+	BLOB_ROW_LEN_WORD = 1,
+	BLOB_ROW_LEN_DWORD = 2
+};
+
+
+static BYTE CalcBlobRowFlags ( DWORD uTotalLen )
+{
+	if ( uTotalLen<0xFF )
+		return BLOB_ROW_LEN_BYTE;
+
+	if ( uTotalLen<0xFFFF )
+		return BLOB_ROW_LEN_WORD;
+
+	return BLOB_ROW_LEN_DWORD;
+}
+
+
+DWORD RowFlagsToLen ( BYTE uFlags )
+{
+	switch ( uFlags )
+	{
+	case BLOB_ROW_LEN_BYTE:		return 1;
+	case BLOB_ROW_LEN_WORD:		return 2;
+	case BLOB_ROW_LEN_DWORD:	return 4;
+	default:
+		assert ( 0 && "Unknown blob flags" );
+		return 0;
+	}
+}
+
+
+class AttributePacker_i
+{
+public:
+	virtual								~AttributePacker_i(){}
+	virtual bool						SetData ( const BYTE * pData, int iDataLen, CSphString & sError ) = 0;
+	virtual const CSphVector<BYTE> &	GetData() const = 0;
+};
+
+
+class AttributePacker_c : public AttributePacker_i
+{
+public:
+	bool SetData ( const BYTE * pData, int iDataLen, CSphString & /*sError*/ ) override
+	{
+		m_dData.Resize ( iDataLen );
+		memcpy ( m_dData.Begin(), pData, iDataLen );
+		return true;
+	}
+
+	const CSphVector<BYTE> & GetData() const override
+	{
+		return m_dData;
+	}
+
+protected:
+	CSphVector<BYTE>	m_dData;
+};
+
+
+class AttributePacker_MVA32_c : public AttributePacker_c
+{
+public:
+	bool SetData ( const BYTE * pData, int iDataLen, CSphString & /*sError*/ ) override
+	{
+		// incoming data is int64_t, need to make it 32-bit
+		m_dData.Resize ( iDataLen/sizeof(int64_t)*sizeof(DWORD) );
+		DWORD * pMva32 = (DWORD *)m_dData.Begin();
+		auto pMva64 = (const int64_t *)pData;
+		for ( DWORD i = 0; i < iDataLen/sizeof(int64_t); i++ )
+		{
+			*pMva32 = (DWORD)*pMva64;
+			pMva32++;
+			pMva64++;
+		}
+
+		return true;
+	}
+};
+
+
+// packs MVAs coming from updates (pairs of DWORDS for each value)
+template <typename T>
+class AttributePacker_MVA_Update_T : public AttributePacker_c
+{
+public:
+	bool SetData ( const BYTE * pData, int iDataLen, CSphString & /*sError*/ ) override
+	{
+		int iValueSize = 2*sizeof(DWORD);
+		int nValues = iDataLen/iValueSize;
+		m_dData.Resize ( nValues*sizeof(T) );
+		T * pResult = (T*)m_dData.Begin();
+
+		for ( int i = 0; i<nValues; i++ )
+		{
+			DWORD uLo = sphUnalignedRead ( *(DWORD*)pData );
+			DWORD uHi = sphUnalignedRead ( *((DWORD*)pData + 1) );
+			*pResult = (T)( (int64_t)uLo | ( ((int64_t)uHi) << 32 ) );
+			pResult++;
+			pData += iValueSize;
+		}
+
+		return true;
+	}
+};
+
+
+class AttributePacker_Json_c : public AttributePacker_c
+{
+public:
+	bool SetData ( const BYTE * pData, int iDataLen, CSphString & sError ) override
+	{
+		m_dData.Resize(0);
+		if ( !iDataLen )
+			return true;
+
+		// WARNING, tricky bit
+		// flex lexer needs last two (!) bytes to be zeroes
+		// asciiz string supplies one, and we fill out the extra one
+		// and that works, because CSphString always allocates a small extra gap
+		char * szData = const_cast<char*>((const char*)pData);
+		szData[iDataLen] = '\0';
+		szData[iDataLen+1] = '\0';
+
+		return sphJsonParse ( m_dData, szData, g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase, sError );
+	}
+};
+
+//////////////////////////////////////////////////////////////////////////
+class BlobRowBuilder_Base_c : public BlobRowBuilder_i
+{
+public:
+	bool					SetAttr ( int iAttr, const BYTE * pData, int iDataLen, CSphString & sError ) override;
+	~BlobRowBuilder_Base_c () override;
+
+protected:
+	CSphVector<AttributePacker_i*> m_dAttrs;
+};
+
+
+bool BlobRowBuilder_Base_c::SetAttr ( int iAttr, const BYTE * pData, int iDataLen, CSphString & sError )
+{
+	return m_dAttrs[iAttr]->SetData ( pData, iDataLen, sError );
+}
+
+BlobRowBuilder_Base_c::~BlobRowBuilder_Base_c()
+{
+	for ( auto i : m_dAttrs )
+		SafeDelete (i);
+}
+
+
+//////////////////////////////////////////////////////////////////////////
+class BlobRowBuilder_File_c : public BlobRowBuilder_Base_c
+{
+public:
+							BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOffset_t tSpaceForUpdates, bool bJsonPacked );
+							~BlobRowBuilder_File_c() override;
+
+	bool					Setup ( const CSphString & sFile, CSphString & sError );
+
+	SphOffset_t				Flush() override;
+	SphOffset_t				Flush ( const BYTE * pOldRow ) override;
+	bool					Done ( CSphString & sError ) override;
+
+private:
+	CSphWriter				m_tWriter;
+	bool					m_bDeleteFile {true};
+	SphOffset_t				m_tSpaceForUpdates {0};
+};
+
+
+BlobRowBuilder_File_c::BlobRowBuilder_File_c ( const ISphSchema & tSchema, SphOffset_t tSpaceForUpdates, bool bJsonPacked )
+	: m_tSpaceForUpdates ( tSpaceForUpdates )
+{
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
+
+		AttributePacker_i * pPacker = nullptr;
+		switch ( tCol.m_eAttrType )
+		{
+		case SPH_ATTR_STRING:
+		case SPH_ATTR_INT64SET:
+			pPacker = new AttributePacker_c;
+			break;
+
+		case SPH_ATTR_UINT32SET:
+			pPacker = new AttributePacker_MVA32_c;
+			break;
+
+		case SPH_ATTR_JSON:
+			if ( bJsonPacked )
+				pPacker = new AttributePacker_c;
+			else
+				pPacker = new AttributePacker_Json_c;
+			break;
+
+		default:
+			break;
+		}
+
+		if ( pPacker )
+			m_dAttrs.Add(pPacker);
+	}
+}
+
+
+BlobRowBuilder_File_c::~BlobRowBuilder_File_c()
+{
+	if ( m_bDeleteFile )
+		m_tWriter.UnlinkFile();
+}
+
+
+bool BlobRowBuilder_File_c::Setup ( const CSphString & sFile, CSphString & sError )
+{
+	if ( !m_tWriter.OpenFile ( sFile, sError ) )
+		return false;
+
+	// reserve space
+	m_tWriter.PutOffset(0);
+
+	return true;
+}
+
+
+SphOffset_t BlobRowBuilder_File_c::Flush()
+{
+	SphOffset_t tRowOffset = m_tWriter.GetPos();
+
+	DWORD uTotalLen = 0;
+	for ( const auto & i : m_dAttrs )
+		uTotalLen += i->GetData().GetLength();
+
+	BYTE uFlags = CalcBlobRowFlags(uTotalLen);
+	m_tWriter.PutByte(uFlags);
+
+	uTotalLen = 0;
+	for ( const auto & i : m_dAttrs )
+	{
+		uTotalLen += i->GetData().GetLength();
+		switch ( uFlags )
+		{
+		case BLOB_ROW_LEN_BYTE:
+			m_tWriter.PutByte(uTotalLen);
+			break;
+
+		case BLOB_ROW_LEN_WORD:
+			m_tWriter.PutWord(uTotalLen);
+			break;
+
+		case BLOB_ROW_LEN_DWORD:
+			m_tWriter.PutDword(uTotalLen);
+			break;
+		}	
+	}
+
+	for ( const auto & i : m_dAttrs )
+		m_tWriter.PutBytes ( i->GetData().Begin(), i->GetData().GetLength() );
+
+	return tRowOffset;
+}
+
+
+SphOffset_t BlobRowBuilder_File_c::Flush ( const BYTE * pOldRow )
+{
+	assert ( pOldRow );
+	SphOffset_t tRowOffset = m_tWriter.GetPos();
+	m_tWriter.PutBytes ( pOldRow, sphGetBlobTotalLen ( pOldRow, m_dAttrs.GetLength() ) );
+
+	return tRowOffset;
+}
+
+
+bool BlobRowBuilder_File_c::Done ( CSphString & sError )
+{
+	SphOffset_t tTotalSize = m_tWriter.GetPos();
+	// FIXME!!! made single function from this mess as order matters here
+	m_tWriter.Flush(); // store collected data as SeekTo might got rid of buffer collected so far
+	m_tWriter.SeekTo ( 0 ); 
+	m_tWriter.PutOffset ( tTotalSize );
+	m_tWriter.SeekTo ( tTotalSize + m_tSpaceForUpdates, true );
+	m_tWriter.CloseFile();
+
+	if ( m_tWriter.IsError() )
+	{
+		sError.SetSprintf ( "error writing .SPB, %s", sError.cstr() ); // keep original error from writer
+		return false;
+	}
+
+	m_bDeleteFile = false;
+	return true;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+class BlobRowBuilder_Mem_c : public BlobRowBuilder_Base_c
+{
+public:
+							BlobRowBuilder_Mem_c ( CSphTightVector<BYTE> & dPool );
+							BlobRowBuilder_Mem_c ( const ISphSchema & tSchema, CSphTightVector<BYTE> & dPool );
+
+	SphOffset_t				Flush() override;
+	SphOffset_t				Flush ( const BYTE * pOldRow ) override;
+	bool					Done ( CSphString & /*sError*/ ) override { return true; }
+
+protected:
+	CSphTightVector<BYTE> & m_dPool;
+};
+
+
+BlobRowBuilder_Mem_c::BlobRowBuilder_Mem_c ( CSphTightVector<BYTE> & dPool )
+	: m_dPool ( dPool )
+{}
+
+
+BlobRowBuilder_Mem_c::BlobRowBuilder_Mem_c ( const ISphSchema & tSchema, CSphTightVector<BYTE> & dPool )
+	: m_dPool ( dPool )
+{
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
+
+		AttributePacker_i * pPacker = nullptr;
+		switch ( tCol.m_eAttrType )
+		{
+		case SPH_ATTR_STRING:
+		case SPH_ATTR_JSON:			// json doesn't go to a separate packer because we work with pre-parsed json in this case
+		case SPH_ATTR_INT64SET:
+			pPacker = new AttributePacker_c;
+			break;
+
+		case SPH_ATTR_UINT32SET:
+			pPacker = new AttributePacker_MVA32_c;
+			break;
+
+		default:
+			break;
+		}
+
+		if ( pPacker )
+			m_dAttrs.Add(pPacker);
+	}
+}
+
+
+SphOffset_t BlobRowBuilder_Mem_c::Flush()
+{
+	SphOffset_t tRowOffset = m_dPool.GetLength();
+
+	DWORD uTotalLen = 0;
+	for ( const auto & i : m_dAttrs )
+		uTotalLen += i->GetData().GetLength();
+
+	m_dPool.Reserve ( uTotalLen + m_dAttrs.GetLength()*sizeof(DWORD) + 1 );
+
+	BYTE uFlags = CalcBlobRowFlags(uTotalLen);
+	m_dPool.Add(uFlags);
+
+	uTotalLen = 0;
+	BYTE * pPtr;
+	for ( const auto & i : m_dAttrs )
+	{
+		uTotalLen += i->GetData().GetLength();
+		switch ( uFlags )
+		{
+		case BLOB_ROW_LEN_BYTE:
+			m_dPool.Add((BYTE)uTotalLen);
+			break;
+
+		case BLOB_ROW_LEN_WORD:
+			pPtr = m_dPool.AddN ( sizeof(WORD) );
+			sphUnalignedWrite ( pPtr, (WORD)uTotalLen );
+			break;
+
+		case BLOB_ROW_LEN_DWORD:
+			pPtr = m_dPool.AddN ( sizeof(DWORD) );
+			sphUnalignedWrite ( pPtr, (DWORD)uTotalLen );
+			break;
+		}	
+	}
+
+	for ( const auto & i : m_dAttrs )
+	{
+		int iLen = i->GetData().GetLength();
+		pPtr = m_dPool.AddN(iLen);
+		memcpy ( pPtr, i->GetData().Begin(), iLen );
+	}
+
+	return tRowOffset;
+}
+
+
+SphOffset_t BlobRowBuilder_Mem_c::Flush ( const BYTE * pOldRow )
+{
+	assert ( 0 );
+	return 0;
+}
+
+
+//////////////////////////////////////////////////////////////////////////
+
+class BlobRowBuilder_MemUpdate_c : public BlobRowBuilder_Mem_c
+{
+public:
+	BlobRowBuilder_MemUpdate_c ( const ISphSchema & tSchema, CSphTightVector<BYTE> & dPool, const CSphBitvec & dAttrsUpdated );
+};
+
+
+BlobRowBuilder_MemUpdate_c::BlobRowBuilder_MemUpdate_c ( const ISphSchema & tSchema, CSphTightVector<BYTE> & dPool, const CSphBitvec & dAttrsUpdated )
+	: BlobRowBuilder_Mem_c ( dPool )
+{
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
+
+		if ( !dAttrsUpdated.BitGet(i) && sphIsBlobAttr ( tCol.m_eAttrType ) )
+		{
+			m_dAttrs.Add ( new AttributePacker_c );
+			continue;
+		}
+
+		AttributePacker_i * pPacker = nullptr;
+
+		switch ( tCol.m_eAttrType )
+		{
+		case SPH_ATTR_STRING:
+			pPacker = new AttributePacker_c;
+			break;
+
+		case SPH_ATTR_UINT32SET:
+			pPacker = new AttributePacker_MVA_Update_T<DWORD>;
+			break;
+
+		case SPH_ATTR_INT64SET:
+			pPacker = new AttributePacker_MVA_Update_T<int64_t>;
+			break;
+
+		case SPH_ATTR_JSON:
+			pPacker = new AttributePacker_Json_c;
+			break;
+
+		default:
+			break;
+		}
+
+		if ( pPacker )
+			m_dAttrs.Add(pPacker);
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+BlobRowBuilder_i * sphCreateBlobRowBuilder ( const ISphSchema & tSchema, const CSphString & sFile, SphOffset_t tSpaceForUpdates, CSphString & sError )
+{
+	BlobRowBuilder_File_c * pBuilder = new BlobRowBuilder_File_c ( tSchema, tSpaceForUpdates, false );
+	if ( !pBuilder->Setup ( sFile, sError ) )
+		SafeDelete ( pBuilder );
+
+	return pBuilder;
+}
+
+
+BlobRowBuilder_i *	sphCreateBlobRowJsonBuilder ( const ISphSchema & tSchema, const CSphString & sFile, SphOffset_t tSpaceForUpdates, CSphString & sError )
+{
+	BlobRowBuilder_File_c * pBuilder = new BlobRowBuilder_File_c ( tSchema, tSpaceForUpdates, true );
+	if ( !pBuilder->Setup ( sFile, sError ) )
+		SafeDelete ( pBuilder );
+
+	return pBuilder;
+}
+
+
+BlobRowBuilder_i * sphCreateBlobRowBuilder ( const ISphSchema & tSchema, CSphTightVector<BYTE> & dPool )
+{
+	return new BlobRowBuilder_Mem_c ( tSchema, dPool );
+}
+
+
+BlobRowBuilder_i * sphCreateBlobRowBuilderUpdate ( const ISphSchema & tSchema, CSphTightVector<BYTE> & dPool, const CSphBitvec & dAttrsUpdated )
+{
+	return new BlobRowBuilder_MemUpdate_c ( tSchema, dPool, dAttrsUpdated );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+static int64_t GetBlobRowOffset ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator )
+{
+	// blob row locator NEEDS to be the 2nd attribute after docid
+	if ( tLocator.m_bDynamic )
+		return sphGetBlobRowOffset ( tMatch.m_pDynamic );
+	else
+		return sphGetBlobRowOffset ( tMatch.m_pStatic );
+}
+
+template <typename T>
+static const BYTE * GetBlobAttr ( int iBlobAttrId, int nBlobAttrs, const BYTE * pRow, int & iLengthBytes )
+{
+	T uLen1 = sphUnalignedRead ( *((T*)pRow + iBlobAttrId) );
+	T uLen0 = iBlobAttrId > 0 ? sphUnalignedRead ( *((T*)pRow + iBlobAttrId - 1) ) : 0;
+	iLengthBytes = (int)uLen1-uLen0;
+	assert ( iLengthBytes>=0 );
+
+	return iLengthBytes ? (const BYTE *)((T*)pRow + nBlobAttrs) + uLen0 : nullptr;
+}
+
+
+static const BYTE * GetBlobAttr ( const BYTE * pRow, int iBlobAttrId, int nBlobAttrs, int & iLengthBytes )
+{
+	switch ( *pRow )
+	{
+	case BLOB_ROW_LEN_BYTE:		return GetBlobAttr<BYTE> ( iBlobAttrId, nBlobAttrs, pRow+1, iLengthBytes );
+	case BLOB_ROW_LEN_WORD:		return GetBlobAttr<WORD> ( iBlobAttrId, nBlobAttrs, pRow+1, iLengthBytes );
+	case BLOB_ROW_LEN_DWORD:	return GetBlobAttr<DWORD>( iBlobAttrId, nBlobAttrs, pRow+1, iLengthBytes );
+	default:
+		break;
+	}
+
+	assert ( 0 && "Unknown blob row type" );
+	return nullptr;
+}
+
+
+const BYTE * sphGetBlobAttr ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool, int & iLengthBytes )
+{
+	assert ( pBlobPool );
+	int64_t iOffset = GetBlobRowOffset ( tMatch, tLocator );
+	return GetBlobAttr ( pBlobPool+iOffset, tLocator.m_iBlobAttrId, tLocator.m_nBlobAttrs, iLengthBytes );
+}
+
+
+const BYTE * sphGetBlobAttr ( const CSphRowitem * pDocinfo, const CSphAttrLocator & tLocator, const BYTE * pBlobPool, int & iLengthBytes )
+{
+	assert ( pBlobPool );
+	int64_t iOffset = sphGetBlobRowOffset ( pDocinfo );
+	return GetBlobAttr ( pBlobPool+iOffset, tLocator.m_iBlobAttrId, tLocator.m_nBlobAttrs, iLengthBytes );
+}
+
+
+const BYTE * sphGetBlobAttr ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool )
+{
+	int iLengthBytes = 0;
+	return sphGetBlobAttr ( tMatch, tLocator, pBlobPool, iLengthBytes );
+}
+
+
+int64_t sphGetBlobRowOffset ( const CSphRowitem * pDocinfo )
+{
+	return sphUnalignedRead ( *((int64_t*)pDocinfo + 1) );
+}
+
+
+void sphSetBlobRowOffset ( CSphRowitem * pDocinfo, int64_t iOffset )
+{
+	sphUnalignedWrite ( (int64_t*)pDocinfo + 1, iOffset );
+}
+
+
+template <typename T>
+static int GetBlobAttrLen ( int iBlobAttrId, const BYTE * pRow )
+{
+	assert ( pRow );
+
+	T uLen1 = sphUnalignedRead ( *((T*)pRow + iBlobAttrId) );
+	T uLen0 = iBlobAttrId > 0 ? sphUnalignedRead ( *((T*)pRow+iBlobAttrId-1) ) : 0;
+
+	return (int)uLen1-uLen0;
+}
+
+
+int sphGetBlobAttrLen ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool )
+{
+	assert ( pBlobPool );
+
+	int64_t iOffset = GetBlobRowOffset ( tMatch, tLocator );
+	const BYTE * pRow = pBlobPool+iOffset;
+	switch ( *pRow )
+	{
+	case BLOB_ROW_LEN_BYTE:		return GetBlobAttrLen<BYTE> ( tLocator.m_iBlobAttrId, pRow+1 );
+	case BLOB_ROW_LEN_WORD:		return GetBlobAttrLen<WORD> ( tLocator.m_iBlobAttrId, pRow+1 );
+	case BLOB_ROW_LEN_DWORD:	return GetBlobAttrLen<DWORD> ( tLocator.m_iBlobAttrId, pRow+1 );
+	default:
+		break;
+	}
+
+	assert ( 0 && "Unknown blob row type" );
+	return 0;
+}
+
+
+template <typename T>
+static int GetBlobTotalLen ( const BYTE * pRow, int nBlobAttrs )
+{
+	assert ( pRow );
+	return sphUnalignedRead ( *((const T *)pRow + nBlobAttrs - 1 ) ) + nBlobAttrs*sizeof(T) + 1;
+}
+
+
+DWORD sphGetBlobTotalLen ( const BYTE * pRow, int nBlobAttrs )
+{
+	switch ( *pRow )
+	{
+	case BLOB_ROW_LEN_BYTE:		return GetBlobTotalLen<BYTE> ( pRow+1, nBlobAttrs );
+	case BLOB_ROW_LEN_WORD:		return GetBlobTotalLen<WORD> ( pRow+1, nBlobAttrs );
+	case BLOB_ROW_LEN_DWORD:	return GetBlobTotalLen<DWORD> ( pRow+1, nBlobAttrs );
+	default:
+		break;
+	}
+
+	assert ( 0 && "Unknown blob row type" );
+	return 0;
+}
+
+
+int64_t sphCopyBlobRow ( CSphTightVector<BYTE> & dDstPool, const CSphTightVector<BYTE> & dSrcPool, int64_t iOffset, int nBlobs )
+{
+	const BYTE * pSrcBlob = dSrcPool.Begin()+iOffset;
+
+	int iBlobLen = sphGetBlobTotalLen ( pSrcBlob, nBlobs );
+	int64_t iNewOffset = dDstPool.GetLength();
+	dDstPool.Resize ( iNewOffset+iBlobLen );
+	BYTE * pDstBlob = dDstPool.Begin()+iNewOffset;
+	memcpy ( pDstBlob, pSrcBlob, iBlobLen );
+
+	return iNewOffset;
+}
+
+
+void sphAddAttrToBlobRow ( const CSphRowitem * pDocinfo, CSphTightVector<BYTE> & dBlobRow, const BYTE * pPool, int nBlobs )
+{
+	if ( nBlobs )
+	{
+		const BYTE * pOldRow = pPool + sphGetBlobRowOffset ( pDocinfo );
+		DWORD uOldBlobLen = sphGetBlobTotalLen ( pOldRow, nBlobs );
+		DWORD uLenSize = RowFlagsToLen ( *pOldRow );
+		dBlobRow.Resize ( uOldBlobLen + uLenSize );
+		BYTE * pNewRow = dBlobRow.Begin();
+		DWORD uAttrLengthSize = uLenSize*nBlobs+1;			// old blob lengths + flags
+		memcpy ( pNewRow, pOldRow, uAttrLengthSize );
+		pNewRow += uAttrLengthSize;
+		pOldRow += uAttrLengthSize;
+		memcpy ( pNewRow, pOldRow-uLenSize, uLenSize );		// new attr length (last cumulative length)
+		pNewRow += uLenSize;
+		memcpy ( pNewRow, pOldRow, uOldBlobLen-uAttrLengthSize );
+	}
+	else
+	{
+		dBlobRow.Add ( CalcBlobRowFlags(0) );	// 1-byte flags
+		dBlobRow.Add ( 0 );						// 1-byte length
+	}
+}
+
+
+void sphRemoveAttrFromBlobRow ( const CSphRowitem * pDocinfo, CSphTightVector<BYTE> & dBlobRow, const BYTE * pPool, int nBlobs, int iBlobAttrId )
+{
+	if ( nBlobs<=1 )
+	{
+		dBlobRow.Resize(0);
+		return;
+	}
+
+	const BYTE * pOldRow = pPool + sphGetBlobRowOffset ( pDocinfo );
+	BYTE uFlags = *pOldRow;
+	CSphVector<DWORD> dAttrLengths;
+	for ( int i = 0; i < nBlobs; i++ )
+		if ( i!=iBlobAttrId )
+		{
+			switch ( uFlags )
+			{
+			case BLOB_ROW_LEN_BYTE:
+				dAttrLengths.Add ( GetBlobAttrLen<BYTE> ( i, pOldRow+1 ) );
+				break;
+
+			case BLOB_ROW_LEN_WORD:
+				dAttrLengths.Add ( GetBlobAttrLen<WORD> ( i, pOldRow+1 ) );
+				break;
+
+			case BLOB_ROW_LEN_DWORD:
+				dAttrLengths.Add ( GetBlobAttrLen<DWORD> ( i, pOldRow+1 ) );
+				break;
+
+			default:
+				break;
+			}
+		}
+
+	DWORD uTotalLength = 0;
+	for ( auto i : dAttrLengths )
+		uTotalLength += i;
+
+	dBlobRow.Resize ( 1 + (nBlobs-1)*RowFlagsToLen(uFlags) + uTotalLength );
+	BYTE * pNewRow = dBlobRow.Begin();
+
+	// flags
+	BYTE uNewFlags = CalcBlobRowFlags ( uTotalLength );
+	*pNewRow++ = uNewFlags;
+
+	// attribute lengths
+	DWORD uCumulativeLength = 0;
+	ARRAY_FOREACH ( i, dAttrLengths )
+	{
+		uCumulativeLength += dAttrLengths[i];
+
+		switch ( uNewFlags )
+		{
+		case BLOB_ROW_LEN_BYTE:
+			sphUnalignedWrite ( pNewRow, (BYTE)uCumulativeLength );
+			pNewRow += sizeof(BYTE);
+			break;
+
+		case BLOB_ROW_LEN_WORD:
+			sphUnalignedWrite ( pNewRow, (WORD)uCumulativeLength );
+			pNewRow += sizeof(WORD);
+			break;
+
+		case BLOB_ROW_LEN_DWORD:
+			sphUnalignedWrite ( pNewRow, (DWORD)uCumulativeLength );
+			pNewRow += sizeof(DWORD);
+			break;
+
+		default:
+			break;
+		}
+	}
+
+	// attribute data
+	for ( int i = 0; i < nBlobs; i++ )
+		if ( i!=iBlobAttrId )
+		{
+			int iLengthBytes = 0;
+			const BYTE * pBlob = GetBlobAttr ( pOldRow, i, nBlobs, iLengthBytes );
+			memcpy ( pNewRow, pBlob, iLengthBytes );
+			pNewRow += iLengthBytes;
+		}
+}
+
+
+template<typename T>
+static bool CheckMVAValues ( const T * pMVA, DWORD uLengthBytes, int iBlobAttrId, CSphString & sError )
+{
+	if ( uLengthBytes % sizeof(T) )
+	{
+		sError.SetSprintf ( "Blob row error: MVA attribute length=%u is not a multiple of %u (blob attribute %d)", uLengthBytes, DWORD(sizeof(T)), iBlobAttrId );
+		return false;
+	}
+
+	int nValues = int(uLengthBytes/sizeof(T));
+	for ( int i = 0; i < nValues-1; i++ )
+		if ( pMVA[i]>=pMVA[i+1] )
+		{
+			sError.SetSprintf ( "Blob row error: descending MVA values found (blob attribute %d)", iBlobAttrId );
+			return false;
+		}
+
+	return true;
+}
+
+
+bool sphCheckBlobRow ( int64_t iOff, DebugCheckReader_i & tBlobs, const CSphSchema & tSchema, CSphString & sError )
+{
+	CSphVector<ESphAttr> dBlobAttrs;
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+	{
+		ESphAttr eAttr = tSchema.GetAttr(i).m_eAttrType;
+		if ( sphIsBlobAttr(eAttr) )
+			dBlobAttrs.Add(eAttr);
+	}
+
+	int64_t iBlobsElemCount = tBlobs.GetLengthBytes();
+	if ( iOff<0 || iOff>iBlobsElemCount )
+	{
+		sError.SetSprintf ( "Blob offset out of bounds: " INT64_FMT " (max: " INT64_FMT ")", iOff, iBlobsElemCount );
+		return false;
+	}
+
+	tBlobs.SeekTo ( iOff, 16 );
+
+	BYTE uType = 0;
+	tBlobs.GetBytes ( &uType, sizeof(uType) );
+	if ( uType!=BLOB_ROW_LEN_BYTE && uType!=BLOB_ROW_LEN_WORD && uType!=BLOB_ROW_LEN_DWORD )
+	{
+		sError.SetSprintf ( "Unknown blob row type: %u", uType );
+		return false;
+	}
+
+	int nBlobAttrs = dBlobAttrs.GetLength();
+	DWORD uLenSize = RowFlagsToLen ( uType );
+	DWORD uAttrLengths = uLenSize*nBlobAttrs;
+	if ( iOff + uAttrLengths > iBlobsElemCount )
+		sError = "Blob row too long";
+
+	CSphFixedVector<BYTE> dLengths ( uAttrLengths );
+	tBlobs.GetBytes ( dLengths.Begin(), dLengths.GetLengthBytes() );
+	const BYTE * pLen = dLengths.Begin();
+
+	CSphVector<int> dAttrLengths ( nBlobAttrs );
+
+	for ( int i = 0; i < nBlobAttrs; i++ )
+	{
+		switch ( uType )
+		{
+		case BLOB_ROW_LEN_BYTE:		dAttrLengths[i] = GetBlobAttrLen<BYTE> ( i, pLen );	break;
+		case BLOB_ROW_LEN_WORD:		dAttrLengths[i] = GetBlobAttrLen<WORD> ( i, pLen );	break;
+		case BLOB_ROW_LEN_DWORD:	dAttrLengths[i] = GetBlobAttrLen<DWORD> ( i, pLen );	break;
+		default:
+			break;
+		}
+	}
+
+	for ( int i = 0; i < nBlobAttrs-1; i++ )
+		if ( dAttrLengths[i]<0 )
+		{
+			sError = "Blob row error: negative attribute length";
+			return false;
+		}
+
+	DWORD uTotalLength = 0;
+	for ( auto i : dAttrLengths )
+		uTotalLength += (DWORD)i;
+
+	if ( iOff+uAttrLengths+uTotalLength > iBlobsElemCount )
+	{
+		sError = "Blob row too long";
+		return false;
+	}
+
+	CSphFixedVector<BYTE> dAttrs ( uTotalLength );
+	tBlobs.GetBytes ( dAttrs.Begin(), dAttrs.GetLengthBytes() );
+	const BYTE * pAttr = dAttrs.Begin();
+	for ( int i = 0; i < nBlobAttrs; i++ )
+	{
+		DWORD uLength = (DWORD)dAttrLengths[i];
+
+		switch ( dBlobAttrs[i] )
+		{
+		case SPH_ATTR_UINT32SET:
+			if ( !CheckMVAValues ( (const DWORD *)pAttr, uLength, i, sError ) )
+				return false;
+			break;
+
+		case SPH_ATTR_INT64SET:
+			if ( !CheckMVAValues ( (const int64_t *)pAttr, uLength, i, sError ) )
+				return false;
+			break;
+
+		case SPH_ATTR_STRING:
+			for ( DWORD j = 0; j < uLength; j++ )
+				if ( !pAttr[j] )
+				{
+					sError.SetSprintf ( "Blob row error: string value contains zeroes (blob attribute %d)", i );
+					return false;
+				}
+			break;
+
+		default:
+			break;
+		}
+
+		pAttr += uLength;
+	}
+
+	return true;
+}
+
+
+const char * sphGetBlobLocatorName()
+{
+	static const char * BLOB_LOCATOR_ATTR = "$_blob_locator";
+	return BLOB_LOCATOR_ATTR;
+}
+
+
+const char * sphGetDocidName()
+{
+	static const char * DOCID_ATTR = "id";
+	return DOCID_ATTR;
+}
+
+
+bool sphIsBlobAttr ( ESphAttr eAttr )
+{
+	return eAttr==SPH_ATTR_STRING || eAttr==SPH_ATTR_JSON	|| eAttr==SPH_ATTR_UINT32SET || eAttr==SPH_ATTR_INT64SET;
+}
+
+
+//////////////////////////////////////////////////////////////////////////
+// data ptr attributes
+
+int sphCalcPackedLength ( int iLengthBytes )
+{
+	return sphCalcZippedLen(iLengthBytes) + iLengthBytes;
+}
+
+
+BYTE * sphPackPtrAttr ( const BYTE * pData, int iLengthBytes )
+{
+	if ( !iLengthBytes )
+		return nullptr;
+
+	assert ( pData );
+
+	BYTE * pPacked = new BYTE [sphCalcPackedLength(iLengthBytes)];
+	sphPackPtrAttr ( pPacked, pData, iLengthBytes );
+	return pPacked;
+}
+
+
+void sphPackPtrAttr ( BYTE * pPrealloc, const BYTE * pData, int iLengthBytes )
+{
+	assert ( pPrealloc && pData );
+	pPrealloc += sphZipToPtr ( iLengthBytes, pPrealloc );
+	memcpy ( pPrealloc, pData, iLengthBytes );
+}
+
+
+BYTE * sphPackPtrAttr ( int iLengthBytes, BYTE ** ppData )
+{
+	// BYTE * pPacked = new BYTE [sphCalcPackedLength(iLengthBytes)];
+	BYTE * pPacked = sphAllocateSmall ( sphCalcPackedLength ( iLengthBytes ) );
+	*ppData = pPacked;
+	*ppData += sphZipToPtr ( iLengthBytes, pPacked );
+	return pPacked;
+}
+
+
+int sphUnpackPtrAttr ( const BYTE * pData, const BYTE ** ppUnpacked )
+{
+	if ( !pData )
+	{
+		if ( ppUnpacked )
+			*ppUnpacked = nullptr;
+
+		return 0;
+	}
+
+	int iLen = (int)sphUnzipInt ( pData );
+
+	if ( ppUnpacked )
+		*ppUnpacked = pData;
+
+	return iLen;
+}
+
+
+ESphAttr sphPlainAttrToPtrAttr ( ESphAttr eAttrType )
+{
+	switch ( eAttrType )
+	{
+	case SPH_ATTR_STRING:		return SPH_ATTR_STRINGPTR;
+	case SPH_ATTR_JSON:			return SPH_ATTR_JSON_PTR;
+	case SPH_ATTR_UINT32SET:	return SPH_ATTR_UINT32SET_PTR;
+	case SPH_ATTR_INT64SET:		return SPH_ATTR_INT64SET_PTR;
+	case SPH_ATTR_JSON_FIELD:	return SPH_ATTR_JSON_FIELD_PTR;
+	default:					return eAttrType;
+	};
+}
+
+
+bool sphIsDataPtrAttr ( ESphAttr eAttr )
+{
+	return eAttr==SPH_ATTR_STRINGPTR || eAttr==SPH_ATTR_FACTORS || eAttr==SPH_ATTR_FACTORS_JSON || eAttr==SPH_ATTR_UINT32SET_PTR ||
+		eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_JSON_PTR || eAttr==SPH_ATTR_JSON_FIELD_PTR;
+}
+
+//////////////////////////////////////////////////////////////////////////
+// misc attribute-related
+
+template < typename T >
+static void MVA2Str ( const T * pMVA, int iLengthBytes, StringBuilder_c &dStr )
+{
+	dStr.GrowEnough ( ( SPH_MAX_NUMERIC_STR + 1 ) * iLengthBytes / sizeof ( DWORD ) );
+	int nValues = iLengthBytes / sizeof ( T );
+	Comma_c sComma ( "," );
+	for ( int i = 0; i<nValues; ++i )
+	{
+		dStr << sComma;
+		dStr.GrowEnough ( SPH_MAX_NUMERIC_STR );
+		dStr += sph::NtoA ( dStr.end (), pMVA[i] );
+	}
+}
+
+
+bool sphIsInternalAttr ( const CSphString & sAttrName )
+{
+	return sAttrName==sphGetBlobLocatorName();
+}
+
+
+bool sphIsInternalAttr ( const CSphColumnInfo & tCol )
+{
+	return sphIsInternalAttr ( tCol.m_sName );
+}
+
+
+void sphMVA2Str ( const BYTE * pMVA, int iLengthBytes, bool b64bit, StringBuilder_c &dStr )
+{
+	if ( b64bit )
+		MVA2Str ( ( const int64_t * ) pMVA, iLengthBytes, dStr );
+	else
+		MVA2Str ( ( const DWORD * ) pMVA, iLengthBytes, dStr );
+}
+
+
+void sphPackedMVA2Str ( const BYTE * pMVA, bool b64bit, StringBuilder_c & dStr )
+{
+	int iLengthBytes = sphUnpackPtrAttr ( pMVA, &pMVA );
+	sphMVA2Str( pMVA, iLengthBytes, b64bit, dStr );
+}

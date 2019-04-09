@@ -210,10 +210,19 @@ void sphJsonSkipNode ( ESphJsonType eType, const BYTE ** ppData );
 int sphJsonFieldLength ( ESphJsonType eType, const BYTE * pData );
 
 /// inplace JSON update, both for realtime and non-realtime indexes, returns true if update is possible
-bool sphJsonInplaceUpdate ( ESphJsonType eValueType, int64_t iValue, ISphExpr * pExpr, BYTE * pStrings, const CSphRowitem * pRow, bool bUpdate );
+bool sphJsonInplaceUpdate ( ESphJsonType eValueType, int64_t iValue, ISphExpr * pExpr, BYTE * pBlobPool, const CSphRowitem * pRow, bool bUpdate );
 
 /// converts string to number
 bool sphJsonStringToNumber ( const char * s, int iLen, ESphJsonType & eType, int64_t & iVal, double & fVal );
+
+/// unpack json data offset from uint64_t
+uint64_t sphJsonUnpackOffset ( uint64_t uPacked );
+
+/// unpack json data type from uint64_t
+ESphJsonType sphJsonUnpackType ( uint64_t uPacked );
+
+/// pack json type and offset to uint64_t
+uint64_t sphJsonPackTypeOffset ( ESphJsonType eType, uint64_t uOffset );
 
 /// internal cJSON init
 void sphInitCJson();

@@ -33,7 +33,6 @@ index idx_130
 {
 	source			= src
 	path			= <data_path/>/idx_130
-    docinfo			= extern
 }
 
 </config>
@@ -46,7 +45,7 @@ for ( $i = 0; $i < 4; $i++)
 {
 	$results[] = sprintf( "iteration=%d", $i );
 
-	$up = $client->UpdateAttributes ( "idx_130", array("mva1"), array(1=>array(array(2,3,4)), 3=>array(array(6,7,8))),true);
+	$up = $client->UpdateAttributes ( "idx_130", array("mva1"), array(1=>array(array(2,3,4)), 3=>array(array(6,7,8))), SPH_UPDATE_MVA );
 	if ( $up >= 0 )
 		$results[] = sprintf("up.ok=%d", $up);
 	else

@@ -44,7 +44,7 @@ TEST_F ( filter_block_level, range )
 	CSphString sWarning, sError;
 	CSphSchema tSchema;
 	CSphColumnInfo tCol;
-	CSphFixedVector<DWORD> dMin ( DWSIZEOF(SphDocID_t) + 1 ), dMax ( DWSIZEOF(SphDocID_t) + 1 );
+	CSphFixedVector<DWORD> dMin ( DWSIZEOF(DocID_t) + 1 ), dMax ( DWSIZEOF(DocID_t) + 1 );
 	CSphScopedPtr<ISphFilter> tFilter ( NULL );
 
 	tCol.m_eAttrType = SPH_ATTR_INTEGER;
@@ -60,26 +60,26 @@ TEST_F ( filter_block_level, range )
 	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
 
 	// filter >=10 && <=40 vs block 1-5
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 1;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 5;
+	*dMin.Begin() = 1;
+	*dMax.Begin() = 5;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >=10 && <=40 vs block 1-10
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 10;
+	*dMax.Begin() = 10;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >=10 && <=40 vs block 40-50
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 40;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 50;
+	*dMin.Begin() = 40;
+	*dMax.Begin() = 50;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >=10 && <=40 vs block 41-50
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 41;
+	*dMin.Begin() = 41;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >=10 && <=40 vs block 9-41
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 9;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 41;
+	*dMin.Begin() = 9;
+	*dMax.Begin() = 41;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	///
@@ -90,28 +90,28 @@ TEST_F ( filter_block_level, range )
 	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
 
 	// filter <=40 vs block 41-50
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 41;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 50;
+	*dMin.Begin() = 41;
+	*dMax.Begin() = 50;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter <=40 vs block 40-50
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 40;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 50;
+	*dMin.Begin() = 40;
+	*dMax.Begin() = 50;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter <=40 vs block 39-50
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 39;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 50;
+	*dMin.Begin() = 39;
+	*dMax.Begin() = 50;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter <=40 vs block 30-40
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 30;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 40;
+	*dMin.Begin() = 30;
+	*dMax.Begin() = 40;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter <=40 vs block 1-4
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 1;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 4;
+	*dMin.Begin() = 1;
+	*dMax.Begin() = 4;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	///
@@ -122,28 +122,28 @@ TEST_F ( filter_block_level, range )
 	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
 
 	// filter >=15 vs block 10-14
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 10;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 14;
+	*dMin.Begin() = 10;
+	*dMax.Begin() = 14;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >=15 vs block 10-15
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 10;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 15;
+	*dMin.Begin() = 10;
+	*dMax.Begin() = 15;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >=15 vs block 10-16
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 10;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 16;
+	*dMin.Begin() = 10;
+	*dMax.Begin() = 16;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >=15 vs block 55-65
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 55;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 65;
+	*dMin.Begin() = 55;
+	*dMax.Begin() = 65;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >=15 vs block 1-5
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 1;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 5;
+	*dMin.Begin() = 1;
+	*dMax.Begin() = 5;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	SetDefault ();
@@ -155,30 +155,30 @@ TEST_F ( filter_block_level, range )
 	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
 
 	// filter >10 && <40 vs block 1-5
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 1;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 5;
+	*dMin.Begin() = 1;
+	*dMax.Begin() = 5;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >10 && <40 vs block 1-10
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 10;
+	*dMax.Begin() = 10;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >10 && <40 vs block 40-50
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 40;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 50;
+	*dMin.Begin() = 40;
+	*dMax.Begin() = 50;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >10 && <40 vs block 41-50
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 41;
+	*dMin.Begin() = 41;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >10 && <40 vs block 39-50
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 39;
+	*dMin.Begin() = 39;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >10 && <40 vs block 9-41
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 9;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 41;
+	*dMin.Begin() = 9;
+	*dMax.Begin() = 41;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	///
@@ -191,28 +191,28 @@ TEST_F ( filter_block_level, range )
 	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
 
 	// filter <40 vs block 40-50
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 40;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 50;
+	*dMin.Begin() = 40;
+	*dMax.Begin() = 50;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter <40 vs block 41-50
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 41;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 50;
+	*dMin.Begin() = 41;
+	*dMax.Begin() = 50;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter <40 vs block 39-50
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 39;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 50;
+	*dMin.Begin() = 39;
+	*dMax.Begin() = 50;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter <40 vs block 30-40
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 30;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 40;
+	*dMin.Begin() = 30;
+	*dMax.Begin() = 40;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter <40 vs block 1-4
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 1;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 4;
+	*dMin.Begin() = 1;
+	*dMax.Begin() = 4;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	///
@@ -225,23 +225,23 @@ TEST_F ( filter_block_level, range )
 	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
 
 	// filter >15 vs block 10-15
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 10;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 15;
+	*dMin.Begin() = 10;
+	*dMax.Begin() = 15;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >15 vs block 10-16
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 10;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 16;
+	*dMin.Begin() = 10;
+	*dMax.Begin() = 16;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >15 vs block 55-65
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 55;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 65;
+	*dMin.Begin() = 55;
+	*dMax.Begin() = 65;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >15 vs block 1-5
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 1;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 5;
+	*dMin.Begin() = 1;
+	*dMax.Begin() = 5;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 }
 
@@ -250,7 +250,7 @@ TEST_F ( filter_block_level, range_float )
 	CSphString sWarning, sError;
 	CSphSchema tSchema;
 	CSphColumnInfo tCol;
-	CSphFixedVector<DWORD> dMin ( DWSIZEOF(SphDocID_t) + 1 ), dMax ( DWSIZEOF(SphDocID_t) + 1 );
+	CSphFixedVector<DWORD> dMin ( DWSIZEOF(DocID_t) + 1 ), dMax ( DWSIZEOF(DocID_t) + 1 );
 	CSphScopedPtr<ISphFilter> tFilter ( NULL );
 
 	tCol.m_eAttrType = SPH_ATTR_FLOAT;
@@ -267,26 +267,26 @@ TEST_F ( filter_block_level, range_float )
 	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
 
 	// filter >10 && <40 vs block 1-5
-	*DOCINFO2ATTRS ( dMin.Begin() ) = sphF2DW ( 1.0f );
-	*DOCINFO2ATTRS ( dMax.Begin() ) = sphF2DW ( 5.0f );
+	*dMin.Begin() = sphF2DW ( 1.0f );
+	*dMax.Begin() = sphF2DW ( 5.0f );
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >10 && <40 vs block 1-10.1
-	*DOCINFO2ATTRS ( dMax.Begin() ) = sphF2DW ( 10.1f );
+	*dMax.Begin() = sphF2DW ( 10.1f );
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >10 && <40 vs block 39.9-50
-	*DOCINFO2ATTRS ( dMin.Begin() ) = sphF2DW ( 39.9f );
-	*DOCINFO2ATTRS ( dMax.Begin() ) = sphF2DW ( 50.0f );
+	*dMin.Begin() = sphF2DW ( 39.9f );
+	*dMax.Begin() = sphF2DW ( 50.0f );
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >10 && <40 vs block 40-50
-	*DOCINFO2ATTRS ( dMin.Begin() ) = sphF2DW (  40.0f );
+	*dMin.Begin() = sphF2DW (  40.0f );
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >10 && <40 vs block 9-41
-	*DOCINFO2ATTRS ( dMin.Begin() ) = sphF2DW ( 9.0f );
-	*DOCINFO2ATTRS ( dMax.Begin() ) = sphF2DW ( 41.0f );
+	*dMin.Begin() = sphF2DW ( 9.0f );
+	*dMax.Begin() = sphF2DW ( 41.0f );
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	///
@@ -301,23 +301,23 @@ TEST_F ( filter_block_level, range_float )
 	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
 
 	// filter <40 vs block 40-50
-	*DOCINFO2ATTRS ( dMin.Begin() ) = sphF2DW ( 40.0f );
-	*DOCINFO2ATTRS ( dMax.Begin() ) = sphF2DW ( 50.0f );
+	*dMin.Begin() = sphF2DW ( 40.0f );
+	*dMax.Begin() = sphF2DW ( 50.0f );
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter <40 vs block 39.9-50
-	*DOCINFO2ATTRS ( dMin.Begin() ) = sphF2DW ( 39.9f );
-	*DOCINFO2ATTRS ( dMax.Begin() ) = sphF2DW ( 50.0f );
+	*dMin.Begin() = sphF2DW ( 39.9f );
+	*dMax.Begin() = sphF2DW ( 50.0f );
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter <40 vs block 30-40
-	*DOCINFO2ATTRS ( dMin.Begin() ) = sphF2DW ( 30.0f );
-	*DOCINFO2ATTRS ( dMax.Begin() ) = sphF2DW ( 40.0f );
+	*dMin.Begin() = sphF2DW ( 30.0f );
+	*dMax.Begin() = sphF2DW ( 40.0f );
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter <40 vs block 1-4
-	*DOCINFO2ATTRS ( dMin.Begin() ) = sphF2DW ( 1.0f );
-	*DOCINFO2ATTRS ( dMax.Begin() ) = sphF2DW ( 4.0f );
+	*dMin.Begin() = sphF2DW ( 1.0f );
+	*dMax.Begin() = sphF2DW ( 4.0f );
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	tOpt.m_fMinValue = 30.0f;
@@ -329,8 +329,8 @@ TEST_F ( filter_block_level, range_float )
 	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
 
 	// filter <40 vs block 1-4
-	*DOCINFO2ATTRS ( dMin.Begin() ) = sphF2DW ( 1.0f );
-	*DOCINFO2ATTRS ( dMax.Begin() ) = sphF2DW ( 4.0f );
+	*dMin.Begin() = sphF2DW ( 1.0f );
+	*dMax.Begin() = sphF2DW ( 4.0f );
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) ); // FIXME!!! should be TRUE due to m_bOpenLeft option
 
 	///
@@ -345,30 +345,29 @@ TEST_F ( filter_block_level, range_float )
 	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
 
 	// filter >15 vs block 10-15
-	*DOCINFO2ATTRS ( dMin.Begin() ) = sphF2DW ( 10.0f );
-	*DOCINFO2ATTRS ( dMax.Begin() ) = sphF2DW ( 15.0f );
+	*dMin.Begin() = sphF2DW ( 10.0f );
+	*dMax.Begin() = sphF2DW ( 15.0f );
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >15 vs block 10-16
-	*DOCINFO2ATTRS ( dMin.Begin() ) = sphF2DW ( 10.0f );
-	*DOCINFO2ATTRS ( dMax.Begin() ) = sphF2DW ( 16.0f );
+	*dMin.Begin() = sphF2DW ( 10.0f );
+	*dMax.Begin() = sphF2DW ( 16.0f );
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >15 vs block 55-65
-	*DOCINFO2ATTRS ( dMin.Begin() ) = sphF2DW ( 55.0f );
-	*DOCINFO2ATTRS ( dMax.Begin() ) = sphF2DW ( 65.0f );
+	*dMin.Begin() = sphF2DW ( 55.0f );
+	*dMax.Begin() = sphF2DW ( 65.0f );
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >15 vs block 1-5
-	*DOCINFO2ATTRS ( dMin.Begin() ) = sphF2DW ( 1.0f );
-	*DOCINFO2ATTRS ( dMax.Begin() ) = sphF2DW ( 5.0f );
+	*dMin.Begin() = sphF2DW ( 1.0f );
+	*dMax.Begin() = sphF2DW ( 5.0f );
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter >15 vs block 150-200
-	*DOCINFO2ATTRS ( dMin.Begin() ) = sphF2DW ( 150.0f );
-	*DOCINFO2ATTRS ( dMax.Begin() ) = sphF2DW ( 200.0f );
+	*dMin.Begin() = sphF2DW ( 150.0f );
+	*dMax.Begin() = sphF2DW ( 200.0f );
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) ); // FIXME!!! should be TRUE due to m_bOpenRight option
-
 }
 
 TEST_F ( filter_block_level, values )
@@ -376,7 +375,7 @@ TEST_F ( filter_block_level, values )
 	CSphString sWarning, sError;
 	CSphSchema tSchema;
 	CSphColumnInfo tCol;
-	CSphFixedVector<DWORD> dMin ( DWSIZEOF(SphDocID_t) + 1 ), dMax ( DWSIZEOF(SphDocID_t) + 1 );
+	CSphFixedVector<DWORD> dMin ( DWSIZEOF(DocID_t) + 1 ), dMax ( DWSIZEOF(DocID_t) + 1 );
 	CSphScopedPtr<ISphFilter> tFilter ( NULL );
 
 	tCol.m_eAttrType = SPH_ATTR_INTEGER;
@@ -392,23 +391,23 @@ TEST_F ( filter_block_level, values )
 	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
 
 	// filter values vs block 1-9
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 1;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 9;
+	*dMin.Begin() = 1;
+	*dMax.Begin() = 9;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter values vs block 11-39
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 11;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 39;
+	*dMin.Begin() = 11;
+	*dMax.Begin() = 39;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter values vs block 9-101
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 9;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 101;
+	*dMin.Begin() = 9;
+	*dMax.Begin() = 101;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter values vs block 41-101
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 41;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 101;
+	*dMin.Begin() = 41;
+	*dMax.Begin() = 101;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	/// single value
@@ -421,18 +420,18 @@ TEST_F ( filter_block_level, values )
 	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
 
 	// filter values vs block 1-9
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 1;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 9;
+	*dMin.Begin() = 1;
+	*dMax.Begin() = 9;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter values vs block 11-39
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 11;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 39;
+	*dMin.Begin() = 11;
+	*dMax.Begin() = 39;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter values vs block 9-101
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 9;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 11;
+	*dMin.Begin() = 9;
+	*dMax.Begin() = 11;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 }
 
@@ -441,7 +440,7 @@ TEST_F ( filter_block_level, and2 )
 	CSphString sWarning, sError;
 	CSphSchema tSchema;
 	CSphColumnInfo tCol;
-	CSphFixedVector<DWORD> dMin ( DWSIZEOF(SphDocID_t) + 1 ), dMax ( DWSIZEOF(SphDocID_t) + 1 );
+	CSphFixedVector<DWORD> dMin ( DWSIZEOF(DocID_t) + 1 ), dMax ( DWSIZEOF(DocID_t) + 1 );
 	CSphScopedPtr<ISphFilter> tFilter ( NULL );
 
 	tCol.m_eAttrType = SPH_ATTR_INTEGER;
@@ -467,18 +466,18 @@ TEST_F ( filter_block_level, and2 )
 	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
 
 	// filter values vs block 5-9
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 5;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 9;
+	*dMin.Begin() = 5;
+	*dMax.Begin() = 9;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter values vs block 11-29
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 11;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 29;
+	*dMin.Begin() = 11;
+	*dMax.Begin() = 29;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter values vs block 9-21
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 9;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 21;
+	*dMin.Begin() = 9;
+	*dMax.Begin() = 21;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 }
 
@@ -487,7 +486,7 @@ TEST_F ( filter_block_level, and3 )
 	CSphString sWarning, sError;
 	CSphSchema tSchema;
 	CSphColumnInfo tCol;
-	CSphFixedVector<DWORD> dMin ( DWSIZEOF(SphDocID_t) + 1 ), dMax ( DWSIZEOF(SphDocID_t) + 1 );
+	CSphFixedVector<DWORD> dMin ( DWSIZEOF(DocID_t) + 1 ), dMax ( DWSIZEOF(DocID_t) + 1 );
 	CSphScopedPtr<ISphFilter> tFilter ( NULL );
 
 	tCol.m_eAttrType = SPH_ATTR_INTEGER;
@@ -519,18 +518,18 @@ TEST_F ( filter_block_level, and3 )
 	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
 
 	// filter values vs block 11-14
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 11;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 14;
+	*dMin.Begin() = 11;
+	*dMax.Begin() = 14;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter values vs block 9-16
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 9;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 16;
+	*dMin.Begin() = 9;
+	*dMax.Begin() = 16;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter values vs block 5-25
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 5;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 25;
+	*dMin.Begin() = 5;
+	*dMax.Begin() = 25;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 }
 
@@ -539,7 +538,7 @@ TEST_F ( filter_block_level, and )
 	CSphString sWarning, sError;
 	CSphSchema tSchema;
 	CSphColumnInfo tCol;
-	CSphFixedVector<DWORD> dMin ( DWSIZEOF(SphDocID_t) + 1 ), dMax ( DWSIZEOF(SphDocID_t) + 1 );
+	CSphFixedVector<DWORD> dMin ( DWSIZEOF(DocID_t) + 1 ), dMax ( DWSIZEOF(DocID_t) + 1 );
 	CSphScopedPtr<ISphFilter> tFilter ( NULL );
 
 	tCol.m_eAttrType = SPH_ATTR_INTEGER;
@@ -577,12 +576,12 @@ TEST_F ( filter_block_level, and )
 	ASSERT_TRUE ( tFilter.Ptr()!=NULL );
 
 	// filter values vs block 5-19
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 5;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 19;
+	*dMin.Begin() = 5;
+	*dMax.Begin() = 19;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	// filter values vs block 1-30
-	*DOCINFO2ATTRS ( dMin.Begin() ) = 1;
-	*DOCINFO2ATTRS ( dMax.Begin() ) = 30;
+	*dMin.Begin() = 1;
+	*dMax.Begin() = 30;
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 }

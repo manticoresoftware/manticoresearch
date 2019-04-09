@@ -33,7 +33,6 @@ index lj
 {
 	source			= srclj
 	path			= </Static><Data_Path/><Static>/lj
-	docinfo			= extern
 	min_word_len	= 1
 }
 </Static>

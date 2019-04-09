@@ -108,16 +108,22 @@ $run_subtest = function ( &$client, $index1, $index2, &$results, $sd_address, $s
 	$query_res = $res[0];
 	{
 		$results[] = sprintf ( "query: \"%s\" index: %s", $query, $index1 );
-		foreach ( $query_res["matches"] as $match )
-			$results[] = sprintf ( "\tid: %d, weight: %d, gid: %d, @groupby: %d, @count: %d",
-				$match["id"], $match["weight"], $match["attrs"]["gid"], $match["attrs"]["@groupby"], $match["attrs"]["@count"] );
+		if ( array_key_exists ( "matches", $query_res ) )
+		{
+			foreach ( $query_res["matches"] as $match )
+				$results[] = sprintf ( "\tid: %d, weight: %d, gid: %d, @groupby: %d, @count: %d",
+					$match["id"], $match["weight"], $match["attrs"]["gid"], $match["attrs"]["@groupby"], $match["attrs"]["@count"] );
+		}
 	}
 	$query_res = $res[1];
 	{
 		$results[] = sprintf ( "query: \"%s\" index: %s", $query, $index2 );
-		foreach ( $query_res["matches"] as $match )
-			$results[] = sprintf ( "\tid: %d, weight: %d, gid: %d",
-				$match["id"], $match["weight"], $match["attrs"]["gid"] );
+		if ( array_key_exists ( "matches", $query_res ) )
+		{
+			foreach ( $query_res["matches"] as $match )
+				$results[] = sprintf ( "\tid: %d, weight: %d, gid: %d",
+					$match["id"], $match["weight"], $match["attrs"]["gid"] );
+		}
 	}
 	$results[] = "";
 };

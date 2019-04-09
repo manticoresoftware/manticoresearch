@@ -31,7 +31,6 @@ index idx
 {
 	source			= src
 	path			= <data_path/>/main
-    docinfo			= extern
 }
 
 </config>

@@ -41,6 +41,7 @@ static bool			g_bCfgHasData = false;
 // FIXME!!! take from config
 static int			g_iRemoteTimeout = 120 * 1000; // 2 minutes in msec
 static const char * g_sDebugOptions = "debug=on;cert.log_conflicts=yes";
+static const char * g_sDefaultReplicationNodes = "gcomm://";
 
 enum class ClusterState_e
 {
@@ -57,13 +58,26 @@ enum class ClusterState_e
 struct ClusterDesc_t
 {
 	CSphString	m_sName;
-	CSphString	m_sConnectNodes;
-	CSphString	m_sListen; // +1 after listen is IST port
 	CSphString	m_sPath; // path relative to data_dir
 	CSphVector<CSphString> m_dIndexes;
+	CSphString	m_sClusterNodes;
 
 	SmallStringHash_T<CSphString> m_hOptions;
 };
+
+class ScopedPort_c : public ISphNoncopyable
+{
+	int m_iPort = -1;
+
+public:
+	explicit ScopedPort_c ( int iPort ) : m_iPort ( iPort ) {}
+	~ScopedPort_c();
+	int Get() const { return m_iPort; }
+	void Set ( int iPort );
+	int Leak();
+	void Free();
+};
+
 
 struct ReplicationCluster_t : public ClusterDesc_t
 {
@@ -75,14 +89,16 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	SphThread_t	m_tRecvThd;
 
 	// nodes at cluster
-	CSphString	m_sNodes; // raw nodes addresses (API and replication) from whole cluster
-	RwLock_t m_tNodesLock;
+	CSphString	m_sViewNodes; // raw nodes addresses (API and replication) from whole cluster
+	CSphMutex	m_tViewNodesLock;
 	CSphVector<uint64_t> m_dIndexHashes;
+	ScopedPort_c	m_tPort { -1 };
+
 
 	CSphMutex m_tOptsLock;
 
 	// state from plugin
-	CSphFixedVector<BYTE>	m_dUUID { 0 };
+	CSphFixedVector<char>	m_dUUID { 0 };
 	int						m_iConfID = 0;
 	int						m_iStatus = 0;
 	int						m_iSize = 0;
@@ -121,7 +137,9 @@ struct ReplicationArgs_t
 {
 	ReplicationCluster_t *	m_pCluster = nullptr;
 	bool					m_bNewCluster = false;
-	CSphString				m_sIncomingAdresses;
+	CSphString				m_sListenAddr;
+	int						m_iListenPort = -1;
+	CSphString				m_sNodes;
 };
 
 class CommitMonitor_c
@@ -140,10 +158,6 @@ private:
 	ReplicationCommand_t & m_tCmd;
 	int * m_pDeletedCount = nullptr;
 };
-
-static CSphString g_sIncomingAddr;
-static CSphString g_sIncomingIP;
-static bool g_bHasIncoming = false;
 
 static SmallStringHash_T<ReplicationCluster_t *> g_hClusters;
 static RwLock_t g_tClustersLock;
@@ -178,6 +192,92 @@ static bool RemoteClusterSynced ( const PQRemoteData_t & tCmd, CSphString & sErr
 
 static bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CSphString & sCluster, ReplicationCommand_t & tCmd );
 static bool HandleCmdReplicated ( ReplicationCommand_t & tCmd );
+static bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sCluster, const CSphString & sGTID, CSphString & sError, CSphString & sNodes );
+static bool RemoteClusterGetNodes ( const CSphString & sCluster, const CSphString & sGTID, CSphString & sError, CSphString & sNodes );
+static void ClusterFilterNodes ( const CSphString & sSrcNodes, ProtocolType_e eProto, CSphString & sDstNodes );
+static bool RemoteClusterUpdateNodes ( const CSphString & sCluster, CSphString * pNodes, CSphString & sError );
+
+
+struct PortsRange_t
+{
+	int m_iPort = 0;
+	int m_iCount = 0;
+};
+
+class FreePortList_c
+{
+private:
+	CSphVector<int>	m_dFree;
+	CSphTightVector<PortsRange_t> m_dPorts;
+	CSphMutex m_tLock;
+
+public:
+	void AddRange ( const PortsRange_t & tPorts )
+	{
+		assert ( tPorts.m_iPort && tPorts.m_iCount && ( tPorts.m_iCount%2 )==0 );
+		ScopedMutex_t tLock ( m_tLock );
+		m_dPorts.Add ( tPorts );
+	}
+
+	int Get ()
+	{
+		int iRes = -1;
+		ScopedMutex_t tLock ( m_tLock );
+		if ( m_dFree.GetLength () )
+		{
+			iRes = m_dFree.Pop();
+		} else if ( m_dPorts.GetLength() )
+		{
+			assert ( m_dPorts.Last().m_iCount>=2 );
+			PortsRange_t & tPorts = m_dPorts.Last();
+			iRes = tPorts.m_iPort;
+			tPorts.m_iPort += 2;
+			tPorts.m_iCount -= 2;
+			if ( !tPorts.m_iCount )
+				m_dPorts.Pop();
+		}
+		return iRes;
+	}
+
+	void Free ( int iPort )
+	{
+		ScopedMutex_t tLock ( m_tLock );
+		m_dFree.Add ( iPort );
+	}
+};
+
+static bool g_bReplicationEnabled = false;
+static bool g_bHasIncoming = false;
+static CSphString g_sIncomingIP;
+static CSphString g_sIncomingProto;
+static CSphString g_sListenReplicationIP;
+static FreePortList_c g_tPorts;
+
+ScopedPort_c::~ScopedPort_c()
+{
+	Free();
+}
+
+void ScopedPort_c::Free()
+{
+	if ( m_iPort!=-1 )
+		g_tPorts.Free ( m_iPort );
+	m_iPort = -1;
+}
+
+void ScopedPort_c::Set ( int iPort )
+{
+	Free();
+	m_iPort = iPort;
+}
+
+int ScopedPort_c::Leak()
+{
+	int iPort = m_iPort;
+	m_iPort = -1;
+	return iPort;
+}
+
 
 // receiving thread context for wsrep callbacks
 struct ReceiverCtx_t : ISphRefcounted
@@ -294,18 +394,6 @@ static bool CheckClasterState ( const ReplicationCluster_t * pCluster, CSphStrin
 	return CheckClasterState ( eState, pCluster->m_sName, sError );
 }
 
-static void GetNodeFullAddress ( const CSphString & sListen, CSphString & sAddr )
-{
-	ListenerDesc_t tListen = ParseListener ( sListen.cstr() );
-	sAddr.SetSprintf ( "%s,%s:%d:replication", g_sIncomingAddr.cstr(), g_sIncomingIP.cstr(), tListen.m_iPort );
-}
-
-static void GetNodeReplicationAddress ( const CSphString & sListen, CSphString & sAddr )
-{
-	ListenerDesc_t tListen = ParseListener ( sListen.cstr() );
-	sAddr.SetSprintf ( "%s:%d", g_sIncomingIP.cstr(), tListen.m_iPort );
-}
-
 static CSphString GetOptions ( const SmallStringHash_T<CSphString> & hOptions )
 {
 	StringBuilder_c tBuf ( ";" );
@@ -367,20 +455,21 @@ static void SetOptions ( const CSphString & sOptions, SmallStringHash_T<CSphStri
 
 static void UpdateGroupView ( const wsrep_view_info_t * pView, ReplicationCluster_t * pCluster )
 {
-	StringBuilder_c sBuf ( ";" );
+	StringBuilder_c sBuf ( "," );
 	const wsrep_member_info_t * pBoxes = pView->members;
 	for ( int i=0; i<pView->memb_num; i++ )
-	{
-		if ( i!=pView->my_idx )
-			sBuf += pBoxes[i].incoming;
-	}
+		sBuf += pBoxes[i].incoming;
 
 	// change of nodes happens only here with single thread
 	// its safe to compare nodes string here without lock
-	if ( pCluster->m_sNodes!=sBuf.cstr() )
+	if ( pCluster->m_sViewNodes!=sBuf.cstr() )
 	{
-		ScWL_t tLock ( pCluster->m_tNodesLock );
-		pCluster->m_sNodes = sBuf.cstr();
+		ScopedMutex_t tLock ( pCluster->m_tViewNodesLock );
+		pCluster->m_sViewNodes = sBuf.cstr();
+
+		// lets also update cluster nodes set at config for just created cluster with new member
+		if ( pCluster->m_sClusterNodes.IsEmpty() && pView->memb_num>1 )
+			ClusterFilterNodes ( pCluster->m_sViewNodes, PROTO_SPHINX, pCluster->m_sClusterNodes );
 	}
 }
 
@@ -406,8 +495,7 @@ static wsrep_cb_status_t ViewChanged_fn ( void * pAppCtx, void * pRecvCtx, const
 
 	if ( pView->state_gap )
 	{
-		CSphString sAddr;
-		GetNodeFullAddress ( pCluster->m_sListen, sAddr );
+		CSphString sAddr = g_sIncomingProto;
 		sphLogDebugRpl ( "join %s to %s", sAddr.cstr(), pCluster->m_sName.cstr() );
 
 		*pSstReqLen = sAddr.Length() + 1;
@@ -679,7 +767,7 @@ void Instr_fn ( wsrep_pfs_instr_type_t type, wsrep_pfs_instr_ops_t ops, wsrep_pf
 
 bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 {
-	assert ( !g_sDataDir.IsEmpty() );
+	assert ( g_bReplicationEnabled );
 	wsrep_t * pWsrep = nullptr;
 	// let's load and initialize provider
 	wsrep_status_t eRes = (wsrep_status_t)wsrep_load ( GetReplicationDL(), &pWsrep, Logger_fn );
@@ -697,7 +785,18 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	CSphString sMyName;
 	sMyName.SetSprintf ( "daemon_%d_%s", GetOsThreadId(), tArgs.m_pCluster->m_sName.cstr() );
 
-	sphLogDebugRpl ( "node incoming '%s', listen '%s', name '%s'", tArgs.m_sIncomingAdresses.cstr(), tArgs.m_pCluster->m_sListen.cstr(), sMyName.cstr() );
+	CSphString sConnectNodes;
+	if ( tArgs.m_sNodes.IsEmpty() )
+	{
+		sConnectNodes = g_sDefaultReplicationNodes;
+	} else
+	{
+		sConnectNodes.SetSprintf ( "%s%s", g_sDefaultReplicationNodes, tArgs.m_sNodes.cstr() );
+	}
+
+	CSphString sIncoming;
+	sIncoming.SetSprintf ( "%s,%s:%d:replication", g_sIncomingProto.cstr(), g_sIncomingIP.cstr(), tArgs.m_iListenPort );
+	sphLogDebugRpl ( "node incoming '%s', listen '%s', nodes '%s', name '%s'", sIncoming.cstr(), tArgs.m_sListenAddr.cstr(), sConnectNodes.cstr(), sMyName.cstr() );
 
 	ReceiverCtx_t * pRecvArgs = new ReceiverCtx_t();
 	pRecvArgs->m_pCluster = tArgs.m_pCluster;
@@ -734,9 +833,9 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	wsrep_args.app_ctx		= pRecvArgs,
 
 	wsrep_args.node_name	= sMyName.cstr();
-	wsrep_args.node_address	= tArgs.m_pCluster->m_sListen.cstr();
+	wsrep_args.node_address	= tArgs.m_sListenAddr.cstr();
 	// must to be set otherwise node works as GARB - does not affect FC and might hung 
-	wsrep_args.node_incoming = tArgs.m_sIncomingAdresses.cstr();
+	wsrep_args.node_incoming = sIncoming.cstr();
 	wsrep_args.data_dir		= sFullClusterPath.cstr(); // working directory
 	wsrep_args.options		= sOptions.cstr();
 	wsrep_args.proto_ver	= 127; // maximum supported application event protocol
@@ -764,7 +863,7 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	}
 
 	// Connect to cluster
-	eRes = pWsrep->connect ( pWsrep, tArgs.m_pCluster->m_sName.cstr(), tArgs.m_pCluster->m_sConnectNodes.cstr(), "", tArgs.m_bNewCluster );
+	eRes = pWsrep->connect ( pWsrep, tArgs.m_pCluster->m_sName.cstr(), sConnectNodes.cstr(), "", tArgs.m_bNewCluster );
 	if ( eRes!=WSREP_OK )
 	{
 		sError.SetSprintf ( "replication connect failed: %d '%s'", (int)eRes, GetStatus ( eRes ) );
@@ -973,6 +1072,14 @@ static void ReplicateClusterStats ( ReplicationCluster_t * pCluster, VectorLike 
 		dOut.Add().SetSprintf ( "%d", pCluster->m_iIdx );
 	if ( dOut.MatchAddVa ( "cluster_%s_node_state", sName ) )
 		dOut.Add() = GetNodeState ( pCluster->GetNodeState() );
+	// nodes of cluster defined and view
+	{
+		ScopedMutex_t tLock ( pCluster->m_tViewNodesLock );
+		if ( dOut.MatchAddVa ( "cluster_%s_nodes_set", sName ) )
+			dOut.Add().SetSprintf ( "%s", pCluster->m_sClusterNodes.scstr() );
+		if ( dOut.MatchAddVa ( "cluster_%s_nodes_view", sName ) )
+			dOut.Add().SetSprintf ( "%s", pCluster->m_sViewNodes.scstr() );
+	}
 
 	// cluster indexes
 	if ( dOut.MatchAddVa ( "cluster_%s_indexes_count", sName ) )
@@ -1073,27 +1180,10 @@ void JsonLoadConfig ( const CSphConfigSection & hSearchd )
 {
 	g_sLogFile = hSearchd.GetStr ( "log", "" );
 
-	g_sIncomingIP = hSearchd.GetStr ( "node_address" );
-	g_bHasIncoming = !g_sIncomingIP.IsEmpty();
-	DWORD uIP = 0;
-	int iPort = 9320;
-	bool bNoListen = true;
-
 	// node with empty incoming addresses works as GARB - does not affect FC
 	// might hung on pushing 1500 transactions
-	for ( const CSphVariant * pOpt = hSearchd("listen"); pOpt; pOpt = pOpt->m_pNext )
-	{
-		const CSphString & sListen = pOpt->strval();
-		// check for valid address of API protocol but not local or port only
-		ListenerDesc_t tListen = ParseListener ( sListen.cstr() );
-		if ( tListen.m_eProto!=PROTO_SPHINX || tListen.m_uIP==0 )
-			continue;
-
-		uIP = tListen.m_uIP;
-		iPort = tListen.m_iPort;
-		bNoListen = false;
-		break;
-	}
+	g_sIncomingIP = hSearchd.GetStr ( "node_address" );
+	g_bHasIncoming = !g_sIncomingIP.IsEmpty();
 
 	g_sDataDir = hSearchd.GetStr ( "data_dir", "" );
 	if ( g_sDataDir.IsEmpty() )
@@ -1111,29 +1201,12 @@ void JsonLoadConfig ( const CSphConfigSection & hSearchd )
 	g_sConfigPath.SetSprintf ( "%s/manticoresearch.json", g_sDataDir.cstr() );
 	if ( !JsonConfigRead ( g_sConfigPath, g_dCfgClusters, g_dCfgIndexes, sError ) )
 		sphDie ( "failed to use JSON config, %s", sError.cstr() );
-
-	if ( bNoListen )
-	{
-		sphWarning ( "no listen found, can not set incoming addresses, replication disabled" );
-		return;
-	}
-
-	if ( !g_bHasIncoming )
-	{
-		char sListenBuf [ SPH_ADDRESS_SIZE ];
-		sphFormatIP ( sListenBuf, sizeof(sListenBuf), uIP );
-		g_sIncomingIP = sListenBuf;
-		g_sIncomingAddr.SetSprintf ( "%s:%d", sListenBuf, iPort );
-	} else
-	{
-		g_sIncomingAddr.SetSprintf ( "%s:%d", g_sIncomingIP.cstr(), iPort );
-	}
 }
 
 void JsonDoneConfig()
 {
 	CSphString sError;
-	if ( !g_sDataDir.IsEmpty() && ( g_bCfgHasData || g_hClusters.GetLength()>0 ) )
+	if ( g_bReplicationEnabled && ( g_bCfgHasData || g_hClusters.GetLength()>0 ) )
 	{
 		CSphVector<IndexDesc_t> dIndexes;
 		GetLocalIndexes ( dIndexes );
@@ -1603,8 +1676,6 @@ bool JsonLoadIndexDesc ( const JsonObj_c & tJson, CSphString & sError, IndexDesc
 	return true;
 }
 
-static const CSphString g_sDefaultReplicationNodes = "gcomm://";
-
 bool JsonConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> & dClusters, CSphVector<IndexDesc_t> & dIndexes, CSphString & sError )
 {
 	if ( !sphIsReadable ( sConfigPath, nullptr ) )
@@ -1672,11 +1743,8 @@ bool JsonConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> 
 			SetOptions ( sOptions, tCluster.m_hOptions );
 		}
 
-		tCluster.m_sConnectNodes = g_sDefaultReplicationNodes;
-		bGood &= i.FetchStrItem ( tCluster.m_sConnectNodes, "nodes", sError, true );
+		bGood &= i.FetchStrItem ( tCluster.m_sClusterNodes, "nodes", sError, true );
 		bGood &= i.FetchStrItem ( tCluster.m_sPath, "path", sError, true );
-		// must have cluster desc
-		bGood &= i.FetchStrItem ( tCluster.m_sListen, "listen", sError, false );
 
 		// set indexes prior replication init
 		JsonObj_c tIndexes = i.GetItem("indexes");
@@ -1786,8 +1854,7 @@ void JsonConfigDumpClusters ( const SmallStringHash_T<ReplicationCluster_t *> & 
 
 		JsonObj_c tItem;
 		tItem.AddStr ( "path", pCluster->m_sPath );
-		tItem.AddStr ( "listen", pCluster->m_sListen );
-		tItem.AddStr ( "nodes", pCluster->m_sConnectNodes );
+		tItem.AddStr ( "nodes", pCluster->m_sClusterNodes );
 		tItem.AddStr ( "options", sOptions );
 
 		// index array
@@ -1878,7 +1945,7 @@ bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName
 
 static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes, const CSphString & sCluster, CSphString & sError )
 {
-	assert ( !g_sDataDir.IsEmpty() );
+	assert ( g_bReplicationEnabled );
 
 	if ( !g_hClusters.GetLength() )
 	{
@@ -2004,9 +2071,9 @@ bool CheckPath ( const CSphString & sPath, bool bCheckWrite, CSphString & sError
 
 static bool ClusterCheckPath ( const CSphString & sPath, const CSphString & sName, bool bCheckWrite, CSphString & sError )
 {
-	if ( g_sDataDir.IsEmpty() )
+	if ( !g_bReplicationEnabled )
 	{
-		sError.SetSprintf ( "data_dir option is missed, replication disabled" );
+		sError.SetSprintf ( "data_dir option is missed or no replication listeners set, replication disabled" );
 		return false;
 	}
 
@@ -2108,18 +2175,82 @@ static void NewClusterClean ( const CSphString & sPath )
 	}
 }
 
-bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bool bForce )
+static void SetListener ( const CSphVector<ListenerDesc_t> & dListeners )
 {
-	if ( g_sDataDir.IsEmpty() )
+	bool bGotReplicationPorts = false;
+	ARRAY_FOREACH ( i, dListeners )
 	{
-		sphWarning ( "data_dir option is missed, replication disabled" );
-		return false;
+		const ListenerDesc_t & tListen = dListeners[i];
+		if ( tListen.m_eProto!=PROTO_REPLICATION )
+			continue;
+
+		const bool bBadCount = ( tListen.m_iPortsCount<2 ); 
+		const bool bBadRange = ( ( tListen.m_iPortsCount%2 )!=0 && ( tListen.m_iPortsCount-1 )<2 );
+		if ( bBadCount || bBadRange )
+		{
+			sphWarning ( "invalid replication ports count %d, should be at least 2", tListen.m_iPortsCount );
+			continue;
+		}
+
+		PortsRange_t tPorts;
+		tPorts.m_iPort = tListen.m_iPort;
+		tPorts.m_iCount = tListen.m_iPortsCount;
+		if ( ( tPorts.m_iCount%2 )!=0 )
+			tPorts.m_iCount--;
+		if ( g_sListenReplicationIP.IsEmpty() && tListen.m_uIP!=0 )
+		{
+			char sListenBuf [ SPH_ADDRESS_SIZE ];
+			sphFormatIP ( sListenBuf, sizeof(sListenBuf), tListen.m_uIP );
+			g_sListenReplicationIP = sListenBuf;
+		}
+
+		bGotReplicationPorts = true;
+		g_tPorts.AddRange ( tPorts );
 	}
 
-	if ( g_sIncomingAddr.IsEmpty() )
+	int iPort = -1;
+	if ( g_bHasIncoming )
 	{
-		sphWarning ( "incoming addresses not set, replication disabled" );
-		return false;
+		iPort = dListeners.GetFirst ( [&] ( const ListenerDesc_t & tListen ) { return tListen.m_eProto==PROTO_SPHINX && tListen.m_uIP!=0; } );
+	} else
+	{
+		iPort = dListeners.GetFirst ( [&] ( const ListenerDesc_t & tListen ) { return tListen.m_eProto==PROTO_SPHINX; } );
+	}
+
+	if ( iPort==-1 )
+	{
+		if ( g_dCfgClusters.GetLength() )
+			sphWarning ( "no listen found, can not set incoming addresses, replication disabled" );
+		return;
+	}
+
+	if ( !g_bHasIncoming )
+	{
+		char sListenBuf [ SPH_ADDRESS_SIZE ];
+		sphFormatIP ( sListenBuf, sizeof(sListenBuf), dListeners[iPort].m_uIP );
+		g_sIncomingIP = sListenBuf;
+		g_sIncomingProto.SetSprintf ( "%s:%d", sListenBuf, dListeners[iPort].m_iPort );
+		if ( g_sListenReplicationIP.IsEmpty() )
+			g_sListenReplicationIP = sListenBuf;
+	} else
+	{
+		g_sIncomingProto.SetSprintf ( "%s:%d", g_sIncomingIP.cstr(), dListeners[iPort].m_iPort );
+		if ( g_sListenReplicationIP.IsEmpty() )
+			g_sListenReplicationIP = g_sIncomingIP;
+	}
+
+	g_bReplicationEnabled = ( !g_sDataDir.IsEmpty() && bGotReplicationPorts );
+}
+
+void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<ListenerDesc_t> & dListeners, bool bNewCluster, bool bForce )
+{
+	SetListener ( dListeners );
+
+	if ( !g_bReplicationEnabled )
+	{
+		if ( g_dCfgClusters.GetLength() )
+			sphWarning ( "data_dir option is missed or no replication listeners set, replication disabled" );
+		return;
 	}
 
 	sphThreadKeyCreate ( &g_tClusterKey );
@@ -2130,32 +2261,47 @@ bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bo
 		ReplicationArgs_t tArgs;
 		// global options
 		tArgs.m_bNewCluster = ( bNewCluster || bForce );
-		GetNodeFullAddress ( tDesc.m_sListen, tArgs.m_sIncomingAdresses );
 
-		CSphScopedPtr<ReplicationCluster_t> pElem ( new ReplicationCluster_t );
-		pElem->m_sConnectNodes = tDesc.m_sConnectNodes;
-		pElem->m_sName = tDesc.m_sName;
-		pElem->m_sListen = tDesc.m_sListen;
-		pElem->m_sPath = tDesc.m_sPath;
-		pElem->m_hOptions = tDesc.m_hOptions;
-
-		// check listen IP address
-		ListenerDesc_t tListen = ParseListener ( pElem->m_sListen.cstr() );
-		char sListenBuf [ SPH_ADDRESS_SIZE ];
-		sphFormatIP ( sListenBuf, sizeof(sListenBuf), tListen.m_uIP );
-		if ( tListen.m_uIP==0 )
+		// cluster nodes
+		if ( tArgs.m_bNewCluster || tDesc.m_sClusterNodes.IsEmpty() )
 		{
-			sphWarning ( "cluster '%s' listen empty address (%s), skipped", pElem->m_sName.cstr(), sListenBuf );
+			if ( tDesc.m_sClusterNodes.IsEmpty() )
+			{
+				sphWarning ( "no nodes found, force new cluster '%s'", tDesc.m_sName.cstr() );
+				tArgs.m_bNewCluster = true;
+			}
+		} else
+		{
+			CSphString sNodes;
+			if ( !ClusterGetNodes ( tDesc.m_sClusterNodes, tDesc.m_sName, "", sError, sNodes ) )
+			{
+				sphWarning ( "cluster '%s', no nodes available, replication disabled, error: %s", tDesc.m_sName.cstr(), sError.cstr() );
+				continue;
+			}
+
+			ClusterFilterNodes ( sNodes, PROTO_REPLICATION, tArgs.m_sNodes );
+			if ( sNodes.IsEmpty() )
+			{
+				sphWarning ( "cluster '%s', no nodes available, replication disabled", tDesc.m_sName.cstr() );
+				continue;
+			}
+		}
+
+		ScopedPort_c tPort ( g_tPorts.Get() );
+		if ( tPort.Get()==-1 )
+		{
+			sphWarning ( "cluster '%s', no replication ports available, replication disabled, add replication listener", tDesc.m_sName.cstr() );
 			continue;
 		}
+		tArgs.m_sListenAddr.SetSprintf ( "%s:%d", g_sListenReplicationIP.cstr(), tPort.Get() );
+		tArgs.m_iListenPort = tPort.Get();
 
-		bool bNodesEmpty = ( pElem->m_sConnectNodes==g_sDefaultReplicationNodes );
-		if ( bNodesEmpty )
-		{
-			if ( !tArgs.m_bNewCluster )
-				sphWarning ( "nodes property is empty, force new cluster '%s'", pElem->m_sName.cstr() );
-			tArgs.m_bNewCluster = true;
-		}
+		CSphScopedPtr<ReplicationCluster_t> pElem ( new ReplicationCluster_t );
+		pElem->m_sName = tDesc.m_sName;
+		pElem->m_sPath = tDesc.m_sPath;
+		pElem->m_hOptions = tDesc.m_hOptions;
+		pElem->m_tPort.Set ( tPort.Leak() );
+		pElem->m_sClusterNodes = tDesc.m_sClusterNodes;
 
 		// check cluster path is unique
 		if ( !ClusterCheckPath ( pElem->m_sPath, pElem->m_sName, false, sError ) )
@@ -2167,7 +2313,7 @@ bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bo
 		CSphString sClusterPath = GetClusterPath ( pElem->m_sPath );
 
 		// set safe_to_bootstrap to 1 into grastate.dat file at cluster path
-		if ( ( bForce || bNodesEmpty ) && !NewClusterForce ( sClusterPath, sError ) )
+		if ( bForce && !NewClusterForce ( sClusterPath, sError ) )
 		{
 			sphWarning ( "%s, cluster '%s' skipped", sError.cstr(), pElem->m_sName.cstr() );
 			continue;
@@ -2199,7 +2345,6 @@ bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bo
 			g_hClusters.Delete ( tDesc.m_sName );
 		}
 	}
-	return true;
 }
 
 static bool CheckClusterOption ( const SmallStringHash_T<SqlInsert_t *> & hValues, const char * sName, bool bOptional, CSphString & sVal, CSphString & sError )
@@ -2225,9 +2370,9 @@ static bool CheckClusterOption ( const SmallStringHash_T<SqlInsert_t *> & hValue
 
 static bool CheckClusterStatement ( const CSphString & sCluster, bool bCheckCluster, CSphString & sError )
 {
-	if ( g_sIncomingAddr.IsEmpty() )
+	if ( !g_bReplicationEnabled )
 	{
-		sError = "incoming addresses not set";
+		sError = "data_dir option is missed or no replication listeners set";
 		return false;
 	}
 
@@ -2256,16 +2401,11 @@ static bool CheckClusterStatement ( const CSphString & sCluster, const StrVec_t 
 	ARRAY_FOREACH ( i, dNames )
 		hValues.Add ( dValues.Begin() + i, dNames[i] );
 
-	CSphString sListen;
-	if ( !CheckClusterOption ( hValues, "listen", false, sListen, sError ) )
-		return false;
-
 	pElem = new ReplicationCluster_t;
 	pElem->m_sName = sCluster;
-	pElem->m_sListen = sListen;
 
 	// optional items
-	if ( !CheckClusterOption ( hValues, "nodes", !bJoin, pElem->m_sConnectNodes, sError ) )
+	if ( !CheckClusterOption ( hValues, "nodes", !bJoin, pElem->m_sClusterNodes, sError ) )
 		return false;
 	if ( !CheckClusterOption ( hValues, "path", true, pElem->m_sPath, sError ) )
 		return false;
@@ -2280,16 +2420,6 @@ static bool CheckClusterStatement ( const CSphString & sCluster, const StrVec_t 
 	if ( !bValidPath )
 		return false;
 
-	// check listen IP address
-	ListenerDesc_t tListen = ParseListener ( pElem->m_sListen.cstr() );
-	char sListenBuf [ SPH_ADDRESS_SIZE ];
-	sphFormatIP ( sListenBuf, sizeof(sListenBuf), tListen.m_uIP );
-	if ( tListen.m_uIP==0 )
-	{
-		sError.SetSprintf ( "cluster '%s' listen empty address (%s)", pElem->m_sName.cstr(), sListenBuf );
-		return false;
-	}
-
 	return true;
 }
 
@@ -2299,18 +2429,37 @@ static bool CheckClusterStatement ( const CSphString & sCluster, const StrVec_t 
 
 bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphString & sError )
 {
+	ReplicationArgs_t tArgs;
 	CSphScopedPtr<ReplicationCluster_t> pElem ( nullptr );
 	if ( !CheckClusterStatement ( sCluster, dNames, dValues, true, sError, pElem ) )
 		return false;
 
-	// nodes should start with gcomm://
-	if ( !pElem->m_sConnectNodes.Begins ( "gcomm://" ) )
-		pElem->m_sConnectNodes.SetSprintf ( "gcomm://%s", pElem->m_sConnectNodes.cstr() );
+	CSphString sNodes;
+	if ( !ClusterGetNodes ( pElem->m_sClusterNodes, pElem->m_sName, "", sError, sNodes ) )
+	{
+		sError.SetSprintf ( "cluster '%s', no nodes available, error '%s'", pElem->m_sName.cstr(), sError.cstr() );
+		return false;
+	}
 
-	ReplicationArgs_t tArgs;
+	ClusterFilterNodes ( sNodes, PROTO_REPLICATION, tArgs.m_sNodes );
+	if ( tArgs.m_sNodes.IsEmpty() )
+	{
+		sError.SetSprintf ( "cluster '%s', no nodes available", pElem->m_sName.cstr() );
+		return false;
+	}
+
+	ScopedPort_c tPort ( g_tPorts.Get() );
+	if ( tPort.Get()==-1 )
+	{
+		sError.SetSprintf ( "cluster '%s', no replication ports available, add replication listener", pElem->m_sName.cstr() );
+		return false;
+	}
+	tArgs.m_sListenAddr.SetSprintf ( "%s:%d", g_sListenReplicationIP.cstr(), tPort.Get() );
+	tArgs.m_iListenPort = tPort.Get();
+	pElem->m_tPort.Set ( tPort.Leak() );
+
 	// global options
 	tArgs.m_bNewCluster = false;
-	GetNodeFullAddress ( pElem->m_sListen, tArgs.m_sIncomingAdresses );
 	tArgs.m_pCluster = pElem.Ptr();
 
 	// need to clean up Galera system files left from previous cluster
@@ -2339,17 +2488,23 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 
 bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphString & sError )
 {
+	ReplicationArgs_t tArgs;
 	CSphScopedPtr<ReplicationCluster_t> pElem ( nullptr );
 	if ( !CheckClusterStatement ( sCluster, dNames, dValues, false, sError, pElem ) )
 		return false;
 
-	// nodes to connect should start with gcomm://
-	pElem->m_sConnectNodes = g_sDefaultReplicationNodes;
+	ScopedPort_c tPort ( g_tPorts.Get() );
+	if ( tPort.Get()==-1 )
+	{
+		sError.SetSprintf ( "cluster '%s', no replication ports available, add replication listener", pElem->m_sName.cstr() );
+		return false;
+	}
+	tArgs.m_sListenAddr.SetSprintf ( "%s:%d", g_sListenReplicationIP.cstr(), tPort.Get() );
+	tArgs.m_iListenPort = tPort.Get();
+	pElem->m_tPort.Set ( tPort.Leak() );
 
-	ReplicationArgs_t tArgs;
 	// global options
 	tArgs.m_bNewCluster = true;
-	GetNodeFullAddress ( pElem->m_sListen, tArgs.m_sIncomingAdresses );
 	tArgs.m_pCluster = pElem.Ptr();
 
 	// need to clean up Galera system files left from previous cluster
@@ -2386,6 +2541,8 @@ enum PQRemoteCommand_e : WORD
 	CLUSTER_FILE_SEND			= 3,
 	CLUSTER_INDEX_ADD_LOCAL		= 4,
 	CLUSTER_SYNCED				= 5,
+	CLUSTER_GET_NODES			= 6,
+	CLUSTER_UPDATE_NODES		= 7,
 
 	PQR_COMMAND_TOTAL,
 	PQR_COMMAND_WRONG = PQR_COMMAND_TOTAL,
@@ -2443,67 +2600,78 @@ struct VecAgentDesc_t : public ISphNoncopyable, public CSphVector<AgentDesc_t *>
 	}
 };
 
-static void GetNodes ( const CSphString & sNodes, VecAgentDesc_t & dNodes )
+template <typename NODE_ITERATOR>
+void GetNodes_T ( const CSphString & sNodes, NODE_ITERATOR & tIt )
 {
 	if ( sNodes.IsEmpty () )
 		return;
 
 	CSphString sTmp = sNodes;
-	const char * sCur = sTmp.cstr();
+	char * sCur = const_cast<char *>( sTmp.cstr() );
 	while ( *sCur )
 	{
-		char * sAddrs = (char *)sCur;
-		while ( *sCur && *sCur!=';' )
+		// skip spaces
+		while ( *sCur && ( *sCur==';' || *sCur==',' || sphIsSpace ( *sCur ) )  )
 			++sCur;
 
-		const char * sAddrsStart = sAddrs;
-		const char * sAddrsEnd = sCur;
+		const char * sAddrs = (char *)sCur;
+		while ( *sCur && !( *sCur==';' || *sCur==',' || sphIsSpace ( *sCur ) )  )
+			++sCur;
 
-		// skip the delimiter
+		// replace delimiter with 0 for ParseListener and skip delimiter itself
 		if ( *sCur )
-			++sCur;
-
-		int iNodes = dNodes.GetLength();
-		while ( sAddrs<sAddrsEnd )
 		{
-			const char * sListen = sAddrs;
-			while ( sAddrs<sAddrsEnd && *sAddrs!=',' )
-				++sAddrs;
-
-			// replace delimiter with 0 for ParseListener and skip that delimiter
-			*sAddrs = '\0';
-			sAddrs++;
-
-			ListenerDesc_t tListen = ParseListener ( sListen );
-
-			if ( tListen.m_eProto!=PROTO_SPHINX )
-				continue;
-
-			if ( tListen.m_uIP==0 )
-				continue;
-
-			char sAddrBuf [ SPH_ADDRESS_SIZE ];
-			sphFormatIP ( sAddrBuf, sizeof(sAddrBuf), tListen.m_uIP );
-
-			AgentDesc_t * pDesc = new AgentDesc_t;
-			dNodes.Add( pDesc );
-			pDesc->m_sAddr = sAddrBuf;
-			pDesc->m_uAddr = tListen.m_uIP;
-			pDesc->m_iPort = tListen.m_iPort;
-			pDesc->m_bNeedResolve = false;
-			pDesc->m_bPersistent = false;
-			pDesc->m_iFamily = AF_INET;
-
-			// need only first address, for multiple address need implement MultiAgent interface
-			break;
+			*sCur = '\0';
+			sCur++;
 		}
 
-		if ( iNodes==dNodes.GetLength() )
-			sphWarning ( "node '%.*s' without API address, remote command skipped", (int)( sAddrsEnd-sAddrsStart ), sAddrsStart );
+		if ( *sAddrs )
+			tIt.SetNode ( sAddrs );
 	}
 }
 
-static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, const PQRemoteData_t & tReq )
+struct AgentDescIterator_t
+{
+	VecAgentDesc_t & m_dNodes;
+	explicit AgentDescIterator_t ( VecAgentDesc_t & dNodes )
+		: m_dNodes ( dNodes )
+	{}
+
+	void SetNode ( const char * sListen )
+	{
+		ListenerDesc_t tListen = ParseListener ( sListen );
+
+		if ( tListen.m_eProto!=PROTO_SPHINX )
+			return;
+
+		if ( tListen.m_uIP==0 )
+			return;
+
+		// filter out own address to do not query itself
+		if ( g_sIncomingProto.Begins ( sListen ) )
+			return;
+
+		char sAddrBuf [ SPH_ADDRESS_SIZE ];
+		sphFormatIP ( sAddrBuf, sizeof(sAddrBuf), tListen.m_uIP );
+
+		AgentDesc_t * pDesc = new AgentDesc_t;
+		m_dNodes.Add( pDesc );
+		pDesc->m_sAddr = sAddrBuf;
+		pDesc->m_uAddr = tListen.m_uIP;
+		pDesc->m_iPort = tListen.m_iPort;
+		pDesc->m_bNeedResolve = false;
+		pDesc->m_bPersistent = false;
+		pDesc->m_iFamily = AF_INET;
+	}
+};
+
+void GetNodes ( const CSphString & sNodes, VecAgentDesc_t & dNodes )
+{
+	AgentDescIterator_t tIt ( dNodes );
+	GetNodes_T ( sNodes, tIt );
+}
+
+static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, const PQRemoteData_t & tReq, int iTimeout )
 {
 	AgentConn_t * pAgent = new AgentConn_t;
 	pAgent->m_tDesc.CloneFrom ( tDesc );
@@ -2511,8 +2679,8 @@ static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, const PQRemoteData
 	HostDesc_t tHost;
 	pAgent->m_tDesc.m_pDash = new HostDashboard_t ( tHost );
 
-	pAgent->m_iMyConnectTimeout = g_iRemoteTimeout;
-	pAgent->m_iMyQueryTimeout = g_iRemoteTimeout;
+	pAgent->m_iMyConnectTimeout = iTimeout;
+	pAgent->m_iMyQueryTimeout = iTimeout;
 
 	pAgent->m_pResult = new PQRemoteAgentData_t ( tReq );
 
@@ -2526,16 +2694,46 @@ static void GetNodes ( const CSphString & sNodes, VecRefPtrs_t<AgentConn_t *> & 
 
 	dNodes.Resize ( dDesc.GetLength() );
 	ARRAY_FOREACH ( i, dDesc )
-		dNodes[i] = CreateAgent ( *dDesc[i], tReq );
+		dNodes[i] = CreateAgent ( *dDesc[i], tReq, g_iRemoteTimeout );
 }
 
 static void GetNodes ( const VecAgentDesc_t & dDesc, VecRefPtrs_t<AgentConn_t *> & dNodes, const PQRemoteData_t & tReq )
 {
 	dNodes.Resize ( dDesc.GetLength() );
 	ARRAY_FOREACH ( i, dDesc )
-		dNodes[i] = CreateAgent ( *dDesc[i], tReq );
+		dNodes[i] = CreateAgent ( *dDesc[i], tReq, g_iRemoteTimeout );
 }
 
+struct ListenerProtocolIterator_t
+{
+	StringBuilder_c m_sNodes { "," };
+	ProtocolType_e m_eProto;
+
+	explicit ListenerProtocolIterator_t ( ProtocolType_e eProto )
+		: m_eProto ( eProto )
+	{}
+
+	void SetNode ( const char * sListen )
+	{
+		ListenerDesc_t tListen = ParseListener ( sListen );
+
+		// filter out wrong protocol
+		if ( tListen.m_eProto!=m_eProto )
+			return;
+
+		char sAddrBuf [ SPH_ADDRESS_SIZE ];
+		sphFormatIP ( sAddrBuf, sizeof(sAddrBuf), tListen.m_uIP );
+
+		m_sNodes.Appendf ( "%s:%d", sAddrBuf, tListen.m_iPort );
+	}
+};
+
+void ClusterFilterNodes ( const CSphString & sSrcNodes, ProtocolType_e eProto, CSphString & sDstNodes )
+{
+	ListenerProtocolIterator_t tIt ( eProto );
+	GetNodes_T ( sSrcNodes, tIt );
+	sDstNodes = tIt.m_sNodes.cstr();
+}
 
 struct PQRemoteBase_t : public IRequestBuilder_t, public IReplyParser_t
 {
@@ -2768,6 +2966,75 @@ static bool PerformRemoteTasks ( VectorAgentConn_t & dNodes, IRequestBuilder_t &
 	return ( iFinished==iNodes );
 }
 
+
+struct PQRemoteClusterGetNodes_t : public PQRemoteBase_t
+{
+	PQRemoteClusterGetNodes_t ()
+		: PQRemoteBase_t ( CLUSTER_GET_NODES )
+	{
+	}
+
+	void BuildCommand ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final
+	{
+		const PQRemoteData_t & tCmd = GetReq ( tAgent );
+		tOut.SendString ( tCmd.m_sCluster.cstr() );
+		tOut.SendString ( tCmd.m_sGTID.cstr() );
+	}
+
+	static void ParseCommand ( InputBuffer_c & tBuf, PQRemoteData_t & tCmd )
+	{
+		tCmd.m_sCluster = tBuf.GetString();
+		tCmd.m_sGTID = tBuf.GetString();
+	}
+
+	static void BuildReply ( const CSphString & sNodes, CachedOutputBuffer_c & tOut )
+	{
+		APICommand_t tReply ( tOut, SEARCHD_OK );
+		tOut.SendString ( sNodes.cstr() );
+	}
+
+	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final
+	{
+		PQRemoteReply_t & tRes = GetRes ( tAgent );
+		tRes.m_sFileHash = tReq.GetString();
+
+		return !tReq.GetError();
+	}
+};
+
+struct PQRemoteClusterUpdateNodes_t : public PQRemoteBase_t
+{
+	PQRemoteClusterUpdateNodes_t()
+		: PQRemoteBase_t ( CLUSTER_UPDATE_NODES )
+	{
+	}
+
+	void BuildCommand ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final
+	{
+		const PQRemoteData_t & tCmd = GetReq ( tAgent );
+		tOut.SendString ( tCmd.m_sCluster.cstr() );
+	}
+
+	static void ParseCommand ( InputBuffer_c & tBuf, PQRemoteData_t & tCmd )
+	{
+		tCmd.m_sCluster = tBuf.GetString();
+	}
+
+	static void BuildReply ( CachedOutputBuffer_c & tOut )
+	{
+		APICommand_t tReply ( tOut, SEARCHD_OK );
+		tOut.SendByte ( 1 );
+	}
+
+	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final
+	{
+		// just payload as can not recv reply with 0 size
+		tReq.GetByte();
+		return !tReq.GetError();
+	}
+};
+
+
 void HandleCommandClusterPq ( CachedOutputBuffer_c & tOut, WORD uCommandVer, InputBuffer_c & tBuf, const char * sClient )
 {
 	if ( !CheckCommandVersion ( uCommandVer, VER_COMMAND_CLUSTERPQ, tOut ) )
@@ -2828,7 +3095,27 @@ void HandleCommandClusterPq ( CachedOutputBuffer_c & tOut, WORD uCommandVer, Inp
 		}
 		break;
 
-		default: assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
+		case CLUSTER_GET_NODES:
+		{
+			PQRemoteClusterGetNodes_t::ParseCommand ( tBuf, tCmd );
+			bOk = RemoteClusterGetNodes ( tCmd.m_sCluster, tCmd.m_sGTID, sError, tRes.m_sFileHash );
+			if ( bOk )
+				PQRemoteClusterGetNodes_t::BuildReply ( tRes.m_sFileHash, tOut );
+		}
+		break;
+
+		case CLUSTER_UPDATE_NODES:
+		{
+			PQRemoteClusterUpdateNodes_t::ParseCommand ( tBuf, tCmd );
+			bOk = RemoteClusterUpdateNodes ( tCmd.m_sCluster, nullptr, sError );
+			if ( bOk )
+				PQRemoteClusterUpdateNodes_t::BuildReply ( tOut );
+		}
+		break;
+
+		default:
+			sError.SetSprintf ( "INTERNAL ERROR: unhandled command %d", (int)eClusterCmd );
+			break;
 	}
 
 	if ( !bOk )
@@ -2892,8 +3179,8 @@ bool ClusterDelete ( const CSphString & sCluster, CSphString & sError, CSphStrin
 
 		// copy nodes with lock as change of cluster view would change node list string
 		{
-			ScRL_t tNodesLock ( (*ppCluster)->m_tNodesLock );
-			sNodes = (*ppCluster)->m_sNodes;
+			ScopedMutex_t tNodesLock ( (*ppCluster)->m_tViewNodesLock );
+			sNodes = (*ppCluster)->m_sViewNodes;
 		}
 	}
 
@@ -2904,7 +3191,7 @@ bool ClusterDelete ( const CSphString & sCluster, CSphString & sError, CSphStrin
 		VecRefPtrs_t<AgentConn_t *> dNodes;
 		GetNodes ( sNodes, dNodes, tCmd );
 		PQRemoteDelete_t tReq;
-		if ( !PerformRemoteTasks ( dNodes, tReq, tReq, sError ) )
+		if ( dNodes.GetLength() && !PerformRemoteTasks ( dNodes, tReq, tReq, sError ) )
 			return false;
 	}
 
@@ -3074,7 +3361,7 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 		}
 	}
 
-	sphLogDebugRpl ( "loading index '%s' from %s", tCmd.m_sIndex.cstr(), tCmd.m_sIndexPath.cstr() );
+	sphLogDebugRpl ( "loading index '%s' into cluster '%s' from %s", tCmd.m_sIndex.cstr(), tCmd.m_sCluster.cstr(), tCmd.m_sIndexPath.cstr() );
 
 	CSphConfigSection hIndex;
 	hIndex.Add ( CSphVariant ( tCmd.m_sIndexPath.cstr(), 0 ), "path" );
@@ -3133,7 +3420,7 @@ static bool SendFile ( const CSphVector<RemoteFileState_t> & dDesc, const CSphSt
 	VecRefPtrs_t<AgentConn_t *> dNodes;
 	dNodes.Resize ( dReaders.GetLength() );
 	ARRAY_FOREACH ( i, dReaders )
-		dNodes[i] = CreateAgent ( *dReaders[i].m_pAgentDesc, dReaders[i].m_tArgs );
+		dNodes[i] = CreateAgent ( *dReaders[i].m_pAgentDesc, dReaders[i].m_tArgs, g_iRemoteTimeout );
 
 	// submit initial jobs
 	CSphRefcountedPtr<IRemoteAgentsObserver> tReporter ( GetObserver() );
@@ -3208,7 +3495,7 @@ static bool SendFile ( const CSphVector<RemoteFileState_t> & dDesc, const CSphSt
 			// remove agent from main vector
 			pAgent->Release();
 
-			AgentConn_t * pNextJob = CreateAgent ( *tReader.m_pAgentDesc, tReader.m_tArgs );
+			AgentConn_t * pNextJob = CreateAgent ( *tReader.m_pAgentDesc, tReader.m_tArgs, g_iRemoteTimeout );
 			dNodes[iAgent] = pNextJob;
 
 			dNewNode[0] = pNextJob;
@@ -3351,7 +3638,7 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 			tAgentData.m_iIndexFileSize = iFileSize;
 			tAgentData.m_sIndexPath = tState.m_sRemoteIndexPath;
 
-			dNodes[i] = CreateAgent ( *tState.m_pAgentDesc, tAgentData );
+			dNodes[i] = CreateAgent ( *tState.m_pAgentDesc, tAgentData, g_iRemoteTimeout );
 		}
 
 		PQRemoteIndexAdd_t tReq;
@@ -3379,8 +3666,8 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 
 		// copy nodes with lock as change of cluster view would change node list string
 		{
-			ScRL_t tNodesLock ( (*ppCluster)->m_tNodesLock );
-			sNodes = (*ppCluster)->m_sNodes;
+			ScopedMutex_t tNodesLock ( (*ppCluster)->m_tViewNodesLock );
+			sNodes = (*ppCluster)->m_sViewNodes;
 		}
 	}
 
@@ -3390,7 +3677,7 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 		VecAgentDesc_t dDesc;
 		GetNodes ( sNodes, dDesc );
 
-		if ( !NodesReplicateIndex ( sCluster, sIndex, dDesc, sError ) )
+		if ( dDesc.GetLength() && !NodesReplicateIndex ( sCluster, sIndex, dDesc, sError ) )
 			return false;
 	}
 
@@ -3598,4 +3885,159 @@ bool CheckIndexCluster ( const CSphString & sIndexName, const ServedDesc_t & tDe
 		sError.SetSprintf ( "index '%s' already is part of cluster '%s', use %s:%s as ident", sIndexName.cstr(), tDesc.m_sCluster.cstr(), tDesc.m_sCluster.cstr(), sIndexName.cstr() );
 
 	return false;
+}
+
+bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sCluster, const CSphString & sGTID, CSphString & sError, CSphString & sNodes )
+{
+	VecAgentDesc_t dDesc;
+	GetNodes ( sClusterNodes, dDesc );
+	if ( !dDesc.GetLength() )
+	{
+		sError.SetSprintf ( "%s invalid node", sClusterNodes.cstr() );
+		return false;
+	}
+
+	CSphFixedVector<PQRemoteData_t> dReplies ( dDesc.GetLength() );
+	VecRefPtrs_t<AgentConn_t *> dAgents;
+	dAgents.Resize ( dDesc.GetLength() );
+	ARRAY_FOREACH ( i, dAgents )
+	{
+		dReplies[i].m_sCluster = sCluster;
+		dReplies[i].m_sGTID = sGTID;
+		dAgents[i] = CreateAgent ( *dDesc[i], dReplies[i], 200 ); // no need to wait for missed nodes
+	}
+
+	// submit initial jobs
+	CSphRefcountedPtr<IRemoteAgentsObserver> tReporter ( GetObserver() );
+	PQRemoteClusterGetNodes_t tReq;
+	ScheduleDistrJobs ( dAgents, &tReq, &tReq, tReporter );
+
+	bool bDone = false;
+	while ( !bDone )
+	{
+		// don't forget to check incoming replies after send was over
+		bDone = tReporter->IsDone();
+		// wait one or more remote queries to complete
+		if ( !bDone )
+			tReporter->WaitChanges();
+
+		for ( const AgentConn_t * pAgent : dAgents )
+		{
+			if ( !pAgent->m_bSuccess )
+				continue;
+
+			// FIXME!!! no need to wait all replies in case any node get nodes list
+			// just break on 1st successful reply
+			// however need a way for distributed loop to finish as it can not break early
+			const PQRemoteReply_t & tRes = PQRemoteBase_t::GetRes ( *pAgent );
+			sNodes = tRes.m_sFileHash;
+		}
+	}
+
+
+	bool bGotNodes = ( !sNodes.IsEmpty() );
+	if ( !bGotNodes )
+	{
+		StringBuilder_c sBuf ( ";" );
+		for ( const AgentConn_t * pAgent : dAgents )
+		{
+			if ( !pAgent->m_sFailure.IsEmpty() )
+			{
+				sphWarning ( "'%s:%d': %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pAgent->m_sFailure.cstr() );
+				sBuf.Appendf ( "'%s:%d': %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pAgent->m_sFailure.cstr() );
+			}
+		}
+		sError = sBuf.cstr();
+	}
+
+	return bGotNodes;
+}
+
+bool RemoteClusterGetNodes ( const CSphString & sCluster, const CSphString & sGTID, CSphString & sError, CSphString & sNodes )
+{
+	ScRL_t tLock ( g_tClustersLock );
+	ReplicationCluster_t ** ppCluster = g_hClusters ( sCluster );
+	if ( !ppCluster )
+	{
+		sError.SetSprintf ( "unknown cluster '%s'", sCluster.cstr() );
+		return false;
+	}
+
+	ReplicationCluster_t * pCluster = (*ppCluster);
+	if ( !sGTID.IsEmpty() && strncmp ( sGTID.cstr(), pCluster->m_dUUID.Begin(), pCluster->m_dUUID.GetLength() )!=0 )
+	{
+		sError.SetSprintf ( "cluster '%s' GTID %.*s does not match to incoming %s", sCluster.cstr(), pCluster->m_dUUID.GetLength(), pCluster->m_dUUID.Begin(), sGTID.cstr() );
+		return false;
+	}
+
+	// send back view nodes of cluster - as list of actual nodes
+	{
+		ScopedMutex_t tNodesLock ( (*ppCluster)->m_tViewNodesLock );
+		sNodes = (*ppCluster)->m_sViewNodes;
+	}
+
+	return true;
+}
+
+
+bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdate, CSphString & sError )
+{
+	if ( sUpdate!="nodes" )
+	{
+		sError.SetSprintf ( "unhandled statement, only UPDATE nodes supported, got '%s'", sUpdate.cstr() );
+		return false;
+	}
+
+	{
+		ScRL_t tLock ( g_tClustersLock );
+		ReplicationCluster_t ** ppCluster = g_hClusters ( sCluster );
+		if ( !ppCluster )
+		{
+			sError.SetSprintf ( "unknown cluster '%s'", sCluster.cstr() );
+			return false;
+		}
+		if ( !CheckClasterState ( *ppCluster, sError ) )
+			return false;
+	}
+	// need to update all VIEW nodes - not cluster set nodes
+	CSphString sNodes;
+
+	// local nodes update
+	bool bOk = RemoteClusterUpdateNodes ( sCluster, &sNodes, sError );
+
+	// remote nodes update after locals updated
+	PQRemoteData_t tReqData;
+	tReqData.m_sCluster = sCluster;
+
+	VecRefPtrs_t<AgentConn_t *> dNodes;
+	GetNodes ( sNodes, dNodes, tReqData );
+	PQRemoteClusterUpdateNodes_t tReq;
+	bOk &= PerformRemoteTasks ( dNodes, tReq, tReq, sError );
+
+	return bOk;
+}
+
+bool RemoteClusterUpdateNodes ( const CSphString & sCluster, CSphString * pNodes, CSphString & sError )
+{
+	{
+		ScRL_t tLock ( g_tClustersLock );
+		ReplicationCluster_t ** ppCluster = g_hClusters ( sCluster );
+		if ( !ppCluster )
+		{
+			sError.SetSprintf ( "unknown cluster '%s'", sCluster.cstr() );
+			return false;
+		}
+		if ( !CheckClasterState ( *ppCluster, sError ) )
+			return false;
+
+		{
+			ReplicationCluster_t * pCluster = *ppCluster;
+			ScopedMutex_t tNodesLock ( (*ppCluster)->m_tViewNodesLock );
+			ClusterFilterNodes ( pCluster->m_sViewNodes, PROTO_SPHINX, pCluster->m_sClusterNodes );
+			if ( pNodes )
+				*pNodes = pCluster->m_sClusterNodes;
+		}
+	}
+
+	return true;
 }

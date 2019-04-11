@@ -2272,6 +2272,7 @@ ListenerDesc_t ParseListener ( const char * sSpec )
 	tRes.m_sUnix = "";
 	tRes.m_uIP = htonl ( INADDR_ANY );
 	tRes.m_iPort = SPHINXAPI_PORT;
+	tRes.m_iPortsCount = 0;
 	tRes.m_bVIP = false;
 
 	// split by colon
@@ -2369,12 +2370,29 @@ ListenerDesc_t ParseListener ( const char * sSpec )
 		tRes.m_uIP = sParts[0].IsEmpty()
 			? htonl ( INADDR_ANY )
 			: sphGetAddress ( sParts[0].cstr(), GETADDR_STRICT );
+
+		if ( tRes.m_eProto==PROTO_REPLICATION )
+		{
+			const char * sPorts = sParts[1].cstr();
+			const char * sDelimiter = strchr ( sPorts, '-' );
+			if ( sDelimiter && sDelimiter+1-sPorts<sParts[1].Length() )
+			{
+				int iPortsEnd = atol ( sDelimiter+1 );
+				CheckPort ( iPortsEnd );
+				if ( iPortsEnd<=tRes.m_iPort )
+					sphFatal ( "ports range invalid %d-%d", iPort, iPortsEnd );
+				if ( ( iPortsEnd - tRes.m_iPort )<2 )
+					sphFatal ( "ports range %d-%d count should be at least 2, got %d", iPort, iPortsEnd, iPortsEnd-iPort );
+					
+				tRes.m_iPortsCount = iPortsEnd - tRes.m_iPort;
+			}
+		}
 	}
 	return tRes;
 }
 
 
-void AddListener ( const CSphString & sListen, bool bHttpAllowed )
+void AddListener ( const CSphString & sListen, bool bHttpAllowed, CSphVector<ListenerDesc_t> & dDesc )
 {
 	ListenerDesc_t tDesc = ParseListener ( sListen.cstr() );
 
@@ -2388,6 +2406,10 @@ void AddListener ( const CSphString & sListen, bool bHttpAllowed )
 		sphWarning ( "thread_pool disabled, can not listen for http interface, port=%d, use workers=thread_pool", tDesc.m_iPort );
 		return;
 	}
+
+	dDesc.Add ( tDesc );
+	if ( tDesc.m_eProto==PROTO_REPLICATION )
+		return;
 
 #if !USE_WINDOWS
 	if ( !tDesc.m_sUnix.IsEmpty() )
@@ -8347,7 +8369,7 @@ static const char * g_dSqlStmts[] =
 	"select_dual", "show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
 	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
-	"join_cluster", "cluster_create", "cluster_delete", "cluster_index_add", "cluster_index_delete"
+	"join_cluster", "cluster_create", "cluster_delete", "cluster_index_add", "cluster_index_delete", "cluster_update"
 };
 
 
@@ -18088,6 +18110,17 @@ public:
 			}
 			return true;
 
+		case STMT_CLUSTER_ALTER_UPDATE:
+			m_tLastMeta = CSphQueryResultMeta();
+			if ( ClusterAlterUpdate ( pStmt->m_sCluster, pStmt->m_sSetName, m_tLastMeta.m_sError ) )
+			{
+				tOut.Ok();
+			} else
+			{
+				tOut.Error ( sQuery.cstr(), m_tLastMeta.m_sError.cstr() );
+			}
+			return true;
+
 		default:
 			m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );
 			tOut.Error ( sQuery.cstr(), m_sError.cstr() );
@@ -24472,11 +24505,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	Listener_t tListener;
 	tListener.m_eProto = PROTO_SPHINX;
 	tListener.m_bTcp = true;
+	CSphVector<ListenerDesc_t> dListenerDescs;
 
 	// command line arguments override config (but only in --console)
 	if ( bOptListen )
 	{
-		AddListener ( sOptListen, bThdPool );
+		AddListener ( sOptListen, bThdPool, dListenerDescs );
 
 	} else if ( bOptPort )
 	{
@@ -24487,7 +24521,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	{
 		// listen directives in configuration file
 		for ( CSphVariant * v = hSearchd("listen"); v; v = v->m_pNext )
-			AddListener ( v->strval(), bThdPool );
+			AddListener ( v->strval(), bThdPool, dListenerDescs );
 
 		// default is to listen on our two ports
 		if ( !g_dListeners.GetLength() )
@@ -24773,7 +24807,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	SphCrashLogger_c::SetTopQueryTLS ( &tQueryTLS );
 
 	// time for replication to sync with cluster
-	ReplicationStart ( hSearchd, bNewCluster, bNewClusterForce );
+	ReplicationStart ( hSearchd, dListenerDescs, bNewCluster, bNewClusterForce );
 
 	// ready, steady, go
 	sphInfo ( "accepting connections" );

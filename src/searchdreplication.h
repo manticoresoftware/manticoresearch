@@ -17,6 +17,26 @@
 #ifndef _searchdreplication_
 #define _searchdreplication_
 
+enum ProtocolType_e
+{
+	PROTO_SPHINX = 0,
+	PROTO_MYSQL41,
+	PROTO_HTTP,
+	PROTO_REPLICATION,
+
+	PROTO_TOTAL
+};
+
+struct ListenerDesc_t
+{
+	ProtocolType_e	m_eProto;
+	CSphString		m_sUnix;
+	DWORD			m_uIP;
+	int				m_iPort;
+	int				m_iPortsCount;
+	bool			m_bVIP;
+};
+
 void JsonLoadConfig ( const CSphConfigSection & hSearchd );
 void JsonDoneConfig();
 void JsonConfigConfigureAndPreload ( int & iValidIndexes, int & iCounter  );
@@ -29,6 +49,7 @@ enum ReplicationCommand_e
 	RCOMMAND_TRUNCATE,
 	RCOMMAND_CLUSTER_ALTER_ADD,
 	RCOMMAND_CLUSTER_ALTER_DROP,
+	RCOMMAND_CLUSTER_ALTER_UPDATE,
 
 	RCOMMAND_TOTAL
 };
@@ -62,12 +83,13 @@ bool HandleCmdReplicate ( ReplicationCommand_t & tCmd, CSphString & sError, int 
 void Shutdown ();
 // unfreeze threads waiting of replication started
 void ReplicateClustersDelete();
-bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bool bForce );
+void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<ListenerDesc_t> & dListeners, bool bNewCluster, bool bForce );
 bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphString & sError );
 bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphString & sError );
 bool ClusterDelete ( const CSphString & sCluster, CSphString & sError, CSphString & sWarning );
 void HandleCommandClusterPq ( CachedOutputBuffer_c & tOut, WORD uCommandVer, InputBuffer_c & tBuf, const char * sClient );
 bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool bAdd, CSphString & sError, CSphString & sWarning );
+bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdate, CSphString & sError );
 
 // 'like' matcher
 class CheckLike
@@ -102,25 +124,6 @@ void ReplicateClustersStatus ( VectorLike & dStatus );
 
 #define SPH_ADDRESS_SIZE		sizeof("000.000.000.000")
 #define SPH_ADDRPORT_SIZE		sizeof("000.000.000.000:00000")
-
-enum ProtocolType_e
-{
-	PROTO_SPHINX = 0,
-	PROTO_MYSQL41,
-	PROTO_HTTP,
-	PROTO_REPLICATION,
-
-	PROTO_TOTAL
-};
-
-struct ListenerDesc_t
-{
-	ProtocolType_e	m_eProto;
-	CSphString		m_sUnix;
-	DWORD			m_uIP;
-	int				m_iPort;
-	bool			m_bVIP;
-};
 
 ListenerDesc_t ParseListener ( const char * sSpec );
 ESphAddIndex ConfigureAndPreload ( const CSphConfigSection & hIndex, const char * sIndexName, bool bJson );

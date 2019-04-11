@@ -1553,6 +1553,13 @@ alter:
 			pParser->ToString ( tStmt.m_sCluster, $3 );
 			pParser->ToString ( tStmt.m_sIndex, $5 );
 		}
+	| TOK_ALTER TOK_CLUSTER ident TOK_UPDATE ident
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_CLUSTER_ALTER_UPDATE;
+			pParser->ToString ( tStmt.m_sCluster, $3 );
+			pParser->ToString ( tStmt.m_sSetName, $5 );
+		}
 	;
 
 //////////////////////////////////////////////////////////////////////////

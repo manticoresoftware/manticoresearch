@@ -21589,7 +21589,7 @@ struct HttpHeaderStreamParser_t
 
 struct NetReceiveDataHttp_t : public ISphNetAction
 {
-	CSphScopedPtr<NetStateQL_t>		m_tState;
+	CSphScopedPtr<NetStateCommon_t>		m_tState;
 	HttpHeaderStreamParser_t		m_tHeadParser;
 
 	explicit NetReceiveDataHttp_t ( NetStateQL_t * pState );
@@ -22201,10 +22201,10 @@ struct ThdJobQL_t : public ISphJob
 
 struct ThdJobHttp_t : public ISphJob
 {
-	CSphScopedPtr<NetStateQL_t>		m_tState;
+	CSphScopedPtr<NetStateCommon_t>		m_tState;
 	CSphNetLoop *		m_pLoop;
 
-	ThdJobHttp_t ( CSphNetLoop * pLoop, NetStateQL_t * pState );
+	ThdJobHttp_t ( CSphNetLoop * pLoop, NetStateCommon_t * pState );
 
 	void		Call () final;
 };
@@ -23352,7 +23352,7 @@ void ThdJobCleanup_t::Clear ()
 	m_dCleanup.Reset();
 }
 
-ThdJobHttp_t::ThdJobHttp_t ( CSphNetLoop * pLoop, NetStateQL_t * pState )
+ThdJobHttp_t::ThdJobHttp_t ( CSphNetLoop * pLoop, NetStateCommon_t * pState )
 	: m_tState ( pState )
 	, m_pLoop ( pLoop )
 {

@@ -1922,6 +1922,61 @@ static bool LoadRtIndex ( Index_t & tIndex, CSphString & sError )
 	return true;
 }
 
+
+static bool RenameRtIndex ( Index_t & tIndex, CSphString & sError )
+{
+	CSphString sMetaNew;
+	sMetaNew.SetSprintf ( "%s.new.meta", tIndex.m_sPathOut.cstr() );
+
+	CSphString sChunkNew;
+	sChunkNew.SetSprintf ( "%s.new.ram", tIndex.m_sPathOut.cstr() );
+
+	CSphString sMetaTo, sChunkTo, sKillTo;
+	sMetaTo.SetSprintf ( "%s.meta", tIndex.m_sPathOut.cstr() );
+	sChunkTo.SetSprintf ( "%s.ram", tIndex.m_sPathOut.cstr() );
+	sKillTo.SetSprintf ( "%s.kill", tIndex.m_sPathOut.cstr() );
+
+	CSphString sMetaOld, sChunkOld, sKillOld;
+	sMetaOld.SetSprintf ( "%s.old.meta", tIndex.m_sPathOut.cstr() );
+	sChunkOld.SetSprintf ( "%s.old.ram", tIndex.m_sPathOut.cstr() );
+	sKillOld.SetSprintf ( "%s.old.kill", tIndex.m_sPathOut.cstr() );
+
+	// cur to old
+	bool bHasRamChunk = sphIsReadable ( sChunkTo.cstr() );
+	if ( bHasRamChunk && ::rename ( sChunkTo.cstr(), sChunkOld.cstr() ) )
+	{
+		sError.SetSprintf ( "failed to rename ram chunk (src=%s, dst=%s, errno=%d, error=%s)", sChunkTo.cstr(), sChunkOld.cstr(), errno, strerror(errno) );
+		return false;
+	}
+
+	if ( ::rename ( sMetaTo.cstr(), sMetaOld.cstr() ) )
+	{
+		sError.SetSprintf ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)", sMetaTo.cstr(), sMetaOld.cstr(), errno, strerror(errno) );
+		return false;
+	}
+
+	if ( ::rename ( sKillTo.cstr(), sKillOld.cstr() ) && bHasRamChunk )
+	{
+		sError.SetSprintf ( "failed to rename killlist (src=%s, dst=%s, errno=%d, error=%s)", sKillTo.cstr(), sKillOld.cstr(), errno, strerror(errno) );
+		return false;
+	}
+
+	// new to cur
+	if ( ::rename ( sChunkNew.cstr(), sChunkTo.cstr() ) )
+	{
+		sError.SetSprintf ( "failed to rename ram chunk (src=%s, dst=%s, errno=%d, error=%s)", sChunkNew.cstr(), sChunkTo.cstr(), errno, strerror(errno) );
+		return false;
+	}
+	if ( ::rename ( sMetaNew.cstr(), sMetaTo.cstr() ) )
+	{
+		sError.SetSprintf ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)", sMetaNew.cstr(), sMetaTo.cstr(), errno, strerror(errno) );
+		return false;
+	}
+
+	return true;
+}
+
+
 static bool SaveRtIndex ( Index_t & tIndex, CSphString & sError )
 {
 	// merge index settings with new defaults
@@ -2014,50 +2069,12 @@ static bool SaveRtIndex ( Index_t & tIndex, CSphString & sError )
 
 	wrChunk.CloseFile();
 
-	CSphString sMetaTo, sChunkTo, sKillTo;
-	sMetaTo.SetSprintf ( "%s.meta", tIndex.m_sPathOut.cstr() );
-	sChunkTo.SetSprintf ( "%s.ram", tIndex.m_sPathOut.cstr() );
-	sKillTo.SetSprintf ( "%s.kill", tIndex.m_sPathOut.cstr() );
-
-	CSphString sMetaOld, sChunkOld, sKillOld;
-	sMetaOld.SetSprintf ( "%s.old.meta", tIndex.m_sPathOut.cstr() );
-	sChunkOld.SetSprintf ( "%s.old.ram", tIndex.m_sPathOut.cstr() );
-	sKillOld.SetSprintf ( "%s.old.kill", tIndex.m_sPathOut.cstr() );
-
-	// cur to old
-	bool bHasRamChunk = sphIsReadable ( sChunkTo.cstr() );
-	if ( bHasRamChunk && ::rename ( sChunkTo.cstr(), sChunkOld.cstr() ) )
-	{
-		sError.SetSprintf ( "failed to rename ram chunk (src=%s, dst=%s, errno=%d, error=%s)", sChunkTo.cstr(), sChunkOld.cstr(), errno, strerror(errno) );
+	if ( tIndex.m_sPath==tIndex.m_sPathOut && !RenameRtIndex ( tIndex, sError ) )
 		return false;
-	}
-
-	if ( ::rename ( sMetaTo.cstr(), sMetaOld.cstr() ) )
-	{
-		sError.SetSprintf ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)", sMetaTo.cstr(), sMetaOld.cstr(), errno, strerror(errno) );
-		return false;
-	}
-
-	if ( ::rename ( sKillTo.cstr(), sKillOld.cstr() ) && bHasRamChunk )
-	{
-		sError.SetSprintf ( "failed to rename killlist (src=%s, dst=%s, errno=%d, error=%s)", sKillTo.cstr(), sKillOld.cstr(), errno, strerror(errno) );
-		return false;
-	}
-
-	// new to cur
-	if ( ::rename ( sChunkNew.cstr(), sChunkTo.cstr() ) )
-	{
-		sError.SetSprintf ( "failed to rename ram chunk (src=%s, dst=%s, errno=%d, error=%s)", sChunkNew.cstr(), sChunkTo.cstr(), errno, strerror(errno) );
-		return false;
-	}
-	if ( ::rename ( sMetaNew.cstr(), sMetaTo.cstr() ) )
-	{
-		sError.SetSprintf ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)", sMetaNew.cstr(), sMetaTo.cstr(), errno, strerror(errno) );
-		return false;
-	}
 
 	return true;
 }
+
 
 static bool ConvertPlain ( const CSphString & sName, const CSphString & sPath, bool bStripPath, CSphString & sError, const CSphVector<SphDocID_t> & dKilled, const CSphString & sPathOut, const CSphVector<KillListTarget_t> & dKlistTargets, Index_t * pRtIndex, bool bIgnoreKlist=false )
 {
@@ -2264,6 +2281,7 @@ int main ( int argc, char ** argv )
 	CSphString sIndexOut;
 	CSphString sIndexFile;
 	CSphString sKlistTarget;
+	bool bKlistTargetCLI = false;
 	bool bStripPath = false;
 	bool bAll = false;
 
@@ -2325,6 +2343,7 @@ int main ( int argc, char ** argv )
 			if ( ++i>=argc )
 				sphDie ( "killlist target requires an argument" );
 
+			bKlistTargetCLI = true;
 			sKlistTarget = argv[i];
 
 		} else
@@ -2418,16 +2437,20 @@ int main ( int argc, char ** argv )
 			sphSplit ( dNameParts, sIndexIn.cstr(), "/\\" );
 			sIndexFile = dNameParts.Last();
 
-			// killlist_target from config only for --all option
-			if ( bAll && tIndex.Exists( "killlist_target" ) )
+			if ( tIndex.Exists( "killlist_target" ) )
 			{
-				sKlistTarget = tIndex["killlist_target"].cstr();
-				if ( !ParseKillListTargets ( sKlistTarget, dKlistTargets, sIndexName.cstr(), sError ) )
+				if ( bKlistTargetCLI )
+					sphWarning ( "--killlist-target specified in command line overrides killlist_target from config '%s'", sConfig.cstr() );
+				else
 				{
-					sphWarning ( "failed to parse killlist_target, '%s'", sError.cstr() );
-					dKlistTargets.Resize ( 0 );
-					sKlistTarget = "";
-					sError = "";
+					sKlistTarget = tIndex["killlist_target"].cstr();
+					if ( !ParseKillListTargets ( sKlistTarget, dKlistTargets, sIndexName.cstr(), sError ) )
+					{
+						sphWarning ( "failed to parse killlist_target, '%s'", sError.cstr() );
+						dKlistTargets.Resize ( 0 );
+						sKlistTarget = "";
+						sError = "";
+					}
 				}
 			}
 

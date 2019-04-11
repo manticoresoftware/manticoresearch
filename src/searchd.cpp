@@ -21597,6 +21597,9 @@ struct NetReceiveDataHttp_t : public ISphNetAction
 	NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) override;
 	NetEvent_e		Setup ( int64_t tmNow ) override;
 	void			CloseSocket () override;
+
+private:
+	void GrowBuffer();
 };
 
 struct EventsIterator_t
@@ -23123,6 +23126,19 @@ bool HttpHeaderStreamParser_t::HeaderFound ( const BYTE * pBuf, int iLen )
 	return ( m_iHeaderEnd>0 );
 }
 
+void NetReceiveDataHttp_t::GrowBuffer()
+{
+	if ( m_tState->m_iLeft )
+		return;
+
+	auto iCanGrow = Min ( g_iMaxPacketSize - m_tState->m_iPos, 4096 );
+	if ( !iCanGrow )
+		return;
+
+	m_tState->m_dBuf.AddN ( iCanGrow );
+	m_tState->m_iLeft = iCanGrow;
+}
+
 NetEvent_e NetReceiveDataHttp_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & , CSphNetLoop * pLoop )
 {
 	assert ( m_tState.Ptr() );
@@ -23151,7 +23167,10 @@ NetEvent_e NetReceiveDataHttp_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActi
 		if ( !m_tHeadParser.m_iHeaderEnd )
 		{
 			if ( !m_tHeadParser.HeaderFound ( m_tState->m_dBuf.Begin(), m_tState->m_iPos ) )
+			{
+				GrowBuffer ();
 				continue;
+			}
 
 			int iReqSize = m_tHeadParser.m_iHeaderEnd + m_tHeadParser.m_iFieldContentLenVal;
 			if ( m_tHeadParser.m_iFieldContentLenVal && m_tState->m_iPos<iReqSize )

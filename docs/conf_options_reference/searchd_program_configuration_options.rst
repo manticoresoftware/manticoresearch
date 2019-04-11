@@ -464,12 +464,12 @@ The informal grammar for ``listen`` setting is:
 .. code-block:: ini
 
 
-    listen = ( address ":" port | port | path ) [ ":" protocol ] [ "_vip" ]
+    listen = ( address ":" port | port | path | address ":" port start - port end ) [ ":" protocol ] [ "_vip" ]
 
 I.e. you can specify either an IP address (or hostname) and port number,
-or just a port number, or Unix socket path. If you specify port number
-but not the address, ``searchd`` will listen on all network interfaces.
-Unix path is identified by a leading slash.
+or just a port number or Unix socket path or an IP address and ports range.
+If you specify port number but not the address, ``searchd`` will listen on all network interfaces.
+Unix path is identified by a leading slash. Ports range could be set only for replication protocol.
 
 You can also specify a protocol handler (listener) to be used for
 connections on this socket. Supported protocol values are :
@@ -477,6 +477,7 @@ connections on this socket. Supported protocol values are :
 * ``sphinx`` - native API protocol, used for client connections but also by distributed indexes. Default protocol if none specified.
 * ``mysql41`` - MySQL protocol used since 4.1. More details on MySQL protocol support can be found in :ref:`mysql_protocol_support_and_sphinxql` section.
 * ``http`` - HTTP protocol. More details can be found in :ref:`httpapi_reference` section.
+* ``replication`` - replication protocol, used for nodes communication. More details can be found in :ref:`replication` section.
 
 
 Adding a "_vip" suffix to a protocol (for instance ``sphinx_vip`` or
@@ -497,7 +498,8 @@ Examples:
     listen = /var/run/sphinx.s
     listen = 9312
     listen = localhost:9306:mysql41
-	listen = 127.0.0.1:9308:http
+    listen = 127.0.0.1:9308:http
+    listen = 192.168.0.1:9320-9328:replication
 
 There can be multiple listen directives, ``searchd`` will listen for
 client connections on all specified ports and sockets.
@@ -781,6 +783,30 @@ These options define how many clients got accepted and how many requests
 processed on each iteration of network loop, in case of value above zero.
 Zero value means do not constrain network loop. These options might help to
 fine tune network loop throughput at high load scenario.
+
+.. _node_address:
+
+node_address
+~~~~~~~~~~~~
+
+This setting lets you specify the network address of the node. By default it set to 
+replication :ref:`listen <listen>` address. That is correct in most cases, however there are
+situations where you have to specify it manually:
+
+* node behind a firewall
+* network address translation enabled (NAT)
+* container deployments, such as Docker or cloud deployments
+* clusters with nodes in more than one region
+
+
+Examples:
+
+
+.. code-block:: ini
+
+
+    node_address = 10.101.0.10
+	
 
 .. _ondisk_attrs_default:
 

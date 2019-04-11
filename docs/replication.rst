@@ -33,6 +33,8 @@ To use replication in the daemon:
 
 - :ref:`data_dir <data_dir>` option should be set in :ref:`searchd <searchd_program_configuration_options>` section of config
 
+- there should be a :ref:`listen <listen>` for replication protocol directive containing an external IP address and it should not be 0.0.0.0 along with ports range defined
+
 - there should be at least one value of :ref:`listen <listen>` for SphinxAPI protocol directive containing an external IP address and it should not be 0.0.0.0
 
 
@@ -66,21 +68,13 @@ path
 Data directory for replication write-set cache and incoming indexes from other nodes.
 Should be unique among other clusters in the node. Default is :ref:`data_dir <data_dir>`.
 
-.. _cluster_listen:
-
-listen
-~~~~~~
-
-Specifies cluster's IP address and port for the replication protocol (not the same as SphinxAPI port). The address should be an external IP
-and cannot be ``0.0.0.0``. The value should be unique among other clusters in the node. The daemon will also occupy
-``port+1`` for incremental state transfer communications. 
-
 .. _cluster_nodes:
 
 nodes
 ~~~~~
 
 List of pairs of address:port of all nodes in the cluster (comma separated).
+API interface of node should be used for nodes option.
 It can contain the current node's address too.
 This is used to join cluster initially and rejoin the cluster after restart.
 
@@ -98,7 +92,7 @@ here `Galera Documentation Parameters <http://galeracluster.com/documentation-we
 Create cluster
 --------------
 
-To create a cluster at least its :ref:`name <cluster_name>` and :ref:`listen <cluster_listen>` should
+To create a cluster at least its :ref:`name <cluster_name>` should
 be set. In case of a single cluster or if you are creating the first one
 :ref:`path <cluster_path>` may be omitted, in this case :ref:`data_dir <data_dir>`
 will be used as the cluster path. For all subsequent clusters you need to specify
@@ -107,23 +101,25 @@ may be also set to enumerate all nodes in the cluster.
 
 .. code-block:: sql
 
-    CREATE CLUSTER posts '10.12.1.35:9321' as listen
-    CREATE CLUSTER click_query 'clicks_mirror1:9351' as listen, '/var/data/click_query/' as path
-    CREATE CLUSTER click_query 'clicks_mirror1:9351' as listen, '/var/data/click_query/' as path, 'clicks_mirror1:9351;clicks_mirror2:9351;clicks_mirror3:9351' as nodes
+    CREATE CLUSTER posts
+    CREATE CLUSTER click_query '/var/data/click_query/' as path
+    CREATE CLUSTER click_query '/var/data/click_query/' as path, 'clicks_mirror1:9351,clicks_mirror2:9351,clicks_mirror3:9351' as nodes
+
+In case cluster created without nodes list first joined node will be saved as nodes list option.
 
 .. _replication_join:
 
 Join cluster
 ------------
 
-To join an existing cluster :ref:`name <cluster_name>`, :ref:`listen <cluster_listen>` and :ref:`nodes <cluster_nodes>` should be set.
+To join an existing cluster :ref:`name <cluster_name>` and :ref:`nodes <cluster_nodes>` should be set.
 In case of a single cluster :ref:`path <cluster_path>` might be omitted, :ref:`data_dir <data_dir>`
 will be used as the cluster path then. For all subsequent clusters :ref:`path <cluster_path>` need to be set and should be available.
 
 .. code-block:: sql
 
-    JOIN CLUSTER posts '10.12.1.36:9321' as listen, '10.12.1.35:9321' as nodes
-    JOIN CLUSTER click_query 'clicks_mirror2:9351' as listen, 'clicks_mirror1:9351;clicks_mirror2:9351;clicks_mirror3:9351' as nodes, '/var/data/click_query/' as path
+    JOIN CLUSTER posts '10.12.1.35:9321' as nodes
+    JOIN CLUSTER click_query  'clicks_mirror1:9351;clicks_mirror2:9351;clicks_mirror3:9351' as nodes, '/var/data/click_query/' as path
 
 
 
@@ -158,6 +154,25 @@ an active non-replicated index.
 
 The node which receives ALTER query sends the index to other nodes in the cluster.
 All local indexes with the same name on other cluster's nodes get replaced.
+
+.. _replication_alter_update:
+
+Nodes management
+----------------------------------------
+
+ALTER UPDATE nodes statement set list nodes for cluster on each node to value every node
+actually sees now
+
+.. code-block:: sql
+
+     ALTER CLUSTER posts UPDATE nodes
+	 
+For example on cluster creation nodes list was ``10.10.0.1:9312,10.10.1.1:9312`` since that
+other nodes also joined the cluster and currently cluster view is
+``10.10.0.1:9312,10.10.1.1:9312,10.15.0.1:9312,10.15.0.3:9312``. It might be better to issue this
+statement and update nodes list from current cluster view to reach more nodes in cluster on node restart.
+Cluster nodes list and current cluster view at node might be inspected at
+:ref:`SHOW STATUS <replication_status>` statement.
 
 
 .. _replication_write:
@@ -207,29 +222,36 @@ We additionally display:
 
 - cluster_name - :ref:`name <cluster_name>` of the cluster
 
-- node_state - current state of the node: ``undefined``, ``joiner``, ``donor``, ``joined``, ``synced``, ``error``
+- node_state - current state of the node: ``closed``, ``destroyed``, ``joining``, ``donor``, ``synced``
 
 - indexes_count - how many indexes are managed by the cluster
 
 - indexes - list of index names managed by the cluster
+
+- nodes_set - list of nodes in cluster defined on cluster create or join
+
+- nodes_view - actual list of nodes in cluster which this node sees
+
 
 
 .. code-block:: sql
 
 
     mysql> SHOW STATUS;
-    +----------------------------+--------------------------------------+
-    | Counter                    | Value                                |
-    +----------------------------+--------------------------------------+
-    | cluster_name               | post                                 |
-    | cluster_post_state_uuid    | fba97c45-36df-11e9-a84e-eb09d14b8ea7 |
-    | cluster_post_conf_id       | 1                                    |
-    | cluster_post_status        | primary                              |
-    | cluster_post_size          | 5                                    |
-    | cluster_post_local_index   | 0                                    |
-    | cluster_post_node_state    | synced                               |
-    | cluster_post_indexes_count | 2                                    |
-    | cluster_post_indexes       | pq1,pq_posts                         |
+    +----------------------------+-------------------------------------------------------------------------------------+
+    | Counter                    | Value                                                                               |
+    +----------------------------+-------------------------------------------------------------------------------------+
+    | cluster_name               | post                                                                                |
+    | cluster_post_state_uuid    | fba97c45-36df-11e9-a84e-eb09d14b8ea7                                                |
+    | cluster_post_conf_id       | 1                                                                                   |
+    | cluster_post_status        | primary                                                                             |
+    | cluster_post_size          | 5                                                                                   |
+    | cluster_post_local_index   | 0                                                                                   |
+    | cluster_post_node_state    | synced                                                                              |
+    | cluster_post_indexes_count | 2                                                                                   |
+    | cluster_post_indexes       | pq1,pq_posts                                                                        |
+    | cluster_post_nodes_set     | 10.10.0.1:9312                                                                      |
+    | cluster_post_nodes_view    | 10.10.0.1:9312,10.10.0.1:9320:replication,10.10.1.1:9312,10.10.1.1:9320:replication |
 
 
 

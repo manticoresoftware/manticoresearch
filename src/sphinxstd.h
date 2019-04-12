@@ -4446,7 +4446,7 @@ public:
 		{
 			// found matching key? great, return the value
 			Entry_t * p = m_pHash + iIndex;
-			if ( p->m_Key==k && p->m_uState==ENTRY_USED )
+			if ( p->m_uState==ENTRY_USED && p->m_Key==k )
 				return p->m_Value;
 
 			// no matching keys? add it

@@ -766,7 +766,7 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 						bEofDoc |= (pEndHits->m_tRowID!=tCurRowID)?2:0;
 					}
 
-					if ( pStartHits->m_uHitpos<pEndHits->m_uHitpos && !( bEofDoc & 1 ) )
+					if ( !( bEofDoc & 1 ) && pStartHits->m_uHitpos<pEndHits->m_uHitpos )
 					{
 						// actions for outspan/start-marker state
 						// <b>...<b>..<b>..</b> will ignore all the <b> inside.

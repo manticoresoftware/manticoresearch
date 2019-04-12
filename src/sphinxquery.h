@@ -72,7 +72,7 @@ struct XQLimitSpec_t
 public:
 	XQLimitSpec_t ()
 	{
-		Reset();
+		m_dFieldMask.SetAll ();
 	}
 
 	inline void Reset ()
@@ -91,25 +91,37 @@ public:
 
 	XQLimitSpec_t ( const XQLimitSpec_t& dLimit )
 	{
-		if ( this==&dLimit )
-			return;
-		Reset();
-		*this = dLimit;
-	}
-
-	XQLimitSpec_t & operator = ( const XQLimitSpec_t& dLimit )
-	{
-		if ( this==&dLimit )
-			return *this;
-
 		if ( dLimit.m_bFieldSpec )
 			SetFieldSpec ( dLimit.m_dFieldMask, dLimit.m_iFieldMaxPos );
+		else
+			m_dFieldMask.SetAll ();
 
-		if ( dLimit.m_dZones.GetLength() )
+		if ( !dLimit.m_dZones.IsEmpty ())
 			SetZoneSpec ( dLimit.m_dZones, dLimit.m_bZoneSpan );
+	}
 
+	XQLimitSpec_t ( XQLimitSpec_t&& rhs ) noexcept
+		: XQLimitSpec_t ()
+	{
+		Swap ( rhs );
+	}
+
+	void Swap ( XQLimitSpec_t& rhs ) noexcept
+	{
+		::Swap ( m_bFieldSpec, rhs.m_bFieldSpec );
+		::Swap ( m_dFieldMask, rhs.m_dFieldMask );
+		::Swap ( m_iFieldMaxPos, rhs.m_iFieldMaxPos );
+		::Swap ( m_dZones, rhs.m_dZones );
+		::Swap ( m_bZoneSpan, rhs.m_bZoneSpan );
+	}
+
+	XQLimitSpec_t & operator = ( XQLimitSpec_t dLimit )
+	{
+		Swap ( dLimit );
 		return *this;
 	}
+
+
 public:
 	void SetZoneSpec ( const CSphVector<int> & dZones, bool bZoneSpan );
 	void SetFieldSpec ( const FieldMask_t& uMask, int iMaxPos );

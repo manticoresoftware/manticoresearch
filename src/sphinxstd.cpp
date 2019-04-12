@@ -2224,30 +2224,21 @@ StringBuilder_c::~StringBuilder_c ()
 }
 
 StringBuilder_c::StringBuilder_c ( StringBuilder_c&& rhs ) noexcept
-	: m_sBuffer (rhs.m_sBuffer)
-	, m_iSize (rhs.m_iSize)
-	, m_iUsed (rhs.m_iUsed)
-	, m_pDelimiter (rhs.m_pDelimiter)
 {
-	rhs.m_pDelimiter = nullptr;
-	rhs.m_sBuffer = nullptr;
+	Swap (rhs);
 }
 
-StringBuilder_c & StringBuilder_c::operator= ( StringBuilder_c && rhs ) noexcept
+void StringBuilder_c::Swap ( StringBuilder_c& rhs ) noexcept
 {
-	if ( &rhs!=this )
-	{
-		SafeDelete ( m_pDelimiter );
-		SafeDeleteArray ( m_sBuffer );
+	::Swap ( m_sBuffer, rhs.m_sBuffer );
+	::Swap ( m_iSize, rhs.m_iSize );
+	::Swap ( m_iUsed, rhs.m_iUsed );
+	::Swap ( m_pDelimiter, rhs.m_pDelimiter );
+}
 
-		m_sBuffer = rhs.m_sBuffer;
-		m_iSize = rhs.m_iSize;
-		m_iUsed = rhs.m_iUsed;
-		m_pDelimiter = rhs.m_pDelimiter;
-
-		rhs.m_pDelimiter = nullptr;
-		rhs.m_sBuffer = nullptr;
-	}
+StringBuilder_c & StringBuilder_c::operator= ( StringBuilder_c rhs ) noexcept
+{
+	Swap (rhs);
 	return *this;
 }
 
@@ -2472,7 +2463,7 @@ void StringBuilder_c::Grow ( int iLen )
 	auto * pNew = new char[m_iSize];
 	if ( m_sBuffer )
 		memcpy ( pNew, m_sBuffer, m_iUsed + 1 );
-	Swap ( pNew, m_sBuffer );
+	::Swap ( pNew, m_sBuffer );
 	SafeDeleteArray ( pNew );
 }
 

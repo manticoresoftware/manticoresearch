@@ -2759,7 +2759,9 @@ public:
 	~StringBuilder_c ();
 
 	StringBuilder_c ( StringBuilder_c&& rhs ) noexcept;
-	StringBuilder_c& operator= ( StringBuilder_c&& rhs ) noexcept;
+	StringBuilder_c& operator= ( StringBuilder_c rhs ) noexcept;
+
+	void Swap ( StringBuilder_c& rhs ) noexcept;
 
 	// reset to initial state
 	void Clear ();

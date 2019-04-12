@@ -2196,13 +2196,24 @@ public:
 	// hHash.Exists ( "asdf" ); // implicit CSphString construction and deletion here
 	CSphString ( const CSphString & rhs )
 	{
-		*this = rhs;
+		if (!rhs.m_sValue)
+			return;
+		else if ( rhs.m_sValue[0]=='\0' )
+		{
+			m_sValue = EMPTY;
+		} else
+		{
+			int iLen = 1 + strlen ( rhs.m_sValue );
+			m_sValue = new char[iLen + SAFETY_GAP];
+
+			memcpy ( m_sValue, rhs.m_sValue, iLen ); // NOLINT
+			memset ( m_sValue + iLen, 0, SAFETY_GAP );
+		}
 	}
 
 	CSphString ( CSphString&& rhs ) noexcept
-		: m_sValue ( rhs.m_sValue )
 	{
-		rhs.m_sValue = nullptr;
+		Swap(rhs);
 	}
 
 	~CSphString ()
@@ -2278,45 +2289,10 @@ public:
 		SetBinary ( sValue, iLen );
 	}
 
-	CSphString & operator = ( const CSphString & rhs )
+	// pass by value - replaces both copy and move assignments.
+	CSphString & operator = ( CSphString rhs )
 	{
-		if ( m_sValue==rhs.m_sValue )
-			return *this;
-		SafeFree ();
-		if ( rhs.m_sValue )
-		{
-			if ( rhs.m_sValue[0]=='\0' )
-			{
-				m_sValue = EMPTY;
-			} else
-			{
-				int iLen = 1+strlen(rhs.m_sValue);
-				m_sValue = new char [ iLen+SAFETY_GAP ];
-
-				strcpy ( m_sValue, rhs.m_sValue ); // NOLINT
-				memset ( m_sValue+iLen, 0, SAFETY_GAP );
-			}
-		}
-		return *this;
-	}
-
-	CSphString & operator = ( CSphString&& rhs ) noexcept
-	{
-		if ( m_sValue==rhs.m_sValue )
-			return *this;
-		SafeFree ();
-
-		if ( rhs.m_sValue )
-		{
-			if ( rhs.m_sValue[0]=='\0' )
-			{
-				m_sValue = EMPTY;
-			} else
-			{
-				m_sValue = rhs.m_sValue;
-				rhs.m_sValue = nullptr;
-			}
-		}
+		Swap (rhs);
 		return *this;
 	}
 

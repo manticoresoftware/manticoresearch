@@ -4741,31 +4741,23 @@ public:
 	{}
 
 	CircularBuffer_T ( CircularBuffer_T&& rhs ) noexcept
-		: m_dValues ( std::move ( rhs.m_dValues ) )
-		, m_fGrowFactor ( rhs.m_fGrowFactor )
-		, m_iHead ( rhs.m_iHead )
-		, m_iTail ( rhs.m_iTail )
-		, m_iUsed ( rhs.m_iUsed )
+		: CircularBuffer_T ( 0, 1.5f )
 	{
-		rhs.m_iHead = 0;
-		rhs.m_iTail = 0;
-		rhs.m_iUsed = 0;
+		Swap ( rhs );
 	}
 
-	CircularBuffer_T & operator= ( CircularBuffer_T&& rhs ) noexcept
+	void Swap ( CircularBuffer_T& rhs ) noexcept
 	{
-		if ( &rhs!=this )
-		{
-			m_dValues = std::move ( rhs.m_dValues );
-			m_fGrowFactor = rhs.m_fGrowFactor;
-			m_iHead = rhs.m_iHead;
-			m_iTail = rhs.m_iTail;
-			m_iUsed = rhs.m_iUsed;
+		m_dValues.SwapData ( rhs.m_dValues );
+		::Swap ( m_fGrowFactor, rhs.m_fGrowFactor );
+		::Swap ( m_iHead, rhs.m_iHead );
+		::Swap ( m_iTail, rhs.m_iTail );
+		::Swap ( m_iUsed, rhs.m_iUsed );
+	}
 
-			rhs.m_iHead = 0;
-			rhs.m_iTail = 0;
-			rhs.m_iUsed = 0;
-		}
+	CircularBuffer_T & operator= ( CircularBuffer_T rhs )
+	{
+		Swap ( rhs );
 		return *this;
 	}
 

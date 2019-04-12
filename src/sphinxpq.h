@@ -60,7 +60,8 @@ struct PercolateMatchResult_t : ISphNoncopyable
 
 	PercolateMatchResult_t() = default;
 	PercolateMatchResult_t ( PercolateMatchResult_t&& rhs ) noexcept;
-	PercolateMatchResult_t& operator = ( PercolateMatchResult_t&& rhs ) noexcept;
+	PercolateMatchResult_t& operator = ( PercolateMatchResult_t rhs ) noexcept;
+	void Swap ( PercolateMatchResult_t& rhs ) noexcept;
 
 	void Reset ();
 };

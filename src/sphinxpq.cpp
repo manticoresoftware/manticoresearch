@@ -2283,52 +2283,37 @@ void PercolateMatchResult_t::Reset ()
 }
 
 PercolateMatchResult_t::PercolateMatchResult_t ( PercolateMatchResult_t&& rhs ) noexcept
+	: PercolateMatchResult_t()
 {
-	m_bGetDocs = rhs.m_bGetDocs;
-	m_bGetQuery = rhs.m_bGetQuery;
-	m_bGetFilters = rhs.m_bGetFilters;
-
-	m_iQueriesMatched = rhs.m_iQueriesMatched;
-	m_iQueriesFailed = rhs.m_iQueriesFailed;
-	m_iDocsMatched = rhs.m_iDocsMatched;
-	m_tmTotal = rhs.m_tmTotal;
-
-	m_bVerbose = rhs.m_bVerbose;
-	m_iEarlyOutQueries = rhs.m_iEarlyOutQueries;
-	m_iTotalQueries = rhs.m_iTotalQueries;
-	m_iOnlyTerms = rhs.m_iOnlyTerms;
-	m_tmSetup = rhs.m_tmSetup;
-	m_sMessages = std::move ( rhs.m_sMessages );
-
-	m_dQueryDesc = std::move ( rhs.m_dQueryDesc );
-	m_dDocs = std::move ( rhs.m_dDocs );
-	m_dQueryDT = std::move ( rhs.m_dQueryDT );
+	Swap (rhs);
 }
 
-PercolateMatchResult_t&PercolateMatchResult_t::operator= ( PercolateMatchResult_t &&rhs ) noexcept
+void PercolateMatchResult_t::Swap ( PercolateMatchResult_t& rhs ) noexcept
 {
-	if ( &rhs != this )
-	{
-		m_bGetDocs = rhs.m_bGetDocs;
-		m_bGetQuery = rhs.m_bGetQuery;
-		m_bGetFilters = rhs.m_bGetFilters;
+	::Swap ( m_bGetDocs, rhs.m_bGetDocs );
+	::Swap ( m_bGetQuery, rhs.m_bGetQuery );
+	::Swap ( m_bGetFilters, rhs.m_bGetFilters );
 
-		m_iQueriesMatched = rhs.m_iQueriesMatched;
-		m_iQueriesFailed = rhs.m_iQueriesFailed;
-		m_iDocsMatched = rhs.m_iDocsMatched;
-		m_tmTotal = rhs.m_tmTotal;
+	::Swap ( m_iQueriesMatched, rhs.m_iQueriesMatched );
+	::Swap ( m_iQueriesFailed, rhs.m_iQueriesFailed );
+	::Swap ( m_iDocsMatched, rhs.m_iDocsMatched );
+	::Swap ( m_tmTotal, rhs.m_tmTotal );
 
-		m_bVerbose = rhs.m_bVerbose;
-		m_iEarlyOutQueries = rhs.m_iEarlyOutQueries;
-		m_iTotalQueries = rhs.m_iTotalQueries;
-		m_iOnlyTerms = rhs.m_iOnlyTerms;
-		m_tmSetup = rhs.m_tmSetup;
-		m_sMessages = std::move ( rhs.m_sMessages );
+	::Swap ( m_bVerbose, rhs.m_bVerbose );
+	::Swap ( m_iEarlyOutQueries, rhs.m_iEarlyOutQueries );
+	::Swap ( m_iTotalQueries, rhs.m_iTotalQueries );
+	::Swap ( m_iOnlyTerms, rhs.m_iOnlyTerms );
+	::Swap ( m_tmSetup, rhs.m_tmSetup );
+	::Swap ( m_sMessages, rhs.m_sMessages );
 
-		m_dQueryDesc = std::move ( rhs.m_dQueryDesc );
-		m_dDocs = std::move ( rhs.m_dDocs );
-		m_dQueryDT = std::move ( rhs.m_dQueryDT );
-	}
+	::Swap ( m_dQueryDesc, rhs.m_dQueryDesc );
+	::Swap ( m_dDocs, rhs.m_dDocs );
+	::Swap ( m_dQueryDT, rhs.m_dQueryDT );
+}
+
+PercolateMatchResult_t&PercolateMatchResult_t::operator= ( PercolateMatchResult_t rhs ) noexcept
+{
+	Swap ( rhs );
 	return *this;
 }
 

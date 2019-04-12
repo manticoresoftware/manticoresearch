@@ -33,7 +33,7 @@ To use replication in the daemon:
 
 - :ref:`data_dir <data_dir>` option should be set in :ref:`searchd <searchd_program_configuration_options>` section of config
 
-- there should be a :ref:`listen <listen>` for replication protocol directive containing an external IP address and it should not be 0.0.0.0 along with ports range defined
+- there should be a :ref:`listen <listen>` for replication protocol directive containing an external IP address and it should not be 0.0.0.0 along with ports range defined and these address port range pair should not be same for all daemons on same box
 
 - there should be at least one value of :ref:`listen <listen>` for SphinxAPI protocol directive containing an external IP address and it should not be 0.0.0.0
 

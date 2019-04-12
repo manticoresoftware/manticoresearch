@@ -841,7 +841,7 @@ public:
 	SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const override
 	{
 		int iLen = 0;
-		const BYTE * pStr = sphGetBlobAttr ( tMatch, m_tLocator, m_pBlobPool, iLen );
+		const BYTE * pStr = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool, iLen );
 		if ( !pStr || !iLen )
 			return 0;
 
@@ -4438,7 +4438,7 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 					tSettings.m_pGrouper = new CSphGrouperJsonField ( tLoc, pExpr );
 					tSettings.m_bJson = true;
 
-				} else if ( eType==SPH_ATTR_STRING )
+				} else if ( eType==SPH_ATTR_STRING || eType==SPH_ATTR_STRINGPTR ) // percolate select list push matches with string_ptr
 					tSettings.m_pGrouper = sphCreateGrouperString ( tLoc, pQuery->m_eCollation );
 				else
 					tSettings.m_pGrouper = new CSphGrouperAttr ( tLoc );

@@ -209,6 +209,10 @@ index pq_mva
 <sphinxql>describe pq_wild1 table</sphinxql>
 <sphinxql>describe pq_mva table</sphinxql>
 
+<!-- group by tags -->
+<sphinxql>insert into pq_mva (query, tags) values('test1', 'q33')</sphinxql>
+<sphinxql>select id, count(*) c, tags from pq_mva group by tags</sphinxql>
+
 </sphqueries>
 
 </test>

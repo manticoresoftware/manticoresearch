@@ -595,7 +595,8 @@ public:
 
 	QueryStatContainer_c();
 	QueryStatContainer_c ( QueryStatContainer_c && tOther ) noexcept;
-	QueryStatContainer_c & operator= ( QueryStatContainer_c && tOther ) noexcept;
+	void Swap ( QueryStatContainer_c& rhs ) noexcept;
+	QueryStatContainer_c & operator= ( QueryStatContainer_c tOther ) noexcept;
 	
 private:
 	CircularBuffer_T<QueryStatRecord_t>	m_dRecords;
@@ -612,7 +613,8 @@ public:
 
 	QueryStatContainerExact_c();
 	QueryStatContainerExact_c ( QueryStatContainerExact_c && tOther ) noexcept;
-	QueryStatContainerExact_c & operator= ( QueryStatContainerExact_c && tOther ) noexcept;
+	void Swap ( QueryStatContainerExact_c& rhs ) noexcept;
+	QueryStatContainerExact_c & operator= ( QueryStatContainerExact_c tOther ) noexcept;
 
 private:
 	struct QueryStatRecordExact_t

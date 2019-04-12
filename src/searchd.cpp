@@ -591,12 +591,16 @@ int QueryStatContainer_c::GetNumRecords() const
 QueryStatContainer_c::QueryStatContainer_c() = default;
 
 QueryStatContainer_c::QueryStatContainer_c ( QueryStatContainer_c && tOther ) noexcept
-	: m_dRecords { std::move ( tOther.m_dRecords ) } {}
+	: QueryStatContainer_c () { Swap(tOther); }
 
-QueryStatContainer_c & QueryStatContainer_c::operator = ( QueryStatContainer_c && tOther ) noexcept
+void QueryStatContainer_c::Swap ( QueryStatContainer_c& rhs ) noexcept
 {
-	if ( &tOther!=this )
-		m_dRecords = std::move ( tOther.m_dRecords );
+	rhs.m_dRecords.Swap ( m_dRecords );
+}
+
+QueryStatContainer_c & QueryStatContainer_c::operator = ( QueryStatContainer_c tOther ) noexcept
+{
+	Swap (tOther);
 	return *this;
 }
 
@@ -640,14 +644,16 @@ void QueryStatContainerExact_c::GetRecord ( int iRecord, QueryStatRecord_t & tRe
 QueryStatContainerExact_c::QueryStatContainerExact_c() = default;
 
 QueryStatContainerExact_c::QueryStatContainerExact_c ( QueryStatContainerExact_c && tOther ) noexcept
-	: m_dRecords { std::move ( tOther.m_dRecords ) }
+	: QueryStatContainerExact_c () { Swap ( tOther );}
+
+void QueryStatContainerExact_c::Swap ( QueryStatContainerExact_c& rhs ) noexcept
 {
+	rhs.m_dRecords.Swap ( m_dRecords );
 }
 
-QueryStatContainerExact_c & QueryStatContainerExact_c::operator = ( QueryStatContainerExact_c && tOther ) noexcept
+QueryStatContainerExact_c & QueryStatContainerExact_c::operator = ( QueryStatContainerExact_c tOther ) noexcept
 {
-	if ( &tOther!=this )
-		m_dRecords = std::move ( tOther.m_dRecords );
+	Swap ( tOther );
 	return *this;
 }
 #endif

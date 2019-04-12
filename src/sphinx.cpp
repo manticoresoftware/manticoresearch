@@ -7148,17 +7148,43 @@ void CSphSchemaHelper::CopyPtrsSpecial ( CSphMatch * pDst, const void* _pSrc, co
 
 CSphSchema::CSphSchema ( const char * sName )
 	: m_sName ( sName )
-	, m_iFirstFieldLenAttr ( -1 )
-	, m_iLastFieldLenAttr ( -1 )
 {
-	for ( auto & dBucket : m_dBuckets )
-		dBucket = 0xffff;
+	memset ( m_dBuckets, 0xFF, sizeof ( m_dBuckets ) );
 }
 
 
 CSphSchema::CSphSchema ( const CSphSchema & rhs )
 {
-	*this = rhs;
+	m_dDataPtrAttrs = rhs.m_dDataPtrAttrs;
+	m_iFirstFieldLenAttr = rhs.m_iFirstFieldLenAttr;
+	m_iLastFieldLenAttr = rhs.m_iLastFieldLenAttr;
+	m_iRowSize = rhs.m_iRowSize;
+	m_sName = rhs.m_sName;
+	m_dFields = rhs.m_dFields;
+	m_dAttrs = rhs.m_dAttrs;
+	m_dStaticUsed = rhs.m_dStaticUsed;
+	m_dDynamicUsed = rhs.m_dDynamicUsed;
+	memcpy ( m_dBuckets, rhs.m_dBuckets, sizeof ( m_dBuckets ));
+}
+
+CSphSchema::CSphSchema ( CSphSchema && rhs ) noexcept
+	: CSphSchema ( nullptr )
+{
+	Swap(rhs);
+}
+
+void CSphSchema::Swap ( CSphSchema& rhs ) noexcept
+{
+	::Swap ( m_dDataPtrAttrs, rhs.m_dDataPtrAttrs );
+	::Swap ( m_iFirstFieldLenAttr, rhs.m_iFirstFieldLenAttr );
+	::Swap ( m_iLastFieldLenAttr, rhs.m_iLastFieldLenAttr );
+	::Swap ( m_iRowSize, rhs.m_iRowSize );
+	::Swap ( m_sName, rhs.m_sName );
+	::Swap ( m_dFields, rhs.m_dFields );
+	::Swap ( m_dAttrs, rhs.m_dAttrs );
+	::Swap ( m_dStaticUsed, rhs.m_dStaticUsed );
+	::Swap ( m_dDynamicUsed, rhs.m_dDynamicUsed );
+	std::swap ( m_dBuckets, rhs.m_dBuckets );
 }
 
 
@@ -7187,45 +7213,12 @@ CSphSchema & CSphSchema::operator = ( const ISphSchema & rhs )
 }
 
 
-CSphSchema & CSphSchema::operator = ( const CSphSchema & rhs )
-{
-	if ( this!=&rhs )
-	{
-		m_dDataPtrAttrs			= rhs.m_dDataPtrAttrs;
-		m_iFirstFieldLenAttr	= rhs.m_iFirstFieldLenAttr;
-		m_iLastFieldLenAttr		= rhs.m_iLastFieldLenAttr;
-		m_iRowSize				= rhs.m_iRowSize;
-		m_sName					= rhs.m_sName;
-		m_dFields				= rhs.m_dFields;
-		m_dAttrs				= rhs.m_dAttrs;
-		m_dStaticUsed			= rhs.m_dStaticUsed;
-		m_dDynamicUsed			= rhs.m_dDynamicUsed;
-		RebuildHash();
-	}
 
+CSphSchema & CSphSchema::operator = ( CSphSchema rhs )
+{
+	Swap ( rhs );
 	return *this;
 }
-
-
-CSphSchema & CSphSchema::operator = ( CSphSchema && rhs ) noexcept
-{
-	if ( this!=&rhs )
-	{
-		m_dDataPtrAttrs			= std::move ( rhs.m_dDataPtrAttrs );
-		m_iFirstFieldLenAttr	= std::move ( rhs.m_iFirstFieldLenAttr );
-		m_iLastFieldLenAttr		= std::move ( rhs.m_iLastFieldLenAttr );
-		m_iRowSize				= std::move ( rhs.m_iRowSize );
-		m_sName					= std::move ( rhs.m_sName );
-		m_dFields				= std::move ( rhs.m_dFields );
-		m_dAttrs				= std::move ( rhs.m_dAttrs );
-		m_dStaticUsed			= std::move ( rhs.m_dStaticUsed );
-		m_dDynamicUsed			= std::move ( rhs.m_dDynamicUsed );
-		RebuildHash();
-	}
-
-	return *this;
-}
-
 
 const char * CSphSchema::GetName() const
 {
@@ -7341,8 +7334,7 @@ void CSphSchema::Reset ()
 
 	m_dFields.Reset();
 	m_dAttrs.Reset();
-	for ( auto & dBucket : m_dBuckets )
-		dBucket = 0xffff;
+	memset ( m_dBuckets, 0xFF, sizeof ( m_dBuckets ));
 	m_dStaticUsed.Reset();
 	m_iRowSize = 0;
 }
@@ -7461,8 +7453,7 @@ void CSphSchema::RebuildHash ()
 	if ( m_dAttrs.GetLength()<HASH_THRESH )
 		return;
 
-	for ( WORD & uBucket : m_dBuckets )
-		uBucket = 0xffff;
+	memset ( m_dBuckets, 0xFF, sizeof ( m_dBuckets ));
 
 	ARRAY_FOREACH ( i, m_dAttrs )
 	{

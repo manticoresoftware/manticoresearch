@@ -1471,10 +1471,11 @@ public:
 	/// ctor
 	explicit				CSphSchema ( const char * sName="(nameless)" );
 							CSphSchema ( const CSphSchema & rhs );
+							CSphSchema ( CSphSchema && rhs ) noexcept;
+	void					Swap ( CSphSchema & rhs ) noexcept;
 
 	CSphSchema &			operator = ( const ISphSchema & rhs );
-	CSphSchema &			operator = ( const CSphSchema & rhs );
-	CSphSchema &			operator = ( CSphSchema && rhs ) noexcept;
+	CSphSchema &			operator = ( CSphSchema rhs );
 
 	/// visitor-style uber-virtual assignment implementation
 	virtual void			AssignTo ( CSphRsetSchema & lhs ) const;
@@ -1556,8 +1557,8 @@ protected:
 
 	CSphString					m_sName;		///< my human-readable name
 
-	int							m_iFirstFieldLenAttr;///< position of the first field length attribute (cached on insert/delete)
-	int							m_iLastFieldLenAttr; ///< position of the last field length attribute (cached on insert/delete)
+	int							m_iFirstFieldLenAttr = -1;///< position of the first field length attribute (cached on insert/delete)
+	int							m_iLastFieldLenAttr = -1; ///< position of the last field length attribute (cached on insert/delete)
 
 	int							m_iRowSize = 0;				///< cached row size
 

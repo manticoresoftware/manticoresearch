@@ -236,12 +236,13 @@ public:
 	explicit		JsonObj_c ( bool bArray = false );
 	explicit		JsonObj_c ( cJSON * pRoot, bool bOwner = true );
 	explicit		JsonObj_c ( const char * szJson );
-					JsonObj_c ( JsonObj_c && rhs );
+					JsonObj_c ( JsonObj_c && rhs ) noexcept;
 					~JsonObj_c();
 
 					// a shortcut for !Empty()
 					operator bool() const;
-	JsonObj_c &		operator = ( JsonObj_c && rhs );
+	void Swap ( JsonObj_c& rhs ) noexcept;
+	JsonObj_c &		operator = ( JsonObj_c rhs );
 	JsonObj_c		operator[] ( int iItem ) const;
 	JsonObj_c &		operator++();
 	JsonObj_c 		operator*();

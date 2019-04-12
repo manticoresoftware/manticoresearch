@@ -1345,14 +1345,16 @@ JsonObj_c::JsonObj_c ( const char * szJson )
 }
 
 
-JsonObj_c::JsonObj_c ( JsonObj_c && rhs )
+JsonObj_c::JsonObj_c ( JsonObj_c && rhs ) noexcept
+	: m_pRoot ( nullptr )
 {
-	if ( this!=&rhs )
-	{
-		m_pRoot = rhs.m_pRoot;
-		m_bOwner = rhs.m_bOwner;
-		rhs.m_pRoot = nullptr;
-	}
+	Swap (rhs);
+}
+
+void JsonObj_c::Swap ( JsonObj_c& rhs ) noexcept
+{
+	::Swap ( m_pRoot, rhs.m_pRoot );
+	::Swap ( m_bOwner, rhs.m_bOwner );
 }
 
 
@@ -1374,18 +1376,9 @@ JsonObj_c::operator bool() const
 }
 
 
-JsonObj_c & JsonObj_c::operator = ( JsonObj_c && rhs )
+JsonObj_c & JsonObj_c::operator = ( JsonObj_c rhs )
 {
-	if ( this!=&rhs )
-	{
-		if ( m_pRoot )
-			cJSON_Delete(m_pRoot);
-
-		m_pRoot = rhs.m_pRoot;
-		m_bOwner = rhs.m_bOwner;
-		rhs.m_pRoot = nullptr;
-	}
-
+	Swap(rhs);
 	return *this;
 }
 

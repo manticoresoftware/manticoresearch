@@ -388,8 +388,13 @@ function GetSearchd ( &$searchd, &$error )
 {
 	global $g_locals;
 
+	if ( isset ( $g_locals['valgrindoptions'] ) )
+		$vlgoptions = $g_locals['valgrindoptions'];
+	else
+		$vlgoptions = '--leak-check=full';
+
 	if ( UseValgrind() ) {
-		$searchd = "valgrind --leak-check=full ";
+		$searchd = "valgrind $vlgoptions ";
 		if ( file_exists("valgrind.supp" ) )
 			$searchd .= "--suppressions=" . getcwd() . "/valgrind.supp ";
 		$searchd .= $g_locals['searchd'];
@@ -404,6 +409,13 @@ function GetSearchd ( &$searchd, &$error )
 		}
 	}
 	return true;
+}
+
+function GetTmDelta()
+{
+	if ( UseValgrind() )
+		return 10;
+	return 3;
 }
 
 function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watchdog = false, $addr=false, $port=false )
@@ -1834,7 +1846,7 @@ class SphinxConfig
 						}
 						
 						$tm_delta = MyMicrotime()-$wait_started;
-						if ( $tm_delta>3 )
+						if ( $tm_delta>GetTmDelta() )
 						{
 							$status .= sprintf( "; timeout %.3f sec", $tm_delta );
 							break;

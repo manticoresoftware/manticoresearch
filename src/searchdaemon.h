@@ -1154,6 +1154,7 @@ struct SqlStmt_t
 	// used by INSERT, DELETE, CALL, DESC, ATTACH, ALTER, RELOAD INDEX
 	CSphString				m_sIndex;
 	CSphString				m_sCluster;
+	bool					m_bClusterUpdateNodes = false;
 
 	// INSERT (and CALL) specific
 	CSphVector<SqlInsert_t>	m_dInsertValues; // reused by CALL

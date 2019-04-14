@@ -2405,8 +2405,17 @@ static bool CheckClusterStatement ( const CSphString & sCluster, const StrVec_t 
 	pElem->m_sName = sCluster;
 
 	// optional items
-	if ( !CheckClusterOption ( hValues, "nodes", !bJoin, pElem->m_sClusterNodes, sError ) )
+	if ( !CheckClusterOption ( hValues, "at_node", true, pElem->m_sClusterNodes, sError ) )
 		return false;
+	if ( pElem->m_sClusterNodes.IsEmpty() && !CheckClusterOption ( hValues, "nodes", true, pElem->m_sClusterNodes, sError ) )
+		return false;
+
+	if ( bJoin && pElem->m_sClusterNodes.IsEmpty() )
+	{
+		sError.SetSprintf ( "can not join without either nodes list or AT node" );
+		return false;
+	}
+
 	if ( !CheckClusterOption ( hValues, "path", true, pElem->m_sPath, sError ) )
 		return false;
 
@@ -2427,7 +2436,7 @@ static bool CheckClusterStatement ( const CSphString & sCluster, const StrVec_t 
 // cluster join to existed
 /////////////////////////////////////////////////////////////////////////////
 
-bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphString & sError )
+bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, bool bUpdateNodes, CSphString & sError )
 {
 	ReplicationArgs_t tArgs;
 	CSphScopedPtr<ReplicationCluster_t> pElem ( nullptr );
@@ -2479,7 +2488,12 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	}
 
 	ClusterState_e eState = tArgs.m_pCluster->WaitReady();
-	return ( eState==ClusterState_e::DONOR || eState==ClusterState_e::SYNCED );
+	bool bOk = ( eState==ClusterState_e::DONOR || eState==ClusterState_e::SYNCED );
+
+	if ( bOk && bUpdateNodes )
+		bOk &= ClusterAlterUpdate ( sCluster, "nodes", sError );
+
+	return bOk;
 }
 
 /////////////////////////////////////////////////////////////////////////////

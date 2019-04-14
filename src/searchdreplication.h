@@ -84,7 +84,7 @@ void Shutdown ();
 // unfreeze threads waiting of replication started
 void ReplicateClustersDelete();
 void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<ListenerDesc_t> & dListeners, bool bNewCluster, bool bForce );
-bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphString & sError );
+bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, bool bUpdateNodes, CSphString & sError );
 bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphString & sError );
 bool ClusterDelete ( const CSphString & sCluster, CSphString & sError, CSphString & sWarning );
 void HandleCommandClusterPq ( CachedOutputBuffer_c & tOut, WORD uCommandVer, InputBuffer_c & tBuf, const char * sClient );

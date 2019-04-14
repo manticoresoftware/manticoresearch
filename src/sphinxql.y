@@ -30,6 +30,7 @@
 %token	TOK_ANY
 %token	TOK_AS
 %token	TOK_ASC
+%token	TOK_AT
 %token	TOK_ATTACH
 %token	TOK_ATTRIBUTES
 %token	TOK_AVG
@@ -1951,6 +1952,13 @@ join_cluster:
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_JOIN_CLUSTER;
 			pParser->ToString ( tStmt.m_sIndex, $3 );
+		}
+	| TOK_JOIN TOK_CLUSTER ident TOK_AT TOK_QUOTED_STRING cluster_opts_list
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_JOIN_CLUSTER;
+			pParser->ToString ( tStmt.m_sIndex, $3 );
+			pParser->JoinClusterAt ( $5 );
 		}
 	;
 

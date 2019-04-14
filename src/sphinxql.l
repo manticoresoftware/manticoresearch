@@ -46,6 +46,7 @@ ALPHA				[a-zA-Z_]+
 "ANY"				{ YYSTOREBOUNDS; return TOK_ANY; }
 "AS"				{ YYSTOREBOUNDS; return TOK_AS; }
 "ASC"				{ YYSTOREBOUNDS; return TOK_ASC; }
+"AT"				{ YYSTOREBOUNDS; return TOK_AT; }
 "ATTACH"			{ YYSTOREBOUNDS; return TOK_ATTACH; }
 "ATTRIBUTES"		{ YYSTOREBOUNDS; return TOK_ATTRIBUTES; }
 "AVG"				{ YYSTOREBOUNDS; return TOK_AVG; }

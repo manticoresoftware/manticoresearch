@@ -107,20 +107,30 @@ may be also set to enumerate all nodes in the cluster.
 
 In case cluster created without nodes list first joined node will be saved as nodes list option.
 
-.. _replication_join:
+
+.. _replication_join_at:
 
 Join cluster
 ------------
 
-To join an existing cluster :ref:`name <cluster_name>` and :ref:`nodes <cluster_nodes>` should be set.
+To join an existing cluster :ref:`name <cluster_name>` and any working node should be set.
 In case of a single cluster :ref:`path <cluster_path>` might be omitted, :ref:`data_dir <data_dir>`
 will be used as the cluster path then. For all subsequent clusters :ref:`path <cluster_path>` need to be set and should be available.
 
 .. code-block:: sql
 
-    JOIN CLUSTER posts '10.12.1.35:9321' as nodes
-    JOIN CLUSTER click_query  'clicks_mirror1:9351;clicks_mirror2:9351;clicks_mirror3:9351' as nodes, '/var/data/click_query/' as path
+    JOIN CLUSTER posts at '10.12.1.35:9321'
 
+This way node joins cluster by getting data from node provided and on success updates nodes list in all other nodes same
+as :ref:`alter update nodes <replication_alter_update>`
+
+When nodes located at different network segments or different datacenters :ref:`nodes <cluster_nodes>` option might be set
+explicitly. That allows to minimize traffic between nodes or use gateway nodes for datacenters communication.
+This form join an existing cluster :ref:`name <cluster_name>` uses nodes option :ref:`nodes <cluster_nodes>`.
+
+.. code-block:: sql
+
+    JOIN CLUSTER click_query  'clicks_mirror1:9351;clicks_mirror2:9351;clicks_mirror3:9351' as nodes, '/var/data/click_query/' as path
 
 
 .. _replication_delete:
@@ -190,13 +200,15 @@ An error will be triggered otherwise.
      INSERT INTO posts:weekly_index VALUES ( 'iphone case' )
      TRUNCATE RTINDEX click_query:weekly_index
 
-Read statements such as ``CALL PQ`` or ``SELECT``
-can use regular index names not prepended with cluster name.
+Read statements such as ``CALL PQ`` or ``SELECT`` or ``DESCRIBE``
+can use either regular index names not prepended with cluster name
+or ``cluster_name:index_name`` naming. ``cluster_name:index_name`` form just ignores
+cluster name and might be used on index not in cluster.
 
 .. code-block:: sql
 
      SELECT * FROM weekly_index
-     CALL PQ('weekly_index', 'document is here')
+     CALL PQ('posts:weekly_index', 'document is here')
 
 
 Insert of a percolate query at multiple nodes of the same cluster at the same time

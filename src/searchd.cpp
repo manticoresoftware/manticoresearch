@@ -8586,6 +8586,8 @@ public:
 	// split ident ( cluster:index ) to parts
 	static void					SplitClusterIndex ( CSphString & sIndex, CSphString * pCluster );
 
+	void						JoinClusterAt ( const SqlNode_t & tAt );
+
 private:
 	void						AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
 	void						GenericStatement ( SqlNode_t * pNode, SqlStmt_e iStmt );
@@ -9804,6 +9806,18 @@ void SqlParser_c::SplitClusterIndex ( CSphString & sIndex, CSphString * pCluster
 		if ( pCluster )
 			pCluster->SetBinary ( sTmp.cstr(), iPos );
 	}
+}
+
+void SqlParser_c::JoinClusterAt ( const SqlNode_t & tAt )
+{
+	assert ( m_pStmt );
+	m_pStmt->m_bClusterUpdateNodes = true;
+
+	m_pStmt->m_dCallOptNames.Add ( "at_node" );
+
+	SqlInsert_t & tVal = m_pStmt->m_dCallOptValues.Add();
+	tVal.m_iType = tAt.m_iType;
+	ToStringUnescape ( tVal.m_sVal, tAt );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -18089,7 +18103,7 @@ public:
 			return true;
 
 		case STMT_JOIN_CLUSTER:
-			if ( ClusterJoin ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, m_sError ) )
+			if ( ClusterJoin ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, pStmt->m_bClusterUpdateNodes, m_sError ) )
 				tOut.Ok();
 			else
 				tOut.Error ( sQuery.cstr(), m_sError.cstr() );

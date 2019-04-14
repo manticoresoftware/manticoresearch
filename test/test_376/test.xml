@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>replication join at</name>
+
+<requires><replication/><non-windows/></requires>
+<skip_indexer/>
+<num_agents>3</num_agents>
+
+<config>
+
+<agent0>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"></data_path>
+}
+
+index pq1
+{
+	type = percolate
+	path			= <data_path/>/pq1
+}
+
+index pq2
+{
+	type = percolate
+	path			= <data_path/>/pq2
+}
+
+index pq3
+{
+	type = percolate
+	path			= <data_path/>/pq3
+}
+</agent0>
+<agent1>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data1"></data_path>
+}
+</agent1>
+<agent2>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data2"></data_path>
+}
+</agent2>
+
+</config>
+
+
+<sphqueries>
+<!-- request to node 0 -->
+<sphinxql d="0" >create cluster test</sphinxql>
+<sphinxql d="0">ALTER CLUSTER test ADD pq1</sphinxql>
+<sphinxql d="0">INSERT INTO test:pq1 VALUES('test 1')</sphinxql>
+<sphinxql d="0">INSERT INTO test:pq1 VALUES('test 2')</sphinxql>
+<sphinxql d="0">INSERT INTO test:pq1 VALUES('test 3')</sphinxql>
+<!-- request to node 1 -->
+<sphinxql d="1" cluster_connect="0">join cluster test '%addr_connect%' as nodes</sphinxql>
+<!-- request to node 2, chain nodes 2>1>0 and update nodes -->
+<sphinxql d="2" cluster_connect="1">join cluster test at '%addr_connect%'</sphinxql>
+
+<!-- stop node 2 and 1 -->
+<sphinxql d="2" system="stop-agent"/>
+<sphinxql d="1">SHOW TABLES</sphinxql> <!-- just for reconnect -->
+<sphinxql d="1" system="stop-agent"/>
+
+<!-- stream to node 0 -->
+<sphinxql d="0">INSERT INTO test:pq1 VALUES('test 11')</sphinxql>
+
+<!-- start node 2 and check changes from node 0 are here-->
+<sphinxql d="2" system="start-agent"/>
+<sphinxql d="2">SHOW TABLES</sphinxql> <!-- just for reconnect -->
+<sphinxql d="2" system="wait-cluster-ready-test"/>
+<sphinxql d="2">SELECT * FROM test:pq1</sphinxql>
+
+<!-- start node 1 -->
+<sphinxql d="1" system="start-agent"/>
+<sphinxql d="1">SHOW TABLES</sphinxql> <!-- just for reconnect -->
+<sphinxql d="1" system="wait-cluster-ready-test"/>
+<sphinxql d="1">SELECT * FROM test:pq1</sphinxql>
+<sphinxql d="1">INSERT INTO test:pq1 VALUES('test 12')</sphinxql>
+
+<!-- stream to node 2 -->
+<sphinxql d="2">SELECT * FROM test:pq1</sphinxql>
+
+</sphqueries>
+
+</test>

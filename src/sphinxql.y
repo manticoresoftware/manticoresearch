@@ -380,7 +380,7 @@ select_from:
 	opt_hint_clause
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SELECT;
-			pParser->ToString ( pParser->m_pQuery->m_sIndexes, $4 );
+			pParser->SetIndex ( $4, pParser->m_pQuery->m_sIndexes );
 		}
 	;
 
@@ -1399,7 +1399,7 @@ describe:
 	describe_tok ident describe_opt like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_DESCRIBE;
-			pParser->ToString ( pParser->m_pStmt->m_sIndex, $2 );
+			pParser->SetIndex ( $2 );
 		}
 	;
 
@@ -1407,7 +1407,7 @@ describe_opt:
 	// empty
 	| TOK_TABLE
 		{
-			pParser->m_pStmt->m_iIntParam = 42; // just a flag that 'TOK_TABLE' is in use
+			pParser->m_pStmt->m_iIntParam = TOK_TABLE; // just a flag that 'TOK_TABLE' is in use
 		}
 
 describe_tok:

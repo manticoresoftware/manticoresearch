@@ -8582,6 +8582,9 @@ public:
 	void						SetGroupbyLimit ( int iLimit );
 	void						SetLimit ( int iOffset, int iLimit );
 	void						SetIndex ( const SqlNode_t & tIndex );
+	void						SetIndex ( const SqlNode_t & tIndex, CSphString & sIndex ) const;
+	// split ident ( cluster:index ) to parts
+	static void					SplitClusterIndex ( CSphString & sIndex, CSphString * pCluster );
 
 private:
 	void						AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
@@ -9772,24 +9775,34 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 	return true;
 }
 
+void SqlParser_c::SetIndex ( const SqlNode_t & tIndex, CSphString & sIndex ) const
+{
+	ToString ( sIndex, tIndex );
+	SplitClusterIndex ( sIndex, nullptr );
+}
+
 void SqlParser_c::SetIndex ( const SqlNode_t & tIndex )
 {
 	assert ( m_pStmt );
 	ToString ( m_pStmt->m_sIndex, tIndex );
+	SplitClusterIndex ( m_pStmt->m_sIndex, &m_pStmt->m_sCluster );
+}
 
-	// split ident ( cluster:index ) to parts
-	if ( !m_pStmt->m_sIndex.IsEmpty() )
+void SqlParser_c::SplitClusterIndex ( CSphString & sIndex, CSphString * pCluster )
+{
+	if ( sIndex.IsEmpty() )
+		return;
+
+	const char * sDelimiter = strchr ( sIndex.cstr(), ':' );
+	if ( sDelimiter )
 	{
-		const char * sDelimiter = strchr ( m_pStmt->m_sIndex.cstr(), ':' );
-		if ( sDelimiter )
-		{
-			CSphString sTmp = m_pStmt->m_sIndex; // m_sIndex.SetBinary can not accept this(m_sIndex) pointer
+		CSphString sTmp = sIndex; // m_sIndex.SetBinary can not accept this(m_sIndex) pointer
 
-			int iPos = sDelimiter - m_pStmt->m_sIndex.cstr();
-			int iLen = m_pStmt->m_sIndex.Length();
-			m_pStmt->m_sIndex.SetBinary ( sTmp.cstr() + iPos + 1, iLen - iPos - 1 );
-			m_pStmt->m_sCluster.SetBinary ( sTmp.cstr(), iPos );
-		}
+		int iPos = sDelimiter - sIndex.cstr();
+		int iLen = sIndex.Length();
+		sIndex.SetBinary ( sTmp.cstr() + iPos + 1, iLen - iPos - 1 );
+		if ( pCluster )
+			pCluster->SetBinary ( sTmp.cstr(), iPos );
 	}
 }
 
@@ -13337,6 +13350,7 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 	CSphString sError;
 	PercolateOptions_t tOpts;
 	tOpts.m_sIndex = dStmtIndex.m_sVal;
+	SqlParser_c::SplitClusterIndex ( tOpts.m_sIndex, nullptr );
 	bool bSkipEmpty = false;
 	ARRAY_FOREACH ( i, tStmt.m_dCallOptNames )
 	{
@@ -14613,7 +14627,7 @@ void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 
 		// data
 		const CSphSchema *pSchema = &pServed->m_pIndex->GetMatchSchema ();
-		if ( tStmt.m_iIntParam==42 ) // user wants internal schema instead
+		if ( tStmt.m_iIntParam==TOK_TABLE ) // user wants internal schema instead
 		{
 			if ( pServed->IsMutable () )
 			{

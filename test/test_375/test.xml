@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>percolate statements ignore cluster name</name>
+
+<config>
+indexer
+{
+	mem_limit				= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source dummy_src
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+	sql_attr_json	= j
+}
+
+index dummy
+{
+	source			= dummy_src
+	path			= <data_path/>/dummy
+}
+
+index pq
+{
+	type = percolate
+	path			= <data_path/>/pq
+	rt_field 		= title
+}
+</config>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `gid` int(11) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `j` varchar(8192) NOT NULL,
+  PRIMARY KEY (`id`)
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `test_table`;</db_drop>
+<db_insert>
+INSERT INTO `test_table` VALUES
+(1,1,'test one','{"a":5,"b":123}'),
+(2,1,'test two','{"a":101,"b":134}')
+</db_insert>
+
+<sphqueries>
+<sphinxql>INSERT INTO pq (query) VALUES ('me')</sphinxql>
+<sphinxql>INSERT INTO pq (query) VALUES ('we')</sphinxql>
+<sphinxql>SELECT * FROM cluster_test:pq</sphinxql>
+<sphinxql>CALL PQ ('cluster_test:pq', 'me', 1 as docs, 1 as query, 0 as docs_json)</sphinxql>
+<sphinxql>DESC cluster_test:pq</sphinxql>
+<sphinxql>DESC cluster_test:pq TABLE</sphinxql>
+</sphqueries>
+</test>

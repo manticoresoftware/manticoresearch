@@ -6025,6 +6025,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 						}
 
 						// stringptr expressions should be duplicated (or taken over) at this point
+						tCtx.FreeDataFilter ( pMatch[i] );
 						tCtx.FreeDataSort ( pMatch[i] );
 
 						if ( bNewMatch )

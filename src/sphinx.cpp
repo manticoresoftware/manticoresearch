@@ -13397,6 +13397,7 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 				}
 			}
 
+			pCtx->FreeDataFilter ( tMatch );
 			pCtx->FreeDataSort ( tMatch );
 
 			if ( bNewMatch )

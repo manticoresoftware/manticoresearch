@@ -6,6 +6,7 @@ Gettting Started
    
    getting-started/docker
    getting-started/official-packages
+   getting-started/migrate_from_manticore2
    getting-started/configuration
    getting-started/connectivity
    getting-started/indexes

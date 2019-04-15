@@ -105,16 +105,16 @@ Plain indexes and RealTime indexes chunks:
 +-----------+------------------------------+-----------------------------------------+
 | spl       | index lock file              | on disk only                            |
 +-----------+------------------------------+-----------------------------------------+
-| spm       | MVA attrs                    | mmap(), also see :ref:`ondisk_attrs`    |
+| spm       | row map                      | always loaded in memory                 |
++-----------+------------------------------+-----------------------------------------+
+| sphi      | secondary index histograms   | always loaded in memory                 |
++-----------+------------------------------+-----------------------------------------+
+| spt       | docid lookups                | always loaded in memory                 |
 +-----------+------------------------------+-----------------------------------------+
 | spp       | keyword positions            | read, on disk, gets cached by OS        |
 +-----------+------------------------------+-----------------------------------------+
-| sps       | string/json attrs            | mmap(), also see :ref:`ondisk_attrs`    |
+| spb       | var-length attrs             | mmap(), also see :ref:`ondisk_attrs`    |
 +-----------+------------------------------+-----------------------------------------+
-| mvp       | MVA attrs updates :sup:`[1]` | always loaded in memory                 |
-+-----------+------------------------------+-----------------------------------------+
-
-:sup:`[1]` - created only in case of MVA persistent updates
 
 
 RealTime indexes also have:

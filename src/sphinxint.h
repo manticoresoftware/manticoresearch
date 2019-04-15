@@ -1727,6 +1727,9 @@ public:
 	// read .sph and adopt index version from there.
 	bool ReadVersion ( const char * sType="" );
 
+	// read the beginning of .spk and parse killlist targets
+	bool ReadKlistTargets ( StrVec_t & dTargets, const char * sType="" );
+
 	DWORD GetVersion() const { return m_uVersion; }
 
 	// simple make decorated path, like '.old' -> /path/to/index.old

@@ -12,7 +12,6 @@ searchd
 {
 	<searchd_settings/>
 	expansion_limit = 2
-	seamless_rotate = 0
 	<dynamic>
 		<variant>
 			seamless_rotate = 0
@@ -107,9 +106,42 @@ index i_attrs
 	source = src_attrs
 	path = <data_path/>/attrs
 }
+
+source chain1
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = select id, text from test_table;
+}
+
+source chain2
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = select id, text from test_table;
+	sql_query_killlist = select id from klist_table;
+}
+
+
+index main
+{
+	source = chain1
+	path = <data_path/>/chain1
+}
+
+index delta
+{
+	source = chain2
+	path = <data_path/>/chain2
+	killlist_target = main:kl
+}
+
 </config>
 
-<db_drop>drop table if exists test_table</db_drop>
+<db_drop>drop table if exists test_table;</db_drop>
+<db_drop>drop table if exists klist_table;</db_drop>
 
 <db_create>
 create table test_table
@@ -117,6 +149,13 @@ create table test_table
 	id int not null,
 	text varchar(255) not null,
 	mode int
+);
+</db_create>
+
+<db_create>
+create table klist_table
+(
+	id int not null
 );
 </db_create>
 
@@ -133,6 +172,10 @@ insert into test_table values
 ( 3, 'three',  2 ),
 
 ( 1000, '', 1 );
+</db_insert>
+
+<db_insert>
+insert into klist_table values (1);
 </db_insert>
 
 <custom_test><![CDATA[
@@ -196,6 +239,14 @@ $results[] = 'updated flush tag - ' . $client->FlushAttributes();
 RunIndexer ( $errors, 'i_attrs --rotate --keep-attrs' );
 sleep(2);
 $results[] = $q1 ( $client, '', 'i_attrs' );
+
+// smart rotation order (following a chain of killlist_target)
+$results[] = $q1 ( $client, 'first', 'main' );
+mysql_query ( 'delete from klist_table where id=1' );
+RunIndexer ( $errors, 'main delta --rotate' );
+mysql_query ( 'insert into klist_table values (1)' );
+sleep(2);
+$results[] = $q1 ( $client, 'first', 'main' );
 
 ]]></custom_test>
 

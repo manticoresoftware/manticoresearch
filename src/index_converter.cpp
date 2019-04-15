@@ -1359,7 +1359,7 @@ bool ConverterPlain_t::ConvertDictionary ( Index_t & tIndex, CSphString & sError
 		}
 
 		// skiplist
-		if ( iDocs>SPH_SKIPLIST_BLOCK )
+		if ( iDocs>(int)SPH_SKIPLIST_BLOCK )
 			tReaderDict.UnzipInt();
 
 		if ( iDocs>tIndex.m_tSettings.m_iSkiplistBlockSize )
@@ -1633,8 +1633,6 @@ struct ExtInfo_t
 static CSphVector<ExtInfo_t> GetExts ( const char * szPrefix, bool bOldFormat )
 {
 	CSphVector<ExtInfo_t> dResult;
-	const char ** ppExts = nullptr;
-	int iCount = 0;
 	if ( bOldFormat )
 	{
 		int iCount = sizeof(g_dExtsOld) / sizeof ( g_dExtsOld[0] );

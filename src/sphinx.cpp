@@ -30135,6 +30135,30 @@ bool IndexFiles_c::ReadVersion ( const char * sType )
 	return true;
 }
 
+
+bool IndexFiles_c::ReadKlistTargets ( StrVec_t & dTargets, const char * szType )
+{
+	CSphString sPath = FullPath ( sphGetExt(SPH_EXT_SPK).cstr(), szType );
+	if ( !sphIsReadable(sPath) )
+		return true;
+
+	CSphString sError;
+	CSphAutoreader tReader;
+	if ( !tReader.Open ( sPath, sError ) )
+		return false;
+
+	DWORD nIndexes = tReader.GetDword();
+	dTargets.Resize ( nIndexes );
+	for ( auto & i : dTargets )
+	{
+		i = tReader.GetString();
+		tReader.GetDword();	// skip flags
+	}
+
+	return true;
+}
+
+
 void IndexFiles_c::InitFrom ( const CSphIndex* pIndex )
 {
 	if ( !pIndex )

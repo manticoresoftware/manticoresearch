@@ -18595,7 +18595,8 @@ bool ApplyKillListsTo ( ServedDesc_t & tLockedServed, CSphString & sError )
 	return true;
 }
 
-enum class ROTATE_FROM
+
+enum class RotateFrom_e
 {
 	NONE,
 	NEW,
@@ -18604,7 +18605,30 @@ enum class ROTATE_FROM
 	PATH_COPY
 };
 
-ROTATE_FROM CheckIndexHeaderRotate ( const ServedDesc_t & dServed )
+
+static bool PreloadKlistTarget ( const ServedDesc_t & tServed, RotateFrom_e eFrom, StrVec_t & dKlistTarget )
+{
+	switch ( eFrom )
+	{
+	case RotateFrom_e::NEW:
+		return IndexFiles_c ( tServed.m_sIndexPath ).ReadKlistTargets ( dKlistTarget, ".new" );
+
+	case RotateFrom_e::REENABLE:
+		return IndexFiles_c ( tServed.m_sIndexPath ).ReadKlistTargets ( dKlistTarget );
+
+	case RotateFrom_e::PATH_NEW:
+		return IndexFiles_c ( tServed.m_sNewPath ).ReadKlistTargets ( dKlistTarget, ".new" );
+
+	case RotateFrom_e::PATH_COPY:
+		return IndexFiles_c ( tServed.m_sNewPath ).ReadKlistTargets ( dKlistTarget );
+
+	default:
+		return false;
+	}
+}
+
+
+RotateFrom_e CheckIndexHeaderRotate ( const ServedDesc_t & tServed )
 {
 	// check order:
 	// current_path/idx.new.sph		- rotation of current index
@@ -18612,22 +18636,22 @@ ROTATE_FROM CheckIndexHeaderRotate ( const ServedDesc_t & dServed )
 	// new_path/idx.new.sph			- rotation of current index but with new path via indexer --rotate
 	// new_path/idx.sph				- rotation of current index but with new path via files copy
 
-	if ( IndexFiles_c ( dServed.m_sIndexPath ).ReadVersion (".new") )
-		return ROTATE_FROM::NEW;
+	if ( IndexFiles_c ( tServed.m_sIndexPath ).ReadVersion (".new") )
+		return RotateFrom_e::NEW;
 
-	if ( dServed.m_bOnlyNew && IndexFiles_c ( dServed.m_sIndexPath ).ReadVersion() )
-		return ROTATE_FROM::REENABLE;
+	if ( tServed.m_bOnlyNew && IndexFiles_c ( tServed.m_sIndexPath ).ReadVersion() )
+		return RotateFrom_e::REENABLE;
 
-	if ( dServed.m_sNewPath.IsEmpty () || dServed.m_sNewPath==dServed.m_sIndexPath )
-		return ROTATE_FROM::NONE;
+	if ( tServed.m_sNewPath.IsEmpty () || tServed.m_sNewPath==tServed.m_sIndexPath )
+		return RotateFrom_e::NONE;
 
-	if ( IndexFiles_c ( dServed.m_sNewPath ).ReadVersion ( ".new" ) )
-		return ROTATE_FROM::PATH_NEW;
+	if ( IndexFiles_c ( tServed.m_sNewPath ).ReadVersion ( ".new" ) )
+		return RotateFrom_e::PATH_NEW;
 
-	if ( IndexFiles_c ( dServed.m_sNewPath ).ReadVersion () )
-		return ROTATE_FROM::PATH_COPY;
+	if ( IndexFiles_c ( tServed.m_sNewPath ).ReadVersion () )
+		return RotateFrom_e::PATH_COPY;
 
-	return ROTATE_FROM::NONE;
+	return RotateFrom_e::NONE;
 }
 
 /// returns true if any version of the index (old or new one) has been preread
@@ -18636,9 +18660,9 @@ bool RotateIndexGreedy ( const ServedIndex_c * pIndex, ServedDesc_t &tWlockedInd
 	sphLogDebug ( "RotateIndexGreedy for '%s' invoked", szIndex );
 	IndexFiles_c dFiles ( tWlockedIndex.m_sIndexPath );
 	dFiles.SetName ( szIndex );
-	ROTATE_FROM eRot = CheckIndexHeaderRotate ( tWlockedIndex );
-	bool bReEnable = ( eRot==ROTATE_FROM::REENABLE );
-	if ( eRot==ROTATE_FROM::PATH_NEW || eRot==ROTATE_FROM::PATH_COPY )
+	RotateFrom_e eRot = CheckIndexHeaderRotate ( tWlockedIndex );
+	bool bReEnable = ( eRot==RotateFrom_e::REENABLE );
+	if ( eRot==RotateFrom_e::PATH_NEW || eRot==RotateFrom_e::PATH_COPY )
 	{
 		sError.SetSprintf ( "rotating index '%s': can not rotate from new path, switch to seamless_rotate=1; using old index", szIndex );
 		return false;
@@ -18944,7 +18968,7 @@ static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError )
 
 	// get existing index. Look first to disabled hash.
 	auto pRotating = GetDisabled ( sIndex );
-	if ( !pRotating )
+	if ( !pRotating || !ServedDescRPtr_c(pRotating)->m_pIndex )
 	{
 		pRotating = GetServed ( sIndex );
 		if ( !pRotating )
@@ -18965,7 +18989,7 @@ static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError )
 	tNewIndex.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 
 	IndexFiles_c dActivePath, dNewPath;
-	ROTATE_FROM eRot = ROTATE_FROM::NONE;
+	RotateFrom_e eRot = RotateFrom_e::NONE;
 	{
 		ServedDescRPtr_c pCurrentlyServed ( pRotating );
 		if ( !pCurrentlyServed->m_pIndex )
@@ -18993,7 +19017,7 @@ static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError )
 		eRot = CheckIndexHeaderRotate ( *pCurrentlyServed );
 	}
 
-	if ( eRot==ROTATE_FROM::NONE )
+	if ( eRot==RotateFrom_e::NONE )
 	{
 		sphWarning ( "nothing to rotate for index '%s'", sIndex.cstr() );
 		return false;
@@ -19002,20 +19026,20 @@ static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError )
 	CSphString sPathTo;
 	switch ( eRot )
 	{
-	case ROTATE_FROM::PATH_NEW: // move from new_path/idx.new.sph -> new_path/idx.sph
+	case RotateFrom_e::PATH_NEW: // move from new_path/idx.new.sph -> new_path/idx.sph
 		tNewIndex.m_pIndex->SetBase ( dNewPath.MakePath (".new").cstr() );
 		sPathTo = dNewPath.GetBase();
 		break;
 
-	case ROTATE_FROM::PATH_COPY: // load from new_path/idx.sph
+	case RotateFrom_e::PATH_COPY: // load from new_path/idx.sph
 		tNewIndex.m_pIndex->SetBase ( dNewPath.GetBase ().cstr() );
 		break;
 
-	case ROTATE_FROM::REENABLE: // load from current_path/idx.sph
+	case RotateFrom_e::REENABLE: // load from current_path/idx.sph
 		tNewIndex.m_pIndex->SetBase ( dActivePath.GetBase ().cstr() );
 		break;
 
-	//case ROTATE_FROM::NEW:  // move from current_path/idx.new.sph -> current_path/idx.sph
+	//case RotateFrom_e::NEW:  // move from current_path/idx.new.sph -> current_path/idx.sph
 	default:
 		tNewIndex.m_pIndex->SetBase ( dActivePath.MakePath ( ".new" ).cstr () );
 		sPathTo = dActivePath.GetBase ();
@@ -19139,37 +19163,41 @@ void RotationThreadFunc ( void * )
 		bool bMutable = false;
 		{
 			ServedIndexRefPtr_c pIndex ( nullptr );
-			// scope for g_pDisabledIndexes
+
+			// find the index with the best (least) rotation priority
+			int iMinPriority = INT_MAX;
+			for ( RLockedServedIt_c it ( g_pDisabledIndexes ); it.Next(); )
 			{
-				RLockedServedIt_c it ( g_pDisabledIndexes );
-				it.Next();
-				sIndex = it.GetName ();
-				pIndex = it.Get();
+				ServedDescRPtr_c rLocked(it.Get());
+
+				if ( rLocked->m_iRotationPriority < iMinPriority )
+				{
+					sIndex = it.GetName();
+					pIndex = it.Get();
+					iMinPriority = rLocked->m_iRotationPriority;
+				}
 			}
 
-			if ( pIndex ) // that is rt/percolate. Plain locals has just name and nullptr index
 			{
-				{
-					ServedDescRPtr_c tLocked ( pIndex );
-					bMutable = tLocked->IsMutable ();
-					// cluster indexes got managed by different path
-					if ( tLocked->IsCluster() )
-						continue;
-				}
+				ServedDescRPtr_c tLocked ( pIndex );
+				bMutable = tLocked->IsMutable();
+				// cluster indexes got managed by different path
+				if ( tLocked->IsCluster() )
+					continue;
+			}
 
-				// prealloc RT and percolate here
-				if ( bMutable )
+			// prealloc RT and percolate here
+			if ( bMutable )
+			{
+				ServedDescWPtr_c wLocked ( pIndex );
+				if ( PreallocNewIndex ( *wLocked, sIndex.cstr() ) )
 				{
-					ServedDescWPtr_c wLocked ( pIndex );
-					if ( PreallocNewIndex ( *wLocked, sIndex.cstr() ) )
-					{
-						wLocked->m_bOnlyNew = false;
-						g_pLocalIndexes->AddOrReplace ( pIndex, sIndex );
-						pIndex->AddRef ();
-					} else
-					{
-						g_pLocalIndexes->DeleteIfNull ( sIndex );
-					}
+					wLocked->m_bOnlyNew = false;
+					g_pLocalIndexes->AddOrReplace ( pIndex, sIndex );
+					pIndex->AddRef ();
+				} else
+				{
+					g_pLocalIndexes->DeleteIfNull ( sIndex );
 				}
 			}
 		}
@@ -20240,7 +20268,15 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 				if ( pServedWLocked->m_eType!=IndexType_e::TEMPLATE && hIndex.Exists ( "path" ) && hIndex["path"].strval ()!=pServedWLocked->m_sIndexPath )
 				{
 					pServedWLocked->m_sNewPath = hIndex["path"].strval ();
-					g_pDisabledIndexes->AddUniq ( nullptr, sIndexName );
+
+					ServedDesc_t tDesc;
+					tDesc.m_sIndexPath = pServedWLocked->m_sIndexPath;
+					tDesc.m_sNewPath = pServedWLocked->m_sNewPath;
+					tDesc.m_eType = pServedWLocked->m_eType;
+					if ( !PreloadKlistTarget ( tDesc, CheckIndexHeaderRotate(tDesc), tDesc.m_dKilllistTargets ) )
+						tDesc.m_dKilllistTargets.Reset();
+
+					g_pDisabledIndexes->AddUniq ( new ServedIndex_c(tDesc), sIndexName );
 				}
 			}
 
@@ -20326,6 +20362,221 @@ void RotationServiceThreadFunc ( void * )
 	}
 }
 
+
+struct IndexWithPriority_t
+{
+	CSphString	m_sIndex;
+	StrVec_t	m_dKilllistTargets;
+	int			m_iPriority {-1};
+	int			m_nReferences {0};
+};
+
+
+static void SetIndexPriority ( IndexWithPriority_t & tIndex, int iPriority, const SmallStringHash_T<IndexWithPriority_t> & tIndexHash )
+{
+	tIndex.m_iPriority = Max ( tIndex.m_iPriority, iPriority );
+	for ( const auto & i : tIndex.m_dKilllistTargets )
+	{
+		IndexWithPriority_t * pIdx = tIndexHash(i);
+		if ( pIdx )
+			SetIndexPriority ( *pIdx, iPriority+1, tIndexHash );
+	}
+}
+
+
+static void CalcRotationPriorities()
+{
+	SmallStringHash_T<IndexWithPriority_t> tIndexesToRotate;
+
+	// don't need wlock since rotation thread is already waiting for g_tRotateThreadMutex
+	for ( RLockedServedIt_c it ( g_pDisabledIndexes ); it.Next (); )
+	{
+		auto pIndex = it.Get();
+		assert(pIndex);
+
+		ServedDescRPtr_c pRlockedServedPtr(pIndex);
+
+		// check for rt/percolate. they don't need killlist_target
+		if ( !pRlockedServedPtr->IsMutable() && g_pLocalIndexes->Contains ( it.GetName() ) ) 
+		{
+			ServedDescRPtr_c pDesc ( GetServed ( it.GetName() ) );
+
+			IndexWithPriority_t tToRotate;
+			tToRotate.m_sIndex = it.GetName();
+			tToRotate.m_dKilllistTargets = pRlockedServedPtr->m_dKilllistTargets;
+
+			tIndexesToRotate.Add ( tToRotate, it.GetName() );
+		}
+	}
+
+	// set priorities
+	for ( tIndexesToRotate.IterateStart (); tIndexesToRotate.IterateNext (); )
+		for ( const auto & i : tIndexesToRotate.IterateGet().m_dKilllistTargets )
+		{
+			IndexWithPriority_t * pIdx = tIndexesToRotate(i);
+			if ( pIdx )
+				pIdx->m_nReferences++;
+		}
+
+	// start with the least-referenced index
+	IndexWithPriority_t * pMin;
+	do
+	{
+		pMin = nullptr;
+		for ( tIndexesToRotate.IterateStart (); tIndexesToRotate.IterateNext (); )
+		{
+			IndexWithPriority_t & tIdx = tIndexesToRotate.IterateGet();
+			if ( tIdx.m_iPriority==-1 && ( !pMin || tIdx.m_nReferences<pMin->m_nReferences ) )
+				pMin = &tIdx;
+		}
+
+		if ( pMin )
+			SetIndexPriority ( *pMin, 0, tIndexesToRotate );
+	}
+	while ( pMin );
+	
+	// copy priorities to disabled indexes
+	for ( tIndexesToRotate.IterateStart (); tIndexesToRotate.IterateNext (); )
+	{
+		const IndexWithPriority_t & tIdx = tIndexesToRotate.IterateGet();
+		assert ( tIdx.m_iPriority>=0 );
+		ServedDescWPtr_c pDisabled ( GetDisabled ( tIdx.m_sIndex ) );
+		if ( pDisabled )
+			pDisabled->m_iRotationPriority = tIdx.m_iPriority;
+	}
+}
+
+
+static void CheckIndexesForSeamless()
+{
+	// check what indexes need to be rotated
+	SmallStringHash_T<bool> dNotCapableForRotation;
+	for ( RLockedServedIt_c it ( g_pDisabledIndexes ); it.Next(); )
+	{
+		ServedDescRPtr_c rLocked ( it.Get() );
+		const CSphString & sIndex = it.GetName ();
+		assert ( rLocked );
+		if ( !rLocked->m_pIndex )
+			continue;
+
+		if ( CheckIndexHeaderRotate(*rLocked)==RotateFrom_e::NONE && !rLocked->IsMutable() )
+		{
+			dNotCapableForRotation.Add ( true, sIndex );
+			sphLogDebug ( "Index %s (%s) is not capable for seamless rotate. Skipping", sIndex.cstr ()
+				, rLocked->m_sIndexPath.cstr () );
+		}
+	}
+
+	if ( dNotCapableForRotation.GetLength () )
+	{
+		sphWarning ( "INTERNAL ERROR: non-empty queue on a rotation cycle start, got %d elements"
+			, dNotCapableForRotation.GetLength () );
+		for ( dNotCapableForRotation.IterateStart (); dNotCapableForRotation.IterateNext (); )
+		{
+			g_pDisabledIndexes->Delete ( dNotCapableForRotation.IterateGetKey () );
+			sphWarning ( "queue[] = %s", dNotCapableForRotation.IterateGetKey ().cstr () );
+		}
+	}
+
+	if ( !g_pDisabledIndexes->GetLength () )
+	{
+		sphWarning ( "nothing to rotate after SIGHUP" );
+		g_bInvokeRotationService = false;
+		g_bInRotate = false;
+	}
+}
+
+
+static void DoGreedyRotation()
+{
+	ScRL_t tRotateConfigMutex { g_tRotateConfigMutex };
+
+	while ( g_pDisabledIndexes->GetLength() )
+	{
+		CSphString sIndex, sError;
+		ServedIndexRefPtr_c pIndex ( nullptr );
+
+		// find the index with the best (least) rotation priority
+		int iMinPriority = INT_MAX;
+		for ( RLockedServedIt_c it ( g_pDisabledIndexes ); it.Next(); )
+		{
+			ServedDescRPtr_c rLocked(it.Get());
+
+			if ( rLocked->m_iRotationPriority < iMinPriority )
+			{
+				sIndex = it.GetName();
+				pIndex = it.Get();
+				iMinPriority = rLocked->m_iRotationPriority;
+			}
+		}
+
+		assert ( pIndex );
+
+		// special processing for plain old rotation cur.new.* -> cur.*
+		if ( !ServedDescRPtr_c(pIndex)->m_pIndex )
+		{
+			auto pRotating = GetServed ( sIndex );
+			assert ( pRotating );
+			ServedDescWPtr_c pWRotating ( pRotating );
+			assert ( pWRotating->m_eType==IndexType_e::PLAIN );
+			if ( !RotateIndexGreedy ( pRotating, *pWRotating, sIndex.cstr(), sError ) )
+			{
+				sphWarning ( "%s", sError.cstr () );
+				g_pLocalIndexes->Delete ( sIndex );
+			}
+		}
+		else
+		{
+			ServedDescWPtr_c pWlockedServedPtr ( pIndex );
+
+			assert ( pWlockedServedPtr->m_pIndex );
+			assert ( g_pLocalIndexes->Contains ( sIndex ) );
+
+			// prealloc RT and percolate here
+			if ( pWlockedServedPtr->IsMutable () )
+			{
+				pWlockedServedPtr->m_bOnlyNew = false;
+				if ( PreallocNewIndex ( *pWlockedServedPtr, &g_pCfg.m_tConf["index"][sIndex], sIndex.cstr() ) )
+				{
+					g_pLocalIndexes->AddOrReplace ( pIndex, sIndex );
+					pIndex->AddRef ();
+				} else
+					g_pLocalIndexes->DeleteIfNull ( sIndex );
+			}
+			else if ( pWlockedServedPtr->m_eType==IndexType_e::PLAIN )
+			{
+				bool bWasAdded = pWlockedServedPtr->m_bOnlyNew;
+				bool bOk = RotateIndexGreedy ( pIndex, *pWlockedServedPtr, sIndex.cstr(), sError );
+				if ( !bOk )
+					sphWarning ( "%s", sError.cstr() );
+
+				if ( bWasAdded && bOk && !sphFixupIndexSettings ( pWlockedServedPtr->m_pIndex, g_pCfg.m_tConf["index"][sIndex], sError, g_bStripPath ) )
+				{
+					sphWarning ( "index '%s': %s - NOT SERVING", sIndex.cstr(), sError.cstr() );
+					bOk = false;
+				}
+
+				if ( bOk )
+				{
+					pWlockedServedPtr->m_pIndex->Preread();
+					g_pLocalIndexes->AddOrReplace ( pIndex, sIndex );
+					pIndex->AddRef ();
+				} else
+					g_pLocalIndexes->DeleteIfNull ( sIndex );
+			}
+		}
+
+		g_pDisabledIndexes->Delete ( sIndex );
+		g_pDistIndexes->Delete ( sIndex ); // postponed delete of same-named distributed (if any)
+	}
+
+	g_pDisabledIndexes->ReleaseAndClear ();
+	g_bInRotate = false;
+	g_bInvokeRotationService = true;
+	sphInfo ( "rotating finished" );
+}
+
+
 // ServiceMain() -> TickHead() -> CheckRotate()
 void CheckRotate () REQUIRES ( MainThread )
 {
@@ -20347,137 +20598,39 @@ void CheckRotate () REQUIRES ( MainThread )
 			ReloadIndexSettings ( g_pCfg );
 	}
 
-	// special pass for 'simple' rotation (i.e. *.new to current)
-	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next (); )
 	{
-		auto pIdx = it.Get();
-		if ( !pIdx )
-			continue;
-		ServedDescRPtr_c rLocked ( pIdx );
-		const CSphString &sIndex = it.GetName ();
-		assert ( rLocked->m_pIndex );
-		if ( rLocked->m_eType==IndexType_e::PLAIN && ROTATE_FROM::NEW==CheckIndexHeaderRotate ( *rLocked ) )
-			g_pDisabledIndexes->AddUniq ( nullptr, sIndex );
-	}
+		// we want rotation thread to wait until we're done with our new rotation priorities
+		ScopedMutex_t tBlockRotations ( g_tRotateThreadMutex );
 
-	/////////////////////
-	// RAM-greedy rotate
-	/////////////////////
-
-	if ( !g_bSeamlessRotate )
-	{
-		ScRL_t tRotateConfigMutex { g_tRotateConfigMutex };
-		for ( RLockedServedIt_c it ( g_pDisabledIndexes ); it.Next(); )
+		// special pass for 'simple' rotation (i.e. *.new to current)
+		for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next (); )
 		{
-			auto pIndex = it.Get();
-			const char * sIndex = it.GetName ().cstr ();
-			CSphString sError;
-
-			// special processing for plain old rotation cur.new.* -> cur.*
-			if ( !pIndex )
-			{
-				auto pRotating = GetServed ( sIndex );
-				assert ( pRotating );
-				ServedDescWPtr_c pWRotating ( pRotating );
-				assert ( pWRotating->m_eType==IndexType_e::PLAIN );
-				if ( !RotateIndexGreedy ( pRotating, *pWRotating, sIndex, sError ) )
-				{
-					sphWarning ( "%s", sError.cstr () );
-					g_pLocalIndexes->Delete ( sIndex );
-				}
-				g_pDistIndexes->Delete ( sIndex ); // postponed delete of same-named distributed (if any)
+			auto pIdx = it.Get();
+			if ( !pIdx )
 				continue;
-			}
-
-			ServedDescWPtr_c pWlockedServedPtr ( pIndex );
-
-			assert ( pWlockedServedPtr->m_pIndex );
-			assert ( g_pLocalIndexes->Contains ( sIndex ) );
-
-			// prealloc RT and percolate here
-			if ( pWlockedServedPtr->IsMutable () )
+			ServedDescRPtr_c rLocked ( pIdx );
+			const CSphString & sIndex = it.GetName();
+			assert ( rLocked->m_pIndex );
+			if ( rLocked->m_eType==IndexType_e::PLAIN && CheckIndexHeaderRotate ( *rLocked )==RotateFrom_e::NEW )
 			{
-				pWlockedServedPtr->m_bOnlyNew = false;
-				if ( PreallocNewIndex ( *pWlockedServedPtr, &g_pCfg.m_tConf["index"][sIndex], sIndex ) )
-				{
-					g_pLocalIndexes->AddOrReplace ( pIndex, sIndex );
-					pIndex->AddRef ();
-				} else
-					g_pLocalIndexes->DeleteIfNull ( sIndex );
-				g_pDistIndexes->Delete ( sIndex ); // postponed delete of same-named distributed (if any)
+				ServedDesc_t tDesc;
+				tDesc.m_sIndexPath = rLocked->m_sIndexPath;
+				tDesc.m_sNewPath = rLocked->m_sNewPath;
+				tDesc.m_eType = rLocked->m_eType;
+				if ( !PreloadKlistTarget ( tDesc, RotateFrom_e::NEW, tDesc.m_dKilllistTargets ) )
+					tDesc.m_dKilllistTargets.Reset();
+
+				g_pDisabledIndexes->AddUniq ( new ServedIndex_c(tDesc), sIndex );
 			}
-
-			if ( pWlockedServedPtr->m_eType!=IndexType_e::PLAIN )
-				continue;
-
-			bool bWasAdded = pWlockedServedPtr->m_bOnlyNew;
-			bool bOk = RotateIndexGreedy ( pIndex, *pWlockedServedPtr, sIndex, sError );
-			if ( !bOk )
-				sphWarning ( "%s", sError.cstr() );
-
-			if ( bWasAdded && bOk && !sphFixupIndexSettings ( pWlockedServedPtr->m_pIndex, g_pCfg.m_tConf["index"][sIndex], sError, g_bStripPath ) )
-			{
-				sphWarning ( "index '%s': %s - NOT SERVING", sIndex, sError.cstr() );
-				bOk = false;
-			}
-
-			if ( bOk )
-			{
-				pWlockedServedPtr->m_pIndex->Preread();
-				g_pLocalIndexes->AddOrReplace ( pIndex, sIndex );
-				pIndex->AddRef ();
-			} else
-				g_pLocalIndexes->DeleteIfNull ( sIndex );
-			g_pDistIndexes->Delete ( sIndex ); // postponed delete of same-named distributed (if any)
 		}
 
-		g_pDisabledIndexes->ReleaseAndClear ();
-		g_bInRotate = false;
-		g_bInvokeRotationService = true;
-		sphInfo ( "rotating finished" );
-		return;
+		CalcRotationPriorities();
 	}
 
-	///////////////////
-	// seamless rotate
-	///////////////////
-
-	// check what indexes need to be rotated
-	SmallStringHash_T<bool> dNotCapableForRotation;
-	for ( RLockedServedIt_c it ( g_pDisabledIndexes ); it.Next(); )
-	{
-		ServedDescRPtr_c rLocked ( it.Get() );
-		const CSphString & sIndex = it.GetName ();
-		if ( !rLocked )
-			continue;
-
-		assert ( rLocked->m_pIndex );
-		if ( ROTATE_FROM::NONE==CheckIndexHeaderRotate ( *rLocked ) && !rLocked->IsMutable() )
-		{
-			dNotCapableForRotation.Add ( true, sIndex );
-			sphLogDebug ( "Index %s (%s) is not capable for seamless rotate. Skipping", sIndex.cstr ()
-						  , rLocked->m_sIndexPath.cstr () );
-		}
-	}
-
-	if ( dNotCapableForRotation.GetLength () )
-	{
-		sphWarning ( "INTERNAL ERROR: non-empty queue on a rotation cycle start, got %d elements"
-					 , dNotCapableForRotation.GetLength () );
-		for ( dNotCapableForRotation.IterateStart (); dNotCapableForRotation.IterateNext (); )
-		{
-			g_pDisabledIndexes->Delete ( dNotCapableForRotation.IterateGetKey () );
-			sphWarning ( "queue[] = %s", dNotCapableForRotation.IterateGetKey ().cstr () );
-		}
-	}
-
-	if ( !g_pDisabledIndexes->GetLength () )
-	{
-		sphWarning ( "nothing to rotate after SIGHUP" );
-		g_bInvokeRotationService = false;
-		g_bInRotate = false;
-		return;
-	}
+	if ( g_bSeamlessRotate )
+		CheckIndexesForSeamless();
+	else
+		DoGreedyRotation();
 }
 
 

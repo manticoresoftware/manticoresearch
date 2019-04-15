@@ -680,6 +680,8 @@ struct ServedDesc_t
 	bool		m_bOnDiskAttrs	= false;
 	bool		m_bOnDiskPools	= false;
 	int64_t		m_iMass			= 0; // relative weight (by access speed) of the index
+	int			m_iRotationPriority = 0;	// rotation priority (for proper rotation of indexes chained by killlist_target). 0==high priority
+	StrVec_t	m_dKilllistTargets;
 	mutable CSphString	m_sUnlink;
 	IndexType_e	m_eType			= IndexType_e::PLAIN;
 	bool		m_bJson			= false;

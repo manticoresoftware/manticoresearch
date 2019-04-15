@@ -457,17 +457,17 @@ void LOC_PREFIX(stem_ru) ( LOC_CHAR_TYPE * word )
 		c==RUS::A || c==RUS::E || c==RUS::YO || c==RUS::I || c==RUS::O || \
 		c==RUS::U || c==RUS::Y || c==RUS::EE || c==RUS::YU || c==RUS::YA )
 
-	// EndOfWord
-	#undef EOW
-	#define EOW(_arg) (!(*((unsigned char*)(_arg))))
+	// NotEndOfWord
+	#undef NEOW
+	#define NEOW(_arg) (*((unsigned char*)(_arg)) && *((unsigned char*)(_arg)+1))
 
-	while ( !EOW(word) ) if ( IV(*word) ) break; else word++;
-	if ( !EOW(word) ) word++; else return;
-	len = 0; while ( !EOW(word+len) ) len++;
+	while ( NEOW(word) ) if ( IV(*word) ) break; else ++word;
+	if ( NEOW(word) ) ++word; else return;
+	len = 0; while ( NEOW(word+len) ) ++len;
 
 	r1 = r2 = len;
-	for ( i=-1; i<len-1; i++ ) if ( IV(word[i]) && !IV(word[i+1]) ) { r1 = i+2; break; }
-	for ( i=r1; i<len-1; i++ ) if ( IV(word[i]) && !IV(word[i+1]) ) { r2 = i+2; break; }
+	for ( i=-1; i<len-1; ++i ) if ( IV(word[i]) && !IV(word[i+1]) ) { r1 = i+2; break; }
+	for ( i=r1; i<len-1; ++i ) if ( IV(word[i]) && !IV(word[i+1]) ) { r2 = i+2; break; }
 
 	#define C(p) word[len-p]
 	#define W(p,c) ( C(p)==c )

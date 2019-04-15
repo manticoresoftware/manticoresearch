@@ -380,7 +380,7 @@ static bool CheckClasterState ( ClusterState_e eState, const CSphString & sClust
 {
 	if ( eState!=ClusterState_e::SYNCED && eState!=ClusterState_e::DONOR )
 	{
-		sError.SetSprintf ( "cluster '%s' not ready, current state %s", sCluster.cstr(), GetNodeState ( eState ) );
+		sError.SetSprintf ( "cluster '%s' is not ready, current state is %s", sCluster.cstr(), GetNodeState ( eState ) );
 		return false;
 	}
 
@@ -773,7 +773,7 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	wsrep_status_t eRes = (wsrep_status_t)wsrep_load ( GetReplicationDL(), &pWsrep, Logger_fn );
 	if ( eRes!=WSREP_OK )
 	{
-		sError.SetSprintf ( "load of provider '%s' failed, %d '%s'", GetReplicationDL(), (int)eRes, GetStatus ( eRes ) );
+		sError.SetSprintf ( "provider '%s' - failed to load, %d '%s'", GetReplicationDL(), (int)eRes, GetStatus ( eRes ) );
 		return false;
 	}
 	assert ( pWsrep );
@@ -866,7 +866,7 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	eRes = pWsrep->connect ( pWsrep, tArgs.m_pCluster->m_sName.cstr(), sConnectNodes.cstr(), "", tArgs.m_bNewCluster );
 	if ( eRes!=WSREP_OK )
 	{
-		sError.SetSprintf ( "replication connect failed: %d '%s'", (int)eRes, GetStatus ( eRes ) );
+		sError.SetSprintf ( "replication connection failed: %d '%s'", (int)eRes, GetStatus ( eRes ) );
 		// might try to join existed cluster however that took too long to timeout in case no cluster started
 		return false;
 	}
@@ -884,7 +884,7 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	pRecvArgs->m_tStarted.WaitEvent();
 	pRecvArgs->Release();
 
-	sphLogDebugRpl ( "replicator created for cluster '%s'", tArgs.m_pCluster->m_sName.cstr() );
+	sphLogDebugRpl ( "replicator is created for cluster '%s'", tArgs.m_pCluster->m_sName.cstr() );
 
 	return true;
 }
@@ -1193,7 +1193,7 @@ void JsonLoadConfig ( const CSphConfigSection & hSearchd )
 	// check data_dir exists and available
 	if ( !CheckPath ( g_sDataDir, true, sError ) )
 	{
-		sphWarning ( "%s, replication disabled", sError.cstr() );
+		sphWarning ( "%s, replication is disabled", sError.cstr() );
 		g_sDataDir = "";
 		return;
 	}
@@ -1296,7 +1296,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 	ReplicationCommand_e eCommand = (ReplicationCommand_e)tReader.GetWord();
 	if ( eCommand<0 || eCommand>RCOMMAND_TOTAL )
 	{
-		sphWarning ( "replication bad command %d", (int)eCommand );
+		sphWarning ( "bad replication command %d", (int)eCommand );
 		return false;
 	}
 
@@ -1323,14 +1323,14 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 		ServedIndexRefPtr_c pServed = GetServed ( sIndex );
 		if ( !pServed )
 		{
-			sphWarning ( "replicate unknown index '%s', command %d", sIndex.cstr(), (int)eCommand );
+			sphWarning ( "unknown index '%s' for replication, command %d", sIndex.cstr(), (int)eCommand );
 			return false;
 		}
 
 		ServedDescRPtr_c pDesc ( pServed );
 		if ( pDesc->m_eType!=IndexType_e::PERCOLATE )
 		{
-			sphWarning ( "replicate wrong type of index '%s', command %d", sIndex.cstr(), (int)eCommand );
+			sphWarning ( "wrong type of index '%s' for replication, command %d", sIndex.cstr(), (int)eCommand );
 			return false;
 		}
 
@@ -1346,7 +1346,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 
 		if ( !tCmd.m_pStored )
 		{
-			sphWarning ( "replicate pq-add error '%s', index '%s'", sError.cstr(), tCmd.m_sIndex.cstr() );
+			sphWarning ( "pq-add replication error '%s', index '%s'", sError.cstr(), tCmd.m_sIndex.cstr() );
 			return false;
 		}
 	}
@@ -1371,7 +1371,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 		break;
 
 	default:
-		sphWarning ( "replicate unsupported command %d", (int)eCommand );
+		sphWarning ( "unsupported replication command %d", (int)eCommand );
 		return false;
 	}
 
@@ -1388,7 +1388,7 @@ bool HandleCmdReplicated ( ReplicationCommand_t & tCmd )
 	{
 		if ( tCmd.m_eCommand==RCOMMAND_CLUSTER_ALTER_ADD && !CheckLocalIndex ( tCmd.m_sIndex, sError ) )
 		{
-			sphWarning ( "replicate %s, command %d", sError.cstr(), (int)tCmd.m_eCommand );
+			sphWarning ( "replication error %s, command %d", sError.cstr(), (int)tCmd.m_eCommand );
 			return false;
 		}
 
@@ -1402,14 +1402,14 @@ bool HandleCmdReplicated ( ReplicationCommand_t & tCmd )
 	ServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sIndex );
 	if ( !pServed )
 	{
-		sphWarning ( "replicate unknown index '%s', command %d", tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand );
+		sphWarning ( "unknown index '%s' for replication, command %d", tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand );
 		return false;
 	}
 
 	ServedDescPtr_c pDesc ( pServed, ( tCmd.m_eCommand==RCOMMAND_TRUNCATE ) );
 	if ( pDesc->m_eType!=IndexType_e::PERCOLATE )
 	{
-		sphWarning ( "replicate wrong type of index '%s', command %d", tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand );
+		sphWarning ( "wrong type of index '%s' for replication, command %d", tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand );
 		return false;
 	}
 
@@ -1425,7 +1425,7 @@ bool HandleCmdReplicated ( ReplicationCommand_t & tCmd )
 		tCmd.m_pStored = nullptr;
 		if ( !bOk )
 		{
-			sphWarning ( "replicate commit error '%s', index '%s'", sError.cstr(), tCmd.m_sIndex.cstr() );
+			sphWarning ( "replication commit error '%s', index '%s'", sError.cstr(), tCmd.m_sIndex.cstr() );
 			return false;
 		}
 	}
@@ -1447,7 +1447,7 @@ bool HandleCmdReplicated ( ReplicationCommand_t & tCmd )
 		break;
 
 	default:
-		sphWarning ( "replicate unsupported command %d", tCmd.m_eCommand );
+		sphWarning ( "unsupported replication command %d", tCmd.m_eCommand );
 		return false;
 	}
 
@@ -1470,7 +1470,7 @@ bool HandleCmdReplicate ( ReplicationCommand_t & tCmd, CSphString & sError, int 
 	g_tClustersLock.Unlock();
 	if ( !ppCluster )
 	{
-		sError.SetSprintf ( "unknown cluster %s", tCmd.m_sCluster.cstr() );
+		sError.SetSprintf ( "unknown cluster '%s'", tCmd.m_sCluster.cstr() );
 		return false;
 	}
 	if ( !CheckClasterState ( eClusterState, tCmd.m_sCluster, sError ) )
@@ -1478,14 +1478,14 @@ bool HandleCmdReplicate ( ReplicationCommand_t & tCmd, CSphString & sError, int 
 
 	if ( tCmd.m_eCommand==RCOMMAND_TRUNCATE && tCmd.m_bReconfigure )
 	{
-		sError.SetSprintf ( "RECONFIGURE not supported in cluster index" );
+		sError.SetSprintf ( "RECONFIGURE is not supported for a cluster index" );
 		return false;
 	}
 
 	const uint64_t uIndexHash = sphFNV64 ( tCmd.m_sIndex.cstr() );
 	if ( tCmd.m_bCheckIndex && !(*ppCluster)->m_dIndexHashes.BinarySearch ( uIndexHash ) )
 	{
-		sError.SetSprintf ( "index '%s' not belongs to cluster '%s'", tCmd.m_sIndex.cstr(), tCmd.m_sCluster.cstr() );
+		sError.SetSprintf ( "index '%s' doesn't belong to cluster '%s'", tCmd.m_sIndex.cstr(), tCmd.m_sCluster.cstr() );
 		return false;
 	}
 
@@ -1539,7 +1539,7 @@ bool HandleCmdReplicate ( ReplicationCommand_t & tCmd, CSphString & sError, int 
 		break;
 
 	default:
-		sError.SetSprintf ( "unknown command %d", tCmd.m_eCommand );
+		sError.SetSprintf ( "unknown command '%d'", tCmd.m_eCommand );
 		return false;
 	}
 
@@ -1597,7 +1597,7 @@ bool CommitMonitor_c::Commit ( CSphString & sError )
 		break;
 
 	default:
-		sError.SetSprintf ( "unknown command %d", m_tCmd.m_eCommand );
+		sError.SetSprintf ( "unknown command '%d'", m_tCmd.m_eCommand );
 		return false;
 	}
 
@@ -1610,7 +1610,7 @@ bool CommitMonitor_c::CommitTOI ( CSphString & sError )
 	ReplicationCluster_t ** ppCluster = g_hClusters ( m_tCmd.m_sCluster );
 	if ( !ppCluster )
 	{
-		sError.SetSprintf ( "unknown cluster %s", m_tCmd.m_sCluster.cstr() );
+		sError.SetSprintf ( "unknown cluster '%s'", m_tCmd.m_sCluster.cstr() );
 		return false;
 	}
 
@@ -1618,7 +1618,7 @@ bool CommitMonitor_c::CommitTOI ( CSphString & sError )
 	const uint64_t uIndexHash = sphFNV64 ( m_tCmd.m_sIndex.cstr() );
 	if ( m_tCmd.m_bCheckIndex && !pCluster->m_dIndexHashes.BinarySearch ( uIndexHash ) )
 	{
-		sError.SetSprintf ( "index '%s' not belongs to cluster '%s'", m_tCmd.m_sIndex.cstr(), m_tCmd.m_sCluster.cstr() );
+		sError.SetSprintf ( "index '%s' doesn't belong to cluster '%s'", m_tCmd.m_sIndex.cstr(), m_tCmd.m_sCluster.cstr() );
 		return false;
 	}
 
@@ -1640,7 +1640,7 @@ bool CommitMonitor_c::CommitTOI ( CSphString & sError )
 		break;
 
 	default:
-		sError.SetSprintf ( "unknown command %d", m_tCmd.m_eCommand );
+		sError.SetSprintf ( "unknown command '%d'", m_tCmd.m_eCommand );
 		return false;
 	}
 
@@ -1754,7 +1754,7 @@ bool JsonConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> 
 			if ( j.IsStr() )
 				tCluster.m_dIndexes.Add ( j.StrVal() );
 			else
-				sphWarning ( "cluster '%s' index %d name should be a string, skipped", tCluster.m_sName.cstr(), iItem );
+				sphWarning ( "cluster '%s', index %d: name should be a string, skipped", tCluster.m_sName.cstr(), iItem );
 
 			iItem++;
 		}
@@ -1968,7 +1968,7 @@ static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes, co
 		ReplicationCluster_t ** ppCluster = g_hClusters ( sCluster );
 		if ( !ppCluster )
 		{
-			sError.SetSprintf ( "unknown cluster %s", sCluster.cstr() );
+			sError.SetSprintf ( "unknown cluster '%s'", sCluster.cstr() );
 			return false;
 		}
 
@@ -1985,7 +1985,7 @@ static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes, co
 			{
 				if ( hIndexes.Exists ( sIndex ) )
 				{
-					sError.SetSprintf ( "index '%s' is already in another cluster '%s', replicated cluster '%s'", sIndex.cstr(), pOrigCluster->m_sName.cstr(), sCluster.cstr() );
+					sError.SetSprintf ( "index '%s' is already a part of cluster '%s'", sIndex.cstr(), pOrigCluster->m_sName.cstr() );
 					return false;
 				}
 			}
@@ -2005,7 +2005,7 @@ static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes, co
 		ReplicationCluster_t ** ppCluster = g_hClusters ( sCluster );
 		if ( !ppCluster )
 		{
-			sError.SetSprintf ( "unknown cluster %s", sCluster.cstr() );
+			sError.SetSprintf ( "unknown cluster '%s'", sCluster.cstr() );
 			return false;
 		}
 
@@ -2050,7 +2050,7 @@ bool CheckPath ( const CSphString & sPath, bool bCheckWrite, CSphString & sError
 {
 	if ( !sphIsReadable ( sPath, &sError ) )
 	{
-		sError.SetSprintf ( "can not access directory %s, %s", sPath.cstr(), sError.cstr() );
+		sError.SetSprintf ( "cannot access directory %s, %s", sPath.cstr(), sError.cstr() );
 		return false;
 	}
 
@@ -2073,7 +2073,7 @@ static bool ClusterCheckPath ( const CSphString & sPath, const CSphString & sNam
 {
 	if ( !g_bReplicationEnabled )
 	{
-		sError.SetSprintf ( "data_dir option is missed or no replication listeners set, replication disabled" );
+		sError.SetSprintf ( "data_dir option is missing in config or no replication listener is set, replication is disabled" );
 		return false;
 	}
 
@@ -2220,7 +2220,7 @@ static void SetListener ( const CSphVector<ListenerDesc_t> & dListeners )
 	if ( iPort==-1 )
 	{
 		if ( g_dCfgClusters.GetLength() )
-			sphWarning ( "no listen found, can not set incoming addresses, replication disabled" );
+			sphWarning ( "no 'listen' is found, cannot set incoming addresses, replication is disabled" );
 		return;
 	}
 
@@ -2249,7 +2249,7 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 	if ( !g_bReplicationEnabled )
 	{
 		if ( g_dCfgClusters.GetLength() )
-			sphWarning ( "data_dir option is missed or no replication listeners set, replication disabled" );
+			sphWarning ( "data_dir option is missing in config or no replication listener is set, replication is disabled" );
 		return;
 	}
 
@@ -2267,7 +2267,7 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 		{
 			if ( tDesc.m_sClusterNodes.IsEmpty() )
 			{
-				sphWarning ( "no nodes found, force new cluster '%s'", tDesc.m_sName.cstr() );
+				sphWarning ( "no nodes found, created new cluster '%s'", tDesc.m_sName.cstr() );
 				tArgs.m_bNewCluster = true;
 			}
 		} else
@@ -2275,14 +2275,14 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 			CSphString sNodes;
 			if ( !ClusterGetNodes ( tDesc.m_sClusterNodes, tDesc.m_sName, "", sError, sNodes ) )
 			{
-				sphWarning ( "cluster '%s', no nodes available, replication disabled, error: %s", tDesc.m_sName.cstr(), sError.cstr() );
+				sphWarning ( "cluster '%s': no available nodes, replication is disabled, error: %s", tDesc.m_sName.cstr(), sError.cstr() );
 				continue;
 			}
 
 			ClusterFilterNodes ( sNodes, PROTO_REPLICATION, tArgs.m_sNodes );
 			if ( sNodes.IsEmpty() )
 			{
-				sphWarning ( "cluster '%s', no nodes available, replication disabled", tDesc.m_sName.cstr() );
+				sphWarning ( "cluster '%s': no available nodes, replication is disabled", tDesc.m_sName.cstr() );
 				continue;
 			}
 		}
@@ -2290,7 +2290,7 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 		ScopedPort_c tPort ( g_tPorts.Get() );
 		if ( tPort.Get()==-1 )
 		{
-			sphWarning ( "cluster '%s', no replication ports available, replication disabled, add replication listener", tDesc.m_sName.cstr() );
+			sphWarning ( "cluster '%s', no available replication ports, replication is disabled, add replication listener", tDesc.m_sName.cstr() );
 			continue;
 		}
 		tArgs.m_sListenAddr.SetSprintf ( "%s:%d", g_sListenReplicationIP.cstr(), tPort.Get() );
@@ -2324,7 +2324,7 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 		{
 			if ( !SetIndexCluster ( sIndexName, pElem->m_sName, sError ) )
 			{
-				sphWarning ( "%s, removed from cluster %s", sError.cstr(), pElem->m_sName.cstr() );
+				sphWarning ( "%s, removed from cluster '%s'", sError.cstr(), pElem->m_sName.cstr() );
 				continue;
 			}
 			pElem->m_dIndexes.Add ( sIndexName );
@@ -2359,7 +2359,7 @@ static bool CheckClusterOption ( const SmallStringHash_T<SqlInsert_t *> & hValue
 
 	if ( (*ppVal)->m_sVal.IsEmpty() )
 	{
-		sError.SetSprintf ( "'%s' should have string value", sName );
+		sError.SetSprintf ( "'%s' should have a string value", sName );
 		return false;
 	}
 
@@ -2412,7 +2412,7 @@ static bool CheckClusterStatement ( const CSphString & sCluster, const StrVec_t 
 
 	if ( bJoin && pElem->m_sClusterNodes.IsEmpty() )
 	{
-		sError.SetSprintf ( "can not join without either nodes list or AT node" );
+		sError.SetSprintf ( "cannot join without either nodes list or AT node" );
 		return false;
 	}
 
@@ -3346,7 +3346,7 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 	CSphString sType = GetTypeName ( tCmd.m_eIndex );
 	if ( tCmd.m_eIndex!=IndexType_e::PERCOLATE )
 	{
-		sError.SetSprintf ( "unsupported index '%s' type %s", tCmd.m_sIndex.cstr(), sType.cstr() );
+		sError.SetSprintf ( "unsupported type '%s' in index '%s'", sType.cstr(), tCmd.m_sIndex.cstr() );
 		return false;
 	}
 
@@ -3361,7 +3361,7 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 		tRes.m_iIndexFileSize = tFile.GetSize();
 		if ( tRes.m_iIndexFileSize!=tCmd.m_iIndexFileSize )
 		{
-			sError.SetSprintf ( "size " INT64_FMT " not equal to stored size " INT64_FMT, tCmd.m_iIndexFileSize, tRes.m_iIndexFileSize );
+			sError.SetSprintf ( "size " INT64_FMT " is not equal to stored size " INT64_FMT, tCmd.m_iIndexFileSize, tRes.m_iIndexFileSize );
 			return false;
 		}
 
@@ -3370,7 +3370,7 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 
 		if ( tRes.m_sFileHash!=tCmd.m_sFileHash )
 		{
-			sError.SetSprintf ( "sha1 %s not equal to stored sha1 %s", tCmd.m_sFileHash.cstr(), tRes.m_sFileHash.cstr() );
+			sError.SetSprintf ( "sha1 %s is not equal to stored sha1 %s", tCmd.m_sFileHash.cstr(), tRes.m_sFileHash.cstr() );
 			return false;
 		}
 	}
@@ -3549,8 +3549,8 @@ static bool CheckReplyIndexState ( const VecRefPtrs_t<AgentConn_t *> & dNodes, i
 	}
 	if ( !sBuf.IsEmpty() )
 	{
-		sphWarning ( "nodes failed to create file: %s", sBuf.cstr() );
-		sError.SetSprintf ( "nodes failed to create file: %s", sBuf.cstr() );
+		sphWarning ( "the nodes failed to create file: %s", sBuf.cstr() );
+		sError.SetSprintf ( "the nodes failed to create file: %s", sBuf.cstr() );
 		return false;
 	}
 
@@ -3724,7 +3724,7 @@ bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool
 
 		if ( bAdd && !pDesc->m_sCluster.IsEmpty() )
 		{
-			sError.SetSprintf ( "index already '%s' is part of cluster '%s'", sIndex.cstr(), pDesc->m_sCluster.cstr() );
+			sError.SetSprintf ( "index '%s' is a part of cluster '%s'", sIndex.cstr(), pDesc->m_sCluster.cstr() );
 			return false;
 		}
 		if ( !bAdd && pDesc->m_sCluster.IsEmpty() )
@@ -3894,9 +3894,9 @@ bool CheckIndexCluster ( const CSphString & sIndexName, const ServedDesc_t & tDe
 		return true;
 
 	if ( tDesc.m_sCluster.IsEmpty() )
-		sError.SetSprintf ( "index '%s' is not in cluster, use %s as ident", sIndexName.cstr(), sIndexName.cstr() );
+		sError.SetSprintf ( "index '%s' is not in any cluster, use just '%s'", sIndexName.cstr(), sIndexName.cstr() );
 	else
-		sError.SetSprintf ( "index '%s' already is part of cluster '%s', use %s:%s as ident", sIndexName.cstr(), tDesc.m_sCluster.cstr(), tDesc.m_sCluster.cstr(), sIndexName.cstr() );
+		sError.SetSprintf ( "index '%s' is a part of cluster '%s', use '%s:%s'", sIndexName.cstr(), tDesc.m_sCluster.cstr(), tDesc.m_sCluster.cstr(), sIndexName.cstr() );
 
 	return false;
 }
@@ -3980,7 +3980,7 @@ bool RemoteClusterGetNodes ( const CSphString & sCluster, const CSphString & sGT
 	ReplicationCluster_t * pCluster = (*ppCluster);
 	if ( !sGTID.IsEmpty() && strncmp ( sGTID.cstr(), pCluster->m_dUUID.Begin(), pCluster->m_dUUID.GetLength() )!=0 )
 	{
-		sError.SetSprintf ( "cluster '%s' GTID %.*s does not match to incoming %s", sCluster.cstr(), pCluster->m_dUUID.GetLength(), pCluster->m_dUUID.Begin(), sGTID.cstr() );
+		sError.SetSprintf ( "cluster '%s' GTID %.*s does not match with incoming %s", sCluster.cstr(), pCluster->m_dUUID.GetLength(), pCluster->m_dUUID.Begin(), sGTID.cstr() );
 		return false;
 	}
 
@@ -3998,7 +3998,7 @@ bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdat
 {
 	if ( sUpdate!="nodes" )
 	{
-		sError.SetSprintf ( "unhandled statement, only UPDATE nodes supported, got '%s'", sUpdate.cstr() );
+		sError.SetSprintf ( "unhandled statement, only UPDATE nodes are supported, got '%s'", sUpdate.cstr() );
 		return false;
 	}
 

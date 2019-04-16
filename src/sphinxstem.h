@@ -60,13 +60,13 @@ bool	sphAotInit ( const CSphString & sDictFile, CSphString & sError, int iLang )
 
 // functions below by design used in indexing time
 /// lemmatize (or guess a normal form) a Russian word in Windows-1251 encoding
-void	sphAotLemmatizeRu1251 ( BYTE * pWord );
+void	sphAotLemmatizeRu1251 ( BYTE * pWord, int iLen );
 
 /// lemmatize (or guess a normal form) a Russian word in UTF-8 encoding, return a single "best" lemma
 void	sphAotLemmatizeRuUTF8 ( BYTE * pWord );
 
 /// lemmatize (or guess a normal form) a German word in Windows-1252 encoding
-void	sphAotLemmatizeDe1252 ( BYTE * pWord );
+void	sphAotLemmatizeDe1252 ( BYTE * pWord, int iLen );
 
 /// lemmatize (or guess a normal form) a German word in UTF-8 encoding, return a single "best" lemma
 void	sphAotLemmatizeDeUTF8 ( BYTE * pWord );

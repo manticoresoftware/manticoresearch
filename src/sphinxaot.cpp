@@ -913,7 +913,7 @@ static inline bool IsDeFreq3 ( BYTE * )
 	return false;
 }
 
-void sphAotLemmatizeRu1251 ( BYTE * pWord )
+void sphAotLemmatizeRu1251 ( BYTE * pWord, int iLen )
 {
 	// i must be initialized
 	assert ( g_pLemmatizers[AOT_RU] );
@@ -923,7 +923,10 @@ void sphAotLemmatizeRu1251 ( BYTE * pWord )
 		return;
 
 	// handle a few most frequent 2-char, 3-char pass-through words
-	if ( IsRuFreq2(pWord) || IsRuFreq3(pWord) )
+	if ( iLen==2 && IsRuFreq2 ( pWord ))
+		return;
+
+	if ( iLen==3 && IsRuFreq3 ( pWord ))
 		return;
 
 	// do lemmatizing
@@ -1041,7 +1044,7 @@ static inline bool IsRussianAlphaUtf8 ( const BYTE * pWord )
 	return false;
 }
 
-void sphAotLemmatizeDe1252 ( BYTE * pWord )
+void sphAotLemmatizeDe1252 ( BYTE * pWord, int iLen )
 {
 	// i must be initialized
 	assert ( g_pLemmatizers[AOT_DE] );
@@ -1051,7 +1054,10 @@ void sphAotLemmatizeDe1252 ( BYTE * pWord )
 		return;
 
 	// handle a few most frequent 2-char, 3-char pass-through words
-	if ( IsDeFreq2(pWord) || IsDeFreq3(pWord) )
+	if ( iLen==2 && IsDeFreq2 ( pWord ))
+		return;
+
+	if ( iLen==3 && IsDeFreq3 ( pWord ))
 		return;
 
 	// do lemmatizing
@@ -1258,11 +1264,12 @@ void sphAotLemmatizeRuUTF8 ( BYTE * pWord )
 	// convert to Windows-1251
 	// failure means we should not lemmatize this
 	BYTE sBuf [ SPH_MAX_WORD_LEN+4 ];
-	if ( !Utf8ToWin1251 ( sBuf, pWord ) )
+	auto iFormLen = Utf8ToWin1251 ( sBuf, pWord );
+	if ( !iFormLen )
 		return;
 
 	// lemmatize, convert back, done!
-	sphAotLemmatizeRu1251 ( sBuf );
+	sphAotLemmatizeRu1251 ( sBuf, iFormLen );
 	Win1251ToLowercaseUtf8 ( pWord, sBuf );
 }
 
@@ -1278,11 +1285,12 @@ void sphAotLemmatizeDeUTF8 ( BYTE * pWord )
 	// convert to Windows-1252
 	// failure means we should not lemmatize this
 	BYTE sBuf [ SPH_MAX_WORD_LEN+4 ];
-	if ( !Utf8ToWin1252 ( sBuf, pWord ) )
+	auto iFormLen = Utf8ToWin1252 ( sBuf, pWord );
+	if ( !iFormLen )
 		return;
 
 	// lemmatize, convert back, done!
-	sphAotLemmatizeDe1252 ( sBuf );
+	sphAotLemmatizeDe1252 ( sBuf, iFormLen );
 	Win1252ToLowercaseUtf8 ( pWord, sBuf );
 }
 

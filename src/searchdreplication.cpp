@@ -495,11 +495,10 @@ static wsrep_cb_status_t ViewChanged_fn ( void * pAppCtx, void * pRecvCtx, const
 
 	if ( pView->state_gap )
 	{
-		CSphString sAddr = g_sIncomingProto;
-		sphLogDebugRpl ( "join %s to %s", sAddr.cstr(), pCluster->m_sName.cstr() );
-
-		*pSstReqLen = sAddr.Length() + 1;
-		*ppSstReq = sAddr.Leak();
+		auto sAddr = ::strdup( g_sIncomingProto.scstr() );
+		sphLogDebugRpl ( "join %s to %s", sAddr, pCluster->m_sName.cstr() );
+		*pSstReqLen = strlen(sAddr) + 1;
+		*ppSstReq = sAddr;
 		pCluster->SetNodeState ( ClusterState_e::JOINING );
 	}
 

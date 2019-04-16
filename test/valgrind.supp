@@ -1,4 +1,4 @@
-
+# this is from RE2 inside
 {
    has_index
    Memcheck:Cond
@@ -13,28 +13,13 @@
    fun:_ZN3re23NFA12AddToThreadqEPNS_11SparseArrayIPNS0_6ThreadEEEiiPKcPS7_
 }
 
+# this is from RLP inside
 {
-   ExtRanker_c::IsInZone(int, ExtHit_t const*, int*)
-   Memcheck:Cond
-   fun:_ZN11ExtRanker_c8IsInZoneEiPK8ExtHit_tPi
-   fun:_ZNK14TermAcceptor_cIL15TermPosFilter_e5EE15IsAcceptableHitEPK8ExtHit_t
-   fun:_ZN14ExtConditionalIL15TermPosFilter_e5E9ExtTerm_cE12GetDocsChunkEv
-}
-
-{
-   IsRuFreq3(unsigned char*)
-   Memcheck:Cond
-   fun:_ZL9IsRuFreq3Ph
-}
-
-{
-   operator new(unsigned long)
+   Suppression
    Memcheck:Leak
    match-leak-kinds: possible
-   fun:malloc
    fun:_Znwm
    fun:_ZN10btstlp_std12__node_allocILb1ELi0EE14_S_chunk_allocEmRi
    fun:_ZN10btstlp_std12__node_allocILb1ELi0EE9_S_refillEm
    fun:_ZN10btstlp_std12__node_allocILb1ELi0EE11_M_allocateEm
-   fun:_ZN10btstlp_std12basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE7reserveEm
 }

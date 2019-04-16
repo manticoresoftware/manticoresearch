@@ -769,7 +769,7 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	assert ( g_bReplicationEnabled );
 	wsrep_t * pWsrep = nullptr;
 	// let's load and initialize provider
-	wsrep_status_t eRes = (wsrep_status_t)wsrep_load ( GetReplicationDL(), &pWsrep, Logger_fn );
+	auto eRes = (wsrep_status_t)wsrep_load ( GetReplicationDL(), &pWsrep, Logger_fn );
 	if ( eRes!=WSREP_OK )
 	{
 		sError.SetSprintf ( "provider '%s' - failed to load, %d '%s'", GetReplicationDL(), (int)eRes, GetStatus ( eRes ) );
@@ -797,7 +797,7 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	sIncoming.SetSprintf ( "%s,%s:%d:replication", g_sIncomingProto.cstr(), g_sIncomingIP.cstr(), tArgs.m_iListenPort );
 	sphLogDebugRpl ( "node incoming '%s', listen '%s', nodes '%s', name '%s'", sIncoming.cstr(), tArgs.m_sListenAddr.cstr(), sConnectNodes.cstr(), sMyName.cstr() );
 
-	ReceiverCtx_t * pRecvArgs = new ReceiverCtx_t();
+	auto * pRecvArgs = new ReceiverCtx_t();
 	pRecvArgs->m_pCluster = tArgs.m_pCluster;
 	CSphString sFullClusterPath = GetClusterPath ( tArgs.m_pCluster->m_sPath );
 
@@ -3532,11 +3532,6 @@ static bool SendFile ( const CSphVector<RemoteFileState_t> & dDesc, const CSphSt
 			bDone = false;
 		}
 	}
-
-	// result got shared and has not owned
-	for ( AgentConn_t * pAgent : dNodes )
-		pAgent->m_pResult.LeakPtr();
-
 	return true;
 }
 

@@ -21587,7 +21587,9 @@ CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CS
 {
 	CSphDictRefPtr_c pDict { new CSphDictCRC<false> };
 	SetupDictionary ( pDict, tSettings, pFiles, pTokenizer, sIndex, bStripFile, sError );
-	pDict->SetSkiplistBlockSize ( iSkiplistBlockSize );
+	// might be empty due to wrong morphology setup
+	if ( pDict.Ptr() )
+		pDict->SetSkiplistBlockSize ( iSkiplistBlockSize );
 	return pDict.Leak ();
 }
 
@@ -21598,7 +21600,9 @@ CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings,
 {
 	CSphDictRefPtr_c pDict { new CSphDictKeywords() };
 	SetupDictionary ( pDict, tSettings, pFiles, pTokenizer, sIndex, bStripFile, sError );
-	pDict->SetSkiplistBlockSize ( iSkiplistBlockSize );
+	// might be empty due to wrong morphology setup
+	if ( pDict.Ptr() )
+		pDict->SetSkiplistBlockSize ( iSkiplistBlockSize );
 	return pDict.Leak ();
 }
 

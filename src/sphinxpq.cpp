@@ -146,7 +146,7 @@ public:
 
 private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
-	static const DWORD				META_VERSION = 7;				///< current version, added expression filter
+	static const DWORD				META_VERSION = 8;				///< current version, new index format
 
 	int								m_iLockFD = -1;
 	CSphSourceStats					m_tStat;
@@ -2053,6 +2053,14 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath )
 	if ( uVersion==0 || uVersion>META_VERSION )
 	{
 		m_sLastError.SetSprintf ( "%s is v.%d, binary is v.%d", sMeta.cstr(), uVersion, META_VERSION );
+		return false;
+	}
+
+	// we don't support anything prior to v8
+	DWORD uMinFormatVer = 8;
+	if ( uVersion<uMinFormatVer )
+	{
+		m_sLastError.SetSprintf ( "indexes prior to v.%d are no longer supported (use index_converter tool); %s is v.%d", uMinFormatVer, m_sFilename.cstr(), uVersion );
 		return false;
 	}
 

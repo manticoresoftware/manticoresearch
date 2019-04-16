@@ -22,6 +22,7 @@
 #include "sphinxsearch.h"
 #include "secondaryindex.h"
 #include "sphinxstem.h"
+#include "sphinxpq.h"
 
 namespace legacy
 {
@@ -44,6 +45,9 @@ static const int DOCLIST_HINT_THRESH = 256;
 
 static const DWORD META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
 static const DWORD META_VERSION		= 14;			///< current version
+
+static const DWORD PQ_META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
+static const DWORD PQ_META_VERSION = 7;					///< current version
 
 static bool g_bLargeDocid = false;
 static CSphString g_sOutDir;
@@ -105,8 +109,11 @@ enum IndexType_e
 {
 	INDEX_UNKNOWN,
 	INDEX_PLAIN,
-	INDEX_RT
+	INDEX_RT,
+	INDEX_PQ
 };
+
+static const char * g_sIndexType[] = { "none", "plain", "rt", "percolate" };
 
 /// unpack string attr from row storage (22 bits length max)
 /// returns unpacked length; stores pointer to string data if required
@@ -232,6 +239,9 @@ struct Index_t
 	int m_iMaxCodepointLength = 0;
 	CSphFixedVector<int> m_dRtChunkNames {0};
 	CSphSchema m_tSchema;
+
+	// PQ specific
+	CSphFixedVector<StoredQueryDesc_t> m_dStored { 0 };
 
 	bool IsSeparateOutDir () const { return m_sPath!=m_sPathOut; }
 
@@ -948,6 +958,7 @@ struct ConverterPlain_t
 {
 	bool Save ( const CSphVector<SphDocID_t> & dKilled, Index_t & tIndex, bool bIgnoreKlist, CSphString & sError );
 	const CSphSchema & GetSchema() const { return m_tSchema; }
+	bool ConvertSchema ( Index_t & tIndex, CSphString & sError );
 
 private:
 	CSphScopedPtr<ISphInfixBuilder> m_pInfixer { nullptr };
@@ -1600,6 +1611,15 @@ bool ConverterPlain_t::Init ( Index_t & tIndex, CSphString & sError )
 	return ( sError.IsEmpty() );
 }
 
+bool ConverterPlain_t::ConvertSchema ( Index_t & tIndex, CSphString & sError )
+{
+	if ( !Init ( tIndex, sError ) )
+		return false;
+
+	tIndex.m_tSchema = m_tSchema;
+	return true;
+}
+
 bool ConverterPlain_t::WriteKillList ( const Index_t & tIndex, bool bIgnoreKlist, CSphString & sError )
 {
 	CSphVector<DocID_t> dKillList;
@@ -2153,14 +2173,171 @@ static void GetKilledDocs ( const CSphFixedVector<int> & dRtChunkNames, int iCur
 	dKilled.Uniq(); // get rid of duplicates
 }
 
+static bool LoadPqIndex ( Index_t & tIndex, CSphString & sError )
+{
+	// load meta
+	CSphString sMetaName = GetIndexFileName ( tIndex.m_sPath, "meta" );
+
+	CSphAutoreader rdMeta;
+	if ( !rdMeta.Open ( sMetaName.cstr(), sError ) )
+		return false;
+
+	if ( rdMeta.GetDword()!=PQ_META_HEADER_MAGIC )
+	{
+		sError.SetSprintf ( "invalid meta file %s", sMetaName.cstr() );
+		return false;
+	}
+	DWORD uVersion = rdMeta.GetDword();
+	if ( uVersion>PQ_META_VERSION )
+	{
+		sError.SetSprintf ( "already a v3 index; nothing to do" );
+		return false;
+	}
+	if ( uVersion==0 || uVersion>PQ_META_VERSION )
+	{
+		sError.SetSprintf ( "%s is v.%d, binary is v.%d", sMetaName.cstr(), uVersion, PQ_META_VERSION );
+		return false;
+	}
+
+	DWORD uSettingsVer = rdMeta.GetDword();
+
+	CSphTokenizerSettings tTokenizerSettings;
+	CSphDictSettings tDictSettings;
+
+	// load settings
+	legacy::ReadSchema ( rdMeta, tIndex.m_dSchemaFields, tIndex.m_dSchemaAttrs );
+	legacy::LoadIndexSettings ( tIndex.m_tSettings, rdMeta, uSettingsVer );
+	if ( !legacy::LoadTokenizerSettings ( rdMeta, tIndex.m_tTokSettings, tIndex.m_tEmbeddedTok, uSettingsVer, sError ) )
+		return false;
+
+	legacy::LoadDictionarySettings ( rdMeta, tIndex.m_tDictSettings, tIndex.m_tEmbeddedDict, uSettingsVer, sError );
+
+	if ( !SetupWordProcessors ( tIndex, sError ) )
+		return false;
+
+	if ( uVersion>=6 )
+		legacy::LoadFieldFilterSettings ( rdMeta, tIndex.m_tFieldFilterSettings );
+
+	// queries
+	DWORD uQueries = rdMeta.GetDword();
+	tIndex.m_dStored.Reset ( uQueries );
+	ARRAY_FOREACH ( i, tIndex.m_dStored )
+	{
+		StoredQueryDesc_t & tQuery = tIndex.m_dStored[i];
+		if ( uVersion<7 )
+			LoadStoredQueryV6 ( uVersion, tQuery, rdMeta );
+		else
+			LoadStoredQuery ( uVersion, tQuery, rdMeta );
+	}
+	if ( uVersion>=7 )
+		tIndex.m_iTID = rdMeta.GetOffset();
+
+	if ( rdMeta.GetErrorFlag() )
+	{
+		sError = rdMeta.GetErrorMessage();
+		return false;
+	}
+
+	return true;
+}
+
+static bool SavePqIndex ( Index_t & tIndex, CSphString & sError )
+{
+	ConverterPlain_t tConverter;
+	if ( !tConverter.ConvertSchema ( tIndex, sError ) )
+		return false;
+
+	// merge index settings with new defaults
+	CSphConfigSection hIndex;
+	CSphIndexSettings tDefaultSettings;
+	if ( !sphConfIndex ( hIndex, tDefaultSettings, tIndex.m_sName.cstr(), sError ) )
+		return false;
+
+	// write new meta
+	CSphString sMetaNew;
+	sMetaNew.SetSprintf ( "%s.new.meta", tIndex.m_sPathOut.cstr() );
+
+	CSphWriter wrMeta;
+	if ( !wrMeta.OpenFile ( sMetaNew, sError ) )
+		return false;
+	wrMeta.PutDword ( PQ_META_HEADER_MAGIC );
+	wrMeta.PutDword ( PQ_META_VERSION+1 );
+	wrMeta.PutDword ( INDEX_FORMAT_VERSION );
+
+	WriteSchema ( wrMeta, tIndex.m_tSchema );
+
+	// index settings
+	wrMeta.PutDword ( tIndex.m_tSettings.m_iMinPrefixLen );
+	wrMeta.PutDword ( tIndex.m_tSettings.m_iMinInfixLen );
+	wrMeta.PutDword ( tIndex.m_tSettings.m_iMaxSubstringLen );
+	wrMeta.PutByte ( tIndex.m_tSettings.m_bHtmlStrip ? 1 : 0 );
+	wrMeta.PutString ( tIndex.m_tSettings.m_sHtmlIndexAttrs.cstr () );
+	wrMeta.PutString ( tIndex.m_tSettings.m_sHtmlRemoveElements.cstr () );
+	wrMeta.PutByte ( tIndex.m_tSettings.m_bIndexExactWords ? 1 : 0 );
+	wrMeta.PutDword ( tIndex.m_tSettings.m_eHitless );
+	wrMeta.PutDword ( tIndex.m_tSettings.m_eHitFormat );
+	wrMeta.PutByte ( tIndex.m_tSettings.m_bIndexSP );
+	wrMeta.PutString ( tIndex.m_tSettings.m_sZones );
+	wrMeta.PutDword ( tIndex.m_tSettings.m_iBoundaryStep );
+	wrMeta.PutDword ( tIndex.m_tSettings.m_iStopwordStep );
+	wrMeta.PutDword ( tIndex.m_tSettings.m_iOvershortStep );
+	wrMeta.PutDword ( tIndex.m_tSettings.m_iEmbeddedLimit );
+	wrMeta.PutByte ( tIndex.m_tSettings.m_eBigramIndex );
+	wrMeta.PutString ( tIndex.m_tSettings.m_sBigramWords );
+	wrMeta.PutByte ( tIndex.m_tSettings.m_bIndexFieldLens );
+	wrMeta.PutByte ( tIndex.m_tSettings.m_eChineseRLP );
+	wrMeta.PutString ( tIndex.m_tSettings.m_sRLPContext );
+	wrMeta.PutString ( tIndex.m_tSettings.m_sIndexTokenFilter );
+	wrMeta.PutOffset ( tIndex.m_tSettings.m_tBlobUpdateSpace );
+	wrMeta.PutDword ( tIndex.m_tSettings.m_iSkiplistBlockSize );
+
+	SaveTokenizerSettings ( wrMeta, tIndex.m_pTokenizer, tIndex.m_tSettings.m_iEmbeddedLimit );
+	SaveDictionarySettings ( wrMeta, tIndex.m_pDict, false, tIndex.m_tSettings.m_iEmbeddedLimit );
+
+	SaveFieldFilterSettings ( wrMeta, tIndex.m_tFieldFilterSettings );
+
+	wrMeta.PutDword ( tIndex.m_dStored.GetLength() );
+
+	ARRAY_FOREACH ( i, tIndex.m_dStored )
+		SaveStoredQuery ( tIndex.m_dStored[i], wrMeta );
+
+	wrMeta.PutOffset ( tIndex.m_iTID );
+
+	wrMeta.CloseFile();
+
+	if ( tIndex.m_sPath==tIndex.m_sPathOut )
+	{
+		CSphString sMetaTo;
+		sMetaTo.SetSprintf ( "%s.meta", tIndex.m_sPathOut.cstr() );
+		CSphString sMetaOld;
+		sMetaOld.SetSprintf ( "%s.old.meta", tIndex.m_sPathOut.cstr() );
+
+		if ( ::rename ( sMetaTo.cstr(), sMetaOld.cstr() ) )
+		{
+			sError.SetSprintf ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)", sMetaTo.cstr(), sMetaOld.cstr(), errno, strerror(errno) );
+			return false;
+		}
+		if ( ::rename ( sMetaNew.cstr(), sMetaTo.cstr() ) )
+		{
+			sError.SetSprintf ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)", sMetaNew.cstr(), sMetaTo.cstr(), errno, strerror(errno) );
+			return false;
+		}
+	}
+
+	return true;
+}
+
+
 static bool Convert ( const CSphString & sName, const CSphString & sPath, IndexType_e eType, bool bStripPath, const CSphString & sPathOut, const CSphVector<KillListTarget_t> & dKlistTargets, CSphString & sError )
 {
 	if ( eType==INDEX_UNKNOWN )
 	{
 		if ( sphIsReadable ( GetIndexFileName( sPath, "spa" ).cstr() ) )
 			eType = INDEX_PLAIN;
-		else if ( sphIsReadable ( GetIndexFileName( sPath, "meta" ).cstr() ) )
+		else if ( sphIsReadable ( GetIndexFileName( sPath, "meta" ).cstr() ) && sphIsReadable ( GetIndexFileName( sPath, "ram" ).cstr() ) )
 			eType = INDEX_RT;
+		else if ( sphIsReadable ( GetIndexFileName( sPath, "meta" ).cstr() ) )
+			eType = INDEX_PQ;
 	}
 
 	if ( eType==INDEX_UNKNOWN )
@@ -2168,6 +2345,8 @@ static bool Convert ( const CSphString & sName, const CSphString & sPath, IndexT
 		sError.SetSprintf ( "unknown index type '%s'", sName.cstr() );
 		return false;
 	}
+
+	printf ( "converting %s index '%s'\n", g_sIndexType[eType], sName.cstr() );
 
 	if ( eType==INDEX_RT )
 	{
@@ -2223,6 +2402,25 @@ static bool Convert ( const CSphString & sName, const CSphString & sPath, IndexT
 			sError.SetSprintf ( "conversion failed for index '%s', error: %s", sName.cstr(), sError.cstr() );
 			return false;
 		}
+	} else if ( eType==INDEX_PQ )
+	{
+		Index_t tIndex;
+		tIndex.m_sName = sName;
+		tIndex.m_sPath = sPath;
+		tIndex.m_sPathOut = sPathOut;
+
+		if ( !LoadPqIndex ( tIndex, sError ) )
+		{
+			sError.SetSprintf ( "failed to load index '%s', error: %s", sName.cstr(), sError.cstr() );
+			return false;
+		}
+
+		if ( !SavePqIndex ( tIndex, sError ) )
+		{
+			sError.SetSprintf ( "conversion failed for index '%s', error: %s", sName.cstr(), sError.cstr() );
+			return false;
+		}
+
 	} else
 	{
 		CSphVector<SphDocID_t> dKilled;
@@ -2416,13 +2614,13 @@ int main ( int argc, char ** argv )
 					sphWarning ( "unknown index '%s' type '%s', skipped", sIndexName.cstr(), sType.cstr() );
 					continue;
 				}
-				if ( sType!="rt" && sType!="plain" )
+				if ( sType!="rt" && sType!="plain" && sType!="percolate" )
 				{
-					sphWarning ( "index '%s' type '%s', only 'plain' or 'rt' types supported, skipped", sIndexName.cstr(), sType.cstr() );
+					sphWarning ( "index '%s' type '%s', only 'plain' or 'rt' or 'percolate' types supported, skipped", sIndexName.cstr(), sType.cstr() );
 					continue;
 				}
 
-				eIndex = ( sType=="rt" ? legacy::INDEX_RT : legacy::INDEX_PLAIN );
+				eIndex = ( sType=="rt" ? legacy::INDEX_RT : ( sType=="percolate" ? legacy::INDEX_PQ : legacy::INDEX_PLAIN ) );
 			}
 
 			if ( !tIndex.Exists ( "path" ) )

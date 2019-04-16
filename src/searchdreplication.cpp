@@ -1167,12 +1167,24 @@ void ReplicateClustersDelete()
 	while ( g_hClusters.IterateNext ( &pIt ) )
 	{
 		pProvider = g_hClusters.IterateGet ( &pIt )->m_pProvider;
-		ReplicateClusterDone ( g_hClusters.IterateGet ( &pIt ) );
+		auto * pCluster = g_hClusters.IterateGet ( &pIt );
+		ReplicateClusterDone ( pCluster );
+		SafeDelete( pCluster );
 	}
 	g_hClusters.Reset();
 
 	if ( pProvider )
 		wsrep_unload ( pProvider );
+}
+
+void DeleteClusterByName ( const CSphString& sCluster )
+{
+	auto** ppCluster = g_hClusters ( sCluster );
+	if ( ppCluster )
+	{
+		g_hClusters.Delete ( sCluster );
+		SafeDelete ( *ppCluster );
+	}
 }
 
 void JsonLoadConfig ( const CSphConfigSection & hSearchd )
@@ -2341,7 +2353,7 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 		{
 			sphLogFatal ( "%s", sError.cstr() );
 			ScWL_t tLock ( g_tClustersLock );
-			g_hClusters.Delete ( tDesc.m_sName );
+			DeleteClusterByName ( tDesc.m_sName );
 		}
 	}
 }
@@ -2482,7 +2494,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	if ( !ReplicateClusterInit ( tArgs, sError ) )
 	{
 		ScWL_t tLock ( g_tClustersLock );
-		g_hClusters.Delete ( sCluster );
+		DeleteClusterByName ( sCluster );
 		return false;
 	}
 
@@ -2532,7 +2544,7 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 	if ( !ReplicateClusterInit ( tArgs, sError ) )
 	{
 		ScWL_t tLock ( g_tClustersLock );
-		g_hClusters.Delete ( sCluster );
+		DeleteClusterByName ( sCluster );
 		return false;
 	}
 

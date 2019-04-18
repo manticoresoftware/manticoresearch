@@ -449,6 +449,7 @@ static ServiceThread_t						g_tRotationServiceThread;
 static volatile bool						g_bInvokeRotationService = false;
 static volatile bool						g_bNeedRotate = false;		// true if there were pending HUPs to handle (they could fly in during previous rotate)
 static volatile bool						g_bInRotate = false;		// true while we are rotating
+static volatile bool						g_bReloadForced = false;	// true in case reload issued via SphinxQL
 
 static ServiceThread_t						g_tPingThread;
 
@@ -14930,6 +14931,7 @@ void HandleMysqlFlushLogs ( SqlRowBuffer_c &tOut )
 
 void HandleMysqlReloadIndexes ( SqlRowBuffer_c &tOut )
 {
+	g_bReloadForced = true;
 	sighup(1);
 	tOut.Ok ();
 }
@@ -20473,8 +20475,10 @@ static void CheckIndexesForSeamless()
 			, dNotCapableForRotation.GetLength () );
 		for ( dNotCapableForRotation.IterateStart (); dNotCapableForRotation.IterateNext (); )
 		{
-			g_pDisabledIndexes->Delete ( dNotCapableForRotation.IterateGetKey () );
-			sphWarning ( "queue[] = %s", dNotCapableForRotation.IterateGetKey ().cstr () );
+			// need also to remove empty description from local index list
+			g_pLocalIndexes->DeleteIfNull ( dNotCapableForRotation.IterateGetKey() );
+			g_pDisabledIndexes->Delete ( dNotCapableForRotation.IterateGetKey() );
+			sphWarning ( "queue[] = %s", dNotCapableForRotation.IterateGetKey().cstr () );
 		}
 	}
 
@@ -20594,8 +20598,9 @@ void CheckRotate () REQUIRES ( MainThread )
 	g_pDisabledIndexes->ReleaseAndClear ();
 	{
 		ScWL_t dRotateConfigMutexWlocked { g_tRotateConfigMutex };
-		if ( CheckConfigChanges () )
+		if ( CheckConfigChanges () || g_bReloadForced )
 			ReloadIndexSettings ( g_pCfg );
+		g_bReloadForced = false;
 	}
 
 	{

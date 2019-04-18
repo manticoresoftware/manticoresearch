@@ -186,6 +186,14 @@ b+c+d e from test where match('title') and e>0</sphinxql> --> <!-- Expr_Hour_c/E
 
 <sphinxql>select length(to_string(bigstr.a)), CRC32(bigstr.a) from test2 where id=6</sphinxql> <!-- call Expr_JsonFieldConv_c::StringEval via CRC32() -->
 
+<!-- CONCAT() and related stuff -->
+<sphinxql>select CONCAT('----',str,'----') from test</sphinxql> 
+<sphinxql>select CONCAT(str,'-',',','-',to_string(bint)) from test</sphinxql> 
+<sphinxql>select CONCAT(str,bint) from test</sphinxql> 
+<sphinxql>select GROUP_CONCAT(CONCAT(str,',',to_string(bint))) from test GROUP BY bint</sphinxql> 
+<sphinxql>select CONCAT(str,',',to_string(bint)) a, GROUP_CONCAT(a) from test GROUP BY bint</sphinxql> 
+
+
 <!-- fixme: NOT TESTED 
 Expr_Udf_c
 Expr_UdfInt_c

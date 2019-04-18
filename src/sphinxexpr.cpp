@@ -946,6 +946,130 @@ public:
 };
 
 
+class Expr_Concat_c : public Expr_NoLocator_c
+{
+public:
+	explicit Expr_Concat_c ( const CSphVector<ISphExpr *> & dArgs, const CSphVector<bool> & dConstStr )
+	{
+		// pre-eval const strings
+		CSphVector<const BYTE *> dEvaluated ( dArgs.GetLength() );
+		m_dArgs.Resize ( dArgs.GetLength() );
+		CSphMatch tMatch; // fake match
+		ARRAY_FOREACH ( i, m_dArgs )
+		{
+			if ( dConstStr[i] )
+				dArgs[i]->StringEval ( tMatch, &dEvaluated[i] );
+			else
+				dEvaluated[i] = nullptr;
+		}
+
+		// pre-concat const strings
+		int iArg = 0;
+		while ( iArg < m_dArgs.GetLength() )
+		{
+			StringOrExpr_t & tArg = m_dArgs[iArg];
+			if ( dEvaluated[iArg] )
+			{
+				for ( ; iArg < dEvaluated.GetLength() && dEvaluated[iArg]; iArg++ )
+				{
+					int iLen = strlen ( (const char *)dEvaluated[iArg] );
+					memcpy ( tArg.m_dBuffer.AddN (iLen), dEvaluated[iArg], iLen );
+				}
+			}
+			else
+				tArg.m_pExpr = dArgs[iArg++];
+		}
+
+		// remove gaps (if any)
+		ARRAY_FOREACH ( i, m_dArgs )
+			if ( !m_dArgs[i].m_dBuffer.GetLength() && !m_dArgs[i].m_pExpr )
+				m_dArgs.Remove(i--);
+
+		for ( auto & i : m_dArgs )
+			SafeAddRef ( i.m_pExpr );
+	}
+
+	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final
+	{
+		CSphVector<BYTE> dResult;
+		int iResultLen = EvalMatch ( tMatch, dResult );
+		*ppStr = dResult.LeakData();
+		return iResultLen;
+	}
+
+	const BYTE * StringEvalPacked ( const CSphMatch & tMatch ) const
+	{
+		// this is done to avoid reallocation while re-packing the result of StringEval call
+		CSphVector<BYTE> dResult;
+		int iResultLen = EvalMatch ( tMatch, dResult );
+		int iTotalLen = sphCalcPackedLength(iResultLen);
+		dResult.Resize ( iTotalLen );
+		BYTE * pData = dResult.Begin();
+		BYTE * pString = pData+(iTotalLen-iResultLen);
+		memmove ( pString, pData, iResultLen );
+		sphPackPtrAttr ( pData, pString, iResultLen );
+		return dResult.LeakData();
+	}
+
+	float Eval ( const CSphMatch & ) const final { assert ( 0 ); return 0; }
+
+	void Command ( ESphExprCommand eCmd, void * pArg ) final
+	{
+		for ( auto & i : m_dArgs )
+			if ( i.m_pExpr )
+				i.m_pExpr->Command ( eCmd, pArg );
+	}
+
+	bool IsDataPtrAttr() const final
+	{
+		return true;
+	}
+
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
+	{
+		EXPR_CLASS_NAME("Expr_Concat_c");
+		for ( const auto & i : m_dArgs )
+			if ( i.m_pExpr ) uHash = i.m_pExpr->GetHash ( tSorterSchema, uHash, bDisable );
+		return CALC_DEP_HASHES();
+	}
+
+protected:
+	struct StringOrExpr_t
+	{
+		CSphVector<BYTE>			m_dBuffer;
+		CSphRefcountedPtr<ISphExpr>	m_pExpr {nullptr};
+	};
+
+	CSphVector<StringOrExpr_t> m_dArgs;
+
+
+	int EvalMatch ( const CSphMatch & tMatch, CSphVector<BYTE> & dResult ) const
+	{
+		for ( auto & i : m_dArgs )
+		{
+			const BYTE * pStr = nullptr;
+			int iLen;
+			if ( i.m_pExpr )
+				iLen = i.m_pExpr->StringEval ( tMatch, &pStr );
+			else
+			{
+				iLen = i.m_dBuffer.GetLength();
+				pStr = i.m_dBuffer.Begin();
+			}
+
+			if ( pStr )
+				memcpy ( dResult.AddN(iLen), pStr, iLen );
+
+			if ( i.m_pExpr && i.m_pExpr->IsDataPtrAttr() )
+				SafeDeleteArray(pStr);
+		}
+
+		dResult.Add('\0');
+		return dResult.GetLength()-1;
+	}
+};
+
+
 class Expr_ToString_c : public Expr_Unary_c
 {
 public:
@@ -982,6 +1106,20 @@ public:
 					sphMVA2Str ( pValues, iLen, m_eArg==SPH_ATTR_INT64SET || m_eArg==SPH_ATTR_INT64SET_PTR, m_sBuilder );
 				}
 				break;
+
+			case SPH_ATTR_STRING:
+			{
+				CSphVector<BYTE> dTmp;
+				int iLen = m_pFirst->StringEval ( tMatch, ppStr );
+				dTmp.Resize(iLen+1);
+				if ( ppStr )
+					memcpy ( dTmp.Begin(), *ppStr, dTmp.GetLength() );
+				else
+					dTmp[0] = '\0';
+
+				*ppStr = dTmp.LeakData();
+				return iLen;
+			}
 
 			case SPH_ATTR_STRINGPTR:
 				return m_pFirst->StringEval ( tMatch, ppStr );
@@ -2716,6 +2854,7 @@ enum Func_e
 	FUNC_GEOPOLY2D,
 	FUNC_CONTAINS,
 	FUNC_ZONESPANLIST,
+	FUNC_CONCAT,
 	FUNC_TO_STRING,
 	FUNC_RANKFACTORS,
 	FUNC_PACKEDFACTORS,
@@ -2807,6 +2946,7 @@ static FuncDesc_t g_dFuncs[] =
 	{ "geopoly2d",		-1,	FUNC_GEOPOLY2D,		SPH_ATTR_POLY2D },
 	{ "contains",		3,	FUNC_CONTAINS,		SPH_ATTR_INTEGER },
 	{ "zonespanlist",	0,	FUNC_ZONESPANLIST,	SPH_ATTR_STRINGPTR },
+	{ "concat",			-1,	FUNC_CONCAT,		SPH_ATTR_STRINGPTR },
 	{ "to_string",		1,	FUNC_TO_STRING,		SPH_ATTR_STRINGPTR },
 	{ "rankfactors",	0,	FUNC_RANKFACTORS,	SPH_ATTR_STRINGPTR },
 	{ "packedfactors",	0,	FUNC_PACKEDFACTORS, SPH_ATTR_FACTORS },
@@ -2881,33 +3021,33 @@ static int FuncHashLookup ( const char * sKey )
 
 	static BYTE dAsso[] =
     {
-		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
-		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
-		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
-		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
-		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
-		 15, 139, 139, 139, 139, 139, 139, 139, 139, 139,
-		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
-		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
-		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
-		139, 139, 139, 139, 139,  25, 139,	15,  25,   0,
-		 75,  10,  65,	10,  15,   0, 139, 139,   5,   0,
-		 10,   0,  55,	 0,  25,  35,  25,	25, 139,  80,
-		 55,  40,	0, 139, 139, 139, 139, 139, 139, 139,
-		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
-		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
-		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
-		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
-		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
-		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
-		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
-		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
-		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
-		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
-		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
-		139, 139, 139, 139, 139, 139, 139, 139, 139, 139,
-		139, 139, 139, 139, 139, 139
-    };
+		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+		0, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+		114, 114, 114, 114, 114,   5, 114,  15,   0,   5,
+		60,   0,  80,  20,  55,   0, 114, 114,  20,   0,
+		10,   0,  20,   0,   5,  60,   0,  25, 114,  80,
+		65,  35,   0, 114, 114, 114, 114, 114, 114, 114,
+		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+		114, 114, 114, 114, 114, 114
+	};
 
 	auto * s = (const BYTE*) sKey;
 	auto iHash = strlen ( sKey );
@@ -2920,20 +3060,18 @@ static int FuncHashLookup ( const char * sKey )
 
 	static int dIndexes[] =
 	{
-		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-		-1, -1, 31, 23, 2, 16, 21, 6, 38, 7,
-		8, -1, 39, 56, 60, 61, -1, 34, 57, 37,
-		13, 47, -1, 54, 29, 48, -1, -1, 5, 50,
-		33, 11, 45, 30, 20, 44, -1, -1, 4, 12,
-		64, 22, -1, 49, 63, -1, 32, 51, 52, 40,
-		62, 41, 55, 53, 10, -1, 36, 27, 58, 17,
-		35, -1, -1, 24, 18, 3, -1, 19, 1, 26,
-		-1, -1, -1, 42, -1, -1, -1, 43, -1, -1,
-		-1, -1, 59, 0, 28, -1, -1, -1, -1, 14,
-		65, -1, -1, -1, -1, -1, 46, -1, -1, -1,
-		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-		-1, -1, -1, 9, -1, -1, -1, -1, -1, -1,
-		-1, -1, -1, 15, -1, -1, -1, -1, 25,
+		-1, -1, -1, -1, -1, 45, 32, -1, 55, 2,
+		33, -1, 31, 23, 41, 16, 21, 46, 30, -1,
+		13, 40, 39, 38, 61, 62, 11, 34, 57, 37,
+		65, -1, 6, 50, 64, 63, 48, -1, 53, 51,
+		49, 42, 52, 54, 7, 8, 36, 56, -1, 29,
+		-1, -1, -1, 43, 17, -1, -1, -1, 58, 18,
+		-1, -1, 19, 59, 26, -1, -1, -1, 5, 10,
+		35, 22, -1, 4, 12, -1, -1, 60, 1, 28,
+		-1, -1, 27, 24, 20, -1, -1, -1, 9, 14,
+		-1, 47, -1, 0, -1, -1, -1, -1, -1, -1,
+		66, -1, -1, 25, -1, 3, -1, 44, -1, -1,
+		-1, -1, -1, 15,
 	};
 
 	if ( iHash>=(int)(sizeof(dIndexes)/sizeof(dIndexes[0])) )
@@ -3213,6 +3351,7 @@ private:
 	ISphExpr *				CreateAggregateNode ( const ExprNode_t & tNode, ESphAggrFunc eFunc, ISphExpr * pLeft );
 	ISphExpr *				CreateForInNode ( int iNode );
 	ISphExpr *				CreateRegexNode ( ISphExpr * pAttr, ISphExpr * pString );
+	ISphExpr *				CreateConcatNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs );
 	void					FixupIterators ( int iNode, const char * sKey, SphAttr_t * pAttr );
 
 	bool					GetError () const { return !( m_sLexerError.IsEmpty() && m_sParserError.IsEmpty() && m_sCreateError.IsEmpty() ); }
@@ -5241,6 +5380,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 						return new Expr_GetZonespanlist_c ();
 					case FUNC_TO_STRING:
 						return new Expr_ToString_c ( dArgs[0], m_dNodes [ tNode.m_iLeft ].m_eRetType );
+					case FUNC_CONCAT:
+						return CreateConcatNode ( tNode.m_iLeft, dArgs );
 					case FUNC_RANKFACTORS:
 						m_eEvalStage = SPH_EVAL_PRESORT;
 						return new Expr_GetRankFactors_c();
@@ -6935,10 +7076,47 @@ ISphExpr * ExprParser_t::CreateForInNode ( int iNode )
 	return pFunc;
 }
 
+
 ISphExpr * ExprParser_t::CreateRegexNode ( ISphExpr * pAttr, ISphExpr * pString )
 {
 	return new Expr_Regex_c ( pAttr, pString );
 }
+
+
+struct GatherConstStrings_t : ISphNoncopyable
+{
+	CSphVector<bool> & m_dConstStr;
+	explicit GatherConstStrings_t ( CSphVector<bool> & dConstStr )
+		: m_dConstStr ( dConstStr )
+	{}
+
+	void Collect ( int , const ExprNode_t & tNode )
+	{
+		m_dConstStr.Add ( tNode.m_iToken==TOK_CONST_STRING );
+	}
+};
+
+
+ISphExpr * ExprParser_t::CreateConcatNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs )
+{
+	CSphVector<ESphAttr> dTypes;
+	GatherArgRetTypes ( iArgsNode, dTypes );
+
+	ARRAY_FOREACH ( i, dTypes )
+		if ( dTypes[i]!=SPH_ATTR_STRING && dTypes[i]!=SPH_ATTR_STRINGPTR )
+		{
+			m_sCreateError.SetSprintf ( "all CONCAT() arguments must be strings (arg %d is not)", i+1 );
+			return nullptr;
+		}
+
+
+	CSphVector<bool> dConstStr;
+	GatherConstStrings_t tCollector ( dConstStr );
+	GatherArgT ( iArgsNode, tCollector );
+
+	return new Expr_Concat_c ( dArgs, dConstStr );
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -7224,7 +7402,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 		bGotString |= dRetTypes[i]==SPH_ATTR_STRING;
 		bGotMva |= ( dRetTypes[i]==SPH_ATTR_UINT32SET || dRetTypes[i]==SPH_ATTR_INT64SET || dRetTypes[i]==SPH_ATTR_UINT32SET_PTR || dRetTypes[i]==SPH_ATTR_INT64SET_PTR );
 	}
-	if ( bGotString && !( eFunc==FUNC_SUBSTRING_INDEX || eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST || eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D || eFunc==FUNC_REGEX ) )
+	if ( bGotString && !( eFunc==FUNC_TO_STRING || eFunc==FUNC_CONCAT || eFunc==FUNC_SUBSTRING_INDEX || eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST || eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D || eFunc==FUNC_REGEX ) )
 	{
 		m_sParserError.SetSprintf ( "%s() arguments can not be string", sFuncName );
 		return -1;

@@ -935,7 +935,8 @@ void sphPackPtrAttr ( BYTE * pPrealloc, const BYTE * pData, int iLengthBytes )
 {
 	assert ( pPrealloc && pData );
 	pPrealloc += sphZipToPtr ( iLengthBytes, pPrealloc );
-	memcpy ( pPrealloc, pData, iLengthBytes );
+	if ( pPrealloc!=pData )
+		memcpy ( pPrealloc, pData, iLengthBytes );
 }
 
 

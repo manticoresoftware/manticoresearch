@@ -36,6 +36,8 @@ for quick access.
 
 -  :ref:`CEIL() <expr-func-ceil>`
 
+-  :ref:`CONCAT() <expr-func-concat>`
+
 -  :ref:`CONTAINS() <expr-func-contains>`
 
 -  :ref:`COS() <expr-func-cos>`
@@ -598,6 +600,17 @@ Miscellaneous functions
 
    Returns the arctangent function of two arguments, expressed in
    **radians**.
+
+.. _expr-func-concat:
+
+-  CONCAT()
+
+   Concatenates two or more strings into one. Non-string arguments must be explicitly 
+   converted to string using TO_STRING() function
+
+   .. code-block:: none
+
+      CONCAT(TO_STRING(float_attr), ',', TO_STRING(int_attr), ',', title)
 
 .. _expr-func-crc32:
 

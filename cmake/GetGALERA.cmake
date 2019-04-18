@@ -1,4 +1,5 @@
 # build Galera plugin at configure time
+cmake_minimum_required ( VERSION 3.11 FATAL_ERROR )
 
 if ( UNIX AND NOT APPLE )
 

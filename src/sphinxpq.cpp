@@ -2563,7 +2563,7 @@ void MergePqResults ( const VecTraits_T<CPqResult *> &dChunks, CPqResult &dRes, 
 	if ( bHasDocids )
 	{
 		dRes.m_dDocids.Reset ( hDocids.GetLength() );
-		int i = 0;
+		int64_t i = 0;
 		int64_t iDocid;
 		int * pIndex;
 		while ( nullptr != ( pIndex = hDocids.Iterate ( &i, &iDocid ) ) )

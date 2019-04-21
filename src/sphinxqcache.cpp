@@ -225,7 +225,7 @@ void QcacheEntry_c::Finish()
 	m_dWeights.Resize ( m_hWeights.GetLength() );
 	m_dWeights.Fill ( -1 );
 
-	int i = 0;
+	int64_t i = 0;
 	int iWeight;
 	int * pIndex;
 	while ( ( pIndex = m_hWeights.Iterate ( &i, &iWeight ) )!=NULL )

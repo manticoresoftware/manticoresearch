@@ -4400,7 +4400,7 @@ class OpenHash_T
 {
 public:
 	/// initialize hash of a given initial size
-	explicit OpenHash_T ( int iSize=256 )
+	explicit OpenHash_T ( int64_t iSize=256 )
 	{
 		Reset ( iSize );
 	}
@@ -4411,8 +4411,9 @@ public:
 	}
 
 	/// reset to a given size
-	void Reset ( int iSize )
+	void Reset ( int64_t iSize )
 	{
+		assert ( iSize<=UINT_MAX ); 		// sanity check
 		SafeDeleteArray ( m_pHash );
 		if ( iSize<=0 )
 		{
@@ -4420,7 +4421,8 @@ public:
 			return;
 		}
 
-		iSize = ( 1<<sphLog2 ( iSize-1 ) );
+		iSize = ( 1ULL<<sphLog2 ( iSize-1 ) );
+		assert ( iSize<=UINT_MAX ); 		// sanity check
 		m_pHash = new Entry_t[iSize];
 		m_iSize = iSize;
 		m_iUsed = 0;
@@ -4439,9 +4441,9 @@ public:
 	VALUE & Acquire ( KEY k )
 	{
 		DWORD uHash = HASHFUNC::GetHash(k);
-		int iIndex = uHash & ( m_iSize-1 );
+		int64_t iIndex = uHash & ( m_iSize-1 );
 
-		int iDead = -1;
+		int64_t iDead = -1;
 		while (true)
 		{
 			// found matching key? great, return the value
@@ -4491,7 +4493,7 @@ public:
 	/// add or fail (if key already exists)
 	bool Add ( KEY k, const VALUE & v )
 	{
-		int u = m_iUsed;
+		int64_t u = m_iUsed;
 		VALUE & x = Acquire(k);
 		if ( u==m_iUsed )
 			return false; // found an existing value by k, can not add v
@@ -4503,7 +4505,7 @@ public:
 	/// find existing value, or add a new value
 	VALUE & FindOrAdd ( KEY k, const VALUE & v )
 	{
-		int u = m_iUsed;
+		int64_t u = m_iUsed;
 		VALUE & x = Acquire(k);
 		if ( u!=m_iUsed )
 			x = v; // did not find an existing value by k, so add v
@@ -4522,7 +4524,7 @@ public:
 	}
 
 	/// get number of inserted key-value pairs
-	int GetLength() const
+	int64_t GetLength() const
 	{
 		return m_iUsed;
 	}
@@ -4531,12 +4533,12 @@ public:
 	/// finds the next alive key-value pair starting from the given index
 	/// returns that pair and updates the index on success
 	/// returns NULL when the hash is over
-	VALUE * Iterate ( int * pIndex, KEY * pKey ) const
+	VALUE * Iterate ( int64_t * pIndex, KEY * pKey ) const
 	{
 		if ( !pIndex || *pIndex<0 )
 			return nullptr;
 
-		for ( int i = *pIndex; i < m_iSize; i++ )
+		for ( int64_t i = *pIndex; i < m_iSize; i++ )
 			if ( m_pHash[i].m_uState==ENTRY_USED )
 			{
 				*pIndex = i+1;
@@ -4568,28 +4570,30 @@ protected:
 	};
 #pragma pack(pop)
 
-	int			m_iSize {0};					// total hash size
-	int			m_iUsed {0};					// how many entries are actually used
-	int			m_iMaxUsed {0};					// resize threshold
+	int64_t		m_iSize {0};					// total hash size
+	int64_t		m_iUsed {0};					// how many entries are actually used
+	int64_t		m_iMaxUsed {0};					// resize threshold
 
 	Entry_t *	m_pHash {nullptr};	///< hash entries
 
 									/// get max load, ie. max number of actually used entries at given size
-	int GetMaxLoad ( int iSize ) const
+	int64_t GetMaxLoad ( int64_t iSize ) const
 	{
-		return (int)( iSize*LOAD_FACTOR );
+		return (int64_t)( iSize*LOAD_FACTOR );
 	}
 
 	/// we are overloaded, lets grow 2x and rehash
 	void Grow()
 	{
-		int iNewSize = 2*Max(m_iSize,8);
+		int64_t iNewSize = 2*Max(m_iSize,8);
+		assert ( iNewSize<=UINT_MAX ); 		// sanity check
+
 		Entry_t * pNew = new Entry_t[iNewSize];
 
-		for ( int i=0; i<m_iSize; i++ )
+		for ( int64_t i=0; i<m_iSize; i++ )
 			if ( m_pHash[i].m_uState==ENTRY_USED )
 			{
-				int j = HASHFUNC::GetHash ( m_pHash[i].m_Key ) & ( iNewSize-1 );
+				int64_t j = HASHFUNC::GetHash ( m_pHash[i].m_Key ) & ( iNewSize-1 );
 				while ( pNew[j].m_uState==ENTRY_USED )
 					j = ( j+1 ) & ( iNewSize-1 );
 
@@ -4605,8 +4609,7 @@ protected:
 	/// find (and do not touch!) entry by key
 	inline Entry_t * FindEntry ( KEY k ) const
 	{
-		DWORD uHash = (DWORD)HASHFUNC::GetHash(k);
-		int iIndex = uHash & ( m_iSize-1 );
+		int64_t iIndex = HASHFUNC::GetHash(k) & ( m_iSize-1 );
 
 		while ( m_pHash[iIndex].m_uState!=ENTRY_EMPTY )
 		{

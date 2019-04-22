@@ -629,7 +629,7 @@ within an index. Kill-list for a given index suppresses results from
 is to help implement deletions and updates on existing indexes without
 rebuilding (actually even touching them), and especially to fight
 phantom results problem. The indexes where the results should be suppressed
-are specified in the ``killlist_target`` index setting.
+are specified in the :ref:`killlist_target` index setting.
 
 Let us dissect an example. Assume we have two indexes, ‘main’ and
 ‘delta’. Assume that documents 2, 3, and 5 were deleted since last
@@ -670,7 +670,7 @@ network when sending queries. (Because that might be too much of an
 impact when the K-list is huge.) You will need to setup a separate
 per-server K-lists in that case.
 
-Also note that you have to specify ``killlist_target`` in the 'delta' index,
+Also note that you have to specify :ref:`killlist_target` in the 'delta' index,
 otherwise the kill-list will not be applied.
 
 Example:

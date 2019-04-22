@@ -36,6 +36,11 @@ The killlist_target directive points the target indexes and defines which doc id
 The documents in the kill-lists are deleted from the target indexes, they are not returned in results, even if the search doesn't include the index that provide the kill-lists.
 Because of this the order of indexes for searching does not matter. Now doing delta,main  or main, delta will provide same results.
 
+In previous versions indexes were rotated in the order found in configuration or the order given an input. Index rotation is now affected by killlist targets. 
+Before starting to rotate indexes,  the daemon search for chains of indexes by killlist_target definitions. It will first rotate indexes not referenced anywhere as kill-lists targets.
+Next it will rotate indexes targeted by already rotated indexes and so on (the effect is in cascade).
+For example if we do ``indexer --all`` and we have 3 indexes : main, delta_big (which target on main) and delta_small (with target on delta_big), first the delta_small is rotated, then delta_big and finally main.
+This is to ensure on  targets it will be applied the newest kill-lists and not an older version of them.
 
 Removed configuration keys
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

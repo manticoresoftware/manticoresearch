@@ -39,7 +39,7 @@ Wildcarding on index names is also supported. The following wildcard tokens can 
 
 * ``?`` matches any single character
 * ``*`` matches any count of any characters
-* ``*`` matches none or any single character
+* ``%`` matches none or any single character
 
 .. code-block:: bash
 
@@ -99,7 +99,9 @@ operation is performed. These options are:
    serving from the newer files. Depending on the setting of
    :ref:`seamless_rotate <seamless_rotate>`,
    there may be a slight delay in being able to search the newer
-   indexes. Example usage:
+   indexes. In case multiple indexes are rotated at once which are chained by killlist_target relations, 
+   rotation will start with the indexes that are not targets and finish with the ones at the end of target chain.
+   Example usage:
 
    .. code-block:: bash
 

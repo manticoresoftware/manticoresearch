@@ -101,21 +101,22 @@ Plain indexes and RealTime indexes chunks:
 +-----------+------------------------------+-----------------------------------------+
 | sph       | index/chunk header           | always loaded in memory                 |
 +-----------+------------------------------+-----------------------------------------+
-| spk       | Kill list                    | always loaded in memory                 |
+| spk       | Kill list                    | loaded and discarded :sup:`[1]`         |
 +-----------+------------------------------+-----------------------------------------+
 | spl       | index lock file              | on disk only                            |
 +-----------+------------------------------+-----------------------------------------+
-| spm       | row map                      | always loaded in memory                 |
+| spm       | row map                      | mmap()                                  |
 +-----------+------------------------------+-----------------------------------------+
 | sphi      | secondary index histograms   | always loaded in memory                 |
 +-----------+------------------------------+-----------------------------------------+
-| spt       | docid lookups                | always loaded in memory                 |
+| spt       | docid lookups                | mmap()                                  |
 +-----------+------------------------------+-----------------------------------------+
 | spp       | keyword positions            | read, on disk, gets cached by OS        |
 +-----------+------------------------------+-----------------------------------------+
 | spb       | var-length attrs             | mmap(), also see :ref:`ondisk_attrs`    |
 +-----------+------------------------------+-----------------------------------------+
 
+:sup:`[1]` Kill lists -  loaded in memory at startup and discarded after they are applied to targets
 
 RealTime indexes also have:
 

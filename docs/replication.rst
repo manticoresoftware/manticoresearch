@@ -103,7 +103,7 @@ may be also set to enumerate all nodes in the cluster.
 
     CREATE CLUSTER posts
     CREATE CLUSTER click_query '/var/data/click_query/' as path
-    CREATE CLUSTER click_query '/var/data/click_query/' as path, 'clicks_mirror1:9351,clicks_mirror2:9351,clicks_mirror3:9351' as nodes
+    CREATE CLUSTER click_query '/var/data/click_query/' as path, 'clicks_mirror1:9312,clicks_mirror2:9312,clicks_mirror3:9312' as nodes
 
 In case cluster created without nodes list first joined node will be saved as nodes list option.
 
@@ -119,7 +119,7 @@ will be used as the cluster path then. For all subsequent clusters :ref:`path <c
 
 .. code-block:: sql
 
-    JOIN CLUSTER posts at '10.12.1.35:9321'
+    JOIN CLUSTER posts at '10.12.1.35:9312'
 
 This way node joins cluster by getting data from node provided and on success updates nodes list in all other nodes same
 as :ref:`alter update nodes <replication_alter_update>`
@@ -130,7 +130,7 @@ This form join an existing cluster :ref:`name <cluster_name>` uses nodes option 
 
 .. code-block:: sql
 
-    JOIN CLUSTER click_query  'clicks_mirror1:9351;clicks_mirror2:9351;clicks_mirror3:9351' as nodes, '/var/data/click_query/' as path
+    JOIN CLUSTER click_query  'clicks_mirror1:9312;clicks_mirror2:9312;clicks_mirror3:9312' as nodes, '/var/data/click_query/' as path
 
 
 .. _replication_delete:

@@ -23,6 +23,7 @@ index test_rt
     rt_field = title
 	rt_field = content
     rt_attr_uint = int_col
+	rt_attr_bigint = bint_col
 	rt_attr_float = flt_col
 	rt_attr_multi = mva_col
 	rt_attr_json = json_col
@@ -39,6 +40,7 @@ index test_rt
 	"id":1,
 	"doc":
 	{
+		"bint_col" : 1556004428,
 	    "int_col" : 1,
 		"flt_col" : 1.1,
 		"mva_col" : [1,2,3,4,5],

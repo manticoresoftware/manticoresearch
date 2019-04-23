@@ -8715,7 +8715,7 @@ public:
 		{
 			case TOK_QUOTED_STRING :	return strtoll ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
 			case TOK_CONST_INT:			return tVal.m_iVal;
-			case TOK_CONST_FLOAT:		return int(tVal.m_fVal); // FIXME? report conversion error?
+			case TOK_CONST_FLOAT:		return int64_t(tVal.m_fVal); // FIXME? report conversion error?
 		}
 		return 0;
 	}

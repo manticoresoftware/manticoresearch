@@ -1375,7 +1375,7 @@ bool ParseJsonInsert ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDo
 			{
 				tNewValue.m_iType = sphGetTokTypeStr();
 				tNewValue.m_sVal = tItem.StrVal();
-			} else if ( tItem.IsNum() )
+			} else if ( tItem.IsDbl() )
 			{
 				tNewValue.m_iType = sphGetTokTypeFloat();
 				tNewValue.m_fVal = tItem.FltVal();

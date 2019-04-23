@@ -3955,18 +3955,14 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CachedOutputBuffer_c & tOut, CSphQ
 	}
 
 	tQuery.m_sIndexes = tReq.GetString ();
-	bool bIdrange64 = tReq.GetInt()!=0;
 
-	// WAS: id range filter
-	if ( bIdrange64 )
-	{
-		tReq.GetUint64 ();
-		tReq.GetUint64 ();
-	} else
-	{
-		tReq.GetDword ();
-		tReq.GetDword ();
-	}
+	// legacy id range filter
+	bool bIdrange64 = tReq.GetInt()!=0;
+	DocID_t tMinDocID = bIdrange64 ? (DocID_t)tReq.GetUint64 () : tReq.GetDword ();
+	DocID_t tMaxDocID = bIdrange64 ? (DocID_t)tReq.GetUint64 () : tReq.GetDword ();
+
+	if ( tMaxDocID==0 || (uint64_t)tMaxDocID==UINT64_MAX )
+		tMaxDocID = INT64_MAX;
 
 	int iAttrFilters = tReq.GetInt ();
 	if ( iAttrFilters>g_iMaxFilters )
@@ -3979,6 +3975,16 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CachedOutputBuffer_c & tOut, CSphQ
 	for ( auto & i : tQuery.m_dFilters )
 		if ( !ParseSearchFilter ( i, tReq, tOut, uMasterVer ) )
 			return false;
+
+	// now add id range filter
+	if ( tMinDocID!=0 || tMaxDocID!=INT64_MAX )
+	{
+		CSphFilterSettings & tFilter = tQuery.m_dFilters.Add();
+		tFilter.m_sAttrName = sphGetDocidName();
+		tFilter.m_eType = SPH_FILTER_RANGE;
+		tFilter.m_iMinValue = tMinDocID;
+		tFilter.m_iMaxValue = tMaxDocID;
+	}
 
 	tQuery.m_eGroupFunc = (ESphGroupBy) tReq.GetDword ();
 	tQuery.m_sGroupBy = tReq.GetString ();

@@ -2250,11 +2250,12 @@ void DebugCheckHelper_c::DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, De
 			int64_t iBlobOffset2 = sphGetRowAttr ( pRow, pBlobLocator->m_tLocator );
 
 			if ( iBlobOffset1!=iBlobOffset2 )
-				tReporter.Fail ( "blob row locator mismatch (row=" INT64_FMT ", docid=" INT64_FMT ", offset1=" INT64_FMT ", offset2=" INT64_FMT ")", iRow, tDocID, iBlobOffset1, iBlobOffset2 );
+				tReporter.Fail ( "blob row locator mismatch (row=" INT64_FMT ", docid=" INT64_FMT ", offset1=" INT64_FMT ", offset2=" INT64_FMT ", rowid=" INT64_FMT " of " INT64_FMT ")",
+					iRow, tDocID, iBlobOffset1, iBlobOffset2, iRow, nRows );
 
 			CSphString sError;
 			if ( !sphCheckBlobRow ( iBlobOffset1, tBlobs, tSchema, sError ) )
-				tReporter.Fail ( "%s at offset " INT64_FMT ", id=" INT64_FMT, sError.cstr(), iBlobOffset1, tDocID );
+				tReporter.Fail ( "%s at offset " INT64_FMT ", docid=" INT64_FMT ", rowid=" INT64_FMT " of " INT64_FMT, sError.cstr(), iBlobOffset1, tDocID, iRow, nRows );
 		}
 
 		///////////////////////////

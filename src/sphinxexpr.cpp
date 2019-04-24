@@ -1761,16 +1761,19 @@ public:
 		const char * pBuf = nullptr;
 		int  iLen = StringEval ( tMatch, (const BYTE **) &pBuf );
 
-		const char * pMax = sphFindLastNumeric ( pBuf, iLen );
-		if ( pBuf<pMax )
+		if ( iLen && pBuf )
 		{
-			fVal = (float) strtod ( pBuf, NULL );
-		}
-		else
-		{
-			CSphString sBuf;
-			sBuf.SetBinary ( pBuf, iLen );
-			fVal = (float) strtod ( sBuf.cstr(), NULL );
+			const char * pMax = sphFindLastNumeric ( pBuf, iLen );
+			if ( pBuf<pMax )
+			{
+				fVal = (float) strtod ( pBuf, NULL );
+			}
+			else
+			{
+				CSphString sBuf;
+				sBuf.SetBinary ( pBuf, iLen );
+				fVal = (float) strtod ( sBuf.cstr(), NULL );
+			}
 		}
 
 		if ( IsDataPtrAttr() )
@@ -1785,16 +1788,19 @@ public:
 		const char * pBuf = nullptr;
 		int  iLen = StringEval ( tMatch, (const BYTE **) &pBuf );
 
-		const char * pMax = sphFindLastNumeric ( pBuf, iLen );
-		if ( pBuf<pMax )
+		if ( iLen && pBuf )
 		{
-			iVal = strtol ( pBuf, NULL, 10 );
-		}
-		else
-		{
-			CSphString sBuf;
-			sBuf.SetBinary ( pBuf, iLen );
-			iVal = strtol ( sBuf.cstr(), NULL, 10 );
+			const char * pMax = sphFindLastNumeric ( pBuf, iLen );
+			if ( pBuf<pMax )
+			{
+				iVal = strtol ( pBuf, NULL, 10 );
+			}
+			else
+			{
+				CSphString sBuf;
+				sBuf.SetBinary ( pBuf, iLen );
+				iVal = strtol ( sBuf.cstr(), NULL, 10 );
+			}
 		}
 
 		if ( IsDataPtrAttr() )
@@ -1809,16 +1815,19 @@ public:
 		const char * pBuf = nullptr;
 		int  iLen = StringEval ( tMatch, (const BYTE **) &pBuf );
 
-		const char * pMax = sphFindLastNumeric ( pBuf, iLen );
-		if ( pBuf<pMax )
+		if ( iLen && pBuf )
 		{
-			iVal = strtoll ( pBuf, NULL, 10 );
-		}
-		else
-		{
-			CSphString sBuf;
-			sBuf.SetBinary ( pBuf, iLen );
-			iVal = strtoll ( sBuf.cstr(), NULL, 10 );
+			const char * pMax = sphFindLastNumeric ( pBuf, iLen );
+			if ( pBuf<pMax )
+			{
+				iVal = strtoll ( pBuf, NULL, 10 );
+			}
+			else
+			{
+				CSphString sBuf;
+				sBuf.SetBinary ( pBuf, iLen );
+				iVal = strtoll ( sBuf.cstr(), NULL, 10 );
+			}
 		}
 
 		if ( IsDataPtrAttr() )

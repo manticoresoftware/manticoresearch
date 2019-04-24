@@ -39,6 +39,9 @@ inline bool sphIsDigital ( char c )
 /// pointer to the last number in the buf, touching it's end
 inline const char * sphFindLastNumeric ( const char * pBuf, int iLen )
 {
+	if ( !pBuf || !iLen )
+		return pBuf;
+
 	for ( auto pLast = pBuf + iLen - 1; pLast>=pBuf; --pLast )
 		if ( !sphIsDigital ( *pLast ) )
 			return pLast + 1;

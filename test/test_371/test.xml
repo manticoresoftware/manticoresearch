@@ -200,6 +200,9 @@ INSERT INTO rt (id, gid, title, j) VALUES
 <sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', '-1') as res from test2_dist</sphinxql>
 <sphinxql>select id, substring_index('aaa.bbb.ccc.ddd', '.', 'aaa') as res from test2_dist</sphinxql>
 
+<!-- regression substring_index from missed json field -->
+<sphinxql>select id, j.lat, j.lon, j.coord, geodist(substring_index(j.coord1,' ',-1), substring_index(j.coord2,' ',1), j.lat, j.lon) as gd, substring_index(j.coord2,' ',1) as t from test1_loc</sphinxql>
+
 </sphqueries>
 
 

@@ -1568,6 +1568,34 @@ void ConverterPlain_t::SaveHeader ( const Index_t & tIndex, DWORD uKillListSize 
 	tWriter.CloseFile ();
 }
 
+static void CopyAndUpdateSchema ( const Index_t & tIndex, CSphSchema & tSchema )
+{
+	ARRAY_FOREACH ( i, tIndex.m_dSchemaFields )
+		tSchema.AddField ( tIndex.m_dSchemaFields[i] );
+
+	CSphColumnInfo tCol ( sphGetDocidName() );
+	tCol.m_eAttrType = SPH_ATTR_BIGINT;
+	tSchema.InsertAttr ( 0, tCol, false );
+
+	ARRAY_FOREACH ( i, tIndex.m_dSchemaAttrs )
+		tSchema.AddAttr ( tIndex.m_dSchemaAttrs[i], false );
+
+	if ( tSchema.HasBlobAttrs() )
+	{
+		CSphColumnInfo tCol ( sphGetBlobLocatorName() );
+		tCol.m_eAttrType = SPH_ATTR_BIGINT;
+
+		// should be right after docid
+		tSchema.InsertAttr ( 1, tCol, false );
+
+		// rebuild locators in the schema
+		const char * szTmpColName = "$_tmp";
+		CSphColumnInfo tColTmp ( szTmpColName, SPH_ATTR_BIGINT );
+		tSchema.AddAttr ( tColTmp, false );
+		tSchema.RemoveAttr ( szTmpColName, false );
+	}
+}
+
 bool ConverterPlain_t::Init ( Index_t & tIndex, CSphString & sError )
 {
 	// merge index settings with new defaults
@@ -1580,30 +1608,7 @@ bool ConverterPlain_t::Init ( Index_t & tIndex, CSphString & sError )
 	tIndex.m_tSettings.m_iSkiplistBlockSize = tDefaultSettings.m_iSkiplistBlockSize;
 
 	// old schema to new schema
-	ARRAY_FOREACH ( i, tIndex.m_dSchemaFields )
-		m_tSchema.AddField ( tIndex.m_dSchemaFields[i] );
-
-	CSphColumnInfo tCol ( sphGetDocidName() );
-	tCol.m_eAttrType = SPH_ATTR_BIGINT;
-	m_tSchema.InsertAttr ( 0, tCol, false );
-
-	ARRAY_FOREACH ( i, tIndex.m_dSchemaAttrs )
-		m_tSchema.AddAttr ( tIndex.m_dSchemaAttrs[i], false );
-
-	if ( m_tSchema.HasBlobAttrs() )
-	{
-		CSphColumnInfo tCol ( sphGetBlobLocatorName() );
-		tCol.m_eAttrType = SPH_ATTR_BIGINT;
-		
-		// should be right after docid
-		m_tSchema.InsertAttr ( 1, tCol, false );
-
-		// rebuild locators in the schema
-		const char * szTmpColName = "$_tmp";
-		CSphColumnInfo tColTmp ( szTmpColName, SPH_ATTR_BIGINT );
-		m_tSchema.AddAttr ( tColTmp, false );
-		m_tSchema.RemoveAttr ( szTmpColName, false );
-	}
+	CopyAndUpdateSchema ( tIndex, m_tSchema );
 
 	if ( tIndex.m_tSettings.m_iMinInfixLen && tIndex.m_pDict->GetSettings().m_bWordDict )
 		m_pInfixer = sphCreateInfixBuilder ( tIndex.m_pTokenizer->GetMaxCodepointLength(), &sError );
@@ -1997,6 +2002,10 @@ static bool RenameRtIndex ( Index_t & tIndex, CSphString & sError )
 
 static bool SaveRtIndex ( Index_t & tIndex, CSphString & sError )
 {
+	// no disk chunks - need to copy old schema from meta and update it if necessary
+	if ( !tIndex.m_dRtChunkNames.GetLength() )
+		CopyAndUpdateSchema ( tIndex, tIndex.m_tSchema );
+
 	// merge index settings with new defaults
 	CSphConfigSection hIndex;
 	CSphIndexSettings tDefaultSettings;

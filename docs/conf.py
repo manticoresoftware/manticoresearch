@@ -1,12 +1,13 @@
 import os
 import sys
-import collections
+
 try:
- if THEME_PATH:
-	sys.path.append(THEME_PATH)
+    if THEME_PATH:
+        sys.path.append(THEME_PATH)
 except NameError:
-	pass
+    pass
 import sphinx_rtd_theme
+
 sys.path.insert(0, os.path.abspath('..'))
 sys.path.append(os.path.dirname(__file__))
 sys.path.append(os.path.abspath('_ext'))

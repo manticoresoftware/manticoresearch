@@ -63,7 +63,7 @@ public:
 	virtual void ForceDiskChunk () = 0;
 
 	/// attach a disk chunk to current index
-	virtual bool AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError ) = 0;
+	virtual bool AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, CSphString & sError ) = 0;
 
 	/// truncate index (that is, kill all data)
 	virtual bool Truncate ( CSphString & sError ) = 0;

@@ -104,7 +104,7 @@ public:
 	void CheckRamFlush () override;
 	void ForceRamFlush ( bool bPeriodic ) override;
 	void ForceDiskChunk () override;
-	bool AttachDiskIndex ( CSphIndex * , CSphString & ) override { return true; }
+	bool AttachDiskIndex ( CSphIndex * , bool, CSphString & ) override { return true; }
 	void Optimize () override {}
 	bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const override;
 	void Reconfigure ( CSphReconfigureSetup & tSetup ) override REQUIRES ( !m_tLock );

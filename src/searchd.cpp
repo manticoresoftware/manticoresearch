@@ -16463,8 +16463,7 @@ void HandleMysqlAttach ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 
 	auto * pRtTo = ( RtIndex_i * ) pTo->m_pIndex;
 
-	if ( ( bTruncate && !pRtTo->Truncate ( sError ) ) ||
-		!pRtTo->AttachDiskIndex ( pFrom->m_pIndex, sError ) )
+	if ( !pRtTo->AttachDiskIndex ( pFrom->m_pIndex, bTruncate, sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 		return;

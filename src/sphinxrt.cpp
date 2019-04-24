@@ -1020,7 +1020,7 @@ public:
 	void				CheckRamFlush () final;
 	void				ForceRamFlush ( bool bPeriodic=false ) final;
 	void				ForceDiskChunk() final;
-	bool				AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError ) final;
+	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, CSphString & sError ) final;
 	bool				Truncate ( CSphString & sError ) final;
 	void				Optimize () final;
 	virtual void				ProgressiveMerge ();
@@ -6615,11 +6615,9 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ES
 // MAGIC CONVERSIONS
 //////////////////////////////////////////////////////////////////////////
 
-bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
+bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, CSphString & sError )
 {
-	SphOptimizeGuard_t tStopOptimize ( m_tOptimizingLock, m_bOptimizeStop ); // got write-locked at daemon
-
-	bool bEmptyRT = ( !m_dRamChunks.GetLength() && !m_dDiskChunks.GetLength() );
+	bool bEmptyRT = ( ( !m_dRamChunks.GetLength() && !m_dDiskChunks.GetLength() ) || bTruncate );
 
 	// safeguards
 	// we do not support some of the disk index features in RT just yet
@@ -6638,6 +6636,11 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 			LOC_ERROR ( "ATTACH currently requires same attributes declaration (RT-side support not implemented yet)" );
 	}
 #undef LOC_ERROR
+
+	if ( bTruncate && !Truncate ( sError ) )
+		return false;
+
+	SphOptimizeGuard_t tStopOptimize ( m_tOptimizingLock, m_bOptimizeStop ); // got write-locked at daemon
 
 	int iTotalKilled = 0;
 	if ( !bEmptyRT )

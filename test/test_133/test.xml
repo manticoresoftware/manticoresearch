@@ -223,6 +223,10 @@ You have gone away'));]]></db_insert>
 <sphinxql> select * from rt where match (' "Who am I" ' ) </sphinxql>
 <sphinxql> select * from rt where match (' "of this" ' ) </sphinxql>
 <sphinxql> select * from rt where match (' ZONE:zoneA "like this" ' ) </sphinxql>
+
+<!-- regression for hit sorting in SENTENCE -->
+<sphinxql> select * from rt where match (' one SENTENCE one' ) </sphinxql>
+
 </sphqueries>
 
 </test>

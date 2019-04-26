@@ -5281,7 +5281,7 @@ const ExtDoc_t * ExtUnit_c::GetDocsChunk()
 	m_pDotDoc = pDotDoc;
 	m_pHit1 = pHit1;
 	m_pHit2 = pHit2;
-	m_pDotDoc = pDotDoc;
+	m_pDotHit = pDotHit;
 
 	return ReturnDocsChunk ( iDoc, "unit" );
 }

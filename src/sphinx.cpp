@@ -11231,6 +11231,11 @@ public:
 		return pSrc;
 	}
 
+	void Reset()
+	{
+		m_pIndex.Reset();
+	}
+
 private:
 	const BYTE * GetBlobData ( int iAttr, int & iLen, ESphAttr & eAttr )
 	{
@@ -11550,7 +11555,10 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	CSphAutofile fdTmpLookup ( GetIndexFileName("tmp2"), SPH_O_NEW, m_sLastError, true );
 
 	CSphWriter tWriterSPA;
-	if ( !tWriterSPA.OpenFile ( GetIndexFileName(SPH_EXT_SPA), m_sLastError ) )
+
+	// write to temp file because of possible --keep-attrs option which loads prev index
+	CSphString sSPA = GetIndexFileName ( SPH_EXT_SPA, true );
+	if ( !tWriterSPA.OpenFile ( sSPA, m_sLastError ) )
 		return 0;
 
 	DeleteOnFail_c dFileWatchdog;
@@ -11561,10 +11569,11 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	if ( fdLock.GetFD()<0 || fdHits.GetFD()<0 )
 		return 0;
 
+	CSphString sSPB = GetIndexFileName ( SPH_EXT_SPB, true );
 	CSphScopedPtr<BlobRowBuilder_i> pBlobRowBuilder(nullptr);
 	if ( bHaveBlobAttrs )
 	{
-		pBlobRowBuilder = sphCreateBlobRowBuilder ( m_tSchema, GetIndexFileName(SPH_EXT_SPB), m_tSettings.m_tBlobUpdateSpace, m_sLastError );
+		pBlobRowBuilder = sphCreateBlobRowBuilder ( m_tSchema, sSPB, m_tSettings.m_tBlobUpdateSpace, m_sLastError );
 		if ( !pBlobRowBuilder.Ptr() )
 			return 0;
 	}
@@ -11875,6 +11884,24 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		return false;
 	}
 
+	if ( pBlobRowBuilder.Ptr() && !pBlobRowBuilder->Done ( m_sLastError ) )
+		return 0;
+
+	if ( bGotPrevIndex )
+		tPrevAttrs.Reset();
+
+	if ( sph::rename ( sSPA.cstr(), GetIndexFileName(SPH_EXT_SPA).cstr() )!=0 )
+	{
+		m_sLastError.SetSprintf ( "failed to rename %s to %s", sSPA.cstr(), GetIndexFileName(SPH_EXT_SPA).cstr() );
+		return false;
+	}
+
+	if ( bHaveBlobAttrs && sph::rename ( sSPB.cstr(), GetIndexFileName(SPH_EXT_SPB).cstr() )!=0 )
+	{
+		m_sLastError.SetSprintf ( "failed to rename %s to %s", sSPB.cstr(), GetIndexFileName(SPH_EXT_SPB).cstr() );
+		return false;
+	}
+
 	if ( !WriteDeadRowMap ( GetIndexFileName(SPH_EXT_SPM), m_tStats.m_iTotalDocuments, m_sLastError ) )
 		return 0;
 
@@ -12058,9 +12085,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	BuildHeader_t tBuildHeader ( m_tStats );
 	if ( !tHitBuilder.cidxDone ( iMemoryLimit, m_tSettings.m_iMinInfixLen, m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
-		return 0;
-
-	if ( pBlobRowBuilder.Ptr() && !pBlobRowBuilder->Done ( m_sLastError ) )
 		return 0;
 
 	dRelocationBuffer.Reset(0);

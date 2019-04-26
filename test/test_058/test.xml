@@ -248,6 +248,9 @@ mysql_query ( 'insert into klist_table values (1)' );
 sleep(2);
 $results[] = $q1 ( $client, 'first', 'main' );
 
+// regression for indexer crashing on keep-attrs w/o rotate
+RunIndexer ( $errors, 'i_attrs --keep-attrs' );
+
 ]]></custom_test>
 
 </test>

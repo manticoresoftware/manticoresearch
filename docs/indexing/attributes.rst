@@ -104,12 +104,5 @@ index data in ``.spa`` file.
 
 A copy of ``.spa`` file (with all the
 attribute values for all the documents) is kept in RAM by ``searchd`` at
-all times. This is for performance reasons; random disk I/O would be too
-slow.
-
-Search-time memory requirements for are
-(1+number_of_attrs)*number_of_docs*\ 4 bytes, ie. 10 million docs
-with 2 groups and 1 timestamp will take (1+2+1)*10M*\ 4 = 160 MB of RAM.
-This is *PER DAEMON*, not per query. ``searchd`` will allocate 160 MB on
-startup, read the data and keep it shared between queries. The children
-will *NOT* allocate any additional copies of this data.
+all times (via mmap()). This is for performance reasons; random disk I/O may be too slow otherwise
+in most cases.

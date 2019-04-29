@@ -3,7 +3,7 @@
 ``index_converter`` command reference
 -------------------------------------
 
-``index_converter`` is a tool for converting indexed created with Sphinx/Manticore Search 2.x to Manticore Search 3.x index format.
+``index_converter`` is a tool for converting indexes created with Sphinx/Manticore Search 2.x to Manticore Search 3.x index format.
 
 The tool can be used in several different ways:
 
@@ -11,45 +11,41 @@ Convert one index at a time:
 
 .. code-block:: bash
 
-    $ indexer --config /home/myuser/sphinx.conf --index indexname
+    $ index_converter --config /home/myuser/sphinx.conf --index indexname
 
 Convert all indexes:
 
 .. code-block:: bash
 
-    $ indexer --config /home/myuser/sphinx.conf --all
-	
-	
+    $ index_converter --config /home/myuser/sphinx.conf --all
+
 Convert indexes found in a folder:
 
 .. code-block:: bash
 
-    $ indexer  --path /var/lib/manticoresearch/data --all
-	
+    $ index_converter  --path /var/lib/manticoresearch/data --all
 
-The new version of the index is written by default in the same folder. Previous version files are saved with `.old` in their name. 
-An exception is `.spp` (hitlists) file  which is the only index component that didn't had any change in the new format.
+New version of the index is written by default in the same folder. Previous version files are saved with `.old` extension in their name.
+An exception is `.spp` (hitlists) file which is the only index component that didn't have any change in the new format.
 
-You can save the new index version  to a different folder using `--output-dir` option
+You can save the new index version to a different folder using `--output-dir` option
 
 .. code-block:: bash
 
-    $ indexer --config /home/myuser/sphinx.conf --all --output-dir /new/path
-	
+    $ index_converter --config /home/myuser/sphinx.conf --all --output-dir /new/path
 
-A special case is for indexes containing kill-lists. As the behaviour of how kill-lists works has changed, the delta index should know which are the target indexes for applying the kill-lists
+A special case is for indexes containing kill-lists. As the behaviour of how kill-lists works has changed (see :ref:`killlist_target`), the delta index should know which are the target indexes for applying the kill-lists
 There are 3 ways to have a converted index ready for setting targeted indexes for applying kill-lists:
 
 - Use `--killlist-target` when converting an index
 
 .. code-block:: bash
 
-    $ indexer --config /home/myuser/sphinx.conf --index deltaindex --killlist-target mainindex:kl
-	
--  Add killlist_target in the configuration before doing the conversion
+    $ index_converter --config /home/myuser/sphinx.conf --index deltaindex --killlist-target mainindex:kl
 
-- use :ref:`ALTER ... KILLLIST_TARGET<alter_syntax>` command after conversion 
+- Add killlist_target in the configuration before doing the conversion
 
+- use :ref:`ALTER ... KILLLIST_TARGET<alter_syntax>` command after conversion
 
 A complete list of ``index_converter`` options:
 
@@ -59,17 +55,17 @@ A complete list of ``index_converter`` options:
    ``/usr/local/sphinx/etc/sphinx.conf`` if installed into
    ``/usr/local/sphinx``), followed by the current directory you are in
    when calling ``index_converter`` from the shell.
-   
-- ``--index`` specify which index should be converted
 
-- ``path`` - instead of using a config file, a path containing indexes can be used
+- ``--index`` specifies which index should be converted
 
-- ``strip-path`` - strip path from filenames referenced by index: stopwords, exceptions and wordforms
+- ``--path`` - instead of using a config file, a path containing index(es) can be used
 
-- ``large-docid`` - allows to convert documents with ids larger than 2^63 and display a warning, otherwise it will just exit on the large id with an error. This option was added as in v3 the doc ids are signed, while previous they were unsigned
+- ``--strip-path`` - strips path from filenames referenced by index: stopwords, exceptions and wordforms
 
-- ``--output-dir <dir>`` - write the new files in a choosen folder rather than same location with existing index files. When this option is used, existing index files remain untouched at their location.
+- ``--large-docid`` - allows to convert documents with ids larger than 2^63 and display a warning, otherwise it will just exit on the large id with an error. This option was added as in Manticore 3.x doc ids are signed bigint, while previously they were unsigned
 
-- ``-all``  - convert all indexes 
+- ``--output-dir <dir>`` - writes the new files in a chosen folder rather than the same location as with the existing index files. When this option set, existing index files will remain untouched at their location.
 
-- ``--killlist-target <targets>`` -  set the target indexes for which kill-lists will be applied. This option should be used only in conjunction with ``--index`` option
+- ``--all``  - converts all indexes from the config
+
+- ``--killlist-target <targets>`` -  sets the target indexes for which kill-lists will be applied. This option should be used only in conjunction with ``--index`` option

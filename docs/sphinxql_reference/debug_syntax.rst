@@ -8,13 +8,13 @@ DEBUG syntax
 
     DEBUG [ subcommand ]
 
-DEBUG statement designed to call different internal or vip commands for dev/testing purposes. It is not intended
-for production automation, since the syntax of ``subcommand`` part may be freely changed in every build.
+DEBUG statement is designed to call different internal or vip commands for dev/testing purposes. It is not intended
+for production automation, since the syntax of ``subcommand`` part may be freely changed in any build.
 
 Call ``DEBUG`` without params to show list of useful commands (in general) and subcommands (of ``DEBUG`` statement) available
 at the moment.
 
-However you can invoke ``DEBUG`` without params to know which subcommands of the statement are available in particulary case:
+However you can invoke ``DEBUG`` without params to know which subcommands of the statement are available in any particular case:
 
 .. code-block:: mysql
 
@@ -29,9 +29,9 @@ However you can invoke ``DEBUG`` without params to know which subcommands of the
 	2 rows in set (0,00 sec)
 
 
-(theese commands are already documented, but such short help just remind them).
+(these commands are already documented, but such short help just remind about them).
 
-If you connect via 'VIP' connection (see :ref:`listen` for details), output might be a bit different:
+If you connect via 'VIP' connection (see :ref:`listen` for details) the output might be a bit different:
 
 .. code-block:: mysql
 
@@ -48,9 +48,9 @@ If you connect via 'VIP' connection (see :ref:`listen` for details), output migh
 	4 rows in set (0,00 sec)
 
 
-Here you can see additional commands available only in current context (namely, if you connected on VIP port).
+Here you can see additional commands available only in the current context (namely, if you connected on a VIP port).
 Two additional subcommands available right now are ``token`` and ``shutdown``.
-First one just calculates hash (SHA1) of the <password> (which, in turn, may be empty, or a word, or num/phrase eclosed in
+The first one just calculates a hash (SHA1) of the <password> (which, in turn, may be empty, or a word, or num/phrase enclosed in
 '-quotes) like:
 
 .. code-block:: mysql
@@ -64,9 +64,9 @@ First one just calculates hash (SHA1) of the <password> (which, in turn, may be 
 	+-------------+------------------------------------------+
 	1 row in set (0,00 sec)
 
-Another debug subcommand, ``shutdown`` will send the TERM signal to the daemon and so, will cause it's shutdown.
-Since it is quite dangerous (nobody wants accidentally stop production service), it 1) need VIP connection, and 2) need
-the password. For choosed password you need to generate the token with ``debug token`` subcommand, and put it into
-ref:`shutdown_token` param of searchd section of config file. If no such section exists, or if the hash of provided
-password is not match to the token stored in config, subcommand will do nothing. Otherwize it will cause 'clean' shutdown
+Another debug subcommand ``shutdown`` will send a TERM signal to the daemon and so will make it shut down.
+Since it is quite dangerous (nobody wants accidentally stop a production service), it 1) needs a VIP connection, and 2) needs
+the password. For the chosen password you need to generate a token with ``debug token`` subcommand, and put it into
+ref:`shutdown_token` param of searchd section of the config file. If no such section exists, or if a hash of the provided
+password does not match with the token stored in the config, the subcommand will do nothing. Otherwise it will cause 'clean' shutdown
 of the daemon.

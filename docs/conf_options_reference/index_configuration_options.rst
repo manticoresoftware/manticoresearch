@@ -248,7 +248,7 @@ Example:
     agent = test:9312|box2:9312|box3:9312:any2[retry_count=2]
 
 .. _agent_mirrors:
-	
+
 Agent mirrors
 ^^^^^^^^^^^^^
 
@@ -609,13 +609,13 @@ Example:
 
     # english charset defined with alias
     charset_table = 0..9, english, _
-    
 
-So if you want your search to support different languages 
-you will need to define sets of valid characters and folding rules 
+
+So if you want your search to support different languages
+you will need to define sets of valid characters and folding rules
 for all of them what can be quite a laborious task.
 We have performed this task for you by preparing default charset tables,
-non-cjk and cjk, that comprise non-cjk and cjk-languages respectively. 
+non-cjk and cjk, that comprise non-cjk and cjk-languages respectively.
 These charsets should be sufficient to use in most cases.
 
 The languages that are currently NOT supported:
@@ -644,7 +644,7 @@ The languages that are currently NOT supported:
 All other languages listed in the following list are supported by default:
 `Unicode languages list <http://www.unicode.org/cldr/charts/latest/supplemental/languages_and_scripts.html/>`_.
 
-To be able to work with both cjk and non-cjk languages you should set the options 
+To be able to work with both cjk and non-cjk languages you should set the options
 in your configuration file as shown below:
 
 .. code-block:: none
@@ -885,7 +885,7 @@ exact words) are combined:
 
 
     running -> ( running | *running* | =running )
-	
+
 (as ``expand_keywords =  1`` or ``expand_keywords = star,exact``)
 or expansion limited by exact option even infixes enabled for index
 
@@ -1356,8 +1356,8 @@ Example:
 
 
     index_token_filter = my_lib.so:custom_blend:chars=@#&
-	
-	
+
+
 .. _index_zones:
 
 index_zones
@@ -1523,7 +1523,10 @@ killlist_target
 Sets the index(es) that the kill-list will be applied to.
 Optional, default value is empty.
 
-In order to supress matches in the older (**main**) index that were updated or deleted in the newer (**delta**) index you need to
+When you use :ref:`plain_indexes` you often need to maintain not a single index, but
+a set of them to be able to add/update/delete new documents sooner (read :ref:`delta_index_updates`).
+In order to suppress matches in the previous (**main**) index that were updated or
+deleted in the next (**delta**) index you need to:
 
 1. Create a kill-list in the **delta** index using :ref:`sql_query_killlist`
 2. Specify **main** index as ``killlist_target`` in **delta** index settings:
@@ -1541,11 +1544,11 @@ When ``killlist_target`` is specified, kill-list is applied to all the indexes l
 
 ``killlist_target`` has 3 modes of operation:
 
-1. ``killlist_target = main:kl``. Document ids from the kill-list of the **delta** index are supressed in the **main** index (see ``sql_query_killlist``).
-2. ``killlist_target = main:id``. All document ids from **delta** index are supressed in the **main** index. Kill-list is ignored.
-3. ``killlist_target = main``. Both document ids from **delta** index and its kill-list are supressed in the **main** index.
+1. ``killlist_target = main:kl``. Document ids from the kill-list of the **delta** index are suppressed in the **main** index (see ``sql_query_killlist``).
+2. ``killlist_target = main:id``. All document ids from **delta** index are suppressed in the **main** index. Kill-list is ignored.
+3. ``killlist_target = main``. Both document ids from **delta** index and its kill-list are suppressed in the **main** index.
 
-Multiple targets can be specified separated by comma like ``killlist_target = index_one:kl,index_two:k1``.
+Multiple targets can be specified separated by comma like ``killlist_target = index_one:kl,index_two:kl``.
 
 You can change ``killlist_target`` settings for an index without reindexing it by using ``ALTER``:
 
@@ -2018,7 +2021,7 @@ To be used in conjunction with in
 list defines characters, sequences of which are subject to N-gram
 extraction. Words comprised of other characters will not be affected by
 N-gram indexing feature. The value format is identical to
-:ref:`charset_table <charset_table>`. 
+:ref:`charset_table <charset_table>`.
 N-gram characters cannot appear in the :ref:`charset_table <charset_table>`.
 
 Example:
@@ -2028,8 +2031,8 @@ Example:
 
 
     ngram_chars = U+3000..U+2FA1F
-    
-    
+
+
 Also you can use an alias for our default N-gram table as in the example below.
 It should be sufficient in most cases.
 
@@ -2114,7 +2117,6 @@ Possible values:
 
 
 -  0 - disabled and default value, all attributes are loaded in memory
-   (the normal behaviour of docinfo = extern)
 -  1 - all attributes stay on disk. Daemon loads no files (.spa, .spb).
    This is the most memory conserving mode, however it is also the
    slowest as the whole doc-id-list and block index doesn't load.
@@ -2169,7 +2171,7 @@ remove ``.tmp*`` files is if indexer fails to remove them automatically.
 
 For reference, different index files store the following data:
 
--  ``.spa`` stores document attributes 
+-  ``.spa`` stores document attributes
 
 -  ``.spb`` stores blob attributes: strings, MVA, json
 
@@ -2812,18 +2814,18 @@ type
 Index type. Known values are ``plain``, ``distributed``, ``rt``,
 ``template`` and ``percolate``. Optional, default is ‘plain’ (plain local index).
 
-Manticore supports several different types of indexes. 
+Manticore supports several different types of indexes.
 Plain local indexes
-are stored and processed on the local machine. 
+are stored and processed on the local machine.
 Distributed indexes
 involve not only local searching but querying remote ``searchd``
-instances over the network as well (see :ref:`distributed_searching`). 
+instances over the network as well (see :ref:`distributed_searching`).
 Real-time indexes (or
 RT indexes for short) are also stored and processed locally, but
 additionally allow for on-the-fly updates of the full-text index (see
 :ref:`real-time_indexes`). Note that
 *attributes* can be updated on-the-fly using either plain local indexes
-or RT ones. 
+or RT ones.
 Template indexes are actually a pseudo-indexes because they
 do not store any data. That means they do not create any files on your
 hard drive. But you can use them for keywords and snippets generation,
@@ -2932,5 +2934,3 @@ ascending order. (If multi-byte codepages are used, and file names can
 include foreign characters, the resulting order may not be exactly
 alphabetic.) If a same wordform definition is found in several files,
 the latter one is used, and it overrides previous definitions.
-
-

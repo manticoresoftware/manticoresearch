@@ -235,7 +235,7 @@ success. Returns -1 and sets an error message on error.
 
 Attribute values updated using
 :ref:`UpdateAttributes() <update_attributes>`
-API call are done in a memory mapped file. Which means the OS
+API call are kept in a memory mapped file. Which means the OS
 decides when the updates are actually written to disk.
 FlushAttributes() call lets you enforce a flush, which writes all the
 changes to disk. The call will block
@@ -302,7 +302,7 @@ see below.
 
 Optional ``$type`` parameter can have the following values:
 
-1. ``SPH_UPDATE_INT``. This is the default value. ``$values`` hash holds 
+1. ``SPH_UPDATE_INT``. This is the default value. ``$values`` hash holds
 documents IDs as keys and a plain arrays of new attribute values.
 
 2. ``SPH_UPDATE_MVA``. Points that MVA attributes are being updated. In this

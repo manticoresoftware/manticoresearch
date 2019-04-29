@@ -67,14 +67,14 @@ attr_flush_period
 ~~~~~~~~~~~~~~~~~
 
 When calling ``UpdateAttributes()`` to update document attributes in
-real-time, changes are first written to the in-memory copy of attributes.
-Updates work on a memory mapped file, which means that the OS decides
+real-time, the changes are first written to in-memory copy of attributes.
+The updates are done in a memory mapped file, which means that the OS decides
 when to write these changes to disk. Once ``searchd`` shuts
-down normally (via ``SIGTERM`` being sent), all the changes are written to
+down normally (via ``SIGTERM`` being sent) it forces writing all the changes to
 disk.
 
-It is possible to tell ``searchd`` to periodically write these changes
-back to disk, to avoid them being lost. The time between those intervals
+It is also possible to tell ``searchd`` to periodically write these changes
+back to disk to avoid them being lost. The time between those intervals
 is set with ``attr_flush_period``, in seconds.
 
 It defaults to 0, which disables the periodic flushing, but flushing
@@ -789,7 +789,7 @@ fine tune network loop throughput at high load scenario.
 node_address
 ~~~~~~~~~~~~
 
-This setting lets you specify the network address of the node. By default it set to 
+This setting lets you specify the network address of the node. By default it set to
 replication :ref:`listen <listen>` address. That is correct in most cases, however there are
 situations where you have to specify it manually:
 
@@ -806,7 +806,7 @@ Examples:
 
 
     node_address = 10.101.0.10
-	
+
 
 .. _ondisk_attrs_default:
 

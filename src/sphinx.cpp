@@ -2326,7 +2326,7 @@ class CSphIndex_VLN : public CSphIndex, public IndexUpdateHelper_c, public Index
 	friend class CSphMerger;
 	friend class AttrIndexBuilder_c;
 	friend struct SphFinalMatchCalc_t;
-	friend class KeepAttrs_t;
+	friend class KeepAttrs_c;
 
 public:
 	explicit					CSphIndex_VLN ( const char* sIndexName, const char * sFilename );
@@ -11020,37 +11020,16 @@ void SourceCopyMva ( const BYTE * pData, int iLenBytes, CSphVector<int64_t> & dD
 	}
 }
 
-class KeepAttrs_t : public BlobSource_i
+class KeepAttrs_c : public BlobSource_i
 {
-private:
-	CSphScopedPtr<CSphIndex_VLN> m_pIndex;
-	CSphVector<CSphAttrLocator>	m_dLocPlain;
-	CSphBitvec m_dLocMva;
-	CSphBitvec m_dMvaField;
-	CSphBitvec m_dLocString;
-
-	bool m_bKeepSomeAttrs = false;
-	bool m_bHasMva = false;
-	bool m_bHasString = false;
-
-	const CSphRowitem * m_pRow = nullptr;
-	CSphVector<int64_t> m_dDataMva;
-	CSphString m_sDataString;
-	const CSphString m_sEmpty = "";
-
-	BlobSource_i * m_pBlobSource = nullptr;
-	DocID_t m_tDocid = 0;
-	QueryMvaContainer_c & m_tMvaContainer;
-
 public:
-	explicit KeepAttrs_t ( QueryMvaContainer_c & tMvaContainer )
+	explicit KeepAttrs_c ( QueryMvaContainer_c & tMvaContainer )
 		: m_pIndex ( nullptr )
 		, m_tMvaContainer ( tMvaContainer )
 	{}
 
-	virtual ~KeepAttrs_t() override
-	{
-	}
+	virtual ~KeepAttrs_c() override
+	{}
 
 	void SetBlobSource ( BlobSource_i * pSource )
 	{
@@ -11061,6 +11040,9 @@ public:
 	{
 		if ( sKeepAttrs.IsEmpty() && !dKeepAttrs.GetLength() )
 			return false;
+
+		m_bHasBlobAttrs = tSchema.HasBlobAttrs();
+		m_iStride = tSchema.GetRowSize();
 
 		CSphString sError;
 		CSphString sWarning;
@@ -11216,19 +11198,28 @@ public:
 		if ( m_bKeepSomeAttrs && !m_dLocPlain.GetLength() )
 			return pSrc;
 
-		// keep whole row
-		if ( !m_bKeepSomeAttrs )
-			return m_pRow;
-
-		// keep only some plain attributes
-		ARRAY_FOREACH ( i, m_dLocPlain )
+		if ( m_bKeepSomeAttrs )
 		{
-			const CSphAttrLocator & tLoc = m_dLocPlain[i];
-			SphAttr_t tAtrr = sphGetRowAttr ( m_pRow, tLoc );
-			sphSetRowAttr ( pSrc, tLoc, tAtrr );
+			// keep only some plain attributes
+			ARRAY_FOREACH ( i, m_dLocPlain )
+			{
+				const CSphAttrLocator & tLoc = m_dLocPlain[i];
+				SphAttr_t tAtrr = sphGetRowAttr ( m_pRow, tLoc );
+				sphSetRowAttr ( pSrc, tLoc, tAtrr );
+			}
+			return pSrc;
+		}
+		else if ( m_bHasBlobAttrs )
+		{
+			// copy whole row except blob row offset
+			SphOffset_t tOffset = sphGetBlobRowOffset(pSrc);
+			memcpy ( pSrc, m_pRow, m_iStride*sizeof(CSphRowitem) );
+			sphSetBlobRowOffset ( pSrc, tOffset );
+			return pSrc;
 		}
 
-		return pSrc;
+		// keep whole row
+		return m_pRow;
 	}
 
 	void Reset()
@@ -11237,6 +11228,28 @@ public:
 	}
 
 private:
+	CSphScopedPtr<CSphIndex_VLN>	m_pIndex;
+	CSphVector<CSphAttrLocator>		m_dLocPlain;
+	CSphBitvec						m_dLocMva;
+	CSphBitvec						m_dMvaField;
+	CSphBitvec						m_dLocString;
+
+	bool							m_bKeepSomeAttrs = false;
+	bool							m_bHasMva = false;
+	bool							m_bHasString = false;
+	bool							m_bHasBlobAttrs = false;
+
+	int								m_iStride = 0;
+	const CSphRowitem *				m_pRow = nullptr;
+	CSphVector<int64_t>				m_dDataMva;
+	CSphString						m_sDataString;
+	const CSphString				m_sEmpty = "";
+
+	BlobSource_i *					m_pBlobSource = nullptr;
+	DocID_t							m_tDocid = 0;
+	QueryMvaContainer_c &			m_tMvaContainer;
+
+
 	const BYTE * GetBlobData ( int iAttr, int & iLen, ESphAttr & eAttr )
 	{
 		const BYTE * pPool = m_pIndex->m_tBlobAttrs.GetWritePtr();
@@ -11544,7 +11557,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	CSphFixedVector<DocidRowidPair_t> dDocidLookup ( nDocidLookupsPerBlock );
 
 	// fallback blob source (for mva)
-	KeepAttrs_t tPrevAttrs ( tQueryMvaContainer );
+	KeepAttrs_c tPrevAttrs ( tQueryMvaContainer );
 	const bool bGotPrevIndex = tPrevAttrs.Init ( m_sKeepAttrs, m_dKeepAttrs, m_tSchema );
 
 	// create temp files

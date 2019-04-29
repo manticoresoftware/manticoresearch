@@ -13,11 +13,11 @@ We took advantage of Percona's fork of Galera library which gives the following 
 
 - true multi-master - read and write to any node at any time
 
-- synchronous replication - no slave lag, no data is lost at node crash
+- synchronous replication - no slave lag, no data is lost after a node crash
 
 - hot standby - no downtime during failover (since there is no failover)
 
-- tightly coupled - all nodes hold the same state. No diverged data between nodes allowed
+- tightly coupled - all the nodes hold the same state. No diverged data between nodes allowed
 
 - automatic node provisioning -  no need to manually back up the database and restore it on a new node
 
@@ -27,15 +27,15 @@ We took advantage of Percona's fork of Galera library which gives the following 
 
 - certification based replication
 
-To use replication in the daemon:
+To use replication with the daemon:
 
 - the daemon should be built with replication support (enabled in the `builds Manticore provides <https://manticoresearch.com/downloads/>`_)
 
 - :ref:`data_dir <data_dir>` option should be set in :ref:`searchd <searchd_program_configuration_options>` section of config
 
-- there should be a :ref:`listen <listen>` for replication protocol directive containing an external IP address and it should not be 0.0.0.0 along with ports range defined and these address port range pair should not be same for all daemons on same box
+- there should be a :ref:`listen <listen>` for the replication protocol directive containing an external IP address that should not be equal to 0.0.0.0 along with a ports range defined and these "address - port range" pairs should be different for all the daemons on the same box
 
-- there should be at least one value of :ref:`listen <listen>` for SphinxAPI protocol directive containing an external IP address and it should not be 0.0.0.0
+- there should be at least one value of :ref:`listen <listen>` for the SphinxAPI protocol directive containing an external IP address that should not be equal to 0.0.0.0
 
 
 .. _replication_cluster:
@@ -44,10 +44,10 @@ Replication cluster
 -------------------
 
 Replication cluster is a set of nodes among which a write transaction gets replicated.
-Replication is configured on a per-index basis. One index can be assigned to only
-one cluster. There is no restriction to how many indexes a cluster may have. All
+Replication is configured on the per-index basis. One index can be assigned to only
+one cluster. There is no restriction on how many indexes a cluster may have. All
 transactions such as ``INSERT``, ``REPLACE``, ``DELETE``, ``TRUNCATE`` in any
-percolate index belonging to a cluster are replicated to all other nodes in the
+percolate index belonging to a cluster are replicated to all the other nodes in the
 cluster. Replication is multi-master, so writes to any particular node or to
 multiple nodes simultaneously work equally well.
 
@@ -65,16 +65,16 @@ Specifies cluster name. Should be unique.
 path
 ~~~~
 
-Data directory for replication write-set cache and incoming indexes from other nodes.
-Should be unique among other clusters in the node. Default is :ref:`data_dir <data_dir>`.
+Data directory for a write-set cache replication and incoming indexes from other nodes.
+Should be unique among the other clusters in the node. Default is :ref:`data_dir <data_dir>`.
 
 .. _cluster_nodes:
 
 nodes
 ~~~~~
 
-List of pairs of address:port of all nodes in the cluster (comma separated).
-API interface of node should be used for nodes option.
+List of pairs address:port for all the nodes in the cluster (comma separated).
+API interface of node should be used for this option.
 It can contain the current node's address too.
 This is used to join cluster initially and rejoin the cluster after restart.
 

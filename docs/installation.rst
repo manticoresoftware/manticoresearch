@@ -163,7 +163,7 @@ In the following example we'll consider folder ``C:\Manticore`` where we unpack 
 
 The zip comes with 2 sample configurations: ``sphinx.conf.in`` and ``sphinx-min.conf.in``. The latter is a stripped-down of comments version of the first.  	
 
-The configuration contains a @CONFIGDIR@ string which needs to be replaced. The @CONFIGDIR@ is the root directory of ``data`` and ``log`` folders (first is used as location for indexes, second for logs).
+The configuration contains a ``@CONFIGDIR@`` string which needs to be replaced. The ``@CONFIGDIR@`` is the root directory of ``data`` and ``log`` folders (first is used as location for indexes, second for logs).
 The zip package comes with these folders, so they will be available at the location where you unzipped the package. If you want to use a different location, the two folders must be created there.
 
 Install the ``searchd`` system as a Windows service:
@@ -280,8 +280,8 @@ Required tools
 Required libraries/packages on Linux
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-* Development version of 'ssl' lib. Usually comes in package named like `libssl-dev` or `openssl-devel`.
-* Development version of 'boost'. On debian packages `libboost-system-dev` and `libboost-program-options-dev` are enough; on redhat it is `boost-devel`.
+* Development version of **ssl** lib. Usually comes in package named like **libssl-dev** or **openssl-devel**.
+* Development version of **boost**. On debian packages **libboost-system-dev** and **libboost-program-options-dev** are enough; on redhat it is **boost-devel**.
 
 
 Optional dependencies
@@ -299,8 +299,8 @@ General building options
 
 For compiling latest version of Manticore, recommended is checkout the latest code from the github repositiory.
 Alternative, for compiling a certain version, you can either checked that version from github or use it's respective source tarball.
-In last case avoid to use automatic tarballs from github (named there as 'Source code'), but use provided files as `manticore-2.4.1-171017-3b31a97-release.tar.gz`.
-When building from clone you need packages `git`, `flex`, `bison`. When building from tarball they are not necessary. This requirement
+In last case avoid to use automatic tarballs from github (named there as 'Source code'), but use provided files as **manticore-2.4.1-171017-3b31a97-release.tar.gz**.
+When building from git clone you need packages **git**, **flex**, **bison**. When building from tarball they are not necessary. This requirement
 may be essential to build on Windows.
 
 .. code-block:: bash
@@ -371,19 +371,19 @@ RHEL/CentOS 6  ship with a old version of the gcc compiler, which doesn't suppor
    $ yum install -y devtoolset-2-gcc devtoolset-2-binutils devtoolset-2-gcc-c++
    $ export PATH=/opt/rh/devtoolset-2/root/usr/bin:$PATH
 
-Manticore uses `cmake` for building. We recommend to use a folder outside the sources to keep them clean.
+Manticore uses **cmake** for building. We recommend to use a folder outside the sources to keep them clean.
 
 .. code-block:: bash
 
    $ mkdir build
    $ cd build
-   $ cmake -D WITH_MYSQL=1 -DWITH_RE2=1 ../manticore
+   $ cmake3 -D WITH_MYSQL=1 -DWITH_RE2=1 ../manticore
 
 or if we use sources from tarball:
 
 .. code-block:: bash
 
-   $ cmake -D WITH_MYSQL=1 -DWITH_RE2=1 ../manticore-2.4.1-171017-3b31a97-release
+   $ cmake3 -D WITH_MYSQL=1 -DWITH_RE2=1 ../manticore-2.4.1-171017-3b31a97-release
 
 To simply compile:
 
@@ -411,7 +411,7 @@ If, for example, we want to create a deb package for Debian Jessie, we need to s
 
 .. code-block:: bash
 
-   $ cmake -DDISTR_BUILD=jessie ../manticore
+   $ cmake3 -DDISTR_BUILD=jessie ../manticore
    $ make -j4 package	   
 
 This will create 2 deb packages, a manticore-x.x.x-bin.deb and a manticore-x.x.x-dbg.deb which contains the version with debug symbols.
@@ -444,7 +444,7 @@ If you didn't change path for sources and build, just move to you build folder a
 
 .. code-block:: bash
 
-   cmake .
+   cmake3 .
    make clean
    make
 

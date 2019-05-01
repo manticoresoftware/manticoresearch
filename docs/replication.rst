@@ -319,7 +319,7 @@ most advanced node to the ``primary component`` with :ref:`SET <set_syntax>` sta
 
 .. code-block:: sql
 
-     SET CLUSTER posts GLOBAL 'pc.bootstrap=1'
+     SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 
 
 All other nodes will reconnect to the node and resync their data based on this node.

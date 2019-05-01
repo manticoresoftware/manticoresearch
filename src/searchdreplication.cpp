@@ -100,7 +100,7 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	// state from plugin
 	CSphFixedVector<char>	m_dUUID { 0 };
 	int						m_iConfID = 0;
-	int						m_iStatus = 0;
+	int						m_iStatus = WSREP_VIEW_DISCONNECTED;
 	int						m_iSize = 0;
 	int						m_iIdx = 0;
 
@@ -120,6 +120,11 @@ struct ReplicationCluster_t : public ClusterDesc_t
 
 		return m_eNodeState;
 	}
+	void					SetPrimary ( wsrep_view_status_t eStatus )
+	{
+		m_iStatus = eStatus;
+	}
+	bool					IsPrimary() const { return ( m_iStatus==WSREP_VIEW_PRIMARY ); }
 
 private:
 	CSphAutoEvent m_tStateChanged;
@@ -376,8 +381,13 @@ static void LogGroupView ( const wsrep_view_info_t * pView )
 	sphLogDebugRpl ( "%s", sBuf.cstr() );
 }
 
-static bool CheckClasterState ( ClusterState_e eState, const CSphString & sCluster, CSphString & sError )
+static bool CheckClasterState ( ClusterState_e eState, bool bPrimary, const CSphString & sCluster, CSphString & sError )
 {
+	if ( !bPrimary )
+	{
+		sError.SetSprintf ( "cluster '%s' is not ready, not primary state (%s)", sCluster.cstr(), GetNodeState ( eState ) );
+		return false;
+	}
 	if ( eState!=ClusterState_e::SYNCED && eState!=ClusterState_e::DONOR )
 	{
 		sError.SetSprintf ( "cluster '%s' is not ready, current state is %s", sCluster.cstr(), GetNodeState ( eState ) );
@@ -390,16 +400,21 @@ static bool CheckClasterState ( ClusterState_e eState, const CSphString & sClust
 static bool CheckClasterState ( const ReplicationCluster_t * pCluster, CSphString & sError )
 {
 	assert ( pCluster );
-	ClusterState_e eState = pCluster->GetNodeState();
-	return CheckClasterState ( eState, pCluster->m_sName, sError );
+	const ClusterState_e eState = pCluster->GetNodeState();
+	const bool bPrimary = pCluster->IsPrimary();
+	return CheckClasterState ( eState, bPrimary, pCluster->m_sName, sError );
 }
 
-static CSphString GetOptions ( const SmallStringHash_T<CSphString> & hOptions )
+static CSphString GetOptions ( const SmallStringHash_T<CSphString> & hOptions, bool bSave )
 {
 	StringBuilder_c tBuf ( ";" );
 	void * pIt = nullptr;
 	while ( hOptions.IterateNext ( &pIt ) )
 	{
+		// skip one time options on save
+		if ( bSave && hOptions.IterateGetKey ( &pIt )=="pc.bootstrap" )
+			continue;
+
 		tBuf.Appendf ( "%s=%s", hOptions.IterateGetKey ( &pIt ).cstr(), hOptions.IterateGet ( &pIt ).cstr() );
 	}
 
@@ -485,9 +500,9 @@ static wsrep_cb_status_t ViewChanged_fn ( void * pAppCtx, void * pRecvCtx, const
 	ReplicationCluster_t * pCluster = pLocalCtx->m_pCluster;
 	memcpy ( pCluster->m_dUUID.Begin(), pView->state_id.uuid.data, pCluster->m_dUUID.GetLengthBytes() );
 	pCluster->m_iConfID = pView->view;
-	pCluster->m_iStatus = pView->status;
 	pCluster->m_iSize = pView->memb_num;
 	pCluster->m_iIdx = pView->my_idx;
+	pCluster->SetPrimary ( pView->status );
 	UpdateGroupView ( pView, pCluster );
 
 	*ppSstReq = nullptr;
@@ -802,7 +817,7 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	CSphString sFullClusterPath = GetClusterPath ( tArgs.m_pCluster->m_sPath );
 
 	StringBuilder_c sOptions ( ";" );
-	sOptions += GetOptions ( tArgs.m_pCluster->m_hOptions ).cstr();
+	sOptions += GetOptions ( tArgs.m_pCluster->m_hOptions, false ).cstr();
 
 	// all replication options below have not stored into cluster config
 
@@ -957,6 +972,11 @@ static bool Replicate ( uint64_t uQueryHash, const CSphVector<BYTE> & dBuf, wsre
 	{
 		tRes = pProvider->replicate ( pProvider, iConnId, &tHnd, WSREP_FLAG_COMMIT, &tLogMeta );
 		bOk = CheckResult ( tRes, tLogMeta, "replicate", sError );
+	}
+	if ( tRes==WSREP_TRX_FAIL )
+	{
+		wsrep_status_t tRoll = pProvider->post_rollback ( pProvider, &tHnd );
+		CheckResult ( tRoll, tLogMeta, "post_rollback", sError );
 	}
 
 	sphLogDebugRpl ( "replicating %d, seq " INT64_FMT ", hash " UINT64_FMT, (int)bOk, (int64_t)tLogMeta.gtid.seqno, uQueryHash );
@@ -1474,17 +1494,21 @@ bool HandleCmdReplicate ( ReplicationCommand_t & tCmd, CSphString & sError, int 
 		return tMonitor.Commit ( sError );
 
 	ClusterState_e eClusterState = ClusterState_e::CLOSED;
+	bool bPrimary = false;
 	g_tClustersLock.ReadLock();
 	ReplicationCluster_t ** ppCluster = g_hClusters ( tCmd.m_sCluster );
 	if ( ppCluster )
+	{
 		eClusterState = (*ppCluster)->GetNodeState();
+		bPrimary = (*ppCluster)->IsPrimary();
+	}
 	g_tClustersLock.Unlock();
 	if ( !ppCluster )
 	{
 		sError.SetSprintf ( "unknown cluster '%s'", tCmd.m_sCluster.cstr() );
 		return false;
 	}
-	if ( !CheckClasterState ( eClusterState, tCmd.m_sCluster, sError ) )
+	if ( !CheckClasterState ( eClusterState, bPrimary, tCmd.m_sCluster, sError ) )
 		return false;
 
 	if ( tCmd.m_eCommand==RCOMMAND_TRUNCATE && tCmd.m_bReconfigure )
@@ -1861,7 +1885,7 @@ void JsonConfigDumpClusters ( const SmallStringHash_T<ReplicationCluster_t *> & 
 	{
 		const ReplicationCluster_t * pCluster = hClusters.IterateGet ( &pIt );
 
-		CSphString sOptions = GetOptions ( pCluster->m_hOptions );
+		CSphString sOptions = GetOptions ( pCluster->m_hOptions, true );
 
 		JsonObj_c tItem;
 		tItem.AddStr ( "path", pCluster->m_sPath );

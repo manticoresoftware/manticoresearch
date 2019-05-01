@@ -2580,6 +2580,7 @@ int main ( int argc, char ** argv )
 		if ( ( bAll || !sIndexName.IsEmpty() ) && !pIndexes )
 			sphDie ( "no indexes found in config" );
 
+		sphConfigureCommon ( tConfig.m_tConf );
 		pIndexes->IterateStart();
 	}
 

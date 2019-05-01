@@ -933,10 +933,10 @@ node they reside.
 
 The easiest way to fix that issue is to create and utilize a global
 frequency dictionary, or a global IDF file for short. This directive
-lets you specify the location of that file. It it suggested (but not
-required) to use a .idf extension. When the IDF file is specified for a
-given index *and* and OPTION global_idf is set to 1, the engine will
-use the keyword frequencies and collection documents count from the
+lets you specify the location of that file. It is suggested (but not
+required) to use an .idf extension. When the IDF file is specified for a
+given index *and* OPTION global_idf is set to 1, the engine will
+use the keyword frequencies and collection documents counts from the
 global_idf file, rather than just the local index. That way, IDFs and
 the values that depend on them will stay consistent across the cluster.
 

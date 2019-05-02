@@ -586,13 +586,13 @@ ranges of characters at once. The complete list is as follows:
    a number of Unicode blocks where uppercase and lowercase letters go
    in such interleaved order instead of contiguous chunks.
 
-Control characters with codes from 0 to 31 are always treated as
-separators. Characters with codes 32 to 127, ie. 7-bit ASCII characters,
+Control characters with codes from 0 to 32 are always treated as
+separators. Characters with codes 33 to 127, ie. 7-bit ASCII characters,
 can be used in the mappings as is. To avoid configuration file encoding
 issues, 8-bit ASCII characters and Unicode characters must be specified
 in U+xxx form, where ‘xxx’ is hexadecimal codepoint number. This form
 can also be used for 7-bit ASCII characters to encode special ones: eg.
-use U+20 to encode space, U+2E to encode dot, U+2C to encode comma.
+use U+2E to encode dot, U+2C to encode comma.
 
 Aliases “english” and “russian” are allowed at control character
 mapping.

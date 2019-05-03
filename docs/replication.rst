@@ -8,7 +8,9 @@ Replication
   Please note that this feature is in preview stage. Some functionality may be not yet complete and may suffer changes.
   Read carefully changelogs of future updates to avoid possible breakages.
 
-Manticore search daemon can replicate a write transaction in a percolate index to other nodes in the cluster.
+Manticore search daemon can replicate a write transaction (``INSERT``, ``REPLACE``, ``DELETE``, ``TRUNCATE``, etc)
+in an index to other nodes in the cluster. Currently only percolate indexes are supported, rt index support is in progress.
+
 We took advantage of Percona's fork of Galera library which gives the following benefits:
 
 - true multi-master - read and write to any node at any time
@@ -27,7 +29,7 @@ We took advantage of Percona's fork of Galera library which gives the following 
 
 - certification based replication
 
-To use replication with the daemon:
+To use replication in Manticore search:
 
 - the daemon should be built with replication support (enabled in the `builds Manticore provides <https://manticoresearch.com/downloads/>`_)
 
@@ -65,18 +67,18 @@ Specifies a name for the cluster. Should be unique.
 path
 ~~~~
 
-Data directory for a write-set cache replication and incoming indexes from other nodes.
-Should be unique among the other clusters in the node. Default is :ref:`data_dir <data_dir>`.
+Data directory for a `write-set cache replication <http://galeracluster.com/documentation-webpages/statetransfer.html#gcache>`_
+and incoming indexes from other nodes. Should be unique among the other clusters in the node. Default is :ref:`data_dir <data_dir>`.
 
 .. _cluster_nodes:
 
 nodes
 ~~~~~
 
-List of pairs address:port for all the nodes in the cluster (comma separated).
+A list of address:port pairs for all the nodes in the cluster (comma separated).
 A node's API interface should be used for this option.
 It can contain the current node's address too.
-This is used to join a node to the cluster and rejoin it after restart.
+This list is used to join a node to the cluster and rejoin it after restart.
 
 .. _cluster_options:
 
@@ -89,13 +91,12 @@ here `Galera Documentation Parameters <http://galeracluster.com/documentation-we
 
 .. _replication_create:
 
-Create cluster
---------------
+Creating a cluster
+------------------
 
 To create a cluster you should set at least its :ref:`name <cluster_name>`. In case of a single cluster or if the cluster you are creating is the first one
-:ref:`path <cluster_path>` option may be omitted, in this case :ref:`data_dir <data_dir>`
-option will be used as the cluster path. For all subsequent clusters you need to specify
-:ref:`path <cluster_path>` and this path should be available. :ref:`nodes <cluster_nodes>` option
+:ref:`path <cluster_path>` option may be omitted, in this case :ref:`data_dir <data_dir>` option will be used as the cluster path.
+For all subsequent clusters you need to specify :ref:`path <cluster_path>` and this path should be available. :ref:`nodes <cluster_nodes>` option
 may be also set to enumerate all the nodes in the cluster.
 
 .. code-block:: sql
@@ -104,13 +105,13 @@ may be also set to enumerate all the nodes in the cluster.
     CREATE CLUSTER click_query '/var/data/click_query/' as path
     CREATE CLUSTER click_query '/var/data/click_query/' as path, 'clicks_mirror1:9312,clicks_mirror2:9312,clicks_mirror3:9312' as nodes
 
-In case a cluster is created without nodes list option the first node to be joined to the cluster will be saved as a value for it.
+If a cluster is created without the :ref:`nodes <_cluster_nodes>` option, the first node that gets joined to the cluster will be saved as `nodes`.
 
 
 .. _replication_join_at:
 
-Join cluster
-------------
+Joining a cluster
+-----------------
 
 To join an existing cluster :ref:`name <cluster_name>` and any working node should be set.
 In case of a single cluster :ref:`path <cluster_path>` might be omitted, :ref:`data_dir <data_dir>`
@@ -118,27 +119,39 @@ will be used as the cluster path. For all subsequent clusters :ref:`path <cluste
 
 .. code-block:: sql
 
-    JOIN CLUSTER posts at '10.12.1.35:9312'
+    JOIN CLUSTER posts AT '10.12.1.35:9312'
 
-A node joins cluster by getting data from the node provided and, if successful, it updates nodes list in all the other cluster nodes the same way as here  :ref:`alter update nodes <replication_alter_update>`.
+A node joins a cluster by getting the data from the node provided and, if successful, it updates node lists in all the other cluster nodes
+similar to :ref:`ALTER CLUSTER ... UPDATE nodes <replication_alter_update>`. These lists are used to rejoin nodes to
+the cluster on restart.
+
+There are two lists of nodes. One is used to rejoin nodes to the cluster on restart, it is updated across all nodes by
+:ref:`ALTER CLUSTER ... UPDATE nodes <replication_alter_update>`. `JOIN CLUSTER ... AT` does the same update automatically.
+:ref:`SHOW STATUS <replication_status>` shows this list as `cluster_post_nodes_set`.
+
+The second list is a list of all active nodes used for replication. This list doesn't require manual management.
+:ref:`ALTER CLUSTER ... UPDATE nodes <replication_alter_update>` actually copies this list of nodes to the list of nodes
+used to rejoin on restart. :ref:`SHOW STATUS <replication_status>` shows this list as `cluster_post_nodes_view`.
 
 When nodes are located at different network segments or in different datacenters :ref:`nodes <cluster_nodes>` option may be set
 explicitly. That allows to minimize traffic between nodes and to use gateway nodes for datacenters intercommunication.
-This form join an existing cluster :ref:`name <cluster_name>` uses nodes option :ref:`nodes <cluster_nodes>`.
+The following command joins an existing cluster using the :ref:`nodes <cluster_nodes>` option.
 
 .. code-block:: sql
 
-    JOIN CLUSTER click_query  'clicks_mirror1:9312;clicks_mirror2:9312;clicks_mirror3:9312' as nodes, '/var/data/click_query/' as path
+    JOIN CLUSTER click_query 'clicks_mirror1:9312;clicks_mirror2:9312;clicks_mirror3:9312' as nodes, '/var/data/click_query/' as path
+
+Note that when this syntax is used, `cluster_post_nodes_set` list is not updated automatically. Use :ref:`ALTER CLUSTER ... UPDATE nodes <replication_alter_update>`
+to update it.
 
 
 .. _replication_delete:
 
-Delete cluster
---------------
+Deleting a cluster
+------------------
 
 Delete statement removes a cluster specified with :ref:`name <cluster_name>`. The cluster
-gets removed from all the nodes, but its indexes are left intact and become just
-active local non-replicated indexes.
+gets removed from all the nodes, but its indexes are left intact and become active local non-replicated indexes.
 
 .. code-block:: sql
 
@@ -147,12 +160,15 @@ active local non-replicated indexes.
 
 .. _replication_alter:
 
-Indexes management
-----------------------------------------
+Managing indexes
+----------------
 
-ALTER statement adds an existing local PQ index to the cluster or forgets about the
-index, i.e., it doesn't remove the index files on the nodes but just makes it
-an active non-replicated index.
+`ALTER CLUSTER <cluster_name> ADD <index_name>` adds an existing local PQ index to the cluster.
+The node which receives the ALTER query sends the index to the other nodes in the cluster. All the local
+indexes with the same name on the other nodes of the cluster get replaced with the new index.
+
+`ALTER CLUSTER <cluster_name> DROP <index_name>` forgets about a local PQ index, i.e., it doesn't remove
+the index files on the nodes but just makes it an active non-replicated index.
 
 .. code-block:: sql
 
@@ -160,71 +176,66 @@ an active non-replicated index.
      ALTER CLUSTER posts DROP weekly_index
 
 
-The node which receives ALTER query sends the index to the other nodes in the cluster.
-All local indexes with the same name on the other cluster's nodes get replaced.
-
 .. _replication_alter_update:
 
-Nodes management
-----------------------------------------
+Managing nodes
+--------------
 
-ALTER UPDATE nodes statement sets list nodes option for a cluster on each node to include every node
-that is actually in the cluster now
+`ALTER CLUSTER <cluster_name> UPDATE nodes` statement updates node lists on each node of the cluster to include
+every active node in the cluster. See :ref:`Joining a cluster<_replication_join_at>` for more info on node lists.
 
 .. code-block:: sql
 
      ALTER CLUSTER posts UPDATE nodes
 	 
-For example, after cluster's creation a nodes list was ``10.10.0.1:9312,10.10.1.1:9312`` Since that
-other nodes also joined the cluster and currently it became
-``10.10.0.1:9312,10.10.1.1:9312,10.15.0.1:9312,10.15.0.3:9312``. It might be better to issue this
-statement and update nodes list from the current cluster view to comprise all nodes in the cluster on node restart.
-The cluster nodes list and the node's current cluster view can be inspected with
-:ref:`SHOW STATUS <replication_status>` statement.
+For example, when the cluster was initially created, the list of nodes used for rejoining the cluster was ``10.10.0.1:9312,10.10.1.1:9312``.
+Since then other nodes joined the cluster and now we have the following active nodes: ``10.10.0.1:9312,10.10.1.1:9312,10.15.0.1:9312,10.15.0.3:9312``.
+But the list of nodes used for rejoining the cluster is still the same. Running the `ALTER CLUSTER ... UPDATE nodes` statement
+copies the list of active nodes to the list of nodes used to rejoin on restart. After this, the list of nodes used on restart includes all
+the active nodes in the cluster.
 
+Both lists of nodes can be viewed using :ref:`SHOW STATUS <replication_status>` statement (`cluster_post_nodes_set` and `cluster_post_nodes_view`).
 
 .. _replication_write:
 
 Write statements
-----------------------------------------
+----------------
 
 All write statements such as ``INSERT``, ``REPLACE``, ``DELETE``, ``TRUNCATE`` that
-change the content of a cluster's index should use ``cluster_name:index_name`` expression to make sure the change is propagated to all replicas in the cluster.
-An error will be triggered otherwise.
+change the content of a cluster's index should use ``cluster_name:index_name`` expression in place of an index name to make
+sure the change is propagated to all replicas in the cluster. An error will be triggered otherwise.
 
 .. code-block:: sql
 
      INSERT INTO posts:weekly_index VALUES ( 'iphone case' )
      TRUNCATE RTINDEX click_query:weekly_index
 
-Read statements such as ``CALL PQ``, ``SELECT`` or ``DESCRIBE``
-can use either regular index names not prepended with a cluster name
-or ``cluster_name:index_name`` expression. ``cluster_name:index_name`` form just ignores
-cluster name and might be used on an index that doesn't belong to the cluster.
+Read statements such as ``CALL PQ``, ``SELECT`` or ``DESCRIBE`` can use either regular index names not prepended with
+a cluster name or ``cluster_name:index_name``. ``cluster_name:index_name`` syntax ignores the cluster name and may be used
+on an index that doesn't belong to the cluster.
 
 .. code-block:: sql
 
      SELECT * FROM weekly_index
      CALL PQ('posts:weekly_index', 'document is here')
 
+Insertion of a percolate query performed at multiple nodes of the same cluster at the same time with auto generated document
+id may trigger an error as, for now, id auto generation takes into account only the local index.
+This may generate a duplicate id and replication requires no id conflicts.
+If an insert fails, retry should work well in most cases, but it depends on the insertion rate.
 
-The insert of a percolate query performed at multiple nodes of the same cluster at the same time
-with auto generated document id may trigger an error as, for now, id auto generation
-takes into account only local index, but the replication guarantees no id conflict.
-Retry should work well in most cases, but it depends on the insert rate.
-However, the replacing of percolate queries at multiple nodes at the same time with auto generated document
-``id`` may cause to replace only the query from the last finished request.
+However, replacement of percolate queries at multiple nodes at the same time with auto generated document
+``id`` may cause only the query from the last finished request to be replaced.
 
-In future, this behavior may be improved with switching to UUID.
+In the future, this behavior will be improved by switching to UUIDs.
 
 
 .. _replication_status:
 
 Cluster status
-----------------------------------------
+--------------
 
-:ref:`SHOW STATUS <show_status_syntax>` outputs, among other information, also 
-cluster status variables. The output format is
+:ref:`SHOW STATUS <show_status_syntax>` outputs, among other information, cluster status variables. The output format is
 ``cluster_name_variable_name`` ``variable_value``. Most of them are described in
 `Galera Documentation Status <http://galeracluster.com/documentation-webpages/galerastatusvariables.html>`__.
 Additionally we display:
@@ -233,11 +244,11 @@ Additionally we display:
 
 - node_state - current state of the node: ``closed``, ``destroyed``, ``joining``, ``donor``, ``synced``
 
-- indexes_count - how many indexes are managed by the cluster
+- indexes_count - number of indexes managed by the cluster
 
 - indexes - list of index names managed by the cluster
 
-- nodes_set - list of nodes in the cluster defined with cluster CREATE or JOIN command
+- nodes_set - list of nodes in the cluster defined with cluster CREATE, JOIN or ALTER UPDATE commands
 
 - nodes_view - actual list of nodes in cluster which this node sees
 
@@ -267,7 +278,7 @@ Additionally we display:
 .. _replication_set:
 
 Cluster parameters
-----------------------------------------
+------------------
 
 Replication plugin options can be changed using :ref:`SET <set_syntax>` statement:
 
@@ -275,11 +286,13 @@ Replication plugin options can be changed using :ref:`SET <set_syntax>` statemen
 
      SET CLUSTER click_query GLOBAL 'pc.bootstrap' = 1
 
+See `Galera Documentation Parameters <http://galeracluster.com/documentation-webpages/galeraparameters.html>`_
+for a list of available options.
 
 .. _replication_restart:
 
-Cluster restart
-----------------------------------------
+Restarting a cluster
+--------------------
 
 A replication cluster requires its single node to be started as a
 reference point before all the other nodes join it and form a cluster. This is
@@ -288,13 +301,13 @@ see that as a reference point to sync up the data from. The restart of a single 
 or reconnecting from a node after a shutdown can be done as usual.
 
 After the whole cluster shutdown the daemon that was stopped last should be started first
-with the command line key ``--new-cluster``. To make sure that the daemon is able to
+with ``--new-cluster`` command line option. To make sure that the daemon is able to
 start as a reference point the ``grastate.dat`` file located at the cluster :ref:`path <cluster_path>`
 should be updated with the value of ``1`` for ``safe_to_bootstrap`` option. I.e.,
-the both conditions, ``--new-cluster`` and ``safe_to_bootstrap=1``, should be satisfied.
-Attempt to start any other node without these options set will trigger an error.
-To override this protection and start cluster from another daemon forcibly, the command line key
-``--new-cluster-force`` can be used.
+both conditions, ``--new-cluster`` and ``safe_to_bootstrap=1``, must be satisfied.
+An attempt to start any other node without these options set will trigger an error.
+To override this protection and start cluster from another daemon forcibly, ``--new-cluster-force``
+command line option may be used.
 
 In case of a hard crash or an unclean shutdown of all the daemons in the cluster you need to
 identify the most advanced node that has the largest ``seqno`` in the ``grastate.dat`` file
@@ -305,15 +318,15 @@ key ``--new-cluster-force``.
 .. _replication_diverge:
 
 Cluster with diverged nodes
-----------------------------------------
+---------------------------
 
-Sometimes replicated nodes can be diverged from each other. The state of all the nodes
+Sometimes replicated nodes can diverge from each other. The state of all the nodes
 might turn into ``non-primary`` due to a network split between nodes, a cluster
 crash, or if the replication plugin hits an exception when determining the ``primary component``.
 Then it's necessary to select a node and promote it to the ``primary component``.
 
 To determine which node needs to be a reference, compare the ``last_committed``
-cluster status variable value on all the nodes. In case all the daemons are already
+cluster status variable value on all nodes. If all the daemons are already
 running there's no need to start the cluster again. You just need to promote the
 most advanced node to the ``primary component`` with :ref:`SET <set_syntax>` statement:
 

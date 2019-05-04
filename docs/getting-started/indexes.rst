@@ -132,9 +132,8 @@ The more interesting strategies are the latency-weighted probabilities based one
 Replication and cluster
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-Replication to work needs these additional options at daemon section of config:
-:ref:`listen <listen>` API and replication with external IP and :ref:`data_dir <data_dir>`
-
+To use replication define one :ref:`listen <listen>` address and port for SphinxAPI protocol and one :ref:`listen <listen>` for
+replication address and port range in the config. Define :ref:`data_dir <data_dir>` folder for incoming indexes.
 
 .. code-block::  none
 
@@ -145,13 +144,13 @@ Replication to work needs these additional options at daemon section of config:
     ...
    }
 
-User creates cluster via SphinxQL interface at daemon that has local indexes these going to be replicated 
+Create a cluster (via SphinxQL) at the daemon that has local indexes that need to be replicated 
 
 .. code-block:: sql
 
     CREATE CLUSTER posts
 	
-then adds local indexes into cluster	
+Add these local indexes to cluster
 
 .. code-block:: sql
 
@@ -164,12 +163,10 @@ All other nodes that want replica of cluster's indexes should join cluster as
 
     JOIN CLUSTER posts AT '192.168.1.101:9312'
 
-
-Now any queries that modify these indexes belong to cluster use cluster name ``posts:`` as prefix
+When running queries prepend the index name with the cluster name (``posts:``).
 
 .. code-block:: sql
 
     INSERT INTO posts:pq_title VALUES ( 3, 'test me' )
 
-And any queries that modify these indexes got replicated on all nodes in cluster.
-
+Now all such queries that modify indexes in the cluster are replicated to all nodes in the cluster.

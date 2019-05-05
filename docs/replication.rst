@@ -141,7 +141,7 @@ The following command joins an existing cluster using the :ref:`nodes <cluster_n
 
     JOIN CLUSTER click_query 'clicks_mirror1:9312;clicks_mirror2:9312;clicks_mirror3:9312' as nodes, '/var/data/click_query/' as path
 
-Note that when this syntax is used, `cluster_post_nodes_set` list is not updated automatically. Use :ref:`ALTER CLUSTER ... UPDATE nodes <replication_alter_update>`
+Note that when this syntax is used, ``cluster_post_nodes_set`` list is not updated automatically. Use :ref:`ALTER CLUSTER ... UPDATE nodes <replication_alter_update>`
 to update it.
 
 ``JOIN CLUSTER`` statement completes when a node receives all the neccesary data to be in sync with all the other nodes in the cluster.
@@ -183,7 +183,7 @@ the index files on the nodes but just makes it an active non-replicated index.
 Managing nodes
 --------------
 
-`ALTER CLUSTER <cluster_name> UPDATE nodes` statement updates node lists on each node of the cluster to include
+``ALTER CLUSTER <cluster_name> UPDATE nodes`` statement updates node lists on each node of the cluster to include
 every active node in the cluster. See :ref:`Joining a cluster<_replication_join_at>` for more info on node lists.
 
 .. code-block:: sql
@@ -192,7 +192,7 @@ every active node in the cluster. See :ref:`Joining a cluster<_replication_join_
 	 
 For example, when the cluster was initially created, the list of nodes used for rejoining the cluster was ``10.10.0.1:9312,10.10.1.1:9312``.
 Since then other nodes joined the cluster and now we have the following active nodes: ``10.10.0.1:9312,10.10.1.1:9312,10.15.0.1:9312,10.15.0.3:9312``.
-But the list of nodes used for rejoining the cluster is still the same. Running the `ALTER CLUSTER ... UPDATE nodes` statement
+But the list of nodes used for rejoining the cluster is still the same. Running the ``ALTER CLUSTER ... UPDATE nodes`` statement
 copies the list of active nodes to the list of nodes used to rejoin on restart. After this, the list of nodes used on restart includes all
 the active nodes in the cluster.
 

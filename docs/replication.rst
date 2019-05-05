@@ -35,7 +35,7 @@ To use replication in Manticore search:
 
 - :ref:`data_dir <data_dir>` option should be set in :ref:`searchd <searchd_program_configuration_options>` section of config
 
-- there should be a :ref:`listen <listen>` for the replication protocol directive containing an external IP address that should not be equal to 0.0.0.0 along with a ports range defined and these "address - port range" pairs should be different for all the daemons on the same box
+- there should be a :ref:`listen <listen>` for the replication protocol directive containing an external IP address that should not be equal to 0.0.0.0 along with a ports range defined and these "address - port range" pairs should be different for all the daemons on the same box. As a rule of thumb, port range should specify no less than two ports per cluster.
 
 - there should be at least one value of :ref:`listen <listen>` for the SphinxAPI protocol directive containing an external IP address that should not be equal to 0.0.0.0
 
@@ -126,12 +126,12 @@ similar to :ref:`ALTER CLUSTER ... UPDATE nodes <replication_alter_update>`. The
 the cluster on restart.
 
 There are two lists of nodes. One is used to rejoin nodes to the cluster on restart, it is updated across all nodes by
-:ref:`ALTER CLUSTER ... UPDATE nodes <replication_alter_update>`. `JOIN CLUSTER ... AT` does the same update automatically.
-:ref:`SHOW STATUS <replication_status>` shows this list as `cluster_post_nodes_set`.
+:ref:`ALTER CLUSTER ... UPDATE nodes <replication_alter_update>`. ``JOIN CLUSTER ... AT`` does the same update automatically.
+:ref:`SHOW STATUS <replication_status>` shows this list as ``cluster_post_nodes_set``.
 
 The second list is a list of all active nodes used for replication. This list doesn't require manual management.
 :ref:`ALTER CLUSTER ... UPDATE nodes <replication_alter_update>` actually copies this list of nodes to the list of nodes
-used to rejoin on restart. :ref:`SHOW STATUS <replication_status>` shows this list as `cluster_post_nodes_view`.
+used to rejoin on restart. :ref:`SHOW STATUS <replication_status>` shows this list as ``cluster_post_nodes_view``.
 
 When nodes are located at different network segments or in different datacenters :ref:`nodes <cluster_nodes>` option may be set
 explicitly. That allows to minimize traffic between nodes and to use gateway nodes for datacenters intercommunication.
@@ -143,6 +143,8 @@ The following command joins an existing cluster using the :ref:`nodes <cluster_n
 
 Note that when this syntax is used, `cluster_post_nodes_set` list is not updated automatically. Use :ref:`ALTER CLUSTER ... UPDATE nodes <replication_alter_update>`
 to update it.
+
+``JOIN CLUSTER`` statement completes when a node receives all the neccesary data to be in sync with all the other nodes in the cluster.
 
 
 .. _replication_delete:
@@ -163,11 +165,11 @@ gets removed from all the nodes, but its indexes are left intact and become acti
 Managing indexes
 ----------------
 
-`ALTER CLUSTER <cluster_name> ADD <index_name>` adds an existing local PQ index to the cluster.
+``ALTER CLUSTER <cluster_name> ADD <index_name>`` adds an existing local PQ index to the cluster.
 The node which receives the ALTER query sends the index to the other nodes in the cluster. All the local
 indexes with the same name on the other nodes of the cluster get replaced with the new index.
 
-`ALTER CLUSTER <cluster_name> DROP <index_name>` forgets about a local PQ index, i.e., it doesn't remove
+``ALTER CLUSTER <cluster_name> DROP <index_name>`` forgets about a local PQ index, i.e., it doesn't remove
 the index files on the nodes but just makes it an active non-replicated index.
 
 .. code-block:: sql
@@ -194,7 +196,7 @@ But the list of nodes used for rejoining the cluster is still the same. Running 
 copies the list of active nodes to the list of nodes used to rejoin on restart. After this, the list of nodes used on restart includes all
 the active nodes in the cluster.
 
-Both lists of nodes can be viewed using :ref:`SHOW STATUS <replication_status>` statement (`cluster_post_nodes_set` and `cluster_post_nodes_view`).
+Both lists of nodes can be viewed using :ref:`SHOW STATUS <replication_status>` statement (``cluster_post_nodes_set`` and ``cluster_post_nodes_view``).
 
 .. _replication_write:
 

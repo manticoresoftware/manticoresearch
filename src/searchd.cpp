@@ -11790,7 +11790,7 @@ void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char 
 
 	LogSphinxqlError ( sStmt, sError, iCID );
 
-	int iErrorLen = strlen(sError)+1; // including the trailing zero
+	int iErrorLen = strlen(sError);
 
 	// cut the error message to fix isseue with long message for popular clients
 	if ( iErrorLen>SPH_MYSQL_ERROR_MAX_LENGTH )
@@ -11857,7 +11857,7 @@ void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedR
 
 	int iMsgLen = 0;
 	if ( sMessage )
-		iMsgLen = strlen(sMessage) + 1; // FIXME! does or doesn't the trailing zero necessary in Ok packet?
+		iMsgLen = strlen(sMessage);
 
 	tOut.SendLSBDword ( DWORD (uPacketID<<24) + iLen + iMsgLen + 5);
 	tOut.SendByte ( 0 );				// ok packet

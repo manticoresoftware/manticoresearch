@@ -1,6 +1,40 @@
 Release notes
 =============
 
+
+Version 3.0.0, 6 May 2019
+-------------------------------
+
+Features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* New index storage. Non-scalar attributes are not limited anymore to 4GB size per index
+* attr_update_reserve directive
+* String,JSON and MVAs can be updated using UPDATE
+* killlists are applied at index load time
+* killlist_target directive
+* multi AND searches speedup
+* better average performance and RAM usage
+* convert tool for upgrading indexes made with 2.x
+* CONCAT() function
+* JOIN CLUSTER cluster AT 'nodeaddress:port'
+* ALTER CLUSTER posts UPDATE nodes
+* node_address directive
+* list of nodes printed in SHOW STATUS
+
+Behaviour changes
+~~~~~~~~~~~~~~~~~
+
+* in case of indexes with killists, daemon doesn't rotate indexes in order defined in conf, but follows the chain of killlist targets
+* order of indexes in a search no longer defines the order in which killlists are applied
+* Document IDs are now signed big integers
+
+Removed directives
+~~~~~~~~~~~~~~~~~~
+
+* docinfo (always extern now), inplace_docinfo_gap, mva_updates_pool 
+
+
 Version 2.8.2 GA, 2 April 2019
 ------------------------------
 

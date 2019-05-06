@@ -3505,18 +3505,35 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 	if ( isdigit ( m_pCur[0] ) )
 		return ParseNumeric ( lvalp, &m_pCur );
 
+	bool bBackQuote = m_pCur[0]=='`';
+
 	// check for field, function, or magic name
 	if ( sphIsAttr ( m_pCur[0] )
-		|| ( m_pCur[0]=='@' && sphIsAttr ( m_pCur[1] ) && !isdigit ( m_pCur[1] ) ) )
+		|| ( m_pCur[0]=='@' && sphIsAttr ( m_pCur[1] ) && !isdigit ( m_pCur[1] ) )
+		|| ( bBackQuote && sphIsAttr ( m_pCur[1] ) ) )
 	{
 		// get token
 		const char * pStart = m_pCur++;
+		if ( bBackQuote )
+			pStart++;
+
 		while ( sphIsAttr ( *m_pCur ) ) m_pCur++;
 
 		CSphString sTok;
 		sTok.SetBinary ( pStart, m_pCur-pStart );
 		CSphString sTokMixedCase = sTok;
 		sTok.ToLower ();
+
+		if ( bBackQuote )
+		{
+			if ( *m_pCur!='`' )
+			{
+				m_sLexerError.SetSprintf ( "expected '`' near '%s'", m_pCur );
+				return -1;
+			}
+
+			m_pCur++;
+		}
 
 		// check for magic name
 		if ( sTok=="@id" )

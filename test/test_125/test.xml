@@ -135,6 +135,20 @@ index test_json
 	path			= <data_path/>/test_json
 }
 
+source test_name
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from name_table
+	sql_attr_uint	= 123_attr1
+	sql_attr_uint	= 10000attr2
+}
+
+index test_name
+{
+	source			= test_name
+	path			= <data_path/>/test_name
+}
 </config>
 
 <db_create>
@@ -186,12 +200,21 @@ CREATE TABLE json_table (
   PRIMARY KEY (`id`)
 );
 </db_create>
+<db_create>
+CREATE TABLE name_table (
+  `id` int(11),
+  `title` varchar(255),
+  `123_attr1` int(11),
+  `10000attr2` int(11)
+);
+</db_create>
 
 <db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
 <db_drop>DROP TABLE IF EXISTS cmp_table;</db_drop>
 <db_drop>DROP TABLE IF EXISTS string_table;</db_drop>
 <db_drop>DROP TABLE IF EXISTS string_table1;</db_drop>
 <db_drop>DROP TABLE IF EXISTS json_table;</db_drop>
+<db_drop>DROP TABLE IF EXISTS name_table;</db_drop>
 
 <db_insert>
 INSERT INTO test_table ( id, aa, title, mm, kk, f1, f2 ) VALUES
@@ -230,6 +253,12 @@ INSERT INTO json_table VALUES
 (1,1,'test one','{"name":"Alice","uid":123, "lon":-0.0798578, "lat":0.937717, "pct":12.4, "sq":9, "poly":"1,2,3,4,5,6.0", "points":[1,2,3,4,5,6.0]}'),
 (2,1,'test two','{"name":"Bob","uid":234,"gid":12, "lon":-0.0799989, "lat":0.891975, "pct":-103.7, "sq":16, "poly":"1,-2,1,2,-5,6", "points":[1,-2,1,2,-5,6]}'),
 (3,2,'another doc','{"name":"Charlie","uid":345, "lon":-0.0721455, "lat":0.926761, "pct":4.1, "sq":225, "poly":"-1,2,12,4,5,6", "points":[-1,2,12,4,5,6]}')
+</db_insert>
+
+<db_insert>
+INSERT INTO name_table VALUES
+(1,'test one',100,1000),
+(2,'test two',200,2000)
 </db_insert>
 
 <query_attributes>
@@ -458,6 +487,15 @@ INSERT INTO json_table VALUES
 <sphinxql>SELECT CONTAINS(POLY2D(j.points[0], j.points[1], j.points[2], j.points[3], j.points[4], j.points[5]), 2, 3) FROM test_json</sphinxql>
 <sphinxql>SELECT CONTAINS(POLY2D(j.poly), j.pct, 3 ) FROM test_json</sphinxql>
 <sphinxql>SELECT CONTAINS(POLY2D(j.poly), 3, j.pct ) FROM test_json</sphinxql>
+
+<!-- regression for attribute names starting w/numbers -->
+<sphinxql>SELECT 123_attr1 FROM test_name</sphinxql>
+<sphinxql>SELECT `123_attr1` FROM test_name</sphinxql>
+<sphinxql>SELECT `123_attr1` 000alias FROM test_name</sphinxql>
+<sphinxql>SELECT `123_attr1` `000alias` FROM test_name</sphinxql>
+<sphinxql>SELECT `123_attr1` `000alias` FROM test_name WHERE `000alias`>100 </sphinxql>
+<sphinxql>SELECT `123_attr1` `000alias1`, `10000attr2` `000alias2` FROM test_name WHERE `000alias1`>100 AND `000alias2`=2000 </sphinxql>
+
 </sphqueries>
 
 </test>

@@ -38,11 +38,17 @@ static CSphString	g_sLogFile;
 static CSphString	g_sDataDir;
 static CSphString	g_sConfigPath;
 static bool			g_bCfgHasData = false;
-// FIXME!!! take from config
+// FIXME!!! take these timeout from config
 static int			g_iRemoteTimeout = 120 * 1000; // 2 minutes in msec
+// 200 msec is ok as we do not need to any missed nodes in cluster node list
+static int			g_iAnyNodesTimeout = 200;
+
+// debug options passed into Galera for our logreplication command line key
 static const char * g_sDebugOptions = "debug=on;cert.log_conflicts=yes";
+// prefix added for Galera nodes
 static const char * g_sDefaultReplicationNodes = "gcomm://";
 
+// cluster state this node sees
 enum class ClusterState_e
 {
 	// stop terminal states
@@ -55,16 +61,18 @@ enum class ClusterState_e
 	SYNCED				// node works as usual
 };
 
+// cluster data that gets stored and loaded
 struct ClusterDesc_t
 {
-	CSphString	m_sName;
-	CSphString	m_sPath; // path relative to data_dir
-	CSphVector<CSphString> m_dIndexes;
-	CSphString	m_sClusterNodes;
+	CSphString	m_sName;				// cluster name
+	CSphString	m_sPath;				// path relative to data_dir
+	CSphVector<CSphString> m_dIndexes;	// list of index name in cluster
+	CSphString	m_sClusterNodes;		// string list of comma separated nodes (node - address:API_port)
 
-	SmallStringHash_T<CSphString> m_hOptions;
+	SmallStringHash_T<CSphString> m_hOptions;	// options for Galera
 };
 
+// managed port got back into global ports list
 class ScopedPort_c : public ISphNoncopyable
 {
 	int m_iPort = -1;
@@ -79,6 +87,7 @@ public:
 };
 
 
+// cluster related data
 struct ReplicationCluster_t : public ClusterDesc_t
 {
 	// replicator
@@ -90,14 +99,18 @@ struct ReplicationCluster_t : public ClusterDesc_t
 
 	// nodes at cluster
 	CSphString	m_sViewNodes; // raw nodes addresses (API and replication) from whole cluster
+	// lock protects access to m_sViewNodes and m_sClusterNodes
 	CSphMutex	m_tViewNodesLock;
+	// representation of m_dIndexes for binarySearch
+	// to quickly validate query to cluster:index
 	CSphVector<uint64_t> m_dIndexHashes;
+	// Galera port got from global ports list on cluster created
 	ScopedPort_c	m_tPort { -1 };
 
-
+	// lock protects access to m_hOptions
 	CSphMutex m_tOptsLock;
 
-	// state from plugin
+	// state variables cached from Galera
 	CSphFixedVector<char>	m_dUUID { 0 };
 	int						m_iConfID = 0;
 	int						m_iStatus = WSREP_VIEW_DISCONNECTED;
@@ -131,6 +144,7 @@ private:
 	ClusterState_e m_eNodeState { ClusterState_e::CLOSED };
 };
 
+// JSON index description
 struct IndexDesc_t
 {
 	CSphString	m_sName;
@@ -138,15 +152,22 @@ struct IndexDesc_t
 	IndexType_e		m_eType = IndexType_e::ERROR_;
 };
 
+// arguments to replication static functions 
 struct ReplicationArgs_t
 {
+	// cluster description
 	ReplicationCluster_t *	m_pCluster = nullptr;
+	// to create new cluster or join existed
 	bool					m_bNewCluster = false;
+	// node address to listen by Galera
 	CSphString				m_sListenAddr;
+	// node incoming address passed into cluster, IP used from listen API or node_address
 	int						m_iListenPort = -1;
+	// nodes list to join by Galera
 	CSphString				m_sNodes;
 };
 
+// interface to pass into static Replicate to issue commit for specific command
 class CommitMonitor_c
 {
 public:
@@ -156,7 +177,9 @@ public:
 	{}
 	~CommitMonitor_c() = default;
 
+	// commit for common commands
 	bool Commit ( CSphString & sError );
+	// commit for Total Order Isolation commands
 	bool CommitTOI ( CSphString & sError );
 
 private:
@@ -164,42 +187,92 @@ private:
 	int * m_pDeletedCount = nullptr;
 };
 
+// cluster list
 static SmallStringHash_T<ReplicationCluster_t *> g_hClusters;
+// lock protects operations at g_hClusters
 static RwLock_t g_tClustersLock;
+// hack for abort callback to invalidate only specific cluster
 static SphThreadKey_t g_tClusterKey;
 
 // description of clusters and indexes loaded from JSON config
 static CSphVector<ClusterDesc_t> g_dCfgClusters;
 static CSphVector<IndexDesc_t> g_dCfgIndexes;
 
+/////////////////////////////////////////////////////////////////////////////
+// forward declarations
+/////////////////////////////////////////////////////////////////////////////
+
+// abort callback that invalidates specific cluster
 static void ReplicationAbort();
 
+/////////////////////////////////////////////////////////////////////////////
+// JSON config related functions
+/////////////////////////////////////////////////////////////////////////////
+
+// write info about cluster and indexes into manticore.json
 static bool JsonConfigWrite ( const CSphString & sConfigPath, const SmallStringHash_T<ReplicationCluster_t *> & hClusters, const CSphVector<IndexDesc_t> & dIndexes, CSphString & sError );
+
+// read info about cluster and indexes from manticore.json and validate data
 static bool JsonConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> & hClusters, CSphVector<IndexDesc_t> & dIndexes, CSphString & sError );
+
+// get index list that should be saved into JSON config
 static void GetLocalIndexes ( CSphVector<IndexDesc_t> & dIndexes );
+
+// JSON reader and writer helper functions
 static void JsonConfigSetIndex ( const IndexDesc_t & tIndex, JsonObj_c & tIndexes );
 static bool JsonLoadIndexDesc ( const JsonObj_c & tJson, CSphString & sError, IndexDesc_t & tIndex );
 static void JsonConfigDumpClusters ( const SmallStringHash_T<ReplicationCluster_t *> & hClusters, StringBuilder_c & tOut );
 static void JsonConfigDumpIndexes ( const CSphVector<IndexDesc_t> & dIndexes, StringBuilder_c & tOut );
 
+// check path exists and also check daemon could write there
 static bool CheckPath ( const CSphString & sPath, bool bCheckWrite, CSphString & sError, const char * sCheckFileName="tmp" );
+
+// create string by join global data_dir and cluster path 
 static CSphString GetClusterPath ( const CSphString & sPath );
+
+/////////////////////////////////////////////////////////////////////////////
+// remote commands for cluster and index managements
+/////////////////////////////////////////////////////////////////////////////
 
 struct PQRemoteReply_t;
 struct PQRemoteData_t;
 
+// command at remote node for CLUSTER_DELETE to delete cluster
 static bool RemoteClusterDelete ( const CSphString & sCluster, CSphString & sError );
+
+// command at remote node for CLUSTER_FILE_RESERVE to check
+// - file could be allocated on disk at cluster path and reserve disk space for a file
+// - or make sure that index has exact same index file, ie sha1 matched
 static bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError );
+
+// command at remote node for CLUSTER_FILE_SEND to store data into file, data size and file offset defined by sender
 static bool RemoteFileStore ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError );
+
+// command at remote node for CLUSTER_INDEX_ADD_LOCAL to check sha1 of index file matched and load index into daemon
 static bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError );
+
+// send local indexes to remote nodes via API
 static bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphString & sNode, bool bBypass, const wsrep_gtid_t & tStateID, CSphString & sError );
+
+// callback at remote node for CLUSTER_SYNCED to pick up received indexes then call Galera sst_received
 static bool RemoteClusterSynced ( const PQRemoteData_t & tCmd, CSphString & sError );
 
+// callback for Galera apply_cb to parse replicated command
 static bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CSphString & sCluster, ReplicationCommand_t & tCmd );
+
+// callback for Galera commit_cb to commit replicated command
 static bool HandleCmdReplicated ( ReplicationCommand_t & tCmd );
+
+// command to all remote nodes at cluster to get actual nodes list
 static bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sCluster, const CSphString & sGTID, CSphString & sError, CSphString & sNodes );
+
+// callback at remote node for CLUSTER_GET_NODES to return actual nodes list at cluster
 static bool RemoteClusterGetNodes ( const CSphString & sCluster, const CSphString & sGTID, CSphString & sError, CSphString & sNodes );
+
+// utility function to filter nodes list provided at string by specific protocol
 static void ClusterFilterNodes ( const CSphString & sSrcNodes, ProtocolType_e eProto, CSphString & sDstNodes );
+
+// callback at remote node for CLUSTER_UPDATE_NODES to update nodes list at cluster from actual nodes list
 static bool RemoteClusterUpdateNodes ( const CSphString & sCluster, CSphString * pNodes, CSphString & sError );
 
 
@@ -209,6 +282,7 @@ struct PortsRange_t
 	int m_iCount = 0;
 };
 
+// manage ports pairs for clusters set as Galera replication listener ports range
 class FreePortList_c
 {
 private:
@@ -217,6 +291,7 @@ private:
 	CSphMutex m_tLock;
 
 public:
+	// set range of ports there is could generate ports pairs
 	void AddRange ( const PortsRange_t & tPorts )
 	{
 		assert ( tPorts.m_iPort && tPorts.m_iCount && ( tPorts.m_iCount%2 )==0 );
@@ -224,6 +299,9 @@ public:
 		m_dPorts.Add ( tPorts );
 	}
 
+	// get next available range of ports for Galera listener
+	// first reuse ports pair that was recently released
+	// or pair from range set
 	int Get ()
 	{
 		int iRes = -1;
@@ -244,6 +322,7 @@ public:
 		return iRes;
 	}
 
+	// free ports pair and add it to free list
 	void Free ( int iPort )
 	{
 		ScopedMutex_t tLock ( m_tLock );
@@ -252,10 +331,15 @@ public:
 };
 
 static bool g_bReplicationEnabled = false;
+// incoming address guessed (false) or set via searchd.node_address
 static bool g_bHasIncoming = false;
+// incoming IP part of address set by searchd.node_address or took from listener
 static CSphString g_sIncomingIP;
+// incoming address (IP:port from API listener) used for request to this node from other daemons
 static CSphString g_sIncomingProto;
+// listen IP part of address for Galera
 static CSphString g_sListenReplicationIP;
+// ports pairs manager
 static FreePortList_c g_tPorts;
 
 ScopedPort_c::~ScopedPort_c()
@@ -284,12 +368,14 @@ int ScopedPort_c::Leak()
 }
 
 
-// receiving thread context for wsrep callbacks
+// data passed to Galera and used at callbacks
 struct ReceiverCtx_t : ISphRefcounted
 {
 	ReplicationCluster_t *	m_pCluster = nullptr;
+	// event to release main thread after recv thread started
 	CSphAutoEvent			m_tStarted;
 
+	// share of remote command received between apply and commit callbacks
 	ReplicationCommand_t	m_tCmd;
 
 	ReceiverCtx_t() = default;
@@ -299,7 +385,7 @@ struct ReceiverCtx_t : ISphRefcounted
 	}
 };
 
-// Logging stuff for the loader
+// log strings enum -> strings
 static const char * g_sClusterStatus[WSREP_VIEW_MAX] = { "primary", "non-primary", "disconnected" };
 static const char * g_sStatusDesc[] = {
  "success",
@@ -337,6 +423,7 @@ static const char * GetStatus ( wsrep_status_t tStatus )
 		return strerror ( tStatus );
 }
 
+// var args wrapper for log callback
 static void LoggerWrapper ( wsrep_log_level_t eLevel, const char * sFmt, ... )
 {
 	ESphLogLevel eLevelDst = SPH_LOG_INFO;
@@ -356,14 +443,16 @@ static void LoggerWrapper ( wsrep_log_level_t eLevel, const char * sFmt, ... )
 	va_end ( ap );
 }
 
+// callback for Galera logger_cb to log messages and errors
 static void Logger_fn ( wsrep_log_level_t eLevel, const char * sMsg )
 {
 	LoggerWrapper ( eLevel, sMsg );
 }
 
-
+// commands version (commands these got replicated via Galera)
 static const WORD g_iReplicateCommandVer = 0x101;
 
+// log debug info about cluster nodes as current nodes views that
 static void LogGroupView ( const wsrep_view_info_t * pView )
 {
 	if ( g_eLogLevel<SPH_LOG_RPL_DEBUG )
@@ -381,6 +470,7 @@ static void LogGroupView ( const wsrep_view_info_t * pView )
 	sphLogDebugRpl ( "%s", sBuf.cstr() );
 }
 
+// check cluster state prior passing write transaction \ commands into cluster
 static bool CheckClasterState ( ClusterState_e eState, bool bPrimary, const CSphString & sCluster, CSphString & sError )
 {
 	if ( !bPrimary )
@@ -397,6 +487,7 @@ static bool CheckClasterState ( ClusterState_e eState, bool bPrimary, const CSph
 	return true;
 }
 
+// check cluster state wrapper
 static bool CheckClasterState ( const ReplicationCluster_t * pCluster, CSphString & sError )
 {
 	assert ( pCluster );
@@ -405,6 +496,7 @@ static bool CheckClasterState ( const ReplicationCluster_t * pCluster, CSphStrin
 	return CheckClasterState ( eState, bPrimary, pCluster->m_sName, sError );
 }
 
+// get string of cluster options with semicolon delimiter
 static CSphString GetOptions ( const SmallStringHash_T<CSphString> & hOptions, bool bSave )
 {
 	StringBuilder_c tBuf ( ";" );
@@ -421,6 +513,7 @@ static CSphString GetOptions ( const SmallStringHash_T<CSphString> & hOptions, b
 	return tBuf.cstr();
 }
 
+// parse and set cluster options into hash from single string
 static void SetOptions ( const CSphString & sOptions, SmallStringHash_T<CSphString> & hOptions )
 {
 	if ( sOptions.IsEmpty() )
@@ -468,6 +561,7 @@ static void SetOptions ( const CSphString & sOptions, SmallStringHash_T<CSphStri
 	}
 }
 
+// update cluster state nodes from Galera callback on cluster view changes
 static void UpdateGroupView ( const wsrep_view_info_t * pView, ReplicationCluster_t * pCluster )
 {
 	StringBuilder_c sBuf ( "," );
@@ -488,6 +582,7 @@ static void UpdateGroupView ( const wsrep_view_info_t * pView, ReplicationCluste
 	}
 }
 
+// callback for Galera view_handler_cb that cluster view got changed, ie node either added or removed from cluster
 // This will be called on cluster view change (nodes joining, leaving, etc.).
 // Each view change is the point where application may be pronounced out of
 // sync with the current cluster view and need state transfer.
@@ -520,6 +615,7 @@ static wsrep_cb_status_t ViewChanged_fn ( void * pAppCtx, void * pRecvCtx, const
 	return WSREP_CB_SUCCESS;
 }
 
+// callback for Galera sst_donate_cb to become of donor and start sending SST (all cluster indexes) to joiner
 static wsrep_cb_status_t SstDonate_fn ( void * pAppCtx, void * pRecvCtx, const void * sMsg, size_t iMsgLen, const wsrep_gtid_t * pStateID, const char * pState, size_t iStateLen, wsrep_bool_t bBypass )
 {
 	ReceiverCtx_t * pLocalCtx = (ReceiverCtx_t *)pRecvCtx;
@@ -553,6 +649,7 @@ static wsrep_cb_status_t SstDonate_fn ( void * pAppCtx, void * pRecvCtx, const v
 	return ( bOk ? WSREP_CB_SUCCESS : WSREP_CB_FAILURE );
 }
 
+// callback for Galera synced_cb that cluster fully synced and could accept transactions
 static void Synced_fn ( void * pAppCtx )
 {
 	ReceiverCtx_t * pLocalCtx = (ReceiverCtx_t *)pAppCtx;
@@ -564,6 +661,7 @@ static void Synced_fn ( void * pAppCtx )
 	sphLogDebugRpl ( "synced cluster %s", pCluster->m_sName.cstr() );
 }
 
+// callback for Galera apply_cb that transaction received from cluster by node
 // This is called to "apply" writeset.
 // If writesets don't conflict on keys, it may be called concurrently to
 // utilize several CPU cores.
@@ -581,6 +679,7 @@ static wsrep_cb_status_t Apply_fn ( void * pCtx, const void * pData, size_t uSiz
 	return WSREP_CB_SUCCESS;
 }
 
+// callback for Galera commit_cb that transaction received and parsed before should be committed or rolled back
 static wsrep_cb_status_t Commit_fn ( void * pCtx, const void * hndTrx, uint32_t uFlags, const wsrep_trx_meta_t * pMeta, wsrep_bool_t * pExit, wsrep_bool_t bCommit )
 {
 	ReceiverCtx_t * pLocalCtx = (ReceiverCtx_t *)pCtx;
@@ -612,6 +711,7 @@ static wsrep_cb_status_t Commit_fn ( void * pCtx, const void * hndTrx, uint32_t 
 	return eRes;
 }
 
+// callback for Galera unordered_cb that unordered transaction received
 static wsrep_cb_status_t Unordered_fn ( void * pCtx, const void * pData, size_t uSize )
 {
 	//ReceiverCtx_t * pLocalCtx = (ReceiverCtx_t *)pCtx;
@@ -619,6 +719,7 @@ static wsrep_cb_status_t Unordered_fn ( void * pCtx, const void * pData, size_t 
 	return WSREP_CB_SUCCESS;
 }
 
+// main recv thread of Galera that handles cluster
 // This is the listening thread. It blocks in wsrep::recv() call until
 // disconnect from cluster. It will apply and commit writesets through the
 // callbacks defined above.
@@ -653,8 +754,7 @@ static void ReplicationRecv_fn ( void * pArgs )
 	pCtx->Release();
 }
 
-void Instr_fn ( wsrep_pfs_instr_type_t , wsrep_pfs_instr_ops_t , wsrep_pfs_instr_tag_t , void ** , void ** , const void * );
-
+// callback for Galera pfs_instr_cb there all mutex \ threads \ events should be implemented, could also count these operations for extended stats
 // @brief a callback to create PFS instrumented mutex/condition variables
 //
 // @param type			mutex or condition variable
@@ -779,6 +879,7 @@ void Instr_fn ( wsrep_pfs_instr_type_t type, wsrep_pfs_instr_ops_t ops, wsrep_pf
 }
 
 
+// create cluster from desc and become master node or join existed cluster
 bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 {
 	assert ( g_bReplicationEnabled );
@@ -903,6 +1004,7 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	return true;
 }
 
+// shutdown and delete cluster, also join cluster recv thread
 void ReplicateClusterDone ( ReplicationCluster_t * pCluster )
 {
 	if ( !pCluster )
@@ -923,6 +1025,7 @@ void ReplicateClusterDone ( ReplicationCluster_t * pCluster )
 	}
 }
 
+// check return code from Galera calls
 // FIXME!!! handle more status codes properly
 static bool CheckResult ( wsrep_status_t tRes, const wsrep_trx_meta_t & tMeta, const char * sAt, CSphString & sError )
 {
@@ -934,6 +1037,7 @@ static bool CheckResult ( wsrep_status_t tRes, const wsrep_trx_meta_t & tMeta, c
 	return false;
 }
 
+// replicate serialized data into cluster and call commit monitor along
 static bool Replicate ( uint64_t uQueryHash, const CSphVector<BYTE> & dBuf, wsrep_t * pProvider, CommitMonitor_c & tMonitor, CSphString & sError )
 {
 	assert ( pProvider );
@@ -1016,6 +1120,7 @@ static bool Replicate ( uint64_t uQueryHash, const CSphVector<BYTE> & dBuf, wsre
 	return bOk;
 }
 
+// replicate serialized data into cluster in TotalOrderIsolation mode and call commit monitor along
 static bool ReplicateTOI ( uint64_t uQueryHash, const CSphVector<BYTE> & dBuf, wsrep_t * pProvider, CommitMonitor_c & tMonitor, CSphString & sError )
 {
 	assert ( pProvider );
@@ -1061,6 +1166,7 @@ static bool ReplicateTOI ( uint64_t uQueryHash, const CSphVector<BYTE> & dBuf, w
 	return bOk;
 }
 
+// get cluster status variables (our and Galera)
 static void ReplicateClusterStats ( ReplicationCluster_t * pCluster, VectorLike & dOut )
 {
 	if ( !pCluster || !pCluster->m_pProvider )
@@ -1145,6 +1251,7 @@ static void ReplicateClusterStats ( ReplicationCluster_t * pCluster, VectorLike 
 	pCluster->m_pProvider->stats_free ( pCluster->m_pProvider, pVarsStart );
 }
 
+// set Galera option for cluster
 bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sName, const CSphString & sVal, CSphString & sError )
 {
 	ScRL_t tClusterGuard ( g_tClustersLock );		
@@ -1172,6 +1279,7 @@ bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sName,
 	return ( tOk==WSREP_OK );
 }
 
+// abort callback that invalidates specific cluster
 void ReplicationAbort()
 {
 	ReplicationCluster_t * pCluster = (ReplicationCluster_t *)sphThreadGet ( g_tClusterKey );
@@ -1180,6 +1288,7 @@ void ReplicationAbort()
 		pCluster->SetNodeState ( ClusterState_e::DESTROYED );
 }
 
+// delete all clusters on daemon shutdown
 void ReplicateClustersDelete()
 {
 	wsrep_t * pProvider = nullptr;
@@ -1197,6 +1306,7 @@ void ReplicateClustersDelete()
 		wsrep_unload ( pProvider );
 }
 
+// clean up cluster prior to start it again
 void DeleteClusterByName ( const CSphString& sCluster )
 {
 	auto** ppCluster = g_hClusters ( sCluster );
@@ -1207,6 +1317,7 @@ void DeleteClusterByName ( const CSphString& sCluster )
 	}
 }
 
+// load data from JSON config on daemon start
 void JsonLoadConfig ( const CSphConfigSection & hSearchd )
 {
 	g_sLogFile = hSearchd.GetStr ( "log", "" );
@@ -1234,6 +1345,7 @@ void JsonLoadConfig ( const CSphConfigSection & hSearchd )
 		sphDie ( "failed to use JSON config, %s", sError.cstr() );
 }
 
+// save clusters and their indexes into JSON config on daemon shutdown
 void JsonDoneConfig()
 {
 	CSphString sError;
@@ -1246,6 +1358,7 @@ void JsonDoneConfig()
 	}
 }
 
+// load indexes got from JSON config on daemon indexes preload (part of ConfigureAndPreload work done here)
 void JsonConfigConfigureAndPreload ( int & iValidIndexes, int & iCounter )
 {
 	for ( const IndexDesc_t & tIndex : g_dCfgIndexes )
@@ -1264,6 +1377,7 @@ void JsonConfigConfigureAndPreload ( int & iValidIndexes, int & iCounter )
 	}
 }
 
+// dump all clusters statuses
 void ReplicateClustersStatus ( VectorLike & dStatus )
 {
 	ScRL_t tLock ( g_tClustersLock );
@@ -1291,6 +1405,7 @@ static bool CheckLocalIndex ( const CSphString & sIndex, CSphString & sError )
 	return true;
 }
 
+// set cluster name into index desc for fast rejects
 static bool SetIndexCluster ( const CSphString & sIndex, const CSphString & sCluster, CSphString & sError )
 {
 	ServedIndexRefPtr_c pServed = GetServed ( sIndex );
@@ -1320,6 +1435,7 @@ static bool SetIndexCluster ( const CSphString & sIndex, const CSphString & sClu
 	return true;
 }
 
+// callback for Galera apply_cb to parse replicated commands
 bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CSphString & sCluster, ReplicationCommand_t & tCmd )
 {
 	MemoryReader_c tReader ( pData, iLen );
@@ -1409,7 +1525,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 	return true;
 }
 
-
+// callback for Galera commit_cb to commit replicated command
 bool HandleCmdReplicated ( ReplicationCommand_t & tCmd )
 {
 	CSphString sError;
@@ -1485,11 +1601,13 @@ bool HandleCmdReplicated ( ReplicationCommand_t & tCmd )
 	return true;
 }
 
+// single point there all commands passed these might be replicated, even if no cluster
 bool HandleCmdReplicate ( ReplicationCommand_t & tCmd, CSphString & sError, int * pDeletedCount )
 {
 	assert ( tCmd.m_eCommand>=0 && tCmd.m_eCommand<RCOMMAND_TOTAL );
 	CommitMonitor_c tMonitor ( tCmd, pDeletedCount );
 
+	// without cluster path
 	if ( tCmd.m_sCluster.IsEmpty() )
 		return tMonitor.Commit ( sError );
 
@@ -1584,6 +1702,7 @@ bool HandleCmdReplicate ( ReplicationCommand_t & tCmd, CSphString & sError, int 
 		return ReplicateTOI ( uQueryHash, dBuf, (*ppCluster)->m_pProvider, tMonitor, sError );
 }
 
+// commit for common commands
 bool CommitMonitor_c::Commit ( CSphString & sError )
 {
 	ServedIndexRefPtr_c pServed = GetServed ( m_tCmd.m_sIndex );
@@ -1639,6 +1758,7 @@ bool CommitMonitor_c::Commit ( CSphString & sError )
 	return bOk;
 }
 
+// commit for Total Order Isolation commands
 bool CommitMonitor_c::CommitTOI ( CSphString & sError )
 {
 	ScWL_t tLock (g_tClustersLock ); // FIXME!!! no need to lock as all cluster operation serialized with TOI mode
@@ -1711,6 +1831,7 @@ bool JsonLoadIndexDesc ( const JsonObj_c & tJson, CSphString & sError, IndexDesc
 	return true;
 }
 
+// read info about cluster and indexes from manticore.json and validate data
 bool JsonConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> & dClusters, CSphVector<IndexDesc_t> & dIndexes, CSphString & sError )
 {
 	if ( !sphIsReadable ( sConfigPath, nullptr ) )
@@ -1807,7 +1928,7 @@ bool JsonConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> 
 	return true;
 }
 
-
+// write info about cluster and indexes into manticore.json
 bool JsonConfigWrite ( const CSphString & sConfigPath, const SmallStringHash_T<ReplicationCluster_t *> & hClusters, const CSphVector<IndexDesc_t> & dIndexes, CSphString & sError )
 {
 	StringBuilder_c sConfigData;
@@ -1850,6 +1971,7 @@ bool JsonConfigWrite ( const CSphString & sConfigPath, const SmallStringHash_T<R
 	return true;
 }
 
+// helper function that saves cluster related data into JSON config on clusters got changed
 static bool SaveConfig()
 {
 	CSphVector<IndexDesc_t> dJsonIndexes;
@@ -1876,6 +1998,7 @@ void JsonConfigSetIndex ( const IndexDesc_t & tIndex, JsonObj_c & tIndexes )
 	tIndexes.AddItem ( tIndex.m_sName.cstr(), tIdx );
 }
 
+// saves clusters into string
 void JsonConfigDumpClusters ( const SmallStringHash_T<ReplicationCluster_t *> & hClusters, StringBuilder_c & tOut )
 {
 	JsonObj_c tClusters;
@@ -1906,6 +2029,7 @@ void JsonConfigDumpClusters ( const SmallStringHash_T<ReplicationCluster_t *> & 
 	tOut += tClusters.AsString(true).cstr();
 }
 
+// saves clusters indexes and indexes from JSON config into string
 void JsonConfigDumpIndexes ( const CSphVector<IndexDesc_t> & dIndexes, StringBuilder_c & tOut )
 {
 	JsonObj_c tIndexes;
@@ -1915,7 +2039,7 @@ void JsonConfigDumpIndexes ( const CSphVector<IndexDesc_t> & dIndexes, StringBui
 	tOut += tIndexes.AsString(true).cstr();
 }
 
-
+// get index list that should be saved into JSON config
 void GetLocalIndexes ( CSphVector<IndexDesc_t> & dIndexes )
 {
 	for ( RLockedServedIt_c tIt ( g_pLocalIndexes ); tIt.Next (); )
@@ -1935,6 +2059,8 @@ void GetLocalIndexes ( CSphVector<IndexDesc_t> & dIndexes )
 	}
 }
 
+// load index into daemon from disk files for cluster use
+// in case index already exists prohibit it to save on index delete as disk files has fresh data received from remote node
 bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName, const CSphString & sCluster )
 {
 	// delete existed index first, does not allow to save it's data that breaks sync'ed index files
@@ -1978,6 +2104,7 @@ bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName
 	return true;
 }
 
+// load indexes received from another node or existed already into daemon
 static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes, const CSphString & sCluster, CSphString & sError )
 {
 	assert ( g_bReplicationEnabled );
@@ -2056,6 +2183,7 @@ static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes, co
 	return true;
 }
 
+// create string by join global data_dir and cluster path 
 CSphString GetClusterPath ( const CSphString & sPath )
 {
 	if ( sPath.IsEmpty() )
@@ -2067,6 +2195,7 @@ CSphString GetClusterPath ( const CSphString & sPath )
 	return sFullPath;
 }
 
+// create string by join global data_dir and cluster path 
 static bool GetClusterPath ( const CSphString & sCluster, CSphString & sClusterPath, CSphString & sError )
 {
 	ScRL_t tLock ( g_tClustersLock );
@@ -2081,6 +2210,7 @@ static bool GetClusterPath ( const CSphString & sCluster, CSphString & sClusterP
 	return true;
 }
 
+// check path exists and also check daemon could write there
 bool CheckPath ( const CSphString & sPath, bool bCheckWrite, CSphString & sError, const char * sCheckFileName )
 {
 	if ( !sphIsReadable ( sPath, &sError ) )
@@ -2104,6 +2234,7 @@ bool CheckPath ( const CSphString & sPath, bool bCheckWrite, CSphString & sError
 	return true;
 }
 
+// validate clusters paths
 static bool ClusterCheckPath ( const CSphString & sPath, const CSphString & sName, bool bCheckWrite, CSphString & sError )
 {
 	if ( !g_bReplicationEnabled )
@@ -2134,6 +2265,7 @@ static bool ClusterCheckPath ( const CSphString & sPath, const CSphString & sNam
 	return true;
 }
 
+// set safe_to_bootstrap: 1 at cluster/grastate.dat for Galera to start properly
 static bool NewClusterForce ( const CSphString & sPath, CSphString & sError )
 {
 	CSphString sClusterState;
@@ -2199,6 +2331,7 @@ static bool NewClusterForce ( const CSphString & sPath, CSphString & sError )
 
 const char * g_sLibFiles[] = { "grastate.dat", "galera.cache" };
 
+// clean up Galera files at cluster path to start new and fresh cluster again
 static void NewClusterClean ( const CSphString & sPath )
 {
 	for ( const char * sFile : g_sLibFiles )
@@ -2210,6 +2343,7 @@ static void NewClusterClean ( const CSphString & sPath )
 	}
 }
 
+// setup IP, ports and node incoming address
 static void SetListener ( const CSphVector<ListenerDesc_t> & dListeners )
 {
 	bool bGotReplicationPorts = false;
@@ -2277,6 +2411,7 @@ static void SetListener ( const CSphVector<ListenerDesc_t> & dListeners )
 	g_bReplicationEnabled = ( !g_sDataDir.IsEmpty() && bGotReplicationPorts );
 }
 
+// start clusters on daemon start
 void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<ListenerDesc_t> & dListeners, bool bNewCluster, bool bForce )
 {
 	SetListener ( dListeners );
@@ -2382,6 +2517,7 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 	}
 }
 
+// validate cluster option at SphinxQL statement
 static bool CheckClusterOption ( const SmallStringHash_T<SqlInsert_t *> & hValues, const char * sName, bool bOptional, CSphString & sVal, CSphString & sError )
 {
 	SqlInsert_t ** ppVal = hValues ( sName );
@@ -2403,6 +2539,7 @@ static bool CheckClusterOption ( const SmallStringHash_T<SqlInsert_t *> & hValue
 	return true;
 }
 
+// validate cluster SphinxQL statement
 static bool CheckClusterStatement ( const CSphString & sCluster, bool bCheckCluster, CSphString & sError )
 {
 	if ( !g_bReplicationEnabled )
@@ -2426,6 +2563,7 @@ static bool CheckClusterStatement ( const CSphString & sCluster, bool bCheckClus
 	return true;
 }
 
+// validate cluster SphinxQL statement
 static bool CheckClusterStatement ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, bool bJoin, CSphString & sError, CSphScopedPtr<ReplicationCluster_t> & pElem )
 {
 	if ( !CheckClusterStatement ( sCluster, true, sError ) )
@@ -2468,7 +2606,7 @@ static bool CheckClusterStatement ( const CSphString & sCluster, const StrVec_t 
 }
 
 /////////////////////////////////////////////////////////////////////////////
-// cluster join to existed
+// cluster joins to existed nodes
 /////////////////////////////////////////////////////////////////////////////
 
 bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, bool bUpdateNodes, CSphString & sError )
@@ -2532,7 +2670,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 }
 
 /////////////////////////////////////////////////////////////////////////////
-// cluster create new without nodes
+// cluster creates master node
 /////////////////////////////////////////////////////////////////////////////
 
 bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphString & sError )
@@ -2577,11 +2715,7 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 	return ( eState==ClusterState_e::DONOR || eState==ClusterState_e::SYNCED );
 }
 
-/////////////////////////////////////////////////////////////////////////////
-// cluster delete
-/////////////////////////////////////////////////////////////////////////////
-
-
+// API commands that not get replicated via Galera, cluster management
 enum PQRemoteCommand_e : WORD
 {
 	CLUSTER_DELETE				= 0,
@@ -2597,6 +2731,7 @@ enum PQRemoteCommand_e : WORD
 	PQR_COMMAND_WRONG = PQR_COMMAND_TOTAL,
 };
 
+// reply from remote node
 struct PQRemoteReply_t
 {
 	CSphString	m_sIndexPath;		// index path without extension (with or without path due to bClusterIndex)
@@ -2605,7 +2740,7 @@ struct PQRemoteReply_t
 	int64_t		m_iIndexFileSize = 0;	// size of index file
 };
 
-
+// query to remote node
 struct PQRemoteData_t : public PQRemoteReply_t
 {
 	CSphString	m_sIndex;			// local name of index
@@ -2626,6 +2761,7 @@ struct PQRemoteData_t : public PQRemoteReply_t
 	CSphFixedVector<CSphString> m_dIndexes { 0 };	// index list received
 };
 
+// interface implementation to work with our agents
 struct PQRemoteAgentData_t : public iQueryResult
 {
 	const PQRemoteData_t & m_tReq;
@@ -2649,6 +2785,7 @@ struct VecAgentDesc_t : public ISphNoncopyable, public CSphVector<AgentDesc_t *>
 	}
 };
 
+// get nodes of specific type from string
 template <typename NODE_ITERATOR>
 void GetNodes_T ( const CSphString & sNodes, NODE_ITERATOR & tIt )
 {
@@ -2679,6 +2816,7 @@ void GetNodes_T ( const CSphString & sNodes, NODE_ITERATOR & tIt )
 	}
 }
 
+// get nodes functor to collect listener API with external address
 struct AgentDescIterator_t
 {
 	VecAgentDesc_t & m_dNodes;
@@ -2753,6 +2891,7 @@ static void GetNodes ( const VecAgentDesc_t & dDesc, VecRefPtrs_t<AgentConn_t *>
 		dNodes[i] = CreateAgent ( *dDesc[i], tReq, g_iRemoteTimeout );
 }
 
+// get nodes functor to collect listener with specific protocol
 struct ListenerProtocolIterator_t
 {
 	StringBuilder_c m_sNodes { "," };
@@ -2777,6 +2916,7 @@ struct ListenerProtocolIterator_t
 	}
 };
 
+// utility function to filter nodes list provided at string by specific protocol
 void ClusterFilterNodes ( const CSphString & sSrcNodes, ProtocolType_e eProto, CSphString & sDstNodes )
 {
 	ListenerProtocolIterator_t tIt ( eProto );
@@ -2784,6 +2924,7 @@ void ClusterFilterNodes ( const CSphString & sSrcNodes, ProtocolType_e eProto, C
 	sDstNodes = tIt.m_sNodes.cstr();
 }
 
+// base of API commands request and reply builders
 struct PQRemoteBase_t : public IRequestBuilder_t, public IReplyParser_t
 {
 	explicit PQRemoteBase_t ( PQRemoteCommand_e eCmd )
@@ -2818,6 +2959,7 @@ private:
 	const PQRemoteCommand_e m_eCmd = PQR_COMMAND_WRONG;
 };
 
+// API command to remote node to delete cluster
 struct PQRemoteDelete_t : public PQRemoteBase_t
 {
 	PQRemoteDelete_t()
@@ -2850,6 +2992,7 @@ struct PQRemoteDelete_t : public PQRemoteBase_t
 	}
 };
 
+// API command to remote node prior to file send
 struct PQRemoteFileReserve_t : public PQRemoteBase_t
 {
 	PQRemoteFileReserve_t ()
@@ -2896,6 +3039,7 @@ struct PQRemoteFileReserve_t : public PQRemoteBase_t
 };
 
 
+// API command to remote node of file send
 struct PQRemoteFileSend_t : public PQRemoteBase_t
 {
 	PQRemoteFileSend_t ()
@@ -2937,6 +3081,7 @@ struct PQRemoteFileSend_t : public PQRemoteBase_t
 	}
 };
 
+// API command to remote node on add index into cluster
 struct PQRemoteIndexAdd_t : public PQRemoteBase_t
 {
 	PQRemoteIndexAdd_t ()
@@ -2982,7 +3127,7 @@ struct PQRemoteIndexAdd_t : public PQRemoteBase_t
 	}
 };
 
-
+// API command to remote node to issue cluster synced callback
 struct PQRemoteSynced_t : public PQRemoteBase_t
 {
 	PQRemoteSynced_t();
@@ -2992,7 +3137,7 @@ struct PQRemoteSynced_t : public PQRemoteBase_t
 	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final;
 };
 
-
+// wrapper of PerformRemoteTasks
 static bool PerformRemoteTasks ( VectorAgentConn_t & dNodes, IRequestBuilder_t & tReq, IReplyParser_t & tReply, CSphString & sError )
 {
 	int iNodes = dNodes.GetLength();
@@ -3015,7 +3160,7 @@ static bool PerformRemoteTasks ( VectorAgentConn_t & dNodes, IRequestBuilder_t &
 	return ( iFinished==iNodes );
 }
 
-
+// API command to remote node to get nodes it sees
 struct PQRemoteClusterGetNodes_t : public PQRemoteBase_t
 {
 	PQRemoteClusterGetNodes_t ()
@@ -3051,6 +3196,7 @@ struct PQRemoteClusterGetNodes_t : public PQRemoteBase_t
 	}
 };
 
+// API command to remote node to update nodes by nodes it sees
 struct PQRemoteClusterUpdateNodes_t : public PQRemoteBase_t
 {
 	PQRemoteClusterUpdateNodes_t()
@@ -3084,6 +3230,7 @@ struct PQRemoteClusterUpdateNodes_t : public PQRemoteBase_t
 };
 
 
+// handler of all remote commands via API parsed at daemon as SEARCHD_COMMAND_CLUSTERPQ
 void HandleCommandClusterPq ( CachedOutputBuffer_c & tOut, WORD uCommandVer, InputBuffer_c & tBuf, const char * sClient )
 {
 	if ( !CheckCommandVersion ( uCommandVer, VER_COMMAND_CLUSTERPQ, tOut ) )
@@ -3175,6 +3322,7 @@ void HandleCommandClusterPq ( CachedOutputBuffer_c & tOut, WORD uCommandVer, Inp
 	}
 }
 
+// command at remote node for CLUSTER_DELETE to delete cluster
 bool RemoteClusterDelete ( const CSphString & sCluster, CSphString & sError )
 {
 	// erase cluster from all hashes
@@ -3209,6 +3357,10 @@ bool RemoteClusterDelete ( const CSphString & sCluster, CSphString & sError )
 
 	return true;
 }
+
+/////////////////////////////////////////////////////////////////////////////
+// cluster deletes
+/////////////////////////////////////////////////////////////////////////////
 
 // cluster delete every node then itself
 bool ClusterDelete ( const CSphString & sCluster, CSphString & sError, CSphString & sWarning )
@@ -3260,6 +3412,7 @@ void ReplicationCluster_t::UpdateIndexHashes()
 	m_dIndexHashes.Uniq();
 }
 
+// cluster ALTER statement that removes index from cluster but keep it at daemon
 static bool ClusterAlterDrop ( const CSphString & sCluster, const CSphString & sIndex, CSphString & sError )
 {
 	ReplicationCommand_t tDropCmd;
@@ -3270,6 +3423,9 @@ static bool ClusterAlterDrop ( const CSphString & sCluster, const CSphString & s
 	return HandleCmdReplicate ( tDropCmd, sError, nullptr );
 }
 
+// command at remote node for CLUSTER_FILE_RESERVE to check
+// - file could be allocated on disk at cluster path and reserve disk space for a file
+// - or make sure that index has exact same index file, ie sha1 matched
 bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError )
 {
 	CSphString sFilePath;
@@ -3346,6 +3502,7 @@ bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CS
 	return true;
 }
 
+// command at remote node for CLUSTER_FILE_SEND to store data into file, data size and file offset defined by sender
 bool RemoteFileStore ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError )
 {
 	CSphAutofile tOut ( tCmd.m_sFileName, O_RDWR, sError, false );
@@ -3376,6 +3533,7 @@ bool RemoteFileStore ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 	return true;
 }
 
+// command at remote node for CLUSTER_INDEX_ADD_LOCAL to check sha1 of index file matched and load index into daemon
 bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError )
 {
 	CSphString sType = GetTypeName ( tCmd.m_eIndex );
@@ -3438,6 +3596,7 @@ struct FileReader_t
 	const AgentDesc_t * m_pAgentDesc = nullptr;
 };
 
+// send file to multiple nodes by chunks as API command CLUSTER_FILE_SEND
 static bool SendFile ( const CSphVector<RemoteFileState_t> & dDesc, const CSphString & sFileIn, int64_t iFileSize, const CSphString & sCluster, CSphString & sError )
 {
 	// setup buffers
@@ -3587,6 +3746,7 @@ static bool CheckReplyIndexState ( const VecRefPtrs_t<AgentConn_t *> & dNodes, i
 	return true;
 }
 
+// send local index to remote nodes via API
 static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString & sIndex, const VecAgentDesc_t & dDesc, CSphString & sError )
 {
 	assert ( dDesc.GetLength() );
@@ -3694,6 +3854,7 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 	return true;
 }
 
+// cluster ALTER statement that adds index
 static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sIndex, CSphString & sError, CSphString & sWarning )
 {
 	CSphString sNodes;
@@ -3734,7 +3895,7 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 	return HandleCmdReplicate ( tAddCmd, sError, nullptr );
 }
 
-
+// cluster ALTER statement
 bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool bAdd, CSphString & sError, CSphString & sWarning )
 {
 	{
@@ -3811,6 +3972,7 @@ bool PQRemoteSynced_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) con
 	return !tReq.GetError();
 }
 
+// API command to remote node to issue cluster synced callback
 static bool SendClusterSynced ( const CSphString & sCluster, const CSphVector<CSphString> & dIndexes, const VecAgentDesc_t & dDesc, const char * sGTID, CSphString & sError )
 {
 	PQRemoteData_t tAgentData;
@@ -3830,6 +3992,7 @@ static bool SendClusterSynced ( const CSphString & sCluster, const CSphVector<CS
 	return true;
 }
 
+// send local indexes to remote nodes via API
 bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphString & sNode, bool bBypass, const wsrep_gtid_t & tStateID, CSphString & sError )
 {
 	VecAgentDesc_t dDesc;
@@ -3878,6 +4041,7 @@ bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphStrin
 	return bOk;
 }
 
+// callback at remote node for CLUSTER_SYNCED to pick up received indexes then call Galera sst_received
 bool RemoteClusterSynced ( const PQRemoteData_t & tCmd, CSphString & sError )
 {
 	sphLogDebugRpl ( "join sync %s, UID %s, indexes %d", tCmd.m_sCluster.cstr(), tCmd.m_sGTID.cstr(), tCmd.m_dIndexes.GetLength() );
@@ -3918,6 +4082,7 @@ bool RemoteClusterSynced ( const PQRemoteData_t & tCmd, CSphString & sError )
 	return bValid;
 }
 
+// validate that SphinxQL statement could be run for this cluster:index 
 bool CheckIndexCluster ( const CSphString & sIndexName, const ServedDesc_t & tDesc, const CSphString & sStmtCluster, CSphString & sError )
 {
 	if ( tDesc.m_sCluster==sStmtCluster )
@@ -3931,6 +4096,7 @@ bool CheckIndexCluster ( const CSphString & sIndexName, const ServedDesc_t & tDe
 	return false;
 }
 
+// command to all remote nodes at cluster to get actual nodes list
 bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sCluster, const CSphString & sGTID, CSphString & sError, CSphString & sNodes )
 {
 	VecAgentDesc_t dDesc;
@@ -3948,7 +4114,7 @@ bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sClu
 	{
 		dReplies[i].m_sCluster = sCluster;
 		dReplies[i].m_sGTID = sGTID;
-		dAgents[i] = CreateAgent ( *dDesc[i], dReplies[i], 200 ); // no need to wait for missed nodes
+		dAgents[i] = CreateAgent ( *dDesc[i], dReplies[i], g_iAnyNodesTimeout );
 	}
 
 	// submit initial jobs
@@ -3997,6 +4163,7 @@ bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sClu
 	return bGotNodes;
 }
 
+// callback at remote node for CLUSTER_GET_NODES to return actual nodes list at cluster
 bool RemoteClusterGetNodes ( const CSphString & sCluster, const CSphString & sGTID, CSphString & sError, CSphString & sNodes )
 {
 	ScRL_t tLock ( g_tClustersLock );
@@ -4023,7 +4190,7 @@ bool RemoteClusterGetNodes ( const CSphString & sCluster, const CSphString & sGT
 	return true;
 }
 
-
+// cluster ALTER statement that updates nodes option from view nodes at all nodes at cluster
 bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdate, CSphString & sError )
 {
 	if ( sUpdate!="nodes" )
@@ -4061,6 +4228,7 @@ bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdat
 	return bOk;
 }
 
+// callback at remote node for CLUSTER_UPDATE_NODES to update nodes list at cluster from actual nodes list
 bool RemoteClusterUpdateNodes ( const CSphString & sCluster, CSphString * pNodes, CSphString & sError )
 {
 	{

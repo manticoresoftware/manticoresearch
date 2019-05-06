@@ -119,9 +119,14 @@ The options available to ``searchd`` on all builds are:
    ``query_log`` will need to have been activated in ``sphinx.conf``) to
    provide more detailed information on a per-query basis as to the
    input/output operations carried out in the course of that query, with
-   a slight performance hit and of course bigger logs.  The IO statistics don't include information about IO operations for attributes,as these are loaded with mmap().
-   Further details are available under the `query log
-   format <README>` section. You might
+   a slight performance hit and of course bigger logs. 
+   
+   .. note::
+      The IO statistics don't include information about IO operations for attributes, as these are loaded with mmap().
+   
+   
+   Further details are available under the :ref:`query log
+   format <query_log_format>` section. You might
    start ``searchd`` thus:
 
    .. code-block:: bash

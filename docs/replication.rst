@@ -105,7 +105,7 @@ may be also set to enumerate all the nodes in the cluster.
     CREATE CLUSTER click_query '/var/data/click_query/' as path
     CREATE CLUSTER click_query '/var/data/click_query/' as path, 'clicks_mirror1:9312,clicks_mirror2:9312,clicks_mirror3:9312' as nodes
 
-If a cluster is created without the :ref:`nodes <_cluster_nodes>` option, the first node that gets joined to the cluster will be saved as `nodes`.
+If a cluster is created without the :ref:`nodes <cluster_nodes>` option, the first node that gets joined to the cluster will be saved as `nodes`.
 
 
 .. _replication_join_at:
@@ -184,7 +184,7 @@ Managing nodes
 --------------
 
 ``ALTER CLUSTER <cluster_name> UPDATE nodes`` statement updates node lists on each node of the cluster to include
-every active node in the cluster. See :ref:`Joining a cluster<_replication_join_at>` for more info on node lists.
+every active node in the cluster. See :ref:`Joining a cluster<replication_join_at>` for more info on node lists.
 
 .. code-block:: sql
 

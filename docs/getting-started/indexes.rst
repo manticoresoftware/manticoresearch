@@ -18,6 +18,8 @@ In the current version, indexes use a schema like a normal database table. The s
 * fulltext fields - they contain indexed content. There can be multiple fulltext fields per index. Fulltext searches can be made on all fields or selective. Currently the original text is not stored, so if it’s required to show their content in search results, a trip to the origin source must be made using the ids (or other identifier) obtained from the search
 * attributes - their values are stored and are not used in fulltext matching. Instead they can be used for regular filtering, grouping, sorting. They can be also used in expressions of score ranking.
 
+Field and attribute names must start with a letter and can contain letters, digits and underscore.
+
 The following types can be stored in attributes:
 
 * unsigned 32 bit and signed 64 bit integers

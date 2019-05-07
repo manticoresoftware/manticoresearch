@@ -18205,7 +18205,6 @@ void HandleCommandJson ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c &
 	CSphString sCommand = tReq.GetString ();
 	
 	ESphHttpEndpoint eEndpoint = sphStrToHttpEndpoint ( sEndpoint );
-	assert ( eEndpoint!=SPH_HTTP_ENDPOINT_TOTAL );
 
 	CSphVector<BYTE> dResult;
 	SmallStringHash_T<CSphString> tOptions;

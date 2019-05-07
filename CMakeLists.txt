@@ -55,7 +55,14 @@ also option forced to ON values: WITH_MYSQL, WITH_EXPAT, WITH_PGSQL, WITH_RE2, W
 Also LIBS_BUNDLE is automatically set to folder 'bundle' placed one level above the sources" )
 endif ()
 
-include ( GetGALERA )
+option ( USE_GALERA "Enable building Galera replication library and using it" ON )
+if ( APPLE OR NOT UNIX )
+	set ( DISABLE_REPLICATION OFF )
+endif ()
+
+if ( USE_GALERA )
+	include ( GetGALERA )
+endif ()
 
 
 # Collect build info which will be embedded into binaries

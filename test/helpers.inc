@@ -3132,7 +3132,11 @@ class SphinxConfig
 			if ( $cn === false )
 				return false;
 
-			$cols = join ( ", ", array_keys ( $data["orders"] ) );
+			$corrected_cols = array();
+			foreach ( array_keys($data["orders"]) as $key )
+				$corrected_cols[] = '`'.$key.'`';
+
+			$cols = join ( ", ", $corrected_cols );
 			$prefix = "INSERT INTO $name ($cols) VALUES ";
 
 			$accum = "";

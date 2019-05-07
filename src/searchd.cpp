@@ -8419,7 +8419,12 @@ SqlStmt_t::~SqlStmt_t()
 bool SqlStmt_t::AddSchemaItem ( const char * psName )
 {
 	m_dInsertSchema.Add ( psName );
-	m_dInsertSchema.Last().ToLower();
+	CSphString & sAttr = m_dInsertSchema.Last();
+	sAttr.ToLower();
+	int iLen = sAttr.Length();
+	if ( iLen>1 && sAttr.cstr()[0] == '`' && sAttr.cstr()[iLen-1]=='`' )
+		sAttr = sAttr.SubString ( 1, iLen-2 );
+
 	m_iSchemaSz = m_dInsertSchema.GetLength();
 	return true; // stub; check if the given field actually exists in the schema
 }

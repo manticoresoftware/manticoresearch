@@ -641,7 +641,7 @@ protected:
 			HttpErrorReply ( m_dData, eStatus, szError );
 		else
 		{
-			m_dData.Resize ( strlen(szError)+1 );
+			m_dData.Resize ( strlen(szError) );
 			memcpy ( m_dData.Begin(), szError, m_dData.GetLength() );
 		}
 	}
@@ -663,7 +663,7 @@ protected:
 			HttpErrorReply ( m_dData, eStatus, sBuf );
 		else
 		{
-			m_dData.Resize ( iPrinted+1 );
+			m_dData.Resize ( iPrinted );
 			memcpy ( m_dData.Begin(), sBuf, iPrinted );
 		}
 	}
@@ -684,7 +684,7 @@ protected:
 			HttpBuildReply ( m_dData, eStatus, sResult, iLen, false );
 		else
 		{
-			m_dData.Resize ( iLen+1 );
+			m_dData.Resize ( iLen );
 			memcpy ( m_dData.Begin(), sResult, m_dData.GetLength() );
 		}
 	}

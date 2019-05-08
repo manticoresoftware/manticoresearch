@@ -2377,16 +2377,8 @@ static void SetListener ( const CSphVector<ListenerDesc_t> & dListeners )
 		g_tPorts.AddRange ( tPorts );
 	}
 
-	int iPort = -1;
-	if ( g_bHasIncoming )
-	{
-		iPort = dListeners.GetFirst ( [&] ( const ListenerDesc_t & tListen ) { return tListen.m_eProto==PROTO_SPHINX && tListen.m_uIP!=0; } );
-	} else
-	{
-		iPort = dListeners.GetFirst ( [&] ( const ListenerDesc_t & tListen ) { return tListen.m_eProto==PROTO_SPHINX; } );
-	}
-
-	if ( iPort==-1 )
+	int iPort = dListeners.GetFirst ( [&] ( const ListenerDesc_t & tListen ) { return tListen.m_eProto==PROTO_SPHINX; } );
+	if ( iPort==-1 || !bGotReplicationPorts )
 	{
 		if ( g_dCfgClusters.GetLength() )
 			sphWarning ( "no 'listen' is found, cannot set incoming addresses, replication is disabled" );
@@ -2394,19 +2386,9 @@ static void SetListener ( const CSphVector<ListenerDesc_t> & dListeners )
 	}
 
 	if ( !g_bHasIncoming )
-	{
-		char sListenBuf [ SPH_ADDRESS_SIZE ];
-		sphFormatIP ( sListenBuf, sizeof(sListenBuf), dListeners[iPort].m_uIP );
-		g_sIncomingIP = sListenBuf;
-		g_sIncomingProto.SetSprintf ( "%s:%d", sListenBuf, dListeners[iPort].m_iPort );
-		if ( g_sListenReplicationIP.IsEmpty() )
-			g_sListenReplicationIP = sListenBuf;
-	} else
-	{
-		g_sIncomingProto.SetSprintf ( "%s:%d", g_sIncomingIP.cstr(), dListeners[iPort].m_iPort );
-		if ( g_sListenReplicationIP.IsEmpty() )
-			g_sListenReplicationIP = g_sIncomingIP;
-	}
+		g_sIncomingIP = g_sListenReplicationIP;
+
+	g_sIncomingProto.SetSprintf ( "%s:%d", g_sIncomingIP.cstr(), dListeners[iPort].m_iPort );
 
 	g_bReplicationEnabled = ( !g_sDataDir.IsEmpty() && bGotReplicationPorts );
 }

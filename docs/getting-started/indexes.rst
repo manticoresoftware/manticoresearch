@@ -134,13 +134,13 @@ The more interesting strategies are the latency-weighted probabilities based one
 Replication and cluster
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-To use replication define one :ref:`listen <listen>` address and port for SphinxAPI protocol and one :ref:`listen <listen>` for
+To use replication define one :ref:`listen <listen>` port for SphinxAPI protocol and one :ref:`listen <listen>` for
 replication address and port range in the config. Define :ref:`data_dir <data_dir>` folder for incoming indexes.
 
 .. code-block::  none
 
   searchd {
-    listen = 192.168.1.101:9312
+    listen = 9312
     listen = 192.168.1.101:9360-9370:replication
     data_dir = /var/lib/manticore/
     ...

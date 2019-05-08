@@ -338,3 +338,10 @@ most advanced node to the ``primary component`` with :ref:`SET <set_syntax>` sta
 
 
 All other nodes will reconnect to the node and resync their data based on this node.
+
+.. toctree::
+   :titlesonly:
+   
+   replication/recover-cluster
+   
+   

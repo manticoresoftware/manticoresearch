@@ -194,7 +194,9 @@ if ( SPLIT_SYMBOLS )
 	split_dbg ( index_converter )
 endif()
 
-INSTALL ( TARGETS indexer indextool searchd spelldump wordbreaker index_converter RUNTIME DESTINATION ${BINPREFIX}bin COMPONENT applications )
+INSTALL ( TARGETS indexer indextool searchd spelldump wordbreaker RUNTIME DESTINATION ${BINPREFIX}bin COMPONENT applications )
+
+INSTALL ( TARGETS index_converter RUNTIME DESTINATION ${BINPREFIX}bin COMPONENT converter )
 
 if ( NOT DISABLE_TESTING )
 	# Read docs at https://github.com/google/googletest.git

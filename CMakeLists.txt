@@ -57,7 +57,7 @@ endif ()
 
 option ( USE_GALERA "Enable building Galera replication library and using it" ON )
 if ( APPLE OR NOT UNIX )
-	set ( DISABLE_REPLICATION OFF )
+	set ( USE_GALERA OFF )
 endif ()
 
 if ( USE_GALERA )

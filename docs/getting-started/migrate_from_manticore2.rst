@@ -7,6 +7,26 @@ The upgrade procedure may differ depending on your setup (number of servers in t
 whether you have HA or not etc.), but in general it's about creating new 3.x index versions
 and replacing your existing ones with them along with replacing older 2.x binaries with the new ones.
 
+There are two special requirements to take care:
+
+- RealTime indexes require to be flushed on existing version (see below)
+- Plain indexes with kill-lists require adding a new directive in index configuration (see below)
+
+Manticore Search 3 includes a new tool - :ref:`index_converter tool<index_converter_command_reference>` -  that can convert 2.x indexes to 3.x format. 
+The :ref:`index_converter tool<index_converter_command_reference>` comes in a separate package which should be installed first. 
+Using the convert tool create 3.x versions of your indexes. The index_converter can write the new files in the existing data folder and backup the old files or it can write the new files to a chosen folder.
+If your
+
+If you have a single server:
+
+- install manticore-converter package
+- use index_converter to create new versions of the indexes in a different folder than the existing data folder ( using --output-dir option)
+- stop existing Manticore, upgrade to 3.0, move the new indexes to data folder, start Manticore
+
+To get a minimal downtime, you can copy 2.x indexes, config (you'll need to edit paths here for indexes, logs and different ports) and binaries to a separate location and start this on a separate port and point your application to it.After upgrade is made to  3.0 and the new daemon is started, you can point back the application to the normal ports. If all good, stop the 2.x copy and delete the files to free the space.
+
+If you have a spare box (like a testing or staging server), you can do here first the index upgrade and even install Manticore 3 to perform several tests and if everything is ok copy the new index files to the production server.If you have multiple servers which can be pulled out from production, do it one by one and perform the upgrade on each. For distributed setups, 2.x searchd can work as master with 3.x nodes, so you can do  upgrading on the data nodes first and at the end the master node.
+
 There have been no changes made on how clients should connect to the engine or any change
 in querying mode or queries behavior.
 

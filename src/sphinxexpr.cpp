@@ -8255,8 +8255,11 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	}
 
 	// deduce return type
+	ESphAttr eAttrType = m_dNodes[m_iParsed].m_eRetType;
+
 	// pooled MVAs are ok to use in expressions, but storing them into schema requires their _PTR counterparts
-	ESphAttr eAttrType = sphPlainAttrToPtrAttr ( m_dNodes[m_iParsed].m_eRetType );
+	if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET )
+		eAttrType = sphPlainAttrToPtrAttr(eAttrType);
 
 	// Check expression stack to fit for mutual recursive function calls.
 	// This check is an approximation, because different compilers with

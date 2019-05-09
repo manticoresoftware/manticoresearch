@@ -22,13 +22,16 @@ endif ()
 
 set ( CPACK_RPM_PACKAGE_URL "https://manticoresearch.com/" )
 set ( CPACK_RPM_PACKAGE_GROUP "Applications/Text" )
-set ( CPACK_RPM_PACKAGE_OBSOLETES "sphinx" )
-set ( CPACK_RPM_PACKAGE_DESCRIPTION "Manticore is a full-text search server that adds many advanced features
+set ( CPACK_RPM_BIN_PACKAGE_OBSOLETES "sphinx" )
+set ( CPACK_COMPONENT_BIN_DESCRIPTION "Manticore is a full-text search server that adds many advanced features
 on top of plain old text searching. Data can be fetched directly from
 a database, or streamed in XML format. MySQL, PostgreSQL, SQL Server,
 Oracle, and other databases are supported. Client programs can query
 Sphinx either using native SphinxAPI library, or using regular MySQL
 client programs and libraries via SQL-like SphinxQL interface.")
+
+ 
+ set  ( CPACK_COMPONENT_CONVERTER_DESCRIPTION "This package provides the index_converter tool for Manticore Search. index_converter upgrade indexes created with Manticore Search 2.x to Manticore Search 3.x format." )
 
 #set ( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST "/usr/include" )
 set ( CPACK_RPM_BIN_USER_FILELIST
@@ -67,10 +70,10 @@ configure_file ( "dist/rpm/manticore.logrotate.in" "${MANTICORE_BINARY_DIR}/mant
 
 set ( SCR "${CMAKE_CURRENT_SOURCE_DIR}/dist/rpm" ) # a shortcut
 if ( WITH_SYSTEMD )
-	set ( CPACK_RPM_BUILDREQUIRES "systemd-units" )
-	set ( CPACK_RPM_POST_INSTALL_SCRIPT_FILE "${SCR}/manticore_s.post" )
-	set ( CPACK_RPM_POST_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.postun" )
-	set ( CPACK_RPM_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.preun" )
+	set ( CPACK_RPM_BIN_BUILDREQUIRES "systemd-units" )
+	set ( CPACK_RPM_BIN_POST_INSTALL_SCRIPT_FILE "${SCR}/manticore_s.post" )
+	set ( CPACK_RPM_BIN_POST_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.postun" )
+	set ( CPACK_RPM_BIN_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.preun" )
 
 	configure_file ( "dist/rpm/manticore.tmpfiles.in" "${MANTICORE_BINARY_DIR}/searchd.conf" @ONLY )
 	configure_file ( "dist/rpm/manticore.generator.in" "${MANTICORE_BINARY_DIR}/manticore-search-generator" @ONLY )
@@ -79,10 +82,10 @@ if ( WITH_SYSTEMD )
 			DESTINATION usr/lib/systemd/system-generators COMPONENT adm )
 
 else ()
-	set ( CPACK_RPM_PACKAGE_REQUIRES_POST chkconfig )
-	set ( CPACK_RPM_PACKAGE_REQUIRES_PREUN "chkconfig, initscripts" )
-	set ( CPACK_RPM_POST_INSTALL_SCRIPT_FILE "${SCR}/manticore.post" )
-	set ( CPACK_RPM_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore.preun" )
+	set ( CPACK_RPM_BIN_PACKAGE_REQUIRES_POST chkconfig )
+	set ( CPACK_RPM_BIN_PACKAGE_REQUIRES_PREUN "chkconfig, initscripts" )
+	set ( CPACK_RPM_BIN_POST_INSTALL_SCRIPT_FILE "${SCR}/manticore.post" )
+	set ( CPACK_RPM_BIN_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore.preun" )
 	configure_file ( "dist/rpm/manticore.init.in" "${MANTICORE_BINARY_DIR}/searchd" @ONLY )
 	install ( PROGRAMS ${MANTICORE_BINARY_DIR}/searchd
 			DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/rc.d/init.d COMPONENT adm )

@@ -94,7 +94,7 @@ install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore/dat
 install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COMPONENT adm )
 
 # tickets per components
-set ( CPACK_DEBIAN_PACKAGE_DESCRIPTION "Fast standalone full-text SQL search engine
+set ( CPACK_COMPONENT_BIN_DESCRIPTION "Fast standalone full-text SQL search engine
  Manticore (ex. Sphinx) is a standalone full text search engine, meant to provide fast,
  size-efficient and relevant fulltext search functions to other applications.
  Sphinx was specially designed to integrate well with SQL databases and
@@ -104,6 +104,8 @@ set ( CPACK_DEBIAN_PACKAGE_DESCRIPTION "Fast standalone full-text SQL search eng
  recognizes).
  .
  Sphinx is an acronym which is officially decoded as SQL Phrase Index." )
+ 
+ set  ( CPACK_COMPONENT_CONVERTER_DESCRIPTION "This package provides the index_converter tool for Manticore Search. index_converter upgrade indexes created with Manticore Search 2.x to Manticore Search 3.x format." )
 
 
 set ( CPACK_DEBIAN_PACKAGE_NAME "manticore" )
@@ -116,9 +118,9 @@ set ( CPACK_DEBIAN_PACKAGE_NAME "manticore" )
 set ( CPACK_DEBIAN_PACKAGE_SHLIBDEPS "ON" )
 set ( CPACK_DEBIAN_PACKAGE_SECTION "misc" )
 set ( CPACK_DEBIAN_PACKAGE_PRIORITY "optional" )
-set ( CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${MANTICORE_BINARY_DIR}/conffiles;${MANTICORE_BINARY_DIR}/postinst;${MANTICORE_BINARY_DIR}/prerm;${EXTRA_SCRIPTS}" )
+set ( CPACK_DEBIAN_BIN_PACKAGE_CONTROL_EXTRA "${MANTICORE_BINARY_DIR}/conffiles;${MANTICORE_BINARY_DIR}/postinst;${MANTICORE_BINARY_DIR}/prerm;${EXTRA_SCRIPTS}" )
 set ( CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION "ON" )
-set ( CPACK_DEBIAN_PACKAGE_REPLACES "sphinxsearch" )
+set ( CPACK_DEBIAN_BIN_PACKAGE_REPLACES "sphinxsearch" )
 
 set ( CONFFILEDIR "${SYSCONFDIR}/sphinxsearch" )
 

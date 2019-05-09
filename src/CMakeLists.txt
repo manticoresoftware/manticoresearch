@@ -180,7 +180,9 @@ target_link_libraries ( spelldump libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( wordbreaker libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( index_converter libsphinx ${EXTRA_LIBRARIES} )
 
-SET_SEARCHD_RPATH ()
+IF ( USE_GALERA )
+    SET_SEARCHD_RPATH ()
+endif ()
 
 include ( helpers )
 

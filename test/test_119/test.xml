@@ -143,6 +143,10 @@ INSERT INTO `test_table` VALUES
 <!-- regression: aggregate dependencies -->
 <sphinxql>select ival*ival as p, sum(p), avg(p), min(p), max(p) from test</sphinxql>
 
+<!-- regression: mva aliasing -->
+<sphinxql>select mva a, least(a) from mva</sphinxql>
+
+
 </sphqueries>
 
 </test>

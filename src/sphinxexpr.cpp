@@ -4210,8 +4210,8 @@ public:
 			case SPH_UDF_TYPE_FLOAT:		*(float*)&m_dArgvals[i] = m_dArgs[i]->Eval ( tMatch ); break;
 			case SPH_UDF_TYPE_STRING:		tArgs.str_lengths[i] = m_dArgs[i]->StringEval ( tMatch, (const BYTE**)&tArgs.arg_values[i] ); break;
 			case SPH_UDF_TYPE_UINT32SET:
-			case SPH_UDF_TYPE_UINT64SET:
-				tArgs.arg_values[i] = (char*) m_dArgs[i]->MvaEval ( tMatch, tArgs.str_lengths[i] ); break;
+			case SPH_UDF_TYPE_INT64SET:
+				tArgs.arg_values[i] = (char*) m_dArgs[i]->MvaEval ( tMatch, tArgs.str_lengths[i] );
 				tArgs.str_lengths[i] /= ( tArgs.arg_types[i]==SPH_UDF_TYPE_UINT32SET ) ? sizeof(DWORD) : sizeof(int64_t);
 				break;
 
@@ -7250,11 +7250,13 @@ int ExprParser_t::AddNodeAttr ( int iTokenType, uint64_t uAttrLocator )
 	tNode.m_iToken = iTokenType;
 	sphUnpackAttrLocator ( uAttrLocator, &tNode );
 
+	bool bPtrAttr = tNode.m_tLocator.m_iBlobAttrId<0;
+
 	switch ( iTokenType )
 	{
 	case TOK_ATTR_FLOAT:	tNode.m_eRetType = SPH_ATTR_FLOAT;			break;
-	case TOK_ATTR_MVA32:	tNode.m_eRetType = SPH_ATTR_UINT32SET_PTR;	break;
-	case TOK_ATTR_MVA64:	tNode.m_eRetType = SPH_ATTR_INT64SET_PTR;	break;
+	case TOK_ATTR_MVA32:	tNode.m_eRetType = bPtrAttr ? SPH_ATTR_UINT32SET_PTR : SPH_ATTR_UINT32SET;	break;
+	case TOK_ATTR_MVA64:	tNode.m_eRetType = bPtrAttr ? SPH_ATTR_INT64SET_PTR : SPH_ATTR_INT64SET;	break;
 	case TOK_ATTR_STRING:	tNode.m_eRetType = SPH_ATTR_STRING;			break;
 	case TOK_ATTR_FACTORS:	tNode.m_eRetType = SPH_ATTR_FACTORS;		break;
 	case TOK_ATTR_JSON:		tNode.m_eRetType = SPH_ATTR_JSON_FIELD;		break;
@@ -7913,10 +7915,12 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 					eRes = SPH_UDF_TYPE_STRING;
 					break;
 				case SPH_ATTR_UINT32SET:
+				case SPH_ATTR_UINT32SET_PTR:
 					eRes = SPH_UDF_TYPE_UINT32SET;
 					break;
 				case SPH_ATTR_INT64SET:
-					eRes = SPH_UDF_TYPE_UINT64SET;
+				case SPH_ATTR_INT64SET_PTR:
+					eRes = SPH_UDF_TYPE_INT64SET;
 					break;
 				case SPH_ATTR_FACTORS:
 					eRes = SPH_UDF_TYPE_FACTORS;
@@ -8251,7 +8255,8 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	}
 
 	// deduce return type
-	ESphAttr eAttrType = m_dNodes[m_iParsed].m_eRetType;
+	// pooled MVAs are ok to use in expressions, but storing them into schema requires their _PTR counterparts
+	ESphAttr eAttrType = sphPlainAttrToPtrAttr ( m_dNodes[m_iParsed].m_eRetType );
 
 	// Check expression stack to fit for mutual recursive function calls.
 	// This check is an approximation, because different compilers with

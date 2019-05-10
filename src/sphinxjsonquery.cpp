@@ -1711,7 +1711,7 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes
 		const BYTE * pFactors = ( const BYTE * ) tMatch.GetAttr ( tLoc );
 		sphUnpackPtrAttr ( pFactors, &pFactors );
 		if ( pFactors )
-			sphFormatFactors ( tOut, ( const unsigned int * ) pFactors, eAttrType!=SPH_ATTR_FACTORS );
+			sphFormatFactors ( tOut, ( const unsigned int * ) pFactors, true );
 		else
 			tOut << "null";
 	}
@@ -1917,10 +1917,10 @@ JsonObj_c sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID
 	JsonObj_c tObj;
 
 	tObj.AddStr ( "_index", szIndex );
-	tObj.AddNum ( "_id", tDocId );
+	tObj.AddInt ( "_id", tDocId );
 	tObj.AddBool ( "created", !bReplace );
 	tObj.AddStr ( "result", bReplace ? "updated" : "created" );
-	tObj.AddNum ( "status", bReplace ? 200 : 201 );
+	tObj.AddInt ( "status", bReplace ? 200 : 201 );
 
 	return tObj;
 }
@@ -1933,10 +1933,10 @@ JsonObj_c sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int 
 	tObj.AddStr ( "_index", szIndex );
 
 	if ( !tDocId )
-		tObj.AddNum ( "updated", iAffected );
+		tObj.AddInt ( "updated", iAffected );
 	else
 	{
-		tObj.AddNum ( "_id", tDocId );
+		tObj.AddInt ( "_id", tDocId );
 		tObj.AddStr ( "result", iAffected ? "updated" : "noop" );
 	}
 
@@ -1951,10 +1951,10 @@ JsonObj_c sphEncodeDeleteResultJson ( const char * szIndex, DocID_t tDocId, int 
 	tObj.AddStr ( "_index", szIndex );
 
 	if ( !tDocId )
-		tObj.AddNum ( "deleted", iAffected );
+		tObj.AddInt ( "deleted", iAffected );
 	else
 	{
-		tObj.AddNum ( "_id", tDocId );
+		tObj.AddInt ( "_id", tDocId );
 		tObj.AddBool ( "found", !!iAffected );
 		tObj.AddStr ( "result", iAffected ? "deleted" : "not found" );
 	}
@@ -1971,7 +1971,7 @@ JsonObj_c sphEncodeInsertErrorJson ( const char * szIndex, const char * szError 
 	tErr.AddStr ( "index", szIndex );
 
 	tObj.AddItem ( "error", tErr );
-	tObj.AddNum ( "status", 500 );
+	tObj.AddInt ( "status", 500 );
 
 	return tObj;
 }

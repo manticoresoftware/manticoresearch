@@ -1403,7 +1403,7 @@ void JsonObj_c::AddStr ( const char * szName, const CSphString & sValue )
 }
 
 
-void JsonObj_c::AddNum ( const char * szName, int64_t iValue )
+void JsonObj_c::AddInt ( const char * szName, int64_t iValue )
 {
 	assert ( m_pRoot );
 	cJSON_AddNumberToObject ( m_pRoot, szName, iValue );

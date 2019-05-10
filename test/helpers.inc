@@ -1018,6 +1018,22 @@ function HttpQueryPost ( $http_endpoint, $http_content, $http_post )
 }
 
 
+function GetJsonError()
+{
+    switch (json_last_error())
+	{
+		case JSON_ERROR_NONE:			return 'no errors';
+		case JSON_ERROR_DEPTH:			return 'maximum stack depth exceeded';
+		case JSON_ERROR_STATE_MISMATCH: return 'underflow or the modes mismatch';
+		case JSON_ERROR_CTRL_CHAR:		return 'unexpected control character found';
+		case JSON_ERROR_SYNTAX:			return 'syntax error, malformed JSON';
+		case JSON_ERROR_UTF8:			return 'malformed UTF-8 characters, possibly incorrectly encoded';
+    }
+
+	return 'unknown error';
+}
+
+
 class SphinxConfig
 {
 	private $_name;
@@ -1694,7 +1710,7 @@ class SphinxConfig
 				$decoded_rows = json_decode ( $query_result['rows'] );
 				if ( !$decoded_rows )
 				{
-					$error = "Unable to decode repsonse json'" . $query_result['rows'] . "'";
+					$error = "Unable to decode repsonse json'" . $query_result['rows'] . "': ".GetJsonError();
 					return false;
 				}
 

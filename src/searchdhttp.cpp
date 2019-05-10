@@ -22,158 +22,6 @@
 #include "searchdha.h"
 #include "searchdreplication.h"
 
-static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & tOut )
-{
-	const ISphSchema & tSchema = tRes.m_tSchema;
-	StringBuilder_c sTmp;
-
-	CSphBitvec tAttrsToSend;
-	sphGetAttrsToSend ( tSchema, false, true, tAttrsToSend );
-
-	tOut.StartBlock ( ",", "{", "}");
-
-	// column names
-	tOut.StartBlock (",", R"("attrs":[)","]");
-	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
-		if ( tAttrsToSend.BitGet(i) )
-			tOut.AppendString ( tSchema.GetAttr(i).m_sName, '"');
-	tOut.FinishBlock(false); // attrs
-
-	// attribute values
-	tOut.StartBlock ( "," , R"("matches":[)", "]" );
-	for ( int iMatch=tRes.m_iOffset; iMatch<tRes.m_iOffset+tRes.m_iCount; ++iMatch )
-	{
-		tOut.StartBlock ( ",", "[", "]");
-
-		const CSphMatch & tMatch = tRes.m_dMatches [ iMatch ];
-		for ( int iAttr=0; iAttr<tSchema.GetAttrsCount(); ++iAttr )
-		{
-			if ( !tAttrsToSend.BitGet(iAttr) )
-				continue;
-
-			CSphAttrLocator tLoc = tSchema.GetAttr(iAttr).m_tLocator;
-			ESphAttr eAttrType = tSchema.GetAttr(iAttr).m_eAttrType;
-
-			assert ( sphPlainAttrToPtrAttr(eAttrType)==eAttrType );
-
-			switch ( eAttrType )
-			{
-			case SPH_ATTR_FLOAT:
-				tOut.Appendf ( "%f", tMatch.GetAttrFloat(tLoc) );
-				break;
-
-			case SPH_ATTR_UINT32SET_PTR:
-			case SPH_ATTR_INT64SET_PTR:
-				{
-					ScopedComma_c sNoComma ( tOut, nullptr );
-					tOut << "[";
-					sphPackedMVA2Str ( (const BYTE *)tMatch.GetAttr ( tLoc ), eAttrType==SPH_ATTR_INT64SET_PTR, tOut );
-					tOut << "]";
-				}
-				break;
-
-			case SPH_ATTR_STRINGPTR:
-				{
-					auto * pString = ( const BYTE * ) tMatch.GetAttr ( tLoc );
-					int iLen = sphUnpackPtrAttr ( pString, &pString );
-					tOut.AppendEscaped ( (const char*) pString, EscBld::eEscape, iLen );
-				}
-				break;
-
-			case SPH_ATTR_JSON_PTR:
-				{
-					const BYTE * pJSON = (const BYTE *)tMatch.GetAttr ( tLoc );
-					sphUnpackPtrAttr ( pJSON, &pJSON );
-					auto pTest = tOut.end();
-					sphJsonFormat ( tOut, pJSON );
-					// empty string (no objects) - return NULL
-					// (canonical "{}" and "[]" are handled by sphJsonFormat)
-
-					if ( pTest == tOut.end() )
-						tOut += "null";
-				}
-				break;
-
-			case SPH_ATTR_FACTORS:
-			case SPH_ATTR_FACTORS_JSON:
-				{
-					const BYTE * pFactors = (const BYTE *)tMatch.GetAttr ( tLoc );
-					sphUnpackPtrAttr ( pFactors, &pFactors );
-					if ( pFactors )
-					{
-						if ( eAttrType==SPH_ATTR_FACTORS_JSON ) // fixme! need test for it!
-							sphFormatFactors ( tOut, ( unsigned int * ) pFactors, true );
-						else
-						{
-							sTmp.Clear ();
-							sphFormatFactors ( sTmp, ( unsigned int * ) pFactors, false );
-							tOut.AppendEscaped ( sTmp.cstr(), EscBld::eEscape );
-						}
-					} else
-						tOut += "null";
-				}
-				break;
-
-			case SPH_ATTR_JSON_FIELD_PTR:
-				{
-					const BYTE * pField = (const BYTE *)tMatch.GetAttr ( tLoc );
-					sphUnpackPtrAttr ( pField, &pField );
-					if ( !pField )
-					{
-						tOut += "null";
-						break;
-					}
-
-					auto eJson = ESphJsonType ( *pField++ );
-					if ( eJson==JSON_NULL )
-					{
-						// no key found - NULL value
-						tOut += "null";
-					} else
-					{
-						// send string to client
-						sphJsonFieldFormat ( tOut, pField, eJson, true );
-					}
-				}
-				break;
-
-			case SPH_ATTR_INTEGER:
-			case SPH_ATTR_TIMESTAMP:
-			case SPH_ATTR_BOOL:
-			case SPH_ATTR_TOKENCOUNT:
-			case SPH_ATTR_BIGINT:
-			default:
-				tOut.Appendf ( INT64_FMT, tMatch.GetAttr(tLoc) );
-			}
-		}
-		tOut.FinishBlock (); // one match
-	}
-	tOut.FinishBlock ( false ); // matches
-
-	// meta information
-	tOut.StartBlock ( ",", R"("meta":{)", "}" );
-	tOut.Sprintf ( R"("total":%d, "total_found":%l, "time":%.3F)",
-		tRes.m_iMatches, tRes.m_iTotalMatches, tRes.m_iQueryTime );
-
-	// word statistics
-	tOut.StartBlock ( ",", R"("words":[)", "]" );
-	auto &hWS = tRes.m_hWordStats;//.IterateStart();
-	for ( hWS.IterateStart (); hWS.IterateNext (); )
-	{
-		const auto &tS = tRes.m_hWordStats.IterateGet ();
-		tOut.Sprintf ( R"({"word":"%s", "docs":%l, "hits":%l})", hWS.IterateGetKey().cstr(), tS.m_iDocs, tS.m_iHits );
-	}
-	tOut.FinishBlock ( false ); // words
-	tOut.FinishBlock ( false ); // meta
-
-	if ( !tRes.m_sWarning.IsEmpty() )
-	{
-		tOut << R"("warning":)";
-		tOut.AppendEscaped ( tRes.m_sWarning.cstr (), EscBld::eAll | EscBld::eSkipComma );
-	}
-	tOut.FinishBlock (false);
-}
-
 
 const char * g_dHttpStatus[] = { "200 OK", "206 Partial Content", "400 Bad Request", "500 Internal Server Error",
 								 "501 Not Implemented", "503 Service Unavailable" };
@@ -783,46 +631,11 @@ protected:
 };
 
 
-class HttpSearchHandler_Plain_c : public HttpSearchHandler_c
-{
-public:
-	HttpSearchHandler_Plain_c ( const char * sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd )
-		: HttpSearchHandler_c ( sQuery, tOptions, tThd )
-	{}
-
-protected:
-	QueryParser_i * PreParseQuery() override
-	{
-		CSphString sError;
-		ParseSearchOptions ( m_tOptions, m_tQuery );
-		if ( !ParseSelectList ( sError, m_tQuery ) )
-		{
-			ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
-			return NULL;
-		}
-
-		if ( !m_tQuery.m_sSortBy.IsEmpty() )
-			m_tQuery.m_eSort = SPH_SORT_EXTENDED;
-
-		m_eQueryType = QUERY_SQL;
-
-		return sphCreatePlainQueryParser();
-	}
-
-	CSphString EncodeResult ( const AggrResult_t & tRes, CSphQueryProfile * /*pProfile*/ ) override
-	{
-		JsonEscapedBuilder tResBuilder;
-		EncodeResultJson ( tRes, tResBuilder );
-		return tResBuilder.cstr();
-	}
-};
-
-
-class HttpSearchHandler_SQL_c : public HttpSearchHandler_Plain_c
+class HttpSearchHandler_SQL_c : public HttpSearchHandler_c
 {
 public:
 	HttpSearchHandler_SQL_c ( const char * sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd )
-		: HttpSearchHandler_Plain_c ( sQuery, tOptions, tThd )
+		: HttpSearchHandler_c ( sQuery, tOptions, tThd )
 	{}
 
 protected:
@@ -871,6 +684,11 @@ protected:
 		m_eQueryType = QUERY_SQL;
 
 		return sphCreatePlainQueryParser();
+	}
+
+	CSphString EncodeResult ( const AggrResult_t & tRes, CSphQueryProfile * pProfile ) override
+	{
+		return sphEncodeResultJson ( tRes, m_tQuery, pProfile, false );
 	}
 };
 
@@ -1189,9 +1007,6 @@ static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const cha
 {
 	switch ( eEndpoint )
 	{
-	case SPH_HTTP_ENDPOINT_SEARCH:
-		return new HttpSearchHandler_Plain_c ( sQuery, tOptions, tThd );
-
 	case SPH_HTTP_ENDPOINT_SQL:
 		return new HttpSearchHandler_SQL_c ( sQuery, tOptions, tThd );
 
@@ -1276,7 +1091,7 @@ void sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const c
 }
 
 
-const char * g_dEndpoints[] = { "index.html", "search", "sql", "json/search", "json/index", "json/create", "json/insert", "json/replace", "json/update", "json/delete", "json/bulk", "json/pq" };
+const char * g_dEndpoints[] = { "index.html", "sql", "json/search", "json/index", "json/create", "json/insert", "json/replace", "json/update", "json/delete", "json/bulk", "json/pq" };
 STATIC_ASSERT ( sizeof(g_dEndpoints)/sizeof(g_dEndpoints[0])==SPH_HTTP_ENDPOINT_TOTAL, SPH_HTTP_ENDPOINT_SHOULD_BE_SAME_AS_SPH_HTTP_ENDPOINT_TOTAL );
 
 ESphHttpEndpoint sphStrToHttpEndpoint ( const CSphString & sEndpoint )

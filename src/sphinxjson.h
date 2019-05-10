@@ -248,8 +248,10 @@ public:
 
 	void			AddStr ( const char * szName, const char * szValue );
 	void			AddStr ( const char * szName, const CSphString & sValue );
-	void			AddNum ( const char * szName, int64_t iValue );
+	void			AddInt ( const char * szName, int64_t iValue );
+	void			AddFlt ( const char * szName, float fValue );
 	void			AddBool ( const char * szName, bool bValue );
+	void			AddNull ( const char * szName );
 	void			AddItem ( const char * szName, JsonObj_c & tObj );
 	void			AddItem ( JsonObj_c & tObj );
 	void			DelItem ( const char * szName );
@@ -267,6 +269,7 @@ public:
 	bool			FetchStrItem ( CSphString & sValue, const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
 	bool			HasItem ( const char * szName ) const;
 
+	static JsonObj_c CreateInt ( int64_t iInt );
 	static JsonObj_c CreateStr ( const CSphString & sStr );
 
 	bool			IsInt() const;

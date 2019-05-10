@@ -74,14 +74,8 @@ Two"}')
 </db_insert>
 
 <httpqueries>
-<query endpoint="search" method="get">index=test&amp;limit=10&amp;select=*</query>
-<query endpoint="search" method="post">index=test&amp;limit=2&amp;select=*</query>
 <query endpoint="sql" method="get">query=select+*+from+test+limit+2</query>
-<query endpoint="search" method="get">index=test&amp;limit=5&amp;select=*&amp;match=tes%2a</query>
-<query endpoint="search" method="post">index=test&amp;limit=5&amp;select=*&amp;match=tes%2a</query>
 <query endpoint="sql" method="get">query=select%20%2A+from+test%20where+match('tes%2a')+limit+5</query>
-<query endpoint="search" method="get">index=test&amp;limit=10&amp;select=*&amp;group=gid</query>
-<query endpoint="search" method="post">index=test&amp;limit=5&amp;select=*&amp;order_by=j.uid+asc</query>
 <query endpoint="sql" method="post">query=select%20%2A+from+test%20order+by+j.uid+asc+limit+5</query>
 
 <!-- expected to fail since non-url encoded -->

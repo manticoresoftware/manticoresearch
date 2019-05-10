@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>SENTENCE hitbuffer edge cases</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+	binlog_path = #
+    subtree_docs_cache  = 128k
+    subtree_hits_cache  = 128k
+}
+
+source dummysrc
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test_table
+}
+
+index dummysrcmain
+{
+	source			= dummysrc
+	path			= <data_path/>/dummysrcmain
+}
+
+index test1
+{
+	type			= rt
+	path			= <data_path/>/rt
+	
+	rt_field	= title
+	rt_attr_uint	= idd
+	
+	html_strip		= 1
+	index_sp		= 1
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL AUTO_INCREMENT,
+	title varchar(255) NOT NULL
+);
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>insert into test_table values ( 1, 'first')</db_insert>
+
+<sphqueries>
+
+<sphinxql>
+INSERT INTO test1 (id, title) VALUES
+( 10, 'The one book might be same as two books' ),
+( 11, 'The one book might be same as two books' ),
+( 12, 'The one book might be same as two books' ),
+( 13, 'The one book might be same as two books' ),
+( 14, 'The one book might be same as two books' ),
+( 15, 'The one book might be same as two books' ),
+( 16, 'The one book might be same as two books' ),
+( 17, 'The one book might be same as two books' ),
+( 18, 'The one book might be same as two books' ),
+( 19, 'The one book might be same as two books' ),
+( 20, 'The one book might be same as two books' ),
+( 21, 'The one book might be same as two books' ),
+( 22, 'The one book might be same as two books' ),
+( 23, 'The one book might be same as two books' ),
+( 24, 'The one book might be same as two books' ),
+( 25, 'The one book might be same as two books' ),
+( 26, 'The one book might be same as two books' ),
+( 27, 'The one book might be same as two books' ),
+( 28, 'The one book might be same as two books' ),
+( 29, 'The one book might be same as two books' ),
+( 30, 'The one book might be same as two books' ),
+( 31, 'The one book might be same as two books' ),
+( 32, 'The one book might be same as two books' ),
+( 33, 'The one book might be same as two books' ),
+( 34, 'The one book might be same as two books' ),
+( 35, 'The one book might be same as two books' ),
+( 36, 'The one book might be same as two books' ),
+( 37, 'The one book might be same as two books' ),
+( 38, 'The one book might be same as two books' ),
+( 39, 'The one book might be same as two books' ),
+( 40, 'The one book might be same as two books' ),
+( 41, 'The one book might be same as two books' ),
+( 42, 'The one book might be same as two books' ),
+( 43, 'The one book might be same as two books' ),
+( 44, 'The one book might be same as two books' ),
+( 45, 'The one book might be same as two books' ),
+( 46, 'The one book might be same as two books' ),
+( 47, 'The one book might be same as two books' ),
+( 48, 'The one book might be same as two books' ),
+( 49, 'The one book might be same as two books' ),
+
+( 110, 'The one book. Not same as two books' ),
+( 111, 'The one book is not same as two books. But tree might be better.' )
+</sphinxql>
+
+<!-- regression for dot hit after buffer of regular matches -->
+<sphinxql> SELECT * FROM test1 WHERE MATCH (' one SENTENCE two' ) ORDER BY id DESC </sphinxql>
+
+</sphqueries>
+
+</test>

@@ -826,6 +826,11 @@ private:
 	const ExtHit_t *	m_pHit1 {nullptr};		///< current in-chunk ptr
 	const ExtHit_t *	m_pHit2 {nullptr};		///< current in-chunk ptr
 	const ExtHit_t *	m_pDotHit {nullptr};	///< current in-chunk ptr
+
+	// need to keep this between GetDocsChunk
+	// as one call of GetDocsChunk might fetch m_pDotDocs
+	// but fetch m_pDotHit many calls later
+	bool m_bNeedDotHits = false;
 };
 
 
@@ -4983,6 +4988,7 @@ void ExtUnit_c::Reset ( const ISphQwordSetup & tSetup )
 
 	m_pDocs1 = m_pDocs2 = m_pDotDocs = nullptr;
 	m_pDoc1 = m_pDoc2 = m_pDotDoc = nullptr;
+	m_bNeedDotHits = false;
 
 	BufferedNode_c::Reset();
 }
@@ -5161,7 +5167,6 @@ const ExtDoc_t * ExtUnit_c::GetDocsChunk()
 
 	bool bNeedDoc1Hits = false;
 	bool bNeedDoc2Hits = false;
-	bool bNeedDotHits = false;
 	while ( iDoc<MAX_BLOCK_DOCS-1 )
 	{
 		// fetch more candidate docs, if needed
@@ -5209,7 +5214,7 @@ const ExtDoc_t * ExtUnit_c::GetDocsChunk()
 		{
 			m_pDot->HintRowID(tRowID);
 			pDotDoc = m_pDotDocs = m_pDot->GetDocsChunk();
-			bNeedDotHits = true;
+			m_bNeedDotHits = true;
 		}
 
 		// skip preceding docs
@@ -5221,7 +5226,7 @@ const ExtDoc_t * ExtUnit_c::GetDocsChunk()
 			if ( !HasDocs(pDotDoc) )
 			{
 				pDotDoc = m_pDotDocs = m_pDot->GetDocsChunk();
-				bNeedDotHits = true;
+				m_bNeedDotHits = true;
 			}
 		}
 
@@ -5258,10 +5263,10 @@ const ExtDoc_t * ExtUnit_c::GetDocsChunk()
 		{
 			// got both hits and dots
 			// rewind to relevant dots hits, then do sentence boundary detection
-			if ( bNeedDotHits )
+			if ( m_bNeedDotHits )
 			{
 				pDotHit = m_pDot->GetHits ( pDotDoc );
-				bNeedDotHits = false;
+				m_bNeedDotHits = false;
 			}
 
 			while ( pDotHit->m_tRowID < tRowID )

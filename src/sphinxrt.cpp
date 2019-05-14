@@ -3368,6 +3368,8 @@ int RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, con
 	if ( !tGuard.m_dRamChunks.GetLength() )
 		return -1;
 
+	int64_t tmSave = sphMicroTimer ();
+
 	MEMORY ( MEM_INDEX_RT );
 
 	CSphFixedVector<int> dChunkNames = GetIndexNames ( tGuard.m_dDiskChunks, true );
@@ -3432,6 +3434,10 @@ int RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, con
 	m_tmSaved = sphMicroTimer();
 
 	Verify ( m_tWriting.Unlock() );
+
+	tmSave = sphMicroTimer () - tmSave;
+	sphInfo ( "rt: index %s: diskchunk %d saved in %d.%03d sec",
+			  m_sIndexName.cstr (), iChunkId, ( int ) ( tmSave / 1000000 ), ( int ) (( tmSave / 1000 ) % 1000 ));
 
 	return iChunkId;
 }

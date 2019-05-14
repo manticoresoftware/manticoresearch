@@ -71,6 +71,18 @@ windows:
     - cmake -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 .
     - cmake --build . --target package --config RelWithDebInfo --clean-first
     - cp manticore-*.zip ..
+    - cd ..
+    - mkdir sphinxconvbin-x32
+    - cd sphinxconvbin-x32
+    - cmake -G "Visual Studio 14" -DSPHINX_TAG=$RELEASE_TAG -DDISABLE_TESTING=1 -DWITH_RE2=0 -DWITH_STEMMER=0 -WITH_EXPAT=0 -WITH_ICONV=0 -WITH_MYSQL=0 .. 
+    - cmake --build . --target package --config RelWithDebInfo --clean-first    
+    - cp manticore-*-converter.zip ..
+    - cd ..    
+    - mkdir sphinxconvbin-x64
+    - cd sphinxconvbin-x64
+    - cmake -G "Visual Studio 14 Win64" -DSPHINX_TAG=$RELEASE_TAG -DDISABLE_TESTING=1 -DWITH_RE2=0 -DWITH_STEMMER=0 -DWITH_RE2=0 -DWITH_STEMMER=0 -WITH_EXPAT=0 -WITH_ICONV=0 -WITH_MYSQL=0 .. 
+    - cmake --build . --target package --config RelWithDebInfo --clean-first    
+    - cp manticore-*-converter.zip ..
   artifacts:
     paths:
       - manticore-*.zip

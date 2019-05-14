@@ -9256,17 +9256,11 @@ void SqlParser_c::UpdateMVAAttr ( const SqlNode_t & tName, const SqlNode_t & dVa
 		// got MVA values, let's process them
 		dValues.m_pValues->Uniq(); // don't need dupes within MVA
 		tUpd.m_dPool.Add ( dValues.m_pValues->GetLength()*2 );
-		SphAttr_t * pVal = dValues.m_pValues->Begin();
-		SphAttr_t * pValMax = pVal + dValues.m_pValues->GetLength();
-		for ( ;pVal<pValMax; pVal++ )
+		for ( auto uVal : *dValues.m_pValues )
 		{
-			SphAttr_t uVal = *pVal;
 			if ( uVal>UINT_MAX )
-			{
 				eType = SPH_ATTR_INT64SET;
-			}
-			tUpd.m_dPool.Add ( (DWORD)uVal );
-			tUpd.m_dPool.Add ( (DWORD)( uVal>>32 ) );
+			*(( int64_t* ) tUpd.m_dPool.AddN ( 2 )) = uVal;
 		}
 	} else
 	{
@@ -10623,7 +10617,8 @@ void UpdateRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedOu
 					tOut.SendDword ( uVal/2 );
 					while ( pPool<pEnd )
 					{
-						tOut.SendDword ( *pPool );
+						auto iVal = *(int64_t*)pPool;
+						tOut.SendDword ( iVal&0xFFFFFFFF );
 						pPool += 2;
 					}
 				}
@@ -10774,8 +10769,7 @@ void HandleCommandUpdate ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c 
 					tUpd.m_dPool.Add ( dMva.GetLength()*2 );
 					ARRAY_FOREACH ( j, dMva )
 					{
-						tUpd.m_dPool.Add ( dMva[j] );
-						tUpd.m_dPool.Add ( 0 ); // dummy expander mva32 -> mva64
+						*(int64_t*)tUpd.m_dPool.AddN(2) = dMva[j]; // dummy expander mva32 -> mva64
 					}
 				}
 				break;

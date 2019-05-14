@@ -83,44 +83,22 @@ protected:
 };
 
 
-class AttributePacker_MVA32_c : public AttributePacker_c
-{
-public:
-	bool SetData ( const BYTE * pData, int iDataLen, CSphString & /*sError*/ ) override
-	{
-		// incoming data is int64_t, need to make it 32-bit
-		m_dData.Resize ( iDataLen/sizeof(int64_t)*sizeof(DWORD) );
-		DWORD * pMva32 = (DWORD *)m_dData.Begin();
-		auto pMva64 = (const int64_t *)pData;
-		for ( DWORD i = 0; i < iDataLen/sizeof(int64_t); i++ )
-		{
-			*pMva32 = (DWORD)*pMva64;
-			pMva32++;
-			pMva64++;
-		}
-
-		return true;
-	}
-};
-
-
 // packs MVAs coming from updates (pairs of DWORDS for each value)
-template <typename T>
-class AttributePacker_MVA_Update_T : public AttributePacker_c
+template <typename INT>
+class AttributePacker_MVA_T : public AttributePacker_c
 {
 public:
 	bool SetData ( const BYTE * pData, int iDataLen, CSphString & /*sError*/ ) override
 	{
-		int iValueSize = 2*sizeof(DWORD);
+		int iValueSize = sizeof ( int64_t );
 		int nValues = iDataLen/iValueSize;
-		m_dData.Resize ( nValues*sizeof(T) );
-		T * pResult = (T*)m_dData.Begin();
+		m_dData.Resize ( nValues*sizeof(INT) );
+		auto * pResult = (INT*)m_dData.Begin();
 
 		for ( int i = 0; i<nValues; i++ )
 		{
-			DWORD uLo = sphUnalignedRead ( *(DWORD*)pData );
-			DWORD uHi = sphUnalignedRead ( *((DWORD*)pData + 1) );
-			*pResult = (T)( (int64_t)uLo | ( ((int64_t)uHi) << 32 ) );
+			auto iVal = sphUnalignedRead ( *(int64_t*)pData );
+			*pResult = INT(iVal);
 			pResult++;
 			pData += iValueSize;
 		}
@@ -129,6 +107,7 @@ public:
 	}
 };
 
+using AttributePacker_MVA32_c = AttributePacker_MVA_T<DWORD>;
 
 class AttributePacker_Json_c : public AttributePacker_c
 {
@@ -455,11 +434,11 @@ BlobRowBuilder_MemUpdate_c::BlobRowBuilder_MemUpdate_c ( const ISphSchema & tSch
 			break;
 
 		case SPH_ATTR_UINT32SET:
-			pPacker = new AttributePacker_MVA_Update_T<DWORD>;
+			pPacker = new AttributePacker_MVA_T<DWORD>;
 			break;
 
 		case SPH_ATTR_INT64SET:
-			pPacker = new AttributePacker_MVA_Update_T<int64_t>;
+			pPacker = new AttributePacker_MVA_T<int64_t>;
 			break;
 
 		case SPH_ATTR_JSON:

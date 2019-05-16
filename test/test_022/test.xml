@@ -200,6 +200,12 @@ index multi22
 <sphinxql>SELECT * FROM multi22 WHERE MATCH('man utd')</sphinxql>
 <sphinxql>show meta</sphinxql>
 
+<!-- checking that (MATCH(...)) is supported (Github#143) and the results don't differ from just MATCH(...) -->
+<sphinxql>SELECT * FROM multi22 WHERE MATCH('man')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi22 WHERE (MATCH('man'))</sphinxql>
+<sphinxql>show meta</sphinxql>
+
 </sphqueries>
 
 <db_create>

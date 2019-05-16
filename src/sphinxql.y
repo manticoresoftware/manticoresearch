@@ -437,6 +437,7 @@ where_expr:
 
 where_item:
 	TOK_MATCH '(' TOK_QUOTED_STRING ')'
+        | '(' where_item ')'
 		{
 			if ( !pParser->SetMatch($3) )
 				YYERROR;

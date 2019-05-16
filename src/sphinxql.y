@@ -441,6 +441,11 @@ where_item:
 			if ( !pParser->SetMatch($3) )
 				YYERROR;
 		}
+	| '(' TOK_MATCH '(' TOK_QUOTED_STRING ')' ')'
+		{
+                        if ( !pParser->SetMatch($4) )
+                                YYERROR;
+		}
 	;
 
 filter_expr:

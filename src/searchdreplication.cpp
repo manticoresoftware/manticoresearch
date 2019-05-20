@@ -919,6 +919,13 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	CSphString sIncoming;
 	sIncoming.SetSprintf ( "%s,%s:%d:replication", g_sIncomingProto.cstr(), g_sIncomingIP.cstr(), tArgs.m_iListenPort );
 	sphLogDebugRpl ( "node incoming '%s', listen '%s', nodes '%s', name '%s'", sIncoming.cstr(), tArgs.m_sListenAddr.cstr(), sConnectNodes.cstr(), sMyName.cstr() );
+	if ( g_eLogLevel>=SPH_LOG_RPL_DEBUG )
+	{
+		StringBuilder_c sIndexes ( "," );
+		for ( const CSphString & sIndex : tArgs.m_pCluster->m_dIndexes )
+			sIndexes += sIndex.cstr();
+		sphLogDebugRpl ( "cluster '%s', indexes '%s', nodes '%s'", tArgs.m_pCluster->m_sName.cstr(), sIndexes.cstr(), tArgs.m_pCluster->m_sClusterNodes.cstr() );
+	}
 
 	auto * pRecvArgs = new ReceiverCtx_t();
 	pRecvArgs->m_pCluster = tArgs.m_pCluster;
@@ -3914,10 +3921,15 @@ bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool
 		}
 	}
 
+	bool bOk = false;
 	if ( bAdd )
-		return ClusterAlterAdd ( sCluster, sIndex, sError, sWarning );
+		bOk = ClusterAlterAdd ( sCluster, sIndex, sError, sWarning );
 	else
-		return ClusterAlterDrop ( sCluster, sIndex, sError );
+		bOk = ClusterAlterDrop ( sCluster, sIndex, sError );
+
+	SaveConfig();
+
+	return bOk;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -4213,6 +4225,8 @@ bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdat
 	GetNodes ( sNodes, dNodes, tReqData );
 	PQRemoteClusterUpdateNodes_t tReq;
 	bOk &= PerformRemoteTasks ( dNodes, tReq, tReq, sError );
+
+	SaveConfig();
 
 	return bOk;
 }

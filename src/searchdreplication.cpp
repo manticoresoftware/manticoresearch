@@ -4282,7 +4282,7 @@ CSphString GetMacAddress ()
 			pAdapter = pAdapter->Next;
 		}
 	}
-#elif __FreeBSD__
+#elif defined(__FreeBSD__)
 	int iLen = 0;
 	const int iMibLen = 6;
 	int dMib[iMibLen] = { CTL_NET, AF_ROUTE, 0, AF_LINK, NET_RT_IFLIST, 0 };
@@ -4318,6 +4318,9 @@ CSphString GetMacAddress ()
 			}
 		}
 	}
+#elif defined ( __APPLE__ )
+	// no MAC address for OSX
+
 #else
 	int iFD = socket(AF_INET, SOCK_DGRAM, 0);
 	if ( iFD>=0 )

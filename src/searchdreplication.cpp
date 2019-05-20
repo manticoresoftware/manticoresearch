@@ -19,8 +19,15 @@
 #if USE_WINDOWS
 #include <io.h> // for setmode(). open() on windows
 #define sphSeek		_lseeki64
+// for MAC
+#include <iphlpapi.h>
+#pragma comment(lib, "IPHLPAPI.lib")
 #else
 #define sphSeek		lseek
+// for MAC
+#include <net/if.h>
+#include <sys/ioctl.h>
+#include <net/ethernet.h>
 #endif
 
 const char * GetReplicationDL()
@@ -4234,4 +4241,112 @@ bool RemoteClusterUpdateNodes ( const CSphString & sCluster, CSphString * pNodes
 	}
 
 	return true;
+}
+
+CSphString GetMacAddress ()
+{
+	StringBuilder_c sMAC ( ":" );
+
+#if USE_WINDOWS
+    IP_ADAPTER_ADDRESSES dAdapters[16];
+	DWORD uSize = sizeof ( dAdapters );
+    if ( GetAdaptersAddresses ( 0, 0, nullptr, dAdapters, &uSize )==NO_ERROR )
+	{
+		PIP_ADAPTER_ADDRESSES pAdapter = dAdapters;
+		while ( pAdapter )
+		{
+			if ( pAdapter->IfType == IF_TYPE_ETHERNET_CSMACD && pAdapter->PhysicalAddressLength>=6 )
+			{
+				const BYTE * pMAC = pAdapter->PhysicalAddress;
+				for ( DWORD i=0; i<pAdapter->PhysicalAddressLength; i++ )
+				{
+					sMAC.Appendf ( "%02x", *pMAC );
+					pMAC++;
+				}
+				break;
+			}
+			pAdapter = pAdapter->Next;
+		}
+	}
+#elif __FreeBSD__
+	int iLen = 0;
+	const int iMibLen = 6;
+	int dMib[iMibLen] = { CTL_NET, AF_ROUTE, 0, AF_LINK, NET_RT_IFLIST, 0 };
+
+	if ( sysctl ( dMib, iMibLen, NULL, &iLen, NULL, 0 )!=-1 )
+	{
+		CSphFixedVector<char> dBuf ( iLen );
+		if ( sysctl ( dMib, iMibLen, dBuf.Begin(), &iLen, NULL, 0 )>=0 )
+		{
+			if_msghdr * pIf = nullptr;
+			for ( const char * pNext = dBuf.Begin(); pNext<dBuf.Begin() + iLen; pNext+=pIf->ifm_msglen )
+			{
+				pIf = (if_msghdr *)pNext;
+				if ( pIf->ifm_type==RTM_IFINFO )
+				{
+					bool bAllZero = true;
+					const sockaddr_dl * pSdl= (const sockaddr_dl *)(pIf + 1);
+					const BYTE * pMAC = LLADDR(pSdl);
+					for ( int i=0; i<ETHER_ADDR_LEN; i++ )
+					{
+						BYTE uPart = *pMAC;
+						pMAC++;
+						bAllZero &= ( uPart==0 );
+						sMAC.Appendf ( "%02x", uPart );
+					}
+
+					if ( !bAllZero )
+						break;
+
+					sMAC.Clear();
+					sMAC.StartBlock ( ":" );
+				}
+			}
+		}
+	}
+#else
+	int iFD = socket(AF_INET, SOCK_DGRAM, 0);
+	if ( iFD>=0 )
+	{
+		ifreq dIf[64];
+		ifconf tIfConf;
+		tIfConf.ifc_len = sizeof(dIf);
+		tIfConf.ifc_req = dIf;
+
+		if ( ioctl ( iFD, SIOCGIFCONF, &tIfConf )>=0 )
+		{
+			const ifreq * pIfEnd = dIf + ( tIfConf.ifc_len / sizeof(dIf[0]) );
+			for ( const ifreq * pIfCur = tIfConf.ifc_req; pIfCur<pIfEnd; pIfCur++ )
+			{
+				if ( pIfCur->ifr_addr.sa_family==AF_INET )
+				{
+					ifreq tIfCur;
+					memset( &tIfCur, 0, sizeof(tIfCur) );
+					memcpy( tIfCur.ifr_name, pIfCur->ifr_name, sizeof(tIfCur.ifr_name));
+					if ( ioctl ( iFD, SIOCGIFHWADDR, &tIfCur)>=0 )
+					{
+						bool bAllZero = true;
+						const BYTE * pMAC = (const BYTE *)tIfCur.ifr_hwaddr.sa_data;
+						for ( int i=0; i<ETHER_ADDR_LEN; i++ )
+						{
+							BYTE uPart = *pMAC;
+							pMAC++;
+							bAllZero &= ( uPart==0 );
+							sMAC.Appendf ( "%02x", uPart );
+						}
+
+						if ( !bAllZero )
+							break;
+
+						sMAC.Clear();
+						sMAC.StartBlock ( ":" );
+					}
+				}
+			}
+		}
+	}
+	SafeClose ( iFD );
+#endif
+
+	return sMAC.cstr();
 }

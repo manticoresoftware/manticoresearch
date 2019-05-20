@@ -86,6 +86,8 @@ TEST ( Misc, SpanSearch )
 	ASSERT_EQ ( FindSpan ( dVec, 1, 5 ), 0 );
 	ASSERT_EQ ( FindSpan ( dVec, 3, 5 ), 1 );
 	ASSERT_EQ ( FindSpan ( dVec, 4, 5 ), 2 );
+	ASSERT_EQ ( FindSpan ( dVec, 0, 5 ), -1 );
+	ASSERT_EQ ( FindSpan ( dVec, 11, 5 ), 2 );
 
 	dVec.Add ( 15 );
 	dVec.Add ( 17 );
@@ -95,6 +97,8 @@ TEST ( Misc, SpanSearch )
 	ASSERT_EQ ( FindSpan ( dVec, 1, 5 ), 0 );
 	ASSERT_EQ ( FindSpan ( dVec, 18, 5 ), 4 );
 	ASSERT_EQ ( FindSpan ( dVec, 23, 5 ), 6 );
+	ASSERT_EQ ( FindSpan ( dVec, 0, 5 ), -1 );
+	ASSERT_EQ ( FindSpan ( dVec, 31, 5 ), 6 );
 }
 
 //////////////////////////////////////////////////////////////////////////

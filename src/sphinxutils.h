@@ -367,4 +367,17 @@ public:
 const char * GetBaseName ( const CSphString & sFullPath );
 bool HasMvaUpdated ( const CSphString & sIndexPath );
 
+// uuid short generator - static across daemon
+//	bytes	value
+//	1		server_id & 0xff
+//	4		startup time of server in seconds
+//	3		increment base part
+uint64_t	UuidShort();
+
+// server - is server id used as iServer & 0xff
+// started - is a server start time \ Unix timestamp in seconds
+void		UuidShortSetup ( int iServer, int iStarted );
+
+BYTE Pearson8 ( const BYTE * pBuf, int iLen );
+
 #endif // _sphinxutils_

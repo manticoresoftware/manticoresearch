@@ -3395,7 +3395,8 @@ class SphinxConfig
 				$agents[$agentid]["data_path"] = $subdir->nodeValue;
 				return;
 			}
-
+			case "agent_id": fwrite($fp, $agentid); return;
+			
 		}
 
 		if ( $nodename=="dynamic" )

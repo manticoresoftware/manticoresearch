@@ -1137,7 +1137,7 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 	for ( const auto& tDesc : tRes.m_dQueryDesc )
 	{
 		ScopedComma_c sQueryComma ( tOut, ",","{"," }");
-		tOut.Sprintf ( R"("_index":"%s","_type":"doc","_id":"%u","_score":"1")", sIndex.cstr(), tDesc.m_uQID );
+		tOut.Sprintf ( R"("_index":"%s","_type":"doc","_id":"%U","_score":"1")", sIndex.cstr(), tDesc.m_uQID );
 		if ( !tDesc.m_bQL )
 			tOut.Sprintf ( R"("_source":{"query":%s})", tDesc.m_sQuery.cstr () );
 		else

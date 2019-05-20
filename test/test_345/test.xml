@@ -57,13 +57,13 @@ CREATE TABLE `test_table` (
 <query endpoint="json/pq/idx1/search">{ "query": { "percolate": { "documents" : [{ "title" : "A new tree test in the office" }, { "title" : "A cat test in the office" }, { "title" : "A dog test in the office" }] } } }</query>
 
 <!-- replace query -->
-<query endpoint="json/pq/idx1/doc/1">{ "query": { "match": { "title": "nop" } } }</query>
-<query endpoint="json/pq/idx1/doc/1?refresh=1">{ "query": { "match": { "title": { "query": "cat dog test", "operator": "or" } } }, "tags":["id", "id_x101"] }</query>
+<query endpoint="json/pq/idx1/doc/1677721600001">{ "query": { "match": { "title": "nop" } } }</query>
+<query endpoint="json/pq/idx1/doc/1677721600001?refresh=1">{ "query": { "match": { "title": { "query": "cat dog test", "operator": "or" } } }, "tags":["id", "id_x101"] }</query>
 <!-- list stored queries -->
 <query endpoint="json/pq/idx1/search"></query>
 
 <!-- delete by id -->
-<query endpoint="json/pq/idx1/_delete_by_query">{ "id": [2, 10] }</query>
+<query endpoint="json/pq/idx1/_delete_by_query">{ "id": [1677721600002, 10] }</query>
 <query endpoint="json/pq/idx1/search"></query>
 <!-- delete by tags -->
 <query endpoint="json/pq/idx1/_delete_by_query">{ "tags": ["id_x1", "id_x2"] }</query>

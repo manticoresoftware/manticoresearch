@@ -1558,13 +1558,15 @@ StoredQuery_i * PercolateIndex_c::AddQuery ( const PercolateQueryArgs_t & tArgs,
 	bool bAutoID = ( pStored->m_uQUID==0 );
 	if ( bAutoID )
 	{
-		m_tLock.ReadLock();
-		if ( m_dStored.GetLength() )
-			pStored->m_uQUID = m_dStored.Last().m_uQUID + 1;
-		else
-			pStored->m_uQUID = 1;
-		m_tLock.Unlock();
-
+		bool bDuplicate = true;
+		while ( bDuplicate )
+		{
+			// get uuid_short and check it not collide with user provided already stored query
+			pStored->m_uQUID = UuidShort();
+			m_tLock.ReadLock();
+			bDuplicate = ( m_dStored.BinarySearch ( bind ( &StoredQueryKey_t::m_uQUID ), pStored->m_uQUID )!=nullptr );
+			m_tLock.Unlock();
+		}
 	} else
 	{
 		m_tLock.ReadLock();
@@ -1596,7 +1598,7 @@ bool PercolateIndex_c::CommitPercolate ( StoredQuery_i * pQuery, CSphString & )
 	int iPos = FindSpan ( m_dStored, pStored->m_uQUID );
 	if ( iPos==-1 )
 	{
-		m_dStored.Add ( tItem );
+		m_dStored.Insert ( 0, tItem );
 	} else if ( m_dStored[iPos].m_uQUID==tItem.m_uQUID )
 	{
 		SafeDelete ( m_dStored[iPos].m_pQuery );

@@ -173,6 +173,8 @@ static int				g_tmWait = 1;
 bool					g_bGroupingInUtc	= false;
 static auto&			g_iTFO = sphGetTFO ();
 static CSphString		g_sShutdownToken;
+static int				g_iServerID = 0;
+static bool				g_bServerID = false;
 
 struct Listener_t
 {
@@ -23964,6 +23966,11 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 			g_iLogFileMode = iMode;
 		}
 	}
+	if ( hSearchd ( "server_id" ) )
+	{
+		g_iServerID = hSearchd.GetInt ( "server_id", g_iServerID );
+		g_bServerID = true;
+	}
 
 	//////////////////////////////////////////////////
 	// prebuild MySQL wire protocol handshake packets
@@ -24162,6 +24169,42 @@ void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpened=fal
 
 		g_sLogFile = sLog;
 		g_bLogTty = isatty ( g_iLogFile )!=0;
+}
+
+static void SetUuidShort ( bool bTestMode )
+{
+	int iServerId = g_iServerID;
+	uint64_t uStartedSec = 0;
+
+	if ( !bTestMode )
+	{
+		// server id as high part of counter
+		if ( g_bServerID )
+		{
+			iServerId = g_iServerID;
+		} else
+		{
+			CSphString sMAC = GetMacAddress();
+			sphLogDebug ( "MAC address %s for uuid-short server_id", sMAC.cstr() );
+			if ( sMAC.IsEmpty() )
+			{
+				DWORD uSeed = sphRand();
+				sMAC.SetSprintf ( "%u", uSeed );
+				sphWarning ( "failed to get MAC address, using random number %s", sMAC.cstr()  );
+			}
+			// fold MAC into 1 byte
+			iServerId = Pearson8 ( (const BYTE *)sMAC.cstr(), sMAC.Length() );
+		}
+
+		// start time Unix timestamp as middle part of counter
+		uStartedSec = sphMicroTimer() / 1000000;
+	} else
+	{
+		// need constant seed across all environments for tests
+		uStartedSec = 100000;
+		iServerId = g_iServerID;
+	}
+	UuidShortSetup ( iServerId, (int)uStartedSec );
 }
 
 int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
@@ -24794,6 +24837,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	sphRTConfigure ( hSearchd, bTestMode );
 	SetPercolateQueryParserFactory ( PercolateQueryParserFactory );
 	SetPercolateThreads ( g_iDistThreads );
+	SetUuidShort ( bTestMode );
 
 	if ( bOptPIDFile )
 	{

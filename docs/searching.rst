@@ -17,6 +17,7 @@ Searching
    searching/mysql_protocol_support_and_sphinxql
    searching/multi-queries
    searching/faceted_search
+   searching/geosearching
    searching/collations
    searching/query_cache
    mysql_storage_engine_sphinxse

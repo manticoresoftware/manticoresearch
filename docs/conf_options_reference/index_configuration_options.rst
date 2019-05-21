@@ -1815,7 +1815,15 @@ Setting mlock option to 1 makes Manticore lock physical RAM used for that
 cached data using mlock(2) system call, and that prevents swapping (see
 man 2 mlock for details). mlock(2) is a privileged call, so it will
 require ``searchd`` to be either run from root account, or be granted
-enough privileges otherwise. If mlock() fails, a warning is emitted, but
+enough privileges otherwise. 
+
+On Linux platforms where Manticore service is managed by systemd, you can use
+``LimitMEMLOCK=infinity`` in the unit file. 
+Newer releases use a systemd generator  instead of a simple systemd unit (to detect if **jemalloc** can be used instead of standard **malloc**).
+In these cases one should add LimitMEMLOCK to the generator file located usually at
+``/lib/systemd/system-generators/manticore-generator``  and run ``systemctl daemon-reload`` to perform the unit file update.
+
+If mlock() fails, a warning is emitted, but
 index continues working.
 
 Example:

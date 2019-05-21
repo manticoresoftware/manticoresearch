@@ -17,6 +17,12 @@ counters will only be available if searchd was configured with
 :ref:`predicted time
 costs <predicted_time_costs>`
 and query had predicted_time in OPTION clause.
+SHOW META needs to run right after the query was execute in the **same** session.
+As some mysql connectors/libraries use connection pools, running SHOW META in a separate statement 
+can lead to unexpected results like getting meta from another query. 
+In these cases (and recommended in general) is to run a multiple statement containing query + SHOW META.
+Some connectors/libraries support o multi-queries on same method for single statement, other may require usage
+of a dedicated method for multi-queries or setting specific options at connection setup.
 
 .. code-block:: mysql
 

@@ -274,12 +274,12 @@ Numeric functions
 
 -  GEOPOLY2D()
 
-   GEOPOLY2D(x1,y1,x2,y2,x3,y3…) produces a polygon to be used with the
+   GEOPOLY2D(lat1,lon1,lat2,lon2,lat3,lon3…) produces a polygon to be used with the
    :ref:`CONTAINS() <expr-func-contains>` function. This function takes
    into account the Earth's curvature by tessellating the polygon into
-   smaller ones, and should be used for larger areas; see the
-   :ref:`POLY2D() <expr-func-poly2d>` function. The function expects
-   coordinates to be in degrees, if radians are used it will give same
+   smaller ones, and should be used for larger areas. For small areas
+   :ref:`POLY2D() <expr-func-poly2d>` function can be used instead. The function expects
+   coordinates to be pairs of latitude/longitude coordinates in degrees, if radians are used it will give same
    result as POLY2D().
 
 .. _expr-func-idiv:
@@ -326,8 +326,8 @@ Numeric functions
 
    POLY2D(x1,y1,x2,y2,x3,y3…) produces a polygon to be used with the
    :ref:`CONTAINS() <expr-func-contains>` function. This polygon assumes a
-   flat Earth, so it should not be too large; see the
-   :ref:`POLY2D() <expr-func-poly2d>` function.
+   flat Earth, so it should not be too large; for large areas the
+   :ref:`GEOPOLY2D() <expr-func-geopoly2d>` function which takes Earth's curvature in consideration should be used.
 
 .. _expr-func-pow:
 
@@ -355,7 +355,7 @@ Numeric functions
    Forcibly reinterprets given argument to 64-bit unsigned type.
 
 
-.. _Date and time functions:
+.. _date_and_time_functions:
 
 Date and time functions
 ~~~~~~~~~~~~~~~~~~~~~~~

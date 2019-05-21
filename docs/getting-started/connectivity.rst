@@ -5,6 +5,15 @@ A guide on connectivity
 
 Manticore Search offers 3 protocols that allows clients to connect in multiple ways. 
 
+Please note that currently none of the protocols implement any kind of authentification.
+Someone able to connect to your search instances could crawl your data, run heavy queries that can slow down servers or perform changes on the indexes.
+Your search servers should not be reachable by outside world.  
+If the application that connects to Manticore live on the same server, the ``listen`` clauses should bound the protocols only to local interface.
+
+In case search instances  require to be reached from outside, connections should be restricted with the help of a firewall only the the known IPs authorized 
+to connect. For SphinxQL, proxies like ProxySQL can add an authentification level.  For HTTP protocol, a reserve proxy like Nginx can implement HTTP based authentifications.
+
+
 SphinxAPI protocol
 ~~~~~~~~~~~~~~~~~~
 

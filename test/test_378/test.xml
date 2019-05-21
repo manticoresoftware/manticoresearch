@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>ALTER at index MVA</name>
+
+<config>
+indexer
+{
+	mem_limit				= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+
+}
+
+source src
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT id, gid, title FROM test_table
+  sql_attr_uint   = gid
+}
+
+index test
+{
+  source      = src
+  path      = <data_path/>/test
+}
+
+index rt
+{
+	type = rt
+	path = <data_path/>/rt
+	rt_field = title
+	rt_attr_uint = attr1
+	rt_attr_uint = attr2
+	rt_attr_uint = attr3
+	rt_attr_multi = m1
+	rt_attr_multi = m2
+	rt_attr_multi = m3
+}
+
+</config>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11) NOT NULL,
+  `gid` int(11) NOT NULL,
+  `title` varchar(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `test_table`;</db_drop>
+<db_insert>INSERT INTO `test_table` VALUES (1,1,'test one')</db_insert>
+
+<sphqueries>
+<!-- regression crash on add \ remove plain attribute at index with blobs  -->
+<sphinxql>INSERT INTO rt VALUES (1, 'text', 11, 12, 13, (101, 102), (201, 202), (301, 302))</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+<sphinxql>ALTER TABLE rt drop column attr3</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+<sphinxql>ALTER TABLE rt drop column m3</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+</sphqueries>
+
+</test>

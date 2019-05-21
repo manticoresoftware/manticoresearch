@@ -633,6 +633,7 @@ int64_t sphCopyBlobRow ( CSphTightVector<BYTE> & dDstPool, const CSphTightVector
 
 void sphAddAttrToBlobRow ( const CSphRowitem * pDocinfo, CSphTightVector<BYTE> & dBlobRow, const BYTE * pPool, int nBlobs )
 {
+	dBlobRow.Resize ( 0 );
 	if ( nBlobs )
 	{
 		const BYTE * pOldRow = pPool + sphGetBlobRowOffset ( pDocinfo );

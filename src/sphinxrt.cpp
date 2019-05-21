@@ -6582,6 +6582,17 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ES
 		if ( !m_dDiskChunks[iDiskChunk]->AddRemoveAttribute ( bAdd, sAttrName, eAttrType, sError ) )
 			sphWarning ( "%s attribute to %s.%d: %s", bAdd ? "adding" : "removing", m_sPath.cstr(), dChunkNames[iDiskChunk], sError.cstr() );
 
+	bool bHadBlobs = false;
+	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
+		bHadBlobs |= sphIsBlobAttr ( m_tSchema.GetAttr(i).m_eAttrType );
+
+	bool bHaveBlobs = false;
+	for ( int i = 0; i < tNewSchema.GetAttrsCount(); i++ )
+		bHaveBlobs |= sphIsBlobAttr ( tNewSchema.GetAttr(i).m_eAttrType );
+
+	bool bBlob = sphIsBlobAttr ( eAttrType );
+	bool bBlobsModified = bBlob && ( bAdd || bHaveBlobs==bHadBlobs );
+
 	// now modify the ramchunk
 	for ( RtSegment_t * pSeg : m_dRamChunks )
 	{
@@ -6603,7 +6614,8 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ES
 			sphWarning ( "%s attribute to %s: %s", bAdd ? "adding" : "removing", m_sPath.cstr(), sError.cstr() );
 
 		pSeg->m_dRows.SwapData(dSPA);
-		pSeg->m_dBlobs.SwapData(dSPB);
+		if ( bBlob || bBlobsModified )
+			pSeg->m_dBlobs.SwapData(dSPB);
 	}
 
 	// fixme: we can't rollback at this point

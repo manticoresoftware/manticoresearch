@@ -24198,6 +24198,10 @@ static void SetUuidShort ( bool bTestMode )
 
 		// start time Unix timestamp as middle part of counter
 		uStartedSec = sphMicroTimer() / 1000000;
+		// base timestamp is 01 May of 2019
+		const uint64_t uBaseSec = 1556668800;
+		if ( uStartedSec>uBaseSec )
+			uStartedSec -= uBaseSec;
 	} else
 	{
 		// need constant seed across all environments for tests

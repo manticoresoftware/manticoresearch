@@ -24778,8 +24778,15 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	// build indexes hash
 	//////////////////////
 
-	// configure and preload
+	// initialize buffering settings of daemon (since next step is loading indices, we need it already done!)
+	auto iReadUnhinted = hSearchd.GetSize ( "read_unhinted", -1 );
+	SetUnhintedBuffer ( iReadUnhinted );
 
+	auto iReadBuffer = hSearchd.GetSize ( "read_buffer", -1 );
+	SetDocsReadBuffers ( hSearchd.GetSize ( "read_buffer_docs", iReadBuffer ));
+	SetHitsReadBuffers ( hSearchd.GetSize ( "read_buffer_hits", iReadBuffer ));
+
+	// configure and preload
 	if ( bTestMode ) // pass this flag here prior to index config
 		sphRTSetTestMode();
 
@@ -24929,8 +24936,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	if ( g_bService )
 		MySetServiceStatus ( SERVICE_RUNNING, NO_ERROR, 0 );
 #endif
-
-	sphSetReadBuffers ( hSearchd.GetSize ( "read_buffer", 0 ), hSearchd.GetSize ( "read_unhinted", 0 ) );
 
 	// in threaded mode, create a dedicated rotation thread
 	if ( g_bSeamlessRotate && !g_tRotateThread.Create ( RotationThreadFunc, 0, "rotation" ) )

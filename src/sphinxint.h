@@ -347,7 +347,7 @@ public:
 	RowID_t		UnzipRowid ()	{ return UnzipInt(); }
 	SphWordID_t	UnzipWordid ()	{ return UnzipOffset(); }
 
-	const CSphReader &	operator = ( const CSphReader & rhs );
+	CSphReader &	operator = ( const CSphReader & rhs );
 
 protected:
 
@@ -371,21 +371,29 @@ protected:
 	virtual void		UpdateCache ();
 };
 
-
-/// scoped reader
-class CSphAutoreader : public CSphReader
+/// file reader
+class FileReader_c: public CSphReader
 {
 public:
-				CSphAutoreader ( BYTE * pBuf=NULL, int iSize=0 ) : CSphReader ( pBuf, iSize ) {}
-				~CSphAutoreader ();
+	explicit FileReader_c ( BYTE* pBuf = nullptr, int iSize = 0 )
+		: CSphReader ( pBuf, iSize )
+	{}
+
+	SphOffset_t GetFilesize () const;
+
+	// added for DebugCheck()
+	int GetFD () const { return m_iFD; }
+};
+
+/// scoped file reader
+class CSphAutoreader : public FileReader_c
+{
+public:
+	CSphAutoreader ( BYTE * pBuf=nullptr, int iSize=0 ) : FileReader_c ( pBuf, iSize ) {}
+	~CSphAutoreader () override { Close(); }
 
 	bool		Open ( const CSphString & sFilename, CSphString & sError );
 	void		Close ();
-	SphOffset_t	GetFilesize ();
-
-public:
-	// added for DebugCheck()
-	int			GetFD () { return m_iFD; }
 };
 
 class MemoryReader_c

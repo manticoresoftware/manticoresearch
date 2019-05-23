@@ -646,6 +646,9 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "index_token_filter",		0, NULL },
 	{ "morphology_skip_fields",	0, NULL },
 	{ "killlist_target",		0, nullptr },
+	{ "read_buffer_docs",		0, nullptr },
+	{ "read_buffer_hits",		0, nullptr },
+	{ "read_unhinted",		0, nullptr },
 	{ nullptr,					0, nullptr }
 };
 
@@ -693,6 +696,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "listen_backlog",			0, NULL },
 	{ "listen_tfo",				0, NULL },
 	{ "read_buffer",			0, NULL },
+	{ "read_buffer_docs",		0, NULL },
+	{ "read_buffer_hits",		0, NULL },
 	{ "read_unhinted",			0, NULL },
 	{ "max_batch_queries",		0, NULL },
 	{ "subtree_docs_cache",		0, NULL },

@@ -1087,12 +1087,19 @@ incoming queries at some point with a “maxed out” message.
 read_buffer
 ~~~~~~~~~~~
 
-Per-keyword read buffer size. Optional, default is 256K. Deprecated. Unused.
+Per-keyword read buffer size. Optional, default is 256K
 
-In past, for every keyword occurrence in every search query, there were two
+For every keyword occurrence in every search query, there are two
 associated read buffers (one for document list and one for hit list).
 This setting let you control their sizes, increasing per-query RAM use,
-but possibly decreasing IO time.
+but possibly decreasing IO time. Minimal value is 8K. Apart general size, you may also tune buffers for document lists
+and hit lists individually, using :ref:`read_buffer_docs` and :ref:`read_buffer_hits` params.
+
+Setting this value to 0 effectively forces daemon to use memory-mappings for these lists. That is special mode which
+often may significally improve searching speed in general; however it implies that you have enough RAM to fit all your
+indexes. With memory-mapping OS caches accessed chunks of files in free RAM, and may cache the whole of them, in
+opposite to concrete limited buffers. However this RAM itself is not considered as 'occupied', that is why buffer are
+virtually zero.
 
 Example:
 
@@ -1101,6 +1108,52 @@ Example:
 
 
     read_buffer = 1M
+
+
+.. _read_buffer_docs:
+
+read_buffer_docs
+~~~~~~~~~~~~~~~~
+
+Per-keyword read buffer size for document lists. Optional, default is 256K, minimal is 8K
+
+This is same as :ref:`read_buffer`, but manages size for document lists only. If both params exist; `read_buffer_docs`
+overrides more general `read_buffer`. Also you may set :ref:`index_read_buffer_docs` on per-index basis; that value
+will override anything set on daemon's config level.
+
+Apart concrete size numbers, and 0 (for memory-mapping), you can set it to -1, which means 'the default', that is
+hard-coded value 256K.
+
+Example:
+
+
+.. code-block:: ini
+
+
+    read_buffer_docs = 0
+
+
+.. _read_buffer_hits:
+
+read_buffer_hits
+~~~~~~~~~~~~~~~~
+
+Per-keyword read buffer size for hit lists. Optional, default is 256K, minimal is 8K
+
+This is same as :ref:`read_buffer`, but manages size for hit lists only. If both params exist; `read_buffer_hits`
+overrides more general `read_buffer`. Also you may set :ref:`index_read_buffer_hits` on per-index basis; that value
+will override anything set on daemon's config level.
+
+Apart concrete size numbers, and 0 (for memory-mapping), you can set it to -1, which means 'the default', that is
+hard-coded value 256K.
+
+Example:
+
+
+.. code-block:: ini
+
+	read_buffer = 100M
+    read_buffer_hits = -1 # discard 100M for hits and use (256K)
 
 
 .. _read_timeout:
@@ -1125,16 +1178,17 @@ Example:
 read_unhinted
 ~~~~~~~~~~~~~
 
-Unhinted read size. Optional, default is 32K. Deprecated. Unused.
+Unhinted read size. Optional, default is 32K, minimal 1K
 
-In past, when querying, some reads knew in advance exactly how much data is there
+When querying, some reads know in advance exactly how much data is there
 to be read, but some currently do not. Most prominently, hit list size
 in not currently known in advance. This setting let you control how
 much data to read in such cases. It impacted hit list IO time,
 reducing it for lists larger than unhinted read size, but raising it for
-smaller lists. It **not** affected RAM use because read buffer
+smaller lists. It **not** affects RAM usage because read buffer
 will be already allocated. So it should be not greater than
-read_buffer.
+read_buffer. For memory-mapped reading (when read_buffer=0) this param is not
+used and doesn't affect anything at all.
 
 Example:
 

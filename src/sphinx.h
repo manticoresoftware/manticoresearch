@@ -3512,7 +3512,9 @@ ISphMatchSorter *	sphCreateQueue ( SphQueueSettings_t & tQueue );
 int					sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag );
 
 /// setup per-keyword read buffer sizes
-void				sphSetReadBuffers ( int iReadBuffer, int iReadUnhinted );
+void SetDocsReadBuffers ( int iReadBuffer  );
+void SetHitsReadBuffers ( int iReadBuffer );
+void SetUnhintedBuffer ( int iReadUnhinted );
 
 /// check query for expressions
 bool				sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema );

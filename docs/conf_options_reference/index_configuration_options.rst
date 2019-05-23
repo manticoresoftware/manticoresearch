@@ -2317,6 +2317,45 @@ Example:
 
     preopen = 1
 
+
+.. _index_read_buffer_docs:
+
+read_buffer_docs
+~~~~~~~~~~~~~~~~
+
+Per-keyword read buffer size for document lists. Optional, default is 256K, minimal is 8K
+
+This is same as :ref:`read_buffer_docs` in searchd config section, but manages size on per-index basis, overriding any
+more general settings. The meaning is the same as one in corresponding searchd option.
+
+Example:
+
+
+.. code-block:: ini
+
+
+    read_buffer_docs = 0 # use memory-mapping
+
+
+.. _index_read_buffer_hits:
+
+read_buffer_hits
+~~~~~~~~~~~~~~~~
+
+Per-keyword read buffer size for hit lists. Optional, default is 256K, minimal is 8K
+
+This is same as :ref:`read_buffer_hits` in searchd config section, but manages size on per-index basis, overriding any
+more general settings. The meaning is the same as one in corresponding searchd option.
+
+Example:
+
+
+.. code-block:: ini
+
+
+    read_buffer_hits = -1 # discard anything set in searchd section; forcibly use default (256K) instead.
+
+
 .. _regexp_filter:
 
 regexp_filter

@@ -175,8 +175,9 @@ static const int	MIN_READ_BUFFER			= 8192;
 static const int	MIN_READ_UNHINTED		= 1024;
 #define READ_NO_SIZE_HINT 0
 
-static int			g_iReadBuffer			= DEFAULT_READ_BUFFER;
-static int			g_iReadUnhinted			= DEFAULT_READ_UNHINTED;
+static int 			g_iReadBufferDocs 		= -1;
+static int			g_iReadBufferHits 		= -1;
+static int 			g_iReadUnhinted 		= DEFAULT_READ_UNHINTED;
 
 #ifndef FULL_SHARE_DIR
 #define FULL_SHARE_DIR "."
@@ -192,6 +193,9 @@ int64_t		g_iIndexerCurrentRangeMin	= 0;
 int64_t		g_iIndexerCurrentRangeMax	= 0;
 int64_t		g_iIndexerPoolStartDocID	= 0;
 int64_t		g_iIndexerPoolStartHit		= 0;
+
+// returns correct size even if iBuf is 0
+int GetReadBuffer ( int iBuf );
 
 /// global IDF
 class CSphGlobalIDF
@@ -597,45 +601,40 @@ public:
 
 class CSphIndex_VLN;
 
-/// everything required to setup search term
-class DiskIndexQwordSetup_c : public ISphQwordSetup
+// Reader from file or filemap
+class IFileBlockReader : public ISphRefcountedMT
 {
 public:
-	const CSphAutofile &	m_tDoclist;
-	const CSphAutofile &	m_tHitlist;
-	bool					m_bSetupReaders = false;
-	const BYTE *			m_pSkips;
-	int						m_iSkiplistBlockSize = 0;
-	CSphQueryProfile *		m_pProfile;
-
-public:
-	DiskIndexQwordSetup_c ( const CSphAutofile & tDoclist, const CSphAutofile & tHitlist, const BYTE * pSkips, int iSkiplistBlockSize, CSphQueryProfile * pProfile )
-		: m_tDoclist ( tDoclist )
-		, m_tHitlist ( tHitlist )
-		, m_pSkips ( pSkips )
-		, m_iSkiplistBlockSize ( iSkiplistBlockSize )
-		, m_pProfile ( pProfile )
-	{}
-
-	ISphQword *					QwordSpawn ( const XQKeyword_t & tWord ) const final;
-	bool						QwordSetup ( ISphQword * ) const final;
-
-	bool						Setup ( ISphQword * ) const;
+	virtual SphOffset_t GetPos () const { return 0; }
+	virtual void SeekTo ( SphOffset_t iPos, int iSizeHint ) {};
+	virtual DWORD UnzipInt () { return 0; };
+	virtual uint64_t UnzipOffset () { return 0; };
+	virtual void Reset () {};
+	RowID_t UnzipRowid () { return UnzipInt (); };
+	SphWordID_t UnzipWordid () { return UnzipOffset (); };
 };
 
+using IFileBlockReaderPtr_t = CSphRefcountedPtr<IFileBlockReader>;
+
 // imitate CSphReader but fully in memory (intended to use with mmap)
-class ThinMMapReader_c
+class ThinMMapReader_c : public IFileBlockReader
 {
-	const BYTE *	m_pBase = nullptr;
-	const BYTE *	m_pPointer = nullptr;
-	SphOffset_t		m_iSize = 0;
+	friend class MMapFabric_c;
+	const BYTE* m_pBase = nullptr;
+	const BYTE* m_pPointer = nullptr;
+	SphOffset_t m_iSize = 0;
+
+	ThinMMapReader_c ( const BYTE* pArena, SphOffset_t iSize )
+	{
+		m_pPointer = m_pBase = pArena;
+		m_iSize = iSize;
+	}
+protected:
+	~ThinMMapReader_c() final {}
+
 public:
-	CSphQueryProfile* m_pProfile;
-	ESphQueryState m_eProfileState;
 
-	void Reset () {};
-
-	SphOffset_t GetPos () const
+	SphOffset_t GetPos () const final
 	{
 		if ( !m_pPointer )
 			return 0;
@@ -643,38 +642,237 @@ public:
 		return m_pPointer - m_pBase;
 	}
 
-	SphOffset_t GetFilesize () const { return m_iSize; }
-	void SeekTo ( SphOffset_t iPos, int /*iSizeHint*/ =0) { m_pPointer = m_pBase + iPos; }
+	void SeekTo ( SphOffset_t iPos, int /*iSizeHint*/ ) final
+	{ m_pPointer = m_pBase + iPos; }
 
-	void SkipBytes ( int iCount )
+	DWORD UnzipInt () final;
+	uint64_t UnzipOffset () final;
+
+	void Reset () final
 	{
-		assert ( m_pPointer );
-		m_pPointer += iCount;
+		m_pPointer = m_pBase;
 	}
+};
 
-	void SetArena ( const BYTE * pArena, SphOffset_t iSize=0 )
+class DirectFileReader_c: public IFileBlockReader, protected FileReader_c
+{
+	friend class DirectFabric_c;
+protected:
+	~DirectFileReader_c() final {}
+	explicit DirectFileReader_c ( BYTE* pBuf, int iSize )
+		: FileReader_c ( pBuf, iSize )
+	{}
+
+public:
+
+	SphOffset_t GetPos () const final
 	{
-		m_pPointer = m_pBase = pArena;
-		m_iSize = iSize;
+		return FileReader_c::GetPos();
 	}
 
-	DWORD UnzipInt ();
-	uint64_t UnzipOffset ();
-
-	SphWordID_t UnzipWordid () { return UnzipOffset (); }
-
-	BYTE GetByte() {
-		assert ( m_pPointer );
-		return *m_pPointer++;
-	}
-
-	void GetBytes ( void* pData, int iSize )
+	void SeekTo ( SphOffset_t iPos, int iSizeHint ) final
 	{
-		assert ( m_pPointer );
-		memcpy ( pData, m_pPointer, iSize );
-		SkipBytes ( iSize );
+		FileReader_c::SeekTo (iPos, iSizeHint);
 	}
 
+	DWORD UnzipInt () final
+	{
+		return FileReader_c::UnzipInt();
+	}
+
+	uint64_t UnzipOffset () final
+	{
+		return FileReader_c::UnzipOffset ();
+	}
+
+	void Reset () final
+	{
+		FileReader_c::Reset ();
+	}
+};
+
+// producer of readers from file or filemap
+class DataReaderFabric_c: public ISphRefcountedMT
+{
+	bool m_bValid = false;
+
+protected:
+	~DataReaderFabric_c () override	{}
+	void SetValid ( bool bValid ) { m_bValid = bValid; }
+
+public:
+	enum EKind
+	{
+		eDocs = 0, eHits
+	};
+
+	bool IsValid () const { return m_bValid; }
+
+	virtual SphOffset_t GetFilesize () const = 0;
+	virtual SphOffset_t GetPos () const = 0;
+	virtual void SeekTo ( SphOffset_t ) = 0;
+	virtual IFileBlockReader* MakeReader ( BYTE* pBuf, int iSize ) = 0;
+	virtual void SetProfile ( CSphQueryProfile* ) {};
+};
+
+using DataReaderFabricPtr_t = CSphRefcountedPtr<DataReaderFabric_c>;
+
+inline static ESphQueryState StateByKind ( DataReaderFabric_c::EKind eKind )
+{
+	switch ( eKind )
+	{
+		case DataReaderFabric_c::eDocs: return SPH_QSTATE_READ_DOCS;
+		case DataReaderFabric_c::eHits: return SPH_QSTATE_READ_HITS;
+		default: return SPH_QSTATE_IO;
+	}
+}
+
+// producer of readers which access by Seek + Read
+class DirectFabric_c: public DataReaderFabric_c
+{
+	CSphAutoreader m_dReader;
+	ESphQueryState m_eWorkState;
+	SphOffset_t m_iPos = 0;
+	int m_iReadBuffer = 0;
+	int m_iReadUnhinted = 0;
+
+protected:
+	~DirectFabric_c() final {} // d-tr only by Release
+
+public:
+	DirectFabric_c ( const CSphString& sFile, CSphString& sError,
+		ESphQueryState eState, int iReadBuffer, int iReadUnhinted )
+		: m_eWorkState ( eState )
+		, m_iReadBuffer ( iReadBuffer )
+		, m_iReadUnhinted ( iReadUnhinted )
+	{
+		SetValid ( m_dReader.Open ( sFile, sError ) );
+	}
+
+	SphOffset_t GetFilesize () const final
+	{
+		return m_dReader.GetFilesize();
+	}
+
+	SphOffset_t GetPos () const final
+	{
+		return m_iPos;
+	}
+
+	void SeekTo ( SphOffset_t iPos ) final
+	{
+		m_iPos = iPos;
+	}
+
+	// returns depended reader sharing same FD as maker
+	IFileBlockReader* MakeReader ( BYTE* pBuf, int iSize ) final
+	{
+		auto pFileReader = new DirectFileReader_c ( pBuf, iSize );
+		pFileReader->SetFile ( m_dReader.GetFD(), m_dReader.GetFilename().cstr() );
+		pFileReader->SetBuffers ( m_iReadBuffer, m_iReadUnhinted );
+		if ( m_iPos )
+			pFileReader->SeekTo ( m_iPos, READ_NO_SIZE_HINT );
+		pFileReader->m_pProfile = m_dReader.m_pProfile;
+		pFileReader->m_eProfileState = m_eWorkState;
+		return pFileReader;
+	}
+
+	void SetProfile ( CSphQueryProfile* pProfile ) final
+	{
+		m_dReader.m_pProfile = pProfile;
+	}
+};
+
+// producer of readers which access by MMap
+class MMapFabric_c: public DataReaderFabric_c
+{
+	CSphMappedBuffer<BYTE> m_tBackendFile;
+	SphOffset_t m_iPos = 0;
+
+protected:
+	~MMapFabric_c () final {} // d-tr only by Release
+
+public:
+	MMapFabric_c ( const CSphString& sFile, CSphString& sError )
+	{
+		SetValid ( m_tBackendFile.Setup ( sFile, sError ) );
+	}
+
+	SphOffset_t GetFilesize () const final
+	{
+		return m_tBackendFile.GetLength64 ();
+	}
+
+	SphOffset_t GetPos () const final
+	{
+		return m_iPos;
+	}
+
+	void SeekTo ( SphOffset_t iPos ) final
+	{
+		m_iPos = iPos;
+	}
+
+	// returns depended reader sharing same mmap as maker
+	IFileBlockReader* MakeReader ( BYTE*, int ) final
+	{
+		auto pReader = new ThinMMapReader_c ( m_tBackendFile.GetWritePtr (),
+											  m_tBackendFile.GetLength64 () );
+		if ( m_iPos )
+			pReader->SeekTo ( m_iPos, 0 );
+		return pReader;
+	}
+};
+
+static DataReaderFabric_c* NewProxyReader ( const CSphString& sFile, CSphString& sError,
+	DataReaderFabric_c::EKind eKind, const CSphConfigSection& hSettings, bool bOnlyDirect=true )
+{
+	int iReadBuffer = DEFAULT_READ_BUFFER;
+	auto eState = StateByKind ( eKind );
+	DataReaderFabric_c* pReader = nullptr;
+
+	switch (eState)
+	{
+		case SPH_QSTATE_READ_DOCS: iReadBuffer = hSettings.GetSize ( "read_buffer_docs", g_iReadBufferDocs ); break;
+		case SPH_QSTATE_READ_HITS: iReadBuffer = hSettings.GetSize ( "read_buffer_hits", g_iReadBufferHits ); break;
+		default: break;
+	}
+
+	if ( bOnlyDirect || iReadBuffer )
+		pReader = new DirectFabric_c ( sFile, sError, eState, GetReadBuffer ( iReadBuffer ), g_iReadUnhinted );
+	else
+		pReader = new MMapFabric_c ( sFile, sError );
+
+	if ( !pReader->IsValid ())
+		SafeRelease ( pReader )
+	return pReader;
+}
+
+
+/// everything required to setup search term
+class DiskIndexQwordSetup_c: public ISphQwordSetup
+{
+public:
+	DataReaderFabricPtr_t m_pDoclist;
+	DataReaderFabricPtr_t m_pHitlist;
+	bool m_bSetupReaders = false;
+	const BYTE* m_pSkips;
+	int m_iSkiplistBlockSize = 0;
+
+public:
+	DiskIndexQwordSetup_c ( DataReaderFabric_c* pDoclist, DataReaderFabric_c* pHitlist, const BYTE* pSkips,
+		int iSkiplistBlockSize )
+		: m_pDoclist ( pDoclist ), m_pHitlist ( pHitlist ), m_pSkips ( pSkips ),
+		m_iSkiplistBlockSize ( iSkiplistBlockSize )
+	{
+		SafeAddRef( pDoclist )
+		SafeAddRef( pHitlist )
+	}
+
+	ISphQword* QwordSpawn ( const XQKeyword_t& tWord ) const final;
+	bool QwordSetup ( ISphQword* ) const final;
+
+	bool Setup ( ISphQword* ) const;
 };
 
 /// query word from the searcher's point of view
@@ -694,10 +892,14 @@ public:
 	CSphMatch		m_tDoc;			///< current match (partial)
 	Hitpos_t		m_iHitPos {EMPTY_HIT};	///< current hit postition, from hitlist
 
-	BYTE			m_dDoclistBuf [ MINIBUFFER_LEN ];
 	BYTE			m_dHitlistBuf [ MINIBUFFER_LEN ];
-	CSphReader		m_rdDoclist;	///< my doclist reader
-	CSphReader		m_rdHitlist;	///< my hitlist reader
+	BYTE			m_dDoclistBuf [ MINIBUFFER_LEN ];
+
+	BYTE*			m_pHitsBuf = nullptr;
+	BYTE*			m_pDocsBuf = nullptr;
+
+	IFileBlockReaderPtr_t		m_rdDoclist;	///< my doclist accessor
+	IFileBlockReaderPtr_t		m_rdHitlist;	///< my hitlist accessor
 
 #ifndef NDEBUG
 	bool			m_bHitlistOver = true;
@@ -705,10 +907,27 @@ public:
 
 public:
 	explicit DiskIndexQwordTraits_c ( bool bUseMini, bool bExcluded )
-		: m_rdDoclist ( bUseMini ? m_dDoclistBuf : nullptr, bUseMini ? MINIBUFFER_LEN : 0 )
-		, m_rdHitlist ( bUseMini ? m_dHitlistBuf : nullptr, bUseMini ? MINIBUFFER_LEN : 0 )
 	{
 		m_bExcluded = bExcluded;
+		if ( bUseMini ) {
+			m_pDocsBuf = m_dDoclistBuf;
+			m_pHitsBuf = m_dHitlistBuf;
+			//m_rdDoclist.SetMiniBuf ( m_dDoclistBuf, MINIBUFFER_LEN );
+		}
+	}
+
+	void SetDocReader ( DataReaderFabric_c* pReader )
+	{
+		if ( !pReader )
+			return;
+		m_rdDoclist = pReader->MakeReader ( m_pDocsBuf, MINIBUFFER_LEN );
+	}
+
+	void SetHitReader ( DataReaderFabric_c* pReader )
+	{
+		if ( !pReader )
+			return;
+		m_rdHitlist = pReader->MakeReader ( m_pHitsBuf, MINIBUFFER_LEN );
 	}
 
 	void ResetDecoderState ()
@@ -741,15 +960,17 @@ public:
 
 	void Reset () final
 	{
-		m_rdDoclist.Reset ();
-		m_rdHitlist.Reset ();
+		if ( m_rdDoclist )
+			m_rdDoclist->Reset ();
+		if ( m_rdHitlist )
+			m_rdHitlist->Reset ();
 		ResetDecoderState();
 	}
 
 	void GetHitlistEntry ()
 	{
 		assert ( !m_bHitlistOver );
-		DWORD iDelta = m_rdHitlist.UnzipInt ();
+		DWORD iDelta = m_rdHitlist->UnzipInt ();
 		if ( iDelta )
 		{
 			m_iHitPos += iDelta;
@@ -813,10 +1034,10 @@ public:
 		}
 
 		const SkiplistEntry_t & t = m_dSkiplist[m_iSkipListBlock];
-		if ( t.m_iOffset<=m_rdDoclist.GetPos() )
+		if ( t.m_iOffset<=m_rdDoclist->GetPos() )
 			return;
 
-		m_rdDoclist.SeekTo ( t.m_iOffset, -1 );
+		m_rdDoclist->SeekTo ( t.m_iOffset, -1 );
 		m_tDoc.m_tRowID = t.m_tBaseRowIDPlus1-1;
 		m_uHitPosition = m_iHitlistPos = t.m_iBaseHitlistPos;
 	}
@@ -838,9 +1059,9 @@ public:
 			m_uHitState = 0;
 			m_iHitPos = EMPTY_HIT;
 			if_const ( DISABLE_HITLIST_SEEK )
-				assert ( m_rdHitlist.GetPos()==uOff ); // make sure we're where caller thinks we are.
+				assert ( m_rdHitlist->GetPos()==uOff ); // make sure we're where caller thinks we are.
 			else
-				m_rdHitlist.SeekTo ( uOff, READ_NO_SIZE_HINT );
+				m_rdHitlist->SeekTo ( uOff, READ_NO_SIZE_HINT );
 		}
 #ifndef NDEBUG
 		m_bHitlistOver = false;
@@ -881,7 +1102,7 @@ private:
 
 	inline void ReadNext()
 	{
-		RowID_t uDelta = m_rdDoclist.UnzipRowid();
+		RowID_t uDelta = m_rdDoclist->UnzipRowid();
 		if ( uDelta )
 		{
 			m_bAllFieldsKnown = false;
@@ -889,11 +1110,11 @@ private:
 
 			if_const ( INLINE_HITS )
 			{
-				m_uMatchHits = m_rdDoclist.UnzipInt();
-				const DWORD uFirst = m_rdDoclist.UnzipInt();
+				m_uMatchHits = m_rdDoclist->UnzipInt();
+				const DWORD uFirst = m_rdDoclist->UnzipInt();
 				if ( m_uMatchHits==1 && m_bHasHitlist )
 				{
-					DWORD uField = m_rdDoclist.UnzipInt(); // field and end marker
+					DWORD uField = m_rdDoclist->UnzipInt(); // field and end marker
 					m_iHitlistPos = uFirst | ( uField << 23 ) | ( U64C(1)<<63 );
 					m_dQwordFields.UnsetAll();
 					// want to make sure bad field data not cause crash
@@ -902,18 +1123,18 @@ private:
 				} else
 				{
 					m_dQwordFields.Assign32 ( uFirst );
-					m_uHitPosition += m_rdDoclist.UnzipOffset();
+					m_uHitPosition += m_rdDoclist->UnzipOffset();
 					m_iHitlistPos = m_uHitPosition;
 				}
 			} else
 			{
-				SphOffset_t iDeltaPos = m_rdDoclist.UnzipOffset();
+				SphOffset_t iDeltaPos = m_rdDoclist->UnzipOffset();
 				assert ( iDeltaPos>=0 );
 
 				m_iHitlistPos += iDeltaPos;
 
-				m_dQwordFields.Assign32 ( m_rdDoclist.UnzipInt() );
-				m_uMatchHits = m_rdDoclist.UnzipInt();
+				m_dQwordFields.Assign32 ( m_rdDoclist->UnzipInt() );
+				m_uMatchHits = m_rdDoclist->UnzipInt();
 			}
 		} else
 			m_tDoc.m_tRowID = INVALID_ROWID;
@@ -959,7 +1180,7 @@ class DiskPayloadQword_c : public DiskIndexQword_c<INLINE_HITS, false>
 
 public:
 	explicit DiskPayloadQword_c ( const DiskSubstringPayload_t * pPayload, bool bExcluded,
-		const CSphAutofile & tDoclist, const CSphAutofile & tHitlist, CSphQueryProfile * pProfile )
+		DataReaderFabric_c * pDoclist, DataReaderFabric_c * pHitlist )
 		: BASE ( true, bExcluded )
 	{
 		m_pPayload = pPayload;
@@ -967,15 +1188,8 @@ public:
 		this->m_iHits = m_pPayload->m_iTotalHits;
 		m_iDoclist = 0;
 
-		this->m_rdDoclist.SetFile ( tDoclist );
-		this->m_rdDoclist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
-		this->m_rdDoclist.m_pProfile = pProfile;
-		this->m_rdDoclist.m_eProfileState = SPH_QSTATE_READ_DOCS;
-
-		this->m_rdHitlist.SetFile ( tHitlist );
-		this->m_rdHitlist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
-		this->m_rdHitlist.m_pProfile = pProfile;
-		this->m_rdHitlist.m_eProfileState = SPH_QSTATE_READ_HITS;
+		this->SetDocReader ( pDoclist );
+		this->SetHitReader ( pHitlist );
 	}
 
 	const CSphMatch & GetNextDoc() final
@@ -1009,7 +1223,7 @@ private:
 		int iHint = m_pPayload->m_dDoclist[m_iDoclist].m_iLen;
 		m_iDoclist++;
 
-		this->m_rdDoclist.SeekTo ( uDocOff, iHint );
+		this->m_rdDoclist->SeekTo ( uDocOff, iHint );
 	}
 
 	const DiskSubstringPayload_t *	m_pPayload;
@@ -2296,8 +2510,8 @@ void DebugCheckHelper_c::DebugCheck_DeadRowMap ( int64_t iSizeBytes, int64_t nRo
 struct DebugCheckContext_t
 {
 	CSphAutoreader			m_tDictReader;
-	CSphAutoreader			m_tDocsReader;
-	CSphAutoreader			m_tHitsReader;
+	DataReaderFabricPtr_t	m_pDocsReader;
+	DataReaderFabricPtr_t	m_pHitsReader;
 	CSphAutoreader			m_tSkipsReader;
 	CSphAutoreader			m_tDeadRowReader;
 	CSphAutoreader			m_tAttrReader;
@@ -2445,8 +2659,8 @@ private:
 
 	DWORD						m_uAttrsStatus;
 
-	CSphAutofile				m_tDoclistFile;			///< doclist file
-	CSphAutofile				m_tHitlistFile;			///< hitlist file
+	DataReaderFabricPtr_t		m_pDoclistFile;			///< doclist file
+	DataReaderFabricPtr_t		m_pHitlistFile;			///< hitlist file
 
 	HistogramContainer_c *		m_pHistograms {nullptr};
 
@@ -2880,15 +3094,32 @@ int64_t sphGetFileSize ( const CSphString& sFile, CSphString * sError )
 }
 
 
-void sphSetReadBuffers ( int iReadBuffer, int iReadUnhinted )
+void SetDocsReadBuffers ( int iReadBuffer )
 {
-	if ( iReadBuffer<=0 )
+	if ( iReadBuffer<0 )
 		iReadBuffer = DEFAULT_READ_BUFFER;
-	g_iReadBuffer = Max ( iReadBuffer, MIN_READ_BUFFER );
+	g_iReadBufferDocs = iReadBuffer ? Max ( iReadBuffer, MIN_READ_BUFFER ) : 0;
+}
 
+void SetHitsReadBuffers ( int iReadBuffer )
+{
+	if ( iReadBuffer<0 )
+		iReadBuffer = DEFAULT_READ_BUFFER;
+	g_iReadBufferHits = iReadBuffer ? Max ( iReadBuffer, MIN_READ_BUFFER ) : 0;
+}
+
+void SetUnhintedBuffer ( int iReadUnhinted )
+{
 	if ( iReadUnhinted<=0 )
 		iReadUnhinted = DEFAULT_READ_UNHINTED;
 	g_iReadUnhinted = Max ( iReadUnhinted, MIN_READ_UNHINTED );
+}
+
+int GetReadBuffer ( int iBuf )
+{
+	if ( !iBuf )
+		return DEFAULT_READ_BUFFER;
+	return Max ( iBuf, MIN_READ_BUFFER );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -8158,11 +8389,14 @@ SphOffset_t sphUnzipOffset ( const BYTE * & pBuf )	{ SPH_VARINT_DECODE ( SphOffs
 DWORD CSphReader::UnzipInt ()			{ SPH_VARINT_DECODE ( DWORD, GetByte() ); }
 uint64_t CSphReader::UnzipOffset ()		{ SPH_VARINT_DECODE ( uint64_t, GetByte() ); }
 
+DWORD ThinMMapReader_c::UnzipInt ()		{ SPH_VARINT_DECODE ( DWORD, *m_pPointer++ ); }
+uint64_t ThinMMapReader_c::UnzipOffset ()	{ SPH_VARINT_DECODE ( uint64_t, *m_pPointer++ ); }
+
 #define sphUnzipWordid sphUnzipOffset
 
 /////////////////////////////////////////////////////////////////////////////
 
-const CSphReader & CSphReader::operator = ( const CSphReader & rhs )
+CSphReader & CSphReader::operator = ( const CSphReader & rhs )
 {
 	SetFile ( rhs.m_iFD, rhs.m_sFilename.cstr() );
 	SeekTo ( rhs.m_iPos + rhs.m_iBuffPos, rhs.m_iSizeHint );
@@ -8221,13 +8455,6 @@ bool CSphReader::Tag ( const char * sTag )
 }
 
 //////////////////////////////////////////////////////////////////////////
-
-CSphAutoreader::~CSphAutoreader ()
-{
-	Close ();
-}
-
-
 bool CSphAutoreader::Open ( const CSphString & sFilename, CSphString & sError )
 {
 	assert ( m_iFD<0 );
@@ -8253,15 +8480,11 @@ void CSphAutoreader::Close ()
 }
 
 
-SphOffset_t CSphAutoreader::GetFilesize ()
+SphOffset_t FileReader_c::GetFilesize () const
 {
 	assert ( m_iFD>=0 );
 
-	struct_stat st;
-	if ( m_iFD<0 || fstat ( m_iFD, &st )<0 )
-		return -1;
-
-	return st.st_size;
+	return sphGetFileSize ( m_iFD, nullptr );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -12359,7 +12582,7 @@ public:
 		tQword.m_iHitlistPos = 0;
 
 		if ( bWordDict )
-			tQword.m_rdDoclist.SeekTo ( tReader.m_iDoclistOffset, tReader.m_iHint );
+			tQword.m_rdDoclist->SeekTo ( tReader.m_iDoclistOffset, tReader.m_iHint );
 	}
 
 	template < typename QWORD >
@@ -12434,13 +12657,13 @@ public:
 	}
 
 	template < typename QWORD >
-	static inline void ConfigureQword ( QWORD & tQword, const CSphAutofile & tHits, const CSphAutofile & tDocs, int iDynamic )
+	static inline void ConfigureQword ( QWORD & tQword, DataReaderFabric_c * pHits, DataReaderFabric_c * pDocs, int iDynamic )
 	{
-		tQword.m_rdHitlist.SetFile ( tHits );
-		tQword.m_rdHitlist.GetByte();
+		tQword.SetHitReader ( pHits );
+		tQword.m_rdHitlist->SeekTo ( 1, READ_NO_SIZE_HINT );
 
-		tQword.m_rdDoclist.SetFile ( tDocs );
-		tQword.m_rdDoclist.GetByte();
+		tQword.SetDocReader ( pDocs );
+		tQword.m_rdDoclist->SeekTo ( 1, READ_NO_SIZE_HINT );
 
 		tQword.m_tDoc.Reset ( iDynamic );
 	}
@@ -12476,13 +12699,36 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 	QWORDDST tDstQword ( false, false );
 	QWORDSRC tSrcQword ( false, false );
 
-	CSphAutofile tSrcDocs, tSrcHits;
-	tSrcDocs.Open ( pSrcIndex->GetIndexFileName(SPH_EXT_SPD), SPH_O_READ, sError );
-	tSrcHits.Open ( pSrcIndex->GetIndexFileName(SPH_EXT_SPP), SPH_O_READ, sError );
+	DataReaderFabricPtr_t tSrcDocs {
+		NewProxyReader ( pSrcIndex->GetIndexFileName ( SPH_EXT_SPD ), sError,
+			DataReaderFabric_c::eDocs, pSrcIndex->GetConfigSection () )
+	};
+	if ( !tSrcDocs )
+		return false;
 
-	CSphAutofile tDstDocs, tDstHits;
-	tDstDocs.Open ( pDstIndex->GetIndexFileName(SPH_EXT_SPD), SPH_O_READ, sError );
-	tDstHits.Open ( pDstIndex->GetIndexFileName(SPH_EXT_SPP), SPH_O_READ, sError );
+	DataReaderFabricPtr_t tSrcHits {
+		NewProxyReader ( pSrcIndex->GetIndexFileName ( SPH_EXT_SPP ), sError,
+			DataReaderFabric_c::eHits, pSrcIndex->GetConfigSection ()  )
+	};
+	if ( !tSrcHits )
+		return false;
+
+	if ( !sError.IsEmpty () || g_bShutdown || *pLocalStop )
+		return false;
+
+	DataReaderFabricPtr_t tDstDocs {
+		NewProxyReader ( pDstIndex->GetIndexFileName ( SPH_EXT_SPD ), sError,
+			DataReaderFabric_c::eDocs, pDstIndex->GetConfigSection ()  )
+	};
+	if ( !tDstDocs )
+		return false;
+
+	DataReaderFabricPtr_t tDstHits {
+		NewProxyReader ( pDstIndex->GetIndexFileName ( SPH_EXT_SPP ), sError,
+			DataReaderFabric_c::eHits, pDstIndex->GetConfigSection ()  )
+	};
+	if ( !tDstHits )
+		return false;
 
 	if ( !sError.IsEmpty() || g_bShutdown || *pLocalStop )
 		return false;
@@ -13930,10 +14176,10 @@ ISphQword * DiskIndexQwordSetup_c::QwordSpawn ( const XQKeyword_t & tWord ) cons
 	{
 		if ( m_pIndex->GetSettings().m_eHitFormat==SPH_HIT_FORMAT_INLINE )
 		{
-			return new DiskPayloadQword_c<true> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_tDoclist, m_tHitlist, m_pProfile );
+			return new DiskPayloadQword_c<true> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist );
 		} else
 		{
-			return new DiskPayloadQword_c<false> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_tDoclist, m_tHitlist, m_pProfile );
+			return new DiskPayloadQword_c<false> ( (const DiskSubstringPayload_t *)tWord.m_pPayload, tWord.m_bExcluded, m_pDoclist, m_pHitlist );
 		}
 	}
 	return NULL;
@@ -14050,10 +14296,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 
 	if ( m_bSetupReaders )
 	{
-		tWord.m_rdDoclist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
-		tWord.m_rdDoclist.SetFile ( m_tDoclist );
-		tWord.m_rdDoclist.m_pProfile = m_pProfile;
-		tWord.m_rdDoclist.m_eProfileState = SPH_QSTATE_READ_DOCS;
+		tWord.SetDocReader ( m_pDoclist );
 
 		// read in skiplist
 		// OPTIMIZE? maybe cache hot decompressed lists?
@@ -14077,12 +14320,8 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 			}
 		}
 
-		tWord.m_rdDoclist.SeekTo ( tRes.m_iDoclistOffset, tRes.m_iDoclistHint );
-
-		tWord.m_rdHitlist.SetBuffers ( g_iReadBuffer, g_iReadUnhinted );
-		tWord.m_rdHitlist.SetFile ( m_tHitlist );
-		tWord.m_rdHitlist.m_pProfile = m_pProfile;
-		tWord.m_rdHitlist.m_eProfileState = SPH_QSTATE_READ_HITS;
+		tWord.m_rdDoclist->SeekTo ( tRes.m_iDoclistOffset, tRes.m_iDoclistHint );
+		tWord.SetHitReader ( m_pHitlist );
 	}
 
 	return true;
@@ -14147,8 +14386,8 @@ void CSphIndex_VLN::Dealloc ()
 	if ( !m_bPassedAlloc )
 		return;
 
-	m_tDoclistFile.Close ();
-	m_tHitlistFile.Close ();
+	m_pDoclistFile = nullptr;
+	m_pHitlistFile = nullptr;
 
 	m_tAttr.Reset ();
 	m_tBlobAttrs.Reset();
@@ -14668,15 +14907,22 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 	}
 
 	// open files
-	CSphAutofile tDoclist, tHitlist;
-	if ( tDoclist.Open ( GetIndexFileName(SPH_EXT_SPD), SPH_O_READ, m_sLastError ) < 0 )
+	DataReaderFabricPtr_t pDoclist {
+		NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), m_sLastError, DataReaderFabric_c::eDocs, m_hSettings )
+	};
+	if ( !pDoclist )
 		sphDie ( "failed to open doclist: %s", m_sLastError.cstr() );
 
-	if ( tHitlist.Open ( GetIndexFileName(SPH_EXT_SPP), SPH_O_READ, m_sLastError ) < 0 )
-		sphDie ( "failed to open hitlist: %s", m_sLastError.cstr() );
+	DataReaderFabricPtr_t pHitlist {
+		NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), m_sLastError, DataReaderFabric_c::eHits, m_hSettings )
+	};
+	if ( !pHitlist )
+		sphDie ( "failed to open hitlist: %s", m_sLastError.cstr ());
+
 
 	// aim
-	DiskIndexQwordSetup_c tTermSetup ( tDoclist, tHitlist, m_tSkiplists.GetWritePtr(), m_tSettings.m_iSkiplistBlockSize, nullptr );
+	DiskIndexQwordSetup_c tTermSetup ( pDoclist, pHitlist,
+		m_tSkiplists.GetWritePtr(), m_tSettings.m_iSkiplistBlockSize );
 	tTermSetup.SetDict ( m_pDict );
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_bSetupReaders = true;
@@ -14805,10 +15051,14 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 	// preopen
 	if ( m_bKeepFilesOpen )
 	{
-		if ( m_tDoclistFile.Open ( GetIndexFileName(SPH_EXT_SPD), SPH_O_READ, m_sLastError ) < 0 )
+		m_pDoclistFile = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), m_sLastError,
+										  DataReaderFabric_c::eDocs, m_hSettings, false );
+		if ( !m_pDoclistFile )
 			return false;
 
-		if ( m_tHitlistFile.Open ( GetIndexFileName(SPH_EXT_SPP), SPH_O_READ, m_sLastError ) < 0 )
+		m_pHitlistFile = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), m_sLastError,
+										  DataReaderFabric_c::eHits, m_hSettings, false );
+		if ( !m_pHitlistFile )
 			return false;
 	}
 
@@ -15458,9 +15708,11 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	// FIXME!!! missed bigram, add flags to fold blended parts, show expanded terms
 
 	// prepare for setup
-	CSphAutofile tDummy1, tDummy2;
+	DataReaderFabric_c * tDummy1 = nullptr;
+	DataReaderFabric_c * tDummy2 = nullptr;
 
-	DiskIndexQwordSetup_c tTermSetup ( tDummy1, tDummy2, m_tSkiplists.GetWritePtr(), m_tSettings.m_iSkiplistBlockSize, nullptr );
+	DiskIndexQwordSetup_c tTermSetup ( tDummy1, tDummy2,
+		m_tSkiplists.GetWritePtr(), m_tSettings.m_iSkiplistBlockSize );
 	tTermSetup.SetDict ( pDict );
 	tTermSetup.m_pIndex = this;
 
@@ -16690,26 +16942,37 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
 
 	// open files
-	CSphAutofile tDoclist, tHitlist;
-	if ( !m_bKeepFilesOpen )
+	DataReaderFabricPtr_t pDoclist, pHitlist;
+	if ( m_bKeepFilesOpen )
 	{
+		pDoclist = m_pDoclistFile;
+		pHitlist = m_pHitlistFile;
+	}
+	else {
 		if ( pProfile )
 			pProfile->Switch ( SPH_QSTATE_OPEN );
 
-		if ( tDoclist.Open ( GetIndexFileName(SPH_EXT_SPD), SPH_O_READ, pResult->m_sError ) < 0 )
+		// fixme! Consider if ProxyReader is also appropriate in case of NOT keepfileopen
+		pDoclist = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), pResult->m_sError,
+									 DataReaderFabric_c::eDocs, m_hSettings );
+		if ( !pDoclist )
 			return false;
 
-		if ( tHitlist.Open ( GetIndexFileName(SPH_EXT_SPP), SPH_O_READ, pResult->m_sError ) < 0 )
+		pHitlist = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), pResult->m_sError,
+									 DataReaderFabric_c::eHits, m_hSettings );
+		if ( !pHitlist )
 			return false;
 	}
+
+	pDoclist->SetProfile ( pProfile );
+	pHitlist->SetProfile ( pProfile );
 
 	if ( pProfile )
 		pProfile->Switch ( SPH_QSTATE_INIT );
 
 	// setup search terms
-	DiskIndexQwordSetup_c tTermSetup ( m_bKeepFilesOpen ? m_tDoclistFile : tDoclist,
-		m_bKeepFilesOpen ? m_tHitlistFile : tHitlist,
-		m_tSkiplists.GetWritePtr(), m_tSettings.m_iSkiplistBlockSize, pProfile );
+	DiskIndexQwordSetup_c tTermSetup ( pDoclist, pHitlist,
+		m_tSkiplists.GetWritePtr(), m_tSettings.m_iSkiplistBlockSize );
 
 	tTermSetup.SetDict ( pDict );
 	tTermSetup.m_pIndex = this;
@@ -17588,16 +17851,16 @@ void CSphIndex_VLN::DebugCheck_Docs ( DebugCheckContext_t & tCtx, DebugCheckErro
 	tReporter.Msg ( "checking data..." );
 
 	CSphAutoreader & tDictReader = tCtx.m_tDictReader;
-	CSphAutoreader & tDocsReader = tCtx.m_tDocsReader;
-	CSphAutoreader & tHitsReader = tCtx.m_tHitsReader;
+	auto pDocsReader = tCtx.m_pDocsReader;
+	auto pHitsReader = tCtx.m_pHitsReader;
 	CSphAutoreader & tSkipsReader = tCtx.m_tSkipsReader;
 
-	int64_t iDocsSize = tDocsReader.GetFilesize();
+	int64_t iDocsSize = pDocsReader->GetFilesize();
 	int64_t iSkiplistLen = tSkipsReader.GetFilesize();
 
 	tDictReader.SeekTo ( 1, READ_NO_SIZE_HINT );
-	tDocsReader.SeekTo ( 1, READ_NO_SIZE_HINT );
-	tHitsReader.SeekTo ( 1, READ_NO_SIZE_HINT );
+	pDocsReader->SeekTo ( 1 );
+	pHitsReader->SeekTo ( 1 );
 
 	SphWordID_t uWordid = 0;
 	int64_t iDoclistOffset = 0;
@@ -17685,11 +17948,11 @@ void CSphIndex_VLN::DebugCheck_Docs ( DebugCheckContext_t & tCtx, DebugCheckErro
 			iSkipsOffset = tDictReader.UnzipInt();
 
 		// check whether the offset is as expected
-		if ( iDoclistOffset!=tDocsReader.GetPos() )
+		if ( iDoclistOffset!=pDocsReader->GetPos() )
 		{
 			if ( !bWordDict )
 				tReporter.Fail ( "unexpected doclist offset (wordid=" UINT64_FMT "(%s)(%d), dictpos=" INT64_FMT ", doclistpos=" INT64_FMT ")",
-					(uint64_t)uWordid, sWord, iWordsChecked, iDoclistOffset, (int64_t)tDocsReader.GetPos() );
+					(uint64_t)uWordid, sWord, iWordsChecked, iDoclistOffset, (int64_t) pDocsReader->GetPos() );
 
 			if ( iDoclistOffset>=iDocsSize || iDoclistOffset<0 )
 			{
@@ -17698,11 +17961,11 @@ void CSphIndex_VLN::DebugCheck_Docs ( DebugCheckContext_t & tCtx, DebugCheckErro
 				iWordsChecked++;
 				continue;
 			} else
-				tDocsReader.SeekTo ( iDoclistOffset, READ_NO_SIZE_HINT );
+				pDocsReader->SeekTo ( iDoclistOffset );
 		}
 
 		// create and manually setup doclist reader
-		DiskIndexQwordTraits_c * pQword = NULL;
+		DiskIndexQwordTraits_c * pQword = nullptr;
 		if ( m_tSettings.m_eHitFormat==SPH_HIT_FORMAT_INLINE )
 			pQword = new DiskIndexQword_c<true,false> ( false, false );
 		else
@@ -17712,10 +17975,10 @@ void CSphIndex_VLN::DebugCheck_Docs ( DebugCheckContext_t & tCtx, DebugCheckErro
 		pQword->m_tDoc.m_tRowID = INVALID_ROWID;
 		pQword->m_iDocs = 0;
 		pQword->m_iHits = 0;
-		pQword->m_rdDoclist.SetFile ( tDocsReader.GetFD(), tDocsReader.GetFilename().cstr() );
-		pQword->m_rdDoclist.SeekTo ( tDocsReader.GetPos(), READ_NO_SIZE_HINT );
-		pQword->m_rdHitlist.SetFile ( tHitsReader.GetFD(), tHitsReader.GetFilename().cstr() );
-		pQword->m_rdHitlist.SeekTo ( tHitsReader.GetPos(), READ_NO_SIZE_HINT );
+		pQword->SetDocReader ( pDocsReader );
+//		pQword->m_rdDoclist.SeekTo ( tDocsReader.GetPos(), READ_NO_SIZE_HINT );
+		pQword->SetHitReader ( pHitsReader );
+//		pQword->m_rdHitlist.SeekTo ( tHitsReader.GetPos(), READ_NO_SIZE_HINT );
 
 		// loop the doclist
 		int iDoclistDocs = 0;
@@ -17734,7 +17997,7 @@ void CSphIndex_VLN::DebugCheck_Docs ( DebugCheckContext_t & tCtx, DebugCheckErro
 			{
 				SkiplistEntry_t & tBlock = dDoclistSkips.Add();
 				tBlock.m_tBaseRowIDPlus1 = pQword->m_tDoc.m_tRowID+1;
-				tBlock.m_iOffset = pQword->m_rdDoclist.GetPos();
+				tBlock.m_iOffset = pQword->m_rdDoclist->GetPos();
 				tBlock.m_iBaseHitlistPos = pQword->m_uHitPosition;
 			}
 
@@ -17753,9 +18016,9 @@ void CSphIndex_VLN::DebugCheck_Docs ( DebugCheckContext_t & tCtx, DebugCheckErro
 			// check position in case of regular (not-inline) hit
 			if (!( pQword->m_iHitlistPos>>63 ))
 			{
-				if ( !bWordDict && pQword->m_iHitlistPos!=pQword->m_rdHitlist.GetPos() )
+				if ( !bWordDict && pQword->m_iHitlistPos!=pQword->m_rdHitlist->GetPos() )
 					tReporter.Fail ( "unexpected hitlist offset (wordid=" UINT64_FMT "(%s), rowid=%u, expected=" INT64_FMT ", actual=" INT64_FMT ")",
-						(uint64_t)uWordid, sWord, pQword->m_tDoc.m_tRowID, (int64_t)pQword->m_iHitlistPos, (int64_t)pQword->m_rdHitlist.GetPos() );
+						(uint64_t)uWordid, sWord, pQword->m_tDoc.m_tRowID, (int64_t)pQword->m_iHitlistPos, (int64_t)pQword->m_rdHitlist->GetPos() );
 			}
 
 			// aim
@@ -17815,7 +18078,7 @@ void CSphIndex_VLN::DebugCheck_Docs ( DebugCheckContext_t & tCtx, DebugCheckErro
 				tReporter.Fail ( "field mask mismatch (wordid=" UINT64_FMT "(%s), rowid=%u)", (uint64_t)uWordid, sWord, pQword->m_tDoc.m_tRowID );
 
 			// update my hitlist reader
-			tHitsReader.SeekTo ( pQword->m_rdHitlist.GetPos(), READ_NO_SIZE_HINT );
+			pHitsReader->SeekTo ( pQword->m_rdHitlist->GetPos() );
 		}
 
 		// do checks
@@ -17876,7 +18139,7 @@ void CSphIndex_VLN::DebugCheck_Docs ( DebugCheckContext_t & tCtx, DebugCheckErro
 		}
 
 		// move my reader instance forward too
-		tDocsReader.SeekTo ( pQword->m_rdDoclist.GetPos(), READ_NO_SIZE_HINT );
+		pDocsReader->SeekTo ( pQword->m_rdDoclist->GetPos() );
 
 		// cleanup
 		SafeDelete ( pQword );
@@ -18076,10 +18339,14 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	if ( !tCtx.m_tDictReader.Open ( GetIndexFileName(SPH_EXT_SPI), sError ) )
 		tReporter.Fail ( "unable to open dictionary: %s", sError.cstr() );
 
-	if ( !tCtx.m_tDocsReader.Open ( GetIndexFileName(SPH_EXT_SPD), sError ) )
+	tCtx.m_pDocsReader = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), sError,
+		DataReaderFabric_c::eDocs, m_hSettings );
+	if ( !tCtx.m_pDocsReader )
 		tReporter.Fail ( "unable to open doclist: %s", sError.cstr() );
 
-	if ( !tCtx.m_tHitsReader.Open ( GetIndexFileName(SPH_EXT_SPP), sError ) )
+	tCtx.m_pHitsReader = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), sError,
+		DataReaderFabric_c::eHits, m_hSettings );
+	if ( !tCtx.m_pHitsReader )
 		tReporter.Fail ( "unable to open hitlist: %s", sError.cstr() );
 
 	if ( !tCtx.m_tSkipsReader.Open ( GetIndexFileName(SPH_EXT_SPE), sError ) )

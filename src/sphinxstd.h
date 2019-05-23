@@ -3123,9 +3123,19 @@ public:
 	}
 
 	CSphRefcountedPtr ( CSphRefcountedPtr&& rhs ) noexcept
-		: m_pPtr ( rhs.m_pPtr )
 	{
-		rhs.m_pPtr = nullptr;
+		Swap(rhs);
+	}
+
+	CSphRefcountedPtr& operator= ( CSphRefcountedPtr rhs )
+	{
+		Swap(rhs);
+		return *this;
+	}
+
+	void Swap ( CSphRefcountedPtr& rhs ) noexcept
+	{
+		::Swap(m_pPtr, rhs.m_pPtr);
 	}
 
 	~CSphRefcountedPtr ()				{ SafeRelease ( m_pPtr ); }
@@ -3150,25 +3160,6 @@ public:
 	{
 		SafeRelease ( m_pPtr );
 		m_pPtr = pPtr;
-		return *this;
-	}
-
-	/// wrapper assignment, does automated reference tracking
-	CSphRefcountedPtr & operator = ( const CSphRefcountedPtr & rhs )
-	{
-		SafeAddRef ( rhs.m_pPtr );
-		SafeRelease ( m_pPtr );
-		m_pPtr = rhs.m_pPtr;
-		return *this;
-	}
-
-	CSphRefcountedPtr & operator= ( CSphRefcountedPtr && rhs ) noexcept
-	{
-		if (this==&rhs)
-			return *this;
-		SafeRelease( m_pPtr );
-		m_pPtr = rhs.m_pPtr;
-		rhs.m_pPtr = nullptr;
 		return *this;
 	}
 

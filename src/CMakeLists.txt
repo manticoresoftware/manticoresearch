@@ -172,6 +172,7 @@ add_executable ( searchd ${SEARCHD_SRCS} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD
 add_executable ( spelldump ${SPELLDUMP_SRCS} )
 add_executable ( wordbreaker ${WORDBREAKER_SRCS} )
 add_executable ( index_converter ${INDEX_CONV_SRCS} )
+add_executable ( make_segdictionary make_segdictionary.cpp )
 add_dependencies ( wordbreaker vergen )
 target_link_libraries ( indexer libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( indextool libsphinx ${EXTRA_LIBRARIES} )
@@ -199,6 +200,7 @@ endif()
 INSTALL ( TARGETS indexer indextool searchd spelldump wordbreaker RUNTIME DESTINATION ${BINPREFIX}bin COMPONENT applications )
 
 INSTALL ( TARGETS index_converter RUNTIME DESTINATION ${BINPREFIX}bin COMPONENT converter )
+INSTALL ( TARGETS make_segdictionary RUNTIME DESTINATION ${BINPREFIX}bin COMPONENT APPLICATIONS )
 
 if ( NOT DISABLE_TESTING )
 	# Read docs at https://github.com/google/googletest.git

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2019, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2017-2018, Manticore Software LTD (http://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -17,6 +17,7 @@
 #include "sphinxrt.h"
 #include "sphinxint.h"
 #include "sphinxstem.h"
+#include "json/cJSON.h"
 #include <math.h>
 
 #define SNOWBALL 0
@@ -91,6 +92,7 @@ char * LoadFile ( const char * sName, int * pLen, bool bReportErrors )
 		return NULL;
 	}
 	*pLen = iData;
+	sData[iData] = 0;
 	return sData;
 }
 
@@ -154,12 +156,37 @@ void BenchTokenizer ()
 		SafeDeleteArray ( sData );
 	}
 
+	iBytes = 0;
 	char * sData = LoadFile ( "./utf8.txt", &iBytes, false );
+	printf("utf8.txt, %d\n", iBytes);
 	if ( sData )
 	{
-		ISphTokenizer * pTokenizer = sphCreateUTF8Tokenizer ();
-		printf ( "run 3: " );
-		BenchTokenizer ( pTokenizer, (BYTE*)sData, iBytes );
+		ISphTokenizer * pTokenizer = sphCreateUTF8NgramTokenizer ();
+		bool g = pTokenizer->SetNgramChars("U+3000..U+2FA1F", sError);
+		pTokenizer->SetBuffer ( (const BYTE*)sData, iBytes );
+		printf("SetNgramChars: %d, %s\n", g, sError.cstr());
+		printf ( "run 3: \n" );
+		while (1) {
+			BYTE * token = pTokenizer->GetToken ();
+			printf ( "got token: [%s]\n", token);
+			if ( !token ) break;
+		}
+	}
+	iBytes = 0;
+	sData = LoadFile ( "./utf8-zh.txt", &iBytes, false );
+	printf("utf8-zh.txt, %d, %s\n", iBytes, sData);
+	if ( sData )
+	{
+		ISphTokenizer * pTokenizer = sphCreateUTF8SegTokenizer ();
+		CSphString sError;
+		pTokenizer->SetSegDictionary("/opt/manticore-seg/etc/zh-words.dict", sError);
+		pTokenizer->SetBuffer ( (const BYTE*)sData, iBytes );
+		printf ( "run 4: \n" );
+		while (1) {
+			BYTE * token = pTokenizer->GetToken ();
+			printf ( "got token: [%s]\n", token);
+			if ( !token ) break;
+		}
 	}
 	SafeDeleteArray ( sData );
 }

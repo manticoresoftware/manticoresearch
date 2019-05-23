@@ -568,6 +568,7 @@ static KeyDesc_t g_dKeysSource[] =
 /// allowed keys for index section
 static KeyDesc_t g_dKeysIndex[] =
 {
+	{ "seg_dictionary",		0, NULL },
 	{ "source",					KEY_LIST, NULL },
 	{ "path",					0, NULL },
 	{ "docinfo",				KEY_REMOVED, NULL },
@@ -1347,6 +1348,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 void sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings & tSettings )
 {
 	tSettings.m_iNgramLen = Max ( hIndex.GetInt ( "ngram_len" ), 0 );
+	tSettings.m_iType = hIndex("seg_dictionary") ? TOKENIZER_SEG:( hIndex("ngram_chars") ? TOKENIZER_NGRAM : TOKENIZER_UTF8 );
 
 	if ( hIndex ( "ngram_chars" ) )
 	{
@@ -1356,6 +1358,7 @@ void sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings 
 			sphWarning ( "ngram_chars specified, but ngram_len=0; IGNORED" );
 	}
 
+	tSettings.m_sSegDictionary  = hIndex.GetStr( "seg_dictionary" );
 	tSettings.m_sCaseFolding = hIndex.GetStr ( "charset_table" );
 	tSettings.m_iMinWordLen = Max ( hIndex.GetInt ( "min_word_len", 1 ), 1 );
 	tSettings.m_sNgramChars = hIndex.GetStr ( "ngram_chars" );

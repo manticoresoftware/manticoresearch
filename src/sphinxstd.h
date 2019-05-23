@@ -2598,11 +2598,26 @@ public:
 	}
 
 	/// copy ctor
-	CSphVariant ( const CSphVariant & rhs )
+	CSphVariant ( const CSphVariant& rhs )
 	{
-		m_pNext = nullptr;
-		*this = rhs;
+		if ( rhs.m_pNext )
+			m_pNext = new CSphVariant ( *rhs.m_pNext );
+
+		m_sValue = rhs.m_sValue;
+		m_iValue = rhs.m_iValue;
+		m_i64Value = rhs.m_i64Value;
+		m_fValue = rhs.m_fValue;
+		m_bTag = rhs.m_bTag;
+		m_iTag = rhs.m_iTag;
 	}
+
+	/// move ctor
+	CSphVariant ( CSphVariant&& rhs )
+		: CSphVariant()
+	{
+		Swap ( rhs );
+	}
+
 
 	/// default dtor
 	/// WARNING: automatically frees linked items!
@@ -2619,20 +2634,21 @@ public:
 	float floatval () const	{ return m_fValue; }
 
 	/// default copy operator
-	CSphVariant & operator = ( const CSphVariant & rhs )
+	CSphVariant& operator= ( CSphVariant rhs )
 	{
-		assert ( !m_pNext );
-		if ( rhs.m_pNext )
-			m_pNext = new CSphVariant ( *rhs.m_pNext );
-
-		m_sValue = rhs.m_sValue;
-		m_iValue = rhs.m_iValue;
-		m_i64Value = rhs.m_i64Value;
-		m_fValue = rhs.m_fValue;
-		m_bTag = rhs.m_bTag;
-		m_iTag = rhs.m_iTag;
-
+		Swap ( rhs );
 		return *this;
+	}
+
+	void Swap ( CSphVariant& rhs ) noexcept
+	{
+		::Swap ( m_pNext, rhs.m_pNext );
+		::Swap ( m_sValue, rhs.m_sValue );
+		::Swap ( m_iValue, rhs.m_iValue );
+		::Swap ( m_i64Value, rhs.m_i64Value );
+		::Swap ( m_fValue, rhs.m_fValue );
+		::Swap ( m_bTag, rhs.m_bTag );
+		::Swap ( m_iTag, rhs.m_iTag );
 	}
 
 	bool operator== ( const char * s ) const { return m_sValue==s; }

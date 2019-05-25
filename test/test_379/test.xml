@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>id attr index</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id, gid, title from test_table
+	sql_attr_uint	= gid
+	sql_field_string = title
+}
+
+index test1
+{
+	source			= test1
+	path			= <data_path/>/test1
+}
+</config>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	gid int not null,
+	title varchar(255) not null
+);
+</db_create>
+<db_drop>drop table if exists test_table;</db_drop>
+
+<db_insert>
+insert into test_table values
+( 1, 11, 'test' ),
+( 2, 12, 'test' ),
+( 3, 13, 'test' ),
+( 11, 21,'test' ),
+( 12, 22, 'test' ),
+( 13, 23, 'test' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>select id from test1 where id in (1,13) and gid not in (1)</sphinxql>
+<sphinxql>select id from test1 where id in (1,13) and gid not in (1) force index(id)</sphinxql>
+<sphinxql>select id from test1 where id in (1,13) and gid not in (1) ignore index(id)</sphinxql>
+</sphqueries>
+
+</test>

@@ -13864,15 +13864,17 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	bool bReverse = pQuery->m_bReverseScan; // shortcut
 	int iCutoff = ( pQuery->m_iCutoff<=0 ) ? -1 : pQuery->m_iCutoff;
 
-	CSphVector<CSphFilterSettings> dFilters = pQuery->m_dFilters;
+	// we don't modify the original filters because iterators may use some data from them (to avoid copying)
+	CSphVector<CSphFilterSettings> dModifiedFilters;
 	RowidIterator_i * pIterator = nullptr;
 	if ( m_pHistograms )
-		pIterator = CreateFilteredIterator ( dFilters, pQuery->m_dFilterTree, pQuery->m_dIndexHints, *m_pHistograms, m_tDocidLookup.GetWritePtr() );
+		pIterator = CreateFilteredIterator ( pQuery->m_dFilters, dModifiedFilters, pQuery->m_dFilterTree, pQuery->m_dIndexHints, *m_pHistograms, m_tDocidLookup.GetWritePtr() );
 
 	if ( pIterator )
 	{
 		// one or several filters got replaced by an iterator, need to re-create the remaining filters
 		SafeDelete ( tCtx.m_pFilter );
+		tFlx.m_pFilters = &dModifiedFilters;
 		tCtx.CreateFilters ( tFlx, pResult->m_sError, pResult->m_sWarning );
 
 		bool bStop;

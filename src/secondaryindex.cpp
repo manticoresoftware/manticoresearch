@@ -1047,7 +1047,7 @@ void SelectIterators ( const CSphVector<CSphFilterSettings> & dFilters, const CS
 }
 
 
-RowidIterator_i * CreateFilteredIterator ( CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c & tHistograms, const BYTE * pDocidLookup )
+RowidIterator_i * CreateFilteredIterator ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c & tHistograms, const BYTE * pDocidLookup )
 {
 	// no iterators with OR queries
 	if ( dFilterTree.GetLength() )
@@ -1065,8 +1065,11 @@ RowidIterator_i * CreateFilteredIterator ( CSphVector<CSphFilterSettings> & dFil
 	}
 
 	dEnabledIndexes.Sort ( bind ( &SecondaryIndexInfo_t::m_iFilterId ) );
-	for ( int i = dEnabledIndexes.GetLength()-1; i>=0; i-- )
-		dFilters.Remove ( dEnabledIndexes[i].m_iFilterId );
+	ARRAY_FOREACH ( i, dFilters )
+	{
+		if ( !dEnabledIndexes.FindFirst ( [i] ( const SecondaryIndexInfo_t & tInfo ) { return tInfo.m_iFilterId==i; } ) )
+			dModifiedFilters.Add ( dFilters[i] );
+	}
 
 	int nIterators = dIterators.GetLength();
 	if ( nIterators==1 )

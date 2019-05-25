@@ -85,7 +85,7 @@ struct SecondaryIndexInfo_t
 	int		m_iFilterId {-1};
 };
 
-RowidIterator_i * CreateFilteredIterator ( CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c & tHistograms, const BYTE * pDocidLookup );
+RowidIterator_i * CreateFilteredIterator ( const CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphFilterSettings> & dModifiedFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, const CSphVector<IndexHint_t> & dHints, const HistogramContainer_c & tHistograms, const BYTE * pDocidLookup );
 
 //////////////////////////////////////////////////////////////////////////
 

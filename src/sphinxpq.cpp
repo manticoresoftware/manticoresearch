@@ -140,6 +140,9 @@ public:
 	void				DebugDumpDict ( FILE * ) override {}
 	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) override {}
 	void				SetMemorySettings ( bool , bool , bool ) override {}
+	void				SetConfigSection ( CSphConfigSection ) override {};
+	CSphConfigSection	GetConfigSection () const override { return CSphConfigSection (); };
+
 	void				ProhibitSave() override { m_bSaveDisabled = true; }
 
 	const CSphSchema &GetMatchSchema () const override { return m_tMatchSchema; }

@@ -19018,7 +19018,7 @@ static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError )
 		tNewIndex.m_pIndex->SetPreopen ( pCurrentlyServed->m_bPreopen || g_bPreopenIndexes );
 		tNewIndex.m_pIndex->SetGlobalIDFPath ( pCurrentlyServed->m_sGlobalIDFPath );
 		tNewIndex.m_pIndex->SetMemorySettings ( tNewIndex.m_bMlock, tNewIndex.m_bOnDiskAttrs, tNewIndex.m_bOnDiskPools );
-
+		tNewIndex.m_pIndex->SetConfigSection ( pCurrentlyServed->m_pIndex->GetConfigSection ());
 		dActivePath.SetBase ( pCurrentlyServed->m_sIndexPath );
 		dNewPath.SetBase ( pCurrentlyServed->m_sNewPath );
 		eRot = CheckIndexHeaderRotate ( *pCurrentlyServed );
@@ -19798,6 +19798,7 @@ ESphAddIndex AddRTPercolate ( const char * szIndexName, ServedDesc_t & tIdx, con
 	tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );
 	tIdx.m_pIndex->SetGlobalIDFPath ( tIdx.m_sGlobalIDFPath );
 	tIdx.m_pIndex->SetMemorySettings ( tIdx.m_bMlock, tIdx.m_bOnDiskAttrs, tIdx.m_bOnDiskPools );
+	tIdx.m_pIndex->SetConfigSection ( hIndex );
 
 	tIdx.m_pIndex->Setup ( tSettings );
 	tIdx.m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
@@ -20018,6 +20019,7 @@ ESphAddIndex AddPlainIndex ( const char * szIndexName, const CSphConfigSection &
 	tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );
 	tIdx.m_pIndex->SetGlobalIDFPath ( tIdx.m_sGlobalIDFPath );
 	tIdx.m_pIndex->SetMemorySettings ( tIdx.m_bMlock, tIdx.m_bOnDiskAttrs, tIdx.m_bOnDiskPools );
+	tIdx.m_pIndex->SetConfigSection ( hIndex );
 	tIdx.m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
 	CSphIndexStatus tStatus;
 	tIdx.m_pIndex->GetStatus ( &tStatus );

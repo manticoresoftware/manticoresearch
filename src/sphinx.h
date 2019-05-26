@@ -3395,6 +3395,11 @@ public:
 
 	virtual void				SetMemorySettings ( bool bMlock, bool bOndiskAttrs, bool bOndiskPool ) = 0;
 
+	// most generic section - let's index take necessary values from the config itself.
+	// fixme! m.b. move most of another option into this generic?
+	virtual void 				SetConfigSection ( CSphConfigSection ) = 0;
+	virtual CSphConfigSection	GetConfigSection() const = 0;
+
 	virtual void				GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings );
 
 public:

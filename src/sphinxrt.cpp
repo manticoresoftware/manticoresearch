@@ -1043,6 +1043,8 @@ public:
 	void				Dealloc () final {}
 	void				Preread () final;
 	void				SetMemorySettings ( bool bMlock, bool bOndiskAttrs, bool bOndiskPool ) final;
+	void 				SetConfigSection ( CSphConfigSection ) final;
+	CSphConfigSection	GetConfigSection () const final { return m_hSettings; }
 	void				SetBase ( const char * ) final {}
 	bool				Rename ( const char * ) final { return true; }
 	bool				Lock () final { return true; }
@@ -1147,6 +1149,7 @@ private:
 	bool						m_bMlock = false;
 	bool						m_bOndiskAllAttr = false;
 	bool						m_bOndiskPoolAttr = false;
+	CSphConfigSection			m_hSettings;
 
 	CSphFixedVector<int64_t>	m_dFieldLens { SPH_MAX_FIELDS };	///< total field lengths over entire index
 	CSphFixedVector<int64_t>	m_dFieldLensRam { SPH_MAX_FIELDS };	///< field lengths summed over current RAM chunk
@@ -3459,6 +3462,8 @@ CSphIndex * RtIndex_c::LoadDiskChunk ( const char * sChunk, CSphString & sError 
 	pDiskChunk->m_iExpandKeywords = m_iExpandKeywords;
 	pDiskChunk->SetBinlog ( false );
 	pDiskChunk->SetMemorySettings ( m_bMlock, m_bOndiskAllAttr, m_bOndiskPoolAttr );
+	pDiskChunk->SetConfigSection ( GetConfigSection ());
+
 	if ( m_bDebugCheck )
 		pDiskChunk->SetDebugCheck();
 
@@ -3690,6 +3695,10 @@ void RtIndex_c::SetMemorySettings ( bool bMlock, bool bOndiskAttrs, bool bOndisk
 	m_bOndiskPoolAttr = ( bOndiskAttrs || bOndiskPool );
 }
 
+void RtIndex_c::SetConfigSection ( CSphConfigSection hIndex )
+{
+	m_hSettings.Swap ( hIndex );
+}
 
 static bool CheckVectorLength ( int iLen, int64_t iSaneLen, const char * sAt, CSphString & sError )
 {

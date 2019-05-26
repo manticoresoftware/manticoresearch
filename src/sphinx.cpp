@@ -1421,6 +1421,8 @@ public:
 	void				Dealloc () final {}
 	void				Preread () final {}
 	void				SetMemorySettings ( bool , bool , bool ) final {}
+	void 				SetConfigSection ( CSphConfigSection ) final {}
+	CSphConfigSection	GetConfigSection () const final { return CSphConfigSection(); }
 	void				SetBase ( const char * ) final {}
 	bool				Rename ( const char * ) final { return false; }
 	bool				Lock () final { return true; }
@@ -2349,6 +2351,8 @@ public:
 	void				Dealloc () final;
 	void				Preread () final;
 	void				SetMemorySettings ( bool bMlock, bool bOndiskAttrs, bool bOndiskPool ) final;
+	void				SetConfigSection ( CSphConfigSection ) final;
+	CSphConfigSection	GetConfigSection () const final { return m_hSettings; }
 
 	void				SetBase ( const char * sNewBase ) final;
 	bool				Rename ( const char * sNewBase ) final;
@@ -2431,6 +2435,7 @@ private:
 	bool						m_bMlock;
 	bool						m_bOndiskAllAttr;
 	bool						m_bOndiskPoolAttr;
+	CSphConfigSection			m_hSettings; ///< copy of config section (just parsed)
 
 	DWORD						m_uVersion;				///< data files version
 	volatile bool				m_bPassedRead;
@@ -14925,6 +14930,10 @@ void CSphIndex_VLN::SetMemorySettings ( bool bMlock, bool bOndiskAttrs, bool bOn
 	m_bOndiskPoolAttr = ( bOndiskAttrs || bOndiskPool );
 }
 
+void CSphIndex_VLN::SetConfigSection ( CSphConfigSection hIndex )
+{
+	m_hSettings.Swap ( hIndex );
+}
 
 void CSphIndex_VLN::SetBase ( const char * sNewBase )
 {

@@ -143,6 +143,19 @@ public:
 	int		GetSize ( const char * sKey, int iDefault ) const;
 	int64_t GetSize64 ( const char * sKey, int64_t iDefault ) const;
 
+	void Swap ( CSphConfigSection& other ) noexcept
+	{
+		::Swap(m_iTag, other.m_iTag);
+		SmallStringHash_T<CSphVariant>::Swap(other);
+	}
+
+	/// copying
+	CSphConfigSection& operator= ( CSphConfigSection rhs )
+	{
+		Swap ( rhs );
+		return *this;
+	}
+
 	int m_iTag;
 };
 

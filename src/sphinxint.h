@@ -1710,9 +1710,9 @@ class IndexFiles_c : public ISphNoncopyable
 
 public:
 	IndexFiles_c() = default;
-	explicit IndexFiles_c ( const CSphString & sBase, DWORD uVersion = INDEX_FORMAT_VERSION )
+	explicit IndexFiles_c ( CSphString sBase, DWORD uVersion = INDEX_FORMAT_VERSION )
 		: m_uVersion ( uVersion )
-		, m_sFilename ( sBase )
+		, m_sFilename { std::move(sBase) }
 	{}
 
 	void InitFrom ( const CSphIndex * pIndex );

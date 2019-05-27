@@ -1167,7 +1167,7 @@ private:
 	void						SaveMeta ( int64_t iTID, const CSphFixedVector<int> & dChunkNames );
 	void						SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats ) const;
 	void						SaveDiskData ( const char * sFilename, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats ) const;
-	int							SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats, bool bMoveRetired );
+	int							SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats, bool bMoveRetired, bool bForced );
 	CSphIndex *					LoadDiskChunk ( const char * sChunk, CSphString & sError ) const;
 	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes );
 	bool						SaveRamChunk ( const VecTraits_T<const RtSegment_t *>& dSegments );
@@ -2656,7 +2656,7 @@ void RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<DocID_t> & 
 
 		Verify ( m_tWriting.Unlock() );
 
-		int iSavedChunkId = SaveDiskChunk ( iTID, tGuard, tStat2Dump, false );
+		int iSavedChunkId = SaveDiskChunk ( iTID, tGuard, tStat2Dump, false, bForceDump );
 		g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), iTID, false );
 
 		// notify the disk chunk that we were saving of the documents that were killed while we were saving it
@@ -3366,7 +3366,7 @@ void RtIndex_c::SaveMeta ( int64_t iTID, const CSphFixedVector<int> & dChunkName
 }
 
 
-int RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats, bool bMoveRetired )
+int RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats, bool bMoveRetired, bool bForce )
 {
 	if ( !tGuard.m_dRamChunks.GetLength() )
 		return -1;
@@ -3439,8 +3439,9 @@ int RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, con
 	Verify ( m_tWriting.Unlock() );
 
 	tmSave = sphMicroTimer () - tmSave;
-	sphInfo ( "rt: index %s: diskchunk %d saved in %d.%03d sec",
-			  m_sIndexName.cstr (), iChunkId, ( int ) ( tmSave / 1000000 ), ( int ) (( tmSave / 1000 ) % 1000 ));
+	const char* sReason = bForce ? "forcibly saved" : "saved";
+	sphInfo ( "rt: index %s: diskchunk %d %s in %d.%03d sec",
+			  m_sIndexName.cstr (), iChunkId, sReason, ( int ) ( tmSave / 1000000 ), ( int ) (( tmSave / 1000 ) % 1000 ));
 
 	return iChunkId;
 }
@@ -6684,7 +6685,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, CSphString
 		GetReaderChunks ( tGuard );
 
 		ChunkStats_t tStats ( m_tStats, m_dFieldLensRam );
-		SaveDiskChunk ( m_iTID, tGuard, tStats, true );
+		SaveDiskChunk ( m_iTID, tGuard, tStats, true, true );
 
 		for ( const auto & pChunk : m_dDiskChunks )
 		{

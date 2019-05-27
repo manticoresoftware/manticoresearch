@@ -7055,6 +7055,14 @@ void SearchHandler_c::RunLocalSearches()
 			continue;
 		}
 
+		if ( !ServedDesc_t::IsSelectable ( pServed ) )
+		{
+			for ( int i = m_iStart; i<=m_iEnd; ++i )
+				m_dFailuresSet[i].SubmitEx ( sLocal, nullptr, "%s", "index is not suitable for select" );
+
+			continue;
+		}
+
 		assert ( pServed->m_pIndex );
 
 		// create sorters

@@ -391,8 +391,9 @@ public:
 			return false;
 
 		DWORD uLength = tReq.GetDword();
-		CSphFixedVector<BYTE> dResult ( uLength );
+		CSphFixedVector<BYTE> dResult ( uLength+1 );
 		tReq.GetBytes ( dResult.Begin(), uLength );
+		dResult[uLength] = '\0';
 
 		return sphGetResultStats ( (const char *)dResult.Begin(), m_iAffected, m_iWarnings, eEndpoint==SPH_HTTP_ENDPOINT_JSON_UPDATE );
 	}

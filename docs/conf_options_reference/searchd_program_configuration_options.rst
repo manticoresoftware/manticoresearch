@@ -1095,12 +1095,6 @@ This setting let you control their sizes, increasing per-query RAM use,
 but possibly decreasing IO time. Minimal value is 8K. Apart general size, you may also tune buffers for document lists
 and hit lists individually, using :ref:`read_buffer_docs` and :ref:`read_buffer_hits` params.
 
-Setting this value to 0 effectively forces daemon to use memory-mappings for these lists. That is special mode which
-often may significally improve searching speed in general; however it implies that you have enough RAM to fit all your
-indexes. With memory-mapping OS caches accessed chunks of files in free RAM, and may cache the whole of them, in
-opposite to concrete limited buffers. However this RAM itself is not considered as 'occupied', that is why buffer are
-virtually zero.
-
 Example:
 
 
@@ -1121,16 +1115,13 @@ This is same as :ref:`read_buffer`, but manages size for document lists only. If
 overrides more general `read_buffer`. Also you may set :ref:`index_read_buffer_docs` on per-index basis; that value
 will override anything set on daemon's config level.
 
-Apart concrete size numbers, and 0 (for memory-mapping), you can set it to -1, which means 'the default', that is
-hard-coded value 256K.
-
 Example:
 
 
 .. code-block:: ini
 
 
-    read_buffer_docs = 0
+    read_buffer_docs = 128K
 
 
 .. _read_buffer_hits:
@@ -1144,16 +1135,12 @@ This is same as :ref:`read_buffer`, but manages size for hit lists only. If both
 overrides more general `read_buffer`. Also you may set :ref:`index_read_buffer_hits` on per-index basis; that value
 will override anything set on daemon's config level.
 
-Apart concrete size numbers, and 0 (for memory-mapping), you can set it to -1, which means 'the default', that is
-hard-coded value 256K.
-
 Example:
 
 
 .. code-block:: ini
 
-	read_buffer = 100M
-    read_buffer_hits = -1 # discard 100M for hits and use (256K)
+    read_buffer_hits = 100M
 
 
 .. _read_timeout:
@@ -1187,8 +1174,7 @@ much data to read in such cases. It impacted hit list IO time,
 reducing it for lists larger than unhinted read size, but raising it for
 smaller lists. It **not** affects RAM usage because read buffer
 will be already allocated. So it should be not greater than
-read_buffer. For memory-mapped reading (when read_buffer=0) this param is not
-used and doesn't affect anything at all.
+read_buffer.
 
 Example:
 

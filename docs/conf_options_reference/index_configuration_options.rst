@@ -3,6 +3,95 @@
 Index configuration options
 ---------------------------
 
+.. _access_plain_attrs:
+
+access_plain_attrs
+~~~~~~~~~~~~~~~~~~
+
+This mode is how index attribute file got read. Optional, default value mmap_preread.
+
+Possible values are ``mmap``, ``mmap_preread``, ``mlock``. Refer to :ref:`mlock` directive for possible
+mlock restrictions.
+
+On daemon start attribute file got mapped into memory and preread background thread started to cache in
+attribute file - that is ``mmap_preread`` option. ``mlock`` option uses mlock(2) privileged call to cache in attribute file
+instead preread background thread. ``mmap`` option just map attribute file into memory and expect OS to cache parts of file
+used more often.
+
+
+Example:
+
+
+.. code-block:: ini
+
+
+    access_plain_attrs = mlock
+
+
+.. _access_blob_attrs:
+
+access_blob_attrs
+~~~~~~~~~~~~~~~~~
+
+This mode is how index blob file got read. Optional, default value mmap_preread.
+
+Possible values are ``mmap``, ``mmap_preread``, ``mlock``. Refer to :ref:`mlock` directive for possible
+mlock restrictions.
+
+On daemon start blob file got mapped into memory and preread background thread started to cache in
+blob file - that is ``mmap_preread`` option. ``mlock`` option uses mlock(2) privileged call to cache in blob file
+instead preread background thread. ``mmap`` option just map blob file into memory and expect OS to cache parts of file
+used more often.
+
+
+Example:
+
+
+.. code-block:: ini
+
+
+    access_blob_attrs = mmap
+
+
+.. _access_doclists:
+
+access_doclists
+~~~~~~~~~~~~~~~
+
+This mode is how doclist file got read. Optional, default value file.
+
+Possible values are ``file``, ``mmap``.
+
+To read data from doclist file these types of reader might be used - file reader and mmap. ``file`` reader provides optimal performance
+and could be tuned with options :ref:`read_buffer_docs` and :ref:`read_buffer_hits`. ``mmap`` is file mapped into memory as :ref:`access_plain_attrs`
+does and could provide significant performance improvement in case all index files fit in memory.
+
+.. code-block:: ini
+
+
+    access_doclists = mmap
+
+
+.. _access_access_hitlists:
+
+access_hitlists
+~~~~~~~~~~~~~~~
+
+
+This mode is how hitlist file got read. Optional, default value file.
+
+Possible values are ``file``, ``mmap``.
+
+To read data from hitlist file these types of reader might be used - file reader and mmap. ``file`` reader provides optimal performance
+and could be tuned with options :ref:`read_buffer_docs` and :ref:`read_buffer_hits`. ``mmap`` is file mapped into memory as :ref:`access_plain_attrs`
+does and could provide significant performance improvement in case all index files fit in memory.
+
+.. code-block:: ini
+
+
+    access_hitlists = file
+
+
 .. _agent_blackhole:
 
 agent_blackhole
@@ -2334,7 +2423,7 @@ Example:
 .. code-block:: ini
 
 
-    read_buffer_docs = 0 # use memory-mapping
+    read_buffer_docs = 128K
 
 
 .. _index_read_buffer_hits:
@@ -2353,7 +2442,7 @@ Example:
 .. code-block:: ini
 
 
-    read_buffer_hits = -1 # discard anything set in searchd section; forcibly use default (256K) instead.
+    read_buffer_hits = 32K
 
 
 .. _regexp_filter:

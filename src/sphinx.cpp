@@ -175,8 +175,6 @@ static const int	MIN_READ_BUFFER			= 8192;
 static const int	MIN_READ_UNHINTED		= 1024;
 #define READ_NO_SIZE_HINT 0
 
-static int 			g_iReadBufferDocs 		= -1;
-static int			g_iReadBufferHits 		= -1;
 static int 			g_iReadUnhinted 		= DEFAULT_READ_UNHINTED;
 
 #ifndef FULL_SHARE_DIR
@@ -193,9 +191,6 @@ int64_t		g_iIndexerCurrentRangeMin	= 0;
 int64_t		g_iIndexerCurrentRangeMax	= 0;
 int64_t		g_iIndexerPoolStartDocID	= 0;
 int64_t		g_iIndexerPoolStartHit		= 0;
-
-// returns correct size even if iBuf is 0
-int GetReadBuffer ( int iBuf );
 
 /// global IDF
 class CSphGlobalIDF
@@ -825,21 +820,13 @@ public:
 };
 
 static DataReaderFabric_c* NewProxyReader ( const CSphString& sFile, CSphString& sError,
-	DataReaderFabric_c::EKind eKind, const CSphConfigSection& hSettings, bool bOnlyDirect=true )
+	DataReaderFabric_c::EKind eKind, int iReadBuffer, bool bOnDisk )
 {
-	int iReadBuffer = DEFAULT_READ_BUFFER;
 	auto eState = StateByKind ( eKind );
 	DataReaderFabric_c* pReader = nullptr;
 
-	switch (eState)
-	{
-		case SPH_QSTATE_READ_DOCS: iReadBuffer = hSettings.GetSize ( "read_buffer_docs", g_iReadBufferDocs ); break;
-		case SPH_QSTATE_READ_HITS: iReadBuffer = hSettings.GetSize ( "read_buffer_hits", g_iReadBufferHits ); break;
-		default: break;
-	}
-
-	if ( bOnlyDirect || iReadBuffer )
-		pReader = new DirectFabric_c ( sFile, sError, eState, GetReadBuffer ( iReadBuffer ), g_iReadUnhinted );
+	if ( bOnDisk )
+		pReader = new DirectFabric_c ( sFile, sError, eState, iReadBuffer, g_iReadUnhinted );
 	else
 		pReader = new MMapFabric_c ( sFile, sError );
 
@@ -1634,9 +1621,7 @@ public:
 	bool				Prealloc ( bool ) final { return false; }
 	void				Dealloc () final {}
 	void				Preread () final {}
-	void				SetMemorySettings ( bool , bool , bool ) final {}
-	void 				SetConfigSection ( CSphConfigSection ) final {}
-	CSphConfigSection	GetConfigSection () const final { return CSphConfigSection(); }
+	void				SetMemorySettings ( const FileAccessSettings_t & ) final {}
 	void				SetBase ( const char * ) final {}
 	bool				Rename ( const char * ) final { return false; }
 	bool				Lock () final { return true; }
@@ -2564,9 +2549,7 @@ public:
 	bool				Prealloc ( bool bStripPath ) final;
 	void				Dealloc () final;
 	void				Preread () final;
-	void				SetMemorySettings ( bool bMlock, bool bOndiskAttrs, bool bOndiskPool ) final;
-	void				SetConfigSection ( CSphConfigSection ) final;
-	CSphConfigSection	GetConfigSection () const final { return m_hSettings; }
+	void				SetMemorySettings ( const FileAccessSettings_t & tFileAccessSettings ) final;
 
 	void				SetBase ( const char * sNewBase ) final;
 	bool				Rename ( const char * sNewBase ) final;
@@ -2646,10 +2629,7 @@ private:
 	CSphMappedBuffer<BYTE>		m_tDocidLookup;		///< speeds up docid-rowid lookups + used for applying killlist on startup
 	LookupReader_c				m_tLookupReader;	///< used by getrowidbydocid
 
-	bool						m_bMlock;
-	bool						m_bOndiskAllAttr;
-	bool						m_bOndiskPoolAttr;
-	CSphConfigSection			m_hSettings; ///< copy of config section (just parsed)
+	FileAccessSettings_t		m_tFiles;
 
 	DWORD						m_uVersion;				///< data files version
 	volatile bool				m_bPassedRead;
@@ -3093,21 +3073,6 @@ int64_t sphGetFileSize ( const CSphString& sFile, CSphString * sError )
 	return st.st_size;
 }
 
-
-void SetDocsReadBuffers ( int iReadBuffer )
-{
-	if ( iReadBuffer<0 )
-		iReadBuffer = DEFAULT_READ_BUFFER;
-	g_iReadBufferDocs = iReadBuffer ? Max ( iReadBuffer, MIN_READ_BUFFER ) : 0;
-}
-
-void SetHitsReadBuffers ( int iReadBuffer )
-{
-	if ( iReadBuffer<0 )
-		iReadBuffer = DEFAULT_READ_BUFFER;
-	g_iReadBufferHits = iReadBuffer ? Max ( iReadBuffer, MIN_READ_BUFFER ) : 0;
-}
-
 void SetUnhintedBuffer ( int iReadUnhinted )
 {
 	if ( iReadUnhinted<=0 )
@@ -3115,12 +3080,28 @@ void SetUnhintedBuffer ( int iReadUnhinted )
 	g_iReadUnhinted = Max ( iReadUnhinted, MIN_READ_UNHINTED );
 }
 
+// returns correct size even if iBuf is 0
 int GetReadBuffer ( int iBuf )
 {
 	if ( !iBuf )
 		return DEFAULT_READ_BUFFER;
 	return Max ( iBuf, MIN_READ_BUFFER );
 }
+
+bool IsMlock ( FileAccess_e eType ) { return eType==FileAccess_e::MLOCK; }
+bool IsOndisk ( FileAccess_e eType ) { return eType==FileAccess_e::FILE || eType==FileAccess_e::MMAP; }
+
+bool FileAccessSettings_t::operator== ( const FileAccessSettings_t & tOther ) const
+{
+	return ( m_eAttr==tOther.m_eAttr && m_eBlob==tOther.m_eBlob && m_eDoclist==tOther.m_eDoclist && m_eHitlist==tOther.m_eHitlist
+		&& m_iReadBufferDocList==tOther.m_iReadBufferDocList && m_iReadBufferHitList==tOther.m_iReadBufferHitList );
+}
+
+bool FileAccessSettings_t::operator!= ( const FileAccessSettings_t & tOther ) const
+{
+	return !operator==( tOther );
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 // DOCINFO
@@ -9182,9 +9163,6 @@ CSphIndex_VLN::CSphIndex_VLN ( const char* sIndexName, const char * sFilename )
 	m_iDocinfoIndex = 0;
 	m_pDocinfoIndex = NULL;
 
-	m_bMlock = false;
-	m_bOndiskAllAttr = false;
-	m_bOndiskPoolAttr = false;
 	m_uVersion = INDEX_FORMAT_VERSION;
 	m_bPassedRead = false;
 	m_bPassedAlloc = false;
@@ -9800,10 +9778,10 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttr
 	m_iMinMaxIndex = iNewMinMaxIndex;
 	m_pDocinfoIndex = m_tAttr.GetWritePtr() + m_iMinMaxIndex;
 
-	PrereadMapping ( m_sIndexName.cstr(), "attributes", m_bMlock, m_bOndiskAllAttr, m_tAttr );
+	PrereadMapping ( m_sIndexName.cstr(), "attributes", IsMlock ( m_tFiles.m_eAttr ), IsOndisk ( m_tFiles.m_eAttr ), m_tAttr );
 
 	if ( bBlobsModified )
-		PrereadMapping ( m_sIndexName.cstr(), "blob attributes", m_bMlock, m_bOndiskAllAttr, m_tBlobAttrs );
+		PrereadMapping ( m_sIndexName.cstr(), "blob attributes", IsMlock ( m_tFiles.m_eBlob ), IsOndisk ( m_tFiles.m_eBlob ), m_tBlobAttrs );
 
 	return true;
 }
@@ -11276,7 +11254,7 @@ public:
 		CSphString sWarning;
 
 		m_pIndex = (CSphIndex_VLN *)sphCreateIndexPhrase ( "keep-attrs", sKeepAttrs.cstr() );
-		m_pIndex->SetMemorySettings ( false, true, true );
+		m_pIndex->SetMemorySettings ( FileAccessSettings_t() );
 
 		if ( !m_pIndex->Prealloc ( false ) )
 		{
@@ -12701,14 +12679,14 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 	DataReaderFabricPtr_t tSrcDocs {
 		NewProxyReader ( pSrcIndex->GetIndexFileName ( SPH_EXT_SPD ), sError,
-			DataReaderFabric_c::eDocs, pSrcIndex->GetConfigSection () )
+			DataReaderFabric_c::eDocs, pSrcIndex->m_tFiles.m_iReadBufferDocList, true )
 	};
 	if ( !tSrcDocs )
 		return false;
 
 	DataReaderFabricPtr_t tSrcHits {
 		NewProxyReader ( pSrcIndex->GetIndexFileName ( SPH_EXT_SPP ), sError,
-			DataReaderFabric_c::eHits, pSrcIndex->GetConfigSection ()  )
+			DataReaderFabric_c::eHits, pSrcIndex->m_tFiles.m_iReadBufferHitList, true  )
 	};
 	if ( !tSrcHits )
 		return false;
@@ -12718,14 +12696,14 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 	DataReaderFabricPtr_t tDstDocs {
 		NewProxyReader ( pDstIndex->GetIndexFileName ( SPH_EXT_SPD ), sError,
-			DataReaderFabric_c::eDocs, pDstIndex->GetConfigSection ()  )
+			DataReaderFabric_c::eDocs, pDstIndex->m_tFiles.m_iReadBufferDocList, true )
 	};
 	if ( !tDstDocs )
 		return false;
 
 	DataReaderFabricPtr_t tDstHits {
 		NewProxyReader ( pDstIndex->GetIndexFileName ( SPH_EXT_SPP ), sError,
-			DataReaderFabric_c::eHits, pDstIndex->GetConfigSection ()  )
+			DataReaderFabric_c::eHits, pDstIndex->m_tFiles.m_iReadBufferHitList, true )
 	};
 	if ( !tDstHits )
 		return false;
@@ -12855,11 +12833,11 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSettings> & dFilters, bool bSupressDstDocids )
 {
-	SetMemorySettings ( false, true, true );
+	SetMemorySettings ( FileAccessSettings_t() );
 	if ( !Prealloc ( false ) )
 		return false;
 	Preread ();
-	pSource->SetMemorySettings ( false, true, true );
+	pSource->SetMemorySettings ( FileAccessSettings_t() );
 	if ( !pSource->Prealloc ( false ) )
 	{
 		m_sLastError.SetSprintf ( "source index preload failed: %s", pSource->GetLastError().cstr() );
@@ -14908,13 +14886,13 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 
 	// open files
 	DataReaderFabricPtr_t pDoclist {
-		NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), m_sLastError, DataReaderFabric_c::eDocs, m_hSettings )
+		NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), m_sLastError, DataReaderFabric_c::eDocs, m_tFiles.m_iReadBufferDocList, true )
 	};
 	if ( !pDoclist )
 		sphDie ( "failed to open doclist: %s", m_sLastError.cstr() );
 
 	DataReaderFabricPtr_t pHitlist {
-		NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), m_sLastError, DataReaderFabric_c::eHits, m_hSettings )
+		NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), m_sLastError, DataReaderFabric_c::eHits, m_tFiles.m_iReadBufferHitList, true )
 	};
 	if ( !pHitlist )
 		sphDie ( "failed to open hitlist: %s", m_sLastError.cstr ());
@@ -15048,16 +15026,20 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 	if ( !sphIsReadable ( GetIndexFileName(SPH_EXT_SPE).cstr(), &m_sLastError ) )
 		return false;
 
-	// preopen
-	if ( m_bKeepFilesOpen )
+	// preopen doclist for mmap or keep files open (mmap also force open files)
+	if ( m_bKeepFilesOpen || m_tFiles.m_eDoclist!=FileAccess_e::FILE )
 	{
 		m_pDoclistFile = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), m_sLastError,
-										  DataReaderFabric_c::eDocs, m_hSettings, false );
+										  DataReaderFabric_c::eDocs, m_tFiles.m_iReadBufferDocList, ( m_tFiles.m_eDoclist==FileAccess_e::FILE ) );
 		if ( !m_pDoclistFile )
 			return false;
+	}
 
+	// preopen hitlist for mmap or keep files open (mmap also force open files)
+	if ( m_bKeepFilesOpen || m_tFiles.m_eHitlist!=FileAccess_e::FILE )
+	{
 		m_pHitlistFile = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), m_sLastError,
-										  DataReaderFabric_c::eHits, m_hSettings, false );
+										  DataReaderFabric_c::eHits, m_tFiles.m_iReadBufferHitList, ( m_tFiles.m_eHitlist==FileAccess_e::FILE ) );
 		if ( !m_pHitlistFile )
 			return false;
 	}
@@ -15159,12 +15141,12 @@ void CSphIndex_VLN::Preread()
 	///////////////////
 
 	volatile BYTE uRead = 0; // just need all side-effects
-	uRead ^= PrereadMapping ( m_sIndexName.cstr(), "attributes", m_bMlock, m_bOndiskAllAttr, m_tAttr );
-	uRead ^= PrereadMapping ( m_sIndexName.cstr(), "blobs", m_bMlock, m_bOndiskPoolAttr, m_tBlobAttrs );
-	uRead ^= PrereadMapping ( m_sIndexName.cstr(), "skip-list", m_bMlock, false, m_tSkiplists );
-	uRead ^= PrereadMapping ( m_sIndexName.cstr(), "dictionary", m_bMlock, false, m_tWordlist.m_tBuf );
-	uRead ^= PrereadMapping ( m_sIndexName.cstr(), "docid-lookup", m_bMlock, false, m_tDocidLookup );
-	uRead ^= m_tDeadRowMap.Preread ( m_sIndexName.cstr(), "kill-list", m_bMlock );
+	uRead ^= PrereadMapping ( m_sIndexName.cstr(), "attributes", IsMlock ( m_tFiles.m_eAttr ), IsOndisk ( m_tFiles.m_eAttr ), m_tAttr );
+	uRead ^= PrereadMapping ( m_sIndexName.cstr(), "blobs", IsMlock ( m_tFiles.m_eBlob ), IsOndisk ( m_tFiles.m_eBlob ), m_tBlobAttrs );
+	uRead ^= PrereadMapping ( m_sIndexName.cstr(), "skip-list", IsMlock ( m_tFiles.m_eAttr ), false, m_tSkiplists );
+	uRead ^= PrereadMapping ( m_sIndexName.cstr(), "dictionary", IsMlock ( m_tFiles.m_eAttr ), false, m_tWordlist.m_tBuf );
+	uRead ^= PrereadMapping ( m_sIndexName.cstr(), "docid-lookup", IsMlock ( m_tFiles.m_eAttr ), false, m_tDocidLookup );
+	uRead ^= m_tDeadRowMap.Preread ( m_sIndexName.cstr(), "kill-list", IsMlock ( m_tFiles.m_eAttr ) );
 
 	PopulateHistograms();
 
@@ -15173,16 +15155,9 @@ void CSphIndex_VLN::Preread()
 }
 
 
-void CSphIndex_VLN::SetMemorySettings ( bool bMlock, bool bOndiskAttrs, bool bOndiskPool )
+void CSphIndex_VLN::SetMemorySettings ( const FileAccessSettings_t & tFileAccessSettings )
 {
-	m_bMlock = bMlock;
-	m_bOndiskAllAttr = bOndiskAttrs;
-	m_bOndiskPoolAttr = ( bOndiskAttrs || bOndiskPool );
-}
-
-void CSphIndex_VLN::SetConfigSection ( CSphConfigSection hIndex )
-{
-	m_hSettings.Swap ( hIndex );
+	m_tFiles = tFileAccessSettings;
 }
 
 void CSphIndex_VLN::SetBase ( const char * sNewBase )
@@ -16942,24 +16917,23 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
 
 	// open files
-	DataReaderFabricPtr_t pDoclist, pHitlist;
-	if ( m_bKeepFilesOpen )
-	{
-		pDoclist = m_pDoclistFile;
-		pHitlist = m_pHitlistFile;
-	}
-	else {
-		if ( pProfile )
-			pProfile->Switch ( SPH_QSTATE_OPEN );
+	DataReaderFabricPtr_t pDoclist = m_pDoclistFile;
+	DataReaderFabricPtr_t pHitlist = m_pHitlistFile;
+	if ( pProfile && ( !pDoclist || !pHitlist ) )
+		pProfile->Switch ( SPH_QSTATE_OPEN );
 
-		// fixme! Consider if ProxyReader is also appropriate in case of NOT keepfileopen
+	if ( !pDoclist )
+	{
 		pDoclist = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), pResult->m_sError,
-									 DataReaderFabric_c::eDocs, m_hSettings );
+									 DataReaderFabric_c::eDocs, m_tFiles.m_iReadBufferDocList, true );
 		if ( !pDoclist )
 			return false;
+	}
 
+	if ( !pHitlist )
+	{
 		pHitlist = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), pResult->m_sError,
-									 DataReaderFabric_c::eHits, m_hSettings );
+									 DataReaderFabric_c::eHits, m_tFiles.m_iReadBufferHitList, true );
 		if ( !pHitlist )
 			return false;
 	}
@@ -18339,13 +18313,15 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	if ( !tCtx.m_tDictReader.Open ( GetIndexFileName(SPH_EXT_SPI), sError ) )
 		tReporter.Fail ( "unable to open dictionary: %s", sError.cstr() );
 
+	// use file reader during debug check to lower memory pressure
 	tCtx.m_pDocsReader = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), sError,
-		DataReaderFabric_c::eDocs, m_hSettings );
+		DataReaderFabric_c::eDocs, m_tFiles.m_iReadBufferDocList, true );
 	if ( !tCtx.m_pDocsReader )
 		tReporter.Fail ( "unable to open doclist: %s", sError.cstr() );
 
+	// use file reader during debug check to lower memory pressure
 	tCtx.m_pHitsReader = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), sError,
-		DataReaderFabric_c::eHits, m_hSettings );
+		DataReaderFabric_c::eHits, m_tFiles.m_iReadBufferHitList, true );
 	if ( !tCtx.m_pHitsReader )
 		tReporter.Fail ( "unable to open hitlist: %s", sError.cstr() );
 

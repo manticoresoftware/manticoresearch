@@ -810,9 +810,7 @@ public:
 	bool				Prealloc ( bool ) override { return false; }
 	void				Dealloc () override {}
 	void				Preread () override {}
-	void				SetMemorySettings ( bool , bool , bool ) override {}
-	void				SetConfigSection ( CSphConfigSection ) override {}
-	CSphConfigSection	GetConfigSection () const override { return CSphConfigSection (); }
+	void				SetMemorySettings ( const FileAccessSettings_t & ) override {}
 	void				SetBase ( const char * ) override {}
 	bool				Rename ( const char * ) override { return false; }
 	bool				Lock () override { return true; }

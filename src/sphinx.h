@@ -3263,6 +3263,33 @@ private:
 	int		m_iSegment {-1};
 };
 
+enum class FileAccess_e
+{
+	FILE,
+	MMAP,
+	MMAP_PREREAD,
+	MLOCK
+};
+
+bool IsMlock ( FileAccess_e eType );
+bool IsOndisk ( FileAccess_e eType );
+
+// returns correct size even if iBuf is 0
+int GetReadBuffer ( int iBuf );
+
+struct FileAccessSettings_t
+{
+	FileAccess_e	m_eAttr = FileAccess_e::MMAP_PREREAD;
+	FileAccess_e	m_eBlob = FileAccess_e::MMAP_PREREAD;
+	FileAccess_e	m_eDoclist = FileAccess_e::FILE;
+	FileAccess_e	m_eHitlist = FileAccess_e::FILE;
+	int				m_iReadBufferDocList = 0;
+	int				m_iReadBufferHitList = 0;
+
+	bool operator== ( const FileAccessSettings_t & tOther ) const;
+	bool operator!= ( const FileAccessSettings_t & tOther ) const;
+};
+
 /// generic fulltext index interface
 class CSphIndex : public ISphKeywordsStat, public IndexSegment_c
 {
@@ -3393,12 +3420,7 @@ public:
 	/// internal make document id list from external docinfo, DO NOT USE
 	virtual bool BuildDocList ( SphAttr_t ** ppDocList, int64_t * pCount, CSphString * pError ) const;
 
-	virtual void				SetMemorySettings ( bool bMlock, bool bOndiskAttrs, bool bOndiskPool ) = 0;
-
-	// most generic section - let's index take necessary values from the config itself.
-	// fixme! m.b. move most of another option into this generic?
-	virtual void 				SetConfigSection ( CSphConfigSection ) = 0;
-	virtual CSphConfigSection	GetConfigSection() const = 0;
+	virtual void				SetMemorySettings ( const FileAccessSettings_t & tFileAccessSettings ) = 0;
 
 	virtual void				GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings );
 
@@ -3512,8 +3534,6 @@ ISphMatchSorter *	sphCreateQueue ( SphQueueSettings_t & tQueue );
 int					sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag );
 
 /// setup per-keyword read buffer sizes
-void SetDocsReadBuffers ( int iReadBuffer  );
-void SetHitsReadBuffers ( int iReadBuffer );
 void SetUnhintedBuffer ( int iReadUnhinted );
 
 /// check query for expressions

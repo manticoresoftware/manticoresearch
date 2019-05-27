@@ -1042,9 +1042,7 @@ public:
 	bool				Prealloc ( bool bStripPath ) final;
 	void				Dealloc () final {}
 	void				Preread () final;
-	void				SetMemorySettings ( bool bMlock, bool bOndiskAttrs, bool bOndiskPool ) final;
-	void 				SetConfigSection ( CSphConfigSection ) final;
-	CSphConfigSection	GetConfigSection () const final { return m_hSettings; }
+	void				SetMemorySettings ( const FileAccessSettings_t & tFileAccessSettings ) final;
 	void				SetBase ( const char * ) final {}
 	bool				Rename ( const char * ) final { return true; }
 	bool				Lock () final { return true; }
@@ -1146,10 +1144,7 @@ private:
 	ISphTokenizerRefPtr_c		m_pTokenizerIndexing;
 	bool						m_bLoadRamPassedOk = true;
 
-	bool						m_bMlock = false;
-	bool						m_bOndiskAllAttr = false;
-	bool						m_bOndiskPoolAttr = false;
-	CSphConfigSection			m_hSettings;
+	FileAccessSettings_t		m_tFiles;
 
 	CSphFixedVector<int64_t>	m_dFieldLens { SPH_MAX_FIELDS };	///< total field lengths over entire index
 	CSphFixedVector<int64_t>	m_dFieldLensRam { SPH_MAX_FIELDS };	///< field lengths summed over current RAM chunk
@@ -3462,8 +3457,7 @@ CSphIndex * RtIndex_c::LoadDiskChunk ( const char * sChunk, CSphString & sError 
 	pDiskChunk->m_iExpansionLimit = m_iExpansionLimit;
 	pDiskChunk->m_iExpandKeywords = m_iExpandKeywords;
 	pDiskChunk->SetBinlog ( false );
-	pDiskChunk->SetMemorySettings ( m_bMlock, m_bOndiskAllAttr, m_bOndiskPoolAttr );
-	pDiskChunk->SetConfigSection ( GetConfigSection ());
+	pDiskChunk->SetMemorySettings ( m_tFiles );
 
 	if ( m_bDebugCheck )
 		pDiskChunk->SetDebugCheck();
@@ -3689,16 +3683,9 @@ void RtIndex_c::Preread ()
 }
 
 
-void RtIndex_c::SetMemorySettings ( bool bMlock, bool bOndiskAttrs, bool bOndiskPool )
+void RtIndex_c::SetMemorySettings ( const FileAccessSettings_t & tFileAccessSettings )
 {
-	m_bMlock = bMlock;
-	m_bOndiskAllAttr = bOndiskAttrs;
-	m_bOndiskPoolAttr = ( bOndiskAttrs || bOndiskPool );
-}
-
-void RtIndex_c::SetConfigSection ( CSphConfigSection hIndex )
-{
-	m_hSettings.Swap ( hIndex );
+	m_tFiles = tFileAccessSettings;
 }
 
 static bool CheckVectorLength ( int iLen, int64_t iSaneLen, const char * sAt, CSphString & sError )

@@ -139,9 +139,7 @@ public:
 	int					DebugCheck ( FILE * ) override { return 0; } // NOLINT
 	void				DebugDumpDict ( FILE * ) override {}
 	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) override {}
-	void				SetMemorySettings ( bool , bool , bool ) override {}
-	void				SetConfigSection ( CSphConfigSection ) override {};
-	CSphConfigSection	GetConfigSection () const override { return CSphConfigSection (); };
+	void				SetMemorySettings ( const FileAccessSettings_t & ) override {}
 
 	void				ProhibitSave() override { m_bSaveDisabled = true; }
 

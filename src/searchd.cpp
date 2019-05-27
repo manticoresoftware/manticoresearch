@@ -163,8 +163,6 @@ static bool				g_bPreopenIndexes	= false;
 #endif
 static bool				g_bWatchdog			= true;
 static int				g_iExpansionLimit	= 0;
-static bool				g_bOnDiskAttrs		= false;
-static bool				g_bOnDiskPools		= false;
 static int				g_iShutdownTimeout	= 3000000; // default timeout on daemon shutdown and stopwait is 3 seconds
 static int				g_iBacklog			= SEARCHD_BACKLOG;
 static int				g_iThdPoolCount		= 2;
@@ -200,6 +198,11 @@ static int				g_iMaxFilters		= 256;
 static int				g_iMaxFilterValues	= 4096;
 static int				g_iMaxBatchQueries	= 32;
 static ESphCollation	g_eCollation = SPH_COLLATION_DEFAULT;
+
+static bool				g_bOnDiskAttrs		= false; // DEPRICATED - remove
+static bool				g_bOnDiskPools		= false; // DEPRICATED - remove
+static int				g_iReadBufferHits = 0;
+static int				g_iReadBufferDocs = 0;
 
 static ISphThdPool *	g_pThdPool			= NULL;
 int				g_iDistThreads		= 0;
@@ -19013,20 +19016,17 @@ static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError )
 			return false;
 		}
 		// keep settings from current index description
-		tNewIndex.m_bMlock = pCurrentlyServed->m_bMlock;
+		tNewIndex.m_tFileAccessSettings = pCurrentlyServed->m_tFileAccessSettings;
 		tNewIndex.m_iExpandKeywords = pCurrentlyServed->m_iExpandKeywords;
 		tNewIndex.m_bPreopen = pCurrentlyServed->m_bPreopen;
 		tNewIndex.m_sGlobalIDFPath = pCurrentlyServed->m_sGlobalIDFPath;
-		tNewIndex.m_bOnDiskAttrs = pCurrentlyServed->m_bOnDiskAttrs;
-		tNewIndex.m_bOnDiskPools = pCurrentlyServed->m_bOnDiskPools;
 
 		// set settings into index
 		tNewIndex.m_pIndex->m_iExpandKeywords = pCurrentlyServed->m_iExpandKeywords;
 		tNewIndex.m_bOnlyNew = pCurrentlyServed->m_bOnlyNew;
 		tNewIndex.m_pIndex->SetPreopen ( pCurrentlyServed->m_bPreopen || g_bPreopenIndexes );
 		tNewIndex.m_pIndex->SetGlobalIDFPath ( pCurrentlyServed->m_sGlobalIDFPath );
-		tNewIndex.m_pIndex->SetMemorySettings ( tNewIndex.m_bMlock, tNewIndex.m_bOnDiskAttrs, tNewIndex.m_bOnDiskPools );
-		tNewIndex.m_pIndex->SetConfigSection ( pCurrentlyServed->m_pIndex->GetConfigSection ());
+		tNewIndex.m_pIndex->SetMemorySettings ( tNewIndex.m_tFileAccessSettings );
 		dActivePath.SetBase ( pCurrentlyServed->m_sIndexPath );
 		dNewPath.SetBase ( pCurrentlyServed->m_sNewPath );
 		eRot = CheckIndexHeaderRotate ( *pCurrentlyServed );
@@ -19603,16 +19603,80 @@ void ConfigureTemplateIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIn
 	pIdx->m_iExpandKeywords = ParseKeywordExpansion ( hIndex.GetStr( "expand_keywords", "" ) );
 }
 
+const char * g_sFileAccessNames[] = { "file", "mmap", "mmap_preread", "mlock" };
+
+static FileAccess_e ParseFileAccess ( const CSphConfigSection & hIndex, const char * sKey, FileAccess_e eDefault )
+{
+	const char * sVal = hIndex.GetStr ( sKey, "" );
+	if ( !sVal || !*sVal )
+		return eDefault;
+
+	if ( strcmp ( sVal, "file" )==0 )
+		return FileAccess_e::FILE;
+	else if ( strcmp ( sVal, "mmap" )==0 )
+		return FileAccess_e::MMAP;
+	else if ( strcmp ( sVal, "mmap_preread" )==0 )
+		return FileAccess_e::MMAP_PREREAD;
+	else if ( strcmp ( sVal, "mlock" )==0 )
+		return FileAccess_e::MLOCK;
+	else
+	{
+		sphWarning ( "%s unknown value %s, use default %s", sKey, sVal, g_sFileAccessNames[(int)eDefault] );
+		return eDefault;
+	}
+}
+
+static void GetFileAccess (  const CSphConfigSection & hIndex, const char * sKey, FileAccess_e & eValue, bool bList, FileAccess_e eDefault )
+{
+	// should use original value as default due to deprecated options
+	eValue = ParseFileAccess ( hIndex, sKey, eValue );
+
+	// but then check might reset invalid value to real default
+	if ( ( bList && eValue!=FileAccess_e::FILE && eValue!=FileAccess_e::MMAP ) ||
+		( !bList && eValue!=FileAccess_e::MMAP && eValue!=FileAccess_e::MMAP_PREREAD && eValue!=FileAccess_e::MLOCK ) )
+	{
+		sphWarning ( "%s invalid value %s, use default %s", sKey, g_sFileAccessNames[(int)eValue], g_sFileAccessNames[(int)eDefault] );
+		eValue = eDefault;
+	}
+}
+
 void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex ) REQUIRES ( MainThread )
 {
 	ConfigureTemplateIndex ( pIdx, hIndex);
-	pIdx->m_bMlock = ( hIndex.GetInt ( "mlock", 0 )!=0 ) && !g_bOptNoLock;
 	pIdx->m_bPreopen = ( hIndex.GetInt ( "preopen", 0 )!=0 );
 	pIdx->m_sGlobalIDFPath = hIndex.GetStr ( "global_idf" );
-	pIdx->m_bOnDiskAttrs = ( hIndex.GetInt ( "ondisk_attrs", 0 )==1 );
-	pIdx->m_bOnDiskPools = ( strcmp ( hIndex.GetStr ( "ondisk_attrs", "" ), "pool" )==0 );
-	pIdx->m_bOnDiskAttrs |= g_bOnDiskAttrs;
-	pIdx->m_bOnDiskPools |= g_bOnDiskPools;
+
+	// DEPRICATED - remove these 2 options
+	if ( hIndex.GetInt ( "mlock", 0 )==1 )
+	{
+		pIdx->m_tFileAccessSettings.m_eAttr = FileAccess_e::MLOCK;
+		pIdx->m_tFileAccessSettings.m_eBlob = FileAccess_e::MLOCK;
+	}
+	if ( hIndex.Exists ( "ondisk_attrs" ) )
+	{
+		bool bOnDiskAttrs = ( hIndex.GetInt ( "ondisk_attrs", 0 )==1 );
+		bool bOnDiskPools = ( strcmp ( hIndex.GetStr ( "ondisk_attrs", "" ), "pool" )==0 );
+
+		bOnDiskAttrs |= g_bOnDiskAttrs;
+		bOnDiskPools |= g_bOnDiskPools;
+
+		if ( bOnDiskAttrs || bOnDiskPools )
+			pIdx->m_tFileAccessSettings.m_eAttr = FileAccess_e::MMAP;
+		if ( bOnDiskPools )
+			pIdx->m_tFileAccessSettings.m_eBlob = FileAccess_e::MMAP;
+	}
+
+	// need to keep value from deprecated options for some time - use it as defaults on parse for now
+	FileAccessSettings_t tDefault;
+	GetFileAccess ( hIndex, "access_plain_attrs", pIdx->m_tFileAccessSettings.m_eAttr, false, tDefault.m_eAttr );
+	GetFileAccess ( hIndex, "access_blob_attrs", pIdx->m_tFileAccessSettings.m_eBlob, false, tDefault.m_eBlob );
+	GetFileAccess ( hIndex, "access_doclists", pIdx->m_tFileAccessSettings.m_eDoclist, true, tDefault.m_eDoclist );
+	GetFileAccess ( hIndex, "access_hitlists", pIdx->m_tFileAccessSettings.m_eHitlist, true, tDefault.m_eHitlist );
+
+	// inherit global value, might be absent - 0
+	// set correct value via GetReadBuffer
+	pIdx->m_tFileAccessSettings.m_iReadBufferDocList = GetReadBuffer ( hIndex.GetInt ( "read_buffer_docs", g_iReadBufferDocs ) );
+	pIdx->m_tFileAccessSettings.m_iReadBufferHitList = GetReadBuffer ( hIndex.GetInt ( "read_buffer_hits", g_iReadBufferHits ) );
 }
 
 
@@ -19805,8 +19869,7 @@ ESphAddIndex AddRTPercolate ( const char * szIndexName, ServedDesc_t & tIdx, con
 	tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 	tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );
 	tIdx.m_pIndex->SetGlobalIDFPath ( tIdx.m_sGlobalIDFPath );
-	tIdx.m_pIndex->SetMemorySettings ( tIdx.m_bMlock, tIdx.m_bOnDiskAttrs, tIdx.m_bOnDiskPools );
-	tIdx.m_pIndex->SetConfigSection ( hIndex );
+	tIdx.m_pIndex->SetMemorySettings ( tIdx.m_tFileAccessSettings );
 
 	tIdx.m_pIndex->Setup ( tSettings );
 	tIdx.m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
@@ -20026,8 +20089,7 @@ ESphAddIndex AddPlainIndex ( const char * szIndexName, const CSphConfigSection &
 	tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 	tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );
 	tIdx.m_pIndex->SetGlobalIDFPath ( tIdx.m_sGlobalIDFPath );
-	tIdx.m_pIndex->SetMemorySettings ( tIdx.m_bMlock, tIdx.m_bOnDiskAttrs, tIdx.m_bOnDiskPools );
-	tIdx.m_pIndex->SetConfigSection ( hIndex );
+	tIdx.m_pIndex->SetMemorySettings ( tIdx.m_tFileAccessSettings );
 	tIdx.m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
 	CSphIndexStatus tStatus;
 	tIdx.m_pIndex->GetStatus ( &tStatus );
@@ -20267,11 +20329,9 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 						ServedDesc_t tDesc;
 						ConfigureLocalIndex ( &tDesc, hIndex );
 						bReconfigure = ( tDesc.m_iExpandKeywords!=pServedRLocked->m_iExpandKeywords ||
-							tDesc.m_bMlock!=pServedRLocked->m_bMlock ||
+							tDesc.m_tFileAccessSettings!=pServedRLocked->m_tFileAccessSettings ||
 							tDesc.m_bPreopen!=pServedRLocked->m_bPreopen ||
-							tDesc.m_sGlobalIDFPath!=pServedRLocked->m_sGlobalIDFPath ||
-							tDesc.m_bOnDiskAttrs!=pServedRLocked->m_bOnDiskAttrs ||
-							tDesc.m_bOnDiskPools!=pServedRLocked->m_bOnDiskPools );
+							tDesc.m_sGlobalIDFPath!=pServedRLocked->m_sGlobalIDFPath );
 						bReconfigure |= ( pServedRLocked->m_eType!=IndexType_e::TEMPLATE && hIndex.Exists ( "path" ) && hIndex["path"].strval ()!=pServedRLocked->m_sIndexPath );
 					}
 				}
@@ -24787,12 +24847,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	//////////////////////
 
 	// initialize buffering settings of daemon (since next step is loading indices, we need it already done!)
-	auto iReadUnhinted = hSearchd.GetSize ( "read_unhinted", -1 );
+	auto iReadUnhinted = hSearchd.GetSize ( "read_unhinted", 0 );
 	SetUnhintedBuffer ( iReadUnhinted );
 
-	auto iReadBuffer = hSearchd.GetSize ( "read_buffer", -1 );
-	SetDocsReadBuffers ( hSearchd.GetSize ( "read_buffer_docs", iReadBuffer ));
-	SetHitsReadBuffers ( hSearchd.GetSize ( "read_buffer_hits", iReadBuffer ));
+	int iReadBuffer = hSearchd.GetSize ( "read_buffer", 0 );
+	g_iReadBufferDocs = hSearchd.GetSize ( "read_buffer_docs", iReadBuffer );
+	g_iReadBufferHits = hSearchd.GetSize ( "read_buffer_hits", iReadBuffer );
 
 	// configure and preload
 	if ( bTestMode ) // pass this flag here prior to index config

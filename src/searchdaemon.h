@@ -672,13 +672,10 @@ struct ServedDesc_t
 	CSphIndex *	m_pIndex		= nullptr; ///< owned index; will be deleted in d-tr
 	CSphString	m_sIndexPath;	///< current index path; independent but related to one in m_pIndex
 	CSphString	m_sNewPath;		///< when reloading because of config changed, it contains path to new index.
-	bool		m_bMlock		= false;
 	bool		m_bPreopen		= false;
 	int			m_iExpandKeywords { KWE_DISABLED };
 	bool		m_bOnlyNew		= false; ///< load new (previously not loaded) index - need fixup, prealloc, etc.
 	CSphString	m_sGlobalIDFPath;
-	bool		m_bOnDiskAttrs	= false;
-	bool		m_bOnDiskPools	= false;
 	int64_t		m_iMass			= 0; // relative weight (by access speed) of the index
 	int			m_iRotationPriority = 0;	// rotation priority (for proper rotation of indexes chained by killlist_target). 0==high priority
 	StrVec_t	m_dKilllistTargets;
@@ -686,6 +683,7 @@ struct ServedDesc_t
 	IndexType_e	m_eType			= IndexType_e::PLAIN;
 	bool		m_bJson			= false; // index came from replication json config, not from usual config file
 	CSphString	m_sCluster;
+	FileAccessSettings_t m_tFileAccessSettings;
 
 	// statics instead of members below used to simultaneously check pointer for null also.
 

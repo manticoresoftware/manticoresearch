@@ -828,7 +828,7 @@ void ServedStats_c::CalcStatsForInterval ( const QueryStatContainer_i * pContain
 // want write lock to wipe out reader and not wait readers
 // but only for RT and PQ indexes as these operations are rare there
 ServedIndex_c::ServedIndex_c ( const ServedDesc_t & tDesc )
-	: m_tLock ( tDesc.m_eType==IndexType_e::RT || tDesc.m_eType==IndexType_e::PERCOLATE )
+	: m_tLock ( ServedDesc_t::IsMutable ( &tDesc ) )
 {
 	*(ServedDesc_t*)(this) = tDesc;
 }
@@ -13564,7 +13564,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 		return;
 	}
 
-	if ( !pServed->IsMutable () )
+	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
 		sError.SetSprintf ( "index '%s' does not support INSERT", tStmt.m_sIndex.cstr ());
 		tOut.Error ( tStmt.m_sStmt, sError.cstr ());
@@ -14651,7 +14651,7 @@ void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 		const CSphSchema *pSchema = &pServed->m_pIndex->GetMatchSchema ();
 		if ( tStmt.m_iIntParam==TOK_TABLE ) // user wants internal schema instead
 		{
-			if ( pServed->IsMutable () )
+			if ( ServedDesc_t::IsMutable ( pServed ) )
 			{
 				auto pRtIndex = (RtIndex_i*)pServed->m_pIndex;
 				pSchema = &pRtIndex->GetInternalSchema ();
@@ -15876,7 +15876,7 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const CSphStr
 		}
 
 		auto * pIndex = static_cast<RtIndex_i *> ( pLocked->m_pIndex );
-		if ( !pLocked->IsMutable () )
+		if ( !ServedDesc_t::IsMutable ( pLocked ) )
 		{
 			sError.SetSprintf ( "does not support DELETE" );
 			dErrors.Submit ( sName, sDistributed, sError.cstr() );
@@ -16482,7 +16482,7 @@ void HandleMysqlFlushRtindex ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	CSphString sError;
 	ServedDescRPtr_c pIndex ( GetServed ( tStmt.m_sIndex ) );
 
-	if ( !pIndex || !pIndex->IsMutable() )
+	if ( !ServedDesc_t::IsMutable ( pIndex ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, "FLUSH RTINDEX requires an existing RT index" );
 		return;
@@ -16499,7 +16499,7 @@ void HandleMysqlFlushRamchunk ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	CSphString sError;
 	ServedDescRPtr_c pIndex ( GetServed ( tStmt.m_sIndex ) );
 
-	if ( !pIndex || !pIndex->IsMutable() )
+	if ( !ServedDesc_t::IsMutable ( pIndex ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, "FLUSH RAMCHUNK requires an existing RT index" );
 		return;
@@ -16706,7 +16706,7 @@ void HandleMysqlTruncate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	// but only read lock for check
 	{
 		ServedDescRPtr_c pIndex ( GetServed ( sIndex ) );
-		if ( !pIndex || !pIndex->IsMutable () )
+		if ( !ServedDesc_t::IsMutable ( pIndex ) )
 		{
 			tOut.Error ( tStmt.m_sStmt, "TRUNCATE RTINDEX requires an existing RT index" );
 			return;
@@ -16735,7 +16735,7 @@ void HandleMysqlTruncate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 void HandleMysqlOptimize ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
 	ServedDescRPtr_c pIndex ( GetServed ( tStmt.m_sIndex ) );
-	if ( !pIndex || !pIndex->IsMutable() )
+	if ( !ServedDesc_t::IsMutable ( pIndex ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, "OPTIMIZE INDEX requires an existing RT index" );
 		return;
@@ -17498,7 +17498,7 @@ static void HandleMysqlReconfigure ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 	}
 
 	ServedDescWPtr_c dWLocked ( pServed );
-	if ( !dWLocked->IsMutable() )
+	if ( !ServedDesc_t::IsMutable ( dWLocked ))
 	{
 		sError.SetSprintf ( "'%s' does not support ALTER (enabled, not mutable)", sIndex.cstr() );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
@@ -17541,7 +17541,7 @@ static void HandleMysqlAlterKlist ( SqlRowBuffer_c & tOut, const SqlStmt_t & tSt
 		else
 			sError.SetSprintf ( "index '%s' not found", tStmt.m_sIndex.cstr () );
 	}
-	else if ( pWriteLocked->IsMutable () )
+	else if ( ServedDesc_t::IsMutable ( pWriteLocked ) )
 		sError.SetSprintf ( "'%s' does not support ALTER (RT or percolate)", tStmt.m_sIndex.cstr () );
 
 	if ( !sError.IsEmpty () )
@@ -17599,7 +17599,7 @@ static void HandleMysqlReloadIndex ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 
 	{
 		ServedDescRPtr_c pServed ( pIndex );
-		if ( pServed->IsMutable () )
+		if ( ServedDesc_t::IsMutable ( pServed ) )
 		{
 			sError.SetSprintf ( "can not reload RT or percolate index" );
 			tOut.Error ( tStmt.m_sStmt, sError.cstr () );
@@ -18870,7 +18870,7 @@ static void RtFlushThreadFunc ( void * )
 		for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next (); )
 		{
 			ServedDescRPtr_c pIdx ( it.Get () );
-			if ( !pIdx || !pIdx->IsMutable() )
+			if ( !ServedDesc_t::IsMutable ( pIdx ) )
 				continue;
 
 			dRtIndexes.Add().m_sName = it.GetName ();
@@ -19187,9 +19187,9 @@ void RotationThreadFunc ( void * )
 
 			{
 				ServedDescRPtr_c tLocked ( pIndex );
-				bMutable = tLocked->IsMutable();
+				bMutable = ServedDesc_t::IsMutable ( tLocked );
 				// cluster indexes got managed by different path
-				if ( tLocked->IsCluster() )
+				if ( ServedDesc_t::IsCluster ( tLocked ) )
 					continue;
 			}
 
@@ -20220,7 +20220,7 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 	{
 		// skip JSON indexes or indexes belong to cluster - no need to manage them
 		ServedDescRPtr_c pServed ( it.Get() );
-		if ( pServed && pServed->IsCluster() )
+		if ( ServedDesc_t::IsCluster ( pServed ) )
 			continue;
 
 		dLocalToDelete.Add ( true, it.GetName() );
@@ -20406,7 +20406,7 @@ static void CalcRotationPriorities()
 		ServedDescRPtr_c pRlockedServedPtr(pIndex);
 
 		// check for rt/percolate. they don't need killlist_target
-		if ( !pRlockedServedPtr->IsMutable() && g_pLocalIndexes->Contains ( it.GetName() ) ) 
+		if ( !ServedDesc_t::IsMutable ( pRlockedServedPtr ) && g_pLocalIndexes->Contains ( it.GetName() ) )
 		{
 			ServedDescRPtr_c pDesc ( GetServed ( it.GetName() ) );
 
@@ -20468,7 +20468,7 @@ static void CheckIndexesForSeamless()
 		if ( !rLocked->m_pIndex )
 			continue;
 
-		if ( CheckIndexHeaderRotate(*rLocked)==RotateFrom_e::NONE && !rLocked->IsMutable() )
+		if ( CheckIndexHeaderRotate(*rLocked)==RotateFrom_e::NONE && !ServedDesc_t::IsMutable (rLocked) )
 		{
 			dNotCapableForRotation.Add ( true, sIndex );
 			sphLogDebug ( "Index %s (%s) is not capable for seamless rotate. Skipping", sIndex.cstr ()
@@ -20544,7 +20544,7 @@ static void DoGreedyRotation()
 			assert ( g_pLocalIndexes->Contains ( sIndex ) );
 
 			// prealloc RT and percolate here
-			if ( pWlockedServedPtr->IsMutable () )
+			if ( ServedDesc_t::IsMutable ( pWlockedServedPtr ) )
 			{
 				pWlockedServedPtr->m_bOnlyNew = false;
 				if ( PreallocNewIndex ( *pWlockedServedPtr, &g_pCfg.m_tConf["index"][sIndex], sIndex.cstr() ) )

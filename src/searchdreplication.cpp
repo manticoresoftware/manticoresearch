@@ -2086,9 +2086,9 @@ bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName
 		{
 			// we are only owner of that index and will free it after delete from hash
 			ServedDescWPtr_c pDesc ( pServedCur );
-			if ( pDesc->IsMutable() )
+			if ( ServedDesc_t::IsMutable ( pDesc ) )
 			{
-				RtIndex_i * pIndex = (RtIndex_i*)pDesc->m_pIndex;
+				auto * pIndex = (RtIndex_i*)pDesc->m_pIndex;
 				pIndex->ProhibitSave();
 				bJson = pDesc->m_bJson;
 			}
@@ -3431,7 +3431,7 @@ bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CS
 	{
 		ServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sIndex );
 		ServedDescRPtr_c pDesc ( pServed );
-		if ( pDesc && pDesc->IsMutable() )
+		if ( ServedDesc_t::IsMutable ( pDesc ) )
 		{
 			bGotIndex = true;
 			sFilePath.SetSprintf ( "%s.meta", pDesc->m_sIndexPath.cstr() );

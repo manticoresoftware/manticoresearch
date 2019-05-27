@@ -684,11 +684,45 @@ struct ServedDesc_t
 	StrVec_t	m_dKilllistTargets;
 	mutable CSphString	m_sUnlink;
 	IndexType_e	m_eType			= IndexType_e::PLAIN;
-	bool		m_bJson			= false;
+	bool		m_bJson			= false; // index came from replication json config, not from usual config file
 	CSphString	m_sCluster;
 
-	inline bool IsMutable () const { return m_eType==IndexType_e::RT || m_eType==IndexType_e::PERCOLATE; }
-	bool		IsCluster () const { return m_bJson || !m_sCluster.IsEmpty(); }
+	// statics instead of members below used to simultaneously check pointer for null also.
+
+	// mutable is one which can be insert/replace
+	static bool IsMutable ( const ServedDesc_t* pServed )
+	{
+		if ( !pServed )
+			return false;
+		return pServed->m_eType==IndexType_e::RT || pServed->m_eType==IndexType_e::PERCOLATE;
+	}
+
+	// cluster is one which can deals with replication
+	static bool IsCluster ( const ServedDesc_t* pServed )
+	{
+		if ( !pServed )
+			return false;
+		return pServed->m_bJson || !pServed->m_sCluster.IsEmpty ();
+	}
+
+	// CanSelect is one which supports select ... from (at least full-scan).
+	static bool IsSelectable ( const ServedDesc_t* pServed )
+	{
+		if ( !pServed )
+			return false;
+		return IsFT ( pServed ) || pServed->m_eType==IndexType_e::PERCOLATE;
+	}
+
+	// FT is one which supports full-text searching
+	static bool IsFT ( const ServedDesc_t* pServed )
+	{
+		if ( !pServed )
+			return false;
+		return pServed->m_eType==IndexType_e::PLAIN
+			|| pServed->m_eType==IndexType_e::RT
+			|| pServed->m_eType==IndexType_e::DISTR; // fixme! distrs not necessary ft.
+	}
+
 	virtual                ~ServedDesc_t ();
 };
 

@@ -755,6 +755,10 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "data_dir",				0, NULL },
 	{ "node_address",			0, NULL },
 	{ "server_id",				0, NULL },
+	{ "access_plain_attrs",		0, nullptr },
+	{ "access_blob_attrs",		0, nullptr },
+	{ "access_doclists",		0, nullptr },
+	{ "access_hitlists",		0, nullptr },
 	{ NULL,						0, NULL }
 };
 

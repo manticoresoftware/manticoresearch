@@ -3,6 +3,47 @@
 ``searchd`` program configuration options
 -----------------------------------------
 
+.. _access_plain_attrs_searchd:
+
+access_plain_attrs
+~~~~~~~~~~~~~~~~~~
+
+Instance-wide defaults for :ref:`access_plain_attrs`. Optional, default value is mmap_preread.
+
+This directive lets you specify the default value of :ref:`access_plain_attrs` for all indexes served by this copy of searchd.
+Per-index directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
+
+
+.. _access_blob_attrs_searchd:
+
+access_blob_attrs
+~~~~~~~~~~~~~~~~~
+
+Instance-wide defaults for :ref:`access_blob_attrs`. Optional, default value is mmap_preread.
+
+This directive lets you specify the default value of :ref:`access_blob_attrs` for all indexes served by this copy of searchd.
+Per-index directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
+
+.. _access_doclists_searchd:
+
+access_doclists
+~~~~~~~~~~~~~~~
+
+Instance-wide defaults for :ref:`access_doclists`. Optional, default value is file.
+
+This directive lets you specify the default value of :ref:`access_doclists` for all indexes served by this copy of searchd.
+Per-index directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
+
+.. _access_hitlists_searchd:
+
+access_hitlists
+~~~~~~~~~~~~~~~
+
+Instance-wide defaults for :ref:`access_hitlists`. Optional, default value is file.
+
+This directive lets you specify the default value of :ref:`access_hitlists` for all indexes served by this copy of searchd.
+Per-index directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
+
 .. _agent_connect_timeout_searchd:
 
 agent_connect_timeout

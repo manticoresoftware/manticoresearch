@@ -199,10 +199,7 @@ static int				g_iMaxFilterValues	= 4096;
 static int				g_iMaxBatchQueries	= 32;
 static ESphCollation	g_eCollation = SPH_COLLATION_DEFAULT;
 
-static bool				g_bOnDiskAttrs		= false; // DEPRICATED - remove
-static bool				g_bOnDiskPools		= false; // DEPRICATED - remove
-static int				g_iReadBufferHits = 0;
-static int				g_iReadBufferDocs = 0;
+static FileAccessSettings_t g_tDefaultFA;
 
 static ISphThdPool *	g_pThdPool			= NULL;
 int				g_iDistThreads		= 0;
@@ -19646,6 +19643,7 @@ void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex
 	pIdx->m_bPreopen = ( hIndex.GetInt ( "preopen", 0 )!=0 );
 	pIdx->m_sGlobalIDFPath = hIndex.GetStr ( "global_idf" );
 
+	pIdx->m_tFileAccessSettings = g_tDefaultFA;
 	// DEPRICATED - remove these 2 options
 	if ( hIndex.GetInt ( "mlock", 0 )==1 )
 	{
@@ -19657,9 +19655,6 @@ void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex
 		bool bOnDiskAttrs = ( hIndex.GetInt ( "ondisk_attrs", 0 )==1 );
 		bool bOnDiskPools = ( strcmp ( hIndex.GetStr ( "ondisk_attrs", "" ), "pool" )==0 );
 
-		bOnDiskAttrs |= g_bOnDiskAttrs;
-		bOnDiskPools |= g_bOnDiskPools;
-
 		if ( bOnDiskAttrs || bOnDiskPools )
 			pIdx->m_tFileAccessSettings.m_eAttr = FileAccess_e::MMAP;
 		if ( bOnDiskPools )
@@ -19667,16 +19662,15 @@ void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex
 	}
 
 	// need to keep value from deprecated options for some time - use it as defaults on parse for now
-	FileAccessSettings_t tDefault;
-	GetFileAccess ( hIndex, "access_plain_attrs", pIdx->m_tFileAccessSettings.m_eAttr, false, tDefault.m_eAttr );
-	GetFileAccess ( hIndex, "access_blob_attrs", pIdx->m_tFileAccessSettings.m_eBlob, false, tDefault.m_eBlob );
-	GetFileAccess ( hIndex, "access_doclists", pIdx->m_tFileAccessSettings.m_eDoclist, true, tDefault.m_eDoclist );
-	GetFileAccess ( hIndex, "access_hitlists", pIdx->m_tFileAccessSettings.m_eHitlist, true, tDefault.m_eHitlist );
+	GetFileAccess ( hIndex, "access_plain_attrs", pIdx->m_tFileAccessSettings.m_eAttr, false, g_tDefaultFA.m_eAttr );
+	GetFileAccess ( hIndex, "access_blob_attrs", pIdx->m_tFileAccessSettings.m_eBlob, false, g_tDefaultFA.m_eBlob );
+	GetFileAccess ( hIndex, "access_doclists", pIdx->m_tFileAccessSettings.m_eDoclist, true, g_tDefaultFA.m_eDoclist );
+	GetFileAccess ( hIndex, "access_hitlists", pIdx->m_tFileAccessSettings.m_eHitlist, true, g_tDefaultFA.m_eHitlist );
 
 	// inherit global value, might be absent - 0
 	// set correct value via GetReadBuffer
-	pIdx->m_tFileAccessSettings.m_iReadBufferDocList = GetReadBuffer ( hIndex.GetInt ( "read_buffer_docs", g_iReadBufferDocs ) );
-	pIdx->m_tFileAccessSettings.m_iReadBufferHitList = GetReadBuffer ( hIndex.GetInt ( "read_buffer_hits", g_iReadBufferHits ) );
+	pIdx->m_tFileAccessSettings.m_iReadBufferDocList = GetReadBuffer ( hIndex.GetInt ( "read_buffer_docs", g_tDefaultFA.m_iReadBufferDocList ) );
+	pIdx->m_tFileAccessSettings.m_iReadBufferHitList = GetReadBuffer ( hIndex.GetInt ( "read_buffer_hits", g_tDefaultFA.m_iReadBufferHitList ) );
 }
 
 
@@ -23899,8 +23893,27 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_bPreopenIndexes = hSearchd.GetInt ( "preopen_indexes", (int)g_bPreopenIndexes )!=0;
 	sphSetUnlinkOld ( hSearchd.GetInt ( "unlink_old", 1 )!=0 );
 	g_iExpansionLimit = hSearchd.GetInt ( "expansion_limit", 0 );
-	g_bOnDiskAttrs = ( hSearchd.GetInt ( "ondisk_attrs_default", 0 )==1 );
-	g_bOnDiskPools = ( strcmp ( hSearchd.GetStr ( "ondisk_attrs_default", "" ), "pool" )==0 );
+
+	// initialize buffering settings
+	auto iReadUnhinted = hSearchd.GetSize ( "read_unhinted", 0 );
+	SetUnhintedBuffer ( iReadUnhinted );
+
+	int iReadBuffer = hSearchd.GetSize ( "read_buffer", 0 );
+	g_tDefaultFA.m_iReadBufferDocList = hSearchd.GetSize ( "read_buffer_docs", iReadBuffer );
+	g_tDefaultFA.m_iReadBufferHitList = hSearchd.GetSize ( "read_buffer_hits", iReadBuffer );
+
+	bool bOnDiskAttrs = ( hSearchd.GetInt ( "ondisk_attrs_default", 0 )==1 );
+	bool bOnDiskPools = ( strcmp ( hSearchd.GetStr ( "ondisk_attrs_default", "" ), "pool" )==0 );
+	if ( bOnDiskAttrs || bOnDiskPools )
+		g_tDefaultFA.m_eAttr = FileAccess_e::MMAP;
+	if ( bOnDiskPools )
+		g_tDefaultFA.m_eBlob = FileAccess_e::MMAP;
+
+	FileAccessSettings_t tDefaultFA;
+	GetFileAccess ( hSearchd, "access_plain_attrs", g_tDefaultFA.m_eAttr, false, tDefaultFA.m_eAttr );
+	GetFileAccess ( hSearchd, "access_blob_attrs", g_tDefaultFA.m_eBlob, false, tDefaultFA.m_eBlob );
+	GetFileAccess ( hSearchd, "access_doclists", g_tDefaultFA.m_eDoclist, true, tDefaultFA.m_eDoclist );
+	GetFileAccess ( hSearchd, "access_hitlists", g_tDefaultFA.m_eHitlist, true, tDefaultFA.m_eHitlist );
 
 	if ( hSearchd("subtree_docs_cache") )
 		g_iMaxCachedDocs = hSearchd.GetSize ( "subtree_docs_cache", g_iMaxCachedDocs );
@@ -24852,14 +24865,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	//////////////////////
 	// build indexes hash
 	//////////////////////
-
-	// initialize buffering settings of daemon (since next step is loading indices, we need it already done!)
-	auto iReadUnhinted = hSearchd.GetSize ( "read_unhinted", 0 );
-	SetUnhintedBuffer ( iReadUnhinted );
-
-	int iReadBuffer = hSearchd.GetSize ( "read_buffer", 0 );
-	g_iReadBufferDocs = hSearchd.GetSize ( "read_buffer_docs", iReadBuffer );
-	g_iReadBufferHits = hSearchd.GetSize ( "read_buffer_hits", iReadBuffer );
 
 	// configure and preload
 	if ( bTestMode ) // pass this flag here prior to index config

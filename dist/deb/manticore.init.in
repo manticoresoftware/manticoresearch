@@ -87,7 +87,7 @@ do_force_stop() {
             kill -9 $pid
             [ -n "$DODTIME" ] && sleep "$DODTIME"s
             if running ; then
-                echo "Cannot kill $LABEL (pid=$pid)!"
+                echo "Cannot kill $NAME (pid=$pid)!"
                 exit 1
             fi
         fi

@@ -28,14 +28,6 @@ index test
 	path			= <data_path/>/test
 	dict			= keywords
 }
-
-index testbla
-{
-    type = rt
-    rt_field = title
-	path			= <data_path/>/testbla
-	dict			= blablabla
-}
 </config>
 
 <db_create>

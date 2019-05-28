@@ -4608,8 +4608,6 @@ void LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings
 	tSettings.m_iMinStemmingLen = tReader.GetDword ();
 
 	tSettings.m_bWordDict = ( tReader.GetByte()!=0 );
-	if ( !tSettings.m_bWordDict )
-		sphWarning ( "dict=crc deprecated, use dict=keywords instead" );
 
 	tSettings.m_bStopwordsUnstemmed = ( tReader.GetByte()!=0 );
 	tSettings.m_sMorphFingerprint = tReader.GetString();

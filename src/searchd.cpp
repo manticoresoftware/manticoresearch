@@ -19957,9 +19957,16 @@ ESphAddIndex AddRTIndex ( const char * szIndexName, const CSphConfigSection &hIn
 			return ADD_ERROR;
 		}
 
-	bool bWordDict = strcmp ( hIndex.GetStr ( "dict", "keywords" ), "keywords" )==0;
-	if ( !bWordDict )
-		sphWarning ( "dict=crc deprecated, use dict=keywords instead" );
+	auto sIndexType = hIndex.GetStr ( "dict", "keywords" );
+
+	bool bWordDict = true;
+	if ( strcmp ( sIndexType, "crc" )==0 )
+		bWordDict = false;
+	else if ( strcmp ( sIndexType, "keywords")!=0 )
+	{
+		sphWarning ( "index '%s': unknown dict=%s; only 'keywords' or 'crc' values allowed", szIndexName, sIndexType);
+		return ADD_ERROR;
+	}
 	if ( bWordDict && ( tSettings.m_dPrefixFields.GetLength () || tSettings.m_dInfixFields.GetLength () ) )
 		sphWarning ( "WARNING: index '%s': prefix_fields and infix_fields has no effect with dict=keywords, ignoring\n", szIndexName);
 	if ( bWordDict && tSettings.m_iMinInfixLen==1 )

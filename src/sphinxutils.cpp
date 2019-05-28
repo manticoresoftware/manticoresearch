@@ -1457,9 +1457,7 @@ void sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tS
 		tSettings.m_bWordDict = true; // default to keywords
 		if ( hIndex["dict"]=="crc" )
 		{
-			sphWarning ( "dict=crc deprecated, use dict=keywords instead" );
 			tSettings.m_bWordDict = false;
-
 		} else if ( hIndex["dict"]!="keywords" )
 			fprintf ( stdout, "WARNING: unknown dict=%s, defaulting to keywords\n", hIndex["dict"].cstr() );
 	}
@@ -1617,9 +1615,16 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 		return false;
 	}
 
-	bool bWordDict = ( strcmp ( hIndex.GetStr ( "dict", "keywords" ), "keywords" )==0 );
-	if ( !bWordDict )
-		sphWarning ( "dict=crc deprecated, use dict=keywords instead" );
+	auto sIndexType = hIndex.GetStr ( "dict", "keywords" );
+
+	bool bWordDict = true;
+	if ( strcmp ( sIndexType, "crc" )==0 )
+		bWordDict = false;
+	else if ( strcmp ( sIndexType, "keywords" )!=0 )
+	{
+		sError.SetSprintf ( "index '%s': unknown dict=%s; only 'keywords' or 'crc' values allowed", szIndexName, sIndexType );
+		return false;
+	}
 
 	if ( hIndex("type") && hIndex["type"]=="rt" && ( tSettings.m_iMinInfixLen>0 || tSettings.m_iMinPrefixLen>0 ) && !bWordDict )
 	{

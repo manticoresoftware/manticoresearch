@@ -126,8 +126,4 @@ CREATE TABLE test_table
 <query mode="extended2">w6w9m94wxwja</query>
 </queries>
 
-<sphqueries>
-<sphinxql>select * from testbla</sphinxql>
-</sphqueries>
-
 </test>

@@ -11,7 +11,7 @@ access_plain_attrs
 This mode is how index attribute file got read. Optional, default value mmap_preread.
 
 Possible values are ``mmap``, ``mmap_preread``, ``mlock``. Refer to :ref:`mlock` directive for possible
-mlock restrictions.
+mlock restrictions and :ref:`index_files_access` for detailed explanation of values.
 
 On daemon start attribute file got mapped into memory and preread background thread started to cache in
 attribute file - that is ``mmap_preread`` option. ``mlock`` option uses mlock(2) privileged call to cache in attribute file
@@ -36,7 +36,7 @@ access_blob_attrs
 This mode is how index blob file got read. Optional, default value mmap_preread.
 
 Possible values are ``mmap``, ``mmap_preread``, ``mlock``. Refer to :ref:`mlock` directive for possible
-mlock restrictions.
+mlock restrictions and :ref:`index_files_access` for detailed explanation of values.
 
 On daemon start blob file got mapped into memory and preread background thread started to cache in
 blob file - that is ``mmap_preread`` option. ``mlock`` option uses mlock(2) privileged call to cache in blob file
@@ -60,7 +60,7 @@ access_doclists
 
 This mode is how doclist file got read. Optional, default value file.
 
-Possible values are ``file``, ``mmap``.
+Possible values are ``file``, ``mmap``. Refer to :ref:`index_files_access` for detailed explanation of values.
 
 To read data from doclist file these types of reader might be used - file reader and mmap. ``file`` reader provides optimal performance
 and could be tuned with options :ref:`read_buffer_docs` and :ref:`read_buffer_hits`. ``mmap`` is file mapped into memory as :ref:`access_plain_attrs`
@@ -72,7 +72,7 @@ does and could provide significant performance improvement in case all index fil
     access_doclists = mmap
 
 
-.. _access_access_hitlists:
+.. _access_hitlists:
 
 access_hitlists
 ~~~~~~~~~~~~~~~
@@ -80,7 +80,7 @@ access_hitlists
 
 This mode is how hitlist file got read. Optional, default value file.
 
-Possible values are ``file``, ``mmap``.
+Possible values are ``file``, ``mmap``. Refer to :ref:`index_files_access` for detailed explanation of values.
 
 To read data from hitlist file these types of reader might be used - file reader and mmap. ``file`` reader provides optimal performance
 and could be tuned with options :ref:`read_buffer_docs` and :ref:`read_buffer_hits`. ``mmap`` is file mapped into memory as :ref:`access_plain_attrs`

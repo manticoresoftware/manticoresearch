@@ -87,36 +87,36 @@ Index files
 Each index consists of a number of files.
 
 Small index components are fully loaded into memory.
-Big index components  are read from disk as needed.  Currently these use seek+read to retrieve data from disk.
+Big index components  are read from disk as needed.  Currently these use seek+read or mmap() to retrieve data from disk.
 Attribute components are opened and mapped with mmap(). They can be loaded fully in memory or left on disk and read when needed.
 
 Plain indexes and RealTime indexes chunks:
 
-+-----------+------------------------------+-----------------------------------------+
-| Extension |  Stores                      | Memory management                       |
-+===========+==============================+=========================================+
-| spa       | scalar attrs                 | mmap(), also see :ref:`ondisk_attrs`    |
-+-----------+------------------------------+-----------------------------------------+
-| spd       | document lists               | read, on disk, gets cached by OS        |
-+-----------+------------------------------+-----------------------------------------+
-| spi       | dictionary                   | always loaded in memory                 |
-+-----------+------------------------------+-----------------------------------------+
-| sph       | index/chunk header           | always loaded in memory                 |
-+-----------+------------------------------+-----------------------------------------+
-| spk       | Kill list                    | loaded and discarded :sup:`[1]`         |
-+-----------+------------------------------+-----------------------------------------+
-| spl       | index lock file              | on disk only                            |
-+-----------+------------------------------+-----------------------------------------+
-| spm       | row map                      | mmap()                                  |
-+-----------+------------------------------+-----------------------------------------+
-| sphi      | secondary index histograms   | always loaded in memory                 |
-+-----------+------------------------------+-----------------------------------------+
-| spt       | docid lookups                | mmap()                                  |
-+-----------+------------------------------+-----------------------------------------+
-| spp       | keyword positions            | read, on disk, gets cached by OS        |
-+-----------+------------------------------+-----------------------------------------+
-| spb       | var-length attrs             | mmap(), also see :ref:`ondisk_attrs`    |
-+-----------+------------------------------+-----------------------------------------+
++-----------+------------------------------+--------------------------------------------+
+| Extension |  Stores                      | Memory management                          |
++===========+==============================+============================================+
+| spa       | scalar attrs                 | mmap(), also see :ref:`access_plain_attrs` |
++-----------+------------------------------+--------------------------------------------+
+| spd       | document lists               | read, on disk, gets cached by OS or mmap() |
++-----------+------------------------------+--------------------------------------------+
+| spi       | dictionary                   | always loaded in memory                    |
++-----------+------------------------------+--------------------------------------------+
+| sph       | index/chunk header           | always loaded in memory                    |
++-----------+------------------------------+--------------------------------------------+
+| spk       | Kill list                    | loaded and discarded :sup:`[1]`            |
++-----------+------------------------------+--------------------------------------------+
+| spl       | index lock file              | on disk only                               |
++-----------+------------------------------+--------------------------------------------+
+| spm       | row map                      | mmap()                                     |
++-----------+------------------------------+--------------------------------------------+
+| sphi      | secondary index histograms   | always loaded in memory                    |
++-----------+------------------------------+--------------------------------------------+
+| spt       | docid lookups                | mmap()                                     |
++-----------+------------------------------+--------------------------------------------+
+| spp       | keyword positions            | read, on disk, gets cached by OS or mmap() |
++-----------+------------------------------+--------------------------------------------+
+| spb       | var-length attrs             | mmap(), also see :ref:`access_blob_attrs`  |
++-----------+------------------------------+--------------------------------------------+
 
 :sup:`[1]` Kill lists -  loaded in memory at startup and discarded after they are applied to targets
 
@@ -125,7 +125,7 @@ RealTime indexes also have:
 +-----------+---------------------------+-----------------------------------------+
 | Extension |  Stores                   | Memory management                       |
 +===========+===========================+=========================================+
-+ kill      | RT kill :sup:`[1]`        |  on disk only                           |
++ kill      | RT kill :sup:`[1]`        | on disk only                            |
 +-----------+---------------------------+-----------------------------------------+
 | meta      | RT header                 | always loaded in memory                 |
 +-----------+---------------------------+-----------------------------------------+
@@ -138,6 +138,66 @@ RealTime indexes also have:
 :sup:`[1]` RT kill -  documents that gets REPLACEd. Gets cleared when RAM chunk is dumped as disk chunk.
 
 :sup:`[2]` RAM chunk copy - created when RAM chunk is flushed to disk. Cleared when RAM chunk is dumped as disk chunk.
+
+
+.. _index_files_access:
+
+Index files access
+~~~~~~~~~~~~~~~~~~
+
+The daemon uses two types of reader to read index data - seek+read and mmap.
+
+The daemon uses seek+read reader for reading document list and keyword positions, ie ``spd`` and ``spp`` files.
+This reader uses internal buffers there data got cached on file access. The size of these buffers could be tuned with
+options :ref:`read_buffer_docs` and :ref:`read_buffer_hits`. There is also :ref:`preopen` option that allows to control
+amount of files opened by daemon at start.
+
+The daemon uses mmap reader and it just maps file into memory with mmap(2) system call and OS caches file content by itself. Options 
+:ref:`read_buffer_docs` and :ref:`read_buffer_hits` have no effect for file accessed via this reader. This reader could be used for
+scalar attributes, var-length attributes, document lists, keyword positions, ie ``spa``, ``spb``, ``spd`` and ``spp`` files.
+
+The reader mmap used for attribute files could also lock index data in memory via mlock(2) privileged call and prevents swap out
+of cached data to disk by OS. That might be useful in many cases for example:
+
+* alot of indexes load into daemon but some of them should always be “hot” and other could be swapped out due to low activity. ``access_plain_attrs = mlock`` option might be used for such “hot” indexes.
+
+* mmap reader used for all files of large index but different parts of full-text index files got accessed more often which in turn causes to swap out attributes of this index. ``access_plain_attrs = mlock`` option could be used for this case and set attributes always be in memory.
+
+To control which reader type will be used for particular index files :ref:`access_plain_attrs`, :ref:`access_blob_attrs`,
+:ref:`access_doclists` and :ref:`access_hitlists` options might be used with possible values:
+
+* ``file`` daemon reads index file from disk with seek+read using internal buffers on file access
+* ``mmap`` daemon maps index file into memory and OS caches up it content on file access
+* ``mmap_preread`` daemon maps index file into memory then caches it up at warm up thread
+* ``mlock`` daemon maps index file into memory then issue mlock sytem call to cache up file content and lock it into memory and prevent it being swapped
+
+Here is table with readers comparison and possible combination of its options
+
++-----------+-----------------------------------+-----------------------------------+-----------------------------------+----------------------------------------------+
+| extension | disk                              | memory                            | locked in memory                  | cached in memory on daemon start             |
++-----------+-----------------------------------+-----------------------------------+-----------------------------------+----------------------------------------------+
+| spa       | no                                | access_plain_attrs = mmap         | access_plain_attrs = mlock        | access_plain_attrs = mmap_preread (default)  |
++-----------+-----------------------------------+-----------------------------------+-----------------------------------+----------------------------------------------+
+| spb       | no                                | access_blob_attrs = mmap          | access_blob_attrs = mlock         | access_blob_attrs = mmap_preread (default)   |
++-----------+-----------------------------------+-----------------------------------+-----------------------------------+----------------------------------------------+
+| spd       | access_doclists = file (default)  | access_doclists = mmap            | no                                | no                                           |
++-----------+-----------------------------------+-----------------------------------+-----------------------------------+----------------------------------------------+
+| spp       | access_hitlists = file (default)  | access_hitlists = mmap            | no                                | no                                           |
++-----------+-----------------------------------+-----------------------------------+-----------------------------------+----------------------------------------------+
+
+The reader mmap caches up content of index file on daemon start at background warmup thread with mlock system
+call or by touching memory pages of mapped file. This index data warm up could take some time and performed only for index files wich
+``access`` options are ``mmap_preread`` or ``mlock``. ``access`` option ``mmap`` only maps index file but daemon does not cache up
+its content so OS populate this mapping on first access of index files.
+
+The daemon also has command line option ``--force-preread`` that instructs daemon to wait warmup cache thread prior to serve any incoming connection.
+Starting daemon with this option allows to make sure index files will be fully loaded and cached into memory prior to serve incoming client requests.
+
+The readers mmap might be preferred for box there daemon running has a lot of memory and fits whole indexes into RAM.
+That allows OS to manage index data effectively and fast restart of daemon. However for regular boxes or
+for usual indexes there full-text part of the index is much larger than the attributes default values of reader should fit well.
+By default daemon uses mmap reader for access to all attributes files and file reader to access document list and keyword positions files.
+
 
 Operations on indexes
 ~~~~~~~~~~~~~~~~~~~~~
@@ -171,4 +231,4 @@ Index schema can be changed on-the-fly in case of attribute. Full-text fields ho
 Change of tokenization settings requires a remaking in case of plain indexes. For Real-Time indexes, these can be made on-the-fly using
 :ref:`ALTER RECONFIGURE<alter_syntax>` but they will affect only new content added to index, as it's not possible yet to re-tokenize already indexed texts.
 
-Some settings like :ref:`mlock` and :ref:`ondisk_attrs`, which don't alter in any way the index, don't require an index rebuild, just a reload.
+Some settings like :ref:`access_plain_attrs`, which don't alter in any way the index, don't require an index rebuild, just a reload.

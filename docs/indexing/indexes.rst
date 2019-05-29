@@ -97,13 +97,14 @@ Plain indexes and RealTime indexes chunks:
 +===========+==============================+============================================+
 | spa       | scalar attrs                 | mmap(), also see :ref:`access_plain_attrs` |
 +-----------+------------------------------+--------------------------------------------+
-| spd       | document lists               | read, on disk, gets cached by OS or mmap() |
+| spd       | document lists               | read from disk and may be cached by OS     |
+|           |                              | or mmaped, also see :ref:`access_doclists` |
 +-----------+------------------------------+--------------------------------------------+
 | spi       | dictionary                   | always loaded in memory                    |
 +-----------+------------------------------+--------------------------------------------+
 | sph       | index/chunk header           | always loaded in memory                    |
 +-----------+------------------------------+--------------------------------------------+
-| spk       | Kill list                    | loaded and discarded :sup:`[1]`            |
+| spk       | kill list                    | loaded and discarded :sup:`[1]`            |
 +-----------+------------------------------+--------------------------------------------+
 | spl       | index lock file              | on disk only                               |
 +-----------+------------------------------+--------------------------------------------+
@@ -113,7 +114,8 @@ Plain indexes and RealTime indexes chunks:
 +-----------+------------------------------+--------------------------------------------+
 | spt       | docid lookups                | mmap()                                     |
 +-----------+------------------------------+--------------------------------------------+
-| spp       | keyword positions            | read, on disk, gets cached by OS or mmap() |
+| spp       | keyword positions            | read from disk and may be cached by OS     |
+|           |                              | or mmaped, also see :ref:`access_hitlists` |
 +-----------+------------------------------+--------------------------------------------+
 | spb       | var-length attrs             | mmap(), also see :ref:`access_blob_attrs`  |
 +-----------+------------------------------+--------------------------------------------+

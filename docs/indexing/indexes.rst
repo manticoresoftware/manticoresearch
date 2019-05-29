@@ -149,7 +149,7 @@ Accessing index files
 
 The daemon uses two access modes to read index data - seek+read and mmap.
 
-In seek+read mode the daemon has to do 2 system calls: seek and read to read document
+In seek+read mode the daemon performs system call pread(2) to read document
 lists and keyword positions, i.e. ``spd`` and ``spp`` files. Internal read buffers are
 used to optimize reading. The size of these buffers can be tuned with options :ref:`read_buffer_docs`
 and :ref:`read_buffer_hits`. There is also :ref:`preopen` option that allows to control
@@ -195,8 +195,9 @@ Here is a table which can help you select your desired mode:
 
 There's also a searchd command line option ``--force-preread`` that instructs the
 daemon to wait until the attribute files are read prior to starting accepting incoming connections.
-Starting daemon with this option allows to make sure index files will be fully loaded
-and cached in memory to provide maximum performance.
+Starting daemon with this option allows to make sure that all mapped index files will be 'warmed'
+by touching every page of the maps. OS, in turn, usually tries to keep all 'warm' data in the disk cache,
+providing maximum performance.
 
 The recommendations are:
 

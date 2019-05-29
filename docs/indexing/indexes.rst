@@ -144,8 +144,8 @@ RealTime indexes also have:
 
 .. _index_files_access:
 
-Index files access
-~~~~~~~~~~~~~~~~~~
+Accessing index files
+~~~~~~~~~~~~~~~~~~~~~
 
 The daemon uses two access modes to read index data - seek+read and mmap.
 
@@ -171,8 +171,7 @@ To control what access mode will be used :ref:`access_plain_attrs`, :ref:`access
 * ``file`` daemon reads index file from disk with seek+read using internal buffers on file access
 * ``mmap`` daemon maps index file into memory and OS caches up its contents on file access
 * ``mmap_preread`` daemon maps index file into memory and a background thread reads it once to warm up the cache
-* ``mlock`` daemon maps index file into memory and then issues mlock system call to cache up the file contents and
-lock it into memory to prevent it being swapped out
+* ``mlock`` daemon maps index file into memory and then issues mlock system call to cache up the file contents and lock it into memory to prevent it being swapped out
 
 Here is a table which can help you select your desired mode:
 
@@ -201,16 +200,11 @@ and cached in memory to provide maximum performance.
 
 The recommendations are:
 
-* If search performance is very important and you have enough memory - use mlock
-for attributes and mmap for doclists/hitlists. Be aware mlock is a privileged system call
-and the user running searchd should have enough privileges. Read :ref:`here<mlock>` for details
-* If you can't afford lower performance on start and ready to wait longer on start
-until it's warmed up - use --force-preread
+* If search performance is very important and you have enough memory - use mlock for attributes and mmap for doclists/hitlists. Be aware mlock is a privileged system call and the user running searchd should have enough privileges. Read :ref:`here<mlock>` for details
+* If you can't afford lower performance on start and ready to wait longer on start until it's warmed up - use --force-preread
 * If you want searchd to be able to restart faster - stay with mmap_preread
-* If you want to save RAM - do not use mlock, then your OS will decide what should be in memory at
-any given moment of time depending on what is read from disk more frequently
-* If search performance doesn't matter at all and you want to save maximum RAM - use
-access_doclists/access_hitlists=file and access_plain_attrs/access_blob_attrs=mmap
+* If you want to save RAM - do not use mlock, then your OS will decide what should be in memory at any given moment of time depending on what is read from disk more frequently
+* If search performance doesn't matter at all and you want to save maximum RAM - use access_doclists/access_hitlists=file and access_plain_attrs/access_blob_attrs=mmap
 
 The default mode is to mmap and pre-read attributes and access doclists/hitlists directly
 from disk which provides decent search performance, optimal memory usage and faster

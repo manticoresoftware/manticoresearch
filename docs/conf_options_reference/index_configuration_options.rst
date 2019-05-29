@@ -14,7 +14,7 @@ Optional, default is mmap_preread.
 Possible values are ``mmap``, ``mmap_preread``, ``mlock``. Refer to :ref:`mlock` directive for possible
 mlock restrictions and :ref:`index_files_access` for detailed explanation of the values.
 
-In ``mmap_preread`` mode upon search daemon start index's attributes file gets mapped into memory
+In ``mmap_preread`` mode upon daemon start index's attributes file gets mapped into memory
 and is pre-read by a background thread. ``mlock`` option uses mlock(2) privileged call
 to additionally lock the attributes in memory. ``mmap`` option
 just maps the file into memory and expects OS to cache those parts of the file that are used more often.
@@ -39,7 +39,7 @@ This mode specifies how index's blob attributes file is accessed. Optional, defa
 Possible values are ``mmap``, ``mmap_preread``, ``mlock``. Refer to :ref:`mlock` directive for possible
 mlock restrictions and :ref:`index_files_access` for detailed explanation of the values.
 
-In ``mmap_preread`` mode upon search daemon start index's attributes file gets mapped into memory
+In ``mmap_preread`` mode upon daemon start index's attributes file gets mapped into memory
 and is pre-read by a background thread. ``mlock`` option uses mlock(2) privileged call
 to additionally lock the attributes in memory. ``mmap`` option
 just maps the file into memory and expects OS to cache those parts of the file that are used more often.

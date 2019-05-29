@@ -198,6 +198,7 @@ Starting daemon with this option allows to make sure index files will be fully l
 and cached in memory to provide maximum performance.
 
 The recommendations are:
+
 * If search performance is very important and you have enough memory - use mlock
 for attributes and mmap for doclists/hitlists. Be aware mlock is a privileged system call
 and the user running searchd should have enough privileges. Read :ref:`here<mlock>` for details

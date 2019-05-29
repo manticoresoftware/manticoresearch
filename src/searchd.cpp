@@ -15591,7 +15591,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 		// in case there are no matches, send a dummy schema
 		// result set header packet. We will attach EOF manually at the end.
 		dRows.HeadBegin ( bAddQueryColumn ? 2 : 1 );
-		dRows.HeadColumn ( "id", MYSQL_COL_LONGLONG, MYSQL_COL_UNSIGNED_FLAG );
+		dRows.HeadColumn ( "id", MYSQL_COL_LONGLONG, 0 );
 	} else
 	{
 		int iAttrsToSend = tAttrsToSend.BitCount();
@@ -15619,7 +15619,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 			default:
 				break;
 			}
-			dRows.HeadColumn ( tCol.m_sName.cstr(), eType, tCol.m_sName=="id" ? MYSQL_COL_UNSIGNED_FLAG : 0 );
+			dRows.HeadColumn ( tCol.m_sName.cstr(), eType, 0 );
 		}
 	}
 

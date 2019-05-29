@@ -87,7 +87,7 @@ Index files
 Each index consists of a number of files.
 
 Small index components are fully loaded into memory.
-Big index components  are read from disk as needed.  Currently these use seek+read or mmap() to retrieve data from disk.
+Big index components  are read from disk as needed. Currently these use seek+read or mmap() to retrieve data from disk.
 Attribute components are opened and mapped with mmap(). They can be loaded fully in memory or left on disk and read when needed.
 
 Plain indexes and RealTime indexes chunks:
@@ -135,9 +135,9 @@ RealTime indexes also have:
 +-----------+---------------------------+-----------------------------------------+
 
 
-:sup:`[1]` RT kill -  documents that gets REPLACEd. Gets cleared when RAM chunk is dumped as disk chunk.
+:sup:`[1]` RT kill -  documents that are REPLACEd get cleared when the RAM chunk is dumped as a disk chunk.
 
-:sup:`[2]` RAM chunk copy - created when RAM chunk is flushed to disk. Cleared when RAM chunk is dumped as disk chunk.
+:sup:`[2]` RAM chunk copy - created when the RAM chunk is flushed to disk. Cleared when the RAM chunk is dumped as a disk chunk.
 
 
 .. _index_files_access:
@@ -145,59 +145,73 @@ RealTime indexes also have:
 Index files access
 ~~~~~~~~~~~~~~~~~~
 
-The daemon uses two types of reader to read index data - seek+read and mmap.
+The daemon uses two access modes to read index data - seek+read and mmap.
 
-The daemon uses seek+read reader for reading document list and keyword positions, ie ``spd`` and ``spp`` files.
-This reader uses internal buffers there data got cached on file access. The size of these buffers could be tuned with
-options :ref:`read_buffer_docs` and :ref:`read_buffer_hits`. There is also :ref:`preopen` option that allows to control
-amount of files opened by daemon at start.
+In seek+read mode the daemon has to do 2 system calls: seek and read to read document
+lists and keyword positions, i.e. ``spd`` and ``spp`` files. Internal read buffers are
+used to optimize reading. The size of these buffers can be tuned with options :ref:`read_buffer_docs`
+and :ref:`read_buffer_hits`. There is also :ref:`preopen` option that allows to control
+the amount of files opened by daemon at start.
 
-The daemon uses mmap reader and it just maps file into memory with mmap(2) system call and OS caches file content by itself. Options 
-:ref:`read_buffer_docs` and :ref:`read_buffer_hits` have no effect for file accessed via this reader. This reader could be used for
-scalar attributes, var-length attributes, document lists, keyword positions, ie ``spa``, ``spb``, ``spd`` and ``spp`` files.
+In mmap access mode the search daemon just maps index's file into memory with
+mmap(2) system call and OS caches file content by itself. Options
+:ref:`read_buffer_docs` and :ref:`read_buffer_hits` have no effect for corresponding
+files in this mode. This reader could be used for scalar (int, float, boolean, timestamp)
+attributes, var-length (string, mva, json) attributes, document lists and keyword
+positions, i.e. ``spa``, ``spb``, ``spd`` and ``spp`` files.
 
-The reader mmap used for attribute files could also lock index data in memory via mlock(2) privileged call and prevents swap out
-of cached data to disk by OS. That might be useful in many cases for example:
+The ``mmap`` reader can also lock index's data in memory via mlock(2) privileged call which prevents swapping out
+of the cached data to disk by OS.
 
-* alot of indexes load into daemon but some of them should always be “hot” and other could be swapped out due to low activity. ``access_plain_attrs = mlock`` option might be used for such “hot” indexes.
-
-* mmap reader used for all files of large index but different parts of full-text index files got accessed more often which in turn causes to swap out attributes of this index. ``access_plain_attrs = mlock`` option could be used for this case and set attributes always be in memory.
-
-To control which reader type will be used for particular index files :ref:`access_plain_attrs`, :ref:`access_blob_attrs`,
-:ref:`access_doclists` and :ref:`access_hitlists` options might be used with possible values:
+To control what access mode will be used :ref:`access_plain_attrs`, :ref:`access_blob_attrs`,
+:ref:`access_doclists` and :ref:`access_hitlists` options are available with the following values:
 
 * ``file`` daemon reads index file from disk with seek+read using internal buffers on file access
-* ``mmap`` daemon maps index file into memory and OS caches up it content on file access
-* ``mmap_preread`` daemon maps index file into memory then caches it up at warm up thread
-* ``mlock`` daemon maps index file into memory then issue mlock sytem call to cache up file content and lock it into memory and prevent it being swapped
+* ``mmap`` daemon maps index file into memory and OS caches up its contents on file access
+* ``mmap_preread`` daemon maps index file into memory and a background thread reads it once to warm up the cache
+* ``mlock`` daemon maps index file into memory and then issues mlock system call to cache up the file contents and
+lock it into memory to prevent it being swapped out
 
-Here is table with readers comparison and possible combination of its options
+Here is a table which can help you select your desired mode:
 
-+-----------+-----------------------------------+-----------------------------------+-----------------------------------+----------------------------------------------+
-| extension | disk                              | memory                            | locked in memory                  | cached in memory on daemon start             |
-+-----------+-----------------------------------+-----------------------------------+-----------------------------------+----------------------------------------------+
-| spa       | no                                | access_plain_attrs = mmap         | access_plain_attrs = mlock        | access_plain_attrs = mmap_preread (default)  |
-+-----------+-----------------------------------+-----------------------------------+-----------------------------------+----------------------------------------------+
-| spb       | no                                | access_blob_attrs = mmap          | access_blob_attrs = mlock         | access_blob_attrs = mmap_preread (default)   |
-+-----------+-----------------------------------+-----------------------------------+-----------------------------------+----------------------------------------------+
-| spd       | access_doclists = file (default)  | access_doclists = mmap            | no                                | no                                           |
-+-----------+-----------------------------------+-----------------------------------+-----------------------------------+----------------------------------------------+
-| spp       | access_hitlists = file (default)  | access_hitlists = mmap            | no                                | no                                           |
-+-----------+-----------------------------------+-----------------------------------+-----------------------------------+----------------------------------------------+
++-------------------------+-----------------------------------+--------------------------------------+----------------------------------------------+----------------------------+
+| index part              | keep it on disk                   | keep it in memory                    | cached in memory on daemon start             | lock it in memory          |
++-------------------------+-----------------------------------+--------------------------------------+----------------------------------------------+----------------------------+
+| .spa (plain attributes) | access_plain_attrs=mmap - the file will mapped to RAM, but your OS will  | access_plain_attrs = mmap_preread (default)  | access_plain_attrs = mlock |
+|                         | decide whether to really load it to RAM or not and can easily swap it    |                                              |                            |
+|                         | out (default)                                                            |                                              |                            |
++-------------------------+-----------------------------------+--------------------------------------+----------------------------------------------+----------------------------+
+| .spb (blob attributes)  | access_blob_attrs=mmap - the file will mapped to RAM, but your OS will   | access_blob_attrs = mmap_preread (default)   | access_blob_attrs = mlock  |
+|                         | decide whether to really load it to RAM or not and can easily swap it    |                                              |                            |
+|                         | out (default)                                                            |                                              |                            |
++-------------------------+-----------------------------------+--------------------------------------+----------------------------------------------+----------------------------+
+| .spd (doc lists)        | access_doclists = file (default)  | access_doclists = mmap, may be still | no                                           | no                         |
+|                         |                                   | swapped out by OS                    |                                              |                            |
++-------------------------+-----------------------------------+--------------------------------------+----------------------------------------------+----------------------------+
+| .spp (hit lists)        | access_hitlists = file (default)  | access_hitlists = mmap, may be still | no                                           | no                         |
+|                         |                                   | swapped out by OS                    |                                              |                            |
++-------------------------+-----------------------------------+--------------------------------------+----------------------------------------------+----------------------------+
 
-The reader mmap caches up content of index file on daemon start at background warmup thread with mlock system
-call or by touching memory pages of mapped file. This index data warm up could take some time and performed only for index files wich
-``access`` options are ``mmap_preread`` or ``mlock``. ``access`` option ``mmap`` only maps index file but daemon does not cache up
-its content so OS populate this mapping on first access of index files.
+There's also a searchd command line option ``--force-preread`` that instructs the
+daemon to wait until the attribute files are read prior to starting accepting incoming connections.
+Starting daemon with this option allows to make sure index files will be fully loaded
+and cached in memory to provide maximum performance.
 
-The daemon also has command line option ``--force-preread`` that instructs daemon to wait warmup cache thread prior to serve any incoming connection.
-Starting daemon with this option allows to make sure index files will be fully loaded and cached into memory prior to serve incoming client requests.
+The recommendations are:
+* If search performance is very important and you have enough memory - use mlock
+for attributes and mmap for doclists/hitlists. Be aware mlock is a privileged system call
+and the user running searchd should have enough privileges. Read :ref:`here<mlock>` for details
+* If you can't afford lower performance on start and ready to wait longer on start
+until it's warmed up - use --force-preread
+* If you want searchd to be able to restart faster - stay with mmap_preread
+* If you want to save RAM - do not use mlock, then your OS will decide what should be in memory at
+any given moment of time depending on what is read from disk more frequently
+* If search performance doesn't matter at all and you want to save maximum RAM - use
+access_doclists/access_hitlists=file and access_plain_attrs/access_blob_attrs=mmap
 
-The readers mmap might be preferred for box there daemon running has a lot of memory and fits whole indexes into RAM.
-That allows OS to manage index data effectively and fast restart of daemon. However for regular boxes or
-for usual indexes there full-text part of the index is much larger than the attributes default values of reader should fit well.
-By default daemon uses mmap reader for access to all attributes files and file reader to access document list and keyword positions files.
-
+The default mode is to mmap and pre-read attributes and access doclists/hitlists directly
+from disk which provides decent search performance, optimal memory usage and faster
+searchd restart in most cases.
 
 Operations on indexes
 ~~~~~~~~~~~~~~~~~~~~~

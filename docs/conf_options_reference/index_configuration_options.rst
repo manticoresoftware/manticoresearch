@@ -8,15 +8,16 @@ Index configuration options
 access_plain_attrs
 ~~~~~~~~~~~~~~~~~~
 
-This mode is how index attribute file got read. Optional, default value mmap_preread.
+Specifies how search daemon will access index's plain attributes (bigint, bool, float, timestamp, uint).
+Optional, default is mmap_preread.
 
 Possible values are ``mmap``, ``mmap_preread``, ``mlock``. Refer to :ref:`mlock` directive for possible
-mlock restrictions and :ref:`index_files_access` for detailed explanation of values.
+mlock restrictions and :ref:`index_files_access` for detailed explanation of the values.
 
-On daemon start attribute file got mapped into memory and preread background thread started to cache in
-attribute file - that is ``mmap_preread`` option. ``mlock`` option uses mlock(2) privileged call to cache in attribute file
-instead preread background thread. ``mmap`` option just map attribute file into memory and expect OS to cache parts of file
-used more often.
+In ``mmap_preread`` mode upon search daemon start index's attributes file gets mapped into memory
+and is pre-read by a background thread. ``mlock`` option uses mlock(2) privileged call
+to additionally lock the attributes in memory. ``mmap`` option
+just maps the file into memory and expects OS to cache those parts of the file that are used more often.
 
 
 Example:
@@ -33,16 +34,15 @@ Example:
 access_blob_attrs
 ~~~~~~~~~~~~~~~~~
 
-This mode is how index blob file got read. Optional, default value mmap_preread.
+This mode specifies how index's blob attributes file is accessed. Optional, default value is mmap_preread.
 
 Possible values are ``mmap``, ``mmap_preread``, ``mlock``. Refer to :ref:`mlock` directive for possible
-mlock restrictions and :ref:`index_files_access` for detailed explanation of values.
+mlock restrictions and :ref:`index_files_access` for detailed explanation of the values.
 
-On daemon start blob file got mapped into memory and preread background thread started to cache in
-blob file - that is ``mmap_preread`` option. ``mlock`` option uses mlock(2) privileged call to cache in blob file
-instead preread background thread. ``mmap`` option just map blob file into memory and expect OS to cache parts of file
-used more often.
-
+In ``mmap_preread`` mode upon search daemon start index's attributes file gets mapped into memory
+and is pre-read by a background thread. ``mlock`` option uses mlock(2) privileged call
+to additionally lock the attributes in memory. ``mmap`` option
+just maps the file into memory and expects OS to cache those parts of the file that are used more often.
 
 Example:
 
@@ -58,13 +58,14 @@ Example:
 access_doclists
 ~~~~~~~~~~~~~~~
 
-This mode is how doclist file got read. Optional, default value file.
+This mode defines how index's doclists file is accessed. Optional, default is ``file``.
 
-Possible values are ``file``, ``mmap``. Refer to :ref:`index_files_access` for detailed explanation of values.
+Possible values are ``file`` and ``mmap``. Refer to :ref:`index_files_access` for detailed explanation of the values.
 
-To read data from doclist file these types of reader might be used - file reader and mmap. ``file`` reader provides optimal performance
-and could be tuned with options :ref:`read_buffer_docs` and :ref:`read_buffer_hits`. ``mmap`` is file mapped into memory as :ref:`access_plain_attrs`
-does and could provide significant performance improvement in case all index files fit in memory.
+Search daemon can read data from index's doclists file in 2 modes. ``file`` reader provides optimal performance
+and can be tuned with options :ref:`read_buffer_docs` and :ref:`read_buffer_hits`. ``mmap`` allows to map the file
+into memory as :ref:`access_plain_attrs` does and can provide significant performance improvement in case
+you have enough free memory and all index files can fit in ram.
 
 .. code-block:: ini
 
@@ -78,13 +79,14 @@ access_hitlists
 ~~~~~~~~~~~~~~~
 
 
-This mode is how hitlist file got read. Optional, default value file.
+This mode defines how index's hitlists file is accessed. Optional, default is ``file``.
 
-Possible values are ``file``, ``mmap``. Refer to :ref:`index_files_access` for detailed explanation of values.
+Possible values are ``file`` and ``mmap``. Refer to :ref:`index_files_access` for detailed explanation of the values.
 
-To read data from hitlist file these types of reader might be used - file reader and mmap. ``file`` reader provides optimal performance
-and could be tuned with options :ref:`read_buffer_docs` and :ref:`read_buffer_hits`. ``mmap`` is file mapped into memory as :ref:`access_plain_attrs`
-does and could provide significant performance improvement in case all index files fit in memory.
+Search daemon can read data from index's hitlists file in 2 modes. ``file`` reader provides optimal performance
+and can be tuned with options :ref:`read_buffer_docs` and :ref:`read_buffer_hits`. ``mmap`` allows to map the file
+into memory as :ref:`access_plain_attrs` does and can provide significant performance improvement in case
+you have enough free memory and all index files can fit in ram.
 
 .. code-block:: ini
 
@@ -1904,10 +1906,10 @@ Setting mlock option to 1 makes Manticore lock physical RAM used for that
 cached data using mlock(2) system call, and that prevents swapping (see
 man 2 mlock for details). mlock(2) is a privileged call, so it will
 require ``searchd`` to be either run from root account, or be granted
-enough privileges otherwise. 
+enough privileges otherwise.
 
 On Linux platforms where Manticore service is managed by systemd, you can use
-``LimitMEMLOCK=infinity`` in the unit file. 
+``LimitMEMLOCK=infinity`` in the unit file.
 Newer releases use a systemd generator  instead of a simple systemd unit (to detect if **jemalloc** can be used instead of standard **malloc**).
 In these cases one should add LimitMEMLOCK to the generator file located usually at
 ``/lib/systemd/system-generators/manticore-generator``  and run ``systemctl daemon-reload`` to perform the unit file update.

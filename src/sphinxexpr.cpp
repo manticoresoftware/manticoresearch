@@ -1113,7 +1113,10 @@ public:
 				int iLen = m_pFirst->StringEval ( tMatch, ppStr );
 				dTmp.Resize(iLen+1);
 				if ( ppStr )
-					memcpy ( dTmp.Begin(), *ppStr, dTmp.GetLength() );
+				{
+					memcpy ( dTmp.Begin(), *ppStr, iLen );
+					dTmp[iLen] = '\0';
+				}
 				else
 					dTmp[0] = '\0';
 

@@ -1571,8 +1571,8 @@ public:
 		for ( auto &AttrsRaw : m_dAttrsRaw )
 			pDst->SetAttr ( AttrsRaw, pGroup->GetAttr ( AttrsRaw ) );
 
-		m_pSchema->FreeDataSpecial ( pDst, m_dMyPtrRows );
-		m_pSchema->CopyPtrsSpecial ( pDst, pGroup->m_pDynamic, m_dMyPtrRows );
+//		CSphSchemaHelper::FreeDataSpecial ( pDst, m_dMyPtrRows );
+		CSphSchemaHelper::CopyPtrsSpecial ( pDst, pGroup->m_pDynamic, m_dMyPtrRows );
 	}
 
 	void Clone ( CSphMatch * pDst, const CSphMatch * pSrc )

@@ -92,7 +92,7 @@ CREATE TABLE test_table2
 ( 2, 234, 234, 234, 2.2, '20,30,40', 'str2', '{"a":[2,3,4,5], "t":["t2", "t3", "t4"]}', 'title' ),
 ( 3, 345, 345, 345, 3.3, '30,40,50', 'str3', '{"a":[3,4,5,1], "t":["t3", "t4", "t5"]}',	'title' ),
 ( 4, 456, 456, 456, 4.4, '40,50,60', 'str4', '{"a":["4","5","6","2"], "t":["t4", "t5", "t6"]}','title' ),
-( 5, 567, 567, 567, 5.5, '50,60,70', 'str5', '["a","b"]', 'title' )
+( 5, 567, 567, 567, 5.5, '50,60,70', 'str4', '["a","b"]', 'title' )
 </db_insert>
 <db_insert>INSERT INTO test_table2 VALUES
 ( 6, 678, 678, 678, 6.6, '60,70,80', 'str6', '["a","b"]', 'title', '{"a":"
@@ -191,7 +191,8 @@ b+c+d e from test where match('title') and e>0</sphinxql> --> <!-- Expr_Hour_c/E
 <sphinxql>select CONCAT(str,'-',',','-',to_string(bint)) from test</sphinxql> 
 <sphinxql>select CONCAT(str,bint) from test</sphinxql> 
 <sphinxql>select GROUP_CONCAT(CONCAT(str,',',to_string(bint))) from test GROUP BY bint</sphinxql> 
-<sphinxql>select CONCAT(str,',',to_string(bint)) a, GROUP_CONCAT(a) from test GROUP BY bint</sphinxql> 
+<sphinxql>select CONCAT(str,',',to_string(bint)) a, GROUP_CONCAT(a) from test GROUP BY bint</sphinxql>
+<sphinxql>select id, concat(str) as g, group_concat(g) as grp from test group 2 by str</sphinxql>
 
 
 <!-- fixme: NOT TESTED 

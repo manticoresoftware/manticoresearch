@@ -1925,6 +1925,9 @@ Example:
 
     mlock = 1
 
+.. warning::
+   The functionality of this directive is taken over by :ref:`access_plain_attrs` and :ref:`access_blob_attrs` directives as of 3.0.2. 
+   
 .. _morphology:
 
 morphology
@@ -2226,6 +2229,7 @@ Possible values:
 This option does not affect indexing in any way, it only requires daemon
 restart.
 
+
 Example:
 
 
@@ -2234,6 +2238,15 @@ Example:
 
     ondisk_attrs = pool #keep pooled attributes on disk
 
+.. warning::
+   The functionality of this directive is taken over by :ref:`access_plain_attrs` and :ref:`access_blob_attrs` directives as of 3.0.2. 
+   The option is marked as deprecated and will be removed in future versions.
+   The equivalent values are :
+   * ondisk_attrs = 0 -  access_plain_attrs=mmap_preread and access_blob_attrs=mmap_preread
+   * ondisk_attrs = pool    -  access_plain_attrs=mmap_preread and access_blob_attrs=mmap
+   * ondisk_attrs = 1    -  access_plain_attrs=mmap and access_blob_attrs=mmap
+   
+   
 .. _overshort_step:
 
 overshort_step

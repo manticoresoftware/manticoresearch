@@ -862,6 +862,10 @@ all indexes served by this copy of searchd. Per-index directives take
 precedence, and will overwrite this instance-wide default value,
 allowing for fine-grain control.
 
+.. warning::
+   The functionality of this directive is taken over by :ref:`access_plain_attrs_searchd` and :ref:`access_blob_attrs_searchd` directives as of 3.0.2. 
+   The option is marked as deprecated and will be removed in future versions.
+   
 .. _persistent_connections_limit:
 
 persistent_connections_limit
@@ -1355,6 +1359,21 @@ Example:
 
 
     seamless_rotate = 1
+
+.. _server_id:
+
+server_id
+~~~~~~~~~
+
+Integer number that serves as server identificator used as seed to generate an unique short UUID for nodes that are part of a replication cluster.
+The server_id must be unique across the nodes of a cluster. If server_id is not set, MAC address or a random number will be used as seed for the short UUID.
+
+Example:
+
+.. code-block:: ini
+
+    server_id = 1
+
 
 .. _shutdown_timeout:
 

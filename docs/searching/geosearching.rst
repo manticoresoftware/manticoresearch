@@ -72,5 +72,5 @@ GEOPOLY2D also expects coordinates as latitude/longitude pairs in degrees, using
 
 .. code-block:: none
    
-   SELECT *,CONTAINS(GEOPOLY2D(40.76439, -73.9997, 42.21211, -73.999,  42.21211, -76.123, 40.76439 , -76.123), 41.5445,-74.973) AS inside FROM myindex WHERE MATCH('...') WHERE inside=1;
+   SELECT *,CONTAINS(GEOPOLY2D(40.76439, -73.9997, 42.21211, -73.999,  42.21211, -76.123, 40.76439 , -76.123), 41.5445,-74.973) AS inside FROM myindex WHERE MATCH('...') AND inside=1;
    

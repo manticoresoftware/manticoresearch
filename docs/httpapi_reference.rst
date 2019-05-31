@@ -14,56 +14,6 @@ To enabled the HTTP protocol, a :ref:`listen` directive with http specified as a
 
 Supported endpoints:
 
-/search API
------------
-
-Allows a simple full-text search, parameters can be : 
-* index   (index or list of indexes)
-* match (equivalent of MATCH()) 
-* select (as SELECT clause)
-* group (grouping attribute)
-* order (SQL-like sorting)
-* limit (equivalent of LIMIT 0,N) 
-
-Response is a JSON document containing an array of attrs,matches and meta similar with the SphinxAPI response.
-
-.. code-block:: bash
-
-       curl -X POST 'http://manticoresearch:9308/search'
-       -d 'index=forum&match=@subject php manticore&select=id,subject,author_id&limit=5'
-
-.. code-block:: json
-       
-	{
-	   "attrs":[
-		  "forum_id",
-		  "author_id",
-		  "subject",
-		  "id"
-	   ],
-	   "matches":[
-
-	   ],
-	   "meta":{
-		  "total":0,
-		  "total_found":0,
-		  "time":0.000,
-		  "words":[
-			 {
-				"word":"php",
-				"docs":3252,
-				"hits":11166
-			 },
-			 {
-				"word":"manticore",
-				"docs":0,
-				"hits":0
-			 }
-		  ]
-	   }
-	}
-	
-
 /sql API
 --------
 

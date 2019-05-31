@@ -1392,26 +1392,25 @@ public:
 	/// copy ctor
 	Vector_T ( const Vector_T<T> & rhs )
 	{
-		*this = rhs;
+		m_iCount = rhs.m_iCount;
+		m_iLimit = rhs.m_iLimit;
+		if ( m_iLimit )
+			m_pData = STORE::Allocate(m_iLimit);
+		__analysis_assume ( m_iCount<=m_iLimit );
+		POLICY::Copy ( m_pData, rhs.m_pData, m_iCount );
 	}
 
 	/// move ctr
 	Vector_T ( Vector_T<T> &&rhs ) noexcept
-		: STORE (std::move(rhs))
+		: Vector_T()
 	{
-		m_iCount = rhs.m_iCount;
-		m_iLimit = rhs.m_iLimit;
-		m_pData = rhs.m_pData;
-
-		rhs.m_pData = nullptr;
-		rhs.m_iCount = 0;
-		rhs.m_iLimit = 0;
+		SwapData(rhs);
 	}
 
 	/// dtor
 	~Vector_T ()
 	{
-		Reset ();
+		STORE::Deallocate ( m_pData );
 	}
 
 	/// add entry
@@ -1607,36 +1606,13 @@ public:
 		Resize ( iLeft );
 	}
 
-	/// copy
-	Vector_T &operator= ( const Vector_T<T> &rhs )
+	/// copy + move
+	// if provided lvalue, it will be copied into rhs via copy ctr, then swapped to *this
+	// if provided rvalue, it will just pass to SwapData immediately.
+	Vector_T &operator= ( Vector_T<T> rhs ) noexcept
 	{
-		Reset ();
-
-		m_iCount = rhs.m_iCount;
-		m_iLimit = rhs.m_iLimit;
-		if ( m_iLimit )
-			m_pData = new T [ m_iLimit ];
-		__analysis_assume ( m_iCount<=m_iLimit );
-		POLICY::Copy ( m_pData, rhs.m_pData, m_iCount );
-
+		SwapData ( rhs );
 		return *this;
-	}
-
-	/// move
-	Vector_T &operator= ( Vector_T<T> &&rhs ) noexcept
-	{
-		Reset ();
-
-		m_iCount = rhs.m_iCount;
-		m_iLimit = rhs.m_iLimit;
-		m_pData = rhs.m_pData;
-
-		rhs.m_pData = nullptr;
-		rhs.m_iCount = 0;
-		rhs.m_iLimit = 0;
-
-		return static_cast<Vector_T &>(STORE::operator= ( std::move ( rhs ) ));
-//		return *this;
 	}
 
 	/// memmove N elements from raw pointer to the end
@@ -1664,7 +1640,7 @@ public:
 
 	/// swap
 	template < typename L=LIMIT >
-	void SwapData ( Vector_T<T, POLICY, L, STORE> &rhs )
+	void SwapData ( Vector_T<T, POLICY, L, STORE> &rhs ) noexcept
 	{
 		STORE::DataIsNotOwned ();
 		Swap ( m_iCount, rhs.m_iCount );

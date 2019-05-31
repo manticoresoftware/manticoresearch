@@ -2038,7 +2038,37 @@ TEST ( functions, VectorEx )
 	dTVec.Append (dLVec);
 	ASSERT_EQ ( dTVec.GetLength (), 4 );
 	int* VARIABLE_IS_NOT_USED pData = dTVec.LeakData();
+}
 
+TEST ( functions, VectorCopyMove )
+{
+	using vec = CSphVector<int>;
+	vec dVec;
+	dVec.Add ( 1 );
+	dVec.Add ( 2 );
+	dVec.Add ( 3 );
+	dVec.Add ( 4 );
+	dVec.Add ( 5 );
+	vec dCopy ( dVec ); // copy c-tr
+	vec dCopy2; // default c-tr
+	dCopy2 = dVec; // copy c-tr dVec to tmp, then swap dCopy2 with tmp; then d-tr of empty tmp.
+	vec dMove ( std::move ( dCopy )); // move c-tr
+	vec dMove2; // default ctr
+	dMove2 = std::move ( dCopy2 ); // move ctr dCopy2 to tmp, swap dMove2 with tmp; dtr empty tmp.
+}
+
+TEST ( functions, LazyVectorCopyMove )
+{
+	using vec = LazyVector_T<int>;
+	vec dVec;
+	dVec.Add ( 1 );
+	dVec.Add ( 2 );
+	dVec.Add ( 3 );
+	dVec.Add ( 4 );
+	dVec.Add ( 5 );
+	// vec dCopy ( dVec ); // will not compile since copy c-tr is deleted
+	vec dCopy;
+	dCopy.Append(dVec);
 }
 
 #ifdef _WIN32

@@ -1,9 +1,42 @@
 Release notes
 =============
 
+Version 3.0.2, 31 May 2019
+--------------------------
+
+Improvements
+~~~~~~~~~~~~
+
+* added mmap readers for docs and hit lists
+* /sql HTTP endpoint response is now the same as /json/search response
+* new directives access_plain_attrs, access_blob_attrs, access_doclists, access_hitlists
+* new directive server_id for replication setups
+
+Removals
+~~~~~~~~
+
+* removed HTTP /search endpoint
+
+Deprecations
+~~~~~~~~~~~~
+
+* ondisk_attrs, ondisk_attrs_default, mlock  (replaced by access_* directives)
+
+Bugfixes
+~~~~~~~~
+
+* `849c16e1 <https://github.com/manticoresoftware/manticoresearch/commit/849c16e1040f382795ba0635cb48686f9db4f2d8>`__ allow attribute names starting with numbers in select list
+* `48e6c302 <https://github.com/manticoresoftware/manticoresearch/commit/48e6c302ca37bec0bc49c79619c60bf787ed0708>`__ fixed MVAs in UDFs, fixed MVA aliasing
+* `055586a9 <https://github.com/manticoresoftware/manticoresearch/commit/055586a9a2ebfa8874f68099c5bc798a145fd4ef>`__ fixed #187 crash when using query with SENTENCE
+* `93bf52f2 <https://github.com/manticoresoftware/manticoresearch/commit/93bf52f23f1c53c8a93a603387ca5463e1fc2ae8>`__ fixed #143 support () around MATCH() 
+* `599ee79c <https://github.com/manticoresoftware/manticoresearch/commit/599ee79ccd38cce0023a55cbce8f50c3dca62e38>`__ fixed save of cluster state on ALTER cluster statement
+* `230c321e <https://github.com/manticoresoftware/manticoresearch/commit/230c321e277514b191629538eb3f02d219113d95>`__ fixed  crash of daemon on ALTER index with blob attributes
+* `5802b85a <https://github.com/manticoresoftware/manticoresearch/commit/5802b85aa93a81caea77073a3381ef912fdd677c>`__ fixed #196 filtering by id
+* `25d2dabd <https://github.com/manticoresoftware/manticoresearch/commit/25d2dabda4a299a29bd375405862126da9b4bfac>`__ discard searching on template indexes
+* `2a30d5b4 <https://github.com/manticoresoftware/manticoresearch/commit/2a30d5b49d76faab031d195f533974938769b8e6>`__ fixed id column to have regular bigint type at SphinxQL reply
 
 Version 3.0.0, 6 May 2019
--------------------------------
+-------------------------
 
 Features and improvements
 ~~~~~~~~~~~~~~~~~~~~~~~~~

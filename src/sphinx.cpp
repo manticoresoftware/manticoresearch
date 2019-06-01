@@ -7104,8 +7104,9 @@ void sphDeallocatePacked ( BYTE * pBlob )
 {
 	if ( !pBlob )
 		return;
-	const BYTE * pFoo = pBlob;
-	sphDeallocateSmall ( pBlob, sphCalcPackedLength ( sphUnzipInt ( pFoo ) ) );
+	//const BYTE * pFoo = pBlob;
+	//sphDeallocateSmall ( pBlob, sphCalcPackedLength ( sphUnzipInt ( pFoo ) ) );
+	sphDeallocateSmall ( pBlob );
 }
 
 void CSphSchemaHelper::FreeDataSpecial ( CSphMatch * pMatch, const CSphVector<int> &dSpecials )
@@ -7117,7 +7118,6 @@ void CSphSchemaHelper::FreeDataSpecial ( CSphMatch * pMatch, const CSphVector<in
 	for ( auto iOffset : dSpecials )
 	{
 		BYTE * &pData = *( BYTE ** ) ( pMatch->m_pDynamic + iOffset );
-		// SafeDeleteArray ( pData );
 		sphDeallocatePacked ( pData );
 		pData = nullptr;
 	}

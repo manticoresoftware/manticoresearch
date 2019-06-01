@@ -4997,6 +4997,7 @@ size_t sphGetSmallReservedSize ();	// how many pooled from the sys right now
 #else
 inline BYTE * sphAllocateSmall(int iBytes) {return new BYTE[iBytes];};
 inline void sphDeallocateSmall(BYTE * pBlob, int) {delete[]pBlob;};
+inline void sphDeallocateSmall ( BYTE* pBlob ) { delete[]pBlob; };
 inline size_t sphGetSmallAllocatedSize() {return 0;};    // how many allocated right now
 inline size_t sphGetSmallReservedSize() {return 0;};    // how many pooled from the sys right now
 #endif // USE_SMALLALLOC

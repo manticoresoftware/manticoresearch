@@ -997,7 +997,7 @@ public:
 		return iResultLen;
 	}
 
-	const BYTE * StringEvalPacked ( const CSphMatch & tMatch ) const
+	const BYTE * StringEvalPacked ( const CSphMatch & tMatch ) const final
 	{
 		// this is done to avoid reallocation while re-packing the result of StringEval call
 		CSphVector<BYTE> dResult;
@@ -1058,7 +1058,7 @@ protected:
 			}
 
 			if ( pStr )
-				memcpy ( dResult.AddN(iLen), pStr, iLen );
+				dResult.Append ( pStr, iLen );
 
 			if ( i.m_pExpr && i.m_pExpr->IsDataPtrAttr() )
 				SafeDeleteArray(pStr);

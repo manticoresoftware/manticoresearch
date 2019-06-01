@@ -897,20 +897,19 @@ int sphCalcPackedLength ( int iLengthBytes )
 	return sphCalcZippedLen(iLengthBytes) + iLengthBytes;
 }
 
-
+// allocate and pack blob pData[iLengthBytes], return pointer to it
 BYTE * sphPackPtrAttr ( const BYTE * pData, int iLengthBytes )
 {
 	if ( !iLengthBytes )
 		return nullptr;
 
 	assert ( pData );
-
-	BYTE * pPacked = new BYTE [sphCalcPackedLength(iLengthBytes)];
+	BYTE* pPacked = sphAllocateSmall ( sphCalcPackedLength ( iLengthBytes ));
 	sphPackPtrAttr ( pPacked, pData, iLengthBytes );
 	return pPacked;
 }
 
-
+// pack blob pData[iLengthBytes] into preallocated buf
 void sphPackPtrAttr ( BYTE * pPrealloc, const BYTE * pData, int iLengthBytes )
 {
 	assert ( pPrealloc && pData );
@@ -919,10 +918,9 @@ void sphPackPtrAttr ( BYTE * pPrealloc, const BYTE * pData, int iLengthBytes )
 		memcpy ( pPrealloc, pData, iLengthBytes );
 }
 
-
+// allocate blob for iLengthBytes, pack size, then return pointer to payload in *ppData, and whole blob in result
 BYTE * sphPackPtrAttr ( int iLengthBytes, BYTE ** ppData )
 {
-	// BYTE * pPacked = new BYTE [sphCalcPackedLength(iLengthBytes)];
 	BYTE * pPacked = sphAllocateSmall ( sphCalcPackedLength ( iLengthBytes ) );
 	*ppData = pPacked;
 	*ppData += sphZipToPtr ( iLengthBytes, pPacked );

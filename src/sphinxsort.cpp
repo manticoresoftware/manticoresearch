@@ -1204,12 +1204,9 @@ class CSphUniqounter : public CSphVector<SphGroupedValue_t>
 {
 public:
 #ifndef NDEBUG
-					CSphUniqounter () : m_iCountPos ( 0 ), m_bSorted ( true ) { Reserve ( 16384 ); }
+					CSphUniqounter () { Reserve ( 16384 ); }
 	void			Add ( const SphGroupedValue_t & tValue )	{ CSphVector<SphGroupedValue_t>::Add ( tValue ); m_bSorted = false; }
 	void			Sort ()										{ CSphVector<SphGroupedValue_t>::Sort (); m_bSorted = true; }
-
-#else
-					CSphUniqounter () : m_iCountPos ( 0 ) {}
 #endif
 
 public:
@@ -1218,10 +1215,10 @@ public:
 	void			Compact ( SphGroupKey_t * pRemoveGroups, int iRemoveGroups );
 
 protected:
-	int				m_iCountPos;
+	int				m_iCountPos = 0;
 
 #ifndef NDEBUG
-	bool			m_bSorted;
+	bool			m_bSorted = true;
 #endif
 };
 
@@ -1544,8 +1541,8 @@ struct MatchCloner_t
 {
 private:
 	CSphFixedVector<CSphRowitem>	m_dRowBuf { 0 };
-	CSphVector<CSphAttrLocator>		m_dAttrsRaw;
-	CSphVector<CSphAttrLocator>		m_dAttrsPtr;
+	CSphVector<CSphAttrLocator>		m_dAttrsGrp; // locators for grouping attrs (@groupby, @count, etc.)
+	CSphVector<CSphAttrLocator>		m_dAttrsPtr; // locators for group_concat attrs
 	CSphVector<int>					m_dMyPtrRows; // rowids matching m_dAttrsPtr
 	CSphVector<int>					m_dOtherPtrRows; // rest rowids NOT matching m_dAttrsPtr
 	const CSphSchemaHelper *		m_pSchema = nullptr;
@@ -1568,7 +1565,7 @@ public:
 		// clone
 		m_pSchema->CloneMatchSpecial ( pDst, *pSrc, m_dOtherPtrRows );
 
-		for ( auto &AttrsRaw : m_dAttrsRaw )
+		for ( auto &AttrsRaw : m_dAttrsGrp )
 			pDst->SetAttr ( AttrsRaw, pGroup->GetAttr ( AttrsRaw ) );
 
 //		CSphSchemaHelper::FreeDataSpecial ( pDst, m_dMyPtrRows );
@@ -1588,7 +1585,7 @@ public:
 		memcpy ( m_dRowBuf.Begin(), pDst->m_pDynamic, m_dRowBuf.GetLengthBytes() );
 		m_pSchema->CloneMatchSpecial ( pDst, *pSrc, m_dOtherPtrRows );
 
-		for ( auto &AttrsRaw : m_dAttrsRaw )
+		for ( auto &AttrsRaw : m_dAttrsGrp )
 			pDst->SetAttr ( AttrsRaw, sphGetRowAttr ( m_dRowBuf.Begin(), AttrsRaw ) );
 
 		for ( auto &AttrsRaw : m_dAttrsPtr )
@@ -1597,7 +1594,7 @@ public:
 
 	inline void AddRaw ( const CSphAttrLocator& tLoc )
 	{
-		m_dAttrsRaw.Add ( tLoc );
+		m_dAttrsGrp.Add ( tLoc );
 	}
 
 	inline void AddPtr ( const CSphAttrLocator &tLoc )
@@ -1606,7 +1603,7 @@ public:
 	}
 	inline void ResetAttrs()
 	{
-		m_dAttrsRaw.Resize(0);
+		m_dAttrsGrp.Resize ( 0 );
 		m_dAttrsPtr.Resize ( 0 );
 	}
 
@@ -2341,8 +2338,8 @@ public:
 			m_dJustPopped.Reserve ( m_iSize );
 
 		// trick! This case we allocated 2*m_iSize mem.
-		// range 0..m_iSize used for 1-st matches of each subgroup (i.e., for heads)
-		// range m_iSize+1..2*m_iSize used for the tails.
+		// range [0..m_iSize) used for 1-st matches of each subgroup (i.e., for heads)
+		// range [m_iSize..2*m_iSize) used for the tails.
 		m_dGroupByList.Reset ( m_iSize );
 		m_dGroupsLen.Reset ( m_iSize );
 		m_iSize >>= 1;
@@ -2438,14 +2435,15 @@ public:
 	}
 
 	// insert a match into subgroup, or discard it
-	// returns 0 if no place now (need to flush)
-	// returns 1 if value was discarded or replaced other existing value
-	// returns 2 if value was added.
-	enum InsertRes_e
+	// returns:
+	// 	NOPLACE if no place now (need to flush)
+	// 	REPLACED if value was discarded or replaced other existing value
+	// 	ADDED if value was added.
+	enum class InsertRes_e
 	{
-		INSERT_NONE,
-		INSERT_REPLACED,
-		INSERT_ADDED
+		NOPLACE,
+		REPLACED,
+		ADDED
 	};
 
 	InsertRes_e InsertMatch ( int iPos, const CSphMatch & tEntry, const SphGroupKey_t uGroupKey)
@@ -2458,14 +2456,15 @@ public:
 			CSphMatch * pMatch = m_pData+iPos;
 			if ( m_pComp->VirtualIsLess ( *pMatch, tEntry, m_tState ) ) // the tEntry is better than current *pMatch
 			{
-				int iNew = iPos;
+				int iNew;
 				if ( bDoAdd )
 				{
 					iNew = GetFreePos ( true ); // add to the tails (2-nd subrange)
 					if ( iNew<0 )
-						return INSERT_NONE;
+						return InsertRes_e::NOPLACE;
 				} else
 				{
+					iNew = iPos;
 					int iPreLast = iPrev;
 					while ( m_dGroupByList[iNew]>=0 )
 					{
@@ -2521,7 +2520,7 @@ public:
 		{
 			int iNew = GetFreePos ( true ); // add to the tails (2-nd subrange)
 			if ( iNew<0 )
-				return INSERT_NONE;
+				return InsertRes_e::NOPLACE;
 
 			CSphMatch & tNew = m_pData [ iNew ];
 			assert ( !tNew.m_pDynamic );
@@ -2537,7 +2536,7 @@ public:
 				++m_dGroupsLen[iHead];
 		}
 
-		return bDoAdd ? INSERT_ADDED : INSERT_REPLACED;
+		return bDoAdd ? InsertRes_e::ADDED : InsertRes_e::REPLACED;
 	}
 
 #ifndef NDEBUG
@@ -2613,28 +2612,32 @@ public:
 					pAggregate->Update ( pMatch, &tEntry, bGrouped );
 
 			// if new entry is more relevant, update from it
-			InsertRes_e eRes = InsertMatch ( pMatch-m_pData, tEntry, uGroupKey );
-			if ( eRes==INSERT_NONE )
+			switch ( InsertMatch ( pMatch-m_pData, tEntry, uGroupKey ) )
 			{
-				// need to keep all poped values
-				CSphTightVector<RowID_t> dJustPopped;
-				dJustPopped.SwapData ( m_dJustPopped );
+				case InsertRes_e::NOPLACE:
+				{
+					// need to keep all popped values
+					CSphTightVector<RowID_t> dJustPopped;
+					dJustPopped.SwapData ( m_dJustPopped );
 
-				// was no insertion because cache cleaning. Recall myself
-				PushEx ( tEntry, uGroupKey, bGrouped, bNewSet );
+					// was no insertion because cache cleaning. Recall myself
+					PushEx ( tEntry, uGroupKey, bGrouped, bNewSet );
 
-				// post Push work
-				ARRAY_FOREACH ( i, dJustPopped )
-					m_dJustPopped.Add ( dJustPopped[i] );
-				CSphMatch ** ppDec = m_hGroup2Match.Find ( uGroupKey );
-				assert ( ppDec );
-				(*ppDec)->SetAttr ( m_tLocCount, (*ppDec)->GetAttr ( m_tLocCount )-1 );
-
-			} else if ( eRes==INSERT_ADDED )
-			{
-				if ( bGrouped )
-					return true;
-				++m_iTotal;
+					// post Push work
+					ARRAY_FOREACH ( i, dJustPopped )
+						m_dJustPopped.Add ( dJustPopped[i] );
+					CSphMatch ** ppDec = m_hGroup2Match.Find ( uGroupKey );
+					assert ( ppDec );
+					(*ppDec)->SetAttr ( m_tLocCount, (*ppDec)->GetAttr ( m_tLocCount )-1 );
+					break;
+				}
+				case InsertRes_e::ADDED:
+				{
+					if ( bGrouped )
+						return true;
+					++m_iTotal;
+				}
+				default: break;
 			}
 		}
 
@@ -2755,26 +2758,28 @@ public:
 		const CSphMatch * pBegin = pTo;
 		int iTotal = GetLength ();
 		int iTopGroupMatch = 0;
-		int iEntry = 0;
 
-		while ( iEntry<iTotal )
+		for ( int iEntry=0; iEntry<iTotal; ++iEntry )
 		{
 			CSphMatch * pMatch = m_pData + iTopGroupMatch;
 			for ( auto * pAggr : dAggrs )
 				pAggr->Finalize ( pMatch );
+			++iTopGroupMatch;
 
-			bool bTopPassed = ( !m_pAggrFilter || m_pAggrFilter->Eval ( *pMatch ) );
+			// check if match (and whole group) is filtered out; skip them if so.
+			if ( m_pAggrFilter && !m_pAggrFilter->Eval ( *pMatch ) )
+			{
+				auto** ppMatch = m_hGroup2Match.Find ( pMatch->GetAttr ( m_tLocGroupby ));
+				for ( int iNext = ( ppMatch ? *ppMatch - m_pData : -1 ); iNext>=0; iNext = m_dGroupByList[iNext] )
+					++iEntry;
+				continue;
+			}
 
 			// copy top group match
-			if ( bTopPassed )
-			{
-				m_pSchema->CloneMatch ( pTo, *pMatch );
-				if ( iTag>=0 )
-					pTo->m_iTag = iTag;
-				pTo++;
-			}
-			iEntry++;
-			iTopGroupMatch++;
+			m_pSchema->CloneMatch ( pTo, *pMatch );
+			if ( iTag>=0 )
+				pTo->m_iTag = iTag;
+			++pTo;
 
 			// now look for the next match.
 			// In this specific case (2-nd, just after the head)
@@ -2784,14 +2789,11 @@ public:
 			while ( iNext>=0 )
 			{
 				// copy rest group matches
-				if ( bTopPassed )
-				{
-					m_tPregroup.Combine ( pTo, m_pData+iNext, pMatch );
-					if ( iTag>=0 )
-						pTo->m_iTag = iTag;
-					pTo++;
-				}
-				iEntry++;
+				m_tPregroup.Combine ( pTo, m_pData+iNext, pMatch );
+				if ( iTag>=0 )
+					pTo->m_iTag = iTag;
+				++pTo;
+				++iEntry;
 				iNext = m_dGroupByList[iNext];
 			}
 		}

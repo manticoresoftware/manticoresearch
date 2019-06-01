@@ -838,18 +838,12 @@ class CSphFreeList
 {
 private:
 	CSphTightVector<int>	m_dFree;
-	int						m_iNextFree;
+	int						m_iNextFree = 0;
 #ifndef NDEBUG
-	int						m_iSize;
+	int						m_iSize = 0;
 #endif
 
 public:
-	CSphFreeList ()
-		: m_iNextFree ( 0 )
-#ifndef NDEBUG
-		, m_iSize ( 0 )
-#endif
-	{}
 
 	void Reset ( int iSize )
 	{
@@ -862,13 +856,9 @@ public:
 
 	int Get ()
 	{
-		int iRes = -1;
-		if ( m_dFree.GetLength () )
-			iRes = m_dFree.Pop ();
-		else
-			iRes = m_iNextFree++;
-		assert ( iRes>=0 && iRes<m_iSize );
-		return iRes;
+		if ( !m_dFree.IsEmpty() )
+			return m_dFree.Pop ();
+		return m_iNextFree++;
 	}
 
 	void Free ( int iIndex )

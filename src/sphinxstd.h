@@ -1754,23 +1754,12 @@ public:
 
 	CSphFixedVector ( CSphFixedVector&& rhs ) noexcept
 	{
-		m_pData = rhs.m_pData;
-		m_iCount = rhs.m_iCount;
-		rhs.m_pData = nullptr;
-		rhs.m_iCount = 0;
+		SwapData(rhs);
 	}
 
-	CSphFixedVector & operator= ( CSphFixedVector&& rhs ) noexcept
+	CSphFixedVector & operator= ( CSphFixedVector rhs ) noexcept
 	{
-		if ( &rhs!=this )
-		{
-			SafeDeleteArray ( m_pData );
-			m_pData = rhs.m_pData;
-			m_iCount = rhs.m_iCount;
-
-			rhs.m_pData = nullptr;
-			rhs.m_iCount = 0;
-		}
+		SwapData(rhs);
 		return *this;
 	}
 
@@ -1800,7 +1789,7 @@ public:
 	}
 
 	/// swap
-	void SwapData ( CSphFixedVector<T> & rhs )
+	void SwapData ( CSphFixedVector<T> & rhs ) noexcept
 	{
 		Swap ( m_pData, rhs.m_pData );
 		Swap ( m_iCount, rhs.m_iCount );

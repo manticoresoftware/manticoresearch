@@ -3022,9 +3022,23 @@ public:
 	T *				operator -> () const		{ return m_pPtr; }
 	T *				Ptr () const				{ return m_pPtr; }
 	explicit operator bool () const				{ return m_pPtr!=nullptr; }
-	CSphScopedPtr &	operator = ( T * pPtr )		{ SafeDelete ( m_pPtr ); m_pPtr = pPtr; return *this; }
+
+	CSphScopedPtr& operator= ( T* pPtr )
+	{
+		CSphScopedPtr<T> pTmp ( pPtr );
+		Swap ( pTmp );
+		return *this;
+	}
+
+	CSphScopedPtr& operator= ( CSphScopedPtr pPtr )
+	{
+		Swap ( pPtr );
+		return *this;
+	}
 	T *				LeakPtr ()					{ T * pPtr = m_pPtr; m_pPtr = NULL; return pPtr; }
 	void			Reset ()					{ SafeDelete ( m_pPtr ); }
+	inline void 	Swap (CSphScopedPtr & rhs) noexcept { ::Swap(m_pPtr,rhs.m_pPtr);}
+
 
 protected:
 	T *				m_pPtr;

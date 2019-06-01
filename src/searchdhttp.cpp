@@ -256,7 +256,7 @@ int HttpRequestParser_c::ParserHeaderValue ( http_parser * pParser, const char *
 	assert ( pParser->data );
 	CSphString sVal;
 	sVal.SetBinary ( sAt, iLen );
-	HttpRequestParser_c * pHttpParser = (HttpRequestParser_c *)pParser->data;
+	auto * pHttpParser = (HttpRequestParser_c *)pParser->data;
 	pHttpParser->m_hOptions.Add ( sVal, pHttpParser->m_sCurField );
 	pHttpParser->m_sCurField = "";
 	return 0;
@@ -265,24 +265,23 @@ int HttpRequestParser_c::ParserHeaderValue ( http_parser * pParser, const char *
 int HttpRequestParser_c::ParserBody ( http_parser * pParser, const char * sAt, size_t iLen )
 {
 	assert ( pParser->data );
-	HttpRequestParser_c * pHttpParser = (HttpRequestParser_c *)pParser->data;
+	auto * pHttpParser = (HttpRequestParser_c *)pParser->data;
 	pHttpParser->ParseList ( sAt, iLen );
 	pHttpParser->m_sRawBody.SetBinary ( sAt, iLen );
 	return 0;
 }
 
-
 static const char * g_sIndexPage =
-"<!DOCTYPE html>"
-"<html>"
-"<head>"
-"<title>Manticore</title>"
-"</head>"
-"<body>"
-"<h1>Manticore daemon</h1>"
-"<p>%s</p>"
-"</body>"
-"</html>";
+R"index(<!DOCTYPE html>
+<html>
+<head>
+<title>Manticore</title>
+</head>
+<body>
+<h1>Manticore daemon</h1>
+<p>%s</p>
+</body>
+</html>)index";
 
 
 static void HttpHandlerIndexPage ( CSphVector<BYTE> & dData )

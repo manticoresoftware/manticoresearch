@@ -83,12 +83,12 @@ public:
 
 	StoredQuery_i * AddQuery ( const PercolateQueryArgs_t & tArgs, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError )
 		REQUIRES (!m_tLock);
-	StoredQuery_i * Query ( const PercolateQueryArgs_t & tArgs, CSphString & sError ) override;
+	StoredQuery_i * Query ( const PercolateQueryArgs_t & tArgs, CSphString & sError ) override REQUIRES (!m_tLock);
 
 	bool Prealloc ( bool bStripPath ) override;
 	void Dealloc () override {}
 	void Preread () override {}
-	void PostSetup() override;
+	void PostSetup() override REQUIRES (!m_tLock);
 	RtAccum_t * CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) override;
 	ISphTokenizer * CloneIndexingTokenizer() const override { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 	void SaveMeta ( bool bShutdown );
@@ -157,7 +157,7 @@ private:
 	bool							m_bHasFiles = false;
 
 	CSphVector<StoredQueryKey_t>	m_dStored GUARDED_BY ( m_tLock );
-	RwLock_t						m_tLock;
+	mutable RwLock_t				m_tLock;
 
 	CSphFixedVector<StoredQueryDesc_t>	m_dLoadedQueries { 0 };
 	CSphSchema						m_tMatchSchema;
@@ -1824,11 +1824,18 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 
 	CSphVector<PercolateQueryDesc> dQueries;
 
-	for ( const StoredQueryKey_t &dQuery : m_dStored )
-	{
-		auto * pQuery = dQuery.m_pQuery;
 
-		tMatch.SetAttr ( dID.m_tLocator, dQuery.m_uQUID );
+	for ( int iQuery=0; true; ++iQuery ) // iQuery<=m_dStored.GetLength checked under rlock below
+	{
+		StoredQuery_t * pQuery = nullptr;
+		{
+			ScRL_t stLock ( m_tLock );
+			if ( iQuery>=m_dStored.GetLength ())
+				break;
+			const StoredQueryKey_t& dQuery = m_dStored[iQuery];
+			pQuery = dQuery.m_pQuery;
+			tMatch.SetAttr ( dID.m_tLocator, dQuery.m_uQUID );
+		}
 
 		int iLen = pQuery->m_sQuery.Length ();
 		tMatch.SetAttr ( dColQuery.m_tLocator, (SphAttr_t) sphPackPtrAttr ( iLen+2, &pData ) );
@@ -2351,21 +2358,24 @@ void PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 	m_iMaxCodepointLength = m_pTokenizer->GetMaxCodepointLength();
 	SetupQueryTokenizer();
 
-	m_dLoadedQueries.Reset ( m_dStored.GetLength() );
-	ARRAY_FOREACH ( i, m_dLoadedQueries )
-	{
-		StoredQueryDesc_t & tQuery = m_dLoadedQueries[i];
-		const StoredQuery_t * pStored = m_dStored[i].m_pQuery;
+	{ // scoped wlock
+		ScWL_t StoreWlock ( m_tLock );
+		m_dLoadedQueries.Reset ( m_dStored.GetLength() );
+		ARRAY_FOREACH ( i, m_dLoadedQueries )
+		{
+			StoredQueryDesc_t & tQuery = m_dLoadedQueries[i];
+			const StoredQuery_t * pStored = m_dStored[i].m_pQuery;
 
-		tQuery.m_uQUID = pStored->m_uQUID;
-		tQuery.m_sQuery = pStored->m_sQuery;
-		tQuery.m_sTags = pStored->m_sTags;
-		tQuery.m_dFilters = pStored->m_dFilters;
-		tQuery.m_dFilterTree = pStored->m_dFilterTree;
+			tQuery.m_uQUID = pStored->m_uQUID;
+			tQuery.m_sQuery = pStored->m_sQuery;
+			tQuery.m_sTags = pStored->m_sTags;
+			tQuery.m_dFilters = pStored->m_dFilters;
+			tQuery.m_dFilterTree = pStored->m_dFilterTree;
 
-		SafeDelete ( pStored );
+			SafeDelete ( pStored );
+		}
+		m_dStored.Resize ( 0 );
 	}
-	m_dStored.Resize ( 0 );
 
 	PostSetup();
 }

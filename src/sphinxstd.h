@@ -3893,7 +3893,7 @@ class SCOPED_CAPABILITY CSphScopedRLock : ISphNoncopyable
 {
 public:
 	/// lock on creation
-	CSphScopedRLock ( CSphRwlock & tLock ) ACQUIRE_SHARED( tLock )
+	CSphScopedRLock ( CSphRwlock & tLock ) ACQUIRE_SHARED ( tLock )
 		: m_tLock ( tLock )
 	{
 		m_tLock.ReadLock();

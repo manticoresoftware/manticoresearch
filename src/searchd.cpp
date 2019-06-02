@@ -840,7 +840,7 @@ ServedIndex_c::ServedIndex_c ( const ServedDesc_t & tDesc )
 	*(ServedDesc_t*)(this) = tDesc;
 }
 
-ServedDesc_t * ServedIndex_c::ReadLock () const
+const ServedDesc_t * ServedIndex_c::ReadLock () const
 {
 	if ( m_tLock.ReadLock () )
 		sphLogDebugvv ( "ReadLock %p", this );
@@ -850,7 +850,7 @@ ServedDesc_t * ServedIndex_c::ReadLock () const
 		assert ( false );
 	}
 	AddRef ();
-	return ( ServedDesc_t * ) this;
+	return ( const ServedDesc_t * ) this;
 }
 
 ServedDesc_t * ServedIndex_c::WriteLock () const

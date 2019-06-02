@@ -507,21 +507,20 @@ protected:
 		}
 	}
 
-	ServedDescPtr_c GetIndex ( const CSphString & sIndex, IndexType_e eType )
+	// check whether given served index is exist and has requested type
+	bool CheckValid ( const ServedDesc_t* pServed, const CSphString& sIndex, IndexType_e eType )
 	{
-		ServedDescPtr_c pServed ( GetServed ( sIndex ), false );
 		if ( !pServed )
 		{
 			FormatError ( SPH_HTTP_STATUS_500, "no such index '%s'", sIndex.cstr () );
-			return ServedDescPtr_c();
+			return false;
 		}
 		if ( pServed->m_eType!=eType || !pServed->m_pIndex )
 		{
 			FormatError ( SPH_HTTP_STATUS_500, "index '%s' is not %s (enabled=%d)", sIndex.cstr(), GetTypeName ( eType ).cstr(), (int)(!!pServed->m_pIndex) );
-			return ServedDescPtr_c();
+			return false;
 		}
-
-		return pServed;
+		return true;
 	}
 };
 
@@ -1264,8 +1263,8 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 	CSphVector<FilterTreeItem_t> dFilterTree;
 	if ( tFilters )
 	{
-		ServedDescPtr_c pServed ( GetIndex ( sIndex, IndexType_e::PERCOLATE ) );
-		if ( !pServed )
+		ServedDescRPtr_c pServed ( GetServed ( sIndex ));
+		if ( !CheckValid ( pServed, sIndex, IndexType_e::PERCOLATE ) )
 			return false;
 
 		auto pIndex = (PercolateIndex_i *)pServed->m_pIndex;
@@ -1284,8 +1283,8 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 	// scope for index lock
 	bool bOk = false;
 	{
-		ServedDescPtr_c pServed ( GetIndex ( sIndex, IndexType_e::PERCOLATE ) );
-		if ( !pServed )
+		ServedDescRPtr_c pServed ( GetServed ( sIndex ));
+		if ( !CheckValid ( pServed, sIndex, IndexType_e::PERCOLATE ))
 			return false;
 
 		auto pIndex = (PercolateIndex_i *)pServed->m_pIndex;

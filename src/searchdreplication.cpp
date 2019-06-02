@@ -207,6 +207,8 @@ public:
 private:
 	RtAccum_t & m_tAcc;
 	int * m_pDeletedCount = nullptr;
+	bool CommitNonEmptyCmds ( RtIndex_i* pIndex, const ReplicationCommand_t& tCmd, bool bOnlyTruncate,
+		CSphString& sError ) const;
 };
 
 // cluster list
@@ -1585,25 +1587,36 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 		return false;
 	}
 
-	ServedDescPtr_c pDesc ( pServed, ( tCmd.m_eCommand==ReplicationCommand_e::TRUNCATE ) );
-	if ( pDesc->m_eType!=IndexType_e::PERCOLATE )
+	// special path with wlocked index for truncate
+	if ( tCmd.m_eCommand==ReplicationCommand_e::TRUNCATE )
+	{
+		ServedDescWPtr_c pWDesc ( pServed );
+		if ( pWDesc->m_eType!=IndexType_e::PERCOLATE )
+		{
+			sphWarning ( "wrong type of index '%s' for replication, command %d", tCmd.m_sIndex.cstr (),
+						 ( int ) tCmd.m_eCommand );
+			return false;
+		}
+		auto* pIndex = ( RtIndex_i* ) pWDesc->m_pIndex;
+		sphLogDebugRpl ( "pq-truncate-commit, index '%s'", tCmd.m_sIndex.cstr ());
+		if ( !pIndex->Truncate ( sError ))
+			sphWarning ( "%s", sError.cstr ());
+		return true;
+	}
+
+	ServedDescRPtr_c pRDesc ( pServed );
+	if ( pRDesc->m_eType!=IndexType_e::PERCOLATE )
 	{
 		sphWarning ( "wrong type of index '%s' for replication, command %d", tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand );
 		return false;
 	}
 
-	RtIndex_i * pIndex = (RtIndex_i * )pDesc->m_pIndex;
-	if ( tCmd.m_eCommand==ReplicationCommand_e::TRUNCATE )
-	{
-		sphLogDebugRpl ( "pq-truncate-commit, index '%s'", tCmd.m_sIndex.cstr() );
-		if ( !pIndex->Truncate ( sError ) )
-			sphWarning ( "%s", sError.cstr() );
-	} else
-	{
-		sphLogDebugRpl ( "pq-commit, index '%s', uid " INT64_FMT ", queries %d, tags %s", tCmd.m_sIndex.cstr(), ( tCmd.m_pStored ? tCmd.m_pStored->m_uQUID : int64_t(0) ),
-			tCmd.m_dDeleteQueries.GetLength(), tCmd.m_sDeleteTags.scstr() );
+	auto * pIndex = (RtIndex_i * ) pRDesc->m_pIndex;
+	assert ( tCmd.m_eCommand!=ReplicationCommand_e::TRUNCATE );
+	sphLogDebugRpl ( "pq-commit, index '%s', uid " INT64_FMT ", queries %d, tags %s",
+		tCmd.m_sIndex.cstr(), ( tCmd.m_pStored ? tCmd.m_pStored->m_uQUID : int64_t(0) ),
+		tCmd.m_dDeleteQueries.GetLength(), tCmd.m_sDeleteTags.scstr() );
 		pIndex->Commit ( nullptr, &tAcc );
-	}
 
 	return true;
 }
@@ -1679,7 +1692,7 @@ bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pDeletedC
 			tWriter.PutWord ( (WORD)tCmd.m_eCommand );
 			tWriter.PutWord ( g_iReplicateCommandVer );
 			tWriter.PutString ( tCmd.m_sIndex );
-			
+
 		}
 		dBufQueries.AddN ( sizeof(DWORD) );
 		int iLenOff = dBufQueries.GetLength();
@@ -1747,54 +1760,82 @@ bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pDeletedC
 }
 
 // commit for common commands
-bool CommitMonitor_c::Commit ( CSphString & sError )
+bool CommitMonitor_c::Commit ( CSphString& sError )
 {
-	// there could be index already at accumulator
-	// however truncate need to obtain and write lock index for operation
-	RtIndex_i * pIndex = m_tAcc.GetIndex();
-	ServedDescPtr_c tLock;
-	if ( !pIndex && m_tAcc.m_dCmd.GetLength() )
+	RtIndex_i* pIndex = m_tAcc.GetIndex ();
+
+	// short path for usual accum without commands
+	if ( m_tAcc.m_dCmd.IsEmpty() )
 	{
-		bool bWlock = ( m_tAcc.m_dCmd[0]->m_eCommand==ReplicationCommand_e::TRUNCATE );
-		tLock = ServedDescPtr_c ( GetServed ( m_tAcc.m_dCmd[0]->m_sIndex ), bWlock );
-		if ( tLock && ServedDesc_t::IsMutable ( tLock ) )
-			pIndex = (RtIndex_i *)tLock->m_pIndex;
-		else if ( tLock )
-			sError = "requires an existing RT or percolate index";
-		else
-			sError = "requires an existing index";
+		if ( !pIndex )
+			return false;
+
+		pIndex->Commit ( m_pDeletedCount, &m_tAcc );
+		return true;
 	}
 
-	if ( !pIndex )
-		return false;
+	ReplicationCommand_t& tCmd = *m_tAcc.m_dCmd[0];
+	bool bTruncate = tCmd.m_eCommand==ReplicationCommand_e::TRUNCATE;
+	bool bOnlyTruncate = bTruncate && ( m_tAcc.m_dCmd.GetLength ()==1 );
 
-	bool bOk = false;
-	if ( m_tAcc.m_dCmd.GetLength()==1 && m_tAcc.m_dCmd[0]->m_eCommand==ReplicationCommand_e::TRUNCATE )
+	// process with index from accum (no need to lock/unlock it)
+	if ( pIndex )
+		return CommitNonEmptyCmds ( pIndex, tCmd, bOnlyTruncate, sError );
+
+	auto pServed = GetServed ( tCmd.m_sIndex );
+	if ( !pServed )
 	{
-		ReplicationCommand_t & tCmd = *m_tAcc.m_dCmd[0];
-		bOk = pIndex->Truncate ( sError );
-		if ( bOk && tCmd.m_bReconfigure )
-		{
-			assert ( tCmd.m_tReconfigure.Ptr() );
-			CSphReconfigureSetup tSetup;
-			bool bSame = pIndex->IsSameSettings ( *tCmd.m_tReconfigure.Ptr(), tSetup, sError );
-			if ( !bSame && sError.IsEmpty() )
-				pIndex->Reconfigure ( tSetup );
-			bOk = sError.IsEmpty();
-		}
-	} else
+		sError = "requires an existing index";
+		return false;
+	}
+
+	// truncate needs wlocked index
+	if ( bTruncate )
+	{
+		ServedDescWPtr_c wLocked ( pServed );
+		if ( ServedDesc_t::IsMutable ( wLocked ))
+			return CommitNonEmptyCmds (( RtIndex_i* ) wLocked->m_pIndex, tCmd, bOnlyTruncate, sError );
+
+		sError = "requires an existing RT or percolate index";
+		return false;
+	}
+
+	ServedDescRPtr_c rLocked ( pServed );
+	if ( ServedDesc_t::IsMutable ( rLocked ))
+		return CommitNonEmptyCmds (( RtIndex_i* ) rLocked->m_pIndex, tCmd, bOnlyTruncate, sError );
+
+	sError = "requires an existing RT or percolate index";
+	return false;
+}
+
+bool CommitMonitor_c::CommitNonEmptyCmds ( RtIndex_i* pIndex, const ReplicationCommand_t& tCmd, bool bOnlyTruncate,
+	CSphString & sError ) const
+{
+	assert ( pIndex );
+	if ( !bOnlyTruncate )
 	{
 		pIndex->Commit ( m_pDeletedCount, &m_tAcc );
-		bOk = true;
+		return true;
 	}
 
-	return bOk;
+	if ( !pIndex->Truncate ( sError ))
+		return false;
+
+	if ( !tCmd.m_bReconfigure )
+		return true;
+
+	assert ( tCmd.m_tReconfigure.Ptr ());
+	CSphReconfigureSetup tSetup;
+	bool bSame = pIndex->IsSameSettings ( *tCmd.m_tReconfigure.Ptr (), tSetup, sError );
+	if ( !bSame && sError.IsEmpty ())
+		pIndex->Reconfigure ( tSetup );
+	return sError.IsEmpty ();
 }
 
 // commit for Total Order Isolation commands
 bool CommitMonitor_c::CommitTOI ( CSphString & sError )
 {
-	if ( !m_tAcc.m_dCmd.GetLength() )
+	if ( m_tAcc.m_dCmd.IsEmpty() )
 	{
 		sError.SetSprintf ( "empty accumulator" );
 		return false;

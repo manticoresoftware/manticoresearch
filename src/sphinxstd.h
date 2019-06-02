@@ -3073,10 +3073,9 @@ public:
 	explicit		CSphRefcountedPtr ( T * pPtr ) : m_pPtr ( pPtr ) {}	///< construction from raw pointer, takes over ownership!
 
 	CSphRefcountedPtr ( const CSphRefcountedPtr& rhs )
+		: m_pPtr ( rhs.m_pPtr )
 	{
-		if ( rhs.m_pPtr )
-			rhs.m_pPtr->AddRef ();
-		m_pPtr = rhs.m_pPtr;
+		SafeAddRef ( m_pPtr );
 	}
 
 	CSphRefcountedPtr ( CSphRefcountedPtr&& rhs ) noexcept

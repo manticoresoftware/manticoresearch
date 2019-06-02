@@ -735,9 +735,8 @@ class ServedIndex_c : public ISphRefcountedMT, private ServedDesc_t, public Serv
 private:
 	friend class ServedDescRPtr_c;
 	friend class ServedDescWPtr_c;
-	friend class ServedDescPtr_c;
 
-	ServedDesc_t * ReadLock () const ACQUIRE_SHARED( m_tLock );
+	const ServedDesc_t * ReadLock () const ACQUIRE_SHARED( m_tLock );
 	ServedDesc_t * WriteLock () const ACQUIRE( m_tLock );
 	void Unlock () const UNLOCK_FUNCTION( m_tLock );
 
@@ -787,7 +786,7 @@ public:
 	operator const ServedDesc_t * () const
 	{ return m_pCore; }
 private:
-	ServedDesc_t * m_pCore = nullptr;
+	const ServedDesc_t * m_pCore = nullptr;
 	const ServedIndex_c * m_pLock = nullptr;
 };
 
@@ -822,72 +821,6 @@ public:
 
 	operator ServedDesc_t * () const
 	{ return m_pCore; }
-
-private:
-	ServedDesc_t * m_pCore = nullptr;
-	const ServedIndex_c * m_pLock = nullptr;
-};
-
-
-/// RAII exclusive writer for ServedDesc_t hidden in ServedIndex_c
-class SCOPED_CAPABILITY ServedDescPtr_c : ISphNoncopyable
-{
-public:
-	ServedDescPtr_c () = default;
-
-	// acquire write (exclusive) lock
-	ServedDescPtr_c ( const ServedIndex_c * pLock, bool bWrite ) ACQUIRE ( pLock->m_tLock )
-		: m_pLock { pLock }
-	{
-		if ( m_pLock )
-		{
-			if ( bWrite )
-				m_pCore = m_pLock->WriteLock();
-			else
-				m_pCore = m_pLock->ReadLock();
-		}
-	}
-
-	ServedDescPtr_c ( ServedDescPtr_c && tOther )
-		: m_pCore ( std::move ( tOther.m_pCore ) )
-		, m_pLock ( std::move ( tOther.m_pLock ) )
-	{
-		tOther.m_pCore = nullptr;
-		tOther.m_pLock = nullptr;
-	}
-
-	ServedDescPtr_c & operator= ( ServedDescPtr_c && tOther )
-	{
-		m_pCore = std::move ( tOther.m_pCore );
-		m_pLock = std::move ( tOther.m_pLock );
-		tOther.m_pCore = nullptr;
-		tOther.m_pLock = nullptr;
-
-		return *this;
-	}
-
-	/// unlock on going out of scope
-	~ServedDescPtr_c () RELEASE ()
-	{
-		if ( m_pLock )
-			m_pLock->Unlock ();
-	}
-
-public:
-	ServedDesc_t * operator-> () const
-	{
-		return m_pCore;
-	}
-
-	explicit operator bool () const
-	{
-		return m_pCore!=nullptr;
-	}
-
-	operator ServedDesc_t * () const
-	{
-		return m_pCore;
-	}
 
 private:
 	ServedDesc_t * m_pCore = nullptr;

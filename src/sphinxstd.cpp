@@ -1184,37 +1184,71 @@ bool CSphMutex::Unlock ()
 	return ReleaseMutex ( m_hMutex )==TRUE;
 }
 
-bool CSphAutoEvent::Init ()
+EventWrapper_c::EventWrapper_c ()
 {
-	m_hEvent = CreateEvent ( NULL, FALSE, FALSE, NULL );
+	m_hEvent = CreateEvent ( NULL, TRUE, FALSE, NULL );
 	m_bInitialized = ( m_hEvent!=0 );
-		return m_bInitialized;
 }
 
-bool CSphAutoEvent::Done()
+EventWrapper_c::~EventWrapper_c ()
 {
 	if ( !m_bInitialized )
-		return true;
+		return;
 
 	m_bInitialized = false;
-	return CloseHandle ( m_hEvent )==TRUE;
+	CloseHandle ( m_hEvent );
 }
 
-void CSphAutoEvent::SetEvent()
+template<>
+void AutoEvent_T<true>::SetEvent()
 {
 	m_iSent = 1;
 	::SetEvent ( m_hEvent );
 }
 
-void CSphAutoEvent::WaitEvent()
+template<>
+void AutoEvent_T<false>::SetEvent ()
 {
-	if ( m_iSent )
+	++m_iSent;
+	::SetEvent ( m_hEvent );
+}
+
+template<>
+bool AutoEvent_T<true>::WaitEvent ( int iMsec )
+{
+	if ( !m_bInitialized )
+		return false;
+
+	if ( !m_iSent )
 	{
-		m_iSent = 0;
-		return;
+		DWORD iTime=( iMsec == -1 )?INFINITE:iMsec;
+		auto iRes=WaitForSingleObject ( m_hEvent, iTime );
+		if ( iRes == WAIT_TIMEOUT )
+			return false;
 	}
 
-	WaitForSingleObject ( m_hEvent, INFINITE );
+	ResetEvent ( m_hEvent );
+	m_iSent=0;
+	return true;
+}
+
+template<>
+bool AutoEvent_T<false>::WaitEvent ( int iMsec )
+{
+	if ( !m_bInitialized )
+		return false;
+
+	if ( !m_iSent )
+	{
+		DWORD iTime=( iMsec == -1 )?INFINITE:iMsec;
+		auto iRes=WaitForSingleObject ( m_hEvent, iTime );
+		if ( iRes == WAIT_TIMEOUT )
+			return false;
+	}
+
+	ResetEvent ( m_hEvent );
+	--m_iSent;
+	return true;
 }
 
 #else
@@ -1284,27 +1318,23 @@ bool CSphMutex::Unlock ()
 	return ( pthread_mutex_unlock ( &m_tMutex )==0 );
 }
 
-bool CSphAutoEvent::Init ()
+EventWrapper_c::EventWrapper_c ()
 {
-	if ( m_bInitialized )
-		return true;
 	m_bInitialized = ( pthread_mutex_init ( &m_tMutex, nullptr )==0 );
 	m_bInitialized &= ( pthread_cond_init ( &m_tCond, nullptr )==0 );
-	return m_bInitialized;
 }
 
-bool CSphAutoEvent::Done ()
+EventWrapper_c::~EventWrapper_c ()
 {
 	if ( !m_bInitialized )
-		return true;
+		return;
 
-	m_bInitialized = false;
-	bool bDone = ( pthread_cond_destroy ( &m_tCond )==0 );
-	bDone &= ( pthread_mutex_destroy ( &m_tMutex )==0 );
-	return bDone;
+	pthread_cond_destroy ( &m_tCond );
+	pthread_mutex_destroy ( &m_tMutex );
 }
 
-void CSphAutoEvent::SetEvent ()
+template<>
+void AutoEvent_T<false>::SetEvent ()
 {
 	if ( !m_bInitialized )
 		return;
@@ -1315,17 +1345,88 @@ void CSphAutoEvent::SetEvent ()
 	pthread_mutex_unlock ( &m_tMutex );
 }
 
-void CSphAutoEvent::WaitEvent()
+template <>
+void AutoEvent_T<true>::SetEvent ()
 {
 	if ( !m_bInitialized )
 		return;
 
 	pthread_mutex_lock ( &m_tMutex );
-	while (  !m_iSent )
-		pthread_cond_wait ( &m_tCond, &m_tMutex );
+	m_iSent=1;
+	pthread_cond_signal ( &m_tCond );
+	pthread_mutex_unlock ( &m_tMutex );
+}
+
+template <>
+bool AutoEvent_T<false>::WaitEvent ( int iMsec )
+{
+	if ( !m_bInitialized )
+		return false;
+
+	if ( iMsec==-1 )
+	{
+		pthread_mutex_lock ( &m_tMutex );
+		while (  !m_iSent )
+			pthread_cond_wait ( &m_tCond, &m_tMutex );
+
+		--m_iSent;
+		pthread_mutex_unlock ( &m_tMutex );
+		return true;
+	}
+
+#ifdef HAVE_PTHREAD_COND_TIMEDWAIT
+	struct timespec ts;
+	clock_gettime ( CLOCK_REALTIME, &ts );
+
+	int ns = ts.tv_nsec + ( iMsec % 1000 ) * 1000000;
+	ts.tv_sec += ( ns / 1000000000 ) + ( iMsec / 1000 );
+	ts.tv_nsec = ( ns % 1000000000 );
+
+	int iRes = 0;
+	pthread_mutex_lock ( &m_tMutex );
+	while ( !m_iSent && !iRes )
+		iRes = pthread_cond_timedwait ( &m_tCond, &m_tMutex, &ts );
 
 	--m_iSent;
 	pthread_mutex_unlock ( &m_tMutex );
+	return iRes!=ETIMEDOUT;
+#endif
+}
+
+template <>
+bool AutoEvent_T<true>::WaitEvent ( int iMsec )
+{
+	if ( !m_bInitialized )
+		return false;
+
+	if ( iMsec == -1 )
+	{
+		pthread_mutex_lock ( &m_tMutex );
+		while ( !m_iSent )
+			pthread_cond_wait ( &m_tCond, &m_tMutex );
+
+		m_iSent = 0;
+		pthread_mutex_unlock ( &m_tMutex );
+		return true;
+	}
+
+#ifdef HAVE_PTHREAD_COND_TIMEDWAIT
+	struct timespec ts;
+	clock_gettime ( CLOCK_REALTIME, &ts );
+
+	int ns = ts.tv_nsec + ( iMsec % 1000 ) * 1000000;
+	ts.tv_sec += ( ns / 1000000000 ) + ( iMsec / 1000 );
+	ts.tv_nsec = ( ns % 1000000000 );
+
+	int iRes = 0;
+	pthread_mutex_lock ( &m_tMutex );
+	while ( !m_iSent && !iRes )
+		iRes = pthread_cond_timedwait ( &m_tCond, &m_tMutex, &ts );
+
+	m_iSent=0;
+	pthread_mutex_unlock ( &m_tMutex );
+	return iRes!=ETIMEDOUT;
+#endif
 }
 
 #endif

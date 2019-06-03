@@ -3772,34 +3772,19 @@ protected:
 };
 
 // event implementation
-class CSphAutoEvent : public ISphNoncopyable
+class EventWrapper_c : public ISphNoncopyable
 {
 public:
-	CSphAutoEvent ()
-	{
-		Init();
-	}
-	~CSphAutoEvent()
-	{
-		Done();
-	}
-
-	// increase event's count and issue an event.
-	void SetEvent();
-
-	// decrease event's count. If count empty, go to sleep until new events
-	void WaitEvent();
+	EventWrapper_c ();
+	~EventWrapper_c();
 
 	inline bool Initialized() const
 	{
 		return m_bInitialized;
 	}
 
-private:
-	bool Init ();
-	bool Done ();
+protected:
 	bool m_bInitialized = false;
-	volatile int  m_iSent = 0;
 
 #if USE_WINDOWS
 	HANDLE m_hEvent = 0;
@@ -3808,6 +3793,24 @@ private:
 	pthread_mutex_t m_tMutex;
 #endif
 };
+
+template <bool bONESHOT=true>
+class AutoEvent_T: public EventWrapper_c
+{
+public:
+	// increase of set (oneshot) event's count and issue an event.
+	void SetEvent ();
+
+	// decrease or reset (oneshot) event's count. If count empty, go to sleep until new events
+	// returns true if event happened, false if timeout reached or event is not initialized
+	bool WaitEvent ( int iMsec = -1); // -1 means 'infinite'
+
+private:
+	volatile int m_iSent = 0;
+};
+
+using CSphAutoEvent = AutoEvent_T<false>;
+using OneshotEvent_c = AutoEvent_T<>;
 
 /// scoped mutex lock
 template < typename T >

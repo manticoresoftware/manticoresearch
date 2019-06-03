@@ -730,6 +730,174 @@ TEST ( functions, RWLock )
 
 //////////////////////////////////////////////////////////////////////////
 
+CSphAutoEvent g_multievent;
+OneshotEvent_c g_oneevent;
+volatile int64_t tmNow;
+
+int getms()
+{
+	return (sphMicroTimer () - tmNow)/1000;
+}
+
+void AutoEventest ( void* )
+{
+	printf("\n%d thread started", getms());
+	for ( int i=0; i<5; ++i)
+	{
+		ASSERT_TRUE ( g_multievent.WaitEvent ()) << "WaitEvent";
+		printf ( "\n%d B%d: %d-st event waited", getms (),i+1,i);
+	}
+}
+
+void AutoEventestTimed ( void* )
+{
+	printf ( "\n%d B1: started", getms ());
+	for ( int i = 0; i<5; ++i )
+	{
+		ASSERT_TRUE ( g_multievent.WaitEvent (500)) << "WaitEvent";
+		printf ( "\n%d B%d: %d-st event waited", getms (), i+2, i );
+	}
+	ASSERT_FALSE ( g_multievent.WaitEvent ( 200 )) << "WaitEvent";
+	printf ( "\n%d B7: one event timed-out", getms () );
+	ASSERT_TRUE ( g_multievent.WaitEvent ( 500 )) << "WaitEvent";
+	ASSERT_TRUE ( g_multievent.WaitEvent ( 500 )) << "WaitEvent";
+	printf ( "\n%d B8: last 2 events succeeded", getms ());
+}
+
+// multievent - we can set it N times, and then it may be waited N times also, but N+1 will block
+TEST ( functions, MultiAutoEvent )
+{
+	tmNow = sphMicroTimer ();
+	SphThread_t th;
+
+	// set 4 events before event start the thread. Expect, it will be catched.
+	printf ( "\n%d A1: set event 4 times a row", getms ());
+	g_multievent.SetEvent ();
+	g_multievent.SetEvent ();
+	g_multievent.SetEvent ();
+	g_multievent.SetEvent ();
+
+
+	// now start the thread, it will receive events
+	ASSERT_TRUE ( sphThreadCreate ( &th, AutoEventest, nullptr )) << "autoevent thread created";
+	printf ( "\n%d A2: created working thread", getms () );
+	// sleep half-a-second and set last event.
+	sphSleepMsec ( 500 );
+	printf ( "\n%d A3: set event", getms () );
+	g_multievent.SetEvent ();
+
+	sphSleepMsec ( 100 );
+	ASSERT_TRUE ( sphThreadJoin ( &th )) << "autoevent thread done";
+}
+
+TEST ( functions, MultiAutoEventTimed )
+{
+	tmNow=sphMicroTimer ();
+	SphThread_t th;
+
+	// set 4 events before event start the thread. Expect, it will be catched.
+	printf ( "\n%d 4 events set", getms () );
+	g_multievent.SetEvent ();
+	g_multievent.SetEvent ();
+	g_multievent.SetEvent ();
+	g_multievent.SetEvent ();
+
+	// now start the thread, it will receive events
+	ASSERT_TRUE ( sphThreadCreate ( &th, AutoEventestTimed, nullptr ) ) << "autoeventtimed thread created";
+	printf ( "\n%d A2: created working thread", getms () );
+
+	// sleep half-a-second and set last event.
+	sphSleepMsec ( 100 );
+	printf ( "\n%d A3: set event", getms () );
+	g_multievent.SetEvent ();
+	sphSleepMsec ( 400 );
+	printf ( "\n%d A4: set event twice", getms () );
+	g_multievent.SetEvent ();
+	g_multievent.SetEvent ();
+	sphSleepMsec ( 100 );
+	ASSERT_TRUE ( sphThreadJoin ( &th ) ) << "autoevent thread done";
+}
+
+void OneshotEventTest ( void* )
+{
+	printf ( "\n%d thread started", getms ());
+	for ( int i = 0; i<2; ++i )
+	{
+		ASSERT_TRUE ( g_oneevent.WaitEvent ()) << "WaitEvent";
+		printf ( "\n%d thread %d-st event waited", getms (), i );
+	}
+}
+
+void OneshotEventTestTimed ( void* )
+{
+	printf ( "\n%d B1: started", getms ());
+	bool bRes=g_oneevent.WaitEvent ( 500 ); ASSERT_TRUE ( bRes ) << "WaitEvent";
+	printf ( "\n%d B2: 1-st event returned %s", getms (), bRes?"true":"false" );
+	bRes=g_oneevent.WaitEvent ( 500 ); ASSERT_TRUE ( bRes ) << "WaitEvent";
+	printf ( "\n%d B3: 2-nd event returned %s", getms (), bRes?"true":"false" );
+	bRes=g_oneevent.WaitEvent ( 500 ); ASSERT_TRUE ( bRes ) << "WaitEvent";
+	printf ( "\n%d B4: 3-rd event returned %s", getms (), bRes?"true":"false" );
+	sphSleepMsec ( 100 );
+	bRes=g_oneevent.WaitEvent ( 500 ); ASSERT_FALSE ( bRes ) << "WaitEvent";
+	printf ( "\n%d B5: 4-th event returned %s", getms (), bRes?"true":"false" );
+}
+
+// oneshot event - we can set it N times, but only once it waited, and then will block.
+TEST ( functions, OneshotAutoEvent )
+{
+	tmNow = sphMicroTimer ();
+	SphThread_t th;
+
+	// set 4 events before event start the thread. Expect, it will be catched.
+	printf ( "\n%d A1: set event 4 times a row", getms ());
+	g_oneevent.SetEvent ();
+	g_oneevent.SetEvent ();
+	g_oneevent.SetEvent ();
+	g_oneevent.SetEvent ();
+
+	// now start the thread, it will receive events
+	ASSERT_TRUE ( sphThreadCreate ( &th, OneshotEventTest, nullptr )) << "autoevent thread created";
+	printf ( "\n%d A2: created working thread", getms ());
+
+	// sleep half-a-second and set last event.
+	sphSleepMsec ( 500 );
+	printf ( "\n%d A3: set event", getms ());
+	g_oneevent.SetEvent ();
+	sphSleepMsec ( 100 );
+	ASSERT_TRUE ( sphThreadJoin ( &th )) << "autoevent thread done";
+}
+
+// oneshot event - we can set it N times, but only once it waited, and then will block.
+TEST ( functions, OneshotAutoEventTimed )
+{
+	tmNow=sphMicroTimer ();
+	SphThread_t th;
+	
+	// set 4 events before event start the thread. Expect, it will be catched.
+	printf ( "\n%d A1: set event 4 times a row", getms () );
+	g_oneevent.SetEvent ();
+	g_oneevent.SetEvent ();
+	g_oneevent.SetEvent ();
+	g_oneevent.SetEvent ();
+
+	// now start the thread, it will receive events
+	ASSERT_TRUE ( sphThreadCreate ( &th, OneshotEventTestTimed, nullptr ) ) << "autoevent thread created";
+	printf ( "\n%d A2: created working thread", getms () );
+
+	// sleep half-a-second and set last event.
+	sphSleepMsec ( 100 );
+	printf ( "\n%d A3: set event", getms () );
+	g_oneevent.SetEvent ();
+	sphSleepMsec ( 400 );
+	printf ( "\n%d A4: set event twice", getms () );
+	g_oneevent.SetEvent ();
+	g_oneevent.SetEvent ();
+	sphSleepMsec ( 100 );
+	ASSERT_TRUE ( sphThreadJoin ( &th ) ) << "autoevent thread done";
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 void CleanupCallback ( void * pArg )
 {
 	*( bool * ) pArg = true;

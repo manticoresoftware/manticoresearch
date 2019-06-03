@@ -107,6 +107,9 @@
 /* Define to 1 if you have the `pthread_mutex_timedlock' function. */
 #cmakedefine HAVE_PTHREAD_MUTEX_TIMEDLOCK ${HAVE_PTHREAD_MUTEX_TIMEDLOCK}
 
+/* Define to 1 if you have the `pthread_cond_timedwait' function. */
+#cmakedefine HAVE_PTHREAD_COND_TIMEDWAIT ${HAVE_PTHREAD_COND_TIMEDWAIT}
+
 /* Define to 1 if you have the `pthread_getname_np' function. */
 #cmakedefine HAVE_PTHREAD_GETNAME_NP ${HAVE_PTHREAD_GETNAME_NP}
 

@@ -267,6 +267,7 @@ else ( WIN32 )
 	find_package ( Threads REQUIRED )
 	list ( APPEND EXTRA_LIBRARIES ${CMAKE_THREAD_LIBS_INIT} )
 	ac_check_func_ex ( "pthread_mutex_timedlock" "" "${CMAKE_THREAD_LIBS_INIT}" )
+	ac_check_func_ex ( "pthread_cond_timedwait" "" "${CMAKE_THREAD_LIBS_INIT}" )
 
 	message ( STATUS "Checking for standard header files" )
 	include ( ac_header_stdc )

@@ -1939,7 +1939,7 @@ DWORD sphGetAddress ( const char * sHost, bool bFatal, bool bIP )
 
 
 #if !USE_WINDOWS
-int sphCreateUnixSocket ( const char * sPath )
+int sphCreateUnixSocket ( const char * sPath ) REQUIRES ( MainThread )
 {
 	static struct sockaddr_un uaddr;
 	size_t len = strlen ( sPath );
@@ -1973,7 +1973,7 @@ int sphCreateUnixSocket ( const char * sPath )
 #endif // !USE_WINDOWS
 
 
-int sphCreateInetSocket ( DWORD uAddr, int iPort )
+int sphCreateInetSocket ( DWORD uAddr, int iPort ) REQUIRES ( MainThread )
 {
 	char sAddress[SPH_ADDRESS_SIZE];
 	sphFormatIP ( sAddress, SPH_ADDRESS_SIZE, uAddr );
@@ -2194,7 +2194,8 @@ ListenerDesc_t ParseListener ( const char * sSpec )
 }
 
 
-void AddListener ( const CSphString & sListen, bool bHttpAllowed, CSphVector<ListenerDesc_t> & dDesc )
+void AddListener ( const CSphString & sListen, bool bHttpAllowed, CSphVector<ListenerDesc_t> & dDesc )  REQUIRES (
+	MainThread )
 {
 	ListenerDesc_t tDesc = ParseListener ( sListen.cstr() );
 
@@ -11340,7 +11341,7 @@ void HandleCommandStatus ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c
 // FLUSH HANDLER
 //////////////////////////////////////////////////////////////////////////
 
-static int CommandFlush ()
+static int CommandFlush () EXCLUDES ( MainThread )
 {
 	// force a check in head process, and wait it until completes
 	// FIXME! semi active wait..
@@ -18898,6 +18899,7 @@ bool PreallocNewIndex ( ServedDesc_t &tIdx, const char * szIndexName ) EXCLUDES 
 static CSphMutex g_tRotateThreadMutex;
 // called either from MysqlReloadIndex, either from RotationThreadFunc (never from main thread).
 static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError )
+	EXCLUDES ( MainThread, g_tRotateThreadMutex )
 {
 	// only one rotation and reload thread allowed to prevent deadlocks
 	ScopedMutex_t tBlockRotations ( g_tRotateThreadMutex );
@@ -20390,7 +20392,7 @@ static void SetIndexPriority ( IndexWithPriority_t & tIndex, int iPriority, cons
 }
 
 
-static void CalcRotationPriorities()
+static void CalcRotationPriorities() REQUIRES ( MainThread, g_tRotateThreadMutex )
 {
 	SmallStringHash_T<IndexWithPriority_t> tIndexesToRotate;
 
@@ -20452,8 +20454,8 @@ static void CalcRotationPriorities()
 	}
 }
 
-
-static void CheckIndexesForSeamless()
+// ServiceMain() -> TickHead() -> CheckRotate() -> CheckIndexesForSeamless()
+static void CheckIndexesForSeamless() REQUIRES ( MainThread )
 {
 	// check what indexes need to be rotated
 	SmallStringHash_T<bool> dNotCapableForRotation;
@@ -20495,7 +20497,7 @@ static void CheckIndexesForSeamless()
 }
 
 
-static void DoGreedyRotation()
+static void DoGreedyRotation() REQUIRES ( MainThread )
 {
 	ScRL_t tRotateConfigMutex { g_tRotateConfigMutex };
 
@@ -20586,9 +20588,9 @@ static void DoGreedyRotation()
 
 
 // ServiceMain() -> TickHead() -> CheckRotate()
-void CheckRotate () REQUIRES ( MainThread )
+void CheckRotate () REQUIRES ( MainThread ) EXCLUDES ( g_tRotateThreadMutex )
 {
-	// do we need to rotate now?
+	// do we need to rotate now? If no sigHUP received, or if we are already rotating - no.
 	if ( !g_bNeedRotate || g_bInRotate )
 		return;
 

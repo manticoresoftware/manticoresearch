@@ -20123,9 +20123,10 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 	return ADD_ERROR;
 }
 
-
-bool CheckConfigChanges ()
+// check if config changed, and also cache content into dContent (will be used instead of one more config touching)
+bool CheckConfigChanges ( CSphVector<char>& dContent )
 {
+	dContent.Reset();
 	DWORD uCRC32 = 0;
 	struct stat tStat = {0}; // fixme! we have struct_stat in defines, investigate it!
 
@@ -20139,25 +20140,37 @@ bool CheckConfigChanges ()
 	if ( fstat ( fileno ( fp ), &tStat )<0 )
 		memset ( &tStat, 0, sizeof ( tStat ) );
 	bool bGotLine = fgets ( sBuf, sizeof(sBuf), fp );
-	fclose ( fp );
+
 	if ( !bGotLine )
+	{
+		fclose ( fp );
 		return true;
+	}
 
 	char * p = sBuf;
 	while ( isspace(*p) )
 		p++;
 	if ( p[0]=='#' && p[1]=='!' )
 	{
+		fclose ( fp );
 		p += 2;
-
-		CSphVector<char> dContent;
 		char sError [ 1024 ];
 		if ( !TryToExec ( p, g_sConfigFile.cstr(), dContent, sError, sizeof(sError) ) )
 			return true;
 
 		uCRC32 = sphCRC32 ( dContent.Begin(), dContent.GetLength() );
 	} else
-		sphCalcFileCRC32 ( g_sConfigFile.cstr (), uCRC32 );
+	{
+		while ( bGotLine ) {
+			auto iLen = strlen ( sBuf );
+			auto sDst = dContent.AddN ( iLen );
+			memcpy ( sDst, sBuf, iLen );
+			bGotLine = fgets ( sBuf, sizeof ( sBuf ), fp );
+		}
+		dContent.Add('\0');
+		fclose ( fp );
+		uCRC32 = sphCRC32 ( dContent.Begin (), dContent.GetLength ());
+	}
 #else
 	sphCalcFileCRC32 ( g_sConfigFile.cstr (), uCRC32 );
 	if ( stat ( g_sConfigFile.cstr (), &tStat )<0 )
@@ -20200,12 +20213,6 @@ void InitPersistentPool()
 // ServiceMain() -> TickHead() -> CheckRotate() -> ReloadIndexSettings().
 static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread, g_tRotateConfigMutex )
 {
-	if ( !tCP.ReParse ( g_sConfigFile.cstr () ) )
-	{
-		sphWarning ( "failed to parse config file '%s'; using previous settings", g_sConfigFile.cstr () );
-		return;
-	}
-
 	// collect names of all existing local indexes as assumed for deletion
 	SmallStringHash_T<bool> dLocalToDelete;
 	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next (); )
@@ -20595,8 +20602,16 @@ void CheckRotate () REQUIRES ( MainThread )
 	g_pDisabledIndexes->ReleaseAndClear ();
 	{
 		ScWL_t dRotateConfigMutexWlocked { g_tRotateConfigMutex };
-		if ( CheckConfigChanges () || g_bReloadForced )
-			ReloadIndexSettings ( g_pCfg );
+		CSphVector<char> dConfig;
+		if ( CheckConfigChanges ( dConfig ) || g_bReloadForced )
+		{
+			if ( g_pCfg.ReParse ( g_sConfigFile.cstr (), dConfig.begin ()))
+				ReloadIndexSettings ( g_pCfg );
+			else
+				sphWarning ( "failed to parse config file '%s'; using previous settings", g_sConfigFile.cstr ());
+		}
+		dConfig.Reset ();
+
 		g_bReloadForced = false;
 	}
 
@@ -24416,14 +24431,16 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	sphInfo ( "using config file '%s'...", g_sConfigFile.cstr () );
 
-	CheckConfigChanges ();
+	CSphVector<char> dConfig;
+	CheckConfigChanges ( dConfig );
 
 	{
 		ScWL_t dWLock { g_tRotateConfigMutex };
 		// do parse
-		if ( !g_pCfg.Parse ( g_sConfigFile.cstr () ) )
-			sphFatal ( "failed to parse config file '%s'", g_sConfigFile.cstr () );
+		if ( !g_pCfg.Parse ( g_sConfigFile.cstr (), dConfig.begin () ) )
+			sphFatal ( "failed1 to parse config file '%s'", g_sConfigFile.cstr () );
 	}
+	dConfig.Reset ();
 
 	// strictly speaking we must hold g_tRotateConfigMutex all the way we work with config.
 	// but in this very case we're starting in single main thread, no concurrency yet.
@@ -24667,17 +24684,18 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	g_bPidIsMine = true;
 
 	// Actions on resurrection
-	if ( bWatched && !bVisualLoad && CheckConfigChanges() )
+	if ( bWatched && !bVisualLoad && CheckConfigChanges(dConfig) )
 	{
 		// reparse the config file
 		sphInfo ( "Reloading the config" );
 		ScWL_t dWLock { g_tRotateConfigMutex };
-		if ( !g_pCfg.ReParse ( g_sConfigFile.cstr () ) )
+		if ( !g_pCfg.ReParse ( g_sConfigFile.cstr (), dConfig.begin () ) )
 			sphFatal ( "failed to parse config file '%s'", g_sConfigFile.cstr () );
 
 		sphInfo ( "Reconfigure the daemon" );
 		ConfigureSearchd ( hConf, bOptPIDFile );
 	}
+	dConfig.Reset();
 
 	// hSearchdpre might be dead if we reloaded the config.
 	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];

@@ -2947,21 +2947,25 @@ static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, const PQRemoteData
 	return pAgent;
 }
 
-static void GetNodes ( const CSphString & sNodes, VecRefPtrs_t<AgentConn_t *> & dNodes, const PQRemoteData_t & tReq )
+static VecRefPtrs_t<AgentConn_t*> GetNodes ( const CSphString & sNodes, const PQRemoteData_t & tReq )
 {
+	VecRefPtrs_t<AgentConn_t*> dNodes;
 	VecAgentDesc_t dDesc;
 	GetNodes ( sNodes, dDesc );
 
 	dNodes.Resize ( dDesc.GetLength() );
 	ARRAY_FOREACH ( i, dDesc )
 		dNodes[i] = CreateAgent ( *dDesc[i], tReq, g_iRemoteTimeout );
+	return dNodes;
 }
 
-static void GetNodes ( const VecAgentDesc_t & dDesc, VecRefPtrs_t<AgentConn_t *> & dNodes, const PQRemoteData_t & tReq )
+static VecRefPtrs_t<AgentConn_t*> GetNodes ( const VecAgentDesc_t & dDesc, const PQRemoteData_t & tReq )
 {
+	VecRefPtrs_t<AgentConn_t*> dNodes;
 	dNodes.Resize ( dDesc.GetLength() );
 	ARRAY_FOREACH ( i, dDesc )
 		dNodes[i] = CreateAgent ( *dDesc[i], tReq, g_iRemoteTimeout );
+	return dNodes;
 }
 
 // get nodes functor to collect listener with specific protocol
@@ -3462,8 +3466,7 @@ bool ClusterDelete ( const CSphString & sCluster, CSphString & sError, CSphStrin
 	{
 		PQRemoteData_t tCmd;
 		tCmd.m_sCluster = sCluster;
-		VecRefPtrs_t<AgentConn_t *> dNodes;
-		GetNodes ( sNodes, dNodes, tCmd );
+		auto dNodes = GetNodes ( sNodes, tCmd );
 		PQRemoteDelete_t tReq;
 		if ( dNodes.GetLength() && !PerformRemoteTasks ( dNodes, tReq, tReq, sError ) )
 			return false;
@@ -3793,7 +3796,7 @@ static bool SendFile ( const CSphVector<RemoteFileState_t> & dDesc, const CSphSt
 }
 
 // check that agents reply with proper index size
-static bool CheckReplyIndexState ( const VecRefPtrs_t<AgentConn_t *> & dNodes, int64_t iFileSize, CSphString * pHash, CSphString & sError )
+static bool CheckReplyIndexState ( const VecTraits_T<AgentConn_t *> & dNodes, int64_t iFileSize, CSphString * pHash, CSphString & sError )
 {
 	StringBuilder_c sBuf ( "," );
 	for ( const AgentConn_t * pAgent : dNodes )
@@ -3871,8 +3874,7 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 		tAgentData.m_iIndexFileSize = iFileSize;
 		tAgentData.m_sFileHash = sFileHash;
 
-		VecRefPtrs_t<AgentConn_t *> dNodes;
-		GetNodes ( dDesc, dNodes, tAgentData );
+		auto dNodes = GetNodes ( dDesc, tAgentData );
 		PQRemoteFileReserve_t tReq;
 		bool bOk = PerformRemoteTasks ( dNodes, tReq, tReq, sError );
 		if ( !CheckReplyIndexState ( dNodes, iFileSize, nullptr, sError ) || !bOk )
@@ -4062,8 +4064,7 @@ static bool SendClusterSynced ( const CSphString & sCluster, const CSphVector<CS
 	ARRAY_FOREACH ( i, dIndexes )
 		tAgentData.m_dIndexes[i] = dIndexes[i];
 
-	VecRefPtrs_t<AgentConn_t *> dNodes;
-	GetNodes ( dDesc, dNodes, tAgentData );
+	auto dNodes = GetNodes ( dDesc, tAgentData );
 	PQRemoteSynced_t tReq;
 	bool bOk = PerformRemoteTasks ( dNodes, tReq, tReq, sError );
 	if ( !CheckReplyIndexState ( dNodes, 0, nullptr, sError ) || !bOk )
@@ -4300,8 +4301,7 @@ bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdat
 	PQRemoteData_t tReqData;
 	tReqData.m_sCluster = sCluster;
 
-	VecRefPtrs_t<AgentConn_t *> dNodes;
-	GetNodes ( sNodes, dNodes, tReqData );
+	auto dNodes = GetNodes ( sNodes, tReqData );
 	PQRemoteClusterUpdateNodes_t tReq;
 	bOk &= PerformRemoteTasks ( dNodes, tReq, tReq, sError );
 

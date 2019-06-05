@@ -4337,6 +4337,20 @@ protected:
 template <class T>
 struct VecRefPtrs_t : public ISphNoncopyable, public CSphVector<T>
 {
+	using CSphVector<T>::SwapData;
+
+	VecRefPtrs_t () = default;
+	VecRefPtrs_t ( VecRefPtrs_t<T>&& rhs ) noexcept
+	{
+		SwapData (rhs);
+	}
+
+	VecRefPtrs_t& operator = ( VecRefPtrs_t<T>&& rhs ) noexcept
+	{
+		SwapData ( rhs );
+		return *this;
+	}
+
 	~VecRefPtrs_t ()
 	{
 		CSphVector<T>::Apply ( [] ( T &ptr ) { SafeRelease ( ptr ); } );

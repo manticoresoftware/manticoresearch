@@ -101,8 +101,8 @@ HostDashboard_t::HostDashboard_t ( const HostDesc_t & tHost )
 	assert ( !tHost.m_pDash );
 	m_tHost.CloneFromHost ( tHost );
 	m_iLastQueryTime = m_iLastAnswerTime = sphMicroTimer () - g_iPingInterval*1000;
-	for ( auto & dStat : m_dStats )
-		dStat.m_dData.Reset();
+	for ( auto & dMetric : m_dPeriodicMetrics )
+		dMetric.m_dMetrics.Reset ();
 }
 
 HostDashboard_t::~HostDashboard_t ()
@@ -133,20 +133,20 @@ bool HostDashboard_t::IsHalfPeriodChanged ( DWORD * pLast )
 	return false;
 }
 
-AgentDash_t& HostDashboard_t::GetCurrentStat ()
+MetricsAndCounters_t& HostDashboard_t::GetCurrentMetrics ()
 {
 	DWORD uCurrentPeriod = GetCurSeconds()/g_uHAPeriodKarma;
-	auto & dCurrentStats = m_dStats[uCurrentPeriod % STATS_DASH_PERIODS];
-	if ( dCurrentStats.m_uPeriod!=uCurrentPeriod ) // we have new or reused stat
+	auto & dCurrentMetrics = m_dPeriodicMetrics[uCurrentPeriod % STATS_DASH_PERIODS];
+	if ( dCurrentMetrics.m_uPeriod!=uCurrentPeriod ) // we have new or reused stat
 	{
-		dCurrentStats.m_dData.Reset ();
-		dCurrentStats.m_uPeriod = uCurrentPeriod;
+		dCurrentMetrics.m_dMetrics.Reset ();
+		dCurrentMetrics.m_uPeriod = uCurrentPeriod;
 	}
 
-	return dCurrentStats.m_dData;
+	return dCurrentMetrics.m_dMetrics;
 }
 
-void HostDashboard_t::GetCollectedStat ( HostStatSnapshot_t& dResult, int iPeriods ) const
+void HostDashboard_t::GetCollectedMetrics ( HostMetricsSnapshot_t& dResult, int iPeriods ) const
 {
 	DWORD uSeconds = GetCurSeconds();
 
@@ -155,14 +155,14 @@ void HostDashboard_t::GetCollectedStat ( HostStatSnapshot_t& dResult, int iPerio
 	iPeriods = Min ( iPeriods, STATS_DASH_PERIODS );
 
 	DWORD uCurrentPeriod = uSeconds/g_uHAPeriodKarma;
-	AgentDash_t tAccum;
+	MetricsAndCounters_t tAccum;
 	tAccum.Reset ();
 
-	CSphScopedRLock tRguard ( m_dDataLock );
+	CSphScopedRLock tRguard ( m_dMetricsLock );
 	for ( ; iPeriods>0; --iPeriods, --uCurrentPeriod )
 		// it might be no queries at all in the fixed time
-		if ( m_dStats[uCurrentPeriod % STATS_DASH_PERIODS].m_uPeriod==uCurrentPeriod )
-			tAccum.Add ( m_dStats[uCurrentPeriod % STATS_DASH_PERIODS].m_dData );
+		if ( m_dPeriodicMetrics[uCurrentPeriod % STATS_DASH_PERIODS].m_uPeriod==uCurrentPeriod )
+			tAccum.Add ( m_dPeriodicMetrics[uCurrentPeriod % STATS_DASH_PERIODS].m_dMetrics );
 
 	for ( int i = 0; i<eMaxAgentStat; ++i )
 		dResult[i] = tAccum.m_dCounters[i];
@@ -274,9 +274,7 @@ void PersistentConnectionsPool_c::Shutdown ()
 
 void ClosePersistentSockets()
 {
-	VecRefPtrs_t<HostDashboard_t *> dHosts;
-	g_tDashes.GetActiveDashes ( dHosts );
-	dHosts.Apply ( [] ( HostDashboard_t * &pHost ) { SafeDelete ( pHost->m_pPersPool ); } );
+	Dashboard::GetActiveHosts().Apply ([] (HostDashboard_t * &pHost) { SafeDelete ( pHost->m_pPersPool ); });
 }
 
 // check whether sURL contains plain ip-address, and so, m.b. no need to resolve it many times.
@@ -455,12 +453,12 @@ public:
 /// add agent into global dashboard hash
 static bool ValidateAndAddDashboard ( AgentDesc_t& dAgent, const WarnInfo_t &tInfo )
 {
-	assert ( !dAgent.m_pDash && !dAgent.m_pStats );
+	assert ( !dAgent.m_pDash && !dAgent.m_pMetrics );
 	if ( !ResolveAddress ( dAgent, tInfo ) )
 		return false;
 
-	g_tDashes.LinkHost ( dAgent );
-	dAgent.m_pStats = new AgentDash_t;
+	Dashboard::LinkHost ( dAgent );
+	dAgent.m_pMetrics = new MetricsAndCounters_t;
 	assert ( dAgent.m_pDash );
 	return true;
 }
@@ -498,7 +496,7 @@ void MultiAgentDesc_c::CleanupOrphaned()
 		}
 	}
 	if ( bNeedGC )
-		g_tDashes.CleanupOrphaned ();
+		Dashboard::CleanupOrphaned ();
 }
 
 // calculate uniq key for holding MultiAgent instance in global hash
@@ -553,7 +551,7 @@ bool MultiAgentDesc_c::Init ( const CSphVector<AgentDesc_t *> &dHosts,
 	ARRAY_FOREACH ( i, dHosts )
 	{
 		// we have templates parsed from config, NOT real working hosts!
-		assert ( !dHosts[i]->m_pDash && !dHosts[i]->m_pStats );
+		assert ( !dHosts[i]->m_pDash && !dHosts[i]->m_pMetrics );
 		if ( !ValidateAndAddDashboard ( ( m_pData + i )->CloneFrom ( *dHosts[i] ), tWarn ) )
 			return false;
 		m_dWeights[i] = fFrac;
@@ -645,17 +643,17 @@ const AgentDesc_t &MultiAgentDesc_c::StDiscardDead ()
 		// no locks for g_pStats since we just reading, and read data is not critical.
 		const HostDashboard_t * pDash = m_pData[i].m_pDash;
 
-		HostStatSnapshot_t dDashStat;
-		pDash->GetCollectedStat (dDashStat);// look at last 30..90 seconds.
+		HostMetricsSnapshot_t dMetricsSnapshot;
+		pDash->GetCollectedMetrics ( dMetricsSnapshot );// look at last 30..90 seconds.
 		uint64_t uQueries = 0;
 		for ( int j=0; j<eMaxAgentStat; ++j )
-			uQueries += dDashStat[j];
+			uQueries += dMetricsSnapshot[j];
 		if ( uQueries > 0 )
-			dTimers[i] = dDashStat[ehTotalMsecs]/uQueries;
+			dTimers[i] = dMetricsSnapshot[ehTotalMsecs]/uQueries;
 		else
 			dTimers[i] = 0;
 
-		CSphScopedRLock tRguard ( pDash->m_dDataLock );
+		CSphScopedRLock tRguard ( pDash->m_dMetricsLock );
 		int64_t iThisErrARow = ( pDash->m_iErrorsARow<=iDeadThr ) ? 0 : pDash->m_iErrorsARow;
 
 		if ( iErrARow < 0 )
@@ -700,7 +698,7 @@ const AgentDesc_t &MultiAgentDesc_c::StDiscardDead ()
 	{
 		float fAge = 0.0;
 		const HostDashboard_t & dDash = *m_pData[iBestAgent].m_pDash;
-		CSphScopedRLock tRguard ( dDash.m_dDataLock );
+		CSphScopedRLock tRguard ( dDash.m_dMetricsLock );
 		fAge = ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
 		sphLogDebugv ("client=%s, HA selected %d node by weighted random, with best EaR ("
 						  INT64_FMT "), last answered in %.3f milliseconds, among %d candidates"
@@ -747,8 +745,8 @@ const AgentDesc_t &MultiAgentDesc_c::StLowErrors ()
 		// no locks for g_pStats since we just reading, and read data is not critical.
 		const HostDashboard_t & dDash = *m_pData[i].m_pDash;
 
-		HostStatSnapshot_t dDashStat;
-		dDash.GetCollectedStat (dDashStat); // look at last 30..90 seconds.
+		HostMetricsSnapshot_t dMetricsSnapshot;
+		dDash.GetCollectedMetrics ( dMetricsSnapshot ); // look at last 30..90 seconds.
 		uint64_t uQueries = 0;
 		uint64_t uCriticalErrors = 0;
 		uint64_t uAllErrors = 0;
@@ -760,13 +758,13 @@ const AgentDesc_t &MultiAgentDesc_c::StLowErrors ()
 			else if ( j==eNetworkNonCritical )
 			{
 				uAllErrors = uQueries;
-				uSuccesses = dDashStat[j];
+				uSuccesses = dMetricsSnapshot[j];
 			}
-			uQueries += dDashStat[j];
+			uQueries += dMetricsSnapshot[j];
 		}
 
 		if ( uQueries > 0 )
-			dTimers[i] = dDashStat[ehTotalMsecs]/uQueries;
+			dTimers[i] = dMetricsSnapshot[ehTotalMsecs]/uQueries;
 		else
 			dTimers[i] = 0;
 
@@ -830,7 +828,7 @@ const AgentDesc_t &MultiAgentDesc_c::StLowErrors ()
 	{
 		float fAge = 0.0f;
 		const HostDashboard_t & dDash = *m_pData[iBestAgent].m_pDash;
-		CSphScopedRLock tRguard ( dDash.m_dDataLock );
+		CSphScopedRLock tRguard ( dDash.m_dMetricsLock );
 		fAge = ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
 		sphLogDebugv (
 			"client=%s, HA selected %d node by weighted random, "
@@ -880,7 +878,6 @@ const char * Agent_e_Name ( Agent_e eState )
 }
 
 SearchdStats_t g_tStats;
-cDashStorage g_tDashes;
 
 // generic stats track - always to agent stats, separately to dashboard.
 void agent_stats_inc ( AgentConn_t &tAgent, AgentStats_e iCountID )
@@ -888,13 +885,13 @@ void agent_stats_inc ( AgentConn_t &tAgent, AgentStats_e iCountID )
 	assert ( iCountID<=eMaxAgentStat );
 	assert ( tAgent.m_tDesc.m_pDash );
 
-	if ( tAgent.m_tDesc.m_pStats )
-		++tAgent.m_tDesc.m_pStats->m_dCounters[iCountID];
+	if ( tAgent.m_tDesc.m_pMetrics )
+		++tAgent.m_tDesc.m_pMetrics->m_dCounters[iCountID];
 
 	HostDashboard_t &tIndexDash = *tAgent.m_tDesc.m_pDash;
-	CSphScopedWLock tWguard ( tIndexDash.m_dDataLock );
-	AgentDash_t &tAgentDash = tIndexDash.GetCurrentStat ();
-	tAgentDash.m_dCounters[iCountID]++;
+	CSphScopedWLock tWguard ( tIndexDash.m_dMetricsLock );
+	MetricsAndCounters_t &tAgentMetrics = tIndexDash.GetCurrentMetrics ();
+	tAgentMetrics.m_dCounters[iCountID]++;
 	if ( iCountID>=eNetworkNonCritical && iCountID<eMaxAgentStat )
 		tIndexDash.m_iErrorsARow = 0;
 	else
@@ -906,10 +903,10 @@ void agent_stats_inc ( AgentConn_t &tAgent, AgentStats_e iCountID )
 
 	// do not count query time for unlinked connections (pings)
 	// only count errors
-	if ( tAgent.m_tDesc.m_pStats )
+	if ( tAgent.m_tDesc.m_pMetrics )
 	{
-		tAgentDash.m_dMetrics[ehTotalMsecs] += tAgent.m_iEndQuery - tAgent.m_iStartQuery;
-		tAgent.m_tDesc.m_pStats->m_dMetrics[ehTotalMsecs] += tAgent.m_iEndQuery - tAgent.m_iStartQuery;
+		tAgentMetrics.m_dMetrics[ehTotalMsecs] += tAgent.m_iEndQuery - tAgent.m_iStartQuery;
+		tAgent.m_tDesc.m_pMetrics->m_dMetrics[ehTotalMsecs] += tAgent.m_iEndQuery - tAgent.m_iStartQuery;
 	}
 }
 
@@ -920,8 +917,8 @@ void track_processing_time ( AgentConn_t &tAgent )
 	assert ( tAgent.m_tDesc.m_pDash );
 	uint64_t uConnTime = ( uint64_t ) sphMicroTimer () - tAgent.m_iStartQuery;
 	{
-		CSphScopedWLock tWguard ( tAgent.m_tDesc.m_pDash->m_dDataLock );
-		uint64_t * pMetrics = tAgent.m_tDesc.m_pDash->GetCurrentStat ().m_dMetrics;
+		CSphScopedWLock tWguard ( tAgent.m_tDesc.m_pDash->m_dMetricsLock );
+		uint64_t * pMetrics = tAgent.m_tDesc.m_pDash->GetCurrentMetrics ().m_dMetrics;
 
 		++pMetrics[ehConnTries];
 		if ( uint64_t ( uConnTime )>pMetrics[ehMaxMsecs] )
@@ -935,11 +932,11 @@ void track_processing_time ( AgentConn_t &tAgent )
 	} // no need to hold dashboard anymore
 
 
-	if ( !tAgent.m_tDesc.m_pStats )
+	if ( !tAgent.m_tDesc.m_pMetrics )
 		return;
 
 	// then we count permanent statistic (for show status)
-	uint64_t * pHStat = tAgent.m_tDesc.m_pStats->m_dMetrics;
+	uint64_t * pHStat = tAgent.m_tDesc.m_pMetrics->m_dMetrics;
 	++pHStat[ehConnTries];
 	if ( uint64_t ( uConnTime )>pHStat[ehMaxMsecs] )
 		pHStat[ehMaxMsecs] = uConnTime;
@@ -1245,64 +1242,68 @@ AgentDesc_t &AgentDesc_t::CloneFrom ( const AgentDesc_t &rhs )
 		return *this;
 	CloneFromHost ( rhs );
 	m_sIndexes = rhs.m_sIndexes;
-	m_pStats = rhs.m_pStats;
+	m_pMetrics = rhs.m_pMetrics;
 	return *this;
 }
 
-void cDashStorage::CleanupOrphaned ()
+//// global dashboard
+
+namespace Dashboard {
+	RwLock_t g_tDashLock;
+	VecRefPtrs_t<HostDashboard_t*> g_dDashes GUARDED_BY( g_tDashLock );
+
+void CleanupOrphaned ()
 {
-	CSphScopedWLock tWguard ( m_tDashLock );
-	ARRAY_FOREACH ( i, m_dDashes )
+	CSphScopedWLock tWguard ( g_tDashLock );
+	ARRAY_FOREACH ( i, g_dDashes )
 	{
-		auto pDash = m_dDashes[i];
+		auto pDash = g_dDashes[i];
 		if ( pDash->IsLast () )
 		{
-			m_dDashes.RemoveFast ( i-- ); // remove, and then step back
+			g_dDashes.RemoveFast ( i-- ); // remove, and then step back
 			SafeRelease ( pDash );
 		}
 	}
 }
 
-void cDashStorage::LinkHost ( HostDesc_t &dHost )
+// Due to very rare template of usage, linear search is quite enough here
+HostDashboardRefPtr_t FindAgent ( const CSphString& sAgent )
+	{
+		CSphScopedRLock tRguard ( g_tDashLock );
+		for ( auto* pDash : g_dDashes )
+		{
+			if ( pDash->IsLast ())
+				continue;
+
+			if ( pDash->m_tHost.GetMyUrl ()==sAgent )
+			{
+				pDash->AddRef ();
+				return HostDashboardRefPtr_t ( pDash );
+			}
+		}
+		return HostDashboardRefPtr_t (); // not found
+	}
+
+void LinkHost ( HostDesc_t &dHost )
 {
 	assert ( !dHost.m_pDash );
-	auto pDash = FindAgent ( dHost.GetMyUrl() );
-	if ( pDash )
-	{
-		dHost.m_pDash = pDash.Leak ();
+	dHost.m_pDash = FindAgent ( dHost.GetMyUrl() );
+	if ( dHost.m_pDash )
 		return;
-	}
 
 	// nothing found existing; so create the new.
 	dHost.m_pDash = new HostDashboard_t ( dHost );
-	CSphScopedWLock tWguard ( m_tDashLock );
-	m_dDashes.Add ( dHost.m_pDash );
+	CSphScopedWLock tWguard ( g_tDashLock );
+	g_dDashes.Add ( dHost.m_pDash );
 	dHost.m_pDash->AddRef(); // one link here in vec, other returned with the host
 }
 
-// Due to very rare template of usage, linear search is quite enough here
-HostDashboardPtr_t cDashStorage::FindAgent ( const CSphString & sAgent ) const
+VecRefPtrs_t<HostDashboard_t*> GetActiveHosts ()
 {
-	CSphScopedRLock tRguard ( m_tDashLock );
-	for ( auto * pDash : m_dDashes )
-	{
-		if ( pDash->IsLast() )
-			continue;
-		
-		if ( pDash->m_tHost.GetMyUrl () == sAgent )
-		{
-			pDash->AddRef();
-			return HostDashboardPtr_t ( pDash );
-		}
-	}
-	return HostDashboardPtr_t(); // not found
-}
-
-void cDashStorage::GetActiveDashes ( CSphVector<HostDashboard_t *> & dAgents ) const
-{
+	VecRefPtrs_t<HostDashboard_t*> dAgents;
 	assert ( dAgents.IsEmpty ());
-	CSphScopedRLock tRguard ( m_tDashLock );
-	for ( auto * pDash : m_dDashes )
+	ScRL_t tRguard ( g_tDashLock );
+	for ( auto * pDash : g_dDashes )
 	{
 		if ( pDash->IsLast() )
 			continue;
@@ -1310,7 +1311,9 @@ void cDashStorage::GetActiveDashes ( CSphVector<HostDashboard_t *> & dAgents ) c
 		pDash->AddRef ();
 		dAgents.Add ( pDash );
 	}
+	return dAgents;
 }
+} // namespace Dashboard
 
 /// SmartOutputBuffer_t : chain of blobs could be used in scattered sending
 /////////////////////////////////////////////////////////////////////////////
@@ -1775,6 +1778,8 @@ void AgentConn_t::ScheduleCallbacks ()
 {
 	LazyTask ( m_iPoolerTimeout, true, BYTE ( m_dIOVec.HasUnsent () ? 1 : 2 ) );
 }
+
+void FirePoller (); // forward definition
 
 // retry timeout used when we need to pause before next retry, so just start connection when it fired
 // hard timeout used when connection/query timed out. Drop existing connection and try again.

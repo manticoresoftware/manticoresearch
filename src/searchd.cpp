@@ -10938,17 +10938,17 @@ void BuildStatus ( VectorLike & dStatus )
 			MultiAgentDesc_c &dMultiAgent = *dAgents[i];
 			ARRAY_FOREACH ( j, dMultiAgent )
 			{
-				const auto pDash = dMultiAgent[j].m_pStats;
+				const auto pMetrics = dMultiAgent[j].m_pMetrics;
 				for ( int k=0; k<eMaxAgentStat; ++k )
 					if ( dStatus.MatchAddVa ( "ag_%s_%d_%d_%s", sIdx, i+1, j+1, sAgentStatsNames[k] ) )
-						dStatus.Add().SetSprintf ( FMT64, (int64_t) pDash->m_dCounters[k] );
+						dStatus.Add().SetSprintf ( FMT64, (int64_t) pMetrics->m_dCounters[k] );
 				for ( int k = 0; k<ehMaxStat; ++k )
 					if ( dStatus.MatchAddVa ( "ag_%s_%d_%d_%s", sIdx, i + 1, j + 1, sAgentStatsNames[eMaxAgentStat+k] ) )
 					{
 						if ( k==ehTotalMsecs || k==ehAverageMsecs || k==ehMaxMsecs )
-							dStatus.Add ().SetSprintf ( FLOAT, (float) pDash->m_dMetrics[k] / 1000.0 );
+							dStatus.Add ().SetSprintf ( FLOAT, (float) pMetrics->m_dMetrics[k] / 1000.0 );
 						else
-							dStatus.Add ().SetSprintf ( FMT64, (int64_t) pDash->m_dMetrics[k] );
+							dStatus.Add ().SetSprintf ( FMT64, (int64_t) pMetrics->m_dMetrics[k] );
 					}
 
 			}
@@ -11060,7 +11060,7 @@ void BuildOneAgentStatus ( VectorLike & dStatus, HostDashboard_t* pDash, const c
 	const char * FLOAT = "%.2f";
 
 	{
-		CSphScopedRLock tGuard ( pDash->m_dDataLock );
+		CSphScopedRLock tGuard ( pDash->m_dMetricsLock );
 		if ( dStatus.MatchAddVa ( "%s_hostname", sPrefix ) )
 			dStatus.Add().SetSprintf ( "%s", pDash->m_tHost.GetMyUrl().cstr() );
 
@@ -11091,24 +11091,24 @@ void BuildOneAgentStatus ( VectorLike & dStatus, HostDashboard_t* pDash, const c
 
 	while ( iPeriods>0 )
 	{
-		HostStatSnapshot_t dDashStat;
-		pDash->GetCollectedStat ( dDashStat, iPeriods );
+		HostMetricsSnapshot_t dMetricsSnapshot;
+		pDash->GetCollectedMetrics ( dMetricsSnapshot, iPeriods );
 		{
 			for ( int j = 0; j<ehMaxStat+eMaxAgentStat; ++j )
 				// hack. Avoid microseconds in human-readable statistic
 				if ( j==ehTotalMsecs && dStatus.MatchAddVa ( "%s_%dperiods_msecsperqueryy", sPrefix, iPeriods ) )
 				{
-					if ( dDashStat[ehConnTries]>0 )
-						dStatus.Add ().SetSprintf ( FLOAT, (float) ((dDashStat[ehTotalMsecs] / 1000.0)
-																	/ dDashStat[ehConnTries]) );
+					if ( dMetricsSnapshot[ehConnTries]>0 )
+						dStatus.Add ().SetSprintf ( FLOAT, (float) ((dMetricsSnapshot[ehTotalMsecs] / 1000.0)
+																	/ dMetricsSnapshot[ehConnTries]));
 					else
 						dStatus.Add ( "n/a" );
 				} else if ( dStatus.MatchAddVa ( "%s_%dperiods_%s", sPrefix, iPeriods, sAgentStatsNames[j] ) )
 				{
 					if ( j==ehMaxMsecs || j==ehAverageMsecs )
-						dStatus.Add ().SetSprintf ( FLOAT, (float) dDashStat[j] / 1000.0);
+						dStatus.Add ().SetSprintf ( FLOAT, (float) dMetricsSnapshot[j] / 1000.0 );
 					else
-						dStatus.Add ().SetSprintf ( FMT64, dDashStat[j] );
+						dStatus.Add ().SetSprintf ( FMT64, dMetricsSnapshot[j] );
 				}
 		}
 
@@ -11173,14 +11173,11 @@ void BuildAgentStatus ( VectorLike &dStatus, const CSphString& sIndexOrAgent )
 	{
 		if ( !BuildDistIndexStatus ( dStatus, sIndexOrAgent ) )
 		{
-			auto pAgent = g_tDashes.FindAgent ( sIndexOrAgent );
-			if ( !pAgent )
-			{
-				if ( dStatus.MatchAdd ( "status_error" ) )
-					dStatus.Add ().SetSprintf ( "No such distr index or agent: %s", sIndexOrAgent.cstr () );
-				return;
-			}
-			BuildOneAgentStatus ( dStatus, pAgent );
+			auto pAgent = Dashboard::FindAgent ( sIndexOrAgent );
+			if ( pAgent )
+				BuildOneAgentStatus ( dStatus, pAgent );
+			else if ( dStatus.MatchAdd ( "status_error" ) )
+				dStatus.Add ().SetSprintf ( "No such distr index or agent: %s", sIndexOrAgent.cstr () );
 		}
 		return;
 	}
@@ -11192,8 +11189,7 @@ void BuildAgentStatus ( VectorLike &dStatus, const CSphString& sIndexOrAgent )
 	if ( dStatus.MatchAdd ( "status_stored_periods" ) )
 		dStatus.Add().SetSprintf ( "%d", STATS_DASH_PERIODS );
 
-	VecRefPtrs_t<HostDashboard_t *> dDashes;
-	g_tDashes.GetActiveDashes ( dDashes );
+	auto dDashes = Dashboard::GetActiveHosts();
 
 	CSphString sPrefix;
 	ARRAY_FOREACH ( i, dDashes )
@@ -14870,23 +14866,22 @@ protected:
 static void CheckPing ( int64_t iNow )
 {
 	VecRefPtrsAgentConn_t dConnections;
-	VecRefPtrs_t<HostDashboard_t *> dDashes;
-	g_tDashes.GetActiveDashes ( dDashes );
+	auto dDashes = Dashboard::GetActiveHosts();
 	for ( auto& pDash : dDashes )
 	{
 		assert ( pDash->m_iNeedPing>=0 );
 		if ( pDash->m_iNeedPing )
 		{
-			CSphScopedRLock tRguard ( pDash->m_dDataLock );
+			CSphScopedRLock tRguard ( pDash->m_dMetricsLock );
 			if ( pDash->IsOlder ( iNow ) )
 			{
 				assert ( !pDash->m_tHost.m_pDash );
 				auto * pAgent = new AgentConn_t;
 				pAgent->m_tDesc.CloneFromHost ( pDash->m_tHost );
-				pAgent->m_tDesc.m_pDash = pDash;
 				pAgent->m_iMyConnectTimeout = g_iPingInterval;
 				pAgent->m_iMyQueryTimeout = g_iPingInterval;
-				pDash->AddRef (); // m_tDesc above will release on destroy
+				pAgent->m_tDesc.m_pDash = pDash;
+				pDash->AddRef (); // pAgent->m_tDesc above will release on destroy
 				dConnections.Add ( pAgent );
 			}
 		}
@@ -20198,9 +20193,7 @@ void InitPersistentPool()
 		return;
 	}
 
-	VecRefPtrs_t<HostDashboard_t *> tHosts;
-	g_tDashes.GetActiveDashes (tHosts);
-	tHosts.Apply ( [] ( HostDashboard_t *&pHost ) {
+	Dashboard::GetActiveHosts ().Apply ( [] ( HostDashboard_t *&pHost ) {
 		if ( !pHost->m_pPersPool )
 			pHost->m_pPersPool = new PersistentConnectionsPool_c;
 		pHost->m_pPersPool->ReInit ( g_iPersistentPoolSize );

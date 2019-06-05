@@ -145,13 +145,13 @@ public:
 
 void ClosePersistentSockets();
 
-struct AgentDash_t : ISphRefcountedMT
+struct MetricsAndCounters_t : ISphRefcountedMT
 {
 	// was uint64_t, but for atomic it creates extra tmpl instantiation without practical difference
 	CSphAtomicL m_dCounters[eMaxAgentStat];	// event counters
 	uint64_t m_dMetrics[ehMaxStat];			// calculated metrics
 
-	AgentDash_t()
+	MetricsAndCounters_t ()
 	{
 		for ( auto& dMetric : m_dMetrics )
 			dMetric = 0;
@@ -165,7 +165,7 @@ struct AgentDash_t : ISphRefcountedMT
 			uMetric = 0;
 	}
 
-	void Add ( const AgentDash_t &rhs )
+	void Add ( const MetricsAndCounters_t &rhs )
 	{
 		for ( int i = 0; i<eMaxAgentStat; ++i )
 			m_dCounters[i] += rhs.m_dCounters[i];
@@ -181,14 +181,14 @@ struct AgentDash_t : ISphRefcountedMT
 		m_dMetrics[ehConnTries] += rhs.m_dMetrics[ehConnTries];
 	}
 private:
-	~AgentDash_t() = default;
+	~MetricsAndCounters_t () final = default;
 	friend struct HostDashboard_t; // the only struct allowed to directly declare/destroy me.
 };
 
-using AgentDashPtr_t = CSphRefcountedPtr<AgentDash_t>;
+using MetricsAndCountersRefPtr_t = CSphRefcountedPtr<MetricsAndCounters_t>;
 
 struct HostDashboard_t;
-using HostDashboardPtr_t = CSphRefcountedPtr<HostDashboard_t>;
+using HostDashboardRefPtr_t = CSphRefcountedPtr<HostDashboard_t>;
 
 /// generic descriptor of remote host
 struct HostDesc_t : ISphNoncopyable
@@ -202,7 +202,7 @@ struct HostDesc_t : ISphNoncopyable
 	bool m_bBlackhole = false;	///< blackhole agent flag
 	bool m_bPersistent = false;	///< whether to keep the persistent connection to the agent.
 
-	mutable HostDashboardPtr_t m_pDash;	///< ha dashboard of the host
+	mutable HostDashboardRefPtr_t m_pDash;	///< ha dashboard of the host
 
 	HostDesc_t &CloneFromHost ( const HostDesc_t &tOther );
 	CSphString GetMyUrl () const;
@@ -212,7 +212,7 @@ struct HostDesc_t : ISphNoncopyable
 struct AgentDesc_t : HostDesc_t
 {
 	CSphString			m_sIndexes;		///< remote index names to query
-	mutable AgentDashPtr_t m_pStats;	///< source for ShowStatus (one copy shared over all clones, refcounted).
+	mutable MetricsAndCountersRefPtr_t m_pMetrics;	///< source for ShowStatus (one copy shared over all clones, refcounted).
 	AgentDesc_t &CloneFrom ( const AgentDesc_t &tOther );
 };
 
@@ -229,7 +229,7 @@ struct AgentOptions_t
 
 
 extern const char * sAgentStatsNames[eMaxAgentStat + ehMaxStat];
-using HostStatSnapshot_t = uint64_t[eMaxAgentStat + ehMaxStat];
+using HostMetricsSnapshot_t = uint64_t[eMaxAgentStat + ehMaxStat];
 
 /// per-host dashboard
 struct HostDashboard_t : public ISphRefcountedMT
@@ -238,17 +238,17 @@ struct HostDashboard_t : public ISphRefcountedMT
 	volatile int m_iNeedPing = 0;    // we'll ping only HA agents, not everyone
 	PersistentConnectionsPool_c * m_pPersPool = nullptr;    // persistence pool also lives here, one per dashboard
 
-	mutable RwLock_t m_dDataLock;        // guards everything essential (see thread annotations)
-	int64_t m_iLastAnswerTime GUARDED_BY ( m_dDataLock ) = 0;    // updated when we get an answer from the host
-	int64_t m_iLastQueryTime GUARDED_BY ( m_dDataLock ) = 0;    // updated when we send a query to a host
+	mutable RwLock_t m_dMetricsLock;        // guards everything essential (see thread annotations)
+	int64_t m_iLastAnswerTime GUARDED_BY ( m_dMetricsLock ) = 0;    // updated when we get an answer from the host
+	int64_t m_iLastQueryTime GUARDED_BY ( m_dMetricsLock ) = 0;    // updated when we send a query to a host
 	int64_t m_iErrorsARow GUARDED_BY (
-		m_dDataLock ) = 0;        // num of errors a row, updated when we update the general statistic.
+		m_dMetricsLock ) = 0;        // num of errors a row, updated when we update the general statistic.
 
 public:
 	explicit HostDashboard_t ( const HostDesc_t &tAgent );
-	bool IsOlder ( int64_t iTime ) const REQUIRES_SHARED ( m_dDataLock );
-	AgentDash_t &GetCurrentStat () REQUIRES ( m_dDataLock );
-	void GetCollectedStat ( HostStatSnapshot_t &dResult, int iPeriods = 1 ) const REQUIRES ( !m_dDataLock );
+	bool IsOlder ( int64_t iTime ) const REQUIRES_SHARED ( m_dMetricsLock );
+	MetricsAndCounters_t &GetCurrentMetrics () REQUIRES ( m_dMetricsLock );
+	void GetCollectedMetrics ( HostMetricsSnapshot_t &dResult, int iPeriods = 1 ) const REQUIRES ( !m_dMetricsLock );
 
 	static DWORD GetCurSeconds ();
 	static bool IsHalfPeriodChanged ( DWORD * pLast );
@@ -256,9 +256,9 @@ public:
 private:
 	struct
 	{
-		AgentDash_t m_dData;
+		MetricsAndCounters_t m_dMetrics;
 		DWORD m_uPeriod = 0xFFFFFFFF;
-	} m_dStats[STATS_DASH_PERIODS] GUARDED_BY ( m_dDataLock );
+	} m_dPeriodicMetrics[STATS_DASH_PERIODS] GUARDED_BY ( m_dMetricsLock );
 
 	~HostDashboard_t ();
 };
@@ -675,7 +675,6 @@ public:
 };
 
 extern GuardedHash_c * g_pDistIndexes;	// distributed indexes hash
-extern GuardedHash_c * g_pMultiAgents;	// global hash of all agents
 
 inline DistributedIndexRefPtr_t GetDistr ( const CSphString &sName )
 {
@@ -708,20 +707,14 @@ struct SearchdStats_t
 	CSphAtomicL		m_iAgentPredictedTime;	///< total agent predicted query time
 };
 
-class cDashStorage : public ISphNoncopyable
-{
-	VecRefPtrs_t<HostDashboard_t *>	m_dDashes GUARDED_BY(m_tDashLock);
-	mutable RwLock_t				m_tDashLock;
-
-public:
-	void				LinkHost ( HostDesc_t &dHost ); ///< put host into dashboard and init link to it
-	HostDashboardPtr_t	FindAgent ( const CSphString& sAgent ) const;
-	void				GetActiveDashes ( CSphVector<HostDashboard_t *> & dAgents ) const;
-	void				CleanupOrphaned();
-};
-
 extern SearchdStats_t			g_tStats;
-extern cDashStorage				g_tDashes;
+
+namespace Dashboard {
+	void LinkHost ( HostDesc_t& dHost ); ///< put host into global dashboard and init link to it
+	HostDashboardRefPtr_t FindAgent ( const CSphString& sAgent );
+	VecRefPtrs_t<HostDashboard_t*> GetActiveHosts ();
+	void CleanupOrphaned ();
+}
 
 // parse strategy name into enum value
 bool ParseStrategyHA ( const char * sName, HAStrategies_e * pStrategy );
@@ -786,8 +779,6 @@ bool sphNBSockEof ( int iSock );
 //////////////////////////////////////////////////////////////////////////
 // Universal work with select/poll/epoll/kqueue
 //////////////////////////////////////////////////////////////////////////
-void FirePoller ();
-
 // wrapper around epoll/kqueue/poll
 struct NetEventsIterator_t
 {

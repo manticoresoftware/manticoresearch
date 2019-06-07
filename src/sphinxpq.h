@@ -65,23 +65,6 @@ struct PercolateMatchResult_t : ISphNoncopyable
 	void Reset ();
 };
 
-struct StoredQueryDesc_t
-{
-	CSphVector<CSphFilterSettings>	m_dFilters;
-	CSphVector<FilterTreeItem_t>	m_dFilterTree;
-
-	CSphString						m_sQuery;
-	CSphString						m_sTags;
-	uint64_t						m_uQUID = 0;
-	bool							m_bQL = true;
-};
-
-class StoredQuery_i : public ISphNoncopyable, public StoredQueryDesc_t
-{
-public:
-	virtual ~StoredQuery_i() {}
-};
-
 struct PercolateQueryArgs_t
 {
 	const char * m_sQuery = nullptr;
@@ -97,20 +80,21 @@ struct PercolateQueryArgs_t
 	PercolateQueryArgs_t ( const StoredQueryDesc_t & tDesc );
 };
 
+class StoredQuery_i;
+
 class PercolateIndex_i : public RtIndex_i
 {
 public:
 	PercolateIndex_i ( const char * sIndexName, const char * sFileName ) : RtIndex_i ( sIndexName, sFileName ) {}
-	virtual bool	MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchResult_t & tResult ) = 0;
-	virtual int		DeleteQueries ( const uint64_t * pQueries, int iCount ) = 0;
-	virtual int		DeleteQueries ( const char * sTags ) = 0;
+	virtual bool	MatchDocuments ( RtAccum_t * pAccExt, PercolateMatchResult_t & tResult ) = 0;
 
 	virtual StoredQuery_i * Query ( const PercolateQueryArgs_t & tArgs, CSphString & sError ) = 0;
 
-	// ISphRtIndex already has Commit with another signature, so let it be CommitPercolate
-	virtual bool	CommitPercolate ( StoredQuery_i * pQuery, CSphString & sError ) = 0;
-
 	bool	IsPQ() const override { return true; }
+
+	virtual int ReplayDeleteQueries ( const uint64_t * pQueries, int iCount ) = 0;
+	virtual int ReplayDeleteQueries ( const char * sTags ) = 0;
+	virtual void ReplayCommit ( StoredQuery_i * pQuery ) = 0;
 };
 
 /// percolate query index factory

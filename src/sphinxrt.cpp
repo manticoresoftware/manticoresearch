@@ -23,6 +23,7 @@
 #include "attribute.h"
 #include "killlist.h"
 #include "secondaryindex.h"
+#include "accumulator.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -1009,13 +1010,13 @@ public:
 
 	bool				AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFields,
 		CSphMatch & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr,
-		const VecTraits_T<int64_t> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt ) override;
+		const VecTraits_T<int64_t> & dMvas, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) override;
 	virtual bool		AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace,
 		const char ** ppStr, const VecTraits_T<int64_t> & dMvas, CSphString & sError, CSphString & sWarning,
-		ISphRtAccum * pAccExt );
-	bool				DeleteDocument ( const DocID_t * pDocs, int iDocs, CSphString & sError, ISphRtAccum * pAccExt ) final;
-	void				Commit ( int * pDeleted, ISphRtAccum * pAccExt ) final;
-	void				RollBack ( ISphRtAccum * pAccExt ) final;
+		RtAccum_t * pAccExt );
+	bool				DeleteDocument ( const DocID_t * pDocs, int iDocs, CSphString & sError, RtAccum_t * pAccExt ) final;
+	void				Commit ( int * pDeleted, RtAccum_t * pAccExt ) final;
+	void				RollBack ( RtAccum_t * pAccExt ) final;
 	void				CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<DocID_t> & dAccKlist, int * pTotalKilled, bool bForceDump ); // FIXME? protect?
 	void				CheckRamFlush () final;
 	void				ForceRamFlush ( bool bPeriodic=false ) final;
@@ -1151,7 +1152,7 @@ private:
 	CSphFixedVector<int64_t>	m_dFieldLensDisk { SPH_MAX_FIELDS };	///< field lengths summed over all disk chunks
 	CSphBitvec					m_tMorphFields;
 
-	ISphRtAccum *		CreateAccum ( CSphString & sError ) final;
+	RtAccum_t *					CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) final;
 
 	int							CompareWords ( const RtWord_t * pWord1, const RtWord_t * pWord2 ) const;
 	void						MergeAttributes ( RtRowIterator_c & tIt, CSphTightVector<CSphRowitem> & dRows, CSphTightVector<BYTE> & dBlobs, const CSphTightVector<BYTE> & dOldBlobs, int nBlobs, CSphVector<RowID_t> & dRowMap, RowID_t & tNextRowID );
@@ -1404,7 +1405,7 @@ void CSphSource_StringVector::Disconnect ()
 
 bool RtIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFields,
 	CSphMatch & tDoc,	bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr,
-	const VecTraits_T<int64_t> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt )
+	const VecTraits_T<int64_t> & dMvas, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt )
 {
 	assert ( g_bRTChangesAllowed );
 	assert ( m_tSchema.GetAttrIndex ( sphGetDocidName() )==0 );
@@ -1508,10 +1509,10 @@ static void AccumCleanup ( void * pArg )
 }
 
 
-ISphRtAccum * RtIndex_i::AcquireAccum ( CSphDict * pDict, ISphRtAccum * pAccExt,
+RtAccum_t * RtIndex_i::AcquireAccum ( CSphDict * pDict, RtAccum_t * pAccExt,
 	bool bWordDict, bool bSetTLS, CSphString* sError )
 {
-	auto pAcc = ( RtAccum_t * ) ( pAccExt ? pAccExt : sphThreadGet ( g_tTlsAccumKey ) );
+	RtAccum_t * pAcc = ( RtAccum_t * ) ( pAccExt ? pAccExt : sphThreadGet ( g_tTlsAccumKey ) );
 
 	if ( pAcc && pAcc->GetIndex() && pAcc->GetIndex()!=this )
 	{
@@ -1536,14 +1537,14 @@ ISphRtAccum * RtIndex_i::AcquireAccum ( CSphDict * pDict, ISphRtAccum * pAccExt,
 	return pAcc;
 }
 
-ISphRtAccum * RtIndex_c::CreateAccum ( CSphString & sError )
+RtAccum_t * RtIndex_c::CreateAccum ( RtAccum_t * pAccExt, CSphString & sError )
 {
-	return AcquireAccum ( m_pDict, nullptr, m_bKeywordDict, false, &sError);
+	return AcquireAccum ( m_pDict, pAccExt, m_bKeywordDict, false, &sError);
 }
 
 
 bool RtIndex_c::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, const char ** ppStr,
-	const VecTraits_T<int64_t> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt )
+	const VecTraits_T<int64_t> & dMvas, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt )
 {
 	assert ( g_bRTChangesAllowed );
 
@@ -1563,6 +1564,8 @@ RtAccum_t::RtAccum_t ( bool bKeywordDict )
 RtAccum_t::~RtAccum_t()
 {
 	SafeDelete ( m_pBlobWriter );
+	ARRAY_FOREACH ( i, m_dCmd )
+		SafeDelete ( m_dCmd[i] );
 }
 
 void RtAccum_t::SetupDict ( const RtIndex_i * pIndex, CSphDict * pDict, bool bKeywordDict )
@@ -1601,24 +1604,28 @@ void RtAccum_t::Sort ()
 	}
 }
 
-void RtAccum_t::Cleanup ( BYTE eWhat )
+void RtAccum_t::CleanupPart()
 {
-	if ( eWhat & EPartial )
-	{
-		m_dAccumRows.Resize ( 0 );
-		m_dBlobs.Resize ( 0 );
-		m_dPerDocHitsCount.Resize ( 0 );
-		ResetDict ();
-		ResetRowID ();
-	}
-	if ( eWhat & EAccum )
-		m_dAccum.Resize ( 0 );
-	if ( eWhat & ERest )
-	{
-		SetIndex ( nullptr );
-		m_uAccumDocs = 0;
-		m_dAccumKlist.Reset ();
-	}
+	m_dAccumRows.Resize ( 0 );
+	m_dBlobs.Resize ( 0 );
+	m_dPerDocHitsCount.Resize ( 0 );
+	ResetDict ();
+	ResetRowID ();
+
+	m_dAccum.Resize ( 0 );
+}
+
+void RtAccum_t::Cleanup()
+{
+	CleanupPart();
+
+	SetIndex ( nullptr );
+	m_uAccumDocs = 0;
+	m_dAccumKlist.Reset ();
+	
+	ARRAY_FOREACH ( i, m_dCmd )
+		SafeDelete ( m_dCmd[i] );
+	m_dCmd.Reset();
 }
 
 void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, int iRowSize,
@@ -1997,15 +2004,9 @@ void RtAccum_t::SetIndex ( RtIndex_i * pIndex )
 {
 	m_pIndex = pIndex;
 
-	if ( pIndex )
-	{
-		if ( pIndex->GetInternalSchema().HasBlobAttrs() )
-		{
-			SafeDelete ( m_pBlobWriter );
-			m_pBlobWriter = sphCreateBlobRowBuilder ( pIndex->GetInternalSchema(), m_dBlobs );
-		}
-	} else
-		SafeDelete ( m_pBlobWriter );
+	SafeDelete ( m_pBlobWriter );
+	if ( pIndex && pIndex->GetInternalSchema().HasBlobAttrs() )
+		m_pBlobWriter = sphCreateBlobRowBuilder ( pIndex->GetInternalSchema(), m_dBlobs );
 }
 
 
@@ -2020,6 +2021,12 @@ void RtAccum_t::ResetRowID()
 	m_tNextRowID=0;
 }
 
+ReplicationCommand_t * RtAccum_t::AddCommand()
+{
+	ReplicationCommand_t * pCmd = new ReplicationCommand_t();
+	m_dCmd.Add ( pCmd );
+	return pCmd;
+}
 
 void RtIndex_c::CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWriter_t & tOutDoc, RtDocReader_t & tInDoc, RtWord_t & tWord, const CSphVector<RowID_t> & dRowMap )
 {
@@ -2372,7 +2379,7 @@ struct CmpSegments_fn
 };
 
 
-void RtIndex_c::Commit ( int * pDeleted, ISphRtAccum * pAccExt )
+void RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAccExt )
 {
 	assert ( g_bRTChangesAllowed );
 	MEMORY ( MEM_INDEX_RT );
@@ -2384,8 +2391,7 @@ void RtIndex_c::Commit ( int * pDeleted, ISphRtAccum * pAccExt )
 	// empty txn, just ignore
 	if ( !pAcc->m_uAccumDocs && !pAcc->m_dAccumKlist.GetLength() )
 	{
-		pAcc->SetIndex ( nullptr );
-		pAcc->Cleanup ( RtAccum_t::EPartial );
+		pAcc->Cleanup();
 		return;
 	}
 
@@ -2402,7 +2408,7 @@ void RtIndex_c::Commit ( int * pDeleted, ISphRtAccum * pAccExt )
 	BuildSegmentInfixes ( pNewSeg, m_pDict->HasMorphology(), m_bKeywordDict, m_tSettings.m_iMinInfixLen, m_iWordsCheckpoint, ( m_iMaxCodepointLength>1 ) );
 
 	// clean up parts we no longer need
-	pAcc->Cleanup ( RtAccum_t::EPartial | RtAccum_t::EAccum );
+	pAcc->CleanupPart();
 
 	// sort accum klist, too
 	pAcc->m_dAccumKlist.Uniq ();
@@ -2411,7 +2417,7 @@ void RtIndex_c::Commit ( int * pDeleted, ISphRtAccum * pAccExt )
 	CommitReplayable ( pNewSeg, pAcc->m_dAccumKlist, pDeleted, false );
 
 	// done; cleanup accum
-	pAcc->Cleanup ( RtAccum_t::ERest );
+	pAcc->Cleanup();
 
 	// reset accumulated warnings
 	CSphString sWarning;
@@ -2693,7 +2699,7 @@ void RtIndex_c::FreeRetired()
 }
 
 
-void RtIndex_c::RollBack ( ISphRtAccum * pAccExt )
+void RtIndex_c::RollBack ( RtAccum_t * pAccExt )
 {
 	assert ( g_bRTChangesAllowed );
 
@@ -2704,7 +2710,7 @@ void RtIndex_c::RollBack ( ISphRtAccum * pAccExt )
 	pAcc->Cleanup ();
 }
 
-bool RtIndex_c::DeleteDocument ( const DocID_t * pDocs, int iDocs, CSphString & sError, ISphRtAccum * pAccExt )
+bool RtIndex_c::DeleteDocument ( const DocID_t * pDocs, int iDocs, CSphString & sError, RtAccum_t * pAccExt )
 {
 	assert ( g_bRTChangesAllowed );
 	MEMORY ( MEM_RT_ACCUM );
@@ -8809,9 +8815,11 @@ bool RtBinlog_c::ReplayPqAdd ( int iBinlog, DWORD uReplayFlags, BinlogReader_c &
 
 		// actually replay
 		StoredQuery_i * pQuery = tIndex.m_pPQ->Query ( tArgs, sError );
-		if ( !pQuery || !tIndex.m_pPQ->CommitPercolate ( pQuery, sError ) )
+		if ( !pQuery )
 			sphDie ( "binlog: pq-add: apply error (index=%s, lasttime=" INT64_FMT ", logtime=" INT64_FMT ", pos=" INT64_FMT ", '%s')",
 				tIndex.m_sName.cstr(), tIndex.m_tmMax, tmStamp, iTxnPos, sError.cstr() );
+
+		tIndex.m_pPQ->ReplayCommit ( pQuery );
 
 		// update committed tid on replay in case of unexpected / mismatched tid
 		tIndex.m_pPQ->m_iTID = iTID;
@@ -8867,9 +8875,9 @@ bool RtBinlog_c::ReplayPqDelete ( int iBinlog, DWORD uReplayFlags, BinlogReader_
 
 		// actually replay
 		if ( dQueries.GetLength() )
-			tIndex.m_pPQ->DeleteQueries ( dQueries.Begin(), dQueries.GetLength() );
+			tIndex.m_pPQ->ReplayDeleteQueries ( dQueries.Begin(), dQueries.GetLength() );
 		else
-			tIndex.m_pPQ->DeleteQueries ( sTags.cstr() );
+			tIndex.m_pPQ->ReplayDeleteQueries ( sTags.cstr() );
 
 		// update committed tid on replay in case of unexpected / mismatched tid
 		tIndex.m_pPQ->m_iTID = iTID;
@@ -8886,10 +8894,10 @@ bool RtBinlog_c::ReplayPqDelete ( int iBinlog, DWORD uReplayFlags, BinlogReader_
 
 RtIndex_i * sphGetCurrentIndexRT()
 {
-	ISphRtAccum * pAcc = (ISphRtAccum*) sphThreadGet ( g_tTlsAccumKey );
+	RtAccum_t * pAcc = (RtAccum_t *) sphThreadGet ( g_tTlsAccumKey );
 	if ( pAcc )
 		return pAcc->GetIndex();
-	return NULL;
+	return nullptr;
 }
 
 RtIndex_i * sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndexName,

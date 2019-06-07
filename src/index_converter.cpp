@@ -23,6 +23,7 @@
 #include "secondaryindex.h"
 #include "sphinxstem.h"
 #include "sphinxpq.h"
+#include "accumulator.h"
 
 namespace legacy
 {

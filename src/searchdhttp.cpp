@@ -21,7 +21,7 @@
 #include "searchdaemon.h"
 #include "searchdha.h"
 #include "searchdreplication.h"
-
+#include "accumulator.h"
 
 const char * g_dHttpStatus[] = { "200 OK", "206 Partial Content", "400 Bad Request", "500 Internal Server Error",
 								 "501 Not Implemented", "503 Service Unavailable" };
@@ -271,40 +271,6 @@ int HttpRequestParser_c::ParserBody ( http_parser * pParser, const char * sAt, s
 	return 0;
 }
 
-
-
-static const CSphString * GetAnyValue ( const SmallStringHash_T<CSphString> & hOptions, const char * sKey1, const char * sKey2 )
-{
-	const CSphString * pVal1 = hOptions ( sKey1 );
-	return pVal1 ? pVal1 : hOptions ( sKey2 );
-}
-
-static void ParseSearchOptions ( const SmallStringHash_T<CSphString> & hOptions, CSphQuery & tQuery )
-{
-	const CSphString * pMatch = hOptions ( "match" );
-	if ( pMatch )
-		tQuery.m_sQuery = *pMatch;
-
-	const CSphString * pIdx = GetAnyValue ( hOptions, "index", "indexes" );
-	if ( pIdx )
-		tQuery.m_sIndexes = *pIdx;
-
-	const CSphString * pSel = GetAnyValue ( hOptions, "select", "select_list" );
-	if ( pSel )
-		tQuery.m_sSelect = *pSel;
-
-	const CSphString * pGroup = GetAnyValue ( hOptions, "group", "group_by" );
-	if ( pGroup )
-		tQuery.m_sGroupBy = *pGroup;
-
-	const CSphString * pOrder = GetAnyValue ( hOptions, "order", "order_by" );
-	if ( pOrder )
-		tQuery.m_sSortBy = *pOrder;
-
-	const CSphString * pLimit = hOptions ( "limit" );
-	if ( pLimit )
-		tQuery.m_iLimit = atoi ( pLimit->cstr() );
-}
 
 static const char * g_sIndexPage =
 "<!DOCTYPE html>"
@@ -729,7 +695,7 @@ class HttpJsonInsertTraits_c
 protected:
 	bool ProcessInsert ( SqlStmt_t & tStmt, DocID_t tDocId, bool bReplace, JsonObj_c & tResult )
 	{
-		CSphSessionAccum tAcc ( false );
+		CSphSessionAccum tAcc;
 		CSphString sWarning;
 		HttpErrorReporter_c tReporter;
 		sphHandleMysqlInsert ( tReporter, tStmt, bReplace, true, sWarning, tAcc, SPH_COLLATION_DEFAULT );
@@ -842,7 +808,7 @@ class HttpJsonDeleteTraits_c
 protected:
 	bool ProcessDelete ( const char * szRawRequest, const SqlStmt_t & tStmt, DocID_t tDocId, const ThdDesc_t & tThd, JsonObj_c & tResult )
 	{
-		CSphSessionAccum tAcc ( false );
+		CSphSessionAccum tAcc;
 		HttpErrorReporter_c tReporter;
 		CSphString sWarning;
 		JsonParserFactory_c tFactory ( SPH_HTTP_ENDPOINT_JSON_DELETE );
@@ -1214,7 +1180,7 @@ bool HttpHandlerPQ_c::DoCallPQ ( const CSphString & sIndex, const JsonObj_c & tP
 	tOpts.m_bGetQuery = true;
 	// fixme! id alias here is 'id' or 'uid'. Process it!
 
-	CSphSessionAccum tAcc ( true );
+	CSphSessionAccum tAcc;
 	CPqResult tResult;
 	tResult.m_dResult.m_bGetFilters = false;
 
@@ -1316,8 +1282,8 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 		dFilterTree.SwapData ( tQuery.m_dFilterTree );
 	}
 
-	StoredQuery_i * pStored = nullptr;
 	// scope for index lock
+	bool bOk = false;
 	{
 		ServedDescPtr_c pServed ( GetIndex ( sIndex, IndexType_e::PERCOLATE ) );
 		if ( !pServed )
@@ -1333,19 +1299,20 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 		tArgs.m_bQL = bQueryQL;
 
 		// add query
-		pStored = pIndex->Query ( tArgs, sError );
-	}
-	bool bOk = ( pStored!=nullptr );
-	if ( pStored )
-	{
-		ReplicationCommand_t tCmd;
-		tCmd.m_eCommand = RCOMMAND_PQUERY_ADD;
-		tCmd.m_sIndex = sIndex;
-		tCmd.m_pStored = pStored;
-		// refresh query's UID for reply as it might be auto-generated
-		uID = pStored->m_uQUID;
+		StoredQuery_i * pStored = pIndex->Query ( tArgs, sError );
+		if ( pStored )
+		{
+			RtAccum_t tAcc ( false );
+			tAcc.SetIndex ( pIndex );
+			ReplicationCommand_t * pCmd = tAcc.AddCommand();
+			pCmd->m_eCommand = ReplicationCommand_e::PQUERY_ADD;
+			pCmd->m_sIndex = sIndex;
+			pCmd->m_pStored = pStored;
+			// refresh query's UID for reply as it might be auto-generated
+			uID = pStored->m_uQUID;
 
-		bOk = HandleCmdReplicate ( tCmd, sError, nullptr );
+			bOk = HandleCmdReplicate ( tAcc, sError, nullptr );
+		}
 	}
 
 	if ( !bOk )
@@ -1378,9 +1345,10 @@ bool HttpHandlerPQ_c::ListQueries ( const CSphString & sIndex )
 
 bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoot )
 {
-	ReplicationCommand_t tCmd;
-	tCmd.m_eCommand = RCOMMAND_DELETE;
-	tCmd.m_sIndex = sIndex;
+	RtAccum_t tAcc ( false );
+	ReplicationCommand_t * pCmd = tAcc.AddCommand();
+	pCmd->m_eCommand = ReplicationCommand_e::PQUERY_DELETE;
+	pCmd->m_sIndex = sIndex;
 
 	CSphString sError;
 	JsonObj_c tTagsArray = tRoot.GetArrayItem ( "tags", sError, true );
@@ -1402,19 +1370,19 @@ bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoo
 	}
 
 	for ( const auto & i : tUidsArray )
-		tCmd.m_dDeleteQueries.Add ( i.IntVal() );
+		pCmd->m_dDeleteQueries.Add ( i.IntVal() );
 
-	if ( !sTags.GetLength() && !tCmd.m_dDeleteQueries.GetLength() )
+	if ( !sTags.GetLength() && !pCmd->m_dDeleteQueries.GetLength() )
 	{
 		ReportError ( "no tags or id field arrays found", SPH_HTTP_STATUS_400 );
 		return false;
 	}
 
-	tCmd.m_sDeleteTags = sTags.cstr();
+	pCmd->m_sDeleteTags = sTags.cstr();
 	uint64_t tmStart = sphMicroTimer();
 
 	int iDeleted = 0;
-	bool bOk = HandleCmdReplicate ( tCmd, sError, &iDeleted );
+	bool bOk = HandleCmdReplicate ( tAcc, sError, &iDeleted );
 
 	uint64_t tmTotal = sphMicroTimer() - tmStart;
 

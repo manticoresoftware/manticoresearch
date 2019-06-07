@@ -414,6 +414,13 @@ public:
 	{
 		return ( m_pCur - m_pData );
 	}
+
+	void SetPos ( int iOff )
+	{
+		assert ( iOff>=0 && iOff<=m_iLen );
+		m_pCur = m_pData + iOff;
+	}
+
 	uint64_t UnzipOffset();
 	DWORD UnzipInt();
 
@@ -1858,8 +1865,6 @@ public:
 	virtual const char *	GetLastWarning() const = 0;
 	virtual void			ResetWarning() = 0;
 };
-
-using ISphRtDictWraperRefPtr_c = CSphRefcountedPtr<ISphRtDictWraper>;
 
 ISphRtDictWraper * sphCreateRtKeywordsDictionaryWrapper ( CSphDict * pBase );
 

@@ -33,7 +33,7 @@ set ( INDEX_CONV_SRCS index_converter.cpp )
 # The headers is not neccessary for executable build, but nesessary for MSVC and other projects
 # all the (non-generated) headers
 # So if you add headers to the project and NOT see them in visual studio solution - just list them here!
-file ( GLOB HEADERS "sphinx*.h" lz4.h lz4hc.h http/http_parser.h secondaryindex.h searchnode.h killlist.h attribute.h)
+file ( GLOB HEADERS "sphinx*.h" lz4.h lz4hc.h http/http_parser.h secondaryindex.h searchnode.h killlist.h attribute.h accumulator.h)
 file ( GLOB SEARCHD_H "searchd*.h" )
 
 if ( UNIX AND NOT APPLE )

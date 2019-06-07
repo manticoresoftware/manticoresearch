@@ -1,7 +1,5 @@
 //
 // Copyright (c) 2017-2019, Manticore Software LTD (http://manticoresearch.com)
-// Copyright (c) 2001-2016, Andrew Aksyonoff
-// Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -37,6 +35,8 @@ struct ListenerDesc_t
 	bool			m_bVIP;
 };
 
+struct ReplicationCommand_t;
+
 // load data from JSON config on daemon start
 void JsonLoadConfig ( const CSphConfigSection & hSearchd );
 
@@ -46,48 +46,11 @@ void JsonDoneConfig();
 // load indexes got from JSON config on daemon indexes preload (part of ConfigureAndPreload work done here)
 void JsonConfigConfigureAndPreload ( int & iValidIndexes, int & iCounter  );
 
-// commands that got replicated via Galera, transactions
-enum ReplicationCommand_e
-{
-	RCOMMAND_PQUERY_ADD = 0,
-	RCOMMAND_ROLLBACK,
-	RCOMMAND_DELETE,
-	RCOMMAND_TRUNCATE,
-	RCOMMAND_CLUSTER_ALTER_ADD,
-	RCOMMAND_CLUSTER_ALTER_DROP,
-
-	RCOMMAND_TOTAL
-};
-
-// command trait
-struct ReplicationCommand_t
-{
-	// common
-	ReplicationCommand_e	m_eCommand { RCOMMAND_TOTAL };
-	CSphString				m_sIndex;
-	CSphString				m_sCluster;
-
-	// add
-	StoredQueryDesc_t		m_tPQ;
-	StoredQuery_i *			m_pStored = nullptr;
-
-	// delete
-	CSphVector<uint64_t>	m_dDeleteQueries;
-	CSphString				m_sDeleteTags;
-
-	// truncate
-	bool					m_bReconfigure = false;
-	CSphReconfigureSettings m_tReconfigureSettings;
-
-	bool					m_bCheckIndex = true;
-	bool					m_bIsolated = false;
-};
-
 // set Galera option for cluster
 bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sName, const CSphString & sVal, CSphString & sError );
 
 // single point there all commands passed these might be replicated, even if no cluster
-bool HandleCmdReplicate ( ReplicationCommand_t & tCmd, CSphString & sError, int * pDeletedCount );
+bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pDeletedCount );
 
 // delete all clusters on daemon shutdown
 void ReplicateClustersDelete();

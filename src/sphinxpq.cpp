@@ -12,6 +12,7 @@
 
 #include "sphinxpq.h"
 #include "sphinxrlp.h"
+#include "accumulator.h"
 
 /// protection from concurrent changes during binlog replay
 static auto &g_bRTChangesAllowed = RTChangesAllowed ();
@@ -75,22 +76,20 @@ public:
 
 	bool AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFields, CSphMatch & tDoc,
 		bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const VecTraits_T<int64_t> & dMvas,
-		CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt ) override;
-	bool MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchResult_t &tRes ) override;
-	void RollBack ( ISphRtAccum * pAccExt ) override;
-	int DeleteQueries ( const uint64_t * pQueries, int iCount ) override;
-	int DeleteQueries ( const char * sTags ) override;
+		CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) override;
+	bool MatchDocuments ( RtAccum_t * pAccExt, PercolateMatchResult_t &tRes ) override;
+	void Commit ( int * pDeleted, RtAccum_t * pAccExt ) override;
+	void RollBack ( RtAccum_t * pAccExt ) override;
 
 	StoredQuery_i * AddQuery ( const PercolateQueryArgs_t & tArgs, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError )
 		REQUIRES (!m_tLock);
 	StoredQuery_i * Query ( const PercolateQueryArgs_t & tArgs, CSphString & sError ) override;
-	bool CommitPercolate ( StoredQuery_i * pQuery, CSphString & sError ) final;
 
 	bool Prealloc ( bool bStripPath ) override;
 	void Dealloc () override {}
 	void Preread () override {}
 	void PostSetup() override;
-	ISphRtAccum * CreateAccum ( CSphString & sError ) override;
+	RtAccum_t * CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) override;
 	ISphTokenizer * CloneIndexingTokenizer() const override { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 	void SaveMeta ( bool bShutdown );
 	bool Truncate ( CSphString & ) override EXCLUDES (m_tLock);
@@ -99,8 +98,7 @@ public:
 	bool MultiQuery ( const CSphQuery *, CSphQueryResult *, int, ISphMatchSorter **, const CSphMultiQueryArgs & ) const override;
 	bool MultiQueryEx ( int, const CSphQuery *, CSphQueryResult **, ISphMatchSorter **, const CSphMultiQueryArgs & ) const override;
 	virtual bool AddDocument ( ISphHits * , const CSphMatch & , const char ** , const CSphVector<DWORD> & , CSphString & , CSphString & ) { return true; }
-	void Commit ( int * , ISphRtAccum * pAccExt ) override { RollBack ( pAccExt ); }
-	bool DeleteDocument ( const DocID_t * , int , CSphString & , ISphRtAccum * pAccExt ) override { RollBack ( pAccExt ); return true; }
+	bool DeleteDocument ( const DocID_t * , int , CSphString & , RtAccum_t * pAccExt ) override { RollBack ( pAccExt ); return true; }
 	void CheckRamFlush () override;
 	void ForceRamFlush ( bool bPeriodic ) override;
 	void ForceDiskChunk () override;
@@ -171,6 +169,10 @@ private:
 	PercolateMatchContext_t * CreateMatchContext ( const RtSegment_t * pSeg, const SegmentReject_t &tReject );
 
 	void RamFlush ( bool bPeriodic );
+
+	int ReplayDeleteQueries ( const uint64_t * pQueries, int iCount ) final;
+	int ReplayDeleteQueries ( const char * sTags ) final;
+	void ReplayCommit ( StoredQuery_i * pQuery ) final;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -714,15 +716,15 @@ PercolateIndex_c::~PercolateIndex_c ()
 	SafeClose ( m_iLockFD );
 }
 
-ISphRtAccum * PercolateIndex_c::CreateAccum ( CSphString & sError )
+RtAccum_t * PercolateIndex_c::CreateAccum ( RtAccum_t * pAccExt, CSphString & sError )
 {
-	return AcquireAccum ( m_pDict, nullptr, true, false, &sError );
+	return AcquireAccum ( m_pDict, pAccExt, true, false, &sError );
 }
 
 
 bool PercolateIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFields,
 	CSphMatch & tDoc, bool , const CSphString & , const char ** ppStr, const VecTraits_T<int64_t> & dMvas,
-	CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt )
+	CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt )
 {
 	auto pAcc = ( RtAccum_t * ) AcquireAccum ( m_pDict, pAccExt, true, true, &sError );
 	if ( !pAcc )
@@ -1381,7 +1383,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 }
 
 
-bool PercolateIndex_c::MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchResult_t & tRes )
+bool PercolateIndex_c::MatchDocuments ( RtAccum_t * pAccExt, PercolateMatchResult_t & tRes )
 {
 	MEMORY ( MEM_INDEX_RT );
 
@@ -1425,7 +1427,7 @@ bool PercolateIndex_c::MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchRes
 	return true;
 }
 
-void PercolateIndex_c::RollBack ( ISphRtAccum * pAccExt )
+void PercolateIndex_c::RollBack ( RtAccum_t * pAccExt )
 {
 	assert ( g_bRTChangesAllowed );
 
@@ -1433,7 +1435,7 @@ void PercolateIndex_c::RollBack ( ISphRtAccum * pAccExt )
 	if ( !pAcc )
 		return;
 
-	pAcc->Cleanup ();
+	pAcc->Cleanup();
 }
 
 
@@ -1584,7 +1586,7 @@ StoredQuery_i * PercolateIndex_c::AddQuery ( const PercolateQueryArgs_t & tArgs,
 	return pStored;
 }
 
-bool PercolateIndex_c::CommitPercolate ( StoredQuery_i * pQuery, CSphString & )
+void PercolateIndex_c::ReplayCommit ( StoredQuery_i * pQuery )
 {
 	StoredQuery_t * pStored = (StoredQuery_t *)pQuery;
 
@@ -1609,11 +1611,9 @@ bool PercolateIndex_c::CommitPercolate ( StoredQuery_i * pQuery, CSphString & )
 		m_dStored.Insert ( iPos+1, tItem );
 	}
 	m_tLock.Unlock();
-
-	return true;
 }
 
-int PercolateIndex_c::DeleteQueries ( const uint64_t * pQueries, int iCount )
+int PercolateIndex_c::ReplayDeleteQueries ( const uint64_t * pQueries, int iCount )
 {
 	assert ( !iCount || pQueries!=NULL );
 
@@ -1637,7 +1637,7 @@ int PercolateIndex_c::DeleteQueries ( const uint64_t * pQueries, int iCount )
 	return iDeleted;
 }
 
-int PercolateIndex_c::DeleteQueries ( const char * sTags )
+int PercolateIndex_c::ReplayDeleteQueries ( const char * sTags )
 {
 	CSphVector<uint64_t> dTags;
 	PercolateTags ( sTags, dTags );
@@ -1666,6 +1666,41 @@ int PercolateIndex_c::DeleteQueries ( const char * sTags )
 		GetBinlog()->BinlogPqDelete ( &m_iTID, m_sIndexName.cstr(), nullptr, 0, sTags );
 
 	return iDeleted;
+}
+
+void PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAccExt )
+{
+	assert ( g_bRTChangesAllowed );
+
+	RtAccum_t * pAcc = (RtAccum_t *)AcquireAccum ( m_pDict, pAccExt );
+	if ( !pAcc )
+		return;
+
+	int iDeleted = 0;
+	for ( ReplicationCommand_t * pCmd : pAcc->m_dCmd )
+	{
+		switch ( pCmd->m_eCommand )
+		{
+		case ReplicationCommand_e::PQUERY_ADD:
+			ReplayCommit ( pCmd->m_pStored.LeakPtr() );
+			break;
+
+		case ReplicationCommand_e::PQUERY_DELETE:
+			if ( pCmd->m_dDeleteQueries.GetLength() )
+				iDeleted += ReplayDeleteQueries ( pCmd->m_dDeleteQueries.Begin(), pCmd->m_dDeleteQueries.GetLength() );
+			else
+				iDeleted += ReplayDeleteQueries ( pCmd->m_sDeleteTags.cstr() );
+			break;
+
+		default:
+			sphWarning ( "index %s: unsupported command %d", m_sIndexName.cstr(), (int)pCmd->m_eCommand );
+		}
+	}
+
+	pAcc->Cleanup();
+
+	if ( pDeleted )
+		*pDeleted = iDeleted;
 }
 
 struct PqMatchProcessor_t : ISphMatchProcessor, ISphNoncopyable
@@ -2001,8 +2036,13 @@ void PercolateIndex_c::PostSetup()
 		const ISphTokenizer * pTok = tQuery.m_bQL ? pTokenizer : pTokenizerJson;
 		PercolateQueryArgs_t tArgs ( tQuery );
 		StoredQuery_i * pQuery = AddQuery ( tArgs, pTok, pDict, sError );
-		if ( !pQuery || !CommitPercolate ( pQuery, sError ) )
+		if ( !pQuery )
+		{
 			sphWarning ( "index '%s': %d (id=" UINT64_FMT ") query failed to load, ignoring", m_sIndexName.cstr(), i, tQuery.m_uQUID );
+		} else
+		{
+			ReplayCommit ( pQuery );
+		}
 	}
 
 	m_dLoadedQueries.Reset ( 0 );

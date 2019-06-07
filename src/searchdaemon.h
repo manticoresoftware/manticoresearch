@@ -882,6 +882,11 @@ public:
 		return m_pCore!=nullptr;
 	}
 
+	operator ServedDesc_t * () const
+	{
+		return m_pCore;
+	}
+
 private:
 	ServedDesc_t * m_pCore = nullptr;
 	const ServedIndex_c * m_pLock = nullptr;
@@ -1278,15 +1283,14 @@ public:
 class CSphSessionAccum
 {
 public:
-	explicit	CSphSessionAccum ( bool bManage );
-				~CSphSessionAccum();
+	CSphSessionAccum () = default;
+	~CSphSessionAccum();
 
-	ISphRtAccum * GetAcc ( RtIndex_i * pIndex, CSphString & sError );
+	RtAccum_t * GetAcc ( RtIndex_i * pIndex, CSphString & sError );
 	RtIndex_i * GetIndex ();
 
 private:
-	ISphRtAccum *		m_pAcc = nullptr;
-	bool				m_bManage;
+	RtAccum_t * m_pAcc = nullptr;
 };
 
 

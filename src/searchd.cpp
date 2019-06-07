@@ -22,6 +22,7 @@
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
 #include "sphinxrlp.h"
+#include "accumulator.h"
 
 extern "C"
 {
@@ -13024,7 +13025,7 @@ static void PQLocalMatch ( const BlobVec_t &dDocs, const CSphString& sIndex, con
 	}
 
 	auto pIndex = ( PercolateIndex_i * ) pServed->m_pIndex;
-	ISphRtAccum * pAccum = tAcc.GetAcc ( pIndex, sError );
+	RtAccum_t * pAccum = tAcc.GetAcc ( pIndex, sError );
 	sMsg.Err ( sError );
 
 	if ( !sMsg.ErrEmpty () )
@@ -13324,7 +13325,7 @@ void HandleCommandCallPq ( CachedOutputBuffer_c &tOut, WORD uVer, InputBuffer_c 
 		}
 
 	// working
-	CSphSessionAccum tAcc ( true );
+	CSphSessionAccum tAcc;
 	CPqResult tResult;
 
 	PercolateMatchDocuments ( dDocs, tOpts, tAcc, tResult );
@@ -13579,12 +13580,13 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 		return;
 	}
 
-	bool bPq = pServed->m_eType==IndexType_e::PERCOLATE;
+	bool bPq = ( pServed->m_eType==IndexType_e::PERCOLATE );
 
 	auto * pIndex = (RtIndex_i *)pServed->m_pIndex;
 
 	// get schema, check values count
 	const CSphSchema & tSchema = pIndex->GetMatchSchema ();
+	const CSphSchema & tSchemaInt = pIndex->GetInternalSchema();
 	int iSchemaSz = tSchema.GetAttrsCount() + tSchema.GetFieldsCount();
 	if ( pIndex->GetSettings().m_bIndexFieldLens )
 		iSchemaSz -= tSchema.GetFieldsCount();
@@ -13607,6 +13609,12 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 	if ( ( iGot % iExp )!=0 )
 	{
 		sError.SetSprintf ( "column count does not match value count (expected %d, got %d)", iExp, iGot );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	if ( bPq && !CheckIndexCluster ( tStmt.m_sIndex, *pServed, tStmt.m_sCluster, sError ) )
+	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
@@ -13721,7 +13729,12 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 	CSphVector<const char *> dStrings;
 	StringPtrTraits_t tStrings;
 	tStrings.m_dOff.Reset ( tSchema.GetAttrsCount() );
-	ISphRtAccum* pAccum = tAcc.GetAcc ( pIndex, sError );
+	RtAccum_t * pAccum = tAcc.GetAcc ( pIndex, sError );
+	if ( !pAccum )
+	{
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
 
 	const CSphColumnInfo * pDocid = tSchema.GetAttr(sphGetDocidName());
 	assert ( pDocid );
@@ -13732,13 +13745,6 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 	for ( int c=0; c<tStmt.m_iRowsAffected; ++c )
 	{
 		assert ( sError.IsEmpty() );
-
-		// pq specific: only ONE row allowed for now (remove this check on #684 resolving)
-		if ( c && bPq )
-		{
-			sError.SetSprintf ( "PQ for now allows only 1 rows per insert, %d provided", tStmt.m_iRowsAffected );
-			break;
-		}
 
 		CSphMatchVariant tDoc;
 		tDoc.Reset ( tSchema.GetRowSize() );
@@ -13897,44 +13903,39 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 		// do add
 		if ( bPq )
 		{
-			if ( iIdIndex >= 0 && !tDoc.GetAttr(tIdLoc) )
+			if ( iIdIndex>=0 && !tDoc.GetAttr ( tIdLoc ) )
 			{
 				sError.SetSprintf ( "'id' column parsed as 0. Omit the column to enable auto-id" );
 				break;
 			}
-			if ( CheckIndexCluster ( tStmt.m_sIndex, *pServed, tStmt.m_sCluster, sError ) ) {
-				const CSphSchema& tSchema = pIndex->GetInternalSchema ();
 
-				CSphVector<CSphFilterSettings> dFilters;
-				CSphVector<FilterTreeItem_t>   dFilterTree;
-				if ( !PercolateParseFilters ( dStrings[2], eCollation, tSchema, dFilters, dFilterTree, sError ) )
-					break;
+			CSphVector<CSphFilterSettings> dFilters;
+			CSphVector<FilterTreeItem_t>   dFilterTree;
+			if ( !PercolateParseFilters ( dStrings[2], eCollation, tSchemaInt, dFilters, dFilterTree, sError ) )
+				break;
 
-				PercolateQueryArgs_t tArgs ( dFilters, dFilterTree );
-				tArgs.m_sQuery   = dStrings[0];
-				tArgs.m_sTags	= dStrings[1];
-				tArgs.m_uQUID	= tDoc.GetAttr(tIdLoc);
-				tArgs.m_bReplace = bReplace;
-				tArgs.m_bQL		 = true;
+			PercolateQueryArgs_t tArgs ( dFilters, dFilterTree );
+			tArgs.m_sQuery   = dStrings[0];
+			tArgs.m_sTags	= dStrings[1];
+			tArgs.m_uQUID	= tDoc.GetAttr(tIdLoc);
+			tArgs.m_bReplace = bReplace;
+			tArgs.m_bQL		 = true;
 
-				// add query
-				auto* pQIndex = (PercolateIndex_i *) pIndex;
-				auto pStored = pQIndex->Query ( tArgs, sError );
-				if ( pStored )
-				{
-					ReplicationCommand_t tCmd;
-					tCmd.m_eCommand = RCOMMAND_PQUERY_ADD;
-					tCmd.m_sIndex   = tStmt.m_sIndex;
-					tCmd.m_sCluster = tStmt.m_sCluster;
-					tCmd.m_pStored  = pStored;
-
-					HandleCmdReplicate ( tCmd, sError, nullptr );
-				}
+			// add query
+			PercolateIndex_i * pQIndex = (PercolateIndex_i *)pIndex;
+			StoredQuery_i * pStored = pQIndex->Query ( tArgs, sError );
+			if ( pStored )
+			{
+				ReplicationCommand_t * pCmd = pAccum->AddCommand();
+				pCmd->m_eCommand = ReplicationCommand_e::PQUERY_ADD;
+				pCmd->m_sIndex   = tStmt.m_sIndex;
+				pCmd->m_sCluster = tStmt.m_sCluster;
+				pCmd->m_pStored  = pStored;
 			}
-
-		}
-		else
+		} else
+		{
 			pIndex->AddDocument ( dFields, tDoc, bReplace, tStmt.m_sStringParam, dStrings.Begin(), dMvas, sError, sWarning, pAccum );
+		}
 
 		if ( !sError.IsEmpty() )
 			break;
@@ -13949,8 +13950,8 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 	}
 
 	// no errors so far
-	if ( bCommit && !bPq )
-		pIndex->Commit ( nullptr, pAccum );
+	if ( bCommit )
+		HandleCmdReplicate ( *pAccum, sError, nullptr );
 
 	// my OK packet
 	tOut.Ok ( tStmt.m_iRowsAffected, sWarning );
@@ -15817,19 +15818,19 @@ void HandleMysqlMeta ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt, const CS
 	dRows.Eof ( bMoreResultsFollow );
 }
 
-static int PercolateDeleteDocuments ( const CSphString & sIndex, const CSphString & sCluster, const SqlStmt_t & tStmt, CSphString & sError )
+static void PercolateDeleteDocuments ( const CSphString & sIndex, const CSphString & sCluster, const SqlStmt_t & tStmt, RtAccum_t & tAccum, CSphString & sError )
 {
 	// prohibit double copy of filters
 	const CSphQuery & tQuery = tStmt.m_tQuery;
-	ReplicationCommand_t tCmd;
-	tCmd.m_eCommand = RCOMMAND_DELETE;
-	tCmd.m_sIndex = sIndex;
-	tCmd.m_sCluster = sCluster;
+	CSphScopedPtr<ReplicationCommand_t> pCmd ( new ReplicationCommand_t );
+	pCmd->m_eCommand = ReplicationCommand_e::PQUERY_DELETE;
+	pCmd->m_sIndex = sIndex;
+	pCmd->m_sCluster = sCluster;
 
 	if ( tQuery.m_dFilters.GetLength()>1 )
 	{
 		sError.SetSprintf ( "only single filter supported, got %d", tQuery.m_dFilters.GetLength() );
-		return 0;
+		return;
 	}
 
 	if ( tQuery.m_dFilters.GetLength() )
@@ -15838,13 +15839,13 @@ static int PercolateDeleteDocuments ( const CSphString & sIndex, const CSphStrin
 		if ( ( pFilter->m_bHasEqualMin || pFilter->m_bHasEqualMax ) && !pFilter->m_bExclude && pFilter->m_eType==SPH_FILTER_VALUES
 			&& ( pFilter->m_sAttrName=="@id" || pFilter->m_sAttrName=="id" || pFilter->m_sAttrName=="uid" ) )
 		{
-			tCmd.m_dDeleteQueries.Reserve ( pFilter->GetNumValues() );
+			pCmd->m_dDeleteQueries.Reserve ( pFilter->GetNumValues() );
 			const SphAttr_t * pA = pFilter->GetValueArray();
 			for ( int i = 0; i < pFilter->GetNumValues(); ++i )
-				tCmd.m_dDeleteQueries.Add ( pA[i] );
+				pCmd->m_dDeleteQueries.Add ( pA[i] );
 		} else if ( pFilter->m_eType==SPH_FILTER_STRING && pFilter->m_sAttrName=="tags" && pFilter->m_dStrings.GetLength() )
 		{
-			tCmd.m_sDeleteTags = pFilter->m_dStrings[0].cstr();
+			pCmd->m_sDeleteTags = pFilter->m_dStrings[0].cstr();
 		} else if ( pFilter->m_eType==SPH_FILTER_STRING_LIST && pFilter->m_sAttrName=="tags" && pFilter->m_dStrings.GetLength() )
 		{
 			StringBuilder_c tBuf;
@@ -15853,18 +15854,16 @@ static int PercolateDeleteDocuments ( const CSphString & sIndex, const CSphStrin
 				tBuf << sVal;
 			tBuf.FinishBlock ();
 
-			tCmd.m_sDeleteTags = tBuf.cstr();
+			pCmd->m_sDeleteTags = tBuf.cstr();
 		}
 		else
 		{
 			sError.SetSprintf ( "unsupported filter type %d, attribute '%s'", pFilter->m_eType, pFilter->m_sAttrName.cstr() );
-			return 0;
+			return;
 		}
 	}
 
-	int iDeleted = 0;
-	HandleCmdReplicate ( tCmd, sError, &iDeleted );
-	return iDeleted;
+	tAccum.m_dCmd.Add ( pCmd.LeakPtr() );
 }
 
 
@@ -15873,48 +15872,52 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const CSphStr
 {
 	CSphString sError;
 
-	// scope just for unlocked index for percolate call
-	while ( true )
+	ServedDescRPtr_c pLocked ( GetServed ( sName ) );
+	if ( !pLocked || !pLocked->m_pIndex )
 	{
-		ServedDescRPtr_c pLocked ( GetServed ( sName ) );
-		if ( !pLocked || !pLocked->m_pIndex )
-		{
-			dErrors.Submit ( sName, sDistributed, "index not available" );
-			return 0;
-		}
+		dErrors.Submit ( sName, sDistributed, "index not available" );
+		return 0;
+	}
 
-		auto * pIndex = static_cast<RtIndex_i *> ( pLocked->m_pIndex );
-		if ( !ServedDesc_t::IsMutable ( pLocked ) )
-		{
-			sError.SetSprintf ( "does not support DELETE" );
-			dErrors.Submit ( sName, sDistributed, sError.cstr() );
-			return 0;
-		}
+	auto * pIndex = static_cast<RtIndex_i *> ( pLocked->m_pIndex );
+	if ( !ServedDesc_t::IsMutable ( pLocked ) )
+	{
+		sError.SetSprintf ( "does not support DELETE" );
+		dErrors.Submit ( sName, sDistributed, sError.cstr() );
+		return 0;
+	}
 
-		ISphRtAccum * pAccum = tAcc.GetAcc ( pIndex, sError );
+	RtAccum_t * pAccum = tAcc.GetAcc ( pIndex, sError );
+	if ( !sError.IsEmpty() )
+	{
+		dErrors.Submit ( sName, sDistributed, sError.cstr() );
+		return 0;
+	}
+
+	if ( !CheckIndexCluster ( sName, *pLocked, sCluster, sError ) )
+	{
+		dErrors.Submit ( sName, sDistributed, sError.cstr() );
+		return 0;
+	} 
+
+	int iAffected = 0;
+
+	// goto to percolate path with unlocked index
+	if ( pLocked->m_eType==IndexType_e::PERCOLATE )
+	{
+		PercolateDeleteDocuments ( sName, sCluster, tStmt, *pAccum, sError );
 		if ( !sError.IsEmpty() )
 		{
 			dErrors.Submit ( sName, sDistributed, sError.cstr() );
 			return 0;
 		}
-
-		// goto to percolate path with unlocked index
-		if ( pLocked->m_eType==IndexType_e::PERCOLATE )
-		{
-			if ( !CheckIndexCluster ( sName, *pLocked, sCluster, sError ) )
-			{
-				dErrors.Submit ( sName, sDistributed, sError.cstr() );
-				return 0;
-			} 
-
-			break;
-		}
-
+	} else
+	{
 		CSphScopedPtr<SearchHandler_c> pHandler ( nullptr );
 		CSphVector<DocID_t> dValues;
 		if ( !pDocs ) // needs to be deleted via query
 		{
-		pHandler = new SearchHandler_c ( 1, tQueryParserFactory.CreateQueryParser(), tStmt.m_tQuery.m_eQueryType, false, tThd );
+			pHandler = new SearchHandler_c ( 1, tQueryParserFactory.CreateQueryParser(), tStmt.m_tQuery.m_eQueryType, false, tThd );
 			pHandler->m_dLocked.AddUnmanaged ( sName, pLocked );
 			pHandler->RunDeletes ( tStmt.m_tQuery, sName, &sError, &dValues );
 			pDocs = dValues.Begin();
@@ -15926,21 +15929,12 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const CSphStr
 			dErrors.Submit ( sName, sDistributed, sError.cstr() );
 			return 0;
 		}
-
-		int iAffected = 0;
-		if ( bCommit )
-			pIndex->Commit ( &iAffected, pAccum );
-
-		return iAffected;
 	}
 
-	// need unlocked index here
-	int iAffected = PercolateDeleteDocuments ( sName, sCluster, tStmt, sError );
-	if ( !sError.IsEmpty() )
-		dErrors.Submit ( sName, sDistributed, sError.cstr() );
+	if ( bCommit )
+		HandleCmdReplicate ( *pAccum, sError, &iAffected );
 
 	return iAffected;
-
 }
 
 
@@ -16273,14 +16267,14 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 				RtIndex_i * pIndex = tAcc.GetIndex();
 				if ( pIndex )
 				{
-					ISphRtAccum * pAccum = tAcc.GetAcc ( pIndex, sError );
+					RtAccum_t * pAccum = tAcc.GetAcc ( pIndex, sError );
 					if ( !sError.IsEmpty() )
 					{
 						tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 						return;
 					} else
 					{
-						pIndex->Commit ( NULL, pAccum );
+						HandleCmdReplicate ( *pAccum, sError, nullptr );
 					}
 				}
 			}
@@ -16700,11 +16694,14 @@ void HandleMysqlTruncate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
 	bool bReconfigure = ( tStmt.m_iIntParam==1 );
 
-	ReplicationCommand_t tCmd;
+	CSphScopedPtr<ReplicationCommand_t> pCmd ( new ReplicationCommand_t() );
 	CSphString sError;
 	const CSphString & sIndex = tStmt.m_sIndex;
 
-	if ( bReconfigure && !PrepareReconfigure ( sIndex, tCmd.m_tReconfigureSettings, sError ) )
+	if ( bReconfigure )
+		pCmd->m_tReconfigure = new CSphReconfigureSettings();
+
+	if ( bReconfigure && !PrepareReconfigure ( sIndex, *pCmd->m_tReconfigure.Ptr(), sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 		return;
@@ -16727,12 +16724,15 @@ void HandleMysqlTruncate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 		}
 	}
 
-	tCmd.m_eCommand = RCOMMAND_TRUNCATE;
-	tCmd.m_sIndex = sIndex;
-	tCmd.m_sCluster = tStmt.m_sCluster;
-	tCmd.m_bReconfigure = bReconfigure;
+	pCmd->m_eCommand = ReplicationCommand_e::TRUNCATE;
+	pCmd->m_sIndex = sIndex;
+	pCmd->m_sCluster = tStmt.m_sCluster;
+	pCmd->m_bReconfigure = bReconfigure;
 
-	bool bRes = HandleCmdReplicate ( tCmd, sError, nullptr );
+	RtAccum_t tAcc ( false );
+	tAcc.m_dCmd.Add ( pCmd.LeakPtr() );
+
+	bool bRes = HandleCmdReplicate ( tAcc, sError, nullptr );
 	if ( !bRes )
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 	else
@@ -17654,34 +17654,30 @@ static void HandleMysqlReloadIndex ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 
 //////////////////////////////////////////////////////////////////////////
 
-CSphSessionAccum::CSphSessionAccum ( bool bManage )
-	: m_bManage ( bManage )
-{ }
-
 CSphSessionAccum::~CSphSessionAccum()
 {
 	SafeDelete ( m_pAcc );
 }
 
-ISphRtAccum * CSphSessionAccum::GetAcc ( RtIndex_i * pIndex, CSphString & sError )
+RtAccum_t * CSphSessionAccum::GetAcc ( RtIndex_i * pIndex, CSphString & sError )
 {
-	if ( !m_bManage )
-		return nullptr;
-
 	assert ( pIndex );
-	if ( m_pAcc )
-		return m_pAcc;
+	RtAccum_t * pAcc = pIndex->CreateAccum ( m_pAcc, sError );
+	if ( !pAcc && !sError.IsEmpty() )
+		return pAcc;
 
-	m_pAcc = pIndex->CreateAccum ( sError );
-	return m_pAcc;
+	if ( pAcc!=m_pAcc )
+		SafeDelete ( m_pAcc );
+	m_pAcc = pAcc;
+	return pAcc;
 }
 
 RtIndex_i * CSphSessionAccum::GetIndex ()
 {
-	if ( !m_bManage )
+	if ( m_pAcc )
+		return m_pAcc->GetIndex();
+	else
 		return sphGetCurrentIndexRT();
-
-	return ( m_pAcc ? m_pAcc->GetIndex() : NULL );
 }
 
 static bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, CSphString & sFederatedQuery );
@@ -17703,10 +17699,6 @@ public:
 	CSphQueryProfileMysql	m_tLastProfile;
 
 public:
-	explicit CSphinxqlSession ( bool bManage )
-		: m_tAcc ( bManage )
-	{}
-
 	// just execute one sphinxql statement
 	//
 	// IMPORTANT! this does NOT start or stop profiling, as there a few external
@@ -17862,13 +17854,13 @@ public:
 				RtIndex_i * pIndex = m_tAcc.GetIndex();
 				if ( pIndex )
 				{
-					ISphRtAccum * pAccum = m_tAcc.GetAcc ( pIndex, m_sError );
+					RtAccum_t * pAccum = m_tAcc.GetAcc ( pIndex, m_sError );
 					if ( !m_sError.IsEmpty() )
 					{
 						tOut.Error ( sQuery.cstr(), m_sError.cstr() );
 						return true;
 					}
-					pIndex->Commit ( NULL, pAccum );
+					HandleCmdReplicate ( *pAccum, m_sError, nullptr );
 				}
 				tOut.Ok();
 				return true;
@@ -17882,7 +17874,7 @@ public:
 				RtIndex_i * pIndex = m_tAcc.GetIndex();
 				if ( pIndex )
 				{
-					ISphRtAccum * pAccum = m_tAcc.GetAcc ( pIndex, m_sError );
+					RtAccum_t * pAccum = m_tAcc.GetAcc ( pIndex, m_sError );
 					if ( !m_sError.IsEmpty() )
 					{
 						tOut.Error ( sQuery.cstr(), m_sError.cstr() );
@@ -17891,7 +17883,7 @@ public:
 					if ( eStmt==STMT_COMMIT )
 					{
 						StatCountCommand ( SEARCHD_COMMAND_COMMIT );
-						pIndex->Commit ( NULL, pAccum );
+						HandleCmdReplicate ( *pAccum, m_sError, nullptr );
 					} else
 					{
 						pIndex->RollBack ( pAccum );
@@ -18192,7 +18184,7 @@ void HandleCommandSphinxql ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer
 	BYTE uDummy = 0;
 
 	// todo: move upper, if the session variables are also necessary in API access mode.
-	CSphinxqlSession tSession ( true ); // FIXME!!! check that no accum related command used via API
+	CSphinxqlSession tSession; // FIXME!!! check that no accum related command used via API
 
 	APICommand_t dOk ( tOut, SEARCHD_OK, VER_COMMAND_SPHINXQL );
 	tSession.Execute ( sCommand, tOut, uDummy, tThd );
@@ -18361,7 +18353,7 @@ static void HandleClientMySQL ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handler
 	}
 
 	CSphString sQuery; // to keep data alive for SphCrashQuery_c
-	CSphinxqlSession tSession ( false ); // session variables and state
+	CSphinxqlSession tSession; // session variables and state
 	tSession.m_tVars.m_bVIP = tThd.m_bVip;
 	bool bAuthed = false;
 	BYTE uPacketID = 1;
@@ -21792,7 +21784,7 @@ using NetStateAPI_t = NetStateCommon_t;
 
 struct NetStateQL_t : public NetStateCommon_t
 {
-	CSphinxqlSession	m_tSession { true };
+	CSphinxqlSession	m_tSession;
 	bool				m_bAuthed = false;
 	BYTE				m_uPacketID = 1;
 };

@@ -22,7 +22,7 @@
 
 struct CSphReconfigureSettings;
 struct CSphReconfigureSetup;
-class ISphRtAccum;
+class RtAccum_t;
 
 
 /// RAM based updateable backend interface
@@ -38,17 +38,17 @@ public:
 	/// fails in case of two open txns to different indexes
 	virtual bool AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFields, CSphMatch & tDoc,
 		bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const VecTraits_T<int64_t> & dMvas,
-		CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt ) = 0;
+		CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) = 0;
 
 	/// delete document in current txn
 	/// fails in case of two open txns to different indexes
-	virtual bool DeleteDocument ( const DocID_t * pDocs, int iDocs, CSphString & sError, ISphRtAccum * pAccExt ) = 0;
+	virtual bool DeleteDocument ( const DocID_t * pDocs, int iDocs, CSphString & sError, RtAccum_t * pAccExt ) = 0;
 
 	/// commit pending changes
-	virtual void Commit ( int * pDeleted, ISphRtAccum * pAccExt ) = 0;
+	virtual void Commit ( int * pDeleted, RtAccum_t * pAccExt ) = 0;
 
 	/// undo pending changes
-	virtual void RollBack ( ISphRtAccum * pAccExt ) = 0;
+	virtual void RollBack ( RtAccum_t * pAccExt ) = 0;
 
 	/// check and periodically flush RAM chunk to disk
 	virtual void CheckRamFlush () = 0;
@@ -80,7 +80,7 @@ public:
 	/// get disk chunk
 	virtual CSphIndex * GetDiskChunk ( int iChunk ) = 0;
 	
-	virtual ISphRtAccum * CreateAccum ( CSphString & sError ) = 0;
+	virtual RtAccum_t * CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) = 0;
 
 	// instead of cloning for each AddDocument() call we could just call this method and improve batch inserts speed
 	virtual ISphTokenizer * CloneIndexingTokenizer() const = 0;
@@ -89,7 +89,7 @@ public:
 	
 	/// acquire thread-local indexing accumulator
 	/// returns NULL if another index already uses it in an open txn
-	ISphRtAccum * AcquireAccum ( CSphDict * pDict, ISphRtAccum * pAccExt=nullptr,
+	RtAccum_t * AcquireAccum ( CSphDict * pDict, RtAccum_t * pAccExt=nullptr,
 		bool bWordDict=true, bool bSetTLS = true, CSphString * sError=nullptr );
 };
 
@@ -107,16 +107,6 @@ void sphRTDone ();
 RtIndex_i * sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
 
 typedef void ProgressCallbackSimple_t ();
-
-class ISphRtAccum
-{
-protected:
-	RtIndex_i * m_pIndex=nullptr;		///< my current owner in this thread
-	ISphRtAccum () {} // can not create such thing outside of RT index
-public:
-	virtual ~ISphRtAccum () {}
-	RtIndex_i * GetIndex() const { return m_pIndex; }
-};
 
 typedef const QueryParser_i * CreateQueryParser ( bool bJson );
 
@@ -262,51 +252,6 @@ struct RtHitReader2_t : public RtHitReader_t
 {
 	const BYTE * m_pBase = nullptr;
 	void Seek ( SphOffset_t uOff, int iHits );
-};
-
-/// indexing accumulator
-class RtAccum_t : public ISphRtAccum
-{
-public:
-	DWORD						m_uAccumDocs {0};
-	CSphTightVector<CSphWordHit>	m_dAccum;
-	CSphTightVector<CSphRowitem>	m_dAccumRows;
-	CSphVector<DocID_t>			m_dAccumKlist;
-	CSphTightVector<BYTE>		m_dBlobs;
-	CSphVector<DWORD>			m_dPerDocHitsCount;
-
-	bool						m_bKeywordDict {true};
-	CSphDictRefPtr_c			m_pDict;
-	CSphDict *					m_pRefDict = nullptr; // not owned, used only for ==-matching
-
-private:
-	ISphRtDictWraperRefPtr_c	m_pDictRt;
-	bool						m_bReplace = false;		///< insert or replace mode (affects CleanupDuplicates() behavior)
-	BlobRowBuilder_i *			m_pBlobWriter {nullptr};
-	RowID_t						m_tNextRowID {0};
-	void						ResetDict ();
-public:
-					explicit RtAccum_t ( bool bKeywordDict );
-					~RtAccum_t() override;
-
-	void			SetupDict ( const RtIndex_i * pIndex, CSphDict * pDict, bool bKeywordDict );
-	void			Sort ();
-
-
-enum EWhatClear { EPartial=1, EAccum=2, ERest=4, EAll=7};
-	void Cleanup ( BYTE eWhat=EAll );
-
-	void			AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, int iRowSize,
-		const char ** ppStr, const VecTraits_T<int64_t> & dMvas );
-	RtSegment_t *	CreateSegment ( int iRowSize, int iWordsCheckpoint );
-	void			CleanupDuplicates ( int iRowSize );
-	void			GrabLastWarning ( CSphString & sWarning );
-	void			SetIndex ( RtIndex_i * pIndex );
-
-	RowID_t			GenerateRowID();
-	void			ResetRowID();
-
-
 };
 
 class CSphSource_StringVector : public CSphSource_Document

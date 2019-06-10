@@ -1245,7 +1245,7 @@ class SqlRowBuffer_c;
 class StmtErrorReporter_i
 {
 public:
-	virtual void Ok ( int iAffectedRows, const CSphString & sWarning ) = 0;
+	virtual void Ok ( int iAffectedRows, const CSphString & sWarning, int64_t iLastInsertId ) = 0;
 	virtual void Ok ( int iAffectedRows, int nWarnings=0 ) = 0;
 	virtual void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr = MYSQL_ERR_PARSE_ERROR ) = 0;
 
@@ -1301,7 +1301,7 @@ bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, CachedOutputBuffer_c 
 ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster, const ThdDesc_t & tThd );
 void sphFormatFactors ( StringBuilder_c& dOut, const unsigned int * pFactors, bool bJson );
 bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation );
-void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation );
+void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation, CSphVector<int64_t> & dLastIds );
 void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning, const ThdDesc_t & tThd );
 void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphSessionAccum & tAcc, const ThdDesc_t & tThd );
 

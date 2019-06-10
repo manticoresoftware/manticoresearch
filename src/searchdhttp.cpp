@@ -399,7 +399,7 @@ private:
 class HttpErrorReporter_c : public StmtErrorReporter_i
 {
 public:
-	virtual void	Ok ( int iAffectedRows, const CSphString & /*sWarning*/ ) { m_iAffected = iAffectedRows; }
+	virtual void	Ok ( int iAffectedRows, const CSphString & /*sWarning*/, int64_t /*iLastInsertId*/ ) { m_iAffected = iAffectedRows; }
 	virtual void	Ok ( int iAffectedRows, int /*nWarnings*/ ) { m_iAffected = iAffectedRows; }
 	virtual void	Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr );
 	virtual SqlRowBuffer_c * GetBuffer() { return NULL; }
@@ -696,7 +696,8 @@ protected:
 		CSphSessionAccum tAcc;
 		CSphString sWarning;
 		HttpErrorReporter_c tReporter;
-		sphHandleMysqlInsert ( tReporter, tStmt, bReplace, true, sWarning, tAcc, SPH_COLLATION_DEFAULT );
+		CSphVector<int64_t> dLastIds;
+		sphHandleMysqlInsert ( tReporter, tStmt, bReplace, true, sWarning, tAcc, SPH_COLLATION_DEFAULT, dLastIds );
 
 		if ( tReporter.IsError() )
 			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );

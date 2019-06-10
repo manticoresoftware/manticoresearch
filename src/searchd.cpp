@@ -2627,7 +2627,7 @@ void ISphOutputBuffer::SendString ( const char * sStr )
 
 /////////////////////////////////////////////////////////////////////////////
 // encodes Mysql Length-coded binary
-BYTE * MysqlPackInt ( BYTE * pOutput, int iValue )
+BYTE * MysqlPackInt ( BYTE * pOutput, int64_t iValue )
 {
 	if ( iValue<0 )
 		return pOutput;
@@ -2660,10 +2660,10 @@ BYTE * MysqlPackInt ( BYTE * pOutput, int iValue )
 	*pOutput++ = (BYTE)( iValue>>8 );
 	*pOutput++ = (BYTE)( iValue>>16 );
 	*pOutput++ = (BYTE)( iValue>>24 );
-	*pOutput++ = 0;
-	*pOutput++ = 0;
-	*pOutput++ = 0;
-	*pOutput++ = 0;
+	*pOutput++ = (BYTE)( iValue>>32 );
+	*pOutput++ = (BYTE)( iValue>>40 );
+	*pOutput++ = (BYTE)( iValue>>48 );
+	*pOutput++ = (BYTE)( iValue>>56 );
 	return pOutput;
 }
 
@@ -11857,13 +11857,12 @@ void SendMysqlEofPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iWarns, b
 
 
 // was defaults ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedRows=0, int iWarns=0, const char * sMessage=nullptr, bool bMoreResults=false, bool bAutoCommit )
-void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedRows, int iWarns, const char * sMessage, bool bMoreResults, bool bAutoCommit )
+void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedRows, int iWarns, const char * sMessage, bool bMoreResults, bool bAutoCommit, int64_t iLastID )
 {
-	DWORD iInsert_id = 0;
 	BYTE sVarLen[20] = {0}; // max 18 for packed number, +1 more just for fun
 	BYTE * pBuf = sVarLen;
 	pBuf = MysqlPackInt ( pBuf, iAffectedRows );
-	pBuf = MysqlPackInt ( pBuf, iInsert_id );
+	pBuf = MysqlPackInt ( pBuf, iLastID );
 	int iLen = pBuf - sVarLen;
 
 	int iMsgLen = 0;
@@ -11890,7 +11889,7 @@ void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedR
 
 void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, bool bAutoCommit )
 {
-	SendMysqlOkPacket ( tOut, uPacketID, 0, 0, nullptr, false, bAutoCommit );
+	SendMysqlOkPacket ( tOut, uPacketID, 0, 0, nullptr, false, bAutoCommit, 0 );
 }
 
 
@@ -12157,9 +12156,9 @@ public:
 		Error ( nullptr, sBuf, iErr );
 	}
 
-	inline void Ok ( int iAffectedRows=0, int iWarns=0, const char * sMessage=NULL, bool bMoreResults=false )
+	inline void Ok ( int iAffectedRows=0, int iWarns=0, const char * sMessage=NULL, bool bMoreResults=false, int64_t iLastInsertId=0 )
 	{
-		SendMysqlOkPacket ( m_tOut, m_uPacketID, iAffectedRows, iWarns, sMessage, bMoreResults, m_bAutoCommit );
+		SendMysqlOkPacket ( m_tOut, m_uPacketID, iAffectedRows, iWarns, sMessage, bMoreResults, m_bAutoCommit, iLastInsertId );
 		if ( bMoreResults )
 			m_uPacketID++;
 	}
@@ -12273,9 +12272,9 @@ public:
 		: m_tRowBuffer ( tBuffer )
 	{}
 
-	void Ok ( int iAffectedRows, const CSphString & sWarning ) final
+	void Ok ( int iAffectedRows, const CSphString & sWarning, int64_t iLastInsertId ) final
 	{
-		m_tRowBuffer.Ok ( iAffectedRows, sWarning.IsEmpty() ? 0 : 1 );
+		m_tRowBuffer.Ok ( iAffectedRows, ( sWarning.IsEmpty() ? 0 : 1 ), nullptr, false, iLastInsertId );
 	}
 
 	void Ok ( int iAffectedRows, int nWarnings ) final
@@ -13566,7 +13565,7 @@ protected:
 
 
 void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool bReplace, bool bCommit,
-	  CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation )
+	  CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation, CSphVector<int64_t> & dLastIds )
 {
 	MEMORY ( MEM_SQL_INSERT );
 
@@ -13746,6 +13745,8 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 	assert ( pDocid );
 	CSphAttrLocator tIdLoc = pDocid->m_tLocator;
 	tIdLoc.m_bDynamic = true;
+	CSphVector<int64_t> dIds;
+	dIds.Reserve ( tStmt.m_iRowsAffected );
 
 	// convert attrs
 	for ( int c=0; c<tStmt.m_iRowsAffected; ++c )
@@ -13755,8 +13756,9 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 		CSphMatchVariant tDoc;
 		tDoc.Reset ( tSchema.GetRowSize() );
 		if ( iIdIndex>=0 )
+		{
 			tDoc.SetAttr ( tIdLoc, tStmt.m_dInsertValues[iIdIndex + c * iExp], SPH_ATTR_BIGINT );
-		else
+		} else
 		{
 			assert ( bPq );
 			assert ( tDoc.GetAttr(tIdLoc)==0 );
@@ -13937,10 +13939,15 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 				pCmd->m_sIndex   = tStmt.m_sIndex;
 				pCmd->m_sCluster = tStmt.m_sCluster;
 				pCmd->m_pStored  = pStored;
+
+				dIds.Add ( pStored->m_uQUID );
 			}
 		} else
 		{
 			pIndex->AddDocument ( dFields, tDoc, bReplace, tStmt.m_sStringParam, dStrings.Begin(), dMvas, sError, sWarning, pAccum );
+
+			if ( iIdIndex>=0 )
+				dIds.Add ( tDoc.GetAttr ( tIdLoc ) );
 		}
 
 		if ( !sError.IsEmpty() )
@@ -13955,12 +13962,18 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 		return;
 	}
 
+	dLastIds.SwapData ( dIds );
+
 	// no errors so far
 	if ( bCommit )
 		HandleCmdReplicate ( *pAccum, sError, nullptr );
 
+	int64_t iLastInsertId = 0;
+	if ( dLastIds.GetLength() )
+		iLastInsertId = dLastIds.Last();
+
 	// my OK packet
-	tOut.Ok ( tStmt.m_iRowsAffected, sWarning );
+	tOut.Ok ( tStmt.m_iRowsAffected, sWarning, iLastInsertId );
 }
 
 
@@ -16069,6 +16082,7 @@ struct SessionVars_t
 	ESphCollation	m_eCollation { g_eCollation };
 	bool			m_bProfile = false;
 	bool			m_bVIP = false;
+	CSphVector<int64_t> m_dLastIds;
 };
 
 // fwd
@@ -16770,11 +16784,13 @@ void HandleMysqlOptimize ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	g_tOptimizeQueueMutex.Unlock();
 }
 
-void HandleMysqlSelectSysvar ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+void HandleMysqlSelectSysvar ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const SessionVars_t & tVars )
 {
+	bool bStr = ( tStmt.m_tQuery.m_dItems.FindFirst ( [] ( const CSphQueryItem & tItem ) { return tItem.m_sExpr=="@@session.last_insert_id"; } ) );
+
 	tOut.HeadBegin ( tStmt.m_tQuery.m_dItems.GetLength() );
 	ARRAY_FOREACH ( i, tStmt.m_tQuery.m_dItems )
-		tOut.HeadColumn ( tStmt.m_tQuery.m_dItems[i].m_sAlias.cstr(), MYSQL_COL_LONG );
+		tOut.HeadColumn ( tStmt.m_tQuery.m_dItems[i].m_sAlias.cstr(), bStr ? MYSQL_COL_STRING : MYSQL_COL_LONG );
 	tOut.HeadEnd();
 
 	ARRAY_FOREACH ( i, tStmt.m_tQuery.m_dItems )
@@ -16790,6 +16806,13 @@ void HandleMysqlSelectSysvar ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 		// MySQL Go connector, really expects an answer here
 		else if ( sVar=="@@max_allowed_packet" )
 			tOut.PutNumAsString ( g_iMaxPacketSize );
+		else if ( sVar=="@@session.last_insert_id" )
+		{
+			StringBuilder_c tBuf ( "," );
+			for ( int64_t iID : tVars.m_dLastIds )
+				tBuf.Appendf ( INT64_FMT, iID );
+			tOut.PutString ( tBuf.cstr() );
+		}
 		else
 			tOut.PutString("");
 	}
@@ -16798,8 +16821,38 @@ void HandleMysqlSelectSysvar ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	tOut.Eof();
 }
 
+struct ExtraLastInsertID_t : public ISphExtra
+{
+	explicit ExtraLastInsertID_t ( const CSphVector<int64_t> & dIds )
+		: m_dIds ( dIds )
+	{
+	}
 
-void HandleMysqlSelectDual ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+	virtual ~ExtraLastInsertID_t () = default;
+
+	virtual bool ExtraDataImpl ( ExtraData_e eCmd, void ** pData )
+	{
+		if ( eCmd==EXTRA_GET_LAST_INSERT_ID )
+		{
+			StringBuilder_c tBuf ( "," );
+			for ( int64_t iID : m_dIds )
+				tBuf.Appendf ( INT64_FMT, iID );
+
+			CSphString * sVal = ( CSphString *)pData;
+			assert ( sVal );
+			*sVal = tBuf.cstr();
+
+			return true;
+		}
+		return false;
+	}
+
+	const CSphVector<int64_t> & m_dIds;
+};
+
+
+
+void HandleMysqlSelectDual ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const SessionVars_t & tVars )
 {
 	CSphString sVar = tStmt.m_tQuery.m_sQuery;
 	CSphSchema	tSchema;
@@ -16817,6 +16870,9 @@ void HandleMysqlSelectDual ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	tOut.HeadBegin(1);
 	tOut.HeadColumn ( sVar.cstr(), MYSQL_COL_STRING );
 	tOut.HeadEnd();
+
+	ExtraLastInsertID_t tIds ( tVars.m_dLastIds );
+	pExpr->Command ( SPH_EXPR_SET_EXTRA_DATA, &tIds );
 
 	CSphMatch tMatch;
 	const BYTE * pStr = nullptr;
@@ -16935,6 +16991,13 @@ void HandleMysqlShowVariables ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt,
 	dMatchRows.DataTuplet ( "character_set_client", "utf8" );
 	dMatchRows.DataTuplet ( "character_set_connection", "utf8" );
 	dMatchRows.DataTuplet ( "grouping_in_utc", g_bGroupingInUtc ? "1" : "0" );
+	if ( dMatchRows.Match ( "last_insert_id" ) )
+	{
+		StringBuilder_c tBuf ( "," );
+		for ( int64_t iID : tVars.m_dLastIds )
+			tBuf.Appendf ( INT64_FMT, iID );
+		dRows .DataTuplet ( "last_insert_id", tBuf.cstr() );
+	}
 
 	// fine
 	dRows.Eof();
@@ -17831,7 +17894,7 @@ public:
 				StatCountCommand ( eStmt==STMT_INSERT ? SEARCHD_COMMAND_INSERT : SEARCHD_COMMAND_REPLACE );
 				StmtErrorReporter_c tErrorReporter ( tOut );
 				sphHandleMysqlInsert ( tErrorReporter, *pStmt, eStmt==STMT_REPLACE,
-					m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tLastMeta.m_sWarning, m_tAcc, m_tVars.m_eCollation );
+					m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tLastMeta.m_sWarning, m_tAcc, m_tVars.m_eCollation, m_tVars.m_dLastIds );
 				return true;
 			}
 
@@ -18031,7 +18094,7 @@ public:
 			return true;
 
 		case STMT_SELECT_SYSVAR:
-			HandleMysqlSelectSysvar ( tOut, *pStmt );
+			HandleMysqlSelectSysvar ( tOut, *pStmt, m_tVars );
 			return true;
 
 		case STMT_SHOW_COLLATION:
@@ -18067,7 +18130,7 @@ public:
 			return false; // do not profile this call, keep last query profile
 
 		case STMT_SELECT_DUAL:
-			HandleMysqlSelectDual ( tOut, *pStmt );
+			HandleMysqlSelectDual ( tOut, *pStmt, m_tVars );
 			return true;
 
 		case STMT_SHOW_DATABASES:

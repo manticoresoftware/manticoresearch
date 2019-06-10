@@ -22,7 +22,7 @@ AUTOCOMMIT is set to 1 by default, meaning that every statement that
 performs any changes on any index is implicitly wrapped in BEGIN and
 COMMIT.
 
-Transactions are limited to a single RT index, and also limited in size.
+Transactions are limited to a single RT or percolate index, and also limited in size.
 They are atomic, consistent, overly isolated, and durable. Overly
 isolated means that the changes are not only invisible to the concurrent
 transactions but even to the current session itself.

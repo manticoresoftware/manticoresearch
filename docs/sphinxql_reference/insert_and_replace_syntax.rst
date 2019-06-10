@@ -62,7 +62,9 @@ is ``tags``. ``id`` in this case will be generated automatically (maximum curren
  INSERT INTO index_name VALUES ( 'full text query terms', 'tags');
  INSERT INTO index_name VALUES ( 'full text query terms');
 
-You can insert only 1 row a time into a percolate index, multiple rows as for RT are not allowed yet.
+Multiple rows can be inserted using a single INSERT statement by
+providing several comma-separated, parentheses-enclosed lists of rows
+values.
 
 Also, you can insert values only into local percolate index. Distributed percolate (i.e. distributed index built from percolate agents/locals) is not
 supported for INSERTs yet.

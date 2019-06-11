@@ -3457,22 +3457,22 @@ const char * GetBaseName ( const CSphString & sFullPath )
 	return pCur;
 }
 
-static CSphAtomic_T<int64_t> g_iUUID { 1 };
-static uint64_t g_uUuidBase = 0;
+static CSphAtomic_T<int64_t> g_iUID { 1 };
+static int64_t g_iUidBase = 0;
 
-uint64_t UuidShort()
+int64_t UidShort()
 {
-	int64_t iVal = g_iUUID.Inc();
-	uint64_t uUUID = g_uUuidBase + (uint64_t)iVal;
-	return uUUID;
+	int64_t iVal = g_iUID.Inc();
+	int64_t iUID = g_iUidBase + iVal;
+	return iUID;
 }
 
-void UuidShortSetup ( int iServer, int iStarted )
+void UidShortSetup ( int iServer, int iStarted )
 {
-	uint64_t uSeed = (((uint64_t)iServer ) & 0xff ) << 56;
-	uSeed += ((uint64_t)iStarted ) << 24;
-	g_uUuidBase = uSeed;
-	sphLogDebug ( "uuid-short server_id %d, started %d, seed " UINT64_FMT, iServer, iStarted, uSeed );
+	int64_t iSeed = ( (int64_t)iServer & 0x7f ) << 56;
+	iSeed += ((int64_t)iStarted ) << 24;
+	g_iUidBase = iSeed;
+	sphLogDebug ( "uid-short server_id %d, started %d, seed " INT64_FMT, iServer, iStarted, iSeed );
 }
 
 // RNG of the integers 0-255

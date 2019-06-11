@@ -98,8 +98,8 @@ TEST_F ( PQ_merge, JustOneResult )
 
 	// ensure we take correct matches
 	ASSERT_EQ ( dResult.m_dQueryDesc.GetLength(), dResult.m_iQueriesMatched );
-	ASSERT_EQ ( dResult.m_dQueryDesc[0].m_uQID, 100 );
-	ASSERT_EQ ( dResult.m_dQueryDesc[1].m_uQID, 101 );
+	ASSERT_EQ ( dResult.m_dQueryDesc[0].m_iQUID, 100 );
+	ASSERT_EQ ( dResult.m_dQueryDesc[1].m_iQUID, 101 );
 }
 
 // one result, but with list of docs
@@ -129,8 +129,8 @@ TEST_F ( PQ_merge, JustOneResultWithDocs )
 
 	// ensure we take correct matches
 	ASSERT_EQ ( dResult.m_dQueryDesc.GetLength (), dResult.m_iQueriesMatched );
-	ASSERT_EQ ( dResult.m_dQueryDesc[0].m_uQID, 100 );
-	ASSERT_EQ ( dResult.m_dQueryDesc[1].m_uQID, 101 );
+	ASSERT_EQ ( dResult.m_dQueryDesc[0].m_iQUID, 100 );
+	ASSERT_EQ ( dResult.m_dQueryDesc[1].m_iQUID, 101 );
 }
 
 // one result, but with times
@@ -161,8 +161,8 @@ TEST_F ( PQ_merge, JustOneResultVerbose )
 
 	// ensure we take correct matches
 	ASSERT_EQ ( dResult.m_dQueryDesc.GetLength (), dResult.m_iQueriesMatched );
-	ASSERT_EQ ( dResult.m_dQueryDesc[0].m_uQID, 100 );
-	ASSERT_EQ ( dResult.m_dQueryDesc[1].m_uQID, 101 );
+	ASSERT_EQ ( dResult.m_dQueryDesc[0].m_iQUID, 100 );
+	ASSERT_EQ ( dResult.m_dQueryDesc[1].m_iQUID, 101 );
 }
 
 // one result, with everything
@@ -197,8 +197,8 @@ TEST_F ( PQ_merge, JustOneResultWithEverything )
 
 	// ensure we take correct matches
 	ASSERT_EQ ( dResult.m_dQueryDesc.GetLength (), dResult.m_iQueriesMatched );
-	ASSERT_EQ ( dResult.m_dQueryDesc[0].m_uQID, 100 );
-	ASSERT_EQ ( dResult.m_dQueryDesc[1].m_uQID, 101 );
+	ASSERT_EQ ( dResult.m_dQueryDesc[0].m_iQUID, 100 );
+	ASSERT_EQ ( dResult.m_dQueryDesc[1].m_iQUID, 101 );
 }
 
 // full result, with everything
@@ -230,7 +230,7 @@ TEST_F ( PQ_merge, FullResult )
 	ASSERT_EQ ( dResult.m_dQueryDesc.GetLength (), dResult.m_iQueriesMatched );
 	int j = 0;
 	for ( auto qid : { 100, 101, 102, 103, 180, 190 } )
-		ASSERT_EQ ( dResult.m_dQueryDesc[j++].m_uQID, qid );
+		ASSERT_EQ ( dResult.m_dQueryDesc[j++].m_iQUID, qid );
 }
 
 // full result, with everything
@@ -266,7 +266,7 @@ TEST_F ( PQ_merge, FullResultWithDocs )
 	ASSERT_EQ ( dResult.m_dQueryDesc.GetLength (), dResult.m_iQueriesMatched );
 	j = 0;
 	for ( auto qid : { 100, 101, 102, 103, 180, 190 } )
-		ASSERT_EQ ( dResult.m_dQueryDesc[j++].m_uQID, qid );
+		ASSERT_EQ ( dResult.m_dQueryDesc[j++].m_iQUID, qid );
 }
 
 // full result, with everything
@@ -302,7 +302,7 @@ TEST_F ( PQ_merge, FullResultVerbose )
 	ASSERT_EQ ( dResult.m_dQueryDesc.GetLength (), dResult.m_iQueriesMatched );
 	j = 0;
 	for ( auto qid : { 100, 101, 102, 103, 180, 190 } )
-		ASSERT_EQ ( dResult.m_dQueryDesc[j++].m_uQID, qid );
+		ASSERT_EQ ( dResult.m_dQueryDesc[j++].m_iQUID, qid );
 }
 
 // full result, with everything
@@ -341,5 +341,5 @@ TEST_F ( PQ_merge, FullResultWithEverything )
 	ASSERT_EQ ( dResult.m_dQueryDesc.GetLength (), dResult.m_iQueriesMatched );
 	j=0;
 	for ( auto qid : { 100, 101, 102, 103, 180, 190 } )
-		ASSERT_EQ ( dResult.m_dQueryDesc[j++].m_uQID, qid );
+		ASSERT_EQ ( dResult.m_dQueryDesc[j++].m_iQUID, qid );
 }

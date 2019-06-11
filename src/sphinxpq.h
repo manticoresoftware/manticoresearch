@@ -25,7 +25,7 @@
 
 struct PercolateQueryDesc
 {
-	uint64_t m_uQID;
+	int64_t m_iQUID;
 	CSphString m_sQuery;
 	CSphString m_sTags;
 	CSphString m_sFilters;
@@ -72,7 +72,7 @@ struct PercolateQueryArgs_t
 	const char * m_sTags = nullptr;
 	const CSphVector<CSphFilterSettings> & m_dFilters;
 	const CSphVector<FilterTreeItem_t> & m_dFilterTree;
-	uint64_t m_uQUID = 0;
+	int64_t m_iQUID = 0;
 	bool m_bQL = true;
 
 	bool m_bReplace = false;
@@ -93,7 +93,7 @@ public:
 
 	bool	IsPQ() const override { return true; }
 
-	virtual int ReplayDeleteQueries ( const uint64_t * pQueries, int iCount ) = 0;
+	virtual int ReplayDeleteQueries ( const int64_t * pQueries, int iCount ) = 0;
 	virtual int ReplayDeleteQueries ( const char * sTags ) = 0;
 	virtual void ReplayCommit ( StoredQuery_i * pQuery ) = 0;
 };
@@ -111,8 +111,8 @@ void LoadStoredQuery ( DWORD uVersion, StoredQueryDesc_t & tQuery, CSphReader & 
 void LoadStoredQueryV6 ( DWORD uVersion, StoredQueryDesc_t & tQuery, CSphReader & tReader );
 void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, CSphVector<BYTE> & dOut );
 void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, CSphWriter & tWriter );
-void LoadDeleteQuery ( const BYTE * pData, int iLen, CSphVector<uint64_t> & dQueries, CSphString & sTags );
-void SaveDeleteQuery ( const uint64_t * pQueries, int iCount, const char * sTags, CSphVector<BYTE> & dOut );
+void LoadDeleteQuery ( const BYTE * pData, int iLen, CSphVector<int64_t> & dQueries, CSphString & sTags );
+void SaveDeleteQuery ( const int64_t * pQueries, int iCount, const char * sTags, CSphVector<BYTE> & dOut );
 
 //////////////////////////////////////////////////////////////////////////
 

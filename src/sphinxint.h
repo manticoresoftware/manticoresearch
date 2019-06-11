@@ -1583,7 +1583,7 @@ public:
 	virtual bool		IsActive () = 0;
 
 	virtual void		BinlogPqAdd ( int64_t * pTID, const char * sIndexName, const StoredQueryDesc_t & tStored ) = 0;
-	virtual void		BinlogPqDelete ( int64_t * pTID, const char * sIndexName, const uint64_t * pQueries, int iCount, const char * sTags ) = 0;
+	virtual void		BinlogPqDelete ( int64_t * pTID, const char * sIndexName, const int64_t * pQueries, int iCount, const char * sTags ) = 0;
 };
 
 //////////////////////////////////////////////////////////////////////////

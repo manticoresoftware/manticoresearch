@@ -1103,7 +1103,7 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 	for ( const auto& tDesc : tRes.m_dQueryDesc )
 	{
 		ScopedComma_c sQueryComma ( tOut, ",","{"," }");
-		tOut.Sprintf ( R"("_index":"%s","_type":"doc","_id":"%U","_score":"1")", sIndex.cstr(), tDesc.m_uQID );
+		tOut.Sprintf ( R"("_index":"%s","_type":"doc","_id":"%U","_score":"1")", sIndex.cstr(), tDesc.m_iQUID );
 		if ( !tDesc.m_bQL )
 			tOut.Sprintf ( R"("_source":{"query":%s})", tDesc.m_sQuery.cstr () );
 		else
@@ -1193,12 +1193,12 @@ bool HttpHandlerPQ_c::DoCallPQ ( const CSphString & sIndex, const JsonObj_c & tP
 }
 
 
-static void EncodePercolateQueryResult ( bool bReplace, const CSphString & sIndex, uint64_t uID, StringBuilder_c & tOut )
+static void EncodePercolateQueryResult ( bool bReplace, const CSphString & sIndex, int64_t iID, StringBuilder_c & tOut )
 {
 	if ( bReplace )
-		tOut.Sprintf (R"({"index":"%s","type":"doc","_id":"%U","result":"updated","forced_refresh":true})", sIndex.cstr(), uID);
+		tOut.Sprintf (R"({"index":"%s","type":"doc","_id":"%U","result":"updated","forced_refresh":true})", sIndex.cstr(), iID);
 	else
-		tOut.Sprintf ( R"({"index":"%s","type":"doc","_id":"%U","result":"created"})", sIndex.cstr (), uID );
+		tOut.Sprintf ( R"({"index":"%s","type":"doc","_id":"%U","result":"created"})", sIndex.cstr (), iID );
 }
 
 
@@ -1232,9 +1232,9 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 		return false;
 	}
 
-	uint64_t uID = 0;
+	int64_t iID = 0;
 	if ( pUID && !pUID->IsEmpty() )
-		uID = strtoull ( pUID->cstr(), nullptr, 10 );
+		iID = strtoll ( pUID->cstr(), nullptr, 10 );
 
 	JsonObj_c tTagsArray = tRoot.GetArrayItem ( "tags", sError, true );
 	if ( !sError.IsEmpty() )
@@ -1293,7 +1293,7 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 		PercolateQueryArgs_t tArgs ( dFilters, dFilterTree );
 		tArgs.m_sQuery = sQuery;
 		tArgs.m_sTags = sTags.cstr();
-		tArgs.m_uQUID = uID;
+		tArgs.m_iQUID = iID;
 		tArgs.m_bReplace = bReplace;
 		tArgs.m_bQL = bQueryQL;
 
@@ -1308,7 +1308,7 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 			pCmd->m_sIndex = sIndex;
 			pCmd->m_pStored = pStored;
 			// refresh query's UID for reply as it might be auto-generated
-			uID = pStored->m_uQUID;
+			iID = pStored->m_iQUID;
 
 			bOk = HandleCmdReplicate ( tAcc, sError, nullptr );
 		}
@@ -1319,7 +1319,7 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 	else
 	{
 		StringBuilder_c sRes;
-		EncodePercolateQueryResult ( bReplace, sIndex, uID, sRes );
+		EncodePercolateQueryResult ( bReplace, sIndex, iID, sRes );
 		BuildReply ( sRes, SPH_HTTP_STATUS_200 );
 	}
 

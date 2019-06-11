@@ -1366,7 +1366,8 @@ server_id
 ~~~~~~~~~
 
 Integer number that serves as server identificator used as seed to generate an unique short UUID for nodes that are part of a replication cluster.
-The server_id must be unique across the nodes of a cluster. If server_id is not set, MAC address or a random number will be used as seed for the short UUID.
+The server_id must be unique across the nodes of a cluster and in range from 0 to 127.
+If server_id is not set, MAC address or a random number will be used as seed for the short UUID.
 
 Example:
 

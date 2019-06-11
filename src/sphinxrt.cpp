@@ -580,7 +580,7 @@ void MemoryWriter_c::ZipInt ( DWORD uVal )
 void LoadStoredQueryV6 ( DWORD uVersion, StoredQueryDesc_t & tQuery, CSphReader & tReader )
 {
 	if ( uVersion>=3 )
-		tQuery.m_uQUID = tReader.GetOffset();
+		tQuery.m_iQUID = tReader.GetOffset();
 	if ( uVersion>=4 )
 		tQuery.m_bQL = ( tReader.GetDword()!=0 );
 
@@ -624,7 +624,7 @@ template<typename READER>
 void LoadStoredQuery ( DWORD uVersion, StoredQueryDesc_t & tQuery, READER & tReader )
 {
 	assert ( uVersion>=7 );
-	tQuery.m_uQUID = tReader.UnzipOffset();
+	tQuery.m_iQUID = tReader.UnzipOffset();
 	tQuery.m_bQL = ( tReader.UnzipInt()!=0 );
 	tQuery.m_sQuery = tReader.GetString();
 	tQuery.m_sTags = tReader.GetString();
@@ -665,7 +665,7 @@ void LoadStoredQuery ( DWORD uVersion, StoredQueryDesc_t & tQuery, READER & tRea
 template<typename WRITER>
 void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, WRITER & tWriter )
 {
-	tWriter.ZipOffset ( tQuery.m_uQUID );
+	tWriter.ZipOffset ( tQuery.m_iQUID );
 	tWriter.ZipInt ( tQuery.m_bQL );
 	tWriter.PutString ( tQuery.m_sQuery );
 	tWriter.PutString ( tQuery.m_sTags );
@@ -725,7 +725,7 @@ void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, CSphWriter & tWriter )
 }
 
 template<typename READER>
-void LoadDeleteQuery ( CSphVector<uint64_t> & dQueries, CSphString & sTags, READER & tReader )
+void LoadDeleteQuery ( CSphVector<int64_t> & dQueries, CSphString & sTags, READER & tReader )
 {
 	dQueries.Resize ( tReader.UnzipInt() );
 	ARRAY_FOREACH ( i, dQueries )
@@ -734,14 +734,14 @@ void LoadDeleteQuery ( CSphVector<uint64_t> & dQueries, CSphString & sTags, READ
 	sTags = tReader.GetString();
 }
 
-void LoadDeleteQuery ( const BYTE * pData, int iLen, CSphVector<uint64_t> & dQueries, CSphString & sTags )
+void LoadDeleteQuery ( const BYTE * pData, int iLen, CSphVector<int64_t> & dQueries, CSphString & sTags )
 {
 	MemoryReader_c tReader ( pData, iLen );
 	LoadDeleteQuery ( dQueries, sTags, tReader );
 }
 
 template<typename WRITER>
-void SaveDeleteQuery ( const uint64_t * pQueries, int iCount, const char * sTags, WRITER & tWriter )
+void SaveDeleteQuery ( const int64_t * pQueries, int iCount, const char * sTags, WRITER & tWriter )
 {
 	tWriter.ZipInt ( iCount );
 	for ( int i=0; i<iCount; i++ )
@@ -750,7 +750,7 @@ void SaveDeleteQuery ( const uint64_t * pQueries, int iCount, const char * sTags
 	tWriter.PutString ( sTags );
 }
 
-void SaveDeleteQuery ( const uint64_t * pQueries, int iCount, const char * sTags, CSphVector<BYTE> & dOut )
+void SaveDeleteQuery ( const int64_t * pQueries, int iCount, const char * sTags, CSphVector<BYTE> & dOut )
 {
 	MemoryWriter_c tWriter ( dOut );
 	SaveDeleteQuery ( pQueries, iCount, sTags, tWriter );
@@ -862,7 +862,7 @@ public:
 	void	BinlogReconfigure ( int64_t * pTID, const char * sIndexName, const CSphReconfigureSetup & tSetup ) override;
 	void	NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bShutdown ) final;
 	void	BinlogPqAdd ( int64_t * pTID, const char * sIndexName, const StoredQueryDesc_t & tStored ) override;
-	void	BinlogPqDelete ( int64_t * pTID, const char * sIndexName, const uint64_t * pQueries, int iCount, const char * sTags ) override;
+	void	BinlogPqDelete ( int64_t * pTID, const char * sIndexName, const int64_t * pQueries, int iCount, const char * sTags ) override;
 
 	void	Configure ( const CSphConfigSection & hSearchd, bool bTestMode );
 	void	Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD uReplayFlags, ProgressCallbackSimple_t * pfnProgressCallback );
@@ -872,7 +872,7 @@ public:
 	void	CheckPath ( const CSphConfigSection & hSearchd, bool bTestMode );
 
 private:
-	static const DWORD		BINLOG_VERSION = 7;
+	static const DWORD		BINLOG_VERSION = 8;
 
 	static const DWORD		BINLOG_HEADER_MAGIC = 0x4c425053;	/// magic 'SPBL' header that marks binlog file
 	static const DWORD		BLOP_MAGIC = 0x214e5854;			/// magic 'TXN!' header that marks binlog entry
@@ -8831,7 +8831,7 @@ bool RtBinlog_c::ReplayPqAdd ( int iBinlog, DWORD uReplayFlags, BinlogReader_c &
 	return true;
 }
 
-void RtBinlog_c::BinlogPqDelete ( int64_t * pTID, const char * sIndexName, const uint64_t * pQueries, int iCount, const char * sTags )
+void RtBinlog_c::BinlogPqDelete ( int64_t * pTID, const char * sIndexName, const int64_t * pQueries, int iCount, const char * sTags )
 {
 	MEMORY ( MEM_BINLOG );
 	if ( !PreOp ( BLOP_PQ_DELETE, pTID, sIndexName ) )
@@ -8854,7 +8854,7 @@ bool RtBinlog_c::ReplayPqDelete ( int iBinlog, DWORD uReplayFlags, BinlogReader_
 	const int64_t iTID = (int64_t) tReader.UnzipOffset();
 	const int64_t tmStamp = (int64_t) tReader.UnzipOffset();
 
-	CSphVector<uint64_t> dQueries;
+	CSphVector<int64_t> dQueries;
 	CSphString sTags;
 	LoadDeleteQuery ( dQueries, sTags, tReader );
 

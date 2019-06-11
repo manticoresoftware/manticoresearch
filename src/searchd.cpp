@@ -12769,7 +12769,7 @@ struct PqReplyParser_t : public IReplyParser_t
 		dResult.m_dQueryDesc.Reset ( iRows );
 		for ( auto &tDesc : dResult.m_dQueryDesc )
 		{
-			tDesc.m_uQID = tReq.GetUint64 ();
+			tDesc.m_iQUID = tReq.GetUint64 ();
 			if ( bDumpDocs )
 			{
 				int iCount = tReq.GetInt ();
@@ -12857,7 +12857,7 @@ static void SendAPIPercolateReply ( CachedOutputBuffer_c &tOut, const CPqResult 
 	tOut.SendInt ( tRes.m_dQueryDesc.GetLength () );
 	for ( const auto &tDesc : tRes.m_dQueryDesc )
 	{
-		tOut.SendUint64 ( tDesc.m_uQID );
+		tOut.SendUint64 ( tDesc.m_iQUID );
 		if ( bDumpDocs )
 		{
 			// document count + document id(s)
@@ -12935,7 +12935,7 @@ static void SendMysqlPercolateReply ( SqlRowBuffer_c &tOut
 		iColumns += 3;
 	tOut.HeadBegin ( iColumns );
 
-	tOut.HeadColumn ( "id", MYSQL_COL_LONGLONG, MYSQL_COL_UNSIGNED_FLAG );
+	tOut.HeadColumn ( "id", MYSQL_COL_LONGLONG, 0 );
 	if ( bDumpDocs )
 		tOut.HeadColumn ( "documents", MYSQL_COL_STRING );
 	if ( bQuery )
@@ -12954,7 +12954,7 @@ static void SendMysqlPercolateReply ( SqlRowBuffer_c &tOut
 	StringBuilder_c sDocs;
 	for ( const auto &tDesc : tRes.m_dQueryDesc )
 	{
-		tOut.PutNumAsString ( tDesc.m_uQID );
+		tOut.PutNumAsString ( tDesc.m_iQUID );
 		if ( bDumpDocs )
 		{
 			sDocs.StartBlock ( "," );
@@ -13925,7 +13925,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 			PercolateQueryArgs_t tArgs ( dFilters, dFilterTree );
 			tArgs.m_sQuery   = dStrings[0];
 			tArgs.m_sTags	= dStrings[1];
-			tArgs.m_uQUID	= tDoc.GetAttr(tIdLoc);
+			tArgs.m_iQUID	= tDoc.GetAttr(tIdLoc);
 			tArgs.m_bReplace = bReplace;
 			tArgs.m_bQL		 = true;
 
@@ -13940,7 +13940,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 				pCmd->m_sCluster = tStmt.m_sCluster;
 				pCmd->m_pStored  = pStored;
 
-				dIds.Add ( pStored->m_uQUID );
+				dIds.Add ( pStored->m_iQUID );
 			}
 		} else
 		{
@@ -24121,6 +24121,12 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	{
 		g_iServerID = hSearchd.GetInt ( "server_id", g_iServerID );
 		g_bServerID = true;
+		const int iServerMask = 0x7f;
+		if ( g_iServerID>iServerMask )
+		{
+			g_iServerID &= iServerMask;
+			sphWarning ( "server_id out of range 0 - 127, clamped to %d", g_iServerID );
+		}
 	}
 
 	//////////////////////////////////////////////////
@@ -24322,8 +24328,9 @@ void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpened=fal
 		g_bLogTty = isatty ( g_iLogFile )!=0;
 }
 
-static void SetUuidShort ( bool bTestMode )
+static void SetUidShort ( bool bTestMode )
 {
+	const int iServerMask = 0x7f;
 	int iServerId = g_iServerID;
 	uint64_t uStartedSec = 0;
 
@@ -24345,6 +24352,7 @@ static void SetUuidShort ( bool bTestMode )
 			}
 			// fold MAC into 1 byte
 			iServerId = Pearson8 ( (const BYTE *)sMAC.cstr(), sMAC.Length() );
+			iServerId &= iServerMask;
 		}
 
 		// start time Unix timestamp as middle part of counter
@@ -24359,7 +24367,7 @@ static void SetUuidShort ( bool bTestMode )
 		uStartedSec = 100000;
 		iServerId = g_iServerID;
 	}
-	UuidShortSetup ( iServerId, (int)uStartedSec );
+	UidShortSetup ( iServerId, (int)uStartedSec );
 }
 
 int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
@@ -24991,7 +24999,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	sphRTConfigure ( hSearchd, bTestMode );
 	SetPercolateQueryParserFactory ( PercolateQueryParserFactory );
 	SetPercolateThreads ( g_iDistThreads );
-	SetUuidShort ( bTestMode );
+	SetUidShort ( bTestMode );
 
 	if ( bOptPIDFile )
 	{

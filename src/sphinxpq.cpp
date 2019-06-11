@@ -46,24 +46,24 @@ static bool NotImplementedError ( CSphString * pError )
 
 struct StoredQueryKey_t
 {
-	uint64_t m_uQUID = 0;
+	int64_t m_iQUID = 0;
 	StoredQuery_t * m_pQuery = nullptr;
 };
 
 // FindSpan vector operators
-static bool operator < ( const StoredQueryKey_t & tKey, uint64_t uQUID )
+static bool operator < ( const StoredQueryKey_t & tKey, int64_t iQUID )
 {
-	return tKey.m_uQUID<uQUID;
+	return tKey.m_iQUID<iQUID;
 }
 
-static bool operator == ( const StoredQueryKey_t & tKey, uint64_t uQUID )
+static bool operator == ( const StoredQueryKey_t & tKey, int64_t iQUID )
 {
-	return tKey.m_uQUID==uQUID;
+	return tKey.m_iQUID==iQUID;
 }
 
-static bool operator < ( uint64_t uQUID, const StoredQueryKey_t & tKey )
+static bool operator < ( int64_t iQUID, const StoredQueryKey_t & tKey )
 {
-	return uQUID<tKey.m_uQUID;
+	return iQUID<tKey.m_iQUID;
 }
 
 static int g_iPercolateThreads = 1;
@@ -170,7 +170,7 @@ private:
 
 	void RamFlush ( bool bPeriodic );
 
-	int ReplayDeleteQueries ( const uint64_t * pQueries, int iCount ) final;
+	int ReplayDeleteQueries ( const int64_t * pQueries, int iCount ) final;
 	int ReplayDeleteQueries ( const char * sTags ) final;
 	void ReplayCommit ( StoredQuery_i * pQuery ) final;
 };
@@ -1106,7 +1106,7 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 		tMatchCtx.m_iDocsMatched += iMatchCount;
 
 		PercolateQueryDesc & tDesc = tMatchCtx.m_dQueryMatched.Add();
-		tDesc.m_uQID = pStored->m_uQUID;
+		tDesc.m_iQUID = pStored->m_iQUID;
 		if ( bCollectDocs )
 			tMatchCtx.m_dDocsMatched[iDocsOff] = iMatchCount;
 		if ( tMatchCtx.m_bGetQuery )
@@ -1164,7 +1164,7 @@ struct PercolateMatchJob_t : public ISphJob
 
 void PercolateQueryDesc::Swap ( PercolateQueryDesc & tOther )
 {
-	::Swap ( m_uQID, tOther.m_uQID );
+	::Swap ( m_iQUID, tOther.m_iQUID );
 	::Swap ( m_bQL, tOther.m_bQL );
 
 	m_sQuery.Swap ( tOther.m_sQuery );
@@ -1191,7 +1191,7 @@ struct PQMergeIterator_t
 
 	static inline bool IsLess ( const PQMergeIterator_t &a, const PQMergeIterator_t &b )
 	{
-		return a.CurDesc().m_uQID<b.CurDesc().m_uQID;
+		return a.CurDesc().m_iQUID<b.CurDesc().m_iQUID;
 	}
 };
 
@@ -1553,32 +1553,32 @@ StoredQuery_i * PercolateIndex_c::AddQuery ( const PercolateQueryArgs_t & tArgs,
 	QueryGetTerms ( pStored->m_pXQ->m_pRoot, pDict, pStored->m_hDict );
 	pStored->m_sTags = tArgs.m_sTags;
 	PercolateTags ( tArgs.m_sTags, pStored->m_dTags );
-	pStored->m_uQUID = tArgs.m_uQUID;
+	pStored->m_iQUID = tArgs.m_iQUID;
 	pStored->m_dFilters = tArgs.m_dFilters;
 	pStored->m_dFilterTree = tArgs.m_dFilterTree;
 	pStored->m_bQL = tArgs.m_bQL;
 
-	bool bAutoID = ( pStored->m_uQUID==0 );
+	bool bAutoID = ( pStored->m_iQUID==0 );
 	if ( bAutoID )
 	{
 		bool bDuplicate = true;
 		while ( bDuplicate )
 		{
 			// get uuid_short and check it not collide with user provided already stored query
-			pStored->m_uQUID = UuidShort();
+			pStored->m_iQUID = UidShort();
 			m_tLock.ReadLock();
-			bDuplicate = ( m_dStored.BinarySearch ( bind ( &StoredQueryKey_t::m_uQUID ), pStored->m_uQUID )!=nullptr );
+			bDuplicate = ( m_dStored.BinarySearch ( bind ( &StoredQueryKey_t::m_iQUID ), pStored->m_iQUID )!=nullptr );
 			m_tLock.Unlock();
 		}
 	} else
 	{
 		m_tLock.ReadLock();
-		const StoredQueryKey_t * pGotStored = m_dStored.BinarySearch ( bind ( &StoredQueryKey_t::m_uQUID ), tArgs.m_uQUID );
+		const StoredQueryKey_t * pGotStored = m_dStored.BinarySearch ( bind ( &StoredQueryKey_t::m_iQUID ), tArgs.m_iQUID );
 		m_tLock.Unlock();
 
 		if ( pGotStored && !tArgs.m_bReplace )
 		{
-			sError.SetSprintf ( "duplicate id '" UINT64_FMT "'", tArgs.m_uQUID );
+			sError.SetSprintf ( "duplicate id '" INT64_FMT "'", tArgs.m_iQUID );
 			SafeDelete ( pStored );
 		}
 	}
@@ -1595,14 +1595,14 @@ void PercolateIndex_c::ReplayCommit ( StoredQuery_i * pQuery )
 
 	StoredQueryKey_t tItem;
 	tItem.m_pQuery = pStored;
-	tItem.m_uQUID = pStored->m_uQUID;
+	tItem.m_iQUID = pStored->m_iQUID;
 
 	m_tLock.WriteLock();
-	int iPos = FindSpan ( m_dStored, pStored->m_uQUID );
+	int iPos = FindSpan ( m_dStored, pStored->m_iQUID );
 	if ( iPos==-1 )
 	{
 		m_dStored.Insert ( 0, tItem );
-	} else if ( m_dStored[iPos].m_uQUID==tItem.m_uQUID )
+	} else if ( m_dStored[iPos].m_iQUID==tItem.m_iQUID )
 	{
 		SafeDelete ( m_dStored[iPos].m_pQuery );
 		m_dStored[iPos].m_pQuery = tItem.m_pQuery;
@@ -1613,7 +1613,7 @@ void PercolateIndex_c::ReplayCommit ( StoredQuery_i * pQuery )
 	m_tLock.Unlock();
 }
 
-int PercolateIndex_c::ReplayDeleteQueries ( const uint64_t * pQueries, int iCount )
+int PercolateIndex_c::ReplayDeleteQueries ( const int64_t * pQueries, int iCount )
 {
 	assert ( !iCount || pQueries!=NULL );
 
@@ -1622,7 +1622,7 @@ int PercolateIndex_c::ReplayDeleteQueries ( const uint64_t * pQueries, int iCoun
 
 	for ( int i=0; i<iCount; i++ )
 	{
-		const StoredQueryKey_t * ppElem = m_dStored.BinarySearch ( bind ( &StoredQueryKey_t::m_uQUID ), pQueries[i] );
+		const StoredQueryKey_t * ppElem = m_dStored.BinarySearch ( bind ( &StoredQueryKey_t::m_iQUID ), pQueries[i] );
 		if ( ppElem )
 		{
 			int iElem = ppElem - m_dStored.Begin();
@@ -1834,7 +1834,7 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 				break;
 			const StoredQueryKey_t& dQuery = m_dStored[iQuery];
 			pQuery = dQuery.m_pQuery;
-			tMatch.SetAttr ( dID.m_tLocator, dQuery.m_uQUID );
+			tMatch.SetAttr ( dID.m_tLocator, dQuery.m_iQUID );
 		}
 
 		int iLen = pQuery->m_sQuery.Length ();
@@ -1970,7 +1970,7 @@ struct LoadedQuerySort_fn
 {
 	bool IsLess ( const StoredQueryDesc_t * pA, const StoredQueryDesc_t * pB ) const
 	{
-		return ( pA->m_uQUID<pB->m_uQUID );
+		return ( pA->m_iQUID<pB->m_iQUID );
 	}
 };
 
@@ -2024,13 +2024,13 @@ void PercolateIndex_c::PostSetup()
 		SetupExactDict ( pDict, pTokenizer );
 
 	bool bSorted = true;
-	uint64_t uLast = 0;
+	int64_t iLastUID = 0;
 	CSphFixedVector<StoredQueryDesc_t *> dStored ( m_dLoadedQueries.GetLength() );
 	ARRAY_FOREACH ( i, m_dLoadedQueries )
 	{
 		dStored[i] = m_dLoadedQueries.Begin() + i;
-		bSorted &= ( uLast<dStored[i]->m_uQUID );
-		uLast = dStored[i]->m_uQUID;
+		bSorted &= ( iLastUID<dStored[i]->m_iQUID );
+		iLastUID = dStored[i]->m_iQUID;
 	}
 
 	if ( !bSorted )
@@ -2045,7 +2045,7 @@ void PercolateIndex_c::PostSetup()
 		StoredQuery_i * pQuery = AddQuery ( tArgs, pTok, pDict, sError );
 		if ( !pQuery )
 		{
-			sphWarning ( "index '%s': %d (id=" UINT64_FMT ") query failed to load, ignoring", m_sIndexName.cstr(), i, tQuery.m_uQUID );
+			sphWarning ( "index '%s': %d (id=" INT64_FMT ") query failed to load, ignoring", m_sIndexName.cstr(), i, tQuery.m_iQUID );
 		} else
 		{
 			ReplayCommit ( pQuery );
@@ -2366,7 +2366,7 @@ void PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 			StoredQueryDesc_t & tQuery = m_dLoadedQueries[i];
 			const StoredQuery_t * pStored = m_dStored[i].m_pQuery;
 
-			tQuery.m_uQUID = pStored->m_uQUID;
+			tQuery.m_iQUID = pStored->m_iQUID;
 			tQuery.m_sQuery = pStored->m_sQuery;
 			tQuery.m_sTags = pStored->m_sTags;
 			tQuery.m_dFilters = pStored->m_dFilters;
@@ -2437,7 +2437,7 @@ PercolateQueryArgs_t::PercolateQueryArgs_t ( const StoredQueryDesc_t & tDesc )
 {
 	m_sQuery = tDesc.m_sQuery.cstr();
 	m_sTags = tDesc.m_sTags.cstr();
-	m_uQUID = tDesc.m_uQUID;
+	m_iQUID = tDesc.m_iQUID;
 	m_bQL = tDesc.m_bQL;
 }
 
@@ -2458,7 +2458,7 @@ struct PQMergeResultsIterator_t
 		m_pDocs = pMatch->m_dResult.m_dDocs.begin();
 	}
 
-	inline PercolateQueryDesc &CurDesc () const
+	inline PercolateQueryDesc & CurDesc () const
 	{ return m_pResult->m_dResult.m_dQueryDesc[m_iIdx]; }
 
 	inline int CurDt () const
@@ -2466,7 +2466,7 @@ struct PQMergeResultsIterator_t
 
 	static inline bool IsLess ( const PQMergeResultsIterator_t &a, const PQMergeResultsIterator_t &b )
 	{
-		return a.CurDesc ().m_uQID<b.CurDesc ().m_uQID;
+		return a.CurDesc().m_iQUID<b.CurDesc().m_iQUID;
 	}
 };
 

@@ -1500,7 +1500,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 
 			StoredQueryDesc_t tPQ;
 			LoadStoredQuery ( pRequest, iRequestLen, tPQ );
-			sphLogDebugRpl ( "pq-add, index '%s', uid " UINT64_FMT " query %s", pCmd->m_sIndex.cstr(), tPQ.m_uQUID, tPQ.m_sQuery.cstr() );
+			sphLogDebugRpl ( "pq-add, index '%s', uid " INT64_FMT " query %s", pCmd->m_sIndex.cstr(), tPQ.m_iQUID, tPQ.m_sQuery.cstr() );
 
 			CSphString sError;
 			PercolateQueryArgs_t tArgs ( tPQ );
@@ -1614,7 +1614,7 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 	auto * pIndex = (RtIndex_i * ) pRDesc->m_pIndex;
 	assert ( tCmd.m_eCommand!=ReplicationCommand_e::TRUNCATE );
 	sphLogDebugRpl ( "pq-commit, index '%s', uid " INT64_FMT ", queries %d, tags %s",
-		tCmd.m_sIndex.cstr(), ( tCmd.m_pStored ? tCmd.m_pStored->m_uQUID : int64_t(0) ),
+		tCmd.m_sIndex.cstr(), ( tCmd.m_pStored ? tCmd.m_pStored->m_iQUID : int64_t(0) ),
 		tCmd.m_dDeleteQueries.GetLength(), tCmd.m_sDeleteTags.scstr() );
 		pIndex->Commit ( nullptr, &tAcc );
 
@@ -1703,7 +1703,7 @@ bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pDeletedC
 			assert ( tCmd.m_pStored );
 			SaveStoredQuery ( *tCmd.m_pStored.Ptr(), dBufQueries );
 
-			uQueryHash = sphFNV64 ( &tCmd.m_pStored->m_uQUID, sizeof(tCmd.m_pStored->m_uQUID), uQueryHash );
+			uQueryHash = sphFNV64 ( &tCmd.m_pStored->m_iQUID, sizeof(tCmd.m_pStored->m_iQUID), uQueryHash );
 			break;
 
 		case ReplicationCommand_e::PQUERY_DELETE:

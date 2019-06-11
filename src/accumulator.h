@@ -25,7 +25,7 @@ struct StoredQueryDesc_t
 
 	CSphString						m_sQuery;
 	CSphString						m_sTags;
-	uint64_t						m_uQUID = 0;
+	int64_t							m_iQUID = 0;
 	bool							m_bQL = true;
 };
 
@@ -59,7 +59,7 @@ struct ReplicationCommand_t
 	CSphScopedPtr<StoredQuery_i> m_pStored { nullptr };
 
 	// delete
-	CSphVector<uint64_t>	m_dDeleteQueries;
+	CSphVector<int64_t>		m_dDeleteQueries;
 	CSphString				m_sDeleteTags;
 
 	// truncate

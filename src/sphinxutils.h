@@ -382,14 +382,14 @@ bool HasMvaUpdated ( const CSphString & sIndexPath );
 
 // uuid short generator - static across daemon
 //	bytes	value
-//	1		server_id & 0xff
+//	1		server_id & 0x7f
 //	4		startup time of server in seconds
 //	3		increment base part
-uint64_t	UuidShort();
+int64_t	UidShort();
 
-// server - is server id used as iServer & 0xff
+// server - is server id used as iServer & 0x7f
 // started - is a server start time \ Unix timestamp in seconds
-void		UuidShortSetup ( int iServer, int iStarted );
+void		UidShortSetup ( int iServer, int iStarted );
 
 BYTE Pearson8 ( const BYTE * pBuf, int iLen );
 

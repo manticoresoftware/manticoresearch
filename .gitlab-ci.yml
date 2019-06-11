@@ -45,7 +45,7 @@ simple_tests:
   variables:
     CTEST_BUILD_CONFIGURATION: "Debug"
   script:
-    - ctest -V -S /work/gltest.cmake
+    - ctest -V -S misc/ctest/gltest.cmake
   artifacts:
     paths:
     - build/here
@@ -69,7 +69,7 @@ release_tests:
   variables:
     CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
   script:
-    - ctest -V -S /work/gltest.cmake
+    - ctest -V -S misc/ctest/gltest.cmake
   artifacts:
     paths:
     - build/here
@@ -93,9 +93,9 @@ push_results:
     - simple_tests
     - release_tests
   variables:
-    GIT_STRATEGY: none
+    GIT_STRATEGY: fetch
   script:
-    - ctest -S /work/upload.cmake
+    - ctest -S misc/ctest/upload.cmake
   when: always
   artifacts:
     paths:

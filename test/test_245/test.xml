@@ -51,6 +51,9 @@ index idx_factors_rev
 <sphinxql>select id, groupby() g, count(*) c, t, packedfactors() p from idx_factors where match ('this') group 20 by gid option max_matches=1000, ranker=expr('1')</sphinxql>
 <sphinxql>select id, groupby() g, count(*) c, t, packedfactors() p from idx_factors where match ('this') group 2 by gid option max_matches=5, ranker=expr('1')</sphinxql>
 <sphinxql>select id, groupby() g, count(*) c, t, packedfactors() p from idx_factors where match ('this') group 3 by gid option max_matches=17, ranker=expr('1')</sphinxql>
+
+<!-- regression for max_matches=str -->
+<sphinxql>select id from idx_factors where match ('this') option max_matches=str</sphinxql>
 </sphqueries>
 
 </test>

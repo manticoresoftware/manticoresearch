@@ -8620,6 +8620,8 @@ private:
 	void						AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
 	void						GenericStatement ( SqlNode_t * pNode, SqlStmt_e iStmt );
 
+	bool						CheckInteger ( const CSphString & sOpt, const CSphString & sVal ) const;
+
 protected:
 	bool						m_bNamedVecBusy = false;
 	CSphVector<CSphNamedInt>	m_dNamedVec;
@@ -8845,6 +8847,22 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent )
 }
 
 
+bool SqlParser_c::CheckInteger ( const CSphString & sOpt, const CSphString & sVal ) const
+{
+	const char * p = sVal.cstr();
+	while ( sphIsInteger ( *p++ ) )
+		p++;
+
+	if ( *p )
+	{
+		m_pParseError->SetSprintf ( "%s value should be a number: '%s'", sOpt.cstr(), sVal.cstr() );
+		return false;
+	}
+
+	return true;
+}
+
+
 bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue )
 {
 	CSphString sOpt, sVal;
@@ -8893,30 +8911,51 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 		m_pQuery->m_sQueryTokenFilterOpts = dParams[2];
 	} else if ( sOpt=="max_matches" )
 	{
+		if ( !CheckInteger ( sOpt, sVal ) )
+			return false;
+
 		m_pQuery->m_iMaxMatches = (int)tValue.m_iValue;
 
 	} else if ( sOpt=="cutoff" )
 	{
+		if ( !CheckInteger ( sOpt, sVal ) )
+			return false;
+
 		m_pQuery->m_iCutoff = (int)tValue.m_iValue;
 
 	} else if ( sOpt=="max_query_time" )
 	{
+		if ( !CheckInteger ( sOpt, sVal ) )
+			return false;
+
 		m_pQuery->m_uMaxQueryMsec = (int)tValue.m_iValue;
 
 	} else if ( sOpt=="retry_count" )
 	{
+		if ( !CheckInteger ( sOpt, sVal ) )
+			return false;
+
 		m_pQuery->m_iRetryCount = (int)tValue.m_iValue;
 
 	} else if ( sOpt=="retry_delay" )
 	{
+		if ( !CheckInteger ( sOpt, sVal ) )
+			return false;
+
 		m_pQuery->m_iRetryDelay = (int)tValue.m_iValue;
 
 	} else if ( sOpt=="reverse_scan" )
 	{
+		if ( !CheckInteger ( sOpt, sVal ) )
+			return false;
+
 		m_pQuery->m_bReverseScan = ( tValue.m_iValue!=0 );
 
 	} else if ( sOpt=="ignore_nonexistent_columns" )
 	{
+		if ( !CheckInteger ( sOpt, sVal ) )
+			return false;
+
 		m_pQuery->m_bIgnoreNonexistent = ( tValue.m_iValue!=0 );
 
 	} else if ( sOpt=="comment" )
@@ -8935,10 +8974,16 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 
 	} else if ( sOpt=="agent_query_timeout" )
 	{
+		if ( !CheckInteger ( sOpt, sVal ) )
+			return false;
+
 		m_pQuery->m_iAgentQueryTimeout = (int)tValue.m_iValue;
 
 	} else if ( sOpt=="max_predicted_time" )
 	{
+		if ( !CheckInteger ( sOpt, sVal ) )
+			return false;
+
 		m_pQuery->m_iMaxPredictedMsec = int ( tValue.m_iValue > INT_MAX ? INT_MAX : tValue.m_iValue );
 
 	} else if ( sOpt=="boolean_simplify" )
@@ -8969,34 +9014,58 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 		}
 	} else if ( sOpt=="global_idf" )
 	{
+		if ( !CheckInteger ( sOpt, sVal ) )
+			return false;
+
 		m_pQuery->m_bGlobalIDF = ( tValue.m_iValue!=0 );
 
 	} else if ( sOpt=="local_df" )
 	{
+		if ( !CheckInteger ( sOpt, sVal ) )
+			return false;
+
 		m_pQuery->m_bLocalDF = ( tValue.m_iValue!=0 );
 
 	} else if ( sOpt=="ignore_nonexistent_indexes" )
 	{
+		if ( !CheckInteger ( sOpt, sVal ) )
+			return false;
+
 		m_pQuery->m_bIgnoreNonexistentIndexes = ( tValue.m_iValue!=0 );
 
 	} else if ( sOpt=="strict" )
 	{
+		if ( !CheckInteger ( sOpt, sVal ) )
+			return false;
+
 		m_pQuery->m_bStrict = ( tValue.m_iValue!=0 );
 
 	} else if ( sOpt=="columns" ) // for SHOW THREADS
 	{
+		if ( !CheckInteger ( sOpt, sVal ) )
+			return false;
+
 		m_pStmt->m_iThreadsCols = Max ( (int)tValue.m_iValue, 0 );
 
 	} else if ( sOpt=="rand_seed" )
 	{
+		if ( !CheckInteger ( sOpt, sVal ) )
+			return false;
+
 		m_pStmt->m_tQuery.m_iRandSeed = int64_t(DWORD(tValue.m_iValue));
 
 	} else if ( sOpt=="sync" )
 	{
+		if ( !CheckInteger ( sOpt, sVal ) )
+			return false;
+
 		m_pQuery->m_bSync = ( tValue.m_iValue!=0 );
 
 	} else if ( sOpt=="expand_keywords" )
 	{
+		if ( !CheckInteger ( sOpt, sVal ) )
+			return false;
+
 		m_pQuery->m_eExpandKeywords = ( tValue.m_iValue!=0 ? QUERY_OPT_ENABLED : QUERY_OPT_DISABLED );
 
 	} else if ( sOpt=="format" ) // for SHOW THREADS

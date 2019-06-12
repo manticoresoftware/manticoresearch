@@ -30,6 +30,11 @@ inline int sphIsAlpha ( int c )
 	return ( c>='0' && c<='9' ) || ( c>='a' && c<='z' ) || ( c>='A' && c<='Z' ) || c=='-' || c=='_';
 }
 
+inline bool sphIsInteger ( char c )
+{
+	return ( c>='0' && c<='9' ) || c=='+' || c=='-';
+}
+
 /// symbols allowed in numbers (like 1.84E-20)
 inline bool sphIsDigital ( char c )
 {

@@ -706,7 +706,7 @@ So if you want your search to support different languages
 you will need to define sets of valid characters and folding rules
 for all of them what can be quite a laborious task.
 We have performed this task for you by preparing default charset tables,
-non-cjk and cjk, that comprise non-cjk and cjk-languages respectively.
+non_cjk and cjk, that comprise non-cjk and cjk-languages respectively.
 These charsets should be sufficient to use in most cases.
 
 The languages that are currently NOT supported:

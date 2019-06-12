@@ -900,10 +900,9 @@ void ApplyKilllists ( CSphConfig & hConf )
 		tIndex.m_sName = hConf["index"].IterateGetKey().cstr();
 		tIndex.m_sPath = hIndex["path"].cstr();
 
-		IndexFiles_c tIndexFiles ( tIndex.m_sPath );
-		tIndexFiles.SetName ( tIndex.m_sName.cstr() );
+		IndexFiles_c tIndexFiles ( tIndex.m_sPath, tIndex.m_sName.cstr () );
 
-		if ( !tIndexFiles.ReadVersion("") )
+		if ( !tIndexFiles.CheckHeader() )
 		{
 			fprintf ( stdout, "WARNING: unable to index header for index %s\n", tIndex.m_sName.cstr() );
 			continue;

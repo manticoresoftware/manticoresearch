@@ -15165,7 +15165,7 @@ bool CSphIndex_VLN::Rename ( const char * sNewBase )
 	if ( m_sFilename==sNewBase )
 		return true;
 
-	IndexFiles_c dFiles ( m_sFilename, m_uVersion );
+	IndexFiles_c dFiles ( m_sFilename, nullptr, m_uVersion );
 	if ( !dFiles.RenameBase ( sNewBase ) )
 	{
 		m_sLastError = dFiles.ErrorMsg ();
@@ -30395,7 +30395,7 @@ bool IndexFiles_c::RollbackSuff ( const char * sBackupSuffix, const char * sActi
 	return Rollback ( FullPath ( "", sBackupSuffix ).cstr (), FullPath ( "", sActiveSuffix ).cstr () );
 }
 
-bool IndexFiles_c::ReadVersion ( const char * sType )
+bool IndexFiles_c::CheckHeader ( const char * sType )
 {
 	auto sPath = FullPath ( sphGetExt(SPH_EXT_SPH).cstr(), sType );
 	BYTE dBuffer[8];
@@ -30444,16 +30444,6 @@ bool IndexFiles_c::ReadKlistTargets ( StrVec_t & dTargets, const char * szType )
 	}
 
 	return true;
-}
-
-
-void IndexFiles_c::InitFrom ( const CSphIndex* pIndex )
-{
-	if ( !pIndex )
-		return;
-	m_sIndexName = pIndex->GetName ();
-	m_sFilename = pIndex->GetFilename ();
-	ReadVersion ();
 }
 
 volatile bool& sphGetShutdown ()

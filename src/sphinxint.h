@@ -1705,19 +1705,16 @@ class IndexFiles_c : public ISphNoncopyable
 	CSphString	m_sLastError;
 	bool		m_bFatal = false; // if fatal fail happened (unable to rename during rollback)
 	CSphString FullPath ( const char * sExt, const char * sSuffix = "", const char * sBase = nullptr );
+	inline void SetName ( const char* sIndex ) { m_sIndexName = sIndex; }
 
 public:
 	IndexFiles_c() = default;
-	explicit IndexFiles_c ( CSphString sBase, DWORD uVersion = INDEX_FORMAT_VERSION )
+	explicit IndexFiles_c ( CSphString sBase, const char* sIndex=nullptr, DWORD uVersion = INDEX_FORMAT_VERSION )
 		: m_uVersion ( uVersion )
 		, m_sFilename { std::move(sBase) }
-	{}
-
-	void InitFrom ( const CSphIndex * pIndex );
-
-	inline void SetName ( const char * sIndex )
 	{
-		m_sIndexName = sIndex;
+		if ( sIndex )
+			SetName ( sIndex );
 	}
 
 	inline void SetBase ( const CSphString & sNewBase )
@@ -1731,7 +1728,7 @@ public:
 	inline bool IsFatal() const { return m_bFatal; }
 
 	// read .sph and adopt index version from there.
-	bool ReadVersion ( const char * sType="" );
+	bool CheckHeader ( const char * sType="" );
 
 	// read the beginning of .spk and parse killlist targets
 	bool ReadKlistTargets ( StrVec_t & dTargets, const char * sType="" );

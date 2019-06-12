@@ -18568,19 +18568,19 @@ RotateFrom_e CheckIndexHeaderRotate ( const ServedDesc_t & tServed )
 	// new_path/idx.new.sph			- rotation of current index but with new path via indexer --rotate
 	// new_path/idx.sph				- rotation of current index but with new path via files copy
 
-	if ( IndexFiles_c ( tServed.m_sIndexPath ).ReadVersion (".new") )
+	if ( IndexFiles_c ( tServed.m_sIndexPath ).CheckHeader (".new") )
 		return RotateFrom_e::NEW;
 
-	if ( tServed.m_bOnlyNew && IndexFiles_c ( tServed.m_sIndexPath ).ReadVersion() )
+	if ( tServed.m_bOnlyNew && IndexFiles_c ( tServed.m_sIndexPath ).CheckHeader() )
 		return RotateFrom_e::REENABLE;
 
 	if ( tServed.m_sNewPath.IsEmpty () || tServed.m_sNewPath==tServed.m_sIndexPath )
 		return RotateFrom_e::NONE;
 
-	if ( IndexFiles_c ( tServed.m_sNewPath ).ReadVersion ( ".new" ) )
+	if ( IndexFiles_c ( tServed.m_sNewPath ).CheckHeader ( ".new" ) )
 		return RotateFrom_e::PATH_NEW;
 
-	if ( IndexFiles_c ( tServed.m_sNewPath ).ReadVersion () )
+	if ( IndexFiles_c ( tServed.m_sNewPath ).CheckHeader () )
 		return RotateFrom_e::PATH_COPY;
 
 	return RotateFrom_e::NONE;
@@ -18590,8 +18590,7 @@ RotateFrom_e CheckIndexHeaderRotate ( const ServedDesc_t & tServed )
 bool RotateIndexGreedy ( const ServedIndex_c * pIndex, ServedDesc_t &tWlockedIndex, const char * szIndex, CSphString & sError ) REQUIRES (pIndex->rwlock ())
 {
 	sphLogDebug ( "RotateIndexGreedy for '%s' invoked", szIndex );
-	IndexFiles_c dFiles ( tWlockedIndex.m_sIndexPath );
-	dFiles.SetName ( szIndex );
+	IndexFiles_c dFiles ( tWlockedIndex.m_sIndexPath, szIndex );
 	RotateFrom_e eRot = CheckIndexHeaderRotate ( tWlockedIndex );
 	bool bReEnable = ( eRot==RotateFrom_e::REENABLE );
 	if ( eRot==RotateFrom_e::PATH_NEW || eRot==RotateFrom_e::PATH_COPY )
@@ -18601,7 +18600,7 @@ bool RotateIndexGreedy ( const ServedIndex_c * pIndex, ServedDesc_t &tWlockedInd
 	}
 
 	const char * sFromSuffix = bReEnable ? "" : ".new";
-	if ( !dFiles.ReadVersion ( sFromSuffix ) )
+	if ( !dFiles.CheckHeader ( sFromSuffix ) )
 	{
 		// no files or wrong files - no rotation
 		sError = dFiles.ErrorMsg();
@@ -19001,7 +19000,7 @@ static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError )
 	bool bHaveBackup = false;
 	if ( !sPathTo.IsEmpty () )
 	{
-		if ( dActivePath.GetBase ()==sPathTo && !pCurrentlyServed->m_bOnlyNew && dActivePath.ReadVersion () )
+		if ( dActivePath.GetBase ()==sPathTo && !pCurrentlyServed->m_bOnlyNew && dActivePath.CheckHeader () )
 		{
 			// moving to active path; need backup to .old!
 			bHaveBackup = pOld->Rename ( dActivePath.MakePath ( ".old" ).cstr () );

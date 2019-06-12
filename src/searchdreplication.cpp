@@ -4341,7 +4341,7 @@ CSphString GetMacAddress ()
 	StringBuilder_c sMAC ( ":" );
 
 #if USE_WINDOWS
-    IP_ADAPTER_ADDRESSES dAdapters[16];
+    IP_ADAPTER_ADDRESSES dAdapters[128];
 	DWORD uSize = sizeof ( dAdapters );
     if ( GetAdaptersAddresses ( 0, 0, nullptr, dAdapters, &uSize )==NO_ERROR )
 	{

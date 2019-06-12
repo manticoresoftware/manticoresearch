@@ -1991,32 +1991,17 @@ directive. Also, there is a
 directive that lets you speed up lemmatizing (and therefore indexing) by
 spending more RAM for, basically, an uncompressed cache of a dictionary.
 
-Chinese segmentation using Rosette Linguistics Platform is also
-available. It is a much more precise but slower way (compared to
-n-grams) to segment Chinese documents.
+Chinese segmentation using ICU is also available. It is a much more precise
+but slower way (compared to n-grams) to segment Chinese documents.
 :ref:`charset_table`
-must contain all Chinese characters except Chinese punctuation marks
-because incoming documents are first processed by sphinx tokenizer and
-then the result is processed by RLP. Manticore performs per-token language
-detection on the incoming documents. If token language is identified as
-Chinese, it will only be processed the RLP, even if multiple morphology
-processors are specified. Otherwise, it will be processed by all the
-morphology processors specified in the “morphology” option. Rosette
-Linguistics Platform must be installed and configured and sphinx must be
-built with a –with-rlp switch. See also
-:ref:`rlp_root`,
-:ref:`rlp_environment`
-and :ref:`rlp_context`
-options. A batched version of RLP segmentation is also available
-(``rlp_chinese_batched``). It provides the same functionality as the
-basic ``rlp_chinese`` segmentation, but enables batching documents
-before processing them by the RLP. Processing several documents at once
-can result in a substantial indexing speedup if the documents are small
-(for example, less than 1k). See also
-:ref:`rlp_max_batch_size`
-and
-:ref:`rlp_max_batch_docs`
-options.
+must contain all Chinese characters. Documents are first pre-processed by
+ICU and then the result is processed by the tokenizer and other morphology
+processors specified in the “morphology” option are applied. When documents
+are processed by ICU, only parts that contain chinese text are segmented, others
+are left as is.
+
+See also
+:ref:`icu_data`
 
 Additional stemmers provided by
 `Snowball <http://snowball.tartarus.org/>`__ project
@@ -2063,11 +2048,7 @@ as follows:
 
 -  metaphone - replace keywords with their METAPHONE code.
 
--  rlp_chinese - apply Chinese text segmentation using Rosette
-   Linguistics Platform
-
--  rlp_chinese_batched - apply Chinese text segmentation using Rosette
-   Linguistics Platform with document batching
+-  icu_chinese - apply Chinese text segmentation using ICU
 
 Additional values provided by libstemmer are in ‘libstemmer_XXX’
 format, where XXX is libstemmer algorithm codename (refer to
@@ -2506,20 +2487,6 @@ Example:
     # index 'blue' or 'red' as 'color'
     regexp_filter = (blue|red) => color
 
-.. _rlp_context:
-
-rlp_context
-~~~~~~~~~~~
-
-RLP context configuration file. Mandatory if RLP is used.
-
-Example:
-
-
-.. code-block:: ini
-
-
-    rlp_context = /home/myuser/RLP/rlp-context.xml
 
 .. _rt_attr_bigint:
 

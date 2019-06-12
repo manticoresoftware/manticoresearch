@@ -17,8 +17,8 @@
 #include "sphinxutils.h"
 #include "sphinxint.h"
 #include "sphinxplugin.h"
-#include "sphinxrlp.h"
 #include "sphinxstem.h"
+#include "icu.h"
 
 #include <ctype.h>
 #include <fcntl.h>
@@ -641,7 +641,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "divide_remote_ranges",	KEY_HIDDEN, NULL },
 	{ "stopwords_unstemmed",	0, NULL },
 	{ "global_idf",				0, NULL },
-	{ "rlp_context",			0, NULL },
+	{ "rlp_context",			KEY_REMOVED, NULL },
 	{ "ondisk_attrs",			KEY_DEPRECATED, "access_plain_attrs = mmap" },
 	{ "index_token_filter",		0, NULL },
 	{ "morphology_skip_fields",	0, NULL },
@@ -769,10 +769,11 @@ static KeyDesc_t g_dKeysCommon[] =
 	{ "on_json_attr_error",		0, NULL },
 	{ "json_autoconv_numbers",	0, NULL },
 	{ "json_autoconv_keynames",	0, NULL },
-	{ "rlp_root",				0, NULL },
-	{ "rlp_environment",		0, NULL },
-	{ "rlp_max_batch_size",		0, NULL },
-	{ "rlp_max_batch_docs",		0, NULL },
+	{ "rlp_root",				KEY_REMOVED, NULL },
+	{ "rlp_environment",		KEY_REMOVED, NULL },
+	{ "icu_data",				0, NULL },
+	{ "rlp_max_batch_size",		KEY_REMOVED, NULL },
+	{ "rlp_max_batch_docs",		KEY_REMOVED, NULL },
 	{ "plugin_dir",				0, NULL },
 	{ "progressive_merge",		0, NULL },
 	{ NULL,						0, NULL }
@@ -1726,19 +1727,9 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 			}
 	}
 
-	bool bPlainRLP = dMorphs.Contains ( "rlp_chinese" );
-	bool bBatchedRLP = dMorphs.Contains ( "rlp_chinese_batched" );
+	tSettings.m_ePreprocessor = dMorphs.Contains ( "icu_chinese" ) ? Preprocessor_e::ICU : Preprocessor_e::NONE;
 
-	if ( bPlainRLP && bBatchedRLP )
-	{
-		fprintf ( stdout, "WARNING: both rlp_chinese and rlp_chinese_batched options specified; switching to rlp_chinese\n" );
-		bBatchedRLP = false;
-	}
-
-	tSettings.m_eChineseRLP = bPlainRLP ? SPH_RLP_PLAIN : ( bBatchedRLP ? SPH_RLP_BATCHED : SPH_RLP_NONE );
-	tSettings.m_sRLPContext = hIndex.GetStr ( "rlp_context" );
-
-	if ( !sphRLPCheckConfig ( tSettings, sError ) )
+	if ( !sphCheckConfigICU ( tSettings, sError ) )
 		fprintf ( stdout, "WARNING: %s\n", sError.cstr() );
 
 	// all good
@@ -1821,7 +1812,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		if ( sphConfFieldFilter ( hIndex, tFilterSettings, sError ) )
 			pFieldFilter = sphCreateRegexpFilter ( tFilterSettings, sError );
 
-		if ( !sphSpawnRLPFilter ( pFieldFilter, pIndex->GetSettings(), pIndex->GetTokenizer()->GetSettings(), pIndex->GetName(), sError ) )
+		if ( !sphSpawnFilterICU ( pFieldFilter, pIndex->GetSettings(), pIndex->GetTokenizer()->GetSettings(), pIndex->GetName(), sError ) )
 			sphWarning ( "index '%s': %s", pIndex->GetName(), sError.cstr() );
 
 		pIndex->SetFieldFilter ( pFieldFilter );
@@ -3097,7 +3088,7 @@ void sphConfigureCommon ( const CSphConfig & hConf )
 
 	CSphConfigSection & hCommon = hConf["common"]["common"];
 	g_sLemmatizerBase = hCommon.GetStr ( "lemmatizer_base" );
-	sphConfigureRLP ( hCommon );
+	sphConfigureICU ( hCommon );
 
 	bool bJsonStrict = false;
 	bool bJsonAutoconvNumbers;

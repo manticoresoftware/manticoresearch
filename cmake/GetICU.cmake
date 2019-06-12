@@ -1,0 +1,151 @@
+#=============================================================================
+# Copyright 2017-2019, Manticore Software LTD (http://manticoresearch.com)
+#
+# Distributed under the OSI-approved BSD License (the "License");
+# see accompanying file Copyright.txt for details.
+#
+# This software is distributed WITHOUT ANY WARRANTY; without even the
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# See the License for more information.
+#=============================================================================
+
+
+set ( ICU_LIBDIR "${MANTICORE_BINARY_DIR}/icu-bin" )
+set ( ICU_SRC "${MANTICORE_BINARY_DIR}/icu" )
+mark_as_advanced ( ICU_SRC ICU_LIBDIR )
+set ( ICUZIP "icu4c-64_2-src.tgz" )
+
+#set ( ICU_DEBUG ON )
+find_package ( ICU COMPONENTS uc )
+if ( ICU_FOUND )
+	mark_as_advanced ( ICU_DERB_EXECUTABLE ICU_GENBRK_EXECUTABLE ICU_GENCCODE_EXECUTABLE
+			ICU_GENCFU_EXECUTABLE ICU_GENCMN_EXECUTABLE ICU_GENCNVAL_EXECUTABLE
+			ICU_GENDICT_EXECUTABLE ICU_GENNORM2_EXECUTABLE ICU_GENRB_EXECUTABLE
+			ICU_GENSPREP_EXECUTABLE ICU_ICU-CONFIG_EXECUTABLE ICU_ICUINFO_EXECUTABLE
+			ICU_ICUPKG_EXECUTABLE ICU_INCLUDE_DIR ICU_MAKECONV_EXECUTABLE ICU_MAKEFILE_INC
+			ICU_PKGDATA_EXECUTABLE ICU_PKGDATA_INC ICU_UCONV_EXECUTABLE )
+	set ( USE_ICU 1 )
+	# check whether we will build ICU from sources ourselves
+	if ( WITH_ICU_FORCE_STATIC )
+		set ( NEED_ICU_FROMSOURCES 1 )
+		unset ( ICU_INCLUDE_DIRS )
+		unset ( ICU_LIBRARIES )
+		message ( STATUS "ICU as sys shared lib found, but need sources" )
+	else ()
+		message ( STATUS "ICU as sys shared library" )
+		set ( ICU_IS_SHARED 1 )
+		mark_as_advanced ( ICU_IS_SHARED )
+	endif ()
+else ()
+	set ( NEED_ICU_FROMSOURCES 1 )
+endif ()
+
+if ( NEED_ICU_FROMSOURCES )
+include ( FetchContent )
+# check whether we have local copy (to not disturb network)
+if ( LIBS_BUNDLE AND EXISTS "${LIBS_BUNDLE}/${ICUZIP}" )
+	set ( ICU_URL "${LIBS_BUNDLE}/${ICUZIP}" )
+	file ( SHA1 "${ICU_URL}" SHA1ICU )
+	set ( ICU_URL_HASH "SHA1=${SHA1ICU}" )
+	message ( STATUS "Using ICU from ${ICU_URL} with hash ${SHA1ICU}" )
+
+	FetchContent_Declare ( icu
+			SOURCE_DIR "${ICU_SRC}"
+			BINARY_DIR "${ICU_LIBDIR}"
+			URL "${ICU_URL}"
+			URL_HASH ${ICU_URL_HASH}
+			)
+else ()
+	set ( ICU_URL_GITHUB "https://github.com/unicode-org/icu/releases/download/release-64-2/${ICUZIP}" )
+	message ( STATUS "Using ICU from ${ICU_URL_GITHUB}" )
+	message ( STATUS "(you can download the file and save it as '${ICUZIP}' into ${LIBS_BUNDLE}/) " )
+	FetchContent_Declare ( icu
+			SOURCE_DIR "${ICU_SRC}"
+			BINARY_DIR "${ICU_LIBDIR}"
+			URL "${ICU_URL_GITHUB}"
+			)
+endif ()
+
+FetchContent_GetProperties ( icu )
+if ( NOT icu_POPULATED )
+	FetchContent_Populate ( icu )
+endif ()
+
+if ( icu_POPULATED )
+	set ( USE_ICU 1 )
+	include_directories ( "${icu_SOURCE_DIR}/source/common" )
+	if ( NOT EXISTS "${ICU_SRC}/CMakeLists.txt" )
+		configure_file ( "${CMAKE_SOURCE_DIR}/libicu/CMakeLists.txt" "${ICU_SRC}/CMakeLists.txt" COPYONLY )
+	endif ()
+	add_subdirectory ( ${icu_SOURCE_DIR} ${icu_BINARY_DIR} )
+	set ( ICU_INCLUDE_DIRS "${ICU_SRC}/source/common" )
+	set ( ICU_LIBRARIES icu )
+endif ()
+endif ( NEED_ICU_FROMSOURCES )
+
+if ( USE_ICU )
+	include_directories ( ${ICU_INCLUDE_DIRS} )
+	if ( NOT ICU_IS_SHARED )
+		list ( APPEND EXTRA_LIBRARIES ${ICU_LIBRARIES} )
+	endif()
+endif()
+
+CMAKE_DEPENDENT_OPTION ( DL_ICU "load ICU library dynamically" ON "ICU_FOUND;HAVE_DLOPEN;ICU_IS_SHARED;USE_ICU" OFF )
+
+if ( DL_ICU )
+	set (ICU_FUNCS
+			createWordInstance
+			utext_openUTF8
+			utext_close
+			getChinese
+			u_errorName
+			u_setDataDirectory)
+	list ( LENGTH ICU_FUNCS NFUNCS )
+	math ( EXPR NFUNCS "${NFUNCS}-1" )
+
+	include ( helpers )
+	GET_NAMES ( "${ICU_LIBRARIES}" ICU_FUNCS CPP_FUNCS RAW_FUNCS )
+
+	if ( NOT CPP_FUNCS )
+		UNSET ( DL_ICU )
+		message (STATUS "Unable to extract functions from ICU lib, falling back to explicit linkage" )
+	else()
+
+		# prepare inclusion clause
+		SET (icui "${MANTICORE_BINARY_DIR}/config/ldicu.inl")
+		file (WRITE "${icui}" "// This is generated file. Look into GetICU.cmake for template\n\n")
+		foreach (_icuf RANGE ${NFUNCS})
+			list ( GET ICU_FUNCS ${_icuf} _icuff )
+			list ( GET CPP_FUNCS ${_icuf} _icufcpp )
+			file ( APPEND "${icui}" "static decltype ( &${_icufcpp} ) imp_${_icuff} = nullptr;\n" )
+		endforeach()
+
+		# InitDynamicIcu ()
+		file ( APPEND "${icui}" "\nbool InitDynamicIcu ()\n{\n\tconst char* sFuncs[] = {\n" )
+		foreach ( _icuf RANGE ${NFUNCS} )
+			list ( GET RAW_FUNCS ${_icuf} _icufr )
+			file ( APPEND "${icui}" "\t\t\"${_icufr}\",\n" )
+		endforeach ()
+		file ( APPEND "${icui}" "\n\t};\n\n\tvoid** pFuncs[] = {\n" )
+		foreach ( _icuf RANGE ${NFUNCS} )
+			list ( GET ICU_FUNCS ${_icuf} _icuff )
+			file ( APPEND "${icui}" "\t\t( void** ) &imp_${_icuff},\n" )
+		endforeach ()
+		file ( APPEND "${icui}" "\n\t};\n\n" )
+		file ( APPEND "${icui}" "\tstatic CSphDynamicLibrary dLib ( ICU_LIB );\n" )
+		file ( APPEND "${icui}" "\tif ( !dLib.LoadSymbols ( sFuncs, pFuncs, sizeof ( pFuncs ) / sizeof ( void** )))\n" )
+		file ( APPEND "${icui}" "\t\treturn false;\n" )
+		file ( APPEND "${icui}" "\treturn true;\n" )
+		file ( APPEND "${icui}" "}\n" )
+	endif()
+endif()
+
+if ( DL_ICU )
+	set ( DL_ICU 1 )
+	GET_SONAME ( "${ICU_LIBRARIES}" ICU_LIB )
+	message ( STATUS "ICU will be loaded dynamically in runtime as ${ICU_LIB}" )
+	memcfgvalues ( DL_ICU ICU_LIB )
+else ( DL_ICU )
+	list ( APPEND EXTRA_LIBRARIES ${ICU_LIBRARIES} )
+	message ( STATUS "ICU will be linked as ${ICU_LIBRARIES}" )
+endif ()

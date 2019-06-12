@@ -18,7 +18,7 @@
 #include "sphinxutils.h"
 #include "sphinxjson.h"
 #include "sphinxplugin.h"
-#include "sphinxrlp.h"
+#include "icu.h"
 #include "sphinxqcache.h"
 #include "attribute.h"
 #include "killlist.h"
@@ -3624,7 +3624,7 @@ bool RtIndex_c::Prealloc ( bool bStripPath )
 	if ( tFieldFilterSettings.m_dRegexps.GetLength() )
 		pFieldFilter = sphCreateRegexpFilter ( tFieldFilterSettings, m_sLastError );
 
-	if ( !sphSpawnRLPFilter ( pFieldFilter, m_tSettings, tTokenizerSettings, sMeta.cstr(), m_sLastError ) )
+	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokenizerSettings, sMeta.cstr(), m_sLastError ) )
 
 		return false;
 
@@ -7291,11 +7291,11 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 		}
 	}
 
-	// rlp filter
-	bool bRlpSame = ( tIndexSettings.m_eChineseRLP==tSettings.m_tIndex.m_eChineseRLP );
-	if ( !bRlpSame )
+	// icu filter
+	bool bIcuSame = ( tIndexSettings.m_ePreprocessor==tSettings.m_tIndex.m_ePreprocessor );
+	if ( !bIcuSame )
 	{
-		if ( !sphSpawnRLPFilter ( tFieldFilter, tSettings.m_tIndex, tSettings.m_tTokenizer, sIndexName.cstr (), sError ) )
+		if ( !sphSpawnFilterICU ( tFieldFilter, tSettings.m_tIndex, tSettings.m_tTokenizer, sIndexName.cstr (), sError ) )
 		{
 			sError.SetSprintf ( "'%s' failed to create field filter, error '%s'", sIndexName.cstr (), sError.cstr () );
 			return true;
@@ -7305,7 +7305,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	// compare options
 	if ( !bSame || uTokHash!=pTokenizer->GetSettingsFNV() || uDictHash!=tDict->GetSettingsFNV() ||
 		iMaxCodepointLength!=pTokenizer->GetMaxCodepointLength() || sphGetSettingsFNV ( tIndexSettings )!=sphGetSettingsFNV ( tSettings.m_tIndex ) ||
-		!bReFilterSame || !bRlpSame )
+		!bReFilterSame || !bIcuSame )
 	{
 		tSetup.m_pTokenizer = pTokenizer.Leak();
 		tSetup.m_pDict = tDict.Leak();
@@ -7382,8 +7382,7 @@ uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
 	uHash = sphFNV64 ( &tSettings.m_eBigramIndex, sizeof(tSettings.m_eBigramIndex), uHash );
 	uHash = sphFNV64 ( tSettings.m_sBigramWords.cstr(), tSettings.m_sBigramWords.Length(), uHash );
 	uHash = sphFNV64 ( &tSettings.m_uAotFilterMask, sizeof(tSettings.m_uAotFilterMask), uHash );
-	uHash = sphFNV64 ( &tSettings.m_eChineseRLP, sizeof(tSettings.m_eChineseRLP), uHash );
-	uHash = sphFNV64 ( tSettings.m_sRLPContext.cstr(), tSettings.m_sRLPContext.Length(), uHash );
+	uHash = sphFNV64 ( &tSettings.m_ePreprocessor, sizeof(tSettings.m_ePreprocessor), uHash );
 	uHash = sphFNV64 ( tSettings.m_sIndexTokenFilter.cstr(), tSettings.m_sIndexTokenFilter.Length(), uHash );
 	uHash = sphFNV64 ( &tSettings.m_iMinPrefixLen, sizeof(tSettings.m_iMinPrefixLen), uHash );
 	uHash = sphFNV64 ( &tSettings.m_iMinInfixLen, sizeof(tSettings.m_iMinInfixLen), uHash );

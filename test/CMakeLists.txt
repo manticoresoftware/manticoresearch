@@ -54,7 +54,6 @@ if ( NOT DISABLE_TESTING )
 				COMMAND php ubertest.php
 					-b "${MANTICORE_BINARY_DIR}/src/"
 					-t "${MANTICORE_BINARY_DIR}/test/"
-					-r "${RLP_ROOT}"
 					--ctest -u test --strict-verbose --no-demo
 					t ${onetest} )
 		add_test ( NAME "\"rt_${tst_name}\""
@@ -63,7 +62,6 @@ if ( NOT DISABLE_TESTING )
 				COMMAND php ubertest.php
 				-b "${MANTICORE_BINARY_DIR}/src/"
 				-t "${MANTICORE_BINARY_DIR}/test/"
-				-r "${RLP_ROOT}"
 				--ctest -u test --strict-verbose --no-demo
 				--rt --ignore-weights
 				t ${onetest} )

@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>RLP vs field_len</name>
+<name>ICU vs field_len</name>
 
-<requires><rlp/></requires>
+<requires>
+<icu/>
+</requires>
 
 <config>
 indexer
@@ -35,8 +37,7 @@ index test
 			U+2E80..U+2EF3, U+2F00..U+2FD5, U+3105..U+312D, U+31C0..U+31E3, U+3400..U+4DB5, U+4E00..U+9FCC, \
 			U+F900..U+FAD9, U+20000..U+2FA1D
 			
-	morphology 		= rlp_chinese_batched, stem_enru
-	rlp_context		= <rlp_root/>/rlp/samples/etc/rlp-chinese-context.xml
+	morphology 		= icu_chinese, stem_enru
 	index_field_lengths = 1
 }
 
@@ -49,8 +50,7 @@ index rt
 			U+2E80..U+2EF3, U+2F00..U+2FD5, U+3105..U+312D, U+31C0..U+31E3, U+3400..U+4DB5, U+4E00..U+9FCC, \
 			U+F900..U+FAD9, U+20000..U+2FA1D
 			
-	morphology 		= rlp_chinese_batched, stem_enru
-	rlp_context		= <rlp_root/>/rlp/samples/etc/rlp-chinese-context.xml
+	morphology 		= icu_chinese, stem_enru
 	
 	rt_field = content
 	rt_field = text
@@ -59,8 +59,7 @@ index rt
 
 common
 {
-	rlp_root = <rlp_root/>
-	rlp_environment = <rlp_root/>/rlp/etc/rlp-environment.xml
+	icu_data = <local>icu_data</local>
 }
 </config>
 
@@ -71,7 +70,7 @@ CREATE TABLE test_table
 	content VARCHAR(255) NOT NULL,
 	text1 VARCHAR(255) NOT NULL,
 	text2 VARCHAR(255) NOT NULL
-)
+) CHARACTER SET utf8;
 </db_create>
 <db_drop>DROP TABLE IF EXISTS test_table</db_drop>
 <db_insert>SET NAMES utf8</db_insert>

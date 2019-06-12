@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>CJK via RLP</name>
+<name>CJK via ICU</name>
 
 <requires>
-<rlp/>
+<icu/>
 </requires>
 
 <config>
@@ -42,13 +42,9 @@ index base
 			U+2E80..U+2EF3, U+2F00..U+2FD5, U+3105..U+312D, U+31C0..U+31E3, U+3400..U+4DB5, U+4E00..U+9FCC, \
 			U+F900..U+FAD9, U+20000..U+2FA1D
 			
-	<dynamic>
-		<variant>morphology 		= rlp_chinese, stem_enru</variant>
-		<variant>morphology 		= rlp_chinese_batched, stem_enru</variant>
-	</dynamic>
+	morphology 		= icu_chinese, stem_enru
 	
 	blend_chars		= -, U+23
-	rlp_context		= <rlp_root/>/rlp/samples/etc/rlp-chinese-context.xml
 }
 
 index test : base
@@ -100,14 +96,12 @@ index test_spec
 			U+2E80..U+2EF3, U+2F00..U+2FD5, U+3105..U+312D, U+31C0..U+31E3, U+3400..U+4DB5, U+4E00..U+9FCC, \
 			U+F900..U+FAD9, U+20000..U+2FA1D
 			
-	morphology 		= rlp_chinese_batched
-	rlp_context		= <rlp_root/>/rlp/samples/etc/rlp-chinese-context.xml
+	morphology 		= icu_chinese
 }
 
 common
 {
-	rlp_root = <rlp_root/>
-	rlp_environment = <rlp_root/>/rlp/etc/rlp-environment.xml
+	icu_data = <local>icu_data</local>
 }
 </config>
 
@@ -140,7 +134,7 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from test where match('test')</sphinxql>
 <sphinxql>select * from test where match('test2')</sphinxql>
 <sphinxql>select * from test where match('許多')</sphinxql>
-<sphinxql>select * from test where match('則')</sphinxql>
+<sphinxql>select * from test where match('則有')</sphinxql>
 <sphinxql>select * from test where match('來')</sphinxql>
 <sphinxql>select * from test where match('這群白髮蒼蒼，')</sphinxql>
 <sphinxql>select * from test where match('ruin')</sphinxql>
@@ -149,7 +143,7 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from test where match('aaa-bbb')</sphinxql>
 <sphinxql>select * from test where match('msgCnt')</sphinxql>
 <sphinxql>select * from test where match('今天的心情')</sphinxql>
-<sphinxql>select * from test where match('@content 則')</sphinxql>
+<sphinxql>select * from test where match('@content 則有')</sphinxql>
 <sphinxql>select * from test where match('querymapped')</sphinxql>
 
 <sphinxql>select * from test_xml where match('mix')</sphinxql>
@@ -157,7 +151,7 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from test_xml where match('test')</sphinxql>
 <sphinxql>select * from test_xml where match('test2')</sphinxql>
 <sphinxql>select * from test_xml where match('許多')</sphinxql>
-<sphinxql>select * from test_xml where match('則')</sphinxql>
+<sphinxql>select * from test_xml where match('則有')</sphinxql>
 <sphinxql>select * from test_xml where match('來')</sphinxql>
 <sphinxql>select * from test_xml where match('這群白髮蒼蒼，')</sphinxql>
 <sphinxql>select * from test_xml where match('ruin')</sphinxql>
@@ -166,7 +160,7 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from test_xml where match('aaa-bbb')</sphinxql>
 <sphinxql>select * from test_xml where match('msgCnt')</sphinxql>
 <sphinxql>select * from test_xml where match('今天的心情')</sphinxql>
-<sphinxql>select * from test_xml where match('@content 則')</sphinxql>
+<sphinxql>select * from test_xml where match('@content 則有')</sphinxql>
 
 <sphinxql>insert into test2 values(1,'this is some mixed text in english. and some blended aaa-bbb',10 )</sphinxql>
 <sphinxql>insert into test2 values(2,'許多社區長青學苑多開設有書法、插花、土風舞班，',11 )</sphinxql>
@@ -181,7 +175,7 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from test2 where match('test')</sphinxql>
 <sphinxql>select * from test2 where match('test2')</sphinxql>
 <sphinxql>select * from test2 where match('許多')</sphinxql>
-<sphinxql>select * from test2 where match('則')</sphinxql>
+<sphinxql>select * from test2 where match('則有')</sphinxql>
 <sphinxql>select * from test2 where match('來')</sphinxql>
 <sphinxql>select * from test2 where match('這群白髮蒼蒼，')</sphinxql>
 <sphinxql>select * from test2 where match('ruin')</sphinxql>
@@ -190,7 +184,7 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from test2 where match('aaa-bbb')</sphinxql>
 <sphinxql>select * from test2 where match('msgCnt')</sphinxql>
 <sphinxql>select * from test2 where match('今天的心情')</sphinxql>
-<sphinxql>select * from test2 where match('@title 則')</sphinxql>
+<sphinxql>select * from test2 where match('@title 則有')</sphinxql>
 
 <sphinxql>select * from test_stripped where match('msgCnt')</sphinxql>
 <sphinxql>select * from test_stripped where match('今天的心情')</sphinxql>

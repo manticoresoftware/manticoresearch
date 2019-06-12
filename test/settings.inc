@@ -34,7 +34,8 @@ $index_data_path	= "data";
 $g_guesscached = false;
 $g_model	= false;
 $g_re2		= false;
-$g_rlp		= false;
+$g_icu		= false;
+$g_dl_icu	= false;
 $g_odbc     = false;
 $g_strict	= false;
 $g_skipdemo = false;
@@ -98,13 +99,14 @@ function LoadCachedGuesses ()
 function CacheGuesses ()
 {
 	global $g_locals;
-	global $g_re2, $g_rlp, $g_odbc, $g_repli;
+	global $g_re2, $g_icu, $g_dl_icu, $g_odbc, $g_repli;
 
 	$guessfile = $g_locals['testdir'].'guess.txt';
 
 	$text = "global \$g_guesscached; \$g_guesscached = true;\n";
 	if ( $g_re2 ) $text .= "global \$g_re2; \$g_re2 = true;\n";
-	if ( $g_rlp ) $text .= "global \$g_rlp; \$g_rlp = true;\n";
+	if ( $g_icu ) $text .= "global \$g_icu; \$g_icu = true;\n";
+	if ( $g_dl_icu ) $text .= "global \$g_dl_icu; \$g_dl_icu = true;\n";
 	if ( $g_odbc ) $text .= "global \$g_odbc; \$g_odbc = true;\n";
 	if ( $g_repli ) $text .= "global \$g_repli; \$g_repli = true;\n";
 
@@ -153,10 +155,22 @@ function GuessRE2 ()
     $g_re2 = GuessFeature ('test_re.conf','no regexp support compiled');
 }
 
-function GuessRLP ()
+function GuessICU ()
 {
-	global $g_rlp;
-    $g_rlp = GuessFeature ( 'test_rlp.conf','no RLP support compiled');
+	global $g_icu, $g_dl_icu;
+    $g_icu = GuessFeature ( 'test_icu.conf','no ICU support compiled');
+
+	$dl_icu = 'DDL_ICU=1';
+	
+	$banner = GetBanner();
+	foreach ( $banner as $line )
+	{
+		if ( strpos ( $line, $dl_icu ) !== false )
+		{
+			$g_dl_icu = true;
+			break;
+		}
+	}
 }
 
 function GuessODBC ()

@@ -20,6 +20,10 @@
 #cmakedefine DL_MYSQL ${DL_MYSQL}
 #cmakedefine MYSQL_LIB "${MYSQL_LIB}"
 
+/* Define to 1 if you want runtime load icu using dlopen */
+#cmakedefine DL_ICU ${DL_ICU}
+#cmakedefine ICU_LIB "${ICU_LIB}"
+
 /* Define to 1 if runtime load PosgreSQL using dlopen */
 #cmakedefine DL_PGSQL ${DL_PGSQL}
 #cmakedefine PGSQL_LIB "${PGSQL_LIB}"
@@ -163,9 +167,8 @@
 /* re2 library support */
 #cmakedefine USE_RE2 ${USE_RE2}
 
-/* RLP library support */
-#cmakedefine USE_RLP ${USE_RLP}
-#cmakedefine RLP_ROOT "${RLP_ROOT}"
+/* ICU library support */
+#cmakedefine USE_ICU ${USE_ICU}
 
 /* define to use Alexandresku's loki small obj allocator for movable attrs */
 #cmakedefine USE_SMALLALLOC ${USE_SMALLALLOC}

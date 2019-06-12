@@ -1326,7 +1326,6 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		}
 
 		// count [ * ] at phrase node for qpos shift
-		// FIXME! RLP can return tokens from several buffers, all this pointer arithmetic will lead to crashes
 		if ( m_pTokenizer->m_bPhrase && pLastTokenEnd )
 		{
 			if ( strncmp ( sToken, "*", 1 )==0 )
@@ -1565,7 +1564,7 @@ void XQParser_t::HandleModifiers ( XQKeyword_t & tKeyword )
 		++sTokEnd; // Skipping.
 	}
 
-	if ( sTokEnd[0]=='^' && ( sTokEnd[1]=='.' || isdigit ( sTokEnd[1] ) ) )
+	if ( sTokEnd[0]=='^' && ( sTokEnd[1]=='.' || sphIsDigital ( sTokEnd[1] ) ) )
 	{
 		// Probably we have a boost, lets check.
 		char * pEnd;
@@ -1727,7 +1726,6 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 {
 	// FIXME? might wanna verify somehow that pTokenizer has all the specials etc from sphSetupQueryTokenizer
 	ISphTokenizerRefPtr_c pMyTokenizer { pTokenizer->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) };
-	CSphTightVector<char> dRlpBuf;
 
 	// most outcomes are errors
 	SafeDelete ( tParsed.m_pRoot );

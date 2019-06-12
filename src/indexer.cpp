@@ -16,7 +16,7 @@
 #include "sphinxstem.h"
 #include "sphinxplugin.h"
 #include "attribute.h"
-#include "sphinxrlp.h"
+#include "icu.h"
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -669,7 +669,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 
 
 #if USE_PGSQL
-CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * sSourceName, bool bProxy )
+CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * sSourceName )
 {
 	assert ( hSource["type"]=="pgsql" );
 
@@ -679,7 +679,7 @@ CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * 
 
 	LOC_GETS ( tParams.m_sClientEncoding,	"sql_client_encoding" );
 
-	CSphSource_PgSQL * pSrcPgSQL = CreateSourceWithProxy<CSphSource_PgSQL> ( sSourceName, bProxy );
+	CSphSource_PgSQL * pSrcPgSQL = new CSphSource_PgSQL ( sSourceName );
 	if ( !pSrcPgSQL->Setup ( tParams ) )
 		SafeDelete ( pSrcPgSQL );
 
@@ -689,7 +689,7 @@ CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * 
 
 
 #if USE_MYSQL
-CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * sSourceName, bool bProxy )
+CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * sSourceName )
 {
 	assert ( hSource["type"]=="mysql" );
 
@@ -703,7 +703,7 @@ CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * 
 	LOC_GETS ( tParams.m_sSslCert,			"mysql_ssl_cert" );
 	LOC_GETS ( tParams.m_sSslCA,			"mysql_ssl_ca" );
 
-	CSphSource_MySQL * pSrcMySQL = CreateSourceWithProxy<CSphSource_MySQL> ( sSourceName, bProxy );
+	CSphSource_MySQL * pSrcMySQL = new CSphSource_MySQL(sSourceName);
 	if ( !pSrcMySQL->Setup ( tParams ) )
 		SafeDelete ( pSrcMySQL );
 
@@ -713,7 +713,7 @@ CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * 
 
 
 #if USE_ODBC
-CSphSource * SpawnSourceODBC ( const CSphConfigSection & hSource, const char * sSourceName, bool bProxy )
+CSphSource * SpawnSourceODBC ( const CSphConfigSection & hSource, const char * sSourceName )
 {
 	assert ( hSource["type"]=="odbc" );
 
@@ -724,14 +724,14 @@ CSphSource * SpawnSourceODBC ( const CSphConfigSection & hSource, const char * s
 	LOC_GETS ( tParams.m_sOdbcDSN, "odbc_dsn" );
 	LOC_GETS ( tParams.m_sColBuffers, "sql_column_buffers" );
 
-	CSphSource_ODBC * pSrc = CreateSourceWithProxy<CSphSource_ODBC> ( sSourceName, bProxy );
+	CSphSource_ODBC * pSrc = new CSphSource_ODBC(sSourceName);
 	if ( !pSrc->Setup ( tParams ) )
 		SafeDelete ( pSrc );
 
 	return pSrc;
 }
 
-CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * sSourceName, bool bProxy )
+CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * sSourceName )
 {
 	assert ( hSource["type"]=="mssql" );
 
@@ -743,7 +743,7 @@ CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * 
 	LOC_GETS ( tParams.m_sColBuffers, "sql_column_buffers" );
 	LOC_GETS ( tParams.m_sOdbcDSN, "odbc_dsn" ); // a shortcut, may be used instead of other specific combination
 
-	CSphSource_MSSQL * pSrc = CreateSourceWithProxy<CSphSource_MSSQL> ( sSourceName, bProxy );
+	CSphSource_MSSQL * pSrc = new CSphSource_MSSQL(sSourceName);
 	if ( !pSrc->Setup ( tParams ) )
 		SafeDelete ( pSrc );
 
@@ -752,7 +752,7 @@ CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * 
 #endif // USE_ODBC
 
 
-CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool bProxy )
+CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char * sSourceName )
 {
 	assert ( hSource["type"]=="xmlpipe2" );
 
@@ -771,7 +771,7 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 	}
 
 	CSphString sError;
-	CSphSource * pResult = sphCreateSourceXmlpipe2 ( &hSource, pPipe, sSourceName, g_iMaxXmlpipe2Field, bProxy, sError );
+	CSphSource * pResult = sphCreateSourceXmlpipe2 ( &hSource, pPipe, sSourceName, g_iMaxXmlpipe2Field, sError );
 	if ( !pResult )
 		fprintf ( stdout, "ERROR: xmlpipe: %s", sError.cstr() );
 
@@ -784,7 +784,7 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 }
 
 
-CSphSource * SpawnSourceTSVPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool bProxy )
+CSphSource * SpawnSourceTSVPipe ( const CSphConfigSection & hSource, const char * sSourceName )
 {
 	assert ( hSource["type"]=="tsvpipe" );
 
@@ -801,11 +801,11 @@ CSphSource * SpawnSourceTSVPipe ( const CSphConfigSection & hSource, const char 
 		return NULL;
 	}
 
-	return sphCreateSourceTSVpipe ( &hSource, pPipe, sSourceName, bProxy );
+	return sphCreateSourceTSVpipe ( &hSource, pPipe, sSourceName );
 }
 
 
-CSphSource * SpawnSourceCSVPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool bProxy )
+CSphSource * SpawnSourceCSVPipe ( const CSphConfigSection & hSource, const char * sSourceName )
 {
 	assert ( hSource["type"]=="csvpipe" );
 
@@ -822,11 +822,11 @@ CSphSource * SpawnSourceCSVPipe ( const CSphConfigSection & hSource, const char 
 		return NULL;
 	}
 
-	return sphCreateSourceCSVpipe ( &hSource, pPipe, sSourceName, bProxy );
+	return sphCreateSourceCSVpipe ( &hSource, pPipe, sSourceName );
 }
 
 
-CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSourceName, bool bBatchedRLP )
+CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSourceName )
 {
 	if ( !hSource.Exists ( "type" ) )
 	{
@@ -836,30 +836,30 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 
 	#if USE_PGSQL
 	if ( hSource["type"]=="pgsql" )
-		return SpawnSourcePgSQL ( hSource, sSourceName, bBatchedRLP );
+		return SpawnSourcePgSQL ( hSource, sSourceName );
 	#endif
 
 	#if USE_MYSQL
 	if ( hSource["type"]=="mysql" )
-		return SpawnSourceMySQL ( hSource, sSourceName, bBatchedRLP );
+		return SpawnSourceMySQL ( hSource, sSourceName );
 	#endif
 
 	#if USE_ODBC
 	if ( hSource["type"]=="odbc" )
-		return SpawnSourceODBC ( hSource, sSourceName, bBatchedRLP );
+		return SpawnSourceODBC ( hSource, sSourceName );
 
 	if ( hSource["type"]=="mssql" )
-		return SpawnSourceMSSQL ( hSource, sSourceName, bBatchedRLP );
+		return SpawnSourceMSSQL ( hSource, sSourceName );
 	#endif
 
 	if ( hSource["type"]=="xmlpipe2" )
-		return SpawnSourceXMLPipe ( hSource, sSourceName, bBatchedRLP );
+		return SpawnSourceXMLPipe ( hSource, sSourceName );
 
 	if ( hSource["type"]=="tsvpipe" )
-		return SpawnSourceTSVPipe ( hSource, sSourceName, bBatchedRLP );
+		return SpawnSourceTSVPipe ( hSource, sSourceName );
 
 	if ( hSource["type"]=="csvpipe" )
-		return SpawnSourceCSVPipe ( hSource, sSourceName, bBatchedRLP );
+		return SpawnSourceCSVPipe ( hSource, sSourceName );
 
 	fprintf ( stdout, "ERROR: source '%s': unknown type '%s'; skipping.\n", sSourceName,
 		hSource["type"].cstr() );
@@ -1000,7 +1000,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	if ( sphConfFieldFilter ( hIndex, tFilterSettings, sError ) )
 		pFieldFilter = sphCreateRegexpFilter ( tFilterSettings, sError );
 
-	if ( !sphSpawnRLPFilter ( pFieldFilter, tSettings, tTokSettings, sIndexName, sError ) )
+	if ( !sphSpawnFilterICU ( pFieldFilter, tSettings, tTokSettings, sIndexName, sError ) )
 		sphDie ( "%s", sError.cstr() );
 
 	if ( !sError.IsEmpty () )
@@ -1069,7 +1069,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		}
 		const CSphConfigSection & hSource = hSources [ pSourceName->cstr() ];
 
-		CSphSource * pSource = SpawnSource ( hSource, pSourceName->cstr(), tSettings.m_eChineseRLP==SPH_RLP_BATCHED );
+		CSphSource * pSource = SpawnSource ( hSource, pSourceName->cstr() );
 		if ( !pSource )
 		{
 			bSpawnFailed = true;

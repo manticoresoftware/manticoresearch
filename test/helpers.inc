@@ -1150,9 +1150,14 @@ class SphinxConfig
 
 	function GetLocal ( $key )
 	{
-		global $g_locals;
+		global $g_locals, $g_dl_icu;
+		
 		if ( !array_key_exists ( $key, $g_locals ) )
 		{
+			// don't need 'icu_data' when icu is built from package
+			if ( $key=='icu_data' && $g_dl_icu )
+				return '';
+
 			printf ( "FATAL: unbound local variable '%s' (go add it at ~/.sphinx).\n", $key );
 			exit ( 1 );
 		}
@@ -3334,7 +3339,6 @@ class SphinxConfig
 			case "agent2_address":		fwrite ( STDOUT, $agents[2]["address"].":".$agents[2]["port"] ); return;
 
 			case "test_root":			fwrite ( STDOUT, dirname(__FILE__) ); return;
-			case "rlp_root":			fwrite ( STDOUT, $g_locals['rlproot'] ); return;
 			case "testdir":	{
 				if ( $g_locals['testdir'] == '' ) {
 					fwrite(STDOUT, dirname(__FILE__)."/");
@@ -3372,7 +3376,6 @@ class SphinxConfig
 
 			case "local":				fwrite ( $fp, $this->GetLocal ( $node->nodeValue ) ); return;
 			case "test_root":			fwrite ( $fp, dirname(__FILE__) ); return;
-			case "rlp_root":			fwrite ( $fp, $g_locals['rlproot'] ); return;
 			case "this_test":			fwrite ( $fp, $this->_testdir ); return;
 			case "testdir":	{
 				if ( $g_locals['testdir'] == '' ) {
@@ -3474,7 +3477,7 @@ function CopyDirContents ( $from, $to )
 
 function CheckConfig ( $config, $path )
 {
-	global $g_re2, $g_rlp, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli;
+	global $g_re2, $g_icu, $g_dl_icu, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli;
 	
 	if ( $config->Requires("non-windows") && $windows )
 	{
@@ -3500,9 +3503,15 @@ function CheckConfig ( $config, $path )
 		return false;
 	}
 
-	if ( $config->Requires("rlp") && !$g_rlp )
+	if ( $config->Requires("icu") && !$g_icu )
 	{
-		printf ( "SKIPPING %s, %s - compile with RLP support to run this test\n", $path, $config->Name () );
+		printf ( "SKIPPING %s, %s - compile with ICU support to run this test\n", $path, $config->Name () );
+		return false;
+	}
+
+	if ( $config->Requires("icu") && !$g_dl_icu && !isset($g_locals["icu_data"]) )
+	{
+		printf ( "SKIPPING %s, %s - icu_data required, add it to your ~/.sphinx\n", $path, $config->Name () );
 		return false;
 	}
 

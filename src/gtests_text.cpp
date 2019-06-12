@@ -577,7 +577,7 @@ TEST ( Text, cvs_source )
 	ASSERT_TRUE ( tConf.Add ( CSphVariant ( "gid", 6 ), "csvpipe_attr_uint" ) );
 
 	// setup source
-	CSphSource_Document * pCSV = ( CSphSource_Document * ) sphCreateSourceCSVpipe ( &tConf, fp, "csv", false );
+	CSphSource_Document * pCSV = ( CSphSource_Document * ) sphCreateSourceCSVpipe ( &tConf, fp, "csv" );
 	CSphString sError;
 	ASSERT_TRUE ( pCSV->Connect ( sError ) );
 	ASSERT_TRUE ( pCSV->IterateStart ( sError ) );
@@ -642,7 +642,7 @@ R"raw(<?xml version="1.0" encoding="utf-8"?>
 	CSphConfigSection tConf;
 
 	// setup source
-	auto * pSource = ( CSphSource_Document * ) sphCreateSourceXmlpipe2 ( &tConf, fp, "xml", 2*1024*1024, false, sError );
+	auto * pSource = ( CSphSource_Document * ) sphCreateSourceXmlpipe2 ( &tConf, fp, "xml", 2*1024*1024, sError );
 	ASSERT_FALSE ( pSource->Connect ( sError ) );
 	ASSERT_STREQ ( sError.cstr(), sRes );
 

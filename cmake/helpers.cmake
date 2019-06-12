@@ -268,6 +268,74 @@ function ( GET_SONAME RAWLIB OUTVAR )
 	endif()
 endfunction()
 
+function( GET_NAMES RAWLIB NAMELIST RAWLIST CPPLIST )
+#function( GET_NAMES RAWLIB NAMELIST )
+	if ( NOT MSVC )
+		if ( APPLE )
+			set ( "${RAWLIST}" "" PARENT_SCOPE )
+			set ( "${CPPLIST}" "" PARENT_SCOPE )
+		else ()
+			if ( NOT DEFINED CMAKE_OBJDUMP )
+				find_package ( BinUtils QUIET )
+			endif ()
+			if ( NOT DEFINED CMAKE_OBJDUMP )
+				find_program ( CMAKE_OBJDUMP objdump )
+			endif ()
+			mark_as_advanced ( CMAKE_OBJDUMP BinUtils_DIR )
+
+			set ( MANGLED "" )
+			set ( ORIGINAL "" )
+			set ( DEMANGLED "" )
+			# extract mangled names first
+			execute_process ( COMMAND "${CMAKE_OBJDUMP}" -T "${RAWLIB}"
+					WORKING_DIRECTORY "${SOURCE_DIR}"
+					RESULT_VARIABLE res
+					OUTPUT_VARIABLE _CONTENT
+					ERROR_QUIET
+					OUTPUT_STRIP_TRAILING_WHITESPACE )
+
+			STRING ( REGEX REPLACE "\n" ";" _CONTENT "${_CONTENT}" )
+
+			set (MANGLED "")
+			FOREACH ( LINE ${_CONTENT} )
+				FOREACH ( TMPL ${${NAMELIST}} )
+					IF ( "${LINE}" MATCHES "^.*[ \t](.*${TMPL}.*)" )
+						list ( APPEND MANGLED "${CMAKE_MATCH_1}")
+						list ( APPEND ORIGINAL "${TMPL}" )
+					endif ()
+				endforeach()
+			endforeach ()
+
+
+			# extract mangled names first
+			execute_process ( COMMAND "${CMAKE_OBJDUMP}" -TC "${RAWLIB}"
+					WORKING_DIRECTORY "${SOURCE_DIR}"
+					RESULT_VARIABLE res
+					OUTPUT_VARIABLE _CONTENT
+					ERROR_QUIET
+					OUTPUT_STRIP_TRAILING_WHITESPACE )
+
+			STRING ( REGEX REPLACE "\n" ";" _CONTENT "${_CONTENT}" )
+			FOREACH ( LINE ${_CONTENT} )
+				#message (STATUS "line is ${LINE}")
+				FOREACH ( TMPL ${${NAMELIST}} )
+					IF ( "${LINE}" MATCHES "^.*[ \t](.*${TMPL}.*)" )
+						set (TMP ${CMAKE_MATCH_1})
+						IF ( "${TMP}" MATCHES "^(.*)\\(.*" )
+							set ( TMP ${CMAKE_MATCH_1} )
+						endif()
+						list ( APPEND DEMANGLED "${TMP}" )
+					endif ()
+				endforeach ()
+			endforeach ()
+
+			set ( "${NAMELIST}" "${ORIGINAL}" PARENT_SCOPE )
+			set ( "${RAWLIST}" "${DEMANGLED}" PARENT_SCOPE )
+			set ( "${CPPLIST}" "${MANGLED}" PARENT_SCOPE )
+		endif ()
+	endif ()
+endfunction()
+
 # windows case. The pdbs are located in bin/config/*.pdb
 function( __split_win_dbg BINARYNAME )
 	set ( PDB_PATH "${CMAKE_CURRENT_BINARY_DIR}/\${CMAKE_INSTALL_CONFIG_NAME}" )

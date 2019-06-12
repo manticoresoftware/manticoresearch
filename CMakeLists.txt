@@ -64,7 +64,6 @@ if ( USE_GALERA )
 	include ( GetGALERA )
 endif ()
 
-
 # Collect build info which will be embedded into binaries
 SET ( BANNER )
 # append any text to build info
@@ -224,8 +223,8 @@ else ( WIN32 )
 			set ( WITH_PGSQL 0 )
 		endif()
 
-		set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CFLAGS}" )
-		set ( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CFLAGS} -fno-rtti -std=c++11" )
+		set ( MY_C_FLAGS "${CFLAGS}" )
+		set ( MY_CXX_FLAGS "${CFLAGS} -fno-rtti -std=c++11" )
 
 		# eliminate also some too noisy warnings from CLang
 		if ( CMAKE_CXX_COMPILER_ID MATCHES "Clang" )
@@ -402,75 +401,6 @@ else ( WIN32 )
 	endif ( WITH_PGSQL )
 endif ( WIN32 )
 
-
-message ( STATUS "Option WITH_RLP ${WITH_RLP}" )
-option ( WITH_RLP "compile with RLP library support" OFF )
-if ( WITH_RLP )
-	SET ( RLP_ROOT "${MANTICORE_SOURCE_DIR}" CACHE PATH "RLP root folder." )
-	if ( RLP_PATH )
-		if ( NOT RLP_ROOT )
-			set ( RLP_ROOT "${RLP_PATH}" )
-			message ( STATUS "Option RLP_PATH is deprecated. Use RLP_ROOT instead." )
-		else ()
-			message ( STATUS "Option RLP_PATH is deprecated. Will use value of RLP_ROOT." )
-		endif ()
-	endif ()
-
-	if ( RLP_ROOT )
-		if ( EXISTS "${RLP_ROOT}/rlp/rlp/include/bt_rlp_c.h" )
-			set ( USE_RLP 1 )
-		elseif ( EXISTS "${RLP_ROOT}/rlp/include/bt_rlp_c.h" )
-			message ( WARNING "RLP_ROOT must point not to RLP sources folder, but to it's parent" )
-			GET_FILENAME_COMPONENT ( RLP_ROOT_NAME ${RLP_ROOT} NAME )
-			GET_FILENAME_COMPONENT ( RLP_ROOT ${RLP_ROOT} PATH )
-			if ( NOT ${RLP_ROOT_NAME} STREQUAL rlp )
-				message ( SEND_ERROR "RLP sources must be located in folder '${RLP_ROOT}/rlp', not '${RLP_ROOT}/${RLP_ROOT_NAME}'" )
-			endif ()
-			set ( USE_RLP 1 )
-		else ()
-			message ( SEND_ERROR "missing RLP sources from ${RLP_ROOT}" )
-		endif ()
-	endif ()
-
-	if ( USE_RLP )
-		if ( WIN32 )
-
-			if ( NOT RLP_LIBPATH )
-				file ( GLOB RLPLIBS "${RLP_ROOT}/rlp/lib/*msvc*" )
-			endif ()
-
-			include_directories ( "${RLP_ROOT}/rlp/rlp/include" "${RLP_ROOT}/rlp/utilities/include" )
-			add_definitions ( "-D_REENTRANT" )
-			find_library ( LIBRLPC btrlpc HINT "${RLPLIBS}" )
-			find_library ( LIBRLPCORE btrlpcore HINT "${RLPLIBS}" )
-			find_library ( LIBRLPUTILS btutils HINT "${RLPLIBS}" )
-
-			file ( GLOB RLPDLLS "${RLP_ROOT}/rlp/bin/*msvc*" )
-			message ( STATUS "On Windows consider also to add DLLs from ${RLPDLLS}")
-			unset ( RLPDLLS )
-
-		else ( WIN32 )
-			if ( NOT RLP_LIBPATH )
-				file ( GLOB RLPLIBS "${RLP_ROOT}/rlp/lib/*gcc*" )
-			endif ()
-
-			include_directories ( "${RLP_ROOT}/rlp/rlp/include" "${RLP_ROOT}/rlp/utilities/include" )
-			add_definitions ( "-D_REENTRANT" )
-			find_library ( LIBRLPC btrlpc HINT "${RLPLIBS}" )
-			find_library ( LIBRLPCORE btrlpcore HINT "${RLPLIBS}" )
-			find_library ( LIBRLPUTILS btutils HINT "${RLPLIBS}" )
-
-		endif ( WIN32 )
-
-		list ( APPEND EXTRA_LIBRARIES ${LIBRLPC} ${LIBRLPCORE} ${LIBRLPUTILS} )
-		message ( STATUS "RLP from ${RLP_ROOT}, libraries looked at ${RLPLIBS}" )
-	else ()
-		message ( STATUS "RLP is not active, check path of RLP_ROOT (${RLP_ROOT})" )
-	endif ()
-
-	mark_as_advanced ( USE_RLP RLP_PATH LIBRLPC LIBRLPCORE LIBRLPUTILS RLP_LIBPATH RLPLIBS )
-endif ( WITH_RLP )
-
 message ( STATUS "Checking for unaligned RAM access" )
 include ( check_unaligned_ram_access )
 
@@ -554,6 +484,14 @@ IF ( WITH_STEMMER )
 	LIST ( APPEND PKGSUFFIXES "stemmer" )
 ENDIF ( WITH_STEMMER )
 
+# Check for ICU build
+message ( STATUS "Option WITH_ICU ${WITH_ICU}" )
+option ( WITH_ICU "compile with ICU library support" ON )
+if ( WITH_ICU )
+	OPTION ( WITH_ICU_FORCE_STATIC "force to compile ICU from sources" OFF )
+	include ( GetICU )
+endif ( WITH_ICU )
+
 # Move this flags here to avoid configuration problems
 if ( HAVE_GCC_LIKE AND CMAKE_BUILD_TYPE STREQUAL Debug )
 	OPTION ( COVERAGE_TEST "Test coverage" OFF )
@@ -587,7 +525,7 @@ endif ()
 memcfgvalues ( USE_BISON USE_FLEX USE_SYSLOG WITH_EXPAT WITH_ICONV WITH_MYSQL
 		WITH_MYSQL_INCLUDES WITH_MYSQL_LIBS WITH_MYSQL_ROOT WITH_ODBC WITH_PGSQL
 		WITH_PGSQL_INCLUDES WITH_PGSQL_LIBS WITH_RE2 WITH_RE2_INCLUDES WITH_RE2_LIBS
-		WITH_RE2_ROOT WITH_RLP WITH_STEMMER WITH_ZLIB GALERA_SOVERSION )
+		WITH_RE2_ROOT WITH_STEMMER WITH_ZLIB GALERA_SOVERSION )
 
 if ( WIN32 )
 	IF ( CMAKE_EXE_LINKER_FLAGS MATCHES "x64" )
@@ -666,6 +604,9 @@ FOREACH ( SUFFIX ${PKGSUFFIXES} )
 endforeach ()
 
 set ( CPACK_PROJECT_CONFIG_FILE "${MANTICORE_BINARY_DIR}/config/CPackOptions.cmake" )
+
+set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MY_C_FLAGS}" )
+set ( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MY_CXX_FLAGS}" )
 
 add_subdirectory ( src )
 add_subdirectory ( test )

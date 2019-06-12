@@ -21,7 +21,7 @@
 #include "sphinxjsonquery.h"
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
-#include "sphinxrlp.h"
+#include "icu.h"
 #include "accumulator.h"
 
 extern "C"
@@ -1508,7 +1508,6 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	sphShutdownWordforms ();
 	sphShutdownGlobalIDFs ();
 	sphAotShutdown ();
-	sphRLPDone();
 
 	ARRAY_FOREACH ( i, g_dListeners )
 		if ( g_dListeners[i].m_iSock>=0 )
@@ -17256,7 +17255,6 @@ void DumpIndexSettings ( StringBuilder_c & tBuf, CSphIndex * pIndex )
 	DumpKey ( tBuf, "overshort_step",		tSettings.m_iOvershortStep,				tSettings.m_iOvershortStep!=1 );
 	DumpKey ( tBuf, "bigram_index", sphBigramName ( tSettings.m_eBigramIndex ), tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE );
 	DumpKey ( tBuf, "bigram_freq_words",	tSettings.m_sBigramWords.cstr(),		!tSettings.m_sBigramWords.IsEmpty() );
-	DumpKey ( tBuf, "rlp_context",			tSettings.m_sRLPContext.cstr(),			!tSettings.m_sRLPContext.IsEmpty() );
 	DumpKey ( tBuf, "index_token_filter",	tSettings.m_sIndexTokenFilter.cstr(),	!tSettings.m_sIndexTokenFilter.IsEmpty() );
 	CSphFieldFilterSettings tFieldFilter;
 	pIndex->GetFieldFilterSettings ( tFieldFilter );

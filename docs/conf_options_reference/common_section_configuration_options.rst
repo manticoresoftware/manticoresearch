@@ -122,12 +122,14 @@ Example:
     plugin_dir = /usr/local/sphinx/lib
 
 
-.. _rlp_environment:
+.. _icu_data:
 
-rlp_environment
+icu_data
 ~~~~~~~~~~~~~~~
 
-RLP environment configuration file. Mandatory if RLP is used.
+A folder that contains data used by ICU to segment chinese text. Should only be specified if
+ICU is built from sources. If ICU is loaded as a dynamic library (supplied in a package, e.g. 
+``libicu_dev``), it doesn't require any external data.
 
 Example:
 
@@ -135,60 +137,6 @@ Example:
 .. code-block:: ini
 
 
-    rlp_environment = /home/myuser/RLP/rlp-environment.xml
+    icu_data = /home/myuser/icu_data
 
 
-
-.. _rlp_max_batch_docs:
-
-rlp_max_batch_docs
-~~~~~~~~~~~~~~~~~~
-
-Maximum number of documents batched before processing them by the RLP.
-Optional, default is 50. This option has effect only if
-``morphology = rlp_chinese_batched`` is specified.
-
-Example:
-
-.. code-block:: ini
-
-
-    rlp_max_batch_docs = 100
-
-
-
-.. _rlp_max_batch_size:
-
-rlp_max_batch_size
-~~~~~~~~~~~~~~~~~~
-
-Maximum total size of documents batched before processing them by the
-RLP. Optional, default is 51200. Do not set this value to more than 10Mb
-because sphinx splits large documents to 10Mb chunks before processing
-them by the RLP. This option has effect only if
-``morphology = rlp_chinese_batched`` is specified.
-
-Example:
-
-
-.. code-block:: ini
-
-
-    rlp_max_batch_size = 100k
-
-	
-.. _rlp_root:
-
-rlp_root
-~~~~~~~~
-
-Path to the RLP root folder. Mandatory if RLP is used.
-
-Example:
-
-.. code-block:: ini
-
-
-    rlp_root = /home/myuser/RLP
-
-	

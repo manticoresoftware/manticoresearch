@@ -22,7 +22,7 @@
 #include "sphinxjson.h"
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
-#include "sphinxrlp.h"
+#include "icu.h"
 #include "attribute.h"
 #include "secondaryindex.h"
 #include "killlist.h"
@@ -10445,8 +10445,8 @@ void SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettin
 	tWriter.PutByte ( tSettings.m_eBigramIndex );
 	tWriter.PutString ( tSettings.m_sBigramWords );
 	tWriter.PutByte ( tSettings.m_bIndexFieldLens );
-	tWriter.PutByte ( tSettings.m_eChineseRLP );
-	tWriter.PutString ( tSettings.m_sRLPContext );
+	tWriter.PutByte ( tSettings.m_ePreprocessor==Preprocessor_e::ICU ? 1 : 0 );
+	tWriter.PutString("");	// was: RLP context
 	tWriter.PutString ( tSettings.m_sIndexTokenFilter );
 	tWriter.PutOffset ( tSettings.m_tBlobUpdateSpace );
 	tWriter.PutDword ( tSettings.m_iSkiplistBlockSize );
@@ -14404,8 +14404,8 @@ void LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DW
 
 	tSettings.m_bIndexFieldLens = ( tReader.GetByte()!=0 );
 
-	tSettings.m_eChineseRLP = (ESphRLPFilter)tReader.GetByte();
-	tSettings.m_sRLPContext = tReader.GetString();
+	tSettings.m_ePreprocessor = tReader.GetByte()==1 ? Preprocessor_e::ICU : Preprocessor_e::NONE;
+	tReader.GetString(); // was: RLP context
 
 	tSettings.m_sIndexTokenFilter = tReader.GetString();
 	tSettings.m_tBlobUpdateSpace = tReader.GetOffset();
@@ -14532,10 +14532,8 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 	if ( tFieldFilterSettings.m_dRegexps.GetLength() )
 		pFieldFilter = sphCreateRegexpFilter ( tFieldFilterSettings, m_sLastError );
 
-	if ( !sphSpawnRLPFilter ( pFieldFilter, m_tSettings, tTokSettings, sHeaderName, m_sLastError ) )
-
+	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokSettings, sHeaderName, m_sLastError ) )
 		return false;
-
 
 	SetFieldFilter ( pFieldFilter );
 
@@ -14642,8 +14640,6 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 			fprintf ( fp, "\tbigram_index = %s\n", sphBigramName ( m_tSettings.m_eBigramIndex ) );
 		if ( !m_tSettings.m_sBigramWords.IsEmpty() )
 			fprintf ( fp, "\tbigram_freq_words = %s\n", m_tSettings.m_sBigramWords.cstr() );
-		if ( !m_tSettings.m_sRLPContext.IsEmpty() )
-			fprintf ( fp, "\trlp_context = %s\n", m_tSettings.m_sRLPContext.cstr() );
 		if ( !m_tSettings.m_sIndexTokenFilter.IsEmpty() )
 			fprintf ( fp, "\tindex_token_filter = %s\n", m_tSettings.m_sIndexTokenFilter.cstr() );
 
@@ -14744,7 +14740,6 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 	fprintf ( fp, "overshort-step: %d\n", m_tSettings.m_iOvershortStep );
 	fprintf ( fp, "bigram-index: %s\n", sphBigramName ( m_tSettings.m_eBigramIndex ) );
 	fprintf ( fp, "bigram-freq-words: %s\n", m_tSettings.m_sBigramWords.cstr() );
-	fprintf ( fp, "rlp-context: %s\n", m_tSettings.m_sRLPContext.cstr() );
 	fprintf ( fp, "index-token-filter: %s\n", m_tSettings.m_sIndexTokenFilter.cstr() );
 	CSphFieldFilterSettings tFieldFilter;
 	GetFieldFilterSettings ( tFieldFilter );
@@ -19005,10 +19000,7 @@ int CSphTemplateDictTraits::InitMorph ( const char * szMorph, int iLength, CSphS
 	}
 #endif
 
-	if ( iLength==11 && !strncmp ( szMorph, "rlp_chinese", iLength ) )
-		return ST_OK;
-
-	if ( iLength==19 && !strncmp ( szMorph, "rlp_chinese_batched", iLength ) )
+	if ( iLength==11 && !strncmp ( szMorph, "icu_chinese", iLength ) )
 		return ST_OK;
 
 	sMessage.SetBinary ( szMorph, iLength );
@@ -27292,11 +27284,11 @@ void CSphSource_XMLPipe2::Characters ( const char * pCharacters, int iLen )
 	}
 }
 
-CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE * pPipe, const char * szSourceName, int iMaxFieldLen, bool bProxy, CSphString & sError )
+CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE * pPipe, const char * szSourceName, int iMaxFieldLen, CSphString & sError )
 {
 	bool bUTF8 = pSource->GetInt ( "xmlpipe_fixup_utf8", 0 )!=0;
 
-	CSphSource_XMLPipe2 * pXMLPipe = CreateSourceWithProxy<CSphSource_XMLPipe2> ( szSourceName, bProxy );
+	CSphSource_XMLPipe2 * pXMLPipe = new CSphSource_XMLPipe2(szSourceName);
 	if ( !pXMLPipe->Setup ( iMaxFieldLen, bUTF8, pPipe, *pSource, sError ) )
 		SafeDelete ( pXMLPipe );
 
@@ -27883,10 +27875,10 @@ private:
 };
 
 
-CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool bProxy )
+CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName )
 {
 	CSphString sError;
-	auto * pTSV = CreateSourceWithProxy<CSphSource_TSV> ( sSourceName, bProxy );
+	auto * pTSV = new CSphSource_TSV(sSourceName);
 	if ( !pTSV->Setup ( *pSource, pPipe, sError ) )
 	{
 		SafeDelete ( pTSV );
@@ -27897,11 +27889,11 @@ CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * 
 }
 
 
-CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool bProxy )
+CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName )
 {
 	CSphString sError;
 	const char * sDelimiter = pSource->GetStr ( "csvpipe_delimiter", "" );
-	auto * pCSV = CreateSourceWithProxy<CSphSource_CSV> ( sSourceName, bProxy );
+	auto * pCSV = new CSphSource_CSV(sSourceName);
 	pCSV->SetDelimiter ( sDelimiter );
 	if ( !pCSV->Setup ( *pSource, pPipe, sError ) )
 	{

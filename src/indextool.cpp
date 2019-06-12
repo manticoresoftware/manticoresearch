@@ -602,8 +602,8 @@ void InfoMetaIndexSettings ( CSphReader &tReader, DWORD uVersion )
 
 	if ( uVersion>=39 )
 	{
-		fprintf ( stdout, "\neChineseRLP: %d", tReader.GetByte () );
-		fprintf ( stdout, "\nsRLPContext: %s", tReader.GetString ().cstr () );
+		fprintf ( stdout, "\nePreprocessor: %d", tReader.GetByte () );
+		tReader.GetString();	// was: RLP context
 	}
 
 	if ( uVersion>=41 )
@@ -1274,7 +1274,7 @@ int main ( int argc, char ** argv )
 		exit (0);
 	}
 
-	// configure common settings (as of time of this writing, AOT and RLP setup)
+	// configure common settings (as of time of this writing, AOT and ICU setup)
 	sphConfigureCommon ( hConf );
 
 	// common part for several commands, check and preload index

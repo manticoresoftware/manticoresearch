@@ -1783,8 +1783,8 @@ using ISphFieldFilterRefPtr_c = CSphRefcountedPtr<ISphFieldFilter>;
 /// create a regexp field filter
 ISphFieldFilter * sphCreateRegexpFilter ( const CSphFieldFilterSettings & tFilterSettings, CSphString & sError );
 
-/// create a RLP field filter
-ISphFieldFilter * sphCreateRLPFilter ( ISphFieldFilter * pParent, const char * szRLPRoot, const char * szRLPEnv, const char * szRLPCtx, const char * szBlendChars, CSphString & sError );
+/// create an ICU field filter
+ISphFieldFilter * sphCreateFilterICU ( ISphFieldFilter * pParent, const char * szBlendChars, CSphString & sError );
 
 class BlobSource_i
 {
@@ -2333,7 +2333,7 @@ struct CSphSource_MSSQL : public CSphSource_ODBC
 
 #if USE_LIBEXPAT
 class CSphConfigSection;
-CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE * pPipe, const char * szSourceName, int iMaxFieldLen, bool bProxy, CSphString & sError );
+CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE * pPipe, const char * szSourceName, int iMaxFieldLen, CSphString & sError );
 #endif
 
 
@@ -3032,11 +3032,10 @@ enum ESphHitFormat
 };
 
 
-enum ESphRLPFilter
+enum class Preprocessor_e
 {
-	SPH_RLP_NONE			= 0,	///< rlp not used
-	SPH_RLP_PLAIN			= 1,	///< rlp used to tokenize every document
-	SPH_RLP_BATCHED			= 2		///< rlp used to batch documents and tokenize several documents at once
+	NONE,			///< no preprocessor
+	ICU				///< ICU chinese preprocessor
 };
 
 
@@ -3074,8 +3073,7 @@ struct CSphIndexSettings : CSphSourceSettings
 	StrVec_t		m_dBigramWords;
 
 	DWORD			m_uAotFilterMask = 0;			///< lemmatize_XX_all forces us to transform queries on the index level too
-	ESphRLPFilter	m_eChineseRLP = SPH_RLP_NONE;	///< chinese RLP filter
-	CSphString		m_sRLPContext;					///< path to RLP context file
+	Preprocessor_e	m_ePreprocessor = Preprocessor_e::NONE;
 
 	CSphString		m_sIndexTokenFilter;	///< indexing time token filter spec string (pretty useless for disk, vital for RT)
 };

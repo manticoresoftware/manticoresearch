@@ -17,7 +17,7 @@
 #include "sphinx.h"
 #include "sphinxutils.h"
 #include "sphinxint.h"
-#include "sphinxrlp.h"
+#include "icu.h"
 #include "attribute.h"
 #include "sphinxsearch.h"
 #include "secondaryindex.h"
@@ -163,8 +163,7 @@ struct IndexSettings_t : public CSphSourceSettings
 	StrVec_t				m_dBigramWords;
 
 	DWORD			m_uAotFilterMask = 0;
-	ESphRLPFilter	m_eChineseRLP = SPH_RLP_NONE;
-	CSphString		m_sRLPContext;
+	Preprocessor_e	m_ePreprocessor = Preprocessor_e::ICU;
 
 	CSphString		m_sIndexTokenFilter;
 };
@@ -312,8 +311,8 @@ static void LoadIndexSettings ( IndexSettings_t & tSettings, CSphReader & tReade
 
 	if ( uVersion>=39 )
 	{
-		tSettings.m_eChineseRLP = (ESphRLPFilter)tReader.GetByte();
-		tSettings.m_sRLPContext = tReader.GetString();
+		tSettings.m_ePreprocessor = tReader.GetByte()==1 ? Preprocessor_e::ICU : Preprocessor_e::NONE;
+		tReader.GetString();	// was: RLP context
 	}
 
 	if ( uVersion>=41 )
@@ -1539,8 +1538,8 @@ void ConverterPlain_t::SaveHeader ( const Index_t & tIndex, DWORD uKillListSize 
 	tWriter.PutByte ( tIndex.m_tSettings.m_eBigramIndex );
 	tWriter.PutString ( tIndex.m_tSettings.m_sBigramWords );
 	tWriter.PutByte ( tIndex.m_tSettings.m_bIndexFieldLens );
-	tWriter.PutByte ( tIndex.m_tSettings.m_eChineseRLP );
-	tWriter.PutString ( tIndex.m_tSettings.m_sRLPContext );
+	tWriter.PutByte ( tIndex.m_tSettings.m_ePreprocessor==Preprocessor_e::ICU ? 1 : 0 );
+	tWriter.PutString("");	// was: rlp context
 	tWriter.PutString ( tIndex.m_tSettings.m_sIndexTokenFilter );
 	tWriter.PutOffset ( tIndex.m_tSettings.m_tBlobUpdateSpace );
 	tWriter.PutDword ( tIndex.m_tSettings.m_iSkiplistBlockSize );
@@ -2047,8 +2046,8 @@ static bool SaveRtIndex ( Index_t & tIndex, CSphString & sError )
 	wrMeta.PutByte ( tIndex.m_tSettings.m_eBigramIndex );
 	wrMeta.PutString ( tIndex.m_tSettings.m_sBigramWords );
 	wrMeta.PutByte ( tIndex.m_tSettings.m_bIndexFieldLens );
-	wrMeta.PutByte ( tIndex.m_tSettings.m_eChineseRLP );
-	wrMeta.PutString ( tIndex.m_tSettings.m_sRLPContext );
+	wrMeta.PutByte ( tIndex.m_tSettings.m_ePreprocessor==Preprocessor_e::ICU ? 1 : 0 );
+	wrMeta.PutString (""); // was: RLP context
 	wrMeta.PutString ( tIndex.m_tSettings.m_sIndexTokenFilter );
 	wrMeta.PutOffset ( tDefaultSettings.m_tBlobUpdateSpace );
 	wrMeta.PutDword ( tDefaultSettings.m_iSkiplistBlockSize );
@@ -2293,8 +2292,8 @@ static bool SavePqIndex ( Index_t & tIndex, CSphString & sError )
 	wrMeta.PutByte ( tIndex.m_tSettings.m_eBigramIndex );
 	wrMeta.PutString ( tIndex.m_tSettings.m_sBigramWords );
 	wrMeta.PutByte ( tIndex.m_tSettings.m_bIndexFieldLens );
-	wrMeta.PutByte ( tIndex.m_tSettings.m_eChineseRLP );
-	wrMeta.PutString ( tIndex.m_tSettings.m_sRLPContext );
+	wrMeta.PutByte ( tIndex.m_tSettings.m_ePreprocessor==Preprocessor_e::ICU ? 1 : 0 );
+	wrMeta.PutString("");	// was: RLP context
 	wrMeta.PutString ( tIndex.m_tSettings.m_sIndexTokenFilter );
 	wrMeta.PutOffset ( tIndex.m_tSettings.m_tBlobUpdateSpace );
 	wrMeta.PutDword ( tIndex.m_tSettings.m_iSkiplistBlockSize );

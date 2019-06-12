@@ -11,7 +11,7 @@
 //
 
 #include "sphinxpq.h"
-#include "sphinxrlp.h"
+#include "icu.h"
 #include "accumulator.h"
 
 /// protection from concurrent changes during binlog replay
@@ -2156,7 +2156,7 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath )
 
 	m_pTokenizer = ISphTokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms () );
 
-	// regexp and RLP
+	// regexp and ICU
 	if ( uVersion>=6 )
 	{
 		ISphFieldFilterRefPtr_c pFieldFilter;
@@ -2165,7 +2165,7 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath )
 		if ( tFieldFilterSettings.m_dRegexps.GetLength() )
 			pFieldFilter = sphCreateRegexpFilter ( tFieldFilterSettings, m_sLastError );
 
-		if ( !sphSpawnRLPFilter ( pFieldFilter, m_tSettings, tTokenizerSettings, sMeta.cstr(), m_sLastError ) )
+		if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokenizerSettings, sMeta.cstr(), m_sLastError ) )
 			return false;
 
 		SetFieldFilter ( pFieldFilter );

@@ -597,69 +597,68 @@ public:
 class CSphIndex_VLN;
 
 // Reader from file or filemap
-class IFileBlockReader : public ISphRefcountedMT
+class FileBlockReader_c : public ISphRefcountedMT
 {
 public:
-	virtual SphOffset_t GetPos () const { return 0; }
-	virtual void SeekTo ( SphOffset_t iPos, int iSizeHint ) {};
-	virtual DWORD UnzipInt () { return 0; };
-	virtual uint64_t UnzipOffset () { return 0; };
-	virtual void Reset () {};
-	RowID_t UnzipRowid () { return UnzipInt (); };
-	SphWordID_t UnzipWordid () { return UnzipOffset (); };
+	virtual SphOffset_t	GetPos () const { return 0; }
+	virtual void		SeekTo ( SphOffset_t iPos, int iSizeHint ) {};
+	virtual DWORD		UnzipInt () { return 0; };
+	virtual uint64_t	UnzipOffset () { return 0; };
+	virtual void		Reset () {};
+	RowID_t				UnzipRowid () { return UnzipInt (); };
+	SphWordID_t			UnzipWordid () { return UnzipOffset (); };
 };
 
-using IFileBlockReaderPtr_t = CSphRefcountedPtr<IFileBlockReader>;
+using FileBlockReaderPtr_c = CSphRefcountedPtr<FileBlockReader_c>;
 
 // imitate CSphReader but fully in memory (intended to use with mmap)
-class ThinMMapReader_c : public IFileBlockReader
+class ThinMMapReader_c : public FileBlockReader_c
 {
-	friend class MMapFabric_c;
-	const BYTE* m_pBase = nullptr;
-	const BYTE* m_pPointer = nullptr;
-	SphOffset_t m_iSize = 0;
-
-	ThinMMapReader_c ( const BYTE* pArena, SphOffset_t iSize )
-	{
-		m_pPointer = m_pBase = pArena;
-		m_iSize = iSize;
-	}
-protected:
-	~ThinMMapReader_c() final {}
-
 public:
-
 	SphOffset_t GetPos () const final
 	{
 		if ( !m_pPointer )
 			return 0;
+
 		assert ( m_pBase );
 		return m_pPointer - m_pBase;
 	}
 
 	void SeekTo ( SphOffset_t iPos, int /*iSizeHint*/ ) final
-	{ m_pPointer = m_pBase + iPos; }
+	{
+		m_pPointer = m_pBase + iPos;
+	}
 
-	DWORD UnzipInt () final;
-	uint64_t UnzipOffset () final;
+	DWORD		UnzipInt () final;
+	uint64_t	UnzipOffset () final;
 
 	void Reset () final
 	{
 		m_pPointer = m_pBase;
 	}
+
+protected:
+	~ThinMMapReader_c() final {}
+
+private:
+	friend class MMapFactory_c;
+
+	const BYTE *	m_pBase = nullptr;
+	const BYTE *	m_pPointer = nullptr;
+	SphOffset_t		m_iSize = 0;
+
+	ThinMMapReader_c ( const BYTE * pArena, SphOffset_t iSize )
+	{
+		m_pPointer = m_pBase = pArena;
+		m_iSize = iSize;
+	}
 };
 
-class DirectFileReader_c: public IFileBlockReader, protected FileReader_c
+class DirectFileReader_c: public FileBlockReader_c, protected FileReader_c
 {
-	friend class DirectFabric_c;
-protected:
-	~DirectFileReader_c() final {}
-	explicit DirectFileReader_c ( BYTE* pBuf, int iSize )
-		: FileReader_c ( pBuf, iSize )
-	{}
+	friend class DirectFactory_c;
 
 public:
-
 	SphOffset_t GetPos () const final
 	{
 		return FileReader_c::GetPos();
@@ -667,63 +666,73 @@ public:
 
 	void SeekTo ( SphOffset_t iPos, int iSizeHint ) final
 	{
-		FileReader_c::SeekTo (iPos, iSizeHint);
+		FileReader_c::SeekTo ( iPos, iSizeHint );
 	}
 
-	DWORD UnzipInt () final
+	DWORD UnzipInt() final
 	{
 		return FileReader_c::UnzipInt();
 	}
 
-	uint64_t UnzipOffset () final
+	uint64_t UnzipOffset() final
 	{
-		return FileReader_c::UnzipOffset ();
+		return FileReader_c::UnzipOffset();
 	}
 
-	void Reset () final
+	void Reset() final
 	{
-		FileReader_c::Reset ();
+		FileReader_c::Reset();
 	}
+
+protected:
+	explicit DirectFileReader_c ( BYTE * pBuf, int iSize )
+		: FileReader_c ( pBuf, iSize )
+	{}
+
+	~DirectFileReader_c() final {}
 };
 
 // producer of readers from file or filemap
-class DataReaderFabric_c: public ISphRefcountedMT
+class DataReaderFactory_c: public ISphRefcountedMT
 {
-	bool m_bValid = false;
-
-protected:
-	~DataReaderFabric_c () override	{}
-	void SetValid ( bool bValid ) { m_bValid = bValid; }
-
 public:
-	enum EKind
+	enum Kind_e
 	{
-		eDocs = 0, eHits
+		DOCS,
+		HITS
 	};
 
-	bool IsValid () const { return m_bValid; }
+	bool						IsValid () const { return m_bValid; }
 
-	virtual SphOffset_t GetFilesize () const = 0;
-	virtual SphOffset_t GetPos () const = 0;
-	virtual void SeekTo ( SphOffset_t ) = 0;
-	virtual IFileBlockReader* MakeReader ( BYTE* pBuf, int iSize ) = 0;
-	virtual void SetProfile ( CSphQueryProfile* ) {};
+	virtual SphOffset_t			GetFilesize () const = 0;
+	virtual SphOffset_t			GetPos () const = 0;
+	virtual void				SeekTo ( SphOffset_t ) = 0;
+	virtual FileBlockReader_c *	MakeReader ( BYTE * pBuf, int iSize ) = 0;
+	virtual void				SetProfile ( CSphQueryProfile * ) {};
+
+protected:
+								~DataReaderFactory_c () override {}
+
+	void						SetValid ( bool bValid ) { m_bValid = bValid; }
+
+private:
+	bool m_bValid = false;
 };
 
-using DataReaderFabricPtr_t = CSphRefcountedPtr<DataReaderFabric_c>;
+using DataReaderFactoryPtr_c = CSphRefcountedPtr<DataReaderFactory_c>;
 
-inline static ESphQueryState StateByKind ( DataReaderFabric_c::EKind eKind )
+inline static ESphQueryState StateByKind ( DataReaderFactory_c::Kind_e eKind )
 {
 	switch ( eKind )
 	{
-		case DataReaderFabric_c::eDocs: return SPH_QSTATE_READ_DOCS;
-		case DataReaderFabric_c::eHits: return SPH_QSTATE_READ_HITS;
+		case DataReaderFactory_c::DOCS: return SPH_QSTATE_READ_DOCS;
+		case DataReaderFactory_c::HITS: return SPH_QSTATE_READ_HITS;
 		default: return SPH_QSTATE_IO;
 	}
 }
 
 // producer of readers which access by Seek + Read
-class DirectFabric_c: public DataReaderFabric_c
+class DirectFactory_c: public DataReaderFactory_c
 {
 	CSphAutoreader m_dReader;
 	ESphQueryState m_eWorkState;
@@ -732,10 +741,10 @@ class DirectFabric_c: public DataReaderFabric_c
 	int m_iReadUnhinted = 0;
 
 protected:
-	~DirectFabric_c() final {} // d-tr only by Release
+	~DirectFactory_c() final {} // d-tr only by Release
 
 public:
-	DirectFabric_c ( const CSphString& sFile, CSphString& sError,
+	DirectFactory_c ( const CSphString& sFile, CSphString& sError,
 		ESphQueryState eState, int iReadBuffer, int iReadUnhinted )
 		: m_eWorkState ( eState )
 		, m_iReadBuffer ( iReadBuffer )
@@ -760,7 +769,7 @@ public:
 	}
 
 	// returns depended reader sharing same FD as maker
-	IFileBlockReader* MakeReader ( BYTE* pBuf, int iSize ) final
+	FileBlockReader_c * MakeReader ( BYTE * pBuf, int iSize ) final
 	{
 		auto pFileReader = new DirectFileReader_c ( pBuf, iSize );
 		pFileReader->SetFile ( m_dReader.GetFD(), m_dReader.GetFilename().cstr() );
@@ -779,16 +788,16 @@ public:
 };
 
 // producer of readers which access by MMap
-class MMapFabric_c: public DataReaderFabric_c
+class MMapFactory_c: public DataReaderFactory_c
 {
 	CSphMappedBuffer<BYTE> m_tBackendFile;
 	SphOffset_t m_iPos = 0;
 
 protected:
-	~MMapFabric_c () final {} // d-tr only by Release
+	~MMapFactory_c() final {} // d-tr only by Release
 
 public:
-	MMapFabric_c ( const CSphString& sFile, CSphString& sError )
+	MMapFactory_c ( const CSphString & sFile, CSphString& sError )
 	{
 		SetValid ( m_tBackendFile.Setup ( sFile, sError ) );
 	}
@@ -809,26 +818,25 @@ public:
 	}
 
 	// returns depended reader sharing same mmap as maker
-	IFileBlockReader* MakeReader ( BYTE*, int ) final
+	FileBlockReader_c * MakeReader ( BYTE *, int ) final
 	{
-		auto pReader = new ThinMMapReader_c ( m_tBackendFile.GetWritePtr (),
-											  m_tBackendFile.GetLength64 () );
+		auto pReader = new ThinMMapReader_c ( m_tBackendFile.GetWritePtr(),
+											  m_tBackendFile.GetLength64() );
 		if ( m_iPos )
 			pReader->SeekTo ( m_iPos, 0 );
 		return pReader;
 	}
 };
 
-static DataReaderFabric_c* NewProxyReader ( const CSphString& sFile, CSphString& sError,
-	DataReaderFabric_c::EKind eKind, int iReadBuffer, bool bOnDisk )
+static DataReaderFactory_c * NewProxyReader ( const CSphString & sFile, CSphString & sError, DataReaderFactory_c::Kind_e eKind, int iReadBuffer, bool bOnDisk )
 {
 	auto eState = StateByKind ( eKind );
-	DataReaderFabric_c* pReader = nullptr;
+	DataReaderFactory_c * pReader = nullptr;
 
 	if ( bOnDisk )
-		pReader = new DirectFabric_c ( sFile, sError, eState, iReadBuffer, g_iReadUnhinted );
+		pReader = new DirectFactory_c ( sFile, sError, eState, iReadBuffer, g_iReadUnhinted );
 	else
-		pReader = new MMapFabric_c ( sFile, sError );
+		pReader = new MMapFactory_c ( sFile, sError );
 
 	if ( !pReader->IsValid ())
 		SafeRelease ( pReader )
@@ -840,26 +848,27 @@ static DataReaderFabric_c* NewProxyReader ( const CSphString& sFile, CSphString&
 class DiskIndexQwordSetup_c: public ISphQwordSetup
 {
 public:
-	DataReaderFabricPtr_t m_pDoclist;
-	DataReaderFabricPtr_t m_pHitlist;
-	bool m_bSetupReaders = false;
-	const BYTE* m_pSkips;
-	int m_iSkiplistBlockSize = 0;
+	DataReaderFactoryPtr_c		m_pDoclist;
+	DataReaderFactoryPtr_c		m_pHitlist;
+	bool						m_bSetupReaders = false;
+	const BYTE *				m_pSkips;
+	int							m_iSkiplistBlockSize = 0;
 
 public:
-	DiskIndexQwordSetup_c ( DataReaderFabric_c* pDoclist, DataReaderFabric_c* pHitlist, const BYTE* pSkips,
-		int iSkiplistBlockSize )
-		: m_pDoclist ( pDoclist ), m_pHitlist ( pHitlist ), m_pSkips ( pSkips ),
-		m_iSkiplistBlockSize ( iSkiplistBlockSize )
+	DiskIndexQwordSetup_c ( DataReaderFactory_c * pDoclist, DataReaderFactory_c * pHitlist, const BYTE * pSkips, int iSkiplistBlockSize )
+		: m_pDoclist ( pDoclist )
+		, m_pHitlist ( pHitlist )
+		, m_pSkips ( pSkips )
+		, m_iSkiplistBlockSize ( iSkiplistBlockSize )
 	{
-		SafeAddRef( pDoclist )
-		SafeAddRef( pHitlist )
+		SafeAddRef(pDoclist);
+		SafeAddRef(pHitlist);
 	}
 
-	ISphQword* QwordSpawn ( const XQKeyword_t& tWord ) const final;
-	bool QwordSetup ( ISphQword* ) const final;
+	ISphQword *			QwordSpawn ( const XQKeyword_t & tWord ) const final;
+	bool				QwordSetup ( ISphQword * ) const final;
 
-	bool Setup ( ISphQword* ) const;
+	bool				Setup ( ISphQword * ) const;
 };
 
 /// query word from the searcher's point of view
@@ -885,8 +894,8 @@ public:
 	BYTE*			m_pHitsBuf = nullptr;
 	BYTE*			m_pDocsBuf = nullptr;
 
-	IFileBlockReaderPtr_t		m_rdDoclist;	///< my doclist accessor
-	IFileBlockReaderPtr_t		m_rdHitlist;	///< my hitlist accessor
+	FileBlockReaderPtr_c		m_rdDoclist;	///< my doclist accessor
+	FileBlockReaderPtr_c		m_rdHitlist;	///< my hitlist accessor
 
 #ifndef NDEBUG
 	bool			m_bHitlistOver = true;
@@ -896,21 +905,22 @@ public:
 	explicit DiskIndexQwordTraits_c ( bool bUseMini, bool bExcluded )
 	{
 		m_bExcluded = bExcluded;
-		if ( bUseMini ) {
+		if ( bUseMini )
+		{
 			m_pDocsBuf = m_dDoclistBuf;
 			m_pHitsBuf = m_dHitlistBuf;
 			//m_rdDoclist.SetMiniBuf ( m_dDoclistBuf, MINIBUFFER_LEN );
 		}
 	}
 
-	void SetDocReader ( DataReaderFabric_c* pReader )
+	void SetDocReader ( DataReaderFactory_c * pReader )
 	{
 		if ( !pReader )
 			return;
 		m_rdDoclist = pReader->MakeReader ( m_pDocsBuf, MINIBUFFER_LEN );
 	}
 
-	void SetHitReader ( DataReaderFabric_c* pReader )
+	void SetHitReader ( DataReaderFactory_c * pReader )
 	{
 		if ( !pReader )
 			return;
@@ -1167,7 +1177,7 @@ class DiskPayloadQword_c : public DiskIndexQword_c<INLINE_HITS, false>
 
 public:
 	explicit DiskPayloadQword_c ( const DiskSubstringPayload_t * pPayload, bool bExcluded,
-		DataReaderFabric_c * pDoclist, DataReaderFabric_c * pHitlist )
+		DataReaderFactory_c * pDoclist, DataReaderFactory_c * pHitlist )
 		: BASE ( true, bExcluded )
 	{
 		m_pPayload = pPayload;
@@ -2495,8 +2505,8 @@ void DebugCheckHelper_c::DebugCheck_DeadRowMap ( int64_t iSizeBytes, int64_t nRo
 struct DebugCheckContext_t
 {
 	CSphAutoreader			m_tDictReader;
-	DataReaderFabricPtr_t	m_pDocsReader;
-	DataReaderFabricPtr_t	m_pHitsReader;
+	DataReaderFactoryPtr_c	m_pDocsReader;
+	DataReaderFactoryPtr_c	m_pHitsReader;
 	CSphAutoreader			m_tSkipsReader;
 	CSphAutoreader			m_tDeadRowReader;
 	CSphAutoreader			m_tAttrReader;
@@ -2639,8 +2649,8 @@ private:
 
 	DWORD						m_uAttrsStatus;
 
-	DataReaderFabricPtr_t		m_pDoclistFile;			///< doclist file
-	DataReaderFabricPtr_t		m_pHitlistFile;			///< hitlist file
+	DataReaderFactoryPtr_c		m_pDoclistFile;			///< doclist file
+	DataReaderFactoryPtr_c		m_pHitlistFile;			///< hitlist file
 
 	HistogramContainer_c *		m_pHistograms {nullptr};
 
@@ -12624,7 +12634,7 @@ public:
 	}
 
 	template < typename QWORD >
-	static inline void ConfigureQword ( QWORD & tQword, DataReaderFabric_c * pHits, DataReaderFabric_c * pDocs, int iDynamic )
+	static inline void ConfigureQword ( QWORD & tQword, DataReaderFactory_c * pHits, DataReaderFactory_c * pDocs, int iDynamic )
 	{
 		tQword.SetHitReader ( pHits );
 		tQword.m_rdHitlist->SeekTo ( 1, READ_NO_SIZE_HINT );
@@ -12666,16 +12676,16 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 	QWORDDST tDstQword ( false, false );
 	QWORDSRC tSrcQword ( false, false );
 
-	DataReaderFabricPtr_t tSrcDocs {
+	DataReaderFactoryPtr_c tSrcDocs {
 		NewProxyReader ( pSrcIndex->GetIndexFileName ( SPH_EXT_SPD ), sError,
-			DataReaderFabric_c::eDocs, pSrcIndex->m_tFiles.m_iReadBufferDocList, true )
+			DataReaderFactory_c::DOCS, pSrcIndex->m_tFiles.m_iReadBufferDocList, true )
 	};
 	if ( !tSrcDocs )
 		return false;
 
-	DataReaderFabricPtr_t tSrcHits {
+	DataReaderFactoryPtr_c tSrcHits {
 		NewProxyReader ( pSrcIndex->GetIndexFileName ( SPH_EXT_SPP ), sError,
-			DataReaderFabric_c::eHits, pSrcIndex->m_tFiles.m_iReadBufferHitList, true  )
+			DataReaderFactory_c::HITS, pSrcIndex->m_tFiles.m_iReadBufferHitList, true  )
 	};
 	if ( !tSrcHits )
 		return false;
@@ -12683,16 +12693,16 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 	if ( !sError.IsEmpty () || g_bShutdown || *pLocalStop )
 		return false;
 
-	DataReaderFabricPtr_t tDstDocs {
+	DataReaderFactoryPtr_c tDstDocs {
 		NewProxyReader ( pDstIndex->GetIndexFileName ( SPH_EXT_SPD ), sError,
-			DataReaderFabric_c::eDocs, pDstIndex->m_tFiles.m_iReadBufferDocList, true )
+			DataReaderFactory_c::DOCS, pDstIndex->m_tFiles.m_iReadBufferDocList, true )
 	};
 	if ( !tDstDocs )
 		return false;
 
-	DataReaderFabricPtr_t tDstHits {
+	DataReaderFactoryPtr_c tDstHits {
 		NewProxyReader ( pDstIndex->GetIndexFileName ( SPH_EXT_SPP ), sError,
-			DataReaderFabric_c::eHits, pDstIndex->m_tFiles.m_iReadBufferHitList, true )
+			DataReaderFactory_c::HITS, pDstIndex->m_tFiles.m_iReadBufferHitList, true )
 	};
 	if ( !tDstHits )
 		return false;
@@ -14869,14 +14879,14 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 	}
 
 	// open files
-	DataReaderFabricPtr_t pDoclist {
-		NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), m_sLastError, DataReaderFabric_c::eDocs, m_tFiles.m_iReadBufferDocList, true )
+	DataReaderFactoryPtr_c pDoclist {
+		NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), m_sLastError, DataReaderFactory_c::DOCS, m_tFiles.m_iReadBufferDocList, true )
 	};
 	if ( !pDoclist )
 		sphDie ( "failed to open doclist: %s", m_sLastError.cstr() );
 
-	DataReaderFabricPtr_t pHitlist {
-		NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), m_sLastError, DataReaderFabric_c::eHits, m_tFiles.m_iReadBufferHitList, true )
+	DataReaderFactoryPtr_c pHitlist {
+		NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), m_sLastError, DataReaderFactory_c::HITS, m_tFiles.m_iReadBufferHitList, true )
 	};
 	if ( !pHitlist )
 		sphDie ( "failed to open hitlist: %s", m_sLastError.cstr ());
@@ -15014,7 +15024,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 	if ( m_bKeepFilesOpen || m_tFiles.m_eDoclist!=FileAccess_e::FILE )
 	{
 		m_pDoclistFile = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), m_sLastError,
-										  DataReaderFabric_c::eDocs, m_tFiles.m_iReadBufferDocList, ( m_tFiles.m_eDoclist==FileAccess_e::FILE ) );
+										  DataReaderFactory_c::DOCS, m_tFiles.m_iReadBufferDocList, ( m_tFiles.m_eDoclist==FileAccess_e::FILE ) );
 		if ( !m_pDoclistFile )
 			return false;
 	}
@@ -15023,7 +15033,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 	if ( m_bKeepFilesOpen || m_tFiles.m_eHitlist!=FileAccess_e::FILE )
 	{
 		m_pHitlistFile = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), m_sLastError,
-										  DataReaderFabric_c::eHits, m_tFiles.m_iReadBufferHitList, ( m_tFiles.m_eHitlist==FileAccess_e::FILE ) );
+										  DataReaderFactory_c::HITS, m_tFiles.m_iReadBufferHitList, ( m_tFiles.m_eHitlist==FileAccess_e::FILE ) );
 		if ( !m_pHitlistFile )
 			return false;
 	}
@@ -15667,8 +15677,8 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	// FIXME!!! missed bigram, add flags to fold blended parts, show expanded terms
 
 	// prepare for setup
-	DataReaderFabric_c * tDummy1 = nullptr;
-	DataReaderFabric_c * tDummy2 = nullptr;
+	DataReaderFactory_c * tDummy1 = nullptr;
+	DataReaderFactory_c * tDummy2 = nullptr;
 
 	DiskIndexQwordSetup_c tTermSetup ( tDummy1, tDummy2,
 		m_tSkiplists.GetWritePtr(), m_tSettings.m_iSkiplistBlockSize );
@@ -16901,15 +16911,15 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
 
 	// open files
-	DataReaderFabricPtr_t pDoclist = m_pDoclistFile;
-	DataReaderFabricPtr_t pHitlist = m_pHitlistFile;
+	DataReaderFactoryPtr_c pDoclist = m_pDoclistFile;
+	DataReaderFactoryPtr_c pHitlist = m_pHitlistFile;
 	if ( pProfile && ( !pDoclist || !pHitlist ) )
 		pProfile->Switch ( SPH_QSTATE_OPEN );
 
 	if ( !pDoclist )
 	{
 		pDoclist = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), pResult->m_sError,
-									 DataReaderFabric_c::eDocs, m_tFiles.m_iReadBufferDocList, true );
+									 DataReaderFactory_c::DOCS, m_tFiles.m_iReadBufferDocList, true );
 		if ( !pDoclist )
 			return false;
 	}
@@ -16917,7 +16927,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	if ( !pHitlist )
 	{
 		pHitlist = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), pResult->m_sError,
-									 DataReaderFabric_c::eHits, m_tFiles.m_iReadBufferHitList, true );
+									 DataReaderFactory_c::HITS, m_tFiles.m_iReadBufferHitList, true );
 		if ( !pHitlist )
 			return false;
 	}
@@ -18299,13 +18309,13 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 	// use file reader during debug check to lower memory pressure
 	tCtx.m_pDocsReader = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), sError,
-		DataReaderFabric_c::eDocs, m_tFiles.m_iReadBufferDocList, true );
+		DataReaderFactory_c::DOCS, m_tFiles.m_iReadBufferDocList, true );
 	if ( !tCtx.m_pDocsReader )
 		tReporter.Fail ( "unable to open doclist: %s", sError.cstr() );
 
 	// use file reader during debug check to lower memory pressure
 	tCtx.m_pHitsReader = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), sError,
-		DataReaderFabric_c::eHits, m_tFiles.m_iReadBufferHitList, true );
+		DataReaderFactory_c::HITS, m_tFiles.m_iReadBufferHitList, true );
 	if ( !tCtx.m_pHitsReader )
 		tReporter.Fail ( "unable to open hitlist: %s", sError.cstr() );
 

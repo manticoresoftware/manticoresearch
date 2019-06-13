@@ -830,6 +830,7 @@ private:
 
 using ServedIndexRefPtr_c = CSphRefcountedPtr<ServedIndex_c>;
 
+using AddOrReplaceHookFn = void ( * ) ( ISphRefcountedMT*, const CSphString& );
 /// hash of ref-counted pointers, guarded by RW-lock
 class GuardedHash_c : public ISphNoncopyable
 {
@@ -846,6 +847,7 @@ public:
 
 	// atomically set new entry, then release previous, if not the same and is non-zero
 	void AddOrReplace ( ISphRefcountedMT * pEntry, const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
+	void SetAddOrReplaceHook ( AddOrReplaceHookFn pHook ) { m_pHook = pHook; }
 
 	// release and delete from hash by key
 	bool Delete ( const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
@@ -880,6 +882,7 @@ private:
 private:
 	mutable CSphRwlock m_tIndexesRWLock; // distinguishable name for catch possible warnings
 	RefCntHash_t m_hIndexes GUARDED_BY ( m_tIndexesRWLock );
+	AddOrReplaceHookFn m_pHook = nullptr;
 };
 
 // multi-threaded hash iterator

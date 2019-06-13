@@ -734,6 +734,8 @@ void GuardedHash_c::AddOrReplace ( ISphRefcountedMT * pValue, const CSphString &
 	{
 		Verify ( m_hIndexes.Add ( pValue, tKey ) );
 	}
+	if ( m_pHook )
+		m_pHook ( pValue, tKey );
 }
 
 // check if hash contains an entry

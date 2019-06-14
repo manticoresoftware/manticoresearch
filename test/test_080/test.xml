@@ -2,6 +2,9 @@
 <test>
 
 <name>merge vs write buffer corruption</name>
+<requires>
+<non-rt/>
+</requires>
 
 <config>
 indexer

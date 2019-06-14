@@ -2,6 +2,9 @@
 <test>
 
 <name>hitless merge</name>
+<requires>
+<non-rt/>
+</requires>
 
 <config>
 indexer

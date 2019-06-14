@@ -2,6 +2,9 @@
 <test>
 
 <name>merge vs different min docids</name>
+<requires>
+<non-rt/>
+</requires>
 
 <config>
 indexer

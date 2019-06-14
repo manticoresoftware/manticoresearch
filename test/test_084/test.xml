@@ -2,6 +2,9 @@
 <test>
 
 <name>merge vs phantom killer</name>
+<requires>
+<non-rt/>
+</requires>
 
 <config>
 indexer

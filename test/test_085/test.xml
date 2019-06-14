@@ -2,6 +2,9 @@
 <test>
 
 <name>merge vs dupecounter</name>
+<requires>
+<non-rt/>
+</requires>
 
 <config>
 indexer

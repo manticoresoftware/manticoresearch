@@ -2,6 +2,9 @@
 <test>
 
 <name>bitfields vs inline docinfo vs merge</name>
+<requires>
+<non-rt/>
+</requires>
 
 <config>
 indexer

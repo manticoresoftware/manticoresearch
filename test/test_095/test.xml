@@ -2,6 +2,9 @@
 <test>
 
 <name>merge vs killlists</name>
+<requires>
+<non-rt/>
+</requires>
 
 <config>
 indexer

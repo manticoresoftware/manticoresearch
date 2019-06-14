@@ -3,7 +3,7 @@
 
 <name>merge vs --merge-dst-range</name>
 
-<requires><variant_match/></requires>
+<requires><variant_match/><non-rt/></requires>
 
 <config>
 indexer

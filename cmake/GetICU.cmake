@@ -9,13 +9,16 @@
 # See the License for more information.
 #=============================================================================
 
-
+CMAKE_POLICY ( SET CMP0074 NEW )
 set ( ICU_LIBDIR "${MANTICORE_BINARY_DIR}/icu-bin" )
 set ( ICU_SRC "${MANTICORE_BINARY_DIR}/icu" )
 mark_as_advanced ( ICU_SRC ICU_LIBDIR )
 set ( ICUZIP "icu4c-64_2-src.tgz" )
 
 #set ( ICU_DEBUG ON )
+
+macro( try_icu )
+set ( NEED_ICU_FROMSOURCES 0 )
 find_package ( ICU COMPONENTS uc )
 if ( ICU_FOUND )
 	mark_as_advanced ( ICU_DERB_EXECUTABLE ICU_GENBRK_EXECUTABLE ICU_GENCCODE_EXECUTABLE
@@ -38,7 +41,27 @@ if ( ICU_FOUND )
 	endif ()
 else ()
 	set ( NEED_ICU_FROMSOURCES 1 )
-endif ()
+endif()
+endmacro()
+
+set (STORED_ICU "${ICU_LIBRARIES}")
+try_icu()
+if ( NOT ICU_FOUND )
+	if ( APPLE )
+		set ( ICU_BREW /usr/local/opt/icu4c )
+		if ( EXISTS ${ICU_BREW} )
+			if ( NOT $ENV{ICU_ROOT} STREQUAL )
+				message ( "Will retry with 'ICU_ROOT=${ICU_BREW}'" )
+				message ( "Use 'export ICU_ROOT=/path/to/icu/root' if you want to build with alternate ICU.")
+				set ( ENV{ICU_ROOT} ${ICU_BREW} )
+				try_icu()
+			endif ()
+		else()
+			message ( "You can use brew-provided ICU by installing it with `brew install icu4c`" )
+			message ( "Then try to reconfigure and maybe provide env ICU_ROOT with the path to ICU folder." )
+		endif ()
+	endif ()
+endif()
 
 if ( NEED_ICU_FROMSOURCES )
 include ( FetchContent )
@@ -83,6 +106,11 @@ if ( icu_POPULATED )
 endif ()
 endif ( NEED_ICU_FROMSOURCES )
 
+if ( STORED_ICU AND NOT STORED_ICU STREQUAL ICU_LIBRARIES)
+	message (STATUS "EXPERIMENTAL! Use your provided ${STORED_ICU} instead of found ${ICU_LIBRARIES}")
+	set ( ICU_LIBRARIES "${STORED_ICU}" CACHE STRING "" FORCE )
+endif()
+
 if ( USE_ICU )
 	include_directories ( ${ICU_INCLUDE_DIRS} )
 	if ( NOT ICU_IS_SHARED )
@@ -93,37 +121,45 @@ endif()
 CMAKE_DEPENDENT_OPTION ( DL_ICU "load ICU library dynamically" ON "ICU_FOUND;HAVE_DLOPEN;ICU_IS_SHARED;USE_ICU" OFF )
 
 if ( DL_ICU )
-	set (ICU_FUNCS
-			createWordInstance
-			utext_openUTF8
-			utext_close
-			getChinese
-			u_errorName
-			u_setDataDirectory)
-	list ( LENGTH ICU_FUNCS NFUNCS )
-	math ( EXPR NFUNCS "${NFUNCS}-1" )
 
-	include ( helpers )
-	GET_NAMES ( "${ICU_LIBRARIES}" ICU_FUNCS CPP_FUNCS RAW_FUNCS )
+	if ( NOT ICU_CPP_FUNCS )
+		set ( ICU_FUNCS
+				BreakIterator::createWordInstance
+				utext_openUTF8
+				utext_close
+				Locale::getChinese
+				u_errorName
+				u_setDataDirectory )
+		include ( helpers )
+		GET_NAMES ( "${ICU_LIBRARIES}" ICU_FUNCS ICU_CPP_FUNCS ICU_RAW_FUNCS )
+	endif()
 
-	if ( NOT CPP_FUNCS )
-		UNSET ( DL_ICU )
+	if ( NOT ICU_CPP_FUNCS )
+		SET ( DL_ICU 0 )
 		message (STATUS "Unable to extract functions from ICU lib, falling back to explicit linkage" )
 	else()
 
+		# set them into cache - to avoid run get_names in future.
+		set ( ICU_FUNCS "${ICU_FUNCS}" CACHE STRING "" )
+		set ( ICU_CPP_FUNCS "${ICU_CPP_FUNCS}" CACHE STRING "" )
+		set ( ICU_RAW_FUNCS "${ICU_RAW_FUNCS}" CACHE STRING "" )
+		mark_as_advanced ( ICU_FUNCS ICU_CPP_FUNCS ICU_RAW_FUNCS )
+
+		list ( LENGTH ICU_FUNCS NFUNCS )
+		math ( EXPR NFUNCS "${NFUNCS}-1" )
 		# prepare inclusion clause
 		SET (icui "${MANTICORE_BINARY_DIR}/config/ldicu.inl")
 		file (WRITE "${icui}" "// This is generated file. Look into GetICU.cmake for template\n\n")
 		foreach (_icuf RANGE ${NFUNCS})
 			list ( GET ICU_FUNCS ${_icuf} _icuff )
-			list ( GET CPP_FUNCS ${_icuf} _icufcpp )
+			list ( GET ICU_CPP_FUNCS ${_icuf} _icufcpp )
 			file ( APPEND "${icui}" "static decltype ( &${_icufcpp} ) imp_${_icuff} = nullptr;\n" )
 		endforeach()
 
 		# InitDynamicIcu ()
 		file ( APPEND "${icui}" "\nbool InitDynamicIcu ()\n{\n\tconst char* sFuncs[] = {\n" )
 		foreach ( _icuf RANGE ${NFUNCS} )
-			list ( GET RAW_FUNCS ${_icuf} _icufr )
+			list ( GET ICU_RAW_FUNCS ${_icuf} _icufr )
 			file ( APPEND "${icui}" "\t\t\"${_icufr}\",\n" )
 		endforeach ()
 		file ( APPEND "${icui}" "\n\t};\n\n\tvoid** pFuncs[] = {\n" )
@@ -133,9 +169,7 @@ if ( DL_ICU )
 		endforeach ()
 		file ( APPEND "${icui}" "\n\t};\n\n" )
 		file ( APPEND "${icui}" "\tstatic CSphDynamicLibrary dLib ( ICU_LIB );\n" )
-		file ( APPEND "${icui}" "\tif ( !dLib.LoadSymbols ( sFuncs, pFuncs, sizeof ( pFuncs ) / sizeof ( void** )))\n" )
-		file ( APPEND "${icui}" "\t\treturn false;\n" )
-		file ( APPEND "${icui}" "\treturn true;\n" )
+		file ( APPEND "${icui}" "\treturn dLib.LoadSymbols ( sFuncs, pFuncs, sizeof ( pFuncs ) / sizeof ( void** ));\n" )
 		file ( APPEND "${icui}" "}\n" )
 	endif()
 endif()

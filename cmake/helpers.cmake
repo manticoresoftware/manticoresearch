@@ -275,46 +275,119 @@ function ( GET_SONAME RAWLIB OUTVAR )
 	endif()
 endfunction()
 
-function( GET_NAMES RAWLIB NAMELIST RAWLIST CPPLIST )
-#function( GET_NAMES RAWLIB NAMELIST )
+
+# pre-filter contents by wide regexp (to process later only few matched lines)
+# that is significantly boost whole test since we will deal only with tiny blob
+function ( PREFILTER CONTENT NAMES )
+	STRING ( REGEX REPLACE ";" "|" REGNAMELIST "${${NAMES}}" )
+	STRING ( REGEX REPLACE "::" ".*" REGNAMELIST "${REGNAMELIST}" )
+	set (LINES "")
+	FOREACH ( LINE ${${CONTENT}} )
+		IF ( "${LINE}" MATCHES "${REGNAMELIST}" )
+			list ( APPEND LINES "${LINE}" )
+		endif ()
+	endforeach ()
+	set ( "${CONTENT}" "${LINES}" PARENT_SCOPE)
+endfunction()
+
+function( GET_NAMES RAWLIB NAMELIST MANGLEDLIST DEMANGLEDLIST )
 	if ( NOT MSVC )
+		if ( NOT DEFINED CMAKE_OBJDUMP )
+			find_package ( BinUtils QUIET )
+		endif ()
+		if ( NOT DEFINED CMAKE_OBJDUMP )
+			find_program ( CMAKE_OBJDUMP objdump )
+		endif ()
+		mark_as_advanced ( CMAKE_OBJDUMP BinUtils_DIR )
+
+		if ( NOT DEFINED CPPFILT )
+			find_program ( CPPFILT c++filt )
+		endif()
+		mark_as_advanced ( CPPFILT )
+
+		set ( MANGLED "" )
+		set ( ORIGINAL "" )
+		set ( DEMANGLED "" )
 		if ( APPLE )
-			set ( "${RAWLIST}" "" PARENT_SCOPE )
-			set ( "${CPPLIST}" "" PARENT_SCOPE )
-		else ()
-			if ( NOT DEFINED CMAKE_OBJDUMP )
-				find_package ( BinUtils QUIET )
+			set (OBJOPT "-macho;-t")
+		else()
+			set (OBJOPT "-T")
+		endif()
+		list (APPEND OBJOPT ${RAWLIB})
+
+		# extract mangled names first
+		execute_process ( COMMAND ${CMAKE_OBJDUMP} ${OBJOPT}
+				WORKING_DIRECTORY "${SOURCE_DIR}"
+				RESULT_VARIABLE res
+				OUTPUT_VARIABLE _CONTENT
+				ERROR_QUIET
+				OUTPUT_STRIP_TRAILING_WHITESPACE )
+
+		STRING ( REGEX REPLACE "\n" ";" _CONTENT "${_CONTENT}" )
+		prefilter (_CONTENT ${NAMELIST})
+
+		# extract pure names (without namespaces)
+		set (PURENAMES "")
+		FOREACH ( TMPL ${${NAMELIST}} )
+			IF ( "${TMPL}" MATCHES ".*::(.*)$" )
+				list ( APPEND PURENAMES "${CMAKE_MATCH_1}" )
+			else()
+				list ( APPEND PURENAMES "${TMPL}" )
 			endif ()
-			if ( NOT DEFINED CMAKE_OBJDUMP )
-				find_program ( CMAKE_OBJDUMP objdump )
-			endif ()
-			mark_as_advanced ( CMAKE_OBJDUMP BinUtils_DIR )
+		endforeach ()
 
-			set ( MANGLED "" )
-			set ( ORIGINAL "" )
-			set ( DEMANGLED "" )
-			# extract mangled names first
-			execute_process ( COMMAND "${CMAKE_OBJDUMP}" -T "${RAWLIB}"
-					WORKING_DIRECTORY "${SOURCE_DIR}"
-					RESULT_VARIABLE res
-					OUTPUT_VARIABLE _CONTENT
-					ERROR_QUIET
-					OUTPUT_STRIP_TRAILING_WHITESPACE )
+		# extract mangled names and rearrange original list also
+		set (RAWMANGLED "")
+		FOREACH ( LINE ${_CONTENT} )
+			FOREACH ( TMPL ${PURENAMES} )
+				IF ( "${LINE}" MATCHES "^.*[ \t](.*${TMPL}.*)" )
+					list ( APPEND RAWMANGLED "${CMAKE_MATCH_1}" )
+					list ( APPEND ORIGINAL "${TMPL}" )
+				endif ()
+			endforeach ()
+		endforeach ()
 
-			STRING ( REGEX REPLACE "\n" ";" _CONTENT "${_CONTENT}" )
+		# on Apple remove extra leading underscores before demangling
+		if ( APPLE )
+			set ( FOR_CPPFILT "" )
+			FOREACH ( MNGL ${RAWMANGLED} )
+				IF ( "${MNGL}" MATCHES "^_(_.*)" ) # double __ is ok
+					list ( APPEND FOR_CPPFILT ${MNGL} )
+					list ( APPEND MANGLED "${CMAKE_MATCH_1}" )
+				elseif ( "${MNGL}" MATCHES "^_(.*)" ) # throw out leading single _
+					list ( APPEND FOR_CPPFILT ${CMAKE_MATCH_1} )
+					list ( APPEND MANGLED "${CMAKE_MATCH_1}" )
+				else() # add the rest as is
+					list ( APPEND FOR_CPPFILT ${MNGL} )
+					list ( APPEND MANGLED "${MNGL}" )
+				endif ()
+			endforeach()
+		else()
+			set ( FOR_CPPFILT "${RAWMANGLED}" )
+			set ( MANGLED "${RAWMANGLED}" )
+		endif()
 
-			set (MANGLED "")
-			FOREACH ( LINE ${_CONTENT} )
-				FOREACH ( TMPL ${${NAMELIST}} )
-					IF ( "${LINE}" MATCHES "^.*[ \t](.*${TMPL}.*)" )
-						list ( APPEND MANGLED "${CMAKE_MATCH_1}")
-						list ( APPEND ORIGINAL "${TMPL}" )
-					endif ()
-				endforeach()
+		# extract demangled names then
+		if ( DEFINED CPPFILT )
+			message (STATUS "Demangling using c++filt")
+			FOREACH ( MNGL ${FOR_CPPFILT} )
+				execute_process ( COMMAND "${CPPFILT}" "${MNGL}"
+						WORKING_DIRECTORY "${SOURCE_DIR}"
+						RESULT_VARIABLE res
+						OUTPUT_VARIABLE _CONTENT
+						ERROR_QUIET
+						OUTPUT_STRIP_TRAILING_WHITESPACE )
+
+				IF ( "${_CONTENT}" MATCHES "^(.*)\\(.*" )
+					set ( _CONTENT ${CMAKE_MATCH_1} )
+				elseif ( "${_CONTENT}" MATCHES "^_(.*)" )
+					set ( _CONTENT ${CMAKE_MATCH_1} )
+				endif ()
+				list ( APPEND DEMANGLED "${_CONTENT}" )
 			endforeach ()
 
-
-			# extract mangled names first
+		else()
+			message ( STATUS "Demangling using objdump -TC" )
 			execute_process ( COMMAND "${CMAKE_OBJDUMP}" -TC "${RAWLIB}"
 					WORKING_DIRECTORY "${SOURCE_DIR}"
 					RESULT_VARIABLE res
@@ -323,23 +396,24 @@ function( GET_NAMES RAWLIB NAMELIST RAWLIST CPPLIST )
 					OUTPUT_STRIP_TRAILING_WHITESPACE )
 
 			STRING ( REGEX REPLACE "\n" ";" _CONTENT "${_CONTENT}" )
+			prefilter ( _CONTENT ${NAMELIST} )
 			FOREACH ( LINE ${_CONTENT} )
 				#message (STATUS "line is ${LINE}")
-				FOREACH ( TMPL ${${NAMELIST}} )
+				FOREACH ( TMPL ${PURENAMES} )
 					IF ( "${LINE}" MATCHES "^.*[ \t](.*${TMPL}.*)" )
 						set (TMP ${CMAKE_MATCH_1})
 						IF ( "${TMP}" MATCHES "^(.*)\\(.*" )
 							set ( TMP ${CMAKE_MATCH_1} )
-						endif()
+						endif ()
 						list ( APPEND DEMANGLED "${TMP}" )
 					endif ()
 				endforeach ()
 			endforeach ()
+		endif( DEFINED CPPFILT )
 
-			set ( "${NAMELIST}" "${ORIGINAL}" PARENT_SCOPE )
-			set ( "${RAWLIST}" "${DEMANGLED}" PARENT_SCOPE )
-			set ( "${CPPLIST}" "${MANGLED}" PARENT_SCOPE )
-		endif ()
+		set ( "${NAMELIST}" "${ORIGINAL}" PARENT_SCOPE )
+		set ( "${MANGLEDLIST}" "${DEMANGLED}" PARENT_SCOPE )
+		set ( "${DEMANGLEDLIST}" "${MANGLED}" PARENT_SCOPE )
 	endif ()
 endfunction()
 

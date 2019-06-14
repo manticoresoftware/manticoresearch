@@ -59,7 +59,7 @@ index rt
 
 common
 {
-	icu_data = <local>icu_data</local>
+	icu_data_dir = <local>icu_data_dir</local>
 }
 </config>
 

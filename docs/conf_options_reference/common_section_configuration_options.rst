@@ -122,9 +122,9 @@ Example:
     plugin_dir = /usr/local/sphinx/lib
 
 
-.. _icu_data:
+.. _icu_data_dir:
 
-icu_data
+icu_data_dir
 ~~~~~~~~~~~~~~~
 
 A folder that contains data used by ICU to segment chinese text. Should only be specified if
@@ -137,6 +137,6 @@ Example:
 .. code-block:: ini
 
 
-    icu_data = /home/myuser/icu_data
+    icu_data_dir = /home/myuser/icu_data
 
 

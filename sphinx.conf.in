@@ -1085,10 +1085,10 @@ common
 	# json_autoconv_keynames = lowercase
 
 
-	# path to ICU data directory
+	# ICU data directory
 	# optional, defaut is /usr/local/share (see ./configure --datadir)
 	#
-	# icu_data = /usr/local/share/sphinx/icu
+	# icu_data_dir = /usr/local/share/sphinx/icu
 
 
 	# trusted plugin directory

@@ -104,6 +104,9 @@ bool ICUPreprocessor_c::Init ( CSphString & sError )
 	if ( U_FAILURE(tStatus) )
 	{
 		sError.SetSprintf( "Unable to initialize ICU break iterator: %s", imp_u_errorName(tStatus) );
+		if ( tStatus==U_MISSING_RESOURCE_ERROR )
+			sError.SetSprintf ( "%s. Make sure ICU data file is accessible (icu_data_dir might be missing in config)", sError.cstr() );
+
 		return false;			
 	}
 
@@ -409,7 +412,7 @@ void sphConfigureICU ( CSphConfigSection & hCommon )
 		return;
 	}
 
-	CSphString sData = hCommon.GetStr ( "icu_data" );
+	CSphString sData = hCommon.GetStr ( "icu_data_dir" );
 	imp_u_setDataDirectory ( sData.cstr() );
 }
 

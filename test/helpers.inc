@@ -1154,8 +1154,8 @@ class SphinxConfig
 		
 		if ( !array_key_exists ( $key, $g_locals ) )
 		{
-			// don't need 'icu_data' when icu is built from package
-			if ( $key=='icu_data' && $g_dl_icu )
+			// don't need 'icu_data_dir' when icu is built from package
+			if ( $key=='icu_data_dir' && $g_dl_icu )
 				return '';
 
 			printf ( "FATAL: unbound local variable '%s' (go add it at ~/.sphinx).\n", $key );
@@ -3509,9 +3509,9 @@ function CheckConfig ( $config, $path )
 		return false;
 	}
 
-	if ( $config->Requires("icu") && !$g_dl_icu && !isset($g_locals["icu_data"]) )
+	if ( $config->Requires("icu") && !$g_dl_icu && !isset($g_locals["icu_data_dir"]) )
 	{
-		printf ( "SKIPPING %s, %s - icu_data required, add it to your ~/.sphinx\n", $path, $config->Name () );
+		printf ( "SKIPPING %s, %s - icu_data_dir required, add it to your ~/.sphinx\n", $path, $config->Name () );
 		return false;
 	}
 

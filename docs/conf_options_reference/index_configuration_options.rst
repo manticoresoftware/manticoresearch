@@ -2001,7 +2001,7 @@ are processed by ICU, only parts that contain chinese text are segmented, others
 are left as is.
 
 See also
-:ref:`icu_data`
+:ref:`icu_data_dir`
 
 Additional stemmers provided by
 `Snowball <http://snowball.tartarus.org/>`__ project

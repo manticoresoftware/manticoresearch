@@ -240,17 +240,24 @@ endmacro()
 
 function ( GET_SONAME RAWLIB OUTVAR )
 	if ( NOT MSVC )
+		if ( NOT DEFINED CMAKE_OBJDUMP )
+			find_package ( BinUtils QUIET )
+		endif ()
+		if ( NOT DEFINED CMAKE_OBJDUMP )
+			find_program ( CMAKE_OBJDUMP objdump )
+		endif ()
+		mark_as_advanced ( CMAKE_OBJDUMP BinUtils_DIR )
 		if ( APPLE )
-			GET_FILENAME_COMPONENT ( _OUTVAR ${RAWLIB} NAME )
-			set ( "${OUTVAR}" "${_OUTVAR}" PARENT_SCOPE )
+			execute_process ( COMMAND "${CMAKE_OBJDUMP}" -macho -dylib-id "${RAWLIB}"
+					WORKING_DIRECTORY "${SOURCE_DIR}"
+					RESULT_VARIABLE res
+					OUTPUT_VARIABLE _CONTENT
+					ERROR_QUIET
+					OUTPUT_STRIP_TRAILING_WHITESPACE )
+
+			STRING ( REGEX REPLACE ".*:\n" "" _CONTENT "${_CONTENT}" )
+			set ( "${OUTVAR}" "${_CONTENT}" PARENT_SCOPE )
 		else()
-			if ( NOT DEFINED CMAKE_OBJDUMP )
-				find_package ( BinUtils QUIET )
-			endif ()
-			if ( NOT DEFINED CMAKE_OBJDUMP )
-				find_program ( CMAKE_OBJDUMP objdump )
-			endif ()
-			mark_as_advanced ( CMAKE_OBJDUMP BinUtils_DIR )
 			execute_process ( COMMAND "${CMAKE_OBJDUMP}" -p "${RAWLIB}"
 					WORKING_DIRECTORY "${SOURCE_DIR}"
 					RESULT_VARIABLE res
@@ -264,7 +271,7 @@ function ( GET_SONAME RAWLIB OUTVAR )
 					set ( "${OUTVAR}" "${CMAKE_MATCH_1}" PARENT_SCOPE)
 				endif ()
 			endforeach ()
-		endif()
+		endif(APPLE)
 	endif()
 endfunction()
 

@@ -35,7 +35,7 @@ $g_guesscached = false;
 $g_model	= false;
 $g_re2		= false;
 $g_icu		= false;
-$g_dl_icu	= false;
+$g_shared_icu	= false;
 $g_odbc     = false;
 $g_strict	= false;
 $g_skipdemo = false;
@@ -99,14 +99,14 @@ function LoadCachedGuesses ()
 function CacheGuesses ()
 {
 	global $g_locals;
-	global $g_re2, $g_icu, $g_dl_icu, $g_odbc, $g_repli;
+	global $g_re2, $g_icu, $g_shared_icu, $g_odbc, $g_repli;
 
 	$guessfile = $g_locals['testdir'].'guess.txt';
 
 	$text = "global \$g_guesscached; \$g_guesscached = true;\n";
 	if ( $g_re2 ) $text .= "global \$g_re2; \$g_re2 = true;\n";
 	if ( $g_icu ) $text .= "global \$g_icu; \$g_icu = true;\n";
-	if ( $g_dl_icu ) $text .= "global \$g_dl_icu; \$g_dl_icu = true;\n";
+	if ( $g_shared_icu ) $text .= "global \$g_shared_icu; \$g_shared_icu = true;\n";
 	if ( $g_odbc ) $text .= "global \$g_odbc; \$g_odbc = true;\n";
 	if ( $g_repli ) $text .= "global \$g_repli; \$g_repli = true;\n";
 
@@ -157,17 +157,17 @@ function GuessRE2 ()
 
 function GuessICU ()
 {
-	global $g_icu, $g_dl_icu;
+	global $g_icu, $g_shared_icu;
     $g_icu = GuessFeature ( 'test_icu.conf','no ICU support compiled');
 
-	$dl_icu = 'DDL_ICU=1';
+	$shared_icu = 'ICU_IS_SHARED=1';
 	
 	$banner = GetBanner();
 	foreach ( $banner as $line )
 	{
-		if ( strpos ( $line, $dl_icu ) !== false )
+		if ( strpos ( $line, $shared_icu ) !== false )
 		{
-			$g_dl_icu = true;
+			$g_shared_icu = true;
 			break;
 		}
 	}

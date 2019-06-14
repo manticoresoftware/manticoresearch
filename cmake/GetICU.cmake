@@ -121,7 +121,6 @@ endif()
 CMAKE_DEPENDENT_OPTION ( DL_ICU "load ICU library dynamically" ON "ICU_FOUND;HAVE_DLOPEN;ICU_IS_SHARED;USE_ICU" OFF )
 
 if ( DL_ICU )
-
 	if ( NOT ICU_CPP_FUNCS )
 		set ( ICU_FUNCS
 				BreakIterator::createWordInstance
@@ -173,6 +172,8 @@ if ( DL_ICU )
 		file ( APPEND "${icui}" "}\n" )
 	endif()
 endif()
+
+memcfgvalues ( ICU_IS_SHARED )
 
 if ( DL_ICU )
 	set ( DL_ICU 1 )

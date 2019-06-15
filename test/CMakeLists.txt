@@ -38,7 +38,7 @@ if ( NOT DISABLE_TESTING )
 			# convert it to lower (CMAKE regexes are case-sensitive)
 			STRING ( TOLOWER "${_test_head}" _lower_test_head )
 
-			# extract test name. It is not simple 'match <name>(.*)</name' since we want non-lower-case,
+			# extract test name. It is not simple 'match <name>(.*)</name>' since we want non-lower-case,
 			# so find the chunk in lowered-case, then take the clause by substring from original chunk
 
 			# find pos and length of test name
@@ -66,7 +66,7 @@ if ( NOT DISABLE_TESTING )
 			endif ()
 
 		else ()
-			if ( onetest STREQUAL "028" )
+			if ( onetest STREQUAL "028" ) # the only non-xml test we have
 				set ( test_name "spelldump...")
 			else()
 				set ( test_name "" )
@@ -80,7 +80,7 @@ if ( NOT DISABLE_TESTING )
 				set ( EXPLANATION "non-windows")
 			endif()
 		else()
-			if ( "WINDOWS" IN_LIST REQUIRES AND NOT WIN32 )
+			if ( "WINDOWS" IN_LIST REQUIRES )
 				set ( ADD_TEST 0)
 				set ( EXPLANATION "windows" )
 			endif()

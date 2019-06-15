@@ -9,7 +9,10 @@
 # See the License for more information.
 #=============================================================================
 
-CMAKE_POLICY ( SET CMP0074 NEW )
+IF ( POLICY CMP0074 )
+	CMAKE_POLICY ( SET CMP0074 NEW )
+ENDIF ()
+
 set ( ICU_LIBDIR "${MANTICORE_BINARY_DIR}/icu-bin" )
 set ( ICU_SRC "${MANTICORE_BINARY_DIR}/icu" )
 mark_as_advanced ( ICU_SRC ICU_LIBDIR )
@@ -50,10 +53,10 @@ if ( NOT ICU_FOUND )
 	if ( APPLE )
 		set ( ICU_BREW /usr/local/opt/icu4c )
 		if ( EXISTS ${ICU_BREW} )
-			if ( NOT $ENV{ICU_ROOT} STREQUAL )
+			if ( NOT $ENV{ICU_ROOT} STREQUAL "${ICU_BREW}" )
 				message ( "Will retry with 'ICU_ROOT=${ICU_BREW}'" )
 				message ( "Use 'export ICU_ROOT=/path/to/icu/root' if you want to build with alternate ICU.")
-				set ( ENV{ICU_ROOT} ${ICU_BREW} )
+				set ( ENV{ICU_ROOT} "${ICU_BREW}" )
 				try_icu()
 			endif ()
 		else()
@@ -106,9 +109,9 @@ if ( icu_POPULATED )
 endif ()
 endif ( NEED_ICU_FROMSOURCES )
 
-if ( STORED_ICU AND NOT STORED_ICU STREQUAL ICU_LIBRARIES)
+if ( STORED_ICU AND NOT STORED_ICU STREQUAL "${ICU_LIBRARIES}" )
 	message (STATUS "EXPERIMENTAL! Use your provided ${STORED_ICU} instead of found ${ICU_LIBRARIES}")
-	set ( ICU_LIBRARIES "${STORED_ICU}" CACHE STRING "" FORCE )
+	set ( ICU_LIBRARIES "${STORED_ICU}" CACHE STRING "User-provided ICU library" FORCE )
 endif()
 
 if ( USE_ICU )

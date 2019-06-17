@@ -2266,6 +2266,167 @@ void IFtoA_T ( PCHAR * pOutput, Num nVal, int iPrec )
 	::NtoA_T ( &pBegin, iFrac, 10, 0, iPrec, '0' );
 }
 
+namespace tmtoa {
+	using us_t = int64_t; // useconds
+
+	static const us_t US = 1;
+	static const us_t U5 = 5;
+	static const us_t U5X = 50 * US;
+	static const us_t U5C = 500 * US;
+	static const us_t MS = 1000 * US;
+	static const us_t MS5 = 5 * MS;
+	static const us_t M5X = 50 * MS;
+	static const us_t M5C = 500 * MS;
+	static const us_t S = 1000 * MS;
+	static const us_t S3 = 3 * S;
+	static const us_t S3X = 30 * S;
+	static const us_t M = 60 * S;
+	static const us_t M3 = 3 * M;
+	static const us_t M3X = 30 * M;
+	static const us_t H = 60 * M;
+	static const us_t H5 = 72 * M; // 1.2 hour
+	static const us_t H5X = 12 * H;
+	static const us_t D = 24 * H;
+	static const us_t D5 = 84 * H; // 3.5 days
+	static const us_t W = 7 * D;
+
+	static const int NUM_SCALES = 7;
+	static const char* sSuffixes[NUM_SCALES] = { "us", "ms", "s", "m", "h", "d", "w" };
+	static const int iSufLens[NUM_SCALES] = { 2, 2, 1, 1, 1, 1, 1 }; // len of names
+	static const int64_t TMScales[NUM_SCALES] = { US, MS, S, M, H, D, W };
+	// how many rest digits causes new scale to add instead of frac
+	static const int iPrecAfter[NUM_SCALES] = { 0, 3, 3, 2, 2, 2, 1 };
+
+	us_t calc_round ( int iScale, int iPrec )
+	{
+		// prec:	0	1	2	3	4	5	6	7	8	9	10	11	12	13
+		// ---------------------------------------------------------------
+		// usec 	0
+		// msec 	U5C	U5X	U5	0
+		// sec 		M5C	M5X MS5	U5C	U5X	U5	0
+		// min 		S3X	S3	M5C	M5X MS5	U5C	U5X	U5	0
+		// hour 	M3X	M3	S3X	S3	M5C	M5X	MS5	U5C	U5X	U5	0
+		// day		H5X	H5	M3X	M3	S3X	S3	M5C	M5X	MS5	U5C	U5X	U5	0
+		// week		D5	H5X	H5	M3X	M3	S3X	S3	M5C	M5X	MS5	U5C	U5X	U5	0
+		static const int dStartPos[NUM_SCALES] = {13, 10, 7, 5, 3, 1, 0};
+		static const us_t dRound[] = { D5, H5X, H5, M3X, M3, S3X, S3, M5C, M5X, MS5, U5C, U5X, U5, 0 };
+		assert (iScale>=0 && iScale<NUM_SCALES);
+		assert ( iPrec>=0 && iPrec<14);
+		auto iIdx = dStartPos[iScale] + iPrec;
+		if ( iIdx>12 )
+			return 0;
+		return dRound[iIdx];
+	}
+}
+
+// format timespan expressed in useconds.
+template < typename PCHAR >
+void TMtoA_T ( PCHAR* pOutput, int64_t nVal, int iPrec )
+{
+	assert ( iPrec<nDividers );
+	auto& pBegin = *pOutput;
+
+	// correct sign, if necessary
+	if ( nVal<0 )
+	{
+		*tail ( pBegin ) = '-';
+		++pBegin;
+		nVal = -nVal;
+	}
+
+	// find the range we deal with (from 6(week) to 0(usecs))
+	int iSpan;
+	for ( iSpan = 6; iSpan>0; --iSpan )
+		if ( nVal>=tmtoa::TMScales[iSpan] )
+			break;
+
+	// round the value
+	auto iRound = tmtoa::calc_round ( iSpan, iPrec );
+	if ( iRound )
+	{
+		nVal += iRound;
+		nVal -= nVal % ( iRound + iRound );
+	}
+
+	// after rounding range may change, recalc
+	for ( iSpan = 6; iSpan>0; --iSpan )
+		if ( nVal>=tmtoa::TMScales[iSpan] )
+			break;
+
+	while (true)
+	{
+		// multiplier and precision digits for range
+		auto iMul = tmtoa::TMScales[iSpan];
+		auto iPrecAfter = tmtoa::iPrecAfter[iSpan];
+
+		// solid part
+		::NtoA_T ( &pBegin, nVal / iMul );
+
+		// rest
+		nVal %= iMul;
+		// check if rest of precision is enough to print extra values
+		if ( iPrec>0 && iPrec<iPrecAfter )
+		{
+			if (iPrec==2) nVal /= (iMul/100);
+			else if ( iPrec==1) nVal /= (iMul/10);
+			if ( nVal ) // 0. Stop printing
+			{
+				*tail ( pBegin ) = '.';
+				++pBegin;
+				::NtoA_T ( &pBegin, nVal, 10, 0, iPrec, '0' );
+			}
+		}
+
+		// print specifier
+		Grow ( pBegin, tmtoa::iSufLens[iSpan] );
+		memcpy ( tail ( pBegin ), tmtoa::sSuffixes[iSpan], tmtoa::iSufLens[iSpan] );
+		pBegin += tmtoa::iSufLens[iSpan];
+
+		// all is done
+		if ( !iPrecAfter || iPrec<iPrecAfter )
+			return;
+
+		// the rest is 0. Stop
+		if (nVal==0)
+			return;
+
+		// print space before continue.
+		*tail ( pBegin ) = ' ';
+		++pBegin;
+
+		// go to next range
+		iPrec -= iPrecAfter;
+		--iSpan;
+	}
+}
+
+// format timestamp expressed in useconds.
+template < typename PCHAR >
+void TMStoA_T ( PCHAR* pOutput, int64_t nVal, int iPrec )
+{
+	int64_t iTimespan = nVal-sphMicroTimer ();
+	auto& pBegin = *pOutput;
+	if ( iTimespan<0 ) // past event
+	{
+		TMtoA_T ( pOutput, -iTimespan, iPrec );
+		// print specifier
+		Grow ( pBegin, 4 );
+		memcpy ( tail ( pBegin ), " ago", 4 );
+		pBegin += 4;
+	} else if (iTimespan>0)
+	{
+		Grow ( pBegin, 3 );
+		memcpy ( tail ( pBegin ), "in ", 3 );
+		pBegin += 3;
+		TMtoA_T ( pOutput, iTimespan, iPrec );
+	} else
+	{
+		Grow ( pBegin, 3 );
+		memcpy ( tail ( pBegin ), "now", 3 );
+		pBegin += 3;
+	}
+}
+
 template <typename Num>
 inline static void NtoA ( char** ppOutput, Num uVal, int iBase = 10, int iWidth = 0, int iPrec = 0, char cFill = ' ' )
 {
@@ -2503,6 +2664,22 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 			{
 				int iValue = va_arg ( ap, int );
 				::IFtoA_T ( &pOutput, iValue, iPrec );
+				state = SNORMAL;
+				break;
+			}
+
+		case 't': // timespan given in int64 useconds
+			{
+				int64_t iValue = va_arg ( ap, int64_t );
+				::TMtoA_T ( &pOutput, iValue, iPrec );
+				state = SNORMAL;
+				break;
+			}
+
+		case 'T': // timestamp (related to now()) given in int64 useconds
+			{
+				int64_t iValue = va_arg ( ap, int64_t );
+				::TMStoA_T ( &pOutput, iValue, iPrec );
 				state = SNORMAL;
 				break;
 			}

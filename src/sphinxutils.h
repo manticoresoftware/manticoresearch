@@ -87,6 +87,57 @@ namespace sph {
 	/// my own fixed-point floats. iPrec - num of digits after point. i.e. 100000, 3 -> 100.000
 	int IFtoA ( char * pOutput, int nVal, int iPrec = 3 );
 	int IFtoA ( char * pOutput, int64_t nVal, int iPrec = 6 );
+
+	/* Custom format specifiers for types:
+
+	'int' values:
+	%d - decimal int
+	%F - fixed-point int (see notes below about fixed-points)
+	%i - skip int. Prints nothing, just skips parameter. Useful for conditional format.
+
+	'DWORD' (uint32) values:
+	%u - decimal uint32
+	%x - hex uint32
+
+	'int64_t' (signed) values:
+	%l - decimal int64
+	%D - fixed-point int64
+	%t - timespan (see notes below)
+	%T - timestamp from now
+
+	'uint64_t' (unsigned) values:
+	%U - decimal uint64
+
+	z-terminated string:
+	%s - print string, or "(null)"
+
+	etc.:
+	%p - print pointer (16 hex digits)
+	%f - float (fall-back to standard sprintf)
+
+	Fixed-point ints (both 32 and 64 bits) need precise param to set the decimal point at this place
+	Example:	( "%.4F", 999005 ) will output '99.9005'.
+				( "%.3D", (int64_t) -10000 ) will output '-10.000'
+
+	Timespan prints time expressed in useconds in human-readable format. It output number with suffix.
+	Suffixes are 'us', 'ms', 's', 'm', 'h', 'd', 'w' (usecs, msecs, secs, mins, hours, days, weeks).
+	Example:	("%t", 1555555) will print "2s" (2 seconds)
+				("%t", 3600000000*24*2) will print "2d" (2 days)
+
+	Timespan may be supplied with precision param, and then it will print up to 7 numbers with suffixes.
+	Example:	("%.2t", 1555555) will print "1.56s"
+				("%.5t", 1555555) will print "1s 555.56ms"
+				("%.8t", 71555555) will print "1m 11s 555ms 555us"
+	Timespan also reasonable rounds the value when necessary and doesn't output redundant zeros.
+	Example:	("%.7t", 89999994) will print "1m 29s 999.99ms"
+				("%.7t", 89999995) will print "1m 30s"
+
+	Timestamp from now - just takes provided value, compares it with sphMicroTimer() output
+	and print the timespan difference according to the rules:
+		- if given value is in the past, print 'TM ago' (where TM is timespan of the difference)
+		- if given value is in the future, print 'in TM'.
+		- if given value is exactly now, print the word 'now'.
+	 */
 	int vSprintf ( char * pOutput, const char * sFmt, va_list ap );
 	int Sprintf ( char * pOutput, const char * sFmt, ... );
 	void vSprintf ( StringBuilder_c &pOutput, const char * sFmt, va_list ap );

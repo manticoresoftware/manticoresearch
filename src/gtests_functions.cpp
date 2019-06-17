@@ -1465,75 +1465,64 @@ TEST (functions, size_parser)
 }
 
 // parsing time - number with possible suffixes us, ms, s, m, h, d, w
-TEST ( functions, time_parser )
+TEST ( functions, sphGetTime64 )
 {
-	// useconds
-	ASSERT_EQ ( 1, sphGetTime64 ( "1us" ));
-	ASSERT_EQ ( 2, sphGetTime64 ( "2Us" ));
-	ASSERT_EQ ( 3, sphGetTime64 ( "3uS" ));
-	ASSERT_EQ ( 4, sphGetTime64 ( "4US" ));
+	static const struct
+	{ int64_t tm; const char* str; } models[] = {
+		{ 1, "1us" }, { 2, "2Usm" }, { 3, "3uS" }, { 4, "4US" }, // useconds
+		{ 1000, "1ms" }, { 2000, "2Ms" }, { 3000, "3mS" }, { 4000, "4MS" },// milliseconds
+		{ 1000000, "1" }, { 2000000, "2s" }, { 3000000, "3S" }, // seconds
+		{ 60000000, "1m" }, { 120000000, "2M" }, // minutes
+		{ 3600000000, "1h" }, { 36000000000, "10H" }, // hours
+		{ 24 * 3600000000, "1D" }, { 48 * 3600000000, "2d" }, // days
+		{ 7 * 24 * 3600000000, "1W" }, { 14 * 24 * 3600000000, "2w" }, // weeks
+	};
 
-	// milliseconds
-	ASSERT_EQ ( 1000, sphGetTime64 ( "1ms" ));
-	ASSERT_EQ ( 2000, sphGetTime64 ( "2Ms" ));
-	ASSERT_EQ ( 3000, sphGetTime64 ( "3mS" ));
-	ASSERT_EQ ( 4000, sphGetTime64 ( "4MS" ));
+	for ( const auto& model : models )
+		EXPECT_EQ ( model.tm, sphGetTime64 (model.str) ) << "for " << model.tm << " and " << model.str;
+}
 
-	// seconds
-	ASSERT_EQ ( 1000000, sphGetTime64 ( "1" ));
-	ASSERT_EQ ( 2000000, sphGetTime64 ( "2s" ));
-	ASSERT_EQ ( 3000000, sphGetTime64 ( "3S" ));
+// Untouched sError on success;
+TEST ( functions, sphGetTime64_nullerror )
+{
+	static const struct
+	{ int64_t tm; const char* str; } models[] = {
+		{ 1000000, "1" }, { 2, "2us" }, { 1000000, "1s" }, { 60000000, "1m" },
+		{ 3600000000, "1h" }, { 24 * 3600000000, "1d" }, { 7 * 24 * 3600000000, "1w" },
+	};
 
-	// minutes
-	ASSERT_EQ ( 60000000, sphGetTime64 ( "1m" ));
-	ASSERT_EQ ( 120000000, sphGetTime64 ( "2M" ));
-
-	// hours
-	ASSERT_EQ ( 3600000000, sphGetTime64 ( "1H" ));
-	ASSERT_EQ ( 36000000000, sphGetTime64 ( "10h" ));
-
-	// day
-	ASSERT_EQ ( 24 * 3600000000, sphGetTime64 ( "1D" ));
-	ASSERT_EQ ( 48 * 3600000000, sphGetTime64 ( "2d" ));
-
-	// week
-	ASSERT_EQ ( 7 * 24 * 3600000000, sphGetTime64 ( "1W" ));
-	ASSERT_EQ ( 14 * 24 * 3600000000, sphGetTime64 ( "2w" ));
-
-	// Untouched sError on success;
 	char* sError = nullptr;
-	ASSERT_EQ ( 1000000, sphGetTime64 ( "1", &sError ));
-	ASSERT_EQ ( sError, nullptr );
-	ASSERT_EQ ( 1, sphGetTime64 ( "1us", &sError ));
-	ASSERT_EQ ( sError, nullptr );
-	ASSERT_EQ ( 1000, sphGetTime64 ( "1ms", &sError ));
-	ASSERT_EQ ( sError, nullptr );
-	ASSERT_EQ ( 1000000, sphGetTime64 ( "1s", &sError ));
-	ASSERT_EQ ( sError, nullptr );
-	ASSERT_EQ ( 60000000, sphGetTime64 ( "1m", &sError ));
-	ASSERT_EQ ( sError, nullptr );
-	ASSERT_EQ ( 3600000000, sphGetTime64 ( "1h", &sError ));
-	ASSERT_EQ ( sError, nullptr );
-	ASSERT_EQ ( 24 * 3600000000, sphGetTime64 ( "1d", &sError ));
-	ASSERT_EQ ( sError, nullptr );
-	ASSERT_EQ ( 7 * 24 * 3600000000, sphGetTime64 ( "1w", &sError ));
-	ASSERT_EQ ( sError, nullptr );
+	for ( const auto& model : models ) {
+		EXPECT_EQ ( model.tm, sphGetTime64 ( model.str, &sError )) << "for " << model.tm << " and " << model.str;
+		EXPECT_EQ ( sError, nullptr ) << "for " << model.tm << " and " << model.str;
+	}
+}
 
-	// empty and null input strings
+// empty and null input strings
+TEST ( functions, sphGetTime64_defaults )
+{
+	char* sError = nullptr;
 	ASSERT_EQ ( 11, sphGetTime64 ( "", &sError, 11 ));
 	ASSERT_EQ ( sError, nullptr );
 	ASSERT_EQ ( 12, sphGetTime64 ( nullptr, &sError, 12 ));
 	ASSERT_EQ ( sError, nullptr );
-
-	// error handle for non-numeric
-	ASSERT_EQ ( -1, sphGetTime64 ( "abc", &sError ));
-	ASSERT_STREQ ( sError, "abc" );
-
-	// error handle for numeric, but unknown suffix (=non-numeric)
-	ASSERT_EQ ( -1, sphGetTime64 ( "10z", &sError ));
-	ASSERT_STREQ ( sError, "z" );
 }
 
+// processing errors
+TEST ( functions, sphGetTime64_errors )
+{
+	static const struct
+	{ int64_t res; const char* str; const char* err;} models[] = {
+		{ -1, "abc", "abc" }, // error handle for non-numeric
+		{ -1, "10z", "z" }, // error handle for numeric, but unknown suffix (=non-numeric)
+	};
+
+	char* sError = nullptr;
+	for ( const auto& model : models ) {
+		EXPECT_EQ ( model.res, sphGetTime64 ( model.str, &sError ));
+		EXPECT_STREQ ( sError, model.err ) << "for " << model.res << " and " << model.str << " err " << model.err;
+	}
+}
 
 TEST ( functions, hashmap_iterations )
 {
@@ -1978,6 +1967,9 @@ TEST ( functions, sph_Sprintf_to_builder )
 
 	sBuf.Sprintf ( " %.3F, %.6F", 999500, -1400932 );
 	ASSERT_STREQ ( sBuf.cstr (), "{1 -1 100,2 -2 200} 999.500, -1.400932" );
+
+	sBuf.Sprintf ( " %.3F", 999005 );
+	ASSERT_STREQ ( sBuf.cstr (), "{1 -1 100,2 -2 200} 999.500, -1.400932 999.005" );
 }
 
 TEST ( functions, sph_Sprintf_regression_on_empty_buf )
@@ -1985,6 +1977,93 @@ TEST ( functions, sph_Sprintf_regression_on_empty_buf )
 	StringBuilder_c sBuf;
 	sBuf.Sprintf ( "%.3F", 10 );
 	ASSERT_STREQ ( sBuf.cstr (), "0.010" );
+}
+
+TEST ( functions, sph_Sprintf_inttimespans )
+{
+	StringBuilder_c sBuf;
+
+	static const struct {int64_t tm; const char* res;} models[] =
+	{
+		{ 4,			"4us" },
+		{ 5000,			"5ms" },
+		{ 6000000,		"6s" },
+		{ 120000000,			"2m" },
+		{ 3600000000,			"1h" },
+		{ 3600000000*24*2,		"2d" },
+		{ 3600000000*24*7*2,	"2w" },
+	};
+
+	for ( const auto& model : models )
+	{
+		sBuf.Sprintf ( "%t", model.tm );
+		EXPECT_STREQ ( sBuf.cstr (), model.res ) << "for " << model.tm << " with %t";
+		sBuf.Clear ();
+	}
+}
+
+TEST ( functions, sph_Sprintf_fractimespans_round )
+{
+	StringBuilder_c sBuf;
+	static const struct {int64_t tm; const char* fmt; const char* res;} models[] =
+		{
+			// us rounding
+			{ 999, "%t", "999us" },
+			{ 999, "%.1t", "999us" },
+			{ 999, "%.2t", "999us" },
+			{ 999, "%.3t", "999us" },
+
+			// ms rounding
+			{ 1559, "%t", "2ms" },
+			{ 1559, "%.1t", "1.6ms" },
+			{ 1559, "%.2t", "1.56ms" },
+			{ 1559, "%.3t", "1ms 559us" },
+
+			// s rounding
+			{ 1555555, "%t", "2s" },
+			{ 1555555, "%.1t", "1.6s" },
+			{ 1555555, "%.2t", "1.56s" },
+			{ 1555555, "%.3t", "1s 556ms" },
+			{ 1555555, "%.4t", "1s 555.6ms" },
+			{ 1555555, "%.5t", "1s 555.56ms" },
+			{ 1999995, "%.5t", "2s" },
+			{ 1555555, "%.6t", "1s 555ms 555us" },
+
+			// m rounding
+			{ 71555555, "%t", "1m" },
+			{ 71555555, "%.1t", "1.2m" },
+			{ 71555555, "%.2t", "1m 12s" },
+			{ 71555555, "%.3t", "1m 11.6s" },
+			{ 71555555, "%.4t", "1m 11.56s" },
+			{ 71555555, "%.5t", "1m 11s 556ms" },
+			{ 71555555, "%.6t", "1m 11s 555.6ms" },
+			{ 71555555, "%.7t", "1m 11s 555.56ms" },
+			{ 71555555, "%.8t", "1m 11s 555ms 555us" },
+			{ 89999999, "%.7t", "1m 30s" },
+			{ 89999994, "%.7t", "1m 29s 999.99ms" },
+			{ 89999995, "%.7t", "1m 30s" },
+			{ 90999999, "%.7t", "1m 31s" },
+		};
+
+	for ( const auto& model : models )
+	{
+		sBuf.Sprintf ( model.fmt, model.tm );
+		EXPECT_STREQ ( sBuf.cstr (), model.res ) << "for " << model.tm << " with " << model.fmt;
+		sBuf.Clear ();
+	}
+}
+
+TEST ( functions, sph_Sprintf_fractimezero )
+{
+	StringBuilder_c sBuf;
+
+	sBuf.Sprintf ( "%t", 0 );
+	ASSERT_STREQ ( sBuf.cstr (), "0us" );
+	sBuf.Clear ();
+
+	sBuf.Sprintf ( "%.3t", 0 );
+	ASSERT_STREQ ( sBuf.cstr (), "0us" );
+	sBuf.Clear ();
 }
 
 TEST ( functions, DISABLED_bench_Sprintf )

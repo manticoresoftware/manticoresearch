@@ -2371,7 +2371,7 @@ BYTE * StringBuilder_c::Leak ()
 
 void StringBuilder_c::MoveTo ( CSphString &sTarget )
 {
-	sTarget.Adopt ( std::move(m_sBuffer) );
+	sTarget.Adopt ( &m_sBuffer );
 	NewBuffer ();
 }
 

@@ -862,7 +862,7 @@ LazyJobs_c& LazyTasker ()
 
 CSphMutex g_tRegisterLock;
 
-TaskManager_Internal::TaskWorker& TaskManager_Internal::TaskWorker::GetNewTask ()
+TaskManager_Internal::TaskWorker& TaskManager_Internal::TaskWorker::GetNewTask () ACQUIRE ( g_tRegisterLock )
 {
 	g_tRegisterLock.Lock ();
 	if ( !g_iTasks ) // this is first class; start log timering
@@ -872,6 +872,7 @@ TaskManager_Internal::TaskWorker& TaskManager_Internal::TaskWorker::GetNewTask (
 }
 
 TaskID TaskManager_Internal::TaskWorker::FinishRegisterTask ( CSphString sName, int iThreads, int iJobs )
+	RELEASE ( g_tRegisterLock)
 {
 	auto& dTask = g_Tasks[g_iTasks];
 	dTask.m_iMaxRunners = iThreads;

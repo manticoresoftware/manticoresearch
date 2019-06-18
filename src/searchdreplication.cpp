@@ -240,7 +240,7 @@ static bool JsonConfigWrite ( const CSphString & sConfigPath, const SmallStringH
 static bool JsonConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> & hClusters, CSphVector<IndexDesc_t> & dIndexes, CSphString & sError );
 
 // get index list that should be saved into JSON config
-static void GetLocalIndexes ( CSphVector<IndexDesc_t> & dIndexes );
+static void GetLocalIndexesFromJson ( CSphVector<IndexDesc_t> & dIndexes );
 
 // JSON reader and writer helper functions
 static void JsonConfigSetIndex ( const IndexDesc_t & tIndex, JsonObj_c & tIndexes );
@@ -1356,14 +1356,14 @@ void JsonDoneConfig()
 	if ( g_bReplicationEnabled && ( g_bCfgHasData || g_hClusters.GetLength()>0 ) )
 	{
 		CSphVector<IndexDesc_t> dIndexes;
-		GetLocalIndexes ( dIndexes );
+		GetLocalIndexesFromJson ( dIndexes );
 		if ( !JsonConfigWrite ( g_sConfigPath, g_hClusters, dIndexes, sError ) )
 			sphLogFatal ( "%s", sError.cstr() );
 	}
 }
 
 // load indexes got from JSON config on daemon indexes preload (part of ConfigureAndPreload work done here)
-void JsonConfigConfigureAndPreload ( int & iValidIndexes, int & iCounter )
+void JsonConfigConfigureAndPreload ( int & iValidIndexes, int & iCounter ) REQUIRES ( MainThread )
 {
 	for ( const IndexDesc_t & tIndex : g_dCfgIndexes )
 	{
@@ -1371,7 +1371,7 @@ void JsonConfigConfigureAndPreload ( int & iValidIndexes, int & iCounter )
 		hIndex.Add ( CSphVariant ( tIndex.m_sPath.cstr(), 0 ), "path" );
 		hIndex.Add ( CSphVariant ( GetTypeName ( tIndex.m_eType ).cstr(), 0 ), "type" );
 
-		ESphAddIndex eAdd = ConfigureAndPreload ( hIndex, tIndex.m_sName.cstr(), true );
+		ESphAddIndex eAdd = ConfigureAndPreloadIndex ( hIndex, tIndex.m_sName.cstr (), true );
 		iValidIndexes += ( eAdd!=ADD_ERROR ? 1 : 0 );
 		iCounter += ( eAdd==ADD_DSBLED ? 1 : 0 );
 		if ( eAdd==ADD_ERROR )
@@ -2069,7 +2069,7 @@ static bool SaveConfig()
 {
 	CSphVector<IndexDesc_t> dJsonIndexes;
 	CSphString sError;
-	GetLocalIndexes ( dJsonIndexes );
+	GetLocalIndexesFromJson ( dJsonIndexes );
 	{
 		ScRL_t tLock ( g_tClustersLock );
 		if ( !JsonConfigWrite ( g_sConfigPath, g_hClusters, dJsonIndexes, sError ) )
@@ -2133,7 +2133,7 @@ void JsonConfigDumpIndexes ( const CSphVector<IndexDesc_t> & dIndexes, StringBui
 }
 
 // get index list that should be saved into JSON config
-void GetLocalIndexes ( CSphVector<IndexDesc_t> & dIndexes )
+void GetLocalIndexesFromJson ( CSphVector<IndexDesc_t> & dIndexes )
 {
 	for ( RLockedServedIt_c tIt ( g_pLocalIndexes ); tIt.Next (); )
 	{
@@ -2176,11 +2176,14 @@ bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName
 		}
 	}
 
-	ESphAddIndex eAdd = AddIndex ( sIndexName.cstr(), hIndex );
+	GuardedHash_c dNotLoadedIndexes;
+	ESphAddIndex eAdd = AddIndexMT ( dNotLoadedIndexes, sIndexName.cstr(), hIndex );
+	assert ( eAdd==ADD_DSBLED || eAdd==ADD_ERROR );
+
 	if ( eAdd!=ADD_DSBLED )
 		return false;
 
-	ServedIndexRefPtr_c pServed = GetDisabled ( sIndexName );
+	ServedIndexRefPtr_c pServed = GetServed ( sIndexName, &dNotLoadedIndexes );
 	ServedDescWPtr_c pDesc ( pServed );
 	pDesc->m_bJson = bJson;
 	pDesc->m_sCluster = sCluster;
@@ -2191,8 +2194,6 @@ bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName
 
 	// finally add the index to the hash of enabled.
 	g_pLocalIndexes->AddOrReplace ( pServed, sIndexName );
-	g_pDisabledIndexes->Delete ( sIndexName );
-
 	return true;
 }
 

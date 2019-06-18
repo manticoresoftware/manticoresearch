@@ -113,8 +113,8 @@ void ReplicateClustersStatus ( VectorLike & dStatus );
 #define SPH_ADDRPORT_SIZE		sizeof("000.000.000.000:00000")
 
 ListenerDesc_t ParseListener ( const char * sSpec );
-ESphAddIndex ConfigureAndPreload ( const CSphConfigSection & hIndex, const char * sIndexName, bool bJson );
-ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace=false );
+ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName, bool bJson );
+ESphAddIndex AddIndexMT ( GuardedHash_c& dPost, const char* szIndexName, const CSphConfigSection& hIndex, bool bReplace = false );
 bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, const char * szIndexName );
 bool CheckIndexCluster ( const CSphString & sIndexName, const ServedDesc_t & tDesc, const CSphString & sStmtCluster, CSphString & sError );
 

@@ -1009,15 +1009,9 @@ public:
 };
 
 extern GuardedHash_c * g_pLocalIndexes;    // served (local) indexes hash
-extern GuardedHash_c * g_pDisabledIndexes; // not-served local indexes hash
 inline ServedIndexRefPtr_c GetServed ( const CSphString &sName, GuardedHash_c * pHash = g_pLocalIndexes )
 {
 	return ServedIndexRefPtr_c ( ( ServedIndex_c * ) pHash->Get ( sName ) );
-}
-
-inline ServedIndexRefPtr_c GetDisabled ( const CSphString &sName, GuardedHash_c * pHash = g_pDisabledIndexes )
-{
-	return GetServed ( sName, g_pDisabledIndexes );
 }
 
 enum SqlStmt_e

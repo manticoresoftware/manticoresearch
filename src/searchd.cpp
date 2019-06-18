@@ -27,6 +27,7 @@
 #include "searchdha.h"
 #include "searchdreplication.h"
 #include "threadutils.h"
+#include "searchdtask.h"
 using namespace Threads;
 
 extern "C"
@@ -11882,6 +11883,19 @@ public:
 		AddN ( iLen + 1 );
 	}
 
+	void PutTimeAsString ( int64_t tmVal )
+	{
+		StringBuilder_c sTime;
+		sTime.Sprintf ("%t", tmVal);
+		PutString ( sTime.cstr() );
+	}
+
+	void PutTimestampAsString ( int64_t tmTimestamp )
+	{
+		StringBuilder_c sTime;
+		sTime.Sprintf ( "%T", tmTimestamp );
+		PutString ( sTime.cstr ());
+	}
 
 	// pack raw array (i.e. packed length, then blob) into proto mysql
 	void PutArray ( const void * pBlob, int iLen, bool bSendEmpty = false )
@@ -16536,6 +16550,75 @@ void HandleMysqlDebug ( SqlRowBuffer_c &tOut, const SqlStmt_t &tStmt, bool bVipC
 		CSphString sResult;
 		sResult.SetSprintf ( "%.3f", (float)tmDelta/1000000.0f );
 		tOut.DataTuplet ( "sleep", sResult.cstr () );
+	}
+	else if ( sCommand=="tasks" )
+	{
+		const char* dHeader[] = { "Name", "MaxRunners", "MaxQueue", "CurrentRunners", "TotalSpent",
+			"LastFinished", "Executed", "Dropped", "In Queue" };
+		tOut.HeadOfStrings ( &dHeader[0], sizeof ( dHeader ) / sizeof ( dHeader[0] ));
+
+		auto dTasks = TaskManager::GetTaskInfo ();
+		for ( const auto& dTask : dTasks )
+		{
+			tOut.PutString ( dTask.m_sName );
+			if ( dTask.m_iMaxRunners>0 )
+				tOut.PutNumAsString ( dTask.m_iMaxRunners );
+			else
+				tOut.PutString ( "Scheduling" );
+			switch ( dTask.m_iMaxQueueSize )
+			{
+				case -1 : tOut.PutString ( "Unlimited" ); break;
+				case 0 : tOut.PutString ( "Disabled" ); break;
+				default : tOut.PutNumAsString ( dTask.m_iMaxQueueSize );
+			}
+			tOut.PutNumAsString ( dTask.m_iCurrentRunners );
+			tOut.PutTimeAsString ( dTask.m_iTotalSpent );
+			tOut.PutTimestampAsString ( dTask.m_iLastFinished );
+			tOut.PutNumAsString ( dTask.m_iTotalRun );
+			tOut.PutNumAsString ( dTask.m_iTotalDropped );
+			tOut.PutNumAsString ( dTask.m_inQueue );
+			tOut.Commit ();
+		}
+	}
+	else if ( sCommand=="systhreads" )
+	{
+		const char* dHeader[] = {
+			"ID", "ThID", "Run time", "Load time", "Total ticks", "Jobs done", "Last job take", "Idle for" };
+		tOut.HeadOfStrings ( &dHeader[0], sizeof ( dHeader ) / sizeof ( dHeader[0] ));
+		auto dTasks = TaskManager::GetThreadsInfo ();
+		for ( auto& dTask : dTasks )
+		{
+			tOut.PutNumAsString ( dTask.m_iMyThreadID );
+			tOut.PutNumAsString ( dTask.m_iMyOSThreadID );
+			tOut.PutTimestampAsString ( dTask.m_iMyStartTimestamp );
+			tOut.PutTimeAsString ( dTask.m_iTotalWorkedTime );
+			tOut.PutNumAsString ( dTask.m_iTotalTicked );
+			tOut.PutNumAsString ( dTask.m_iTotalJobsDone );
+			if ( dTask.m_iLastJobDoneTime<0 )
+				tOut.PutString ( "In work" );
+			else
+				tOut.PutTimeAsString ( dTask.m_iLastJobDoneTime - dTask.m_iLastJobStartTime );
+			if ( dTask.m_iLastJobDoneTime<0 )
+				tOut.PutString ( "0 (working)" );
+			else
+				tOut.PutTimestampAsString ( dTask.m_iLastJobDoneTime );
+			tOut.Commit ();
+		}
+
+	}
+	else if ( sCommand=="sched" )
+	{
+		const char* dHeader[] = {
+			"Time rest", "Task"
+		};
+		tOut.HeadOfStrings ( &dHeader[0], sizeof ( dHeader ) / sizeof ( dHeader[0] ));
+		auto dTasks = TaskManager::GetSchedInfo ();
+		for ( auto& dTask : dTasks )
+		{
+			tOut.PutTimestampAsString ( dTask.m_iTimeoutStamp );
+			tOut.PutString ( dTask.m_sTask );
+			tOut.Commit ();
+		}
 	} else
 	{
 		// no known command; provide short help.
@@ -16559,6 +16642,9 @@ void HandleMysqlDebug ( SqlRowBuffer_c &tOut, const SqlStmt_t &tStmt, bool bVipC
 		tOut.DataTuplet ( "malloc_trim", "pefrorm 'malloc_trim' call" );
 #endif
 		tOut.DataTuplet ( "sleep Nsec", "sleep for N seconds" );
+		tOut.DataTuplet ( "tasks", "display global tasks stat" );
+		tOut.DataTuplet ( "systhreads", "display task manager threads" );
+		tOut.DataTuplet ( "sched", "display task manager schedule" );
 	}
 	// done
 	tOut.Eof ();

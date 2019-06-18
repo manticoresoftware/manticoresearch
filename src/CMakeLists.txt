@@ -19,7 +19,8 @@ set ( LIBSPHINX_SRCS sphinx.cpp sphinxexcerpt.cpp
 		sphinxpq.cpp icu.cpp )
 set ( INDEXER_SRCS indexer.cpp )
 set ( INDEXTOOL_SRCS indextool.cpp )
-set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp searchdreplication.cpp )
+set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp
+		searchdreplication.cpp threadutils.cpp )
 set ( SEARCHD_SRCS searchd.cpp ${SEARCHD_SRCS_TESTABLE} )
 set ( SPELLDUMP_SRCS spelldump.cpp )
 set ( TESTS_SRCS tests.cpp )
@@ -35,7 +36,7 @@ set ( INDEX_CONV_SRCS index_converter.cpp )
 # all the (non-generated) headers
 # So if you add headers to the project and NOT see them in visual studio solution - just list them here!
 file ( GLOB HEADERS "sphinx*.h" lz4.h lz4hc.h http/http_parser.h secondaryindex.h searchnode.h killlist.h attribute.h accumulator.h)
-file ( GLOB SEARCHD_H "searchd*.h" )
+file ( GLOB SEARCHD_H "searchd*.h" "task*.h" threadutils.h )
 
 if ( UNIX AND NOT APPLE )
 	add_subdirectory ( replication )

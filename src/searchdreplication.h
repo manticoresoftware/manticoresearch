@@ -27,7 +27,7 @@ enum ProtocolType_e
 
 struct ListenerDesc_t
 {
-	ProtocolType_e	m_eProto;
+	Proto_e			m_eProto;
 	CSphString		m_sUnix;
 	DWORD			m_uIP;
 	int				m_iPort;

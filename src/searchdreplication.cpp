@@ -294,7 +294,7 @@ static bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString
 static bool RemoteClusterGetNodes ( const CSphString & sCluster, const CSphString & sGTID, CSphString & sError, CSphString & sNodes );
 
 // utility function to filter nodes list provided at string by specific protocol
-static void ClusterFilterNodes ( const CSphString & sSrcNodes, ProtocolType_e eProto, CSphString & sDstNodes );
+static void ClusterFilterNodes ( const CSphString & sSrcNodes, Proto_e eProto, CSphString & sDstNodes );
 
 // callback at remote node for CLUSTER_UPDATE_NODES to update nodes list at cluster from actual nodes list
 static bool RemoteClusterUpdateNodes ( const CSphString & sCluster, CSphString * pNodes, CSphString & sError );
@@ -597,7 +597,7 @@ static void UpdateGroupView ( const wsrep_view_info_t * pView, ReplicationCluste
 
 		// lets also update cluster nodes set at config for just created cluster with new member
 		if ( pCluster->m_sClusterNodes.IsEmpty() && pView->memb_num>1 )
-			ClusterFilterNodes ( pCluster->m_sViewNodes, PROTO_SPHINX, pCluster->m_sClusterNodes );
+			ClusterFilterNodes ( pCluster->m_sViewNodes, Proto_e::SPHINX, pCluster->m_sClusterNodes );
 	}
 }
 
@@ -2441,7 +2441,7 @@ static void SetListener ( const CSphVector<ListenerDesc_t> & dListeners )
 	ARRAY_FOREACH ( i, dListeners )
 	{
 		const ListenerDesc_t & tListen = dListeners[i];
-		if ( tListen.m_eProto!=PROTO_REPLICATION )
+		if ( tListen.m_eProto!=Proto_e::REPLICATION )
 			continue;
 
 		const bool bBadCount = ( tListen.m_iPortsCount<2 ); 
@@ -2468,7 +2468,7 @@ static void SetListener ( const CSphVector<ListenerDesc_t> & dListeners )
 		g_tPorts.AddRange ( tPorts );
 	}
 
-	int iPort = dListeners.GetFirst ( [&] ( const ListenerDesc_t & tListen ) { return tListen.m_eProto==PROTO_SPHINX; } );
+	int iPort = dListeners.GetFirst ( [&] ( const ListenerDesc_t & tListen ) { return tListen.m_eProto==Proto_e::SPHINX; } );
 	if ( iPort==-1 || !bGotReplicationPorts )
 	{
 		if ( g_dCfgClusters.GetLength() )
@@ -2522,7 +2522,7 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 				continue;
 			}
 
-			ClusterFilterNodes ( sNodes, PROTO_REPLICATION, tArgs.m_sNodes );
+			ClusterFilterNodes ( sNodes, Proto_e::REPLICATION, tArgs.m_sNodes );
 			if ( sNodes.IsEmpty() )
 			{
 				sphWarning ( "cluster '%s': no available nodes, replication is disabled", tDesc.m_sName.cstr() );
@@ -2696,7 +2696,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 		return false;
 	}
 
-	ClusterFilterNodes ( sNodes, PROTO_REPLICATION, tArgs.m_sNodes );
+	ClusterFilterNodes ( sNodes, Proto_e::REPLICATION, tArgs.m_sNodes );
 	if ( tArgs.m_sNodes.IsEmpty() )
 	{
 		sError.SetSprintf ( "cluster '%s', no nodes available", pElem->m_sName.cstr() );
@@ -2901,7 +2901,7 @@ struct AgentDescIterator_t
 	{
 		ListenerDesc_t tListen = ParseListener ( sListen );
 
-		if ( tListen.m_eProto!=PROTO_SPHINX )
+		if ( tListen.m_eProto!=Proto_e::SPHINX )
 			return;
 
 		if ( tListen.m_uIP==0 )
@@ -2968,9 +2968,9 @@ static void GetNodes ( const VecAgentDesc_t & dDesc, VecRefPtrs_t<AgentConn_t *>
 struct ListenerProtocolIterator_t
 {
 	StringBuilder_c m_sNodes { "," };
-	ProtocolType_e m_eProto;
+	Proto_e m_eProto;
 
-	explicit ListenerProtocolIterator_t ( ProtocolType_e eProto )
+	explicit ListenerProtocolIterator_t ( Proto_e eProto )
 		: m_eProto ( eProto )
 	{}
 
@@ -2990,7 +2990,7 @@ struct ListenerProtocolIterator_t
 };
 
 // utility function to filter nodes list provided at string by specific protocol
-void ClusterFilterNodes ( const CSphString & sSrcNodes, ProtocolType_e eProto, CSphString & sDstNodes )
+void ClusterFilterNodes ( const CSphString & sSrcNodes, Proto_e eProto, CSphString & sDstNodes )
 {
 	ListenerProtocolIterator_t tIt ( eProto );
 	GetNodes_T ( sSrcNodes, tIt );
@@ -4327,7 +4327,7 @@ bool RemoteClusterUpdateNodes ( const CSphString & sCluster, CSphString * pNodes
 		{
 			ReplicationCluster_t * pCluster = *ppCluster;
 			ScopedMutex_t tNodesLock ( (*ppCluster)->m_tViewNodesLock );
-			ClusterFilterNodes ( pCluster->m_sViewNodes, PROTO_SPHINX, pCluster->m_sClusterNodes );
+			ClusterFilterNodes ( pCluster->m_sViewNodes, Proto_e::SPHINX, pCluster->m_sClusterNodes );
 			if ( pNodes )
 				*pNodes = pCluster->m_sClusterNodes;
 		}

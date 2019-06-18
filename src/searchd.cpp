@@ -23,28 +23,21 @@
 #include "sphinxqcache.h"
 #include "icu.h"
 #include "accumulator.h"
+#include "searchdaemon.h"
+#include "searchdha.h"
+#include "searchdreplication.h"
+#include "threadutils.h"
+using namespace Threads;
 
 extern "C"
 {
 #include "sphinxudf.h"
 }
 
-#include <errno.h>
-#include <fcntl.h>
 #include <signal.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <time.h>
-#include <stdarg.h>
-#include <limits.h>
 #include <locale.h>
 #include <math.h>
-
-#include "searchdaemon.h"
-#include "searchdha.h"
-#include "searchdreplication.h"
+#include <time.h>
 
 #if HAVE_MALLOC_H
 #include <malloc.h>
@@ -71,33 +64,16 @@ extern "C"
 #if USE_WINDOWS
 	// Win-specific headers and calls
 	#include <io.h>
-	#include <tlhelp32.h>
 
 	#define sphSeek		_lseeki64
 	#define stat		_stat
 
 #else
 	// UNIX-specific headers and calls
-	#include <unistd.h>
-	#include <netinet/in.h>
-	#include <netinet/tcp.h>
-	#include <sys/file.h>
-	#include <sys/time.h>
 	#include <sys/wait.h>
 	#include <netdb.h>
-	#include <sys/syscall.h>
-
-
-	// for thr_self()
-	#ifdef __FreeBSD__
-	#include <sys/thr.h>
-	#endif
 
 	#define sphSeek		lseek
-
-#if HAVE_EVENTFD
-	#include <sys/eventfd.h>
-#endif
 
 #endif
 
@@ -106,7 +82,6 @@ extern "C"
 #endif
 
 #if HAVE_GETRLIMIT & HAVE_SETRLIMIT
-	#include <sys/time.h>
 	#include <sys/resource.h>
 #endif
 
@@ -179,7 +154,7 @@ struct Listener_t
 {
 	int					m_iSock;
 	bool				m_bTcp;
-	ProtocolType_e		m_eProto;
+	Proto_e				m_eProto;
 	bool				m_bVIP;
 };
 static CSphVector<Listener_t>	g_dListeners;
@@ -219,189 +194,6 @@ CSphString				g_sMySQLVersion = SPHINX_VERSION;
 // for CLang thread-safety analysis
 ThreadRole MainThread; // functions which called only from main thread
 ThreadRole HandlerThread; // thread which serves clients
-
-struct ServiceThread_t
-{
-	SphThread_t m_tThread;
-	bool m_bCreated = false;
-	
-	~ServiceThread_t()
-	{
-		Join();
-	}
-
-	bool Create ( void (*fnThread)(void*), void * pArg, const char * sName = nullptr )
-	{
-		m_bCreated = sphThreadCreate ( &m_tThread, fnThread, pArg, false, sName );
-		return m_bCreated;
-	}
-
-	void Join ()
-	{
-		if ( m_bCreated && sphGetShutdown() )
-			sphThreadJoin ( &m_tThread );
-		m_bCreated = false;
-	}
-};
-
-enum ThdState_e
-{
-	THD_HANDSHAKE = 0,
-	THD_NET_READ,
-	THD_NET_WRITE,
-	THD_QUERY,
-	THD_NET_IDLE,
-
-	THD_STATE_TOTAL
-};
-
-static const char * g_dThdStates[THD_STATE_TOTAL] = {
-	"handshake", "net_read", "net_write", "query", "net_idle"
-};
-
-struct ThdDesc_t : public ListNode_t
-{
-	SphThread_t		m_tThd {0};
-	ProtocolType_e	m_eProto { PROTO_MYSQL41 };
-	int				m_iClientSock = 0;
-	CSphString		m_sClientName;
-	bool			m_bVip = false;
-
-	ThdState_e		m_eThdState { THD_HANDSHAKE };
-	const char *	m_sCommand = nullptr;
-	int				m_iConnID = -1;	///< current conn-id for this thread
-
-	// stuff for SHOW THREADS
-	int				m_iTid = 0;		///< OS thread id, or 0 if unknown
-	int64_t			m_tmConnect = 0;	///< when did the client connect?
-	int64_t			m_tmStart = 0;	///< when did the current request start?
-	bool			m_bSystem = false;
-	CSphFixedVector<char> m_dBuf {512};	///< current request description
-	int				m_iCookie = 0;	///< may be used in case of pool to distinguish threads
-
-	CSphMutex m_tQueryLock;
-	const CSphQuery *	m_pQuery GUARDED_BY (m_tQueryLock) = nullptr;
-
-	ThdDesc_t ()
-	{
-		m_dBuf[0] = '\0';
-		m_dBuf.Last() = '\0';
-	}
-
-	void SetThreadInfo ( const char * sTemplate, ... )
-	{
-		// thread safe modification of string at m_dBuf
-		m_dBuf[0] = '\0';
-		m_dBuf.Last() = '\0';
-
-		va_list ap;
-
-		va_start ( ap, sTemplate );
-		int iPrinted = vsnprintf ( m_dBuf.Begin(), m_dBuf.GetLength()-1, sTemplate, ap );
-		va_end ( ap );
-
-		if ( iPrinted>0 )
-			m_dBuf[Min ( iPrinted, m_dBuf.GetLength()-1 )] = '\0';
-	}
-
-	void SetSearchQuery ( const CSphQuery * pQuery )
-	{
-		m_tQueryLock.Lock();
-		m_pQuery = pQuery;
-		m_tQueryLock.Unlock();
-	}
-};
-
-static RwLock_t				g_tThdLock;
-static List_t				g_dThd GUARDED_BY ( g_tThdLock );				///< existing threads table
-
-static void ThreadSetSnippetInfo ( const char * sQuery, int64_t iSizeKB, bool bApi, ThdDesc_t &tThd )
-{
-	if ( bApi )
-		tThd.SetThreadInfo ( "api-snippet datasize=%d.%d""k query=\"%s\"", int ( iSizeKB / 10 ), int ( iSizeKB % 10 ), sQuery );
-	else
-		tThd.SetThreadInfo ( "sphinxql-snippet datasize=%d.%d""k query=\"%s\"", int ( iSizeKB / 10 ), int ( iSizeKB % 10 ), sQuery );
-}
-
-static void ThreadSetSnippetInfo ( const char * sQuery, int64_t iSizeKB, ThdDesc_t &tThd )
-{
-	tThd.SetThreadInfo ( "snippet datasize=%d.%d""k query=\"%s\"", int ( iSizeKB / 10 ), int ( iSizeKB % 10 ), sQuery );
-}
-
-static void ThreadAdd ( ThdDesc_t * pThd ) EXCLUDES ( g_tThdLock )
-{
-	ScWL_t dThdLock ( g_tThdLock );
-	g_dThd.Add ( pThd );
-}
-
-static void ThreadRemove ( ThdDesc_t * pThd ) EXCLUDES ( g_tThdLock )
-{
-	ScWL_t dThdLock ( g_tThdLock );
-	g_dThd.Remove ( pThd );
-}
-
-static int ThreadsNum () EXCLUDES ( g_tThdLock )
-{
-	ScRL_t dThdLock ( g_tThdLock );
-	return g_dThd.GetLength ();
-}
-
-static void ThdState ( ThdState_e eState, ThdDesc_t & tThd )
-{
-	tThd.m_eThdState = eState;
-	tThd.m_tmStart = sphMicroTimer();
-	if ( eState==THD_NET_IDLE )
-		tThd.m_dBuf[0] = '\0';
-}
-
-static const char * g_sSystemName = "SYSTEM";
-struct ThreadSystem_t
-{
-	ThdDesc_t m_tDesc;
-
-	explicit ThreadSystem_t ( const char * sName )
-	{
-		m_tDesc.m_bSystem = true;
-		m_tDesc.m_tmStart = sphMicroTimer();
-		m_tDesc.m_iTid = GetOsThreadId();
-		m_tDesc.SetThreadInfo ( "SYSTEM %s", sName );
-		m_tDesc.m_sCommand = g_sSystemName;
-
-		ThreadAdd ( &m_tDesc );
-	}
-
-	~ThreadSystem_t()
-	{
-		ThreadRemove ( &m_tDesc );
-	}
-};
-
-struct ThreadLocal_t
-{
-	ThdDesc_t m_tDesc;
-
-	explicit ThreadLocal_t ( const ThdDesc_t & tDesc )
-	{
-		m_tDesc.m_iTid = GetOsThreadId();
-		m_tDesc.m_eProto = tDesc.m_eProto;
-		m_tDesc.m_iClientSock = tDesc.m_iClientSock;
-		m_tDesc.m_sClientName = tDesc.m_sClientName;
-		m_tDesc.m_eThdState = tDesc.m_eThdState;
-		m_tDesc.m_sCommand = tDesc.m_sCommand;
-		m_tDesc.m_iConnID = tDesc.m_iConnID;
-		m_tDesc.m_iCookie = tDesc.m_iCookie;
-
-		m_tDesc.m_tmConnect = tDesc.m_tmConnect;
-		m_tDesc.m_tmStart = tDesc.m_tmStart;
-
-		ThreadAdd ( &m_tDesc );
-	}
-
-	~ThreadLocal_t()
-	{
-		ThreadRemove ( &m_tDesc );
-	}
-};
 
 static int						g_iConnectionID = 0;		///< global conn-id
 
@@ -1865,16 +1657,17 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 
 	// threads table
 	// FIXME? should we try to lock threads table somehow?
-	sphSafeInfo ( g_iLogFile, "--- %d active threads ---", g_dThd.GetLength() );
+	auto gdThd = RlockedList_t::GetGlobalThreads ();
+	sphSafeInfo ( g_iLogFile, "--- %d active threads ---", gdThd->GetLength() );
 
 	int iThd = 0;
-	for ( const ListNode_t * pIt = g_dThd.Begin (); pIt!=g_dThd.End(); pIt = pIt->m_pNext )
+	for ( const ListNode_t * pIt = gdThd->Begin (); pIt!=gdThd->End(); pIt = pIt->m_pNext )
 	{
 		auto * pThd = (ThdDesc_t *)pIt;
 		sphSafeInfo ( g_iLogFile, "thd %d, proto %s, state %s, command %s",
 			iThd,
-			g_dProtoNames[pThd->m_eProto],
-			g_dThdStates[pThd->m_eThdState],
+			ProtoName(pThd->m_eProto),
+			ThdStateName(pThd->m_eThdState),
 			pThd->m_sCommand ? pThd->m_sCommand : "-" );
 		++iThd;
 	}
@@ -2252,21 +2045,21 @@ void CheckPort ( int iPort )
 
 void ProtoByName ( const CSphString & sProto, ListenerDesc_t & tDesc )
 {
-	if ( sProto=="sphinx" )			tDesc.m_eProto = PROTO_SPHINX;
-	else if ( sProto=="mysql41" )	tDesc.m_eProto = PROTO_MYSQL41;
-	else if ( sProto=="http" )		tDesc.m_eProto = PROTO_HTTP;
-	else if ( sProto=="replication" )	tDesc.m_eProto = PROTO_REPLICATION;
+	if ( sProto=="sphinx" )			tDesc.m_eProto = Proto_e::SPHINX;
+	else if ( sProto=="mysql41" )	tDesc.m_eProto = Proto_e::MYSQL41;
+	else if ( sProto=="http" )		tDesc.m_eProto = Proto_e::HTTP;
+	else if ( sProto=="replication" )	tDesc.m_eProto = Proto_e::REPLICATION;
 	else if ( sProto=="sphinx_vip" )
 	{
-		tDesc.m_eProto = PROTO_SPHINX;
+		tDesc.m_eProto = Proto_e::SPHINX;
 		tDesc.m_bVIP = true;
 	} else if ( sProto=="mysql41_vip" )
 	{
-		tDesc.m_eProto = PROTO_MYSQL41;
+		tDesc.m_eProto = Proto_e::MYSQL41;
 		tDesc.m_bVIP = true;
 	} else if ( sProto=="http_vip" )
 	{
-		tDesc.m_eProto = PROTO_HTTP;
+		tDesc.m_eProto = Proto_e::HTTP;
 		tDesc.m_bVIP = true;
 	} else
 	{
@@ -2277,7 +2070,7 @@ void ProtoByName ( const CSphString & sProto, ListenerDesc_t & tDesc )
 ListenerDesc_t ParseListener ( const char * sSpec )
 {
 	ListenerDesc_t tRes;
-	tRes.m_eProto = PROTO_SPHINX;
+	tRes.m_eProto = Proto_e::SPHINX;
 	tRes.m_sUnix = "";
 	tRes.m_uIP = htonl ( INADDR_ANY );
 	tRes.m_iPort = SPHINXAPI_PORT;
@@ -2380,7 +2173,7 @@ ListenerDesc_t ParseListener ( const char * sSpec )
 			? htonl ( INADDR_ANY )
 			: sphGetAddress ( sParts[0].cstr(), GETADDR_STRICT );
 
-		if ( tRes.m_eProto==PROTO_REPLICATION )
+		if ( tRes.m_eProto==Proto_e::REPLICATION )
 		{
 			const char * sPorts = sParts[1].cstr();
 			const char * sDelimiter = strchr ( sPorts, '-' );
@@ -2410,14 +2203,14 @@ void AddListener ( const CSphString & sListen, bool bHttpAllowed, CSphVector<Lis
 	tListener.m_bTcp = true;
 	tListener.m_bVIP = tDesc.m_bVIP;
 
-	if ( tDesc.m_eProto==PROTO_HTTP && !bHttpAllowed )
+	if ( tDesc.m_eProto==Proto_e::HTTP && !bHttpAllowed )
 	{
 		sphWarning ( "thread_pool disabled, can not listen for http interface, port=%d, use workers=thread_pool", tDesc.m_iPort );
 		return;
 	}
 
 	dDesc.Add ( tDesc );
-	if ( tDesc.m_eProto==PROTO_REPLICATION )
+	if ( tDesc.m_eProto==Proto_e::REPLICATION )
 		return;
 
 #if !USE_WINDOWS
@@ -11615,7 +11408,7 @@ static void HandleClientSphinx ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handle
 	}
 
 	MEMORY ( MEM_API_HANDLE );
-	ThdState ( THD_HANDSHAKE, tThd );
+	ThdState ( ThdState_e::HANDSHAKE, tThd );
 
 	int64_t iCID = tThd.m_iConnID;
 	const char * sClientIP = tThd.m_sClientName.cstr();
@@ -11655,7 +11448,7 @@ static void HandleClientSphinx ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handle
 		// currently, the only signal allowed to interrupt this read is SIGTERM
 		// letting SIGHUP interrupt causes trouble under query/rotation pressure
 		// see sphSockRead() and ReadFrom() for details
-		ThdState ( THD_NET_IDLE, tThd );
+		ThdState ( ThdState_e::NET_IDLE, tThd );
 		bool bCommand = tBuf.ReadFrom ( 8, iTimeout, bPersist );
 
 		// on SIGTERM, bail unconditionally and immediately, at all times
@@ -11694,7 +11487,7 @@ static void HandleClientSphinx ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handle
 
 		// okay, signal related mess should be over, try to parse the command
 		// (but some other socket error still might had happened, so beware)
-		ThdState ( THD_NET_READ, tThd );
+		ThdState ( ThdState_e::NET_READ, tThd );
 		auto eCommand = ( SearchdCommand_e ) tBuf.GetWord ();
 		WORD uCommandVer = tBuf.GetWord ();
 		int iLength = tBuf.GetInt ();
@@ -11764,7 +11557,7 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 	StatCountCommand ( eCommand );
 
 	tThd.m_sCommand = g_dApiCommands[eCommand];
-	ThdState ( THD_QUERY, tThd );
+	ThdState ( ThdState_e::QUERY, tThd );
 
 	bool bPersist = false;
 	sphLogDebugv ( "conn %s(%d): got command %d, handling", tThd.m_sClientName.cstr(), tThd.m_iConnID, eCommand );
@@ -14924,7 +14717,7 @@ enum ThreadInfoFormat_e
 static const char * FormatInfo ( ThdDesc_t & tThd, ThreadInfoFormat_e eFmt, QuotationEscapedBuilder & tBuf )
 {
 	ScopedMutex_t pQueryGuard ( tThd.m_tQueryLock );
-	if ( tThd.m_pQuery && eFmt==THD_FORMAT_SPHINXQL && tThd.m_eProto!=PROTO_MYSQL41 )
+	if ( tThd.m_pQuery && eFmt==THD_FORMAT_SPHINXQL && tThd.m_eProto!=Proto_e::MYSQL41 )
 	{
 		bool bGotQuery = false;
 		if ( tThd.m_pQuery )
@@ -14965,8 +14758,8 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	if ( tStmt.m_sThreadFormat=="sphinxql" )
 		eFmt = THD_FORMAT_SPHINXQL;
 
-	ScRL_t dThdLock ( g_tThdLock );
-	for ( const ListNode_t * pIt = g_dThd.Begin (); pIt!=g_dThd.End(); pIt = pIt->m_pNext )
+	auto gdThd = RlockedList_t::GetGlobalThreads ();
+	for ( const ListNode_t * pIt = gdThd->Begin (); pIt!=gdThd->End(); pIt = pIt->m_pNext )
 	{
 		auto * pThd = (ThdDesc_t *)pIt;
 
@@ -14976,8 +14769,8 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 
 		tOut.PutNumAsString ( pThd->m_iTid );
 		tOut.PutString ( GetThreadName ( const_cast <SphThread_t *>(&pThd->m_tThd) ) );
-		tOut.PutString ( pThd->m_bSystem ? "-" : g_dProtoNames [ pThd->m_eProto ] );
-		tOut.PutString ( pThd->m_bSystem ? "-" : g_dThdStates [ pThd->m_eThdState ] );
+		tOut.PutString ( pThd->m_bSystem ? "-" : ProtoName ( pThd->m_eProto ) );
+		tOut.PutString ( pThd->m_bSystem ? "-" : ThdStateName ( pThd->m_eThdState ) );
 		tOut.PutString ( pThd->m_sClientName );
 		tOut.PutMicrosec ( tmNow - pThd->m_tmStart );
 		tOut.PutString ( FormatInfo ( *pThd, eFmt, tBuf ) );
@@ -16252,7 +16045,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	{
 		SqlStmt_e eStmt = dStmt[i].m_eStmt;
 
-		ThdState ( THD_QUERY, tThd );
+		ThdState ( ThdState_e::QUERY, tThd );
 		tThd.m_sCommand = g_dSqlStmts[eStmt];
 
 		const CSphQueryResultMeta & tMeta = bUseFirstMeta ? tHandler.m_dResults[0] : ( iSelect-1>=0 ? tHandler.m_dResults[iSelect-1] : tPrevMeta );
@@ -17875,7 +17668,7 @@ public:
 		assert ( !bParsedOK || pStmt );
 
 		tThd.m_sCommand = g_dSqlStmts[eStmt];
-		ThdState ( THD_QUERY, tThd );
+		ThdState ( ThdState_e::QUERY, tThd );
 
 		SqlRowBuffer_c tOut ( &uPacketID, &tOutput, tThd.m_iConnID, m_tVars.m_bAutoCommit );
 
@@ -18471,7 +18264,7 @@ static bool ReadMySQLPacketHeader ( int iSock, int& iLen, BYTE& uPacketID )
 static void HandleClientMySQL ( int iSock, ThdDesc_t & tThd ) REQUIRES ( HandlerThread )
 {
 	MEMORY ( MEM_SQL_HANDLE );
-	ThdState ( THD_HANDSHAKE, tThd );
+	ThdState ( ThdState_e::HANDSHAKE, tThd );
 
 	// set off query guard
 	CrashQuery_t tCrashQuery;
@@ -18503,7 +18296,7 @@ static void HandleClientMySQL ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handler
 
 		// get next packet
 		// we want interruptible calls here, so that shutdowns could be honored
-		ThdState ( THD_NET_IDLE, tThd );
+		ThdState ( ThdState_e::NET_IDLE, tThd );
 		if ( !ReadMySQLPacketHeader ( iSock, iPacketLen, uPacketID ) )
 		{
 			sphLogDebugv ( "conn %s(%d): bailing on failed MySQL header (sockerr=%s)", sClientIP, iCID, sphSockError() );
@@ -18519,7 +18312,7 @@ static void HandleClientMySQL ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handler
 		}
 
 		// keep getting that packet
-		ThdState ( THD_NET_READ, tThd );
+		ThdState ( ThdState_e::NET_READ, tThd );
 		if ( !tIn.ReadFrom ( iPacketLen, g_iClientQlTimeout, true ) )
 		{
 			sphWarning ( "failed to receive MySQL request body (client=%s(%d), exp=%d, error='%s')", sClientIP, iCID, iPacketLen, sphSockError() );
@@ -18561,7 +18354,7 @@ static void HandleClientMySQL ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handler
 		// handle auth packet
 		if ( !bAuthed )
 		{
-			ThdState ( THD_NET_WRITE, tThd );
+			ThdState ( ThdState_e::NET_WRITE, tThd );
 			bAuthed = true;
 			if ( IsFederatedUser ( tIn.GetBufferPtr(), tIn.GetLength() ) )
 				tSession.SetFederatedUser();
@@ -18612,7 +18405,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString
 			assert ( uMysqlCmd==MYSQL_COM_QUERY );
 			sQuery = tIn.GetRawString ( iPacketLen-1 ); // OPTIMIZE? could be huge; avoid copying?
 			assert ( !tIn.GetError() );
-			ThdState ( THD_QUERY, tThd );
+			ThdState ( ThdState_e::QUERY, tThd );
 			tThd.SetThreadInfo ( "%s", sQuery.cstr() ); // OPTIMIZE? could be huge; avoid copying?
 			bKeepProfile = tSession.Execute ( sQuery, tOut, uPacketID, tThd );
 			break;
@@ -18625,7 +18418,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString
 	}
 
 	// send the response packet
-	ThdState ( THD_NET_WRITE, tThd );
+	ThdState ( ThdState_e::NET_WRITE, tThd );
 	tOut.Flush();
 	if ( tOut.GetError() )
 		return false;
@@ -18643,12 +18436,12 @@ bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString
 // HANDLE-BY-LISTENER
 //////////////////////////////////////////////////////////////////////////
 
-void HandleClient ( ProtocolType_e eProto, int iSock, ThdDesc_t & tThd ) REQUIRES (HandlerThread)
+void HandleClient ( Proto_e eProto, int iSock, ThdDesc_t & tThd ) REQUIRES (HandlerThread)
 {
 	switch ( eProto )
 	{
-		case PROTO_SPHINX:		HandleClientSphinx ( iSock, tThd ); break;
-		case PROTO_MYSQL41:		HandleClientMySQL ( iSock, tThd ); break;
+		case Proto_e::SPHINX:		HandleClientSphinx ( iSock, tThd ); break;
+		case Proto_e::MYSQL41:		HandleClientMySQL ( iSock, tThd ); break;
 		default:				assert ( 0 && "unhandled protocol type" ); break;
 	}
 }
@@ -21494,7 +21287,7 @@ void QueryStatus ( CSphVariant * v )
 	for ( ; v; v = v->m_pNext )
 	{
 		ListenerDesc_t tDesc = ParseListener ( v->cstr() );
-		if ( tDesc.m_eProto!=PROTO_SPHINX )
+		if ( tDesc.m_eProto!=Proto_e::SPHINX )
 			continue;
 
 		int iSock = -1;
@@ -21749,25 +21542,6 @@ Listener_t * DoAccept ( int * pClientSock, char * sClientName ) REQUIRES ( MainT
 }
 
 
-int GetOsThreadId()
-{
-#if USE_WINDOWS
-	return GetCurrentThreadId();
-#elif defined ( __APPLE__ )
-	uint64_t tid;
- 	pthread_threadid_np(NULL, &tid);
-	return tid;
-#elif defined(SYS_gettid)
-	return syscall ( SYS_gettid );
-#elif defined(__FreeBSD__)
-	long tid;
-	thr_self(&tid);
-	return (int)tid;
-#else
-	return 0;
-#endif
-}
-
 void HandlerThreadFunc ( void * pArg ) REQUIRES ( !HandlerThread )
 {
 	ScopedRole_c tHandler ( HandlerThread );
@@ -21818,7 +21592,7 @@ void TickHead () REQUIRES ( MainThread )
 	if ( ( g_iMaxChildren && !g_pThdPool && ThreadsNum()>=g_iMaxChildren )
 		|| ( g_bInRotate && !g_bSeamlessRotate ) )
 	{
-		if ( pListener->m_eProto==PROTO_SPHINX )
+		if ( pListener->m_eProto==Proto_e::SPHINX )
 			FailClient ( iClientSock, "server maxed out, retry in a second" );
 		else
 			MysqlMaxedOut ( iClientSock );
@@ -22770,30 +22544,30 @@ NetEvent_e NetActionAccept_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction 
 			iConnID = 0;
 		}
 
-		ISphNetAction * pAction = NULL;
-		if ( m_tListener.m_eProto==PROTO_SPHINX )
+		ISphNetAction * pAction = nullptr;
+		if ( m_tListener.m_eProto==Proto_e::SPHINX )
 		{
-			NetStateAPI_t * pStateAPI = new NetStateAPI_t ();
+			auto * pStateAPI = new NetStateAPI_t ();
 			pStateAPI->m_dBuf.Reserve ( 65535 );
 			FillNetState ( pStateAPI, iClientSock, iConnID, m_tListener.m_bVIP, saStorage );
 			pAction = new NetReceiveDataAPI_t ( pStateAPI );
-		} else if ( m_tListener.m_eProto==PROTO_HTTP )
+		} else if ( m_tListener.m_eProto==Proto_e::HTTP )
 		{
-			NetStateQL_t * pStateHttp = new NetStateQL_t ();
+			auto * pStateHttp = new NetStateQL_t ();
 			pStateHttp->m_dBuf.Reserve ( 65535 );
 			FillNetState ( pStateHttp, iClientSock, iConnID, false, saStorage );
 			pAction = new NetReceiveDataHttp_t ( pStateHttp );
 		} else
 		{
-			NetStateQL_t * pStateQL = new NetStateQL_t ();
+			auto * pStateQL = new NetStateQL_t ();
 			pStateQL->m_dBuf.Reserve ( 65535 );
 			FillNetState ( pStateQL, iClientSock, iConnID, m_tListener.m_bVIP, saStorage );
-			NetReceiveDataQL_t * pActionQL = new NetReceiveDataQL_t ( pStateQL );
+			auto * pActionQL = new NetReceiveDataQL_t ( pStateQL );
 			pActionQL->SetupHandshakePhase();
 			pAction = pActionQL;
 		}
 		dNextTick.Add ( pAction );
-		sphLogDebugv ( "%p accepted %s, sock=%d, tick=%u", this, g_dProtoNames[m_tListener.m_eProto], pAction->m_iSock, pLoop->m_uTick );
+		sphLogDebugv ( "%p accepted %s, sock=%d, tick=%u", this, ProtoName(m_tListener.m_eProto), pAction->m_iSock, pLoop->m_uTick );
 	}
 }
 
@@ -23649,7 +23423,7 @@ void ThdJobAPI_t::Call ()
 	int iTid = GetOsThreadId();
 
 	ThdDesc_t tThdDesc;
-	tThdDesc.m_eProto = PROTO_SPHINX;
+	tThdDesc.m_eProto = Proto_e::SPHINX;
 	tThdDesc.m_iClientSock = m_tState->m_iClientSock;
 	tThdDesc.m_sClientName = m_tState->m_sClientName;
 	tThdDesc.m_iConnID = m_tState->m_iConnID;
@@ -23715,7 +23489,7 @@ void ThdJobQL_t::Call ()
 	int iTid = GetOsThreadId();
 
 	ThdDesc_t tThdDesc;
-	tThdDesc.m_eProto = PROTO_MYSQL41;
+	tThdDesc.m_eProto = Proto_e::MYSQL41;
 	tThdDesc.m_iClientSock = m_tState->m_iClientSock;
 	tThdDesc.m_sClientName = m_tState->m_sClientName;
 	tThdDesc.m_iConnID = m_tState->m_iConnID;
@@ -23811,7 +23585,7 @@ void ThdJobHttp_t::Call ()
 	int iTid = GetOsThreadId();
 
 	ThdDesc_t tThdDesc;
-	tThdDesc.m_eProto = PROTO_HTTP;
+	tThdDesc.m_eProto = Proto_e::HTTP;
 	tThdDesc.m_iClientSock = m_tState->m_iClientSock;
 	tThdDesc.m_sClientName = m_tState->m_sClientName;
 	tThdDesc.m_iConnID = m_tState->m_iConnID;
@@ -24965,7 +24739,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	////////////////////
 
 	Listener_t tListener;
-	tListener.m_eProto = PROTO_SPHINX;
+	tListener.m_eProto = Proto_e::SPHINX;
 	tListener.m_bTcp = true;
 	CSphVector<ListenerDesc_t> dListenerDescs;
 
@@ -24989,11 +24763,11 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		if ( !g_dListeners.GetLength() )
 		{
 			tListener.m_iSock = sphCreateInetSocket ( htonl ( INADDR_ANY ), SPHINXAPI_PORT );
-			tListener.m_eProto = PROTO_SPHINX;
+			tListener.m_eProto = Proto_e::SPHINX;
 			g_dListeners.Add ( tListener );
 
 			tListener.m_iSock = sphCreateInetSocket ( htonl ( INADDR_ANY ), SPHINXQL_PORT );
-			tListener.m_eProto = PROTO_MYSQL41;
+			tListener.m_eProto = Proto_e::MYSQL41;
 			g_dListeners.Add ( tListener );
 		}
 	}

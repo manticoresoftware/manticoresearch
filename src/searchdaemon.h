@@ -108,6 +108,8 @@
 #include "sphinxutils.h"
 #include "sphinxint.h"
 #include "sphinxrt.h"
+#include "threadutils.h"
+using namespace Threads;
 
 const char * sphSockError ( int =0 );
 int sphSockGetErrno ();
@@ -479,8 +481,6 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 
 // first try to get data, and only then fall into sphSockRead (which poll socket first)
 int SockReadFast ( int iSock, void * buf, int iLen, int iReadTimeout );
-int GetOsThreadId();
-
 
 extern ThreadRole MainThread;
 /// This class is basically a pointer to query string and some more additional info.
@@ -1294,8 +1294,6 @@ enum ESphHttpEndpoint
 	SPH_HTTP_ENDPOINT_TOTAL
 };
 
-// fwd
-struct ThdDesc_t;
 
 bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, CachedOutputBuffer_c & tOut );
 ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster, const ThdDesc_t & tThd );

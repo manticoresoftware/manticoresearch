@@ -97,6 +97,9 @@ if ( NOT icu_POPULATED )
 	FetchContent_Populate ( icu )
 endif ()
 
+mark_as_advanced ( FETCHCONTENT_FULLY_DISCONNECTED FETCHCONTENT_QUIET FETCHCONTENT_UPDATES_DISCONNECTED
+		FETCHCONTENT_SOURCE_DIR_ICU FETCHCONTENT_UPDATES_DISCONNECTED_ICU )
+
 if ( icu_POPULATED )
 	set ( USE_ICU 1 )
 	include_directories ( "${icu_SOURCE_DIR}/source/common" )

@@ -43,6 +43,8 @@ if ( UNIX AND NOT APPLE )
 		add_subdirectory ( ${galera_SOURCE_DIR} ${galera_BINARY_DIR} )
 		get_galera_api_version ( "${WSREP_PATH}/wsrep_api.h" GALERA_SOVERSION )
 	endif ()
+	mark_as_advanced ( FETCHCONTENT_FULLY_DISCONNECTED FETCHCONTENT_QUIET FETCHCONTENT_UPDATES_DISCONNECTED
+			FETCHCONTENT_SOURCE_DIR_GALERA FETCHCONTENT_UPDATES_DISCONNECTED_GALERA )
 endif()
 
 # add RPATH only to specific target

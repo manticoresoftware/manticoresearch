@@ -59,29 +59,11 @@ CSphString HostDesc_t::GetMyUrl() const
 	return sName;
 }
 
-static DWORD g_uTimePrefix = 0;
-void StartLogTime()
-{
-	g_uTimePrefix = sphMicroTimer () / 1000;
-}
-
-void sphLogDebugTimeredPrefix ( const char* sPrefix, const char * sFmt, ... )
-{
-	StringBuilder_c sMyPrefix;
-	sMyPrefix+=sPrefix;
-	sMyPrefix.Appendf ("[%04d] ", (int)(sphMicroTimer ()/1000-g_uTimePrefix) );
-	sMyPrefix+=sFmt;
-	va_list ap;
-	va_start ( ap, sFmt );
-	sphLogVa ( sMyPrefix.cstr(), ap, SPH_LOG_VERBOSE_DEBUG );
-	va_end ( ap );
-}
-
 #define VERBOSE_NETLOOP 0
 
 #if VERBOSE_NETLOOP
-	#define sphLogDebugA( ... ) sphLogDebugTimeredPrefix ("A ", __VA_ARGS__)
-	#define sphLogDebugL( ... ) sphLogDebugTimeredPrefix ("L ", __VA_ARGS__)
+	#define sphLogDebugA( ... ) TimePrefixed::LogDebugv ("A ", __VA_ARGS__)
+	#define sphLogDebugL( ... ) TimePrefixed::LogDebugv ("L ", __VA_ARGS__)
 #else
 #if USE_WINDOWS
 #pragma warning(disable:4390)
@@ -2118,7 +2100,8 @@ void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery
 {
 //	sphLogSupress ( "L ", SPH_LOG_VERBOSE_DEBUG );
 //	sphLogSupress ( "- ", SPH_LOG_VERBOSE_DEBUG );
-	StartLogTime();
+//	TimePrefixed::TimeStart();
+	assert ( pReporter );
 	sphLogDebugv ( "S ==========> ScheduleDistrJobs() for %d remotes", dRemotes.GetLength () );
 
 	bool bNeedKick = false; // if some of connections falled to waiting and need to kick the poller.

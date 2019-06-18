@@ -312,6 +312,7 @@ void sphSetLogger ( SphLogger_fn fnLog );
 
 void sphLogVa ( const char * sFmt, va_list ap, ESphLogLevel eLevel = SPH_LOG_WARNING );
 void sphWarning ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
+void sphLogf ( ESphLogLevel eLevel, const char* sFmt, ... );
 void sphInfo ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
 void sphLogFatal ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
 void sphLogDebug ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
@@ -322,6 +323,17 @@ void sphLogDebugRpl ( const char * sFmt, ... ) __attribute__((format(printf,1,2)
 // set the prefix to supress the log
 void sphLogSupress ( const char * sPrefix, ESphLogLevel eLevel = SPH_LOG_WARNING );
 void sphLogSupressRemove ( const char * sPrefix, ESphLogLevel eLevel = SPH_LOG_WARNING );
+
+// TimePrefixed logging - output "prefix [ms] ...'; 'ms' is reset to 0 by TimeStart().
+namespace TimePrefixed {
+	void TimeStart ();
+	void Warning ( const char* sPrefix, const char* sFmt, ... );
+	void Info ( const char* sPrefix, const char* sFmt, ... );
+	void LogFatal ( const char* sPrefix, const char* sFmt, ... );
+	void LogDebug ( const char* sPrefix, const char* sFmt, ... );
+	void LogDebugv ( const char* sPrefix, const char* sFmt, ... );
+	void LogDebugvv ( const char* sPrefix, const char* sFmt, ... );
+}
 
 //////////////////////////////////////////////////////////////////////////
 

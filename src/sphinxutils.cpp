@@ -2061,6 +2061,14 @@ void sphLogVa ( const char * sFmt, va_list ap, ESphLogLevel eLevel )
 	Log ( eLevel, sFmt, ap );
 }
 
+void sphLogf ( ESphLogLevel eLevel, const char* sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	Log ( eLevel, sFmt, ap );
+	va_end ( ap );
+}
+
 void sphWarning ( const char * sFmt, ... )
 {
 	va_list ap;
@@ -2120,6 +2128,76 @@ void sphLogDebugRpl ( const char * sFmt, ... )
 void sphSetLogger ( SphLogger_fn fnLog )
 {
 	g_pLogger = fnLog;
+}
+
+namespace TimePrefixed {
+	static int64_t g_uTimePrefix = 0;
+
+	void TimeStart ()
+	{
+		g_uTimePrefix = sphMicroTimer ();
+	}
+
+	void TimedLogVa ( const char* sPrefix, const char* sFmt, va_list ap, ESphLogLevel eLevel )
+	{
+		if ( eLevel>g_eLogLevel )
+			return;
+
+		StringBuilder_c sMyLine;
+		sMyLine.Sprintf ( "%s[%t] %s", sPrefix, sphMicroTimer () - g_uTimePrefix, sFmt);
+		CSphString sFormat;
+		sMyLine.MoveTo (sFormat);
+		sMyLine.vSprintf ( sFormat.cstr(), ap );
+		sphLogf ( eLevel, "%s", sMyLine.cstr () );
+	}
+
+	void Warning ( const char* sPrefix, const char* sFmt, ... )
+	{
+		va_list ap;
+		va_start ( ap, sFmt );
+		TimedLogVa ( sPrefix, sFmt, ap, SPH_LOG_WARNING);
+		va_end ( ap );
+	}
+
+	void Info ( const char* sPrefix, const char* sFmt, ... )
+	{
+		va_list ap;
+		va_start ( ap, sFmt );
+		TimedLogVa ( sPrefix, sFmt, ap, SPH_LOG_INFO );
+		va_end ( ap );
+	}
+
+	void LogFatal ( const char* sPrefix, const char* sFmt, ... )
+	{
+		va_list ap;
+		va_start ( ap, sFmt );
+		TimedLogVa ( sPrefix, sFmt, ap, SPH_LOG_FATAL );
+		va_end ( ap );
+	}
+
+	void LogDebug ( const char* sPrefix, const char* sFmt, ... )
+	{
+		va_list ap;
+		va_start ( ap, sFmt );
+		TimedLogVa ( sPrefix, sFmt, ap, SPH_LOG_DEBUG );
+		va_end ( ap );
+	}
+
+	void LogDebugv ( const char* sPrefix, const char* sFmt, ... )
+	{
+		va_list ap;
+		va_start ( ap, sFmt );
+		TimedLogVa ( sPrefix, sFmt, ap, SPH_LOG_VERBOSE_DEBUG );
+		va_end ( ap );
+	}
+
+	void LogDebugvv ( const char* sPrefix, const char* sFmt, ... )
+	{
+		va_list ap;
+		va_start ( ap, sFmt );
+		TimedLogVa ( sPrefix, sFmt, ap, SPH_LOG_VERY_VERBOSE_DEBUG );
+		va_end ( ap );
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////

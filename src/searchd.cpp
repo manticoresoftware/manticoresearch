@@ -29,6 +29,7 @@
 #include "threadutils.h"
 #include "searchdtask.h"
 #include "taskping.h"
+#include "taskmalloctrim.h"
 
 using namespace Threads;
 
@@ -13128,7 +13129,7 @@ void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t
 		pReporter = GetObserver();
 		ScheduleDistrJobs ( dAgents, pReqBuilder.Ptr(), pParser.Ptr(), pReporter );
 	}
-	
+
 	LazyVector_T <CPqResult> dLocalResults;
 	for ( const auto & sPqIndex : *pLocalIndexes )
 	{
@@ -13136,7 +13137,7 @@ void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t
 		PQLocalMatch ( dDocs, sPqIndex, tOpts, tAcc, dResult, iStart, iStep );
 		iStart += iStep;
 	}
-	
+
 	if ( bHaveRemotes )
 	{
 		assert ( pReporter );
@@ -16401,7 +16402,7 @@ void HandleMysqlDebug ( SqlRowBuffer_c &tOut, const SqlStmt_t &tStmt, bool bVipC
 	{
 		tOut.HeadTuplet ( "command", "result" );
 		CSphString sResult;
-		sResult.SetSprintf ( "%d", malloc_trim (0));
+		sResult.SetSprintf ( "%d", PerformMallocTrim (0));
 		tOut.DataTuplet ( "malloc_trim", sResult.cstr () );
 	}
 #endif
@@ -24778,6 +24779,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	// (since loading ha-mirrors of distributed already assumes ping is usable).
 	if ( g_iPingInterval>0 )
 		Ping::Start();
+
+	ScheduleMallocTrim();
 
 	//////////////////////
 	// build indexes hash

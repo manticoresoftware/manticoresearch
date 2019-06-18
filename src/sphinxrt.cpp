@@ -8930,7 +8930,7 @@ void sphRTConfigure ( const CSphConfigSection & hSearchd, bool bTestMode )
 {
 	assert ( g_pBinlog );
 	g_pRtBinlog->Configure ( hSearchd, bTestMode );
-	g_iRtFlushPeriod = hSearchd.GetInt ( "rt_flush_period", (int)g_iRtFlushPeriod );
+	g_iRtFlushPeriod = hSearchd.GetSTimeS ( "rt_flush_period", (int)g_iRtFlushPeriod );
 	g_iRtFlushPeriod = Max ( g_iRtFlushPeriod, 10 );
 }
 

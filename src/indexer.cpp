@@ -408,6 +408,16 @@ bool ParseMultiAttr ( const char * sBuf, CSphColumnInfo & tAttr, const char * sS
 	for ( CSphVariant * pVal = hSource(_key); pVal; pVal = pVal->m_pNext ) \
 		_arg.Add ( pVal->cstr() );
 
+// get time in seconds
+#define LOC_GETTS( _arg, _key ) \
+    if ( hSource.Exists(_key) && hSource[_key].intval() ) \
+        _arg = hSource.GetMsTimeS(_key,0);
+
+// get time in miliseconds
+#define LOC_GETMS( _arg, _key ) \
+    if ( hSource.Exists(_key) && hSource[_key].intval() ) \
+        _arg = hSource.GetMsTimeMs(_key,0);
+
 void SqlAttrsConfigure ( CSphSourceParams_SQL & tParams, const CSphVariant * pHead,
 	ESphAttr eAttrType, const char * sSourceName, bool bIndexedAttr = false )
 {
@@ -600,7 +610,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 	LOC_GETS ( tParams.m_sHookQueryRange,	"hook_query_range" );
 	LOC_GETS ( tParams.m_sHookPostIndex,	"hook_post_index" );
 
-	LOC_GETI ( tParams.m_iRangedThrottle,	"sql_ranged_throttle" );
+	LOC_GETMS ( tParams.m_iRangedThrottle,	"sql_ranged_throttle" );
 
 	SqlAttrsConfigure ( tParams,	hSource("sql_attr_uint"),			SPH_ATTR_INTEGER,	sSourceName );
 	SqlAttrsConfigure ( tParams,	hSource("sql_attr_timestamp"),		SPH_ATTR_TIMESTAMP,	sSourceName );

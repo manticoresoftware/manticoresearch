@@ -1464,6 +1464,76 @@ TEST (functions, size_parser)
 	ASSERT_STREQ ( sError, "z" );
 }
 
+// parsing time - number with possible suffixes us, ms, s, m, h, d, w
+TEST ( functions, time_parser )
+{
+	// useconds
+	ASSERT_EQ ( 1, sphGetTime64 ( "1us" ));
+	ASSERT_EQ ( 2, sphGetTime64 ( "2Us" ));
+	ASSERT_EQ ( 3, sphGetTime64 ( "3uS" ));
+	ASSERT_EQ ( 4, sphGetTime64 ( "4US" ));
+
+	// milliseconds
+	ASSERT_EQ ( 1000, sphGetTime64 ( "1ms" ));
+	ASSERT_EQ ( 2000, sphGetTime64 ( "2Ms" ));
+	ASSERT_EQ ( 3000, sphGetTime64 ( "3mS" ));
+	ASSERT_EQ ( 4000, sphGetTime64 ( "4MS" ));
+
+	// seconds
+	ASSERT_EQ ( 1000000, sphGetTime64 ( "1" ));
+	ASSERT_EQ ( 2000000, sphGetTime64 ( "2s" ));
+	ASSERT_EQ ( 3000000, sphGetTime64 ( "3S" ));
+
+	// minutes
+	ASSERT_EQ ( 60000000, sphGetTime64 ( "1m" ));
+	ASSERT_EQ ( 120000000, sphGetTime64 ( "2M" ));
+
+	// hours
+	ASSERT_EQ ( 3600000000, sphGetTime64 ( "1H" ));
+	ASSERT_EQ ( 36000000000, sphGetTime64 ( "10h" ));
+
+	// day
+	ASSERT_EQ ( 24 * 3600000000, sphGetTime64 ( "1D" ));
+	ASSERT_EQ ( 48 * 3600000000, sphGetTime64 ( "2d" ));
+
+	// week
+	ASSERT_EQ ( 7 * 24 * 3600000000, sphGetTime64 ( "1W" ));
+	ASSERT_EQ ( 14 * 24 * 3600000000, sphGetTime64 ( "2w" ));
+
+	// Untouched sError on success;
+	char* sError = nullptr;
+	ASSERT_EQ ( 1000000, sphGetTime64 ( "1", &sError ));
+	ASSERT_EQ ( sError, nullptr );
+	ASSERT_EQ ( 1, sphGetTime64 ( "1us", &sError ));
+	ASSERT_EQ ( sError, nullptr );
+	ASSERT_EQ ( 1000, sphGetTime64 ( "1ms", &sError ));
+	ASSERT_EQ ( sError, nullptr );
+	ASSERT_EQ ( 1000000, sphGetTime64 ( "1s", &sError ));
+	ASSERT_EQ ( sError, nullptr );
+	ASSERT_EQ ( 60000000, sphGetTime64 ( "1m", &sError ));
+	ASSERT_EQ ( sError, nullptr );
+	ASSERT_EQ ( 3600000000, sphGetTime64 ( "1h", &sError ));
+	ASSERT_EQ ( sError, nullptr );
+	ASSERT_EQ ( 24 * 3600000000, sphGetTime64 ( "1d", &sError ));
+	ASSERT_EQ ( sError, nullptr );
+	ASSERT_EQ ( 7 * 24 * 3600000000, sphGetTime64 ( "1w", &sError ));
+	ASSERT_EQ ( sError, nullptr );
+
+	// empty and null input strings
+	ASSERT_EQ ( 11, sphGetTime64 ( "", &sError, 11 ));
+	ASSERT_EQ ( sError, nullptr );
+	ASSERT_EQ ( 12, sphGetTime64 ( nullptr, &sError, 12 ));
+	ASSERT_EQ ( sError, nullptr );
+
+	// error handle for non-numeric
+	ASSERT_EQ ( -1, sphGetTime64 ( "abc", &sError ));
+	ASSERT_STREQ ( sError, "abc" );
+
+	// error handle for numeric, but unknown suffix (=non-numeric)
+	ASSERT_EQ ( -1, sphGetTime64 ( "10z", &sError ));
+	ASSERT_STREQ ( sError, "z" );
+}
+
 
 TEST ( functions, hashmap_iterations )
 {

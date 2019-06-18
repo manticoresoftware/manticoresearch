@@ -383,7 +383,7 @@ bool sphWildcardMatch ( const char * sString, const char * sPattern, const int *
 }
 
 //////////////////////////////////////////////////////////////////////////
-// cases are covered by (functions, size_parser) gtest_functions.cpp
+// cases are covered by TEST (functions, size_parser) gtest_functions.cpp
 int64_t sphGetSize64 ( const char * sValue, char ** ppErr, int64_t iDefault )
 {
 	if ( !sValue )
@@ -417,6 +417,48 @@ int64_t sphGetSize64 ( const char * sValue, char ** ppErr, int64_t iDefault )
 	return iRes;
 }
 
+// cases are covered by TEST ( functions, time_parser ) gtest_functions.cpp
+int64_t sphGetTime64 ( const char* sValue, char** ppErr, int64_t iDefault )
+{
+	if ( !sValue )
+		return iDefault;
+
+	if ( !strlen ( sValue ) )
+		return iDefault;
+
+	char* sEnd;
+	int64_t iRes = strtoll ( sValue, &sEnd, 10 );
+
+	switch ( *sEnd )
+	{
+		case 'w': case 'W' : iRes *= 7; // passthrow
+		case 'd': case 'D' : iRes *= 24; // passthrow
+		case 'h': case 'H' : iRes *= 3600 * 1000000LL; break;
+		case 'm': case 'M':
+			switch ( sEnd[1] ) {
+				case 's': case 'S' : iRes *= 1000; break;
+				default: iRes *= 1000000*60; break;
+			}
+			break;
+		case 'u': case 'U':
+			switch ( sEnd[1] ) {
+				case 's': case 'S' : break; // no multiplier for useconds
+				default:
+					if ( ppErr )
+						*ppErr = sEnd;
+					iRes = iDefault;
+			}
+			break;
+
+		case 's': case 'S': case '\0' : iRes *= 1000000; break; // sec is default
+		default:
+			if ( ppErr )
+				*ppErr = sEnd;
+			iRes = iDefault;
+	}
+	return iRes;
+}
+
 int64_t CSphConfigSection::GetSize64 ( const char * sKey, int64_t iDefault ) const
 {
 	CSphVariant * pEntry = (*this)( sKey );
@@ -446,6 +488,69 @@ int CSphConfigSection::GetSize ( const char * sKey, int iDefault ) const
 		iSize = INT_MAX;
 	}
 	return (int)iSize;
+}
+
+int64_t CSphConfigSection::GetUsTime64S ( const char* sKey, int64_t iDefault ) const
+{
+	CSphVariant* pEntry = ( *this ) ( sKey );
+	if ( !pEntry )
+	{
+		sphLogDebug ( "'%s' - nothing specified, using default value " INT64_FMT, sKey, iDefault );
+		return iDefault;
+	}
+
+	char* sErr = nullptr;
+	auto iRes = sphGetTime64 ( pEntry->cstr (), &sErr, iDefault );
+
+	if ( sErr && *sErr )
+	{
+		sphWarning ( "'%s = %s' parse error '%s'", sKey, pEntry->cstr (), sErr );
+		iRes = iDefault;
+	}
+	return iRes;
+}
+
+int64_t CSphConfigSection::GetUsTime64Ms ( const char* sKey, int64_t iDefault ) const
+{
+	CSphVariant* pEntry = ( *this ) ( sKey );
+	if ( !pEntry )
+	{
+		sphLogDebug ( "'%s' - nothing specified, using default value " INT64_FMT, sKey, iDefault );
+		return iDefault;
+	}
+	StringBuilder_c sTmp;
+	sTmp << pEntry->strval () << "ms";
+	char* sErr = nullptr;
+	auto iRes = sphGetTime64 ( sTmp.cstr (), &sErr, iDefault );
+
+	if ( sErr && *sErr )
+	{
+		sphWarning ( "'%s = %s' parse error '%s'", sKey, sTmp.cstr (), sErr );
+		iRes = iDefault;
+	}
+	return iRes;
+}
+
+int CSphConfigSection::GetSTimeS ( const char* sKey, int iDefault ) const
+{
+	int64_t iTime = GetUsTime64S ( sKey, iDefault*1000000 ) / 1000000ll;
+	if ( iTime>INT_MAX )
+	{
+		sphWarning ( "'%s = " INT64_FMT "' clamped to %d(INT_MAX)", sKey, iTime, INT_MAX );
+		iTime = INT_MAX;
+	}
+	return ( int ) iTime;
+}
+
+int CSphConfigSection::GetMsTimeMs ( const char* sKey, int iDefault ) const
+{
+	int64_t iTime = GetUsTime64Ms ( sKey, iDefault*1000 ) / 1000ll;
+	if ( iTime>INT_MAX )
+	{
+		sphWarning ( "'%s = " INT64_FMT "' clamped to %d(INT_MAX)", sKey, iTime, INT_MAX );
+		iTime = INT_MAX;
+	}
+	return ( int ) iTime;
 }
 
 //////////////////////////////////////////////////////////////////////////

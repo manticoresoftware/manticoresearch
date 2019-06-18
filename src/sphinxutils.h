@@ -113,6 +113,11 @@ bool sphWildcardMatch ( const char * sSstring, const char * sPattern, const int 
 /// parse size from text (int, or K/M/G/T suffix), or return provided default value.
 /// *ppErr, if provided, will point to parsing error, if any
 int64_t sphGetSize64 ( const char * sValue, char ** ppErr = nullptr, int64_t iDefault=-1 );
+
+/// parse time from text (seconds, or us/ms/s/m/h/d/w suffix), or return provided default value.
+/// \return result in uSeconds, i.e. may be directly compared with sphMicroTimer(), etc.
+/// *ppErr, if provided, will point to parsing error, if any. By default scale is 's', seconds.
+int64_t sphGetTime64 ( const char* sValue, char** ppErr = nullptr, int64_t iDefault = -1 );
 //////////////////////////////////////////////////////////////////////////
 
 /// config section (hash of variant values)
@@ -144,9 +149,19 @@ public:
 		return pEntry ? pEntry->strval().cstr() : sDefault;
 	}
 
-	/// get size option (plain int, or with K/M prefix) value by key and default value
+	/// get size option (plain int, or with K/M suffix) value by key and default value
 	int		GetSize ( const char * sKey, int iDefault ) const;
 	int64_t GetSize64 ( const char * sKey, int64_t iDefault ) const;
+
+	/// get time option in useconds (1000*1000 useconds = 1 second)
+	/// (plain int, or with us/ms/s/m/h/d/w suffix) value by key and default value
+	/// if no key specified, GetTime64 considers num in seconds, GetTime64ms in milliseconds.
+	int64_t GetUsTime64S ( const char* sKey, int64_t iDefault ) const;
+	int64_t GetUsTime64Ms ( const char* sKey, int64_t iDefault ) const;
+
+	// same as GetUsTime, but returns value expressed in int milliseconds and seconds
+	int GetSTimeS ( const char* sKey, int iDefault=0 ) const; // default seconds
+	int GetMsTimeMs ( const char* sKey, int iDefault=0 ) const; // default milliseconds
 
 	void Swap ( CSphConfigSection& other ) noexcept
 	{

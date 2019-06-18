@@ -19697,7 +19697,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 		if ( hIndex["agent_connect_timeout"].intval()<=0 )
 			sphWarning ( "index '%s': agent_connect_timeout must be positive, ignored", szIndexName );
 		else
-			tIdx.m_iAgentConnectTimeout = hIndex["agent_connect_timeout"].intval();
+			tIdx.m_iAgentConnectTimeout = hIndex.GetMsTimeMs ( "agent_connect_timeout" );
 	}
 
 	tIdx.m_bDivideRemoteRanges = hIndex.GetInt ( "divide_remote_ranges", 0 )!=0;
@@ -19707,7 +19707,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 		if ( hIndex["agent_query_timeout"].intval()<=0 )
 			sphWarning ( "index '%s': agent_query_timeout must be positive, ignored", szIndexName );
 		else
-			tIdx.m_iAgentQueryTimeout = hIndex["agent_query_timeout"].intval();
+			tIdx.m_iAgentQueryTimeout = hIndex.GetMsTimeMs ( "agent_query_timeout");
 	}
 
 	bool bHaveHA = tIdx.m_dAgents.FindFirst ( [] ( MultiAgentDesc_c * ag ) { return ag->IsHA (); } );
@@ -23776,13 +23776,13 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 			sphFatal ( "mandatory option 'pid_file' not found in 'searchd' section" );
 
 	if ( hSearchd.Exists ( "read_timeout" ) && hSearchd["read_timeout"].intval()>=0 )
-		g_iReadTimeout = hSearchd["read_timeout"].intval();
+		g_iReadTimeout = hSearchd.GetSTimeS ("read_timeout");
 
 	if ( hSearchd.Exists ( "sphinxql_timeout" ) && hSearchd["sphinxql_timeout"].intval()>=0 )
-		g_iClientQlTimeout = hSearchd["sphinxql_timeout"].intval();
+		g_iClientQlTimeout = hSearchd.GetSTimeS("sphinxql_timeout");
 
 	if ( hSearchd.Exists ( "client_timeout" ) && hSearchd["client_timeout"].intval()>=0 )
-		g_iClientTimeout = hSearchd["client_timeout"].intval();
+		g_iClientTimeout = hSearchd.GetSTimeS ( "client_timeout" );
 
 	if ( hSearchd.Exists ( "max_children" ) && hSearchd["max_children"].intval()>=0 )
 	{
@@ -23838,19 +23838,19 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	if ( !g_bSeamlessRotate && g_bPreopenIndexes )
 		sphWarning ( "preopen_indexes=1 has no effect with seamless_rotate=0" );
 
-	g_iAttrFlushPeriod = hSearchd.GetInt ( "attr_flush_period", g_iAttrFlushPeriod );
+	g_iAttrFlushPeriod = hSearchd.GetSTimeS ( "attr_flush_period", g_iAttrFlushPeriod );
 	g_iMaxPacketSize = hSearchd.GetSize ( "max_packet_size", g_iMaxPacketSize );
 	g_iMaxFilters = hSearchd.GetInt ( "max_filters", g_iMaxFilters );
 	g_iMaxFilterValues = hSearchd.GetInt ( "max_filter_values", g_iMaxFilterValues );
 	g_iMaxBatchQueries = hSearchd.GetInt ( "max_batch_queries", g_iMaxBatchQueries );
 	g_iDistThreads = hSearchd.GetInt ( "dist_threads", g_iDistThreads );
 	sphSetThrottling ( hSearchd.GetInt ( "rt_merge_iops", 0 ), hSearchd.GetSize ( "rt_merge_maxiosize", 0 ) );
-	g_iPingInterval = hSearchd.GetInt ( "ha_ping_interval", 1000 );
-	g_uHAPeriodKarma = hSearchd.GetInt ( "ha_period_karma", 60 );
-	g_iQueryLogMinMsec = hSearchd.GetInt ( "query_log_min_msec", g_iQueryLogMinMsec );
-	g_iAgentConnectTimeout = hSearchd.GetInt ( "agent_connect_timeout", g_iAgentConnectTimeout );
-	g_iAgentQueryTimeout = hSearchd.GetInt ( "agent_query_timeout", g_iAgentQueryTimeout );
-	g_iAgentRetryDelay = hSearchd.GetInt ( "agent_retry_delay", g_iAgentRetryDelay );
+	g_iPingInterval = hSearchd.GetMsTimeMs ( "ha_ping_interval", 1000 );
+	g_uHAPeriodKarma = hSearchd.GetSTimeS ( "ha_period_karma", 60 );
+	g_iQueryLogMinMsec = hSearchd.GetMsTimeMs ( "query_log_min_msec", g_iQueryLogMinMsec );
+	g_iAgentConnectTimeout = hSearchd.GetMsTimeMs ( "agent_connect_timeout", g_iAgentConnectTimeout );
+	g_iAgentQueryTimeout = hSearchd.GetMsTimeMs ( "agent_query_timeout", g_iAgentQueryTimeout );
+	g_iAgentRetryDelay = hSearchd.GetMsTimeMs ( "agent_retry_delay", g_iAgentRetryDelay );
 	if ( g_iAgentRetryDelay > MAX_RETRY_DELAY )
 		sphWarning ( "agent_retry_delay %d exceeded max recommended %d", g_iAgentRetryDelay, MAX_RETRY_DELAY );
 	g_iAgentRetryCount = hSearchd.GetInt ( "agent_retry_count", g_iAgentRetryCount );
@@ -23899,11 +23899,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		ParsePredictedTimeCosts ( hSearchd["predicted_time_costs"].cstr() );
 
 	if ( hSearchd("shutdown_timeout") )
-	{
-		int iTimeout = hSearchd.GetInt ( "shutdown_timeout", 0 );
-		if ( iTimeout )
-			g_iShutdownTimeout = iTimeout * 1000000;
-	}
+		g_iShutdownTimeout = hSearchd.GetUsTime64S ( "shutdown_timeout", 3000000);
 
 	if ( hSearchd.Exists ( "max_open_files" ) )
 	{
@@ -23937,8 +23933,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 
 	QcacheStatus_t s = QcacheGetStatus();
 	s.m_iMaxBytes = hSearchd.GetSize64 ( "qcache_max_bytes", s.m_iMaxBytes );
-	s.m_iThreshMsec = hSearchd.GetInt ( "qcache_thresh_msec", s.m_iThreshMsec );
-	s.m_iTtlSec = hSearchd.GetInt ( "qcache_ttl_sec", s.m_iTtlSec );
+	s.m_iThreshMsec = hSearchd.GetMsTimeMs ( "qcache_thresh_msec", s.m_iThreshMsec );
+	s.m_iTtlSec = hSearchd.GetSTimeS ( "qcache_ttl_sec", s.m_iTtlSec );
 	QcacheSetup ( s.m_iMaxBytes, s.m_iThreshMsec, s.m_iTtlSec );
 
 	// hostname_lookup = {config_load | request}

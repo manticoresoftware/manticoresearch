@@ -1478,7 +1478,7 @@ class CSphSchema : public CSphSchemaHelper
 
 public:
 	/// ctor
-	explicit				CSphSchema ( const char * sName="(nameless)" );
+	explicit				CSphSchema ( CSphString sName="(nameless)" );
 							CSphSchema ( const CSphSchema & rhs );
 							CSphSchema ( CSphSchema && rhs ) noexcept;
 	void					Swap ( CSphSchema & rhs ) noexcept;
@@ -3395,7 +3395,7 @@ public:
 	virtual bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError ) = 0;
 
 	virtual void				FlushDeadRowMap ( bool bWaitComplete ) const {};
-	virtual bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, CSphVector<KillListTarget_t> & dTargets, CSphString & sError ) { return true; }
+	virtual bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, CSphVector<KillListTarget_t> & dTargets, CSphString & sError ) const { return true; }
 	virtual bool				AlterKillListTarget ( CSphVector<KillListTarget_t> & dTargets, CSphString & sError ) { return false; }
 	virtual void				KillExistingDocids ( CSphIndex * pTarget ) {}
 	virtual int					KillMulti ( const DocID_t * pKlist, int iKlistSize ) { return 0; }

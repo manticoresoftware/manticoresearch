@@ -2558,7 +2558,7 @@ public:
 
 	bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError ) final;
 	void				FlushDeadRowMap ( bool bWaitComplete ) const final;
-	bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, CSphVector<KillListTarget_t> & dTargets, CSphString & sError ) final;
+	bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, CSphVector<KillListTarget_t> & dTargets, CSphString & sError ) const final;
 	bool				AlterKillListTarget ( CSphVector<KillListTarget_t> & dTargets, CSphString & sError ) final;
 	void				KillExistingDocids ( CSphIndex * pTarget ) final;
 
@@ -7123,8 +7123,8 @@ void CSphSchemaHelper::CopyPtrsSpecial ( CSphMatch * pDst, const void* _pSrc, co
 
 //////////////////////////////////////////////////////////////////////////
 
-CSphSchema::CSphSchema ( const char * sName )
-	: m_sName ( sName )
+CSphSchema::CSphSchema ( CSphString sName )
+	: m_sName ( std::move(sName) )
 {
 	memset ( m_dBuckets, 0xFF, sizeof ( m_dBuckets ) );
 }
@@ -9760,7 +9760,7 @@ void CSphIndex_VLN::FlushDeadRowMap ( bool bWaitComplete ) const
 }
 
 
-bool CSphIndex_VLN::LoadKillList ( CSphFixedVector<DocID_t> *pKillList, CSphVector<KillListTarget_t> & dTargets, CSphString & sError )
+bool CSphIndex_VLN::LoadKillList ( CSphFixedVector<DocID_t> *pKillList, CSphVector<KillListTarget_t> & dTargets, CSphString & sError ) const
 {
 	CSphString sSPK = GetIndexFileName(SPH_EXT_SPK);
 	if ( !sphIsReadable ( sSPK.cstr() ) )

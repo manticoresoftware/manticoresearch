@@ -676,7 +676,7 @@ struct ServedDesc_t
 	CSphString	m_sNewPath;		///< when reloading because of config changed, it contains path to new index.
 	bool		m_bPreopen		= false;
 	int			m_iExpandKeywords { KWE_DISABLED };
-	bool		m_bOnlyNew		= false; ///< load new (previously not loaded) index - need fixup, prealloc, etc.
+	bool		m_bOnlyNew		= false; ///< load new clean index - no previous valid files, no .old backups possible, no way to serve if loading failed.
 	CSphString	m_sGlobalIDFPath;
 	int64_t		m_iMass			= 0; // relative weight (by access speed) of the index
 	int			m_iRotationPriority = 0;	// rotation priority (for proper rotation of indexes chained by killlist_target). 0==high priority

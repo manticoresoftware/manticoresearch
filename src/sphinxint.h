@@ -1717,7 +1717,7 @@ class IndexFiles_c : public ISphNoncopyable
 	CSphString	m_sLastError;
 	bool		m_bFatal = false; // if fatal fail happened (unable to rename during rollback)
 	CSphString FullPath ( const char * sExt, const char * sSuffix = "", const char * sBase = nullptr );
-	inline void SetName ( const char* sIndex ) { m_sIndexName = sIndex; }
+	inline void SetName ( CSphString sIndex ) { m_sIndexName = std::move(sIndex); }
 
 public:
 	IndexFiles_c() = default;

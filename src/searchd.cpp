@@ -17437,7 +17437,7 @@ static void HandleMysqlShowPlan ( SqlRowBuffer_c & tOut, const CSphQueryProfile 
 }
 
 static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError );
-static bool RotateIndexGreedy ( const ServedIndex_c * pIndex, ServedDesc_t & tServed, const char * sIndex, CSphString & sError );
+static bool RotateIndexGreedy ( ServedDesc_t & tServed, const char * sIndex, CSphString & sError );
 static void HandleMysqlReloadIndex ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
 	CSphString sError;
@@ -17483,7 +17483,7 @@ static void HandleMysqlReloadIndex ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 	} else
 	{
 		ServedDescWPtr_c pServedWL ( pIndex );
-		if ( !RotateIndexGreedy ( pIndex, *pServedWL, tStmt.m_sIndex.cstr(), sError ) )
+		if ( !RotateIndexGreedy ( *pServedWL, tStmt.m_sIndex.cstr(), sError ) )
 		{
 			sphWarning ( "%s", sError.cstr() );
 			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -18450,10 +18450,10 @@ bool ApplyKillListsTo ( ServedDesc_t & tLockedServed, CSphString & sError )
 enum class RotateFrom_e
 {
 	NONE,
-	NEW,
-	REENABLE,
-	PATH_NEW,
-	PATH_COPY
+	NEW,		// move index from idx.new.ext into idx.ext
+	REENABLE,	// just load the index
+	PATH_NEW,	// move from some external path, idx.new.ext into idx.ext
+	PATH_COPY	// move from some external path to current path.
 };
 
 
@@ -18506,7 +18506,7 @@ RotateFrom_e CheckIndexHeaderRotate ( const ServedDesc_t & tServed )
 }
 
 /// returns true if any version of the index (old or new one) has been preread
-bool RotateIndexGreedy ( const ServedIndex_c * pIndex, ServedDesc_t &tWlockedIndex, const char * szIndex, CSphString & sError ) REQUIRES (pIndex->rwlock ())
+bool RotateIndexGreedy (ServedDesc_t &tWlockedIndex, const char * szIndex, CSphString & sError )
 {
 	sphLogDebug ( "RotateIndexGreedy for '%s' invoked", szIndex );
 	IndexFiles_c dFiles ( tWlockedIndex.m_sIndexPath, szIndex );
@@ -18555,14 +18555,10 @@ bool RotateIndexGreedy ( const ServedIndex_c * pIndex, ServedDesc_t &tWlockedInd
 				sphFatal ( "%s", dFiles.FatalMsg ( "rotating" ).cstr () );
 
 			// rollback old ones
-			if ( !tWlockedIndex.m_bOnlyNew )
-			{
-				if ( !dFiles.RollbackSuff ( ".old" ) )
-					sphFatal ( "%s", dFiles.FatalMsg ( "rotating" ).cstr () );
-				return false;
-			}
-
-			sError.SetSprintf ( "rotating index '%s': %s; using old index", szIndex, dFiles.ErrorMsg () );
+			if ( tWlockedIndex.m_bOnlyNew )
+				sError.SetSprintf ( "rotating index '%s': %s; using old index", szIndex, dFiles.ErrorMsg() );
+			else if ( !dFiles.RollbackSuff ( ".old" ) )
+				sphFatal ( "%s", dFiles.FatalMsg ( "rotating" ).cstr () );
 			return false;
 		}
 
@@ -18579,7 +18575,7 @@ bool RotateIndexGreedy ( const ServedIndex_c * pIndex, ServedDesc_t &tWlockedInd
 	{
 		if ( tWlockedIndex.m_bOnlyNew )
 		{
-			sError.SetSprintf ( "rotating index '%s': .new preload failed: %s; NOT SERVING", szIndex, tWlockedIndex.m_pIndex->GetLastError().cstr() );
+			sError.SetSprintf ( "rotating index '%s': .new prealloc failed: %s; NOT SERVING", szIndex, tWlockedIndex.m_pIndex->GetLastError().cstr() );
 			return false;
 		}
 		sphWarning ( "rotating index '%s': .new preload failed: %s", szIndex, tWlockedIndex.m_pIndex->GetLastError().cstr() );
@@ -18589,7 +18585,7 @@ bool RotateIndexGreedy ( const ServedIndex_c * pIndex, ServedDesc_t &tWlockedInd
 		if ( !dFiles.RollbackSuff ( ".old" ) )
 			sphFatal ( "%s", dFiles.FatalMsg ( "rotating" ).cstr () );
 
-		sphLogDebug ( "RotateIndexGreedy: has recovered. Prelloc it." );
+		sphLogDebug ( "RotateIndexGreedy: has recovered. Prealloc it." );
 		bPreallocSuccess = tWlockedIndex.m_pIndex->Prealloc ( g_bStripPath );
 		if ( !bPreallocSuccess )
 			sError.SetSprintf ( "rotating index '%s': .new preload failed; ROLLBACK FAILED; INDEX UNUSABLE", szIndex );
@@ -19266,7 +19262,7 @@ ESphAddIndex AddDistributedIndex ( const char * szIndexName, const CSphConfigSec
 }
 
 // hash any local index (plain, rt, etc.)
-bool AddLocallyServedIndex ( const char * szIndexName, ServedDesc_t & tIdx, bool bReplace ) REQUIRES ( MainThread )
+bool AddLocallyServedIndex ( const CSphString& sIndexName, ServedDesc_t & tIdx, bool bReplace ) REQUIRES ( MainThread )
 {
 	ServedIndexRefPtr_c pIdx ( new ServedIndex_c ( tIdx ) );
 
@@ -19274,20 +19270,20 @@ bool AddLocallyServedIndex ( const char * szIndexName, ServedDesc_t & tIdx, bool
 	// so all no-templates we implicitly add to disabled hash
 	if ( tIdx.m_eType!=IndexType_e::TEMPLATE )
 	{
-		g_pLocalIndexes->AddUniq ( nullptr, szIndexName );
-		if ( !g_pDisabledIndexes->AddUniq ( pIdx, szIndexName ) )
+		g_pLocalIndexes->AddUniq ( nullptr, sIndexName );
+		if ( !g_pDisabledIndexes->AddUniq ( pIdx, sIndexName ) )
 		{
-			sphWarning ( "INTERNAL ERROR: index '%s': hash add failed - NOT SERVING", szIndexName );
-			g_pLocalIndexes->DeleteIfNull ( szIndexName );
+			sphWarning ( "INTERNAL ERROR: index '%s': hash add failed - NOT SERVING", sIndexName.cstr() );
+			g_pLocalIndexes->DeleteIfNull ( sIndexName );
 			return false;
 		}
 	} else // templates we either add, either replace depending on requiested action
 	{
 		if ( bReplace )
-			g_pLocalIndexes->AddOrReplace ( pIdx, szIndexName );
-		else if ( !g_pLocalIndexes->AddUniq ( pIdx, szIndexName ) )
+			g_pLocalIndexes->AddOrReplace ( pIdx, sIndexName );
+		else if ( !g_pLocalIndexes->AddUniq ( pIdx, sIndexName ) )
 		{
-			sphWarning ( "INTERNAL ERROR: index '%s': hash add failed - NOT SERVING", szIndexName );
+			sphWarning ( "INTERNAL ERROR: index '%s': hash add failed - NOT SERVING", sIndexName.cstr () );
 			return false;
 		}
 	}
@@ -19992,8 +19988,8 @@ static void DoGreedyRotation() REQUIRES ( MainThread )
 
 	while ( g_pDisabledIndexes->GetLength() )
 	{
-		CSphString sIndex, sError;
-		ServedIndexRefPtr_c pIndex ( nullptr );
+		CSphString sDisabledIndex, sError;
+		ServedIndexRefPtr_c pDisabledIndex ( nullptr );
 
 		// find the index with the best (least) rotation priority
 		int iMinPriority = INT_MAX;
@@ -20003,70 +19999,70 @@ static void DoGreedyRotation() REQUIRES ( MainThread )
 
 			if ( rLocked->m_iRotationPriority < iMinPriority )
 			{
-				sIndex = it.GetName();
-				pIndex = it.Get();
+				sDisabledIndex = it.GetName();
+				pDisabledIndex = it.Get();
 				iMinPriority = rLocked->m_iRotationPriority;
 			}
 		}
 
-		assert ( pIndex );
+		assert ( pDisabledIndex );
 
 		// special processing for plain old rotation cur.new.* -> cur.*
-		if ( !ServedDescRPtr_c(pIndex)->m_pIndex )
+		if ( !ServedDescRPtr_c( pDisabledIndex)->m_pIndex )
 		{
-			auto pRotating = GetServed ( sIndex );
+			auto pRotating = GetServed ( sDisabledIndex );
 			assert ( pRotating );
 			ServedDescWPtr_c pWRotating ( pRotating );
 			assert ( pWRotating->m_eType==IndexType_e::PLAIN );
-			if ( !RotateIndexGreedy ( pRotating, *pWRotating, sIndex.cstr(), sError ) )
+			if ( !RotateIndexGreedy ( *pWRotating, sDisabledIndex.cstr(), sError ) )
 			{
 				sphWarning ( "%s", sError.cstr () );
-				g_pLocalIndexes->Delete ( sIndex );
+				g_pLocalIndexes->Delete ( sDisabledIndex );
 			}
 		}
 		else
 		{
-			ServedDescWPtr_c pWlockedServedPtr ( pIndex );
+			ServedDescWPtr_c pWlockedServedDisabledPtr ( pDisabledIndex );
 
-			assert ( pWlockedServedPtr->m_pIndex );
-			assert ( g_pLocalIndexes->Contains ( sIndex ) );
+			assert ( pWlockedServedDisabledPtr->m_pIndex );
+			assert ( g_pLocalIndexes->Contains ( sDisabledIndex ) );
 
 			// prealloc RT and percolate here
-			if ( ServedDesc_t::IsMutable ( pWlockedServedPtr ) )
+			if ( ServedDesc_t::IsMutable ( pWlockedServedDisabledPtr ) )
 			{
-				pWlockedServedPtr->m_bOnlyNew = false;
-				if ( PreallocNewIndex ( *pWlockedServedPtr, &g_pCfg.m_tConf["index"][sIndex], sIndex.cstr() ) )
+				pWlockedServedDisabledPtr->m_bOnlyNew = false;
+				if ( PreallocNewIndex ( *pWlockedServedDisabledPtr, &g_pCfg.m_tConf["index"][sDisabledIndex], sDisabledIndex.cstr() ) )
 				{
-					g_pLocalIndexes->AddOrReplace ( pIndex, sIndex );
-					pIndex->AddRef ();
+					g_pLocalIndexes->AddOrReplace ( pDisabledIndex, sDisabledIndex );
+					pDisabledIndex->AddRef ();
 				} else
-					g_pLocalIndexes->DeleteIfNull ( sIndex );
+					g_pLocalIndexes->DeleteIfNull ( sDisabledIndex );
 			}
-			else if ( pWlockedServedPtr->m_eType==IndexType_e::PLAIN )
+			else if ( pWlockedServedDisabledPtr->m_eType==IndexType_e::PLAIN )
 			{
-				bool bWasAdded = pWlockedServedPtr->m_bOnlyNew;
-				bool bOk = RotateIndexGreedy ( pIndex, *pWlockedServedPtr, sIndex.cstr(), sError );
+				bool bWasAdded = pWlockedServedDisabledPtr->m_bOnlyNew;
+				bool bOk = RotateIndexGreedy ( *pWlockedServedDisabledPtr, sDisabledIndex.cstr(), sError );
 				if ( !bOk )
 					sphWarning ( "%s", sError.cstr() );
 
-				if ( bWasAdded && bOk && !sphFixupIndexSettings ( pWlockedServedPtr->m_pIndex, g_pCfg.m_tConf["index"][sIndex], sError, g_bStripPath ) )
+				if ( bWasAdded && bOk && !sphFixupIndexSettings ( pWlockedServedDisabledPtr->m_pIndex, g_pCfg.m_tConf["index"][sDisabledIndex], sError, g_bStripPath ) )
 				{
-					sphWarning ( "index '%s': %s - NOT SERVING", sIndex.cstr(), sError.cstr() );
+					sphWarning ( "index '%s': %s - NOT SERVING", sDisabledIndex.cstr(), sError.cstr() );
 					bOk = false;
 				}
 
 				if ( bOk )
 				{
-					pWlockedServedPtr->m_pIndex->Preread();
-					g_pLocalIndexes->AddOrReplace ( pIndex, sIndex );
-					pIndex->AddRef ();
+					pWlockedServedDisabledPtr->m_pIndex->Preread();
+					g_pLocalIndexes->AddOrReplace ( pDisabledIndex, sDisabledIndex );
+					pDisabledIndex->AddRef ();
 				} else
-					g_pLocalIndexes->DeleteIfNull ( sIndex );
+					g_pLocalIndexes->DeleteIfNull ( sDisabledIndex );
 			}
 		}
 
-		g_pDisabledIndexes->Delete ( sIndex );
-		g_pDistIndexes->Delete ( sIndex ); // postponed delete of same-named distributed (if any)
+		g_pDisabledIndexes->Delete ( sDisabledIndex );
+		g_pDistIndexes->Delete ( sDisabledIndex ); // postponed delete of same-named distributed (if any)
 	}
 
 	g_pDisabledIndexes->ReleaseAndClear ();
@@ -23463,7 +23459,7 @@ ESphAddIndex ConfigureAndPreload ( const CSphConfigSection & hIndex, const char 
 		{
 			pJustAddedLocalWl->m_bOnlyNew = !dJustAddedFiles.HasAllFiles();
 			CSphString sError;
-			if ( RotateIndexGreedy ( pHandle, *pJustAddedLocalWl, sIndexName, sError ) )
+			if ( RotateIndexGreedy ( *pJustAddedLocalWl, sIndexName, sError ) )
 			{
 				bPreloadOk = sphFixupIndexSettings ( pJustAddedLocalWl->m_pIndex, hIndex, sError, g_bStripPath );
 				if ( !bPreloadOk )

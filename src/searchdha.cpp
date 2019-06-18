@@ -19,6 +19,7 @@
 
 #include "searchdaemon.h"
 #include "searchdha.h"
+#include "searchdtask.h"
 
 #include <utility>
 
@@ -2638,170 +2639,22 @@ void PollableEvent_t::DisposeEvent () const
 	}
 }
 
-struct Task_t
+
+struct Task_t:
 #if USE_WINDOWS
-	: DoubleOverlapped_t
+	DoubleOverlapped_t,
 #endif
+	EnqueuedTimeout_t
 {
 	enum IO : BYTE { NO = 0, RW = 1, RO = 2 };
 
 	AgentConn_t *	m_pPayload	= nullptr;	// ext conn we hold
-	int64_t			m_iTimeoutTime = -1;	// active timeout (used for bin heap morph)
 	int64_t			m_iPlannedTimeout = 0;	// asked timeout (-1 - delete task, 0 - no changes; >0 - set value)
-	int				m_iTimeoutIdx = -1;		// idx inside timeouts bin heap (or -1 if not there)
 	int				m_ifd = -1;
 	int 			m_iStoredfd = -1;		// helper to find original fd if socket was closed
 	int				m_iTickProcessed=0;		// tick # to detect and avoid reading callback in same loop with write
 	BYTE			m_uIOActive = NO;		// active IO callbacks: 0-none, 1-r+w, 2-r
 	BYTE			m_uIOChanged = NO;		// need IO changes: dequeue (if !m_uIOActive), 1-set to rw, 2-set to ro
-};
-
-inline static bool operator< (const Task_t& dLeft, const Task_t& dRight )
-{
-	return dLeft.m_iTimeoutTime<dRight.m_iTimeoutTime;
-}
-
-/// priority queue for timeouts - as CSphQueue, but specific (can resize, stores internal index in an object)
-class TimeoutQueue_c
-{
-	CSphTightVector<Task_t*> m_dQueue;
-	CSphTightVector<uintptr_t> m_dCloud;
-
-	inline void ShiftUp ( int iHole )
-	{
-		if ( m_dQueue.IsEmpty () )
-			return;
-		int iParent = ( iHole - 1 ) / 2;
-		// shift up if needed, so that worst (lesser) ones float to the top
-		while ( iHole && *m_dQueue[iHole]<*m_dQueue[iParent] )
-		{
-			Swap ( m_dQueue[iHole], m_dQueue[iParent] );
-			m_dQueue[iHole]->m_iTimeoutIdx = iHole;
-			iHole = iParent;
-			iParent = ( iHole - 1 ) / 2;
-		}
-		m_dQueue[iHole]->m_iTimeoutIdx = iHole;
-	};
-
-	inline void ShiftDown ( int iHole )
-	{
-		if ( m_dQueue.IsEmpty () || iHole==m_dQueue.GetLength () )
-			return;
-		auto iMinChild = iHole * 2 + 1;
-		auto iUsed = m_dQueue.GetLength ();
-		while ( iMinChild<iUsed )
-		{
-			// select smallest child
-			if ( iMinChild + 1<iUsed && *m_dQueue[iMinChild + 1]<*m_dQueue[iMinChild] )
-				++iMinChild;
-
-			// if smallest child is less than entry, do float it to the top
-			if ( *m_dQueue[iHole]<*m_dQueue[iMinChild] )
-				break;
-
-			Swap ( m_dQueue[iHole], m_dQueue[iMinChild] );
-			m_dQueue[iHole]->m_iTimeoutIdx = iHole;
-			iHole = iMinChild;
-			iMinChild = iHole * 2 + 1;
-		}
-		m_dQueue[iHole]->m_iTimeoutIdx = iHole;
-	}
-
-public:
-	void Push ( Task_t * pTask )
-	{
-		if ( !pTask )
-			return;
-
-		m_dQueue.Add ( pTask );
-		ShiftUp ( m_dQueue.GetLength () - 1 );
-		m_dCloud.Add ( ( uintptr_t ) pTask );
-		m_dCloud.Uniq();
-	}
-
-	/// remove root (ie. top priority) entry
-	void Pop ()
-	{
-		if ( m_dQueue.IsEmpty() )
-			return;
-
-		m_dQueue[0]->m_iTimeoutIdx = -1;
-		Verify (m_dCloud.RemoveValueFromSorted ( ( uintptr_t ) m_dQueue[0] ) );
-		m_dQueue.RemoveFast (0);
-		ShiftDown(0);
-	}
-
-	/// entry m.b. already added, but timeout changed and it need to be rebalanced
-	void Change ( Task_t * pTask )
-	{
-		if ( !pTask )
-			return;
-
-		auto iHole = pTask->m_iTimeoutIdx;
-		if ( iHole<0 )
-		{
-			Push ( pTask );
-			return;
-		}
-
-		if ( iHole && *m_dQueue[iHole]<*m_dQueue[( iHole - 1 ) / 2] )
-			ShiftUp ( iHole );
-		else
-			ShiftDown ( iHole );
-	}
-
-	/// erase elem using stored idx
-	void Remove ( Task_t * pTask )
-	{
-		if ( !pTask )
-			return;
-
-		auto iHole = pTask->m_iTimeoutIdx;
-		if ( iHole<0 || iHole>=m_dQueue.GetLength () )
-			return;
-
-		Verify ( m_dCloud.RemoveValueFromSorted ( ( uintptr_t ) pTask ) );
-		m_dQueue.RemoveFast ( iHole );
-		if ( iHole<m_dQueue.GetLength () )
-		{
-			if ( iHole && *m_dQueue[iHole]<*m_dQueue[( iHole - 1 ) / 2] )
-				ShiftUp ( iHole );
-			else
-				ShiftDown ( iHole );
-		}
-		pTask->m_iTimeoutIdx = -1;
-	}
-
-	inline bool IsEmpty () const
-	{
-		return m_dQueue.IsEmpty ();
-	}
-
-	inline bool IsNotHere ( const Task_t * pTask ) const
-	{
-		return !m_dCloud.BinarySearch ( ( uintptr_t ) pTask );
-	}
-
-	/// get minimal (root) elem
-	inline Task_t * Root () const
-	{
-		if ( m_dQueue.IsEmpty () )
-			return nullptr;
-		return m_dQueue[0];
-	}
-
-	CSphString DebugDump ( const char * sPrefix ) const
-	{
-		StringBuilder_c tBuild;
-		for ( auto * cTask : m_dQueue )
-			tBuild.Appendf ( tBuild.IsEmpty ()?"%p(" INT64_FMT ")":", %p(" INT64_FMT ")", cTask, cTask->m_iTimeoutTime);
-		CSphString sRes;
-		if ( !m_dQueue.IsEmpty () )
-			sRes.SetSprintf ("%s%d:%s", sPrefix, m_dQueue.GetLength (),tBuild.cstr());
-		else
-			sRes.SetSprintf ( "%sHeap empty.", sPrefix );
-		return sRes;
-	}
 };
 
 ThreadRole LazyThread;
@@ -3410,7 +3263,7 @@ class LazyNetEvents_c : ISphNoncopyable, protected NetEventsFlavour_c
 
 private:
 	/// maps AgentConn_t -> Task_c for new/existing task
-	inline Task_t * CreateNewTask ( AgentConn_t * pConnection )
+	static inline Task_t * CreateNewTask ( AgentConn_t * pConnection )
 	{
 		auto pTask = new Task_t;
 		pTask->m_ifd = pTask->m_iStoredfd = pConnection->m_iSock;
@@ -3548,7 +3401,7 @@ private:
 		bool bHasTimeout = false;
 		while ( !m_dTimeouts.IsEmpty () )
 		{
-			auto pTask = m_dTimeouts.Root ();
+			auto* pTask = ( Task_t* ) m_dTimeouts.Root ();
 			assert ( pTask->m_iTimeoutTime>0 );
 
 			m_iNextTimeoutUS = pTask->m_iTimeoutTime - sphMicroTimer ();
@@ -3586,7 +3439,7 @@ private:
 	{
 		while ( !m_dTimeouts.IsEmpty () )
 		{
-			auto pTask = m_dTimeouts.Root ();
+			auto pTask = ( Task_t* ) m_dTimeouts.Root ();
 			m_dTimeouts.Pop ();
 			CSphRefcountedPtr<AgentConn_t> pKeepConn ( DeleteTask ( pTask, false ) );
 			if ( pKeepConn )
@@ -3980,16 +3833,6 @@ bool sphNBSockEof ( int iSock )
 // in case of epoll/kqueue the full set of polled sockets are stored
 // in a cache inside kernel, so once added, we can't iterate over all of the items.
 // So, we store them in linked list for that purpose.
-
-/// wrap raw void* into ListNode_t to store it in List_t
-struct ListedData_t : public ListNode_t
-{
-	const void * m_pData = nullptr;
-
-	explicit ListedData_t ( const void * pData )
-		: m_pData ( pData )
-	{}
-};
 
 // store and iterate over the list of items
 class IterableEvents_c : public ISphNetEvents

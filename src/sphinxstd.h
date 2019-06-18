@@ -4934,7 +4934,18 @@ public:
 
 private:
 	ListNode_t m_tStub;	///< stub node
-	int m_iCount;
+	volatile int m_iCount;
+};
+
+/// wrap raw void* into ListNode_t to store it in List_t
+struct ListedData_t: public ListNode_t
+{
+	const void* m_pData = nullptr;
+
+	ListedData_t() = default;
+	explicit ListedData_t ( const void* pData )
+		: m_pData ( pData )
+	{}
 };
 
 

@@ -41,7 +41,7 @@
 	#include <signal.h>
 #endif
 
-int				g_iPingInterval		= 0;		// by default ping HA agents every 1 second
+int64_t			g_iPingInterval		= 0;		// by default ping HA agents every 1 second
 DWORD			g_uHAPeriodKarma	= 60;		// by default use the last 1 minute statistic to determine the best HA agent
 
 int				g_iPersistentPoolSize	= 0;
@@ -83,7 +83,7 @@ HostDashboard_t::HostDashboard_t ( const HostDesc_t & tHost )
 {
 	assert ( !tHost.m_pDash );
 	m_tHost.CloneFromHost ( tHost );
-	m_iLastQueryTime = m_iLastAnswerTime = sphMicroTimer () - g_iPingInterval*1000;
+	m_iLastQueryTime = m_iLastAnswerTime = sphMicroTimer ();
 	for ( auto & dMetric : m_dPeriodicMetrics )
 		dMetric.m_dMetrics.Reset ();
 }
@@ -93,9 +93,11 @@ HostDashboard_t::~HostDashboard_t ()
 	SafeDelete ( m_pPersPool );
 }
 
-bool HostDashboard_t::IsOlder ( int64_t iTime ) const
+int64_t HostDashboard_t::EngageTime () const NO_THREAD_SAFETY_ANALYSIS
 {
-	return ( (iTime-m_iLastAnswerTime)>g_iPingInterval*1000LL );
+	// m_dMetricsLock is essential when we read/update all metrics a time, atomically.
+	// (for just one m_iLastAnswerTime it is enough that it is atomic itself, no lock necessary)
+	return m_iLastAnswerTime + g_iPingInterval;
 }
 
 DWORD HostDashboard_t::GetCurSeconds()
@@ -447,6 +449,26 @@ static bool ValidateAndAddDashboard ( AgentDesc_t& dAgent, const WarnInfo_t &tIn
 	return true;
 }
 
+static IPinger* g_pPinger = nullptr;
+void SetGlobalPinger ( IPinger* pPinger )
+{
+	g_pPinger = pPinger;
+}
+
+// Subscribe hosts with just enabled pings (i.e. where iNeedPing is exactly 1, no more)
+void PingCheckAdd ( HostDashboard_t* pHost )
+{
+	if ( !g_pPinger )
+		return;
+
+	if ( !pHost )
+		return;
+
+	assert ( pHost->m_iNeedPing>=0 );
+	if ( pHost->m_iNeedPing==1 )
+		g_pPinger->Subscribe ( pHost );
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // MultiAgentDesc_c
 //
@@ -545,7 +567,10 @@ bool MultiAgentDesc_c::Init ( const CSphVector<AgentDesc_t *> &dHosts,
 	m_bNeedPing = IsHA () && !tOpt.m_bBlackhole;
 	if ( m_bNeedPing )
 		for ( int i = 0; i<GetLength (); ++i )
+		{
 			++m_pData[i].m_pDash->m_iNeedPing;
+			PingCheckAdd ( m_pData[i].m_pDash );
+		}
 
 	return true;
 }

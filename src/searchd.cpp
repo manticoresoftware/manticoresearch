@@ -28,6 +28,8 @@
 #include "searchdreplication.h"
 #include "threadutils.h"
 #include "searchdtask.h"
+#include "taskping.h"
+
 using namespace Threads;
 
 extern "C"
@@ -246,8 +248,6 @@ static volatile bool						g_bInvokeRotationService = false;
 static volatile bool						g_bNeedRotate = false;		// true if there were pending HUPs to handle (they could fly in during previous rotate)
 static volatile bool						g_bInRotate = false;		// true while we are rotating
 static volatile bool						g_bReloadForced = false;	// true in case reload issued via SphinxQL
-
-static ServiceThread_t						g_tPingThread;
 
 static CSphVector<SphThread_t>				g_dTickPoolThread;
 
@@ -1237,7 +1237,6 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	}
 #endif
 	g_tRotationServiceThread.Join();
-	g_tPingThread.Join();
 
 	// force even long time searches to shut
 	sphInterruptNow();
@@ -14855,109 +14854,6 @@ void HandleMysqlReloadIndexes ( SqlRowBuffer_c &tOut )
 	tOut.Ok ();
 }
 
-// The pinger
-struct PingRequestBuilder_t : public IRequestBuilder_t
-{
-	explicit PingRequestBuilder_t ( int iCookie = 0 )
-		: m_iCookie ( iCookie )
-	{}
-	void BuildRequest ( const AgentConn_t &, CachedOutputBuffer_c & tOut ) const final
-	{
-		// API header
-		APICommand_t tWr { tOut, SEARCHD_COMMAND_PING, VER_COMMAND_PING };
-		tOut.SendInt ( m_iCookie );
-	}
-
-protected:
-	const int m_iCookie;
-};
-
-struct PingReplyParser_t : public IReplyParser_t
-{
-	explicit PingReplyParser_t ( int * pCookie )
-		: m_pCookie ( pCookie )
-	{}
-
-	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final
-	{
-		*m_pCookie += tReq.GetDword ();
-		return true;
-	}
-
-protected:
-	int * m_pCookie;
-};
-
-
-static void CheckPing ( int64_t iNow )
-{
-	VecRefPtrsAgentConn_t dConnections;
-	auto dDashes = Dashboard::GetActiveHosts();
-	for ( auto& pDash : dDashes )
-	{
-		assert ( pDash->m_iNeedPing>=0 );
-		if ( pDash->m_iNeedPing )
-		{
-			CSphScopedRLock tRguard ( pDash->m_dMetricsLock );
-			if ( pDash->IsOlder ( iNow ) )
-			{
-				assert ( !pDash->m_tHost.m_pDash );
-				auto * pAgent = new AgentConn_t;
-				pAgent->m_tDesc.CloneFromHost ( pDash->m_tHost );
-				pAgent->m_iMyConnectTimeout = g_iPingInterval;
-				pAgent->m_iMyQueryTimeout = g_iPingInterval;
-				pAgent->m_tDesc.m_pDash = pDash;
-				pDash->AddRef (); // pAgent->m_tDesc above will release on destroy
-				dConnections.Add ( pAgent );
-			}
-		}
-	}
-
-	if ( dConnections.IsEmpty() )
-		return;
-
-	int iReplyCookie = 0;
-
-
-	// fixme! Let's rewrite ping proc another (async) way.
-	PingRequestBuilder_t tReqBuilder ( (int)iNow );
-	PingReplyParser_t tParser ( &iReplyCookie );
-	PerformRemoteTasks ( dConnections, &tReqBuilder, &tParser );
-
-	// connect to remote agents and query them
-	if ( g_bShutdown )
-		return;
-}
-
-
-static void PingThreadFunc ( void * )
-{
-	if ( g_iPingInterval<=0 )
-		return;
-
-	// crash logging for the thread
-	CrashQuery_t tQueryTLS;
-	SphCrashLogger_c::SetTopQueryTLS ( &tQueryTLS );
-
-	int64_t iLastCheck = 0;
-
-	while ( !g_bShutdown )
-	{
-		// check if we have work to do
-		int64_t iNow = sphMicroTimer();
-		if ( ( iNow-iLastCheck )<g_iPingInterval*1000LL )
-		{
-			sphSleepMsec ( 50 );
-			continue;
-		}
-
-		ThreadSystem_t tThdSystemDesc ( "PING" );
-
-		CheckPing ( iNow );
-		iLastCheck = sphMicroTimer();
-	}
-}
-
 
 /////////////////////////////////////////////////////////////////////////////
 // user variables these send from master to agents
@@ -23952,7 +23848,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_iMaxBatchQueries = hSearchd.GetInt ( "max_batch_queries", g_iMaxBatchQueries );
 	g_iDistThreads = hSearchd.GetInt ( "dist_threads", g_iDistThreads );
 	sphSetThrottling ( hSearchd.GetInt ( "rt_merge_iops", 0 ), hSearchd.GetSize ( "rt_merge_maxiosize", 0 ) );
-	g_iPingInterval = hSearchd.GetMsTimeMs ( "ha_ping_interval", 1000 );
+	g_iPingInterval = hSearchd.GetUsTime64Ms ( "ha_ping_interval", 1000000 );
 	g_uHAPeriodKarma = hSearchd.GetSTimeS ( "ha_period_karma", 60 );
 	g_iQueryLogMinMsec = hSearchd.GetMsTimeMs ( "query_log_min_msec", g_iQueryLogMinMsec );
 	g_iAgentConnectTimeout = hSearchd.GetMsTimeMs ( "agent_connect_timeout", g_iAgentConnectTimeout );
@@ -24878,6 +24774,11 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		}
 	}
 
+	// set up ping service (if necessary) before loading indexes
+	// (since loading ha-mirrors of distributed already assumes ping is usable).
+	if ( g_iPingInterval>0 )
+		Ping::Start();
+
 	//////////////////////
 	// build indexes hash
 	//////////////////////
@@ -25097,9 +24998,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	if ( !g_tRotationServiceThread.Create ( RotationServiceThreadFunc, 0, "rotationservice" ) )
 		sphDie ( "failed to create rotation service thread" );
-
-	if ( !g_tPingThread.Create ( PingThreadFunc, 0, "ping_service" ) )
-		sphDie ( "failed to create ping service thread" );
 
 	if ( bForcedPreread )
 	{

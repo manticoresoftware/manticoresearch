@@ -41,7 +41,7 @@ bool LoadExFunctions ();
 
 extern int				g_iReadTimeout; // defined in searchd.cpp
 
-extern int				g_iPingInterval;		// by default ping HA agents every 1 second
+extern int64_t			g_iPingInterval;
 extern DWORD			g_uHAPeriodKarma;		// by default use the last 1 minute statistic to determine the best HA agent
 extern int				g_iPersistentPoolSize;
 
@@ -246,7 +246,7 @@ struct HostDashboard_t : public ISphRefcountedMT
 
 public:
 	explicit HostDashboard_t ( const HostDesc_t &tAgent );
-	bool IsOlder ( int64_t iTime ) const REQUIRES_SHARED ( m_dMetricsLock );
+	int64_t EngageTime () const;
 	MetricsAndCounters_t &GetCurrentMetrics () REQUIRES ( m_dMetricsLock );
 	void GetCollectedMetrics ( HostMetricsSnapshot_t &dResult, int iPeriods = 1 ) const REQUIRES ( !m_dMetricsLock );
 
@@ -262,6 +262,15 @@ private:
 
 	~HostDashboard_t ();
 };
+
+class IPinger
+{
+public:
+	virtual void Subscribe ( HostDashboard_t* pHost ) = 0;
+	virtual ~IPinger() {};
+};
+
+void SetGlobalPinger ( IPinger* pPinger );
 
 
 /// context which keeps name of the index and agent

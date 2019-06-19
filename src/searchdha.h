@@ -239,7 +239,7 @@ struct HostDashboard_t : public ISphRefcountedMT
 	PersistentConnectionsPool_c * m_pPersPool = nullptr;    // persistence pool also lives here, one per dashboard
 
 	mutable RwLock_t m_dMetricsLock;        // guards everything essential (see thread annotations)
-	int64_t m_iLastAnswerTime GUARDED_BY ( m_dMetricsLock ) = 0;    // updated when we get an answer from the host
+	CSphAtomicL m_iLastAnswerTime GUARDED_BY ( m_dMetricsLock );    // updated when we get an answer from the host
 	int64_t m_iLastQueryTime GUARDED_BY ( m_dMetricsLock ) = 0;    // updated when we send a query to a host
 	int64_t m_iErrorsARow GUARDED_BY (
 		m_dMetricsLock ) = 0;        // num of errors a row, updated when we update the general statistic.
@@ -370,8 +370,17 @@ extern int g_iAgentRetryDelay;
 
 struct IReporter_t : ISphRefcountedMT
 {
+	// called by netloop - initially feeds reporter with tasks
+	// For every task just before start querying it calls Add(1).
+	// If task is not to be traced (blackhole), it then calls Add(-1).
 	virtual void Add ( int iTasks ) = 0;
+
+	// called by netloop - when one of the task is finished (and tells, success or not). Good point for callback!
+	// false returned in case of permanent error (dead; retries limit exceeded) and when aborting due to shutdown.
 	virtual void Report ( bool bSuccess ) = 0;
+
+	// called by outline observer, or by netloop checking for orphaned
+	// must return 'true' if reporter is abandoned - i.e. if all expected connections are finished.
 	virtual bool IsDone () const = 0;
 protected:
 	virtual ~IReporter_t () {};
@@ -618,7 +627,7 @@ public:
 IRemoteAgentsObserver * GetObserver ();
 
 void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery, IReplyParser_t * pParser,
-	IRemoteAgentsObserver * pReporter=nullptr, int iQueryRetry = -1, int iQueryDelay = -1 );
+	IReporter_t * pReporter, int iQueryRetry = -1, int iQueryDelay = -1 );
 
 // simplified full task - schedule jobs, wait for complete, report num of succeeded
 int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery, IReplyParser_t * pParser );

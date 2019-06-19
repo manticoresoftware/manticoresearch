@@ -13115,12 +13115,21 @@ void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t
 	int iStart = 0;
 	int iStep = iChunks>1 ? ( ( dDocs.GetLength () - 1 ) / iChunks + 1 ) : 0;
 
-	PqRequestBuilder_c tReqBuilder ( dDocs, tOpts, iStart, iStep );
-	iStart += iStep * dAgents.GetLength();
-	PqReplyParser_t tParser;
-	CSphRefcountedPtr<IRemoteAgentsObserver> tReporter ( GetObserver () );
-	ScheduleDistrJobs ( dAgents, &tReqBuilder, &tParser, tReporter );
-
+	bool bHaveRemotes = !dAgents.IsEmpty ();
+	int iSuccesses = 0;
+	int iAgentsDone = 0;
+	CSphScopedPtr<PqRequestBuilder_c> pReqBuilder { nullptr };
+	CSphScopedPtr<IReplyParser_t> pParser { nullptr };
+	CSphRefcountedPtr<IRemoteAgentsObserver> pReporter { nullptr };
+	if ( bHaveRemotes )
+	{
+		pReqBuilder = new PqRequestBuilder_c ( dDocs, tOpts, iStart, iStep );
+		iStart += iStep * dAgents.GetLength ();
+		pParser = new PqReplyParser_t;
+		pReporter = GetObserver();
+		ScheduleDistrJobs ( dAgents, pReqBuilder.Ptr(), pParser.Ptr(), pReporter );
+	}
+	
 	LazyVector_T <CPqResult> dLocalResults;
 	for ( const auto & sPqIndex : *pLocalIndexes )
 	{
@@ -13128,11 +13137,14 @@ void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t
 		PQLocalMatch ( dDocs, sPqIndex, tOpts, tAcc, dResult, iStart, iStep );
 		iStart += iStep;
 	}
-
-	tReporter->Finish ();
-
-	auto iSuccesses = ( int ) tReporter->GetSucceeded ();
-	auto iAgentsDone = ( int ) tReporter->GetFinished ();
+	
+	if ( bHaveRemotes )
+	{
+		assert ( pReporter );
+		pReporter->Finish ();
+		iSuccesses = ( int ) pReporter->GetSucceeded ();
+		iAgentsDone = ( int ) pReporter->GetFinished ();
+	}
 
 	LazyVector_T<CPqResult*> dAllResults;
 	for ( auto & dLocalRes : dLocalResults )

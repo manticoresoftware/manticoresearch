@@ -1378,6 +1378,8 @@ void SmartOutputBuffer_t::LeakTo ( CSphVector<ISphOutputBuffer *> dOut )
 #define UIO_MAXIOV (1024)
 #endif
 
+// makes vector of chunks suitable to direct using in Send() or WSASend()
+// returns federated size of the chunks
 size_t SmartOutputBuffer_t::GetIOVec ( CSphVector<sphIovec> &dOut ) const
 {
 	size_t iOutSize = 0;
@@ -2085,6 +2087,9 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 //! Simplified wrapper for ScheduleDistrJobs, wait for finish and return succeeded
 int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery, IReplyParser_t * pParser )
 {
+	if ( dRemotes.IsEmpty() )
+		return 0;
+
 	CSphRefcountedPtr<IRemoteAgentsObserver> tReporter { GetObserver () };
 	ScheduleDistrJobs ( dRemotes, pQuery, pParser, tReporter );
 	tReporter->Finish ();
@@ -2096,14 +2101,20 @@ int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery
 /// jobs themselves are ref-counted and owned by nobody (they're just released on finish, so
 /// if nobody waits them (say, blackhole), they just dissapeared).
 /// on return blackholes removed from dRemotes
-void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery, IReplyParser_t * pParser
-						 , IRemoteAgentsObserver * pReporter, int iQueryRetry, int iQueryDelay )
+void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery, IReplyParser_t * pParser,
+	IReporter_t * pReporter, int iQueryRetry, int iQueryDelay )
 {
 //	sphLogSupress ( "L ", SPH_LOG_VERBOSE_DEBUG );
 //	sphLogSupress ( "- ", SPH_LOG_VERBOSE_DEBUG );
 //	TimePrefixed::TimeStart();
 	assert ( pReporter );
 	sphLogDebugv ( "S ==========> ScheduleDistrJobs() for %d remotes", dRemotes.GetLength () );
+
+	if ( dRemotes.IsEmpty () )
+	{
+		sphWarning ("Empty remotes provided to ScheduleDistrJobs. Consider to save resources and avoid it");
+		return;
+	}
 
 	bool bNeedKick = false; // if some of connections falled to waiting and need to kick the poller.
 	ARRAY_FOREACH ( i, dRemotes )
@@ -2114,6 +2125,7 @@ void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery
 		// start the actual job.
 		// It might lucky be completed immediately. Or, it will be acquired by async network
 		// (and addreffed there in the loop)
+		pReporter->Add ( 1 );
 		pConnection->StartRemoteLoopTry ();
 		bNeedKick |= pConnection->FireKick ();
 
@@ -2123,11 +2135,9 @@ void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery
 			sphLogDebugv ( "S Remove blackhole()" );
 			SafeRelease ( pConnection );
 			dRemotes.RemoveFast ( i-- );
+			pReporter->Add ( -1 );
 		}
 	}
-
-	if ( pReporter )
-		pReporter->Add ( dRemotes.GetLength () );
 
 	if ( bNeedKick )
 	{
@@ -3761,20 +3771,16 @@ public:
 
 	void Add ( int iTasks ) final
 	{
-		m_iTasks.Add ( iTasks );
-		m_bGotTasks = true;
+		m_iTasks += iTasks;
 	}
 
 	// check that there are no works to do
 	bool IsDone () const final
 	{
-		if ( m_bGotTasks )
-		{
-			if ( m_iFinished > m_iTasks )
-				sphWarning ( "Orphaned chain detected (expected %d, got %d)", (int)m_iTasks.GetValue(), (int)m_iFinished.GetValue() );
-			return m_iFinished>=m_iTasks;
-		}
-		return false;
+		if ( m_iFinished > m_iTasks )
+			sphWarning ( "Orphaned chain detected (expected %d, got %d)", (int)m_iTasks, (int)m_iFinished );
+
+		return m_iFinished>=m_iTasks;
 	}
 
 	// block execution until all tasks are finished
@@ -3802,11 +3808,9 @@ public:
 
 private:
 	CSphAutoEvent	m_tChanged;			///< the signaller
-	CSphAtomic		m_iSucceeded { 0 };	//< num of tasks finished successfully
-	CSphAtomic		m_iFinished { 0 };	//< num of tasks finished.
-	CSphAtomic		m_iTasks { 0 };		//< total num of tasks
-	bool			m_bGotTasks = false;
-
+	CSphAtomic		m_iSucceeded;	//< num of tasks finished successfully
+	CSphAtomic		m_iFinished;	//< num of tasks finished.
+	CSphAtomic		m_iTasks;		//< total num of tasks
 };
 
 IRemoteAgentsObserver * GetObserver ()

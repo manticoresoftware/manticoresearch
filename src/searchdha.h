@@ -371,9 +371,9 @@ extern int g_iAgentRetryDelay;
 struct IReporter_t : ISphRefcountedMT
 {
 	// called by netloop - initially feeds reporter with tasks
-	// For every task just before start querying it calls Add(1).
-	// If task is not to be traced (blackhole), it then calls Add(-1).
-	virtual void Add ( int iTasks ) = 0;
+	// For every task just before start querying it calls FeedTask(true).
+	// If task is not to be traced (blackhole), it then calls FeedTask(false).
+	virtual void FeedTask ( bool bAdd ) = 0;
 
 	// called by netloop - when one of the task is finished (and tells, success or not). Good point for callback!
 	// false returned in case of permanent error (dead; retries limit exceeded) and when aborting due to shutdown.
@@ -628,6 +628,13 @@ IRemoteAgentsObserver * GetObserver ();
 
 void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery, IReplyParser_t * pParser,
 	IReporter_t * pReporter, int iQueryRetry = -1, int iQueryDelay = -1 );
+
+// schedule one job. Returns false if connection s blackhole (and so, will not report anything
+using Deffered_f = std::function<void ( bool )>;
+bool RunRemoteTask ( AgentConn_t* pConnection, IRequestBuilder_t* pQuery, IReplyParser_t* pParser,
+	Deffered_f && pAction, int iQueryRetry = -1, int iQueryDelay = -1 );
+bool RunRemoteTask ( AgentConn_t* pConnection, IRequestBuilder_t* pQuery, IReplyParser_t* pParser,
+	Deffered_f & pAction, int iQueryRetry = -1, int iQueryDelay = -1 );
 
 // simplified full task - schedule jobs, wait for complete, report num of succeeded
 int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery, IReplyParser_t * pParser );

@@ -1926,8 +1926,8 @@ Example:
     mlock = 1
 
 .. warning::
-   The functionality of this directive is taken over by :ref:`access_plain_attrs` and :ref:`access_blob_attrs` directives as of 3.0.2. 
-   
+   The functionality of this directive is taken over by :ref:`access_plain_attrs` and :ref:`access_blob_attrs` directives as of 3.0.2.
+
 .. _morphology:
 
 morphology
@@ -1991,14 +1991,15 @@ directive. Also, there is a
 directive that lets you speed up lemmatizing (and therefore indexing) by
 spending more RAM for, basically, an uncompressed cache of a dictionary.
 
-Chinese segmentation using ICU is also available. It is a much more precise
-but slower way (compared to n-grams) to segment Chinese documents.
-:ref:`charset_table`
-must contain all Chinese characters. Documents are first pre-processed by
-ICU and then the result is processed by the tokenizer and other morphology
-processors specified in the “morphology” option are applied. When documents
-are processed by ICU, only parts that contain chinese text are segmented, others
-are left as is.
+Chinese segmentation using ICU (http://site.icu-project.org/) is also available.
+It is a much more precise, but a little bit slower way (compared to n-grams) to
+segment Chinese documents.
+:ref:`charset_table` must contain all Chinese characters (you can use alias "cjk").
+In case of "morphology=icu_chinese" documents are first pre-processed by ICU, then
+the result is processed by the tokenizer (according to your charset_table) and then
+other morphology processors specified in the "morphology" option are applied. When the documents
+are processed by ICU, only those parts of texts that contain Chinese are passed to
+ICU for segmentation, others can be modified by other means (different morphologies, charset_table etc.)
 
 See also
 :ref:`icu_data_dir`
@@ -2220,14 +2221,14 @@ Example:
     ondisk_attrs = pool #keep pooled attributes on disk
 
 .. warning::
-   The functionality of this directive is taken over by :ref:`access_plain_attrs` and :ref:`access_blob_attrs` directives as of 3.0.2. 
+   The functionality of this directive is taken over by :ref:`access_plain_attrs` and :ref:`access_blob_attrs` directives as of 3.0.2.
    The option is marked as deprecated and will be removed in future versions.
    The equivalent values are :
    * ondisk_attrs = 0 -  access_plain_attrs=mmap_preread and access_blob_attrs=mmap_preread
    * ondisk_attrs = pool    -  access_plain_attrs=mmap_preread and access_blob_attrs=mmap
    * ondisk_attrs = 1    -  access_plain_attrs=mmap and access_blob_attrs=mmap
-   
-   
+
+
 .. _overshort_step:
 
 overshort_step

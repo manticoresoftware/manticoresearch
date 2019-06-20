@@ -63,7 +63,7 @@ specified. Some transformations performed by this optimization include:
 -  Common keywords: (A \| “A B”~N) becomes A; (“A B” \| “A B C”) becomes
    “A B”; (“A B”~N \| “A B C”~N) becomes (“A B”~N)
 
--  Common phrase: (“X A B” \| “Y A B”) becomes ((“X\|Y”) “A B”)
+-  Common phrase: (“X A B” \| “Y A B”) becomes (“(“X”\|“Y”) A B”)
 
 -  Common AND NOT: ((A !X) \| (A !Y) \| (A !Z)) becomes (A !(X Y Z))
 

@@ -24,15 +24,15 @@ Example:
 
 
     lemmatizer_base = /usr/local/share/sphinx/dicts/
-	
+
 .. _progressive_merge:
 
 progressive_merge
 ~~~~~~~~~~~~~~~~~
 
-Merge Real-Time index chunks during OPTIMIZE operation from smaller to bigger. Progressive merge merger faster and reads/write less data. 
-Enabled by default. If disabled, chunks are merged from first to last created. 
-	
+Merge Real-Time index chunks during OPTIMIZE operation from smaller to bigger. Progressive merge merger faster and reads/write less data.
+Enabled by default. If disabled, chunks are merged from first to last created.
+
 .. _json_autoconv_keynames:
 
 json_autoconv_keynames
@@ -54,7 +54,7 @@ Example:
 
     json_autoconv_keynames = lowercase
 
-	
+
 .. _json_autoconv_numbers:
 
 json_autoconv_numbers
@@ -111,7 +111,7 @@ empty (no location).
 
 Specifies the trusted directory from which the :ref:`UDF
 libraries <udfs_user_defined_functions>` can be
-loaded. 
+loaded.
 
 Example:
 
@@ -127,9 +127,9 @@ Example:
 icu_data_dir
 ~~~~~~~~~~~~~~~
 
-A folder that contains data used by ICU to segment chinese text. Should only be specified if
-ICU is built from sources. If ICU is loaded as a dynamic library (supplied in a package, e.g. 
-``libicu_dev``), it doesn't require any external data.
+A folder that contains data used by ICU to segment Chinese text. Should only be specified if you've built
+ICU from sources. If ICU is loaded as a dynamic library (supplied in a package provided by us,
+e.g. ``libicu_dev``), it doesn't require any external data.
 
 Example:
 
@@ -138,5 +138,3 @@ Example:
 
 
     icu_data_dir = /home/myuser/icu_data
-
-

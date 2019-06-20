@@ -182,10 +182,8 @@ void TimeoutQueue_c::DebugDump ( const std::function<void ( EnqueuedTimeout_t* )
 //////////////////////////////////////////////////////////////////////////
 // Tasks (job classes)
 //////////////////////////////////////////////////////////////////////////
-struct TaskFlavour_t
+struct TaskFlavour_t : public TaskManager_Internal::TaskWorker
 {
-	fnThread_t m_fnWorker = nullptr; // main worker function
-	fnThread_t m_fnReleasePayload = nullptr; // called to release payload (if any)
 	CSphString m_sName; // informational name (for logs, etc.)
 	int m_iMaxRunners = 0; // max num of threads running jobs from the same task (0 mean only main thread)
 	int m_iMaxQueueSize = 0; // max possible num of enqueued tasks of this type. (-1 means unlimited)
@@ -634,8 +632,10 @@ private:
 
 		CSphScopedPtr<TaskWorker_t> pThreadWorkerContext { new TaskWorker_t };
 		pThreadWorkerContext->m_iMyThreadID = ++m_iNextThreadId;
+		StringBuilder_c thName;
+		thName.Sprintf ("TaskW_%d", pThreadWorkerContext->m_iMyThreadID);
 		SphThread_t tThd;
-		if ( sphThreadCreate ( &tThd, TheadPoolWorker, pThreadWorkerContext.Ptr (), true, "SysWork" ))
+		if ( sphThreadCreate ( &tThd, TheadPoolWorker, pThreadWorkerContext.Ptr (), true, thName.cstr() ))
 		{
 			m_dWorkers.Add ( pThreadWorkerContext.LeakPtr ());
 			++m_iIdleWorkers;
@@ -854,20 +854,25 @@ LazyJobs_c& LazyTasker ()
 	return dEvents;
 }
 
-TaskID TaskManager::RegisterGlobal ( const char* sName, fnThread_t fnThread, fnThread_t fnFree, int iThreads, int iJobs )
+TaskID TaskManager_Internal::TaskWorker::FinishRegisterTask ( CSphString sName, int iThreads, int iJobs )
+{
+	TaskManager_Internal::TaskWorker& dFirst = g_Tasks[0];
+	auto iTaskID = this - &dFirst;
+	auto& dTask = g_Tasks[iTaskID];
+	dTask.m_iMaxRunners = iThreads;
+	dTask.m_iMaxQueueSize = iJobs;
+	dTask.m_sName = std::move(sName);
+	InfoX( "Task class for %s registered with id=%d, max %d parallel jobs", sName, iTaskID, iThreads );
+	return iTaskID;
+}
+
+TaskManager_Internal::TaskWorker& TaskManager_Internal::TaskWorker::GetNewTask ()
 {
 	auto iTaskID = TaskID ( g_iTasks++ );
 	if ( !iTaskID ) // this is first class; start log timering
-		TimePrefixed::TimeStart();
+		TimePrefixed::TimeStart ();
 
-	auto &dTask = g_Tasks[iTaskID];
-	dTask.m_iMaxRunners = iThreads;
-	dTask.m_iMaxQueueSize = iJobs;
-	dTask.m_fnWorker = std::forward<fnThread_t> ( fnThread );
-	dTask.m_fnReleasePayload = std::forward<fnThread_t> ( fnFree );
-	dTask.m_sName = sName;
-	InfoX( "Task class for %s registered with id=%d, max %d parallel jobs", sName, iTaskID, iThreads );
-	return iTaskID;
+	return g_Tasks[iTaskID];
 }
 
 void TaskManager::ScheduleJob ( TaskID iTask, int64_t iTimestamp, void* pPayload )

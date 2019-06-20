@@ -327,8 +327,9 @@ class DNSResolver_c
 	bool 		m_bCallbackInvoked	= false;
 	CSphString	m_sHost;
 
-	DNSResolver_c ( const char * sHost, CallBack_f &&pFunc )
-		: m_pCallback ( std::move ( pFunc ) )
+	template <typename CALLBACK_F>
+	DNSResolver_c ( const char * sHost, CALLBACK_F&& pFunc )
+		: m_pCallback ( std::forward<CALLBACK_F> ( pFunc ) )
 		, m_sHost ( sHost )
 	{
 		m_tHints.ai_family = AF_INET;
@@ -413,20 +414,20 @@ public:
 	//! resolved any complex way), will call the callback immediately.
 	//! \param sHost - host address, as 'www.google.com', or '127.0.0.1'
 	//! \param pFunc - callback func/functor or lambda
-	static void GetAddress_a ( const char * sHost, CallBack_f && pFunc )
+	template <typename CALLBACK_F>
+	static void GetAddress_a ( const char * sHost, CALLBACK_F && pFunc = nullptr )
 	{
 		if ( IsIpAddress ( sHost ) )
 		{
 			DWORD uResult = sphGetAddress ( sHost, false, true );
 			if ( uResult )
 			{
-				if ( pFunc )
-					pFunc ( uResult );
+				pFunc ( uResult );
 				return;
 			}
 		}
 
-		auto * pPayload = new DNSResolver_c ( sHost, std::forward<CallBack_f>(pFunc) );
+		auto * pPayload = new DNSResolver_c ( sHost, std::forward<CALLBACK_F>(pFunc) );
 		pPayload->ResolveBegin();
 	}
 };

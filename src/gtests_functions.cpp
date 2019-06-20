@@ -2032,6 +2032,76 @@ void test_sphintf_for ( int64_t iNum )
 	test_sprintf ( "%09.3d", iNum );
 }
 
+/*
+ * Different helpers to investigate how copy/move would work
+ * Run test functions.trainer to investigate what is finally happens.
+ */
+struct train_c
+{
+	int m_x = 0;
+
+	train_c() { std::cout << "\n-CTR train default 0 " << this; }
+	train_c(int x) : m_x (x) { std::cout << "\n-CTR train_c(x) " << m_x << " " << this; }
+
+	train_c(const train_c& c) : m_x(c.m_x) { std::cout << "\n-COPY train ctr "
+	<< m_x << " " << this << " from " << c.m_x << " " << &c;}
+	train_c(train_c&& c) : m_x(c.m_x) { c.m_x = 0; std::cout << "\n-MOVE train ctr "
+	<< m_x << " " << this << " from " << c.m_x << " " << &c;}
+
+	train_c& operator= (const train_c& c) { m_x = c.m_x; std::cout << "\n-COPY train ="
+		<< m_x << " " << this << " from " << &c; return *this;}
+	train_c& operator= ( train_c&& c ) { m_x = c.m_x; c.m_x = 0; std::cout << "\n-MOVE train ="
+		<< m_x << " " << this << " from " << &c; return *this;}
+
+	~train_c() { std::cout << "\n-DTR train " << m_x << " " << this; m_x = 0;}
+};
+
+struct helper_c
+{
+	int pad = 0;
+	train_c m_h;
+
+	helper_c() { std::cout << "\nHELPER default " << this; }
+//	helper_c( train_c c ) : m_h { std::move(c) } {
+//		std::cout << "\nHELPER " << this << " from " << &c << " " << &m_h << " " << m_h.m_x; }
+
+	template <typename TRAIN_C>
+	helper_c ( TRAIN_C&& c ): m_h { std::forward<TRAIN_C> ( c ) }
+	{
+		std::cout << "\nHELPER_TT " << this << " from " << &c << " " << &m_h << " " << m_h.m_x;
+	}
+
+	~helper_c() { std::cout << "\n~HELPER " << this; }
+};
+
+template <typename TRAIN_C>
+helper_c* make_helper ( TRAIN_C&& c )
+{
+	std::cout << "\n====>  called make_helper with " << &c;
+	return new helper_c ( std::forward<TRAIN_C>(c) );
+}
+
+TEST ( functions, trainer )
+{
+	std::cout << "\n\n==>  usual pass";
+	{
+		train_c a (10);
+		auto* foo = make_helper (a);
+		std::cout << "\n==>  made foo " << foo->m_h.m_x << " a is " << a.m_x;
+		delete foo;
+	}
+
+	std::cout << "\n\n==>  indirect ctr";
+	auto fee = make_helper (11);
+	std::cout << "\n==>  made fee " << fee->m_h.m_x;
+	delete fee;
+
+	std::cout << "\n\n==>  direct ctr";
+	auto bar = make_helper ( train_c (12) );
+	std::cout << "\n==>  made fee " << bar->m_h.m_x;
+	delete bar;
+}
+
 TEST ( functions, sph_Sprintf )
 {
 	test_sphintf_for ( 0 );

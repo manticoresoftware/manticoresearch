@@ -155,6 +155,9 @@ namespace TaskManager {
 	 */
 	void StartJob ( TaskID iTask, void* pPayload = nullptr );
 
+	/// causes finishing the tasker
+	void ShutDown();
+
 	CSphVector<TaskInfo_t> GetTaskInfo ();
 	CSphVector<ThreadInfo_t> GetThreadsInfo ();
 	CSphVector<ScheduleInfo_t> GetSchedInfo ();

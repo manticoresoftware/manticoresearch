@@ -47,6 +47,10 @@ static auto& g_bShutdown = sphGetShutdown ();
 // period of idle, after which workers will finish.
 static int64_t IDLE_TIME_TO_FINISH = 600 * 1000000LL; // 10m
 
+// Max num of task flavours (we allocate fixed vec of this size)
+// since we have only 7 different tasks for now, pool of 32 slots seems to be enough
+static const size_t NUM_TASKS = 32;
+
 inline static bool operator< ( const EnqueuedTimeout_t& dLeft, const EnqueuedTimeout_t& dRight )
 {
 	return dLeft.m_iTimeoutTime<dRight.m_iTimeoutTime;
@@ -201,10 +205,9 @@ struct TaskProperties_t
 };
 
 // Task class descriptor just stores pointers to function-checker and function-worker
-// since we have only 7 different tasks for now, static pool of 16 slots seems to be enough
-const size_t NUM_TASKS = 16;
-static TaskFlavour_t g_Tasks[NUM_TASKS];
-static TaskProperties_t g_TaskProps[NUM_TASKS];
+
+CSphFixedVector<TaskFlavour_t> g_Tasks { NUM_TASKS };
+CSphFixedVector<TaskProperties_t> g_TaskProps { NUM_TASKS };
 static CSphAtomic g_iTasks;
 
 // task of determined flavour with stored payload
@@ -340,8 +343,9 @@ struct TaskWorker_t: public ListNode_t
 	// returns timeout after which we'll regarded idle too much
 	int TimeToDeadMS ( int64_t iIdlePeriod )
 	{
-		auto uSecs = (( m_iLastJobDoneTime + iIdlePeriod ) - sphMicroTimer ()) / 1000;
-		return Max ( uSecs, 0 );
+		auto iLastJob = (m_iLastJobDoneTime>0) ? m_iLastJobDoneTime : sphMicroTimer();
+		auto mSecs = (( iLastJob + iIdlePeriod ) - sphMicroTimer ()) / 1000;
+		return Max ( mSecs, 0 );
 	}
 };
 
@@ -365,7 +369,6 @@ class LazyJobs_c: ISphNoncopyable
 	VectorTask_c* m_pEnqueuedTasks GUARDED_BY ( m_dActiveLock ) = nullptr; // ext. mt queue where we add tasks
 	CSphMutex m_dActiveLock;
 	TimeoutQueue_c m_dTimeouts;
-	SphThread_t m_dWorkingThread;
 	int64_t m_iNextTimeoutUS = 0;
 	OneshotEvent_c m_tSignal;
 	TaskID m_iScheduler = -1;
@@ -501,7 +504,7 @@ private:
 		auto VARIABLE_IS_NOT_USED iWaited = sphMicroTimer () - iStarted;
 		DebugT ( "waited %t, reason=%s", iWaited, bWasKicked ? "kicked": "timeout or error" );
 
-		if ( g_bShutdown )
+		if ( g_bShutdown || m_bShutdown )
 		{
 			AbortScheduled ();
 			DebugT ( "EventTick() exit because of shutdown=%d", g_bShutdown );
@@ -653,7 +656,6 @@ private:
 
 	void FinishAllWorkers () NO_THREAD_SAFETY_ANALYSIS
 	{
-		m_bShutdown = true;
 		KickJobPool ();
 
 		while ( m_dWorkers.GetLength ())
@@ -734,7 +736,8 @@ private:
 public:
 	LazyJobs_c ()
 	{
-		sphThreadCreate ( &m_dWorkingThread, WorkerFunc, this, false, "TaskSched" );
+		SphThread_t tThd;
+		sphThreadCreate ( &tThd, WorkerFunc, this, true, "TaskSched" );
 		m_iScheduler = TaskManager::RegisterGlobal ( "Scheduler",
 			[] ( void* pScheduledJob ) REQUIRES ( TaskThread )
 			{
@@ -751,13 +754,16 @@ public:
 	~LazyJobs_c ()
 	{
 		DebugX ( "~LazyJobs_c. Shutdown=%d", g_bShutdown );
+		Shutdown();
+	}
+
+	void Shutdown()
+	{
+		InfoX( "Shutdown" );
+		m_bShutdown = true;
 		Kick ();
-		AbortScheduled ();
 		FinishAllWorkers ();
 		RemoveAllJobs ();
-		// might be crash - no need to hung waiting thread
-		if ( g_bShutdown )
-			sphThreadJoin ( &m_dWorkingThread );
 	}
 
 	/// Add (enqueue) immediate task.
@@ -854,25 +860,27 @@ LazyJobs_c& LazyTasker ()
 	return dEvents;
 }
 
-TaskID TaskManager_Internal::TaskWorker::FinishRegisterTask ( CSphString sName, int iThreads, int iJobs )
-{
-	TaskManager_Internal::TaskWorker& dFirst = g_Tasks[0];
-	auto iTaskID = this - &dFirst;
-	auto& dTask = g_Tasks[iTaskID];
-	dTask.m_iMaxRunners = iThreads;
-	dTask.m_iMaxQueueSize = iJobs;
-	dTask.m_sName = std::move(sName);
-	InfoX( "Task class for %s registered with id=%d, max %d parallel jobs", sName, iTaskID, iThreads );
-	return iTaskID;
-}
+CSphMutex g_tRegisterLock;
 
 TaskManager_Internal::TaskWorker& TaskManager_Internal::TaskWorker::GetNewTask ()
 {
-	auto iTaskID = TaskID ( g_iTasks++ );
-	if ( !iTaskID ) // this is first class; start log timering
+	g_tRegisterLock.Lock ();
+	if ( !g_iTasks ) // this is first class; start log timering
 		TimePrefixed::TimeStart ();
 
-	return g_Tasks[iTaskID];
+	return g_Tasks[g_iTasks];
+}
+
+TaskID TaskManager_Internal::TaskWorker::FinishRegisterTask ( CSphString sName, int iThreads, int iJobs )
+{
+	auto& dTask = g_Tasks[g_iTasks];
+	dTask.m_iMaxRunners = iThreads;
+	dTask.m_iMaxQueueSize = iJobs;
+	dTask.m_sName = std::move ( sName );
+	InfoX( "Task class for %s registered with id=%d, max %d parallel jobs", dTask.m_sName.cstr (), g_iTasks, iThreads );
+	TaskID iTask = g_iTasks++;
+	g_tRegisterLock.Unlock ();
+	return iTask;
 }
 
 void TaskManager::ScheduleJob ( TaskID iTask, int64_t iTimestamp, void* pPayload )
@@ -901,4 +909,9 @@ CSphVector<TaskManager::ThreadInfo_t> TaskManager::GetThreadsInfo ()
 CSphVector<TaskManager::ScheduleInfo_t> TaskManager::GetSchedInfo ()
 {
 	return LazyTasker ().GetSchedInfo ();
+}
+
+void TaskManager::ShutDown ()
+{
+	LazyTasker ().Shutdown();
 }

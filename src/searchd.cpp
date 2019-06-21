@@ -1242,6 +1242,9 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	// force even long time searches to shut
 	sphInterruptNow();
 
+	// release all planned/scheduled tasks
+	TaskManager::ShutDown();
+
 	// tell flush-rt thread to shutdown, and wait until it does
 	g_tRtFlushThread.Join();
 	if ( g_tBinlogAutoflush.m_fnWork )

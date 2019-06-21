@@ -30,6 +30,7 @@
 #include "searchdtask.h"
 #include "taskping.h"
 #include "taskmalloctrim.h"
+#include "taskoptimize.h"
 
 using namespace Threads;
 
@@ -256,11 +257,6 @@ static CSphVector<SphThread_t>				g_dTickPoolThread;
 static ServiceThread_t						g_tRtFlushThread;
 static ServiceThread_t						g_tBinlogFlushThread;
 static BinlogFlushInfo_t					g_tBinlogAutoflush;
-
-// optimize thread
-static ServiceThread_t						g_tOptimizeThread;
-static CSphMutex							g_tOptimizeQueueMutex;
-static StrVec_t								g_dOptimizeQueue;
 
 static CSphMutex							g_tPersLock;
 static CSphAtomic							g_iPersistentInUse;
@@ -1259,8 +1255,6 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	// tell uservars flush thread to shutdown, and wait until it does
 	if ( !g_sSphinxqlState.IsEmpty() )
 		g_tSphinxqlStateFlushThread.Join();
-
-	g_tOptimizeThread.Join();
 
 	g_tPrereadThread.Join();
 
@@ -14876,7 +14870,6 @@ void HandleMysqlReloadIndexes ( SqlRowBuffer_c &tOut )
 	tOut.Ok ();
 }
 
-
 /////////////////////////////////////////////////////////////////////////////
 // user variables these send from master to agents
 /////////////////////////////////////////////////////////////////////////////
@@ -16673,9 +16666,7 @@ void HandleMysqlOptimize ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 		return;
 	}
 
-	g_tOptimizeQueueMutex.Lock ();
-	g_dOptimizeQueue.Add ( tStmt.m_sIndex );
-	g_tOptimizeQueueMutex.Unlock();
+	EnqueueForOptimize ( tStmt.m_sIndex );
 }
 
 void HandleMysqlSelectSysvar ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const SessionVars_t & tVars )
@@ -19477,45 +19468,7 @@ static void SphinxqlStateRead ( const CSphString & sName )
 		sphWarning ( "sphinxql_state: parse error at line %d: %s", 1+iLines, sError.cstr() );
 }
 
-//////////////////////////////////////////////////////////////////////////
 
-void OptimizeThreadFunc ( void * )
-{
-	while ( !g_bShutdown )
-	{
-		// stand still till optimize time
-		if ( !g_dOptimizeQueue.GetLength() )
-		{
-			sphSleepMsec ( 50 );
-			continue;
-		}
-
-		CSphString sIndex;
-		g_tOptimizeQueueMutex.Lock();
-		if ( g_dOptimizeQueue.GetLength() )
-		{
-			sIndex = g_dOptimizeQueue[0];
-			g_dOptimizeQueue.Remove(0);
-		}
-		g_tOptimizeQueueMutex.Unlock();
-
-		auto pServed = GetServed ( sIndex );
-
-		if ( !pServed )
-			continue;
-
-		ServedDescRPtr_c dReadLock ( pServed );
-		if ( !dReadLock->m_pIndex )
-			continue;
-
-		// want to track optimize only at work
-		ThreadSystem_t tThdSystemDesc ( "OPTIMIZE" );
-
-		// FIXME: MVA update would wait w-lock here for a very long time
-		assert ( dReadLock->m_eType==IndexType_e::RT );
-		static_cast<RtIndex_i *>( dReadLock->m_pIndex )->Optimize ();
-	}
-}
 
 static int ParseKeywordExpansion ( const char * sValue ) REQUIRES ( MainThread )
 {
@@ -25023,8 +24976,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	if ( !g_tRtFlushThread.Create ( RtFlushThreadFunc, 0, "rt_flush" ) )
 		sphDie ( "failed to create rt-flush thread" );
 
-	if ( !g_tOptimizeThread.Create ( OptimizeThreadFunc, 0, "optimize" ) )
-		sphDie ( "failed to create optimize thread" );
 
 	g_sSphinxqlState = hSearchd.GetStr ( "sphinxql_state" );
 	if ( !g_sSphinxqlState.IsEmpty() )

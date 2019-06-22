@@ -7,9 +7,10 @@
 #include "searchdtask.h"
 
 // Ping API proto
-struct PingBuilder_t: public IRequestBuilder_t, public IReplyParser_t, public ISphRefcountedMT
+class PingBuilder_c: public RequestBuilder_i, public ReplyParser_i, public ISphRefcountedMT
 {
-	explicit PingBuilder_t ( int iCookie )
+public:
+	explicit PingBuilder_c ( int iCookie )
 		: m_iSendCookie ( iCookie )
 	{}
 
@@ -27,7 +28,7 @@ struct PingBuilder_t: public IRequestBuilder_t, public IReplyParser_t, public IS
 	}
 
 private:
-	~PingBuilder_t () final
+	~PingBuilder_c () final
 	{}
 
 private:
@@ -67,7 +68,7 @@ static void PingWorker ( void* pCookie )
 
 	// Run network task
 //	sphWarning ( "Ping %s", pConn->m_tDesc.GetMyUrl ().cstr ());
-	CSphRefcountedPtr<PingBuilder_t> pPinger ( new PingBuilder_t (( int ) iNow ));
+	CSphRefcountedPtr<PingBuilder_c> pPinger ( new PingBuilder_c (( int ) iNow ));
 	RunRemoteTask ( pConn, pPinger, pPinger, [ pPinger, pHost ] ( bool b ) { SchedulePing (pHost); } );
 }
 

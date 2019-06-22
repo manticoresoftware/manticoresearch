@@ -2111,12 +2111,12 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 }
 
 //! Simplified wrapper for ScheduleDistrJobs, wait for finish and return succeeded
-int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery, IReplyParser_t * pParser )
+int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser )
 {
 	if ( dRemotes.IsEmpty() )
 		return 0;
 
-	CSphRefcountedPtr<IRemoteAgentsObserver> tReporter { GetObserver () };
+	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter { GetObserver () };
 	ScheduleDistrJobs ( dRemotes, pQuery, pParser, tReporter );
 	tReporter->Finish ();
 	return (int)tReporter->GetSucceeded ();
@@ -2127,8 +2127,8 @@ int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery
 /// jobs themselves are ref-counted and owned by nobody (they're just released on finish, so
 /// if nobody waits them (say, blackhole), they just dissapeared).
 /// on return blackholes removed from dRemotes
-void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery, IReplyParser_t * pParser,
-	IReporter_t * pReporter, int iQueryRetry, int iQueryDelay )
+void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser,
+	Reporter_i * pReporter, int iQueryRetry, int iQueryDelay )
 {
 //	sphLogSupress ( "L ", SPH_LOG_VERBOSE_DEBUG );
 //	sphLogSupress ( "- ", SPH_LOG_VERBOSE_DEBUG );
@@ -2174,15 +2174,12 @@ void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery
 	sphLogDebugv ( "S ScheduleDistrJobs() done. Total %d", dRemotes.GetLength () );
 }
 
-class ReportCallback_c: public IReporter_t
+class ReportCallback_c : public Reporter_i
 {
-	CallBack_f m_fCallback = nullptr;
-	AgentConn_t* m_pConnection = nullptr;
-
 public:
 	template <typename CALLBACK_F>
 	ReportCallback_c ( CALLBACK_F&& fAction, AgentConn_t* pConnection )
-		: m_fCallback { std::forward<CALLBACK_F> ( fAction ) }
+		: m_pCallback { std::forward<CALLBACK_F> ( fAction ) }
 		, m_pConnection ( pConnection )
 	{}
 
@@ -2198,12 +2195,18 @@ public:
 	{
 		assert ( m_pConnection && "strange Report called without the connection!" );
 		SafeRelease ( m_pConnection )
-		if ( m_fCallback )
-			m_fCallback ( bParam );
+		if ( m_pCallback )
+			m_pCallback ( bParam );
 	};
 
 	// just always return 'false' here to suppress any kind of 'orphaned' stuff.
 	bool IsDone () const final { return false; };
+
+private:
+	using BoolCallBack_f = std::function<void ( bool )>;
+
+	BoolCallBack_f	m_pCallback = nullptr;
+	AgentConn_t	*	m_pConnection = nullptr;
 };
 
 
@@ -2211,8 +2214,8 @@ public:
 /// Schedule one job (remote). Callback pAction will be called with bool 'success' param on finish.
 /// If connection is blackhole, returns false, and callback will NOT be called in the case
 /// (since blackholes live alone).
-bool RunRemoteTaskImpl ( AgentConn_t* pConnection, IRequestBuilder_t* pQuery, IReplyParser_t* pParser,
-	IReporter_t* pReporter, int iQueryRetry, int iQueryDelay )
+bool RunRemoteTaskImpl ( AgentConn_t* pConnection, RequestBuilder_i* pQuery, ReplyParser_i* pParser,
+	Reporter_i* pReporter, int iQueryRetry, int iQueryDelay )
 {
 	sphLogDebugv ( "S ==========> ScheduleDistrJob()" );
 	pConnection->GenericInit ( pQuery, pParser, pReporter, iQueryRetry, iQueryDelay );
@@ -2242,25 +2245,25 @@ bool RunRemoteTaskImpl ( AgentConn_t* pConnection, IRequestBuilder_t* pQuery, IR
 	return !bBlackhole;
 }
 
-bool RunRemoteTask ( AgentConn_t* pConnection, IRequestBuilder_t* pQuery, IReplyParser_t* pParser,
+bool RunRemoteTask ( AgentConn_t* pConnection, RequestBuilder_i* pQuery, ReplyParser_i* pParser,
 	Deffered_f&& pAction, int iQueryRetry, int iQueryDelay )
 {
-	CSphRefcountedPtr<IReporter_t> pReporter (
+	CSphRefcountedPtr<Reporter_i> pReporter (
 		new ReportCallback_c ( std::move ( pAction ), pConnection ));
 	return RunRemoteTaskImpl ( pConnection, pQuery, pParser, pReporter, iQueryRetry, iQueryDelay );
 }
 
-bool RunRemoteTask ( AgentConn_t* pConnection, IRequestBuilder_t* pQuery, IReplyParser_t* pParser,
+bool RunRemoteTask ( AgentConn_t* pConnection, RequestBuilder_i* pQuery, ReplyParser_i* pParser,
 	const Deffered_f& pAction, int iQueryRetry, int iQueryDelay )
 {
-	CSphRefcountedPtr<IReporter_t> pReporter (
+	CSphRefcountedPtr<Reporter_i> pReporter (
 		new ReportCallback_c ( pAction, pConnection ));
 	return RunRemoteTaskImpl ( pConnection, pQuery, pParser, pReporter, iQueryRetry, iQueryDelay );
 }
 
 // this is run once entering query loop for all retries (and all mirrors).
-void AgentConn_t::GenericInit ( IRequestBuilder_t * pQuery, IReplyParser_t * pParser,
-								IReporter_t * pReporter, int iQueryRetry, int iQueryDelay )
+void AgentConn_t::GenericInit ( RequestBuilder_i * pQuery, ReplyParser_i * pParser,
+								Reporter_i * pReporter, int iQueryRetry, int iQueryDelay )
 {
 	sphLogDebugA ( "%d GenericInit() pBuilder %p, parser %p, retries %d, delay %d, ref=%d",
 		m_iStoreTag, pQuery, pParser, iQueryRetry, iQueryDelay, ( int ) GetRefcount ());
@@ -3868,7 +3871,7 @@ void FirePoller ()
 }
 
 
-class CRemoteAgentsObserver : public IRemoteAgentsObserver
+class CRemoteAgentsObserver : public RemoteAgentsObserver_i
 {
 public:
 	void Report ( bool bSuccess ) final
@@ -3926,7 +3929,7 @@ private:
 	CSphAtomic		m_iTasks;		//< total num of tasks
 };
 
-IRemoteAgentsObserver * GetObserver ()
+RemoteAgentsObserver_i * GetObserver ()
 {
 	return new CRemoteAgentsObserver;
 }

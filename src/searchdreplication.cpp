@@ -3002,9 +3002,10 @@ void ClusterFilterNodes ( const CSphString & sSrcNodes, Proto_e eProto, CSphStri
 }
 
 // base of API commands request and reply builders
-struct PQRemoteBase_t : public IRequestBuilder_t, public IReplyParser_t
+class PQRemoteBase_c : public RequestBuilder_i, public ReplyParser_i
 {
-	explicit PQRemoteBase_t ( PQRemoteCommand_e eCmd )
+public:
+	explicit PQRemoteBase_c ( PQRemoteCommand_e eCmd )
 		: m_eCmd ( eCmd )
 	{
 	}
@@ -3037,10 +3038,11 @@ private:
 };
 
 // API command to remote node to delete cluster
-struct PQRemoteDelete_t : public PQRemoteBase_t
+class PQRemoteDelete_c : public PQRemoteBase_c
 {
-	PQRemoteDelete_t()
-		: PQRemoteBase_t ( CLUSTER_DELETE )
+public:
+	PQRemoteDelete_c()
+		: PQRemoteBase_c ( CLUSTER_DELETE )
 	{
 	}
 
@@ -3070,10 +3072,11 @@ struct PQRemoteDelete_t : public PQRemoteBase_t
 };
 
 // API command to remote node prior to file send
-struct PQRemoteFileReserve_t : public PQRemoteBase_t
+class PQRemoteFileReserve_c : public PQRemoteBase_c
 {
-	PQRemoteFileReserve_t ()
-		: PQRemoteBase_t ( CLUSTER_FILE_RESERVE )
+public:
+	PQRemoteFileReserve_c ()
+		: PQRemoteBase_c ( CLUSTER_FILE_RESERVE )
 	{
 	}
 
@@ -3117,10 +3120,11 @@ struct PQRemoteFileReserve_t : public PQRemoteBase_t
 
 
 // API command to remote node of file send
-struct PQRemoteFileSend_t : public PQRemoteBase_t
+class PQRemoteFileSend_c : public PQRemoteBase_c
 {
-	PQRemoteFileSend_t ()
-		: PQRemoteBase_t ( CLUSTER_FILE_SEND )
+public:
+	PQRemoteFileSend_c ()
+		: PQRemoteBase_c ( CLUSTER_FILE_SEND )
 	{
 	}
 
@@ -3159,10 +3163,11 @@ struct PQRemoteFileSend_t : public PQRemoteBase_t
 };
 
 // API command to remote node on add index into cluster
-struct PQRemoteIndexAdd_t : public PQRemoteBase_t
+class PQRemoteIndexAdd_c : public PQRemoteBase_c
 {
-	PQRemoteIndexAdd_t ()
-		: PQRemoteBase_t ( CLUSTER_INDEX_ADD_LOCAL )
+public:
+	PQRemoteIndexAdd_c ()
+		: PQRemoteBase_c ( CLUSTER_INDEX_ADD_LOCAL )
 	{
 	}
 
@@ -3205,9 +3210,10 @@ struct PQRemoteIndexAdd_t : public PQRemoteBase_t
 };
 
 // API command to remote node to issue cluster synced callback
-struct PQRemoteSynced_t : public PQRemoteBase_t
+class PQRemoteSynced_c : public PQRemoteBase_c
 {
-	PQRemoteSynced_t();
+public:
+	PQRemoteSynced_c();
 	void BuildCommand ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final;
 	static void ParseCommand ( InputBuffer_c & tBuf, PQRemoteData_t & tCmd );
 	static void BuildReply ( const PQRemoteReply_t & tRes, CachedOutputBuffer_c & tOut );
@@ -3215,7 +3221,7 @@ struct PQRemoteSynced_t : public PQRemoteBase_t
 };
 
 // wrapper of PerformRemoteTasks
-static bool PerformRemoteTasks ( VectorAgentConn_t & dNodes, IRequestBuilder_t & tReq, IReplyParser_t & tReply, CSphString & sError )
+static bool PerformRemoteTasks ( VectorAgentConn_t & dNodes, RequestBuilder_i & tReq, ReplyParser_i & tReply, CSphString & sError )
 {
 	int iNodes = dNodes.GetLength();
 	int iFinished = PerformRemoteTasks ( dNodes, &tReq, &tReply );
@@ -3238,10 +3244,11 @@ static bool PerformRemoteTasks ( VectorAgentConn_t & dNodes, IRequestBuilder_t &
 }
 
 // API command to remote node to get nodes it sees
-struct PQRemoteClusterGetNodes_t : public PQRemoteBase_t
+class PQRemoteClusterGetNodes_c : public PQRemoteBase_c
 {
-	PQRemoteClusterGetNodes_t ()
-		: PQRemoteBase_t ( CLUSTER_GET_NODES )
+public:
+	PQRemoteClusterGetNodes_c ()
+		: PQRemoteBase_c ( CLUSTER_GET_NODES )
 	{
 	}
 
@@ -3274,10 +3281,11 @@ struct PQRemoteClusterGetNodes_t : public PQRemoteBase_t
 };
 
 // API command to remote node to update nodes by nodes it sees
-struct PQRemoteClusterUpdateNodes_t : public PQRemoteBase_t
+class PQRemoteClusterUpdateNodes_c : public PQRemoteBase_c
 {
-	PQRemoteClusterUpdateNodes_t()
-		: PQRemoteBase_t ( CLUSTER_UPDATE_NODES )
+public:
+	PQRemoteClusterUpdateNodes_c()
+		: PQRemoteBase_c ( CLUSTER_UPDATE_NODES )
 	{
 	}
 
@@ -3324,65 +3332,65 @@ void HandleCommandClusterPq ( CachedOutputBuffer_c & tOut, WORD uCommandVer, Inp
 	{
 		case CLUSTER_DELETE:
 		{
-			PQRemoteDelete_t::ParseCommand ( tBuf, tCmd );
+			PQRemoteDelete_c::ParseCommand ( tBuf, tCmd );
 			bOk = RemoteClusterDelete ( tCmd.m_sCluster, sError );
 			SaveConfig();
 			if ( bOk )
-				PQRemoteDelete_t::BuildReply ( tRes, tOut );
+				PQRemoteDelete_c::BuildReply ( tRes, tOut );
 		}
 		break;
 
 		case CLUSTER_FILE_RESERVE:
 		{
-			PQRemoteFileReserve_t::ParseCommand ( tBuf, tCmd );
+			PQRemoteFileReserve_c::ParseCommand ( tBuf, tCmd );
 			bOk = RemoteFileReserve ( tCmd, tRes, sError );
 			if ( bOk )
-				PQRemoteFileReserve_t::BuildReply ( tRes, tOut );
+				PQRemoteFileReserve_c::BuildReply ( tRes, tOut );
 		}
 		break;
 
 		case CLUSTER_FILE_SEND:
 		{
-			PQRemoteFileSend_t::ParseCommand ( tBuf, tCmd );
+			PQRemoteFileSend_c::ParseCommand ( tBuf, tCmd );
 			bOk = RemoteFileStore ( tCmd, tRes, sError );
 			if ( bOk )
-				PQRemoteFileSend_t::BuildReply ( tRes, tOut );
+				PQRemoteFileSend_c::BuildReply ( tRes, tOut );
 		}
 		break;
 
 		case CLUSTER_INDEX_ADD_LOCAL:
 		{
-			PQRemoteIndexAdd_t::ParseCommand ( tBuf, tCmd );
+			PQRemoteIndexAdd_c::ParseCommand ( tBuf, tCmd );
 			bOk = RemoteLoadIndex ( tCmd, tRes, sError );
 			if ( bOk )
-				PQRemoteIndexAdd_t::BuildReply ( tRes, tOut );
+				PQRemoteIndexAdd_c::BuildReply ( tRes, tOut );
 		}
 		break;
 
 		case CLUSTER_SYNCED:
 		{
-			PQRemoteSynced_t::ParseCommand ( tBuf, tCmd );
+			PQRemoteSynced_c::ParseCommand ( tBuf, tCmd );
 			bOk = RemoteClusterSynced ( tCmd, sError );
 			if ( bOk )
-				PQRemoteSynced_t::BuildReply ( tRes, tOut );
+				PQRemoteSynced_c::BuildReply ( tRes, tOut );
 		}
 		break;
 
 		case CLUSTER_GET_NODES:
 		{
-			PQRemoteClusterGetNodes_t::ParseCommand ( tBuf, tCmd );
+			PQRemoteClusterGetNodes_c::ParseCommand ( tBuf, tCmd );
 			bOk = RemoteClusterGetNodes ( tCmd.m_sCluster, tCmd.m_sGTID, sError, tRes.m_sFileHash );
 			if ( bOk )
-				PQRemoteClusterGetNodes_t::BuildReply ( tRes.m_sFileHash, tOut );
+				PQRemoteClusterGetNodes_c::BuildReply ( tRes.m_sFileHash, tOut );
 		}
 		break;
 
 		case CLUSTER_UPDATE_NODES:
 		{
-			PQRemoteClusterUpdateNodes_t::ParseCommand ( tBuf, tCmd );
+			PQRemoteClusterUpdateNodes_c::ParseCommand ( tBuf, tCmd );
 			bOk = RemoteClusterUpdateNodes ( tCmd.m_sCluster, nullptr, sError );
 			if ( bOk )
-				PQRemoteClusterUpdateNodes_t::BuildReply ( tOut );
+				PQRemoteClusterUpdateNodes_c::BuildReply ( tOut );
 		}
 		break;
 
@@ -3467,7 +3475,7 @@ bool ClusterDelete ( const CSphString & sCluster, CSphString & sError, CSphStrin
 		PQRemoteData_t tCmd;
 		tCmd.m_sCluster = sCluster;
 		auto dNodes = GetNodes ( sNodes, tCmd );
-		PQRemoteDelete_t tReq;
+		PQRemoteDelete_c tReq;
 		if ( dNodes.GetLength() && !PerformRemoteTasks ( dNodes, tReq, tReq, sError ) )
 			return false;
 	}
@@ -3708,8 +3716,8 @@ static bool SendFile ( const CSphVector<RemoteFileState_t> & dDesc, const CSphSt
 		dNodes[i] = CreateAgent ( *dReaders[i].m_pAgentDesc, dReaders[i].m_tArgs, g_iRemoteTimeout );
 
 	// submit initial jobs
-	CSphRefcountedPtr<IRemoteAgentsObserver> tReporter ( GetObserver() );
-	PQRemoteFileSend_t tReq;
+	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter ( GetObserver() );
+	PQRemoteFileSend_c tReq;
 	ScheduleDistrJobs ( dNodes, &tReq, &tReq, tReporter );
 
 	StringBuilder_c tErrors;
@@ -3732,7 +3740,7 @@ static bool SendFile ( const CSphVector<RemoteFileState_t> & dDesc, const CSphSt
 				continue;
 
 			FileReader_t & tReader = dReaders[iAgent];
-			const PQRemoteReply_t & tRes = PQRemoteBase_t::GetRes ( *pAgent );
+			const PQRemoteReply_t & tRes = PQRemoteBase_c::GetRes ( *pAgent );
 
 			// report errors first
 			if ( tRes.m_iIndexFileSize!=tReader.m_tArgs.m_iFileOff+tReader.m_tArgs.m_iSendSize || !pAgent->m_sFailure.IsEmpty() )
@@ -3801,7 +3809,7 @@ static bool CheckReplyIndexState ( const VecTraits_T<AgentConn_t *> & dNodes, in
 	StringBuilder_c sBuf ( "," );
 	for ( const AgentConn_t * pAgent : dNodes )
 	{
-		const PQRemoteReply_t & tRes = PQRemoteBase_t::GetRes ( *pAgent );
+		const PQRemoteReply_t & tRes = PQRemoteBase_c::GetRes ( *pAgent );
 		const bool bSameSize = ( tRes.m_iIndexFileSize==iFileSize );
 		const bool bSameHash = ( !pHash || ( (*pHash)==tRes.m_sFileHash ) );
 
@@ -3875,7 +3883,7 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 		tAgentData.m_sFileHash = sFileHash;
 
 		auto dNodes = GetNodes ( dDesc, tAgentData );
-		PQRemoteFileReserve_t tReq;
+		PQRemoteFileReserve_c tReq;
 		bool bOk = PerformRemoteTasks ( dNodes, tReq, tReq, sError );
 		if ( !CheckReplyIndexState ( dNodes, iFileSize, nullptr, sError ) || !bOk )
 			return false;
@@ -3884,7 +3892,7 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 		assert ( dDesc.GetLength()==dNodes.GetLength() );
 		ARRAY_FOREACH ( i, dNodes )
 		{
-			 const PQRemoteReply_t & tRes = PQRemoteBase_t::GetRes ( *dNodes[i] );
+			 const PQRemoteReply_t & tRes = PQRemoteBase_c::GetRes ( *dNodes[i] );
 
 			 // no need to send index files to nodes there files matches exactly
 			 if ( tRes.m_iIndexFileSize==iFileSize && tRes.m_sFileHash==sFileHash )
@@ -3921,7 +3929,7 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 			dNodes[i] = CreateAgent ( *tState.m_pAgentDesc, tAgentData, g_iRemoteTimeout );
 		}
 
-		PQRemoteIndexAdd_t tReq;
+		PQRemoteIndexAdd_c tReq;
 		bool bOk = PerformRemoteTasks ( dNodes, tReq, tReq, sError );
 		if ( !CheckReplyIndexState ( dNodes, iFileSize, &sFileHash, sError ) || !bOk )
 			return false;
@@ -4017,12 +4025,12 @@ bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool
 // SST
 /////////////////////////////////////////////////////////////////////////////
 
-PQRemoteSynced_t::PQRemoteSynced_t ()
-	: PQRemoteBase_t ( CLUSTER_SYNCED )
+PQRemoteSynced_c::PQRemoteSynced_c ()
+	: PQRemoteBase_c ( CLUSTER_SYNCED )
 {
 }
 
-void PQRemoteSynced_t::BuildCommand ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
+void PQRemoteSynced_c::BuildCommand ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
 {
 	const PQRemoteData_t & tCmd = GetReq ( tAgent );
 	tOut.SendString ( tCmd.m_sCluster.cstr() );
@@ -4032,7 +4040,7 @@ void PQRemoteSynced_t::BuildCommand ( const AgentConn_t & tAgent, CachedOutputBu
 		tOut.SendString ( sIndex.cstr() );
 }
 
-void PQRemoteSynced_t::ParseCommand ( InputBuffer_c & tBuf, PQRemoteData_t & tCmd )
+void PQRemoteSynced_c::ParseCommand ( InputBuffer_c & tBuf, PQRemoteData_t & tCmd )
 {
 	tCmd.m_sCluster = tBuf.GetString();
 	tCmd.m_sGTID = tBuf.GetString();
@@ -4041,13 +4049,13 @@ void PQRemoteSynced_t::ParseCommand ( InputBuffer_c & tBuf, PQRemoteData_t & tCm
 		tCmd.m_dIndexes[i] = tBuf.GetString();
 }
 
-void PQRemoteSynced_t::BuildReply ( const PQRemoteReply_t & tRes, CachedOutputBuffer_c & tOut )
+void PQRemoteSynced_c::BuildReply ( const PQRemoteReply_t & tRes, CachedOutputBuffer_c & tOut )
 {
 	APICommand_t tReply ( tOut, SEARCHD_OK );
 	tOut.SendByte ( 1 );
 }
 
-bool PQRemoteSynced_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
+bool PQRemoteSynced_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
 {
 	// just payload as can not recv reply with 0 size
 	tReq.GetByte();
@@ -4065,7 +4073,7 @@ static bool SendClusterSynced ( const CSphString & sCluster, const CSphVector<CS
 		tAgentData.m_dIndexes[i] = dIndexes[i];
 
 	auto dNodes = GetNodes ( dDesc, tAgentData );
-	PQRemoteSynced_t tReq;
+	PQRemoteSynced_c tReq;
 	bool bOk = PerformRemoteTasks ( dNodes, tReq, tReq, sError );
 	if ( !CheckReplyIndexState ( dNodes, 0, nullptr, sError ) || !bOk )
 		return false;
@@ -4199,8 +4207,8 @@ bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sClu
 	}
 
 	// submit initial jobs
-	CSphRefcountedPtr<IRemoteAgentsObserver> tReporter ( GetObserver() );
-	PQRemoteClusterGetNodes_t tReq;
+	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter ( GetObserver() );
+	PQRemoteClusterGetNodes_c tReq;
 	ScheduleDistrJobs ( dAgents, &tReq, &tReq, tReporter );
 
 	bool bDone = false;
@@ -4220,7 +4228,7 @@ bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sClu
 			// FIXME!!! no need to wait all replies in case any node get nodes list
 			// just break on 1st successful reply
 			// however need a way for distributed loop to finish as it can not break early
-			const PQRemoteReply_t & tRes = PQRemoteBase_t::GetRes ( *pAgent );
+			const PQRemoteReply_t & tRes = PQRemoteBase_c::GetRes ( *pAgent );
 			sNodes = tRes.m_sFileHash;
 		}
 	}
@@ -4302,7 +4310,7 @@ bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdat
 	tReqData.m_sCluster = sCluster;
 
 	auto dNodes = GetNodes ( sNodes, tReqData );
-	PQRemoteClusterUpdateNodes_t tReq;
+	PQRemoteClusterUpdateNodes_c tReq;
 	bOk &= PerformRemoteTasks ( dNodes, tReq, tReq, sError );
 
 	SaveConfig();

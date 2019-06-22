@@ -377,8 +377,9 @@ using MultiAgentDescRefPtr_c = CSphRefcountedPtr<MultiAgentDesc_c>;
 extern int g_iAgentRetryCount;
 extern int g_iAgentRetryDelay;
 
-struct IReporter_t : ISphRefcountedMT
+class Reporter_i : public ISphRefcountedMT
 {
+public:
 	// called by netloop - initially feeds reporter with tasks
 	// For every task just before start querying it calls FeedTask(true).
 	// If task is not to be traced (blackhole), it then calls FeedTask(false).
@@ -391,8 +392,9 @@ struct IReporter_t : ISphRefcountedMT
 	// called by outline observer, or by netloop checking for orphaned
 	// must return 'true' if reporter is abandoned - i.e. if all expected connections are finished.
 	virtual bool IsDone () const = 0;
+
 protected:
-	virtual ~IReporter_t () {};
+	virtual ~Reporter_i () {};
 };
 
 #if USE_WINDOWS
@@ -504,7 +506,7 @@ public:
 	mutable int		m_iStoreTag = -1;	///< cookie, m.b. used to 'glue' to concrete connection
 	int				m_iWeight = -1;		///< weight of the index, will be send with query to remote host
 
-	CSphRefcountedPtr<IReporter_t>	m_pReporter { nullptr };	///< used to report back when we're finished
+	CSphRefcountedPtr<Reporter_i>	m_pReporter { nullptr };	///< used to report back when we're finished
 	LPKEY			m_pPollerTask = nullptr; ///< internal for poller. fixme! privatize?
 	CSphAtomic		m_bSuccess;		///< agent got processed, no need to retry
 
@@ -517,7 +519,7 @@ public:
 	inline void SetNetLoop ( bool bInNetLoop = true ) { m_bInNetLoop = bInNetLoop; }
 	inline bool FireKick () { bool bRes = m_bNeedKick; m_bNeedKick = false; return bRes; }
 
-	void GenericInit ( IRequestBuilder_t * pQuery, IReplyParser_t * pParser, IReporter_t * pReporter, int iQueryRetry, int iQueryDelay );
+	void GenericInit ( RequestBuilder_i * pQuery, ReplyParser_i * pParser, Reporter_i * pReporter, int iQueryRetry, int iQueryDelay );
 	void StartRemoteLoopTry ();
 
 	void ErrorCallback ( int64_t iWaited );
@@ -539,8 +541,8 @@ public:
 private:
 
 	// prepare buf, parse result
-	IRequestBuilder_t * m_pBuilder = nullptr; ///< fixme! check if it is ok to have as the member, or we don't need it actually
-	IReplyParser_t *	m_pParser = nullptr;
+	RequestBuilder_i * m_pBuilder = nullptr; ///< fixme! check if it is ok to have as the member, or we don't need it actually
+	ReplyParser_i *	m_pParser = nullptr;
 
 	// working with mirrors
 	MultiAgentDescRefPtr_c m_pMultiAgent { nullptr }; ///< my manager, could turn me into another mirror
@@ -616,7 +618,7 @@ private:
 
 using VectorAgentConn_t = CSphVector<AgentConn_t *>;
 using VecRefPtrsAgentConn_t = VecRefPtrs_t<AgentConn_t *>;
-class IRemoteAgentsObserver : public IReporter_t
+class RemoteAgentsObserver_i : public Reporter_i
 {
 public:
 
@@ -633,20 +635,20 @@ public:
 	virtual void WaitChanges () = 0;
 };
 
-IRemoteAgentsObserver * GetObserver ();
+RemoteAgentsObserver_i * GetObserver ();
 
-void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery, IReplyParser_t * pParser,
-	IReporter_t * pReporter, int iQueryRetry = -1, int iQueryDelay = -1 );
+void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser,
+	Reporter_i * pReporter, int iQueryRetry = -1, int iQueryDelay = -1 );
 
 // schedule one job. Returns false if connection s blackhole (and so, will not report anything
 using Deffered_f = std::function<void ( bool )>;
-bool RunRemoteTask ( AgentConn_t* pConnection, IRequestBuilder_t* pQuery, IReplyParser_t* pParser,
+bool RunRemoteTask ( AgentConn_t* pConnection, RequestBuilder_i* pQuery, ReplyParser_i* pParser,
 	Deffered_f && pAction, int iQueryRetry = -1, int iQueryDelay = -1 );
-bool RunRemoteTask ( AgentConn_t* pConnection, IRequestBuilder_t* pQuery, IReplyParser_t* pParser,
+bool RunRemoteTask ( AgentConn_t* pConnection, RequestBuilder_i* pQuery, ReplyParser_i* pParser,
 	Deffered_f & pAction, int iQueryRetry = -1, int iQueryDelay = -1 );
 
 // simplified full task - schedule jobs, wait for complete, report num of succeeded
-int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery, IReplyParser_t * pParser );
+int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser );
 
 /////////////////////////////////////////////////////////////////////////////
 // DISTRIBUTED QUERIES
@@ -759,16 +761,18 @@ bool ParseAddressPort ( HostDesc_t & pAgent, const char ** ppLine, const WarnInf
 //! \return configured multiagent, or null if failed
 MultiAgentDesc_c * ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions );
 
-struct IRequestBuilder_t : public ISphNoncopyable
+class RequestBuilder_i : public ISphNoncopyable
 {
-	virtual ~IRequestBuilder_t () {} // to avoid gcc4 warns
+public:
+	virtual ~RequestBuilder_i () {} // to avoid gcc4 warns
 	virtual void BuildRequest ( const AgentConn_t &tAgent, CachedOutputBuffer_c &tOut ) const = 0;
 };
 
 
-struct IReplyParser_t
+class ReplyParser_i
 {
-	virtual ~IReplyParser_t () {} // to avoid gcc4 warns
+public:
+	virtual ~ReplyParser_i () {} // to avoid gcc4 warns
 	virtual bool ParseReply ( MemInputBuffer_c &tReq, AgentConn_t &tAgent ) const = 0;
 };
 

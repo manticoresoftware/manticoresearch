@@ -1253,15 +1253,15 @@ public:
 };
 
 
-struct IRequestBuilder_t;
-struct IReplyParser_t;
+class RequestBuilder_i;
+class ReplyParser_i;
 
 class QueryParserFactory_i
 {
 public:
 	virtual QueryParser_i *		CreateQueryParser() const = 0;
-	virtual IRequestBuilder_t *	CreateRequestBuilder ( const CSphString & sQuery, const SqlStmt_t & tStmt ) const = 0;
-	virtual IReplyParser_t *	CreateReplyParser ( int & iUpdated, int & iWarnings ) const = 0;
+	virtual RequestBuilder_i *	CreateRequestBuilder ( const CSphString & sQuery, const SqlStmt_t & tStmt ) const = 0;
+	virtual ReplyParser_i *		CreateReplyParser ( int & iUpdated, int & iWarnings ) const = 0;
 };
 
 

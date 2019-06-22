@@ -2905,9 +2905,10 @@ DistributedIndex_t::~DistributedIndex_t ()
 // SEARCH HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
-struct SearchRequestBuilder_t : public IRequestBuilder_t
+class SearchRequestBuilder_c : public RequestBuilder_i
 {
-	SearchRequestBuilder_t ( const CSphVector<CSphQuery> & dQueries, int iStart, int iEnd, int iDivideLimits )
+public:
+	SearchRequestBuilder_c ( const CSphVector<CSphQuery> & dQueries, int iStart, int iEnd, int iDivideLimits )
 		: m_dQueries ( dQueries ), m_iStart ( iStart ), m_iEnd ( iEnd ), m_iDivideLimits ( iDivideLimits )
 	{}
 
@@ -2924,7 +2925,7 @@ protected:
 };
 
 
-class SearchReplyParser_c : public IReplyParser_t, public ISphNoncopyable
+class SearchReplyParser_c : public ReplyParser_i, public ISphNoncopyable
 {
 public:
 	SearchReplyParser_c ( int iStart, int iEnd )
@@ -2963,7 +2964,7 @@ enum
 	QFLAG_JSON_QUERY			= 1UL << 11
 };
 
-void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, ISphOutputBuffer & tOut, const CSphQuery & q, int iWeight, int iAgentQueryTimeout ) const
+void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer & tOut, const CSphQuery & q, int iWeight, int iAgentQueryTimeout ) const
 {
 	bool bAgentWeight = ( iWeight!=-1 );
 	// starting with command version 1.27, flags go first
@@ -3170,7 +3171,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, ISphOutputBuffer
 }
 
 
-void SearchRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
+void SearchRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
 {
 	APICommand_t tWr { tOut, SEARCHD_COMMAND_SEARCH, VER_COMMAND_SEARCH }; // API header
 
@@ -7529,15 +7530,15 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	///////////////////////////////////////////////////////////
 
 	// connect to remote agents and query them, if required
-	CSphScopedPtr<SearchRequestBuilder_t> tReqBuilder { nullptr };
-	CSphRefcountedPtr<IRemoteAgentsObserver> tReporter { nullptr };
-	CSphScopedPtr<IReplyParser_t> tParser { nullptr };
+	CSphScopedPtr<SearchRequestBuilder_c> tReqBuilder { nullptr };
+	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter { nullptr };
+	CSphScopedPtr<ReplyParser_i> tParser { nullptr };
 	if ( !dRemotes.IsEmpty() )
 	{
 		if ( m_pProfile )
 			m_pProfile->Switch ( SPH_QSTATE_DIST_CONNECT );
 
-		tReqBuilder = new SearchRequestBuilder_t ( m_dQueries, iStart, iEnd, iDivideLimits );
+		tReqBuilder = new SearchRequestBuilder_c ( m_dQueries, iStart, iEnd, iDivideLimits );
 		tParser = new SearchReplyParser_c ( iStart, iEnd );
 		tReporter = GetObserver();
 
@@ -9862,9 +9863,10 @@ struct SnippetJob_t : public ISphJob
 };
 
 
-struct SnippetRequestBuilder_t : public IRequestBuilder_t
+class SnippetRequestBuilder_c : public RequestBuilder_i
 {
-	explicit SnippetRequestBuilder_t ( const SnippetsRemote_t * pWorker )
+public:
+	explicit SnippetRequestBuilder_c ( const SnippetsRemote_t * pWorker )
 		: m_pWorker ( pWorker )
 	{}
 	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final;
@@ -9875,9 +9877,10 @@ private:
 };
 
 
-struct SnippetReplyParser_t : public IReplyParser_t
+class SnippetReplyParser_c : public ReplyParser_i
 {
-	explicit SnippetReplyParser_t ( SnippetsRemote_t * pWorker )
+public:
+	explicit SnippetReplyParser_c ( SnippetsRemote_t * pWorker )
 		: m_pWorker ( pWorker )
 	{}
 
@@ -9888,7 +9891,7 @@ private:
 };
 
 
-void SnippetRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
+void SnippetRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
 {
 	// it sends either all queries to each agent or sequence of queries to current agent
 //	auto iWorker = ( int ) m_iWorker++;
@@ -9929,7 +9932,7 @@ void SnippetRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedO
 		tOut.SendString ( dQueries[iDoc].m_sSource.cstr() );
 }
 
-bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const
+bool SnippetReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const
 {
 	auto & dQueries = m_pWorker->m_dQueries;
 	int iDoc = m_pWorker->m_dTasks[tAgent.m_iStoreTag].m_iHead;
@@ -10174,9 +10177,9 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	}
 
 	// connect to remote agents and query them
-	SnippetRequestBuilder_t tReqBuilder ( &dRemoteSnippets );
-	SnippetReplyParser_t  tParser ( &dRemoteSnippets );
-	CSphRefcountedPtr<IRemoteAgentsObserver> tReporter ( GetObserver() );
+	SnippetRequestBuilder_c tReqBuilder ( &dRemoteSnippets );
+	SnippetReplyParser_c tParser ( &dRemoteSnippets );
+	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter ( GetObserver() );
 	ScheduleDistrJobs ( dRemoteSnippets.m_dAgents, &tReqBuilder, &tParser, tReporter );
 
 	// run local worker in current thread also
@@ -10414,9 +10417,10 @@ void HandleCommandKeywords ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer
 // UPDATES HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
-struct UpdateRequestBuilder_t : public IRequestBuilder_t
+class UpdateRequestBuilder_c : public RequestBuilder_i
 {
-	explicit UpdateRequestBuilder_t ( const CSphAttrUpdate & pUpd ) : m_tUpd ( pUpd ) {}
+public:
+	explicit UpdateRequestBuilder_c ( const CSphAttrUpdate & pUpd ) : m_tUpd ( pUpd ) {}
 	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c& tOut ) const final;
 
 protected:
@@ -10424,9 +10428,10 @@ protected:
 };
 
 
-struct UpdateReplyParser_t : public IReplyParser_t
+class UpdateReplyParser_c : public ReplyParser_i
 {
-	explicit UpdateReplyParser_t ( int * pUpd )
+public:
+	explicit UpdateReplyParser_c ( int * pUpd )
 		: m_pUpdated ( pUpd )
 	{}
 
@@ -10441,7 +10446,7 @@ protected:
 };
 
 
-void UpdateRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
+void UpdateRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
 {
 	const char * sIndexes = tAgent.m_tDesc.m_sIndexes.cstr();
 	bool bBlob = false;
@@ -10752,8 +10757,8 @@ void HandleCommandUpdate ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c 
 				pDist->GetAllHosts ( dAgents );
 
 				// connect to remote agents and query them
-				UpdateRequestBuilder_t tReqBuilder ( tUpd );
-				UpdateReplyParser_t tParser ( &iUpdated );
+				UpdateRequestBuilder_c tReqBuilder ( tUpd );
+				UpdateReplyParser_c tParser ( &iUpdated );
 				iSuccesses += PerformRemoteTasks ( dAgents, &tReqBuilder, &tParser );
 			}
 		}
@@ -12548,7 +12553,7 @@ static void FixParsedMva ( const CSphVector<int64_t> & dParsed, CSphVector<int64
 }
 
 
-class PqRequestBuilder_c : public IRequestBuilder_t
+class PqRequestBuilder_c : public RequestBuilder_i
 {
 	const BlobVec_t &m_dDocs;
 	const PercolateOptions_t &m_tOpts;
@@ -12611,8 +12616,9 @@ public:
 
 
 
-struct PqReplyParser_t : public IReplyParser_t
+class PqReplyParser_c : public ReplyParser_i
 {
+public:
 	bool ParseReply ( MemInputBuffer_c &tReq, AgentConn_t &tAgent ) const final
 	{
 		//	auto &dQueries = m_pWorker->m_dQueries;
@@ -13119,13 +13125,13 @@ void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t
 	int iSuccesses = 0;
 	int iAgentsDone = 0;
 	CSphScopedPtr<PqRequestBuilder_c> pReqBuilder { nullptr };
-	CSphScopedPtr<IReplyParser_t> pParser { nullptr };
-	CSphRefcountedPtr<IRemoteAgentsObserver> pReporter { nullptr };
+	CSphScopedPtr<ReplyParser_i> pParser { nullptr };
+	CSphRefcountedPtr<RemoteAgentsObserver_i> pReporter { nullptr };
 	if ( bHaveRemotes )
 	{
 		pReqBuilder = new PqRequestBuilder_c ( dDocs, tOpts, iStart, iStep );
 		iStart += iStep * dAgents.GetLength ();
-		pParser = new PqReplyParser_t;
+		pParser = new PqReplyParser_c;
 		pReporter = GetObserver();
 		ScheduleDistrJobs ( dAgents, pReqBuilder.Ptr(), pParser.Ptr(), pReporter );
 	}
@@ -13436,7 +13442,7 @@ void HandleMysqlPercolateMeta ( const CPqResult &tResult, const CSphString & sWa
 }
 
 
-class SphinxqlRequestBuilder_c : public IRequestBuilder_t
+class SphinxqlRequestBuilder_c : public RequestBuilder_i
 {
 public:
 			SphinxqlRequestBuilder_c ( const CSphString & sQuery, const SqlStmt_t & tStmt );
@@ -14044,9 +14050,10 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc
 }
 
 
-struct KeywordsRequestBuilder_t : public IRequestBuilder_t
+class KeywordsRequestBuilder_c : public RequestBuilder_i
 {
-	KeywordsRequestBuilder_t ( const GetKeywordsSettings_t & tSettings, const CSphString & sTerm );
+public:
+	KeywordsRequestBuilder_c ( const GetKeywordsSettings_t & tSettings, const CSphString & sTerm );
 	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final;
 
 protected:
@@ -14055,9 +14062,10 @@ protected:
 };
 
 
-struct KeywordsReplyParser_t : public IReplyParser_t
+class KeywordsReplyParser_c : public ReplyParser_i
 {
-	KeywordsReplyParser_t ( bool bGetStats, CSphVector<CSphKeywordInfo> & dKeywords );
+public:
+	KeywordsReplyParser_c ( bool bGetStats, CSphVector<CSphKeywordInfo> & dKeywords );
 	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final;
 
 	bool m_bStats;
@@ -14120,8 +14128,8 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 		if ( !dAgents.IsEmpty() )
 		{
 			// connect to remote agents and query them
-			KeywordsRequestBuilder_t tReqBuilder ( tSettings, sQuery );
-			KeywordsReplyParser_t tParser ( tSettings.m_bStats, dKeywords );
+			KeywordsRequestBuilder_c tReqBuilder ( tSettings, sQuery );
+			KeywordsReplyParser_c tParser ( tSettings.m_bStats, dKeywords );
 			iAgentsReply = PerformRemoteTasks ( dAgents, &tReqBuilder, &tParser );
 
 			for ( const AgentConn_t * pAgent : dAgents )
@@ -14262,13 +14270,13 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphStr
 	tOut.Eof ( false, iWarnings );
 }
 
-KeywordsRequestBuilder_t::KeywordsRequestBuilder_t ( const GetKeywordsSettings_t & tSettings, const CSphString & sTerm )
+KeywordsRequestBuilder_c::KeywordsRequestBuilder_c ( const GetKeywordsSettings_t & tSettings, const CSphString & sTerm )
 	: m_tSettings ( tSettings )
 	, m_sTerm ( sTerm )
 {
 }
 
-void KeywordsRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
+void KeywordsRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
 {
 	const CSphString & sIndexes = tAgent.m_tDesc.m_sIndexes;
 
@@ -14283,13 +14291,13 @@ void KeywordsRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, Cached
 	tOut.SendInt ( m_tSettings.m_iExpansionLimit );
 }
 
-KeywordsReplyParser_t::KeywordsReplyParser_t ( bool bGetStats, CSphVector<CSphKeywordInfo> & dKeywords )
+KeywordsReplyParser_c::KeywordsReplyParser_c ( bool bGetStats, CSphVector<CSphKeywordInfo> & dKeywords )
 	: m_bStats ( bGetStats )
 	, m_dKeywords ( dKeywords )
 {
 }
 
-bool KeywordsReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
+bool KeywordsReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
 {
 	int iWords = tReq.GetInt();
 	int iLen = m_dKeywords.GetLength();
@@ -14860,9 +14868,10 @@ void HandleMysqlReloadIndexes ( SqlRowBuffer_c &tOut )
 // user variables these send from master to agents
 /////////////////////////////////////////////////////////////////////////////
 
-struct UVarRequestBuilder_t : public IRequestBuilder_t
+class UVarRequestBuilder_c : public RequestBuilder_i
 {
-	UVarRequestBuilder_t ( const char * sName, const CSphVector<SphAttr_t> &dSetValues )
+public:
+	UVarRequestBuilder_c ( const char * sName, const CSphVector<SphAttr_t> &dSetValues )
 		: m_sName ( sName )
 	{
 		m_iUserVars = dSetValues.GetLength ();
@@ -14900,8 +14909,9 @@ struct UVarRequestBuilder_t : public IRequestBuilder_t
 	int m_iLength = 0;
 };
 
-struct UVarReplyParser_t : public IReplyParser_t
+class UVarReplyParser_c : public ReplyParser_i
 {
+public:
 	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final
 	{
 		// error got handled at call site
@@ -14943,8 +14953,8 @@ static bool SendUserVar ( const char * sIndex, const char * sUserVarName, CSphVe
 	// connect to remote agents and query them
 	if ( !dAgents.IsEmpty() )
 	{
-		UVarRequestBuilder_t tReqBuilder ( sUserVarName, dSetValues );
-		UVarReplyParser_t tParser;
+		UVarRequestBuilder_c tReqBuilder ( sUserVarName, dSetValues );
+		UVarReplyParser_c tParser;
 		PerformRemoteTasks ( dAgents, &tReqBuilder, &tParser );
 	}
 
@@ -14997,9 +15007,10 @@ void HandleCommandUserVar ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_
 // SMART UPDATES HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
-struct SphinxqlReplyParser_t : public IReplyParser_t
+class SphinxqlReplyParser_c : public ReplyParser_i
 {
-	explicit SphinxqlReplyParser_t ( int * pUpd, int * pWarns )
+public:
+	explicit SphinxqlReplyParser_c ( int * pUpd, int * pWarns )
 		: m_pUpdated ( pUpd )
 		, m_pWarns ( pWarns )
 	{}
@@ -15066,14 +15077,14 @@ public:
 		return sphCreatePlainQueryParser();
 	}
 
-	IRequestBuilder_t * CreateRequestBuilder ( const CSphString & sQuery, const SqlStmt_t & tStmt ) const override
+	RequestBuilder_i * CreateRequestBuilder ( const CSphString & sQuery, const SqlStmt_t & tStmt ) const override
 	{
 		return new SphinxqlRequestBuilder_c ( sQuery, tStmt );
 	}
 
-	IReplyParser_t * CreateReplyParser ( int & iUpdated, int & iWarnings ) const override
+	ReplyParser_i * CreateReplyParser ( int & iUpdated, int & iWarnings ) const override
 	{
-		return new SphinxqlReplyParser_t ( &iUpdated, &iWarnings );
+		return new SphinxqlReplyParser_c ( &iUpdated, &iWarnings );
 	}
 };
 
@@ -15184,8 +15195,8 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory
 			pDist->GetAllHosts ( dAgents );
 
 			// connect to remote agents and query them
-			CSphScopedPtr<IRequestBuilder_t> pRequestBuilder ( tQueryParserFactory.CreateRequestBuilder ( sQuery, tStmt ) ) ;
-			CSphScopedPtr<IReplyParser_t> pReplyParser ( tQueryParserFactory.CreateReplyParser ( iUpdated, iWarns ) );
+			CSphScopedPtr<RequestBuilder_i> pRequestBuilder ( tQueryParserFactory.CreateRequestBuilder ( sQuery, tStmt ) ) ;
+			CSphScopedPtr<ReplyParser_i> pReplyParser ( tQueryParserFactory.CreateReplyParser ( iUpdated, iWarns ) );
 			iSuccesses += PerformRemoteTasks ( dAgents, pRequestBuilder.Ptr (), pReplyParser.Ptr () );
 		}
 	}
@@ -15833,8 +15844,8 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory
 			int iWarns = 0;
 
 			// connect to remote agents and query them
-			CSphScopedPtr<IRequestBuilder_t> pRequestBuilder ( tQueryParserFactory.CreateRequestBuilder ( sQuery, tStmt ) ) ;
-			CSphScopedPtr<IReplyParser_t> pReplyParser ( tQueryParserFactory.CreateReplyParser ( iGot, iWarns ) );
+			CSphScopedPtr<RequestBuilder_i> pRequestBuilder ( tQueryParserFactory.CreateRequestBuilder ( sQuery, tStmt ) ) ;
+			CSphScopedPtr<ReplyParser_i> pReplyParser ( tQueryParserFactory.CreateReplyParser ( iGot, iWarns ) );
 			PerformRemoteTasks ( dAgents, pRequestBuilder.Ptr (), pReplyParser.Ptr () );
 
 			// FIXME!!! report error & warnings from agents

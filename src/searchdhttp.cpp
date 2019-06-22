@@ -310,7 +310,7 @@ private:
 };
 
 //////////////////////////////////////////////////////////////////////////
-class JsonRequestBuilder_c : public IRequestBuilder_t
+class JsonRequestBuilder_c : public RequestBuilder_i
 {
 public:
 	JsonRequestBuilder_c ( const CSphString & sQuery, const SqlStmt_t & /*tStmt*/, ESphHttpEndpoint eEndpoint )
@@ -340,7 +340,7 @@ private:
 };
 
 
-class JsonReplyParser_c : public IReplyParser_t
+class JsonReplyParser_c : public ReplyParser_i
 {
 public:
 	JsonReplyParser_c ( int & iAffected, int & iWarnings )
@@ -381,12 +381,12 @@ public:
 		return sphCreateJsonQueryParser();
 	}
 
-	IRequestBuilder_t * CreateRequestBuilder ( const CSphString & sQuery, const SqlStmt_t & tStmt ) const override
+	RequestBuilder_i * CreateRequestBuilder ( const CSphString & sQuery, const SqlStmt_t & tStmt ) const override
 	{
 		return new JsonRequestBuilder_c ( sQuery, tStmt, m_eEndpoint );
 	}
 
-	IReplyParser_t * CreateReplyParser ( int & iUpdated, int & iWarnings ) const override
+	ReplyParser_i * CreateReplyParser ( int & iUpdated, int & iWarnings ) const override
 	{
 		return new JsonReplyParser_c ( iUpdated, iWarnings );
 	}

@@ -28,6 +28,9 @@
 #include "searchdreplication.h"
 #include "threadutils.h"
 #include "searchdtask.h"
+#include "global_idf.h"
+
+// services
 #include "taskping.h"
 #include "taskmalloctrim.h"
 #include "taskoptimize.h"
@@ -1296,7 +1299,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	ReplicateClustersDelete();
 
 	sphShutdownWordforms ();
-	sphShutdownGlobalIDFs ();
+	sph::ShutdownGlobalIDFs ();
 	sphAotShutdown ();
 
 	ARRAY_FOREACH ( i, g_dListeners )
@@ -20122,7 +20125,7 @@ bool CheckConfigChanges ( CSphVector<char>& dContent )
 {
 	dContent.Reset();
 	DWORD uCRC32 = 0;
-	struct stat tStat = {0}; // fixme! we have struct_stat in defines, investigate it!
+	struct_stat tStat = {0};
 
 #if !USE_WINDOWS
 	char sBuf [ 8192 ];
@@ -20343,7 +20346,7 @@ void CheckRotateGlobalIDFs ()
 	}
 
 	ThreadSystem_t tThdSystemDesc ( "ROTATE global IDF" );
-	sphUpdateGlobalIDFs ( dFiles );
+	sph::UpdateGlobalIDFs ( dFiles );
 }
 
 
@@ -24066,7 +24069,8 @@ ESphAddIndex ConfigureAndPreload ( const CSphConfigSection & hIndex, const char 
 		pHandle->AddRef ();
 
 		CSphString sError;
-		if ( !pJustAddedLocalWl->m_sGlobalIDFPath.IsEmpty() && !sphPrereadGlobalIDF ( pJustAddedLocalWl->m_sGlobalIDFPath, sError ) )
+		if ( !pJustAddedLocalWl->m_sGlobalIDFPath.IsEmpty()
+				&& !sph::PrereadGlobalIDF (	pJustAddedLocalWl->m_sGlobalIDFPath, sError ) )
 			sphWarning ( "index '%s': global IDF unavailable - IGNORING", sIndexName );
 	}
 

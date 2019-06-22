@@ -25,6 +25,19 @@
 #include <fcntl.h>
 #include <float.h>
 
+#if USE_WINDOWS
+#define stat		_stat64
+#define fstat		_fstat64
+#if _MSC_VER<1400
+#define struct_stat	__stat64
+#else
+#define struct_stat	struct _stat64
+#endif
+#else
+#define struct_stat        struct stat
+#endif
+
+
 //////////////////////////////////////////////////////////////////////////
 // INTERNAL CONSTANTS
 //////////////////////////////////////////////////////////////////////////

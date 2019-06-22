@@ -170,6 +170,12 @@ bool			sphIsReadable ( const CSphString& sFilename, CSphString * pError = NULL )
 /// set throttling options
 void			sphSetThrottling ( int iMaxIOps, int iMaxIOSize );
 
+/// write blob to file honoring throttling
+bool			sphWriteThrottled ( int iFD, const void* pBuf, int64_t iCount, const char* sName, CSphString& sError );
+
+/// read blob from file honoring throttling
+size_t			sphReadThrottled ( int iFD, void* pBuf, size_t iCount );
+
 /// immediately interrupt current query
 void			sphInterruptNow();
 
@@ -865,12 +871,6 @@ CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, con
 
 /// clear wordform cache
 void sphShutdownWordforms ();
-
-/// update/clear global IDF cache
-bool sphPrereadGlobalIDF ( const CSphString & sPath, CSphString & sError );
-void sphUpdateGlobalIDFs ( const StrVec_t & dFiles );
-void sphInitGlobalIDFs ();
-void sphShutdownGlobalIDFs ();
 
 /////////////////////////////////////////////////////////////////////////////
 // DATASOURCES

@@ -16,7 +16,7 @@ set ( LIBSPHINX_SRCS sphinx.cpp sphinxexcerpt.cpp
 		sphinxaot.cpp sphinxplugin.cpp sphinxudf.c
 		sphinxqcache.cpp sphinxjsonquery.cpp
 		attribute.cpp secondaryindex.cpp killlist.cpp searchnode.cpp json/cJSON.c
-		sphinxpq.cpp icu.cpp )
+		sphinxpq.cpp icu.cpp global_idf.cpp )
 set ( INDEXER_SRCS indexer.cpp )
 set ( INDEXTOOL_SRCS indextool.cpp )
 set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp
@@ -36,7 +36,8 @@ set ( INDEX_CONV_SRCS index_converter.cpp )
 # The headers is not neccessary for executable build, but nesessary for MSVC and other projects
 # all the (non-generated) headers
 # So if you add headers to the project and NOT see them in visual studio solution - just list them here!
-file ( GLOB HEADERS "sphinx*.h" lz4.h lz4hc.h http/http_parser.h secondaryindex.h searchnode.h killlist.h attribute.h accumulator.h)
+file ( GLOB HEADERS "sphinx*.h" lz4.h lz4hc.h http/http_parser.h secondaryindex.h searchnode.h killlist.h
+		attribute.h accumulator.h global_idf.h)
 file ( GLOB SEARCHD_H "searchd*.h" "task*.h" threadutils.h )
 
 if ( UNIX AND NOT APPLE )

@@ -34,6 +34,7 @@
 #include "taskping.h"
 #include "taskmalloctrim.h"
 #include "taskoptimize.h"
+#include "taskglobalidf.h"
 
 using namespace Threads;
 
@@ -248,8 +249,6 @@ GuardedHash_c *								g_pDistIndexes = new GuardedHash_c ();    // distributed 
 static RwLock_t								g_tRotateConfigMutex;
 static CSphConfigParser g_pCfg GUARDED_BY ( g_tRotateConfigMutex );
 static ServiceThread_t						g_tRotateThread;
-static ServiceThread_t						g_tRotationServiceThread;
-static volatile bool						g_bInvokeRotationService = false;
 static volatile bool						g_bNeedRotate = false;		// true if there were pending HUPs to handle (they could fly in during previous rotate)
 static volatile bool						g_bInRotate = false;		// true while we are rotating
 static volatile bool						g_bReloadForced = false;	// true in case reload issued via SphinxQL
@@ -1236,7 +1235,6 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 		int VARIABLE_IS_NOT_USED iDummy = ::write ( fdStopwait, &uHandshakeOk, sizeof(DWORD) );
 	}
 #endif
-	g_tRotationServiceThread.Join();
 
 	// force even long time searches to shut
 	sphInterruptNow();
@@ -19185,7 +19183,7 @@ void RotationThreadFunc ( void * )
 		if ( !g_pDisabledIndexes->GetLength () )
 		{
 			g_bInRotate = false;
-			g_bInvokeRotationService = true;
+			RotateGlobalIdf();
 			sphInfo ( "rotating index: all indexes done" );
 		}
 	}
@@ -20335,34 +20333,6 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 	InitPersistentPool();
 }
 
-void CheckRotateGlobalIDFs ()
-{
-	CSphVector <CSphString> dFiles;
-	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); )
-	{
-		ServedDescRPtr_c pIndex (it.Get());
-		if ( pIndex && !pIndex->m_sGlobalIDFPath.IsEmpty() )
-			dFiles.Add ( pIndex->m_sGlobalIDFPath );
-	}
-
-	ThreadSystem_t tThdSystemDesc ( "ROTATE global IDF" );
-	sph::UpdateGlobalIDFs ( dFiles );
-}
-
-
-void RotationServiceThreadFunc ( void * )
-{
-	while ( !g_bShutdown )
-	{
-		if ( g_bInvokeRotationService )
-		{
-			CheckRotateGlobalIDFs ();
-			g_bInvokeRotationService = false;
-		}
-		sphSleepMsec ( 50 );
-	}
-}
-
 
 struct IndexWithPriority_t
 {
@@ -20484,7 +20454,6 @@ static void CheckIndexesForSeamless() REQUIRES ( MainThread )
 	if ( !g_pDisabledIndexes->GetLength () )
 	{
 		sphWarning ( "nothing to rotate after SIGHUP" );
-		g_bInvokeRotationService = false;
 		g_bInRotate = false;
 	}
 }
@@ -20575,7 +20544,7 @@ static void DoGreedyRotation() REQUIRES ( MainThread )
 
 	g_pDisabledIndexes->ReleaseAndClear ();
 	g_bInRotate = false;
-	g_bInvokeRotationService = true;
+	RotateGlobalIdf ();
 	sphInfo ( "rotating finished" );
 }
 
@@ -25003,9 +24972,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		else if ( !g_tSphinxqlStateFlushThread.Create ( SphinxqlStateThreadFunc, NULL, "sphinxql_state" ) )
 			sphDie ( "failed to create sphinxql_state writer thread" );
 	}
-
-	if ( !g_tRotationServiceThread.Create ( RotationServiceThreadFunc, 0, "rotationservice" ) )
-		sphDie ( "failed to create rotation service thread" );
 
 	if ( bForcedPreread )
 	{

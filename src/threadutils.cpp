@@ -74,33 +74,20 @@ void ServiceThread_t::Join ()
 	m_bCreated = false;
 }
 
-ThdDesc_t::ThdDesc_t ()
-{
-	m_dBuf[0] = '\0';
-	m_dBuf.Last () = '\0';
-}
-
 void ThdDesc_t::SetThreadInfo ( const char* sTemplate, ... )
 {
-	// thread safe modification of string at m_dBuf
-	m_dBuf[0] = '\0';
-	m_dBuf.Last () = '\0';
-
+	ScopedMutex_t dLock ( m_tQueryLock );
+	m_sBuf.Clear();
 	va_list ap;
-
 	va_start ( ap, sTemplate );
-	int iPrinted = vsnprintf ( m_dBuf.Begin (), m_dBuf.GetLength () - 1, sTemplate, ap );
+	m_sBuf.vSprintf ( sTemplate, ap );
 	va_end ( ap );
-
-	if ( iPrinted>0 )
-		m_dBuf[Min ( iPrinted, m_dBuf.GetLength () - 1 )] = '\0';
 }
 
 void ThdDesc_t::SetSearchQuery ( const CSphQuery* pQuery )
 {
-	m_tQueryLock.Lock ();
+	ScopedMutex_t dLock (m_tQueryLock);
 	m_pQuery = pQuery;
-	m_tQueryLock.Unlock ();
 }
 
 ThreadSystem_t::ThreadSystem_t ( const char* sName )
@@ -111,12 +98,12 @@ ThreadSystem_t::ThreadSystem_t ( const char* sName )
 	m_tDesc.SetThreadInfo ( "SYSTEM %s", sName );
 	m_tDesc.m_sCommand = g_sSystemName;
 
-	ThreadAdd ( &m_tDesc );
+	m_tDesc.AddToGlobal();
 }
 
 ThreadSystem_t::~ThreadSystem_t ()
 {
-	ThreadRemove ( &m_tDesc );
+	m_tDesc.RemoveFromGlobal ();
 }
 
 ThreadLocal_t::ThreadLocal_t ( const ThdDesc_t& tDesc )
@@ -133,40 +120,44 @@ ThreadLocal_t::ThreadLocal_t ( const ThdDesc_t& tDesc )
 	m_tDesc.m_tmConnect = tDesc.m_tmConnect;
 	m_tDesc.m_tmStart = tDesc.m_tmStart;
 
-	ThreadAdd ( &m_tDesc );
+	m_tDesc.AddToGlobal ();
 }
 
 ThreadLocal_t::~ThreadLocal_t ()
 {
-	ThreadRemove ( &m_tDesc );
+	m_tDesc.RemoveFromGlobal ();
 }
 
-
-void Threads::ThreadSetSnippetInfo ( const char* sQuery, int64_t iSizeKB, bool bApi, ThdDesc_t& tThd )
-{
-	if ( bApi )
-		tThd.SetThreadInfo ( "api-snippet datasize=%d.%d""k query=\"%s\"", int ( iSizeKB / 10 ), int ( iSizeKB % 10 ),
-							 sQuery );
-	else
-		tThd.SetThreadInfo ( "sphinxql-snippet datasize=%d.%d""k query=\"%s\"", int ( iSizeKB / 10 ),
-							 int ( iSizeKB % 10 ), sQuery );
-}
-
-void Threads::ThreadSetSnippetInfo ( const char* sQuery, int64_t iSizeKB, ThdDesc_t& tThd )
-{
-	tThd.SetThreadInfo ( "snippet datasize=%d.%d""k query=\"%s\"", int ( iSizeKB / 10 ), int ( iSizeKB % 10 ), sQuery );
-}
-
-void Threads::ThreadAdd ( ThdDesc_t* pThd ) EXCLUDES ( g_tThdLock )
+void Threads::ThdDesc_t::AddToGlobal () EXCLUDES ( g_tThdLock )
 {
 	ScWL_t dThdLock ( g_tThdLock );
-	g_dThd.Add ( pThd );
+	g_dThd.Add ( this );
 }
 
-void Threads::ThreadRemove ( ThdDesc_t* pThd ) EXCLUDES ( g_tThdLock )
+void Threads::ThdDesc_t::RemoveFromGlobal () EXCLUDES ( g_tThdLock )
 {
 	ScWL_t dThdLock ( g_tThdLock );
-	g_dThd.Remove ( pThd );
+	g_dThd.Remove ( this );
+}
+
+Threads::ThdPublicInfo_t Threads::ThdDesc_t::GetPublicInfo ()
+{
+	ThdPublicInfo_t dResult;
+	ThdInfo_t& dSemiRes = dResult;
+	dSemiRes = *( ThdInfo_t* ) this;
+
+	dResult.m_sThName = GetThreadName ( &m_tThd );
+
+	ScopedMutex_t dLock ( m_tQueryLock );
+	if ( m_pQuery )
+		dResult.m_pQuery = new CSphQuery ( *m_pQuery );
+	dResult.m_sRequestDescription = m_sBuf.cstr();
+	return dResult;
+}
+
+Threads::ThdPublicInfo_t::~ThdPublicInfo_t ()
+{
+	SafeDelete ( m_pQuery );
 }
 
 int Threads::ThreadsNum () EXCLUDES ( g_tThdLock )
@@ -179,40 +170,22 @@ void Threads::ThdState ( ThdState_e eState, ThdDesc_t& tThd )
 {
 	tThd.m_eThdState = eState;
 	tThd.m_tmStart = sphMicroTimer ();
-	if ( eState==ThdState_e::NET_IDLE )
-		tThd.m_dBuf[0] = '\0';
 }
 
-RlockedList_t RlockedList_t::GetGlobalThreads ()
+
+List_t& Threads::GetUnsafeUnlockedUnprotectedGlobalThreadList () NO_THREAD_SAFETY_ANALYSIS
 {
-	RlockedList_t tRes;
-	tRes.m_pCore = &g_dThd;
-	tRes.m_pLock = &g_tThdLock;
-	g_tThdLock.ReadLock ();
-	return tRes;
+	return g_dThd;
 }
 
-RlockedList_t::~RlockedList_t()
+CSphVector<ThdPublicInfo_t> Threads::GetGlobalThreadInfos ()
 {
-	if ( m_pLock )
-		m_pLock->Unlock ();
-}
-
-void RlockedList_t::Swap ( RlockedList_t& rhs) noexcept
-{
-	::Swap ( m_pLock, rhs.m_pLock );
-	::Swap ( m_pCore, rhs.m_pCore );
-}
-
-RlockedList_t& RlockedList_t::operator= ( RlockedList_t&& rhs ) noexcept
-{
-	Swap(rhs);
-	return *this;
-}
-
-RlockedList_t::RlockedList_t ( RlockedList_t && rhs ) noexcept
-{
-	Swap (rhs);
+	ScRL_t dThdLock ( g_tThdLock );
+	CSphVector<ThdPublicInfo_t> dResult;
+	dResult.Reserve ( g_dThd.GetLength ());
+	for ( const ListNode_t* pIt = g_dThd.Begin (); pIt!=g_dThd.End (); pIt = pIt->m_pNext )
+		dResult.Add ((( ThdDesc_t* ) pIt )->GetPublicInfo ());
+	return dResult;
 }
 
 

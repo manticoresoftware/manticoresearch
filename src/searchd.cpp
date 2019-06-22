@@ -1657,12 +1657,11 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 #endif
 
 	// threads table
-	// FIXME? should we try to lock threads table somehow?
-	auto gdThd = RlockedList_t::GetGlobalThreads ();
-	sphSafeInfo ( g_iLogFile, "--- %d active threads ---", gdThd->GetLength() );
+	const auto& g_dThd = Threads::GetUnsafeUnlockedUnprotectedGlobalThreadList();
+	sphSafeInfo ( g_iLogFile, "--- %d active threads ---", g_dThd.GetLength() );
 
 	int iThd = 0;
-	for ( const ListNode_t * pIt = gdThd->Begin (); pIt!=gdThd->End(); pIt = pIt->m_pNext )
+	for ( const ListNode_t * pIt = g_dThd.Begin (); pIt!=g_dThd.End(); pIt = pIt->m_pNext )
 	{
 		auto * pThd = (ThdDesc_t *)pIt;
 		sphSafeInfo ( g_iLogFile, "thd %d, proto %s, state %s, command %s",
@@ -8022,7 +8021,8 @@ void HandleCommandSearch ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c
 		tHandler.SetQueryType ( eQueryType );
 
 		const CSphQuery & q = tHandler.m_dQueries[0];
-		tThd.SetThreadInfo ( "api-search query=\"%s\" comment=\"%s\" index=\"%s\"", q.m_sQuery.scstr(), q.m_sComment.scstr(), q.m_sIndexes.scstr() );
+		tThd.SetThreadInfo ( R"(api-search query="%s" comment="%s" index="%s")",
+			q.m_sQuery.scstr(), q.m_sComment.scstr(), q.m_sIndexes.scstr() );
 		tThd.SetSearchQuery ( &q );
 	}
 
@@ -10078,7 +10078,8 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	}
 
 	// set correct data size for snippets
-	ThreadSetSnippetInfo ( dQueries[0].m_sWords.scstr (), GetSnippetDataSize (dQueries), tThd );
+	tThd.SetThreadInfo ( R"(snippet datasize=%.1Dk query="%s")",
+						 GetSnippetDataSize ( dQueries ), dQueries[0].m_sWords.scstr () );
 
 	// tough jobs first
 	if ( !bScattered )
@@ -10093,7 +10094,8 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 			dQueries[i].m_iNext = iAbsentHead;
 			iAbsentHead = i;
 			if ( bNeedAllFiles )
-				dQueries[i].m_sError.SetSprintf ( "absenthead: failed to stat %s: %s", dQueries[i].m_sSource.cstr(), strerrorm(errno) );
+				dQueries[i].m_sError.SetSprintf ( "absenthead: failed to stat %s: %s",
+					dQueries[i].m_sSource.cstr(), strerrorm(errno) );
 		}
 
 	// check if all files are available locally.
@@ -10328,7 +10330,8 @@ void HandleCommandExcerpt ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c
 			return;
 		}
 	}
-	ThreadSetSnippetInfo ( dQueries[0].m_sWords.scstr (), GetSnippetDataSize ( dQueries ), false, tThd );
+	tThd.SetThreadInfo ( R"(api-snippet datasize=%.1Dk query="%s")", GetSnippetDataSize ( dQueries ),
+						 dQueries[0].m_sWords.scstr ());
 
 	if ( !MakeSnippets ( sIndex, dQueries, sError, tThd ) )
 	{
@@ -14023,7 +14026,8 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc
 		}
 	}
 
-	ThreadSetSnippetInfo ( dQueries[0].m_sWords.scstr (), GetSnippetDataSize ( dQueries ), true, tThd );
+	tThd.SetThreadInfo ( R"(sphinxql-snippet datasize=%.1Dk query="%s")",
+						GetSnippetDataSize ( dQueries ), dQueries[0].m_sWords.scstr ());
 
 	if ( !MakeSnippets ( sIndex, dQueries, sError, tThd ) )
 	{
@@ -14751,9 +14755,8 @@ enum ThreadInfoFormat_e
 	THD_FORMAT_SPHINXQL
 };
 
-static const char * FormatInfo ( ThdDesc_t & tThd, ThreadInfoFormat_e eFmt, QuotationEscapedBuilder & tBuf )
+static const char * FormatInfo ( ThdPublicInfo_t & tThd, ThreadInfoFormat_e eFmt, QuotationEscapedBuilder & tBuf )
 {
-	ScopedMutex_t pQueryGuard ( tThd.m_tQueryLock );
 	if ( tThd.m_pQuery && eFmt==THD_FORMAT_SPHINXQL && tThd.m_eProto!=Proto_e::MYSQL41 )
 	{
 		bool bGotQuery = false;
@@ -14769,10 +14772,10 @@ static const char * FormatInfo ( ThdDesc_t & tThd, ThreadInfoFormat_e eFmt, Quot
 			return tBuf.cstr();
 	}
 
-	if ( tThd.m_dBuf[0]=='\0' && tThd.m_sCommand )
+	if ( tThd.m_sRequestDescription.IsEmpty () && tThd.m_sCommand )
 		return tThd.m_sCommand;
 	else
-		return tThd.m_dBuf.Begin();
+		return tThd.m_sRequestDescription.cstr();
 }
 
 void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
@@ -14795,22 +14798,23 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	if ( tStmt.m_sThreadFormat=="sphinxql" )
 		eFmt = THD_FORMAT_SPHINXQL;
 
-	auto gdThd = RlockedList_t::GetGlobalThreads ();
-	for ( const ListNode_t * pIt = gdThd->Begin (); pIt!=gdThd->End(); pIt = pIt->m_pNext )
+	auto dThreads = Threads::GetGlobalThreadInfos();
+	for ( ThdPublicInfo_t& dThd : dThreads )
 	{
-		auto * pThd = (ThdDesc_t *)pIt;
-
-		int iLen = strnlen ( pThd->m_dBuf.Begin(), pThd->m_dBuf.GetLength() );
+		int iLen = dThd.m_sRequestDescription.Length ();
 		if ( tStmt.m_iThreadsCols>0 && iLen>tStmt.m_iThreadsCols )
-			pThd->m_dBuf[tStmt.m_iThreadsCols] = '\0';
+		{
+			auto pBuf = const_cast<char*>(dThd.m_sRequestDescription.cstr ());
+			pBuf[tStmt.m_iThreadsCols] = '\0';
+		}
 
-		tOut.PutNumAsString ( pThd->m_iTid );
-		tOut.PutString ( GetThreadName ( const_cast <SphThread_t *>(&pThd->m_tThd) ) );
-		tOut.PutString ( pThd->m_bSystem ? "-" : ProtoName ( pThd->m_eProto ) );
-		tOut.PutString ( pThd->m_bSystem ? "-" : ThdStateName ( pThd->m_eThdState ) );
-		tOut.PutString ( pThd->m_sClientName );
-		tOut.PutMicrosec ( tmNow - pThd->m_tmStart );
-		tOut.PutString ( FormatInfo ( *pThd, eFmt, tBuf ) );
+		tOut.PutNumAsString ( dThd.m_iTid );
+		tOut.PutString ( dThd.m_sThName );
+		tOut.PutString ( dThd.m_bSystem ? "-" : ProtoName ( dThd.m_eProto ) );
+		tOut.PutString ( dThd.m_bSystem ? "-" : ThdStateName ( dThd.m_eThdState ) );
+		tOut.PutString ( dThd.m_sClientName );
+		tOut.PutMicrosec ( tmNow - dThd.m_tmStart );
+		tOut.PutString ( FormatInfo ( dThd, eFmt, tBuf ) );
 
 		tOut.Commit();
 	}
@@ -21593,7 +21597,7 @@ void HandlerThreadFunc ( void * pArg ) REQUIRES ( !HandlerThread )
 {
 	ScopedRole_c tHandler ( HandlerThread );
 	// handle that client
-	ThdDesc_t * pThd = (ThdDesc_t*) pArg;
+	auto * pThd = (ThdDesc_t*) pArg;
 	pThd->m_iTid = GetOsThreadId();
 	HandleClient ( pThd->m_eProto, pThd->m_iClientSock, *pThd );
 	sphSockClose ( pThd->m_iClientSock );
@@ -21603,7 +21607,7 @@ void HandlerThreadFunc ( void * pArg ) REQUIRES ( !HandlerThread )
 	// FIXME? this is sort of automatic on UNIX (pthread_exit() gets implicitly called on return)
 	CloseHandle ( pThd->m_tThd );
 #endif
-	ThreadRemove ( pThd );
+	pThd->RemoveFromGlobal ();
 	SafeDelete ( pThd );
 }
 
@@ -21657,12 +21661,12 @@ void TickHead () REQUIRES ( MainThread )
 	pThd->m_tmConnect = sphMicroTimer();
 	pThd->m_bVip = pListener->m_bVIP;
 
-	ThreadAdd ( pThd );
+	pThd->AddToGlobal ();
 
 	if ( !SphCrashLogger_c::ThreadCreate ( &pThd->m_tThd, HandlerThreadFunc, pThd, true, "handler" ) )
 	{
 		int iErr = errno;
-		ThreadRemove ( pThd );
+		pThd->RemoveFromGlobal ();
 		SafeDelete ( pThd );
 
 		FailClient ( iClientSock, "failed to create worker thread" );
@@ -23477,7 +23481,7 @@ void ThdJobAPI_t::Call ()
 	tThdDesc.m_tmConnect = sphMicroTimer();
 	tThdDesc.m_iTid = iTid;
 
-	ThreadAdd ( &tThdDesc );
+	tThdDesc.AddToGlobal();
 
 	assert ( m_tState.Ptr() );
 
@@ -23497,7 +23501,7 @@ void ThdJobAPI_t::Call ()
 	}
 	tOut.Flush();
 
-	ThreadRemove ( &tThdDesc );
+	tThdDesc.RemoveFromGlobal ();
 
 	sphLogDebugv ( "%p API job done, command=%d, tick=%u", this, m_eCommand, m_pLoop->m_uTick );
 
@@ -23543,7 +23547,7 @@ void ThdJobQL_t::Call ()
 	tThdDesc.m_tmConnect = sphMicroTimer();
 	tThdDesc.m_iTid = iTid;
 
-	ThreadAdd ( &tThdDesc );
+	tThdDesc.AddToGlobal ();
 
 	CSphString sQuery; // to keep data alive for SphCrashQuery_c
 	bool bProfile = m_tState->m_tSession.m_tVars.m_bProfile; // the current statement might change it
@@ -23576,7 +23580,7 @@ void ThdJobQL_t::Call ()
 		JobDoSendNB ( pSend, m_pLoop );
 	}
 
-	ThreadRemove ( &tThdDesc );
+	tThdDesc.RemoveFromGlobal ();
 }
 
 static void LogCleanup ( const CSphVector<ISphNetAction *> & dCleanup )
@@ -23639,7 +23643,7 @@ void ThdJobHttp_t::Call ()
 	tThdDesc.m_tmConnect = sphMicroTimer();
 	tThdDesc.m_iTid = iTid;
 
-	ThreadAdd ( &tThdDesc );
+	tThdDesc.AddToGlobal ();
 
 	assert ( m_tState.Ptr() );
 
@@ -23662,7 +23666,7 @@ void ThdJobHttp_t::Call ()
 	}
 
 	SphCrashLogger_c::SetLastQuery ( CrashQuery_t() );
-	ThreadRemove ( &tThdDesc );
+	tThdDesc.RemoveFromGlobal ();
 
 	sphLogDebugv ( "%p http job done, tick=%u", this, m_pLoop->m_uTick );
 

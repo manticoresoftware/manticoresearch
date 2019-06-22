@@ -51,34 +51,49 @@ struct ServiceThread_t
 	void Join ();
 };
 
-struct ThdDesc_t: public ListNode_t
+// common thread properties
+struct ThdInfo_t
 {
-	SphThread_t m_tThd { 0 };
-	Proto_e m_eProto = Proto_e::MYSQL41;
-	int m_iClientSock = 0;
+	Proto_e	   m_eProto		 = Proto_e::MYSQL41;
+	int		   m_iClientSock = 0;
 	CSphString m_sClientName;
-	bool m_bVip = false;
+	bool	   m_bVip = false;
 
-	ThdState_e m_eThdState = ThdState_e::HANDSHAKE;
-	const char* m_sCommand = nullptr;
-	int m_iConnID = -1;    ///< current conn-id for this thread
+	ThdState_e	m_eThdState = ThdState_e::HANDSHAKE;
+	const char* m_sCommand	= nullptr;
+	int			m_iConnID	= -1; ///< current conn-id for this thread
 
 	// stuff for SHOW THREADS
-	int m_iTid = 0;        ///< OS thread id, or 0 if unknown
-	int64_t m_tmConnect = 0;    ///< when did the client connect?
-	int64_t m_tmStart = 0;    ///< when did the current request start?
-	bool m_bSystem = false;
-	CSphFixedVector<char> m_dBuf { 512 };    ///< current request description
-	int m_iCookie = 0;    ///< may be used in case of pool to distinguish threads
-
-	CSphMutex m_tQueryLock;
-	const CSphQuery* m_pQuery GUARDED_BY (m_tQueryLock) = nullptr;
-
-	ThdDesc_t ();
-	void SetThreadInfo ( const char* sTemplate, ... );
-	void SetSearchQuery ( const CSphQuery* pQuery );
+	int		m_iTid		= 0; ///< OS thread id, or 0 if unknown
+	int64_t m_tmConnect = 0; ///< when did the client connect?
+	int64_t m_tmStart	= 0; ///< when did the current request start?
+	bool	m_bSystem	= false;
+	int		m_iCookie	= 0; ///< may be used in case of pool to distinguish threads
 };
 
+// trivial info for public use (no locks, everything owned)
+struct ThdPublicInfo_t : ThdInfo_t
+{
+	CSphString m_sThName;
+	CSphQuery* m_pQuery = nullptr;
+	CSphString m_sRequestDescription;
+	~ThdPublicInfo_t();
+};
+
+struct ThdDesc_t: public ThdInfo_t, private ListNode_t
+{
+	SphThread_t m_tThd { 0 };
+	CSphMutex		 m_tQueryLock;
+	const CSphQuery* m_pQuery GUARDED_BY ( m_tQueryLock ) = nullptr;
+	StringBuilder_c m_sBuf GUARDED_BY ( m_tQueryLock ); ///< current request description
+
+	void SetThreadInfo ( const char* sTemplate, ... ) REQUIRES ( !m_tQueryLock );
+	void SetSearchQuery ( const CSphQuery* pQuery ) REQUIRES ( !m_tQueryLock );
+
+	void AddToGlobal ();
+	void RemoveFromGlobal ();
+	ThdPublicInfo_t GetPublicInfo();
+};
 
 struct ThreadSystem_t
 {
@@ -94,34 +109,14 @@ struct ThreadLocal_t
 	~ThreadLocal_t ();
 };
 
-void ThreadSetSnippetInfo ( const char* sQuery, int64_t iSizeKB, bool bApi, ThdDesc_t& tThd );
-void ThreadSetSnippetInfo ( const char* sQuery, int64_t iSizeKB, ThdDesc_t& tThd );
-void ThreadAdd ( ThdDesc_t* pThd );
-void ThreadRemove ( ThdDesc_t* pThd );
 int ThreadsNum ();
 void ThdState ( ThdState_e eState, ThdDesc_t& tThd );
 
-// used to hide global list of threads and give only rlocked read-only ref on demand.
-class RlockedList_t: ISphNoncopyable
-{
-	RlockedList_t() = default;
-public:
-	static RlockedList_t GetGlobalThreads ();
-	/// unlock on going out of scope
-	~RlockedList_t ();
+// WARNING! Should be used only in crash dumping, where any copying is UB!
+List_t& GetUnsafeUnlockedUnprotectedGlobalThreadList();
 
-	const List_t* operator-> () const 	{ return m_pCore; }
-	explicit operator bool () const	{ return m_pCore!=nullptr; }
-	explicit operator const List_t* () const { return m_pCore; }
-
-	void Swap ( RlockedList_t& rhs ) noexcept;
-	RlockedList_t& operator= ( RlockedList_t&& rhs) noexcept;
-	RlockedList_t ( RlockedList_t&& rhs ) noexcept;
-
-private:
-	const List_t* m_pCore = nullptr;
-	RwLock_t* m_pLock = nullptr;
-};
+// Trivial vec of global thread descriptors
+CSphVector<ThdPublicInfo_t> GetGlobalThreadInfos ();
 
 } // namespace Threads
 

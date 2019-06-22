@@ -792,7 +792,7 @@ public:
 public:
 	//statictics
 
-	CSphVector<TaskManager::TaskInfo_t> GetTaskInfo () const
+	CSphVector<TaskManager::TaskInfo_t> GetTaskInfo () const NO_THREAD_SAFETY_ANALYSIS
 	{
 		CSphVector<TaskManager::TaskInfo_t> dRes;
 		for ( auto i = 0; i<g_iTasks; ++i )

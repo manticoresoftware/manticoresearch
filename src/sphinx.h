@@ -621,6 +621,15 @@ public:
 	bool							m_bPhrase = false;
 };
 
+
+struct CharsetAlias_t
+{
+	CSphString					m_sName;
+	int							m_iNameLen;
+	CSphVector<CSphRemapRange>	m_dRemaps;
+};
+
+
 using ISphTokenizerRefPtr_c = CSphRefcountedPtr<ISphTokenizer>;
 
 /// parse charset table

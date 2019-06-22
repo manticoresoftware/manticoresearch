@@ -17,6 +17,7 @@
 #include "sphinxutils.h"
 
 bool sphCheckConfigICU ( CSphIndexSettings & tSettings, CSphString & sError );
+bool sphCheckTokenizerICU ( CSphIndexSettings & tSettings, const CSphTokenizerSettings & tTokSettings, CSphString & sError );
 bool sphSpawnFilterICU ( ISphFieldFilterRefPtr_c & pFieldFilter, const CSphIndexSettings & m_tSettings, const CSphTokenizerSettings & tTokSettings, const char * szIndex, CSphString & sError );
 void sphConfigureICU ( CSphConfigSection & hCommon );
 

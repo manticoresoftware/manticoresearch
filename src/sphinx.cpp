@@ -4233,13 +4233,6 @@ bool CSphCharsetDefinitionParser::AddRange ( const CSphRemapRange & tRange, CSph
 }
 
 
-struct CharsetAlias_t
-{
-	CSphString					m_sName;
-	int							m_iNameLen;
-	CSphVector<CSphRemapRange>	m_dRemaps;
-};
-
 // Charsets relocated to folder 'charsets', each one in separate .txt file.
 // When you change the content of the folder,
 // reconfigure the project with cmake in order to pick the changes.
@@ -4252,7 +4245,7 @@ static const char * globalaliases_names[] = { "english", "russian" };
 enum E_GLOBALALIASES { CHARSET_ENGLISH, CHARSET_RUSSIAN, CHARSET_TOTAL };
 #endif
 
-static CSphVector<CharsetAlias_t> g_dCharsetAliases;
+CSphVector<CharsetAlias_t> g_dCharsetAliases;
 
 
 bool sphInitCharsetAliasTable ( CSphString & sError ) // FIXME!!! move alias generation to config common section

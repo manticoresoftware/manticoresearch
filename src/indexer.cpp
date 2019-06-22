@@ -941,6 +941,9 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	CSphTokenizerSettings tTokSettings;
 	sphConfTokenizer ( hIndex, tTokSettings );
 
+	if ( !sphCheckTokenizerICU ( tSettings, tTokSettings, sError ) )
+		fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sError.cstr() );
+
 	CSphDictSettings tDictSettings;
 	sphConfDictionary ( hIndex, tDictSettings );
 

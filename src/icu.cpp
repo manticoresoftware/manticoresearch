@@ -50,6 +50,8 @@
 #define InitDynamicIcu() (true)
 #endif
 
+extern CSphVector<CharsetAlias_t> g_dCharsetAliases;
+
 class ICUPreprocessor_c
 {
 public:
@@ -387,6 +389,48 @@ bool sphCheckConfigICU ( CSphIndexSettings &, CSphString & )
 }
 
 
+bool sphCheckTokenizerICU ( CSphIndexSettings & tSettings, const CSphTokenizerSettings & tTokSettings, CSphString & sError )
+{
+	if ( tSettings.m_ePreprocessor!=Preprocessor_e::ICU )
+		return true;
+
+	ISphTokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokSettings, NULL, sError ) };
+	if ( !pTokenizer.Ptr() )
+		return false;
+
+	const CSphLowercaser & tLC = pTokenizer->GetLowercaser();
+
+	const CharsetAlias_t * pCJKAlias = nullptr;
+	for ( const auto & i : g_dCharsetAliases )
+		if ( i.m_sName=="cjk" )
+			pCJKAlias = &i;
+
+	if ( !pCJKAlias )
+		return true;
+
+	int iFound = 0;
+	int iTotal = 0;
+
+	for ( const auto & i : pCJKAlias->m_dRemaps )
+		for ( int iCode = i.m_iStart; iCode<=i.m_iEnd; iCode++ )
+		{
+			if ( tLC.ToLower(iCode) )
+				iFound++;
+
+			iTotal++;
+		}
+
+	float fRatio = float(iFound)/iTotal;
+	if ( fRatio < 0.5f )
+	{
+		sError = "ICU CJK segmentation turned on, check that you have CJK characters in charset_table";
+		return false;
+	}
+
+	return true;
+}
+
+
 bool sphSpawnFilterICU ( ISphFieldFilterRefPtr_c & pFieldFilter, const CSphIndexSettings & m_tSettings,	const CSphTokenizerSettings & tTokSettings, const char * szIndex, CSphString & sError )
 {
 	if ( m_tSettings.m_ePreprocessor==Preprocessor_e::NONE )
@@ -435,6 +479,12 @@ bool sphCheckConfigICU ( CSphIndexSettings & tSettings, CSphString & sError )
 		return false;
 	}
 
+	return true;
+}
+
+
+bool sphCheckTokenizerICU ( CSphIndexSettings &, const CSphTokenizerSettings &, CSphString & )
+{
 	return true;
 }
 

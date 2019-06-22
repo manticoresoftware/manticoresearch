@@ -36,6 +36,7 @@
 #include "taskoptimize.h"
 #include "taskglobalidf.h"
 #include "tasksavestate.h"
+#include "taskflushbinlog.h"
 
 using namespace Threads;
 
@@ -256,8 +257,6 @@ static CSphVector<SphThread_t>				g_dTickPoolThread;
 
 /// flush parameters of rt indexes
 static ServiceThread_t						g_tRtFlushThread;
-static ServiceThread_t						g_tBinlogFlushThread;
-static BinlogFlushInfo_t					g_tBinlogAutoflush;
 
 static CSphMutex							g_tPersLock;
 static CSphAtomic							g_iPersistentInUse;
@@ -1220,8 +1219,6 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	// tell flush-rt thread to shutdown, and wait until it does
 	g_tRtFlushThread.Join();
-	if ( g_tBinlogAutoflush.m_fnWork )
-		g_tBinlogFlushThread.Join();
 
 	// tell rotation thread to shutdown, and wait until it does
 	if ( g_bSeamlessRotate )
@@ -18797,19 +18794,6 @@ static void RtFlushThreadFunc ( void * )
 	}
 }
 
-static void RtBinlogAutoflushThreadFunc ( void * )
-{
-	assert ( g_tBinlogAutoflush.m_pLog && g_tBinlogAutoflush.m_fnWork );
-
-	while ( !g_bShutdown )
-	{
-		ThreadSystem_t tThdSystemDesc ( "FLUSH RT BINLOG" );
-		g_tBinlogAutoflush.m_fnWork ( g_tBinlogAutoflush.m_pLog );
-		sphSleepMsec ( 50 );
-	}
-}
-
-
 /// this gets called for every new physical index
 /// that is, local and RT indexes, but not distributed once
 bool PreallocNewIndex ( ServedDesc_t &tIdx, const CSphConfigSection * pConfig, const char * szIndexName )
@@ -24627,7 +24611,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 			hIndexes.Add ( pLocked->m_pIndex, it.GetName () );
 	}
 
-	sphReplayBinlog ( hIndexes, uReplayFlags, DumpMemStat, g_tBinlogAutoflush );
+	sphReplayBinlog ( hIndexes, uReplayFlags, DumpMemStat );
 	hIndexes.Reset();
 
 	// no need to create another cluster on restart by watchdog resurrection
@@ -24637,8 +24621,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		bNewClusterForce = false;
 	}
 	
-	if ( g_tBinlogAutoflush.m_fnWork && !g_tBinlogFlushThread.Create ( RtBinlogAutoflushThreadFunc, 0, "binlog_flush" ) )
-		sphDie ( "failed to create binlog flush thread" );
+	StartRtBinlogFlushing();
 
 	if ( g_bIOStats && !sphInitIOStats () )
 		sphWarning ( "unable to init IO statistics" );

@@ -44,8 +44,7 @@ void TestRTInit ()
 	sphRTConfigure ( tRTConfig, true );
 
 	SmallStringHash_T<CSphIndex *> hIndexes;
-	BinlogFlushInfo_t tBinlogFlush;
-	sphReplayBinlog ( hIndexes, 0, nullptr, tBinlogFlush );
+	sphReplayBinlog ( hIndexes );
 }
 
 #define RT_INDEX_FILE_NAME "test_temp"

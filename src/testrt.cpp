@@ -617,8 +617,7 @@ int main ( int argc, char ** argv )
 	sphRTInit ( tRTConfig, true, nullptr );
 	sphRTConfigure ( tRTConfig, true );
 	SmallStringHash_T< CSphIndex * > dTemp;
-	BinlogFlushInfo_t tBinlogFlush;
-	sphReplayBinlog ( dTemp, 0, NULL, tBinlogFlush );
+	sphReplayBinlog ( dTemp );
 	RtIndex_i * pIndex = sphCreateIndexRT ( tSchema, "testrt", 32*1024*1024, DATAFLD "dump", false );
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( pDict );

@@ -38,7 +38,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 #define BINLOG_WRITE_BUFFER		256*1024
-#define BINLOG_AUTO_FLUSH		1000000
+#define BINLOG_AUTO_FLUSH		1000000 // 1 sec
 
 #define RTDICT_CHECKPOINT_V5			48
 #define SPH_RT_DOUBLE_BUFFER_PERCENT	10
@@ -867,9 +867,12 @@ public:
 	void	Configure ( const CSphConfigSection & hSearchd, bool bTestMode );
 	void	Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD uReplayFlags, ProgressCallbackSimple_t * pfnProgressCallback );
 
-	void	GetFlushInfo ( BinlogFlushInfo_t & tFlush );
 	bool	IsActive () override	{ return !m_bDisabled; }
 	void	CheckPath ( const CSphConfigSection & hSearchd, bool bTestMode );
+
+	bool	IsFlushingEnabled() const;
+	void	DoFlush ();
+	int64_t	NextFlushingTime() const;
 
 private:
 	static const DWORD		BINLOG_VERSION = 8;
@@ -878,8 +881,8 @@ private:
 	static const DWORD		BLOP_MAGIC = 0x214e5854;			/// magic 'TXN!' header that marks binlog entry
 	static const DWORD		BINLOG_META_MAGIC = 0x494c5053;		/// magic 'SPLI' header that marks binlog meta
 
-	int64_t					m_iFlushTimeLeft;
-	volatile int			m_iFlushPeriod;
+	volatile int64_t		m_iLastFlushed = 0;
+	volatile int64_t		m_iFlushPeriod = BINLOG_AUTO_FLUSH;
 
 	enum OnCommitAction_e
 	{
@@ -887,11 +890,11 @@ private:
 		ACTION_FSYNC,
 		ACTION_WRITE
 	};
-	OnCommitAction_e		m_eOnCommit;
+	OnCommitAction_e		m_eOnCommit { ACTION_NONE };
 
 	CSphMutex				m_tWriteLock; // lock on operation
 
-	int						m_iLockFD;
+	int						m_iLockFD = -1;
 	CSphString				m_sWriterError;
 	BinlogWriter_c			m_tWriter;
 
@@ -899,16 +902,16 @@ private:
 
 	CSphString				m_sLogPath;
 
-	bool					m_bReplayMode; // replay mode indicator
-	bool					m_bDisabled;
+	bool					m_bReplayMode = false; // replay mode indicator
+	bool					m_bDisabled = true;
 
-	int						m_iRestartSize; // binlog size restart threshold
+	int						m_iRestartSize = 268435456; // binlog size restart threshold, 256M
 
 	// replay stats
 	mutable int				m_iReplayedRows=0;
 
 private:
-	static void				DoAutoFlush ( void * pBinlog );
+
 	int 					GetWriteIndexID ( const char * sName, int64_t iTID, int64_t tmNow );
 	void					LoadMeta ();
 	void					SaveMeta ();
@@ -927,8 +930,8 @@ private:
 	bool					ReplayPqAdd ( int iBinlog, DWORD uReplayFlags, BinlogReader_c & tReader ) const;
 	bool					ReplayPqDelete ( int iBinlog, DWORD uReplayFlags, BinlogReader_c & tReader ) const;
 
-	bool	PreOp ( Blop_e eOp, int64_t * pTID, const char * sIndexName );
-	void	PostOp ();
+	bool	PreOp ( Blop_e eOp, int64_t * pTID, const char * sIndexName ) ACQUIRE (m_tWriteLock);
+	void	PostOp () RELEASE (m_tWriteLock);
 	bool	CheckCrc ( const char * sOp, const CSphString & sIndex, int64_t iTID, int64_t iTxnPos, BinlogReader_c & tReader ) const;
 	void	CheckTid ( const char * sOp, const BinlogIndexInfo_t & tIndex, int64_t iTID, int64_t iTxnPos ) const;
 	void	CheckTidSeq ( const char * sOp, const BinlogIndexInfo_t & tIndex, int64_t iTID, int64_t iTxnPos ) const;
@@ -7588,13 +7591,6 @@ void BinlogReader_c::HashCollected ()
 //////////////////////////////////////////////////////////////////////////
 
 RtBinlog_c::RtBinlog_c ()
-	: m_iFlushTimeLeft ( 0 )
-	, m_iFlushPeriod ( BINLOG_AUTO_FLUSH )
-	, m_eOnCommit ( ACTION_NONE )
-	, m_iLockFD ( -1 )
-	, m_bReplayMode ( false )
-	, m_bDisabled ( true )
-	, m_iRestartSize ( 268435456 )
 {
 	MEMORY ( MEM_BINLOG );
 
@@ -7605,13 +7601,11 @@ RtBinlog_c::~RtBinlog_c ()
 {
 	if ( !m_bDisabled )
 	{
-		m_iFlushPeriod = 0;
 		DoCacheWrite();
 		m_tWriter.CloseFile();
 		LockFile ( false );
 	}
 }
-
 
 void RtBinlog_c::BinlogCommit ( int64_t * pTID, const char * sIndexName, const RtSegment_t * pSeg, const CSphVector<DocID_t> & dKlist, bool bKeywordDict )
 {
@@ -7900,39 +7894,62 @@ void RtBinlog_c::Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD 
 	OpenNewLog ( iLastLogState );
 }
 
-void RtBinlog_c::GetFlushInfo ( BinlogFlushInfo_t & tFlush )
+bool RtBinlog_c::IsFlushingEnabled() const
 {
-	if ( !m_bDisabled && m_eOnCommit!=ACTION_FSYNC )
-	{
-		m_iFlushTimeLeft = sphMicroTimer() + m_iFlushPeriod;
-		tFlush.m_pLog = this;
-		tFlush.m_fnWork = RtBinlog_c::DoAutoFlush;
-	}
+	return ( !m_bDisabled && m_eOnCommit!=ACTION_FSYNC );
 }
 
-void RtBinlog_c::DoAutoFlush ( void * pBinlog )
+
+
+
+void RtBinlog_c::DoFlush ()
 {
-	assert ( pBinlog );
-	RtBinlog_c * pLog = (RtBinlog_c *)pBinlog;
-	assert ( !pLog->m_bDisabled );
+	assert ( !m_bDisabled );
+	MEMORY ( MEM_BINLOG );
 
-	if ( pLog->m_iFlushPeriod>0 && pLog->m_iFlushTimeLeft<sphMicroTimer() )
+	if ( m_eOnCommit==ACTION_NONE || m_tWriter.HasUnwrittenData() )
 	{
-		MEMORY ( MEM_BINLOG );
-
-		pLog->m_iFlushTimeLeft = sphMicroTimer() + pLog->m_iFlushPeriod;
-
-		if ( pLog->m_eOnCommit==ACTION_NONE || pLog->m_tWriter.HasUnwrittenData() )
-		{
-			Verify ( pLog->m_tWriteLock.Lock() );
-			pLog->m_tWriter.Flush();
-			Verify ( pLog->m_tWriteLock.Unlock() );
-		}
-
-		if ( pLog->m_tWriter.HasUnsyncedData() )
-			pLog->m_tWriter.Fsync();
+		ScopedMutex_t LockWriter( m_tWriteLock);
+		m_tWriter.Flush();
 	}
+
+	if ( m_tWriter.HasUnsyncedData() )
+		m_tWriter.Fsync();
+
+	m_iLastFlushed = sphMicroTimer ();
 }
+
+int64_t RtBinlog_c::NextFlushingTime () const
+{
+	if ( !m_iLastFlushed )
+		return sphMicroTimer () + m_iFlushPeriod;
+	return m_iLastFlushed + m_iFlushPeriod;
+}
+
+bool sphFlushBinlogEnabled ()
+{
+	if ( !g_pRtBinlog )
+		return false;
+
+	return g_pRtBinlog->IsFlushingEnabled ();
+}
+
+void sphFlushBinlog ()
+{
+	if ( !g_pRtBinlog )
+		return;
+
+	g_pRtBinlog->DoFlush ();
+}
+
+int64_t sphNextFlushTimestamp ()
+{
+	if ( !g_pRtBinlog )
+		return -1;
+
+	return g_pRtBinlog->NextFlushingTime ();
+}
+
 
 int RtBinlog_c::GetWriteIndexID ( const char * sName, int64_t iTID, int64_t tmNow )
 {
@@ -8978,11 +8995,10 @@ void sphRTDone ()
 }
 
 
-void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD uReplayFlags, ProgressCallbackSimple_t * pfnProgressCallback, BinlogFlushInfo_t & tFlush )
+void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD uReplayFlags, ProgressCallbackSimple_t * pfnProgressCallback )
 {
 	MEMORY ( MEM_BINLOG );
 	g_pRtBinlog->Replay ( hIndexes, uReplayFlags, pfnProgressCallback );
-	g_pRtBinlog->GetFlushInfo ( tFlush );
 	g_bRTChangesAllowed = true;
 }
 

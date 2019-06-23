@@ -50,14 +50,11 @@ public:
 	/// undo pending changes
 	virtual void RollBack ( RtAccum_t * pAccExt ) = 0;
 
-	/// check and periodically flush RAM chunk to disk
-	virtual void CheckRamFlush () = 0;
-
 	/// forcibly flush RAM chunk to disk
 	virtual void ForceRamFlush ( bool bPeriodic=false ) = 0;
 
-	/// get time of last flush, 0 means no flush required
-	virtual int64_t GetFlushAge() const = 0;
+	/// get time of last flush happened
+	virtual int64_t GetLastFlushTimestamp() const = 0;
 
 	/// forcibly save RAM chunk as a new disk chunk
 	virtual bool ForceDiskChunk () = 0;

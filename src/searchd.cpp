@@ -38,6 +38,7 @@
 #include "tasksavestate.h"
 #include "taskflushbinlog.h"
 #include "taskflushattrs.h"
+#include "taskflushmutable.h"
 
 using namespace Threads;
 
@@ -254,9 +255,6 @@ static volatile bool						g_bInRotate = false;		// true while we are rotating
 static volatile bool						g_bReloadForced = false;	// true in case reload issued via SphinxQL
 
 static CSphVector<SphThread_t>				g_dTickPoolThread;
-
-/// flush parameters of rt indexes
-static ServiceThread_t						g_tRtFlushThread;
 
 static CSphMutex							g_tPersLock;
 static CSphAtomic							g_iPersistentInUse;
@@ -1191,8 +1189,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	// release all planned/scheduled tasks
 	TaskManager::ShutDown();
 
-	// tell flush-rt thread to shutdown, and wait until it does
-	g_tRtFlushThread.Join();
+	ShutdownFlushingMutable();
 
 	// tell rotation thread to shutdown, and wait until it does
 	if ( g_bSeamlessRotate )
@@ -18690,66 +18687,6 @@ void CheckLeaks () REQUIRES ( MainThread )
 #endif
 }
 
-// RT index that got flushed for long time ago floats to start
-struct RtFlushAge_fn
-{
-	bool IsLess ( const CSphNamedInt & a, const CSphNamedInt & b ) const
-	{
-		return ( b.m_iValue<a.m_iValue );
-	}
-};
-#define SPH_RT_AUTO_FLUSH_CHECK_PERIOD ( 5000000 )
-
-static void RtFlushThreadFunc ( void * )
-{
-	int64_t tmNextCheck = sphMicroTimer() + SPH_RT_AUTO_FLUSH_CHECK_PERIOD;
-	while ( !g_bShutdown )
-	{
-		// stand still till save time
-		if ( tmNextCheck>sphMicroTimer() )
-		{
-			sphSleepMsec ( 50 );
-			continue;
-		}
-
-		ThreadSystem_t tThdSystemDesc ( "FLUSH RT" );
-
-		int64_t tmNow = sphMicroTimer();
-		// collecting available rt indexes at save time
-		CSphVector<CSphNamedInt> dRtIndexes;
-		for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next (); )
-		{
-			ServedDescRPtr_c pIdx ( it.Get () );
-			if ( !ServedDesc_t::IsMutable ( pIdx ) )
-				continue;
-
-			dRtIndexes.Add().m_sName = it.GetName ();
-			auto * pRT = (RtIndex_i *) pIdx->m_pIndex;
-			int64_t tmFlushed = pRT->GetFlushAge();
-			if ( tmFlushed==0 )
-				dRtIndexes.Last().m_iValue = 0;
-			else
-				dRtIndexes.Last().m_iValue = int( tmNow - tmFlushed>INT_MAX ? INT_MAX : tmNow - tmFlushed );
-		}
-
-		sphSort ( dRtIndexes.Begin(), dRtIndexes.GetLength(), RtFlushAge_fn() );
-
-		// do check+save
-		ARRAY_FOREACH_COND ( i, dRtIndexes, !g_bShutdown )
-		{
-			auto pServed = GetServed ( dRtIndexes[i].m_sName );
-			if ( !pServed )
-				continue;
-
-			ServedDescRPtr_c dReadLock ( pServed );
-			auto * pRT = (RtIndex_i *) dReadLock->m_pIndex;
-			pRT->CheckRamFlush();
-		}
-
-		tmNextCheck = sphMicroTimer() + SPH_RT_AUTO_FLUSH_CHECK_PERIOD;
-	}
-}
-
 /// this gets called for every new physical index
 /// that is, local and RT indexes, but not distributed once
 bool PreallocNewIndex ( ServedDesc_t &tIdx, const CSphConfigSection * pConfig, const char * szIndexName )
@@ -24328,6 +24265,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	ScheduleMallocTrim();
 
+	// initialize timeouts since hook will use them
+	auto iRtFlushPeriod = hSearchd.GetUsTime64S ( "rt_flush_period", 36000000000ll ); // 10h
+	SetRtFlushPeriod ( Max ( iRtFlushPeriod, 10 * 1000000 ) );
+	g_pLocalIndexes->SetAddOrReplaceHook ( HookSubscribeMutableFlush );
 	//////////////////////
 	// build indexes hash
 	//////////////////////
@@ -24516,10 +24457,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	g_tStats.m_uStarted = (DWORD)time(NULL);
 
 	// threads mode
-	// create optimize and flush threads, and load saved sphinxql state
-	if ( !g_tRtFlushThread.Create ( RtFlushThreadFunc, 0, "rt_flush" ))
-		sphDie ( "failed to create rt-flush thread" );
-
 	if ( !InitSphinxqlState ( hSearchd.GetStr ( "sphinxql_state" ), sError ))
 		sphWarning ( "sphinxql_state flush disabled: %s", sError.cstr ());
 

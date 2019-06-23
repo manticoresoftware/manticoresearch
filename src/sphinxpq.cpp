@@ -99,7 +99,6 @@ public:
 	bool MultiQueryEx ( int, const CSphQuery *, CSphQueryResult **, ISphMatchSorter **, const CSphMultiQueryArgs & ) const override;
 	virtual bool AddDocument ( ISphHits * , const CSphMatch & , const char ** , const CSphVector<DWORD> & , CSphString & , CSphString & ) { return true; }
 	bool DeleteDocument ( const DocID_t * , int , CSphString & , RtAccum_t * pAccExt ) override { RollBack ( pAccExt ); return true; }
-	void CheckRamFlush () override;
 	void ForceRamFlush ( bool bPeriodic ) override;
 	bool ForceDiskChunk () override;
 	bool AttachDiskIndex ( CSphIndex * , bool, bool &, CSphString & ) override { return true; }
@@ -107,7 +106,7 @@ public:
 	bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const override;
 	bool Reconfigure ( CSphReconfigureSetup & tSetup ) override REQUIRES ( !m_tLock );
 	CSphIndex * GetDiskChunk ( int ) override { return NULL; } // NOLINT
-	int64_t GetFlushAge() const override { return 0; }
+	int64_t GetLastFlushTimestamp() const override { return m_tmSaved; }
 
 	int					Kill ( DocID_t ) override { return 0; }
 	int					KillMulti ( const DocID_t * pKlist, int iKlistSize ) override { return 0; }
@@ -2224,24 +2223,24 @@ void PercolateIndex_c::SaveMeta ( bool bShutdown )
 	// meta v.6
 	SaveFieldFilterSettings ( wrMeta, m_pFieldFilter );
 
-	Verify ( m_tLock.ReadLock() );
-	wrMeta.PutDword ( m_dStored.GetLength() );
-
-	ARRAY_FOREACH ( i, m_dStored )
 	{
-		const StoredQuery_t * pQuery = m_dStored[i].m_pQuery;
-		SaveStoredQuery ( *pQuery, wrMeta );
+		ScRL_t rLock ( m_tLock );
+		wrMeta.PutDword ( m_dStored.GetLength() );
+
+		ARRAY_FOREACH ( i, m_dStored )
+		{
+			const StoredQuery_t * pQuery = m_dStored[i].m_pQuery;
+			SaveStoredQuery ( *pQuery, wrMeta );
+		}
+
+		wrMeta.PutOffset ( m_iTID );
+
+		if ( GetBinlog() )
+			GetBinlog()->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, bShutdown );
+
+		m_iSavedTID = m_iTID;
+		m_tmSaved = sphMicroTimer();
 	}
-
-	wrMeta.PutOffset ( m_iTID );
-
-	if ( GetBinlog() )
-		GetBinlog()->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, bShutdown );
-
-	m_iSavedTID = m_iTID;
-	m_tmSaved = sphMicroTimer();
-
-	m_tLock.Unlock();
 
 	wrMeta.CloseFile();
 
@@ -2391,7 +2390,7 @@ void SetPercolateThreads ( int iThreads )
 
 void PercolateIndex_c::ForceRamFlush ( bool bPeriodic )
 {
-	if ( m_iTID<=m_iSavedTID )
+	if ( GetBinlog ()->IsActive () && m_iTID<=m_iSavedTID )
 		return;
 
 	RamFlush ( bPeriodic );
@@ -2420,17 +2419,6 @@ bool PercolateIndex_c::ForceDiskChunk()
 	ForceRamFlush ( false );
 	return true;
 }
-
-void PercolateIndex_c::CheckRamFlush ()
-{
-	if ( ( sphMicroTimer()-m_tmSaved )/1000000<GetRtFlushPeriod() )
-		return;
-	if ( GetBinlog()->IsActive() && m_iTID<=m_iSavedTID )
-		return;
-
-	ForceRamFlush ( true );
-}
-
 
 PercolateQueryArgs_t::PercolateQueryArgs_t ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree )
 	: m_dFilters ( dFilters )

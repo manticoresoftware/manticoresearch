@@ -92,7 +92,6 @@ extern const char *		MAGIC_WORD_PARAGRAPH;	///< value is "\3paragraph"
 /// binlog, defined in sphinxrt.cpp
 extern class ISphBinlog *		g_pBinlog;
 ISphBinlog *					GetBinlog();
-int64_t							GetRtFlushPeriod();
 
 /// costs for max_predicted_time limits, defined in sphinxsearch.cpp
 /// measured in nanoseconds (that is, 1e-9)

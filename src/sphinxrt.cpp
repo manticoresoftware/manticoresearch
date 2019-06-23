@@ -1021,7 +1021,6 @@ public:
 	bool				Commit ( int * pDeleted, RtAccum_t * pAccExt ) final;
 	void				RollBack ( RtAccum_t * pAccExt ) final;
 	bool				CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<DocID_t> & dAccKlist, int * pTotalKilled, bool bForceDump ); // FIXME? protect?
-	void				CheckRamFlush () final;
 	void				ForceRamFlush ( bool bPeriodic=false ) final;
 	bool				ForceDiskChunk() final;
 	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) final;
@@ -1097,7 +1096,7 @@ public:
 
 	bool				IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const final;
 	bool				Reconfigure ( CSphReconfigureSetup & tSetup ) final;
-	int64_t				GetFlushAge() const final;
+	int64_t				GetLastFlushTimestamp() const final;
 	void				ProhibitSave() final {}
 
 	void				SetDebugCheck () final { m_bDebugCheck = true; }
@@ -1269,32 +1268,16 @@ RtIndex_c::~RtIndex_c ()
 	}
 }
 
-
-static int64_t g_iRtFlushPeriod = 10*60*60; // default period is 10 hours
-int64_t GetRtFlushPeriod() { return g_iRtFlushPeriod; }
-
-void RtIndex_c::CheckRamFlush ()
+void RtIndex_c::ForceRamFlush ( bool bPeriodic ) REQUIRES (!this->m_tFlushLock)
 {
-	if ( ( sphMicroTimer()-m_tmSaved )/1000000<g_iRtFlushPeriod )
-		return;
-	if ( g_pRtBinlog->IsActive() && m_iTID<=m_iSavedTID )
+	if ( g_pRtBinlog->IsActive () && m_iTID<=m_iSavedTID )
 		return;
 
-	ForceRamFlush ( true );
-}
-
-
-void RtIndex_c::ForceRamFlush ( bool bPeriodic )
-{
 	int64_t tmSave = sphMicroTimer();
 
 	// need this lock as could get here at same time either ways:
-	// via RtFlushThreadFunc->RtIndex_c::CheckRamFlush
 	// and via HandleMysqlFlushRtindex
 	CSphScopedLock<CSphMutex> tLock ( m_tFlushLock );
-
-	if ( g_pRtBinlog->IsActive() && m_iTID<=m_iSavedTID )
-		return;
 
 	int64_t iUsedRam = 0;
 	int64_t iSavedTID = m_iTID;
@@ -1329,11 +1312,8 @@ void RtIndex_c::ForceRamFlush ( bool bPeriodic )
 }
 
 
-int64_t RtIndex_c::GetFlushAge() const
+int64_t RtIndex_c::GetLastFlushTimestamp() const
 {
-	if ( m_iSavedTID==0 || m_iSavedTID==m_iTID )
-		return 0;
-
 	return m_tmSaved;
 }
 
@@ -2671,7 +2651,7 @@ bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<DocID_t> & 
 			m_dRetired.Reset();
 			return false;
 		}
-		
+
 		g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), iTID, false );
 
 		// notify the disk chunk that we were saving of the documents that were killed while we were saving it
@@ -8977,13 +8957,10 @@ void sphRTInit ( const CSphConfigSection & hSearchd, bool bTestMode, const CSphC
 		g_bProgressiveMerge = ( pCommon->GetInt ( "progressive_merge", 1 )!=0 );
 }
 
-
 void sphRTConfigure ( const CSphConfigSection & hSearchd, bool bTestMode )
 {
 	assert ( g_pBinlog );
 	g_pRtBinlog->Configure ( hSearchd, bTestMode );
-	g_iRtFlushPeriod = hSearchd.GetSTimeS ( "rt_flush_period", (int)g_iRtFlushPeriod );
-	g_iRtFlushPeriod = Max ( g_iRtFlushPeriod, 10 );
 }
 
 

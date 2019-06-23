@@ -128,7 +128,7 @@ namespace TaskManager {
 //	TaskID RegisterGlobal ( const char* sName, fnThread_t fnThread, fnThread_t fnFree=nullptr, int iThreads=0, int iJobs=-1 );
 
 	template <typename FN1, typename FN2>
-	TaskID RegisterGlobal ( const char* sName, FN1&& fnThread, FN2&& fnFree = nullptr, int iThreads = 0,
+	TaskID RegisterGlobal ( const char* sName, FN1&& fnThread, FN2&& fnFree, int iThreads = 0,
 		int iJobs = -1 )
 	{
 		auto& dNewTask = TaskManager_Internal::TaskWorker::GetNewTask ();

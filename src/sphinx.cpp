@@ -2616,7 +2616,7 @@ private:
 	bool						m_bIsEmpty;				///< do we have actually indexed documents (m_iTotalDocuments is just fetched documents, not indexed!)
 	bool						m_bDebugCheck;
 
-	DWORD						m_uAttrsStatus;
+	mutable DWORD				m_uAttrsStatus = 0;
 
 	DataReaderFactoryPtr_c		m_pDoclistFile;			///< doclist file
 	DataReaderFactoryPtr_c		m_pHitlistFile;			///< hitlist file
@@ -9478,7 +9478,7 @@ bool CSphIndex_VLN::SaveAttributes ( CSphString & sError ) const
 		g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
 
 	if ( m_uAttrsStatus==uAttrStatus )
-		const_cast<DWORD &>( m_uAttrsStatus ) = 0;
+		m_uAttrsStatus = 0;
 
 	sphLogDebugvv ( "index '%s' attrs (%d) saved", m_sIndexName.cstr(), m_uAttrsStatus );
 
@@ -14344,7 +14344,7 @@ void CSphIndex_VLN::Dealloc ()
 
 	m_bPassedRead = false;
 	m_bPassedAlloc = false;
-	m_uAttrsStatus = false;
+	m_uAttrsStatus = 0;
 
 	QcacheDeleteIndex ( m_iIndexId );
 	m_iIndexId = m_tIdGenerator.Inc();

@@ -37,6 +37,7 @@
 #include "taskglobalidf.h"
 #include "tasksavestate.h"
 #include "taskflushbinlog.h"
+#include "taskflushattrs.h"
 
 using namespace Threads;
 
@@ -177,7 +178,6 @@ static int				g_iPidFD		= -1;
 static int				g_iMaxCachedDocs	= 0;	// in bytes
 static int				g_iMaxCachedHits	= 0;	// in bytes
 
-static int				g_iAttrFlushPeriod	= 0;			// in seconds; 0 means "do not flush"
 int				g_iMaxPacketSize	= 8*1024*1024;	// in bytes; for both query packets from clients and response packets from agents
 static int				g_iMaxFilters		= 256;
 static int				g_iMaxFilterValues	= 4096;
@@ -283,16 +283,6 @@ const char * sAgentStatsNames[eMaxAgentStat+ehMaxStat]=
 
 static RwLock_t					g_tLastMetaLock;
 static CSphQueryResultMeta		g_tLastMeta GUARDED_BY ( g_tLastMetaLock );
-
-//////////////////////////////////////////////////////////////////////////
-struct FlushState_t
-{
-	int		m_bFlushing;		///< update flushing in progress
-	int		m_iFlushTag;		///< last flushed tag
-	bool	m_bForceCheck;		///< forced check/flush flag
-};
-
-static FlushState_t				g_tFlush;
 
 /////////////////////////////////////////////////////////////////////////////
 // MISC
@@ -1170,24 +1160,6 @@ public:
 /////////////////////////////////////////////////////////////////////////////
 // SIGNAL HANDLERS
 /////////////////////////////////////////////////////////////////////////////
-
-
-static bool SaveIndexes ()
-{
-	CSphString sError;
-	bool bAllSaved = true;
-	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); )
-	{
-		ServedDescRPtr_c pServed (it.Get());
-		if ( pServed && !pServed->m_pIndex->SaveAttributes ( sError ) )
-		{
-			sphWarning ( "index %s: attrs save failed: %s", it.GetName ().cstr(), sError.cstr() );
-			bAllSaved = false;
-		}
-	}
-	return bAllSaved;
-}
-
 void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 {
 #if !USE_WINDOWS
@@ -1243,7 +1215,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	}
 
 	// save attribute updates for all local indexes
-	bAttrsSaveOk = SaveIndexes();
+	bAttrsSaveOk = FinallySaveIndexes();
 
 	// right before unlock loop
 	JsonDoneConfig();
@@ -11319,24 +11291,6 @@ void HandleCommandStatus ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c
 //////////////////////////////////////////////////////////////////////////
 // FLUSH HANDLER
 //////////////////////////////////////////////////////////////////////////
-
-static int CommandFlush () EXCLUDES ( MainThread )
-{
-	// force a check in head process, and wait it until completes
-	// FIXME! semi active wait..
-	sphLogDebug ( "attrflush: forcing check, tag=%d", g_tFlush.m_iFlushTag );
-	g_tFlush.m_bForceCheck = true;
-	while ( g_tFlush.m_bForceCheck )
-		sphSleepMsec ( 1 );
-
-	// if we are flushing now, wait until flush completes
-	while ( g_tFlush.m_bFlushing )
-		sphSleepMsec ( 10 );
-	sphLogDebug ( "attrflush: check finished, tag=%d", g_tFlush.m_iFlushTag );
-
-	return g_tFlush.m_iFlushTag;
-}
-
 void HandleCommandFlush ( CachedOutputBuffer_c & tOut, WORD uVer )
 {
 	if ( !CheckCommandVersion ( uVer, VER_COMMAND_FLUSHATTRS, tOut ) )
@@ -20341,76 +20295,6 @@ void CheckReopenLogs () REQUIRES ( MainThread )
 	g_bGotSigusr1 = 0;
 }
 
-
-static void ThdSaveIndexes ( void * )
-{
-	ThreadSystem_t tThdSystemDesc ( "SAVE indexes" );
-	SaveIndexes ();
-
-	// we're no more flushing
-	g_tFlush.m_bFlushing = false;
-}
-
-void CheckFlush () REQUIRES ( MainThread )
-{
-	if ( g_tFlush.m_bFlushing )
-		return;
-
-	// do a periodic check, unless we have a forced check
-	if ( !g_tFlush.m_bForceCheck )
-	{
-		static int64_t tmLastCheck = -1000;
-		int64_t tmNow = sphMicroTimer();
-
-		if ( !g_iAttrFlushPeriod || ( tmLastCheck + int64_t(g_iAttrFlushPeriod)*I64C(1000000) )>=tmNow )
-			return;
-
-		tmLastCheck = tmNow;
-		sphLogDebug ( "attrflush: doing periodic check" );
-	} else
-	{
-		sphLogDebug ( "attrflush: doing forced check" );
-	}
-
-	// check if there are dirty indexes
-	bool bDirty = false;
-	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); )
-	{
-		auto pServed = it.Get();
-		ServedDescRPtr_c pLocked ( pServed );
-		if ( pServed && pLocked->m_pIndex->GetAttributeStatus() )
-		{
-			bDirty = true;
-			break;
-		}
-	}
-
-	// need to set this before clearing check flag
-	if ( bDirty )
-		g_tFlush.m_bFlushing = true;
-
-	// if there was a forced check in progress, it no longer is
-	if ( g_tFlush.m_bForceCheck )
-		g_tFlush.m_bForceCheck = false;
-
-	// nothing to do, no indexes were updated
-	if ( !bDirty )
-	{
-		sphLogDebug ( "attrflush: no dirty indexes found" );
-		return;
-	}
-
-	// launch the flush!
-	g_tFlush.m_iFlushTag++;
-
-	sphLogDebug ( "attrflush: starting writer, tag ( %d )", g_tFlush.m_iFlushTag );
-
-	ThdDesc_t tThd;
-	if ( !sphThreadCreate ( &tThd.m_tThd, ThdSaveIndexes, NULL, true, "SaveIndexes" ) )
-		sphWarning ( "failed to create attribute save thread, error[%d] %s", errno, strerrorm(errno) );
-}
-
-
 #if !USE_WINDOWS
 #define WINAPI
 #else
@@ -21231,7 +21115,6 @@ void TickHead () REQUIRES ( MainThread )
 	CheckLeaks ();
 	CheckReopenLogs ();
 	CheckRotate ();
-	CheckFlush ();
 
 	if ( g_pThdPool )
 	{
@@ -23502,7 +23385,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	if ( !g_bSeamlessRotate && g_bPreopenIndexes )
 		sphWarning ( "preopen_indexes=1 has no effect with seamless_rotate=0" );
 
-	g_iAttrFlushPeriod = hSearchd.GetSTimeS ( "attr_flush_period", g_iAttrFlushPeriod );
+	SetAttrFlushPeriod ( hSearchd.GetUsTime64S ( "attr_flush_period", 0 ));
 	g_iMaxPacketSize = hSearchd.GetSize ( "max_packet_size", g_iMaxPacketSize );
 	g_iMaxFilters = hSearchd.GetInt ( "max_filters", g_iMaxFilters );
 	g_iMaxFilterValues = hSearchd.GetInt ( "max_filter_values", g_iMaxFilterValues );
@@ -24622,6 +24505,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	}
 	
 	StartRtBinlogFlushing();
+
+	ScheduleFlushAttrs();
 
 	if ( g_bIOStats && !sphInitIOStats () )
 		sphWarning ( "unable to init IO statistics" );

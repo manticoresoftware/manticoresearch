@@ -47,7 +47,7 @@
 inline const char * strerrorm ( int errnum )
 {
 	if (errnum==EMFILE)
-		return "Too many open files (on linux see /etc/security/limits.conf, also 'ulimit -n')";
+		return "Too many open files (on linux see /etc/security/limits.conf, 'ulimit -n', max_open_files config option)";
 	return strerror (errnum);
 }
 

@@ -1015,13 +1015,13 @@ public:
 		const char ** ppStr, const VecTraits_T<int64_t> & dMvas, CSphString & sError, CSphString & sWarning,
 		RtAccum_t * pAccExt );
 	bool				DeleteDocument ( const DocID_t * pDocs, int iDocs, CSphString & sError, RtAccum_t * pAccExt ) final;
-	void				Commit ( int * pDeleted, RtAccum_t * pAccExt ) final;
+	bool				Commit ( int * pDeleted, RtAccum_t * pAccExt ) final;
 	void				RollBack ( RtAccum_t * pAccExt ) final;
-	void				CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<DocID_t> & dAccKlist, int * pTotalKilled, bool bForceDump ); // FIXME? protect?
+	bool				CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<DocID_t> & dAccKlist, int * pTotalKilled, bool bForceDump ); // FIXME? protect?
 	void				CheckRamFlush () final;
 	void				ForceRamFlush ( bool bPeriodic=false ) final;
-	void				ForceDiskChunk() final;
-	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, CSphString & sError ) final;
+	bool				ForceDiskChunk() final;
+	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) final;
 	bool				Truncate ( CSphString & sError ) final;
 	void				Optimize () final;
 	virtual void				ProgressiveMerge ();
@@ -1093,7 +1093,7 @@ public:
 	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) final {}
 
 	bool				IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const final;
-	void				Reconfigure ( CSphReconfigureSetup & tSetup ) final;
+	bool				Reconfigure ( CSphReconfigureSetup & tSetup ) final;
 	int64_t				GetFlushAge() const final;
 	void				ProhibitSave() final {}
 
@@ -1163,7 +1163,7 @@ private:
 	void						SaveMeta ( int64_t iTID, const CSphFixedVector<int> & dChunkNames );
 	void						SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats ) const;
 	void						SaveDiskData ( const char * sFilename, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats ) const;
-	int							SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats, bool bMoveRetired, bool bForced );
+	bool						SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats, bool bMoveRetired, bool bForced, int iSavedChunkId );
 	CSphIndex *					LoadDiskChunk ( const char * sChunk, CSphString & sError ) const;
 	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes );
 	bool						SaveRamChunk ( const VecTraits_T<const RtSegment_t *>& dSegments );
@@ -2379,20 +2379,20 @@ struct CmpSegments_fn
 };
 
 
-void RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAccExt )
+bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAccExt )
 {
 	assert ( g_bRTChangesAllowed );
 	MEMORY ( MEM_INDEX_RT );
 
 	auto pAcc = ( RtAccum_t * ) AcquireAccum ( m_pDict, pAccExt, m_bKeywordDict );
 	if ( !pAcc )
-		return;
+		return true;
 
 	// empty txn, just ignore
 	if ( !pAcc->m_uAccumDocs && !pAcc->m_dAccumKlist.GetLength() )
 	{
 		pAcc->Cleanup();
-		return;
+		return true;
 	}
 
 	// phase 0, build a new segment
@@ -2414,14 +2414,19 @@ void RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAccExt )
 	pAcc->m_dAccumKlist.Uniq ();
 
 	// now on to the stuff that needs locking and recovery
-	CommitReplayable ( pNewSeg, pAcc->m_dAccumKlist, pDeleted, false );
+	bool bOk = CommitReplayable ( pNewSeg, pAcc->m_dAccumKlist, pDeleted, false );
 
 	// done; cleanup accum
 	pAcc->Cleanup();
 
+	if ( !bOk )
+		return false;
+
 	// reset accumulated warnings
 	CSphString sWarning;
 	pAcc->GrabLastWarning ( sWarning );
+
+	return true;
 }
 
 
@@ -2449,7 +2454,7 @@ int RtIndex_c::ApplyKillList ( const CSphVector<DocID_t> & dAccKlist )
 }
 
 
-void RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<DocID_t> & dAccKlist, int * pTotalKilled, bool bForceDump )
+bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<DocID_t> & dAccKlist, int * pTotalKilled, bool bForceDump )
 {
 	// store statistics, because pNewSeg just might get merged
 	int iNewDocs = pNewSeg ? pNewSeg->m_uRows : 0;
@@ -2635,7 +2640,7 @@ void RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<DocID_t> & 
 	{
 		// all done, enable other writers
 		Verify ( m_tWriting.Unlock() );
-		return;
+		return true;
 	}
 
 	// scope for guard then retired clean up
@@ -2657,7 +2662,13 @@ void RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<DocID_t> & 
 
 		Verify ( m_tWriting.Unlock() );
 
-		int iSavedChunkId = SaveDiskChunk ( iTID, tGuard, tStat2Dump, false, bForceDump );
+		int iSavedChunkId = -1;
+		if ( !SaveDiskChunk ( iTID, tGuard, tStat2Dump, false, bForceDump, iSavedChunkId ) )
+		{
+			m_dRetired.Reset();
+			return false;
+		}
+		
 		g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), iTID, false );
 
 		// notify the disk chunk that we were saving of the documents that were killed while we were saving it
@@ -2681,6 +2692,8 @@ void RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<DocID_t> & 
 
 	// TODO - try to call FreeRetired after take writer lock again
 	// to free more memory
+
+	return true;
 }
 
 
@@ -2742,15 +2755,21 @@ struct Checkpoint_t
 };
 
 
-void RtIndex_c::ForceDiskChunk() NO_THREAD_SAFETY_ANALYSIS
+bool RtIndex_c::ForceDiskChunk() NO_THREAD_SAFETY_ANALYSIS
 {
 	MEMORY ( MEM_INDEX_RT );
 
 	if ( !m_dRamChunks.GetLength() )
-		return;
+		return true;
 
 	CSphVector<DocID_t> dTmp;
-	CommitReplayable ( nullptr, dTmp, nullptr, true );
+	if ( !CommitReplayable ( nullptr, dTmp, nullptr, true ) )
+	{
+		FreeRetired();
+		return false;
+	}
+
+	return true;
 }
 
 
@@ -3367,10 +3386,13 @@ void RtIndex_c::SaveMeta ( int64_t iTID, const CSphFixedVector<int> & dChunkName
 }
 
 
-int RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats, bool bMoveRetired, bool bForce )
+bool RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats, bool bMoveRetired, bool bForce, int iSavedChunkId )
 {
 	if ( !tGuard.m_dRamChunks.GetLength() )
-		return -1;
+	{
+		iSavedChunkId = -1;
+		return true;
+	}
 
 	int64_t tmSave = sphMicroTimer ();
 
@@ -3386,7 +3408,7 @@ int RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, con
 	// bring new disk chunk online
 	CSphIndex * pDiskChunk = LoadDiskChunk ( sNewChunk.cstr(), m_sLastError );
 	if ( !pDiskChunk )
-		sphDie ( "%s", m_sLastError.cstr() );
+		return false;
 
 	// FIXME! add binlog cleanup here once we have binlogs
 
@@ -3406,7 +3428,7 @@ int RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, con
 
 	m_dDiskChunks.Add ( pDiskChunk );
 
-	int iChunkId = pDiskChunk->GetIndexId();
+	iSavedChunkId = pDiskChunk->GetIndexId();
 
 	// update field lengths
 	if ( m_tSchema.GetAttrId_FirstFieldLen()>=0 )
@@ -3442,9 +3464,9 @@ int RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, con
 	tmSave = sphMicroTimer () - tmSave;
 	const char* sReason = bForce ? "forcibly saved" : "saved";
 	sphInfo ( "rt: index %s: diskchunk %d %s in %d.%03d sec",
-			  m_sIndexName.cstr (), iChunkId, sReason, ( int ) ( tmSave / 1000000 ), ( int ) (( tmSave / 1000 ) % 1000 ));
+			  m_sIndexName.cstr (), iSavedChunkId, sReason, ( int ) ( tmSave / 1000000 ), ( int ) (( tmSave / 1000 ) % 1000 ));
 
-	return iChunkId;
+	return true;
 }
 
 
@@ -6636,8 +6658,9 @@ bool RtIndex_c::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ES
 // MAGIC CONVERSIONS
 //////////////////////////////////////////////////////////////////////////
 
-bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, CSphString & sError )
+bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError )
 {
+	bFatal = false;
 	bool bEmptyRT = ( ( !m_dRamChunks.GetLength() && !m_dDiskChunks.GetLength() ) || bTruncate );
 
 	// safeguards
@@ -6678,7 +6701,12 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, CSphString
 		GetReaderChunks ( tGuard );
 
 		ChunkStats_t tStats ( m_tStats, m_dFieldLensRam );
-		SaveDiskChunk ( m_iTID, tGuard, tStats, true, true );
+		int iSavedChunkId = -1;
+		if ( !SaveDiskChunk ( m_iTID, tGuard, tStats, true, true, iSavedChunkId ) )
+		{
+			bFatal = true;
+			return false;
+		}
 
 		for ( const auto & pChunk : m_dDiskChunks )
 		{
@@ -7324,9 +7352,10 @@ bool RtIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconf
 		m_pTokenizer->GetSettingsFNV(), m_pDict->GetSettingsFNV(), m_pTokenizer->GetMaxCodepointLength(), true, tSettings, tSetup, sError );
 }
 
-void RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
+bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 {
-	ForceDiskChunk();
+	if ( !ForceDiskChunk() )
+		return false;
 
 	Setup ( tSetup.m_tIndex );
 	SetTokenizer ( tSetup.m_pTokenizer );
@@ -7341,6 +7370,8 @@ void RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 	ISphTokenizerRefPtr_c pIndexing { ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
 	if ( pIndexing )
 		m_pTokenizerIndexing = pIndexing;
+
+	return true;
 }
 
 
@@ -8398,7 +8429,8 @@ bool RtBinlog_c::ReplayCommit ( int iBinlog, DWORD uReplayFlags, BinlogReader_c 
 		}
 
 		// actually replay
-		tIndex.m_pRT->CommitReplayable ( pSeg.LeakPtr(), dKlist, NULL, false );
+		if ( !tIndex.m_pRT->CommitReplayable ( pSeg.LeakPtr(), dKlist, NULL, false ) )
+			return false;
 
 		// update committed tid on replay in case of unexpected / mismatched tid
 		tIndex.m_pRT->m_iTID = iTID;
@@ -8649,7 +8681,10 @@ bool RtBinlog_c::ReplayReconfigure ( int iBinlog, DWORD uReplayFlags, BinlogRead
 				tIndex.m_sName.cstr(), tIndex.m_pRT->m_iTID, iTID, iTxnPos, sError.cstr() );
 
 		if ( !bSame )
-			tIndex.m_pRT->Reconfigure ( tSetup );
+		{
+			if ( !tIndex.m_pRT->Reconfigure ( tSetup ) )
+				return false;
+		}
 
 		// update committed tid on replay in case of unexpected / mismatched tid
 		tIndex.m_pRT->m_iTID = iTID;

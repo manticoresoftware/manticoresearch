@@ -45,7 +45,7 @@ public:
 	virtual bool DeleteDocument ( const DocID_t * pDocs, int iDocs, CSphString & sError, RtAccum_t * pAccExt ) = 0;
 
 	/// commit pending changes
-	virtual void Commit ( int * pDeleted, RtAccum_t * pAccExt ) = 0;
+	virtual bool Commit ( int * pDeleted, RtAccum_t * pAccExt ) = 0;
 
 	/// undo pending changes
 	virtual void RollBack ( RtAccum_t * pAccExt ) = 0;
@@ -60,10 +60,10 @@ public:
 	virtual int64_t GetFlushAge() const = 0;
 
 	/// forcibly save RAM chunk as a new disk chunk
-	virtual void ForceDiskChunk () = 0;
+	virtual bool ForceDiskChunk () = 0;
 
 	/// attach a disk chunk to current index
-	virtual bool AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, CSphString & sError ) = 0;
+	virtual bool AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) = 0;
 
 	/// truncate index (that is, kill all data)
 	virtual bool Truncate ( CSphString & sError ) = 0;
@@ -75,7 +75,7 @@ public:
 
 	/// reconfigure index by using new tokenizer, dictionary and index settings
 	/// current data got saved with current settings
-	virtual void Reconfigure ( CSphReconfigureSetup & tSetup ) = 0;
+	virtual bool Reconfigure ( CSphReconfigureSetup & tSetup ) = 0;
 
 	/// get disk chunk
 	virtual CSphIndex * GetDiskChunk ( int iChunk ) = 0;

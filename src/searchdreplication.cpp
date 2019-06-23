@@ -1616,7 +1616,9 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 	sphLogDebugRpl ( "pq-commit, index '%s', uid " INT64_FMT ", queries %d, tags %s",
 		tCmd.m_sIndex.cstr(), ( tCmd.m_pStored ? tCmd.m_pStored->m_iQUID : int64_t(0) ),
 		tCmd.m_dDeleteQueries.GetLength(), tCmd.m_sDeleteTags.scstr() );
-		pIndex->Commit ( nullptr, &tAcc );
+
+	if ( !pIndex->Commit ( nullptr, &tAcc ) )
+		return false;
 
 	return true;
 }
@@ -1770,7 +1772,9 @@ bool CommitMonitor_c::Commit ( CSphString& sError )
 		if ( !pIndex )
 			return false;
 
-		pIndex->Commit ( m_pDeletedCount, &m_tAcc );
+		if ( !pIndex->Commit ( m_pDeletedCount, &m_tAcc ) )
+			return false;
+
 		return true;
 	}
 
@@ -1813,10 +1817,7 @@ bool CommitMonitor_c::CommitNonEmptyCmds ( RtIndex_i* pIndex, const ReplicationC
 {
 	assert ( pIndex );
 	if ( !bOnlyTruncate )
-	{
-		pIndex->Commit ( m_pDeletedCount, &m_tAcc );
-		return true;
-	}
+		return pIndex->Commit ( m_pDeletedCount, &m_tAcc );
 
 	if ( !pIndex->Truncate ( sError ))
 		return false;
@@ -1827,8 +1828,9 @@ bool CommitMonitor_c::CommitNonEmptyCmds ( RtIndex_i* pIndex, const ReplicationC
 	assert ( tCmd.m_tReconfigure.Ptr ());
 	CSphReconfigureSetup tSetup;
 	bool bSame = pIndex->IsSameSettings ( *tCmd.m_tReconfigure.Ptr (), tSetup, sError );
-	if ( !bSame && sError.IsEmpty ())
-		pIndex->Reconfigure ( tSetup );
+	if ( !bSame && sError.IsEmpty() && !pIndex->Reconfigure ( tSetup ) )
+		return false;
+
 	return sError.IsEmpty ();
 }
 

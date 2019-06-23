@@ -78,7 +78,7 @@ public:
 		bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const VecTraits_T<int64_t> & dMvas,
 		CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) override;
 	bool MatchDocuments ( RtAccum_t * pAccExt, PercolateMatchResult_t &tRes ) override;
-	void Commit ( int * pDeleted, RtAccum_t * pAccExt ) override;
+	bool Commit ( int * pDeleted, RtAccum_t * pAccExt ) override;
 	void RollBack ( RtAccum_t * pAccExt ) override;
 
 	StoredQuery_i * AddQuery ( const PercolateQueryArgs_t & tArgs, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError )
@@ -101,11 +101,11 @@ public:
 	bool DeleteDocument ( const DocID_t * , int , CSphString & , RtAccum_t * pAccExt ) override { RollBack ( pAccExt ); return true; }
 	void CheckRamFlush () override;
 	void ForceRamFlush ( bool bPeriodic ) override;
-	void ForceDiskChunk () override;
-	bool AttachDiskIndex ( CSphIndex * , bool, CSphString & ) override { return true; }
+	bool ForceDiskChunk () override;
+	bool AttachDiskIndex ( CSphIndex * , bool, bool &, CSphString & ) override { return true; }
 	void Optimize () override {}
 	bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const override;
-	void Reconfigure ( CSphReconfigureSetup & tSetup ) override REQUIRES ( !m_tLock );
+	bool Reconfigure ( CSphReconfigureSetup & tSetup ) override REQUIRES ( !m_tLock );
 	CSphIndex * GetDiskChunk ( int ) override { return NULL; } // NOLINT
 	int64_t GetFlushAge() const override { return 0; }
 
@@ -1668,13 +1668,13 @@ int PercolateIndex_c::ReplayDeleteQueries ( const char * sTags )
 	return iDeleted;
 }
 
-void PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAccExt )
+bool PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAccExt )
 {
 	assert ( g_bRTChangesAllowed );
 
 	RtAccum_t * pAcc = (RtAccum_t *)AcquireAccum ( m_pDict, pAccExt );
 	if ( !pAcc )
-		return;
+		return true;
 
 	int iDeleted = 0;
 	for ( ReplicationCommand_t * pCmd : pAcc->m_dCmd )
@@ -1701,6 +1701,8 @@ void PercolateIndex_c::Commit ( int * pDeleted, RtAccum_t * pAccExt )
 
 	if ( pDeleted )
 		*pDeleted = iDeleted;
+
+	return true;
 }
 
 struct PqMatchProcessor_t : ISphMatchProcessor, ISphNoncopyable
@@ -2343,7 +2345,7 @@ bool PercolateIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSp
 		m_pTokenizer->GetSettingsFNV(), m_pDict->GetSettingsFNV(), m_pTokenizer->GetMaxCodepointLength(), bSameSchema, tSettings, tSetup, sError );
 }
 
-void PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
+bool PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 {
 	if ( GetBinlog() )
 		GetBinlog()->BinlogReconfigure ( &m_iTID, m_sIndexName.cstr(), tSetup );
@@ -2378,6 +2380,8 @@ void PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 	}
 
 	PostSetup();
+
+	return true;
 }
 
 void SetPercolateThreads ( int iThreads )
@@ -2411,9 +2415,10 @@ void PercolateIndex_c::RamFlush ( bool bPeriodic )
 		, (int) (tmAge/1000000), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
 }
 
-void PercolateIndex_c::ForceDiskChunk ()
+bool PercolateIndex_c::ForceDiskChunk()
 {
 	ForceRamFlush ( false );
+	return true;
 }
 
 void PercolateIndex_c::CheckRamFlush ()

@@ -16277,8 +16277,12 @@ void HandleMysqlAttach ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 
 	auto * pRtTo = ( RtIndex_i * ) pTo->m_pIndex;
 
-	if ( !pRtTo->AttachDiskIndex ( pFrom->m_pIndex, bTruncate, sError ) )
+	bool bFatal = false;
+	if ( !pRtTo->AttachDiskIndex ( pFrom->m_pIndex, bTruncate, bFatal, sError ) )
 	{
+		if ( bFatal )
+			g_pLocalIndexes->Delete(sFrom);
+
 		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 		return;
 	}
@@ -16309,9 +16313,7 @@ void HandleMysqlFlushRtindex ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 
 void HandleMysqlFlushRamchunk ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
-	CSphString sError;
 	ServedDescRPtr_c pIndex ( GetServed ( tStmt.m_sIndex ) );
-
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, "FLUSH RAMCHUNK requires an existing RT index" );
@@ -16319,7 +16321,15 @@ void HandleMysqlFlushRamchunk ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	}
 
 	auto * pRt = (RtIndex_i*)pIndex->m_pIndex;
-	pRt->ForceDiskChunk();
+	if ( !pRt->ForceDiskChunk() )
+	{
+		CSphString sError;
+		sError.SetSprintf ( "index '%s': FLUSH RAMCHUNK failed; INDEX UNUSABLE (%s)", tStmt.m_sIndex.cstr(), pRt->GetLastError().cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+		g_pLocalIndexes->Delete ( tStmt.m_sIndex );
+		return;
+	}
+
 	tOut.Ok();
 }
 
@@ -17446,7 +17456,15 @@ static void HandleMysqlReconfigure ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 
 	bool bSame = ( (const RtIndex_i *) dWLocked->m_pIndex )->IsSameSettings ( tSettings, tSetup, sError );
 	if ( !bSame && sError.IsEmpty() )
-		( (RtIndex_i *) dWLocked->m_pIndex )->Reconfigure(tSetup);
+	{
+		auto pRT = (RtIndex_i *) dWLocked->m_pIndex;
+		bool bOk = pRT->Reconfigure(tSetup);
+		if ( !bOk )
+		{
+			sError.SetSprintf ( "index '%s': reconfigure failed; INDEX UNUSABLE (%s)", tStmt.m_sIndex.cstr(), pRT->GetLastError().cstr() );
+			g_pLocalIndexes->Delete ( tStmt.m_sIndex );
+		}
+	}
 
 	if ( sError.IsEmpty() )
 		tOut.Ok();

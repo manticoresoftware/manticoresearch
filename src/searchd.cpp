@@ -10597,6 +10597,12 @@ void HandleCommandUpdate ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c 
 	for ( auto & i : tUpd.m_dAttributes )
 	{
 		i.m_sName = tReq.GetString();
+		if ( i.m_sName==sphGetDocidName() )
+		{
+			SendErrorReply ( tOut, "'id' attribute cannot be updated" );
+			return;
+		}
+
 		i.m_eType = SPH_ATTR_INTEGER;
 		if ( iVer>=0x102 )
 		{
@@ -15154,7 +15160,15 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory
 
 	bool bBlobUpdate = false;
 	for ( const auto & i : tStmt.m_tUpdate.m_dAttributes )
+	{
+		if ( i.m_sName==sphGetDocidName() )
+		{
+			tOut.Error ( tStmt.m_sStmt, "'id' attribute cannot be updated" );
+			return;
+		}
+
 		bBlobUpdate |= sphIsBlobAttr ( i.m_eType );
+	}
 
 	ARRAY_FOREACH ( iIdx, dIndexNames )
 	{

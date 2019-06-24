@@ -12,6 +12,7 @@ Multiple attributes and values can be specified in a single statement.
 Both RT and disk indexes are supported.
 
 All attributes types (int, bigint, float, strings, MVA, JSON) can be dynamically updated.
+Note that ``id`` attribute cannot be updated.
 
 ``where_condition`` has the same syntax as in the SELECT statement (see
 :ref:`select_syntax` for

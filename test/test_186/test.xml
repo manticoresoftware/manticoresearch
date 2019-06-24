@@ -159,6 +159,9 @@ index rt
 <sphinxql>update rt set bfloat=-5 where id=1</sphinxql>
 <sphinxql>select bfloat from rt where id=1</sphinxql>
 
+<!-- regression for id updates -->
+<sphinxql>update rt set id=100 where id=1</sphinxql>
+
 </sphqueries>
 
   <DB_Create>

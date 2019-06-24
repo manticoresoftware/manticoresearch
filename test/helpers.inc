@@ -903,7 +903,7 @@ class APIClient extends SphinxClient
 	function XUpdateAttributes ( $index, $attrs, $values, $type=SPH_UPDATE_INT, $ignorenonexistent=false )
 	{
 		$res = $this->UpdateAttributes ( $index, $attrs, $values, $type, $ignorenonexistent );
-		if ($res===false)
+		if ($res===-1)
 			return $this->GetLastError();
 		return $res;
 	}

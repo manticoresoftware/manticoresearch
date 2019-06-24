@@ -183,6 +183,8 @@ $iquery = "REPLACE INTO rt1 (id, title, content, gid, price, big, categories, cr
 $results[] = $ql->Query ( $iquery );
 $results[] = $ql->Query ( "SELECT * FROM rt1" );
 
+// regression for id updates
+$results[] = $client->XUpdateAttributes ( "block1", array("id"), array(1=>array(100)) );
 ]]></custom_test>
 
 <db_create>

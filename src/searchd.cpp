@@ -39,6 +39,7 @@
 #include "taskflushbinlog.h"
 #include "taskflushattrs.h"
 #include "taskflushmutable.h"
+#include "taskpreread.h"
 
 using namespace Threads;
 
@@ -239,7 +240,6 @@ static volatile sig_atomic_t g_bGotSigusr1		= 0;	// we just received SIGUSR1; ne
 static CSphLargeBuffer<DWORD, true>	g_bDaemonAtShutdown;
 static auto&					g_bShutdown = sphGetShutdown();
 volatile bool					g_bMaintenance = false;
-volatile bool					g_bPrereading = false;
 static CSphLargeBuffer<DWORD, true>	g_bHaveTTY;
 
 GuardedHash_c *								g_pLocalIndexes = new GuardedHash_c();	// served (local) indexes hash
@@ -258,8 +258,6 @@ static CSphVector<SphThread_t>				g_dTickPoolThread;
 
 static CSphMutex							g_tPersLock;
 static CSphAtomic							g_iPersistentInUse;
-
-static ServiceThread_t						g_tPrereadThread;
 
 
 /// command names
@@ -1197,12 +1195,10 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 		g_tRotateThread.Join();
 	}
 
-
-	g_tPrereadThread.Join();
-
 	int64_t tmShutStarted = sphMicroTimer();
 	// stop search threads; up to shutdown_timeout seconds
-	while ( ( ThreadsNum() > 0 || g_bPrereading ) && ( sphMicroTimer()-tmShutStarted )<g_iShutdownTimeout )
+	WaitFinishPreread ( g_iShutdownTimeout );
+	while ( ( ThreadsNum() > 0 ) && ( sphMicroTimer()-tmShutStarted )<g_iShutdownTimeout )
 		sphSleepMsec ( 50 );
 
 	if ( g_pThdPool )
@@ -19002,53 +18998,6 @@ void RotationThreadFunc ( void * )
 	}
 }
 
-static void PrereadFunc ( void * )
-{
-	ThreadSystem_t tThdSystemDesc ( "PREREAD" );
-
-	int64_t tmStart = sphMicroTimer();
-
-	StrVec_t dIndexes;
-	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); )
-	{
-		if ( it.Get() )
-			dIndexes.Add ( it.GetName () );
-	}
-
-	g_bPrereading = true;
-	sphInfo ( "prereading %d indexes", dIndexes.GetLength() );
-	int iReaded = 0;
-
-	for ( int i=0; i<dIndexes.GetLength() && !g_bShutdown; ++i )
-	{
-		const CSphString & sName = dIndexes[i];
-		auto pServed = GetServed ( sName );
-		if ( !pServed )
-			continue;
-
-		ServedDescRPtr_c dReadLock ( pServed );
-		if ( dReadLock->m_eType==IndexType_e::TEMPLATE )
-			continue;
-
-		int64_t tmReading = sphMicroTimer();
-
-		sphLogDebug ( "prereading index '%s'", sName.cstr() );
-
-		dReadLock->m_pIndex->Preread();
-		if ( !dReadLock->m_pIndex->GetLastWarning().IsEmpty() )
-			sphWarning ( "'%s' preread: %s", sName.cstr(), dReadLock->m_pIndex->GetLastWarning().cstr() );
-
-		int64_t tmReaded = sphMicroTimer() - tmReading;
-		sphLogDebug ( "prereaded index '%s' in %0.3f sec", sName.cstr(), float(tmReaded)/1000000.0f );
-
-		++iReaded;
-	}
-
-	g_bPrereading = false;
-	int64_t tmFinished = sphMicroTimer() - tmStart;
-	sphInfo ( "prereaded %d indexes in %0.3f sec", iReaded, float(tmFinished)/1000000.0f );
-}
-
 static int ParseKeywordExpansion ( const char * sValue ) REQUIRES ( MainThread )
 {
 	if ( !sValue || *sValue=='\0' )
@@ -24461,13 +24410,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		sphWarning ( "sphinxql_state flush disabled: %s", sError.cstr ());
 
 	if ( bForcedPreread )
-	{
-		PrereadFunc ( NULL );
-	} else
-	{
-		if ( !g_tPrereadThread.Create ( PrereadFunc, 0, "preread" ) )
-			sphWarning ( "failed to create preread thread" );
-	}
+		DoPreread();
+	else
+		StartPreread();
 
 	// almost ready, time to start listening
 	g_iBacklog = hSearchd.GetInt ( "listen_backlog", g_iBacklog );

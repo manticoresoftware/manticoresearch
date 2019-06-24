@@ -30,7 +30,9 @@ parameters for configuring folding depending on tokenization settings:
 
 -  ``expansion_limit`` - override expansion_limit defined in
    configuration, default is 0 (use value from configuration)
-
+   
+-  ``sort_mode`` - sort output result by either 'docs' or 'hits'. Default no sorting.
+   
 .. code-block:: mysql
 
 

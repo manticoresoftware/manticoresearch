@@ -35,7 +35,7 @@ An optional LIKE clause is supported. Refer to :ref:`show_meta_syntax` for its s
 .. _describe_pq_syntax:
 
 Percolate index schemas
------------------------
+~~~~~~~~~~~~~~~~~~~~~~~
 
 If you apply ``DESC`` statement to a percolate index it will show the `outer` schema which is used to view the stored queries. That schema is fixed and the same for all local pq indexes:
 

@@ -76,8 +76,18 @@ can be made as
 JSON
 ^^^^
 
-Allows storing JSON objects for schema-less data. JSON properties can be used in most operations and special functions like :ref:`ALL() <expr-func-all>`, :ref:`ANY() <expr-func-any>`,:ref:`GREATEST() <expr-func-greatest>`,:ref:`LEAST() <expr-func-least>` and :ref:`INDEXOF() <expr-func-indexof>` allow traversal of property arrays.
-Text properties are treated same as strings (so it's not possible to use them in full-text matches).
+Allows storing JSON objects for schema-less data. JSON properties can be used in most operations and special functions like :ref:`ALL() <expr-func-all>`, :ref:`ANY() <expr-func-any>`, :ref:`GREATEST() <expr-func-greatest>`, :ref:`LEAST() <expr-func-least>` and :ref:`INDEXOF() <expr-func-indexof>` allow traversal of property arrays.
+
+Text properties are treated same as strings so it's not possible to use them in full-text matches expressions, but string functions like :ref:`REGEX <expr-func-regex>` can be used.
+
+In case of JSON properties, enforcing data type is required to be casted in some situations for proper functionality. For example in case of float values :ref:`DOUBLE() <expr-func-double>`  
+must be used for proper sorting:
+
+.. code-block:: none
+
+   SELECT * FROM myindex ORDER BY DOUBLE (myjson.myfloat) DESC
+   
+
 
 Multi-value integer
 ^^^^^^^^^^^^^^^^^^^

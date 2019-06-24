@@ -241,11 +241,6 @@ Numeric functions
 
    Returns the cosine of the argument.
 
-.. _expr-func-double:
-
--  DOUBLE()
-   Forcibly promotes given argument to floating point type. Intended to
-   help enforce evaluation of numeric JSON fields.
 
 .. _expr-func-exp:
     
@@ -348,11 +343,6 @@ Numeric functions
 
    Returns the square root of the argument.
 
-.. _expr-func-uint:
-
--  UINT()
-
-   Forcibly reinterprets given argument to 64-bit unsigned type.
 
 
 .. _date_and_time_functions:
@@ -428,6 +418,15 @@ Date and time functions
 Type conversion functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
+
+.. _expr-func-double:
+
+-  DOUBLE()
+
+   Forcibly promotes given argument to floating point type. Intended to
+   help enforce evaluation of numeric JSON fields.
+   
+
 .. _expr-func-bigint:
 
 -  BIGINT()
@@ -458,6 +457,12 @@ Type conversion functions
 -  TO_STRING()
 
    Forcibly promotes the argument to string type.
+
+.. _expr-func-uint:
+
+-  UINT()
+
+   Forcibly reinterprets given argument to 64-bit unsigned type.
 
    
 .. _comparison functions:

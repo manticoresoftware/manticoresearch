@@ -139,7 +139,9 @@ known usage quirks. Those quirks are listed in this section.
    256..1024M if you're planning to index gigabytes.
 
 -  High DELETE/REPLACE rate can lead to kill-list fragmentation and
-   impact searching performance.
+   impact searching performance. Records are not immediately purged, but only marked as delete. 
+   Reclaiming the space used by deleted/old version documents can be done with  :ref:`OPTIMIZE <optimize_index_syntax>` command 
+   which during merging the RT chunks also purge marked records.
 
 -  No transaction size limits are currently imposed; too many concurrent
    INSERT/REPLACE transactions might therefore consume a lot of RAM.

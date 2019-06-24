@@ -39,6 +39,7 @@ To use replication in Manticore search:
 - there should be a :ref:`listen <listen>` for the replication protocol directive containing an external IP address that should not be equal to 0.0.0.0 along with a ports range defined and these "address - port range" pairs should be different for all the daemons on the same box. As a rule of thumb, port range should specify no less than two ports per cluster.
 
 - there should be at least one value of :ref:`listen <listen>` for the SphinxAPI protocol directive
+- set unique values on :ref:`server_id <server_id>` for each node. If no value set, the node will try to use the MAC address (or a random number if this fails) to generate a server_id.
 
 
 .. _replication_cluster:

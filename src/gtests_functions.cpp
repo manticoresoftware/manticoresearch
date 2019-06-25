@@ -1317,7 +1317,8 @@ static void TestRebalance_fn ( tstcase * pData, int iLen, int iStride )
 
 		for ( int j = 0; j<iStride; ++j )
 		{
-			ASSERT_NEAR ( dWeights[j], pData[i * iStride + j].wnew, 0.01);
+			ASSERT_NEAR ( dWeights[j], pData[i * iStride + j].wnew, 0.01)
+				<< " \n----dWeights[" << j << "]=" << dWeights[j] << " vs " << pData[i * iStride + j].wnew;
 		}
 	}
 }
@@ -1342,14 +1343,14 @@ TEST ( functions, Rebalance )
 						 {08.5008f, 412733,	32.9526f}, {91.4977f, 202851, 67.0474f} };
 	TestRebalance_fn ( dData1, sizeof(dData1) / sizeof( tstcase), 2 );
 
-	tstcase dData2[] = { { 0.000000f, 0, 10.00000f }, { 00.0015f, 18469, 90.0000f } };
+	tstcase dData2[] = { { 0.000000f, 0, 0.00000f }, { 00.0015f, 18469, 100.0000f } };
 	TestRebalance_fn ( dData2, sizeof(dData2) / sizeof( tstcase), 2 );
 
-	tstcase dData3[] = { { 0.000000f, 0, 3.3333f }, { 0.0015f, 0, 3.3333f }
-						 , { 0.0031f, 0, 3.3333f }, { 0.0046f, 18469, 90.0000f } };
+	tstcase dData3[] = { { 0.000000f, 0, 0.00000f }, { 0.0015f, 0, 0.00000f }
+						 , { 0.0031f, 0, 0.00000f }, { 0.0046f, 18469, 100.0000f } };
 	TestRebalance_fn ( dData3, sizeof ( dData3 ) / sizeof ( tstcase ), 4 );
 
-	tstcase dData4[] = { { 0.000000f, 7100, 65.0088f }, { 0.0015f, 0, 10.0f }, { 0.0031f, 18469, 24.9912f } };
+	tstcase dData4[] = { { 0.000000f, 7100, 72.2320f }, { 0.0015f, 0, 0.0f }, { 0.0031f, 18469, 27.7679f } };
 	TestRebalance_fn ( dData4, sizeof ( dData4 ) / sizeof ( tstcase ), 3 );
 }
 

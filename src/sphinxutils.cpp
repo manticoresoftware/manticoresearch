@@ -3593,9 +3593,6 @@ bool CSphDynamicLibrary::LoadSymbols ( const char **, void ***, int ) { return f
 // calculate new weights as inverse freqs of timers, giving also small probability to bad timers.
 void RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, CSphFixedVector<float>& dWeights )
 {
-	// in case of mirror without response still set small probability to it
-	const float fEmptiesPercent = 10.0f;
-
 	assert ( dTimers.GetLength () );
 	float fSum = 0.0;
 	int iAlive = 0;
@@ -3617,13 +3614,7 @@ void RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, CSphFixedVecto
 
 	// if one or more bad (empty) timers provided, give fEmptiesPercent frac to all of them,
 	// and also assume fEmptiesPercent/num_of_deads fraq per each of them.
-	int iEmpties = dTimers.GetLength () - iAlive;
 	float fEmptyPercent = 0.0f;
-	if ( iEmpties )
-	{
-		fSum /= (1.0f-fEmptiesPercent*0.01f);
-		fEmptyPercent = fEmptiesPercent/iEmpties;
-	}
 
 	// balance weights
 	float fCheck = 0;

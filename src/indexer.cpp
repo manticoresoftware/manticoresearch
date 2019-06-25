@@ -1448,7 +1448,7 @@ void SetSignalHandlers ()
 //		sa.sa_flags = SA_NOCLDSTOP;
 //		sa.sa_handler = SIG_IGN; if ( sigaction ( SIGCHLD, &sa, NULL )!=0 ) break;
 
-		sa.sa_flags |= SA_RESETHAND;
+		sa.sa_flags = SA_RESETHAND;
 		sa.sa_handler = sigsegv; if ( sigaction ( SIGSEGV, &sa, NULL )!=0 ) break;
 		sa.sa_handler = sigsegv; if ( sigaction ( SIGBUS, &sa, NULL )!=0 ) break;
 		sa.sa_handler = sigsegv; if ( sigaction ( SIGABRT, &sa, NULL )!=0 ) break;

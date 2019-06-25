@@ -21,6 +21,7 @@
 #include "searchdreplication.h"
 #include "sphinxjson.h"
 #include "accumulator.h"
+#include <math.h>
 
 #if !HAVE_WSREP
 #include "replication/wsrep_api_stub.h"
@@ -1373,6 +1374,9 @@ void JsonConfigConfigureAndPreload ( int & iValidIndexes, int & iCounter ) REQUI
 		CSphConfigSection hIndex;
 		hIndex.Add ( CSphVariant ( tIndex.m_sPath.cstr(), 0 ), "path" );
 		hIndex.Add ( CSphVariant ( GetTypeName ( tIndex.m_eType ).cstr(), 0 ), "type" );
+		// dummy
+		hIndex.Add ( CSphVariant ( "text", 0 ), "rt_field" );
+		hIndex.Add ( CSphVariant ( "gid", 0 ), "rt_attr_uint" );
 
 		ESphAddIndex eAdd = ConfigureAndPreloadIndex ( hIndex, tIndex.m_sName.cstr (), true );
 		iValidIndexes += ( eAdd!=ADD_ERROR ? 1 : 0 );
@@ -1403,7 +1407,7 @@ static bool CheckLocalIndex ( const CSphString & sIndex, CSphString & sError )
 	}
 
 	ServedDescRPtr_c pDesc ( pServed );
-	if ( pDesc->m_eType!=IndexType_e::PERCOLATE )
+	if ( pDesc->m_eType!=IndexType_e::PERCOLATE && pDesc->m_eType!=IndexType_e::RT )
 	{
 		sError.SetSprintf ( "wrong type of index '%s'", sIndex.cstr() );
 		return false;
@@ -1425,7 +1429,7 @@ static bool SetIndexCluster ( const CSphString & sIndex, const CSphString & sClu
 	bool bSetCluster = false;
 	{
 		ServedDescRPtr_c pDesc ( pServed );
-		if ( pDesc->m_eType!=IndexType_e::PERCOLATE )
+		if ( pDesc->m_eType!=IndexType_e::PERCOLATE && pDesc->m_eType!=IndexType_e::RT )
 		{
 			sError.SetSprintf ( "wrong type of index '%s'", sIndex.cstr() );
 			return false;
@@ -2802,34 +2806,78 @@ enum PQRemoteCommand_e : WORD
 	PQR_COMMAND_WRONG = PQR_COMMAND_TOTAL,
 };
 
+
+struct FileChunks_t
+{
+	int64_t m_iFileSize = 0; // size of whole file
+	int m_iHashStartItem = 0; // offset in hashes vector in HASH20_SIZE items
+	int m_iChunkBytes = 0; // length bytes of one hash chunk in file
+
+	// count of chunks for file size
+	int GetChunksCount() const { return int( ceilf ( float(m_iFileSize) / m_iChunkBytes ) ); }
+};
+
+
+struct SyncSrc_t
+{
+	CSphVector<CSphString> m_dIndexFiles; // index file names (full path, file name, extension) at source node
+	CSphFixedVector<CSphString> m_dBaseNames { 0 }; // index file names only (file name, extension) send from source node to destination
+
+	CSphFixedVector<FileChunks_t> m_dChunks { 0 };
+	CSphFixedVector<BYTE> m_dHashes { 0 }; // hashes of all index files
+	int m_iMaxChunkBytes = 0; // max length bytes of file chunk hashed
+
+	BYTE * GetFileHash ( int iFile ) const
+	{
+		assert ( iFile>=0 && iFile<m_dBaseNames.GetLength() );
+		return m_dHashes.Begin() + iFile * HASH20_SIZE;
+	}
+
+	
+	BYTE * GetChunkHash ( int iFile, int iChunk ) const
+	{
+		assert ( iFile>=0 && iFile<m_dBaseNames.GetLength() );
+		assert ( iChunk>=0 && iChunk<m_dChunks[iFile].GetChunksCount() );
+		return m_dHashes.Begin() + ( m_dChunks[iFile].m_iHashStartItem + iChunk ) * HASH20_SIZE;
+	}
+};
+
+struct SyncDst_t
+{
+	CSphBitvec m_dNodeChunks;
+	CSphFixedVector<CSphString> m_dRemotePaths { 0 };
+};
+
 // reply from remote node
 struct PQRemoteReply_t
 {
-	CSphString	m_sIndexPath;		// index path without extension (with or without path due to bClusterIndex)
-
-	CSphString	m_sFileHash;			// sha1 of index file
-	int64_t		m_iIndexFileSize = 0;	// size of index file
+	CSphScopedPtr<SyncDst_t> m_pDst { nullptr };
+	const SyncDst_t * m_pSharedDst = nullptr;
+	CSphString m_sRemoteIndexPath;
+	bool m_bIndexActive = false;
+	CSphString m_sNodes;
 };
 
 // query to remote node
-struct PQRemoteData_t : public PQRemoteReply_t
+struct PQRemoteData_t
 {
 	CSphString	m_sIndex;			// local name of index
-	CSphString	m_sFileName;		// index file name with extension (with or without path due to bClusterIndex)
 
 	// file send args
-	const BYTE * m_pSendBuff = nullptr;
+	BYTE * m_pSendBuff = nullptr;
 	int			m_iSendSize = 0;
 	int64_t		m_iFileOff = 0;
 
 	CSphString	m_sCluster;			// cluster name of index
-
 	IndexType_e	m_eIndex = IndexType_e::ERROR_;
-
 
 	// SST
 	CSphString	m_sGTID;							// GTID received
 	CSphFixedVector<CSphString> m_dIndexes { 0 };	// index list received
+	SyncSrc_t * m_pChunks = nullptr;
+	CSphString m_sIndexFileName;
+	CSphString m_sRemoteFileName;
+	CSphString m_sRemoteIndexPath;
 };
 
 // interface implementation to work with our agents
@@ -2945,25 +2993,21 @@ static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, const PQRemoteData
 	return pAgent;
 }
 
-static VecRefPtrs_t<AgentConn_t*> GetNodes ( const CSphString & sNodes, const PQRemoteData_t & tReq )
+static void GetNodes ( const CSphString & sNodes, VecRefPtrs_t<AgentConn_t *> & dNodes, const PQRemoteData_t & tReq )
 {
-	VecRefPtrs_t<AgentConn_t*> dNodes;
 	VecAgentDesc_t dDesc;
 	GetNodes ( sNodes, dDesc );
 
 	dNodes.Resize ( dDesc.GetLength() );
 	ARRAY_FOREACH ( i, dDesc )
 		dNodes[i] = CreateAgent ( *dDesc[i], tReq, g_iRemoteTimeout );
-	return dNodes;
 }
 
-static VecRefPtrs_t<AgentConn_t*> GetNodes ( const VecAgentDesc_t & dDesc, const PQRemoteData_t & tReq )
+static void GetNodes ( const VecAgentDesc_t & dDesc, VecRefPtrs_t<AgentConn_t *> & dNodes, const PQRemoteData_t & tReq )
 {
-	VecRefPtrs_t<AgentConn_t*> dNodes;
 	dNodes.Resize ( dDesc.GetLength() );
 	ARRAY_FOREACH ( i, dDesc )
 		dNodes[i] = CreateAgent ( *dDesc[i], tReq, g_iRemoteTimeout );
-	return dNodes;
 }
 
 // get nodes functor to collect listener with specific protocol
@@ -3035,6 +3079,44 @@ private:
 	const PQRemoteCommand_e m_eCmd = PQR_COMMAND_WRONG;
 };
 
+
+static void SendArray ( const VecTraits_T<CSphString> & dBuf, CachedOutputBuffer_c & tOut )
+{
+	tOut.SendInt ( dBuf.GetLength() );
+	for ( const CSphString & sVal : dBuf )
+		tOut.SendString ( sVal.cstr() );
+}
+
+template <typename T>
+void SendArray ( const VecTraits_T<T> & dBuf, CachedOutputBuffer_c & tOut )
+{
+	tOut.SendInt ( dBuf.GetLength() );
+	if ( dBuf.GetLength() )
+		tOut.SendBytes ( dBuf.Begin(), sizeof(dBuf[0]) * dBuf.GetLength() );
+}
+
+template<typename T>
+void GetArray ( CSphFixedVector<T> & dBuf, InputBuffer_c & tIn )
+{
+	int iCount = tIn.GetInt();
+	if ( !iCount )
+		return;
+
+	dBuf.Reset ( iCount );
+	tIn.GetBytes ( dBuf.Begin(), dBuf.GetLengthBytes() );
+}
+
+void GetArray ( CSphFixedVector<CSphString> & dBuf, InputBuffer_c & tIn )
+{
+	int iCount = tIn.GetInt();
+	if ( !iCount )
+		return;
+
+	dBuf.Reset ( iCount );
+	for ( CSphString & sVal : dBuf )
+		sVal = tIn.GetString();
+}
+
 // API command to remote node to delete cluster
 class PQRemoteDelete_c : public PQRemoteBase_c
 {
@@ -3081,36 +3163,56 @@ public:
 	void BuildCommand ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final
 	{
 		const PQRemoteData_t & tCmd = GetReq ( tAgent );
+		assert ( tCmd.m_pChunks );
 		tOut.SendString ( tCmd.m_sCluster.cstr() );
 		tOut.SendString ( tCmd.m_sIndex.cstr() );
-		tOut.SendString ( tCmd.m_sFileName.cstr() );
-		tOut.SendUint64 ( tCmd.m_iIndexFileSize );
-		tOut.SendString ( tCmd.m_sFileHash.cstr() );
+		tOut.SendString ( tCmd.m_sIndexFileName.cstr() );
+
+		assert ( tCmd.m_pChunks );
+		const SyncSrc_t * pSrc = tCmd.m_pChunks;
+		SendArray ( pSrc->m_dBaseNames, tOut );
+		SendArray ( pSrc->m_dChunks, tOut );
+		SendArray ( pSrc->m_dHashes, tOut );
 	}
 
 	static void ParseCommand ( InputBuffer_c & tBuf, PQRemoteData_t & tCmd )
 	{
 		tCmd.m_sCluster = tBuf.GetString();
 		tCmd.m_sIndex = tBuf.GetString();
-		tCmd.m_sFileName = tBuf.GetString();
-		tCmd.m_iIndexFileSize = tBuf.GetUint64();
-		tCmd.m_sFileHash = tBuf.GetString();
+		tCmd.m_sIndexFileName = tBuf.GetString();
+
+		assert ( tCmd.m_pChunks );
+		SyncSrc_t * pSrc = tCmd.m_pChunks;
+		GetArray ( pSrc->m_dBaseNames, tBuf );
+		GetArray ( pSrc->m_dChunks, tBuf );
+		GetArray ( pSrc->m_dHashes, tBuf );
 	}
 
 	static void BuildReply ( const PQRemoteReply_t & tRes, CachedOutputBuffer_c & tOut )
 	{
+		assert ( tRes.m_pDst.Ptr() );
+		const SyncDst_t * pDst = tRes.m_pDst.Ptr();
+
 		APICommand_t tReply ( tOut, SEARCHD_OK );
-		tOut.SendUint64 ( tRes.m_iIndexFileSize );
-		tOut.SendString ( tRes.m_sFileHash.cstr() );
-		tOut.SendString ( tRes.m_sIndexPath.cstr() );
+		tOut.SendString ( tRes.m_sRemoteIndexPath.cstr() );
+		tOut.SendByte ( tRes.m_bIndexActive );
+		SendArray ( pDst->m_dRemotePaths, tOut );
+		tOut.SendInt ( pDst->m_dNodeChunks.GetBits() );
+		tOut.SendBytes ( pDst->m_dNodeChunks.Begin(), sizeof(DWORD) * pDst->m_dNodeChunks.GetSize() );
 	}
 
 	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final
 	{
 		PQRemoteReply_t & tRes = GetRes ( tAgent );
-		tRes.m_iIndexFileSize = (int64_t)tReq.GetUint64();
-		tRes.m_sFileHash = tReq.GetString();
-		tRes.m_sIndexPath = tReq.GetString();
+		assert ( tRes.m_pDst.Ptr() );
+		SyncDst_t * pDst = tRes.m_pDst.Ptr();
+
+		tRes.m_sRemoteIndexPath = tReq.GetString();
+		tRes.m_bIndexActive = !!tReq.GetByte();
+		GetArray ( pDst->m_dRemotePaths, tReq );
+		int iBits = tReq.GetInt();
+		pDst->m_dNodeChunks.Init ( iBits );
+		tReq.GetBytes ( pDst->m_dNodeChunks.Begin(), sizeof(DWORD) * pDst->m_dNodeChunks.GetSize() );
 
 		return !tReq.GetError();
 	}
@@ -3130,7 +3232,7 @@ public:
 	{
 		const PQRemoteData_t & tCmd = GetReq ( tAgent );
 		tOut.SendString ( tCmd.m_sCluster.cstr() );
-		tOut.SendString ( tCmd.m_sFileName.cstr() );
+		tOut.SendString ( tCmd.m_sRemoteFileName.cstr() );
 		tOut.SendUint64 ( tCmd.m_iFileOff );
 		tOut.SendInt ( tCmd.m_iSendSize );
 		tOut.SendBytes ( tCmd.m_pSendBuff, tCmd.m_iSendSize );
@@ -3139,23 +3241,23 @@ public:
 	static void ParseCommand ( InputBuffer_c & tBuf, PQRemoteData_t & tCmd )
 	{
 		tCmd.m_sCluster = tBuf.GetString();
-		tCmd.m_sFileName = tBuf.GetString();
+		tCmd.m_sRemoteFileName = tBuf.GetString();
 		tCmd.m_iFileOff = tBuf.GetUint64();
 		tCmd.m_iSendSize = tBuf.GetInt();
-		tBuf.GetBytesZerocopy ( &tCmd.m_pSendBuff, tCmd.m_iSendSize );
+		const BYTE * pData = nullptr;
+		tBuf.GetBytesZerocopy ( &pData, tCmd.m_iSendSize );
+		tCmd.m_pSendBuff = (BYTE *)pData;
 	}
 
 	static void BuildReply ( const PQRemoteReply_t & tRes, CachedOutputBuffer_c & tOut )
 	{
 		APICommand_t tReply ( tOut, SEARCHD_OK );
-		tOut.SendUint64 ( tRes.m_iIndexFileSize );
+		tOut.SendByte ( 1 );
 	}
 
-	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final
+	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final
 	{
-		PQRemoteReply_t & tRes = GetRes ( tAgent );
-		tRes.m_iIndexFileSize = (int64_t)tReq.GetUint64();
-
+		tReq.GetByte();
 		return !tReq.GetError();
 	}
 };
@@ -3174,35 +3276,39 @@ public:
 		const PQRemoteData_t & tCmd = GetReq ( tAgent );
 		tOut.SendString ( tCmd.m_sCluster.cstr() );
 		tOut.SendString ( tCmd.m_sIndex.cstr() );
-		tOut.SendString ( tCmd.m_sIndexPath.cstr() );
-		tOut.SendByte ( (BYTE)IndexType_e::PERCOLATE );
-		tOut.SendUint64 ( tCmd.m_iIndexFileSize );
-		tOut.SendString ( tCmd.m_sFileHash.cstr() );
+		tOut.SendString ( tCmd.m_sRemoteIndexPath.cstr() );
+		tOut.SendByte ( (BYTE)tCmd.m_eIndex );
+
+		const SyncDst_t * pDst = GetRes ( tAgent ).m_pSharedDst;
+		assert ( tCmd.m_pChunks );
+		assert ( pDst );
+		// remote file names at sync destination
+		SendArray ( pDst->m_dRemotePaths, tOut );
+		tOut.SendBytes ( tCmd.m_pChunks->m_dHashes.Begin(), pDst->m_dRemotePaths.GetLength() * HASH20_SIZE );
 	}
 
 	static void ParseCommand ( InputBuffer_c & tBuf, PQRemoteData_t & tCmd )
 	{
 		tCmd.m_sCluster = tBuf.GetString();
 		tCmd.m_sIndex = tBuf.GetString();
-		tCmd.m_sIndexPath = tBuf.GetString();
+		tCmd.m_sRemoteIndexPath = tBuf.GetString();
 		tCmd.m_eIndex = (IndexType_e)tBuf.GetByte();
-		tCmd.m_iIndexFileSize = tBuf.GetUint64();
-		tCmd.m_sFileHash = tBuf.GetString();
+
+		assert ( tCmd.m_pChunks );
+		GetArray ( tCmd.m_pChunks->m_dBaseNames, tBuf );
+		tCmd.m_pChunks->m_dHashes.Reset ( tCmd.m_pChunks->m_dBaseNames.GetLength() * HASH20_SIZE );
+		tBuf.GetBytes ( tCmd.m_pChunks->m_dHashes.Begin(), tCmd.m_pChunks->m_dHashes.GetLengthBytes() );
 	}
 
 	static void BuildReply ( const PQRemoteReply_t & tRes, CachedOutputBuffer_c & tOut )
 	{
 		APICommand_t tReply ( tOut, SEARCHD_OK );
-		tOut.SendUint64 ( tRes.m_iIndexFileSize );
-		tOut.SendString ( tRes.m_sFileHash.cstr() );
+		tOut.SendByte ( 1 );
 	}
 
 	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final
 	{
-		PQRemoteReply_t & tRes = GetRes ( tAgent );
-		tRes.m_iIndexFileSize = (int64_t)tReq.GetUint64();
-		tRes.m_sFileHash = tReq.GetString();
-
+		tReq.GetByte();
 		return !tReq.GetError();
 	}
 };
@@ -3225,20 +3331,21 @@ static bool PerformRemoteTasks ( VectorAgentConn_t & dNodes, RequestBuilder_i & 
 	int iFinished = PerformRemoteTasks ( dNodes, &tReq, &tReply );
 
 	if ( iFinished!=iNodes )
-	{
 		sphLogDebugRpl ( "%d(%d) nodes finished well", iFinished, iNodes );
 
-		for ( const AgentConn_t * pAgent : dNodes )
+	StringBuilder_c tTmp ( ";" );
+	for ( const AgentConn_t * pAgent : dNodes )
+	{
+		if ( !pAgent->m_sFailure.IsEmpty() )
 		{
-			if ( !pAgent->m_sFailure.IsEmpty() )
-			{
-				sphWarning ( "'%s:%d': %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pAgent->m_sFailure.cstr() );
-				sError.SetSprintf ( "%s'%s:%d': %s", ( sError.IsEmpty() ? "" : ";" ), pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pAgent->m_sFailure.cstr() );
-			}
+			sphWarning ( "'%s:%d': %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pAgent->m_sFailure.cstr() );
+			tTmp.Appendf ( "'%s:%d': %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pAgent->m_sFailure.cstr() );
 		}
 	}
+	if ( !tTmp.IsEmpty() )
+		sError = tTmp.cstr();
 
-	return ( iFinished==iNodes );
+	return ( iFinished==iNodes && sError.IsEmpty() );
 }
 
 // API command to remote node to get nodes it sees
@@ -3272,7 +3379,7 @@ public:
 	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final
 	{
 		PQRemoteReply_t & tRes = GetRes ( tAgent );
-		tRes.m_sFileHash = tReq.GetString();
+		tRes.m_sNodes = tReq.GetString();
 
 		return !tReq.GetError();
 	}
@@ -3340,6 +3447,9 @@ void HandleCommandClusterPq ( CachedOutputBuffer_c & tOut, WORD uCommandVer, Inp
 
 		case CLUSTER_FILE_RESERVE:
 		{
+			SyncSrc_t tSrc;
+			tCmd.m_pChunks = &tSrc;
+			tRes.m_pDst = new SyncDst_t();
 			PQRemoteFileReserve_c::ParseCommand ( tBuf, tCmd );
 			bOk = RemoteFileReserve ( tCmd, tRes, sError );
 			if ( bOk )
@@ -3358,6 +3468,8 @@ void HandleCommandClusterPq ( CachedOutputBuffer_c & tOut, WORD uCommandVer, Inp
 
 		case CLUSTER_INDEX_ADD_LOCAL:
 		{
+			SyncSrc_t tSrc;
+			tCmd.m_pChunks = &tSrc;
 			PQRemoteIndexAdd_c::ParseCommand ( tBuf, tCmd );
 			bOk = RemoteLoadIndex ( tCmd, tRes, sError );
 			if ( bOk )
@@ -3377,9 +3489,9 @@ void HandleCommandClusterPq ( CachedOutputBuffer_c & tOut, WORD uCommandVer, Inp
 		case CLUSTER_GET_NODES:
 		{
 			PQRemoteClusterGetNodes_c::ParseCommand ( tBuf, tCmd );
-			bOk = RemoteClusterGetNodes ( tCmd.m_sCluster, tCmd.m_sGTID, sError, tRes.m_sFileHash );
+			bOk = RemoteClusterGetNodes ( tCmd.m_sCluster, tCmd.m_sGTID, sError, tRes.m_sNodes );
 			if ( bOk )
-				PQRemoteClusterGetNodes_c::BuildReply ( tRes.m_sFileHash, tOut );
+				PQRemoteClusterGetNodes_c::BuildReply ( tRes.m_sNodes, tOut );
 		}
 		break;
 
@@ -3476,7 +3588,8 @@ bool ClusterDelete ( const CSphString & sCluster, CSphString & sError, CSphStrin
 	{
 		PQRemoteData_t tCmd;
 		tCmd.m_sCluster = sCluster;
-		auto dNodes = GetNodes ( sNodes, tCmd );
+		VecRefPtrs_t<AgentConn_t *> dNodes;
+		GetNodes ( sNodes, dNodes, tCmd );
 		PQRemoteDelete_c tReq;
 		if ( dNodes.GetLength() && !PerformRemoteTasks ( dNodes, tReq, tReq, sError ) )
 			return false;
@@ -3510,89 +3623,194 @@ static bool ClusterAlterDrop ( const CSphString & sCluster, const CSphString & s
 	return HandleCmdReplicate ( tAcc, sError, nullptr );
 }
 
+static bool SyncSigCompare ( int iFile, const CSphString & sName, const SyncSrc_t & tSrc, CSphBitvec & tDst, CSphVector<BYTE> & dBuf, CSphString & sError )
+{
+	const FileChunks_t & tChunk = tSrc.m_dChunks[iFile];
+	SHA1_c tHashFile;
+	SHA1_c tHashChunk;
+	tHashFile.Init();
+
+	dBuf.Resize ( HASH20_SIZE * 2 + tChunk.m_iChunkBytes );
+	BYTE * pReadData = dBuf.Begin();
+	BYTE * pHashFile = dBuf.Begin() + tChunk.m_iChunkBytes;
+	BYTE * pHashChunk = dBuf.Begin() + tChunk.m_iChunkBytes + HASH20_SIZE;
+
+	CSphAutofile tIndexFile;
+
+	if ( tIndexFile.Open ( sName, SPH_O_READ, sError )<0 )
+		return false;
+
+	int iChunk = 0;
+	int64_t iReadTotal = 0;
+	while ( iReadTotal<tChunk.m_iFileSize )
+	{
+		int iLeft = tChunk.m_iFileSize - iReadTotal;
+		iLeft = Min ( iLeft, tChunk.m_iChunkBytes );
+		iReadTotal += iLeft;
+
+		if ( !tIndexFile.Read ( pReadData, iLeft, sError ) )
+			return false;
+
+		// update whole file hash
+		tHashFile.Update ( pReadData, iLeft );
+
+		// update and flush chunk hash
+		tHashChunk.Init();
+		tHashChunk.Update ( pReadData, iLeft );
+		tHashChunk.Final ( pHashChunk );
+
+		if ( memcmp ( pHashChunk, tSrc.GetChunkHash ( iFile, iChunk ), HASH20_SIZE )==0 )
+			tDst.BitSet ( tChunk.m_iHashStartItem + iChunk );
+		iChunk++;
+	}
+
+	tHashFile.Final ( pHashFile );
+
+	if ( memcmp ( pHashFile, tSrc.GetFileHash ( iFile ), HASH20_SIZE )==0 )
+		tDst.BitSet ( iFile );
+
+	return true;
+}
+
+static bool SyncSigVerify ( const SyncSrc_t & tSrc, CSphString & sError )
+{
+	CSphAutoreader tIndexFile;
+	SHA1_c tHashFile;
+
+	ARRAY_FOREACH ( iFile, tSrc.m_dBaseNames )
+	{
+		const CSphString & sFileName = tSrc.m_dBaseNames[iFile];
+		if ( !tIndexFile.Open ( sFileName, sError ) )
+			return false;
+
+		tHashFile.Init();
+		const int64_t iFileSize = tIndexFile.GetFilesize();
+		int64_t iReadTotal = 0;
+		while ( iReadTotal<iFileSize )
+		{
+			const int iLeft = iFileSize - iReadTotal;
+
+			const BYTE * pData = nullptr;
+			const int iGot = tIndexFile.GetBytesZerocopy ( &pData, iLeft );
+			iReadTotal += iGot;
+
+			// update whole file hash
+			tHashFile.Update ( pData, iGot );
+		}
+
+		BYTE dHash [HASH20_SIZE];
+		tHashFile.Final ( dHash );
+		tIndexFile.Close();
+
+		if ( memcmp ( dHash, tSrc.GetFileHash ( iFile ), HASH20_SIZE )!=0 )
+		{
+			sError.SetSprintf ( "%s sha1 does not matched, expected %s, got %s", sFileName.cstr(),
+				BinToHex ( dHash, HASH20_SIZE ).cstr(), BinToHex ( tSrc.GetFileHash ( iFile ), HASH20_SIZE ).cstr() );
+			return false;
+		}
+	}
+		
+	return true;
+}
+
 // command at remote node for CLUSTER_FILE_RESERVE to check
 // - file could be allocated on disk at cluster path and reserve disk space for a file
 // - or make sure that index has exact same index file, ie sha1 matched
 bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError )
 {
-	CSphString sFilePath;
-	bool bGotIndex = false;
-
+	assert ( tCmd.m_pChunks );
+	assert ( tRes.m_pDst.Ptr() );
 	// use index path first
 	{
 		ServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sIndex );
 		ServedDescRPtr_c pDesc ( pServed );
 		if ( ServedDesc_t::IsMutable ( pDesc ) )
 		{
-			bGotIndex = true;
-			sFilePath.SetSprintf ( "%s.meta", pDesc->m_sIndexPath.cstr() );
-			tRes.m_sIndexPath = pDesc->m_sIndexPath;
+			tRes.m_bIndexActive = true;
+			tRes.m_sRemoteIndexPath = pDesc->m_sIndexPath;
+			( (RtIndex_i *)pDesc->m_pIndex )->ProhibitSave();
 		}
 	}
 
-	// use cluster path as head of index path
-	if ( !bGotIndex )
+	// use cluster path as head of index path or existed index path
+	CSphString sIndexPath;
+	if ( tRes.m_bIndexActive )
 	{
-		CSphString sClusterPath;
-		if ( !GetClusterPath ( tCmd.m_sCluster, sClusterPath, sError ) )
+		sIndexPath = GetPathOnly ( tRes.m_sRemoteIndexPath );
+	} else
+	{
+		if ( !GetClusterPath ( tCmd.m_sCluster, sIndexPath, sError ) )
+			return false;
+		tRes.m_sRemoteIndexPath.SetSprintf ( "%s/%s", sIndexPath.cstr(), tCmd.m_sIndexFileName.cstr() );
+	}
+
+	// set index files names
+	tRes.m_pDst->m_dRemotePaths.Reset ( tCmd.m_pChunks->m_dBaseNames.GetLength() );
+	ARRAY_FOREACH ( iFile, tCmd.m_pChunks->m_dBaseNames )
+	{
+		const CSphString & sFile = tCmd.m_pChunks->m_dBaseNames[iFile];
+		tRes.m_pDst->m_dRemotePaths[iFile].SetSprintf ( "%s/%s", sIndexPath.cstr(), sFile.cstr() );
+	}
+	int iBits = tCmd.m_pChunks->m_dChunks.Last().m_iHashStartItem + tCmd.m_pChunks->m_dChunks.Last().GetChunksCount();
+	tRes.m_pDst->m_dNodeChunks.Init ( iBits );
+
+	CSphVector<BYTE> dReadBuf;
+
+	// check file exists, same size and same hash
+	ARRAY_FOREACH ( iFile, tRes.m_pDst->m_dRemotePaths )
+	{
+		const CSphString & sFile = tRes.m_pDst->m_dRemotePaths[iFile];
+		const FileChunks_t & tFile = tCmd.m_pChunks->m_dChunks[iFile];
+		
+		if ( sphIsReadable ( sFile ) )
+		{
+			int64_t iLen = 0;
+			{
+				CSphAutofile tOut ( sFile, SPH_O_READ, sError, false );
+				if ( tOut.GetFD()<0 )
+					return false;
+
+				iLen = tOut.GetSize();
+			}
+
+			// check only in case size matched
+			if ( iLen==tFile.m_iFileSize )
+			{
+				if ( !SyncSigCompare ( iFile, sFile, *tCmd.m_pChunks, tRes.m_pDst->m_dNodeChunks, dReadBuf, sError ) )
+					return false;
+				else
+					continue;
+			}
+		}
+
+
+		// need to create file with specific size
+		CSphAutofile tOut ( sFile, SPH_O_NEW, sError, false );
+		if ( tOut.GetFD()<0 )
 			return false;
 
-		sFilePath.SetSprintf ( "%s/%s.meta", sClusterPath.cstr(), tCmd.m_sFileName.cstr() );
-		tRes.m_sIndexPath.SetSprintf ( "%s/%s", sClusterPath.cstr(), tCmd.m_sFileName.cstr() );
-	}
-
-	// check that index file matched to reference file
-	// but only in case index loaded into daemon
-	// as there is no path to not sync file but load index afters
-	while ( bGotIndex )
-	{
-		CSphAutofile tFile ( sFilePath, SPH_O_READ, sError, false );
-		if ( tFile.GetFD()<0 )
-			break;
-
-		tRes.m_iIndexFileSize = tFile.GetSize();
-		if ( tRes.m_iIndexFileSize!=tCmd.m_iIndexFileSize )
-			break;
-
-		if ( !CalcSHA1 ( sFilePath, tRes.m_sFileHash, sError ) )
+		int64_t iLen = sphSeek ( tOut.GetFD(), tFile.m_iFileSize, SEEK_SET );
+		if ( iLen!=tFile.m_iFileSize )
 		{
-			tRes.m_sFileHash = "";
-			sphWarning ( "%s", sError.cstr() );
-			break;
+			if ( iLen<0 )
+			{
+				sError.SetSprintf ( "error: %d '%s'", errno, strerrorm ( errno ) );
+			} else
+			{
+				sError.SetSprintf ( "error, expected: " INT64_FMT ", got " INT64_FMT, tFile.m_iFileSize, iLen );
+			}
+
+			return false;
 		}
-
-		// no need to send index file
-		if ( tRes.m_sFileHash==tCmd.m_sFileHash )
-			return true;
-
-		break;
 	}
 
-	// check that could create file with specific size
-	CSphAutofile tOut ( sFilePath, SPH_O_NEW, sError, false );
-	if ( tOut.GetFD()<0 )
-		return false;
-
-	tRes.m_iIndexFileSize = sphSeek ( tOut.GetFD(), tCmd.m_iIndexFileSize, SEEK_SET );
-	if ( tCmd.m_iIndexFileSize!=tRes.m_iIndexFileSize )
-	{
-		if ( tRes.m_iIndexFileSize<0 )
-		{
-			sError.SetSprintf ( "error: %d '%s'", errno, strerrorm ( errno ) );
-		} else
-		{
-			sError.SetSprintf ( "error, expected: " INT64_FMT ", got " INT64_FMT, tCmd.m_iIndexFileSize, tRes.m_iIndexFileSize );
-		}
-
-		return false;
-	}
 	return true;
 }
 
 // command at remote node for CLUSTER_FILE_SEND to store data into file, data size and file offset defined by sender
 bool RemoteFileStore ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError )
 {
-	CSphAutofile tOut ( tCmd.m_sFileName, O_RDWR, sError, false );
+	CSphAutofile tOut ( tCmd.m_sRemoteFileName, O_RDWR, sError, false );
 	if ( tOut.GetFD()<0 )
 		return false;
 
@@ -3604,7 +3822,6 @@ bool RemoteFileStore ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 			sError.SetSprintf ( "error %s", strerrorm ( errno ) );
 		} else
 		{
-			tRes.m_iIndexFileSize = iPos; // reply what disk space available
 			sError.SetSprintf ( "error, expected: " INT64_FMT ", got " INT64_FMT, tCmd.m_iFileOff, iPos );
 		}
 		return false;
@@ -3616,50 +3833,32 @@ bool RemoteFileStore ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 		return false;
 	}
 
-	tRes.m_iIndexFileSize = iPos + tCmd.m_iSendSize;
 	return true;
 }
 
 // command at remote node for CLUSTER_INDEX_ADD_LOCAL to check sha1 of index file matched and load index into daemon
 bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError )
 {
+	assert ( tCmd.m_pChunks );
 	CSphString sType = GetTypeName ( tCmd.m_eIndex );
-	if ( tCmd.m_eIndex!=IndexType_e::PERCOLATE )
+	if ( tCmd.m_eIndex!=IndexType_e::PERCOLATE && tCmd.m_eIndex!=IndexType_e::RT )
 	{
 		sError.SetSprintf ( "unsupported type '%s' in index '%s'", sType.cstr(), tCmd.m_sIndex.cstr() );
 		return false;
 	}
 
 	// check that size matched and sha1 matched prior to loading index
-	{
-		CSphString sIndexFile;
-		sIndexFile.SetSprintf ( "%s.meta", tCmd.m_sIndexPath.cstr() );
-		CSphAutofile tFile ( sIndexFile, SPH_O_READ, sError, false );
-		if ( tFile.GetFD()<0 )
-			return false;
+	if ( !SyncSigVerify ( *tCmd.m_pChunks, sError ) )
+		return false;
 
-		tRes.m_iIndexFileSize = tFile.GetSize();
-		if ( tRes.m_iIndexFileSize!=tCmd.m_iIndexFileSize )
-		{
-			sError.SetSprintf ( "size " INT64_FMT " is not equal to stored size " INT64_FMT, tCmd.m_iIndexFileSize, tRes.m_iIndexFileSize );
-			return false;
-		}
-
-		if ( !CalcSHA1 ( sIndexFile, tRes.m_sFileHash, sError ) )
-			return false;
-
-		if ( tRes.m_sFileHash!=tCmd.m_sFileHash )
-		{
-			sError.SetSprintf ( "sha1 %s is not equal to stored sha1 %s", tCmd.m_sFileHash.cstr(), tRes.m_sFileHash.cstr() );
-			return false;
-		}
-	}
-
-	sphLogDebugRpl ( "loading index '%s' into cluster '%s' from %s", tCmd.m_sIndex.cstr(), tCmd.m_sCluster.cstr(), tCmd.m_sIndexPath.cstr() );
+	sphLogDebugRpl ( "loading index '%s' into cluster '%s' from %s", tCmd.m_sIndex.cstr(), tCmd.m_sCluster.cstr(), tCmd.m_sRemoteIndexPath.cstr() );
 
 	CSphConfigSection hIndex;
-	hIndex.Add ( CSphVariant ( tCmd.m_sIndexPath.cstr(), 0 ), "path" );
+	hIndex.Add ( CSphVariant ( tCmd.m_sRemoteIndexPath.cstr(), 0 ), "path" );
 	hIndex.Add ( CSphVariant ( sType.cstr(), 0 ), "type" );
+	// dummy
+	hIndex.Add ( CSphVariant ( "text", 0 ), "rt_field" );
+	hIndex.Add ( CSphVariant ( "gid", 0 ), "rt_attr_uint" );
 	if ( !LoadIndex ( hIndex, tCmd.m_sIndex, tCmd.m_sCluster ) )
 	{
 		sError.SetSprintf ( "failed to load index '%s'", tCmd.m_sIndex.cstr() );
@@ -3672,8 +3871,9 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 struct RemoteFileState_t
 {
 	CSphString m_sRemoteIndexPath;
-	CSphString m_sRemoteFilePath;
 	const AgentDesc_t * m_pAgentDesc = nullptr;
+	const SyncSrc_t * m_pSyncSrc = nullptr;
+	const SyncDst_t * m_pSyncDst = nullptr;
 };
 
 struct FileReader_t
@@ -3681,34 +3881,210 @@ struct FileReader_t
 	CSphAutofile m_tFile;
 	PQRemoteData_t m_tArgs;
 	const AgentDesc_t * m_pAgentDesc = nullptr;
+
+	const SyncSrc_t * m_pSyncSrc = nullptr;
+	const SyncDst_t * m_pSyncDst = nullptr;
+
+	int m_iFile = -1;
+	int m_iChunk = -1;
+	int m_bDone = false;
+
+	int m_iPackets = 1;
 };
 
+static bool ReadChunk ( int iChunk, FileReader_t & tReader, StringBuilder_c & sErrors )
+{
+	assert ( tReader.m_pSyncSrc );
+	const SyncSrc_t * pSrc = tReader.m_pSyncSrc;
+	const FileChunks_t & tChunk = pSrc->m_dChunks[tReader.m_iFile];
+
+	int iSendSize = tChunk.m_iChunkBytes;
+	if ( iChunk==tChunk.GetChunksCount()-1 ) // calculate file tail size for last chunk
+		iSendSize = tChunk.m_iFileSize - tChunk.m_iChunkBytes * iChunk;
+
+	tReader.m_tArgs.m_iFileOff = (int64_t)tChunk.m_iChunkBytes * iChunk;
+	tReader.m_tArgs.m_iSendSize = iSendSize;
+
+	bool bSeek = ( tReader.m_iChunk!=-1 && iChunk!=tReader.m_iChunk+1 );
+	tReader.m_iChunk = iChunk;
+
+	// seek to new chunk
+	if ( bSeek )
+	{
+		int64_t iNewPos = sphSeek ( tReader.m_tFile.GetFD(), tReader.m_tArgs.m_iFileOff, SEEK_SET );
+		if ( iNewPos!=tReader.m_tArgs.m_iFileOff )
+		{
+			if ( iNewPos<0 )
+				sErrors.Appendf ( "seek error %d '%s'", errno, strerrorm (errno) );
+			else
+				sErrors.Appendf ( "seek error, expected: " INT64_FMT ", got " INT64_FMT, tReader.m_tArgs.m_iFileOff, iNewPos );
+
+			return false;
+		}
+	}
+
+	CSphString sReaderError;
+	if ( !tReader.m_tFile.Read ( tReader.m_tArgs.m_pSendBuff, iSendSize, sReaderError ) )
+	{
+		sErrors += sReaderError.cstr();
+		return false;
+	}
+
+	return true;
+}
+
+static bool Next ( FileReader_t & tReader, StringBuilder_c & sErrors )
+{
+	assert ( tReader.m_pSyncSrc );
+	assert ( tReader.m_pSyncDst );
+	assert ( !tReader.m_bDone );
+
+	const SyncSrc_t * pSrc = tReader.m_pSyncSrc;
+	const SyncDst_t * pDst = tReader.m_pSyncDst;
+
+	// search for next chunk in same file
+	const FileChunks_t & tChunk = pSrc->m_dChunks[tReader.m_iFile];
+	int iChunk = tReader.m_iChunk+1;
+	const int iCount = tChunk.GetChunksCount();
+	for ( ; iChunk<iCount; iChunk++ )
+	{
+		if ( !pDst->m_dNodeChunks.BitGet ( tChunk.m_iHashStartItem + iChunk ) )
+			break;
+	}
+	if ( iChunk<iCount )
+		return ReadChunk ( iChunk, tReader, sErrors );
+
+	// search for next file
+	const int iFiles = pSrc->m_dBaseNames.GetLength();
+	int iFile = tReader.m_iFile+1;
+	for ( ; iFile<iFiles; iFile++ )
+	{
+		if ( !pDst->m_dNodeChunks.BitGet ( iFile ) )
+			break;
+	}
+	tReader.m_iFile = iFile;
+	tReader.m_iChunk = -1;
+
+	// no more files left
+	if ( iFile==iFiles )
+	{
+		tReader.m_bDone = true;
+		return true;
+	}
+
+	// look for chunk in next file
+	tReader.m_tFile.Close();
+	CSphString sReaderError;
+	if ( tReader.m_tFile.Open ( pSrc->m_dIndexFiles[iFile], SPH_O_READ, sReaderError, false )<0 )
+	{
+		sErrors += sReaderError.cstr();
+		return false;
+	}
+	tReader.m_tArgs.m_sRemoteFileName = pDst->m_dRemotePaths[iFile];
+
+	const FileChunks_t & tNewChunk = pSrc->m_dChunks[iFile];
+	int iNewChunk = 0;
+	const int iNewCount = tNewChunk.GetChunksCount();
+	for ( ; iNewChunk<iNewCount; iNewChunk++ )
+	{
+		if ( !pDst->m_dNodeChunks.BitGet ( tNewChunk.m_iHashStartItem + iNewChunk ) )
+			break;
+	}
+	assert ( iNewChunk<iNewCount );
+	assert ( !pDst->m_dNodeChunks.BitGet ( tNewChunk.m_iHashStartItem + iNewChunk ) );
+	return ReadChunk ( iNewChunk, tReader, sErrors );
+}
+
+static bool InitReader ( FileReader_t & tReader, CSphString & sError )
+{
+	assert ( tReader.m_pSyncSrc );
+	assert ( tReader.m_pSyncDst );
+
+	const SyncSrc_t * pSrc = tReader.m_pSyncSrc;
+	const SyncDst_t * pDst = tReader.m_pSyncDst;
+
+	const int iFiles = pSrc->m_dBaseNames.GetLength();
+	int iFile = 0;
+	for ( ; iFile<iFiles; iFile++ )
+	{
+		if ( !pDst->m_dNodeChunks.BitGet ( iFile ) )
+			break;
+	}
+	assert ( !pDst->m_dNodeChunks.BitGet ( iFile ) );
+	tReader.m_iFile = iFile;
+
+	const FileChunks_t & tChunk = pSrc->m_dChunks[iFile];
+	int iChunk = 0;
+	const int iCount = tChunk.GetChunksCount();
+
+	for ( ; iChunk<iCount; iChunk++ )
+	{
+		if ( !pDst->m_dNodeChunks.BitGet ( tChunk.m_iHashStartItem + iChunk ) )
+			break;
+	}
+	assert ( iChunk<iCount );
+	assert ( !pDst->m_dNodeChunks.BitGet ( tChunk.m_iHashStartItem + iChunk ) );
+	tReader.m_iChunk = iChunk;
+
+	int iSendSize = tChunk.m_iChunkBytes;
+	if ( iChunk==iCount-1 ) // calculate file tail size for last chunk
+		iSendSize = tChunk.m_iFileSize - tChunk.m_iChunkBytes * iChunk;
+
+	tReader.m_tArgs.m_iFileOff = (int64_t)tChunk.m_iChunkBytes * iChunk;
+	tReader.m_tArgs.m_iSendSize = iSendSize;
+	tReader.m_tArgs.m_sRemoteFileName = pDst->m_dRemotePaths[iFile];
+
+	if ( tReader.m_tFile.Open ( pSrc->m_dIndexFiles[iFile], SPH_O_READ, sError, false )<0 )
+		return false;
+
+	if ( !tReader.m_tFile.Read ( tReader.m_tArgs.m_pSendBuff, iSendSize, sError ) )
+		return false;
+
+	return true;
+}
+
+static void ReportSendStat ( const VecRefPtrs_t<AgentConn_t *> & dNodes, const CSphFixedVector<FileReader_t> & dReaders, const CSphString & sCluster, const CSphString & sIndex )
+{
+	if ( g_eLogLevel<SPH_LOG_RPL_DEBUG )
+		return;
+
+	int iTotal = 0;
+	StringBuilder_c tTmp;
+	tTmp.Appendf ( "file sync packets sent '%s:%s' to ", sCluster.cstr(), sIndex.cstr() );
+	ARRAY_FOREACH ( iAgent, dNodes )
+	{
+		const AgentConn_t * pAgent = dNodes[iAgent];
+		const FileReader_t & tReader = dReaders[iAgent];
+
+		tTmp.Appendf ( "'%s:%d':%d,", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, tReader.m_iPackets );
+		iTotal += tReader.m_iPackets;
+	}
+	tTmp.Appendf ( " total:%d", iTotal );
+
+	sphLogDebugRpl ( "%s", tTmp.cstr() );
+}
+
 // send file to multiple nodes by chunks as API command CLUSTER_FILE_SEND
-static bool SendFile ( const CSphVector<RemoteFileState_t> & dDesc, const CSphString & sFileIn, int64_t iFileSize, const CSphString & sCluster, CSphString & sError )
+static bool SendFile ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileState_t> & dDesc, const CSphString & sCluster, const CSphString & sIndex, CSphString & sError )
 {
 	// setup buffers
-	const int64_t iReaderBufSize = Min ( iFileSize, g_iMaxPacketSize * 3 / 4 );
-	CSphFixedVector<BYTE> dReadBuf ( iReaderBufSize * dDesc.GetLength() );
-
+	CSphFixedVector<BYTE> dReadBuf ( tSigSrc.m_iMaxChunkBytes * dDesc.GetLength() );
 	CSphFixedVector<FileReader_t> dReaders  ( dDesc.GetLength() );
-	ARRAY_FOREACH ( i, dReaders )
+
+	ARRAY_FOREACH ( iNode, dReaders )
 	{
 		// setup file readers
-		FileReader_t & tReader = dReaders[i];
+		FileReader_t & tReader = dReaders[iNode];
 		tReader.m_tArgs.m_sCluster = sCluster;
-		tReader.m_tArgs.m_sFileName = dDesc[i].m_sRemoteFilePath;
-		tReader.m_pAgentDesc = dDesc[i].m_pAgentDesc;
+		tReader.m_pAgentDesc = dDesc[iNode].m_pAgentDesc;
+		tReader.m_tArgs.m_pSendBuff = dReadBuf.Begin() + tSigSrc.m_iMaxChunkBytes * iNode;
+		tReader.m_pSyncSrc = dDesc[iNode].m_pSyncSrc;
+		tReader.m_pSyncDst = dDesc[iNode].m_pSyncDst;
 
-		BYTE * pBuf = dReadBuf.Begin() + iReaderBufSize * i;
-		tReader.m_tArgs.m_pSendBuff = pBuf;
-		tReader.m_tArgs.m_iSendSize = iReaderBufSize;
-
-		if ( tReader.m_tFile.Open ( sFileIn, SPH_O_READ, sError, false )<0 )
+		if ( !InitReader ( tReader, sError ) )
 			return false;
 
-		// initial send is whole buffer or whole file whichever is less
-		if ( !tReader.m_tFile.Read ( pBuf, iReaderBufSize, sError ) )
-			return false;
+		assert ( !tReader.m_bDone );
 	}
 
 	// create agents
@@ -3722,7 +4098,8 @@ static bool SendFile ( const CSphVector<RemoteFileState_t> & dDesc, const CSphSt
 	PQRemoteFileSend_c tReq;
 	ScheduleDistrJobs ( dNodes, &tReq, &tReq, tReporter );
 
-	StringBuilder_c tErrors;
+	StringBuilder_c tErrors ( ";" );
+
 	bool bDone = false;
 	VecRefPtrs_t<AgentConn_t *> dNewNode;
 	dNewNode.Add ( nullptr );
@@ -3738,54 +4115,28 @@ static bool SendFile ( const CSphVector<RemoteFileState_t> & dDesc, const CSphSt
 		ARRAY_FOREACH ( iAgent, dNodes )
 		{
 			AgentConn_t * pAgent = dNodes[iAgent];
-			if ( !pAgent->m_bSuccess )
-				continue;
-
 			FileReader_t & tReader = dReaders[iAgent];
-			const PQRemoteReply_t & tRes = PQRemoteBase_c::GetRes ( *pAgent );
+			if ( !pAgent->m_bSuccess || tReader.m_bDone )
+				continue;
 
 			// report errors first
-			if ( tRes.m_iIndexFileSize!=tReader.m_tArgs.m_iFileOff+tReader.m_tArgs.m_iSendSize || !pAgent->m_sFailure.IsEmpty() )
+			if ( !pAgent->m_sFailure.IsEmpty() )
 			{
-				if ( !tErrors.IsEmpty() )
-					tErrors += "; ";
-
-				tErrors.Appendf ( "'%s:%d'", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort );
-
-				if ( tRes.m_iIndexFileSize!=tReader.m_tArgs.m_iFileOff+tReader.m_tArgs.m_iSendSize )
-					tErrors.Appendf ( "wrong file part stored, expected " INT64_FMT " stored " INT64_FMT,
-						tReader.m_tArgs.m_iFileOff+tReader.m_tArgs.m_iSendSize, tRes.m_iIndexFileSize );
-
-				if ( !pAgent->m_sFailure.IsEmpty() )
-					tErrors += pAgent->m_sFailure.cstr();
-
+				tErrors.Appendf ( "'%s:%d' %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pAgent->m_sFailure.cstr() );
 				pAgent->m_bSuccess = false;
+				tReader.m_bDone = true;
 				continue;
 			}
 
-			tReader.m_tArgs.m_iFileOff += tReader.m_tArgs.m_iSendSize;
-			int64_t iSize = iFileSize - tReader.m_tArgs.m_iFileOff;
-
-			// check that file fully sent 
-			if ( !iSize )
+			if ( !Next ( tReader, tErrors ) )
 			{
 				pAgent->m_bSuccess = false;
+				tReader.m_bDone = true;
 				continue;
 			}
 
-			// clump file tail to buffer
-			if ( iSize>iReaderBufSize )
-				iSize = iReaderBufSize;
-			tReader.m_tArgs.m_iSendSize = iSize;
-
-			if ( !tReader.m_tFile.Read ( const_cast<BYTE* >( tReader.m_tArgs.m_pSendBuff ), iSize, sError ) )
-			{
-				if ( !tErrors.IsEmpty() )
-					tErrors += "; ";
-				tErrors.Appendf ( "'%s:%d' %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, sError.cstr() );
-				pAgent->m_bSuccess = false;
+			if ( tReader.m_bDone )
 				continue;
-			}
 
 			// remove agent from main vector
 			pAgent->Release();
@@ -3800,38 +4151,110 @@ static bool SendFile ( const CSphVector<RemoteFileState_t> & dDesc, const CSphSt
 
 			// reset done flag to process new item
 			bDone = false;
+			tReader.m_iPackets++;
 		}
 	}
+
+	if ( !tErrors.IsEmpty() )
+		sError = tErrors.cstr();
+
+	ReportSendStat ( dNodes, dReaders, sCluster, sIndex );
+
 	return true;
 }
 
-// check that agents reply with proper index size
-static bool CheckReplyIndexState ( const VecTraits_T<AgentConn_t *> & dNodes, int64_t iFileSize, CSphString * pHash, CSphString & sError )
+static bool SyncSigBegin ( SyncSrc_t & tSync, CSphString & sError )
 {
-	StringBuilder_c sBuf ( "," );
-	for ( const AgentConn_t * pAgent : dNodes )
-	{
-		const PQRemoteReply_t & tRes = PQRemoteBase_c::GetRes ( *pAgent );
-		const bool bSameSize = ( tRes.m_iIndexFileSize==iFileSize );
-		const bool bSameHash = ( !pHash || ( (*pHash)==tRes.m_sFileHash ) );
+	const int iFiles =  tSync.m_dIndexFiles.GetLength();
+	tSync.m_dBaseNames.Reset ( iFiles );
+	tSync.m_dChunks.Reset ( iFiles );
 
-		if ( !bSameSize )
-		{
-			sBuf.Appendf ( "'%s:%d' size " INT64_FMT " not equal to stored size " INT64_FMT, pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, iFileSize, tRes.m_iIndexFileSize );
-		} else if ( !bSameHash )
-		{
-			sBuf.Appendf ( "'%s:%d' sha1 %s not equal to stored sha1 %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pHash->cstr(), tRes.m_sFileHash.cstr() );
-		}
-	}
-	if ( !sBuf.IsEmpty() )
+	const int iMinChunkBuf = Min ( g_iMaxPacketSize * 3 / 4, 8 * 1024 );
+	int iHashes = iFiles;
+
+	for ( int i=0; i<iFiles; i++ )
 	{
-		sphWarning ( "the nodes failed to create file: %s", sBuf.cstr() );
-		sError.SetSprintf ( "the nodes failed to create file: %s", sBuf.cstr() );
-		return false;
+		const CSphString & sFile = tSync.m_dIndexFiles[i];
+		CSphAutofile tIndexFile;
+		if ( tIndexFile.Open ( sFile, SPH_O_READ, sError )<0 )
+			return false;
+
+		tSync.m_dBaseNames[i] = GetBaseName ( sFile );
+
+		int64_t iFileSize = tIndexFile.GetSize();
+
+		// rsync uses sqrt ( iSize ) but that make too small buffers
+		int iChunkBytes = iFileSize / 2000;
+		// no need too small chunks
+		iChunkBytes = Max ( iChunkBytes, iMinChunkBuf );
+		if ( iFileSize<iChunkBytes )
+			iChunkBytes = iFileSize;
+
+		FileChunks_t & tSlice = tSync.m_dChunks[i];
+		tSlice.m_iFileSize = iFileSize;
+		tSlice.m_iChunkBytes = iChunkBytes;
+		tSlice.m_iHashStartItem = iHashes;
+
+		iHashes += tSlice.GetChunksCount();
+		tSync.m_iMaxChunkBytes = Max ( tSlice.m_iChunkBytes, tSync.m_iMaxChunkBytes );
+	}
+	tSync.m_dHashes.Reset ( iHashes * HASH20_SIZE );
+
+	SHA1_c tHashFile;
+	SHA1_c tHashChunk;
+
+	CSphFixedVector<BYTE> dReadBuf ( tSync.m_iMaxChunkBytes );
+	CSphAutofile tIndexFile;
+
+	for ( int iFile=0; iFile<iFiles; iFile++ )
+	{
+		const CSphString & sFile = tSync.m_dIndexFiles[iFile];
+		if ( tIndexFile.Open ( sFile, SPH_O_READ, sError )<0 )
+			return false;
+
+		const FileChunks_t & tChunk = tSync.m_dChunks[iFile];
+		tHashFile.Init();
+
+		int iChunk = 0;
+		int64_t iReadTotal = 0;
+		while ( iReadTotal<tChunk.m_iFileSize )
+		{
+			int iLeft = tChunk.m_iFileSize - iReadTotal;
+			iLeft = Min ( iLeft, tChunk.m_iChunkBytes );
+			iReadTotal += iLeft;
+
+			if ( !tIndexFile.Read ( dReadBuf.Begin(), iLeft, sError ) )
+				return false;
+
+			// update whole file hash
+			tHashFile.Update ( dReadBuf.Begin(), iLeft );
+
+			// update and flush chunk hash
+			tHashChunk.Init();
+			tHashChunk.Update ( dReadBuf.Begin(), iLeft );
+			tHashChunk.Final ( tSync.GetChunkHash ( iFile, iChunk ) );
+			iChunk++;
+		}
+
+		tIndexFile.Close();
+		tHashFile.Final ( tSync.GetFileHash ( iFile ) );
 	}
 
 	return true;
 }
+
+struct SendStatesGuard_t : public ISphNoncopyable
+{
+	CSphVector<const SyncDst_t *> m_dFree;
+	CSphVector<RemoteFileState_t> m_dSendFiles;
+	CSphVector<RemoteFileState_t> m_dActivateIndexes;
+
+	~SendStatesGuard_t()
+	{
+		ARRAY_FOREACH ( i, m_dFree )
+			SafeDelete ( m_dFree[i] );
+	}
+};
 
 // send local index to remote nodes via API
 static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString & sIndex, const VecAgentDesc_t & dDesc, CSphString & sError )
@@ -3839,7 +4262,8 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 	assert ( dDesc.GetLength() );
 
 	CSphString sIndexPath;
-	CSphString sIndexFile;
+	CSphVector<CSphString> dIndexFiles;
+	IndexType_e eType = IndexType_e::ERROR_;
 	{
 		ServedIndexRefPtr_c pServed = GetServed ( sIndex );
 		if ( !pServed )
@@ -3849,7 +4273,7 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 		}
 
 		ServedDescRPtr_c pDesc ( pServed );
-		if ( pDesc->m_eType!=IndexType_e::PERCOLATE )
+		if ( pDesc->m_eType!=IndexType_e::PERCOLATE && pDesc->m_eType!=IndexType_e::RT )
 		{
 			sError.SetSprintf ( "wrong type of index '%s'", sIndex.cstr() );
 			return false;
@@ -3857,83 +4281,115 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 
 		PercolateIndex_i * pIndex = (PercolateIndex_i *)pDesc->m_pIndex;
 		pIndex->ForceRamFlush ( false );
+		pIndex->GetIndexFiles ( dIndexFiles );
 		// FIXME!!! handle other index types
 		sIndexPath = pDesc->m_sIndexPath;
-		sIndexFile.SetSprintf ( "%s.meta", sIndexPath.cstr() );
+		eType = pDesc->m_eType;
 	}
 	assert ( !sIndexPath.IsEmpty() );
+	assert ( dIndexFiles.GetLength() );
 
-	int64_t iFileSize = 0;
-	CSphString sFileHash;
-	{
-		CSphAutoreader tIndexFile;
-		if ( !tIndexFile.Open ( sIndexFile, sError ) )
-			return false;
-	
-		iFileSize = tIndexFile.GetFilesize();
-		if ( !CalcSHA1 ( sIndexFile, sFileHash, sError ) )
-			return false;
-	}
+	SyncSrc_t tSigSrc;
+	tSigSrc.m_dIndexFiles.SwapData ( dIndexFiles );
+	if ( !SyncSigBegin ( tSigSrc, sError ) )
+		return false;
 
-	CSphVector<RemoteFileState_t> dSendStates;
+	SendStatesGuard_t tStatesGuard;
+	CSphVector<RemoteFileState_t> & dSendStates = tStatesGuard.m_dSendFiles;
+	CSphVector<RemoteFileState_t> & dActivateIndexes = tStatesGuard.m_dActivateIndexes;
 	{
 		PQRemoteData_t tAgentData;
 		tAgentData.m_sCluster = sCluster;
 		tAgentData.m_sIndex = sIndex;
-		tAgentData.m_sFileName = GetBaseName ( sIndexPath );
-		tAgentData.m_iIndexFileSize = iFileSize;
-		tAgentData.m_sFileHash = sFileHash;
+		tAgentData.m_pChunks = &tSigSrc;
+		tAgentData.m_sIndexFileName = GetBaseName ( sIndexPath );
 
-		auto dNodes = GetNodes ( dDesc, tAgentData );
+		VecRefPtrs_t<AgentConn_t *> dNodes;
+		GetNodes ( dDesc, dNodes, tAgentData );
+		for ( AgentConn_t * pAgent : dNodes )
+			PQRemoteBase_c::GetRes ( *pAgent ).m_pDst = new SyncDst_t();
+
 		PQRemoteFileReserve_c tReq;
-		bool bOk = PerformRemoteTasks ( dNodes, tReq, tReq, sError );
-		if ( !CheckReplyIndexState ( dNodes, iFileSize, nullptr, sError ) || !bOk )
+		if ( !PerformRemoteTasks ( dNodes, tReq, tReq, sError ) )
 			return false;
 
 		// collect remote file states and make list nodes and files to send
 		assert ( dDesc.GetLength()==dNodes.GetLength() );
-		ARRAY_FOREACH ( i, dNodes )
+		ARRAY_FOREACH ( iNode, dNodes )
 		{
-			 const PQRemoteReply_t & tRes = PQRemoteBase_c::GetRes ( *dNodes[i] );
+			 PQRemoteReply_t & tRes = PQRemoteBase_c::GetRes ( *dNodes[iNode] );
+			 const CSphBitvec & tFilesDst = tRes.m_pDst->m_dNodeChunks;
+			 bool bSameFiles = ( tSigSrc.m_dBaseNames.GetLength()==tRes.m_pDst->m_dRemotePaths.GetLength() );
+			 bool bSameHashes = ( tSigSrc.m_dHashes.GetLength() / HASH20_SIZE==tRes.m_pDst->m_dNodeChunks.GetBits() );
+			 if ( !bSameFiles || !bSameHashes )
+			 {
+				if ( !sError.IsEmpty() )
+					sError.SetSprintf ( "%s; ", sError.cstr() );
+
+				sError.SetSprintf ( "%s'%s:%d' wrong stored files %d(%d), hashes %d(%d)",
+					sError.scstr(), dNodes[iNode]->m_tDesc.m_sAddr.cstr(), dNodes[iNode]->m_tDesc.m_iPort,
+					tSigSrc.m_dBaseNames.GetLength(), tRes.m_pDst->m_dRemotePaths.GetLength(),
+					tSigSrc.m_dHashes.GetLength() / HASH20_SIZE, tRes.m_pDst->m_dNodeChunks.GetBits() );
+				continue;
+			 }
+
+			 const SyncDst_t * pDst = tRes.m_pDst.LeakPtr();
+			 tStatesGuard.m_dFree.Add ( pDst );
+
+			 bool bFilesMatched = true;
+			 for ( int iFile=0; bFilesMatched && iFile<tSigSrc.m_dBaseNames.GetLength(); iFile++ )
+				 bFilesMatched &= tFilesDst.BitGet ( iFile );
 
 			 // no need to send index files to nodes there files matches exactly
-			 if ( tRes.m_iIndexFileSize==iFileSize && tRes.m_sFileHash==sFileHash )
-				 continue;
+			 if ( !bFilesMatched )
+			 {
+				 RemoteFileState_t & tRemoteState = dSendStates.Add();
+				 tRemoteState.m_sRemoteIndexPath = tRes.m_sRemoteIndexPath;
+				 tRemoteState.m_pAgentDesc = dDesc[iNode];
+				 tRemoteState.m_pSyncSrc = &tSigSrc;
+				 tRemoteState.m_pSyncDst = pDst;
 
-			 RemoteFileState_t & tRemoteState = dSendStates.Add();
-			 tRemoteState.m_sRemoteIndexPath = tRes.m_sIndexPath;
-			 tRemoteState.m_sRemoteFilePath.SetSprintf ( "%s.meta", tRes.m_sIndexPath.cstr() );
-			 tRemoteState.m_pAgentDesc = dDesc[i];
+				 // after file send need also to re-activate index with new files
+				 dActivateIndexes.Add ( tRemoteState );
+
+			 } else if ( !tRes.m_bIndexActive )
+			 {
+				 RemoteFileState_t & tRemoteState = dActivateIndexes.Add();
+				 tRemoteState.m_sRemoteIndexPath = tRes.m_sRemoteIndexPath;
+				 tRemoteState.m_pAgentDesc = dDesc[iNode];
+				 tRemoteState.m_pSyncSrc = &tSigSrc;
+				 tRemoteState.m_pSyncDst = pDst;
+			 }
 		}
 	}
 
-	if ( !dSendStates.GetLength() )
+	if ( !dSendStates.GetLength() && !dActivateIndexes.GetLength() )
 		return true;
 
-	if ( !SendFile ( dSendStates, sIndexFile, iFileSize, sCluster, sError ) )
+	if ( dSendStates.GetLength() && !SendFile ( tSigSrc, dSendStates, sCluster, sIndex, sError ) )
 		return false;
 
 	{
-		CSphFixedVector<PQRemoteData_t> dAgentData ( dSendStates.GetLength() );
+		CSphFixedVector<PQRemoteData_t> dAgentData ( dActivateIndexes.GetLength() );
 		VecRefPtrs_t<AgentConn_t *> dNodes;
-		dNodes.Resize ( dSendStates.GetLength() );
-		ARRAY_FOREACH ( i, dSendStates )
+		dNodes.Resize ( dActivateIndexes.GetLength() );
+		ARRAY_FOREACH ( i, dActivateIndexes )
 		{
-			const RemoteFileState_t & tState = dSendStates[i];
+			const RemoteFileState_t & tState = dActivateIndexes[i];
 
 			PQRemoteData_t & tAgentData = dAgentData[i];
 			tAgentData.m_sCluster = sCluster;
 			tAgentData.m_sIndex = sIndex;
-			tAgentData.m_sFileHash = sFileHash;
-			tAgentData.m_iIndexFileSize = iFileSize;
-			tAgentData.m_sIndexPath = tState.m_sRemoteIndexPath;
+			tAgentData.m_sRemoteIndexPath = tState.m_sRemoteIndexPath;
+			tAgentData.m_pChunks = &tSigSrc;
+			tAgentData.m_eIndex = eType;
 
 			dNodes[i] = CreateAgent ( *tState.m_pAgentDesc, tAgentData, g_iRemoteTimeout );
+			PQRemoteBase_c::GetRes ( *dNodes[i] ).m_pSharedDst = tState.m_pSyncDst;
 		}
 
 		PQRemoteIndexAdd_c tReq;
-		bool bOk = PerformRemoteTasks ( dNodes, tReq, tReq, sError );
-		if ( !CheckReplyIndexState ( dNodes, iFileSize, &sFileHash, sError ) || !bOk )
+		if ( !PerformRemoteTasks ( dNodes, tReq, tReq, sError ) )
 			return false;
 	}
 
@@ -3971,6 +4427,9 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 
 		if ( dDesc.GetLength() && !NodesReplicateIndex ( sCluster, sIndex, dDesc, sError ) )
 			return false;
+
+		if ( !sError.IsEmpty() )
+			sphWarning ( "%s", sError.cstr() );
 	}
 
 	RtAccum_t tAcc { false };
@@ -3995,7 +4454,7 @@ bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool
 		}
 
 		ServedDescRPtr_c pDesc ( pServed );
-		if ( pDesc->m_eType!=IndexType_e::PERCOLATE )
+		if ( pDesc->m_eType!=IndexType_e::PERCOLATE && pDesc->m_eType!=IndexType_e::RT )
 		{
 			sError.SetSprintf ( "wrong type of index '%s'", sIndex.cstr() );
 			return false;
@@ -4075,10 +4534,10 @@ static bool SendClusterSynced ( const CSphString & sCluster, const CSphVector<CS
 	ARRAY_FOREACH ( i, dIndexes )
 		tAgentData.m_dIndexes[i] = dIndexes[i];
 
-	auto dNodes = GetNodes ( dDesc, tAgentData );
+	VecRefPtrs_t<AgentConn_t *> dNodes;
+	GetNodes ( dDesc, dNodes, tAgentData );
 	PQRemoteSynced_c tReq;
-	bool bOk = PerformRemoteTasks ( dNodes, tReq, tReq, sError );
-	if ( !CheckReplyIndexState ( dNodes, 0, nullptr, sError ) || !bOk )
+	if ( !PerformRemoteTasks ( dNodes, tReq, tReq, sError ) )
 		return false;
 
 	return true;
@@ -4119,10 +4578,19 @@ bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphStrin
 	}
 
 	bool bOk = true;
-	ARRAY_FOREACH_COND( i, dIndexes, bOk )
-		bOk = NodesReplicateIndex( pCluster->m_sName, dIndexes[i], dDesc, sError );
+	for ( const CSphString & sIndex : dIndexes )
+	{
+		if ( !NodesReplicateIndex ( pCluster->m_sName, sIndex, dDesc, sError ) )
+		{
+			sphWarning ( "%s", sError.cstr() );
+			bOk = false;
+			break;
+		}
 
-	if ( !bOk ) sphWarning( "%s", sError.cstr());
+		if ( !sError.IsEmpty() )
+			sphWarning ( "%s", sError.cstr() );
+	}
+
 	bOk &= SendClusterSynced ( pCluster->m_sName, pCluster->m_dIndexes, dDesc, bOk ? sGTID : "" , sError );
 	
 	return bOk;
@@ -4229,7 +4697,7 @@ bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sClu
 			// just break on 1st successful reply
 			// however need a way for distributed loop to finish as it can not break early
 			const PQRemoteReply_t & tRes = PQRemoteBase_c::GetRes ( *pAgent );
-			sNodes = tRes.m_sFileHash;
+			sNodes = tRes.m_sNodes;
 		}
 	}
 
@@ -4311,7 +4779,8 @@ bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdat
 	PQRemoteData_t tReqData;
 	tReqData.m_sCluster = sCluster;
 
-	auto dNodes = GetNodes ( sNodes, tReqData );
+	VecRefPtrs_t<AgentConn_t *> dNodes;
+	GetNodes ( sNodes, dNodes, tReqData );
 	PQRemoteClusterUpdateNodes_c tReq;
 	bOk &= PerformRemoteTasks ( dNodes, tReq, tReq, sError );
 
@@ -4349,11 +4818,11 @@ CSphString GetMacAddress ()
 	StringBuilder_c sMAC ( ":" );
 
 #if USE_WINDOWS
-    IP_ADAPTER_ADDRESSES dAdapters[128];
-	DWORD uSize = sizeof ( dAdapters );
-    if ( GetAdaptersAddresses ( 0, 0, nullptr, dAdapters, &uSize )==NO_ERROR )
+    CSphFixedVector<IP_ADAPTER_ADDRESSES> dAdapters ( 128 );
+	PIP_ADAPTER_ADDRESSES pAdapter = dAdapters.Begin();
+	DWORD uSize = dAdapters.GetLengthBytes();
+    if ( GetAdaptersAddresses ( 0, 0, nullptr, pAdapter, &uSize )==NO_ERROR )
 	{
-		PIP_ADAPTER_ADDRESSES pAdapter = dAdapters;
 		while ( pAdapter )
 		{
 			if ( pAdapter->IfType == IF_TYPE_ETHERNET_CSMACD && pAdapter->PhysicalAddressLength>=6 )

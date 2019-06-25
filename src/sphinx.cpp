@@ -2640,6 +2640,7 @@ private:
 private:
 	CSphString					GetIndexFileName ( ESphExt eExt, bool bTemp=false ) const;
 	CSphString					GetIndexFileName ( const char * szExt ) const;
+	void						GetIndexFiles ( CSphVector<CSphString> & dFiles ) const override;
 
 	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, const SphWordStatChecker_t & tStatDiff ) const;
 
@@ -9927,6 +9928,21 @@ CSphString CSphIndex_VLN::GetIndexFileName ( const char * szExt ) const
 	CSphString sRes;
 	sRes.SetSprintf ( "%s.%s", m_sFilename.cstr(), szExt );
 	return sRes;
+}
+
+void CSphIndex_VLN::GetIndexFiles ( CSphVector<CSphString> & dFiles ) const
+{
+	for ( int iExt=0; iExt<SPH_EXT_TOTAL; iExt++ )
+	{
+		if ( iExt==SPH_EXT_SPL )
+			continue;
+
+		CSphString sName = GetIndexFileName ( (ESphExt)iExt, false );
+		if ( !sphIsReadable ( sName.cstr() ) )
+			continue;
+
+		dFiles.Add ( sName );
+	}
 }
 
 
@@ -17240,112 +17256,110 @@ void CSphIndex_VLN::GetStatus ( CSphIndexStatus* pRes ) const
 // received a copy of the GPL license along with this program; if you
 // did not, you can find it at http://www.gnu.org/
 
-class SHA1_c
+void SHA1_c::Transform ( const BYTE buf[64] )
 {
-	DWORD state[5], count[2];
-	BYTE buffer[64];
-
-	void Transform ( const BYTE buf[64] )
+	DWORD a = state[0], b = state[1], c = state[2], d = state[3], e = state[4], block[16];
+	memset ( block, 0, sizeof ( block ) ); // initial conversion to big-endian units
+	for ( int i = 0; i<64; i++ )
+		block[i >> 2] += buf[i] << ( ( 3 - ( i & 3 ) ) * 8 );
+	for ( int i = 0; i<80; i++ ) // do hashing rounds
 	{
-		DWORD a = state[0], b = state[1], c = state[2], d = state[3], e = state[4], block[16];
-		memset ( block, 0, sizeof ( block ) ); // initial conversion to big-endian units
-		for ( int i = 0; i<64; i++ )
-			block[i >> 2] += buf[i] << ( ( 3 - ( i & 3 ) ) * 8 );
-		for ( int i = 0; i<80; i++ ) // do hashing rounds
-		{
 #define _LROT( value, bits ) ( ( (value) << (bits) ) | ( (value) >> ( 32-(bits) ) ) )
-			if ( i>=16 )
-				block[i & 15] = _LROT (
-					block[( i + 13 ) & 15] ^ block[( i + 8 ) & 15] ^ block[( i + 2 ) & 15] ^ block[i & 15], 1 );
+		if ( i>=16 )
+			block[i & 15] = _LROT (
+				block[( i + 13 ) & 15] ^ block[( i + 8 ) & 15] ^ block[( i + 2 ) & 15] ^ block[i & 15], 1 );
 
-			if ( i<20 )
-				e += ( ( b & ( c ^ d ) ) ^ d ) + 0x5A827999;
-			else if ( i<40 )
-				e += ( b ^ c ^ d ) + 0x6ED9EBA1;
-			else if ( i<60 )
-				e += ( ( ( b | c ) & d ) | ( b & c ) ) + 0x8F1BBCDC;
-			else
-				e += ( b ^ c ^ d ) + 0xCA62C1D6;
+		if ( i<20 )
+			e += ( ( b & ( c ^ d ) ) ^ d ) + 0x5A827999;
+		else if ( i<40 )
+			e += ( b ^ c ^ d ) + 0x6ED9EBA1;
+		else if ( i<60 )
+			e += ( ( ( b | c ) & d ) | ( b & c ) ) + 0x8F1BBCDC;
+		else
+			e += ( b ^ c ^ d ) + 0xCA62C1D6;
 
-			e += block[i & 15] + _LROT ( a, 5 );
-			DWORD t = e;
-			e = d;
-			d = c;
-			c = _LROT ( b, 30 );
-			b = a;
-			a = t;
-		}
-		state[0] += a; // save state
-		state[1] += b;
-		state[2] += c;
-		state[3] += d;
-		state[4] += e;
+		e += block[i & 15] + _LROT ( a, 5 );
+		DWORD t = e;
+		e = d;
+		d = c;
+		c = _LROT ( b, 30 );
+		b = a;
+		a = t;
 	}
+	state[0] += a; // save state
+	state[1] += b;
+	state[2] += c;
+	state[3] += d;
+	state[4] += e;
+}
 
-public:
-	SHA1_c & Init()
+SHA1_c & SHA1_c::Init()
+{
+	const DWORD dInit[5] = { 0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0 };
+	memcpy ( state, dInit, sizeof ( state ) );
+	count[0] = count[1] = 0;
+	return *this;
+}
+
+SHA1_c & SHA1_c::Update ( const BYTE * data, int len )
+{
+	int i, j = ( count[0] >> 3 ) & 63;
+	count[0] += ( len << 3 );
+	if ( count[0]<( DWORD ) ( len << 3 ) )
+		count[1]++;
+	count[1] += ( len >> 29 );
+	if ( ( j + len )>63 )
 	{
-		const DWORD dInit[5] = { 0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0 };
-		memcpy ( state, dInit, sizeof ( state ) );
-		count[0] = count[1] = 0;
-		return *this;
-	}
+		i = 64 - j;
+		memcpy ( &buffer[j], data, i );
+		Transform ( buffer );
+		for ( ; i + 63<len; i += 64 )
+			Transform ( data + i );
+		j = 0;
+	} else
+		i = 0;
+	memcpy ( &buffer[j], &data[i], len - i );
+	return *this;
+}
 
-	SHA1_c & Update ( const BYTE * data, int len )
-	{
-		int i, j = ( count[0] >> 3 ) & 63;
-		count[0] += ( len << 3 );
-		if ( count[0]<( DWORD ) ( len << 3 ) )
-			count[1]++;
-		count[1] += ( len >> 29 );
-		if ( ( j + len )>63 )
-		{
-			i = 64 - j;
-			memcpy ( &buffer[j], data, i );
-			Transform ( buffer );
-			for ( ; i + 63<len; i += 64 )
-				Transform ( data + i );
-			j = 0;
-		} else
-			i = 0;
-		memcpy ( &buffer[j], &data[i], len - i );
-		return *this;
-	}
-
-	void Final ( BYTE digest[SHA1_SIZE] )
-	{
-		BYTE finalcount[8];
-		for ( auto i = 0; i<8; i++ )
-			finalcount[i] = ( BYTE ) ( ( count[( i>=4 ) ? 0 : 1] >> ( ( 3 - ( i & 3 ) ) * 8 ) )
-				& 255 ); // endian independent
-		Update ( ( BYTE * ) "\200", 1 ); // add padding
-		while ( ( count[0] & 504 )!=448 )
-			Update ( ( BYTE * ) "\0", 1 );
-		Update ( finalcount, 8 ); // should cause a SHA1_Transform()
-		for ( auto i = 0; i<SHA1_SIZE; i++ )
-			digest[i] = ( BYTE ) ( ( state[i >> 2] >> ( ( 3 - ( i & 3 ) ) * 8 ) ) & 255 );
-	}
-};
+void SHA1_c::Final ( BYTE digest[SHA1_SIZE] )
+{
+	BYTE finalcount[8];
+	for ( auto i = 0; i<8; i++ )
+		finalcount[i] = ( BYTE ) ( ( count[( i>=4 ) ? 0 : 1] >> ( ( 3 - ( i & 3 ) ) * 8 ) )
+			& 255 ); // endian independent
+	Update ( ( BYTE * ) "\200", 1 ); // add padding
+	while ( ( count[0] & 504 )!=448 )
+		Update ( ( BYTE * ) "\0", 1 );
+	Update ( finalcount, 8 ); // should cause a SHA1_Transform()
+	for ( auto i = 0; i<SHA1_SIZE; i++ )
+		digest[i] = ( BYTE ) ( ( state[i >> 2] >> ( ( 3 - ( i & 3 ) ) * 8 ) ) & 255 );
+}
 
 
-CSphString BinToHex ( const CSphFixedVector<BYTE> & dHash )
+CSphString BinToHex ( const BYTE * pHash, int iLen )
 {
 	const char * sDigits = "0123456789abcdef";
-	if ( dHash.IsEmpty() )
+	if ( !iLen )
 		return "";
 
 	CSphString sRes;
-	auto iLen = 2*dHash.GetLength()*2;
-	sRes.Reserve ( iLen );
-	auto sHash = const_cast<char *> (sRes.cstr ());
+	int iStrLen = 2*iLen+2;
+	sRes.Reserve ( iStrLen );
+	char * sHash = const_cast<char *> (sRes.cstr ());
 
-	ARRAY_FOREACH ( i, dHash )
+	for ( int i=0; i<iLen; i++ )
 	{
-		sHash[i << 1] = sDigits[dHash[i] >> 4];
-		sHash[1 + ( i << 1 )] = sDigits[dHash[i] & 0x0f];
+		*sHash++ = sDigits[pHash[i] >> 4];
+		*sHash++ = sDigits[pHash[i] & 0x0f];
 	}
-	sHash[iLen] = '\0';
+	*sHash = '\0';
 	return sRes;
+}
+
+CSphString BinToHex ( const VecTraits_T<BYTE> & dHash )
+{
+	return BinToHex ( dHash.Begin(), dHash.GetLength() );
 }
 
 CSphString CalcSHA1 ( const void * pData, int iLen )

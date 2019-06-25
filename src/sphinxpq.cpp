@@ -121,7 +121,7 @@ public:
 //	virtual bool				Mlock () { return false; }
 	bool				EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const override;
 	const CSphSourceStats &	GetStats () const override { return m_tStat; }
-	void				GetStatus ( CSphIndexStatus* pRes ) const override { assert (pRes); if ( pRes ) { pRes->m_iDiskUse = 0; pRes->m_iRamUse = 0;}}
+	void				GetStatus ( CSphIndexStatus* pRes ) const override { assert (pRes); if ( pRes ) { pRes->m_iDiskUse = 0; pRes->m_iRamUse = 0; pRes->m_iTID = m_iTID; pRes->m_iSavedTID = m_iSavedTID; }}
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & , CSphString * pError ) const override { return NotImplementedError(pError); }
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const override { return false; }
 	int					UpdateAttributes ( const CSphAttrUpdate & /*tUpd*/, int /*iIndex*/, bool & /*bCritical*/, CSphString & sError, CSphString & /*sWarning*/ ) override { NotImplementedError ( &sError ); return -1; }
@@ -172,6 +172,8 @@ private:
 	int ReplayDeleteQueries ( const int64_t * pQueries, int iCount ) final;
 	int ReplayDeleteQueries ( const char * sTags ) final;
 	void ReplayCommit ( StoredQuery_i * pQuery ) final;
+
+	void GetIndexFiles ( CSphVector<CSphString> & dFiles ) const override;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2601,4 +2603,10 @@ void MergePqResults ( const VecTraits_T<CPqResult *> &dChunks, CPqResult &dRes, 
 			dRes.m_dDocids[*pIndex] = iDocid;
 
 	}
+}
+
+void PercolateIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles ) const
+{
+	CSphString & sMeta = dFiles.Add();
+	sMeta.SetSprintf ( "%s.meta", m_sFilename.cstr() );
 }

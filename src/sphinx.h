@@ -3113,6 +3113,8 @@ struct CSphIndexStatus
 	int64_t			m_iRamChunkSize = 0; // not used for plain
 	int				m_iNumChunks = 0; // not used for plain
 	int64_t			m_iMemLimit = 0; // not used for plain
+	int64_t			m_iTID = 0;
+	int64_t			m_iSavedTID = 0;
 };
 
 
@@ -3425,6 +3427,9 @@ public:
 
 	/// get for the base file name
 	const char *				GetFilename () const { return m_sFilename.cstr(); }
+
+	/// get actual index files list
+	virtual void				GetIndexFiles ( CSphVector<CSphString> & dFiles ) const {};
 
 	/// internal make document id list from external docinfo, DO NOT USE
 	virtual bool BuildDocList ( SphAttr_t ** ppDocList, int64_t * pCount, CSphString * pError ) const;

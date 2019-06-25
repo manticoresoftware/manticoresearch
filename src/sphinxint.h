@@ -2289,9 +2289,24 @@ inline void FlipEndianess ( DWORD* pData )
 /// SHA1 digests
 static const int HASH20_SIZE = 20;
 static const int SHA1_SIZE = HASH20_SIZE;
-class SHA1_c;
+static const int SHA1_BUF_SIZE = 64;
 
-CSphString BinToHex ( const CSphVector<BYTE> & dHash );
+class SHA1_c
+{
+public:
+	SHA1_c & Init();
+	SHA1_c & Update ( const BYTE * pData, int iLen );
+	void Final ( BYTE digest[SHA1_SIZE] );
+
+private:
+	DWORD state[5], count[2];
+	BYTE buffer[SHA1_BUF_SIZE];
+
+	void Transform ( const BYTE buf[SHA1_BUF_SIZE] );
+};
+
+CSphString BinToHex ( const VecTraits_T<BYTE> & dHash );
+CSphString BinToHex ( const BYTE * pHash, int iLen );
 CSphString CalcSHA1 ( const void * pData, int iLen );
 bool CalcSHA1 ( const CSphString & sFileName, CSphString & sRes, CSphString & sError );
 

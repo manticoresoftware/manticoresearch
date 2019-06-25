@@ -2601,3 +2601,47 @@ TEST ( functions, CSphQueue )
 	ASSERT_EQ ( qQ.Root (), 100 ) << "pushed 100 over 1000, it became root now";
 
 }
+
+
+TEST ( functions, path )
+{
+	CSphString sSrc1 ( "/home/build/test/data/pq2" );
+	CSphString sPath1 = GetPathOnly ( sSrc1 );
+	ASSERT_STREQ ( sPath1.cstr(), "/home/build/test/data/" );
+
+	CSphString sSrc2 ( "home/pq2" );
+	CSphString sPath2 = GetPathOnly ( sSrc2 );
+	ASSERT_STREQ ( sPath2.cstr(), "home/" );
+
+	CSphString sSrc3 ( "/pq2" );
+	CSphString sPath3 = GetPathOnly ( sSrc3 );
+	ASSERT_STREQ ( sPath3.cstr(), "/" );
+
+	CSphString sSrc4 ( "/home/pq2" );
+	CSphString sPath4 = GetPathOnly ( sSrc4 );
+	ASSERT_STREQ ( sPath4.cstr(), "/home/" );
+
+	CSphString sSrc5 ( "/home/build/" );
+	CSphString sPath5 = GetPathOnly ( sSrc5 );
+	ASSERT_STREQ ( sPath5.cstr(), "/home/build/" );
+
+	CSphString sSrc6 ( "home/build/" );
+	CSphString sPath6 = GetPathOnly ( sSrc6 );
+	ASSERT_STREQ ( sPath6.cstr(), "home/build/" );
+
+	CSphString sSrc11 ( "/home/pq2" );
+	CSphString sFile11 = GetBaseName ( sSrc11 );
+	ASSERT_STREQ ( sFile11.cstr(), "pq2" );
+
+	CSphString sSrc12 ( "home/pq2" );
+	CSphString sFile12 = GetBaseName ( sSrc12 );
+	ASSERT_STREQ ( sFile12.cstr(), "pq2" );
+
+	CSphString sSrc13 ( "pq2" );
+	CSphString sFile13 = GetBaseName ( sSrc13 );
+	ASSERT_STREQ ( sFile13.cstr(), "pq2" );
+
+	CSphString sSrc14 ( "/pq2" );
+	CSphString sFile14 = GetBaseName ( sSrc14 );
+	ASSERT_STREQ ( sFile14.cstr(), "pq2" );
+}

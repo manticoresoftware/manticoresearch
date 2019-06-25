@@ -1192,6 +1192,8 @@ private:
 	void						Update_CollectRowPtrs ( UpdateContext_t & tCtx, const SphChunkGuard_t & tGuard );
 	bool						Update_WriteBlobRow ( UpdateContext_t & tCtx, int iUpd, CSphRowitem * pDocinfo, const BYTE * pBlob, int iLength, int nBlobAttrs, bool & bCritical, CSphString & sError ) override;
 	bool						Update_DiskChunks ( UpdateContext_t & tCtx, const SphChunkGuard_t & tGuard, int & iUpdated, CSphString & sError );
+
+	void						GetIndexFiles ( CSphVector<CSphString> & dFiles ) const override;
 };
 
 
@@ -7209,6 +7211,9 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 
 	pRes->m_iNumChunks = m_dDiskChunks.GetLength();
 
+	pRes->m_iTID = m_iTID;
+	pRes->m_iSavedTID = m_iSavedTID;
+
 	Verify ( m_tChunkLock.Unlock() );
 }
 
@@ -7401,6 +7406,20 @@ uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
 
 	return uHash;
 }
+
+void RtIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles ) const
+{
+	CSphString & sMeta = dFiles.Add();
+	sMeta.SetSprintf ( "%s.meta", m_sPath.cstr() );
+	CSphString & sRam = dFiles.Add();
+	sRam.SetSprintf ( "%s.ram", m_sPath.cstr() );
+
+	SphChunkGuard_t tGuard;
+	GetReaderChunks ( tGuard );
+	for ( const CSphIndex * pIndex : tGuard.m_dDiskChunks )
+		pIndex->GetIndexFiles ( dFiles );
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 // BINLOG

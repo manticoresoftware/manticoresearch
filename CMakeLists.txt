@@ -634,7 +634,9 @@ set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MY_C_FLAGS}" )
 set ( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MY_CXX_FLAGS}" )
 
 add_subdirectory ( src )
-add_subdirectory ( test )
 
+if ( NOT DISABLE_TESTING )
+	add_subdirectory ( test )
+endif ()
 
 include ( CPack )

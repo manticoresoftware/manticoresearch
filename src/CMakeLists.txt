@@ -43,7 +43,8 @@ file ( GLOB SEARCHD_H "searchd*.h" "task*.h" threadutils.h )
 
 if ( UNIX AND NOT APPLE )
 	add_subdirectory ( replication )
-	add_compile_definitions( HAVE_WSREP )
+	# add_compile_definitions( HAVE_WSREP ) # need cmake >3.12, let's skip it for a while..
+    add_definitions ( -DHAVE_WSREP )
 	set ( WSREP "wsrep")
 	LIST (APPEND SEARCHD_H "replication/wsrep_api.h" )
 else()

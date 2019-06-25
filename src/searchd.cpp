@@ -714,6 +714,7 @@ bool GuardedHash_c::AddUniq ( ISphRefcountedMT * pValue, const CSphString &tKey 
 		return false;
 
 	pVal = pValue;
+	SafeAddRef ( pVal );
 	return true;
 }
 
@@ -730,6 +731,7 @@ void GuardedHash_c::AddOrReplace ( ISphRefcountedMT * pValue, const CSphString &
 	{
 		Verify ( m_hIndexes.Add ( pValue, tKey ) );
 	}
+	SafeAddRef ( pValue );
 	if ( m_pHook )
 		m_pHook ( pValue, tKey );
 }
@@ -762,13 +764,10 @@ ISphRefcountedMT * GuardedHash_c::TryAddThenGet ( ISphRefcountedMT * pValue, con
 	if ( iPrevSize<GetLengthUnl () ) // value just inserted
 	{
 		pVal = pValue;
-		if ( pVal )
-			pVal->AddRef ();
+		SafeAddRef ( pVal );
 	}
 
-	if ( pVal )
-		pVal->AddRef ();
-
+	SafeAddRef ( pVal );
 	return pVal;
 }
 
@@ -18890,7 +18889,7 @@ static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError )
 
 	// set new index to hash
 	tNewIndex.m_sIndexPath = tNewIndex.m_pIndex->GetFilename();
-	g_pLocalIndexes->AddOrReplace ( new ServedIndex_c ( tNewIndex ), sIndex );
+	g_pLocalIndexes->AddOrReplace ( RefCountedRefPtr_t ( new ServedIndex_c ( tNewIndex )), sIndex );
 	sphInfo ( "rotating index '%s': success", sIndex.cstr() );
 	tNewIndex.m_pIndex = nullptr;
 
@@ -18965,11 +18964,8 @@ void RotationThreadFunc ( void * )
 				{
 					wLocked->m_bOnlyNew = false;
 					g_pLocalIndexes->AddOrReplace ( pIndex, sIndex );
-					pIndex->AddRef ();
 				} else
-				{
 					g_pLocalIndexes->DeleteIfNull ( sIndex );
-				}
 			}
 		}
 
@@ -19257,7 +19253,6 @@ ESphAddIndex AddDistributedIndex ( const char * szIndexName, const CSphConfigSec
 		return ADD_ERROR;
 	}
 
-	pIdx->AddRef (); // on succeed add - hash owns index
 	return ADD_DISTR;
 }
 
@@ -19289,7 +19284,6 @@ bool AddLocallyServedIndex ( const CSphString& sIndexName, ServedDesc_t & tIdx, 
 	}
 	// leak pointer, so it's destructor won't delete it
 	tIdx.m_pIndex = nullptr;
-	pIdx->AddRef ();
 	return true;
 }
 
@@ -19798,7 +19792,7 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 					if ( !PreloadKlistTarget ( tDesc, CheckIndexHeaderRotate(tDesc), tDesc.m_dKilllistTargets ) )
 						tDesc.m_dKilllistTargets.Reset();
 
-					g_pDisabledIndexes->AddUniq ( new ServedIndex_c(tDesc), sIndexName );
+					g_pDisabledIndexes->AddUniq ( RefCountedRefPtr_t ( new ServedIndex_c ( tDesc )), sIndexName );
 				}
 			}
 
@@ -19816,7 +19810,7 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 			ConfigureDistributedIndex ( *ptrIdx, sIndexName.cstr (), hIndex );
 
 			if ( !ptrIdx->IsEmpty () )
-				g_pDistIndexes->AddOrReplace ( ptrIdx.Leak (), sIndexName );
+				g_pDistIndexes->AddOrReplace ( ptrIdx, sIndexName );
 			else
 				sphWarning ( "index '%s': no valid local/remote indexes in distributed index; using last valid definition", sIndexName.cstr () );
 
@@ -20032,10 +20026,8 @@ static void DoGreedyRotation() REQUIRES ( MainThread )
 			{
 				pWlockedServedDisabledPtr->m_bOnlyNew = false;
 				if ( PreallocNewIndex ( *pWlockedServedDisabledPtr, &g_pCfg.m_tConf["index"][sDisabledIndex], sDisabledIndex.cstr() ) )
-				{
 					g_pLocalIndexes->AddOrReplace ( pDisabledIndex, sDisabledIndex );
-					pDisabledIndex->AddRef ();
-				} else
+				else
 					g_pLocalIndexes->DeleteIfNull ( sDisabledIndex );
 			}
 			else if ( pWlockedServedDisabledPtr->m_eType==IndexType_e::PLAIN )
@@ -20055,7 +20047,6 @@ static void DoGreedyRotation() REQUIRES ( MainThread )
 				{
 					pWlockedServedDisabledPtr->m_pIndex->Preread();
 					g_pLocalIndexes->AddOrReplace ( pDisabledIndex, sDisabledIndex );
-					pDisabledIndex->AddRef ();
 				} else
 					g_pLocalIndexes->DeleteIfNull ( sDisabledIndex );
 			}
@@ -20124,7 +20115,7 @@ void CheckRotate () REQUIRES ( MainThread ) EXCLUDES ( g_tRotateThreadMutex )
 				if ( !PreloadKlistTarget ( tDesc, RotateFrom_e::NEW, tDesc.m_dKilllistTargets ) )
 					tDesc.m_dKilllistTargets.Reset();
 
-				g_pDisabledIndexes->AddUniq ( new ServedIndex_c(tDesc), sIndex );
+				g_pDisabledIndexes->AddUniq ( RefCountedRefPtr_t ( new ServedIndex_c ( tDesc )), sIndex );
 			}
 		}
 
@@ -23487,7 +23478,6 @@ ESphAddIndex ConfigureAndPreload ( const CSphConfigSection & hIndex, const char 
 
 		// finally add the index to the hash of enabled.
 		g_pLocalIndexes->AddOrReplace ( pHandle, sIndexName );
-		pHandle->AddRef ();
 
 		CSphString sError;
 		if ( !pJustAddedLocalWl->m_sGlobalIDFPath.IsEmpty()

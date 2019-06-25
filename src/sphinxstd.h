@@ -4334,6 +4334,8 @@ protected:
 	mutable CSphAtomic m_iRefCount { 1 };
 };
 
+using RefCountedRefPtr_t = CSphRefcountedPtr<ISphRefcountedMT>;
+
 template <class T>
 struct VecRefPtrs_t : public ISphNoncopyable, public CSphVector<T>
 {

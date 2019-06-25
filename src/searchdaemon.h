@@ -842,7 +842,7 @@ public:
 	GuardedHash_c ();
 	~GuardedHash_c ();
 
-	// atomically try add an entry and adopt it (NO addref!)
+	// atomically try add an entry and adopt it
 	bool AddUniq ( ISphRefcountedMT * pEntry, const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
 
 	// atomically set new entry, then release previous, if not the same and is non-zero
@@ -857,7 +857,7 @@ public:
 
 	int GetLength () const EXCLUDES ( m_tIndexesRWLock );
 
-	// check if value exists and if it is non-null
+	// check if value exists (even if it is nullptr)
 	bool Contains ( const CSphString &tKey ) const EXCLUDES ( m_tIndexesRWLock );
 
 	// reset the hash

@@ -528,8 +528,8 @@ TEST ( T_IndexHash, served_hash_and_getter )
 {
 	auto pHash = new GuardedHash_c;
 	ServedDesc_t tDesc;
-	pHash->AddUniq ( new ServedIndex_c ( tDesc ), "hello" );
-	pHash->AddUniq ( new ServedIndex_c ( tDesc ), "world" );
+	pHash->AddUniq ( RefCountedRefPtr_t ( new ServedIndex_c ( tDesc )), "hello" );
+	pHash->AddUniq ( RefCountedRefPtr_t ( new ServedIndex_c ( tDesc )), "world" );
 
 	{
 		auto pHello = GetServed ( "hello", pHash );
@@ -557,9 +557,10 @@ TEST ( T_IndexHash, served_hash_and_getter )
 	// try to replace existing one
 	pHash->AddOrReplace ( pFee, "hello" );
 	ASSERT_EQ ( pFoo->GetRefcount (), 1 ) << "we're the only owner now";
-	ASSERT_EQ ( pFee->GetRefcount (), 1 ) << "hash owns the var, we just have a weak ptr";
+	ASSERT_EQ ( pFee->GetRefcount (), 2 ) << "hash owns the var, we just have a weak ptr";
 	delete pHash;
 	ASSERT_EQ ( pFoo->GetRefcount (), 1 ) << "we're the only owner now";
+	SafeRelease ( pFee );
 }
 
 
@@ -569,8 +570,8 @@ TEST ( T_IndexHash, served_hash_add_or_replace )
 	ServedDesc_t tDesc;
 
 	// crash of AddOrReplace after Delete
-	ServedIndex_c * pIdx1 = new ServedIndex_c ( tDesc );
-	ServedIndex_c * pIdx2 = new ServedIndex_c ( tDesc );
+	auto * pIdx1 = new ServedIndex_c ( tDesc );
+	auto * pIdx2 = new ServedIndex_c ( tDesc );
 	ASSERT_TRUE ( pHash->AddUniq ( pIdx1, "idx1" ) );
 
 	// case itself
@@ -579,13 +580,16 @@ TEST ( T_IndexHash, served_hash_add_or_replace )
 
 	// cleanup
 	ASSERT_TRUE ( pHash->Delete ( "idx1" ) );
+
+	SafeRelease ( pIdx1 );
+	SafeRelease ( pIdx2 );
 }
 
 TEST ( T_IndexHash, ensure_right_refcounting )
 {
 	auto pHash = new GuardedHash_c;
 	ServedDesc_t tDesc;
-	pHash->AddUniq ( new ServedIndex_c ( tDesc ), "hello" );
+	pHash->AddUniq ( RefCountedRefPtr_t ( new ServedIndex_c ( tDesc ) ), "hello" );
 
 
 	{
@@ -610,9 +614,10 @@ TEST ( T_IndexHash, ensure_right_refcounting )
 	// try to replace existing one
 	pHash->AddOrReplace ( pFee, "hello" );
 	ASSERT_EQ ( pFoo->GetRefcount (), 1 ) << "we're the only owner now";
-	ASSERT_EQ ( pFee->GetRefcount (), 1 ) << "hash owns the var, we just have a weak ptr";
+	ASSERT_EQ ( pFee->GetRefcount (), 2 ) << "hash owns the var, we just have a weak ptr";
 	delete pHash;
 	ASSERT_EQ ( pFoo->GetRefcount (), 1 ) << "we're the only owner now";
+	SafeRelease ( pFee );
 }
 
 
@@ -638,4 +643,288 @@ TEST ( T_IndexHash, served_pointer_manipulations )
 		delete pHash;
 //		auto & x = dVec[0];
 	}
+}
+
+class TGuardedHash_c: public ::testing::Test
+{
+protected:
+	GuardedHash_c* pHash;
+	ISphRefcountedMT* pRef;
+
+	void SetUp () override
+	{
+		pHash = new GuardedHash_c;
+		pRef = new ISphRefcountedMT ();
+		ASSERT_TRUE ( pRef->IsLast ()) << "we are the one";
+	}
+
+	void TearDown () override
+	{
+		SafeDelete ( pHash );
+		ASSERT_TRUE ( pRef->IsLast ()) << "hash deleted, we a the one";
+		SafeRelease ( pRef );
+	}
+};
+
+TEST_F ( TGuardedHash_c, AddUniq )
+{
+	pHash->AddUniq ( pRef, "hello" );
+	ASSERT_EQ ( pRef->GetRefcount (), 2 ) << "one we, second hash";
+
+	pHash->AddUniq ( pRef, "hello" );
+	ASSERT_EQ ( pRef->GetRefcount (), 2 ) << "no second addition";
+
+	pHash->AddUniq ( pRef, "world" );
+	ASSERT_EQ ( pRef->GetRefcount (), 3 ) << "3 of us";
+}
+
+TEST_F ( TGuardedHash_c, AddOrReplace )
+{
+	pHash->AddOrReplace ( pRef, "hello" );
+	ASSERT_EQ ( pRef->GetRefcount (), 2 ) << "one we, second hash";
+
+	pHash->AddOrReplace ( pRef, "hello" );
+	ASSERT_EQ ( pRef->GetRefcount (), 2 ) << "no second addition";
+
+	pHash->AddOrReplace ( pRef, "world" );
+	ASSERT_EQ ( pRef->GetRefcount (), 3 ) << "3 of us";
+}
+
+TEST_F ( TGuardedHash_c, Delete )
+{
+	// prepare
+	pHash->AddUniq ( pRef, "hello" );
+	pHash->AddUniq ( pRef, "world" );
+	EXPECT_EQ ( pRef->GetRefcount (), 3 );
+	EXPECT_EQ ( pHash->GetLength(), 2);
+
+	// the test
+	pHash->Delete ( "hello" );
+	ASSERT_EQ ( pRef->GetRefcount (), 2 ) << "no second addition";
+	ASSERT_EQ ( pHash->GetLength (), 1 );
+
+
+	pHash->Delete ( "world" );
+	ASSERT_TRUE ( pRef->IsLast () ) << "3 of us";
+	ASSERT_EQ ( pHash->GetLength (), 0 );
+}
+
+TEST_F ( TGuardedHash_c, DeleteIfNull )
+{
+	// prepare
+	pHash->AddUniq ( pRef, "hello" );
+	pHash->AddUniq ( nullptr, "world" );
+	EXPECT_EQ ( pRef->GetRefcount (), 2 );
+	EXPECT_EQ ( pHash->GetLength (), 2 );
+
+	// the test
+	pHash->DeleteIfNull ( "world" );
+	ASSERT_EQ ( pHash->GetLength (), 1 );
+	ASSERT_EQ ( pRef->GetRefcount (), 2 ) << "null deleted";
+
+	pHash->DeleteIfNull ( "hello" );
+	ASSERT_EQ ( pHash->GetLength (), 1 ) << "must not delete";
+	ASSERT_EQ ( pRef->GetRefcount (), 2 );
+}
+
+TEST_F ( TGuardedHash_c, GetLength )
+{
+	pHash->AddUniq ( nullptr, "hello" );
+	EXPECT_EQ ( pHash->GetLength (), 1 );
+
+	pHash->AddUniq ( nullptr, "world" );
+	EXPECT_EQ ( pHash->GetLength (), 2 );
+
+	pHash->Delete ( "hello" );
+	ASSERT_EQ ( pHash->GetLength (), 1 );
+
+	pHash->Delete ( "world" );
+	ASSERT_EQ ( pHash->GetLength (), 0 );
+}
+
+TEST_F ( TGuardedHash_c, Contains )
+{
+	pHash->AddUniq ( nullptr, "hello" );
+	pHash->AddUniq ( pRef, "world" );
+
+	EXPECT_EQ ( pRef->GetRefcount (), 2 );
+
+	ASSERT_FALSE ( pHash->Contains ( "foo" )) << "foo wasn't inserted";
+	ASSERT_TRUE ( pHash->Contains ( "hello" )) << "hello has null value";
+	ASSERT_TRUE ( pHash->Contains ( "world" )) << "world is ok";
+
+	ASSERT_EQ ( pRef->GetRefcount (), 2 ) << "contains does'nt affect ref at all";
+}
+
+TEST_F ( TGuardedHash_c, ReleaseAndClear )
+{
+	pHash->AddUniq ( nullptr, "hello" );
+	pHash->AddUniq ( pRef, "world" );
+
+	EXPECT_EQ ( pRef->GetRefcount (), 2 );
+	EXPECT_EQ ( pHash->GetLength (), 2 );
+
+	pHash->ReleaseAndClear ();
+
+	ASSERT_EQ ( pHash->GetLength (), 0 ) << "hash must be anandoned";
+	ASSERT_TRUE ( pRef->IsLast ()) << "me was removed";
+}
+
+TEST_F ( TGuardedHash_c, Get )
+{
+	pHash->AddUniq ( nullptr, "hello" );
+	pHash->AddUniq ( pRef, "world" );
+	EXPECT_EQ ( pRef->GetRefcount (), 2 );
+
+	{ // get unexistent
+		RefCountedRefPtr_t pFoo { pHash->Get ("foo") };
+		ASSERT_FALSE ( pFoo ) << "wasn't in hash";
+		EXPECT_TRUE ( !pFoo ) << "wasn't in hash";
+		EXPECT_TRUE ( pFoo==nullptr ) << "wasn't in hash";
+		ASSERT_EQ ( pRef->GetRefcount (), 2 );
+	}
+	ASSERT_EQ ( pRef->GetRefcount (), 2 );
+
+	{ // get null
+		RefCountedRefPtr_t pFoo { pHash->Get ( "hello" ) };
+		ASSERT_FALSE ( bool(pFoo)) << "null  in hash";
+		ASSERT_EQ ( pRef->GetRefcount (), 2 );
+	}
+	ASSERT_EQ ( pRef->GetRefcount (), 2 );
+
+	{ // get existing
+		RefCountedRefPtr_t pFoo { pHash->Get ( "world" ) };
+		ASSERT_EQ ( pFoo->GetRefcount (), 3 );
+		ASSERT_EQ ( pRef->GetRefcount (), 3 );
+	}
+	ASSERT_EQ ( pRef->GetRefcount (), 2 );
+}
+
+// TryAddThenGet of null value for of non-existent key
+TEST_F ( TGuardedHash_c, TryAddThenGet_null_to_unexistent )
+{
+	pHash->AddUniq ( nullptr, "hello" );
+	pHash->AddUniq ( pRef, "world" );
+	EXPECT_EQ ( pRef->GetRefcount (), 2 );
+
+	{ // get unexistent
+		RefCountedRefPtr_t pFoo { pHash->TryAddThenGet ( nullptr, "foo" ) };
+		ASSERT_FALSE ( pFoo ) << "wasn't in hash";
+
+		EXPECT_EQ ( pHash->GetLength (), 3 ) << "new value added";
+		ASSERT_TRUE ( pHash->Contains ( "foo" )) << "foo is inserted";
+		auto* pBar = pHash->Get ( "foo" );
+		ASSERT_EQ ( pBar,nullptr);
+	}
+	ASSERT_EQ ( pRef->GetRefcount (), 2 );
+}
+
+// TryAddThenGet of null value for key with null ptr
+TEST_F ( TGuardedHash_c, TryAddThenGet_null_to_null )
+{
+	pHash->AddUniq ( nullptr, "hello" );
+	pHash->AddUniq ( pRef, "world" );
+	EXPECT_EQ ( pRef->GetRefcount (), 2 );
+
+	{ // get unexistent
+		RefCountedRefPtr_t pFoo { pHash->TryAddThenGet ( nullptr, "hello" ) };
+		ASSERT_FALSE ( pFoo ) << "wasn't in hash";
+
+		EXPECT_EQ ( pHash->GetLength (), 2 ) << "not new value";
+		ASSERT_TRUE ( pHash->Contains ( "hello" )) << "hello is inserted";
+		auto* pBar = pHash->Get ( "hello" );
+		ASSERT_EQ ( pBar, nullptr );
+	}
+	ASSERT_EQ ( pRef->GetRefcount (), 2 );
+}
+
+// TryAddThenGet of null value for key with non-null ptr
+TEST_F ( TGuardedHash_c, TryAddThenGet_null_to_existing )
+{
+	pHash->AddUniq ( nullptr, "hello" );
+	pHash->AddUniq ( pRef, "world" );
+	EXPECT_EQ ( pRef->GetRefcount (), 2 ) << "me and hash";
+
+	{ // replace existing with nullptr
+		RefCountedRefPtr_t pFoo { pHash->TryAddThenGet ( nullptr, "world" ) };
+		EXPECT_TRUE ( pFoo ) << "wasn't in hash";
+
+		ASSERT_EQ ( pFoo->GetRefcount (), 3 );
+		ASSERT_EQ ( pRef->GetRefcount (), 3 ) << "me, hash and pFoo";
+	}
+	EXPECT_EQ ( pRef->GetRefcount (), 2 );
+}
+
+// TryAddThenGet of obj for unexisting key
+TEST_F ( TGuardedHash_c, TryAddThenGet_obj_to_unexistent )
+{
+	pHash->AddUniq ( nullptr, "hello" );
+	pHash->AddUniq ( pRef, "world" );
+	EXPECT_EQ ( pRef->GetRefcount (), 2 ) << "me and hash";
+
+	{
+		RefCountedRefPtr_t pFoo { pHash->TryAddThenGet ( pRef, "foo" ) };
+		ASSERT_TRUE ( pFoo ) << "wasn't in hash";
+
+		EXPECT_EQ ( pHash->GetLength (), 3 ) << "not new value";
+		ASSERT_TRUE ( pHash->Contains ( "foo" )) << "foo is inserted";
+
+		ASSERT_EQ ( pFoo->GetRefcount (), 4 );
+		ASSERT_EQ ( pRef->GetRefcount (), 4 ) << "me, 2hash and pFoo";
+	}
+	EXPECT_EQ ( pRef->GetRefcount (), 3 );
+}
+
+// TryAddThenGet of obj for null key
+TEST_F ( TGuardedHash_c, TryAddThenGet_obj_to_null )
+{
+	pHash->AddUniq ( nullptr, "hello" );
+	pHash->AddUniq ( pRef, "world" );
+	EXPECT_EQ ( pRef->GetRefcount (), 2 ) << "me and hash";
+
+	{
+		RefCountedRefPtr_t pFoo { pHash->TryAddThenGet ( pRef, "hello" ) };
+		ASSERT_FALSE ( pFoo ) << "wasn't in hash";
+
+		EXPECT_EQ ( pHash->GetLength (), 2 ) << "not new value";
+		ASSERT_EQ ( pRef->GetRefcount (), 2 ) << "me and hash";
+	}
+	EXPECT_EQ ( pRef->GetRefcount (), 2 );
+}
+
+// TryAddThenGet of obj for obj
+TEST_F ( TGuardedHash_c, TryAddThenGet_obj_to_obj )
+{
+	pHash->AddUniq ( pRef, "hello" );
+	pHash->AddUniq ( pRef, "world" );
+	EXPECT_EQ ( pRef->GetRefcount (), 3 ) << "me and 2hash";
+
+	{
+		RefCountedRefPtr_t pFoo { pHash->TryAddThenGet ( pRef, "hello" ) };
+		ASSERT_TRUE ( pFoo ) << "wasn't in hash";
+
+		EXPECT_EQ ( pHash->GetLength (), 2 ) << "not new value";
+		ASSERT_EQ ( pRef->GetRefcount (), 4 ) << "me, 2hash and pFoo";
+	}
+	EXPECT_EQ ( pRef->GetRefcount (), 3 ) << "me and 2hash";
+}
+
+// TryAddThenGet of obj for obj
+TEST_F ( TGuardedHash_c, TryAddThenGet_obj_to_obj2 )
+{
+	pHash->AddUniq ( pRef, "hello" );
+	EXPECT_EQ ( pRef->GetRefcount (), 2 ) << "me and hash";
+
+	{
+		RefCountedRefPtr_t pBar { new ISphRefcountedMT };
+		EXPECT_TRUE ( pBar->IsLast() );
+
+		RefCountedRefPtr_t pFoo { pHash->TryAddThenGet ( pBar, "hello" ) };
+		ASSERT_TRUE ( pBar->IsLast ()) << "pBar wasn't affected";
+
+		ASSERT_EQ ( pRef->GetRefcount (), 3 ) << "me, 2hash and pFoo";
+		ASSERT_EQ ( pFoo->GetRefcount (), 3 ) << "me, 2hash and pFoo";
+
+	}
+	EXPECT_EQ ( pRef->GetRefcount (), 2 ) << "me and hash";
 }

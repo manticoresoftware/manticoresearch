@@ -2191,7 +2191,6 @@ bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName
 
 	// finally add the index to the hash of enabled.
 	g_pLocalIndexes->AddOrReplace ( pServed, sIndexName );
-	pServed->AddRef ();
 	g_pDisabledIndexes->Delete ( sIndexName );
 
 	return true;

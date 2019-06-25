@@ -81,7 +81,7 @@ TEST ( searchd_stuff, crash_on_exists )
 
 		ServedDesc_t tDesc;
 		tDesc.m_sIndexPath.SetSprintf ( "/tmp/very-long-path/goes/here/%s", g_dLocals[i].cstr () );
-		g_pLocals->AddUniq ( new ServedIndex_c (tDesc), g_dLocals[i] );
+		g_pLocals->AddUniq ( RefCountedRefPtr_t ( new ServedIndex_c (tDesc) ), g_dLocals[i] );
 	}
 
 	SphThread_t th1, th2, th3, th4, th5, thRot;

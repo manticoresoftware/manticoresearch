@@ -1295,19 +1295,17 @@ void ReplicationAbort()
 // delete all clusters on daemon shutdown
 void ReplicateClustersDelete()
 {
-	wsrep_t * pProvider = nullptr;
-	void * pIt = nullptr;
-	while ( g_hClusters.IterateNext ( &pIt ) )
+	void* pIt = nullptr;
+	while ( g_hClusters.IterateNext ( &pIt ))
 	{
-		pProvider = g_hClusters.IterateGet ( &pIt )->m_pProvider;
-		auto * pCluster = g_hClusters.IterateGet ( &pIt );
+		auto* pCluster = SmallStringHash_T<ReplicationCluster_t *>::IterateGet ( &pIt );
+		auto pProvider = pCluster->m_pProvider;
 		ReplicateClusterDone ( pCluster );
 		SafeDelete( pCluster );
+		if ( pProvider )
+			wsrep_unload( pProvider );
 	}
-	g_hClusters.Reset();
-
-	if ( pProvider )
-		wsrep_unload ( pProvider );
+	g_hClusters.Reset ();
 }
 
 // clean up cluster prior to start it again
@@ -3439,8 +3437,12 @@ bool RemoteClusterDelete ( const CSphString & sCluster, CSphString & sError )
 		pCluster->m_dIndexHashes.Reset();
 	}
 
+	wsrep_t* pProvider = pCluster->m_pProvider;
 	ReplicateClusterDone ( pCluster );
 	SafeDelete ( pCluster );
+
+	if ( pProvider )
+		wsrep_unload ( pProvider );
 
 	return true;
 }

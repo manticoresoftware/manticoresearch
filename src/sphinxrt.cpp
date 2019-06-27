@@ -6821,6 +6821,7 @@ void RtIndex_c::Optimize()
 	}
 
 	int64_t tmStart = sphMicroTimer();
+	sphLogDebug( "rt optimize: index %s: optimization started",  m_sIndexName.cstr() );
 
 	CSphScopedLock<CSphMutex> tOptimizing ( m_tOptimizingLock );
 	m_bOptimizing = true;

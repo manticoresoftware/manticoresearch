@@ -60,12 +60,13 @@ access_doclists
 
 This mode defines how index's doclists file is accessed. Optional, default is ``file``.
 
-Possible values are ``file`` and ``mmap``. Refer to :ref:`index_files_access` for detailed explanation of the values.
+Possible values are ``file``, ``mmap``, and ``mlock``. Refer to :ref:`index_files_access` for detailed explanation of the values.
 
 Search daemon can read data from index's doclists file in 2 modes. ``file`` reader provides optimal performance
 and can be tuned with options :ref:`read_buffer_docs` and :ref:`read_buffer_hits`. ``mmap`` allows to map the file
 into memory as :ref:`access_plain_attrs` does and can provide significant performance improvement in case
-you have enough free memory and all index files can fit in ram.
+you have enough free memory and all index files can fit in ram. ``mlock`` option uses mlock(2) privileged call
+to additionally lock doclists in memory.
 
 .. code-block:: ini
 
@@ -81,12 +82,13 @@ access_hitlists
 
 This mode defines how index's hitlists file is accessed. Optional, default is ``file``.
 
-Possible values are ``file`` and ``mmap``. Refer to :ref:`index_files_access` for detailed explanation of the values.
+Possible values are ``file``, ``mmap``, and ``mlock``. Refer to :ref:`index_files_access` for detailed explanation of the values.
 
 Search daemon can read data from index's hitlists file in 2 modes. ``file`` reader provides optimal performance
 and can be tuned with options :ref:`read_buffer_docs` and :ref:`read_buffer_hits`. ``mmap`` allows to map the file
 into memory as :ref:`access_plain_attrs` does and can provide significant performance improvement in case
-you have enough free memory and all index files can fit in ram.
+you have enough free memory and all index files can fit in ram. ``mlock`` option uses mlock(2) privileged call
+to additionally lock hitlists in memory.
 
 .. code-block:: ini
 

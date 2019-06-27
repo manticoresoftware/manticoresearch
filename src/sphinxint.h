@@ -2366,29 +2366,28 @@ struct SchemaItemVariant_t
 using SchemaItemHash_c = OpenHash_T<SchemaItemVariant_t, uint64_t, HashFunc_Int64_t>;
 
 template <typename T>
-BYTE PrereadMapping ( const char * sIndexName, const char * sFor, bool bMlock, bool bOnDisk, CSphBufferTrait<T> & tBuf, const BYTE * pStart = nullptr )
+BYTE PrereadMapping ( const char * sIndexName, const char * sFor, bool bMlock, bool bOnDisk,
+	CSphBufferTrait<T> & tBuf )
 {
+	static volatile BYTE g_uHash;
 	if ( bOnDisk || tBuf.IsEmpty() )
-		return 0xff;
+		return g_uHash;
 
-	const BYTE * pCur = pStart ? pStart : (BYTE *)tBuf.GetWritePtr();
+	const BYTE * pCur = (BYTE *)tBuf.GetWritePtr();
 	const BYTE * pEnd = (BYTE *)tBuf.GetWritePtr() + tBuf.GetLengthBytes();
 	const int iHalfPage = 2048;
 
-	BYTE uHash = 0xff;
+	g_uHash = 0xff;
 	for ( ; pCur<pEnd; pCur+=iHalfPage )
-		uHash ^= *pCur;
-	uHash ^= *(pEnd-1);
+		g_uHash ^= *pCur;
+	g_uHash ^= *(pEnd-1);
 
 	// we want to prevent PrereadMapping() from being aggressively optimized away
 	// volatile return values *should* normally achieve that
-	volatile BYTE uRes = uHash;
-
 	CSphString sWarning;
 	if ( bMlock && !tBuf.MemLock ( sWarning ) )
 		sphWarning ( "index '%s': %s for %s", sIndexName, sWarning.cstr(), sFor );
-
-	return uRes;
+	return g_uHash;
 }
 
 // crash related code

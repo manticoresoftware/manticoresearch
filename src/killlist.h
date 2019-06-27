@@ -66,7 +66,7 @@ public:
 	bool		Flush ( bool bWaitComplete, CSphString & sError ) const;
 	bool		Prealloc ( DWORD uRows, const CSphString & sFilename, CSphString & sError );
 	void		Dealloc();
-	BYTE		Preread ( const char * sIndexName, const char * sFor, bool bMlock );
+	void		Preread ( const char * sIndexName, const char * sFor, bool bMlock );
 
 private:
 	CSphMappedBuffer<DWORD> m_tData;

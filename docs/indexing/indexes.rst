@@ -186,10 +186,10 @@ Here is a table which can help you select your desired mode:
 |                         | decide whether to really load it to RAM or not and can easily swap it    |                                              |                            |
 |                         | out (default)                                                            |                                              |                            |
 +-------------------------+-----------------------------------+--------------------------------------+----------------------------------------------+----------------------------+
-| .spd (doc lists)        | access_doclists = file (default)  | access_doclists = mmap, may be still | no                                           | no                         |
+| .spd (doc lists)        | access_doclists = file (default)  | access_doclists = mmap, may be still | no                                           | access_doclists = mlock    |
 |                         |                                   | swapped out by OS                    |                                              |                            |
 +-------------------------+-----------------------------------+--------------------------------------+----------------------------------------------+----------------------------+
-| .spp (hit lists)        | access_hitlists = file (default)  | access_hitlists = mmap, may be still | no                                           | no                         |
+| .spp (hit lists)        | access_hitlists = file (default)  | access_hitlists = mmap, may be still | no                                           | access_hitlists = mlock    |
 |                         |                                   | swapped out by OS                    |                                              |                            |
 +-------------------------+-----------------------------------+--------------------------------------+----------------------------------------------+----------------------------+
 

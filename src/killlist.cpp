@@ -151,11 +151,10 @@ bool DeadRowMap_Disk_c::Prealloc ( DWORD uRows, const CSphString & sFilename, CS
 }
 
 
-BYTE DeadRowMap_Disk_c::Preread ( const char * sIndexName, const char * sFor, bool bMlock )
+void DeadRowMap_Disk_c::Preread ( const char * sIndexName, const char * sFor, bool bMlock )
 {
-	BYTE uRes = PrereadMapping ( sIndexName, sFor, bMlock, false, m_tData );
+	PrereadMapping ( sIndexName, sFor, bMlock, false, m_tData );
 	CheckForDead ( m_tData.GetWritePtr(), m_tData.GetWritePtr()+m_tData.GetLength() );
-	return uRes;
 }
 
 

@@ -3276,7 +3276,8 @@ enum class FileAccess_e
 	FILE,
 	MMAP,
 	MMAP_PREREAD,
-	MLOCK
+	MLOCK,
+	UNKNOWN
 };
 
 bool IsMlock ( FileAccess_e eType );
@@ -3287,12 +3288,12 @@ int GetReadBuffer ( int iBuf );
 
 struct FileAccessSettings_t
 {
-	FileAccess_e	m_eAttr = FileAccess_e::MMAP_PREREAD;
-	FileAccess_e	m_eBlob = FileAccess_e::MMAP_PREREAD;
-	FileAccess_e	m_eDoclist = FileAccess_e::FILE;
-	FileAccess_e	m_eHitlist = FileAccess_e::FILE;
-	int				m_iReadBufferDocList = 0;
-	int				m_iReadBufferHitList = 0;
+	FileAccess_e	m_eAttr;
+	FileAccess_e	m_eBlob;
+	FileAccess_e	m_eDoclist;
+	FileAccess_e	m_eHitlist;
+	int				m_iReadBufferDocList;
+	int				m_iReadBufferHitList;
 
 	bool operator== ( const FileAccessSettings_t & tOther ) const;
 	bool operator!= ( const FileAccessSettings_t & tOther ) const;

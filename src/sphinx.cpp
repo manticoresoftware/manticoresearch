@@ -766,9 +766,11 @@ protected:
 	~MMapFactory_c() final {} // d-tr only by Release
 
 public:
-	MMapFactory_c ( const CSphString & sFile, CSphString& sError )
+	MMapFactory_c ( const CSphString & sFile, CSphString& sError, FileAccess_e eAccess )
 	{
 		SetValid ( m_tBackendFile.Setup ( sFile, sError ) );
+		if ( eAccess==FileAccess_e::MLOCK )
+			m_tBackendFile.MemLock( sError );
 	}
 
 	SphOffset_t GetFilesize () const final
@@ -797,15 +799,15 @@ public:
 	}
 };
 
-static DataReaderFactory_c * NewProxyReader ( const CSphString & sFile, CSphString & sError, DataReaderFactory_c::Kind_e eKind, int iReadBuffer, bool bOnDisk )
+static DataReaderFactory_c * NewProxyReader ( const CSphString & sFile, CSphString & sError, DataReaderFactory_c::Kind_e eKind, int iReadBuffer, FileAccess_e eAccess )
 {
 	auto eState = StateByKind ( eKind );
 	DataReaderFactory_c * pReader = nullptr;
 
-	if ( bOnDisk )
+	if ( eAccess==FileAccess_e::FILE )
 		pReader = new DirectFactory_c ( sFile, sError, eState, iReadBuffer, g_iReadUnhinted );
 	else
-		pReader = new MMapFactory_c ( sFile, sError );
+		pReader = new MMapFactory_c ( sFile, sError, eAccess );
 
 	if ( !pReader->IsValid ())
 		SafeRelease ( pReader )
@@ -12644,14 +12646,14 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 	DataReaderFactoryPtr_c tSrcDocs {
 		NewProxyReader ( pSrcIndex->GetIndexFileName ( SPH_EXT_SPD ), sError,
-			DataReaderFactory_c::DOCS, pSrcIndex->m_tFiles.m_iReadBufferDocList, true )
+			DataReaderFactory_c::DOCS, pSrcIndex->m_tFiles.m_iReadBufferDocList, FileAccess_e::FILE )
 	};
 	if ( !tSrcDocs )
 		return false;
 
 	DataReaderFactoryPtr_c tSrcHits {
 		NewProxyReader ( pSrcIndex->GetIndexFileName ( SPH_EXT_SPP ), sError,
-			DataReaderFactory_c::HITS, pSrcIndex->m_tFiles.m_iReadBufferHitList, true  )
+			DataReaderFactory_c::HITS, pSrcIndex->m_tFiles.m_iReadBufferHitList, FileAccess_e::FILE  )
 	};
 	if ( !tSrcHits )
 		return false;
@@ -12661,14 +12663,14 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 	DataReaderFactoryPtr_c tDstDocs {
 		NewProxyReader ( pDstIndex->GetIndexFileName ( SPH_EXT_SPD ), sError,
-			DataReaderFactory_c::DOCS, pDstIndex->m_tFiles.m_iReadBufferDocList, true )
+			DataReaderFactory_c::DOCS, pDstIndex->m_tFiles.m_iReadBufferDocList, FileAccess_e::FILE )
 	};
 	if ( !tDstDocs )
 		return false;
 
 	DataReaderFactoryPtr_c tDstHits {
 		NewProxyReader ( pDstIndex->GetIndexFileName ( SPH_EXT_SPP ), sError,
-			DataReaderFactory_c::HITS, pDstIndex->m_tFiles.m_iReadBufferHitList, true )
+			DataReaderFactory_c::HITS, pDstIndex->m_tFiles.m_iReadBufferHitList, FileAccess_e::FILE )
 	};
 	if ( !tDstHits )
 		return false;
@@ -14846,13 +14848,15 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 
 	// open files
 	DataReaderFactoryPtr_c pDoclist {
-		NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), m_sLastError, DataReaderFactory_c::DOCS, m_tFiles.m_iReadBufferDocList, true )
+		NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), m_sLastError, DataReaderFactory_c::DOCS,
+			m_tFiles.m_iReadBufferDocList, FileAccess_e::FILE )
 	};
 	if ( !pDoclist )
 		sphDie ( "failed to open doclist: %s", m_sLastError.cstr() );
 
 	DataReaderFactoryPtr_c pHitlist {
-		NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), m_sLastError, DataReaderFactory_c::HITS, m_tFiles.m_iReadBufferHitList, true )
+		NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), m_sLastError, DataReaderFactory_c::HITS,
+			m_tFiles.m_iReadBufferHitList, FileAccess_e::FILE )
 	};
 	if ( !pHitlist )
 		sphDie ( "failed to open hitlist: %s", m_sLastError.cstr ());
@@ -14990,7 +14994,8 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 	if ( m_bKeepFilesOpen || m_tFiles.m_eDoclist!=FileAccess_e::FILE )
 	{
 		m_pDoclistFile = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), m_sLastError,
-										  DataReaderFactory_c::DOCS, m_tFiles.m_iReadBufferDocList, ( m_tFiles.m_eDoclist==FileAccess_e::FILE ) );
+										  DataReaderFactory_c::DOCS, m_tFiles.m_iReadBufferDocList,
+										  m_tFiles.m_eDoclist );
 		if ( !m_pDoclistFile )
 			return false;
 	}
@@ -14999,7 +15004,8 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 	if ( m_bKeepFilesOpen || m_tFiles.m_eHitlist!=FileAccess_e::FILE )
 	{
 		m_pHitlistFile = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), m_sLastError,
-										  DataReaderFactory_c::HITS, m_tFiles.m_iReadBufferHitList, ( m_tFiles.m_eHitlist==FileAccess_e::FILE ) );
+										  DataReaderFactory_c::HITS, m_tFiles.m_iReadBufferHitList,
+										  m_tFiles.m_eHitlist );
 		if ( !m_pHitlistFile )
 			return false;
 	}
@@ -15100,18 +15106,17 @@ void CSphIndex_VLN::Preread()
 	// read everything
 	///////////////////
 
-	volatile BYTE uRead = 0; // just need all side-effects
-	uRead ^= PrereadMapping ( m_sIndexName.cstr(), "attributes", IsMlock ( m_tFiles.m_eAttr ), IsOndisk ( m_tFiles.m_eAttr ), m_tAttr );
-	uRead ^= PrereadMapping ( m_sIndexName.cstr(), "blobs", IsMlock ( m_tFiles.m_eBlob ), IsOndisk ( m_tFiles.m_eBlob ), m_tBlobAttrs );
-	uRead ^= PrereadMapping ( m_sIndexName.cstr(), "skip-list", IsMlock ( m_tFiles.m_eAttr ), false, m_tSkiplists );
-	uRead ^= PrereadMapping ( m_sIndexName.cstr(), "dictionary", IsMlock ( m_tFiles.m_eAttr ), false, m_tWordlist.m_tBuf );
-	uRead ^= PrereadMapping ( m_sIndexName.cstr(), "docid-lookup", IsMlock ( m_tFiles.m_eAttr ), false, m_tDocidLookup );
-	uRead ^= m_tDeadRowMap.Preread ( m_sIndexName.cstr(), "kill-list", IsMlock ( m_tFiles.m_eAttr ) );
+	PrereadMapping ( m_sIndexName.cstr(), "attributes", IsMlock ( m_tFiles.m_eAttr ), IsOndisk ( m_tFiles.m_eAttr ), m_tAttr );
+	PrereadMapping ( m_sIndexName.cstr(), "blobs", IsMlock ( m_tFiles.m_eBlob ), IsOndisk ( m_tFiles.m_eBlob ), m_tBlobAttrs );
+	PrereadMapping ( m_sIndexName.cstr(), "skip-list", IsMlock ( m_tFiles.m_eAttr ), false, m_tSkiplists );
+	PrereadMapping ( m_sIndexName.cstr(), "dictionary", IsMlock ( m_tFiles.m_eAttr ), false, m_tWordlist.m_tBuf );
+	PrereadMapping ( m_sIndexName.cstr(), "docid-lookup", IsMlock ( m_tFiles.m_eAttr ), false, m_tDocidLookup );
+	m_tDeadRowMap.Preread ( m_sIndexName.cstr(), "kill-list", IsMlock ( m_tFiles.m_eAttr ) );
 
 	PopulateHistograms();
 
 	m_bPassedRead = true;
-	sphLogDebug ( "Preread successfully finished, hash=%u", (DWORD)uRead );
+	sphLogDebug ( "Preread successfully finished" );
 }
 
 
@@ -16885,7 +16890,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	if ( !pDoclist )
 	{
 		pDoclist = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), pResult->m_sError,
-									 DataReaderFactory_c::DOCS, m_tFiles.m_iReadBufferDocList, true );
+			DataReaderFactory_c::DOCS, m_tFiles.m_iReadBufferDocList, FileAccess_e::FILE );
 		if ( !pDoclist )
 			return false;
 	}
@@ -16893,7 +16898,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	if ( !pHitlist )
 	{
 		pHitlist = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), pResult->m_sError,
-									 DataReaderFactory_c::HITS, m_tFiles.m_iReadBufferHitList, true );
+			DataReaderFactory_c::HITS, m_tFiles.m_iReadBufferHitList, FileAccess_e::FILE );
 		if ( !pHitlist )
 			return false;
 	}
@@ -18275,13 +18280,13 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 	// use file reader during debug check to lower memory pressure
 	tCtx.m_pDocsReader = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), sError,
-		DataReaderFactory_c::DOCS, m_tFiles.m_iReadBufferDocList, true );
+		DataReaderFactory_c::DOCS, m_tFiles.m_iReadBufferDocList, FileAccess_e::FILE );
 	if ( !tCtx.m_pDocsReader )
 		tReporter.Fail ( "unable to open doclist: %s", sError.cstr() );
 
 	// use file reader during debug check to lower memory pressure
 	tCtx.m_pHitsReader = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), sError,
-		DataReaderFactory_c::HITS, m_tFiles.m_iReadBufferHitList, true );
+		DataReaderFactory_c::HITS, m_tFiles.m_iReadBufferHitList, FileAccess_e::FILE );
 	if ( !tCtx.m_pHitsReader )
 		tReporter.Fail ( "unable to open hitlist: %s", sError.cstr() );
 

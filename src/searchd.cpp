@@ -19053,41 +19053,51 @@ void ConfigureTemplateIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIn
 	pIdx->m_iExpandKeywords = ParseKeywordExpansion ( hIndex.GetStr( "expand_keywords", "" ) );
 }
 
-const char * g_sFileAccessNames[] = { "file", "mmap", "mmap_preread", "mlock" };
-
-static FileAccess_e ParseFileAccess ( const CSphConfigSection & hIndex, const char * sKey, FileAccess_e eDefault )
+static const char * FileAccessName ( FileAccess_e eValue )
 {
-	const char * sVal = hIndex.GetStr ( sKey, "" );
-	if ( !sVal || !*sVal )
-		return eDefault;
-
-	if ( strcmp ( sVal, "file" )==0 )
-		return FileAccess_e::FILE;
-	else if ( strcmp ( sVal, "mmap" )==0 )
-		return FileAccess_e::MMAP;
-	else if ( strcmp ( sVal, "mmap_preread" )==0 )
-		return FileAccess_e::MMAP_PREREAD;
-	else if ( strcmp ( sVal, "mlock" )==0 )
-		return FileAccess_e::MLOCK;
-	else
+	switch ( eValue )
 	{
-		sphWarning ( "%s unknown value %s, use default %s", sKey, sVal, g_sFileAccessNames[(int)eDefault] );
-		return eDefault;
+		case FileAccess_e::FILE : return "file";
+		case FileAccess_e::MMAP : return "mmap";
+		case FileAccess_e::MMAP_PREREAD : return "mmap_preread";
+		case FileAccess_e::MLOCK : return "mlock";
+		case FileAccess_e::UNKNOWN : return "unknown";
 	}
+	assert ( 0 && "Not all values of FileAccess_e named");
 }
 
-static void GetFileAccess (  const CSphConfigSection & hIndex, const char * sKey, FileAccess_e & eValue, bool bList, FileAccess_e eDefault )
+static FileAccess_e ParseFileAccess ( CSphString sVal )
+{
+	if ( sVal=="file" ) return FileAccess_e::FILE;
+	if ( sVal=="mmap" )	return FileAccess_e::MMAP;
+	if ( sVal=="mmap_preread" ) return FileAccess_e::MMAP_PREREAD;
+	if ( sVal=="mlock" ) return FileAccess_e::MLOCK;
+	return FileAccess_e::UNKNOWN;
+}
+
+static FileAccess_e GetFileAccess (  const CSphConfigSection & hIndex, const char * sKey,
+	bool bList, FileAccess_e eDefault )
 {
 	// should use original value as default due to deprecated options
-	eValue = ParseFileAccess ( hIndex, sKey, eValue );
-
-	// but then check might reset invalid value to real default
-	if ( ( bList && eValue!=FileAccess_e::FILE && eValue!=FileAccess_e::MMAP ) ||
-		( !bList && eValue!=FileAccess_e::MMAP && eValue!=FileAccess_e::MMAP_PREREAD && eValue!=FileAccess_e::MLOCK ) )
+	auto eValue = eDefault;
+	auto sVal = hIndex.GetStr( sKey, nullptr );
+	if ( sVal )
+		eValue = ParseFileAccess ( sVal );
+	if ( eValue==FileAccess_e::UNKNOWN )
 	{
-		sphWarning ( "%s invalid value %s, use default %s", sKey, g_sFileAccessNames[(int)eValue], g_sFileAccessNames[(int)eDefault] );
+		sphWarning( "%s unknown value %s, use default %s", sKey, sVal, FileAccessName( eDefault ));
 		eValue = eDefault;
 	}
+
+	// but then check might reset invalid value to real default
+	if ( ( bList && eValue==FileAccess_e::MMAP_PREREAD) ||
+		( !bList && eValue==FileAccess_e::FILE) )
+	{
+		sphWarning( "%s invalid value %s, use default %s", sKey,
+			FileAccessName( eValue ), FileAccessName( eDefault ));
+		return eDefault;
+	}
+	return eValue;
 }
 
 void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex )
@@ -19095,30 +19105,31 @@ void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex
 	ConfigureTemplateIndex ( pIdx, hIndex);
 	pIdx->m_bPreopen = ( hIndex.GetInt ( "preopen", 0 )!=0 );
 	pIdx->m_sGlobalIDFPath = hIndex.GetStr ( "global_idf" );
+	auto& tFileSettings = pIdx->m_tFileAccessSettings;
 
-	pIdx->m_tFileAccessSettings = g_tDefaultFA;
+	tFileSettings = g_tDefaultFA;
 	// DEPRICATED - remove these 2 options
 	if ( hIndex.GetInt ( "mlock", 0 )==1 )
 	{
-		pIdx->m_tFileAccessSettings.m_eAttr = FileAccess_e::MLOCK;
-		pIdx->m_tFileAccessSettings.m_eBlob = FileAccess_e::MLOCK;
+		tFileSettings.m_eAttr = FileAccess_e::MLOCK;
+		tFileSettings.m_eBlob = FileAccess_e::MLOCK;
 	}
 	if ( hIndex.Exists ( "ondisk_attrs" ) )
 	{
 		bool bOnDiskAttrs = ( hIndex.GetInt ( "ondisk_attrs", 0 )==1 );
-		bool bOnDiskPools = ( strcmp ( hIndex.GetStr ( "ondisk_attrs", "" ), "pool" )==0 );
+		bool bOnDiskPools = ( strcmp ( hIndex.GetStr ( "ondisk_attrs" ), "pool" )==0 );
 
 		if ( bOnDiskAttrs || bOnDiskPools )
-			pIdx->m_tFileAccessSettings.m_eAttr = FileAccess_e::MMAP;
+			tFileSettings.m_eAttr = FileAccess_e::MMAP;
 		if ( bOnDiskPools )
-			pIdx->m_tFileAccessSettings.m_eBlob = FileAccess_e::MMAP;
+			tFileSettings.m_eBlob = FileAccess_e::MMAP;
 	}
 
 	// need to keep value from deprecated options for some time - use it as defaults on parse for now
-	GetFileAccess ( hIndex, "access_plain_attrs", pIdx->m_tFileAccessSettings.m_eAttr, false, g_tDefaultFA.m_eAttr );
-	GetFileAccess ( hIndex, "access_blob_attrs", pIdx->m_tFileAccessSettings.m_eBlob, false, g_tDefaultFA.m_eBlob );
-	GetFileAccess ( hIndex, "access_doclists", pIdx->m_tFileAccessSettings.m_eDoclist, true, g_tDefaultFA.m_eDoclist );
-	GetFileAccess ( hIndex, "access_hitlists", pIdx->m_tFileAccessSettings.m_eHitlist, true, g_tDefaultFA.m_eHitlist );
+	tFileSettings.m_eAttr = GetFileAccess( hIndex, "access_plain_attrs", false, tFileSettings.m_eAttr );
+	tFileSettings.m_eBlob = GetFileAccess( hIndex, "access_blob_attrs", false, tFileSettings.m_eBlob );
+	tFileSettings.m_eDoclist = GetFileAccess( hIndex, "access_doclists", true, tFileSettings.m_eDoclist );
+	tFileSettings.m_eHitlist = GetFileAccess( hIndex, "access_hitlists", true, tFileSettings.m_eHitlist );
 
 	// inherit global value, might be absent - 0
 	// set correct value via GetReadBuffer
@@ -23208,12 +23219,15 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_iExpansionLimit = hSearchd.GetInt ( "expansion_limit", 0 );
 
 	// initialize buffering settings
-	auto iReadUnhinted = hSearchd.GetSize ( "read_unhinted", 0 );
-	SetUnhintedBuffer ( iReadUnhinted );
-
-	int iReadBuffer = hSearchd.GetSize ( "read_buffer", 0 );
+	SetUnhintedBuffer ( hSearchd.GetSize( "read_unhinted", 32 * 1024 ) );
+	int iReadBuffer = hSearchd.GetSize ( "read_buffer", 256*1024 );
 	g_tDefaultFA.m_iReadBufferDocList = hSearchd.GetSize ( "read_buffer_docs", iReadBuffer );
 	g_tDefaultFA.m_iReadBufferHitList = hSearchd.GetSize ( "read_buffer_hits", iReadBuffer );
+	g_tDefaultFA.m_eDoclist = GetFileAccess( hSearchd, "access_doclists", true, FileAccess_e::FILE );
+	g_tDefaultFA.m_eHitlist = GetFileAccess( hSearchd, "access_hitlists", true, FileAccess_e::FILE );
+
+	g_tDefaultFA.m_eAttr = FileAccess_e::MMAP_PREREAD;
+	g_tDefaultFA.m_eBlob = FileAccess_e::MMAP_PREREAD;
 
 	bool bOnDiskAttrs = ( hSearchd.GetInt ( "ondisk_attrs_default", 0 )==1 );
 	bool bOnDiskPools = ( strcmp ( hSearchd.GetStr ( "ondisk_attrs_default", "" ), "pool" )==0 );
@@ -23222,11 +23236,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	if ( bOnDiskPools )
 		g_tDefaultFA.m_eBlob = FileAccess_e::MMAP;
 
-	FileAccessSettings_t tDefaultFA;
-	GetFileAccess ( hSearchd, "access_plain_attrs", g_tDefaultFA.m_eAttr, false, tDefaultFA.m_eAttr );
-	GetFileAccess ( hSearchd, "access_blob_attrs", g_tDefaultFA.m_eBlob, false, tDefaultFA.m_eBlob );
-	GetFileAccess ( hSearchd, "access_doclists", g_tDefaultFA.m_eDoclist, true, tDefaultFA.m_eDoclist );
-	GetFileAccess ( hSearchd, "access_hitlists", g_tDefaultFA.m_eHitlist, true, tDefaultFA.m_eHitlist );
+	g_tDefaultFA.m_eAttr = GetFileAccess( hSearchd, "access_plain_attrs", false, g_tDefaultFA.m_eAttr );
+	g_tDefaultFA.m_eBlob = GetFileAccess( hSearchd, "access_blob_attrs", false, g_tDefaultFA.m_eBlob );
 
 	if ( hSearchd("subtree_docs_cache") )
 		g_iMaxCachedDocs = hSearchd.GetSize ( "subtree_docs_cache", g_iMaxCachedDocs );

@@ -93,7 +93,7 @@ in agent definition means always at most 2 tries, no mean if you have 1 or 10 mi
 agent_retry_delay
 ~~~~~~~~~~~~~~~~~
 
-Integer, in milliseconds. Specifies the delay sphinx rest before
+Integer, in milliseconds (or :ref:`suffixed <special_suffixes>`). Specifies the delay sphinx rest before
 retrying to query a remote agent in case it fails. The value has sense
 only if non-zero
 :ref:`agent_retry_count <agent_retry_count>`
@@ -116,7 +116,7 @@ disk.
 
 It is also possible to tell ``searchd`` to periodically write these changes
 back to disk to avoid them being lost. The time between those intervals
-is set with ``attr_flush_period``, in seconds.
+is set with ``attr_flush_period``, in seconds (or :ref:`suffixed <special_suffixes>`).
 
 It defaults to 0, which disables the periodic flushing, but flushing
 will still occur at normal shut-down.
@@ -228,7 +228,7 @@ Example:
 client_timeout
 ~~~~~~~~~~~~~~
 
-Maximum time to wait between requests (in seconds) when using persistent
+Maximum time to wait between requests (in seconds or :ref:`suffixed <special_suffixes>`) when using persistent
 connections. Optional, default is five minutes.
 
 Example:
@@ -237,7 +237,7 @@ Example:
 .. code-block:: ini
 
 
-    client_timeout = 3600
+    client_timeout = 1h
 
 .. _collation_libc_locale:
 
@@ -406,7 +406,7 @@ daemon) in local TZ.
 ha_period_karma
 ~~~~~~~~~~~~~~~
 
-Agent mirror statistics window size, in seconds. Optional, default is
+Agent mirror statistics window size, in seconds (or :ref:`suffixed <special_suffixes>`). Optional, default is
 60.
 
 For a distributed index with agent mirrors in it (see more in :ref:`remote
@@ -432,14 +432,14 @@ Example:
 .. code-block:: ini
 
 
-    ha_period_karma = 120
+    ha_period_karma = 2m
 
 .. _ha_ping_interval:
 
 ha_ping_interval
 ~~~~~~~~~~~~~~~~
 
-Interval between agent mirror pings, in milliseconds. Optional, default
+Interval between agent mirror pings, in milliseconds (or :ref:`suffixed <special_suffixes>`). Optional, default
 is 1000.
 
 For a distributed index with agent mirrors in it (see more in :ref:`remote
@@ -456,7 +456,7 @@ Example:
 .. code-block:: ini
 
 
-    ha_ping_interval = 0
+    ha_ping_interval = 3s
 
 .. _hostname_lookup:
 
@@ -1030,7 +1030,9 @@ qcache_thresh_msec
 
 Integer, in milliseconds. The minimum wall time threshold for a query
 result to be cached. Defaults to 3000, or 3 seconds. 0 means cache
-everything. Refer to :ref:`query cache <query_cache>` for details.
+everything. Refer to :ref:`query cache <query_cache>` for details. This value also may
+be expressed with time :ref:`suffix <special_suffixes>`, but use it with care and don't
+confuse yourself with name of the value itself, containing '_msec'.
 
 .. _qcache_ttl_sec:
 
@@ -1039,7 +1041,9 @@ qcache_ttl_sec
 
 Integer, in seconds. The expiration period for a cached result set.
 Defaults to 60, or 1 minute. The minimum possible value is 1 second.
-Refer to :ref:`query cache <query_cache>` for details.
+Refer to :ref:`query cache <query_cache>` for details. This value also may
+be expressed with time :ref:`suffix <special_suffixes>`, but use it with care and don't
+confuse yourself with name of the value itself, containing '_sec'.
 
 .. _query_log_format:
 
@@ -1072,7 +1076,9 @@ query_log_min_msec
 Limit (in milliseconds) that prevents the query from being written to
 the query log. Optional, default is 0 (all queries are written to the
 query log). This directive specifies that only queries with execution
-times that exceed the specified limit will be logged.
+times that exceed the specified limit will be logged (this value also may
+be expressed with time :ref:`suffix <special_suffixes>`, but use it with care and don't
+confuse yourself with name of the value itself, containing '_msec').
 
 .. _query_log:
 
@@ -1193,7 +1199,7 @@ Example:
 read_timeout
 ~~~~~~~~~~~~
 
-Network client request read timeout, in seconds. Optional, default is 5
+Network client request read timeout, in seconds (or :ref:`suffixed <special_suffixes>`). Optional, default is 5
 seconds. ``searchd`` will forcibly close the client connections which
 fail to send a query within this timeout.
 
@@ -1236,7 +1242,7 @@ Example:
 rt_flush_period
 ~~~~~~~~~~~~~~~
 
-RT indexes RAM chunk flush check period, in seconds. Optional, default
+RT indexes RAM chunk flush check period, in seconds (or :ref:`suffixed <special_suffixes>`). Optional, default
 is 10 hours.
 
 Actively updated RT indexes that however fully fit in RAM chunks can
@@ -1381,7 +1387,7 @@ Example:
 shutdown_timeout
 ~~~~~~~~~~~~~~~~
 
-searchd –stopwait wait time, in seconds. Optional, default is 3 seconds.
+searchd –stopwait wait time, in seconds (or :ref:`suffixed <special_suffixes>`). Optional, default is 3 seconds.
 
 When you run searchd –stopwait your daemon needs to perform some
 activities before stopping like finishing queries, flushing RT RAM
@@ -1396,7 +1402,7 @@ Example:
 .. code-block:: ini
 
 
-    shutdown_timeout = 5 # wait for up to 5 seconds
+    shutdown_timeout = 1m # wait for up to 60 seconds
 
 .. _shutdown_token:
 
@@ -1469,7 +1475,7 @@ Example:
 sphinxql_timeout
 ~~~~~~~~~~~~~~~~
 
-Maximum time to wait between requests (in seconds) when using sphinxql
+Maximum time to wait between requests (in seconds, or :ref:`suffixed <special_suffixes>`) when using sphinxql
 interface. Optional, default is 15 minutes.
 
 Example:
@@ -1478,7 +1484,7 @@ Example:
 .. code-block:: ini
 
 
-    sphinxql_timeout = 900
+    sphinxql_timeout = 15m
 
 .. _subtree_docs_cache:
 

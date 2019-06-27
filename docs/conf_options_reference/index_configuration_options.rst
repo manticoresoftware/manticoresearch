@@ -129,7 +129,7 @@ Example:
 agent_connect_timeout
 ~~~~~~~~~~~~~~~~~~~~~
 
-Remote agent connection timeout, in milliseconds. Optional, default is
+Remote agent connection timeout, in milliseconds (or :ref:`suffixed <special_suffixes>`). Optional, default is
 1000 (ie. 1 second).
 
 When connecting to remote agents, ``searchd`` will wait at most this
@@ -189,7 +189,7 @@ Example:
 agent_query_timeout
 ~~~~~~~~~~~~~~~~~~~
 
-Remote agent query timeout, in milliseconds. Optional, default is 3000
+Remote agent query timeout, in milliseconds (or :ref:`suffixed <special_suffixes>`). Optional, default is 3000
 (ie. 3 seconds).
 
 After connection, ``searchd`` will wait at most this much time for

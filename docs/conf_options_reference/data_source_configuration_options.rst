@@ -851,7 +851,7 @@ Example:
 sql_ranged_throttle
 ~~~~~~~~~~~~~~~~~~~
 
-Ranged query throttling period, in milliseconds. Optional, default is 0
+Ranged query throttling period, in milliseconds (or :ref:`suffixed <special_suffixes>`). Optional, default is 0
 (no throttling). Applies to SQL source types (``mysql``, ``pgsql``,
 ``mssql``) only.
 

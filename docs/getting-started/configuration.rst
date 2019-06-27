@@ -6,7 +6,7 @@ A guide on configuration file
 Manticore search uses a configuration file for customizing settings and  declaration indexes and sources.
 
 The configuration file is in a plain text format and can be edited with any text editor.
-The configuration is logically split into sections.  It's content is delimited by ``{`` and ``}``.
+The configuration is logically split into sections.  It's content is enclosed in ``{`` and ``}``.
 There are 5 types of sections as follow:
 
 * searchd - mandatory and can be declared only once, contains settings of searchd daemon
@@ -19,6 +19,21 @@ There are 5 types of sections as follow:
 Indexes and sources are parsed as the configuration file is read. In case of inherited sections, child sections must come after parent declarations. The same applies to distributed indexes with local indexes.
 
 There is no rule for the settings sections. They can declared at the start or end of the file or even mixed between index/source declarations.
+
+.. _special_suffixes:
+
+Special suffixes
+~~~~~~~~~~~~~~~~
+
+Manticore search may recognize and parse special suffixes which makes easier to use numeric values with special meaning. Common form for them is `integer number` + `literal`, like `10k` or `100d`, but not `40.3s` (since 40.3 is not integer), or not `2d 4h` (since there are two, not one value). Literals are case-insensitive, so `10W` is the same as `10w`.
+There are 2 types of such suffixes currently supported:
+
+* Size suffixes - may be used in parameters which define size of something (memory buffer, disk file, limit of RAM, etc. ) in bytes. "Naked" numbers in that places mean literaly size in bytes (octets). Size values take suffix `k` for kilobytes (1k=1024), `m` for megabytes (1m=1024k), `g` for gitabytes (1g=1024m) and `t` for terabytes (1t=1024g).
+
+* Time suffixes - may be used in parameters defining some time interval values, like delays, timeouts, etc. "Naked" numbers in that places usually has documented scale, and you must know if a number, say, 100 in a place means '100 seconds' or '100 milliseconds'. However instead of guessing you just can write suffixed value and it will be fully determined by it's suffix. Time values take suffix `us` for useconds (microseconds), `ms` for milliseconds, `s` for seconds, `m` for minutes, `h` for hours, `d` for days and `w` for weeks.
+
+.. warning::
+`Giga-`, and especially `tera-` size suffixes are not very usable right now, since most of the sizes inside are limited by 2Gb (or, being precise, 2Gb - 1 byte), and for the moment only :ref:`rt_mem_limit <rt_mem_limit>`, :ref:`attr_update_reserve <attr_update_reserve>` from index config, and :ref:`qcache_max_bytes <qcache_max_bytes>` from searchd config accept 64-bit values which may exceed 2Gb.
 
 Scripting support
 ~~~~~~~~~~~~~~~~~

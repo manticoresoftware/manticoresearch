@@ -621,6 +621,16 @@ private:
 		m_pPointer = m_pBase = pArena;
 		m_iSize = iSize;
 	}
+
+	BYTE GetByte()
+	{
+		auto iPos = m_pPointer - m_pBase;
+		if ( iPos>=0 && iPos<m_iSize )
+			return *m_pPointer++;
+		sphWarning( "INTERNAL: out-of-range in ThinMMapReader_c: trying to read at " INT64_FMT ", from mmap of "
+			INT64_FMT ", query most probably would FAIL; report the fact to dev!", int64_t(iPos), int64_t (m_iSize));
+		return 0; // it's better then crash because of unexpected read out-of-range (file reader does the same there)
+	}
 };
 
 class DirectFileReader_c: public FileBlockReader_c, protected FileReader_c
@@ -8338,8 +8348,8 @@ SphOffset_t sphUnzipOffset ( const BYTE * & pBuf )	{ SPH_VARINT_DECODE ( SphOffs
 DWORD CSphReader::UnzipInt ()			{ SPH_VARINT_DECODE ( DWORD, GetByte() ); }
 uint64_t CSphReader::UnzipOffset ()		{ SPH_VARINT_DECODE ( uint64_t, GetByte() ); }
 
-DWORD ThinMMapReader_c::UnzipInt ()		{ SPH_VARINT_DECODE ( DWORD, *m_pPointer++ ); }
-uint64_t ThinMMapReader_c::UnzipOffset ()	{ SPH_VARINT_DECODE ( uint64_t, *m_pPointer++ ); }
+DWORD ThinMMapReader_c::UnzipInt ()		{ SPH_VARINT_DECODE ( DWORD, GetByte() ); }
+uint64_t ThinMMapReader_c::UnzipOffset ()	{ SPH_VARINT_DECODE ( uint64_t, GetByte() ); }
 
 #define sphUnzipWordid sphUnzipOffset
 

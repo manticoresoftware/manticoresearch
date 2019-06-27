@@ -68,6 +68,14 @@ Example 3.3. Fully automated live updates
         path = /path/to/delta
     }
 
+A better split variable is to use a timestamp  column instead of the ID as timestamps can track not just new documents, but also modified ones.
+
+For the datasets that can have documents modified or deleted, the delta index should also provide a list with documents that sufffered changes in order to be suppressed and not be used in search queries.
+This is achieved with the feature called Kill lists.
+The document ids to be killed can be provided in an auxiliary query defined by :ref:`sql_query_killlist <sql_query_killlist>`. 
+The delta must point the indexes for which the kill-lists will be applied by  directive :ref:`killlist_target <killlist_target>`.
+The effect of kill-lists is permanent on the target index, meaning even if the search is made without the delta index, the suppressed documents will not appear in searches.
+
 Note how we're overriding ``sql_query_pre`` in the delta source. We need
 to explicitly have that override. Otherwise ``REPLACE`` query would be
 run when indexing delta source too, effectively nullifying it. However,

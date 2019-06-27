@@ -5,6 +5,12 @@ Data Types
 
 The following data types are supported in Manticore Search:
 
+Document ID
+^^^^^^^^^^^
+
+The identificator of a document in the index. Document IDs must be unique signed 64-bit integers. Document IDs are implicit and have no declaration. Update operation is forbidden on document ids.
+
+
 Text
 ^^^^
 

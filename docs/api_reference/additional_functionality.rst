@@ -295,7 +295,10 @@ failure.
 
 ``$index`` is a name of the index (or indexes) to be updated. ``$attrs``
 is a plain array with string attribute names, listing attributes that
-are updated. Note that ``id`` attribute cannot be updated.
+are updated.
+
+.. warning::
+  Note that document ``id`` attribute cannot be updated.
 
 ``$values`` is a hash with documents IDs as keys and new attribute values,
 see below.

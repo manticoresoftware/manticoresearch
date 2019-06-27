@@ -9,8 +9,9 @@ is:
 
 **ALL DOCUMENT IDS MUST BE UNIQUE SIGNED POSITIVE NON-ZERO 64-BIT INTEGER NUMBERS**
 
-If this requirement is not met, different bad things can happen. For
-instance, Manticore can crash with an internal assertion while indexing; or
-produce strange results when searching due to conflicting IDs. Also, a
-1000-pound gorilla might eventually come out of your display and start
-throwing barrels at you. You've been warned.
+Indexing documents with same ID will result in strange search results, as matching processes will return the
+document id, however it's possible that selection to pick another document with same ID, leading to incorrect search results.
+It is also possible that duplicate IDs to trigger crashes at indexing due to internal assertion checks.
+In case of distributed indexes, having documents with same ID in different nodes can also lead to incorrect results.
+In case of delta indexes providing updates for main indexes, the outdated documents with same ID as newer ones can be suppressed 
+by :ref:`kill-lists <killlist_target>`.

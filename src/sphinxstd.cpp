@@ -870,7 +870,7 @@ SPH_THDFUNC sphThreadProcWrapper ( void * pArg )
 	pthread_mutex_unlock ( &( (ThreadCall_t*) pArg)->m_dlock );
 #endif
 
-	ThreadCall_t * pCall = (ThreadCall_t*) pArg;
+	auto * pCall = (ThreadCall_t*) pArg;
 	MemorizeStack ( & cTopOfMyStack );
 
 	// set name of self
@@ -889,7 +889,7 @@ SPH_THDFUNC sphThreadProcWrapper ( void * pArg )
 	pCall->m_pCall ( pCall->m_pArg );
 	SafeDelete ( pCall );
 
-	ThreadCall_t * pCleanup = (ThreadCall_t*) sphThreadGet ( g_tThreadCleanupKey );
+	auto * pCleanup = (ThreadCall_t*) sphThreadGet ( g_tThreadCleanupKey );
 	while ( pCleanup )
 	{
 		pCall = pCleanup;
@@ -973,7 +973,7 @@ bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pA
 {
 	// we can not put this on current stack because wrapper need to see
 	// it all the time and it will destroy this data from heap by itself
-	ThreadCall_t * pCall = new ThreadCall_t;
+	auto * pCall = new ThreadCall_t;
 	pCall->m_pCall = fnThread;
 	pCall->m_pArg = pArg;
 	pCall->m_pNext = nullptr;
@@ -1021,7 +1021,7 @@ bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pA
 	return false;
 }
 
-CSphString GetThreadName ( SphThread_t * pThread )
+CSphString GetThreadName ( const SphThread_t * pThread )
 {
 	if ( !pThread || !*pThread )
 		return "";
@@ -1036,7 +1036,7 @@ CSphString GetThreadName ( SphThread_t * pThread )
 }
 
 
-bool sphThreadJoin ( SphThread_t * pThread )
+bool sphThreadJoin ( const SphThread_t * pThread )
 {
 #if USE_WINDOWS
 	DWORD uWait = WaitForSingleObject ( *pThread, INFINITE );
@@ -1044,7 +1044,7 @@ bool sphThreadJoin ( SphThread_t * pThread )
 	*pThread = NULL;
 	return ( uWait==WAIT_OBJECT_0 || uWait==WAIT_ABANDONED );
 #else
-	return pthread_join ( *pThread, NULL )==0;
+	return pthread_join ( *pThread, nullptr )==0;
 #endif
 }
 

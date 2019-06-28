@@ -552,7 +552,7 @@ sphMemberLess ( T C::* pMember )
 template < typename T >
 struct SphAccessor_T
 {
-	typedef T MEDIAN_TYPE;
+	using MEDIAN_TYPE = T;
 
 	MEDIAN_TYPE & Key ( T * a ) const
 	{
@@ -583,7 +583,7 @@ struct SphAccessor_T
 
 /// heap sort helper
 template < typename T, typename U, typename V >
-void sphSiftDown ( T * pData, int iStart, int iEnd, const U &COMP, const V &ACC )
+void sphSiftDown ( T * pData, int iStart, int iEnd, U&& COMP, V&& ACC )
 {
 	while (true)
 	{
@@ -605,27 +605,27 @@ void sphSiftDown ( T * pData, int iStart, int iEnd, const U &COMP, const V &ACC 
 
 /// heap sort
 template < typename T, typename U, typename V >
-void sphHeapSort ( T * pData, int iCount, const U &COMP, const V &ACC )
+void sphHeapSort ( T * pData, int iCount, U&& COMP, V&& ACC )
 {
 	if ( !pData || iCount<=1 )
 		return;
 
 	// build a max-heap, so that the largest element is root
 	for ( int iStart=( iCount-2 )>>1; iStart>=0; --iStart )
-		sphSiftDown ( pData, iStart, iCount-1, COMP, ACC );
+		sphSiftDown ( pData, iStart, iCount-1, std::forward<U>(COMP), std::forward<V>(ACC) );
 
 	// now keep popping root into the end of array
 	for ( int iEnd=iCount-1; iEnd>0; )
 	{
 		ACC.Swap ( pData, ACC.Add ( pData, iEnd ) );
-		sphSiftDown ( pData, 0, --iEnd, COMP, ACC );
+		sphSiftDown ( pData, 0, --iEnd, std::forward<U>(COMP), std::forward<V>(ACC) );
 	}
 }
 
 
 /// generic sort
 template < typename T, typename U, typename V >
-void sphSort ( T * pData, int iCount, const U &COMP, const V &ACC )
+void sphSort ( T * pData, int iCount, U&& COMP, V&& ACC )
 {
 	if ( iCount<2 )
 		return;
@@ -634,7 +634,7 @@ void sphSort ( T * pData, int iCount, const U &COMP, const V &ACC )
 	// st0 and st1 are stacks with left and right bounds of array-part.
 	// They allow us to avoid recursion in quicksort implementation.
 	P st0[32], st1[32], a, b, i, j;
-	typename V::MEDIAN_TYPE x;
+	typename std::remove_reference<V>::type::MEDIAN_TYPE x;
 	int k;
 
 	const int SMALL_THRESH = 32;
@@ -655,7 +655,7 @@ void sphSort ( T * pData, int iCount, const U &COMP, const V &ACC )
 		{
 			if ( !--iDepthLimit )
 			{
-				sphHeapSort ( a, ACC.Sub ( b, a )+1, COMP, ACC );
+				sphHeapSort ( a, ACC.Sub ( b, a )+1, std::forward<U>(COMP), ACC );
 				return;
 			}
 		}
@@ -714,9 +714,9 @@ void sphSort ( T * pData, int iCount, const U &COMP, const V &ACC )
 
 
 template < typename T, typename U >
-void sphSort ( T * pData, int iCount, const U& COMP )
+void sphSort ( T * pData, int iCount, U&& COMP )
 {
-	sphSort ( pData, iCount, COMP, SphAccessor_T<T>() );
+	sphSort ( pData, iCount, std::forward<U>(COMP), SphAccessor_T<T>() );
 }
 
 
@@ -783,7 +783,7 @@ struct SphEqualityFunctor_T
 
 /// generic binary search
 template < typename T, typename U, typename PRED >
-T * sphBinarySearch ( T * pStart, T * pEnd, const PRED & tPred, U tRef )
+T * sphBinarySearch ( T * pStart, T * pEnd, PRED && tPred, U tRef )
 {
 	if ( !pStart || pEnd<pStart )
 		return NULL;
@@ -817,7 +817,7 @@ T * sphBinarySearch ( T * pStart, T * pEnd, const PRED & tPred, U tRef )
 // returns first (leftmost) occurrence of the value
 // returns -1 if not found
 template < typename T, typename U, typename PRED >
-int sphBinarySearchFirst ( T * pValues, int iStart, int iEnd, const PRED & tPred, U tRef )
+int sphBinarySearchFirst ( T * pValues, int iStart, int iEnd, PRED && tPred, U tRef )
 {
 	assert ( iStart<=iEnd );
 
@@ -847,7 +847,7 @@ T * sphBinarySearch ( T * pStart, T * pEnd, T & tRef )
 
 // find the first entry that is greater than tRef
 template < typename T, typename U, typename PRED >
-T * sphBinarySearchFirst ( T * pStart, T * pEnd, const PRED & tPred, U tRef )
+T * sphBinarySearchFirst ( T * pStart, T * pEnd, PRED && tPred, U tRef )
 {
 	if ( !pStart || pEnd<pStart )
 		return NULL;
@@ -866,7 +866,7 @@ T * sphBinarySearchFirst ( T * pStart, T * pEnd, const PRED & tPred, U tRef )
 
 
 template < typename T, typename T_COUNTER, typename COMP >
-T_COUNTER sphUniq ( T * pData, T_COUNTER iCount, COMP tComp )
+T_COUNTER sphUniq ( T * pData, T_COUNTER iCount, COMP && tComp )
 {
 	if ( !iCount )
 		return 0;
@@ -882,7 +882,6 @@ T_COUNTER sphUniq ( T * pData, T_COUNTER iCount, COMP tComp )
 	return iDst;
 }
 
-
 /// generic uniq
 template < typename T, typename T_COUNTER >
 T_COUNTER sphUniq ( T * pData, T_COUNTER iCount )
@@ -890,86 +889,12 @@ T_COUNTER sphUniq ( T * pData, T_COUNTER iCount )
 	return sphUniq ( pData, iCount, SphEqualityFunctor_T<T>() );
 }
 
-
-//////////////////////////////////////////////////////////////////////////
-/// Copy/move vec of a data item-by-item
-template < typename T, bool = std::is_pod<T>::value >
-class DataMover_T
-{
-public:
-	static inline void Copy ( T * pNew, T * pData, int iLength )
-	{
-		for ( int i = 0; i<iLength; ++i )
-			pNew[i] = pData[i];
-	}
-
-	static inline void Move ( T * pNew, T * pData, int iLength )
-	{
-		for ( int i = 0; i<iLength; ++i )
-			pNew[i] = std::move ( pData[i] );
-	}
-};
-
-template < typename T> /// Copy/move vec of POD data using memmove
-class DataMover_T<T, true>
-{
-public:
-	static inline void Copy ( T * pNew, const T * pData, int iLength )
-	{
-		if ( iLength ) // m.b. work without this check, but sanitize for paranoids.
-			memmove ( ( void * ) pNew, ( const void * ) pData, iLength * sizeof ( T ) );
-	}
-
-	static inline void Move ( T * pNew, const T * pData, int iLength )
-	{ Copy ( pNew, pData, iLength); }
-
-	// append raw blob: defined ONLY in POD specialization.
-	static inline void CopyVoid ( T * pNew, const void * pData, int iLength )
-	{ Copy ( pNew, (T*)pData, iLength ); }
-};
-
-/// default vector policy
-/// grow 2x and copy using assignment operator on resize
-template < typename T >
-class CSphVectorPolicy : public DataMover_T<T>
-{
-protected:
-	static const int MAGIC_INITIAL_LIMIT = 8;
-
-public:
-	static inline void CopyOrSwap ( T & pLeft, const T & pRight )
-	{
-		pLeft = pRight;
-	}
-
-	static inline int Relimit ( int iLimit, int iNewLimit )
-	{
-		if ( !iLimit )
-			iLimit = MAGIC_INITIAL_LIMIT;
-		while ( iLimit<iNewLimit )
-		{
-			iLimit *= 2;
-			assert ( iLimit>0 );
-		}
-		return iLimit;
-	}
-};
-
 /// buffer traits - provides generic ops over a typed blob (vector).
 /// just provide common operators; doesn't manage buffer anyway
 template < typename T > class VecTraits_T
 {
+
 public:
-
-	//! functional types to use as lambda type.
-	//! If we use simple function pointer here (say, as (*bool) (const T&) )
-	//! it will work, but only for pure lambdas.
-	//! Any other non-pure lambda which binds (acquires) anyting from
-	//! env will cause compile error and actually works well only with such
-	//! std::function typedefs
-	using fFilter=std::function<bool ( const T & )>;
-	using fAction=std::function<void ( T & )>;
-
 	VecTraits_T() = default;
 
 	// this ctr allows to regard any typed blob as VecTraits, and use it's benefits.
@@ -1089,7 +1014,7 @@ public:
 
 	/// generic sort
 	template < typename F >
-	void Sort ( F COMP, int iStart = 0, int iEnd = -1 )
+	void Sort ( F&& COMP, int iStart = 0, int iEnd = -1 )
 	{
 		if ( m_iCount<2 )
 			return;
@@ -1099,7 +1024,7 @@ public:
 			iEnd += m_iCount;
 		assert ( iStart<=iEnd );
 
-		sphSort ( m_pData + iStart, iEnd - iStart + 1, COMP );
+		sphSort ( m_pData + iStart, iEnd - iStart + 1, std::forward<F>(COMP) );
 	}
 
 	/// generic binary search
@@ -1119,34 +1044,38 @@ public:
 
 	/// generic linear search - 'ARRAY_ANY' replace
 	/// see 'Contains()' below for examlpe of usage.
-	inline bool FindFirst ( fFilter COND ) const
+	template < typename FILTER >
+	inline bool FindFirst( FILTER&& cond ) const
 	{
 		for ( int i = 0; i<m_iCount; ++i )
-			if ( COND ( m_pData[i] ) )
+			if ( cond ( m_pData[i] ) )
 				return true;
 		return false;
 	}
 
-	inline int GetFirst ( fFilter COND ) const
+	template <typename FILTER >
+	inline int GetFirst( FILTER&& cond ) const
 	{
 		for ( int i = 0; i<m_iCount; ++i )
-			if ( COND ( m_pData[i] ) )
+			if ( cond ( m_pData[i] ) )
 				return i;
 		return -1;
 	}
 
 	/// generic 'ARRAY_ALL'
-	inline bool TestAll ( fFilter COND ) const
+	template <typename FILTER>
+	inline bool TestAll( FILTER&& cond ) const
 	{
 		for ( int i = 0; i<m_iCount; ++i )
-			if ( !COND ( m_pData[i] ) )
+			if ( !cond ( m_pData[i] ) )
 				return false;
 		return true;
 	}
 
 	/// Apply an action to every member
 	/// Apply ( [] (T& item) {...} );
-	void Apply ( fAction Verb ) const
+	template < typename ACTION >
+	void Apply( ACTION&& Verb ) const
 	{
 		for ( int i = 0; i<m_iCount; ++i )
 			Verb ( m_pData[i] );
@@ -1160,7 +1089,7 @@ public:
 
 	/// generic linear search
 	template < typename FUNCTOR, typename U >
-	bool Contains ( FUNCTOR COMP, U tValue )
+	bool Contains ( FUNCTOR&& COMP, U tValue )
 	{
 		return FindFirst ( [&] ( const T &v ) { return COMP.IsEq ( v, tValue ); } );
 	}
@@ -2067,7 +1996,7 @@ public:
 	}
 
 	/// moving ctor
-	CSphOrderedHash ( CSphOrderedHash&& rhs )
+	CSphOrderedHash ( CSphOrderedHash&& rhs ) noexcept
 		: CSphOrderedHash ()
 	{
 		Swap(rhs);
@@ -2568,8 +2497,8 @@ public:
 	}
 
 	/// move ctor
-	CSphVariant ( CSphVariant&& rhs )
-		: CSphVariant()
+	CSphVariant ( CSphVariant&& rhs ) noexcept
+		: m_pNext ( nullptr ) // otherwise trash in uninitialized m_pNext causes crash in dtr
 	{
 		Swap ( rhs );
 	}
@@ -2625,7 +2554,7 @@ protected:
 
 public:
 	// standalone - call () when necessary
-	Comma_c ( const char * sDelim = ", " )
+	explicit Comma_c ( const char * sDelim = ", " )
 		: m_sDelimiter ( sDelim )
 	{
 		if ( sDelim )
@@ -2635,11 +2564,11 @@ public:
 	inline bool Started() const { return m_bStarted; };
 
 	// returns "" first time, m_sDelimiter after
-	operator const char * ()
+	explicit operator const char * ()
 	{
-		auto * sComma = m_bStarted ? m_sDelimiter : nullptr;
+		auto * sComma = m_bStarted ? m_sDelimiter : "";
 		m_bStarted = true;
-		return sComma ? sComma : "";
+		return sComma;
 	}
 };
 
@@ -2702,7 +2631,6 @@ class StringBuilder_c : public ISphNoncopyable
 		}
 
 		inline void SkipNext () { m_bSkipNext = true; }
-
 	};
 
 private:
@@ -3620,10 +3548,10 @@ void sphThreadDone ( int iFD );
 bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg, bool bDetached=false, const char * sName=nullptr );
 
 /// get name of a thread
-CSphString GetThreadName ( SphThread_t * pThread );
+CSphString GetThreadName ( const SphThread_t * pThread );
 
 /// my join thread wrapper
-bool sphThreadJoin ( SphThread_t * pThread );
+bool sphThreadJoin ( const SphThread_t * pThread );
 
 /// add (cleanup) callback to run on thread exit
 void sphThreadOnExit ( void (*fnCleanup)(void*), void * pArg );
@@ -3908,7 +3836,7 @@ class SCOPED_CAPABILITY CSphScopedRLock : ISphNoncopyable
 {
 public:
 	/// lock on creation
-	CSphScopedRLock ( CSphRwlock & tLock ) ACQUIRE_SHARED ( tLock )
+	explicit CSphScopedRLock ( CSphRwlock & tLock ) ACQUIRE_SHARED ( tLock )
 		: m_tLock ( tLock )
 	{
 		m_tLock.ReadLock();
@@ -3929,7 +3857,7 @@ class SCOPED_CAPABILITY CSphScopedWLock : ISphNoncopyable
 {
 public:
 	/// lock on creation
-	CSphScopedWLock ( CSphRwlock & tLock ) ACQUIRE ( tLock ) EXCLUDES ( tLock )
+	explicit CSphScopedWLock ( CSphRwlock & tLock ) ACQUIRE ( tLock ) EXCLUDES ( tLock )
 		: m_tLock ( tLock )
 	{
 		m_tLock.WriteLock();
@@ -3951,7 +3879,7 @@ class SCOPED_CAPABILITY ScopedUnlock_T : ISphNoncopyable
 {
 public:
 	/// lock on creation
-	ScopedUnlock_T ( LOCKED &tLock ) ACQUIRE ( tLock )
+	explicit ScopedUnlock_T ( LOCKED &tLock ) ACQUIRE ( tLock )
 		: m_pLock ( &tLock )
 	{}
 
@@ -3994,7 +3922,7 @@ class AtScopeExit_T
 {
 	ACTION m_dAction;
 public:
-	AtScopeExit_T ( ACTION &&tAction )
+	explicit AtScopeExit_T ( ACTION &&tAction )
 		: m_dAction { std::forward<ACTION> ( tAction ) }
 	{}
 

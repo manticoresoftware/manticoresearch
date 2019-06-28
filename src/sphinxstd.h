@@ -2748,9 +2748,21 @@ public:
 	StringBuilder_c &AppendString ( const CSphString &sText, char cQuote = '\0' );
 	StringBuilder_c &operator+= ( const char * sText );
 	StringBuilder_c &operator<< ( const VecTraits_T<char> &sText );
-	inline StringBuilder_c &operator<< ( const char * sText ) { return *this += sText; }
-	inline StringBuilder_c &operator<< ( const CSphString &sText ) { return *this += sText.cstr (); }
-	inline StringBuilder_c &operator<< ( const CSphVariant &sText )	{ return *this += sText.cstr (); }
+	StringBuilder_c &operator<< ( const char * sText ) { return *this += sText; }
+	StringBuilder_c &operator<< ( const CSphString &sText ) { return *this += sText.cstr (); }
+	StringBuilder_c &operator<< ( const CSphVariant &sText )	{ return *this += sText.cstr (); }
+	StringBuilder_c &operator<<( Comma_c& dComma ) { return *this += (const char*)dComma; }
+
+	StringBuilder_c& operator<< ( int iVal );
+	StringBuilder_c& operator<< ( long iVal );
+	StringBuilder_c& operator<<( long long iVal );
+
+	StringBuilder_c& operator<<( unsigned int uVal );
+	StringBuilder_c& operator<<( unsigned long uVal );
+	StringBuilder_c& operator<<( unsigned long long uVal );
+
+	StringBuilder_c& operator<<( float fVal );
+	StringBuilder_c& operator<<( double fVal );
 
 	// append 1 char despite any blocks.
 	inline void RawC ( char cChar ) { GrowEnough ( 1 ); *end () = cChar; ++m_iUsed; }

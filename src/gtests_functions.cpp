@@ -190,6 +190,30 @@ TEST ( functions, stringbuilder_standalone )
 	ASSERT_STREQ ( builder.cstr (), "one, two, three" );
 }
 
+// standalone comma. Not necesssary related to stringbuilder, but live alone.
+TEST ( functions, stringbuilder_numprint )
+{
+	StringBuilder_c builder;
+	builder << "sa" << 10 << 10ll;
+	ASSERT_STREQ ( builder.cstr(), "sa1010" );
+	builder.Clear();
+
+	builder << 1.1f;
+	ASSERT_STREQ ( builder.cstr(), "1.100000" );
+}
+
+
+// standalone comma. Not necesssary related to stringbuilder, but live alone.
+TEST ( functions, stringbuilder_intprint )
+{
+	StringBuilder_c builder;
+	builder << "sa";
+	builder << 10;
+	builder << 10ll;
+	ASSERT_STREQ ( builder.cstr(), "sa1010" );
+}
+
+
 // many nested scoped commas and 'StartBlock' modifier
 // (scoped comma is the same as pair 'StartBlock...FinishBlock')
 TEST ( functions, stringbuilder_nested )

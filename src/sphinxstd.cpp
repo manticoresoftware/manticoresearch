@@ -2557,6 +2557,70 @@ StringBuilder_c &StringBuilder_c::operator<< ( const VecTraits_T<char> &sText )
 	return AppendChars ( sText.begin(), sText.GetLength() );
 }
 
+StringBuilder_c& StringBuilder_c::operator<<( int iVal )
+{
+	GrowEnough(32);
+	m_iUsed += sph::NtoA( end(), iVal );
+	m_sBuffer[m_iUsed] = '\0';
+	return *this;
+}
+
+StringBuilder_c& StringBuilder_c::operator<<( long iVal )
+{
+	GrowEnough(32);
+	m_iUsed += sph::NtoA( end(), iVal );
+	m_sBuffer[m_iUsed] = '\0';
+	return *this;
+}
+
+StringBuilder_c& StringBuilder_c::operator<<( long long iVal )
+{
+	GrowEnough(32);
+	m_iUsed += sph::NtoA( end(), iVal );
+	m_sBuffer[m_iUsed] = '\0';
+	return *this;
+}
+
+StringBuilder_c& StringBuilder_c::operator<<( unsigned int uVal )
+{
+	GrowEnough(32);
+	m_iUsed += sph::NtoA( end(), uVal );
+	m_sBuffer[m_iUsed] = '\0';
+	return *this;
+}
+
+StringBuilder_c& StringBuilder_c::operator<<( unsigned long uVal )
+{
+	GrowEnough(32);
+	m_iUsed += sph::NtoA( end(), uVal );
+	m_sBuffer[m_iUsed] = '\0';
+	return *this;
+}
+
+StringBuilder_c& StringBuilder_c::operator<<( unsigned long long uVal )
+{
+	GrowEnough(32);
+	m_iUsed += sph::NtoA( end(), uVal );
+	m_sBuffer[m_iUsed] = '\0';
+	return *this;
+}
+
+StringBuilder_c& StringBuilder_c::operator<<( float fVal )
+{
+	GrowEnough( 32 );
+	m_iUsed += sph::PrintVarFloat( end(), fVal );
+	m_sBuffer[m_iUsed] = '\0';
+	return *this;
+}
+
+StringBuilder_c& StringBuilder_c::operator<<( double fVal )
+{
+	GrowEnough( 32 );
+	m_iUsed += sprintf( end(), "%f", fVal );
+	m_sBuffer[m_iUsed] = '\0';
+	return *this;
+}
+
 void StringBuilder_c::Grow ( int iLen )
 {
 	assert ( m_iSize<m_iUsed + iLen + uSTEP );

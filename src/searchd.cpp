@@ -23845,7 +23845,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		ScWL_t dWLock { g_tRotateConfigMutex };
 		// do parse
 		if ( !g_pCfg.Parse ( g_sConfigFile.cstr (), dConfig.begin () ) )
-			sphFatal ( "failed1 to parse config file '%s'", g_sConfigFile.cstr () );
+			sphFatal ( "failed to parse config file '%s'", g_sConfigFile.cstr () );
 	}
 	dConfig.Reset ();
 

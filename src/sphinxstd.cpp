@@ -2560,7 +2560,7 @@ StringBuilder_c &StringBuilder_c::operator<< ( const VecTraits_T<char> &sText )
 void StringBuilder_c::Grow ( int iLen )
 {
 	assert ( m_iSize<m_iUsed + iLen + uSTEP );
-	m_iSize = m_iUsed + iLen + uSTEP;
+	m_iSize = sph::TightRelimit::Relimit( m_iSize, m_iUsed + iLen + uSTEP );
 	auto * pNew = new char[m_iSize];
 	if ( m_sBuffer )
 		memcpy ( pNew, m_sBuffer, m_iUsed + 1 );

@@ -49,7 +49,7 @@ static int64_t IDLE_TIME_TO_FINISH = 600 * 1000000LL; // 10m
 
 // Max num of task flavours (we allocate fixed vec of this size)
 // since we have only 7 different tasks for now, pool of 32 slots seems to be enough
-static const size_t NUM_TASKS = 32;
+static const int NUM_TASKS = 32;
 
 inline static bool operator< ( const EnqueuedTimeout_t& dLeft, const EnqueuedTimeout_t& dRight )
 {
@@ -206,8 +206,15 @@ struct TaskProperties_t
 
 // Task class descriptor just stores pointers to function-checker and function-worker
 
+#if (USE_WINDOWS && _MSC_VER<1910)
+// visual studio 2015 causes C2719 error when tries compile 'contains' for fixed fector of TaskProperties_t
+TaskFlavour_t g_Tasks [ NUM_TASKS ];
+TaskProperties_t g_TaskProps [ NUM_TASKS ];
+#else
 CSphFixedVector<TaskFlavour_t> g_Tasks { NUM_TASKS };
 CSphFixedVector<TaskProperties_t> g_TaskProps { NUM_TASKS };
+#endif
+
 static CSphAtomic g_iTasks;
 
 // task of determined flavour with stored payload

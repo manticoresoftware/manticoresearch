@@ -78,7 +78,6 @@ extern "C"
 	#include <io.h>
 
 	#define sphSeek		_lseeki64
-	#define stat		_stat
 
 #else
 	// UNIX-specific headers and calls

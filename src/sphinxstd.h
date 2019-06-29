@@ -3551,7 +3551,7 @@ bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pA
 CSphString GetThreadName ( const SphThread_t * pThread );
 
 /// my join thread wrapper
-bool sphThreadJoin ( const SphThread_t * pThread );
+bool sphThreadJoin ( SphThread_t * pThread );
 
 /// add (cleanup) callback to run on thread exit
 void sphThreadOnExit ( void (*fnCleanup)(void*), void * pArg );

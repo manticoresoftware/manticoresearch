@@ -1036,7 +1036,7 @@ CSphString GetThreadName ( const SphThread_t * pThread )
 }
 
 
-bool sphThreadJoin ( const SphThread_t * pThread )
+bool sphThreadJoin ( SphThread_t * pThread )
 {
 #if USE_WINDOWS
 	DWORD uWait = WaitForSingleObject ( *pThread, INFINITE );

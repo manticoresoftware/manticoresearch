@@ -66,18 +66,6 @@ public:
 using fnThread_t = std::function<void ( void* )>;
 using TaskID = int;
 
-// that is just to define template function, but not expose too much of internals.
-namespace TaskManager_Internal {
-	struct TaskWorker
-	{
-		fnThread_t m_fnWorker = nullptr; // main worker function
-		fnThread_t m_fnReleasePayload = nullptr; // called to release payload (if any)
-		TaskID FinishRegisterTask ( CSphString, int, int );
-		static TaskWorker& GetNewTask ();
-	};
-}
-
-
 namespace TaskManager {
 
 	struct TaskInfo_t
@@ -125,17 +113,8 @@ namespace TaskManager {
 	 * other numbers determine concrete limit.
 	 * @return integer ID which has to be used to schedule/start jobs of that kind.
 	 */
-//	TaskID RegisterGlobal ( const char* sName, fnThread_t fnThread, fnThread_t fnFree=nullptr, int iThreads=0, int iJobs=-1 );
-
-	template <typename FN1, typename FN2>
-	TaskID RegisterGlobal ( const char* sName, FN1&& fnThread, FN2&& fnFree, int iThreads = 0,
-		int iJobs = -1 )
-	{
-		auto& dNewTask = TaskManager_Internal::TaskWorker::GetNewTask ();
-		dNewTask.m_fnWorker = std::forward<FN1> ( fnThread );
-		dNewTask.m_fnReleasePayload = std::forward<FN2> ( fnFree );
-		return dNewTask.FinishRegisterTask ( sName, iThreads, iJobs );
-	}
+	TaskID RegisterGlobal ( CSphString sName, fnThread_t fnThread, fnThread_t fnFree, int iThreads = 0,
+		int iJobs = -1 );
 
 	/*!
 	 * @brief schedule job which will be engaged at given time (in microseconds). Scheduling will not run the

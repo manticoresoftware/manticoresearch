@@ -2127,6 +2127,33 @@ TEST ( functions, trainer )
 	delete bar;
 }
 
+helper_c* make_helper_byval( train_c c )
+{
+	std::cout << "\n====>  called make_helper_byval with " << &c;
+	return new helper_c( std::move( c ));
+}
+
+TEST ( functions, trainer_by_val )
+{
+	std::cout << "\n\n==>  usual pass";
+	{
+		train_c a( 10 );
+		auto* foo = make_helper_byval( a );
+		std::cout << "\n==>  made foo " << foo->m_h.m_x << " a is " << a.m_x;
+		delete foo;
+	}
+
+	std::cout << "\n\n==>  indirect ctr";
+	auto fee = make_helper_byval( 11 );
+	std::cout << "\n==>  made fee " << fee->m_h.m_x;
+	delete fee;
+
+	std::cout << "\n\n==>  direct ctr";
+	auto bar = make_helper_byval( train_c( 12 ));
+	std::cout << "\n==>  made fee " << bar->m_h.m_x;
+	delete bar;
+}
+
 TEST ( functions, sph_Sprintf )
 {
 	test_sphintf_for ( 0 );

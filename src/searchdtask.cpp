@@ -186,8 +186,10 @@ void TimeoutQueue_c::DebugDump ( const std::function<void ( EnqueuedTimeout_t* )
 //////////////////////////////////////////////////////////////////////////
 // Tasks (job classes)
 //////////////////////////////////////////////////////////////////////////
-struct TaskFlavour_t : public TaskManager_Internal::TaskWorker
+struct TaskFlavour_t
 {
+	fnThread_t m_fnWorker = nullptr; // main worker function
+	fnThread_t m_fnReleasePayload = nullptr; // called to release
 	CSphString m_sName; // informational name (for logs, etc.)
 	int m_iMaxRunners = 0; // max num of threads running jobs from the same task (0 mean only main thread)
 	int m_iMaxQueueSize = 0; // max possible num of enqueued tasks of this type. (-1 means unlimited)
@@ -867,28 +869,20 @@ LazyJobs_c& LazyTasker ()
 	return dEvents;
 }
 
-CSphMutex g_tRegisterLock;
-
-TaskManager_Internal::TaskWorker& TaskManager_Internal::TaskWorker::GetNewTask () ACQUIRE ( g_tRegisterLock )
+TaskID TaskManager::RegisterGlobal( CSphString sName, fnThread_t fnThread, fnThread_t fnFree, int iThreads, int iJobs )
 {
-	g_tRegisterLock.Lock ();
-	if ( !g_iTasks ) // this is first class; start log timering
-		TimePrefixed::TimeStart ();
+	auto iTaskID = TaskID( g_iTasks++ );
+	if ( !iTaskID ) // this is first class; start log timering
+		TimePrefixed::TimeStart();
 
-	return g_Tasks[g_iTasks];
-}
-
-TaskID TaskManager_Internal::TaskWorker::FinishRegisterTask ( CSphString sName, int iThreads, int iJobs )
-	RELEASE ( g_tRegisterLock)
-{
-	auto& dTask = g_Tasks[g_iTasks];
+	auto& dTask = g_Tasks[iTaskID];
 	dTask.m_iMaxRunners = iThreads;
 	dTask.m_iMaxQueueSize = iJobs;
-	dTask.m_sName = std::move ( sName );
-	InfoX( "Task class for %s registered with id=%d, max %d parallel jobs", dTask.m_sName.cstr (), g_iTasks, iThreads );
-	TaskID iTask = g_iTasks++;
-	g_tRegisterLock.Unlock ();
-	return iTask;
+	dTask.m_fnWorker = std::move( fnThread );
+	dTask.m_fnReleasePayload = std::move( fnFree );
+	dTask.m_sName = std::move( sName );
+	InfoX( "Task class for %s registered with id=%d, max %d parallel jobs", sName, iTaskID, iThreads );
+	return iTaskID;
 }
 
 void TaskManager::ScheduleJob ( TaskID iTask, int64_t iTimestamp, void* pPayload )

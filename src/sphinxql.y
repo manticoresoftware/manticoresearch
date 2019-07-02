@@ -134,6 +134,7 @@
 %token	TOK_TABLE
 %token	TOK_TABLES
 %token	TOK_THREADS
+%token	TOK_TIMESTAMP
 %token	TOK_TO
 %token	TOK_TRANSACTION
 %token	TOK_TRUE
@@ -1514,6 +1515,7 @@ alter_col_type:
 	| TOK_JSON		{ $$.m_iValue = SPH_ATTR_JSON; }
 	| TOK_STRING	{ $$.m_iValue = SPH_ATTR_STRING; }
 	| TOK_INT		{ $$.m_iValue = SPH_ATTR_INTEGER; }
+	| TOK_TIMESTAMP		{ $$.m_iValue = SPH_ATTR_TIMESTAMP; }
 	;
 
 alter:

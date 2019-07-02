@@ -6,7 +6,7 @@ ALTER syntax
 .. code-block:: none
 
 
-    ALTER TABLE index {ADD|DROP} COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING}]
+    ALTER TABLE index {ADD|DROP} COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING|TIMESTAMP}]
 
 It supports adding one attribute at a time for both plain and RT
 indexes. The int, bigint, float, bool, multi-valued, multi-valued 64bit,

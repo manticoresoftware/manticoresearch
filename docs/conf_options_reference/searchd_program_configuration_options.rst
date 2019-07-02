@@ -1420,7 +1420,7 @@ snippets_file_prefix
 ~~~~~~~~~~~~~~~~~~~~
 
 A prefix to prepend to the local file names when generating snippets.
-Optional, default is empty.
+Optional, default is current working folder.
 
 This prefix can be used in distributed snippets generation along with
 ``load_files`` or ``load_files_scattered`` options.
@@ -1430,6 +1430,19 @@ prefix is set to “server1” and the request refers to “file23”,
 ``searchd`` will attempt to open “server1file23” (all of that without
 quotes). So if you need it to be a path, you have to mention the
 trailing slash.
+
+After constructing final file path, daemon unwinds all relative dirs and
+compares final result with the value of ``snippet_file_prefix``. If result
+is not begin with the prefix, such file will be rejected with error message.
+
+So, if you set it to '/mnt/data' and somebody calls snippet generation with file
+'../../../etc/passwd', as the source, it will get error message
+`File '/mnt/data/../../../etc/passwd' escapes '/mnt/data/' scope`
+instead of content of the file.
+
+Also, with non-set parameter and reading '/etc/passwd' it will actually read
+/daemon/working/folder/etc/passwd since default for param is exactly daemon's
+working folder.
 
 Note also that this is a local option, it does not affect the agents
 anyhow. So you can safely set a prefix on a master server. The requests
@@ -1447,6 +1460,10 @@ Example:
 
 
     snippets_file_prefix = /mnt/common/server1/
+
+.. warning::
+   If you still want to access files from the FS root, you have to explicitly set ``snippets_file_prefix``
+to empty value (by `snippets_file_prefix=` line), or to root (by `snippets_file_prefix=/`).
 
 .. _sphinxql_state:
 

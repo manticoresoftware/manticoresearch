@@ -3784,6 +3784,11 @@ void SnippetContext_t::BuildExcerpt ( ExcerptQuery_t & tOptions, const CSphIndex
 		CSphAutofile tFile;
 		CSphString sFilename;
 		sFilename.SetSprintf ( "%s%s", g_sSnippetsFilePrefix.cstr(), tOptions.m_sSource.scstr() );
+		if ( !TestEscaping( g_sSnippetsFilePrefix, sFilename ))
+		{
+			sError.SetSprintf( "File '%s' escapes '%s' scope", sFilename.scstr(), g_sSnippetsFilePrefix.scstr());
+			return;
+		}
 		if ( !sFilename.IsEmpty () && tFile.Open ( sFilename.cstr(), SPH_O_READ, sError )<0 )
 			return;
 		else if ( tOptions.m_sSource.IsEmpty() )
@@ -3971,6 +3976,15 @@ bool SnippetContext_t::Setup ( const CSphIndex * pIndex, const ExcerptQuery_t &t
 		( tSettings.m_sStripMode=="retain" && tSettings.m_bHighlightQuery ) );
 
 	return SetupStripperSPZ ( pIndex->GetSettings (), tSettings, bSetupSPZ, m_tStripper, m_pTokenizer, sError );
+}
+
+// check whether filepath from sPath does not escape area of sPrefix
+bool TestEscaping( const CSphString& sPrefix, const CSphString& sPath )
+{
+	if ( sPrefix.IsEmpty() || sPrefix==sPath )
+		return true;
+	auto sNormalized = sphNormalizePath( sPath );
+	return sPrefix==sNormalized.SubString( 0, sPrefix.Length());
 }
 
 //

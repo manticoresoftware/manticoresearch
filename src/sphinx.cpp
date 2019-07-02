@@ -78,9 +78,11 @@
 
 #if USE_WINDOWS
 	// workaround Windows quirks
+	#include <direct.h>
 	#define popen		_popen
 	#define pclose		_pclose
 	#define snprintf	_snprintf
+	#define getcwd		_getcwd
 
 	#define stat		_stat64
 	#define fstat		_fstat64
@@ -11055,6 +11057,12 @@ CSphString sphNormalizePath( const CSphString& sOrigPath )
 		sResult.AppendChars( dChunk.first, dChunk.second );
 
 	return sResult.cstr();
+}
+
+CSphString sphGetCwd()
+{
+	CSphVector<char> sBuf (65536);
+	return getcwd( sBuf.begin(), sBuf.GetLength());
 }
 
 class DeleteOnFail_c : public ISphNoncopyable

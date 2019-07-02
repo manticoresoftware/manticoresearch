@@ -3081,6 +3081,8 @@ bool			sphTruncate ( int iFD );
 
 // unwind different tricks like "../../../etc/passwd"
 CSphString		sphNormalizePath ( const CSphString& sOrigPath );
+CSphString		sphGetCwd();
+
 
 /// buffer trait that neither own buffer nor clean-up it on destroy
 template < typename T >

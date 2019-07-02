@@ -9996,6 +9996,12 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 		{
 			CSphString sFilename, sStatError;
 			sFilename.SetSprintf ( "%s%s", g_sSnippetsFilePrefix.cstr(), dQuery.m_sSource.scstr() );
+			if ( !TestEscaping ( g_sSnippetsFilePrefix, sFilename ))
+			{
+				sError.SetSprintf( "File '%s' escapes '%s' scope",
+					sFilename.scstr(), g_sSnippetsFilePrefix.scstr());
+				return false;
+			}
 			auto iFileSize = sphGetFileSize (sFilename, &sStatError);
 			if ( iFileSize<0 )
 			{
@@ -24225,6 +24231,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	if ( hSearchd.Exists ( "snippets_file_prefix" ) )
 		g_sSnippetsFilePrefix = hSearchd["snippets_file_prefix"].cstr();
+	else
+		g_sSnippetsFilePrefix.SetSprintf("%s/", sphGetCwd().scstr());
 
 	const char* sLogFormat = hSearchd.GetStr ( "query_log_format", "plain" );
 	if ( !strcmp ( sLogFormat, "sphinxql" ) )

@@ -83,5 +83,8 @@ public:
 	void BuildExcerpt ( ExcerptQuery_t &tOptions, const CSphIndex * pIndex ) const;
 };
 
+// helper whether filepath from sPath does not escape area of sPrefix
+bool TestEscaping( const CSphString& sPrefix, const CSphString& sPath );
+
 extern CSphString g_sSnippetsFilePrefix;
 #endif // _sphinxexcerpt_

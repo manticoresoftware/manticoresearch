@@ -650,3 +650,30 @@ R"raw(<?xml version="1.0" encoding="utf-8"?>
 	SafeDelete ( pSource );
 }
 #endif
+
+
+TEST ( Text, sphNormalizeAbsolutePath )
+{
+	ASSERT_STREQ ( sphNormalizePath( "/" ).cstr(), "/" );
+	ASSERT_STREQ ( sphNormalizePath( "/..//bbb" ).cstr(), "/bbb" );
+	ASSERT_STREQ ( sphNormalizePath( "/quite/long/path/../../../etc/passwd" ).cstr(), "/etc/passwd" );
+	ASSERT_STREQ ( sphNormalizePath( "/aaa/bbb/ccc/ddd/../../../../../../../" ).cstr(), "/" );
+}
+
+TEST ( Text, sphNormalizeRelativePath )
+{
+	ASSERT_STREQ ( sphNormalizePath( "" ).cstr(), "" );
+	ASSERT_STREQ ( sphNormalizePath( nullptr ).cstr(), "" );
+	ASSERT_STREQ ( sphNormalizePath( "aaa/" ).cstr(), "aaa" );
+	ASSERT_STREQ ( sphNormalizePath( "aaa/." ).cstr(), "aaa" );
+	ASSERT_STREQ ( sphNormalizePath( "aaa/././././////././" ).cstr(), "aaa" );
+	ASSERT_STREQ ( sphNormalizePath( "aaa/////" ).cstr(), "aaa" );
+	ASSERT_STREQ ( sphNormalizePath( "aaa/bbb/ccc" ).cstr(), "aaa/bbb/ccc" );
+	ASSERT_STREQ ( sphNormalizePath( "aaa/bbb/ccc/ddd/.." ).cstr(), "aaa/bbb/ccc" );
+	ASSERT_STREQ ( sphNormalizePath( "aaa/bbb/ccc/ddd/../../.." ).cstr(), "aaa" );
+	ASSERT_STREQ ( sphNormalizePath( "aaa/bbb/ccc/ddd/../../../xxx" ).cstr(), "aaa/xxx" );
+	ASSERT_STREQ ( sphNormalizePath( "aaa/bbb/ccc/ddd/../../../.." ).cstr(), "" );
+	ASSERT_STREQ ( sphNormalizePath( "aaa/bbb/ccc/ddd/../../../../" ).cstr(), "" );
+	ASSERT_STREQ ( sphNormalizePath( "aaa/bbb/ccc/ddd/../../../../../../../" ).cstr(), "../../.." );
+	ASSERT_STREQ ( sphNormalizePath( "..//bbb" ).cstr(), "../bbb" );
+}

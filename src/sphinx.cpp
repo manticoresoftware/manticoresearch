@@ -10999,6 +10999,64 @@ bool sphTruncate ( int iFD )
 #endif
 }
 
+CSphString sphNormalizePath( const CSphString& sOrigPath )
+{
+	using Chunk_t = std::pair<const char*, size_t>;
+	CSphVector<Chunk_t> dChunks;
+	const char* sBegin = sOrigPath.scstr();
+	const char* sEnd = sBegin + sOrigPath.Length();
+	const char* sPath = sBegin;
+	int iLevel = 0;
+
+	while ( sPath<sEnd )
+	{
+		const char* sSlash = ( char* ) memchr( sPath, '/', sEnd - sPath );
+		if ( !sSlash )
+			sSlash = sEnd;
+
+		auto iChunkLen = sSlash - sPath;
+
+		switch ( iChunkLen )
+		{
+			case 0: // empty chunk skipped
+				++sPath;
+				continue;
+			case 1: // simple dot chunk skipped
+				if ( *sPath=='.' )
+				{
+					sPath += 2;
+					continue;
+				}
+				break;
+			case 2: // double dot abandons chunks, then decrease level
+				if ( sPath[0]=='.' && sPath[1]=='.' )
+				{
+					if ( dChunks.IsEmpty())
+						--iLevel;
+					else
+						dChunks.Pop();
+					sPath += 3;
+					continue;
+				}
+			default: break;
+		}
+		dChunks.Add( { sPath, iChunkLen } );
+		sPath = sSlash + 1;
+	}
+
+	StringBuilder_c sResult( "/" );
+	if ( *sBegin=='/' )
+		sResult.AppendRawChars( "/" );
+	else
+		while ( iLevel++<0 )
+			sResult << "..";
+
+	for ( const auto& dChunk: dChunks )
+		sResult.AppendChars( dChunk.first, dChunk.second );
+
+	return sResult.cstr();
+}
+
 class DeleteOnFail_c : public ISphNoncopyable
 {
 public:

@@ -1691,31 +1691,40 @@ void SetSignalHandlers ( bool bAllowCtrlC=false ) REQUIRES ( MainThread )
 	sa.sa_flags = SA_NOCLDSTOP;
 
 	bool bSignalsSet = false;
-	while (true)
+	auto dFatalOnFail = AtScopeExit( [ &bSignalsSet ]
 	{
-		sa.sa_handler = sigterm;	if ( sigaction ( SIGTERM, &sa, NULL )!=0 ) break;
-		if ( !bAllowCtrlC )
-		{
-			sa.sa_handler = sigterm;
-			if ( sigaction ( SIGINT, &sa, NULL )!=0 )
-				break;
-		}
-		sa.sa_handler = sighup;		if ( sigaction ( SIGHUP, &sa, NULL )!=0 ) break;
-		sa.sa_handler = sigusr1;	if ( sigaction ( SIGUSR1, &sa, NULL )!=0 ) break;
-		sa.sa_handler = SIG_IGN;	if ( sigaction ( SIGPIPE, &sa, NULL )!=0 ) break;
+		if ( !bSignalsSet )
+			sphFatal( "sigaction(): %s", strerrorm(errno));
+	} );
 
-		sa.sa_flags |= SA_RESETHAND;
-		sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGSEGV, &sa, NULL )!=0 ) break;
-		sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGBUS, &sa, NULL )!=0 ) break;
-		sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGABRT, &sa, NULL )!=0 ) break;
-		sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGILL, &sa, NULL )!=0 ) break;
-		sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGFPE, &sa, NULL )!=0 ) break;
-
-		bSignalsSet = true;
-		break;
+	sa.sa_handler = sigterm;	if ( sigaction ( SIGTERM, &sa, NULL )!=0 ) return;
+	if ( !bAllowCtrlC )
+	{
+		sa.sa_handler = sigterm;
+		if ( sigaction ( SIGINT, &sa, NULL )!=0 )
+			return;
 	}
-	if ( !bSignalsSet )
-		sphFatal ( "sigaction(): %s", strerrorm(errno) );
+	sa.sa_handler = sighup;		if ( sigaction ( SIGHUP, &sa, NULL )!=0 ) 		return;
+	sa.sa_handler = sigusr1;	if ( sigaction ( SIGUSR1, &sa, NULL )!=0 )		return;
+	sa.sa_handler = SIG_IGN;	if ( sigaction ( SIGPIPE, &sa, NULL )!=0 ) return;
+
+	sa.sa_flags |= SA_RESETHAND;
+
+	static BYTE exception_handler_stack[SIGSTKSZ];
+	stack_t ss;
+	ss.ss_sp = exception_handler_stack;
+	ss.ss_flags = 0;
+	ss.ss_size = SIGSTKSZ;
+	sigaltstack( &ss, 0 );
+	sa.sa_flags |= SA_ONSTACK;
+
+	sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGSEGV, &sa, NULL )!=0 ) return;
+	sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGBUS, &sa, NULL )!=0 ) return;
+	sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGABRT, &sa, NULL )!=0 ) return;
+	sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGILL, &sa, NULL )!=0 ) return;
+	sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGFPE, &sa, NULL )!=0 ) return;
+
+	bSignalsSet = true;
 }
 #endif
 

@@ -5,7 +5,7 @@
 // main purpose of this wrapper is to make some internal stuff of cJSON visible from outside
 // for the sake of testing/benching. And keep original file untouched for the sake of no-conflicts merging on update.
 
-#include "cJSON.c"
+#include "json/cJSON.c"
 
 // stuff below is only for benching purpuses (used in gtests_functions.cpp)
 int cJsonunescape ( char ** buf, cJSON * item )

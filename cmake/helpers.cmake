@@ -472,15 +472,6 @@ function( __split_linux_dbg BINARYNAME DOINSTALL )
 	endif()
 endfunction()
 
-# split debug symbols from target, return path with dbg
-function( split_dbg_noinstall BINARYNAME )
-	if ( APPLE )
-		__split_apple_dbg ( ${BINARYNAME} FALSE )
-	elseif ( NOT MSVC )
-		__split_linux_dbg ( ${BINARYNAME} FALSE )
-	endif ()
-endfunction()
-
 # split debug symbols from target, install them
 function( split_dbg BINARYNAME )
 	if ( MSVC )

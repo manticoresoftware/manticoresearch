@@ -8,12 +8,10 @@
 // did not, you can find it at http://www.gnu.org/
 //
 
-#include "sphinxjsonquery.h"
 #include "sphinxquery.h"
 #include "sphinxsearch.h"
 #include "sphinxplugin.h"
 #include "sphinxutils.h"
-#include "sphinxpq.h"
 #include "searchdaemon.h"
 #include "sphinxjson.h"
 #include "attribute.h"
@@ -54,8 +52,8 @@ public:
 	void			CollectKeywords ( const char * szStr, XQNode_t * pNode, const XQLimitSpec_t & tLimitSpec );
 
 	bool			HandleFieldBlockStart ( const char * & /*pPtr*/ ) override { return true; }
-	virtual bool	HandleSpecialFields ( const char * & pPtr, FieldMask_t & dFields ) override;
-	virtual bool	NeedTrailingSeparator() override { return false; }
+	bool	HandleSpecialFields ( const char * & pPtr, FieldMask_t & dFields ) override;
+	bool	NeedTrailingSeparator() override { return false; }
 
 	XQNode_t *		CreateNode ( XQLimitSpec_t & tLimitSpec );
 
@@ -97,7 +95,7 @@ void QueryTreeBuilder_c::CollectKeywords ( const char * szStr, XQNode_t * pNode,
 		const char * sToken = (const char *) m_pTokenizer->GetToken ();
 		if ( !sToken )
 		{
-			AddChildKeyword ( pNode, NULL, iSkippedPosBeforeToken, tLimitSpec );
+			AddChildKeyword ( pNode, nullptr, iSkippedPosBeforeToken, tLimitSpec );
 			break;
 		}
 
@@ -141,7 +139,7 @@ void QueryTreeBuilder_c::CollectKeywords ( const char * szStr, XQNode_t * pNode,
 
 		if ( !uWordId )
 		{
-			sToken = NULL;
+			sToken = nullptr;
 			// stopwords with step=0 must not affect pos
 			if ( m_bEmptyStopword )
 				m_iAtomPos--;
@@ -185,7 +183,7 @@ bool QueryTreeBuilder_c::HandleSpecialFields ( const char * & pPtr, FieldMask_t 
 
 XQNode_t * QueryTreeBuilder_c::CreateNode ( XQLimitSpec_t & tLimitSpec )
 {
-	XQNode_t * pNode = new XQNode_t(tLimitSpec);
+	auto * pNode = new XQNode_t(tLimitSpec);
 	m_dSpawned.Add ( pNode );
 	return pNode;
 }
@@ -195,7 +193,7 @@ void QueryTreeBuilder_c::AddChildKeyword ( XQNode_t * pParent, const char * szKe
 {
 	XQKeyword_t tKeyword ( szKeyword, m_iAtomPos );
 	tKeyword.m_iSkippedBefore = iSkippedPosBeforeToken;
-	XQNode_t * pNode = new XQNode_t ( tLimitSpec );
+	auto * pNode = new XQNode_t ( tLimitSpec );
 	pNode->m_pParent = pParent;
 	pNode->m_dWords.Add ( tKeyword );
 	pParent->m_dChildren.Add ( pNode );
@@ -207,22 +205,22 @@ void QueryTreeBuilder_c::AddChildKeyword ( XQNode_t * pParent, const char * szKe
 class QueryParserJson_c : public QueryParser_i
 {
 public:
-	virtual bool	IsFullscan ( const CSphQuery & tQuery ) const;
-	virtual bool	IsFullscan ( const XQQuery_t & tQuery ) const;
-	virtual bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery,
+	bool	IsFullscan ( const CSphQuery & tQuery ) const final;
+	bool	IsFullscan ( const XQQuery_t & tQuery ) const final;
+	bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery,
 		const ISphTokenizer * pQueryTokenizer, const ISphTokenizer * pQueryTokenizerJson,
-		const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings ) const;
+		const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings ) const final;
 
 private:
-	XQNode_t *		ConstructMatchNode ( XQNode_t * pParent, const JsonObj_c & tJson, bool bPhrase, QueryTreeBuilder_c & tBuilder ) const;
-	XQNode_t *		ConstructBoolNode ( XQNode_t * pParent, const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const;
-	XQNode_t *		ConstructQLNode ( XQNode_t * pParent, const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const;
-	XQNode_t *		ConstructMatchAllNode ( XQNode_t * pParent, QueryTreeBuilder_c & tBuilder ) const;
+	XQNode_t *		ConstructMatchNode ( const JsonObj_c & tJson, bool bPhrase, QueryTreeBuilder_c & tBuilder ) const;
+	XQNode_t *		ConstructBoolNode ( const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const;
+	XQNode_t *		ConstructQLNode ( const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const;
+	XQNode_t *		ConstructMatchAllNode ( QueryTreeBuilder_c & tBuilder ) const;
 
 	bool			ConstructBoolNodeItems ( const JsonObj_c & tClause, CSphVector<XQNode_t *> & dItems, QueryTreeBuilder_c & tBuilder ) const;
 	bool			ConstructNodeOrFilter ( const JsonObj_c & tItem, CSphVector<XQNode_t *> & dNodes, QueryTreeBuilder_c & tBuilder ) const;
 
-	XQNode_t *		ConstructNode ( XQNode_t * pParent, const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const;
+	XQNode_t *		ConstructNode ( const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const;
 };
 
 
@@ -259,7 +257,7 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 	QueryTreeBuilder_c tBuilder ( pQuery, pQueryTokenizerQL, tSettings );
 	tBuilder.Setup ( pSchema, pMyJsonTokenizer, pMyDict, &tParsed, tSettings );
 
-	tParsed.m_pRoot = ConstructNode ( nullptr, tRoot[0], tBuilder );
+	tParsed.m_pRoot = ConstructNode ( tRoot[0], tBuilder );
 	if ( tBuilder.IsError() )
 	{
 		tBuilder.Cleanup();
@@ -303,7 +301,7 @@ static XQOperator_e StrToNodeOp ( const char * szStr )
 }
 
 
-XQNode_t * QueryParserJson_c::ConstructMatchNode ( XQNode_t * pParent, const JsonObj_c & tJson, bool bPhrase, QueryTreeBuilder_c & tBuilder ) const
+XQNode_t * QueryParserJson_c::ConstructMatchNode ( const JsonObj_c & tJson, bool bPhrase, QueryTreeBuilder_c & tBuilder ) const
 {
 	if ( !tJson.IsObj() )
 	{
@@ -378,8 +376,6 @@ XQNode_t * QueryParserJson_c::ConstructMatchNode ( XQNode_t * pParent, const Jso
 
 	XQNode_t * pNewNode = tBuilder.CreateNode ( tLimitSpec );
 	pNewNode->SetOp ( eNodeOp );
-	pNewNode->m_pParent = pParent;
-
 	tBuilder.CollectKeywords ( szQuery, pNewNode, tLimitSpec );
 
 	return pNewNode;
@@ -391,7 +387,7 @@ bool QueryParserJson_c::ConstructNodeOrFilter ( const JsonObj_c & tItem, CSphVec
 	// we created filters before, no need to process them again
 	if ( !IsFilter ( tItem ) )
 	{
-		XQNode_t * pNode = ConstructNode ( NULL, tItem, tBuilder );
+		XQNode_t * pNode = ConstructNode ( tItem, tBuilder );
 		if ( !pNode )
 			return false;
 
@@ -431,7 +427,7 @@ bool QueryParserJson_c::ConstructBoolNodeItems ( const JsonObj_c & tClause, CSph
 }
 
 
-XQNode_t * QueryParserJson_c::ConstructBoolNode ( XQNode_t * pParent, const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const
+XQNode_t * QueryParserJson_c::ConstructBoolNode ( const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const
 {
 	if ( !tJson.IsObj() )
 	{
@@ -555,7 +551,6 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( XQNode_t * pParent, const Json
 
 		assert ( pResultNode );
 
-		pResultNode->m_pParent = pParent;
 		return pResultNode;
 	} else
 	{
@@ -569,8 +564,6 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( XQNode_t * pParent, const Json
 			pAndNode->SetOp(SPH_QUERY_AND);
 			pAndNode->m_dChildren.Add ( pMustNode );
 			pAndNode->m_dChildren.Add ( pMustNotNode );
-			pAndNode->m_pParent = pParent;		// may be modified later
-
 			pMustNode->m_pParent = pAndNode;
 			pMustNotNode->m_pParent = pAndNode;
 
@@ -584,8 +577,6 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( XQNode_t * pParent, const Json
 			pMaybeNode->SetOp ( SPH_QUERY_MAYBE );
 			pMaybeNode->m_dChildren.Add ( pResultNode );
 			pMaybeNode->m_dChildren.Add ( pShouldNode );
-			pMaybeNode->m_pParent = pParent;
-
 			pShouldNode->m_pParent = pMaybeNode;
 			pResultNode->m_pParent = pMaybeNode;
 
@@ -599,7 +590,7 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( XQNode_t * pParent, const Json
 }
 
 
-XQNode_t * QueryParserJson_c::ConstructQLNode ( XQNode_t * pParent, const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const
+XQNode_t * QueryParserJson_c::ConstructQLNode ( const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const
 {
 	if ( !tJson.IsStr() )
 	{
@@ -623,17 +614,16 @@ XQNode_t * QueryParserJson_c::ConstructQLNode ( XQNode_t * pParent, const JsonOb
 }
 
 
-XQNode_t * QueryParserJson_c::ConstructMatchAllNode ( XQNode_t * pParent, QueryTreeBuilder_c & tBuilder ) const
+XQNode_t * QueryParserJson_c::ConstructMatchAllNode ( QueryTreeBuilder_c & tBuilder ) const
 {
 	XQLimitSpec_t tLimitSpec;
 	XQNode_t * pNewNode = tBuilder.CreateNode ( tLimitSpec );
 	pNewNode->SetOp ( SPH_QUERY_NULL );
-	pNewNode->m_pParent = pParent;
 	return pNewNode;
 }
 
 
-XQNode_t * QueryParserJson_c::ConstructNode ( XQNode_t * pParent, const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const
+XQNode_t * QueryParserJson_c::ConstructNode ( const JsonObj_c & tJson, QueryTreeBuilder_c & tBuilder ) const
 {
 	CSphString sName = tJson.Name();
 	if ( !tJson || sName.IsEmpty() )
@@ -645,16 +635,16 @@ XQNode_t * QueryParserJson_c::ConstructNode ( XQNode_t * pParent, const JsonObj_
 	bool bMatch = sName=="match";
 	bool bPhrase = sName=="match_phrase";
 	if ( bMatch || bPhrase )
-		return ConstructMatchNode ( pParent, tJson, bPhrase, tBuilder );
+		return ConstructMatchNode ( tJson, bPhrase, tBuilder );
 
 	if ( sName=="match_all" )
-		return ConstructMatchAllNode ( pParent, tBuilder );
+		return ConstructMatchAllNode ( tBuilder );
 
 	if ( sName=="bool" )
-		return ConstructBoolNode ( pParent, tJson, tBuilder );
+		return ConstructBoolNode ( tJson, tBuilder );
 
 	if ( sName=="query_string" )
-		return ConstructQLNode ( pParent, tJson, tBuilder );
+		return ConstructQLNode ( tJson, tBuilder );
 
 	return nullptr;
 }
@@ -727,7 +717,7 @@ bool GeoDistInfo_c::Parse ( const JsonObj_c & tRoot, bool bNeedDistance, CSphStr
 		CSphString sType = tType.StrVal();
 		if ( sType!="adaptive" && sType!="haversine" )
 		{
-			sWarning.SetSprintf ( "\"distance_type\" property type is invalid: \"%s\", defaulting to \"adaptive\"", sType.cstr() );
+			sWarning.SetSprintf ( R"("distance_type" property type is invalid: "%s", defaulting to "adaptive")", sType.cstr() );
 			m_bGeodistAdaptive = true;
 		} else
 			m_bGeodistAdaptive = sType=="adaptive";
@@ -1342,10 +1332,7 @@ bool sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfi
 
 	// source \ select filter
 	JsonObj_c tSelect = tRoot.GetItem("_source");
-	if ( tSelect && !ParseSelect ( tSelect, tQuery, sError ) )
-		return false;
-
-	return true;
+	return !tSelect || ParseSelect ( tSelect, tQuery, sError );
 }
 
 
@@ -1453,10 +1440,7 @@ static bool ParseUpdateDeleteQueries ( const JsonObj_c & tRoot, SqlStmt_t & tStm
 	}
 
 	CSphString sWarning; // fixme: add to results
-	if ( !ParseJsonQueryFilters ( tQuery, tStmt.m_tQuery, sError, sWarning ) )
-		return false;
-
-	return true;
+	return ParseJsonQueryFilters ( tQuery, tStmt.m_tQuery, sError, sWarning );
 }
 
 
@@ -1495,7 +1479,7 @@ static bool ParseJsonUpdate ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_
 			int64_t iValue = tItem.IntVal();
 
 			tUpd.m_dPool.Add ( (DWORD)iValue );
-			DWORD uHi = (DWORD)( iValue>>32 );
+			auto uHi = (DWORD)( iValue>>32 );
 
 			if ( uHi )
 			{
@@ -2145,10 +2129,7 @@ static bool CheckField ( HttpSnippetField_t & tParsed, CSphString & sError, cons
 	if ( !tField.FetchIntItem ( tParsed.m_iFragmentSize, "fragment_size", sError, true ) )
 		return false;
 
-	if ( !tField.FetchIntItem ( tParsed.m_iFragmentCount, "number_of_fragments", sError, true ) )
-		return false;
-
-	return true;
+	return tField.FetchIntItem( tParsed.m_iFragmentCount, "number_of_fragments", sError, true );
 }
 
 

@@ -22,3 +22,5 @@ include ( builds/CommonDeb )
 
 # some wheezy-specific variables and files
 set ( DISTR_SUFFIX "~wheezy_${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}" )
+
+set ( CPACK_DEBIAN_BIN_PACKAGE_SUGGESTS "libmysqlclient18 libpq5 libexpat1 libodbc1" )

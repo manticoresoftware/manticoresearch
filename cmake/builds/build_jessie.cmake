@@ -36,3 +36,5 @@ install ( FILES "${MANTICORE_BINARY_DIR}/manticore-generator"
 		
 # some jessie-specific variables and files
 set ( DISTR_SUFFIX "~jessie_${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}" )
+
+set ( CPACK_DEBIAN_BIN_PACKAGE_SUGGESTS "libmysqlclient18 libpq5 libexpat1 libodbc1" )

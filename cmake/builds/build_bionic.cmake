@@ -35,3 +35,5 @@ install ( FILES "${MANTICORE_BINARY_DIR}/manticore-generator"
 
 # some bionic-specific variables and files
 set ( DISTR_SUFFIX "~bionic_${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}" )
+
+set ( CPACK_DEBIAN_BIN_PACKAGE_SUGGESTS "libmysqlclient20 libpq5 libexpat1 libodbc1" )

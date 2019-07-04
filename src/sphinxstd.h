@@ -3659,6 +3659,50 @@ void MemorizeStack ( void* PStack );
 /// set thread-local key value
 bool sphThreadSet ( SphThreadKey_t tKey, void * pValue );
 
+
+template < typename T=void >
+class TLS_T final
+{
+	SphThreadKey_t m_tKey;
+
+public:
+	TLS_T()
+	{
+		Verify ( sphThreadKeyCreate( &m_tKey ));
+	}
+
+	~TLS_T()
+	{
+		sphThreadKeyDelete( m_tKey );
+	}
+
+	TLS_T& operator=( T* pValue )
+	{
+		Verify ( sphThreadSet( m_tKey, pValue ));
+		return *this;
+	}
+
+	const T* operator*() const
+	{
+		return ( T* ) sphThreadGet( m_tKey );
+	}
+
+	T* operator->() const
+	{
+		return ( T* ) sphThreadGet( m_tKey );
+	}
+
+	operator bool() const
+	{
+		return sphThreadGet( m_tKey );
+	}
+
+	operator T*() const
+	{
+		return ( T* ) sphThreadGet( m_tKey );
+	}
+};
+
 #if !USE_WINDOWS
 /// what kind of threading lib do we have? The number of frames in the stack depends from it
 bool sphIsLtLib();

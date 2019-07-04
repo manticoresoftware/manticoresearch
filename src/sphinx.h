@@ -183,7 +183,7 @@ void			sphInterruptNow();
 bool			sphInterrupted();
 
 /// initialize IO statistics collecting
-bool			sphInitIOStats ();
+void			sphInitIOStats ();
 
 /// clean up IO statistics collector
 void			sphDoneIOStats ();

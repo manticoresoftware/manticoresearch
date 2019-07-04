@@ -1419,25 +1419,18 @@ static int		g_iCrashInfoLen = 0;
 static char		g_sMinidump[SPH_TIME_PID_MAX_SIZE] = "";
 #endif
 
-SphThreadKey_t SphCrashLogger_c::m_tTLS = SphThreadKey_t ();
+TLS_T<CrashQuery_t> SphCrashLogger_c::m_pTlsCrashQuery;    // pointer to on-stack instance of this class
 
 static CrashQuery_t g_tUnhandled;
 
 // lets invalidate pointer when this instance goes out of scope to get immediate crash
 // instead of a reference to incorrect stack frame in case of some programming error
-SphCrashLogger_c::~SphCrashLogger_c () { sphThreadSet ( m_tTLS, NULL ); }
+SphCrashLogger_c::~SphCrashLogger_c () { m_pTlsCrashQuery = nullptr; }
 
 void SphCrashLogger_c::Init ()
 {
 	sphBacktraceInit();
-	Verify ( sphThreadKeyCreate ( &m_tTLS ) );
 }
-
-void SphCrashLogger_c::Done ()
-{
-	sphThreadKeyDelete ( m_tTLS );
-}
-
 
 #if !USE_WINDOWS
 void SphCrashLogger_c::HandleCrash ( int sig ) NO_THREAD_SAFETY_ANALYSIS
@@ -1626,7 +1619,7 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 
 void SphCrashLogger_c::SetLastQuery ( const CrashQuery_t & tQuery )
 {
-	CrashQuery_t * pQuery = (CrashQuery_t *)sphThreadGet ( m_tTLS );
+	CrashQuery_t * pQuery = m_pTlsCrashQuery;
 	assert ( pQuery );
 	*pQuery = tQuery;
 }
@@ -1642,12 +1635,12 @@ void SphCrashLogger_c::SetupTimePID ()
 
 void SphCrashLogger_c::SetTopQueryTLS ( CrashQuery_t * pQuery )
 {
-	Verify ( sphThreadSet ( m_tTLS, pQuery ) );
+	m_pTlsCrashQuery = pQuery;
 }
 
 CrashQuery_t SphCrashLogger_c::GetQuery()
 {
-	const CrashQuery_t * pQuery = (CrashQuery_t *)sphThreadGet ( m_tTLS );
+	const CrashQuery_t * pQuery = m_pTlsCrashQuery;
 
 	// in case TLS not set \ found handler still should process crash
 	// FIXME!!! some service threads use raw threads instead ThreadCreate
@@ -24391,9 +24384,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	StartRtBinlogFlushing();
 
 	ScheduleFlushAttrs();
-
-	if ( g_bIOStats && !sphInitIOStats () )
-		sphWarning ( "unable to init IO statistics" );
 
 	g_tStats.m_uStarted = (DWORD)time(NULL);
 

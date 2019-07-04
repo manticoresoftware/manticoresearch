@@ -471,9 +471,6 @@ void debugdeallocate ( void * pPtr )
 // MEMORY STATISTICS
 //////////////////////////////////////////////////////////////////////////////
 
-/// TLS key of memory category stack
-SphThreadKey_t g_tTLSMemCategory;
-
 STATIC_ASSERT ( MEM_TOTAL<255, TOO_MANY_MEMORY_CATEGORIES );
 
 // stack of memory categories as we move deeper and deeper
@@ -521,6 +518,9 @@ public:
 	}
 };
 
+/// TLS key of memory category stack
+TLS_T<MemCategoryStack_t> g_tTLSMemCategory;
+
 static MemCategoryStack_t * g_pMainTLS = NULL; // category stack of main thread
 
 // memory statistic's per thread factory
@@ -529,7 +529,7 @@ static MemCategoryStack_t * sphMemStatThdInit ()
 	MemCategoryStack_t * pTLS = (MemCategoryStack_t *)sphDebugNew ( sizeof ( MemCategoryStack_t ) );
 	pTLS->Reset();
 
-	Verify ( sphThreadSet ( g_tTLSMemCategory, pTLS ) );
+	g_tTLSMemCategory = pTLS;
 	return pTLS;
 }
 
@@ -542,8 +542,6 @@ static void sphMemStatThdCleanup ( MemCategoryStack_t * pTLS )
 // init of memory statistic's data
 static void sphMemStatInit ()
 {
-	Verify ( sphThreadKeyCreate ( &g_tTLSMemCategory ) );
-
 	// main thread statistic's creation
 	assert ( g_pMainTLS==NULL );
 	g_pMainTLS = sphMemStatThdInit();
@@ -555,8 +553,6 @@ static void sphMemStatDone ()
 {
 	assert ( g_pMainTLS!=NULL );
 	sphMemStatThdCleanup ( g_pMainTLS );
-
-	sphThreadKeyDelete ( g_tTLSMemCategory );
 }
 
 // direct access for special category
@@ -592,7 +588,7 @@ void sphMemStatMMapDel ( int64_t iSize )
 // push new category on arrival
 void sphMemStatPush ( MemCategory_e eCategory )
 {
-	MemCategoryStack_t * pTLS = (MemCategoryStack_t*) sphThreadGet ( g_tTLSMemCategory );
+	MemCategoryStack_t * pTLS = g_tTLSMemCategory;
 	if ( pTLS )
 		pTLS->Push ( eCategory );
 };
@@ -600,7 +596,7 @@ void sphMemStatPush ( MemCategory_e eCategory )
 // restore last category
 void sphMemStatPop ( MemCategory_e eCategory )
 {
-	MemCategoryStack_t * pTLS = (MemCategoryStack_t*) sphThreadGet ( g_tTLSMemCategory );
+	MemCategoryStack_t * pTLS = g_tTLSMemCategory;
 	if ( pTLS )
 		pTLS->Pop ( eCategory );
 };
@@ -608,7 +604,7 @@ void sphMemStatPop ( MemCategory_e eCategory )
 // get current category
 static MemCategory_e sphMemStatGet ()
 {
-	MemCategoryStack_t * pTLS = (MemCategoryStack_t*) sphThreadGet ( g_tTLSMemCategory );
+	MemCategoryStack_t * pTLS = g_tTLSMemCategory;
 	return pTLS ? pTLS->Top() : MEM_CORE;
 }
 
@@ -834,9 +830,8 @@ struct ThreadCall_t
 		char 			m_sName[16];	// used in main thread
 	};
 };
-static SphThreadKey_t g_tThreadCleanupKey;
-static SphThreadKey_t g_tMyThreadStack;
-
+static TLS_T<ThreadCall_t> g_pTlsThreadCleanup;
+static TLS_T<> g_pTlsMyThreadStack;
 
 #if USE_WINDOWS
 #define SPH_THDFUNC DWORD __stdcall
@@ -853,8 +848,8 @@ SPH_THDFUNC sphThreadProcWrapper ( void * pArg )
 	// with experimentally measured value to check whether we have enough stack to execute current query.
 	// The check is not ideal and do not work for all compilers and compiler settings.
 	char	cTopOfMyStack;
-	assert ( sphThreadGet ( g_tThreadCleanupKey )==NULL );
-	assert ( sphThreadGet ( g_tMyThreadStack )==NULL );
+	assert ( !g_pTlsThreadCleanup );
+	assert ( !g_pTlsMyThreadStack );
 
 #if SPH_ALLOCS_PROFILER
 	MemCategoryStack_t * pTLS = sphMemStatThdInit();
@@ -889,7 +884,7 @@ SPH_THDFUNC sphThreadProcWrapper ( void * pArg )
 	pCall->m_pCall ( pCall->m_pArg );
 	SafeDelete ( pCall );
 
-	auto * pCleanup = (ThreadCall_t*) sphThreadGet ( g_tThreadCleanupKey );
+	ThreadCall_t * pCleanup = g_pTlsThreadCleanup;
 	while ( pCleanup )
 	{
 		pCall = pCleanup;
@@ -922,13 +917,6 @@ void * sphThreadInit ( bool )
 #if SPH_DEBUG_LEAKS || SPH_ALLOCS_PROFILER
 		sphMemStatInit();
 #endif
-
-		// we're single-threaded yet, right?!
-		if ( !sphThreadKeyCreate ( &g_tThreadCleanupKey ) )
-			sphDie ( "FATAL: sphThreadKeyCreate() failed" );
-
-		if ( !sphThreadKeyCreate ( &g_tMyThreadStack ) )
-			sphDie ( "FATAL: sphThreadKeyCreate() failed" );
 
 #if !USE_WINDOWS
 		if ( pthread_attr_init ( &tJoinableAttr ) )
@@ -1057,8 +1045,8 @@ void sphThreadOnExit ( void (*fnCleanup)(void*), void * pArg )
 	auto pCleanup = new ThreadCall_t;
 	pCleanup->m_pCall = fnCleanup;
 	pCleanup->m_pArg = pArg;
-	pCleanup->m_pNext = (ThreadCall_t*) sphThreadGet ( g_tThreadCleanupKey );
-	sphThreadSet ( g_tThreadCleanupKey, pCleanup );
+	pCleanup->m_pNext = g_pTlsThreadCleanup;
+	g_pTlsThreadCleanup = pCleanup;
 }
 
 
@@ -1094,7 +1082,7 @@ void * sphThreadGet ( SphThreadKey_t tKey )
 
 void * sphMyStack ()
 {
-	return sphThreadGet ( g_tMyThreadStack );
+	return g_pTlsMyThreadStack;
 }
 
 
@@ -1117,7 +1105,7 @@ void sphSetMyStackSize ( int iStackSize )
 
 void MemorizeStack ( void* PStack )
 {
-	sphThreadSet ( g_tMyThreadStack, PStack );
+	g_pTlsMyThreadStack = PStack;
 }
 
 

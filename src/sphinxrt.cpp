@@ -763,7 +763,7 @@ void SaveDeleteQuery ( const int64_t * pQueries, int iCount, const char * sTags,
 class RtIndex_c;
 
 /// TLS indexing accumulator (we disallow two uncommitted adds within one thread; and so need at most one)
-static SphThreadKey_t g_tTlsAccumKey;
+static TLS_T<RtAccum_t> g_pTlsAccum;
 
 /// binlog file view of the index
 /// everything that a given log file needs to know about an index
@@ -1501,10 +1501,11 @@ static void AccumCleanup ( void * pArg )
 }
 
 
-RtAccum_t * RtIndex_i::AcquireAccum ( CSphDict * pDict, RtAccum_t * pAccExt,
+RtAccum_t * RtIndex_i::AcquireAccum ( CSphDict * pDict, RtAccum_t * pAcc,
 	bool bWordDict, bool bSetTLS, CSphString* sError )
 {
-	RtAccum_t * pAcc = ( RtAccum_t * ) ( pAccExt ? pAccExt : sphThreadGet ( g_tTlsAccumKey ) );
+	if ( !pAcc )
+		pAcc = g_pTlsAccum;
 
 	if ( pAcc && pAcc->GetIndex() && pAcc->GetIndex()!=this )
 	{
@@ -1518,7 +1519,7 @@ RtAccum_t * RtIndex_i::AcquireAccum ( CSphDict * pDict, RtAccum_t * pAccExt,
 		pAcc = new RtAccum_t ( bWordDict );
 		if ( bSetTLS )
 		{
-			sphThreadSet ( g_tTlsAccumKey, pAcc );
+			g_pTlsAccum = pAcc;
 			sphThreadOnExit ( AccumCleanup, pAcc );
 		}
 	}
@@ -9029,7 +9030,7 @@ bool RtBinlog_c::ReplayPqDelete ( int iBinlog, DWORD uReplayFlags, BinlogReader_
 
 RtIndex_i * sphGetCurrentIndexRT()
 {
-	RtAccum_t * pAcc = (RtAccum_t *) sphThreadGet ( g_tTlsAccumKey );
+	RtAccum_t * pAcc = g_pTlsAccum;
 	if ( pAcc )
 		return pAcc->GetIndex();
 	return nullptr;
@@ -9047,8 +9048,6 @@ void sphRTInit ( const CSphConfigSection & hSearchd, bool bTestMode, const CSphC
 	MEMORY ( MEM_BINLOG );
 
 	g_bRTChangesAllowed = false;
-	Verify ( sphThreadKeyCreate ( &g_tTlsAccumKey ) );
-
 	g_pRtBinlog = new RtBinlog_c();
 	if ( !g_pRtBinlog )
 		sphDie ( "binlog: failed to create binlog" );
@@ -9070,7 +9069,6 @@ void sphRTConfigure ( const CSphConfigSection & hSearchd, bool bTestMode )
 
 void sphRTDone ()
 {
-	sphThreadKeyDelete ( g_tTlsAccumKey );
 	// its valid for "searchd --stop" case
 	SafeDelete ( g_pBinlog );
 }

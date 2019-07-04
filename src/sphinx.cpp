@@ -209,21 +209,16 @@ STATIC_SIZE_ASSERT ( SphOffset_t, 8 );
 
 // whatever to collect IO stats
 static bool g_bCollectIOStats = false;
-static SphThreadKey_t g_tIOStatsTls;
+static TLS_T<CSphIOStats> g_pTlsIOStats;
 
 
-bool sphInitIOStats ()
+void sphInitIOStats ()
 {
-	if ( !sphThreadKeyCreate ( &g_tIOStatsTls ) )
-		return false;
-
 	g_bCollectIOStats = true;
-	return true;
 }
 
 void sphDoneIOStats ()
 {
-	sphThreadKeyDelete ( g_tIOStatsTls );
 	g_bCollectIOStats = false;
 }
 
@@ -237,8 +232,8 @@ void CSphIOStats::Start()
 	if ( !g_bCollectIOStats )
 		return;
 
-	m_pPrev = (CSphIOStats *)sphThreadGet ( g_tIOStatsTls );
-	sphThreadSet ( g_tIOStatsTls, this );
+	m_pPrev = g_pTlsIOStats;
+	g_pTlsIOStats = this;
 	m_bEnabled = true;
 }
 
@@ -248,7 +243,7 @@ void CSphIOStats::Stop()
 		return;
 
 	m_bEnabled = false;
-	sphThreadSet ( g_tIOStatsTls, m_pPrev );
+	g_pTlsIOStats = m_pPrev;
 }
 
 
@@ -268,7 +263,7 @@ static CSphIOStats * GetIOStats ()
 	if ( !g_bCollectIOStats )
 		return nullptr;
 
-	CSphIOStats * pIOStats = (CSphIOStats *)sphThreadGet ( g_tIOStatsTls );
+	CSphIOStats * pIOStats = g_pTlsIOStats;
 
 	if ( !pIOStats || !pIOStats->IsEnabled() )
 		return nullptr;

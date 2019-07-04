@@ -495,7 +495,7 @@ public:
 	~SphCrashLogger_c ();
 
 	static void Init () REQUIRES ( MainThread );
-	static void Done () REQUIRES ( MainThread );
+	static void Done () REQUIRES ( MainThread ) {};
 
 #if !USE_WINDOWS
 	static void HandleCrash ( int );
@@ -523,8 +523,7 @@ private:
 
 	// sets up a TLS for a given thread
 	static void ThreadWrapper ( void * pArg );
-
-	static SphThreadKey_t	m_tTLS;	// pointer to on-stack instance of this class
+	static TLS_T<CrashQuery_t> m_pTlsCrashQuery;    // pointer to on-stack instance of this class
 };
 
 enum

@@ -245,7 +245,7 @@ static RwLock_t g_tClustersLock;
 static SmallStringHash_T<ReplicationCluster_t *> g_hClusters GUARDED_BY ( g_tClustersLock );
 
 // hack for abort callback to invalidate only specific cluster
-static SphThreadKey_t g_tClusterKey;
+static TLS_T<ReplicationCluster_t> g_pTlsCluster;
 
 // description of clusters and indexes loaded from JSON config
 static CSphVector<ClusterDesc_t> g_dCfgClusters;
@@ -818,7 +818,7 @@ static void ReplicationRecv_fn ( void * pArgs )
 
 	// set cluster state
 	pCtx->m_pCluster->m_bRecvStarted = true;
-	sphThreadSet ( g_tClusterKey, pCtx->m_pCluster );
+	g_pTlsCluster = pCtx->m_pCluster;
 	pCtx->m_pCluster->SetNodeState ( ClusterState_e::JOINING );
 
 	// send event to free main thread
@@ -1356,7 +1356,7 @@ bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sName,
 // abort callback that invalidates specific cluster
 void ReplicationAbort()
 {
-	ReplicationCluster_t * pCluster = (ReplicationCluster_t *)sphThreadGet ( g_tClusterKey );
+	ReplicationCluster_t * pCluster = g_pTlsCluster;
 	sphWarning ( "abort from cluster '%s'", ( pCluster ? pCluster->m_sName.cstr() : "" ) );
 	if ( pCluster )
 		pCluster->SetNodeState ( ClusterState_e::DESTROYED );
@@ -2757,7 +2757,6 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 		return;
 	}
 
-	sphThreadKeyCreate ( &g_tClusterKey );
 	CSphString sError;
 
 	for ( const ClusterDesc_t & tDesc : g_dCfgClusters )

@@ -2042,18 +2042,22 @@ void sphLogSupressRemove ( const char * sDelPrefix, ESphLogLevel eLevel )
 }
 
 
-static SphLogger_fn g_pLogger = &StdoutLogger;
+volatile SphLogger_fn& g_pLogger()
+{
+	static SphLogger_fn pLogger = &StdoutLogger;
+	return pLogger;
+}
 
 inline void Log ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 {
-	if ( !g_pLogger ) return;
+	if ( !g_pLogger() ) return;
 	for ( const char * sPrefix : dDisabledLevelLogs[eLevel] )
 		if ( sPrefix && !strncmp ( sPrefix, sFmt, strlen ( sPrefix ) ) )
 			return;
 		else if ( !sPrefix )
 			break;
 
-	( *g_pLogger ) ( eLevel, sFmt, ap );
+	g_pLogger() ( eLevel, sFmt, ap );
 }
 
 void sphLogVa ( const char * sFmt, va_list ap, ESphLogLevel eLevel )
@@ -2123,11 +2127,6 @@ void sphLogDebugRpl ( const char * sFmt, ... )
 	va_start ( ap, sFmt );
 	sphLogVa ( sFmt, ap, SPH_LOG_RPL_DEBUG );
 	va_end ( ap );
-}
-
-void sphSetLogger ( SphLogger_fn fnLog )
-{
-	g_pLogger = fnLog;
 }
 
 namespace TimePrefixed {

@@ -30,23 +30,18 @@
 	#pragma comment(linker, "/defaultlib:ws2_32.lib")
 	#pragma message("Automatically linking with ws2_32.lib")
 
-#else
-	// UNIX-specific headers and calls
-	#include <sys/socket.h>
-	#include <sys/un.h>
-	#include <arpa/inet.h>
+	// socket function definitions
+	#pragma comment(linker, "/defaultlib:wsock32.lib")
+	#pragma message("Automatically linking with wsock32.lib")
 
-	#if HAVE_POLL
-	#include <poll.h>
-	#endif
-
-	#if HAVE_EPOLL
-	#include <sys/epoll.h>
-	#endif
-
-#endif
-
-#if USE_WINDOWS
+	#define sphSockRecv(_sock,_buf,_len)	::recv(_sock,_buf,_len,0)
+	#define sphSockSend(_sock,_buf,_len)	::send(_sock,_buf,_len,0)
+	#define sphSockClose(_sock)				::closesocket(_sock)
+	#define SSIZE_T long
+		using sphIovec=WSABUF;
+	#define IOBUFTYPE (CHAR FAR *)
+	#define IOPTR(tX) (tX.buf)
+	#define IOLEN(tX) (tX.len)
 
 	// Windows hacks
 	#undef EINTR
@@ -67,28 +62,25 @@
 	#define ECONNRESET		WSAECONNRESET
 	#define ECONNABORTED	WSAECONNABORTED
 	#define ESHUTDOWN		WSAESHUTDOWN
-	#define socklen_t		int
 
 	#define ftruncate		_chsize
 	#define getpid			GetCurrentProcessId
 
-#endif // USE_WINDOWS
 
-// socket function definitions
-#if USE_WINDOWS
-
-	#pragma comment(linker, "/defaultlib:wsock32.lib")
-	#pragma message("Automatically linking with wsock32.lib")
-
-	#define sphSockRecv(_sock,_buf,_len)	::recv(_sock,_buf,_len,0)
-	#define sphSockSend(_sock,_buf,_len)	::send(_sock,_buf,_len,0)
-	#define sphSockClose(_sock)				::closesocket(_sock)
-	#define SSIZE_T long
-	using sphIovec = WSABUF;
-	#define IOBUFTYPE (CHAR FAR *)
-	#define IOPTR(tX) (tX.buf)
-	#define IOLEN(tX) (tX.len)
 #else
+	// UNIX-specific headers and calls
+	#include <sys/socket.h>
+	#include <sys/un.h>
+	#include <arpa/inet.h>
+
+	#if HAVE_POLL
+	#include <poll.h>
+	#endif
+
+	#if HAVE_EPOLL
+	#include <sys/epoll.h>
+	#endif
+
 	// there's no MSG_NOSIGNAL on OS X
 	#ifndef MSG_NOSIGNAL
 	#define MSG_NOSIGNAL 0
@@ -111,23 +103,32 @@
 #include "threadutils.h"
 using namespace Threads;
 
-const char * sphSockError ( int =0 );
-int sphSockGetErrno ();
-void sphSockSetErrno ( int );
-int sphSockPeekErrno ();
-int sphSetSockNB ( int );
-void sphFDSet ( int fd, fd_set * fdset );
-void sphFDClr ( int fd, fd_set * fdset );
+#define SPHINXAPI_PORT            9312
+#define SPHINXQL_PORT            9306
+#define SPH_ADDRESS_SIZE        sizeof("000.000.000.000")
+#define SPH_ADDRPORT_SIZE        sizeof("000.000.000.000:00000")
+#define NETOUTBUF                8192
 
-/** \brief wrapper over getaddrinfo
-Invokes getaddrinfo for given host which perform name resolving (dns).
- \param[in] sHost the host name
- \param[in] bFatal whether failed resolving is fatal (false by default)
- \param[in] bIP set true if sHost contains IP address (false by default)
- so no potentially lengthy network host address lockup necessary
- \return ipv4 address as DWORD, to be directly used as s_addr in connect(). */
-DWORD sphGetAddress ( const char * sHost, bool bFatal=false, bool bIP=false );
-char * sphFormatIP ( char * sBuffer, int iBufferSize, DWORD uAddress );
+// strict check, sphGetAddress will die with sphFatal() on failure
+#define GETADDR_STRICT	true
+
+// these defined in searchd.cpp
+void sphFatal( const char* sFmt, ... ) __attribute__ (( format ( printf, 1, 2 ))) NO_RETURN;
+void sphFatalLog( const char* sFmt, ... ) __attribute__ (( format ( printf, 1, 2 )));
+volatile bool& sphGetGotSigterm();
+
+/////////////////////////////////////////////////////////////////////////////
+// SOME SHARED GLOBAL VARIABLES
+/////////////////////////////////////////////////////////////////////////////
+
+// these are in searchd.cpp
+extern int g_iReadTimeout;        // defined in searchd.cpp
+extern int g_iWriteTimeout;    // sec
+
+extern int g_iMaxPacketSize;    // in bytes; for both query packets from clients and response packets from agents
+extern int g_iDistThreads;
+
+static const int64_t MS2SEC = I64C ( 1000000 );
 
 /////////////////////////////////////////////////////////////////////////////
 // MISC GLOBALS
@@ -214,18 +215,103 @@ enum class IndexType_e
 	ERROR_, // simple "ERROR" doesn't work on win due to '#define ERROR 0' somewhere.
 };
 
+enum ProtocolType_e
+{
+	PROTO_SPHINX = 0,
+	PROTO_MYSQL41,
+	PROTO_HTTP,
+	PROTO_REPLICATION,
+
+	PROTO_TOTAL
+};
+
+struct ListenerDesc_t
+{
+	Proto_e m_eProto;
+	CSphString m_sUnix;
+	DWORD m_uIP;
+	int m_iPort;
+	int m_iPortsCount;
+	bool m_bVIP;
+};
+
+// 'like' matcher
+class CheckLike
+{
+private:
+	CSphString m_sPattern;
+
+public:
+	explicit CheckLike( const char* sPattern );
+	bool Match( const char* sValue );
+};
+
+// string vector with 'like' matcher
+class VectorLike: public StrVec_t, public CheckLike
+{
+public:
+	CSphString m_sColKey;
+	CSphString m_sColValue;
+
+public:
+
+	VectorLike();
+	explicit VectorLike( const CSphString& sPattern );
+
+	const char* szColKey() const;
+	const char* szColValue() const;
+	bool MatchAdd( const char* sValue );
+	bool MatchAddVa( const char* sTemplate, ... ) __attribute__ (( format ( printf, 2, 3 )));
+};
+
 CSphString GetTypeName ( IndexType_e eType );
 IndexType_e TypeOfIndexConfig ( const CSphString & sType );
 
+// forwards from searchd
+void CheckPort( int iPort );
+ListenerDesc_t ParseListener( const char* sSpec );
+
+// use check outside ParseListener in order to make tests consistent despite platforms
+#if USE_WINDOWS
+	#define CHECK_LISTENER(dListener) \
+		if ( !(dListener).m_sUnix.IsEmpty() ) \
+			sphFatal( "UNIX sockets are not supported on Windows" );
+#else
+	#define CHECK_LISTENER(dListener)
+#endif
+
+
 /////////////////////////////////////////////////////////////////////////////
-// SOME SHARED GLOBAL VARIABLES
+// NETWORK SOCKET WRAPPERS
 /////////////////////////////////////////////////////////////////////////////
 
-extern int				g_iReadTimeout;		// defined in searchd.cpp
-extern int				g_iMaxPacketSize;	// in bytes; for both query packets from clients and response packets from agents
+const char* sphSockError( int = 0 );
+int sphSockGetErrno();
+void sphSockSetErrno( int );
+int sphSockPeekErrno();
+int sphSetSockNB( int );
+int RecvNBChunk( int iSock, char*& pBuf, int& iLeftBytes );
+int sphPoll( int iSock, int64_t tmTimeout, bool bWrite = false );
+void sphFDSet( int fd, fd_set* fdset );
+void sphFDClr( int fd, fd_set* fdset );
 
-extern int				g_iDistThreads;
-extern ESphLogLevel		g_eLogLevel;
+
+/** \brief wrapper over getaddrinfo
+Invokes getaddrinfo for given host which perform name resolving (dns).
+ \param[in] sHost the host name
+ \param[in] bFatal whether failed resolving is fatal (false by default)
+ \param[in] bIP set true if sHost contains IP address (false by default)
+ so no potentially lengthy network host address lockup necessary
+ \return ipv4 address as DWORD, to be directly used as s_addr in connect(). */
+DWORD sphGetAddress( const char* sHost, bool bFatal = false, bool bIP = false );
+char* sphFormatIP( char* sBuffer, int iBufferSize, DWORD uAddress );
+CSphString GetMacAddress();
+
+bool IsPortInRange( int iPort );
+int sphSockRead( int iSock, void* buf, int iLen, int iReadTimeout, bool bIntr );
+
+// first try to get data, and only then fall into sphSockRead (which poll socket first)
+int SockReadFast( int iSock, void* buf, int iLen, int iReadTimeout );
 
 /////////////////////////////////////////////////////////////////////////////
 // NETWORK BUFFERS
@@ -236,14 +322,12 @@ extern ESphLogLevel		g_eLogLevel;
 /// we just cache all streamed data into internal blob;
 /// NO data sending itself lives in this class.
 
-#define NETOUTBUF                8192
-
 class ISphOutputBuffer : public ISphRefcountedMT
 {
 public:
 	ISphOutputBuffer ();
-	ISphOutputBuffer ( CSphVector<BYTE>& dChunk );
-	virtual ~ISphOutputBuffer() {}
+	explicit ISphOutputBuffer ( CSphVector<BYTE>& dChunk );
+	~ISphOutputBuffer() override {}
 
 	void		SendInt ( int iValue )			{ SendT<int> ( htonl ( iValue ) ); }
 
@@ -319,7 +403,6 @@ private:
 
 
 // assume buffer never flushed between different Send()
-// bye-bye all 'calculate query len'
 class CachedOutputBuffer_c : public ISphOutputBuffer
 {
 	CSphVector<intptr_t> m_dBlobs;
@@ -420,8 +503,8 @@ public:
 	int				GetLength() const { return m_iLen; }
 	bool			GetBytesZerocopy ( const BYTE ** ppData, int iLen );
 
-	template < typename T > bool	GetDwords ( CSphVector<T> & dBuffer, int & iGot, int iMax );
-	template < typename T > bool	GetQwords ( CSphVector<T> & dBuffer, int & iGot, int iMax );
+	bool	GetDwords ( CSphVector<DWORD> & dBuffer, int & iGot, int iMax );
+	bool	GetQwords ( CSphVector<SphAttr_t> & dBuffer, int & iGot, int iMax );
 
 	inline int		HasBytes() const
 	{
@@ -436,22 +519,19 @@ protected:
 
 protected:
 	void			SetError ( bool bError ) { m_bError = bError; }
-	template < typename T > T	GetT ();
-};
-
-template < typename T > T InputBuffer_c::GetT ()
-{
-	if ( m_bError || ( m_pCur+sizeof(T) > m_pBuf+m_iLen ) )
+	template < typename T > T	GetT ()
 	{
-		SetError ( true );
-		return 0;
+		if ( m_bError || ( m_pCur + sizeof( T )>m_pBuf + m_iLen ))
+		{
+			SetError( true );
+			return 0;
+		}
+
+		T iRes = sphUnalignedRead( *( T* ) m_pCur );
+		m_pCur += sizeof( T );
+		return iRes;
 	}
-
-	T iRes = sphUnalignedRead ( *(T*)m_pCur );
-	m_pCur += sizeof(T);
-	return iRes;
-}
-
+};
 
 /// simple memory request buffer
 using MemInputBuffer_c = InputBuffer_c;
@@ -476,89 +556,45 @@ private:
 	bool				m_bIntr = false;
 };
 
-bool IsPortInRange ( int iPort );
-int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr );
 
-// first try to get data, and only then fall into sphSockRead (which poll socket first)
-int SockReadFast ( int iSock, void * buf, int iLen, int iReadTimeout );
 
-extern ThreadRole MainThread;
-/// This class is basically a pointer to query string and some more additional info.
-/// Each thread which executes query must have exactly one instance of this class on
-/// its stack and m_tLastQueryTLS will contain a pointer to that instance.
-/// Main thread has explicitly created SphCrashLogger_c on its stack, other query
-/// threads should be created with SphCrashLogger_c::ThreadCreate()
-class SphCrashLogger_c
-{
-public:
-	SphCrashLogger_c () {}
-	~SphCrashLogger_c ();
-
-	static void Init () REQUIRES ( MainThread );
-	static void Done () REQUIRES ( MainThread ) {};
-
-#if !USE_WINDOWS
-	static void HandleCrash ( int );
-#else
-	static LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc );
-#endif
-	static void SetLastQuery ( const CrashQuery_t & tQuery );
-	static void SetupTimePID ();
-	static CrashQuery_t GetQuery ();
-	static void SetTopQueryTLS ( CrashQuery_t * pQuery );
-
-	// create thread with crash logging
-	static bool ThreadCreate ( SphThread_t * pThread, void ( *pCall )(void*), void * pArg, bool bDetached=false, const char* sName=nullptr );
-
-private:
-	struct CallArgPair_t
+/////////////////////////////////////////////////////////////////////////////
+// SERVED INDEX DESCRIPTORS STUFF
+/////////////////////////////////////////////////////////////////////////////
+namespace QueryStats {
+	enum
 	{
-		CallArgPair_t ( void ( *pCall )(void *), void * pArg )
-			: m_pCall ( pCall )
-			, m_pArg ( pArg )
-		{}
-		void ( *m_pCall )( void * );
-		void * m_pArg;
+		INTERVAL_1MIN,
+		INTERVAL_5MIN,
+		INTERVAL_15MIN,
+		INTERVAL_ALLTIME,
+
+		INTERVAL_TOTAL
 	};
 
-	// sets up a TLS for a given thread
-	static void ThreadWrapper ( void * pArg );
-	static TLS_T<CrashQuery_t> m_pTlsCrashQuery;    // pointer to on-stack instance of this class
-};
 
-enum
-{
-	QUERY_STATS_INTERVAL_1MIN,
-	QUERY_STATS_INTERVAL_5MIN,
-	QUERY_STATS_INTERVAL_15MIN,
-	QUERY_STATS_INTERVAL_ALLTIME,
+	enum
+	{
+		TYPE_AVG,
+		TYPE_MIN,
+		TYPE_MAX,
+		TYPE_95,
+		TYPE_99,
 
-	QUERY_STATS_INTERVAL_TOTAL
-};
-
-
-enum
-{
-	QUERY_STATS_TYPE_AVG,
-	QUERY_STATS_TYPE_MIN,
-	QUERY_STATS_TYPE_MAX,
-	QUERY_STATS_TYPE_95,
-	QUERY_STATS_TYPE_99,
-
-	QUERY_STATS_TYPE_TOTAL,
-};
-
+		TYPE_TOTAL,
+	};
+}
 
 struct QueryStatElement_t
 {
-	uint64_t	m_dData[QUERY_STATS_TYPE_TOTAL] = { 0, UINT64_MAX, 0, 0, 0, };
+	uint64_t	m_dData[QueryStats::TYPE_TOTAL] = { 0, UINT64_MAX, 0, 0, 0, };
 	uint64_t	m_uTotalQueries = 0;
 };
 
 
 struct QueryStats_t
 {
-	QueryStatElement_t	m_dStats[QUERY_STATS_INTERVAL_TOTAL];
+	QueryStatElement_t	m_dStats[QueryStats::INTERVAL_TOTAL];
 };
 
 
@@ -579,53 +615,12 @@ struct QueryStatRecord_t
 class QueryStatContainer_i
 {
 public:
+	virtual								~QueryStatContainer_i() {}
 	virtual void						Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp ) = 0;
 	virtual void						GetRecord ( int iRecord, QueryStatRecord_t & tRecord ) const = 0;
 	virtual int							GetNumRecords() const = 0;
 };
 
-
-class QueryStatContainer_c : public QueryStatContainer_i
-{
-public:
-	void						Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp ) final;
-	void						GetRecord ( int iRecord, QueryStatRecord_t & tRecord ) const final;
-	int							GetNumRecords() const final;
-
-	QueryStatContainer_c();
-	QueryStatContainer_c ( QueryStatContainer_c && tOther ) noexcept;
-	void Swap ( QueryStatContainer_c& rhs ) noexcept;
-	QueryStatContainer_c & operator= ( QueryStatContainer_c tOther ) noexcept;
-	
-private:
-	CircularBuffer_T<QueryStatRecord_t>	m_dRecords;
-};
-
-
-#ifndef NDEBUG
-class QueryStatContainerExact_c : public QueryStatContainer_i
-{
-public:
-	void						Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp ) final;
-	void						GetRecord ( int iRecord, QueryStatRecord_t & tRecord ) const final;
-	int							GetNumRecords() const final;
-
-	QueryStatContainerExact_c();
-	QueryStatContainerExact_c ( QueryStatContainerExact_c && tOther ) noexcept;
-	void Swap ( QueryStatContainerExact_c& rhs ) noexcept;
-	QueryStatContainerExact_c & operator= ( QueryStatContainerExact_c tOther ) noexcept;
-
-private:
-	struct QueryStatRecordExact_t
-	{
-		uint64_t	m_uQueryTime;
-		uint64_t	m_uFoundRows;
-		uint64_t	m_uTimestamp;
-	};
-
-	CircularBuffer_T<QueryStatRecordExact_t> m_dRecords;
-};
-#endif
 
 class ServedStats_c
 {
@@ -635,16 +630,16 @@ public:
 
 	void				AddQueryStat ( uint64_t uFoundRows, uint64_t uQueryTime ); //  REQUIRES ( !m_tStatsLock );
 						/// since mutex is internal,
-	void				CalculateQueryStats ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const; // REQUIRES (	!m_tStatsLock );
+	void				CalculateQueryStats ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const EXCLUDES ( m_tStatsLock );
 #ifndef NDEBUG
-	void				CalculateQueryStatsExact ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const; // REQUIRES ( !m_tStatsLock );
+	void				CalculateQueryStatsExact ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const EXCLUDES ( m_tStatsLock );
 #endif
 private:
 	mutable CSphRwlock m_tStatsLock;
-	QueryStatContainer_c m_tQueryStatRecords GUARDED_BY ( m_tStatsLock );
+	CSphScopedPtr<QueryStatContainer_i> m_pQueryStatRecords GUARDED_BY ( m_tStatsLock );
 
 #ifndef NDEBUG
-	QueryStatContainerExact_c m_tQueryStatRecordsExact GUARDED_BY ( m_tStatsLock );
+	CSphScopedPtr<QueryStatContainer_i> m_pQueryStatRecordsExact GUARDED_BY ( m_tStatsLock );
 #endif
 
 	TDigest_i *			m_pQueryTimeDigest GUARDED_BY ( m_tStatsLock ) = nullptr;
@@ -761,7 +756,7 @@ class SCOPED_CAPABILITY ServedDescRPtr_c : ISphNoncopyable
 public:
 	ServedDescRPtr_c() = default;
 	// by default acquire read (shared) lock
-	ServedDescRPtr_c ( const ServedIndex_c * pLock ) ACQUIRE_SHARED( pLock->m_tLock )
+	explicit ServedDescRPtr_c ( const ServedIndex_c * pLock ) ACQUIRE_SHARED( pLock->m_tLock )
 		: m_pLock { pLock }
 	{
 		if ( m_pLock )
@@ -801,7 +796,7 @@ public:
 	ServedDescWPtr_c () = default;
 
 	// acquire write (exclusive) lock
-	ServedDescWPtr_c ( const ServedIndex_c * pLock ) ACQUIRE ( pLock->m_tLock )
+	explicit ServedDescWPtr_c ( const ServedIndex_c * pLock ) ACQUIRE ( pLock->m_tLock )
 		: m_pLock { pLock }
 	{
 		if ( m_pLock )
@@ -836,7 +831,8 @@ private:
 
 using ServedIndexRefPtr_c = CSphRefcountedPtr<ServedIndex_c>;
 
-using AddOrReplaceHookFn = void ( * ) ( ISphRefcountedMT*, const CSphString& );
+using AddOrReplaceHookFn = std::function<void( ISphRefcountedMT*, const CSphString& )>;
+
 /// hash of ref-counted pointers, guarded by RW-lock
 class GuardedHash_c : public ISphNoncopyable
 {
@@ -853,7 +849,8 @@ public:
 
 	// atomically set new entry, then release previous, if not the same and is non-zero
 	void AddOrReplace ( ISphRefcountedMT * pEntry, const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
-	void SetAddOrReplaceHook ( AddOrReplaceHookFn pHook ) { m_pHook = pHook; }
+
+	void SetAddOrReplaceHook( AddOrReplaceHookFn pHook )	{ m_pHook = std::move( pHook ); }
 
 	// release and delete from hash by key
 	bool Delete ( const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
@@ -1019,6 +1016,27 @@ inline ServedIndexRefPtr_c GetServed ( const CSphString &sName, GuardedHash_c * 
 {
 	return ServedIndexRefPtr_c ( ( ServedIndex_c * ) pHash->Get ( sName ) );
 }
+
+
+ESphAddIndex ConfigureAndPreloadIndex( const CSphConfigSection& hIndex, const char* sIndexName, bool bJson );
+ESphAddIndex
+AddIndexMT( GuardedHash_c& dPost, const char* szIndexName, const CSphConfigSection& hIndex, bool bReplace = false );
+bool PreallocNewIndex( ServedDesc_t& tIdx, const CSphConfigSection* pConfig, const char* szIndexName );
+
+struct AttrUpdateArgs: public CSphAttrUpdateEx
+{
+	const CSphQuery* m_pQuery = nullptr;
+	const ThdDesc_t* m_pThd = nullptr;
+	const ServedDesc_t* m_pDesc = nullptr;
+	const CSphString* m_pIndexName = nullptr;
+	bool m_bJson = false;
+};
+
+void HandleMySqlExtendedUpdate( AttrUpdateArgs& tArgs );
+
+/////////////////////////////////////////////////////////////////////////////
+// SERVED INDEX DESCRIPTORS STUFF
+/////////////////////////////////////////////////////////////////////////////
 
 enum SqlStmt_e
 {

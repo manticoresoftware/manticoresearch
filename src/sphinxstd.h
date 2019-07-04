@@ -100,8 +100,10 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 
 #if defined (__GNUC__)
 #define VARIABLE_IS_NOT_USED __attribute__((unused))
+#define NO_RETURN  __attribute__ ((__noreturn__))
 #else
 #define  VARIABLE_IS_NOT_USED
+#define NO_RETURN
 #endif
 
 #define STATIC_ASSERT(_cond,_name)		typedef char STATIC_ASSERT_FAILED_ ## _name [ (_cond) ? 1 : -1 ] VARIABLE_IS_NOT_USED

@@ -308,7 +308,7 @@ enum ESphLogLevel
 extern ESphLogLevel g_eLogLevel;		// current log level, can be changed on the fly
 
 typedef void ( *SphLogger_fn )( ESphLogLevel, const char *, va_list );
-void sphSetLogger ( SphLogger_fn fnLog );
+volatile SphLogger_fn& g_pLogger();
 
 void sphLogVa ( const char * sFmt, va_list ap, ESphLogLevel eLevel = SPH_LOG_WARNING );
 void sphWarning ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT

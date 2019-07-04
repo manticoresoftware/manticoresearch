@@ -15,28 +15,6 @@
 #ifndef _searchdreplication_
 #define _searchdreplication_
 
-enum ProtocolType_e
-{
-	PROTO_SPHINX = 0,
-	PROTO_MYSQL41,
-	PROTO_HTTP,
-	PROTO_REPLICATION,
-
-	PROTO_TOTAL
-};
-
-struct ListenerDesc_t
-{
-	Proto_e			m_eProto;
-	CSphString		m_sUnix;
-	DWORD			m_uIP;
-	int				m_iPort;
-	int				m_iPortsCount;
-	bool			m_bVIP;
-};
-
-struct ReplicationCommand_t;
-
 // load data from JSON config on daemon start
 void JsonLoadConfig ( const CSphConfigSection & hSearchd );
 
@@ -78,61 +56,14 @@ bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool
 // cluster ALTER statement that updates nodes option from view nodes at all nodes at cluster
 bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdate, CSphString & sError );
 
-// 'like' matcher
-class CheckLike
-{
-private:
-	CSphString m_sPattern;
-
-public:
-	explicit CheckLike ( const char * sPattern );
-	bool Match ( const char * sValue );
-};
-
-// string vector with 'like' matcher
-class VectorLike : public StrVec_t, public CheckLike
-{
-public:
-	CSphString m_sColKey;
-	CSphString m_sColValue;
-
-public:
-
-	VectorLike ();
-	explicit VectorLike ( const CSphString& sPattern );
-
-	const char * szColKey() const;
-	const char * szColValue() const;
-	bool MatchAdd ( const char* sValue );
-	bool MatchAddVa ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
-};
-
 // dump all clusters statuses
 void ReplicateClustersStatus ( VectorLike & dStatus );
 
-// forwards from searchd
-#define SPH_ADDRESS_SIZE		sizeof("000.000.000.000")
-#define SPH_ADDRPORT_SIZE		sizeof("000.000.000.000:00000")
-
-ListenerDesc_t ParseListener ( const char * sSpec );
-ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName, bool bJson );
-ESphAddIndex AddIndexMT ( GuardedHash_c& dPost, const char* szIndexName, const CSphConfigSection& hIndex, bool bReplace = false );
-bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, const char * szIndexName );
+// validate that SphinxQL statement could be run for this cluster:index
 bool CheckIndexCluster ( const CSphString & sIndexName, const ServedDesc_t & tDesc, const CSphString & sStmtCluster, CSphString & sError );
 bool ClusterOperationProhibit ( const ServedDesc_t * pDesc, CSphString & sError, const char * sOp );
 
-CSphString GetMacAddress ();
 
-struct AttrUpdateArgs : public CSphAttrUpdateEx
-{
-	const CSphQuery * m_pQuery = nullptr;
-	const ThdDesc_t * m_pThd = nullptr;
-	const ServedDesc_t * m_pDesc = nullptr;
-	const CSphString * m_pIndexName = nullptr;
-	bool m_bJson = false;
-};
-
-void HandleMySqlExtendedUpdate ( AttrUpdateArgs & tArgs );
 
 
 #endif // _searchdreplication_

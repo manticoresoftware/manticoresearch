@@ -15,20 +15,22 @@
 #include "sphinxint.h"
 #include "searchdaemon.h"
 #include "searchdha.h"
+#include "searchdreplication.h"
 
 
 // QueryStatElement_t uses default ctr with inline initializer;
 // this test is just to be sure it works correctly
 TEST ( functions, QueryStatElement_t_ctr )
 {
+	using namespace QueryStats;
 	QueryStatElement_t tElem;
-	ASSERT_EQ ( sizeof(tElem.m_dData), QUERY_STATS_TYPE_TOTAL*sizeof(tElem.m_dData[0]));
+	ASSERT_EQ ( sizeof(tElem.m_dData), TYPE_TOTAL*sizeof(tElem.m_dData[0]));
 	ASSERT_EQ ( tElem.m_uTotalQueries, 0);
-	ASSERT_EQ ( tElem.m_dData[QUERY_STATS_TYPE_AVG], 0 );
-	ASSERT_EQ ( tElem.m_dData[QUERY_STATS_TYPE_MIN], UINT64_MAX );
-	ASSERT_EQ ( tElem.m_dData[QUERY_STATS_TYPE_MAX], 0 );
-	ASSERT_EQ ( tElem.m_dData[QUERY_STATS_TYPE_95], 0 );
-	ASSERT_EQ ( tElem.m_dData[QUERY_STATS_TYPE_99], 0 );
+	ASSERT_EQ ( tElem.m_dData[TYPE_AVG], 0 );
+	ASSERT_EQ ( tElem.m_dData[TYPE_MIN], UINT64_MAX );
+	ASSERT_EQ ( tElem.m_dData[TYPE_MAX], 0 );
+	ASSERT_EQ ( tElem.m_dData[TYPE_95], 0 );
+	ASSERT_EQ ( tElem.m_dData[TYPE_99], 0 );
 }
 
 class tstlogger
@@ -56,31 +58,55 @@ class tstlogger
 			break;
 		}
 		char * pOut = sLogBuff;
-		pOut += sprintf ( pOut, "%s", lvl );
-		vsprintf ( pOut, sFmt, ap );
+		if ( m_bOutToStderr )
+		{
+			fprintf ( stderr, "%s", lvl );
+			vfprintf ( stderr, sFmt, ap);
+		} else
+		{
+			pOut += sprintf( pOut, "%s", lvl );
+			vsprintf( pOut, sFmt, ap );
+		}
 	}
 
 protected:
 	void setup ()
 	{
-		sphSetLogger ( TestLogger );
+		g_pLogger() = TestLogger;
 		sLogBuff[0] = '\0';
 	}
 
 	static char sLogBuff[1024];
+	static bool m_bOutToStderr;
 };
 
 char tstlogger::sLogBuff[1024];
+bool tstlogger::m_bOutToStderr = false;
 
-// check how ParseAddressPort holds different cases
-class T_ParseAddressPort : protected tstlogger, public ::testing::Test
+
+class CustomLogger_c: protected tstlogger, public ::testing::Test
 {
-
 protected:
-	void SetUp () final
+	void SetUp() override
 	{
 		tstlogger::setup();
 	}
+};
+
+class DeathLogger_c: protected tstlogger, public ::testing::Test
+{
+protected:
+	void SetUp() override
+	{
+		m_bOutToStderr = true;
+		tstlogger::setup();
+	}
+};
+
+// check how ParseAddressPort holds different cases
+class T_ParseAddressPort :  public CustomLogger_c
+{
+protected:
 
 	WarnInfo_t tInfo {"tstidx", "tstagent" };
 
@@ -927,4 +953,120 @@ TEST_F ( TGuardedHash_c, TryAddThenGet_obj_to_obj2 )
 
 	}
 	EXPECT_EQ ( pRef->GetRefcount (), 2 ) << "me and hash";
+}
+
+bool operator==( const ListenerDesc_t& lhs, const ListenerDesc_t& rhs )
+{
+	return lhs.m_eProto==rhs.m_eProto
+	&& lhs.m_bVIP == rhs.m_bVIP
+	&& lhs.m_iPort == rhs.m_iPort
+	&& lhs.m_iPortsCount == rhs.m_iPortsCount
+	&& lhs.m_uIP == rhs.m_uIP
+	&& lhs.m_sUnix == rhs.m_sUnix;
+}
+
+
+// simple IP, no port, default port - success
+TEST ( ParseListener, simple_ip_no_port )
+{
+	struct { const char* sSpec; ListenerDesc_t sRes; } dTable[] = {
+		{"8.8.8.8:1000",		{ Proto_e::SPHINX, "", 134744072, 1000, 0, false }},
+		{"1000",				{ Proto_e::SPHINX, "", 0, 1000, 0, false }},
+		{"/linux/host",			{ Proto_e::SPHINX, "/linux/host", 0, 9312, 0, false }},
+		{"8.8.8.8:1000-10000",	{ Proto_e::SPHINX, "", 134744072, 1000, 9000, false }},
+
+		{"8.8.8.8:1000:sphinx",		{ Proto_e::SPHINX, "", 134744072, 1000, 0, false }},
+		{"1000:sphinx",				{ Proto_e::SPHINX, "", 0, 1000, 0, false }},
+		{"/linux/host:sphinx",		{ Proto_e::SPHINX, "/linux/host", 0, 9312, 0, false }},
+		{"8.8.8.8:1000-10000:sphinx",	{ Proto_e::SPHINX, "", 134744072, 1000, 9000, false }},
+
+		{"8.8.8.8:1000:mysql41",	{ Proto_e::MYSQL41, "", 134744072, 1000, 0, false }},
+		{"1000:mysql41",			{ Proto_e::MYSQL41, "", 0, 1000, 0, false }},
+		{"/linux/host:mysql41",			{ Proto_e::MYSQL41, "/linux/host", 0, 9312, 0, false }},
+		{"8.8.8.8:1000-10000:mysql41",	{ Proto_e::MYSQL41, "", 134744072, 1000, 9000, false }},
+
+		{"8.8.8.8:1000:http",		{ Proto_e::HTTP, "", 134744072, 1000, 0, false }},
+		{"1000:http",				{ Proto_e::HTTP, "", 0, 1000, 0, false }},
+		{"/linux/host:http",		{ Proto_e::HTTP, "/linux/host", 0, 9312, 0, false }},
+		{"8.8.8.8:1000-10000:http",	{ Proto_e::HTTP, "", 134744072, 1000, 9000, false }},
+
+		{"8.8.8.8:1000:replication",	{ Proto_e::REPLICATION, "", 134744072, 1000, 0, false }},
+		{"1000:replication",			{ Proto_e::REPLICATION, "", 0, 1000, 0, false }},
+		{"/linux/host:replication",		{ Proto_e::REPLICATION, "/linux/host", 0, 9312, 0, false }},
+		{"8.8.8.8:1000-10000:replication",	{ Proto_e::REPLICATION, "", 134744072, 1000, 9000, false }},
+
+		{"8.8.8.8:1000:sphinx_vip",		{ Proto_e::SPHINX, "", 134744072, 1000, 0, true }},
+		{"1000:sphinx_vip",				{ Proto_e::SPHINX, "", 0, 1000, 0, true }},
+		{"/linux/host:sphinx_vip",		{ Proto_e::SPHINX, "/linux/host", 0, 9312, 0, true }},
+		{"8.8.8.8:1000-10000:sphinx_vip",	{ Proto_e::SPHINX, "", 134744072, 1000, 9000, true }},
+
+		{"8.8.8.8:1000:mysql41_vip",	{ Proto_e::MYSQL41, "", 134744072, 1000, 0, true }},
+		{"1000:mysql41_vip",			{ Proto_e::MYSQL41, "", 0, 1000, 0, true }},
+		{"/linux/host:mysql41_vip",		{ Proto_e::MYSQL41, "/linux/host", 0, 9312, 0, true }},
+		{"8.8.8.8:1000-10000:mysql41_vip",	{ Proto_e::MYSQL41, "", 134744072, 1000, 9000, true }},
+
+		{"8.8.8.8:1000:http_vip",	{ Proto_e::HTTP, "", 134744072, 1000, 0, true }},
+		{"1000:http_vip",			{ Proto_e::HTTP, "", 0, 1000, 0, true }},
+		{"/linux/host:http_vip",	{ Proto_e::HTTP, "/linux/host", 0, 9312, 0, true }},
+		{"8.8.8.8:1000-10000:http_vip",	{ Proto_e::HTTP, "", 134744072, 1000, 9000, true }},
+
+		{"8.8.8.8:1000:replication_vip",	{ Proto_e::REPLICATION, "", 134744072, 1000, 0, true }},
+		{"1000:replication_vip",			{ Proto_e::REPLICATION, "", 0, 1000, 0, true }},
+		{"/linux/host:replication_vip",		{ Proto_e::REPLICATION, "/linux/host", 0, 9312, 0, true }},
+		{"8.8.8.8:1000-10000:replication_vip",	{ Proto_e::REPLICATION, "", 134744072, 1000, 9000, true }},
+	};
+
+	for (const auto& sCase : dTable)
+		EXPECT_TRUE ( ParseListener( sCase.sSpec )==sCase.sRes ) << sCase.sSpec;
+}
+
+TEST_F ( DeathLogger_c, ParseListener_wrong_port )
+{
+	struct
+	{
+		const char* sSpec;
+		ListenerDesc_t sRes;
+	} dTable[] = {
+		{ "8.8.8.8:65536", { Proto_e::SPHINX, "", 0, 9306, 0, false }},
+		{ "65536", { Proto_e::SPHINX, "", 0, 9306, 0, false }},
+		{ "8.8.8.8:1000-65536", { Proto_e::SPHINX, "", 0, 1000, 0, false }},
+
+		{ "8.8.8.8:65536:sphinx", { Proto_e::SPHINX, "", 0, 9306, 0, false }},
+		{ "65536:sphinx", { Proto_e::SPHINX, "", 0, 9306, 0, false }},
+		{ "8.8.8.8:1000-65536:sphinx", { Proto_e::SPHINX, "", 0, 9306, 0, false }},
+
+		{ "8.8.8.8:65536:mysql41", { Proto_e::MYSQL41, "", 0, 9306, 0, false }},
+		{ "65536:mysql41", { Proto_e::MYSQL41, "", 0, 9306, 0, false }},
+		{ "8.8.8.8:1000-65536:mysql41", { Proto_e::MYSQL41, "", 0, 9306, 0, false }},
+
+		{ "8.8.8.8:65536:http", { Proto_e::HTTP, "", 0, 9306, 0, false }},
+		{ "65536:http", { Proto_e::HTTP, "", 0, 9306, 0, false }},
+		{ "8.8.8.8:1000-65536:http", { Proto_e::HTTP, "", 0, 9306, 0, false }},
+
+		{ "8.8.8.8:65536:replication", { Proto_e::REPLICATION, "", 0, 9306, 0, false }},
+		{ "65536:replication", { Proto_e::REPLICATION, "", 0, 9306, 0, false }},
+		{ "8.8.8.8:1000-65536:replication", { Proto_e::REPLICATION, "", 0, 9306, 0, false }},
+
+		{ "8.8.8.8:65536:sphinx_vip", { Proto_e::SPHINX, "", 0, 9306, 0, false }},
+		{ "65536:sphinx_vip", { Proto_e::SPHINX, "", 0, 9306, 0, false }},
+		{ "8.8.8.8:1000-65536:sphinx_vip", { Proto_e::SPHINX, "", 0, 9306, 0, false }},
+
+		{ "8.8.8.8:65536:mysql41_vip", { Proto_e::MYSQL41, "", 0, 9306, 0, false }},
+		{ "65536:mysql41_vip", { Proto_e::MYSQL41, "", 0, 9306, 0, false }},
+		{ "8.8.8.8:1000-65536:mysql41_vip", { Proto_e::MYSQL41, "", 0, 9306, 0, false }},
+
+		{ "8.8.8.8:65536:http_vip", { Proto_e::HTTP, "", 0, 9306, 0, false }},
+		{ "65536:http_vip", { Proto_e::HTTP, "", 0, 9306, 0, false }},
+		{ "8.8.8.8:1000-65536:http_vip", { Proto_e::HTTP, "", 0, 9306, 0, false }},
+
+		{ "8.8.8.8:65536:replication_vip", { Proto_e::REPLICATION, "", 0, 9306, 0, false }},
+		{ "65536:replication_vip", { Proto_e::REPLICATION, "", 0, 9306, 0, false }},
+		{ "8.8.8.8:1000-65536:replication_vip", { Proto_e::REPLICATION, "", 0, 9306, 0, false }},
+	};
+
+	for ( const auto& sCase : dTable )
+	{
+		EXPECT_EXIT( ParseListener( sCase.sSpec ), ::testing::ExitedWithCode( 1 ),
+					 "FATAL: port 65536 is out of range" ) << sCase.sSpec;
+	}
 }

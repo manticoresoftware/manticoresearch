@@ -22,7 +22,9 @@ set ( INDEXTOOL_SRCS indextool.cpp )
 set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp
 		searchdreplication.cpp threadutils.cpp searchdtask.cpp taskping.cpp
 		taskmalloctrim.cpp taskoptimize.cpp taskglobalidf.cpp tasksavestate.cpp
-		taskflushbinlog.cpp taskflushattrs.cpp taskflushmutable.cpp taskpreread.cpp )
+		taskflushbinlog.cpp taskflushattrs.cpp taskflushmutable.cpp taskpreread.cpp
+		searchdaemon.cpp )
+set ( SEARCHD_SRCS searchd.cpp ${SEARCHD_SRCS_TESTABLE} )
 set ( SPELLDUMP_SRCS spelldump.cpp )
 set ( TESTS_SRCS tests.cpp )
 set ( WORDBREAKER_SRCS sphinxstd.cpp wordbreaker.cpp)
@@ -167,7 +169,7 @@ add_library ( libsphinx STATIC ${LIBSPHINX_SRCS} ${HEADERS} ${GHEADERS} ${LIBSPH
 add_dependencies ( libsphinx vergen )
 
 add_library ( lsearchd OBJECT ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
-add_dependencies(lsearchd vergen)
+add_dependencies ( lsearchd vergen )
 
 # our executables
 add_executable ( indexer ${INDEXER_SRCS} )

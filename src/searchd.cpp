@@ -21,7 +21,6 @@
 #include "sphinxjsonquery.h"
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
-#include "icu.h"
 #include "accumulator.h"
 #include "searchdaemon.h"
 #include "searchdha.h"
@@ -48,21 +47,16 @@ extern "C"
 #include "sphinxudf.h"
 }
 
-#include <signal.h>
-#include <locale.h>
-#include <math.h>
-#include <time.h>
+#include <csignal>
+#include <clocale>
+#include <cmath>
+#include <ctime>
 
 #if HAVE_MALLOC_H
 #include <malloc.h>
 #endif
 
 #define SEARCHD_BACKLOG			5
-#define SPHINXAPI_PORT			9312
-#define SPHINXQL_PORT			9306
-#define SPH_ADDRESS_SIZE		sizeof("000.000.000.000")
-#define SPH_ADDRPORT_SIZE		sizeof("000.000.000.000:00000")
-#define NETOUTBUF				8192
 
 // don't shutdown on SIGKILL (debug purposes)
 // 1 - SIGKILL will shut down the whole daemon; 0 - watchdog will reincarnate the daemon
@@ -77,15 +71,11 @@ extern "C"
 	// Win-specific headers and calls
 	#include <io.h>
 
-	#define sphSeek		_lseeki64
-
 #else
 	// UNIX-specific headers and calls
 	#include <sys/wait.h>
 	#include <netdb.h>
 	#include<netinet/in.h>
-
-	#define sphSeek		lseek
 
 #endif
 
@@ -138,9 +128,8 @@ static char				g_sLogFilter[SPH_MAX_FILENAME_LEN+1] = "\0";
 static int				g_iLogFilterLen = 0;
 static int				g_iLogFileMode = 0;
 
-static const int64_t	MS2SEC = I64C ( 1000000 );
 int						g_iReadTimeout		= 5;	// sec
-static int				g_iWriteTimeout		= 5;
+int						g_iWriteTimeout		= 5;	// sec
 static int				g_iClientTimeout	= 300;
 static int				g_iClientQlTimeout	= 900;	// sec
 static int				g_iMaxChildren		= 0;
@@ -233,7 +222,7 @@ static bool				g_bStripPath	= false;
 static bool				g_bCoreDump		= false;
 
 static volatile sig_atomic_t g_bGotSighup		= 0;	// we just received SIGHUP; need to log
-static volatile sig_atomic_t g_bGotSigterm		= 0;	// we just received SIGTERM; need to shutdown
+static auto& g_bGotSigterm		= sphGetGotSigterm();	// we just received SIGTERM; need to shutdown
 static volatile sig_atomic_t g_bGotSigusr1		= 0;	// we just received SIGUSR1; need to reopen logs
 
 // pipe to watchdog to inform that daemon is going to close, so no need to restart it in case of crash
@@ -297,486 +286,6 @@ static ServedIndexRefPtr_c GetDisabled ( const CSphString& sName )
 	return GetServed ( sName, &g_dPostIndexes );
 }
 
-//////////////////////////////////////////////////////////////////////////
-void QueryStatContainer_c::Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp )
-{
-	if ( !m_dRecords.IsEmpty() )
-	{
-		QueryStatRecord_t & tLast = m_dRecords.Last();
-		const uint64_t BUCKET_TIME_DELTA = 100000;
-		if ( uTimestamp-tLast.m_uTimestamp<=BUCKET_TIME_DELTA )
-		{
-			tLast.m_uFoundRowsMin = Min ( uFoundRows, tLast.m_uFoundRowsMin );
-			tLast.m_uFoundRowsMax = Max ( uFoundRows, tLast.m_uFoundRowsMax );
-			tLast.m_uFoundRowsSum += uFoundRows;
-
-			tLast.m_uQueryTimeMin = Min ( uQueryTime, tLast.m_uQueryTimeMin );
-			tLast.m_uQueryTimeMax = Max ( uQueryTime, tLast.m_uQueryTimeMax );
-			tLast.m_uQueryTimeSum += uQueryTime;
-
-			tLast.m_iCount++;
-
-			return;
-		}
-	}
-
-	const uint64_t MAX_TIME_DELTA = 15*60*1000000;
-	while ( !m_dRecords.IsEmpty() && ( uTimestamp-m_dRecords[0].m_uTimestamp ) > MAX_TIME_DELTA )
-		m_dRecords.Pop();
-
-	QueryStatRecord_t & tRecord = m_dRecords.Push();
-	tRecord.m_uFoundRowsMin = uFoundRows;
-	tRecord.m_uFoundRowsMax = uFoundRows;
-	tRecord.m_uFoundRowsSum = uFoundRows;
-
-	tRecord.m_uQueryTimeMin = uQueryTime;
-	tRecord.m_uQueryTimeMax = uQueryTime;
-	tRecord.m_uQueryTimeSum = uQueryTime;
-
-	tRecord.m_uTimestamp = uTimestamp;
-	tRecord.m_iCount = 1;
-}
-
-void QueryStatContainer_c::GetRecord ( int iRecord, QueryStatRecord_t & tRecord ) const
-{
-	tRecord = m_dRecords[iRecord];
-}
-
-
-int QueryStatContainer_c::GetNumRecords() const
-{
-	return m_dRecords.GetLength();
-}
-
-QueryStatContainer_c::QueryStatContainer_c() = default;
-
-QueryStatContainer_c::QueryStatContainer_c ( QueryStatContainer_c && tOther ) noexcept
-	: QueryStatContainer_c () { Swap(tOther); }
-
-void QueryStatContainer_c::Swap ( QueryStatContainer_c& rhs ) noexcept
-{
-	rhs.m_dRecords.Swap ( m_dRecords );
-}
-
-QueryStatContainer_c & QueryStatContainer_c::operator = ( QueryStatContainer_c tOther ) noexcept
-{
-	Swap (tOther);
-	return *this;
-}
-
-//////////////////////////////////////////////////////////////////////////
-
-#ifndef NDEBUG
-void QueryStatContainerExact_c::Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp )
-{
-	const uint64_t MAX_TIME_DELTA = 15*60*1000000;
-	while ( !m_dRecords.IsEmpty() && ( uTimestamp-m_dRecords[0].m_uTimestamp ) > MAX_TIME_DELTA )
-		m_dRecords.Pop();
-
-	QueryStatRecordExact_t & tRecord = m_dRecords.Push();
-	tRecord.m_uFoundRows = uFoundRows;
-	tRecord.m_uQueryTime = uQueryTime;
-	tRecord.m_uTimestamp = uTimestamp;
-}
-
-
-int QueryStatContainerExact_c::GetNumRecords() const
-{
-	return m_dRecords.GetLength();
-}
-
-
-void QueryStatContainerExact_c::GetRecord ( int iRecord, QueryStatRecord_t & tRecord ) const
-{
-	const QueryStatRecordExact_t & tExact = m_dRecords[iRecord];
-
-	tRecord.m_uQueryTimeMin = tExact.m_uQueryTime;
-	tRecord.m_uQueryTimeMax = tExact.m_uQueryTime;
-	tRecord.m_uQueryTimeSum = tExact.m_uQueryTime;
-	tRecord.m_uFoundRowsMin = tExact.m_uFoundRows;
-	tRecord.m_uFoundRowsMax = tExact.m_uFoundRows;
-	tRecord.m_uFoundRowsSum = tExact.m_uFoundRows;
-
-	tRecord.m_uTimestamp = tExact.m_uTimestamp;
-	tRecord.m_iCount = 1;
-}
-
-QueryStatContainerExact_c::QueryStatContainerExact_c() = default;
-
-QueryStatContainerExact_c::QueryStatContainerExact_c ( QueryStatContainerExact_c && tOther ) noexcept
-	: QueryStatContainerExact_c () { Swap ( tOther );}
-
-void QueryStatContainerExact_c::Swap ( QueryStatContainerExact_c& rhs ) noexcept
-{
-	rhs.m_dRecords.Swap ( m_dRecords );
-}
-
-QueryStatContainerExact_c & QueryStatContainerExact_c::operator = ( QueryStatContainerExact_c tOther ) noexcept
-{
-	Swap ( tOther );
-	return *this;
-}
-#endif
-
-
-//////////////////////////////////////////////////////////////////////////
-ServedDesc_t::~ServedDesc_t ()
-{
-	if ( m_pIndex )
-		m_pIndex->Dealloc ();
-	if ( !m_sUnlink.IsEmpty () )
-	{
-		sphLogDebug ( "unlink %s", m_sUnlink.cstr() );
-		sphUnlinkIndex ( m_sUnlink.cstr (), false );
-	}
-	SafeDelete ( m_pIndex );
-}
-
-//////////////////////////////////////////////////////////////////////////
-ServedStats_c::ServedStats_c()
-{
-	Verify (m_tStatsLock.Init ( true ));
-	m_pQueryTimeDigest = sphCreateTDigest();
-	m_pRowsFoundDigest = sphCreateTDigest();
-	assert ( m_pQueryTimeDigest && m_pRowsFoundDigest );
-}
-
-
-ServedStats_c::~ServedStats_c()
-{
-	SafeDelete ( m_pRowsFoundDigest );
-	SafeDelete ( m_pQueryTimeDigest );
-	m_tStatsLock.Done ();
-}
-
-void ServedStats_c::AddQueryStat ( uint64_t uFoundRows, uint64_t uQueryTime )
-{
-	ScWL_t wLock ( m_tStatsLock );
-
-	m_pRowsFoundDigest->Add ( (double)uFoundRows );
-	m_pQueryTimeDigest->Add ( (double)uQueryTime );
-
-	uint64_t uTimeStamp = sphMicroTimer();
-	m_tQueryStatRecords.Add ( uFoundRows, uQueryTime, uTimeStamp );
-
-#ifndef NDEBUG
-	m_tQueryStatRecordsExact.Add ( uFoundRows, uQueryTime, uTimeStamp );
-#endif
-	
-	m_uTotalFoundRowsMin = Min ( uFoundRows, m_uTotalFoundRowsMin );
-	m_uTotalFoundRowsMax = Max ( uFoundRows, m_uTotalFoundRowsMax );
-	m_uTotalFoundRowsSum+= uFoundRows;
-	
-	m_uTotalQueryTimeMin = Min ( uQueryTime, m_uTotalQueryTimeMin );
-	m_uTotalQueryTimeMax = Max ( uQueryTime, m_uTotalQueryTimeMax );
-	m_uTotalQueryTimeSum+= uQueryTime;
-	
-	++m_uTotalQueries;
-}
-
-
-static const uint64_t g_dStatsIntervals[]=
-{
-	1*60*1000000,
-	5*60*1000000,
-	15*60*1000000
-};
-
-
-void ServedStats_c::DoStatCalcStats ( const QueryStatContainer_i * pContainer,
-	QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const
-{
-	assert ( pContainer );
-
-	auto uTimestamp = sphMicroTimer();
-
-	ScRL_t rLock ( m_tStatsLock );
-
-	int iRecords = m_tQueryStatRecords.GetNumRecords();
-	for ( int i = QUERY_STATS_INTERVAL_1MIN; i<=QUERY_STATS_INTERVAL_15MIN; ++i )
-		CalcStatsForInterval ( pContainer, tRowsFoundStats.m_dStats[i], tQueryTimeStats.m_dStats[i], uTimestamp, g_dStatsIntervals[i], iRecords );
-
-	auto & tRowsAllStats = tRowsFoundStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME];
-	tRowsAllStats.m_dData[QUERY_STATS_TYPE_AVG] = m_uTotalQueries ? m_uTotalFoundRowsSum/m_uTotalQueries : 0;
-	tRowsAllStats.m_dData[QUERY_STATS_TYPE_MIN] = m_uTotalFoundRowsMin;
-	tRowsAllStats.m_dData[QUERY_STATS_TYPE_MAX] = m_uTotalFoundRowsMax;
-	tRowsAllStats.m_dData[QUERY_STATS_TYPE_95] = (uint64_t)m_pRowsFoundDigest->Percentile(95);
-	tRowsAllStats.m_dData[QUERY_STATS_TYPE_99] = (uint64_t)m_pRowsFoundDigest->Percentile(99);
-	tRowsAllStats.m_uTotalQueries = m_uTotalQueries;
-
-	auto & tQueryAllStats = tQueryTimeStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME];
-	tQueryAllStats.m_dData[QUERY_STATS_TYPE_AVG] = m_uTotalQueries ? m_uTotalQueryTimeSum/m_uTotalQueries : 0;
-	tQueryAllStats.m_dData[QUERY_STATS_TYPE_MIN] = m_uTotalQueryTimeMin;
-	tQueryAllStats.m_dData[QUERY_STATS_TYPE_MAX] = m_uTotalQueryTimeMax;
-	tQueryAllStats.m_dData[QUERY_STATS_TYPE_95] = (uint64_t)m_pQueryTimeDigest->Percentile(95);
-	tQueryAllStats.m_dData[QUERY_STATS_TYPE_99] = (uint64_t)m_pQueryTimeDigest->Percentile(99);
-	tQueryAllStats.m_uTotalQueries = m_uTotalQueries;
-}
-
-
-void ServedStats_c::CalculateQueryStats ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const
-{
-	DoStatCalcStats ( &m_tQueryStatRecords, tRowsFoundStats, tQueryTimeStats );
-}
-
-
-#ifndef NDEBUG
-void ServedStats_c::CalculateQueryStatsExact ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const
-{
-	DoStatCalcStats ( &m_tQueryStatRecordsExact, tRowsFoundStats, tQueryTimeStats );
-}
-#endif // !NDEBUG
-
-
-void ServedStats_c::CalcStatsForInterval ( const QueryStatContainer_i * pContainer, QueryStatElement_t & tRowResult, QueryStatElement_t & tTimeResult, uint64_t uTimestamp, uint64_t uInterval, int iRecords )
-{
-	assert ( pContainer );
-
-	tRowResult.m_dData[QUERY_STATS_TYPE_AVG] = 0;
-	tRowResult.m_dData[QUERY_STATS_TYPE_MIN] = UINT64_MAX;
-	tRowResult.m_dData[QUERY_STATS_TYPE_MAX] = 0;
-	
-	tTimeResult.m_dData[QUERY_STATS_TYPE_AVG] = 0;
-	tTimeResult.m_dData[QUERY_STATS_TYPE_MIN] = UINT64_MAX;
-	tTimeResult.m_dData[QUERY_STATS_TYPE_MAX] = 0;
-	
-	CSphTightVector<uint64_t> dFound, dTime;
-	dFound.Reserve ( iRecords );
-	dTime.Reserve ( iRecords );
-
-	DWORD uTotalQueries = 0;
-	QueryStatRecord_t tRecord;
-
-	for ( int i = 0; i < pContainer->GetNumRecords(); ++i )
-	{
-		pContainer->GetRecord ( i, tRecord );
-
-		if ( uTimestamp-tRecord.m_uTimestamp<=uInterval )
-		{
-			tRowResult.m_dData[QUERY_STATS_TYPE_MIN] = Min ( tRecord.m_uFoundRowsMin, tRowResult.m_dData[QUERY_STATS_TYPE_MIN] );
-			tRowResult.m_dData[QUERY_STATS_TYPE_MAX] = Max ( tRecord.m_uFoundRowsMax, tRowResult.m_dData[QUERY_STATS_TYPE_MAX] );
-
-			tTimeResult.m_dData[QUERY_STATS_TYPE_MIN] = Min ( tRecord.m_uQueryTimeMin, tTimeResult.m_dData[QUERY_STATS_TYPE_MIN] );
-			tTimeResult.m_dData[QUERY_STATS_TYPE_MAX] = Max ( tRecord.m_uQueryTimeMax, tTimeResult.m_dData[QUERY_STATS_TYPE_MAX] );
-
-			dFound.Add ( tRecord.m_uFoundRowsSum/tRecord.m_iCount );
-			dTime.Add ( tRecord.m_uQueryTimeSum/tRecord.m_iCount );
-
-			tRowResult.m_dData[QUERY_STATS_TYPE_AVG] += tRecord.m_uFoundRowsSum;
-			tTimeResult.m_dData[QUERY_STATS_TYPE_AVG] += tRecord.m_uQueryTimeSum;
-			uTotalQueries += tRecord.m_iCount;
-		}
-	}
-	
-	dFound.Sort();
-	dTime.Sort();
-
-	tRowResult.m_uTotalQueries = uTotalQueries;
-	tTimeResult.m_uTotalQueries = uTotalQueries;
-	
-	if ( !dFound.GetLength() )
-		return;
-	
-	tRowResult.m_dData[QUERY_STATS_TYPE_AVG]/= uTotalQueries;
-	tTimeResult.m_dData[QUERY_STATS_TYPE_AVG]/= uTotalQueries;
-	
-	int u95 = Max ( 0, Min ( int ( ceilf ( dFound.GetLength()*0.95f ) + 0.5f )-1, dFound.GetLength()-1 ) );
-	int u99 = Max ( 0, Min ( int ( ceilf ( dFound.GetLength()*0.99f ) + 0.5f )-1, dFound.GetLength()-1 ) );
-
-	tRowResult.m_dData[QUERY_STATS_TYPE_95] = dFound[u95];
-	tRowResult.m_dData[QUERY_STATS_TYPE_99] = dFound[u99];
-	
-	tTimeResult.m_dData[QUERY_STATS_TYPE_95] = dTime[u95];
-	tTimeResult.m_dData[QUERY_STATS_TYPE_99] = dTime[u99];
-}
-
-//////////////////////////////////////////////////////////////////////////
-
-// want write lock to wipe out reader and not wait readers
-// but only for RT and PQ indexes as these operations are rare there
-ServedIndex_c::ServedIndex_c ( const ServedDesc_t & tDesc )
-	: m_tLock ( ServedDesc_t::IsMutable ( &tDesc ) )
-{
-	*(ServedDesc_t*)(this) = tDesc;
-}
-
-const ServedDesc_t * ServedIndex_c::ReadLock () const
-{
-	if ( m_tLock.ReadLock () )
-		sphLogDebugvv ( "ReadLock %p", this );
-	else
-	{
-		sphLogDebug ( "ReadLock %p failed", this );
-		assert ( false );
-	}
-	AddRef ();
-	return ( const ServedDesc_t * ) this;
-}
-
-ServedDesc_t * ServedIndex_c::WriteLock () const
-{
-	sphLogDebugvv ( "WriteLock %p wait", this );
-	if ( m_tLock.WriteLock() )
-		sphLogDebugvv ( "WriteLock %p", this );
-	else
-	{
-		sphLogDebug ( "WriteLock %p failed", this );
-		assert ( false );
-	}
-	AddRef ();
-	return ( ServedDesc_t * ) this;
-}
-
-void ServedIndex_c::Unlock () const
-{
-	if ( m_tLock.Unlock() )
-		sphLogDebugvv ( "Unlock %p", this );
-	else
-	{
-		sphLogDebug ( "Unlock %p failed", this );
-		assert ( false );
-	}
-	Release ();
-}
-
-//////////////////////////////////////////////////////////////////////////
-GuardedHash_c::GuardedHash_c ()
-{
-	if ( !m_tIndexesRWLock.Init() )
-		sphDie ( "failed to init hash indexes rwlock" );
-}
-
-
-GuardedHash_c::~GuardedHash_c()
-{
-	ReleaseAndClear ();
-	Verify ( m_tIndexesRWLock.Done() );
-}
-
-int GuardedHash_c::GetLength () const
-{
-	CSphScopedRLock dRL { m_tIndexesRWLock };
-	return GetLengthUnl();
-}
-
-int GuardedHash_c::GetLengthUnl () const
-{
-	return m_hIndexes.GetLength ();
-}
-
-void GuardedHash_c::ReleaseAndClear ()
-{
-	ScWL_t hHashWLock { m_tIndexesRWLock };
-	for ( m_hIndexes.IterateStart (); m_hIndexes.IterateNext(); )
-		SafeRelease ( m_hIndexes.IterateGet () );
-
-	m_hIndexes.Reset();
-}
-
-void GuardedHash_c::Rlock () const
-{
-	Verify ( m_tIndexesRWLock.ReadLock() );
-}
-
-
-void GuardedHash_c::Wlock () const
-{
-	Verify ( m_tIndexesRWLock.WriteLock() );
-}
-
-
-void GuardedHash_c::Unlock () const
-{
-	Verify ( m_tIndexesRWLock.Unlock() );
-}
-
-
-bool GuardedHash_c::Delete ( const CSphString & tKey )
-{
-	ScWL_t hHashWLock { m_tIndexesRWLock };
-	ISphRefcountedMT ** ppEntry = m_hIndexes ( tKey );
-	// release entry - last owner will free it
-	if ( ppEntry )
-		SafeRelease(*ppEntry);
-
-	// remove from hash
-	return m_hIndexes.Delete ( tKey );
-}
-
-bool GuardedHash_c::DeleteIfNull ( const CSphString & tKey )
-{
-	ScWL_t hHashWLock { m_tIndexesRWLock };
-	ISphRefcountedMT ** ppEntry = m_hIndexes ( tKey );
-	if ( ppEntry && *ppEntry )
-		return false;
-	return m_hIndexes.Delete ( tKey );
-}
-
-bool GuardedHash_c::AddUniq ( ISphRefcountedMT * pValue, const CSphString &tKey )
-{
-	ScWL_t hHashWLock { m_tIndexesRWLock };
-	int iPrevSize = GetLengthUnl ();
-	ISphRefcountedMT * &pVal = m_hIndexes.AddUnique ( tKey );
-	if ( iPrevSize==GetLengthUnl () )
-		return false;
-
-	pVal = pValue;
-	SafeAddRef ( pVal );
-	return true;
-}
-
-void GuardedHash_c::AddOrReplace ( ISphRefcountedMT * pValue, const CSphString &tKey )
-{
-	ScWL_t hHashWLock { m_tIndexesRWLock };
-	// can not use AddUnique as new inserted item has no values
-	ISphRefcountedMT ** ppEntry = m_hIndexes ( tKey );
-	if ( ppEntry )
-	{
-		SafeRelease ( *ppEntry );
-		(*ppEntry) = pValue;
-	} else
-	{
-		Verify ( m_hIndexes.Add ( pValue, tKey ) );
-	}
-	SafeAddRef ( pValue );
-	if ( m_pHook )
-		m_pHook ( pValue, tKey );
-}
-
-// check if hash contains an entry
-bool GuardedHash_c::Contains ( const CSphString &tKey ) const
-{
-	ScRL_t hHashRLock { m_tIndexesRWLock };
-	ISphRefcountedMT ** ppEntry = m_hIndexes ( tKey );
-	return ppEntry!=nullptr;
-}
-
-ISphRefcountedMT * GuardedHash_c::Get ( const CSphString &tKey ) const
-{
-	ScRL_t hHashRLock { m_tIndexesRWLock };
-	ISphRefcountedMT ** ppEntry = m_hIndexes ( tKey );
-	if ( !ppEntry )
-		return nullptr;
-	if (!*ppEntry)
-		return nullptr;
-	(*ppEntry)->AddRef();
-	return *ppEntry;
-}
-
-ISphRefcountedMT * GuardedHash_c::TryAddThenGet ( ISphRefcountedMT * pValue, const CSphString &tKey )
-{
-	ScWL_t hHashWLock { m_tIndexesRWLock };
-	int iPrevSize = GetLengthUnl ();
-	ISphRefcountedMT *&pVal = m_hIndexes.AddUnique ( tKey );
-	if ( iPrevSize<GetLengthUnl () ) // value just inserted
-	{
-		pVal = pValue;
-		SafeAddRef ( pVal );
-	}
-
-	SafeAddRef ( pVal );
-	return pVal;
-}
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -978,24 +487,24 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 }
 
 
-void sphFatal ( const char * sFmt, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );
 void sphFatal ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
-	sphLog ( SPH_LOG_FATAL, sFmt, ap );
+	g_pLogger() ( SPH_LOG_FATAL, sFmt, ap );
 	va_end ( ap );
+#ifndef SUPRESS_SEARCHD_MAIN
 	Shutdown ();
+#endif
 	exit ( 1 );
 }
 
 
-void sphFatalLog ( const char * sFmt, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );
 void sphFatalLog ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
-	sphLog ( SPH_LOG_FATAL, sFmt, ap );
+	g_pLogger() ( SPH_LOG_FATAL, sFmt, ap );
 	va_end ( ap );
 }
 
@@ -1722,159 +1231,6 @@ void SetSignalHandlers ( bool bAllowCtrlC=false ) REQUIRES ( MainThread )
 }
 #endif
 
-
-/////////////////////////////////////////////////////////////////////////////
-// NETWORK STUFF
-/////////////////////////////////////////////////////////////////////////////
-
-#if USE_WINDOWS
-
-const int		WIN32_PIPE_BUFSIZE		= 32;
-
-/// on Windows, the wrapper just prevents the warnings
-
-#pragma warning(push) // store current warning values
-#pragma warning(disable:4127) // conditional expr is const
-#pragma warning(disable:4389) // signed/unsigned mismatch
-
-void sphFDSet ( int fd, fd_set * fdset )
-{
-	FD_SET ( fd, fdset );
-}
-
-void sphFDClr ( int fd, fd_set * fdset )
-{
-	FD_SET ( fd, fdset );
-}
-
-#pragma warning(pop) // restore warnings
-
-#else // !USE_WINDOWS
-
-#define SPH_FDSET_OVERFLOW(_fd) ( (_fd)<0 || (_fd)>=(int)FD_SETSIZE )
-
-/// on UNIX, we also check that the descript won't corrupt the stack
-void sphFDSet ( int fd, fd_set * set )
-{
-	if ( SPH_FDSET_OVERFLOW(fd) )
-		sphFatal ( "sphFDSet() failed fd=%d, FD_SETSIZE=%d", fd, FD_SETSIZE );
-	else
-		FD_SET ( fd, set );
-}
-
-void sphFDClr ( int fd, fd_set * set )
-{
-	if ( SPH_FDSET_OVERFLOW( fd ) )
-		sphFatal ( "sphFDClr() failed fd=%d, FD_SETSIZE=%d", fd, FD_SETSIZE );
-	else
-		FD_CLR ( fd, set );
-}
-
-#endif // USE_WINDOWS
-
-
-#if USE_WINDOWS
-const char * sphSockError ( int iErr )
-{
-	if ( iErr==0 )
-		iErr = WSAGetLastError ();
-
-	static char sBuf [ 256 ];
-	_snprintf ( sBuf, sizeof(sBuf), "WSA error %d", iErr );
-	return sBuf;
-}
-#else
-const char * sphSockError ( int )
-{
-	return strerrorm ( errno );
-}
-#endif
-
-
-int sphSockGetErrno ()
-{
-	#if USE_WINDOWS
-		return WSAGetLastError();
-	#else
-		return errno;
-	#endif
-}
-
-
-void sphSockSetErrno ( int iErr )
-{
-	#if USE_WINDOWS
-		WSASetLastError ( iErr );
-	#else
-		errno = iErr;
-	#endif
-}
-
-
-int sphSockPeekErrno ()
-{
-	int iRes = sphSockGetErrno();
-	sphSockSetErrno ( iRes );
-	return iRes;
-}
-
-
-/// formats IP address given in network byte order into sBuffer
-/// returns the buffer
-char * sphFormatIP ( char * sBuffer, int iBufferSize, DWORD uAddress )
-{
-	const BYTE *a = (const BYTE *)&uAddress;
-	snprintf ( sBuffer, iBufferSize, "%u.%u.%u.%u", a[0], a[1], a[2], a[3] );
-	return sBuffer;
-}
-
-
-static const bool GETADDR_STRICT = true; ///< strict check, will die with sphFatal() on failure
-
-DWORD sphGetAddress ( const char * sHost, bool bFatal, bool bIP )
-{
-	struct addrinfo tHints, *pResult = nullptr;
-	memset ( &tHints, 0, sizeof(tHints));
-	tHints.ai_family = AF_INET;
-	tHints.ai_socktype = SOCK_STREAM;
-	if ( bIP )
-		tHints.ai_flags = AI_NUMERICHOST;
-
-	int iResult = getaddrinfo ( sHost, nullptr, &tHints, &pResult );
-	auto pOrigResult = pResult;
-	if ( iResult!=0 || !pResult )
-	{
-		if ( bFatal )
-			sphFatal ( "no AF_INET address found for: %s", sHost );
-		else
-			sphLogDebugv ( "no AF_INET address found for: %s", sHost );
-		return 0;
-	}
-
-	assert ( pResult );
-	auto * pSockaddr_ipv4 = (struct sockaddr_in *) pResult->ai_addr;
-	DWORD uAddr = pSockaddr_ipv4->sin_addr.s_addr;
-
-	if ( pResult->ai_next )
-	{
-		StringBuilder_c sBuf ( "; ip=", "ip=" );
-		for ( ; pResult->ai_next; pResult = pResult->ai_next )
-		{
-			char sAddrBuf [ SPH_ADDRESS_SIZE ];
-			auto * pAddr = (struct sockaddr_in *)pResult->ai_addr;
-			DWORD uNextAddr = pAddr->sin_addr.s_addr;
-			sphFormatIP ( sAddrBuf, sizeof(sAddrBuf), uNextAddr );
-			sBuf << sAddrBuf;
-		}
-
-		sphWarning ( "multiple addresses found for '%s', using the first one (%s)", sHost, sBuf.cstr() );
-	}
-
-	freeaddrinfo ( pOrigResult );
-	return uAddr;
-}
-
-
 #if !USE_WINDOWS
 int sphCreateUnixSocket ( const char * sPath ) REQUIRES ( MainThread )
 {
@@ -1967,174 +1323,11 @@ int sphCreateInetSocket ( DWORD uAddr, int iPort ) REQUIRES ( MainThread )
 	return iSock;
 }
 
-
-bool IsPortInRange ( int iPort )
-{
-	return ( iPort>0 ) && ( iPort<=0xFFFF );
-}
-
-
-void CheckPort ( int iPort )
-{
-	if ( !IsPortInRange(iPort) )
-		sphFatal ( "port %d is out of range", iPort );
-}
-
-void ProtoByName ( const CSphString & sProto, ListenerDesc_t & tDesc )
-{
-	if ( sProto=="sphinx" )			tDesc.m_eProto = Proto_e::SPHINX;
-	else if ( sProto=="mysql41" )	tDesc.m_eProto = Proto_e::MYSQL41;
-	else if ( sProto=="http" )		tDesc.m_eProto = Proto_e::HTTP;
-	else if ( sProto=="replication" )	tDesc.m_eProto = Proto_e::REPLICATION;
-	else if ( sProto=="sphinx_vip" )
-	{
-		tDesc.m_eProto = Proto_e::SPHINX;
-		tDesc.m_bVIP = true;
-	} else if ( sProto=="mysql41_vip" )
-	{
-		tDesc.m_eProto = Proto_e::MYSQL41;
-		tDesc.m_bVIP = true;
-	} else if ( sProto=="http_vip" )
-	{
-		tDesc.m_eProto = Proto_e::HTTP;
-		tDesc.m_bVIP = true;
-	} else
-	{
-		sphFatal ( "unknown listen protocol type '%s'", sProto.cstr() ? sProto.cstr() : "(NULL)" );
-	}
-}
-
-ListenerDesc_t ParseListener ( const char * sSpec )
-{
-	ListenerDesc_t tRes;
-	tRes.m_eProto = Proto_e::SPHINX;
-	tRes.m_sUnix = "";
-	tRes.m_uIP = htonl ( INADDR_ANY );
-	tRes.m_iPort = SPHINXAPI_PORT;
-	tRes.m_iPortsCount = 0;
-	tRes.m_bVIP = false;
-
-	// split by colon
-	int iParts = 0;
-	CSphString sParts[3];
-
-	const char * sPart = sSpec;
-	for ( const char * p = sSpec; ; p++ )
-		if ( *p=='\0' || *p==':' )
-	{
-		if ( iParts==3 )
-			sphFatal ( "invalid listen format (too many fields)" );
-
-		sParts[iParts++].SetBinary ( sPart, p-sPart );
-		if ( !*p )
-			break; // bail out on zero
-
-		sPart = p+1;
-	}
-	assert ( iParts>=1 && iParts<=3 );
-
-	// handle UNIX socket case
-	// might be either name on itself (1 part), or name+protocol (2 parts)
-	sPart = sParts[0].cstr();
-	if ( sPart[0]=='/' )
-	{
-		if ( iParts>2 )
-			sphFatal ( "invalid listen format (too many fields)" );
-
-		if ( iParts==2 )
-			ProtoByName ( sParts[1], tRes );
-
-#if USE_WINDOWS
-		sphFatal ( "UNIX sockets are not supported on Windows" );
-#else
-		tRes.m_sUnix = sPart;
-		return tRes;
-#endif
-	}
-
-	// check if it all starts with a valid port number
-	sPart = sParts[0].cstr();
-	int iLen = strlen(sPart);
-
-	bool bAllDigits = true;
-	for ( int i=0; i<iLen && bAllDigits; i++ )
-		if ( !isdigit ( sPart[i] ) )
-			bAllDigits = false;
-
-	int iPort = 0;
-	if ( bAllDigits && iLen<=5 )
-	{
-		iPort = atol(sPart);
-		CheckPort ( iPort ); // lets forbid ambiguous magic like 0:sphinx or 99999:mysql41
-	}
-
-	// handle TCP port case
-	// one part. might be either port name, or host name, or UNIX socket name
-	if ( iParts==1 )
-	{
-		if ( iPort )
-		{
-			// port name on itself
-			tRes.m_uIP = htonl ( INADDR_ANY );
-			tRes.m_iPort = iPort;
-		} else
-		{
-			// host name on itself
-			tRes.m_uIP = sphGetAddress ( sSpec, GETADDR_STRICT );
-			tRes.m_iPort = SPHINXAPI_PORT;
-		}
-		return tRes;
-	}
-
-	// two or three parts
-	if ( iPort )
-	{
-		// 1st part is a valid port number; must be port:proto
-		if ( iParts!=2 )
-			sphFatal ( "invalid listen format (expected port:proto, got extra trailing part in listen=%s)", sSpec );
-
-		tRes.m_uIP = htonl ( INADDR_ANY );
-		tRes.m_iPort = iPort;
-		ProtoByName ( sParts[1], tRes );
-
-	} else
-	{
-		// 1st part must be a host name; must be host:port[:proto]
-		if ( iParts==3 )
-			ProtoByName ( sParts[2], tRes );
-
-		tRes.m_iPort = atol ( sParts[1].cstr() );
-		CheckPort ( tRes.m_iPort );
-
-		tRes.m_uIP = sParts[0].IsEmpty()
-			? htonl ( INADDR_ANY )
-			: sphGetAddress ( sParts[0].cstr(), GETADDR_STRICT );
-
-		if ( tRes.m_eProto==Proto_e::REPLICATION )
-		{
-			const char * sPorts = sParts[1].cstr();
-			const char * sDelimiter = strchr ( sPorts, '-' );
-			if ( sDelimiter && sDelimiter+1-sPorts<sParts[1].Length() )
-			{
-				int iPortsEnd = atol ( sDelimiter+1 );
-				CheckPort ( iPortsEnd );
-				if ( iPortsEnd<=tRes.m_iPort )
-					sphFatal ( "ports range invalid %d-%d", iPort, iPortsEnd );
-				if ( ( iPortsEnd - tRes.m_iPort )<2 )
-					sphFatal ( "ports range %d-%d count should be at least 2, got %d", iPort, iPortsEnd, iPortsEnd-iPort );
-					
-				tRes.m_iPortsCount = iPortsEnd - tRes.m_iPort;
-			}
-		}
-	}
-	return tRes;
-}
-
-
 void AddListener ( const CSphString & sListen, bool bHttpAllowed, CSphVector<ListenerDesc_t> & dDesc )  REQUIRES (
 	MainThread )
 {
 	ListenerDesc_t tDesc = ParseListener ( sListen.cstr() );
+	CHECK_LISTENER ( tDesc );
 
 	Listener_t tListener;
 	tListener.m_eProto = tDesc.m_eProto;
@@ -2161,198 +1354,6 @@ void AddListener ( const CSphString & sListen, bool bHttpAllowed, CSphVector<Lis
 		tListener.m_iSock = sphCreateInetSocket ( tDesc.m_uIP, tDesc.m_iPort );
 
 	g_dListeners.Add ( tListener );
-}
-
-
-int sphSetSockNB ( int iSock )
-{
-	#if USE_WINDOWS
-		u_long uMode = 1;
-		return ioctlsocket ( iSock, FIONBIO, &uMode );
-	#else
-		return fcntl ( iSock, F_SETFL, O_NONBLOCK );
-	#endif
-}
-
-/// wait until socket is readable or writable
-int sphPoll ( int iSock, int64_t tmTimeout, bool bWrite=false )
-{
-	// don't need any epoll/kqueue here, since we check only 1 socket
-#if HAVE_POLL
-	struct pollfd pfd;
-	pfd.fd = iSock;
-	pfd.events = bWrite ? POLLOUT : POLLIN;
-
-	return ::poll ( &pfd, 1, int ( tmTimeout/1000 ) );
-#else
-	fd_set fdSet;
-	FD_ZERO ( &fdSet );
-	sphFDSet ( iSock, &fdSet );
-
-	struct timeval tv;
-	tv.tv_sec = (int)( tmTimeout / 1000000 );
-	tv.tv_usec = (int)( tmTimeout % 1000000 );
-
-	return ::select ( iSock+1, bWrite ? NULL : &fdSet, bWrite ? &fdSet : NULL, NULL, &tv );
-#endif
-}
-
-int RecvNBChunk ( int iSock, char * &pBuf, int& iLeftBytes)
-{
-	// try to receive next chunk
-	auto iRes = sphSockRecv ( iSock, pBuf, iLeftBytes );
-
-	if ( iRes>0 )
-	{
-		pBuf += iRes;
-		iLeftBytes -= iRes;
-	}
-	return (int)iRes;
-}
-
-
-int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr )
-{
-	assert ( iLen>0 );
-
-	int64_t tmMaxTimer = sphMicroTimer() + I64C(1000000)*Max ( 1, iReadTimeout ); // in microseconds
-	int iLeftBytes = iLen; // bytes to read left
-
-	auto pBuf = (char*) buf;
-	int iErr = 0;
-	int iRes = -1;
-
-	while ( iLeftBytes>0 )
-	{
-		int64_t tmMicroLeft = tmMaxTimer - sphMicroTimer();
-		if ( tmMicroLeft<=0 )
-			break; // timed out
-
-#if USE_WINDOWS
-		// Windows EINTR emulation
-		// Ctrl-C will not interrupt select on Windows, so let's handle that manually
-		// forcibly limit select() to 100 ms, and check flag afterwards
-		if ( bIntr )
-			tmMicroLeft = Min ( tmMicroLeft, 100000 );
-#endif
-
-		// wait until there is data
-		iRes = sphPoll ( iSock, tmMicroLeft );
-
-		// if there was EINTR, retry
-		// if any other error, bail
-		if ( iRes==-1 )
-		{
-			// only let SIGTERM (of all them) to interrupt, and only if explicitly allowed
-			iErr = sphSockGetErrno();
-			if ( iErr==EINTR )
-			{
-				if ( !( g_bGotSigterm && bIntr ))
-					continue;
-				sphLogDebug ( "sphSockRead: select got SIGTERM, exit -1" );
-			}
-			return -1;
-		}
-
-		// if there was a timeout, report it as an error
-		if ( iRes==0 )
-		{
-#if USE_WINDOWS
-			// Windows EINTR emulation
-			if ( bIntr )
-			{
-				// got that SIGTERM
-				if ( g_bGotSigterm )
-				{
-					sphLogDebug ( "sphSockRead: got SIGTERM emulation on Windows, exit -1" );
-					sphSockSetErrno ( EINTR );
-					return -1;
-				}
-
-				// timeout might not be fully over just yet, so re-loop
-				continue;
-			}
-#endif
-
-			sphSockSetErrno ( ETIMEDOUT );
-			return -1;
-		}
-
-		// try to receive next chunk
-		iRes = RecvNBChunk ( iSock, pBuf, iLeftBytes );
-
-		// if there was eof, we're done
-		if ( !iRes )
-		{
-			sphSockSetErrno ( ECONNRESET );
-			return -1;
-		}
-
-		// if there was EINTR, retry
-		// if any other error, bail
-		if ( iRes==-1 )
-		{
-			// only let SIGTERM (of all them) to interrupt, and only if explicitly allowed
-			iErr = sphSockGetErrno ();
-			if ( iErr==EINTR )
-			{
-				if ( !( g_bGotSigterm && bIntr ) )
-					continue;
-				sphLogDebug ( "sphSockRead: select got SIGTERM, exit -1" );
-			}
-			return -1;
-		}
-
-		// avoid partial buffer loss in case of signal during the 2nd (!) read
-		bIntr = false;
-	}
-
-	// if there was a timeout, report it as an error
-	if ( iLeftBytes!=0 )
-	{
-		sphSockSetErrno ( ETIMEDOUT );
-		return -1;
-	}
-
-	return iLen;
-}
-
-int SockReadFast ( int iSock, void * buf, int iLen, int iReadTimeout )
-{
-	auto pBuf = ( char * ) buf;
-	int iFullLen = iLen;
-	// try to receive available chunk
-	int iChunk = RecvNBChunk ( iSock, pBuf, iLen );
-	if ( !iLen ) // all read in one-shot
-	{
-		assert (iChunk==iFullLen);
-		return iFullLen;
-	}
-
-	auto iRes = sphSockRead ( iSock, pBuf, iLen, iReadTimeout, false );
-	if ( iRes>=0 )
-		iRes += iChunk;
-	return iRes;
-}
-/////////////////////////////////////////////////////////////////////////////
-
-ISphOutputBuffer::ISphOutputBuffer ()
-{
-	m_dBuf.Reserve ( NETOUTBUF );
-}
-
-// construct via adopting external buf
-ISphOutputBuffer::ISphOutputBuffer ( CSphVector<BYTE>& dChunk )
-{
-	m_dBuf.SwapData (dChunk);
-}
-
-
-void ISphOutputBuffer::SendString ( const char * sStr )
-{
-	int iLen = sStr ? strlen(sStr) : 0;
-	SendInt ( iLen );
-	SendBytes ( sStr, iLen );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2491,300 +1492,6 @@ void ISphOutputBuffer::SendArray ( const StringBuilder_c &dBuf )
 {
 	SendArray ( dBuf.begin(), dBuf.GetLength () );
 }
-
-/////////////////////////////////////////////////////////////////////////////
-
-void CachedOutputBuffer_c::Flush()
-{
-	CommitAllMeasuredLengths();
-	ISphOutputBuffer::Flush();
-}
-
-intptr_t CachedOutputBuffer_c::StartMeasureLength ()
-{
-	auto iPos = ( intptr_t ) m_dBuf.GetLength ();
-	m_dBlobs.Add ( iPos );
-	SendInt(0);
-	return iPos;
-}
-
-void CachedOutputBuffer_c::CommitMeasuredLength ( intptr_t iStoredPos )
-{
-	if ( m_dBlobs.IsEmpty() ) // possible if flush happens before APIheader destroyed.
-		return;
-	auto iPos = m_dBlobs.Pop();
-	assert ( iStoredPos==-1 || iStoredPos==iPos );
-	int iBlobLen = m_dBuf.GetLength () - iPos - sizeof ( int );
-	WriteInt ( iPos, iBlobLen );
-}
-
-void CachedOutputBuffer_c::CommitAllMeasuredLengths()
-{
-	while ( !m_dBlobs.IsEmpty() )
-	{
-		auto uPos = m_dBlobs.Pop ();
-		int iBlobLen = m_dBuf.GetLength () - uPos - sizeof ( int );
-		WriteInt ( uPos, iBlobLen );
-	}
-}
-
-/////////////////////////////////////////////////////////////////////////////
-
-NetOutputBuffer_c::NetOutputBuffer_c ( int iSock )
-	: m_iSock ( iSock )
-{
-	assert ( m_iSock>0 );
-}
-
-void NetOutputBuffer_c::Flush ()
-{
-	CommitAllMeasuredLengths ();
-
-	if ( m_bError )
-		return;
-
-	int iLen = m_dBuf.GetLength();
-	if ( !iLen )
-		return;
-
-	if ( g_bGotSigterm )
-		sphLogDebug ( "SIGTERM in NetOutputBuffer::Flush" );
-
-	StringBuilder_c sError;
-	auto * pBuffer = (const char *)m_dBuf.Begin();
-
-	CSphScopedProfile tProf ( m_pProfile, SPH_QSTATE_NET_WRITE );
-
-	const int64_t tmMaxTimer = sphMicroTimer() + MS2SEC * g_iWriteTimeout; // in microseconds
-	while ( !m_bError )
-	{
-		auto iRes = sphSockSend ( m_iSock, pBuffer, iLen );
-		if ( iRes<0 )
-		{
-			int iErrno = sphSockGetErrno();
-			if ( iErrno==EINTR ) // interrupted before any data was sent; just loop
-				continue;
-			if ( iErrno!=EAGAIN && iErrno!=EWOULDBLOCK )
-			{
-				sError.Sprintf ( "send() failed: %d: %s", iErrno, sphSockError ( iErrno ) );
-				sphWarning ( "%s", sError.cstr () );
-				m_bError = true;
-				break;
-			}
-		} else
-		{
-			m_iSent += iRes;
-			pBuffer += iRes;
-			iLen -= iRes;
-			if ( iLen==0 )
-				break;
-		}
-
-		// wait until we can write
-		int64_t tmMicroLeft = tmMaxTimer - sphMicroTimer();
-		iRes = 0;
-		if ( tmMicroLeft>0 )
-			iRes = sphPoll ( m_iSock, tmMicroLeft, true );
-
-		if ( !iRes ) // timeout
-		{
-			sError << "timed out while trying to flush network buffers";
-			sphWarning ( "%s", sError.cstr () );
-			m_bError = true;
-			break;
-		}
-
-		if ( iRes<0 )
-		{
-			int iErrno = sphSockGetErrno ();
-			if ( iErrno==EINTR )
-				break;
-			sError.Sprintf ( "sphPoll() failed: %d: %s", iErrno, sphSockError ( iErrno ) );
-			sphWarning ( "%s", sError.cstr () );
-			m_bError = true;
-			break;
-		}
-		assert (iRes>0);
-	}
-
-	m_dBuf.Resize ( 0 );
-}
-
-
-/////////////////////////////////////////////////////////////////////////////
-
-InputBuffer_c::InputBuffer_c ( const BYTE * pBuf, int iLen )
-	: m_pBuf ( pBuf )
-	, m_pCur ( pBuf )
-	, m_bError ( !pBuf || iLen<0 )
-	, m_iLen ( iLen )
-{}
-
-
-CSphString InputBuffer_c::GetString ()
-{
-	CSphString sRes;
-
-	int iLen = GetInt ();
-	if ( m_bError || iLen<0 || iLen>g_iMaxPacketSize || ( m_pCur+iLen > m_pBuf+m_iLen ) )
-	{
-		SetError ( true );
-		return sRes;
-	}
-
-	if ( iLen )
-		sRes.SetBinary ( (char*)m_pCur, iLen );
-
-	m_pCur += iLen;
-	return sRes;
-}
-
-
-CSphString InputBuffer_c::GetRawString ( int iLen )
-{
-	CSphString sRes;
-
-	if ( m_bError || iLen<0 || iLen>g_iMaxPacketSize || ( m_pCur+iLen > m_pBuf+m_iLen ) )
-	{
-		SetError ( true );
-		return sRes;
-	}
-
-	if ( iLen )
-		sRes.SetBinary ( (char*)m_pCur, iLen );
-
-	m_pCur += iLen;
-	return sRes;
-}
-
-
-bool InputBuffer_c::GetString ( CSphVector<BYTE> & dBuffer )
-{
-	int iLen = GetInt ();
-	if ( m_bError || iLen<0 || iLen>g_iMaxPacketSize || ( m_pCur+iLen > m_pBuf+m_iLen ) )
-	{
-		SetError ( true );
-		return false;
-	}
-
-	if ( !iLen )
-		return true;
-
-	return GetBytes ( dBuffer.AddN ( iLen ), iLen );
-}
-
-
-bool InputBuffer_c::GetBytes ( void * pBuf, int iLen )
-{
-	assert ( pBuf );
-	assert ( iLen>0 && iLen<=g_iMaxPacketSize );
-
-	if ( m_bError || ( m_pCur+iLen > m_pBuf+m_iLen ) )
-	{
-		SetError ( true );
-		return false;
-	}
-
-	memcpy ( pBuf, m_pCur, iLen );
-	m_pCur += iLen;
-	return true;
-}
-
-bool InputBuffer_c::GetBytesZerocopy ( const BYTE ** ppData, int iLen )
-{
-	assert ( ppData );
-	assert ( iLen>0 && iLen<=g_iMaxPacketSize );
-
-	if ( m_bError || ( m_pCur+iLen > m_pBuf+m_iLen ) )
-	{
-		SetError ( true );
-		return false;
-	}
-
-	*ppData = m_pCur;
-	m_pCur += iLen;
-	return true;
-}
-
-
-template < typename T > bool InputBuffer_c::GetDwords ( CSphVector<T> & dBuffer, int & iGot, int iMax )
-{
-	iGot = GetInt ();
-	if ( iGot<0 || iGot>iMax )
-	{
-		SetError ( true );
-		return false;
-	}
-
-	dBuffer.Resize ( iGot );
-	ARRAY_FOREACH ( i, dBuffer )
-		dBuffer[i] = GetDword ();
-
-	if ( m_bError )
-		dBuffer.Reset ();
-
-	return !m_bError;
-}
-
-
-template < typename T > bool InputBuffer_c::GetQwords ( CSphVector<T> & dBuffer, int & iGot, int iMax )
-{
-	iGot = GetInt ();
-	if ( iGot<0 || iGot>iMax )
-	{
-		SetError ( true );
-		return false;
-	}
-
-	dBuffer.Resize ( iGot );
-	ARRAY_FOREACH ( i, dBuffer )
-		dBuffer[i] = GetUint64 ();
-
-	if ( m_bError )
-		dBuffer.Reset ();
-
-	return !m_bError;
-}
-/////////////////////////////////////////////////////////////////////////////
-
-NetInputBuffer_c::NetInputBuffer_c ( int iSock )
-	: STORE (NET_MINIBUFFER_SIZE)
-	, InputBuffer_c ( m_pData, NET_MINIBUFFER_SIZE )
-	, m_iSock ( iSock )
-{
-	Resize (0);
-}
-
-
-bool NetInputBuffer_c::ReadFrom ( int iLen, int iTimeout, bool bIntr, bool bAppend )
-{
-	int iTail = bAppend ? m_iLen : 0;
-
-	m_bIntr = false;
-	if ( iLen<=0 || iLen>g_iMaxPacketSize || m_iSock<0 )
-		return false;
-
-	int iOff = m_pCur - m_pBuf;
-	Resize ( m_iLen );
-	Reserve ( iTail + iLen );
-	BYTE * pBuf = m_pData + iTail;
-	m_pBuf = m_pData;
-	m_pCur = bAppend ? m_pData + iOff : m_pData;
-	int iGot = sphSockRead ( m_iSock, pBuf , iLen, iTimeout, bIntr );
-	if ( g_bGotSigterm )
-	{
-		sphLogDebug ( "NetInputBuffer_c::ReadFrom: got SIGTERM, return false" );
-		m_bError = true;
-		m_bIntr = true;
-		return false;
-	}
-
-	m_bError = ( iGot!=iLen );
-	m_bIntr = m_bError && ( sphSockPeekErrno()==EINTR );
-	m_iLen = m_bError ? 0 : iTail+iLen;
-	return !m_bError;
-}
-
 
 void SendErrorReply ( CachedOutputBuffer_c & tOut, const char * sTemplate, ... )
 {
@@ -10722,79 +9429,6 @@ void HandleCommandUpdate ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c 
 	tOut.SendInt ( iUpdated );
 }
 
-// 'like' matcher
-CheckLike::CheckLike ( const char * sPattern )
-{
-	if ( !sPattern )
-		return;
-
-	m_sPattern.Reserve ( 2*strlen ( sPattern ) );
-	char * d = const_cast<char*> ( m_sPattern.cstr() );
-
-	// remap from SQL LIKE syntax to Sphinx wildcards syntax
-	// '_' maps to '?', match any single char
-	// '%' maps to '*', match zero or mor chars
-	for ( const char * s = sPattern; *s; s++ )
-	{
-		switch ( *s )
-		{
-			case '_':	*d++ = '?'; break;
-			case '%':	*d++ = '*'; break;
-			case '?':	*d++ = '\\'; *d++ = '?'; break;
-			case '*':	*d++ = '\\'; *d++ = '*'; break;
-			default:	*d++ = *s; break;
-		}
-	}
-	*d = '\0';
-}
-
-bool CheckLike::Match ( const char * sValue )
-{
-	return sValue && ( m_sPattern.IsEmpty() || sphWildcardMatch ( sValue, m_sPattern.cstr() ) );
-}
-
-// string vector with 'like' matcher
-VectorLike::VectorLike ()
-	: CheckLike ( NULL )
-{}
-
-VectorLike::VectorLike ( const CSphString& sPattern )
-	: CheckLike ( sPattern.cstr() )
-	, m_sColKey ( "Variable_name" )
-	, m_sColValue ( "Value" )
-{}
-
-const char * VectorLike::szColKey() const
-{
-	return m_sColKey.cstr();
-}
-
-const char * VectorLike::szColValue() const
-{
-	return m_sColValue.cstr();
-}
-
-bool VectorLike::MatchAdd ( const char* sValue )
-{
-	if ( Match ( sValue ) )
-	{
-		Add ( sValue );
-		return true;
-	}
-	return false;
-}
-
-bool VectorLike::MatchAddVa ( const char * sTemplate, ... )
-{
-	va_list ap;
-	CSphString sValue;
-
-	va_start ( ap, sTemplate );
-	sValue.SetSprintfVa ( sTemplate, ap );
-	va_end ( ap );
-
-	return MatchAdd ( sValue.cstr() );
-}
 
 //////////////////////////////////////////////////////////////////////////
 // STATUS HANDLER
@@ -16761,11 +15395,14 @@ void HandleMysqlShowVariables ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt,
 	dRows.Eof();
 }
 
-
+template <typename FORMATFN>
 static void AddQueryStats ( IDataTupleter & tOut, const char * szPrefix, const QueryStats_t & tStats,
-	void (*FormatFn)( StringBuilder_c & sBuf, uint64_t uQueries, uint64_t uStat, const char * sType ) )
+	//void (*FormatFn)( StringBuilder_c & sBuf, uint64_t uQueries, uint64_t uStat, const char * sType ) )
+	FORMATFN FormatFn )
+
 {
-	static const char * dStatIntervalNames[QUERY_STATS_INTERVAL_TOTAL] =
+	using namespace QueryStats;
+	static const char * dStatIntervalNames[INTERVAL_TOTAL] =
 	{
 		"1min",
 		"5min",
@@ -16773,7 +15410,7 @@ static void AddQueryStats ( IDataTupleter & tOut, const char * szPrefix, const Q
 		"total"
 	};
 
-	static const char * dStatTypeNames[QUERY_STATS_TYPE_TOTAL] =
+	static const char * dStatTypeNames[TYPE_TOTAL] =
 	{
 		"avg",
 		"min",
@@ -16784,16 +15421,13 @@ static void AddQueryStats ( IDataTupleter & tOut, const char * szPrefix, const Q
 
 	StringBuilder_c sBuf;
 	StringBuilder_c sName;
-	for ( int i = 0; i < QUERY_STATS_INTERVAL_TOTAL; ++i )
+	for ( int i = 0; i < INTERVAL_TOTAL; ++i )
 	{
 		sBuf.Clear();
-		sBuf.Appendf ( "{\"queries\":" UINT64_FMT, tStats.m_dStats[i].m_uTotalQueries );
-		for ( int j = 0; j < QUERY_STATS_TYPE_TOTAL; ++j )
-		{
-			sBuf += ", ";
+		ScopedComma_c VARIABLE_IS_NOT_USED tRootBlock( sBuf, ", ", R"({"queries":)", "}" );
+		sBuf << tStats.m_dStats[i].m_uTotalQueries;
+		for ( int j = 0; j < TYPE_TOTAL; ++j )
 			FormatFn ( sBuf, tStats.m_dStats[i].m_uTotalQueries, tStats.m_dStats[i].m_dData[j], dStatTypeNames[j] );
-		}
-		sBuf += "}";
 
 		sName.Clear();
 		sName << szPrefix << "_" << dStatIntervalNames[i];
@@ -16808,10 +15442,7 @@ static void AddQueryTimeStatsToOutput ( SqlRowBuffer_c & tOut, const char * szPr
 	AddQueryStats ( tOut, szPrefix, tQueryTimeStats,
 		[]( StringBuilder_c & sBuf, uint64_t uQueries, uint64_t uStat, const char * sType )
 		{
-			if ( uQueries )
-				sBuf.Appendf ( "\"%s_sec\":%d.%03d", sType, DWORD ( uStat/1000 ), DWORD ( uStat%1000 ) );
-			else
-				sBuf << "\"" << sType << R"(":"-")";
+			uQueries ? sBuf.Sprintf( R"("%s_sec":%.3F)", sType, uStat ) : sBuf.AppendName( sType ) << R"("-")";
 		} );
 }
 
@@ -16821,11 +15452,8 @@ static void AddFoundRowsStatsToOutput ( SqlRowBuffer_c & tOut, const char * szPr
 	AddQueryStats ( tOut, szPrefix, tRowsFoundStats,
 		[]( StringBuilder_c & sBuf, uint64_t uQueries, uint64_t uStat, const char * sType )
 		{
-			sBuf << "\"" << sType << "\":";
-			if ( uQueries )
-				sBuf.Appendf ( UINT64_FMT, uStat );
-			else
-				sBuf += "\"-\"";
+			sBuf.AppendName( sType );
+			uQueries ? sBuf << uStat : sBuf << R"("-")";
 		} );
 }
 
@@ -19564,33 +18192,6 @@ static ESphAddIndex AddTemplateIndex ( const char * szIndexName, const CSphConfi
 	return ADD_SERVED;
 }
 
-IndexType_e TypeOfIndexConfig ( const CSphString & sType )
-{
-	if ( sType=="distributed" )
-		return IndexType_e::DISTR;
-
-	if ( sType=="rt" )
-		return IndexType_e::RT;
-
-	if ( sType=="percolate" )
-		return IndexType_e::PERCOLATE;
-
-	if ( sType=="template" )
-		return IndexType_e::TEMPLATE;
-
-	if ( ( sType.IsEmpty () || sType=="plain" ) )
-		return IndexType_e::PLAIN;
-
-	return IndexType_e::ERROR_;
-}
-
-const char * g_dIndexTypeName[1+(int)IndexType_e::ERROR_] = { "plain", "template", "rt", "percolate", "distributed", "invalid" };
-
-CSphString GetTypeName ( IndexType_e eType )
-{
-	return g_dIndexTypeName[(int)eType];
-}
-
 // AddIndex() -> AddIndexMT() // from main thread
 // RemoteLoadIndex() -> LoadIndex() -> AddIndexMT() // only Percolate! From other threads
 ESphAddIndex AddIndexMT ( GuardedHash_c& dPost, const char* szIndexName, const CSphConfigSection& hIndex, bool bReplace )
@@ -20640,6 +19241,8 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 }
 #endif // !USE_WINDOWS
 
+const int		WIN32_PIPE_BUFSIZE=32;
+
 /// check for incoming signals, and react on them
 void CheckSignals () REQUIRES ( MainThread )
 {
@@ -20667,6 +19270,7 @@ void CheckSignals () REQUIRES ( MainThread )
 	}
 
 #if USE_WINDOWS
+
 	BYTE dPipeInBuf [ WIN32_PIPE_BUFSIZE ];
 	DWORD nBytesRead = 0;
 	BOOL bSuccess = ReadFile ( g_hPipe, dPipeInBuf, WIN32_PIPE_BUFSIZE, &nBytesRead, NULL );
@@ -20712,6 +19316,7 @@ void QueryStatus ( CSphVariant * v )
 	for ( ; v; v = v->m_pNext )
 	{
 		ListenerDesc_t tDesc = ParseListener ( v->cstr() );
+		CHECK_LISTENER( tDesc );
 		if ( tDesc.m_eProto!=Proto_e::SPHINX )
 			continue;
 
@@ -24465,7 +23070,7 @@ inline int mainimpl ( int argc, char **argv )
 	MemorizeStack ( &cTopOfMainStack );
 
 	sphSetDieCallback ( DieCallback );
-	sphSetLogger ( sphLog );
+	g_pLogger() = sphLog;
 	g_pUservarsHook = UservarsHook;
 	sphCollationInit ();
 	sphBacktraceSetBinaryName ( argv[0] );
@@ -24514,3 +23119,9 @@ int main ( int argc, char ** argv )
 	return mainimpl ( argc, argv );
 }
 #endif
+
+volatile bool& sphGetGotSigterm()
+{
+	static bool bGotSigterm = false;
+	return bGotSigterm;
+}

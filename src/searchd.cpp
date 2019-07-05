@@ -13426,7 +13426,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 		return;
 	}
 
-	if ( bPq && !CheckIndexCluster ( tStmt.m_sIndex, *pServed, tStmt.m_sCluster, sError ) )
+	if ( !CheckIndexCluster ( tStmt.m_sIndex, *pServed, tStmt.m_sCluster, sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;

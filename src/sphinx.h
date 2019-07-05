@@ -2469,7 +2469,7 @@ public:
 	void				SetExternalValues ( const SphAttr_t * pValues, int nValues );
 
 	SphAttr_t			GetValue ( int iIdx ) const	{ assert ( iIdx<GetNumValues() ); return m_pValues ? m_pValues[iIdx] : m_dValues[iIdx]; }
-	const SphAttr_t *	GetValueArray () const		{ return m_pValues ? m_pValues : &(m_dValues[0]); }
+	const SphAttr_t *	GetValueArray () const		{ return m_pValues ? m_pValues : m_dValues.Begin(); }
 	int					GetNumValues () const		{ return m_pValues ? m_nValues : m_dValues.GetLength (); }
 
 	bool				operator == ( const CSphFilterSettings & rhs ) const;

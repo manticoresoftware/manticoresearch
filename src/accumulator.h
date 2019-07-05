@@ -103,6 +103,7 @@ private:
 	bool						m_bReplace = false;		///< insert or replace mode (affects CleanupDuplicates() behavior)
 	BlobRowBuilder_i *			m_pBlobWriter {nullptr};
 	RowID_t						m_tNextRowID {0};
+	CSphFixedVector<BYTE>		m_dPackedKeywords { 0 };
 	void						ResetDict ();
 
 	// FIXME!!! index is unlocked between add data and commit or at begin and end
@@ -134,6 +135,9 @@ public:
 
 	void LoadRtTrx ( const BYTE * pData, int iLen );
 	void SaveRtTrx ( MemoryWriter_c & tWriter ) const;
+
+	const BYTE * GetPackedKeywords () const;
+	int GetPackedLen () const;
 };
 
 #endif // _accumulator_

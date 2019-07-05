@@ -465,6 +465,9 @@ public:
 
 	void GetBytes ( void * pData, int iLen )
 	{
+		if ( !iLen )
+			return;
+
 		assert ( m_pCur );
 		assert ( m_pCur<m_pData+m_iLen );
 		assert ( m_pCur+iLen<=m_pData+m_iLen );
@@ -535,6 +538,9 @@ public:
 
 	void PutBytes ( const void * pData, int iLen )
 	{
+		if ( !iLen )
+			return;
+
 		BYTE * pCur = m_dBuf.AddN ( iLen );
 		memcpy ( pCur, pData, iLen );
 	}

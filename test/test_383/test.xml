@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>replication for RT</name>
+
+<requires><replication/><non-windows/></requires>
+<skip_indexer/>
+<num_agents>3</num_agents>
+
+<config>
+
+<agent0>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"></data_path>
+	server_id = <agent_id/>
+}
+
+index rt1
+{
+	type = rt
+	path			= <data_path/>/rt1
+	rt_mem_limit	= 128k
+	
+	rt_field		= title
+	rt_attr_multi	= mva1
+	rt_attr_uint	= gid
+	rt_attr_json 	= j1
+}
+
+index rt2
+{
+	type = rt
+	path			= <data_path/>/rt2
+	rt_mem_limit	= 128k
+
+	rt_field		= title
+	rt_attr_multi	= mva1
+	rt_attr_uint	= gid
+	rt_attr_json 	= j1
+}
+
+index rtc
+{
+	type = rt
+	path			= <data_path/>/rtc
+	rt_mem_limit	= 128k
+	dict 			= crc
+
+	rt_field		= title
+	rt_attr_multi	= mva1
+	rt_attr_uint	= gid
+	rt_attr_json 	= j1
+}
+</agent0>
+<agent1>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data1"></data_path>
+	server_id = <agent_id/>
+}
+</agent1>
+<agent2>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data2"></data_path>
+	server_id = <agent_id/>
+}
+</agent2>
+
+</config>
+
+
+<sphqueries>
+<!-- request to node 0 -->
+<sphinxql d="0">insert into rt1 (id,title,mva1,gid,j1) values (1, 'test 1', (11,12,13), 11, '{"data":"test 1", fd:11}'), (2, 'test 2', (21,22,23), 21, ''), (3, 'test 3', (), 31, '{"data":"test 3", fd:31}')</sphinxql>
+<sphinxql d="0">SELECT * FROM test:rt1</sphinxql>
+<sphinxql d="0">replace into rt1 (id,title,mva1,gid,j1) values (5, 'test 5', (51,52,53), 51, '{"data":"test 5", fd:51}'), (1, 'test 6', (61,62,63), 61, '{"data":"test 6", fd:16}'), (7, 'test 7', (), 71, '')</sphinxql>
+<sphinxql d="0">SELECT * FROM test:rt1</sphinxql>
+
+<sphinxql d="0">create cluster test</sphinxql>
+<sphinxql d="0">ALTER CLUSTER test ADD rt1</sphinxql>
+<sphinxql d="0">ALTER CLUSTER test ADD rt2</sphinxql>
+
+<!-- request to node 1 -->
+<sphinxql d="1" cluster_connect="0">join cluster test '%addr_connect%' as nodes</sphinxql>
+
+<!-- request to node 2, chain nodes 2>1>0 and update nodes -->
+<sphinxql d="2" cluster_connect="1">join cluster test at '%addr_connect%'</sphinxql>
+
+<!-- stream to node 2 -->
+<sphinxql d="2">SELECT * FROM test:rt1</sphinxql>
+<sphinxql d="2">SELECT * FROM test:rt2</sphinxql>
+<sphinxql d="2">UPDATE test:rt1 SET mva1=(31,33) where id=3</sphinxql>
+<sphinxql d="2">DELETE FROM test:rt1 WHERE id=7</sphinxql>
+<sphinxql d="2">SELECT * FROM test:rt1</sphinxql>
+
+<!-- stream to node 1 -->
+<sphinxql d="1">insert into rt2 (id) values (1001)</sphinxql>
+<sphinxql d="1">UPDATE rt2 SET mva1=() where id=1001</sphinxql>
+<sphinxql d="1">DELETE FROM rt2 WHERE id=1001</sphinxql>
+<sphinxql d="1">insert into test:rt2 (id,title,mva1,gid,j1) values (11, 'test 11', (11,12,13), 11, '{"data":"test 11", fd:11}'), (12, 'test 12', (21,22,23), 21, ''), (13, 'test 13', (), 31, '{"data":"test 13", fd:31}')</sphinxql>
+
+<!-- request to node 0 -->
+<sphinxql d="0">SELECT * FROM test:rt2</sphinxql>
+<sphinxql d="0">UPDATE test:rt2 SET mva1=(101) where j1.data is not null</sphinxql>
+<sphinxql d="0">SELECT * FROM test:rt2</sphinxql>
+
+<!-- stop node 0 -->
+<sphinxql d="0" system="stop-agent"/>
+
+<!-- stream to node 1 -->
+<sphinxql d="1">DELETE FROM test:rt2 WHERE j.fd IN (10,11)</sphinxql>
+<sphinxql d="1">insert into test:rt2 (id,title,mva1,gid,j1) values (21, 'test 21', (21,22,23), 21, '{"data":"test 21", fd:21}')</sphinxql>
+<sphinxql d="1">SELECT * FROM test:rt2</sphinxql>
+<sphinxql d="1">UPDATE test:rt2 SET gid=1 WHERE MATCH ('test | 21') AND j1.fd IN (12,21)</sphinxql>
+<sphinxql d="1">SELECT * FROM test:rt2</sphinxql>
+
+<!-- start node 0 -->
+<sphinxql d="0" system="start-agent"/>
+<sphinxql d="0">SHOW TABLES</sphinxql> <!-- just to reconnect to agent0 -->
+<sphinxql d="0" system="wait-cluster-ready-test"/>
+<sphinxql d="0">SELECT * FROM test:rt2</sphinxql>
+
+<!-- request to node 0 -->
+<sphinxql d="0">ALTER CLUSTER test ADD rtc</sphinxql>
+<sphinxql d="0">insert into test:rtc (id,title,mva1,gid,j1) values (101, 'test 101', (121,122,123), 121, '{"data":"test 101", fd:121}')</sphinxql>
+<sphinxql d="0">insert into test:rt2 (id,title,mva1,gid,j1) values (201, 'test 201', (221,222,223), 221, '{"data":"test 201", fd:221}')</sphinxql>
+<sphinxql d="0">insert into test:rtc (id,title,mva1,gid,j1) values (301, 'test 301', (321,322,323), 321, '{"data":"test 301", fd:321}')</sphinxql>
+
+<!-- request to node 2 -->
+<sphinxql d="2">SELECT * FROM test:rt2</sphinxql>
+<sphinxql d="2">SELECT * FROM test:rtc</sphinxql>
+
+</sphqueries>
+
+</test>

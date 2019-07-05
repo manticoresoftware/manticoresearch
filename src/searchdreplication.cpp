@@ -727,7 +727,7 @@ void ReceiverCtx_t::Cleanup()
 	for ( CSphFilterSettings & tItem : m_tQuery.m_dFilters )
 	{
 		const SphAttr_t * pVals = tItem.GetValueArray();
-		if ( pVals )
+		if ( pVals && pVals!=tItem.m_dValues.Begin() )
 		{
 			delete[] pVals;
 			tItem.SetExternalValues ( nullptr, 0 );
@@ -5296,9 +5296,12 @@ static void SaveFilter ( const CSphFilterSettings & tItem, MemoryWriter_c & tWri
 	SaveArray ( tItem.m_dValues, tWriter );
 	SaveArray ( tItem.m_dStrings, tWriter );
 
-	tWriter.PutDword ( tItem.GetNumValues() );
-	if ( tItem.GetNumValues() )
-		tWriter.PutBytes ( tItem.GetValueArray(), sizeof(*tItem.GetValueArray()) * tItem.GetNumValues() );
+	int iValues = tItem.GetNumValues();
+	if ( tItem.GetValueArray()==tItem.m_dValues.Begin() )
+		iValues = 0;
+	tWriter.PutDword ( iValues );
+	if ( iValues )
+		tWriter.PutBytes ( tItem.GetValueArray(), sizeof(*tItem.GetValueArray()) * iValues );
 }
 
 static void LoadFilter ( CSphFilterSettings & tItem, MemoryReader_c & tReader )

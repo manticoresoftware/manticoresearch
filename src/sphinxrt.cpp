@@ -1582,6 +1582,23 @@ void RtAccum_t::ResetDict ()
 	{
 		m_pDictRt->ResetKeywords();
 	}
+	m_dPackedKeywords.Reset ( 0 );
+}
+
+const BYTE * RtAccum_t::GetPackedKeywords () const
+{
+	if ( m_dPackedKeywords.GetLength() )
+		return m_dPackedKeywords.Begin();
+	else
+		return m_pDictRt->GetPackedKeywords();
+}
+
+int RtAccum_t::GetPackedLen () const
+{
+	if ( m_dPackedKeywords.GetLength() )
+		return m_dPackedKeywords.GetLength();
+	else
+		return m_pDictRt->GetPackedLen();
 }
 
 void RtAccum_t::Sort ()
@@ -1591,7 +1608,7 @@ void RtAccum_t::Sort ()
 	else
 	{
 		assert ( m_pDictRt );
-		const BYTE * pPackedKeywords = m_pDictRt->GetPackedKeywords();
+		const BYTE * pPackedKeywords = GetPackedKeywords();
 		m_dAccum.Sort ( CmpHitKeywords_fn ( pPackedKeywords ) );
 	}
 }
@@ -1780,7 +1797,7 @@ RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize, int iWordsCheckpoint )
 	RtWordWriter_t tOutWord ( pSeg, m_bKeywordDict, iWordsCheckpoint );
 	RtHitWriter_t tOutHit ( pSeg );
 
-	const BYTE * pPacketBase = m_bKeywordDict ? m_pDictRt->GetPackedKeywords() : nullptr;
+	const BYTE * pPacketBase = m_bKeywordDict ? GetPackedKeywords() : nullptr;
 
 	Hitpos_t uEmbeddedHit = EMPTY_HIT;
 	Hitpos_t uPrevHit = EMPTY_HIT;
@@ -1822,7 +1839,7 @@ RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize, int iWordsCheckpoint )
 				if ( m_bKeywordDict )
 				{
 					const BYTE * pPackedWord = pPacketBase + tWord.m_uWordID;
-					assert ( pPackedWord[0] && pPackedWord[0]+1<m_pDictRt->GetPackedLen() );
+					assert ( pPackedWord[0] && pPackedWord[0]+1<GetPackedLen() );
 					tWord.m_sWord = pPackedWord;
 				}
 				tOutWord.ZipWord ( tWord );
@@ -9172,6 +9189,8 @@ void RtAccum_t::LoadRtTrx ( const BYTE * pData, int iLen )
 	tReader.GetBytes ( m_dBlobs.Begin(), m_dBlobs.GetLengthBytes() );
 	m_dPerDocHitsCount.Resize ( tReader.GetDword() );
 	tReader.GetBytes ( m_dPerDocHitsCount.Begin(), m_dPerDocHitsCount.GetLengthBytes() );
+	m_dPackedKeywords.Reset ( tReader.GetDword() );
+	tReader.GetBytes ( m_dPackedKeywords.Begin(), m_dPackedKeywords.GetLengthBytes() );
 
 	// delete
 	m_dAccumKlist.Resize ( tReader.GetDword() );
@@ -9192,6 +9211,11 @@ void RtAccum_t::SaveRtTrx ( MemoryWriter_c & tWriter ) const
 	tWriter.PutBytes ( m_dBlobs.Begin(), m_dBlobs.GetLengthBytes() );
 	tWriter.PutDword ( m_dPerDocHitsCount.GetLength() );
 	tWriter.PutBytes ( m_dPerDocHitsCount.Begin(), m_dPerDocHitsCount.GetLengthBytes() );
+	// packed keywords default length is 1 no need to pass that
+	int iLen = ( m_bKeywordDict && m_pDictRt->GetPackedLen()>1 ? m_pDictRt->GetPackedLen() : 0 );
+	tWriter.PutDword ( iLen );
+	if ( iLen )
+		tWriter.PutBytes ( m_pDictRt->GetPackedKeywords(), iLen );
 
 	// delete
 	tWriter.PutDword ( m_dAccumKlist.GetLength() );

@@ -507,7 +507,7 @@ static void Logger_fn ( wsrep_log_level_t eLevel, const char * sMsg )
 }
 
 // commands version (commands these got replicated via Galera)
-static const WORD g_iReplicateCommandVer = 0x102;
+static const WORD g_iReplicateCommandVer = 0x103;
 
 // log debug info about cluster nodes as current nodes views that
 static void LogGroupView ( const wsrep_view_info_t * pView )

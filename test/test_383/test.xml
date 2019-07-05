@@ -2,7 +2,7 @@
 <test>
 <name>replication for RT</name>
 
-<requires><replication/><non-windows/></requires>
+<requires><replication/><non-windows/><non-rt/></requires>
 <skip_indexer/>
 <num_agents>3</num_agents>
 

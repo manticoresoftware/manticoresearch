@@ -49,3 +49,17 @@ you can do an update by query and apply the update to all the documents that mat
 
 Query syntax is the same as in the ``json/search`` endpoint. Note that you can't specify ``id`` and ``query`` at the same time.
 
+To update a document in a cluster's index ``cluster`` property should be set along with ``index`` property:
+
+::
+
+	{
+	  "cluster":"nodes4",
+	  "index":"test",
+	  "id":1,
+	  "doc":
+	  {
+	    "gid" : 100,
+	    "price" : 1000
+	  }
+	}

@@ -8,8 +8,8 @@ Replication
   Please note that this feature is in preview stage. Some functionality may be not yet complete and may suffer changes.
   Read carefully changelogs of future updates to avoid possible breakages.
 
-Manticore search daemon can replicate a write transaction (``INSERT``, ``REPLACE``, ``DELETE``, ``TRUNCATE``, etc)
-in an index to other nodes in the cluster. Currently only percolate indexes are supported, rt index support is in progress.
+Manticore search daemon can replicate a write transaction (``INSERT``, ``REPLACE``, ``DELETE``, ``TRUNCATE``, ``UPDATE``, etc)
+in an index to other nodes in the cluster. Currently percolate and rt indexes are supported.
 Only Linux packages and builds support replication, Windows and MacOS packages do not support replication.
 
 We took advantage of Percona's fork of Galera library which gives the following benefits:
@@ -205,7 +205,7 @@ Both lists of nodes can be viewed using :ref:`SHOW STATUS <replication_status>` 
 Write statements
 ----------------
 
-All write statements such as ``INSERT``, ``REPLACE``, ``DELETE``, ``TRUNCATE`` that
+All write statements such as ``INSERT``, ``REPLACE``, ``DELETE``, ``TRUNCATE``, ``UPDATE`` that
 change the content of a cluster's index should use ``cluster_name:index_name`` expression in place of an index name to make
 sure the change is propagated to all replicas in the cluster. An error will be triggered otherwise.
 
@@ -213,6 +213,8 @@ sure the change is propagated to all replicas in the cluster. An error will be t
 
      INSERT INTO posts:weekly_index VALUES ( 'iphone case' )
      TRUNCATE RTINDEX click_query:weekly_index
+     UPDATE INTO posts:rt_tags SET tags=(101, 302, 304) WHERE MATCH ('use') AND id IN (1,101,201)
+     DELETE FROM clicks:rt WHERE MATCH ('dumy') AND gid>206
 
 Read statements such as ``CALL PQ``, ``SELECT`` or ``DESCRIBE`` can use either regular index names not prepended with
 a cluster name or ``cluster_name:index_name``. ``cluster_name:index_name`` syntax ignores the cluster name and may be used
@@ -223,16 +225,14 @@ on an index that doesn't belong to the cluster.
      SELECT * FROM weekly_index
      CALL PQ('posts:weekly_index', 'document is here')
 
-Insertion of a percolate query performed at multiple nodes of the same cluster at the same time with auto generated document
-id may trigger an error as, for now, id auto generation takes into account only the local index.
-This may generate a duplicate id and replication requires no id conflicts.
-If an insert fails, retry should work well in most cases, but it depends on the insertion rate.
+ID auto generation uses UUID_SHORT similar to MySQL function. It is valid cluster wide UUID when :ref:`server_id <server_id>`
+properly configured.
 
-However, replacement of percolate queries at multiple nodes at the same time with auto generated document
-``id`` may cause only the query from the last finished request to be replaced.
+All write statements for HTTP interface to a cluster's index should set ``cluster`` property along with ``index`` name.
+An error will be triggered otherwise.
 
-In the future, this behavior will be improved by switching to UUIDs.
-
+``UpdateAttributes`` statement from API interface to specific index always set proper cluster at server and there is no way
+to know is update to index got propagated into cluster properly or node diverged and statement updated only local index.
 
 .. _replication_status:
 

@@ -42,3 +42,13 @@ As in ``json/update``, you can do a delete by query.
 	}
 
 This deletes all documents that match a given query.
+
+To delete a document in a cluster's index ``cluster`` property should be set along with ``index`` property:
+
+::
+
+	{
+	  "cluster":"nodes4",
+	  "index":"test",
+	  "id":1
+	}

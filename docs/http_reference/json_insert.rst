@@ -61,3 +61,19 @@ MVA attributes are inserted as arrays of numbers. JSON attributes can be inserte
       "content" : "new document"
     }
   }
+  
+
+To index a document in a cluster's index ``cluster`` property should be set along with ``index`` property:
+
+::
+
+	{
+	  "cluster":"nodes4",
+	  "index":"test",
+	  "id":1,
+	  "doc":
+	  {
+	    "gid" : 10,
+	    "content" : "new document"
+	  }
+	}

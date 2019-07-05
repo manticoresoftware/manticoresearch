@@ -4462,6 +4462,41 @@ struct SendStatesGuard_t : public ISphNoncopyable
 	}
 };
 
+struct IndexSaveGuard_t
+{
+	CSphString m_sIndexName;
+
+	void EnableSave()
+	{
+		if ( m_sIndexName.IsEmpty() )
+			return;
+
+		ServedIndexRefPtr_c pServed = GetServed ( m_sIndexName );
+		if ( !pServed )
+		{
+			sphWarning ( "unknown index '%s'", m_sIndexName.cstr() );
+			return;
+		}
+
+		ServedDescRPtr_c pDesc ( pServed );
+		if ( pDesc->m_eType!=IndexType_e::PERCOLATE && pDesc->m_eType!=IndexType_e::RT )
+		{
+			sphWarning ( "wrong type of index '%s'", m_sIndexName.cstr() );
+			return;
+		}
+
+		RtIndex_i * pIndex = (RtIndex_i *)pDesc->m_pIndex;
+		pIndex->EnableSave();
+
+		m_sIndexName = "";
+	}
+
+	~IndexSaveGuard_t()
+	{
+		EnableSave();
+	}
+};
+
 // send local index to remote nodes via API
 static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString & sIndex, const VecAgentDesc_t & dDesc, CSphString & sError )
 {
@@ -4470,6 +4505,7 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 	CSphString sIndexPath;
 	CSphVector<CSphString> dIndexFiles;
 	IndexType_e eType = IndexType_e::ERROR_;
+	IndexSaveGuard_t tIndexSaveGuard;
 	{
 		ServedIndexRefPtr_c pServed = GetServed ( sIndex );
 		if ( !pServed )
@@ -4485,12 +4521,11 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 			return false;
 		}
 
-		PercolateIndex_i * pIndex = (PercolateIndex_i *)pDesc->m_pIndex;
-		pIndex->ForceRamFlush ( false );
-		pIndex->GetIndexFiles ( dIndexFiles );
-		// FIXME!!! handle other index types
+		RtIndex_i * pIndex = (RtIndex_i *)pDesc->m_pIndex;
+		pIndex->LockFileState ( dIndexFiles );
 		sIndexPath = pDesc->m_sIndexPath;
 		eType = pDesc->m_eType;
+		tIndexSaveGuard.m_sIndexName = sIndex;
 	}
 	assert ( !sIndexPath.IsEmpty() );
 	assert ( dIndexFiles.GetLength() );
@@ -4574,6 +4609,9 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 
 	if ( dSendStates.GetLength() && !SendFile ( tSigSrc, dSendStates, sCluster, sIndex, sError ) )
 		return false;
+
+	// allow index local write operations passed without replicator
+	tIndexSaveGuard.EnableSave();
 
 	{
 		CSphFixedVector<PQRemoteData_t> dAgentData ( dActivateIndexes.GetLength() );

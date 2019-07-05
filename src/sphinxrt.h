@@ -83,6 +83,8 @@ public:
 	virtual ISphTokenizer * CloneIndexingTokenizer() const = 0;
 
 	virtual void ProhibitSave() = 0;
+	virtual void EnableSave() = 0;
+	virtual void LockFileState ( CSphVector<CSphString> & dFiles ) = 0;
 	
 	/// acquire thread-local indexing accumulator
 	/// returns NULL if another index already uses it in an open txn

@@ -1097,7 +1097,9 @@ public:
 	bool				IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const final;
 	bool				Reconfigure ( CSphReconfigureSetup & tSetup ) final;
 	int64_t				GetLastFlushTimestamp() const final;
-	void				ProhibitSave() final { m_bSaveDisabled = true; }
+	void				ProhibitSave() final;
+	void				EnableSave() final;
+	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
 
 	void				SetDebugCheck () final { m_bDebugCheck = true; }
 
@@ -1147,6 +1149,7 @@ private:
 	ISphTokenizerRefPtr_c		m_pTokenizerIndexing;
 	bool						m_bLoadRamPassedOk = true;
 	bool						m_bSaveDisabled = false;
+	bool						m_bHasFiles = false;
 
 	FileAccessSettings_t		m_tFiles;
 
@@ -1274,6 +1277,9 @@ RtIndex_c::~RtIndex_c ()
 void RtIndex_c::ForceRamFlush ( bool bPeriodic ) REQUIRES (!this->m_tFlushLock)
 {
 	if ( g_pRtBinlog->IsActive () && m_iTID<=m_iSavedTID )
+		return;
+
+	if ( m_bSaveDisabled )
 		return;
 
 	int64_t tmSave = sphMicroTimer();
@@ -2758,7 +2764,7 @@ bool RtIndex_c::ForceDiskChunk() NO_THREAD_SAFETY_ANALYSIS
 {
 	MEMORY ( MEM_INDEX_RT );
 
-	if ( !m_dRamChunks.GetLength() )
+	if ( !m_dRamChunks.GetLength() || m_bSaveDisabled )
 		return true;
 
 	CSphVector<DocID_t> dTmp;
@@ -3846,6 +3852,7 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 		return true;
 
 	m_bLoadRamPassedOk = false;
+	m_bHasFiles = true;
 
 	CSphAutoreader rdChunk;
 	if ( !rdChunk.Open ( sChunk, m_sLastError ) )
@@ -3966,6 +3973,15 @@ void RtIndex_c::PostSetup()
 	const CSphDictSettings & tDictSettings = m_pDict->GetSettings();
 	if ( !ParseMorphFields ( tDictSettings.m_sMorphology, tDictSettings.m_sMorphFields, m_tSchema.GetFields(), m_tMorphFields, m_sLastError ) )
 		sphWarning ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
+
+
+	// still need index files for index just created from config
+	if ( !m_bHasFiles )
+	{
+		SaveRamChunk ( m_dRamChunks );
+		CSphFixedVector<int> dNames = GetIndexNames ( m_dDiskChunks, false );
+		SaveMeta ( m_iTID, dNames );
+	}
 }
 
 struct MemoryDebugCheckReader_c : public DebugCheckReader_i
@@ -6845,7 +6861,7 @@ void RtIndex_c::Optimize()
 	CSphSchema tSchema = m_tSchema;
 	CSphString sError;
 
-	while ( m_dDiskChunks.GetLength()>1 && !g_bShutdown && !m_bOptimizeStop )
+	while ( m_dDiskChunks.GetLength()>1 && !g_bShutdown && !m_bOptimizeStop && !m_bSaveDisabled )
 	{
 		const CSphIndex * pOldest = nullptr;
 		const CSphIndex * pOlder = nullptr;
@@ -6864,7 +6880,7 @@ void RtIndex_c::Optimize()
 		sMerged.SetSprintf ( "%s.tmp", pOldest->GetFilename() );
 
 		// check forced exit after long operation
-		if ( g_bShutdown || m_bOptimizeStop )
+		if ( g_bShutdown || m_bOptimizeStop || m_bSaveDisabled )
 			break;
 
 		// merge data to disk ( data is constant during that phase )
@@ -6877,7 +6893,7 @@ void RtIndex_c::Optimize()
 		}
 
 		// check forced exit after long operation
-		if ( g_bShutdown || m_bOptimizeStop )
+		if ( g_bShutdown || m_bOptimizeStop || m_bSaveDisabled )
 			break;
 
 		CSphScopedPtr<CSphIndex> pMerged ( LoadDiskChunk ( sMerged.cstr(), sError ) );
@@ -6887,7 +6903,7 @@ void RtIndex_c::Optimize()
 			break;
 		}
 		// check forced exit after long operation
-		if ( g_bShutdown || m_bOptimizeStop )
+		if ( g_bShutdown || m_bOptimizeStop || m_bSaveDisabled )
 			break;
 
 		// lets rotate indexes
@@ -7019,7 +7035,7 @@ void RtIndex_c::ProgressiveMerge()
 	CSphSchema tSchema = m_tSchema;
 	CSphString sError;
 
-	while ( m_dDiskChunks.GetLength()>1 && !g_bShutdown && !m_bOptimizeStop )
+	while ( m_dDiskChunks.GetLength()>1 && !g_bShutdown && !m_bOptimizeStop && !m_bSaveDisabled )
 	{
 		const CSphIndex * pOldest = nullptr;
 		const CSphIndex * pOlder = nullptr;
@@ -7060,7 +7076,7 @@ void RtIndex_c::ProgressiveMerge()
 		sMerged.SetSprintf ( "%s.tmp", pOldest->GetFilename() );
 
 		// check forced exit after long operation
-		if ( g_bShutdown || m_bOptimizeStop )
+		if ( g_bShutdown || m_bOptimizeStop || m_bSaveDisabled )
 			break;
 
 		// merge data to disk ( data is constant during that phase )
@@ -7073,7 +7089,7 @@ void RtIndex_c::ProgressiveMerge()
 			break;
 		}
 		// check forced exit after long operation
-		if ( g_bShutdown || m_bOptimizeStop )
+		if ( g_bShutdown || m_bOptimizeStop || m_bSaveDisabled )
 			break;
 
 		CSphScopedPtr<CSphIndex> pMerged ( LoadDiskChunk ( sMerged.cstr(), sError ) );
@@ -7084,7 +7100,7 @@ void RtIndex_c::ProgressiveMerge()
 			break;
 		}
 		// check forced exit after long operation
-		if ( g_bShutdown || m_bOptimizeStop )
+		if ( g_bShutdown || m_bOptimizeStop || m_bSaveDisabled )
 			break;
 
 		// lets rotate indexes
@@ -7438,6 +7454,34 @@ void RtIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles ) const
 	GetReaderChunks ( tGuard );
 	for ( const CSphIndex * pIndex : tGuard.m_dDiskChunks )
 		pIndex->GetIndexFiles ( dFiles );
+}
+
+void RtIndex_c::ProhibitSave()
+{
+	m_bOptimizeStop = true;
+	// just wait optimize finished
+	m_tOptimizingLock.Lock();
+	m_bSaveDisabled = true;
+	m_tOptimizingLock.Unlock();
+}
+
+void RtIndex_c::EnableSave()
+{
+	m_bSaveDisabled = false;
+	m_bOptimizeStop = false;
+}
+
+void RtIndex_c::LockFileState ( CSphVector<CSphString> & dFiles )
+{
+	m_bOptimizeStop = true;
+	// just wait optimize finished
+	m_tOptimizingLock.Lock();
+	m_tOptimizingLock.Unlock();
+
+	ForceRamFlush ( false );
+	m_bSaveDisabled = true;
+
+	GetIndexFiles ( dFiles );
 }
 
 

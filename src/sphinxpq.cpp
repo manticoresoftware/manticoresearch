@@ -139,6 +139,8 @@ public:
 	void				SetMemorySettings ( const FileAccessSettings_t & ) override {}
 
 	void				ProhibitSave() override { m_bSaveDisabled = true; }
+	void				EnableSave() override { m_bSaveDisabled = false; }
+	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
 
 	const CSphSchema &GetMatchSchema () const override { return m_tMatchSchema; }
 
@@ -2395,6 +2397,9 @@ void PercolateIndex_c::ForceRamFlush ( bool bPeriodic )
 	if ( GetBinlog ()->IsActive () && m_iTID<=m_iSavedTID )
 		return;
 
+	if ( m_bSaveDisabled )
+		return;
+
 	RamFlush ( bPeriodic );
 }
 
@@ -2421,6 +2426,15 @@ bool PercolateIndex_c::ForceDiskChunk()
 	ForceRamFlush ( false );
 	return true;
 }
+
+void PercolateIndex_c::LockFileState ( CSphVector<CSphString> & dFiles )
+{
+	ForceRamFlush ( false );
+	m_bSaveDisabled = true;
+
+	GetIndexFiles ( dFiles );
+}
+
 
 PercolateQueryArgs_t::PercolateQueryArgs_t ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree )
 	: m_dFilters ( dFilters )

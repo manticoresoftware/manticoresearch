@@ -1462,8 +1462,9 @@ Example:
     snippets_file_prefix = /mnt/common/server1/
 
 .. warning::
-   If you still want to access files from the FS root, you have to explicitly set ``snippets_file_prefix``
-to empty value (by `snippets_file_prefix=` line), or to root (by `snippets_file_prefix=/`).
+  If you still want to access files from the FS root, you have to explicitly set ``snippets_file_prefix``
+  to empty value (by `snippets_file_prefix=` line), or to root (by `snippets_file_prefix=/`).
+
 
 .. _sphinxql_state:
 

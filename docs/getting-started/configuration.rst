@@ -33,7 +33,7 @@ There are 2 types of such suffixes currently supported:
 * Time suffixes - can be used in parameters defining some time interval values like delays, timeouts, etc. "Naked" values for those parameters usually have documented scale, and you must know if their numbers, say, 100, means '100 seconds' or '100 milliseconds'. However instead of guessing you just can write suffixed value and it will be fully determined by it's suffix. Time values take suffix `us` for useconds (microseconds), `ms` for milliseconds, `s` for seconds, `m` for minutes, `h` for hours, `d` for days and `w` for weeks.
 
 .. warning::
-`Giga-`, and especially `tera-` size suffixes are not very usable right now, since most of the sizes inside are limited by 2Gb (or, being precise, 2Gb - 1 byte), and for the moment only :ref:`rt_mem_limit <rt_mem_limit>`, :ref:`attr_update_reserve <attr_update_reserve>` from index config, and :ref:`qcache_max_bytes <qcache_max_bytes>` from searchd config accepts 64-bit values which may exceed 2Gb.
+  `Giga-`, and especially `tera-` size suffixes are not very usable right now, since most of the sizes inside are limited by 2Gb (or, being precise, 2Gb - 1 byte), and for the moment only :ref:`rt_mem_limit <rt_mem_limit>`, :ref:`attr_update_reserve <attr_update_reserve>` from index config, and :ref:`qcache_max_bytes <qcache_max_bytes>` from searchd config accepts 64-bit values which may exceed 2Gb.
 
 Scripting support
 ~~~~~~~~~~~~~~~~~

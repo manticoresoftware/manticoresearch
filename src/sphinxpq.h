@@ -102,8 +102,8 @@ public:
 PercolateIndex_i * CreateIndexPercolate ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath );
 void FixPercolateSchema ( CSphSchema & tSchema );
 
-typedef const QueryParser_i * CreateQueryParser ( bool bJson );
-void SetPercolateQueryParserFactory ( CreateQueryParser * pCall );
+typedef const QueryParser_i * CreateQueryParser_fn ( bool bJson );
+void SetPercolateQueryParserFactory ( CreateQueryParser_fn * pCall );
 void SetPercolateThreads ( int iThreads );
 
 void LoadStoredQuery ( const BYTE * pData, int iLen, StoredQueryDesc_t & tQuery );

@@ -804,6 +804,27 @@ protected:
 /// check if a non-blocked socket is still connected
 bool sphNBSockEof ( int iSock );
 
+class SphinxqlRequestBuilder_c : public RequestBuilder_i
+{
+public:
+			SphinxqlRequestBuilder_c ( const CSphString & sQuery, const SqlStmt_t & tStmt );
+	void	BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final;
+
+protected:
+	const CSphString m_sBegin;
+	const CSphString m_sEnd;
+};
+
+class SphinxqlReplyParser_c : public ReplyParser_i
+{
+public:
+	explicit SphinxqlReplyParser_c ( int * pUpd, int * pWarns );
+	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final;
+
+protected:
+	int * m_pUpdated;
+	int * m_pWarns;
+};
 
 //////////////////////////////////////////////////////////////////////////
 // Universal work with select/poll/epoll/kqueue

@@ -43,6 +43,10 @@ enum class ReplicationCommand_e
 	TRUNCATE,
 	CLUSTER_ALTER_ADD,
 	CLUSTER_ALTER_DROP,
+	RT_TRX,
+	UPDATE_API,
+	UPDATE_QL,
+	UPDATE_JSON,
 
 	TOTAL
 };
@@ -66,8 +70,14 @@ struct ReplicationCommand_t
 	bool					m_bReconfigure = false;
 	CSphScopedPtr<CSphReconfigureSettings> m_tReconfigure { nullptr };
 
+	// commit related
 	bool					m_bCheckIndex = true;
 	bool					m_bIsolated = false;
+
+	// update
+	const CSphAttrUpdate * m_pUpdateAPI = nullptr;
+	bool m_bBlobUpdate = false;
+	const CSphQuery * m_pUpdateCond = nullptr;
 };
 
 class RtIndex_i;
@@ -119,7 +129,11 @@ public:
 	void			ResetRowID();
 
 	RtIndex_i * GetIndex() const { return m_pIndex; }
-	ReplicationCommand_t * AddCommand();
+	ReplicationCommand_t * AddCommand ( ReplicationCommand_e eCmd );
+	ReplicationCommand_t * AddCommand ( ReplicationCommand_e eCmd, const CSphString & sCluster, const CSphString & sIndex );
+
+	void LoadRtTrx ( const BYTE * pData, int iLen );
+	void SaveRtTrx ( MemoryWriter_c & tWriter ) const;
 };
 
 #endif // _accumulator_

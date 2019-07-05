@@ -1097,7 +1097,7 @@ public:
 	bool				IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const final;
 	bool				Reconfigure ( CSphReconfigureSetup & tSetup ) final;
 	int64_t				GetLastFlushTimestamp() const final;
-	void				ProhibitSave() final {}
+	void				ProhibitSave() final { m_bSaveDisabled = true; }
 
 	void				SetDebugCheck () final { m_bDebugCheck = true; }
 
@@ -1146,6 +1146,7 @@ private:
 	int							m_iMaxCodepointLength = 0;
 	ISphTokenizerRefPtr_c		m_pTokenizerIndexing;
 	bool						m_bLoadRamPassedOk = true;
+	bool						m_bSaveDisabled = false;
 
 	FileAccessSettings_t		m_tFiles;
 
@@ -1165,7 +1166,7 @@ private:
 	void						SaveMeta ( int64_t iTID, const CSphFixedVector<int> & dChunkNames );
 	void						SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats ) const;
 	void						SaveDiskData ( const char * sFilename, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats ) const;
-	bool						SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats, bool bMoveRetired, bool bForced, int iSavedChunkId );
+	bool						SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats, bool bMoveRetired, bool bForced, int & iSavedChunkId );
 	CSphIndex *					LoadDiskChunk ( const char * sChunk, CSphString & sError ) const;
 	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes );
 	bool						SaveRamChunk ( const VecTraits_T<const RtSegment_t *>& dSegments );
@@ -1235,7 +1236,7 @@ RtIndex_c::~RtIndex_c ()
 	int64_t tmSave = sphMicroTimer();
 	bool bValid = m_pTokenizer && m_pDict && m_bLoadRamPassedOk;
 
-	if ( bValid )
+	if ( bValid && !m_bSaveDisabled )
 	{
 		SaveRamChunk ( m_dRamChunks );
 		CSphFixedVector<int> dNames = GetIndexNames ( m_dDiskChunks, false );
@@ -2006,10 +2007,23 @@ void RtAccum_t::ResetRowID()
 	m_tNextRowID=0;
 }
 
-ReplicationCommand_t * RtAccum_t::AddCommand()
+ReplicationCommand_t * RtAccum_t::AddCommand ( ReplicationCommand_e eCmd )
 {
+	return AddCommand ( eCmd, CSphString(), CSphString() );
+}
+
+ReplicationCommand_t * RtAccum_t::AddCommand ( ReplicationCommand_e eCmd, const CSphString & sCluster, const CSphString & sIndex )
+{
+	// all writes to RT index go as single command to serialize accumulator
+	if ( eCmd==ReplicationCommand_e::RT_TRX && m_dCmd.GetLength() && m_dCmd.Last()->m_eCommand==ReplicationCommand_e::RT_TRX )
+		return m_dCmd.Last();
+
 	ReplicationCommand_t * pCmd = new ReplicationCommand_t();
 	m_dCmd.Add ( pCmd );
+	pCmd->m_eCommand = eCmd;
+	pCmd->m_sCluster = sCluster;
+	pCmd->m_sIndex = sIndex;
+
 	return pCmd;
 }
 
@@ -3314,6 +3328,9 @@ namespace sph
 
 void RtIndex_c::SaveMeta ( int64_t iTID, const CSphFixedVector<int> & dChunkNames )
 {
+	if ( m_bSaveDisabled )
+		return;
+
 	// sanity check
 	if ( m_iLockFD<0 )
 		return;
@@ -3371,9 +3388,9 @@ void RtIndex_c::SaveMeta ( int64_t iTID, const CSphFixedVector<int> & dChunkName
 }
 
 
-bool RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats, bool bMoveRetired, bool bForce, int iSavedChunkId )
+bool RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats, bool bMoveRetired, bool bForce, int & iSavedChunkId )
 {
-	if ( !tGuard.m_dRamChunks.GetLength() )
+	if ( !tGuard.m_dRamChunks.GetLength() || m_bSaveDisabled )
 	{
 		iSavedChunkId = -1;
 		return true;
@@ -3753,6 +3770,9 @@ static bool LoadVector ( BinlogReader_c & tReader, CSphVector < T, P > & tVector
 
 bool RtIndex_c::SaveRamChunk ( const VecTraits_T<const RtSegment_t *> &dSegments )
 {
+	if ( m_bSaveDisabled )
+		return true;
+
 	MEMORY ( MEM_INDEX_RT );
 
 	CSphString sChunk, sNewChunk;
@@ -6487,7 +6507,7 @@ int RtIndex_c::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool 
 
 bool RtIndex_c::SaveAttributes ( CSphString & sError ) const
 {
-	if ( !m_dDiskChunks.GetLength() )
+	if ( !m_dDiskChunks.GetLength() || m_bSaveDisabled )
 		return true;
 
 	DWORD uStatus = m_uDiskAttrStatus;
@@ -9091,4 +9111,45 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 	}
 
 	return true;
+}
+
+void RtAccum_t::LoadRtTrx ( const BYTE * pData, int iLen )
+{
+	MemoryReader_c tReader ( pData, iLen );
+	m_bReplace = !!tReader.GetByte();
+	m_uAccumDocs = tReader.GetDword();
+
+	// insert and replace
+	m_dAccum.Resize ( tReader.GetDword() );
+	tReader.GetBytes ( m_dAccum.Begin(), m_dAccum.GetLengthBytes() );
+	m_dAccumRows.Resize ( tReader.GetDword() );
+	tReader.GetBytes ( m_dAccumRows.Begin(), m_dAccumRows.GetLengthBytes() );
+	m_dBlobs.Resize ( tReader.GetDword() );
+	tReader.GetBytes ( m_dBlobs.Begin(), m_dBlobs.GetLengthBytes() );
+	m_dPerDocHitsCount.Resize ( tReader.GetDword() );
+	tReader.GetBytes ( m_dPerDocHitsCount.Begin(), m_dPerDocHitsCount.GetLengthBytes() );
+
+	// delete
+	m_dAccumKlist.Resize ( tReader.GetDword() );
+	tReader.GetBytes ( m_dAccumKlist.Begin(), m_dAccumKlist.GetLengthBytes() );
+}
+
+void RtAccum_t::SaveRtTrx ( MemoryWriter_c & tWriter ) const
+{
+	tWriter.PutByte ( m_bReplace ); // this need only for data sort on commit
+	tWriter.PutDword ( m_uAccumDocs );
+
+	// insert and replace
+	tWriter.PutDword ( m_dAccum.GetLength() );
+	tWriter.PutBytes ( m_dAccum.Begin(), m_dAccum.GetLengthBytes() );
+	tWriter.PutDword ( m_dAccumRows.GetLength() );
+	tWriter.PutBytes ( m_dAccumRows.Begin(), m_dAccumRows.GetLengthBytes() );
+	tWriter.PutDword ( m_dBlobs.GetLength() );
+	tWriter.PutBytes ( m_dBlobs.Begin(), m_dBlobs.GetLengthBytes() );
+	tWriter.PutDword ( m_dPerDocHitsCount.GetLength() );
+	tWriter.PutBytes ( m_dPerDocHitsCount.Begin(), m_dPerDocHitsCount.GetLengthBytes() );
+
+	// delete
+	tWriter.PutDword ( m_dAccumKlist.GetLength() );
+	tWriter.PutBytes ( m_dAccumKlist.Begin(), m_dAccumKlist.GetLengthBytes() );
 }

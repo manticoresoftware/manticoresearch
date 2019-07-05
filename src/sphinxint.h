@@ -451,29 +451,39 @@ public:
 
 	DWORD GetDword()
 	{
-		assert ( m_pCur );
-		assert ( m_pCur<m_pData+m_iLen );
 		DWORD uRes = 0;
-		GetBytes ( (BYTE *)&uRes, sizeof(uRes) );
+		GetBytes ( &uRes, sizeof(uRes) );
 		return uRes;
 	}
 
 	WORD GetWord()
 	{
-		assert ( m_pCur );
-		assert ( m_pCur<m_pData+m_iLen );
 		WORD uRes = 0;
-		GetBytes ( (BYTE *)&uRes, sizeof(uRes) );
+		GetBytes ( &uRes, sizeof(uRes) );
 		return uRes;
 	}
 
-	void GetBytes ( BYTE * pData, int iLen )
+	void GetBytes ( void * pData, int iLen )
 	{
 		assert ( m_pCur );
 		assert ( m_pCur<m_pData+m_iLen );
 		assert ( m_pCur+iLen<=m_pData+m_iLen );
 		memcpy ( pData, m_pCur, iLen );
 		m_pCur += iLen;
+	}
+
+	BYTE GetByte()
+	{
+		BYTE uVal = 0;
+		GetBytes ( &uVal, sizeof(uVal) );
+		return uVal;
+	}
+
+	uint64_t GetUint64()
+	{
+		uint64_t uVal;
+		GetBytes ( &uVal, sizeof(uVal) );
+		return uVal;
 	}
 };
 
@@ -523,10 +533,20 @@ public:
 		PutBytes ( (BYTE *)&uVal, sizeof(uVal) );
 	}
 
-	void PutBytes ( const BYTE * pData, int iLen )
+	void PutBytes ( const void * pData, int iLen )
 	{
 		BYTE * pCur = m_dBuf.AddN ( iLen );
 		memcpy ( pCur, pData, iLen );
+	}
+
+	void PutByte ( BYTE uVal )
+	{
+		m_dBuf.Add ( uVal );
+	}
+
+	void PutUint64 ( uint64_t uVal )
+	{
+		PutBytes ( (BYTE *)&uVal, sizeof(uVal) );
 	}
 };
 

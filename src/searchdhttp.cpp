@@ -313,8 +313,8 @@ private:
 class JsonRequestBuilder_c : public RequestBuilder_i
 {
 public:
-	JsonRequestBuilder_c ( const CSphString & sQuery, const SqlStmt_t & /*tStmt*/, ESphHttpEndpoint eEndpoint )
-		: m_eEndpoint ( eEndpoint )
+	JsonRequestBuilder_c ( const CSphString & sQuery, const CSphString & sEndpoint )
+		: m_sEndpoint ( sEndpoint )
 		, m_tQuery ( sQuery.cstr() )
 	{
 		// fixme: we can implement replacing indexes in a string (without parsing) if it becomes a performance issue
@@ -327,15 +327,14 @@ public:
 		m_tQuery.AddStr ( "index", tAgent.m_tDesc.m_sIndexes.cstr() );
 
 		CSphString sRequest = m_tQuery.AsString();
-		CSphString sEndpoint = sphHttpEndpointToStr ( m_eEndpoint );
 
 		APICommand_t tWr { tOut, SEARCHD_COMMAND_JSON, VER_COMMAND_JSON }; // API header
-		tOut.SendString ( sEndpoint.cstr() );
+		tOut.SendString ( m_sEndpoint.cstr() );
 		tOut.SendString ( sRequest.cstr() );
 	}
 
 private:
-	ESphHttpEndpoint	m_eEndpoint {SPH_HTTP_ENDPOINT_TOTAL};
+	CSphString			m_sEndpoint;
 	mutable JsonObj_c	m_tQuery;
 };
 
@@ -368,32 +367,33 @@ protected:
 	int &	m_iWarnings;
 };
 
-
-class JsonParserFactory_c : public QueryParserFactory_i
+QueryParser_i * CreateQueryParser( bool bJson )
 {
-public:
-	JsonParserFactory_c ( ESphHttpEndpoint eEndpoint )
-		: m_eEndpoint ( eEndpoint )
-	{}
-
-	virtual QueryParser_i * CreateQueryParser() const override
-	{
+	if ( bJson )
 		return sphCreateJsonQueryParser();
-	}
+	else
+		return sphCreatePlainQueryParser();
+}
 
-	RequestBuilder_i * CreateRequestBuilder ( const CSphString & sQuery, const SqlStmt_t & tStmt ) const override
+RequestBuilder_i * CreateRequestBuilder (const CSphString & sQuery, const SqlStmt_t & tStmt )
+{
+	if ( tStmt.m_bJson )
 	{
-		return new JsonRequestBuilder_c ( sQuery, tStmt, m_eEndpoint );
+		assert ( !tStmt.m_sEndpoint.IsEmpty() );
+		return new JsonRequestBuilder_c ( sQuery, tStmt.m_sEndpoint );
+	} else
+	{
+		return new SphinxqlRequestBuilder_c ( sQuery, tStmt );
 	}
+}
 
-	ReplyParser_i * CreateReplyParser ( int & iUpdated, int & iWarnings ) const override
-	{
+ReplyParser_i * CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings )
+{
+	if ( bJson )
 		return new JsonReplyParser_c ( iUpdated, iWarnings );
-	}
-
-private:
-	ESphHttpEndpoint m_eEndpoint {SPH_HTTP_ENDPOINT_TOTAL};
-};
+	else
+		return new SphinxqlReplyParser_c ( &iUpdated, &iWarnings );
+}
 
 //////////////////////////////////////////////////////////////////////////
 class HttpErrorReporter_c : public StmtErrorReporter_i
@@ -750,8 +750,7 @@ protected:
 	{
 		HttpErrorReporter_c tReporter;
 		CSphString sWarning;
-		JsonParserFactory_c tFactory ( SPH_HTTP_ENDPOINT_JSON_UPDATE );
-		sphHandleMysqlUpdate ( tReporter, tFactory, tStmt, szRawRequest, sWarning, tThd );
+		sphHandleMysqlUpdate ( tReporter, tStmt, szRawRequest, sWarning, tThd );
 
 		if ( tReporter.IsError() )
 			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
@@ -773,6 +772,9 @@ public:
 	bool Process () override
 	{
 		SqlStmt_t tStmt;
+		tStmt.m_bJson = true;
+		tStmt.m_sEndpoint = sphHttpEndpointToStr ( SPH_HTTP_ENDPOINT_JSON_UPDATE );
+
 		DocID_t tDocId = 0;
 		CSphString sError;
 		if ( !ParseQuery ( tStmt, tDocId, sError ) )
@@ -810,8 +812,7 @@ protected:
 		CSphSessionAccum tAcc;
 		HttpErrorReporter_c tReporter;
 		CSphString sWarning;
-		JsonParserFactory_c tFactory ( SPH_HTTP_ENDPOINT_JSON_DELETE );
-		sphHandleMysqlDelete ( tReporter, tFactory, tStmt, szRawRequest, true, tAcc, tThd );
+		sphHandleMysqlDelete ( tReporter, tStmt, szRawRequest, true, tAcc, tThd );
 
 		if ( tReporter.IsError() )
 			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
@@ -833,6 +834,7 @@ public:
 protected:
 	bool ParseQuery ( SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError ) override
 	{
+		tStmt.m_sEndpoint = sphHttpEndpointToStr ( SPH_HTTP_ENDPOINT_JSON_DELETE );
 		return sphParseJsonDelete ( m_sQuery, tStmt, tDocId, sError );
 	}
 
@@ -886,6 +888,7 @@ public:
 
 			*p++ = '\0';
 			SqlStmt_t tStmt;
+			tStmt.m_bJson = true;
 			DocID_t tDocId = 0;
 			CSphString sStmt;
 			CSphString sError;
@@ -908,10 +911,12 @@ public:
 				break;
 
 			case STMT_UPDATE:
+				tStmt.m_sEndpoint = sphHttpEndpointToStr ( SPH_HTTP_ENDPOINT_JSON_UPDATE );
 				bResult = ProcessUpdate ( sQuery.cstr(), tStmt, tDocId, m_tThd, tResult );
 				break;
 
 			case STMT_DELETE:
+				tStmt.m_sEndpoint = sphHttpEndpointToStr ( SPH_HTTP_ENDPOINT_JSON_DELETE );
 				bResult = ProcessDelete ( sQuery.cstr(), tStmt, tDocId, m_tThd, tResult );
 				break;
 
@@ -1303,14 +1308,13 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 		{
 			RtAccum_t tAcc ( false );
 			tAcc.SetIndex ( pIndex );
-			ReplicationCommand_t * pCmd = tAcc.AddCommand();
-			pCmd->m_eCommand = ReplicationCommand_e::PQUERY_ADD;
+			ReplicationCommand_t * pCmd = tAcc.AddCommand ( ReplicationCommand_e::PQUERY_ADD );
 			pCmd->m_sIndex = sIndex;
 			pCmd->m_pStored = pStored;
 			// refresh query's UID for reply as it might be auto-generated
 			iID = pStored->m_iQUID;
 
-			bOk = HandleCmdReplicate ( tAcc, sError, nullptr );
+			bOk = HandleCmdReplicate ( tAcc, sError );
 		}
 	}
 
@@ -1345,8 +1349,7 @@ bool HttpHandlerPQ_c::ListQueries ( const CSphString & sIndex )
 bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoot )
 {
 	RtAccum_t tAcc ( false );
-	ReplicationCommand_t * pCmd = tAcc.AddCommand();
-	pCmd->m_eCommand = ReplicationCommand_e::PQUERY_DELETE;
+	ReplicationCommand_t * pCmd = tAcc.AddCommand ( ReplicationCommand_e::PQUERY_DELETE );
 	pCmd->m_sIndex = sIndex;
 
 	CSphString sError;
@@ -1381,7 +1384,7 @@ bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoo
 	uint64_t tmStart = sphMicroTimer();
 
 	int iDeleted = 0;
-	bool bOk = HandleCmdReplicate ( tAcc, sError, &iDeleted );
+	bool bOk = HandleCmdReplicate ( tAcc, sError, iDeleted );
 
 	uint64_t tmTotal = sphMicroTimer() - tmStart;
 

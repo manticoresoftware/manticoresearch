@@ -1482,8 +1482,8 @@ static const QueryParser_i * CreatePlainQueryparser ( bool )
 	return sphCreatePlainQueryParser();
 }
 
-static CreateQueryParser * g_pCreateQueryParser = CreatePlainQueryparser;
-void SetPercolateQueryParserFactory ( CreateQueryParser * pCall )
+static CreateQueryParser_fn * g_pCreateQueryParser = CreatePlainQueryparser;
+void SetPercolateQueryParserFactory ( CreateQueryParser_fn * pCall )
 {
 	g_pCreateQueryParser = pCall;
 }

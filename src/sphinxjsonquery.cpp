@@ -1198,6 +1198,22 @@ static bool ParseIndexId ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t &
 	return true;
 }
 
+static bool ParseCluster ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, CSphString & sError )
+{
+	if ( !tRoot )
+	{
+		sError.SetSprintf ( "unable to parse: %s", tRoot.GetErrorPtr() );
+		return false;
+	}
+
+	// cluster is optional
+	JsonObj_c tCluster = tRoot.GetStrItem ( "cluster", sError, true );
+	if ( tCluster )
+		tStmt.m_sCluster = tCluster.StrVal();
+
+	return true;
+}
+
 
 QueryParser_i * sphCreateJsonQueryParser()
 {
@@ -1343,6 +1359,9 @@ bool ParseJsonInsert ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDo
 	if ( !ParseIndexId ( tRoot, tStmt, tDocId, sError ) )
 		return false;
 
+	if ( !ParseCluster ( tRoot, tStmt, sError ) )
+		return false;
+
 	tStmt.m_dInsertSchema.Add ( sphGetDocidName() );
 	SqlInsert_t & tId = tStmt.m_dInsertValues.Add();
 	tId.m_iType = sphGetTokTypeInt();
@@ -1418,6 +1437,9 @@ static bool ParseUpdateDeleteQueries ( const JsonObj_c & tRoot, SqlStmt_t & tStm
 {	
 	tStmt.m_tQuery.m_sSelect = "*";
 	if ( !ParseIndex ( tRoot, tStmt, sError ) )
+		return false;
+
+	if ( !ParseCluster ( tRoot, tStmt, sError ) )
 		return false;
 
 	JsonObj_c tId = tRoot.GetIntItem ( "id", sError );

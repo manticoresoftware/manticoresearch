@@ -6113,8 +6113,7 @@ public:
 	void							RunUpdates ( const CSphQuery & tQuery, const CSphString & sIndex, CSphAttrUpdateEx * pUpdates ); ///< run Update command instead of Search
 	void							RunDeletes ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, CSphVector<DocID_t> * pDelDocs );
 	void							SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc ) final;
-	void							SetQueryParser ( const QueryParser_i * pParser );
-	void							SetQueryType ( QueryType_e eQueryType );
+	void							SetQueryParser ( const QueryParser_i * pParser, QueryType_e eQueryType );
 	void							SetProfile ( CSphQueryProfile * pProfile ) final;
 	AggrResult_t *					GetResult ( int iResult ) final { return m_dResults.Begin() + iResult; }
 	void							SetFederatedUser () { m_bFederatedUser = true; }
@@ -6191,8 +6190,7 @@ SearchHandler_c::SearchHandler_c ( int iQueries, const QueryParser_i * pQueryPar
 	ARRAY_FOREACH ( i, m_dTables )
 		m_dTables[i] = nullptr;
 
-	SetQueryParser ( pQueryParser );
-	SetQueryType ( eQueryType );
+	SetQueryParser ( pQueryParser, eQueryType );
 }
 
 
@@ -6203,20 +6201,15 @@ SearchHandler_c::~SearchHandler_c ()
 		SafeDelete ( m_dTables[i] );
 }
 
-
-void SearchHandler_c::SetQueryParser ( const QueryParser_i * pParser )
+void SearchHandler_c::SetQueryParser ( const QueryParser_i * pParser, QueryType_e eQueryType )
 {
 	m_pQueryParser = pParser;
-	for ( auto & dQuery : m_dQueries )
-		dQuery.m_pQueryParser = pParser;
-}
-
-
-void SearchHandler_c::SetQueryType ( QueryType_e eQueryType )
-{
 	m_eQueryType = eQueryType;
 	for ( auto & dQuery : m_dQueries )
+	{
+		dQuery.m_pQueryParser = pParser;
 		dQuery.m_eQueryType = eQueryType;
+	}
 }
 
 LockedCollection_c::~LockedCollection_c()
@@ -7960,8 +7953,7 @@ void HandleCommandSearch ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c
 			pParser = sphCreatePlainQueryParser();
 
 		assert ( pParser );
-		tHandler.SetQueryParser ( pParser );
-		tHandler.SetQueryType ( eQueryType );
+		tHandler.SetQueryParser ( pParser, eQueryType );
 
 		const CSphQuery & q = tHandler.m_dQueries[0];
 		tThd.SetThreadInfo ( R"(api-search query="%s" comment="%s" index="%s")",
@@ -9049,6 +9041,7 @@ void SqlParser_c::GenericStatement ( SqlNode_t * pNode, SqlStmt_e iStmt )
 bool SqlParser_c::UpdateStatement ( SqlNode_t * pNode )
 {
 	GenericStatement ( pNode, STMT_UPDATE );
+	SetIndex ( *pNode );
 	m_pStmt->m_tUpdate.m_dRowOffset.Add ( 0 );
 	return true;
 }
@@ -10401,12 +10394,7 @@ protected:
 void UpdateRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
 {
 	const char * sIndexes = tAgent.m_tDesc.m_sIndexes.cstr();
-	bool bBlob = false;
-	for ( const auto & i : m_tUpd.m_dAttributes )
-	{
-		assert ( i.m_eType!=SPH_ATTR_INT64SET ); // mva64 goes only via SphinxQL (SphinxqlRequestBuilder_c)
-		bBlob |= sphIsBlobAttr ( i.m_eType );
-	}
+	assert ( m_tUpd.m_dAttributes.TestAll ( [&] ( const TypedAttribute_t & tAttr ) { return ( tAttr.m_eType!=SPH_ATTR_INT64SET ); } ) );
 
 	// API header
 	APICommand_t tWr { tOut, SEARCHD_COMMAND_UPDATE, VER_COMMAND_UPDATE };
@@ -10478,20 +10466,32 @@ void UpdateRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, CachedOu
 	}
 }
 
-static void DoCommandUpdate ( const char * sIndex, const char * sDistributed, const CSphAttrUpdate & tUpd,
+static void DoCommandUpdate ( const CSphString & sIndex, const char * sDistributed, const CSphAttrUpdate & tUpd, bool bBlobUpdate,
 	int & iSuccesses, int & iUpdated,
-	SearchFailuresLog_c & dFails, const ServedDesc_t * pServed )
+	SearchFailuresLog_c & dFails, ServedIndexRefPtr_c & pServed )
 {
-	if ( !pServed )
+	CSphString sCluster;
 	{
-		dFails.Submit ( sIndex, sDistributed, "index not available" );
-		return;
+		ServedDescRPtr_c tDesc ( pServed );
+		if ( !tDesc )
+		{
+			dFails.Submit ( sIndex, sDistributed, "index not available" );
+			return;
+		}
+
+		sCluster = tDesc->m_sCluster;
 	}
 
+	ThdDesc_t tThd;
+	int iUpd = 0;
 	CSphString sError, sWarning;
-	bool bCritical = false;
-	int iUpd = pServed->m_pIndex->UpdateAttributes ( tUpd, -1, bCritical, sError, sWarning );
-	assert ( !bCritical );    // fixme! handle this
+	RtAccum_t tAcc ( false );
+	ReplicationCommand_t * pCmd = tAcc.AddCommand ( ReplicationCommand_e::UPDATE_API, sCluster, sIndex );
+	assert ( pCmd );
+	pCmd->m_pUpdateAPI = &tUpd;
+	pCmd->m_bBlobUpdate = bBlobUpdate;
+
+	HandleCmdReplicate ( tAcc, sError, sWarning, iUpd, tThd );
 
 	if ( iUpd<0 )
 	{
@@ -10678,34 +10678,25 @@ void HandleCommandUpdate ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c 
 
 	ARRAY_FOREACH ( iIdx, dIndexNames )
 	{
-		const char * sReqIndex = dIndexNames[iIdx].cstr();
+		const CSphString & sReqIndex = dIndexNames[iIdx];
 		auto pLocal = GetServed ( sReqIndex );
 		if ( pLocal )
 		{
-			if ( bBlobUpdate )
-				DoCommandUpdate ( sReqIndex, nullptr, tUpd, iSuccesses,
-					iUpdated, dFails, ServedDescWPtr_c ( pLocal ) );
-			else
-				DoCommandUpdate ( sReqIndex, nullptr, tUpd, iSuccesses,
-					iUpdated, dFails, ServedDescRPtr_c ( pLocal ) );
+			DoCommandUpdate ( sReqIndex, nullptr, tUpd, bBlobUpdate, iSuccesses, iUpdated, dFails, pLocal );
+
 		} else if ( dDistributed[iIdx] )
 		{
 			auto * pDist = dDistributed[iIdx];
 
 			assert ( !pDist->IsEmpty() );
 
-			for ( const auto & sLocal : pDist->m_dLocal )
+			for ( const CSphString & sLocal : pDist->m_dLocal )
 			{
 				auto pServed = GetServed ( sLocal );
-				if ( pServed )
-				{
-					if ( bBlobUpdate )
-						DoCommandUpdate ( sLocal.cstr (), sReqIndex, tUpd, iSuccesses,
-							iUpdated, dFails, ServedDescWPtr_c ( pServed ) );
-					else
-						DoCommandUpdate ( sLocal.cstr (), sReqIndex, tUpd,
-							iSuccesses, iUpdated, dFails, ServedDescRPtr_c ( pServed ) );
-				}
+				if ( !pServed )
+					continue;
+
+				DoCommandUpdate ( sLocal, sReqIndex.cstr(), tUpd, bBlobUpdate, iSuccesses, iUpdated, dFails, pServed );
 			}
 
 			// update remote agents
@@ -13381,19 +13372,6 @@ void HandleMysqlPercolateMeta ( const CPqResult &tResult, const CSphString & sWa
 	tOut.Eof();
 }
 
-
-class SphinxqlRequestBuilder_c : public RequestBuilder_i
-{
-public:
-			SphinxqlRequestBuilder_c ( const CSphString & sQuery, const SqlStmt_t & tStmt );
-	void	BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final;
-
-protected:
-	const CSphString m_sBegin;
-	const CSphString m_sEnd;
-};
-
-
 void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool bReplace, bool bCommit,
 	  CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation, CSphVector<int64_t> & dLastIds )
 {
@@ -13764,10 +13742,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 			StoredQuery_i * pStored = pQIndex->Query ( tArgs, sError );
 			if ( pStored )
 			{
-				ReplicationCommand_t * pCmd = pAccum->AddCommand();
-				pCmd->m_eCommand = ReplicationCommand_e::PQUERY_ADD;
-				pCmd->m_sIndex   = tStmt.m_sIndex;
-				pCmd->m_sCluster = tStmt.m_sCluster;
+				ReplicationCommand_t * pCmd = pAccum->AddCommand ( ReplicationCommand_e::PQUERY_ADD, tStmt.m_sCluster, tStmt.m_sIndex );
 				pCmd->m_pStored  = pStored;
 
 				dIds.Add ( pStored->m_iQUID );
@@ -13778,6 +13753,8 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 
 			if ( iIdIndex>=0 )
 				dIds.Add ( tDoc.GetAttr ( tIdLoc ) );
+
+			pAccum->AddCommand ( ReplicationCommand_e::RT_TRX, tStmt.m_sCluster, tStmt.m_sIndex );
 		}
 
 		if ( !sError.IsEmpty() )
@@ -13796,7 +13773,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 
 	// no errors so far
 	if ( bCommit )
-		HandleCmdReplicate ( *pAccum, sError, nullptr );
+		HandleCmdReplicate ( *pAccum, sError );
 
 	int64_t iLastInsertId = 0;
 	if ( dLastIds.GetLength() )
@@ -14939,45 +14916,37 @@ void HandleCommandUserVar ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_
 // SMART UPDATES HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
-class SphinxqlReplyParser_c : public ReplyParser_i
+SphinxqlReplyParser_c::SphinxqlReplyParser_c ( int * pUpd, int * pWarns )
+	: m_pUpdated ( pUpd )
+	, m_pWarns ( pWarns )
+{}
+
+bool SphinxqlReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
 {
-public:
-	explicit SphinxqlReplyParser_c ( int * pUpd, int * pWarns )
-		: m_pUpdated ( pUpd )
-		, m_pWarns ( pWarns )
-	{}
+	DWORD uSize = ( tReq.GetLSBDword() & 0x00ffffff ) - 1;
+	BYTE uCommand = tReq.GetByte();
 
-	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final
+	if ( uCommand==0 ) // ok packet
 	{
-		DWORD uSize = ( tReq.GetLSBDword() & 0x00ffffff ) - 1;
-		BYTE uCommand = tReq.GetByte();
-
-		if ( uCommand==0 ) // ok packet
-		{
-			*m_pUpdated += MysqlUnpack ( tReq, &uSize );
-			MysqlUnpack ( tReq, &uSize ); ///< int Insert_id (don't used).
-			*m_pWarns += tReq.GetLSBDword(); ///< num of warnings
-			uSize -= 4;
-			if ( uSize )
-				tReq.GetRawString ( uSize );
-			return true;
-		}
-		if ( uCommand==0xff ) // error packet
-		{
-			tReq.GetByte();
-			tReq.GetByte(); ///< num of errors (2 bytes), we don't use it for now.
-			uSize -= 2;
-			if ( uSize )
-				tReq.GetRawString ( uSize );
-		}
-
-		return false;
+		*m_pUpdated += MysqlUnpack ( tReq, &uSize );
+		MysqlUnpack ( tReq, &uSize ); ///< int Insert_id (don't used).
+		*m_pWarns += tReq.GetLSBDword(); ///< num of warnings
+		uSize -= 4;
+		if ( uSize )
+			tReq.GetRawString ( uSize );
+		return true;
+	}
+	if ( uCommand==0xff ) // error packet
+	{
+		tReq.GetByte();
+		tReq.GetByte(); ///< num of errors (2 bytes), we don't use it for now.
+		uSize -= 2;
+		if ( uSize )
+			tReq.GetRawString ( uSize );
 	}
 
-protected:
-	int * m_pUpdated;
-	int * m_pWarns;
-};
+	return false;
+}
 
 
 SphinxqlRequestBuilder_c::SphinxqlRequestBuilder_c ( const CSphString& sQuery, const SqlStmt_t & tStmt )
@@ -15001,47 +14970,38 @@ void SphinxqlRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, Cached
 }
 
 
-class PlainParserFactory_c : public QueryParserFactory_i
-{
-public:
-	QueryParser_i * CreateQueryParser () const override
-	{
-		return sphCreatePlainQueryParser();
-	}
-
-	RequestBuilder_i * CreateRequestBuilder ( const CSphString & sQuery, const SqlStmt_t & tStmt ) const override
-	{
-		return new SphinxqlRequestBuilder_c ( sQuery, tStmt );
-	}
-
-	ReplyParser_i * CreateReplyParser ( int & iUpdated, int & iWarnings ) const override
-	{
-		return new SphinxqlReplyParser_c ( &iUpdated, &iWarnings );
-	}
-};
-
 //////////////////////////////////////////////////////////////////////////
 
-static void DoExtendedUpdate ( const char * sIndex, const QueryParserFactory_i & tQueryParserFactory, const char * sDistributed, const SqlStmt_t & tStmt, int & iSuccesses, int & iUpdated,
-	SearchFailuresLog_c & dFails, const ServedDesc_t * pServed, CSphString & sWarning, const ThdDesc_t & tThd )
+static void DoExtendedUpdate ( const CSphString & sCluster, const CSphString & sIndex, const char * sDistributed,
+	const CSphAttrUpdate & tUpd, bool bBlobUpdate, const CSphQuery & tQuery, bool bJson,
+	int & iSuccesses, int & iUpdated,
+	SearchFailuresLog_c & dFails, CSphString & sWarning, const ServedIndexRefPtr_c & tServed, const ThdDesc_t & tThd )
 {
-	if ( !pServed || !pServed->m_pIndex )
+	CSphString sError;
+	// checks
 	{
-		dFails.Submit ( sIndex, sDistributed, "index not available" );
-		return;
+		ServedDescRPtr_c tDesc ( tServed );
+		if ( !tDesc )
+		{
+			dFails.Submit ( sIndex, sDistributed, "index not available" );
+			return;
+		}
+
+		if ( !CheckIndexCluster ( sIndex, *tDesc, sCluster, sError ) )
+		{
+			dFails.Submit ( sIndex, sDistributed, sError.cstr() );
+			return;
+		}
 	}
 
-	SearchHandler_c tHandler ( 1, tQueryParserFactory.CreateQueryParser(), tStmt.m_tQuery.m_eQueryType, false, tThd );
-	CSphAttrUpdateEx tUpdate;
-	CSphString sError;
+	RtAccum_t tAcc ( false );
+	ReplicationCommand_t * pCmd = tAcc.AddCommand ( bJson ? ReplicationCommand_e::UPDATE_JSON : ReplicationCommand_e::UPDATE_QL, sCluster, sIndex );
+	assert ( pCmd );
+	pCmd->m_pUpdateAPI = &tUpd;
+	pCmd->m_bBlobUpdate = bBlobUpdate;
+	pCmd->m_pUpdateCond = &tQuery;
 
-	tUpdate.m_pUpdate = &tStmt.m_tUpdate;
-	tUpdate.m_pIndex = pServed->m_pIndex;
-	tUpdate.m_pError = &sError;
-	tUpdate.m_pWarning = &sWarning;
-
-	tHandler.m_dLocked.AddUnmanaged ( sIndex, pServed );
-	tHandler.RunUpdates ( tStmt.m_tQuery, sIndex, &tUpdate );
+	HandleCmdReplicate ( tAcc, sError, sWarning, iUpdated, tThd );
 
 	if ( sError.Length() )
 	{
@@ -15049,12 +15009,35 @@ static void DoExtendedUpdate ( const char * sIndex, const QueryParserFactory_i &
 		return;
 	}
 
-	iUpdated += tUpdate.m_iAffected;
 	iSuccesses++;
 }
 
+void HandleMySqlExtendedUpdate ( AttrUpdateArgs & tArgs )
+{
+	assert ( tArgs.m_pUpdate );
+	assert ( tArgs.m_pError );
+	assert ( tArgs.m_pWarning );
+	assert ( tArgs.m_pIndexName );
 
-void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning, const ThdDesc_t & tThd )
+	if ( !tArgs.m_pDesc )
+	{
+		*tArgs.m_pError = "index not available";
+		return;
+	}
+
+	assert ( tArgs.m_pQuery );
+	assert ( tArgs.m_pThd );
+	assert ( tArgs.m_pQuery );
+
+	SearchHandler_c tHandler ( 1, CreateQueryParser ( tArgs.m_bJson ), tArgs.m_pQuery->m_eQueryType, false, *tArgs.m_pThd );
+	tArgs.m_pIndex = tArgs.m_pDesc->m_pIndex;
+
+	tHandler.m_dLocked.AddUnmanaged ( *tArgs.m_pIndexName, tArgs.m_pDesc );
+	tHandler.RunUpdates ( *tArgs.m_pQuery, *tArgs.m_pIndexName, &tArgs );
+}
+
+
+void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning, const ThdDesc_t & tThd )
 {
 	CSphString sError;
 
@@ -15102,12 +15085,8 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory
 		auto pLocked = GetServed ( sReqIndex );
 		if ( pLocked )
 		{
-			if ( bBlobUpdate )
-				DoExtendedUpdate ( sReqIndex, tQueryParserFactory, nullptr, tStmt, iSuccesses,
-					iUpdated, dFails, ServedDescWPtr_c ( pLocked ), sWarning, tThd );
-			else
-				DoExtendedUpdate ( sReqIndex, tQueryParserFactory, nullptr, tStmt, iSuccesses,
-					iUpdated, dFails, ServedDescRPtr_c ( pLocked ), sWarning, tThd );
+			DoExtendedUpdate ( tStmt.m_sCluster, sReqIndex, nullptr, tStmt.m_tUpdate, bBlobUpdate, tStmt.m_tQuery, tStmt.m_bJson, iSuccesses, iUpdated, dFails, sWarning, pLocked, tThd );
+
 		} else if ( dDistributed[iIdx] )
 		{
 			assert ( !dDistributed[iIdx]->IsEmpty() );
@@ -15117,12 +15096,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory
 			{
 				const char * sLocal = dLocal[i].cstr();
 				auto pServed = GetServed ( sLocal );
-				if ( bBlobUpdate )
-					DoExtendedUpdate ( sLocal, tQueryParserFactory, sReqIndex, tStmt, iSuccesses,
-						iUpdated, dFails, ServedDescWPtr_c ( pServed ), sWarning, tThd );
-				else
-					DoExtendedUpdate ( sLocal, tQueryParserFactory, sReqIndex, tStmt, iSuccesses,
-						iUpdated, dFails, ServedDescRPtr_c ( pServed ), sWarning, tThd );
+				DoExtendedUpdate ( tStmt.m_sCluster, sLocal, sReqIndex, tStmt.m_tUpdate, bBlobUpdate, tStmt.m_tQuery, tStmt.m_bJson, iSuccesses, iUpdated, dFails, sWarning, pServed, tThd );
 			}
 		}
 
@@ -15135,8 +15109,8 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory
 			pDist->GetAllHosts ( dAgents );
 
 			// connect to remote agents and query them
-			CSphScopedPtr<RequestBuilder_i> pRequestBuilder ( tQueryParserFactory.CreateRequestBuilder ( sQuery, tStmt ) ) ;
-			CSphScopedPtr<ReplyParser_i> pReplyParser ( tQueryParserFactory.CreateReplyParser ( iUpdated, iWarns ) );
+			CSphScopedPtr<RequestBuilder_i> pRequestBuilder ( CreateRequestBuilder ( sQuery, tStmt ) ) ;
+			CSphScopedPtr<ReplyParser_i> pReplyParser ( CreateReplyParser ( tStmt.m_bJson, iUpdated, iWarns ) );
 			iSuccesses += PerformRemoteTasks ( dAgents, pRequestBuilder.Ptr (), pReplyParser.Ptr () );
 		}
 	}
@@ -15617,7 +15591,7 @@ static void PercolateDeleteDocuments ( const CSphString & sIndex, const CSphStri
 }
 
 
-static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const CSphString & sCluster, const QueryParserFactory_i & tQueryParserFactory, const char * sDistributed, const SqlStmt_t & tStmt,
+static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const CSphString & sCluster, const char * sDistributed, const SqlStmt_t & tStmt,
 	const DocID_t * pDocs, int iCount, SearchFailuresLog_c & dErrors, bool bCommit, CSphSessionAccum & tAcc, const ThdDesc_t & tThd )
 {
 	CSphString sError;
@@ -15667,7 +15641,7 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const CSphStr
 		CSphVector<DocID_t> dValues;
 		if ( !pDocs ) // needs to be deleted via query
 		{
-			pHandler = new SearchHandler_c ( 1, tQueryParserFactory.CreateQueryParser(), tStmt.m_tQuery.m_eQueryType, false, tThd );
+			pHandler = new SearchHandler_c ( 1, CreateQueryParser ( tStmt.m_bJson ), tStmt.m_tQuery.m_eQueryType, false, tThd );
 			pHandler->m_dLocked.AddUnmanaged ( sName, pLocked );
 			pHandler->RunDeletes ( tStmt.m_tQuery, sName, &sError, &dValues );
 			pDocs = dValues.Begin();
@@ -15679,16 +15653,18 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const CSphStr
 			dErrors.Submit ( sName, sDistributed, sError.cstr() );
 			return 0;
 		}
+
+		pAccum->AddCommand ( ReplicationCommand_e::RT_TRX, sCluster, sName );
 	}
 
 	if ( bCommit )
-		HandleCmdReplicate ( *pAccum, sError, &iAffected );
+		HandleCmdReplicate ( *pAccum, sError, iAffected );
 
 	return iAffected;
 }
 
 
-void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphSessionAccum & tAcc, const ThdDesc_t & tThd )
+void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphSessionAccum & tAcc, const ThdDesc_t & tThd )
 {
 	MEMORY ( MEM_SQL_DELETE );
 
@@ -15756,7 +15732,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory
 		bool bLocal = g_pLocalIndexes->Contains ( sName );
 		if ( bLocal )
 		{
-			iAffected += LocalIndexDoDeleteDocuments ( sName, tStmt.m_sCluster, tQueryParserFactory, nullptr,
+			iAffected += LocalIndexDoDeleteDocuments ( sName, tStmt.m_sCluster, nullptr,
 				tStmt, pDocs, iDocsCount, dErrors, bCommit, tAcc, tThd );
 		}
 		else if ( dDistributed[iIdx] )
@@ -15767,7 +15743,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory
 				bool bDistLocal = g_pLocalIndexes->Contains ( sLocal );
 				if ( bDistLocal )
 				{
-					iAffected += LocalIndexDoDeleteDocuments ( sLocal, tStmt.m_sCluster, tQueryParserFactory, sName.cstr(),
+					iAffected += LocalIndexDoDeleteDocuments ( sLocal, tStmt.m_sCluster, sName.cstr(),
 						tStmt, pDocs, iDocsCount, dErrors, bCommit, tAcc, tThd );
 				}
 			}
@@ -15784,8 +15760,8 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory
 			int iWarns = 0;
 
 			// connect to remote agents and query them
-			CSphScopedPtr<RequestBuilder_i> pRequestBuilder ( tQueryParserFactory.CreateRequestBuilder ( sQuery, tStmt ) ) ;
-			CSphScopedPtr<ReplyParser_i> pReplyParser ( tQueryParserFactory.CreateReplyParser ( iGot, iWarns ) );
+			CSphScopedPtr<RequestBuilder_i> pRequestBuilder ( CreateRequestBuilder ( sQuery, tStmt ) ) ;
+			CSphScopedPtr<ReplyParser_i> pReplyParser ( CreateReplyParser ( tStmt.m_bJson, iGot, iWarns ) );
 			PerformRemoteTasks ( dAgents, pRequestBuilder.Ptr (), pReplyParser.Ptr () );
 
 			// FIXME!!! report error & warnings from agents
@@ -15996,7 +15972,7 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 						return;
 					} else
 					{
-						HandleCmdReplicate ( *pAccum, sError, nullptr );
+						HandleCmdReplicate ( *pAccum, sError );
 					}
 				}
 			}
@@ -16179,6 +16155,13 @@ void HandleMysqlAttach ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 				tOut.Error ( tStmt.m_sStmt, "1st argument to ATTACH must be a plain index" );
 			else if ( pTo->m_eType!=IndexType_e::RT )
 				tOut.Error ( tStmt.m_sStmt, "2nd argument to ATTACH must be a RT index" );
+			return;
+		}
+
+		// cluster does not implement ATTACH for now
+		if ( ClusterOperationProhibit ( pTo, sError, "ATTACH" ) )
+		{
+			tOut.ErrorEx ( MYSQL_ERR_PARSE_ERROR, "index %s: %s", sTo.cstr(), sError.cstr () );
 			return;
 		}
 	}
@@ -16536,7 +16519,7 @@ void HandleMysqlTruncate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	RtAccum_t tAcc ( false );
 	tAcc.m_dCmd.Add ( pCmd.LeakPtr() );
 
-	bool bRes = HandleCmdReplicate ( tAcc, sError, nullptr );
+	bool bRes = HandleCmdReplicate ( tAcc, sError );
 	if ( !bRes )
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 	else
@@ -17269,6 +17252,14 @@ static void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, b
 		}
 
 		ServedDescWPtr_c pWriteLocked ( pLocal ); // write-lock
+
+		// cluster does not implement ALTER for now
+		if ( ClusterOperationProhibit ( pWriteLocked, sError, "ALTER" ) )
+		{
+			dErrors.Submit ( sName, nullptr, sError.cstr() );
+			continue;
+		}
+
 		CSphString sAddError;
 
 		if ( bAdd )
@@ -17696,8 +17687,7 @@ public:
 				m_tLastMeta.m_sWarning = "";
 				StatCountCommand ( SEARCHD_COMMAND_DELETE );
 				StmtErrorReporter_c tErrorReporter ( tOut );
-				PlainParserFactory_c tParserFactory;
-				sphHandleMysqlDelete ( tErrorReporter, tParserFactory, *pStmt, sQuery, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tAcc, tThd );
+				sphHandleMysqlDelete ( tErrorReporter, *pStmt, sQuery, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tAcc, tThd );
 				return true;
 			}
 
@@ -17720,7 +17710,7 @@ public:
 						tOut.Error ( sQuery.cstr(), m_sError.cstr() );
 						return true;
 					}
-					HandleCmdReplicate ( *pAccum, m_sError, nullptr );
+					HandleCmdReplicate ( *pAccum, m_sError );
 				}
 				tOut.Ok();
 				return true;
@@ -17743,7 +17733,7 @@ public:
 					if ( eStmt==STMT_COMMIT )
 					{
 						StatCountCommand ( SEARCHD_COMMAND_COMMIT );
-						HandleCmdReplicate ( *pAccum, m_sError, nullptr );
+						HandleCmdReplicate ( *pAccum, m_sError );
 					} else
 					{
 						pIndex->RollBack ( pAccum );
@@ -17801,8 +17791,7 @@ public:
 				m_tLastMeta.m_sWarning = "";
 				StatCountCommand ( SEARCHD_COMMAND_UPDATE );
 				StmtErrorReporter_c tErrorReporter ( tOut );
-				PlainParserFactory_c tParserFactory;
-				sphHandleMysqlUpdate ( tErrorReporter, tParserFactory, *pStmt, sQuery, m_tLastMeta.m_sWarning, tThd );
+				sphHandleMysqlUpdate ( tErrorReporter, *pStmt, sQuery, m_tLastMeta.m_sWarning, tThd );
 				return true;
 			}
 

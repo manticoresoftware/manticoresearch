@@ -105,8 +105,6 @@ RtIndex_i * sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndexNa
 
 typedef void ProgressCallbackSimple_t ();
 
-typedef const QueryParser_i * CreateQueryParser ( bool bJson );
-
 
 //////////////////////////////////////////////////////////////////////////
 

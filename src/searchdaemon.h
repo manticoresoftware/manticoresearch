@@ -785,6 +785,10 @@ public:
 
 	operator const ServedDesc_t * () const
 	{ return m_pCore; }
+
+	const ServedDesc_t * Ptr () const
+	{ return m_pCore; }
+
 private:
 	const ServedDesc_t * m_pCore = nullptr;
 	const ServedIndex_c * m_pLock = nullptr;
@@ -820,6 +824,9 @@ public:
 	{ return m_pCore!=nullptr; }
 
 	operator ServedDesc_t * () const
+	{ return m_pCore; }
+
+	ServedDesc_t * Ptr () const
 	{ return m_pCore; }
 
 private:
@@ -1178,6 +1185,9 @@ struct SqlStmt_t
 
 	bool					m_bLimitSet = false; // true for query with not default values
 
+	bool					m_bJson = false;
+	CSphString				m_sEndpoint;
+
 	SqlStmt_t ();
 	~SqlStmt_t();
 
@@ -1250,17 +1260,13 @@ public:
 };
 
 
+class QueryParser_i;
 class RequestBuilder_i;
 class ReplyParser_i;
 
-class QueryParserFactory_i
-{
-public:
-	virtual QueryParser_i *		CreateQueryParser() const = 0;
-	virtual RequestBuilder_i *	CreateRequestBuilder ( const CSphString & sQuery, const SqlStmt_t & tStmt ) const = 0;
-	virtual ReplyParser_i *		CreateReplyParser ( int & iUpdated, int & iWarnings ) const = 0;
-};
-
+QueryParser_i * CreateQueryParser ( bool bJson );
+RequestBuilder_i * CreateRequestBuilder ( const CSphString & sQuery, const SqlStmt_t & tStmt );
+ReplyParser_i * CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings );
 
 enum ESphHttpStatus
 {
@@ -1297,8 +1303,8 @@ ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i *
 void sphFormatFactors ( StringBuilder_c& dOut, const unsigned int * pFactors, bool bJson );
 bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation );
 void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation, CSphVector<int64_t> & dLastIds );
-void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning, const ThdDesc_t & tThd );
-void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphSessionAccum & tAcc, const ThdDesc_t & tThd );
+void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning, const ThdDesc_t & tThd );
+void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphSessionAccum & tAcc, const ThdDesc_t & tThd );
 
 bool				sphLoopClientHttp ( const BYTE * pRequest, int iRequestLen, CSphVector<BYTE> & dResult, const ThdDesc_t & tThd );
 bool				sphProcessHttpQueryNoResponce ( ESphHttpEndpoint eEndpoint, const char * sQuery, const SmallStringHash_T<CSphString> & tOptions, const ThdDesc_t & tThd, CSphVector<BYTE> & dResult );
@@ -1335,4 +1341,48 @@ struct CPqResult; // defined in sphinxpq.h
 bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, const CSphSchema & tSchema, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError );
 void PercolateMatchDocuments ( const BlobVec_t &dDocs, const PercolateOptions_t &tOpts, CSphSessionAccum &tAcc
 							   , CPqResult &tResult );
+
+void SendArray ( const VecTraits_T<CSphString> & dBuf, ISphOutputBuffer & tOut );
+void GetArray ( CSphFixedVector<CSphString> & dBuf, InputBuffer_c & tIn );
+void SaveArray ( const VecTraits_T<CSphString> & dBuf, MemoryWriter_c & tOut );
+void GetArray ( CSphVector<CSphString> & dBuf, MemoryReader_c & tIn );
+
+template <typename T>
+void SendArray ( const VecTraits_T<T> & dBuf, ISphOutputBuffer & tOut )
+{
+	tOut.SendInt ( dBuf.GetLength() );
+	if ( dBuf.GetLength() )
+		tOut.SendBytes ( dBuf.Begin(), sizeof(dBuf[0]) * dBuf.GetLength() );
+}
+
+template<typename T>
+void GetArray ( CSphFixedVector<T> & dBuf, InputBuffer_c & tIn )
+{
+	int iCount = tIn.GetInt();
+	if ( !iCount )
+		return;
+
+	dBuf.Reset ( iCount );
+	tIn.GetBytes ( dBuf.Begin(), dBuf.GetLengthBytes() );
+}
+
+template<typename T>
+void GetArray ( CSphVector<T> & dBuf, MemoryReader_c & tIn )
+{
+	int iCount = tIn.GetDword();
+	if ( !iCount )
+		return;
+
+	dBuf.Resize ( iCount );
+	tIn.GetBytes ( dBuf.Begin(), dBuf.GetLengthBytes() );
+}
+
+template <typename T>
+void SaveArray ( const VecTraits_T<T> & dBuf, MemoryWriter_c & tOut )
+{
+	tOut.PutDword ( dBuf.GetLength() );
+	if ( dBuf.GetLength() )
+		tOut.PutBytes ( dBuf.Begin(), sizeof(dBuf[0]) * dBuf.GetLength() );
+}
+
 #endif // _searchdaemon_

@@ -50,7 +50,9 @@ void JsonConfigConfigureAndPreload ( int & iValidIndexes, int & iCounter  );
 bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sName, const CSphString & sVal, CSphString & sError );
 
 // single point there all commands passed these might be replicated, even if no cluster
-bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pDeletedCount );
+bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError );
+bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int & iDeletedCount );
+bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, CSphString & sWarning, int & iUpdated, const ThdDesc_t & tThd );
 
 // delete all clusters on daemon shutdown
 void ReplicateClustersDelete();
@@ -117,7 +119,20 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 ESphAddIndex AddIndexMT ( GuardedHash_c& dPost, const char* szIndexName, const CSphConfigSection& hIndex, bool bReplace = false );
 bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, const char * szIndexName );
 bool CheckIndexCluster ( const CSphString & sIndexName, const ServedDesc_t & tDesc, const CSphString & sStmtCluster, CSphString & sError );
+bool ClusterOperationProhibit ( const ServedDesc_t * pDesc, CSphString & sError, const char * sOp );
 
 CSphString GetMacAddress ();
+
+struct AttrUpdateArgs : public CSphAttrUpdateEx
+{
+	const CSphQuery * m_pQuery = nullptr;
+	const ThdDesc_t * m_pThd = nullptr;
+	const ServedDesc_t * m_pDesc = nullptr;
+	const CSphString * m_pIndexName = nullptr;
+	bool m_bJson = false;
+};
+
+void HandleMySqlExtendedUpdate ( AttrUpdateArgs & tArgs );
+
 
 #endif // _searchdreplication_

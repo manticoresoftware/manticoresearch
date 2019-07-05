@@ -19076,8 +19076,10 @@ static const char * FileAccessName ( FileAccess_e eValue )
 		case FileAccess_e::MMAP_PREREAD : return "mmap_preread";
 		case FileAccess_e::MLOCK : return "mlock";
 		case FileAccess_e::UNKNOWN : return "unknown";
+		default:
+			assert ( 0 && "Not all values of FileAccess_e named");
+			return "";
 	}
-	assert ( 0 && "Not all values of FileAccess_e named");
 }
 
 static FileAccess_e ParseFileAccess ( CSphString sVal )

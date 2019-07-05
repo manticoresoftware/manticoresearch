@@ -3485,13 +3485,6 @@ CSphIndex * RtIndex_c::LoadDiskChunk ( const char * sChunk, CSphString & sError 
 	return pDiskChunk;
 }
 
-bool HasMvaUpdated ( const CSphString & sIndexPath )
-{
-	CSphString sChunkMVP;
-	sChunkMVP.SetSprintf ( "%s.mvp", sIndexPath.cstr() );
-	return sphIsReadable ( sChunkMVP.cstr() );
-}
-
 
 bool RtIndex_c::Prealloc ( bool bStripPath )
 {

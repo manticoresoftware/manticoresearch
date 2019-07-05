@@ -1281,15 +1281,6 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 		return false;
 	}
 
-	bool bDstMvaUpdated = HasMvaUpdated ( hDst["path"].strval() );
-	bool bSrcMvaUpdated = HasMvaUpdated ( hSrc["path"].strval() );
-
-	if ( bDstMvaUpdated || bSrcMvaUpdated )
-	{
-		fprintf ( stdout, "ERROR: index '%s': merge prohibited due to updated MVA.\n", bDstMvaUpdated ? sDst : sSrc );
-		return false;
-	}
-
 	// do the merge
 	CSphIndex * pSrc = sphCreateIndexPhrase ( nullptr, hSrc["path"].cstr() );
 	CSphIndex * pDst = sphCreateIndexPhrase ( nullptr, hDst["path"].cstr() );

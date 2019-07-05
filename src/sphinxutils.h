@@ -153,6 +153,7 @@ void sphSplit ( StrVec_t & dOut, const char * sIn );
 
 /// string splitter, splits by the given boundaries
 void sphSplit ( StrVec_t & dOut, const char * sIn, const char * sBounds );
+StrVec_t sphSplit( const char* sIn, const char* sBounds );
 
 /// perform sphSplit, but applies a functor instead of add a chunk to the vector
 using StrFunctor = std::function<void ( const char*, int )>;

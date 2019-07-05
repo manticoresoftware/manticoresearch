@@ -947,7 +947,20 @@ struct SphChunkGuard_t
 	CSphFixedVector<const CSphIndex *>		m_dDiskChunks { 0 };
 	CSphRwlock *							m_pReading = nullptr;
 
-	~SphChunkGuard_t();
+	~SphChunkGuard_t()
+	{
+		if ( m_pReading )
+			m_pReading->Unlock();
+
+		if ( m_dRamChunks.IsEmpty())
+			return;
+
+		ARRAY_FOREACH ( i, m_dRamChunks )
+		{
+			assert ( m_dRamChunks[i]->m_tRefCount.GetValue()>=1 );
+			m_dRamChunks[i]->m_tRefCount.Dec();
+		}
+	}
 };
 
 
@@ -5561,23 +5574,6 @@ void RtIndex_c::GetReaderChunks ( SphChunkGuard_t & tGuard ) const NO_THREAD_SAF
 	}
 
 }
-
-
-SphChunkGuard_t::~SphChunkGuard_t()
-{
-	if ( m_pReading )
-		m_pReading->Unlock();
-
-	if ( !m_dRamChunks.GetLength() )
-		return;
-
-	ARRAY_FOREACH ( i, m_dRamChunks )
-	{
-		assert ( m_dRamChunks[i]->m_tRefCount.GetValue()>=1 );
-		m_dRamChunks[i]->m_tRefCount.Dec();
-	}
-}
-
 
 // FIXME! missing MVA, index_exact_words support
 // FIXME? any chance to factor out common backend agnostic code?

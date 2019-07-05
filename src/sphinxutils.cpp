@@ -160,6 +160,13 @@ void sphSplit ( StrVec_t & dOut, const char * sIn, const char * sBounds )
 	}
 }
 
+StrVec_t sphSplit( const char* sIn, const char* sBounds )
+{
+	StrVec_t dResult;
+	sphSplit ( dResult, sIn, sBounds );
+	return dResult;
+}
+
 template < typename T1, typename T2 >
 static bool sphWildcardMatchRec ( const T1 * sString, const T2 * sPattern )
 {

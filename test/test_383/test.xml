@@ -2,7 +2,7 @@
 <test>
 <name>replication for RT</name>
 
-<requires><replication/><non-windows/><non-rt/></requires>
+<requires><replication/><non-windows/></requires>
 <skip_indexer/>
 <num_agents>3</num_agents>
 
@@ -85,10 +85,10 @@ searchd
 <sphinxql d="0">ALTER CLUSTER test ADD rt2</sphinxql>
 
 <!-- request to node 1 -->
-<sphinxql d="1" cluster_connect="0">join cluster test '%addr_connect%' as nodes</sphinxql>
+<sphinxql d="1" cluster_connect="0">join cluster test at '%addr_connect%'</sphinxql>
 
 <!-- request to node 2, chain nodes 2>1>0 and update nodes -->
-<sphinxql d="2" cluster_connect="1">join cluster test at '%addr_connect%'</sphinxql>
+<sphinxql d="2" cluster_connect="0">join cluster test at '%addr_connect%'</sphinxql>
 
 <!-- stream to node 2 -->
 <sphinxql d="2">SELECT * FROM test:rt1</sphinxql>
@@ -131,6 +131,8 @@ searchd
 <sphinxql d="0">insert into test:rtc (id,title,mva1,gid,j1) values (301, 'test 301', (321,322,323), 321, '{"data":"test 301", fd:321}')</sphinxql>
 
 <!-- request to node 2 -->
+<sphinxql d="2">SHOW TABLES</sphinxql> <!-- just to reconnect to agent2 -->
+<sphinxql d="2" system="wait-status-cluster_test_last_committed" wait_value="13"/>
 <sphinxql d="2">SELECT * FROM test:rt2</sphinxql>
 <sphinxql d="2">SELECT * FROM test:rtc</sphinxql>
 

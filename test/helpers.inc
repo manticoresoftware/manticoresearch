@@ -1770,6 +1770,7 @@ class SphinxConfig
 			$use_agent=0;
 			$vip_connection=0;
 			$system_cmd = "";
+			$wait_value = 0;
 			if (is_array($query))
 			{
 				$cluster_connect = -1;
@@ -1788,6 +1789,8 @@ class SphinxConfig
 						$cluster_connect = $v;
 					elseif ($k=="cluster_path")
 						$cluster_path = $v;
+					elseif ($k=="wait_value")
+						$wait_value = $v;
 				}
 				$query = $query[0];
 				if ( $cluster_connect !== -1 )
@@ -1815,6 +1818,7 @@ class SphinxConfig
 			if ( !empty($system_cmd) )
 			{
 				$wait_cmd_name = "wait-cluster-ready-";
+				$wait_status_name = "wait-status-";
 				$status = '';
 				if ( $system_cmd=="restart-daemon" )
 				{
@@ -1855,6 +1859,37 @@ class SphinxConfig
 						{
 							$node_state = trim(explode("\n", substr($status, $delim_pos+1))[0]);
 							if ($node_state==="synced" || $node_state==="donor" )
+							{
+								break;
+							} else
+							{
+								usleep(500);
+							}
+						} else
+						{
+							break;
+						}
+						
+						$tm_delta = MyMicrotime()-$wait_started;
+						if ( $tm_delta>GetTmDelta() )
+						{
+							$status .= sprintf( "; timeout %.3f sec", $tm_delta );
+							break;
+						}
+					}
+				} else if ( strpos($system_cmd, $wait_status_name)===0 )
+				{
+					$name = substr ($system_cmd, strlen($wait_status_name));
+					$ql = new QLClient();
+					$ql->SetConnection($connection);
+					$wait_started = MyMicrotime();
+					while ( true ) {
+						$status = $ql->Query("show status like '$name'");
+						$delim_pos = strpos($status, "|" );
+						if ( $delim_pos>0 )
+						{
+							$wait_got_val = trim(explode("\n", substr($status, $delim_pos+1))[0]);
+							if ($wait_got_val>=$wait_value )
 							{
 								break;
 							} else

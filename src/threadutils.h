@@ -72,13 +72,21 @@ struct ThdInfo_t
 };
 
 // trivial info for public use (no locks, everything owned)
-struct ThdPublicInfo_t : ThdInfo_t
+struct ThdPublicInfo_t : ThdInfo_t, public ISphNoncopyable
 {
 	CSphString m_sThName;
 	CSphQuery* m_pQuery = nullptr;
 	CSphString m_sRequestDescription;
+
+	ThdPublicInfo_t() = default;
 	~ThdPublicInfo_t();
+
+	void Swap( ThdPublicInfo_t& rhs );
+	ThdPublicInfo_t( ThdPublicInfo_t&& rhs) noexcept;
+	ThdPublicInfo_t& operator= ( ThdPublicInfo_t&& rhs) noexcept;
 };
+
+
 
 struct ThdDesc_t: public ThdInfo_t, private ListNode_t
 {
@@ -116,7 +124,7 @@ void ThdState ( ThdState_e eState, ThdDesc_t& tThd );
 List_t& GetUnsafeUnlockedUnprotectedGlobalThreadList();
 
 // Trivial vec of global thread descriptors
-CSphVector<ThdPublicInfo_t> GetGlobalThreadInfos ();
+CSphSwapVector<ThdPublicInfo_t> GetGlobalThreadInfos ();
 
 } // namespace Threads
 

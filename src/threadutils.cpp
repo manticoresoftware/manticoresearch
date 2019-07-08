@@ -160,6 +160,24 @@ Threads::ThdPublicInfo_t::~ThdPublicInfo_t ()
 	SafeDelete ( m_pQuery );
 }
 
+void Threads::ThdPublicInfo_t::Swap( ThdPublicInfo_t& rhs )
+{
+	::Swap ( m_sThName, rhs.m_sThName );
+	::Swap( m_pQuery, rhs.m_pQuery );
+	::Swap( m_sRequestDescription, rhs.m_sRequestDescription );
+}
+
+Threads::ThdPublicInfo_t::ThdPublicInfo_t( ThdPublicInfo_t && rhs) noexcept
+{
+	Swap(rhs);
+}
+
+Threads::ThdPublicInfo_t& Threads::ThdPublicInfo_t::operator=( ThdPublicInfo_t && rhs ) noexcept
+{
+	Swap(rhs);
+	return *this;
+}
+
 int Threads::ThreadsNum () EXCLUDES ( g_tThdLock )
 {
 	ScRL_t dThdLock ( g_tThdLock );
@@ -178,10 +196,10 @@ List_t& Threads::GetUnsafeUnlockedUnprotectedGlobalThreadList () NO_THREAD_SAFET
 	return g_dThd;
 }
 
-CSphVector<ThdPublicInfo_t> Threads::GetGlobalThreadInfos ()
+CSphSwapVector<ThdPublicInfo_t> Threads::GetGlobalThreadInfos ()
 {
 	ScRL_t dThdLock ( g_tThdLock );
-	CSphVector<ThdPublicInfo_t> dResult;
+	CSphSwapVector<ThdPublicInfo_t> dResult;
 	dResult.Reserve ( g_dThd.GetLength ());
 	for ( const ListNode_t* pIt = g_dThd.Begin (); pIt!=g_dThd.End (); pIt = pIt->m_pNext )
 		dResult.Add ((( ThdDesc_t* ) pIt )->GetPublicInfo ());

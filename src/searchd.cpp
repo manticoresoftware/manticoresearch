@@ -14662,7 +14662,7 @@ enum ThreadInfoFormat_e
 	THD_FORMAT_SPHINXQL
 };
 
-static const char * FormatInfo ( ThdPublicInfo_t & tThd, ThreadInfoFormat_e eFmt, QuotationEscapedBuilder & tBuf )
+static const char * FormatInfo ( const ThdPublicInfo_t & tThd, ThreadInfoFormat_e eFmt, QuotationEscapedBuilder & tBuf )
 {
 	if ( tThd.m_pQuery && eFmt==THD_FORMAT_SPHINXQL && tThd.m_eProto!=Proto_e::MYSQL41 )
 	{
@@ -14706,7 +14706,7 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 		eFmt = THD_FORMAT_SPHINXQL;
 
 	auto dThreads = Threads::GetGlobalThreadInfos();
-	for ( ThdPublicInfo_t& dThd : dThreads )
+	for ( const ThdPublicInfo_t& dThd : dThreads )
 	{
 		int iLen = dThd.m_sRequestDescription.Length ();
 		if ( tStmt.m_iThreadsCols>0 && iLen>tStmt.m_iThreadsCols )

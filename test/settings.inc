@@ -18,6 +18,7 @@ $agent_address		= "127.0.0.1";
 $agent_port			= 6713;
 $agent_port_sql		= 6707;
 $agent_port_sql_vip	= 6710;
+$agent_port_http	= 6781;
 
 if ( array_key_exists ( "SPHINXDAEMON", $_ENV ) && $_ENV["SPHINXDAEMON"] ) 
 	$sd_address = $_ENV["SPHINXDAEMON"];
@@ -25,9 +26,9 @@ else if ( array_key_exists ( "SPHINXDAEMON", $_SERVER ) && $_SERVER["SPHINXDAEMO
 	$sd_address = $_SERVER["SPHINXDAEMON"];
 
 $agents 			= array (
-	array ( "address" => $sd_address, "port" => $sd_port, "sqlport" => $sd_sphinxql_port, "sqlport_vip" => $sd_sphinxql_port_vip, "replication_port" => $sd_replication_port ),
-	array ( "address" => $agent_address, "port" => $agent_port, "sqlport" => $agent_port_sql, "sqlport_vip" => $agent_port_sql_vip, "replication_port" => $sd_replication_port+20 ),
-	array ( "address" => $agent_address, "port" => $agent_port+1, "sqlport" => $agent_port_sql+1, "sqlport_vip" => $agent_port_sql_vip+1, "replication_port" => $sd_replication_port+30  ) );
+	array ( "address" => $sd_address, "port" => $sd_port, "sqlport" => $sd_sphinxql_port, "sqlport_vip" => $sd_sphinxql_port_vip, "replication_port" => $sd_replication_port, "http_port" => $sd_http_port ),
+	array ( "address" => $agent_address, "port" => $agent_port, "sqlport" => $agent_port_sql, "sqlport_vip" => $agent_port_sql_vip, "replication_port" => $sd_replication_port+20, "http_port" => $agent_port_http ),
+	array ( "address" => $agent_address, "port" => $agent_port+1, "sqlport" => $agent_port_sql+1, "sqlport_vip" => $agent_port_sql_vip+1, "replication_port" => $sd_replication_port+30, "http_port" => $agent_port_http+1 ) );
 
 $index_data_path	= "data";
 

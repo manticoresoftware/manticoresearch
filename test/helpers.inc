@@ -940,6 +940,7 @@ function HttpFormatResultSet ( $result, $nquery )
 	$attrs = array();
 	$matches = array();
 	$meta = array();
+	$agent = '';
 
 	if ( array_key_exists ( 'http_endpoint', $result ) )
 		$http_endpoint = $result['http_endpoint'];
@@ -956,10 +957,13 @@ function HttpFormatResultSet ( $result, $nquery )
 	if ( array_key_exists ( 'rows', $result ) )	
 		$rows = json_decode ( $result['rows'], 1 );
 
+	if ( array_key_exists ("agent", $result ) )
+		$agent =" (agent-" . $result["agent"] . ")" ;
+
 	$request = json_encode ( $http_request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
 	$request = stripcslashes ( $request );
 	
-	$str .= "http-$nquery> /$http_endpoint\n";
+	$str .= "http-$nquery$agent> /$http_endpoint\n";
 	$str .= "Status: $http_code\n";
 	$str .= "$http_method ". $request . "\n";
 				
@@ -987,10 +991,11 @@ function RunCurl ( $curl_desc, &$rows )
 }
 
 
-function HttpQueryGet ( $http_endpoint, $http_content, $http_get )
+function HttpQueryGet ( $http_endpoint, $http_content, $http_get, $use_agent )
 {
-	global $sd_http_port;
-	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => "127.0.0.1:$sd_http_port/" . $http_endpoint );
+	global $agents;
+	$http_port = $agents[$use_agent]["http_port"];
+	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => "127.0.0.1:$http_port/" . $http_endpoint );
 	$curl_desc[CURLOPT_URL] = $curl_desc[CURLOPT_URL] . '?' . $http_get;
 
 	if ( $http_content!==NULL )
@@ -1002,10 +1007,11 @@ function HttpQueryGet ( $http_endpoint, $http_content, $http_get )
 }
 
 
-function HttpQueryPost ( $http_endpoint, $http_content, $http_post )
+function HttpQueryPost ( $http_endpoint, $http_content, $http_post, $use_agent )
 {
-	global $sd_http_port;
-	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => "127.0.0.1:$sd_http_port/" . $http_endpoint );
+	global $agents;
+	$http_port = $agents[$use_agent]["http_port"];
+	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => "127.0.0.1:$http_port/" . $http_endpoint );
 	$curl_desc[CURLOPT_POST] = 1;
 	$curl_desc[CURLOPT_POSTFIELDS] = $http_post;
 
@@ -1207,6 +1213,7 @@ class SphinxConfig
 		$this->_sd_sphinxql_port = $agent ["sqlport"];
 		$this->_sd_sphinxql_port_vip = $agent ["sqlport_vip"];
 		$this->_sd_replication_port = $agent ["replication_port"];
+		$this->_sd_http_port = $agent["http_port"];
 	}
 
 	
@@ -1661,6 +1668,7 @@ class SphinxConfig
 		$http_endpoint = NULL;
 		$http_method = NULL;
 		$http_content = NULL;
+		$use_agent = 0;
 
 		if ( $g_pick_query>0 )
 		{
@@ -1686,6 +1694,8 @@ class SphinxConfig
 					$http_method = $v;
 				elseif ($k=="content")
 					$http_content = $v;
+				elseif ( $k="d" )
+					$use_agent = $v;
 			}
 
 			$query = $query[0];
@@ -1704,11 +1714,14 @@ class SphinxConfig
 			}
 
 			if ( $post )
-				$query_result = HttpQueryPost ( $http_endpoint, $http_content, $query );
+				$query_result = HttpQueryPost ( $http_endpoint, $http_content, $query, $use_agent );
 			else
-				$query_result = HttpQueryGet ( $http_endpoint, $http_content, $query );
+				$query_result = HttpQueryGet ( $http_endpoint, $http_content, $query, $use_agent );
 
 			$query_result['http']=1;
+			
+			if ( $use_agent>0 )
+				$query_result['agent'] = $use_agent;
 
 			if ( array_key_exists ( 'rows', $query_result ) )
 			{

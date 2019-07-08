@@ -2482,8 +2482,16 @@ void TMtoA_T ( PCHAR* pOutput, int64_t nVal, int iPrec )
 template < typename PCHAR >
 void TMStoA_T ( PCHAR* pOutput, int64_t nVal, int iPrec )
 {
-	int64_t iTimespan = nVal-sphMicroTimer ();
 	auto& pBegin = *pOutput;
+	if ( !nVal )
+	{
+		Grow( pBegin, 5 );
+		memcpy( tail( pBegin ), "never", 5 );
+		pBegin += 5;
+		return;
+	}
+
+	int64_t iTimespan = nVal - sphMicroTimer();
 	if ( iTimespan<0 ) // past event
 	{
 		TMtoA_T ( pOutput, -iTimespan, iPrec );

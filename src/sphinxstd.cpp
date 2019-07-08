@@ -2653,6 +2653,32 @@ void StringBuilder_c::Clear()
 }
 
 
+void StringBuilder_c::NtoA ( DWORD uVal )
+{
+	InitAddPrefix();
+
+	const int MAX_NUMERIC_STR = 64;
+	GrowEnough ( MAX_NUMERIC_STR+1 );
+
+	int iLen = sph::NtoA ( (char *)m_szBuffer + m_iUsed, uVal );
+	m_iUsed += iLen;
+	m_szBuffer[m_iUsed] = '\0';
+}
+
+
+void StringBuilder_c::NtoA ( int64_t iVal )
+{
+	InitAddPrefix();
+
+	const int MAX_NUMERIC_STR = 64;
+	GrowEnough ( MAX_NUMERIC_STR+1 );
+
+	int iLen = sph::NtoA ( (char *)m_szBuffer + m_iUsed, iVal );
+	m_iUsed += iLen;
+	m_szBuffer[m_iUsed] = '\0';
+}
+
+
 void StringBuilder_c::FtoA ( float fVal )
 {
 	InitAddPrefix();

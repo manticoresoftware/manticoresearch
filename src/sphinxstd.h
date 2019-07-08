@@ -2668,19 +2668,8 @@ public:
 		Grow ( iLen );
 	}
 
-	template < typename NUM >
-	void NtoA ( NUM tVal )
-	{
-		InitAddPrefix();
-
-		const int MAX_NUMERIC_STR = 64;
-		GrowEnough ( MAX_NUMERIC_STR+1 );
-
-		int iLen = sph::NtoA ( (char *)m_szBuffer + m_iUsed, tVal );
-		m_iUsed += iLen;
-		m_szBuffer[m_iUsed] = '\0';
-	}
-
+	void NtoA ( DWORD uVal );
+	void NtoA ( int64_t iVal );
 	void FtoA ( float fVal );
 
 protected:

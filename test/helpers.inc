@@ -3028,6 +3028,7 @@ class SphinxConfig
 				$schema['range'] = $sql_query_range;
 				$schema['values'] = $insert_values;
 				$schema['sqlport'] = $this->_sd_sphinxql_port;
+				$schema['http_port'] = $this->_sd_http_port;
 
 				$schemas[$match[$srcname][0]] = $schema;
 				$srclen = $match[$epilog][1] - $match[$body][1];

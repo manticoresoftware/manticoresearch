@@ -1620,7 +1620,7 @@ static void PackedShortMVA2Json ( StringBuilder_c& tOut, const BYTE * pMVA )
 	int nValues = iLengthBytes / sizeof ( DWORD );
 	auto pValues = ( const DWORD * ) pMVA;
 	for ( int i = 0; i<nValues; ++i )
-		tOut.Sprintf ( "%u", pValues[i] );
+		tOut.NtoA(pValues[i]);
 }
 
 static void PackedWideMVA2Json ( StringBuilder_c &tOut, const BYTE * pMVA )
@@ -1629,7 +1629,7 @@ static void PackedWideMVA2Json ( StringBuilder_c &tOut, const BYTE * pMVA )
 	int nValues = iLengthBytes / sizeof ( int64_t );
 	auto pValues = ( const int64_t * ) pMVA;
 	for ( int i = 0; i<nValues; ++i )
-		tOut.Sprintf ( "%l", pValues[i] );
+		tOut.NtoA(pValues[i]);
 }
 
 static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes, ESphAttr eAttrType, const char * szCol,
@@ -1643,13 +1643,16 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes
 	case SPH_ATTR_INTEGER:
 	case SPH_ATTR_TIMESTAMP:
 	case SPH_ATTR_TOKENCOUNT:
-	case SPH_ATTR_BIGINT: tOut.Sprintf( "%l", tMatch.GetAttr ( tLoc ) );
+	case SPH_ATTR_BIGINT:
+		tOut.NtoA ( tMatch.GetAttr(tLoc) );
 		break;
 
-	case SPH_ATTR_FLOAT: tOut.Sprintf ( "%f", tMatch.GetAttrFloat ( tLoc ) );
+	case SPH_ATTR_FLOAT:
+		tOut.FtoA ( tMatch.GetAttrFloat(tLoc) );
 		break;
 
-	case SPH_ATTR_BOOL: tOut << ( tMatch.GetAttr ( tLoc ) ? "true" : "false" );
+	case SPH_ATTR_BOOL:
+		tOut << ( tMatch.GetAttr ( tLoc ) ? "true" : "false" );
 		break;
 
 	case SPH_ATTR_UINT32SET_PTR:
@@ -1741,7 +1744,8 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes
 	}
 	break;
 
-	default: assert ( 0 && "Unknown attribute" );
+	default:
+		assert ( 0 && "Unknown attribute" );
 		break;
 	}
 }

@@ -9269,7 +9269,6 @@ void SqlParser_c::SetLimit ( int iOffset, int iLimit )
 {
 	m_pQuery->m_iOffset = iOffset;
 	m_pQuery->m_iLimit = iLimit;
-	m_pStmt->m_bLimitSet = true;
 }
 
 #ifndef NDEBUG
@@ -24432,7 +24431,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		ARRAY_FOREACH ( iTick, g_dTickPoolThread )
 		{
 			if ( !sphThreadCreate ( g_dTickPoolThread.Begin()+iTick, CSphNetLoop::ThdTick,
-				nullptr, false, Str_b().Sprintf ( "TickPool_%d", iTick ).cstr () ) )
+				nullptr, false, StringBuilder_c().Sprintf ( "TickPool_%d", iTick ).cstr () ) )
 				sphDie ( "failed to create tick pool thread" );
 		}
 	}

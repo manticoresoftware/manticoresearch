@@ -1183,8 +1183,6 @@ struct SqlStmt_t
 	// generic integer parameter, used in SHOW SETTINGS, default value -1
 	int						m_iIntParam = -1;
 
-	bool					m_bLimitSet = false; // true for query with not default values
-
 	bool					m_bJson = false;
 	CSphString				m_sEndpoint;
 

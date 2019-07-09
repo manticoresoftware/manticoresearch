@@ -365,7 +365,9 @@ void test_status ( sphinx_client * client )
 		&& strstr ( status[k], "wall" )==NULL 
 		&& strstr ( status[k], "wait" )==NULL 
 		&& strstr ( status[k], "connect_avg" )==NULL 
-		&& strstr ( status[k], "connect_max")==NULL 
+		&& strstr ( status[k], "connect_max")==NULL
+		&& strstr( status[k], "version" )==NULL
+		&& strstr( status[k], "mysql_version" )==NULL
 		&& strstr ( status[k], "connect_count")==NULL ) )
 		{
 			for ( j=0; j<num_cols; j++, k++ )
@@ -501,9 +503,9 @@ int main ( int argc, char ** argv )
 	test_query ( client, "is", "test1" );
 
 	// override
-	title ( "override" );
-	sphinx_add_override ( client, "group_id", &override_docid, 1, &override_value );
-	test_query ( client, "is", "test1" );
+//	title ( "override" );
+//	sphinx_add_override ( client, "group_id", &override_docid, 1, &override_value );
+//	test_query ( client, "is", "test1" );
 
 	// group_by (override attr)
 	title ( "group_by (override attr)" );

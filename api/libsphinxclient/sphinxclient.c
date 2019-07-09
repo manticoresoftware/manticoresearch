@@ -1396,7 +1396,7 @@ static const char * sock_error ()
 	_snprintf ( sBuf, sizeof(sBuf), "WSA error %d", iErr );
 	return sBuf;
 #else
-	return strerrorm ( errno );
+	return strerror ( errno );
 #endif
 }
 
@@ -1486,7 +1486,7 @@ static sphinx_bool net_write ( int fd, const char * bytes, int len, sphinx_clien
 static sphinx_bool net_read ( int fd, char * buf, int len, sphinx_client * client )
 {
 	int res, err;
-	while (true)
+	for (;;)
 	{
 		res = recv ( fd, buf, len, 0 );
 

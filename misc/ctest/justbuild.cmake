@@ -49,26 +49,13 @@ endforeach ()
 set ( CTEST_CONFIGURE_COMMAND "${CMAKE_CALL} \"${CTEST_SOURCE_DIRECTORY}\"" )
 
 # will not write and count warnings in auto-generated files of lexer
-#set ( CTEST_CUSTOM_WARNING_EXCEPTION ".*flexsphinx.*" )
+set ( CTEST_CUSTOM_WARNING_EXCEPTION ".*flexsphinx.*" )
 
 # Do the test suite
 ctest_start ( "Continuous" )
 ctest_update ()
 ctest_configure ()
 ctest_build ( RETURN_VALUE retcode )
-#ctest_test ( RETURN_VALUE retcode )
-#ctest_test ( STRIDE 50 )
-#ctest_test ( STRIDE 50 EXCLUDE_LABEL RT RETURN_VALUE retcode )
-
-#if ( WITH_COVERAGE AND CTEST_COVERAGE_COMMAND )
-#	ctest_coverage ()
-#endif ( WITH_COVERAGE AND CTEST_COVERAGE_COMMAND )
-
-#if ( WITH_MEMCHECK AND CTEST_MEMORYCHECK_COMMAND )
-#	ctest_memcheck ()
-#endif ( WITH_MEMCHECK AND CTEST_MEMORYCHECK_COMMAND )
-
-#ctest_submit ()
 
 if ( retcode )
 	MESSAGE ( FATAL_ERROR "tests failed with ${retcode} code" )

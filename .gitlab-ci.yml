@@ -46,11 +46,11 @@ simple_tests:
     CTEST_BUILD_CONFIGURATION: "Debug"
   script:
     - ctest -V -S misc/ctest/gltest.cmake
-    - cd build && mkdir here
-    - cp -r Testing/2*/*.xml here
+    - cd build && mkdir here1
+    - cp -r Testing/2*/*.xml here1
   artifacts:
     paths:
-    - build/here
+    - build/here1
     - build/test/test_*/report.txt
     - build/test/error*.txt
     - build/test/searchd.log
@@ -71,11 +71,11 @@ release_tests:
     CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
   script:
     - ctest -V -S misc/ctest/gltest.cmake
-    - cd build && mkdir here
-    - cp -r Testing/2*/*.xml here
+    - cd build && mkdir here2
+    - cp -r Testing/2*/*.xml here2
   artifacts:
     paths:
-    - build/here
+    - build/here2
     - build/test/test_*/report.txt
     - build/test/error*.txt
     - build/test/searchd.log
@@ -100,11 +100,11 @@ build_win:
     - 'net use x: \\\\VBOXSRV\\shared'
     - mkdir build && cd build
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
-    - mkdir here
-    - cp -r Testing/2*/*.xml here
+    - mkdir here3
+    - cp -r Testing/2*/*.xml here3
   artifacts:
     paths:
-      - build/here
+      - build/here3
     expire_in: 12 hrs
     when: always
   retry: 1
@@ -125,11 +125,11 @@ build_mac:
   script:
     - mkdir build && cd build
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
-    - mkdir here
-    - cp -r Testing/2*/*.xml here
+    - mkdir here4
+    - cp -r Testing/2*/*.xml here4
   artifacts:
     paths:
-      - build/here
+      - build/here4
     expire_in: 12 hrs
     when: always
   retry: 1

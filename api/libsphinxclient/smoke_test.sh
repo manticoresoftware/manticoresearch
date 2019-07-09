@@ -1,5 +1,12 @@
 #!/bin/sh
 
+#This file left here only for reference
+#Actual script have to be run via CTest as
+#`ctest -L API`. It will prepare the index with indexer,
+# and then run smoke as here.
+#
+# Actual related fileas are CMakeLists.txt and smoke.cmake
+
 [ "z$FAILLOG" = "z" ] && FAILLOG="/tmp/faillog"
 DIFF='smoke_diff.txt'
 RES='smoke_test.txt'

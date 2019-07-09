@@ -30,7 +30,6 @@ osx:
     - mac
     - build
   script:
-    - brew install icu4c
     - mkdir build && cd build
     - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=macos -DLIBS_BUNDLE=/work ..
     - make -j2 package

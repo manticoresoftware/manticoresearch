@@ -11,14 +11,13 @@ endif()
 ctest_start(Continuous)
 ctest_submit(FILES ${XMLS})
 
-string ( TIMESTAMP _output "%Y-%m-%d" )
-set ( URLB "http://$ENV{CDASH_URL}/CDash/public/index.php?project=Manticoresearch&date=${_output}")
-set ( URL "${URLB}&filtercount=1&field1=revision&compare1=63&value1=$ENV{CI_COMMIT_SHA}" )
+find_program ( PHP NAMES php )
+find_program ( XSLTPROC NAMES xsltproc )
 
-file ( WRITE "${CTEST_BINARY_DIRECTORY}/../results.html"
-	"<!DOCTYPE html>\n"
-	"<html><head>\n"
-	"<meta http-equiv=\"refresh\" content=\"0;url=${URL}\">\n"
-	"</head><body>\n"
-	"<p> CDash for this pipeline is <a href=\"${URL}\">here</a>.</p>\n"
-	"</body></html>\n" )
+file ( GLOB TESTXML "build/here/*Test.xml" )
+
+execute_process (
+		COMMAND ${PHP} ${CTEST_SOURCE_DIRECTORY}/misc/junit/filter.php ${TESTXML}
+		COMMAND ${XSLTPROC} -o ${CTEST_BINARY_DIRECTORY}/junit_${CTEST_BUILD_CONFIGURATION}.xml ${CTEST_SOURCE_DIRECTORY}/misc/junit/ctest2junit.xsl -
+)
+

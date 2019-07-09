@@ -16,7 +16,7 @@ endif ()
 
 # fallback to run without ctest
 if ( NOT CTEST_SOURCE_DIRECTORY )
-	set ( CTEST_SOURCE_DIRECTORY "." )
+	set ( CTEST_SOURCE_DIRECTORY ".." )
 endif ()
 
 if ( NOT CTEST_CMAKE_GENERATOR )
@@ -71,7 +71,7 @@ set ( CTEST_CUSTOM_WARNING_EXCEPTION ".*flexsphinx.*" )
 ctest_start ( "Continuous" )
 ctest_update ()
 ctest_configure ()
-ctest_build ( FLAGS -j5 TARGET package )
+ctest_build ( FLAGS -j5 )
 ctest_test ( RETURN_VALUE retcode )
 #ctest_test ( STRIDE 50 )
 #ctest_test ( STRIDE 50 EXCLUDE_LABEL RT RETURN_VALUE retcode )

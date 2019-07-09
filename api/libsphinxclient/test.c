@@ -367,6 +367,7 @@ void test_status ( sphinx_client * client )
 		&& strstr ( status[k], "connect_avg" )==NULL 
 		&& strstr ( status[k], "connect_max")==NULL
 		&& strstr( status[k], "version" )==NULL
+		&& strstr( status[k], "qcache_max_bytes" )==NULL
 		&& strstr( status[k], "mysql_version" )==NULL
 		&& strstr ( status[k], "connect_count")==NULL ) )
 		{

@@ -24,18 +24,21 @@ if ( NOT DISABLE_TESTING )
 	add_executable (testcli test.c)
 	target_link_libraries ( testcli sphinxclient )
 
+	configure_file ( ${CMAKE_CURRENT_SOURCE_DIR}/smoke_data.csv ${CMAKE_CURRENT_BINARY_DIR}/smoke_data.csv COPYONLY )
+	configure_file ( ${CMAKE_CURRENT_SOURCE_DIR}/smoke_test.conf ${CMAKE_CURRENT_BINARY_DIR}/smoke_test.conf COPYONLY )
+
 	set ( test "\"Prepare API test\"" )
 	add_test ( NAME "${test}" COMMAND indexer -c smoke_test.conf --all
-			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} )
+			WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} )
 	SET_TESTS_PROPERTIES ( "${test}" PROPERTIES LABELS "API"
-			FIXTURES_SETUP APIINDEX RESOURCE_LOCK DbAccess )
+			FIXTURES_SETUP APIINDEX  )
 
 	set ( test "\"Perform API smoke test\"" )
 	add_test ( NAME "${test}" COMMAND ${CMAKE_COMMAND}
 			-D BINDIR=${MANTICORE_BINARY_DIR}
-			-D CURBINDIR=${CMAKE_CURRENT_BINARY_DIR}
-			-P smoke.cmake
-			WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} )
+			-D SRCDIR=${CMAKE_CURRENT_SOURCE_DIR}
+			-P ${CMAKE_CURRENT_SOURCE_DIR}/smoke.cmake
+			WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} )
 	SET_TESTS_PROPERTIES ( "${test}" PROPERTIES LABELS "API"
 			FIXTURES_REQUIRED APIINDEX )
 

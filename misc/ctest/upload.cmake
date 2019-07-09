@@ -14,7 +14,7 @@ ctest_submit(FILES ${XMLS})
 find_program ( PHP NAMES php )
 find_program ( XSLTPROC NAMES xsltproc )
 
-file ( GLOB TESTXML "build/here/*Test.xml" )
+file ( GLOB TESTXML "build/here1/*Test.xml" )
 
 execute_process (
 		COMMAND ${PHP} ${CTEST_SOURCE_DIRECTORY}/misc/junit/filter.php ${TESTXML}

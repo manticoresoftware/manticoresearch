@@ -637,6 +637,7 @@ add_subdirectory ( src )
 
 if ( NOT DISABLE_TESTING )
 	add_subdirectory ( test )
+	add_subdirectory ( api/libsphinxclient )
 endif ()
 
 include ( CPack )

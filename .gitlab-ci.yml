@@ -45,7 +45,7 @@ simple_tests:
   variables:
     CTEST_BUILD_CONFIGURATION: "Debug"
   script:
-    - ctest -VV -S misc/ctest/gltest.cmake
+    - ctest -V -S misc/ctest/gltest.cmake
     - cd build && mkdir here1
     - cp -r Testing/2*/*.xml here1
   artifacts:
@@ -70,7 +70,7 @@ release_tests:
   variables:
     CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
   script:
-    - ctest -VV -S misc/ctest/gltest.cmake
+    - ctest -V -S misc/ctest/gltest.cmake
     - cd build && mkdir here2
     - cp -r Testing/2*/*.xml here2
   artifacts:

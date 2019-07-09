@@ -83,6 +83,7 @@ extern "C"
 	// UNIX-specific headers and calls
 	#include <sys/wait.h>
 	#include <netdb.h>
+	#include<netinet/in.h>
 
 	#define sphSeek		lseek
 

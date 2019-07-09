@@ -46,6 +46,13 @@
 #include <net/ethernet.h>
 #endif
 
+// for FreeBSD
+#if defined(__FreeBSD__)
+#include <sys/sysctl.h>
+#include <net/route.h>
+#include <net/if_dl.h>
+#endif
+
 const char * GetReplicationDL()
 {
 #ifdef GALERA_SOVERSION
@@ -5089,7 +5096,7 @@ CSphString GetMacAddress ()
 		}
 	}
 #elif defined(__FreeBSD__)
-	int iLen = 0;
+	size_t iLen = 0;
 	const int iMibLen = 6;
 	int dMib[iMibLen] = { CTL_NET, AF_ROUTE, 0, AF_LINK, NET_RT_IFLIST, 0 };
 
@@ -5106,7 +5113,7 @@ CSphString GetMacAddress ()
 				{
 					bool bAllZero = true;
 					const sockaddr_dl * pSdl= (const sockaddr_dl *)(pIf + 1);
-					const BYTE * pMAC = LLADDR(pSdl);
+					const BYTE * pMAC = (const BYTE *)LLADDR(pSdl);
 					for ( int i=0; i<ETHER_ADDR_LEN; i++ )
 					{
 						BYTE uPart = *pMAC;

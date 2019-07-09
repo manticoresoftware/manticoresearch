@@ -3,7 +3,7 @@ set(CTEST_BINARY_DIRECTORY "build")
 
 # template file for cdash upload is placed in secret variable 'CDASH_UPLOAD' of gitlab
 configure_file ("$ENV{CDASH_UPLOAD}" "${CTEST_BINARY_DIRECTORY}/CTestConfig.cmake" @ONLY)
-file ( GLOB XMLS "build/here/*.xml")
+file ( GLOB XMLS "build/here?/*.xml")
 if ( NOT XMLS )
     message(FATAL_ERROR "Nothing to upload.")
 endif()

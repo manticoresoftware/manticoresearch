@@ -8,11 +8,15 @@ set ( LIBS_BUNDLE "$ENV{LIBS_BUNDLE}" )
 set_property ( GLOBAL PROPERTY Label P$ENV{CI_PIPELINE_ID} J$ENV{CI_JOB_ID} )
 
 # platform specific options
-set ( CTEST_SITE "$ENV{CI_SERVER_NAME} ${CTEST_BUILD_CONFIGURATION}" )
+set ( CTEST_SITE "$ENV{CI_SERVER_NAME} build ${CTEST_BUILD_CONFIGURATION}" )
+
+# common test options
+set ( CONFIG_OPTIONS "WITH_ODBC=1;WITH_RE2=1;WITH_STEMMER=1;WITH_PGSQL=1;WITH_EXPAT=1;USE_GALERA=0;DISABLE_TESTING=1" )
+LIST ( APPEND CONFIG_OPTIONS "LIBS_BUNDLE=${LIBS_BUNDLE}" )
 
 if ( NOT CTEST_SOURCE_DIRECTORY )
-	set ( CTEST_SOURCE_DIRECTORY "${CI_PROJECT_DIR}" )
-endif ()
+	set ( CTEST_SOURCE_DIRECTORY "${CI_PROJECT_DIR}")
+endif()
 
 # fallback to run without ctest
 if ( NOT CTEST_SOURCE_DIRECTORY )
@@ -21,37 +25,17 @@ endif ()
 
 if ( NOT CTEST_CMAKE_GENERATOR )
 	set ( CTEST_CMAKE_GENERATOR "Unix Makefiles" )
-endif()
-
-# common test options
-set ( CONFIG_OPTIONS "WITH_ODBC=1;WITH_RE2=1;WITH_STEMMER=1;WITH_PGSQL=1;WITH_EXPAT=1" )
-set ( CTEST_BINARY_DIRECTORY "build" )
-
-if ( CTEST_BUILD_CONFIGURATION STREQUAL Debug )
-	# configure coverage
-	set ( WITH_COVERAGE TRUE )
-	find_program ( CTEST_COVERAGE_COMMAND NAMES gcov )
-	LIST ( APPEND CONFIG_OPTIONS "COVERAGE_TEST=1" )
-	LIST ( APPEND CTEST_CUSTOM_COVERAGE_EXCLUDE "googletest-src/.*" )
 endif ()
 
-if ( BUNDLE )
-	LIST ( APPEND CONFIG_OPTIONS "LIBS_BUNDLE=${BUNDLE}" )
-endif ()
-
+set ( CTEST_BINARY_DIRECTORY "${CTEST_SOURCE_DIRECTORY}/build" )
 SET ( CTEST_START_WITH_EMPTY_BINARY_DIRECTORY TRUE )
 #ctest_empty_binary_directory(${CTEST_BINARY_DIRECTORY})
 
 #######################################################################
-set ( CTESTCONFIG "${CTEST_BINARY_DIRECTORY}/CTestConfig.cmake")
+set ( CTESTCONFIG "${CTEST_BINARY_DIRECTORY}/CTestConfig.cmake" )
 file ( WRITE "${CTESTCONFIG}" "set ( CTEST_PROJECT_NAME \"Manticoresearch\" )\n" )
 file ( APPEND "${CTESTCONFIG}" "set ( CTEST_NIGHTLY_START_TIME \"01:00:00 UTC\" )\n" )
 file ( APPEND "${CTESTCONFIG}" "set ( CTEST_DROP_SITE_CDASH TRUE )\n" )
-
-# configure memcheck
-SET ( WITH_MEMCHECK FALSE )
-#find_program(CTEST_MEMORYCHECK_COMMAND NAMES valgrind)
-#set(CTEST_MEMORYCHECK_SUPPRESSIONS_FILE ${CTEST_SOURCE_DIRECTORY}/tests/valgrind.supp)
 
 # configure update (will log git rev id)
 find_program ( CTEST_GIT_COMMAND NAMES git )
@@ -65,24 +49,24 @@ endforeach ()
 set ( CTEST_CONFIGURE_COMMAND "${CMAKE_CALL} \"${CTEST_SOURCE_DIRECTORY}\"" )
 
 # will not write and count warnings in auto-generated files of lexer
-set ( CTEST_CUSTOM_WARNING_EXCEPTION ".*flexsphinx.*" )
+#set ( CTEST_CUSTOM_WARNING_EXCEPTION ".*flexsphinx.*" )
 
 # Do the test suite
 ctest_start ( "Continuous" )
 ctest_update ()
 ctest_configure ()
-ctest_build ( FLAGS -j5 TARGET package )
-ctest_test ( RETURN_VALUE retcode )
+ctest_build ( RETURN_VALUE retcode )
+#ctest_test ( RETURN_VALUE retcode )
 #ctest_test ( STRIDE 50 )
 #ctest_test ( STRIDE 50 EXCLUDE_LABEL RT RETURN_VALUE retcode )
 
-if ( WITH_COVERAGE AND CTEST_COVERAGE_COMMAND )
-	ctest_coverage ()
-endif ( WITH_COVERAGE AND CTEST_COVERAGE_COMMAND )
+#if ( WITH_COVERAGE AND CTEST_COVERAGE_COMMAND )
+#	ctest_coverage ()
+#endif ( WITH_COVERAGE AND CTEST_COVERAGE_COMMAND )
 
-if ( WITH_MEMCHECK AND CTEST_MEMORYCHECK_COMMAND )
-	ctest_memcheck ()
-endif ( WITH_MEMCHECK AND CTEST_MEMORYCHECK_COMMAND )
+#if ( WITH_MEMCHECK AND CTEST_MEMORYCHECK_COMMAND )
+#	ctest_memcheck ()
+#endif ( WITH_MEMCHECK AND CTEST_MEMORYCHECK_COMMAND )
 
 #ctest_submit ()
 

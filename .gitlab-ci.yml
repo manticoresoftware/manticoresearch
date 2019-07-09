@@ -46,13 +46,14 @@ simple_tests:
     CTEST_BUILD_CONFIGURATION: "Debug"
   script:
     - ctest -V -S misc/ctest/gltest.cmake
+    - cd build && mkdir here
+    - cp -r Testing/2*/*.xml here
   artifacts:
     paths:
     - build/here
     - build/test/test_*/report.txt
     - build/test/error*.txt
     - build/test/searchd.log
-    - build/junit_*.xml
     expire_in: 12 hrs
     when: always
   retry: 1
@@ -70,13 +71,65 @@ release_tests:
     CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
   script:
     - ctest -V -S misc/ctest/gltest.cmake
+    - cd build && mkdir here
+    - cp -r Testing/2*/*.xml here
   artifacts:
     paths:
     - build/here
     - build/test/test_*/report.txt
     - build/test/error*.txt
     - build/test/searchd.log
-    - build/junit_*.xml
+    expire_in: 12 hrs
+    when: always
+  retry: 1
+
+build_win:
+  stage: routines
+  except:
+    variables:
+      - $WHAT
+  tags:
+    - windows
+    - build
+  dependencies: []
+  variables:
+    CTEST_BUILD_CONFIGURATION: "Debug"
+    LIBS_BUNDLE: "x:/bundle"
+    CTEST_CMAKE_GENERATOR: "Visual Studio 14"
+  script:
+    - 'net use x: \\\\VBOXSRV\\shared'
+    - mkdir build && cd build
+    - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
+    - mkdir here
+    - cp -r Testing/2*/*.xml here
+  artifacts:
+    paths:
+      - build/here
+    expire_in: 12 hrs
+    when: always
+  retry: 1
+
+build_mac:
+  stage: routines
+  except:
+    variables:
+      - $WHAT
+  tags:
+    - mac
+    - build
+  dependencies: []
+  variables:
+    CTEST_BUILD_CONFIGURATION: "Debug"
+    LIBS_BUNDLE: "/work"
+    CTEST_CMAKE_GENERATOR: "Unix Makefiles"
+  script:
+    - mkdir build && cd build
+    - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
+    - mkdir here
+    - cp -r Testing/2*/*.xml here
+  artifacts:
+    paths:
+      - build/here
     expire_in: 12 hrs
     when: always
   retry: 1
@@ -92,14 +145,14 @@ push_results:
   dependencies:
     - simple_tests
     - release_tests
+    - build_win
+    - build_mac
   variables:
     GIT_STRATEGY: fetch
   script:
     - ctest -S misc/ctest/upload.cmake
   when: always
   artifacts:
-    paths:
-    - results.html
     reports:
       junit: build/junit_*.xml
   environment:

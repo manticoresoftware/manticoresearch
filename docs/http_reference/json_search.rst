@@ -37,6 +37,16 @@ query).
 
 You can also use ``"size"``/``"from"`` synonyms in place of ``"limit"``/``"offset"``.
 
+``"max_matches"`` setting controls how many matches ``searchd`` will keep. For more info see ``SetLimits`` in the API and ``MAX_MATCHES`` in the SphinxQL. Example:
+
+.. code-block:: json
+
+    {
+      "index":"test",
+      "query": { "match_all": {} },
+      "max_matches":10000
+    }
+
 
 In case the index contains json attributes, they will be injected into output json as inline objects, so you can simple take and work with them (before they were returned as escaped strings, so you had to parse them into json).
 

@@ -1270,6 +1270,13 @@ static bool ParseLimits ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphStrin
 	if ( tOffset )
 		tQuery.m_iOffset = tOffset.IntVal();
 
+	JsonObj_c tMaxMatches = tRoot.GetIntItem ( "max_matches", sError, true );
+	if ( !sError.IsEmpty() )
+		return false;
+
+	if ( tMaxMatches )
+		tQuery.m_iMaxMatches = tMaxMatches.IntVal();
+
 	return true;
 }
 

@@ -1517,7 +1517,7 @@ JsonObj_c JsonObj_c::GetIntItem ( const char * szName, CSphString & sError, bool
 }
 
 
-JsonObj_c JsonObj_c::GetIntItem ( const char * szName1, const char * szName2, CSphString & sError, bool bIgnoreMissing ) const
+JsonObj_c JsonObj_c::GetIntItem ( const char * szName1, const char * szName2, CSphString & sError ) const
 {
 	JsonObj_c tResult = GetIntItem ( szName1, sError, true );
 	if ( !tResult )

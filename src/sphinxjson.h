@@ -353,6 +353,7 @@ public:
 
 	const char *	GetErrorPtr() const;
 	bool			GetError ( const char * szBuf, int iBufLen, CSphString & sError ) const;
+	bool			GetError ( const char* szBuf, int iBufLen ) const;
 	cJSON *			GetRoot();
 	CSphString		AsString ( bool bFormat=false ) const;
 

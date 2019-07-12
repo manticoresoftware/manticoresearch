@@ -500,6 +500,15 @@ public:
 	const ISphNoncopyable &		operator = ( const ISphNoncopyable & ) = delete;
 };
 
+/// prevent move
+class ISphNonmovable
+{
+public:
+	ISphNonmovable() = default;
+	ISphNonmovable( ISphNonmovable&& ) noexcept = delete;
+	ISphNonmovable& operator=( ISphNonmovable&& ) noexcept = delete;
+};
+
 //////////////////////////////////////////////////////////////////////////////
 
 /// generic comparator

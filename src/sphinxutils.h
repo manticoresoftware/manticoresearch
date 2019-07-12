@@ -459,6 +459,39 @@ public:
 	void MoveAllTo ( CSphString &sTarget );
 };
 
+namespace TlsMsg
+{
+	// format error, then return false
+	bool Err( const char* sFmt, ... );
+
+	// put error from string, then return false
+	bool Err( const CSphString& sMsg );
+
+	// clear current state and return builder for user manipulations
+	StringBuilder_c& Err();
+
+	// return last error
+	const char* szError();
+
+	// move error to given string, or leave it intact if no error
+	void MoveError( CSphString& sError );
+
+	// true if some error was reported.
+	bool HasErr();
+
+	// RAII keep previous msg; restore it on destroy
+	class KeepError_c : public ISphNoncopyable, public ISphNonmovable
+	{
+		CSphString m_sPrevError;
+	public:
+		KeepError_c() { MoveError ( m_sPrevError ); }
+		~KeepError_c() { Err ( m_sPrevError); }
+
+		// to use as legacy error collector
+		operator CSphString&() { return m_sPrevError;}
+	};
+}
+
 // extract basename from path
 const char * GetBaseName ( const CSphString & sFullPath );
 CSphString GetPathOnly ( const CSphString & sFullPath );

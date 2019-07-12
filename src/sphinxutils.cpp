@@ -3794,6 +3794,54 @@ void Warner_c::MoveAllTo ( CSphString &sTarget )
 	Clear();
 }
 
+namespace TlsMsg {
+
+	StringBuilder_c* TlsMsgs(bool bDoClear=true)
+	{
+		static TLS_T<StringBuilder_c> pContainer;
+		if (!pContainer)
+		{
+			static StringBuilder_c sMsgs;
+			pContainer = &sMsgs;
+		}
+
+		if ( bDoClear )
+			pContainer->Clear();
+		return pContainer;
+	}
+
+	bool Err( const char* sFmt, ... )
+	{
+		StringBuilder_c sMsgs;
+		va_list ap;
+		va_start ( ap, sFmt );
+		sMsgs.vSprintf( sFmt, ap );
+		va_end ( ap );
+		TlsMsgs ()->Swap ( sMsgs );
+		return false;
+	}
+
+	bool Err( const CSphString& sMsg )
+	{
+		if (sMsg.IsEmpty())
+			return true;
+		*TlsMsgs() << sMsg;
+		return false;
+	}
+
+	StringBuilder_c& Err() { return *TlsMsgs(); }
+	const char* szError() { return TlsMsgs(false)->cstr(); }
+	void MoveError ( CSphString& sError )
+	{
+		auto& sStream = *TlsMsgs( false );
+		if ( sStream.IsEmpty())
+			return;
+		sStream.MoveTo(sError);
+	}
+
+	bool HasErr() { return !TlsMsgs(false)->IsEmpty(); }
+}
+
 const char * GetBaseName ( const CSphString & sFullPath )
 {
 	if ( sFullPath.IsEmpty() )

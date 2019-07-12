@@ -1730,6 +1730,15 @@ bool JsonObj_c::GetError ( const char * szBuf, int iBufLen, CSphString & sError 
 }
 
 
+bool JsonObj_c::GetError( const char* szBuf, int iBufLen ) const
+{
+	CSphString sError;
+	if ( GetError ( szBuf, iBufLen, sError ) )
+		return !TlsMsg::Err ( sError );
+	return false;
+}
+
+
 cJSON * JsonObj_c::Leak()
 {
 	cJSON * pRoot = m_pRoot;

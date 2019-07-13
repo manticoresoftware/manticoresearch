@@ -206,6 +206,9 @@ INSERT INTO test_table VALUES
 <sphinxql>CALL KEYWORDS ( '#中国地理', 'test' )</sphinxql>
 <sphinxql>CALL KEYWORDS ( '#abc', 'test' )</sphinxql>
 
+<!-- regression CALL KEYWORDS -->
+<sphinxql>CALL KEYWORDS ( '成員年齡均超過六十歲，tested', 'test' )</sphinxql>
+<sphinxql>CALL KEYWORDS ( '成員年齡均超過六十歲，tested', 'test2' )</sphinxql>
 
 </sphqueries>
 

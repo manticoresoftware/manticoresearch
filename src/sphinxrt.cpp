@@ -6267,7 +6267,17 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	if ( m_tSettings.m_bIndexExactWords )
 		SetupExactDict ( pDict, pTokenizer, false );
 
-	// FIXME!!! missed bigram, FieldFilter
+	CSphVector<BYTE> dFiltered;
+	ISphFieldFilterRefPtr_c pFieldFilter;
+	const BYTE * sModifiedQuery = (const BYTE *)sQuery;
+	if ( m_pFieldFilter && sQuery )
+	{
+		pFieldFilter = m_pFieldFilter->Clone();
+		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
+			sModifiedQuery = dFiltered.Begin();
+	}
+
+	// FIXME!!! missing bigram
 
 	if ( !bFillOnly )
 	{
@@ -6291,7 +6301,7 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		tExpCtx.m_bMergeSingles = false;
 		tExpCtx.m_pIndexData = &tGuard.m_dRamChunks;
 
-		pTokenizer->SetBuffer ( (BYTE *)sQuery, strlen ( sQuery ) );
+		pTokenizer->SetBuffer ( sModifiedQuery, strlen ( (const char*)sModifiedQuery ) );
 		tAotFilter.GetKeywords ( dKeywords, tExpCtx );
 	} else
 	{
@@ -6335,7 +6345,7 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		SmallStringHash_T<CSphKeywordInfo> hKeywords;
 		ARRAY_FOREACH ( iChunk, tGuard.m_dDiskChunks )
 		{
-			tGuard.m_dDiskChunks[iChunk]->GetKeywords ( dChunkKeywords, sQuery, tSettings, pError );
+			tGuard.m_dDiskChunks[iChunk]->GetKeywords ( dChunkKeywords, (const char*)sModifiedQuery, tSettings, pError );
 			HashKeywords ( dChunkKeywords, hKeywords );
 			dChunkKeywords.Resize ( 0 );
 		}

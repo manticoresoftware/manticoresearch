@@ -11019,8 +11019,7 @@ bool sphTruncate ( int iFD )
 
 CSphString sphNormalizePath( const CSphString& sOrigPath )
 {
-	using Chunk_t = std::pair<const char*, size_t>;
-	CSphVector<Chunk_t> dChunks;
+	CSphVector<Str_t> dChunks;
 	const char* sBegin = sOrigPath.scstr();
 	const char* sEnd = sBegin + sOrigPath.Length();
 	const char* sPath = sBegin;
@@ -11064,13 +11063,13 @@ CSphString sphNormalizePath( const CSphString& sOrigPath )
 
 	StringBuilder_c sResult( "/" );
 	if ( *sBegin=='/' )
-		sResult.AppendRawChars( "/" );
+		sResult.AppendRawChunk ( {"/", 1} );
 	else
 		while ( iLevel++<0 )
 			sResult << "..";
 
 	for ( const auto& dChunk: dChunks )
-		sResult.AppendChars( dChunk.first, dChunk.second );
+		sResult.AppendChunk ( dChunk );
 
 	return sResult.cstr();
 }

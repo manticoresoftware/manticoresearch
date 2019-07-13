@@ -982,11 +982,10 @@ ESphJsonType sphJsonFindByIndex ( ESphJsonType eType, const BYTE ** ppValue, int
 static const BYTE * JsonFormatStr ( JsonEscapedBuilder &sOut, const BYTE * p, bool bQuote=true )
 {
 	int iLen = sphJsonUnpackInt ( &p );
-	sOut.GrowEnough ( iLen );
 	if ( bQuote )
 		sOut.AppendEscaped ( ( const char * ) p, EscBld::eEscape, iLen );
 	else
-		sOut.AppendChars ( ( const char * ) p, iLen );
+		sOut.AppendChunk ( {(const char *) p, iLen} );
 	return p+iLen;
 }
 
@@ -1024,7 +1023,7 @@ const BYTE * sphJsonFieldFormat ( JsonEscapedBuilder & sOut, const BYTE * pData,
 		case JSON_DOUBLE:
 		{
 			auto iLen = snprintf ( sDouble, szDouble, "%lf", sphQW2D ( sphJsonLoadBigint ( &p ) ) ); // NOLINT
-			sOut.AppendChars ( sDouble, iLen );
+			sOut.AppendChunk ( {sDouble, iLen} );
 			break;
 		}
 		case JSON_STRING:
@@ -1056,7 +1055,7 @@ const BYTE * sphJsonFieldFormat ( JsonEscapedBuilder & sOut, const BYTE * pData,
 			for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
 			{
 				auto iLen = snprintf ( sDouble, szDouble, "%lf", sphQW2D ( sphJsonLoadBigint ( &p ) ) ); // NOLINT
-				sOut.AppendChars ( sDouble, iLen );
+				sOut.AppendChunk ( {sDouble, iLen} );
 			}
 			sOut.FinishBlock ( false );
 			break;

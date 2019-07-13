@@ -126,13 +126,13 @@ TEST ( functions, stringbuilder_hello )
 	builder << dText;
 	ASSERT_STREQ ( builder.cstr (), "Hello world!I amabc" );
 
-	// AppendChars of blob
+	// AppendChunk of blob
 	const char* sText = "text";
-	builder.AppendChars ( sText, (int) strlen (sText) );
+	builder.AppendChunk ( {sText, (int) strlen ( sText )});
 	ASSERT_STREQ ( builder.cstr (), "Hello world!I amabctext" );
 
-	// AppendChars with quotation
-	builder.AppendChars ( sText, ( int ) strlen ( sText ), '`' );
+	// AppendChunk with quotation
+	builder.AppendChunk ( {sText, (int) strlen ( sText )}, '`' );
 	ASSERT_STREQ ( builder.cstr (), "Hello world!I amabctext`text`" );
 
 	// AppendString

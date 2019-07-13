@@ -1141,7 +1141,7 @@ public:
 		// collapse same messages
 		m_dLog.Uniq ();
 		int iSpanStart = 0;
-		Comma_c sDelimiter (";\n");
+		Comma_c sColon( ";\n" );
 
 		for ( int i=1; i<=m_dLog.GetLength(); ++i )
 		{
@@ -1150,7 +1150,7 @@ public:
 				if ( m_dLog[i].m_sError==m_dLog[i-1].m_sError )
 					continue;
 
-			sReport << sDelimiter << "index ";
+			sReport << sColon << "index ";
 
 			ReportIndexesName ( iSpanStart, i, m_dLog, sReport );
 			sReport << m_dLog[iSpanStart].m_sError;

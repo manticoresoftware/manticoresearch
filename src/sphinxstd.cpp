@@ -2324,7 +2324,6 @@ StringBuilder_c::StringBuilder_c ( const char * sDel, const char * sPref, const 
 
 StringBuilder_c::~StringBuilder_c()
 {
-	SafeDelete ( m_pDelimiter );
 	SafeDeleteArray ( m_szBuffer );
 }
 
@@ -2338,7 +2337,7 @@ void StringBuilder_c::Swap ( StringBuilder_c& rhs ) noexcept
 	::Swap ( m_szBuffer, rhs.m_szBuffer );
 	::Swap ( m_iSize, rhs.m_iSize );
 	::Swap ( m_iUsed, rhs.m_iUsed );
-	::Swap ( m_pDelimiter, rhs.m_pDelimiter );
+	::Swap ( m_dDelimiters, rhs.m_dDelimiters );
 }
 
 StringBuilder_c & StringBuilder_c::operator= ( StringBuilder_c rhs ) noexcept
@@ -2347,37 +2346,32 @@ StringBuilder_c & StringBuilder_c::operator= ( StringBuilder_c rhs ) noexcept
 	return *this;
 }
 
-StringBuilder_c::LazyComma_c * StringBuilder_c::StartBlock ( const char * sDel, const char * sPref, const char * sTerm )
+int StringBuilder_c::StartBlock ( const char * sDel, const char * sPref, const char * sTerm )
 {
-	m_pDelimiter = new LazyComma_c (m_pDelimiter, sDel, sPref, sTerm );
-	return m_pDelimiter;
+	m_dDelimiters.Add ( LazyComma_c ( sDel, sPref, sTerm ) );
+	return m_dDelimiters.GetLength();
 }
 
 void StringBuilder_c::FinishBlock ( bool bAllowEmpty ) // finish last pushed block
 {
-	if ( !m_pDelimiter )
+	if ( m_dDelimiters.IsEmpty() )
 		return;
 
-	if ( !bAllowEmpty && !m_pDelimiter->Started() )
+	if ( !bAllowEmpty && !m_dDelimiters.Last().Started() )
 	{
-		AppendChars ( "\0", 1 );
+		AppendChunk ( {"\0", 1} );
 		--m_iUsed;
 	}
 
-	if ( m_pDelimiter->Started () )
-		AppendRawChars ( m_pDelimiter->m_sSuffix );
+	if ( m_dDelimiters.Last().Started () )
+		AppendRawChunk ( m_dDelimiters.Last().m_sSuffix );
 
-	auto pDel = m_pDelimiter;
-	m_pDelimiter = pDel->m_pPrevious;
-	pDel->m_pPrevious = nullptr;
-	SafeDelete ( pDel );
+	m_dDelimiters.Pop();
 }
 
-void StringBuilder_c::FinishBlocks ( StringBuilder_c::LazyComma_c * pLevel, bool bAllowEmpty )
+void StringBuilder_c::FinishBlocks ( int iLevel, bool bAllowEmpty )
 {
-	while ( m_pDelimiter && m_pDelimiter!=pLevel )
-		FinishBlock ( bAllowEmpty );
-	if ( m_pDelimiter )
+	while ( !m_dDelimiters.IsEmpty() && iLevel<=m_dDelimiters.GetLength() )
 		FinishBlock ( bAllowEmpty );
 }
 
@@ -2389,19 +2383,18 @@ StringBuilder_c & StringBuilder_c::vAppendf ( const char * sTemplate, va_list ap
 	assert ( m_szBuffer );
 	assert ( m_iUsed<m_iSize );
 
-	int iComma = 0;
-	const char * sPrefix = m_pDelimiter ? m_pDelimiter->RawComma ( iComma, *this ) : nullptr;
+	auto sComma = Delim();
 
 	while (true)
 	{
 		int iLeft = m_iSize - m_iUsed;
-		if ( iComma && iComma < iLeft ) // prepend delimiter first...
+		if ( sComma.second && sComma.second < iLeft ) // prepend delimiter first...
 		{
-			if ( sPrefix )
-				memcpy ( m_szBuffer + m_iUsed, sPrefix, iComma );
-			iLeft -= iComma;
-			m_iUsed += iComma;
-			iComma = 0;
+			if ( sComma.second )
+				memcpy ( m_szBuffer + m_iUsed, sComma.first, sComma.second );
+			iLeft -= sComma.second;
+			m_iUsed += sComma.second;
+			sComma = dEmptyStr;
 		}
 
 		// try to append
@@ -2424,7 +2417,7 @@ StringBuilder_c & StringBuilder_c::vAppendf ( const char * sTemplate, va_list ap
 		// we need more chars!
 		// either 256 (happens on Windows; lets assume we need 256 more chars)
 		// or get all the needed chars and 64 more for future calls
-		GrowEnough ( iPrinted<0 ? 256 : iPrinted + iComma );
+		GrowEnough ( iPrinted<0 ? 256 : iPrinted + sComma.second );
 	}
 	return *this;
 }
@@ -2445,14 +2438,13 @@ StringBuilder_c & StringBuilder_c::vSprintf ( const char * sTemplate, va_list ap
 
 	assert ( m_iUsed==0 || m_iUsed<m_iSize );
 
-	int iComma = 0;
-	const char * sPrefix = m_pDelimiter ? m_pDelimiter->RawComma ( iComma, *this ) : nullptr;
+	auto sComma = Delim();
 
-	if ( iComma && sPrefix ) // prepend delimiter first...
+	if ( sComma.second ) // prepend delimiter first...
 	{
-		GrowEnough ( iComma );
-		memcpy ( m_szBuffer + m_iUsed, sPrefix, iComma );
-		m_iUsed += iComma;
+		GrowEnough ( sComma.second );
+		memcpy ( m_szBuffer + m_iUsed, sComma.first, sComma.second );
+		m_iUsed += sComma.second;
 	}
 	sph::vSprintf ( *this, sTemplate, ap );
 	return *this;
@@ -2480,24 +2472,22 @@ void StringBuilder_c::MoveTo ( CSphString &sTarget )
 	NewBuffer ();
 }
 
-void StringBuilder_c::AppendRawChars ( const char * sText ) // append without any commas
+void StringBuilder_c::AppendRawChunk ( Str_t sText ) // append without any commas
 {
-	if ( !sText || !*sText )
+	if ( !sText.second )
 		return;
 
-	int iLen = strlen ( sText );
+	GrowEnough ( sText.second + 1 ); // +1 because we'll put trailing \0 also
 
-	GrowEnough ( iLen + 1 ); // +1 because we'll put trailing \0 also
-
-	memcpy ( m_szBuffer + m_iUsed, sText, iLen );
-	m_iUsed += iLen;
+	memcpy ( m_szBuffer + m_iUsed, sText.first, sText.second );
+	m_iUsed += sText.second;
 	m_szBuffer[m_iUsed] = '\0';
 }
 
 StringBuilder_c & StringBuilder_c::SkipNextComma()
 {
-	if ( m_pDelimiter )
-		m_pDelimiter->SkipNext ();
+	if ( !m_dDelimiters.IsEmpty() )
+		m_dDelimiters.Last().SkipNext ();
 	return *this;
 }
 
@@ -2506,7 +2496,7 @@ StringBuilder_c & StringBuilder_c::AppendName ( const char * sName )
 	if ( !sName || !strlen ( sName ) )
 		return *this;
 
-	AppendChars ( sName, strlen ( sName ), '"' );
+	AppendChunk ( {sName, strlen ( sName )}, '"' );
 	GrowEnough(2);
 	m_szBuffer[m_iUsed] = ':';
 	m_szBuffer[m_iUsed+1] = '\0';
@@ -2514,26 +2504,22 @@ StringBuilder_c & StringBuilder_c::AppendName ( const char * sName )
 	return SkipNextComma ();
 }
 
-StringBuilder_c & StringBuilder_c::AppendChars ( const char * sText, int iLen, char cQuote )
+StringBuilder_c & StringBuilder_c::AppendChunk ( const Str_t& sChunk, char cQuote )
 {
-	if ( !iLen )
+	if ( !sChunk.second )
 		return *this;
 
-	int iComma = 0;
-	const char * sPrefix = m_pDelimiter ? m_pDelimiter->RawComma ( iComma, *this ) : nullptr;
+	auto sComma = Delim();
+	int iQuote = cQuote!=0;
 
-	int iQuote = 0;
-	if ( cQuote!='\0' )
-		++iQuote;
+	GrowEnough ( sChunk.second + sComma.second + iQuote + iQuote + 1 ); // +1 because we'll put trailing \0 also
 
-	GrowEnough ( iLen + iComma + iQuote + iQuote + 1 ); // +1 because we'll put trailing \0 also
-
-	if ( sPrefix )
-		memcpy ( m_szBuffer + m_iUsed, sPrefix, iComma );
+	if ( sComma.second )
+		memcpy ( m_szBuffer + m_iUsed, sComma.first, sComma.second );
 	if (iQuote)
-		m_szBuffer[m_iUsed + iComma] = cQuote;
-	memcpy ( m_szBuffer + m_iUsed + iComma + iQuote, sText, iLen );
-	m_iUsed += iLen+iComma+iQuote+iQuote;
+		m_szBuffer[m_iUsed +sComma.second] = cQuote;
+	memcpy ( m_szBuffer + m_iUsed +sComma.second + iQuote, sChunk.first, sChunk.second );
+	m_iUsed += sChunk.second+sComma.second+iQuote+iQuote;
 	if ( iQuote )
 		m_szBuffer[m_iUsed-1] = cQuote;
 	m_szBuffer[m_iUsed] = '\0';
@@ -2542,7 +2528,7 @@ StringBuilder_c & StringBuilder_c::AppendChars ( const char * sText, int iLen, c
 
 StringBuilder_c & StringBuilder_c::AppendString ( const CSphString &sText, char cQuote)
 {
-	return AppendChars ( sText.cstr(), sText.Length (), cQuote );
+	return AppendChunk ( {sText.cstr (), sText.Length ()}, cQuote );
 }
 
 StringBuilder_c & StringBuilder_c::operator += ( const char * sText )
@@ -2550,7 +2536,12 @@ StringBuilder_c & StringBuilder_c::operator += ( const char * sText )
 	if ( !sText || *sText=='\0' )
 		return *this;
 
-	return AppendChars ( sText, strlen ( sText ) );
+	return AppendChunk ( {sText, strlen ( sText )} );
+}
+
+StringBuilder_c & StringBuilder_c::operator+= ( const Str_t& sChunk )
+{
+	return AppendChunk ( sChunk );
 }
 
 StringBuilder_c & StringBuilder_c::operator<< ( const VecTraits_T<char> &sText )
@@ -2558,7 +2549,7 @@ StringBuilder_c & StringBuilder_c::operator<< ( const VecTraits_T<char> &sText )
 	if ( sText.IsEmpty () )
 		return *this;
 
-	return AppendChars ( sText.begin(), sText.GetLength() );
+	return AppendChunk ( {sText.begin (), sText.GetLength ()} );
 }
 
 StringBuilder_c& StringBuilder_c::operator << ( int iVal )
@@ -2653,7 +2644,7 @@ void StringBuilder_c::Clear()
 	if ( m_szBuffer )
 		m_szBuffer[0] = '\0';
 	m_iUsed = 0;
-	SafeDelete ( m_pDelimiter );
+	m_dDelimiters.Reset();
 }
 
 
@@ -2698,44 +2689,30 @@ void StringBuilder_c::FtoA ( float fVal )
 
 //////////////////////////////////////////////////////////////////////////
 
-StringBuilder_c::LazyComma_c::LazyComma_c ( LazyComma_c * pPrevious, const char * sDelim, const char * sPrefix, const char * sTerm )
+StringBuilder_c::LazyComma_c::LazyComma_c ( const char * sDelim, const char * sPrefix, const char * sTerm )
 	: Comma_c ( sDelim )
-	, m_sPrefix ( sPrefix )
-	, m_sSuffix ( sTerm )
-	, m_pPrevious ( pPrevious )
-{}
-
-
-StringBuilder_c::LazyComma_c::~LazyComma_c()
 {
-	SafeDelete ( m_pPrevious );
+	if ( sPrefix )
+		m_sPrefix = { sPrefix, strlen(sPrefix) };
+
+	if ( sTerm )
+		m_sSuffix = { sTerm, strlen(sTerm ) };
 }
 
 
-const char * StringBuilder_c::LazyComma_c::RawComma ( int &iLen, StringBuilder_c &dBuilder )
+const Str_t& StringBuilder_c::LazyComma_c::RawComma ( const std::function<void ()> & fnAddNext )
 {
 	if ( m_bSkipNext )
 	{
 		m_bSkipNext = false;
-		iLen = 0;
-		return nullptr;
+		return dEmptyStr;
 	}
 
 	if ( Started() )
-	{
-		iLen = m_iLength;;
-		return m_sDelimiter;
-	}
+		return m_sComma;
 
 	m_bStarted = true;
-	if ( m_pPrevious )
-	{
-		int iPrevLen = 0;
-		const char * sPrevDelim = m_pPrevious->RawComma ( iPrevLen, dBuilder );
-		dBuilder.AppendRawChars ( sPrevDelim );
-	}
-
-	iLen = m_sPrefix ? strlen ( m_sPrefix ) : 0;
+	fnAddNext();
 	return m_sPrefix;
 }
 

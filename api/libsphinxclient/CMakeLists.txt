@@ -16,7 +16,9 @@ PROJECT ( SPHINXCLIENT
 
 # our mega-lib
 add_library ( sphinxclient STATIC sphinxclient.c )
-target_compile_options ( sphinxclient PRIVATE -g3 -Wall -O0 )
+if ( NOT WIN32 )
+	target_compile_options ( sphinxclient PRIVATE -g3 -Wall -O0 )
+endif ()
 
 # testing stuff
 if ( NOT DISABLE_TESTING )

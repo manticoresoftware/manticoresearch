@@ -2386,7 +2386,7 @@ struct SortField_t : public GeoDistInfo_c
 static void FormatSortBy ( const CSphVector<SortField_t> & dSort, CSphQuery & tQuery, bool & bGotWeight )
 {
 	StringBuilder_c sSortBuf;
-	Comma_c sComma;
+	Comma_c sComma ({", ",2});
 
 	for ( const SortField_t &tItem : dSort )
 	{

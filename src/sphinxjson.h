@@ -170,7 +170,68 @@ struct EscapeJsonString_t
 	}
 };
 
-using JsonEscapedBuilder = EscapedStringBuilder_T<EscapeJsonString_t>;
+class JsonEscapedBuilder : public EscapedStringBuilder_T<EscapeJsonString_t>
+{
+	using Base_T = EscapedStringBuilder_T<EscapeJsonString_t>;
+public:
+
+	ScopedComma_c Named ( const char * sName )
+	{
+		Base_T::AppendEscaped ( sName );
+		AppendRawChunk ( {":", 1} );
+		SkipNextComma ();
+		return ScopedComma_c ( *this, nullptr );
+	}
+
+	ScopedComma_c Object ()
+	{
+		return ScopedComma_c ( *this, dJsonObj );
+	}
+
+	ScopedComma_c ObjectW ()
+	{
+		return ScopedComma_c ( *this, dJsonObjW );
+	}
+
+	ScopedComma_c Array ()
+	{
+		return ScopedComma_c ( *this, dJsonArr );
+	}
+
+	ScopedComma_c ArrayW ()
+	{
+		return ScopedComma_c ( *this, dJsonArrW );
+	}
+
+	int NamedBlock( const char* sName )
+	{
+		Base_T::AppendEscaped( sName );
+		AppendRawChunk( { ":", 1 } );
+		SkipNextComma();
+		return MuteBlock();
+	}
+
+	int ObjectBlock()
+	{
+		return StartBlock( dJsonObj );
+	}
+
+	int ObjectWBlock()
+	{
+		return StartBlock( dJsonObjW );
+	}
+
+	int ArrayBlock()
+	{
+		return StartBlock( dJsonArr );
+	}
+
+	int ArrayWBlock()
+	{
+		return StartBlock( dJsonArrW );
+	}
+
+};
 
 /// parse JSON, convert it into SphinxBSON blob
 bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, CSphString & sError );

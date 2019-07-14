@@ -164,10 +164,10 @@ add_dependencies ( tarball vergen )
 
 # our mega-lib
 add_library ( libsphinx STATIC ${LIBSPHINX_SRCS} ${HEADERS} ${GHEADERS} ${LIBSPHINX_BISON} ${LIBSPHINX_FLEX} ${CHARSET_FILES} ${CHARSET_TEMPLATE} "../misc/manticore.natvis" )
-
 add_dependencies ( libsphinx vergen )
 
 add_library ( lsearchd OBJECT ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
+add_dependencies(lsearchd vergen)
 
 # our executables
 add_executable ( indexer ${INDEXER_SRCS} )

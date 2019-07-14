@@ -2556,11 +2556,25 @@ protected:
 
 public:
 	// standalone - cast to 'Str_t' when necessary
-	explicit Comma_c ( const char * sDelim = ", " )
+	explicit Comma_c ( const char * sDelim=nullptr )
 	{
-		if ( !sDelim )
-			return;
-		m_sComma = { sDelim, strlen( sDelim ) };
+		m_sComma = sDelim ? Str_t { sDelim, strlen( sDelim ) } : dEmptyStr;
+	}
+
+	explicit Comma_c( Str_t sDelim ): m_sComma( std::move( sDelim )) {}
+
+	Comma_c ( const Comma_c& rhs ) = default;
+	Comma_c ( Comma_c&& rhs) noexcept = default;
+	Comma_c& operator= ( Comma_c rhs)
+	{
+		Swap(rhs);
+		return *this;
+	}
+
+	void Swap ( Comma_c& rhs ) noexcept
+	{
+		m_sComma.swap(rhs.m_sComma);
+		::Swap ( m_bStarted, rhs.m_bStarted );
 	}
 
 	inline bool Started() const { return m_bStarted; };
@@ -2574,13 +2588,21 @@ public:
 	}
 };
 
+using StrBlock_t = std::tuple<Str_t, Str_t, Str_t>;
+
+// common pattern
+const StrBlock_t dEmptyBl = { dEmptyStr, dEmptyStr, dEmptyStr }; // empty
+const StrBlock_t dJsonObj = { {",",1}, {"{",1}, {"}",1} }; // json object
+const StrBlock_t dJsonArr = { {",",1}, {"[",1}, {"]",1} }; // json array
+
+const StrBlock_t dJsonObjW = { {",\n",2}, {"{\n",2}, {"\n}",2} }; // json object with formatting
+const StrBlock_t dJsonArrW = { {",\n",2}, {"[\n",2}, {"\n]",2} }; // json array with formatting
 
 /// string builder
 /// somewhat quicker than a series of SetSprintf()s
 /// lets you build strings bigger than 1024 bytes, too
 class StringBuilder_c : public ISphNoncopyable
 {
-	friend class ScopedComma_c;
 	class LazyComma_c;
 
 public:
@@ -2650,6 +2672,8 @@ public:
 	// comma manipulations
 	// start new comma block; return index of it (for future possible reference in FinishBlocks())
 	int					StartBlock ( const char * sDel = ", ", const char * sPref = nullptr, const char * sTerm = nullptr );
+	int 				StartBlock( const StrBlock_t& dBlock );
+	int					MuteBlock ();
 
 	// finish and close last opened comma block.
 	// bAllowEmpty - close empty block output nothing(default), or prefix/suffix pair (if any).
@@ -2709,9 +2733,9 @@ protected:
 		{
 			--iLast;
 			if ( iLast>=0 )
-				AppendRawChunk ( m_dDelimiters[iLast].RawComma (fnApply) );
+				AppendRawChunk( m_dDelimiters[iLast].RawComma( fnApply ));
 		};
-		return m_dDelimiters.Last ().RawComma ( fnApply );
+		return m_dDelimiters.Last().RawComma( fnApply );
 	}
 
 private:
@@ -2722,17 +2746,31 @@ private:
 	// When in scope, inject prefix before very first item, or delimiter before each next.
 	class LazyComma_c : public Comma_c
 	{
-		friend class StringBuilder_c;
-
-		Str_t m_sPrefix = dEmptyStr;
-		Str_t m_sSuffix = dEmptyStr;
 		bool m_bSkipNext = false;
 
 	public:
+		Str_t m_sPrefix = dEmptyStr;
+		Str_t m_sSuffix = dEmptyStr;
+
 		// c-tr for managed - linked StringBuilder will inject RawComma() on each call, terminator at end
 		LazyComma_c ( const char * sDelim, const char * sPrefix, const char * sTerm );
+		explicit LazyComma_c( const StrBlock_t& dBlock );
 		LazyComma_c () = default;
 		LazyComma_c ( const LazyComma_c & ) = default;
+		LazyComma_c ( LazyComma_c && ) noexcept = default;
+		LazyComma_c& operator= (LazyComma_c rhs)
+		{
+			Swap(rhs);
+			return *this;
+		}
+
+		void Swap ( LazyComma_c & rhs ) noexcept
+		{
+			Comma_c::Swap ( rhs );
+			m_sPrefix.swap ( rhs.m_sPrefix );
+			m_sSuffix.swap ( rhs.m_sSuffix );
+			::Swap ( m_bSkipNext, rhs.m_bSkipNext );
+		}
 
 		const Str_t & RawComma ( const std::function<void ()> & fnAddNext );
 
@@ -2868,7 +2906,7 @@ public:
 	}
 };
 
-class ScopedComma_c
+class ScopedComma_c : public ISphNoncopyable
 {
 	StringBuilder_c * m_pOwner = nullptr;
 	int m_iLevel = 0;
@@ -2876,20 +2914,49 @@ class ScopedComma_c
 public:
 	ScopedComma_c () = default;
 	explicit ScopedComma_c ( StringBuilder_c & tOwner,
-		const char * sDel = ", ", const char * sPref = nullptr, const char * sTerm = nullptr )
+		const char * sDel, const char * sPref = nullptr, const char * sTerm = nullptr )
 		: m_pOwner ( &tOwner )
 	{
 		m_iLevel = tOwner.StartBlock (sDel, sPref, sTerm);
 	}
 
+	explicit ScopedComma_c( StringBuilder_c& tOwner, const StrBlock_t& dBlock )
+		: m_pOwner ( &tOwner )
+	{
+		m_iLevel = tOwner.StartBlock ( dBlock );
+	}
+
+	ScopedComma_c ( ScopedComma_c&& rhs ) noexcept
+	{
+		Swap (rhs);
+	}
+
+	ScopedComma_c& operator= ( ScopedComma_c && rhs ) noexcept
+	{
+		Swap (rhs);
+		return *this;
+	}
+
+	void Swap (ScopedComma_c& rhs) noexcept
+	{
+		::Swap ( m_pOwner, rhs.m_pOwner);
+		::Swap (m_iLevel, rhs.m_iLevel);
+	}
+
 	void Init ( StringBuilder_c &tOwner,
-		const char * sDel = ", ", const char * sPref = nullptr, const char * sTerm = nullptr )
+		const char * sDel, const char * sPref = nullptr, const char * sTerm = nullptr )
 	{
 		assert ( !m_pOwner );
 		if ( m_pOwner )
 			return;
 		m_pOwner = &tOwner;
 		m_iLevel = tOwner.StartBlock ( sDel, sPref, sTerm );
+	}
+
+	StringBuilder_c& Sink() const
+	{
+		assert ( m_pOwner );
+		return *m_pOwner;
 	}
 
 	~ScopedComma_c()

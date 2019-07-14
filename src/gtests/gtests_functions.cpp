@@ -183,12 +183,121 @@ TEST ( functions, stringbuilder_scopedprefixed )
 TEST ( functions, stringbuilder_standalone )
 {
 	StringBuilder_c builder;
-	Comma_c tComma; // default is ', '
+	Comma_c tComma (", "); // default is ', '
 	builder << tComma << "one";
 	builder << tComma << "two";
 	builder << tComma << "three";
 	ASSERT_STREQ ( builder.cstr (), "one, two, three" );
 }
+
+TEST ( functions, JsonEscapedBuilder_sugar )
+{
+	JsonEscapedBuilder tOut;
+
+	// scoped name
+	tOut.ArrayBlock();
+	{
+		auto tNamed = tOut.Named("test1");
+		tOut << "one" << "two";
+		tOut.AppendEscaped("blabla");
+	};
+	tOut.FinishBlock();
+	EXPECT_STREQ ( tOut.cstr (), "[\"test1\":onetwo\"blabla\"]" );
+
+	// scoped immediate name
+	tOut.Clear();
+	tOut.ArrayBlock();
+	{
+		tOut.Named( "test1" ).Sink() << "one" << "two";
+		tOut.AppendEscaped( "blabla" );
+	};
+	tOut.FinishBlock();
+	EXPECT_STREQ ( tOut.cstr(), "[\"test1\":onetwo,\"blabla\"]" );
+
+	// block name
+	tOut.Clear();
+	tOut.ArrayBlock();
+	tOut.NamedBlock( "test1" );
+	tOut << "one" << "two";
+	tOut.AppendEscaped( "blabla" );
+	tOut.FinishBlocks();
+	EXPECT_STREQ ( tOut.cstr(), "[\"test1\":onetwo\"blabla\"]" );
+
+	// scoped object
+	tOut.Clear();
+	{
+		auto tObj = tOut.Object();
+		tOut.Named( "val1" ).Sink() << 1;
+		tOut.Named( "val2" ).Sink() << 2;
+	}
+	EXPECT_STREQ ( tOut.cstr(), "{\"val1\":1,\"val2\":2}" );
+
+	// scoped immediate object
+	tOut.Clear();
+	(tOut.Object().Sink().AppendName("val1") << 1).AppendName("val2") << 2;
+	EXPECT_STREQ ( tOut.cstr(), "{\"val1\":1,\"val2\":2}" );
+
+	// block object
+	tOut.Clear();
+	tOut.ObjectBlock();
+	tOut.Named( "val1" ).Sink() << 1;
+	tOut.Named( "val2" ).Sink() << 2;
+	tOut.FinishBlocks();
+	EXPECT_STREQ ( tOut.cstr(), "{\"val1\":1,\"val2\":2}" );
+
+	// scoped array
+	tOut.Clear();
+	{
+		auto tObj = tOut.Array();
+		tOut << 1 << 2 << 3 << 4;
+	}
+	EXPECT_STREQ ( tOut.cstr(), "[1,2,3,4]" );
+
+	// scoped immediate array
+	tOut.Clear();
+	tOut.Array().Sink() << 1 << 2 << 3 << 4;
+	EXPECT_STREQ ( tOut.cstr(), "[1,2,3,4]" );
+
+	// block array
+	tOut.Clear();
+	tOut.ArrayBlock();
+	tOut << 1 << 2 << 3 << 4;
+	tOut.FinishBlocks();
+	EXPECT_STREQ ( tOut.cstr(), "[1,2,3,4]" );
+
+	// scoped immediate warray
+	tOut.Clear();
+	tOut.ArrayW().Sink() << 1 << 2 << 3 << 4;
+	EXPECT_STREQ ( tOut.cstr(), "[\n1,\n2,\n3,\n4\n]" );
+}
+
+TEST ( functions, StringBuilder_sugar )
+{
+	static const struct { const char* name; int value; } datas[] =
+		{
+			{ "one", 1 },
+			{ "two", 2 },
+			{ "three", 3 },
+			{ "four", 4  },
+			{ "five", 5 },
+			{ "six", 6 },
+			{ "seven", 7 },
+		};
+
+	StringBuilder_c sBuf;
+	ScopedComma_c tComma( sBuf, dJsonObj );
+	for ( const auto& data : datas )
+	{
+		ScopedComma_c(sBuf,"=").Sink() << data.name << data.value;
+		sBuf << "dl";
+	}
+	sBuf.FinishBlocks();
+
+	ASSERT_STREQ ( sBuf.cstr(), "{one=1,dl,two=2,dl,three=3,dl,four=4,dl,five=5,dl,six=6,dl,seven=7,dl}" );
+
+}
+
+
 
 // standalone comma. Not necesssary related to stringbuilder, but live alone.
 TEST ( functions, stringbuilder_numprint )
@@ -220,7 +329,7 @@ TEST ( functions, stringbuilder_nested )
 {
 	StringBuilder_c builder;
 	builder << "one, two, three";
-	ScopedComma_c lev0 ( builder );
+	ScopedComma_c lev0 ( builder, ", " );
 	{
 		ScopedComma_c lev1 ( builder, ", ", "[", "]" );
 		builder.StartBlock ( ": ", "(", ")" );

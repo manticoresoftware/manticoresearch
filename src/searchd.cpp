@@ -1141,7 +1141,7 @@ public:
 		// collapse same messages
 		m_dLog.Uniq ();
 		int iSpanStart = 0;
-		Comma_c sColon( ";\n" );
+		Comma_c sColon( { ";\n", 2 } );
 
 		for ( int i=1; i<=m_dLog.GetLength(); ++i )
 		{
@@ -4147,7 +4147,7 @@ static const CSphQuery g_tDefaultQuery {};
 static void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuilder & tBuf );
 static void FormatList ( const CSphVector<CSphNamedInt> & dValues, StringBuilder_c & tBuf )
 {
-	ScopedComma_c tComma ( tBuf );
+	ScopedComma_c tComma ( tBuf, ", " );
 	for ( const auto& dValue : dValues )
 		tBuf.Appendf ( "%s=%d", dValue.m_sName.cstr(), dValue.m_iValue );
 }
@@ -15199,7 +15199,7 @@ void sphFormatFactors ( StringBuilder_c & sOut, const unsigned int * pFactors, b
 					"min_hit_pos=%d, min_best_span_pos=%d, exact_hit=%u, max_window_hits=%d, "
 					"min_gaps=%d, exact_order=%u, lccs=%d, wlccs=%f, atc=%f)";
 		sWordFmt = "word%d=(tf=%d, idf=%f)";
-		sDelim.Init ( sOut );
+		sDelim.Init ( sOut, ", " );
 	}
 #define DI( _factor ) sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_##_factor )
 #define DF( _factor ) sphinx_get_doc_factor_float ( pFactors, SPH_DOCF_##_factor )

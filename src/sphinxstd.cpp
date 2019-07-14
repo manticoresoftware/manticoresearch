@@ -2352,6 +2352,18 @@ int StringBuilder_c::StartBlock ( const char * sDel, const char * sPref, const c
 	return m_dDelimiters.GetLength();
 }
 
+int StringBuilder_c::StartBlock ( const StrBlock_t& dBlock )
+{
+	m_dDelimiters.Add ( LazyComma_c ( dBlock ) );
+	return m_dDelimiters.GetLength();
+}
+
+int StringBuilder_c::MuteBlock ()
+{
+	m_dDelimiters.Add ( LazyComma_c() );
+	return m_dDelimiters.GetLength ();
+}
+
 void StringBuilder_c::FinishBlock ( bool bAllowEmpty ) // finish last pushed block
 {
 	if ( m_dDelimiters.IsEmpty() )
@@ -2554,6 +2566,7 @@ StringBuilder_c & StringBuilder_c::operator<< ( const VecTraits_T<char> &sText )
 
 StringBuilder_c& StringBuilder_c::operator << ( int iVal )
 {
+	InitAddPrefix();
 	GrowEnough(32);
 	m_iUsed += sph::NtoA( end(), iVal );
 	m_szBuffer[m_iUsed] = '\0';
@@ -2562,6 +2575,7 @@ StringBuilder_c& StringBuilder_c::operator << ( int iVal )
 
 StringBuilder_c & StringBuilder_c::operator << ( long iVal )
 {
+	InitAddPrefix();
 	GrowEnough(32);
 	m_iUsed += sph::NtoA( end(), iVal );
 	m_szBuffer[m_iUsed] = '\0';
@@ -2570,6 +2584,7 @@ StringBuilder_c & StringBuilder_c::operator << ( long iVal )
 
 StringBuilder_c & StringBuilder_c::operator << ( long long iVal )
 {
+	InitAddPrefix();
 	GrowEnough(32);
 	m_iUsed += sph::NtoA( end(), iVal );
 	m_szBuffer[m_iUsed] = '\0';
@@ -2578,6 +2593,7 @@ StringBuilder_c & StringBuilder_c::operator << ( long long iVal )
 
 StringBuilder_c & StringBuilder_c::operator << ( unsigned int uVal )
 {
+	InitAddPrefix();
 	GrowEnough(32);
 	m_iUsed += sph::NtoA( end(), uVal );
 	m_szBuffer[m_iUsed] = '\0';
@@ -2586,6 +2602,7 @@ StringBuilder_c & StringBuilder_c::operator << ( unsigned int uVal )
 
 StringBuilder_c & StringBuilder_c::operator << ( unsigned long uVal )
 {
+	InitAddPrefix();
 	GrowEnough(32);
 	m_iUsed += sph::NtoA( end(), uVal );
 	m_szBuffer[m_iUsed] = '\0';
@@ -2594,6 +2611,7 @@ StringBuilder_c & StringBuilder_c::operator << ( unsigned long uVal )
 
 StringBuilder_c & StringBuilder_c::operator << ( unsigned long long uVal )
 {
+	InitAddPrefix();
 	GrowEnough(32);
 	m_iUsed += sph::NtoA( end(), uVal );
 	m_szBuffer[m_iUsed] = '\0';
@@ -2602,6 +2620,7 @@ StringBuilder_c & StringBuilder_c::operator << ( unsigned long long uVal )
 
 StringBuilder_c & StringBuilder_c::operator<< ( float fVal )
 {
+	InitAddPrefix();
 	GrowEnough( 32 );
 	m_iUsed += sph::PrintVarFloat( end(), fVal );
 	m_szBuffer[m_iUsed] = '\0';
@@ -2610,6 +2629,7 @@ StringBuilder_c & StringBuilder_c::operator<< ( float fVal )
 
 StringBuilder_c & StringBuilder_c::operator<< ( double fVal )
 {
+	InitAddPrefix();
 	GrowEnough( 32 );
 	m_iUsed += sprintf( end(), "%f", fVal );
 	m_szBuffer[m_iUsed] = '\0';
@@ -2698,6 +2718,12 @@ StringBuilder_c::LazyComma_c::LazyComma_c ( const char * sDelim, const char * sP
 	if ( sTerm )
 		m_sSuffix = { sTerm, strlen(sTerm ) };
 }
+
+StringBuilder_c::LazyComma_c::LazyComma_c( const StrBlock_t& dBlock )
+	: Comma_c ( std::get<0>(dBlock) )
+	, m_sPrefix ( std::get<1>(dBlock) )
+	, m_sSuffix ( std::get<2>(dBlock) )
+{}
 
 
 const Str_t& StringBuilder_c::LazyComma_c::RawComma ( const std::function<void ()> & fnAddNext )

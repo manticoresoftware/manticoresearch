@@ -45,8 +45,13 @@
 	#pragma comment(linker, "/defaultlib:wsock32.lib")
 	#pragma message("Automatically linking with wsock32.lib")
 
-	#define EWOULDBLOCK			WSAEWOULDBLOCK
-	#define EINTR				WSAEINTR
+	#ifndef EWOULDBLOCK
+		#define EWOULDBLOCK			WSAEWOULDBLOCK
+	#endif
+
+	#ifndef EINTR
+		#define EINTR				WSAEINTR
+	#endif
 
 #else
 	// UNIX-specific headers and calls

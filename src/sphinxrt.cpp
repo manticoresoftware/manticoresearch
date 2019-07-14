@@ -7923,11 +7923,11 @@ void RtBinlog_c::Configure ( const CSphConfigSection & hSearchd, bool bTestMode 
 		default:	sphDie ( "unknown binlog flush mode %d (must be 0, 1, or 2)\n", iMode );
 	}
 
-#ifndef DATADIR
-#define DATADIR "."
+#ifndef LOCALDATADIR
+#define LOCALDATADIR "."
 #endif
 
-	m_sLogPath = hSearchd.GetStr ( "binlog_path", bTestMode ? "" : DATADIR );
+	m_sLogPath = hSearchd.GetStr ( "binlog_path", bTestMode ? "" : LOCALDATADIR );
 	m_bDisabled = m_sLogPath.IsEmpty();
 
 	m_iRestartSize = hSearchd.GetSize ( "binlog_max_log_size", m_iRestartSize );
@@ -8801,11 +8801,11 @@ bool RtBinlog_c::ReplayReconfigure ( int iBinlog, DWORD uReplayFlags, BinlogRead
 
 void RtBinlog_c::CheckPath ( const CSphConfigSection & hSearchd, bool bTestMode )
 {
-#ifndef DATADIR
-#define DATADIR "."
+#ifndef LOCALDATADIR
+#define LOCALDATADIR "."
 #endif
 
-	m_sLogPath = hSearchd.GetStr ( "binlog_path", bTestMode ? "" : DATADIR );
+	m_sLogPath = hSearchd.GetStr ( "binlog_path", bTestMode ? "" : LOCALDATADIR );
 	m_bDisabled = m_sLogPath.IsEmpty();
 
 	if ( !m_bDisabled )

@@ -1,14 +1,14 @@
-# ---------- bionic ----------
+# ---------- buster ----------
 # Above line is mandatory!
-# rules to build deb package for Ubuntu 18.04 (bionic)
+# rules to build deb package for Debian buster
 
-message ( STATUS "Will create DEB for Ubuntu 18.04 (bionic)" )
+message ( STATUS "Will create DEB for Debian (buster)" )
 
-# m.b. postinst.bionic, postinst.debian and postinst.trusty
-FILE ( READ dist/deb/postinst.xenial.in POSTINST_SPECIFIC_IN )
+# m.b. postinst.xenial, postinst.debian and postinst.trusty
+FILE ( READ dist/deb/postinst.debian.in POSTINST_SPECIFIC )
 
 # m.b. prerm.ubuntu, prerm.debian
-configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/prerm.ubuntu.in"
+configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/prerm.debian.in"
 		"${MANTICORE_BINARY_DIR}/prerm" @ONLY )
 
 # m.b. posrtrm.systemd, posrtm.wheezy targeted to posrtm, and also preinst.trusty targeted to preinst
@@ -33,7 +33,7 @@ install ( FILES "${MANTICORE_BINARY_DIR}/manticore-generator"
 		DESTINATION  /lib/systemd/system-generators  PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
         GROUP_EXECUTE GROUP_READ COMPONENT adm )
 
-# some bionic-specific variables and files
-set ( DISTR_SUFFIX "~bionic_${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}" )
+# some buster-specific variables and files
+set ( DISTR_SUFFIX "~buster_${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}" )
 
-set ( CPACK_DEBIAN_BIN_PACKAGE_SUGGESTS "libmysqlclient20, libpq5, libexpat1, libodbc1, libicu60" )
+set ( CPACK_DEBIAN_BIN_PACKAGE_SUGGESTS "libicu63, libmariadb3, libpq5, libexpat1, libodbc1" )

@@ -48,7 +48,7 @@ if ( DISTR_BUILD )
 	set ( WITH_RE2 1 CACHE BOOL "Forced RE2" )
 	set ( WITH_STEMMER 1 CACHE BOOL "Forced Stemmer" )
 	SET ( DISABLE_TESTING 1 CACHE BOOL "Forced no testing" FORCE )
-	if ( NOT "${CMAKE_INSTALL_PREFIX}" STREQUAL "macosbrew" )
+	if ( NOT "${DISTR_BUILD}" STREQUAL "macosbrew" )
 	 SET ( CMAKE_INSTALL_PREFIX "/usr" CACHE FILEPATH "Forced install to /usr" FORCE )
 	endif ()
 	message ( STATUS "DISTR_BUILD applied.

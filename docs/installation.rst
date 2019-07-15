@@ -10,6 +10,7 @@ Supported releases:
 
 	* 8.0 (jessie)
 	* 9.0 (stretch)
+	* 10.0 (buster)
 	
 *  Ubuntu
 
@@ -67,6 +68,8 @@ Below is the reference table with list of all client libraries for different deb
 +---------+------------------------+------------+---------------+--------------+
 | stretch | libmariadbclient.so.18 | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
 +---------+------------------------+------------+---------------+--------------+
+| buster  | libmariadb.so.3        | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
++---------+------------------------+------------+---------------+--------------+
 
 
 To find the packages which provide the libraries you can use, for example ``apt-file``:
@@ -88,6 +91,33 @@ Finally install necessary packages:
 	$ sudo apt-get install libmysqlclient20 libodbc1 libpq5 libexpat1
 
 If you aren't going to use ``indexer`` tool at all, you don't need find and install any libraries.
+
+Searchd daemon can optionally use the ICU library for chinese :ref:`morphology <morphology>` processing. 
+The appropriate ICU library used at compiling must be installed for using the ICU processor.
+Below is the reference table with the ICU library for different debian/ubuntu distributions:
+
++---------+------------------------+
+| Distr   | ICU library            |
++=========+========================+
+| trusty  | libicudata.so.52       | 
++---------+------------------------+
+| xenial  | libicudata.so.55       |
++---------+------------------------+
+| bionic  | libicudata.so.60       |
++---------+------------------------+
+| jessie  | libicudata.so.52       |
++---------+------------------------+
+| stretch | libicudata.so.57       |
++---------+------------------------+
+| buster  | libicudata.so.63       |
++---------+------------------------+
+
+For example on Debian Stretch ``libicu57`` needs to be additionally installed for ICU support:
+
+.. code-block:: bash
+
+	$ sudo apt-get install libicu57
+
 
 After preparing configuration file (see :ref:`Quick tour <quick_usage_tour>`), you can start searchd daemon:
 
@@ -127,6 +157,13 @@ you'll need to install appropriate client libraries. Use yum to download and ins
 Note, that you need only libs for types of sources you're going to use. So if you plan to make indexes only
 from mysql source, then installing 'mysql-libs' will be enough.
 If you don't going to use 'indexer' tool at all, you don't need to install these packages.
+
+For ICU support, additional ``libicu`` package needs to be installed.
+
+.. code-block:: bash
+
+	$ yum install libicu
+
 Download RedHat RPM from Manticore website and install it:
 
 .. code-block:: bash
@@ -292,6 +329,7 @@ Optional dependencies
 * development version of libPQ for the PostgreSQL source driver
 * development version of libexpat for the XMLpipe source driver
 * RE2 (bundled in the source tarball) for :ref:`regexp_filter` feature
+* development version of libicudata for ICU chinese morphology processor
 * lib stemmer (bundled in the source tarball ) for additional language stemmers 
 
 General building options
@@ -340,7 +378,8 @@ Next step is to configure the building with cmake. Available list of configurati
 * ``WITH_MYSQL`` (bool)	 enabled compiling with MySQL client library, used by MySQL source driver. Additional parameters ``WITH_MYSQL_ROOT``, ``WITH_MYSQL_LIBS`` and ``WITH_MYSQL_INCLUDES`` can be used for custom MySQL files
 * ``WITH_ODBC`` (bool)	 enabled compiling with ODBC client library, used by ODBC source driver
 * ``WITH_PGSQL`` (bool)	 enabled compiling with PostgreSQL client library, used by PostgreSQL source driver
-* ``DISTR_BUILD``  -  in case the target is packaging, it specifies the target operating system. Supported values are: `centos6`, `centos7`, `wheezy`, `jessie`, `stretch`, `trusty`, `xenial`, `bionic`, `macos`, `default`.
+* ``WITH_ICU`` (bool)  enabled compiling with ICU library support, used by morphology processor
+* ``DISTR_BUILD``  -  in case the target is packaging, it specifies the target operating system. Supported values are: `centos6`, `centos7`, `wheezy`, `jessie`, `stretch`, `buster`, `trusty`, `xenial`, `bionic`, `macos`, `default`.
 
 Compiling on UNIX systems
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -350,7 +389,7 @@ To install all dependencies on Debian/Ubuntu:
 
 .. code-block:: bash
 
-   $ apt-get install build-essential cmake unixodbc-dev libpq-dev libexpat-dev libmysqlclient-dev libssl-dev libboost-system-dev libboost-program-options-dev git flex bison
+   $ apt-get install build-essential cmake unixodbc-dev libpq-dev libexpat-dev libmysqlclient-dev libicu-dev libssl-dev libboost-system-dev libboost-program-options-dev git flex bison
 
 Note: on Debian 9 (stretch) package ``libmysqlclient-dev`` is absent. Use ``default-libmysqlclient-dev`` there instead.
 
@@ -358,7 +397,7 @@ To install all dependencies on CentOS/RHEL:
 
 .. code-block:: bash
 
-   $ yum install gcc gcc-c++ make cmake mysql-devel expat-devel postgresql-devel unixODBC-devel openssl-devel boost-devel rpm-build systemd-units  git flex bison
+   $ yum install gcc gcc-c++ make cmake mysql-devel expat-devel postgresql-devel unixODBC-devel libicu-devel openssl-devel boost-devel rpm-build systemd-units  git flex bison 
 
 (git, flex, bison doesn't necessary if you build from tarball)
 

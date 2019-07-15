@@ -19,54 +19,47 @@ Supported endpoints:
 
 Allows running a SELECT SphinxQL, set as query parameter. 
 
-Response is a JSON document containing an array of attrs,matches and meta similar with the SphinxAPI response.
+The query payload **must** be URL encoded, otherwise query statements with '=' (filtering or setting options) will result in error.
 
 .. code-block:: bash
 
 
         curl -X POST 'http://manticoresearch:9308/sql'
-       -d "query=select id,subject,author_id  from forum where match('@subject php manticore') group by
+       --data-urlencode "query=select id,subject,author_id  from forum where match('@subject php manticore') group by
         author_id order by id desc limit 0,5"
+
+The response is in JSON format and contains hits information and time of execution. The response share same format as :ref:`/json/search <http_json_search>` endpoint.
 
 .. code-block:: json
   
-	{
-	   "attrs":[
-		  "forum_id",
-		  "author_id",
-		  "subject",
-		  "id",
-		  "@groupby",
-		  "@count"
-	   ],
-	   "matches":[
-
-	   ],
-	   "meta":{
-		  "total":123,
-		  "total_found":123,
-		  "time":0.087,
-		  "words":[
-			 {
-				"word":"php",
-				"docs":3252,
-				"hits":11166
-			 },
-			 {
-				"word":"manticore",
-				"docs":1242,
-				"hits":4352
-			 }
-		  ]
-	   }
-	}
+    {
+      "took":10
+      "timed_out": false,
+      "hits":
+      {
+        "total": 2,
+        "hits":
+        [
+          {
+            "_id": "1",
+            "_score": 1,
+            "_source": { "gid": 11 }
+          },
+          {
+            "_id": "2",
+            "_score": 1,
+            "_source": { "gid": 12 }
+          }
+        ]
+      }
+    }
 
 For comfortable debugging in browser you can set param 'mode' to 'raw', and then the rest of the query after 'query='
 will be passed inside without any substitutions/url decoding.
 
 .. code-block:: bash
 
-        curl -X POST http://manticoresearch:9308/sql -d "query=select id,packedfactors() from test where match('tes*') option ranker=expr('1')"
+        curl -X POST http://manticoresearch:9308/sql -d "query=select id,packedfactors() from movies where match('star') option ranker=expr('1')"
 
 
 .. code-block:: json
@@ -75,11 +68,11 @@ will be passed inside without any substitutions/url decoding.
 
 .. code-block:: bash
 
-		curl -X POST http://localhost:9308/sql -d "mode=raw&query=select id,packedfactors() from test where match('tes*') option ranker=expr('1')"
+		curl -X POST http://localhost:9308/sql -d "mode=raw&query=query=select id,packedfactors() from movies where match('star') option ranker=expr('1')"
 
 .. code-block:: json
 
-    {"attrs":["id","packedfactors()"],"matches":[[1,"bm25=616, bm25a=0.696891, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.255958, min_idf=0.255958, max_idf=0.255958, sum_idf=0.255958, min_hit_pos=1, min_best_span_pos=1, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=0.255958, atc=0.000000), word0=(tf=1, idf=0.255958)"],[2,"bm25=616, bm25a=0.696891, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.255958, min_idf=0.255958, max_idf=0.255958, sum_idf=0.255958, min_hit_pos=1, min_best_span_pos=1, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=0.255958, atc=0.000000), word0=(tf=1, idf=0.255958)"],[8,"bm25=616, bm25a=0.696891, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.255958, min_idf=0.255958, max_idf=0.255958, sum_idf=0.255958, min_hit_pos=2, min_best_span_pos=2, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=0.255958, atc=0.000000), word0=(tf=1, idf=0.255958)"]],"meta":{"total":3, "total_found":3, "time":0.001,"words":[{"word":"tes*", "docs":3, "hits":3}]}}
+    {"took":0,"timed_out":false,"hits":{"total":72,"hits":[{"_id":"5","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":32, "doc_word_count":1, "fields":[{"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"46","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":2, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":8, "min_best_span_pos":8, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"49","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":32, "doc_word_count":1, "fields":[{"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"58","_score":1,"_source":{"packedfactors()":{"bm25":655, "bm25a":0.71596009, "field_mask":34, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":5, "min_best_span_pos":5, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}, {"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":2, "idf":0.24835411}]}}},{"_id":"67","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":2, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":8, "min_best_span_pos":8, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"161","_score":1,"_source":{"packedfactors()":{"bm25":655, "bm25a":0.71596009, "field_mask":34, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":9, "min_best_span_pos":9, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}, {"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":2, "idf":0.24835411}]}}},{"_id":"201","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":2, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":12, "min_best_span_pos":12, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"237","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":32, "doc_word_count":1, "fields":[{"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"238","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":32, "doc_word_count":1, "fields":[{"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"241","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":32, "doc_word_count":1, "fields":[{"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"601","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":32, "doc_word_count":1, "fields":[{"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"673","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":2, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":9, "min_best_span_pos":9, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"779","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":32, "doc_word_count":1, "fields":[{"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"799","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":2, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":6, "min_best_span_pos":6, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"807","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":2, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":2, "min_best_span_pos":2, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"1066","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":2, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":4, "min_best_span_pos":4, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"1068","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":32, "doc_word_count":1, "fields":[{"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"1227","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":2, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":7, "min_best_span_pos":7, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"1336","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":2, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":10, "min_best_span_pos":10, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"1344","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":32, "doc_word_count":1, "fields":[{"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}}]}}
 
 
  

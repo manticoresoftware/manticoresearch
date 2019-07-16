@@ -875,13 +875,13 @@ TaskID TaskManager::RegisterGlobal( CSphString sName, fnThread_t fnThread, fnThr
 	if ( !iTaskID ) // this is first class; start log timering
 		TimePrefixed::TimeStart();
 
+	InfoX( "Task class for %s registered with id=%d, max %d parallel jobs", sName.cstr(), iTaskID, iThreads );
 	auto& dTask = g_Tasks[iTaskID];
 	dTask.m_iMaxRunners = iThreads;
 	dTask.m_iMaxQueueSize = iJobs;
 	dTask.m_fnWorker = std::move( fnThread );
 	dTask.m_fnReleasePayload = std::move( fnFree );
 	dTask.m_sName = std::move( sName );
-	InfoX( "Task class for %s registered with id=%d, max %d parallel jobs", sName, iTaskID, iThreads );
 	return iTaskID;
 }
 

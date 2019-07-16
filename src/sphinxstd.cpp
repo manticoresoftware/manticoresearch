@@ -1387,9 +1387,11 @@ bool AutoEvent_T<false>::WaitEvent ( int iMsec )
 	while ( !m_iSent && !iRes )
 		iRes = pthread_cond_timedwait ( &m_tCond, &m_tMutex, &ts );
 
-	--m_iSent;
+	bool bEventHappened = iRes!=ETIMEDOUT;
+	if ( bEventHappened )
+		--m_iSent;
 	pthread_mutex_unlock ( &m_tMutex );
-	return iRes!=ETIMEDOUT;
+	return bEventHappened;
 #endif
 }
 
@@ -1423,9 +1425,11 @@ bool AutoEvent_T<true>::WaitEvent ( int iMsec )
 	while ( !m_iSent && !iRes )
 		iRes = pthread_cond_timedwait ( &m_tCond, &m_tMutex, &ts );
 
-	m_iSent=0;
+	bool bEventHappened = iRes!=ETIMEDOUT;
+	if ( bEventHappened )
+		m_iSent=0;
 	pthread_mutex_unlock ( &m_tMutex );
-	return iRes!=ETIMEDOUT;
+	return bEventHappened;
 #endif
 }
 

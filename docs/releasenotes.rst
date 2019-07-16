@@ -1,6 +1,46 @@
 Release notes
 =============
 
+Version 3.1.0, 16 July 2019
+---------------------------
+
+Features and Improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* replication for RealTime indexes
+* ICU tokenizer for chinese  
+* new morphology option icu_chinese
+* new directive icu_data_dir
+* multiple statements transactions for replication
+* LAST_INSERT_ID() and @@session.last_insert_id
+* LIKE 'pattern' for SHOW VARIABLES
+* Multiple documents INSERT for percolate indexes
+* Added time parsers for config
+* internal task manager
+* mlock for doc and hit lists components
+* jail snippets path
+
+Removals
+~~~~~~~~
+
+* RLP library support dropped in favor of ICU; all rlp* directives removed
+* updating document ID with UPDATE is disabled
+
+Bugfixes
+~~~~~~~~
+
+* `f0472223 <https://github.com/manticoresoftware/manticoresearch/commit/f047222339fd0e62a07e9ca8b2a829297d5db861>`__ fix defects in concat and group_concat
+* `b08147ee <https://github.com/manticoresoftware/manticoresearch/commit/b08147ee24712b5eaa51f261626b5d16c6242fdd>`__ fix query uid at percolate index to be BIGINT attribute type
+* `4cd85afa <https://github.com/manticoresoftware/manticoresearch/commit/4cd85afaf76eef0ce9fa1cd073f3fed160279890>`__ do not crash if failed to prealloc a new disk chunk
+* `1a551227 <https://github.com/manticoresoftware/manticoresearch/commit/1a551227886474054111088412f2b2396f485652>`__ add missing timestamp data type to ALTER
+* `f3a8e096 <https://github.com/manticoresoftware/manticoresearch/commit/f3a8e096fd496a6b001d398aadbb781b2dbad929>`__ fix crash of wrong mmap read
+* `44757711 <https://github.com/manticoresoftware/manticoresearch/commit/447577115192db7ac7bfea70b5ba58ee2c61229f>`__ fix hash of clusters lock in replication
+* `ff476df9 <https://github.com/manticoresoftware/manticoresearch/commit/ff476df955f057bd38e8b6ad6056325e9d6fbb9c>`__ fix leak of providers in replication
+* `58dcbb77 <https://github.com/manticoresoftware/manticoresearch/commit/58dcbb779c4c30ca1560460c78e35ba114b83716>`__ fix #246 undefined sigmask in indexer
+* `3dd8278e <https://github.com/manticoresoftware/manticoresearch/commit/3dd8278e747d534f69fe9c3d360eef188ab7b6d5>`__ fix race in netloop reporting
+* `a02aae05 <https://github.com/manticoresoftware/manticoresearch/commit/a02aae05a3fa3d1caf2821f43c7e237b6de76336>`__ zero gap for HA strategies rebalancer
+
+
 Version 3.0.2, 31 May 2019
 --------------------------
 

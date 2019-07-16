@@ -74,6 +74,8 @@ for quick access.
 
 -  :ref:`INTERVAL() <expr-func-interval>`
 
+-  :ref:`LAST_INSERT_ID() <expr-func-last-insert-id>`
+
 -  :ref:`LEAST() <expr-func-least>`
 
 -  :ref:`LENGTH() <expr-func-length>`
@@ -681,6 +683,12 @@ Miscellaneous functions
 
 
        SELECT INDEXOF(name='John' FOR name IN j.peoples) FROM test;
+
+.. _expr-func-last-insert-id:
+
+-  LAST_INSERT_ID()
+
+   LAST_INSERT_ID() report ids of documents inserted or replaced by last statement in current session.
 
 .. _expr-func-least:
 

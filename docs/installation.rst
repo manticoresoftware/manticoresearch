@@ -92,7 +92,7 @@ Finally install necessary packages:
 
 If you aren't going to use ``indexer`` tool at all, you don't need find and install any libraries.
 
-Searchd daemon can optionally use the ICU library for chinese :ref:`morphology <morphology>` processing. 
+Manticore can optionally use the ICU library for chinese :ref:`morphology <morphology>` processing. 
 The appropriate ICU library used at compiling must be installed for using the ICU processor.
 Below is the reference table with the ICU library for different debian/ubuntu distributions:
 

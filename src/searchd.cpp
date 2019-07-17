@@ -18796,7 +18796,7 @@ static bool RotateIndexMT ( ServedIndex_c* pIndex, const CSphString & sIndex, CS
 
 	if ( eRot==RotateFrom_e::NONE )
 	{
-		sphWarning ( "nothing to rotate for index '%s'", sIndex.cstr() );
+		sError.SetSprintf ( "nothing to rotate for index '%s'", sIndex.cstr() );
 		return false;
 	}
 
@@ -20091,7 +20091,8 @@ static void CheckRotate () REQUIRES ( MainThread ) EXCLUDES ( g_tRotateThreadMut
 		CSphVector<char> dConfig;
 		if ( CheckConfigChanges ( dConfig ) || g_bReloadForced )
 		{
-			if ( g_pCfg.ReParse ( g_sConfigFile.cstr (), dConfig.begin ()))
+			sphInfo( "Config changed (read %d chars)", dConfig.GetLength());
+			if ( !dConfig.IsEmpty() && g_pCfg.ReParse ( g_sConfigFile.cstr (), dConfig.begin ()))
 				ReloadIndexSettings ( g_pCfg );
 			else
 				sphWarning ( "failed to parse config file '%s'; using previous settings", g_sConfigFile.cstr ());
@@ -23843,10 +23844,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 #endif
 			"./sphinx.conf)." );
 
-	sphInfo ( "using config file '%s'...", g_sConfigFile.cstr () );
-
 	CSphVector<char> dConfig;
 	CheckConfigChanges ( dConfig );
+
+	sphInfo( "using config file '%s' (%d chars)...", g_sConfigFile.cstr(), dConfig.GetLength());
 
 	{
 		ScWL_t dWLock { g_tRotateConfigMutex };
@@ -24101,7 +24102,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	if ( bWatched && !bVisualLoad && CheckConfigChanges(dConfig) )
 	{
 		// reparse the config file
-		sphInfo ( "Reloading the config" );
+		sphInfo ( "Reloading the config (%d chars)", dConfig.GetLength() );
 		ScWL_t dWLock { g_tRotateConfigMutex };
 		if ( !g_pCfg.ReParse ( g_sConfigFile.cstr (), dConfig.begin () ) )
 			sphFatal ( "failed to parse config file '%s'", g_sConfigFile.cstr () );

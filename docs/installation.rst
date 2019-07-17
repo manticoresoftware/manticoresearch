@@ -221,6 +221,44 @@ Once started you can access Manticore using the mysql cli:
 	C:\path\to\mysql> mysql -P9306 -h127.0.0.1
 
 (note that in most example, we use ``-h0``, on Windows you need to use ``localhost`` or ``127.0.0.1`` for the local host.)
+
+
+Installing Manticore on MacOS
+-----------------------------
+
+On MacOS Manticore can be installed in 2 easy way:
+
+1. Use the official tar containing binary executables. Download it from the website and unpack it to a folder:
+
+
+.. code-block:: bash
+	
+	$ mkdir manticore
+	$ tar -zxvf manticore-3.1.0-190716-445e806e-release-osx10.14.4-x86_64-bin.tar -C manticore
+	$ cd manticore
+	$ bin/searchd  -c sphinx.conf
+
+The sphinx.conf is located in the root folder.
+	
+2. Use official brew tap
+
+Add to brew the official Manticore tap and install Manticore. Bottles are available for sierra and mojave.
+  
+.. code-block:: bash
+	
+	$ brew tap  manticoresoftware/tap
+	$ brew install manticoresearch
+	
+For indexing additional dependencies that can be installed using brew are ``mysql@5.7``, ``libpq``, ``unixodbc``.
+	
+Start Manticore as brew service:
+
+.. code-block:: bash
+	
+	$ brew services start  manticoresearch
+	
+The configuration is located at ``/usr/local/etc/manticore/sphinx.conf``.
+
 	
 .. _upgrade_from_sphinx:
 

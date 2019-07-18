@@ -1853,7 +1853,6 @@ CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQ
 	tOut.StartBlock ( ",", R"("hits":[)", "]" );
 
 	const CSphColumnInfo * pId = tSchema.GetAttr ( sphGetDocidName() );		
-	assert(pId);
 
 	for ( int iMatch=tRes.m_iOffset; iMatch<tRes.m_iOffset+tRes.m_iCount; ++iMatch )
 	{
@@ -1862,8 +1861,14 @@ CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQ
 		ScopedComma_c sQueryComma ( tOut, ",", "{", "}" );
 
 		// note, that originally there is string UID, so we just output number in quotes for docid here
-		DocID_t tDocID = tMatch.GetAttr ( pId->m_tLocator );
-		tOut.Sprintf ( R"("_id":"%l","_score":%d)", tDocID, tMatch.m_iWeight );
+		if ( pId )
+		{
+			DocID_t tDocID = tMatch.GetAttr ( pId->m_tLocator );
+			tOut.Sprintf ( R"("_id":"%l","_score":%d)", tDocID, tMatch.m_iWeight );
+		}
+		else
+			tOut.Sprintf ( R"("_score":%d)", tMatch.m_iWeight );
+
 		tOut.StartBlock ( ",", "\"_source\":{", "}");
 
 		for ( int iAttr=0; iAttr<nSchemaAttrs; iAttr++ )

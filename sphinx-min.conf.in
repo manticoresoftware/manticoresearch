@@ -59,6 +59,5 @@ searchd
 	seamless_rotate		= 1
 	preopen_indexes		= 1
 	unlink_old		= 1
-	workers			= threads # for RT to work
 	binlog_path		= @CONFDIR@/data
 }

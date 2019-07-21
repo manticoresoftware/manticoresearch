@@ -223,7 +223,7 @@ source src1
 
 
 	# kill-list query, fetches the document IDs for kill-list
-	# k-list will suppress matches from preceding indexes in the same query
+	# k-list will suppress matches from target indexes defined by index killlist_target directive
 	# optional, default is empty
 	#
 	# sql_query_killlist	= SELECT id FROM documents WHERE edited>=@last_reindex
@@ -340,11 +340,6 @@ index test1
 	# mandatory, path must be writable, extensions will be auto-appended
 	path			= @CONFDIR@/data/test1
 
-	# document attribute values (docinfo) storage mode
-	# optional, default is 'extern'
-	# known values are 'none', 'extern' and 'inline'
-	docinfo			= extern
-
 	# dictionary type, 'crc' or 'keywords'
 	# crc is faster to index when no substring/wildcards searches are needed
 	# crc with substrings might be faster to search but is much slower to index
@@ -354,10 +349,6 @@ index test1
 	# optional, default is 'keywords'
 	dict			= keywords
 
-	# memory locking for cached data (.spa and .spi), to prevent swapping
-	# optional, default is 0 (do not mlock)
-	# requires searchd to be run from root
-	mlock			= 0
 
 	# a list of morphology preprocessors to apply
 	# optional, default is empty
@@ -619,6 +610,27 @@ index test1
 	# optional, default is empty (use local IDFs)
 	#
 	# global_idf		= /usr/local/sphinx/var/global.idf
+	
+	# decide how hitlists file is loaded
+	# possible values are file, mmap and mlock
+	# default is file
+	# access_doclists		= file
+	
+	# decide how doclists file is loaded
+	# possible values are file, mmap and mlock
+	# default is file
+	# access_doclists		= file
+	
+	# decide how plain attributes file is loaded
+	# possible values are mmap, mmap_preread and mlock
+	# default is mmap
+	# access_plain_attrs	= mmap
+	
+	# decide how var-length (string,mva,json) attributes file is loaded
+	# possible values are mmap, mmap_preread and mlock
+	# default is mmap
+	# access_blob_attrs	= mmap
+	
 }
 
 
@@ -671,7 +683,6 @@ index dist1
 
 
 	# persistenly connected remote agent
-	# reduces connect() pressure, requires that workers IS threads
 	#
 	# agent_persistent		= testbox:9312:testindex1,testindex2
 
@@ -796,7 +807,7 @@ indexer
 searchd
 {
 	# [hostname:]port[:protocol], or /unix/socket/path to listen on
-	# known protocols are 'sphinx' (SphinxAPI) and 'mysql41' (SphinxQL)
+	# known protocols are 'sphinx' (SphinxAPI), 'http'  and 'mysql41' (SphinxQL) 
 	#
 	# multi-value, multiple listen points are allowed
 	# optional, defaults are 9312:sphinx and 9306:mysql41, as below
@@ -864,11 +875,6 @@ searchd
 	# attr_flush_period	= 900
 
 
-	# MVA updates pool size
-	# shared between all instances of searchd, disables attr flushes!
-	# optional, default size is 1M
-	mva_updates_pool	= 1M
-
 	# max allowed network packet size
 	# limits both query packets from clients, and responses from agents
 	# optional, default size is 8M
@@ -919,10 +925,9 @@ searchd
 
 
 	# multi-processing mode (MPM)
-	# known values are none, fork, prefork, and threads
-	# threads is required for RT backend to work
-	# optional, default is threads
-	workers			= threads # for RT to work
+	# known values are thread_pool and  threads
+	# optional, default is thread_pool
+	workers			= thread_pool
 
 
 	# max threads to create for searching local parts of a distributed index
@@ -1035,12 +1040,6 @@ searchd
 	# optional, default is 60 seconds
 	#
 	# ha_period_karma			= 60
-
-
-	# delay between preforked children restarts on rotation, in milliseconds
-	# optional, default is 0 (no delay)
-	#
-	# prefork_rotation_throttle	= 100
 
 
 	# a prefix to prepend to the local file names when creating snippets

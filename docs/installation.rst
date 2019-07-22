@@ -289,7 +289,7 @@ Docker images of Manticore Search are hosted publicly on Docker Hub at https://h
 
 For more information about using Docker, see the `Docker Docs <https://docs.docker.com/>`__.
 
-The searchd daemon runs in nodetach mode inside the container. Default configuration includes a simple Real-Time index and listens on the default ports (9306 for SphinxQL, 9312 for SphinxAPI and 9308 for HTTP).
+The searchd daemon runs in nodetach mode inside the container under **manticore** user. Default configuration includes a simple Real-Time index and listens on the default ports (9306 for SphinxQL, 9312 for SphinxAPI and 9308 for HTTP).
 
 The image comes with MySQL and PostgreSQL client libraries for indexing data from these databases, as well as with the expat library for XML indexing.
 
@@ -302,11 +302,12 @@ To start a container running the latest release of Manticore Search run:
    
    docker run --name manticore -p 9306:9306 -d manticoresearch/manticore
    
-Operations with utility tools over running daemon can be made with `docker exec` command:
+Operations with utility tools over running daemon can be made with `docker exec` command.
+Please note that any ``indexer`` command must run under **manticore**  user, otherwise ``searchd`` won't be able to rotate the files:
    
 .. code-block:: bash
    
-   docker exec -it manticore indexer --all --rotate
+   docker exec -it manticore gosu manticore indexer --all --rotate
    
 To stop the Manticore Search container you can simply do:
 
@@ -318,7 +319,7 @@ or (managed stop with no hard-killing):
 
 .. code-block:: bash
 
-   docker exec -it manticore searchd --stopwait
+   docker exec -it manticore gosu manticore searchd --stopwait
 	
 Please note that any indexed data or configuration change made is lost if the container is stopped. For persistence, you need to mount the configuration and data folders.
 

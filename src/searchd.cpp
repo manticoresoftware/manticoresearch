@@ -4382,7 +4382,7 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 	if ( q.m_bHasOuter )
 		tBuf += "SELECT * FROM (";
 
-	UnBackquote_fn tUnquoted ( q.m_sSelect.cstr() );
+	UnBackquote_fn tUnquoted ( q.m_sSelect.IsEmpty() ? "*" : q.m_sSelect.cstr() );
 	tBuf.Appendf ( "SELECT %s FROM %s", tUnquoted.cstr(), q.m_sIndexes.cstr() );
 
 	// WHERE clause

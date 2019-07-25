@@ -18251,7 +18251,7 @@ void CSphIndex_VLN::DebugCheck_BlockIndex ( DebugCheckContext_t & tCtx, DebugChe
 	int64_t iAllRowsTotal = m_iDocinfo + (m_iDocinfoIndex+1)*2;
 	DWORD uStride = m_tSchema.GetRowSize();
 	int64_t iLoadedRowItems = tCtx.m_tAttrReader.GetFilesize() / sizeof(CSphRowitem);
-	if ( iAllRowsTotal*uStride > iLoadedRowItems )
+	if ( iAllRowsTotal*uStride>iLoadedRowItems && m_iDocinfo )
 		tReporter.Fail ( "rowitems count mismatch (expected=" INT64_FMT ", loaded=" INT64_FMT ")", iAllRowsTotal*uStride, iLoadedRowItems );
 
 	// check size

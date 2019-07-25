@@ -118,6 +118,22 @@ index csv32
 	path = <data_path/>/csv32
     dict = keywords
 }
+
+index tsv_l1
+{
+	source = src22
+	path = <data_path/>/tsv_l1
+    dict = keywords
+	index_field_lengths = 1
+}
+
+index csv_l1
+{
+	source = src32
+	path = <data_path/>/csv_l1
+    dict = keywords
+	index_field_lengths = 1
+}
 </config>
 
 <sphqueries>
@@ -127,6 +143,11 @@ index csv32
 <sphinxql>SELECT * FROM tsv22 ORDER BY id asc</sphinxql>
 <sphinxql>SELECT * FROM csv31 ORDER BY id asc</sphinxql>
 <sphinxql>SELECT * FROM csv32 ORDER BY id asc</sphinxql>
+
+<!-- regression crash on field length -->
+<sphinxql>SELECT * FROM tsv_l1 ORDER BY id asc</sphinxql>
+<sphinxql>SELECT * FROM csv_l1 ORDER BY id asc</sphinxql>
+
 </sphqueries>
 
 </test>

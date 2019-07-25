@@ -28089,6 +28089,9 @@ bool CSphSource_BaseSV::Connect ( CSphString & sError )
 		m_tSchema.SetFieldWordpart ( i, eWordpart );
 	}
 
+	if ( !AddAutoAttrs ( sError ) )
+		return false;
+
 	AllocDocinfo();
 
 	m_tHits.m_dData.Reserve ( m_iMaxHits );

@@ -918,10 +918,6 @@ Miscellaneous functions
 
    REGEX(attr,expr) function returns 1 if regular expression matched to
    string of attribute and 0 otherwise. It works with both string and JSON attributes.
-   
-   We use the RE2 engine to implement regexps. So when building from the source,
-   the library must be installed in the system and Manticore must be
-   configured built with a --with-re2 switch. Binary packages should come with RE2 builtin.
 
 .. code-block:: mysql
 

@@ -41,5 +41,4 @@ the rules
 the text ‘RED TUBE 5" LONG’ would be indexed as ‘COLOR TUBE 5 INCH
 LONG’, and 'PLANK 2" x 4“‘as 'PLANK 2 INCH x 4 INCH’. Rules are applied
 in the given order. Text in queries is also replaced; a search for”BLUE
-TUBE" would actually become a search for “COLOR TUBE”. Note that Manticore
-must be built with the –with-re2 option to use this feature.
+TUBE" would actually become a search for “COLOR TUBE”.

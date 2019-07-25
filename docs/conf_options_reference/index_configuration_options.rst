@@ -2470,11 +2470,6 @@ other processing, even before tokenization. That is, regexps are applied
 to the raw source fields when indexing, and to the raw search query text
 when searching.
 
-We use the  `RE2 engine <https://github.com/google/re2>`__ to implement
-regexps. So when building from the source, the library must be installed
-in the system and Manticore must be configured built with a ``--with-re2``
-switch. Binary packages should come with RE2 builtin.
-
 Example:
 
 

@@ -171,10 +171,7 @@ is not defined, it assumes the zero num of persistent connections, and
 ‘agent_persistent’ acts exactly as simple ‘agent’.
 
 Persistent master-agent connections reduce TCP port pressure, and save
-on connection handshakes. As of time of this writing, they are supported
-**only** in workers=threads and workers=threadpool mode. In other
-modes, simple non-persistent connections (i.e., one connection per
-operation) will be used, and a warning will show up in the console.
+on connection handshakes.
 
 Example:
 

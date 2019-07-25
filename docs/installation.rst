@@ -420,8 +420,8 @@ Next step is to configure the building with cmake. Available list of configurati
 * ``WITH_ICU`` (bool)  enabled compiling with ICU library support, used by morphology processor
 * ``DISTR_BUILD``  -  in case the target is packaging, it specifies the target operating system. Supported values are: `centos6`, `centos7`, `wheezy`, `jessie`, `stretch`, `buster`, `trusty`, `xenial`, `bionic`, `macos`, `default`.
 
-Compiling on UNIX systems
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Compiling on Linux systems
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 To install all dependencies on Debian/Ubuntu:
@@ -514,6 +514,48 @@ For a simple building on x64:
    C:\build>"%PROGRAMW6432%\CMake\bin\cmake.exe" -G "Visual Studio 14 Win64" -DLIBS_BUNDLE="C:\bundle" "C:\manticore"
    C:\build>"%PROGRAMW6432%\CMake\bin\cmake.exe" -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 .
    C:\build>"%PROGRAMW6432%\CMake\bin\cmake.exe" --build . --target package --config RelWithDebInfo
+
+
+Compiling on FreeBSD
+~~~~~~~~~~~~~~~~~~~~
+
+.. warning::
+   Support for FreeBSD is limited and successful compiling is not guaranteed. 
+   We recommend checking the issue tracker for unresolved issues on this platform before trying to compile latest versions.
+
+FreeBSD uses clang instead of gcc as system compiler and it's installed by default.
+
+First install required packages:
+
+.. code-block:: bash
+
+   $ pkg install cmake bison flex
+
+
+To compile a version without optional dependencies:
+
+.. code-block:: bash
+
+   $ cmake -DUSE_GALERA=0 -DWITH_MYSQL=0 -DDISABLE_TESTING=1 ../manticoresearch/
+   $ make 
+
+With the exception of Galera, the rest of optional dependencies can be installed:
+
+.. code-block:: bash
+
+   $ pkg install mariadb103-client postgresql-libpqxx unixODBC icu expat
+   
+(you can replace ``mariadb103-client`` with MySQL client package of your choice)
+
+Building with all optional features and installation system-wide:
+
+.. code-block:: bash
+
+   $ cmake -DUSE_GALERA=0 -DWITH_PGSQL=1 -DDISABLE_TESTING=1 -DCMAKE_INSTALL_PREFIX=/ -DCMAKE_INSTALL_LOCALSTATEDIR=/var ../manticoresearch/
+   $ make
+   $ make install
+   
+
 
 Recompilation (update)
 ~~~~~~~~~~~~~~~~~~~~~~

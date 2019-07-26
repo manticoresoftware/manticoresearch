@@ -2,6 +2,8 @@
 
 For general questions, post a question to [Forum](https://forum.manticoresearch.com) or [Slack](http://slack.manticoresearch.com)
 
+If you don't understand how smth works check in [interactive courses](https://play.manticoresearch.com) or [documentation](https://docs.manticoresearch.com)
+
 If you open a Github issue, it must be a bug or feature request and you need to provide the below information.
 
 # Describe the environment
@@ -28,3 +30,5 @@ If you open a Github issue, it must be a bug or feature request and you need to 
     3.
 
 **Messsages from log files:**
+
+**In case you've faced a crash what indextool --check returns:**

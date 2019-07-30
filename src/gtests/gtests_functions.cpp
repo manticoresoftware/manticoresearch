@@ -1849,6 +1849,15 @@ TEST ( functions, hashmap_iterations )
 		EXPECT_EQ ( tHash.IterateGet (), tstvalues[i].iVal );
 		++i;
 	}
+
+	// test ranged-for iterations
+	i = 0;
+	for ( const auto& mp : tHash )
+	{
+		EXPECT_STREQ ( mp.first.cstr (), tstvalues[i].sKey );
+		EXPECT_EQ ( mp.second, tstvalues[i].iVal );
+		++i;
+	}
 }
 
 TEST ( functions, vector )

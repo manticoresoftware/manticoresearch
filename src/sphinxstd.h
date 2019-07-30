@@ -1789,11 +1789,12 @@ public:
 template < typename T, typename KEY, typename HASHFUNC, int LENGTH >
 class CSphOrderedHash
 {
+public:
+	using KeyValue_t = std::pair<KEY, T>;
+
 protected:
-	struct HashEntry_t
+	struct HashEntry_t : public KeyValue_t // key, data, owned by the hash
 	{
-		KEY				m_tKey;						///< key, owned by the hash
-		T 				m_tValue;					///< data, owned by the hash
 		HashEntry_t *	m_pNextByHash = nullptr;	///< next entry in hash list
 		HashEntry_t *	m_pPrevByOrder = nullptr;	///< prev entry in the insertion order
 		HashEntry_t *	m_pNextByOrder = nullptr;	///< next entry in the insertion order
@@ -1820,7 +1821,7 @@ protected:
 
 		while ( pEntry )
 		{
-			if ( pEntry->m_tKey==tKey )
+			if ( pEntry->first==tKey )
 				return pEntry;
 			pEntry = pEntry->m_pNextByHash;
 		}
@@ -1834,7 +1835,7 @@ protected:
 		HashEntry_t * pEntry = *ppEntry;
 		while ( pEntry )
 		{
-			if ( pEntry->m_tKey==tKey )
+			if ( pEntry->first==tKey )
 				return nullptr;
 
 			ppEntry = &pEntry->m_pNextByHash;
@@ -1846,7 +1847,7 @@ protected:
 		assert ( !*ppEntry );
 
 		pEntry = new HashEntry_t;
-		pEntry->m_tKey = tKey;
+		pEntry->first = tKey;
 
 		*ppEntry = pEntry;
 
@@ -1910,7 +1911,7 @@ public:
 		HashEntry_t * pEntry = AddImpl ( tKey );
 		if ( !pEntry )
 			return false;
-		pEntry->m_tValue = std::move ( tValue );
+		pEntry->second = std::move ( tValue );
 		return true;
 	}
 
@@ -1920,7 +1921,7 @@ public:
 		HashEntry_t * pEntry = AddImpl ( tKey );
 		if ( !pEntry )
 			return false;
-		pEntry->m_tValue = tValue;
+		pEntry->second = tValue;
 		return true;
 	}
 
@@ -1934,8 +1935,8 @@ public:
 
 		while ( pEntry )
 		{
-			if ( pEntry->m_tKey==tKey )
-				return pEntry->m_tValue;
+			if ( pEntry->first==tKey )
+				return pEntry->second;
 
 			ppEntry = &pEntry->m_pNextByHash;
 			pEntry = *ppEntry;
@@ -1945,7 +1946,7 @@ public:
 		assert ( !pEntry );
 
 		pEntry = new HashEntry_t;
-		pEntry->m_tKey = tKey;
+		pEntry->first = tKey;
 
 		*ppEntry = pEntry;
 
@@ -1962,7 +1963,7 @@ public:
 		m_pLastByOrder = pEntry;
 
 		++m_iLength;
-		return pEntry->m_tValue;
+		return pEntry->second;
 	}
 
 	/// delete an entry
@@ -1975,7 +1976,7 @@ public:
 		HashEntry_t * pToDelete = nullptr;
 		while ( pEntry )
 		{
-			if ( pEntry->m_tKey==tKey )
+			if ( pEntry->first==tKey )
 			{
 				pToDelete = pEntry;
 				if ( pPrevEntry )
@@ -2023,7 +2024,7 @@ public:
 	T * operator () ( const KEY & tKey ) const
 	{
 		HashEntry_t * pEntry = FindByKey ( tKey );
-		return pEntry ? &pEntry->m_tValue : nullptr;
+		return pEntry ? &pEntry->second : nullptr;
 	}
 
 	/// get value reference by key, asserting that the key exists in hash
@@ -2032,7 +2033,7 @@ public:
 		HashEntry_t * pEntry = FindByKey ( tKey );
 		assert ( pEntry && "hash missing value in operator []" );
 
-		return pEntry->m_tValue;
+		return pEntry->second;
 	}
 
 	/// copying ctor
@@ -2092,14 +2093,14 @@ public:
 	T & IterateGet () const
 	{
 		assert ( m_pIterator );
-		return m_pIterator->m_tValue;
+		return m_pIterator->second;
 	}
 
 	/// get entry key
 	const KEY & IterateGetKey () const
 	{
 		assert ( m_pIterator );
-		return m_pIterator->m_tKey;
+		return m_pIterator->first;
 	}
 
 	/// go to next existing entry in terms of external independed iterator
@@ -2116,7 +2117,7 @@ public:
 		assert ( ppCookie );
 		auto ** ppIterator = reinterpret_cast < HashEntry_t** > ( ppCookie );
 		assert ( *ppIterator );
-		return ( *ppIterator )->m_tValue;
+		return ( *ppIterator )->second;
 	}
 
 	/// get entry key in terms of external independed iterator
@@ -2125,7 +2126,41 @@ public:
 		assert ( ppCookie );
 		auto ** ppIterator = reinterpret_cast < HashEntry_t** > ( ppCookie );
 		assert ( *ppIterator );
-		return ( *ppIterator )->m_tKey;
+		return ( *ppIterator )->first;
+	}
+
+public:
+
+	class Iterator_c
+	{
+		HashEntry_t* m_pIterator = nullptr;
+	public:
+		explicit Iterator_c ( HashEntry_t * pIterator=nullptr)
+			: m_pIterator ( pIterator ) {}
+
+		KeyValue_t& operator*() { return *m_pIterator; };
+
+		Iterator_c & operator++ ()
+		{
+			m_pIterator = m_pIterator->m_pNextByOrder;
+			return *this;
+		}
+
+		bool operator!= ( const Iterator_c & rhs ) const
+		{
+			return m_pIterator!=rhs.m_pIterator;
+		}
+	};
+
+	// c++11 style iteration
+	Iterator_c begin () const
+	{
+		return Iterator_c(m_pFirstByOrder);
+	}
+
+	Iterator_c end() const
+	{
+		return Iterator_c(nullptr);
 	}
 
 

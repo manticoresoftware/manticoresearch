@@ -289,9 +289,9 @@ Docker images of Manticore Search are hosted publicly on Docker Hub at https://h
 
 For more information about using Docker, see the `Docker Docs <https://docs.docker.com/>`__.
 
-The searchd daemon runs in nodetach mode inside the container under **manticore** user. Default configuration includes a simple Real-Time index and listens on the default ports (9306 for SphinxQL, 9312 for SphinxAPI and 9308 for HTTP).
+The searchd daemon runs in nodetach mode inside the container under **manticore** user. Default configuration includes a simple Real-Time index and listens on the default ports (9306 for SphinxQL, 9312 for SphinxAPI, 9308 for HTTP  and 9312-9325 for replication).
 
-The image comes with MySQL and PostgreSQL client libraries for indexing data from these databases, as well as with the expat library for XML indexing.
+The image uses currently the Manticore binaries from the Debian Stretch package.
 
 Starting a Manticore Search instance in a container
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -327,11 +327,11 @@ Mounting points
 ~~~~~~~~~~~~~~~
 
 The configuration folder inside the image is the usual `/etc/sphinxseach`. 
-Index files are located at `/var/lib/manticore/data` and logs at `/var/lib/manticore/log`. For persistence, mount these points to your local folders.
+Index files are located at `/var/lib/manticore/data` and logs at `/var/log/manticore`.  For persistence, mount these points to your local folders.
 
 .. code-block:: bash
    
-   docker run --name manticore -v /path/to/config/:/etc/sphinxsearch/ -v /path/to/data/:/var/lib/manticore/data -v /path/to/logs/:/var/lib/manticore/log -p 9306:9306 -d manticoresearch/manticore
+   docker run --name manticore -v /path/to/config/:/etc/sphinxsearch/ -v /path/to/data/:/var/lib/manticore/data -v /path/to/logs/:/var/log/manticore -p 9306:9306 -d manticoresearch/manticore
    
 
    

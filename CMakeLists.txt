@@ -154,7 +154,7 @@ if ( WIN32 )
 	endif ()
 
 	if ( HAVE_pq )
-		option ( WITH_PGSQL "compile with pq support" OFF )
+		option ( WITH_PGSQL "compile with pq support" ON )
 		if ( WITH_PGSQL )
 			set ( USE_PGSQL 1 )
 			include_directories ( ${pq_INCLUDE} )
@@ -166,7 +166,7 @@ if ( WIN32 )
 			else ( DL_PGSQL )
 				list ( APPEND EXTRA_LIBRARIES ${pq_LIB} )
 			endif ()
-			LIST ( APPEND PKGSUFFIXES "pgsql" )
+#			LIST ( APPEND PKGSUFFIXES "pgsql" )
 			IF ( CMAKE_EXE_LINKER_FLAGS MATCHES "x64" )
 				install ( FILES
 						${pq_ROOT}/bin/libeay32.dll
@@ -480,11 +480,11 @@ endif ( WITH_RE2 )
 
 # Check for Libstemmer build
 message ( STATUS "Option WITH_STEMMER ${WITH_STEMMER}" )
-OPTION ( WITH_STEMMER "compile with stemmer support" OFF )
+OPTION ( WITH_STEMMER "compile with stemmer support" ON )
 IF ( WITH_STEMMER )
 	OPTION ( WITH_STEMMER_FORCE_STATIC "force to compile stemmer from sources" OFF )
 	include ( GetStemmer )
-	LIST ( APPEND PKGSUFFIXES "stemmer" )
+#	LIST ( APPEND PKGSUFFIXES "stemmer" )
 ENDIF ( WITH_STEMMER )
 
 # Check for ICU build

@@ -55,22 +55,14 @@ windows:
     - mkdir sphinxbin-x32
     - cd sphinxbin-x32
     - 'net use x: \\\\VBOXSRV\\shared'
-    - cmake -G "Visual Studio 14" -DSPHINX_TAG=$RELEASE_TAG -DLIBS_BUNDLE="x:/bundle" -DDISTR_BUILD=default ..
+    - cmake -G "Visual Studio 14" -DSPHINX_TAG=$RELEASE_TAG -DLIBS_BUNDLE="x:/bundle" -DDISTR_BUILD=default -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 ..
     - cmake --build . --target package --config RelWithDebInfo
-    - cmake -DWITH_PGSQL=1 .
-    - cmake --build . --target package --config RelWithDebInfo --clean-first
-    - cmake -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 .
-    - cmake --build . --target package --config RelWithDebInfo --clean-first
     - cp manticore-*.zip ..
     - cd ..
     - mkdir sphinxbin-x64
     - cd sphinxbin-x64
-    - cmake -G "Visual Studio 14 Win64" -DSPHINX_TAG=$RELEASE_TAG -DLIBS_BUNDLE="x:/bundle" -DDISTR_BUILD=default ..
+    - cmake -G "Visual Studio 14 Win64" -DSPHINX_TAG=$RELEASE_TAG -DLIBS_BUNDLE="x:/bundle" -DDISTR_BUILD=default -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 ..
     - cmake --build . --target package --config RelWithDebInfo
-    - cmake -DWITH_PGSQL=1 .
-    - cmake --build . --target package --config RelWithDebInfo --clean-first
-    - cmake -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 .
-    - cmake --build . --target package --config RelWithDebInfo --clean-first
     - cp manticore-*.zip ..
     - cd ..
     - mkdir sphinxconvbin-x32

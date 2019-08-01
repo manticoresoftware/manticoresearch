@@ -1645,6 +1645,12 @@ int main ( int argc, char ** argv )
 	bool bVerbose = false;
 	CSphString sDumpRows;
 
+	if ( argc==2 && ( !strcmp ( argv[1], "--help" ) || !strcmp ( argv[1], "-h" )))
+	{
+		ShowHelp();
+		return 0;
+	}
+
 	int i;
 	for ( i=1; i<argc; i++ )
 	{

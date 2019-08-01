@@ -115,7 +115,7 @@ windows:
     - docker
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=$DISTR ..
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=$DISTR $XTRAFLAGS ..
     - make -j4 package
     - cp manticore*deb ..
   artifacts:
@@ -193,6 +193,17 @@ bionic:
       - $WHAT == "all"
       - $WHAT =~ /bionic/
   image: registry.gitlab.com/manticoresearch/dev/bionic_cmake314:latest
+
+buster:
+  <<: *debian
+  variables:
+    DISTR: "buster"
+    XTRAFLAGS: "-DCMAKE_CXX_FLAGS=\"-Wno-error=stringop-truncation\""
+  only:
+    variables:
+      - $WHAT == "all"
+      - $WHAT =~ /buster/
+  image: registry.gitlab.com/manticoresearch/dev/buster_cmake314:latest
 
 # collect artifacts from all previous jobs.
 # m.b. it has sense to also publish them in one click to github release?

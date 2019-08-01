@@ -106,15 +106,25 @@ static void ScheduleFlushTask ( void* pName, int64_t iNextTimestamp=-1 )
 				}
 
 				// check timeout, schedule or run immediately.
-				if (( pRT->GetLastFlushTimestamp () + g_iRtFlushPeriod - 1000 )<=sphMicroTimer ())
+				auto iLastTimestamp = pRT->GetLastFlushTimestamp ();
+				auto iPlannedTimestamp = iLastTimestamp+g_iRtFlushPeriod;
+				if (( iPlannedTimestamp-1000 )<=sphMicroTimer ())
+				{
 					pRT->ForceRamFlush ( true );
+					// if flush not happened (by any reason) - stamp not updated
+					if ( iLastTimestamp==pRT->GetLastFlushTimestamp ()) {
+						sphInfo ("Scheduled flush of index %s didn't happened; fallback", sName.cstr());
+						iPlannedTimestamp = sphMicroTimer() + FALLBACK_FLUSH_PERIOD;
+					} else
+						iPlannedTimestamp = pRT->GetLastFlushTimestamp ()+g_iRtFlushPeriod;
+				}
 
 				// once more check for disabled - since ForceRamFlush may be long
 				if ( g_Flushable.IsDisabled ())
 					return;
 
 				// reschedule or post-schedule
-				ScheduleFlushTask ( sName.Leak(), pRT->GetLastFlushTimestamp () + g_iRtFlushPeriod );
+				ScheduleFlushTask ( sName.Leak(), iPlannedTimestamp );
 			},
 			[] ( void* pName ) // deleter
 			{

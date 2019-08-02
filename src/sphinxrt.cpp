@@ -6749,8 +6749,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 		for ( const auto & pChunk : m_dDiskChunks )
 		{
 			auto pSegment = (IndexSegment_c*)pChunk;
-			for ( int i = 0; i<iCount; i++ )
-				iTotalKilled += KillInDiskChunk ( pSegment, pIndexDocList, iCount );
+			iTotalKilled += KillInDiskChunk ( pSegment, pIndexDocList, iCount );
 		}
 
 		SafeDeleteArray ( pIndexDocList );

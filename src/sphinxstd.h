@@ -1194,6 +1194,12 @@ public:
 		for ( int i = 0; i<iLength; ++i )
 			pNew[i] = std::move ( pData[i] );
 	}
+
+	static inline void Zero ( T * pData, int iLength )
+	{
+		for ( int i = 0; i<iLength; ++i )
+			pData[i] = 0;
+	}
 };
 
 template < typename T > /// Copy/move blob of POD data using memmove
@@ -1212,6 +1218,9 @@ public:
 	// append raw blob: defined ONLY in POD specialization.
 	static inline void CopyVoid ( T * pNew, const void * pData, int iLength )
 	{ Copy ( pNew, ( T * ) pData, iLength ); }
+
+	static inline void Zero ( T * pData, int iLength )
+	{ memset ((void *) pData, 0, iLength * sizeof ( T )); }
 };
 
 /// default vector mover
@@ -1457,7 +1466,7 @@ public:
 	}
 
 	/// pop last value
-	const T & Pop ()
+	T & Pop ()
 	{
 		assert ( m_iCount>0 );
 		return m_pData[--m_iCount];
@@ -1519,6 +1528,15 @@ public:
 	void ZeroMem ()
 	{
 		memset ( Begin (), 0, (size_t) AllocatedBytes () );
+	}
+
+	/// set the tail [m_iCount..m_iLimit) to zero
+	void ZeroTail ()
+	{
+		if ( !m_pData )
+			return;
+
+		POLICY::Zero ( &m_pData[m_iCount], m_iLimit-m_iCount );
 	}
 
 	/// query current reserved size, in elements
@@ -1675,6 +1693,25 @@ using CSphTightVector =  CSphVector < T, sph::TightRelimit >;
 template < typename T >
 class CSphFixedVector : public ISphNoncopyable, public VecTraits_T<T>
 {
+	template<typename TT, bool POD = std::is_pod<TT>::value>
+	struct Copy {
+		inline static void FromT ( TT* pData, const VecTraits_T<TT> & dOrigin )
+		{
+			ARRAY_FOREACH ( i, dOrigin )
+				pData[i] = dOrigin[i];
+		}
+	};
+
+	template<typename TT >
+	struct Copy<TT, true>
+	{
+		inline static void FromT ( TT * pData, const VecTraits_T<TT> & dOrigin )
+		{
+			memcpy ( pData, dOrigin.begin (), dOrigin.GetLengthBytes ());
+		}
+	};
+
+
 protected:
 	using VecTraits_T<T>::m_pData;
 	using VecTraits_T<T>::m_iCount;
@@ -1717,7 +1754,7 @@ public:
 	void CopyFrom ( const VecTraits_T<T>& dOrigin )
 	{
 		Reset ( dOrigin.GetLength() );
-		memcpy ( m_pData, dOrigin.begin(), dOrigin.GetLengthBytes());
+		Copy<T>::FromT ( m_pData, dOrigin );
 	}
 
 	T * LeakData ()

@@ -6849,7 +6849,7 @@ bool RtIndex_c::Truncate ( CSphString & )
 
 int RtIndex_c::KillInDiskChunk ( IndexSegment_c * pSegment, const VecTraits_T<DocID_t> & dKlist )
 {
-	assert ( pSegment && pKlist );
+	assert ( pSegment );
 	if ( m_bOptimizing )
 		m_dKillsWhileOptimizing.Append ( dKlist );
 

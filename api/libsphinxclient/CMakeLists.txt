@@ -1,4 +1,4 @@
-cmake_minimum_required ( VERSION 3.13 )
+cmake_minimum_required ( VERSION 3.12 )
 CMAKE_POLICY ( SET CMP0048 NEW )
 
 # set default build type to Release (if nothing else provided from outside yet)

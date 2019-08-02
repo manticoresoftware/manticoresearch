@@ -3742,7 +3742,7 @@ public:
 
 	operator bool() const
 	{
-		return sphThreadGet( m_tKey );
+		return !!sphThreadGet( m_tKey );
 	}
 
 	operator T*() const

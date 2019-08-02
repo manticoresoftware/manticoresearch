@@ -246,13 +246,13 @@ int RtSegment_t::Kill ( DocID_t tDocID )
 }
 
 
-int	RtSegment_t::KillMulti ( const DocID_t * pKlist, int iKlistSize )
+int	RtSegment_t::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 {
 	int iTotalKilled = 0;
 
 	// fixme: implement more efficient batch killer
-	for ( int i = 0; i < iKlistSize; i++ )
-		iTotalKilled += Kill ( pKlist[i] );
+	for ( auto iDocID : dKlist )
+		iTotalKilled += Kill ( iDocID );
 
 	return iTotalKilled;
 }
@@ -1050,7 +1050,7 @@ public:
 #endif
 
 	int					Kill ( DocID_t tDocID ) final;
-	int					KillMulti ( const DocID_t * pKlist, int iKlistSize ) final;
+	int					KillMulti ( const VecTraits_T<DocID_t> & dKlist ) final;
 
 	int					Build ( const CSphVector<CSphSource*> & , int , int ) final { return 0; }
 	bool				Merge ( CSphIndex * , const CSphVector<CSphFilterSettings> &, bool ) final { return false; }
@@ -1203,14 +1203,16 @@ private:
 	void				GetReaderChunks ( SphChunkGuard_t & tGuard ) const;
 	void				FreeRetired();
 
-	int							ApplyKillList ( const CSphVector<DocID_t> & dAccKlist );
-	int							KillInDiskChunk ( IndexSegment_c * pSegment, const DocID_t * pKlist, int iKlistSize );
+	int					ApplyKillList ( const CSphVector<DocID_t> & dAccKlist );
+	int					KillInDiskChunk ( IndexSegment_c * pSegment, const VecTraits_T<DocID_t>& dKlist );
 
-	void						Update_CollectRowPtrs ( UpdateContext_t & tCtx, const SphChunkGuard_t & tGuard );
-	bool						Update_WriteBlobRow ( UpdateContext_t & tCtx, int iUpd, CSphRowitem * pDocinfo, const BYTE * pBlob, int iLength, int nBlobAttrs, bool & bCritical, CSphString & sError ) override;
-	bool						Update_DiskChunks ( UpdateContext_t & tCtx, const SphChunkGuard_t & tGuard, int & iUpdated, CSphString & sError );
+	void				Update_CollectRowPtrs ( UpdateContext_t & tCtx, const SphChunkGuard_t & tGuard );
+	bool				Update_WriteBlobRow ( UpdateContext_t & tCtx, int iUpd, CSphRowitem * pDocinfo,
+			const BYTE * pBlob, int iLength, int nBlobAttrs, bool & bCritical, CSphString & sError ) override;
+	bool				Update_DiskChunks ( UpdateContext_t & tCtx, const SphChunkGuard_t & tGuard,
+			int & iUpdated, CSphString & sError );
 
-	void						GetIndexFiles ( CSphVector<CSphString> & dFiles ) const override;
+	void				GetIndexFiles ( CSphVector<CSphString> & dFiles ) const override;
 };
 
 
@@ -2480,11 +2482,11 @@ int RtIndex_c::ApplyKillList ( const CSphVector<DocID_t> & dAccKlist )
 	}
 
 	for ( auto & pChunk : m_dDiskChunks )
-		iKilled += KillInDiskChunk ( pChunk, dAccKlist.Begin(), dAccKlist.GetLength() );
+		iKilled += KillInDiskChunk ( pChunk, dAccKlist );
 
 	// don't touch the chunks that are being saved
 	for ( int iChunk = m_iDoubleBuffer; iChunk < m_dRamChunks.GetLength(); iChunk++ )
-		iKilled += m_dRamChunks[iChunk]->KillMulti ( dAccKlist.Begin(), dAccKlist.GetLength() );
+		iKilled += m_dRamChunks[iChunk]->KillMulti ( dAccKlist );
 
 	return iKilled;
 }
@@ -2701,7 +2703,7 @@ bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<DocID_t> & 
 		int iSavedChunkId = -1;
 		if ( !SaveDiskChunk ( iTID, tGuard, tStat2Dump, false, bForceDump, iSavedChunkId ) )
 		{
-			m_dRetired.Reset();
+			m_dRetired.Reset(); // be careful on merge!
 			return false;
 		}
 
@@ -2709,7 +2711,8 @@ bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<DocID_t> & 
 
 		// notify the disk chunk that we were saving of the documents that were killed while we were saving it
 		{
-			CSphScopedLock<CSphMutex> tWriteLock ( m_tWriting );
+			ScopedMutex_t tWriteLock ( m_tWriting );
+			ScWL_t tChunksWLock {m_tChunkLock};
 
 			CSphIndex * pDiskChunk = nullptr;
 			for ( auto pChunk : m_dDiskChunks )
@@ -2720,7 +2723,7 @@ bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<DocID_t> & 
 				}
 
 			if ( pDiskChunk )
-				pDiskChunk->KillMulti ( m_dKillsWhileSaving.Begin(), m_dKillsWhileSaving.GetLength() );
+				pDiskChunk->KillMulti ( m_dKillsWhileSaving );
 
 			m_dKillsWhileSaving.Resize(0);
 		}
@@ -6727,11 +6730,10 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 	int iTotalKilled = 0;
 	if ( !bEmptyRT )
 	{
-		SphAttr_t * pIndexDocList = nullptr;
-		int64_t iCount = 0;
-		if ( !pIndex->BuildDocList ( &pIndexDocList, &iCount, &sError ) )
+		auto dIndexDocList = pIndex->BuildDocList();
+		if ( TlsMsg::HasErr () )
 		{
-			sError.SetSprintf ( "ATTACH failed, %s", sError.cstr() );
+			sError.SetSprintf ( "ATTACH failed, %s", TlsMsg::szError () );
 			return false;
 		}
 
@@ -6747,12 +6749,8 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 		}
 
 		for ( const auto & pChunk : m_dDiskChunks )
-		{
-			auto pSegment = (IndexSegment_c*)pChunk;
-			iTotalKilled += KillInDiskChunk ( pSegment, pIndexDocList, iCount );
-		}
+			iTotalKilled += KillInDiskChunk ( pChunk, dIndexDocList );
 
-		SafeDeleteArray ( pIndexDocList );
 	}
 
 	CSphFixedVector<int> dChunkNames = GetIndexNames ( m_dDiskChunks, true );
@@ -6849,16 +6847,13 @@ bool RtIndex_c::Truncate ( CSphString & )
 }
 
 
-int RtIndex_c::KillInDiskChunk ( IndexSegment_c * pSegment, const DocID_t * pKlist, int iKlistSize )
+int RtIndex_c::KillInDiskChunk ( IndexSegment_c * pSegment, const VecTraits_T<DocID_t> & dKlist )
 {
 	assert ( pSegment && pKlist );
 	if ( m_bOptimizing )
-	{
-		DocID_t * pAdd = m_dKillsWhileOptimizing.AddN ( iKlistSize );
-		memcpy ( pAdd, pKlist, iKlistSize*sizeof(pKlist[0]) );
-	}
+		m_dKillsWhileOptimizing.Append ( dKlist );
 
-	return pSegment->KillMulti ( pKlist, iKlistSize );
+	return pSegment->KillMulti ( dKlist );
 }
 
 
@@ -6955,7 +6950,7 @@ void RtIndex_c::Optimize()
 		Verify ( m_tChunkLock.WriteLock() );
 
 		// apply killlists that were collected while we were merging segments
-		pMerged->KillMulti ( m_dKillsWhileOptimizing.Begin(), m_dKillsWhileOptimizing.GetLength() );
+		pMerged->KillMulti ( m_dKillsWhileOptimizing );
 
 		sphLogDebug ( "optimized 0=%s, 1=%s, new=%s", m_dDiskChunks[0]->GetName(), m_dDiskChunks[1]->GetName(), pMerged->GetName() );
 
@@ -7164,7 +7159,7 @@ void RtIndex_c::ProgressiveMerge()
 		Verify ( m_tChunkLock.WriteLock() );
 
 		// apply killlists that were collected while we were merging segments
-		pMerged->KillMulti ( m_dKillsWhileOptimizing.Begin(), m_dKillsWhileOptimizing.GetLength() );
+		pMerged->KillMulti ( m_dKillsWhileOptimizing );
 
 		sphLogDebug ( "optimized (progressive) a=%s, b=%s, new=%s", pOldest->GetName(), pOlder->GetName(), pMerged->GetName() );
 
@@ -7423,7 +7418,7 @@ int	RtIndex_c::Kill ( DocID_t tDocID )
 }
 
 
-int RtIndex_c::KillMulti ( const DocID_t * pKlist, int iKlistSize )
+int RtIndex_c::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 {
 	assert ( 0 && "No external kills for RT");
 	return 0;

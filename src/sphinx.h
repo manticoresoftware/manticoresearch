@@ -3147,7 +3147,7 @@ class IndexSegment_c
 {
 public:
 	virtual int		Kill ( DocID_t tDocID ) = 0;
-	virtual int		KillMulti ( const DocID_t * pKlist, int iKlistSize ) = 0;
+	virtual int		KillMulti ( const VecTraits_T<DocID_t> & dKlist ) = 0;
 };
 
 
@@ -3401,7 +3401,7 @@ public:
 	virtual bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, CSphVector<KillListTarget_t> & dTargets, CSphString & sError ) const { return true; }
 	virtual bool				AlterKillListTarget ( CSphVector<KillListTarget_t> & dTargets, CSphString & sError ) { return false; }
 	virtual void				KillExistingDocids ( CSphIndex * pTarget ) {}
-	virtual int					KillMulti ( const DocID_t * pKlist, int iKlistSize ) { return 0; }
+	virtual int					KillMulti ( const VecTraits_T<DocID_t> & dKlist ) { return 0; }
 
 public:
 	/// internal debugging hook, DO NOT USE
@@ -3432,7 +3432,7 @@ public:
 	virtual void				GetIndexFiles ( CSphVector<CSphString> & dFiles ) const {};
 
 	/// internal make document id list from external docinfo, DO NOT USE
-	virtual bool BuildDocList ( SphAttr_t ** ppDocList, int64_t * pCount, CSphString * pError ) const;
+	virtual CSphFixedVector<SphAttr_t> BuildDocList () const;
 
 	virtual void				SetMemorySettings ( const FileAccessSettings_t & tFileAccessSettings ) = 0;
 

@@ -2576,12 +2576,13 @@ public:
 	void				SetKeepAttrs ( const CSphString & sKeepAttrs, const StrVec_t & dAttrs ) final { m_sKeepAttrs = sKeepAttrs; m_dKeepAttrs = dAttrs; }
 	RowID_t				GetRowidByDocid ( DocID_t tDocID ) const;
 	int					Kill ( DocID_t tDocID ) final;
-	int					KillMulti ( const DocID_t * pKlist, int iKlistSize ) final;
+	int					KillMulti ( const VecTraits_T<DocID_t> & dKlist ) final;
 
 	const CSphSourceStats &		GetStats () const final { return m_tStats; }
 	int64_t *			GetFieldLens() const final { return m_tSettings.m_bIndexFieldLens ? m_dFieldLens.begin() : nullptr; }
 	void				GetStatus ( CSphIndexStatus* ) const final;
-	bool 				BuildDocList ( SphAttr_t ** ppDocList, int64_t * pCount, CSphString * pError ) const final;
+
+	CSphFixedVector<SphAttr_t> 	BuildDocList () const final;
 
 private:
 	static const int			MIN_WRITE_BUFFER		= 262144;	///< min write buffer size
@@ -8933,12 +8934,10 @@ float CSphIndex::GetGlobalIDF ( const CSphString & sWord, int64_t iDocsLocal, bo
 }
 
 
-bool CSphIndex::BuildDocList ( SphAttr_t ** ppDocList, int64_t * pCount, CSphString * ) const
+CSphFixedVector<SphAttr_t> CSphIndex::BuildDocList () const
 {
-	assert ( *ppDocList && pCount );
-	*ppDocList = nullptr;
-	*pCount = 0;
-	return true;
+	TlsMsg::Err(); // reset error
+	return CSphFixedVector<SphAttr_t>(0);
 }
 
 void CSphIndex::GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings )
@@ -9880,14 +9879,14 @@ void CSphIndex_VLN::KillExistingDocids ( CSphIndex * pTarget )
 	while ( tLookup.ReadDocID(tDocID) )
 		dKillList[uDocidIndex++] = tDocID;
 
-	pTarget->KillMulti ( dKillList.Begin(), dKillList.GetLength() );
+	pTarget->KillMulti ( dKillList );
 }
 
 
-int CSphIndex_VLN::KillMulti ( const DocID_t * pKlist, int iKlistSize )
+int CSphIndex_VLN::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 {
 	LookupReader_c tTargetReader ( m_tDocidLookup.GetWritePtr() );
-	DocidListReader_c tKillerReader ( pKlist, iKlistSize );
+	DocidListReader_c tKillerReader ( dKlist );
 
 	int iTotalKilled = KillByLookup ( tTargetReader, tKillerReader, m_tDeadRowMap );
 	if ( iTotalKilled )
@@ -13401,36 +13400,32 @@ bool CSphIndex_VLN::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) 
 }
 
 
-bool CSphIndex_VLN::BuildDocList ( SphAttr_t ** ppDocList, int64_t * pCount, CSphString * pError ) const
+CSphFixedVector<SphAttr_t> CSphIndex_VLN::BuildDocList () const
 {
-	assert ( ppDocList && pCount && pError );
-	*ppDocList = nullptr;
-	*pCount = 0;
+	TlsMsg::Err(); // clean err
+	CSphFixedVector<SphAttr_t> dResult {0};
 	if ( !m_iDocinfo )
-		return true;
+		return dResult;
 
 	// new[] might fail on 32bit here
 	int64_t iSizeMax = (size_t)m_iDocinfo;
 	if ( iSizeMax!=m_iDocinfo )
 	{
-		pError->SetSprintf ( "doc-list build size_t overflow (docs count=" INT64_FMT ", size max=" INT64_FMT ")", m_iDocinfo, iSizeMax );
-		return false;
+		TlsMsg::Err ( "doc-list build size_t overflow (docs count=%l, size max=%l)", m_iDocinfo, iSizeMax );
+		return dResult;
 	}
 
 	int iStride = m_tSchema.GetRowSize();
-	auto * pDst = new SphAttr_t [(size_t)m_iDocinfo];
-	*ppDocList = pDst;
-	*pCount = m_iDocinfo;
+	dResult.Reset ( m_iDocinfo );
 
 	const CSphRowitem * pRow = m_tAttr.GetWritePtr();
-	const CSphRowitem * pEnd = m_tAttr.GetWritePtr() + m_iDocinfo*iStride;
-	while ( pRow<pEnd )
+	for ( SphAttr_t& dDst : dResult)
 	{
-		*pDst++ = sphGetDocID ( pRow );
+		dDst = sphGetDocID ( pRow );
 		pRow += iStride;
 	}
 
-	return true;
+	return dResult;
 }
 
 

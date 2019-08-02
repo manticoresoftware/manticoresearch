@@ -197,7 +197,7 @@ public:
 	RowID_t					GetRowidByDocid ( DocID_t tDocID ) const;
 
 	int Kill ( DocID_t tDocID ) override;
-	int KillMulti ( const DocID_t * pKlist, int iKlistSize ) override;
+	int KillMulti ( const VecTraits_T<DocID_t> & dKlist ) override;
 
 	void BuildDocID2RowIDMap ();
 };

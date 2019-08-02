@@ -102,13 +102,13 @@ public:
 	{}
 
 
-	DocidListReader_c ( const CSphFixedVector<DocID_t> & dKlist )
+	DocidListReader_c ( const VecTraits_T<DocID_t> & dKlist )
 		: m_pIterator ( dKlist.Begin() )
-		, m_pMaxIterator ( dKlist.Begin()+dKlist.GetLength() )
+		, m_pMaxIterator ( dKlist.End() )
 	{}
 
 
-	inline bool Read ( DocID_t & tDocID, RowID_t & tRowID )
+	static inline bool Read ( DocID_t & tDocID, RowID_t & tRowID )
 	{
 		return false;
 	}
@@ -122,7 +122,7 @@ public:
 		return true;
 	}
 
-	inline void HintDocID ( DocID_t tDocID ) {}
+	static inline void HintDocID ( DocID_t tDocID ) {}
 
 private:
 	const DocID_t * m_pIterator {nullptr};

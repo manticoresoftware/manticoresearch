@@ -109,7 +109,7 @@ public:
 	int64_t GetLastFlushTimestamp() const override { return m_tmSaved; }
 
 	int					Kill ( DocID_t ) override { return 0; }
-	int					KillMulti ( const DocID_t * pKlist, int iKlistSize ) override { return 0; }
+	int					KillMulti ( const VecTraits_T<DocID_t> & dKlist ) override { return 0; }
 
 	// plain index stub
 	int					Build ( const CSphVector<CSphSource*> & , int , int ) override { return 0; }

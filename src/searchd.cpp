@@ -17017,7 +17017,7 @@ static bool ApplyIndexKillList ( CSphIndex * pIndex, CSphString & sWarning, CSph
 		{
 			// kill the docids provided by sql_query_killlist and similar
 			if ( tIndex.m_uFlags & KillListTarget_t::USE_KLIST )
-				pTarget->m_pIndex->KillMulti ( dKillList.Begin(), dKillList.GetLength() );
+				pTarget->m_pIndex->KillMulti ( dKillList );
 
 			// kill all the docids present in this index
 			if ( tIndex.m_uFlags & KillListTarget_t::USE_DOCIDS )
@@ -17061,7 +17061,7 @@ bool ApplyKillListsTo ( ServedDesc_t & tLockedServed, CSphString & sError )
 			if ( tIndex.m_sIndex==tLockedServed.m_pIndex->GetName() )
 			{
 				if ( tIndex.m_uFlags & KillListTarget_t::USE_KLIST )
-					pKillListTarget->KillMulti ( dKillList.Begin(), dKillList.GetLength() );
+					pKillListTarget->KillMulti ( dKillList );
 
 				// kill all the docids present in this index
 				if ( tIndex.m_uFlags & KillListTarget_t::USE_DOCIDS )

@@ -34,6 +34,7 @@
 #include <sys/sysctl.h>
 #include <net/route.h>
 #include <net/if_dl.h>
+#include <netinet/in.h>
 #endif
 
 #include <cmath>

@@ -2639,12 +2639,12 @@ public:
 using StrBlock_t = std::tuple<Str_t, Str_t, Str_t>;
 
 // common pattern
-const StrBlock_t dEmptyBl = { dEmptyStr, dEmptyStr, dEmptyStr }; // empty
-const StrBlock_t dJsonObj = { {",",1}, {"{",1}, {"}",1} }; // json object
-const StrBlock_t dJsonArr = { {",",1}, {"[",1}, {"]",1} }; // json array
+const StrBlock_t dEmptyBl { dEmptyStr, dEmptyStr, dEmptyStr }; // empty
+const StrBlock_t dJsonObj { {",",1}, {"{",1}, {"}",1} }; // json object
+const StrBlock_t dJsonArr { {",",1}, {"[",1}, {"]",1} }; // json array
 
-const StrBlock_t dJsonObjW = { {",\n",2}, {"{\n",2}, {"\n}",2} }; // json object with formatting
-const StrBlock_t dJsonArrW = { {",\n",2}, {"[\n",2}, {"\n]",2} }; // json array with formatting
+const StrBlock_t dJsonObjW { {",\n",2}, {"{\n",2}, {"\n}",2} }; // json object with formatting
+const StrBlock_t dJsonArrW { {",\n",2}, {"[\n",2}, {"\n]",2} }; // json array with formatting
 
 /// string builder
 /// somewhat quicker than a series of SetSprintf()s

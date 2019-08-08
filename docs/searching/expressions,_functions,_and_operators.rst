@@ -702,11 +702,13 @@ Miscellaneous functions
 
 -  LENGTH()
 
-   LENGTH(attr_mva) function returns amount of elements in MVA set. It
-   works with both 32-bit and 64-bit MVA attributes. LENGTH(attr_json)
-   returns length of a field in JSON. Return value depends on type of a
-   field. For example LENGTH(json_attr.some_int) always returns 1 and
-   LENGTH(json_attr.some_array) returns number of elements in array.
+   LENGTH(attr_mva) function returns amount of elements in MVA set. It works with both 32-bit and 64-bit MVA attributes. 
+   
+   LENGTH(attr_json)  returns length of a field in JSON. Return value depends on type of a field. 
+   For example LENGTH(json_attr.some_int) always returns 1 and  LENGTH(json_attr.some_array) returns number of elements in array.
+   
+   LENGTH(string_expr) function returns the length of the string resulted from an expression. 
+   :ref:`TO_STRING() <expr-func-to-string>` must enclose the expression, regardless if the expression returns a non-string or it's simply a string attribute.
 
 .. _expr-func-min-top-sortval:
 

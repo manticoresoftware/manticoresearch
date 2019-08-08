@@ -19306,7 +19306,7 @@ void QueryStatus ( CSphVariant * v )
 	if ( !v )
 	{
 		snprintf ( sListen, sizeof ( sListen ), "127.0.0.1:%d:sphinx", SPHINXAPI_PORT );
-		tListen = CSphVariant ( sListen, 0 );
+		tListen = CSphVariant ( sListen );
 		v = &tListen;
 	}
 
@@ -21926,58 +21926,21 @@ static void ParsePredictedTimeCosts ( const char * p )
 {
 	// yet another mini-parser!
 	// ident=value [, ident=value [...]]
-	while ( *p )
+	sph::ParseKeyValues ( p, [] (CSphString&& sIdent, CSphString&& sValue)
 	{
-		// parse ident
-		while ( sphIsSpace(*p) )
-			p++;
-		if ( !*p )
-			break;
-		if ( !sphIsAlpha(*p) )
-			sphDie ( "predicted_time_costs: parse error near '%s' (identifier expected)", p );
-		const char * q = p;
-		while ( sphIsAlpha(*p) )
-			p++;
-		CSphString sIdent;
-		sIdent.SetBinary ( q, p-q );
-		sIdent.ToLower();
-
-		// parse =value
-		while ( sphIsSpace(*p) )
-			p++;
-		if ( *p!='=' )
-			sphDie ( "predicted_time_costs: parse error near '%s' (expected '=' sign)", p );
-		p++;
-		while ( sphIsSpace(*p) )
-			p++;
-		if ( *p<'0' || *p>'9' )
-			sphDie ( "predicted_time_costs: parse error near '%s' (number expected)", p );
-		q = p;
-		while ( *p>='0' && *p<='9' )
-			p++;
-		CSphString sValue;
-		sValue.SetBinary ( q, p-q );
-		int iValue = atoi ( sValue.cstr() );
-
-		// parse comma
-		while ( sphIsSpace(*p) )
-			p++;
-		if ( *p && *p!=',' )
-			sphDie ( "predicted_time_costs: parse error near '%s' (expected ',' or end of line)", p );
-		p++;
-
 		// bind value
 		if ( sIdent=="skip" )
-			g_iPredictorCostSkip = iValue;
+			g_iPredictorCostSkip = atoi ( sValue.cstr ());
 		else if ( sIdent=="doc" )
-			g_iPredictorCostDoc = iValue;
+			g_iPredictorCostDoc = atoi ( sValue.cstr ());
 		else if ( sIdent=="hit" )
-			g_iPredictorCostHit = iValue;
+			g_iPredictorCostHit = atoi ( sValue.cstr ());
 		else if ( sIdent=="match" )
-			g_iPredictorCostMatch = iValue;
+			g_iPredictorCostMatch = atoi ( sValue.cstr ());
 		else
-			sphDie ( "predicted_time_costs: unknown identifier '%s' (known ones are skip, doc, hit, match)", sIdent.cstr() );
-	}
+			sphDie ( "predicted_time_costs: unknown identifier '%s' (known ones are skip, doc, hit, match)",
+					 sIdent.cstr ());
+	});
 }
 
 // read system TFO settings and init g_ITFO according to it.

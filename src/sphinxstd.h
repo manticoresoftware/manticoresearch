@@ -2557,7 +2557,7 @@ public:
 
 
 	/// ctor from C string
-	CSphVariant ( const char * sString, int iTag )
+	explicit CSphVariant ( const char * sString, int iTag=0 )
 		: m_sValue ( sString )
 		, m_iValue ( sString ? atoi ( sString ) : 0 )
 		, m_i64Value ( sString ? (int64_t)strtoull ( sString, nullptr, 10 ) : 0 )

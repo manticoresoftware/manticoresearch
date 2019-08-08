@@ -1428,11 +1428,11 @@ void JsonConfigConfigureAndPreload ( int & iValidIndexes, int & iCounter ) REQUI
 	for ( const IndexDesc_t & tIndex : g_dCfgIndexes )
 	{
 		CSphConfigSection hIndex;
-		hIndex.Add ( CSphVariant ( tIndex.m_sPath.cstr(), 0 ), "path" );
-		hIndex.Add ( CSphVariant ( GetTypeName ( tIndex.m_eType ).cstr(), 0 ), "type" );
+		hIndex.Add ( CSphVariant ( tIndex.m_sPath.cstr() ), "path" );
+		hIndex.Add ( CSphVariant ( GetTypeName ( tIndex.m_eType ).cstr() ), "type" );
 		// dummy
-		hIndex.Add ( CSphVariant ( "text", 0 ), "rt_field" );
-		hIndex.Add ( CSphVariant ( "gid", 0 ), "rt_attr_uint" );
+		hIndex.Add ( CSphVariant ( "text" ), "rt_field" );
+		hIndex.Add ( CSphVariant ( "gid" ), "rt_attr_uint" );
 
 		ESphAddIndex eAdd = ConfigureAndPreloadIndex ( hIndex, tIndex.m_sName.cstr (), true );
 		iValidIndexes += ( eAdd!=ADD_ERROR ? 1 : 0 );
@@ -4071,11 +4071,11 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 	sphLogDebugRpl ( "loading index '%s' into cluster '%s' from %s", tCmd.m_sIndex.cstr(), tCmd.m_sCluster.cstr(), tCmd.m_sRemoteIndexPath.cstr() );
 
 	CSphConfigSection hIndex;
-	hIndex.Add ( CSphVariant ( tCmd.m_sRemoteIndexPath.cstr(), 0 ), "path" );
-	hIndex.Add ( CSphVariant ( sType.cstr(), 0 ), "type" );
+	hIndex.Add ( CSphVariant ( tCmd.m_sRemoteIndexPath.cstr() ), "path" );
+	hIndex.Add ( CSphVariant ( sType.cstr() ), "type" );
 	// dummy
-	hIndex.Add ( CSphVariant ( "text", 0 ), "rt_field" );
-	hIndex.Add ( CSphVariant ( "gid", 0 ), "rt_attr_uint" );
+	hIndex.Add ( CSphVariant ( "text" ), "rt_field" );
+	hIndex.Add ( CSphVariant ( "gid" ), "rt_attr_uint" );
 	if ( !LoadIndex ( hIndex, tCmd.m_sIndex, tCmd.m_sCluster ) )
 	{
 		sError.SetSprintf ( "failed to load index '%s'", tCmd.m_sIndex.cstr() );

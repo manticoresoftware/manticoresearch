@@ -2858,6 +2858,37 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 		return iLen;
 	}
 
+	SmallStringHash_T<CSphString> ParseKeyValueStrings ( const char * sBuf )
+	{
+		SmallStringHash_T<CSphString> hRes;
+		if ( sBuf && ( *sBuf ))
+		{
+			auto dOptions = sphSplit ( sBuf, ",; \t\n\r" );
+			for ( auto & sOption: dOptions ) {
+				auto dOption = sphSplit ( sOption.cstr (), "=" );
+				assert ( dOption.GetLength ()==2 ); // as 'key' = 'value'
+				dOption.Apply ( [] ( CSphString & sVal ) { sVal.Trim (); } );
+				hRes.Add ( dOption[1], dOption[0] );
+			}
+		}
+		return hRes;
+	}
+
+	SmallStringHash_T<CSphVariant> ParseKeyValueVars ( const char * sBuf )
+	{
+		SmallStringHash_T<CSphVariant> hRes;
+		if ( sBuf && (*sBuf) )
+		{
+			auto dOptions = sphSplit ( sBuf, ",; \t\n\r" );
+			for ( auto & sOption: dOptions ) {
+				auto dOption = sphSplit ( sOption.cstr (), "=" );
+				assert ( dOption.GetLength ()==2 ); // as 'key' = 'value'
+				dOption.Apply ( [] ( CSphString & sVal ) { sVal.Trim (); } );
+				hRes.Add ( CSphVariant ( dOption[1].cstr ()), dOption[0] );
+			}
+		}
+		return hRes;
+	}
 } // namespace sph
 
 static int sphVSprintf ( char * pOutput, const char * sFmt, va_list ap )

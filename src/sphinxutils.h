@@ -172,6 +172,28 @@ int64_t sphGetSize64 ( const char * sValue, char ** ppErr = nullptr, int64_t iDe
 int64_t sphGetTime64 ( const char* sValue, char** ppErr = nullptr, int64_t iDefault = -1 );
 //////////////////////////////////////////////////////////////////////////
 
+namespace sph
+{
+
+	// common parser for 'foo=1;bar=2;baz=str, me=here' constructions.
+	SmallStringHash_T<CSphString> ParseKeyValueStrings ( const char * sBuf );
+	SmallStringHash_T<CSphVariant> ParseKeyValueVars ( const char * sBuf );
+
+	template<typename FnFilter>
+	void ParseKeyValues ( const char * sBuf, FnFilter && fnFilter )
+	{
+		if ( sBuf && ( *sBuf )) {
+			auto dOptions = sphSplit ( sBuf, ",; \t\n\r" );
+			for ( auto & sOption: dOptions ) {
+				auto dOption = sphSplit ( sOption.cstr (), "=" );
+				assert ( dOption.GetLength ()==2 ); // as 'key' = 'value'
+				dOption.Apply ( [] ( CSphString & sVal ) { sVal.Trim (); } );
+				fnFilter ( std::move ( dOption[0] ), std::move ( dOption[1] ));
+			}
+		}
+	}
+} // namespace sph
+
 /// config section (hash of variant values)
 class CSphConfigSection : public SmallStringHash_T < CSphVariant >
 {

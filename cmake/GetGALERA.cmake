@@ -23,7 +23,7 @@ if ( UNIX AND NOT APPLE )
 				)
 	else ()
 		set ( GALERA_URL_GITHUB "https://github.com/manticoresoftware/galera/archive/cmake-3.x-5.7.zip" )
-		message ( STATUS "Use galera from github https://github.com/manticoresoftware/galera/archive/cmake-3.x-5.7.zip" )
+		message ( STATUS "Use galera from github ${GALERA_URL_GITHUB}" )
 		message ( STATUS "(you can download the file and save it as '${GALERAZIP}' into ${LIBS_BUNDLE}/) " )
 		FetchContent_Declare ( galera
 				SOURCE_DIR "${GALERA_SRC}"

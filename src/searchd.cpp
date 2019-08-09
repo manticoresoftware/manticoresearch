@@ -89,13 +89,6 @@ extern "C"
 
 /////////////////////////////////////////////////////////////////////////////
 
-
-static const char * g_dProtoNames[PROTO_TOTAL] =
-{
-	"sphinxapi", "sphinxql", "http"
-};
-
-
 static bool				g_bService		= false;
 #if USE_WINDOWS
 static bool				g_bServiceStop	= false;
@@ -19786,10 +19779,10 @@ struct NetReceiveDataQL_t : public ISphNetAction
 struct NetSendData_t : public ISphNetAction
 {
 	CSphScopedPtr<NetStateCommon_t>		m_tState;
-	ProtocolType_e						m_eProto;
+	Proto_e								m_eProto;
 	bool								m_bContinue;
 
-	NetSendData_t ( NetStateCommon_t * pState, ProtocolType_e eProto );
+	NetSendData_t ( NetStateCommon_t * pState, Proto_e eProto );
 
 	NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) override;
 	NetEvent_e		Setup ( int64_t tmNow ) override;
@@ -20774,7 +20767,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 				SendErrorReply ( tOut, "invalid command (code=%d, len=%d)", m_eCommand, m_tState->m_iLeft );
 
 				tOut.SwapData ( m_tState->m_dBuf );
-				auto * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_SPHINX );
+				auto * pSend = new NetSendData_t ( m_tState.LeakPtr(), Proto_e::SPHINX );
 				dNextTick.Add ( pSend );
 				return NE_REMOVE;
 			}
@@ -20804,7 +20797,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 				m_tState->m_dBuf.Resize ( 0 );
 				tOut.SwapData ( m_tState->m_dBuf );
 
-				auto * pSend = new NetSendData_t ( m_tState.LeakPtr (), PROTO_SPHINX );
+				auto * pSend = new NetSendData_t ( m_tState.LeakPtr (), Proto_e::SPHINX );
 				dNextTick.Add ( pSend );
 
 			} else if ( bMaxedOut )
@@ -20820,7 +20813,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 				tOut.SendString ( g_sMaxedOutMessage );
 
 				tOut.SwapData ( m_tState->m_dBuf );
-				auto * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_SPHINX );
+				auto * pSend = new NetSendData_t ( m_tState.LeakPtr(), Proto_e::SPHINX );
 				dNextTick.Add ( pSend );
 
 			} else
@@ -21120,7 +21113,7 @@ void NetReceiveDataQL_t::CloseSocket()
 }
 
 
-NetSendData_t::NetSendData_t ( NetStateCommon_t * pState, ProtocolType_e eProto )
+NetSendData_t::NetSendData_t ( NetStateCommon_t * pState, Proto_e eProto )
 	: ISphNetAction ( pState->m_iClientSock )
 	, m_tState ( pState )
 	, m_eProto ( eProto )
@@ -21160,10 +21153,10 @@ NetEvent_e NetSendData_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> &
 
 	if ( m_tState->m_bKeepSocket )
 	{
-		sphLogDebugv ( "%p send %s job created, sent=%d, sock=%d, tick=%u", this, g_dProtoNames[m_eProto], m_tState->m_iPos, m_iSock, pLoop->m_uTick );
+		sphLogDebugv ( "%p send %s job created, sent=%d, sock=%d, tick=%u", this, ProtoName(m_eProto), m_tState->m_iPos, m_iSock, pLoop->m_uTick );
 		switch ( m_eProto )
 		{
-			case PROTO_SPHINX:
+			case Proto_e::SPHINX:
 			{
 				auto * pAction = new NetReceiveDataAPI_t ( m_tState.LeakPtr() );
 				pAction->SetupBodyPhase();
@@ -21171,7 +21164,7 @@ NetEvent_e NetSendData_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> &
 			}
 			break;
 
-			case PROTO_MYSQL41:
+			case Proto_e::MYSQL41:
 			{
 				auto * pAction = new NetReceiveDataQL_t ( (NetStateQL_t *)m_tState.LeakPtr() );
 				pAction->SetupBodyPhase();
@@ -21179,7 +21172,7 @@ NetEvent_e NetSendData_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> &
 			}
 			break;
 
-			case PROTO_HTTP:
+			case Proto_e::HTTP:
 			{
 				auto * pAction = new NetReceiveDataHttp_t ( (NetStateQL_t *)m_tState.LeakPtr() );
 				dNextTick.Add ( pAction );
@@ -21196,7 +21189,7 @@ NetEvent_e NetSendData_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> &
 NetEvent_e NetSendData_t::Setup ( int64_t tmNow )
 {
 	assert ( m_tState.Ptr() );
-	sphLogDebugv ( "%p send %s setup, keep=%d, buf=%d, client=%s, conn=%d, sock=%d", this, g_dProtoNames[m_eProto], (int)(m_tState->m_bKeepSocket),
+	sphLogDebugv ( "%p send %s setup, keep=%d, buf=%d, client=%s, conn=%d, sock=%d", this, ProtoName(m_eProto), (int)(m_tState->m_bKeepSocket),
 		m_tState->m_dBuf.GetLength(), m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock );
 
 	if ( !m_bContinue )
@@ -21489,7 +21482,7 @@ void ThdJobAPI_t::Call ()
 	if ( tOut.GetSentCount() )
 	{
 		tOut.SwapData ( m_tState->m_dBuf );
-		auto * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_SPHINX );
+		auto * pSend = new NetSendData_t ( m_tState.LeakPtr(), Proto_e::SPHINX );
 		JobDoSendNB ( pSend, m_pLoop );
 	} else if ( m_tState->m_bKeepSocket ) // no response - switching to receive
 	{
@@ -21553,7 +21546,7 @@ void ThdJobQL_t::Call ()
 	{
 		assert ( m_pLoop );
 		tOut.SwapData ( m_tState->m_dBuf );
-		NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_MYSQL41 );
+		NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), Proto_e::MYSQL41 );
 		JobDoSendNB ( pSend, m_pLoop );
 	}
 
@@ -21651,7 +21644,7 @@ void ThdJobHttp_t::Call ()
 		return;
 
 	assert ( m_pLoop );
-	NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_HTTP );
+	NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), Proto_e::HTTP );
 	JobDoSendNB ( pSend, m_pLoop );
 }
 

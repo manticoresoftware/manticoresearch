@@ -215,16 +215,6 @@ enum class IndexType_e
 	ERROR_, // simple "ERROR" doesn't work on win due to '#define ERROR 0' somewhere.
 };
 
-enum ProtocolType_e
-{
-	PROTO_SPHINX = 0,
-	PROTO_MYSQL41,
-	PROTO_HTTP,
-	PROTO_REPLICATION,
-
-	PROTO_TOTAL
-};
-
 struct ListenerDesc_t
 {
 	Proto_e m_eProto;

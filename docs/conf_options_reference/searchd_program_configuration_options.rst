@@ -519,6 +519,7 @@ connections on this socket. Supported protocol values are :
 * ``mysql41`` - MySQL protocol used since 4.1. More details on MySQL protocol support can be found in :ref:`mysql_protocol_support_and_sphinxql` section.
 * ``http`` - HTTP protocol. More details can be found in :ref:`httpapi_reference` section.
 * ``replication`` - replication protocol, used for nodes communication. More details can be found in :ref:`replication` section.
+* ``https`` - HTTPS protocol. It uses OpenSSL library to encrypt HTTP traffic. More details can be found in :ref:`httpapi_reference` section.
 
 
 Adding a "_vip" suffix to a protocol (for instance ``sphinx_vip`` or
@@ -541,6 +542,7 @@ Examples:
     listen = localhost:9306:mysql41
     listen = 127.0.0.1:9308:http
     listen = 192.168.0.1:9320-9328:replication
+    listen = 127.0.0.1:9443:https
 
 There can be multiple listen directives, ``searchd`` will listen for
 client connections on all specified ports and sockets.
@@ -1503,6 +1505,48 @@ Example:
 
 
     sphinxql_timeout = 15m
+
+.. _ssl_ca:
+
+ssl_ca
+~~~~~~
+
+Path to the SSL Certificate Authority (CA) file. Optional, default is empty.
+
+Daemon uses the CA file to verify the signature on the certificate. The file must be a PEM format.
+
+.. code-block:: ini
+
+
+    ssl_ca = keys/company_cert.pem
+
+.. _ssl_cert:
+
+ssl_cert
+~~~~~~~~
+
+Path to the SSL certificate. Optional, default is empty.
+
+Daemon uses the certificate as self-signed public key encrypting HTTP traffic over SSL. The file must be a PEM format.
+
+.. code-block:: ini
+
+
+    ssl_cert = keys/shard1_cert.pem
+
+.. _ssl_key:
+
+ssl_key
+~~~~~~~
+
+Path to the SSL certificate key. Optional, default is empty.
+
+Daemon uses the certificate key self-signed private key encrypting HTTP traffic over SSL. The file must be a PEM format.
+
+.. code-block:: ini
+
+
+    ssl_key = keys/shard1.pem
 
 .. _subtree_docs_cache:
 

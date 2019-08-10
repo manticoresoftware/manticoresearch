@@ -91,3 +91,63 @@ This endpoint expects request body with queries defined as JSON document. Respon
 	:glob:
 	
 	http_reference/*
+	
+SSL
+---
+
+All traffic from daemon to client may be confidential. To prevent sniffing of the data from the network and reduce risk from network based attacks HTTPS port might be set at daemon and communication to that port get through SSL with help of OpenSSL library.
+
+To enable SSL at daemon these file paths should be set: path to the key, path to certificate and path certificate authority in :ref:`searchd <searchd_program_configuration_options>` section of config and define HTTPS :ref:`listener <listen>`. Where SSL files are:
+
+* :ref:`ssl_ca <ssl_ca>` certificate authority file
+* :ref:`ssl_cert <ssl_cert>` certificate file
+* :ref:`ssl_key <ssl_key>` key file
+
+Prior to communicate client could check that certificate matched on request to server and make sure traffic got encrypted.
+
+.. code-block:: ini
+
+    ssl_ca = ca-cert.pem	
+    ssl_cert = server-cert.pem
+    ssl_key = server-key.pem
+
+Configuring SSL
+~~~~~~~~~~~~~~~
+
+These steps allow to generate the relevant certificates for daemon and it assumes OpenSSL is used.
+
+Daemon uses the Certificate Authority to verify the signature of certificates. Next it is necessary the key and cert file for generation of server and client certificates.
+
+Generate the CA key
+~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+    openssl genrsa 2048 > ca-key.pem
+	
+Generate the CA certificate from the CA key
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. code-block:: bash
+
+    openssl req -new -x509 -nodes -days 365 -key ca-key.pem -out ca-cert.pem
+
+Both files needed to generate server and client certificates and later ``ca-cert.pem`` for verification of certificate signatures.
+
+Server Certificate
+~~~~~~~~~~~~~~~~~~
+
+Daemon uses the server certificate to secure communication with client.
+
+.. code-block:: bash
+
+    openssl req -newkey rsa:2048 -days 365 -nodes -keyout server-key.pem -out server-req.pem
+    openssl rsa -in server-key.pem -out server-key.pem
+    openssl x509 -req -in server-req.pem -days 365 -CA ca-cert.pem -CAkey ca-key.pem -set_serial 01 -out server-cert.pem
+
+When generation done OpenSSL could be used to verify the key and certificate files generated correctly
+
+.. code-block:: bash
+
+    openssl verify -CAfile ca-cert.pem server-cert.pem
+

@@ -193,3 +193,6 @@
 
 /* Whether to compile for Windows */
 #cmakedefine01 USE_WINDOWS
+
+/* Whether to use OpenSSL */
+#cmakedefine01 USE_SSL

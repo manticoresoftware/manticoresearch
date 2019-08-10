@@ -66,6 +66,15 @@ if ( USE_GALERA )
 	include ( GetGALERA )
 endif ()
 
+option ( USE_SSL "Enable building with OpenSSL" 1 )
+if ( USE_SSL )
+	find_package(OpenSSL)
+	if ( OpenSSL_FOUND )
+		option ( USE_SSL "Enabled building with OpenSSL" 1 )
+		message ( STATUS "OpenSSL include directory: ${OPENSSL_INCLUDE_DIR}" )
+	endif ( OpenSSL_FOUND )	
+endif ()
+
 # Collect build info which will be embedded into binaries
 SET ( BANNER )
 # append any text to build info

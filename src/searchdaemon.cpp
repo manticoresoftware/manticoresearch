@@ -174,6 +174,8 @@ static Proto_e SimpleProtoByName ( const CSphString& sProto )
 		return Proto_e::MYSQL41;
 	if ( sProto=="http" )
 		return Proto_e::HTTP;
+	if ( sProto=="https" )
+		return Proto_e::HTTPS;
 	if ( sProto=="replication" )
 		return Proto_e::REPLICATION;
 	sphFatal( "unknown listen protocol type '%s'", sProto.scstr());

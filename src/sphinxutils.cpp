@@ -871,6 +871,9 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "access_blob_attrs",		0, nullptr },
 	{ "access_doclists",		0, nullptr },
 	{ "access_hitlists",		0, nullptr },
+	{ "ssl_cert",				0, nullptr },
+	{ "ssl_key",				0, nullptr },
+	{ "ssl_ca",					0, nullptr },
 	{ NULL,						0, NULL }
 };
 

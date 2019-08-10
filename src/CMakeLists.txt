@@ -23,7 +23,7 @@ set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp
 		searchdreplication.cpp threadutils.cpp searchdtask.cpp taskping.cpp
 		taskmalloctrim.cpp taskoptimize.cpp taskglobalidf.cpp tasksavestate.cpp
 		taskflushbinlog.cpp taskflushattrs.cpp taskflushmutable.cpp taskpreread.cpp
-		searchdaemon.cpp )
+		searchdaemon.cpp searchdssl.cpp )
 set ( SEARCHD_SRCS searchd.cpp ${SEARCHD_SRCS_TESTABLE} )
 set ( SPELLDUMP_SRCS spelldump.cpp )
 set ( TESTS_SRCS tests.cpp )
@@ -169,6 +169,11 @@ add_library ( libsphinx STATIC ${LIBSPHINX_SRCS} ${HEADERS} ${GHEADERS} ${LIBSPH
 add_dependencies ( libsphinx vergen )
 
 add_library ( lsearchd OBJECT ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
+if ( USE_SSL )
+	include_directories ( ${OPENSSL_INCLUDE_DIR} )
+	target_link_libraries ( lsearchd OpenSSL::SSL )		
+endif ( USE_SSL )
+
 add_dependencies ( lsearchd vergen )
 
 # our executables

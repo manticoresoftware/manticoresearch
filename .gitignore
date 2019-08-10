@@ -23,8 +23,9 @@
 /.idea
 /test/.idea
 /cmake-build*
-/build
+/build*
 /rlp
+/.vs
 
 # /config/
 /config/stamp-h1

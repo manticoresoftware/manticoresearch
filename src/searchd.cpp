@@ -28,6 +28,7 @@
 #include "threadutils.h"
 #include "searchdtask.h"
 #include "global_idf.h"
+#include "searchdssl.h"
 
 // services
 #include "taskping.h"
@@ -739,6 +740,8 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	sph::ShutdownGlobalIDFs ();
 	sphAotShutdown ();
 
+	SslDone();
+
 	ARRAY_FOREACH ( i, g_dListeners )
 		if ( g_dListeners[i].m_iSock>=0 )
 			sphSockClose ( g_dListeners[i].m_iSock );
@@ -1327,7 +1330,7 @@ void AddListener ( const CSphString & sListen, bool bHttpAllowed, CSphVector<Lis
 	tListener.m_bTcp = true;
 	tListener.m_bVIP = tDesc.m_bVIP;
 
-	if ( tDesc.m_eProto==Proto_e::HTTP && !bHttpAllowed )
+	if ( ( tDesc.m_eProto==Proto_e::HTTP || tDesc.m_eProto == Proto_e::HTTPS ) && !bHttpAllowed )
 	{
 		sphWarning ( "thread_pool disabled, can not listen for http interface, port=%d, use workers=thread_pool", tDesc.m_iPort );
 		return;
@@ -19720,6 +19723,15 @@ struct NetStateQL_t : public NetStateCommon_t
 	BYTE				m_uPacketID = 1;
 };
 
+struct NetStateHttps_t : public NetStateCommon_t
+{
+	SslClient_i * m_pSession = nullptr;
+	CSphVector<BYTE> m_dDecripted;
+
+	NetStateHttps_t() = default;
+	virtual ~NetStateHttps_t();
+};
+
 enum ActionAPI_e
 {
 	AAPI_HANDSHAKE_OUT = 0,
@@ -19807,7 +19819,7 @@ struct HttpHeaderStreamParser_t
 
 struct NetReceiveDataHttp_t : public ISphNetAction
 {
-	CSphScopedPtr<NetStateCommon_t>		m_tState;
+	CSphScopedPtr<NetStateCommon_t>	m_tState;
 	HttpHeaderStreamParser_t		m_tHeadParser;
 
 	explicit NetReceiveDataHttp_t ( NetStateQL_t * pState );
@@ -19818,6 +19830,28 @@ struct NetReceiveDataHttp_t : public ISphNetAction
 
 private:
 	void GrowBuffer();
+};
+
+struct NetReceiveDataHttps_t : public ISphNetAction
+{
+	CSphScopedPtr<NetStateHttps_t>	m_tState;
+	HttpHeaderStreamParser_t		m_tHeadParser;
+	bool							m_bWrite = false;
+
+	explicit NetReceiveDataHttps_t ( NetStateHttps_t * pState );
+
+	NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) override;
+	NetEvent_e		Setup ( int64_t tmNow ) override;
+	void			CloseSocket () override;
+};
+
+struct NetReplyHttps_t : public NetSendData_t
+{
+	NetStateHttps_t * m_pState = nullptr;
+
+	NetReplyHttps_t ( NetStateHttps_t * pState );
+	NetEvent_e		Setup ( int64_t tmNow ) override;
+	void			CloseSocket () override;
 };
 
 struct EventsIterator_t
@@ -20424,8 +20458,9 @@ struct ThdJobHttp_t : public ISphJob
 {
 	CSphScopedPtr<NetStateCommon_t>		m_tState;
 	CSphNetLoop *		m_pLoop;
+	const bool			m_bSsl = false;
 
-	ThdJobHttp_t ( CSphNetLoop * pLoop, NetStateCommon_t * pState );
+	ThdJobHttp_t ( CSphNetLoop * pLoop, NetStateCommon_t * pState, bool bSsl );
 
 	void		Call () final;
 };
@@ -20483,6 +20518,8 @@ static int NetBufGetInt ( const BYTE * pBuf )
 	return ntohl ( iVal );
 }
 
+#define NET_STATE_BUF_SIZE 65535
+#define NET_STATE_HTTP_SIZE 4000
 
 NetActionAccept_t::NetActionAccept_t ( const Listener_t & tListener )
 	: ISphNetAction ( tListener.m_iSock )
@@ -20569,19 +20606,26 @@ NetEvent_e NetActionAccept_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction 
 		if ( m_tListener.m_eProto==Proto_e::SPHINX )
 		{
 			auto * pStateAPI = new NetStateAPI_t ();
-			pStateAPI->m_dBuf.Reserve ( 65535 );
+			pStateAPI->m_dBuf.Reserve ( NET_STATE_BUF_SIZE );
 			FillNetState ( pStateAPI, iClientSock, iConnID, m_tListener.m_bVIP, saStorage );
 			pAction = new NetReceiveDataAPI_t ( pStateAPI );
 		} else if ( m_tListener.m_eProto==Proto_e::HTTP )
 		{
 			auto * pStateHttp = new NetStateQL_t ();
-			pStateHttp->m_dBuf.Reserve ( 65535 );
+			pStateHttp->m_dBuf.Reserve ( NET_STATE_BUF_SIZE );
 			FillNetState ( pStateHttp, iClientSock, iConnID, false, saStorage );
 			pAction = new NetReceiveDataHttp_t ( pStateHttp );
+		}
+		else if ( m_tListener.m_eProto == Proto_e::HTTPS )
+		{
+			auto * pStateHttp = new NetStateHttps_t ();
+			pStateHttp->m_dBuf.Reserve ( NET_STATE_BUF_SIZE );
+			FillNetState ( pStateHttp, iClientSock, iConnID, false, saStorage );
+			pAction = new NetReceiveDataHttps_t ( pStateHttp );
 		} else
 		{
 			auto * pStateQL = new NetStateQL_t ();
-			pStateQL->m_dBuf.Reserve ( 65535 );
+			pStateQL->m_dBuf.Reserve ( NET_STATE_BUF_SIZE );
 			FillNetState ( pStateQL, iClientSock, iConnID, m_tListener.m_bVIP, saStorage );
 			auto * pActionQL = new NetReceiveDataQL_t ( pStateQL );
 			pActionQL->SetupHandshakePhase();
@@ -21153,7 +21197,7 @@ NetEvent_e NetSendData_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> &
 
 	if ( m_tState->m_bKeepSocket )
 	{
-		sphLogDebugv ( "%p send %s job created, sent=%d, sock=%d, tick=%u", this, ProtoName(m_eProto), m_tState->m_iPos, m_iSock, pLoop->m_uTick );
+		sphLogDebugv ( "%p send %s job created, sent=%d, sock=%d, tick=%u", this, ProtoName ( m_eProto ), m_tState->m_iPos, m_iSock, pLoop->m_uTick );
 		switch ( m_eProto )
 		{
 			case Proto_e::SPHINX:
@@ -21179,6 +21223,13 @@ NetEvent_e NetSendData_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> &
 			}
 			break;
 
+			case Proto_e::HTTPS:
+			{
+				auto * pAction = new NetReceiveDataHttps_t ( (NetStateHttps_t *)m_tState.LeakPtr() );
+				dNextTick.Add ( pAction );
+			}
+			break;
+
 			default: break;
 		}
 	}
@@ -21189,7 +21240,7 @@ NetEvent_e NetSendData_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> &
 NetEvent_e NetSendData_t::Setup ( int64_t tmNow )
 {
 	assert ( m_tState.Ptr() );
-	sphLogDebugv ( "%p send %s setup, keep=%d, buf=%d, client=%s, conn=%d, sock=%d", this, ProtoName(m_eProto), (int)(m_tState->m_bKeepSocket),
+	sphLogDebugv ( "%p send %s setup, keep=%d, buf=%d, client=%s, conn=%d, sock=%d", this, ProtoName ( m_eProto ), (int)(m_tState->m_bKeepSocket),
 		m_tState->m_dBuf.GetLength(), m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock );
 
 	if ( !m_bContinue )
@@ -21270,8 +21321,8 @@ NetReceiveDataHttp_t::NetReceiveDataHttp_t ( NetStateQL_t *	pState )
 {
 	assert ( m_tState.Ptr() );
 	m_tState->m_iPos = 0;
-	m_tState->m_iLeft = 4000;
-	m_tState->m_dBuf.Resize ( Max ( m_tState->m_dBuf.GetLimit(), 4000 ) );
+	m_tState->m_iLeft = NET_STATE_HTTP_SIZE;
+	m_tState->m_dBuf.Resize ( Max ( m_tState->m_dBuf.GetLimit(), NET_STATE_HTTP_SIZE ) );
 }
 
 NetEvent_e NetReceiveDataHttp_t::Setup ( int64_t tmNow )
@@ -21414,7 +21465,7 @@ NetEvent_e NetReceiveDataHttp_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActi
 		sphLogDebugv ( "%p HTTP buf=%d, header=%d, content-len=%d, sock=%d, tick=%u", this, m_tState->m_dBuf.GetLength(), m_tHeadParser.m_iHeaderEnd, m_tHeadParser.m_iFieldContentLenVal, m_iSock, pLoop->m_uTick );
 
 		// no VIP for http for now
-		ThdJobHttp_t * pJob = new ThdJobHttp_t ( pLoop, m_tState.LeakPtr() );
+		ThdJobHttp_t * pJob = new ThdJobHttp_t ( pLoop, m_tState.LeakPtr(), false );
 		g_pThdPool->AddJob ( pJob );
 
 		return NE_REMOVED;
@@ -21426,6 +21477,183 @@ void NetReceiveDataHttp_t::CloseSocket()
 	if ( m_tState.Ptr() )
 		m_tState->CloseSocket();
 }
+
+NetStateHttps_t::~NetStateHttps_t()
+{
+	SslFree ( m_pSession );
+	m_pSession = nullptr;
+}
+
+NetReceiveDataHttps_t::NetReceiveDataHttps_t ( NetStateHttps_t * pState )
+	: ISphNetAction ( pState->m_iClientSock )
+	, m_tState ( pState )
+{
+	assert ( m_tState.Ptr() );
+	m_tState->m_iPos = 0;
+	m_tState->m_iLeft = NET_STATE_HTTP_SIZE;
+	m_tState->m_dBuf.Resize ( Max ( m_tState->m_dBuf.GetLimit(), NET_STATE_HTTP_SIZE ) );
+}
+
+void NetReceiveDataHttps_t::CloseSocket()
+{
+	if ( m_tState.Ptr() )
+		m_tState->CloseSocket();
+}
+
+NetEvent_e NetReceiveDataHttps_t::Setup ( int64_t tmNow )
+{
+	assert ( m_tState.Ptr() );
+	sphLogDebugv ( "%p receive HTTPS setup, keep=%d, client=%s, conn=%d, sock=%d", this, m_tState->m_bKeepSocket, m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock );
+
+	if ( !m_tState->m_bKeepSocket )
+	{
+		m_tmTimeout = tmNow + MS2SEC * g_iReadTimeout;
+	}
+	else
+	{
+		m_tmTimeout = tmNow + MS2SEC * g_iClientTimeout;
+	}
+	m_bWrite = false;
+
+	m_tState->m_pSession = SslSetup ( m_tState->m_pSession );
+	m_tState->m_dDecripted.Resize ( 0 );
+
+	return NE_IN;
+}
+
+NetEvent_e NetReceiveDataHttps_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNext, CSphNetLoop * pLoop )
+{
+	assert ( m_tState.Ptr() );
+	const char * sHttpError = "https error";
+	if ( CheckSocketError ( uGotEvents, sHttpError, m_tState.Ptr(), false ) )
+		return NE_REMOVE;
+
+	// loop to handle similar operations at once
+	while (true)
+	{
+		int iRes = m_tState->NetManageSocket ( m_bWrite );
+		if ( iRes==-1 )
+		{
+			// FIXME!!! report back to client buffer overflow with 413 error
+			LogSocketError ( sHttpError, m_tState.Ptr(), false );
+			return NE_REMOVE;
+		}
+
+		int iOff = m_tState->m_iPos;
+		m_tState->m_iLeft -= iRes;
+		m_tState->m_iPos += iRes;
+
+		sphLogDebugv ( "%p HTTPS %s len %d, off %d, sock=%d, tick=%u", this, m_bWrite ? "write" : "read", iRes, iOff, m_iSock, pLoop->m_uTick );
+
+		// socket would block - going back to polling
+		if ( iRes==0 )
+			return NE_KEEP;
+
+		if ( m_bWrite && m_tState->m_iLeft==0 )
+		{
+			m_tState->m_dBuf.Resize ( NET_STATE_HTTP_SIZE );
+			m_tState->m_iLeft = m_tState->m_dBuf.GetLength();
+			m_tState->m_iPos = 0;
+			m_bWrite = false;
+			return NE_IN;
+		}
+
+		const int iDecriptedLen = m_tState->m_dDecripted.GetLength();
+		bool bWrite = m_bWrite;
+		bool bDone = SslTick ( m_tState->m_pSession, bWrite, m_tState->m_dBuf, iRes, iOff, m_tState->m_dDecripted );
+
+		// SSL reports finish only on error
+		if ( bDone )
+			return NE_REMOVE;
+
+		bool bChange = ( bWrite!=m_bWrite );
+		m_bWrite = bWrite;
+		if ( bChange )
+		{
+			m_tState->m_iLeft = m_tState->m_dBuf.GetLength();
+			m_tState->m_iPos = 0;
+			return ( m_bWrite ? NE_OUT : NE_IN );
+		}
+
+		// grow read buffer
+		if ( !m_bWrite && iRes+iOff==m_tState->m_dBuf.GetLength() )
+		{
+			int iCanGrow = Min ( g_iMaxPacketSize - m_tState->m_iPos, 4096 );
+			if ( !iCanGrow )
+			{
+				sphWarning ( "ill-formed client request (length=%d out of bounds) (client=%s(%d)), sock=%d", m_tState->m_iLeft, m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock );
+				return NE_REMOVE;
+			}
+
+			m_tState->m_dBuf.AddN ( iCanGrow );
+			m_tState->m_iLeft = iCanGrow;
+		}
+
+		// check on new part of decoded data
+		if ( iDecriptedLen<m_tState->m_dDecripted.GetLength() &&
+			m_tHeadParser.HeaderFound ( m_tState->m_dDecripted.Begin(), m_tState->m_dDecripted.GetLength() ) )
+		{
+			int iReqSize = m_tHeadParser.m_iHeaderEnd + m_tHeadParser.m_iFieldContentLenVal;
+			if ( iReqSize>=m_tState->m_dDecripted.GetLength() )
+			{
+				pLoop->RemoveIterEvent();
+
+				sphLogDebugv ( "%p HTTPS buf=%d, '%.*s', header=%d, content-len=%d, sock=%d, tick=%u", this, m_tState->m_dDecripted.GetLength(), Min ( m_tState->m_dDecripted.GetLength(), 128 ), m_tState->m_dDecripted.Begin(),
+					m_tHeadParser.m_iHeaderEnd, m_tHeadParser.m_iFieldContentLenVal, m_iSock, pLoop->m_uTick );
+
+				m_tState->m_dDecripted.SwapData ( m_tState->m_dBuf );
+				ThdJobHttp_t * pJob = new ThdJobHttp_t ( pLoop, m_tState.LeakPtr(), true );
+				g_pThdPool->AddJob ( pJob );
+
+				return NE_REMOVED;
+			}
+		}
+
+		// keep reading till end of buffer or data at socket
+		if ( iRes>0 )
+			continue;
+
+		return NE_KEEP;
+	}
+}
+
+NetReplyHttps_t::NetReplyHttps_t ( NetStateHttps_t * pState )
+	: NetSendData_t ( pState, Proto_e::HTTPS )
+	, m_pState ( pState )
+{
+}
+
+NetEvent_e NetReplyHttps_t::Setup ( int64_t tmNow )
+{
+	assert ( m_tState.Ptr() );
+	assert ( m_pState->m_pSession );
+
+	sphLogDebugv ( "%p send HTTPS setup, keep=%d, buf=%d, client=%s, conn=%d, sock=%d", this, (int)(m_tState->m_bKeepSocket),
+		m_tState->m_dBuf.GetLength(), m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock );
+
+	if ( !m_bContinue )
+	{
+		m_tmTimeout = tmNow + MS2SEC * g_iWriteTimeout;
+
+		assert ( m_tState->m_dBuf.GetLength() );
+		if ( !SslSend ( m_pState->m_pSession, m_pState->m_dDecripted, m_pState->m_dBuf ) )
+			return NE_REMOVE;
+
+		m_pState->m_dDecripted.SwapData ( m_pState->m_dBuf );
+		m_tState->m_iLeft = m_tState->m_dBuf.GetLength();
+		m_tState->m_iPos = 0;
+	}
+	m_bContinue = false;
+
+	return NE_OUT;
+}
+
+void NetReplyHttps_t::CloseSocket ()
+{
+	if ( m_tState.Ptr() )
+		m_tState->CloseSocket();
+}
+
 
 ThdJobAPI_t::ThdJobAPI_t ( CSphNetLoop * pLoop, NetStateAPI_t * pState )
 	: m_tState ( pState )
@@ -21589,9 +21817,10 @@ void ThdJobCleanup_t::Clear ()
 	m_dCleanup.Reset();
 }
 
-ThdJobHttp_t::ThdJobHttp_t ( CSphNetLoop * pLoop, NetStateCommon_t * pState )
+ThdJobHttp_t::ThdJobHttp_t ( CSphNetLoop * pLoop, NetStateCommon_t * pState, bool bSsl )
 	: m_tState ( pState )
 	, m_pLoop ( pLoop )
+,	  m_bSsl ( bSsl )
 {
 	assert ( m_tState.Ptr() );
 }
@@ -21644,7 +21873,14 @@ void ThdJobHttp_t::Call ()
 		return;
 
 	assert ( m_pLoop );
-	NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), Proto_e::HTTP );
+	NetSendData_t * pSend = nullptr;
+	if ( !m_bSsl )
+	{
+		pSend = new NetSendData_t ( m_tState.LeakPtr(), Proto_e::HTTP );
+	} else
+	{
+		pSend = new NetReplyHttps_t ( (NetStateHttps_t *)m_tState.LeakPtr() );
+	}
 	JobDoSendNB ( pSend, m_pLoop );
 }
 
@@ -21652,13 +21888,13 @@ void ThdJobHttp_t::Call ()
 void JobDoSendNB ( NetSendData_t * pSend, CSphNetLoop * pLoop )
 {
 	assert ( pLoop && pSend );
-	pSend->Setup ( sphMicroTimer() );
+	NetEvent_e eRes = pSend->Setup ( sphMicroTimer() );
 
 	// try to push data to socket here then transfer send-action to net-loop in case send needs poll to continue
 	CSphVector<ISphNetAction *> dNext ( 1 );
 	dNext.Resize ( 0 );
 	DWORD uGotEvents = NE_OUT;
-	NetEvent_e eRes = pSend->Tick ( uGotEvents, dNext, pLoop );
+	eRes = pSend->Tick ( uGotEvents, dNext, pLoop );
 	if ( eRes==NE_REMOVE )
 	{
 		SafeDelete ( pSend );
@@ -22791,6 +23027,42 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 			g_dListeners.Add ( tListener );
 		}
 	}
+
+	bool bNeedSsl = g_dListeners.FindFirst ( [] ( const Listener_t & tDesc ) { return tDesc.m_eProto==Proto_e::HTTPS; } );
+	if ( bNeedSsl )
+	{
+		bool bSslValid = SslInit();
+		bool bSslKeysValid = true;
+		if ( bSslValid )
+		{
+			const char * sSslCert = hSearchd ( "ssl_cert" ) ? hSearchd ( "ssl_cert" )->cstr() : nullptr;
+			const char * sSslKey = hSearchd ( "ssl_key" ) ? hSearchd ( "ssl_key" )->cstr() : nullptr;
+			const char * sSslCa = hSearchd ( "ssl_ca" ) ? hSearchd ( "ssl_ca" )->cstr() : nullptr;
+			if ( sSslCert || sSslKey || sSslCa )
+			{
+				bSslValid = SetKeys ( sSslCert, sSslKey, sSslCa );
+			} else
+			{
+				bSslKeysValid = false;
+			}
+		}
+
+		if ( !bSslValid || !bSslKeysValid )
+		{
+			for ( Listener_t & tDesc : g_dListeners )
+			{
+				if ( tDesc.m_eProto!=Proto_e::HTTPS )
+					continue;
+				tDesc.m_eProto = Proto_e::HTTP;
+			}
+#if USE_SSL
+			sphWarning ( "no SSL %s found, all HTTPS listeners replaced with HTTP", bSslKeysValid ? "library" : "keys" );
+#else
+			sphWarning ( "binary compiled without SSL library support, set CMake option USE_SSL=1, all HTTPS listeners replaced with HTTP" );
+#endif
+		}
+	}
+
 
 	// set up ping service (if necessary) before loading indexes
 	// (since loading ha-mirrors of distributed already assumes ping is usable).

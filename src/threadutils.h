@@ -33,6 +33,7 @@ enum class Proto_e
 	MYSQL41,
 	HTTP,
 	REPLICATION,
+	HTTPS
 };
 
 const char* ThdStateName( ThdState_e eState);

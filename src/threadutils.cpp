@@ -51,6 +51,7 @@ const char* ProtoName ( Proto_e eProto )
 		case Proto_e::SPHINX: return "sphinxapi";
 		case Proto_e::MYSQL41: return "sphinxql";
 		case Proto_e::HTTP: return "http";
+		case Proto_e::HTTPS: return "https";
 		case Proto_e::REPLICATION: return "replication";
 	}
 	return "unknown";

@@ -72,6 +72,8 @@ if ( USE_SSL )
 	if ( OpenSSL_FOUND )
 		option ( USE_SSL "Enabled building with OpenSSL" 1 )
 		message ( STATUS "OpenSSL include directory: ${OPENSSL_INCLUDE_DIR}" )
+	else ( OpenSSL_FOUND )
+		set ( USE_SSL 0 )
 	endif ( OpenSSL_FOUND )	
 endif ()
 

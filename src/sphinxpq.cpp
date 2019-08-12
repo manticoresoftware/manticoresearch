@@ -100,6 +100,7 @@ public:
 	virtual bool AddDocument ( ISphHits * , const CSphMatch & , const char ** , const CSphVector<DWORD> & , CSphString & , CSphString & ) { return true; }
 	bool DeleteDocument ( const DocID_t * , int , CSphString & , RtAccum_t * pAccExt ) override { RollBack ( pAccExt ); return true; }
 	void ForceRamFlush ( bool bPeriodic ) override;
+	bool IsFlushNeed() const override;
 	bool ForceDiskChunk () override;
 	bool AttachDiskIndex ( CSphIndex * , bool, bool &, CSphString & ) override { return true; }
 	void Optimize () override {}
@@ -2392,12 +2393,21 @@ void SetPercolateThreads ( int iThreads )
 	g_iPercolateThreads = Max ( 1, iThreads );
 }
 
-void PercolateIndex_c::ForceRamFlush ( bool bPeriodic )
+bool PercolateIndex_c::IsFlushNeed() const
 {
-	if ( GetBinlog ()->IsActive () && m_iTID<=m_iSavedTID )
-		return;
+	// m_iTID get managed by binlog that is why wo binlog there is no need to compare it
+	if ( GetBinlog() && GetBinlog()->IsActive() && m_iTID<=m_iSavedTID )
+		return false;
 
 	if ( m_bSaveDisabled )
+		return false;
+
+	return true;
+}
+
+void PercolateIndex_c::ForceRamFlush ( bool bPeriodic )
+{
+	if ( !IsFlushNeed() )
 		return;
 
 	RamFlush ( bPeriodic );

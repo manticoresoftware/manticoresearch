@@ -53,6 +53,8 @@ public:
 	/// forcibly flush RAM chunk to disk
 	virtual void ForceRamFlush ( bool bPeriodic=false ) = 0;
 
+	virtual bool IsFlushNeed() const = 0;
+
 	/// get time of last flush happened
 	virtual int64_t GetLastFlushTimestamp() const = 0;
 

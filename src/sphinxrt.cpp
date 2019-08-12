@@ -1035,6 +1035,7 @@ public:
 	void				RollBack ( RtAccum_t * pAccExt ) final;
 	bool				CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<DocID_t> & dAccKlist, int * pTotalKilled, bool bForceDump ); // FIXME? protect?
 	void				ForceRamFlush ( bool bPeriodic=false ) final;
+	bool				IsFlushNeed() const final;
 	bool				ForceDiskChunk() final;
 	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) final;
 	bool				Truncate ( CSphString & sError ) final;
@@ -1289,12 +1290,21 @@ RtIndex_c::~RtIndex_c ()
 	}
 }
 
-void RtIndex_c::ForceRamFlush ( bool bPeriodic ) REQUIRES (!this->m_tFlushLock)
+bool RtIndex_c::IsFlushNeed() const
 {
-	if ( g_pRtBinlog->IsActive () && m_iTID<=m_iSavedTID )
-		return;
+	// m_iTID get managed by binlog that is why wo binlog there is no need to compare it 
+	if ( g_pBinlog && g_pBinlog->IsActive() && m_iTID<=m_iSavedTID )
+		return false;
 
 	if ( m_bSaveDisabled )
+		return false;
+
+	return true;
+}
+
+void RtIndex_c::ForceRamFlush ( bool bPeriodic ) REQUIRES (!this->m_tFlushLock)
+{
+	if ( !IsFlushNeed() )
 		return;
 
 	int64_t tmSave = sphMicroTimer();

@@ -197,6 +197,39 @@ if ( WIN32 )
 			endif ()
 		endif ()
 	endif ()
+	
+	if ( USE_SSL )
+		IF ( CMAKE_EXE_LINKER_FLAGS MATCHES "x64" )
+			FIND_FILE ( HAVE_CRYPTO_DLL
+			NAMES
+			"libeay32.dll"
+			PATHS "${OPENSSL_INCLUDE_DIR}/.."
+			NO_DEFAULT_PATH
+			)
+			FIND_FILE(HAVE_OPENSSL_DLL
+			NAMES
+			"ssleay32.dll"
+			PATHS "${OPENSSL_INCLUDE_DIR}/.."
+			NO_DEFAULT_PATH
+			)	
+		else ()
+			FIND_FILE ( HAVE_CRYPTO_DLL
+			NAMES
+			"libcrypto-1_1.dll"
+			PATHS "${OPENSSL_INCLUDE_DIR}/.."
+			NO_DEFAULT_PATH
+			)
+			FIND_FILE(HAVE_OPENSSL_DLL
+			NAMES
+			"libssl-1_1.dll"
+			PATHS "${OPENSSL_INCLUDE_DIR}/.."
+			NO_DEFAULT_PATH
+			)	
+		endif ()
+		install ( FILES "${HAVE_CRYPTO_DLL}" DESTINATION bin COMPONENT applications )
+		install ( FILES "${HAVE_OPENSSL_DLL}" DESTINATION bin COMPONENT applications )
+	endif ( USE_SSL )
+	
 	mark_as_advanced ( CMAKE_CONFIGURATION_TYPES )
 	add_definitions ("-D_CRT_SECURE_NO_WARNINGS")
 	add_definitions ( "-wd4996" "-wd4706" "-wd4244" "-wd4702" )

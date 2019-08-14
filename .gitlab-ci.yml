@@ -96,6 +96,7 @@ build_win:
     CTEST_BUILD_CONFIGURATION: "Debug"
     LIBS_BUNDLE: "x:/bundle"
     CTEST_CMAKE_GENERATOR: "Visual Studio 14"
+    OPENSSL_ROOT_DIR: "x:/bundle/openssl-x32"
   script:
     - 'net use x: \\\\VBOXSRV\\shared'
     - mkdir build && cd build

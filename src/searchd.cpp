@@ -18067,6 +18067,7 @@ ESphAddIndex AddRTIndex ( GuardedHash_c& dPost, const char * szIndexName, const 
 	ServedDesc_t tIdx;
 	tIdx.m_pIndex = sphCreateIndexRT ( tSchema, szIndexName, iRamSize, hIndex["path"].cstr (), bWordDict );
 	tIdx.m_eType = IndexType_e::RT;
+	tIdx.m_iMemLimit = iRamSize;
 	return AddRTPercolate ( dPost, szIndexName, tIdx, hIndex, tSettings, bReplace );
 }
 

@@ -670,6 +670,7 @@ struct ServedDesc_t
 	bool		m_bJson			= false; // index came from replication json config, not from usual config file
 	CSphString	m_sCluster;
 	FileAccessSettings_t m_tFileAccessSettings;
+	int			m_iMemLimit = 0;
 
 	// statics instead of members below used to simultaneously check pointer for null also.
 

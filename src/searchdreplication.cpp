@@ -173,6 +173,8 @@ struct ReplicationArgs_t
 	int						m_iListenPort = -1;
 	// nodes list to join by Galera
 	CSphString				m_sNodes;
+	// max value of rt_mem_limit of all indexes
+	int						m_iMaxMemLimit = 0;
 };
 
 // interface to pass into static Replicate to issue commit for specific command
@@ -941,6 +943,17 @@ void Instr_fn ( wsrep_pfs_instr_type_t type, wsrep_pfs_instr_ops_t ops, wsrep_pf
 #endif
 }
 
+static int GetClusterMemLimit ( int iMemLimit, int iIndexes )
+{
+	const int CACHE_PER_INDEX = 16;
+
+	// change default cache size to 16Mb per added index or size of largest rt_mem_limit of RT index
+	int iSize = iMemLimit / 1024 / 1024;
+	int iCount = Max ( 1, iIndexes );
+	iSize = Max ( iCount * CACHE_PER_INDEX, iSize );
+
+	return iSize;
+}
 
 // create cluster from desc and become master node or join existed cluster
 bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
@@ -998,12 +1011,10 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 		sOptions.Appendf ( "ist.recv_addr=%s", g_sIncomingIP.cstr() );
 	}
 
-	// change default cache size to 16Mb per added index but not more than default value
+	// change default cache size 
 	if ( !tArgs.m_pCluster->m_hOptions.Exists ( "gcache.size" ) )
 	{
-		const int CACHE_PER_INDEX = 16;
-		int iCount = Max ( 1, tArgs.m_pCluster->m_dIndexes.GetLength() );
-		int iSize = Min ( iCount * CACHE_PER_INDEX, 128 );
+		int iSize = GetClusterMemLimit ( tArgs.m_iMaxMemLimit, tArgs.m_pCluster->m_dIndexes.GetLength() );
 		sOptions.Appendf ( "gcache.size=%dM", iSize );
 	}
 
@@ -1462,7 +1473,7 @@ static bool CheckLocalIndex ( const CSphString & sIndex, CSphString & sError )
 }
 
 // set cluster name into index desc for fast rejects
-static bool SetIndexCluster ( const CSphString & sIndex, const CSphString & sCluster, CSphString & sError )
+static bool SetIndexCluster ( const CSphString & sIndex, const CSphString & sCluster, CSphString & sError, int * pMemLimit )
 {
 	ServedIndexRefPtr_c pServed = GetServed ( sIndex );
 	if ( !pServed )
@@ -1480,6 +1491,8 @@ static bool SetIndexCluster ( const CSphString & sIndex, const CSphString & sClu
 			return false;
 		}
 		bSetCluster = ( pDesc->m_sCluster!=sCluster );
+		if ( pMemLimit )
+			*pMemLimit = pDesc->m_iMemLimit;
 	}
 
 	if ( bSetCluster )
@@ -2031,7 +2044,7 @@ bool CommitMonitor_c::CommitTOI ( CSphString & sError ) EXCLUDES ( g_tClustersLo
 	switch ( tCmd.m_eCommand )
 	{
 	case ReplicationCommand_e::CLUSTER_ALTER_ADD:
-		if ( !SetIndexCluster ( tCmd.m_sIndex, pCluster->m_sName, sError ) )
+		if ( !SetIndexCluster ( tCmd.m_sIndex, pCluster->m_sName, sError, nullptr ) )
 		{
 			return false;
 		}
@@ -2041,7 +2054,7 @@ bool CommitMonitor_c::CommitTOI ( CSphString & sError ) EXCLUDES ( g_tClustersLo
 		break;
 
 	case ReplicationCommand_e::CLUSTER_ALTER_DROP:
-		if ( !SetIndexCluster ( tCmd.m_sIndex, CSphString(), sError ) )
+		if ( !SetIndexCluster ( tCmd.m_sIndex, CSphString(), sError, nullptr ) )
 		{
 			return false;
 		}
@@ -2485,7 +2498,7 @@ static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes,
 	}
 
 	for ( const CSphString & sIndex : dIndexes )
-		if ( !SetIndexCluster ( sIndex, sCluster, sError ) )
+		if ( !SetIndexCluster ( sIndex, sCluster, sError, nullptr ) )
 			return false;
 
 	// scope for modify cluster data
@@ -2800,18 +2813,23 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 			continue;
 		}
 
+		int iMaxMemLimit = 0;
+
 		// check indexes valid
 		for ( const CSphString & sIndexName : tDesc.m_dIndexes )
 		{
-			if ( !SetIndexCluster ( sIndexName, pElem->m_sName, sError ) )
+			int iMemLimit = 0;
+			if ( !SetIndexCluster ( sIndexName, pElem->m_sName, sError, &iMemLimit ) )
 			{
 				sphWarning ( "%s, removed from cluster '%s'", sError.cstr(), pElem->m_sName.cstr() );
 				continue;
 			}
 			pElem->m_dIndexes.Add ( sIndexName );
+			iMaxMemLimit = Max ( iMemLimit, iMaxMemLimit );
 		}
 		pElem->UpdateIndexHashes();
 		tArgs.m_pCluster = pElem.Ptr();
+		tArgs.m_iMaxMemLimit = iMaxMemLimit;
 
 		{
 			ScWL_t tLock ( g_tClustersLock );
@@ -3736,7 +3754,7 @@ bool RemoteClusterDelete ( const CSphString & sCluster, CSphString & sError ) EX
 
 		for ( const CSphString & sIndex : pCluster->m_dIndexes )
 		{
-			if ( !SetIndexCluster ( sIndex, CSphString(), sError ) )
+			if ( !SetIndexCluster ( sIndex, CSphString(), sError, nullptr ) )
 				return false;
 		}
 		pCluster->m_dIndexes.Reset();

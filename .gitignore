@@ -23,7 +23,9 @@
 /.idea
 /test/.idea
 /cmake-build*
-/build*
+/build
+/buildx64
+/build_temp
 /rlp
 /.vs
 

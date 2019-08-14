@@ -3888,6 +3888,18 @@ CSphString GetPathOnly ( const CSphString & sFullPath )
 
 }
 
+const char * GetExtension ( const CSphString & sFullPath )
+{
+	if ( sFullPath.IsEmpty() )
+		return nullptr;
+
+	const char * pDot = strchr ( sFullPath.cstr(), '.' );
+	if ( !pDot || pDot[1]=='\0' )
+		return nullptr;
+
+	return pDot+1;
+}
+
 static CSphAtomic_T<int64_t> g_iUID { 1 };
 static int64_t g_iUidBase = 0;
 

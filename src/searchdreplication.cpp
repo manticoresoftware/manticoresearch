@@ -3924,25 +3924,32 @@ bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CS
 		}
 	}
 
+	tRes.m_pDst->m_dRemotePaths.Reset ( tCmd.m_pChunks->m_dBaseNames.GetLength() );
+
 	// use cluster path as head of index path or existed index path
-	CSphString sIndexPath;
 	if ( tRes.m_bIndexActive )
 	{
-		sIndexPath = GetPathOnly ( tRes.m_sRemoteIndexPath );
+		// set index files names into existing index files
+		ARRAY_FOREACH ( iFile, tCmd.m_pChunks->m_dBaseNames )
+		{
+			const CSphString & sFile = tCmd.m_pChunks->m_dBaseNames[iFile];
+			tRes.m_pDst->m_dRemotePaths[iFile].SetSprintf ( "%s.%s", tRes.m_sRemoteIndexPath.cstr(), GetExtension ( sFile.cstr() ) );
+		}
 	} else
 	{
+		CSphString sIndexPath;
 		if ( !GetClusterPath ( tCmd.m_sCluster, sIndexPath, sError ) )
 			return false;
 		tRes.m_sRemoteIndexPath.SetSprintf ( "%s/%s", sIndexPath.cstr(), tCmd.m_sIndexFileName.cstr() );
+
+		// set index files names into cluster folder
+		ARRAY_FOREACH ( iFile, tCmd.m_pChunks->m_dBaseNames )
+		{
+			const CSphString & sFile = tCmd.m_pChunks->m_dBaseNames[iFile];
+			tRes.m_pDst->m_dRemotePaths[iFile].SetSprintf ( "%s/%s", sIndexPath.cstr(), sFile.cstr() );
+		}
 	}
 
-	// set index files names
-	tRes.m_pDst->m_dRemotePaths.Reset ( tCmd.m_pChunks->m_dBaseNames.GetLength() );
-	ARRAY_FOREACH ( iFile, tCmd.m_pChunks->m_dBaseNames )
-	{
-		const CSphString & sFile = tCmd.m_pChunks->m_dBaseNames[iFile];
-		tRes.m_pDst->m_dRemotePaths[iFile].SetSprintf ( "%s/%s", sIndexPath.cstr(), sFile.cstr() );
-	}
 	int iBits = tCmd.m_pChunks->m_dChunks.Last().m_iHashStartItem + tCmd.m_pChunks->m_dChunks.Last().GetChunksCount();
 	tRes.m_pDst->m_dNodeChunks.Init ( iBits );
 

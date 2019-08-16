@@ -577,8 +577,8 @@ not the rule. Linux (as most progressive) supports it since 2011, on kernels sta
 also in game.
 
 For Linux system daemon checks variable ``/proc/sys/net/ipv4/tcp_fastopen`` and behaves according
- to it. Bit 0 manages client side, bit 1 rules listeners. By default system has this param set to 1,
- i.e. clients enabled, listeners disabled.
+to it. Bit 0 manages client side, bit 1 rules listeners. By default system has this param set to 1,
+i.e. clients enabled, listeners disabled.
 
 .. _log:
 
@@ -814,18 +814,20 @@ case ``net_wait_tm`` is ``0``. Also busy loop might be disabled with ``net_wait_
 - this way poller set timeout of ``1ms`` for system poll call.
 
 .. _net_throttle_accept:
+
+net_throttle_accept
+~~~~~~~~~~~~~~~~~~~
+
+Defines how many clients are accepted on each iteration of the network loop in case of thread_poll worker.
+Default is 0 (unlimited), which should be fine for most users. This is a fine tuning option to control the throughput of the network loop in high load scenarios.
+
 .. _net_throttle_action:
 
-net_throttle_accept net_throttle_action
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+net_throttle_action
+~~~~~~~~~~~~~~~~~~~
 
-Control network thread for workers=thread_pool mode,
-default is 0.
-
-These options define how many clients got accepted and how many requests
-processed on each iteration of network loop, in case of value above zero.
-Zero value means do not constrain network loop. These options might help to
-fine tune network loop throughput at high load scenario.
+Defines how many requests are processed on each iteration of the network loop in case of thread_poll worker.
+Default is 0 (unlimited), which should be fine for most users. This is a fine tuning option to control the throughput of the network loop in high load scenarios.
 
 .. _node_address:
 

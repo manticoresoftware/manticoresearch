@@ -162,11 +162,13 @@ To generate CA key/certificate and server key/certificate you can do:
     openssl ecparam -name prime256v1 -out ecparam.file
 
 * Generate certificate request and server private key (fill in at least "Common Name" different from the root certificate's common name):
+
 .. code-block:: bash
 
     openssl req -newkey ec:ecparam.file -days 3600 -nodes -keyout server-key.pem -out server-cert.csr
 
 * Remove the passphrase for the key if any:
+
 .. code-block:: bash
 
     openssl ec -in server-key.pem -out server-key.pem

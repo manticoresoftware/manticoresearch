@@ -579,21 +579,16 @@ specified, multiple variants of the same token will be indexed. Regular
 keywords (resulting from that token by replacing blended with
 whitespace) are always be indexed.
 
--  trim_none
--  Index the entire token.
+-  ``trim_none`` -  Index the entire token.
 
--  trim_head
--  Trim heading blended characters, and index the resulting token.
+-  ``trim_head`` -  Trim heading blended characters, and index the resulting token.
 
--  trim_tail
--  Trim trailing blended characters, and index the resulting token.
+-  ``trim_tail`` -  Trim trailing blended characters, and index the resulting token.
 
--  trim_both
--  Trim both heading and trailing blended characters, and index the
+-  ``trim_both`` -  Trim both heading and trailing blended characters, and index the
    resulting token.
 
--  skip_pure
--  Do not index the token if it's purely blended, that is, consists of
+-  ``skip_pure`` -  Do not index the token if it's purely blended, that is, consists of
    blended characters only.
 
 Returning to the “@dude!” example above, setting
@@ -628,7 +623,7 @@ charset_table
 Accepted characters table, with case folding rules. Optional, default
 value are latin and cyrillic characters.
 
-charset_table is the main workhorse of Manticore tokenizing process, ie.
+charset_table is the main workhorse of Manticore tokenization process, ie.
 the process of extracting keywords from document text or query text. It
 controls what characters are accepted as valid and what are not, and how
 the accepted characters should be transformed (eg. should the case be
@@ -649,26 +644,21 @@ whole table in such form would result in bloated and barely manageable
 specifications. So there are several syntax shortcuts that let you map
 ranges of characters at once. The complete list is as follows:
 
--  A->a
--  Single char mapping, declares source char ‘A’ as allowed to occur
+-  ``A->a`` -  Single char mapping, declares source char ‘A’ as allowed to occur
    within keywords and maps it to destination char ‘a’ (but does *not*
    declare ‘a’ as allowed).
 
--  A..Z->a..z
--  Range mapping, declares all chars in source range as allowed and maps
+-  ``A..Z->a..z`` -  Range mapping, declares all chars in source range as allowed and maps
    them to the destination range. Does *not* declare destination range
    as allowed. Also checks ranges' lengths (the lengths must be equal).
 
--  a
--  Stray char mapping, declares a character as allowed and maps it to
+-  ``a`` -  Stray char mapping, declares a character as allowed and maps it to
    itself. Equivalent to a->a single char mapping.
 
--  a..z
--  Stray range mapping, declares all characters in range as allowed and
+-  ``a..z`` -  Stray range mapping, declares all characters in range as allowed and
    maps them to themselves. Equivalent to a..z->a..z range mapping.
 
--  A..Z/2
--  Checkerboard range map. Maps every pair of chars to the second char.
+-  ``A..Z/2`` -  Checkerboard range map. Maps every pair of chars to the second char.
    More formally, declares odd characters in range as allowed and maps
    them to the even ones; also declares even characters as allowed and
    maps them to themselves. For instance, A..Z/2 is equivalent to A->B,
@@ -680,12 +670,12 @@ Control characters with codes from 0 to 32 are always treated as
 separators. Characters with codes 33 to 127, ie. 7-bit ASCII characters,
 can be used in the mappings as is. To avoid configuration file encoding
 issues, 8-bit ASCII characters and Unicode characters must be specified
-in U+xxx form, where ‘xxx’ is hexadecimal codepoint number. This form
+in ``U+xxx`` form, where ``xxx`` is hexadecimal codepoint number. This form
 can also be used for 7-bit ASCII characters to encode special ones: eg.
 use U+2E to encode dot, U+2C to encode comma.
 
-Aliases “english” and “russian” are allowed at control character
-mapping.
+Beside definitions of characters and mappings, there are several built-in aliases that can be used.
+Current  aliases are: ``english``, ``russian``, ``non_cjk`` and ``cjk``.
 
 Example:
 

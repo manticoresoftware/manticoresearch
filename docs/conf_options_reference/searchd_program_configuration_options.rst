@@ -865,9 +865,9 @@ precedence, and will overwrite this instance-wide default value,
 allowing for fine-grain control.
 
 .. warning::
-   The functionality of this directive is taken over by :ref:`access_plain_attrs_searchd` and :ref:`access_blob_attrs_searchd` directives as of 3.0.2. 
+   The functionality of this directive is taken over by :ref:`access_plain_attrs_searchd` and :ref:`access_blob_attrs_searchd` directives as of 3.0.2.
    The option is marked as deprecated and will be removed in future versions.
-   
+
 .. _persistent_connections_limit:
 
 persistent_connections_limit
@@ -1511,28 +1511,29 @@ Example:
 ssl_ca
 ~~~~~~
 
-Path to the SSL Certificate Authority (CA) file. Optional, default is empty.
+Path to the SSL Certificate Authority (CA) certificate file (aka root certificate). Optional, default is empty.
+When not empty the certificate in ``ssl_cert`` should be signed by this root certificate.
 
-Daemon uses the CA file to verify the signature on the certificate. The file must be a PEM format.
+Daemon uses the CA file to verify the signature on the certificate. The file must be in PEM format.
 
 .. code-block:: ini
 
 
-    ssl_ca = keys/company_cert.pem
+    ssl_ca = keys/ca-cert.pem
 
 .. _ssl_cert:
 
 ssl_cert
 ~~~~~~~~
 
-Path to the SSL certificate. Optional, default is empty.
+Path to the server's SSL certificate. Optional, default is empty.
 
-Daemon uses the certificate as self-signed public key encrypting HTTP traffic over SSL. The file must be a PEM format.
+Daemon uses this certificate as self-signed public key encrypting HTTP traffic over SSL. The file must be in PEM format.
 
 .. code-block:: ini
 
 
-    ssl_cert = keys/shard1_cert.pem
+    ssl_cert = keys/server-cert.pem
 
 .. _ssl_key:
 
@@ -1541,12 +1542,12 @@ ssl_key
 
 Path to the SSL certificate key. Optional, default is empty.
 
-Daemon uses the certificate key self-signed private key encrypting HTTP traffic over SSL. The file must be a PEM format.
+Daemon uses this private key to encrypt HTTP traffic over SSL. The file must be in PEM format.
 
 .. code-block:: ini
 
 
-    ssl_key = keys/shard1.pem
+    ssl_key = keys/server-key.pem
 
 .. _subtree_docs_cache:
 

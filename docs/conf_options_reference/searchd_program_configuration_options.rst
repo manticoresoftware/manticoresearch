@@ -803,7 +803,7 @@ net_wait_tm
 ~~~~~~~~~~~
 
 Control busy loop interval of a network thread for workers=thread_pool mode,
-default is 1, might be set to -1, 0, positive integer.
+default is -1, might be set to -1, 0, positive integer.
 
 In case daemon configured as pure master and routes requests to agents
 it is important to handle requests without delays and do not allow net-thread
@@ -811,7 +811,11 @@ to sleep or cut out from CPU. Here is busy loop to do that. After incoming
 request, network thread use CPU poll for ``10 * net_wait_tm`` milliseconds
 in case ``net_wait_tm`` is positive number or polls only with CPU in
 case ``net_wait_tm`` is ``0``. Also busy loop might be disabled with ``net_wait_tm = -1``
-- this way poller set timeout of ``1ms`` for system poll call.
+- this way poller set timeout to actual agent's timeouts on system polling call.
+
+.. warning::
+    CPU busy loop actually loads CPU core, so setting this value to any non-default will
+cause noticeable CPU usage even with idle daemon.
 
 .. _net_throttle_accept:
 

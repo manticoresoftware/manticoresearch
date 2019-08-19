@@ -138,7 +138,7 @@ static int				g_iShutdownTimeout	= 3000000; // default timeout on daemon shutdow
 static int				g_iBacklog			= SEARCHD_BACKLOG;
 static int				g_iThdPoolCount		= 2;
 static int				g_iThdQueueMax		= 0;
-static int				g_tmWait = 1;
+static int				g_tmWait 			= -1;
 bool					g_bGroupingInUtc	= false;
 static auto&			g_iTFO = sphGetTFO ();
 static CSphString		g_sShutdownToken;

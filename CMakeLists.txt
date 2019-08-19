@@ -57,21 +57,6 @@ also option forced to ON values: WITH_MYSQL, WITH_EXPAT, WITH_PGSQL, WITH_RE2, W
 Also LIBS_BUNDLE is automatically set to folder 'bundle' placed one level above the sources" )
 endif ()
 
-option ( USE_GALERA "Enable building Galera replication library and using it" ON )
-if ( APPLE OR NOT UNIX )
-	set ( USE_GALERA OFF )
-endif ()
-
-if ( USE_GALERA )
-	include ( GetGALERA )
-endif ()
-
-find_package(OpenSSL)
-if ( OpenSSL_FOUND )
-	option ( USE_SSL "Enabled building with OpenSSL" 1 )
-	message ( STATUS "OpenSSL include directory: ${OPENSSL_INCLUDE_DIR}" )
-endif ( OpenSSL_FOUND )
-
 # Collect build info which will be embedded into binaries
 SET ( BANNER )
 # append any text to build info
@@ -91,6 +76,22 @@ endmacro()
 
 memcfgvalues ( CMAKE_BUILD_TYPE )
 memcfgvalues ( DISTR_BUILD )
+
+option(USE_GALERA "Enable building Galera replication library and using it" ON)
+if (APPLE OR NOT UNIX)
+	set(USE_GALERA OFF)
+endif ()
+
+if (USE_GALERA)
+	include(GetGALERA)
+endif ()
+
+find_package(OpenSSL)
+if (OpenSSL_FOUND)
+	option(USE_SSL "Enabled building with OpenSSL" 1)
+	memcfgvalues(USE_SSL)
+	message(STATUS "OpenSSL include directory: ${OPENSSL_INCLUDE_DIR}")
+endif (OpenSSL_FOUND)
 
 # ctest variables
 set ( DEFAULT_CTEST_CONFIGURATION_TYPE "Debug" )

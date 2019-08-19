@@ -121,6 +121,23 @@ Known global server variables are:
    :ref:`grouping_in_utc <grouping_in_utc>`
    config params for more details.
 
+-  ``QUERY_LOG_MIN_MSEC = <value>``
+   Changes the :ref:`query_log_min_msec <query_log_min_msec>` searchd settings value.
+   In this case it expects value exactly in milliseconds and doesn't parse time suffixes, as in config.
+
+-  ``LOG_DEBUG_FILTER = <string value>``
+   Option exists since Sphinx 2.11 and give a chance to filter out redundand log messages.
+   If value is set, then all logs with level > INFO (i.e., DEBUG, DEBUGV, etc.)
+   will be compared with the string and outputed only in the case they starts with given value.
+
+.. warning::
+   This is very specific and 'hard' variable; filtered out messages will be just dropped and not
+   written into the log at all. Better just filter your log with something like 'grep', in this
+   case you'll have at least full original log as backup.
+
+-  ``NET_WAIT = {-1 | 0 | POSITIVE_INT_VALUE}``
+   Changes the :ref:`net_wait_tm <net_wait_tm>` searchd settings value.
+
 Examples:
 
 .. code-block:: mysql

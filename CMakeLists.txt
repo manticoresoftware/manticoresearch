@@ -66,16 +66,11 @@ if ( USE_GALERA )
 	include ( GetGALERA )
 endif ()
 
-option ( USE_SSL "Enable building with OpenSSL" 1 )
-if ( USE_SSL )
-	find_package(OpenSSL)
-	if ( OpenSSL_FOUND )
-		option ( USE_SSL "Enabled building with OpenSSL" 1 )
-		message ( STATUS "OpenSSL include directory: ${OPENSSL_INCLUDE_DIR}" )
-	else ( OpenSSL_FOUND )
-		set ( USE_SSL 0 )
-	endif ( OpenSSL_FOUND )	
-endif ()
+find_package(OpenSSL)
+if ( OpenSSL_FOUND )
+	option ( USE_SSL "Enabled building with OpenSSL" 1 )
+	message ( STATUS "OpenSSL include directory: ${OPENSSL_INCLUDE_DIR}" )
+endif ( OpenSSL_FOUND )
 
 # Collect build info which will be embedded into binaries
 SET ( BANNER )
@@ -200,35 +195,32 @@ if ( WIN32 )
 	
 	if ( USE_SSL )
 		IF ( CMAKE_EXE_LINKER_FLAGS MATCHES "x64" )
-			FIND_FILE ( HAVE_CRYPTO_DLL
-			NAMES
-			"libeay32.dll"
+			FIND_FILE ( CRYPTO_DLL
+			NAMES "libeay32.dll"
 			PATHS "${OPENSSL_INCLUDE_DIR}/.."
 			NO_DEFAULT_PATH
 			)
-			FIND_FILE(HAVE_OPENSSL_DLL
-			NAMES
-			"ssleay32.dll"
+			FIND_FILE(OPENSSL_DLL
+			NAMES "ssleay32.dll"
 			PATHS "${OPENSSL_INCLUDE_DIR}/.."
 			NO_DEFAULT_PATH
 			)	
 		else ()
-			FIND_FILE ( HAVE_CRYPTO_DLL
-			NAMES
-			"libcrypto-1_1.dll"
+			FIND_FILE ( CRYPTO_DLL
+			NAMES "libcrypto-1_1.dll"
 			PATHS "${OPENSSL_INCLUDE_DIR}/.."
 			NO_DEFAULT_PATH
 			)
-			FIND_FILE(HAVE_OPENSSL_DLL
-			NAMES
-			"libssl-1_1.dll"
+			FIND_FILE ( OPENSSL_DLL
+			NAMES "libssl-1_1.dll"
 			PATHS "${OPENSSL_INCLUDE_DIR}/.."
 			NO_DEFAULT_PATH
 			)	
 		endif ()
-		install ( FILES "${HAVE_CRYPTO_DLL}" DESTINATION bin COMPONENT applications )
-		install ( FILES "${HAVE_OPENSSL_DLL}" DESTINATION bin COMPONENT applications )
+		install ( FILES "${CRYPTO_DLL}" DESTINATION bin COMPONENT applications )
+		install ( FILES "${OPENSSL_DLL}" DESTINATION bin COMPONENT applications )
 	endif ( USE_SSL )
+	mark_as_advanced(SSL_EAY_DEBUG SSL_EAY_RELEASE LIB_EAY_DEBUG LIB_EAY_RELEASE)
 	
 	mark_as_advanced ( CMAKE_CONFIGURATION_TYPES )
 	add_definitions ("-D_CRT_SECURE_NO_WARNINGS")

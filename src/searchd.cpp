@@ -171,7 +171,7 @@ static ESphCollation	g_eCollation = SPH_COLLATION_DEFAULT;
 
 static FileAccessSettings_t g_tDefaultFA;
 
-static ISphThdPool *	g_pThdPool			= NULL;
+static ISphThdPool *	g_pThdPool			= nullptr;
 int				g_iDistThreads		= 0;
 
 int				g_iAgentConnectTimeout = 1000;
@@ -678,6 +678,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	{
 		*g_bDaemonAtShutdown.GetWritePtr() = 1;
 	}
+	searchd::FireShutdownCbs();
 
 #if !USE_WINDOWS
 	// stopwait handshake
@@ -19236,9 +19237,9 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 		}
 	}
 }
-#endif // !USE_WINDOWS
-
+#else
 const int		WIN32_PIPE_BUFSIZE=32;
+#endif // !USE_WINDOWS
 
 /// check for incoming signals, and react on them
 void CheckSignals () REQUIRES ( MainThread )
@@ -19653,27 +19654,24 @@ void TickHead () REQUIRES ( MainThread )
 // NETWORK THREAD
 /////////////////////////////////////////////////////////////////////////////
 
-enum NetEvent_e
+enum NetEvent_e : DWORD
 {
 	NE_KEEP = 0,
-	NE_IN = 1UL<<0,
-	NE_OUT = 1UL<<1,
-	NE_HUP = 1UL<<2,
-	NE_ERR = 1UL<<3,
+	NE_IN = NetPollEvent_t::READ,
+	NE_OUT = NetPollEvent_t::WRITE,
+	NE_HUP = NetPollEvent_t::HUP,
+	NE_ERR = NetPollEvent_t::ERR,
+	NE_MASK = NE_IN | NE_OUT | NE_HUP | NE_ERR,
 	NE_REMOVE = 1UL<<4,
 	NE_REMOVED = 1UL<<5,
 };
 
 struct NetStateCommon_t;
 class CSphNetLoop;
-struct ISphNetAction : ISphNoncopyable
+struct ISphNetAction : ISphNoncopyable, NetPollEvent_t
 {
-	int64_t				m_tmTimeout;
-	const int			m_iSock;
-
-	explicit ISphNetAction ( int iSock ) : m_tmTimeout ( 0 ), m_iSock ( iSock ) {}
-	virtual ~ISphNetAction () {}
-	virtual NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) = 0;
+	explicit ISphNetAction ( int iSock ) : NetPollEvent_t ( iSock ) {}
+	virtual NetEvent_e		Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) = 0;
 	virtual NetEvent_e		Setup ( int64_t tmNow ) = 0;
 	virtual bool			GetStats ( int & ) { return false; }
 	virtual void			CloseSocket () = 0;
@@ -19694,7 +19692,7 @@ struct NetStateCommon_t
 	NetStateCommon_t ();
 	virtual ~NetStateCommon_t ();
 
-	int NetManageSocket ( bool bWrite, bool bAfterWrite = false );
+	int SocketIO ( bool bWrite, bool bAfterWrite = false );
 	void CloseSocket ();
 };
 
@@ -19706,7 +19704,7 @@ struct NetActionAccept_t : public ISphNetAction
 
 	explicit NetActionAccept_t ( const Listener_t & tListener );
 
-	NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) final;
+	NetEvent_e		Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dQueue, CSphNetLoop * pLoop ) final;
 	NetEvent_e		Setup ( int64_t tmNow ) final;
 	bool			GetStats ( int & iConnections ) final;
 	void			CloseSocket () final {}
@@ -19753,7 +19751,7 @@ struct NetReceiveDataAPI_t : public ISphNetAction
 
 	explicit NetReceiveDataAPI_t ( NetStateAPI_t * pState );
 
-	NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) override;
+	NetEvent_e		Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) override;
 	NetEvent_e		Setup ( int64_t tmNow ) override;
 	void			CloseSocket () override;
 
@@ -19781,7 +19779,7 @@ struct NetReceiveDataQL_t : public ISphNetAction
 
 	explicit NetReceiveDataQL_t ( NetStateQL_t * pState );
 
-	NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) override;
+	NetEvent_e		Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) override;
 	NetEvent_e		Setup ( int64_t tmNow ) override;
 	void			CloseSocket () override;
 
@@ -19797,7 +19795,7 @@ struct NetSendData_t : public ISphNetAction
 
 	NetSendData_t ( NetStateCommon_t * pState, Proto_e eProto );
 
-	NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) override;
+	NetEvent_e		Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) override;
 	NetEvent_e		Setup ( int64_t tmNow ) override;
 	void			CloseSocket () override;
 
@@ -19825,7 +19823,7 @@ struct NetReceiveDataHttp_t : public ISphNetAction
 
 	explicit NetReceiveDataHttp_t ( NetStateQL_t * pState );
 
-	NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) override;
+	NetEvent_e		Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) override;
 	NetEvent_e		Setup ( int64_t tmNow ) override;
 	void			CloseSocket () override;
 
@@ -19841,7 +19839,7 @@ struct NetReceiveDataHttps_t : public ISphNetAction
 
 	explicit NetReceiveDataHttps_t ( NetStateHttps_t * pState );
 
-	NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) override;
+	NetEvent_e 		Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) override;
 	NetEvent_e		Setup ( int64_t tmNow ) override;
 	void			CloseSocket () override;
 };
@@ -19853,132 +19851,6 @@ struct NetReplyHttps_t : public NetSendData_t
 	NetReplyHttps_t ( NetStateHttps_t * pState );
 	NetEvent_e		Setup ( int64_t tmNow ) override;
 	void			CloseSocket () override;
-};
-
-struct EventsIterator_t
-{
-	ISphNetAction * m_pWork = nullptr;
-	DWORD			m_uEvents = 0;
-};
-
-
-class NetActionsPoller
-{
-private:
-	EventsIterator_t	m_tIter;
-	ISphNetEvents *		m_pPoll;
-
-	inline DWORD TranslateEvents ( DWORD uNetEvents )
-	{
-		DWORD uEvents = 0;
-		if ( uNetEvents & ISphNetEvents::SPH_POLL_RD )
-			uEvents |= NE_IN;
-		if ( uNetEvents & ISphNetEvents::SPH_POLL_WR )
-			uEvents |= NE_OUT;
-		if ( uNetEvents & ISphNetEvents::SPH_POLL_HUP )
-			uEvents |= NE_HUP;
-		if ( uNetEvents & ISphNetEvents::SPH_POLL_ERR )
-			uEvents |= NE_ERR;
-		return uEvents;
-	}
-public:
-	NetActionsPoller ()
-	{
-		m_pPoll = sphCreatePoll ( 1000 );
-	}
-
-	~NetActionsPoller()
-	{
-		if ( m_pPoll )
-		{
-			m_pPoll->IterateStart ();
-			while ( m_pPoll->IterateNextAll() )
-			{
-				auto * pWork = (ISphNetAction *)m_pPoll->IterateGet().m_pData;
-				SafeDelete ( pWork );
-			}
-		}
-		SafeDelete ( m_pPoll );
-	}
-
-	void SetupEvent ( ISphNetAction * pWork, int64_t tmNow )
-	{
-		assert ( m_pPoll );
-		assert ( pWork && pWork->m_iSock>=0 );
-
-		NetEvent_e eSetup = pWork->Setup ( tmNow );
-		assert ( eSetup==NE_IN || eSetup==NE_OUT );
-
-		m_pPoll->SetupEvent ( pWork->m_iSock, 
-			( eSetup==NE_IN ? ISphNetEvents::SPH_POLL_RD : ISphNetEvents::SPH_POLL_WR ), pWork );
-	}
-
-	bool Wait ( int timeoutMs )
-	{
-		assert ( m_pPoll );
-		return m_pPoll->Wait ( timeoutMs );
-	}
-
-	bool IterateNextAll ()
-	{
-		assert ( m_pPoll );
-		m_tIter.m_pWork = nullptr;
-		m_tIter.m_uEvents = 0;
-		bool bRes = m_pPoll->IterateNextAll();
-		if ( bRes )
-		{
-			const NetEventsIterator_t & tBackendIterator = m_pPoll->IterateGet();
-			m_tIter.m_pWork = (ISphNetAction *)tBackendIterator.m_pData;
-			m_tIter.m_uEvents = TranslateEvents ( tBackendIterator.m_uEvents );
-		}
-		return bRes;
-	}
-
-	bool IterateNextReady ()
-	{
-		assert ( m_pPoll );
-		m_tIter.m_pWork = nullptr;
-		m_tIter.m_uEvents = 0;
-		bool bRes = m_pPoll->IterateNextReady();
-		if ( bRes )
-		{
-			const NetEventsIterator_t & tBackendIterator = m_pPoll->IterateGet();
-			m_tIter.m_pWork = (ISphNetAction *)tBackendIterator.m_pData;
-			m_tIter.m_uEvents = TranslateEvents ( tBackendIterator.m_uEvents );
-		}
-		return bRes;
-	}
-
-	void IterateChangeEvent ( NetEvent_e eEv, ISphNetAction * pAction)
-	{
-		assert ( m_pPoll );		
-		m_pPoll->IterateChangeEvent ( pAction->m_iSock, ( eEv==NE_IN ? ISphNetEvents::SPH_POLL_RD : ISphNetEvents::SPH_POLL_WR ) );
-	}
-
-	void IterateRemove ()
-	{
-		assert ( m_pPoll );
-		const NetEventsIterator_t & tBackendIterator = m_pPoll->IterateGet();
-		auto * pAction = (ISphNetAction *)tBackendIterator.m_pData;
-
-		m_pPoll->IterateRemove ( pAction->m_iSock );
-		m_tIter.m_pWork = nullptr;
-	}
-
-	int IterateStart ()
-	{
-		assert ( m_pPoll );
-
-		m_tIter.m_pWork = nullptr;
-		m_tIter.m_uEvents = 0;
-
-		return m_pPoll->IterateStart();
-	}
-
-	EventsIterator_t & IterateGet ()
-	{
-		return m_tIter;
-	}
 };
 
 // event that wakes-up poll net loop from finished thread pool job
@@ -20004,7 +19876,7 @@ public:
 		sphLogDebugv ( "failed to wakeup net thread ( error %d,'%s')", iErrno, strerrorm ( iErrno ) );
 	}
 
-	NetEvent_e Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> &, CSphNetLoop * ) final
+	NetEvent_e Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> &, CSphNetLoop * ) final
 	{
 		if ( uGotEvents & NE_IN )
 			DisposeEvent();
@@ -20180,7 +20052,7 @@ struct ThdJobCleanup_t : public ISphJob
 {
 	CSphVector<ISphNetAction *> m_dCleanup;
 
-	explicit ThdJobCleanup_t ( CSphVector<ISphNetAction *> & dCleanup );
+	explicit ThdJobCleanup_t ( CSphVector<ISphNetAction *>&& dCleanup );
 	~ThdJobCleanup_t () override;
 
 	void				Call () override;
@@ -20194,51 +20066,67 @@ static int	g_iThrottleAccept = 0;
 class CSphNetLoop
 {
 public:
-	DWORD							m_uTick;
+	DWORD							m_uTick = 0;
 
 private:
-	CSphVector<ISphNetAction *>		m_dWorkExternal;
-	volatile bool					m_bGotExternal;
+	CSphVector<ISphNetAction *>		m_dWorkExternal GUARDED_BY ( m_tExtLock );
+	volatile bool					m_bGotExternal = false;
 	CSphWakeupEvent *				m_pWakeupExternal = nullptr; // FIXME!!! owned\deleted by event loop
 	CSphMutex						m_tExtLock;
 	LoopProfiler_t					m_tPrf;
-	NetActionsPoller				m_tPoller;
+	ISphNetPoller *					m_pPoll = nullptr;
+	void *							m_pShutdownCookie = nullptr;
 
 	explicit CSphNetLoop ( CSphVector<Listener_t> & dListeners )
 	{
+		m_pPoll = sphCreatePoll ( 1000 );
 		int64_t tmNow = sphMicroTimer();
-		for ( const auto & dListener : dListeners )
-		{
-			auto * pCur = new NetActionAccept_t ( dListener );
-			m_tPoller.SetupEvent ( pCur, tmNow );
-		}
-
 		CSphScopedPtr<CSphWakeupEvent> pWakeup ( new CSphWakeupEvent );
 		if ( pWakeup->IsPollable() )
 		{
 			m_pWakeupExternal = pWakeup.LeakPtr ();
-			m_tPoller.SetupEvent ( m_pWakeupExternal, tmNow );
+			SetupEvent ( m_pWakeupExternal, tmNow );
+			m_pShutdownCookie = searchd::AddShutdownCb ( [this] { Kick (); } );
 		} else
 			sphWarning ( "net-loop use timeout due to %s", pWakeup->m_sError.cstr () );
 
-		m_bGotExternal = false;
+		for ( const auto & dListener : dListeners )
+		{
+			auto * pCur = new NetActionAccept_t ( dListener );
+			SetupEvent ( pCur, tmNow );
+		}
+
 		m_dWorkExternal.Reserve ( 1000 );
-		m_uTick = 0;
+	}
+
+	void SetupEvent ( ISphNetAction * pWork, int64_t tmNow )
+	{
+		assert ( m_pPoll );
+		assert ( pWork && pWork->m_iSock>=0 );
+
+		NetEvent_e eSetup = pWork->Setup ( tmNow );
+		assert ( eSetup==NE_IN || eSetup==NE_OUT );
+		pWork->m_uNetEvents = ( eSetup==NE_IN ? NetPollEvent_t::READ : NetPollEvent_t::WRITE );
+		m_pPoll->SetupEvent ( pWork );
 	}
 
 	~CSphNetLoop()
 	{
-		ARRAY_FOREACH ( i, m_dWorkExternal )
-			SafeDelete ( m_dWorkExternal[i] );
+		searchd::DeleteShutdownCb ( m_pShutdownCookie );
+		ScopedMutex_t tExtLock ( m_tExtLock );
+		for ( auto* pWork : m_dWorkExternal )
+			SafeDelete ( pWork );
+		m_pPoll->ForAll ( [] ( NetPollEvent_t * pWork )
+		{
+			SafeDelete ( pWork );
+		} );
+		SafeDelete ( m_pPoll );
 	}
 
-	void Tick ()
+	void LoopNetPoll ()
 	{
-		CSphVector<ISphNetAction *> dCleanup;
 		CSphVector<ISphNetAction *> dWorkNext;
 		dWorkNext.Reserve ( 1000 );
-		dCleanup.Reserve ( 1000 );
-		int64_t tmNextCheck = INT64_MAX;
 		int64_t tmLastWait = sphMicroTimer();
 
 		while ( !g_bShutdown )
@@ -20253,20 +20141,19 @@ private:
 			// 5k qps for net-loop with spin-wait
 			int iSpinWait = 0;
 			if ( g_tmWait==-1 || ( g_tmWait>0 && sphMicroTimer()-tmLastWait>I64C(10000)*g_tmWait ) )
-				iSpinWait = 1;
+				iSpinWait = m_pWakeupExternal ? WAIT_UNTIL_TIMEOUT : 1;
 
 			m_tPrf.StartPoll();
 			// need positive timeout for communicate threads back and shutdown
-			bool bGot = m_tPoller.Wait ( iSpinWait );
+			bool bGot = m_pPoll->Wait ( iSpinWait );
 			m_tPrf.EndTask();
 
-			m_uTick++;
+			++m_uTick;
 
 			// try to remove outdated items on no signals
 			if ( !bGot && !m_bGotExternal )
 			{
-				tmNextCheck = RemoveOutdated ( tmNextCheck, dCleanup );
-				Cleanup ( dCleanup );
+				AddCleanupAction ( RemoveOutdated () );
 				m_tPrf.End();
 				continue;
 			}
@@ -20275,33 +20162,37 @@ private:
 			if ( m_bGotExternal )
 			{
 				m_tPrf.StartExt();
+				ScopedMutex_t tExtLock ( m_tExtLock );
 				m_tPrf.m_iPerfExt = m_dWorkExternal.GetLength();
-				assert ( dWorkNext.GetLength()==0 );
-				Verify ( m_tExtLock.Lock() );
+				assert ( dWorkNext.IsEmpty() );
 				dWorkNext.SwapData ( m_dWorkExternal );
 				m_bGotExternal = false;
-				Verify ( m_tExtLock.Unlock() );
 				m_tPrf.EndTask();
 			}
 
 			// handle events and collect stats
 			m_tPrf.StartTick();
 
-			int iGotEvents = m_tPoller.IterateStart();
+			int iGotEvents = m_pPoll->GetNumOfReady ();
 			sphLogDebugv ( "got events=%d, tick=%u", iGotEvents, m_uTick );
-
 			int iConnections = 0;
 			int iMaxIters = 0;
-			while ( m_tPoller.IterateNextReady() && ( !g_iThrottleAction || iMaxIters<g_iThrottleAction ) )
-			{
-				m_tPrf.StartAt();
-				assert ( m_tPoller.IterateGet().m_pWork && m_tPoller.IterateGet().m_uEvents );
-				ISphNetAction * pWork = m_tPoller.IterateGet().m_pWork;
 
-				NetEvent_e eEv = pWork->Tick ( m_tPoller.IterateGet().m_uEvents, dWorkNext, this );
+			CSphVector<ISphNetAction *> dCleanup;
+			dCleanup.Reserve ( 1000 );
+			for ( NetPollEvent_t & dReady : *m_pPoll )
+			{
+				if ( g_iThrottleAction && iMaxIters>=g_iThrottleAction )
+					break;
+				m_tPrf.StartAt();
+				dReady.m_uNetEvents &= NE_MASK; // filter out possible non-desirable bits
+				assert ( dReady.m_uNetEvents );
+				auto pWork = (ISphNetAction *) &dReady;
+
+				NetEvent_e eEv = pWork->Loop ( dReady.m_uNetEvents, dWorkNext, this );
 				pWork->GetStats ( iConnections );
-				m_tPrf.m_iPerfEv++;
-				iMaxIters++;
+				++m_tPrf.m_iPerfEv;
+				++iMaxIters;
 
 				if ( eEv==NE_KEEP )
 				{
@@ -20313,30 +20204,25 @@ private:
 				if ( eEv==NE_REMOVE || eEv==NE_REMOVED )
 				{
 					if ( eEv==NE_REMOVE )
-						RemoveIterEvent();
+						m_pPoll->RemoveEvent ( &dReady );
 					dCleanup.Add ( pWork );
 				} else
 				{
-					m_tPoller.IterateChangeEvent ( eEv, pWork );
+					m_pPoll->ChangeEvent ( &dReady,
+							eEv==NE_IN ? NetPollEvent_t::READ : NetPollEvent_t::WRITE);
 				}
 				m_tPrf.EndTask();
 				m_tPrf.EndTask();
 			}
 			m_tPrf.EndTask();
 
-			tmNextCheck = RemoveOutdated ( tmNextCheck, dCleanup );
-			Cleanup ( dCleanup );
+			dCleanup.Append ( RemoveOutdated () );
+			AddCleanupAction ( std::move ( dCleanup ));
 
 			m_tPrf.StartNext();
 			int64_t	tmNow = sphMicroTimer();
 			// setup new handlers
-			ARRAY_FOREACH ( i, dWorkNext )
-			{
-				ISphNetAction * pWork = dWorkNext[i];
-				m_tPoller.SetupEvent ( pWork, tmNow );
-				if ( pWork->m_tmTimeout )
-					tmNextCheck = Min ( tmNextCheck, pWork->m_tmTimeout );
-			}
+			dWorkNext.Apply ( [&] ( ISphNetAction * pWork ) { SetupEvent ( pWork, tmNow ); } );
 			m_tPrf.m_iPerfNext = dWorkNext.GetLength();
 			dWorkNext.Resize ( 0 );
 			m_tPrf.EndTask();
@@ -20354,81 +20240,72 @@ private:
 		}
 	}
 
-	int64_t RemoveOutdated ( int64_t tmNextCheck, CSphVector<ISphNetAction *> & dCleanup )
+	CSphVector<ISphNetAction *> RemoveOutdated ()
 	{
+		CSphVector<ISphNetAction *> dCleanup;
 		int64_t tmNow = sphMicroTimer();
-		if ( tmNow<tmNextCheck )
-			return tmNextCheck;
-
 		m_tPrf.StartRemove();
 
 		// remove outdated items on no signals
-		tmNextCheck = INT64_MAX;
-		m_tPoller.IterateStart();
-		while ( m_tPoller.IterateNextAll() )
+		m_pPoll->ForAll ([&] ( NetPollEvent_t * pEvent )
 		{
-			assert ( m_tPoller.IterateGet().m_pWork );
-			ISphNetAction * pWork = m_tPoller.IterateGet().m_pWork;
-			if ( !pWork->m_tmTimeout )
-				continue;
+			if ( pEvent->m_iTimeoutTime<=0 || tmNow<pEvent->m_iTimeoutTime )
+				return;
 
-			if ( tmNow<pWork->m_tmTimeout )
-			{
-				tmNextCheck = Min ( tmNextCheck, pWork->m_tmTimeout );
-				continue;
-			}
+			sphLogDebugv ( "%p bailing on timeout no signal, sock=%d", pEvent, pEvent->m_iSock );
+			m_pPoll->RemoveEvent ( pEvent );
 
-			sphLogDebugv ( "%p bailing on timeout no signal, sock=%d", pWork, pWork->m_iSock );
-			m_tPoller.IterateRemove ();
-			// SafeDelete ( pWork );
 			// close socket immediately to prevent write by client into persist connection that just timed out
 			// that does not need in case Work got removed at IterateRemove + SafeDelete ( pWork );
-			// but deferred clean up by ThdJobCleanup_t needs to close socket here right after it was removed from e(poll) set
-			pWork->CloseSocket();
+			// but deferred clean up by ThdJobCleanup_t needs to close socket here right after
+			// it was removed from e(poll) set
+			auto * pWork = (ISphNetAction *) pEvent;
+			pWork->CloseSocket ();
 			dCleanup.Add ( pWork );
-		}
-
+		 });
 		m_tPrf.EndTask();
-
-		return tmNextCheck;
+		return dCleanup;
 	}
 
-	void Cleanup ( CSphVector<ISphNetAction *> & dCleanup )
+	void AddCleanupAction ( CSphVector<ISphNetAction *>&& dCleanup )
 	{
-		if ( !dCleanup.GetLength() )
+		if ( dCleanup.IsEmpty() )
 			return;
 
 		m_tPrf.m_iPerfClean = dCleanup.GetLength();
 		m_tPrf.StartClean();
-		ThdJobCleanup_t * pCleanup = new ThdJobCleanup_t ( dCleanup );
-		g_pThdPool->AddJob ( pCleanup );
+		g_pThdPool->AddJob ( new ThdJobCleanup_t ( std::move ( dCleanup )));
 		m_tPrf.EndTask();
 	}
 
 public:
-	void AddAction ( ISphNetAction * pElem )
+	void Kick ()
 	{
-		Verify ( m_tExtLock.Lock() );
-		m_bGotExternal = true;
-		m_dWorkExternal.Add ( pElem );
-		Verify ( m_tExtLock.Unlock() );
 		if ( m_pWakeupExternal )
-			m_pWakeupExternal->Wakeup();
+			m_pWakeupExternal->Wakeup ();
 	}
 
-	void RemoveIterEvent ()
+	void AddAction ( ISphNetAction * pElem )
 	{
-		m_tPoller.IterateRemove();
+		ScopedMutex_t tExtLock ( m_tExtLock );
+		m_bGotExternal = true;
+		m_dWorkExternal.Add ( pElem );
+		Kick();
+	}
+
+	void RemoveIterEvent ( NetPollEvent_t * pEvent )
+	{
+		m_pPoll->RemoveEvent ( pEvent );
 	}
 
 	// main thread wrapper
-	static void ThdTick ( void * )
+	static void ThdLoop ( void * )
 	{
 		CrashQuery_t tQueryTLS;
 		SphCrashLogger_c::SetTopQueryTLS ( &tQueryTLS );
 
 		CSphNetLoop tLoop ( g_dListeners );
-		tLoop.Tick();
+		tLoop.LoopNetPoll ();
 	}
 };
 
@@ -20480,13 +20357,16 @@ static void LogSocketError ( const char * sMsg, const NetStateCommon_t * pConn, 
 		socklen_t iLen = sizeof(iErrno);
 		int iRes = getsockopt ( pConn->m_iClientSock, SOL_SOCKET, SO_ERROR, (char*)&iErrno, &iLen );
 		if ( iRes<0 )
-			sphWarning ( "%s (client=%s(%d)), failed to get error: %d '%s'", sMsg, pConn->m_sClientName, pConn->m_iConnID, errno, strerrorm ( errno ) );
+			sphWarning ( "%s (client=%s(%d)), failed to get error: %d '%s'",
+					sMsg, pConn->m_sClientName, pConn->m_iConnID, errno, strerrorm ( errno ) );
 	}
 
 	if ( bDebug || iErrno==ESHUTDOWN )
-		sphLogDebugv ( "%s (client=%s(%d)), error: %d '%s', sock=%d", sMsg, pConn->m_sClientName, pConn->m_iConnID, iErrno, sphSockError ( iErrno ), pConn->m_iClientSock );
+		sphLogDebugv ( "%s (client=%s(%d)), error: %d '%s', sock=%d",
+				sMsg, pConn->m_sClientName, pConn->m_iConnID, iErrno, sphSockError ( iErrno ), pConn->m_iClientSock );
 	else
-		sphWarning ( "%s (client=%s(%d)), error: %d '%s', sock=%d", sMsg, pConn->m_sClientName, pConn->m_iConnID, iErrno, sphSockError ( iErrno ), pConn->m_iClientSock );
+		sphWarning ( "%s (client=%s(%d)), error: %d '%s', sock=%d",
+				sMsg, pConn->m_sClientName, pConn->m_iConnID, iErrno, sphSockError ( iErrno ), pConn->m_iClientSock );
 }
 
 static bool CheckSocketError ( DWORD uGotEvents, const char * sMsg, const NetStateCommon_t * pConn, bool bDebug )
@@ -20529,7 +20409,7 @@ NetActionAccept_t::NetActionAccept_t ( const Listener_t & tListener )
 	m_iConnections = 0;
 }
 
-NetEvent_e NetActionAccept_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop )
+NetEvent_e NetActionAccept_t::Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dQueue, CSphNetLoop * pLoop )
 {
 	if ( CheckSocketError ( uGotEvents, "accept err WTF???", &m_tDummy, true ) )
 		return NE_KEEP;
@@ -20595,7 +20475,7 @@ NetEvent_e NetActionAccept_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction 
 			return NE_KEEP;
 		}
 
-		m_iConnections++;
+		++m_iConnections;
 		int iConnID = ++g_iConnectionID;
 		if ( g_iConnectionID<0 )
 		{
@@ -20632,7 +20512,7 @@ NetEvent_e NetActionAccept_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction 
 			pActionQL->SetupHandshakePhase();
 			pAction = pActionQL;
 		}
-		dNextTick.Add ( pAction );
+		dQueue.Add ( pAction );
 		sphLogDebugv ( "%p accepted %s, sock=%d, tick=%u", this, ProtoName(m_tListener.m_eProto), pAction->m_iSock, pLoop->m_uTick );
 	}
 }
@@ -20697,14 +20577,15 @@ NetReceiveDataAPI_t::NetReceiveDataAPI_t ( NetStateAPI_t *	pState )
 NetEvent_e NetReceiveDataAPI_t::Setup ( int64_t tmNow )
 {
 	assert ( m_tState.Ptr() );
-	sphLogDebugv ( "%p receive API setup, phase=%d, keep=%d, client=%s, conn=%d, sock=%d", this, m_ePhase, m_tState->m_bKeepSocket, m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock );
+	sphLogDebugv ( "%p receive API setup, phase=%d, keep=%d, client=%s, conn=%d, sock=%d", this, m_ePhase,
+			m_tState->m_bKeepSocket, m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock );
 
 	if ( !m_tState->m_bKeepSocket )
 	{
-		m_tmTimeout = tmNow + MS2SEC * g_iReadTimeout;
+		m_iTimeoutTime = tmNow + MS2SEC * g_iReadTimeout;
 	} else
 	{
-		m_tmTimeout = tmNow + MS2SEC * g_iClientTimeout;
+		m_iTimeoutTime = tmNow + MS2SEC * g_iClientTimeout;
 	}
 
 	return ( m_ePhase==AAPI_HANDSHAKE_OUT ? NE_OUT : NE_IN );
@@ -20721,10 +20602,9 @@ void NetReceiveDataAPI_t::SetupBodyPhase()
 void NetReceiveDataAPI_t::AddJobAPI ( CSphNetLoop * pLoop )
 {
 	assert ( m_tState.Ptr() );
-	pLoop->RemoveIterEvent();
 	bool bStart = m_tState->m_bVIP;
 	int iLen = m_tState->m_dBuf.GetLength();
-	ThdJobAPI_t * pJob = new ThdJobAPI_t ( pLoop, m_tState.LeakPtr() );
+	auto * pJob = new ThdJobAPI_t ( pLoop, m_tState.LeakPtr() );
 	pJob->m_eCommand = m_eCommand;
 	pJob->m_uCommandVer = m_uCommandVer;
 	sphLogDebugv ( "%p receive API job created (%p), buf=%d, sock=%d, tick=%u", this, pJob, iLen, m_iSock, pLoop->m_uTick );
@@ -20736,7 +20616,7 @@ void NetReceiveDataAPI_t::AddJobAPI ( CSphNetLoop * pLoop )
 
 static char g_sMaxedOutMessage[] = "maxed out, dismissing client";
 
-NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop )
+NetEvent_e NetReceiveDataAPI_t::Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop )
 {
 	assert ( m_tState.Ptr() );
 	bool bDebug = ( m_ePhase==AAPI_HANDSHAKE_IN || m_ePhase==AAPI_COMMAND );
@@ -20748,7 +20628,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 	while (true)
 	{
 		bool bWrite = ( m_ePhase==AAPI_HANDSHAKE_OUT );
-		int iRes = m_tState->NetManageSocket ( bWrite, bWasWrite );
+		int iRes = m_tState->SocketIO ( bWrite, bWasWrite );
 		if ( iRes==-1 )
 		{
 			LogSocketError ( g_sErrorNetAPI[m_ePhase], m_tState.Ptr(), false );
@@ -20812,14 +20692,14 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 				SendErrorReply ( tOut, "invalid command (code=%d, len=%d)", m_eCommand, m_tState->m_iLeft );
 
 				tOut.SwapData ( m_tState->m_dBuf );
-				auto * pSend = new NetSendData_t ( m_tState.LeakPtr(), Proto_e::SPHINX );
-				dNextTick.Add ( pSend );
+				dNextTick.Add ( new NetSendData_t ( m_tState.LeakPtr (), Proto_e::SPHINX ) );
 				return NE_REMOVE;
 			}
 			m_tState->m_dBuf.Resize ( m_tState->m_iLeft );
 			m_ePhase = AAPI_BODY;
 			if ( !m_tState->m_iLeft ) // command without body
 			{
+				pLoop->RemoveIterEvent (this);
 				AddJobAPI ( pLoop );
 				return NE_REMOVED;
 			}
@@ -20833,7 +20713,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 			if ( m_eCommand==SEARCHD_COMMAND_PING )
 			{
 				CachedOutputBuffer_c tOut;
-				MemInputBuffer_c tIn ( m_tState->m_dBuf.Begin (), m_tState->m_dBuf.GetLength () );
+				MemInputBuffer_c tIn ( m_tState->m_dBuf );
 				HandleCommandPing ( tOut, m_uCommandVer, tIn );
 
 				if ( tIn.GetError () )
@@ -20841,9 +20721,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 
 				m_tState->m_dBuf.Resize ( 0 );
 				tOut.SwapData ( m_tState->m_dBuf );
-
-				auto * pSend = new NetSendData_t ( m_tState.LeakPtr (), Proto_e::SPHINX );
-				dNextTick.Add ( pSend );
+				dNextTick.Add ( new NetSendData_t ( m_tState.LeakPtr (), Proto_e::SPHINX ) );
 
 			} else if ( bMaxedOut )
 			{
@@ -20858,11 +20736,10 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 				tOut.SendString ( g_sMaxedOutMessage );
 
 				tOut.SwapData ( m_tState->m_dBuf );
-				auto * pSend = new NetSendData_t ( m_tState.LeakPtr(), Proto_e::SPHINX );
-				dNextTick.Add ( pSend );
-
+				dNextTick.Add ( new NetSendData_t ( m_tState.LeakPtr (), Proto_e::SPHINX ) );
 			} else
 			{
+				pLoop->RemoveIterEvent (this);
 				AddJobAPI ( pLoop );
 				return NE_REMOVED;
 			}
@@ -20903,8 +20780,7 @@ void NetReceiveDataQL_t::SetupHandshakePhase()
 {
 	m_ePhase = AQL_HANDSHAKE;
 
-	m_tState->m_dBuf.Resize ( g_iMysqlHandshake );
-	memcpy ( m_tState->m_dBuf.Begin(), g_sMysqlHandshake, g_iMysqlHandshake );
+	m_tState->m_dBuf.Append( g_sMysqlHandshake, g_iMysqlHandshake );
 	m_tState->m_iLeft = m_tState->m_dBuf.GetLength();
 	m_tState->m_iPos = 0;
 
@@ -20927,9 +20803,10 @@ void NetReceiveDataQL_t::SetupBodyPhase()
 NetEvent_e NetReceiveDataQL_t::Setup ( int64_t tmNow )
 {
 	assert ( m_tState.Ptr() );
-	sphLogDebugv ( "%p receive QL setup, phase=%d, client=%s, conn=%d, sock=%d", this, m_ePhase, m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock );
+	sphLogDebugv ( "%p receive QL setup, phase=%d, client=%s, conn=%d, sock=%d", this,
+			m_ePhase, m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock );
 
-	m_tmTimeout = tmNow + MS2SEC * g_iClientQlTimeout;
+	m_iTimeoutTime = tmNow + MS2SEC * g_iClientQlTimeout;
 
 	NetEvent_e eEvent;
 	if ( m_ePhase==AQL_HANDSHAKE )
@@ -20944,7 +20821,7 @@ NetEvent_e NetReceiveDataQL_t::Setup ( int64_t tmNow )
 	return eEvent;
 }
 
-NetEvent_e NetReceiveDataQL_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> &, CSphNetLoop * pLoop )
+NetEvent_e NetReceiveDataQL_t::Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> &, CSphNetLoop * pLoop )
 {
 	assert ( m_tState.Ptr() );
 	bool bDebugErr = ( ( m_ePhase==AQL_LENGTH && !m_bAppend ) || m_ePhase==AQL_AUTH );
@@ -20955,7 +20832,7 @@ NetEvent_e NetReceiveDataQL_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction
 	// loop to handle similar operations at once
 	while (true)
 	{
-		int iRes = m_tState->NetManageSocket ( m_bWrite, bWrite );
+		int iRes = m_tState->SocketIO ( m_bWrite, bWrite );
 		if ( iRes==-1 )
 		{
 			LogSocketError ( g_sErrorNetQL[m_ePhase], m_tState.Ptr(), false );
@@ -21084,11 +20961,11 @@ NetEvent_e NetReceiveDataQL_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction
 
 					if ( iCmd==MYSQL_COM_QUERY )
 					{
-						pLoop->RemoveIterEvent();
+						pLoop->RemoveIterEvent(this);
 
 						// going to actual work now
 						bool bStart = m_tState->m_bVIP;
-						ThdJobQL_t * pJob = new ThdJobQL_t ( pLoop, m_tState.LeakPtr() );
+						auto * pJob = new ThdJobQL_t ( pLoop, m_tState.LeakPtr() );
 						if ( bStart )
 							g_pThdPool->StartJob ( pJob );
 						else
@@ -21169,14 +21046,14 @@ NetSendData_t::NetSendData_t ( NetStateCommon_t * pState, Proto_e eProto )
 	m_tState->m_iLeft = 0;
 }
 
-NetEvent_e NetSendData_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop )
+NetEvent_e NetSendData_t::Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop )
 {
 	if ( CheckSocketError ( uGotEvents, "failed to send data", m_tState.Ptr(), false ) )
 		return NE_REMOVE;
 
 	for ( ; m_tState->m_iLeft>0; )
 	{
-		int iRes = m_tState->NetManageSocket ( true );
+		int iRes = m_tState->SocketIO ( true );
 		if ( iRes==-1 )
 		{
 			LogSocketError ( "failed to send data", m_tState.Ptr(), false );
@@ -21241,12 +21118,13 @@ NetEvent_e NetSendData_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> &
 NetEvent_e NetSendData_t::Setup ( int64_t tmNow )
 {
 	assert ( m_tState.Ptr() );
-	sphLogDebugv ( "%p send %s setup, keep=%d, buf=%d, client=%s, conn=%d, sock=%d", this, ProtoName ( m_eProto ), (int)(m_tState->m_bKeepSocket),
-		m_tState->m_dBuf.GetLength(), m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock );
+	sphLogDebugv ( "%p send %s setup, keep=%d, buf=%d, client=%s, conn=%d, sock=%d", this,
+			ProtoName ( m_eProto ), (int)(m_tState->m_bKeepSocket), m_tState->m_dBuf.GetLength(),
+			m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock );
 
 	if ( !m_bContinue )
 	{
-		m_tmTimeout = tmNow + MS2SEC * g_iWriteTimeout;
+		m_iTimeoutTime = tmNow + MS2SEC * g_iWriteTimeout;
 
 		assert ( m_tState->m_dBuf.GetLength() );
 		m_tState->m_iLeft = m_tState->m_dBuf.GetLength();
@@ -21285,7 +21163,7 @@ void NetStateCommon_t::CloseSocket ()
 	}
 }
 
-int NetStateCommon_t::NetManageSocket ( bool bWrite, bool bAfterWrite )
+int NetStateCommon_t::SocketIO ( bool bWrite, bool bAfterWrite )
 {
 	// try next chunk
 	int iRes = 0;
@@ -21329,14 +21207,15 @@ NetReceiveDataHttp_t::NetReceiveDataHttp_t ( NetStateQL_t *	pState )
 NetEvent_e NetReceiveDataHttp_t::Setup ( int64_t tmNow )
 {
 	assert ( m_tState.Ptr() );
-	sphLogDebugv ( "%p receive HTTP setup, keep=%d, client=%s, conn=%d, sock=%d", this, m_tState->m_bKeepSocket, m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock );
+	sphLogDebugv ( "%p receive HTTP setup, keep=%d, client=%s, conn=%d, sock=%d", this,
+			m_tState->m_bKeepSocket, m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock );
 
 	if ( !m_tState->m_bKeepSocket )
 	{
-		m_tmTimeout = tmNow + MS2SEC * g_iReadTimeout;
+		m_iTimeoutTime = tmNow + MS2SEC * g_iReadTimeout;
 	} else
 	{
-		m_tmTimeout = tmNow + MS2SEC * g_iClientTimeout;
+		m_iTimeoutTime = tmNow + MS2SEC * g_iClientTimeout;
 	}
 	return NE_IN;
 }
@@ -21409,7 +21288,7 @@ void NetReceiveDataHttp_t::GrowBuffer()
 	m_tState->m_iLeft = iCanGrow;
 }
 
-NetEvent_e NetReceiveDataHttp_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & , CSphNetLoop * pLoop )
+NetEvent_e NetReceiveDataHttp_t::Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> & , CSphNetLoop * pLoop )
 {
 	assert ( m_tState.Ptr() );
 	const char * sHttpError = "http error";
@@ -21419,7 +21298,7 @@ NetEvent_e NetReceiveDataHttp_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActi
 	// loop to handle similar operations at once
 	while (true)
 	{
-		int iRes = m_tState->NetManageSocket ( false );
+		int iRes = m_tState->SocketIO ( false );
 		if ( iRes==-1 )
 		{
 			// FIXME!!! report back to client buffer overflow with 413 error
@@ -21461,12 +21340,12 @@ NetEvent_e NetReceiveDataHttp_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActi
 		if ( iRes>0 )
 			continue;
 
-		pLoop->RemoveIterEvent();
+		pLoop->RemoveIterEvent(this);
 
 		sphLogDebugv ( "%p HTTP buf=%d, header=%d, content-len=%d, sock=%d, tick=%u", this, m_tState->m_dBuf.GetLength(), m_tHeadParser.m_iHeaderEnd, m_tHeadParser.m_iFieldContentLenVal, m_iSock, pLoop->m_uTick );
 
 		// no VIP for http for now
-		ThdJobHttp_t * pJob = new ThdJobHttp_t ( pLoop, m_tState.LeakPtr(), false );
+		auto * pJob = new ThdJobHttp_t ( pLoop, m_tState.LeakPtr(), false );
 		g_pThdPool->AddJob ( pJob );
 
 		return NE_REMOVED;
@@ -21508,11 +21387,11 @@ NetEvent_e NetReceiveDataHttps_t::Setup ( int64_t tmNow )
 
 	if ( !m_tState->m_bKeepSocket )
 	{
-		m_tmTimeout = tmNow + MS2SEC * g_iReadTimeout;
+		m_iTimeoutTime = tmNow + MS2SEC * g_iReadTimeout;
 	}
 	else
 	{
-		m_tmTimeout = tmNow + MS2SEC * g_iClientTimeout;
+		m_iTimeoutTime = tmNow + MS2SEC * g_iClientTimeout;
 	}
 	m_bWrite = false;
 
@@ -21522,7 +21401,7 @@ NetEvent_e NetReceiveDataHttps_t::Setup ( int64_t tmNow )
 	return NE_IN;
 }
 
-NetEvent_e NetReceiveDataHttps_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNext, CSphNetLoop * pLoop )
+NetEvent_e NetReceiveDataHttps_t::Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNext, CSphNetLoop * pLoop )
 {
 	assert ( m_tState.Ptr() );
 	const char * sHttpError = "https error";
@@ -21532,7 +21411,7 @@ NetEvent_e NetReceiveDataHttps_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAct
 	// loop to handle similar operations at once
 	while (true)
 	{
-		int iRes = m_tState->NetManageSocket ( m_bWrite );
+		int iRes = m_tState->SocketIO ( m_bWrite );
 		if ( iRes==-1 )
 		{
 			// FIXME!!! report back to client buffer overflow with 413 error
@@ -21597,7 +21476,7 @@ NetEvent_e NetReceiveDataHttps_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAct
 			int iReqSize = m_tHeadParser.m_iHeaderEnd + m_tHeadParser.m_iFieldContentLenVal;
 			if ( iReqSize>=m_tState->m_dDecripted.GetLength() )
 			{
-				pLoop->RemoveIterEvent();
+				pLoop->RemoveIterEvent(this);
 
 				sphLogDebugv ( "%p HTTPS buf=%d, '%.*s', header=%d, content-len=%d, sock=%d, tick=%u", this, m_tState->m_dDecripted.GetLength(), Min ( m_tState->m_dDecripted.GetLength(), 128 ), m_tState->m_dDecripted.Begin(),
 					m_tHeadParser.m_iHeaderEnd, m_tHeadParser.m_iFieldContentLenVal, m_iSock, pLoop->m_uTick );
@@ -21634,7 +21513,7 @@ NetEvent_e NetReplyHttps_t::Setup ( int64_t tmNow )
 
 	if ( !m_bContinue )
 	{
-		m_tmTimeout = tmNow + MS2SEC * g_iWriteTimeout;
+		m_iTimeoutTime = tmNow + MS2SEC * g_iWriteTimeout;
 
 		assert ( m_tState->m_dBuf.GetLength() );
 		if ( !SslSend ( m_pState->m_pSession, m_pState->m_dDecripted, m_pState->m_dBuf ) )
@@ -21685,7 +21564,7 @@ void ThdJobAPI_t::Call ()
 	assert ( m_tState.Ptr() );
 
 	// handle that client
-	MemInputBuffer_c tBuf ( m_tState->m_dBuf.Begin(), m_tState->m_dBuf.GetLength() );
+	MemInputBuffer_c tBuf ( m_tState->m_dBuf );
 	CachedOutputBuffer_c tOut;
 
 	if ( g_bMaintenance && !m_tState->m_bVIP )
@@ -21711,8 +21590,7 @@ void ThdJobAPI_t::Call ()
 	if ( tOut.GetSentCount() )
 	{
 		tOut.SwapData ( m_tState->m_dBuf );
-		auto * pSend = new NetSendData_t ( m_tState.LeakPtr(), Proto_e::SPHINX );
-		JobDoSendNB ( pSend, m_pLoop );
+		JobDoSendNB ( new NetSendData_t ( m_tState.LeakPtr (), Proto_e::SPHINX ), m_pLoop );
 	} else if ( m_tState->m_bKeepSocket ) // no response - switching to receive
 	{
 		auto * pReceive = new NetReceiveDataAPI_t ( m_tState.LeakPtr() );
@@ -21753,7 +21631,7 @@ void ThdJobQL_t::Call ()
 	if ( bProfile )
 		m_tState->m_tSession.m_tProfile.Start ( SPH_QSTATE_TOTAL );
 
-	MemInputBuffer_c tIn ( m_tState->m_dBuf.Begin(), m_tState->m_dBuf.GetLength() );
+	MemInputBuffer_c tIn ( m_tState->m_dBuf );
 	ISphOutputBuffer tOut;
 
 	// needed to check permission to turn maintenance mode on/off
@@ -21775,8 +21653,7 @@ void ThdJobQL_t::Call ()
 	{
 		assert ( m_pLoop );
 		tOut.SwapData ( m_tState->m_dBuf );
-		NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), Proto_e::MYSQL41 );
-		JobDoSendNB ( pSend, m_pLoop );
+		JobDoSendNB ( new NetSendData_t ( m_tState.LeakPtr (), Proto_e::MYSQL41 ), m_pLoop );
 	}
 
 	tThdDesc.RemoveFromGlobal ();
@@ -21791,11 +21668,9 @@ static void LogCleanup ( const CSphVector<ISphNetAction *> & dCleanup )
 	sphLogDebugv ( "cleaned jobs(sock)=%d, %s", dCleanup.GetLength(), sTmp.cstr() );
 }
 
-ThdJobCleanup_t::ThdJobCleanup_t ( CSphVector<ISphNetAction *> & dCleanup )
-{
-	m_dCleanup.SwapData ( dCleanup );
-	dCleanup.Reserve ( 1000 );
-}
+ThdJobCleanup_t::ThdJobCleanup_t ( CSphVector<ISphNetAction *>&& dCleanup )
+	: m_dCleanup ( std::move ( dCleanup ))
+{}
 
 ThdJobCleanup_t::~ThdJobCleanup_t ()
 {
@@ -21874,17 +21749,12 @@ void ThdJobHttp_t::Call ()
 		return;
 
 	assert ( m_pLoop );
-	NetSendData_t * pSend = nullptr;
-	if ( !m_bSsl )
-	{
-		pSend = new NetSendData_t ( m_tState.LeakPtr(), Proto_e::HTTP );
-	} else
-	{
-		pSend = new NetReplyHttps_t ( (NetStateHttps_t *)m_tState.LeakPtr() );
-	}
-	JobDoSendNB ( pSend, m_pLoop );
-}
 
+	if ( m_bSsl )
+		JobDoSendNB ( new NetSendData_t ( m_tState.LeakPtr (), Proto_e::HTTP ), m_pLoop );
+	else
+		JobDoSendNB ( new NetSendData_t ( m_tState.LeakPtr (), Proto_e::HTTP ) , m_pLoop );
+}
 
 void JobDoSendNB ( NetSendData_t * pSend, CSphNetLoop * pLoop )
 {
@@ -21895,7 +21765,7 @@ void JobDoSendNB ( NetSendData_t * pSend, CSphNetLoop * pLoop )
 	CSphVector<ISphNetAction *> dNext ( 1 );
 	dNext.Resize ( 0 );
 	DWORD uGotEvents = NE_OUT;
-	eRes = pSend->Tick ( uGotEvents, dNext, pLoop );
+	eRes = pSend->Loop ( uGotEvents, dNext, pLoop );
 	if ( eRes==NE_REMOVE )
 	{
 		SafeDelete ( pSend );
@@ -23256,8 +23126,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		g_dTickPoolThread.Resize ( g_iNetWorkers );
 		ARRAY_FOREACH ( iTick, g_dTickPoolThread )
 		{
-			if ( !sphThreadCreate ( g_dTickPoolThread.Begin()+iTick, CSphNetLoop::ThdTick,
-				nullptr, false, StringBuilder_c().Sprintf ( "TickPool_%d", iTick ).cstr () ) )
+			if ( !sphThreadCreate ( g_dTickPoolThread.Begin ()+iTick, CSphNetLoop::ThdLoop, nullptr, false
+									, StringBuilder_c ().Sprintf ( "TickPool_%d", iTick ).cstr ()) )
 				sphDie ( "failed to create tick pool thread" );
 		}
 	}

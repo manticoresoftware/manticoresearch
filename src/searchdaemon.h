@@ -475,6 +475,7 @@ class InputBuffer_c
 {
 public:
 	InputBuffer_c ( const BYTE * pBuf, int iLen );
+	InputBuffer_c ( const VecTraits_T<BYTE>& dBuf );
 	virtual			~InputBuffer_c () {}
 
 	int				GetInt () { return ntohl ( GetT<int> () ); }
@@ -1389,6 +1390,21 @@ void SaveArray ( const VecTraits_T<T> & dBuf, MemoryWriter_c & tOut )
 	tOut.PutDword ( dBuf.GetLength() );
 	if ( dBuf.GetLength() )
 		tOut.PutBytes ( dBuf.Begin(), sizeof(dBuf[0]) * dBuf.GetLength() );
+}
+
+// add handler which will be called on daemon's shutdown right after
+// g_bShutdown is set to true. Returns cookie for refer the callback in future.
+using Handler_fn = std::function<void ()>;
+
+namespace searchd {
+
+	void* AddShutdownCb ( Handler_fn fnCb );
+
+	// remove previously set shutdown cb by cookie
+	void DeleteShutdownCb ( void* pCookie );
+
+	// invoke shutdown handlers
+	void FireShutdownCbs ();
 }
 
 #endif // _searchdaemon_

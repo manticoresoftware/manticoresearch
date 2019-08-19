@@ -5059,7 +5059,7 @@ public:
 		assert ( pNode->m_pNext && pNode->m_pPrev );
 		pNode->m_pNext->m_pPrev = pNode->m_pPrev;
 		pNode->m_pPrev->m_pNext = pNode->m_pNext;
-		pNode->m_pNext = nullptr;
+		//pNode->m_pNext = nullptr; // leave as is for iterate and delete
 		pNode->m_pPrev = nullptr;
 
 		--m_iCount;
@@ -5078,6 +5078,37 @@ public:
 	inline const ListNode_t * End () const
 	{
 		return &m_tStub;
+	}
+
+	class Iterator_c
+	{
+		ListNode_t * m_pIterator = nullptr;
+	public:
+		explicit Iterator_c ( ListNode_t * pIterator = nullptr ) : m_pIterator ( pIterator ) {}
+
+		ListNode_t & operator* () { return *m_pIterator; };
+
+		Iterator_c & operator++ ()
+		{
+			m_pIterator = m_pIterator->m_pNext;
+			return *this;
+		}
+
+		bool operator!= ( const Iterator_c & rhs ) const
+		{
+			return m_pIterator!=rhs.m_pIterator;
+		}
+	};
+
+	// c++11 style iteration
+	Iterator_c begin () const
+	{
+		return Iterator_c ( m_tStub.m_pNext );
+	}
+
+	Iterator_c end () const
+	{
+		return Iterator_c ( const_cast<ListNode_t*> (&m_tStub) );
 	}
 
 private:

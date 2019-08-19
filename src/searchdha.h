@@ -20,20 +20,9 @@
 
 #include <utility>
 
-#if HAVE_KQUEUE
-#include <sys/types.h>
-#include <sys/event.h>
-#include <sys/time.h>
-#endif
-
-#if USE_WINDOWS
-
-bool LoadExFunctions ();
-
-#endif
-
 #include "sphinxutils.h"
 #include "searchdaemon.h"
+#include "searchdtask.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // SOME SHARED GLOBAL VARIABLES
@@ -830,59 +819,66 @@ protected:
 // Universal work with select/poll/epoll/kqueue
 //////////////////////////////////////////////////////////////////////////
 // wrapper around epoll/kqueue/poll
-struct NetEventsIterator_t
+
+struct NetPollEvent_t : public EnqueuedTimeout_t
 {
-	const void * 		m_pData = nullptr;
-	DWORD				m_uEvents = 0;
 
-	void Reset ()
+	union {
+		mutable ListNode_t * pPtr = nullptr;
+		int iIdx;
+	}					m_tBack;
+	int					m_iSock = -1;
+	DWORD				m_uNetEvents = 0;
+
+	explicit NetPollEvent_t ( int iSock )
+		: m_iSock ( iSock ) {}
+
+	virtual ~NetPollEvent_t() {}
+
+	enum Events_e : DWORD
 	{
-		m_pData = nullptr;
-		m_uEvents = 0;
-	}
-
-	bool IsReadable () const;
-	bool IsWritable () const;
-};
-
-class ISphNetEvents : public ISphNoncopyable
-{
-public:
-	enum PoolEvents_e
-	{
-		SPH_POLL_RD = 1UL << 0,
-		SPH_POLL_WR = 1UL << 1,
-		SPH_POLL_HUP = 1UL << 2,
-		SPH_POLL_ERR = 1UL << 3,
-		SPH_POLL_PRI = 1UL << 4,
+		READ = 1UL << 0,
+		WRITE = 1UL << 1,
+		HUP = 1UL << 2,
+		ERR = 1UL << 3,
+		PRI = 1UL << 4,
 	};
-public:
-	virtual ~ISphNetEvents () {};
-	virtual void SetupEvent ( int iSocket, PoolEvents_e eFlags, const void * pData ) = 0;
-	virtual bool Wait ( int ) = 0;
-	virtual int IterateStart () = 0;
-	virtual bool IterateNextAll () = 0;
-	virtual bool IterateNextReady () = 0;
-	virtual void IterateChangeEvent ( int iSocket, PoolEvents_e eFlags ) = 0;
-	virtual void IterateRemove ( int iSocket ) = 0;
-	virtual NetEventsIterator_t & IterateGet () = 0;
 };
 
+const int WAIT_UNTIL_TIMEOUT = -1;
 
-inline bool NetEventsIterator_t::IsReadable () const
+class ISphNetPoller;
+class NetPollReadyIterator_c
 {
-	return !! ( m_uEvents & ISphNetEvents::SPH_POLL_RD );
-}
+	int m_iIterEv = 0;
+	ISphNetPoller * m_pOwner = nullptr;
+public:
+	explicit NetPollReadyIterator_c ( ISphNetPoller* pOwner) : m_pOwner ( pOwner ) {}
+	NetPollEvent_t & operator* ();
+	NetPollReadyIterator_c & operator++ ();
+	bool operator!= ( const NetPollReadyIterator_c & rhs ) const;
+};
 
-inline bool NetEventsIterator_t::IsWritable () const
+class ISphNetPoller : public ISphNoncopyable
 {
-	return !! ( m_uEvents & ISphNetEvents::SPH_POLL_WR );
-}
+public:
+	virtual ~ISphNetPoller () {};
+	virtual void SetupEvent ( NetPollEvent_t * pEvent ) = 0;
+	virtual bool Wait ( int ) = 0;
+	virtual int GetNumOfReady () = 0;
+	virtual void ForAll ( std::function<void (NetPollEvent_t*)>&& fnAction ) = 0;
+	virtual void RemoveEvent ( NetPollEvent_t * pEvent ) = 0;
+	virtual void ChangeEvent ( NetPollEvent_t * pEvent, NetPollEvent_t::Events_e eFlags ) = 0;
+
+	NetPollReadyIterator_c begin () { return NetPollReadyIterator_c ( this ); }
+	static NetPollReadyIterator_c end () { return NetPollReadyIterator_c ( nullptr ); }
+};
+
 
 // all fresh codeflows use version with poll/epoll/kqueue.
 // legacy also set bFallbackSelect and it invokes 'select' for the case
 // when nothing of poll/epoll/kqueue is available.
-ISphNetEvents * sphCreatePoll ( int iSizeHint, bool bFallbackSelect = false );
+ISphNetPoller * sphCreatePoll ( int iSizeHint );
 
 // determine which branch will be used
 // defs placed here for easy switch between/debug
@@ -895,5 +891,4 @@ ISphNetEvents * sphCreatePoll ( int iSizeHint, bool bFallbackSelect = false );
 #else
 #define POLLING_SELECT 1
 #endif
-
 #endif // _searchdha_

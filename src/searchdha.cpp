@@ -4211,7 +4211,7 @@ public:
 		EV_SET( &tEv[1], pEvent->m_iSock, (eFlags==NetPollEvent_t::READ ? EVFILT_WRITE : EVFILT_READ),
 				EV_DELETE | EV_CLEAR, 0, 0, (void *) pEvent->m_tBack.pPtr );
 
-		sphLogDebugv ( "%p kqueue change, ev=%d, sock=%d", pEvent->m_tBack.pPtr, tEv.filter, pEvent->m_iSock );
+		sphLogDebugv ( "%p kqueue change, ev=%d, sock=%d", pEvent->m_tBack.pPtr, tEv[0].filter, pEvent->m_iSock );
 
 		int iRes = kevent ( m_iKQ, tEv, 2, nullptr, 0, nullptr );
 		if ( iRes==-1 )

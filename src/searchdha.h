@@ -20,6 +20,10 @@
 
 #include <utility>
 
+#if USE_WINDOWS
+bool LoadExFunctions ();
+#endif
+
 #include "sphinxutils.h"
 #include "searchdaemon.h"
 #include "searchdtask.h"

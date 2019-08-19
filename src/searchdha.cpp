@@ -46,10 +46,6 @@
 	#include <sys/time.h>
 #endif
 
-#if USE_WINDOWS
-bool LoadExFunctions ();
-#endif
-
 int64_t			g_iPingInterval		= 0;		// by default ping HA agents every 1 second
 DWORD			g_uHAPeriodKarma	= 60;		// by default use the last 1 minute statistic to determine the best HA agent
 
@@ -4399,7 +4395,7 @@ bool NetPollReadyIterator_c::operator!= ( const NetPollReadyIterator_c & rhs ) c
 	return rhs.m_pOwner || m_iIterEv<pOwner->m_dEvents.GetLength ();
 }
 
-ISphNetPoller * sphCreatePoll ( int iSizeHint, bool )
+ISphNetPoller * sphCreatePoll ( int iSizeHint )
 {
 	return new PollEvents_c ( iSizeHint );
 }

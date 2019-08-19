@@ -135,6 +135,32 @@ build_mac:
     when: always
   retry: 1
 
+build_bsd:
+  stage: routines
+  except:
+    variables:
+      - $WHAT
+  tags:
+    - freebsd
+    - build
+  dependencies: []
+  variables:
+    CTEST_BUILD_CONFIGURATION: "Debug"
+    LIBS_BUNDLE: "/media/shared/bundle"
+    USE_GALERA: 0
+    CTEST_CMAKE_GENERATOR: "Unix Makefiles"
+  script:
+    - mkdir build && cd build
+    - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
+    - mkdir here5
+    - cp -r Testing/2*/*.xml here5
+  artifacts:
+    paths:
+      - build/here5
+    expire_in: 12 hrs
+    when: always
+  retry: 1
+
 push_results:
   stage: publish
   except:
@@ -148,6 +174,7 @@ push_results:
     - release_tests
     - build_win
     - build_mac
+    - build_bsd
   variables:
     GIT_STRATEGY: fetch
   script:

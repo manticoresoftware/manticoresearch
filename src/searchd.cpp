@@ -15905,7 +15905,8 @@ bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSettings & t
 	CSphConfigParser tCfg;
 	if ( !tCfg.ReParse ( g_sConfigFile.cstr () ) )
 	{
-		sError.SetSprintf ( "failed to parse config file '%s'; using previous settings", g_sConfigFile.cstr () );
+		sError.SetSprintf ( "failed to parse config file '%s': %s; using previous settings",
+				g_sConfigFile.cstr (), TlsMsg::szError() );
 		return false;
 	}
 
@@ -18237,7 +18238,8 @@ bool CheckConfigChanges ( CSphVector<char>& dContent )
 	struct_stat tStat = {0};
 
 #if !USE_WINDOWS
-	char sBuf [ 8192 ];
+	const size_t BUF_SIZE = 8192;
+	char sBuf [ BUF_SIZE ];
 	FILE * fp = nullptr;
 
 	fp = fopen ( g_sConfigFile.cstr (), "rb" );
@@ -18253,24 +18255,28 @@ bool CheckConfigChanges ( CSphVector<char>& dContent )
 		return true;
 	}
 
-	char * p = sBuf;
-	while ( isspace(*p) )
-		p++;
-	if ( p[0]=='#' && p[1]=='!' )
+	char * p;
+	const char* pEnd = sBuf + BUF_SIZE;
+	for ( p = sBuf; p<pEnd; ++p )
+		if ( !isspace(*p) )
+			break;
+
+	if ( p<sBuf+BUF_SIZE-1 && p[0]=='#' && p[1]=='!' )
 	{
+		sBuf[BUF_SIZE-1] = '\0'; // just safety
 		fclose ( fp );
-		p += 2;
-		char sError [ 1024 ];
-		if ( !TryToExec ( p, g_sConfigFile.cstr(), dContent, sError, sizeof(sError) ) )
+		if ( !TryToExec ( p+2, g_sConfigFile.cstr(), dContent ) )
+		{
+			dContent.Reset();
 			return true;
+		}
 
 		uCRC32 = sphCRC32 ( dContent.Begin(), dContent.GetLength() );
 	} else
 	{
 		while ( bGotLine ) {
 			auto iLen = strlen ( sBuf );
-			auto sDst = dContent.AddN ( iLen );
-			memcpy ( sDst, sBuf, iLen );
+			dContent.Append ( sBuf, iLen );
 			bGotLine = fgets ( sBuf, sizeof ( sBuf ), fp );
 		}
 		dContent.Add('\0');
@@ -18336,10 +18342,16 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 		dDistrToDelete.Add ( true, it.GetName () );
 
 	const CSphConfig &hConf = tCP.m_tConf;
-	for ( hConf["index"].IterateStart (); hConf["index"].IterateNext(); )
+	if ( !hConf.Exists ("index") )
 	{
-		const CSphConfigSection & hIndex = hConf["index"].IterateGet();
-		const auto & sIndexName = hConf["index"].IterateGetKey();
+		sphWarning ( "No indexes found in config came to rotation. Abort reloading");
+		return;
+	}
+
+	for ( const auto& dIndex : hConf["index"] )
+	{
+		const auto & sIndexName = dIndex.first;
+		const CSphConfigSection & hIndex = dIndex.second;
 		IndexType_e eNewType = TypeOfIndexConfig ( hIndex.GetStr ( "type", nullptr ) );
 
 		if ( eNewType==IndexType_e::ERROR_ )
@@ -18366,7 +18378,9 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 							tDesc.m_tFileAccessSettings!=pServedRLocked->m_tFileAccessSettings ||
 							tDesc.m_bPreopen!=pServedRLocked->m_bPreopen ||
 							tDesc.m_sGlobalIDFPath!=pServedRLocked->m_sGlobalIDFPath );
-						bReconfigure |= ( pServedRLocked->m_eType!=IndexType_e::TEMPLATE && hIndex.Exists ( "path" ) && hIndex["path"].strval ()!=pServedRLocked->m_sIndexPath );
+						bReconfigure |= ( pServedRLocked->m_eType!=IndexType_e::TEMPLATE
+								&& hIndex.Exists ( "path" )
+								&& hIndex["path"].strval ()!=pServedRLocked->m_sIndexPath );
 					}
 				}
 
@@ -18376,7 +18390,9 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 			{
 				ServedDescWPtr_c pServedWLocked ( pServedIndex );
 				ConfigureLocalIndex ( pServedWLocked, hIndex );
-				if ( pServedWLocked->m_eType!=IndexType_e::TEMPLATE && hIndex.Exists ( "path" ) && hIndex["path"].strval ()!=pServedWLocked->m_sIndexPath )
+				if ( pServedWLocked->m_eType!=IndexType_e::TEMPLATE
+					&& hIndex.Exists ( "path" )
+					&& hIndex["path"].strval ()!=pServedWLocked->m_sIndexPath )
 				{
 					pServedWLocked->m_sNewPath = hIndex["path"].strval ();
 
@@ -18687,7 +18703,8 @@ static void CheckRotate () REQUIRES ( MainThread ) EXCLUDES ( g_tRotateThreadMut
 			if ( !dConfig.IsEmpty() && g_pCfg.ReParse ( g_sConfigFile.cstr (), dConfig.begin ()))
 				ReloadIndexSettings ( g_pCfg );
 			else
-				sphWarning ( "failed to parse config file '%s'; using previous settings", g_sConfigFile.cstr ());
+				sphWarning ( "failed to parse config file '%s': %s; using previous settings",
+						g_sConfigFile.cstr (), TlsMsg::szError ());
 		}
 		dConfig.Reset ();
 
@@ -22514,7 +22531,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		ScWL_t dWLock { g_tRotateConfigMutex };
 		// do parse
 		if ( !g_pCfg.Parse ( g_sConfigFile.cstr (), dConfig.begin () ) )
-			sphFatal ( "failed to parse config file '%s'", g_sConfigFile.cstr () );
+			sphFatal ( "failed to parse config file '%s': %s", g_sConfigFile.cstr (), TlsMsg::szError() );
 	}
 	dConfig.Reset ();
 
@@ -22766,7 +22783,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		sphInfo ( "Reloading the config (%d chars)", dConfig.GetLength() );
 		ScWL_t dWLock { g_tRotateConfigMutex };
 		if ( !g_pCfg.ReParse ( g_sConfigFile.cstr (), dConfig.begin () ) )
-			sphFatal ( "failed to parse config file '%s'", g_sConfigFile.cstr () );
+			sphFatal ( "failed to parse config file '%s': %s", g_sConfigFile.cstr (), TlsMsg::szError() );
 
 		sphInfo ( "Reconfigure the daemon" );
 		ConfigureSearchd ( hConf, bOptPIDFile );

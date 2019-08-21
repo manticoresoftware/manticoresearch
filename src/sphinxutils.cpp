@@ -939,10 +939,7 @@ bool CSphConfigParser::AddSection ( const char * sType, const char * sName )
 		m_tConf.Add ( CSphConfigType(), m_sSectionType ); // FIXME! be paranoid, verify that it returned true
 
 	if ( m_tConf[m_sSectionType].Exists ( m_sSectionName ) )
-	{
-		snprintf ( m_sError, sizeof(m_sError), "section '%s' (type='%s') already exists", sName, sType );
-		return false;
-	}
+		return TlsMsg::Err ( "section '%s' (type='%s') already exists", sName, sType );
 	m_tConf[m_sSectionType].Add ( CSphConfigSection(), m_sSectionName ); // FIXME! be paranoid, verify that it returned true
 
 	return true;
@@ -996,19 +993,13 @@ bool CSphConfigParser::ValidateKey ( const char * sKey )
 		pDesc = pSection->m_pSection;
 
 	if ( !pDesc )
-	{
-		snprintf ( m_sError, sizeof(m_sError), "unknown section type '%s'", m_sSectionType.cstr() );
-		return false;
-	}
+		return TlsMsg::Err( "unknown section type '%s'", m_sSectionType.cstr() );
 
 	// check if the key is known
 	while ( pDesc->m_sKey && strcasecmp ( pDesc->m_sKey, sKey ) )
 		pDesc++;
 	if ( !pDesc->m_sKey )
-	{
-		snprintf ( m_sError, sizeof(m_sError), "unknown key name '%s'", sKey );
-		return false;
-	}
+		return TlsMsg::Err( "unknown key name '%s'", sKey );
 
 	// warn about deprecate keys
 	if ( pDesc->m_iFlags & KEY_DEPRECATED )
@@ -1034,15 +1025,17 @@ bool CSphConfigParser::ValidateKey ( const char * sKey )
 
 #if !USE_WINDOWS
 
-bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult, char * sError, int iErrorLen, const char * sArgs )
+bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult, const char * sArgs )
 {
+	using namespace TlsMsg;
+	Err(); // clean any inherited msgs
+
+	const int BUFFER_SIZE = 65536;
+
 	int dPipe[2] = { -1, -1 };
 
 	if ( pipe ( dPipe ) )
-	{
-		snprintf ( sError, iErrorLen, "pipe() failed (error=%s)", strerrorm(errno) );
-		return false;
-	}
+		return Err ( "pipe() failed (error=%s)", strerrorm(errno) );
 
 	if ( !sArgs )
 		pBuffer = trim ( pBuffer );
@@ -1062,7 +1055,7 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 
 		CSphVector<CSphString> dTmpArgs;
 		CSphVector<char *> dArgs;
-		char * pArgs = NULL;
+		char * pArgs = nullptr;
 		if ( !sArgs )
 		{
 			char * pPtr = pBuffer;
@@ -1090,38 +1083,35 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 		{
 			execvp ( dArgs[0], dArgs.Begin() );
 		} else if ( pArgs )
-			execl ( pBuffer, pBuffer, pArgs, szFilename, (char*)NULL );
+			execl ( pBuffer, pBuffer, pArgs, szFilename, (char*)nullptr );
 		else
-			execl ( pBuffer, pBuffer, szFilename, (char*)NULL );
+			execl ( pBuffer, pBuffer, szFilename, (char*) nullptr );
 
 		exit ( 1 );
 
 	} else if ( iChild==-1 )
-	{
-		snprintf ( sError, iErrorLen, "fork failed: [%d] %s", errno, strerrorm(errno) );
-		return false;
-	}
+		return Err ( "fork failed: [%d] %s", errno, strerrorm(errno) );
 
 	close ( iWrite );
 
-	int iBytesRead, iTotalRead = 0;
-	const int BUFFER_SIZE = 65536;
-
-	dResult.Reset ();
-
-	do
+	dResult.Reset();
+	while (true)
 	{
-		dResult.Resize ( iTotalRead + BUFFER_SIZE );
-		while (true)
+		dResult.ReserveGap ( BUFFER_SIZE );
+		auto pBuf = (void *) dResult.End();
+		auto iChunk = (int) read ( iRead, pBuf, BUFFER_SIZE );
+		if ( iChunk>0 )
+			dResult.AddN ( iChunk );
+
+		if ( !iChunk ) // eof
+			break;
+
+		if ( iChunk==-1 && errno!=EINTR ) // we can get SIGCHLD just before eof, other is fail
 		{
-			iBytesRead = (int) read ( iRead, (void*)&(dResult [iTotalRead]), BUFFER_SIZE );
-			if ( iBytesRead==-1 && errno==EINTR ) // we can get SIGCHLD just before eof
-				continue;
+			Err ( "pipe read error: [%d] %s", errno, strerrorm (errno));
 			break;
 		}
-		iTotalRead += iBytesRead;
 	}
-	while ( iBytesRead > 0 );
 	close ( iRead );
 
 	int iStatus, iResult;
@@ -1139,39 +1129,25 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 		}
 
 		if ( iResult==-1 && errno!=EINTR )
-		{
-			snprintf ( sError, iErrorLen, "waitpid() failed: [%d] %s", errno, strerrorm(errno) );
-			return false;
-		}
+			return Err ( "waitpid() failed: [%d] %s", errno, strerrorm(errno) );
 	}
 	while ( iResult!=iChild );
 
 	if ( WIFEXITED ( iStatus ) && WEXITSTATUS ( iStatus ) )
-	{
 		// FIXME? read stderr and log that too
-		snprintf ( sError, iErrorLen, "error executing '%s' status = %d", pBuffer, WEXITSTATUS ( iStatus ) );
-		return false;
-	}
+		return Err ( "error executing '%s' status = %d", pBuffer, WEXITSTATUS ( iStatus ) );
 
 	if ( WIFSIGNALED ( iStatus ) )
-	{
-		snprintf ( sError, iErrorLen, "error executing '%s', killed by signal %d", pBuffer, WTERMSIG ( iStatus ) );
+		return Err ( "error executing '%s', killed by signal %d", pBuffer, WTERMSIG ( iStatus ) );
+
+	if ( HasErr() )
 		return false;
-	}
 
-	if ( iBytesRead < 0 )
-	{
-		snprintf ( sError, iErrorLen, "pipe read error: [%d] %s", errno, strerrorm(errno) );
-		return false;
-	}
-
-	dResult.Resize ( iTotalRead + 1 );
-	dResult [iTotalRead] = '\0';
-
+	dResult.Add('\0');
 	return true;
 }
 #else
-bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult, char * sError, int iErrorLen, const char * sArgs )
+bool TryToExec ( char *, const char *, CSphVector<char> &, const char* )
 {
 	return true;
 }
@@ -1189,7 +1165,7 @@ char * CSphConfigParser::GetBufferString ( char * szDest, int iMax, const char *
 	}
 
 	if ( !nCopied )
-		return NULL;
+		return nullptr;
 
 	szSource += nCopied;
 	szDest [nCopied] = '\0';
@@ -1209,6 +1185,9 @@ bool CSphConfigParser::ReParse ( const char * sFileName, const char * pBuffer )
 
 bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 {
+	using namespace TlsMsg;
+	Err();
+
 	const int L_STEPBACK	= 16;
 	const int L_TOKEN		= 64;
 	const int L_BUFFER		= 8192;
@@ -1242,16 +1221,10 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 	int iValue = 0, iValueMax = 65535;
 	auto * sValue = new char [ iValueMax+1 ];
 
-	#define LOC_ERROR(_msg) { strncpy ( m_sError, _msg, sizeof(m_sError) ); break; }
-	#define LOC_ERROR2(_msg,_a) { snprintf ( m_sError, sizeof(m_sError), _msg, _a ); break; }
-	#define LOC_ERROR3(_msg,_a,_b) { snprintf ( m_sError, sizeof(m_sError), _msg, _a, _b ); break; }
-	#define LOC_ERROR4(_msg,_a,_b,_c) { snprintf ( m_sError, sizeof(m_sError), _msg, _a, _b, _c ); break; }
-
+	#define LOC_ERROR(...) { Err(__VA_ARGS__); break; }
 	#define LOC_PUSH(_new) { assert ( iStack<int(sizeof(eStack)/sizeof(eState)) ); eStack[iStack++] = eState; eState = _new; }
 	#define LOC_POP() { assert ( iStack>0 ); eState = eStack[--iStack]; }
 	#define LOC_BACK() { p--; }
-
-	m_sError[0] = '\0';
 
 	for ( ; ; p++ )
 	{
@@ -1264,8 +1237,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 
 			m_iLine++;
 			size_t iLen = strlen(sBuf);
-			if ( iLen<=0 )
-				LOC_ERROR ( "internal error; fgets() returned empty string" );
+			if ( iLen<=0 ) LOC_ERROR ( "internal error; fgets() returned empty string" );
 
 			p = sBuf;
 			pEnd = sBuf + iLen;
@@ -1279,6 +1251,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 		// handle S_TOP state
 		if ( eState==S_TOP )
 		{
+			sBuf[L_BUFFER-1] = '\0'; // just safety
 			if ( isspace(*p) )				continue;
 
 			if ( *p=='#' )
@@ -1287,7 +1260,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 				if ( !pBuffer && m_iLine==1 && p==sBuf && p[1]=='!' )
 				{
 					CSphVector<char> dResult;
-					if ( TryToExec ( p+2, sFileName, dResult, m_sError, sizeof(m_sError) ) )
+					if ( TryToExec ( p+2, sFileName, dResult ) )
 						Parse ( sFileName, &dResult[0] );
 					break;
 				} else
@@ -1339,7 +1312,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 				continue;
 			}
 			if ( IsNamedSection(sToken) )	{ m_sSectionType = sToken; sToken[0] = '\0'; LOC_POP (); LOC_PUSH ( S_SECNAME ); LOC_BACK(); continue; }
-											LOC_ERROR2 ( "invalid section type '%s'", sToken );
+											LOC_ERROR ( "invalid section type '%s'", sToken );
 		}
 
 		// handle S_CHR state
@@ -1347,7 +1320,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 		{
 			if ( isspace(*p) )				continue;
 			if ( *p=='#' )					{ LOC_PUSH ( S_SKIP2NL ); continue; }
-			if ( *p!=iCh )					LOC_ERROR3 ( "expected '%c', got '%c'", iCh, *p );
+			if ( *p!=iCh )					LOC_ERROR ( "expected '%c', got '%c'", iCh, *p );
 											LOC_POP (); continue;
 		}
 
@@ -1358,7 +1331,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 			if ( *p=='#' )					{ LOC_PUSH ( S_SKIP2NL ); continue; }
 			if ( *p=='}' )					{ LOC_POP (); continue; }
 			if ( sphIsAlpha(*p) )			{ LOC_PUSH ( S_KEY ); LOC_PUSH ( S_TOK ); LOC_BACK(); iValue = 0; sValue[0] = '\0'; continue; }
-											LOC_ERROR2 ( "section contents: expected token, got '%c'", *p );
+											LOC_ERROR ( "section contents: expected token, got '%c'", *p );
 		}
 
 		// handle S_KEY state
@@ -1397,28 +1370,28 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 		if ( eState==S_SECNAME )
 		{
 			if ( isspace(*p) )					{ continue; }
-			if ( !sToken[0]&&!sphIsAlpha(*p))	{ LOC_ERROR2 ( "named section: expected name, got '%c'", *p ); }
+			if ( !sToken[0]&&!sphIsAlpha(*p))	{ LOC_ERROR ( "named section: expected name, got '%c'", *p ); }
 
 			if ( !sToken[0] )				{ LOC_PUSH ( S_TOK ); LOC_BACK(); continue; }
 			if ( !AddSection ( m_sSectionType.cstr(), sToken ) ) break;
 			sToken[0] = '\0';
 			if ( *p==':' )					{ eState = S_SECBASE; continue; }
 			if ( *p=='{' )					{ eState = S_SEC; continue; }
-											LOC_ERROR2 ( "named section: expected ':' or '{', got '%c'", *p );
+											LOC_ERROR ( "named section: expected ':' or '{', got '%c'", *p );
 		}
 
 		// handle S_SECBASE state
 		if ( eState==S_SECBASE )
 		{
 			if ( isspace(*p) )					{ continue; }
-			if ( !sToken[0]&&!sphIsAlpha(*p))	{ LOC_ERROR2 ( "named section: expected parent name, got '%c'", *p ); }
+			if ( !sToken[0]&&!sphIsAlpha(*p))	{ LOC_ERROR ( "named section: expected parent name, got '%c'", *p ); }
 			if ( !sToken[0] )					{ LOC_PUSH ( S_TOK ); LOC_BACK(); continue; }
 
 			// copy the section
 			assert ( m_tConf.Exists ( m_sSectionType ) );
 
 			if ( !m_tConf [ m_sSectionType ].Exists ( sToken ) )
-				LOC_ERROR4 ( "inherited section '%s': parent doesn't exist (parent name='%s', type='%s')",
+				LOC_ERROR ( "inherited section '%s': parent doesn't exist (parent name='%s', type='%s')",
 					m_sSectionName.cstr(), sToken, m_sSectionType.cstr() );
 
 			CSphConfigSection & tDest = m_tConf [ m_sSectionType ][ m_sSectionName ];
@@ -1436,7 +1409,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 			continue;
 		}
 
-		LOC_ERROR2 ( "internal error (unhandled state %d)", eState );
+		LOC_ERROR ( "internal error (unhandled state %d)", eState );
 	}
 
 	#undef LOC_POP
@@ -1451,24 +1424,21 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 	if ( m_iWarnings>WARNS_THRESH )
 		fprintf ( stdout, "WARNING: %d more warnings skipped.\n", m_iWarnings-WARNS_THRESH );
 
-	if ( strlen(m_sError) )
-	{
-		auto iCol = (int)(p-sBuf+1);
+	if ( !HasErr() )
+		return true;
 
-		int iCtx = Min ( L_STEPBACK, iCol ); // error context is upto L_STEPBACK chars back, but never going to prev line
-		const char * sCtx = p-iCtx+1;
-		if ( sCtx<sBuf )
-			sCtx = sBuf;
+	auto iCol = (int)(p-sBuf+1);
 
-		char sStepback [ L_STEPBACK+1 ];
-		memcpy ( sStepback, sCtx, size_t ( iCtx ) );
-		sStepback[iCtx] = '\0';
+	int iCtx = Min ( L_STEPBACK, iCol ); // error context is upto L_STEPBACK chars back, but never going to prev line
+	const char * sCtx = p-iCtx+1;
+	if ( sCtx<sBuf )
+		sCtx = sBuf;
 
-		fprintf ( stdout, "ERROR: %s in %s line %d col %d.\n", m_sError, m_sFileName.cstr(), m_iLine, iCol );
-		return false;
-	}
+	char sStepback [ L_STEPBACK+1 ];
+	memcpy ( sStepback, sCtx, size_t ( iCtx ) );
+	sStepback[iCtx] = '\0';
 
-	return true;
+	return Err ( "ERROR: %s in %s line %d col %d.\n", szError (), m_sFileName.cstr (), m_iLine, iCol );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1993,7 +1963,7 @@ const char * sphLoadConfig ( const char * sOptConfig, bool bQuiet, CSphConfigPar
 
 	// load config
 	if ( !cp.Parse ( sOptConfig ) )
-		sphDie ( "failed to parse config file '%s'", sOptConfig );
+		sphDie ( "failed to parse config file '%s': %s", sOptConfig, TlsMsg::szError() );
 
 	CSphConfig & hConf = cp.m_tConf;
 	if ( !hConf ( "index" ) )

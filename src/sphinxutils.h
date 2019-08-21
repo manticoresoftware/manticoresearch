@@ -266,22 +266,21 @@ public:
 	CSphConfig		m_tConf;
 
 public:
-	bool			Parse ( const char * sFileName, const char * pBuffer = NULL );
+	bool			Parse ( const char * sFileName, const char * pBuffer = nullptr );
 
 	// fail-save loading new config over existing.
-	bool			ReParse ( const char * sFileName, const char * pBuffer = NULL );
+	bool			ReParse ( const char * sFileName, const char * pBuffer = nullptr );
 
-protected:
+private:
 	CSphString		m_sFileName;
 	int				m_iLine = -1;
 	CSphString		m_sSectionType;
 	CSphString		m_sSectionName;
-	char			m_sError [ 1024 ];
 
 	int					m_iWarnings = 0;
 	static const int	WARNS_THRESH	= 5;
 
-protected:
+private:
 	bool			IsPlainSection ( const char * sKey );
 	bool			IsNamedSection ( const char * sKey );
 	bool			AddSection ( const char * sType, const char * sSection );
@@ -290,7 +289,7 @@ protected:
 	char *			GetBufferString ( char * szDest, int iMax, const char * & szSource );
 };
 
-bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult, char * sError, int iErrorLen, const char * sArgs=nullptr );
+bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult, const char * sArgs=nullptr );
 
 /////////////////////////////////////////////////////////////////////////////
 

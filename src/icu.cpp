@@ -303,7 +303,7 @@ class FieldFilterICU_c : public ISphFieldFilter, public ICUPreprocessor_c
 public:
 	int				Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool bQuery ) final;
 	void			GetSettings ( CSphFieldFilterSettings & tSettings ) const final;
-	ISphFieldFilter * Clone() final;
+	ISphFieldFilter * Clone() const final;
 
 protected:
 					~FieldFilterICU_c() {}
@@ -351,7 +351,7 @@ void FieldFilterICU_c::GetSettings ( CSphFieldFilterSettings & tSettings ) const
 }
 
 
-ISphFieldFilter * FieldFilterICU_c::Clone()
+ISphFieldFilter * FieldFilterICU_c::Clone() const
 {
 	ISphFieldFilterRefPtr_c pClonedParent { m_pParent ? m_pParent->Clone () : nullptr };
 

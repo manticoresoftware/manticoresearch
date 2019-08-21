@@ -99,6 +99,15 @@ index test_spec
 	morphology 		= icu_chinese
 }
 
+index test3 : base
+{
+	type			= rt
+	path			= <data_path/>/test3
+	rt_field		= title
+	rt_attr_string	= title
+	rt_attr_uint	= tag
+}
+
 common
 {
 	icu_data_dir = <local>icu_data_dir</local>
@@ -209,6 +218,15 @@ INSERT INTO test_table VALUES
 <!-- regression CALL KEYWORDS -->
 <sphinxql>CALL KEYWORDS ( '成員年齡均超過六十歲，tested', 'test' )</sphinxql>
 <sphinxql>CALL KEYWORDS ( '成員年齡均超過六十歲，tested', 'test2' )</sphinxql>
+
+<!-- regression CALL SNIPPETS -->
+<sphinxql>CALL SNIPPETS ( '买新的Apple电脑', 'test', '电脑' )</sphinxql>
+<sphinxql>CALL SNIPPETS ( '买新的Apple 电脑', 'test', '电脑' )</sphinxql>
+<sphinxql>CALL KEYWORDS ( '买新的Apple电脑', 'test' )</sphinxql>
+
+<sphinxql>insert into test3 (id, title, tag) values(1,'买新的Apple电脑 test; mixed blended aaa-bbb', 1 )</sphinxql>
+<sphinxql>insert into test3 (id, title, tag) values(2,'买新的Apple电脑tested', 2 )</sphinxql>
+<sphinxql>select id, SNIPPET(title, '电脑') from test3 where match ( '电脑' )</sphinxql>
 
 </sphqueries>
 

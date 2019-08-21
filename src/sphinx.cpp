@@ -23408,7 +23408,7 @@ public:
 
 	int					Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool ) final;
 	void				GetSettings ( CSphFieldFilterSettings & tSettings ) const final;
-	ISphFieldFilter *	Clone() final;
+	ISphFieldFilter *	Clone() const final;
 
 	bool				AddRegExp ( const char * sRegExp, CSphString & sError );
 
@@ -23516,7 +23516,7 @@ bool CSphFieldRegExps::AddRegExp ( const char * sRegExp, CSphString & sError )
 }
 
 
-ISphFieldFilter * CSphFieldRegExps::Clone()
+ISphFieldFilter * CSphFieldRegExps::Clone() const
 {
 	CSphFieldRegExps * pCloned = new CSphFieldRegExps;
 	pCloned->m_dRegexps = m_dRegexps;

@@ -3826,6 +3826,17 @@ void SnippetContext_t::BuildExcerpt ( ExcerptQuery_t & tOptions, const CSphIndex
 	// FIXME!!! check on real data (~100 Mb) as stripper changes len
 	int iDataLen = pData ? strlen ( pData ) : 0;
 
+	CSphVector<BYTE> dPostField;
+	if ( iDataLen && m_pFieldFilter )
+	{
+		int iGot = m_pFieldFilter->Apply ( (const BYTE *)pData, iDataLen, dPostField, false );
+		if ( iGot )
+		{
+			pData = (char *)dPostField.Begin();
+			iDataLen = iGot;
+		}
+	}
+
 	DoHighlighting ( tOptions, pIndex->GetSettings(), m_tExtQuery, m_eExtQuerySPZ, pData, iDataLen, m_pDict,
 		m_pTokenizer, pStripper, m_pQueryTokenizer, tOptions.m_dRes, tOptions.m_dSeparators );
 }
@@ -3971,6 +3982,9 @@ bool SnippetContext_t::Setup ( const CSphIndex * pIndex, const ExcerptQuery_t &t
 		if ( pIndex->GetSettings ().m_uAotFilterMask )
 			TransformAotFilter ( m_tExtQuery.m_pRoot, m_pDict->GetWordforms (), pIndex->GetSettings () );
 	}
+
+	if ( pIndex->GetFieldFilter() )
+		m_pFieldFilter = pIndex->GetFieldFilter()->Clone();
 
 	bool bSetupSPZ = ( tSettings.m_ePassageSPZ!=SPH_SPZ_NONE || m_eExtQuerySPZ!=SPH_SPZ_NONE ||
 		( tSettings.m_sStripMode=="retain" && tSettings.m_bHighlightQuery ) );

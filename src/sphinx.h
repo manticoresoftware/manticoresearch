@@ -1778,7 +1778,7 @@ public:
 
 	virtual	int					Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool bQuery ) = 0;
 	virtual	void				GetSettings ( CSphFieldFilterSettings & tSettings ) const = 0;
-	virtual ISphFieldFilter *	Clone() = 0;
+	virtual ISphFieldFilter *	Clone() const = 0;
 
 	void						SetParent ( ISphFieldFilter * pParent );
 

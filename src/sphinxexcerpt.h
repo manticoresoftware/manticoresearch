@@ -77,6 +77,7 @@ private:
 	CSphDictRefPtr_c m_pDict;
 	XQQuery_t m_tExtQuery;
 	DWORD m_eExtQuerySPZ { SPH_SPZ_NONE };
+	ISphFieldFilterRefPtr_c m_pFieldFilter;
 
 public:
 	bool Setup ( const CSphIndex * pIndex, const ExcerptQuery_t &tSettings, CSphString &sError );

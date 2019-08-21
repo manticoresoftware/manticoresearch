@@ -49,8 +49,8 @@ indexer
 
 searchd
 {
-	listen			= 9312
-	listen			= 9306:mysql41
+	listen			= 127.0.0.1:9312
+	listen			= 127.0.0.1:9306:mysql41
 	log			= @CONFDIR@/log/searchd.log
 	query_log		= @CONFDIR@/log/query.log
 	read_timeout		= 5

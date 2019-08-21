@@ -816,8 +816,8 @@ searchd
 	# listen			= 192.168.0.1:9312
 	# listen			= 9312
 	# listen			= /var/run/searchd.sock
-	listen			= 9312
-	listen			= 9306:mysql41
+	listen			= 127.0.0.1:9312
+	listen			= 127.0.0.1:9306:mysql41
 
 	# whether listener will set flag TCP_FASTOPEN which allows TCP RFC7413
 	# fast open connection. Note, that apart this setting you need also

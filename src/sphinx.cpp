@@ -18481,7 +18481,7 @@ void CSphIndex_VLN::DebugCheckDocidLookup ( CSphAutoreader & tAttrReader, int64_
 
 	int iDocs = tLookup.GetDword();
 	int iDocsPerCheckpoint = tLookup.GetDword();
-	int tMaxDocID = tLookup.GetOffset();
+	tLookup.GetOffset(); // max docid
 	int64_t iLookupBase = tLookup.GetPos();
 
 	int iCheckpoints = ( iDocs + iDocsPerCheckpoint - 1 ) / iDocsPerCheckpoint;
@@ -18538,6 +18538,11 @@ void CSphIndex_VLN::DebugCheckDocidLookup ( CSphAutoreader & tAttrReader, int64_
 				// read only docid
 				tAttrReader.SeekTo ( dRow.GetLengthBytes() * tRowID, sizeof(DocID_t) );
 				tAttrReader.GetBytes ( dRow.Begin(), sizeof(DocID_t) );
+
+				if ( dRowids.BitGet ( tRowID ) )
+					tReporter.Fail ( "row %u already mapped, current docid" INT64_FMT " checkpoint %d, doc %d",
+						tRowID, INT64_FMT, iCp, i );
+
 				dRowids.BitSet ( tRowID );
 
 				if ( tDocID!=sphGetDocID ( dRow.Begin() ) )

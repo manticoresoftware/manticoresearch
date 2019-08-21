@@ -1115,11 +1115,12 @@ public:
 	void				EnableSave() final;
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
 
-	void				SetDebugCheck () final { m_bDebugCheck = true; }
+	void				SetDebugCheck ( bool bCheckIdDups ) final { m_bDebugCheck = true; m_bCheckIdDups = bCheckIdDups; }
 
 protected:
 	CSphSourceStats		m_tStats;
 	bool				m_bDebugCheck = false;
+	bool				m_bCheckIdDups = false;
 
 private:
 	static const DWORD			META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
@@ -3540,7 +3541,7 @@ CSphIndex * RtIndex_c::LoadDiskChunk ( const char * sChunk, CSphString & sError 
 	pDiskChunk->SetMemorySettings ( m_tFiles );
 
 	if ( m_bDebugCheck )
-		pDiskChunk->SetDebugCheck();
+		pDiskChunk->SetDebugCheck ( m_bCheckIdDups );
 
 	if ( !pDiskChunk->Prealloc ( m_bPathStripped ) )
 	{

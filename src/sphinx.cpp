@@ -2530,7 +2530,7 @@ public:
 	void				DebugDumpDocids ( FILE * fp ) final;
 	void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID ) final;
 	void				DebugDumpDict ( FILE * fp ) final;
-	void				SetDebugCheck () final;
+	void				SetDebugCheck ( bool bCheckIdDups ) final;
 	int					DebugCheck ( FILE * fp ) final;
 	template <class Qword> void		DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
 
@@ -2625,6 +2625,7 @@ private:
 	volatile bool				m_bPassedAlloc;
 	bool						m_bIsEmpty;				///< do we have actually indexed documents (m_iTotalDocuments is just fetched documents, not indexed!)
 	bool						m_bDebugCheck;
+	bool						m_bCheckIdDups = false;
 
 	mutable DWORD				m_uAttrsStatus = 0;
 
@@ -2683,6 +2684,9 @@ private:
 	void						DebugCheck_Docs ( DebugCheckContext_t & tCtx, DebugCheckError_c & tReporter );
 	void						DebugCheck_KillList ( DebugCheckContext_t & tCtx, DebugCheckError_c & tReporter ) const;
 	void						DebugCheck_BlockIndex ( DebugCheckContext_t & tCtx, DebugCheckError_c & tReporter );
+
+	void						DebugCheckDocidLookup ( CSphAutoreader & tAttrReader, int64_t iRows, int iRowSize, DebugCheckError_c & tReporter ) const;
+	void						DebugCheckDocids ( CSphAutoreader & tAttrReader, int64_t iRows, int iRowSize, DebugCheckError_c & tReporter ) const;
 };
 
 
@@ -17528,9 +17532,10 @@ void HashCollection_c::AppendNewHash ( const char * sExt, const BYTE * pHash )
 // INDEX CHECKING
 //////////////////////////////////////////////////////////////////////////
 
-void CSphIndex_VLN::SetDebugCheck ()
+void CSphIndex_VLN::SetDebugCheck ( bool bCheckIdDups )
 {
 	m_bDebugCheck = true;
+	m_bCheckIdDups = bCheckIdDups;
 }
 
 
@@ -18442,6 +18447,9 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	DebugCheck_KillList ( tCtx, tReporter );
 	// more common code
 	DebugCheck_DeadRowMap ( tCtx.m_tDeadRowReader.GetFilesize(), m_iDocinfo, tReporter );
+	DebugCheckDocidLookup ( tCtx.m_tAttrReader, m_iDocinfo, m_tSchema.GetRowSize(), tReporter );
+	if ( m_bCheckIdDups )
+		DebugCheckDocids ( tCtx.m_tAttrReader, m_iDocinfo, m_tSchema.GetRowSize(), tReporter );
 
 	///////////////////////////
 	// all finished
@@ -18452,6 +18460,147 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	return (int)Min ( tReporter.GetNumFails(), 255 ); // this is the exitcode; so cap it
 } // NOLINT function length
 
+
+
+void CSphIndex_VLN::DebugCheckDocidLookup ( CSphAutoreader & tAttrReader, int64_t iDocinfo, int iRowsize, DebugCheckError_c & tReporter ) const
+{
+	CSphString sError;
+	tReporter.Msg ( "checking doc-id lookup..." );
+
+	CSphAutoreader tLookup;
+	if ( !tLookup.Open ( GetIndexFileName(SPH_EXT_SPT), sError ) )
+	{
+		tReporter.Fail ( "unable to lookup file: %s", sError.cstr() );
+		return;
+	}
+	int64_t iLookupEnd = tLookup.GetFilesize();
+
+	CSphFixedVector<CSphRowitem> dRow ( iRowsize );
+	tAttrReader.SeekTo ( 0, dRow.GetLengthBytes() );
+	CSphBitvec dRowids ( iDocinfo );
+
+	int iDocs = tLookup.GetDword();
+	int iDocsPerCheckpoint = tLookup.GetDword();
+	int tMaxDocID = tLookup.GetOffset();
+	int64_t iLookupBase = tLookup.GetPos();
+
+	int iCheckpoints = ( iDocs + iDocsPerCheckpoint - 1 ) / iDocsPerCheckpoint;
+
+	DocidLookupCheckpoint_t tCp;
+	DocID_t tLastDocID = 0;
+	int iCp = 0;
+	while ( tLookup.GetPos()<iLookupEnd && iCp<iCheckpoints )
+	{
+		tLookup.SeekTo ( sizeof(DocidLookupCheckpoint_t) * iCp + iLookupBase, sizeof(DocidLookupCheckpoint_t) );
+
+		DocidLookupCheckpoint_t tPrevCp = tCp;
+		tCp.m_tBaseDocID = tLookup.GetOffset();
+		tCp.m_tOffset = tLookup.GetOffset();
+		tLastDocID = tCp.m_tBaseDocID;
+
+		if ( tPrevCp.m_tBaseDocID>=tCp.m_tBaseDocID )
+			tReporter.Fail ( "descending docid at checkpoint %d, previous docid " INT64_FMT " docid " INT64_FMT, iCp, tPrevCp.m_tBaseDocID, tCp.m_tBaseDocID );
+
+		tLookup.SeekTo ( tCp.m_tOffset, sizeof(DWORD) * 3 * iDocsPerCheckpoint );
+
+		int iCpDocs = iDocsPerCheckpoint;
+		// last checkpoint might have less docs
+		if ( iCp==iCheckpoints-1 )
+			iCpDocs = ( iDocs % iDocsPerCheckpoint );
+
+		for ( int i=0; i<iCpDocs; i++ )
+		{
+			DocID_t tDelta = 0;
+			DocID_t tDocID = 0;
+			RowID_t tRowID = INVALID_ROWID;
+
+			if ( !( i % iCpDocs ) )
+			{
+				tDocID = tLastDocID;
+				tRowID = tLookup.GetDword();
+			} else
+			{
+				tDelta = tLookup.UnzipOffset();
+				tRowID = tLookup.GetDword();
+				if ( tDelta<0 )
+					tReporter.Fail ( "invalid docid delta " INT64_FMT " at row %u, checkpoint %d, doc %d, last docid " INT64_FMT,
+						tDocID, tRowID, iCp, i, tLastDocID );
+				else
+					tDocID = tLastDocID + tDelta;
+
+			}
+
+			if ( tRowID>=iDocinfo )
+			{
+				tReporter.Fail ( "rowid %u out of bounds " INT64_FMT, tRowID, iDocinfo );
+			} else
+			{
+				// read only docid
+				tAttrReader.SeekTo ( dRow.GetLengthBytes() * tRowID, sizeof(DocID_t) );
+				tAttrReader.GetBytes ( dRow.Begin(), sizeof(DocID_t) );
+				dRowids.BitSet ( tRowID );
+
+				if ( tDocID!=sphGetDocID ( dRow.Begin() ) )
+					tReporter.Fail ( "invalid docid " INT64_FMT "(" INT64_FMT ") at row %u, checkpoint %d, doc %d, last docid " INT64_FMT,
+						tDocID, sphGetDocID ( dRow.Begin() ), tRowID, iCp, i, tLastDocID );
+			}
+
+			tLastDocID = tDocID;
+		}
+
+		iCp++;
+	}
+
+	for ( int i=0; i<iDocinfo; i++ )
+	{
+		if ( dRowids.BitGet ( i ) )
+			continue;
+
+		tAttrReader.SeekTo ( dRow.GetLengthBytes() * i, sizeof(DocID_t) );
+		tAttrReader.GetBytes ( dRow.Begin(), sizeof(DocID_t) );
+
+		DocID_t tDocID = sphGetDocID ( dRow.Begin() );
+		
+		tReporter.Fail ( "row %u( " INT64_FMT ") not mapped at lookup, docid " INT64_FMT, i, iDocinfo, tDocID );
+	}
+}
+
+struct DocRow_fn
+{
+	bool IsLess ( const DocidRowidPair_t & tA, DocidRowidPair_t & tB ) const
+	{
+		if ( tA.m_tDocID==tB.m_tDocID && tA.m_tRowID<tB.m_tRowID )
+			return true;
+
+		return ( tA.m_tDocID<tB.m_tDocID );
+	}
+};
+
+void CSphIndex_VLN::DebugCheckDocids ( CSphAutoreader & tAttrReader, int64_t iRows, int iRowSize, DebugCheckError_c & tReporter ) const 
+{
+	CSphString sError;
+	tReporter.Msg ( "checking docid douplicates ..." );
+
+	CSphFixedVector<CSphRowitem> dRow ( iRowSize );
+	tAttrReader.SeekTo ( 0, dRow.GetLengthBytes() );
+
+	CSphFixedVector<DocidRowidPair_t> dRows ( iRows );
+	for ( int i=0; i<iRows; i++ )
+	{
+		tAttrReader.SeekTo ( dRow.GetLengthBytes() * i, sizeof(DocID_t) );
+		tAttrReader.GetBytes ( dRow.Begin(), sizeof(DocID_t) );
+
+		dRows[i].m_tRowID = i;
+		dRows[i].m_tDocID = sphGetDocID ( dRow.Begin() );
+	}
+
+	dRows.Sort ( DocRow_fn() );
+	for ( int i=1; i<dRows.GetLength(); i++ )
+	{
+		if ( dRows[i].m_tDocID==dRows[i-1].m_tDocID )
+			tReporter.Fail ( "duplicate of docid " INT64_FMT " found at rows %u %u", dRows[i].m_tDocID, dRows[i-1].m_tRowID, dRows[i].m_tRowID );
+	}
+}
 
 //////////////////////////////////////////////////////////////////////////
 

@@ -1068,6 +1068,7 @@ int main ( int argc, char ** argv )
 	CSphString sDumpDict;
 	bool bQuiet = false;
 	bool bRotate = false;
+	bool bCheckIdDups = false;
 
 	enum
 	{
@@ -1099,6 +1100,7 @@ int main ( int argc, char ** argv )
 		OPT1 ( "-v" )				{ ShowVersion(); exit(0); }
 		OPT ( "-h", "--help" )		{ ShowVersion(); ShowHelp(); exit(0); }
 		OPT1 ( "--apply-killlists" ){ eCommand = CMD_APPLYKLISTS; continue; }
+		OPT1 ( "--check-id-dups" )	{ bCheckIdDups = true; continue; }
 
 		// handle options/commands with 1+ args
 		if ( (i+1)>=argc )			break;
@@ -1316,7 +1318,7 @@ int main ( int argc, char ** argv )
 			sphDie ( "index '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
 
 		if ( eCommand==CMD_CHECK )
-			pIndex->SetDebugCheck();
+			pIndex->SetDebugCheck ( bCheckIdDups );
 
 		CSphString sWarn;
 		if ( !pIndex->Prealloc ( bStripPath ) )

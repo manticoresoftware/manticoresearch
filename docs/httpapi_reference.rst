@@ -95,6 +95,10 @@ This endpoint expects request body with queries defined as JSON document. Respon
 SSL
 ---
 
+.. warning::
+    
+    Please note that SSL feature for the HTTP API is in preview stage. Possible issues can appear with some cryptographic algorithms, support will be improved in future releases.
+
 In many cases you might want to encrypt traffic between your client and the daemon.
 To do that you can :ref:`specify that the daemon should use HTTPS protocol <listen>` rather than HTTP.
 
@@ -129,86 +133,46 @@ Example with CA:
 
 
 Generating SSL files
--------------------------------------
+~~~~~~~~~~~~~~~~~~~~
 
 These steps will help you generate the SSL certificates with 'openssl' tool.
 
 Daemon can use Certificate Authority to verify the signature of certificates, but can also work with
 just private key and certificate (w/o the CA certificate).
 
-Generation of ECDSA certificates with CA:
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-To generate CA key/certificate and server key/certificate you can do:
 
-* Generate CA private key:
+Generate the CA key
+"""""""""""""""""""
 
 .. code-block:: bash
 
+    $ openssl genrsa 2048 > ca-key.pem
+	
+Generate the CA certificate from the CA key
+"""""""""""""""""""""""""""""""""""""""""""
 
-    openssl ecparam -name prime256v1 -genkey -noout -out ca-key.pem
-
-* Generate self-signed CA (root) certificate from the private key (fill in at least "Common Name"):
-
-.. code-block:: bash
-
-
-    openssl req -new -x509 -nodes -days 3600 -sha256 -key ca-key.pem -out ca-cert.pem
-
-* Generate ECDSA param file:
+Generate self-signed CA (root) certificate from the private key (fill in at least "Common Name"):
 
 .. code-block:: bash
 
+    $ openssl req -new -x509 -nodes -days 365 -key ca-key.pem -out ca-cert.pem
 
-    openssl ecparam -name prime256v1 -out ecparam.file
 
-* Generate certificate request and server private key (fill in at least "Common Name" different from the root certificate's common name):
 
-.. code-block:: bash
+Server Certificate
+""""""""""""""""""
 
-    openssl req -newkey ec:ecparam.file -days 3600 -nodes -keyout server-key.pem -out server-cert.csr
-
-* Remove the passphrase for the key if any:
-
-.. code-block:: bash
-
-    openssl ec -in server-key.pem -out server-key.pem
-
-* Generate certificate from the request, CA key and root cert:
+Daemon uses the server certificate to secure communication with client.
+Generate certificate request and server private key (fill in at least "Common Name" different from the root certificate's common name):
 
 .. code-block:: bash
 
+    $ openssl req -newkey rsa:2048 -days 365 -nodes -keyout server-key.pem -out server-req.pem
+    $ openssl rsa -in server-key.pem -out server-key.pem
+    $ openssl x509 -req -in server-req.pem -days 365 -CA ca-cert.pem -CAkey ca-key.pem -set_serial 01 -out server-cert.pem
 
-    openssl x509 -req -in server-cert.csr -days 3600 -CA ca-cert.pem -CAkey ca-key.pem -set_serial 01 -out server-cert.pem
-
-* Verify:
-
-.. code-block:: bash
-
-
-    openssl verify -CAfile ca-cert.pem server-cert.pem
-
-Generation of ECDSA certificates without CA:
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Alternatively you can generate just server key and certificate files without any root certificate:
-
-* generate server private key:
+When generation done OpenSSL could be used to verify the key and certificate files generated correctly
 
 .. code-block:: bash
 
-
-    openssl ecparam -name prime256v1 -genkey -out server-key.pem
-
-* generate certificate request:
-
-.. code-block:: bash
-
-
-    openssl req -new -sha256 -key server-key.pem -out server-cert.csr
-
-* generate server certificate from the request and the provate file:
-
-.. code-block:: bash
-
-
-    openssl req -x509 -sha256 -days 3600 -key server-key.pem -in server-cert.csr -out server-cert.pem
+    $ openssl verify -CAfile ca-cert.pem server-cert.pem

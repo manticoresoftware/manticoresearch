@@ -167,8 +167,10 @@ struct RtWordCheckpoint_t
 
 // this is what actually stores index data
 // RAM chunk consists of such segments
-struct RtSegment_t : IndexSegment_c
+struct RtSegment_t : IndexSegment_c, ISphRefcountedMT
 {
+private:
+	~RtSegment_t () final;
 public:
 	static CSphAtomic m_iSegments;    ///< age tag sequence generator
 	int m_iTag;            ///< segment age tag
@@ -184,13 +186,15 @@ public:
 	CSphTightVector<CSphRowitem> m_dRows;            ///< row data storage
 	CSphTightVector<BYTE> m_dBlobs;            ///< storage for blob attrs
 	CSphVector<BYTE> m_dKeywordCheckpoints;
-	mutable CSphAtomic m_tRefCount;
+	CSphAtomicL * m_pRAMCounter = nullptr; ///< external RAM counter
 	OpenHash_T<RowID_t, DocID_t> m_tDocIDtoRowID; ///< speeds up docid-rowid lookups
 	DeadRowMap_Ram_c m_tDeadRowMap;
 
 	RtSegment_t ( DWORD uDocs );
-	virtual ~RtSegment_t () {};
+
 	int64_t GetUsedRam () const;
+	void FixupRAMCounter ( int64_t iDelta ) const;
+
 	DWORD GetMergeFactor () const;
 	int GetStride () const;
 	const CSphRowitem *		FindRow ( DocID_t tDocid ) const;
@@ -203,6 +207,9 @@ public:
 
 	void BuildDocID2RowIDMap ();
 };
+
+using RtSegmentRefPtf_t = CSphRefcountedPtr<RtSegment_t>;
+using constRtSegmentRefPtf_t = CSphRefcountedPtr<const RtSegment_t>;
 
 struct RtDocReader_t
 {

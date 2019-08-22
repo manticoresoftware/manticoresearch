@@ -1,6 +1,29 @@
 Release notes
 =============
 
+Version 3.1.2, 22 August 2019
+-----------------------------
+
+Features and Improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Experimental SSL support for HTTP API
+* field filter for CALL KEYWORDS
+* max_matches for /json/search
+* automatic sizing of default Galera gcache.size
+* improved FreeBSD support
+
+Bugfixes
+~~~~~~~~
+
+* `0a1a2c81 <https://github.com/manticoresoftware/manticoresearch/commit/0a1a2c81038794983b4e30c8aefc7cc20e89b03f>`__ fixed replication of RT index into node where same RT index exists and has different path
+* `4adc0752 <https://github.com/manticoresoftware/manticoresearch/commit/4adc075294ac823289f745e2cc419f18c7dcf2e2>`__ fix flush rescheduling for indexes without activity
+* `d6c00a6f <https://github.com/manticoresoftware/manticoresearch/commit/d6c00a6f750c04021747e9c99e0f77707a4cbfc3>`__ improve rescheduling of flushing RT/PQ indexes
+* `d0a7c959 <https://github.com/manticoresoftware/manticoresearch/commit/d0a7c95906b9b5ba33c98267d54501cfe27508d6>`__ fix #250 index_field_lengths index option for TSV and CSV piped sources
+* `1266d548 <https://github.com/manticoresoftware/manticoresearch/commit/1266d54800242709fbe2c34e72eb69b6595b23bd>`__ fix indextool wrong report for block index check on empty index
+* `553ca73c <https://github.com/manticoresoftware/manticoresearch/commit/553ca73ca111f28e0888d59cd48b0d6df181ecd6>`__ fix empty select list at SphinxQL query log
+* `56c85844 <https://github.com/manticoresoftware/manticoresearch/commit/56c8584456293665ddd4ce4c94307d74473a78b9>`__ fix indexer -h/--help response
+
 Version 3.1.0, 16 July 2019
 ---------------------------
 

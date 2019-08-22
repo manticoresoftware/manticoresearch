@@ -811,7 +811,6 @@ to sleep or cut out from CPU. Here is busy loop to do that. After incoming
 request, network thread use CPU poll for ``10 * net_wait_tm`` milliseconds
 in case ``net_wait_tm`` is positive number or polls only with CPU in
 case ``net_wait_tm`` is ``0``. Also busy loop might be disabled with ``net_wait_tm = -1``
-- this way poller set timeout of ``1ms`` for system poll call.
 
 .. _net_throttle_accept:
 

@@ -164,12 +164,36 @@ For ICU support, additional ``libicu`` package needs to be installed.
 
 	$ yum install libicu
 
+
+Installing Manticore Search from Manticore **yum** repository
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Install Manticore yum repository by running as root user or with sudo the following command:
+
+
+.. code-block:: bash
+
+	$ yum install http://repo.manticoresearch.com/manticore-repo.noarch.rpm
+
+Install Manticore Search by running:
+
+.. code-block:: bash
+    
+	$ yum install manticore
+
+
+Install Manticore Search using downloaded rpm packages
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 Download RedHat RPM from Manticore website and install it:
 
 .. code-block:: bash
 
 	$ wget https://github.com/manticoresoftware/manticore/releases/download/2.4.1/manticore-2.4.1-171017-3b31a97-release-stemmer-rhel7-bin.rpm
 	$ rpm -Uhv manticore-2.4.1-171017-3b31a97-release-stemmer-rhel7-bin.rpm
+
+Starting Manticore Search
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 After preparing configuration file (see :ref:`Quick tour <quick_usage_tour>`), you can start searchd daemon:
 

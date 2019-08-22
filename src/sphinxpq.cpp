@@ -845,6 +845,7 @@ public:
 		m_iDoc = 0;
 		m_tDocReader = RtDocReader_t();
 		m_pSeg = pSeg;
+		SafeAddRef ( pSeg );
 		m_tHitReader.m_pBase = pSeg->m_dHits.Begin();
 
 		m_dDoclist.Set ( dDoclist.Begin(), dDoclist.GetLength() );
@@ -867,7 +868,7 @@ private:
 		m_iDoc++;
 	}
 
-	const RtSegment_t *			m_pSeg = nullptr;
+	constRtSegmentRefPtf_t		m_pSeg;
 	CSphFixedVector<Slice_t>	m_dDoclist { 0 };
 	CSphMatch					m_tMatch;
 	RtDocReader_t				m_tDocReader;
@@ -1419,7 +1420,7 @@ bool PercolateIndex_c::MatchDocuments ( RtAccum_t * pAccExt, PercolateMatchResul
 		PERCOLATE_WORDS_PER_CP, ( m_iMaxCodepointLength>1 ) );
 
 	DoMatchDocuments ( pSeg, tRes );
-	SafeDelete ( pSeg );
+	SafeRelease ( pSeg );
 
 	// done; cleanup accum
 	pAcc->Cleanup ();

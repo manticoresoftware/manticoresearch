@@ -82,7 +82,7 @@ $q = <<<'EOD'
 }
 EOD;
 
-$res = HttpQueryPost("json/search", NULL, $q, 0 );
+$res = HttpQueryPost("json/search", NULL, $q, 0, false );
 $res = preg_replace('/"time":\d+(\.\d+)*,/', '"time":0.000,', $res);
 $res = preg_replace('/"took":\d*,/', '"took":0,', $res);
 $results[] = $res;

@@ -91,6 +91,13 @@ if (OpenSSL_FOUND)
 	option(USE_SSL "Enabled building with OpenSSL" 1)
 	memcfgvalues(USE_SSL)
 	message(STATUS "OpenSSL include directory: ${OPENSSL_INCLUDE_DIR}")
+
+	if (USE_SSL)
+		include ( helpers )
+		ac_check_func_ex ( TLS_server_method "openssl/ssl.h" "${OPENSSL_LIBRARIES}" )
+		ac_check_func_ex ( TLSv1_2_method "openssl/ssl.h" "${OPENSSL_LIBRARIES}" )
+		ac_check_func_ex ( TLSv1_1_server_method "openssl/ssl.h" "${OPENSSL_LIBRARIES}" )
+	endif (USE_SSL)
 endif (OpenSSL_FOUND)
 
 # ctest variables

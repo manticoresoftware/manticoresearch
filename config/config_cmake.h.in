@@ -196,3 +196,7 @@
 
 /* Whether to use OpenSSL */
 #cmakedefine01 USE_SSL
+
+#cmakedefine01 HAVE_TLS_SERVER_METHOD
+#cmakedefine01 HAVE_TLSV1_2_METHOD
+#cmakedefine01 HAVE_TLSV1_1_SERVER_METHOD

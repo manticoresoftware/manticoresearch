@@ -111,7 +111,16 @@ bool SslInit()
     SSL_load_error_strings();
     SSL_library_init();
 
-	const SSL_METHOD * pMode = SSLv23_method();
+	const SSL_METHOD * pMode = nullptr;
+#if HAVE_TLS_SERVER_METHOD
+	pMode = TLS_server_method();
+#elif HAVE_TLSV1_2_METHOD
+	pMode = TLSv1_2_server_method();
+#elif HAVE_TLSV1_1_SERVER_METHOD
+	pMode = TLSv1_1_server_method();
+#else
+	pMode = SSLv23_server_method();
+#endif
 	g_pSslCtx = SSL_CTX_new (pMode );
 	SSL_CTX_set_verify ( g_pSslCtx, SSL_VERIFY_NONE, nullptr );
 

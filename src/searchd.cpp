@@ -21767,10 +21767,15 @@ void ThdJobHttp_t::Call ()
 
 	assert ( m_pLoop );
 
-	if ( m_bSsl )
-		JobDoSendNB ( new NetSendData_t ( m_tState.LeakPtr (), Proto_e::HTTP ), m_pLoop );
-	else
-		JobDoSendNB ( new NetSendData_t ( m_tState.LeakPtr (), Proto_e::HTTP ) , m_pLoop );
+	NetSendData_t * pSend = nullptr;
+	if ( !m_bSsl )
+	{
+		pSend = new NetSendData_t ( m_tState.LeakPtr(), Proto_e::HTTP );
+	} else
+	{
+		pSend = new NetReplyHttps_t ( (NetStateHttps_t *)m_tState.LeakPtr() );
+	}
+	JobDoSendNB ( pSend, m_pLoop );
 }
 
 void JobDoSendNB ( NetSendData_t * pSend, CSphNetLoop * pLoop )

@@ -2465,11 +2465,11 @@ TEST ( functions, sph_Sprintf_fractimezero )
 {
 	StringBuilder_c sBuf;
 
-	sBuf.Sprintf ( "%t", 0 );
+	sBuf.Sprintf ( "%t", 0ULL );
 	ASSERT_STREQ ( sBuf.cstr (), "0us" );
 	sBuf.Clear ();
 
-	sBuf.Sprintf ( "%.3t", 0 );
+	sBuf.Sprintf ( "%.3t", 0ULL );
 	ASSERT_STREQ ( sBuf.cstr (), "0us" );
 	sBuf.Clear ();
 }

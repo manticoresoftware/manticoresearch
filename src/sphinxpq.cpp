@@ -995,6 +995,19 @@ bool PercolateQwordSetup_c::QwordSetup ( ISphQword * pQword ) const
 }
 
 
+SphWordID_t PercolateDictProxy_c::GetWordID ( BYTE * pWord )
+{
+	assert ( m_pDict );
+	assert ( !m_bHasMorph || m_pDictMorph );
+
+	// apply stemmers
+	if ( m_bHasMorph )
+		m_pDictMorph->GetWordID ( pWord );
+
+	return const_cast<DictMap_t *>(m_pDict)->GetTerm ( pWord );
+}
+
+
 SphWordID_t DictMap_t::GetTerm ( BYTE * sWord ) const
 {
 	const DictTerm_t * pTerm = m_hTerms.Find ( sphFNV64 ( sWord ) );
@@ -1007,7 +1020,7 @@ SphWordID_t DictMap_t::GetTerm ( BYTE * sWord ) const
 
 PercolateMatchContext_t * PercolateIndex_c::CreateMatchContext ( const RtSegment_t * pSeg, const SegmentReject_t &tReject )
 {
-	return new PercolateMatchContext_t ( pSeg, m_iMaxCodepointLength, m_pDict->HasMorphology (), this
+	return new PercolateMatchContext_t ( pSeg, m_iMaxCodepointLength, m_pDict->HasMorphology(), GetStatelessDict ( m_pDict ), this
 												   , m_tSchema, tReject );
 }
 

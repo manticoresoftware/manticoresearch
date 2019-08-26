@@ -166,10 +166,12 @@ class PercolateDictProxy_c : public CSphDict
 {
 	const DictMap_t * m_pDict = nullptr;
 	const bool m_bHasMorph = false;
+	CSphDictRefPtr_c m_pDictMorph { nullptr };
 
 public:
-	explicit PercolateDictProxy_c ( bool bHasMorph )
+	explicit PercolateDictProxy_c ( bool bHasMorph, CSphDict * pDictMorph )
 		: m_bHasMorph ( bHasMorph )
+		, m_pDictMorph ( pDictMorph )
 	{
 	}
 
@@ -179,11 +181,7 @@ public:
 	}
 
 	// these only got called actually
-	SphWordID_t GetWordID ( BYTE * pWord ) final
-	{
-		assert ( m_pDict );
-		return const_cast<DictMap_t *>(m_pDict)->GetTerm ( pWord );
-	}
+	SphWordID_t GetWordID ( BYTE * pWord ) final;
 
 	SphWordID_t GetWordIDNonStemmed ( BYTE * pWord ) final
 	{
@@ -243,10 +241,10 @@ struct PercolateMatchContext_t : public PQMatchContextResult_t
 	const bool m_bUtf8 = false;
 	Warner_c m_dMsg;
 
-	PercolateMatchContext_t ( const RtSegment_t * pSeg, int iMaxCodepointLength, bool bHasMorph
-							  , const PercolateIndex_i * pIndex, const ISphSchema &tSchema
-							  , const SegmentReject_t &tReject )
-		: m_tDictMap ( bHasMorph )
+	PercolateMatchContext_t ( const RtSegment_t * pSeg, int iMaxCodepointLength, bool bHasMorph, CSphDict * pDictMorph
+							  , const PercolateIndex_i * pIndex, const ISphSchema & tSchema
+							  , const SegmentReject_t & tReject )
+		: m_tDictMap ( bHasMorph, pDictMorph )
 		, m_tSchema ( tSchema )
 		, m_tReject ( tReject )
 		, m_bUtf8 ( iMaxCodepointLength>1 )

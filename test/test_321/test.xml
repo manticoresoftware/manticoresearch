@@ -57,6 +57,16 @@ index pq_mva
 	rt_attr_multi = mva3
 }
 
+index pq_stem
+{
+	type = percolate
+	path = <data_path/>/pq_stem
+	rt_field = title
+	rt_attr_uint = gid
+	
+    index_exact_words   = 1          
+    morphology      = stem_ru    	
+}
 
 </config>
 
@@ -213,6 +223,11 @@ index pq_mva
 <sphinxql>insert into pq_mva (query, tags) values('test1', 'q33')</sphinxql>
 <sphinxql>select id, count(*) c, tags from pq_mva group by tags</sphinxql>
 
+<!-- regression stemmed terms missed -->
+<sphinxql>INSERT INTO pq_stem VALUES ( 'проверка' )</sphinxql>
+<sphinxql>INSERT INTO pq_stem VALUES ( 'проверки' )</sphinxql>
+<sphinxql>CALL PQ ('pq_stem', 'была проверка', 1 as docs, 0 as docs_json )</sphinxql>
+<sphinxql>CALL PQ ('pq_stem', 'проверки делом', 1 as docs, 0 as docs_json )</sphinxql>
 </sphqueries>
 
 </test>

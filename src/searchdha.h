@@ -854,10 +854,14 @@ const int WAIT_UNTIL_TIMEOUT = -1;
 class ISphNetPoller;
 class NetPollReadyIterator_c
 {
-	int m_iIterEv = 0;
+	int m_iIterEv = -1;
 	ISphNetPoller * m_pOwner = nullptr;
 public:
-	explicit NetPollReadyIterator_c ( ISphNetPoller* pOwner) : m_pOwner ( pOwner ) {}
+	explicit NetPollReadyIterator_c ( ISphNetPoller* pOwner ) : m_pOwner ( pOwner )
+	{
+		if ( pOwner )
+			operator++();
+	}
 	NetPollEvent_t & operator* ();
 	NetPollReadyIterator_c & operator++ ();
 	bool operator!= ( const NetPollReadyIterator_c & rhs ) const;

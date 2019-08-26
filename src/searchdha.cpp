@@ -4274,9 +4274,29 @@ class PollEvents_c : public ISphNetPoller, public TimeoutEvents_c
 {
 	CSphVector<NetPollEvent_t *>	m_dWork;
 	CSphVector<pollfd>	m_dEvents;
+	CSphVector<int>		m_dDefferedRemove;
 	int					m_iReady = 0;
 	int					m_iLastReportedErrno = -1;
 	friend struct NetPollReadyIterator_c;
+
+	// since remove() may be call from inside iteration, let's keep kill-list and apply later instead of immediate delete
+	void RemoveDeffered ()
+	{
+		if ( m_dDefferedRemove.IsEmpty () )
+			return;
+
+		m_dDefferedRemove.Uniq ();
+		m_dDefferedRemove.RSort ();
+
+		for ( int iToRemove:m_dDefferedRemove )
+		{
+			auto pEvent=m_dWork[iToRemove];
+			RemoveTimeout ( pEvent );
+			m_dEvents.RemoveFast ( iToRemove );
+			m_dWork.RemoveFast ( iToRemove );
+		}
+		m_dDefferedRemove.Resize (0);
+	}
 
 public:
 	explicit PollEvents_c ( int iSizeHint )
@@ -4296,12 +4316,14 @@ public:
 
 		assert ( m_dEvents.GetLength()==m_dWork.GetLength() );
 		m_dEvents.Add ( tEv );
+		pData->m_tBack.iIdx=m_dWork.GetLength ();
 		m_dWork.Add ( pData );
 		AddOrChangeTimeout ( pData );
 	}
 
 	bool Wait ( int timeoutMs ) final
 	{
+		RemoveDeffered ();
 		if ( m_dEvents.IsEmpty() )
 			return false;
 
@@ -4329,6 +4351,7 @@ public:
 
 	void ForAll ( std::function<void ( NetPollEvent_t * )> && fnAction ) final
 	{
+		RemoveDeffered ();
 		for ( auto * pEvent : m_dWork )
 			fnAction ( pEvent );
 	}
@@ -4350,9 +4373,7 @@ public:
 		assert ( pEvent->m_tBack.iIdx>=0 && pEvent->m_tBack.iIdx<m_dEvents.GetLength ());
 		assert ( m_dEvents.GetLength ()==m_dWork.GetLength ());
 
-		RemoveTimeout ( pEvent );
-		m_dEvents.RemoveFast ( pEvent->m_tBack.iIdx );
-		m_dWork.RemoveFast ( pEvent->m_tBack.iIdx );
+		m_dDefferedRemove.Add ( pEvent->m_tBack.iIdx );
 	}
 };
 
@@ -4408,6 +4429,7 @@ class SelectEvents_c : public ISphNetPoller, public TimeoutEvents_c
 private:
 	CSphVector<NetPollEvent_t *> m_dWork;
 	CSphVector<int> m_dSockets;
+	CSphVector<int>		m_dDefferedRemove;
 	fd_set			m_fdsRead;
 	fd_set			m_fdsReadResult;
 	fd_set			m_fdsWrite;
@@ -4416,6 +4438,24 @@ private:
 	int m_iReady = 0;
 	int m_iLastReportedErrno = -1;
 	friend struct NetPollReadyIterator_c;
+
+	void RemoveDeffered ()
+	{
+		if ( m_dDefferedRemove.IsEmpty () )
+			return;
+
+		m_dDefferedRemove.Uniq ();
+		m_dDefferedRemove.RSort ();
+
+		for ( int iToRemove:m_dDefferedRemove )
+		{
+			auto pEvent=m_dWork[iToRemove];
+			RemoveTimeout ( pEvent );
+			m_dSockets.RemoveFast ( iToRemove );
+			m_dWork.RemoveFast ( iToRemove );
+		}
+		m_dDefferedRemove.Resize ( 0 );
+	}
 
 public:
 	explicit SelectEvents_c ( int iSizeHint )
@@ -4435,12 +4475,14 @@ public:
 		m_iMaxSocket = Max ( m_iMaxSocket, pData->m_iSock );
 
 		assert ( m_dSockets.GetLength ()==m_dWork.GetLength () );
+		pData->m_tBack.iIdx=m_dWork.GetLength ();
 		m_dWork.Add ( pData );
 		m_dSockets.Add ( pData->m_iSock);
 	}
 
 	bool Wait ( int timeoutMs ) final
 	{
+		RemoveDeffered ();
 		if ( m_dSockets.IsEmpty() )
 			return false;
 
@@ -4471,6 +4513,7 @@ public:
 
 	void ForAll ( std::function<void ( NetPollEvent_t * )> && fnAction ) final
 	{
+		RemoveDeffered ();
 		for ( auto * pEvent : m_dWork )
 			fnAction ( pEvent );
 	}
@@ -4505,9 +4548,8 @@ public:
 			sphFDClr ( iSock, &m_fdsWrite );
 		if ( FD_ISSET ( iSock, &m_fdsRead ))
 			sphFDClr ( iSock, &m_fdsRead );
-		RemoveTimeout ( pEvent );
-		m_dSockets.RemoveFast ( pEvent->m_tBack.iIdx );
-		m_dWork.RemoveFast ( pEvent->m_tBack.iIdx );
+
+		m_dDefferedRemove.Add ( pEvent->m_tBack.iIdx );
 	}
 };
 

@@ -178,6 +178,7 @@ if ( !$g_guesscached ) {
 	GuessICU();
 	GuessODBC();
 	GuessReplication();
+	GuessSSL();
 	if ( !$force_guess )
 		CacheGuesses();
 }

@@ -991,12 +991,22 @@ function RunCurl ( $curl_desc, &$rows )
 }
 
 
-function HttpQueryGet ( $http_endpoint, $http_content, $http_get, $use_agent )
+function HttpQueryGet ( $http_endpoint, $http_content, $http_get, $use_agent, $use_ssl )
 {
 	global $agents;
+	
+	$ssl = $use_ssl ? "https://" : "";
+	
 	$http_port = $agents[$use_agent]["http_port"];
-	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => "127.0.0.1:$http_port/" . $http_endpoint );
+	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => $ssl . "127.0.0.1:$http_port/" . $http_endpoint );
 	$curl_desc[CURLOPT_URL] = $curl_desc[CURLOPT_URL] . '?' . $http_get;
+	if ( $use_ssl )
+	{
+		$curl_desc[CURLOPT_SSL_VERIFYPEER] = false;
+		$curl_desc[CURLOPT_SSL_VERIFYHOST] = false;
+		$curl_desc[CURLOPT_SSLVERSION] = CURL_SSLVERSION_DEFAULT;
+		//$curl_desc[CURLOPT_VERBOSE] = true; // !COMMIT
+	}
 
 	if ( $http_content!==NULL )
 		$curl_desc[CURLOPT_HTTPHEADER] = array("Content-Type: ".$http_content);
@@ -1007,13 +1017,23 @@ function HttpQueryGet ( $http_endpoint, $http_content, $http_get, $use_agent )
 }
 
 
-function HttpQueryPost ( $http_endpoint, $http_content, $http_post, $use_agent )
+function HttpQueryPost ( $http_endpoint, $http_content, $http_post, $use_agent, $use_ssl )
 {
 	global $agents;
+	
+	$ssl = $use_ssl ? "https://" : "";
+	
 	$http_port = $agents[$use_agent]["http_port"];
-	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => "127.0.0.1:$http_port/" . $http_endpoint );
+	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => $ssl . "127.0.0.1:$http_port/" . $http_endpoint );
 	$curl_desc[CURLOPT_POST] = 1;
 	$curl_desc[CURLOPT_POSTFIELDS] = $http_post;
+	if ( $use_ssl )
+	{
+		$curl_desc[CURLOPT_SSL_VERIFYPEER] = false;
+		$curl_desc[CURLOPT_SSL_VERIFYHOST] = false;
+		$curl_desc[CURLOPT_SSLVERSION] = CURL_SSLVERSION_DEFAULT;
+		//$curl_desc[CURLOPT_VERBOSE] = true; // !COMMIT
+	}
 
 	if ( $http_content!==NULL )
 		$curl_desc[CURLOPT_HTTPHEADER] = array("Content-Type: ".$http_content);
@@ -1714,9 +1734,9 @@ class SphinxConfig
 			}
 
 			if ( $post )
-				$query_result = HttpQueryPost ( $http_endpoint, $http_content, $query, $use_agent );
+				$query_result = HttpQueryPost ( $http_endpoint, $http_content, $query, $use_agent, $this->Requires("https") );
 			else
-				$query_result = HttpQueryGet ( $http_endpoint, $http_content, $query, $use_agent );
+				$query_result = HttpQueryGet ( $http_endpoint, $http_content, $query, $use_agent, $this->Requires("https") );
 
 			$query_result['http']=1;
 			
@@ -2673,7 +2693,7 @@ class SphinxConfig
 	/// write all the result sets
 	function WriteResults ( $fp )
 	{
-		if ( $this->IsQueryTest () || $this->Requires('http') )
+		if ( $this->IsQueryTest () || $this->Requires("http") || $this->Requires("https") )
 		{
 			$nquery = 1;
 			foreach ( $this->_results as $result )
@@ -3296,7 +3316,7 @@ class SphinxConfig
 	{
 		global $sd_log, $sd_query_log, $sd_read_timeout, $sd_max_children, $sd_pid_file;
 		$workers = "threads";
-		if ( $this->Requires("thread_pool") || $this->Requires("http") )
+		if ( $this->Requires("thread_pool") || $this->Requires("http") || $this->Requires("https") )
 			$workers = "thread_pool";
 
 		if ( $this->_compat098 )
@@ -3310,6 +3330,13 @@ class SphinxConfig
 			fwrite ( $fp, "\tlisten		= {$this->_sd_address}:{$this->_sd_sphinxql_port}:mysql41\n" );
 			if ( $this->Requires("http") )
 				fwrite ( $fp, "\tlisten		= {$this->_sd_address}:{$this->_sd_http_port}:http\n" );
+			if ( $this->Requires("https") )
+			{
+				$test_root = dirname(__FILE__);
+				fwrite ( $fp, "\tlisten		= {$this->_sd_address}:{$this->_sd_http_port}:https\n" );
+				fwrite ( $fp, "\tssl_key = {$test_root}/ssl_keys/server-key.pem\n" );
+				fwrite ( $fp, "\tssl_cert = {$test_root}/ssl_keys/server-cert.pem\n" );
+			}
 
 			if ( $this->Requires("vip") )
 				fwrite ( $fp, "\tlisten		= {$this->_sd_address}:{$this->_sd_sphinxql_port_vip}:mysql41_vip\n" );
@@ -3526,7 +3553,7 @@ function CopyDirContents ( $from, $to )
 
 function CheckConfig ( $config, $path )
 {
-	global $g_re2, $g_icu, $g_shared_icu, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli;
+	global $g_re2, $g_icu, $g_shared_icu, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli, $g_ssl;
 	
 	if ( $config->Requires("non-windows") && $windows )
 	{
@@ -3599,6 +3626,12 @@ function CheckConfig ( $config, $path )
 	if ( $config->Requires("replication") && !$g_repli )
 	{
 		printf ( "SKIPPING %s, %s - compile with replication support, add galera_lib_path to your ~/.sphinx to run this test\n", $path, $config->Name () );
+		return false;
+	}
+
+	if ( $config->Requires("https") && !$g_ssl )
+	{
+		printf ( "SKIPPING %s, %s - compile with SSL support or add SSL extension to php\n", $path, $config->Name () );
 		return false;
 	}
 

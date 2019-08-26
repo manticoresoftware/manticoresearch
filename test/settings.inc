@@ -42,6 +42,7 @@ $g_strict	= false;
 $g_skipdemo = false;
 $g_usemarks = true; // that we mark the output of every test in the searchd.log and query.log
 $g_strictverbose = false;
+$g_ssl = false;
 
 $windows = isset($_SERVER["WINDIR"]) || isset($_SERVER["windir"]) || isset($_SERVER["HOMEDRIVE"]);
 $action_retries			= 20;
@@ -100,7 +101,7 @@ function LoadCachedGuesses ()
 function CacheGuesses ()
 {
 	global $g_locals;
-	global $g_re2, $g_icu, $g_shared_icu, $g_odbc, $g_repli;
+	global $g_re2, $g_icu, $g_shared_icu, $g_odbc, $g_repli, $g_ssl;
 
 	$guessfile = $g_locals['testdir'].'guess.txt';
 
@@ -110,6 +111,7 @@ function CacheGuesses ()
 	if ( $g_shared_icu ) $text .= "global \$g_shared_icu; \$g_shared_icu = true;\n";
 	if ( $g_odbc ) $text .= "global \$g_odbc; \$g_odbc = true;\n";
 	if ( $g_repli ) $text .= "global \$g_repli; \$g_repli = true;\n";
+	if ( $g_ssl ) $text .= "global \$g_ssl; \$g_ssl = true;\n";
 
 	file_put_contents ( $guessfile, $text );
 }
@@ -197,6 +199,26 @@ function GuessReplication()
 		if ( strpos ( $line, $repli_on ) !== false )
 		{
 			$g_repli = true;
+			break;
+		}
+	}
+}
+
+function GuessSSL ()
+{
+	global $g_ssl;
+	if ( !defined('OPENSSL_VERSION_NUMBER') )
+	{
+		$g_ssl = false;
+		return;
+	}
+	
+	$banner = GetBanner();
+	foreach ( $banner as $line )
+	{
+		if ( strpos ( $line, 'DUSE_SSL=1' ) !== false || strpos ( $line, 'DUSE_SSL=ON' ) !== false )
+		{
+			$g_ssl = true;
 			break;
 		}
 	}

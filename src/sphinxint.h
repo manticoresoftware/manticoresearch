@@ -2440,6 +2440,8 @@ struct CrashQuery_t
 	WORD			m_uVer = 0;			// last command's version (header)
 	bool			m_bMySQL = false;	// is query from MySQL or API
 	bool			m_bHttp = false;	// is query from HTTP
+	const char *	m_pIndex = nullptr;
+	int				m_iIndexLen = 0;
 };
 
 void CrashQuerySetTop ( CrashQuery_t * pQuery );

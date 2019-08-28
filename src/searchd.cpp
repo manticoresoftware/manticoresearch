@@ -911,6 +911,8 @@ const char		g_sCrashedBannerMySQL[] = "\n--- crashed SphinxQL request dump ---\n
 const char		g_sCrashedBannerHTTP[] = "\n--- crashed HTTP request dump ---\n";
 const char		g_sCrashedBannerBad[] = "\n--- crashed invalid query ---\n";
 const char		g_sCrashedBannerTail[] = "\n--- request dump end ---\n";
+const char		g_sCrashedIndex[] = "--- local index:";
+const char		g_sEndLine[] = "\n";
 #if USE_WINDOWS
 const char		g_sMinidumpBanner[] = "minidump located at: ";
 #endif
@@ -1067,6 +1069,12 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 
 	// tail
 	sphWrite ( g_iLogFile, g_sCrashedBannerTail, sizeof(g_sCrashedBannerTail)-1 );
+
+	// index name
+	sphWrite ( g_iLogFile, g_sCrashedIndex, sizeof (g_sCrashedIndex)-1 );
+	if ( tQuery.m_pIndex && tQuery.m_iIndexLen )
+		sphWrite ( g_iLogFile, tQuery.m_pIndex, tQuery.m_iIndexLen );
+	sphWrite ( g_iLogFile, g_sEndLine, sizeof (g_sEndLine)-1 );
 
 	sphSafeInfo ( g_iLogFile, "Manticore " SPHINX_VERSION );
 
@@ -4816,6 +4824,7 @@ public:
 	AggrResult_t *					GetResult ( int iResult ) final { return m_dResults.Begin() + iResult; }
 	void							SetFederatedUser () { m_bFederatedUser = true; }
 	void 							RunLocalSearchMT ( LocalSearch_t &dWork, ThreadLocal_t &tThd );
+	const CSphString &				GetLocalIndexName ( int iLocal ) const;
 
 public:
 	CSphVector<CSphQuery>			m_dQueries;						///< queries which i need to search
@@ -5091,6 +5100,19 @@ int64_t sphCpuTimer ()
 #endif
 }
 
+struct GuardedCrashQuery_t : public ISphNoncopyable
+{
+	const CrashQuery_t m_tReference;
+	explicit GuardedCrashQuery_t ( const CrashQuery_t & tCrashQuery )
+		: m_tReference ( tCrashQuery )
+	{
+	}
+
+	~GuardedCrashQuery_t()
+	{
+		SphCrashLogger_c::SetLastQuery ( m_tReference );
+	}
+};
 
 struct LocalSearchThreadContext_t
 {
@@ -5104,11 +5126,21 @@ struct LocalSearchThreadContext_t
 
 	void LocalSearch ()
 	{
+		GuardedCrashQuery_t tGuardedCrash ( m_tCrashQuery );
 		SphCrashLogger_c::SetLastQuery ( m_tCrashQuery );
+
 		ThreadLocal_t tThd ( m_pHandler->m_tThd );
 		tThd.m_tDesc.m_iCookie = m_iLocalThreadID;
 		for ( long iCurSearch = ( *m_pCurSearch )++; iCurSearch<m_iSearches; iCurSearch = ( *m_pCurSearch )++ )
+		{
+			CrashQuery_t tCrashQuery = m_tCrashQuery;
+			const CSphString & sIndex = m_pHandler->GetLocalIndexName ( m_pSearches[iCurSearch].m_iLocal );
+			tCrashQuery.m_pIndex = sIndex.cstr();
+			tCrashQuery.m_iIndexLen = sIndex.Length();
+			SphCrashLogger_c::SetLastQuery ( tCrashQuery );
+
 			m_pHandler->RunLocalSearchMT ( m_pSearches[iCurSearch], tThd );
+		}
 	}
 };
 
@@ -5375,6 +5407,11 @@ void SearchHandler_c::RunLocalSearchesParallel()
 
 int64_t sphCpuTimer();
 
+const CSphString & SearchHandler_c::GetLocalIndexName ( int iLocal ) const
+{
+	return m_dLocal[iLocal].m_sName;
+}
+
 // invoked from MT searches. So, must be MT-aware!
 void SearchHandler_c::RunLocalSearchMT ( LocalSearch_t &dWork, ThreadLocal_t &tThd )
 {
@@ -5472,6 +5509,8 @@ void SearchHandler_c::RunLocalSearches()
 		return;
 	}
 
+	GuardedCrashQuery_t tRefCrashQuery ( SphCrashLogger_c::GetQuery() );
+
 	ARRAY_FOREACH ( iLocal, m_dLocal )
 	{
 		const LocalIndex_t &dLocal = m_dLocal [iLocal];
@@ -5479,6 +5518,11 @@ void SearchHandler_c::RunLocalSearches()
 		const char * sParentIndex = dLocal.m_sParentIndex.cstr();
 		int iOrderTag = dLocal.m_iOrderTag;
 		int iIndexWeight = dLocal.m_iWeight;
+
+		CrashQuery_t tCrashQuery = tRefCrashQuery.m_tReference;
+		tCrashQuery.m_pIndex = dLocal.m_sName.cstr();
+		tCrashQuery.m_iIndexLen = dLocal.m_sName.Length();
+		SphCrashLogger_c::SetLastQuery ( tCrashQuery );
 
 		const auto * pServed = m_dLocked.Get ( sLocal );
 		if ( !pServed )

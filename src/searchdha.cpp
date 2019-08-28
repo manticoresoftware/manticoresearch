@@ -4277,7 +4277,7 @@ class PollEvents_c : public ISphNetPoller, public TimeoutEvents_c
 	CSphVector<int>		m_dDefferedRemove;
 	int					m_iReady = 0;
 	int					m_iLastReportedErrno = -1;
-	friend struct NetPollReadyIterator_c;
+	friend class NetPollReadyIterator_c;
 
 	// since remove() may be call from inside iteration, let's keep kill-list and apply later instead of immediate delete
 	void RemoveDeffered ()

@@ -790,6 +790,9 @@ static wsrep_cb_status_t Unordered_fn ( void * pCtx, const void * pData, size_t 
 // callbacks defined above.
 static void ReplicationRecv_fn ( void * pArgs )
 {
+	CrashQuery_t tQueryTLS;
+	SphCrashLogger_c::SetTopQueryTLS ( &tQueryTLS );
+
 	ReceiverCtx_t * pCtx = (ReceiverCtx_t *)pArgs;
 	assert ( pCtx );
 

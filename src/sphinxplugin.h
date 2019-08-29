@@ -22,7 +22,7 @@ extern "C"
 //////////////////////////////////////////////////////////////////////////
 
 // call prototypes for all the known external plugin symbol types
-
+typedef void			(*PluginLogCb_fn) ( void (*) ( const char *, int ));
 typedef int				(*PluginVer_fn)		();
 typedef void			(*PluginReinit_fn)	();
 

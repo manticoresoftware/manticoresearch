@@ -34,6 +34,7 @@ set ( LIBSPHINX_FLEX sphinxjson.l )
 set ( SEARCHD_BISON sphinxql.y )
 set ( SEARCHD_FLEX sphinxql.l )
 set ( INDEX_CONV_SRCS index_converter.cpp )
+set ( UDFEXAMPLE_SRC udfexample.c )
 
 # The headers is not neccessary for executable build, but nesessary for MSVC and other projects
 # all the (non-generated) headers
@@ -190,6 +191,8 @@ target_link_libraries ( searchd lsearchd libsphinx ${EXTRA_LIBRARIES} ${EXTRA_SE
 target_link_libraries ( spelldump libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( wordbreaker libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( index_converter libsphinx ${EXTRA_LIBRARIES} )
+
+add_library ( udfexample SHARED ${UDFEXAMPLE_SRC} )
 
 IF ( USE_GALERA )
     SET_SEARCHD_RPATH ()

@@ -55,6 +55,14 @@ enum sphinx_udf_argtype
 /// results that are returned to searchd MUST be allocated using this replacement
 typedef void * sphinx_malloc_fn ( int );
 
+/// message callback
+/// if plugin implements LIBRARYNAME_setlogcb, it will be invoked just after
+/// version checking and populated with valid pointer to callback.
+/// plugin then may invoke cb and it will write provided message into searchd.log
+/// message might be either with provided len, either asciiz,
+/// in the case 2-nd param must be set to -1
+typedef void sphinx_log_fn ( const char*, int );
+
 /// UDF call arguments
 typedef struct st_sphinx_udf_args
 {
@@ -62,9 +70,11 @@ typedef struct st_sphinx_udf_args
 	enum sphinx_udf_argtype *	arg_types;		///< argument types
 	char **						arg_values;		///< argument values (strings are not (!) ASCIIZ; see str_lengths below)
 	char **						arg_names;		///< argument names (ASCIIZ argname in 'expr AS argname' case; NULL otherwise)
-	int *						str_lengths;	///< string argument lengths
+	int *						str_lengths;	///< string argument lengths, or N of MVA values
 	sphinx_malloc_fn *			fn_malloc;		///< malloc() replacement to allocate returned values
 } SPH_UDF_ARGS;
+
+/// fixme! arg_names field above are actually never set and always contains null
 
 /// UDF initialization
 typedef struct st_sphinx_udf_init

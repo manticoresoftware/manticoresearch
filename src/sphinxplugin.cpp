@@ -292,6 +292,14 @@ static SymbolDesc_t g_dSymbolsQueryTokenFilter[] =
 	{ -1, nullptr, false }
 };
 
+void PluginLog ( const char * szMsg, int iLen )
+{
+	if ( iLen<0 )
+		sphWarning ( "PLUGIN: %s", szMsg );
+	else
+		sphWarning ( "PLUGIN: %.*s", (int) iLen, szMsg );
+}
+
 static PluginLib_c * LoadPluginLibrary ( const char * sLibName, CSphString & sError, bool bLinuxReload=false )
 {
 
@@ -351,6 +359,12 @@ static PluginLib_c * LoadPluginLibrary ( const char * sLibName, CSphString & sEr
 		dlclose ( pHandle );
 		return nullptr;
 	}
+
+	auto fnLogCb = (PluginLogCb_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_setlogcb", sBasename.cstr ()).cstr ());
+	if ( fnLogCb ) {
+		fnLogCb(PluginLog);
+	}
+
 	return new PluginLib_c ( pHandle, sLibName );
 }
 #endif

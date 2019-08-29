@@ -45,10 +45,10 @@ SslClient_i * SslSetup ( SslClient_i * pClient );
 void SslFree ( SslClient_i * pClient );
 
 // handle incoming or outgoing data
-bool SslTick ( SslClient_i * pClient, bool & bWrite, CSphVector<BYTE> & dBuf, int iLen, int iOff, CSphVector<BYTE> & dDecripted );
+bool SslTick ( SslClient_i * pClient, bool & bWrite, CSphVector<BYTE> & dBuf, int iLen, int iOff, CSphVector<BYTE> & dDecrypted );
 
 // encrypt data for sending 
-bool SslSend ( SslClient_i * pClient, CSphVector<BYTE> & dBuf, CSphVector<BYTE> & dDecripted );
+bool SslSend ( SslClient_i * pClient, CSphVector<BYTE> & dBuf, CSphVector<BYTE> & dDecrypted );
 
 
 #endif //MANTICORE_SEARCHDSSL_H

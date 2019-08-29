@@ -25,8 +25,8 @@ bool IsSslValid () { return false; }
 
 SslClient_i * SslSetup ( SslClient_i * pClient ) { return nullptr; }
 void SslFree ( SslClient_i * pClient ) {}
-bool SslTick ( SslClient_i * pClient, bool & bWrite, CSphVector<BYTE> & dBuf, int iLen, int iOff, CSphVector<BYTE> & dDecripted ) { return false; }
-bool SslSend ( SslClient_i * pClient, CSphVector<BYTE> & dBuf, CSphVector<BYTE> & dDecripted ) { return false; }
+bool SslTick ( SslClient_i * pClient, bool & bWrite, CSphVector<BYTE> & dBuf, int iLen, int iOff, CSphVector<BYTE> & dDecrypted ) { return false; }
+bool SslSend ( SslClient_i * pClient, CSphVector<BYTE> & dBuf, CSphVector<BYTE> & dDecrypted ) { return false; }
 
 #else
 
@@ -288,7 +288,7 @@ static SslStatus_e SslHandshake ( SslClient_t * pClient )
 
 // SSL handles incoming data from client
 // data then get into SSL for decrypt
-static bool DoRead ( char * pSrc, int iLen, SslClient_t * pClient, CSphVector<BYTE> & dDecripted )
+static bool DoRead ( char * pSrc, int iLen, SslClient_t * pClient, CSphVector<BYTE> & dDecrypted )
 {
 	BYTE dTmp[SSL_STACK_BUF_SIZE];
 	SslStatus_e eState = SslStatus_e::FAIL;
@@ -322,16 +322,16 @@ static bool DoRead ( char * pSrc, int iLen, SslClient_t * pClient, CSphVector<BY
 
 		for ( iWriteRes=1; iWriteRes>0; )
 		{
-			int iOff = dDecripted.GetLength();
-			dDecripted.Resize ( iOff + SSL_STACK_BUF_SIZE );
-			iWriteRes = SSL_read ( pClient->m_pSsl, dDecripted.Begin() + iOff, SSL_STACK_BUF_SIZE );
+			int iOff = dDecrypted.GetLength();
+			dDecrypted.Resize ( iOff + SSL_STACK_BUF_SIZE );
+			iWriteRes = SSL_read ( pClient->m_pSsl, dDecrypted.Begin() + iOff, SSL_STACK_BUF_SIZE );
 			sphLogDebugSSL ( "after SSL_read on_read_cb 2 %d", iWriteRes );
 			if ( iWriteRes>0 )
 			{
-				dDecripted.Resize ( iOff + iWriteRes );
+				dDecrypted.Resize ( iOff + iWriteRes );
 			} else
 			{
-				dDecripted.Resize ( iOff );
+				dDecrypted.Resize ( iOff );
 			}
 		}
 
@@ -441,12 +441,12 @@ void SslFree ( SslClient_i * pClient )
 }
 
 // handle incoming or outgoing data
-bool SslTick ( SslClient_i * pClient, bool & bWrite, CSphVector<BYTE> & dBuf, int iLen, int iOff, CSphVector<BYTE> & dDecripted )
+bool SslTick ( SslClient_i * pClient, bool & bWrite, CSphVector<BYTE> & dBuf, int iLen, int iOff, CSphVector<BYTE> & dDecrypted )
 {
 	SslClient_t * pSession = (SslClient_t *)pClient;
 	assert ( pSession );
 
-	if ( !bWrite && !DoRead ( (char *)dBuf.Begin() + iOff, iLen, pSession, dDecripted ) )
+	if ( !bWrite && !DoRead ((char *)dBuf.Begin() + iOff, iLen, pSession, dDecrypted ) )
 		return true;
 
     if ( pSession->m_dEncrypt.GetLength() )
@@ -464,11 +464,11 @@ bool SslTick ( SslClient_i * pClient, bool & bWrite, CSphVector<BYTE> & dBuf, in
 }
 
 // encrypt data for sending
-bool SslSend ( SslClient_i * pClient, CSphVector<BYTE> & dBuf, CSphVector<BYTE> & dDecripted )
+bool SslSend ( SslClient_i * pClient, CSphVector<BYTE> & dBuf, CSphVector<BYTE> & dDecrypted )
 {
 	assert ( pClient );
 	SslClient_t * pSession = (SslClient_t *)pClient;
-	pSession->m_dEncrypt.SwapData ( dDecripted );
+	pSession->m_dEncrypt.SwapData ( dDecrypted );
 	if ( !SslEncrypt ( pSession ) )
 		return false;
 

@@ -26,6 +26,8 @@ Manticore Search is an open source search server designed to be fast, scalable a
 * Advanced tokenization at character and word level
 * Morphology preprocessors
 * Real-time and offline indexes
+* Percolate queries for stream filtering
+* Replication
 * JSON attributes
 * Distributed indexes
 * Built-in load balancer

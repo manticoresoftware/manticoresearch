@@ -35,7 +35,7 @@ bool SslSend ( SslClient_i * pClient, CSphVector<BYTE> & dBuf, CSphVector<BYTE> 
 
 #define VERBOSE_SSL 0
 
-#if VERBOSE_NETLOOP
+#if VERBOSE_SSL
 	#define sphLogDebugSSL( ... ) sphLogDebugv (__VA_ARGS__)
 #else
 #if USE_WINDOWS
@@ -69,7 +69,7 @@ static CSphFixedVector<CSphMutex> g_dSslLocks { 0 };
 static SSL_CTX * g_pSslCtx = nullptr;
 static bool g_bKeysSet = false;
 
-static void fnSslLock ( int iMode, int iLock, const char * , int )
+void fnSslLock ( int iMode, int iLock, const char * , int )
 {
 	if ( iMode & CRYPTO_LOCK )
 		g_dSslLocks[iLock].Lock();

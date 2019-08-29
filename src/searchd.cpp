@@ -19903,6 +19903,8 @@ struct NetReceiveDataHttps_t : public ISphNetAction
 	NetEvent_e 		Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) override;
 	NetEvent_e		Setup ( int64_t tmNow ) override;
 	void			CloseSocket () override;
+
+	void			StartJob ( CSphNetLoop * pLoop );
 };
 
 struct NetReplyHttps_t : public NetSendData_t
@@ -21470,6 +21472,8 @@ NetEvent_e NetReceiveDataHttps_t::Loop ( DWORD uGotEvents, CSphVector<ISphNetAct
 		return NE_REMOVE;
 
 	// loop to handle similar operations at once
+	const bool bWasWrite = m_bWrite;
+	bool bGotData = false;
 	while (true)
 	{
 		int iRes = m_tState->SocketIO ( m_bWrite );
@@ -21484,36 +21488,51 @@ NetEvent_e NetReceiveDataHttps_t::Loop ( DWORD uGotEvents, CSphVector<ISphNetAct
 		m_tState->m_iLeft -= iRes;
 		m_tState->m_iPos += iRes;
 
-		sphLogDebugv ( "%p HTTPS %s len %d, off %d, sock=%d, tick=%u", this, m_bWrite ? "write" : "read", iRes, iOff, m_iSock, pLoop->m_uTick );
+		sphLogDebugv ( "%p HTTPS %s len %d(%d), off %d, decripted=%d, sock=%d, tick=%u", this, m_bWrite ? "write" : "read", iRes, m_tState->m_iLeft, iOff, m_tState->m_dDecripted.GetLength(), m_iSock, pLoop->m_uTick );
 
 		// socket would block - going back to polling
 		if ( iRes==0 )
-			return NE_KEEP;
+		{
+			if ( bWasWrite!=m_bWrite )
+				return ( m_bWrite ? NE_OUT : NE_IN );
+			else
+				return NE_KEEP;
+		}
 
 		if ( m_bWrite && m_tState->m_iLeft==0 )
 		{
+			if ( bGotData
+				&& m_tHeadParser.HeaderFound ( m_tState->m_dDecripted.Begin(), m_tState->m_dDecripted.GetLength() )
+				&& m_tHeadParser.m_iHeaderEnd + m_tHeadParser.m_iFieldContentLenVal>=m_tState->m_dDecripted.GetLength() )
+			{
+				StartJob ( pLoop );
+				return NE_REMOVED;
+			}
+
+			// get actual encoded data after handshake
 			m_tState->m_dBuf.Resize ( NET_STATE_HTTP_SIZE );
 			m_tState->m_iLeft = m_tState->m_dBuf.GetLength();
 			m_tState->m_iPos = 0;
 			m_bWrite = false;
-			return NE_IN;
+			return ( bWasWrite ? NE_IN : NE_KEEP );
 		}
 
 		const int iDecriptedLen = m_tState->m_dDecripted.GetLength();
-		bool bWrite = m_bWrite;
-		bool bDone = SslTick ( m_tState->m_pSession, bWrite, m_tState->m_dBuf, iRes, iOff, m_tState->m_dDecripted );
+		bool bTickWrite = m_bWrite;
+		bool bDone = SslTick ( m_tState->m_pSession, bTickWrite, m_tState->m_dBuf, iRes, iOff, m_tState->m_dDecripted );
 
 		// SSL reports finish only on error
 		if ( bDone )
 			return NE_REMOVE;
 
-		bool bChange = ( bWrite!=m_bWrite );
-		m_bWrite = bWrite;
+		bool bChange = ( bTickWrite!=m_bWrite );
+		m_bWrite = bTickWrite;
 		if ( bChange )
 		{
 			m_tState->m_iLeft = m_tState->m_dBuf.GetLength();
 			m_tState->m_iPos = 0;
-			return ( m_bWrite ? NE_OUT : NE_IN );
+			bGotData |= ( iDecriptedLen<m_tState->m_dDecripted.GetLength() );
+			continue;
 		}
 
 		// grow read buffer
@@ -21531,23 +21550,12 @@ NetEvent_e NetReceiveDataHttps_t::Loop ( DWORD uGotEvents, CSphVector<ISphNetAct
 		}
 
 		// check on new part of decoded data
-		if ( iDecriptedLen<m_tState->m_dDecripted.GetLength() &&
-			m_tHeadParser.HeaderFound ( m_tState->m_dDecripted.Begin(), m_tState->m_dDecripted.GetLength() ) )
+		if ( iDecriptedLen<m_tState->m_dDecripted.GetLength()
+			&& m_tHeadParser.HeaderFound ( m_tState->m_dDecripted.Begin(), m_tState->m_dDecripted.GetLength() )
+			&& m_tHeadParser.m_iHeaderEnd + m_tHeadParser.m_iFieldContentLenVal>=m_tState->m_dDecripted.GetLength() )
 		{
-			int iReqSize = m_tHeadParser.m_iHeaderEnd + m_tHeadParser.m_iFieldContentLenVal;
-			if ( iReqSize>=m_tState->m_dDecripted.GetLength() )
-			{
-				pLoop->RemoveIterEvent(this);
-
-				sphLogDebugv ( "%p HTTPS buf=%d, '%.*s', header=%d, content-len=%d, sock=%d, tick=%u", this, m_tState->m_dDecripted.GetLength(), Min ( m_tState->m_dDecripted.GetLength(), 128 ), m_tState->m_dDecripted.Begin(),
-					m_tHeadParser.m_iHeaderEnd, m_tHeadParser.m_iFieldContentLenVal, m_iSock, pLoop->m_uTick );
-
-				m_tState->m_dDecripted.SwapData ( m_tState->m_dBuf );
-				ThdJobHttp_t * pJob = new ThdJobHttp_t ( pLoop, m_tState.LeakPtr(), true );
-				g_pThdPool->AddJob ( pJob );
-
-				return NE_REMOVED;
-			}
+			StartJob ( pLoop );
+			return NE_REMOVED;
 		}
 
 		// keep reading till end of buffer or data at socket
@@ -21556,6 +21564,18 @@ NetEvent_e NetReceiveDataHttps_t::Loop ( DWORD uGotEvents, CSphVector<ISphNetAct
 
 		return NE_KEEP;
 	}
+}
+
+void NetReceiveDataHttps_t::StartJob ( CSphNetLoop * pLoop )
+{
+	pLoop->RemoveIterEvent(this);
+
+	sphLogDebugv ( "%p HTTPS buf=%d, '%.*s', header=%d, content-len=%d, sock=%d, tick=%u", this, m_tState->m_dDecripted.GetLength(), Min ( m_tState->m_dDecripted.GetLength(), 128 ), m_tState->m_dDecripted.Begin(),
+		m_tHeadParser.m_iHeaderEnd, m_tHeadParser.m_iFieldContentLenVal, m_iSock, pLoop->m_uTick );
+
+	m_tState->m_dDecripted.SwapData ( m_tState->m_dBuf );
+	ThdJobHttp_t * pJob = new ThdJobHttp_t ( pLoop, m_tState.LeakPtr(), true );
+	g_pThdPool->AddJob ( pJob );
 }
 
 NetReplyHttps_t::NetReplyHttps_t ( NetStateHttps_t * pState )

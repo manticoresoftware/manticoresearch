@@ -179,12 +179,14 @@ Here is a table which can help you select your desired mode:
 | index part              | keep it on disk                   | keep it in memory                    | cached in memory on daemon start             | lock it in memory          |
 +-------------------------+-----------------------------------+--------------------------------------+----------------------------------------------+----------------------------+
 | .spa (plain attributes) | access_plain_attrs=mmap - the file will mapped to RAM, but your OS will  | access_plain_attrs = mmap_preread (default)  | access_plain_attrs = mlock |
-|                         | decide whether to really load it to RAM or not and can easily swap it    |                                              |                            |
-|                         | out (default)                                                            |                                              |                            |
+| .spe (skip lists)       | decide whether to really load it to RAM or not and can easily swap it    |                                              |                            |
+| .spi (word lists)       | out (default)                                                            |                                              |                            |
+| .spt (lookups)          |                                                                          |                                              |                            |
+| .spm (killed docs)      |                                                                          |                                              |                            |
 +-------------------------+-----------------------------------+--------------------------------------+----------------------------------------------+----------------------------+
 | .spb (blob attributes)  | access_blob_attrs=mmap - the file will mapped to RAM, but your OS will   | access_blob_attrs = mmap_preread (default)   | access_blob_attrs = mlock  |
-|                         | decide whether to really load it to RAM or not and can easily swap it    |                                              |                            |
-|                         | out (default)                                                            |                                              |                            |
+| (string, mva and json   | decide whether to really load it to RAM or not and can easily swap it    |                                              |                            |
+| attributes)             | out (default)                                                            |                                              |                            |
 +-------------------------+-----------------------------------+--------------------------------------+----------------------------------------------+----------------------------+
 | .spd (doc lists)        | access_doclists = file (default)  | access_doclists = mmap, may be still | no                                           | access_doclists = mlock    |
 |                         |                                   | swapped out by OS                    |                                              |                            |
@@ -192,6 +194,8 @@ Here is a table which can help you select your desired mode:
 | .spp (hit lists)        | access_hitlists = file (default)  | access_hitlists = mmap, may be still | no                                           | access_hitlists = mlock    |
 |                         |                                   | swapped out by OS                    |                                              |                            |
 +-------------------------+-----------------------------------+--------------------------------------+----------------------------------------------+----------------------------+
+
+, , , 
 
 There's also a searchd command line option ``--force-preread`` that instructs the
 daemon to wait until the attribute files are read prior to starting accepting incoming connections.

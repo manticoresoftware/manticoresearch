@@ -1122,7 +1122,7 @@ public:
 
 	bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const final;
 	bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const final;
-	bool				DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError, const SphChunkGuard_t & tGuard ) const;
+	void				DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError, const SphChunkGuard_t & tGuard ) const;
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const final;
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const final;
 	void				AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, CSphDict * pDict, bool bGetStats, int iQpos, RtQword_t * pQueryWord, CSphVector <CSphKeywordInfo> & dKeywords, const SphChunkGuard_t & tGuard ) const;
@@ -2593,7 +2593,7 @@ RtSegmentRefPtf_t RtIndex_c::AdoptSegment ( RtSegment_t * pNewSeg )
 {
 	RtSegmentRefPtf_t tResult {pNewSeg};
 	if ( pNewSeg )
-	{		
+	{
 		pNewSeg->AddRef ();
 		pNewSeg->m_pRAMCounter = &m_iRamChunksAllocatedRAM;
 		pNewSeg->UpdateUsedRam();
@@ -5599,20 +5599,19 @@ void SetupStarDict ( DictRefPtr_c& pDict, ISphTokenizer * pTokenizer )
 	pDict = new CSphDictStarV8 ( pDict, true );
 }
 
-struct SphRtFinalMatchCalc_t : ISphMatchProcessor, ISphNoncopyable // fixme! that is actually class, not struct.
+class SphRtFinalMatchCalc_c : public ISphMatchProcessor, ISphNoncopyable
 {
 private:
 	const CSphQueryContext &	m_tCtx;
-	int							m_iSeg;
+	int							m_iSeg = 0;
 	int							m_iSegments;
 	// count per segments matches
 	// to skip iteration of matches at sorter and pool setup for segment without matches at sorter
 	CSphBitvec					m_dSegments;
 
 public:
-	SphRtFinalMatchCalc_t ( int iSegments, const CSphQueryContext & tCtx )
+	SphRtFinalMatchCalc_c ( int iSegments, const CSphQueryContext & tCtx )
 		: m_tCtx ( tCtx )
-		, m_iSeg ( 0 )
 		, m_iSegments ( iSegments )
 	{
 		m_dSegments.Init ( iSegments );
@@ -5768,7 +5767,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			dSorters.Add ( ppSorters[i] );
 
 	// if we have anything to work with
-	if ( dSorters.GetLength()==0 )
+	if ( dSorters.IsEmpty() )
 	{
 		pResult->m_iQueryTime = 0;
 		return false;
@@ -5820,7 +5819,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		GetKeywordsSettings_t tSettings;
 		tSettings.m_bStats = true;
 		CSphVector < CSphKeywordInfo > dKeywords;
-		DoGetKeywords ( dKeywords, pQuery->m_sQuery.cstr(), tSettings, false, NULL, tGuard );
+		DoGetKeywords ( dKeywords, pQuery->m_sQuery.cstr(), tSettings, false, nullptr, tGuard );
 		for ( auto & tKw : dKeywords )
 			if ( !hLocalDocs.Exists ( tKw.m_sNormalized ) ) // skip dupes
 				hLocalDocs.Add ( tKw.m_iDocs, tKw.m_sNormalized );
@@ -5870,7 +5869,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		// we use sorters in both disk chunks and ram chunks, that's why we don't want to move to a new schema before we searched ram chunks
 		tMultiArgs.m_bModifySorterSchemas = false;
 
-		if ( !tGuard.m_dDiskChunks[iChunk]->MultiQuery ( pQuery, &tChunkResult, iSorters, ppSorters, tMultiArgs ) )
+		if ( !tGuard.m_dDiskChunks[iChunk]->MultiQuery ( pQuery, &tChunkResult, dSorters.GetLength(), dSorters.begin(), tMultiArgs ) )
 		{
 			// FIXME? maybe handle this more gracefully (convert to a warning)?
 			pResult->m_sError = tChunkResult.m_sError;
@@ -5878,16 +5877,15 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		}
 
 		// check terms inconsistency among disk chunks
-		const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hDstStats = tChunkResult.m_hWordStats;
+		const auto& hDstStats = tChunkResult.m_hWordStats;
 		tStat.DumpDiffer ( hDstStats, m_sIndexName.cstr(), pResult->m_sWarning );
 		if ( pResult->m_hWordStats.GetLength() )
 		{
-			pResult->m_hWordStats.IterateStart();
-			while ( pResult->m_hWordStats.IterateNext() )
+			for ( auto & tStat : pResult->m_hWordStats )
 			{
-				const CSphQueryResultMeta::WordStat_t * pDstStat = hDstStats ( pResult->m_hWordStats.IterateGetKey() );
+				const auto * pDstStat = hDstStats ( tStat.first );
 				if ( pDstStat )
-					pResult->AddStat ( pResult->m_hWordStats.IterateGetKey(), pDstStat->m_iDocs, pDstStat->m_iHits );
+					pResult->AddStat ( tStat.first, pDstStat->m_iDocs, pDstStat->m_iHits );
 			}
 		} else
 		{
@@ -6283,7 +6281,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 		// at 0 pass processor also fills bitmask of segments these has matches at sorter
 		// then skip sorter processing for these 'empty' segments
-		SphRtFinalMatchCalc_t tFinal ( iSegmentsTotal, tCtx );
+		SphRtFinalMatchCalc_c tFinal ( iSegmentsTotal, tCtx );
 
 		ARRAY_FOREACH_COND ( iSeg, tGuard.m_dRamChunks, tFinal.HasSegments() )
 		{
@@ -6411,13 +6409,13 @@ static void HashKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, SmallStringH
 	}
 }
 
-bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError, const SphChunkGuard_t & tGuard ) const
+void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError, const SphChunkGuard_t & tGuard ) const
 {
 	if ( !bFillOnly )
 		dKeywords.Resize ( 0 );
 
 	if ( ( bFillOnly && !dKeywords.GetLength() ) || ( !bFillOnly && ( !sQuery || !sQuery[0] ) ) )
-		return true;
+		return;
 
 	RtQword_t tQword;
 
@@ -6504,20 +6502,20 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 	// get stats from disk chunks too
 	if ( !tSettings.m_bStats )
-		return true;
+		return;
 
 	if ( bFillOnly )
 	{
-		ARRAY_FOREACH ( iChunk, tGuard.m_dDiskChunks )
-			tGuard.m_dDiskChunks[iChunk]->FillKeywords ( dKeywords );
+		for ( auto& pChunk : tGuard.m_dDiskChunks )
+			pChunk->FillKeywords ( dKeywords );
 	} else
 	{
 		// bigram and expanded might differs need to merge infos
 		CSphVector<CSphKeywordInfo> dChunkKeywords;
 		SmallStringHash_T<CSphKeywordInfo> hKeywords;
-		ARRAY_FOREACH ( iChunk, tGuard.m_dDiskChunks )
+		for ( auto& pChunk: tGuard.m_dDiskChunks )
 		{
-			tGuard.m_dDiskChunks[iChunk]->GetKeywords ( dChunkKeywords, (const char*)sModifiedQuery, tSettings, pError );
+			pChunk->GetKeywords ( dChunkKeywords, (const char*)sModifiedQuery, tSettings, pError );
 			HashKeywords ( dChunkKeywords, hKeywords );
 			dChunkKeywords.Resize ( 0 );
 		}
@@ -6538,26 +6536,20 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 			sphSort ( dKeywords.Begin(), dKeywords.GetLength(), bind ( &CSphKeywordInfo::m_iQpos ) );
 		}
 	}
-
-	return true;
 }
 
 
 bool RtIndex_c::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const
 {
-	SphChunkGuard_t tGuard = GetReaderChunks ();
-	bool bGot = DoGetKeywords ( dKeywords, sQuery, tSettings, false, pError, tGuard );
-	return bGot;
+	DoGetKeywords ( dKeywords, sQuery, tSettings, false, pError, GetReaderChunks () );
+	return true;
 }
 
 
 bool RtIndex_c::FillKeywords ( CSphVector<CSphKeywordInfo> & dKeywords ) const
 {
-	GetKeywordsSettings_t tSettings;
-	tSettings.m_bStats = true;
-	SphChunkGuard_t tGuard = GetReaderChunks ();
-	bool bGot = DoGetKeywords ( dKeywords, NULL, tSettings, true, NULL, tGuard );
-	return bGot;
+	DoGetKeywords ( dKeywords, nullptr, GetKeywordsSettings_t(), true, nullptr, GetReaderChunks () );
+	return true;
 }
 
 
@@ -6568,10 +6560,8 @@ static RtSegment_t * UpdateFindSegment ( const SphChunkGuard_t & tGuard, CSphRow
 	for ( const auto& pChunk : tGuard.m_dRamChunks )
 	{
 		pRow = const_cast<CSphRowitem *> ( pChunk->FindAliveRow ( uDocID ) );
-		if ( !pRow )
-			continue;
-
-		return pChunk;
+		if ( pRow )
+			return pChunk;
 	}
 
 	return nullptr;

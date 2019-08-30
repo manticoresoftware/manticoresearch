@@ -3011,11 +3011,11 @@ public:
 	/// store all entries into specified location and remove them from the queue
 	/// entries are stored in properly sorted order,
 	/// if iTag is non-negative, entries are also tagged; otherwise, their tag's unchanged
-	/// return sored entries count, might be less than length due of aggregate filtering phase
+	/// return sorted entries count, might be less than length due of aggregate filtering phase
 	virtual int			Flatten ( CSphMatch * pTo, int iTag ) = 0;
 
 	/// get a pointer to the worst element, NULL if there is no fixed location
-	virtual const CSphMatch *	GetWorst() const { return NULL; }
+	virtual const CSphMatch *	GetWorst() const { return nullptr; }
 };
 
 struct CmpPSortersByRandom_fn

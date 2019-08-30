@@ -1751,7 +1751,6 @@ static int sphPutBytes ( VECTOR * pOut, const void * pData, int iLen )
 // all indexes should produce same terms for same query
 struct SphWordStatChecker_t
 {
-	SphWordStatChecker_t () {}
 	void Set ( const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hStat );
 	void DumpDiffer ( const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hStat, const char * sIndex, CSphString & sWarning ) const;
 

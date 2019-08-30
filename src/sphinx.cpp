@@ -30377,11 +30377,9 @@ void sphGetSuggest ( const ISphWordlistSuggest * pWordlist, int iInfixCodepointB
 void SphWordStatChecker_t::Set ( const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hStat )
 {
 	m_dSrcWords.Reserve ( hStat.GetLength() );
-	hStat.IterateStart();
-	while ( hStat.IterateNext() )
-	{
-		m_dSrcWords.Add ( sphFNV64 ( hStat.IterateGetKey().cstr() ) );
-	}
+	for ( auto& tStat : hStat )
+		m_dSrcWords.Add ( sphFNV64 ( tStat.first.cstr() ) );
+
 	m_dSrcWords.Sort();
 }
 
@@ -30392,25 +30390,17 @@ void SphWordStatChecker_t::DumpDiffer ( const SmallStringHash_T<CSphQueryResultM
 	if ( !m_dSrcWords.GetLength() )
 		return;
 
-	StringBuilder_c tWarningBuilder;
-	hStat.IterateStart();
-	while ( hStat.IterateNext() )
-	{
-		uint64_t uHash = sphFNV64 ( hStat.IterateGetKey().cstr() );
-		if ( !m_dSrcWords.BinarySearch ( uHash ) )
-		{
-			if ( tWarningBuilder.IsEmpty () )
-			{
-				if ( sIndex )
-					tWarningBuilder.Appendf ( "index '%s': ", sIndex );
+	StringBuilder_c sProlog;
+	if ( sIndex )
+		sProlog << "index '" << sIndex << "': ";
+	sProlog << "query word(s) mismatch: ";
 
-				tWarningBuilder.Appendf ( "query word(s) mismatch: %s", hStat.IterateGetKey().cstr() );
-			} else
-				tWarningBuilder << ", " << hStat.IterateGetKey();
-		}
-	}
+	StringBuilder_c tWarningBuilder ( ", ", sProlog.cstr ());
+	for ( auto & tStat : hStat )
+		if ( !m_dSrcWords.BinarySearch ( sphFNV64 ( tStat.first.cstr ())))
+			tWarningBuilder << tStat.first;
 
-	if ( tWarningBuilder.GetLength() )
+	if ( !tWarningBuilder.IsEmpty() )
 		tWarningBuilder.MoveTo ( sWarning );
 }
 

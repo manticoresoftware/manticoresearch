@@ -3735,10 +3735,12 @@ protected:
 	BYTE	m_sBuf [ MAX_KEYWORD_BYTES ];	///< pair buffer
 	BYTE *	m_pSecond = nullptr;			///< second token pointer
 	int		m_iFirst = 0;					///< first token length, bytes
+	CSphRefcountedPtr<const CSphBigramTokenizer>	m_pFather; ///< used by clones to share state
 
+	// unchanged state (not need to copy on clone)
 	ESphBigram			m_eMode;			///< bigram indexing mode
-	int					m_iMaxLen = 0;			///< max bigram_freq_words length
-	int					m_dWordsHash[256];	///< offsets into m_dWords hashed by 1st byte
+	BYTE				m_uMaxLen = 0;		///< max bigram_freq_words length
+	CSphFixedVector<int> m_dWordsHash {0};	///< offsets into m_dWords hashed by 1st byte
 	CSphVector<BYTE>	m_dWords;			///< case-folded, sorted bigram_freq_words
 
 public:
@@ -3750,21 +3752,22 @@ public:
 		assert ( eMode==SPH_BIGRAM_ALL || dWords.GetLength() );
 
 		m_sBuf[0] = 0;
-		memset ( m_dWordsHash, 0, sizeof(m_dWordsHash) );
+		m_dWordsHash.Reset(256);
+		m_dWordsHash.ZeroVec();
 
 		m_eMode = eMode;
 
 		// only keep unique, real, short enough words
 		dWords.Uniq();
-		ARRAY_FOREACH ( i, dWords )
+		for ( const auto& sWord : dWords )
 		{
-			int iLen = Min ( dWords[i].Length(), 255 );
+			int iLen = Min ( sWord.Length(), 255 );
 			if ( !iLen )
 				continue;
-			m_iMaxLen = Max ( m_iMaxLen, iLen );
+			m_uMaxLen = Max ( m_uMaxLen, iLen );
 
 			// hash word blocks by the first letter
-			BYTE uFirst = *(BYTE*)( dWords[i].cstr() );
+			BYTE uFirst = *(BYTE*)( sWord.cstr() );
 			if ( !m_dWordsHash [ uFirst ] )
 			{
 				m_dWords.Add ( 0 ); // end marker for the previous block
@@ -3772,11 +3775,9 @@ public:
 			}
 
 			// store that word
-			int iPos = m_dWords.GetLength();
-			m_dWords.Resize ( iPos+iLen+1 );
-
-			m_dWords[iPos] = (BYTE)iLen;
-			memcpy ( &m_dWords [ iPos+1 ], dWords[i].cstr(), iLen );
+			m_dWords.ReserveGap ( iLen+1 );
+			m_dWords.Add (iLen);
+			m_dWords.Append ( sWord.cstr(), iLen);
 		}
 		m_dWords.Add ( 0 );
 	}
@@ -3786,9 +3787,14 @@ public:
 	{
 		m_sBuf[0] = 0;
 		m_eMode = pBase->m_eMode;
-		m_iMaxLen = pBase->m_iMaxLen;
-		memcpy ( m_dWordsHash, pBase->m_dWordsHash, sizeof(m_dWordsHash) );
-		m_dWords = pBase->m_dWords;
+		m_uMaxLen = pBase->m_uMaxLen;
+		if ( pBase->m_pFather )
+			m_pFather = pBase->m_pFather;
+		else
+		{
+			pBase->AddRef ();
+			m_pFather = pBase;
+		}
 	}
 
 	ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const final
@@ -3806,11 +3812,14 @@ public:
 		return m_pTokenizer->TokenIsBlended();
 	}
 
-	bool IsFreq ( int iLen, BYTE * sWord )
+	bool IsFreq ( int iLen, BYTE * sWord ) const
 	{
 		// early check
-		if ( iLen>m_iMaxLen )
+		if ( iLen>m_uMaxLen )
 			return false;
+
+		if ( m_pFather )
+			return m_pFather->IsFreq ( iLen, sWord );
 
 		// hash lookup, then linear scan
 		int iPos = m_dWordsHash [ *sWord ];
@@ -3837,7 +3846,7 @@ public:
 				assert ( m_pSecond );
 				m_eState = BIGRAM_CLEAN;
 				pFirst = m_pSecond;
-				m_pSecond = NULL;
+				m_pSecond = nullptr;
 			} else
 			{
 				// just clean slate
@@ -3849,7 +3858,7 @@ public:
 			// clean slate
 			// get first non-blended token
 			if ( !pFirst )
-				return NULL;
+				return nullptr;
 
 			// pass through blended
 			// could handle them as first too, but.. cumbersome
@@ -3860,7 +3869,7 @@ public:
 			// in first_freq and both_freq modes, 1st token must be listed
 			m_iFirst = strlen ( (const char*)pFirst );
 			if ( m_eMode!=SPH_BIGRAM_ALL && !IsFreq ( m_iFirst, pFirst ) )
-					return pFirst;
+				return pFirst;
 
 			// copy it
 			// subsequent calls can and will override token accumulator
@@ -3911,11 +3920,13 @@ public:
 		}
 
 		assert ( 0 && "unhandled bigram tokenizer internal state" );
-		return NULL;
+		return nullptr;
 	}
 
 	uint64_t GetSettingsFNV () const final
 	{
+		if ( m_pFather )
+			return m_pFather->GetSettingsFNV ();
 		uint64_t uHash = CSphTokenFilter::GetSettingsFNV();
 		uHash = sphFNV64 ( m_dWords.Begin(), m_dWords.GetLength(), uHash );
 		return uHash;

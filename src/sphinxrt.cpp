@@ -1244,7 +1244,7 @@ private:
 	bool						ReadNextWord ( SuggestResult_t & tRes, DictWord_t & tWord ) const final;
 
 	int64_t						GetRamLeft() const; // immediate value counted by cloud of RtSegment_t
-	SphChunkGuard_t				GetReaderChunks() const REQUIRES ( !m_tReading ) ACQUIRE_SHARED (m_tReading );
+	SphChunkGuard_t				GetReaderChunks() const ACQUIRE_SHARED (m_tReading );
 
 	RtSegmentRefPtf_t			AdoptSegment ( RtSegment_t * pNewSeg );
 
@@ -5708,7 +5708,8 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	assert ( ppSorters );
 	assert ( pResult );
 
-	// to avoid the checking of a ppSorters's element for NULL on every next step, just filter out all nulls right here
+	// to avoid the checking of a ppSorters's element for NULL on every next step,
+	// just filter out all nulls right here
 	CSphVector<ISphMatchSorter*> dSorters;
 	dSorters.Reserve ( iSorters );
 	for ( int i=0; i<iSorters; ++i )

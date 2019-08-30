@@ -5715,7 +5715,7 @@ void SearchHandler_c::RunLocalSearches()
 
 		// create sorters
 		CSphVector<ISphMatchSorter*> dSorters ( m_iEnd-m_iStart+1 );
-		dSorters.ZeroMem ();
+		dSorters.ZeroVec ();
 
 		DWORD uTotalFactorFlags = SPH_FACTOR_DISABLE;
 		int iValidSorters = 0;
@@ -6417,7 +6417,7 @@ void SearchHandler_c::BuildIndexList ( int iStart, int iEnd, int & iDivideLimits
 				auto & tDistrStat = dDistrServedByAgent.Add();
 				tDistrStat.m_sIndex = sIndex;
 				tDistrStat.m_dStats.Resize ( iEnd-iStart+1 );
-				tDistrStat.m_dStats.ZeroMem();
+				tDistrStat.m_dStats.ZeroVec();
 				for ( auto * pAgent : pDist->m_dAgents )
 				{
 					tDistrStat.m_dAgentIds.Add ( dRemotes.GetLength() );
@@ -9451,7 +9451,7 @@ static bool ExtractDistributedIndexes ( const StrVec_t &dNames, DistrPtrs_t &dDi
 {
 	dDistributed.Reset();
 	dDistributed.Resize( dNames.GetLength () );
-	dDistributed.ZeroMem ();
+	dDistributed.ZeroVec ();
 
 	ARRAY_FOREACH ( i, dNames )
 	{

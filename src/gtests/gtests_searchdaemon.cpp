@@ -661,7 +661,7 @@ TEST ( T_IndexHash, served_pointer_manipulations )
 		{
 			dVec.Reset ();
 			dVec.Resize ( 1 );
-			dVec.ZeroMem ();
+			dVec.ZeroVec ();
 			ASSERT_TRUE ( pHash->Contains ( "hello" ) );
 			dVec[0] = GetServed ("hello", pHash);
 			dVec[0]->AddRef ();

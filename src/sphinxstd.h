@@ -511,6 +511,20 @@ public:
 	ISphNonmovable& operator=( ISphNonmovable&& ) noexcept = delete;
 };
 
+// implement moving ctr and moving= using swap-and-release
+#define MOVE_BYSWAP(class_c)								\
+    class_c ( class_c&& rhs) noexcept {Swap(rhs);}			\
+    class_c & operator= ( class_c && rhs ) noexcept			\
+ 		{ Swap(rhs); return *this;  }
+
+// take all ctr definitions from parent
+#define FWD_CTOR(type_c, base_c)                                                         \
+    template <typename... V>                                                             \
+    type_c(V&&... v)                                                                     \
+        : base_c{std::forward<V>(v)...}                                                  \
+    {                                                                                    \
+    }
+
 //////////////////////////////////////////////////////////////////////////////
 
 /// generic comparator
@@ -1179,7 +1193,7 @@ private:
 /// Each backend provides Copy, Move and CopyOrSwap
 
 /// Copy/move vec of a data item-by-item
-template < typename T, bool = std::is_pod<T>::value >
+template < typename T, bool = std::is_trivially_copyable<T>::value >
 class DataMover_T
 {
 public:
@@ -1202,7 +1216,7 @@ public:
 	}
 };
 
-template < typename T > /// Copy/move blob of POD data using memmove
+template < typename T > /// Copy/move blob of trivial data using memmove
 class DataMover_T<T, true>
 {
 public:
@@ -1524,10 +1538,10 @@ public:
 		m_iLimit = 0;
 	}
 
-	/// memset whole reserved vec
-	void ZeroMem ()
+	/// Set whole vec to 0. For trivially copyable memset will be used
+	void ZeroVec ()
 	{
-		memset ( Begin (), 0, (size_t) AllocatedBytes () );
+		POLICY::Zero ( m_pData, m_iLimit );
 	}
 
 	/// set the tail [m_iCount..m_iLimit) to zero
@@ -1690,28 +1704,9 @@ using CSphTightVector =  CSphVector < T, sph::TightRelimit >;
 //////////////////////////////////////////////////////////////////////////
 
 /// dynamically allocated fixed-size vector
-template < typename T >
-class CSphFixedVector : public ISphNoncopyable, public VecTraits_T<T>
+template<typename T, class POLICY=sph::DefaultCopy_T <T>, class STORE=sph::DefaultStorage_T <T>>
+class CSphFixedVector : public ISphNoncopyable, public VecTraits_T<T>, protected STORE
 {
-	template<typename TT, bool POD = std::is_pod<TT>::value>
-	struct Copy {
-		inline static void FromT ( TT* pData, const VecTraits_T<TT> & dOrigin )
-		{
-			ARRAY_FOREACH ( i, dOrigin )
-				pData[i] = dOrigin[i];
-		}
-	};
-
-	template<typename TT >
-	struct Copy<TT, true>
-	{
-		inline static void FromT ( TT * pData, const VecTraits_T<TT> & dOrigin )
-		{
-			memcpy ( pData, dOrigin.begin (), dOrigin.GetLengthBytes ());
-		}
-	};
-
-
 protected:
 	using VecTraits_T<T>::m_pData;
 	using VecTraits_T<T>::m_iCount;
@@ -1721,12 +1716,12 @@ public:
 	{
 		m_iCount = iSize;
 		assert ( iSize>=0 );
-		m_pData = ( iSize>0 ) ? new T [ iSize ] : nullptr;
+		m_pData = ( iSize>0 ) ? STORE::Allocate ( iSize ) : nullptr;
 	}
 
 	~CSphFixedVector ()
 	{
-		SafeDeleteArray ( m_pData );
+		STORE::Deallocate ( m_pData );
 	}
 
 	CSphFixedVector ( CSphFixedVector&& rhs ) noexcept
@@ -1746,19 +1741,20 @@ public:
 		if ( iSize==m_iCount )
 			return;
 
-		SafeDeleteArray ( m_pData );
-		m_pData = ( iSize>0 ) ? new T [ iSize ] : nullptr;
+		STORE::Deallocate ( m_pData );
+		m_pData = ( iSize>0 ) ? STORE::Allocate ( iSize ) : nullptr;
 		m_iCount = iSize;
 	}
 
 	void CopyFrom ( const VecTraits_T<T>& dOrigin )
 	{
 		Reset ( dOrigin.GetLength() );
-		Copy<T>::FromT ( m_pData, dOrigin );
+		POLICY::Copy ( m_pData, dOrigin.begin(), dOrigin.GetLength() );
 	}
 
 	T * LeakData ()
 	{
+		STORE::DataIsNotOwned ();
 		T * pData = m_pData;
 		m_pData = nullptr;
 		Reset ( 0 );
@@ -1768,15 +1764,23 @@ public:
 	/// swap
 	void SwapData ( CSphFixedVector<T> & rhs ) noexcept
 	{
+		STORE::DataIsNotOwned ();
 		Swap ( m_pData, rhs.m_pData );
 		Swap ( m_iCount, rhs.m_iCount );
 	}
 
 	void Set ( T * pData, int iSize )
 	{
-		SafeDeleteArray ( m_pData );
+		STORE::DataIsNotOwned ();
+		STORE::Deallocate ( m_pData );
 		m_pData = pData;
 		m_iCount = iSize;
+	}
+
+	/// Set whole vec to 0. For trivially copyable memset will be used
+	void ZeroVec ()
+	{
+		POLICY::Zero ( m_pData, m_iCount );
 	}
 };
 

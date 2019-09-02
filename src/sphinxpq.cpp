@@ -1785,8 +1785,7 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 
 	const ISphSchema &tMaxSorterSchema = *( ppSorters[iMaxSchemaIndex]->GetSchema () );
 
-	CSphVector<const ISphSchema *> dSorterSchemas;
-	SorterSchemas ( ppSorters, iSorters, iMaxSchemaIndex, dSorterSchemas );
+	auto dSorterSchemas = SorterSchemas ( ppSorters, iSorters, iMaxSchemaIndex );
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );

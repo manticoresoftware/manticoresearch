@@ -14280,8 +14280,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 	const ISphSchema & tMaxSorterSchema = *(ppSorters[iMaxSchemaIndex]->GetSchema());
 
-	CSphVector< const ISphSchema * > dSorterSchemas;
-	SorterSchemas ( ppSorters, iSorters, iMaxSchemaIndex, dSorterSchemas );
+	auto dSorterSchemas = SorterSchemas ( ppSorters, iSorters, iMaxSchemaIndex);
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );
@@ -17152,8 +17151,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	const ISphSchema & tMaxSorterSchema = *(ppSorters[iMaxSchemaIndex]->GetSchema());
 
-	CSphVector< const ISphSchema * > dSorterSchemas;
-	SorterSchemas ( ppSorters, iSorters, iMaxSchemaIndex, dSorterSchemas );
+	auto dSorterSchemas = SorterSchemas ( ppSorters, iSorters, iMaxSchemaIndex );
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );
@@ -30477,20 +30475,22 @@ void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int64_t iDocs, int
 
 //////////////////////////////////////////////////////////////////////////
 
-void SorterSchemas ( ISphMatchSorter ** ppSorters, int iCount, int iSkipSorter, CSphVector<const ISphSchema *> & dSchemas )
+CSphVector<const ISphSchema *> SorterSchemas ( ISphMatchSorter ** ppSorters, int iCount, int iSkipSorter )
 {
-	if ( iCount<2 )
-		return;
-
-	dSchemas.Reserve ( iCount - 1 );
-	for ( int i=0; i<iCount; i++ )
+	CSphVector<const ISphSchema *> dSchemas;
+	if ( iCount>1 )
 	{
-		if ( i==iSkipSorter || !ppSorters[i] )
-			continue;
+		dSchemas.Reserve ( iCount - 1 );
+		for ( int i=0; i<iCount; ++i )
+		{
+			if ( i==iSkipSorter || !ppSorters[i] )
+				continue;
 
-		const ISphSchema * pSchema = ppSorters[i]->GetSchema();
-		dSchemas.Add ( pSchema );
+			const ISphSchema * pSchema = ppSorters[i]->GetSchema();
+			dSchemas.Add ( pSchema );
+		}
 	}
+	return dSchemas;
 }
 
 //////////////////////////////////////////////////////////////////////////

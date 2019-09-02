@@ -730,7 +730,7 @@ private:
 };
 
 
-void SorterSchemas ( ISphMatchSorter ** ppSorters, int iCount, int iSkipSorter, CSphVector<const ISphSchema *> & dSchemas );
+CSphVector<const ISphSchema *> SorterSchemas ( ISphMatchSorter ** ppSorters, int iCount, int iSkipSorter );
 
 //////////////////////////////////////////////////////////////////////////
 // MEMORY TRACKER

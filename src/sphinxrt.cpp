@@ -5939,8 +5939,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	const ISphSchema & tMaxSorterSchema = *(dSorters[iMaxSchemaIndex]->GetSchema());
 
-	CSphVector< const ISphSchema * > dSorterSchemas;
-	SorterSchemas ( dSorters.Begin(), dSorters.GetLength(), iMaxSchemaIndex, dSorterSchemas );
+	auto dSorterSchemas = SorterSchemas ( dSorters.Begin(), dSorters.GetLength(), iMaxSchemaIndex );
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );

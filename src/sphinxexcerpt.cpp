@@ -3789,13 +3789,13 @@ void SnippetContext_t::BuildExcerpt ( ExcerptQuery_t & tOptions, const CSphIndex
 			sError.SetSprintf( "File '%s' escapes '%s' scope", sFilename.scstr(), g_sSnippetsFilePrefix.scstr());
 			return;
 		}
-		if ( !sFilename.IsEmpty () && tFile.Open ( sFilename.cstr(), SPH_O_READ, sError )<0 )
-			return;
-		else if ( tOptions.m_sSource.IsEmpty() )
+		if ( tOptions.m_sSource.IsEmpty() )
 		{
 			sError.SetSprintf ( "snippet file name is empty" );
 			return;
 		}
+		if ( !sFilename.IsEmpty () && tFile.Open ( sFilename.cstr(), SPH_O_READ, sError )<0 )
+			return;
 
 		// will this ever trigger? time will tell; email me if it does!
 		if ( tFile.GetSize()+1>=(SphOffset_t)INT_MAX )

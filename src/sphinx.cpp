@@ -307,23 +307,30 @@ CSphAutofile::~CSphAutofile ()
 	Close ();
 }
 
+static int AutoFileOpen ( const CSphString & sName, int iMode )
+{
+	int iFD = -1;
+#if USE_WINDOWS
+	if ( iMode==SPH_O_READ )
+	{
+		intptr_t tFD = (intptr_t)CreateFile ( sName.cstr(), GENERIC_READ , FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL );
+		iFD = _open_osfhandle ( tFD, 0 );
+	} else
+		iFD = ::open ( sName.cstr(), iMode, 0644 );
+#else
+	iFD = ::open ( sName.cstr(), iMode, 0644 );
+#endif
+
+	return iFD;
+}
 
 int CSphAutofile::Open ( const CSphString & sName, int iMode, CSphString & sError, bool bTemp )
 {
 	assert ( m_iFD==-1 && m_sFilename.IsEmpty () );
 	assert ( !sName.IsEmpty() );
 
-#if USE_WINDOWS
-	if ( iMode==SPH_O_READ )
-	{
-		intptr_t tFD = (intptr_t)CreateFile ( sName.cstr(), GENERIC_READ , FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL );
-		m_iFD = _open_osfhandle ( tFD, 0 );
-	} else
-		m_iFD = ::open ( sName.cstr(), iMode, 0644 );
-#else
-	m_iFD = ::open ( sName.cstr(), iMode, 0644 );
-#endif
-	m_sFilename = sName; // not exactly sure why is this uncoditional. for error reporting later, i suppose
+	m_iFD = AutoFileOpen ( sName, iMode );
+	m_sFilename = sName; // not exactly sure why is this unconditional. for error reporting later, i suppose
 
 	if ( m_iFD<0 )
 		sError.SetSprintf ( "failed to open %s: %s", sName.cstr(), strerrorm(errno) );
@@ -8422,7 +8429,7 @@ bool CSphAutoreader::Open ( const CSphString & sFilename, CSphString & sError )
 	assert ( m_iFD<0 );
 	assert ( !sFilename.IsEmpty() );
 
-	m_iFD = ::open ( sFilename.cstr(), SPH_O_READ, 0644 );
+	m_iFD = AutoFileOpen ( sFilename, SPH_O_READ );
 	m_iPos = 0;
 	m_iBuffPos = 0;
 	m_iBuffUsed = 0;

@@ -1754,6 +1754,13 @@ class SphinxConfig
 
 				if ( property_exists ( $decoded_rows, 'took' ) )
 					unset ( $decoded_rows->took );
+				
+				// fixup floats in json
+				if ( isset ( $decoded_rows->hits ) && isset ( $decoded_rows->hits->hits ) )
+				{
+					foreach ( $decoded_rows->hits->hits as &$hit )
+						RoundFloatValues ( $hit, 6 );
+				}
 
 				$query_result['rows'] = json_encode ( $decoded_rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
 			}
@@ -2394,7 +2401,10 @@ class SphinxConfig
 			if ( ! $contents )
 				return 0;
 
-			$this->_results_model = $this->FixKeys ( unserialize ( $contents ) );
+			// linux and windows line ending breaks model at different boxes
+			$fixed_data = preg_replace_callback('!s:\d+:"(.*?)";!s', function($m) { return "s:" . strlen($m[1]) . ':"'.$m[1].'";'; }, $contents);
+			
+			$this->_results_model = $this->FixKeys ( unserialize ( $fixed_data ) );
 		}
 
 		return 1;

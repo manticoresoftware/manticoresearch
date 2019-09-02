@@ -18281,7 +18281,6 @@ bool CheckConfigChanges ( CSphVector<char>& dContent )
 	DWORD uCRC32 = 0;
 	struct_stat tStat = {0};
 
-#if !USE_WINDOWS
 	const size_t BUF_SIZE = 8192;
 	char sBuf [ BUF_SIZE ];
 	FILE * fp = nullptr;
@@ -18305,7 +18304,13 @@ bool CheckConfigChanges ( CSphVector<char>& dContent )
 		if ( !isspace(*p) )
 			break;
 
-	if ( p<sBuf+BUF_SIZE-1 && p[0]=='#' && p[1]=='!' )
+#if USE_WINDOWS
+	bool bIsWindows = true;
+#else
+	bool bIsWindows = false;
+#endif
+
+	if ( !bIsWindows && p<sBuf+BUF_SIZE-1 && p[0]=='#' && p[1]=='!' )
 	{
 		sBuf[BUF_SIZE-1] = '\0'; // just safety
 		fclose ( fp );
@@ -18327,11 +18332,6 @@ bool CheckConfigChanges ( CSphVector<char>& dContent )
 		fclose ( fp );
 		uCRC32 = sphCRC32 ( dContent.Begin (), dContent.GetLength ());
 	}
-#else
-	sphCalcFileCRC32 ( g_sConfigFile.cstr (), uCRC32 );
-	if ( stat ( g_sConfigFile.cstr (), &tStat )<0 )
-		memset ( &tStat, 0, sizeof ( tStat ) );
-#endif
 
 	if ( g_uCfgCRC32==uCRC32 && tStat.st_size==g_tCfgStat.st_size
 		&& tStat.st_mtime==g_tCfgStat.st_mtime && tStat.st_ctime==g_tCfgStat.st_ctime )

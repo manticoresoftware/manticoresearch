@@ -4286,6 +4286,7 @@ class PollEvents_c : public ISphNetPoller, public TimeoutEvents_c
 			return;
 
 		m_dDefferedRemove.Uniq ();
+		// need to walk removal index list backward to remove items from m_dWork that just passed by
 		m_dDefferedRemove.RSort ();
 
 		for ( int iToRemove:m_dDefferedRemove )
@@ -4294,6 +4295,9 @@ class PollEvents_c : public ISphNetPoller, public TimeoutEvents_c
 			RemoveTimeout ( pEvent );
 			m_dEvents.RemoveFast ( iToRemove );
 			m_dWork.RemoveFast ( iToRemove );
+			// restore index
+			if ( iToRemove<m_dWork.GetLength() )
+				m_dWork[iToRemove]->m_tBack.iIdx = iToRemove;
 		}
 		m_dDefferedRemove.Resize (0);
 	}
@@ -4437,7 +4441,7 @@ private:
 	int	m_iMaxSocket = 0;
 	int m_iReady = 0;
 	int m_iLastReportedErrno = -1;
-	friend struct NetPollReadyIterator_c;
+	friend class NetPollReadyIterator_c;
 
 	void RemoveDeffered ()
 	{
@@ -4453,6 +4457,9 @@ private:
 			RemoveTimeout ( pEvent );
 			m_dSockets.RemoveFast ( iToRemove );
 			m_dWork.RemoveFast ( iToRemove );
+			// restore index
+			if ( iToRemove<m_dWork.GetLength() )
+				m_dWork[iToRemove]->m_tBack.iIdx = iToRemove;
 		}
 		m_dDefferedRemove.Resize ( 0 );
 	}

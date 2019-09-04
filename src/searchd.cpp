@@ -15689,10 +15689,13 @@ static void AddQueryStats ( IDataTupleter & tOut, const char * szPrefix, const Q
 	for ( int i = 0; i < INTERVAL_TOTAL; ++i )
 	{
 		sBuf.Clear();
-		ScopedComma_c VARIABLE_IS_NOT_USED tRootBlock( sBuf, ", ", R"({"queries":)", "}" );
-		sBuf << tStats.m_dStats[i].m_uTotalQueries;
-		for ( int j = 0; j < TYPE_TOTAL; ++j )
-			FormatFn ( sBuf, tStats.m_dStats[i].m_uTotalQueries, tStats.m_dStats[i].m_dData[j], dStatTypeNames[j] );
+		{
+			ScopedComma_c VARIABLE_IS_NOT_USED tRootBlock( sBuf, ", ", R"({"queries":)", "}" );
+			sBuf << tStats.m_dStats[i].m_uTotalQueries;
+			for ( int j = 0; j < TYPE_TOTAL; ++j )
+				FormatFn ( sBuf, tStats.m_dStats[i].m_uTotalQueries,
+						tStats.m_dStats[i].m_dData[j], dStatTypeNames[j] );
+		}
 
 		sName.Clear();
 		sName << szPrefix << "_" << dStatIntervalNames[i];

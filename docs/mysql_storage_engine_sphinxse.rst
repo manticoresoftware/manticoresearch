@@ -538,7 +538,7 @@ Building snippets (excerpts) via MySQL
 
 SphinxSE also includes a UDF function that lets you create snippets
 through MySQL. The functionality is fully similar to
-:ref:`BuildExcerprts <build_excerpts>` API
+:ref:`BuildExcerpts <build_excerpts>` API
 call but accessible through MySQL+SphinxSE.
 
 The binary that provides the UDF is named ``sphinx.so`` and should be
@@ -563,7 +563,7 @@ Document and words arguments can be either strings or table columns.
 Options must be specified like this:
 ``'value' AS option_name``. For a list of supported options,
 refer to
-:ref:`BuildExcerprts() <build_excerpts>` API
+:ref:`BuildExcerpts() <build_excerpts>` API
 call. The only UDF-specific additional option is named
 ``sphinx`` and lets you specify searchd location (host and
 port).

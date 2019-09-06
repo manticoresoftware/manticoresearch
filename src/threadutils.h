@@ -128,6 +128,45 @@ List_t& GetUnsafeUnlockedUnprotectedGlobalThreadList();
 // Trivial vec of global thread descriptors
 CSphSwapVector<ThdPublicInfo_t> GetGlobalThreadInfos ();
 
+//////////////////////////////////////////////////////////////////////////
+/// functional threadpool with minimum footprint
+using Handler = std::function<void ()>;
+using Predicate = std::function<bool ()>;
+using Handlers = std::initializer_list<Handler>;
+
+struct Service_i
+{
+	virtual ~Service_i() {}
+//	virtual void post() = 0;
+	virtual void run() = 0;
+	virtual void reset() = 0;
+};
+
+struct Scheduler_i
+{
+	virtual ~Scheduler_i() {};
+	virtual void Schedule ( Handler handler ) = 0;
+	virtual const char * szName () const { return "<unknown>"; }
+};
+
+class ThreadPool_c : public Scheduler_i
+{
+public:
+	explicit ThreadPool_c ( size_t threadCount, const char * name = "" );
+
+	~ThreadPool_c () override;
+
+	void Schedule ( Handler handler ) override;
+
+	const char * szName () const override;
+
+	void Wait ();
+
+private:
+	struct Impl_t;
+	Impl_t* m_pImpl = nullptr;
+};
+
 } // namespace Threads
 
 

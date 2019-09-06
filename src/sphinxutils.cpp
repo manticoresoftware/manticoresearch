@@ -4021,3 +4021,22 @@ BYTE Pearson8 ( const BYTE * pBuf, int iLen )
 
 	return iNew;
 }
+
+
+namespace { // to make logMutex static inside .o
+	CSphMutex & logMutex ()
+	{
+		return Single_T<CSphMutex, LogMessage_t> ();
+	}
+}
+
+LogMessage_t::LogMessage_t ()
+{
+	logMutex ().Lock ();
+}
+
+LogMessage_t::~LogMessage_t ()
+{
+	logMutex ().Unlock ();
+	sphLogDebug ( "%s\n", m_dLog.cstr() );
+}

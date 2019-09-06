@@ -3802,6 +3802,21 @@ public:
 	}
 };
 
+
+/// a singleton. Since C++11 it is thread-safe, and so, looks really simple
+template<typename T, typename T_tag = T>
+T & Single_T ()
+{
+	static T t;
+	return t;
+}
+
+template<typename T, typename T_tag = T>
+const T & SingleC_T ()
+{
+	return Single_T<T, T_tag> ();
+}
+
 #if !USE_WINDOWS
 /// what kind of threading lib do we have? The number of frames in the stack depends from it
 bool sphIsLtLib();
@@ -5264,5 +5279,30 @@ void sphDeallocatePacked ( BYTE * pBlob );
 
 DWORD		sphUnzipInt ( const BYTE * & pBuf );
 SphOffset_t sphUnzipOffset ( const BYTE * & pBuf );
+
+
+// fast diagnostic logging.
+// Being a macro, it will be optimized out by compiler when not in use
+
+struct LogMessage_t
+{
+	LogMessage_t ();
+	~LogMessage_t ();
+
+	template<typename T>
+	LogMessage_t & operator<< ( T && t )
+	{
+		m_dLog << std::forward<T> ( t );
+		return *this;
+	}
+
+private:
+	StringBuilder_c m_dLog;
+};
+
+#define LOG_MSG LogMessage_t {}
+#define LOG( Level, Component ) \
+    if (LOG_LEVEL_##Level) \
+        LOG_MSG << LOG_COMPONENT_##Component
 
 #endif // _sphinxstd_

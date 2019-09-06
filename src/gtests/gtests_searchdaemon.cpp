@@ -38,32 +38,31 @@ class tstlogger
 	// test helper log - logs into sLogBuff.
 	static void TestLogger ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	{
-		if ( eLevel>=SPH_LOG_DEBUG )
+		if ( eLevel>m_eMaxLevel )
 			return;
 
-		const char * lvl = "";
-		switch ( eLevel )
-		{
-		case SPH_LOG_FATAL: lvl = "FATAL: ";
-			break;
-		case SPH_LOG_WARNING:
-		case SPH_LOG_INFO: lvl = "WARNING: ";
-			break;
-		case SPH_LOG_DEBUG:
-		case SPH_LOG_RPL_DEBUG:
-		case SPH_LOG_VERBOSE_DEBUG:
-		case SPH_LOG_VERY_VERBOSE_DEBUG:
-		default:
-			lvl = "DEBUG: ";
-			break;
-		}
-		char * pOut = sLogBuff;
 		if ( m_bOutToStderr )
-		{
-			fprintf ( stderr, "%s", lvl );
 			vfprintf ( stderr, sFmt, ap);
-		} else
+		else
 		{
+			const char * lvl = "";
+			switch (eLevel) {
+			case SPH_LOG_FATAL:
+				lvl = "FATAL: ";
+				break;
+			case SPH_LOG_WARNING:
+			case SPH_LOG_INFO:
+				lvl = "WARNING: ";
+				break;
+			case SPH_LOG_DEBUG:
+			case SPH_LOG_RPL_DEBUG:
+			case SPH_LOG_VERBOSE_DEBUG:
+			case SPH_LOG_VERY_VERBOSE_DEBUG:
+			default:
+				lvl = "DEBUG: ";
+				break;
+			}
+			char * pOut = sLogBuff;
 			pOut += sprintf( pOut, "%s", lvl );
 			vsprintf( pOut, sFmt, ap );
 		}
@@ -78,10 +77,20 @@ protected:
 
 	static char sLogBuff[1024];
 	static bool m_bOutToStderr;
+	static ESphLogLevel m_eMaxLevel;
+
+public:
+	static void SetStderrLogger()
+	{
+		m_eMaxLevel = SPH_LOG_DEBUG;
+		m_bOutToStderr = true;
+		g_pLogger () = TestLogger;
+	}
 };
 
 char tstlogger::sLogBuff[1024];
 bool tstlogger::m_bOutToStderr = false;
+ESphLogLevel tstlogger::m_eMaxLevel = SPH_LOG_INFO;
 
 
 class CustomLogger_c: protected tstlogger, public ::testing::Test
@@ -102,6 +111,11 @@ protected:
 		tstlogger::setup();
 	}
 };
+
+void SetStderrLogger()
+{
+	tstlogger::SetStderrLogger ();
+}
 
 // check how ParseAddressPort holds different cases
 class T_ParseAddressPort :  public CustomLogger_c
@@ -1067,6 +1081,6 @@ TEST_F ( DeathLogger_c, ParseListener_wrong_port )
 	for ( const auto& sCase : dTable )
 	{
 		EXPECT_EXIT( ParseListener( sCase.sSpec ), ::testing::ExitedWithCode( 1 ),
-					 "FATAL: port 65536 is out of range" ) << sCase.sSpec;
+					 "port 65536 is out of range" ) << sCase.sSpec;
 	}
 }

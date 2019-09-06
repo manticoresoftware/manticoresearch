@@ -351,6 +351,29 @@ Example:
 
     dist_threads = 4
 
+
+.. _docstore_cache_size:
+
+docstore_cache_size
+~~~~~~~~~~~~~~~~~~~
+Maximum size of document blocks from document storage that are held in
+memory. Optional, default is 16m.
+
+When `stored_fields` is used, document blocks are read from disk and
+uncompressed. Since every block typically holds several documents, it
+may be reused when processing the next document. For this purpose,
+the block is held in a daemon-wide cache. The cache holds uncompressed
+blocks.
+
+Example:
+
+
+.. code-block:: ini
+
+
+    docstore_cache_size = 8m
+
+
 .. _expansion_limit:
 
 expansion_limit

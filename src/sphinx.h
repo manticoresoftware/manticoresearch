@@ -1339,6 +1339,12 @@ enum ESphAggrFunc
 /// source column info
 struct CSphColumnInfo
 {
+	enum FieldFlag_e
+	{
+		FIELD_NONE		= 0,
+		FIELD_STORED	= 1<<0
+	};
+
 	CSphString		m_sName;		///< column name
 	ESphAttr		m_eAttrType;	///< attribute type
 	ESphWordpart	m_eWordpart { SPH_WORDPART_WHOLE };	///< wordpart processing type
@@ -1357,6 +1363,7 @@ struct CSphColumnInfo
 	bool			m_bPayload = false;
 	bool			m_bFilename = false;		///< column is a file name
 	bool			m_bWeight = false;			///< is a weight column
+	DWORD			m_uFieldFlags = 0;			///< stored/indexed/highlighted etc
 
 	WORD			m_uNext = 0xFFFF;			///< next in linked list for hash in CSphSchema
 
@@ -1412,6 +1419,9 @@ public:
 	/// get attribute index by name, returns -1 if not found
 	virtual int						GetAttrIndex ( const char * sName ) const = 0;
 
+	/// get field index by name, returns -1 if not found
+	virtual int						GetFieldIndex ( const char * sName ) const = 0;
+	
 	/// get attr by index
 	virtual const CSphColumnInfo &	GetAttr ( int iIndex ) const = 0;
 
@@ -1498,11 +1508,11 @@ public:
 
 	/// get field index by name
 	/// returns -1 if not found
-	virtual int				GetFieldIndex ( const char * sName ) const;
+	int						GetFieldIndex ( const char * sName ) const final;
 
 	/// get attribute index by name
 	/// returns -1 if not found
-	virtual int				GetAttrIndex ( const char * sName ) const;
+	int						GetAttrIndex ( const char * sName ) const final;
 
 	/// checks if two schemas fully match (ie. fields names, attr names, types and locators are the same)
 	/// describe mismatch (if any) to sError
@@ -1557,6 +1567,9 @@ public:
 
 	bool					HasBlobAttrs() const;
 	int						GetCachedRowSize() const;
+	void					SetupStoredFields ( const StrVec_t & tFields );
+	bool					HasStoredFields() const;
+	bool					IsFieldStored ( int iField ) const;
 
 protected:
 	static const int			HASH_THRESH		= 32;
@@ -1619,6 +1632,7 @@ public:
 	int					GetAttrsCount() const final;
 	int					GetFieldsCount() const final;
 	int					GetAttrIndex ( const char * sName ) const final;
+	int					GetFieldIndex ( const char * sName ) const final;
 	const CSphColumnInfo &	GetField ( int iIndex ) const final;
 	const CSphVector<CSphColumnInfo> & GetFields () const final;
 	const CSphColumnInfo &	GetAttr ( int iIndex ) const final;
@@ -1715,6 +1729,7 @@ struct CSphSourceSettings
 
 	StrVec_t m_dPrefixFields;	///< list of prefix fields
 	StrVec_t m_dInfixFields;	///< list of infix fields
+	StrVec_t m_dStoredFields;	///< list of stored fields
 
 	ESphWordpart			GetWordpart ( const char * sField, bool bWordDict );
 };
@@ -1807,6 +1822,7 @@ public:
 	/// returns string attributes for a given attribute
 	virtual const CSphString & GetStrAttr ( int iAttr ) = 0;
 };
+
 
 /// generic data source
 class CSphSource : public CSphSourceSettings, public BlobSource_i
@@ -1901,6 +1917,9 @@ public:
 	/// notification that a rowid was assigned to a specific docid (used by joined fields)
 	virtual void						RowIDAssigned ( DocID_t tDocID, RowID_t tRowID ) {}
 
+	/// fetch fields for a current document
+	virtual void						GetDocFields ( CSphVector<VecTraits_T<BYTE>> & dFields ) = 0;
+
 	/// begin iterating kill list
 	virtual bool						IterateKillListStart ( CSphString & sError ) = 0;
 
@@ -1968,6 +1987,7 @@ public:
 
 	CSphVector<int64_t> *	GetFieldMVA ( int iAttr ) override;
 	const CSphString &		GetStrAttr ( int iAttr ) override;
+	void					GetDocFields ( CSphVector<VecTraits_T<BYTE>> & dFields ) override;
 
 	void					RowIDAssigned ( DocID_t tDocID, RowID_t tRowID ) override;
 
@@ -2030,6 +2050,7 @@ protected:
 
 	CSphBuildHitsState_t	m_tState;
 	int						m_iMaxHits;
+	CSphVector<CSphVector<BYTE>> m_dDocFields;
 };
 
 struct CSphUnpackInfo
@@ -2729,12 +2750,14 @@ public:
 
 /// search query result (meta-info plus actual matches)
 class CSphQueryProfile;
+class DocstoreReader_i;
 class CSphQueryResult : public CSphQueryResultMeta
 {
 public:
 	CSphSwapVector<CSphMatch>	m_dMatches;			///< top matching documents, no more than MAX_MATCHES
 	CSphSchema				m_tSchema;				///< result schema
-	const BYTE *			m_pBlobPool {nullptr};	///< pointer to MVA storage
+	const BYTE *			m_pBlobPool = nullptr;	///< pointer to blob attr storage
+	const DocstoreReader_i* m_pDocstore = nullptr;	///< pointer to docstore reader
 	int						m_iOffset = 0;			///< requested offset into matches array
 	int						m_iCount = 0;			///< count which will be actually served (computed from total, offset and limit)
 	int						m_iSuccesses = 0;
@@ -3061,7 +3084,26 @@ struct KillListTarget_t
 };
 
 
-struct CSphIndexSettings : CSphSourceSettings
+enum class Compression_e
+{
+	NONE,
+	LZ4,
+	LZ4HC
+};
+
+
+const DWORD DEFAULT_DOCSTORE_BLOCK = 16384;
+const int DEFAULT_COMPRESSION_LEVEL = 9;
+
+struct DocstoreSettings_t
+{
+	Compression_e	m_eCompression		= Compression_e::LZ4;
+	int				m_iCompressionLevel	= DEFAULT_COMPRESSION_LEVEL;
+	DWORD			m_uBlockSize		= DEFAULT_DOCSTORE_BLOCK;
+};
+
+
+struct CSphIndexSettings : CSphSourceSettings, DocstoreSettings_t
 {
 	ESphHitFormat	m_eHitFormat = SPH_HIT_FORMAT_PLAIN;
 	bool			m_bHtmlStrip = false;
@@ -3273,6 +3315,33 @@ private:
 	int		m_iSegment {-1};
 };
 
+
+class DocstoreFields_i;
+void SetupDocstoreFields ( DocstoreFields_i & tFields, const CSphSchema & tSchema );
+
+
+struct DocstoreDoc_t
+{
+	CSphVector<CSphVector<BYTE>> m_dFields;
+};
+
+
+enum DocstoreDataType_e
+{
+	DOCSTORE_TEXT,
+	DOCSTORE_BIN
+};
+
+
+// used to fetch documents from docstore by docids
+class DocstoreReader_i
+{
+public:
+	virtual bool	GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds ) const = 0;
+	virtual int		GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const = 0;
+};
+
+
 enum class FileAccess_e
 {
 	FILE,
@@ -3302,7 +3371,7 @@ struct FileAccessSettings_t
 };
 
 /// generic fulltext index interface
-class CSphIndex : public ISphKeywordsStat, public IndexSegment_c
+class CSphIndex : public ISphKeywordsStat, public IndexSegment_c, public DocstoreReader_i
 {
 public:
 	explicit					CSphIndex ( const char * sIndexName, const char * sFilename );
@@ -3402,6 +3471,9 @@ public:
 	virtual bool				AlterKillListTarget ( CSphVector<KillListTarget_t> & dTargets, CSphString & sError ) { return false; }
 	virtual void				KillExistingDocids ( CSphIndex * pTarget ) {}
 	virtual int					KillMulti ( const VecTraits_T<DocID_t> & dKlist ) { return 0; }
+
+	bool						GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds=nullptr ) const override { return false; }
+	int							GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const override { return -1; }
 
 public:
 	/// internal debugging hook, DO NOT USE

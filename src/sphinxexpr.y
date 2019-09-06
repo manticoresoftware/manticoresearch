@@ -36,6 +36,7 @@
 %token <iNode>			TOK_HOOK_FUNC
 %token <sIdent>			TOK_IDENT
 %token <iAttrLocator>	TOK_ATTR_JSON
+%token <iAttrLocator>	TOK_FIELD
 
 
 %token	TOK_ATWEIGHT
@@ -100,6 +101,7 @@ attr:
 	| TOK_ATTR_JSON					{ $$ = pParser->AddNodeAttr ( TOK_ATTR_JSON, $1 ); }
 	| TOK_ATTR_MVA32				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA32, $1 ); }
 	| TOK_ATTR_MVA64				{ $$ = pParser->AddNodeAttr ( TOK_ATTR_MVA64, $1 ); }
+	| TOK_FIELD						{ $$ = pParser->AddNodeField ( TOK_FIELD, $1 ); }
 	| '`' attr '`'					{ $$ = $2; }
 	;
 
@@ -149,6 +151,7 @@ maparg:
 map_key:
 	ident							{ $$ = $1; }
 	| TOK_ATTR_STRING				{ $$ = pParser->Attr2Ident($1); }
+	| TOK_FIELD						{ $$ = pParser->Field2Ident($1); }
 	| TOK_FUNC_IN					{ $$ = "in"; }
 	| TOK_FUNC_RAND					{ $$ = "rand"; }
 	;

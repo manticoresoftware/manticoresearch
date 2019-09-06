@@ -765,6 +765,10 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "access_blob_attrs",		0, nullptr },
 	{ "access_doclists",		0, nullptr },
 	{ "access_hitlists",		0, nullptr },
+	{ "stored_fields",			0, nullptr },
+	{ "docstore_block_size",	0, nullptr },
+	{ "docstore_compression",	0, nullptr },
+	{ "docstore_compression_level",	0, nullptr },
 	{ nullptr,					0, nullptr }
 };
 
@@ -871,6 +875,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "access_blob_attrs",		0, nullptr },
 	{ "access_doclists",		0, nullptr },
 	{ "access_hitlists",		0, nullptr },
+	{ "docstore_cache_size",	0, nullptr },
 	{ "ssl_cert",				0, nullptr },
 	{ "ssl_key",				0, nullptr },
 	{ "ssl_ca",					0, nullptr },
@@ -1634,7 +1639,62 @@ bool ParseKillListTargets ( const CSphString & sTargets, CSphVector<KillListTarg
 }
 
 
-bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings, const char * szIndexName, CSphString & sError )
+bool ParseDocstoreSettings ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings, CSphString & sWarning, CSphString & sError )
+{
+	tSettings.m_uBlockSize = hIndex.GetSize ( "docstore_block_size", DEFAULT_DOCSTORE_BLOCK );
+	tSettings.m_iCompressionLevel = hIndex.GetInt ( "docstore_compression_level", DEFAULT_COMPRESSION_LEVEL );
+
+	if ( !hIndex.Exists("docstore_compression") )
+		return true;
+
+	CSphString sCompression = hIndex["docstore_compression"].cstr();
+
+	if ( sCompression=="none" )
+		tSettings.m_eCompression = Compression_e::NONE;
+	else if ( sCompression=="lz4" )
+		tSettings.m_eCompression = Compression_e::LZ4;
+	else if ( sCompression=="lz4hc" )
+		tSettings.m_eCompression = Compression_e::LZ4HC;
+	else
+	{
+		sError.SetSprintf ( "unknown compression specified in 'docstore_compression': '%s'\n", sCompression.cstr() ); 
+		return false;
+	}
+
+	if ( hIndex.Exists("docstore_compression_level") && tSettings.m_eCompression!=Compression_e::LZ4HC )
+		sWarning.SetSprintf ( "docstore_compression_level works only with LZ4HC compression" ); 
+
+	return true;
+}
+
+
+bool CheckStoredFields ( const CSphSchema & tSchema, const CSphIndexSettings & tSettings, CSphString & sError )
+{
+	for ( const auto & i : tSettings.m_dStoredFields )
+		if ( tSchema.GetAttr ( i.cstr() ) )
+		{
+			sError.SetSprintf ( "existing attribute specified in stored_fields: '%s'\n", i.cstr() ); 
+			return false;
+		}
+
+	return true;
+}
+
+
+static bool ParseStoredFields ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings, const CSphSchema * pSchema, CSphString & sError )
+{
+	CSphString sFields = hIndex.GetStr ( "stored_fields" );
+	sFields.ToLower();
+	sphSplit ( tSettings.m_dStoredFields, sFields.cstr() );
+
+	if ( pSchema && !CheckStoredFields ( *pSchema, tSettings, sError ) )
+		return false;
+
+	return true;
+}
+
+
+bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings, const char * szIndexName, const CSphSchema * pSchema, CSphString & sError )
 {
 	// misc settings
 	tSettings.m_iMinPrefixLen = Max ( hIndex.GetInt ( "min_prefix_len" ), 0 );
@@ -1663,6 +1723,9 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 	sFields.ToLower();
 	sphSplit ( tSettings.m_dInfixFields, sFields.cstr() );
 
+	if ( !ParseStoredFields ( hIndex, tSettings, pSchema, sError ) )
+		return false;
+
 	if ( tSettings.m_iMinPrefixLen==0 && tSettings.m_dPrefixFields.GetLength()!=0 )
 	{
 		fprintf ( stdout, "WARNING: min_prefix_len=0, prefix_fields ignored\n" );
@@ -1685,6 +1748,7 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 
 	tSettings.m_dPrefixFields.Uniq();
 	tSettings.m_dInfixFields.Uniq();
+	tSettings.m_dStoredFields.Uniq();
 
 	ARRAY_FOREACH ( i, tSettings.m_dPrefixFields )
 		if ( tSettings.m_dInfixFields.Contains ( tSettings.m_dPrefixFields[i] ) )
@@ -1704,6 +1768,13 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 		sError.SetSprintf ( "max_substring_len=%d is less than min_prefix_len=%d", tSettings.m_iMaxSubstringLen, tSettings.m_iMinPrefixLen );
 		return false;
 	}
+
+	CSphString sWarning;
+	if ( !ParseDocstoreSettings ( hIndex, tSettings, sWarning, sError ) )
+		return false;
+
+	if ( !sWarning.IsEmpty() )
+		fprintf ( stdout, "WARNING: %s\n", sWarning.cstr() );
 
 	auto sIndexType = hIndex.GetStr ( "dict", "keywords" );
 

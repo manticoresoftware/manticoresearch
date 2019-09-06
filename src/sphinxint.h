@@ -14,6 +14,7 @@
 #define _sphinxint_
 
 #include "sphinx.h"
+#include "sphinxstd.h"
 #include "sphinxfilter.h"
 #include "sphinxquery.h"
 #include "sphinxexcerpt.h"
@@ -70,7 +71,7 @@ inline const char * strerrorm ( int errnum )
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
-const DWORD		INDEX_FORMAT_VERSION		= 56;				///< my format version
+const DWORD		INDEX_FORMAT_VERSION		= 57;				///< my format version
 
 const char		MAGIC_SYNONYM_WHITESPACE	= 1;				// used internally in tokenizer only
 const char		MAGIC_CODE_SENTENCE			= 2;				// emitted from tokenizer on sentence boundary
@@ -249,7 +250,7 @@ public:
 	void			CloseFile ( bool bTruncate = false );	///< note: calls Flush(), ie. IsError() might get true after this call
 	void			UnlinkFile (); /// some shit happened (outside) and the file is no more actual.
 
-	void			PutByte ( int uValue );
+	void			PutByte ( BYTE uValue );
 	void			PutBytes ( const void * pData, int64_t iSize );
 	void			PutWord ( WORD uValue ) { PutBytes ( &uValue, sizeof(WORD) ); }
 	void			PutDword ( DWORD uValue ) { PutBytes ( &uValue, sizeof(DWORD) ); }
@@ -410,11 +411,6 @@ public:
 
 class MemoryReader_c
 {
-private:
-	const BYTE * m_pData = nullptr;
-	const int m_iLen = 0;
-	const BYTE * m_pCur = nullptr;
-
 public:
 	MemoryReader_c ( const BYTE * pData, int iLen )
 		: m_pData ( pData )
@@ -488,13 +484,20 @@ public:
 		GetBytes ( &uVal, sizeof(uVal) );
 		return uVal;
 	}
+
+	const BYTE * Begin() const
+	{
+		return m_pData;
+	}
+
+protected:
+	const BYTE * m_pData = nullptr;
+	const int m_iLen = 0;
+	const BYTE * m_pCur = nullptr;
 };
 
 class MemoryWriter_c
 {
-private:
-	CSphVector<BYTE> & m_dBuf;
-
 public:
 	MemoryWriter_c ( CSphVector<BYTE> & dBuf )
 		: m_dBuf ( dBuf )
@@ -554,6 +557,33 @@ public:
 	{
 		PutBytes ( (BYTE *)&uVal, sizeof(uVal) );
 	}
+
+protected:
+	CSphVector<BYTE> & m_dBuf;
+};
+
+// fixme: get rid of this
+class MemoryReader2_c : public MemoryReader_c
+{
+public:
+	MemoryReader2_c ( const BYTE * pData, int iLen )
+		: MemoryReader_c ( pData, iLen )
+	{}
+
+	uint64_t UnzipInt() { return sphUnzipInt(m_pCur); }
+	uint64_t UnzipOffset() { return sphUnzipOffset(m_pCur); }
+};
+
+// fixme: get rid of this
+class MemoryWriter2_c : public MemoryWriter_c
+{
+public:
+	MemoryWriter2_c ( CSphVector<BYTE> & dBuf )
+		: MemoryWriter_c ( dBuf )
+	{}
+
+	void ZipOffset ( uint64_t uVal ) { sphZipValue ( uVal, (MemoryWriter_c*)this, &MemoryWriter_c::PutByte ); }
+	void ZipInt ( DWORD uVal ) { sphZipValue ( uVal, (MemoryWriter_c*)this, &MemoryWriter_c::PutByte ); }
 };
 
 
@@ -870,6 +900,31 @@ private:
 
 	void						ResetLocal();
 	void						FlushComputed();
+};
+
+
+class Docstore_c;
+struct PoolPtrs_t
+{
+	const DocstoreReader_i * m_pDocstore = nullptr;
+};
+
+
+class TaggedVector_c
+{
+public:
+	PoolPtrs_t & operator [] ( int iTag ) const
+	{
+		return m_dPool [ iTag & 0x7FFFFFF ];
+	}
+
+	void Resize ( int iSize )
+	{
+		m_dPool.Resize ( iSize );
+	}
+
+private:
+	CSphVector<PoolPtrs_t> m_dPool;
 };
 
 
@@ -1654,7 +1709,7 @@ bool			sphGetUnlinkOld ();
 void			sphUnlinkIndex ( const char * sName, bool bForce );
 
 void			WriteSchema ( CSphWriter & fdInfo, const CSphSchema & tSchema );
-void			ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema );
+void			ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema, DWORD uVersion );
 void			SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettings );
 void			LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion );
 void			SaveTokenizerSettings ( CSphWriter & tWriter, const ISphTokenizer * pTokenizer, int iEmbeddedLimit );
@@ -1714,6 +1769,7 @@ enum ESphExt
 	SPH_EXT_SPM,
 	SPH_EXT_SPT,
 	SPH_EXT_SPHI,
+	SPH_EXT_SPDS,
 	SPH_EXT_SPL,
 
 	SPH_EXT_TOTAL
@@ -2452,5 +2508,8 @@ typedef void CrashQuerySetTop_fn ( CrashQuery_t * pQuery );
 typedef CrashQuery_t CrashQueryGet_fn();
 typedef void CrashQuerySet_fn ( const CrashQuery_t & tCrash );
 void CrashQuerySetupHandlers ( CrashQuerySetTop_fn * pSetTop, CrashQueryGet_fn * pGet, CrashQuerySet_fn * pSet );
+
+// atomic seek+read wrapper
+int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset );
 
 #endif // _sphinxint_

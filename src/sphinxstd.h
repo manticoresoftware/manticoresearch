@@ -5144,7 +5144,7 @@ inline int sphCalcZippedLen ( T tValue )
 
 
 template <typename T, typename C>
-inline int sphZipValue ( T tValue, C * pClass, void (C::*fnPut)(int) )
+inline int sphZipValue ( T tValue, C * pClass, void (C::*fnPut)(BYTE) )
 {
 	int nBytes = sphCalcZippedLen ( tValue );
 	for ( int i = nBytes-1; i>=0; i-- )

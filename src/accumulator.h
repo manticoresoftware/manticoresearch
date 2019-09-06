@@ -98,29 +98,17 @@ public:
 	CSphDictRefPtr_c			m_pDict;
 	CSphDict *					m_pRefDict = nullptr; // not owned, used only for ==-matching
 
-private:
-	CSphRefcountedPtr<ISphRtDictWraper>	m_pDictRt;
-	bool						m_bReplace = false;		///< insert or replace mode (affects CleanupDuplicates() behavior)
-	BlobRowBuilder_i *			m_pBlobWriter {nullptr};
-	RowID_t						m_tNextRowID {0};
-	CSphFixedVector<BYTE>		m_dPackedKeywords { 0 };
-	void						ResetDict ();
 
-	// FIXME!!! index is unlocked between add data and commit or at begin and end
-	RtIndex_i *					m_pIndex = nullptr;		///< my current owner in this thread
-
-public:
 					explicit RtAccum_t ( bool bKeywordDict );
 					~RtAccum_t();
 
 	void			SetupDict ( const RtIndex_i * pIndex, CSphDict * pDict, bool bKeywordDict );
-	void			Sort ();
+	void			Sort();
 
-	void CleanupPart();
-	void Cleanup();
+	void			CleanupPart();
+	void			Cleanup();
 
-	void			AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, int iRowSize,
-		const char ** ppStr, const VecTraits_T<int64_t> & dMvas );
+	void			AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, int iRowSize, const char ** ppStr, const VecTraits_T<int64_t> & dMvas, const DocstoreBuilder_i::Doc_t * pStoredDoc );
 	RtSegment_t *	CreateSegment ( int iRowSize, int iWordsCheckpoint );
 	void			CleanupDuplicates ( int iRowSize );
 	void			GrabLastWarning ( CSphString & sWarning );
@@ -129,15 +117,29 @@ public:
 	RowID_t			GenerateRowID();
 	void			ResetRowID();
 
-	RtIndex_i * GetIndex() const { return m_pIndex; }
+	RtIndex_i *		GetIndex() const { return m_pIndex; }
 	ReplicationCommand_t * AddCommand ( ReplicationCommand_e eCmd );
 	ReplicationCommand_t * AddCommand ( ReplicationCommand_e eCmd, const CSphString & sCluster, const CSphString & sIndex );
 
-	void LoadRtTrx ( const BYTE * pData, int iLen );
-	void SaveRtTrx ( MemoryWriter_c & tWriter ) const;
+	void			LoadRtTrx ( const BYTE * pData, int iLen );
+	void			SaveRtTrx ( MemoryWriter_c & tWriter ) const;
 
-	const BYTE * GetPackedKeywords () const;
-	int GetPackedLen () const;
+	const BYTE *	GetPackedKeywords() const;
+	int				GetPackedLen() const;
+
+private:
+	CSphRefcountedPtr<ISphRtDictWraper>	m_pDictRt;
+	bool						m_bReplace = false;		///< insert or replace mode (affects CleanupDuplicates() behavior)
+	BlobRowBuilder_i *			m_pBlobWriter {nullptr};
+	CSphScopedPtr<DocstoreRT_i>	m_pDocstore {nullptr};
+	RowID_t						m_tNextRowID {0};
+	CSphFixedVector<BYTE>		m_dPackedKeywords { 0 };
+	void						ResetDict ();
+
+	// FIXME!!! index is unlocked between add data and commit or at begin and end
+	RtIndex_i *					m_pIndex = nullptr;		///< my current owner in this thread
+
+	void			SetupDocstore();
 };
 
 #endif // _accumulator_

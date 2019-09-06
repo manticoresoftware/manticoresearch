@@ -19,6 +19,7 @@
 #include "sphinxint.h"
 #include "killlist.h"
 #include "attribute.h"
+#include "docstore.h"
 
 struct CSphReconfigureSettings;
 struct CSphReconfigureSetup;
@@ -169,43 +170,51 @@ struct RtWordCheckpoint_t
 // RAM chunk consists of such segments
 struct RtSegment_t : IndexSegment_c, ISphRefcountedMT
 {
-private:
-	~RtSegment_t () final;
 public:
-	static CSphAtomic m_iSegments;    ///< age tag sequence generator
-	int m_iTag;            ///< segment age tag
+	static CSphAtomic	m_iSegments;		///< age tag sequence generator
+	int					m_iTag;            ///< segment age tag
 
-	CSphTightVector<BYTE> m_dWords;
-	CSphVector<RtWordCheckpoint_t> m_dWordCheckpoints;
-	CSphTightVector<uint64_t> m_dInfixFilterCP;
-	CSphTightVector<BYTE> m_dDocs;
-	CSphTightVector<BYTE> m_dHits;
+	CSphTightVector<BYTE>			m_dWords;
+	CSphVector<RtWordCheckpoint_t>	m_dWordCheckpoints;
+	CSphTightVector<uint64_t>		m_dInfixFilterCP;
+	CSphTightVector<BYTE>			m_dDocs;
+	CSphTightVector<BYTE>			m_dHits;
 
-	DWORD m_uRows { 0 };        ///< number of actually allocated rows
-	CSphAtomic_T<int64_t> m_tAliveRows { 0 };    ///< number of alive (non-killed) rows
-	CSphTightVector<CSphRowitem> m_dRows;            ///< row data storage
-	CSphTightVector<BYTE> m_dBlobs;            ///< storage for blob attrs
-	CSphVector<BYTE> m_dKeywordCheckpoints;
-	CSphAtomicL * m_pRAMCounter = nullptr; ///< external RAM counter
-	OpenHash_T<RowID_t, DocID_t> m_tDocIDtoRowID; ///< speeds up docid-rowid lookups
-	DeadRowMap_Ram_c m_tDeadRowMap;
+	DWORD							m_uRows { 0 };        ///< number of actually allocated rows
+	CSphAtomic_T<int64_t>			m_tAliveRows { 0 };    ///< number of alive (non-killed) rows
+	CSphTightVector<CSphRowitem>	m_dRows;            ///< row data storage
+	CSphTightVector<BYTE>			m_dBlobs;            ///< storage for blob attrs
+	CSphVector<BYTE>				m_dKeywordCheckpoints;
+	CSphAtomicL *					m_pRAMCounter = nullptr; ///< external RAM counter
+	OpenHash_T<RowID_t, DocID_t>	m_tDocIDtoRowID; ///< speeds up docid-rowid lookups
+	DeadRowMap_Ram_c				m_tDeadRowMap;
+	CSphScopedPtr<DocstoreRT_i>		m_pDocstore{nullptr};
 
-	RtSegment_t ( DWORD uDocs );
 
-	int64_t GetUsedRam () const;
-	void FixupRAMCounter ( int64_t iDelta ) const;
+							RtSegment_t ( DWORD uDocs );
 
-	DWORD GetMergeFactor () const;
-	int GetStride () const;
+	int64_t					GetUsedRam();				// get cached ram usage counter
+	void					UpdateUsedRam();			// recalculate ram usage, update index ram counter
+	DWORD					GetMergeFactor() const;
+	int						GetStride() const;
+
 	const CSphRowitem *		FindRow ( DocID_t tDocid ) const;
 	const CSphRowitem *		FindAliveRow ( DocID_t tDocid ) const;
 	const CSphRowitem *		GetDocinfoByRowID ( RowID_t tRowID ) const;
 	RowID_t					GetRowidByDocid ( DocID_t tDocID ) const;
 
-	int Kill ( DocID_t tDocID ) override;
-	int KillMulti ( const VecTraits_T<DocID_t> & dKlist ) override;
+	int						Kill ( DocID_t tDocID ) override;
+	int						KillMulti ( const VecTraits_T<DocID_t> & dKlist ) override;
 
-	void BuildDocID2RowIDMap ();
+	void					SetupDocstore ( const CSphSchema * pSchema );
+	void					BuildDocID2RowIDMap();
+
+private:
+	int64_t					m_iUsedRam = 0;			///< ram usage counter
+
+							~RtSegment_t () final;
+
+	void					FixupRAMCounter ( int64_t iDelta ) const;
 };
 
 using RtSegmentRefPtf_t = CSphRefcountedPtr<RtSegment_t>;

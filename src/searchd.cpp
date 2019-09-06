@@ -28,6 +28,7 @@
 #include "threadutils.h"
 #include "searchdtask.h"
 #include "global_idf.h"
+#include "docstore.h"
 #include "searchdssl.h"
 
 // services
@@ -168,6 +169,8 @@ static int				g_iMaxFilters		= 256;
 static int				g_iMaxFilterValues	= 4096;
 static int				g_iMaxBatchQueries	= 32;
 static ESphCollation	g_eCollation = SPH_COLLATION_DEFAULT;
+
+static int				g_iDocstoreCache = 0;
 
 static FileAccessSettings_t g_tDefaultFA;
 
@@ -737,6 +740,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	ReplicateClustersDelete();
 
+	ShutdownDocstoreCache();
 	sphShutdownWordforms ();
 	sph::ShutdownGlobalIDFs ();
 	sphAotShutdown ();
@@ -3720,35 +3724,39 @@ void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes )
 	assert ( iCur==pRes->m_dMatches.GetLength() );
 }
 
-// rebuild the results itemlist expanding stars
-const CSphVector<CSphQueryItem> & ExpandAsterisk ( const ISphSchema & tSchema,
-	const CSphVector<CSphQueryItem> & tItems, CSphVector<CSphQueryItem> & tExpanded, bool bOnlyPlain, bool & bHaveExprs )
+
+static bool GetIndexSchemaItems ( const ISphSchema & tSchema, const CSphVector<CSphQueryItem> & dItems, CSphVector<int> & dAttrs, CSphVector<int> & dFields )
 {
-	// the result schema usually is the index schema + calculated items + @-items
-	// we need to extract the index schema only
-	CSphVector<int> dIndexSchemaItems;
 	bool bHaveAsterisk = false;
-	for ( const auto & i : tItems )
+	for ( const auto & i : dItems )
 	{
 		if ( i.m_sAlias.cstr() )
 		{
-			int j = tSchema.GetAttrIndex ( i.m_sAlias.cstr() );
-			if ( j>=0 )
-				dIndexSchemaItems.Add(j);
+			int iAttr = tSchema.GetAttrIndex ( i.m_sAlias.cstr() );
+			if ( iAttr>=0 )
+				dAttrs.Add(iAttr);
+			else
+			{
+				int iField = tSchema.GetFieldIndex ( i.m_sAlias.cstr() );
+				if ( iField>=0 )
+					dFields.Add(iField);
+			}
 		}
 
 		bHaveAsterisk |= i.m_sExpr=="*";
 	}
 
-	// no stars? Nothing to do.
-	if ( !bHaveAsterisk )
-		return tItems;
+	dAttrs.Sort();
+	dFields.Sort();
 
-	dIndexSchemaItems.Sort();
+	return bHaveAsterisk;
+}
 
-	// find items that are in index schema but not in our requested item list
-	// not do not include @-items
-	CSphVector<int> dItemsLeftInSchema;
+
+static bool GetItemsLeftInSchema ( const ISphSchema & tSchema, bool bOnlyPlain, const CSphVector<int> & dAttrs, const CSphVector<int> & dFields, CSphVector<int> & dAttrsInSchema )
+{	
+	bool bHaveExprs = false;
+
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
@@ -3761,27 +3769,53 @@ const CSphVector<CSphQueryItem> & ExpandAsterisk ( const ISphSchema & tSchema,
 				continue;
 		}
 
-		if ( tAttr.m_sName.cstr()[0]!='@' && !dIndexSchemaItems.BinarySearch(i) )
-			dItemsLeftInSchema.Add(i);
+		if ( tAttr.m_sName.cstr()[0]!='@' && !dAttrs.BinarySearch(i) )
+			dAttrsInSchema.Add(i);
 	}
 
+	return bHaveExprs;
+}
+
+
+static void DoExpansion ( const ISphSchema & tSchema, const CSphVector<int> & dAttrsInSchema, const CSphVector<CSphQueryItem> & dItems, CSphVector<CSphQueryItem> & tExpanded )
+{
 	bool bExpandedAsterisk = false;
-	ARRAY_FOREACH ( i, tItems )
+	for ( const auto & i : dItems )
 	{
-		if ( tItems[i].m_sExpr=="*" )
+		if ( i.m_sExpr=="*" )
 		{
 			if ( bExpandedAsterisk )
 				continue;
 
 			bExpandedAsterisk = true;
 
-			for ( auto j : dItemsLeftInSchema )
-				tExpanded.Add().m_sExpr = tSchema.GetAttr(j).m_sName;
-		} else
-		{
-			tExpanded.Add ( tItems[i] );
+			for ( auto iAttr : dAttrsInSchema )
+				tExpanded.Add().m_sExpr = tSchema.GetAttr(iAttr).m_sName;
 		}
+		else
+			tExpanded.Add(i);
 	}
+}
+
+
+// rebuild the results itemlist expanding stars
+const CSphVector<CSphQueryItem> & ExpandAsterisk ( const ISphSchema & tSchema, const CSphVector<CSphQueryItem> & dItems, CSphVector<CSphQueryItem> & tExpanded, bool bOnlyPlain, bool & bHaveExprs )
+{
+	// the result schema usually is the index schema + calculated items + @-items
+	// we need to extract the index schema only
+	CSphVector<int> dIndexSchemaAttrs, dIndexSchemaFields;
+	bool bHaveAsterisk = GetIndexSchemaItems ( tSchema, dItems, dIndexSchemaAttrs, dIndexSchemaFields );
+
+	// no stars? Nothing to do.
+	if ( !bHaveAsterisk )
+		return dItems;
+
+	// find items that are in index schema but not in our requested item list
+	// not do not include @-items
+	CSphVector<int> dAttrsLeftInSchema;
+	bHaveExprs = GetItemsLeftInSchema ( tSchema, bOnlyPlain, dIndexSchemaAttrs, dIndexSchemaFields, dAttrsLeftInSchema );
+
+	DoExpansion ( tSchema, dAttrsLeftInSchema, dItems, tExpanded );
 
 	return tExpanded;
 }
@@ -3987,6 +4021,10 @@ static void ProcessPostlimit ( const CSphVector<const CSphColumnInfo *> & dPostl
 			const CSphColumnInfo * pCol = dPostlimit[j];
 			assert ( pCol->m_pExpr );
 
+			// OPTIMIZE? only if the tag did not change?
+			const DocstoreReader_i * pDocstore = tRes.m_dTag2Docstore [ tMatch.m_iTag ].m_pDocstore;
+			pCol->m_pExpr->Command ( SPH_EXPR_SET_DOCSTORE, (void*)pDocstore);
+			
 			if ( pCol->m_eAttrType==SPH_ATTR_INTEGER )
 				tMatch.SetAttr ( pCol->m_tLocator, pCol->m_pExpr->IntEval(tMatch) );
 			else if ( pCol->m_eAttrType==SPH_ATTR_BIGINT )
@@ -4039,17 +4077,14 @@ static void ProcessLocalPostlimit ( const CSphQuery & tQuery, AggrResult_t & tRe
 }
 
 
-/// merges multiple result sets, remaps columns, does reorder for outer selects
-/// query is only (!) non-const to tweak order vs reorder clauses
-bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals,
-	const sph::StringSet& hExtraColumns, CSphQueryProfile * pProfiler,
-	const CSphFilterSettings * pAggrFilter, bool bForceRefItems )
+static bool VerifyMatchCounts ( AggrResult_t & tRes )
 {
 	// sanity check
 	// verify that the match counts are consistent
 	int iExpected = 0;
 	ARRAY_FOREACH ( i, tRes.m_dMatchCounts )
 		iExpected += tRes.m_dMatchCounts[i];
+
 	if ( iExpected!=tRes.m_dMatches.GetLength() )
 	{
 		tRes.m_sError.SetSprintf ( "INTERNAL ERROR: expected %d matches in combined result set, got %d",
@@ -4057,10 +4092,452 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 		return false;
 	}
 
+	return true;
+}
+
+
+static bool MinimizeSchemas ( AggrResult_t & tRes )
+{
+	bool bAllEqual = true;
+
+	// FIXME? add assert ( tRes.m_tSchema==tRes.m_dSchemas[0] );
+	for ( int i=1; i<tRes.m_dSchemas.GetLength(); i++ )
+		if ( !MinimizeSchema ( tRes.m_tSchema, tRes.m_dSchemas[i] ) )
+			bAllEqual = false;
+
+	return bAllEqual;
+}
+
+//////////////////////////////////////////////////////////////////////////
+class FrontendSchemaBuilder_c
+{
+public:
+			FrontendSchemaBuilder_c ( const AggrResult_t & tRes, const CSphQuery & tQuery, const CSphVector<CSphQueryItem> & dItems, const CSphVector<CSphQueryItem> & dQueryItems,
+				const sph::StringSet & hExtraColumns, bool bQueryFromAPI, bool bHaveLocals );
+
+	void	CollectKnownItems();
+	void	AddAttrs();
+
+	bool	CheckUnmapped ( CSphString & sError ) const;
+	void	Finalize();
+
+	void	RemapGroupBy();
+	void	RemapFacets();
+
+	void	SwapAttrs ( CSphSchema & tSchema );
+
+private:
+	const AggrResult_t &				m_tRes;
+	const CSphQuery &					m_tQuery;
+	const CSphVector<CSphQueryItem> &	m_dItems;
+	const CSphVector<CSphQueryItem> &	m_dQueryItems;
+	const sph::StringSet &				m_hExtraColumns;
+	bool								m_bQueryFromAPI;
+	bool								m_bHaveLocals;
+	bool								m_bAgent;
+
+	CSphVector<CSphColumnInfo>			m_dFrontend;
+	CSphVector<int>						m_dKnownAttrs;
+	CSphVector<int>						m_dUnmappedAttrs;
+};
+
+
+FrontendSchemaBuilder_c::FrontendSchemaBuilder_c ( const AggrResult_t & tRes, const CSphQuery & tQuery, const CSphVector<CSphQueryItem> & dItems, const CSphVector<CSphQueryItem> & dQueryItems, const sph::StringSet & hExtraColumns, bool bQueryFromAPI, bool bHaveLocals )
+	: m_tRes ( tRes )
+	, m_tQuery ( tQuery )
+	, m_dItems ( dItems )
+	, m_dQueryItems ( dQueryItems )
+	, m_hExtraColumns ( hExtraColumns )
+	, m_bQueryFromAPI ( bQueryFromAPI )
+	, m_bHaveLocals ( bHaveLocals )
+	, m_bAgent ( tQuery.m_bAgent )
+{
+	m_dFrontend.Resize(dItems.GetLength());
+}
+
+
+void FrontendSchemaBuilder_c::CollectKnownItems()
+{
+	ARRAY_FOREACH ( i, m_dItems )
+	{
+		const CSphQueryItem & tItem = m_dItems[i];
+
+		int iCol = -1;
+		if ( !m_bQueryFromAPI && tItem.m_sAlias.IsEmpty() )
+			iCol = m_tRes.m_tSchema.GetAttrIndex ( tItem.m_sExpr.cstr() );
+
+		if ( iCol>=0 )
+		{
+			m_dKnownAttrs.Add(i);
+			m_dFrontend[i].m_sName = tItem.m_sExpr;
+			m_dFrontend[i].m_iIndex = iCol;
+		}
+		else
+			m_dUnmappedAttrs.Add(i);
+	}
+}
+
+
+void FrontendSchemaBuilder_c::AddAttrs()
+{
+	bool bUsualApi = !m_bAgent && m_bQueryFromAPI;
+
+	for ( int iCol=0; iCol<m_tRes.m_tSchema.GetAttrsCount(); iCol++ )
+	{
+		const CSphColumnInfo & tCol = m_tRes.m_tSchema.GetAttr(iCol);
+
+		assert ( !tCol.m_sName.IsEmpty() );
+		bool bMagic = ( *tCol.m_sName.cstr()=='@' );
+
+		if ( !bMagic && tCol.m_pExpr )
+		{
+			ARRAY_FOREACH ( j, m_dUnmappedAttrs )
+				if ( m_dItems[ m_dUnmappedAttrs[j] ].m_sAlias==tCol.m_sName )
+				{
+					int k = m_dUnmappedAttrs[j];
+					m_dFrontend[k].m_iIndex = iCol;
+					m_dFrontend[k].m_sName = m_dItems[k].m_sAlias;
+					m_dKnownAttrs.Add(k);
+					m_dUnmappedAttrs.Remove ( j-- ); // do not skip an element next to removed one!
+				}
+
+			// FIXME?
+			// really not sure if this is the right thing to do
+			// but it fixes a couple queries in test_163 in compaitbility mode
+			if ( m_bAgent && !m_dFrontend.Contains ( bind ( &CSphColumnInfo::m_sName ), tCol.m_sName ) )
+			{
+				CSphColumnInfo & t = m_dFrontend.Add();
+				t.m_iIndex = iCol;
+				t.m_sName = tCol.m_sName;
+			}
+		} else if ( bMagic && ( tCol.m_pExpr || bUsualApi ) )
+		{
+			ARRAY_FOREACH ( j, m_dUnmappedAttrs )
+				if ( tCol.m_sName==GetMagicSchemaName ( m_dItems[ m_dUnmappedAttrs[j] ].m_sExpr ) )
+				{
+					int k = m_dUnmappedAttrs[j];
+					m_dFrontend[k].m_iIndex = iCol;
+					m_dFrontend[k].m_sName = m_dItems[k].m_sAlias;
+					m_dKnownAttrs.Add(k);
+					m_dUnmappedAttrs.Remove ( j-- ); // do not skip an element next to removed one!
+				}
+
+			if ( !m_dFrontend.Contains ( bind ( &CSphColumnInfo::m_sName ), tCol.m_sName ) )
+			{
+				CSphColumnInfo & t = m_dFrontend.Add();
+				t.m_iIndex = iCol;
+				t.m_sName = tCol.m_sName;
+			}
+		} else
+		{
+			bool bAdded = false;
+			ARRAY_FOREACH ( j, m_dUnmappedAttrs )
+			{
+				int k = m_dUnmappedAttrs[j];
+				const CSphQueryItem & t = m_dItems[k];
+				if ( ( tCol.m_sName==GetMagicSchemaName ( t.m_sExpr ) && t.m_eAggrFunc==SPH_AGGR_NONE )
+					|| ( t.m_sAlias==tCol.m_sName &&
+					( m_tRes.m_tSchema.GetAttrIndex ( GetMagicSchemaName ( t.m_sExpr ) )==-1 || t.m_eAggrFunc!=SPH_AGGR_NONE ) ) )
+				{
+					// tricky bit about naming
+					//
+					// in master mode, we can just use the alias or expression or whatever
+					// the data will be fetched using the locator anyway, column name does not matter anymore
+					//
+					// in agent mode, however, we need to keep the original column names in our response
+					// otherwise, queries like SELECT col1 c, count(*) c FROM dist will fail on master
+					// because it won't be able to identify the count(*) aggregate by its name
+					m_dFrontend[k].m_iIndex = iCol;
+					m_dFrontend[k].m_sName = m_bAgent
+						? tCol.m_sName
+						: ( m_dItems[k].m_sAlias.IsEmpty()
+							? m_dItems[k].m_sExpr
+							: m_dItems[k].m_sAlias );
+					m_dKnownAttrs.Add(k);
+					bAdded = true;
+					m_dUnmappedAttrs.Remove ( j-- ); // do not skip an element next to removed one!
+				}
+			}
+
+			// column was not found in the select list directly
+			// however we might need it anyway because of a non-NULL extra-schema
+			// (extra-schema is additinal set of columns came from right side of query
+			// when you perform 'select a from index order by b', the 'b' is not displayed, but need for sorting,
+			// so extra-schema in the case will contain 'b').
+			// bMagic condition added for @groupbystr in the agent mode
+			if ( !bAdded && m_bAgent && ( m_hExtraColumns[tCol.m_sName] || !m_bHaveLocals || bMagic ) )
+			{
+				CSphColumnInfo & t = m_dFrontend.Add();
+				t.m_iIndex = iCol;
+				t.m_sName = tCol.m_sName;
+			}
+		}
+	}
+
+	m_dKnownAttrs.Sort();
+}
+
+
+bool FrontendSchemaBuilder_c::CheckUnmapped ( CSphString & sError ) const
+{
+	// sanity check
+	// verify that we actually have all the queried select items
+	assert ( m_dUnmappedAttrs.IsEmpty() || ( m_dUnmappedAttrs.GetLength()==1 && m_dItems [ m_dUnmappedAttrs[0] ].m_sExpr=="id" ) );
+	ARRAY_FOREACH ( i, m_dItems )
+	{
+		const CSphQueryItem & tItem = m_dItems[i];
+		if ( !m_dKnownAttrs.BinarySearch(i) && tItem.m_sExpr!="id" )
+		{
+			sError.SetSprintf ( "INTERNAL ERROR: column '%s/%s' not found in result set schema", tItem.m_sExpr.cstr(), tItem.m_sAlias.cstr() );
+			return false;
+		}
+	}
+
+	return true;
+}
+
+
+void FrontendSchemaBuilder_c::Finalize()
+{
+	// finalize the frontend schema columns
+	// we kept indexes into internal schema there, now use them to lookup and copy column data
+	ARRAY_FOREACH ( i, m_dFrontend )
+	{
+		CSphColumnInfo & tFrontend = m_dFrontend[i];
+		const CSphColumnInfo & s = m_tRes.m_tSchema.GetAttr ( tFrontend.m_iIndex );
+		tFrontend.m_tLocator = s.m_tLocator;
+		tFrontend.m_eAttrType = s.m_eAttrType;
+		tFrontend.m_eAggrFunc = s.m_eAggrFunc; // for a sort loop just below
+		tFrontend.m_iIndex = i; // to make the aggr sort loop just below stable
+	}
+
+	// tricky bit
+	// in agents only, push aggregated columns, if any, to the end
+	// for that, sort the schema by (is_aggregate ASC, column_index ASC)
+	if ( m_bAgent )
+		m_dFrontend.Sort ( AggregateColumnSort_fn() );
+}
+
+
+void FrontendSchemaBuilder_c::RemapGroupBy()
+{
+	// remap groupby() and aliased groupby() to @groupbystr or string attribute
+	const CSphColumnInfo * p = m_tRes.m_tSchema.GetAttr ( "@groupbystr" );
+	if ( !p )
+	{
+		// try string attribute (multiple group-by still displays hashes)
+		if ( !m_tQuery.m_sGroupBy.IsEmpty() )
+		{
+			p = m_tRes.m_tSchema.GetAttr ( m_tQuery.m_sGroupBy.cstr() );
+			if ( p && p->m_eAttrType!=SPH_ATTR_STRINGPTR )
+				p = nullptr;
+		}
+
+		if ( !p )
+			return;
+	}
+
+	for ( auto & tFrontend : m_dFrontend )
+		if ( tFrontend.m_sName=="groupby()" )
+		{
+			tFrontend.m_tLocator = p->m_tLocator;
+			tFrontend.m_eAttrType = p->m_eAttrType;
+			tFrontend.m_eAggrFunc = p->m_eAggrFunc;
+		}
+
+	// check aliases too
+	for ( const auto & tQueryItem : m_dQueryItems )
+	{
+		if ( tQueryItem.m_sExpr!="groupby()" )
+			continue;
+
+		for ( auto & tFrontend : m_dFrontend )
+			if ( tFrontend.m_sName==tQueryItem.m_sAlias )
+			{
+				tFrontend.m_tLocator = p->m_tLocator;
+				tFrontend.m_eAttrType = p->m_eAttrType;
+				tFrontend.m_eAggrFunc = p->m_eAggrFunc;
+			}
+	}
+}
+
+
+void FrontendSchemaBuilder_c::RemapFacets()
+{
+	// facets
+	if ( !m_tQuery.m_bFacet && !m_tQuery.m_bFacetHead )
+		return;
+
+	// remap MVA/JSON column to @groupby/@groupbystr in facet queries
+	const CSphColumnInfo * pGroupByCol = m_tRes.m_tSchema.GetAttr ( "@groupbystr" );
+	if ( !pGroupByCol )
+	{
+		pGroupByCol = m_tRes.m_tSchema.GetAttr ( "@groupby" );
+		if ( !pGroupByCol )
+			return;
+	}
+
+	for ( auto & tFrontend : m_dFrontend )
+	{
+		ESphAttr eAttr = tFrontend.m_eAttrType;
+		// checking _PTR attrs only because we should not have and non-ptr attr at this point
+		if ( m_tQuery.m_sGroupBy==tFrontend.m_sName && ( eAttr==SPH_ATTR_UINT32SET_PTR || eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_JSON_FIELD_PTR ) )
+		{
+			tFrontend.m_tLocator = pGroupByCol->m_tLocator;
+			tFrontend.m_eAttrType = pGroupByCol->m_eAttrType;
+			tFrontend.m_eAggrFunc = pGroupByCol->m_eAggrFunc;
+		}
+	}
+}
+
+
+void FrontendSchemaBuilder_c::SwapAttrs ( CSphSchema & tSchema )
+{
+	tSchema.SwapAttrs ( m_dFrontend );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, bool bAllEqual, const CSphFilterSettings * pAggrFilter, CSphQueryProfile * pProfiler )
+{
+	ESphSortOrder eQuerySort = ( tQuery.m_sOuterOrderBy.IsEmpty() ? SPH_SORT_RELEVANCE : SPH_SORT_EXTENDED );
+	CSphQuery tQueryCopy = tQuery;
+	// got outer order? gotta do a couple things
+	if ( tQueryCopy.m_bHasOuter )
+	{
+		// first, temporarily patch up sorting clause and max_matches (we will restore them later)
+		Swap ( tQueryCopy.m_sOuterOrderBy, tQueryCopy.m_sGroupBy.IsEmpty() ? tQueryCopy.m_sSortBy : tQueryCopy.m_sGroupSortBy );
+		Swap ( eQuerySort, tQueryCopy.m_eSort );
+		tQueryCopy.m_iMaxMatches *= tRes.m_dMatchCounts.GetLength();
+		// FIXME? probably not right; 20 shards with by 300 matches might be too much
+		// but propagating too small inner max_matches to the outer is not right either
+
+		// second, apply inner limit now, before (!) reordering
+		int iOut = 0;
+		int iSetStart = 0;
+		for ( int & iCurMatches : tRes.m_dMatchCounts )
+		{
+			assert ( tQueryCopy.m_iLimit>=0 );
+			int iLimitedMatches = Min ( tQueryCopy.m_iLimit, iCurMatches );
+			for ( int i=0; i<iLimitedMatches; ++i )
+				Swap ( tRes.m_dMatches[iOut++], tRes.m_dMatches[iSetStart+i] );
+			iSetStart += iCurMatches;
+			iCurMatches = iLimitedMatches;
+		}
+		tRes.ClampMatches ( iOut, bAllEqual ); // false means no common schema; true == use common schema
+	}
+
+	// so we need to bring matches to the schema that the *sorter* wants
+	// so we need to create the sorter before conversion
+	//
+	// create queue
+	// at this point, we do not need to compute anything; it all must be here
+	SphQueueSettings_t tQueueSettings ( tQueryCopy, tRes.m_tSchema, tRes.m_sError );
+	tQueueSettings.m_bComputeItems = false;
+	tQueueSettings.m_pAggrFilter = pAggrFilter;
+	CSphScopedPtr<ISphMatchSorter> pSorter  ( sphCreateQueue ( tQueueSettings ) );
+
+	// restore outer order related patches, or it screws up the query log
+	if ( tQueryCopy.m_bHasOuter )
+	{
+		Swap ( tQueryCopy.m_sOuterOrderBy, tQueryCopy.m_sGroupBy.IsEmpty() ? tQueryCopy.m_sSortBy : tQueryCopy.m_sGroupSortBy );
+		Swap ( eQuerySort, tQueryCopy.m_eSort );
+		tQueryCopy.m_iMaxMatches /= tRes.m_dMatchCounts.GetLength();
+	}
+
+	if ( !pSorter )
+		return false;
+
+	// reset bAllEqual flag if sorter makes new attributes
+	if ( bAllEqual )
+	{
+		// at first we count already existed internal attributes
+		// then check if sorter makes more
+		CSphVector<SphStringSorterRemap_t> dRemapAttr;
+		sphSortGetStringRemap ( tRes.m_tSchema, tRes.m_tSchema, dRemapAttr );
+		int iRemapCount = dRemapAttr.GetLength();
+		sphSortGetStringRemap ( *pSorter->GetSchema(), tRes.m_tSchema, dRemapAttr );
+
+		bAllEqual = ( dRemapAttr.GetLength()<=iRemapCount );
+	}
+
+	// sorter expects this
+
+	// just doing tRes.m_tSchema = *pSorter->GetSchema() won't work here
+	// because pSorter->GetSchema() may already contain a pointer to tRes.m_tSchema as m_pIndexSchema
+	// that's why we explicitly copy a CSphRsetSchema to a plain CSphSchema and move it to tRes.m_tSchema
+	CSphSchema tSchemaCopy;
+	tSchemaCopy = *pSorter->GetSchema();
+	tRes.m_tSchema = std::move ( tSchemaCopy );
+
+	// convert all matches to sorter schema - at least to manage all static to dynamic
+	if ( !bAllEqual )
+	{
+		// post-limit stuff first
+		if ( bHaveLocals )
+		{
+			CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_EVAL_POST );
+			ProcessLocalPostlimit ( tQueryCopy, tRes );
+		}
+
+		RemapResult ( &tRes.m_tSchema, &tRes );
+	}
+
+	// do the sort work!
+	tRes.m_iTotalMatches -= KillAllDupes ( pSorter.Ptr(), tRes );
+
+	return true;
+}
+
+
+static bool ApplyOuterOrder ( AggrResult_t & tRes, const CSphQuery & tQuery )
+{
+	// reorder (aka outer order)
+	ESphSortFunc eFunc;
+	GenericMatchSort_fn tReorder;
+
+	ESortClauseParseResult eRes = sphParseSortClause ( &tQuery, tQuery.m_sOuterOrderBy.cstr(), tRes.m_tSchema, eFunc, tReorder, true, tRes.m_sError );
+	if ( eRes==SORT_CLAUSE_RANDOM )
+		tRes.m_sError = "order by rand() not supported in outer select";
+
+	if ( eRes!=SORT_CLAUSE_OK )
+		return false;
+
+	assert ( eFunc==FUNC_GENERIC1 ||eFunc==FUNC_GENERIC2 || eFunc==FUNC_GENERIC3 || eFunc==FUNC_GENERIC4 || eFunc==FUNC_GENERIC5 );
+	sphSort ( tRes.m_dMatches.Begin(), tRes.m_dMatches.GetLength(), tReorder, MatchSortAccessor_t() );
+
+	return true;
+}
+
+
+static void ComputePostlimit ( AggrResult_t & tRes, const CSphQuery & tQuery )
+{
+	CSphVector<const CSphColumnInfo *> dPostlimit;
+	ExtractPostlimit ( tRes.m_tSchema, dPostlimit );
+
+	// post compute matches only between offset - limit
+	// however at agent we can't estimate limit.offset at master merged result set
+	// but master don't provide offset to agents only offset+limit as limit
+	// so computing all matches up to iiner.limit \ outer.limit
+	int iTo = tRes.m_dMatches.GetLength();
+	int iOff = Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
+	int iCount = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
+	iTo = Max ( Min ( iOff + iCount, iTo ), 0 );
+	int iFrom = Min ( iOff, iTo );
+
+	ProcessPostlimit ( dPostlimit, iFrom, iTo, tRes );
+}
+
+
+/// merges multiple result sets, remaps columns, does reorder for outer selects
+bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, const sph::StringSet & hExtraColumns, CSphQueryProfile * pProfiler,
+	const CSphFilterSettings * pAggrFilter, bool bForceRefItems )
+{
+	if ( !VerifyMatchCounts(tRes) )
+		return false;
+
 	bool bReturnZeroCount = !tRes.m_dZeroCount.IsEmpty();
 	bool bQueryFromAPI = tQuery.m_eQueryType==QUERY_API;
-	bool bAgent = tQuery.m_bAgent;
-	bool bUsualApi = !bAgent && bQueryFromAPI;
 
 	// 0 matches via SphinxAPI? no fiddling with schemes is necessary
 	// (and via SphinxQL, we still need to return the right schema)
@@ -4077,174 +4554,33 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	if ( tRes.m_dSchemas.GetLength() )
 		tRes.m_tSchema = tRes.m_dSchemas[0];
 
-	bool bAllEqual = true;
-
-	// FIXME? add assert ( tRes.m_tSchema==tRes.m_dSchemas[0] );
-	for ( int i=1; i<tRes.m_dSchemas.GetLength(); i++ )
-		if ( !MinimizeSchema ( tRes.m_tSchema, tRes.m_dSchemas[i] ) )
-			bAllEqual = false;
+	bool bAllEqual = MinimizeSchemas(tRes);
 
 	const CSphVector<CSphQueryItem> & dQueryItems = ( tQuery.m_bFacet || tQuery.m_bFacetHead || bForceRefItems ) ? tQuery.m_dRefItems : tQuery.m_dItems;
 
 	// build a list of select items that the query asked for
 	bool bHaveExprs = false;
 	CSphVector<CSphQueryItem> tExtItems;
-	const CSphVector<CSphQueryItem> & tItems = ExpandAsterisk ( tRes.m_tSchema, dQueryItems, tExtItems, tQuery.m_bFacetHead, bHaveExprs );
+	const CSphVector<CSphQueryItem> & dItems = ExpandAsterisk ( tRes.m_tSchema, dQueryItems, tExtItems, tQuery.m_bFacetHead, bHaveExprs );
 
 	// api + index without attributes + select * case
 	// can not skip aggregate filtering
-	if ( bQueryFromAPI && !tItems.GetLength() && !pAggrFilter && !bHaveExprs )
+	if ( bQueryFromAPI && !dItems.GetLength() && !pAggrFilter && !bHaveExprs )
 	{
 		tRes.FreeMatchesPtrs ( 0, bAllEqual );
 		return true;
 	}
 
 	// build the final schemas!
-	// ???
-	CSphVector<CSphColumnInfo> dFrontend { tItems.GetLength() };
+	FrontendSchemaBuilder_c tFrontendBuilder ( tRes, tQuery, dItems, dQueryItems, hExtraColumns, bQueryFromAPI, bHaveLocals );
 
-	// track select items that made it into the internal schema
-	CSphVector<int> dKnownItems;
-
-	// we use this vector to reduce amount of work in next nested loop
-	// instead of looping through all dItems we FOREACH only unmapped ones
-	CSphVector<int> dUnmappedItems;
-	ARRAY_FOREACH ( i, tItems )
-	{
-		int iCol = -1;
-		if ( !bQueryFromAPI && tItems[i].m_sAlias.IsEmpty() )
-			iCol = tRes.m_tSchema.GetAttrIndex ( tItems[i].m_sExpr.cstr() );
-
-		if ( iCol>=0 )
-		{
-			dFrontend[i].m_sName = tItems[i].m_sExpr;
-			dFrontend[i].m_iIndex = iCol;
-			dKnownItems.Add(i);
-		} else
-			dUnmappedItems.Add(i);
-	}
-
-	// ???
-	for ( int iCol=0; iCol<tRes.m_tSchema.GetAttrsCount(); iCol++ )
-	{
-		const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(iCol);
-
-		assert ( !tCol.m_sName.IsEmpty() );
-		bool bMagic = ( *tCol.m_sName.cstr()=='@' );
-
-		if ( !bMagic && tCol.m_pExpr )
-		{
-			ARRAY_FOREACH ( j, dUnmappedItems )
-				if ( tItems[ dUnmappedItems[j] ].m_sAlias==tCol.m_sName )
-			{
-				int k = dUnmappedItems[j];
-				dFrontend[k].m_iIndex = iCol;
-				dFrontend[k].m_sName = tItems[k].m_sAlias;
-				dKnownItems.Add(k);
-				dUnmappedItems.Remove ( j-- ); // do not skip an element next to removed one!
-			}
-
-			// FIXME?
-			// really not sure if this is the right thing to do
-			// but it fixes a couple queries in test_163 in compaitbility mode
-			if ( bAgent && !dFrontend.Contains ( bind ( &CSphColumnInfo::m_sName ), tCol.m_sName ) )
-			{
-				CSphColumnInfo & t = dFrontend.Add();
-				t.m_iIndex = iCol;
-				t.m_sName = tCol.m_sName;
-			}
-		} else if ( bMagic && ( tCol.m_pExpr || bUsualApi ) )
-		{
-			ARRAY_FOREACH ( j, dUnmappedItems )
-				if ( tCol.m_sName==GetMagicSchemaName ( tItems[ dUnmappedItems[j] ].m_sExpr ) )
-			{
-				int k = dUnmappedItems[j];
-				dFrontend[k].m_iIndex = iCol;
-				dFrontend[k].m_sName = tItems[k].m_sAlias;
-				dKnownItems.Add(k);
-				dUnmappedItems.Remove ( j-- ); // do not skip an element next to removed one!
-			}
-			if ( !dFrontend.Contains ( bind ( &CSphColumnInfo::m_sName ), tCol.m_sName ) )
-			{
-				CSphColumnInfo & t = dFrontend.Add();
-				t.m_iIndex = iCol;
-				t.m_sName = tCol.m_sName;
-			}
-		} else
-		{
-			bool bAdded = false;
-			ARRAY_FOREACH ( j, dUnmappedItems )
-			{
-				int k = dUnmappedItems[j];
-				const CSphQueryItem & t = tItems[k];
-				if ( ( tCol.m_sName==GetMagicSchemaName ( t.m_sExpr ) && t.m_eAggrFunc==SPH_AGGR_NONE )
-						|| ( t.m_sAlias==tCol.m_sName &&
-							( tRes.m_tSchema.GetAttrIndex ( GetMagicSchemaName ( t.m_sExpr ) )==-1 || t.m_eAggrFunc!=SPH_AGGR_NONE ) ) )
-				{
-					// tricky bit about naming
-					//
-					// in master mode, we can just use the alias or expression or whatever
-					// the data will be fetched using the locator anyway, column name does not matter anymore
-					//
-					// in agent mode, however, we need to keep the original column names in our response
-					// otherwise, queries like SELECT col1 c, count(*) c FROM dist will fail on master
-					// because it won't be able to identify the count(*) aggregate by its name
-					dFrontend[k].m_iIndex = iCol;
-					dFrontend[k].m_sName = bAgent
-						? tCol.m_sName
-						: ( tItems[k].m_sAlias.IsEmpty()
-							? tItems[k].m_sExpr
-							: tItems[k].m_sAlias );
-					dKnownItems.Add(k);
-					bAdded = true;
-					dUnmappedItems.Remove ( j-- ); // do not skip an element next to removed one!
-				}
-			}
-
-			// column was not found in the select list directly
-			// however we might need it anyway because of a non-NULL extra-schema
-			// (extra-schema is additinal set of columns came from right side of query
-			// when you perform 'select a from index order by b', the 'b' is not displayed, but need for sorting,
-			// so extra-schema in the case will contain 'b').
-			// bMagic condition added for @groupbystr in the agent mode
-			if ( !bAdded && bAgent && ( hExtraColumns[tCol.m_sName] || !bHaveLocals || bMagic ) )
-			{
-				CSphColumnInfo & t = dFrontend.Add();
-				t.m_iIndex = iCol;
-				t.m_sName = tCol.m_sName;
-			}
-		}
-	}
-
-	// sanity check
-	// verify that we actually have all the queried select items
-	assert ( dUnmappedItems.IsEmpty() || ( dUnmappedItems.GetLength()==1 && tItems [ dUnmappedItems[0] ].m_sExpr=="id" ) );
-	dKnownItems.Sort();
-	ARRAY_FOREACH ( i, tItems )
-		if ( !dKnownItems.BinarySearch(i) && tItems[i].m_sExpr!="id" )
-	{
-		tRes.m_sError.SetSprintf ( "INTERNAL ERROR: column '%s/%s' not found in result set schema",
-			tItems[i].m_sExpr.cstr(), tItems[i].m_sAlias.cstr() );
+	// track select items that made it into the internal schema and the ones that didn't
+	tFrontendBuilder.CollectKnownItems();
+	tFrontendBuilder.AddAttrs();
+	if ( !tFrontendBuilder.CheckUnmapped ( tRes.m_sError ) )
 		return false;
-	}
 
-	// finalize the frontend schema columns
-	// we kept indexes into internal schema there, now use them to lookup and copy column data
-	ARRAY_FOREACH ( i, dFrontend )
-	{
-		CSphColumnInfo & d = dFrontend[i];
-		const CSphColumnInfo & s = tRes.m_tSchema.GetAttr ( d.m_iIndex );
-		d.m_tLocator = s.m_tLocator;
-		d.m_eAttrType = s.m_eAttrType;
-		d.m_eAggrFunc = s.m_eAggrFunc; // for a sort loop just below
-		d.m_iIndex = i; // to make the aggr sort loop just below stable
-	}
-
-	// tricky bit
-	// in agents only, push aggregated columns, if any, to the end
-	// for that, sort the schema by (is_aggregate ASC, column_index ASC)
-	if ( bAgent )
-		dFrontend.Sort ( AggregateColumnSort_fn() );
+	tFrontendBuilder.Finalize();
 
 	// tricky bit
 	// in purely distributed case, all schemas are received from the wire, and miss aggregate functions info
@@ -4257,91 +4593,8 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	// this is a good time to apply outer order clause, too
 	if ( tRes.m_iSuccesses>1 || pAggrFilter )
 	{
-		ESphSortOrder eQuerySort = ( tQuery.m_sOuterOrderBy.IsEmpty() ? SPH_SORT_RELEVANCE : SPH_SORT_EXTENDED );
-		CSphQuery tQueryCopy = tQuery;
-		// got outer order? gotta do a couple things
-		if ( tQueryCopy.m_bHasOuter )
-		{
-			// first, temporarily patch up sorting clause and max_matches (we will restore them later)
-			Swap ( tQueryCopy.m_sOuterOrderBy, tQueryCopy.m_sGroupBy.IsEmpty() ? tQueryCopy.m_sSortBy : tQueryCopy.m_sGroupSortBy );
-			Swap ( eQuerySort, tQueryCopy.m_eSort );
-			tQueryCopy.m_iMaxMatches *= tRes.m_dMatchCounts.GetLength();
-			// FIXME? probably not right; 20 shards with by 300 matches might be too much
-			// but propagating too small inner max_matches to the outer is not right either
-
-			// second, apply inner limit now, before (!) reordering
-			int iOut = 0;
-			int iSetStart = 0;
-			for ( int & iCurMatches : tRes.m_dMatchCounts )
-			{
-				assert ( tQueryCopy.m_iLimit>=0 );
-				int iLimitedMatches = Min ( tQueryCopy.m_iLimit, iCurMatches );
-				for ( int i=0; i<iLimitedMatches; ++i )
-					Swap ( tRes.m_dMatches[iOut++], tRes.m_dMatches[iSetStart+i] );
-				iSetStart += iCurMatches;
-				iCurMatches = iLimitedMatches;
-			}
-			tRes.ClampMatches ( iOut, bAllEqual ); // false means no common schema; true == use common schema
-		}
-
-		// so we need to bring matches to the schema that the *sorter* wants
-		// so we need to create the sorter before conversion
-		//
-		// create queue
-		// at this point, we do not need to compute anything; it all must be here
-		SphQueueSettings_t tQueueSettings ( tQueryCopy, tRes.m_tSchema, tRes.m_sError );
-		tQueueSettings.m_bComputeItems = false;
-		tQueueSettings.m_pAggrFilter = pAggrFilter;
-		CSphScopedPtr<ISphMatchSorter> pSorter  ( sphCreateQueue ( tQueueSettings ) );
-
-		// restore outer order related patches, or it screws up the query log
-		if ( tQueryCopy.m_bHasOuter )
-		{
-			Swap ( tQueryCopy.m_sOuterOrderBy, tQueryCopy.m_sGroupBy.IsEmpty() ? tQueryCopy.m_sSortBy : tQueryCopy.m_sGroupSortBy );
-			Swap ( eQuerySort, tQueryCopy.m_eSort );
-			tQueryCopy.m_iMaxMatches /= tRes.m_dMatchCounts.GetLength();
-		}
-
-		if ( !pSorter )
+		if ( !MergeAllMatches ( tRes, tQuery, bHaveLocals, bAllEqual, pAggrFilter, pProfiler ) )
 			return false;
-
-		// reset bAllEqual flag if sorter makes new attributes
-		if ( bAllEqual )
-		{
-			// at first we count already existed internal attributes
-			// then check if sorter makes more
-			CSphVector<SphStringSorterRemap_t> dRemapAttr;
-			sphSortGetStringRemap ( tRes.m_tSchema, tRes.m_tSchema, dRemapAttr );
-			int iRemapCount = dRemapAttr.GetLength();
-			sphSortGetStringRemap ( *pSorter->GetSchema(), tRes.m_tSchema, dRemapAttr );
-
-			bAllEqual = ( dRemapAttr.GetLength()<=iRemapCount );
-		}
-
-		// sorter expects this
-
-		// just doing tRes.m_tSchema = *pSorter->GetSchema() won't work here
-		// because pSorter->GetSchema() may already contain a pointer to tRes.m_tSchema as m_pIndexSchema
-		// that's why we explicitly copy a CSphRsetSchema to a plain CSphSchema and move it to tRes.m_tSchema
-		CSphSchema tSchemaCopy;
-		tSchemaCopy = *pSorter->GetSchema();
-		tRes.m_tSchema = std::move ( tSchemaCopy );
-
-		// convert all matches to sorter schema - at least to manage all static to dynamic
-		if ( !bAllEqual )
-		{
-			// post-limit stuff first
-			if ( bHaveLocals )
-			{
-				CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_EVAL_POST );
-				ProcessLocalPostlimit ( tQueryCopy, tRes );
-			}
-
-			RemapResult ( &tRes.m_tSchema, &tRes );
-		}
-
-		// do the sort work!
-		tRes.m_iTotalMatches -= KillAllDupes ( pSorter.Ptr(), tRes );
 	}
 
 	// apply outer order clause to single result set
@@ -4352,115 +4605,22 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 
 	if ( tRes.m_iSuccesses==1 && tQuery.m_bHasOuter && !tQuery.m_sOuterOrderBy.IsEmpty() )
 	{
-		// reorder (aka outer order)
-		ESphSortFunc eFunc;
-		GenericMatchSort_fn tReorder;
-
-		ESortClauseParseResult eRes = sphParseSortClause ( &tQuery, tQuery.m_sOuterOrderBy.cstr(),
-			tRes.m_tSchema, eFunc, tReorder, true, tRes.m_sError );
-		if ( eRes==SORT_CLAUSE_RANDOM )
-			tRes.m_sError = "order by rand() not supported in outer select";
-		if ( eRes!=SORT_CLAUSE_OK )
+		if ( !ApplyOuterOrder ( tRes, tQuery ) )
 			return false;
-
-		assert ( eFunc==FUNC_GENERIC1 ||eFunc==FUNC_GENERIC2 || eFunc==FUNC_GENERIC3 || eFunc==FUNC_GENERIC4 || eFunc==FUNC_GENERIC5 );
-		sphSort ( tRes.m_dMatches.Begin(), tRes.m_dMatches.GetLength(), tReorder, MatchSortAccessor_t() );
 	}
 
-	// compute post-limit stuff
 	if ( bAllEqual && bHaveLocals )
 	{
 		CSphScopedProfile ( pProfiler, SPH_QSTATE_EVAL_POST );
-
-		CSphVector<const CSphColumnInfo *> dPostlimit;
-		ExtractPostlimit ( tRes.m_tSchema, dPostlimit );
-
-		// post compute matches only between offset - limit
-		// however at agent we can't estimate limit.offset at master merged result set
-		// but master don't provide offset to agents only offset+limit as limit
-		// so computing all matches up to iiner.limit \ outer.limit
-		int iTo = tRes.m_dMatches.GetLength();
-		int iOff = Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
-		int iCount = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
-		iTo = Max ( Min ( iOff + iCount, iTo ), 0 );
-		int iFrom = Min ( iOff, iTo );
-
-		ProcessPostlimit ( dPostlimit, iFrom, iTo, tRes );
+		ComputePostlimit ( tRes, tQuery );
 	}
 
-	// remap groupby() and aliased groupby() to @groupbystr or string attribute
-	const CSphColumnInfo * p = tRes.m_tSchema.GetAttr ( "@groupbystr" );
-	if ( !p )
-	{
-		// try string attribute (multiple group-by still displays hashes)
-		if ( !tQuery.m_sGroupBy.IsEmpty() )
-		{
-			p = tRes.m_tSchema.GetAttr ( tQuery.m_sGroupBy.cstr() );
-			if ( p && p->m_eAttrType!=SPH_ATTR_STRINGPTR )
-				p = NULL;
-		}
-	}
-	if ( p )
-	{
-		ARRAY_FOREACH ( i, dFrontend )
-		{
-			CSphColumnInfo & d = dFrontend[i];
-			if ( d.m_sName=="groupby()" )
-			{
-				d.m_tLocator = p->m_tLocator;
-				d.m_eAttrType = p->m_eAttrType;
-				d.m_eAggrFunc = p->m_eAggrFunc;
-			}
-		}
-
-		// check aliases too
-		ARRAY_FOREACH ( j, dQueryItems )
-		{
-			const CSphQueryItem & tItem = dQueryItems[j];
-			if ( tItem.m_sExpr=="groupby()" )
-			{
-				ARRAY_FOREACH ( i, dFrontend )
-				{
-					CSphColumnInfo & d = dFrontend[i];
-					if ( d.m_sName==tItem.m_sAlias )
-					{
-						d.m_tLocator = p->m_tLocator;
-						d.m_eAttrType = p->m_eAttrType;
-						d.m_eAggrFunc = p->m_eAggrFunc;
-					}
-				}
-			}
-		}
-	}
-
-	// facets
-	if ( tQuery.m_bFacet || tQuery.m_bFacetHead )
-	{
-		// remap MVA/JSON column to @groupby/@groupbystr in facet queries
-		const CSphColumnInfo * pGroupByCol = tRes.m_tSchema.GetAttr ( "@groupbystr" );
-		if ( !pGroupByCol )
-			pGroupByCol = tRes.m_tSchema.GetAttr ( "@groupby" );
-
-		if ( pGroupByCol )
-		{
-			ARRAY_FOREACH ( i, dFrontend )
-			{
-				CSphColumnInfo & d = dFrontend[i];
-				ESphAttr eAttr = d.m_eAttrType;
-				// checking _PTR attrs only because we should not have and non-ptr attr at this point
-				if ( tQuery.m_sGroupBy==d.m_sName && ( eAttr==SPH_ATTR_UINT32SET_PTR || eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_JSON_FIELD_PTR ) )
-				{
-					d.m_tLocator = pGroupByCol->m_tLocator;
-					d.m_eAttrType = pGroupByCol->m_eAttrType;
-					d.m_eAggrFunc = pGroupByCol->m_eAggrFunc;
-				}
-			}
-		}
-	}
+	tFrontendBuilder.RemapGroupBy();
+	tFrontendBuilder.RemapFacets();
 
 	// all the merging and sorting is now done
 	// replace the minimized matches schema with its subset, the result set schema
-	tRes.m_tSchema.SwapAttrs ( dFrontend );
+	tFrontendBuilder.SwapAttrs ( tRes.m_tSchema );
 	return true;
 }
 
@@ -4662,13 +4822,11 @@ struct Expr_Snippet_c : public ISphStringExpr
 
 	void Command ( ESphExprCommand eCmd, void * pArg ) override
 	{
-		if ( eCmd!=SPH_EXPR_SET_BLOB_POOL )
-			return;
-
 		if ( m_pArgs )
-			m_pArgs->Command ( SPH_EXPR_SET_BLOB_POOL, pArg );
+			m_pArgs->Command ( eCmd, pArg );
+
 		if ( m_pText )
-			m_pText->Command ( SPH_EXPR_SET_BLOB_POOL, pArg );
+			m_pText->Command ( eCmd, pArg );
 	}
 
 	uint64_t GetHash ( const ISphSchema &, uint64_t, bool & ) override
@@ -4867,13 +5025,17 @@ protected:
 	void							OnRunFinished ();
 
 	const ServedDesc_t *			GetIndex ( const CSphString &sName ) const;
+
 private:
 	bool							CheckMultiQuery ( int iStart, int iEnd ) const;
 	bool							RLockInvokedIndexes();
-	void PrepareQueryIndexes ( VectorAgentConn_t &dRemotes, CSphVector<DistrServedByAgent_t> &dDistrServedByAgent );
+	void							PrepareQueryIndexes ( VectorAgentConn_t &dRemotes, CSphVector<DistrServedByAgent_t> &dDistrServedByAgent );
 	void							UniqLocals ();
 	void							RunActionQuery ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors ); ///< run delete/update
-
+	void							BuildIndexList ( int iStart, int iEnd, int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent );
+	void							CalcTimeStats ( int64_t tmCpu, int64_t tmSubset, int iStart, int iEnd, const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent );
+	void							CalcPerIndexStats ( int iStart, int iEnd, const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ) const;
+	void							CalcGlobalStats ( int64_t tmCpu, int64_t tmSubset, int64_t tmLocal, int iStart, int iEnd, const CSphIOStats & tIO, const VecRefPtrsAgentConn_t & dRemotes ) const;
 };
 
 
@@ -4977,6 +5139,7 @@ void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphStrin
 {
 	SetQuery ( 0, tQuery, nullptr );
 	m_dQueries[0].m_sIndexes = sIndex;
+	m_dResults[0].m_dTag2Docstore.Resize(1);
 	m_dLocal.Add ().m_sName = sIndex;
 
 	CheckQuery ( tQuery, *pErrors );
@@ -5200,8 +5363,14 @@ static void FlattenToRes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, int i
 	{
 		CSphSchema & tNewSchema = tRes.m_dSchemas.Add();
 		tNewSchema = *pSorter->GetSchema();
+
+		tRes.m_dTag2Docstore[iTag].m_pDocstore = tRes.m_pDocstore;
+
 		int iCopied = sphFlattenQueue ( pSorter, &tRes, iTag );
 		tRes.m_dMatchCounts.Add ( iCopied );
+
+		// clean up for next index search
+		tRes.m_pDocstore = nullptr;
 	}
 }
 
@@ -5656,6 +5825,7 @@ void SearchHandler_c::RunLocalSearches()
 			{
 				dResults[i] = &m_dResults[i];
 				dResults[i]->m_pBlobPool = nullptr;
+				dResults[i]->m_pDocstore = nullptr;
 			}
 
 			dResults[m_iStart]->m_tIOStats.Start();
@@ -6041,51 +6211,169 @@ void SearchHandler_c::UniqLocals()
 	m_dLocal.Sort ( bind ( &LocalIndex_t::m_iOrderTag ) ); // keep initial order of locals
 }
 
-// one ore more queries against one and same set of indexes
-void SearchHandler_c::RunSubset ( int iStart, int iEnd )
+
+void SearchHandler_c::CalcTimeStats ( int64_t tmCpu, int64_t tmSubset, int iStart, int iEnd, const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent )
 {
-	m_iStart = iStart;
-	m_iEnd = iEnd;
-
-	// all my stats
-	int64_t tmSubset = sphMicroTimer();
-	int64_t tmLocal = 0;
-	int64_t tmCpu = sphCpuTimer ();
-
-	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
-	if ( m_pProfile )
-		eOldState = m_pProfile->m_eState;
-
-
-	// prepare for descent
-	const CSphQuery & tFirst = m_dQueries[iStart];
-
-	for ( int iRes=iStart; iRes<=iEnd; ++iRes )
-		m_dResults[iRes].m_iSuccesses = 0;
-
-	if ( iStart==iEnd && m_pProfile )
+	// in multi-queue case (1 actual call per N queries), just divide overall query time evenly
+	// otherwise (N calls per N queries), divide common query time overheads evenly
+	const int iQueries = iEnd-iStart+1;
+	if ( m_bMultiQueue )
 	{
-		m_dResults[iStart].m_pProfile = m_pProfile;
-		m_tHook.m_pProfiler = m_pProfile;
+		for ( int iRes=iStart; iRes<=iEnd; ++iRes )
+		{
+			m_dResults[iRes].m_iQueryTime = (int)( tmSubset/1000/iQueries );
+			m_dResults[iRes].m_iRealQueryTime = (int)( tmSubset/1000/iQueries );
+			m_dResults[iRes].m_iCpuTime = tmCpu/iQueries;
+		}
+	} else
+	{
+		int64_t tmAccountedWall = 0;
+		int64_t tmAccountedCpu = 0;
+		for ( int iRes=iStart; iRes<=iEnd; ++iRes )
+		{
+			tmAccountedWall += m_dResults[iRes].m_iQueryTime*1000;
+			assert ( ( m_dResults[iRes].m_iCpuTime==0 && m_dResults[iRes].m_iAgentCpuTime==0 ) ||	// all work was done in this thread
+				( m_dResults[iRes].m_iCpuTime>0 && m_dResults[iRes].m_iAgentCpuTime==0 ) ||		// children threads work
+				( m_dResults[iRes].m_iAgentCpuTime>0 && m_dResults[iRes].m_iCpuTime==0 ) );		// agents work
+			tmAccountedCpu += m_dResults[iRes].m_iCpuTime;
+			tmAccountedCpu += m_dResults[iRes].m_iAgentCpuTime;
+		}
+		// whether we had work done in children threads (dist_threads>1) or in agents
+		bool bExternalWork = tmAccountedCpu!=0;
+
+		int64_t tmDeltaWall = ( tmSubset - tmAccountedWall ) / iQueries;
+
+		for ( int iRes=iStart; iRes<=iEnd; ++iRes )
+		{
+			m_dResults[iRes].m_iQueryTime += (int)(tmDeltaWall/1000);
+			m_dResults[iRes].m_iRealQueryTime = (int)( tmSubset/1000/iQueries );
+			m_dResults[iRes].m_iCpuTime = tmCpu/iQueries;
+			if ( bExternalWork )
+				m_dResults[iRes].m_iCpuTime += tmAccountedCpu;
+		}
+
+		// correct per-index stats from agents
+		int iTotalSuccesses = 0;
+		for ( int iRes=iStart; iRes<=iEnd; ++iRes )
+			iTotalSuccesses += m_dResults[iRes].m_iSuccesses;
+
+		int nValidDistrIndexes = 0;
+		for ( const auto &tDistrStat : dDistrServedByAgent )
+			for ( int iQuery=iStart; iQuery<=iEnd; ++iQuery )
+				if ( tDistrStat.m_dStats[iQuery-iStart].m_iSuccesses )
+				{
+					++nValidDistrIndexes;
+					break;
+				}
+
+		if ( iTotalSuccesses && nValidDistrIndexes )
+			for ( auto &tDistrStat : dDistrServedByAgent )
+				for ( int iQuery=iStart; iQuery<=iEnd; ++iQuery )
+				{
+					QueryStat_t & tStat = tDistrStat.m_dStats[iQuery-iStart];
+					int64_t tmDeltaWallAgent = ( tmSubset - tmAccountedWall ) * tStat.m_iSuccesses / ( iTotalSuccesses*nValidDistrIndexes );
+					tStat.m_uQueryTime += (int)(tmDeltaWallAgent/1000);
+				}
+
+		int nValidLocalIndexes = 0;
+		for ( const auto & dQueryIndexStat : m_dQueryIndexStats )
+			for ( int iQuery=iStart; iQuery<=iEnd; ++iQuery )
+				if ( dQueryIndexStat.m_dStats[iQuery-iStart].m_iSuccesses )
+				{
+					++nValidLocalIndexes;
+					break;
+				}
+
+		if ( iTotalSuccesses && nValidLocalIndexes )
+			for ( auto &dQueryIndexStat : m_dQueryIndexStats )
+				for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
+				{
+					QueryStat_t & tStat = dQueryIndexStat.m_dStats[iQuery-iStart];
+					int64_t tmDeltaWallLocal = ( tmSubset - tmAccountedWall ) * tStat.m_iSuccesses / ( iTotalSuccesses*nValidLocalIndexes );
+					tStat.m_uQueryTime += (int)(tmDeltaWallLocal/1000);
+				}
+
+		// don't forget to add this to stats
+		if ( bExternalWork )
+			tmCpu += tmAccountedCpu;
+	}
+}
+
+
+void SearchHandler_c::CalcPerIndexStats ( int iStart, int iEnd, const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ) const
+{
+	// calculate per-index stats
+	ARRAY_FOREACH ( iLocal, m_dLocal )
+	{
+		// a little of durty casting: from ServedDesc_t* to ServedIndex_c*
+		// in order to save statistics.
+		auto pServed = ( ServedIndex_c * ) m_dLocked.Get ( m_dLocal[iLocal].m_sName );
+		for ( int iQuery=iStart; iQuery<=iEnd; ++iQuery )
+		{
+			QueryStat_t & tStat = m_dQueryIndexStats[iLocal].m_dStats[iQuery-iStart];
+			if ( !tStat.m_iSuccesses )
+				continue;
+
+			pServed->AddQueryStat ( tStat.m_uFoundRows, tStat.m_uQueryTime );
+
+			for ( auto &tDistr : dDistrServedByAgent )
+			{
+				if ( tDistr.m_dLocalNames.Contains ( m_dLocal[iLocal].m_sName ) )
+				{
+					tDistr.m_dStats[iQuery - iStart].m_uQueryTime += tStat.m_uQueryTime;
+					tDistr.m_dStats[iQuery - iStart].m_uFoundRows += tStat.m_uFoundRows;
+					tDistr.m_dStats[iQuery - iStart].m_iSuccesses++;
+				}
+			}
+		}
 	}
 
-	// check for facets
-	m_bFacetQueue = iEnd>iStart;
-	for ( int iCheck=iStart+1; iCheck<=iEnd && m_bFacetQueue; ++iCheck )
-		if ( !m_dQueries[iCheck].m_bFacet )
-			m_bFacetQueue = false;
+	for ( auto &tDistr : dDistrServedByAgent )
+	{
+		auto pServedDistIndex = GetDistr ( tDistr.m_sIndex );
+		if ( pServedDistIndex )
+			for ( int iQuery=iStart; iQuery<=iEnd; ++iQuery )
+			{
+				auto & tStat = tDistr.m_dStats[iQuery-iStart];
+				if ( !tStat.m_iSuccesses )
+					continue;
 
-	m_bMultiQueue = m_bFacetQueue || CheckMultiQuery ( iStart, iEnd );
+				pServedDistIndex->AddQueryStat ( tStat.m_uFoundRows, tStat.m_uQueryTime );
+			}
+	}
+}
 
-	////////////////////////////
-	// build local indexes list
-	////////////////////////////
 
-	VecRefPtrsAgentConn_t dRemotes;
-	CSphVector<DistrServedByAgent_t> dDistrServedByAgent;
-	int iDivideLimits = 1;
+void SearchHandler_c::CalcGlobalStats ( int64_t tmCpu, int64_t tmSubset, int64_t tmLocal, int iStart, int iEnd, const CSphIOStats & tIO, const VecRefPtrsAgentConn_t & dRemotes ) const
+{
+	const int iQueries = iEnd-iStart+1;
+	g_tStats.m_iQueries += iQueries;
+	g_tStats.m_iQueryTime += tmSubset;
+	g_tStats.m_iQueryCpuTime += tmCpu;
+	if ( dRemotes.GetLength() )
+	{
+		int64_t tmWait = 0;
+		for ( const AgentConn_t * pAgent : dRemotes )
+			tmWait += pAgent->m_iWaited;
+
+		// do *not* count queries to dist indexes w/o actual remote agents
+		++g_tStats.m_iDistQueries;
+		g_tStats.m_iDistWallTime += tmSubset;
+		g_tStats.m_iDistLocalTime += tmLocal;
+		g_tStats.m_iDistWaitTime += tmWait;
+	}
+	g_tStats.m_iDiskReads += tIO.m_iReadOps;
+	g_tStats.m_iDiskReadTime += tIO.m_iReadTime;
+	g_tStats.m_iDiskReadBytes += tIO.m_iReadBytes;
+}
+
+
+void SearchHandler_c::BuildIndexList ( int iStart, int iEnd, int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent )
+{
+	const CSphQuery & tFirst = m_dQueries[iStart];
+
 	int iTagsCount = 0, iTagStep = iEnd - iStart + 1;
-	m_dLocal.Reset ();
+	m_dLocal.Reset();
 
 	// they're all local, build the list
 	if ( tFirst.m_sIndexes=="*" )
@@ -6178,6 +6466,55 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		if ( !dRemotes.IsEmpty () && !m_dLocal.IsEmpty() )
 			UniqLocals();
 	}
+
+	for ( int iRes=iStart; iRes<=iEnd; iRes++ )
+		m_dResults[iRes].m_dTag2Docstore.Resize(iTagsCount);
+}
+
+
+// one ore more queries against one and same set of indexes
+void SearchHandler_c::RunSubset ( int iStart, int iEnd )
+{
+	m_iStart = iStart;
+	m_iEnd = iEnd;
+
+	// all my stats
+	int64_t tmSubset = sphMicroTimer();
+	int64_t tmLocal = 0;
+	int64_t tmCpu = sphCpuTimer ();
+
+	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
+	if ( m_pProfile )
+		eOldState = m_pProfile->m_eState;
+
+
+	// prepare for descent
+	const CSphQuery & tFirst = m_dQueries[iStart];
+
+	for ( int iRes=iStart; iRes<=iEnd; ++iRes )
+		m_dResults[iRes].m_iSuccesses = 0;
+
+	if ( iStart==iEnd && m_pProfile )
+	{
+		m_dResults[iStart].m_pProfile = m_pProfile;
+		m_tHook.m_pProfiler = m_pProfile;
+	}
+
+	// check for facets
+	m_bFacetQueue = iEnd>iStart;
+	for ( int iCheck=iStart+1; iCheck<=iEnd && m_bFacetQueue; ++iCheck )
+		if ( !m_dQueries[iCheck].m_bFacet )
+			m_bFacetQueue = false;
+
+	m_bMultiQueue = m_bFacetQueue || CheckMultiQuery ( iStart, iEnd );
+
+	////////////////////////////
+	// build local indexes list
+	////////////////////////////
+	VecRefPtrsAgentConn_t dRemotes;
+	CSphVector<DistrServedByAgent_t> dDistrServedByAgent;
+	int iDivideLimits = 1;
+	BuildIndexList ( iStart, iEnd, iDivideLimits, dRemotes, dDistrServedByAgent );
 
 	if ( !RLockInvokedIndexes () )
 		return;
@@ -6306,20 +6643,21 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					tRes.m_iSuccesses++;
 					tRes.m_tSchema = tRemoteResult.m_tSchema;
 
+					assert ( !tRes.m_dTag2Docstore[iOrderTag + iRes - iStart].m_pDocstore );
 
+					tRes.m_dMatches.Reserve ( tRes.m_dMatches.GetLength() + tRemoteResult.m_dMatches.GetLength() );
+					ARRAY_FOREACH ( i, tRemoteResult.m_dMatches )
+					{
+						tRes.m_dMatches.Add();
+						tRemoteResult.m_tSchema.CloneWholeMatch ( &tRes.m_dMatches.Last(), tRemoteResult.m_dMatches[i] );
+						tRes.m_dMatches.Last().m_iTag = ( iOrderTag + iRes - iStart ) | 0x80000000;
+					}
 
-							tRes.m_dMatches.Reserve ( tRes.m_dMatches.GetLength() + tRemoteResult.m_dMatches.GetLength() );
-							ARRAY_FOREACH ( i, tRemoteResult.m_dMatches )
-							{
-								tRes.m_dMatches.Add();
-								tRemoteResult.m_tSchema.CloneWholeMatch ( &tRes.m_dMatches.Last(), tRemoteResult.m_dMatches[i] );
-								tRes.m_dMatches.Last().m_iTag = ( iOrderTag + iRes - iStart ) | 0x80000000;
-							}
-
-							tRes.m_pBlobPool = nullptr;
-							tRes.m_dMatchCounts.Add ( tRemoteResult.m_dMatches.GetLength() );
-							tRes.m_dSchemas.Add ( tRemoteResult.m_tSchema );
-							// note how we do NOT add per-index weight here
+					tRes.m_pBlobPool = nullptr;
+					tRes.m_dTag2Docstore[iOrderTag+iRes-iStart].m_pDocstore = nullptr;
+					tRes.m_dMatchCounts.Add ( tRemoteResult.m_dMatches.GetLength() );
+					tRes.m_dSchemas.Add ( tRemoteResult.m_tSchema );
+					// note how we do NOT add per-index weight here
 
 					// merge this agent's stats
 					tRes.m_iTotalMatches += tRemoteResult.m_iTotalMatches;
@@ -6476,148 +6814,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	tmSubset = sphMicroTimer() - tmSubset;
 	tmCpu = sphCpuTimer() - tmCpu;
 
-	// in multi-queue case (1 actual call per N queries), just divide overall query time evenly
-	// otherwise (N calls per N queries), divide common query time overheads evenly
-	const int iQueries = iEnd-iStart+1;
-	if ( m_bMultiQueue )
-	{
-		for ( int iRes=iStart; iRes<=iEnd; ++iRes )
-		{
-			m_dResults[iRes].m_iQueryTime = (int)( tmSubset/1000/iQueries );
-			m_dResults[iRes].m_iRealQueryTime = (int)( tmSubset/1000/iQueries );
-			m_dResults[iRes].m_iCpuTime = tmCpu/iQueries;
-		}
-	} else
-	{
-		int64_t tmAccountedWall = 0;
-		int64_t tmAccountedCpu = 0;
-		for ( int iRes=iStart; iRes<=iEnd; ++iRes )
-		{
-			tmAccountedWall += m_dResults[iRes].m_iQueryTime*1000;
-			assert ( ( m_dResults[iRes].m_iCpuTime==0 && m_dResults[iRes].m_iAgentCpuTime==0 ) ||	// all work was done in this thread
-					( m_dResults[iRes].m_iCpuTime>0 && m_dResults[iRes].m_iAgentCpuTime==0 ) ||		// children threads work
-					( m_dResults[iRes].m_iAgentCpuTime>0 && m_dResults[iRes].m_iCpuTime==0 ) );		// agents work
-			tmAccountedCpu += m_dResults[iRes].m_iCpuTime;
-			tmAccountedCpu += m_dResults[iRes].m_iAgentCpuTime;
-		}
-		// whether we had work done in children threads (dist_threads>1) or in agents
-		bool bExternalWork = tmAccountedCpu!=0;
-
-		int64_t tmDeltaWall = ( tmSubset - tmAccountedWall ) / iQueries;
-
-		for ( int iRes=iStart; iRes<=iEnd; ++iRes )
-		{
-			m_dResults[iRes].m_iQueryTime += (int)(tmDeltaWall/1000);
-			m_dResults[iRes].m_iRealQueryTime = (int)( tmSubset/1000/iQueries );
-			m_dResults[iRes].m_iCpuTime = tmCpu/iQueries;
-			if ( bExternalWork )
-				m_dResults[iRes].m_iCpuTime += tmAccountedCpu;
-		}
-
-		// correct per-index stats from agents
-		int iTotalSuccesses = 0;
-		for ( int iRes=iStart; iRes<=iEnd; ++iRes )
-			iTotalSuccesses += m_dResults[iRes].m_iSuccesses;
-
-		int nValidDistrIndexes = 0;
-		for ( const auto &tDistrStat : dDistrServedByAgent )
-			for ( int iQuery=iStart; iQuery<=iEnd; ++iQuery )
-				if ( tDistrStat.m_dStats[iQuery-iStart].m_iSuccesses )
-				{
-					++nValidDistrIndexes;
-					break;
-				}
-
-		if ( iTotalSuccesses && nValidDistrIndexes )
-			for ( auto &tDistrStat : dDistrServedByAgent )
-				for ( int iQuery=iStart; iQuery<=iEnd; ++iQuery )
-				{
-					QueryStat_t & tStat = tDistrStat.m_dStats[iQuery-iStart];
-					int64_t tmDeltaWallAgent = ( tmSubset - tmAccountedWall ) * tStat.m_iSuccesses / ( iTotalSuccesses*nValidDistrIndexes );
-					tStat.m_uQueryTime += (int)(tmDeltaWallAgent/1000);
-				}
-
-		int nValidLocalIndexes = 0;
-		for ( const auto & dQueryIndexStat : m_dQueryIndexStats )
-			for ( int iQuery=iStart; iQuery<=iEnd; ++iQuery )
-				if ( dQueryIndexStat.m_dStats[iQuery-iStart].m_iSuccesses )
-				{
-					++nValidLocalIndexes;
-					break;
-				}
-
-		if ( iTotalSuccesses && nValidLocalIndexes )
-			for ( auto &dQueryIndexStat : m_dQueryIndexStats )
-				for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
-				{
-					QueryStat_t & tStat = dQueryIndexStat.m_dStats[iQuery-iStart];
-					int64_t tmDeltaWallLocal = ( tmSubset - tmAccountedWall ) * tStat.m_iSuccesses / ( iTotalSuccesses*nValidLocalIndexes );
-					tStat.m_uQueryTime += (int)(tmDeltaWallLocal/1000);
-				}
-
-		// don't forget to add this to stats
-		if ( bExternalWork )
-			tmCpu += tmAccountedCpu;
-	}
-
-	// calculate per-index stats
-	ARRAY_FOREACH ( iLocal, m_dLocal )
-	{
-		// a little of durty casting: from ServedDesc_t* to ServedIndex_c*
-		// in order to save statistics.
-		auto pServed = ( ServedIndex_c * ) m_dLocked.Get ( m_dLocal[iLocal].m_sName );
-		for ( int iQuery=iStart; iQuery<=iEnd; ++iQuery )
-		{
-			QueryStat_t & tStat = m_dQueryIndexStats[iLocal].m_dStats[iQuery-iStart];
-			if ( !tStat.m_iSuccesses )
-				continue;
-
-			pServed->AddQueryStat ( tStat.m_uFoundRows, tStat.m_uQueryTime );
-
-			for ( auto &tDistr : dDistrServedByAgent )
-			{
-				if ( tDistr.m_dLocalNames.Contains ( m_dLocal[iLocal].m_sName ) )
-				{
-					tDistr.m_dStats[iQuery - iStart].m_uQueryTime += tStat.m_uQueryTime;
-					tDistr.m_dStats[iQuery - iStart].m_uFoundRows += tStat.m_uFoundRows;
-					tDistr.m_dStats[iQuery - iStart].m_iSuccesses++;
-				}
-			}
-		}
-	}
-
-	for ( auto &tDistr : dDistrServedByAgent )
-	{
-		auto pServedDistIndex = GetDistr ( tDistr.m_sIndex );
-		if ( pServedDistIndex )
-			for ( int iQuery=iStart; iQuery<=iEnd; ++iQuery )
-			{
-				auto & tStat = tDistr.m_dStats[iQuery-iStart];
-				if ( !tStat.m_iSuccesses )
-					continue;
-
-				pServedDistIndex->AddQueryStat ( tStat.m_uFoundRows, tStat.m_uQueryTime );
-			}
-	}
-
-	g_tStats.m_iQueries += iQueries;
-	g_tStats.m_iQueryTime += tmSubset;
-	g_tStats.m_iQueryCpuTime += tmCpu;
-	if ( dRemotes.GetLength() )
-	{
-		int64_t tmWait = 0;
-		for ( const AgentConn_t * pAgent : dRemotes )
-			tmWait += pAgent->m_iWaited;
-
-		// do *not* count queries to dist indexes w/o actual remote agents
-		++g_tStats.m_iDistQueries;
-		g_tStats.m_iDistWallTime += tmSubset;
-		g_tStats.m_iDistLocalTime += tmLocal;
-		g_tStats.m_iDistWaitTime += tmWait;
-	}
-	g_tStats.m_iDiskReads += tIO.m_iReadOps;
-	g_tStats.m_iDiskReadTime += tIO.m_iReadTime;
-	g_tStats.m_iDiskReadBytes += tIO.m_iReadBytes;
+	CalcTimeStats ( tmCpu, tmSubset, iStart, iEnd, dDistrServedByAgent );
+	CalcPerIndexStats ( iStart, iEnd, dDistrServedByAgent );
+	CalcGlobalStats ( tmCpu, tmSubset, tmLocal, iStart, iEnd, tIO, dRemotes );
 
 	if ( m_pProfile )
 		m_pProfile->Switch ( eOldState );
@@ -10679,6 +10878,16 @@ public:
 		HeadColumn(pRight);
 		HeadEnd();
 	}
+
+	// table of 3 columns
+	inline void Head3 ( const char * pStr1, const char * pStr2, const char * pStr3 )
+	{
+		HeadBegin(3);
+		HeadColumn(pStr1);
+		HeadColumn(pStr2);
+		HeadColumn(pStr3);
+		HeadEnd();
+	}
 };
 
 class TableLike : public CheckLike
@@ -10716,27 +10925,38 @@ public:
 	}
 
 	// popular pattern of 2 columns of data
-	inline void MatchDataTuplet ( const char * pLeft, const char * pRight )
+	inline void MatchData2 ( const char * pLeft, const char * pRight )
 	{
 		if ( Match ( pLeft ) )
 			m_tOut.DataTuplet ( pLeft, pRight );
 	}
 
-	inline void MatchDataTuplet ( const char * pLeft, int64_t iRight )
+	inline void MatchData2 ( const char * pLeft, int64_t iRight )
 	{
 		if ( Match ( pLeft ) )
 			m_tOut.DataTuplet ( pLeft, iRight );
 	}
 
+	inline void MatchData3 ( const char * pStr1, const char * pStr2, const char * pStr3 )
+	{
+		if ( Match ( pStr1 ) )
+		{
+			m_tOut.PutString ( pStr1 );
+			m_tOut.PutString ( pStr2 );
+			m_tOut.PutString ( pStr3 );
+			m_tOut.Commit();
+		}
+	}
+
 	// popular pattern of 2 columns of data
 	void DataTuplet ( const char * pLeft, const char * pRight ) override
 	{
-		MatchDataTuplet ( pLeft, pRight );
+		MatchData2 ( pLeft, pRight );
 	}
 
 	void DataTuplet ( const char * pLeft, int64_t iRight ) override
 	{
-		MatchDataTuplet ( pLeft, iRight );
+		MatchData2 ( pLeft, iRight );
 	}
 };
 
@@ -13151,7 +13371,7 @@ void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 	if ( pServed && pServed->m_pIndex )
 	{
 		// result set header packet
-		tOut.HeadTuplet ( "Field", "Type" );
+		tOut.Head3 ( "Field", "Type", "Properties" );
 
 		// data
 		const CSphSchema *pSchema = &pServed->m_pIndex->GetMatchSchema ();
@@ -13168,10 +13388,13 @@ void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 		assert ( tSchema.GetAttr(0).m_sName==sphGetDocidName() );
 
 		// id comes before fields
-		dCondOut.MatchDataTuplet ( "id", "bigint" );
+		dCondOut.MatchData3 ( "id", "bigint", "" );
 
 		for ( int i = 0; i<tSchema.GetFieldsCount (); i++ )
-			dCondOut.MatchDataTuplet ( tSchema.GetFieldName ( i ), "field" );
+		{
+			CSphString sProperties = ( tSchema.GetField(i).m_uFieldFlags & CSphColumnInfo::FIELD_STORED ) ? "stored" : "";
+			dCondOut.MatchData3 ( tSchema.GetFieldName(i), "field", sProperties.cstr() );
+		}
 
 		char sTmp[SPH_MAX_WORD_LEN];
 		for ( int i=1; i<tSchema.GetAttrsCount(); i++ )
@@ -13183,11 +13406,12 @@ void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 			if ( tCol.m_eAttrType==SPH_ATTR_INTEGER && tCol.m_tLocator.m_iBitCount!=ROWITEM_BITS )
 			{
 				snprintf ( sTmp, sizeof(sTmp), "%s:%d", sphTypeName ( tCol.m_eAttrType ), tCol.m_tLocator.m_iBitCount );
-				dCondOut.MatchDataTuplet ( tCol.m_sName.cstr(), sTmp );
+				dCondOut.MatchData3 ( tCol.m_sName.cstr(), sTmp, "" );
 			} else
-				dCondOut.MatchDataTuplet ( tCol.m_sName.cstr(), sphTypeName ( tCol.m_eAttrType ) );
+				dCondOut.MatchData3 ( tCol.m_sName.cstr(), sphTypeName ( tCol.m_eAttrType ), "" );
 		}
-		tOut.Eof ();
+
+		tOut.Eof();
 		return;
 	}
 
@@ -13203,7 +13427,7 @@ void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 
 	tOut.HeadTuplet ( "Agent", "Type" );
 	for ( const auto& sIdx : pDistr->m_dLocal )
-		dCondOut.MatchDataTuplet ( sIdx.cstr(), "local" );
+		dCondOut.MatchData2 ( sIdx.cstr(), "local" );
 
 	ARRAY_FOREACH ( i, pDistr->m_dAgents )
 	{
@@ -13218,7 +13442,7 @@ void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 				sKey.Appendf ( "%d_mirror_%d", i+1, j+1 );
 				CSphString sValue;
 				sValue.SetSprintf ( "%s:%s", tDesc.GetMyUrl().cstr(), tDesc.m_sIndexes.cstr() );
-				dCondOut.MatchDataTuplet ( sValue.cstr(), sKey.cstr() );
+				dCondOut.MatchData2 ( sValue.cstr(), sKey.cstr() );
 			}
 		} else
 		{
@@ -13228,7 +13452,7 @@ void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 			sKey.Appendf ( "%d", i+1 );
 			CSphString sValue;
 			sValue.SetSprintf ( "%s:%s", tDesc.GetMyUrl().cstr(), tDesc.m_sIndexes.cstr() );
-			dCondOut.MatchDataTuplet ( sValue.cstr(), sKey.cstr() );
+			dCondOut.MatchData2 ( sValue.cstr(), sKey.cstr() );
 		}
 	}
 	tOut.Eof();
@@ -13285,7 +13509,7 @@ void HandleMysqlShowTables ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 	tOut.HeadTuplet ( "Index", "Type" );
 	TableLike dCondOut ( tOut, tStmt.m_sStringParam.cstr() );
 	for ( auto& dPair : dIndexes )
-		dCondOut.MatchDataTuplet ( dPair.m_sName.cstr (), sTypes[dPair.m_iValue] );
+		dCondOut.MatchData2 ( dPair.m_sName.cstr (), sTypes[dPair.m_iValue] );
 	tOut.Eof();
 }
 
@@ -15972,13 +16196,13 @@ bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSettings & t
 	sphConfDictionary ( hIndex, tSettings.m_tDict );
 	sphConfFieldFilter ( hIndex, tSettings.m_tFieldFilter, sError );
 
-	if ( !sphConfIndex ( hIndex, tSettings.m_tIndex, sIndex.cstr(), sError ) )
+	sphRTSchemaConfigure ( hIndex, tSettings.m_tSchema, sError, true );
+
+	if ( !sphConfIndex ( hIndex, tSettings.m_tIndex, sIndex.cstr(), &tSettings.m_tSchema, sError ) )
 	{
 		sError.SetSprintf ( "'%s' failed to parse index settings, error '%s'", sIndex.cstr(), sError.cstr() );
 		return false;
 	}
-
-	sphRTSchemaConfigure ( hIndex, tSettings.m_tSchema, sError, true );
 
 	return true;
 }
@@ -18012,7 +18236,7 @@ static bool ConfigureRTPercolate (
 
 	// pick config settings
 	// they should be overriden later by Preload() if needed
-	if ( !sphConfIndex ( hIndex, tSettings, szIndexName, sError ) )
+	if ( !sphConfIndex ( hIndex, tSettings, szIndexName, &tSchema, sError ) )
 	{
 		sphWarning ( "ERROR: index '%s': %s - NOT SERVING", szIndexName, sError.cstr () );
 		return false;
@@ -18047,11 +18271,15 @@ static bool ConfigureRTPercolate (
 
 	if ( bWordDict && ( tSettings.m_dPrefixFields.GetLength () || tSettings.m_dInfixFields.GetLength () ) )
 		sphWarning ( "WARNING: index '%s': prefix_fields and infix_fields has no effect with dict=keywords, ignoring\n", szIndexName);
+
 	if ( bWordDict && tSettings.m_iMinInfixLen==1 )
 	{
 		sphWarn ( "min_infix_len must be greater than 1, changed to 2" );
 		tSettings.m_iMinInfixLen = 2;
 	}
+
+	tSchema.SetupStoredFields ( tSettings.m_dStoredFields );
+
 	return true;
 }
 
@@ -18203,7 +18431,7 @@ static ESphAddIndex AddTemplateIndex ( const char * szIndexName, const CSphConfi
 
 	CSphIndexSettings s;
 	CSphString sError;
-	if ( !sphConfIndex ( hIndex, s, szIndexName, sError ) )
+	if ( !sphConfIndex ( hIndex, s, szIndexName, nullptr, sError ) )
 	{
 		sphWarning ( "failed to configure index %s: %s", szIndexName, sError.cstr () );
 		return ADD_ERROR;
@@ -21962,9 +22190,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		g_iClientTimeout = hSearchd.GetSTimeS ( "client_timeout" );
 
 	if ( hSearchd.Exists ( "max_children" ) && hSearchd["max_children"].intval()>=0 )
-	{
 		g_iMaxChildren = hSearchd["max_children"].intval();
-	}
 
 	if ( hSearchd.Exists ( "persistent_connections_limit" ) && hSearchd["persistent_connections_limit"].intval()>=0 )
 		g_iPersistentPoolSize = hSearchd["persistent_connections_limit"].intval();
@@ -21988,6 +22214,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	bool bOnDiskPools = ( strcmp ( hSearchd.GetStr ( "ondisk_attrs_default", "" ), "pool" )==0 );
 	if ( bOnDiskAttrs || bOnDiskPools )
 		g_tDefaultFA.m_eAttr = FileAccess_e::MMAP;
+
 	if ( bOnDiskPools )
 		g_tDefaultFA.m_eBlob = FileAccess_e::MMAP;
 
@@ -22077,6 +22304,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 
 	if ( hSearchd("shutdown_timeout") )
 		g_iShutdownTimeout = hSearchd.GetUsTime64S ( "shutdown_timeout", 3000000);
+
+	g_iDocstoreCache = hSearchd.GetSize ( "docstore_cache_size", 16777216 );
 
 	if ( hSearchd.Exists ( "max_open_files" ) )
 	{
@@ -23066,6 +23295,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	SetPercolateQueryParserFactory ( PercolateQueryParserFactory );
 	SetPercolateThreads ( g_iDistThreads );
 	SetUidShort ( bTestMode );
+	InitDocstoreCache(g_iDocstoreCache);
 
 	if ( bOptPIDFile )
 	{

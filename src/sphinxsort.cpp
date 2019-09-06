@@ -5206,206 +5206,140 @@ inline static void ExtraAddSortkeys ( StrVec_t * pExtra, const ISphSchema & tSor
 }
 
 
-ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
+static bool ParseQueryItem ( const CSphQueryItem & tItem, SphQueueSettings_t & tQueue, CSphRsetSchema & tSorterSchema, sph::StringSet & hQueryAttrs,
+	bool & bHasCount, bool & bHasGroupByExpr, bool & bNeedZonespanlist, DWORD & uPackedFactorFlags )
 {
-	// prepare for descent
-	ISphMatchSorter * pTop = nullptr;
-	CSphMatchComparatorState tStateMatch, tStateGroup;
-
-	// short-cuts
-	const CSphQuery * pQuery = &tQueue.m_tQuery;
-	const ISphSchema & tSchema = tQueue.m_tSchema;
-	CSphString & sError = tQueue.m_sError;
+	const CSphQuery & tQuery	= tQueue.m_tQuery;
+	const ISphSchema & tSchema	= tQueue.m_tSchema;
+	StrVec_t * pExtra			= tQueue.m_pExtra;
 	CSphQueryProfile * pProfiler = tQueue.m_pProfiler;
-	auto * pExtra = tQueue.m_pExtra;
+	CSphString & sError			= tQueue.m_sError;
 
-	sError = "";
-	bool bHasZonespanlist = false;
-	bool bNeedZonespanlist = false;
-	DWORD uPackedFactorFlags = SPH_FACTOR_DISABLE;
+	const CSphString & sExpr = tItem.m_sExpr;
+	bool bIsCount = IsCount(sExpr);
+	bHasCount |= bIsCount;
 
-	///////////////////////////////////////
-	// build incoming and outgoing schemas
-	///////////////////////////////////////
-
-	// sorter schema
-	// adds computed expressions and groupby stuff on top of the original index schema
-	CSphScopedPtr<CSphRsetSchema> pSorterSchema ( new CSphRsetSchema );
-	CSphRsetSchema & tSorterSchema = *pSorterSchema.Ptr();
-
-	tSorterSchema = tSchema;
-
-	sph::StringSet hQueryAttrs;
-
-	// we need this to perform a sanity check
-	bool bHasGroupByExpr = false;
-
-	// setup @geodist
-	if ( pQuery->m_bGeoAnchor && tSorterSchema.GetAttrIndex ( "@geodist" )<0 )
+	if ( sExpr=="*" )
 	{
-		auto pExpr = new ExprGeodist_t ();
-		if ( !pExpr->Setup ( pQuery, tSorterSchema, sError ) )
-		{
-			pExpr->Release ();
-			return nullptr;
-		}
-		CSphColumnInfo tCol ( "@geodist", SPH_ATTR_FLOAT );
-		tCol.m_pExpr = pExpr; // takes ownership, no need to for explicit pExpr release
-		tCol.m_eStage = SPH_EVAL_PREFILTER; // OPTIMIZE? actual stage depends on usage
-		tSorterSchema.AddAttr ( tCol, true );
-		if ( pExtra )
-			pExtra->Add ( tCol.m_sName );
-
-		hQueryAttrs.Add ( tCol.m_sName );
+		for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+			hQueryAttrs.Add ( tSchema.GetAttr(i).m_sName );
 	}
 
-	// setup @expr
-	if ( pQuery->m_eSort==SPH_SORT_EXPR && tSorterSchema.GetAttrIndex ( "@expr" )<0 )
+	// for now, just always pass "plain" attrs from index to sorter; they will be filtered on searchd level
+	int iAttrIdx = tSchema.GetAttrIndex ( sExpr.cstr() );
+	bool bPlainAttr = ( ( sExpr=="*" || ( iAttrIdx>=0 && tItem.m_eAggrFunc==SPH_AGGR_NONE ) ) &&
+		( tItem.m_sAlias.IsEmpty() || tItem.m_sAlias==tItem.m_sExpr ) );
+	if ( iAttrIdx>=0 )
 	{
-		CSphColumnInfo tCol ( "@expr", SPH_ATTR_FLOAT ); // enforce float type for backwards compatibility (ie. too lazy to fix those tests right now)
-		tCol.m_pExpr = sphExprParse ( pQuery->m_sSortBy.cstr(), tSorterSchema, nullptr, nullptr, sError, pProfiler, pQuery->m_eCollation, nullptr, &bHasZonespanlist );
-		bNeedZonespanlist |= bHasZonespanlist;
-		if ( !tCol.m_pExpr )
-			return nullptr;
-		tCol.m_eStage = SPH_EVAL_PRESORT;
-		tSorterSchema.AddAttr ( tCol, true );
+		ESphAttr eAttr = tSchema.GetAttr ( iAttrIdx ).m_eAttrType;
+		if ( eAttr==SPH_ATTR_STRING || eAttr==SPH_ATTR_STRINGPTR
+			|| eAttr==SPH_ATTR_UINT32SET || eAttr==SPH_ATTR_INT64SET )
+		{
+			if ( tItem.m_eAggrFunc!=SPH_AGGR_NONE )
+			{
+				sError.SetSprintf ( "can not aggregate non-scalar attribute '%s'", tItem.m_sExpr.cstr() );
+				return false;
+			}
 
-		hQueryAttrs.Add ( tCol.m_sName );
+			if ( !bPlainAttr && ( eAttr==SPH_ATTR_STRING || eAttr==SPH_ATTR_STRINGPTR ) )
+			{
+				bPlainAttr = true;
+				for ( const auto & i : tQuery.m_dItems )
+					if ( sExpr==i.m_sAlias )
+						bPlainAttr = false;
+			}
+		}
 	}
 
-	// expressions from select items
-	bool bHasCount = false;
-
-	if ( tQueue.m_bComputeItems )
-		ARRAY_FOREACH ( iItem, pQuery->m_dItems )
+	if ( bPlainAttr || IsGroupby ( sExpr ) || bIsCount )
 	{
-		const CSphQueryItem & tItem = pQuery->m_dItems[iItem];
-		const CSphString & sExpr = tItem.m_sExpr;
-		bool bIsCount = IsCount(sExpr);
-		bHasCount |= bIsCount;
+		if ( sExpr!="*" && !tItem.m_sAlias.IsEmpty() )
+			hQueryAttrs.Add ( tItem.m_sAlias );
+		bHasGroupByExpr = IsGroupby ( sExpr );
+		return true;
+	}
 
-		if ( sExpr=="*" )
+	// not an attribute? must be an expression, and must be aliased by query parser
+	assert ( !tItem.m_sAlias.IsEmpty() );
+
+	// tricky part
+	// we might be fed with precomputed matches, but it's all or nothing
+	// the incoming match either does not have anything computed, or it has everything
+	int iSorterAttr = tSorterSchema.GetAttrIndex ( tItem.m_sAlias.cstr() );
+	if ( iSorterAttr>=0 )
+	{
+		if ( hQueryAttrs[tItem.m_sAlias] )
 		{
-			for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
-				hQueryAttrs.Add ( tSchema.GetAttr(i).m_sName );
-		}
-
-		// for now, just always pass "plain" attrs from index to sorter; they will be filtered on searchd level
-		int iAttrIdx = tSchema.GetAttrIndex ( sExpr.cstr() );
-		bool bPlainAttr = ( ( sExpr=="*" || ( iAttrIdx>=0 && tItem.m_eAggrFunc==SPH_AGGR_NONE ) ) &&
-							( tItem.m_sAlias.IsEmpty() || tItem.m_sAlias==tItem.m_sExpr ) );
-		if ( iAttrIdx>=0 )
-		{
-			ESphAttr eAttr = tSchema.GetAttr ( iAttrIdx ).m_eAttrType;
-			if ( eAttr==SPH_ATTR_STRING || eAttr==SPH_ATTR_STRINGPTR
-				|| eAttr==SPH_ATTR_UINT32SET || eAttr==SPH_ATTR_INT64SET )
-			{
-				if ( tItem.m_eAggrFunc!=SPH_AGGR_NONE )
-				{
-					sError.SetSprintf ( "can not aggregate non-scalar attribute '%s'", tItem.m_sExpr.cstr() );
-					return nullptr;
-				}
-
-				if ( !bPlainAttr && ( eAttr==SPH_ATTR_STRING || eAttr==SPH_ATTR_STRINGPTR ) )
-				{
-					bPlainAttr = true;
-					for ( int i=0; i<iItem && bPlainAttr; i++ )
-						if ( sExpr==pQuery->m_dItems[i].m_sAlias )
-							bPlainAttr = false;
-				}
-			}
-		}
-
-		if ( bPlainAttr || IsGroupby ( sExpr ) || bIsCount )
-		{
-			if ( sExpr!="*" && !tItem.m_sAlias.IsEmpty() )
-				hQueryAttrs.Add ( tItem.m_sAlias );
-			bHasGroupByExpr = IsGroupby ( sExpr );
-			continue;
-		}
-
-		// not an attribute? must be an expression, and must be aliased by query parser
-		assert ( !tItem.m_sAlias.IsEmpty() );
-
-		// tricky part
-		// we might be fed with precomputed matches, but it's all or nothing
-		// the incoming match either does not have anything computed, or it has everything
-		int iSorterAttr = tSorterSchema.GetAttrIndex ( tItem.m_sAlias.cstr() );
-		if ( iSorterAttr>=0 )
-		{
-			if ( hQueryAttrs[tItem.m_sAlias] )
-			{
-				sError.SetSprintf ( "alias '%s' must be unique (conflicts with another alias)", tItem.m_sAlias.cstr() );
-				return nullptr;
-			} else
-			{
-				tSorterSchema.RemoveStaticAttr ( iSorterAttr );
-			}
-		}
-
-		// a new and shiny expression, lets parse
-		CSphColumnInfo tExprCol ( tItem.m_sAlias.cstr(), SPH_ATTR_NONE );
-		DWORD uQueryPackedFactorFlags = SPH_FACTOR_DISABLE;
-
-		// tricky bit
-		// GROUP_CONCAT() adds an implicit TO_STRING() conversion on top of its argument
-		// and then the aggregate operation simply concatenates strings as matches arrive
-		// ideally, we would instead pass ownership of the expression to G_C() implementation
-		// and also the original expression type, and let the string conversion happen in G_C() itself
-		// but that ideal route seems somewhat more complicated in the current architecture
-		if ( tItem.m_eAggrFunc==SPH_AGGR_CAT )
-		{
-			CSphString sExpr2;
-			sExpr2.SetSprintf ( "TO_STRING(%s)", sExpr.cstr() );
-			tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), tSorterSchema, &tExprCol.m_eAttrType,
-				&tExprCol.m_bWeight, sError, pProfiler, pQuery->m_eCollation, tQueue.m_pHook, &bHasZonespanlist, &uQueryPackedFactorFlags, &tExprCol.m_eStage );
+			sError.SetSprintf ( "alias '%s' must be unique (conflicts with another alias)", tItem.m_sAlias.cstr() );
+			return false;
 		} else
-		{
-			tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSorterSchema, &tExprCol.m_eAttrType,
-				&tExprCol.m_bWeight, sError, pProfiler, pQuery->m_eCollation, tQueue.m_pHook, &bHasZonespanlist, &uQueryPackedFactorFlags, &tExprCol.m_eStage );
-		}
+			tSorterSchema.RemoveStaticAttr ( iSorterAttr );
+	}
 
-		uPackedFactorFlags |= uQueryPackedFactorFlags;
-		bNeedZonespanlist |= bHasZonespanlist;
-		tExprCol.m_eAggrFunc = tItem.m_eAggrFunc;
-		if ( !tExprCol.m_pExpr )
-		{
-			sError.SetSprintf ( "parse error: %s", sError.cstr() );
-			return nullptr;
-		}
+	// a new and shiny expression, lets parse
+	CSphColumnInfo tExprCol ( tItem.m_sAlias.cstr(), SPH_ATTR_NONE );
+	DWORD uQueryPackedFactorFlags = SPH_FACTOR_DISABLE;
+	bool bHasZonespanlist = false;
 
-		// force AVG() to be computed in floats
-		if ( tExprCol.m_eAggrFunc==SPH_AGGR_AVG )
-		{
-			tExprCol.m_eAttrType = SPH_ATTR_FLOAT;
-			tExprCol.m_tLocator.m_iBitCount = 32;
-		}
+	// tricky bit
+	// GROUP_CONCAT() adds an implicit TO_STRING() conversion on top of its argument
+	// and then the aggregate operation simply concatenates strings as matches arrive
+	// ideally, we would instead pass ownership of the expression to G_C() implementation
+	// and also the original expression type, and let the string conversion happen in G_C() itself
+	// but that ideal route seems somewhat more complicated in the current architecture
+	if ( tItem.m_eAggrFunc==SPH_AGGR_CAT )
+	{
+		CSphString sExpr2;
+		sExpr2.SetSprintf ( "TO_STRING(%s)", sExpr.cstr() );
+		tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), tSorterSchema, &tExprCol.m_eAttrType,
+			&tExprCol.m_bWeight, sError, pProfiler, tQuery.m_eCollation, tQueue.m_pHook, &bHasZonespanlist, &uQueryPackedFactorFlags, &tExprCol.m_eStage );
+	} else
+	{
+		tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSorterSchema, &tExprCol.m_eAttrType,
+			&tExprCol.m_bWeight, sError, pProfiler, tQuery.m_eCollation, tQueue.m_pHook, &bHasZonespanlist, &uQueryPackedFactorFlags, &tExprCol.m_eStage );
+	}
 
-		// force explicit type conversion for JSON attributes
-		if ( tExprCol.m_eAggrFunc!=SPH_AGGR_NONE && tExprCol.m_eAttrType==SPH_ATTR_JSON_FIELD )
-		{
-			sError.SetSprintf ( "ambiguous attribute type '%s', use INTEGER(), BIGINT() or DOUBLE() conversion functions", tItem.m_sExpr.cstr() );
-			return nullptr;
-		}
+	uPackedFactorFlags |= uQueryPackedFactorFlags;
+	bNeedZonespanlist |= bHasZonespanlist;
+	tExprCol.m_eAggrFunc = tItem.m_eAggrFunc;
+	if ( !tExprCol.m_pExpr )
+	{
+		sError.SetSprintf ( "parse error: %s", sError.cstr() );
+		return false;
+	}
 
-		if ( uQueryPackedFactorFlags & SPH_FACTOR_JSON_OUT )
-			tExprCol.m_eAttrType = SPH_ATTR_FACTORS_JSON;
+	// force AVG() to be computed in floats
+	if ( tExprCol.m_eAggrFunc==SPH_AGGR_AVG )
+	{
+		tExprCol.m_eAttrType = SPH_ATTR_FLOAT;
+		tExprCol.m_tLocator.m_iBitCount = 32;
+	}
 
-		// force GROUP_CONCAT() to be computed as strings
-		if ( tExprCol.m_eAggrFunc==SPH_AGGR_CAT )
-		{
-			tExprCol.m_eAttrType = SPH_ATTR_STRINGPTR;
-			tExprCol.m_tLocator.m_iBitCount = ROWITEMPTR_BITS;
-		}
+	// force explicit type conversion for JSON attributes
+	if ( tExprCol.m_eAggrFunc!=SPH_AGGR_NONE && tExprCol.m_eAttrType==SPH_ATTR_JSON_FIELD )
+	{
+		sError.SetSprintf ( "ambiguous attribute type '%s', use INTEGER(), BIGINT() or DOUBLE() conversion functions", tItem.m_sExpr.cstr() );
+		return false;
+	}
 
-		// postpone aggregates, add non-aggregates
-		if ( tExprCol.m_eAggrFunc==SPH_AGGR_NONE )
-		{
-			// is this expression used in filter?
-			// OPTIMIZE? hash filters and do hash lookups?
-			if ( tExprCol.m_eAttrType!=SPH_ATTR_JSON_FIELD )
-			ARRAY_FOREACH ( i, pQuery->m_dFilters )
-				if ( pQuery->m_dFilters[i].m_sAttrName==tExprCol.m_sName )
+	if ( uQueryPackedFactorFlags & SPH_FACTOR_JSON_OUT )
+		tExprCol.m_eAttrType = SPH_ATTR_FACTORS_JSON;
+
+	// force GROUP_CONCAT() to be computed as strings
+	if ( tExprCol.m_eAggrFunc==SPH_AGGR_CAT )
+	{
+		tExprCol.m_eAttrType = SPH_ATTR_STRINGPTR;
+		tExprCol.m_tLocator.m_iBitCount = ROWITEMPTR_BITS;
+	}
+
+	// postpone aggregates, add non-aggregates
+	if ( tExprCol.m_eAggrFunc==SPH_AGGR_NONE )
+	{
+		// is this expression used in filter?
+		// OPTIMIZE? hash filters and do hash lookups?
+		if ( tExprCol.m_eAttrType!=SPH_ATTR_JSON_FIELD )
+			ARRAY_FOREACH ( i, tQuery.m_dFilters )
+			if ( tQuery.m_dFilters[i].m_sAttrName==tExprCol.m_sName )
 			{
 				// is this a hack?
 				// m_bWeight is computed after EarlyReject() get called
@@ -5447,37 +5381,136 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 				break;
 			}
 
-			// add it!
-			// NOTE, "final" stage might need to be fixed up later
-			// we'll do that when parsing sorting clause
-			tSorterSchema.AddAttr ( tExprCol, true );
-		} else // some aggregate
+		// add it!
+		// NOTE, "final" stage might need to be fixed up later
+		// we'll do that when parsing sorting clause
+		tSorterSchema.AddAttr ( tExprCol, true );
+	} else // some aggregate
+	{
+		tExprCol.m_eStage = SPH_EVAL_PRESORT; // sorter expects computed expression
+		tSorterSchema.AddAttr ( tExprCol, true );
+		if ( pExtra )
+			pExtra->Add ( tExprCol.m_sName );
+
+		/// update aggregate dependencies (e.g. SELECT 1+attr f1, min(f1), ...)
+		CSphVector<int> dCur;
+		tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
+
+		ARRAY_FOREACH ( j, dCur )
 		{
-			tExprCol.m_eStage = SPH_EVAL_PRESORT; // sorter expects computed expression
-			tSorterSchema.AddAttr ( tExprCol, true );
-			if ( pExtra )
-				pExtra->Add ( tExprCol.m_sName );
-
-			/// update aggregate dependencies (e.g. SELECT 1+attr f1, min(f1), ...)
-			CSphVector<int> dCur;
-			tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
-
-			ARRAY_FOREACH ( j, dCur )
-			{
-				const CSphColumnInfo & tCol = tSorterSchema.GetAttr ( dCur[j] );
-				if ( tCol.m_pExpr )
-					tCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
-			}
-			dCur.Uniq();
-
-			ARRAY_FOREACH ( j, dCur )
-			{
-				auto & tDep = const_cast < CSphColumnInfo & > ( tSorterSchema.GetAttr ( dCur[j] ) );
-				if ( tDep.m_eStage>tExprCol.m_eStage )
-					tDep.m_eStage = tExprCol.m_eStage;
-			}
+			const CSphColumnInfo & tCol = tSorterSchema.GetAttr ( dCur[j] );
+			if ( tCol.m_pExpr )
+				tCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
 		}
-		hQueryAttrs.Add ( tExprCol.m_sName );
+		dCur.Uniq();
+
+		ARRAY_FOREACH ( j, dCur )
+		{
+			auto & tDep = const_cast < CSphColumnInfo & > ( tSorterSchema.GetAttr ( dCur[j] ) );
+			if ( tDep.m_eStage>tExprCol.m_eStage )
+				tDep.m_eStage = tExprCol.m_eStage;
+		}
+	}
+
+	hQueryAttrs.Add ( tExprCol.m_sName );
+
+	return true;
+}
+
+
+
+ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
+{
+	// prepare for descent
+	ISphMatchSorter * pTop = nullptr;
+	CSphMatchComparatorState tStateMatch, tStateGroup;
+
+	// short-cuts
+	const CSphQuery & tQuery = tQueue.m_tQuery;
+	const ISphSchema & tSchema = tQueue.m_tSchema;
+	CSphString & sError = tQueue.m_sError;
+	CSphQueryProfile * pProfiler = tQueue.m_pProfiler;
+	auto * pExtra = tQueue.m_pExtra;
+
+	sError = "";
+	bool bHasZonespanlist = false;
+	bool bNeedZonespanlist = false;
+	DWORD uPackedFactorFlags = SPH_FACTOR_DISABLE;
+
+	///////////////////////////////////////
+	// build incoming and outgoing schemas
+	///////////////////////////////////////
+
+	// sorter schema
+	// adds computed expressions and groupby stuff on top of the original index schema
+	CSphScopedPtr<CSphRsetSchema> pSorterSchema ( new CSphRsetSchema );
+	CSphRsetSchema & tSorterSchema = *pSorterSchema.Ptr();
+
+	tSorterSchema = tSchema;
+
+	sph::StringSet hQueryAttrs;
+
+	// we need this to perform a sanity check
+	bool bHasGroupByExpr = false;
+
+	// setup @geodist
+	if ( tQuery.m_bGeoAnchor && tSorterSchema.GetAttrIndex ( "@geodist" )<0 )
+	{
+		auto pExpr = new ExprGeodist_t ();
+		if ( !pExpr->Setup ( &tQuery, tSorterSchema, sError ) )
+		{
+			pExpr->Release ();
+			return nullptr;
+		}
+		CSphColumnInfo tCol ( "@geodist", SPH_ATTR_FLOAT );
+		tCol.m_pExpr = pExpr; // takes ownership, no need to for explicit pExpr release
+		tCol.m_eStage = SPH_EVAL_PREFILTER; // OPTIMIZE? actual stage depends on usage
+		tSorterSchema.AddAttr ( tCol, true );
+		if ( pExtra )
+			pExtra->Add ( tCol.m_sName );
+
+		hQueryAttrs.Add ( tCol.m_sName );
+	}
+
+	// setup @expr
+	if ( tQuery.m_eSort==SPH_SORT_EXPR && tSorterSchema.GetAttrIndex ( "@expr" )<0 )
+	{
+		CSphColumnInfo tCol ( "@expr", SPH_ATTR_FLOAT ); // enforce float type for backwards compatibility (ie. too lazy to fix those tests right now)
+		tCol.m_pExpr = sphExprParse ( tQuery.m_sSortBy.cstr(), tSorterSchema, nullptr, nullptr, sError, pProfiler, tQuery.m_eCollation, nullptr, &bHasZonespanlist );
+		bNeedZonespanlist |= bHasZonespanlist;
+		if ( !tCol.m_pExpr )
+			return nullptr;
+		tCol.m_eStage = SPH_EVAL_PRESORT;
+		tSorterSchema.AddAttr ( tCol, true );
+
+		hQueryAttrs.Add ( tCol.m_sName );
+	}
+
+	// expressions from select items
+	bool bHasCount = false;
+	if ( tQueue.m_bComputeItems )
+	{
+		bool bHaveStar = false;
+		for ( const auto & tItem : tQuery.m_dItems )
+			bHaveStar |= tItem.m_sExpr=="*";
+
+		for ( const auto & tItem : tQuery.m_dItems )
+			if ( !ParseQueryItem ( tItem, tQueue, tSorterSchema, hQueryAttrs, bHasCount, bHasGroupByExpr, bNeedZonespanlist, uPackedFactorFlags ) )
+				return nullptr;
+
+		// add expressions for stored fields
+		if ( bHaveStar )
+			for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
+			{
+				const CSphColumnInfo & tField = tSchema.GetField(i);
+				if ( tField.m_uFieldFlags & CSphColumnInfo::FIELD_STORED )
+				{
+					CSphQueryItem tItem;
+					tItem.m_sExpr = tItem.m_sAlias = tField.m_sName;
+					if ( !ParseQueryItem ( tItem, tQueue, tSorterSchema, hQueryAttrs, bHasCount, bHasGroupByExpr, bNeedZonespanlist, uPackedFactorFlags ) )
+						return nullptr;
+				}
+			}
 	}
 
 	////////////////////////////////////////////
@@ -5488,13 +5521,13 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	CSphGroupSorterSettings tSettings;
 	bool bImplicit = false;
 	// need schema with group related columns however not need grouper
-	bool bHeadWOGroup = ( pQuery->m_sGroupBy.IsEmpty() && pQuery->m_bFacetHead );
-	bool bFacet = ( pQuery->m_bFacetHead || pQuery->m_bFacet );
+	bool bHeadWOGroup = ( tQuery.m_sGroupBy.IsEmpty() && tQuery.m_bFacetHead );
+	bool bFacet = ( tQuery.m_bFacetHead || tQuery.m_bFacet );
 
-	if ( pQuery->m_sGroupBy.IsEmpty() )
-		ARRAY_FOREACH_COND ( i, pQuery->m_dItems, !bImplicit )
+	if ( tQuery.m_sGroupBy.IsEmpty() )
+		ARRAY_FOREACH_COND ( i, tQuery.m_dItems, !bImplicit )
 		{
-			const CSphQueryItem & t = pQuery->m_dItems[i];
+			const CSphQueryItem & t = tQuery.m_dItems[i];
 			bImplicit = ( t.m_eAggrFunc!=SPH_AGGR_NONE ) || t.m_sExpr=="count(*)" || t.m_sExpr=="@distinct";
 		}
 
@@ -5502,18 +5535,18 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	if ( bImplicit && bHeadWOGroup )
 	{
 		bool bRefImplicit= false;
-		ARRAY_FOREACH_COND ( i, pQuery->m_dRefItems, !bRefImplicit )
+		ARRAY_FOREACH_COND ( i, tQuery.m_dRefItems, !bRefImplicit )
 		{
-			const CSphQueryItem & t = pQuery->m_dItems[i];
+			const CSphQueryItem & t = tQuery.m_dItems[i];
 			bRefImplicit = ( t.m_eAggrFunc!=SPH_AGGR_NONE ) || t.m_sExpr=="count(*)" || t.m_sExpr=="@distinct";
 		}
 		bHeadWOGroup = !bRefImplicit;
 	}
 
-	if ( !SetupGroupbySettings ( pQuery, tSorterSchema, tSettings, dGroupColumns, sError, bImplicit ) )
+	if ( !SetupGroupbySettings ( &tQuery, tSorterSchema, tSettings, dGroupColumns, sError, bImplicit ) )
 		return nullptr;
 
-	bool bGotGroupby = !pQuery->m_sGroupBy.IsEmpty() || tSettings.m_bImplicit; // or else, check in SetupGroupbySettings() would already fail
+	bool bGotGroupby = !tQuery.m_sGroupBy.IsEmpty() || tSettings.m_bImplicit; // or else, check in SetupGroupbySettings() would already fail
 	const bool bGotDistinct = ( tSettings.m_tDistinctLoc.m_iBitOffset>=0 );
 
 	if ( bHasGroupByExpr && !bGotGroupby )
@@ -5536,9 +5569,9 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		if ( !IsGroupbyMagic ( sHaving ) )
 		{
 			bool bValidHaving = false;
-			ARRAY_FOREACH ( i, pQuery->m_dItems )
+			ARRAY_FOREACH ( i, tQuery.m_dItems )
 			{
-				const CSphQueryItem & tItem = pQuery->m_dItems[i];
+				const CSphQueryItem & tItem = tQuery.m_dItems[i];
 				if ( tItem.m_sAlias!=sHaving )
 					continue;
 
@@ -5641,9 +5674,9 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	bool bRandomize = false;
 
 	// matches sorting function
-	if ( pQuery->m_eSort==SPH_SORT_EXTENDED )
+	if ( tQuery.m_eSort==SPH_SORT_EXTENDED )
 	{
-		ESortClauseParseResult eRes = sphParseSortClause ( pQuery, pQuery->m_sSortBy.cstr(), tSorterSchema, eMatchFunc, tStateMatch, tQueue.m_bComputeItems, sError );
+		ESortClauseParseResult eRes = sphParseSortClause ( &tQuery, tQuery.m_sSortBy.cstr(), tSorterSchema, eMatchFunc, tStateMatch, tQueue.m_bComputeItems, sError );
 
 		if ( eRes==SORT_CLAUSE_ERROR )
 			return nullptr;
@@ -5656,7 +5689,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		FixupDependency ( tSorterSchema, tStateMatch.m_dAttrs, CSphMatchComparatorState::MAX_ATTRS );
 		SetupSortRemap ( tSorterSchema, tStateMatch );
 
-	} else if ( pQuery->m_eSort==SPH_SORT_EXPR )
+	} else if ( tQuery.m_eSort==SPH_SORT_EXPR )
 	{
 		tStateMatch.m_eKeypart[0] = SPH_KEYPART_INT;
 		tStateMatch.m_tLocator[0] = tSorterSchema.GetAttr ( tSorterSchema.GetAttrIndex ( "@expr" ) ).m_tLocator;
@@ -5667,12 +5700,12 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	} else
 	{
 		// check sort-by attribute
-		if ( pQuery->m_eSort!=SPH_SORT_RELEVANCE )
+		if ( tQuery.m_eSort!=SPH_SORT_RELEVANCE )
 		{
-			int iSortAttr = tSorterSchema.GetAttrIndex ( pQuery->m_sSortBy.cstr() );
+			int iSortAttr = tSorterSchema.GetAttrIndex ( tQuery.m_sSortBy.cstr() );
 			if ( iSortAttr<0 )
 			{
-				sError.SetSprintf ( "sort-by attribute '%s' not found", pQuery->m_sSortBy.cstr() );
+				sError.SetSprintf ( "sort-by attribute '%s' not found", tQuery.m_sSortBy.cstr() );
 				return nullptr;
 			}
 			const CSphColumnInfo & tAttr = tSorterSchema.GetAttr ( iSortAttr );
@@ -5685,14 +5718,14 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		SetupSortByDocID ( tSorterSchema, tStateMatch, nullptr, tQueue.m_bComputeItems );
 
 		// find out what function to use and whether it needs attributes
-		switch ( pQuery->m_eSort )
+		switch ( tQuery.m_eSort )
 		{
 			case SPH_SORT_ATTR_DESC:		eMatchFunc = FUNC_ATTR_DESC; break;
 			case SPH_SORT_ATTR_ASC:			eMatchFunc = FUNC_ATTR_ASC; break;
 			case SPH_SORT_TIME_SEGMENTS:	eMatchFunc = FUNC_TIMESEGS; break;
 			case SPH_SORT_RELEVANCE:		eMatchFunc = FUNC_REL_DESC; break;
 			default:
-				sError.SetSprintf ( "unknown sorting mode %d", pQuery->m_eSort );
+				sError.SetSprintf ( "unknown sorting mode %d", tQuery.m_eSort );
 				return nullptr;
 		}
 	}
@@ -5700,8 +5733,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	// groups sorting function
 	if ( bGotGroupby )
 	{
-		ESortClauseParseResult eRes = sphParseSortClause ( pQuery, pQuery->m_sGroupSortBy.cstr(),
-			tSorterSchema, eGroupFunc, tStateGroup, tQueue.m_bComputeItems, sError );
+		ESortClauseParseResult eRes = sphParseSortClause ( &tQuery, tQuery.m_sGroupSortBy.cstr(), tSorterSchema, eGroupFunc, tStateGroup, tQueue.m_bComputeItems, sError );
 
 		if ( eRes==SORT_CLAUSE_ERROR || eRes==SORT_CLAUSE_RANDOM )
 		{
@@ -5721,7 +5753,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 
 		if ( bGotDistinct )
 		{
-			dGroupColumns.Add ( tSorterSchema.GetAttrIndex ( pQuery->m_sGroupDistinct.cstr() ) );
+			dGroupColumns.Add ( tSorterSchema.GetAttrIndex ( tQuery.m_sGroupDistinct.cstr() ) );
 			assert ( dGroupColumns.Last()>=0 );
 			if ( pExtra )
 				pExtra->Add ( tSorterSchema.GetAttr ( dGroupColumns.Last() ).m_sName );
@@ -5747,9 +5779,9 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		{
 			// having might reference aliased attributes but @* attributes got stored without alias in sorter schema
 			CSphString sHaving;
-			ARRAY_FOREACH ( i, pQuery->m_dItems )
+			ARRAY_FOREACH ( i, tQuery.m_dItems )
 			{
-				const CSphQueryItem & tItem = pQuery->m_dItems[i];
+				const CSphQueryItem & tItem = tQuery.m_dItems[i];
 				if ( tItem.m_sAlias==tQueue.m_pAggrFilter->m_sAttrName )
 				{
 					sHaving = tItem.m_sExpr;
@@ -5782,15 +5814,13 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	if ( !bGotGroupby )
 	{
 		if ( tQueue.m_pUpdate )
-			pTop = new CSphUpdateQueue ( pQuery->m_iMaxMatches, tQueue.m_pUpdate, pQuery->m_bIgnoreNonexistent, pQuery->m_bStrict );
+			pTop = new CSphUpdateQueue ( tQuery.m_iMaxMatches, tQueue.m_pUpdate, tQuery.m_bIgnoreNonexistent, tQuery.m_bStrict );
 		else if ( tQueue.m_pCollection )
-			pTop = new CSphCollectQueue ( pQuery->m_iMaxMatches, tQueue.m_pCollection );
+			pTop = new CSphCollectQueue ( tQuery.m_iMaxMatches, tQueue.m_pCollection );
 		else
-			pTop = CreatePlainSorter ( eMatchFunc, pQuery->m_bSortKbuffer, pQuery->m_iMaxMatches, uPackedFactorFlags & SPH_FACTOR_ENABLE );
+			pTop = CreatePlainSorter ( eMatchFunc, tQuery.m_bSortKbuffer, tQuery.m_iMaxMatches, uPackedFactorFlags & SPH_FACTOR_ENABLE );
 	} else
-	{
-		pTop = sphCreateSorter1st ( eMatchFunc, eGroupFunc, pQuery, tSettings, uPackedFactorFlags & SPH_FACTOR_ENABLE );
-	}
+		pTop = sphCreateSorter1st ( eMatchFunc, eGroupFunc, &tQuery, tSettings, uPackedFactorFlags & SPH_FACTOR_ENABLE );
 
 	if ( !pTop )
 	{
@@ -5799,7 +5829,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		return nullptr;
 	}
 
-	switch ( pQuery->m_eCollation )
+	switch ( tQuery.m_eCollation )
 	{
 		case SPH_COLLATION_LIBC_CI:
 			tStateMatch.m_fnStrCmp = sphCollateLibcCI;
@@ -5827,8 +5857,8 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 
 	if ( bRandomize )
 	{
-		if ( pQuery->m_iRandSeed>=0 )
-			sphSrand ( (DWORD)pQuery->m_iRandSeed );
+		if ( tQuery.m_iRandSeed>=0 )
+			sphSrand ( (DWORD)tQuery.m_iRandSeed );
 		else
 			sphAutoSrand ();
 	}

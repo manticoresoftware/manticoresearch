@@ -18,6 +18,7 @@
 #include "attribute.h"
 #include "sphinxint.h"
 #include "sphinxjson.h"
+#include "docstore.h"
 #include <time.h>
 #include <math.h>
 
@@ -299,6 +300,61 @@ public:
 		EXPR_CLASS_NAME("Expr_GetFactorsAttr_c");
 		return CALC_DEP_HASHES();
 	}
+};
+
+
+class Expr_GetField_c : public Expr_NoLocator_c
+{
+public:
+	Expr_GetField_c ( const CSphString & sField )
+		: m_sField ( sField )
+	{}
+
+	float	Eval ( const CSphMatch & ) const final { assert(0); return 0; }
+	int		IntEval ( const CSphMatch & ) const final { assert(0); return 0; }
+	int64_t	Int64Eval ( const CSphMatch & ) const final { assert(0); return 0; }
+	bool	IsDataPtrAttr() const final { return true; }
+
+	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final
+	{
+		if ( !m_pDocstore || !m_dFieldIds.GetLength() )
+		{
+			*ppStr = NULL;
+			return 0;
+		}
+
+		DocID_t tDocID = sphGetDocID ( tMatch.m_pDynamic ? tMatch.m_pDynamic : tMatch.m_pStatic  );
+		DocstoreDoc_t tDoc;
+		Verify ( m_pDocstore->GetDoc ( tDoc, tDocID, &m_dFieldIds ) );
+		int iLen = tDoc.m_dFields[0].GetLength()-1;
+		assert(iLen>=0);
+		*ppStr = tDoc.m_dFields[0].LeakData();
+		return iLen;
+	}
+
+	void Command ( ESphExprCommand eCmd, void * pArg ) final
+	{
+		if ( eCmd==SPH_EXPR_SET_DOCSTORE && !m_pDocstore )
+		{
+			m_pDocstore = (DocstoreReader_i*)pArg;
+			int iFieldId = m_pDocstore->GetFieldId ( m_sField.cstr(), DOCSTORE_TEXT );
+			if ( iFieldId!=-1 )
+				m_dFieldIds.Add(iFieldId);
+		}
+	}
+
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
+	{
+		EXPR_CLASS_NAME("Expr_GetField_c");
+		CALC_STR_HASH(m_sField, m_sField.Length());
+		CALC_POD_HASHES(m_dFieldIds);
+		return CALC_DEP_HASHES();
+	}
+
+private:
+	CSphString			m_sField;
+	DocstoreReader_i *	m_pDocstore = nullptr;
+	CSphVector<int>		m_dFieldIds;
 };
 
 
@@ -3291,6 +3347,7 @@ protected:
 	int						AddNodeFloat ( float fValue );
 	int						AddNodeString ( int64_t iValue );
 	int						AddNodeAttr ( int iTokenType, uint64_t uAttrLocator );
+	int						AddNodeField ( int iTokenType, uint64_t uAttrLocator );
 	int						AddNodeWeight ();
 	int						AddNodeOp ( int iOp, int iLeft, int iRight );
 	int						AddNodeFunc0 ( int iFunc );
@@ -3311,6 +3368,7 @@ protected:
 	int						AddNodeMapArg ( const char * sKey, const char * sValue, int64_t iValue );
 	void					AppendToMapArg ( int iNode, const char * sKey, const char * sValue, int64_t iValue );
 	const char *			Attr2Ident ( uint64_t uAttrLoc );
+	const char *			Field2Ident ( uint64_t uAttrLoc );
 	int						AddNodeJsonField ( uint64_t uAttrLocator, int iLeft );
 	int						AddNodeJsonSubkey ( int64_t iValue );
 	int						AddNodeDotNumber ( int64_t iValue );
@@ -3345,6 +3403,7 @@ private:
 
 	bool					CheckForConstSet ( int iArgsNode, int iSkip );
 	int						ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp );
+	int						ParseField ( int iField, const char* sTok, YYSTYPE * lvalp );
 
 	template < typename T >
 	void					WalkTree ( int iRoot, T & FUNCTOR );
@@ -3369,6 +3428,7 @@ private:
 	ISphExpr *				CreateForInNode ( int iNode );
 	ISphExpr *				CreateRegexNode ( ISphExpr * pAttr, ISphExpr * pString );
 	ISphExpr *				CreateConcatNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs );
+	ISphExpr *				CreateFieldNode ( int iField );
 	void					FixupIterators ( int iNode, const char * sKey, SphAttr_t * pAttr );
 
 	bool					GetError () const { return !( m_sLexerError.IsEmpty() && m_sParserError.IsEmpty() && m_sCreateError.IsEmpty() ); }
@@ -3499,6 +3559,13 @@ int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp )
 }
 
 
+int ExprParser_t::ParseField ( int iField, const char* sTok, YYSTYPE * lvalp )
+{
+	lvalp->iAttrLocator = iField;
+	return TOK_FIELD;
+}
+
+
 /// a lexer of my own
 /// returns token id and fills lvalp on success
 /// returns -1 and fills sError on failure
@@ -3595,6 +3662,11 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		int iAttr = m_pSchema->GetAttrIndex ( sTok.cstr() );
 		if ( iAttr>=0 )
 			return ParseAttr ( iAttr, sTok.cstr(), lvalp );
+
+		// check for field
+		int iField = m_pSchema->GetFieldIndex ( sTok.cstr() );
+		if ( iField>=0 )
+			return ParseField ( iField, sTok.cstr(), lvalp );
 
 		// hook might replace built-in function
 		int iHookFunc = -1;
@@ -5227,6 +5299,21 @@ void ConvertArgsJson ( VecRefPtrs_t<ISphExpr *> & dArgs )
 	}
 }
 
+
+ISphExpr * ExprParser_t::CreateFieldNode ( int iField )
+{
+	m_eEvalStage = SPH_EVAL_POSTLIMIT;
+	const CSphColumnInfo & tField = m_pSchema->GetField(iField);
+	if ( !(tField.m_uFieldFlags & CSphColumnInfo::FIELD_STORED) )
+	{
+		m_sCreateError.SetSprintf ( "field '%s' is not stored, see 'stored_fields' option", tField.m_sName.cstr() );
+		return nullptr;
+	}
+
+	return new Expr_GetField_c ( tField.m_sName );
+}
+
+
 /// fold nodes subtree into opcodes
 ISphExpr * ExprParser_t::CreateTree ( int iNode )
 {
@@ -5301,6 +5388,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_ATTR_MVA64:
 		case TOK_ATTR_MVA32:	return new Expr_GetMva_c ( tNode.m_tLocator, tNode.m_iLocator );
 		case TOK_ATTR_FACTORS:	return new Expr_GetFactorsAttr_c ( tNode.m_tLocator, tNode.m_iLocator );
+		case TOK_FIELD:			return CreateFieldNode ( tNode.m_iLocator );
 
 		case TOK_CONST_FLOAT:	return new Expr_GetConst_c ( tNode.m_fConst );
 		case TOK_CONST_INT:
@@ -7322,6 +7410,18 @@ int ExprParser_t::AddNodeAttr ( int iTokenType, uint64_t uAttrLocator )
 }
 
 
+int ExprParser_t::AddNodeField ( int iTokenType, uint64_t uAttrLocator )
+{
+	assert ( iTokenType==TOK_FIELD );
+
+	ExprNode_t & tNode = m_dNodes.Add();
+	tNode.m_iToken = iTokenType;
+	tNode.m_iLocator = uAttrLocator;
+	tNode.m_eRetType = SPH_ATTR_STRINGPTR;
+	return m_dNodes.GetLength()-1;
+}
+
+
 int ExprParser_t::AddNodeWeight ()
 {
 	ExprNode_t & tNode = m_dNodes.Add ();
@@ -8128,6 +8228,7 @@ void ExprParser_t::AppendToMapArg ( int iNode, const char * sKey, const char * s
 	m_dNodes[iNode].m_pMapArg->Add ( sKey, sValue, iValue );
 }
 
+
 const char * ExprParser_t::Attr2Ident ( uint64_t uAttrLoc )
 {
 	ExprNode_t tAttr;
@@ -8135,6 +8236,15 @@ const char * ExprParser_t::Attr2Ident ( uint64_t uAttrLoc )
 
 	CSphString sIdent;
 	sIdent = m_pSchema->GetAttr ( tAttr.m_iLocator ).m_sName;
+	m_dIdents.Add ( sIdent.Leak() );
+	return m_dIdents.Last();
+}
+
+
+const char * ExprParser_t::Field2Ident ( uint64_t uAttrLoc )
+{
+	CSphString sIdent;
+	sIdent = m_pSchema->GetField(uAttrLoc).m_sName;
 	m_dIdents.Add ( sIdent.Leak() );
 	return m_dIdents.Last();
 }

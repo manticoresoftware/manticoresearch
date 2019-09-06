@@ -781,7 +781,7 @@ static bool LoadPlainIndexChunk ( Index_t & tIndex, CSphString & sError )
 
 	// prealloc skiplist
 	if ( !tIndex.m_tSkiplists.Setup ( GetIndexFileName (  sPath, "spe" ).cstr(), sError, false ) )
-			return false;
+		return false;
 
 	// almost done
 	bool bPersistMVA = sphIsReadable ( GetIndexFileName (  sPath, "mvp" ).cstr() );
@@ -1599,7 +1599,7 @@ bool ConverterPlain_t::Init ( Index_t & tIndex, CSphString & sError )
 	// merge index settings with new defaults
 	CSphConfigSection hIndex;
 	CSphIndexSettings tDefaultSettings;
-	if ( !sphConfIndex ( hIndex, tDefaultSettings, tIndex.m_sName.cstr(), sError ) )
+	if ( !sphConfIndex ( hIndex, tDefaultSettings, tIndex.m_sName.cstr(), nullptr, sError ) )
 		return false;
 
 	tIndex.m_tSettings.m_tBlobUpdateSpace = tDefaultSettings.m_tBlobUpdateSpace;
@@ -2007,7 +2007,7 @@ static bool SaveRtIndex ( Index_t & tIndex, CSphString & sError )
 	// merge index settings with new defaults
 	CSphConfigSection hIndex;
 	CSphIndexSettings tDefaultSettings;
-	if ( !sphConfIndex ( hIndex, tDefaultSettings, tIndex.m_sName.cstr(), sError ) )
+	if ( !sphConfIndex ( hIndex, tDefaultSettings, tIndex.m_sName.cstr(), nullptr, sError ) )
 		return false;
 
 	// write new meta
@@ -2257,7 +2257,7 @@ static bool SavePqIndex ( Index_t & tIndex, CSphString & sError )
 	// merge index settings with new defaults
 	CSphConfigSection hIndex;
 	CSphIndexSettings tDefaultSettings;
-	if ( !sphConfIndex ( hIndex, tDefaultSettings, tIndex.m_sName.cstr(), sError ) )
+	if ( !sphConfIndex ( hIndex, tDefaultSettings, tIndex.m_sName.cstr(), nullptr, sError ) )
 		return false;
 
 	// write new meta

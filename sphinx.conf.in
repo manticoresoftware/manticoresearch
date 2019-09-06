@@ -516,7 +516,6 @@ index test1
 	# optional, defaults are listed below
 	#
 	# inplace_hit_gap		= 0 # preallocated hitlist gap size
-	# inplace_docinfo_gap	= 0 # preallocated docinfo gap size
 	# inplace_reloc_factor	= 0.1 # relocation buffer size within arena
 	# inplace_write_factor	= 0.1 # write buffer size within arena
 
@@ -630,7 +629,26 @@ index test1
 	# possible values are mmap, mmap_preread and mlock
 	# default is mmap
 	# access_blob_attrs	= mmap
-	
+
+	# Original document text from these fields will be stored in the index and
+	# can be retrieved when searching. Optional, default is empty.
+	#
+	# stored_fields = subject, content
+
+	# The size of the block of documents used by document storage. Optional,
+	# default is 16k.
+	#
+	# docstore_block_size = 32k
+
+	# The type of compression used to compress blocks of documents used by document storage
+	# (see stored_fields). Known values are 'lz4', 'lz4hc' and 'none'. Optional, default is 'lz4'.
+	#
+	# docstore_compression = lz4hc
+
+	# Compression level in document storage when 'lz4hc' compression is used. Acceptable values
+	# are between 1 and 12. Optional, default is 9.
+	# 
+	# docstore_compression_level = 10
 }
 
 
@@ -1047,6 +1065,12 @@ searchd
 	# optional, default is empty
 	#
 	# snippets_file_prefix		= /mnt/common/server1/
+
+	
+	# Maximum total size of document blocks from document storage that are
+	# cached in memory. Optional, default is 16m.
+	#
+	# docstore_cache_size = 32m
 }
 
 #############################################################################

@@ -931,7 +931,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	// (need bigram settings to spawn a proper indexing tokenizer)
 	CSphString sError;
 	CSphIndexSettings tSettings;
-	if ( !sphConfIndex ( hIndex, tSettings, sIndexName, sError ) )
+	if ( !sphConfIndex ( hIndex, tSettings, sIndexName, nullptr, sError ) )
 		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
 	///////////////////

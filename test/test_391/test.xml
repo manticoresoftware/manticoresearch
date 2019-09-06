@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>document storage vs http</name>
+
+<requires>
+<http/>
+</requires>
+
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id, title, body from test_table
+}
+
+index test1
+{
+	source			= test1
+	path			= <data_path/>/test1
+	stored_fields	= title, body
+}
+</config>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	title varchar(255) not null,
+	body varchar(255) not null
+);
+</db_create>
+<db_drop>drop table if exists test_table;</db_drop>
+
+<db_insert>
+insert into test_table values
+( 1, 'document 1', 'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat.' ),
+( 2, 'document 2', 'A door opened before them, revealing a small room. Bander said, "Come, half-humans, I want to show you how we live."' ),
+( 3, 'document 3', 'Trevize whispered, "It gets infantile pleasure out of display. I`d love to knock it down."' ),
+( 4, 'document 4', 'Don`t try to compete in childishness, said Bliss.' ),
+( 5, 'document 5', 'Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.' )
+</db_insert>
+
+<httpqueries>
+<query endpoint="json/search">{ "index": "test1", "query": { "match_all": {} } }</query>
+<query endpoint="json/search">{ "index": "test1", "query": { "match_all": {} }, "_source": "title" }</query>
+</httpqueries>
+
+</test>

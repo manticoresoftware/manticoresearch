@@ -768,7 +768,7 @@ bool PercolateIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >>
 	ISphHits * pHits = tSrc.IterateHits ( sError );
 	pAcc->GrabLastWarning ( sWarning );
 
-	pAcc->AddDocument ( pHits, tDoc, true, m_tSchema.GetRowSize(), ppStr, dMvas );
+	pAcc->AddDocument ( pHits, tDoc, true, m_tSchema.GetRowSize(), ppStr, dMvas, nullptr );
 
 	return true;
 }
@@ -2141,7 +2141,7 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath )
 	CSphEmbeddedFiles tEmbeddedFiles;
 
 	// load settings
-	ReadSchema ( rdMeta, m_tSchema );
+	ReadSchema ( rdMeta, m_tSchema, uIndexVersion );
 	LoadIndexSettings ( m_tSettings, rdMeta, uIndexVersion );
 	if ( !LoadTokenizerSettings ( rdMeta, tTokenizerSettings, tEmbeddedFiles, m_sLastError ) )
 		return false;

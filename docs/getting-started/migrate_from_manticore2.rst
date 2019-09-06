@@ -41,7 +41,9 @@ In case of RealTime indexes before converting one you need to flush it's memory 
 Because of the 4GB limitation, a RealTime index in 2.x could still have several disk chunks after an optimize operation. After upgrading to 3.x, these indexes can now be optimized to 1-disk chunk with the usual OPTIMIZE command.
 
 Index files also changed. The only component that didn't get any structural changes is the ``spp`` file (hitlists). ``sps`` (strings/json) and ``spm`` (MVA) are now held by ``spb`` (var-length attributes).
-The new format has an ``spm`` file present, but it's used for row map (previously it was dedicated for MVA attributes). The new extensions added are ``spt`` (docid lookup), ``sphi`` ( secondary index histograms).
+The new format has an ``spm`` file present, but it's used for row map (previously it was dedicated for MVA attributes). The new extensions added are ``spt`` (docid lookup), ``sphi`` ( secondary index histograms),
+``spds`` (document storage).
+
 In case you are using scripts that manipulate index files, they should be adapted for the new file extensions.
 
 Kill-list

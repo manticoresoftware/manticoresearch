@@ -816,6 +816,79 @@ Example:
 
     dict = keywords
 
+.. _docstore_block_size:
+
+docstore_block_size
+~~~~~~~~~~~~~~~~~~~
+
+The size of the block of documents used by document storage. Optional,
+default is 16kb.
+
+When :ref:`stored_fields` are specified, original document text is
+stored inside the index. To use less disk space, documents are compressed.
+To get more efficient disk access and better compression ratios on small documents,
+documents are concatenated into blocks. When indexing, documents are collected until
+their total size reaches the threshold. After that, this block of documents is compressed.
+
+This option can be used to get better compression ratio (by increasing block size)
+or to get faster access to document text (by decreasing block size).
+
+Example:
+
+
+.. code-block:: ini
+
+
+    docstore_block_size = 32k
+
+
+.. _docstore_compression:
+
+docstore_compression
+~~~~~~~~~~~~~~~~~~~~
+
+The type of compression used to compress blocks of documents used by document storage.
+Known values are 'lz4', 'lz4hc' and 'none'. Optional, default is 'lz4'.
+
+When :ref:`stored_fields` are specified, document storage stores compressed document
+blocks. 'lz4' has fast compression and decompression speeds, 'lz4hc' (high compression)
+has the same fast decompression but compression speed is traded for better compression ratio.
+'none' disables compression.
+
+See also :ref:`docstore_compression_level`.
+
+Example:
+
+
+.. code-block:: ini
+
+
+    docstore_compression = lz4hc
+
+
+.. _docstore_compression_level:
+
+docstore_compression_level
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Compression level in document storage when 'lz4hc' compression is used. Acceptable values
+are between 1 and 12. Optional, default is 9.
+
+When 'lz4hc' compression is used, compression level can be fine-tuned to get better performance
+or better compression ratio. Does not work with 'lz4' compression.
+
+See also :ref:`docstore_compression`.
+
+Example:
+
+
+.. code-block:: ini
+
+
+    docstore_compression_level = 12
+
+
+
 .. _embedded_limit:
 
 embedded_limit
@@ -2275,7 +2348,9 @@ For reference, different index files store the following data:
 
 -  ``.spt`` stores additional data structures to speed up lookups by document ids;
 
--  ``.spe`` stores skip-lists to speed up doc-list filtering
+-  ``.spe`` stores skip-lists to speed up doc-list filtering;
+
+-  ``.spds`` stores document text
 
 Example:
 
@@ -2908,6 +2983,32 @@ Example:
 
 
     stopwords_unstemmed = 1
+
+
+.. _stored_fields:
+
+stored_fields
+~~~~~~~~~~~~~
+
+A list of fields to be stored in the index. Optional, default is empty
+(do not store original field text).
+
+By default, original document text is not stored in the index. If
+stored_fields option is set, the field's full text is stored in the index.
+It can be returned with search results.
+
+See also :ref:`docstore_block_size`, :ref:`docstore_compression` for
+document storage compression options.
+
+
+Example:
+
+
+.. code-block:: ini
+
+
+    stored_fields = title,content
+
 
 .. _type:
 

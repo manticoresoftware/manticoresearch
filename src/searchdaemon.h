@@ -1210,6 +1210,7 @@ struct AggrResult_t : CSphQueryResult
 	CSphVector<int>					m_dMatchCounts;		///< aggregated result sets lengths (for schema minimization)
 	CSphVector<const CSphIndex*>	m_dLockedAttrs;		///< indexes which are hold in the memory until sending result
 	StrVec_t						m_dZeroCount;
+	TaggedVector_c					m_dTag2Docstore;	///< tag to docstore mapping
 
 	void ClampMatches ( int iLimit, bool bCommonSchema );
 	void FreeMatchesPtrs ( int iLimit, bool bCommonSchema );

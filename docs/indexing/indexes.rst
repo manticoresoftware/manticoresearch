@@ -119,6 +119,10 @@ Plain indexes and RealTime indexes chunks:
 +-----------+------------------------------+--------------------------------------------+
 | spb       | var-length attrs             | mmap(), also see :ref:`access_blob_attrs`  |
 +-----------+------------------------------+--------------------------------------------+
+| spds      | documents                    | read from disk, also see                   |
+|           |                              | :ref:`docstore_cache_size`                 |
++-----------+------------------------------+--------------------------------------------+
+
 
 :sup:`[1]` Kill lists -  loaded in memory at startup and discarded after they are applied to targets
 

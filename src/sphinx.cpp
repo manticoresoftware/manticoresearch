@@ -26,6 +26,7 @@
 #include "attribute.h"
 #include "secondaryindex.h"
 #include "killlist.h"
+#include "docstore.h"
 #include "global_idf.h"
 
 #include <errno.h>
@@ -1577,6 +1578,7 @@ static IndexFileExt_t g_dIndexFilesExts[SPH_EXT_TOTAL] =
 	{ SPH_EXT_SPM,	".spm",		4,	false,	true,	"dead row map" },
 	{ SPH_EXT_SPT,	".spt",		53,	true,	true,	"docid lookup table" },
 	{ SPH_EXT_SPHI,	".sphi",	53,	true,	true,	"secondary index histograms" },
+	{ SPH_EXT_SPDS, ".spds",	57, true,	true,	"document storage" },
 	{ SPH_EXT_SPL,	".spl",		1,	true,	false,	"file lock for the index" }
 };
 
@@ -2591,6 +2593,9 @@ public:
 
 	CSphFixedVector<SphAttr_t> 	BuildDocList () const final;
 
+	bool				GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds=nullptr ) const final;
+	int					GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
+
 private:
 	static const int			MIN_WRITE_BUFFER		= 262144;	///< min write buffer size
 	static const int			DEFAULT_WRITE_BUFFER	= 1048576;	///< default write buffer size
@@ -2624,6 +2629,8 @@ private:
 
 	CSphMappedBuffer<BYTE>		m_tDocidLookup;		///< speeds up docid-rowid lookups + used for applying killlist on startup
 	LookupReader_c				m_tLookupReader;	///< used by getrowidbydocid
+
+	CSphScopedPtr<Docstore_i> 	m_pDocstore {nullptr};
 
 	FileAccessSettings_t		m_tFiles;
 
@@ -2679,7 +2686,7 @@ private:
 	void						PopulateHistograms();
 
 	static void					CreateRowMaps ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, CSphVector<RowID_t> & dSrcRowMap, CSphVector<RowID_t> & dDstRowMap, bool bSupressDstDocids );
-	static bool					MergeAttributes ( volatile bool * pLocalStop, const CSphIndex_VLN * pIndex, const CSphVector<RowID_t> & dRowMap, AttrIndexBuilder_c & tMinMax,	CSphWriter & tWriterSPA, BlobRowBuilder_i * pBlobRowBuilder, RowID_t & tResultRowID );
+	static bool					MergeAttributes ( volatile bool * pLocalStop, const CSphIndex_VLN * pIndex, const CSphVector<RowID_t> & dRowMap, AttrIndexBuilder_c & tMinMax,	CSphWriter & tWriterSPA, BlobRowBuilder_i * pBlobRowBuilder, DocstoreBuilder_i * pDocstoreBuilder, RowID_t & tResultRowID );
 
 	void						Update_CollectRowPtrs ( UpdateContext_t & tCtx );
 	bool						Update_WriteBlobRow ( UpdateContext_t & tCtx, int iUpd, CSphRowitem * pDocinfo, const BYTE * pBlob, int iLength, int nBlobAttrs, bool & bCritical, CSphString & sError ) override;
@@ -2691,9 +2698,12 @@ private:
 	void						DebugCheck_Docs ( DebugCheckContext_t & tCtx, DebugCheckError_c & tReporter );
 	void						DebugCheck_KillList ( DebugCheckContext_t & tCtx, DebugCheckError_c & tReporter ) const;
 	void						DebugCheck_BlockIndex ( DebugCheckContext_t & tCtx, DebugCheckError_c & tReporter );
-
 	void						DebugCheckDocidLookup ( CSphAutoreader & tAttrReader, int64_t iRows, int iRowSize, DebugCheckError_c & tReporter ) const;
 	void						DebugCheckDocids ( CSphAutoreader & tAttrReader, int64_t iRows, int iRowSize, DebugCheckError_c & tReporter ) const;
+
+	bool						Build_SetupInplace ( SphOffset_t & iHitsGap, int iHitsMax, int iFdHits ) const;
+	bool						Build_SetupDocstore ( CSphScopedPtr<DocstoreBuilder_i> & pDocstore);
+	void						Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, CSphSource * pSource );
 };
 
 
@@ -7524,6 +7534,33 @@ inline int CSphSchema::GetCachedRowSize() const
 	return m_iRowSize;
 }
 
+
+void CSphSchema::SetupStoredFields ( const StrVec_t & tFields )
+{
+	for ( const auto & sField : tFields )
+	{
+		for ( auto & tSchemaField : m_dFields )
+			if ( tSchemaField.m_sName==sField )
+				tSchemaField.m_uFieldFlags |= CSphColumnInfo::FIELD_STORED;
+	}
+}
+
+
+bool CSphSchema::HasStoredFields() const
+{
+	for ( auto & tField : m_dFields )
+		if ( tField.m_uFieldFlags & CSphColumnInfo::FIELD_STORED )
+			return true;
+
+	return false;
+}
+
+
+bool CSphSchema::IsFieldStored ( int iField ) const
+{
+	return !!( m_dFields[iField].m_uFieldFlags & CSphColumnInfo::FIELD_STORED );
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 void CSphRsetSchema::Reset ()
@@ -7596,6 +7633,15 @@ int CSphRsetSchema::GetAttrIndex ( const char * sName ) const
 		return iRes - iSub;
 	}
 	return -1;
+}
+
+
+int CSphRsetSchema::GetFieldIndex ( const char * sName ) const
+{
+	if ( !m_pIndexSchema )
+		return -1;
+
+	return m_pIndexSchema->GetFieldIndex(sName);
 }
 
 
@@ -7821,12 +7867,12 @@ void CSphWriter::UpdatePoolUsed()
 }
 
 
-void CSphWriter::PutByte ( int data )
+void CSphWriter::PutByte ( BYTE uValue )
 {
 	assert ( m_pPool );
 	if ( m_iPoolUsed==m_iBufferSize )
 		Flush ();
-	*m_pPool++ = BYTE ( data & 0xff );
+	*m_pPool++ = uValue;
 	UpdatePoolUsed();
 	m_iPos++;
 }
@@ -10385,7 +10431,20 @@ static void ReadSchemaColumn ( CSphReader & rdInfo, CSphColumnInfo & tCol )
 }
 
 
-void ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema )
+static void ReadSchemaField ( CSphReader & rdInfo, CSphColumnInfo & tCol, DWORD uVersion )
+{
+	if ( uVersion>=57  )
+	{
+		tCol.m_sName = rdInfo.GetString();
+		tCol.m_uFieldFlags = rdInfo.GetDword();
+		tCol.m_bPayload = !!rdInfo.GetByte();
+	}
+	else
+		ReadSchemaColumn ( rdInfo, tCol );
+}
+
+
+void ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema, DWORD uVersion )
 {
 	m_tSchema.Reset ();
 
@@ -10393,7 +10452,7 @@ void ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema )
 	for ( int i=0; i<iNumFields; i++ )
 	{
 		CSphColumnInfo tCol;
-		ReadSchemaColumn ( rdInfo, tCol );
+		ReadSchemaField ( rdInfo, tCol, uVersion );
 		m_tSchema.AddField ( tCol );
 	}
 
@@ -10407,14 +10466,18 @@ void ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema )
 }
 
 
+static void WriteSchemaField ( CSphWriter & fdInfo, const CSphColumnInfo & tCol )
+{
+	fdInfo.PutString ( tCol.m_sName );
+	fdInfo.PutDword ( tCol.m_uFieldFlags );
+	fdInfo.PutByte ( tCol.m_bPayload );
+}
+
+
 static void WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInfo & tCol )
 {
-	int iLen = strlen ( tCol.m_sName.cstr() );
-	fdInfo.PutDword ( iLen );
-	fdInfo.PutBytes ( tCol.m_sName.cstr(), iLen );
-
-	ESphAttr eAttrType = tCol.m_eAttrType;
-	fdInfo.PutDword ( eAttrType );
+	fdInfo.PutString( tCol.m_sName );
+	fdInfo.PutDword ( tCol.m_eAttrType );
 
 	fdInfo.PutDword ( tCol.m_tLocator.CalcRowitem() ); // for backwards compatibility
 	fdInfo.PutDword ( tCol.m_tLocator.m_iBitOffset );
@@ -10428,7 +10491,7 @@ void WriteSchema ( CSphWriter & fdInfo, const CSphSchema & tSchema )
 {
 	fdInfo.PutDword ( tSchema.GetFieldsCount() );
 	for ( int i=0; i<tSchema.GetFieldsCount(); i++ )
-		WriteSchemaColumn ( fdInfo, tSchema.GetField(i) );
+		WriteSchemaField ( fdInfo, tSchema.GetField(i) );
 
 	fdInfo.PutDword ( tSchema.GetAttrsCount() );
 	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
@@ -11707,6 +11770,81 @@ bool CSphIndex_VLN::CreateHistograms ( const AttrIndexBuilder_c & tMinMax )
 }
 
 
+bool CSphIndex_VLN::Build_SetupInplace ( SphOffset_t & iHitsGap, int iHitsMax, int iFdHits ) const
+{
+	if ( !m_bInplaceSettings )
+		return true;
+
+	const int HIT_SIZE_AVG = 4;
+	const float HIT_BLOCK_FACTOR = 1.0f;
+
+	if ( m_iHitGap )
+		iHitsGap = (SphOffset_t) m_iHitGap;
+	else
+		iHitsGap = (SphOffset_t)( iHitsMax*HIT_BLOCK_FACTOR*HIT_SIZE_AVG );
+
+	iHitsGap = Max ( iHitsGap, 1 );
+	if ( !SeekAndWarn ( iFdHits, iHitsGap, "CSphIndex_VLN::Build" ))
+		return false;
+
+	return true;
+}
+
+
+void SetupDocstoreFields ( DocstoreFields_i & tFields, const CSphSchema & tSchema )
+{
+	int iStored = 0;
+	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
+		if ( tSchema.IsFieldStored(i) )
+		{
+			tFields.AddField ( tSchema.GetFieldName(i), DOCSTORE_TEXT );
+			iStored++;
+		}
+
+	assert(iStored);
+}
+
+
+bool CSphIndex_VLN::Build_SetupDocstore ( CSphScopedPtr<DocstoreBuilder_i> & pDocstore )
+{
+	if ( !m_tSchema.HasStoredFields() )
+		return true;
+
+	DocstoreBuilder_i * pBuilder = CreateDocstoreBuilder ( GetIndexFileName(SPH_EXT_SPDS), GetSettings(), m_sLastError );
+	if ( !pBuilder )
+		return false;
+
+	SetupDocstoreFields ( *pBuilder, m_tSchema );
+
+	pDocstore = pBuilder;
+	return true;
+}
+
+
+void CSphIndex_VLN::Build_AddToDocstore ( DocstoreBuilder_i * pDocstoreBuilder, CSphSource * pSource )
+{
+	if ( !pDocstoreBuilder )
+		return;
+
+	DocstoreBuilder_i::Doc_t tDoc;
+	pSource->GetDocFields ( tDoc.m_dFields );
+
+	assert ( tDoc.m_dFields.GetLength()==m_tSchema.GetFieldsCount() );
+
+	// filter out non-hl fields (should already be null)
+	int iField = 0;
+	for ( int i = 0; i < m_tSchema.GetFieldsCount(); i++ )
+	{
+		if ( !m_tSchema.IsFieldStored(i) )
+			tDoc.m_dFields.Remove(iField);
+		else
+			iField++;
+	}
+
+	pDocstoreBuilder->AddDoc ( pSource->m_tDocInfo.m_tRowID, tDoc );
+}
+
+
 int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer )
 {
 	assert ( dSources.GetLength() );
@@ -11715,10 +11853,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	if ( !LoadHitlessWords ( dHitlessWords ) )
 		return 0;
-
-	int iHitBuilderBufferSize = ( iWriteBuffer>0 )
-		? Max ( iWriteBuffer, MIN_WRITE_BUFFER )
-		: DEFAULT_WRITE_BUFFER;
 
 	// vars shared between phases
 	CSphVector<CSphBin*> dBins;
@@ -11746,6 +11880,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	{
 		return 0;
 	}
+
+	if ( !CheckStoredFields ( m_tSchema, m_tSettings, m_sLastError ) )
+		return 0;
 
 	bool bHaveQueryMVAs = false;
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
@@ -11784,6 +11921,10 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	if ( !m_pTokenizer->SetFilterSchema ( m_tSchema, m_sLastError ) )
 		return 0;
+
+	int iHitBuilderBufferSize = ( iWriteBuffer>0 )
+		? Max ( iWriteBuffer, MIN_WRITE_BUFFER )
+		: DEFAULT_WRITE_BUFFER;
 
 	CSphHitBuilder tHitBuilder ( m_tSettings, dHitlessWords, false, iHitBuilderBufferSize, m_pDict, &m_sLastError );
 
@@ -11860,22 +12001,13 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			return 0;
 	}
 
+	CSphScopedPtr<DocstoreBuilder_i> pDocstoreBuilder(nullptr);
+	if ( !Build_SetupDocstore ( pDocstoreBuilder ) )
+		return 0;
+
 	SphOffset_t iHitsGap = 0;
-
-	if ( m_bInplaceSettings )
-	{
-		const int HIT_SIZE_AVG = 4;
-		const float HIT_BLOCK_FACTOR = 1.0f;
-
-		if ( m_iHitGap )
-			iHitsGap = (SphOffset_t) m_iHitGap;
-		else
-			iHitsGap = (SphOffset_t)( iHitsMax*HIT_BLOCK_FACTOR*HIT_SIZE_AVG );
-
-		iHitsGap = Max ( iHitsGap, 1 );
-		if ( !SeekAndWarn ( fdHits.GetFD (), iHitsGap, "CSphIndex_VLN::Build" ))
-			return 0;
-	}
+	if ( !Build_SetupInplace ( iHitsGap, iHitsMax, fdHits.GetFD() ) )
+		return 0;
 
 	if ( !sphLockEx ( fdLock.GetFD(), false ) )
 	{
@@ -12038,6 +12170,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				nDocidLookupBlocks++;
 			}
 
+			Build_AddToDocstore ( pDocstoreBuilder.Ptr(), pSource );
+
 			// go on, loop next document
 		}
 
@@ -12190,6 +12324,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	dKillList.Uniq();
 	if ( !WriteKillList ( GetIndexFileName(SPH_EXT_SPK), dKillList.Begin(), dKillList.GetLength(), m_tSettings.m_dKlistTargets, m_sLastError ) )
 		return 0;
+
+	if ( pDocstoreBuilder.Ptr() )
+		pDocstoreBuilder->Finalize();
 
 	WarnAboutKillList ( dKillList, m_tSettings.m_dKlistTargets );
 
@@ -12967,7 +13104,7 @@ void CSphIndex_VLN::CreateRowMaps ( const CSphIndex_VLN * pDstIndex, const CSphI
 
 
 bool CSphIndex_VLN::MergeAttributes ( volatile bool * pLocalStop, const CSphIndex_VLN * pIndex, const CSphVector<RowID_t> & dRowMap, AttrIndexBuilder_c & tMinMax,
-	CSphWriter & tWriterSPA, BlobRowBuilder_i * pBlobRowBuilder, RowID_t & tResultRowID )
+	CSphWriter & tWriterSPA, BlobRowBuilder_i * pBlobRowBuilder, DocstoreBuilder_i * pDocstoreBuilder, RowID_t & tResultRowID )
 {
 	int iStride = pIndex->m_tSchema.GetRowSize();
 
@@ -13000,6 +13137,9 @@ bool CSphIndex_VLN::MergeAttributes ( volatile bool * pLocalStop, const CSphInde
 			tWriterSPA.PutBytes ( dTmpRow.Begin(), iStrideBytes );
 		} else
 			tWriterSPA.PutBytes ( pRow, iStrideBytes );
+
+		if ( pDocstoreBuilder )
+			pDocstoreBuilder->AddDoc ( tResultRowID, pIndex->m_pDocstore->GetDoc(i) );
 
 		tResultRowID++;
 	}
@@ -13053,6 +13193,18 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 			return false;
 	}
 
+	CSphScopedPtr<DocstoreBuilder_i> pDocstoreBuilder(nullptr);
+	if ( pDstIndex->m_pDocstore )
+	{
+		pDocstoreBuilder = CreateDocstoreBuilder ( pDstIndex->GetIndexFileName ( SPH_EXT_SPDS, true ), pDstIndex->m_pDocstore->GetDocstoreSettings(), sError );
+		if ( !pDocstoreBuilder.Ptr() )
+			return false;
+
+		for ( int i = 0; i < pDstIndex->m_tSchema.GetFieldsCount(); i++ )
+			if ( pDstIndex->m_tSchema.IsFieldStored(i) )
+				pDocstoreBuilder->AddField ( pDstIndex->m_tSchema.GetFieldName(i), DOCSTORE_TEXT );
+	}
+
 	AttrIndexBuilder_c tMinMax ( pDstIndex->m_tSchema );
 
 	CSphVector<RowID_t> dSrcRows(pSrcIndex->m_iDocinfo);
@@ -13061,10 +13213,10 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	CreateRowMaps ( pDstIndex, pSrcIndex, pFilter, dSrcRows, dDstRows, bSupressDstDocids );
 
 	RowID_t tResultRowID = 0;
-	if ( !MergeAttributes ( pLocalStop, pDstIndex, dDstRows, tMinMax, tWriterSPA, pBlobRowBuilder.Ptr(), tResultRowID ) )
+	if ( !MergeAttributes ( pLocalStop, pDstIndex, dDstRows, tMinMax, tWriterSPA, pBlobRowBuilder.Ptr(), pDocstoreBuilder.Ptr(), tResultRowID ) )
 		return false;
 
-	if ( !MergeAttributes ( pLocalStop, pSrcIndex, dSrcRows, tMinMax, tWriterSPA, pBlobRowBuilder.Ptr(), tResultRowID ) )
+	if ( !MergeAttributes ( pLocalStop, pSrcIndex, dSrcRows, tMinMax, tWriterSPA, pBlobRowBuilder.Ptr(), pDocstoreBuilder.Ptr(), tResultRowID ) )
 		return false;
 
 	if ( tResultRowID )
@@ -13146,6 +13298,9 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 	if ( !pDstIndex->WriteLookupAndHistograms ( sSPA.cstr(), sSPT.cstr(), sSPHI.cstr(), tResultRowID, tMinMax, sError ) )
 		return false;
+
+	if ( pDocstoreBuilder.Ptr() )
+		pDocstoreBuilder->Finalize();
 
 	CSphString sHeaderName = pDstIndex->GetIndexFileName ( SPH_EXT_SPH, true );
 
@@ -14196,6 +14351,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 	// done
 	pResult->m_pBlobPool = m_tBlobAttrs.GetWritePtr();
+	pResult->m_pDocstore = this;
 	pResult->m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
 	pResult->m_iBadRows += tCtx.m_iBadRows;
 
@@ -14521,8 +14677,7 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 	}
 
 	// schema
-	// 4th arg means that inline attributes need be dynamic in searching time too
-	ReadSchema ( rdInfo, m_tSchema );
+	ReadSchema ( rdInfo, m_tSchema, m_uVersion );
 
 	// check schema for dupes
 	for ( int iAttr=0; iAttr<m_tSchema.GetAttrsCount(); iAttr++ )
@@ -15170,6 +15325,13 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 		SafeDelete ( m_pHistograms );
 		m_pHistograms = new HistogramContainer_c;
 		if ( !m_pHistograms->Load ( sHistogramFile, m_sLastError ) )
+			return false;
+	}
+
+	if ( m_uVersion>=57 && m_tSchema.HasStoredFields() )
+	{
+		m_pDocstore = CreateDocstore ( GetIndexFileName(SPH_EXT_SPDS), m_sLastError );
+		if ( !m_pDocstore )
 			return false;
 	}
 
@@ -17186,8 +17348,8 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	pRanker->FinalizeCache ( tMaxSorterSchema );
 
-	// mva and string pools ptrs
 	pResult->m_pBlobPool = m_tBlobAttrs.GetWritePtr();
+	pResult->m_pDocstore = this;
 
 	// query timer
 	int64_t tmWall = sphMicroTimer() - tmQueryStart;
@@ -17209,6 +17371,30 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	return true;
 }
+
+
+bool CSphIndex_VLN::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds ) const
+{
+	if ( !m_pDocstore.Ptr() )
+		return false;
+
+	RowID_t tRowID = GetRowidByDocid ( tDocID );
+	if ( tRowID==INVALID_ROWID || m_tDeadRowMap.IsSet(tRowID) )
+		return false;
+
+	tDoc = m_pDocstore->GetDoc ( tRowID, pFieldIds );
+	return true;
+}
+
+
+int CSphIndex_VLN::GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const
+{
+	if ( !m_pDocstore.Ptr() )
+		return -1;
+
+	return m_pDocstore->GetFieldId ( sName, eType );
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 // INDEX STATUS
@@ -23719,6 +23905,7 @@ void CSphSource::Setup ( const CSphSourceSettings & tSettings )
 	m_bIndexSP = tSettings.m_bIndexSP;
 	m_dPrefixFields = tSettings.m_dPrefixFields;
 	m_dInfixFields = tSettings.m_dInfixFields;
+	m_dStoredFields = tSettings.m_dStoredFields;
 	m_bIndexFieldLens = tSettings.m_bIndexFieldLens;
 }
 
@@ -23861,6 +24048,10 @@ bool CSphSource_Document::IterateDocument ( bool & bEOF, CSphString & sError )
 			m_tState.m_dTmpFieldStorage[i] = NULL;
 		}
 	}
+
+	m_dDocFields.Resize ( m_tSchema.GetFieldsCount() );
+	for ( auto & i : m_dDocFields )
+		i.Resize(0);
 
 	// fetch next document
 	while (true)
@@ -24095,6 +24286,8 @@ bool CSphSource_Document::AddAutoAttrs ( CSphString & sError, StrVec_t * pDefaul
 	// auto-computed length attributes
 	if ( m_bIndexFieldLens )
 		return AddFieldLens ( m_tSchema, true, sError );
+
+	m_tSchema.SetupStoredFields ( m_dStoredFields );
 
 	return true;
 }
@@ -24451,16 +24644,19 @@ void CSphSource_Document::BuildHits ( CSphString & sError, bool bSkipEndMarker )
 			// get that field
 			BYTE * sField = m_tState.m_dFields[m_tState.m_iField-m_tState.m_iStartField];
 			int iFieldBytes = m_tState.m_dFieldLengths[m_tState.m_iField-m_tState.m_iStartField];
+			int iOriginalFieldBytes = iFieldBytes;
 			if ( !sField || !(*sField) || !iFieldBytes )
 				continue;
 
 			// load files
 			const BYTE * sTextToIndex;
-			if ( m_tSchema.GetField(m_tState.m_iField).m_bFilename )
+			const CSphColumnInfo & tField = m_tSchema.GetField(m_tState.m_iField);
+			if ( tField.m_bFilename )
 			{
 				LoadFileField ( &sField, sError );
 				sTextToIndex = sField;
 				iFieldBytes = (int) strlen ( (char*)sField );
+
 				if ( m_pFieldFilter && iFieldBytes )
 				{
 					m_tState.m_dFiltered.Resize ( 0 );
@@ -24476,6 +24672,12 @@ void CSphSource_Document::BuildHits ( CSphString & sError, bool bSkipEndMarker )
 
 			if ( iFieldBytes<=0 )
 				continue;
+
+			if ( tField.m_uFieldFlags & CSphColumnInfo::FIELD_STORED )
+			{
+				m_dDocFields[m_tState.m_iField].Resize(iOriginalFieldBytes);
+				memcpy ( m_dDocFields[m_tState.m_iField].Begin(), sField, iOriginalFieldBytes );
+			}
 
 			// strip html
 			if ( m_pStripper )
@@ -24518,6 +24720,14 @@ CSphVector<int64_t> * CSphSource_Document::GetFieldMVA ( int iAttr )
 const CSphString & CSphSource_Document::GetStrAttr ( int iAttr )
 {
 	return m_dStrAttrs[iAttr];
+}
+
+
+void CSphSource_Document::GetDocFields ( CSphVector<VecTraits_T<BYTE>> & dFields )
+{
+	dFields.Resize ( m_dDocFields.GetLength() );
+	ARRAY_FOREACH ( i, m_dDocFields )
+		dFields[i] = VecTraits_T<BYTE>( m_dDocFields[i].Begin(), m_dDocFields[i].GetLength() );
 }
 
 

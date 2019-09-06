@@ -3911,9 +3911,16 @@ public:
 	}
 };
 
+#if USE_WINDOWS
+	using TMutex = HANDLE;
+#else
+	using TMutex = pthread_mutex_t;
+#endif
+
 /// mutex implementation
 class CAPABILITY ( "mutex" ) CSphMutex : public ISphNoncopyable
 {
+
 public:
 	CSphMutex ();
 	~CSphMutex ();
@@ -3925,12 +3932,13 @@ public:
 	// Just for clang negative capabilities.
 	const CSphMutex &operator! () const { return *this; }
 
+	TMutex & mutex () RETURN_CAPABILITY ( this )
+	{
+		return m_tMutex;
+	}
+
 protected:
-#if USE_WINDOWS
-	HANDLE m_hMutex;
-#else
-	pthread_mutex_t m_tMutex;
-#endif
+	TMutex m_tMutex;
 };
 
 // event implementation
@@ -3975,29 +3983,73 @@ using CSphAutoEvent = AutoEvent_T<false>;
 using OneshotEvent_c = AutoEvent_T<>;
 
 /// scoped mutex lock
-template < typename T >
-class SCOPED_CAPABILITY CSphScopedLock : public ISphNoncopyable
+///  may adopt, lock and unlock explicitly
+template<typename Mutex>
+class CAPABILITY("mutex") SCOPED_CAPABILITY CSphScopedLock : public ISphNoncopyable
 {
 public:
-	/// lock on creation
-	explicit CSphScopedLock ( T & tMutex ) ACQUIRE( tMutex )
-		: m_tMutexRef ( tMutex )
+
+	// Tag type used to distinguish constructors.
+	enum ADOPT_LOCK_E { adopt_lock };
+
+	/// adopt already held lock
+	CSphScopedLock ( Mutex & tMutex, ADOPT_LOCK_E ) REQUIRES ( tMutex) ACQUIRE ( tMutex )
+			: m_tMutexRef ( tMutex )
+			, m_bLocked (true )
+	{
+	}
+
+	/// constructor acquires the lock
+	explicit CSphScopedLock ( Mutex & tMutex ) ACQUIRE ( tMutex )
+			: m_tMutexRef ( tMutex ), m_bLocked ( true )
 	{
 		m_tMutexRef.Lock();
+		m_bLocked = true;
 	}
 
 	/// unlock on going out of scope
 	~CSphScopedLock () RELEASE()
 	{
-		m_tMutexRef.Unlock ();
+		if ( m_bLocked )
+			m_tMutexRef.Unlock ();
 	}
 
-protected:
-	T &	m_tMutexRef;
+	/// Explicitly acquire the lock.
+	void Lock () ACQUIRE ()
+	{
+		if ( !m_bLocked )
+		{
+			m_tMutexRef.Lock ();
+			m_bLocked = true;
+		}
+	}
+
+	/// Explicitly release the lock.
+	void Unlock () RELEASE ()
+	{
+		if ( m_bLocked )
+		{
+			m_tMutexRef.Unlock ();
+			m_bLocked = false;
+		}
+	}
+
+	bool Locked () const
+	{
+		return m_bLocked;
+	}
+
+	TMutex & mutex () RETURN_CAPABILITY ( m_tMutexRef )
+	{
+		return m_tMutexRef.mutex();
+	}
+
+private:
+	Mutex & m_tMutexRef;
+	bool m_bLocked; // whether the mutex is currently locked or unlocked
 };
 
 using ScopedMutex_t = CSphScopedLock<CSphMutex>;
-
 
 /// rwlock implementation
 class CAPABILITY ( "mutex" ) CSphRwlock : public ISphNoncopyable

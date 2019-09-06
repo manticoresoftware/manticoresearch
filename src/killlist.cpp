@@ -37,7 +37,7 @@ bool DeadRowMap_c::Set ( RowID_t tRowID, DWORD * pData )
 #endif
 
 #if NO_ATOMIC
-	CSphScopedLock<CSphMutex> tLock ( m_tLock );
+	ScopedMutex_t tLock ( m_tLock );
 	DWORD uPrev = *pDword;
 	*pDword |= uMask;
 #endif

@@ -1354,7 +1354,7 @@ void RtIndex_c::ForceRamFlush ( bool bPeriodic ) REQUIRES (!this->m_tFlushLock)
 
 	// need this lock as could get here at same time either ways:
 	// and via HandleMysqlFlushRtindex
-	CSphScopedLock<CSphMutex> tLock ( m_tFlushLock );
+	ScopedMutex_t tLock ( m_tFlushLock );
 
 	int64_t iUsedRam = 0;
 	int64_t iSavedTID = m_iTID;
@@ -7041,7 +7041,7 @@ void RtIndex_c::Optimize()
 	int64_t tmStart = sphMicroTimer();
 	sphLogDebug( "rt optimize: index %s: optimization started",  m_sIndexName.cstr() );
 
-	CSphScopedLock<CSphMutex> tOptimizing ( m_tOptimizingLock );
+	ScopedMutex_t tOptimizing ( m_tOptimizingLock );
 	m_bOptimizing = true;
 
 	int iChunks = m_dDiskChunks.GetLength();
@@ -7217,7 +7217,7 @@ void RtIndex_c::ProgressiveMerge()
 
 	int64_t tmStart = sphMicroTimer();
 
-	CSphScopedLock<CSphMutex> tOptimizing ( m_tOptimizingLock );
+	ScopedMutex_t tOptimizing ( m_tOptimizingLock );
 	m_bOptimizing = true;
 
 	int iChunks = m_dDiskChunks.GetLength();

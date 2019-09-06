@@ -407,7 +407,7 @@ bool sphPluginCreate ( const char * szLib, PluginType_e eType, const char * sNam
 	}
 
 	// from here, we need a lock (we intend to update the plugin hash)
-	CSphScopedLock<CSphMutex> tLock ( g_tPluginMutex );
+	ScopedMutex_t tLock ( g_tPluginMutex );
 
 	// validate function name
 	PluginKey_t k ( eType, sName );
@@ -477,7 +477,7 @@ bool sphPluginDrop ( PluginType_e eType, const char * sName, CSphString & sError
 	sError = "no dlopen(), no plugins";
 	return false;
 #else
-	CSphScopedLock<CSphMutex> tLock ( g_tPluginMutex );
+	ScopedMutex_t tLock ( g_tPluginMutex );
 
 	PluginKey_t tKey ( eType, sName );
 	PluginDesc_c ** ppPlugin = g_hPlugins(tKey);
@@ -511,7 +511,7 @@ bool sphPluginReload ( const char * sName, CSphString & sError )
 	return false;
 #else
 	// find all plugins from the given library
-	CSphScopedLock<CSphMutex> tLock ( g_tPluginMutex );
+	ScopedMutex_t tLock ( g_tPluginMutex );
 
 	CSphVector<PluginKey_t> dKeys;
 	CSphVector<PluginDesc_c*> dPlugins;
@@ -647,7 +647,7 @@ static const char * UdfReturnType ( ESphAttr eType )
 
 void sphPluginSaveState ( CSphWriter & tWriter )
 {
-	CSphScopedLock<CSphMutex> tLock ( g_tPluginMutex );
+	ScopedMutex_t tLock ( g_tPluginMutex );
 	g_hPlugins.IterateStart();
 	while ( g_hPlugins.IterateNext() )
 	{
@@ -680,7 +680,7 @@ bool sphPluginExists ( PluginType_e eType, const char * sName )
 {
 	if ( !g_bPluginsEnabled )
 		return false;
-	CSphScopedLock<CSphMutex> tLock ( g_tPluginMutex );
+	ScopedMutex_t tLock ( g_tPluginMutex );
 	PluginKey_t k ( eType, sName );
 	PluginDesc_c ** pp = g_hPlugins(k);
 	return pp && *pp;
@@ -692,7 +692,7 @@ PluginDesc_c * sphPluginGet ( PluginType_e eType, const char * sName )
 	if ( !g_bPluginsEnabled )
 		return nullptr;
 
-	CSphScopedLock<CSphMutex> tLock ( g_tPluginMutex );
+	ScopedMutex_t tLock ( g_tPluginMutex );
 	PluginKey_t k ( eType, sName );
 	PluginDesc_c ** pp = g_hPlugins(k);
 	if ( !pp || !*pp )
@@ -706,7 +706,7 @@ void sphPluginList ( CSphVector<PluginInfo_t> & dResult )
 {
 	if ( !g_bPluginsEnabled )
 		return;
-	CSphScopedLock<CSphMutex> tLock ( g_tPluginMutex );
+	ScopedMutex_t tLock ( g_tPluginMutex );
 	g_hPlugins.IterateStart();
 	while ( g_hPlugins.IterateNext() )
 	{

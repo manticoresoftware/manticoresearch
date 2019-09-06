@@ -1144,32 +1144,32 @@ bool sphIsLtLib()
 
 CSphMutex::CSphMutex ()
 {
-	m_hMutex = CreateMutex ( NULL, FALSE, NULL );
-	if ( !m_hMutex )
+	m_tMutex = CreateMutex ( NULL, FALSE, NULL );
+	if ( !m_tMutex )
 		sphDie ( "CreateMutex() failed" );
 }
 
 CSphMutex::~CSphMutex ()
 {
-	if ( CloseHandle ( m_hMutex )==FALSE )
+	if ( CloseHandle ( m_tMutex )==FALSE )
 		sphDie ( "CloseHandle() failed" );
 }
 
 bool CSphMutex::Lock ()
 {
-	DWORD uWait = WaitForSingleObject ( m_hMutex, INFINITE );
+	DWORD uWait = WaitForSingleObject ( m_tMutex, INFINITE );
 	return ( uWait!=WAIT_FAILED && uWait!=WAIT_TIMEOUT );
 }
 
 bool CSphMutex::TimedLock ( int iMsec )
 {
-	DWORD uWait = WaitForSingleObject ( m_hMutex, iMsec );
+	DWORD uWait = WaitForSingleObject ( m_tMutex, iMsec );
 	return ( uWait!=WAIT_FAILED && uWait!=WAIT_TIMEOUT );
 }
 
 bool CSphMutex::Unlock ()
 {
-	return ReleaseMutex ( m_hMutex )==TRUE;
+	return ReleaseMutex ( m_tMutex )==TRUE;
 }
 
 EventWrapper_c::EventWrapper_c ()
@@ -1245,7 +1245,7 @@ bool AutoEvent_T<false>::WaitEvent ( int iMsec )
 
 CSphMutex::CSphMutex()
 {
-	if ( pthread_mutex_init ( &m_tMutex, NULL ) )
+	if ( pthread_mutex_init ( &m_tMutex, nullptr ) )
 		sphDie ( "pthread_mutex_init() failed %s", strerrorm ( errno ) );
 }
 
@@ -1289,7 +1289,7 @@ bool CSphMutex::TimedLock ( int iMsec )
 		struct timeval tvTimeout;
 		tvTimeout.tv_sec = 0;
 		tvTimeout.tv_usec = 1000;
-		select ( 0, NULL, NULL, NULL, &tvTimeout );
+		select ( 0, nullptr, nullptr, nullptr, &tvTimeout );
 #endif
 
 	} while ( sphMicroTimer ()<tmTill );
@@ -1610,7 +1610,7 @@ bool CSphRwlock::ReadLock ()
 	if ( !m_pWritePreferHelper )
 		return pthread_rwlock_rdlock ( m_pLock )==0;
 
-	CSphScopedLock<CSphMutex> tScopedLock (*m_pWritePreferHelper);
+	ScopedMutex_t tScopedLock (*m_pWritePreferHelper);
 	return pthread_rwlock_rdlock ( m_pLock )==0;
 }
 
@@ -1622,7 +1622,7 @@ bool CSphRwlock::WriteLock ()
 	if ( !m_pWritePreferHelper )
 		return pthread_rwlock_wrlock ( m_pLock )==0;
 
-	CSphScopedLock<CSphMutex> tScopedLock(*m_pWritePreferHelper);
+	ScopedMutex_t tScopedLock(*m_pWritePreferHelper);
 	return pthread_rwlock_wrlock ( m_pLock )==0;
 }
 
@@ -3077,7 +3077,7 @@ BYTE * PtrAttrAllocator_c::Allocate ( int iBytes )
 	if ( iBytes>MAX_SMALL_OBJECT_SIZE )
 		return new BYTE[iBytes];
 
-	CSphScopedLock<CSphMutex> tScopedLock ( m_dAllocMutex );
+	ScopedMutex_t tScopedLock ( m_dAllocMutex );
 	if ( m_pLastAlloc && m_pLastAlloc->BlockSize ()==iBytes )
 		return m_pLastAlloc->Allocate ();
 
@@ -3108,7 +3108,7 @@ void PtrAttrAllocator_c::Deallocate ( BYTE * pBlob, int iBytes )
 		return;
 	}
 
-	CSphScopedLock<CSphMutex> tScopedLock ( m_dAllocMutex );
+	ScopedMutex_t tScopedLock ( m_dAllocMutex );
 	if ( m_pLastDealloc && m_pLastDealloc->BlockSize ()==iBytes )
 	{
 		m_pLastDealloc->Deallocate ( pBlob );
@@ -3124,7 +3124,7 @@ void PtrAttrAllocator_c::Deallocate ( BYTE * pBlob, int iBytes )
 
 size_t PtrAttrAllocator_c::GetAllocatedSize ()
 {
-	CSphScopedLock<CSphMutex> tScopedLock ( m_dAllocMutex );
+	ScopedMutex_t tScopedLock ( m_dAllocMutex );
 	size_t uAccum = 0;
 	for ( const auto &dAlloc : m_dPool )
 		uAccum += dAlloc.GetAllocatedSize ();
@@ -3133,7 +3133,7 @@ size_t PtrAttrAllocator_c::GetAllocatedSize ()
 
 size_t PtrAttrAllocator_c::GetReservedSize ()
 {
-	CSphScopedLock<CSphMutex> tScopedLock ( m_dAllocMutex );
+	ScopedMutex_t tScopedLock ( m_dAllocMutex );
 	size_t uAccum = 0;
 	for ( const auto &dAlloc : m_dPool )
 		uAccum += dAlloc.GetReservedSize ();

@@ -2062,6 +2062,8 @@ struct CSphSourceParams_SQL
 	int64_t							m_iRangeStep = 1024;
 	int64_t							m_iRefRangeStep = 1024;
 	bool							m_bPrintQueries = false;
+	bool							m_bPrintRTQueries = false;
+	CSphString						m_sDumpRTIndex;
 
 	StrVec_t						m_dQueryPre;
 	StrVec_t						m_dQueryPost;
@@ -2091,6 +2093,17 @@ struct CSphSourceParams_SQL
 	CSphString						m_sHookPostIndex;
 };
 
+struct SqlQuotation_t
+{
+	static const char cQuote = '\'';
+	inline static bool IsEscapeChar ( char c )
+	{
+		return ( c=='\\' || c=='\'' || c=='\t' );
+	}
+	inline static char GetEscapedChar ( char c ) { return c; }
+};
+
+using SqlEscapedBuilder_c = EscapedStringBuilder_T<SqlQuotation_t>;
 
 /// generic SQL source
 /// multi-field plain-text documents fetched from given query
@@ -2174,6 +2187,17 @@ protected:
 
 	const char *	SqlUnpackColumn ( int iIndex, DWORD & uUnpackedLen, ESphUnpackFormat eFormat );
 	void			ReportUnpackError ( int iIndex, int iError );
+
+	void DumpRowsHeader ();
+	void DumpRowsHeaderSphinxql ();
+
+	void DumpDocument ();
+	void DumpDocumentSphinxql ();
+
+	using TinyCol_t = std::pair<int,bool>; // int idx in sql resultset; bool whether it is string
+	CSphVector<TinyCol_t>	m_dDumpMap;
+	SqlEscapedBuilder_c			m_sCollectDump;
+	int 					m_iCutoutDumpSize = 100*1024;
 };
 
 

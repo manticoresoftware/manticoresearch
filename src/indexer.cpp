@@ -40,12 +40,14 @@
 static bool			g_bQuiet		= false;
 static bool			g_bProgress		= true;
 static bool			g_bPrintQueries	= false;
+static bool			g_bPrintRTQueries = false;
 static bool			g_bKeepAttrs	= false;
 static CSphString	g_sKeepAttrsPath;
+static CSphString	g_sDumpRtIndex;
 static StrVec_t		g_dKeepAttrs;
 
 static const char *	g_sBuildStops	= NULL;
-static int				g_iTopStops		= 100;
+static int			g_iTopStops		= 100;
 static bool			g_bRotate		= false;
 static bool			g_bRotateEach	= false;
 static bool			g_bBuildFreqs	= false;
@@ -674,6 +676,8 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 	if ( g_bPrintQueries )
 		tParams.m_bPrintQueries = true;
 
+	tParams.m_bPrintRTQueries = g_bPrintRTQueries;
+	tParams.m_sDumpRTIndex = g_sDumpRtIndex;
 	return true;
 }
 
@@ -1759,6 +1763,12 @@ int main ( int argc, char ** argv )
 		{
 			g_bPrintQueries = true;
 
+		} else if ( strcasecmp ( argv[i], "--print-rt" )==0 )
+		{
+			g_bPrintRTQueries = true;
+			g_bProgress = false;
+			g_bQuiet = true;
+			g_sDumpRtIndex = argv[++i];
 		} else if ( strcasecmp ( argv[i], "--keep-attrs" )>=0 )
 		{
 			CSphString sArg ( argv[i] );

@@ -1442,6 +1442,25 @@ inline const char * sphTypeDirective ( ESphAttr eType )
 	}
 }
 
+inline const char * sphRtTypeDirective ( ESphAttr eType )
+{
+	switch ( eType )
+	{
+		case SPH_ATTR_INTEGER:		return "rt_attr_uint";
+		case SPH_ATTR_TIMESTAMP:	return "rt_attr_timestamp";
+		case SPH_ATTR_BOOL:			return "rt_attr_bool";
+		case SPH_ATTR_FLOAT:		return "rt_attr_float";
+		case SPH_ATTR_BIGINT:		return "rt_attr_bigint";
+		case SPH_ATTR_STRING:
+		case SPH_ATTR_STRINGPTR:	return "rt_attr_string";
+		case SPH_ATTR_JSON:			return "rt_attr_json";
+
+		case SPH_ATTR_UINT32SET:	return "rt_attr_multi";
+		case SPH_ATTR_INT64SET:		return "rt_attr_multi64";
+		default:					return nullptr;
+	}
+}
+
 inline void SqlUnescape ( CSphString & sRes, const char * sEscaped, int iLen )
 {
 	assert ( iLen>=2 );

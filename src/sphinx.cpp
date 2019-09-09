@@ -9238,8 +9238,7 @@ CSphIndex_VLN::CSphIndex_VLN ( const char* sIndexName, const char * sFilename )
 
 	m_iMinMaxIndex = 0;
 
-	ARRAY_FOREACH ( i, m_dFieldLens )
-		m_dFieldLens[i] = 0;
+	m_dFieldLens.ZeroVec();
 }
 
 
@@ -25351,18 +25350,18 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 	// joined fields
 	m_iPlainFieldsLength = m_tSchema.GetFieldsCount();
 
-	ARRAY_FOREACH ( i, m_tParams.m_dJoinedFields )
+	for ( const auto& dJoinedField: m_tParams.m_dJoinedFields )
 	{
 		CSphColumnInfo tCol;
 		tCol.m_iIndex = -1;
-		tCol.m_sName = m_tParams.m_dJoinedFields[i].m_sName;
-		tCol.m_sQuery = m_tParams.m_dJoinedFields[i].m_sQuery;
-		tCol.m_bPayload = m_tParams.m_dJoinedFields[i].m_bPayload;
-		tCol.m_sQueryRange = m_tParams.m_dJoinedFields[i].m_sRanged;
+		tCol.m_sName = dJoinedField.m_sName;
+		tCol.m_sQuery = dJoinedField.m_sQuery;
+		tCol.m_bPayload = dJoinedField.m_bPayload;
+		tCol.m_sQueryRange = dJoinedField.m_sRanged;
 		tCol.m_eWordpart = GetWordpart ( tCol.m_sName.cstr(), bWordDict );
 
-		tCol.m_eSrc = ( !m_tParams.m_dJoinedFields[i].m_bRangedMain ? SPH_ATTRSRC_QUERY : SPH_ATTRSRC_RANGEDMAINQUERY );
-		if ( !m_tParams.m_dJoinedFields[i].m_sRanged.IsEmpty() )
+		tCol.m_eSrc = ( !dJoinedField.m_bRangedMain ? SPH_ATTRSRC_QUERY : SPH_ATTRSRC_RANGEDMAINQUERY );
+		if ( !dJoinedField.m_sRanged.IsEmpty() )
 			tCol.m_eSrc = SPH_ATTRSRC_RANGEDQUERY;
 
 		m_tSchema.AddField ( tCol );
@@ -25380,29 +25379,90 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 	AllocDocinfo();
 
 	// log it
-	if ( m_fpDumpRows )
+	DumpRowsHeader();
+	return true;
+}
+
+// dump schema to given file or stdout, if rt inserts expected
+void CSphSource_SQL::DumpRowsHeader ()
+{
+	if ( m_tParams.m_bPrintRTQueries )
 	{
-		const char * sTable = m_tSchema.GetName();
-
-		time_t iNow = time ( NULL );
-		fprintf ( m_fpDumpRows, "#\n# === source %s ts %d\n# %s#\n", sTable, (int)iNow, ctime ( &iNow ) );
-		for ( int i=0; i < m_tSchema.GetFieldsCount(); i++ )
-			fprintf ( m_fpDumpRows, "# field %d: %s\n", i, m_tSchema.GetFieldName(i) );
-
-		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
-		{
-			const CSphColumnInfo & tCol = m_tSchema.GetAttr(i);
-			fprintf ( m_fpDumpRows, "# %s = %s # attr %d\n", sphTypeDirective ( tCol.m_eAttrType ), tCol.m_sName.cstr(), i );
-		}
-
-		fprintf ( m_fpDumpRows, "#\n\nDROP TABLE IF EXISTS rows_%s;\nCREATE TABLE rows_%s (\n  id VARCHAR(32) NOT NULL,\n",
-			sTable, sTable );
-		for ( int i=1; i<m_iSqlFields; i++ )
-			fprintf ( m_fpDumpRows, "  %s VARCHAR(4096) NOT NULL,\n", SqlFieldName(i) );
-		fprintf ( m_fpDumpRows, "  KEY(id) );\n\n" );
+		DumpRowsHeaderSphinxql();
+		return;
 	}
 
-	return true;
+	if ( !m_fpDumpRows )
+		return;
+
+	const char * sTable = m_tSchema.GetName ();
+
+	time_t iNow = time ( nullptr );
+	fprintf ( m_fpDumpRows, "#\n# === source %s ts %d\n# %s#\n", sTable, (int) iNow, ctime ( &iNow ));
+	for ( int i = 0; i<m_tSchema.GetFieldsCount (); ++i )
+		fprintf ( m_fpDumpRows, "# field %d: %s\n", i, m_tSchema.GetFieldName ( i ));
+
+	for ( int i = 0; i<m_tSchema.GetAttrsCount (); i++ )
+	{
+		const CSphColumnInfo & tCol = m_tSchema.GetAttr ( i );
+		fprintf ( m_fpDumpRows, "# %s = %s # attr %d\n", sphTypeDirective ( tCol.m_eAttrType ), tCol.m_sName.cstr (),
+				  i );
+	}
+
+	fprintf ( m_fpDumpRows, "#\n\nDROP TABLE IF EXISTS rows_%s;\nCREATE TABLE rows_%s (\n  id VARCHAR(32) NOT NULL,\n",
+			  sTable, sTable );
+	for ( int i = 1; i<m_iSqlFields; ++i )
+		fprintf ( m_fpDumpRows, "  %s VARCHAR(4096) NOT NULL,\n", SqlFieldName ( i ));
+	fprintf ( m_fpDumpRows, "  KEY(id) );\n\n" );
+}
+
+// dump schema to given file or stdout, if rt inserts expected
+void CSphSource_SQL::DumpRowsHeaderSphinxql ()
+{
+	const char * sTable = m_tSchema.GetName ();
+
+	time_t iNow = time ( nullptr );
+	m_sCollectDump.Clear();
+	m_sCollectDump.Sprintf ( "#\n# === source %s ts %d\n# %s#\n", sTable, (int) iNow, ctime ( &iNow ));
+
+	SmallStringHash_T<int> hSqlSchema;
+	for ( int i = 0; i<m_iSqlFields; ++i )
+		hSqlSchema.Add ( i, SqlFieldName ( i ));
+
+	m_dDumpMap.Reset();
+	m_dDumpMap.Add ( {hSqlSchema["id"], false} );
+
+	for ( int i = 0; i<m_tSchema.GetFieldsCount (); ++i )
+	{
+		if ( hSqlSchema.Exists ( m_tSchema.GetFieldName ( i ) ))
+			m_dDumpMap.Add ( {hSqlSchema[m_tSchema.GetFieldName ( i )], true} );
+		m_sCollectDump.Sprintf ( "#\trt_field = %s # field %d\n", m_tSchema.GetFieldName ( i ), i );
+	}
+
+	auto * sBlobLocator = sphGetBlobLocatorName ();
+	auto * sIdLocator = sphGetDocidName ();
+	for ( int i = 0; i<m_tSchema.GetAttrsCount (); ++i )
+	{
+		const CSphColumnInfo & tCol = m_tSchema.GetAttr ( i );
+		if ( tCol.m_sName!=sBlobLocator && tCol.m_sName!=sIdLocator )
+		{
+			if ( hSqlSchema.Exists ( tCol.m_sName ))
+				m_dDumpMap.Add ( {hSqlSchema[tCol.m_sName],
+						tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_STRINGPTR} );
+			auto sTypeName = sphRtTypeDirective ( tCol.m_eAttrType );
+			if ( sTypeName )
+				m_sCollectDump.Sprintf ( "#\t%s = %s # attr %d\n", sTypeName, tCol.m_sName.cstr (), i );
+		}
+	}
+
+	m_sCollectDump << "#\n\n";
+
+	auto fpDump = m_fpDumpRows;
+	if ( !fpDump )
+		fpDump = stdout;
+
+	fprintf ( fpDump, "%s", m_sCollectDump.cstr() );
+	m_sCollectDump.Clear();
 }
 
 #undef LOC_ERROR
@@ -25553,19 +25613,56 @@ BYTE ** CSphSource_SQL::NextDocument ( bool & bEOF, CSphString & sError )
 	}
 
 	// log it
-	if ( m_fpDumpRows )
-	{
-		fprintf ( m_fpDumpRows, "INSERT INTO rows_%s VALUES (", m_tSchema.GetName() );
-		for ( int i=0; i<m_iSqlFields; i++ )
-		{
-			if ( i )
-				fprintf ( m_fpDumpRows, ", " );
-			FormatEscaped ( m_fpDumpRows, SqlColumn(i) );
-		}
-		fprintf ( m_fpDumpRows, ");\n" );
+	DumpDocument();
+	return m_dFields;
+}
+
+void CSphSource_SQL::DumpDocument ()
+{
+	if ( m_tParams.m_bPrintRTQueries ) {
+		DumpDocumentSphinxql ();
+		return;
 	}
 
-	return m_dFields;
+	if ( !m_fpDumpRows )
+		return;
+
+	fprintf ( m_fpDumpRows, "INSERT INTO rows_%s VALUES (", m_tSchema.GetName ());
+	for ( int i = 0; i<m_iSqlFields; ++i )
+	{
+		if ( i )
+			fprintf ( m_fpDumpRows, ", " );
+		FormatEscaped ( m_fpDumpRows, SqlColumn ( i ));
+	}
+	fprintf ( m_fpDumpRows, ");\n" );
+}
+
+void CSphSource_SQL::DumpDocumentSphinxql ()
+{
+	if (m_sCollectDump.IsEmpty ())
+	{
+		m_sCollectDump.Sprintf ( "INSERT INTO %s VALUES ", m_tParams.m_sDumpRTIndex.cstr() );
+		m_sCollectDump.StartBlock (",",nullptr,";\n");
+	}
+	m_sCollectDump.StartBlock(",","(",")");
+	ARRAY_FOREACH ( i, m_dDumpMap )
+	{
+		if ( m_dDumpMap[i].second )
+			m_sCollectDump.AppendEscaped ( SqlColumn ( m_dDumpMap[i].first ) );
+		else
+			m_sCollectDump << SqlColumn ( m_dDumpMap[i].first );
+	}
+	m_sCollectDump.FinishBlock();
+
+	if ( m_sCollectDump.GetLength ()>m_iCutoutDumpSize )
+	{
+		m_sCollectDump.FinishBlocks ();
+		auto fpDump = m_fpDumpRows;
+		if ( !fpDump )
+			fpDump = stdout;
+		fprintf ( fpDump, "%s", m_sCollectDump.cstr ());
+		m_sCollectDump.Clear ();
+	}
 }
 
 
@@ -26277,6 +26374,14 @@ void CSphSource_MySQL::SqlDisconnect ()
 		fprintf ( stdout, "SQL-DISCONNECT\n" );
 
 	sph_mysql_close ( &m_tMysqlDriver );
+
+	m_sCollectDump.FinishBlocks ();
+	auto fpDump = m_fpDumpRows;
+	if ( !fpDump )
+		fpDump = stdout;
+	if ( m_sCollectDump.GetLength ()>0)
+		fprintf ( fpDump, "%s", m_sCollectDump.cstr ());
+	m_sCollectDump.Clear ();
 }
 
 

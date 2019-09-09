@@ -674,7 +674,7 @@ in ``U+xxx`` form, where ``xxx`` is hexadecimal codepoint number. This form
 can also be used for 7-bit ASCII characters to encode special ones: eg.
 use U+2E to encode dot, U+2C to encode comma.
 
-Beside definitions of characters and mappings, there are several built-in aliases that can be used.
+Besides definitions of characters and mappings, there are several built-in aliases that can be used.
 Current  aliases are: ``english``, ``russian``, ``non_cjk`` and ``cjk``.
 
 Example:
@@ -737,6 +737,8 @@ in your configuration file as shown below:
 
 In case you don’t need support for cjk-languages you can just omit `ngram_len` and `ngram_chars` options.
 For more information on those see the appropriate documentation sections.
+
+If you're looking for mapping one character to multiple or vice-versa :ref:`regexp_filter` can be helpful.
 
 
 .. _dict:

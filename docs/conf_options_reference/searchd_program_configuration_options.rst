@@ -357,7 +357,7 @@ Example:
 docstore_cache_size
 ~~~~~~~~~~~~~~~~~~~
 Maximum size of document blocks from document storage that are held in
-memory. Optional, default is 16m.
+memory. Optional, default is 16m (16 megabytes).
 
 When `stored_fields` is used, document blocks are read from disk and
 uncompressed. Since every block typically holds several documents, it

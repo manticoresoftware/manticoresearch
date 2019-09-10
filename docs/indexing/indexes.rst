@@ -182,13 +182,13 @@ Here is a table which can help you select your desired mode:
 +-------------------------+-----------------------------------+--------------------------------------+----------------------------------------------+----------------------------+
 | index part              | keep it on disk                   | keep it in memory                    | cached in memory on daemon start             | lock it in memory          |
 +-------------------------+-----------------------------------+--------------------------------------+----------------------------------------------+----------------------------+
-| .spa (plain attributes) | access_plain_attrs=mmap - the file will mapped to RAM, but your OS will  | access_plain_attrs = mmap_preread (default)  | access_plain_attrs = mlock |
+| .spa (plain attributes) | access_plain_attrs=mmap - the file will be mapped to RAM, but your OS will  | access_plain_attrs = mmap_preread (default)  | access_plain_attrs = mlock |
 | .spe (skip lists)       | decide whether to really load it to RAM or not and can easily swap it    |                                              |                            |
 | .spi (word lists)       | out (default)                                                            |                                              |                            |
 | .spt (lookups)          |                                                                          |                                              |                            |
 | .spm (killed docs)      |                                                                          |                                              |                            |
 +-------------------------+-----------------------------------+--------------------------------------+----------------------------------------------+----------------------------+
-| .spb (blob attributes)  | access_blob_attrs=mmap - the file will mapped to RAM, but your OS will   | access_blob_attrs = mmap_preread (default)   | access_blob_attrs = mlock  |
+| .spb (blob attributes)  | access_blob_attrs=mmap - the file will be mapped to RAM, but your OS will   | access_blob_attrs = mmap_preread (default)   | access_blob_attrs = mlock  |
 | (string, mva and json   | decide whether to really load it to RAM or not and can easily swap it    |                                              |                            |
 | attributes)             | out (default)                                                            |                                              |                            |
 +-------------------------+-----------------------------------+--------------------------------------+----------------------------------------------+----------------------------+

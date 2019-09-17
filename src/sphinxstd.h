@@ -4730,6 +4730,84 @@ struct VecRefPtrs_t : public ISphNoncopyable, public CSphVector<T>
 	}
 };
 
+enum class ETYPE { SINGLE, ARRAY };
+template<typename T, ETYPE tp>
+struct Deleter_T {
+	inline static void Delete (T*& pArg) { SafeDelete ( pArg) }
+};
+
+template<typename T>
+struct Deleter_T<T,ETYPE::ARRAY>
+{
+	inline static void Delete ( T *& pArg ) { SafeDeleteArray ( pArg ) }
+};
+
+/// shared pointer for any object, managed by refcount
+template < typename T, ETYPE tp, typename REFCOUNTED = ISphRefcountedMT >
+class SharedPtr_T
+{
+	template <typename RefCountedT>
+	struct SharedState_T : public RefCountedT
+	{
+		T * m_pPtr = nullptr;
+		~SharedState_T() { Deleter_T<T,tp>::Delete(m_pPtr); }
+	};
+
+	using SharedState_t = SharedState_T<REFCOUNTED>;
+	using StatePtr = CSphRefcountedPtr<SharedState_t>;
+
+	StatePtr m_tState;
+
+public:
+	///< default ctr (for vectors)
+	explicit SharedPtr_T () = default;
+
+	/// construction from raw pointer, creates new shared state!
+	explicit SharedPtr_T ( T * pPtr ) : m_tState ( new SharedState_t() )
+	{
+		m_tState->m_pPtr = pPtr;
+	}
+
+	SharedPtr_T ( const SharedPtr_T& rhs )
+		: m_tState ( rhs.m_tState )
+	{}
+
+	SharedPtr_T ( SharedPtr_T&& rhs ) noexcept
+	{
+		Swap(rhs);
+	}
+
+	SharedPtr_T& operator= ( SharedPtr_T rhs )
+	{
+		Swap(rhs);
+		return *this;
+	}
+
+	void Swap ( SharedPtr_T& rhs ) noexcept
+	{
+		::Swap( m_tState, rhs.m_tState);
+	}
+
+	T *	operator -> () const			{ return m_tState->m_pPtr; }
+		explicit operator bool() const	{ return m_tState && m_tState->m_pPtr!=nullptr; }
+		operator T * () const			{ return m_tState?m_tState->m_pPtr:nullptr; }
+
+public:
+	/// assignment of a raw pointer
+	SharedPtr_T & operator = ( T * pPtr )
+	{
+		m_tState = new SharedState_t;
+		m_tState->m_pPtr = pPtr;
+		return *this;
+	}
+};
+
+template <typename T, typename REFCOUNTED = ISphRefcountedMT>
+using SharedPtr_t = SharedPtr_T<T, ETYPE::SINGLE, REFCOUNTED>;
+
+template<typename T, typename REFCOUNTED = ISphRefcountedMT>
+using SharedPtrArr_t = SharedPtr_T<T, ETYPE::ARRAY, REFCOUNTED>;
+
 struct ISphJob
 {
 	virtual ~ISphJob () {};

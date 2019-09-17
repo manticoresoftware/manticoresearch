@@ -2935,3 +2935,20 @@ TEST ( functions, RawTrivialVector )
 	ASSERT_EQ ( iCountMoving, 3 );
 
 }
+
+TEST ( functions, SharedPtr )
+{
+	SharedPtr_t<int *> pFoo;
+	ASSERT_FALSE ( bool(pFoo) );
+	{
+		SharedPtr_t<int *> pBar { new int };
+		*pBar = 10;
+		pFoo = pBar;
+		ASSERT_EQ ( *pFoo, 10 );
+	}
+	auto b = new int;
+	*b = 20;
+	ASSERT_EQ ( *pFoo, 10 );
+	pFoo = b;
+	ASSERT_EQ ( *pFoo, 20 );
+}

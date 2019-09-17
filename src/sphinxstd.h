@@ -3119,6 +3119,7 @@ public:
 			return BASE::operator[] ( sKey );
 		return false;
 	}
+	using BASE::Reset;
 };
 }
 

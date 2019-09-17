@@ -6135,8 +6135,8 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			{
 				// set string pool for string on_sort expression fix up
 				tCtx.SetBlobPool ( tGuard.m_dRamChunks[iSeg]->m_dBlobs.Begin() );
-				ARRAY_FOREACH ( i, dSorters )
-					dSorters[i]->SetBlobPool ( tGuard.m_dRamChunks[iSeg]->m_dBlobs.Begin() );
+				for ( auto* pSorter: dSorters )
+					pSorter->SetBlobPool ( tGuard.m_dRamChunks[iSeg]->m_dBlobs.Begin() );
 
 				RtRowIterator_c tIt ( tGuard.m_dRamChunks[iSeg], m_iStride );
 				while (true)
@@ -6164,8 +6164,8 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 					tMatch.m_iTag = iSeg+1;
 
 					bool bNewMatch = false;
-					ARRAY_FOREACH ( iSorter, dSorters )
-						bNewMatch |= dSorters[iSorter]->Push ( tMatch );
+					for ( auto* pSorter: dSorters )
+						bNewMatch |= pSorter->Push ( tMatch );
 
 					// stringptr expressions should be duplicated (or taken over) at this point
 					tCtx.FreeDataFilter ( tMatch );
@@ -6207,11 +6207,11 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 				tCtx.m_pIndexSegment = pSeg;
 
 				// set blob pool for string on_sort expression fix up
-				tCtx.SetBlobPool ( pSeg->m_dBlobs.Begin() );
-				for ( auto i : dSorters )
-					i->SetBlobPool ( pSeg->m_dBlobs.Begin() );
+				const BYTE * pBlobPool = pSeg->m_dBlobs.Begin ();
+				tCtx.SetBlobPool ( pBlobPool );
+				for ( auto * pSorter : dSorters )
+					pSorter->SetBlobPool ( pBlobPool );
 
-				const BYTE * pBlobPool = pSeg->m_dBlobs.Begin();
 				pRanker->ExtraData ( EXTRA_SET_BLOBPOOL, (void**)&pBlobPool );
 
 				CSphMatch * pMatch = pRanker->GetMatchesBuffer();
@@ -6244,14 +6244,14 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 						pMatch[i].m_iTag = iSeg+1;
 
 						bool bNewMatch = false;
-						ARRAY_FOREACH ( iSorter, dSorters )
+						for ( auto* pSorter : dSorters )
 						{
-							bNewMatch |= dSorters[iSorter]->Push ( pMatch[i] );
+							bNewMatch |= pSorter->Push ( pMatch[i] );
 
 							if ( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
 							{
-								pRanker->ExtraData ( EXTRA_SET_MATCHPUSHED, (void**)&(dSorters[iSorter]->m_iJustPushed) );
-								pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&(dSorters[iSorter]->m_dJustPopped) );
+								pRanker->ExtraData ( EXTRA_SET_MATCHPUSHED, (void**)&(pSorter->m_iJustPushed) );
+								pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&(pSorter->m_dJustPopped) );
 							}
 						}
 
@@ -6290,13 +6290,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 			// set blob pool for string on_sort expression fix up
 			tCtx.SetBlobPool ( tGuard.m_dRamChunks[iSeg]->m_dBlobs.Begin() );
-
-			for ( int iSorter = 0; iSorter<iSorters; iSorter++ )
-			{
-				ISphMatchSorter * pTop = ppSorters[iSorter];
-				if ( pTop )
-					pTop->Finalize ( tFinal, false );
-			}
+			dSorters.Apply ( [&tFinal] ( ISphMatchSorter * pTop ) { pTop->Finalize ( tFinal, false ); } );
 		}
 	}
 

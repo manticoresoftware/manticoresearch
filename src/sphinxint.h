@@ -1331,26 +1331,19 @@ typedef CSphFixedVector<SphFactorHashEntry_t *> SphFactorHash_t;
 
 struct SphExtraDataRankerState_t
 {
-	const CSphSchema *	m_pSchema;
-	const int64_t *		m_pFieldLens;
+	const CSphSchema *	m_pSchema = nullptr;
+	const int64_t *		m_pFieldLens = nullptr;
 	CSphAttrLocator		m_tFieldLensLoc;
-	int64_t				m_iTotalDocuments;
-	int					m_iFields;
-	int					m_iMaxQpos;
-	SphExtraDataRankerState_t ()
-		: m_pSchema ( NULL )
-		, m_pFieldLens ( NULL )
-		, m_iTotalDocuments ( 0 )
-		, m_iFields ( 0 )
-		, m_iMaxQpos ( 0 )
-	{ }
+	int64_t				m_iTotalDocuments = 0;
+	int					m_iFields = 0;
+	int					m_iMaxQpos = 0;
 };
 
 
 struct MatchSortAccessor_t
 {
-	typedef CSphMatch T;
-	typedef CSphMatch * MEDIAN_TYPE;
+	using T = CSphMatch;
+	using MEDIAN_TYPE = T *;
 
 private:
 	mutable CSphMatch m_tMedian;

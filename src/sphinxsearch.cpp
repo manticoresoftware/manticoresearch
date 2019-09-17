@@ -3511,11 +3511,8 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::ExtraDataImpl ( Extr
 			m_tFactorPool.AddRef ( *(RowID_t*)ppResult );
 			return true;
 		case EXTRA_SET_MATCHPOPPED:
-			{
-				const CSphTightVector<RowID_t> & dReleased = *(CSphTightVector<RowID_t>*)ppResult;
-				ARRAY_FOREACH ( i, dReleased )
-					m_tFactorPool.Release ( dReleased[i] );
-			}
+			for ( RowID_t iRow : *(CSphTightVector<RowID_t> *) ppResult )
+				m_tFactorPool.Release ( iRow );
 			return true;
 		case EXTRA_GET_DATA_PACKEDFACTORS:
 			*ppResult = m_tFactorPool.GetHashPtr();

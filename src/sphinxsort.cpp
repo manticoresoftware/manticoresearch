@@ -50,13 +50,6 @@ void sphFixupLocator ( CSphAttrLocator & tLocator, const ISphSchema * pOldSchema
 }
 
 //////////////////////////////////////////////////////////////////////////
-
-ISphMatchSorter::~ISphMatchSorter()
-{
-	SafeDelete ( m_pSchema );
-}
-
-
 void ISphMatchSorter::SetSchema ( ISphSchema * pSchema, bool bRemapCmp )
 {
 	assert ( pSchema );

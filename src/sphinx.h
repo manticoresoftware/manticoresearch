@@ -2988,7 +2988,7 @@ public:
 	CSphTightVector<RowID_t> m_dJustPopped;
 
 protected:
-	ISphSchema *		m_pSchema { nullptr };	///< sorter schema (adds dynamic attributes on top of index schema)
+	SharedPtr_t<ISphSchema>		m_pSchema;	///< sorter schema (adds dynamic attributes on top of index schema)
 	CSphMatchComparatorState	m_tState;		///< protected to set m_iNow automatically on SetState() calls
 
 public:
@@ -2996,7 +2996,7 @@ public:
 						ISphMatchSorter () : m_bRandomize ( false ), m_iTotal ( 0 ), m_iMatchCapacity ( 0 ) {}
 
 	/// virtualizing dtor
-	virtual				~ISphMatchSorter ();
+	virtual				~ISphMatchSorter () {}
 
 	/// check if this sorter does groupby
 	virtual bool		IsGroupby () const = 0;
@@ -3047,6 +3047,9 @@ public:
 
 	/// get a pointer to the worst element, NULL if there is no fixed location
 	virtual const CSphMatch *	GetWorst() const { return nullptr; }
+
+	/// makes the same sorter
+//	virtual ISphMatchSorter* Clone() = 0;
 };
 
 struct CmpPSortersByRandom_fn

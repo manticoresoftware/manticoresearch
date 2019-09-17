@@ -5688,7 +5688,6 @@ static void TransformSorterSchema ( ISphMatchSorter * pSorter, const SphChunkGua
 	pSorter->Finalize ( fnFinal, false );
 
 	pSorter->SetSchema ( pNewSchema, true );
-	SafeDelete ( pOldSchema );
 }
 
 int64_t RtIndex_c::GetRamLeft () const

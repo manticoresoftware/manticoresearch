@@ -9226,7 +9226,6 @@ static void PooledAttrsToPtrAttrs ( ISphMatchSorter ** ppSorters, int nSorters, 
 		pSorter->Finalize ( fnFinal, false );
 
 		pSorter->SetSchema ( pNewSchema, true );
-		SafeDelete ( pOldSchema );
 	}
 }
 

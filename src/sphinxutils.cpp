@@ -138,33 +138,28 @@ void sphSplitApply ( const char * sIn, int iSize, StrFunctor &&dFunc )
 
 // split by any char from sBounds.
 // if line starts from a bound char, first splitted str will be an empty string
+void sphSplit ( StrVec_t & dOut, const char * sIn, int iLen, const char * sBounds )
+{
+	sph::Split ( sIn, iLen, sBounds, [&] ( const char * sToken, int iLen ) {
+		dOut.Add ().SetBinary ( sToken, iLen );
+	} );
+}
+
+StrVec_t sphSplit ( const char * sIn, int iLen, const char * sBounds )
+{
+	StrVec_t dResult;
+	sphSplit ( dResult, sIn, iLen, sBounds );
+	return dResult;
+}
+
 void sphSplit ( StrVec_t & dOut, const char * sIn, const char * sBounds )
 {
-	if ( !sIn )
-		return;
-
-	const char * p = (char*)sIn;
-	while ( *p )
-	{
-		// skip until the first non-boundary character
-		const char * sNext = p;
-		while ( *p && !strchr ( sBounds, *p ) )
-			++p;
-
-		// add the token, skip the char
-		dOut.Add().SetBinary ( sNext, int (p-sNext) );
-
-		// skip all boundaries
-		while ( *p && strchr ( sBounds, *p ) )
-			++p;
-	}
+	sphSplit ( dOut, sIn, -1, sBounds );
 }
 
 StrVec_t sphSplit( const char* sIn, const char* sBounds )
 {
-	StrVec_t dResult;
-	sphSplit ( dResult, sIn, sBounds );
-	return dResult;
+	return sphSplit ( sIn, -1, sBounds);
 }
 
 template < typename T1, typename T2 >
@@ -2902,32 +2897,20 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 	SmallStringHash_T<CSphString> ParseKeyValueStrings ( const char * sBuf )
 	{
 		SmallStringHash_T<CSphString> hRes;
-		if ( sBuf && ( *sBuf ))
+		sph::ParseKeyValues ( sBuf, [&] ( CSphString && sIdent, CSphString && sValue )
 		{
-			auto dOptions = sphSplit ( sBuf, ",; \t\n\r" );
-			for ( auto & sOption: dOptions ) {
-				auto dOption = sphSplit ( sOption.cstr (), "=" );
-				assert ( dOption.GetLength ()==2 ); // as 'key' = 'value'
-				dOption.Apply ( [] ( CSphString & sVal ) { sVal.Trim (); } );
-				hRes.Add ( dOption[1], dOption[0] );
-			}
-		}
+			hRes.Add ( sValue, sIdent );
+		});
 		return hRes;
 	}
 
 	SmallStringHash_T<CSphVariant> ParseKeyValueVars ( const char * sBuf )
 	{
 		SmallStringHash_T<CSphVariant> hRes;
-		if ( sBuf && (*sBuf) )
+		sph::ParseKeyValues ( sBuf, [&] ( CSphString && sIdent, CSphString && sValue )
 		{
-			auto dOptions = sphSplit ( sBuf, ",; \t\n\r" );
-			for ( auto & sOption: dOptions ) {
-				auto dOption = sphSplit ( sOption.cstr (), "=" );
-				assert ( dOption.GetLength ()==2 ); // as 'key' = 'value'
-				dOption.Apply ( [] ( CSphString & sVal ) { sVal.Trim (); } );
-				hRes.Add ( CSphVariant ( dOption[1].cstr ()), dOption[0] );
-			}
-		}
+			hRes.Add ( CSphVariant (sValue.cstr()), sIdent );
+		});
 		return hRes;
 	}
 } // namespace sph

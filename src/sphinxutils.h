@@ -153,9 +153,11 @@ void sphSplit ( StrVec_t & dOut, const char * sIn );
 
 /// string splitter, splits by the given boundaries
 void sphSplit ( StrVec_t & dOut, const char * sIn, const char * sBounds );
-StrVec_t sphSplit( const char* sIn, const char* sBounds );
+void sphSplit ( StrVec_t & dOut, const char * sIn, int iLen, const char * sBounds );
+StrVec_t sphSplit ( const char * sIn, const char * sBounds );
+StrVec_t sphSplit ( const char * sIn, int iLen, const char * sBounds );
 
-/// perform sphSplit, but applies a functor instead of add a chunk to the vector
+/// perform sphSplit by whitespaces, but applies a functor instead of add a chunk to the vector
 using StrFunctor = std::function<void ( const char*, int )>;
 void sphSplitApply ( const char * sIn, int iSize, StrFunctor &&dFunc );
 
@@ -174,6 +176,29 @@ int64_t sphGetTime64 ( const char* sValue, char** ppErr = nullptr, int64_t iDefa
 
 namespace sph
 {
+	template<typename FnFilter>
+	void Split ( const char * sIn, int iLen, const char * sBounds, FnFilter fnFilter )
+	{
+		if ( !sIn )
+			return;
+
+		const char * p = (char *) sIn;
+		const char * pEnd = p + (( iLen<0 ) ? strlen(sIn) : iLen);
+		while (p<pEnd)
+		{
+			// skip until the first non-boundary character
+			const char * sNext = p;
+			while (p<pEnd && !strchr ( sBounds, *p ))
+				++p;
+
+			// add the token, skip the char
+			fnFilter ( sNext, int ( p-sNext ));
+
+			// skip all boundaries
+			while (p<pEnd && strchr ( sBounds, *p ))
+				++p;
+		}
+	}
 
 	// common parser for 'foo=1;bar=2;baz=str, me=here' constructions.
 	SmallStringHash_T<CSphString> ParseKeyValueStrings ( const char * sBuf );
@@ -182,16 +207,19 @@ namespace sph
 	template<typename FnFilter>
 	void ParseKeyValues ( const char * sBuf, FnFilter && fnFilter )
 	{
-		if ( sBuf && ( *sBuf )) {
-			auto dOptions = sphSplit ( sBuf, ",; \t\n\r" );
-			for ( auto & sOption: dOptions ) {
-				auto dOption = sphSplit ( sOption.cstr (), "=" );
+		if ( sBuf && ( *sBuf ))
+		{
+			sph::Split ( sBuf, -1, ",; \t\n\r", [&] (const char* sToken, int iLen)
+			{
+				auto dOption = sphSplit ( sToken, iLen, "=" );
 				assert ( dOption.GetLength ()==2 ); // as 'key' = 'value'
 				dOption.Apply ( [] ( CSphString & sVal ) { sVal.Trim (); } );
 				fnFilter ( std::move ( dOption[0] ), std::move ( dOption[1] ));
-			}
+			});
 		}
 	}
+
+
 } // namespace sph
 
 /// config section (hash of variant values)

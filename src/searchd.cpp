@@ -4856,7 +4856,7 @@ protected:
 	bool							m_bMultiQueue = false;	///< whether current subset is subject to multi-queue optimization
 	bool							m_bFacetQueue = false;	///< whether current subset is subject to facet-queue optimization
 	CSphVector<LocalIndex_t>		m_dLocal;				///< local indexes for the current subset
-	CSphFixedVector<StrVec_t> m_dExtraSchemas { 0 }; 	///< the extra attrs for agents. One vec per thread
+	CSphFixedVector<StrVec_t> 		m_dExtraSchemas { 0 }; 	///< the extra attrs for agents. One vec per thread
 	CSphAttrUpdateEx *				m_pUpdates = nullptr;	///< holder for updates
 	CSphVector<DocID_t> *			m_pDelDocs = nullptr;	///< this query is for deleting
 

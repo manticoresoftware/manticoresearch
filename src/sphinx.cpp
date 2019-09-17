@@ -7089,6 +7089,11 @@ void CSphSchemaHelper::InsertAttr ( CSphVector<CSphColumnInfo> & dAttrs, CSphVec
 	}
 }
 
+void CSphSchemaHelper::Swap ( CSphSchemaHelper & rhs ) noexcept
+{
+	rhs.m_dDataPtrAttrs.SwapData ( m_dDataPtrAttrs );
+	rhs.m_dDynamicUsed.SwapData ( m_dDynamicUsed );
+}
 
 void CSphSchemaHelper::Reset()
 {
@@ -7758,6 +7763,22 @@ CSphRsetSchema & CSphRsetSchema::operator = ( const CSphSchema & rhs )
 	m_dDataPtrAttrs = rhs.m_dDataPtrAttrs;
 
 	return *this;
+}
+
+void CSphRsetSchema::Swap ( CSphRsetSchema & rhs ) noexcept
+{
+	CSphSchemaHelper::Swap ( rhs );
+	::Swap ( m_pIndexSchema, rhs.m_pIndexSchema );
+	::Swap ( m_dExtraAttrs, rhs.m_dExtraAttrs );
+	::Swap ( m_dRemoved, rhs.m_dRemoved );
+}
+
+CSphRsetSchema::CSphRsetSchema ( const CSphRsetSchema & rhs )
+	: CSphSchemaHelper ( rhs )
+{
+	m_pIndexSchema = rhs.m_pIndexSchema;
+	m_dExtraAttrs = rhs.m_dExtraAttrs;
+	m_dRemoved = rhs.m_dRemoved;
 }
 
 

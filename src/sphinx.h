@@ -1441,6 +1441,8 @@ public:
 	/// get dynamic row part size
 	int GetDynamicSize () const final { return m_dDynamicUsed.GetLength (); }
 
+	void Swap ( CSphSchemaHelper& rhs ) noexcept;
+
 protected:
 	CSphVector<int>	m_dDataPtrAttrs;		///< rowitems of pointers to data that are stored inside matches
 	CSphVector<int> m_dDynamicUsed;			///< dynamic row part map
@@ -1600,10 +1602,16 @@ private:
 	int					ActualLen() const;	///< len of m_pIndexSchema accounting removed stuff
 
 public:
-						~CSphRsetSchema() override {}
+						CSphRsetSchema() = default;
 
 	CSphRsetSchema &	operator = ( const ISphSchema & rhs );
 	CSphRsetSchema &	operator = ( const CSphSchema & rhs );
+
+	void Swap ( CSphRsetSchema & rhs ) noexcept;
+	CSphRsetSchema ( const CSphRsetSchema& rhs );
+
+	CSphRsetSchema ( CSphRsetSchema&& rhs ) noexcept { Swap(rhs); }
+	CSphRsetSchema & operator = ( CSphRsetSchema rhs ) noexcept { Swap(rhs); return *this; }
 
 	void				AddAttr ( const CSphColumnInfo & tCol, bool bDynamic ) final;
 	void				AssignTo ( CSphRsetSchema & lhs ) const		final { lhs = *this; }

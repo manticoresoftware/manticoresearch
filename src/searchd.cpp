@@ -5021,6 +5021,7 @@ protected:
 	bool							m_bGotLocalDF = false;
 	bool							m_bMaster;
 	bool							m_bFederatedUser;
+	bool							m_bQueryLog = true;
 
 	void							OnRunFinished ();
 
@@ -5125,12 +5126,14 @@ const ServedDesc_t * LockedCollection_c::Get ( const CSphString & sName ) const
 
 void SearchHandler_c::RunUpdates ( const CSphQuery & tQuery, const CSphString & sIndex,	CSphAttrUpdateEx * pUpdates )
 {
+	m_bQueryLog = false;
 	m_pUpdates = pUpdates;
 	RunActionQuery ( tQuery, sIndex, pUpdates->m_pError );
 }
 
 void SearchHandler_c::RunDeletes ( const CSphQuery &tQuery, const CSphString &sIndex, CSphString * pErrors, CSphVector<DocID_t> * pDelDocs )
 {
+	m_bQueryLog = false;
 	m_pDelDocs = pDelDocs;
 	RunActionQuery ( tQuery, sIndex, pErrors );
 }
@@ -5183,7 +5186,8 @@ void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphStrin
 	g_tStats.m_iDiskReadTime += tIO.m_iReadTime;
 	g_tStats.m_iDiskReadBytes += tIO.m_iReadBytes;
 
-	LogQuery ( m_dQueries[0], m_dResults[0], m_dAgentTimes[0], m_tThd.m_iConnID );
+	if ( m_bQueryLog )
+		LogQuery ( m_dQueries[0], m_dResults[0], m_dAgentTimes[0], m_tThd.m_iConnID );
 }
 
 void SearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc )
@@ -5218,8 +5222,11 @@ void SearchHandler_c::RunQueries()
 		iEnd = i;
 	}
 	RunSubset ( iStart, iEnd );
-	ARRAY_FOREACH ( i, m_dQueries )
-		LogQuery ( m_dQueries[i], m_dResults[i], m_dAgentTimes[i], m_tThd.m_iConnID );
+	if ( m_bQueryLog )
+	{
+		ARRAY_FOREACH ( i, m_dQueries )
+			LogQuery ( m_dQueries[i], m_dResults[i], m_dAgentTimes[i], m_tThd.m_iConnID );
+	}
 	OnRunFinished();
 }
 

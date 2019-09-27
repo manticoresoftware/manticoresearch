@@ -14613,7 +14613,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	{
 		const CSphFilterSettings* pFilter = tQuery.m_dFilters.Begin();
 		if ( ( pFilter->m_bHasEqualMin || pFilter->m_bHasEqualMax ) && pFilter->m_eType==SPH_FILTER_VALUES
-			&& pFilter->m_sAttrName=="@id" && !pFilter->m_bExclude )
+			&& ( pFilter->m_sAttrName=="@id" || pFilter->m_sAttrName=="id" ) && !pFilter->m_bExclude )
 		{
 			pDocs = (DocID_t *)pFilter->GetValueArray();
 			iDocsCount = pFilter->GetNumValues();

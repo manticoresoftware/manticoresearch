@@ -28,10 +28,12 @@ public:
 };
 
 
+// an interface for plain index (disk chunk) document storage
 class Docstore_i : public virtual DocstoreFields_i
 {
 public:
-	virtual DocstoreDoc_t		GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pFieldIds=nullptr ) const = 0;
+	virtual void				CreateReader ( int64_t iSessionId ) const = 0;
+	virtual DocstoreDoc_t		GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pFieldIds=nullptr, int64_t iSessionId=-1 ) const = 0;
 	virtual DocstoreSettings_t	GetDocstoreSettings() const = 0;
 };
 
@@ -55,6 +57,8 @@ public:
 
 class CSphReader;
 class CSphWriter;
+
+// an interface for RT index document storage
 class DocstoreRT_i : public Docstore_i, public DocstoreBuilder_i
 {
 public:
@@ -68,13 +72,35 @@ public:
 };
 
 
+class DocstoreSession_c
+{
+public:
+	struct Info_t
+	{
+		const DocstoreReader_i *	m_pDocstore = nullptr;
+		int64_t						m_iSessionId = 0;
+	};
+
+
+				DocstoreSession_c();
+				~DocstoreSession_c();
+
+	int64_t		GetUID() const { return m_iUID; }
+
+private:
+	static CSphAtomicL m_tUIDGenerator;
+
+	int64_t		m_iUID = 0;
+};
+
+
 Docstore_i *		CreateDocstore ( const CSphString & sFilename, CSphString & sError );
 DocstoreBuilder_i * CreateDocstoreBuilder ( const CSphString & sFilename, const DocstoreSettings_t & tSettings, CSphString & sError );
 DocstoreRT_i *		CreateDocstoreRT();
 DocstoreFields_i *	CreateDocstoreFields();
 
-void				InitDocstoreCache ( int iCacheSize );
-void				ShutdownDocstoreCache();
+void				InitDocstore ( int iCacheSize );
+void				ShutdownDocstore();
 
 #endif
 

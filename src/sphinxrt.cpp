@@ -1151,7 +1151,8 @@ public:
 
 	void				SetDebugCheck ( bool bCheckIdDups ) final { m_bDebugCheck = true; m_bCheckIdDups = bCheckIdDups; }
 
-	bool				GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds=nullptr ) const final;
+	void				CreateReader ( int64_t iSessionId ) const final;
+	bool				GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds=nullptr, int64_t iSessionId=-1 ) const final;
 	int					GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
 
 protected:
@@ -6279,7 +6280,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	if ( pResult->m_bHasPrediction )
 		pResult->m_tStats.Add ( tQueryStats );
 
-	pResult->m_pDocstore = this;
+	pResult->m_pDocstore = m_tSchema.HasStoredFields() ? this : nullptr;
 	pResult->m_iQueryTime = int ( ( sphMicroTimer()-tmQueryStart )/1000 );
 
 	return true;
@@ -7618,7 +7619,21 @@ void RtIndex_c::LockFileState ( CSphVector<CSphString> & dFiles )
 }
 
 
-bool RtIndex_c::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds ) const
+void RtIndex_c::CreateReader ( int64_t iSessionId ) const
+{
+	// rt docstore doesn't need buffered readers
+	// but disk chunks need them
+	CSphScopedRLock tRLock { m_tChunkLock };
+
+	for ( const auto & i : m_dDiskChunks )
+	{
+		assert(i);
+		i->CreateReader(iSessionId);
+	}
+}
+
+
+bool RtIndex_c::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId ) const
 {
 	CSphScopedRLock tRLock { m_tChunkLock };
 
@@ -7629,14 +7644,14 @@ bool RtIndex_c::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T
 		if ( tRowID==INVALID_ROWID || i->m_tDeadRowMap.IsSet(tRowID) )
 			continue;
 
-		tDoc = i->m_pDocstore->GetDoc ( tRowID, pFieldIds );
+		tDoc = i->m_pDocstore->GetDoc ( tRowID, pFieldIds, iSessionId );
 		return true;
 	}
 
 	for ( const auto & i : m_dDiskChunks )
 	{
 		assert(i);
-		if ( i->GetDoc ( tDoc, tDocID, pFieldIds ) )
+		if ( i->GetDoc ( tDoc, tDocID, pFieldIds, iSessionId ) )
 			return true;
 	}
 

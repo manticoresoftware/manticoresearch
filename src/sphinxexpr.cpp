@@ -317,7 +317,7 @@ public:
 
 	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final
 	{
-		if ( !m_pDocstore || !m_dFieldIds.GetLength() )
+		if ( !m_tSession.m_pDocstore || !m_dFieldIds.GetLength() )
 		{
 			*ppStr = NULL;
 			return 0;
@@ -325,7 +325,7 @@ public:
 
 		DocID_t tDocID = sphGetDocID ( tMatch.m_pDynamic ? tMatch.m_pDynamic : tMatch.m_pStatic  );
 		DocstoreDoc_t tDoc;
-		Verify ( m_pDocstore->GetDoc ( tDoc, tDocID, &m_dFieldIds ) );
+		Verify ( m_tSession.m_pDocstore->GetDoc ( tDoc, tDocID, &m_dFieldIds, m_tSession.m_iSessionId ) );
 		int iLen = tDoc.m_dFields[0].GetLength()-1;
 		assert(iLen>=0);
 		*ppStr = tDoc.m_dFields[0].LeakData();
@@ -334,10 +334,11 @@ public:
 
 	void Command ( ESphExprCommand eCmd, void * pArg ) final
 	{
-		if ( eCmd==SPH_EXPR_SET_DOCSTORE && !m_pDocstore )
+		if ( eCmd==SPH_EXPR_SET_DOCSTORE )
 		{
-			m_pDocstore = (DocstoreReader_i*)pArg;
-			int iFieldId = m_pDocstore->GetFieldId ( m_sField.cstr(), DOCSTORE_TEXT );
+			m_dFieldIds.Resize(0);
+			m_tSession = *(DocstoreSession_c::Info_t*)pArg;
+			int iFieldId = m_tSession.m_pDocstore->GetFieldId ( m_sField.cstr(), DOCSTORE_TEXT );
 			if ( iFieldId!=-1 )
 				m_dFieldIds.Add(iFieldId);
 		}
@@ -352,9 +353,9 @@ public:
 	}
 
 private:
-	CSphString			m_sField;
-	DocstoreReader_i *	m_pDocstore = nullptr;
-	CSphVector<int>		m_dFieldIds;
+	CSphString					m_sField;
+	DocstoreSession_c::Info_t	m_tSession;
+	CSphVector<int>				m_dFieldIds;
 };
 
 

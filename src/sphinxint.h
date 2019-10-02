@@ -355,6 +355,7 @@ public:
 	bool					GetErrorFlag () const		{ return m_bError; }
 	const CSphString &		GetErrorMessage () const	{ return m_sError; }
 	const CSphString &		GetFilename() const			{ return m_sFilename; }
+	int						GetBufferSize() const		{ return m_iBufSize; }
 	void					ResetError();
 
 	RowID_t		UnzipRowid ()	{ return UnzipInt(); }

@@ -740,7 +740,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	ReplicateClustersDelete();
 
-	ShutdownDocstoreCache();
+	ShutdownDocstore();
 	sphShutdownWordforms ();
 	sph::ShutdownGlobalIDFs ();
 	sphAotShutdown ();
@@ -4004,11 +4004,10 @@ static void ExtractPostlimit ( const ISphSchema & tSchema, CSphVector<const CSph
 }
 
 
-static void ProcessPostlimit ( const CSphVector<const CSphColumnInfo *> & dPostlimit, int iFrom, int iTo, AggrResult_t & tRes )
+static CSphVector<const DocstoreReader_i*> GetUniqueDocstores ( const AggrResult_t & tRes, int iFrom, int iTo )
 {
-	if ( !dPostlimit.GetLength() )
-		return;
-
+	CSphVector<const DocstoreReader_i*> dDocstores;
+	const DocstoreReader_i * pPrev = nullptr;
 	for ( int i=iFrom; i<iTo; i++ )
 	{
 		CSphMatch & tMatch = tRes.m_dMatches[i];
@@ -4016,24 +4015,82 @@ static void ProcessPostlimit ( const CSphVector<const CSphColumnInfo *> & dPostl
 		if ( tMatch.m_iTag & 0x80000000 )
 			continue;
 
-		ARRAY_FOREACH ( j, dPostlimit )
+		const DocstoreReader_i * pDocstore = tRes.m_dTag2Docstore [ tMatch.m_iTag ].m_pDocstore;
+		if ( pDocstore && pDocstore!=pPrev )
 		{
-			const CSphColumnInfo * pCol = dPostlimit[j];
-			assert ( pCol->m_pExpr );
-
-			// OPTIMIZE? only if the tag did not change?
-			const DocstoreReader_i * pDocstore = tRes.m_dTag2Docstore [ tMatch.m_iTag ].m_pDocstore;
-			pCol->m_pExpr->Command ( SPH_EXPR_SET_DOCSTORE, (void*)pDocstore);
-			
-			if ( pCol->m_eAttrType==SPH_ATTR_INTEGER )
-				tMatch.SetAttr ( pCol->m_tLocator, pCol->m_pExpr->IntEval(tMatch) );
-			else if ( pCol->m_eAttrType==SPH_ATTR_BIGINT )
-				tMatch.SetAttr ( pCol->m_tLocator, pCol->m_pExpr->Int64Eval(tMatch) );
-			else if ( pCol->m_eAttrType==SPH_ATTR_STRINGPTR )
-				tMatch.SetAttr ( pCol->m_tLocator, (SphAttr_t) pCol->m_pExpr->StringEvalPacked ( tMatch ) ); // FIXME! a potential leak of *previous* value?
-			else
-				tMatch.SetAttrFloat ( pCol->m_tLocator, pCol->m_pExpr->Eval(tMatch) );
+			dDocstores.Add(pDocstore);
+			pPrev = pDocstore;
 		}
+	}
+
+	dDocstores.Uniq();
+
+	return dDocstores;
+}
+
+
+static void SetupPostlimitExprs ( AggrResult_t & tRes, CSphMatch & tMatch, const CSphColumnInfo * pCol, int64_t iDocstoreSessionId )
+{
+	DocstoreSession_c::Info_t tSessionInfo;
+	tSessionInfo.m_pDocstore = tRes.m_dTag2Docstore [ tMatch.m_iTag ].m_pDocstore;
+	tSessionInfo.m_iSessionId = iDocstoreSessionId;
+
+	assert ( pCol && pCol->m_pExpr );
+	pCol->m_pExpr->Command ( SPH_EXPR_SET_DOCSTORE, &tSessionInfo );
+}
+
+
+static void EvalPostlimitExprs ( AggrResult_t & tRes, CSphMatch & tMatch, const CSphColumnInfo * pCol )
+{
+	assert ( pCol && pCol->m_pExpr );
+
+	if ( pCol->m_eAttrType==SPH_ATTR_INTEGER )
+		tMatch.SetAttr ( pCol->m_tLocator, pCol->m_pExpr->IntEval(tMatch) );
+	else if ( pCol->m_eAttrType==SPH_ATTR_BIGINT )
+		tMatch.SetAttr ( pCol->m_tLocator, pCol->m_pExpr->Int64Eval(tMatch) );
+	else if ( pCol->m_eAttrType==SPH_ATTR_STRINGPTR )
+		tMatch.SetAttr ( pCol->m_tLocator, (SphAttr_t) pCol->m_pExpr->StringEvalPacked ( tMatch ) ); // FIXME! a potential leak of *previous* value?
+	else
+		tMatch.SetAttrFloat ( pCol->m_tLocator, pCol->m_pExpr->Eval(tMatch) );
+}
+
+
+static void ProcessPostlimit ( const CSphVector<const CSphColumnInfo *> & dPostlimit, int iFrom, int iTo, AggrResult_t & tRes )
+{
+	if ( !dPostlimit.GetLength() )
+		return;
+
+	// generates docstore session id
+	DocstoreSession_c tSession;
+
+	// collect all unique docstores from matches
+	CSphVector<const DocstoreReader_i*> dDocstores = GetUniqueDocstores ( tRes, iFrom, iTo );
+	if ( dDocstores.GetLength() )
+	{
+		// spawn buffered readers for the current session
+		// put them to a global hash
+		for ( auto & i : dDocstores )
+			i->CreateReader ( tSession.GetUID() );
+	}
+
+	int iLastTag = -1;
+	for ( int i=iFrom; i<iTo; i++ )
+	{
+		CSphMatch & tMatch = tRes.m_dMatches[i];
+		// remote match (tag highest bit 1) == everything is already computed
+		if ( tMatch.m_iTag & 0x80000000 )
+			continue;
+
+		if ( tMatch.m_iTag!=iLastTag )
+		{
+			for ( const auto & pCol : dPostlimit )
+				SetupPostlimitExprs ( tRes, tMatch, pCol, tSession.GetUID() );
+
+			iLastTag = tMatch.m_iTag;
+		}
+
+		for ( const auto & pCol : dPostlimit )
+			EvalPostlimitExprs ( tRes, tMatch, pCol );
 	}
 }
 
@@ -23305,7 +23362,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	SetPercolateQueryParserFactory ( PercolateQueryParserFactory );
 	SetPercolateThreads ( g_iDistThreads );
 	SetUidShort ( bTestMode );
-	InitDocstoreCache(g_iDocstoreCache);
+	InitDocstore ( g_iDocstoreCache );
 
 	if ( bOptPIDFile )
 	{

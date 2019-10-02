@@ -2593,7 +2593,9 @@ public:
 
 	CSphFixedVector<SphAttr_t> 	BuildDocList () const final;
 
-	bool				GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds=nullptr ) const final;
+	// docstore-related section
+	void				CreateReader ( int64_t iSessionId ) const final;
+	bool				GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds=nullptr, int64_t iSessionId=-1 ) const final;
 	int					GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
 
 private:
@@ -14362,7 +14364,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 	// done
 	pResult->m_pBlobPool = m_tBlobAttrs.GetWritePtr();
-	pResult->m_pDocstore = this;
+	pResult->m_pDocstore = m_pDocstore.Ptr() ? this : nullptr;
 	pResult->m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
 	pResult->m_iBadRows += tCtx.m_iBadRows;
 
@@ -17360,7 +17362,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	pRanker->FinalizeCache ( tMaxSorterSchema );
 
 	pResult->m_pBlobPool = m_tBlobAttrs.GetWritePtr();
-	pResult->m_pDocstore = this;
+	pResult->m_pDocstore = m_pDocstore.Ptr() ? this : nullptr;
 
 	// query timer
 	int64_t tmWall = sphMicroTimer() - tmQueryStart;
@@ -17384,7 +17386,16 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 }
 
 
-bool CSphIndex_VLN::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds ) const
+void CSphIndex_VLN::CreateReader ( int64_t iSessionId ) const
+{
+	if ( !m_pDocstore.Ptr() )
+		return;
+
+	m_pDocstore->CreateReader(iSessionId);
+}
+
+
+bool CSphIndex_VLN::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId ) const
 {
 	if ( !m_pDocstore.Ptr() )
 		return false;
@@ -17393,7 +17404,7 @@ bool CSphIndex_VLN::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTrai
 	if ( tRowID==INVALID_ROWID || m_tDeadRowMap.IsSet(tRowID) )
 		return false;
 
-	tDoc = m_pDocstore->GetDoc ( tRowID, pFieldIds );
+	tDoc = m_pDocstore->GetDoc ( tRowID, pFieldIds, iSessionId );
 	return true;
 }
 

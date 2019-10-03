@@ -525,6 +525,9 @@ public:
     {                                                                                    \
     }
 
+// take all ctr definitions from BASE parent
+#define FWD_BASECTOR(type_c)  FWD_CTOR ( type_c, BASE )
+
 //////////////////////////////////////////////////////////////////////////////
 
 /// generic comparator
@@ -4731,26 +4734,26 @@ struct VecRefPtrs_t : public ISphNoncopyable, public CSphVector<T>
 };
 
 enum class ETYPE { SINGLE, ARRAY };
-template<typename T, ETYPE tp>
+template<typename PTR, ETYPE tp>
 struct Deleter_T {
-	inline static void Delete (T*& pArg) { SafeDelete ( pArg) }
+	inline static void Delete ( PTR& pArg) { SafeDelete ( pArg) }
 };
 
-template<typename T>
-struct Deleter_T<T,ETYPE::ARRAY>
+template<typename PTR>
+struct Deleter_T<PTR,ETYPE::ARRAY>
 {
-	inline static void Delete ( T *& pArg ) { SafeDeleteArray ( pArg ) }
+	inline static void Delete ( PTR& pArg ) { SafeDeleteArray ( pArg ) }
 };
 
 /// shared pointer for any object, managed by refcount
-template < typename T, ETYPE tp, typename REFCOUNTED = ISphRefcountedMT >
+template < typename PTR, ETYPE tp, typename REFCOUNTED = ISphRefcountedMT >
 class SharedPtr_T
 {
 	template <typename RefCountedT>
 	struct SharedState_T : public RefCountedT
 	{
-		T * m_pPtr = nullptr;
-		~SharedState_T() { Deleter_T<T,tp>::Delete(m_pPtr); }
+		PTR m_pPtr = nullptr;
+		~SharedState_T() { Deleter_T<PTR,tp>::Delete(m_pPtr); }
 	};
 
 	using SharedState_t = SharedState_T<REFCOUNTED>;
@@ -4763,7 +4766,7 @@ public:
 	explicit SharedPtr_T () = default;
 
 	/// construction from raw pointer, creates new shared state!
-	explicit SharedPtr_T ( T * pPtr ) : m_tState ( new SharedState_t() )
+	explicit SharedPtr_T ( PTR pPtr ) : m_tState ( new SharedState_t() )
 	{
 		m_tState->m_pPtr = pPtr;
 	}
@@ -4788,13 +4791,13 @@ public:
 		::Swap( m_tState, rhs.m_tState);
 	}
 
-	T *	operator -> () const			{ return m_tState->m_pPtr; }
+	PTR	operator -> () const			{ return m_tState->m_pPtr; }
 		explicit operator bool() const	{ return m_tState && m_tState->m_pPtr!=nullptr; }
-		operator T * () const			{ return m_tState?m_tState->m_pPtr:nullptr; }
+		operator PTR () const			{ return m_tState?m_tState->m_pPtr:nullptr; }
 
 public:
 	/// assignment of a raw pointer
-	SharedPtr_T & operator = ( T * pPtr )
+	SharedPtr_T & operator = ( PTR pPtr )
 	{
 		m_tState = new SharedState_t;
 		m_tState->m_pPtr = pPtr;

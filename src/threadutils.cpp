@@ -616,7 +616,8 @@ public:
 
 			pOp->Complete (this);
 
-			LOG ( DETAIL, MT ) << "completed & unlocked";if ( this_thread.m_iPrivateOutstandingWork>1 )
+			LOG ( DETAIL, MT ) << "completed & unlocked";
+			if ( this_thread.m_iPrivateOutstandingWork>1 )
 				m_iOutstandingWork += this_thread.m_iPrivateOutstandingWork-1;
 			else if ( this_thread.m_iPrivateOutstandingWork<1 )
 				work_finished ();

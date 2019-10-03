@@ -2980,20 +2980,20 @@ struct ISphMatchProcessor
 class ISphMatchSorter
 {
 public:
-	bool				m_bRandomize;
-	int64_t				m_iTotal;
+	bool				m_bRandomize = false;
+	int64_t				m_iTotal = 0;
 
 	RowID_t				m_iJustPushed {INVALID_ROWID};
-	int					m_iMatchCapacity;
+	int					m_iMatchCapacity = 0;
 	CSphTightVector<RowID_t> m_dJustPopped;
 
 protected:
-	SharedPtr_t<ISphSchema>		m_pSchema;	///< sorter schema (adds dynamic attributes on top of index schema)
+	SharedPtr_t<ISphSchema*>	m_pSchema;	///< sorter schema (adds dynamic attributes on top of index schema)
 	CSphMatchComparatorState	m_tState;		///< protected to set m_iNow automatically on SetState() calls
 
 public:
 	/// ctor
-						ISphMatchSorter () : m_bRandomize ( false ), m_iTotal ( 0 ), m_iMatchCapacity ( 0 ) {}
+						ISphMatchSorter () {}
 
 	/// virtualizing dtor
 	virtual				~ISphMatchSorter () {}
@@ -3048,8 +3048,9 @@ public:
 	/// get a pointer to the worst element, NULL if there is no fixed location
 	virtual const CSphMatch *	GetWorst() const { return nullptr; }
 
+	virtual ISphMatchSorter* Clone() const = 0;// { return nullptr; }
 	/// makes the same sorter
-//	virtual ISphMatchSorter* Clone() = 0;
+	void CloneTo ( ISphMatchSorter* pTrg ) const;
 };
 
 struct CmpPSortersByRandom_fn

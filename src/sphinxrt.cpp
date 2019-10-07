@@ -3839,7 +3839,7 @@ static bool CheckVectorLength ( int iLen, int64_t iSaneLen, const char * sAt, CS
 template < typename T >
 static void SaveVector ( CSphWriter & tWriter, const VecTraits_T < T > & tVector )
 {
-	STATIC_ASSERT ( std::is_trivially_copyable<T>::value, NON_TRIVIAL_VECTORS_ARE_UNSERIALIZABLE );
+	STATIC_ASSERT ( std::is_pod<T>::value, NON_TRIVIAL_VECTORS_ARE_UNSERIALIZABLE );
 	tWriter.PutDword ( tVector.GetLength() );
 	if ( tVector.GetLength() )
 		tWriter.PutBytes ( tVector.Begin(), tVector.GetLengthBytes() );
@@ -3850,7 +3850,7 @@ template < typename T, typename P >
 static bool LoadVector ( CSphReader & tReader, CSphVector < T, P > & tVector,
 	int64_t iSaneLen, const char * sAt, CSphString & sError )
 {
-	STATIC_ASSERT ( std::is_trivially_copyable<T>::value, NON_TRIVIAL_VECTORS_ARE_UNSERIALIZABLE );
+	STATIC_ASSERT ( std::is_pod<T>::value, NON_TRIVIAL_VECTORS_ARE_UNSERIALIZABLE );
 	int iSize = tReader.GetDword();
 	if ( !CheckVectorLength ( iSize, iSaneLen, sAt, sError ) )
 		return false;
@@ -3866,7 +3866,7 @@ static bool LoadVector ( CSphReader & tReader, CSphVector < T, P > & tVector,
 template < typename T, typename P >
 static void SaveVector ( BinlogWriter_c &tWriter, const CSphVector<T, P> &tVector )
 {
-	STATIC_ASSERT ( std::is_trivially_copyable<T>::value, NON_TRIVIAL_VECTORS_ARE_UNSERIALIZABLE );
+	STATIC_ASSERT ( std::is_pod<T>::value, NON_TRIVIAL_VECTORS_ARE_UNSERIALIZABLE );
 	tWriter.ZipOffset ( tVector.GetLength() );
 	if ( tVector.GetLength() )
 		tWriter.PutBytes ( tVector.Begin(), tVector.GetLengthBytes() );
@@ -3876,7 +3876,7 @@ static void SaveVector ( BinlogWriter_c &tWriter, const CSphVector<T, P> &tVecto
 template < typename T, typename P >
 static bool LoadVector ( BinlogReader_c & tReader, CSphVector < T, P > & tVector )
 {
-	STATIC_ASSERT ( std::is_trivially_copyable<T>::value, NON_TRIVIAL_VECTORS_ARE_UNSERIALIZABLE );
+	STATIC_ASSERT ( std::is_pod<T>::value, NON_TRIVIAL_VECTORS_ARE_UNSERIALIZABLE );
 	tVector.Resize ( (int) tReader.UnzipOffset() ); // FIXME? sanitize?
 	if ( tVector.GetLength() )
 		tReader.GetBytes ( tVector.Begin(), tVector.GetLengthBytes() );

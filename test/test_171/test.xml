@@ -470,6 +470,14 @@ index dist_j
 <!-- regression prohibit HAVING on regular\pool'ed attribute -->
 <sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist_j GROUP BY j.j1 HAVING j.j1 IN ( 1,2 )</sphinxql>
 <sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist_j GROUP BY j.j1 HAVING gg IN ( 1,2 )</sphinxql>
+
+<!-- limit and offset different forms -->
+<sphinxql>SELECT id, tag FROM idx_keys limit 3</sphinxql>
+<sphinxql>SELECT id, tag FROM idx_keys limit 3,3</sphinxql>
+<sphinxql>SELECT id, tag FROM idx_keys limit 3 offset 3</sphinxql>
+<sphinxql>SELECT id, tag FROM idx_keys limit 2 offset 6</sphinxql>
+<sphinxql>SELECT id, tag FROM idx_keys limit 10 offset 5</sphinxql>
+
 </sphqueries>
 
 <db_create>

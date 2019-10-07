@@ -15,6 +15,7 @@
 #include "docstore.h"
 
 #include "sphinxint.h"
+#include "attribute.h"
 #include "lz4/lz4.h"
 #include "lz4/lz4hc.h"
 
@@ -72,6 +73,27 @@ static Compression_e Byte2Compression ( BYTE uComp )
 		return Compression_e::NONE;
 	}
 }
+
+
+static void PackData ( CSphVector<BYTE> & dDst, const BYTE * pData, DWORD uSize, bool bText, bool bPack )
+{
+	if ( bPack )
+	{
+		const DWORD GAP = 8;
+		dDst.Resize ( uSize+GAP );
+		BYTE * pEnd = sphPackPtrAttr ( dDst.Begin(), pData, uSize );
+		dDst.Resize ( pEnd-dDst.Begin() );
+	}
+	else
+	{	
+		dDst.Reserve(uSize+1);
+		dDst.Resize(uSize);
+		memcpy ( dDst.Begin(), pData, uSize );
+		if ( bText )
+			dDst.Add('\0');
+	}
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 class Compressor_i
@@ -184,7 +206,6 @@ public:
 
 	int				GetNumFields() const { return m_dFields.GetLength(); }
 	const Field_t &	GetField ( int iField ) const { return m_dFields[iField]; }
-	void			PostprocessFields ( DocstoreDoc_t & tResult, VecTraits_T<int> & dFieldInRset ) const;
 	void			Load ( CSphReader & tReader );
 	void			Save ( CSphWriter & tWriter );
 
@@ -212,14 +233,6 @@ int DocstoreFields_c::GetFieldId ( const CSphString & sName, DocstoreDataType_e 
 	CSphString sCompound;
 	sCompound.SetSprintf ( "%d%s", eType, sName.cstr() );
 	return m_hFields[sCompound];
-}
-
-
-void DocstoreFields_c::PostprocessFields ( DocstoreDoc_t & tResult, VecTraits_T<int> & dFieldInRset ) const
-{
-	for ( int i = 0; i < GetNumFields(); i++ )
-		if ( dFieldInRset[i]!=-1 && GetField(i).m_eType==DOCSTORE_TEXT )
-			tResult.m_dFields[dFieldInRset[i]].Add('\0');
 }
 
 
@@ -284,7 +297,7 @@ private:
 
 	struct LinkedBlock_t : BlockData_t
 	{
-		int				m_iRefcount = 0;
+		CSphAtomic		m_iRefcount{0};
 		LinkedBlock_t *	m_pPrev = nullptr;
 		LinkedBlock_t *	m_pNext = nullptr;
 		HashKey_t		m_tKey;
@@ -347,6 +360,8 @@ void BlockCache_c::MoveToHead ( LinkedBlock_t * pBlock )
 	if ( pBlock==m_pHead )
 		return;
 
+	ScopedMutex_t tLock(m_tLock);
+
 	if ( m_pTail==pBlock )
 		m_pTail = pBlock->m_pPrev;
 
@@ -365,6 +380,8 @@ void BlockCache_c::MoveToHead ( LinkedBlock_t * pBlock )
 
 void BlockCache_c::Add ( LinkedBlock_t * pBlock )
 {
+	ScopedMutex_t tLock(m_tLock);
+
 	pBlock->m_pNext = m_pHead;
 	if ( m_pHead )
 		m_pHead->m_pPrev = pBlock;
@@ -382,6 +399,8 @@ void BlockCache_c::Add ( LinkedBlock_t * pBlock )
 
 void BlockCache_c::Delete ( LinkedBlock_t * pBlock )
 {
+	ScopedMutex_t tLock(m_tLock);
+
 	Verify ( m_tHash.Delete ( pBlock->m_tKey ) );
 
 	if ( m_pHead == pBlock )
@@ -406,8 +425,6 @@ void BlockCache_c::Delete ( LinkedBlock_t * pBlock )
 
 bool BlockCache_c::Find ( DWORD uUID, SphOffset_t tOffset, BlockData_t & tData )
 {
-	ScopedMutex_t tLock(m_tLock);
-
 	LinkedBlock_t ** ppBlock = m_tHash.Find ( { uUID, tOffset } );
 	if ( !ppBlock )
 		return false;
@@ -422,8 +439,6 @@ bool BlockCache_c::Find ( DWORD uUID, SphOffset_t tOffset, BlockData_t & tData )
 
 void BlockCache_c::Release ( DWORD uUID, SphOffset_t tOffset )
 {
-	ScopedMutex_t tLock(m_tLock);
-
 	LinkedBlock_t ** ppBlock = m_tHash.Find ( { uUID, tOffset } );
 	assert(ppBlock);
 
@@ -453,12 +468,17 @@ void BlockCache_c::DeleteAll ( DWORD uUID )
 
 bool BlockCache_c::Add ( DWORD uUID, SphOffset_t tOffset, BlockData_t & tData )
 {
-	ScopedMutex_t tLock(m_tLock);
-
 	DWORD uSpaceNeeded = tData.m_uSize + sizeof(LinkedBlock_t);
-	SweepUnused ( uSpaceNeeded );
 	if ( !HaveSpaceFor ( uSpaceNeeded ) )
-		return false;
+	{
+		DWORD MAX_BLOCK_SIZE = m_iCacheSize/64;
+		if ( uSpaceNeeded>MAX_BLOCK_SIZE )
+			return false;
+
+		SweepUnused ( uSpaceNeeded );
+		if ( !HaveSpaceFor ( uSpaceNeeded ) )
+			return false;
+	}
 
 #ifndef NDEBUG
 	LinkedBlock_t ** ppBlock = m_tHash.Find ( { uUID, tOffset } );
@@ -469,7 +489,7 @@ bool BlockCache_c::Add ( DWORD uUID, SphOffset_t tOffset, BlockData_t & tData )
 	*(BlockData_t*)pBlock = tData;
 	pBlock->m_iRefcount++;
 	pBlock->m_tKey = { uUID, tOffset };
-	
+
 	Add ( pBlock );	
 	return true;
 }
@@ -699,7 +719,7 @@ public:
 	int					AddField ( const CSphString & sName, DocstoreDataType_e eType ) final;
 	int					GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
 	void				CreateReader ( int64_t iSessionId ) const final;
-	DocstoreDoc_t		GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pFieldIds=nullptr, int64_t iSessionId=-1 ) const final;
+	DocstoreDoc_t		GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const final;
 	DocstoreSettings_t	GetDocstoreSettings() const final;
 
 private:
@@ -712,6 +732,14 @@ private:
 		BlockType_e m_eType = BLOCK_TYPE_SMALL;
 	};
 
+	struct FieldInfo_t
+	{
+		BYTE	m_uFlags = 0;
+		DWORD	m_uCompressedLen = 0;
+		DWORD	m_uUncompressedLen = 0;
+	};
+
+
 	DWORD						m_uUID = 0;
 	CSphString					m_sFilename;
 	CSphAutofile				m_tFile;
@@ -723,9 +751,14 @@ private:
 
 	const Block_t *				FindBlock ( RowID_t tRowID ) const;
 	void						ReadFromFile ( BYTE * pData, int iLength, SphOffset_t tOffset, int64_t iSessionId ) const;
-	DocstoreDoc_t				ReadDocFromSmallBlock ( const Block_t & tBlock, RowID_t tRowID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId ) const;
-	DocstoreDoc_t				ReadDocFromBigBlock ( const Block_t & tBlock, const VecTraits_T<int> * pFieldIds, int64_t iSessionId ) const;
+	DocstoreDoc_t				ReadDocFromSmallBlock ( const Block_t & tBlock, RowID_t tRowID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const;
+	DocstoreDoc_t				ReadDocFromBigBlock ( const Block_t & tBlock, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const;
 	BlockCache_c::BlockData_t	UncompressSmallBlock ( const Block_t & tBlock, int64_t iSessionId ) const;
+	BlockCache_c::BlockData_t	UncompressBigBlockField ( SphOffset_t tOffset, const FieldInfo_t & tInfo, int64_t iSessionId ) const;
+
+	bool						ProcessSmallBlockDoc ( RowID_t tCurDocRowID, RowID_t tRowID, const VecTraits_T<int> * pFieldIds, const CSphFixedVector<int> & dFieldInRset, bool bPack,
+		MemoryReader2_c & tReader, CSphBitvec & tEmptyFields, DocstoreDoc_t & tResult ) const;
+	const void					ProcessBigBlockField ( int iField, const FieldInfo_t & tInfo, int iFieldInRset, bool bPack, int64_t iSessionId, SphOffset_t & tOffset, DocstoreDoc_t & tResult ) const;
 };
 
 
@@ -849,7 +882,7 @@ int Docstore_c::GetFieldId ( const CSphString & sName, DocstoreDataType_e eType 
 }
 
 
-DocstoreDoc_t Docstore_c::GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId ) const
+DocstoreDoc_t Docstore_c::GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const
 {
 #ifndef NDEBUG
 	// assume that field ids are sorted
@@ -861,9 +894,9 @@ DocstoreDoc_t Docstore_c::GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pFie
 	assert ( pBlock );
 
 	if ( pBlock->m_eType==BLOCK_TYPE_SMALL )
-		return ReadDocFromSmallBlock ( *pBlock, tRowID, pFieldIds, iSessionId );
+		return ReadDocFromSmallBlock ( *pBlock, tRowID, pFieldIds, iSessionId, bPack );
 	else
-		return ReadDocFromBigBlock ( *pBlock, pFieldIds, iSessionId );
+		return ReadDocFromBigBlock ( *pBlock, pFieldIds, iSessionId, bPack );
 }
 
 
@@ -937,7 +970,47 @@ BlockCache_c::BlockData_t Docstore_c::UncompressSmallBlock ( const Block_t & tBl
 }
 
 
-DocstoreDoc_t Docstore_c::ReadDocFromSmallBlock ( const Block_t & tBlock, RowID_t tRowID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId ) const
+bool Docstore_c::ProcessSmallBlockDoc ( RowID_t tCurDocRowID, RowID_t tRowID, const VecTraits_T<int> * pFieldIds, const CSphFixedVector<int> & dFieldInRset, bool bPack,
+	MemoryReader2_c & tReader, CSphBitvec & tEmptyFields, DocstoreDoc_t & tResult ) const
+{
+	bool bDocFound = tCurDocRowID==tRowID;
+	if ( bDocFound )
+		tResult.m_dFields.Resize ( pFieldIds ? pFieldIds->GetLength() : m_tFields.GetNumFields() );
+
+	DWORD uBitMaskSize = tEmptyFields.GetSize()*sizeof(DWORD);
+
+	BYTE uDocFlags = tReader.GetByte();
+	if ( uDocFlags & DOC_FLAG_ALL_EMPTY )
+	{
+		for ( auto & i : tResult.m_dFields )
+			i.Resize(0);
+
+		return bDocFound;
+	}
+
+	bool bHasBitmask = !!(uDocFlags & DOC_FLAG_EMPTY_BITMASK);
+	if ( bHasBitmask )
+	{
+		memcpy ( tEmptyFields.Begin(), tReader.Begin()+tReader.GetPos(), uBitMaskSize );
+		tReader.SetPos ( tReader.GetPos()+uBitMaskSize );
+	}
+
+	for ( int iField = 0; iField < m_tFields.GetNumFields(); iField++ )
+		if ( !bHasBitmask || !tEmptyFields.BitGet(iField) )
+		{
+			DWORD uFieldLength = tReader.UnzipInt();
+			int iFieldInRset = dFieldInRset[iField];
+			if ( bDocFound && iFieldInRset!=-1 )
+				PackData ( tResult.m_dFields[iFieldInRset], tReader.Begin()+tReader.GetPos(), uFieldLength, m_tFields.GetField(iField).m_eType==DOCSTORE_TEXT, bPack );
+
+			tReader.SetPos ( tReader.GetPos()+uFieldLength );
+		}
+
+	return bDocFound;
+}
+
+
+DocstoreDoc_t Docstore_c::ReadDocFromSmallBlock ( const Block_t & tBlock, RowID_t tRowID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const
 {
 	BlockCache_c * pBlockCache = BlockCache_c::Get();
 
@@ -967,62 +1040,84 @@ DocstoreDoc_t Docstore_c::ReadDocFromSmallBlock ( const Block_t & tBlock, RowID_
 	RowID_t tCurDocRowID = tBlock.m_tRowID;
 	MemoryReader2_c tReader ( tBlockData.m_pData, tBlockData.m_uSize );
 	CSphBitvec tEmptyFields ( m_tFields.GetNumFields() );
-	DWORD uBitMaskSize = tEmptyFields.GetSize()*sizeof(DWORD);
-	bool bDocFound = false;
-	for ( int i = 0; i < (int)tBlockData.m_uNumDocs && !bDocFound; i++ )
+	for ( int i = 0; i < (int)tBlockData.m_uNumDocs; i++ )
 	{
-		bDocFound = tCurDocRowID==tRowID;
-		if ( bDocFound )
-			tResult.m_dFields.Resize ( pFieldIds ? pFieldIds->GetLength() : m_tFields.GetNumFields() );
-
-		BYTE uDocFlags = tReader.GetByte();
-		if ( uDocFlags & DOC_FLAG_ALL_EMPTY )
-		{
-			for ( auto & i : tResult.m_dFields )
-				i.Resize(0);
-		}
-		else
-		{
-			bool bHasBitmask = !!(uDocFlags & DOC_FLAG_EMPTY_BITMASK);
-			if ( bHasBitmask )
-			{
-				memcpy ( tEmptyFields.Begin(), tReader.Begin()+tReader.GetPos(), uBitMaskSize );
-				tReader.SetPos ( tReader.GetPos()+uBitMaskSize );
-			}
-
-			for ( int iField = 0; iField < m_tFields.GetNumFields(); iField++ )
-				if ( !bHasBitmask || !tEmptyFields.BitGet(iField) )
-				{
-					DWORD uFieldLength = tReader.UnzipInt();
-					int iFieldInRset = dFieldInRset[iField];
-					if ( bDocFound && iFieldInRset!=-1 )
-					{
-						tResult.m_dFields[iFieldInRset].Resize(uFieldLength);
-						memcpy ( tResult.m_dFields[iFieldInRset].Begin(), tReader.Begin()+tReader.GetPos(), uFieldLength );
-					}
-
-					tReader.SetPos ( tReader.GetPos()+uFieldLength );
-				}
-		}
+		if ( ProcessSmallBlockDoc ( tCurDocRowID, tRowID, pFieldIds, dFieldInRset, bPack, tReader, tEmptyFields, tResult ) )
+			break;
 
 		tCurDocRowID++;
 	}
-
-	m_tFields.PostprocessFields ( tResult, dFieldInRset );
 
 	return tResult;
 }
 
 
-DocstoreDoc_t Docstore_c::ReadDocFromBigBlock ( const Block_t & tBlock, const VecTraits_T<int> * pFieldIds, int64_t iSessionId ) const
+BlockCache_c::BlockData_t Docstore_c::UncompressBigBlockField ( SphOffset_t tOffset, const FieldInfo_t & tInfo, int64_t iSessionId ) const
 {
-	struct FieldInfo_t
-	{
-		BYTE	m_uFlags = 0;
-		DWORD	m_uCompressedLen = 0;
-		DWORD	m_uUncompressedLen = 0;
-	};
+	BlockCache_c::BlockData_t tResult;
+	bool bCompressed = !!( tInfo.m_uFlags & FIELD_FLAG_COMPRESSED );
+	DWORD uDataLen = bCompressed ? tInfo.m_uCompressedLen : tInfo.m_uUncompressedLen;
 
+	CSphFixedVector<BYTE> dField ( uDataLen );
+	ReadFromFile ( dField.Begin(), dField.GetLength(), tOffset, iSessionId );
+
+	tResult.m_uSize = tInfo.m_uUncompressedLen;
+
+	CSphFixedVector<BYTE> dDecompressed(0);
+	if ( bCompressed )
+	{
+		dDecompressed.Reset ( tResult.m_uSize );
+		Verify ( m_pCompressor->Decompress ( dField, dDecompressed ) );
+		tResult.m_pData = dDecompressed.LeakData();
+	}
+	else
+		tResult.m_pData = dField.LeakData();
+
+	return tResult;
+}
+
+
+const void Docstore_c::ProcessBigBlockField ( int iField, const FieldInfo_t & tInfo, int iFieldInRset, bool bPack, int64_t iSessionId, SphOffset_t & tOffset, DocstoreDoc_t & tResult ) const
+{
+	if ( tInfo.m_uFlags & FIELD_FLAG_EMPTY )
+		return;
+
+	bool bCompressed = !!( tInfo.m_uFlags & FIELD_FLAG_COMPRESSED );
+	SphOffset_t tOffsetDelta = bCompressed ? tInfo.m_uCompressedLen : tInfo.m_uUncompressedLen;
+	if ( iFieldInRset==-1 )
+	{
+		tOffset += tOffsetDelta;
+		return;
+	}
+
+	BlockCache_c * pBlockCache = BlockCache_c::Get();
+
+	BlockCache_c::BlockData_t tBlockData;
+	bool bFromCache = pBlockCache && pBlockCache->Find ( m_uUID, tOffset, tBlockData );
+	if ( !bFromCache )
+	{
+		tBlockData = UncompressBigBlockField ( tOffset, tInfo, iSessionId );
+		bFromCache = pBlockCache && pBlockCache->Add ( m_uUID, tOffset, tBlockData );
+	}
+
+	ScopedBlock_t tScopedBlock;
+	CSphScopedPtr<BYTE> tDataPtr(nullptr);
+	if ( bFromCache )
+	{
+		tScopedBlock.m_uUID = m_uUID;
+		tScopedBlock.m_tOffset = tOffset;
+	}
+	else
+		tDataPtr = tBlockData.m_pData;
+
+	PackData ( tResult.m_dFields[iFieldInRset], tBlockData.m_pData, tBlockData.m_uSize, m_tFields.GetField(iField).m_eType==DOCSTORE_TEXT, bPack );
+
+	tOffset += tOffsetDelta;
+}
+
+
+DocstoreDoc_t Docstore_c::ReadDocFromBigBlock ( const Block_t & tBlock, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const
+{
 	CSphFixedVector<FieldInfo_t> dFieldInfo ( m_tFields.GetNumFields() );
 	CSphFixedVector<BYTE> dBlockHeader(tBlock.m_uHeaderSize);
 
@@ -1055,15 +1150,13 @@ DocstoreDoc_t Docstore_c::ReadDocFromBigBlock ( const Block_t & tBlock, const Ve
 
 	dBlockHeader.Reset(0);
 
-	CSphFixedVector<BYTE> dBlockBody(tBlock.m_uSize - tBlock.m_uHeaderSize);
-	ReadFromFile ( dBlockBody.Begin(), dBlockBody.GetLength(), tBlock.m_tOffset+tBlock.m_uHeaderSize, iSessionId );
-	const BYTE * pBody = dBlockBody.Begin();
-
 	CSphFixedVector<int> dFieldInRset ( m_tFields.GetNumFields() );
 	CreateFieldRemap ( dFieldInRset, pFieldIds );
 
 	DocstoreDoc_t tResult;
 	tResult.m_dFields.Resize ( pFieldIds ? pFieldIds->GetLength() : m_tFields.GetNumFields() );
+
+	SphOffset_t tOffset = tBlock.m_tOffset+tBlock.m_uHeaderSize;
 
 	// i == physical field order in file
 	// dFieldSort[i] == field order as in m_dFields
@@ -1071,25 +1164,8 @@ DocstoreDoc_t Docstore_c::ReadDocFromBigBlock ( const Block_t & tBlock, const Ve
 	for ( int i = 0; i < m_tFields.GetNumFields(); i++ )
 	{
 		int iField = bNeedReorder ? dFieldSort[i] : i;
-		const FieldInfo_t & tInfo = dFieldInfo[iField];
-		if ( tInfo.m_uFlags & FIELD_FLAG_EMPTY )
-			continue;
-
-		bool bCompressed = !!( tInfo.m_uFlags & FIELD_FLAG_COMPRESSED );
-		if ( dFieldInRset[iField]!=-1 )
-		{
-			CSphVector<BYTE> & tField = tResult.m_dFields[dFieldInRset[iField]];
-			tField.Resize ( tInfo.m_uUncompressedLen );
-			if ( bCompressed )
-				Verify ( m_pCompressor->Decompress ( VecTraits_T<const BYTE> ( pBody, tInfo.m_uCompressedLen ), tField ) );
-			else
-				memcpy ( tField.Begin(), pBody, tInfo.m_uUncompressedLen );
-		}
-
-		pBody += bCompressed ? tInfo.m_uCompressedLen : tInfo.m_uUncompressedLen;
+		ProcessBigBlockField ( iField, dFieldInfo[iField], dFieldInRset[iField], bPack, iSessionId, tOffset, tResult );
 	}
-
-	m_tFields.PostprocessFields ( tResult, dFieldInRset );
 
 	return tResult;
 }
@@ -1466,7 +1542,7 @@ public:
 	int					AddField ( const CSphString & sName, DocstoreDataType_e eType ) final;
 	void				Finalize() final {};
 
-	DocstoreDoc_t		GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pFieldIds=nullptr, int64_t iSessionId=-1 ) const final;
+	DocstoreDoc_t		GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const final;
 	int					GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
 	DocstoreSettings_t	GetDocstoreSettings() const final;
 	void				CreateReader ( int64_t iSessionId ) const final {};
@@ -1538,7 +1614,7 @@ int DocstoreRT_c::AddField ( const CSphString & sName, DocstoreDataType_e eType 
 }
 
 
-DocstoreDoc_t DocstoreRT_c::GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId ) const
+DocstoreDoc_t DocstoreRT_c::GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const
 {
 #ifndef NDEBUG
 	// assume that field ids are sorted
@@ -1558,15 +1634,10 @@ DocstoreDoc_t DocstoreRT_c::GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pF
 		DWORD uFieldLength = sphUnzipInt(pDoc);
 		int iFieldInRset = dFieldInRset[iField];
 		if ( iFieldInRset!=-1 )
-		{
-			tResult.m_dFields[iFieldInRset].Resize(uFieldLength);
-			memcpy ( tResult.m_dFields[iFieldInRset].Begin(), pDoc, uFieldLength );
-		}
+			PackData ( tResult.m_dFields[iFieldInRset], pDoc, uFieldLength, m_tFields.GetField(iField).m_eType==DOCSTORE_TEXT, bPack );
 
 		pDoc += uFieldLength;
 	}
-
-	m_tFields.PostprocessFields ( tResult, dFieldInRset );
 
 	return tResult;
 }

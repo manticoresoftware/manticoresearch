@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>document storage vs distributed</name>
+
+<num_agents>3</num_agents>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+<agent0>
+index dist
+{
+	type = distributed
+	agent = <agent1_address/>:loc1
+	agent = <agent2_address/>:loc2
+}
+</agent0>
+
+<agent1>
+source src_a1
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, title, body FROM test_table where id in ( 1,2 )
+}
+
+index loc1
+{
+	source			= src_a1
+	stored_fields	= title, body
+	path			= <data_path/>/a1
+}
+</agent1>
+
+<agent2>
+source src_a2
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, title, body FROM test_table where id in ( 3,4 )
+}
+
+index  loc2
+{
+	source			= src_a2
+	stored_fields	= title, body
+	path			= <data_path/>/a2
+}
+</agent2>
+
+</config>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	title varchar(255) not null,
+	body varchar(255) not null
+);
+</db_create>
+<db_drop>drop table if exists test_table;</db_drop>
+
+<db_insert>
+insert into test_table values
+( 1, 'document 1', 'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat.' ),
+( 2, 'document 2', 'A door opened before them, revealing a small room. Bander said, "Come, half-humans, I want to show you how we live."' ),
+( 3, 'document 3', 'Trevize whispered, "It gets infantile pleasure out of display. I`d love to knock it down."' ),
+( 4, 'document 4', 'Don`t try to compete in childishness, said Bliss.' ),
+( 5, 'document 5', 'Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>select * from dist</sphinxql>
+<sphinxql>select id,title from dist</sphinxql>
+<sphinxql>select id,body from dist</sphinxql>
+</sphqueries>
+
+</test>

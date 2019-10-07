@@ -3338,7 +3338,7 @@ class DocstoreReader_i
 {
 public:
 	virtual void	CreateReader ( int64_t iSessionId ) const {}
-	virtual bool	GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId ) const = 0;
+	virtual bool	GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const = 0;
 	virtual int		GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const = 0;
 };
 
@@ -3473,7 +3473,7 @@ public:
 	virtual void				KillExistingDocids ( CSphIndex * pTarget ) {}
 	virtual int					KillMulti ( const VecTraits_T<DocID_t> & dKlist ) { return 0; }
 
-	bool						GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds=nullptr, int64_t iSessionId=-1 ) const override { return false; }
+	bool						GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const override { return false; }
 	int							GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const override { return -1; }
 
 public:

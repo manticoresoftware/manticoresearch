@@ -33,7 +33,7 @@ class Docstore_i : public virtual DocstoreFields_i
 {
 public:
 	virtual void				CreateReader ( int64_t iSessionId ) const = 0;
-	virtual DocstoreDoc_t		GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pFieldIds=nullptr, int64_t iSessionId=-1 ) const = 0;
+	virtual DocstoreDoc_t		GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const = 0;
 	virtual DocstoreSettings_t	GetDocstoreSettings() const = 0;
 };
 

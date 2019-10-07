@@ -910,12 +910,14 @@ BYTE * sphPackPtrAttr ( const BYTE * pData, int iLengthBytes )
 }
 
 // pack blob pData[iLengthBytes] into preallocated buf
-void sphPackPtrAttr ( BYTE * pPrealloc, const BYTE * pData, int iLengthBytes )
+BYTE * sphPackPtrAttr ( BYTE * pPrealloc, const BYTE * pData, int iLengthBytes )
 {
 	assert ( pPrealloc && pData );
 	pPrealloc += sphZipToPtr ( iLengthBytes, pPrealloc );
 	if ( pPrealloc!=pData )
 		memcpy ( pPrealloc, pData, iLengthBytes );
+	
+	return pPrealloc+iLengthBytes;
 }
 
 // allocate blob for iLengthBytes, pack size, then return pointer to payload in *ppData, and whole blob in result

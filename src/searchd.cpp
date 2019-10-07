@@ -3777,7 +3777,7 @@ static bool GetItemsLeftInSchema ( const ISphSchema & tSchema, bool bOnlyPlain, 
 }
 
 
-static void DoExpansion ( const ISphSchema & tSchema, const CSphVector<int> & dAttrsInSchema, const CSphVector<CSphQueryItem> & dItems, CSphVector<CSphQueryItem> & tExpanded )
+static void DoExpansion ( const ISphSchema & tSchema, const CSphVector<int> & dAttrsInSchema, const CSphVector<CSphQueryItem> & dItems, CSphVector<CSphQueryItem> & dExpanded )
 {
 	bool bExpandedAsterisk = false;
 	for ( const auto & i : dItems )
@@ -3790,10 +3790,16 @@ static void DoExpansion ( const ISphSchema & tSchema, const CSphVector<int> & dA
 			bExpandedAsterisk = true;
 
 			for ( auto iAttr : dAttrsInSchema )
-				tExpanded.Add().m_sExpr = tSchema.GetAttr(iAttr).m_sName;
+			{
+				const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
+				CSphQueryItem & tExpanded = dExpanded.Add();
+				tExpanded.m_sExpr = tCol.m_sName;
+				if ( tCol.m_pExpr )	// stored fields
+					tExpanded.m_sAlias = tCol.m_sName;
+			}
 		}
 		else
-			tExpanded.Add(i);
+			dExpanded.Add(i);
 	}
 }
 

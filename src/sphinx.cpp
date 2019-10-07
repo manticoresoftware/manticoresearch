@@ -2595,7 +2595,7 @@ public:
 
 	// docstore-related section
 	void				CreateReader ( int64_t iSessionId ) const final;
-	bool				GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds=nullptr, int64_t iSessionId=-1 ) const final;
+	bool				GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const final;
 	int					GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
 
 private:
@@ -13152,7 +13152,7 @@ bool CSphIndex_VLN::MergeAttributes ( volatile bool * pLocalStop, const CSphInde
 			tWriterSPA.PutBytes ( pRow, iStrideBytes );
 
 		if ( pDocstoreBuilder )
-			pDocstoreBuilder->AddDoc ( tResultRowID, pIndex->m_pDocstore->GetDoc(i) );
+			pDocstoreBuilder->AddDoc ( tResultRowID, pIndex->m_pDocstore->GetDoc ( i, nullptr, -1, false ) );
 
 		tResultRowID++;
 	}
@@ -17395,7 +17395,7 @@ void CSphIndex_VLN::CreateReader ( int64_t iSessionId ) const
 }
 
 
-bool CSphIndex_VLN::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId ) const
+bool CSphIndex_VLN::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const
 {
 	if ( !m_pDocstore.Ptr() )
 		return false;
@@ -17404,7 +17404,7 @@ bool CSphIndex_VLN::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTrai
 	if ( tRowID==INVALID_ROWID || m_tDeadRowMap.IsSet(tRowID) )
 		return false;
 
-	tDoc = m_pDocstore->GetDoc ( tRowID, pFieldIds, iSessionId );
+	tDoc = m_pDocstore->GetDoc ( tRowID, pFieldIds, iSessionId, bPack );
 	return true;
 }
 

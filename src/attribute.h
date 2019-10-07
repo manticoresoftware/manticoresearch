@@ -95,8 +95,8 @@ bool				sphIsBlobAttr ( ESphAttr eAttr );
 // pack data pointer attr (length+data), return allocated storage
 BYTE *				sphPackPtrAttr ( const BYTE * pData, int iLengthBytes );
 
-// pack data pointer attr to preallocated storage
-void				sphPackPtrAttr ( BYTE * pPrealloc, const BYTE * pData, int iLengthBytes );
+// pack data pointer attr to preallocated storage, return pointer to end
+BYTE *				sphPackPtrAttr ( BYTE * pPrealloc, const BYTE * pData, int iLengthBytes );
 
 // allocate buffer, store zipped length, set pointer to free space in buffer
 BYTE *				sphPackPtrAttr ( int iLengthBytes, BYTE ** pData );

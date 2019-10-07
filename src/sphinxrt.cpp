@@ -1152,7 +1152,7 @@ public:
 	void				SetDebugCheck ( bool bCheckIdDups ) final { m_bDebugCheck = true; m_bCheckIdDups = bCheckIdDups; }
 
 	void				CreateReader ( int64_t iSessionId ) const final;
-	bool				GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds=nullptr, int64_t iSessionId=-1 ) const final;
+	bool				GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const final;
 	int					GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
 
 protected:
@@ -2986,7 +2986,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 			if ( pDocstoreBuilder.Ptr() )
 			{
 				assert ( pSeg->m_pDocstore.Ptr() );
-				pDocstoreBuilder->AddDoc ( tNextRowID, pSeg->m_pDocstore->GetDoc ( tIt.GetRowID() ) );
+				pDocstoreBuilder->AddDoc ( tNextRowID, pSeg->m_pDocstore->GetDoc ( tIt.GetRowID(), nullptr, -1, false ) );
 			}
 
 			tCtx.m_dRowMaps[i][tIt.GetRowID()] = tNextRowID++;
@@ -3641,7 +3641,7 @@ bool RtIndex_c::Prealloc ( bool bStripPath )
 	if ( !sphLockEx ( m_iLockFD, false ) )
 	{
 		m_sLastError.SetSprintf ( "failed to lock %s: %s", sLock.cstr(), strerrorm(errno) );
-		::close ( m_iLockFD );
+		SafeClose ( m_iLockFD );
 		return false;
 	}
 
@@ -7633,7 +7633,7 @@ void RtIndex_c::CreateReader ( int64_t iSessionId ) const
 }
 
 
-bool RtIndex_c::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId ) const
+bool RtIndex_c::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const
 {
 	CSphScopedRLock tRLock { m_tChunkLock };
 
@@ -7644,14 +7644,14 @@ bool RtIndex_c::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T
 		if ( tRowID==INVALID_ROWID || i->m_tDeadRowMap.IsSet(tRowID) )
 			continue;
 
-		tDoc = i->m_pDocstore->GetDoc ( tRowID, pFieldIds, iSessionId );
+		tDoc = i->m_pDocstore->GetDoc ( tRowID, pFieldIds, iSessionId, bPack );
 		return true;
 	}
 
 	for ( const auto & i : m_dDiskChunks )
 	{
 		assert(i);
-		if ( i->GetDoc ( tDoc, tDocID, pFieldIds, iSessionId ) )
+		if ( i->GetDoc ( tDoc, tDocID, pFieldIds, iSessionId, bPack ) )
 			return true;
 	}
 

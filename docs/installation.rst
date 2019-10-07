@@ -140,6 +140,7 @@ Supported releases:
 
 * CentOS 6 and RHEL 6
 * CentOS 7 and RHEL 7
+* CentOS 8 and RHEL 8
 
 Supported platforms:
 
@@ -442,7 +443,7 @@ Next step is to configure the building with cmake. Available list of configurati
 * ``WITH_ODBC`` (bool)	 enabled compiling with ODBC client library, used by ODBC source driver
 * ``WITH_PGSQL`` (bool)	 enabled compiling with PostgreSQL client library, used by PostgreSQL source driver
 * ``WITH_ICU`` (bool)  enabled compiling with ICU library support, used by morphology processor
-* ``DISTR_BUILD``  -  in case the target is packaging, it specifies the target operating system. Supported values are: `centos6`, `centos7`, `wheezy`, `jessie`, `stretch`, `buster`, `trusty`, `xenial`, `bionic`, `macos`, `default`.
+* ``DISTR_BUILD``  -  in case the target is packaging, it specifies the target operating system. Supported values are: `rhel6`, `rhel7`, `rhel8`, `wheezy`, `jessie`, `stretch`, `buster`, `trusty`, `xenial`, `bionic`, `macos`, `default`.
 
 Compiling on Linux systems
 ~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -136,6 +136,17 @@ rhel7:
       - $WHAT =~ /rhel7/
   image: registry.gitlab.com/manticoresearch/dev/centos7_cmake314:latest
 
+rhel8:
+  <<: *redhat
+  variables:
+    DISTR: "rhel8"
+    XTRAFLAGS: "-DCMAKE_CXX_FLAGS=\"-Wno-error=stringop-truncation\""
+  only:
+    variables:
+      - $WHAT == "all"
+      - $WHAT =~ /rhel8/
+  image: registry.gitlab.com/manticoresearch/dev/centos8_cmake314:latest
+
 jessie:
   <<: *debian
   variables:
@@ -205,7 +216,7 @@ collect:
     variables:
       - $WHAT == "all"
       - $WHAT =~ /collect/
-  dependencies: [tarball, osx, windows, rhel6, rhel7, jessie, stretch, trusty, xenial, bionic]
+  dependencies: [tarball, osx, windows, rhel6, rhel7, rhel8, jessie, stretch, trusty, xenial, bionic]
   variables:
     GIT_STRATEGY: none
   script:

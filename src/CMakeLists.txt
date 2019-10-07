@@ -202,17 +202,20 @@ include ( helpers )
 
 
 if ( SPLIT_SYMBOLS )
-	split_dbg ( indexer )
-	split_dbg ( indextool )
-	split_dbg ( searchd )
-	split_dbg ( spelldump )
-	split_dbg ( wordbreaker )
-	split_dbg ( index_converter )
+       split_dbg ( indexer )
+       split_dbg ( indextool )
+       split_dbg ( searchd )
+       split_dbg ( spelldump )
+       split_dbg ( wordbreaker )
+       split_dbg ( index_converter )
 endif()
 
-INSTALL ( TARGETS indexer indextool searchd spelldump wordbreaker RUNTIME DESTINATION ${BINPREFIX}bin COMPONENT applications )
+
+INSTALL ( TARGETS indexer indextool spelldump wordbreaker RUNTIME DESTINATION ${BINPREFIX}bin COMPONENT tools )
+INSTALL ( TARGETS searchd RUNTIME DESTINATION ${BINPREFIX}bin COMPONENT applications )
 
 INSTALL ( TARGETS index_converter RUNTIME DESTINATION ${BINPREFIX}bin COMPONENT converter )
+INSTALL(FILES sphinxudf.h  DESTINATION usr/include/manticore COMPONENT devel)
 
 if ( NOT DISABLE_TESTING )
 

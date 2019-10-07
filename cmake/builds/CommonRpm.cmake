@@ -6,12 +6,24 @@ set ( CPACK_GENERATOR "RPM" )
 set ( CPACK_PACKAGING_INSTALL_PREFIX "/" )
 set ( BINPREFIX "usr/" )
 
-set ( CPACK_RPM_MAIN_COMPONENT bin )
 set ( CPACK_RPM_PACKAGE_RELEASE 1 )
 set ( CPACK_RPM_PACKAGE_RELEASE_DIST ON )
 
-set ( CPACK_RPM_DEBUGINFO_PACKAGE ON )
-set ( CPACK_RPM_DEBUGINFO_SINGLE_PACKAGE ON )
+if ( SPLIT_APPS )
+	set ( CPACK_RPM_BIN_PACKAGE_NAME "manticore-server" )
+	set ( CPACK_RPM_TOOLS_PACKAGE_NAME "manticore-tools" )
+	set ( CPACK_RPM_DEVEL_PACKAGE_NAME "manticore-devel" )
+	set ( CPACK_RPM_DEVEL_FILE_NAME "RPM-DEFAULT" )
+	set ( CPACK_RPM_BIN_DEBUGINFO_PACKAGE ON )
+	set ( CPACK_RPM_TOOLS_DEBUGINFO_PACKAGE ON )
+	set ( CPACK_RPM_CONVERTER_DEBUGINFO_PACKAGE ON )
+	set ( CPACK_RPM_DEVEL_DEBUGINFO_PACKAGE OFF )
+else ()	
+	set ( CPACK_RPM_MAIN_COMPONENT bin )
+	set ( CPACK_RPM_DEBUGINFO_PACKAGE ON )
+	set ( CPACK_RPM_DEBUGINFO_SINGLE_PACKAGE ON )
+endif()
+
 #set ( CPACK_BUILD_SOURCE_DIRS OFF )
 
 string ( LENGTH "${CMAKE_SOURCE_DIR}" source_dir_len_ )
@@ -19,6 +31,7 @@ if ( source_dir_len_ LESS 75 )
 	message ( STATUS "set src prefix to /tmp/m due to too long path")
 	set ( CPACK_RPM_BUILD_SOURCE_DIRS_PREFIX "/tmp")
 endif ()
+
 
 set ( CPACK_RPM_PACKAGE_URL "https://manticoresearch.com/" )
 set ( CPACK_RPM_PACKAGE_GROUP "Applications/Text" )
@@ -91,7 +104,7 @@ else ()
 			DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/rc.d/init.d COMPONENT adm )
 
 endif ()
-
+if (NOT NOAPI)
 install ( FILES ${MANTICORE_BINARY_DIR}/sphinx-min.conf.dist
 		${MANTICORE_BINARY_DIR}/sphinx.conf.dist
 		DESTINATION usr/${CMAKE_INSTALL_DOCDIR} COMPONENT doc )
@@ -105,7 +118,7 @@ install ( FILES doc/indexer.1 doc/indextool.1 doc/searchd.1 doc/spelldump.1
 install ( DIRECTORY misc/stopwords DESTINATION usr/${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME} COMPONENT doc )
 
 install ( DIRECTORY api DESTINATION usr/${CMAKE_INSTALL_DATADIR}/manticore COMPONENT doc )
-
+endif()
 
 
 install ( FILES ${MANTICORE_BINARY_DIR}/manticore.logrotate
@@ -119,3 +132,4 @@ install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/run/manticore COM
 install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COMPONENT adm )
 
 set ( CONFFILEDIR "${CMAKE_INSTALL_SYSCONFDIR}/sphinx" )
+

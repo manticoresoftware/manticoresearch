@@ -107,6 +107,8 @@ if ( NOT DISABLE_TESTING )
 	include ( CTest )
 endif ()
 
+option ( SEPARATE_DAEMON "Put searchd into different package" OFF )
+
 set ( SPHINX_TAG "" CACHE STRING "The tag which will be added to build" )
 set ( PKGSUFFIXES ) # list of suffixes which will be append to package name, will be '-'-separated
 set ( PACKAGE_NAME "manticore" )
@@ -629,20 +631,43 @@ set ( CPACK_PACKAGE_VENDOR "${COMPANY_NAME}" )
 set ( CPACK_RESOURCE_FILE_LICENSE "${MANTICORE_BINARY_DIR}/COPYING.txt" )
 set ( CPACK_PACKAGE_DESCRIPTION_SUMMARY "Manticore full-text search server")
 
-# binaries, config and docs
-set ( CPACK_COMPONENT_APPLICATIONS_GROUP "bin" )
 set ( CPACK_COMPONENT_GROUP_BIN_DISPLAY_NAME "Runtime" )
-set ( CPACK_COMPONENT_APPLICATIONS_DISPLAY_NAME "${PACKAGE_NAME} applications" )
 
+# applications (indexes,indextool etc.)
+if ( SPLIT_APPS )
+	set ( CPACK_COMPONENT_TOOLS_GROUP "tools" )
+	set ( CPACK_COMPONENT_GROUP_TOOLS_DISPLAY_NAME "Runtime" )
+	set ( CPACK_COMPONENT_TOOLS_DISPLAY_NAME "${PACKAGE_NAME} applications" )
+else()
+	set ( CPACK_COMPONENT_TOOLS_GROUP "bin" )
+	set ( CPACK_COMPONENT_TOOLS_DISPLAY_NAME "${PACKAGE_NAME} applications" )
+endif()
+
+
+# searchd daemon
+set ( CPACK_COMPONENT_APPLICATIONS_GROUP "bin" )
+set ( CPACK_COMPONENT_GROUP_APPLICATIONS_DISPLAY_NAME "Runtime" )
+set ( CPACK_COMPONENT_APPLICATIONS_DISPLAY_NAME "${PACKAGE_NAME} service" )
+
+# configurations
+set ( CPACK_COMPONENT_CONFIG_GROUP "bin" )
+set ( CPACK_COMPONENT_CONFIG_DISPLAY_NAME "Configuration examples" )
+
+# documentation files
+set ( CPACK_COMPONENT_DOC_GROUP "bin" )
+set ( CPACK_COMPONENT_DOC_DISPLAY_NAME "Documentation" )
+
+# converter tool
 set ( CPACK_COMPONENT_CONVERTER_GROUP "converter" )
 set ( CPACK_COMPONENT_GROUP_CONVERTER_DISPLAY_NAME "Runtime" )
 set ( CPACK_COMPONENT_CONVERTER_DISPLAY_NAME "CONVERTER application" )
 
-set ( CPACK_COMPONENT_CONFIG_GROUP "bin" )
-set ( CPACK_COMPONENT_CONFIG_DISPLAY_NAME "Configuration examples" )
+# development files
+set ( CPACK_COMPONENT_DEVEL_GROUP "devel" )
+set ( CPACK_COMPONENT_DEVEL_DISPLAY_NAME "Development" )
+set ( CPACK_COMPONENT_GROUP_DEVEL_DISPLAY_NAME "Development files" )
 
-set ( CPACK_COMPONENT_DOC_GROUP "bin" )
-set ( CPACK_COMPONENT_DOC_DISPLAY_NAME "Documentation" )
+
 
 set ( CPACK_RPM_COMPONENT_INSTALL 1 )
 set ( CPACK_DEB_COMPONENT_INSTALL 1 )

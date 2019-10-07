@@ -136,6 +136,23 @@ rhel7:
       - $WHAT =~ /rhel7/
   image: registry.gitlab.com/manticoresearch/dev/centos7_cmake314:latest
 
+rhelsplit7:
+  <<: *redhat
+  script:
+    - ln -s $(pwd) /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
+    - cd /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
+    - mkdir build && cd build
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DSPLIT_APPS=ON -DNOAPI=ON -DDISTR_BUILD=$DISTR ..
+    - make -j4 package
+    - cp manticore*.rpm ..  
+  variables:
+    DISTR: "rhel7"
+  only:
+    variables:
+      - $WHAT == "all"
+      - $WHAT =~ /rhelsplit7/
+  image: registry.gitlab.com/manticoresearch/dev/centos7_cmake314:latest
+
 rhel8:
   <<: *redhat
   variables:

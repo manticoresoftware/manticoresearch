@@ -1391,7 +1391,7 @@ void DocstoreBuilder_c::WriteSmallBlock()
 
 			tMemWriter.PutByte ( bNeedsBitmask ? DOC_FLAG_EMPTY_BITMASK : 0 );
 			if ( bNeedsBitmask )
-				tMemWriter.PutBytes ( tEmptyFields.Begin(), tEmptyFields.GetSize() );
+				tMemWriter.PutBytes ( tEmptyFields.Begin(), tEmptyFields.GetSize()*sizeof(*tEmptyFields.Begin()) );
 			
 			ARRAY_FOREACH ( iField, tDoc.m_dFields )
 				if ( !bNeedsBitmask || !tEmptyFields.BitGet(iField) )

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>document storage vs empty fields</name>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+source src_a1
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, title, body1,body2,body3,body4,body5,body6 FROM test_table
+}
+
+index loc1
+{
+	source			= src_a1
+	stored_fields	= title, body1,body2,body3,body4,body5,body6
+	path			= <data_path/>/a1
+}
+</config>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	title varchar(255) not null,
+	body1 varchar(255) not null,
+	body2 varchar(255) not null,
+	body3 varchar(255) not null,
+	body4 varchar(255) not null,
+	body5 varchar(255) not null,
+	body6 varchar(255) not null
+);
+</db_create>
+<db_drop>drop table if exists test_table;</db_drop>
+
+<db_insert>
+insert into test_table values
+( 1, 'document 1', 'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat.','','','','','' ),
+( 2, 'document 2', 'A door opened before them, revealing a small room. Bander said, "Come, half-humans, I want to show you how we live."','','','','','' ),
+( 3, 'document 3', 'Trevize whispered, "It gets infantile pleasure out of display. I`d love to knock it down."','','','','','' ),
+( 4, 'document 4', 'Don`t try to compete in childishness, said Bliss.','','','','','' ),
+( 5, 'document 5', 'Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.','','','','','' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>select * from loc1</sphinxql>
+</sphqueries>
+
+</test>

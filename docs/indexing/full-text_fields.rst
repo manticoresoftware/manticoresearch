@@ -12,18 +12,9 @@ search through “title” only) or a subset of fields (eg. to “title” and
 “abstract” only). Manticore index format generally supports up to 256
 fields.
 
-Note that the original contents of the fields are **not** stored in
-the Manticore index. The text that you send to Manticore gets processed, and a
-full-text index (a special data structure that enables quick searches
-for a keyword) gets built from that text. But the original text contents
-are then simply discarded. Manticore assumes that you store those contents
-elsewhere anyway.
 
-Moreover, it is impossible to *fully* reconstruct the original text,
-because the specific whitespace, capitalization, punctuation, etc will
-all be lost during indexing. It is theoretically possible to partially
-reconstruct a given document from the Manticore full-text index, but that
-would be a slow process (especially if the :ref:`CRC
-dictionary <dict>` is used, which
-does not even store the original keywords and works with their hashes
-instead).
+The text that you send to Manticore gets processed, and a
+full-text index (a special data structure that enables quick searches
+for a keyword) gets built from that text.
+Prior Manticore Search 3.2 the original content of fields is discarded and it's not possible to
+*fully* reconstruct it. In newer versions, original content can be optionally stored in index.

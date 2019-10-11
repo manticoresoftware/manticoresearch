@@ -14,11 +14,13 @@ The identificator of a document in the index. Document IDs must be unique signed
 Text
 ^^^^
 
-It is the full-text field part of the index. The content of these fields is indexed and not stored in the original form.
+It is the full-text field part of the index. 
 The text is passed through an analyzer pipeline that converts the text to words, applies morphology transformations etc.
-Full-text fields can only be used in MATCH() clause, they are not returned in the result set and cannot be used for sorting or aggregation.
+Full-text fields can only be used in MATCH() clause and cannot be used for sorting or aggregation.
 Words are stored in an inverted index along with references to the fields they belong and positions in the field.
 This allows to search a word inside each field and to use advanced operators like proximity.
+By default the original text of the fields is only indexed and not stored, thus not possible to be returned in the results.
+Starting with version 3.2.0 it's possible to optionally store and retrieve in results the original content. 
 
 String
 ^^^^^^^

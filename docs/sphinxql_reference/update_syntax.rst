@@ -31,8 +31,7 @@ MVA values sets for updating (and also for INSERT or REPLACE, refer to
 comma-separated lists in parentheses. To erase the MVA value, just
 assign () to it.
 
-UPDATE can be used to perform partial JSON updates, like updating integer
-and float values in a JSON array. Full json updates are supported too.
+UPDATE can be used to perform partial JSON updates on numeric data types or arrays of numeric data types. For updating other data types or changing type of a property a full update of the JSON attribute is required.
 
 .. code-block:: mysql
 
@@ -45,7 +44,7 @@ and float values in a JSON array. Full json updates are supported too.
         fattr=3465.23,
         mvattr1=(3,6,4),
         mvattr2=()
-      WHERE MATCH('hehe') AND enabled=1;
+      WHERE MATCH('something') AND enabled=1;
     Query OK, 148 rows affected (0.01 sec)
 
 OPTION clause. This is a Manticore specific extension that lets you control
@@ -60,11 +59,11 @@ The list of allowed options are the same as for
 :ref:`SELECT <select_syntax>` statement. Specifically for UPDATE
 statement you can use these options:
 
--  ‘ignore_nonexistent_columns’ - points that the update will silently
+-  ‘ignore_nonexistent_columns’ - If set to **1** points that the update will silently
    ignore any warnings about trying to update a column which is not
-   exists in current index schema.
+   exists in current index schema. Default value is **0**.
 
--  ‘strict’ - this option is used while updating JSON attributes. It's
-   possible to update just some types in JSON. And if you try to update,
-   for example, array type you'll get error with ‘strict’ option on and
-   warning otherwise.
+-  ‘strict’ - this option is used while partial updating JSON attributes. 
+   By default (strict=1), UPDATE will end in an error if the UPDATE query tries to perform an update on non-numeric properties.
+   With strict=0 if multiple properties are updated and some are not allowed, the UPDATE will not end in error and will perform the changes only on allowed properties
+   (with the rest being ignored). If none of the SET changes of the UPDATE are not permitted, the command will end in an error even with strict=0.

@@ -72,7 +72,7 @@ The commands are as follows:
    contain spaces instead of separators (accordingly to your
    charset_table settings) and lowercased letters in words.
 
--  ``--html_strip INDEXNAME`` filters stdin using HTML stripper settings
+-  ``--htmlstrip INDEXNAME`` filters stdin using HTML stripper settings
    for a given index, and prints the filtering results to stdout. Note
    that the settings will be taken from sphinx.conf, and not the index
    header.

@@ -183,6 +183,7 @@ To create a new RT index, you need to define it in the sphinx.conf. A simple def
          rt_field = title
          rt_attr_uint = attr1
          rt_attr_uint = attr2
+		 stored_field = title
    }
 
 To get the index online you need to either restart the daemon or send a HUP signal to it.
@@ -194,7 +195,7 @@ Unlike RT, the plain index requires setting up the source and run the indexing p
 For this we need to edit the sphinx.conf configuration file. The initial configuration comes with a sample plain index along with a source.
 For simplicity we use a MySQL source.
 
-First, the database credentials need to be adjusted 
+First, the database credentials need to be adjusted in the source configuration:
 
 .. code-block:: none
    
@@ -246,6 +247,19 @@ In our example group_id and date_added are attributes:
 
       sql_attr_uint           = group_id
       sql_attr_timestamp      = date_added
+
+
+If we want to also store the texts or enable some features (for example wildcarding), we have to edit the index configuration:
+
+.. code-block:: none
+
+      index test1
+	  {
+	  ...
+	      stored_fields           = title
+          min_infix_len           = 3
+	  ...
+
 
 Once we have this setup, we can run the indexing process:
 

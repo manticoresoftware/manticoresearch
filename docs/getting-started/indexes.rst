@@ -15,8 +15,8 @@ In addition, a special index based on RealTime type, called `percolate`, can be 
 In the current version, indexes use a schema like a normal database table. The schema can have 3 big types of columns:
 
 * the first column is always an unsigned 64 bit non-zero number, called `id`. Unlike in a database, there is no mechanism of auto incrementing, so you need to be sure the documents ids are unique
-* fulltext fields - they contain indexed content. There can be multiple fulltext fields per index. Fulltext searches can be made on all fields or selective. Currently the original text is not stored, so if it’s required to show their content in search results, a trip to the origin source must be made using the ids (or other identifier) obtained from the search
-* attributes - their values are stored and are not used in fulltext matching. Instead they can be used for regular filtering, grouping, sorting. They can be also used in expressions of score ranking.
+* full-text fields - they contain indexed content. There can be multiple full-text fields per index. Full-text searches can be made on all fields or selective. Starting with 3.2 it's possible to also store the original content and retrieve it in results.
+* attributes - their values are stored and are not used in full-text matching. Instead they can be used for regular filtering, grouping, sorting. They can be also used in expressions of score ranking.
 
 Field and attribute names must start with a letter and can contain letters, digits and underscore.
 
@@ -65,21 +65,59 @@ As the engine can't globally do a uniqueness on the document ids, an important t
 
 For this, there is an option that allows defining a list of document ids which are suppressed by the delta index. For more details, check :ref:`sql_query_killlist`.
 
+An example of a plain index configuration using a MySQL source:
+
+.. code-block::  none
+
+  source mysource {
+    type             = mysql
+	path             = /path/to/realtime
+    sql_host         = localhost
+	sql_user         = myuser
+	sql_pass         = mypass
+	sql_db           = mydb
+	sql_query        =  SELECT id, title, description, category_id  from mytable
+	sql_attr_uint    = category_id
+	sql_field_string = title
+   }
+   
+  index myindex {
+    type   = plain
+	source = mysource
+	path   = /path/to/myindex
+    ...
+   }
+   
+
 Real-Time indexes
 ~~~~~~~~~~~~~~~~~
 
-RealTime indexes allow online updates, but updating fulltext data and non-numeric attributes require a full row replace.
+Real-Time indexes allow online updates, but updating full-text data and non-numeric attributes require a full row replace.
 
-The RealTIme index  starts empty and you can add, replace, update or delete data in the same fashion as for a database table. The updates are first held into a memory zone, defined by :ref:`rt_mem_limit`. 
+The Real-Time index  starts empty and you can add, replace, update or delete data in the same fashion as for a database table. The updates are first held into a memory zone, defined by :ref:`rt_mem_limit`. 
 When this gets filled, it is dumped as disk chunk -  which as structure is similar with a plain index. As the number of disk chunks increase, the search performance decreases, as the searching is done sequentially on the chunks.
 To avoid that, there is a command that can merge the disk chunks into a single one - :ref:`optimize_index_syntax`. 
 
-Populating a RealTime can be done in two ways: firing INSERTs or converting a plain index to become RealTime.
+Populating a Real-Time index can be done in two ways: firing INSERTs or converting a plain index to become RealTime.
 In case of INSERTs, using a single worker (a script or code) that inserts one record at a time can be slow. You can speed this by batching many rows into one and by using multiple workers that perform inserting. 
 Parallel inserts will be faster but also come at using more CPU. The size of the data buffer memory (which we call RAM chunk) also influence the speed of inserting.
 
+An example of Real-Time index configuration:
 
 
+.. code-block::  none
+
+  index realtime {
+    type           = rt
+	path           = /path/to/realtime
+    rt_field       = title
+    rt_field       = description
+	rt_attr_uint   = category_id
+	rt_attr_string = title
+	rt_attr_json   = metadata
+    ...
+   }
+   
 
 Local distributed indexes
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -89,8 +127,8 @@ In our case, a distributed index would look like:
 
 .. code-block::  none
 
-  index_dist {
-    type = distributed
+  index index_dist {
+    type  = distributed
     local = index1
     local = index2
     ...
@@ -105,7 +143,7 @@ Remote distributed indexes and high availability
 .. code-block:: none
 
    index mydist {
-             type = distributed
+             type  = distributed
              agent = box1:9312:shard1
              agent = box2:9312:shard2
              agent = box3:9312:shard3
@@ -117,7 +155,7 @@ Here we have split the data over 4 servers, each serving one of the shards. If o
 .. code-block:: none
 
    index mydist {
-             type = distributed
+             type  = distributed
              agent = box1:9312|box5:9312:shard1
              agent = box2:9312:|box6:9312:shard2
              agent = box3:9312:|box7:9312:shard3
@@ -140,8 +178,8 @@ replication address and port range in the config. Define :ref:`data_dir <data_di
 .. code-block::  none
 
   searchd {
-    listen = 9312
-    listen = 192.168.1.101:9360-9370:replication
+    listen   = 9312
+    listen   = 192.168.1.101:9360-9370:replication
     data_dir = /var/lib/manticore/
     ...
    }

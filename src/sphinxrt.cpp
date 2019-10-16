@@ -1066,7 +1066,7 @@ public:
 	bool				DeleteDocument ( const DocID_t * pDocs, int iDocs, CSphString & sError, RtAccum_t * pAccExt ) final;
 	bool				Commit ( int * pDeleted, RtAccum_t * pAccExt ) final;
 	void				RollBack ( RtAccum_t * pAccExt ) final;
-	bool				CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<DocID_t> & dAccKlist,
+	bool				CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_t> & dAccKlist,
 			int * pTotalKilled, bool bForceDump ) EXCLUDES (m_tChunkLock ); // FIXME? protect?
 	void				ForceRamFlush ( bool bPeriodic=false ) final;
 	bool				IsFlushNeed() const final;
@@ -2605,7 +2605,7 @@ int RtIndex_c::ApplyKillList ( const CSphVector<DocID_t> & dAccKlist )
 }
 
 
-bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<DocID_t> & dAccKlist, int * pTotalKilled, bool bForceDump )
+bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_t> & dAccKlist, int * pTotalKilled, bool bForceDump )
 {
 	// store statistics, because pNewSeg just might get merged
 	int iNewDocs = pNewSeg ? pNewSeg->m_uRows : 0;

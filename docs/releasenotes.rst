@@ -1,6 +1,36 @@
 Release notes
 =============
 
+Version 3.2.0, 17 October 2019
+------------------------------
+
+Features
+~~~~~~~~
+
+* Document storage
+* new directives stored_fields, docstore_cache_size, docstore_block_size, docstore_compression, docstore_compression_level
+
+Improvements and changes
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+* improved SSL support
+* non_cjk built-in charset updated
+* disabled UPDATE/DELETE statements logging a SELECT in query log
+* RHEL/CentOS 8 packages
+
+Bugfixes
+~~~~~~~~
+
+* `301a806b1 <https://github.com/manticoresoftware/manticoresearch/commit/301a806b14725e842300ee225521407464374c41>`__ fix crash on replace document in disk chunk of RT index
+* `46c1cad8f <https://github.com/manticoresoftware/manticoresearch/commit/46c1cad8fa11c1fc09cc34b20d978fdfcd4e6d27>`__ fix #269 LIMIT N OFFSET M 
+* `92a46edaa <https://github.com/manticoresoftware/manticoresearch/commit/92a46edaa196ef33f3ac2225fbdba2c2b88ee45d>`__ fix DELETE statements with id explicitly set or id list provided to skip search
+* `8ca78c138 <https://github.com/manticoresoftware/manticoresearch/commit/8ca78c138d837caab30dc6e2343a3c4d1687bb87>`__ fix wrong index after event removed at netloop at windows\poll poller
+* `603631e2b <https://github.com/manticoresoftware/manticoresearch/commit/603631e2bff5cb0acf25f68b85621742490eccd9>`__ fix float roundup at JSON via HTTP
+* `62f64cb9e <https://github.com/manticoresoftware/manticoresearch/commit/62f64cb9e75ec28fc3c29f8414ce9656f5580254>`__ fix remote snippets to check empty path first; fixing windows tests
+* `aba274c2c <https://github.com/manticoresoftware/manticoresearch/commit/aba274c2c5abc1029894ba9f95b786bda93e8f22>`__ fix reload of config to work on windows same way as on linux
+* `6b8c4242e <https://github.com/manticoresoftware/manticoresearch/commit/6b8c4242ef77c3fa4d0ccb7d76d81714b6728f0b>`__ fix #194 PQ to work with morphology and stemmers
+* `174d31290 <https://github.com/manticoresoftware/manticoresearch/commit/174d312905285aa5746f4f404c53e6dc669ef42f>`__ fix RT retired segments management
+
 Version 3.1.2, 22 August 2019
 -----------------------------
 

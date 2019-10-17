@@ -233,7 +233,7 @@ collect:
     variables:
       - $WHAT == "all"
       - $WHAT =~ /collect/
-  dependencies: [tarball, osx, windows, rhel6, rhel7, rhel8, jessie, stretch, trusty, xenial, bionic]
+  dependencies: [tarball, osx, windows, rhel6, rhel7, rhel8, jessie, stretch, trusty, xenial, bionic, buster]
   variables:
     GIT_STRATEGY: none
   script:

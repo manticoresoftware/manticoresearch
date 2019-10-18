@@ -5049,6 +5049,8 @@ public:
 	/// Append the node to the tail
 	void Add ( ListNode_t * pNode )
 	{
+		if ( !pNode )
+			return;
 		assert ( !pNode->m_pNext && !pNode->m_pPrev );
 		pNode->m_pNext = m_tStub.m_pNext;
 		pNode->m_pPrev = &m_tStub;
@@ -5060,10 +5062,12 @@ public:
 
 	void Remove ( ListNode_t * pNode )
 	{
+		if ( !pNode )
+			return;
 		assert ( pNode->m_pNext && pNode->m_pPrev );
 		pNode->m_pNext->m_pPrev = pNode->m_pPrev;
 		pNode->m_pPrev->m_pNext = pNode->m_pNext;
-		//pNode->m_pNext = nullptr; // leave as is for iterate and delete
+		pNode->m_pNext = nullptr;
 		pNode->m_pPrev = nullptr;
 
 		--m_iCount;
@@ -5087,14 +5091,21 @@ public:
 	class Iterator_c
 	{
 		ListNode_t * m_pIterator = nullptr;
+		ListNode_t * m_pNext = nullptr; // backup since original m.b. corrupted by dtr/free
 	public:
-		explicit Iterator_c ( ListNode_t * pIterator = nullptr ) : m_pIterator ( pIterator ) {}
+		explicit Iterator_c ( ListNode_t * pIterator = nullptr ) : m_pIterator ( pIterator )
+		{
+			if ( m_pIterator )
+				m_pNext = m_pIterator->m_pNext;
+		}
 
 		ListNode_t & operator* () { return *m_pIterator; };
 
 		Iterator_c & operator++ ()
 		{
-			m_pIterator = m_pIterator->m_pNext;
+			assert ( m_pNext );
+			m_pIterator = m_pNext;
+			m_pNext = m_pIterator->m_pNext;
 			return *this;
 		}
 

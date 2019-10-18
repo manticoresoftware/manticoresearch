@@ -20613,17 +20613,17 @@ private:
 		// remove outdated items on no signals
 		m_pPoll->ForAll ([&] ( NetPollEvent_t * pEvent )
 		{
-			if ( pEvent->m_iTimeoutTime<=0 || tmNow<pEvent->m_iTimeoutTime )
+			auto * pWork = (ISphNetAction *) pEvent;
+			if ( pWork->m_iTimeoutTime<=0 || tmNow<pWork->m_iTimeoutTime )
 				return;
 
-			sphLogDebugv ( "%p bailing on timeout no signal, sock=%d", pEvent, pEvent->m_iSock );
-			m_pPoll->RemoveEvent ( pEvent );
+			sphLogDebugv ( "%p bailing on timeout no signal, sock=%d", pWork, pWork->m_iSock );
+			m_pPoll->RemoveEvent ( pWork );
 
 			// close socket immediately to prevent write by client into persist connection that just timed out
 			// that does not need in case Work got removed at IterateRemove + SafeDelete ( pWork );
 			// but deferred clean up by ThdJobCleanup_t needs to close socket here right after
 			// it was removed from e(poll) set
-			auto * pWork = (ISphNetAction *) pEvent;
 			pWork->CloseSocket ();
 			dCleanup.Add ( pWork );
 		 });
@@ -21806,6 +21806,7 @@ NetEvent_e NetReceiveDataHttps_t::Loop ( DWORD uGotEvents, CSphVector<ISphNetAct
 				&& m_tHeadParser.HeaderFound ( m_tState->m_dDecrypted.Begin(), m_tState->m_dDecrypted.GetLength() )
 				&& m_tHeadParser.m_iHeaderEnd + m_tHeadParser.m_iFieldContentLenVal>=m_tState->m_dDecrypted.GetLength() )
 			{
+				pLoop->RemoveIterEvent ( this );
 				StartJob ( pLoop );
 				return NE_REMOVED;
 			}
@@ -21855,6 +21856,7 @@ NetEvent_e NetReceiveDataHttps_t::Loop ( DWORD uGotEvents, CSphVector<ISphNetAct
 			&& m_tHeadParser.HeaderFound ( m_tState->m_dDecrypted.Begin(), m_tState->m_dDecrypted.GetLength() )
 			&& m_tHeadParser.m_iHeaderEnd + m_tHeadParser.m_iFieldContentLenVal>=m_tState->m_dDecrypted.GetLength() )
 		{
+			pLoop->RemoveIterEvent ( this );
 			StartJob ( pLoop );
 			return NE_REMOVED;
 		}
@@ -21869,8 +21871,6 @@ NetEvent_e NetReceiveDataHttps_t::Loop ( DWORD uGotEvents, CSphVector<ISphNetAct
 
 void NetReceiveDataHttps_t::StartJob ( CSphNetLoop * pLoop )
 {
-	pLoop->RemoveIterEvent(this);
-
 	sphLogDebugv ( "%p HTTPS buf=%d, '%.*s', header=%d, content-len=%d, sock=%d, tick=%u", this, m_tState->m_dDecrypted.GetLength(), Min ( m_tState->m_dDecrypted.GetLength(), 128 ), m_tState->m_dDecrypted.Begin(),
 				   m_tHeadParser.m_iHeaderEnd, m_tHeadParser.m_iFieldContentLenVal, m_iSock, pLoop->m_uTick );
 

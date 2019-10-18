@@ -3885,16 +3885,17 @@ struct EventsList_t
 
 	void RemoveEvent ( NetPollEvent_t * pEvent )
 	{
-		auto* pList = pEvent->m_tBack.pPtr;
+		auto* pList = ( NetListedNode_t*) pEvent->m_tBack.pPtr;
 		m_tWorkList.Remove ( pList );
-		SafeDelete( pList );
+		SafeDelete ( pList );
+		pEvent->m_tBack.pPtr = nullptr;
 	}
 
 	virtual ~EventsList_t ()
 	{
 		while ( m_tWorkList.GetLength() )
 		{
-			auto * pItem = (ListedData_t *)m_tWorkList.Begin();
+			auto * pItem = (NetListedNode_t *)m_tWorkList.Begin();
 			m_tWorkList.Remove ( pItem );
 			SafeDelete( pItem );
 		}
@@ -4222,8 +4223,8 @@ public:
 		sphLogDebugv ( "%p kqueue remove, ev=0x%u, sock=%d",
 				pEvent->m_tBack.pPtr, pEvent->m_uNetEvents, pEvent->m_iSock );
 		struct kevent tEv[2];
-		EV_SET( &tEv[0], pEvent->m_iSock, EVFILT_WRITE, EV_DELETE, 0, 0, nullptr );
-		EV_SET( &tEv[0], pEvent->m_iSock, EVFILT_READ, EV_DELETE, 0, 0, nullptr );
+		EV_SET( &tEv[0], pEvent->m_iSock, EVFILT_WRITE, EV_DELETE | EV_CLEAR, 0, 0, nullptr );
+		EV_SET( &tEv[1], pEvent->m_iSock, EVFILT_READ, EV_DELETE | EV_CLEAR, 0, 0, nullptr );
 		int iRes = kevent ( m_iKQ, tEv, 2, nullptr, 0, nullptr );
 
 		// might be already closed by worker from thread pool

@@ -261,3 +261,87 @@ TEST ( searchd_stuff, prepare_emulation )
 
 	ASSERT_EQ ( tQuery.m_eRanker, SPH_RANK_PROXIMITY );
 }
+
+class CustomNetloop_c :  public ::testing::Test
+{
+protected:
+	void SetUp () override
+	{
+		m_pPoll = sphCreatePoll ( 1000 );
+		int64_t tmNow = sphMicroTimer ();
+		SetupEvent ( new CSphWakeupEvent, tmNow );
+		SetupEvent ( new CSphWakeupEvent, tmNow );
+		SetupEvent ( new CSphWakeupEvent, tmNow );
+	}
+
+	void TearDown () override
+	{
+		m_pPoll->ForAll ( [] ( NetPollEvent_t * pWork ) {
+			SafeDelete ( pWork );
+		} );
+		SafeDelete ( m_pPoll );
+	}
+
+	void SetupEvent ( ISphNetAction * pWork, int64_t tmNow )
+	{
+
+		NetEvent_e eSetup = pWork->Setup ( tmNow );
+		pWork->m_uNetEvents = ( eSetup==NE_IN ? NetPollEvent_t::READ : NetPollEvent_t::WRITE );
+		m_pPoll->SetupEvent ( pWork );
+	}
+
+	CSphVector<ISphNetAction *> RemoveOutdated ( int iOutdate, int iOutdate2=-1 )
+	{
+		CSphVector<ISphNetAction *> dCleanup;
+		int ev = -1;
+		// remove outdated items on no signals
+		m_pPoll->ForAll ( [&] ( NetPollEvent_t * pEvent ) {
+			++ev;
+			if ( ev!=iOutdate && ev!=iOutdate2)
+				return;
+
+			m_pPoll->RemoveEvent ( pEvent );
+			auto * pWork = (ISphNetAction *) pEvent;
+			dCleanup.Add ( pWork );
+		} );
+		return dCleanup;
+	}
+
+	ISphNetPoller * m_pPoll = nullptr;
+};
+
+TEST_F ( CustomNetloop_c, test_usual_remove_1st )
+{
+	int to_del = 0;
+
+	auto dOutdated = RemoveOutdated ( to_del );
+	ARRAY_FOREACH ( i, dOutdated ) SafeDelete ( dOutdated[i] );
+}
+
+TEST_F ( CustomNetloop_c, test_usual_remove_2nd )
+{
+	int to_del = 1;
+
+	auto dOutdated = RemoveOutdated ( to_del );
+	ARRAY_FOREACH ( i, dOutdated ) SafeDelete ( dOutdated[i] );
+}
+
+TEST_F ( CustomNetloop_c, test_usual_remove_3rd )
+{
+	int to_del = 2;
+
+	auto dOutdated = RemoveOutdated ( to_del );
+	ARRAY_FOREACH ( i, dOutdated ) SafeDelete ( dOutdated[i] );
+}
+
+TEST_F ( CustomNetloop_c, test_usual_remove_12 )
+{
+	auto dOutdated = RemoveOutdated ( 0,1 );
+	ARRAY_FOREACH ( i, dOutdated ) SafeDelete ( dOutdated[i] );
+}
+
+TEST_F ( CustomNetloop_c, test_usual_remove_23 )
+{
+	auto dOutdated = RemoveOutdated ( 1, 2 );
+	ARRAY_FOREACH ( i, dOutdated ) SafeDelete ( dOutdated[i] );
+}

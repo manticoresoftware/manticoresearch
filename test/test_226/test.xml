@@ -220,6 +220,11 @@ insert into facetdemo (id,price,brand_id,title,brand_name,property,categories,j)
 <!-- regression need to keeo implicit group by for main query -->
 <sphinxql>select id, price_b, count(*) from facet_gr1 order by id asc facet price_b order by id asc; show meta</sphinxql>
 
+<sphinxql>select * from facetdemo where match ('one') limit 0,15 facet brand_name order by facet() asc facet interval(price,200,400,600,800) order by facet() asc;</sphinxql>
+<sphinxql>show meta like 'multiplier'</sphinxql>
+<sphinxql>select * from facetdemo where match ('one') limit 0,15 facet brand_id order by facet() asc facet interval(price,200,400,600,800) order by facet() asc;</sphinxql>
+<sphinxql>show meta like 'multiplier'</sphinxql>
+
 </sphqueries>
 
 </test>

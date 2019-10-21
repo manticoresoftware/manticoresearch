@@ -934,7 +934,7 @@ public:
 		, m_iCount ( iCount )
 	{}
 
-	VecTraits_T Slice ( int64_t iBegin=0, int64_t iCount=-1 )
+	const VecTraits_T Slice ( int64_t iBegin=0, int64_t iCount=-1 ) const
 	{
 		// calculate starting bound
 		if ( iBegin<0 )

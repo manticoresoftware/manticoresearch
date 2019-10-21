@@ -305,9 +305,10 @@ TEST_P ( RTN, WeightBoundary )
 	tQuery.m_sQuery = "@title cat";
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
 
-	SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema (), tResult.m_sError );
+	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema (), nullptr );
 	tQueueSettings.m_bComputeItems = false;
-	ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings );
+	SphQueueRes_t tRes;
+	ISphMatchSorter * pSorter = sphCreateQueue ( tQuery, tQueueSettings, tResult.m_sError, tRes, nullptr );
 	ASSERT_TRUE ( pSorter );
 	ASSERT_TRUE ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, tArgs ) );
 	sphFlattenQueue ( pSorter, &tResult, 0 );
@@ -407,15 +408,16 @@ TEST_F ( RT, RankerFactors )
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
 	CSphQueryResult tResult;
 	CSphMultiQueryArgs tArgs ( 1 );
-	SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema (), tResult.m_sError );
+	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema (), nullptr );
 	tQueueSettings.m_bComputeItems = true;
 	tArgs.m_uPackedFactorFlags = SPH_FACTOR_ENABLE | SPH_FACTOR_CALC_ATC;
+	SphQueueRes_t tRes;
 
 	for ( auto szQuery : dQueries )
 	{
 		tQuery.m_sQuery = szQuery;
 
-		auto pSorter = sphCreateQueue ( tQueueSettings );
+		auto pSorter = sphCreateQueue ( tQuery, tQueueSettings, tResult.m_sError, tRes, nullptr );
 		ASSERT_TRUE ( pSorter );
 		ASSERT_TRUE ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, tArgs ) );
 		sphFlattenQueue ( pSorter, &tResult, 0 );
@@ -562,9 +564,10 @@ TEST_F ( RT, SendVsMerge )
 	tQuery.m_sQuery = "@title cat";
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
 
-	SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema (), tResult.m_sError );
+	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema (), nullptr );
 	tQueueSettings.m_bComputeItems = false;
-	auto pSorter = sphCreateQueue ( tQueueSettings );
+	SphQueueRes_t tRes;
+	auto pSorter = sphCreateQueue ( tQuery, tQueueSettings, tResult.m_sError, tRes, nullptr );
 	ASSERT_TRUE ( pSorter );
 
 	CSphString sFilter;

@@ -1696,6 +1696,8 @@ bool			sphSortGetStringRemap ( const ISphSchema & tSorterSchema, const ISphSchem
 bool			sphIsSortStringInternal ( const char * sColumnName );
 /// make string lowercase but keep case of JSON.field
 void			sphColumnToLowercase ( char * sVal );
+const char *	SortJsonInternalGet ( const char * sColumnName );
+CSphString		SortJsonInternalSet ( const char * sColumnName );
 
 bool			sphCheckQueryHeight ( const struct XQNode_t * pRoot, CSphString & sError );
 void			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, bool bHasBooleanOptimization, const ISphKeywordsStat * pKeywords );

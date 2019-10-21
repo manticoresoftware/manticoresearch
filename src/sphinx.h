@@ -2984,9 +2984,6 @@ public:
 	/// virtualizing dtor
 	virtual				~ISphMatchSorter ();
 
-	// check if sorter might be used in multi-queue
-	virtual bool		CanMulti () const = 0;
-
 	/// check if this sorter does groupby
 	virtual bool		IsGroupby () const = 0;
 
@@ -3570,27 +3567,27 @@ struct CSphAttrUpdateEx
 
 struct SphQueueSettings_t : public ISphNoncopyable
 {
-	const CSphQuery &			m_tQuery;
 	const ISphSchema &			m_tSchema;
-	CSphString &				m_sError;
 	CSphQueryProfile *			m_pProfiler;
 	bool						m_bComputeItems = true;
-	StrVec_t *					m_pExtra = nullptr;
 	CSphAttrUpdateEx *			m_pUpdate = nullptr;
 	CSphVector<DocID_t> *		m_pCollection = nullptr;
-	bool						m_bZonespanlist = false;
-	DWORD						m_uPackedFactorFlags { SPH_FACTOR_DISABLE };
 	ISphExprHook *				m_pHook = nullptr;
 	const CSphFilterSettings *	m_pAggrFilter = nullptr;
 
-	SphQueueSettings_t ( const CSphQuery & tQuery, const ISphSchema & tSchema, CSphString & sError, CSphQueryProfile * pProfiler = nullptr )
-		: m_tQuery ( tQuery )
-		, m_tSchema ( tSchema )
-		, m_sError ( sError )
+	SphQueueSettings_t ( const ISphSchema & tSchema, CSphQueryProfile * pProfiler = nullptr )
+		: m_tSchema ( tSchema )
 		, m_pProfiler ( pProfiler )
 	{}
 };
 
+struct SphQueueRes_t : public ISphNoncopyable
+{
+	bool						m_bZonespanlist = false;
+	DWORD						m_uPackedFactorFlags { SPH_FACTOR_DISABLE };
+
+	bool						m_bAlowMulti = true;
+};
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -3615,7 +3612,8 @@ ESortClauseParseResult	sphParseSortClause ( const CSphQuery * pQuery, const char
 /// may return NULL on error; in this case, error message is placed in sError
 /// if the pUpdate is given, creates the updater's queue and perform the index update
 /// instead of searching
-ISphMatchSorter *	sphCreateQueue ( SphQueueSettings_t & tQueue );
+ISphMatchSorter *	sphCreateQueue ( const CSphQuery & tQuery, const SphQueueSettings_t & tQueue, CSphString & sError, SphQueueRes_t & tRes, StrVec_t * pExtra );
+bool sphCreateMultiQueue ( const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes, VecTraits_T<StrVec_t> & dExtras );
 
 /// convert queue to sorted array, and add its entries to result's matches array
 int					sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag );

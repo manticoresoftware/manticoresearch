@@ -3674,7 +3674,7 @@ void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes )
 			dRowItems.Add ( tSrcCol.m_tLocator.m_iBitOffset / SIZE_OF_ROW );
 			assert ( dMapFrom[i]>=0
 				|| sphIsSortStringInternal ( pTarget->GetAttr(i).m_sName.cstr() )
-				|| pTarget->GetAttr(i).m_sName=="@groupbystr"
+				|| SortJsonInternalGet ( pTarget->GetAttr(i).m_sName.cstr() )
 				);
 		}
 		int iLimit = Min ( iCur + pRes->m_dMatchCounts[iSchema], pRes->m_dMatches.GetLength() );
@@ -3985,7 +3985,7 @@ struct AggregateColumnSort_fn
 {
 	bool IsAggr ( const CSphColumnInfo & c ) const
 	{
-		return c.m_eAggrFunc!=SPH_AGGR_NONE || c.m_sName=="@groupby" || c.m_sName=="@count" || c.m_sName=="@distinct" || c.m_sName=="@groupbystr";
+		return c.m_eAggrFunc!=SPH_AGGR_NONE || c.m_sName=="@groupby" || c.m_sName=="@count" || c.m_sName=="@distinct" || SortJsonInternalGet ( c.m_sName.cstr() );
 	}
 
 	bool IsLess ( const CSphColumnInfo & a, const CSphColumnInfo & b ) const
@@ -4324,7 +4324,7 @@ void FrontendSchemaBuilder_c::AddAttrs()
 
 			// column was not found in the select list directly
 			// however we might need it anyway because of a non-NULL extra-schema
-			// (extra-schema is additinal set of columns came from right side of query
+			// (extra-schema is additional set of columns came from right side of query
 			// when you perform 'select a from index order by b', the 'b' is not displayed, but need for sorting,
 			// so extra-schema in the case will contain 'b').
 			// bMagic condition added for @groupbystr in the agent mode
@@ -4385,15 +4385,31 @@ void FrontendSchemaBuilder_c::Finalize()
 void FrontendSchemaBuilder_c::RemapGroupBy()
 {
 	// remap groupby() and aliased groupby() to @groupbystr or string attribute
-	const CSphColumnInfo * p = m_tRes.m_tSchema.GetAttr ( "@groupbystr" );
+	const CSphColumnInfo * p = nullptr;
+	CSphString sJsonGroupBy;
+	if ( sphJsonNameSplit ( m_tQuery.m_sGroupBy.cstr(), nullptr, nullptr ) )
+	{
+		sJsonGroupBy = SortJsonInternalSet ( m_tQuery.m_sGroupBy.cstr() );
+		p = m_tRes.m_tSchema.GetAttr ( sJsonGroupBy.cstr() );
+	}
+
 	if ( !p )
 	{
 		// try string attribute (multiple group-by still displays hashes)
 		if ( !m_tQuery.m_sGroupBy.IsEmpty() )
 		{
 			p = m_tRes.m_tSchema.GetAttr ( m_tQuery.m_sGroupBy.cstr() );
-			if ( p && p->m_eAttrType!=SPH_ATTR_STRINGPTR )
-				p = nullptr;
+			if ( p )
+			{
+				if ( p->m_eAttrType==SPH_ATTR_JSON_PTR )
+				{
+					sJsonGroupBy = SortJsonInternalSet ( m_tQuery.m_sGroupBy.cstr() );
+					p = m_tRes.m_tSchema.GetAttr ( sJsonGroupBy.cstr() );
+				} else if ( p->m_eAttrType!=SPH_ATTR_STRINGPTR )
+				{
+					p = nullptr;
+				}
+			}
 		}
 
 		if ( !p )
@@ -4432,7 +4448,14 @@ void FrontendSchemaBuilder_c::RemapFacets()
 		return;
 
 	// remap MVA/JSON column to @groupby/@groupbystr in facet queries
-	const CSphColumnInfo * pGroupByCol = m_tRes.m_tSchema.GetAttr ( "@groupbystr" );
+	const CSphColumnInfo * pGroupByCol = nullptr;
+	CSphString sJsonGroupBy;
+	if ( sphJsonNameSplit ( m_tQuery.m_sGroupBy.cstr(), nullptr, nullptr ) )
+	{
+		sJsonGroupBy = SortJsonInternalSet ( m_tQuery.m_sGroupBy.cstr() );
+		pGroupByCol = m_tRes.m_tSchema.GetAttr ( sJsonGroupBy.cstr() );
+	}
+
 	if ( !pGroupByCol )
 	{
 		pGroupByCol = m_tRes.m_tSchema.GetAttr ( "@groupby" );
@@ -4495,10 +4518,11 @@ static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, boo
 	//
 	// create queue
 	// at this point, we do not need to compute anything; it all must be here
-	SphQueueSettings_t tQueueSettings ( tQueryCopy, tRes.m_tSchema, tRes.m_sError );
+	SphQueueSettings_t tQueueSettings ( tRes.m_tSchema );
 	tQueueSettings.m_bComputeItems = false;
 	tQueueSettings.m_pAggrFilter = pAggrFilter;
-	CSphScopedPtr<ISphMatchSorter> pSorter  ( sphCreateQueue ( tQueueSettings ) );
+	SphQueueRes_t tQueueRes;
+	CSphScopedPtr<ISphMatchSorter> pSorter  ( sphCreateQueue ( tQueryCopy, tQueueSettings, tRes.m_sError, tQueueRes, nullptr ) );
 
 	// restore outer order related patches, or it screws up the query log
 	if ( tQueryCopy.m_bHasOuter )
@@ -5069,7 +5093,7 @@ protected:
 	bool							m_bMultiQueue = false;	///< whether current subset is subject to multi-queue optimization
 	bool							m_bFacetQueue = false;	///< whether current subset is subject to facet-queue optimization
 	CSphVector<LocalIndex_t>		m_dLocal;				///< local indexes for the current subset
-	mutable CSphVector<CSphVector<StrVec_t> > m_dExtraSchemas; 	///< the extra attrs for agents. One vec per thread
+	CSphFixedVector<StrVec_t> m_dExtraSchemas { 0 }; 	///< the extra attrs for agents. One vec per thread
 	CSphAttrUpdateEx *				m_pUpdates = nullptr;	///< holder for updates
 	CSphVector<DocID_t> *			m_pDelDocs = nullptr;	///< this query is for deleting
 
@@ -5077,6 +5101,7 @@ protected:
 	QueryType_e						m_eQueryType {QUERY_API}; ///< queries from sphinxql require special handling
 	const QueryParser_i *			m_pQueryParser;	///< parser used for queries in this handler. e.g. plain or json-style
 
+	// FIXME!!! breaks for dist threads with SNIPPETS expressions for queries to multiple indexes
 	mutable ExprHook_t				m_tHook;
 
 	SmallStringHash_T < int64_t >	m_hLocalDocs;
@@ -5100,6 +5125,7 @@ private:
 	void							CalcTimeStats ( int64_t tmCpu, int64_t tmSubset, int iStart, int iEnd, const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent );
 	void							CalcPerIndexStats ( int iStart, int iEnd, const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ) const;
 	void							CalcGlobalStats ( int64_t tmCpu, int64_t tmSubset, int64_t tmLocal, int iStart, int iEnd, const CSphIOStats & tIO, const VecRefPtrsAgentConn_t & dRemotes ) const;
+	int								CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const;
 };
 
 
@@ -5116,7 +5142,6 @@ SearchHandler_c::SearchHandler_c ( int iQueries, const QueryParser_i * pQueryPar
 	m_dQueries.Resize ( iQueries );
 	m_dResults.Resize ( iQueries );
 	m_dFailuresSet.Resize ( iQueries );
-	m_dExtraSchemas.Resize ( iQueries );
 	m_dAgentTimes.Resize ( iQueries );
 	m_bMaster = bMaster;
 	m_bFederatedUser = false;
@@ -5480,10 +5505,12 @@ void SearchHandler_c::RunLocalSearchesParallel()
 
 	// setup local searches
 	const int iQueries = m_iEnd-m_iStart+1;
-	CSphVector<LocalSearch_t> dWorks ( m_dLocal.GetLength() );
-	CSphVector<CSphQueryResult> dResults ( m_dLocal.GetLength()*iQueries );
-	CSphVector<ISphMatchSorter*> dSorters ( m_dLocal.GetLength()*iQueries );
-	CSphVector<CSphQueryResult*> dResultPtrs ( m_dLocal.GetLength()*iQueries );
+	CSphFixedVector<LocalSearch_t> dWorks { m_dLocal.GetLength() };
+	CSphFixedVector<CSphQueryResult> dResults { m_dLocal.GetLength()*iQueries };
+	CSphFixedVector<ISphMatchSorter*> dSorters { m_dLocal.GetLength()*iQueries };
+	CSphFixedVector<CSphQueryResult*> dResultPtrs ( m_dLocal.GetLength()*iQueries );
+	dSorters.Fill ( nullptr );
+
 
 	ARRAY_FOREACH ( i, dResultPtrs )
 		dResultPtrs[i] = &dResults[i];
@@ -5504,10 +5531,8 @@ void SearchHandler_c::RunLocalSearchesParallel()
 
 	// reserve extra schema set for each thread
 	// (that is simpler than ping-pong with mutex on each addition)
-	assert ( m_dQueries.GetLength() == m_dExtraSchemas.GetLength() );
-	ARRAY_FOREACH ( i, m_dQueries )
-		if ( m_dQueries[i].m_bAgent && m_dExtraSchemas[i].IsEmpty() )
-			m_dExtraSchemas[i].Resize ( iThreads );
+	if ( m_dQueries[0].m_bAgent )
+		m_dExtraSchemas.Reset ( iThreads * m_dQueries.GetLength() );
 
 	// fire searcher threads
 	CSphAtomic iaCursor;
@@ -5624,6 +5649,17 @@ void SearchHandler_c::RunLocalSearchesParallel()
 
 			if ( !tRaw.m_sWarning.IsEmpty() )
 				m_dFailuresSet[iQuery].Submit ( sLocal, sParentIndex, tRaw.m_sWarning.cstr() );
+
+			// merge extra schemas from threads
+			if ( !m_dExtraSchemas.IsEmpty() )
+			{
+				StrVec_t & dExtra = m_dExtraSchemas[iQuery * iThreads];
+				for ( int iThd=1; iThd<iThreads; iThd++ )
+				{
+					const StrVec_t & dMerge = m_dExtraSchemas[iQuery * iThreads + iThd];
+					dExtra.Append ( dMerge );
+				}
+			}
 		}
 	}
 
@@ -5674,47 +5710,33 @@ void SearchHandler_c::RunLocalSearchMT ( LocalSearch_t &dWork, ThreadLocal_t &tT
 		return;
 	}
 	assert ( pServed->m_pIndex );
+	m_tHook.m_pIndex = pServed->m_pIndex;
 
 	// create sorters
-	int iValidSorters = 0;
-	DWORD uFactorFlags = SPH_FACTOR_DISABLE;
-	for ( int i=0; i<iQueries; ++i )
+	SphQueueRes_t tQueueRes;
+	VecTraits_T<ISphMatchSorter *> dSorters ( ppSorters, iQueries );
+	VecTraits_T<StrVec_t> dExtraSchemas = m_dExtraSchemas.Slice ( m_iStart * tThd.m_tDesc.m_iCookie );
+	CSphFixedVector<CSphString> dErrors ( dSorters.GetLength() );
+	int iValidSorters = CreateSorters ( pServed->m_pIndex, dSorters, dErrors, dExtraSchemas, tQueueRes );
+	if ( iValidSorters<dSorters.GetLength() )
 	{
-		CSphString & sError = ppResults[i]->m_sError;
-		const CSphQuery & tQuery = m_dQueries[i+m_iStart];
-
-		m_tHook.m_pIndex = pServed->m_pIndex;
-		SphQueueSettings_t tQueueSettings ( tQuery, pServed->m_pIndex->GetMatchSchema(), sError, m_pProfile );
-		tQueueSettings.m_bComputeItems = true;
-		if ( tQuery.m_bAgent )
+		ARRAY_FOREACH ( i, dErrors )
 		{
-			assert ( m_dExtraSchemas[i + m_iStart].GetLength ()>tThd.m_tDesc.m_iCookie );
-			tQueueSettings.m_pExtra = m_dExtraSchemas[i + m_iStart].begin () + tThd.m_tDesc.m_iCookie;
+			if ( !dErrors[i].IsEmpty() )
+				ppResults[i]->m_sError = dErrors[i].cstr();
 		}
-
-		tQueueSettings.m_pUpdate = m_pUpdates;
-		tQueueSettings.m_pCollection = m_pDelDocs;
-		tQueueSettings.m_pHook = &m_tHook;
-
-		ppSorters[i] = sphCreateQueue ( tQueueSettings );
-
-		uFactorFlags |= tQueueSettings.m_uPackedFactorFlags;
-
-		if ( ppSorters[i] )
-			iValidSorters++;
-
-		// can't use multi-query for sorter with string attribute at group by or sort
-		if ( ppSorters[i] && m_bMultiQueue )
-			m_bMultiQueue = ppSorters[i]->CanMulti();
 	}
+
 	if ( !iValidSorters )
 		return;
+
+	m_bMultiQueue = tQueueRes.m_bAlowMulti;
 
 	int iIndexWeight = m_dLocal[iLocal].m_iWeight;
 
 	// do the query
 	CSphMultiQueryArgs tMultiArgs ( iIndexWeight );
-	tMultiArgs.m_uPackedFactorFlags = uFactorFlags;
+	tMultiArgs.m_uPackedFactorFlags = tQueueRes.m_uPackedFactorFlags;
 	if ( m_bGotLocalDF )
 	{
 		tMultiArgs.m_bLocalDF = true;
@@ -5735,6 +5757,54 @@ void SearchHandler_c::RunLocalSearchMT ( LocalSearch_t &dWork, ThreadLocal_t &tT
 		ppResults[i]->m_iCpuTime = iCpuTime;
 }
 
+int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const
+{
+	int iValidSorters = 0;
+
+	if ( !m_bMultiQueue && !m_bFacetQueue )
+	{
+		tQueueRes.m_bAlowMulti = false;
+		for ( int iQuery=m_iStart; iQuery<=m_iEnd; ++iQuery )
+		{
+			CSphQuery & tQuery = m_dQueries[iQuery];
+
+			// create queue
+			SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema(), m_pProfile );
+			tQueueSettings.m_bComputeItems = true;
+			tQueueSettings.m_pUpdate = m_pUpdates;
+			tQueueSettings.m_pCollection = m_pDelDocs;
+			tQueueSettings.m_pHook = &m_tHook;
+			StrVec_t * pExtra = ( dExtraSchemas.IsEmpty() ? nullptr : dExtraSchemas.begin() + iQuery - m_iStart );
+
+			ISphMatchSorter * pSorter = sphCreateQueue ( tQuery, tQueueSettings, dErrors[iQuery - m_iStart], tQueueRes, pExtra );
+			if ( !pSorter )
+				continue;
+
+			tQuery.m_bZSlist = tQueueRes.m_bZonespanlist;
+			dSorters[iQuery-m_iStart] = pSorter;
+			++iValidSorters;
+		}
+	} else
+	{
+		CSphString sError;
+		SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema(), m_pProfile );
+		tQueueSettings.m_bComputeItems = true;
+		tQueueSettings.m_pUpdate = m_pUpdates;
+		tQueueSettings.m_pCollection = m_pDelDocs;
+		tQueueSettings.m_pHook = &m_tHook;
+
+		const VecTraits_T<CSphQuery> & dQueries = m_dQueries.Slice ( m_iStart );
+		VecTraits_T<StrVec_t> dExtra = dExtraSchemas.Slice ( m_iStart );
+		sphCreateMultiQueue ( tQueueSettings, dQueries, dSorters, dErrors, tQueueRes, dExtra );
+
+		m_dQueries[m_iStart].m_bZSlist = tQueueRes.m_bZonespanlist;
+		dSorters.Apply ( [&iValidSorters] ( const ISphMatchSorter * pSorter ) { if ( pSorter ) iValidSorters++; } );
+		if ( m_bFacetQueue && iValidSorters<dSorters.GetLength() )
+			iValidSorters = 0;
+	}
+
+	return iValidSorters;
+}
 
 void SearchHandler_c::RunLocalSearches()
 {
@@ -5749,6 +5819,9 @@ void SearchHandler_c::RunLocalSearches()
 	}
 
 	GuardedCrashQuery_t tRefCrashQuery ( SphCrashLogger_c::GetQuery() );
+
+	if ( m_dQueries[0].m_bAgent )
+		m_dExtraSchemas.Reset ( m_dQueries.GetLength() );
 
 	ARRAY_FOREACH ( iLocal, m_dLocal )
 	{
@@ -5787,94 +5860,32 @@ void SearchHandler_c::RunLocalSearches()
 		CSphVector<ISphMatchSorter*> dSorters ( m_iEnd-m_iStart+1 );
 		dSorters.ZeroVec ();
 
-		DWORD uTotalFactorFlags = SPH_FACTOR_DISABLE;
-		int iValidSorters = 0;
-		for ( int iQuery=m_iStart; iQuery<=m_iEnd; ++iQuery )
+		if ( m_bFacetQueue )
+			m_bMultiQueue = true;
+		m_tHook.m_pIndex = pServed->m_pIndex;
+
+		CSphFixedVector<CSphString> dErrors ( dSorters.GetLength() );
+		SphQueueRes_t tQueueRes;
+		int iValidSorters = CreateSorters ( pServed->m_pIndex, dSorters, dErrors, m_dExtraSchemas, tQueueRes );
+		if ( iValidSorters<dSorters.GetLength() )
 		{
-			CSphString sError;
-			CSphQuery & tQuery = m_dQueries[iQuery];
-
-			// create queue
-			m_tHook.m_pIndex = pServed->m_pIndex;
-			SphQueueSettings_t tQueueSettings ( tQuery, pServed->m_pIndex->GetMatchSchema(), sError, m_pProfile );
-			tQueueSettings.m_bComputeItems = true;
-			if ( tQuery.m_bAgent )
+			ARRAY_FOREACH ( i, dErrors )
 			{
-				if ( m_dExtraSchemas[iQuery].IsEmpty() )
-					m_dExtraSchemas[iQuery].Add();
-				tQueueSettings.m_pExtra = m_dExtraSchemas[iQuery].begin();
+				if ( !dErrors[i].IsEmpty() )
+					m_dFailuresSet[m_iStart+i].Submit ( sLocal, sParentIndex, dErrors[i].cstr() );
 			}
-			tQueueSettings.m_pUpdate = m_pUpdates;
-			tQueueSettings.m_pCollection = m_pDelDocs;
-			tQueueSettings.m_pHook = &m_tHook;
-
-			ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings );
-
-			uTotalFactorFlags |= tQueueSettings.m_uPackedFactorFlags;
-			tQuery.m_bZSlist = tQueueSettings.m_bZonespanlist;
-			if ( !pSorter )
-			{
-				m_dFailuresSet[iQuery].Submit ( sLocal, sParentIndex, sError.cstr() );
-				continue;
-			}
-
-			if ( m_bMultiQueue )
-			{
-				// can't use multi-query for sorter with string attribute at group by or sort
-				m_bMultiQueue = pSorter->CanMulti();
-
-				if ( !m_bMultiQueue )
-					m_bFacetQueue = false;
-			}
-
-			if ( !sError.IsEmpty() )
-				m_dFailuresSet[iQuery].Submit ( sLocal, sParentIndex, sError.cstr() );
-
-			dSorters[iQuery-m_iStart] = pSorter;
-			++iValidSorters;
 		}
 		if ( !iValidSorters )
 			continue;
 
-		// if sorter schemes have dynamic part, its lengths should be the same for queries to be optimized
-		const ISphMatchSorter * pLastMulti = dSorters[0];
-		for ( int i=1; i<dSorters.GetLength() && m_bMultiQueue; ++i )
-		{
-			if ( !dSorters[i] )
-				continue;
-
-			if ( !pLastMulti )
-			{
-				pLastMulti = dSorters[i];
-				continue;
-			}
-
-			assert ( pLastMulti && dSorters[i] );
-			m_bMultiQueue = pLastMulti->GetSchema()->GetDynamicSize()==dSorters[i]->GetSchema()->GetDynamicSize();
-		}
-
-		// facets, sanity check for json fields (can't be multi-queried yet)
-		for ( int i=1; i<dSorters.GetLength() && m_bFacetQueue; ++i )
-		{
-			if ( !dSorters[i] )
-				continue;
-			for ( int j=0; j<dSorters[i]->GetSchema()->GetAttrsCount(); j++ )
-				if ( dSorters[i]->GetSchema()->GetAttr(j).m_eAttrType==SPH_ATTR_JSON_FIELD )
-				{
-					m_bMultiQueue = m_bFacetQueue = false;
-					break;
-				}
-		}
-
-		if ( m_bFacetQueue )
-			m_bMultiQueue = true;
+		m_bMultiQueue = tQueueRes.m_bAlowMulti;
 
 		// me shortcuts
 		AggrResult_t tStats;
 
 		// do the query
 		CSphMultiQueryArgs tMultiArgs ( iIndexWeight );
-		tMultiArgs.m_uPackedFactorFlags = uTotalFactorFlags;
+		tMultiArgs.m_uPackedFactorFlags = tQueueRes.m_uPackedFactorFlags;
 		if ( m_bGotLocalDF )
 		{
 			tMultiArgs.m_bLocalDF = true;
@@ -5975,6 +5986,9 @@ void SearchHandler_c::RunLocalSearches()
 // check expressions into a query to make sure that it's ready for multi query optimization
 bool SearchHandler_c::AllowsMulti ( int iStart, int iEnd ) const
 {
+	if ( m_bFacetQueue )
+		return true;
+
 	// in some cases the same select list allows queries to be multi query optimized
 	// but we need to check dynamic parts size equality and we do it later in RunLocalSearches()
 	const CSphVector<CSphQueryItem> & tFirstQueryItems = m_dQueries [ iStart ].m_dItems;
@@ -6007,6 +6021,7 @@ bool SearchHandler_c::AllowsMulti ( int iStart, int iEnd ) const
 		if ( !pServedIndex )
 			continue;
 
+		// FIXME!!! compare expressions as m_pExpr->GetHash
 		const CSphSchema & tSchema = pServedIndex->m_pIndex->GetMatchSchema();
 		for ( int i=iStart; i<=iEnd; ++i )
 			if ( sphHasExpressions ( m_dQueries[i], tSchema ) )
@@ -6796,8 +6811,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		const CSphQuery & tQuery = m_dQueries[iRes];
 		sph::StringSet hExtra;
 		if ( !m_dExtraSchemas.IsEmpty () )
-			for ( const auto &dExtraSet : m_dExtraSchemas[iRes] )
-				for ( const CSphString &sExtra : dExtraSet )
+			for ( const StrVec_t & dExtraSet : m_dExtraSchemas )
+				for ( const CSphString & sExtra : dExtraSet )
 					hExtra.Add ( sExtra );
 
 

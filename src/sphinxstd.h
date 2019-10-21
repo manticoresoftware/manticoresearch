@@ -1192,8 +1192,15 @@ private:
 /// Copy backends for vector
 /// Each backend provides Copy, Move and CopyOrSwap
 
+// workaround missing "is_trivially_copyable" in g++ < 5.0
+#if __GNUG__ && __GNUC__<5
+#define IS_TRIVIALLY_COPYABLE(T) __has_trivial_copy(T)
+#else
+#define IS_TRIVIALLY_COPYABLE( T ) std::is_trivially_copyable<T>::value
+#endif
+
 /// Copy/move vec of a data item-by-item
-template < typename T, bool = std::is_trivially_copyable<T>::value >
+template < typename T, bool = IS_TRIVIALLY_COPYABLE(T) >
 class DataMover_T
 {
 public:

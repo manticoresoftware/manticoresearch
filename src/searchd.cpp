@@ -6487,7 +6487,7 @@ void SearchHandler_c::BuildIndexList ( int iStart, int iEnd, int & iDivideLimits
 				auto & tDistrStat = dDistrServedByAgent.Add();
 				tDistrStat.m_sIndex = sIndex;
 				tDistrStat.m_dStats.Resize ( iEnd-iStart+1 );
-				tDistrStat.m_dStats.Fill ( QueryStat_t() );
+				tDistrStat.m_dStats.ZeroVec();
 				for ( auto * pAgent : pDist->m_dAgents )
 				{
 					tDistrStat.m_dAgentIds.Add ( dRemotes.GetLength() );

@@ -1193,7 +1193,7 @@ private:
 /// Each backend provides Copy, Move and CopyOrSwap
 
 /// Copy/move vec of a data item-by-item
-template < typename T, bool = std::is_pod<T>::value >
+template < typename T, bool = std::is_trivially_copyable<T>::value >
 class DataMover_T
 {
 public:

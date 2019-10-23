@@ -5532,7 +5532,7 @@ void SearchHandler_c::RunLocalSearchesParallel()
 	// reserve extra schema set for each thread
 	// (that is simpler than ping-pong with mutex on each addition)
 	if ( m_dQueries[0].m_bAgent )
-		m_dExtraSchemas.Reset ( iThreads * m_dQueries.GetLength() );
+		m_dExtraSchemas.Reset ( iThreads * iQueries );
 
 	// fire searcher threads
 	CSphAtomic iaCursor;
@@ -5653,10 +5653,10 @@ void SearchHandler_c::RunLocalSearchesParallel()
 			// merge extra schemas from threads
 			if ( !m_dExtraSchemas.IsEmpty() )
 			{
-				StrVec_t & dExtra = m_dExtraSchemas[iQuery * iThreads];
+				StrVec_t & dExtra = m_dExtraSchemas[(iQuery - m_iStart) * iThreads];
 				for ( int iThd=1; iThd<iThreads; iThd++ )
 				{
-					const StrVec_t & dMerge = m_dExtraSchemas[iQuery * iThreads + iThd];
+					const StrVec_t & dMerge = m_dExtraSchemas[(iQuery - m_iStart) * iThreads + iThd];
 					dExtra.Append ( dMerge );
 				}
 			}
@@ -5715,7 +5715,7 @@ void SearchHandler_c::RunLocalSearchMT ( LocalSearch_t &dWork, ThreadLocal_t &tT
 	// create sorters
 	SphQueueRes_t tQueueRes;
 	VecTraits_T<ISphMatchSorter *> dSorters ( ppSorters, iQueries );
-	VecTraits_T<StrVec_t> dExtraSchemas = m_dExtraSchemas.Slice ( m_iStart * tThd.m_tDesc.m_iCookie );
+	VecTraits_T<StrVec_t> dExtraSchemas = m_dExtraSchemas.Slice ( iQueries * tThd.m_tDesc.m_iCookie, iQueries );
 	CSphFixedVector<CSphString> dErrors ( dSorters.GetLength() );
 	int iValidSorters = CreateSorters ( pServed->m_pIndex, dSorters, dErrors, dExtraSchemas, tQueueRes );
 	if ( iValidSorters<dSorters.GetLength() )
@@ -5794,8 +5794,7 @@ int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphM
 		tQueueSettings.m_pHook = &m_tHook;
 
 		const VecTraits_T<CSphQuery> & dQueries = m_dQueries.Slice ( m_iStart );
-		VecTraits_T<StrVec_t> dExtra = dExtraSchemas.Slice ( m_iStart );
-		sphCreateMultiQueue ( tQueueSettings, dQueries, dSorters, dErrors, tQueueRes, dExtra );
+		sphCreateMultiQueue ( tQueueSettings, dQueries, dSorters, dErrors, tQueueRes, dExtraSchemas );
 
 		m_dQueries[m_iStart].m_bZSlist = tQueueRes.m_bZonespanlist;
 		dSorters.Apply ( [&iValidSorters] ( const ISphMatchSorter * pSorter ) { if ( pSorter ) iValidSorters++; } );
@@ -5821,7 +5820,7 @@ void SearchHandler_c::RunLocalSearches()
 	GuardedCrashQuery_t tRefCrashQuery ( SphCrashLogger_c::GetQuery() );
 
 	if ( m_dQueries[0].m_bAgent )
-		m_dExtraSchemas.Reset ( m_dQueries.GetLength() );
+		m_dExtraSchemas.Reset ( m_iEnd-m_iStart+1 );
 
 	ARRAY_FOREACH ( iLocal, m_dLocal )
 	{

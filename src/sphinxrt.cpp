@@ -1250,7 +1250,6 @@ private:
 	RtSegmentRefPtf_t			AdoptSegment ( RtSegment_t * pNewSeg );
 
 	int							ApplyKillList ( const CSphVector<DocID_t> & dAccKlist );
-	int							KillInDiskChunk ( IndexSegment_c * pSegment, const VecTraits_T<DocID_t>& dKlist );
 
 	void						Update_CollectRowPtrs ( UpdateContext_t & tCtx, const SphChunkGuard_t & tGuard );
 	bool						Update_WriteBlobRow ( UpdateContext_t & tCtx, int iUpd, CSphRowitem * pDocinfo, const BYTE * pBlob, int iLength, int nBlobAttrs, bool & bCritical, CSphString & sError ) override;
@@ -2594,8 +2593,12 @@ int RtIndex_c::ApplyKillList ( const CSphVector<DocID_t> & dAccKlist )
 	if ( m_iDoubleBuffer )
 		m_dKillsWhileSaving.Append ( dAccKlist );
 
+	// should be appended once not for each disk chunk
+	if ( m_bOptimizing )
+		m_dKillsWhileOptimizing.Append ( dAccKlist );
+
 	for ( auto & pChunk : m_dDiskChunks )
-		iKilled += KillInDiskChunk ( pChunk, dAccKlist );
+		iKilled += pChunk->KillMulti ( dAccKlist );
 
 	// don't touch the chunks that are being saved
 	for ( int iChunk = m_iDoubleBuffer; iChunk < m_dRamChunks.GetLength(); iChunk++ )
@@ -2813,7 +2816,11 @@ bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID
 			}
 
 		if ( pDiskChunk )
+		{
+			// kill-list might have multiple accumulators - need to sort by id asc and remove duplicates
+			m_dKillsWhileSaving.Uniq();
 			pDiskChunk->KillMulti ( m_dKillsWhileSaving );
+		}
 
 		m_dKillsWhileSaving.Reset();
 	}
@@ -6851,7 +6858,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 	int iTotalKilled = 0;
 	if ( !bEmptyRT )
 	{
-		auto dIndexDocList = pIndex->BuildDocList();
+		CSphFixedVector<SphAttr_t> dIndexDocList = pIndex->BuildDocList();
 		if ( TlsMsg::HasErr () )
 		{
 			sError.SetSprintf ( "ATTACH failed, %s", TlsMsg::szError () );
@@ -6869,8 +6876,16 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 			}
 		}
 
+		// docs ids could be not asc
+		// should sort and remove duplicates
+		int iDocsCount = sphUniq ( dIndexDocList.Begin(), dIndexDocList.GetLength() );
+		VecTraits_T<SphAttr_t> dDocsSorted ( dIndexDocList.Begin(), iDocsCount );
+
+		if ( m_bOptimizing )
+			m_dKillsWhileOptimizing.Append ( dIndexDocList );
+
 		for ( const auto & pChunk : m_dDiskChunks )
-			iTotalKilled += KillInDiskChunk ( pChunk, dIndexDocList );
+			iTotalKilled += pChunk->KillMulti ( dIndexDocList );
 
 	}
 
@@ -6966,19 +6981,22 @@ bool RtIndex_c::Truncate ( CSphString & )
 }
 
 
-int RtIndex_c::KillInDiskChunk ( IndexSegment_c * pSegment, const VecTraits_T<DocID_t> & dKlist )
-{
-	assert ( pSegment );
-	if ( m_bOptimizing )
-		m_dKillsWhileOptimizing.Append ( dKlist );
-
-	return pSegment->KillMulti ( dKlist );
-}
-
-
 //////////////////////////////////////////////////////////////////////////
 // OPTIMIZE
 //////////////////////////////////////////////////////////////////////////
+
+static int KListSort ( int iOldCount, CSphVector<DocID_t> & dKList )
+{
+	// kill-list might have multiple accumulators - need to sort by id asc and remove duplicates
+	// but do uniq only once after new data added
+	if ( iOldCount!=dKList.GetLength() )
+	{
+		dKList.Uniq();
+		iOldCount = dKList.GetLength();
+	}
+
+	return iOldCount;
+}
 
 void RtIndex_c::Optimize()
 {
@@ -6997,6 +7015,7 @@ void RtIndex_c::Optimize()
 	int iChunks = m_dDiskChunks.GetLength();
 	CSphSchema tSchema = m_tSchema;
 	CSphString sError;
+	int iOldKListCount = 0;
 
 	while ( m_dDiskChunks.GetLength()>1 && !g_bShutdown && !m_bOptimizeStop && !m_bSaveDisabled )
 	{
@@ -7069,6 +7088,7 @@ void RtIndex_c::Optimize()
 		Verify ( m_tChunkLock.WriteLock() );
 
 		// apply killlists that were collected while we were merging segments
+		iOldKListCount = KListSort ( iOldKListCount, m_dKillsWhileOptimizing );
 		pMerged->KillMulti ( m_dKillsWhileOptimizing );
 
 		sphLogDebug ( "optimized 0=%s, 1=%s, new=%s", m_dDiskChunks[0]->GetName(), m_dDiskChunks[1]->GetName(), pMerged->GetName() );
@@ -7171,6 +7191,7 @@ void RtIndex_c::ProgressiveMerge()
 	int iChunks = m_dDiskChunks.GetLength();
 	CSphSchema tSchema = m_tSchema;
 	CSphString sError;
+	int iOldKListCount = 0;
 
 	while ( m_dDiskChunks.GetLength()>1 && !g_bShutdown && !m_bOptimizeStop && !m_bSaveDisabled )
 	{
@@ -7278,6 +7299,7 @@ void RtIndex_c::ProgressiveMerge()
 		Verify ( m_tChunkLock.WriteLock() );
 
 		// apply killlists that were collected while we were merging segments
+		iOldKListCount = KListSort ( iOldKListCount, m_dKillsWhileOptimizing );
 		pMerged->KillMulti ( m_dKillsWhileOptimizing );
 
 		sphLogDebug ( "optimized (progressive) a=%s, b=%s, new=%s", pOldest->GetName(), pOlder->GetName(), pMerged->GetName() );

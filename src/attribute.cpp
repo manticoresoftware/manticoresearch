@@ -875,11 +875,16 @@ const char * sphGetBlobLocatorName()
 	return BLOB_LOCATOR_ATTR;
 }
 
+static const CSphString g_sDocidName { "id" };
 
 const char * sphGetDocidName()
 {
-	static const char * DOCID_ATTR = "id";
-	return DOCID_ATTR;
+	return g_sDocidName.cstr();
+}
+
+const CSphString &	sphGetDocidStr()
+{
+	return g_sDocidName;
 }
 
 

@@ -129,12 +129,22 @@ searchd
 <sphinxql d="0">insert into test:rtc (id,title,mva1,gid,j1) values (101, 'test 101', (121,122,123), 121, '{"data":"test 101", fd:121}')</sphinxql>
 <sphinxql d="0">insert into test:rt2 (id,title,mva1,gid,j1) values (201, 'test 201', (221,222,223), 221, '{"data":"test 201", fd:221}')</sphinxql>
 <sphinxql d="0">insert into test:rtc (id,title,mva1,gid,j1) values (301, 'test 301', (321,322,323), 321, '{"data":"test 301", fd:321}')</sphinxql>
+<sphinxql d="0">insert into test:rtc (title,mva1,gid,j1) values ('test 501', (521,522,523), 521, '{"data":"test 501", fd:521}')</sphinxql>
 
 <!-- request to node 2 -->
 <sphinxql d="2">SHOW TABLES</sphinxql> <!-- just to reconnect to agent2 -->
-<sphinxql d="2" system="wait-status-cluster_test_last_committed" wait_value="13"/>
+<sphinxql d="2" system="wait-status-cluster_test_last_committed" wait_value="14"/>
 <sphinxql d="2">SELECT * FROM test:rt2</sphinxql>
 <sphinxql d="2">SELECT * FROM test:rtc</sphinxql>
+
+<!-- request to node 2 -->
+<sphinxql d="2">insert into test:rtc (title,mva1,gid,j1) values ('test 601', (621,622,623), 621, '{"data":"test 601", fd:621}')</sphinxql>
+<sphinxql d="2">SELECT * FROM test:rtc</sphinxql>
+
+<!-- request to node 1 -->
+<sphinxql d="1">SHOW TABLES</sphinxql> <!-- just to reconnect to agent1 -->
+<sphinxql d="1" system="wait-status-cluster_test_last_committed" wait_value="15"/>
+<sphinxql d="1">SELECT * FROM test:rtc</sphinxql>
 
 </sphqueries>
 

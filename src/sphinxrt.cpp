@@ -1493,8 +1493,26 @@ bool RtIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFiel
 	assert ( m_tSchema.GetAttr ( sphGetDocidName() )->m_eAttrType==SPH_ATTR_BIGINT );
 
 	DocID_t tDocID = sphGetDocID ( tDoc.m_pDynamic );
-	if ( !tDocID )
-		return false;
+	const bool bAutoID = ( tDocID==0 );
+	if ( bAutoID )
+	{
+		CSphScopedRLock tRLock { m_tChunkLock };
+		// get uuid_short and check it will not collide with already provided document
+		bool bDuplicate = true;
+		while ( bDuplicate )
+		{
+			tDocID = UidShort();
+			bDuplicate = false;
+			ARRAY_FOREACH_COND ( i, m_dRamChunks, !bDuplicate )
+			{
+				bDuplicate = ( m_dRamChunks[i]->FindAliveRow ( tDocID )!=nullptr );
+			}
+		}
+
+		CSphAttrLocator tLocID = m_tSchema.GetAttr ( sphGetDocidName() )->m_tLocator;
+		tLocID.m_bDynamic = true;
+		tDoc.SetAttr ( tLocID, tDocID );
+	}
 
 	ISphTokenizerRefPtr_c tTokenizer { CloneIndexingTokenizer() };
 
@@ -1506,7 +1524,7 @@ bool RtIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFiel
 
 	MEMORY ( MEM_INDEX_RT );
 
-	if ( !bReplace )
+	if ( !bReplace && !bAutoID )
 	{
 		CSphScopedRLock tRLock { m_tChunkLock };
 		for ( auto & pSegment : m_dRamChunks )

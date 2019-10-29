@@ -85,6 +85,7 @@ const char *		sphGetBlobLocatorName();
 
 // current docid attribute name
 const char *		sphGetDocidName();
+const CSphString &	sphGetDocidStr();
 
 // returns true if this is a blob attr type
 bool				sphIsBlobAttr ( ESphAttr eAttr );

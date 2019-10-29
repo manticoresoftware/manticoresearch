@@ -12473,16 +12473,10 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 		ARRAY_FOREACH ( i, tStmt.m_dInsertSchema )
 			dInsertSchema.Add ( i, tStmt.m_dInsertSchema[i] );
 
-		if ( !dInsertSchema.Exists(sphGetDocidName()) )
-		{
-			if ( !bPq )
-			{
-				tOut.Error ( tStmt.m_sStmt, "column list must contain an 'id' column" );
-				return;
-			}
-			iIdIndex = -1;
-		} else
-			iIdIndex = dInsertSchema["id"];
+		iIdIndex = -1;
+		int * pId = dInsertSchema ( sphGetDocidStr() );
+		if ( pId )
+			iIdIndex = *pId;
 
 		// map fields
 		ARRAY_FOREACH ( i, dFieldSchema )
@@ -12540,7 +12534,6 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 			tDoc.SetAttr ( tIdLoc, tStmt.m_dInsertValues[iIdIndex + c * iExp], SPH_ATTR_BIGINT );
 		} else
 		{
-			assert ( bPq );
 			assert ( tDoc.GetAttr(tIdLoc)==0 );
 		}
 		dStrings.Resize ( 0 );

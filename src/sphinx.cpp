@@ -20570,11 +20570,7 @@ struct Infix_t
 	DWORD m_Data[SIZE];
 
 #ifndef NDEBUG
-	BYTE m_TrailingZero;
-
-	Infix_t ()
-		: m_TrailingZero ( 0 )
-	{}
+	BYTE m_TrailingZero { 0 };
 #endif
 
 	void Reset ()
@@ -20872,6 +20868,25 @@ void InfixBuilder_c<2>::AddWord ( const BYTE * pWord, int iWordLength, int iChec
 	}
 }
 
+static int Utf8CodeLen ( BYTE iCode )
+{
+	if ( !iCode )
+		return 0;
+
+	// check for 7-bit case
+	if ( iCode<128 )
+		return 1;
+
+	// get number of bytes
+	int iBytes = 0;
+	while ( iCode & 0x80 )
+	{
+		iBytes++;
+		iCode <<= 1;
+	}
+
+	return iBytes;
+}
 
 /// UTF-8 case, 3/5-dword infixes
 template < int SIZE >
@@ -20886,12 +20901,14 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE * pWord, int iWordLength, int iC
 		iWordLength--;
 	}
 
+	const BYTE * pWordMax = pWord+iWordLength;
+	bool bInvalidTailCp = false;
 	int iCodes = 0; // codepoints in current word
 	BYTE dBytes[SPH_MAX_WORD_LEN+1]; // byte offset for each codepoints
 
 	// build an offsets table into the bytestring
 	dBytes[0] = 0;
-	for ( const BYTE * p = pWord; p<pWord+iWordLength && iCodes<SPH_MAX_WORD_LEN; )
+	for ( const BYTE * p = pWord; p<pWordMax && iCodes<SPH_MAX_WORD_LEN; )
 	{
 		int iLen = 0;
 		BYTE uVal = *p;
@@ -20902,6 +20919,13 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE * pWord, int iWordLength, int iC
 		}
 		if ( !iLen )
 			iLen = 1;
+		
+		// break on tail cut codepoint
+		if ( p+iLen>pWordMax )
+		{
+			bInvalidTailCp = true;
+			break;
+		}
 
 		// skip word with large codepoints
 		if ( iLen>SIZE )
@@ -20913,14 +20937,15 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE * pWord, int iWordLength, int iC
 		dBytes[iCodes+1] = dBytes[iCodes] + (BYTE)iLen;
 		iCodes++;
 	}
-	assert ( pWord[dBytes[iCodes]]==0 || iCodes==SPH_MAX_WORD_LEN );
+	assert ( pWord[dBytes[iCodes]]==0 || iCodes==SPH_MAX_WORD_LEN || bInvalidTailCp );
 
 	// generate infixes
 	Infix_t<SIZE> sKey;
 	for ( int p=0; p<=iCodes-2; p++ )
 	{
 		sKey.Reset();
-		auto pKey = (BYTE*)sKey.m_Data;
+		BYTE * pKey = (BYTE*)sKey.m_Data;
+		const BYTE * pKeyMax = pKey+sizeof(sKey.m_Data);
 
 		const BYTE * s = pWord + dBytes[p];
 		const BYTE * sMax = pWord + dBytes[ p+Min ( 6, iCodes-p ) ];
@@ -20933,14 +20958,18 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE * pWord, int iWordLength, int iC
 			*pKey++ = *s++;
 		} while ( ( *s & 0xC0 )==0x80 );
 
-		while ( s<sMax )
+		assert ( s - ( pWord + dBytes[p] )==(dBytes[p+1] - dBytes[p]) );
+
+		while ( s<sMax && pKey<pKeyMax && pKey+Utf8CodeLen ( *s )<pKeyMax )
 		{
 			// copy next infix codepoint
 			do
 			{
 				uHash = (uHash >> 8) ^ g_dSphinxCRC32 [ (uHash ^ *s) & 0xff ];
 				*pKey++ = *s++;
-			} while ( ( *s & 0xC0 )==0x80 );
+			} while ( ( *s & 0xC0 )==0x80 && pKey<pKeyMax );
+
+			assert ( sphUTF8Len ( (const char *)sKey.m_Data, sizeof(sKey.m_Data) )>=2 );
 
 			InfixIntvec_t * pVal = LookupEntry ( sKey, uHash );
 			if ( pVal )
@@ -20948,6 +20977,8 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE * pWord, int iWordLength, int iC
 			else
 				AddEntry ( sKey, uHash, iCheckpoint );
 		}
+
+		assert ( pKey-(BYTE*)sKey.m_Data<=sizeof(sKey.m_Data) );
 	}
 }
 

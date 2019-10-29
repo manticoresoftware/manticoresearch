@@ -25,7 +25,8 @@ explicitly specified.
 RT index INSERT features
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-ID column is mandatory for RT indexes. Rows with duplicate IDs will
+The ID column can be ommited in INSERT statements as RT index supports
+of **autoincrement** functionality. Rows with duplicate IDs will
 **not** be overwritten by INSERT; use REPLACE to do that. REPLACE
 works exactly like INSERT, except that if an old row has the same ID as
 a new row, the old row is deleted before the new row is inserted.

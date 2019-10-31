@@ -99,7 +99,7 @@ DocstoreBuilder_i * CreateDocstoreBuilder ( const CSphString & sFilename, const 
 DocstoreRT_i *		CreateDocstoreRT();
 DocstoreFields_i *	CreateDocstoreFields();
 
-void				InitDocstore ( int iCacheSize );
+void				InitDocstore ( int64_t iCacheSize );
 void				ShutdownDocstore();
 
 #endif

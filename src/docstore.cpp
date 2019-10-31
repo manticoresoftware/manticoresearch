@@ -281,7 +281,7 @@ public:
 	void					Release ( DWORD uUID, SphOffset_t tOffset );
 	void					DeleteAll ( DWORD uUID );
 
-	static void				Init ( int iCacheSize );
+	static void				Init ( int64_t iCacheSize );
 	static void				Done();
 	static BlockCache_c *	Get();
 
@@ -297,7 +297,7 @@ private:
 
 	struct LinkedBlock_t : BlockData_t
 	{
-		CSphAtomic		m_iRefcount{0};
+		int				m_iRefcount = 0;
 		LinkedBlock_t *	m_pPrev = nullptr;
 		LinkedBlock_t *	m_pNext = nullptr;
 		HashKey_t		m_tKey;
@@ -360,8 +360,6 @@ void BlockCache_c::MoveToHead ( LinkedBlock_t * pBlock )
 	if ( pBlock==m_pHead )
 		return;
 
-	ScopedMutex_t tLock(m_tLock);
-
 	if ( m_pTail==pBlock )
 		m_pTail = pBlock->m_pPrev;
 
@@ -380,8 +378,6 @@ void BlockCache_c::MoveToHead ( LinkedBlock_t * pBlock )
 
 void BlockCache_c::Add ( LinkedBlock_t * pBlock )
 {
-	ScopedMutex_t tLock(m_tLock);
-
 	pBlock->m_pNext = m_pHead;
 	if ( m_pHead )
 		m_pHead->m_pPrev = pBlock;
@@ -399,8 +395,6 @@ void BlockCache_c::Add ( LinkedBlock_t * pBlock )
 
 void BlockCache_c::Delete ( LinkedBlock_t * pBlock )
 {
-	ScopedMutex_t tLock(m_tLock);
-
 	Verify ( m_tHash.Delete ( pBlock->m_tKey ) );
 
 	if ( m_pHead == pBlock )
@@ -425,6 +419,8 @@ void BlockCache_c::Delete ( LinkedBlock_t * pBlock )
 
 bool BlockCache_c::Find ( DWORD uUID, SphOffset_t tOffset, BlockData_t & tData )
 {
+	ScopedMutex_t tLock(m_tLock);
+
 	LinkedBlock_t ** ppBlock = m_tHash.Find ( { uUID, tOffset } );
 	if ( !ppBlock )
 		return false;
@@ -439,6 +435,8 @@ bool BlockCache_c::Find ( DWORD uUID, SphOffset_t tOffset, BlockData_t & tData )
 
 void BlockCache_c::Release ( DWORD uUID, SphOffset_t tOffset )
 {
+	ScopedMutex_t tLock(m_tLock);
+
 	LinkedBlock_t ** ppBlock = m_tHash.Find ( { uUID, tOffset } );
 	assert(ppBlock);
 
@@ -450,6 +448,8 @@ void BlockCache_c::Release ( DWORD uUID, SphOffset_t tOffset )
 
 void BlockCache_c::DeleteAll ( DWORD uUID )
 {
+	ScopedMutex_t tLock(m_tLock);
+
 	LinkedBlock_t * pBlock = m_pHead;
 	while ( pBlock )
 	{
@@ -468,6 +468,8 @@ void BlockCache_c::DeleteAll ( DWORD uUID )
 
 bool BlockCache_c::Add ( DWORD uUID, SphOffset_t tOffset, BlockData_t & tData )
 {
+	ScopedMutex_t tLock(m_tLock);
+
 	DWORD uSpaceNeeded = tData.m_uSize + sizeof(LinkedBlock_t);
 	if ( !HaveSpaceFor ( uSpaceNeeded ) )
 	{
@@ -490,7 +492,7 @@ bool BlockCache_c::Add ( DWORD uUID, SphOffset_t tOffset, BlockData_t & tData )
 	pBlock->m_iRefcount++;
 	pBlock->m_tKey = { uUID, tOffset };
 
-	Add ( pBlock );	
+	Add ( pBlock );
 	return true;
 }
 
@@ -520,7 +522,7 @@ bool BlockCache_c::HaveSpaceFor ( DWORD uSpaceNeeded ) const
 }
 
 
-void BlockCache_c::Init ( int iCacheSize )
+void BlockCache_c::Init ( int64_t iCacheSize )
 {
 	assert ( !m_pBlockCache );
 	if ( iCacheSize > 0 )
@@ -614,13 +616,14 @@ void DocstoreReaders_c::CreateReader ( int64_t iSessionId, DWORD uDocstoreId, co
 	if ( iBufferSize<=(int)uBlockSize )
 		return;
 
+	ScopedMutex_t tLock(m_tLock);
+
 	if ( m_iTotalReaderSize+iBufferSize > MAX_TOTAL_READER_SIZE )
 		return;
 
 	CSphReader * pReader = new CSphReader ( nullptr, iBufferSize );
 	pReader->SetFile(tFile);
 
-	ScopedMutex_t tLock(m_tLock);
 	Verify ( m_tHash.Add ( {iSessionId, uDocstoreId}, pReader ) );
 	m_iTotalReaderSize += iBufferSize;
 }
@@ -628,6 +631,7 @@ void DocstoreReaders_c::CreateReader ( int64_t iSessionId, DWORD uDocstoreId, co
 
 CSphReader * DocstoreReaders_c::GetReader ( int64_t iSessionId, DWORD uDocstoreId )
 {
+	ScopedMutex_t tLock(m_tLock);
 	CSphReader ** ppReader = m_tHash.Find ( { iSessionId, uDocstoreId } );
 	return ppReader ? *ppReader : nullptr;
 }
@@ -1768,7 +1772,7 @@ DocstoreFields_i * CreateDocstoreFields()
 }
 
 
-void InitDocstore ( int iCacheSize )
+void InitDocstore ( int64_t iCacheSize )
 {
 	BlockCache_c::Init(iCacheSize);
 	DocstoreReaders_c::Init();

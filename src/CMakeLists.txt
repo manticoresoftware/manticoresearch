@@ -22,7 +22,7 @@ set ( LIBSPHINX_SRCS sphinx.cpp sphinxexcerpt.cpp
 set ( INDEXER_SRCS indexer.cpp )
 set ( INDEXTOOL_SRCS indextool.cpp )
 set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp
-		searchdreplication.cpp threadutils.cpp searchdtask.cpp taskping.cpp
+		searchdreplication.cpp  searchdtask.cpp taskping.cpp
 		taskmalloctrim.cpp taskoptimize.cpp taskglobalidf.cpp tasksavestate.cpp
 		taskflushbinlog.cpp taskflushattrs.cpp taskflushmutable.cpp taskpreread.cpp
 		searchdaemon.cpp searchdssl.cpp searchdfields.cpp)

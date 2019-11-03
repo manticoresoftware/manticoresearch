@@ -414,7 +414,7 @@ int ScopedPort_c::Leak()
 
 
 // data passed to Galera and used at callbacks
-struct ReceiverCtx_t : ISphRefcounted
+struct ReceiverCtx_t : ISphRefcountedMT
 {
 	ReplicationCluster_t *	m_pCluster = nullptr;
 	// event to release main thread after recv thread started

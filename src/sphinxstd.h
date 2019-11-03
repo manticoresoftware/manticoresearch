@@ -3303,23 +3303,6 @@ protected:
 
 //////////////////////////////////////////////////////////////////////////
 
-/// refcounted base
-/// WARNING, FOR SINGLE-THREADED USE ONLY
-struct ISphRefcounted : public ISphNoncopyable
-{
-protected:
-					ISphRefcounted () : m_iRefCount ( 1 ) {}
-	virtual			~ISphRefcounted () {}; // gcc 4.7.2 hates `=default` here
-
-public:
-	void			AddRef () const		{ m_iRefCount++; }
-	void			Release () const	{ --m_iRefCount; assert ( m_iRefCount>=0 ); if ( m_iRefCount==0 ) delete this; }
-
-protected:
-	mutable int		m_iRefCount;
-};
-
-
 /// automatic pointer wrapper for refcounted objects
 /// construction from or assignment of a raw pointer takes over (!) the ownership
 template < typename T >

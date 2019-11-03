@@ -15591,7 +15591,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 			case SPH_EVAL_PRESORT:
 			case SPH_EVAL_FINAL:
 			{
-				ISphExpr * pExpr = tIn.m_pExpr;
+				ISphExprRefPtr_c pExpr { tIn.m_pExpr };
 				if ( !pExpr )
 				{
 					pResult->m_sError.SetSprintf ( "INTERNAL ERROR: incoming-schema expression missing evaluator (stage=%d, in=%s)",
@@ -15603,8 +15603,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 				CalcItem_t tCalc;
 				tCalc.m_eType = tIn.m_eAttrType;
 				tCalc.m_tLoc = tIn.m_tLocator;
-				tCalc.m_pExpr = pExpr;
-				SafeAddRef ( pExpr );
+				tCalc.m_pExpr = std::move(pExpr);
 				tCalc.m_pExpr->Command ( SPH_EXPR_SET_BLOB_POOL, (void*)&pBlobPool );
 
 				switch ( eStage )

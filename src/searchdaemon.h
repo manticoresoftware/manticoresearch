@@ -1108,7 +1108,7 @@ enum SqlSet_e
 
 /// refcounted vector
 template < typename T >
-class RefcountedVector_c : public CSphVector<T>, public ISphRefcounted
+class RefcountedVector_c : public CSphVector<T>, public ISphRefcountedMT
 {
 };
 

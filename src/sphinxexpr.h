@@ -88,7 +88,7 @@ enum ESphExprCommand
 /// expression evaluator
 /// can always be evaluated in floats using Eval()
 /// can sometimes be evaluated in integers using IntEval(), depending on type as returned from sphExprParse()
-struct ISphExpr : public ISphRefcounted
+struct ISphExpr : public ISphRefcountedMT
 {
 public:
 	/// evaluate this expression for that match

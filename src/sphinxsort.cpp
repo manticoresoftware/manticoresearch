@@ -84,7 +84,7 @@ static const char g_sIntJsonPrefix[] = "@groupbystr";
 
 
 /// base grouper (class that computes groupby key)
-class CSphGrouper : public ISphRefcounted
+class CSphGrouper : public ISphRefcountedMT
 {
 protected:
 	virtual					~CSphGrouper () {}; // =default causes bunch of errors building on wheezy
@@ -1307,7 +1307,7 @@ void CSphUniqounter::Compact ( SphGroupKey_t * pRemoveGroups, int iRemoveGroups 
 /////////////////////////////////////////////////////////////////////////////
 
 /// match comparator interface from group-by sorter point of view
-struct ISphMatchComparator : public ISphRefcounted // non-mt refcounted is enough right now
+struct ISphMatchComparator : public ISphRefcountedMT
 {
 	virtual bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & tState ) const = 0;
 protected:

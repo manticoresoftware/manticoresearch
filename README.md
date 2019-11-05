@@ -50,19 +50,34 @@ To launch a Manticore Search container run
 ### Precompiled binaries
 Packages of latest GA release can be downloaded from http://www.manticoresearch.com/downloads
 
-    $ wget https://github.com/manticoresoftware/manticore/releases/download/x.y.z/manticore_z.y.z.deb
-    $ sudo dpkg -i manticore_x.y.z.deb
-    $ systemctl manticore start
+```
+wget https://github.com/manticoresoftware/manticore/releases/download/x.y.z/manticore_z.y.z.deb
+sudo dpkg -i manticore_x.y.z.deb
+systemctl manticore start
+```
+
+### YUM repo for RHEL/Centos
+```
+yum install http://repo.manticoresearch.com/manticore-repo.noarch.rpm
+yum install manticore
+```
+
+### Homebrew
+```
+brew install manticoresearch
+```
 
 For more details see [installation](https://docs.manticoresearch.com/latest/html/installation.html#installation).
 
 ### Compiling from sources
 If you like to use the latest code, you can build Manticore easy from sources:
 
-     git clone https://github.com/manticoresoftware/manticore.git
-     cd manticore
-     mkdir build && cd build
-     cmake .. &&  make install
+```
+git clone https://github.com/manticoresoftware/manticore.git
+cd manticore
+mkdir build && cd build
+cmake .. &&  make install
+```
 
 For more details check [compiling](https://docs.manticoresearch.com/latest/html/installation.html#compiling-manticore-from-source). 
 ## Getting started

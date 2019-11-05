@@ -91,6 +91,8 @@ For more details check [compiling](https://docs.manticoresearch.com/latest/html/
 
 [Manticore Community Forum](http://forum.manticoresearch.com/)
 
+[Public Slack channel](http://slack.manticoresearch.com/)
+
 [Bug tracker](https://github.com/manticoresoftware/manticore/issues)
 
 [Professional Support](https://manticoresearch.com/professional-support/)

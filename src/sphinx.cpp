@@ -3149,6 +3149,13 @@ const BYTE * CSphMatch::FetchAttrData ( const CSphAttrLocator & tLoc, const BYTE
 	}
 }
 
+ByteBlob_t CSphMatch::FetchAttrData ( const CSphAttrLocator & tLoc, const BYTE * pPool ) const
+{
+	if ( tLoc.IsBlobAttr ())
+		return sphGetBlobAttr ( *this, tLoc, pPool );
+	return sphUnpackPtrAttr ((const BYTE *) GetAttr ( tLoc ));
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // TOKENIZING EXCEPTIONS
 /////////////////////////////////////////////////////////////////////////////

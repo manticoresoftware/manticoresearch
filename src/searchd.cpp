@@ -7079,10 +7079,10 @@ public:
 		return sRes;
 	}
 
-	inline void ToStringUnescape ( CSphString & sRes, const SqlNode_t & tNode ) const
+	inline CSphString ToStringUnescape ( const SqlNode_t & tNode ) const
 	{
 		assert ( tNode.m_iType>=0 );
-		SqlUnescape ( sRes, m_pBuf + tNode.m_iStart, tNode.m_iEnd - tNode.m_iStart );
+		return SqlUnescape ( m_pBuf + tNode.m_iStart, tNode.m_iEnd - tNode.m_iStart );
 	}
 
 	bool			AddSchemaItem ( SqlNode_t * pNode );
@@ -7487,7 +7487,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 
 	} else if ( sOpt=="comment" )
 	{
-		ToStringUnescape ( m_pQuery->m_sComment, tValue );
+		m_pQuery->m_sComment = ToStringUnescape ( tValue );
 
 	} else if ( sOpt=="sort_method" )
 	{
@@ -7631,13 +7631,13 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 		if ( sVal=="expr" || sVal=="export" )
 		{
 			m_pQuery->m_eRanker = sVal=="expr" ? SPH_RANK_EXPR : SPH_RANK_EXPORT;
-			ToStringUnescape ( m_pQuery->m_sRankerExpr, tArg );
+			m_pQuery->m_sRankerExpr = ToStringUnescape ( tArg );
 			return true;
 		} else if ( sphPluginExists ( PLUGIN_RANKER, sVal.cstr() ) )
 		{
 			m_pQuery->m_eRanker = SPH_RANK_PLUGIN;
 			m_pQuery->m_sUDRanker = sVal;
-			ToStringUnescape ( m_pQuery->m_sUDRankerOpts, tArg );
+			m_pQuery->m_sUDRankerOpts = ToStringUnescape ( tArg );
 			return true;
 		}
 	}
@@ -7805,7 +7805,7 @@ bool SqlParser_c::SetMatch ( const YYSTYPE& tValue )
 		return false;
 	};
 
-	ToStringUnescape ( m_pQuery->m_sQuery, tValue );
+	m_pQuery->m_sQuery = ToStringUnescape ( tValue );
 	m_pQuery->m_sRawQuery = m_pQuery->m_sQuery;
 	return m_bGotQuery = true;
 }
@@ -7891,8 +7891,7 @@ void SqlParser_c::UpdateStringAttr ( const SqlNode_t & tCol, const SqlNode_t & t
 {
 	CSphAttrUpdate & tUpd = m_pStmt->m_tUpdate;
 
-	CSphString sStr;
-	ToStringUnescape ( sStr, tStr );
+	auto sStr = ToStringUnescape ( tStr );
 
 	int iLength = sStr.Length();
 	tUpd.m_dPool.Add ( tUpd.m_dBlobs.GetLength() );
@@ -7996,7 +7995,7 @@ bool SqlParser_c::AddStringFilter ( const SqlNode_t & tCol, const SqlNode_t & tV
 	if ( !pFilter )
 		return false;
 	CSphString & sFilterString = pFilter->m_dStrings.Add();
-	ToStringUnescape ( sFilterString, tVal );
+	sFilterString = ToStringUnescape ( tVal );
 	pFilter->m_bExclude = bExclude;
 	return true;
 }
@@ -8014,7 +8013,7 @@ bool SqlParser_c::AddStringListFilter ( const SqlNode_t & tCol, SqlNode_t & tVal
 		uint64_t uVal = ( *tVal.m_pValues )[i];
 		int iOff = ( uVal>>32 );
 		int iLen = ( uVal & 0xffffffff );
-		SqlUnescape ( pFilter->m_dStrings[i], m_pBuf + iOff, iLen );
+		pFilter->m_dStrings[i] = SqlUnescape ( m_pBuf + iOff, iLen );
 	}
 	tVal.m_pValues = nullptr;
 	pFilter->m_bExclude = bInverse;
@@ -8435,7 +8434,7 @@ void SqlParser_c::JoinClusterAt ( const SqlNode_t & tAt )
 
 	SqlInsert_t & tVal = m_pStmt->m_dCallOptValues.Add();
 	tVal.m_iType = tAt.m_iType;
-	ToStringUnescape ( tVal.m_sVal, tAt );
+	tVal.m_sVal = ToStringUnescape ( tAt );
 }
 
 

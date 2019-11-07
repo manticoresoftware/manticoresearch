@@ -452,7 +452,7 @@ public:
 		if ( iLen>0 )
 		{
 			if ( bUnescape )
-				SqlUnescape ( m_sVal, sVal, iLen );
+				m_sVal = SqlUnescape ( sVal, iLen );
 			else
 				m_sVal.SetBinary ( sVal, iLen );
 		}
@@ -1423,7 +1423,7 @@ public:
 	int64_t Int64Eval ( const CSphMatch & tMatch ) const final
 	{
 		// get pointer to JSON blob data
-		const BYTE * pJson = sphGetBlobAttr ( tMatch, m_tLocator, m_pBlobPool );
+		const BYTE * pJson = sphGetBlobAttr ( tMatch, m_tLocator, m_pBlobPool ).first;
 		if ( !pJson )
 			return 0;
 
@@ -3282,10 +3282,10 @@ public:
 	CSphVector<CSphNamedVariant> m_dPairs;
 
 public:
-	void Add ( const char * sKey, const char * sValue, int64_t iValue )
+	void Add ( CSphString sKey, const char * sValue, int64_t iValue )
 	{
 		CSphNamedVariant & t = m_dPairs.Add();
-		t.m_sKey = sKey;
+		t.m_sKey = std::move(sKey);
 		if ( sValue )
 			t.m_sValue = sValue;
 		else
@@ -6074,13 +6074,12 @@ public:
 	/// evaluate arg, check if any values are within set
 	int IntEval ( const CSphMatch & tMatch ) const final
 	{
-		int iLengthBytes = 0;
-		const BYTE * pMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool, iLengthBytes );
+		ByteBlob_t dMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
 
 		const int64_t * pFilter = m_pUservar ? m_pUservar->Begin() : m_dValues.Begin();
 		int nFilters = m_pUservar ? m_pUservar->GetLength() : m_dValues.GetLength();
 
-		return MvaEval_Any ( (const T*)pMva, iLengthBytes/sizeof(T), pFilter, nFilters );
+		return MvaEval_Any<T> ( dMva, {pFilter,nFilters} );
 	}
 
 	void Command ( ESphExprCommand eCmd, void * pArg ) final
@@ -6210,12 +6209,11 @@ public:
 		{
 			for ( int64_t iVal : m_dValues )
 			{
-				auto iOfs = (int)( iVal>>32 );
-				auto iLen = (int)( iVal & 0xffffffffUL );
+				auto iOfs = GetConstStrOffset ( iVal );
+				auto iLen = GetConstStrLength ( iVal );
 				if ( iOfs>0 && iLen>0 && iOfs+iLen<=iExprLen )
 				{
-					CSphString sRes;
-					SqlUnescape ( sRes, sExpr + iOfs, iLen );
+					auto sRes = SqlUnescape ( sExpr + iOfs, iLen );
 					m_dHashes.Add ( sphFNV64 ( sRes.cstr(), sRes.Length() ) );
 				}
 			}
@@ -6423,25 +6421,20 @@ public:
 
 		m_fnStrCmp = GetCollationFn ( eCollation );
 
+		const char * sExpr = pConsts->m_sExpr.cstr ();
+		int iExprLen = pConsts->m_sExpr.Length ();
 		const int64_t * pFilter = m_pUservar ? m_pUservar->Begin() : m_dValues.Begin();
 		const int64_t * pFilterMax = pFilter + ( m_pUservar ? m_pUservar->GetLength() : m_dValues.GetLength() );
 
+		for ( int64_t iVal : m_dValues  )
 		if ( pConsts )
 		{
-			const char * sExpr = pConsts->m_sExpr.cstr ();
-			int iExprLen = pConsts->m_sExpr.Length ();
-
-			for ( const int64_t * pCur=pFilter; pCur<pFilterMax; pCur++ )
+			auto iOfs = GetConstStrOffset ( iVal );
+			auto iLen = GetConstStrLength ( iVal );
+			if ( iOfs>0 && iOfs+iLen<=iExprLen )
 			{
-				int64_t iVal = *pCur;
-				auto iOfs = (int)( iVal>>32 );
-				auto iLen = (int)( iVal & 0xffffffffUL );
-				if ( iOfs>0 && iOfs+iLen<=iExprLen )
-				{
-					CSphString sRes;
-					SqlUnescape ( sRes, sExpr + iOfs, iLen );
-					m_dStringValues.Add ( sRes );
-				}
+				auto sRes = SqlUnescape ( sExpr + iOfs, iLen );
+				m_dStringValues.Add ( sRes );
 			}
 		}
 
@@ -8325,7 +8318,7 @@ int ExprParser_t::AddNodeMapArg ( const char * szKey, const char * szValue, int6
 	{
 		if ( bConstStr )
 		{
-			SqlUnescape ( sValue, m_sExpr + GetConstStrOffset(iValue), GetConstStrLength(iValue) );
+			sValue = SqlUnescape ( m_sExpr + GetConstStrOffset(iValue), GetConstStrLength(iValue) );
 			szValue = sValue.cstr();
 		}
 
@@ -8342,7 +8335,7 @@ void ExprParser_t::AppendToMapArg ( int iNode, const char * szKey, const char * 
 	CSphString sValue;
 	if ( bConstStr )
 	{
-		SqlUnescape ( sValue, m_sExpr + GetConstStrOffset(iValue), GetConstStrLength(iValue) );
+		sValue = SqlUnescape ( m_sExpr + GetConstStrOffset(iValue), GetConstStrLength(iValue) );
 		szValue = sValue.cstr();
 	}
 

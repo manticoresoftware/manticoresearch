@@ -817,32 +817,27 @@ inline int64_t MVA_UPSIZE ( const DWORD * pMva )
 }
 
 template < typename T >
-bool MvaEval_Any ( const T * pMva, int nValues, const SphAttr_t * pFilter, int nFilterValues )
+bool MvaEval_Any ( const VecTraits_T<const T> & dMvas, const VecTraits_T<const SphAttr_t>& dFilters )
 {
-	if ( !pMva || !pFilter )
+	if ( dMvas.IsEmpty () || dFilters.IsEmpty ())
 		return false;
 
-	const T * pMvaMax = pMva+nValues;
-	const SphAttr_t * pFilterMax = pFilter+nFilterValues;
+	const T * L = dMvas.begin();
 
-	const T * L = pMva;
-	const T * R = pMvaMax;
-	R--;
-	for ( ; pFilter < pFilterMax; pFilter++ )
+	for ( const auto& dFilter : dFilters )
 	{
+		const T * R = &dMvas.Last ();
 		while ( L<=R )
 		{
 			const T * pVal = L + (R - L) / 2;
 			T iValue = sphUnalignedRead ( *pVal );
-			if ( *pFilter > iValue )
+			if ( dFilter > iValue )
 				L = pVal + 1;
-			else if ( *pFilter < iValue )
+			else if ( dFilter < iValue )
 				R = pVal - 1;
 			else
 				return true;
 		}
-		R = (const T *)pMvaMax;
-		R--;
 	}
 
 	return false;
@@ -850,18 +845,15 @@ bool MvaEval_Any ( const T * pMva, int nValues, const SphAttr_t * pFilter, int n
 
 
 template < typename T >
-bool MvaEval_All ( const T * pMva, int nValues, const SphAttr_t * pFilter, int nFilterValues )
+bool MvaEval_All ( const VecTraits_T<const T>& dMvas, const VecTraits_T<const SphAttr_t>& dFilters )
 {
-	if ( !pMva || !pFilter )
+	if ( dMvas.IsEmpty() || dFilters.IsEmpty() )
 		return false;
 
-	const T * pMvaMax = pMva+nValues;
-	const SphAttr_t * pFilterMax = pFilter+nFilterValues;
-
-	for ( const T * pVal = pMva; pVal<pMvaMax; pVal++ )
+	for ( const T& dMva : dMvas )
 	{
-		const SphAttr_t iCheck = sphUnalignedRead ( *pVal );
-		if ( !sphBinarySearch ( pFilter, pFilterMax-1, iCheck ) )
+		const SphAttr_t iCheck = sphUnalignedRead ( dMva );
+		if ( !dFilters.BinarySearch ( iCheck ) )
 			return false;
 	}
 
@@ -1454,8 +1446,9 @@ inline const char * sphRtTypeDirective ( ESphAttr eType )
 	}
 }
 
-inline void SqlUnescape ( CSphString & sRes, const char * sEscaped, int iLen )
+inline CSphString SqlUnescape ( const char * sEscaped, int iLen )
 {
+	CSphString sRes;
 	assert ( iLen>=2 );
 	assert (
 		( sEscaped[0]=='\'' && sEscaped[iLen - 1]=='\'' ) ||
@@ -1466,7 +1459,7 @@ inline void SqlUnescape ( CSphString & sRes, const char * sEscaped, int iLen )
 	const char * sMax = s + iLen - 2;
 
 	sRes.Reserve ( iLen );
-	auto * d = ( char * ) sRes.cstr ();
+	auto * d = const_cast<char *> (sRes.cstr ());
 
 	while ( s<sMax )
 	{
@@ -1488,6 +1481,7 @@ inline void SqlUnescape ( CSphString & sRes, const char * sEscaped, int iLen )
 	}
 
 	*d++ = '\0';
+	return sRes;
 }
 
 

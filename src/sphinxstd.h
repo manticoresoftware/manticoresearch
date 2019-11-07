@@ -934,7 +934,13 @@ public:
 	template <typename TT>
 	VecTraits_T ( TT * pData, int64_t iCount )
 		: m_pData ( pData )
-		, m_iCount ( iCount )
+		, m_iCount ( iCount * sizeof ( TT ) / sizeof ( T ))
+	{}
+
+	template<typename TT, typename INT>
+	VecTraits_T ( const std::pair<TT *, INT> & dData )
+		: m_pData ( (T*) dData.first ),
+		m_iCount ( dData.second * sizeof ( TT ) / sizeof ( T ) )
 	{}
 
 	VecTraits_T Slice ( int64_t iBegin=0, int64_t iCount=-1 ) const

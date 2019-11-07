@@ -176,7 +176,7 @@ static void AddInsval ( SqlParser_c * pParser, CSphVector<SqlInsert_t> & dVec, c
 	tIns.m_iVal = tNode.m_iValue; // OPTIMIZE? copy conditionally based on type?
 	tIns.m_fVal = tNode.m_fValue;
 	if ( tIns.m_iType==TOK_QUOTED_STRING )
-		pParser->ToStringUnescape ( tIns.m_sVal, tNode );
+		tIns.m_sVal = pParser->ToStringUnescape ( tNode );
 	tIns.m_pVals = tNode.m_pValues;
 }
 
@@ -1097,7 +1097,7 @@ show_stmt:
 
 like_filter:
 	// empty
-	| TOK_LIKE TOK_QUOTED_STRING		{ pParser->ToStringUnescape ( pParser->m_pStmt->m_sStringParam, $2 ); }
+	| TOK_LIKE TOK_QUOTED_STRING		{ pParser->m_pStmt->m_sStringParam = pParser->ToStringUnescape ($2 ); }
 	;
 
 show_what:
@@ -1112,7 +1112,7 @@ show_what:
 	| TOK_AGENT TOK_QUOTED_STRING TOK_STATUS like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS;
-			pParser->ToStringUnescape ( pParser->m_pStmt->m_sIndex, $2 );
+			pParser->m_pStmt->m_sIndex = pParser->ToStringUnescape ( $2 );
 		}
 	| TOK_AGENT ident TOK_STATUS like_filter
 		{
@@ -1374,11 +1374,11 @@ const_string_list:
 				yyerror ( pParser, "unexpected constant string list" );
 				YYERROR;
 			}
-			pParser->ToStringUnescape ( pParser->m_pStmt->m_dCallStrings.Add(), $1 );
+			pParser->m_pStmt->m_dCallStrings.Add() = pParser->ToStringUnescape ( $1 );
 		}
 	| const_string_list ',' TOK_QUOTED_STRING
 		{
-			pParser->ToStringUnescape ( pParser->m_pStmt->m_dCallStrings.Add(), $3 );
+			pParser->m_pStmt->m_dCallStrings.Add() = pParser->ToStringUnescape ( $3 );
 		}
 	;
 
@@ -1594,7 +1594,7 @@ show_variables:
 	| TOK_SHOW opt_scope TOK_VARIABLES TOK_LIKE TOK_QUOTED_STRING
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_VARIABLES;
-			pParser->ToStringUnescape ( pParser->m_pStmt->m_sStringParam, $5 );
+			pParser->m_pStmt->m_sStringParam = pParser->ToStringUnescape ( $5 );
 		}
 	;
 
@@ -1656,7 +1656,7 @@ create_function:
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CREATE_FUNCTION;
 			pParser->ToString ( tStmt.m_sUdfName, $3 );
-			pParser->ToStringUnescape ( tStmt.m_sUdfLib, $7 );
+			tStmt.m_sUdfLib = pParser->ToStringUnescape ( $7 );
 			tStmt.m_eUdfType = (ESphAttr) $5.m_iValue;
 		}
 	;
@@ -1812,8 +1812,8 @@ create_plugin:
 			SqlStmt_t & s = *pParser->m_pStmt;
 			s.m_eStmt = STMT_CREATE_PLUGIN;
 			pParser->ToString ( s.m_sUdfName, $3 );
-			pParser->ToStringUnescape ( s.m_sStringParam, $5 );
-			pParser->ToStringUnescape ( s.m_sUdfLib, $7 );
+			s.m_sStringParam = pParser->ToStringUnescape ( $5 );
+			s.m_sUdfLib = pParser->ToStringUnescape ( $7 );
 		}
 	;
 
@@ -1823,7 +1823,7 @@ drop_plugin:
 			SqlStmt_t & s = *pParser->m_pStmt;
 			s.m_eStmt = STMT_DROP_PLUGIN;
 			pParser->ToString ( s.m_sUdfName, $3 );
-			pParser->ToStringUnescape ( s.m_sStringParam, $5 );
+			s.m_sStringParam = pParser->ToStringUnescape ( $5 );
 		}
 	;
 
@@ -1832,7 +1832,7 @@ reload_plugins:
 		{
 			SqlStmt_t & s = *pParser->m_pStmt;
 			s.m_eStmt = STMT_RELOAD_PLUGINS;
-			pParser->ToStringUnescape ( s.m_sUdfLib, $5 );
+			s.m_sUdfLib = pParser->ToStringUnescape ( $5 );
 		}
 	;
 
@@ -1916,7 +1916,7 @@ opt_reload_index_from:
 	// empty
 	| TOK_FROM TOK_QUOTED_STRING
 		{
-			pParser->ToStringUnescape ( pParser->m_pStmt->m_sStringParam, $2 );
+			pParser->m_pStmt->m_sStringParam = pParser->ToStringUnescape ( $2 );
 		}
 	;
 

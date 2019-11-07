@@ -116,6 +116,8 @@ extern int64_t g_iIndexerPoolStartHit;
 
 /////////////////////////////////////////////////////////////////////////////
 
+using ByteBlob_t = std::pair<const BYTE *, int>;
+
 /// Sphinx CRC32 implementation
 extern DWORD	g_dSphinxCRC32 [ 256 ];
 DWORD			sphCRC32 ( const void * pString );
@@ -130,7 +132,7 @@ const uint64_t	SPH_FNV64_SEED = 0xcbf29ce484222325ULL;
 uint64_t		sphFNV64 ( const void * pString );
 uint64_t		sphFNV64 ( const void * s, int iLen, uint64_t uPrev = SPH_FNV64_SEED );
 uint64_t		sphFNV64cont ( const void * pString, uint64_t uPrev );
-
+uint64_t		sphFNV64 ( const ByteBlob_t& dBlob ) { return sphFNV64 ( dBlob.first, dBlob.second ); }
 /// calculate file crc32
 bool			sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 );
 
@@ -1244,6 +1246,7 @@ public:
 
 	/// fetches blobs from both data ptr attrs and pooled blob attrs
 	const BYTE * FetchAttrData ( const CSphAttrLocator & tLoc, const BYTE * pPool, int & iLengthBytes ) const;
+	ByteBlob_t FetchAttrData ( const CSphAttrLocator & tLoc, const BYTE * pPool ) const;
 
 	/// "manually" prevent copying
 	CSphMatch & operator = ( const CSphMatch & ) = delete;

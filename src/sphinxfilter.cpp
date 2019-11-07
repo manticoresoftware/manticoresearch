@@ -369,9 +369,8 @@ class Filter_MVAValues_Any_c : public Filter_MVA_c, public IFilter_Values
 public:
 	virtual bool Eval ( const CSphMatch & tMatch ) const
 	{
-		int iLengthBytes = 0;
-		const BYTE * pMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool, iLengthBytes );
-		return MvaEval_Any ( (const T*)pMva, iLengthBytes/sizeof(T), m_pValues, m_iValueCount );
+		auto dMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
+		return MvaEval_Any<T> ( dMva, {m_pValues, m_iValueCount} );
 	}
 };
 
@@ -382,9 +381,8 @@ class Filter_MVAValues_All_c : public Filter_MVA_c, IFilter_Values
 public:
 	virtual bool Eval ( const CSphMatch & tMatch ) const
 	{
-		int iLengthBytes = 0;
-		const BYTE * pMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool, iLengthBytes );
-		return MvaEval_All ( (const T*)pMva, iLengthBytes/sizeof(T), m_pValues, m_iValueCount );
+		auto dMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
+		return MvaEval_All<T> ( dMva, {m_pValues, m_iValueCount} );
 	}
 };
 

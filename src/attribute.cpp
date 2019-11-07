@@ -492,10 +492,7 @@ BlobRowBuilder_i * sphCreateBlobRowBuilderUpdate ( const ISphSchema & tSchema, C
 static int64_t GetBlobRowOffset ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator )
 {
 	// blob row locator NEEDS to be the 2nd attribute after docid
-	if ( tLocator.m_bDynamic )
-		return sphGetBlobRowOffset ( tMatch.m_pDynamic );
-	else
-		return sphGetBlobRowOffset ( tMatch.m_pStatic );
+	return sphGetBlobRowOffset ( tLocator.m_bDynamic ? tMatch.m_pDynamic : tMatch.m_pStatic );
 }
 
 template <typename T>
@@ -525,6 +522,35 @@ static const BYTE * GetBlobAttr ( const BYTE * pRow, int iBlobAttrId, int nBlobA
 	return nullptr;
 }
 
+// same as above, but returns pair instead of confusing result-by-ref.
+template <typename T>
+static ByteBlob_t GetBlobAttr ( int iBlobAttrId, int nBlobAttrs, const BYTE * pRow )
+{
+	auto pTRow = (T*)pRow;
+	T uLen1 = sphUnalignedRead ( pTRow[iBlobAttrId] );
+	T uLen0 = (iBlobAttrId > 0) ? sphUnalignedRead ( pTRow[iBlobAttrId - 1] ) : 0;
+	auto iLengthBytes = (int)uLen1-uLen0;
+	assert ( iLengthBytes>=0 );
+
+	return {iLengthBytes ? (const BYTE *)(pTRow + nBlobAttrs) + uLen0 : nullptr, iLengthBytes };
+}
+
+
+static ByteBlob_t GetBlobAttr ( const BYTE * pRow, int iBlobAttrId, int nBlobAttrs )
+{
+	switch ( *pRow )
+	{
+	case BLOB_ROW_LEN_BYTE:		return GetBlobAttr<BYTE> ( iBlobAttrId, nBlobAttrs, pRow+1 );
+	case BLOB_ROW_LEN_WORD:		return GetBlobAttr<WORD> ( iBlobAttrId, nBlobAttrs, pRow+1 );
+	case BLOB_ROW_LEN_DWORD:	return GetBlobAttr<DWORD>( iBlobAttrId, nBlobAttrs, pRow+1 );
+	default:
+		break;
+	}
+
+	assert ( 0 && "Unknown blob row type" );
+	return { nullptr, 0 };
+}
+
 
 const BYTE * sphGetBlobAttr ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool, int & iLengthBytes )
 {
@@ -533,6 +559,12 @@ const BYTE * sphGetBlobAttr ( const CSphMatch & tMatch, const CSphAttrLocator & 
 	return GetBlobAttr ( pBlobPool+iOffset, tLocator.m_iBlobAttrId, tLocator.m_nBlobAttrs, iLengthBytes );
 }
 
+ByteBlob_t sphGetBlobAttr ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool )
+{
+	assert ( pBlobPool );
+	int64_t iOffset = GetBlobRowOffset ( tMatch, tLocator );
+	return GetBlobAttr ( pBlobPool+iOffset, tLocator.m_iBlobAttrId, tLocator.m_nBlobAttrs );
+}
 
 const BYTE * sphGetBlobAttr ( const CSphRowitem * pDocinfo, const CSphAttrLocator & tLocator, const BYTE * pBlobPool, int & iLengthBytes )
 {
@@ -541,13 +573,12 @@ const BYTE * sphGetBlobAttr ( const CSphRowitem * pDocinfo, const CSphAttrLocato
 	return GetBlobAttr ( pBlobPool+iOffset, tLocator.m_iBlobAttrId, tLocator.m_nBlobAttrs, iLengthBytes );
 }
 
-
-const BYTE * sphGetBlobAttr ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool )
+ByteBlob_t sphGetBlobAttr ( const CSphRowitem * pDocinfo, const CSphAttrLocator & tLocator, const BYTE * pBlobPool )
 {
-	int iLengthBytes = 0;
-	return sphGetBlobAttr ( tMatch, tLocator, pBlobPool, iLengthBytes );
+	assert ( pBlobPool );
+	int64_t iOffset = sphGetBlobRowOffset ( pDocinfo );
+	return GetBlobAttr ( pBlobPool+iOffset, tLocator.m_iBlobAttrId, tLocator.m_nBlobAttrs );
 }
-
 
 int64_t sphGetBlobRowOffset ( const CSphRowitem * pDocinfo )
 {
@@ -937,20 +968,25 @@ BYTE * sphPackPtrAttr ( int iLengthBytes, BYTE ** ppData )
 
 int sphUnpackPtrAttr ( const BYTE * pData, const BYTE ** ppUnpacked )
 {
+	assert ( ppUnpacked );
 	if ( !pData )
 	{
-		if ( ppUnpacked )
-			*ppUnpacked = nullptr;
-
+		*ppUnpacked = nullptr;
 		return 0;
 	}
 
 	int iLen = (int)sphUnzipInt ( pData );
-
-	if ( ppUnpacked )
-		*ppUnpacked = pData;
-
+	*ppUnpacked = pData;
 	return iLen;
+}
+
+ByteBlob_t sphUnpackPtrAttr ( const BYTE * pData )
+{
+	if ( !pData )
+		return { nullptr, 0 };
+
+	auto iLen = (int)sphUnzipInt ( pData );
+	return { pData, iLen };
 }
 
 
@@ -970,8 +1006,9 @@ ESphAttr sphPlainAttrToPtrAttr ( ESphAttr eAttrType )
 
 bool sphIsDataPtrAttr ( ESphAttr eAttr )
 {
-	return eAttr==SPH_ATTR_STRINGPTR || eAttr==SPH_ATTR_FACTORS || eAttr==SPH_ATTR_FACTORS_JSON || eAttr==SPH_ATTR_UINT32SET_PTR ||
-		eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_JSON_PTR || eAttr==SPH_ATTR_JSON_FIELD_PTR;
+	return eAttr==SPH_ATTR_STRINGPTR || eAttr==SPH_ATTR_FACTORS || eAttr==SPH_ATTR_FACTORS_JSON
+	|| eAttr==SPH_ATTR_UINT32SET_PTR ||	eAttr==SPH_ATTR_INT64SET_PTR
+	|| eAttr==SPH_ATTR_JSON_PTR || eAttr==SPH_ATTR_JSON_FIELD_PTR;
 }
 
 //////////////////////////////////////////////////////////////////////////

@@ -56,11 +56,12 @@ void				sphSetBlobRowOffset ( CSphRowitem * pDocinfo, int64_t iOffset );
 // fetches a attribute data and its length from the pool
 const BYTE *		sphGetBlobAttr ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool, int & iLengthBytes );
 
+ByteBlob_t sphGetBlobAttr ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool );
+
 // same as above, but works with docinfo
 const BYTE *		sphGetBlobAttr ( const CSphRowitem * pDocinfo, const CSphAttrLocator & tLocator, const BYTE * pBlobPool, int & iLengthBytes );
 
-// same as above, but without length
-const BYTE *		sphGetBlobAttr ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool );
+ByteBlob_t sphGetBlobAttr ( const CSphRowitem * pDocinfo, const CSphAttrLocator & tLocator, const BYTE * pBlobPool );
 
 // returns blob attribute length
 int					sphGetBlobAttrLen ( const CSphMatch & tMatch, const CSphAttrLocator & tLocator, const BYTE * pBlobPool );
@@ -103,7 +104,8 @@ BYTE *				sphPackPtrAttr ( BYTE * pPrealloc, const BYTE * pData, int iLengthByte
 BYTE *				sphPackPtrAttr ( int iLengthBytes, BYTE ** pData );
 
 // unpack data pointer attr, return length
-int					sphUnpackPtrAttr ( const BYTE * pData, const BYTE ** ppUnpacked=NULL );
+int					sphUnpackPtrAttr ( const BYTE * pData, const BYTE ** ppUnpacked );
+ByteBlob_t			sphUnpackPtrAttr ( const BYTE * pData );
 
 // calculate packed data attr length
 int					sphCalcPackedLength ( int iLengthBytes );

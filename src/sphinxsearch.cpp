@@ -2327,16 +2327,16 @@ struct Expr_BM25F_T : public Expr_NoLocator_c
 		{
 			auto pMapArg = ( Expr_MapArg_c * ) pFieldWeights;
 
-			CSphVector<CSphNamedVariant> & dOpts = pMapArg->m_dValues;
-			ARRAY_FOREACH ( i, dOpts )
+			VecTraits_T<CSphNamedVariant> dOpts ( pMapArg->m_pValues, pMapArg->m_iCount );
+			for ( const auto& dOpt : dOpts )
 			{
 				// FIXME? report errors if field was not found?
-				if ( !dOpts[i].m_sValue.IsEmpty() )
+				if ( !dOpt.m_sValue.IsEmpty() )
 					continue; // weights must be int, not string
-				CSphString & sField = dOpts[i].m_sKey;
+				const CSphString & sField = dOpt.m_sKey;
 				int iField = pState->m_pSchema->GetFieldIndex ( sField.cstr() );
 				if ( iField>=0 )
-					m_dWeights[iField] = dOpts[i].m_iValue;
+					m_dWeights[iField] = dOpt.m_iValue;
 			}
 		}
 

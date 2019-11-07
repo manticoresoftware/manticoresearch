@@ -220,11 +220,14 @@ public:
 class Expr_MapArg_c : public Expr_NoLocator_c
 {
 public:
-	CSphVector<CSphNamedVariant> m_dValues;
+	SharedPtrArr_t<CSphNamedVariant *>	m_pValues;
+	int64_t								m_iCount = 0;
 
+	// c-tr from raw vector - adopt values
 	explicit Expr_MapArg_c ( CSphVector<CSphNamedVariant> & dValues )
 	{
-		m_dValues.SwapData ( dValues );
+		m_iCount = dValues.GetLength();
+		m_pValues = dValues.LeakData ();
 	}
 
 	float Eval ( const CSphMatch & ) const override

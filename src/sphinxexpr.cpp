@@ -653,7 +653,10 @@ public:
 		, m_fB ( b )
 	{
 		if ( pFieldWeights )
-			m_dFieldWeights = std::move ( *pFieldWeights );
+		{
+			m_iCount = pFieldWeights->GetLength ();
+			m_pFieldWeights = pFieldWeights->LeakData ();
+		}
 	}
 
 	float Eval ( const CSphMatch & tMatch ) const final
@@ -730,15 +733,15 @@ public:
 		// bind weights
 		m_dWeights.Resize ( m_tRankerState.m_iFields );
 		m_dWeights.Fill ( 1 );
-		if ( m_dFieldWeights.GetLength() )
+		if ( m_iCount )
 		{
-			ARRAY_FOREACH ( i, m_dFieldWeights )
+			for ( int i=0; i<m_iCount; ++i )
 			{
 				// FIXME? report errors if field was not found?
-				CSphString & sField = m_dFieldWeights[i].m_sKey;
+				CSphString & sField = m_pFieldWeights[i].m_sKey;
 				int iField = m_tRankerState.m_pSchema->GetFieldIndex ( sField.cstr() );
 				if ( iField>=0 )
-					m_dWeights[iField] = m_dFieldWeights[i].m_iValue;
+					m_dWeights[iField] = m_pFieldWeights[i].m_iValue;
 			}
 		}
 
@@ -766,7 +769,8 @@ private:
 	float						m_fWeightedAvgDocLen {0.0f};
 	CSphVector<int>				m_dWeights;		///< per field weights
 	SphFactorHash_t *			m_pHash {nullptr};
-	CSphVector<CSphNamedVariant> m_dFieldWeights;
+	SharedPtrArr_t<CSphNamedVariant *> m_pFieldWeights;
+	int64_t						m_iCount = 0;
 };
 
 

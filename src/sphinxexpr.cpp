@@ -792,7 +792,7 @@ public:
 
 class Expr_Arglist_c : public ISphExpr
 {
-	friend void MoveToArgList ( ISphExpr * pLeft, VecRefPtrs_t<ISphExpr *> & dArgs );
+	friend void MoveToArgList ( ISphExpr * pLeft, VecRefPtrs_t<ISphExpr*> & dArgs );
 
 public:
 	Expr_Arglist_c ( ISphExpr * pLeft, ISphExpr * pRight )
@@ -3200,7 +3200,7 @@ static int VARIABLE_IS_NOT_USED G_FUNC_HASH_CHECK = FuncHashCheck();
 //////////////////////////////////////////////////////////////////////////
 
 static ISphExpr * ConvertExprJson ( ISphExpr * pExpr );
-static void ConvertArgsJson ( VecRefPtrs_t<ISphExpr *> & dArgs );
+static void ConvertArgsJson ( VecRefPtrs_t<ISphExpr*> & dArgs );
 
 /// check whether the type is numeric
 static inline bool IsNumeric ( ESphAttr eType )
@@ -4268,7 +4268,7 @@ void ExprParser_t::Dump ( int iNode )
 
 /// fold arglist into array
 /// moves also ownership (so, 1-st param owned by dArgs on exit)
-void MoveToArgList ( ISphExpr * pLeft, VecRefPtrs_t<ISphExpr *> &dArgs )
+void MoveToArgList ( ISphExpr * pLeft, VecRefPtrs_t<ISphExpr*> &dArgs )
 {
 	if ( !pLeft || !pLeft->IsArglist ())
 	{
@@ -5070,7 +5070,7 @@ protected:
 
 public:
 	Expr_ContainsStrattr_c ( ISphExpr * pLat, ISphExpr * pLon, ISphExpr * pStr, bool bGeo )
-		: Expr_Contains_c (pLat, pLon )
+		: Expr_Contains_c ( pLat, pLon )
 		, m_pStr ( pStr )
 		, m_bGeo ( bGeo )
 	{
@@ -5373,7 +5373,7 @@ ISphExpr * ConvertExprJson ( ISphExpr * pExpr )
 	}
 }
 
-void ConvertArgsJson ( VecRefPtrs_t<ISphExpr *> & dArgs )
+void ConvertArgsJson ( VecRefPtrs_t<ISphExpr*> & dArgs )
 {
 	ARRAY_FOREACH ( i, dArgs )
 	{
@@ -5532,7 +5532,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 				auto eFunc = (Func_e)tNode.m_iFunc;
 				assert ( g_dFuncs[tNode.m_iFunc].m_eFunc==eFunc );
 
-				VecRefPtrs_t<ISphExpr *> dArgs;
+				VecRefPtrs_t<ISphExpr*> dArgs;
 				if ( !bSkipLeft )
 				{
 					SafeAddRef ( pLeft );
@@ -5725,7 +5725,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 			} else
 			{
 				// json key is a generic expression, use generic catch-all JsonField
-				VecRefPtrs_t<ISphExpr *> dArgs;
+				VecRefPtrs_t<ISphExpr*> dArgs;
 				CSphVector<ESphAttr> dTypes;
 				if ( pLeft ) // may be NULL (top level array)
 				{
@@ -5738,7 +5738,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_ITERATOR:
 			{
 				// iterator, e.g. handles "x.gid" in SELECT ALL(x.gid=1 FOR x IN json.array)
-				VecRefPtrs_t<ISphExpr *> dArgs;
+				VecRefPtrs_t<ISphExpr*> dArgs;
 				CSphVector<ESphAttr> dTypes;
 				if ( pLeft )
 				{
@@ -5942,7 +5942,7 @@ template < typename T >
 class Expr_Interval_c : public Expr_ArgVsSet_c<T>
 {
 protected:
-	VecRefPtrs_t<ISphExpr *> m_dTurnPoints;
+	VecRefPtrs_t<ISphExpr*> m_dTurnPoints;
 
 public:
 
@@ -6523,7 +6523,7 @@ public:
 	}
 
 protected:
-	VecRefPtrs_t<ISphExpr *> m_dBitWeights;
+	VecRefPtrs_t<ISphExpr*> m_dBitWeights;
 
 	/// generic evaluate
 	T DoEval ( const CSphMatch & tMatch ) const
@@ -7203,7 +7203,7 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 	}
 
 	// four expressions
-	VecRefPtrs_t<ISphExpr *> dExpr;
+	VecRefPtrs_t<ISphExpr*> dExpr;
 	MoveToArgList ( CreateTree ( iArgs ), dExpr );
 	assert ( dExpr.GetLength()==4 );
 	ConvertArgsJson ( dExpr );

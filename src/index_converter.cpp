@@ -219,9 +219,9 @@ struct Index_t
 	CSphFixedVector<int64_t> m_dFieldLens { SPH_MAX_FIELDS };
 
 	CSphDictSettings m_tDictSettings;
-	CSphDictRefPtr_c  m_pDict;
+	DictRefPtr_c  m_pDict;
 	CSphTokenizerSettings m_tTokSettings;
-	ISphTokenizerRefPtr_c m_pTokenizer;
+	TokenizerRefPtr_c m_pTokenizer;
 	CSphFieldFilterSettings m_tFieldFilterSettings;
 	CSphEmbeddedFiles m_tEmbeddedTok;
 	CSphEmbeddedFiles m_tEmbeddedDict;
@@ -476,11 +476,11 @@ static int GetRowSize ( const CSphVector<CSphColumnInfo> & dAttrs )
 
 static bool SetupWordProcessors ( Index_t & tIndex, CSphString & sError )
 {
-	ISphTokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tIndex.m_tTokSettings, &tIndex.m_tEmbeddedTok, sError ) };
+	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tIndex.m_tTokSettings, &tIndex.m_tEmbeddedTok, sError ) };
 	if ( !pTokenizer )
 		return false;
 
-	CSphDictRefPtr_c pDict { tIndex.m_tDictSettings.m_bWordDict
+	DictRefPtr_c pDict { tIndex.m_tDictSettings.m_bWordDict
 		? sphCreateDictionaryKeywords ( tIndex.m_tDictSettings, &tIndex.m_tEmbeddedDict, pTokenizer, tIndex.m_sName.cstr(), false, tIndex.m_tSettings.m_iSkiplistBlockSize, sError )
 		: sphCreateDictionaryCRC ( tIndex.m_tDictSettings, &tIndex.m_tEmbeddedDict, pTokenizer, tIndex.m_sName.cstr(), false, tIndex.m_tSettings.m_iSkiplistBlockSize, sError ) };
 

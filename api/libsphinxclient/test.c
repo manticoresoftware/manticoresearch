@@ -137,31 +137,24 @@ void test_excerpt ( sphinx_client * client )
 	const char * index = "test1";
 	sphinx_excerpt_options opts;
 	char ** res;
-	int i, j;
+	int i;
 
 	sphinx_init_excerpt_options ( &opts );
 	opts.limit = 60;
 	opts.around = 3;
 	opts.allow_empty = SPH_FALSE;
 
-	for ( j=0; j<2; j++ )
+	res = sphinx_build_excerpts ( client, ndocs, docs, index, words, &opts );
+
+	if ( !res )
 	{
-		opts.exact_phrase = j;
-		printf ( "exact_phrase=%d\n", j );
-
-		res = sphinx_build_excerpts ( client, ndocs, docs, index, words, &opts );
-
-		if ( !res )
-		{
-			g_failed += ( res==NULL );
-			if ( !g_smoke )
-				die ( "query failed: %s", sphinx_error(client) );
-		}
-
-		for ( i=0; i<ndocs; i++ )
-			printf ( "n=%d, res=%s\n", 1+i, res[i] );
-		printf ( "\n" );
+		g_failed += ( res==NULL );
+		if ( !g_smoke )
+			die ( "query failed: %s", sphinx_error(client) );
 	}
+
+	for ( i=0; i<ndocs; i++ )
+		printf ( "n=%d, res=%s\n", 1+i, res[i] );
 }
 
 
@@ -253,7 +246,6 @@ void test_persist_work ( sphinx_client * client )
 			opts.limit_passages = 0;
 			opts.around = 0;
 			opts.html_strip_mode = "none";
-			opts.query_mode = SPH_TRUE;
 		} else
 		{
 			sphinx_init_excerpt_options ( &opts );
@@ -262,7 +254,6 @@ void test_persist_work ( sphinx_client * client )
 			opts.limit_passages = 2;
 			opts.around = 5;
 			opts.html_strip_mode = "none";
-			opts.query_mode = SPH_TRUE;
 
 			*( docs[0]+sizeof(words)+100 ) = '\0';
 		}

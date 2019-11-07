@@ -38,7 +38,7 @@ protected:
 		if ( !( uMode & TOK_NO_SHORT ) )
 			tSettings.m_iMinWordLen = 2;
 
-		ISphTokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings, NULL, sError ) };
+		TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings, NULL, sError ) };
 		if ( !( uMode & TOK_NO_DASH ) )
 		{
 			Verify ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
@@ -62,8 +62,8 @@ protected:
 		return pTokenizer1;
 	}
 
-	ISphTokenizerRefPtr_c m_pTokenizer;
-	ISphTokenizerRefPtr_c& pTokenizer = m_pTokenizer;
+	TokenizerRefPtr_c m_pTokenizer;
+	TokenizerRefPtr_c& pTokenizer = m_pTokenizer;
 	CSphString sError;
 };
 
@@ -119,7 +119,7 @@ TEST_F( Tokenizer, exceptions_more )
 		++iCur;
 	}
 
-	ISphTokenizerRefPtr_c pQtok { m_pTokenizer->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) };
+	TokenizerRefPtr_c pQtok { m_pTokenizer->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) };
 
 	pQtok->SetBuffer ( ( BYTE * ) "life:)", 7 );
 	ASSERT_STREQ ( ( char * ) pQtok->GetToken (), "life:)" );
@@ -540,7 +540,7 @@ TEST_P ( TokenizerP, short_token_handling )
 		NULL
 	};
 
-	ISphTokenizerRefPtr_c pShortTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
+	TokenizerRefPtr_c pShortTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
 	pShortTokenizer->AddPlainChar ( '*' );
 
 	CSphTokenizerSettings tSettings = pShortTokenizer->GetSettings ();
@@ -672,7 +672,7 @@ protected:
 		tSchema.AddField ( "title" );
 		tSchema.AddField ( "body" );
 
-		ISphTokenizerRefPtr_c pBase ( sphCreateUTF8Tokenizer () );
+		TokenizerRefPtr_c pBase ( sphCreateUTF8Tokenizer () );
 		CSphTokenizerSettings tTokenizerSetup;
 		tTokenizerSetup.m_iMinWordLen = 2;
 		tTokenizerSetup.m_sSynonymsFile = g_sTmpfile;
@@ -692,7 +692,7 @@ protected:
 		ASSERT_TRUE ( pDict );
 	}
 
-	CSphDictRefPtr_c pDict;
+	DictRefPtr_c pDict;
 	CSphSchema tSchema;
 	CSphIndexSettings tTmpSettings;
 };

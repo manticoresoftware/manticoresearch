@@ -326,7 +326,7 @@ public:
 		DocID_t tDocID = sphGetDocID ( tMatch.m_pDynamic ? tMatch.m_pDynamic : tMatch.m_pStatic );
 		DocstoreDoc_t tDoc;
 		Verify ( m_tSession.m_pDocstore->GetDoc ( tDoc, tDocID, &m_dFieldIds, m_tSession.m_iSessionId, false ) );
-		int iLen = tDoc.m_dFields[0].GetLength()-1;
+		int iLen = tDoc.m_dFields[0].GetLength();
 		assert(iLen>=0);
 		*ppStr = tDoc.m_dFields[0].LeakData();
 		return iLen;
@@ -348,7 +348,9 @@ public:
 		if ( eCmd==SPH_EXPR_SET_DOCSTORE )
 		{
 			m_dFieldIds.Resize(0);
+			assert(pArg);
 			m_tSession = *(DocstoreSession_c::Info_t*)pArg;
+			assert ( m_tSession.m_pDocstore );
 			int iFieldId = m_tSession.m_pDocstore->GetFieldId ( m_sField.cstr(), DOCSTORE_TEXT );
 			if ( iFieldId!=-1 )
 				m_dFieldIds.Add(iFieldId);
@@ -2946,6 +2948,7 @@ enum Func_e
 	FUNC_LEAST,
 	FUNC_GREATEST,
 	FUNC_UINT,
+	FUNC_QUERY,
 
 	FUNC_CURTIME,
 	FUNC_UTC_TIME,
@@ -3040,6 +3043,7 @@ static FuncDesc_t g_dFuncs[] =
 	{ "least",			1,	FUNC_LEAST,			SPH_ATTR_STRINGPTR },
 	{ "greatest",		1,	FUNC_GREATEST,		SPH_ATTR_STRINGPTR },
 	{ "uint",			1,	FUNC_UINT,			SPH_ATTR_INTEGER },
+	{ "query",			0,	FUNC_QUERY,			SPH_ATTR_STRINGPTR },
 
 	{ "curtime",		0,	FUNC_CURTIME,		SPH_ATTR_STRINGPTR },
 	{ "utc_time",		0,	FUNC_UTC_TIME,		SPH_ATTR_STRINGPTR },
@@ -3105,33 +3109,33 @@ static int FuncHashLookup ( const char * sKey )
 
 	static BYTE dAsso[] =
     {
-      124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-      124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-      124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-      124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-      124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-       40, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-      124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-      124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-      124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-      124, 124, 124, 124, 124,   5, 124,  15,   5,   5,
-       65,   0,  85,  20,  50,   0, 124, 124,  20,   0,
-       10,   0,  40,  25,   5,  40,   0,  25, 124,  70,
-       60,  40,   0, 124, 124, 124, 124, 124, 124, 124,
-      124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-      124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-      124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-      124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-      124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-      124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-      124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-      124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-      124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-      124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-      124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-      124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-      124, 124, 124, 124, 124, 124
-    };
+		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+		40, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+		124, 124, 124, 124, 124,   5, 124,  15,   5,   5,
+		65,   0,  85,  20,  50,   0, 124, 124,  20,   0,
+		10,   0,  40,  25,   5,  40,   0,  25, 124,  70,
+		60,  40,   0, 124, 124, 124, 124, 124, 124, 124,
+		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
+		124, 124, 124, 124, 124, 124
+	};
 
 	auto * s = (const BYTE*) sKey;
 	auto iHash = strlen ( sKey );
@@ -3144,19 +3148,19 @@ static int FuncHashLookup ( const char * sKey )
 
 	static int dIndexes[] =
 	{
-		-1, -1, -1, -1, -1, -1, -1, -1, 55, 2,
+		-1, -1, -1, -1, -1, -1, -1, -1, 56, 2,
 		33, 32, 31, 23, 41, 16, 21, 46, 30, -1,
-		13, 40, 39, 38, 61, 62, -1, 34, 57, 37,
-		65, 11, 6, 50, 64, 63, 48, -1, 53, 51,
-		49, 42, 52, 54, 7, 8, -1, 56, 5, 29,
-		45, 22, -1, 4, 12, -1, -1, -1, 58, 17,
-		-1, -1, -1, 1, 18, 35, 36, 19, 59, 26,
+		13, 40, 39, 38, 62, 63, -1, 34, 58, 37,
+		66, 11, 6, 50, 65, 64, 48, -1, 54, 51,
+		49, 42, 53, 55, 7, 8, -1, 57, 5, 29,
+		45, 22, -1, 4, 12, 52, -1, -1, 59, 17,
+		-1, -1, -1, 1, 18, 35, 36, 19, 60, 26,
 		-1, -1, -1, 43, 10, -1, -1, -1, 24, 20,
-		-1, -1, 60, 0, 28, 66, -1, 27, -1, 67,
+		-1, -1, 61, 0, 28, 67, -1, 27, -1, 68,
 		-1, -1, -1, -1, -1, -1, 47, -1, -1, 14,
 		-1, -1, -1, 9, -1, -1, -1, -1, -1, -1,
 		3, -1, 44, 25, -1, -1, -1, -1, -1, -1,
-		-1, -1, -1, 15
+		-1, -1, -1, 15,
 	};
 
 	if ( iHash>=(int)(sizeof(dIndexes)/sizeof(dIndexes[0])) )
@@ -3377,8 +3381,9 @@ protected:
 	int						AddNodeUservar ( int iUservar );
 	int						AddNodeHookIdent ( int iID );
 	int						AddNodeHookFunc ( int iID, int iLeft );
-	int						AddNodeMapArg ( const char * sKey, const char * sValue, int64_t iValue );
-	void					AppendToMapArg ( int iNode, const char * sKey, const char * sValue, int64_t iValue );
+	int						AddNodeHookFunc ( int iID );
+	int						AddNodeMapArg ( const char * szKey, const char * szValue, int64_t iValue, bool bConstStr = false );
+	void					AppendToMapArg ( int iNode, const char * szKey, const char * szValue, int64_t iValue, bool bConstStr = false );
 	const char *			Attr2Ident ( uint64_t uAttrLoc );
 	const char *			Field2Ident ( uint64_t uAttrLoc );
 	int						AddNodeJsonField ( uint64_t uAttrLocator, int iLeft );
@@ -3527,6 +3532,31 @@ static void sphUnpackAttrLocator ( uint64_t uIndex, ExprNode_t * pNode )
 	pNode->m_tLocator.m_bDynamic = ( ( uIndex & ( U64C(1)<<63 ) )!=0 );
 	pNode->m_iLocator = (int)( ( uIndex>>32 ) & 0x7fff );
 }
+
+
+static int GetConstStrOffset ( int64_t iValue )
+{
+	return (int)( iValue>>32 );
+}
+
+
+static int GetConstStrOffset ( const ExprNode_t & tNode )
+{
+	return GetConstStrOffset ( tNode.m_iConst );
+}
+
+
+static int GetConstStrLength ( int64_t iValue )
+{
+	return (int)( iValue & 0xffffffffUL );
+}
+
+
+static int GetConstStrLength ( const ExprNode_t & tNode )
+{
+	return GetConstStrLength ( tNode.m_iConst );
+}
+
 
 int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp )
 {
@@ -4537,8 +4567,8 @@ ISphExpr * ExprParser_t::CreateExistNode ( const ExprNode_t & tNode )
 	assert ( iAttrName>=0 && iAttrName<m_dNodes.GetLength()
 		&& iAttrDefault>=0 && iAttrDefault<m_dNodes.GetLength() );
 
-	auto iNameStart = (int)( m_dNodes[iAttrName].m_iConst>>32 );
-	auto iNameLen = (int)( m_dNodes[iAttrName].m_iConst & 0xffffffffUL );
+	auto iNameStart = GetConstStrOffset ( m_dNodes[iAttrName] );
+	auto iNameLen = GetConstStrLength ( m_dNodes[iAttrName] );
 	// skip head and tail non attribute name symbols
 	while ( m_sExpr[iNameStart]!='\0' && ( m_sExpr[iNameStart]=='\'' || m_sExpr[iNameStart]==' ' ) && iNameLen )
 	{
@@ -5241,6 +5271,43 @@ public:
 
 //////////////////////////////////////////////////////////////////////////
 
+class Expr_GetQuery_c : public Expr_StrNoLocator_c
+{
+public:
+	Expr_GetQuery_c() = default;
+	~Expr_GetQuery_c() = default;
+
+	int StringEval ( const CSphMatch &, const BYTE ** ppStr ) const final
+	{
+		assert ( ppStr );
+		CSphString sVal = m_sQuery;
+		int iLen = sVal.Length();
+		*ppStr = (const BYTE *)sVal.Leak();
+		return iLen;
+	}
+
+	void Command ( ESphExprCommand eCmd, void * pArg ) final
+	{
+		if ( eCmd==SPH_EXPR_SET_QUERY )
+			m_sQuery = *(CSphString*)pArg;
+	}
+
+	bool IsDataPtrAttr() const final { return true; }
+
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
+	{
+		EXPR_CLASS_NAME("Expr_GetQuery_c");
+		CALC_STR_HASH(m_sQuery, m_sQuery.Length());
+		return CALC_DEP_HASHES();
+	}
+
+private:
+	CSphString m_sQuery;
+};
+
+
+//////////////////////////////////////////////////////////////////////////
+
 class Expr_LastInsertID_c : public Expr_StrNoLocator_c
 {
 public:
@@ -5361,6 +5428,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case FUNC_MIN_TOP_SORTVAL:
 		case FUNC_REMAP:
 		case FUNC_LAST_INSERT_ID:
+		case FUNC_QUERY:
 			bSkipLeft = true;
 			bSkipRight = true;
 			break;
@@ -5412,9 +5480,9 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 				return new Expr_GetConst_c ( float(tNode.m_iConst) );
 			break;
 		case TOK_CONST_STRING:
-			return new Expr_GetStrConst_c ( m_sExpr+(int)( tNode.m_iConst>>32 ), (int)( tNode.m_iConst & 0xffffffffUL ), true );
+			return new Expr_GetStrConst_c ( m_sExpr+GetConstStrOffset(tNode), GetConstStrLength(tNode), true );
 		case TOK_SUBKEY:
-			return new Expr_GetStrConst_c ( m_sExpr+(int)( tNode.m_iConst>>32 ), (int)( tNode.m_iConst & 0xffffffffUL ), false );
+			return new Expr_GetStrConst_c ( m_sExpr+GetConstStrOffset(tNode), GetConstStrLength(tNode), false );
 
 		case TOK_WEIGHT:		return new Expr_GetWeight_c ();
 
@@ -5588,6 +5656,9 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 						return new Expr_BM25F_c ( fK1, fB, pFieldWeights );
 					}
 
+					case FUNC_QUERY:
+						return new Expr_GetQuery_c;
+
 					case FUNC_BIGINT:
 					case FUNC_INTEGER:
 					case FUNC_DOUBLE:
@@ -5633,14 +5704,15 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 				break;
 			}
 
-		case TOK_UDF:			return CreateUdfNode ( tNode.m_iFunc, pLeft ); break;
-		case TOK_HOOK_IDENT:	return m_pHook->CreateNode ( tNode.m_iFunc, NULL, NULL, m_sCreateError ); break;
-		case TOK_HOOK_FUNC:		return m_pHook->CreateNode ( tNode.m_iFunc, pLeft, &m_eEvalStage, m_sCreateError ); break;
+		case TOK_UDF:			return CreateUdfNode ( tNode.m_iFunc, pLeft );
+		case TOK_HOOK_IDENT:	return m_pHook->CreateNode ( tNode.m_iFunc, NULL, NULL, m_sCreateError );
+		case TOK_HOOK_FUNC:		return m_pHook->CreateNode ( tNode.m_iFunc, pLeft, &m_eEvalStage, m_sCreateError );
+
 		case TOK_MAP_ARG:
 			// tricky bit
 			// data gets moved (!) from node to ISphExpr at this point
 			return new Expr_MapArg_c ( tNode.m_pMapArg->m_dPairs );
-			break;
+
 		case TOK_ATTR_JSON:
 			if ( pLeft && m_dNodes[tNode.m_iLeft].m_iToken==TOK_SUBKEY && !tNode.m_tLocator.m_bDynamic )
 			{
@@ -8225,19 +8297,56 @@ int ExprParser_t::AddNodeHookFunc ( int iID, int iLeft )
 	return m_dNodes.GetLength()-1;
 }
 
-int ExprParser_t::AddNodeMapArg ( const char * sKey, const char * sValue, int64_t iValue )
+
+int ExprParser_t::AddNodeHookFunc ( int iID )
+{
+	CSphVector<ESphAttr> dArgTypes;
+	ESphAttr eRet = m_pHook->GetReturnType ( iID, dArgTypes, true, m_sParserError );
+	if ( eRet==SPH_ATTR_NONE )
+		return -1;
+
+	ExprNode_t & tNode = m_dNodes.Add();
+	tNode.m_iToken = TOK_HOOK_FUNC;
+	tNode.m_iFunc = iID;
+	tNode.m_eRetType = eRet;
+
+	return m_dNodes.GetLength()-1;
+}
+
+
+int ExprParser_t::AddNodeMapArg ( const char * szKey, const char * szValue, int64_t iValue, bool bConstStr )
 {
 	ExprNode_t & tNode = m_dNodes.Add();
 	tNode.m_iToken = TOK_MAP_ARG;
 	tNode.m_pMapArg = new MapArg_c();
-	tNode.m_pMapArg->Add ( sKey, sValue, iValue );
+
+	CSphString sValue;
+	if ( szKey )
+	{
+		if ( bConstStr )
+		{
+			SqlUnescape ( sValue, m_sExpr + GetConstStrOffset(iValue), GetConstStrLength(iValue) );
+			szValue = sValue.cstr();
+		}
+
+		tNode.m_pMapArg->Add ( szKey, szValue, iValue );
+	}
+
 	tNode.m_eRetType = SPH_ATTR_MAPARG;
 	return m_dNodes.GetLength()-1;
 }
 
-void ExprParser_t::AppendToMapArg ( int iNode, const char * sKey, const char * sValue, int64_t iValue )
+
+void ExprParser_t::AppendToMapArg ( int iNode, const char * szKey, const char * szValue, int64_t iValue, bool bConstStr )
 {
-	m_dNodes[iNode].m_pMapArg->Add ( sKey, sValue, iValue );
+	CSphString sValue;
+	if ( bConstStr )
+	{
+		SqlUnescape ( sValue, m_sExpr + GetConstStrOffset(iValue), GetConstStrLength(iValue) );
+		szValue = sValue.cstr();
+	}
+
+	m_dNodes[iNode].m_pMapArg->Add ( szKey, szValue, iValue );
 }
 
 

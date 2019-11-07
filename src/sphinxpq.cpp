@@ -151,7 +151,7 @@ private:
 
 	int								m_iLockFD = -1;
 	CSphSourceStats					m_tStat;
-	ISphTokenizerRefPtr_c			m_pTokenizerIndexing;
+	TokenizerRefPtr_c			m_pTokenizerIndexing;
 	int								m_iMaxCodepointLength = 0;
 	int64_t							m_iSavedTID = 0;
 	int64_t							m_tmSaved = 0;
@@ -734,7 +734,7 @@ bool PercolateIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >>
 	if ( !pAcc )
 		return false;
 
-	ISphTokenizerRefPtr_c tTokenizer { CloneIndexingTokenizer () };
+	TokenizerRefPtr_c tTokenizer { CloneIndexingTokenizer () };
 	if ( !tTokenizer )
 	{
 		sError = GetLastError ();
@@ -747,7 +747,7 @@ bool PercolateIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >>
 			m_tSettings.m_bIndexSP, m_tSettings.m_sZones.cstr(), sError ) )
 		return false;
 
-	ISphFieldFilterRefPtr_c pFieldFilter;
+	FieldFilterRefPtr_c pFieldFilter;
 	if ( m_pFieldFilter )
 		pFieldFilter = m_pFieldFilter->Clone();
 
@@ -1471,10 +1471,10 @@ bool PercolateIndex_c::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch
 
 StoredQuery_i * PercolateIndex_c::Query ( const PercolateQueryArgs_t & tArgs, CSphString & sError )
 {
-	ISphTokenizerRefPtr_c pTokenizer ( m_pTokenizer->Clone ( SPH_CLONE_QUERY ) );
+	TokenizerRefPtr_c pTokenizer ( m_pTokenizer->Clone ( SPH_CLONE_QUERY ) );
 	sphSetupQueryTokenizer ( pTokenizer, IsStarDict(), m_tSettings.m_bIndexExactWords, false );
 
-	CSphDictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
+	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
 
 	if ( IsStarDict () )
 		SetupStarDict ( pDict, pTokenizer );
@@ -1483,7 +1483,7 @@ StoredQuery_i * PercolateIndex_c::Query ( const PercolateQueryArgs_t & tArgs, CS
 		SetupExactDict ( pDict, pTokenizer );
 
 	const ISphTokenizer * pTok = pTokenizer;
-	ISphTokenizerRefPtr_c pTokenizerJson;
+	TokenizerRefPtr_c pTokenizerJson;
 	if ( !tArgs.m_bQL )
 	{
 		pTokenizerJson = m_pTokenizer->Clone ( SPH_CLONE_QUERY );
@@ -1531,7 +1531,7 @@ StoredQuery_i * PercolateIndex_c::AddQuery ( const PercolateQueryArgs_t & tArgs,
 	CSphVector<BYTE> dFiltered;
 	if ( m_pFieldFilter && sQuery )
 	{
-		ISphFieldFilterRefPtr_c pFieldFilter { m_pFieldFilter->Clone() };
+		FieldFilterRefPtr_c pFieldFilter { m_pFieldFilter->Clone() };
 		if ( pFieldFilter && pFieldFilter->Apply ( (const BYTE *)sQuery, strlen ( sQuery ), dFiltered, true ) )
 			sQuery = (const char *)dFiltered.Begin();
 	}
@@ -2014,7 +2014,7 @@ void PercolateIndex_c::PostSetup()
 
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	ISphTokenizerRefPtr_c pIndexing { ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
+	TokenizerRefPtr_c pIndexing { ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
 	if ( pIndexing )
 		m_pTokenizerIndexing = pIndexing;
 
@@ -2029,13 +2029,13 @@ void PercolateIndex_c::PostSetup()
 		m_pTokenizerIndexing = nullptr;
 
 	// create queries
-	ISphTokenizerRefPtr_c pTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
+	TokenizerRefPtr_c pTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
 	sphSetupQueryTokenizer ( pTokenizer, IsStarDict(), m_tSettings.m_bIndexExactWords, false );
 
-	ISphTokenizerRefPtr_c pTokenizerJson { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
+	TokenizerRefPtr_c pTokenizerJson { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
 	sphSetupQueryTokenizer ( pTokenizerJson, IsStarDict(), m_tSettings.m_bIndexExactWords, true );
 
-	CSphDictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
+	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
 
 	if ( IsStarDict () )
 		SetupStarDict ( pDict, pTokenizer );
@@ -2179,7 +2179,7 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath )
 	// regexp and ICU
 	if ( uVersion>=6 )
 	{
-		ISphFieldFilterRefPtr_c pFieldFilter;
+		FieldFilterRefPtr_c pFieldFilter;
 		CSphFieldFilterSettings tFieldFilterSettings;
 		LoadFieldFilterSettings ( rdMeta, tFieldFilterSettings );
 		if ( tFieldFilterSettings.m_dRegexps.GetLength() )

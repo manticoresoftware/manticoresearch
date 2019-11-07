@@ -51,7 +51,6 @@ $opts['use_boundaries']    = true;
 $opts['single_passage']    = false;
 $opts['chunk_separator']   = '###';
 $opts['weight_order']      = false;
-$opts['exact_phrase']      = false;         
 $opts['limit']             = 25;
 
 $results[] = $client->BuildExcerpts($docs, 'index_utf8', 'шел', $opts);
@@ -66,7 +65,6 @@ $opts['use_boundaries']    = true;
 $opts['single_passage']    = false;
 $opts['chunk_separator']   = '###';
 $opts['weight_order']      = false;
-$opts['exact_phrase']      = true;         
 $opts['limit']             = 25;
 
 $results[] = $client->BuildExcerpts($docs, 'index_utf8', 'шел по склону', $opts);
@@ -78,7 +76,6 @@ $opts['use_boundaries']    = true;
 $opts['single_passage']    = false;
 $opts['chunk_separator']   = '###';
 $opts['weight_order']      = true;
-$opts['exact_phrase']      = true;         
 $opts['limit']             = 25;
 
 $results[] = $client->BuildExcerpts($docs, 'index_utf8', 'шел по склону', $opts);
@@ -90,7 +87,6 @@ $opts['use_boundaries']    = true;
 $opts['single_passage']    = false;
 $opts['chunk_separator']   = '###';
 $opts['weight_order']      = true;
-$opts['exact_phrase']      = false;         
 $opts['limit']             = 75;
 
 $results[] = $client->BuildExcerpts($docs, 'index_utf8', 'шел по склону', $opts);

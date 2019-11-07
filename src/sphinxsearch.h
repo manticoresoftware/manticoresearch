@@ -103,7 +103,7 @@ public:
 	mutable ISphZoneCheck *	m_pZoneChecker	{nullptr};
 	CSphQueryStats *		m_pStats		{nullptr};
 	mutable bool			m_bSetQposMask	{false};
-	CSphDictRefPtr_c		m_pDict;
+	DictRefPtr_c		m_pDict;
 
 	virtual ~ISphQwordSetup () {}
 

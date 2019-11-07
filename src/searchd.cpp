@@ -30,6 +30,7 @@
 #include "global_idf.h"
 #include "docstore.h"
 #include "searchdssl.h"
+#include "searchdexpr.h"
 
 // services
 #include "taskping.h"
@@ -4035,7 +4036,7 @@ static CSphVector<const DocstoreReader_i*> GetUniqueDocstores ( const AggrResult
 }
 
 
-static void SetupPostlimitExprs ( AggrResult_t & tRes, CSphMatch & tMatch, const CSphColumnInfo * pCol, int64_t iDocstoreSessionId )
+static void SetupPostlimitExprs ( AggrResult_t & tRes, CSphMatch & tMatch, const CSphColumnInfo * pCol, const CSphQuery & tQuery, int64_t iDocstoreSessionId )
 {
 	DocstoreSession_c::Info_t tSessionInfo;
 	tSessionInfo.m_pDocstore = tRes.m_dTag2Docstore [ tMatch.m_iTag ].m_pDocstore;
@@ -4043,6 +4044,7 @@ static void SetupPostlimitExprs ( AggrResult_t & tRes, CSphMatch & tMatch, const
 
 	assert ( pCol && pCol->m_pExpr );
 	pCol->m_pExpr->Command ( SPH_EXPR_SET_DOCSTORE, &tSessionInfo );
+	pCol->m_pExpr->Command ( SPH_EXPR_SET_QUERY, (void*)&tQuery.m_sQuery);
 }
 
 
@@ -4061,7 +4063,7 @@ static void EvalPostlimitExprs ( AggrResult_t & tRes, CSphMatch & tMatch, const 
 }
 
 
-static void ProcessPostlimit ( const CSphVector<const CSphColumnInfo *> & dPostlimit, int iFrom, int iTo, AggrResult_t & tRes )
+static void ProcessPostlimit ( const CSphVector<const CSphColumnInfo *> & dPostlimit, int iFrom, int iTo, const CSphQuery & tQuery, AggrResult_t & tRes )
 {
 	if ( !dPostlimit.GetLength() )
 		return;
@@ -4090,7 +4092,7 @@ static void ProcessPostlimit ( const CSphVector<const CSphColumnInfo *> & dPostl
 		if ( tMatch.m_iTag!=iLastTag )
 		{
 			for ( const auto & pCol : dPostlimit )
-				SetupPostlimitExprs ( tRes, tMatch, pCol, tSession.GetUID() );
+				SetupPostlimitExprs ( tRes, tMatch, pCol, tQuery, tSession.GetUID() );
 
 			iLastTag = tMatch.m_iTag;
 		}
@@ -4135,7 +4137,7 @@ static void ProcessLocalPostlimit ( const CSphQuery & tQuery, AggrResult_t & tRe
 		iFrom += iSetStart;
 		iTo += iSetStart;
 
-		ProcessPostlimit ( dPostlimit, iFrom, iTo, tRes );
+		ProcessPostlimit ( dPostlimit, iFrom, iTo, tQuery, tRes );
 	}
 }
 
@@ -4612,7 +4614,7 @@ static void ComputePostlimit ( AggrResult_t & tRes, const CSphQuery & tQuery )
 	iTo = Max ( Min ( iOff + iCount, iTo ), 0 );
 	int iFrom = Min ( iOff, iTo );
 
-	ProcessPostlimit ( dPostlimit, iFrom, iTo, tRes );
+	ProcessPostlimit ( dPostlimit, iFrom, iTo, tQuery, tRes );
 }
 
 
@@ -4712,287 +4714,6 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 }
 
 /////////////////////////////////////////////////////////////////////////////
-static int StringBinary2Number ( const char * sStr, int iLen )
-{
-	if ( !sStr || !iLen )
-		return 0;
-
-	char sBuf[64];
-	if ( (int)(sizeof ( sBuf )-1 )<iLen )
-		iLen = sizeof ( sBuf )-1;
-	memcpy ( sBuf, sStr, iLen );
-	sBuf[iLen] = '\0';
-
-	return atoi ( sBuf );
-}
-
-static bool SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPost )
-{
-	const char sPassageMacro[] = "%PASSAGE_ID%";
-
-	const char * sPass = NULL;
-	if ( !sSrc.IsEmpty() )
-		sPass = strstr ( sSrc.cstr(), sPassageMacro );
-
-	if ( !sPass )
-		return false;
-
-	int iSrcLen = sSrc.Length();
-	int iPassLen = sizeof ( sPassageMacro ) - 1;
-	int iTailLen = iSrcLen - iPassLen - ( sPass - sSrc.cstr() );
-
-	// copy tail
-	if ( iTailLen )
-		sPost.SetBinary ( sPass+iPassLen, iTailLen );
-
-	CSphString sPre;
-	sPre.SetBinary ( sSrc.cstr(), sPass - sSrc.cstr() );
-	sSrc.Swap ( sPre );
-
-	return true;
-}
-
-ESphSpz GetPassageBoundary ( const CSphString & );
-/// suddenly, searchd-level expression function!
-struct Expr_Snippet_c : public ISphStringExpr
-{
-	CSphRefcountedPtr<ISphExpr>					m_pArgs;
-	CSphRefcountedPtr<ISphExpr>					m_pText;
-	CSphIndex *					m_pIndex;
-	SnippetContext_t			m_tCtx;
-	mutable ExcerptQuery_t		m_tHighlight;
-	CSphQueryProfile *			m_pProfiler;
-
-	explicit Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQueryProfile * pProfiler, CSphString & sError )
-		: m_pArgs ( pArglist )
-		, m_pIndex ( pIndex )
-		, m_pProfiler ( pProfiler )
-	{
-		SafeAddRef ( pArglist );
-		assert ( pArglist->IsArglist() );
-		m_pText = pArglist->GetArg(0);
-		SafeAddRef ( m_pText );
-
-		CSphMatch tDummy;
-		char * pWords;
-		assert ( !pArglist->GetArg(1)->IsDataPtrAttr() ); // aware of memleaks potentially caused by StringEval()
-		pArglist->GetArg(1)->StringEval ( tDummy, (const BYTE**)&pWords );
-		m_tHighlight.m_sWords = pWords;
-
-		for ( int i = 2; i < pArglist->GetNumArgs(); i++ )
-		{
-			assert ( !pArglist->GetArg(i)->IsDataPtrAttr() ); // aware of memleaks potentially caused by StringEval()
-			int iLen = pArglist->GetArg(i)->StringEval ( tDummy, (const BYTE**)&pWords );
-			if ( !pWords || !iLen )
-				continue;
-
-			CSphString sArgs;
-			sArgs.SetBinary ( pWords, iLen );
-			char * pWords = const_cast<char *> ( sArgs.cstr() );
-
-			const char * sEnd = pWords + iLen;
-			while ( pWords<sEnd && *pWords && sphIsSpace ( *pWords ) )	pWords++;
-			char * szOption = pWords;
-			while ( pWords<sEnd && *pWords && sphIsAlpha ( *pWords ) )	pWords++;
-			char * szOptEnd = pWords;
-			while ( pWords<sEnd && *pWords && sphIsSpace ( *pWords ) )	pWords++;
-
-			if ( *pWords++!='=' )
-			{
-				sError.SetSprintf ( "Error parsing SNIPPET options: %s", pWords );
-				return;
-			}
-
-			*szOptEnd = '\0';
-			while ( pWords<sEnd && *pWords && sphIsSpace ( *pWords ) )	pWords++;
-			char * sValue = pWords;
-
-			if ( !*sValue )
-			{
-				sError.SetSprintf ( "Error parsing SNIPPET options" );
-				return;
-			}
-
-			while ( pWords<sEnd && *pWords ) pWords++;
-			int iStrValLen = pWords - sValue;
-
-			if ( !strcasecmp ( szOption, "before_match" ) )					{ m_tHighlight.m_sBeforeMatch.SetBinary ( sValue, iStrValLen ); }
-			else if ( !strcasecmp ( szOption, "after_match" ) )				{ m_tHighlight.m_sAfterMatch.SetBinary ( sValue, iStrValLen ); }
-			else if ( !strcasecmp ( szOption, "chunk_separator" ) )			{ m_tHighlight.m_sChunkSeparator.SetBinary ( sValue, iStrValLen ); }
-			else if ( !strcasecmp ( szOption, "limit" ) )					{ m_tHighlight.m_iLimit = StringBinary2Number ( sValue, iStrValLen ); }
-			else if ( !strcasecmp ( szOption, "around" ) )					{ m_tHighlight.m_iAround = StringBinary2Number ( sValue, iStrValLen ); }
-			else if ( !strcasecmp ( szOption, "exact_phrase" ) )			{ m_tHighlight.m_bExactPhrase = ( StringBinary2Number ( sValue, iStrValLen )!=0 ); }
-			else if ( !strcasecmp ( szOption, "use_boundaries" ) )			{ m_tHighlight.m_bUseBoundaries = ( StringBinary2Number ( sValue, iStrValLen )!=0 ); }
-			else if ( !strcasecmp ( szOption, "weight_order" ) )			{ m_tHighlight.m_bWeightOrder = ( StringBinary2Number ( sValue, iStrValLen )!=0 ); }
-			else if ( !strcasecmp ( szOption, "query_mode" ) )				{ m_tHighlight.m_bHighlightQuery = ( StringBinary2Number ( sValue, iStrValLen )!=0 ); }
-			else if ( !strcasecmp ( szOption, "force_all_words" ) )			{ m_tHighlight.m_bForceAllWords = ( StringBinary2Number ( sValue, iStrValLen )!=0 ); }
-			else if ( !strcasecmp ( szOption, "limit_passages" ) )			{ m_tHighlight.m_iLimitPassages = StringBinary2Number ( sValue, iStrValLen ); }
-			else if ( !strcasecmp ( szOption, "limit_words" ) )				{ m_tHighlight.m_iLimitWords = StringBinary2Number ( sValue, iStrValLen ); }
-			else if ( !strcasecmp ( szOption, "start_passage_id" ) )		{ m_tHighlight.m_iPassageId = StringBinary2Number ( sValue, iStrValLen ); }
-			else if ( !strcasecmp ( szOption, "load_files" ) )				{ m_tHighlight.m_uFilesMode |= ( StringBinary2Number ( sValue, iStrValLen )!=0 ? 1 : 0 ); }
-			else if ( !strcasecmp ( szOption, "load_files_scattered" ) )	{ m_tHighlight.m_uFilesMode |= ( StringBinary2Number ( sValue, iStrValLen )!=0 ? 2 : 0 ); }
-			else if ( !strcasecmp ( szOption, "html_strip_mode" ) )			{ m_tHighlight.m_sStripMode.SetBinary ( sValue, iStrValLen ); }
-			else if ( !strcasecmp ( szOption, "allow_empty" ) )				{ m_tHighlight.m_bAllowEmpty= ( StringBinary2Number ( sValue, iStrValLen )!=0 ); }
-			else if ( !strcasecmp ( szOption, "emit_zones" ) )				{ m_tHighlight.m_bEmitZones = ( StringBinary2Number ( sValue, iStrValLen )!=0 ); }
-			else if ( !strcasecmp ( szOption, "force_passages" ) )			{ m_tHighlight.m_bForcePassages = ( StringBinary2Number ( sValue, iStrValLen )!=0 ); }
-			else if ( !strcasecmp ( szOption, "passage_boundary" ) )
-			{
-				CSphString sBuf;
-				sBuf.SetBinary ( sValue, iStrValLen );
-				m_tHighlight.m_ePassageSPZ = GetPassageBoundary (sBuf);
-			}
-			else if ( !strcasecmp ( szOption, "json_query" ) )
-			{
-				m_tHighlight.m_bJsonQuery = ( StringBinary2Number ( sValue, iStrValLen )!=0 );
-				if ( m_tHighlight.m_bJsonQuery )
-					m_tHighlight.m_bHighlightQuery = true;
-			} else
-			{
-				CSphString sBuf;
-				sBuf.SetBinary ( sValue, iStrValLen );
-				sError.SetSprintf ( "Unknown SNIPPET option: %s=%s", szOption, sBuf.cstr() );
-				return;
-			}
-		}
-
-		m_tHighlight.m_bHasBeforePassageMacro = SnippetTransformPassageMacros ( m_tHighlight.m_sBeforeMatch, m_tHighlight.m_sBeforeMatchPassage );
-		m_tHighlight.m_bHasAfterPassageMacro = SnippetTransformPassageMacros ( m_tHighlight.m_sAfterMatch, m_tHighlight.m_sAfterMatchPassage );
-
-		m_tCtx.Setup ( m_pIndex, m_tHighlight, sError );
-	}
-
-	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final
-	{
-		CSphScopedProfile ( m_pProfiler, SPH_QSTATE_SNIPPET );
-
-		*ppStr = nullptr;
-
-		const BYTE * sSource = nullptr;
-		int iLen = m_pText->StringEval ( tMatch, &sSource );
-
-		if ( !iLen )
-		{
-			if ( m_pText->IsDataPtrAttr() )
-				SafeDeleteArray ( sSource );
-			return 0;
-		}
-
-		// for dynamic strings (eg. fetched by UDFs), just take ownership
-		// for static ones (eg. attributes), treat as binary (ie. mind that
-		// the trailing zero is NOT guaranteed), and copy them
-		if ( m_pText->IsDataPtrAttr() )
-			m_tHighlight.m_sSource.Adopt ( (char**)&sSource );
-		else
-			m_tHighlight.m_sSource.SetBinary ( (const char*)sSource, iLen );
-
-		// FIXME! fill in all the missing options; use consthash?
-		m_tCtx.BuildExcerpt ( m_tHighlight, m_pIndex );
-		
-		if ( !m_tHighlight.m_bJsonQuery )
-		{
-			assert ( m_tHighlight.m_dRes.IsEmpty() || m_tHighlight.m_dRes.Last()=='\0' );
-			int iResultLength = m_tHighlight.m_dRes.GetLength();
-			*ppStr = m_tHighlight.m_dRes.LeakData();
-			// skip trailing zero
-			return ( iResultLength ? iResultLength-1 : 0 );
-		} else
-			return PackSnippets ( m_tHighlight.m_dRes, m_tHighlight.m_dSeparators, m_tHighlight.m_sChunkSeparator.Length(), ppStr );
-	}
-
-	bool IsDataPtrAttr () const final { return true; }
-
-	void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override
-	{
-		if ( m_pText )
-			m_pText->FixupLocator ( pOldSchema, pNewSchema );
-	}
-
-	void Command ( ESphExprCommand eCmd, void * pArg ) override
-	{
-		if ( m_pArgs )
-			m_pArgs->Command ( eCmd, pArg );
-
-		if ( m_pText )
-			m_pText->Command ( eCmd, pArg );
-	}
-
-	uint64_t GetHash ( const ISphSchema &, uint64_t, bool & ) override
-	{
-		assert ( 0 && "no snippets in filters" );
-		return 0;
-	}
-};
-
-
-/// searchd expression hook
-/// needed to implement functions that are builtin for searchd,
-/// but can not be builtin in the generic expression engine itself,
-/// like SNIPPET() function that must know about indexes, tokenizers, etc
-struct ExprHook_t : public ISphExprHook
-{
-	static const int HOOK_SNIPPET = 1;
-	CSphIndex * m_pIndex = nullptr; /// BLOODY HACK
-	CSphQueryProfile * m_pProfiler = nullptr;
-
-	int IsKnownIdent ( const char * ) final
-	{
-		return -1;
-	}
-
-	int IsKnownFunc ( const char * sFunc ) final
-	{
-		if ( !strcasecmp ( sFunc, "SNIPPET" ) )
-			return HOOK_SNIPPET;
-		return -1;
-	}
-
-	ISphExpr * CreateNode ( int DEBUGARG(iID), ISphExpr * pLeft, ESphEvalStage * pEvalStage, CSphString & sError ) final
-	{
-		assert ( iID==HOOK_SNIPPET );
-		if ( pEvalStage )
-			*pEvalStage = SPH_EVAL_POSTLIMIT;
-
-		CSphRefcountedPtr<ISphExpr> pRes { new Expr_Snippet_c ( pLeft, m_pIndex, m_pProfiler, sError ) };
-		if ( !sError.IsEmpty () )
-			pRes = nullptr;
-
-		return pRes.Leak();
-	}
-
-	ESphAttr GetIdentType ( int ) final
-	{
-		assert ( 0 );
-		return SPH_ATTR_NONE;
-	}
-
-	ESphAttr GetReturnType ( int DEBUGARG(iID), const CSphVector<ESphAttr> & dArgs, bool, CSphString & sError ) final
-	{
-		assert ( iID==HOOK_SNIPPET );
-		if ( dArgs.GetLength()<2 )
-		{
-			sError = "SNIPPET() requires 2 or more arguments";
-			return SPH_ATTR_NONE;
-		}
-		if ( dArgs[0]!=SPH_ATTR_STRINGPTR && dArgs[0]!=SPH_ATTR_STRING )
-		{
-			sError = "1st argument to SNIPPET() must be a string expression";
-			return SPH_ATTR_NONE;
-		}
-
-		for ( int i = 1; i < dArgs.GetLength(); i++ )
-			if ( dArgs[i]!=SPH_ATTR_STRING )
-			{
-				sError.SetSprintf ( "%d argument to SNIPPET() must be a constant string", i );
-				return SPH_ATTR_NONE;
-			}
-
-		return SPH_ATTR_STRINGPTR;
-	}
-
-	void CheckEnter ( int ) final {}
-	void CheckExit ( int ) final {}
-};
-
 
 struct LocalIndex_t
 {
@@ -5102,7 +4823,7 @@ protected:
 	const QueryParser_i *			m_pQueryParser;	///< parser used for queries in this handler. e.g. plain or json-style
 
 	// FIXME!!! breaks for dist threads with SNIPPETS expressions for queries to multiple indexes
-	mutable ExprHook_t				m_tHook;
+	mutable ExprHook_c				m_tHook;
 
 	SmallStringHash_T < int64_t >	m_hLocalDocs;
 	int64_t							m_iTotalDocs = 0;
@@ -5710,7 +5431,7 @@ void SearchHandler_c::RunLocalSearchMT ( LocalSearch_t &dWork, ThreadLocal_t &tT
 		return;
 	}
 	assert ( pServed->m_pIndex );
-	m_tHook.m_pIndex = pServed->m_pIndex;
+	m_tHook.SetIndex ( pServed->m_pIndex );
 
 	// create sorters
 	SphQueueRes_t tQueueRes;
@@ -5861,7 +5582,8 @@ void SearchHandler_c::RunLocalSearches()
 
 		if ( m_bFacetQueue )
 			m_bMultiQueue = true;
-		m_tHook.m_pIndex = pServed->m_pIndex;
+
+		m_tHook.SetIndex ( pServed->m_pIndex );
 
 		CSphFixedVector<CSphString> dErrors ( dSorters.GetLength() );
 		SphQueueRes_t tQueueRes;
@@ -5898,6 +5620,9 @@ void SearchHandler_c::RunLocalSearches()
 			tStats.m_tIOStats.Start();
 			bResult = pServed->m_pIndex->MultiQuery ( &m_dQueries[m_iStart], &tStats, dSorters.GetLength(), dSorters.Begin(), tMultiArgs );
 			tStats.m_tIOStats.Stop();
+
+			for ( auto & i : m_dResults )
+				i.m_pDocstore = tStats.m_pDocstore;
 		} else
 		{
 			CSphVector<CSphQueryResult*> dResults ( m_dResults.GetLength() );
@@ -6581,7 +6306,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	if ( iStart==iEnd && m_pProfile )
 	{
 		m_dResults[iStart].m_pProfile = m_pProfile;
-		m_tHook.m_pProfiler = m_pProfile;
+		m_tHook.SetProfiler ( m_pProfile );
 	}
 
 	// check for facets
@@ -8667,66 +8392,6 @@ void SqlParser_c::JoinClusterAt ( const SqlNode_t & tAt )
 	ToStringUnescape ( tVal.m_sVal, tAt );
 }
 
-/////////////////////////////////////////////////////////////////////////////
-
-ESphSpz GetPassageBoundary ( const CSphString & sPassageBoundaryMode )
-{
-	if ( sPassageBoundaryMode.IsEmpty() )
-		return SPH_SPZ_NONE;
-
-	ESphSpz eSPZ = SPH_SPZ_NONE;
-	if ( sPassageBoundaryMode=="sentence" )
-		eSPZ = SPH_SPZ_SENTENCE;
-	else if ( sPassageBoundaryMode=="paragraph" )
-		eSPZ = SPH_SPZ_PARAGRAPH;
-	else if ( sPassageBoundaryMode=="zone" )
-		eSPZ = SPH_SPZ_ZONE;
-
-	return eSPZ;
-}
-
-const char * PassageBoundarySz ( ESphSpz eBoundary )
-{
-	switch ( eBoundary )
-	{
-	case SPH_SPZ_SENTENCE: return "sentence";
-	case SPH_SPZ_PARAGRAPH: return "paragraph";
-	case SPH_SPZ_ZONE: return "zone";
-	default: return "";
-	}
-}
-
-bool sphCheckOptionsSPZ ( const ExcerptQuery_t & q, ESphSpz eMode, CSphString & sError )
-{
-	if ( q.m_ePassageSPZ )
-	{
-		if ( q.m_iAround==0 )
-		{
-			sError.SetSprintf ( "invalid combination of passage_boundary=%s and around=%d", PassageBoundarySz(eMode), q.m_iAround );
-			return false;
-		} else if ( q.m_bUseBoundaries )
-		{
-			sError.SetSprintf ( "invalid combination of passage_boundary=%s and use_boundaries", PassageBoundarySz(eMode) );
-			return false;
-		}
-	}
-
-	if ( q.m_bEmitZones )
-	{
-		if ( q.m_ePassageSPZ!=SPH_SPZ_ZONE )
-		{
-			sError.SetSprintf ( "invalid combination of passage_boundary=%s and emit_zones", PassageBoundarySz(eMode) );
-			return false;
-		}
-		if ( !( q.m_sStripMode=="strip" || q.m_sStripMode=="index" ) )
-		{
-			sError.SetSprintf ( "invalid combination of strip=%s and emit_zones", q.m_sStripMode.cstr() );
-			return false;
-		}
-	}
-
-	return true;
-}
 
 /////////////////////////////////////////////////////////////////////////////
 // EXCERPTS HANDLER
@@ -8735,11 +8400,11 @@ bool sphCheckOptionsSPZ ( const ExcerptQuery_t & q, ESphSpz eMode, CSphString & 
 enum eExcerpt_Flags
 {
 	EXCERPT_FLAG_REMOVESPACES		= 1,
-	EXCERPT_FLAG_EXACTPHRASE		= 2,
+	EXCERPT_FLAG_EXACTPHRASE		= 2,			// deprecated
 	EXCERPT_FLAG_SINGLEPASSAGE		= 4,
 	EXCERPT_FLAG_USEBOUNDARIES		= 8,
 	EXCERPT_FLAG_WEIGHTORDER		= 16,
-	EXCERPT_FLAG_QUERY				= 32,
+	EXCERPT_FLAG_QUERY				= 32,			// deprecated
 	EXCERPT_FLAG_FORCE_ALL_WORDS	= 64,
 	EXCERPT_FLAG_LOAD_FILES			= 128,
 	EXCERPT_FLAG_ALLOW_EMPTY		= 256,
@@ -8754,14 +8419,12 @@ enum
 	EOF_ITEM						= -1
 };
 
-int PackAPISnippetFlags ( const ExcerptQuery_t &q, bool bOnlyScattered = false )
+int PackAPISnippetFlags ( const SnippetQuerySettings_t &q, bool bOnlyScattered = false )
 {
 	int iRawFlags = q.m_bRemoveSpaces ? EXCERPT_FLAG_REMOVESPACES : 0;
-	iRawFlags |= q.m_bExactPhrase ? EXCERPT_FLAG_EXACTPHRASE : 0;
 	iRawFlags |= q.m_iLimitPassages ? EXCERPT_FLAG_SINGLEPASSAGE : 0;
 	iRawFlags |= q.m_bUseBoundaries ? EXCERPT_FLAG_USEBOUNDARIES : 0;
 	iRawFlags |= q.m_bWeightOrder ? EXCERPT_FLAG_WEIGHTORDER : 0;
-	iRawFlags |= q.m_bHighlightQuery ? EXCERPT_FLAG_QUERY : 0;
 	iRawFlags |= q.m_bForceAllWords ? EXCERPT_FLAG_FORCE_ALL_WORDS : 0;
 	if ( !bOnlyScattered || !( q.m_uFilesMode & 2 ) )
 		iRawFlags |= ( q.m_uFilesMode & 1 ) ? EXCERPT_FLAG_LOAD_FILES : 0;
@@ -8778,17 +8441,20 @@ struct SnippetChain_t
 	int							m_iHead { EOF_ITEM };
 };
 
-struct ExcerptQueryChained_t : ExcerptQuery_t
+struct ExcerptQueryChained_t : SnippetQuerySettings_t
 {
-	int64_t m_iSize = 0;        ///< file size, to sort to work-queue order
-	int m_iSeq = 0;            ///< request order, to sort back to request order
-	int m_iNext = PROCESSED_ITEM; ///< the next one in one-link list for batch processing. -1 terminate the list. -2 sign of other (out-of-the-lists)
+	int64_t			m_iSize = 0;		///< file size, to sort to work-queue order
+	int				m_iSeq = 0;			///< request order, to sort back to request order
+	int				m_iNext = PROCESSED_ITEM; ///< the next one in one-link list for batch processing. -1 terminate the list. -2 sign of other (out-of-the-lists)
+	CSphString		m_sSource;			///< source data
+	CSphString		m_sQuery;			///< source data
+	SnippetResult_t m_tResult;			///< query result
 };
 
 struct SnippetsRemote_t : ISphNoncopyable
 {
-	VecRefPtrsAgentConn_t			m_dAgents;
-	CSphVector<SnippetChain_t>		m_dTasks;
+	VecRefPtrsAgentConn_t				m_dAgents;
+	CSphVector<SnippetChain_t>			m_dTasks;
 	CSphVector<ExcerptQueryChained_t> &	m_dQueries;
 
 	explicit SnippetsRemote_t ( CSphVector<ExcerptQueryChained_t> & dQueries )
@@ -8808,16 +8474,21 @@ struct SnippetJob_t : public ISphJob
 	{
 		CrashQuerySet ( m_tCrashQuery ); // transfer crash info into container
 
-		SnippetContext_t tCtx;
-		tCtx.Setup ( m_pIndex, *m_pQueries, m_pQueries->m_sError );
+		// fixme! really only one query text and settings for the entire batch
+		// fixme! error handling!
+		CSphScopedPtr<SnippetBuilder_i>	pSnippetBuilder ( CreateSnippetBuilder() );
+		pSnippetBuilder->Setup ( m_pIndex, *m_pQueries, m_pQueries->m_tResult.m_sError );
+		pSnippetBuilder->SetQuery ( m_pQueries->m_sQuery.cstr(), true, m_pQueries->m_tResult.m_sError );
 
 		for ( long iQuery = (*m_pCurQuery)++; iQuery<m_iQueries; iQuery = (*m_pCurQuery)++ )
 		{
-			auto &dQuery = m_pQueries[iQuery];
-			if ( dQuery.m_iNext!=PROCESSED_ITEM )
+			auto & tQuery = m_pQueries[iQuery];
+			if ( tQuery.m_iNext!=PROCESSED_ITEM )
 				continue;
 
-			tCtx.BuildExcerpt ( dQuery, m_pIndex );
+			// fixme! check for errors
+			CSphScopedPtr<TextSource_i> pSource ( CreateSnippetSource ( tQuery.m_uFilesMode, (const BYTE*)tQuery.m_sSource.cstr(), tQuery.m_sSource.Length() ) );
+			pSnippetBuilder->Build ( pSource.Ptr(), tQuery.m_tResult );
 		}
 	}
 };
@@ -8862,7 +8533,7 @@ void SnippetRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, CachedO
 		tAgent.m_iStoreTag = iWorker;
 	}
 	auto & dQueries = m_pWorker->m_dQueries;
-	const ExcerptQuery_t & q = dQueries[0];
+	const ExcerptQueryChained_t & q = dQueries[0];
 	int iHead = m_pWorker->m_dTasks[iWorker].m_iHead;
 	const char * sIndex = tAgent.m_tDesc.m_sIndexes.cstr();
 
@@ -8871,7 +8542,7 @@ void SnippetRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, CachedO
 	tOut.SendInt ( 0 );
 	tOut.SendInt ( PackAPISnippetFlags ( q, true ) );
 	tOut.SendString ( sIndex );
-	tOut.SendString ( q.m_sWords.cstr() );
+	tOut.SendString ( q.m_sQuery.cstr() );
 	tOut.SendString ( q.m_sBeforeMatch.cstr() );
 	tOut.SendString ( q.m_sAfterMatch.cstr() );
 	tOut.SendString ( q.m_sChunkSeparator.cstr() );
@@ -8899,22 +8570,24 @@ bool SnippetReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & t
 	bool bOk = true;
 	while ( iDoc!=EOF_ITEM )
 	{
-		auto & dQuery = dQueries[iDoc];
-		if ( dQuery.m_uFilesMode & 2 ) // scattered files
+		ExcerptQueryChained_t & tQuery = dQueries[iDoc];
+		SnippetResult_t & tResult = tQuery.m_tResult;
+		if ( tQuery.m_uFilesMode & 2 ) // scattered files
 		{
-			if ( !tReq.GetString ( dQuery.m_dRes ) || dQuery.m_dRes.IsEmpty () )
+			if ( !tReq.GetString ( tResult.m_dResult ) || tResult.m_dResult.IsEmpty () )
 			{
 				bOk = false;
-				dQuery.m_dRes.Reset();
+				tResult.m_dResult.Reset();
 			} else
-				dQuery.m_sError = "";
+				tResult.m_sError = "";
 
-			iDoc = dQuery.m_iNext;
+			iDoc = tQuery.m_iNext;
 			continue;
 		}
-		tReq.GetString ( dQuery.m_dRes );
-		auto iNextDoc = dQuery.m_iNext;
-		dQuery.m_iNext = PROCESSED_ITEM;
+
+		tReq.GetString ( tResult.m_dResult );
+		auto iNextDoc = tQuery.m_iNext;
+		tQuery.m_iNext = PROCESSED_ITEM;
 		iDoc = iNextDoc;
 	}
 
@@ -8937,13 +8610,13 @@ static int64_t GetSnippetDataSize ( const CSphVector<ExcerptQueryChained_t> &dSn
 
 bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQueries, CSphString & sError, ThdDesc_t & tThd )
 {
-	SnippetsRemote_t dRemoteSnippets ( dQueries );
-	ExcerptQuery_t &q = *dQueries.begin ();
+	SnippetsRemote_t tRemoteSnippets ( dQueries );
+	ExcerptQueryChained_t & tQuery = dQueries[0];
 
 	// Both load_files && load_files_scattered report the absent files as errors.
 	// load_files_scattered without load_files just omits the absent files (returns empty strings).
-	auto bScattered = !!( q.m_uFilesMode & 2 );
-	auto bNeedAllFiles = !!( q.m_uFilesMode & 1 );
+	auto bScattered = !!( tQuery.m_uFilesMode & 2 );
+	auto bNeedAllFiles = !!( tQuery.m_uFilesMode & 1 );
 
 	auto pDist = GetDistr ( sIndex );
 	if ( pDist )
@@ -8953,10 +8626,10 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 			pConn->SetMultiAgent ( sIndex, pAgent );
 			pConn->m_iMyConnectTimeout = pDist->m_iAgentConnectTimeout;
 			pConn->m_iMyQueryTimeout = pDist->m_iAgentQueryTimeout;
-			dRemoteSnippets.m_dAgents.Add ( pConn );
+			tRemoteSnippets.m_dAgents.Add ( pConn );
 		}
 
-	bool bRemote = !dRemoteSnippets.m_dAgents.IsEmpty ();
+	bool bRemote = !tRemoteSnippets.m_dAgents.IsEmpty ();
 	if ( bRemote )
 	{
 		if ( pDist->m_dLocal.GetLength()!=1 )
@@ -8965,7 +8638,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 			return false;
 		}
 
-		if ( !q.m_uFilesMode )
+		if ( !tQuery.m_uFilesMode )
 		{
 			sError.SetSprintf ( "%s", "The distributed index for snippets available only when using external files" );
 			return false;
@@ -8989,8 +8662,11 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	CSphIndex * pIndex = pServed->m_pIndex;
 	assert ( pIndex );
 
-	SnippetContext_t tCtx;
-	if ( !tCtx.Setup ( pIndex, q, sError ) ) // same path for single - threaded snippets, bail out here on error
+	CSphScopedPtr<SnippetBuilder_i>	pSnippetBuilder ( CreateSnippetBuilder() );
+	if ( !pSnippetBuilder->Setup ( pIndex, tQuery, sError ) ) // same path for single - threaded snippets, bail out here on error
+		return false;
+
+	if ( !pSnippetBuilder->SetQuery ( tQuery.m_sQuery.cstr(), true, sError ) ) // same path for single - threaded snippets, bail out here on error
 		return false;
 
 	///////////////////
@@ -9001,13 +8677,18 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	StringBuilder_c sErrors ( "; " );
 	if ( g_iDistThreads<=1 || dQueries.GetLength()<2 )
 	{
-		for ( auto & dQuery: dQueries )
+		bool bError = false;
+		for ( auto & tQuery : dQueries )
 		{
-			tCtx.BuildExcerpt ( dQuery, pIndex );
-			sErrors << dQuery.m_sError;
+			SnippetResult_t & tRes = tQuery.m_tResult;
+
+			CSphScopedPtr<TextSource_i> pSource ( CreateSnippetSource ( tQuery.m_uFilesMode, (const BYTE*)tQuery.m_sSource.cstr(), tQuery.m_sSource.Length() ) );
+			bError |= pSnippetBuilder->Build ( pSource.Ptr(), tRes );
+			sErrors << tRes.m_sError;
 		}
-		sErrors.MoveTo (sError);
-		return sError.IsEmpty ();
+
+		sErrors.MoveTo(sError);
+		return bError;
 	}
 
 	// not boring mt loop with (may be) scattered.
@@ -9024,8 +8705,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 			sFilename.SetSprintf ( "%s%s", g_sSnippetsFilePrefix.cstr(), dQuery.m_sSource.scstr() );
 			if ( !TestEscaping ( g_sSnippetsFilePrefix, sFilename ))
 			{
-				sError.SetSprintf( "File '%s' escapes '%s' scope",
-					sFilename.scstr(), g_sSnippetsFilePrefix.scstr());
+				sError.SetSprintf( "File '%s' escapes '%s' scope", sFilename.scstr(), g_sSnippetsFilePrefix.scstr());
 				return false;
 			}
 			auto iFileSize = sphGetFileSize (sFilename, &sStatError);
@@ -9044,8 +8724,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	}
 
 	// set correct data size for snippets
-	tThd.SetThreadInfo ( R"(snippet datasize=%.1Dk query="%s")",
-						 GetSnippetDataSize ( dQueries ), dQueries[0].m_sWords.scstr () );
+	tThd.SetThreadInfo ( R"(snippet datasize=%.1Dk query="%s")", GetSnippetDataSize ( dQueries ), dQueries[0].m_sQuery.scstr () );
 
 	// tough jobs first
 	if ( !bScattered )
@@ -9055,14 +8734,16 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	// later all the list will be sent to remotes (and some of them have to answer)
 	int iAbsentHead = EOF_ITEM;
 	ARRAY_FOREACH ( i, dQueries )
-		if ( dQueries[i].m_iNext==EOF_ITEM )
+	{
+		ExcerptQueryChained_t & tQuery = dQueries[i];
+		if ( tQuery.m_iNext==EOF_ITEM )
 		{
-			dQueries[i].m_iNext = iAbsentHead;
+			tQuery.m_iNext = iAbsentHead;
 			iAbsentHead = i;
 			if ( bNeedAllFiles )
-				dQueries[i].m_sError.SetSprintf ( "absenthead: failed to stat %s: %s",
-					dQueries[i].m_sSource.cstr(), strerrorm(errno) );
+				tQuery.m_tResult.m_sError.SetSprintf ( "absenthead: failed to stat %s: %s", dQueries[i].m_sSource.cstr(), strerrorm(errno) );
 		}
+	}
 
 	// check if all files are available locally.
 	if ( bScattered && iAbsentHead==EOF_ITEM )
@@ -9083,8 +8764,8 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 		// do MT searching
 		for ( auto & t : dThreads )
 		{
-			t.m_iQueries = dQueries.GetLength ();
-			t.m_pQueries = dQueries.Begin ();
+			t.m_iQueries = dQueries.GetLength();
+			t.m_pQueries = dQueries.Begin();
 			t.m_pCurQuery = &iCurQuery;
 			t.m_pIndex = pIndex;
 			t.m_tCrashQuery = tCrashQuery;
@@ -9096,37 +8777,38 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 		if ( pJobLocal )
 			pJobLocal->Call();
 		SafeDelete ( pPool );
-
+		
 		// back in query order
 		if ( !bScattered )
 			dQueries.Sort ( bind ( &ExcerptQueryChained_t::m_iSeq ) );
-		dQueries.Apply ( [&] ( const ExcerptQuery_t &dQuery ) { sErrors << dQuery.m_sError; } );
+
+		dQueries.Apply ( [&] ( const ExcerptQueryChained_t & tQuery ) { sErrors << tQuery.m_tResult.m_sError; } );
 		sErrors.MoveTo ( sError );
 		return sError.IsEmpty ();
 	}
 
 	// and finally most interesting remote case with possibly scattered.
 
-	int iRemoteAgents = dRemoteSnippets.m_dAgents.GetLength();
-	dRemoteSnippets.m_dTasks.Resize ( iRemoteAgents );
+	int iRemoteAgents = tRemoteSnippets.m_dAgents.GetLength();
+	tRemoteSnippets.m_dTasks.Resize ( iRemoteAgents );
 
 	if ( bScattered )
 	{
 		// on scattered case - just push the chain of absent files to all remotes
 		assert ( iAbsentHead!=EOF_ITEM ); // otherwize why we have remotes?
-		for ( auto & dTask : dRemoteSnippets.m_dTasks )
+		for ( auto & dTask : tRemoteSnippets.m_dTasks )
 			dTask.m_iHead = iAbsentHead;
 	} else
 	{
 		// distribute queries among tasks by total task size
 		ARRAY_FOREACH ( i, dQueries )
 		{
-			auto & dHeadTask = *dRemoteSnippets.m_dTasks.begin();
+			auto & dHeadTask = *tRemoteSnippets.m_dTasks.begin();
 			dHeadTask.m_iTotal -= dQueries[i].m_iSize; // -= since size stored as negative.
 			// queries sheduled for local still have iNext==PROCESSED_ITEM
 			dQueries[i].m_iNext = dHeadTask.m_iHead;
 			dHeadTask.m_iHead = i;
-			dRemoteSnippets.m_dTasks.Sort ( bind ( &SnippetChain_t::m_iTotal ) );
+			tRemoteSnippets.m_dTasks.Sort ( bind ( &SnippetChain_t::m_iTotal ) );
 		}
 	}
 
@@ -9145,10 +8827,10 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	}
 
 	// connect to remote agents and query them
-	SnippetRequestBuilder_c tReqBuilder ( &dRemoteSnippets );
-	SnippetReplyParser_c tParser ( &dRemoteSnippets );
+	SnippetRequestBuilder_c tReqBuilder ( &tRemoteSnippets );
+	SnippetReplyParser_c tParser ( &tRemoteSnippets );
 	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter ( GetObserver() );
-	ScheduleDistrJobs ( dRemoteSnippets.m_dAgents, &tReqBuilder, &tParser, tReporter );
+	ScheduleDistrJobs ( tRemoteSnippets.m_dAgents, &tReqBuilder, &tParser, tReporter );
 
 	// run local worker in current thread also
 	if ( pJobLocal )
@@ -9163,10 +8845,10 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	auto iSuccesses = ( int ) tReporter->GetSucceeded ();
 	auto iAgentsDone = ( int ) tReporter->GetFinished ();
 
-	if ( iSuccesses!=dRemoteSnippets.m_dAgents.GetLength() )
+	if ( iSuccesses!=tRemoteSnippets.m_dAgents.GetLength() )
 	{
 		sphWarning ( "Remote snippets: some of the agents didn't answered: %d queried, %d finished, %d succeeded",
-			dRemoteSnippets.m_dAgents.GetLength(), iAgentsDone,	iSuccesses );
+			tRemoteSnippets.m_dAgents.GetLength(), iAgentsDone,	iSuccesses );
 
 		if ( !bScattered )
 		{
@@ -9197,9 +8879,9 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	if ( !bScattered )
 		dQueries.Sort ( bind ( &ExcerptQueryChained_t::m_iSeq ) );
 
-	dQueries.Apply ( [&] ( const ExcerptQuery_t &dQuery ) { sErrors << dQuery.m_sError;});
+	dQueries.Apply ( [&] ( const ExcerptQueryChained_t & tQuery ) { sErrors << tQuery.m_tResult.m_sError; } );
 	sErrors.MoveTo ( sError );
-	return sError.IsEmpty ();
+	return sError.IsEmpty();
 }
 
 // throw out tailing \0 if any
@@ -9227,7 +8909,7 @@ void HandleCommandExcerpt ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c
 	int iFlags = tReq.GetInt ();
 	CSphString sIndex = tReq.GetString ();
 
-	q.m_sWords = tReq.GetString ();
+	q.m_sQuery = tReq.GetString ();
 	q.m_sBeforeMatch = tReq.GetString ();
 	q.m_sAfterMatch = tReq.GetString ();
 	q.m_sChunkSeparator = tReq.GetString ();
@@ -9255,10 +8937,8 @@ void HandleCommandExcerpt ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c
 		q.m_ePassageSPZ = GetPassageBoundary ( tReq.GetString() );
 
 	q.m_bRemoveSpaces = ( iFlags & EXCERPT_FLAG_REMOVESPACES )!=0;
-	q.m_bExactPhrase = ( iFlags & EXCERPT_FLAG_EXACTPHRASE )!=0;
 	q.m_bUseBoundaries = ( iFlags & EXCERPT_FLAG_USEBOUNDARIES )!=0;
 	q.m_bWeightOrder = ( iFlags & EXCERPT_FLAG_WEIGHTORDER )!=0;
-	q.m_bHighlightQuery = ( iFlags & EXCERPT_FLAG_QUERY )!=0;
 	q.m_bForceAllWords = ( iFlags & EXCERPT_FLAG_FORCE_ALL_WORDS )!=0;
 	if ( iFlags & EXCERPT_FLAG_SINGLEPASSAGE )
 		q.m_iLimitPassages = 1;
@@ -9268,6 +8948,13 @@ void HandleCommandExcerpt ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c
 	q.m_bAllowEmpty = ( iFlags & EXCERPT_FLAG_ALLOW_EMPTY )!=0;
 	q.m_bEmitZones = ( iFlags & EXCERPT_FLAG_EMIT_ZONES )!=0;
 	q.m_bForcePassages = ( iFlags & EXCERPT_FLAG_FORCEPASSAGES )!=0;
+
+	bool bExactPhrase = ( iFlags & EXCERPT_FLAG_EXACTPHRASE )!=0;
+	if ( bExactPhrase )
+	{
+		SendErrorReply ( tOut, "exact_phrase is deprecated" );
+		return;
+	}
 
 	int iCount = tReq.GetInt ();
 	if ( iCount<=0 || iCount>EXCERPT_MAX_ENTRIES )
@@ -9296,8 +8983,7 @@ void HandleCommandExcerpt ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c
 			return;
 		}
 	}
-	tThd.SetThreadInfo ( R"(api-snippet datasize=%.1Dk query="%s")", GetSnippetDataSize ( dQueries ),
-						 dQueries[0].m_sWords.scstr ());
+	tThd.SetThreadInfo ( R"(api-snippet datasize=%.1Dk query="%s")", GetSnippetDataSize ( dQueries ), dQueries[0].m_sQuery.scstr ());
 
 	if ( !MakeSnippets ( sIndex, dQueries, sError, tThd ) )
 	{
@@ -9309,21 +8995,20 @@ void HandleCommandExcerpt ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c
 	// serve result
 	////////////////
 
-	for ( auto & dQuery : dQueries )
+	for ( auto & tQuery : dQueries )
 	{
-		auto &dData = dQuery.m_dRes;
-		FixupResultTail ( dData );
+		FixupResultTail ( tQuery.m_tResult.m_dResult );
 		// handle errors
-		if ( !bScattered && dData.IsEmpty() && !dQuery.m_sError.IsEmpty () )
+		if ( !bScattered && tQuery.m_tResult.m_dResult.IsEmpty() && !tQuery.m_tResult.m_sError.IsEmpty() )
 		{
-			SendErrorReply ( tOut, "highlighting failed: %s", dQuery.m_sError.cstr() );
+			SendErrorReply ( tOut, "highlighting failed: %s", tQuery.m_tResult.m_sError.cstr() );
 			return;
 		}
 	}
 
 	APICommand_t dOk ( tOut, SEARCHD_OK, VER_COMMAND_EXCERPT );
-	for ( const auto& dQuery : dQueries )
-		tOut.SendArray ( dQuery.m_dRes );
+	for ( const auto & i : dQueries )
+		tOut.SendArray ( i.m_tResult.m_dResult );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -12823,7 +12508,7 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc
 	CSphString sIndex = tStmt.m_dInsertValues[1].m_sVal;
 
 	ExcerptQueryChained_t q;
-	q.m_sWords = tStmt.m_dInsertValues[2].m_sVal;
+	q.m_sQuery = tStmt.m_dInsertValues[2].m_sVal;
 
 	ARRAY_FOREACH ( i, tStmt.m_dCallOptNames )
 	{
@@ -12844,11 +12529,23 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc
 		else if ( sOpt=="limit_passages" )		{ q.m_iLimitPassages = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="around" )				{ q.m_iAround = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="start_passage_id" )	{ q.m_iPassageId = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
-
-		else if ( sOpt=="exact_phrase" )		{ q.m_bExactPhrase = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="exact_phrase" )
+		{
+			sError.SetSprintf ( "exact_phrase is deprecated" );
+			break;
+		}
 		else if ( sOpt=="use_boundaries" )		{ q.m_bUseBoundaries = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="weight_order" )		{ q.m_bWeightOrder = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
-		else if ( sOpt=="query_mode" )			{ q.m_bHighlightQuery = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="query_mode" )
+		{ 
+			bool bQueryMode = ( v.m_iVal!=0 );
+			iExpType = TOK_CONST_INT;
+			if ( !bQueryMode )
+			{
+				sError.SetSprintf ( "query_mode=0 is deprecated" );
+				break;
+			}
+		}
 		else if ( sOpt=="force_all_words" )		{ q.m_bForceAllWords = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="load_files" )			{ q.m_uFilesMode = ( v.m_iVal!=0 )?1:0; iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="load_files_scattered" ) { q.m_uFilesMode |= ( v.m_iVal!=0 )?2:0; iExpType = TOK_CONST_INT; }
@@ -12899,8 +12596,7 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc
 		}
 	}
 
-	tThd.SetThreadInfo ( R"(sphinxql-snippet datasize=%.1Dk query="%s")",
-						GetSnippetDataSize ( dQueries ), dQueries[0].m_sWords.scstr ());
+	tThd.SetThreadInfo ( R"(sphinxql-snippet datasize=%.1Dk query="%s")", GetSnippetDataSize ( dQueries ), dQueries[0].m_sQuery.scstr ());
 
 	if ( !MakeSnippets ( sIndex, dQueries, sError, tThd ) )
 	{
@@ -12908,7 +12604,7 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc
 		return;
 	}
 
-	if ( !dQueries.FindFirst ( [] ( const ExcerptQuery_t& dQuery ) { return !dQuery.m_dRes.IsEmpty(); } ) )
+	if ( !dQueries.FindFirst ( [] ( const ExcerptQueryChained_t & tQuery ) { return !tQuery.m_tResult.m_dResult.IsEmpty(); } ) )
 	{
 		// just one last error instead of all errors is hopefully ok
 		sError.SetSprintf ( "highlighting failed: %s", sError.cstr() );
@@ -12922,13 +12618,13 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc
 	tOut.HeadEnd();
 
 	// data
-	for ( auto & dQuery : dQueries )
+	for ( auto & i : dQueries )
 	{
-		auto &dData = dQuery.m_dRes;
-		FixupResultTail ( dData );
-		tOut.PutArray ( dData );
+		FixupResultTail ( i.m_tResult.m_dResult );
+		tOut.PutArray ( i.m_tResult.m_dResult );
 		tOut.Commit();
 	}
+
 	tOut.Eof();
 }
 
@@ -17538,8 +17234,8 @@ bool RotateIndexGreedy (ServedDesc_t &tWlockedIndex, const char * szIndex, CSphS
 	}
 
 	// try to use new index
-	ISphTokenizerRefPtr_c	pTokenizer { tWlockedIndex.m_pIndex->LeakTokenizer () }; // FIXME! disable support of that old indexes and remove this bullshit
-	CSphDictRefPtr_c		pDictionary { tWlockedIndex.m_pIndex->LeakDictionary () };
+	TokenizerRefPtr_c	pTokenizer { tWlockedIndex.m_pIndex->LeakTokenizer () }; // FIXME! disable support of that old indexes and remove this bullshit
+	DictRefPtr_c		pDictionary { tWlockedIndex.m_pIndex->LeakDictionary () };
 
 //	bool bRolledBack = false;
 	bool bPreallocSuccess = tWlockedIndex.m_pIndex->Prealloc ( g_bStripPath );
@@ -18598,7 +18294,7 @@ bool CheckConfigChanges ( CSphVector<char>& dContent )
 		return true;
 	if ( fstat ( fileno ( fp ), &tStat )<0 )
 		memset ( &tStat, 0, sizeof ( tStat ) );
-	bool bGotLine = fgets ( sBuf, sizeof(sBuf), fp );
+	bool bGotLine = !!fgets ( sBuf, sizeof(sBuf), fp );
 
 	if ( !bGotLine )
 	{
@@ -18634,7 +18330,7 @@ bool CheckConfigChanges ( CSphVector<char>& dContent )
 		while ( bGotLine ) {
 			auto iLen = strlen ( sBuf );
 			dContent.Append ( sBuf, iLen );
-			bGotLine = fgets ( sBuf, sizeof ( sBuf ), fp );
+			bGotLine = !!fgets ( sBuf, sizeof ( sBuf ), fp );
 		}
 		dContent.Add('\0');
 		fclose ( fp );

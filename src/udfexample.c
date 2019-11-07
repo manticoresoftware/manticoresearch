@@ -231,13 +231,12 @@ DLLEXPORT int hideemail_init ( void ** userdata, int num_fields, const char ** f
 DLLEXPORT char * hideemail_push_token ( void * userdata, char * token, int * extra, int * delta )
 {
 	UdfLog ( "Called hideemail_push_token" );
-	const char * s;
 	char * dst = (char *)userdata;
 	char domain[] = "space.io";
 	char prefix[] = "mailto:";
 	char * pos0;
 	char * pos1;
-	int len0, len1 = ( sizeof(domain)-1 ), cmp, lenprefix = ( sizeof(prefix)-1 );
+	int len0, len1 = ( sizeof(domain)-1 ), lenprefix = ( sizeof(prefix)-1 );
 
 	*delta = 1;
 

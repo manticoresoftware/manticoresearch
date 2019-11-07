@@ -594,12 +594,12 @@ int main ( int argc, char ** argv )
 	CSphDictSettings tDictSettings;
 	tDictSettings.m_bWordDict = false;
 
-	ISphTokenizerRefPtr_c pTok {sphCreateUTF8Tokenizer()};
-	CSphDictRefPtr_c pDict {sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt1", false, 32, sError )};
+	TokenizerRefPtr_c pTok {sphCreateUTF8Tokenizer()};
+	DictRefPtr_c pDict {sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt1", false, 32, sError )};
 	CSphSource_MySQL * pSrc = SpawnSource ( "test1", hSources, pTok, pDict );
 
-	ISphTokenizerRefPtr_c pTok2 {sphCreateUTF8Tokenizer()};
-	CSphDictRefPtr_c pDict2 {sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt2", false, 32, sError )};
+	TokenizerRefPtr_c pTok2 {sphCreateUTF8Tokenizer()};
+	DictRefPtr_c pDict2 {sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt2", false, 32, sError )};
 	CSphSource_MySQL * pSrc2 = SpawnSource ( "test2", hSources, pTok2, pDict2 );
 
 	CSphSchema tSrcSchema;

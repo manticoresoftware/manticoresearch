@@ -225,7 +225,7 @@ protected:
 	CSphSchema tSrcSchema;
 	CSphString sError, sWarning;
 
-	ISphTokenizerRefPtr_c pTok;
+	TokenizerRefPtr_c pTok;
 
 	CSphDictSettings tDictSettings;
 };
@@ -236,7 +236,7 @@ class RTN : public RT, public ::testing::WithParamInterface<DWORD>
 TEST_P ( RTN, WeightBoundary )
 {
 	using namespace testing;
-	CSphDictRefPtr_c pDict { sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "weight", false, 32, sError ) };
+	DictRefPtr_c pDict { sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "weight", false, 32, sError ) };
 
 	tCol.m_sName = "id";
 	tCol.m_eAttrType = SPH_ATTR_BIGINT;

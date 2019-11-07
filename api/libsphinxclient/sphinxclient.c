@@ -2269,11 +2269,9 @@ void sphinx_init_excerpt_options ( sphinx_excerpt_options * opts )
 	opts->around			= 5;
 	opts->start_passage_id	= 1;
 
-	opts->exact_phrase		= SPH_FALSE;
 	opts->single_passage	= SPH_FALSE;
 	opts->use_boundaries	= SPH_FALSE;
 	opts->weight_order		= SPH_FALSE;
-	opts->query_mode		= SPH_FALSE;
 	opts->force_all_words	= SPH_FALSE;
 	opts->load_files		= SPH_FALSE;
 	opts->allow_empty		= SPH_FALSE;
@@ -2330,11 +2328,9 @@ char ** sphinx_build_excerpts ( sphinx_client * client, int num_docs, const char
 	send_int ( &req, req_len );
 
 	flags = 1; // remove spaces
-	if ( opts->exact_phrase )		flags |= 2;
 	if ( opts->single_passage )		flags |= 4;
 	if ( opts->use_boundaries )		flags |= 8;
 	if ( opts->weight_order )		flags |= 16;
-	if ( opts->query_mode )			flags |= 32;
 	if ( opts->force_all_words )	flags |= 64;
 	if ( opts->load_files )			flags |= 128;
 	if ( opts->allow_empty )		flags |= 256;

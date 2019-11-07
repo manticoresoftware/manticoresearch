@@ -1725,7 +1725,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 	const CSphIndexSettings & tSettings )
 {
 	// FIXME? might wanna verify somehow that pTokenizer has all the specials etc from sphSetupQueryTokenizer
-	ISphTokenizerRefPtr_c pMyTokenizer { pTokenizer->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) };
+	TokenizerRefPtr_c pMyTokenizer { pTokenizer->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) };
 
 	// most outcomes are errors
 	SafeDelete ( tParsed.m_pRoot );
@@ -1764,7 +1764,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 	}
 
 	// setup parser
-	CSphDictRefPtr_c pMyDict { GetStatelessDict ( pDict ) };
+	DictRefPtr_c pMyDict { GetStatelessDict ( pDict ) };
 
 	Setup ( pSchema, pMyTokenizer, pMyDict, &tParsed, tSettings );
 	m_sQuery = (BYTE*) sQuery;

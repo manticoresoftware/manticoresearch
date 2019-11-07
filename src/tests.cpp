@@ -143,7 +143,7 @@ void BenchTokenizer ()
 	{
 		char * sData = LoadFile ( "./configure", &iBytes, true );
 
-		ISphTokenizerRefPtr_c pTokenizer { sphCreateUTF8Tokenizer () };
+		TokenizerRefPtr_c pTokenizer { sphCreateUTF8Tokenizer () };
 		// pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z", sError );
 		if ( iRun==2 )
 			pTokenizer->LoadSynonyms ( g_sTmpfile, NULL, sError );
@@ -734,7 +734,7 @@ void BenchStemmer ()
 	printf ( "read %d bytes\n", iLen );
 	fclose ( fp );
 
-	ISphTokenizerRefPtr_c pTok { sphCreateUTF8Tokenizer() };
+	TokenizerRefPtr_c pTok { sphCreateUTF8Tokenizer() };
 	if ( !pTok->SetCaseFolding ( "A..Z->a..z, a..z", sError ) )
 		sphDie ( "oops: %s", sError.cstr() );
 

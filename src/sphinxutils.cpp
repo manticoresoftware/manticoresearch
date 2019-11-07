@@ -1903,7 +1903,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		CSphTokenizerSettings tSettings;
 		sphConfTokenizer ( hIndex, tSettings );
 
-		ISphTokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings, nullptr, sError ) };
+		TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings, nullptr, sError ) };
 		if ( !pTokenizer )
 			return false;
 
@@ -1913,7 +1913,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 	if ( !pIndex->GetDictionary () )
 	{
-		CSphDictRefPtr_c pDict;
+		DictRefPtr_c pDict;
 		CSphDictSettings tSettings;
 		/*if ( bTemplateDict )
 		{
@@ -1938,8 +1938,8 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 	if ( bTokenizerSpawned )
 	{
-		ISphTokenizerRefPtr_c pOldTokenizer { pIndex->LeakTokenizer () };
-		ISphTokenizerRefPtr_c pMultiTokenizer
+		TokenizerRefPtr_c pOldTokenizer { pIndex->LeakTokenizer () };
+		TokenizerRefPtr_c pMultiTokenizer
 			{ ISphTokenizer::CreateMultiformFilter ( pOldTokenizer, pIndex->GetDictionary ()->GetMultiWordforms () ) };
 		pIndex->SetTokenizer ( pMultiTokenizer );
 	}
@@ -1963,7 +1963,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 	if ( !pIndex->GetFieldFilter() )
 	{
-		ISphFieldFilterRefPtr_c pFieldFilter;
+		FieldFilterRefPtr_c pFieldFilter;
 		CSphFieldFilterSettings tFilterSettings;
 		if ( sphConfFieldFilter ( hIndex, tFilterSettings, sError ) )
 			pFieldFilter = sphCreateRegexpFilter ( tFilterSettings, sError );
@@ -1976,7 +1976,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 	// exact words fixup, needed for RT indexes
 	// cloned from indexer, remove somehow?
-	CSphDictRefPtr_c pDict { pIndex->GetDictionary() };
+	DictRefPtr_c pDict { pIndex->GetDictionary() };
 	SafeAddRef ( pDict );
 	assert ( pDict );
 

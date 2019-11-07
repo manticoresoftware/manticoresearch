@@ -78,6 +78,7 @@ enum ESphExprCommand
 {
 	SPH_EXPR_SET_BLOB_POOL,
 	SPH_EXPR_SET_DOCSTORE,
+	SPH_EXPR_SET_QUERY,
 	SPH_EXPR_SET_EXTRA_DATA,
 	SPH_EXPR_GET_DEPENDENT_COLS, ///< used to determine proper evaluating stage
 	SPH_EXPR_GET_UDF
@@ -153,6 +154,17 @@ using ISphExprRefPtr_c = CSphRefcountedPtr<ISphExpr>;
 /// and as local timestamps otherwise (default)
 void setGroupingInUtc ( bool b_GroupingInUtc );
 
+/// named int/string variant
+/// used for named expression function arguments block
+/// ie. {..} part in, for example, BM25F(1.2, 0.8, {title=3}) call
+struct CSphNamedVariant
+{
+	CSphString		m_sKey;		///< key
+	CSphString		m_sValue;	///< value for strings, empty for ints
+	int				m_iValue;	///< value for ints
+};
+
+
 /// string expression traits
 /// can never be evaluated in floats or integers, only StringEval() is allowed
 struct ISphStringExpr : public ISphExpr
@@ -195,17 +207,6 @@ struct ISphExprHook
 };
 
 
-/// named int/string variant
-/// used for named expression function arguments block
-/// ie. {..} part in, for example, BM25F(1.2, 0.8, {title=3}) call
-struct CSphNamedVariant
-{
-	CSphString		m_sKey;		///< key
-	CSphString		m_sValue;	///< value for strings, empty for ints
-	int				m_iValue;	///< value for ints
-};
-
-
 // an expression that has no locator
 class Expr_NoLocator_c : public ISphExpr
 {
@@ -215,8 +216,9 @@ public:
 
 
 /// a container used to pass maps of constants/variables around the evaluation tree
-struct Expr_MapArg_c : public Expr_NoLocator_c
+class Expr_MapArg_c : public Expr_NoLocator_c
 {
+public:
 	CSphVector<CSphNamedVariant> m_dValues;
 
 	explicit Expr_MapArg_c ( CSphVector<CSphNamedVariant> & dValues )

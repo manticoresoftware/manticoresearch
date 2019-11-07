@@ -636,7 +636,7 @@ struct CharsetAlias_t
 };
 
 
-using ISphTokenizerRefPtr_c = CSphRefcountedPtr<ISphTokenizer>;
+using TokenizerRefPtr_c = CSphRefcountedPtr<ISphTokenizer>;
 
 /// parse charset table
 bool					sphParseCharset ( const char * sCharset, CSphVector<CSphRemapRange> & dRemaps );
@@ -855,7 +855,7 @@ protected:
 	CSphString				m_sMorphFingerprint;
 };
 
-using CSphDictRefPtr_c = CSphRefcountedPtr<CSphDict>;
+using DictRefPtr_c = CSphRefcountedPtr<CSphDict>;
 
 /// returns pDict, if stateless. Or it's clone, if not
 CSphDict * GetStatelessDict ( CSphDict * pDict );
@@ -1801,7 +1801,7 @@ protected:
 	ISphFieldFilter *		m_pParent;
 };
 
-using ISphFieldFilterRefPtr_c = CSphRefcountedPtr<ISphFieldFilter>;
+using FieldFilterRefPtr_c = CSphRefcountedPtr<ISphFieldFilter>;
 
 
 /// create a regexp field filter
@@ -1934,9 +1934,9 @@ protected:
 	StrVec_t							m_dStrAttrs;	///< current document string attrs
 	CSphVector<CSphVector<int64_t>>		m_dMvas;		///< per-attribute MVA storage
 
-	ISphTokenizerRefPtr_c				m_pTokenizer;	///< my tokenizer
-	CSphDictRefPtr_c					m_pDict;		///< my dict
-	ISphFieldFilterRefPtr_c				m_pFieldFilter;	///< my field filter
+	TokenizerRefPtr_c				m_pTokenizer;	///< my tokenizer
+	DictRefPtr_c					m_pDict;		///< my dict
+	FieldFilterRefPtr_c				m_pFieldFilter;	///< my field filter
 
 	CSphSourceStats						m_tStats;		///< my stats
 	CSphSchema 							m_tSchema;		///< my schema
@@ -3536,11 +3536,11 @@ protected:
 protected:
 	CSphIndexSettings			m_tSettings;
 
-	ISphFieldFilterRefPtr_c		m_pFieldFilter;
-	ISphTokenizerRefPtr_c		m_pTokenizer;
-	ISphTokenizerRefPtr_c		m_pQueryTokenizer;
-	ISphTokenizerRefPtr_c		m_pQueryTokenizerJson;
-	CSphDictRefPtr_c			m_pDict;
+	FieldFilterRefPtr_c		m_pFieldFilter;
+	TokenizerRefPtr_c		m_pTokenizer;
+	TokenizerRefPtr_c		m_pQueryTokenizer;
+	TokenizerRefPtr_c		m_pQueryTokenizerJson;
+	DictRefPtr_c			m_pDict;
 
 	int							m_iMaxCachedDocs = 0;
 	int							m_iMaxCachedHits = 0;

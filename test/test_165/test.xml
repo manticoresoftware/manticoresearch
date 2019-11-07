@@ -145,9 +145,9 @@ INSERT INTO `star_table` VALUES
 <sphinxql>select * from star where match ('action')</sphinxql>
 
 <!-- regression tokenizer produces wrong token prt with exception -->
-<sphinxql>CALL SNIPPETS('; the test', 'snip', ';doggy the', 1 as force_all_words )</sphinxql>
-<sphinxql>CALL SNIPPETS('; the test', 'snip', 'doggy the', 1 as force_all_words )</sphinxql>
-<sphinxql>CALL SNIPPETS('; the test', 'snip', 'doggy the', 0 as force_all_words )</sphinxql>
+<sphinxql>CALL SNIPPETS('; the test', 'snip', ';doggy|the', 1 as force_all_words )</sphinxql>
+<sphinxql>CALL SNIPPETS('; the test', 'snip', 'doggy|the', 1 as force_all_words )</sphinxql>
+<sphinxql>CALL SNIPPETS('; the test', 'snip', 'doggy|the', 0 as force_all_words )</sphinxql>
 
 <sphinxql>select * from star where match ('a?c')</sphinxql>
 <sphinxql>select * from star where match ('x%z')</sphinxql>

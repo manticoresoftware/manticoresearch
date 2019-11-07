@@ -947,7 +947,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	CSphDictSettings tDictSettings;
 	sphConfDictionary ( hIndex, tDictSettings );
 
-	ISphTokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokSettings, NULL, sError ) };
+	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokSettings, NULL, sError ) };
 	if ( !pTokenizer )
 		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
@@ -962,7 +962,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		if ( !pTokenizer->EnableZoneIndexing ( sError ) )
 			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
-	CSphDictRefPtr_c pDict;
+	DictRefPtr_c pDict;
 
 	// setup tokenization filters
 	if ( !g_sBuildStops )
@@ -1008,7 +1008,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 			pTokenizer = sphAotCreateFilter ( pTokenizer, pDict, tSettings.m_bIndexExactWords, tSettings.m_uAotFilterMask );
 	}
 
-	ISphFieldFilterRefPtr_c pFieldFilter;
+	FieldFilterRefPtr_c pFieldFilter;
 	CSphFieldFilterSettings tFilterSettings;
 	if ( sphConfFieldFilter ( hIndex, tFilterSettings, sError ) )
 		pFieldFilter = sphCreateRegexpFilter ( tFilterSettings, sError );

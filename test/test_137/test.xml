@@ -49,7 +49,6 @@ $results[] = $client->GetLastError();
 // regression for snippets vs stopwords vs proximity
 $docs = array( 'A section of dome lifted up' );
 $results[] = $client->BuildExcerpts($docs, 'test_stops', '"section of dome"~5', $opts );
-$results[] = $client->BuildExcerpts($docs, 'test_stops', '"section of dome"~5', array( 'query_mode'=>true, 'exact_phrase'=>true ) );
 
 ]]></custom_test>
 

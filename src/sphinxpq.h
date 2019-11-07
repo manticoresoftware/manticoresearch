@@ -166,7 +166,7 @@ class PercolateDictProxy_c : public CSphDict
 {
 	const DictMap_t * m_pDict = nullptr;
 	const bool m_bHasMorph = false;
-	CSphDictRefPtr_c m_pDictMorph { nullptr };
+	DictRefPtr_c m_pDictMorph { nullptr };
 
 public:
 	explicit PercolateDictProxy_c ( bool bHasMorph, CSphDict * pDictMorph )

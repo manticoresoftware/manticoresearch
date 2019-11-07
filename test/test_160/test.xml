@@ -62,25 +62,21 @@ $opts = array ( 'passage_boundary'=>'zone', 'limit'=>0 );
 $docs = array('<zoneZZ><zoneA> these words </zoneA><zoneB> and these to </zoneB> are cool </zoneZZ>');
 $pass = 0;
 
-$results[] = '[pass] (query/result=q/r) (fast path=1/0) (query_mode=1/0)';
+$results[] = '[pass] (query/result=q/r) (fast path=1/0)';
 
-foreach ( array(0, 1) as $qmode )
+foreach ( $data as $q )
 {
-	$opts['query_mode'] = $qmode;
-	foreach ( $data as $q )
-	{
-		$opts['limit_passages'] = 10;
-		$results["[$pass]q"] = $q;
-		$res = $client->BuildExcerpts($docs, 'test', $q, $opts );
-		$results["[$pass]r 0 $qmode"] = ( is_array($res) && count($res)>0 ? $res[0] : '');
-		$opts['limit_passages'] = 0;
-		$res = $client->BuildExcerpts($docs, 'test', $q, $opts );
-		$results["[$pass]r 1 $qmode"] = ( is_array($res) && count($res)>0 ? $res[0] : '' );
-		$pass += 1;
-	}
+	$opts['limit_passages'] = 10;
+	$results["[$pass]q"] = $q;
+	$res = $client->BuildExcerpts($docs, 'test', $q, $opts );
+	$results["[$pass]r 0"] = ( is_array($res) && count($res)>0 ? $res[0] : '');
+	$opts['limit_passages'] = 0;
+	$res = $client->BuildExcerpts($docs, 'test', $q, $opts );
+	$results["[$pass]r 1"] = ( is_array($res) && count($res)>0 ? $res[0] : '' );
+	$pass += 1;
 }
 
-$results[] = $client->BuildExcerpts(array('small doc', 'one more'), 'multiform', 'crash on tokenizer from another doc', array ('query_mode'=>0) );
+$results[] = $client->BuildExcerpts(array('small doc', 'one more'), 'multiform', 'crash|on|tokenizer|from|another|doc' );
 
 // another regression - zone transformed by stripper in result set
 $opts = array ( 'query_mode'=>1, 'limit_words'=>6 );

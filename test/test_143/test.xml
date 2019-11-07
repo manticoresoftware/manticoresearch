@@ -240,27 +240,17 @@ INSERT INTO `test_table` VALUES
 <!-- start\whole doc on query\plain -->
 <sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'notfound', 1 AS query_mode, 25 as limit )</sphinxql>
 <sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'notfound', 1 AS query_mode, 0 as limit )</sphinxql>
-<sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'notfound', 0 AS query_mode, 25 as limit )</sphinxql>
-<sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'notfound', 0 AS query_mode, 0 as limit )</sphinxql>
 <!-- higlight start\whole doc on query\plain -->
 <sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'time1', 1 AS query_mode, 25 as limit )</sphinxql>
 <sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'test1', 1 AS query_mode, 0 as limit )</sphinxql>
-<sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'time1', 0 AS query_mode, 25 as limit )</sphinxql>
-<sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'test1', 0 AS query_mode, 0 as limit )</sphinxql>
 
 <sphinxql>CALL SNIPPETS('17 64 15 tripple and true 1 12 11 11 11 11', 'test_milti', 'time2', 1 AS query_mode, 25 as limit )</sphinxql>
 <sphinxql>CALL SNIPPETS('17 64 15 tripple and true 1 12 11 11 11 11', 'test_milti', 'test2', 1 AS query_mode, 0 as limit )</sphinxql>
-<sphinxql>CALL SNIPPETS('17 64 15 tripple and true 1 12 11 11 11 11', 'test_milti', 'time2', 0 AS query_mode, 25 as limit )</sphinxql>
-<sphinxql>CALL SNIPPETS('17 64 15 tripple and true 1 12 11 11 11 11', 'test_milti', 'test2', 0 AS query_mode, 0 as limit )</sphinxql>
 
 <sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'time3', 1 AS query_mode, 25 as limit )</sphinxql>
 <sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'test3', 1 AS query_mode, 0 as limit )</sphinxql>
-<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'time3', 0 AS query_mode, 25 as limit )</sphinxql>
-<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'test3', 0 AS query_mode, 0 as limit )</sphinxql>
 <sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'time3 for', 1 AS query_mode, 25 as limit )</sphinxql>
 <sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'for test3', 1 AS query_mode, 0 as limit )</sphinxql>
-<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'time3 for', 0 AS query_mode, 25 as limit )</sphinxql>
-<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'for test3', 0 AS query_mode, 0 as limit )</sphinxql>
 
 <sphinxql>CALL SNIPPETS('17 64 15 tripple and true 1 12 11 11 11 11', 'test_milti', '"for test2"', 1 AS query_mode, 25 as limit )</sphinxql>
 <sphinxql>CALL SNIPPETS('17 64 15 tripple and true 1 12 11 11 11 11', 'test_milti', '"for test2"', 1 AS query_mode, 0 as limit )</sphinxql>

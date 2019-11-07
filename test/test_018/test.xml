@@ -66,7 +66,7 @@ $docs = array
 	"pro\xEF\xAC\x81ts, lost savings" // latin small ligature 'fi', oh my
 );
 
-$words = "MS Windows";
+$words = "MS|Windows";
 
 $opts = array
 (

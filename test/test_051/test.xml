@@ -67,14 +67,14 @@ END;
 
 $words = array
 (
-	'cajuput invalid',
-	'cajuput invalid expositor'
+	'"cajuput invalid"',
+	'"cajuput invalid expositor"'
 );
 
 $results = array();
 foreach ( $words as $query )
 {
-	$reply = $client->BuildExcerpts ( array($text), 'idx', $query, array('exact_phrase' => true) );
+	$reply = $client->BuildExcerpts ( array($text), 'idx', $query );
 	$results [] = $query;
 	$results [] = $reply;
 }
@@ -98,11 +98,11 @@ $reply = $client->BuildExcerpts ( array($text), 'idx', $query, array( 'around'=>
 $results [] = $query;
 $results [] = $reply;
 
-$reply = $client->BuildExcerpts ( array($text), 'idx', $query, array( 'around'=> 3, 'exact_phrase'=>true, 'limit'=>100, 'limit_passages'=>1 ) );
+$reply = $client->BuildExcerpts ( array($text), 'idx', $query, array( 'around'=> 3, 'limit'=>100, 'limit_passages'=>1 ) );
 $results [] = $query;
 $results [] = $reply;
 
-$reply = $client->BuildExcerpts ( array($text), 'idx', $query, array('around'=> 3, 'limit_words'=>6, 'exact_phrase'=>true) );
+$reply = $client->BuildExcerpts ( array($text), 'idx', $query, array('around'=> 3, 'limit_words'=>6) );
 $results [] = $query;
 $results [] = $reply;
 

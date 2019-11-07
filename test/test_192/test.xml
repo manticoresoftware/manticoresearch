@@ -184,9 +184,7 @@ index test20
 <sphinxql>SELECT * FROM test11 WHERE MATCH('"test a text"')</sphinxql>
 <sphinxql>SHOW META</sphinxql>
 <sphinxql>CALL SNIPPETS ( 'test 3+3+3+3+real text' , 'test10', ' "test a text" ', 1 as query_mode )</sphinxql>
-<sphinxql>CALL SNIPPETS ( 'test 3+3+3+3+real text' , 'test10', ' "test a text" ', 0 as query_mode )</sphinxql>
 <sphinxql>CALL SNIPPETS ( 'test 3+3+3+3+real text' , 'test10', ' "test a text" ', 1 as query_mode, 0 as limit )</sphinxql>
-<sphinxql>CALL SNIPPETS ( 'test 3+3+3+3+real text' , 'test10', ' "test a text" ', 0 as query_mode, 0 as limit )</sphinxql>
 <sphinxql>SELECT * FROM test WHERE MATCH(' " 3 rd text " ')</sphinxql>
 <sphinxql>SHOW META</sphinxql>
 <!-- regression - incomplete multi-form vs blended part -->

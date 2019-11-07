@@ -353,7 +353,7 @@ void FieldFilterICU_c::GetSettings ( CSphFieldFilterSettings & tSettings ) const
 
 ISphFieldFilter * FieldFilterICU_c::Clone() const
 {
-	ISphFieldFilterRefPtr_c pClonedParent { m_pParent ? m_pParent->Clone () : nullptr };
+	FieldFilterRefPtr_c pClonedParent { m_pParent ? m_pParent->Clone () : nullptr };
 
 	CSphString sError;
 	ISphFieldFilter * pFilter = sphCreateFilterICU ( pClonedParent, m_sBlendChars.cstr(), sError );
@@ -394,7 +394,7 @@ bool sphCheckTokenizerICU ( CSphIndexSettings & tSettings, const CSphTokenizerSe
 	if ( tSettings.m_ePreprocessor!=Preprocessor_e::ICU )
 		return true;
 
-	ISphTokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokSettings, NULL, sError ) };
+	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokSettings, NULL, sError ) };
 	if ( !pTokenizer.Ptr() )
 		return false;
 
@@ -431,12 +431,12 @@ bool sphCheckTokenizerICU ( CSphIndexSettings & tSettings, const CSphTokenizerSe
 }
 
 
-bool sphSpawnFilterICU ( ISphFieldFilterRefPtr_c & pFieldFilter, const CSphIndexSettings & m_tSettings,	const CSphTokenizerSettings & tTokSettings, const char * szIndex, CSphString & sError )
+bool sphSpawnFilterICU ( FieldFilterRefPtr_c & pFieldFilter, const CSphIndexSettings & m_tSettings,	const CSphTokenizerSettings & tTokSettings, const char * szIndex, CSphString & sError )
 {
 	if ( m_tSettings.m_ePreprocessor==Preprocessor_e::NONE )
 		return true;
 
-	ISphFieldFilterRefPtr_c pFilterICU { sphCreateFilterICU ( pFieldFilter, tTokSettings.m_sBlendChars.cstr(), sError ) };
+	FieldFilterRefPtr_c pFilterICU { sphCreateFilterICU ( pFieldFilter, tTokSettings.m_sBlendChars.cstr(), sError ) };
 	if ( !sError.IsEmpty() )
 	{
 		sError.SetSprintf ( "index '%s': Error initializing ICU: %s", szIndex, sError.cstr() );
@@ -489,7 +489,7 @@ bool sphCheckTokenizerICU ( CSphIndexSettings &, const CSphTokenizerSettings &, 
 }
 
 
-bool sphSpawnFilterICU ( ISphFieldFilterRefPtr_c &, const CSphIndexSettings &, const CSphTokenizerSettings &, const char *, CSphString & )
+bool sphSpawnFilterICU ( FieldFilterRefPtr_c &, const CSphIndexSettings &, const CSphTokenizerSettings &, const char *, CSphString & )
 {
 	return true;
 }

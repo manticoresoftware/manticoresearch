@@ -86,11 +86,13 @@ static void PackData ( CSphVector<BYTE> & dDst, const BYTE * pData, DWORD uSize,
 	}
 	else
 	{	
-		dDst.Reserve(uSize+1);
-		dDst.Resize(uSize);
+		dDst.Resize ( uSize + ( bText ? 1 : 0 ) );
 		memcpy ( dDst.Begin(), pData, uSize );
 		if ( bText )
-			dDst.Add('\0');
+		{
+			dDst[uSize] = '\0';
+			dDst.Resize(uSize);
+		}
 	}
 }
 
@@ -232,7 +234,8 @@ int DocstoreFields_c::GetFieldId ( const CSphString & sName, DocstoreDataType_e 
 {
 	CSphString sCompound;
 	sCompound.SetSprintf ( "%d%s", eType, sName.cstr() );
-	return m_hFields[sCompound];
+	int * pField = m_hFields(sCompound);
+	return pField ? *pField : -1;
 }
 
 

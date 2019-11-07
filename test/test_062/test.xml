@@ -136,27 +136,27 @@ foreach ( $queries as $query )
 
 $query = ' "*mmitt* u" | ommitt* | "committed u" ';
 $results [] = $query;
-$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query, array ( 'query_mode' => 1 ) );
+$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query );
 
 $query = ' *ommitt* | "committed u" ';
 $results [] = $query;
-$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query, array ( 'query_mode' => 1 ) );
+$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query );
 
-$query = ' *ommitt* committed u ';
+$query = ' *ommitt* | committed | u ';
 $results [] = $query;
-$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query, array ( 'query_mode' => 0 ) );
+$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query );
 
 $query = ' committed* | "committed p" ';
 $results [] = $query;
-$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query, array ( 'query_mode' => 1 ) );
+$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query );
 
-$query = ' committed* committed p ';
+$query = ' committed* | committed | p ';
 $results [] = $query;
-$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query, array ( 'query_mode' => 0 ) );
+$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query );
 
 $query = ' (support ("committed*")) ';
 $results [] = $query;
-$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query, array ( 'query_mode' => 1 ) );
+$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query );
 
 $query = ' (support ("code*" | "code test")) ';
 $results [] = $query;
@@ -199,7 +199,6 @@ $results[] = $client->BuildExcerpts(
 		'limit_words' => 50,
         'limit_passages' =>5,
         'around' => 25,
-        'exact_phrase' => false,
         'force_all_words' => false,
     )
 );
@@ -208,15 +207,11 @@ $results[] = $client->BuildExcerpts(
 $query = 'on | on | the | software | an* | ap* | an* | al* | on | al* | running | runs | run';
 $results[] = $client->BuildExcerpts ( array ( $doc ), 'hi2', $query, array('query_mode'=>true, 'limit'=>200) );
 $results[] = $client->BuildExcerpts ( array ( $doc ), 'hi2', $query, array('query_mode'=>true, 'limit'=>0) );
-$results[] = $client->BuildExcerpts ( array ( $doc ), 'hi2', $query, array('query_mode'=>false, 'limit'=>200) );
-$results[] = $client->BuildExcerpts ( array ( $doc ), 'hi2', $query, array('query_mode'=>false, 'limit'=>0) );
 
 // crash daemon on either no documents or empty query
 $opts = array (
-array('query_mode'=>false, 'allow_empty'=>false),
-array('query_mode'=>true, 'allow_empty'=>false),
-array('query_mode'=>false, 'allow_empty'=>true),
-array('query_mode'=>true, 'allow_empty'=>true) );
+array('allow_empty'=>false),
+array('allow_empty'=>true) );
 
 foreach ( $opts as $o )
 {

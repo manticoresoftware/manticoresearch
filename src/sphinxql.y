@@ -1072,18 +1072,21 @@ json_aggr:
 	;
 
 consthash:
-	hash_key '=' hash_val					{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	// empty
+	| hash_key '=' hash_val					{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| consthash ',' hash_key '=' hash_val	{ TRACK_BOUNDS ( $$, $1, $5 ); }
 	;
 
 hash_key:
 	ident
 	| TOK_IN
+	| TOK_LIMIT
 	;
 
 hash_val:
 	const_int
 	| ident
+	| TOK_QUOTED_STRING 
 	;
 
 //////////////////////////////////////////////////////////////////////////

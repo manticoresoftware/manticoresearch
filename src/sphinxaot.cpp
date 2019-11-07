@@ -1483,7 +1483,7 @@ public:
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
 		assert ( eMode==SPH_CLONE_INDEX );
-		auto * pClone = new CSphAotTokenizerRu ( ISphTokenizerRefPtr_c ( m_pTokenizer->Clone ( eMode ) ), NULL, m_bIndexExact );
+		auto * pClone = new CSphAotTokenizerRu ( TokenizerRefPtr_c ( m_pTokenizer->Clone ( eMode ) ), NULL, m_bIndexExact );
 		if ( m_pWordforms )
 			pClone->m_pWordforms = m_pWordforms;
 		return pClone;
@@ -1613,7 +1613,7 @@ public:
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
 		assert ( eMode==SPH_CLONE_INDEX );
-		auto * pClone = new CSphAotTokenizer ( ISphTokenizerRefPtr_c ( m_pTokenizer->Clone ( eMode ) ), nullptr, m_bIndexExact, m_iLang );
+		auto * pClone = new CSphAotTokenizer ( TokenizerRefPtr_c ( m_pTokenizer->Clone ( eMode ) ), nullptr, m_bIndexExact, m_iLang );
 		if ( m_pWordforms )
 			pClone->m_pWordforms = m_pWordforms;
 		return pClone;

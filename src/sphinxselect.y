@@ -143,8 +143,11 @@ arglist:
 	;
 
 consthash:
-	hash_key TOK_EQ SEL_TOKEN
+	// empty
+	| hash_key TOK_EQ SEL_TOKEN
+	| hash_key TOK_EQ TOK_CONST_STRING
 	| consthash ',' hash_key TOK_EQ SEL_TOKEN
+	| consthash ',' hash_key TOK_EQ TOK_CONST_STRING
 	;	
 	
 hash_key:

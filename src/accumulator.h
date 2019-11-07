@@ -95,7 +95,7 @@ public:
 	CSphVector<ReplicationCommand_t *> m_dCmd;
 
 	bool						m_bKeywordDict {true};
-	CSphDictRefPtr_c			m_pDict;
+	DictRefPtr_c			m_pDict;
 	CSphDict *					m_pRefDict = nullptr; // not owned, used only for ==-matching
 
 

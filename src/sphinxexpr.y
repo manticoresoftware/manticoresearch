@@ -142,10 +142,13 @@ expr:
 	;
 
 maparg:
-	map_key TOK_EQ TOK_CONST_INT					{ $$ = pParser->AddNodeMapArg ( $1, NULL, $3 ); }
+													{ $$ = pParser->AddNodeMapArg ( NULL, NULL, 0 ); }
+	| map_key TOK_EQ TOK_CONST_INT					{ $$ = pParser->AddNodeMapArg ( $1, NULL, $3 ); }
 	| map_key TOK_EQ TOK_IDENT						{ $$ = pParser->AddNodeMapArg ( $1, $3, 0 ); }
+	| map_key TOK_EQ TOK_CONST_STRING				{ $$ = pParser->AddNodeMapArg ( $1, NULL, $3, true ); }
 	| maparg ',' map_key TOK_EQ TOK_CONST_INT		{ pParser->AppendToMapArg ( $$, $3, NULL, $5 ); }
 	| maparg ',' map_key TOK_EQ TOK_IDENT			{ pParser->AppendToMapArg ( $$, $3, $5, 0 ); }
+	| maparg ',' map_key TOK_EQ	TOK_CONST_STRING	{ pParser->AppendToMapArg ( $$, $3, NULL, $5, true ); }
 	;
 
 map_key:
@@ -204,6 +207,7 @@ function:
 	| TOK_FUNC_IN '(' arg ',' constlist_or_uservar ')'{ $$ = pParser->AddNodeIn ( $3, $5 ); }
 	| json_field TOK_FUNC_IN '(' constlist_or_uservar ')'{ $$ = pParser->AddNodeIn ( $1, $4 ); }
 	| TOK_HOOK_FUNC '(' arglist ')' { $$ = pParser->AddNodeHookFunc ( $1, $3 ); if ( $$<0 ) YYERROR; }
+	| TOK_HOOK_FUNC '(' ')'			{ $$ = pParser->AddNodeHookFunc ( $1 ); if ( $$<0 ) YYERROR; }
 	| TOK_FUNC_JA '(' expr for_loop ')' { $$ = pParser->AddNodeFor ( $1, $3, $4 ); }
 	| TOK_FUNC_REMAP '(' expr ',' expr ',' '(' constlist ')' ',' '(' constlist ')' ')' { $$ = pParser->AddNodeRemap ( $3, $5, $8, $12 ); }
 	| TOK_FUNC_PF '(' ')'			{ $$ = pParser->AddNodePF ( $1, -1 ); }

@@ -251,8 +251,8 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 		return false;
 	}
 
-	ISphTokenizerRefPtr_c pMyJsonTokenizer { pQueryTokenizerJson->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) };
-	CSphDictRefPtr_c pMyDict { GetStatelessDict ( pDict ) };
+	TokenizerRefPtr_c pMyJsonTokenizer { pQueryTokenizerJson->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) };
+	DictRefPtr_c pMyDict { GetStatelessDict ( pDict ) };
 
 	QueryTreeBuilder_c tBuilder ( pQuery, pQueryTokenizerQL, tSettings );
 	tBuilder.Setup ( pSchema, pMyJsonTokenizer, pMyDict, &tParsed, tSettings );
@@ -1326,9 +1326,10 @@ bool sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfi
 	{
 		if ( !ParseSnippet ( tSnip, tQuery, sError ) )
 			return false;
-		else
-			bAttrsHighlight = true;
-	} else if ( !sError.IsEmpty() )
+
+		bAttrsHighlight = true;
+	}
+	else if ( !sError.IsEmpty() )
 		return false;
 
 	JsonObj_c tSort = tRoot.GetItem("sort");
@@ -1804,8 +1805,7 @@ static bool NeedToSkipAttr ( const CSphString & sName, const CSphQuery & tQuery 
 }
 
 
-CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQuery,
-	CSphQueryProfile * pProfile, bool bAttrsHighlight )
+CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQuery, CSphQueryProfile * pProfile, bool bAttrsHighlight )
 {
 	JsonEscapedBuilder tOut;
 	CSphString sResult;

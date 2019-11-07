@@ -48,13 +48,11 @@ $opts = array
 $results = array();
 
 for ($limit = 4; $limit < 60; ++$limit )
-foreach ( array(0,1) as $exact )
 foreach ( array(0,1) as $force )
 {
-	$opts["exact_phrase"] = $exact;
 	$opts["force_all_words"] = $force;
 	$opts["limit"] = $limit;
-	$rs["opts"]="phrase $exact, force $force, limit $limit";
+	$rs["opts"]="force $force, limit $limit";
 	$res = $client->BuildExcerpts ( $docs, $index, $words, $opts );
 	if ( !$res )
 		$rs["result"] = $client->GetLastError();

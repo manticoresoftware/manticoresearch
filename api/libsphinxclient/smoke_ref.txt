@@ -1,20 +1,12 @@
-exact_phrase=0
-n=1, res=this is my <b>test</b> <b>text</b> to be highlighted,  ... 
-n=2, res=another <b>test</b> <b>text</b> to be highlighted, below limit
-n=3, res=<b>test</b> number three, without phrase match
-n=4, res=final <b>test</b>, not only  ... with swapped phrase <b>text</b> <b>test</b> as well
-
-exact_phrase=1
 n=1, res=this is my <b>test text</b> to be highlighted,  ... 
 n=2, res=another <b>test text</b> to be highlighted, below limit
 n=3, res=test number three, without phrase match
-n=4, res=final test, not only without phrase match, but also above  ... 
-
+n=4, res=final <b>test</b>, not only  ... with swapped phrase <b>text test</b> as well
 passage_boundary=zone
-n=1, res= ...  manager <b>it</b>. <b>Is</b> Filing this report and. <b>It</b> <b>is</b> signed hereby represent. That <b>it</b> <b>is</b> all information.are <b>It</b> or <b>is</b> cool <b>It</b> <b>is</b> cooler <b>It</b> <b>is</b> another ... 
+n=1, res= ...  manager <b>it. Is</b> Filing this report and. <b>It is</b> signed hereby represent. That <b>it is</b> all information.are <b>It</b> or <b>is</b> cool <b>It is</b> cooler <b>It is</b> another ... 
 
 passage_boundary=sentence
-n=1, res= ... The institutional investment manager <b>it</b>. ...  <b>It</b> <b>is</b> signed hereby represent. ...  That <b>it</b> <b>is</b> all information.are <b>It</b> or <b>is</b> cool <b>It</b> <b>is</b> cooler <b>It</b> <b>is</b> another place! ... 
+n=1, res= ... The institutional investment manager <b>it</b>. ...  <b>It is</b> signed hereby represent. ...  That <b>it is</b> all information.are <b>It</b> or <b>is</b> cool <b>It is</b> cooler <b>It is</b> another place! ... 
 
 build_keywords result:
 1. tokenized=hello, normalized=hello, docs=0, hits=0
@@ -186,10 +178,10 @@ Matches:
 1. doc_id=1, weight=1304, idd=1, group_id=1, tag=(1,3,5,7), tag2=(1,3,5,7), tag64=(1,3,5,7), q=1010, @groupby=1, @count=1
 2. doc_id=2, weight=1304, idd=2, group_id=123, tag=(2,4,6), tag2=(2,4,6), tag64=(2,4,6), q=123020, @groupby=123, @count=3
 
-connections: 19
+connections: 18
 maxed_out: 0
 command_search: 17
-command_excerpt: 4
+command_excerpt: 3
 command_update: 4
 command_delete: 0
 command_keywords: 1

@@ -370,7 +370,7 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup,
 	m_bZSlist = tXQ.m_bNeedSZlist;
 	m_dZoneInfo.Reset ( m_dZones.GetLength() );
 
-	CSphDictRefPtr_c pZonesDict;
+	DictRefPtr_c pZonesDict;
 	// workaround for a particular case with following conditions
 	if ( !m_pIndex->GetDictionary()->GetSettings().m_bWordDict && m_dZones.GetLength() )
 		pZonesDict = m_pIndex->GetDictionary()->Clone();
@@ -4097,7 +4097,7 @@ void CSphHitMarker::Mark ( CSphVector<SphHitMark_t> & dMarked )
 	for ( ; pHits->m_tRowID!=INVALID_ROWID; pHits++ )
 	{
 		SphHitMark_t tMark;
-		tMark.m_uPosition = HITMAN::GetPos ( pHits->m_uHitpos );
+		tMark.m_uPosition = HITMAN::GetPosWithField ( pHits->m_uHitpos );
 		tMark.m_uSpan = pHits->m_uMatchlen;
 
 		dMarked.Add ( tMark );

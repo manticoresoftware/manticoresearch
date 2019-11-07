@@ -1541,7 +1541,7 @@ public:
 	uint64_t	GetSettingsFNV () const final { return m_pDict->GetSettingsFNV(); }
 
 protected:
-	CSphDictRefPtr_c	m_pDict;
+	DictRefPtr_c	m_pDict;
 };
 
 
@@ -1587,7 +1587,7 @@ const CSphString & RemoveDictSpecials ( const CSphString & sWord, CSphString & s
 class CSphTokenFilter : public ISphTokenizer
 {
 protected:
-	ISphTokenizerRefPtr_c		m_pTokenizer;
+	TokenizerRefPtr_c		m_pTokenizer;
 
 public:
 	explicit						CSphTokenFilter ( ISphTokenizer * pTokenizer )					: m_pTokenizer ( pTokenizer ) {	SafeAddRef ( pTokenizer ); }
@@ -1638,10 +1638,10 @@ struct CSphReconfigureSettings
 
 struct CSphReconfigureSetup
 {
-	ISphTokenizerRefPtr_c	m_pTokenizer;
-	CSphDictRefPtr_c		m_pDict;
+	TokenizerRefPtr_c	m_pTokenizer;
+	DictRefPtr_c		m_pDict;
 	CSphIndexSettings		m_tIndex;
-	ISphFieldFilterRefPtr_c	m_pFieldFilter;
+	FieldFilterRefPtr_c	m_pFieldFilter;
 	CSphSchema			m_tSchema;
 };
 
@@ -2142,7 +2142,7 @@ struct GetKeywordsSettings_t
 
 struct ISphQueryFilter
 {
-	ISphTokenizerRefPtr_c		m_pTokenizer;
+	TokenizerRefPtr_c		m_pTokenizer;
 	CSphDict *					m_pDict = nullptr;
 	const CSphIndexSettings *	m_pSettings = nullptr;
 	GetKeywordsSettings_t		m_tFoldSettings;

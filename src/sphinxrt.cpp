@@ -1199,7 +1199,7 @@ private:
 	bool						m_bKeywordDict;
 	int							m_iWordsCheckpoint = RTDICT_CHECKPOINT_V5;
 	int							m_iMaxCodepointLength = 0;
-	ISphTokenizerRefPtr_c		m_pTokenizerIndexing;
+	TokenizerRefPtr_c		m_pTokenizerIndexing;
 	bool						m_bLoadRamPassedOk = true;
 	bool						m_bSaveDisabled = false;
 	bool						m_bHasFiles = false;
@@ -1514,7 +1514,7 @@ bool RtIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFiel
 		tDoc.SetAttr ( tLocID, tDocID );
 	}
 
-	ISphTokenizerRefPtr_c tTokenizer { CloneIndexingTokenizer() };
+	TokenizerRefPtr_c tTokenizer { CloneIndexingTokenizer() };
 
 	if (!tTokenizer)
 	{
@@ -1572,7 +1572,7 @@ bool RtIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFiel
 		return false;
 
 	// OPTIMIZE? do not clone filters on each INSERT
-	ISphFieldFilterRefPtr_c pFieldFilter;
+	FieldFilterRefPtr_c pFieldFilter;
 	if ( m_pFieldFilter )
 		pFieldFilter = m_pFieldFilter->Clone();
 
@@ -3776,7 +3776,7 @@ bool RtIndex_c::Prealloc ( bool bStripPath )
 		sphWarning ( "infix definition changed (from len=%d, hashes=%d to len=%d, hashes=%d) - rebuilding...",
 					(int)BLOOM_PER_ENTRY_VALS_COUNT, (int)BLOOM_HASHES_COUNT, iBloomKeyLen, iBloomHashesCount );
 
-	ISphFieldFilterRefPtr_c pFieldFilter;
+	FieldFilterRefPtr_c pFieldFilter;
 	CSphFieldFilterSettings tFieldFilterSettings;
 	LoadFieldFilterSettings ( rdMeta, tFieldFilterSettings );
 	if ( tFieldFilterSettings.m_dRegexps.GetLength() )
@@ -4112,7 +4112,7 @@ void RtIndex_c::PostSetup()
 
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	ISphTokenizerRefPtr_c pIndexing { ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
+	TokenizerRefPtr_c pIndexing { ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
 	if ( pIndexing )
 		m_pTokenizerIndexing = pIndexing;
 
@@ -5557,7 +5557,7 @@ bool RtIndex_c::IsStarDict() const
 }
 
 
-void SetupExactDict ( CSphDictRefPtr_c &pDict, ISphTokenizer * pTokenizer, bool bAddSpecial )
+void SetupExactDict ( DictRefPtr_c &pDict, ISphTokenizer * pTokenizer, bool bAddSpecial )
 {
 	assert ( pTokenizer );
 	pTokenizer->AddPlainChar ( '=' );
@@ -5567,7 +5567,7 @@ void SetupExactDict ( CSphDictRefPtr_c &pDict, ISphTokenizer * pTokenizer, bool 
 }
 
 
-void SetupStarDict ( CSphDictRefPtr_c& pDict, ISphTokenizer * pTokenizer )
+void SetupStarDict ( DictRefPtr_c& pDict, ISphTokenizer * pTokenizer )
 {
 	assert ( pTokenizer );
 	pTokenizer->AddPlainChar ( '*' );
@@ -5770,10 +5770,10 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	SphChunkGuard_t tGuard = GetReaderChunks ();
 
 	// wrappers
-	ISphTokenizerRefPtr_c pQueryTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
+	TokenizerRefPtr_c pQueryTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
 	sphSetupQueryTokenizer ( pQueryTokenizer, IsStarDict(), m_tSettings.m_bIndexExactWords, false );
 
-	CSphDictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
+	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
 
 	if ( m_bKeywordDict && IsStarDict () )
 		SetupStarDict ( pDict, pQueryTokenizer );
@@ -5951,7 +5951,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	CSphVector<BYTE> dFiltered;
 	const BYTE * sModifiedQuery = (BYTE *)pQuery->m_sQuery.cstr();
 
-	ISphFieldFilterRefPtr_c pFieldFilter;
+	FieldFilterRefPtr_c pFieldFilter;
 	if ( m_pFieldFilter && sModifiedQuery )
 	{
 		pFieldFilter = m_pFieldFilter->Clone();
@@ -5981,7 +5981,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	if ( !pQueryParser->IsFullscan(*pQuery) )
 	{
 		// OPTIMIZE! make a lightweight clone here? and/or remove double clone?
-		ISphTokenizerRefPtr_c pQueryTokenizerJson { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
+		TokenizerRefPtr_c pQueryTokenizerJson { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
 		sphSetupQueryTokenizer ( pQueryTokenizerJson, IsStarDict (), m_tSettings.m_bIndexExactWords, true );
 
 		if ( !pQueryParser->ParseQuery ( tParsed, (const char *)sModifiedQuery, pQuery, pQueryTokenizer, pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings ) )
@@ -6397,12 +6397,12 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 	RtQword_t tQword;
 
-	ISphTokenizerRefPtr_c pTokenizer { m_pTokenizer->Clone ( SPH_CLONE_INDEX ) };
+	TokenizerRefPtr_c pTokenizer { m_pTokenizer->Clone ( SPH_CLONE_INDEX ) };
 	pTokenizer->EnableTokenizedMultiformTracking ();
 
 	// need to support '*' and '=' but not the other specials
 	// so m_pQueryTokenizer does not work for us, gotta clone and setup one manually
-	CSphDictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
+	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
 
 	if ( IsStarDict () )
 	{
@@ -6416,7 +6416,7 @@ bool RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		SetupExactDict ( pDict, pTokenizer, false );
 
 	CSphVector<BYTE> dFiltered;
-	ISphFieldFilterRefPtr_c pFieldFilter;
+	FieldFilterRefPtr_c pFieldFilter;
 	const BYTE * sModifiedQuery = (const BYTE *)sQuery;
 	if ( m_pFieldFilter && sQuery )
 	{
@@ -7437,7 +7437,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	bool bSame, CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError )
 {
 	// FIXME!!! check missed embedded files
-	ISphTokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings.m_tTokenizer, NULL, sError ) };
+	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings.m_tTokenizer, NULL, sError ) };
 	if ( !pTokenizer )
 	{
 		sError.SetSprintf ( "'%s' failed to create tokenizer, error '%s'", sIndexName.cstr(), sError.cstr() );
@@ -7445,7 +7445,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	}
 
 	// dict setup second
-	CSphDictRefPtr_c tDict { sphCreateDictionaryCRC ( tSettings.m_tDict, NULL, pTokenizer, sIndexName.cstr(), false, tIndexSettings.m_iSkiplistBlockSize, sError ) };
+	DictRefPtr_c tDict { sphCreateDictionaryCRC ( tSettings.m_tDict, NULL, pTokenizer, sIndexName.cstr(), false, tIndexSettings.m_iSkiplistBlockSize, sError ) };
 	if ( !tDict )
 	{
 		sError.SetSprintf ( "'%s' failed to create dictionary, error '%s'", sIndexName.cstr(), sError.cstr() );
@@ -7475,7 +7475,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 		tSettings.m_tIndex.m_bIndexExactWords = true;
 
 	// field filter
-	ISphFieldFilterRefPtr_c tFieldFilter;
+	FieldFilterRefPtr_c tFieldFilter;
 
 	// re filter
 	bool bReFilterSame = true;
@@ -7560,7 +7560,7 @@ bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	ISphTokenizerRefPtr_c pIndexing { ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
+	TokenizerRefPtr_c pIndexing { ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
 	if ( pIndexing )
 		m_pTokenizerIndexing = pIndexing;
 

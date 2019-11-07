@@ -290,7 +290,7 @@ struct XQQuery_t : public ISphNoncopyable
 class QueryParser_i
 {
 public:
-	QueryParser_i () {}
+	QueryParser_i () = default;
 	virtual ~QueryParser_i () {}
 	virtual bool IsFullscan ( const CSphQuery & tQuery ) const = 0;
 	virtual bool IsFullscan ( const XQQuery_t & tQuery ) const = 0;

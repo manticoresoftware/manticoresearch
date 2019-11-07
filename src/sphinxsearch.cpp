@@ -973,7 +973,7 @@ ExtRanker_State_T<STATE,USE_BM25>::ExtRanker_State_T ( const XQQuery_t & tXQ, co
 	if ( this->m_bZSlist )
 		m_dZonespans.Reserve ( MAX_BLOCK_DOCS * this->m_dZones.GetLength() );
 
-	m_pHitBase = NULL;
+	m_pHitBase = nullptr;
 }
 
 
@@ -2627,9 +2627,10 @@ public:
 
 	ISphExpr * CreateNode ( int iID, ISphExpr * _pLeft, ESphEvalStage *, CSphString & ) final
 	{
-		int * pCF = &m_pState->m_iCurrentField; // just a shortcut
-		CSphRefcountedPtr<ISphExpr> pLeft ( _pLeft );
 		SafeAddRef ( _pLeft );
+		CSphRefcountedPtr<ISphExpr> pLeft ( _pLeft );
+
+		int * pCF = &m_pState->m_iCurrentField; // just a shortcut
 		switch ( iID )
 		{
 			case XRANK_LCS:					return new Expr_FieldFactor_c<BYTE> ( pCF, m_pState->m_uLCS );
@@ -3879,12 +3880,11 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 	bool bSkipQCache = tCtx.m_bSkipQCache;
 
 	// can we serve this from cache?
-	QcacheEntry_c * pCached = nullptr;
+	CSphRefcountedPtr<QcacheEntry_c> pCached;
 	if ( !bSkipQCache )
 		pCached = QcacheFind ( pIndex->GetIndexId(), *pQuery, tSorterSchema );
 	if ( pCached )
 		return QcacheRanker ( pCached, tTermSetup );
-	SafeRelease ( pCached );
 
 	// setup eval-tree
 	ExtRanker_c * pRanker = nullptr;

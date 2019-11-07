@@ -2076,7 +2076,8 @@ protected:
 		// actions from SetGroupState
 		pClone->m_bSortByDistinct = this->m_bSortByDistinct;
 		pClone->m_tGroupSorter.m_fnStrCmp = this->m_tGroupSorter.m_fnStrCmp;
-		for ( int i = 0; i<CSphMatchComparatorState::MAX_ATTRS; i++ ) {
+		for ( int i = 0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
+		{
 			pClone->m_tGroupSorter.m_eKeypart[i] = this->m_tGroupSorter.m_eKeypart[i];
 			pClone->m_tGroupSorter.m_tLocator[i] = this->m_tGroupSorter.m_tLocator[i];
 		}
@@ -4280,10 +4281,10 @@ public:
 						ExprGeodist_t () = default;
 
 	bool				Setup ( const CSphQuery * pQuery, const ISphSchema & tSchema, CSphString & sError );
-	float				Eval ( const CSphMatch & tMatch ) const override;
-	void				FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override;
-	void				Command ( ESphExprCommand eCmd, void * pArg ) override;
-	uint64_t			GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override;
+	float				Eval ( const CSphMatch & tMatch ) const final;
+	void				FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) final;
+	void				Command ( ESphExprCommand eCmd, void * pArg ) final;
+	uint64_t			GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final;
 
 protected:
 	CSphAttrLocator		m_tGeoLatLoc;

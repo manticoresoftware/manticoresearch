@@ -4153,7 +4153,7 @@ static void ProcessLocalPostlimit ( const CSphQuery & tQuery, bool bMaster, Aggr
 
 		dPostlimit.Resize ( 0 );
 		ExtractPostlimit ( tRes.m_dSchemas[iSchema], bMaster, dPostlimit );
-		if ( !dPostlimit.GetLength() )
+		if ( dPostlimit.IsEmpty() )
 			continue;
 
 		int iTo = iSetCount;

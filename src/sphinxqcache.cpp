@@ -41,12 +41,12 @@ public:
 	void						Setup ( int64_t iMaxBytes, int iThreshMsec, int iTtlSec );
 	void						Add ( const CSphQuery & q, QcacheEntry_c * pResult, const ISphSchema & tSorterSchema );
 	QcacheEntry_c *				Find ( int64_t iIndexId, const CSphQuery & q, const ISphSchema & tSorterSchema );
-	void						DeleteIndex ( int64_t iIndexId );
+	void						DeleteIndex ( int64_t iIndexId ) EXCLUDES ( m_tLock );
 
 private:
-	uint64_t					GetKey ( int64_t iIndexId, const CSphQuery & q );
+	static uint64_t				GetKey ( int64_t iIndexId, const CSphQuery & q );
 	bool						IsValidEntry ( int i ) { return m_hData[i]!=QCACHE_NO_ENTRY && m_hData[i]!=QCACHE_DEAD_ENTRY; }
-	void						EnforceLimits ( bool bSizeOnly );
+	void						EnforceLimits ( bool bSizeOnly ) EXCLUDES ( m_tLock );
 	void						MruToHead ( int iRes );
 	void						DeleteEntry ( int iEntry );
 	bool						CanCacheQuery ( const CSphQuery & q ) const;
@@ -64,14 +64,16 @@ protected:
 	const CSphIndex *			m_pIndex;
 	CSphQueryContext *			m_pCtx;
 
+	void ResetImpl ( const ISphQwordSetup & tSetup ); // to avoid call real virtual Reset() from c-tr.
+
 public:
 	explicit					QcacheRanker_c ( QcacheEntry_c * pEntry, const ISphQwordSetup & tSetup );
-								~QcacheRanker_c() { SafeRelease ( m_pEntry ); }
+								~QcacheRanker_c() final { SafeRelease ( m_pEntry ); }
 
-	CSphMatch *					GetMatchesBuffer() { return m_dMatches; }
-	int							GetMatches();
-	void						Reset ( const ISphQwordSetup & tSetup );
-	bool						IsCache() const { return true; }
+	CSphMatch *					GetMatchesBuffer() final { return m_dMatches; }
+	int							GetMatches() final;
+	void						Reset ( const ISphQwordSetup & tSetup ) final { ResetImpl ( tSetup ); }
+	bool						IsCache() const final { return true; }
 };
 
 /// query cache instance
@@ -268,11 +270,10 @@ Qcache_c::Qcache_c()
 
 Qcache_c::~Qcache_c()
 {
-	m_tLock.Lock();
+	ScopedMutex_t dLock ( m_tLock );
 	ARRAY_FOREACH ( i, m_hData )
 		if ( IsValidEntry(i) )
 			SafeRelease ( m_hData[i] );
-	m_tLock.Unlock();
 }
 
 void Qcache_c::Setup ( int64_t iMaxBytes, int iThreshMsec, int iTtlSec )
@@ -363,7 +364,7 @@ void Qcache_c::Add ( const CSphQuery & q, QcacheEntry_c * pResult, const ISphSch
 	pResult->AddRef();
 	pResult->m_Key = GetKey ( pResult->m_iIndexId, q );
 
-	m_tLock.Lock();
+	ScopedMutex_t dLock (m_tLock);
 
 	// rehash if needed
 	if ( m_iCachedQueries>=m_iMaxQueries )
@@ -412,25 +413,24 @@ void Qcache_c::Add ( const CSphQuery & q, QcacheEntry_c * pResult, const ISphSch
 	m_iUsedBytes += pResult->GetSize();
 	MruToHead(j);
 
-	m_tLock.Unlock();
-
+	dLock.Unlock();
 	EnforceLimits ( true );
 }
 
 QcacheEntry_c * Qcache_c::Find ( int64_t iIndexId, const CSphQuery & q, const ISphSchema & tSorterSchema )
 {
 	if ( m_iMaxBytes<=0 )
-		return NULL;
+		return nullptr;
 
 	if ( !CanCacheQuery(q) )
-		return NULL;
+		return nullptr;
 
 	uint64_t k = GetKey ( iIndexId, q );
 
 	bool bFilterHashesCalculated = false;
 	CSphVector<uint64_t> dFilters;
 	
-	m_tLock.Lock();
+	ScopedMutex_t dLock (m_tLock);
 
 	int64_t tmMin = sphMicroTimer() - int64_t(m_iTtlSec)*1000000;
 	int iLenMask = m_hData.GetLength() - 1;
@@ -460,10 +460,7 @@ QcacheEntry_c * Qcache_c::Find ( int64_t iIndexId, const CSphQuery & q, const IS
 			bFilterHashesCalculated = true;
 
 			if ( !CalcFilterHashes ( dFilters, q, tSorterSchema ) )
-			{
-				m_tLock.Unlock();
-				return NULL;	// this query can't be cached because of the nature of expressions in filters
-			}
+				return nullptr;	// this query can't be cached because of the nature of expressions in filters
 		}
 
 		int j = 0;
@@ -480,7 +477,7 @@ QcacheEntry_c * Qcache_c::Find ( int64_t iIndexId, const CSphQuery & q, const IS
 		}
 	}
 
-	QcacheEntry_c * p = NULL;
+	QcacheEntry_c * p = nullptr;
 	if ( iRes>=0 )
 	{
 		p = m_hData[iRes];
@@ -488,7 +485,6 @@ QcacheEntry_c * Qcache_c::Find ( int64_t iIndexId, const CSphQuery & q, const IS
 		MruToHead(iRes);
 	}
 
-	m_tLock.Unlock();
 	return p;
 }
 
@@ -538,10 +534,7 @@ void Qcache_c::DeleteEntry ( int i )
 
 bool Qcache_c::CanCacheQuery ( const CSphQuery & q ) const
 {
-	if ( q.m_eMode==SPH_MATCH_FULLSCAN || q.m_sQuery.IsEmpty() )
-		return false;
-
-	return true;
+	return q.m_eMode!=SPH_MATCH_FULLSCAN && !q.m_sQuery.IsEmpty();
 }
 
 void Qcache_c::EnforceLimits ( bool bSizeOnly )
@@ -549,7 +542,7 @@ void Qcache_c::EnforceLimits ( bool bSizeOnly )
 	if ( bSizeOnly && m_iUsedBytes<=m_iMaxBytes )
 		return;
 
-	m_tLock.Lock();
+	ScopedMutex_t dLock ( m_tLock );
 
 	// first, enforce size limits
 	int iCur = m_iMruHead;
@@ -566,10 +559,7 @@ void Qcache_c::EnforceLimits ( bool bSizeOnly )
 	}
 
 	if ( bSizeOnly )
-	{
-		m_tLock.Unlock();
 		return;
-	}
 
 	// if requested, do a full sweep, and recheck ttl and thresh limits
 	int64_t tmMin = sphMicroTimer() - int64_t(m_iTtlSec)*1000000;
@@ -577,16 +567,14 @@ void Qcache_c::EnforceLimits ( bool bSizeOnly )
 		if ( IsValidEntry(i) && ( m_hData[i]->m_tmStarted < tmMin || m_hData[i]->m_iElapsedMsec < m_iThreshMsec ) )
 			DeleteEntry(i);
 
-	m_tLock.Unlock();
 }
 
 void Qcache_c::DeleteIndex ( int64_t iIndexId )
 {
-	m_tLock.Lock();
+	ScopedMutex_t dLock ( m_tLock );
 	ARRAY_FOREACH ( i, m_hData )
 		if ( IsValidEntry(i) && m_hData[i]->m_iIndexId==iIndexId )
 			DeleteEntry(i);
-	m_tLock.Unlock();
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -594,10 +582,10 @@ void Qcache_c::DeleteIndex ( int64_t iIndexId )
 QcacheRanker_c::QcacheRanker_c ( QcacheEntry_c * pEntry, const ISphQwordSetup & tSetup )
 {
 	m_pEntry = pEntry;
-	Reset ( tSetup );
+	ResetImpl ( tSetup );
 }
 
-void QcacheRanker_c::Reset ( const ISphQwordSetup & tSetup )
+void QcacheRanker_c::ResetImpl ( const ISphQwordSetup & tSetup )
 {
 	m_pCur = m_pEntry->m_dData.Begin();
 	m_pMax = m_pCur + m_pEntry->m_dData.GetLength();
@@ -605,8 +593,8 @@ void QcacheRanker_c::Reset ( const ISphQwordSetup & tSetup )
 	m_pIndex = tSetup.m_pIndex;
 	m_pCtx = tSetup.m_pCtx;
 
-	for ( int i=0; i<QcacheEntry_c::MAX_FRAME_SIZE; i++ )
-		m_dMatches[i].Reset ( tSetup.m_iDynamicRowitems );
+	for ( auto & m_dMatche : m_dMatches )
+		m_dMatche.Reset ( tSetup.m_iDynamicRowitems );
 }
 
 int QcacheRanker_c::GetMatches()

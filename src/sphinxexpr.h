@@ -230,13 +230,13 @@ public:
 		m_pValues = dValues.LeakData ();
 	}
 
-	float Eval ( const CSphMatch & ) const override
+	float Eval ( const CSphMatch & ) const final
 	{
 		assert ( 0 && "one just does not simply evaluate a const hash" );
 		return 0.0f;
 	}
 
-	uint64_t GetHash ( const ISphSchema &, uint64_t, bool & ) override
+	uint64_t GetHash ( const ISphSchema &, uint64_t, bool & ) final
 	{
 		assert ( 0 && "calling GetHash from a const hash" );
 		return 0;

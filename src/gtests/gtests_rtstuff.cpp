@@ -29,9 +29,9 @@ static void DeleteIndexFiles ( const char * sIndex )
 		"kill", "lock", "meta", "ram", "0.spa", "0.spd", "0.spe", "0.sph", "0.spi", "0.spk", "0.spm", "0.spp" };
 
 	CSphString sName;
-	for ( int i = 0; i<( int ) ( sizeof ( sExts ) / sizeof ( sExts[0] ) ); i++ )
+	for (auto & sExt : sExts)
 	{
-		sName.SetSprintf ( "%s.%s", sIndex, sExts[i] );
+		sName.SetSprintf ( "%s.%s", sIndex, sExt );
 		unlink ( sName.cstr () );
 	}
 }

@@ -28,7 +28,7 @@ struct QcacheMatch_t
 class QcacheEntry_c : public ISphRefcountedMT
 {
 	friend class QcacheRanker_c;
-	~QcacheEntry_c() = default;
+	~QcacheEntry_c() override {};
 
 public:
 	int64_t						m_iIndexId = -1;

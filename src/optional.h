@@ -30,8 +30,8 @@ class Optional_T
 	using ArgumentType = T const&;
 
 
-	bool m_bInitialized;
 	StorageType m_dStorage;
+	bool m_bInitialized;
 
 	void * address () { return &m_dStorage; }
 

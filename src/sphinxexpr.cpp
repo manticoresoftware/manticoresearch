@@ -306,7 +306,7 @@ public:
 class Expr_GetField_c : public Expr_NoLocator_c
 {
 public:
-	Expr_GetField_c ( const CSphString & sField )
+	explicit Expr_GetField_c ( const CSphString & sField )
 		: m_sField ( sField )
 	{}
 
@@ -319,7 +319,7 @@ public:
 	{
 		if ( !m_tSession.m_pDocstore || !m_dFieldIds.GetLength() )
 		{
-			*ppStr = NULL;
+			*ppStr = nullptr;
 			return 0;
 		}
 
@@ -801,12 +801,6 @@ public:
 		AddArgs ( pRight );
 	}
 
-	~Expr_Arglist_c () final
-	{
-		for ( auto& i : m_dArgs )
-			SafeRelease ( i );
-	}
-
 	bool IsArglist () const final
 	{
 		return true;
@@ -1253,7 +1247,6 @@ private:
 	ESphAttr					m_eArg;
 	const BYTE *				m_pBlobPool {nullptr};
 	mutable StringBuilder_c		m_sBuilder;
-	mutable CSphVector<char>	m_dStr;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1560,7 +1553,7 @@ protected:
 	}
 
 	
-	virtual bool IsJson ( bool & bConverted ) const override
+	bool IsJson ( bool & bConverted ) const final
 	{
 		bConverted = true;
 		return true;
@@ -1964,7 +1957,7 @@ public:
 		const char* pDoc = nullptr;
 		int iDocLen = m_pArg->StringEval ( tMatch, (const BYTE **)&pDoc );
 		int iLength = 0;
-		*ppStr = NULL;
+		*ppStr = nullptr;
 
 		if ( pDoc && iDocLen>0 && m_iLenDelim>0 && m_iCount!=0 )
 		{
@@ -1997,13 +1990,13 @@ public:
 			const char * pMax = sphFindLastNumeric ( pBuf, iLen );
 			if ( pBuf<pMax )
 			{
-				fVal = (float) strtod ( pBuf, NULL );
+				fVal = (float) strtod ( pBuf, nullptr );
 			}
 			else
 			{
 				CSphString sBuf;
 				sBuf.SetBinary ( pBuf, iLen );
-				fVal = (float) strtod ( sBuf.cstr(), NULL );
+				fVal = (float) strtod ( sBuf.cstr(), nullptr );
 			}
 		}
 
@@ -2051,13 +2044,13 @@ public:
 			const char * pMax = sphFindLastNumeric ( pBuf, iLen );
 			if ( pBuf<pMax )
 			{
-				iVal = strtoll ( pBuf, NULL, 10 );
+				iVal = strtoll ( pBuf, nullptr, 10 );
 			}
 			else
 			{
 				CSphString sBuf;
 				sBuf.SetBinary ( pBuf, iLen );
-				iVal = strtoll ( sBuf.cstr(), NULL, 10 );
+				iVal = strtoll ( sBuf.cstr(), nullptr, 10 );
 			}
 		}
 
@@ -2087,7 +2080,7 @@ private:
 //	in case of input dynamic string, function allocates buffer for substring and copy substring to it
 int Expr_SubstringIndex_c::SetResultString ( const char * pDoc, int iDocLen, const BYTE ** ppResStr ) const
 {
-	if ( IsDataPtrAttr()==false )
+	if ( !IsDataPtrAttr() )
 	{
 		*ppResStr = (const BYTE *) pDoc;
 	}
@@ -2220,7 +2213,6 @@ public:
 			return;
 
 		SafeAddRef ( pExpr );
-		SafeRelease ( m_pExpr );
 		m_pExpr = pExpr;
 	}
 
@@ -3246,7 +3238,7 @@ public:
 	CSphVector<float>		m_dFloats;		///< float storage
 	ESphAttr				m_eRetType { SPH_ATTR_INTEGER };		///< SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_STRING, or SPH_ATTR_FLOAT
 	CSphString				m_sExpr;		///< m_sExpr copy for TOK_CONST_STRING evaluation
-	bool					m_bPackedStrings = false;
+	bool					m_bPackedStrings = false; // packed string are offset:len from m_dInts over m_sExpr
 
 public:
 
@@ -4508,7 +4500,7 @@ public:
 	{
 		if ( m_bError )
 		{
-			*ppStr = NULL;
+			*ppStr = nullptr;
 			return 0;
 		}
 
@@ -5314,8 +5306,6 @@ private:
 class Expr_LastInsertID_c : public Expr_StrNoLocator_c
 {
 public:
-	Expr_LastInsertID_c () = default;
-	~Expr_LastInsertID_c () = default;
 
 	int StringEval ( const CSphMatch &, const BYTE ** ppStr ) const final
 	{
@@ -5502,14 +5492,15 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case '>':				LOC_SPAWN_POLY ( Expr_Gt ); break;
 		case TOK_LTE:			LOC_SPAWN_POLY ( Expr_Lte ); break;
 		case TOK_GTE:			LOC_SPAWN_POLY ( Expr_Gte ); break;
-		case TOK_EQ:			if ( ( m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_STRING ||
-									m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_STRINGPTR ) &&
-									( m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRING ||
-									m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRINGPTR ) )
-									return new Expr_StrEq_c ( pLeft, pRight, m_eCollation );
-								else if ( ( m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_JSON_FIELD ) &&
-									( m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRING ||
-									m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRINGPTR ) )
+
+		// fixme! Both branches below returns same result. Refactor!
+		case TOK_EQ:			if ( ( m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_STRING
+										|| m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_STRINGPTR
+										|| m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_JSON_FIELD
+									)
+									&& ( m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRING
+										|| m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRINGPTR )
+									)
 									return new Expr_StrEq_c ( pLeft, pRight, m_eCollation );
 								LOC_SPAWN_POLY ( Expr_Eq ); break;
 		case TOK_NE:			LOC_SPAWN_POLY ( Expr_Ne ); break;
@@ -6394,7 +6385,7 @@ protected:
 		return 0;
 	}
 
-	virtual bool IsJson ( bool & bConverted ) const override
+	bool IsJson ( bool & bConverted ) const final
 	{
 		bConverted = true;
 		return true;
@@ -6644,12 +6635,6 @@ public:
 		SafeAddRef ( pLon );
 	}
 
-	~Expr_GeodistConst_c () final
-	{
-		SafeRelease ( m_pLon );
-		SafeRelease ( m_pLat );
-	}
-
 	float Eval ( const CSphMatch & tMatch ) const final
 	{
 		return m_fOut*m_pFunc ( m_pLat->Eval(tMatch), m_pLon->Eval(tMatch), m_fAnchorLat, m_fAnchorLon );
@@ -6682,8 +6667,8 @@ public:
 private:
 	Geofunc_fn	m_pFunc;
 	float		m_fOut;
-	ISphExpr *	m_pLat;
-	ISphExpr *	m_pLon;
+	CSphRefcountedPtr<ISphExpr>	m_pLat;
+	CSphRefcountedPtr<ISphExpr>	m_pLon;
 	float		m_fAnchorLat;
 	float		m_fAnchorLon;
 };
@@ -6704,14 +6689,6 @@ public:
 		SafeAddRef ( pLon );
 		SafeAddRef ( pAnchorLat );
 		SafeAddRef ( pAnchorLon );
-	}
-
-	~Expr_Geodist_c () final
-	{
-		SafeRelease ( m_pAnchorLon );
-		SafeRelease ( m_pAnchorLat );
-		SafeRelease ( m_pLon );
-		SafeRelease ( m_pLat );
 	}
 
 	float Eval ( const CSphMatch & tMatch ) const final
@@ -6750,10 +6727,10 @@ public:
 private:
 	Geofunc_fn	m_pFunc;
 	float		m_fOut;
-	ISphExpr *	m_pLat;
-	ISphExpr *	m_pLon;
-	ISphExpr *	m_pAnchorLat;
-	ISphExpr *	m_pAnchorLon;
+	CSphRefcountedPtr<ISphExpr>	m_pLat;
+	CSphRefcountedPtr<ISphExpr>	m_pLon;
+	CSphRefcountedPtr<ISphExpr>	m_pAnchorLat;
+	CSphRefcountedPtr<ISphExpr>	m_pAnchorLon;
 };
 
 class Expr_Regex_c : public Expr_ArgVsSet_c<int>
@@ -7097,8 +7074,8 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 		// oops, unhandled case
 		default:
 			m_sCreateError = "IN() arguments must be constants (except the 1st one)";
-			return nullptr;
 	}
+	return nullptr;
 }
 
 
@@ -7134,12 +7111,10 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 	if ( dArgs.GetLength()==5 )
 	{
 		assert ( m_dNodes [ dArgs[4] ].m_eRetType==SPH_ATTR_MAPARG );
-		CSphVector<CSphNamedVariant> & dOpts = m_dNodes [ dArgs[4] ].m_pMapArg->m_dPairs;
 
 		// FIXME! handle errors in options somehow?
-		ARRAY_FOREACH ( i, dOpts )
+		for ( const auto& t : m_dNodes[dArgs[4]].m_pMapArg->m_dPairs )
 		{
-			const CSphNamedVariant & t = dOpts[i];
 			if ( t.m_sKey=="in" )
 			{
 				if ( t.m_sValue=="deg" || t.m_sValue=="degrees" )
@@ -7227,13 +7202,12 @@ ISphExpr * ExprParser_t::CreatePFNode ( int iArg )
 	if ( dArgs.GetLength()==1 )
 	{
 		assert ( m_dNodes[dArgs[0]].m_eRetType==SPH_ATTR_MAPARG );
-		CSphVector<CSphNamedVariant> & dOpts = m_dNodes[dArgs[0]].m_pMapArg->m_dPairs;
-	
-		ARRAY_FOREACH ( i, dOpts )
+
+		for ( const auto& dOpt : m_dNodes[dArgs[0]].m_pMapArg->m_dPairs )
 		{
-			if ( dOpts[i].m_sKey=="no_atc" && dOpts[i].m_iValue>0)
+			if ( dOpt.m_sKey=="no_atc" && dOpt.m_iValue>0)
 				bNoATC = true;
-			else if ( dOpts[i].m_sKey=="json" && dOpts[i].m_iValue>0 )
+			else if ( dOpt.m_sKey=="json" && dOpt.m_iValue>0 )
 				bJsonOut = true;
 		}
 	}
@@ -8633,7 +8607,3 @@ ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr )
 {
 	return new Expr_JsonFieldConv_c ( pExpr );
 }
-
-//
-// $Id$
-//

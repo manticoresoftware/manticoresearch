@@ -35,7 +35,7 @@
 #endif
 
 // hack hack hack
-UservarIntSet_c * ( *g_pUservarsHook )( const CSphString & sUservar );
+UservarIntSet_c ( *g_pUservarsHook )( const CSphString & sUservar );
 
 //////////////////////////////////////////////////////////////////////////
 // EVALUATION ENGINE
@@ -5867,7 +5867,7 @@ public:
 	}
 
 	/// copy that uservar
-	Expr_ArgVsConstSet_c ( ISphExpr * pArg, UservarIntSet_c * pUservar )
+	Expr_ArgVsConstSet_c ( ISphExpr * pArg, const UservarIntSet_c& pUservar )
 		: Expr_ArgVsSet_c<T> ( pArg )
 		, m_bFloat ( false )
 	{
@@ -6012,18 +6012,12 @@ class Expr_InUservar_c : public Expr_ArgVsSet_c<int64_t>
 {
 public:
 	/// just get hold of args
-	explicit Expr_InUservar_c ( ISphExpr * pArg, UservarIntSet_c * pConsts )
+	explicit Expr_InUservar_c ( ISphExpr * pArg, UservarIntSet_c pConsts )
 		: Expr_ArgVsSet_c<int64_t> ( pArg )
-		, m_pConsts ( pConsts ) // no addref, hook should have addref'd (otherwise there'd be a race)
+		, m_pConsts ( std::move(pConsts) ) // no addref, hook should have addref'd (otherwise there'd be a race)
 	{
 		assert ( m_pConsts );
 		m_uHash = sphFNV64 ( m_pConsts->Begin(), m_pConsts->GetLength()*sizeof((*m_pConsts)[0]) );
-	}
-
-	/// release the uservar value
-	~Expr_InUservar_c() final
-	{
-		SafeRelease ( m_pConsts );
 	}
 
 	/// evaluate arg, check if the value is within set
@@ -6040,7 +6034,7 @@ public:
 	}
 
 protected:
-	UservarIntSet_c *	m_pConsts;
+	UservarIntSet_c		m_pConsts;
 	uint64_t			m_uHash;
 };
 
@@ -6051,10 +6045,10 @@ class Expr_MVAIn_c : public Expr_ArgVsConstSet_c<int64_t>, public ExprLocatorTra
 {
 public:
 	/// pre-sort values for binary search
-	Expr_MVAIn_c ( const CSphAttrLocator & tLoc, int iLocator, ConstList_c * pConsts, UservarIntSet_c * pUservar )
+	Expr_MVAIn_c ( const CSphAttrLocator & tLoc, int iLocator, ConstList_c * pConsts, UservarIntSet_c pUservar )
 		: Expr_ArgVsConstSet_c<int64_t> ( nullptr, pConsts, false )
 		, ExprLocatorTraits_t ( tLoc, iLocator )
-		, m_pUservar ( pUservar )
+		, m_pUservar ( std::move(pUservar) )
 	{
 		assert ( !pConsts || !pUservar ); // either constlist or uservar, not both
 		this->m_dValues.Sort();
@@ -6062,11 +6056,6 @@ public:
 		// consts are handled in Expr_ArgVsConstSet_c, we only need uservars
 		if ( pUservar )
 			m_uValueHash = sphFNV64 ( pUservar->Begin(), pUservar->GetLength()*sizeof((*pUservar)[0]) );
-	}
-
-	~Expr_MVAIn_c() final
-	{
-		SafeRelease ( m_pUservar );
 	}
 
 	const BYTE * MvaEval ( const CSphMatch &, int & ) const final { assert ( 0 && "not implemented" ); return nullptr; }
@@ -6099,7 +6088,7 @@ public:
 
 protected:
 	const BYTE *		m_pBlobPool {nullptr};
-	UservarIntSet_c *	m_pUservar {nullptr};
+	UservarIntSet_c 	m_pUservar;
 };
 
 
@@ -6221,7 +6210,7 @@ public:
 		}
 	}
 
-	Expr_JsonFieldIn_c ( UservarIntSet_c * pUserVar, ISphExpr * pArg )
+	Expr_JsonFieldIn_c ( const UservarIntSet_c& pUserVar, ISphExpr * pArg )
 		: Expr_ArgVsConstSet_c<int64_t> ( pArg, pUserVar )
 	{
 		assert ( pUserVar );
@@ -6412,10 +6401,10 @@ protected:
 class Expr_StrIn_c : public Expr_ArgVsConstSet_c<int64_t>, public ExprLocatorTraits_t
 {
 public:
-	Expr_StrIn_c ( const CSphAttrLocator & tLoc, int iLocator, ConstList_c * pConsts, UservarIntSet_c * pUservar, ESphCollation eCollation )
+	Expr_StrIn_c ( const CSphAttrLocator & tLoc, int iLocator, ConstList_c * pConsts, UservarIntSet_c pUservar, ESphCollation eCollation )
 		: Expr_ArgVsConstSet_c<int64_t> ( nullptr, pConsts, false )
 		, ExprLocatorTraits_t ( tLoc, iLocator )
-		, m_pUservar ( pUservar )
+		, m_pUservar ( std::move(pUservar) )
 	{
 		assert ( !pConsts || !pUservar || !pConsts->m_bPackedStrings );
 
@@ -6441,11 +6430,6 @@ public:
 		// consts are handled in Expr_ArgVsConstSet_c, we only need uservars
 		if ( m_pUservar )
 			m_uValueHash = sphFNV64 ( pFilter, (pFilterMax-pFilter)*sizeof(*pFilter) );
-	}
-
-	~Expr_StrIn_c() final
-	{
-		SafeRelease ( m_pUservar );
 	}
 
 	int IntEval ( const CSphMatch & tMatch ) const final
@@ -6478,7 +6462,7 @@ public:
 
 protected:
 	const BYTE *			m_pBlobPool {nullptr};
-	UservarIntSet_c *		m_pUservar {nullptr};
+	UservarIntSet_c 		m_pUservar;
 	SphStringCmp_fn			m_fnStrCmp {nullptr};
 	StrVec_t				m_dStringValues;
 };
@@ -7045,6 +7029,8 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 	const ExprNode_t & tLeft = m_dNodes[m_dNodes[iNode].m_iLeft];
 	const ExprNode_t & tRight = m_dNodes[m_dNodes[iNode].m_iRight];
 
+	UservarIntSet_c dNullvars;
+
 	switch ( tRight.m_iToken )
 	{
 		// create IN(arg,constlist)
@@ -7052,11 +7038,11 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 			switch ( tLeft.m_iToken )
 			{
 				case TOK_ATTR_MVA32:
-					return new Expr_MVAIn_c<DWORD> ( tLeft.m_tLocator, tLeft.m_iLocator, tRight.m_pConsts, nullptr );
+					return new Expr_MVAIn_c<DWORD> ( tLeft.m_tLocator, tLeft.m_iLocator, tRight.m_pConsts, dNullvars );
 				case TOK_ATTR_MVA64:
-					return new Expr_MVAIn_c<int64_t> ( tLeft.m_tLocator, tLeft.m_iLocator, tRight.m_pConsts, nullptr );
+					return new Expr_MVAIn_c<int64_t> ( tLeft.m_tLocator, tLeft.m_iLocator, tRight.m_pConsts, dNullvars );
 				case TOK_ATTR_STRING:
-					return new Expr_StrIn_c ( tLeft.m_tLocator, tLeft.m_iLocator, tRight.m_pConsts, nullptr, m_eCollation );
+					return new Expr_StrIn_c ( tLeft.m_tLocator, tLeft.m_iLocator, tRight.m_pConsts, dNullvars, m_eCollation );
 				case TOK_ATTR_JSON:
 					return new Expr_JsonFieldIn_c ( tRight.m_pConsts, CSphRefcountedPtr<ISphExpr> { CreateTree ( m_dNodes [ iNode ].m_iLeft ) } );
 				default:
@@ -7081,7 +7067,7 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 				return nullptr;
 			}
 
-			UservarIntSet_c * pUservar = g_pUservarsHook ( m_dUservars[(int)tRight.m_iConst] );
+			UservarIntSet_c pUservar = g_pUservarsHook ( m_dUservars[(int)tRight.m_iConst] );
 			if ( !pUservar )
 			{
 				m_sCreateError.SetSprintf ( "undefined user variable '%s'", m_dUservars[(int)tRight.m_iConst].cstr() );

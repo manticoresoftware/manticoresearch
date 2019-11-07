@@ -47,7 +47,8 @@ struct ISphFilter
 };
 
 // fwd
-class UservarIntSet_c;
+using UservarIntSetValues_c = CSphVector<SphAttr_t>;
+using UservarIntSet_c = SharedPtr_t<UservarIntSetValues_c *>;
 class HistogramContainer_c;
 
 struct CreateFilterContext_t
@@ -62,7 +63,7 @@ struct CreateFilterContext_t
 
 	ISphFilter * m_pFilter = nullptr;
 	ISphFilter * m_pWeightFilter = nullptr;
-	CSphVector<const UservarIntSet_c *> m_dUserVals;
+	CSphVector<UservarIntSet_c> m_dUserVals;
 
 	CreateFilterContext_t ( const ISphSchema * pSchema=nullptr )
 		: m_pSchema ( pSchema ) {};

@@ -28,14 +28,14 @@ enum Uservar_e
 struct Uservar_t
 {
 	Uservar_e m_eType { USERVAR_INT_SET };
-	CSphRefcountedPtr<UservarIntSet_c> m_pVal;
+	UservarIntSet_c m_pVal;
 };
 
 // create or update the variable
 void SetLocalUserVar ( const CSphString& sName, CSphVector<SphAttr_t>& dSetValues );
 
 // provide variable to outside
-UservarIntSet_c* UservarsHook ( const CSphString& sUservar );
+UservarIntSet_c UservarsHook ( const CSphString& sUservar );
 
 void SphinxqlStateFlush ();
 bool InitSphinxqlState ( CSphString dStateFilePath, CSphString& sError);

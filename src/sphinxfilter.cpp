@@ -1449,9 +1449,6 @@ CreateFilterContext_t::~CreateFilterContext_t()
 {
 	SafeDelete ( m_pFilter );
 	SafeDelete ( m_pWeightFilter );
-
-	for ( auto &pUserVal: m_dUserVals )
-		pUserVal->Release();
 }
 
 
@@ -1480,7 +1477,7 @@ static ISphFilter * CreateFilterNode ( CreateFilterContext_t & tCtx, int iNode, 
 				return nullptr;
 			}
 
-			const UservarIntSet_c * pUservar = g_pUservarsHook ( *sVar );
+			const UservarIntSet_c pUservar = g_pUservarsHook ( *sVar );
 			if ( !pUservar )
 			{
 				sError.SetSprintf ( "undefined global variable '%s'", sVar->cstr() );
@@ -1615,7 +1612,7 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 				return false;
 			}
 
-			const UservarIntSet_c * pUservar = g_pUservarsHook ( *sVar );
+			const UservarIntSet_c pUservar = g_pUservarsHook ( *sVar );
 			if ( !pUservar )
 			{
 				sError.SetSprintf ( "undefined global variable '%s'", sVar->cstr() );

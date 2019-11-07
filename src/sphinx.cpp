@@ -15482,9 +15482,6 @@ void CSphQueryContext::ResetFilters()
 {
 	SafeDelete ( m_pFilter );
 	SafeDelete ( m_pWeightFilter );
-
-	ARRAY_FOREACH ( i, m_dUserVals )
-		m_dUserVals[i]->Release();
 	m_dUserVals.Reset();
 }
 

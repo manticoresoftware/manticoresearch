@@ -44,7 +44,7 @@ static void UservarAdd ( const CSphString& sName, CSphVector<SphAttr_t>& dVal )
 	// swap in the new value
 	assert ( pVar );
 	pVar->m_eType = USERVAR_INT_SET;
-	pVar->m_pVal = new UservarIntSet_c (); // previous will be auto-released here
+	pVar->m_pVal = new UservarIntSetValues_c; // previous will be auto-released here
 	pVar->m_pVal->SwapData ( dVal );
 }
 
@@ -55,15 +55,14 @@ void SetLocalUserVar ( const CSphString& sName, CSphVector<SphAttr_t>& dSetValue
 	SphinxqlStateFlush ();
 }
 
-UservarIntSet_c* UservarsHook ( const CSphString& sUservar )
+UservarIntSet_c UservarsHook ( const CSphString& sUservar )
 {
 	ScRL_t rLock ( g_tUservarsMutex );
 	Uservar_t* pVar = g_hUservars ( sUservar );
 	if ( !pVar )
-		return nullptr;
+		return UservarIntSet_c ();
 
 	assert ( pVar->m_eType==USERVAR_INT_SET );
-	pVar->m_pVal->AddRef ();
 	return pVar->m_pVal;
 }
 
@@ -216,7 +215,7 @@ bool InitSphinxqlState ( CSphString dStateFilePath, CSphString& sError )
 struct NamedRefVectorPair_t
 {
 	CSphString m_sName;
-	CSphRefcountedPtr<UservarIntSet_c> m_pVal;
+	UservarIntSet_c m_pVal;
 };
 
 /// SphinxQL state writer

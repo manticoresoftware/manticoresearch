@@ -3349,8 +3349,8 @@ private:
 
 	void ProcessChanges ( Task_t * pTask )
 	{
-		sphLogDebugL ( "L ProcessChanges for %p, (conn %p) (%d->%d), tm=" INT64_FMT, pTask, pTask->m_pPayload,
-			pTask->m_uIOActive, pTask->m_uIOChanged, pTask->m_iTimeoutTime);
+		sphLogDebugL ( "L ProcessChanges for %p, (conn %p) (%d->%d), tm=" INT64_FMT " sock=%d", pTask, pTask->m_pPayload,
+			pTask->m_uIOActive, pTask->m_uIOChanged, pTask->m_iTimeoutTime, pTask->m_ifd );
 
 		assert ( pTask->m_iTimeoutTime!=0);
 
@@ -3661,15 +3661,17 @@ public:
 		if ( uActivateIO )
 			pTask->m_uIOChanged = uActivateIO;
 
-		sphLogDebugv ( "- %d EnqueueNewTask %p (%p) " INT64_FMT " Us, IO(%d->%d)", pConnection->m_iStoreTag, pTask, pConnection, iTimeoutMS, pTask->m_uIOActive, pTask->m_uIOChanged );
-		AddToQueue ( pTask, pConnection->InNetLoop () );
-
 		// for win it is vitable important to apply changes immediately,
 		// since iocp has to be enqueued before read/write op, not after!
+		// Tomat: moved here to fix race between call from main thd from ScheduleDistrJobs and loop processing from ProcessEnqueuedTasks
 #if USE_WINDOWS
 		if ( uActivateIO )
 			events_change_io ( pTask );
 #endif
+
+		sphLogDebugv ( "- %d EnqueueNewTask %p (%p) " INT64_FMT " Us, IO(%d->%d), sock %d", pConnection->m_iStoreTag, pTask, pConnection, iTimeoutMS, pTask->m_uIOActive, pTask->m_uIOChanged, pConnection->m_iSock );
+		AddToQueue ( pTask, pConnection->InNetLoop () );
+
 		return true;
 	}
 

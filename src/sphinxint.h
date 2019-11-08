@@ -729,7 +729,11 @@ private:
 };
 
 
-CSphVector<const ISphSchema *> SorterSchemas ( ISphMatchSorter ** ppSorters, int iCount, int iSkipSorter );
+// collect valid schemas from sorters, excluding one
+CSphVector<const ISphSchema *> SorterSchemas ( const VecTraits_T<ISphMatchSorter *> & dSorters, int iSkipSorter );
+
+// return index of sorter with max schema, and sum match capacity among the sorters
+std::pair<int, int> GetMaxSchemaIndexAndMatchCapacity ( const VecTraits_T<ISphMatchSorter *> & dSorters );
 
 //////////////////////////////////////////////////////////////////////////
 // MEMORY TRACKER

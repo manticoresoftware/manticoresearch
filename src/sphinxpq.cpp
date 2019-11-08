@@ -1774,18 +1774,9 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 
 	// select the sorter with max schema
 	// uses GetAttrsCount to get working facets (was GetRowSize)
-	int iMaxSchemaSize = -1;
-	int iMaxSchemaIndex = -1;
-	for ( int i = 0; i<iSorters; ++i )
-		if ( ppSorters[i]->GetSchema ()->GetAttrsCount ()>iMaxSchemaSize )
-		{
-			iMaxSchemaSize = ppSorters[i]->GetSchema ()->GetAttrsCount ();
-			iMaxSchemaIndex = i;
-		}
-
-	const ISphSchema &tMaxSorterSchema = *( ppSorters[iMaxSchemaIndex]->GetSchema () );
-
-	auto dSorterSchemas = SorterSchemas ( ppSorters, iSorters, iMaxSchemaIndex );
+	int iMaxSchemaIndex = GetMaxSchemaIndexAndMatchCapacity ( {ppSorters, iSorters} ).first;
+	const ISphSchema & tMaxSorterSchema = *( ppSorters[iMaxSchemaIndex]->GetSchema ());
+	auto dSorterSchemas = SorterSchemas ( {ppSorters, iSorters}, iMaxSchemaIndex );
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );

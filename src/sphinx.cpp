@@ -14293,19 +14293,9 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	ScopedThreadPriority_c tPrio ( pQuery->m_bLowPriority );
 
 	// select the sorter with max schema
-	// uses GetAttrsCount to get working facets (was GetRowSize)
-	int iMaxSchemaSize = -1;
-	int iMaxSchemaIndex = -1;
-	for ( int i=0; i<iSorters; i++ )
-		if ( ppSorters[i]->GetSchema()->GetAttrsCount() > iMaxSchemaSize )
-		{
-			iMaxSchemaSize = ppSorters[i]->GetSchema()->GetAttrsCount();
-			iMaxSchemaIndex = i;
-		}
-
+	int iMaxSchemaIndex = GetMaxSchemaIndexAndMatchCapacity ( {ppSorters,iSorters} ).first;
 	const ISphSchema & tMaxSorterSchema = *(ppSorters[iMaxSchemaIndex]->GetSchema());
-
-	auto dSorterSchemas = SorterSchemas ( ppSorters, iSorters, iMaxSchemaIndex);
+	auto dSorterSchemas = SorterSchemas ( {ppSorters, iSorters}, iMaxSchemaIndex);
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );
@@ -17161,18 +17151,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	}
 
 	// select the sorter with max schema
-	int iMaxSchemaSize = -1;
-	int iMaxSchemaIndex = -1;
-	for ( int i=0; i<iSorters; i++ )
-		if ( ppSorters[i]->GetSchema()->GetRowSize() > iMaxSchemaSize )
-		{
-			iMaxSchemaSize = ppSorters[i]->GetSchema()->GetRowSize();
-			iMaxSchemaIndex = i;
-		}
-
+	int iMaxSchemaIndex = GetMaxSchemaIndexAndMatchCapacity ( {ppSorters,iSorters} ).first;
 	const ISphSchema & tMaxSorterSchema = *(ppSorters[iMaxSchemaIndex]->GetSchema());
-
-	auto dSorterSchemas = SorterSchemas ( ppSorters, iSorters, iMaxSchemaIndex );
+	auto dSorterSchemas = SorterSchemas ( {ppSorters, iSorters}, iMaxSchemaIndex);
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );
@@ -30592,23 +30573,41 @@ void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int64_t iDocs, int
 
 //////////////////////////////////////////////////////////////////////////
 
-CSphVector<const ISphSchema *> SorterSchemas ( ISphMatchSorter ** ppSorters, int iCount, int iSkipSorter )
+CSphVector<const ISphSchema *> SorterSchemas ( const VecTraits_T<ISphMatchSorter *> & dSorters, int iSkipSorter )
 {
 	CSphVector<const ISphSchema *> dSchemas;
-	if ( iCount>1 )
+	if ( !dSorters.IsEmpty() )
 	{
-		dSchemas.Reserve ( iCount - 1 );
-		for ( int i=0; i<iCount; ++i )
+		dSchemas.Reserve ( dSorters.GetLength() - 1 );
+		ARRAY_FOREACH ( i, dSorters )
 		{
-			if ( i==iSkipSorter || !ppSorters[i] )
+			if ( i==iSkipSorter || !dSorters[i] )
 				continue;
 
-			const ISphSchema * pSchema = ppSorters[i]->GetSchema();
+			const ISphSchema * pSchema = dSorters[i]->GetSchema();
 			dSchemas.Add ( pSchema );
 		}
 	}
 	return dSchemas;
 }
+
+std::pair<int, int> GetMaxSchemaIndexAndMatchCapacity ( const VecTraits_T<ISphMatchSorter*> & dSorters )
+{
+	int iMaxSchemaSize = -1;
+	int iMaxSchemaIndex = -1;
+	int iMatchPoolSize = 0;
+	ARRAY_FOREACH ( i, dSorters )
+	{
+		iMatchPoolSize += dSorters[i]->m_iMatchCapacity;
+		if ( dSorters[i]->GetSchema ()->GetAttrsCount ()>iMaxSchemaSize )
+		{
+			iMaxSchemaSize = dSorters[i]->GetSchema ()->GetAttrsCount ();
+			iMaxSchemaIndex = i;
+		}
+	}
+	return {iMaxSchemaIndex, iMatchPoolSize};
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 CSphString IndexFiles_c::FatalMsg ( const char * sMsg )

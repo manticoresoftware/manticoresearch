@@ -5918,35 +5918,24 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	// select the sorter with max schema
 	// uses GetAttrsCount to get working facets (was GetRowSize)
-	int iMaxSchemaSize = -1;
-	int iMaxSchemaIndex = -1;
-	int iMatchPoolSize = 0;
-	ARRAY_FOREACH ( i, dSorters )
-	{
-		iMatchPoolSize += dSorters[i]->m_iMatchCapacity;
-		if ( dSorters[i]->GetSchema ()->GetAttrsCount ()>iMaxSchemaSize )
-		{
-			iMaxSchemaSize = dSorters[i]->GetSchema ()->GetAttrsCount ();
-			iMaxSchemaIndex = i;
-		}
-	}
+	int iMaxSchemaIndex, iMatchPoolSize;
+	std::tie ( iMaxSchemaIndex, iMatchPoolSize ) = GetMaxSchemaIndexAndMatchCapacity ( dSorters );
 
-	if ( iMaxSchemaSize==-1 || iMaxSchemaIndex==-1 )
+	if ( iMaxSchemaIndex==-1 )
 		return false;
 
-	const ISphSchema & tMaxSorterSchema = *(dSorters[iMaxSchemaIndex]->GetSchema());
-
-	auto dSorterSchemas = SorterSchemas ( dSorters.Begin(), dSorters.GetLength(), iMaxSchemaIndex );
+	const ISphSchema & tMaxSorterSchema = *( dSorters[iMaxSchemaIndex]->GetSchema ());
+	auto dSorterSchemas = SorterSchemas ( dSorters, iMaxSchemaIndex );
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );
 	tCtx.m_pProfile = pProfiler;
-	if ( !tCtx.SetupCalc ( pResult, tMaxSorterSchema, m_tSchema, nullptr, dSorterSchemas ) )
-		return false;
-
-	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
 	tCtx.m_pLocalDocs = pLocalDocs;
 	tCtx.m_iTotalDocs = iTotalDocs;
+	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
+
+	if ( !tCtx.SetupCalc ( pResult, tMaxSorterSchema, m_tSchema, nullptr, dSorterSchemas ) )
+		return false;
 
 	// setup search terms
 	RtQwordSetup_t tTermSetup ( tGuard );

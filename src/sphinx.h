@@ -3007,6 +3007,9 @@ public:
 	/// set match comparator state
 	void		SetState ( const CSphMatchComparatorState & tState );
 
+	/// set match comparator state and copy expressions from there (if any)
+	void		CopyState ( const CSphMatchComparatorState & tState );
+
 	/// get match comparator stat
 	const CSphMatchComparatorState &	GetState() const { return m_tState; }
 

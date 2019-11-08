@@ -2161,6 +2161,18 @@ struct Expr_FieldFactor_c : public Expr_NoLocator_c
 		assert ( 0 && "ranker expressions in filters" );
 		return 0;
 	}
+
+	ISphExpr* Clone () const final
+	{
+		assert ( 0 && "cloning ranker expressions is not expected now" );
+		return nullptr; //new Expr_FieldFactor_c ( *this );
+	}
+
+private:
+	Expr_FieldFactor_c ( const Expr_FieldFactor_c& rhs )
+		: m_pIndex ( rhs.m_pIndex )
+		, m_pData ( rhs.m_pData )
+	{}
 };
 
 
@@ -2218,6 +2230,15 @@ struct Expr_IntPtr_c : public Expr_NoLocator_c
 		assert ( 0 && "ranker expressions in filters" );
 		return 0;
 	}
+
+	ISphExpr * Clone () const final
+	{
+		assert ( 0 && "cloning ranker expressions is not expected now" );
+		return nullptr; //new Expr_IntPtr_c ( *this );
+	}
+
+private:
+	Expr_IntPtr_c ( const Expr_IntPtr_c& rhs ) : m_pVal ( rhs.m_pVal ) {}
 };
 
 
@@ -2245,6 +2266,15 @@ struct Expr_FieldMask_c : public Expr_NoLocator_c
 		assert ( 0 && "ranker expressions in filters" );
 		return 0;
 	}
+
+	ISphExpr * Clone () const final
+	{
+		assert ( 0 && "cloning ranker expressions is not expected now" );
+		return nullptr; //new Expr_FieldMask_c ( *this );
+	}
+
+private:
+	Expr_FieldMask_c ( const Expr_FieldMask_c& rhs ) : m_tFieldMask ( rhs.m_tFieldMask ) {}
 };
 
 
@@ -2275,6 +2305,16 @@ struct Expr_FieldFactor_c<CSphBitvec> : public Expr_NoLocator_c
 		assert ( 0 && "ranker expressions in filters" );
 		return 0;
 	}
+
+	ISphExpr * Clone () const final
+	{
+		assert ( 0 && "cloning ranker expressions is not expected now" );
+		return nullptr; // new Expr_FieldFactor_c<CSphBitvec> ( *this );
+	}
+
+private:
+	Expr_FieldFactor_c<CSphBitvec> ( const Expr_FieldFactor_c<CSphBitvec>& rhs )
+	        : m_pIndex ( rhs.m_pIndex ), m_tField ( rhs.m_tField ) {}
 };
 
 
@@ -2302,6 +2342,17 @@ struct Expr_FloatPtr_c : public Expr_NoLocator_c
 		assert ( 0 && "ranker expressions in filters" );
 		return 0;
 	}
+
+	ISphExpr * Clone () const final
+	{
+		assert ( 0 && "cloning ranker expressions is not expected now" );
+		return nullptr; // new Expr_FloatPtr_c ( *this );
+	}
+
+private:
+	Expr_FloatPtr_c ( const Expr_FloatPtr_c& rhs )
+		: m_pVal ( rhs.m_pVal )
+	{}
 };
 
 template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
@@ -2386,6 +2437,21 @@ struct Expr_BM25F_T : public Expr_NoLocator_c
 		assert ( 0 && "ranker expressions in filters" );
 		return 0;
 	}
+
+	ISphExpr * Clone () const final
+	{
+		assert ( 0 && "cloning ranker expressions is not expected now" );
+		return nullptr; // new Expr_BM25F_T ( *this );
+	}
+
+private:
+	Expr_BM25F_T ( const Expr_BM25F_T& rhs )
+		: m_pState ( rhs.m_pState )
+		, m_fK1 ( rhs.m_fK1 )
+		, m_fB ( rhs.m_fB )
+		, m_fWeightedAvgDocLen ( rhs.m_fWeightedAvgDocLen )
+		, m_dWeights ( rhs.m_dWeights )
+	{}
 };
 
 
@@ -2455,6 +2521,17 @@ struct Expr_Sum_T : public ISphExpr
 		assert ( 0 && "ranker expressions in filters" );
 		return 0;
 	}
+
+	ISphExpr * Clone () const final
+	{
+		assert ( 0 && "cloning ranker expressions is not expected now" );
+		return nullptr; // new Expr_Sum_T ( *this );
+	}
+
+private:
+	Expr_Sum_T ( const Expr_Sum_T& rhs )
+		: m_pState ( rhs.m_pState ) // fixme!
+		, m_pArg ( SafeClone (rhs.m_pArg ) ) {}
 };
 
 
@@ -2524,6 +2601,17 @@ struct Expr_Top_T : public ISphExpr
 		assert ( 0 && "ranker expressions in filters" );
 		return 0;
 	}
+
+	ISphExpr * Clone () const final
+	{
+		assert ( 0 && "cloning ranker expressions is not expected now" );
+		return nullptr; // new Expr_Top_T ( *this );
+	}
+
+private:
+	Expr_Top_T ( const Expr_Top_T& rhs )
+		: m_pState ( rhs.m_pState ) // fixme!
+		, m_pArg ( SafeClone ( rhs.m_pArg ) ) {}
 };
 
 
@@ -2541,6 +2629,15 @@ struct Expr_GetIntConst_Rank_c : public Expr_NoLocator_c
 		assert ( 0 && "ranker expressions in filters" );
 		return 0;
 	}
+
+	ISphExpr * Clone () const final
+	{
+		assert ( 0 && "cloning ranker expressions is not expected now" );
+		return nullptr; // new Expr_GetIntConst_Rank_c ( *this );
+	}
+
+private:
+	Expr_GetIntConst_Rank_c ( const Expr_GetIntConst_Rank_c& rhs ) : m_iValue ( rhs.m_iValue ) {}
 };
 
 

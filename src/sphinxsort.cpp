@@ -4285,6 +4285,7 @@ public:
 	void				FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) final;
 	void				Command ( ESphExprCommand eCmd, void * pArg ) final;
 	uint64_t			GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final;
+	ISphExpr *			Clone() const final { return new ExprGeodist_t; }
 
 protected:
 	CSphAttrLocator		m_tGeoLatLoc;
@@ -4711,9 +4712,17 @@ public:
 		return 0;
 	}
 
+	ISphExpr * Clone() const final
+	{
+		return new ExprSortStringAttrFixup_c ( *this );
+	}
+
 public:
 	const BYTE *		m_pBlobPool {nullptr};	///< string pool; base for offset of string attributes
 	CSphAttrLocator		m_tLocator;				///< string attribute to fix
+
+private:
+	ExprSortStringAttrFixup_c ( const ExprSortStringAttrFixup_c& rhs ) : m_tLocator ( rhs.m_tLocator ) {}
 };
 
 
@@ -4831,10 +4840,21 @@ public:
 		return 0;
 	}
 
+	ISphExpr * Clone() const final
+	{
+		return new ExprSortJson2StringPtr_c ( *this );
+	}
+
 private:
 	const BYTE *		m_pBlobPool {nullptr};	///< string pool; base for offset of string attributes
 	CSphAttrLocator		m_tJsonCol;				///< JSON attribute to fix
 	CSphRefcountedPtr<ISphExpr>	m_pExpr;
+
+private:
+	ExprSortJson2StringPtr_c ( const ExprSortJson2StringPtr_c & rhs )
+		: m_tJsonCol ( rhs.m_tJsonCol )
+		, m_pExpr ( SafeClone (rhs.m_pExpr) )
+	{}
 };
 
 

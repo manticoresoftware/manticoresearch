@@ -102,6 +102,10 @@ public:
 	const CSphString &			GetQuery() const { return m_sQuery; }
 	bool						Command ( ESphExprCommand eCmd, void * pArg );
 
+	QueryExprTraits_c ( const QueryExprTraits_c& rhs )
+		: m_pQuery ( SafeClone ( rhs.m_pQuery))
+	{}
+
 private:
 	CSphRefcountedPtr<ISphExpr>	m_pQuery;
 	mutable bool				m_bFirstQuery = true;
@@ -183,6 +187,7 @@ public:
 	void		FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override;
 	void		Command ( ESphExprCommand eCmd, void * pArg ) override;
 	uint64_t	GetHash ( const ISphSchema &, uint64_t, bool & ) override;
+	ISphExpr *	Clone () const override;
 
 protected:
 	CSphRefcountedPtr<ISphExpr>		m_pArgs;
@@ -192,6 +197,9 @@ protected:
 	CSphQueryProfile *				m_pProfiler;
 	CSphScopedPtr<SnippetBuilder_i>	m_pSnippetBuilder;
 	CSphVector<int>					m_dRequestedFields;
+
+private:
+	Expr_Snippet_c ( const Expr_Snippet_c & rhs ); // need for cloning
 };
 
 
@@ -255,8 +263,10 @@ Expr_Snippet_c::Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQu
 			return;
 	}
 
-	m_tSnippetQuery.m_bHasBeforePassageMacro = SnippetTransformPassageMacros ( m_tSnippetQuery.m_sBeforeMatch, m_tSnippetQuery.m_sBeforeMatchPassage );
-	m_tSnippetQuery.m_bHasAfterPassageMacro = SnippetTransformPassageMacros ( m_tSnippetQuery.m_sAfterMatch, m_tSnippetQuery.m_sAfterMatchPassage );
+	m_tSnippetQuery.m_bHasBeforePassageMacro =
+			SnippetTransformPassageMacros ( m_tSnippetQuery.m_sBeforeMatch, m_tSnippetQuery.m_sBeforeMatchPassage );
+	m_tSnippetQuery.m_bHasAfterPassageMacro =
+			SnippetTransformPassageMacros ( m_tSnippetQuery.m_sAfterMatch, m_tSnippetQuery.m_sAfterMatchPassage );
 
 	if ( !m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery, sError ) )
 		return;
@@ -335,9 +345,27 @@ uint64_t Expr_Snippet_c::GetHash ( const ISphSchema &, uint64_t, bool & )
 }
 
 
+ISphExpr * Expr_Snippet_c::Clone () const
+{
+	return new Expr_Snippet_c ( *this );
+}
+
+Expr_Snippet_c::Expr_Snippet_c ( const Expr_Snippet_c& rhs )
+		: QueryExprTraits_c ( rhs )
+		, m_pArgs ( SafeClone ( rhs.m_pArgs ) )
+		, m_pText ( SafeClone ( rhs.m_pText ) )
+		, m_pIndex ( rhs.m_pIndex )
+		, m_tSnippetQuery ( rhs.m_tSnippetQuery )
+		, m_pProfiler ( rhs.m_pProfiler )
+		, m_pSnippetBuilder ( CreateSnippetBuilder () )
+{
+	CSphString sError;
+	assert ( m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery, sError ));
+}
+
 //////////////////////////////////////////////////////////////////////////
 
-class Expr_Highlight_c : public ISphStringExpr, public QueryExprTraits_c
+class Expr_Highlight_c final : public ISphStringExpr, public QueryExprTraits_c
 {
 public:
 				Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQueryProfile * pProfiler, CSphString & sError );
@@ -346,6 +374,7 @@ public:
 	void		Command ( ESphExprCommand eCmd, void * pArg ) final;
 	void		FixupLocator ( const ISphSchema * /*pOldSchema*/, const ISphSchema * /*pNewSchema*/ ) final {}
 	uint64_t	GetHash ( const ISphSchema &, uint64_t, bool & ) final;
+	ISphExpr *	Clone () const final;
 
 private:
 	CSphIndex *						m_pIndex = nullptr;
@@ -358,6 +387,7 @@ private:
 	CSphRefcountedPtr<ISphExpr>		m_pArgs;
 	bool							m_bFetchAllFields = false;
 
+				Expr_Highlight_c ( const Expr_Highlight_c & rhs );
 	bool		FetchFieldsFromDocstore ( DocstoreDoc_t & tFetchedDoc, DocID_t & tDocID ) const;
 	void		ParseFields ( ISphExpr * pExpr );
 	bool		ParseOptions ( const VecTraits_T<CSphNamedVariant> & dMap, CSphString & sError );
@@ -446,7 +476,7 @@ int	Expr_Highlight_c::StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr
 		}
 
 		if ( iFetchedFieldId!=-1 )
-			tNewField.m_dData = VecTraits_T<BYTE>( tFetchedDoc.m_dFields[iFetchedFieldId].Begin(), tFetchedDoc.m_dFields[iFetchedFieldId].GetLength() );
+			tNewField.m_dData = tFetchedDoc.m_dFields[iFetchedFieldId].Slice();
 	}
 
 	if ( UpdateQuery(tMatch) )
@@ -502,6 +532,26 @@ uint64_t Expr_Highlight_c::GetHash ( const ISphSchema &, uint64_t, bool & )
 {
 	assert ( 0 && "no snippets in filters" );
 	return 0;
+}
+
+
+ISphExpr * Expr_Highlight_c::Clone () const
+{
+	return new Expr_Highlight_c ( *this );
+}
+
+
+Expr_Highlight_c::Expr_Highlight_c ( const Expr_Highlight_c& rhs )
+		: QueryExprTraits_c ( rhs )
+		, m_pIndex ( rhs.m_pIndex )
+		, m_pProfiler ( rhs.m_pProfiler )
+		, m_pSnippetBuilder ( CreateSnippetBuilder () )
+		, m_tSnippetQuery ( rhs.m_tSnippetQuery )
+		, m_dRequestedFieldIds ( rhs.m_dRequestedFieldIds )
+		, m_pArgs ( SafeClone ( rhs.m_pArgs ) )
+{
+	CSphString sError;
+	assert ( m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery, sError ));
 }
 
 
@@ -589,7 +639,7 @@ bool Expr_Highlight_c::MarkRequestedFields ( CSphString & sError )
 }
 
 
-bool Expr_Highlight_c::ParseOptions ( const CSphVector<CSphNamedVariant> & dMap, CSphString & sError )
+bool Expr_Highlight_c::ParseOptions ( const VecTraits_T<CSphNamedVariant> & dMap, CSphString & sError )
 {
 	for ( const auto & i : dMap )
 	{
@@ -638,7 +688,7 @@ ISphExpr * ExprHook_c::CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage * p
 	}
 
 	if ( !sError.IsEmpty() )
-		SafeDelete(pRes);
+		SafeRelease(pRes);
 
 	return pRes;
 }

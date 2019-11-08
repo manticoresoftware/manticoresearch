@@ -8835,7 +8835,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 		if ( pJobLocal )
 			pJobLocal->Call();
 		SafeDelete ( pPool );
-		
+
 		// back in query order
 		if ( !bScattered )
 			dQueries.Sort ( bind ( &ExcerptQueryChained_t::m_iSeq ) );
@@ -12603,7 +12603,7 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc
 		else if ( sOpt=="use_boundaries" )		{ q.m_bUseBoundaries = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="weight_order" )		{ q.m_bWeightOrder = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="query_mode" )
-		{ 
+		{
 			bool bQueryMode = ( v.m_iVal!=0 );
 			iExpType = TOK_CONST_INT;
 			if ( !bQueryMode )

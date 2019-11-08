@@ -282,8 +282,6 @@ struct XQQuery_t : public ISphNoncopyable
 	{
 		SafeDelete ( m_pRoot );
 	}
-
-	XQQuery_t * Clone () const;
 };
 
 

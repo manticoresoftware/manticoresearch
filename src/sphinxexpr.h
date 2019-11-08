@@ -146,9 +146,19 @@ public:
 
 	/// get expression hash (for query cache)
 	virtual uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) = 0;
+
+	/// make undependent clone of self
+	virtual ISphExpr* Clone() const = 0;
 };
 
 using ISphExprRefPtr_c = CSphRefcountedPtr<ISphExpr>;
+
+inline ISphExpr* SafeClone ( ISphExpr * pRhs )
+{
+	if ( pRhs )
+		return pRhs->Clone();
+	return nullptr;
+}
 
 /// set global behavior of grouping by day/week/month/year functions:
 /// if invoked true, params treated as UTC timestamps,
@@ -241,6 +251,17 @@ public:
 		assert ( 0 && "calling GetHash from a const hash" );
 		return 0;
 	}
+
+	ISphExpr * Clone () const final
+	{
+		return new Expr_MapArg_c ( *this );
+	}
+
+private:
+	Expr_MapArg_c ( const Expr_MapArg_c& rhs )
+		: m_pValues ( rhs.m_pValues )
+		, m_iCount ( rhs.m_iCount )
+	{}
 };
 
 

@@ -220,7 +220,7 @@ INSTALL(FILES sphinxudf.h  DESTINATION usr/include/manticore COMPONENT devel)
 
 if ( NOT DISABLE_TESTING )
 
-	if ( CMAKE_VERSION VERSION_GREATER 3.1.0 )
+	if ( CMAKE_VERSION VERSION_GREATER 3.1.0 AND NOT DISABLE_GTESTS )
 		add_subdirectory ( gtests )
 	endif()
 
@@ -280,8 +280,9 @@ if ( NOT DISABLE_TESTING )
 
 	# first check syntax
 	find_package ( PythonInterp QUIET )
-	if ( PYTHONINTERP_FOUND )
+	if ( PYTHONINTERP_FOUND AND NOT DISABLE_GTESTS )
 		set ( RESERVED_TEST "\"SphinxQL reserved keywords consistency\"" )
+		message ( STATUS "python binary is ${PYTHON_EXECUTABLE}" ) # !COMMIT
 		add_test ( NAME ${RESERVED_TEST}
 				WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 				COMMAND ${PYTHON_EXECUTABLE} reserved.py )

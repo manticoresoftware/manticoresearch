@@ -114,6 +114,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="--no-demo" )					$g_skipdemo = true;
 	else if ( $arg=="--no-marks" )					$g_usemarks = false;
 	else if ( $arg=="--cwd" )						chdir ( DIRNAME ( __FILE__ ) );
+	else if ( $arg=="--sd_extra" )					$locals['extra_searchd_options'] = $args[++$i];
 	else if ( is_dir($arg) )						$test_dirs[] = $arg;
 	else if ( preg_match ( "/^(\\d+)-(\\d+)$/", $arg, $range ) )
 	{
@@ -255,17 +256,35 @@ $total_subtests = 0;
 $total_subtests_failed = 0;
 $total_skipped = $user_skipped;
 $failed_tests = array();
+
+$test_num = 0;
+$sd_port_ref = $sd_port;
+$agent_port_ref = $agent_port;
+$agent_port_sql_ref = $agent_port_sql;
+$agent_port_sql_vip_ref = $agent_port_sql_vip;
+$agent_port_http_ref = $agent_port_http;
+$sd_sphinxql_port_ref = $sd_sphinxql_port;
+$sd_sphinxql_port_vip_ref = $sd_sphinxql_port_vip;
+$sd_http_port_ref = $sd_http_port;
+
+$name_err_all = $locals['testdir'] . "error_all.txt";
+$name_err = $locals['testdir'] . "error.txt";
+
 foreach ( $tests as $test )
 {
 	$res_path = testdir($test);
 	if ( $windows && !$sd_managed_searchd )
 	{
 		// avoid an issue with daemons stuck in exit(0) for some seconds
-		$sd_port += 10;
-		$agent_port += 10;
-		$agent_port_sql += 10;
-		$agent_port_sql_vip += 10;
-		$agent_port_http += 10;
+		$sd_port = $sd_port_ref + 10 * ( $test_num % 10 );
+		$agent_port = $agent_port_ref + 10 * ( $test_num % 10 );
+		$agent_port_sql = $agent_port_sql_ref + 10 * ( $test_num % 10 );
+		$agent_port_sql_vip = $agent_port_sql_vip_ref + 10 * ( $test_num % 10 );
+		$agent_port_http = $agent_port_http_ref + 10 * ( $test_num % 10 );
+		$sd_sphinxql_port = $sd_sphinxql_port_ref + 10 * ( $test_num % 10 );
+		$sd_sphinxql_port_vip = $sd_sphinxql_port_vip_ref + 10 * ( $test_num % 10 );
+		$sd_http_port = $sd_http_port_ref + 10 * ( $test_num % 10 );
+		$test_num += 1;
 		$agents	= array (
 			array ( "address" => $sd_address, "port" => $sd_port, "sqlport" => $sd_sphinxql_port, "sqlport_vip" => $sd_sphinxql_port_vip, "replication_port"=>0, "http_port" => $sd_http_port ),
 			array ( "address" => $agent_address, "port" => $agent_port, "sqlport" => $agent_port_sql, "sqlport_vip" => $agent_port_sql_vip, "replication_port"=>0, "http_port" => $agent_port_http ),
@@ -282,6 +301,13 @@ foreach ( $tests as $test )
 	{
 		$total_tests++;
 		$res = RunTest ( $test, $g_skipdemo, $g_usemarks );
+		
+		// copy searchd log into a file
+		file_put_contents($name_err_all, "\n*** in test $test ***\n", FILE_APPEND);
+		if ( file_exists ($name_err) )
+		{
+			file_put_contents($name_err_all, file_get_contents($name_err), FILE_APPEND);
+		}
 
 		if ( !is_array($res) )
 		{

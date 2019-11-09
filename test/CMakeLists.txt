@@ -17,11 +17,20 @@ if ( NOT DISABLE_TESTING )
 		message ( STATUS "Create ubertest.php proxy" )
 		configure_file ( "ubertest.php.in" "${MANTICORE_BINARY_DIR}/test/ubertest.php" @ONLY )
 	endif()
+	
+	
+	if ( NOT SEARCHD_CLI_EXTRA )
+		set ( SEARCHD_CLI_EXTRA "" )
+	endif()
 
 	add_test ( NAME "\"Cleaning guess cache\""
 			#    	CONFIGURATIONS Debug
 			COMMAND ${CMAKE_COMMAND} -E remove guess.txt )
 	SET_TESTS_PROPERTIES ( "\"Cleaning guess cache\"" PROPERTIES FIXTURES_SETUP UBER )
+	
+	add_test ( NAME "\"Cleaning errors\""
+			COMMAND ${CMAKE_COMMAND} -E remove error_all.txt )
+	SET_TESTS_PROPERTIES ( "\"Cleaning errors\"" PROPERTIES FIXTURES_SETUP UBER )
 
 	foreach ( test ${tests} )
 		# get the last dir (filename)
@@ -118,6 +127,7 @@ if ( NOT DISABLE_TESTING )
 							-b "${MANTICORE_BINARY_DIR}/src/"
 							-t "${MANTICORE_BINARY_DIR}/test/"
 							--ctest -u test --strict-verbose --no-demo
+							"--sd_extra" "${SEARCHD_CLI_EXTRA}"
 							t ${onetest} )
 
 				SET (labels "PLAIN")
@@ -138,6 +148,7 @@ if ( NOT DISABLE_TESTING )
 						-b "${MANTICORE_BINARY_DIR}/src/"
 						-t "${MANTICORE_BINARY_DIR}/test/"
 						--ctest -u test --strict-verbose --no-demo
+						"--sd_extra" "${SEARCHD_CLI_EXTRA}"
 						--rt --ignore-weights
 						t ${onetest} )
 				SET ( labels "RT" )

@@ -21,7 +21,7 @@ if ( NOT WIN32 )
 endif ()
 
 # testing stuff
-if ( NOT DISABLE_TESTING )
+if ( NOT DISABLE_TESTING AND NOT DISABLE_GTESTS )
 
 	add_executable (testcli test.c)
 	target_link_libraries ( testcli sphinxclient )

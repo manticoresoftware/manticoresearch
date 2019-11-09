@@ -114,7 +114,13 @@ $client->SetLimits(0, 10);
 $client->AddQuery ($query, $index);
 $client->SetGroupBy ('missed', SPH_GROUPBY_ATTR, 'missed desc');
 $client->AddQuery ($query, $index);
-$results[] = $client->RunQueries(); 
+$last = $client->RunQueries(); 
+
+for ($i = 0; $i < count($last); ++$i)
+	if (is_array($last) && is_array($last[$i]))
+		unset($last[$i]["time"]);
+
+$results[] = $last;
 
 $client->ResetGroupBy();
 $index = 'products, idx3';

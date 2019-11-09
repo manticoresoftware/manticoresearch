@@ -83,6 +83,36 @@ release_tests:
     when: always
   retry: 1
 
+win_tests:
+  stage: routines
+  except:
+    variables:
+      - $WHAT
+  tags:
+    - windows
+    - build
+  dependencies: []
+  variables:
+    LIBS_BUNDLE: "x:/bundle"
+    OPENSSL_ROOT_DIR: "x:/bundle/openssl-x32"
+    COPY_DLL: "x:/bundle/dll"
+    WIN_TEST_CI: "1"
+  script:
+    - 'net use x: \\\\VBOXSRV\\shared'
+    - export PATH='/cygdrive/x/bundle/openssl-x32:/cygdrive/x/bundle/Expat-1.95.8/Libs:/cygdrive/x/bundle/libiconv-1.9.1/bin:/cygdrive/x/bundle/mysql/bin:/cygdrive/x/php:'$PATH
+    - misc/ctest/win_tests.bat
+    - cd build && mkdir here6
+    - cp -v -r Testing/2*/*.xml here6
+  artifacts:
+    paths:
+      - build/here6
+      - build/test/test_*/report.txt
+      - build/test/error*.txt
+      - build/test/searchd.log
+    expire_in: 12 hrs
+    when: always
+  retry: 1
+
 build_win:
   stage: routines
   except:
@@ -172,6 +202,7 @@ push_results:
   dependencies:
     - simple_tests
     - release_tests
+    - win_tests
     - build_win
     - build_mac
     - build_bsd

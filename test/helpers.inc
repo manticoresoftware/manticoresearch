@@ -430,6 +430,14 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 	if (!GetSearchd ($path, $error))
 		return 1;
 
+	// try to wait a bit here
+	$action_retries = ActionRetries();
+	$i = 0;
+	while ( !@touch($abs_error_file) && $i < $action_retries )
+	{
+		usleep ( $action_wait_timeout );
+		$i++;
+	}
 	if ( !@touch($abs_error_file) )
 	{
 		$error = "$abs_error_file: unable to create error file";
@@ -2032,6 +2040,13 @@ class SphinxConfig
 				{
 					$query_result["error"] = $this->FixupErrorMessage ( mysqli_error( $connection ) );
 					$query_result["errno"] = mysqli_errno( $connection );
+					
+					// Windows 7 fixup
+					$win7_replace_pos = strpos ( $query_result["error"], "error when sending data: WSA error 10057" );
+					if ( $query_result["errno"]==1064 && $win7_replace_pos!==FALSE ) {
+						$query_result["error"] = substr ( $query_result["error"], 0, $win7_replace_pos ) . "connect timed out";
+					}
+					
 				} else
 				{
 					$query_result["total_rows"] = mysqli_num_rows($result);
@@ -3136,7 +3151,11 @@ class SphinxConfig
 								$sources[$match[$idxname][0]] = $value;
 								break;
 							}
-						case "path": $this->EraseIndexFiles($value);
+						case "path":
+							$this->EraseIndexFiles($value);
+							// need different index paths at every agent
+							if ( $agentid!=0 )
+								$value .= "_$agentid";
 							if ($rtcopy)
 								$justcopy = true;
 							// no break!

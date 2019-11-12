@@ -3893,7 +3893,7 @@ void MemorizeStack ( void* PStack );
 bool sphThreadSet ( SphThreadKey_t tKey, void * pValue );
 
 
-template < typename T=void >
+template < typename PTR=void* >
 class TLS_T final
 {
 	SphThreadKey_t m_tKey;
@@ -3909,30 +3909,30 @@ public:
 		sphThreadKeyDelete( m_tKey );
 	}
 
-	TLS_T& operator=( T* pValue )
+	TLS_T& operator=( PTR pValue )
 	{
-		Verify ( sphThreadSet( m_tKey, pValue ));
+		Verify ( sphThreadSet( m_tKey, (void*)pValue ));
 		return *this;
 	}
 
-	const T* operator*() const
+	const PTR operator*() const
 	{
-		return ( T* ) sphThreadGet( m_tKey );
+		return ( PTR ) sphThreadGet( m_tKey );
 	}
 
-	T* operator->() const
+	PTR operator->() const
 	{
-		return ( T* ) sphThreadGet( m_tKey );
+		return (PTR) sphThreadGet( m_tKey );
 	}
 
 	operator bool() const
 	{
-		return !!sphThreadGet( m_tKey );
+		return sphThreadGet ( m_tKey )!=nullptr;
 	}
 
-	operator T*() const
+	operator PTR() const
 	{
-		return ( T* ) sphThreadGet( m_tKey );
+		return reinterpret_cast<PTR> ( sphThreadGet( m_tKey ) );
 	}
 };
 

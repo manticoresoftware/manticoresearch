@@ -225,7 +225,7 @@ static RwLock_t g_tClustersLock;
 static SmallStringHash_T<ReplicationCluster_t *> g_hClusters GUARDED_BY ( g_tClustersLock );
 
 // hack for abort callback to invalidate only specific cluster
-static TLS_T<ReplicationCluster_t> g_pTlsCluster;
+static TLS_T<ReplicationCluster_t*> g_pTlsCluster;
 
 // description of clusters and indexes loaded from JSON config
 static CSphVector<ClusterDesc_t> g_dCfgClusters;

@@ -932,7 +932,7 @@ static int		g_iCrashInfoLen = 0;
 static char		g_sMinidump[SPH_TIME_PID_MAX_SIZE] = "";
 #endif
 
-TLS_T<CrashQuery_t> SphCrashLogger_c::m_pTlsCrashQuery;    // pointer to on-stack instance of this class
+TLS_T<CrashQuery_t*> SphCrashLogger_c::m_pTlsCrashQuery;    // pointer to on-stack instance of this class
 
 static CrashQuery_t g_tUnhandled;
 

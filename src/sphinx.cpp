@@ -210,7 +210,7 @@ STATIC_SIZE_ASSERT ( SphOffset_t, 8 );
 
 // whatever to collect IO stats
 static bool g_bCollectIOStats = false;
-static TLS_T<CSphIOStats> g_pTlsIOStats;
+static TLS_T<CSphIOStats*> g_pTlsIOStats;
 
 
 void sphInitIOStats ()

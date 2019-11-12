@@ -519,7 +519,7 @@ public:
 };
 
 /// TLS key of memory category stack
-TLS_T<MemCategoryStack_t> g_tTLSMemCategory;
+TLS_T<MemCategoryStack_t*> g_tTLSMemCategory;
 
 static MemCategoryStack_t * g_pMainTLS = NULL; // category stack of main thread
 
@@ -830,7 +830,7 @@ struct ThreadCall_t
 		char 			m_sName[16];	// used in main thread
 	};
 };
-static TLS_T<ThreadCall_t> g_pTlsThreadCleanup;
+static TLS_T<ThreadCall_t*> g_pTlsThreadCleanup;
 static TLS_T<> g_pTlsMyThreadStack;
 
 #if USE_WINDOWS

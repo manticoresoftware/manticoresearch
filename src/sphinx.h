@@ -3653,6 +3653,9 @@ extern CSphString g_sLemmatizerBase;
 // Get global shutdown flag
 volatile bool& sphGetShutdown();
 
+// Access to global max children
+volatile int & sphDistThreads ();
+
 // Access to global TFO settings
 volatile int& sphGetTFO();
 #define TFO_CONNECT 1

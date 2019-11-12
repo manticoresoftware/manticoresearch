@@ -176,7 +176,7 @@ static int				g_iDocstoreCache = 0;
 static FileAccessSettings_t g_tDefaultFA;
 
 static ISphThdPool *	g_pThdPool			= nullptr;
-int				g_iDistThreads		= 0;
+static auto&			g_iDistThreads = sphDistThreads ();
 
 int				g_iAgentConnectTimeout = 1000;
 int				g_iAgentQueryTimeout = 3000;	// global (default). May be override by index-scope values, if one specified
@@ -3863,7 +3863,7 @@ static int KillAllDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes )
 	{
 		Verify ( tRes.m_tSchema.GetAttr(0).m_sName==sphGetDocidName() );
 
-		// normal sorter needs massasging
+		// normal sorter needs massage
 		// sort by docid and then by tag to guarantee the replacement order
 		TaggedMatchSorter_fn fnSort;
 		sphSort ( tRes.m_dMatches.Begin(), tRes.m_dMatches.GetLength(), fnSort, fnSort );

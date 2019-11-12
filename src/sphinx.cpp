@@ -30860,3 +30860,9 @@ volatile int &sphGetTFO ()
 	static int iTFO = 0;
 	return iTFO;
 }
+
+volatile int & sphDistThreads ()
+{
+	static int iDistThreads = 0;
+	return iDistThreads;
+}

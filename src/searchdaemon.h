@@ -126,7 +126,6 @@ extern int g_iReadTimeout;        // defined in searchd.cpp
 extern int g_iWriteTimeout;    // sec
 
 extern int g_iMaxPacketSize;    // in bytes; for both query packets from clients and response packets from agents
-extern int g_iDistThreads;
 
 static const int64_t MS2SEC = I64C ( 1000000 );
 

@@ -3048,9 +3048,14 @@ public:
 	/// get a pointer to the worst element, NULL if there is no fixed location
 	virtual const CSphMatch *	GetWorst() const { return nullptr; }
 
-	virtual ISphMatchSorter* Clone() const = 0;// { return nullptr; }
+	/// make same sorter (for MT processing)
+	virtual ISphMatchSorter* Clone() const = 0;
+
+	/// move resultset into target
+	virtual void MoveTo ( ISphMatchSorter * pRhs ) = 0;
+
 	/// makes the same sorter
-	void CloneTo ( ISphMatchSorter* pTrg ) const;
+	void CloneTo ( ISphMatchSorter * pTrg ) const;
 };
 
 struct CmpPSortersByRandom_fn

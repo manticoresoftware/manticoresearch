@@ -4831,6 +4831,8 @@ template < typename VALUE, typename KEY, typename HASHFUNC=HashFunc_Int64_t >
 class OpenHash_T
 {
 public:
+	using MYTYPE = OpenHash_T<VALUE,KEY,HASHFUNC>;
+
 	/// initialize hash of a given initial size
 	explicit OpenHash_T ( int64_t iSize=256 )
 	{
@@ -4981,6 +4983,14 @@ public:
 			}
 
 		return nullptr;
+	}
+
+	void Swap ( MYTYPE& rhs ) noexcept
+	{
+		::Swap ( m_iSize, rhs.m_iSize );
+		::Swap ( m_iUsed, rhs.m_iUsed );
+		::Swap ( m_iMaxUsed, rhs.m_iMaxUsed );
+		::Swap ( m_pHash, rhs.m_pHash );
 	}
 
 protected:

@@ -141,6 +141,18 @@ public:
 public:
 	int			GetLength () const override								{ return m_iUsed; }
 	int			GetDataLength () const override							{ return m_iDataLength; }
+
+	// helper
+	void SwapMatchQueueTraits ( CSphMatchQueueTraits& rhs )
+	{
+		// ISphMatchSorter
+		::Swap ( m_iTotal, rhs.m_iTotal );
+
+		// CSphMatchQueueTraits
+		::Swap ( m_pData, rhs.m_pData );
+		::Swap ( m_iUsed, rhs.m_iUsed );
+		assert ( m_iSize==rhs.m_iSize );
+	}
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -190,8 +202,9 @@ public:
 		return m_pData;
 	}
 
-	/// add entry to the queue
-	bool Push ( const CSphMatch & tEntry ) override
+	/// generic add entry to the queue
+	template <typename PUSHER, typename MATCH>
+	bool PushT ( PUSHER && PUSH, MATCH && tEntry )
 	{
 		m_iTotal++;
 
@@ -211,7 +224,8 @@ public:
 		}
 
 		// do add
-		m_pSchema->CloneMatch ( m_pData+m_iUsed, tEntry );
+		PUSH ( std::forward<MATCH> ( tEntry ));
+		//		m_pSchema->CloneMatch ( m_pData+m_iUsed, tEntry );
 
 		if_const ( NOTIFICATIONS )
 			m_iJustPushed = tEntry.m_tRowID;
@@ -231,6 +245,15 @@ public:
 		}
 
 		return true;
+	}
+
+	/// add entry to the queue
+	bool Push ( const CSphMatch & tEntry ) override
+	{
+		return PushT ( [this] ( const CSphMatch & tEntry )
+		{
+			m_pSchema->CloneMatch ( m_pData+m_iUsed, tEntry );
+		}, tEntry );
 	}
 
 	/// add grouped entry (must not happen)
@@ -342,7 +365,35 @@ public:
 		CloneTo ( pClone );
 		return pClone;
 	}
+
+	// FIXME! todo
+	void MoveTo ( ISphMatchSorter * pRhs ) final
+	{
+		auto& dRhs = *(MYTYPE *) pRhs;
+
+		if ( !m_iTotal )
+			return; // no matches, nothing to do.
+
+		// install into virgin sorter - no need to do something; just swap
+		if ( !dRhs.m_iTotal )
+		{
+			SwapMatchQueueTraits ( dRhs );
+			return;
+		}
+
+		// both are non-empty - need to process.
+		// work as in non-ordered finalize call, but we not need to
+		// clone the matches, may just move them instead.
+		for ( auto * pCur = m_pData; pCur<( m_pData+m_iUsed ); ++pCur )
+		{
+			dRhs.PushT ( [&dRhs] ( CSphMatch & tEntry ) {
+				Swap ( *( dRhs.m_pData+dRhs.m_iUsed ), tEntry );
+			}, *pCur );
+		}
+	}
 };
+
+
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -529,6 +580,17 @@ public:
 		CloneTo ( pClone );
 		return pClone;
 	}
+
+	// FIXME! todo
+	void MoveTo ( ISphMatchSorter * pRhs ) final
+	{
+		auto& dRhs = *(CSphKbufferMatchQueue<COMP, NOTIFICATIONS>*) pRhs;
+		if ( !dRhs.m_iTotal )
+		{
+			SwapMatchQueueTraits (dRhs);
+			return;
+		}
+	}
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -636,6 +698,10 @@ public:
 	{
 		return nullptr;
 	}
+
+	// stub
+	void MoveTo ( ISphMatchSorter* ) final {}
+
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -690,6 +756,9 @@ public:
 	{
 		return nullptr;
 	}
+
+	// stub
+	void MoveTo ( ISphMatchSorter* ) final {}
 
 private:
 	CSphVector<DocID_t>* m_pValues;
@@ -1087,6 +1156,14 @@ public:
 		m_dHash.Resize ( iBuckets );
 
 		Reset ();
+	}
+
+	void Swap ( CSphFixedHash<T,KEY,HASHFUNC>& rhs ) noexcept
+	{
+		m_dEntries.SwapData ( rhs.m_dEntries );
+		m_dHash.SwapData (rhs.m_dHash );
+		::Swap ( m_iFree, rhs.m_iFree );
+		::Swap ( m_iLength, rhs.m_iLength );
 	}
 
 	/// cleanup
@@ -2110,6 +2187,19 @@ public:
 		return pClone;
 	}
 
+	// FIXME! todo
+	void MoveTo ( ISphMatchSorter * pRhs) final
+	{
+		auto& dRhs = *(MYTYPE *) pRhs;
+		if ( !dRhs.m_iTotal )
+		{
+			CSphMatchQueueTraits::SwapMatchQueueTraits ( dRhs );
+			::Swap ( m_iMaxUsed, dRhs.m_iMaxUsed );
+			m_hGroup2Match.Swap ( dRhs.m_hGroup2Match );
+			return;
+		}
+	}
+
 	void Finalize ( ISphMatchProcessor & tProcessor, bool ) override
 	{
 		if ( !BASE::GetLength() )
@@ -2470,6 +2560,26 @@ public:
 		auto pClone = new MYTYPE ( this->m_pComp, &dFoo, *this );
 		this->CloneKBufferGroupSorter ( pClone );
 		return pClone;
+	}
+
+	// FIXME! todo
+	void MoveTo ( ISphMatchSorter * pRhs) final
+	{
+		auto& dRhs = *(MYTYPE *) pRhs;
+		if ( !dRhs.m_iTotal )
+		{
+			CSphMatchQueueTraits::SwapMatchQueueTraits ( dRhs );
+			m_hGroup2Match.Swap ( dRhs.m_hGroup2Match );
+			m_dGroupByList.SwapData ( dRhs.m_dGroupByList );
+			m_dGroupsLen.SwapData ( dRhs.m_dGroupsLen );
+			::Swap ( m_iFreeHeads, dRhs.m_iFreeHeads );
+			::Swap ( m_uLastGroupKey, dRhs.m_uLastGroupKey );
+#ifndef NDEBUG
+			::Swap ( m_iruns, dRhs.m_iruns );
+			::Swap ( m_ipushed, dRhs.m_ipushed );
+#endif
+			return;
+		}
 	}
 
 private:
@@ -3300,6 +3410,23 @@ public:
 		CloneTo ( pClone );
 		pClone->SetupBaseGrouperWrp (m_pSchema);
 		return pClone;
+	}
+
+	// FIXME! todo
+	void MoveTo ( ISphMatchSorter * pRhs ) final
+	{
+		auto& dRhs = *(MYTYPE *) pRhs;
+		if ( !dRhs.m_iTotal )
+		{
+			// ISphMatchSorter
+			::Swap ( m_iTotal, dRhs.m_iTotal );
+
+			::Swap ( m_tData, dRhs.m_tData );
+			::Swap ( m_bDataInitialized, dRhs.m_bDataInitialized );
+			m_dUniq.SwapData ( dRhs.m_dUniq );
+			::Swap ( m_pBlobPool, dRhs.m_pBlobPool );
+			return;
+		}
 	}
 
 protected:

@@ -14299,6 +14299,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );
+	tCtx.m_iThTag = ppSorters[0]->m_iThTag;
 	if ( !tCtx.SetupCalc ( pResult, tMaxSorterSchema, m_tSchema, m_tBlobAttrs.GetWritePtr(), dSorterSchemas ) )
 		return false;
 
@@ -17161,6 +17162,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	tCtx.m_pLocalDocs = tArgs.m_pLocalDocs;
 	tCtx.m_iTotalDocs = ( tArgs.m_iTotalDocs ? tArgs.m_iTotalDocs : m_tStats.m_iTotalDocuments );
 	tCtx.m_pIndexSegment = this;
+	tCtx.m_iThTag = ppSorters[0]->m_iThTag;
 
 	if ( !tCtx.SetupCalc ( pResult, tMaxSorterSchema, m_tSchema, m_tBlobAttrs.GetWritePtr(), dSorterSchemas ) )
 		return false;

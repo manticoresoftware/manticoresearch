@@ -2988,6 +2988,7 @@ public:
 
 	RowID_t				m_iJustPushed {INVALID_ROWID};
 	int					m_iMatchCapacity = 0;
+	int					m_iThTag = -1; // key to distinquish clones by current thread id
 	CSphTightVector<RowID_t> m_dJustPopped;
 
 protected:

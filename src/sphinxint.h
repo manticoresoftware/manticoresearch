@@ -683,6 +683,7 @@ public:
 	ISphFilter *				m_pFilter = nullptr;
 	ISphFilter *				m_pWeightFilter = nullptr;
 
+	int 						m_iThTag = -1; // key to distinquish clones by current thread id
 	bool						m_bSkipQCache = false;			///< whether do not cache this query
 
 	struct CalcItem_t

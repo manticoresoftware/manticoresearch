@@ -18,7 +18,19 @@ source src_test
 {
   type      = mysql
   <sql_settings/>
-  sql_query     = SELECT id, gid101, gid102, fid105, bid201, sid202, title FROM test_table
+  sql_query     = SELECT id, gid101, gid102, fid105, bid201, sid202, title FROM test_table where id&gt;=10
+  sql_attr_uint   = gid101
+  sql_attr_uint   = gid102
+  sql_attr_uint   = fid105
+  sql_attr_uint   = bid201
+  sql_attr_uint   = sid202
+}
+
+source src_test2
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT id, gid101, gid102, fid105, bid201, sid202, title FROM test_table where id&lt;10
   sql_attr_uint   = gid101
   sql_attr_uint   = gid102
   sql_attr_uint   = fid105
@@ -32,6 +44,13 @@ index test
   source      = src_test
   path      = <data_path/>/test
 }
+
+index test2
+{
+  source      = src_test2
+  path      = <data_path/>/test2
+}
+
 
 </config>
 
@@ -52,6 +71,7 @@ create table test_table
 
 <db_insert>
 insert into test_table values
+(1, '1th fill', 1, 2, 3, 4, 5 ),
 (10, '10th fill', 11, 12, 13, 14, 15 ),
 (11, '11th fill', 21, 22, 23, 24, 25 ),
 (12, '12th fill', 31, 32, 33, 34, 35 )
@@ -63,6 +83,36 @@ insert into test_table values
 <query endpoint="json/search">{ "index": "test", "query": { "match": { "title": "fill" } }, "_source": ["gi*", "*20*"] }</query>
 <query endpoint="json/search">{ "index": "test", "query": { "match": { "title": "fill" } }, "_source": { "includes":["*"], "excludes":[] } }</query>
 <query endpoint="json/search">{ "index": "test", "query": { "match": { "title": "fill" } }, "_source": { "excludes":["*02", "*id1*"] } }</query>
+
+<query endpoint="json/search">
+{   
+   "query":{   
+      "bool":{   
+         "must":[   
+            {   
+               "match":{   
+                  "*":"fill"  
+               }  
+            }  
+         ],  
+         "should":[   
+            {   
+               "equals":{   
+                  "gid101":1  
+               }  
+            },  
+            {   
+               "equals":{   
+                  "gid101":11
+               }  
+            }  
+         ]  
+      }  
+   },  
+   "index":"test,test2",  
+   "limit":5  
+}  
+</query>
 
 </httpqueries>
 

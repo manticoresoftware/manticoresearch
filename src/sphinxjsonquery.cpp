@@ -1066,25 +1066,23 @@ static bool ConstructBoolFilters ( const JsonObj_c & tBool, CSphQuery & tQuery, 
 
 	if ( dMustNot.GetLength() )
 	{
-		int iFilter = dMust.GetLength();
-		dMust.Resize ( dMust.GetLength()+dMustNot.GetLength() );
 		for ( auto & i : dMustNot )
 		{
 			i.m_bExclude = true;
-			dMust[iFilter++] = i;
+			dMust.Add(i);
 		}
 
-		int iQueryItem = dMustQI.GetLength();
-		dMustQI.Resize ( dMustQI.GetLength()+dMustNotQI.GetLength() );
 		for ( auto & i : dMustNotQI )
-			dMustQI[iQueryItem++] = i;
+			dMustQI.Add(i);
 	}
 
 	if ( dMust.GetLength() )
 	{
 		AddToSelectList ( tQuery, dMustQI );
 		tQuery.m_dFilters.SwapData ( dMust );
-		tQuery.m_dItems.SwapData ( dMustQI );
+		for ( const auto & i : dMustQI )
+			tQuery.m_dItems.Add(i);
+
 		return true;
 	}
 
@@ -1092,7 +1090,8 @@ static bool ConstructBoolFilters ( const JsonObj_c & tBool, CSphQuery & tQuery, 
 	{
 		AddToSelectList ( tQuery, dShouldQI );
 		tQuery.m_dFilters.SwapData ( dShould );
-		tQuery.m_dItems.SwapData ( dShouldQI );
+		for ( const auto & i : dShouldQI )
+			tQuery.m_dItems.Add(i);
 
 		// need a filter tree
 		FilterTreeItem_t & tTreeItem = tQuery.m_dFilterTree.Add();
@@ -1877,7 +1876,7 @@ CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQ
 
 	tOut.StartBlock ( ",", R"("hits":[)", "]" );
 
-	const CSphColumnInfo * pId = tSchema.GetAttr ( sphGetDocidName() );		
+	const CSphColumnInfo * pId = tSchema.GetAttr ( sphGetDocidName() );
 
 	for ( int iMatch=tRes.m_iOffset; iMatch<tRes.m_iOffset+tRes.m_iCount; ++iMatch )
 	{

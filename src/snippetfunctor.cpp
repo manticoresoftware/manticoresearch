@@ -302,11 +302,12 @@ PassageContext_t::PassageContext_t()
 class TokenFunctorTraits_c : public TokenFunctor_i
 {
 protected:
-	SnippetResult_t	&			m_tResult;
-	const SnippetQuerySettings_t &		m_tQuery;
-	const CSphIndexSettings	&	m_tIndexSettings;
+	SnippetResult_t	&				m_tResult;
+	const SnippetQuerySettings_t &	m_tQuery;
+	const CSphIndexSettings	&		m_tIndexSettings;
+	CSphVector<BYTE> &				m_dResult;
 
-	TokenizerRefPtr_c		m_pTokenizer;
+	TokenizerRefPtr_c			m_pTokenizer;
 
 	const char *				m_szDocBuffer = nullptr;
 	const char *				m_pDoc = nullptr;
@@ -318,8 +319,7 @@ protected:
 
 			TokenFunctorTraits_c ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, int iField, SnippetResult_t & tRes );
 
-	void	ResultEmit ( const char * pSrc, int iLen, bool bHasPassageMacro=false, int iPassageId=0, const char * pPost=nullptr, int iPostLen=0 ) const;
-	void	ResultEmit ( CSphVector<BYTE> & dResult, const char * pSrc, int iLen, bool bHasPassageMacro=false, int iPassageId=0, const char * pPost=nullptr, int iPostLen=0 ) const;
+	void	ResultEmit ( CSphVector<BYTE> & dBuf, const char * pSrc, int iLen, bool bHasPassageMacro=false, int iPassageId=0, const char * pPost=nullptr, int iPostLen=0 ) const;
 	void	EmitPassageSeparator ( CSphVector<BYTE> & dBuf );
 };
 
@@ -328,10 +328,12 @@ TokenFunctorTraits_c::TokenFunctorTraits_c ( ISphTokenizer * pTokenizer, const S
 	: m_tResult ( tRes )
 	, m_tQuery ( tQuery )
 	, m_tIndexSettings ( tIndexSettings )
+	, m_dResult ( m_tResult.m_dFields[iField].m_dPassages[0].m_dText )
 	, m_pTokenizer ( pTokenizer )
 	, m_szDocBuffer ( szDoc )
 	, m_iDocLen ( iDocLen )
 	, m_iField ( iField )
+
 {
 	SafeAddRef(pTokenizer);
 	assert(m_pTokenizer);
@@ -343,15 +345,9 @@ TokenFunctorTraits_c::TokenFunctorTraits_c ( ISphTokenizer * pTokenizer, const S
 }
 
 
-void TokenFunctorTraits_c::ResultEmit ( const char * pSrc, int iLen, bool bHasPassageMacro, int iPassageId, const char * pPost, int iPostLen ) const
+void TokenFunctorTraits_c::ResultEmit ( CSphVector<BYTE> & dBuf, const char * pSrc, int iLen, bool bHasPassageMacro, int iPassageId,	const char * pPost, int iPostLen ) const
 {
-	ResultEmit ( m_tResult.m_dResult, pSrc, iLen, bHasPassageMacro, iPassageId, pPost, iPostLen );
-}
-
-
-void TokenFunctorTraits_c::ResultEmit ( CSphVector<BYTE> & dResult, const char * pSrc, int iLen, bool bHasPassageMacro, int iPassageId,	const char * pPost, int iPostLen ) const
-{
-	dResult.Append ( pSrc, iLen );
+	dBuf.Append ( pSrc, iLen );
 
 	if ( !bHasPassageMacro )
 		return;
@@ -359,14 +355,13 @@ void TokenFunctorTraits_c::ResultEmit ( CSphVector<BYTE> & dResult, const char *
 	char sBuf[16];
 	int iPassLen = snprintf ( sBuf, sizeof(sBuf), "%d", iPassageId );
 
-	dResult.Append ( sBuf, iPassLen );
-	dResult.Append ( pPost, iPostLen );
+	dBuf.Append ( sBuf, iPassLen );
+	dBuf.Append ( pPost, iPostLen );
 }
 
 
 void TokenFunctorTraits_c::EmitPassageSeparator ( CSphVector<BYTE> & dBuf )
 {
-	m_tResult.m_dSeparators.Add ( m_tResult.m_dResult.GetLength() );
 	ResultEmit ( dBuf, m_tQuery.m_sChunkSeparator.cstr(), m_iSeparatorLen );
 }
 
@@ -401,7 +396,8 @@ void HitTraits_c::RewindHits ( DWORD uTokPos, int iField )
 class DocStartHighlighter_c : public TokenFunctorTraits_c, public virtual DocStartHighlighter_i
 {
 public:
-			DocStartHighlighter_c ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, int & iResultLenCP, SnippetResult_t & tRes );
+			DocStartHighlighter_c ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, int & iResultLenCP,
+				int iField, SnippetResult_t & tRes );
 
 	bool	OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> &, const CSphVector<int> * ) final;
 	bool	OnOverlap ( int iStart, int iLen, int ) final;
@@ -422,8 +418,9 @@ private:
 };
 
 
-DocStartHighlighter_c::DocStartHighlighter_c ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, int & iResultLenCP, SnippetResult_t & tRes )
-	: TokenFunctorTraits_c ( pTokenizer, tQuery, tIndexSettings, szDoc, iDocLen, -1, tRes )
+DocStartHighlighter_c::DocStartHighlighter_c ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, int & iResultLenCP,
+	int iField, SnippetResult_t & tRes )
+	: TokenFunctorTraits_c ( pTokenizer, tQuery, tIndexSettings, szDoc, iDocLen, iField, tRes )
 	, m_iResultLenCP ( iResultLenCP )
 {
 	assert ( !m_tQuery.m_bAllowEmpty );
@@ -462,15 +459,15 @@ void DocStartHighlighter_c::CollectStartTokens ( int iStart, int iLen, int iLeng
 		iCalcLengthCP = sphUTF8Len ( m_pDoc+iStart, iLen );
 
 	bool bLengthOk = m_iResultLenCP+iCalcLengthCP<=m_tQuery.m_iLimit;
-	if ( bLengthOk || !m_tResult.m_dResult.GetLength() )
+	if ( bLengthOk || !m_dResult.GetLength() )
 	{
-		ResultEmit ( m_tResult.m_dResult, m_pDoc+iStart, iLen );
+		ResultEmit ( m_dResult, m_pDoc+iStart, iLen );
 		m_iResultLenCP += iCalcLengthCP;
 	}
 
 	if ( !bLengthOk )
 	{
-		EmitPassageSeparator ( m_tResult.m_dResult );
+		EmitPassageSeparator ( m_dResult );
 		m_bCollectionStopped = true;
 	}
 }
@@ -1345,22 +1342,21 @@ protected:
 
 private:
 	CSphVector<Passage_t*> &		m_dPassages;
+	CSphVector<PassageResult_t>	&	m_dPassageText;
+	CSphVector<BYTE> *				m_pCurPassageText = nullptr;
 	int								m_iCurToken = 0;
 	int								m_iCurPassage = -1;
 	int								m_iOpenUntilTokenPos = 0;
 	int								m_iOpenUntilTokenNum = 0;
 	int								m_iLastPos = 0;
-	bool							m_bLastWasSeparator = false;
 	TokenSpan_c						m_tTmpSpan;
 	CSphVector<Space_t>				m_dSpaces;
-	CSphVector<int>					m_dPassageHeads;
 	const FunctorZoneInfo_t &		m_tZoneInfo;
 
 	void	EmitZoneName ( int iStart ) const;
 	void	EmitSpaces ( int iStart, int iLen, int iBoundary );
 	void	UpdatePassage ( int iStart );
 	void	CheckClose ( int iPos );
-	void	EmitPassagesOrdered();
 };
 
 
@@ -1370,12 +1366,17 @@ PassageHighlighter_c::PassageHighlighter_c ( CSphVector<Passage_t*> & dPassages,
 	, BeforeAfterTraits_c(tQuery)
 	, HitTraits_c(dHits)
 	, m_dPassages ( dPassages )
+	, m_dPassageText ( tRes.m_dFields[iField].m_dPassages )
 	, m_tZoneInfo ( tZoneInfo )
 {
-	if ( m_tQuery.m_bWeightOrder )
-		m_dPassageHeads.Reserve(1024);
+	m_dPassageText.Resize ( dPassages.GetLength() );
 
-	tRes.m_dResult.Reserve ( EstimateResult ( tQuery, iDocLen ) );
+	// we don't want these separators in other functors
+	for ( auto & i : m_dPassageText )
+	{
+		i.m_bStartSeparator = true;
+		i.m_bEndSeparator = true;
+	}
 }
 
 
@@ -1389,20 +1390,19 @@ bool PassageHighlighter_c::OnToken ( const TokenInfo_t & tTok, const CSphVector<
 
 	if ( m_iCurPassage!=-1 )
 	{
-		m_bLastWasSeparator = false;
-
+		assert ( m_pCurPassageText );
 		RewindHits ( tTok.m_uPosition, m_iField );
 
 		bool bHit = m_pHit<m_pHitEnd && IsTokenHit ( tTok, m_pHit->m_uPosition, m_pHit->m_uSpan - 1, m_iField );
 		if ( bHit && !m_iOpenUntilTokenPos )
 		{
-			ResultEmit ( m_tQuery.m_sBeforeMatch.cstr(), m_iBeforeLen, m_tQuery.m_bHasBeforePassageMacro, m_iPassageId, m_tQuery.m_sBeforeMatchPassage.cstr(), m_iBeforePostLen );
+			ResultEmit ( *m_pCurPassageText, m_tQuery.m_sBeforeMatch.cstr(), m_iBeforeLen, m_tQuery.m_bHasBeforePassageMacro, m_iPassageId, m_tQuery.m_sBeforeMatchPassage.cstr(), m_iBeforePostLen );
 			m_iOpenUntilTokenPos = HITMAN::GetPos(m_pHit->m_uPosition)+m_pHit->m_uSpan;
 			m_iOpenUntilTokenNum = m_dPassages[m_iCurPassage]->m_iStart+m_dPassages[m_iCurPassage]->m_iTokens;
 		}
 
 		// emit token itself
-		ResultEmit ( m_pDoc+tTok.m_iStart, tTok.m_iLen );
+		ResultEmit ( *m_pCurPassageText, m_pDoc+tTok.m_iStart, tTok.m_iLen );
 	}
 
 	m_iLastPos = tTok.m_uPosition;
@@ -1422,7 +1422,8 @@ void PassageHighlighter_c::OnSkipHtml ( int iStart, int iLen )
 {
 	assert ( m_pDoc );
 	assert ( iStart>=0 && m_pDoc+iStart+iLen<=m_pDocMax );
-	ResultEmit ( m_pDoc+iStart, iLen );
+	assert ( m_pCurPassageText );
+	ResultEmit ( *m_pCurPassageText, m_pDoc+iStart, iLen );
 }
 
 
@@ -1436,10 +1437,16 @@ void PassageHighlighter_c::OnTail ( int iStart, int iLen, int iBoundary )
 void PassageHighlighter_c::OnFinish()
 {
 	if ( m_iOpenUntilTokenPos )
-		ResultEmit ( m_tQuery.m_sAfterMatch.cstr(), m_iAfterLen, m_tQuery.m_bHasAfterPassageMacro, m_iPassageId++, m_tQuery.m_sAfterMatchPassage.cstr(), m_iAfterPostLen );
+	{
+		assert ( m_pCurPassageText );
+		ResultEmit ( *m_pCurPassageText, m_tQuery.m_sAfterMatch.cstr(), m_iAfterLen, m_tQuery.m_bHasAfterPassageMacro, m_iPassageId++, m_tQuery.m_sAfterMatchPassage.cstr(), m_iAfterPostLen );
+	}
 
-	if ( m_tQuery.m_bWeightOrder )
-		EmitPassagesOrdered();
+	if ( m_iCurPassage!=-1 )
+		m_dPassageText[m_iCurPassage].m_bEndSeparator = false;
+
+	ARRAY_FOREACH ( i, m_dPassages )
+		m_dPassageText[i].m_iWeight = m_dPassages[i]->GetWeight();
 }
 
 
@@ -1458,9 +1465,10 @@ void PassageHighlighter_c::EmitZoneName ( int iStart ) const
 			if ( m_tZoneInfo.m_hZones.IterateGet()!=iParent )
 				continue;
 
-			ResultEmit ( "<", 1 );
-			ResultEmit ( m_tZoneInfo.m_hZones.IterateGetKey().cstr(), m_tZoneInfo.m_hZones.IterateGetKey().Length() );
-			ResultEmit ( ">", 1 );
+			assert ( m_pCurPassageText );
+			ResultEmit ( *m_pCurPassageText, "<", 1 );
+			ResultEmit ( *m_pCurPassageText, m_tZoneInfo.m_hZones.IterateGetKey().cstr(), m_tZoneInfo.m_hZones.IterateGetKey().Length() );
+			ResultEmit ( *m_pCurPassageText, ">", 1 );
 			break;
 		}
 	}
@@ -1479,7 +1487,10 @@ void PassageHighlighter_c::EmitSpaces ( int iStart, int iLen, int iBoundary )
 		UpdatePassage ( iStart );
 
 		if ( m_iCurPassage!=-1 )
-			ResultEmit ( m_pDoc+m_dSpaces[i].m_iStartBytes, m_dSpaces[i].m_iLengthBytes );
+		{
+			assert ( m_pCurPassageText );
+			ResultEmit ( *m_pCurPassageText, m_pDoc+m_dSpaces[i].m_iStartBytes, m_dSpaces[i].m_iLengthBytes );
+		}
 
 		m_iCurToken++;
 	}
@@ -1490,14 +1501,6 @@ void PassageHighlighter_c::UpdatePassage ( int iStart )
 {
 	const Passage_t * pPassage = *(m_dPassages.Begin()+m_iCurPassage);
 	const Passage_t * pNext = *(m_dPassages.Begin()+m_iCurPassage+1);
-	if ( !m_bLastWasSeparator && m_iCurPassage!=-1 && !m_tQuery.m_bWeightOrder
-		&& m_iCurToken==( pPassage->m_iStart + pPassage->m_iTokens )
-		&& !( ( m_iCurPassage+1 )<m_dPassages.GetLength() && m_iCurToken>=pNext->m_iStart
-			&& m_iCurToken<( pNext->m_iStart + pNext->m_iTokens ) ) )
-	{
-		EmitPassageSeparator ( m_tResult.m_dResult );
-		m_bLastWasSeparator = true;
-	}
 
 	int iPassage = m_iCurPassage;
 	if ( m_iCurPassage==-1 || m_iCurToken<pPassage->m_iStart || m_iCurToken>( pPassage->m_iStart + pPassage->m_iTokens - 1 ) )
@@ -1515,17 +1518,12 @@ void PassageHighlighter_c::UpdatePassage ( int iStart )
 			}
 	}
 
+	if ( !m_iCurPassage && !m_iCurToken )
+		m_dPassageText[m_iCurPassage].m_bStartSeparator = false;
+	
 	if ( m_iCurPassage!=-1 && iPassage!=m_iCurPassage )
 	{
-		if ( !m_bLastWasSeparator && m_iCurToken && !m_tQuery.m_bWeightOrder )
-		{
-			EmitPassageSeparator ( m_tResult.m_dResult );
-			m_bLastWasSeparator = true;
-		}
-
-		if ( m_tQuery.m_bWeightOrder )
-			m_dPassageHeads.Add ( m_tResult.m_dResult.GetLength() );
-
+		m_pCurPassageText = &(m_dPassageText[m_iCurPassage].m_dText);
 		EmitZoneName ( iStart );
 	}
 }
@@ -1537,51 +1535,10 @@ void PassageHighlighter_c::CheckClose ( int iPos )
 	if ( ( !m_iOpenUntilTokenPos || iPos<m_iOpenUntilTokenPos ) && ( !m_iOpenUntilTokenNum || m_iCurToken<m_iOpenUntilTokenNum ) )
 		return;
 
-	ResultEmit ( m_tQuery.m_sAfterMatch.cstr(), m_iAfterLen, m_tQuery.m_bHasAfterPassageMacro, m_iPassageId++, m_tQuery.m_sAfterMatchPassage.cstr(), m_iAfterPostLen );
+	assert ( m_pCurPassageText );
+	ResultEmit ( *m_pCurPassageText, m_tQuery.m_sAfterMatch.cstr(), m_iAfterLen, m_tQuery.m_bHasAfterPassageMacro, m_iPassageId++, m_tQuery.m_sAfterMatchPassage.cstr(), m_iAfterPostLen );
 	m_iOpenUntilTokenPos = m_iOpenUntilTokenNum = 0;
 }
-
-
-void PassageHighlighter_c::EmitPassagesOrdered()
-{
-	const CSphVector<BYTE> & dPassageText = m_tResult.m_dResult;
-
-	CSphVector<BYTE> dTmpResult;
-	int iSeparatorLen = m_tQuery.m_sChunkSeparator.Length();
-	dTmpResult.Reserve ( dPassageText.GetLength() + m_dPassageHeads.GetLength()*iSeparatorLen*2 );
-	dTmpResult.Resize(0);
-
-	int iOutLen = dTmpResult.GetLength();
-	dTmpResult.Append ( m_tQuery.m_sChunkSeparator.cstr(), iSeparatorLen );
-	m_tResult.m_dSeparators.Add ( iOutLen );
-
-	ARRAY_FOREACH ( iPassage, m_dPassages )
-	{
-		int iBest = -1;
-		ARRAY_FOREACH ( i, m_dPassages )
-			if ( iBest==-1 || ( i!=iBest && m_dPassages[i]->GetWeight()>=m_dPassages[iBest]->GetWeight() ) )
-				iBest = i;
-
-		assert ( iBest!=-1 );
-
-		Passage_t & tBestPassage = *m_dPassages[iBest];
-		tBestPassage.m_iQwordCount = 0;
-		tBestPassage.m_iUniqQwords = 0;
-		tBestPassage.m_iQwordsWeight = 0;
-		tBestPassage.m_iMinGap = -1;
-
-		int iLen = ( iBest==m_dPassageHeads.GetLength()-1 ? dPassageText.GetLength() : m_dPassageHeads[iBest+1] ) - m_dPassageHeads[iBest];
-
-		dTmpResult.Append( &( dPassageText[m_dPassageHeads[iBest]] ), iLen );
-
-		iOutLen = dTmpResult.GetLength();
-		dTmpResult.Append( m_tQuery.m_sChunkSeparator.cstr(), iSeparatorLen );
-		m_tResult.m_dSeparators.Add(iOutLen);
-	}
-
-	m_tResult.m_dResult = std::move(dTmpResult);
-}
-
 
 //////////////////////////////////////////////////////////////////////////
 /// functor that matches tokens against hit positions from mini-index and highlights them
@@ -1614,7 +1571,7 @@ QueryHighlighter_c::QueryHighlighter_c ( ISphTokenizer * pTokenizer, const Snipp
 	, BeforeAfterTraits_c(tQuery)
 	, HitTraits_c(dHits)
 {
-	tRes.m_dResult.Reserve ( EstimateResult ( tQuery, iDocLen ) );
+	m_dResult.Reserve ( EstimateResult ( tQuery, iDocLen ) );
 }
 
 
@@ -1629,13 +1586,13 @@ bool QueryHighlighter_c::OnToken ( const TokenInfo_t & tTok, const CSphVector<Sp
 	// marker folding, emit "before" marker at span start only
 	if ( m_pHit<m_pHitEnd && IsTokenHit ( tTok, m_pHit->m_uPosition, 0, m_iField ) && !m_iOpenUntilTokenPos )
 	{
-		ResultEmit ( m_tQuery.m_sBeforeMatch.cstr(), m_iBeforeLen, m_tQuery.m_bHasBeforePassageMacro, m_iPassageId, m_tQuery.m_sBeforeMatchPassage.cstr(), m_iBeforePostLen );
+		ResultEmit ( m_dResult, m_tQuery.m_sBeforeMatch.cstr(), m_iBeforeLen, m_tQuery.m_bHasBeforePassageMacro, m_iPassageId, m_tQuery.m_sBeforeMatchPassage.cstr(), m_iBeforePostLen );
 		m_iMatches++;
 		m_iOpenUntilTokenPos = HITMAN::GetPos(m_pHit->m_uPosition)+m_pHit->m_uSpan;
 	}
 
 	// emit token itself
-	ResultEmit ( m_pDoc+tTok.m_iStart, tTok.m_iLen );
+	ResultEmit ( m_dResult, m_pDoc+tTok.m_iStart, tTok.m_iLen );
 	m_iLastPos = tTok.m_uPosition + Max ( tTok.m_iMultiPosLen-1, 0 );
 	return true;
 }
@@ -1646,7 +1603,7 @@ void QueryHighlighter_c::OnTail ( int iStart, int iLen, int )
 	assert ( m_pDoc );
 	assert ( iStart>=0 && m_pDoc+iStart+iLen<=m_pDocMax );
 	CheckClose ( m_iLastPos+1 );
-	ResultEmit ( m_pDoc+iStart, iLen );
+	ResultEmit ( m_dResult, m_pDoc+iStart, iLen );
 }
 
 
@@ -1654,14 +1611,14 @@ void QueryHighlighter_c::OnFinish()
 {
 	if ( !m_iMatches && m_tQuery.m_bAllowEmpty )
 	{
-		m_tResult.m_dResult.Reset();
+		m_dResult.Reset();
 		return;
 	}
 
 	if ( !m_iOpenUntilTokenPos )
 		return;
 
-	ResultEmit ( m_tQuery.m_sAfterMatch.cstr(), m_iAfterLen, m_tQuery.m_bHasAfterPassageMacro, m_iPassageId++, m_tQuery.m_sAfterMatchPassage.cstr(), m_iAfterPostLen );
+	ResultEmit ( m_dResult, m_tQuery.m_sAfterMatch.cstr(), m_iAfterLen, m_tQuery.m_bHasAfterPassageMacro, m_iPassageId++, m_tQuery.m_sAfterMatchPassage.cstr(), m_iAfterPostLen );
 }
 
 
@@ -1670,7 +1627,7 @@ bool QueryHighlighter_c::OnOverlap ( int iStart, int iLen, int )
 	assert ( m_pDoc );
 	assert ( iStart>=0 && m_pDoc+iStart+iLen<=m_pDocMax );
 	CheckClose ( m_iLastPos+1 );
-	ResultEmit ( m_pDoc+iStart, iLen );
+	ResultEmit ( m_dResult, m_pDoc+iStart, iLen );
 	return true;
 }
 
@@ -1680,7 +1637,7 @@ void QueryHighlighter_c::OnSkipHtml ( int iStart, int iLen )
 	assert ( m_pDoc );
 	assert ( iStart>=0 && m_pDoc+iStart+iLen<=m_pDocMax );
 	CheckClose ( m_iLastPos+1 );
-	ResultEmit ( m_pDoc+iStart, iLen );
+	ResultEmit ( m_dResult, m_pDoc+iStart, iLen );
 }
 
 
@@ -1690,7 +1647,7 @@ void QueryHighlighter_c::CheckClose ( int iPos )
 	if ( !m_iOpenUntilTokenPos || iPos<m_iOpenUntilTokenPos )
 		return;
 
-	ResultEmit ( m_tQuery.m_sAfterMatch.cstr(), m_iAfterLen, m_tQuery.m_bHasAfterPassageMacro, m_iPassageId++, m_tQuery.m_sAfterMatchPassage.cstr(), m_iAfterPostLen );
+	ResultEmit ( m_dResult, m_tQuery.m_sAfterMatch.cstr(), m_iAfterLen, m_tQuery.m_bHasAfterPassageMacro, m_iPassageId++, m_tQuery.m_sAfterMatchPassage.cstr(), m_iAfterPostLen );
 	m_iOpenUntilTokenPos = 0;
 }
 
@@ -1855,9 +1812,9 @@ void HitCollector_c::OnTail ( int iStart, int iLen, int iBoundary )
 //////////////////////////////////////////////////////////////////////////
 
 DocStartHighlighter_i * CreateDocStartHighlighter ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen,
-	int & iResultLenCP,	SnippetResult_t & tRes )
+	int & iResultLenCP,	int iField, SnippetResult_t & tRes )
 {
-	return new DocStartHighlighter_c ( pTokenizer, tQuery, tIndexSettings, szDoc, iDocLen, iResultLenCP, tRes );
+	return new DocStartHighlighter_c ( pTokenizer, tQuery, tIndexSettings, szDoc, iDocLen, iResultLenCP, iField, tRes );
 }
 
 

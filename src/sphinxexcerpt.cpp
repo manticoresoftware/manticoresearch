@@ -24,7 +24,42 @@
 #include <math.h>
 
 /////////////////////////////////////////////////////////////////////////////
-// THE EXCERPTS GENERATOR
+
+CSphString SnippetQuerySettings_t::AsString() const
+{
+	SnippetQuerySettings_t tDefault;
+	StringBuilder_c tOut;
+	tOut.StartBlock ( ",", "{", "}" );
+
+	if ( m_sBeforeMatch!=tDefault.m_sBeforeMatch )			tOut.Appendf ( "before_match='%s'",		m_sBeforeMatch.cstr() );
+	if ( m_sAfterMatch!=tDefault.m_sAfterMatch )			tOut.Appendf ( "after_match='%s'",		m_sAfterMatch.cstr() );
+	if ( m_sChunkSeparator!=tDefault.m_sChunkSeparator )	tOut.Appendf ( "chunk_separator='%s'",	m_sChunkSeparator.cstr() );
+	if ( m_sFieldSeparator!=tDefault.m_sFieldSeparator )	tOut.Appendf ( "field_separator='%s'",	m_sFieldSeparator.cstr() );
+	if ( m_sStripMode!=tDefault.m_sStripMode )				tOut.Appendf ( "strip_mode='%s'",		m_sStripMode.cstr() );
+	if ( m_iLimit!=tDefault.m_iLimit )						tOut.Appendf ( "limit=%d",				m_iLimit );
+	if ( m_iLimitWords!=tDefault.m_iLimitWords )			tOut.Appendf ( "limit_words=%d",		m_iLimitWords );
+	if ( m_iLimitPassages!=tDefault.m_iLimitPassages )		tOut.Appendf ( "limit_passages=%d",		m_iLimitPassages );
+	if ( m_iAround!=tDefault.m_iAround )					tOut.Appendf ( "around=%d",				m_iAround );
+	if ( m_iPassageId!=tDefault.m_iPassageId )				tOut.Appendf ( "start_passage_id=%d",	m_iPassageId );
+	if ( m_bUseBoundaries!=tDefault.m_bUseBoundaries )		tOut.Appendf ( "use_boundaries=%d",		m_bUseBoundaries ? 1 : 0 );
+	if ( m_bWeightOrder!=tDefault.m_bWeightOrder )			tOut.Appendf ( "weight_order=%d",		m_bWeightOrder ? 1 : 0 );
+	if ( m_bForceAllWords!=tDefault.m_bForceAllWords )		tOut.Appendf ( "force_all_words=%d",	m_bForceAllWords ? 1 : 0 );
+	if ( m_bAllowEmpty!=tDefault.m_bAllowEmpty )			tOut.Appendf ( "allow_empty=%d",		m_bAllowEmpty ? 1 : 0 );
+	if ( m_bEmitZones!=tDefault.m_bEmitZones )				tOut.Appendf ( "emit_zones=%d",			m_bEmitZones ? 1 : 0 );
+	if ( m_bForcePassages!=tDefault.m_bForcePassages )		tOut.Appendf ( "force_passages=%d",		m_bForcePassages ? 1 : 0 );
+	if ( m_bJsonQuery!=tDefault.m_bJsonQuery )				tOut.Appendf ( "json_query=%d",			m_bJsonQuery ? 1 : 0 );
+	if ( m_ePassageSPZ!=tDefault.m_ePassageSPZ )			tOut.Appendf ( "passage_boundary='%s'",	PassageBoundarySz(m_ePassageSPZ) );
+
+	if ( m_uFilesMode!=tDefault.m_uFilesMode )
+	{
+		if ( m_uFilesMode & 1 ) tOut << "load_files=1";
+		if ( m_uFilesMode & 2 ) tOut << "load_files_scattered=1";
+	}
+
+	tOut.FinishBlock(false);
+	return tOut.cstr();
+}
+
 /////////////////////////////////////////////////////////////////////////////
 
 static const int MAX_HIGHLIGHT_WORDS = 256;
@@ -45,9 +80,6 @@ struct DocQueryZonePair_t
 /// hit-in-zone check implementation for the matching engine
 class SnippetZoneChecker_c : public ISphZoneCheck
 {
-private:
-	CSphVector<ZoneHits_t> m_dZones;
-
 public:
 	SnippetZoneChecker_c ( const CSphVector<ZonePacked_t> & dDocZones, const SmallStringHash_T<int> & hDocNames, const StrVec_t & dQueryZones )
 	{
@@ -117,7 +149,7 @@ public:
 #endif
 	}
 
-	virtual SphZoneHit_e IsInZone ( int iZone, const ExtHit_t * pHit, int * pLastSpan )
+	SphZoneHit_e IsInZone ( int iZone, const ExtHit_t * pHit, int * pLastSpan ) final
 	{
 		DWORD uPosWithField = HITMAN::GetPosWithField ( pHit->m_uHitpos );
 		int iOpen = FindSpan ( m_dZones[iZone].m_dStarts, uPosWithField );
@@ -125,6 +157,9 @@ public:
 			* pLastSpan = iOpen;
 		return ( iOpen>=0 && uPosWithField<=m_dZones[iZone].m_dEnds[iOpen] ) ? SPH_ZONE_FOUND : SPH_ZONE_NO_SPAN;
 	}
+
+private:
+	CSphVector<ZoneHits_t> m_dZones;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -248,9 +283,10 @@ public:
 class SnippetBuilder_c : public SnippetBuilder_i
 {
 public:
-	bool	Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tQuery, CSphString & sError ) final;
-	bool	SetQuery ( const CSphString & sQuery, bool bIgnoreFields, CSphString & sError ) final;
-	bool	Build ( TextSource_i * pSource, SnippetResult_t & tRes ) const final;
+	bool				Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tQuery, CSphString & sError ) final;
+	bool				SetQuery ( const CSphString & sQuery, bool bIgnoreFields, CSphString & sError ) final;
+	bool				Build ( TextSource_i * pSource, SnippetResult_t & tRes ) const final;
+	CSphVector<BYTE>	PackResult ( SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const final;
 
 private:
 	struct ZoneData_t
@@ -259,18 +295,28 @@ private:
 		FunctorZoneInfo_t			m_tInfo;
 	};
 
+	struct WeightedPassage_t
+	{
+		int	m_iId = 0;
+		int	m_iWeight = 0;
+	};
+
+	struct WeightedPassageSort_fn
+	{
+		bool IsLess ( const WeightedPassage_t & a, const WeightedPassage_t  & b ) const;
+	};
+
 	const CSphIndex *				m_pIndex = nullptr;
 	const SnippetQuerySettings_t *	m_pQuerySettings = nullptr;
 	CSphScopedPtr<CSphHTMLStripper> m_pStripper { nullptr };
 	CSphScopedPtr<QueryParser_i>	m_pQueryParser { nullptr };
-	TokenizerRefPtr_c			m_pTokenizer;
-	TokenizerRefPtr_c			m_pTokenizerJson;
-	TokenizerRefPtr_c			m_pQueryTokenizer;
-	DictRefPtr_c				m_pDict;
+	TokenizerRefPtr_c				m_pTokenizer;
+	TokenizerRefPtr_c				m_pTokenizerJson;
+	TokenizerRefPtr_c				m_pQueryTokenizer;
+	DictRefPtr_c					m_pDict;
 	CSphScopedPtr<XQQuery_t>		m_pExtQuery { nullptr };
 	DWORD							m_eExtQuerySPZ = SPH_SPZ_NONE;
-	FieldFilterRefPtr_c			m_pFieldFilter;
-	CSphString						m_sQuery;
+	FieldFilterRefPtr_c				m_pFieldFilter;
 
 	bool							CheckSettings ( TextSource_i * pSource, CSphString & sError ) const;
 	const CSphHTMLStripper *		GetStripperForText() const;
@@ -293,7 +339,10 @@ private:
 	void							FixupQueryLimits ( const SnippetsDocIndex_c & tContainer, SnippetQuerySettings_t & tFixedSettings, CSphString & sWarning, DWORD uFoundTerms ) const;
 	bool							CanHighlightAll ( const SnippetQuerySettings_t & tFixedSettings, int iDocLen ) const;
 	bool							SetupStripperSPZ ( bool bSetupSPZ, CSphString & sError );
-	void							AddFieldSeparator ( SnippetResult_t & tRes ) const;
+
+	void							GetPassageOrder ( const FieldResult_t & tField, CSphVector<WeightedPassage_t> & dPassageOrder ) const;
+	void							PackAsData ( MemoryWriter_c & tWriter, SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const;
+	void							PackAsString ( MemoryWriter_c & tWriter, CSphVector<BYTE> & dRes, SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const;
 };
 
 
@@ -342,18 +391,8 @@ void SnippetBuilder_c::HighlightPassages ( ScopedStreamers_t & tStreamers, TextS
 		if ( !dFilteredPassages.GetLength() )
 			continue;
 
-		int iResultLength = tRes.m_dResult.GetLength();
-
 		CSphScopedPtr<TokenFunctor_i> pHighlighter ( CreatePassageHighlighter ( dFilteredPassages, m_pTokenizer, tFixedSettings, m_pIndex->GetSettings(), szDoc, iDocLen, dMarked, tZoneInfo, iField, tRes ) );
 		tStreamers.m_dStreamers[iField]->Tokenize ( *pHighlighter.Ptr() );
-
-		bool bMoreToCome = false;
-		ARRAY_FOREACH_COND ( iPassage, dPassages, !bMoreToCome )
-			if ( dPassages[iPassage].m_iField>iField )
-				bMoreToCome = true;
-
-		if ( !tFixedSettings.m_bWeightOrder && tRes.m_dResult.GetLength()!=iResultLength && bMoreToCome )
-			AddFieldSeparator(tRes);
 	}	
 }
 
@@ -472,21 +511,8 @@ void SnippetBuilder_c::HighlightAll ( ScopedStreamers_t & tStreamers, TextSource
 		const char * szDoc = (const char*)tSource.GetText(i).Begin();
 		int iDocLen = tSource.GetText(i).GetLength();
 
-		int iResultLength = tRes.m_dResult.GetLength();
-
 		CSphScopedPtr<TokenFunctor_i> pHighlighter ( CreateQueryHighlighter ( m_pTokenizer, tQuery, tIndexSettings, szDoc, iDocLen, dMarked, i, tRes ) );
 		tStreamers.m_dStreamers[i]->Tokenize ( *pHighlighter.Ptr() );
-
-		bool bMoreToCome = false;
-		for ( int iStream = i+1; iStream < tStreamers.m_dStreamers.GetLength(); iStream++ )
-			if ( !tStreamers.m_dStreamers[iStream]->IsEmpty() )
-			{
-				bMoreToCome = true;
-				break;
-			}
-
-		if ( tRes.m_dResult.GetLength()!=iResultLength && bMoreToCome )
-			AddFieldSeparator(tRes);
 	}
 }
 
@@ -502,10 +528,7 @@ void SnippetBuilder_c::HighlightDocStart ( ScopedStreamers_t & tStreamers, TextS
 		const char * szDoc = (const char*)tSource.GetText(i).Begin();
 		int iDocLen = tSource.GetText(i).GetLength();
 
-		if ( i )
-			AddFieldSeparator(tRes);
-
-		CSphScopedPtr<DocStartHighlighter_i> pHighlighter ( CreateDocStartHighlighter ( m_pTokenizer, tQuery, m_pIndex->GetSettings(), szDoc, iDocLen, iResultLenCP, tRes ) );
+		CSphScopedPtr<DocStartHighlighter_i> pHighlighter ( CreateDocStartHighlighter ( m_pTokenizer, tQuery, m_pIndex->GetSettings(), szDoc, iDocLen, iResultLenCP, i, tRes ) );
 		tStreamers.m_dStreamers[i]->Tokenize ( *pHighlighter.Ptr() );
 
 		// did we collect enough tokens?
@@ -545,7 +568,7 @@ bool SnippetBuilder_c::DoHighlighting ( TextSource_i & tSource, SnippetResult_t 
 
 	// create query and hit lists container, parse query
 	SnippetsDocIndex_c tContainer ( *m_pExtQuery.Ptr() );
-	tContainer.ParseQuery ( m_sQuery.cstr(), m_pQueryTokenizer, m_pDict, m_eExtQuerySPZ );
+	tContainer.ParseQuery ( m_pQueryTokenizer, m_pDict, m_eExtQuerySPZ );
 
 	ScopedStreamers_t tStreamers;
 
@@ -558,9 +581,14 @@ bool SnippetBuilder_c::DoHighlighting ( TextSource_i & tSource, SnippetResult_t 
 
 	ZoneData_t tZodeData;
 
+	tRes.m_dFields.Resize ( tSource.GetNumFields() );
+
 	DWORD uFoundWords = 0;
 	for ( int iField = 0; iField < tSource.GetNumFields(); iField++ )
 	{
+		tRes.m_dFields[iField].m_sName = tSource.GetFieldName(iField);
+		tRes.m_dFields[iField].m_dPassages.Resize(1);	// so that non-passage funcs will have something to work on
+
 		const char * szDoc = (const char*)tSource.GetText(iField).Begin();
 		int iDocLen = tSource.GetText(iField).GetLength();
 
@@ -588,7 +616,6 @@ bool SnippetBuilder_c::DoHighlighting ( TextSource_i & tSource, SnippetResult_t 
 	if ( !MarkHits ( tContainer, dMarked, tZodeData, tRes ) )
 	{
 		HighlightDocStart ( tStreamers, tSource, tFixedSettings, tRes );
-		tRes.m_dResult.Add(0);
 		return true;
 	}
 
@@ -605,8 +632,6 @@ bool SnippetBuilder_c::DoHighlighting ( TextSource_i & tSource, SnippetResult_t 
 		ExtractPassages ( tStreamers, tSource, tFixedSettings, tContainer, dMarked, tPassageContext, uFoundWords, tRes );
 		HighlightPassages ( tStreamers, tSource, tPassageContext.m_dPassages, tFixedSettings, dMarked, tZodeData.m_tInfo, tRes );
 	}
-
-	tRes.m_dResult.Add(0);
 
 	return true;
 }
@@ -678,6 +703,7 @@ public:
 	bool						PrepareText ( ISphFieldFilter * pFilter, const CSphHTMLStripper * pStripper, CSphString & sError ) override;
 	VecTraits_T<BYTE>			GetText ( int iField ) const final;
 	int							GetNumFields() const final { return 1; }
+	const char *				GetFieldName ( int iField ) const final { return ""; }
 	bool						TextFromIndex() const final;
 
 protected:
@@ -793,21 +819,22 @@ bool TextSourceFile_c::PrepareText ( ISphFieldFilter * pFilter, const CSphHTMLSt
 class TextSourceFields_c : public TextSource_i, public StringSourceTraits_c
 {
 public:
-						TextSourceFields_c ( const CSphVector<VecTraits_T<BYTE>> & dAllFields );
+						TextSourceFields_c ( const CSphVector<FieldSource_t> & dAllFields );
 
 	bool				PrepareText ( ISphFieldFilter * pFilter, const CSphHTMLStripper * pStripper, CSphString & sError ) final;
 	VecTraits_T<BYTE>	GetText ( int iField ) const final;
 	int					GetNumFields() const final { return m_dFields.GetLength(); }
+	const char *		GetFieldName ( int iField ) const final { return m_dFields[iField].m_sName.cstr(); }
 	bool				TextFromIndex() const final { return true; }
 
 private:
-	const CSphVector<VecTraits_T<BYTE>> &	m_dFields;
-	CSphVector<CSphVector<BYTE>>			m_dModifiedFields;
-	CSphBitvec								m_tUseOriginal;
+	const CSphVector<FieldSource_t> &	m_dFields;
+	CSphVector<CSphVector<BYTE>>		m_dModifiedFields;
+	CSphBitvec							m_tUseOriginal;
 };
 
 
-TextSourceFields_c::TextSourceFields_c ( const CSphVector<VecTraits_T<BYTE>> & dAllFields )
+TextSourceFields_c::TextSourceFields_c ( const CSphVector<FieldSource_t> & dAllFields )
 	: m_dFields ( dAllFields )
 	, m_dModifiedFields ( dAllFields.GetLength() )
 	, m_tUseOriginal ( dAllFields.GetLength() )
@@ -821,7 +848,7 @@ bool TextSourceFields_c::PrepareText ( ISphFieldFilter * pFilter, const CSphHTML
 	ARRAY_FOREACH ( i, m_dFields )
 	{
 		bool bUseOriginal = true;
-		StringSourceTraits_c::PrepareText ( m_dFields[i], m_dModifiedFields[i], pFilter, pStripper, bUseOriginal );
+		StringSourceTraits_c::PrepareText ( m_dFields[i].m_dData, m_dModifiedFields[i], pFilter, pStripper, bUseOriginal );
 		if ( !bUseOriginal )
 			m_tUseOriginal.BitClear(i);
 	}
@@ -833,7 +860,7 @@ bool TextSourceFields_c::PrepareText ( ISphFieldFilter * pFilter, const CSphHTML
 VecTraits_T<BYTE> TextSourceFields_c::GetText ( int iField ) const
 {
 	if ( m_tUseOriginal.BitGet(iField) )
-		return m_dFields[iField];
+		return m_dFields[iField].m_dData;
 
 	return m_dModifiedFields[iField];
 }
@@ -862,7 +889,7 @@ TextSource_i * CreateSnippetSource ( DWORD uFilesMode, const BYTE * pSource, int
 }
 
 
-TextSource_i * CreateHighlightSource ( const CSphVector<VecTraits_T<BYTE>> & dAllFields )
+TextSource_i * CreateHighlightSource ( const CSphVector<FieldSource_t> & dAllFields )
 {
 	return new TextSourceFields_c ( dAllFields );
 }
@@ -980,8 +1007,6 @@ bool SnippetBuilder_c::Build ( TextSource_i * pSource, SnippetResult_t & tRes ) 
 {
 	assert ( m_pIndex && m_pQuerySettings );
 
-	tRes.m_dSeparators.Resize(0);
-
 	if ( !CheckSettings ( pSource, tRes.m_sError ) )
 		return false;
 
@@ -993,6 +1018,131 @@ bool SnippetBuilder_c::Build ( TextSource_i * pSource, SnippetResult_t & tRes ) 
 	DoHighlighting ( *pSource, tRes );
 
 	return true;
+}
+
+
+void SnippetBuilder_c::PackAsData ( MemoryWriter_c & tWriter, SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const
+{
+	CSphVector<WeightedPassage_t> dPassageOrder;
+
+	tWriter.ZipInt ( dRequestedFields.GetLength() );
+	for ( auto i : dRequestedFields )
+	{
+		const FieldResult_t & tField = tRes.m_dFields[i];
+		tWriter.PutString ( tField.m_sName );
+
+		GetPassageOrder ( tField, dPassageOrder );
+		tWriter.ZipInt ( tField.m_dPassages.GetLength() );
+		for ( const auto & tWeighted : dPassageOrder )
+		{
+			PassageResult_t & tPassage = tField.m_dPassages[tWeighted.m_iId];
+
+			tWriter.PutByte ( tPassage.m_bStartSeparator ? 1 : 0 );
+			tWriter.PutByte ( tPassage.m_bEndSeparator ? 1 : 0 );
+			tWriter.ZipInt ( tPassage.m_dText.GetLength() );
+			tWriter.PutBytes ( tPassage.m_dText.Begin(), tPassage.m_dText.GetLength() );
+		}
+	}
+}
+
+
+bool SnippetBuilder_c::WeightedPassageSort_fn::IsLess ( const WeightedPassage_t & a, const WeightedPassage_t & b ) const
+{
+	if ( a.m_iWeight==b.m_iWeight )
+		return a.m_iId<b.m_iId;
+
+	return a.m_iWeight>b.m_iWeight;
+}
+
+
+void SnippetBuilder_c::GetPassageOrder ( const FieldResult_t & tField, CSphVector<WeightedPassage_t> & dPassageOrder ) const
+{
+	dPassageOrder.Resize ( tField.m_dPassages.GetLength() );
+
+	ARRAY_FOREACH ( i, tField.m_dPassages )
+	{
+		dPassageOrder[i].m_iId = i;
+		dPassageOrder[i].m_iWeight = tField.m_dPassages[i].m_iWeight;
+	}
+
+	assert(m_pQuerySettings);
+	if ( m_pQuerySettings->m_bWeightOrder )
+		dPassageOrder.Sort ( WeightedPassageSort_fn() );
+}
+
+
+void SnippetBuilder_c::PackAsString ( MemoryWriter_c & tWriter, CSphVector<BYTE> & dRes, SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const
+{
+	if ( tRes.m_dFields.GetLength()==1 && tRes.m_dFields[0].m_dPassages.GetLength()==1 && !tRes.m_dFields[0].m_dPassages[0].m_bStartSeparator && !tRes.m_dFields[0].m_dPassages[0].m_bEndSeparator )
+	{
+		dRes = std::move ( tRes.m_dFields[0].m_dPassages[0].m_dText );
+		return;
+	}
+
+	assert(m_pQuerySettings);
+	const SnippetQuerySettings_t & tOpts = *m_pQuerySettings;
+
+	CSphVector<WeightedPassage_t> dPassageOrder;
+
+	int iChunkSeparatorLen = tOpts.m_sChunkSeparator.Length();
+	int iFieldSeparatorLen = tOpts.m_sFieldSeparator.Length();
+	bool bWasSeparator = false;
+
+	ARRAY_FOREACH ( i, dRequestedFields )
+	{
+		if ( dRes.GetLength() )
+		{
+			bool bHasMoreData = false;
+			for ( int j = i; j < dRequestedFields.GetLength(); j++ )
+			{
+				const FieldResult_t & tNextField = tRes.m_dFields[dRequestedFields[j]];
+				if ( tNextField.m_dPassages.GetLength() )
+				{
+					bHasMoreData = true;
+					break;
+				}
+			}
+
+			if ( bHasMoreData )
+				tWriter.PutBytes ( m_pQuerySettings->m_sFieldSeparator.cstr(), iFieldSeparatorLen );
+		}
+
+		const FieldResult_t & tField = tRes.m_dFields[dRequestedFields[i]];
+		GetPassageOrder ( tField, dPassageOrder );
+		ARRAY_FOREACH ( iWeighted, dPassageOrder )
+		{
+			PassageResult_t & tPassage = tField.m_dPassages[dPassageOrder[iWeighted].m_iId];
+
+			if ( !iWeighted && tPassage.m_bStartSeparator )
+				tWriter.PutBytes ( tOpts.m_sChunkSeparator.cstr(), iChunkSeparatorLen );
+
+			tWriter.PutBytes ( tPassage.m_dText.Begin(), tPassage.m_dText.GetLength() );
+
+			if ( iWeighted<dPassageOrder.GetLength()-1 || tPassage.m_bEndSeparator )
+				tWriter.PutBytes ( tOpts.m_sChunkSeparator.cstr(), iChunkSeparatorLen );
+		}
+	}
+}
+
+
+CSphVector<BYTE> SnippetBuilder_c::PackResult ( SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const
+{
+	assert(m_pQuerySettings);
+
+	// 1st pass: remove redundant empty passages (if any)
+	for ( auto & tField : tRes.m_dFields )
+		if ( tField.m_dPassages.GetLength()==1 && !tField.m_dPassages[0].m_dText.GetLength() )
+			tField.m_dPassages.Resize(0);
+
+	CSphVector<BYTE> dRes;
+	MemoryWriter_c tWriter(dRes);
+
+	if ( m_pQuerySettings->m_bJsonQuery )
+		PackAsData ( tWriter, tRes, dRequestedFields );
+	else
+		PackAsString ( tWriter, dRes, tRes, dRequestedFields );
+
+	return dRes;
 }
 
 
@@ -1055,16 +1205,6 @@ bool SnippetBuilder_c::SetupStripperSPZ ( bool bSetupSPZ, CSphString & sError )
 }
 
 
-void SnippetBuilder_c::AddFieldSeparator ( SnippetResult_t & tRes ) const
-{
-	assert(m_pQuerySettings);
-
-	int iSeparatorLen = m_pQuerySettings->m_sFieldSeparator.Length();
-	BYTE * pAdded = tRes.m_dResult.AddN(iSeparatorLen);
-	memcpy ( pAdded, m_pQuerySettings->m_sFieldSeparator.cstr(), iSeparatorLen );
-}
-
-
 bool SnippetBuilder_c::Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tSettings, CSphString & sError )
 {
 	assert(pIndex);
@@ -1108,8 +1248,6 @@ bool SnippetBuilder_c::SetQuery ( const CSphString & sQuery, bool bIgnoreFields,
 {
 	assert(m_pIndex);
 	assert(m_pQuerySettings);
-
-	m_sQuery = sQuery;
 
 	m_pExtQuery.Reset();
 	m_pExtQuery = new XQQuery_t;
@@ -1236,4 +1374,25 @@ bool SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPost )
 	sSrc.Swap ( sPre );
 
 	return true;
+}
+
+
+void UnpackSnippetData ( const BYTE * pData, int iLength, SnippetResult_t & tRes )
+{
+	MemoryReader_c tReader ( pData, iLength );
+
+	tRes.m_dFields.Resize ( tReader.UnzipInt() );
+	for ( auto & tField : tRes.m_dFields )
+	{
+		tField.m_sName = tReader.GetString();
+		tField.m_dPassages.Resize ( tReader.UnzipInt() );
+		for ( auto & tPassage : tField.m_dPassages )
+		{
+			tPassage.m_bStartSeparator = !!tReader.GetByte();
+			tPassage.m_bEndSeparator = !!tReader.GetByte();
+
+			tPassage.m_dText.Resize ( tReader.UnzipInt() );
+			tReader.GetBytes ( tPassage.m_dText.Begin(), tPassage.m_dText.GetLength() );
+		}
+	}
 }

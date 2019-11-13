@@ -32,7 +32,7 @@ public:
 	int			FindWord ( SphWordID_t iWordID, const BYTE * sWord, int iWordLen ) const;
 	int			FindStarred ( const char * sWord ) const;
 	void		AddHits ( SphWordID_t iWordID, const BYTE * sWord, int iWordLen, DWORD uPosition );
-	void		ParseQuery ( const char * sQuery, ISphTokenizer * pTokenizer, CSphDict * pDict, DWORD eExtQuerySPZ );
+	void		ParseQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, DWORD eExtQuerySPZ );
 	int			GetTermWeight ( int iQueryPos ) const;
 	int			GetNumTerms () const;
 	DWORD		GetLastPos() const { return m_uLastPos; }

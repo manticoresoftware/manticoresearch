@@ -1531,6 +1531,7 @@ public:
 	virtual int				GetFieldsCount() const			{ return m_dFields.GetLength(); }
 
 	virtual const CSphColumnInfo &	GetField ( int iIndex ) const { return m_dFields[iIndex]; }
+	const CSphColumnInfo *	GetField ( const char * szName ) const;
 	virtual const CSphVector<CSphColumnInfo> & GetFields () const { return m_dFields; }
 
 	// most of the time we only need to get the field name

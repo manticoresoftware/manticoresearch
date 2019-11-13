@@ -8399,7 +8399,7 @@ void SqlParser_c::JoinClusterAt ( const SqlNode_t & tAt )
 
 enum eExcerpt_Flags
 {
-	EXCERPT_FLAG_REMOVESPACES		= 1,
+	EXCERPT_FLAG_REMOVESPACES		= 1,			// deprecated
 	EXCERPT_FLAG_EXACTPHRASE		= 2,			// deprecated
 	EXCERPT_FLAG_SINGLEPASSAGE		= 4,
 	EXCERPT_FLAG_USEBOUNDARIES		= 8,
@@ -8421,8 +8421,7 @@ enum
 
 int PackAPISnippetFlags ( const SnippetQuerySettings_t &q, bool bOnlyScattered = false )
 {
-	int iRawFlags = q.m_bRemoveSpaces ? EXCERPT_FLAG_REMOVESPACES : 0;
-	iRawFlags |= q.m_iLimitPassages ? EXCERPT_FLAG_SINGLEPASSAGE : 0;
+	int iRawFlags = q.m_iLimitPassages ? EXCERPT_FLAG_SINGLEPASSAGE : 0;
 	iRawFlags |= q.m_bUseBoundaries ? EXCERPT_FLAG_USEBOUNDARIES : 0;
 	iRawFlags |= q.m_bWeightOrder ? EXCERPT_FLAG_WEIGHTORDER : 0;
 	iRawFlags |= q.m_bForceAllWords ? EXCERPT_FLAG_FORCE_ALL_WORDS : 0;
@@ -8448,7 +8447,8 @@ struct ExcerptQueryChained_t : SnippetQuerySettings_t
 	int				m_iNext = PROCESSED_ITEM; ///< the next one in one-link list for batch processing. -1 terminate the list. -2 sign of other (out-of-the-lists)
 	CSphString		m_sSource;			///< source data
 	CSphString		m_sQuery;			///< source data
-	SnippetResult_t m_tResult;			///< query result
+	CSphString		m_sError;
+	CSphVector<BYTE> m_dResult;			///< query result
 };
 
 struct SnippetsRemote_t : ISphNoncopyable
@@ -8477,8 +8477,11 @@ struct SnippetJob_t : public ISphJob
 		// fixme! really only one query text and settings for the entire batch
 		// fixme! error handling!
 		CSphScopedPtr<SnippetBuilder_i>	pSnippetBuilder ( CreateSnippetBuilder() );
-		pSnippetBuilder->Setup ( m_pIndex, *m_pQueries, m_pQueries->m_tResult.m_sError );
-		pSnippetBuilder->SetQuery ( m_pQueries->m_sQuery.cstr(), true, m_pQueries->m_tResult.m_sError );
+		pSnippetBuilder->Setup ( m_pIndex, *m_pQueries, m_pQueries->m_sError );
+		pSnippetBuilder->SetQuery ( m_pQueries->m_sQuery.cstr(), true, m_pQueries->m_sError );
+
+		CSphVector<int> dRequestedFields;
+		dRequestedFields.Add(0);
 
 		for ( long iQuery = (*m_pCurQuery)++; iQuery<m_iQueries; iQuery = (*m_pCurQuery)++ )
 		{
@@ -8486,9 +8489,12 @@ struct SnippetJob_t : public ISphJob
 			if ( tQuery.m_iNext!=PROCESSED_ITEM )
 				continue;
 
-			// fixme! check for errors
+			SnippetResult_t tRes;
 			CSphScopedPtr<TextSource_i> pSource ( CreateSnippetSource ( tQuery.m_uFilesMode, (const BYTE*)tQuery.m_sSource.cstr(), tQuery.m_sSource.Length() ) );
-			pSnippetBuilder->Build ( pSource.Ptr(), tQuery.m_tResult );
+			if ( pSnippetBuilder->Build ( pSource.Ptr(), tRes ) )
+				tQuery.m_dResult = pSnippetBuilder->PackResult ( tRes, dRequestedFields );
+			else
+				m_pQueries->m_sError = tRes.m_sError;
 		}
 	}
 };
@@ -8571,21 +8577,22 @@ bool SnippetReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & t
 	while ( iDoc!=EOF_ITEM )
 	{
 		ExcerptQueryChained_t & tQuery = dQueries[iDoc];
-		SnippetResult_t & tResult = tQuery.m_tResult;
+		CSphVector<BYTE> & dRes = tQuery.m_dResult;
+		
 		if ( tQuery.m_uFilesMode & 2 ) // scattered files
 		{
-			if ( !tReq.GetString ( tResult.m_dResult ) || tResult.m_dResult.IsEmpty () )
+			if ( !tReq.GetString(dRes) || dRes.IsEmpty() )
 			{
 				bOk = false;
-				tResult.m_dResult.Reset();
+				dRes.Resize(0);
 			} else
-				tResult.m_sError = "";
+				tQuery.m_sError = "";
 
 			iDoc = tQuery.m_iNext;
 			continue;
 		}
 
-		tReq.GetString ( tResult.m_dResult );
+		tReq.GetString(dRes);
 		auto iNextDoc = tQuery.m_iNext;
 		tQuery.m_iNext = PROCESSED_ITEM;
 		iDoc = iNextDoc;
@@ -8675,20 +8682,26 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 
 	// boring single threaded loop
 	StringBuilder_c sErrors ( "; " );
+	CSphVector<int> dRequestedFields;
+	dRequestedFields.Add(0);
 	if ( g_iDistThreads<=1 || dQueries.GetLength()<2 )
 	{
 		bool bError = false;
 		for ( auto & tQuery : dQueries )
 		{
-			SnippetResult_t & tRes = tQuery.m_tResult;
-
 			CSphScopedPtr<TextSource_i> pSource ( CreateSnippetSource ( tQuery.m_uFilesMode, (const BYTE*)tQuery.m_sSource.cstr(), tQuery.m_sSource.Length() ) );
-			bError |= pSnippetBuilder->Build ( pSource.Ptr(), tRes );
-			sErrors << tRes.m_sError;
+			SnippetResult_t tRes;
+			if ( pSnippetBuilder->Build ( pSource.Ptr(), tRes ) )
+				tQuery.m_dResult = pSnippetBuilder->PackResult ( tRes, dRequestedFields );
+			else
+			{
+				bError = true; 
+				sErrors << tRes.m_sError;
+			}
 		}
 
 		sErrors.MoveTo(sError);
-		return bError;
+		return !bError;
 	}
 
 	// not boring mt loop with (may be) scattered.
@@ -8741,7 +8754,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 			tQuery.m_iNext = iAbsentHead;
 			iAbsentHead = i;
 			if ( bNeedAllFiles )
-				tQuery.m_tResult.m_sError.SetSprintf ( "absenthead: failed to stat %s: %s", dQueries[i].m_sSource.cstr(), strerrorm(errno) );
+				tQuery.m_sError.SetSprintf ( "absenthead: failed to stat %s: %s", dQueries[i].m_sSource.cstr(), strerrorm(errno) );
 		}
 	}
 
@@ -8782,9 +8795,9 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 		if ( !bScattered )
 			dQueries.Sort ( bind ( &ExcerptQueryChained_t::m_iSeq ) );
 
-		dQueries.Apply ( [&] ( const ExcerptQueryChained_t & tQuery ) { sErrors << tQuery.m_tResult.m_sError; } );
+		dQueries.Apply ( [&] ( const ExcerptQueryChained_t & tQuery ) { sErrors << tQuery.m_sError; } );
 		sErrors.MoveTo ( sError );
-		return sError.IsEmpty ();
+		return sError.IsEmpty();
 	}
 
 	// and finally most interesting remote case with possibly scattered.
@@ -8879,7 +8892,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	if ( !bScattered )
 		dQueries.Sort ( bind ( &ExcerptQueryChained_t::m_iSeq ) );
 
-	dQueries.Apply ( [&] ( const ExcerptQueryChained_t & tQuery ) { sErrors << tQuery.m_tResult.m_sError; } );
+	dQueries.Apply ( [&] ( const ExcerptQueryChained_t & tQuery ) { sErrors << tQuery.m_sError; } );
 	sErrors.MoveTo ( sError );
 	return sError.IsEmpty();
 }
@@ -8936,7 +8949,6 @@ void HandleCommandExcerpt ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c
 	if ( iVer>=0x103 )
 		q.m_ePassageSPZ = GetPassageBoundary ( tReq.GetString() );
 
-	q.m_bRemoveSpaces = ( iFlags & EXCERPT_FLAG_REMOVESPACES )!=0;
 	q.m_bUseBoundaries = ( iFlags & EXCERPT_FLAG_USEBOUNDARIES )!=0;
 	q.m_bWeightOrder = ( iFlags & EXCERPT_FLAG_WEIGHTORDER )!=0;
 	q.m_bForceAllWords = ( iFlags & EXCERPT_FLAG_FORCE_ALL_WORDS )!=0;
@@ -8984,7 +8996,6 @@ void HandleCommandExcerpt ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c
 		}
 	}
 	tThd.SetThreadInfo ( R"(api-snippet datasize=%.1Dk query="%s")", GetSnippetDataSize ( dQueries ), dQueries[0].m_sQuery.scstr ());
-
 	if ( !MakeSnippets ( sIndex, dQueries, sError, tThd ) )
 	{
 		SendErrorReply ( tOut, "%s", sError.cstr() );
@@ -8995,20 +9006,19 @@ void HandleCommandExcerpt ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c
 	// serve result
 	////////////////
 
-	for ( auto & tQuery : dQueries )
+	for ( const auto & i : dQueries )
 	{
-		FixupResultTail ( tQuery.m_tResult.m_dResult );
 		// handle errors
-		if ( !bScattered && tQuery.m_tResult.m_dResult.IsEmpty() && !tQuery.m_tResult.m_sError.IsEmpty() )
+		if ( !bScattered && !i.m_sError.IsEmpty() )
 		{
-			SendErrorReply ( tOut, "highlighting failed: %s", tQuery.m_tResult.m_sError.cstr() );
+			SendErrorReply ( tOut, "highlighting failed: %s", i.m_sError.cstr() );
 			return;
 		}
 	}
 
 	APICommand_t dOk ( tOut, SEARCHD_OK, VER_COMMAND_EXCERPT );
 	for ( const auto & i : dQueries )
-		tOut.SendArray ( i.m_tResult.m_dResult );
+		tOut.SendArray ( i.m_dResult );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -12604,7 +12614,7 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc
 		return;
 	}
 
-	if ( !dQueries.FindFirst ( [] ( const ExcerptQueryChained_t & tQuery ) { return !tQuery.m_tResult.m_dResult.IsEmpty(); } ) )
+	if ( !dQueries.FindFirst ( [] ( const ExcerptQueryChained_t & tQuery ) { return tQuery.m_sError.IsEmpty(); } ) )
 	{
 		// just one last error instead of all errors is hopefully ok
 		sError.SetSprintf ( "highlighting failed: %s", sError.cstr() );
@@ -12620,8 +12630,8 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc
 	// data
 	for ( auto & i : dQueries )
 	{
-		FixupResultTail ( i.m_tResult.m_dResult );
-		tOut.PutArray ( i.m_tResult.m_dResult );
+		FixupResultTail ( i.m_dResult );
+		tOut.PutArray ( i.m_dResult );
 		tOut.Commit();
 	}
 

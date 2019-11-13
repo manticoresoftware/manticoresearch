@@ -191,6 +191,7 @@ protected:
 	SnippetQuerySettings_t			m_tSnippetQuery;
 	CSphQueryProfile *				m_pProfiler;
 	CSphScopedPtr<SnippetBuilder_i>	m_pSnippetBuilder;
+	CSphVector<int>					m_dRequestedFields;
 };
 
 
@@ -259,6 +260,8 @@ Expr_Snippet_c::Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQu
 
 	if ( !m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery, sError ) )
 		return;
+
+	m_dRequestedFields.Add(0);
 }
 
 
@@ -293,14 +296,11 @@ int Expr_Snippet_c::StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr )
 	if ( !m_pSnippetBuilder->Build ( pSource.Ptr(), tRes ) )
 		return 0;
 
-	if ( m_tSnippetQuery.m_bJsonQuery )
-		return PackSnippets ( tRes.m_dResult, tRes.m_dSeparators, m_tSnippetQuery.m_sChunkSeparator.Length(), ppStr );
+	CSphVector<BYTE> dRes = m_pSnippetBuilder->PackResult ( tRes, m_dRequestedFields );
 
-	assert ( tRes.m_dResult.IsEmpty() || tRes.m_dResult.Last()=='\0' );
-	int iResultLength = tRes.m_dResult.GetLength();
-	*ppStr = tRes.m_dResult.LeakData();
-	// skip trailing zero
-	return ( iResultLength ? iResultLength-1 : 0 );
+	int iResultLength = dRes.GetLength();
+	*ppStr = dRes.LeakData();
+	return iResultLength;
 }
 
 
@@ -353,10 +353,10 @@ private:
 	CSphScopedPtr<SnippetBuilder_i>	m_pSnippetBuilder;
 	DocstoreSession_c::Info_t		m_tSession;
 	SnippetQuerySettings_t			m_tSnippetQuery;
-	CSphBitvec						m_tRequestedFields;
-	StrVec_t						m_dRequestedFields;
+	CSphVector<int>					m_dRequestedFieldIds;
 	CSphVector<int>					m_dFieldsToFetch;
 	CSphRefcountedPtr<ISphExpr>		m_pArgs;
+	bool							m_bFetchAllFields = false;
 
 	bool		FetchFieldsFromDocstore ( DocstoreDoc_t & tFetchedDoc, DocID_t & tDocID ) const;
 	void		ParseFields ( ISphExpr * pExpr );
@@ -371,7 +371,6 @@ Expr_Highlight_c::Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, CS
 	, m_pIndex ( pIndex )
 	, m_pProfiler ( pProfiler )
 	, m_pSnippetBuilder ( CreateSnippetBuilder() )
-	, m_tRequestedFields ( m_pIndex->GetMatchSchema().GetFieldsCount() )
 {
 	assert ( m_pIndex );
 
@@ -380,9 +379,6 @@ Expr_Highlight_c::Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, CS
 		m_pArgs = pArglist;
 		SafeAddRef(m_pArgs);
 	}
-
-	if ( !m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery, sError ) )
-		return;
 
 	int iNumArgs = pArglist ? ( pArglist->IsArglist() ? pArglist->GetNumArgs() : 1 ) : 0;
 
@@ -403,6 +399,9 @@ Expr_Highlight_c::Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, CS
 	}
 	else
 		MarkAllFields();
+
+	if ( !m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery, sError ) )
+		return;
 }
 
 
@@ -421,34 +420,32 @@ int	Expr_Highlight_c::StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr
 	// so that field matching will work as expected
 	const CSphSchema & tSchema = m_pIndex->GetMatchSchema();
 
-	CSphVector<VecTraits_T<BYTE>> dAllFields;
+	CSphVector<FieldSource_t> dAllFields;
 
 	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
 	{
 		const CSphColumnInfo & tInfo = tSchema.GetField(i);
+		FieldSource_t & tNewField = dAllFields.Add();
+		tNewField.m_sName = tInfo.m_sName;
+
 		if ( !( tInfo.m_uFieldFlags & CSphColumnInfo::FIELD_STORED ) )
-		{
-			dAllFields.Add ( VecTraits_T<BYTE>(nullptr,0) );
 			continue;
-		}
 
 		int iFieldId = m_tSession.m_pDocstore->GetFieldId ( tInfo.m_sName, DOCSTORE_TEXT );
 		assert ( iFieldId!=-1 );
 
 		int iFetchedFieldId = -1;
-		if ( m_dFieldsToFetch.GetLength() )
+		if ( m_bFetchAllFields )
+			iFetchedFieldId = iFieldId;
+		else
 		{
 			int * pFound = sphBinarySearch ( m_dFieldsToFetch.Begin(), m_dFieldsToFetch.Begin()+m_dFieldsToFetch.GetLength()-1, iFieldId );
 			if ( pFound )
 				iFetchedFieldId = pFound-m_dFieldsToFetch.Begin();
 		}
-		else
-			iFetchedFieldId = iFieldId;
 
 		if ( iFetchedFieldId!=-1 )
-			dAllFields.Add ( VecTraits_T<BYTE>( tFetchedDoc.m_dFields[iFetchedFieldId].Begin(), tFetchedDoc.m_dFields[iFetchedFieldId].GetLength() ) );
-		else
-			dAllFields.Add ( VecTraits_T<BYTE>(nullptr,0) );
+			tNewField.m_dData = VecTraits_T<BYTE>( tFetchedDoc.m_dFields[iFetchedFieldId].Begin(), tFetchedDoc.m_dFields[iFetchedFieldId].GetLength() );
 	}
 
 	if ( UpdateQuery(tMatch) )
@@ -464,11 +461,11 @@ int	Expr_Highlight_c::StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr
 	if ( !m_pSnippetBuilder->Build ( pSource.Ptr(), tRes ) )
 		return 0;
 
-	assert ( tRes.m_dResult.IsEmpty() || tRes.m_dResult.Last()=='\0' );
-	int iResultLength = tRes.m_dResult.GetLength();
-	*ppStr = tRes.m_dResult.LeakData();
-	// skip trailing zero
-	return ( iResultLength ? iResultLength-1 : 0 );
+	CSphVector<BYTE> dPacked = m_pSnippetBuilder->PackResult ( tRes, m_dRequestedFieldIds );
+
+	int iResultLength = dPacked.GetLength();
+	*ppStr = dPacked.LeakData();
+	return iResultLength;
 }
 
 
@@ -512,7 +509,7 @@ bool Expr_Highlight_c::FetchFieldsFromDocstore ( DocstoreDoc_t & tFetchedDoc, Do
 	if ( !m_tSession.m_pDocstore )
 		return false;
 
-	const CSphVector<int> * pFieldsToFetch = m_tRequestedFields.BitCount()==m_tRequestedFields.GetBits() ? nullptr : &m_dFieldsToFetch;
+	const CSphVector<int> * pFieldsToFetch = m_bFetchAllFields ? nullptr : &m_dFieldsToFetch;
 	return m_tSession.m_pDocstore->GetDoc ( tFetchedDoc, tDocID, pFieldsToFetch, m_tSession.m_iSessionId, false );
 }
 
@@ -528,59 +525,64 @@ void Expr_Highlight_c::ParseFields ( ISphExpr * pExpr )
 	int iLen = pExpr->StringEval ( tDummy, (const BYTE**)&szFields );
 	sFields.SetBinary ( szFields, iLen );
 	sFields.ToLower();
+	sFields.Trim();
 
-	sphSplit ( m_dRequestedFields, sFields.cstr() );
+	StrVec_t dRequestedFieldNames;
+	sphSplit ( dRequestedFieldNames, sFields.cstr() );
+
+	if ( !dRequestedFieldNames.GetLength() && sFields.IsEmpty() )
+		MarkAllFields();
+	else
+	{
+		const CSphSchema & tSchema = m_pIndex->GetMatchSchema();
+		for ( const auto & i : dRequestedFieldNames )
+		{
+			int iField = tSchema.GetFieldIndex ( i.cstr() );
+			if ( iField!=-1 )
+				m_dRequestedFieldIds.Add(iField);
+		}
+	}
 }
 
 
 void Expr_Highlight_c::MarkAllFields()
 {
-	m_tRequestedFields.Clear();
+	m_bFetchAllFields = true;
 	m_dFieldsToFetch.Resize(0);
 
 	const CSphSchema & tSchema = m_pIndex->GetMatchSchema();
 	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
-		m_tRequestedFields.BitSet(i);
+		m_dRequestedFieldIds.Add(i);
 }
 
 
 bool Expr_Highlight_c::MarkRequestedFields ( CSphString & sError )
 {
-	m_tRequestedFields.Clear();
 	m_dFieldsToFetch.Resize(0);
 
 	bool bResult = true;
 
-	if ( m_dRequestedFields.GetLength() )
+	if ( !m_bFetchAllFields )
 	{
 		assert ( m_tSession.m_pDocstore );
 		const CSphSchema & tSchema = m_pIndex->GetMatchSchema();
 
-		for ( const auto & i : m_dRequestedFields )
+		for ( auto iField : m_dRequestedFieldIds )
 		{
-			int iDocstoreField = m_tSession.m_pDocstore->GetFieldId ( i, DOCSTORE_TEXT );
+			const char * szField = tSchema.GetFieldName(iField);
+			int iDocstoreField = m_tSession.m_pDocstore->GetFieldId ( szField, DOCSTORE_TEXT );
 			if ( iDocstoreField==-1 )
 			{
-				sError.SetSprintf ( "field %s not found", i.cstr() );
+				sError.SetSprintf ( "field %s not found", szField );
 				bResult = false;
 				continue;
 			}
 
-			for ( int iSchemaField = 0; iSchemaField<tSchema.GetFieldsCount(); iSchemaField++ )
-				if ( tSchema.GetField(iSchemaField).m_sName==i )
-				{
-					m_tRequestedFields.BitSet(iSchemaField);
-					break;
-				}
-
 			m_dFieldsToFetch.Add(iDocstoreField);
 		}
 
-		if ( !bResult && !m_tRequestedFields.BitCount() )
-			MarkAllFields();
+		m_dFieldsToFetch.Uniq();
 	}
-	else
-		MarkAllFields();
 
 	return bResult;
 }

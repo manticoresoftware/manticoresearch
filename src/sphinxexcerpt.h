@@ -33,6 +33,7 @@ public:
 	virtual bool				PrepareText ( ISphFieldFilter * pFilter, const CSphHTMLStripper * pStripper, CSphString & sError ) = 0;
 	virtual VecTraits_T<BYTE>	GetText ( int iField ) const = 0;
 	virtual int					GetNumFields() const = 0;
+	virtual const char *		GetFieldName ( int iField ) const = 0;
 	virtual bool				TextFromIndex() const = 0;
 };
 
@@ -50,7 +51,6 @@ struct SnippetQuerySettings_t
 	int				m_iLimitPassages = 0;	///< max passages in snippet
 	int				m_iAround = 5;			///< how much words to highlight around each match
 	int				m_iPassageId = 1;		///< current %PASSAGE_ID% counter value (must start at 1)
-	bool			m_bRemoveSpaces = false;///< whether to collapse whitespace
 	bool			m_bUseBoundaries = false;	///< whether to extract passages by phrase boundaries setup in tokenizer
 	bool			m_bWeightOrder = false;	///< whether to order best passages in document (default) or weight order
 	bool			m_bForceAllWords = false;///< whether to ignore limit until all needed keywords are highlighted (#448)
@@ -66,26 +66,44 @@ struct SnippetQuerySettings_t
 
 	ESphSpz			m_ePassageSPZ { SPH_SPZ_NONE };
 	bool			m_bJsonQuery { false };
+
+	CSphString		AsString() const;
+};
+
+
+struct PassageResult_t
+{
+	CSphVector<BYTE>	m_dText;
+	int					m_iWeight = 0;
+	bool				m_bStartSeparator = false;
+	bool				m_bEndSeparator = false;
+};
+
+
+struct FieldResult_t
+{
+	CSphString					m_sName;
+	CSphVector<PassageResult_t>	m_dPassages;
 };
 
 
 struct SnippetResult_t
 {
-	CSphVector<int>		m_dSeparators;
-	CSphVector<BYTE>	m_dResult;
-	CSphString			m_sError;
-	CSphString			m_sWarning;
+	CSphVector<FieldResult_t>	m_dFields;
+	CSphString					m_sError;
+	CSphString					m_sWarning;
 };
 
 
 class SnippetBuilder_i
 {
 public:
-	virtual			~SnippetBuilder_i() = default;
+	virtual						~SnippetBuilder_i() = default;
 
-	virtual bool	Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tQuery, CSphString & sError ) = 0;
-	virtual bool	SetQuery ( const CSphString & sQuery, bool bIgnoreFields, CSphString & sError ) = 0;
-	virtual bool	Build ( TextSource_i * pSource, SnippetResult_t & tRes ) const = 0;
+	virtual bool				Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tQuery, CSphString & sError ) = 0;
+	virtual bool				SetQuery ( const CSphString & sQuery, bool bIgnoreFields, CSphString & sError ) = 0;
+	virtual bool				Build ( TextSource_i * pSource, SnippetResult_t & tRes ) const = 0;
+	virtual CSphVector<BYTE>	PackResult ( SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const = 0;
 };
 
 
@@ -95,9 +113,16 @@ ESphSpz			GetPassageBoundary ( const CSphString & sPassageBoundaryMode );
 const char *	PassageBoundarySz ( ESphSpz eBoundary );
 bool			sphCheckOptionsSPZ ( const SnippetQuerySettings_t & q, ESphSpz eMode, CSphString & sError );
 bool			SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPost );
+void			UnpackSnippetData ( const BYTE * pData, int iLength, SnippetResult_t & tRes );
+
+struct FieldSource_t
+{
+	CSphString			m_sName;
+	VecTraits_T<BYTE>	m_dData;
+};
 
 TextSource_i *		CreateSnippetSource ( DWORD uFilesMode, const BYTE * pSource, int iLen );
-TextSource_i *		CreateHighlightSource ( const CSphVector<VecTraits_T<BYTE>> & dAllFields );
+TextSource_i *		CreateHighlightSource ( const CSphVector<FieldSource_t> & dAllFields );
 SnippetBuilder_i *	CreateSnippetBuilder();
 
 extern CSphString g_sSnippetsFilePrefix;

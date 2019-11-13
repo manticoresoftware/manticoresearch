@@ -141,7 +141,7 @@ public:
 
 
 DocStartHighlighter_i *	CreateDocStartHighlighter ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, 
-	int & iResultLenCP, SnippetResult_t & tRes );
+	int & iResultLenCP, int iField, SnippetResult_t & tRes );
 
 TokenFunctor_i *		CreateQueryHighlighter ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen,
 	const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes );

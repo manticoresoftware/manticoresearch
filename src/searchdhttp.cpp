@@ -586,7 +586,6 @@ public:
 
 protected:
 	bool					m_bProfile {false};
-	bool					m_bAttrHighlight {false};
 	QueryType_e				m_eQueryType {QUERY_SQL};
 	CSphQuery				m_tQuery;
 	CSphString				m_sWarning;
@@ -653,7 +652,7 @@ protected:
 
 	CSphString EncodeResult ( const AggrResult_t & tRes, CSphQueryProfile * pProfile ) override
 	{
-		return sphEncodeResultJson ( tRes, m_tQuery, pProfile, false );
+		return sphEncodeResultJson ( tRes, m_tQuery, pProfile );
 	}
 };
 
@@ -668,7 +667,7 @@ public:
 	QueryParser_i * PreParseQuery() override
 	{
 		CSphString sError;
-		if ( !sphParseJsonQuery ( m_sQuery, m_tQuery, m_bProfile, m_bAttrHighlight, sError, m_sWarning ) )
+		if ( !sphParseJsonQuery ( m_sQuery, m_tQuery, m_bProfile, sError, m_sWarning ) )
 		{
 			sError.SetSprintf( "Error parsing json query: %s", sError.cstr() );
 			ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
@@ -683,7 +682,7 @@ public:
 protected:
 	CSphString EncodeResult ( const AggrResult_t & tRes, CSphQueryProfile * pProfile ) override
 	{
-		return sphEncodeResultJson ( tRes, m_tQuery, pProfile, m_bAttrHighlight );
+		return sphEncodeResultJson ( tRes, m_tQuery, pProfile );
 	}
 };
 

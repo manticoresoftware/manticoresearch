@@ -3002,43 +3002,46 @@ public:
 
 class ScopedComma_c : public ISphNoncopyable
 {
-	StringBuilder_c * m_pOwner = nullptr;
-	int m_iLevel = 0;
-
 public:
-	ScopedComma_c () = default;
-	explicit ScopedComma_c ( StringBuilder_c & tOwner,
-		const char * sDel, const char * sPref = nullptr, const char * sTerm = nullptr )
+	ScopedComma_c() = default;
+
+	ScopedComma_c ( StringBuilder_c & tOwner, const char * sDel, const char * sPref = nullptr, const char * sTerm = nullptr, bool bAllowEmpty=true )
 		: m_pOwner ( &tOwner )
+		, m_bAllowEmpty ( bAllowEmpty )
 	{
-		m_iLevel = tOwner.StartBlock (sDel, sPref, sTerm);
+		m_iLevel = tOwner.StartBlock ( sDel, sPref, sTerm );
 	}
 
-	explicit ScopedComma_c( StringBuilder_c& tOwner, const StrBlock_t& dBlock )
+	ScopedComma_c ( StringBuilder_c & tOwner, const StrBlock_t & dBlock )
 		: m_pOwner ( &tOwner )
 	{
-		m_iLevel = tOwner.StartBlock ( dBlock );
+		m_iLevel = tOwner.StartBlock(dBlock);
 	}
 
-	ScopedComma_c ( ScopedComma_c&& rhs ) noexcept
+	ScopedComma_c ( ScopedComma_c && rhs ) noexcept
 	{
 		Swap (rhs);
 	}
 
-	ScopedComma_c& operator= ( ScopedComma_c && rhs ) noexcept
+	ScopedComma_c & operator= ( ScopedComma_c && rhs ) noexcept
 	{
 		Swap (rhs);
 		return *this;
 	}
 
-	void Swap (ScopedComma_c& rhs) noexcept
+	~ScopedComma_c()
 	{
-		::Swap ( m_pOwner, rhs.m_pOwner);
-		::Swap (m_iLevel, rhs.m_iLevel);
+		if ( m_pOwner )
+			m_pOwner->FinishBlocks ( m_iLevel, m_bAllowEmpty );
 	}
 
-	void Init ( StringBuilder_c &tOwner,
-		const char * sDel, const char * sPref = nullptr, const char * sTerm = nullptr )
+	void Swap ( ScopedComma_c & rhs ) noexcept
+	{
+		::Swap ( m_pOwner, rhs.m_pOwner );
+		::Swap ( m_iLevel, rhs.m_iLevel );
+	}
+
+	void Init ( StringBuilder_c & tOwner, const char * sDel, const char * sPref = nullptr, const char * sTerm = nullptr )
 	{
 		assert ( !m_pOwner );
 		if ( m_pOwner )
@@ -3047,17 +3050,16 @@ public:
 		m_iLevel = tOwner.StartBlock ( sDel, sPref, sTerm );
 	}
 
-	StringBuilder_c& Sink() const
+	StringBuilder_c & Sink() const
 	{
 		assert ( m_pOwner );
 		return *m_pOwner;
 	}
 
-	~ScopedComma_c()
-	{
-		if ( m_pOwner )
-			m_pOwner->FinishBlocks ( m_iLevel );
-	}
+private:
+	StringBuilder_c *	m_pOwner = nullptr;
+	int					m_iLevel = 0;
+	bool				m_bAllowEmpty = true;
 };
 
 //////////////////////////////////////////////////////////////////////////

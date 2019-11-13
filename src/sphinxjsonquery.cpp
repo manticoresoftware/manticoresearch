@@ -20,9 +20,8 @@
 
 static const char * g_szAll = "_all";
 static const char * g_szFilter = "_@filter_";
-static const char g_sHighlight[] = "_@highlight_";
-static const char g_sOrder[] = "_@order_";
-
+static const char * g_szHighlight = "_@highlight_";
+static const char * g_szOrder = "_@order_";
 
 static bool	IsFilter ( const JsonObj_c & tJson )
 {
@@ -52,8 +51,8 @@ public:
 	void			CollectKeywords ( const char * szStr, XQNode_t * pNode, const XQLimitSpec_t & tLimitSpec );
 
 	bool			HandleFieldBlockStart ( const char * & /*pPtr*/ ) override { return true; }
-	bool	HandleSpecialFields ( const char * & pPtr, FieldMask_t & dFields ) override;
-	bool	NeedTrailingSeparator() override { return false; }
+	bool			HandleSpecialFields ( const char * & pPtr, FieldMask_t & dFields ) override;
+	bool			NeedTrailingSeparator() override { return false; }
 
 	XQNode_t *		CreateNode ( XQLimitSpec_t & tLimitSpec );
 
@@ -1281,8 +1280,7 @@ static bool ParseLimits ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphStrin
 }
 
 
-bool sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfile, bool & bAttrsHighlight,
-	CSphString & sError, CSphString & sWarning )
+bool sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfile, CSphString & sError, CSphString & sWarning )
 {
 	JsonObj_c tRoot ( szQuery );
 	if ( !tRoot )
@@ -1326,8 +1324,6 @@ bool sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfi
 	{
 		if ( !ParseSnippet ( tSnip, tQuery, sError ) )
 			return false;
-
-		bAttrsHighlight = true;
 	}
 	else if ( !sError.IsEmpty() )
 		return false;
@@ -1758,11 +1754,10 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes
 	}
 }
 
-static void UnpackSnippets ( JsonEscapedBuilder &tOut, const CSphMatch &tMatch, const CSphAttrLocator &tLoc );
 
 static bool IsHighlightAttr ( const CSphString & sName )
 {
-	return sName.Begins ( g_sHighlight );
+	return sName.Begins ( g_szHighlight );
 }
 
 
@@ -1771,9 +1766,9 @@ static bool NeedToSkipAttr ( const CSphString & sName, const CSphQuery & tQuery 
 	const char * szName = sName.cstr();
 
 	if ( szName[0]=='i' && szName[1]=='d' && szName[2]=='\0' ) return true;
-	if ( sName.Begins ( g_sHighlight ) ) return true;
+	if ( sName.Begins ( g_szHighlight ) ) return true;
 	if ( sName.Begins ( g_szFilter ) ) return true;
-	if ( sName.Begins ( g_sOrder ) ) return true;
+	if ( sName.Begins ( g_szOrder ) ) return true;
 
 	if ( !tQuery.m_dIncludeItems.GetLength() && !tQuery.m_dExcludeItems.GetLength () )
 		return false;
@@ -1805,7 +1800,30 @@ static bool NeedToSkipAttr ( const CSphString & sName, const CSphQuery & tQuery 
 }
 
 
-CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQuery, CSphQueryProfile * pProfile, bool bAttrsHighlight )
+static void EncodeHighlight ( const CSphMatch & tMatch, int iAttr, const ISphSchema & tSchema, JsonEscapedBuilder & tOut )
+{
+	const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
+
+	ScopedComma_c tHighlightComma ( tOut, ",", R"("highlight":{)", "}", false );
+	auto pData = (const BYTE *)tMatch.GetAttr ( tCol.m_tLocator );
+	int iLength = sphUnpackPtrAttr ( pData, &pData );
+
+	SnippetResult_t tRes;
+	UnpackSnippetData ( pData, iLength, tRes );
+
+	for ( const auto & tField : tRes.m_dFields )
+	{
+		tOut.AppendName ( tField.m_sName.cstr() );
+		ScopedComma_c tHighlight ( tOut, ",", "[", "]", false );
+
+		// we might want to add passage separators to field text here
+		for ( const auto & tPassage : tField.m_dPassages )
+			tOut.AppendEscaped ( (const char *)tPassage.m_dText.Begin(), EscBld::eEscape, tPassage.m_dText.GetLength() );
+	}
+}
+
+
+CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQuery, CSphQueryProfile * pProfile )
 {
 	JsonEscapedBuilder tOut;
 	CSphString sResult;
@@ -1839,8 +1857,8 @@ CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQ
 	CSphBitvec tAttrsToSend;
 	sphGetAttrsToSend ( tSchema, false, true, tAttrsToSend );
 
+	int iHighlightAttr = -1;
 	int nSchemaAttrs = tSchema.GetAttrsCount();
-	CSphBitvec dHiAttrs ( nSchemaAttrs );
 	CSphBitvec dSkipAttrs ( nSchemaAttrs );
 	for ( int iAttr=0; iAttr<nSchemaAttrs; iAttr++ )
 	{
@@ -1848,12 +1866,12 @@ CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQ
 			continue;
 
 		const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
-		const char * sName = tCol.m_sName.cstr();
+		const char * szName = tCol.m_sName.cstr();
 
-		if ( bAttrsHighlight && IsHighlightAttr ( sName ) )
-			dHiAttrs.BitSet ( iAttr );
+		if ( IsHighlightAttr(szName) )
+			iHighlightAttr = iAttr;
 
-		if ( NeedToSkipAttr ( sName, tQuery ) )
+		if ( NeedToSkipAttr ( szName, tQuery ) )
 			dSkipAttrs.BitSet ( iAttr );
 	}
 
@@ -1894,28 +1912,8 @@ CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQ
 
 		tOut.FinishBlock ( false ); // _source obj
 
-		if ( bAttrsHighlight )
-		{
-			ScopedComma_c sHighlightComma ( tOut, ",", R"("highlight":{)", "}" );
-
-			for ( int iAttr=0; iAttr<nSchemaAttrs; iAttr++ )
-			{
-				if ( !tAttrsToSend.BitGet(iAttr) )
-					continue;
-
-				if ( !dHiAttrs.BitGet ( iAttr ) )
-					continue;
-
-
-				const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
-				const char * sName = tCol.m_sName.cstr() + sizeof(g_sHighlight) - 1;
-				assert ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR );
-
-				tOut.AppendName (sName);
-				ScopedComma_c sHighlight ( tOut, ",", "[", "]" );
-				UnpackSnippets ( tOut, tMatch, tCol.m_tLocator );
-			}
-		}
+		if ( iHighlightAttr!=-1 )
+			EncodeHighlight ( tMatch, iHighlightAttr, tSchema, tOut );
 	}
 
 	tOut.FinishBlocks ( sHitMeta, false ); // hits array, hits meta
@@ -2123,117 +2121,76 @@ void sphBuildProfileJson ( JsonEscapedBuilder &tOut, const XQNode_t * pNode, con
 //////////////////////////////////////////////////////////////////////////
 // Highlight
 
-struct HttpSnippetField_t
-{
-	int m_iFragmentSize = -1;
-	int m_iFragmentCount = -1;
-	CSphString m_sName;
-};
-
-static bool CheckField ( HttpSnippetField_t & tParsed, CSphString & sError, const JsonObj_c & tField )
-{
-	assert ( tField.IsObj() );
-	if ( !tField.Size() )
-		return true;
-
-	JsonObj_c tType = tField.GetStrItem ( "type", sError, true );
-	if ( tType )
-	{
-		if ( tType.StrVal()!="unified" )
-		{
-			sError = R"(only "unified" supported for "type" property)";
-			return false;
-		}
-	} else if ( !sError.IsEmpty() )
-		return false;
-
-	if ( tField.HasItem ( "force_source" ) )
-	{
-		sError = R"("force_source" property not supported)";
-		return false;
-	}
-
-	JsonObj_c tFragmenter = tField.GetStrItem ( "fragmenter", sError, true );
-	if ( tFragmenter )
-	{
-		if ( tFragmenter.StrVal()!="span" )
-		{
-			sError = R"(only "span" supported for "fragmenter" property)";
-			return false;
-		}
-	} else if ( !sError.IsEmpty() )
-		return false;
-
-	if ( !tField.FetchIntItem ( tParsed.m_iFragmentSize, "fragment_size", sError, true ) )
-		return false;
-
-	return tField.FetchIntItem( tParsed.m_iFragmentCount, "number_of_fragments", sError, true );
-}
-
-
 struct SnippetOptions_t
 {
-	int			m_iNoMatch {0};
-	bool		m_bWeightOrder {false};
-	bool		m_bKeepHtml {false};
-	CSphString	m_sQuery;
-	CSphString	m_sPreTag;
-	CSphString	m_sPostTag;
-	CSphVector<HttpSnippetField_t> m_dFields;
+	CSphString				m_sQuery;
+	CSphVector<CSphString>	m_dFields;
 };
 
 
-static void FormatSnippetOpts ( const SnippetOptions_t & tOpts, CSphQuery & tQuery )
+static void FormatSnippetOpts ( const SnippetOptions_t & tOpts, const SnippetQuerySettings_t & tSnippetQuery, CSphQuery & tQuery )
 {
-	for ( const HttpSnippetField_t & tSnip : tOpts.m_dFields )
+	StringBuilder_c sItem;
+	sItem << "HIGHLIGHT(";
+	sItem << tSnippetQuery.AsString();
+	sItem << ",";
+
+	if ( tOpts.m_dFields.GetLength() )
 	{
-		StringBuilder_c sItem;
-		const char * sHiQuery = ( tOpts.m_sQuery.IsEmpty() ? tQuery.m_sQuery.cstr() : tOpts.m_sQuery.cstr() );
-		sItem << "SNIPPET(" << tSnip.m_sName << ", '" << sHiQuery << "'";
+		sItem.StartBlock ( ",", "'", "'" );
+		for ( const auto & i : tOpts.m_dFields )
+			sItem << i;
 
-		if ( !tOpts.m_sPreTag.IsEmpty() )
-			sItem << ", 'before_match=" << tOpts.m_sPreTag << "'";
-		if ( !tOpts.m_sPostTag.IsEmpty() )
-			sItem << ", 'after_match=" << tOpts.m_sPostTag << "'";
-		if ( tSnip.m_iFragmentSize!=-1 && !tOpts.m_bKeepHtml )
-			sItem.Appendf ( ", 'limit=%d'", tSnip.m_iFragmentSize );
-		if ( tSnip.m_iFragmentCount!=-1 && !tOpts.m_bKeepHtml )
-			sItem.Appendf ( ", 'limit_passages=%d'", tSnip.m_iFragmentCount );
-		if ( tOpts.m_iNoMatch<1 )
-			sItem << ", 'allow_empty=1'";
-		if ( tOpts.m_bWeightOrder )
-			sItem << ", 'weight_order=1'";
-		if ( tOpts.m_bKeepHtml )
-			sItem << ", 'html_strip_mode=retain', 'limit=0'";
-
-		sItem += ", 'json_query=1')";
-
-		CSphQueryItem & tItem = tQuery.m_dItems.Add();
-		tItem.m_sExpr = sItem.cstr ();
-		tItem.m_sAlias.SetSprintf ( "%s%s", g_sHighlight, tSnip.m_sName.cstr() );
+		sItem.FinishBlock(false);
 	}
+	else
+		sItem << "''";
+
+	if ( !tOpts.m_sQuery.IsEmpty() )
+		sItem.Appendf ( ",'%s'", tOpts.m_sQuery.cstr() );
+
+	sItem << ")";
+
+	CSphQueryItem & tItem = tQuery.m_dItems.Add();
+	tItem.m_sExpr = sItem.cstr ();
+	tItem.m_sAlias.SetSprintf ( "%s", g_szHighlight );
 }
 
 
-static bool ParseSnippet ( const JsonObj_c & tSnip, CSphQuery & tQuery, CSphString & sError )
+static bool ParseSnippetFields ( const JsonObj_c & tSnip, SnippetOptions_t & tOpts, CSphString & sError )
 {
-	const char * dUnsupported[] = { "tags_schema", "require_field_match", "boundary_scanner", "max_fragment_length" };
-	for ( auto szOption : dUnsupported )
-		if ( tSnip.HasItem(szOption) )
-		{
-			sError.SetSprintf ( R"("%s" property not supported)", szOption );
-			return false;
-		}
-
-	JsonObj_c tFields = tSnip.GetObjItem ( "fields", sError, true );
+	JsonObj_c tFields = tSnip.GetArrayItem ( "fields", sError, true );
 	if ( !tFields && !sError.IsEmpty() )
 		return false;
 
-	SnippetOptions_t tOpts;
+	if ( !tFields )
+		return true;
+		
+	tOpts.m_dFields.Reserve ( tFields.Size() );
 
+	for ( const auto & tField : tFields )
+	{
+		if ( !tField.IsStr() )
+		{
+			sError.SetSprintf ( "\"%s\" field should be an string", tField.Name() );
+			return false;
+		}
+
+		tOpts.m_dFields.Add ( tField.StrVal() );
+	}
+
+	return true;
+}
+
+
+static bool ParseSnippetOptsElastic ( const JsonObj_c & tSnip, SnippetOptions_t & tOpts, SnippetQuerySettings_t & tQuery, CSphString & sError )
+{
 	JsonObj_c tEncoder = tSnip.GetStrItem ( "encoder", sError, true );
 	if ( tEncoder )
-		tOpts.m_bKeepHtml = tEncoder.StrVal()=="html";
+	{
+		if ( tEncoder.StrVal()=="html" )
+			tQuery.m_sStripMode = "retain";
+	}
 	else if ( !sError.IsEmpty() )
 		return false;
 
@@ -2243,134 +2200,80 @@ static bool ParseSnippet ( const JsonObj_c & tSnip, CSphQuery & tQuery, CSphStri
 	else if ( !sError.IsEmpty() )
 		return false;
 
-	if ( !tSnip.FetchStrItem ( tOpts.m_sPreTag, "pre_tags", sError, true ) )
+	if ( !tSnip.FetchStrItem ( tQuery.m_sBeforeMatch, "pre_tags", sError, true ) )
 		return false;
 
-	if ( !tSnip.FetchStrItem ( tOpts.m_sPostTag, "post_tags", sError, true ) )
+	if ( !tSnip.FetchStrItem ( tQuery.m_sAfterMatch, "post_tags", sError, true ) )
 		return false;
 
-	if ( !tSnip.FetchIntItem ( tOpts.m_iNoMatch, "no_match_size", sError, true ) )
+	int iNoMatch = 0;
+	if ( !tSnip.FetchIntItem ( iNoMatch, "no_match_size", sError, true ) )
 		return false;
+
+	if ( iNoMatch<1 )
+		tQuery.m_bAllowEmpty = true;
 
 	JsonObj_c tOrder = tSnip.GetStrItem ( "order", sError, true );
 	if ( tOrder )
-		tOpts.m_bWeightOrder = tOrder.StrVal()=="score";
+		tQuery.m_bWeightOrder = tOrder.StrVal()=="score";
 	else if ( !sError.IsEmpty() )
 		return false;
 
-	HttpSnippetField_t tGlobalOptions;
-	if ( !CheckField ( tGlobalOptions, sError, tSnip ) )
+	if ( !tSnip.FetchIntItem ( tQuery.m_iLimit, "fragment_size", sError, true ) )
 		return false;
 
-	tOpts.m_dFields.Reserve ( tFields.Size() );
-
-	for ( const auto & tField : tFields )
-	{
-		if ( !tField.IsObj() )
-		{
-			sError.SetSprintf ( "\"%s\" field should be an object", tField.Name() );
-			return false;
-		}
-
-		HttpSnippetField_t & tSnippetField = tOpts.m_dFields.Add();
-		tSnippetField.m_sName = tField.Name();
-		if ( !CheckField ( tSnippetField, sError, tField ) )
-			return false;
-
-		if ( tGlobalOptions.m_iFragmentSize!=-1 )
-			tSnippetField.m_iFragmentSize = tGlobalOptions.m_iFragmentSize;
-		if ( tGlobalOptions.m_iFragmentCount!=-1 )
-			tSnippetField.m_iFragmentCount = tGlobalOptions.m_iFragmentCount;
-	}
-
-	FormatSnippetOpts ( tOpts, tQuery );
+	if ( !tSnip.FetchIntItem ( tQuery.m_iLimitPassages, "number_of_fragments", sError, true ) )
+		return false;
 
 	return true;
 }
 
 
-struct PassageLocator_t
+static bool ParseSnippetOptsSphinx ( const JsonObj_c & tSnip, SnippetQuerySettings_t & tOpt, CSphString & sError )
 {
-	int m_iOff;
-	int m_iSize;
-};
+	if ( !tSnip.FetchStrItem ( tOpt.m_sBeforeMatch, "before_match", sError, true ) )		return false;
+	if ( !tSnip.FetchStrItem ( tOpt.m_sAfterMatch, "after_match", sError, true ) )			return false;
+	if ( !tSnip.FetchIntItem ( tOpt.m_iLimit, "limit", sError, true ) )						return false;
+	if ( !tSnip.FetchIntItem ( tOpt.m_iAround, "around", sError, true ) )					return false;
+	if ( !tSnip.FetchBoolItem ( tOpt.m_bUseBoundaries, "use_boundaries", sError, true ) )	return false;
+	if ( !tSnip.FetchBoolItem ( tOpt.m_bWeightOrder, "weight_order", sError, true ) )		return false;
+	if ( !tSnip.FetchBoolItem ( tOpt.m_bForceAllWords, "force_all_words", sError, true ) )	return false;
+	if ( !tSnip.FetchIntItem ( tOpt.m_iLimitPassages, "limit_passages", sError, true ) )	return false;
+	if ( !tSnip.FetchIntItem ( tOpt.m_iLimitWords, "limit_words", sError, true ) )			return false;
+	if ( !tSnip.FetchStrItem ( tOpt.m_sStripMode, "html_strip_mode", sError, true ) )		return false;
+	if ( !tSnip.FetchBoolItem ( tOpt.m_bAllowEmpty, "allow_empty", sError, true ) )			return false;
+	if ( !tSnip.FetchBoolItem ( tOpt.m_bEmitZones, "emit_zones", sError, true ) )			return false;
+	if ( !tSnip.FetchBoolItem ( tOpt.m_bForcePassages, "force_passages", sError, true ) )	return false;
 
+	JsonObj_c tBoundary = tSnip.GetStrItem ( "passage_boundary", sError, true );
+	if ( tBoundary )
+		tOpt.m_ePassageSPZ = GetPassageBoundary ( tBoundary.StrVal() );
+	else if ( !sError.IsEmpty() )
+		return false;
 
-int PackSnippets ( const CSphVector<BYTE> & dRes, CSphVector<int> & dSeparators, int iSepLen, const BYTE ** ppStr )
-{
-	if ( !dSeparators.GetLength() && !dRes.GetLength() )
-		return 0;
-
-	int iLast = 0;
-	CSphVector<PassageLocator_t> dPassages;
-	dPassages.Reserve ( dSeparators.GetLength() );
-	for ( int iCur : dSeparators )
-	{
-		int iFrom = iLast;
-		int iLen = iCur - iFrom;
-		iLast = iCur + iSepLen;
-		if ( iLen<=0 )
-			continue;
-		PassageLocator_t & tPass = dPassages.Add();
-		tPass.m_iOff = iFrom;
-		tPass.m_iSize = iLen;
-	}
-
-	if ( !dPassages.GetLength() )
-	{
-		PassageLocator_t & tPass = dPassages.Add();
-		tPass.m_iOff = 0;
-		tPass.m_iSize = dRes.GetLength();
-	}
-
-	int iPassageCount = dPassages.GetLength();
-
-	CSphVector<BYTE> dOut;
-	BYTE * pData;
-
-	pData = dOut.AddN ( sizeof(iPassageCount) );
-	sphUnalignedWrite ( pData, iPassageCount );
-
-	ARRAY_FOREACH ( iPassage, dPassages )
-	{
-		int iSize = dPassages[iPassage].m_iSize + 1;
-
-		pData = dOut.AddN ( sizeof(iSize) );
-		sphUnalignedWrite ( pData, iSize );
-	}
-
-	const BYTE * sText = dRes.Begin();
-	for ( const auto & dPassage : dPassages )
-	{
-		dOut.Append( sText + dPassage.m_iOff, dPassage.m_iSize );
-		dOut.Add('\0'); // make sz-string from binary
-	}
-
-	int iTotalSize = dOut.GetLength();
-	*ppStr = dOut.LeakData();
-	return iTotalSize;
+	return true;
 }
 
-static void UnpackSnippets ( JsonEscapedBuilder &tOut, const CSphMatch &tMatch, const CSphAttrLocator &tLoc )
+
+static bool ParseSnippet ( const JsonObj_c & tSnip, CSphQuery & tQuery, CSphString & sError )
 {
-	auto pData = ( const BYTE * ) tMatch.GetAttr ( tLoc );
-	sphUnpackPtrAttr ( pData, &pData );
-	if ( !pData )
-		return;
+	SnippetOptions_t tOpts;
+	SnippetQuerySettings_t tOptsSphinx;
+	tOptsSphinx.m_bJsonQuery = true;
 
-	int iPassageCount = sphUnalignedRead ( *( int * ) pData );
-	pData += sizeof ( iPassageCount );
+	if ( !ParseSnippetFields ( tSnip, tOpts, sError ) )
+		return false;
 
-	auto pSize = ( const int * ) pData;
-	auto pText = ( const char * ) ( pData + sizeof ( iPassageCount ) * iPassageCount );
-	int iTextOff = 0;
-	for ( int i = 0; i<iPassageCount; ++i )
-	{
-		const char * pPassage = pText + iTextOff;
-		tOut.AppendEscaped ( pPassage, EscBld::eEscape );
-		iTextOff += sphUnalignedRead ( *pSize );
-		++pSize;
-	}
+	// elastic-style options
+	if ( !ParseSnippetOptsElastic ( tSnip, tOpts, tOptsSphinx, sError ) )
+		return false;
+	
+	// sphinx-style options
+	if ( !ParseSnippetOptsSphinx ( tSnip, tOptsSphinx, sError ) )
+		return false;
+
+	FormatSnippetOpts ( tOpts, tOptsSphinx, tQuery );
+	return true;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -2394,12 +2297,12 @@ static void FormatSortBy ( const CSphVector<SortField_t> & dSort, CSphQuery & tQ
 		if ( tItem.IsGeoDist() )
 		{
 			// ORDER BY statement
-			sSortBuf << sComma << g_sOrder << tItem.m_sName << sSort;
+			sSortBuf << sComma << g_szOrder << tItem.m_sName << sSort;
 
 			// query item
 			CSphQueryItem & tQueryItem = tQuery.m_dItems.Add();
 			tQueryItem.m_sExpr = tItem.BuildExprString();
-			tQueryItem.m_sAlias.SetSprintf ( "%s%s", g_sOrder, tItem.m_sName.cstr() );
+			tQueryItem.m_sAlias.SetSprintf ( "%s%s", g_szOrder, tItem.m_sName.cstr() );
 
 			// select list
 			StringBuilder_c sTmp;
@@ -2414,14 +2317,14 @@ static void FormatSortBy ( const CSphVector<SortField_t> & dSort, CSphQuery & tQ
 		{
 			// sort by MVA
 			// ORDER BY statement
-			sSortBuf << sComma << g_sOrder << tItem.m_sName << sSort;
+			sSortBuf << sComma << g_szOrder << tItem.m_sName << sSort;
 
 			// query item
 			StringBuilder_c sTmp;
 			sTmp << ( tItem.m_sMode=="min" ? "least" : "greatest" ) << "(" << tItem.m_sName << ")";
 			CSphQueryItem & tQueryItem = tQuery.m_dItems.Add();
 			sTmp.MoveTo (tQueryItem.m_sExpr);
-			tQueryItem.m_sAlias.SetSprintf ( "%s%s", g_sOrder, tItem.m_sName.cstr() );
+			tQueryItem.m_sAlias.SetSprintf ( "%s%s", g_szOrder, tItem.m_sName.cstr() );
 
 			// select list
 			sTmp << tQuery.m_sSelect << ", " << tQueryItem.m_sExpr << " as " << tQueryItem.m_sAlias;

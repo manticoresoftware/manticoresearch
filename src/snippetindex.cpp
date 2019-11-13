@@ -202,7 +202,7 @@ void TermRemoveDup ( CSphVector<T> & dTerms, CSphVector<int> & dRemovedQPos, con
 }
 
 
-void SnippetsDocIndex_c::ParseQuery ( const char * sQuery, ISphTokenizer * pTokenizer, CSphDict * pDict, DWORD eExtQuerySPZ )
+void SnippetsDocIndex_c::ParseQuery ( ISphTokenizer * pTokenizer, CSphDict * pDict, DWORD eExtQuerySPZ )
 {
 	int iQPos = 0;
 

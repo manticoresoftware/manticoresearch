@@ -7318,6 +7318,16 @@ int CSphSchema::GetFieldIndex ( const char * sName ) const
 }
 
 
+const CSphColumnInfo * CSphSchema::GetField ( const char * szName ) const
+{
+	int iField = GetFieldIndex(szName);
+	if ( iField==-1 )
+		return nullptr;
+
+	return &m_dFields[iField];
+}
+
+
 int CSphSchema::GetAttrIndex ( const char * sName ) const
 {
 	if ( !sName )

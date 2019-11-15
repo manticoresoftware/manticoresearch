@@ -18190,10 +18190,14 @@ void CSphIndex_VLN::DebugCheck_Docs ( DebugCheckContext_t & tCtx, DebugCheckErro
 			iDictHits = tDictReader.UnzipInt();
 		}
 
-		// FIXME? verify skiplist content too
-		int iSkipsOffset = 0;
+		int64_t iSkipsOffset = 0;
 		if ( iDictDocs>m_tSettings.m_iSkiplistBlockSize && !bHitless )
-			iSkipsOffset = tDictReader.UnzipInt();
+		{
+			if ( m_uVersion<=57 )
+				iSkipsOffset = (int)tDictReader.UnzipInt();
+			else
+				iSkipsOffset = tDictReader.UnzipOffset();
+		}
 
 		// check whether the offset is as expected
 		if ( iDoclistOffset!=pDocsReader->GetPos() )
@@ -18340,7 +18344,7 @@ void CSphIndex_VLN::DebugCheck_Docs ( DebugCheckContext_t & tCtx, DebugCheckErro
 		{
 			if ( iSkipsOffset<=0 || iSkipsOffset>iSkiplistLen )
 			{
-				tReporter.Fail ( "invalid skiplist offset (wordid=%llu(%s), off=%d, max=" INT64_FMT ")", UINT64 ( uWordid ), sWord, iSkipsOffset, iSkiplistLen );
+				tReporter.Fail ( "invalid skiplist offset (wordid=%llu(%s), off=" INT64_FMT ", max=" INT64_FMT ")", UINT64 ( uWordid ), sWord, iSkipsOffset, iSkiplistLen );
 				break;
 			}
 
@@ -18731,7 +18735,10 @@ void CSphIndex_VLN::DebugCheckDocidLookup ( CSphAutoreader & tAttrReader, int64_
 		int iCpDocs = iDocsPerCheckpoint;
 		// last checkpoint might have less docs
 		if ( iCp==iCheckpoints-1 )
-			iCpDocs = ( iDocs % iDocsPerCheckpoint );
+		{
+			int iLefover = ( iDocs % iDocsPerCheckpoint );
+			iCpDocs = ( iLefover ? iLefover : iDocsPerCheckpoint );
+		}
 
 		for ( int i=0; i<iCpDocs; i++ )
 		{
@@ -18791,7 +18798,7 @@ void CSphIndex_VLN::DebugCheckDocidLookup ( CSphAutoreader & tAttrReader, int64_
 
 		DocID_t tDocID = sphGetDocID ( dRow.Begin() );
 		
-		tReporter.Fail ( "row %u( " INT64_FMT ") not mapped at lookup, docid " INT64_FMT, i, iDocinfo, tDocID );
+		tReporter.Fail ( "row %u(" INT64_FMT ") not mapped at lookup, docid " INT64_FMT, i, iDocinfo, tDocID );
 	}
 }
 

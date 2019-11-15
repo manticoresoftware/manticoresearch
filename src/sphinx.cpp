@@ -21244,7 +21244,7 @@ public:
 		int							m_iDocs;
 		int							m_iHits;
 		BYTE						m_uHint;
-		int							m_iSkiplistPos;		///< position in .spe file; not exactly likely to hit 2B
+		int64_t						m_iSkiplistPos;		///< position in .spe file
 	};
 
 	struct DictBlock_t
@@ -21600,7 +21600,7 @@ void CSphDictKeywords::DictReadEntry ( CSphBin * pBin, DictKeywordTagged_t & tEn
 	tEntry.m_iHits = pBin->UnzipInt();
 	tEntry.m_uHint = (BYTE) pBin->ReadByte();
 	if ( tEntry.m_iDocs > m_iSkiplistBlockSize )
-		tEntry.m_iSkiplistPos = pBin->UnzipInt();
+		tEntry.m_iSkiplistPos = pBin->UnzipOffset();
 	else
 		tEntry.m_iSkiplistPos = 0;
 }
@@ -21742,7 +21742,7 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphStri
 		if ( tWord.m_uHint )
 			m_wrDict.PutByte ( tWord.m_uHint );
 		if ( tWord.m_iDocs > m_iSkiplistBlockSize )
-			m_wrDict.ZipInt ( tWord.m_iSkiplistPos );
+			m_wrDict.ZipOffset ( tWord.m_iSkiplistPos );
 
 		// build infixes
 		if ( pInfixer )
@@ -21871,7 +21871,7 @@ void CSphDictKeywords::DictFlush ()
 		m_wrTmpDict.PutByte ( pWord->m_uHint );
 		assert ( ( pWord->m_iDocs > m_iSkiplistBlockSize )==( pWord->m_iSkiplistPos!=0 ) );
 		if ( pWord->m_iDocs > m_iSkiplistBlockSize )
-			m_wrTmpDict.ZipInt ( pWord->m_iSkiplistPos );
+			m_wrTmpDict.ZipOffset ( pWord->m_iSkiplistPos );
 	}
 
 	tBlock.m_iLen = (int)( m_wrTmpDict.GetPos() - tBlock.m_iPos );
@@ -21952,7 +21952,7 @@ void CSphDictKeywords::DictEntry ( const CSphDictEntry & tEntry )
 	pWord->m_uHint = sphDoclistHintPack ( tEntry.m_iDocs, tEntry.m_iDoclistLength );
 	pWord->m_iSkiplistPos = 0;
 	if ( tEntry.m_iDocs > m_iSkiplistBlockSize )
-		pWord->m_iSkiplistPos = (int)( tEntry.m_iSkiplistOffset );
+		pWord->m_iSkiplistPos = tEntry.m_iSkiplistOffset;
 }
 
 SphWordID_t CSphDictKeywords::GetWordID ( BYTE * pWord )
@@ -29425,7 +29425,7 @@ bool KeywordsBlockReader_c::UnpackWord()
 	m_uHint = ( m_iDocs>=DOCLIST_HINT_THRESH ) ? *m_pBuf++ : 0;
 	m_iDoclistHint = DoclistHintUnpack ( m_iDocs, m_uHint );
 	if ( m_iDocs > m_iSkiplistBlockSize )
-		m_iSkiplistOffset = sphUnzipInt ( m_pBuf );
+		m_iSkiplistOffset = sphUnzipOffset ( m_pBuf );
 	else
 		m_iSkiplistOffset = 0;
 

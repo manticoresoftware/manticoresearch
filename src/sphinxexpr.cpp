@@ -1537,8 +1537,6 @@ protected:
 		case JSON_TRUE:		return 1;
 		case JSON_STRING:
 		{
-			if ( !g_bJsonAutoconvNumbers )
-				return 0;
 			int iLen = sphJsonUnpackInt ( &pVal );
 			int64_t iVal;
 			double fVal;

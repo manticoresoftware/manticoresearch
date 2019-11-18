@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>json string to number conversion</name>
+
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= select * from test_table
+	sql_attr_uint		= gid
+	sql_attr_json		= json_col
+}
+
+index test
+{
+	source				= test
+	path				= <data_path/>/test
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	json_col VARCHAR(255) NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>INSERT INTO test_table VALUES
+( 1, 123, '{"a":[1,2,3,4], "t":["t1", "t2", "t3"]}', 'title' ),
+( 2, 234, '{"a":[2,3,4,5], "t":["t2", "t3", "t4"]}', 'title' ),
+( 3, 345, '{"a":[3,4,5,1], "t":["t3", "t4", "t5"]}',	'title' ),
+( 4, 456, '{"a":["4","5","6","2"], "t":["t4", "t5", "t6"]}','title' ),
+( 5, 567, '{"a":["4","5all","test 6","2"], "b":[]}', 'title' ),
+( 6, 678, '{"a":[],"b":[]}', 'title' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>select id, json_col j, all(x&gt;1 and x&lt;7 for x in j.a) a from test where match('title') order by id asc</sphinxql>
+<sphinxql>select id, json_col j, json_col.a jc, in(j.a,5,6) as a from test where match('title') order by id asc</sphinxql>
+<sphinxql>select id, json_col j, json_col.a jc, any(x=5 or x=6 for x in j.a) a from test where match('title') order by id asc</sphinxql>
+</sphqueries>
+
+</test>

@@ -1274,6 +1274,13 @@ bool sphJsonStringToNumber ( const char * s, int iLen, ESphJsonType &eType, int6
 	if ( !iLen || iLen==64 )
 		return false;
 
+	const char * pCheck = s;
+	// check string conversion is valid if only whitespaces left
+	while ( pCheck<sEnd && is_json_whitespace(*pCheck) )
+		++pCheck;
+	if ( pCheck!=sEnd )
+		return false;
+
 	char * pTail;
 	errno = 0;
 	if ( !bIsFloat )

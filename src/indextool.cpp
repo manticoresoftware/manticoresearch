@@ -1041,6 +1041,40 @@ static void ShowHelp ()
 	);
 }
 
+enum class IndextoolCmd_e
+{
+	NOTHING,
+	DUMPHEADER,
+	DUMPCONFIG,
+	DUMPDOCIDS,
+	DUMPHITLIST,
+	DUMPDICT,
+	CHECK,
+	STRIP,
+	MORPH,
+	BUILDIDF,
+	MERGEIDF,
+	CHECKCONFIG,
+	FOLD,
+	APPLYKLISTS
+};
+
+static IndextoolCmd_e g_eCommand = IndextoolCmd_e::NOTHING;
+static const char * g_sCommands[] = {"", "dumpheader", "dumpconfig", "dumpdocids", "dumphitlist", "dumpdict",
+	"check", "htmlstrip", "morph", "buildidf", "mergeidf", "checkconfig", "fold", "apply-killlists" };
+
+
+static void SetCmd ( IndextoolCmd_e eCmd )
+{
+	if ( g_eCommand!=IndextoolCmd_e::NOTHING )
+	{
+		fprintf ( stdout, "ERROR: multiple commands not supported (%s, %s).\n", g_sCommands[(int)g_eCommand], g_sCommands[(int)eCmd] );
+		exit ( 1 );
+	}
+
+	g_eCommand = eCmd;
+}
+
 int main ( int argc, char ** argv )
 {
 	if ( argc<=1 )
@@ -1070,24 +1104,6 @@ int main ( int argc, char ** argv )
 	bool bRotate = false;
 	bool bCheckIdDups = false;
 
-	enum
-	{
-		CMD_NOTHING,
-		CMD_DUMPHEADER,
-		CMD_DUMPCONFIG,
-		CMD_DUMPDOCIDS,
-		CMD_DUMPHITLIST,
-		CMD_DUMPDICT,
-		CMD_CHECK,
-		CMD_STRIP,
-		CMD_MORPH,
-		CMD_BUILDIDF,
-		CMD_MERGEIDF,
-		CMD_CHECKCONFIG,
-		CMD_FOLD,
-		CMD_APPLYKLISTS
-	} eCommand = CMD_NOTHING;
-
 	int i;
 	for ( i=1; i<argc; i++ )
 	{
@@ -1095,25 +1111,25 @@ int main ( int argc, char ** argv )
 		if ( argv[i][0]!='-' ) break;
 		OPT ( "-q", "--quiet" )		{ bQuiet = true; continue; }
 		OPT1 ( "--strip-path" )		{ bStripPath = true; continue; }
-		OPT1 ( "--checkconfig" )	{ eCommand = CMD_CHECKCONFIG; continue; }
+		OPT1 ( "--checkconfig" )	{ SetCmd ( IndextoolCmd_e::CHECKCONFIG ); continue; }
 		OPT1 ( "--rotate" )			{ bRotate = true; continue; }
 		OPT1 ( "-v" )				{ ShowVersion(); exit(0); }
 		OPT ( "-h", "--help" )		{ ShowVersion(); ShowHelp(); exit(0); }
-		OPT1 ( "--apply-killlists" ){ eCommand = CMD_APPLYKLISTS; continue; }
+		OPT1 ( "--apply-killlists" ){ SetCmd ( IndextoolCmd_e::APPLYKLISTS ); continue; }
 		OPT1 ( "--check-id-dups" )	{ bCheckIdDups = true; continue; }
 
 		// handle options/commands with 1+ args
 		if ( (i+1)>=argc )			break;
 		OPT ( "-c", "--config" )	sOptConfig = argv[++i];
-		OPT1 ( "--dumpheader" )		{ eCommand = CMD_DUMPHEADER; sDumpHeader = argv[++i]; }
-		OPT1 ( "--dumpconfig" )		{ eCommand = CMD_DUMPCONFIG; sDumpHeader = argv[++i]; }
-		OPT1 ( "--dumpdocids" )		{ eCommand = CMD_DUMPDOCIDS; sIndex = argv[++i]; }
-		OPT1 ( "--check" )			{ eCommand = CMD_CHECK; sIndex = argv[++i]; }
-		OPT1 ( "--htmlstrip" )		{ eCommand = CMD_STRIP; sIndex = argv[++i]; }
-		OPT1 ( "--morph" )			{ eCommand = CMD_MORPH; sIndex = argv[++i]; }
+		OPT1 ( "--dumpheader" )		{ SetCmd ( IndextoolCmd_e::DUMPHEADER ); sDumpHeader = argv[++i]; }
+		OPT1 ( "--dumpconfig" )		{ SetCmd ( IndextoolCmd_e::DUMPCONFIG ); sDumpHeader = argv[++i]; }
+		OPT1 ( "--dumpdocids" )		{ SetCmd ( IndextoolCmd_e::DUMPDOCIDS ); sIndex = argv[++i]; }
+		OPT1 ( "--check" )			{ SetCmd ( IndextoolCmd_e::CHECK ); sIndex = argv[++i]; }
+		OPT1 ( "--htmlstrip" )		{ SetCmd ( IndextoolCmd_e::STRIP ); sIndex = argv[++i]; }
+		OPT1 ( "--morph" )			{ SetCmd ( IndextoolCmd_e::MORPH ); sIndex = argv[++i]; }
 		OPT1 ( "--dumpdict" )
 		{
-			eCommand = CMD_DUMPDICT;
+			SetCmd ( IndextoolCmd_e::DUMPDICT );
 			sDumpDict = argv[++i];
 			if ( (i+1)<argc && !strcmp ( argv[i+1], "--stats" ) )
 			{
@@ -1123,7 +1139,7 @@ int main ( int argc, char ** argv )
 		}
 		OPT1 ( "--fold" )
 		{
-			eCommand = CMD_FOLD;
+			SetCmd ( IndextoolCmd_e::FOLD );
 			sIndex = argv[++i];
 			if ( (i+1)<argc && argv[i+1][0]!='-' )
 				sFoldFile = argv[++i];
@@ -1138,7 +1154,7 @@ int main ( int argc, char ** argv )
 		}
 		OPT1 ("--dumphitlist" )
 		{
-			eCommand = CMD_DUMPHITLIST;
+			SetCmd ( IndextoolCmd_e::DUMPHITLIST );
 			sIndex = argv[++i];
 
 			if ( !strcmp ( argv[i+1], "--wordid" ) )
@@ -1153,7 +1169,7 @@ int main ( int argc, char ** argv )
 
 		} else if ( !strcmp ( argv[i], "--buildidf" ) || !strcmp ( argv[i], "--mergeidf" ) )
 		{
-			eCommand = !strcmp ( argv[i], "--buildidf" ) ? CMD_BUILDIDF : CMD_MERGEIDF;
+			SetCmd ( !strcmp ( argv[i], "--buildidf" ) ? IndextoolCmd_e::BUILDIDF : IndextoolCmd_e::MERGEIDF );
 			while ( ++i<argc )
 			{
 				if ( !strcmp ( argv[i], "--out" ) )
@@ -1207,13 +1223,13 @@ int main ( int argc, char ** argv )
 
 	while (true)
 	{
-		if ( eCommand==CMD_DUMPHEADER && sDumpHeader.Ends ( ".meta" ) )
+		if ( g_eCommand==IndextoolCmd_e::DUMPHEADER && sDumpHeader.Ends ( ".meta" ) )
 		{
 			InfoMeta ( sDumpHeader );
 			return 0;
 		}
 
-		if ( eCommand==CMD_DUMPDICT && !sDumpDict.Ends ( ".spi" ) )
+		if ( g_eCommand==IndextoolCmd_e::DUMPDICT && !sDumpDict.Ends ( ".spi" ) )
 			sIndex = sDumpDict;
 
 		break;
@@ -1223,7 +1239,7 @@ int main ( int argc, char ** argv )
 	// action!
 	///////////
 
-	if ( eCommand==CMD_CHECKCONFIG )
+	if ( g_eCommand==IndextoolCmd_e::CHECKCONFIG )
 	{
 		fprintf ( stdout, "config valid\nchecking index(es) ... " );
 
@@ -1269,7 +1285,7 @@ int main ( int argc, char ** argv )
 		}
 	}
 
-	if ( eCommand==CMD_APPLYKLISTS )
+	if ( g_eCommand==IndextoolCmd_e::APPLYKLISTS )
 	{
 		ApplyKilllists ( hConf );
 		exit (0);
@@ -1287,7 +1303,7 @@ int main ( int argc, char ** argv )
 			sphDie ( "index '%s': no such index in config\n", sIndex.cstr() );
 
 		// only need config-level settings for --htmlstrip
-		if ( eCommand==CMD_STRIP )
+		if ( g_eCommand==IndextoolCmd_e::STRIP )
 			break;
 
 		CSphVariant * pType = hConf["index"][sIndex]("type");
@@ -1317,17 +1333,17 @@ int main ( int argc, char ** argv )
 		if ( !pIndex )
 			sphDie ( "index '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
 
-		if ( eCommand==CMD_CHECK )
+		if ( g_eCommand==IndextoolCmd_e::CHECK )
 			pIndex->SetDebugCheck ( bCheckIdDups );
 
 		CSphString sWarn;
 		if ( !pIndex->Prealloc ( bStripPath ) )
 			sphDie ( "index '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
 
-		if ( eCommand==CMD_MORPH )
+		if ( g_eCommand==IndextoolCmd_e::MORPH )
 			break;
 
-		if ( eCommand!=CMD_CHECK )
+		if ( g_eCommand!=IndextoolCmd_e::CHECK )
 			pIndex->Preread();
 
 		if ( hConf["index"][sIndex]("hitless_words") )
@@ -1354,13 +1370,13 @@ int main ( int argc, char ** argv )
 	CSphString sNewIndex;
 
 	// do the dew
-	switch ( eCommand )
+	switch ( g_eCommand )
 	{
-		case CMD_NOTHING:
+		case IndextoolCmd_e::NOTHING:
 			sphDie ( "nothing to do; specify a command (run indextool w/o switches for help)" );
 
-		case CMD_DUMPHEADER:
-		case CMD_DUMPCONFIG:
+		case IndextoolCmd_e::DUMPHEADER:
+		case IndextoolCmd_e::DUMPCONFIG:
 		{
 			CSphString sIndexName = "(none)";
 			if ( hConf("index") && hConf["index"](sDumpHeader) )
@@ -1376,21 +1392,21 @@ int main ( int argc, char ** argv )
 				fprintf ( stdout, "dumping header file '%s'...\n", sDumpHeader.cstr() );
 
 			pIndex = sphCreateIndexPhrase ( sIndexName.cstr(), "" );
-			pIndex->DebugDumpHeader ( stdout, sDumpHeader.cstr(), eCommand==CMD_DUMPCONFIG );
+			pIndex->DebugDumpHeader ( stdout, sDumpHeader.cstr(), g_eCommand==IndextoolCmd_e::DUMPCONFIG );
 			break;
 		}
 
-		case CMD_DUMPDOCIDS:
+		case IndextoolCmd_e::DUMPDOCIDS:
 			fprintf ( stdout, "dumping docids for index '%s'...\n", sIndex.cstr() );
 			pIndex->DebugDumpDocids ( stdout );
 			break;
 
-		case CMD_DUMPHITLIST:
+		case IndextoolCmd_e::DUMPHITLIST:
 			fprintf ( stdout, "dumping hitlist for index '%s' keyword '%s'...\n", sIndex.cstr(), sKeyword.cstr() );
 			pIndex->DebugDumpHitlist ( stdout, sKeyword.cstr(), bWordid );
 			break;
 
-		case CMD_DUMPDICT:
+		case IndextoolCmd_e::DUMPDICT:
 		{
 			if ( sDumpDict.Ends ( ".spi" ) )
 			{
@@ -1416,7 +1432,7 @@ int main ( int argc, char ** argv )
 			break;
 		}
 
-		case CMD_CHECK:
+		case IndextoolCmd_e::CHECK:
 			fprintf ( stdout, "checking index '%s'...\n", sIndex.cstr() );
 			iCheckErrno = pIndex->DebugCheck ( stdout );
 			if ( iCheckErrno )
@@ -1430,7 +1446,7 @@ int main ( int argc, char ** argv )
 			}
 			return 0;
 
-		case CMD_STRIP:
+		case IndextoolCmd_e::STRIP:
 			{
 				const CSphConfigSection & hIndex = hConf["index"][sIndex];
 				if ( hIndex.GetInt ( "html_strip" )==0 )
@@ -1439,21 +1455,21 @@ int main ( int argc, char ** argv )
 			}
 			break;
 
-		case CMD_MORPH:
+		case IndextoolCmd_e::MORPH:
 			ApplyMorphology ( pIndex );
 			break;
 
-		case CMD_BUILDIDF:
+		case IndextoolCmd_e::BUILDIDF:
 			if ( !BuildIDF ( sOut, dFiles, sError, bSkipUnique ) )
 				sphDie ( "ERROR: %s\n", sError.cstr() );
 			break;
 
-		case CMD_MERGEIDF:
+		case IndextoolCmd_e::MERGEIDF:
 			if ( !MergeIDF ( sOut, dFiles, sError, bSkipUnique ) )
 				sphDie ( "ERROR: %s\n", sError.cstr() );
 			break;
 
-		case CMD_FOLD:
+		case IndextoolCmd_e::FOLD:
 			{
 				FILE * fp = stdin;
 				if ( !sFoldFile.IsEmpty() )
@@ -1469,7 +1485,7 @@ int main ( int argc, char ** argv )
 			break;
 
 		default:
-			sphDie ( "INTERNAL ERROR: unhandled command (id=%d)", (int)eCommand );
+			sphDie ( "INTERNAL ERROR: unhandled command (id=%d)", (int)g_eCommand );
 	}
 
 	return 0;

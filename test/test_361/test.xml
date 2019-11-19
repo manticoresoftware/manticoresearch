@@ -142,5 +142,9 @@ INSERT INTO j_arrays ( id, gid, j ) VALUES
 <sphinxql>INSERT INTO pq_expr (query, filters) VALUES ('', 'CONTAINS(POLY2D(j.poly), 2, 3)')</sphinxql>
 <sphinxql>CALL PQ ('pq_expr', ('{"j":{"poly":"1,2,3,4,5,6.0"}}', '{"j":{"poly":"1,-2,1,2,-5,6"}}', '{"j":{"poly":"-1,2,12,4,5,6"}}'), 1 as docs, 1 as query)</sphinxql>
 
+<!-- regression crash at IN to JSON attribute -->
+<sphinxql>select * from test where j IN (5,100)</sphinxql>
+
+
 </sphqueries>
 </test>

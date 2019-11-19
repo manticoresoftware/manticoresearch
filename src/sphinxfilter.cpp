@@ -1250,7 +1250,7 @@ static ISphFilter * CreateFilterExpr ( ISphExpr * _pExpr, const CSphFilterSettin
 	bool bAutoConvert = false;
 	bool bJsonExpr = false;
 	if ( pExpr && tSettings.m_eType!=SPH_FILTER_NULL )
-	 bJsonExpr = pExpr->IsJson ( bAutoConvert );
+		bJsonExpr = pExpr->IsJson ( bAutoConvert );
 	if ( bJsonExpr && !bAutoConvert )
 		pExpr = sphJsonFieldConv ( pExpr );
 
@@ -1342,6 +1342,8 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 			{
 				pExpr = pAttr->m_pExpr;
 				eAttrType = pAttr->m_eAttrType;
+				if ( pAttr->m_eAttrType==SPH_ATTR_JSON && !pExpr && tSettings.m_eType!=SPH_FILTER_NULL )
+					pExpr = sphExprParse ( sAttrName.cstr(), tSchema, &eAttrType, nullptr, sError, nullptr, eCollation );
 				pFilter = CreateFilterExpr ( pExpr, tSettings, sError, eCollation, pAttr->m_eAttrType );
 
 			} else

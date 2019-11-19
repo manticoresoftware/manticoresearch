@@ -8411,6 +8411,9 @@ void RtBinlog_c::OpenNewLog ( int iLastState )
 	tLog.m_iExt = iExt;
 	m_dLogFiles.Add ( tLog );
 
+	// update meta first then only remove binlog file
+	SaveMeta();
+
 	// create file
 	CSphString sLog = MakeBinlogName ( m_sLogPath.cstr(), tLog.m_iExt );
 
@@ -8423,9 +8426,6 @@ void RtBinlog_c::OpenNewLog ( int iLastState )
 	// emit header
 	m_tWriter.PutDword ( BINLOG_HEADER_MAGIC );
 	m_tWriter.PutDword ( BINLOG_VERSION );
-
-	// update meta
-	SaveMeta();
 }
 
 void RtBinlog_c::DoCacheWrite ()

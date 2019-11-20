@@ -1149,7 +1149,7 @@ public:
 	void				EnableSave() final;
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
 
-	void				SetDebugCheck ( bool bCheckIdDups ) final { m_bDebugCheck = true; m_bCheckIdDups = bCheckIdDups; }
+	void				SetDebugCheck ( bool bCheckIdDups ) final { m_bDebugCheck = true; m_bCheckIdDups = bCheckIdDups; ProhibitSave(); }
 
 	void				CreateReader ( int64_t iSessionId ) const final;
 	bool				GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const final;
@@ -1159,6 +1159,7 @@ protected:
 	CSphSourceStats		m_tStats;
 	bool				m_bDebugCheck = false;
 	bool				m_bCheckIdDups = false;
+	CSphFixedVector<int>	m_dChunkNames { 0 };
 
 private:
 	static const DWORD			META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
@@ -3663,11 +3664,18 @@ bool RtIndex_c::Prealloc ( bool bStripPath )
 		m_sLastError.SetSprintf ( "failed to open %s: %s", sLock.cstr(), strerrorm(errno) );
 		return false;
 	}
+
 	if ( !sphLockEx ( m_iLockFD, false ) )
 	{
-		m_sLastError.SetSprintf ( "failed to lock %s: %s", sLock.cstr(), strerrorm(errno) );
-		SafeClose ( m_iLockFD );
-		return false;
+		if ( !m_bDebugCheck )
+		{
+			m_sLastError.SetSprintf ( "failed to lock %s: %s", sLock.cstr(), strerrorm(errno) );
+			SafeClose ( m_iLockFD );
+			return false;
+		} else
+		{
+			SafeClose ( m_iLockFD );
+		}
 	}
 
 	/////////////
@@ -3789,10 +3797,11 @@ bool RtIndex_c::Prealloc ( bool bStripPath )
 
 	SetFieldFilter ( pFieldFilter );
 
-	CSphFixedVector<int> dChunkNames(0);
 	int iLen = (int)rdMeta.GetDword();
-	dChunkNames.Reset ( iLen );
-	rdMeta.GetBytes ( dChunkNames.Begin(), iLen*sizeof(int) );
+	m_dChunkNames.Reset ( iLen );
+	rdMeta.GetBytes ( m_dChunkNames.Begin(), iLen*sizeof(int) );
+	if ( m_bDebugCheck )
+		return true;
 
 	///////////////
 	// load chunks
@@ -3801,10 +3810,10 @@ bool RtIndex_c::Prealloc ( bool bStripPath )
 	m_bPathStripped = bStripPath;
 
 	// load disk chunks, if any
-	ARRAY_FOREACH ( iChunk, dChunkNames )
+	ARRAY_FOREACH ( iChunk, m_dChunkNames )
 	{
 		CSphString sChunk;
-		sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), dChunkNames[iChunk] );
+		sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), m_dChunkNames[iChunk] );
 		CSphIndex * pIndex = LoadDiskChunk ( sChunk.cstr(), m_sLastError );
 		if ( !pIndex )
 			sphDie ( "%s", m_sLastError.cstr() );
@@ -3825,6 +3834,8 @@ bool RtIndex_c::Prealloc ( bool bStripPath )
 					m_dFieldLensDisk[i] += pLens[i];
 		}
 	}
+
+	m_dChunkNames.Reset ( 0 );
 
 	// load ram chunk
 	bool bRamLoaded = LoadRamChunk ( uVersion, bRebuildInfixes );
@@ -4179,14 +4190,14 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 
 	DebugCheckError_c tReporter(fp);
 
+	if ( m_iLockFD<0 )
+		sphWarning ( "failed to load RAM chunks, checking only %d disk chunks", m_dChunkNames.GetLength() );
+
 	if ( m_iStride!=m_tSchema.GetRowSize() )
 		tReporter.Fail ( "wrong attribute stride (current=%d, should_be=%d)", m_iStride, m_tSchema.GetRowSize() );
 
 	if ( m_iSoftRamLimit<=0 )
 		tReporter.Fail ( "wrong RAM limit (current=" INT64_FMT ")", m_iSoftRamLimit );
-
-	if ( m_iLockFD<0 )
-		tReporter.Fail ( "index lock file id < 0" );
 
 	if ( m_iTID<0 )
 		tReporter.Fail ( "index TID < 0 (current=" INT64_FMT ")", m_iTID );
@@ -4672,10 +4683,22 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 	}
 
 	int iFailsPlain = 0;
-	ARRAY_FOREACH ( i, m_dDiskChunks )
+	ARRAY_FOREACH ( i, m_dChunkNames )
 	{
-		tReporter.Msg ( "checking disk chunk %d(%d)...", i, m_dDiskChunks.GetLength() );
-		iFailsPlain += m_dDiskChunks[i]->DebugCheck ( fp );
+		CSphString sChunk;
+		sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), m_dChunkNames[i] );
+		tReporter.Msg ( "checking disk chunk, extension %d, %d(%d)...", m_dChunkNames[i], i, m_dChunkNames.GetLength() );
+
+		CSphScopedPtr<CSphIndex> pIndex ( LoadDiskChunk ( sChunk.cstr(), m_sLastError ) );
+		if ( pIndex.Ptr() )
+		{
+			iFailsPlain += pIndex->DebugCheck ( fp );
+		} else
+		{
+			tReporter.Fail ( "%s", m_sLastError.cstr() );
+			m_sLastError = "";
+			iFailsPlain++;
+		}
 	}
 
 

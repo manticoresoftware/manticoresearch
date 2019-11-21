@@ -901,11 +901,28 @@ Miscellaneous functions
    depending on condition values. Condition expression should always
    result integer, expression can result in integer or float.
 
-.. code-block:: mysql
+   Example:
 
+   .. code-block:: mysql
+
+
+       SELECT id, size, REMAP(size, 15, (5,6,7,8), (1,1,2,2)) s
+       FROM products
+       ORDER BY s ASC;
+
+
+   This will put documents with sizes 5 and 6 first, lower will go sizes
+   7 an 8. In case there's an original value not listed in the array (e.g.
+   size 10) it will be defaulted to 15 and in this case will be put to the
+   end.
+
+   More examples:
+
+   .. code-block:: mysql
 
        SELECT REMAP(userid, karmapoints, (1, 67), (999, 0)) FROM users;
        SELECT REMAP(id%10, salary, (0), (0.0)) FROM employes;
+
 
 .. _expr-func-rand:
 

@@ -22302,14 +22302,12 @@ ISphRtDictWraper * sphCreateRtKeywordsDictionaryWrapper ( CSphDict * pBase )
 // DICTIONARY FACTORIES
 //////////////////////////////////////////////////////////////////////////
 
-static void SetupDictionary ( DictRefPtr_c& pDict, const CSphDictSettings & tSettings,
-	const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile,
-	CSphString & sError )
+static void SetupDictionary ( DictRefPtr_c& pDict, const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile, CSphString & sError )
 {
 	assert ( pTokenizer );
 
 	pDict->Setup ( tSettings );
-	if ( CSphDict::ST_ERROR == pDict->SetMorphology ( tSettings.m_sMorphology.cstr (), sError ) )
+	if ( pDict->SetMorphology ( tSettings.m_sMorphology.cstr (), sError )==CSphDict::ST_ERROR )
 	{
 		pDict = nullptr;
 		return;

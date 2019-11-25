@@ -180,6 +180,7 @@ if ( DL_ICU )
 	endif()
 endif()
 
+memcfgvalues ( USE_ICU )
 memcfgvalues ( ICU_IS_SHARED )
 
 if ( DL_ICU )

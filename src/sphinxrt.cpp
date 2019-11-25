@@ -3760,11 +3760,14 @@ bool RtIndex_c::Prealloc ( bool bStripPath )
 	// recreate dictionary
 
 	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, m_sLastError );
-	if ( !m_pDict )
-	{
+	if ( !m_sLastError.IsEmpty() )
 		m_sLastError.SetSprintf ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
+
+	if ( !m_pDict )
 		return false;
-	}
+
+	if ( !m_sLastError.IsEmpty() )
+		sphWarning ( "%s", m_sLastError.cstr() );
 
 	m_pTokenizer = ISphTokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms () );
 
@@ -3791,9 +3794,7 @@ bool RtIndex_c::Prealloc ( bool bStripPath )
 		pFieldFilter = sphCreateRegexpFilter ( tFieldFilterSettings, m_sLastError );
 
 	if ( !sphSpawnFilterICU ( pFieldFilter, m_tSettings, tTokenizerSettings, sMeta.cstr(), m_sLastError ) )
-
 		return false;
-
 
 	SetFieldFilter ( pFieldFilter );
 

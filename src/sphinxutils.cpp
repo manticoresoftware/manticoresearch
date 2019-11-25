@@ -1886,7 +1886,7 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 	tSettings.m_ePreprocessor = dMorphs.Contains ( "icu_chinese" ) ? Preprocessor_e::ICU : Preprocessor_e::NONE;
 
 	if ( !sphCheckConfigICU ( tSettings, sError ) )
-		fprintf ( stdout, "WARNING: %s\n", sError.cstr() );
+		return false;
 
 	// all good
 	return true;

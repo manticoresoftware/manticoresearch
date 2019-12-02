@@ -3687,6 +3687,8 @@ public:
 		return true;
 	}
 
+	const char * GetFileName() const { return m_sFilename.cstr(); }
+
 private:
 #if USE_WINDOWS
 	HANDLE		m_iFD;

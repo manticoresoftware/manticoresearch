@@ -573,7 +573,13 @@ class CSphIndex_VLN;
 // Reader from file or filemap
 class FileBlockReader_c : public ISphRefcountedMT
 {
+protected:
+	const char * m_sFileName = nullptr;
+
 public:
+	explicit FileBlockReader_c ( const char * sFileName )
+		: m_sFileName ( sFileName )
+	{}
 	virtual SphOffset_t	GetPos () const { return 0; }
 	virtual void		SeekTo ( SphOffset_t iPos, int iSizeHint ) {};
 	virtual DWORD		UnzipInt () { return 0; };
@@ -621,7 +627,8 @@ private:
 	const BYTE *	m_pPointer = nullptr;
 	SphOffset_t		m_iSize = 0;
 
-	ThinMMapReader_c ( const BYTE * pArena, SphOffset_t iSize )
+	ThinMMapReader_c ( const BYTE * pArena, SphOffset_t iSize, const char * sFileName )
+		: FileBlockReader_c ( sFileName )
 	{
 		m_pPointer = m_pBase = pArena;
 		m_iSize = iSize;
@@ -632,8 +639,9 @@ private:
 		auto iPos = m_pPointer - m_pBase;
 		if ( iPos>=0 && iPos<m_iSize )
 			return *m_pPointer++;
-		sphWarning( "INTERNAL: out-of-range in ThinMMapReader_c: trying to read at " INT64_FMT ", from mmap of "
-			INT64_FMT ", query most probably would FAIL; report the fact to dev!", int64_t(iPos), int64_t (m_iSize));
+		sphWarning( "INTERNAL: out-of-range in ThinMMapReader_c: trying to read '%s' at " INT64_FMT ", from mmap of "
+			INT64_FMT ", query most probably would FAIL; report the fact to dev!",
+			( m_sFileName ? m_sFileName : "" ), int64_t(iPos), int64_t(m_iSize) );
 		return 0; // it's better then crash because of unexpected read out-of-range (file reader does the same there)
 	}
 };
@@ -669,8 +677,9 @@ public:
 	}
 
 protected:
-	explicit DirectFileReader_c ( BYTE * pBuf, int iSize )
+	explicit DirectFileReader_c ( BYTE * pBuf, int iSize, const char * sFileName )
 		: FileReader_c ( pBuf, iSize )
+		, FileBlockReader_c ( sFileName )
 	{}
 
 	~DirectFileReader_c() final {}
@@ -755,7 +764,7 @@ public:
 	// returns depended reader sharing same FD as maker
 	FileBlockReader_c * MakeReader ( BYTE * pBuf, int iSize ) final
 	{
-		auto pFileReader = new DirectFileReader_c ( pBuf, iSize );
+		auto pFileReader = new DirectFileReader_c ( pBuf, iSize, m_dReader.GetFilename().cstr() );
 		pFileReader->SetFile ( m_dReader.GetFD(), m_dReader.GetFilename().cstr() );
 		pFileReader->SetBuffers ( m_iReadBuffer, m_iReadUnhinted );
 		if ( m_iPos )
@@ -807,7 +816,7 @@ public:
 	FileBlockReader_c * MakeReader ( BYTE *, int ) final
 	{
 		auto pReader = new ThinMMapReader_c ( m_tBackendFile.GetWritePtr(),
-											  m_tBackendFile.GetLength64() );
+											  m_tBackendFile.GetLength64(), m_tBackendFile.GetFileName() );
 		if ( m_iPos )
 			pReader->SeekTo ( m_iPos, 0 );
 		return pReader;

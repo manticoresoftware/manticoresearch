@@ -17,6 +17,7 @@ set ( ICU_SRCS
 	source/common/dictbe.cpp 
 	source/common/dictionarydata.cpp 
 	source/common/edits.cpp 
+	source/common/errorcode.cpp 
 	source/common/filteredbrk.cpp 
 	source/common/loadednormalizer2impl.cpp 
 	source/common/locavailable.cpp

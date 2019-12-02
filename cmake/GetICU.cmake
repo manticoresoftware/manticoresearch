@@ -16,7 +16,7 @@ ENDIF ()
 set ( ICU_LIBDIR "${MANTICORE_BINARY_DIR}/icu-bin" )
 set ( ICU_SRC "${MANTICORE_BINARY_DIR}/icu" )
 mark_as_advanced ( ICU_SRC ICU_LIBDIR )
-set ( ICUZIP "icu4c-64_2-src.tgz" )
+set ( ICUZIP "icu4c-65_1-src.tgz" )
 
 #set ( ICU_DEBUG ON )
 
@@ -83,7 +83,7 @@ if ( LIBS_BUNDLE AND EXISTS "${LIBS_BUNDLE}/${ICUZIP}" )
 			URL_HASH ${ICU_URL_HASH}
 			)
 else ()
-	set ( ICU_URL_GITHUB "https://github.com/unicode-org/icu/releases/download/release-64-2/${ICUZIP}" )
+	set ( ICU_URL_GITHUB "https://github.com/unicode-org/icu/releases/download/release-65-1/${ICUZIP}" )
 	message ( STATUS "Using ICU from ${ICU_URL_GITHUB}" )
 	message ( STATUS "(you can download the file and save it as '${ICUZIP}' into ${LIBS_BUNDLE}/) " )
 	FetchContent_Declare ( icu

@@ -493,7 +493,7 @@ SphinxQL expressions.
 Text highlighting
 """""""""""""""""
 
-Fulltext query search results can be highlighted on one or more fields. Field contents has to be stored in string attributes (for now). Here’s an example:
+Fulltext query search results can be highlighted on one or more fields. Field contents has to be stored in document storage (see stored_fields index option). Here’s an example:
 
 .. code-block:: json
 
@@ -534,14 +534,15 @@ As a result of this query, the values of string attributes called ``content`` an
              "highlight":
              {
                "content": [ "<b>first</b> now <b>and</b> then at" ],
-               "title": [ "" ]
+               "title": []
              }
           }
         ]
       }
     }
 
-The following options are supported:
+Highlighting supports all the options that are avilable for ``CALL SNIPPETS``.
+In addition, it supports their synonyms:
 
 * ``fields`` object contains attribute names with options.
 * ``encoder`` can be set to ``default`` or ``html``. When set to ``html``, retains html markup when highlighting. Works similar to ``html_strip_mode=retain`` in ``CALL SNIPPETS``.
@@ -554,7 +555,7 @@ The following options are supported:
       "query": { "match": { "content": "and first" } },
       "highlight":
       {
-        "fields": { "content": {}, "title": {} },
+        "fields": [ "content", "title" ],
         "highlight_query": { "match": { "_all":"on and not" } }
       }
     }
@@ -566,7 +567,7 @@ The following options are supported:
 
        "highlight":
        {
-         "fields": { "content": {} },
+         "fields": [ "content" ],
          "pre_tags": "before_",
          "post_tags": "_after"
        }
@@ -577,7 +578,7 @@ The following options are supported:
 
        "highlight":
        {
-         "fields": { "content": {} },
+         "fields": [ "content" ],
          "no_match_size": 0
        }
 
@@ -588,30 +589,21 @@ The following options are supported:
 
        "highlight":
        {
-         "fields": { "content": {} },
+         "fields": [ "content" ],
          "order": "score"
        }
 
-*  ``fragment_size`` sets maximum fragment size in symbols. Can be global or per-field. Per-field options override global options.   Optional, default is 256. Works similar to ``limit`` in ``CALL SNIPPETS``. Example of per-field usage:
-
-   ::
-
-       "highlight":
-       {
-         "fields": { "content": { "fragment_size": 100 } },
-       }
-
-   Example of global usage:
+*  ``fragment_size`` sets maximum fragment size in symbols. Optional, default is 256. Works similar to ``limit`` in ``CALL SNIPPETS``. Example:
 
    ::
 
     "highlight":
     {
-      "fields": { "content": {} },
+      "fields": [ "content" ],
       "fragment_size": 100
     }
 
-*  ``number_of_fragments``: Limits the maximum number of fragments in a snippet. Just as ``fragment_size``, can be global or per-field. Optional, default is 0 (no limit). Works similar to ``limit_passages`` in ``CALL SNIPPETS``.
+*  ``number_of_fragments``: Limits the maximum number of fragments in a snippet. Optional, default is 0 (no limit). Works similar to ``limit_passages`` in ``CALL SNIPPETS``.
 
 Result set format
 """""""""""""""""

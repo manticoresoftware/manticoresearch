@@ -38,6 +38,9 @@ contains additional optional highlighting parameters:
 -  ``chunk_separator``:
    A string to insert between snippet chunks (passages). Default is ``…``.
 
+-  ``field_separator``:
+   A string to insert between fields. Default is ``|``.
+
 -  ``limit``:
    Maximum snippet size, in symbols (codepoints). Integer, default is
    256.

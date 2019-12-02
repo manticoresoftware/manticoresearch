@@ -44,17 +44,90 @@ several indexes with different schemas.
 
        SELECT *, EXIST('gid', 6) as cnd FROM i1, i2 WHERE cnd>5
 
+
+.. _select_highlight:
+	   
+HIGHLIGHT()
+^^^^^^^^^^^
+
+HIGHLIGHT() can be used to highlight search results.
+By default, it works with no arguments:
+
+.. code-block:: mysql
+
+       SELECT HIGHLIGHT()
+       FROM myIndex WHERE MATCH('my.query')
+
+
+HIGHLIGHT() fetches all available fields from document storage and
+highlights them against the given query. Unlike SNIPPET(), HIGHLIGHT()
+supports field syntax in queries. Field text is separated by ``field_separator``
+which can be changed in the options.
+
+.. code-block:: mysql
+
+       SELECT HIGHLIGHT()
+       FROM myIndex WHERE MATCH('@(body,title) my.query')
+
+
+Optional first argument in HIGHLIGHT() is the list of options :ref:`options <build_excerpts>`:
+
+.. code-block:: mysql
+
+       SELECT HIGHLIGHT({before_match='[match]',after_match='[/match]'})
+       FROM myIndex WHERE MATCH('@(body,title) my.query')
+
+
+Optional second argument is a string containing a field or a list of fields.
+If this argument is present, only the specified fields will be fetched from document
+storage and highlighted.
+
+.. code-block:: mysql
+
+       SELECT HIGHLIGHT({},'body,title')
+       FROM myIndex WHERE MATCH('my.query')
+
+
+Optional third argument is the query. It is used for highlighting search results
+against a query different than the one used for searching.
+
+.. code-block:: mysql
+
+       SELECT HIGHLIGHT({},'', 'another.query')
+       FROM myIndex WHERE MATCH('my.query')
+
+
 .. _select_snippet:
 	   
 SNIPPET()
 ^^^^^^^^^
 
-This is a wrapper around the
-snippets functionality, similar to what is available via CALL
-SNIPPETS. The first two arguments are: the text to highlight, and a
-query. It's possible to pass
-:ref:`options <build_excerpts>` to
-function. The intended use is as follows:
+SNIPPET() can be used to highlight search results in a given text.
+The first two arguments are: the text to highlight, and a
+query. It's possible to pass :ref:`options <build_excerpts>` to
+function as third, fourth and so on arguments.
+
+SNIPPET() can fetch the text to use in highlighting from index itself.
+First argument in this case is field name:
+
+.. code-block:: mysql
+
+       SELECT SNIPPET(body,QUERY())
+       FROM myIndex WHERE MATCH('my.query')
+
+
+QUERY() expression in this example returns the current fulltext query.
+
+SNIPPET() can also highlight non-indexed text:
+
+.. code-block:: mysql
+
+       SELECT id, SNIPPET('text to highlight', 'my.query', 'limit=100')
+       FROM myIndex WHERE MATCH('my.query')
+
+
+It can also be used to highlight text fetched from other sources
+using an UDF:
 
 .. code-block:: mysql
 
@@ -74,6 +147,15 @@ result set is ready, but even after the LIMIT clause is applied. For
 example, with a LIMIT 20,10 clause, SNIPPET() will be called at most
 10 times.
 
+.. _select_query:
+
+QUERY()
+^^^^^^^
+
+QUERY() returns the current search query.
+QUERY() is a postlimit expression and is intended to be used with SNIPPET().
+
+
 Table functions is a mechanism of post-query result set processing.
 Table functions take an arbitrary result set as their input, and
 return a new, processed set as their output. The first argument
@@ -83,6 +165,7 @@ the result set, including the schema. For now, only built in table
 functions are supported. UDFs are planned when the internal call
 interface is stabilized. Table functions work for both outer SELECT
 and nested SELECT.
+
 
 .. _select_remove_repeats:
 

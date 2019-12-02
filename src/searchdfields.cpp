@@ -123,9 +123,6 @@ struct ProxyFieldRequestBuilder_t : public RequestBuilder_i
 	{};
 	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final
 	{
-		AgentFieldPaiload_t * pRes = (AgentFieldPaiload_t *)tAgent.m_pResult.Ptr();
-		assert ( pRes );
-
 		APICommand_t tCmd ( tOut, SEARCHD_COMMAND_GETFIELD, VER_COMMAND_GETFIELD );
 
 		tOut.SendString ( tAgent.m_tDesc.m_sIndexes.cstr() );

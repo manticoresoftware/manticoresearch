@@ -1086,7 +1086,6 @@ void SnippetBuilder_c::PackAsString ( MemoryWriter_c & tWriter, CSphVector<BYTE>
 
 	int iChunkSeparatorLen = tOpts.m_sChunkSeparator.Length();
 	int iFieldSeparatorLen = tOpts.m_sFieldSeparator.Length();
-	bool bWasSeparator = false;
 
 	ARRAY_FOREACH ( i, dRequestedFields )
 	{

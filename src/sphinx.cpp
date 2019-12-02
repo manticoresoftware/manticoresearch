@@ -678,8 +678,8 @@ public:
 
 protected:
 	explicit DirectFileReader_c ( BYTE * pBuf, int iSize, const char * sFileName )
-		: FileReader_c ( pBuf, iSize )
-		, FileBlockReader_c ( sFileName )
+		: FileBlockReader_c ( sFileName )
+		, FileReader_c ( pBuf, iSize )
 	{}
 
 	~DirectFileReader_c() final {}
@@ -20931,7 +20931,9 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE * pWord, int iWordLength, int iC
 	}
 
 	const BYTE * pWordMax = pWord+iWordLength;
+#ifndef NDEBUG
 	bool bInvalidTailCp = false;
+#endif
 	int iCodes = 0; // codepoints in current word
 	BYTE dBytes[SPH_MAX_WORD_LEN+1]; // byte offset for each codepoints
 
@@ -20952,7 +20954,9 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE * pWord, int iWordLength, int iC
 		// break on tail cut codepoint
 		if ( p+iLen>pWordMax )
 		{
+#ifndef NDEBUG
 			bInvalidTailCp = true;
+#endif
 			break;
 		}
 
@@ -21007,7 +21011,7 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE * pWord, int iWordLength, int iC
 				AddEntry ( sKey, uHash, iCheckpoint );
 		}
 
-		assert ( pKey-(BYTE*)sKey.m_Data<=sizeof(sKey.m_Data) );
+		assert ( (size_t)( pKey-(BYTE*)sKey.m_Data )<=sizeof(sKey.m_Data) );
 	}
 }
 

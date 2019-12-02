@@ -15,7 +15,9 @@
 #include "accumulator.h"
 
 /// protection from concurrent changes during binlog replay
+#ifndef NDEBUG
 static auto &g_bRTChangesAllowed = RTChangesAllowed ();
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 // percolate index

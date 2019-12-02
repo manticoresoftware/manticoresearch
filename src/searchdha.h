@@ -888,6 +888,9 @@ public:
 // when nothing of poll/epoll/kqueue is available.
 ISphNetPoller * sphCreatePoll ( int iSizeHint );
 
+void RemotesGetField ( const VecRefPtrsAgentConn_t & dRemotes,	const CSphQuery & tQuery, AggrResult_t & tRes );
+void HandleCommandGetField ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq );
+
 // determine which branch will be used
 // defs placed here for easy switch between/debug
 #if HAVE_EPOLL

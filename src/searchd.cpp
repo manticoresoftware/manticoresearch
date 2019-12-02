@@ -252,7 +252,7 @@ static CSphAtomic							g_iPersistentInUse;
 static const char * g_dApiCommands[] =
 {
 	"search", "excerpt", "update", "keywords", "persist", "status", "query", "flushattrs", "query", "ping", "delete", "set",  "insert", "replace", "commit", "suggest", "json",
-	"callpq", "clusterpq"
+	"callpq", "clusterpq", "getfield"
 };
 
 STATIC_ASSERT ( sizeof(g_dApiCommands)/sizeof(g_dApiCommands[0])==SEARCHD_COMMAND_TOTAL, SEARCHD_COMMAND_SHOULD_BE_SAME_AS_SEARCHD_COMMAND_TOTAL );
@@ -1961,6 +1961,11 @@ void SearchReplyParser_c::ParseSchema ( CSphQueryResult & tRes, MemInputBuffer_c
 
 		// we always work with plain attrs (not *_PTR) when working with agents
 		tCol.m_eAttrType = sphPlainAttrToPtrAttr ( tCol.m_eAttrType );
+		if ( tCol.m_eAttrType==SPH_ATTR_STORED_FIELD )
+		{
+			tCol.m_eAttrType = SPH_ATTR_STRINGPTR;
+			tCol.m_uFieldFlags = CSphColumnInfo::FIELD_STORED;
+		}
 		tSchema.AddAttr ( tCol, true ); // all attributes received from agents are dynamic
 	}
 }
@@ -3385,12 +3390,12 @@ static int SendMVA ( ISphOutputBuffer * pOut, const BYTE * pMVA, bool b64bit )
 }
 
 
-static ESphAttr FixupAttrForNetwork ( ESphAttr eAttr, WORD uMasterVer, bool bAgentMode )
+static ESphAttr FixupAttrForNetwork ( const CSphColumnInfo & tCol, WORD uMasterVer, bool bAgentMode )
 {
 	bool bSendJson = ( bAgentMode && uMasterVer>=3 );
 	bool bSendJsonField = ( bAgentMode && uMasterVer>=4 );
 
-	switch ( eAttr )
+	switch ( tCol.m_eAttrType )
 	{
 	case SPH_ATTR_UINT32SET_PTR:
 		return SPH_ATTR_UINT32SET;
@@ -3399,7 +3404,12 @@ static ESphAttr FixupAttrForNetwork ( ESphAttr eAttr, WORD uMasterVer, bool bAge
 		return SPH_ATTR_INT64SET;
 
 	case SPH_ATTR_STRINGPTR:
-		return SPH_ATTR_STRING;
+	{
+		if ( bAgentMode && uMasterVer>=18 && ( tCol.m_uFieldFlags & CSphColumnInfo::FIELD_STORED ) )
+			return SPH_ATTR_STORED_FIELD;
+		else
+			return SPH_ATTR_STRING;
+	}
 
 	case SPH_ATTR_JSON:
 	case SPH_ATTR_JSON_PTR:
@@ -3409,7 +3419,7 @@ static ESphAttr FixupAttrForNetwork ( ESphAttr eAttr, WORD uMasterVer, bool bAge
 	case SPH_ATTR_JSON_FIELD_PTR:
 		return bSendJsonField ? SPH_ATTR_JSON_FIELD : SPH_ATTR_STRING;
 
-	default: return eAttr;
+	default: return tCol.m_eAttrType;
 	} 
 }
 
@@ -3429,7 +3439,7 @@ static void SendSchema ( ISphOutputBuffer & tOut, const CSphQueryResult & tRes, 
 		const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
 		tOut.SendString ( tCol.m_sName.cstr() );
 
-		ESphAttr eCol = FixupAttrForNetwork ( tCol.m_eAttrType, uMasterVer, bAgentMode );
+		ESphAttr eCol = FixupAttrForNetwork ( tCol, uMasterVer, bAgentMode );
 		tOut.SendDword ( (DWORD)eCol );
 	}
 }
@@ -4000,12 +4010,12 @@ struct AggregateColumnSort_fn
 };
 
 
-static void ExtractPostlimit ( const ISphSchema & tSchema, CSphVector<const CSphColumnInfo *> & dPostlimit )
+static void ExtractPostlimit ( const ISphSchema & tSchema, bool bMaster, CSphVector<const CSphColumnInfo *> & dPostlimit )
 {
 	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tCol = tSchema.GetAttr ( i );
-		if ( tCol.m_eStage==SPH_EVAL_POSTLIMIT )
+		if ( tCol.m_eStage==SPH_EVAL_POSTLIMIT && ( bMaster || tCol.m_uFieldFlags==CSphColumnInfo::FIELD_NONE ) )
 			dPostlimit.Add ( &tCol );
 	}
 }
@@ -4062,17 +4072,30 @@ static void EvalPostlimitExprs ( AggrResult_t & tRes, CSphMatch & tMatch, const 
 		tMatch.SetAttrFloat ( pCol->m_tLocator, pCol->m_pExpr->Eval(tMatch) );
 }
 
-
-static void ProcessPostlimit ( const CSphVector<const CSphColumnInfo *> & dPostlimit, int iFrom, int iTo, const CSphQuery & tQuery, AggrResult_t & tRes )
+struct PostLimitArgs_t
 {
-	if ( !dPostlimit.GetLength() )
+	const CSphVector<const CSphColumnInfo *> & m_dPostlimit;
+	const CSphQuery & m_tQuery;
+	int m_iFrom = 0;
+	int m_iTo = 0;
+	bool m_bMaster = false;
+
+	PostLimitArgs_t ( const CSphVector<const CSphColumnInfo *> & dPostlimit, const CSphQuery & tQuery )
+		: m_dPostlimit ( dPostlimit )
+		, m_tQuery ( tQuery )
+	{}
+};
+
+static void ProcessPostlimit ( const PostLimitArgs_t & tArgs, AggrResult_t & tRes )
+{
+	if ( !tArgs.m_dPostlimit.GetLength() )
 		return;
 
 	// generates docstore session id
 	DocstoreSession_c tSession;
 
 	// collect all unique docstores from matches
-	CSphVector<const DocstoreReader_i*> dDocstores = GetUniqueDocstores ( tRes, iFrom, iTo );
+	CSphVector<const DocstoreReader_i*> dDocstores = GetUniqueDocstores ( tRes, tArgs.m_iFrom, tArgs.m_iTo );
 	if ( dDocstores.GetLength() )
 	{
 		// spawn buffered readers for the current session
@@ -4082,7 +4105,7 @@ static void ProcessPostlimit ( const CSphVector<const CSphColumnInfo *> & dPostl
 	}
 
 	int iLastTag = -1;
-	for ( int i=iFrom; i<iTo; i++ )
+	for ( int i=tArgs.m_iFrom; i<tArgs.m_iTo; i++ )
 	{
 		CSphMatch & tMatch = tRes.m_dMatches[i];
 		// remote match (tag highest bit 1) == everything is already computed
@@ -4091,23 +4114,26 @@ static void ProcessPostlimit ( const CSphVector<const CSphColumnInfo *> & dPostl
 
 		if ( tMatch.m_iTag!=iLastTag )
 		{
-			for ( const auto & pCol : dPostlimit )
-				SetupPostlimitExprs ( tRes, tMatch, pCol, tQuery, tSession.GetUID() );
+			for ( const auto & pCol : tArgs.m_dPostlimit )
+				SetupPostlimitExprs ( tRes, tMatch, pCol, tArgs.m_tQuery, tSession.GetUID() );
 
 			iLastTag = tMatch.m_iTag;
 		}
 
-		for ( const auto & pCol : dPostlimit )
+		for ( const auto & pCol : tArgs.m_dPostlimit )
 			EvalPostlimitExprs ( tRes, tMatch, pCol );
 	}
 }
 
 
-static void ProcessLocalPostlimit ( const CSphQuery & tQuery, AggrResult_t & tRes )
+static void ProcessLocalPostlimit ( const CSphQuery & tQuery, bool bMaster, AggrResult_t & tRes )
 {
 	bool bGotPostlimit = false;
 	for ( int i=0; i<tRes.m_tSchema.GetAttrsCount() && !bGotPostlimit; i++ )
-		bGotPostlimit = ( tRes.m_tSchema.GetAttr(i).m_eStage==SPH_EVAL_POSTLIMIT );
+	{
+		const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
+		bGotPostlimit = ( tCol.m_eStage==SPH_EVAL_POSTLIMIT && ( bMaster || tCol.m_uFieldFlags==CSphColumnInfo::FIELD_NONE ) );
+	}
 
 	if ( !bGotPostlimit )
 		return;
@@ -4122,7 +4148,7 @@ static void ProcessLocalPostlimit ( const CSphQuery & tQuery, AggrResult_t & tRe
 		assert ( iSetNext<=tRes.m_dMatches.GetLength() );
 
 		dPostlimit.Resize ( 0 );
-		ExtractPostlimit ( tRes.m_dSchemas[iSchema], dPostlimit );
+		ExtractPostlimit ( tRes.m_dSchemas[iSchema], bMaster, dPostlimit );
 		if ( !dPostlimit.GetLength() )
 			continue;
 
@@ -4137,7 +4163,12 @@ static void ProcessLocalPostlimit ( const CSphQuery & tQuery, AggrResult_t & tRe
 		iFrom += iSetStart;
 		iTo += iSetStart;
 
-		ProcessPostlimit ( dPostlimit, iFrom, iTo, tQuery, tRes );
+		PostLimitArgs_t tArgs ( dPostlimit, tQuery );
+		tArgs.m_iFrom = iFrom;
+		tArgs.m_iTo = iTo;
+		tArgs.m_bMaster = bMaster;
+
+		ProcessPostlimit ( tArgs, tRes );
 	}
 }
 
@@ -4374,6 +4405,7 @@ void FrontendSchemaBuilder_c::Finalize()
 		tFrontend.m_eAttrType = s.m_eAttrType;
 		tFrontend.m_eAggrFunc = s.m_eAggrFunc; // for a sort loop just below
 		tFrontend.m_iIndex = i; // to make the aggr sort loop just below stable
+		tFrontend.m_uFieldFlags = s.m_uFieldFlags;
 	}
 
 	// tricky bit
@@ -4486,7 +4518,7 @@ void FrontendSchemaBuilder_c::SwapAttrs ( CSphSchema & tSchema )
 
 //////////////////////////////////////////////////////////////////////////
 
-static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, bool bAllEqual, const CSphFilterSettings * pAggrFilter, CSphQueryProfile * pProfiler )
+static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, bool bAllEqual, bool bMaster, const CSphFilterSettings * pAggrFilter, CSphQueryProfile * pProfiler )
 {
 	ESphSortOrder eQuerySort = ( tQuery.m_sOuterOrderBy.IsEmpty() ? SPH_SORT_RELEVANCE : SPH_SORT_EXTENDED );
 	CSphQuery tQueryCopy = tQuery;
@@ -4566,7 +4598,7 @@ static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, boo
 		if ( bHaveLocals )
 		{
 			CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_EVAL_POST );
-			ProcessLocalPostlimit ( tQueryCopy, tRes );
+			ProcessLocalPostlimit ( tQueryCopy, bMaster, tRes );
 		}
 
 		RemapResult ( &tRes.m_tSchema, &tRes );
@@ -4599,10 +4631,10 @@ static bool ApplyOuterOrder ( AggrResult_t & tRes, const CSphQuery & tQuery )
 }
 
 
-static void ComputePostlimit ( AggrResult_t & tRes, const CSphQuery & tQuery )
+static void ComputePostlimit ( const CSphQuery & tQuery, bool bMaster, AggrResult_t & tRes )
 {
 	CSphVector<const CSphColumnInfo *> dPostlimit;
-	ExtractPostlimit ( tRes.m_tSchema, dPostlimit );
+	ExtractPostlimit ( tRes.m_tSchema, bMaster, dPostlimit );
 
 	// post compute matches only between offset - limit
 	// however at agent we can't estimate limit.offset at master merged result set
@@ -4614,13 +4646,18 @@ static void ComputePostlimit ( AggrResult_t & tRes, const CSphQuery & tQuery )
 	iTo = Max ( Min ( iOff + iCount, iTo ), 0 );
 	int iFrom = Min ( iOff, iTo );
 
-	ProcessPostlimit ( dPostlimit, iFrom, iTo, tQuery, tRes );
+	PostLimitArgs_t tArgs ( dPostlimit, tQuery );
+	tArgs.m_iFrom = iFrom;
+	tArgs.m_iTo = iTo;
+	tArgs.m_bMaster = bMaster;
+
+	ProcessPostlimit ( tArgs, tRes );
 }
 
 
 /// merges multiple result sets, remaps columns, does reorder for outer selects
 bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, const sph::StringSet & hExtraColumns, CSphQueryProfile * pProfiler,
-	const CSphFilterSettings * pAggrFilter, bool bForceRefItems )
+	const CSphFilterSettings * pAggrFilter, bool bForceRefItems, bool bMaster, VecRefPtrsAgentConn_t & dRemotes )
 {
 	if ( !VerifyMatchCounts(tRes) )
 		return false;
@@ -4682,7 +4719,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	// this is a good time to apply outer order clause, too
 	if ( tRes.m_iSuccesses>1 || pAggrFilter )
 	{
-		if ( !MergeAllMatches ( tRes, tQuery, bHaveLocals, bAllEqual, pAggrFilter, pProfiler ) )
+		if ( !MergeAllMatches ( tRes, tQuery, bHaveLocals, bAllEqual, bMaster, pAggrFilter, pProfiler ) )
 			return false;
 	}
 
@@ -4701,7 +4738,12 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	if ( bAllEqual && bHaveLocals )
 	{
 		CSphScopedProfile ( pProfiler, SPH_QSTATE_EVAL_POST );
-		ComputePostlimit ( tRes, tQuery );
+		ComputePostlimit ( tQuery, bMaster, tRes );
+	}
+	if ( bMaster && !dRemotes.IsEmpty() )
+	{
+		CSphScopedProfile ( pProfiler, SPH_QSTATE_EVAL_POST );
+		RemotesGetField ( dRemotes, tQuery, tRes );
 	}
 
 	tFrontendBuilder.RemapGroupBy();
@@ -6572,7 +6614,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				}
 			}
 
-			bool bOk = MinimizeAggrResult ( tRes, tQuery, !m_dLocal.IsEmpty(), hExtra, m_pProfile, pAggrFilter, m_bFederatedUser );
+			bool bOk = MinimizeAggrResult ( tRes, tQuery, !m_dLocal.IsEmpty(), hExtra, m_pProfile, pAggrFilter, m_bFederatedUser, m_bMaster, dRemotes );
 
 			if ( !bOk )
 			{
@@ -10175,6 +10217,7 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 		case SEARCHD_COMMAND_UVAR:		HandleCommandUserVar ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_CALLPQ:	HandleCommandCallPq ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_CLUSTERPQ:	HandleCommandClusterPq ( tOut, uCommandVer, tBuf, tThd.m_sClientName.cstr() ); break;
+		case SEARCHD_COMMAND_GETFIELD:	HandleCommandGetField ( tOut, uCommandVer, tBuf ); break;
 		default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
 	}
 
@@ -10871,7 +10914,10 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 	if ( iRes!=0 && !dFilters.GetLength() && sError.Begins ( "percolate filters: syntax error" ) )
 	{
 		ESphAttr eAttrType = SPH_ATTR_NONE;
-		CSphScopedPtr<ISphExpr> pExpr { sphExprParse ( sFilters, tSchema, &eAttrType, NULL, sError, NULL, eCollation ) };
+		ExprParseArgs_t tExprArgs;
+		tExprArgs.m_pAttrType = &eAttrType;
+		tExprArgs.m_eCollation = eCollation;
+		CSphScopedPtr<ISphExpr> pExpr { sphExprParse ( sFilters, tSchema, sError, tExprArgs ) };
 		if ( pExpr )
 		{
 			sError = "";
@@ -13939,7 +13985,9 @@ static void ReturnZeroCount ( const CSphSchema & tSchema, const CSphBitvec & tAt
 			// essentially the same as SELECT_DUAL, parse and print constant expressions
 			ESphAttr eAttrType;
 			CSphString sError;
-			ISphExprRefPtr_c pExpr { sphExprParse ( tCol.m_sName.cstr(), tSchema, &eAttrType, NULL, sError, NULL )};
+			ExprParseArgs_t tExprArgs;
+			tExprArgs.m_pAttrType = &eAttrType;
+			ISphExprRefPtr_c pExpr { sphExprParse ( tCol.m_sName.cstr(), tSchema, sError, tExprArgs )};
 
 			if ( !pExpr || !pExpr->IsConst() )
 				eAttrType = SPH_ATTR_NONE;
@@ -15298,8 +15346,10 @@ void HandleMysqlSelectDual ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, con
 	CSphSchema	tSchema;
 	ESphAttr eAttrType;
 	CSphString sError;
+	ExprParseArgs_t tExprArgs;
+	tExprArgs.m_pAttrType = &eAttrType;
 
-	CSphRefcountedPtr<ISphExpr> pExpr { sphExprParse ( sVar.cstr(), tSchema, &eAttrType, NULL, sError, NULL ) };
+	CSphRefcountedPtr<ISphExpr> pExpr { sphExprParse ( sVar.cstr(), tSchema, sError, tExprArgs ) };
 
 	if ( !pExpr )
 	{

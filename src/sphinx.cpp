@@ -1771,7 +1771,10 @@ bool IndexUpdateHelper_c::Update_FixupData ( UpdateContext_t & tCtx, CSphString 
 			{
 				iUpdAttrId = tCtx.m_tSchema.GetAttrIndex ( sJsonCol.cstr() );
 				if ( iUpdAttrId>=0 )
-					tUpdAttr.m_pExpr = sphExprParse ( sUpdAttrName.cstr(), tCtx.m_tSchema, NULL, NULL, sError, NULL );
+				{
+					ExprParseArgs_t tExprArgs;
+					tUpdAttr.m_pExpr = sphExprParse ( sUpdAttrName.cstr(), tCtx.m_tSchema, sError, tExprArgs );
+				}
 			}
 		}
 

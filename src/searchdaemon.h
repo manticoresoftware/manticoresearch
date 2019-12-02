@@ -156,6 +156,7 @@ enum SearchdCommand_e : WORD
 	SEARCHD_COMMAND_JSON		= 16,
 	SEARCHD_COMMAND_CALLPQ 		= 17,
 	SEARCHD_COMMAND_CLUSTERPQ	= 18,
+	SEARCHD_COMMAND_GETFIELD	= 19,
 
 	SEARCHD_COMMAND_TOTAL,
 	SEARCHD_COMMAND_WRONG = SEARCHD_COMMAND_TOTAL,
@@ -164,7 +165,7 @@ enum SearchdCommand_e : WORD
 /// master-agent API SEARCH command protocol extensions version
 enum
 {
-	VER_COMMAND_SEARCH_MASTER = 17
+	VER_COMMAND_SEARCH_MASTER = 18
 };
 
 
@@ -184,6 +185,7 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_UVAR		= 0x100,
 	VER_COMMAND_CALLPQ		= 0x100,
 	VER_COMMAND_CLUSTERPQ	= 0x102,
+	VER_COMMAND_GETFIELD	= 0x100,
 
 	VER_COMMAND_WRONG = 0,
 };
@@ -1396,6 +1398,8 @@ void SaveArray ( const VecTraits_T<T> & dBuf, MemoryWriter_c & tOut )
 // add handler which will be called on daemon's shutdown right after
 // g_bShutdown is set to true. Returns cookie for refer the callback in future.
 using Handler_fn = std::function<void ()>;
+
+void SendErrorReply ( CachedOutputBuffer_c & tOut, const char * sTemplate, ... );
 
 namespace searchd {
 

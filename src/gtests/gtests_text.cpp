@@ -411,7 +411,8 @@ TEST ( Text, expression_parser )
 	for ( auto &dTest: dTests )
 	{
 		CSphString sError;
-		CSphScopedPtr<ISphExpr> pExpr ( sphExprParse ( dTest.m_sExpr, tSchema, NULL, NULL, sError, NULL ) );
+		ExprParseArgs_t tExprArgs;
+		CSphScopedPtr<ISphExpr> pExpr ( sphExprParse ( dTest.m_sExpr, tSchema, sError, tExprArgs ) );
 		ASSERT_TRUE ( pExpr.Ptr () ) << sError.cstr ();
 		ASSERT_FLOAT_EQ ( dTest.m_fValue, pExpr->Eval ( tMatch ) );
 	}

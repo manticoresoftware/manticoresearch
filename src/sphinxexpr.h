@@ -58,7 +58,8 @@ enum ESphAttr
 	SPH_ATTR_UINT32SET_PTR,				// in-memory version of MVA32
 	SPH_ATTR_INT64SET_PTR,				// in-memory version of MVA64
 	SPH_ATTR_JSON_PTR,					// in-memory version of JSON
-	SPH_ATTR_JSON_FIELD_PTR				// in-memory version of JSON_FIELD
+	SPH_ATTR_JSON_FIELD_PTR,			// in-memory version of JSON_FIELD
+	SPH_ATTR_STORED_FIELD
 };
 
 /// column evaluation stage
@@ -267,9 +268,21 @@ enum ESphCollation
 /// fills pUsesWeight with a flag whether match relevance is referenced in expression AST
 /// fills pEvalStage with a required (!) evaluation stage
 class CSphQueryProfile;
-ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight,
-	CSphString & sError, CSphQueryProfile * pProfiler, ESphCollation eCollation=SPH_COLLATION_DEFAULT, ISphExprHook * pHook=NULL,
-	bool * pZonespanlist=nullptr, DWORD * pPackedFactorsFlags=nullptr, ESphEvalStage * pEvalStage=nullptr );
+
+struct ExprParseArgs_t
+{
+	ESphAttr *			m_pAttrType = nullptr;
+	bool *				m_pUsesWeight = nullptr;
+	CSphQueryProfile *	m_pProfiler = nullptr;
+	ESphCollation		m_eCollation = SPH_COLLATION_DEFAULT;
+	ISphExprHook *		m_pHook = nullptr;
+	bool *				m_pZonespanlist = nullptr;
+	DWORD *				m_pPackedFactorsFlags = nullptr;
+	ESphEvalStage *		m_pEvalStage = nullptr;
+	DWORD *				m_pStoredField = nullptr;
+};
+
+ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, CSphString & sError, ExprParseArgs_t & tArgs );
 
 ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr );
 

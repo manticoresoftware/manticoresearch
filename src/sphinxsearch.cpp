@@ -2935,10 +2935,16 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, 
 	m_dFieldTF.Resize ( m_iFields*(m_iMaxQpos+1) );
 	m_dFieldTF.Fill ( 0 );
 
+	ExprRankerHook_T<NEED_PACKEDFACTORS, HANDLE_DUPES> tHook ( this );
+
 	// parse expression
 	bool bUsesWeight;
-	ExprRankerHook_T<NEED_PACKEDFACTORS, HANDLE_DUPES> tHook ( this );
-	m_pExpr = sphExprParse ( m_sExpr, *m_pSchema, &m_eExprType, &bUsesWeight, sError, nullptr, SPH_COLLATION_DEFAULT, &tHook ); // FIXME!!! profile UDF here too
+	ExprParseArgs_t tExprArgs;
+	tExprArgs.m_pAttrType = &m_eExprType;
+	tExprArgs.m_pUsesWeight = &bUsesWeight;
+	tExprArgs.m_pHook = &tHook;
+
+	m_pExpr = sphExprParse ( m_sExpr, *m_pSchema, sError, tExprArgs ); // FIXME!!! profile UDF here too
 	if ( !m_pExpr )
 		return false;
 	if ( m_eExprType!=SPH_ATTR_INTEGER && m_eExprType!=SPH_ATTR_FLOAT )

@@ -268,7 +268,9 @@ void BenchExpr ()
 
 		ESphAttr uType;
 		CSphString sError;
-		CSphScopedPtr<ISphExpr> pExpr ( sphExprParse ( dBench[iRun].m_sExpr, tSchema, &uType, NULL, sError, NULL ) );
+		ExprParseArgs_t tExprArgs;
+		tExprArgs.m_pAttrType = &uType;
+		CSphScopedPtr<ISphExpr> pExpr ( sphExprParse ( dBench[iRun].m_sExpr, tSchema, sError, tExprArgs ) );
 		if ( !pExpr.Ptr() )
 		{
 			printf ( "FAILED; %s\n", sError.cstr() );

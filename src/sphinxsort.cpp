@@ -3958,7 +3958,8 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 						iAttr = tSchema.GetAttrIndex ( sJsonCol.cstr() );
 						if ( iAttr>=0 )
 						{
-							tState.m_tSubExpr[iField] = sphExprParse ( pTok, tSchema, nullptr, nullptr, sError, nullptr );
+							ExprParseArgs_t tExprArgs;
+							tState.m_tSubExpr[iField] = sphExprParse ( pTok, tSchema, sError, tExprArgs );
 							tState.m_tSubKeys[iField] = JsonKey_t ( pTok, strlen ( pTok ) );
 						}
 					}
@@ -3969,7 +3970,9 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 			ESphAttr eAttrType = SPH_ATTR_NONE;
 			if ( iAttr<0 )
 			{
-				ISphExpr * pExpr = sphExprParse ( pTok, tSchema, &eAttrType, nullptr, sError, nullptr );
+				ExprParseArgs_t tExprArgs;
+				tExprArgs.m_pAttrType = &eAttrType;
+				ISphExpr * pExpr = sphExprParse ( pTok, tSchema, sError, tExprArgs );
 				if ( pExpr )
 				{
 					tState.m_tSubExpr[iField] = pExpr;
@@ -4307,7 +4310,10 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 			dGroupColumns.Add ( iAttr );
 
 			if ( !sJsonExpr.IsEmpty() )
-				dJsonKeys.Last() = sphExprParse ( sJsonExpr.cstr(), tSchema, nullptr, nullptr, sError, nullptr );
+			{
+				ExprParseArgs_t tExprArgs;
+				dJsonKeys.Last() = sphExprParse ( sJsonExpr.cstr(), tSchema, sError, tExprArgs );
+			}
 		}
 
 		tSettings.m_pGrouper = sphCreateGrouperMulti ( dLocators, dAttrTypes, dJsonKeys, pQuery->m_eCollation );
@@ -4335,7 +4341,10 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 
 		dGroupColumns.Add ( iAttr );
 
-		CSphRefcountedPtr<ISphExpr> pExpr { sphExprParse ( pQuery->m_sGroupBy.cstr(), tSchema, nullptr, nullptr, sError, nullptr, pQuery->m_eCollation ) };
+		ExprParseArgs_t tExprArgs;
+		tExprArgs.m_eCollation = pQuery->m_eCollation;
+
+		CSphRefcountedPtr<ISphExpr> pExpr { sphExprParse ( pQuery->m_sGroupBy.cstr(), tSchema, sError, tExprArgs ) };
 		tSettings.m_pGrouper = new CSphGrouperJsonField ( tSchema.GetAttr(iAttr).m_tLocator, pExpr );
 		tSettings.m_bJson = true;
 
@@ -4381,7 +4390,10 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 			case SPH_GROUPBY_ATTR:
 				if ( eType==SPH_ATTR_JSON || eType==SPH_ATTR_JSON_FIELD )
 				{
-					CSphRefcountedPtr<ISphExpr> pExpr { sphExprParse ( pQuery->m_sGroupBy.cstr(), tSchema, nullptr, nullptr, sError, nullptr, pQuery->m_eCollation ) };
+					ExprParseArgs_t tExprArgs;
+					tExprArgs.m_eCollation = pQuery->m_eCollation;
+
+					CSphRefcountedPtr<ISphExpr> pExpr { sphExprParse ( pQuery->m_sGroupBy.cstr(), tSchema, sError, tExprArgs ) };
 					tSettings.m_pGrouper = new CSphGrouperJsonField ( tLoc, pExpr );
 					tSettings.m_bJson = true;
 
@@ -5261,6 +5273,17 @@ static bool ParseQueryItem ( const CSphQueryItem & tItem, const SphQueueSettings
 	CSphColumnInfo tExprCol ( tItem.m_sAlias.cstr(), SPH_ATTR_NONE );
 	DWORD uQueryPackedFactorFlags = SPH_FACTOR_DISABLE;
 	bool bHasZonespanlist = false;
+	
+	ExprParseArgs_t tExprParseArgs;
+	tExprParseArgs.m_pAttrType = &tExprCol.m_eAttrType;
+	tExprParseArgs.m_pUsesWeight = &tExprCol.m_bWeight;
+	tExprParseArgs.m_pProfiler = pProfiler;
+	tExprParseArgs.m_eCollation = tQuery.m_eCollation;
+	tExprParseArgs.m_pHook = tQueue.m_pHook;
+	tExprParseArgs.m_pZonespanlist = &bHasZonespanlist;
+	tExprParseArgs.m_pPackedFactorsFlags = &uQueryPackedFactorFlags;
+	tExprParseArgs.m_pEvalStage = &tExprCol.m_eStage;
+	tExprParseArgs.m_pStoredField = &tExprCol.m_uFieldFlags;
 
 	// tricky bit
 	// GROUP_CONCAT() adds an implicit TO_STRING() conversion on top of its argument
@@ -5272,12 +5295,10 @@ static bool ParseQueryItem ( const CSphQueryItem & tItem, const SphQueueSettings
 	{
 		CSphString sExpr2;
 		sExpr2.SetSprintf ( "TO_STRING(%s)", sExpr.cstr() );
-		tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), tSorterSchema, &tExprCol.m_eAttrType,
-			&tExprCol.m_bWeight, sError, pProfiler, tQuery.m_eCollation, tQueue.m_pHook, &bHasZonespanlist, &uQueryPackedFactorFlags, &tExprCol.m_eStage );
+		tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), tSorterSchema, sError, tExprParseArgs );
 	} else
 	{
-		tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSorterSchema, &tExprCol.m_eAttrType,
-			&tExprCol.m_bWeight, sError, pProfiler, tQuery.m_eCollation, tQueue.m_pHook, &bHasZonespanlist, &uQueryPackedFactorFlags, &tExprCol.m_eStage );
+		tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSorterSchema, sError, tExprParseArgs );
 	}
 
 	tArgs.m_uPackedFactorFlags |= uQueryPackedFactorFlags;
@@ -5454,8 +5475,13 @@ static bool SetupComputeQueue ( const SphQueueSettings_t & tQueue, const CSphQue
 	// setup @expr
 	if ( tQuery.m_eSort==SPH_SORT_EXPR && tSorterSchema.GetAttrIndex ( "@expr" )<0 )
 	{
+		ExprParseArgs_t tExprArgs;
+		tExprArgs.m_pProfiler = tQueue.m_pProfiler;
+		tExprArgs.m_eCollation = tQuery.m_eCollation;
+		tExprArgs.m_pZonespanlist = &tArgs.m_bHasZonespanlist;
+
 		CSphColumnInfo tCol ( "@expr", SPH_ATTR_FLOAT ); // enforce float type for backwards compatibility (ie. too lazy to fix those tests right now)
-		tCol.m_pExpr = sphExprParse ( tQuery.m_sSortBy.cstr(), tSorterSchema, nullptr, nullptr, sError, tQueue.m_pProfiler, tQuery.m_eCollation, nullptr, &tArgs.m_bHasZonespanlist );
+		tCol.m_pExpr = sphExprParse ( tQuery.m_sSortBy.cstr(), tSorterSchema, sError, tExprArgs );
 		tArgs.m_bNeedZonespanlist |= tArgs.m_bHasZonespanlist;
 		if ( !tCol.m_pExpr )
 			return false;

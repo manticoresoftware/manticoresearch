@@ -18,6 +18,52 @@ index dist
 	agent = <agent1_address/>:loc1
 	agent = <agent2_address/>:loc2
 }
+
+index dist2
+{
+	type = distributed
+	agent = <agent1_address/>:proxy1
+	agent = <agent2_address/>:proxy2
+}
+
+index dist3
+{
+	type = distributed
+	agent = <agent0_address/>:dist2
+}
+
+index dist41
+{
+	type = distributed
+	agent = <agent1_address/>:loc1
+	agent = <agent2_address/>:loc2
+}
+
+index dist42
+{
+	type = distributed
+	agent = <agent0_address/>:dist41
+}
+
+index dist_complex1
+{
+	type = distributed
+	agent = <agent1_address/>:proxy11
+	agent = <agent2_address/>:proxy12
+}
+
+index dist_complex2
+{
+	type = distributed
+	agent = <agent2_address/>:proxy13
+}
+
+index dist_complex3
+{
+	type = distributed
+	agent = <agent2_address/>:proxy14
+}
+
 </agent0>
 
 <agent1>
@@ -34,6 +80,49 @@ index loc1
 	source			= src_a1
 	stored_fields	= title, body
 	path			= <data_path/>/a1
+}
+
+index proxy1
+{
+	type = distributed
+	agent = <agent2_address/>:loc2
+}
+
+source src_a11
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, title, body FROM test_table where id in ( 11,13,15,17,19 )
+}
+
+index loc11
+{
+	source			= src_a11
+	stored_fields	= title, body
+	path			= <data_path/>/a11
+}
+
+source src_a12
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, title, body FROM test_table where id in ( 21,23,25,27,29 )
+}
+
+index loc12
+{
+	source			= src_a12
+	stored_fields	= title, body
+	path			= <data_path/>/a12
+}
+
+index proxy11
+{
+	type = distributed
+	local = loc11
+	agent = <agent2_address/>:loc21
 }
 </agent1>
 
@@ -52,6 +141,68 @@ index  loc2
 	stored_fields	= title, body
 	path			= <data_path/>/a2
 }
+
+
+index proxy2
+{
+	type = distributed
+	agent = <agent1_address/>:loc1
+}
+
+source src_a21
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, title, body FROM test_table where id in ( 12,14,16,18,20 )
+}
+
+index  loc21
+{
+	source			= src_a21
+	stored_fields	= title, body
+	path			= <data_path/>/a21
+}
+
+source src_a22
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, title, body FROM test_table where id in ( 22,24,26,28,30 )
+}
+
+index  loc22
+{
+	source			= src_a22
+	stored_fields	= title, body
+	path			= <data_path/>/a22
+}
+
+index proxy12
+{
+	type = distributed
+	local = loc22
+	agent = <agent1_address/>:loc12
+}
+
+index proxy13
+{
+	type = distributed
+	local = loc21
+	local = loc22
+	agent = <agent1_address/>:loc11
+	agent = <agent1_address/>:loc12
+}
+
+index proxy14
+{
+	type = distributed
+	local = loc21
+	local = loc22
+	agent = <agent1_address/>:loc11, loc12
+}
+
 </agent2>
 
 </config>
@@ -72,13 +223,53 @@ insert into test_table values
 ( 2, 'document 2', 'A door opened before them, revealing a small room. Bander said, "Come, half-humans, I want to show you how we live."' ),
 ( 3, 'document 3', 'Trevize whispered, "It gets infantile pleasure out of display. I`d love to knock it down."' ),
 ( 4, 'document 4', 'Don`t try to compete in childishness, said Bliss.' ),
-( 5, 'document 5', 'Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.' )
+( 5, 'document 5', 'Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.' ),
+
+( 11, 'document 11', 'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat.' ),
+( 12, 'document 12', 'A door opened before them, revealing a small room. Bander said, "Come, half-humans, I want to show you how we live."' ),
+( 13, 'document 13', 'Trevize whispered, "It gets infantile pleasure out of display. I`d love to knock it down."' ),
+( 14, 'document 14', 'Don`t try to compete in childishness, said Bliss.' ),
+( 15, 'document 15', 'The Caves of Steel, they called their cities' ),
+( 16, 'document 16', 'Trantor built underground' ),
+( 17, 'document 17', 'Comporellon builds underground right now' ),
+( 18, 'document 18', 'It is a common tendency, when you come to think of it' ),
+( 19, 'document 19', 'Just another variation on the radioactivity theme' ),
+( 20, 'document 20', 'have to go on to the third set of co-ordinates' ),
+( 21, 'document 21', 'Bander pointed its finger and where it pointed the light' ),
+( 22, 'document 22', 'It pointed it elsewhere and the same thing' ),
+( 23, 'document 23', 'Trevize grimaced and said, half-aloud' ),
+( 24, 'document 24', 'I’m not sure what the word ‘charlatan’ means' ),
+( 25, 'document 25', 'It means one who is not genuine' ),
+( 26, 'document 26', 'I admit that I love the dramatic' ),
+( 27, 'document 27', 'what I have shown you is not an effect' ),
+( 28, 'document 28', 'This heat-conducting rod extends several kilometers downward' ),
+( 29, 'document 29', 'I know there are similar rods on other estates' ),
+( 30, 'document 30', 'Solaria’s lower regions for the surface' )
 </db_insert>
 
 <sphqueries>
 <sphinxql>select * from dist</sphinxql>
 <sphinxql>select id,title from dist</sphinxql>
 <sphinxql>select id,body from dist</sphinxql>
+
+<!-- remote cases -->
+<sphinxql>select * from dist2</sphinxql>
+<sphinxql>select * from dist3</sphinxql>
+<sphinxql>select * from dist41</sphinxql>
+<sphinxql>select * from dist42</sphinxql>
+
+<sphinxql>select * from dist_complex1 order by id desc</sphinxql>
+<sphinxql>select * from dist_complex2 order by id desc</sphinxql>
+<sphinxql>select * from dist_complex3 order by id desc</sphinxql>
+
+
+<sphinxql>select * from dist_complex1 order by id desc limit 0,10 </sphinxql>
+<sphinxql>select * from dist_complex1 order by id desc limit 10,10</sphinxql>
+<sphinxql>select * from dist_complex2 order by id desc limit 0,10 </sphinxql>
+<sphinxql>select * from dist_complex2 order by id desc limit 10,10</sphinxql>
+<sphinxql>select * from dist_complex3 order by id desc limit 0,10 </sphinxql>
+<sphinxql>select * from dist_complex3 order by id desc limit 10,10</sphinxql>
+
 </sphqueries>
 
 </test>

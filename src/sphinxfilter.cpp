@@ -1317,8 +1317,12 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 		const int iAttr = ( tSettings.m_eType!=SPH_FILTER_EXPRESSION ? tSchema.GetAttrIndex ( sAttrName.cstr() ) : -1 );
 		if ( iAttr<0 || tSettings.m_eType==SPH_FILTER_EXPRESSION )
 		{
+			ExprParseArgs_t tExprArgs;
+			tExprArgs.m_pAttrType = &eAttrType;
+			tExprArgs.m_eCollation = eCollation;
+
 			// try expression
-			pExpr = sphExprParse ( sAttrName.cstr(), tSchema, &eAttrType, nullptr, sError, nullptr, eCollation );
+			pExpr = sphExprParse ( sAttrName.cstr(), tSchema, sError, tExprArgs );
 			if ( pExpr )
 			{
 				pFilter = CreateFilterExpr ( pExpr, tSettings, sError, eCollation, eAttrType );
@@ -1343,7 +1347,12 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 				pExpr = pAttr->m_pExpr;
 				eAttrType = pAttr->m_eAttrType;
 				if ( pAttr->m_eAttrType==SPH_ATTR_JSON && !pExpr && tSettings.m_eType!=SPH_FILTER_NULL )
-					pExpr = sphExprParse ( sAttrName.cstr(), tSchema, &eAttrType, nullptr, sError, nullptr, eCollation );
+				{
+					ExprParseArgs_t tExprArgs;
+					tExprArgs.m_pAttrType = &eAttrType;
+					tExprArgs.m_eCollation = eCollation;
+					pExpr = sphExprParse ( sAttrName.cstr(), tSchema, sError, tExprArgs );
+				}
 				pFilter = CreateFilterExpr ( pExpr, tSettings, sError, eCollation, pAttr->m_eAttrType );
 
 			} else

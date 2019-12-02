@@ -3406,6 +3406,7 @@ public:
 	DWORD					m_uPackedFactorFlags { SPH_FACTOR_DISABLE };
 	ESphEvalStage			m_eEvalStage { SPH_EVAL_FINAL };
 	ESphCollation			m_eCollation;
+	DWORD					m_uStoredField = CSphColumnInfo::FIELD_NONE;
 
 private:
 	int						GetToken ( YYSTYPE * lvalp );
@@ -5380,6 +5381,7 @@ void ConvertArgsJson ( VecRefPtrs_t<ISphExpr *> & dArgs )
 ISphExpr * ExprParser_t::CreateFieldNode ( int iField )
 {
 	m_eEvalStage = SPH_EVAL_POSTLIMIT;
+	m_uStoredField = CSphColumnInfo::FIELD_STORED;
 	const CSphColumnInfo & tField = m_pSchema->GetField(iField);
 	if ( !(tField.m_uFieldFlags & CSphColumnInfo::FIELD_STORED) )
 	{
@@ -8627,18 +8629,19 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 //////////////////////////////////////////////////////////////////////////
 
 /// parser entry point
-ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight,
-	CSphString & sError, CSphQueryProfile * pProfiler, ESphCollation eCollation, ISphExprHook * pHook, bool * pZonespanlist, DWORD * pPackedFactorsFlags, ESphEvalStage * pEvalStage )
+ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, CSphString & sError, ExprParseArgs_t & tArgs )
 {
 	// parse into opcodes
-	ExprParser_t tParser ( pHook, pProfiler, eCollation );
-	ISphExpr * pRes = tParser.Parse ( sExpr, tSchema, pAttrType, pUsesWeight, sError );
-	if ( pZonespanlist )
-		*pZonespanlist = tParser.m_bHasZonespanlist;
-	if ( pEvalStage )
-		*pEvalStage = tParser.m_eEvalStage;
-	if ( pPackedFactorsFlags )
-		*pPackedFactorsFlags = tParser.m_uPackedFactorFlags;
+	ExprParser_t tParser ( tArgs.m_pHook, tArgs.m_pProfiler, tArgs.m_eCollation );
+	ISphExpr * pRes = tParser.Parse ( sExpr, tSchema, tArgs.m_pAttrType, tArgs.m_pUsesWeight, sError );
+	if ( tArgs.m_pZonespanlist )
+		*tArgs.m_pZonespanlist = tParser.m_bHasZonespanlist;
+	if ( tArgs.m_pEvalStage )
+		*tArgs.m_pEvalStage = tParser.m_eEvalStage;
+	if ( tArgs.m_pPackedFactorsFlags )
+		*tArgs.m_pPackedFactorsFlags = tParser.m_uPackedFactorFlags;
+	if ( tArgs.m_pStoredField )
+		*tArgs.m_pStoredField = tParser.m_uStoredField;
 	return pRes;
 }
 

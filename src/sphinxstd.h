@@ -1137,12 +1137,18 @@ namespace sph {
 /// Storage backends for vector
 /// Each backend provides Allocate and Deallocate
 
+// workaround missing "is_trivially_copyable" in g++ < 5.0
+#if defined (__GNUG__) && (__GNUC__ < 5) && !defined (__clang__)
+#define IS_TRIVIALLY_COPYABLE(T) __has_trivial_copy(T)
+#else
+#define IS_TRIVIALLY_COPYABLE( T ) std::is_trivially_copyable<T>::value
+#endif
+
 /// Default backend - uses plain old new/delete
 template < typename T >
 class DefaultStorage_T
 {
 protected:
-	/// grow enough to hold that much entries.
 	inline static T * Allocate ( int iLimit )
 	{
 		return new T[iLimit];
@@ -1192,12 +1198,7 @@ private:
 /// Copy backends for vector
 /// Each backend provides Copy, Move and CopyOrSwap
 
-// workaround missing "is_trivially_copyable" in g++ < 5.0
-#if __GNUG__ && __GNUC__<5
-#define IS_TRIVIALLY_COPYABLE(T) __has_trivial_copy(T)
-#else
-#define IS_TRIVIALLY_COPYABLE( T ) std::is_trivially_copyable<T>::value
-#endif
+
 
 /// Copy/move vec of a data item-by-item
 template < typename T, bool = IS_TRIVIALLY_COPYABLE(T) >

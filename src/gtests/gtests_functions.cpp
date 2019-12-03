@@ -2763,3 +2763,12 @@ TEST ( functions, path )
 	CSphString sFile14 = GetBaseName ( sSrc14 );
 	ASSERT_STREQ ( sFile14.cstr(), "pq2" );
 }
+
+TEST ( fnctions, IsTriviallyCopyable )
+{
+	EXPECT_TRUE ( IS_TRIVIALLY_COPYABLE ( DWORD ) ) << "DWORD";
+	EXPECT_TRUE ( IS_TRIVIALLY_COPYABLE ( DWORD[] ) ) << "DWORD[]";
+	ASSERT_TRUE ( IS_TRIVIALLY_COPYABLE ( DWORD* ) ) << "DWORD*";
+	ASSERT_FALSE ( IS_TRIVIALLY_COPYABLE ( CSphFixedVector<DWORD> ) ) << "CSphFixedVector<DWORD>";
+	ASSERT_FALSE ( IS_TRIVIALLY_COPYABLE ( CSphString )) << "CSphString";
+}

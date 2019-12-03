@@ -163,6 +163,7 @@ Threads::ThdPublicInfo_t::~ThdPublicInfo_t ()
 
 void Threads::ThdPublicInfo_t::Swap( ThdPublicInfo_t& rhs )
 {
+	::Swap ( (*(ThdInfo_t*)(this)), *(ThdInfo_t*)(&rhs));
 	::Swap ( m_sThName, rhs.m_sThName );
 	::Swap( m_pQuery, rhs.m_pQuery );
 	::Swap( m_sRequestDescription, rhs.m_sRequestDescription );

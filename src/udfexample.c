@@ -153,6 +153,8 @@ DLLEXPORT sphinx_int64_t strtoint ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, ch
 DLLEXPORT int avgmva_init ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error_message )
 {
 	UdfLog ( "Called avgmva_init" );
+	sphinx_int64_t mvattype;
+
 	if ( args->arg_count!=1 ||
 		( args->arg_types[0]!=SPH_UDF_TYPE_UINT32SET && args->arg_types[0]!=SPH_UDF_TYPE_INT64SET ) )
 	{
@@ -161,7 +163,8 @@ DLLEXPORT int avgmva_init ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * err
 	}
 
 	// store our mva vs mva64 flag to func_data
-	init->func_data = (void*)(int)( args->arg_types[0]==SPH_UDF_TYPE_INT64SET ? 1 : 0 );
+	mvattype = args->arg_types[0]==SPH_UDF_TYPE_INT64SET ? 1 : 0;
+	init->func_data = (void*)mvattype;
 	return 0;
 }
 
@@ -194,7 +197,7 @@ DLLEXPORT double avgmva ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error
 	// sphinx_int64_t * values = (sphinx_int64_t*) args->values[idx];
 
 	// pull "mva32 or mva64" flag (that we stored in _init) from func_data
-	is64 = (int)(init->func_data) != 0;
+	is64 = (sphinx_int64_t)(init->func_data) != 0;
 	if ( is64 )
 	{
 		// handle mva64

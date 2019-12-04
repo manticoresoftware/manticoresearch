@@ -822,7 +822,7 @@ public:
 	bool				MultiQuery ( const CSphQuery * , CSphQueryResult * , int , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const override { return false; }
 	bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult ** , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const override { return false; }
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & , CSphString * ) const override { return false; }
-	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const override ;
+	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const override;
 	int					UpdateAttributes ( const CSphAttrUpdate & , int, bool &, CSphString &, CSphString & ) override { return -1; }
 	bool				SaveAttributes ( CSphString & ) const override { return false; }
 	DWORD				GetAttributeStatus () const override { return 0; }

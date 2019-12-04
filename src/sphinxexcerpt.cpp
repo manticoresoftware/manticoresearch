@@ -62,8 +62,6 @@ CSphString SnippetQuerySettings_t::AsString() const
 
 /////////////////////////////////////////////////////////////////////////////
 
-static const int MAX_HIGHLIGHT_WORDS = 256;
-
 #define UINT32_MASK 0xffffffffUL
 #define UINT16_MASK 0xffff
 

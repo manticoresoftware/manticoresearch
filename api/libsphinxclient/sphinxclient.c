@@ -1523,7 +1523,11 @@ static int net_create_inet_sock ( sphinx_client * client )
 {
 	struct hostent * hp;
 	struct sockaddr_in sa;
-	int sock, res, err, optval;
+	int sock, res, err;
+	
+#if defined(SO_NOSIGPIPE)
+	int optval;
+#endif
 
 	hp = gethostbyname ( client->host );
 	if ( !hp )
@@ -1550,8 +1554,8 @@ static int net_create_inet_sock ( sphinx_client * client )
 		return -1;
 	}
 
-	optval = 1;
 #if defined(SO_NOSIGPIPE)
+	optval = 1;
 	if ( setsockopt ( sock, SOL_SOCKET, SO_NOSIGPIPE, (void *)&optval, (socklen_t)sizeof(optval) ) < 0 )
 	{
 		set_error ( client, "setsockopt() failed: %s", sock_error() );
@@ -1580,9 +1584,12 @@ static int net_create_inet_sock ( sphinx_client * client )
 #ifndef _WIN32
 static int net_create_unix_sock ( sphinx_client * client )
 {
-	struct hostent * hp;
 	struct sockaddr_un uaddr;
-	int sock, res, err, optval, len;
+	int sock, res, err, len;
+
+#if defined(SO_NOSIGPIPE)
+	int optval;
+#endif
 
 	len = strlen ( client->host );
 
@@ -1606,8 +1613,8 @@ static int net_create_unix_sock ( sphinx_client * client )
 		return -1;
 	}
 
-	optval = 1;
 #if defined(SO_NOSIGPIPE)
+	optval = 1;
 	if ( setsockopt ( sock, SOL_SOCKET, SO_NOSIGPIPE, (void *)&optval, (socklen_t)sizeof(optval) ) < 0 )
 	{
 		set_error ( client, "setsockopt() failed: %s", sock_error() );
@@ -1824,7 +1831,7 @@ static void net_get_response ( int fd, sphinx_client * client )
 {
 	int len;
 	char header_buf[32], *cur, *response;
-	unsigned short status, ver;
+	unsigned short status;
 
 	// dismiss previous response
 	if ( client->response_buf )
@@ -1845,7 +1852,7 @@ static void net_get_response ( int fd, sphinx_client * client )
 
 	cur = header_buf;
 	status = unpack_short ( &cur );
-	ver = unpack_short ( &cur );
+	unpack_short ( &cur );	// ver
 	len = unpack_int ( &cur );
 
 	// sanity check the length, alloc the buffer
@@ -2606,7 +2613,7 @@ char ** sphinx_status ( sphinx_client * client, int * num_rows, int * num_cols )
 char ** sphinx_status_extended ( sphinx_client * client, int * num_rows, int * num_cols, int local )
 {
 	int i, j, k, n;
-	char *p, *pmax, *req, *buf, **res;
+	char *p, *req, *buf, **res;
 
 	// check args
 	if ( !client || !num_rows || !num_cols )
@@ -2641,7 +2648,6 @@ char ** sphinx_status_extended ( sphinx_client * client, int * num_rows, int * n
 
 	// parse response
 	p = client->response_start;
-	pmax = client->response_start + client->response_len; // max position for checks, to protect against broken responses
 
 	*num_rows = unpack_int ( &p );
 	*num_cols = unpack_int ( &p );

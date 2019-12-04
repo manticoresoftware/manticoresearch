@@ -3449,7 +3449,6 @@ public:
 	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const = 0;
 	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const = 0;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const = 0;
-	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const = 0;
 	virtual void				GetSuggest ( const SuggestArgs_t & , SuggestResult_t & ) const {}
 
 public:
@@ -3469,7 +3468,7 @@ public:
 	virtual bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, CSphVector<KillListTarget_t> & dTargets, CSphString & sError ) const { return true; }
 	virtual bool				AlterKillListTarget ( CSphVector<KillListTarget_t> & dTargets, CSphString & sError ) { return false; }
 	virtual void				KillExistingDocids ( CSphIndex * pTarget ) {}
-	virtual int					KillMulti ( const VecTraits_T<DocID_t> & dKlist ) { return 0; }
+	int							KillMulti ( const VecTraits_T<DocID_t> & dKlist ) override { return 0; }
 
 	bool						GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const override { return false; }
 	int							GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const override { return -1; }

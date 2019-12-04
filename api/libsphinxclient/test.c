@@ -16,6 +16,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #if _WIN32
 #include <winsock2.h>
@@ -144,7 +145,7 @@ void test_excerpt ( sphinx_client * client )
 	opts.around = 3;
 	opts.allow_empty = SPH_FALSE;
 
-	res = sphinx_build_excerpts ( client, ndocs, docs, index, words, &opts );
+	res = sphinx_build_excerpts ( client, ndocs, (const char **)docs, index, words, &opts );
 
 	if ( !res )
 	{
@@ -198,7 +199,7 @@ void test_excerpt_spz ( sphinx_client * client )
 		}
 		printf ( "passage_boundary=%s\n", opts.passage_boundary );
 
-		res = sphinx_build_excerpts ( client, ndocs, docs, index, words, &opts );
+		res = sphinx_build_excerpts ( client, ndocs, (const char **)docs, index, words, &opts );
 		if ( !res )
 			die ( "query failed: %s", sphinx_error(client) );
 
@@ -259,7 +260,7 @@ void test_persist_work ( sphinx_client * client )
 		}
 
 		printf ( "n=%d,\t", i );
-		res = sphinx_build_excerpts ( client, 1, docs, index, words, &opts );
+		res = sphinx_build_excerpts ( client, 1, (const char**)docs, index, words, &opts );
 
 		if ( !res )
 		{
@@ -405,15 +406,15 @@ void title ( const char * name )
 	if ( g_smoke || !name )
 		return;
 
-	printf ( "-> % s <-\n\n", name );
+	printf ( "-> %s <-\n\n", name );
 }
 
 int main ( int argc, char ** argv )
 {
 	int i, port = 0;
 	sphinx_client * client;
-	sphinx_uint64_t override_docid = 2;
-	unsigned int override_value = 2000;
+//	sphinx_uint64_t override_docid = 2;
+//	unsigned int override_value = 2000;
 
 	for ( i=1; i<argc; i++ )
 	{

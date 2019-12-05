@@ -1712,11 +1712,11 @@ struct SphStringSorterRemap_t
 const BYTE *	SkipQuoted ( const BYTE * p );
 
 bool			sphSortGetStringRemap ( const ISphSchema & tSorterSchema, const ISphSchema & tIndexSchema, CSphVector<SphStringSorterRemap_t> & dAttrs );
-bool			sphIsSortStringInternal ( const char * sColumnName );
+bool			IsSortStringInternal ( const CSphString& sColumnName );
 /// make string lowercase but keep case of JSON.field
 void			sphColumnToLowercase ( char * sVal );
-const char *	SortJsonInternalGet ( const char * sColumnName );
-CSphString		SortJsonInternalSet ( const char * sColumnName );
+bool			IsSortJsonInternal ( const CSphString& sColumnName );
+CSphString		SortJsonInternalSet ( const CSphString& sColumnName );
 
 bool			sphCheckQueryHeight ( const struct XQNode_t * pRoot, CSphString & sError );
 void			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, bool bHasBooleanOptimization, const ISphKeywordsStat * pKeywords );

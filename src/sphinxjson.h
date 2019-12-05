@@ -257,7 +257,7 @@ ESphJsonType sphJsonFindByKey ( ESphJsonType eType, const BYTE ** ppValue, const
 ESphJsonType sphJsonFindByIndex ( ESphJsonType eType, const BYTE ** ppValue, int iIndex );
 
 /// split name to object and key parts, return false if not JSON name
-bool sphJsonNameSplit ( const char * sName, CSphString * sColumn, CSphString * sKey );
+bool sphJsonNameSplit ( const char * sName, CSphString * sColumn=nullptr, CSphString * sKey=nullptr );
 
 /// compute node size, in bytes
 /// returns -1 when data itself is required to compute the size, but pData is NULL

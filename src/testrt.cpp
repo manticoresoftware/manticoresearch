@@ -56,10 +56,9 @@ void DoSearch ( CSphIndex * pIndex )
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser ();
 
 	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema(), nullptr );
-	tQueueSettings.m_bComputeItems = false;
 	CSphString sError;
 	SphQueueRes_t tRes;
-	ISphMatchSorter * pSorter = sphCreateQueue ( tQuery, tQueueSettings, sError, tRes, nullptr );
+	ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, sError, tRes, nullptr );
 	if ( !pSorter )
 	{
 		printf ( "failed to create sorter; error=%s", tResult.m_sError.cstr() );

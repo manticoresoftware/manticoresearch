@@ -3224,9 +3224,9 @@ void sphGetAttrsToSend ( const ISphSchema & tSchema, bool bAgentMode, bool bNeed
 {
 	int iCount = tSchema.GetAttrsCount();
 	tAttrs.Init ( iCount );
-	if ( !bAgentMode && iCount && sphIsSortStringInternal ( tSchema.GetAttr ( iCount-1 ).m_sName.cstr() ) )
+	if ( !bAgentMode && iCount && IsSortStringInternal ( tSchema.GetAttr ( iCount-1 ).m_sName ) )
 	{
-		for ( int i=iCount-1; i>=0 && sphIsSortStringInternal ( tSchema.GetAttr(i).m_sName.cstr() ); --i )
+		for ( int i=iCount-1; i>=0 && IsSortStringInternal ( tSchema.GetAttr(i).m_sName ); --i )
 			iCount = i;
 	}
 
@@ -3684,8 +3684,8 @@ void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes )
 			dMapFrom.Add ( iSrcCol );
 			dRowItems.Add ( tSrcCol.m_tLocator.m_iBitOffset / SIZE_OF_ROW );
 			assert ( dMapFrom[i]>=0
-				|| sphIsSortStringInternal ( pTarget->GetAttr(i).m_sName.cstr() )
-				|| SortJsonInternalGet ( pTarget->GetAttr(i).m_sName.cstr() )
+				|| IsSortStringInternal ( pTarget->GetAttr(i).m_sName )
+				|| IsSortJsonInternal ( pTarget->GetAttr(i).m_sName )
 				);
 		}
 		int iLimit = Min ( iCur + pRes->m_dMatchCounts[iSchema], pRes->m_dMatches.GetLength() );
@@ -3996,7 +3996,11 @@ struct AggregateColumnSort_fn
 {
 	bool IsAggr ( const CSphColumnInfo & c ) const
 	{
-		return c.m_eAggrFunc!=SPH_AGGR_NONE || c.m_sName=="@groupby" || c.m_sName=="@count" || c.m_sName=="@distinct" || SortJsonInternalGet ( c.m_sName.cstr() );
+		return c.m_eAggrFunc!=SPH_AGGR_NONE
+			|| c.m_sName=="@groupby"
+			|| c.m_sName=="@count"
+			|| c.m_sName=="@distinct"
+			|| IsSortJsonInternal ( c.m_sName );
 	}
 
 	bool IsLess ( const CSphColumnInfo & a, const CSphColumnInfo & b ) const
@@ -4421,9 +4425,9 @@ void FrontendSchemaBuilder_c::RemapGroupBy()
 	// remap groupby() and aliased groupby() to @groupbystr or string attribute
 	const CSphColumnInfo * p = nullptr;
 	CSphString sJsonGroupBy;
-	if ( sphJsonNameSplit ( m_tQuery.m_sGroupBy.cstr(), nullptr, nullptr ) )
+	if ( sphJsonNameSplit ( m_tQuery.m_sGroupBy.cstr() ) )
 	{
-		sJsonGroupBy = SortJsonInternalSet ( m_tQuery.m_sGroupBy.cstr() );
+		sJsonGroupBy = SortJsonInternalSet ( m_tQuery.m_sGroupBy );
 		p = m_tRes.m_tSchema.GetAttr ( sJsonGroupBy.cstr() );
 	}
 
@@ -4437,7 +4441,7 @@ void FrontendSchemaBuilder_c::RemapGroupBy()
 			{
 				if ( p->m_eAttrType==SPH_ATTR_JSON_PTR )
 				{
-					sJsonGroupBy = SortJsonInternalSet ( m_tQuery.m_sGroupBy.cstr() );
+					sJsonGroupBy = SortJsonInternalSet ( m_tQuery.m_sGroupBy );
 					p = m_tRes.m_tSchema.GetAttr ( sJsonGroupBy.cstr() );
 				} else if ( p->m_eAttrType!=SPH_ATTR_STRINGPTR )
 				{
@@ -4484,9 +4488,9 @@ void FrontendSchemaBuilder_c::RemapFacets()
 	// remap MVA/JSON column to @groupby/@groupbystr in facet queries
 	const CSphColumnInfo * pGroupByCol = nullptr;
 	CSphString sJsonGroupBy;
-	if ( sphJsonNameSplit ( m_tQuery.m_sGroupBy.cstr(), nullptr, nullptr ) )
+	if ( sphJsonNameSplit ( m_tQuery.m_sGroupBy.cstr() ) )
 	{
-		sJsonGroupBy = SortJsonInternalSet ( m_tQuery.m_sGroupBy.cstr() );
+		sJsonGroupBy = SortJsonInternalSet ( m_tQuery.m_sGroupBy );
 		pGroupByCol = m_tRes.m_tSchema.GetAttr ( sJsonGroupBy.cstr() );
 	}
 
@@ -4553,10 +4557,10 @@ static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, boo
 	// create queue
 	// at this point, we do not need to compute anything; it all must be here
 	SphQueueSettings_t tQueueSettings ( tRes.m_tSchema );
-	tQueueSettings.m_bComputeItems = false;
 	tQueueSettings.m_pAggrFilter = pAggrFilter;
 	SphQueueRes_t tQueueRes;
-	CSphScopedPtr<ISphMatchSorter> pSorter  ( sphCreateQueue ( tQueryCopy, tQueueSettings, tRes.m_sError, tQueueRes, nullptr ) );
+	CSphScopedPtr<ISphMatchSorter> pSorter  ( sphCreateQueue ( tQueueSettings, tQueryCopy,
+			tRes.m_sError, tQueueRes, nullptr ) );
 
 	// restore outer order related patches, or it screws up the query log
 	if ( tQueryCopy.m_bHasOuter )
@@ -5539,7 +5543,7 @@ int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphM
 			tQueueSettings.m_pHook = &m_tHook;
 			StrVec_t * pExtra = ( dExtraSchemas.IsEmpty() ? nullptr : dExtraSchemas.begin() + iQuery - m_iStart );
 
-			ISphMatchSorter * pSorter = sphCreateQueue ( tQuery, tQueueSettings, dErrors[iQuery - m_iStart], tQueueRes, pExtra );
+			ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, dErrors[iQuery - m_iStart], tQueueRes, pExtra );
 			if ( !pSorter )
 				continue;
 

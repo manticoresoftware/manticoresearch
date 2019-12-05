@@ -1609,7 +1609,6 @@ public:
 
 	void Swap ( CSphRsetSchema & rhs ) noexcept;
 	CSphRsetSchema ( const CSphRsetSchema& rhs );
-
 	CSphRsetSchema ( CSphRsetSchema&& rhs ) noexcept { Swap(rhs); }
 	CSphRsetSchema & operator = ( CSphRsetSchema rhs ) noexcept { Swap(rhs); return *this; }
 
@@ -3583,7 +3582,7 @@ struct SphQueueSettings_t : public ISphNoncopyable
 {
 	const ISphSchema &			m_tSchema;
 	CSphQueryProfile *			m_pProfiler;
-	bool						m_bComputeItems = true;
+	bool						m_bComputeItems = false;
 	CSphAttrUpdateEx *			m_pUpdate = nullptr;
 	CSphVector<DocID_t> *		m_pCollection = nullptr;
 	ISphExprHook *				m_pHook = nullptr;
@@ -3597,9 +3596,8 @@ struct SphQueueSettings_t : public ISphNoncopyable
 
 struct SphQueueRes_t : public ISphNoncopyable
 {
+	DWORD m_uPackedFactorFlags {SPH_FACTOR_DISABLE};
 	bool						m_bZonespanlist = false;
-	DWORD						m_uPackedFactorFlags { SPH_FACTOR_DISABLE };
-
 	bool						m_bAlowMulti = true;
 };
 
@@ -3626,8 +3624,12 @@ ESortClauseParseResult	sphParseSortClause ( const CSphQuery * pQuery, const char
 /// may return NULL on error; in this case, error message is placed in sError
 /// if the pUpdate is given, creates the updater's queue and perform the index update
 /// instead of searching
-ISphMatchSorter *	sphCreateQueue ( const CSphQuery & tQuery, const SphQueueSettings_t & tQueue, CSphString & sError, SphQueueRes_t & tRes, StrVec_t * pExtra );
-bool sphCreateMultiQueue ( const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes, VecTraits_T<StrVec_t> & dExtras );
+ISphMatchSorter *	sphCreateQueue ( const SphQueueSettings_t & tQueue, const CSphQuery & tQuery,
+		CSphString & sError, SphQueueRes_t & tRes, StrVec_t * pExtra );
+
+void sphCreateMultiQueue ( const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries,
+		VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes,
+		VecTraits_T<StrVec_t> & dExtras );
 
 /// convert queue to sorted array, and add its entries to result's matches array
 int					sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag );

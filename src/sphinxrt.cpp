@@ -4071,6 +4071,7 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 		if ( uVersion>=15 && m_tSchema.HasStoredFields() )
 		{
 			pSeg->m_pDocstore = CreateDocstoreRT();
+			SetupDocstoreFields ( *pSeg->m_pDocstore.Ptr(), m_tSchema );
 			assert ( pSeg->m_pDocstore.Ptr() );
 			if ( !pSeg->m_pDocstore->Load ( rdChunk, m_sLastError ) )
 				return false;

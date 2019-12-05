@@ -1140,8 +1140,10 @@ namespace sph {
 // workaround missing "is_trivially_copyable" in g++ < 5.0
 #if defined (__GNUG__) && (__GNUC__ < 5) && !defined (__clang__)
 #define IS_TRIVIALLY_COPYABLE(T) __has_trivial_copy(T)
+#define IS_TRIVIALLY_DEFAULT_CONSTRUCTIBLE( T ) std::has_trivial_default_constructor<T>::value
 #else
 #define IS_TRIVIALLY_COPYABLE( T ) std::is_trivially_copyable<T>::value
+#define IS_TRIVIALLY_DEFAULT_CONSTRUCTIBLE( T ) std::is_trivially_default_constructible<T>::value
 #endif
 
 /// Default backend - uses plain old new/delete
@@ -1158,7 +1160,9 @@ protected:
 	{
 		delete[] pData;
 	}
-	static inline void DataIsNotOwned() {}
+
+	static const bool is_constructed = true;
+	static const bool is_owned = false;
 };
 
 /// Static backend: small blobs stored localy,
@@ -1187,11 +1191,33 @@ protected:
 			delete[] pData;
 	}
 
-	// DataIsNotOwned is not defined here, so swap/leakdata will not compile.
-	//static inline void DataIsNotOwned () {}
+	static const bool is_constructed = true;
+	static const bool is_owned = true;
 
 private:
 	T m_dData[iSTATICSIZE];
+};
+
+/// optional backend - allocates space but *not* calls ctrs and dtrs
+/// bigger came to plain old new/delete
+template < typename T >
+class RawStorage_T
+{
+	using StorageType = typename std::aligned_storage<sizeof ( T ), alignof ( T )>::type;
+protected:
+	inline static T * Allocate ( int iLimit )
+	{
+		return ( T * )new StorageType[iLimit];
+	}
+
+	inline static void Deallocate ( T * pData )
+	{
+		delete[] reinterpret_cast<StorageType*> (pData);
+	}
+
+	//static const bool is_constructed = IS_TRIVIALLY_COPYABLE( T );
+	static const bool is_constructed = IS_TRIVIALLY_DEFAULT_CONSTRUCTIBLE ( T );
+	static const bool is_owned = false;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1381,6 +1407,7 @@ public:
 	/// dtor
 	~Vector_T ()
 	{
+		destroy_at ( 0, m_iCount );
 		STORE::Deallocate ( m_pData );
 	}
 
@@ -1389,24 +1416,35 @@ public:
 	{
 		if ( m_iCount>=m_iLimit )
 			Reserve ( 1 + m_iCount );
+		construct_at ( m_iCount, 1 );
 		return m_pData[m_iCount++];
 	}
 
 	/// add entry
-	void Add ( const T & tValue )
+	template<typename S=STORE>
+	typename std::enable_if<S::is_constructed>::type Add ( T tValue )
 	{
 		assert ( ( &tValue<m_pData || &tValue>=( m_pData + m_iCount ) ) && "inserting own value (like last()) by ref!" );
 		if ( m_iCount>=m_iLimit )
 			Reserve ( 1 + m_iCount );
-		m_pData[m_iCount++] = tValue;
+		m_pData[m_iCount++] = std::forward<T> ( tValue );
 	}
 
-	void Add ( T&& tValue )
+	template<typename S=STORE>
+	typename std::enable_if<!S::is_constructed>::type Add ( T tValue )
 	{
-		assert ( ( &tValue<m_pData || &tValue>=( m_pData + m_iCount ) ) && "inserting own value (like last()) by ref!" );
+		assert (( &tValue<m_pData || &tValue>=( m_pData+m_iCount )) && "inserting own value (like last()) by ref!" );
 		if ( m_iCount>=m_iLimit )
-			Reserve ( 1 + m_iCount );
-		m_pData[m_iCount++] = std::move ( tValue );
+			Reserve ( 1+m_iCount );
+		new ( m_pData+m_iCount++ ) T ( std::forward<T> ( tValue ));
+	}
+
+	template<typename S=STORE, class... Args>
+	typename std::enable_if<!S::is_constructed>::type
+	Emplace_back ( Args && ... args )
+	{
+		assert ( m_iCount<=m_iLimit );
+		new ( m_pData+m_iCount++ ) T ( std::forward<Args> ( args )... );
 	}
 
 	/// add N more entries, and return a pointer to that buffer
@@ -1414,6 +1452,7 @@ public:
 	{
 		if ( m_iCount + iCount>m_iLimit )
 			Reserve ( m_iCount + iCount );
+		construct_at ( m_iCount, iCount );
 		m_iCount += iCount;
 		return m_pData + m_iCount - iCount;
 	}
@@ -1454,6 +1493,7 @@ public:
 		m_iCount -= iCount;
 		if ( m_iCount>iIndex )
 			POLICY::Move ( m_pData + iIndex, m_pData + iIndex + iCount, m_iCount - iIndex );
+		destroy_at ( m_iCount, iCount );
 	}
 
 	/// remove element by index, swapping it with the tail
@@ -1462,6 +1502,7 @@ public:
 		assert ( iIndex>=0 && iIndex<m_iCount );
 		if ( iIndex!=--m_iCount )
 			Swap ( m_pData[iIndex], m_pData[m_iCount] ); // fixme! What about POLICY::CopyOrSwap here?
+		destroy_at ( m_iCount, 1 );
 	}
 
 	/// remove element by value (warning, linear O(n) search)
@@ -1487,11 +1528,22 @@ public:
 		return true;
 	}
 
-	/// pop last value
-	T & Pop ()
+	/// pop last value by ref (for constructed storage)
+	template<typename S=STORE> typename std::enable_if<S::is_constructed, T&>::type
+	Pop ()
 	{
 		assert ( m_iCount>0 );
 		return m_pData[--m_iCount];
+	}
+
+	/// pop last value
+	template<typename S=STORE> typename std::enable_if<!S::is_constructed, T>::type
+	Pop ()
+	{
+		assert ( m_iCount>0 );
+		auto res = m_pData[--m_iCount];
+		destroy_at(m_iCount);
+		return res;
 	}
 
 public:
@@ -1522,6 +1574,31 @@ public:
 		STORE::Deallocate ( pNew );
 	}
 
+	/// for non-copyable types - work like Reset() + Reserve()
+	/// destroys previous dataset, allocate new one and set size to 0.
+	template<typename S=STORE> typename std::enable_if<!S::is_constructed>::type
+	Reserve_static ( int iNewLimit )
+	{
+		// check that we really need to be called
+		destroy_at ( 0, m_iCount );
+		m_iCount = 0;
+
+		if ( iNewLimit==m_iLimit )
+			return;
+
+		m_iLimit = iNewLimit;
+
+		// realloc
+		T * pNew = nullptr;
+		pNew = STORE::Allocate ( m_iLimit );
+		if ( pNew==m_pData )
+			return;
+
+		__analysis_assume ( m_iCount<=m_iLimit );
+		Swap ( pNew, m_pData );
+		STORE::Deallocate ( pNew );
+	}
+
 	/// ensure we have space for iGap more items (reserve more if necessary)
 	inline void ReserveGap ( int iGap )
 	{
@@ -1529,25 +1606,49 @@ public:
 	}
 
 	/// resize
-	void Resize ( int iNewLength )
+	template<typename S=STORE>
+	typename std::enable_if<S::is_constructed>::type Resize ( int iNewLength )
 	{
 		assert ( iNewLength>=0 );
-		if ( ( unsigned int ) iNewLength>( unsigned int ) m_iCount )
+		if ((unsigned int) iNewLength>(unsigned int) m_iCount )
 			Reserve ( iNewLength );
+		m_iCount = iNewLength;
+	}
+
+	/// for non-constructed imply destroy when shrinking, of construct when widening
+	template<typename S=STORE>
+	typename std::enable_if<!S::is_constructed>::type Resize ( int iNewLength )
+	{
+		assert ( iNewLength>=0 );
+		if ((unsigned int) iNewLength<(unsigned int) m_iCount )
+			destroy_at ( iNewLength, m_iCount-iNewLength );
+		else {
+			Reserve ( iNewLength );
+			construct_at ( m_iCount, iNewLength-m_iCount );
+		}
+		m_iCount = iNewLength;
+	}
+
+	// doesn't need default c-tr
+	void Shrink ( int iNewLength )
+	{
+		assert ( iNewLength<=m_iCount );
+		destroy_at ( iNewLength, m_iCount-iNewLength );
 		m_iCount = iNewLength;
 	}
 
 	/// reset
 	void Reset ()
 	{
+		Shrink ( 0 );
 		STORE::Deallocate ( m_pData );
 		m_pData = nullptr;
-		m_iCount = 0;
 		m_iLimit = 0;
 	}
 
 	/// Set whole vec to 0. For trivially copyable memset will be used
-	void ZeroVec ()
+	template<typename S=STORE> typename std::enable_if<S::is_constructed>::type
+	ZeroVec ()
 	{
 		POLICY::Zero ( m_pData, m_iLimit );
 	}
@@ -1583,7 +1684,7 @@ public:
 
 		Sort ();
 		int iLeft = sphUniq ( m_pData, m_iCount );
-		Resize ( iLeft );
+		Shrink ( iLeft );
 	}
 
 	/// copy + move
@@ -1609,7 +1710,8 @@ public:
 
 	/// append another vec to the end
 	/// will use memmove (POD case), or one-by-one copying.
-	void Append ( const VecTraits_T<T> &rhs )
+	template<typename S=STORE>
+	typename std::enable_if<S::is_constructed>::type Append ( const VecTraits_T<T> &rhs )
 	{
 		if ( rhs.IsEmpty () )
 			return;
@@ -1618,29 +1720,47 @@ public:
 		POLICY::Copy ( pDst, rhs.begin(), rhs.GetLength() );
 	}
 
-	/// swap
-	template < typename L=LIMIT >
-	void SwapData ( Vector_T<T, POLICY, L, STORE> &rhs ) noexcept
+	/// append another vec to the end for non-constructed
+	/// will construct in-place with copy c-tr
+	template<typename S=STORE>
+	typename std::enable_if<!S::is_constructed>::type Append ( const VecTraits_T<T> &rhs )
 	{
-		STORE::DataIsNotOwned ();
+		if ( rhs.IsEmpty () )
+			return;
+
+		auto iRhsLen = rhs.GetLength();
+		if ( m_iCount+iRhsLen>m_iLimit )
+			Reserve ( m_iCount+iRhsLen );
+		for ( int i=0; i<iRhsLen; ++i)
+			new ( m_pData+m_iCount+i ) T ( rhs[i] );
+
+		m_iCount += iRhsLen;
+	}
+
+	/// swap
+	template<typename L=LIMIT, typename S=STORE> typename std::enable_if<!S::is_owned>::type
+	SwapData ( Vector_T<T, POLICY, L, STORE> &rhs ) noexcept
+	{
 		Swap ( m_iCount, rhs.m_iCount );
 		Swap ( m_iLimit, rhs.m_iLimit );
 		Swap ( m_pData, rhs.m_pData );
 	}
 
 	/// leak
-	T * LeakData ()
+	template<typename S=STORE> typename std::enable_if<!S::is_owned, T*>::type
+	LeakData ()
 	{
-		STORE::DataIsNotOwned ();
 		T * pData = m_pData;
-		m_pData = NULL;
+		m_pData = nullptr;
 		Reset();
 		return pData;
 	}
 
 	/// adopt external buffer
 	/// note that caller must himself then nullify origin pData to avoid double-deletion
-	void AdoptData ( T * pData, int64_t iLen, int64_t iLimit )
+	template<typename S=STORE>
+	typename std::enable_if<!S::is_owned>::type
+	AdoptData ( T * pData, int64_t iLen, int64_t iLimit )
 	{
 		assert ( iLen>=0 );
 		assert ( iLimit>=0 );
@@ -1682,6 +1802,27 @@ public:
 
 protected:
 	int64_t		m_iLimit = 0;		///< entries allocated
+
+	template<typename S=STORE>
+	typename std::enable_if<S::is_constructed>::type destroy_at ( int, int ) {}
+
+	template<typename S=STORE>
+	typename std::enable_if<S::is_constructed>::type construct_at ( int, int ) {}
+
+	template<typename S=STORE>
+	typename std::enable_if<!S::is_constructed>::type destroy_at ( int iIndex, int iCount )
+	{
+		for ( auto i = 0; i<iCount; ++i )
+			m_pData[iIndex+i].~T ();
+	}
+
+	template<typename S=STORE>
+	typename std::enable_if<!S::is_constructed>::type construct_at ( int iIndex, int iCount )
+	{
+		assert ( m_pData );
+		for ( auto i = 0; i<iCount; ++i )
+			new ( m_pData+iIndex+i ) T();
+	}
 };
 
 } // namespace sph
@@ -1760,9 +1901,9 @@ public:
 		POLICY::Copy ( m_pData, dOrigin.begin(), dOrigin.GetLength() );
 	}
 
-	T * LeakData ()
+	template<typename S=STORE> typename std::enable_if<!S::is_owned, T*>::type
+	LeakData ()
 	{
-		STORE::DataIsNotOwned ();
 		T * pData = m_pData;
 		m_pData = nullptr;
 		Reset ( 0 );
@@ -1770,17 +1911,17 @@ public:
 	}
 
 	/// swap
-	void SwapData ( CSphFixedVector<T> & rhs ) noexcept
+	template<typename S=STORE> typename std::enable_if<!S::is_owned>::type
+	SwapData ( CSphFixedVector<T> & rhs ) noexcept
 	{
-		STORE::DataIsNotOwned ();
 		Swap ( m_pData, rhs.m_pData );
 		Swap ( m_iCount, rhs.m_iCount );
 	}
 
-	void Set ( T * pData, int iSize )
+	template<typename S=STORE>
+	typename std::enable_if<S::is_constructed && !S::is_owned>::type
+	Set ( T * pData, int iSize )
 	{
-		STORE::DataIsNotOwned ();
-		STORE::Deallocate ( m_pData );
 		m_pData = pData;
 		m_iCount = iSize;
 	}

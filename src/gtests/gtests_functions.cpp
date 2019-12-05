@@ -2764,11 +2764,174 @@ TEST ( functions, path )
 	ASSERT_STREQ ( sFile14.cstr(), "pq2" );
 }
 
-TEST ( fnctions, IsTriviallyCopyable )
+TEST ( functions, IsTriviallyCopyable )
 {
 	EXPECT_TRUE ( IS_TRIVIALLY_COPYABLE ( DWORD ) ) << "DWORD";
 	EXPECT_TRUE ( IS_TRIVIALLY_COPYABLE ( DWORD[] ) ) << "DWORD[]";
 	ASSERT_TRUE ( IS_TRIVIALLY_COPYABLE ( DWORD* ) ) << "DWORD*";
 	ASSERT_FALSE ( IS_TRIVIALLY_COPYABLE ( CSphFixedVector<DWORD> ) ) << "CSphFixedVector<DWORD>";
 	ASSERT_FALSE ( IS_TRIVIALLY_COPYABLE ( CSphString )) << "CSphString";
+}
+
+int iCountCtr = 0;
+int iCountDtr = 0;
+
+struct NonDefaultCtr_t
+{
+	int& m_iFoo; // this effectively disables default c-tr
+	int m_iNum;
+	NonDefaultCtr_t ( int & iFoo, int iNum=0 ) : m_iFoo ( iFoo ), m_iNum ( iNum )
+	{
+		++iCountCtr;
+	}
+
+	~NonDefaultCtr_t ()
+	{
+		++iCountDtr;
+	}
+};
+
+template<typename T>
+using RawVector_T = sph::Vector_T<T, sph::SwapCopy_T<T>, sph::DefaultRelimit, sph::RawStorage_T<T>>;
+
+TEST ( functions, RawVector )
+{
+	iCountCtr = iCountDtr = 0;
+	RawVector_T<NonDefaultCtr_t> testv;
+	ASSERT_EQ ( iCountCtr, 0 );
+	ASSERT_EQ ( iCountDtr, 0 );
+
+	EXPECT_FALSE ( IS_TRIVIALLY_DEFAULT_CONSTRUCTIBLE ( NonDefaultCtr_t )) << "NonDefaultCtr_t";
+
+	// testv.Reserve (100); //< will not compile since Reserve() may reallocate which needs copy ctr
+
+	testv.Reserve_static ( 1000 );
+	ASSERT_EQ ( iCountCtr, 0 ) << "nothing constructed";
+	ASSERT_EQ ( iCountDtr, 0 ) << "nothing destructed";
+
+	int foo;
+	for ( int i=0; i<100; ++i )
+		testv.Emplace_back(foo,i);
+	ASSERT_EQ ( iCountCtr, 100 );
+	ASSERT_EQ ( iCountDtr, 0 ) << "nothing destructed";
+
+	// testv.Resize(500); //< will not compile, since Resize() may imply Reserve
+
+	// Shrink down to 10 elems. It implies that 90 elems will be destructed, and nothing new added
+	testv.Shrink ( 10 );
+	ASSERT_EQ ( iCountCtr, 100 );
+	ASSERT_EQ ( iCountDtr, 90 );
+	ASSERT_EQ ( testv.GetLength(), 10);
+	for ( auto& elem : testv )
+		ASSERT_EQ ( &elem.m_iFoo, &foo );
+
+	// add 10 another elems. It implies that 10 new will be constructed, nothing deleted
+	int bar;
+	for ( int i = 0; i<10; ++i )
+		testv.Emplace_back ( bar, i );
+	ASSERT_EQ ( iCountCtr, 110 );
+	ASSERT_EQ ( iCountDtr, 90 );
+
+	// ensure that 1-st 10 elemst refers to foo, second 10 - to bar
+	for ( int i = 0; i<10; ++i )
+		ASSERT_EQ ( &testv[i].m_iFoo, &foo );
+	for ( int i = 10; i<20; ++i )
+		ASSERT_EQ ( &testv[i].m_iFoo, &bar );
+}
+
+int iCountMoving = 0;
+
+struct TrivialStructure_t
+{
+	int m_iNum = -1;
+
+	TrivialStructure_t ( int iNum = -1 ) : m_iNum ( iNum )
+	{
+		++iCountCtr;
+	}
+
+	TrivialStructure_t ( const TrivialStructure_t& ) = default;
+	TrivialStructure_t ( TrivialStructure_t && rhs ) noexcept { ++iCountMoving; Swap ( rhs ); }
+	TrivialStructure_t & operator= ( TrivialStructure_t rhs ) noexcept { Swap(rhs); return *this;  }
+
+	void Swap ( TrivialStructure_t & rhs ) noexcept
+	{
+		::Swap ( m_iNum, rhs.m_iNum );
+	}
+
+	~TrivialStructure_t ()
+	{
+		++iCountDtr;
+	}
+};
+
+template<typename T>
+using RawTrivialVector_T = sph::Vector_T<T, sph::DefaultCopy_T<T>, sph::DefaultRelimit, sph::RawStorage_T<T>>;
+
+TEST ( functions, RawTrivialVector )
+{
+	EXPECT_FALSE ( IS_TRIVIALLY_DEFAULT_CONSTRUCTIBLE ( TrivialStructure_t )) << "TrivialStructure_t";
+
+	iCountCtr = iCountDtr = 0;
+	RawTrivialVector_T<TrivialStructure_t> testv;
+	ASSERT_EQ ( iCountCtr, 0 );
+	ASSERT_EQ ( iCountDtr, 0 );
+
+	// reserve of empty - relocates nothing
+	testv.Reserve ( 100 );
+	ASSERT_EQ ( iCountCtr, 0 ) << "nothing constructed";
+	ASSERT_EQ ( iCountDtr, 0 ) << "nothing destructed";
+
+	// static reserve of empty - destroys/create nothing
+	testv.Reserve_static ( 1000 );
+	ASSERT_EQ ( iCountCtr, 0 ) << "nothing constructed";
+	ASSERT_EQ ( iCountDtr, 0 ) << "nothing destructed";
+
+	// explicitly construct 100 elems
+	for ( int i=0; i<100; ++i )
+		testv.Emplace_back(55);
+	ASSERT_EQ ( iCountCtr, 100 );
+	ASSERT_EQ ( iCountDtr, 0 ) << "nothing destructed";
+
+	// resize to add 100 more elems and expect they just default c-tred
+	testv.Resize(200);
+	ASSERT_EQ ( iCountMoving, 0 );
+	ASSERT_EQ ( iCountCtr, 200 );
+	ASSERT_EQ ( iCountDtr, 0 );
+
+	// check that 1-st 100 elems are c-tred, and another are default c-tred
+	for ( int i = 0; i<100; ++i )
+		ASSERT_EQ ( testv[i].m_iNum, 55 );
+	for ( int i = 100; i<200; ++i )
+		ASSERT_EQ ( testv[i].m_iNum, -1 );
+
+	// Shrink down to 10 elems. It implies that 190 elems will be destructed, and nothing new added
+	testv.Shrink ( 10 );
+	ASSERT_EQ ( iCountCtr, 200 );
+	ASSERT_EQ ( iCountDtr, 190 );
+	ASSERT_EQ ( testv.GetLength(), 10);
+
+	// add 10 another elems. It implies that 10 new will be constructed, nothing deleted
+	for ( int i = 0; i<10; ++i )
+		testv.Emplace_back ( i );
+	ASSERT_EQ ( iCountCtr, 210 );
+	ASSERT_EQ ( iCountDtr, 190 );
+	ASSERT_EQ ( iCountMoving, 0 );
+
+	/* RemoveFast.
+	 * Swap inside implies triple move/destruct:
+	 * 	T temp = std::move ( v1 ); // 1-st move
+	 *	v1 = std::move ( v2 ); // destruct of v1, then 2-nd move
+	 *  v2 = std::move ( temp ); // destruct of v2, then 3-rd move
+	 *  } // destruct of temp
+	 *
+	 *  Then removing last elem implies 4-th destruct. Totally: 3 moving, 4 destructs
+	 *  (usual vec in preallocated storage will have 3/3 here since removing doesn't destroy objects.)
+	 */
+	iCountCtr = iCountDtr = 0;
+	testv.RemoveFast(1);
+	ASSERT_EQ ( iCountCtr, 0 );
+	ASSERT_EQ ( iCountDtr, 4 );
+	ASSERT_EQ ( iCountMoving, 3 );
+
 }

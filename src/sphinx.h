@@ -90,32 +90,14 @@ STATIC_ASSERT ( ( 1 << ROWITEM_SHIFT )==ROWITEM_BITS, INVALID_ROWITEM_SHIFT );
 
 /////////////////////////////////////////////////////////////////////////////
 
-#ifdef BUILD_WITH_CMAKE
-	#include "gen_sphinxversion.h"
-#else
-	#include "sphinxversion.h"
-#endif
+// defined in sphinxversion.cpp in order to isolate from total rebuild on minor changes
+extern const char * szMANTICORE_VERSION;
+extern const char * szMANTICORE_NAME;
+extern const char * szMANTICORE_BANNER;
+extern const char * szGIT_COMMIT_ID;
+extern const char * szGIT_BRANCH_ID;
+extern const char * szGDB_SOURCE_DIR;
 
-#ifndef SPHINX_TAG
-#define BANNER_TAG "dev"
-#else
-#define BANNER_TAG SPHINX_TAG
-#endif
-
-#ifndef GIT_TIMESTAMP_ID
-#define GIT_TIMESTAMP_ID "000101"
-#endif
-
-// this line is deprecated and no more used. Leaved here for a while.
-// numbers now to be defined via sphinxversion.h
-#ifndef VERNUMBERS
-	#define VERNUMBERS    "7.7.7"
-#endif
-
-#define SPHINX_VERSION          VERNUMBERS " " SPH_GIT_COMMIT_ID "@" GIT_TIMESTAMP_ID " " BANNER_TAG
-#define SPHINX_BANNER			"Manticore " SPHINX_VERSION "\nCopyright (c) 2001-2016, Andrew Aksyonoff\n" \
-	"Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)\n" \
-	"Copyright (c) 2017-2019, Manticore Software LTD (http://manticoresearch.com)\n\n"
 #define SPHINX_SEARCHD_PROTO	1
 #define SPHINX_CLIENT_VERSION	1
 

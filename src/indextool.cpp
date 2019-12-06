@@ -1001,7 +1001,7 @@ void ApplyKilllists ( CSphConfig & hConf )
 
 static void ShowVersion ()
 {
-	fprintf ( stdout, SPHINX_BANNER );
+	fprintf ( stdout, "%s", szMANTICORE_BANNER );
 }
 
 static void ShowHelp ()
@@ -1201,7 +1201,7 @@ int main ( int argc, char ** argv )
 	}
 
 	if ( !bQuiet )
-		fprintf ( stdout, SPHINX_BANNER );
+		fprintf ( stdout, "%s", szMANTICORE_BANNER );
 
 	if ( i!=argc )
 	{

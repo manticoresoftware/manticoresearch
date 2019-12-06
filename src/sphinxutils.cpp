@@ -3174,17 +3174,17 @@ bool sphDumpGdb (int iFD, const char* sName, const char* sPid )
 		return false;
 
 	// master branch is mirrored on github, so could generate more info here.
-	if ( strncmp ( GIT_BRANCH_ID, "git branch master", 17 ) == 0 ) {
-		sphSafeInfo ( iFD,
-			"You can obtain the sources of this version from https://github.com/manticoresoftware/manticoresearch/archive/" SPH_GIT_COMMIT_ID ".zip\n"
+	if ( strncmp ( szGIT_BRANCH_ID, "git branch master", 17 ) == 0 ) {
+		sphSafeInfo ( iFD, "You can obtain the sources of this version from https://github.com/manticoresoftware/manticoresearch/archive/%s.zip\n"
 			"and set up debug env with this shippet (select wget or curl version below):\n\n"
-   "  wget https://codeload.github.com/manticoresoftware/manticoresearch/zip/" SPH_GIT_COMMIT_ID " -O manticore.zip\n"
-   "  curl https://codeload.github.com/manticoresoftware/manticoresearch/zip/" SPH_GIT_COMMIT_ID " -o manticore.zip");
+   "  wget https://codeload.github.com/manticoresoftware/manticoresearch/zip/%s -O manticore.zip\n"
+   "  curl https://codeload.github.com/manticoresoftware/manticoresearch/zip/%s -o manticore.zip",
+   	szGIT_COMMIT_ID, szGIT_COMMIT_ID, szGIT_COMMIT_ID );
 	sphSafeInfo ( iFD,
 	  "\nUnpack the sources by command:\n"
 	  "  mkdir -p /tmp/manticore && unzip manticore.zip -d /tmp/manticore\n\n"
 	  "For comfortable debug also suggest to append a substitution def to your ~/.gdbinit file:\n"
-	  "  set substitute-path \"" GDB_SOURCE_DIR "\" /tmp/manticore/manticoresearch-" SPH_GIT_COMMIT_ID );
+	  "  set substitute-path \"%s\" /tmp/manticore/manticoresearch-%s", szGDB_SOURCE_DIR, szGIT_COMMIT_ID );
 	}
 	return true;
 #else

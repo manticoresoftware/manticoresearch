@@ -2443,7 +2443,7 @@ static bool Convert ( const CSphString & sName, const CSphString & sPath, IndexT
 
 static void ShowVersion ()
 {
-	fprintf ( stdout, SPHINX_BANNER );
+	fprintf ( stdout, "%s", szMANTICORE_BANNER );
 }
 
 static void ShowHelp ()

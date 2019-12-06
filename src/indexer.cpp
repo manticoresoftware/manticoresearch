@@ -1419,7 +1419,7 @@ extern int64_t g_iIndexerPoolStartHit;
 void sigsegv ( int sig )
 {
 	sphSafeInfo ( STDERR_FILENO, "*** Oops, indexer crashed! Please send the following report to developers." );
-	sphSafeInfo ( STDERR_FILENO, "Manticore " SPHINX_VERSION );
+	sphSafeInfo ( STDERR_FILENO, szMANTICORE_NAME );
 	sphSafeInfo ( STDERR_FILENO, "-------------- report begins here ---------------" );
 	sphSafeInfo ( STDERR_FILENO, "Current document: docid=%l, hits=%l", g_iIndexerCurrentDocID, g_iIndexerCurrentHits );
 	sphSafeInfo ( STDERR_FILENO, "Current batch: minid=%l, maxid=%l", g_iIndexerCurrentRangeMin, g_iIndexerCurrentRangeMax );
@@ -1462,13 +1462,14 @@ LONG WINAPI sigsegv ( EXCEPTION_POINTERS * pExc )
 {
 	const char * sFail1 = "*** Oops, indexer crashed! Please send ";
 	const char * sFail2 = " minidump file to developers.\n";
-	const char * sFailVer = "Manticore " SPHINX_VERSION "\n";
+	const char * sFailVer = szMANTICORE_NAME;
 
 	sphBacktrace ( pExc, g_sMinidump );
 	::write ( STDERR_FILENO, sFail1, strlen(sFail1) );
 	::write ( STDERR_FILENO, g_sMinidump, strlen(g_sMinidump) );
 	::write ( STDERR_FILENO, sFail2, strlen(sFail2) );
 	::write ( STDERR_FILENO, sFailVer, strlen(sFailVer) );
+	::write ( STDERR_FILENO, "\n", 1);
 
 	CRASH_EXIT;
 }
@@ -1580,7 +1581,7 @@ bool SendRotate ( const CSphConfig & hConf, bool bForce )
 
 static void ShowVersion ()
 {
-	fprintf ( stdout, SPHINX_BANNER );
+	fprintf ( stdout, "%s", szMANTICORE_BANNER );
 }
 
 static void ShowHelp ()

@@ -34,7 +34,7 @@ static void HttpBuildReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, con
 
 	const char * sContent = ( bHtml ? "text/html" : "application/json" );
 	CSphString sHttp;
-	sHttp.SetSprintf ( "HTTP/1.1 %s\r\nServer: %s\r\nContent-Type: %s; charset=UTF-8\r\nContent-Length:%d\r\n\r\n", g_dHttpStatus[eCode], SPHINX_VERSION, sContent, iBodyLen );
+	sHttp.SetSprintf ( "HTTP/1.1 %s\r\nServer: %s\r\nContent-Type: %s; charset=UTF-8\r\nContent-Length:%d\r\n\r\n", g_dHttpStatus[eCode], szMANTICORE_VERSION, sContent, iBodyLen );
 
 	int iHeaderLen = sHttp.Length();
 	dData.Resize ( iHeaderLen + iBodyLen );
@@ -287,7 +287,7 @@ R"index(<!DOCTYPE html>
 static void HttpHandlerIndexPage ( CSphVector<BYTE> & dData )
 {
 	StringBuilder_c sIndexPage;
-	sIndexPage.Appendf ( g_sIndexPage, SPHINX_VERSION );
+	sIndexPage.Appendf ( g_sIndexPage, szMANTICORE_VERSION );
 	HttpBuildReply ( dData, SPH_HTTP_STATUS_200, sIndexPage.cstr(), sIndexPage.GetLength(), true );
 }
 

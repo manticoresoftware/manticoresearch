@@ -187,7 +187,7 @@ const int	MAX_RETRY_DELAY		= 1000;
 int						g_iAgentRetryCount = 0;
 int						g_iAgentRetryDelay = MAX_RETRY_DELAY/2;	// global (default) values. May be override by the query options 'retry_count' and 'retry_timeout'
 bool					g_bHostnameLookup = false;
-CSphString				g_sMySQLVersion = SPHINX_VERSION;
+CSphString				g_sMySQLVersion = szMANTICORE_VERSION;
 
 // for CLang thread-safety analysis
 ThreadRole MainThread; // functions which called only from main thread
@@ -1081,7 +1081,7 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 		sphWrite ( g_iLogFile, tQuery.m_pIndex, tQuery.m_iIndexLen );
 	sphWrite ( g_iLogFile, g_sEndLine, sizeof (g_sEndLine)-1 );
 
-	sphSafeInfo ( g_iLogFile, "Manticore " SPHINX_VERSION );
+	sphSafeInfo ( g_iLogFile, szMANTICORE_NAME );
 
 #if USE_WINDOWS
 	// mini-dump reference
@@ -9519,7 +9519,7 @@ void BuildStatus ( VectorLike & dStatus )
 	if ( dStatus.MatchAdd ( "maxed_out" ) )
 		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iMaxedOut );
 	if ( dStatus.MatchAdd ( "version" ) )
-		dStatus.Add().SetSprintf ( "%s", SPHINX_VERSION );
+		dStatus.Add().SetSprintf ( "%s", szMANTICORE_VERSION );
 	if ( dStatus.MatchAdd ( "mysql_version" ) )
 		dStatus.Add().SetSprintf ( "%s", g_sMySQLVersion.cstr() );
 	if ( dStatus.MatchAdd ( "command_search" ) )
@@ -19079,7 +19079,7 @@ void ServiceInstall ( int argc, char ** argv )
 	}
 
 	CSphString sDesc;
-	sDesc.SetSprintf ( "%s-%s", g_sServiceName, SPHINX_VERSION );
+	sDesc.SetSprintf ( "%s-%s", g_sServiceName, szMANTICORE_VERSION );
 
 	SERVICE_DESCRIPTION tDesc;
 	tDesc.lpDescription = (LPSTR) sDesc.cstr();
@@ -22238,14 +22238,14 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		"\x6d\x79\x73\x71\x6c\x5f\x6e\x61\x74\x69\x76\x65\x5f\x70\x61\x73\x73\x77\x6f\x72\x64" // auth plugin name: mysql_native_password
 		"\x00";
 
-	g_sMySQLVersion = hSearchd.GetStr ( "mysql_version_string", SPHINX_VERSION );
+	g_sMySQLVersion = hSearchd.GetStr ( "mysql_version_string", szMANTICORE_VERSION );
 	int iLen = g_sMySQLVersion.Length();
 
 	g_iMysqlHandshake = sizeof(sHandshake1) + iLen + sizeof(sHandshake2) - 1;
 	if ( g_iMysqlHandshake>=(int)sizeof(g_sMysqlHandshake) )
 	{
-		sphWarning ( "mysql_version_string too long; using default (version=%s)", SPHINX_VERSION );
-		g_iMysqlHandshake = sizeof(sHandshake1) + strlen(SPHINX_VERSION) + sizeof(sHandshake2) - 1;
+		sphWarning ( "mysql_version_string too long; using default (version=%s)", szMANTICORE_VERSION );
+		g_iMysqlHandshake = sizeof(sHandshake1) + strlen(szMANTICORE_VERSION) + sizeof(sHandshake2) - 1;
 		assert ( g_iMysqlHandshake < (int)sizeof(g_sMysqlHandshake) );
 	}
 
@@ -22499,7 +22499,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	tzset();
 
 	if ( !g_bService )
-		fprintf ( stdout, SPHINX_BANNER );
+		fprintf ( stdout, "%s", szMANTICORE_BANNER );
 
 	const char* sEndian = sphCheckEndian();
 	if ( sEndian )

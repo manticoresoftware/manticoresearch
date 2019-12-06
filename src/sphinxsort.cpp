@@ -112,7 +112,7 @@ private:
 
 public:
 	/// ctor
-	CSphMatchQueueTraits ( int iSize )
+	explicit CSphMatchQueueTraits ( int iSize )
 		: m_iSize ( iSize )
 		, m_iDataLength ( iSize )
 	{

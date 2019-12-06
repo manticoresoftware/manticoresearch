@@ -2939,7 +2939,7 @@ struct CSphMatchComparatorState
 	/// check if any of my attrs are bitfields
 	bool UsesBitfields ()
 	{
-		for ( int i=0; i<MAX_ATTRS; i++ )
+		for ( int i=0; i<MAX_ATTRS; ++i )
 			if ( m_eKeypart[i]==SPH_KEYPART_INT && m_tLocator[i].IsBitfield() )
 				return true;
 		return false;
@@ -3003,10 +3003,10 @@ public:
 	virtual bool		IsGroupby () const = 0;
 
 	/// set match comparator state
-	virtual void		SetState ( const CSphMatchComparatorState & tState );
+	void		SetState ( const CSphMatchComparatorState & tState );
 
 	/// get match comparator stat
-	virtual CSphMatchComparatorState &	GetState() { return m_tState; }
+	const CSphMatchComparatorState &	GetState() const { return m_tState; }
 
 	/// set group comparator state
 	virtual void		SetGroupState ( const CSphMatchComparatorState & ) {}
@@ -3018,7 +3018,7 @@ public:
 	virtual void		SetSchema ( ISphSchema * pSchema, bool bRemapCmp );
 
 	/// get incoming schema
-	virtual const ISphSchema * GetSchema () const { return m_pSchema; }
+	const ISphSchema * GetSchema () const { return m_pSchema; }
 
 	/// base push
 	/// returns false if the entry was rejected as duplicate
@@ -3035,7 +3035,7 @@ public:
 	virtual int			GetDataLength () const = 0;
 
 	/// get total count of non-duplicates Push()ed through this queue
-	virtual int64_t		GetTotalCount () const { return m_iTotal; }
+	int64_t		GetTotalCount () const { return m_iTotal; }
 
 	/// process collected entries up to length count
 	virtual void		Finalize ( ISphMatchProcessor & tProcessor, bool bCallProcessInResultSetOrder ) = 0;

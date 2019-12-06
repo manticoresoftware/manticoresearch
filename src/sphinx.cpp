@@ -13562,7 +13562,7 @@ SphWordID_t CSphDictExact::GetWordID ( BYTE * pWord )
 
 void CSphMatchComparatorState::FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema, bool bRemapKeyparts )
 {
-	for ( int i = 0; i < CSphMatchComparatorState::MAX_ATTRS; i++ )
+	for ( int i = 0; i < CSphMatchComparatorState::MAX_ATTRS; ++i )
 	{
 		if ( m_eKeypart[i]==SPH_KEYPART_DOCID_S || m_eKeypart[i]==SPH_KEYPART_DOCID_D )
 		{
@@ -13817,35 +13817,34 @@ struct ContextExtra : public ISphExtra
 
 	virtual bool ExtraDataImpl ( ExtraData_e eData, void ** ppArg )
 	{
-		if ( eData==EXTRA_GET_QUEUE_WORST || eData==EXTRA_GET_QUEUE_SORTVAL )
+		if ( eData!=EXTRA_GET_QUEUE_WORST && eData!=EXTRA_GET_QUEUE_SORTVAL )
+			return m_pRanker->ExtraData ( eData, ppArg );
+
+		if ( !m_pSorter )
+			return false;
+
+		const CSphMatch * pWorst = m_pSorter->GetWorst();
+		if ( !pWorst )
+			return false;
+
+		if ( eData==EXTRA_GET_QUEUE_WORST )
 		{
-			if ( !m_pSorter )
-				return false;
-			const CSphMatch * pWorst = m_pSorter->GetWorst();
-			if ( !pWorst )
-				return false;
-			if ( eData==EXTRA_GET_QUEUE_WORST )
-			{
-				*ppArg = (void*)pWorst;
-				return true;
-			} else
-			{
-				assert ( eData==EXTRA_GET_QUEUE_SORTVAL );
-				const CSphMatchComparatorState & tCmp = m_pSorter->GetState();
-				if ( tCmp.m_eKeypart[0]==SPH_KEYPART_FLOAT && tCmp.m_tLocator[0].m_bDynamic
-					&& tCmp.m_tLocator[0].m_iBitCount==32 && ( tCmp.m_tLocator[0].m_iBitOffset%32==0 )
-					&& tCmp.m_eKeypart[1]==SPH_KEYPART_ROWID && tCmp.m_dAttrs[1]==-1 )
-				{
-					*(int*)ppArg = tCmp.m_tLocator[0].m_iBitOffset/32;
-					return true;
-				} else
-				{
-					// min_top_sortval() only works with order by float_expr for now
-					return false;
-				}
-			}
+			*ppArg = (void*)pWorst;
+			return true;
+		};
+
+		assert ( eData==EXTRA_GET_QUEUE_SORTVAL );
+		const CSphMatchComparatorState & tCmp = m_pSorter->GetState();
+		if ( tCmp.m_eKeypart[0]==SPH_KEYPART_FLOAT && tCmp.m_tLocator[0].m_bDynamic
+			&& tCmp.m_tLocator[0].m_iBitCount==32 && ( tCmp.m_tLocator[0].m_iBitOffset%32==0 )
+			&& tCmp.m_eKeypart[1]==SPH_KEYPART_ROWID && tCmp.m_dAttrs[1]==-1 )
+		{
+			*(int*)ppArg = tCmp.m_tLocator[0].m_iBitOffset/32;
+			return true;
 		}
-		return m_pRanker->ExtraData ( eData, ppArg );
+
+		// min_top_sortval() only works with order by float_expr for now
+		return false;
 	}
 };
 

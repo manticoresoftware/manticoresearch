@@ -1420,7 +1420,8 @@ ISphFilter * sphCreateFilter ( const CSphFilterSettings &tSettings, const Create
 		sError, sWarning, false, tCtx.m_eCollation);
 }
 
-ISphFilter * sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const CSphString & sAttrName, const ISphSchema & tSchema, CSphString & sError )
+ISphFilter * sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const CSphString & sAttrName,
+		const ISphSchema & tSchema, CSphString & sError )
 {
 	assert ( pSettings );
 	CSphString sWarning;

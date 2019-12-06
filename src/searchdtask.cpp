@@ -301,8 +301,7 @@ struct TaskWorker_t: public ListNode_t
 		for ( int i = 0; i<g_iTasks; ++i )
 		{
 			++iFlavour;
-			if ( iFlavour>=g_iTasks )
-				iFlavour = 0;
+			iFlavour %= g_iTasks;
 
 			// skip queues full of runners (and also non-mt, since they have 0 runners)
 			if ( g_TaskProps[iFlavour].m_iCurrentRunners>=g_Tasks[iFlavour].m_iMaxRunners )
@@ -310,20 +309,19 @@ struct TaskWorker_t: public ListNode_t
 
 			// look into the queue
 			auto& dProp = g_TaskProps[iFlavour];
-			{ // scope for QueueLock
-				ScopedMutex_t tTaskLock ( dProp.m_dQueueLock );
 
-				// this queue is ok, extract the task and return it.
-				if ( dProp.m_dQueue.GetLength ())
-				{
-					pLeaf = ( ListedData_t* ) dProp.m_dQueue.Begin ();
-					dProp.m_dQueue.Remove ( pLeaf );
-					break;
-				}
+			// scope for QueueLock
+			ScopedMutex_t tTaskLock ( dProp.m_dQueueLock );
+
+			// this queue is ok, extract the task and return it.
+			if ( dProp.m_dQueue.GetLength ())
+			{
+				pLeaf = ( ListedData_t* ) dProp.m_dQueue.Begin ();
+				dProp.m_dQueue.Remove ( pLeaf );
+				break;
 			}
 		}
 
-		// no queues to work (any reason - no tasks at all, or no tasks with free worker slots)
 		if ( pLeaf )
 		{
 			// round-robin flavours: next time we'll round from last success job kind.

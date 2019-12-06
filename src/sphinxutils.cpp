@@ -3787,19 +3787,17 @@ Warner_c& Warner_c::operator= ( Warner_c && rhs ) noexcept
 }
 
 
-bool Warner_c::Err ( const char * sFmt, ... )
+void Warner_c::Err ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
 	m_sErrors.vSprintf ( sFmt, ap );
 	va_end ( ap );
-	return false;
 }
 
-bool Warner_c::Err ( const CSphString &sMsg )
+void Warner_c::Err ( const CSphString &sMsg )
 {
 	m_sErrors << sMsg;
-	return false;
 }
 
 void Warner_c::Warn ( const char * sFmt, ... )

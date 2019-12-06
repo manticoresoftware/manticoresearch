@@ -462,8 +462,8 @@ public:
 
 	// append message as error.
 	// always return false (in order to simplify pattern {error='foo'; return false;})
-	bool Err ( const char * sFmt, ... );
-	bool Err ( const CSphString &sMsg );
+	void Err ( const char * sFmt, ... );
+	void Err ( const CSphString &sMsg );
 	StringBuilder_c& Err() { return m_sErrors; }
 	void Warn ( const char * sFmt, ... );
 	void Warn ( const CSphString &sMsg );

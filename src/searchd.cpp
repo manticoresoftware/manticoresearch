@@ -11128,9 +11128,15 @@ static bool ParseBsonDocument ( const VecTraits_T<BYTE>& dDoc, const SchemaItemH
 				case SPH_ATTR_JSON:
 					assert ( pItem->m_iStr!=-1 );
 					{
-						// just save bson blob
-						BYTE * pDst = tStrings.ReserveBlob ( dChild.StandaloneSize(), pItem->m_iStr );
-						dChild.BsonToBson ( pDst );
+						if ( dChild.IsAssoc() || dChild.IsArray() )
+						{
+							// just save bson blob
+							BYTE * pDst = tStrings.ReserveBlob ( dChild.StandaloneSize(), pItem->m_iStr );
+							dChild.BsonToBson ( pDst );
+						} else
+						{
+							sMsg.Warn ( "JSON item (%s) should be object or array, got=%s", sName.cstr(), JsonTypeName ( dChild.GetType() ) );
+						}
 					}
 					break;
 				case SPH_ATTR_STRING:
@@ -11156,15 +11162,16 @@ static bool ParseBsonDocument ( const VecTraits_T<BYTE>& dDoc, const SchemaItemH
 							dMva[pItem->m_iMva] = iOff;
 					} else
 					{
-						sMsg.Warn ( "MVA item should be array" );
+						sMsg.Warn ( "MVA item (%s) should be array, got %s", sName.cstr(), JsonTypeName ( dChild.GetType() ) );
 					}
 				default:
 					break;
 				}
 			}
-		}
-		else if ( !sIdAlias.IsEmpty() && sIdAlias==sName )
+		} else if ( !sIdAlias.IsEmpty() && sIdAlias==sName )
+		{
 			((CSphMatch &)tDoc).SetAttr ( tIdLoc, (DocID_t)dChild.Int() );
+		}
 	}
 	return true;
 }
@@ -11708,9 +11715,9 @@ static void PQLocalMatch ( const BlobVec_t &dDocs, const CSphString& sIndex, con
 
 		// PQ work with sequential document numbers, 0 element unused
 
-
 		// add document
-		pIndex->AddDocument ( dFields, tDoc, true, sTokenFilterOpts, dStrings.Begin (), dMva, sError, sWarning, pAccum );sMsg.Err ( sError );
+		pIndex->AddDocument ( dFields, tDoc, true, sTokenFilterOpts, dStrings.Begin (), dMva, sError, sWarning, pAccum );
+		sMsg.Err ( sError );
 		sMsg.Warn ( sWarning );
 
 		if ( !sMsg.ErrEmpty () )
@@ -11732,7 +11739,7 @@ static void PQLocalMatch ( const BlobVec_t &dDocs, const CSphString& sIndex, con
 }
 
 void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t & tOpts,
-	CSphSessionAccum & tAcc, CPqResult &tResult )
+	CSphSessionAccum & tAcc, CPqResult & tResult )
 {
 	CSphString sIndex = tOpts.m_sIndex;
 	CSphString sWarning, sError;

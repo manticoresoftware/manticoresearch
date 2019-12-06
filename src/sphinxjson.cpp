@@ -3289,3 +3289,15 @@ bool bson::cJsonToBsonLinear ( const cJSON * pNode, CSphVector<BYTE> &dData, Str
 	}
 }
 */
+
+const char * g_dTypeNames[JSON_TOTAL] = {
+	"EOF", "INT32", "INT64", "DOUBLE", "STRING",
+	"STRING_VECTOR", "INT32_VECTOR", "INT64_VECTOR", "DOUBLE_VECTOR", "MIXED_VECTOR",
+	"OBJECT", "BOOL", "BOOL", "NULL", "ROOT_OBJECT"
+};
+
+const char * JsonTypeName ( ESphJsonType eType )
+{
+	assert ( eType>=JSON_EOF && eType<JSON_TOTAL );
+	return g_dTypeNames[eType];
+}

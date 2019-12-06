@@ -288,6 +288,8 @@ uint64_t sphJsonPackTypeOffset ( ESphJsonType eType, uint64_t uOffset );
 /// internal cJSON init
 void sphInitCJson();
 
+const char * JsonTypeName ( ESphJsonType eType );
+
 struct cJSON;
 
 /// simple cJSON wrapper

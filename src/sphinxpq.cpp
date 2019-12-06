@@ -2515,7 +2515,7 @@ void MergePqResults ( const VecTraits_T<CPqResult *> &dChunks, CPqResult &dRes, 
 	{
 		auto dOldMsgs = std::move(dRes.m_dResult.m_sMessages);
 		dRes = std::move ( *dChunks[0] );
-		dRes.m_dResult.m_sMessages = std::move(dOldMsgs);
+		dRes.m_dResult.m_sMessages.AddStringsFrom ( dOldMsgs );
 		return;
 	}
 

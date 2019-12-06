@@ -4737,12 +4737,12 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 
 	if ( bAllEqual && bHaveLocals )
 	{
-		CSphScopedProfile ( pProfiler, SPH_QSTATE_EVAL_POST );
+		CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_EVAL_POST );
 		ComputePostlimit ( tQuery, bMaster, tRes );
 	}
 	if ( bMaster && !dRemotes.IsEmpty() )
 	{
-		CSphScopedProfile ( pProfiler, SPH_QSTATE_EVAL_POST );
+		CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_EVAL_POST );
 		RemotesGetField ( dRemotes, tQuery, tRes );
 	}
 

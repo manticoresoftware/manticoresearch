@@ -360,7 +360,7 @@ private:
 
 	bool		FetchFieldsFromDocstore ( DocstoreDoc_t & tFetchedDoc, DocID_t & tDocID ) const;
 	void		ParseFields ( ISphExpr * pExpr );
-	bool		ParseOptions ( const CSphVector<CSphNamedVariant> & dMap, CSphString & sError );
+	bool		ParseOptions ( const VecTraits_T<CSphNamedVariant> & dMap, CSphString & sError );
 	bool		MarkRequestedFields ( CSphString & sError );
 	void		MarkAllFields();
 };
@@ -387,7 +387,8 @@ Expr_Highlight_c::Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, CS
 		// this should be a map argument. at least we checked that in ExprHook_c::GetReturnType
 		auto pMapArg = (Expr_MapArg_c *)(pArglist->IsArglist() ? pArglist->GetArg(0) : pArglist);
 		assert(pMapArg);
-		if ( !ParseOptions ( pMapArg->m_dValues, sError ) )
+		VecTraits_T<CSphNamedVariant> dOpts ( pMapArg->m_pValues, pMapArg->m_iCount );
+		if ( !ParseOptions ( dOpts, sError ) )
 			return;
 	}
 

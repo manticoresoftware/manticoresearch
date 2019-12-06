@@ -2624,6 +2624,15 @@ StringBuilder_c & StringBuilder_c::operator<< ( double fVal )
 	return *this;
 }
 
+StringBuilder_c & StringBuilder_c::operator<< ( void * pVal )
+{
+	InitAddPrefix ();
+	GrowEnough ( 32 );
+	m_iUsed += sph::NtoA ( end (), reinterpret_cast<uintptr_t>(pVal), 16, sizeof(void*)*2 );
+	m_szBuffer[m_iUsed] = '\0';
+	return *this;
+}
+
 void StringBuilder_c::Grow ( int iLen )
 {
 	assert ( m_iSize<m_iUsed + iLen + GROW_STEP );

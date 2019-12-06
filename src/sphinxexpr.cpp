@@ -111,7 +111,7 @@ const BYTE * ISphExpr::StringEvalPacked ( const CSphMatch & tMatch ) const
 {
 	const BYTE * pStr = nullptr;
 	int iStrLen = StringEval ( tMatch, &pStr );
-	auto pRes = sphPackPtrAttr ( pStr, iStrLen );
+	auto pRes = sphPackPtrAttr ( { pStr, iStrLen } );
 	if ( IsDataPtrAttr () ) SafeDeleteArray ( pStr );
 	return pRes;
 }
@@ -301,9 +301,7 @@ public:
 
 	int64_t Int64Eval ( const CSphMatch & tMatch ) const final
 	{
-		int iLengthBytes = 0;
-		const BYTE * pData = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool, iLengthBytes );
-		return (int64_t)sphPackPtrAttr ( pData, iLengthBytes );
+		return (int64_t)sphPackPtrAttr ( tMatch.FetchAttrData ( m_tLocator, m_pBlobPool ) );
 	}
 
 	const BYTE * MvaEval ( const CSphMatch & tMatch, int & iLengthBytes ) const final
@@ -707,7 +705,7 @@ public:
 		if ( !pData )
 			return nullptr;
 
-		return sphPackPtrAttr( pData, iDataLen );
+		return sphPackPtrAttr( {pData, iDataLen} );
 	}
 
 	void Command ( ESphExprCommand eCmd, void * pArg ) final
@@ -1244,14 +1242,9 @@ public:
 	const BYTE * StringEvalPacked ( const CSphMatch & tMatch ) const final
 	{
 		// this is done to avoid reallocation while re-packing the result of StringEval call
-		CSphVector<BYTE> dResult;
+		TightPackedVec_T<BYTE> dResult;
 		int iResultLen = EvalMatch ( tMatch, dResult );
-		int iTotalLen = sphCalcPackedLength(iResultLen);
-		dResult.Resize ( iTotalLen );
-		BYTE * pData = dResult.Begin();
-		BYTE * pString = pData+(iTotalLen-iResultLen);
-		memmove ( pString, pData, iResultLen );
-		sphPackPtrAttr ( pData, pString, iResultLen );
+		sphPackPtrAttrInPlace ( dResult, iResultLen );
 		return dResult.LeakData();
 	}
 
@@ -1291,8 +1284,8 @@ protected:
 
 	CSphVector<StringOrExpr_t> m_dArgs;
 
-
-	int EvalMatch ( const CSphMatch & tMatch, CSphVector<BYTE> & dResult ) const
+	template<class POLICY, class LIMIT, class STORE>
+	int EvalMatch ( const CSphMatch & tMatch, sph::Vector_T<BYTE, POLICY, LIMIT, STORE> & dResult ) const
 	{
 		for ( auto & i : m_dArgs )
 		{

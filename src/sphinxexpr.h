@@ -149,6 +149,9 @@ public:
 
 	/// make undependent clone of self
 	virtual ISphExpr* Clone() const = 0;
+
+protected:
+	~ISphExpr() override {};
 };
 
 using ISphExprRefPtr_c = CSphRefcountedPtr<ISphExpr>;

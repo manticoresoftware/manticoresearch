@@ -1394,21 +1394,7 @@ void SaveArray ( const VecTraits_T<T> & dBuf, MemoryWriter_c & tOut )
 		tOut.PutBytes ( dBuf.Begin(), sizeof(dBuf[0]) * dBuf.GetLength() );
 }
 
-// add handler which will be called on daemon's shutdown right after
-// g_bShutdown is set to true. Returns cookie for refer the callback in future.
-using Handler_fn = std::function<void ()>;
 
 void SendErrorReply ( CachedOutputBuffer_c & tOut, const char * sTemplate, ... );
-
-namespace searchd {
-
-	void* AddShutdownCb ( Handler_fn fnCb );
-
-	// remove previously set shutdown cb by cookie
-	void DeleteShutdownCb ( void* pCookie );
-
-	// invoke shutdown handlers
-	void FireShutdownCbs ();
-}
 
 #endif // _searchdaemon_

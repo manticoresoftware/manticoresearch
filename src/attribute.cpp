@@ -933,35 +933,52 @@ int sphCalcPackedLength ( int iLengthBytes )
 	return sphCalcZippedLen(iLengthBytes) + iLengthBytes;
 }
 
-// allocate and pack blob pData[iLengthBytes], return pointer to it
-BYTE * sphPackPtrAttr ( const BYTE * pData, int iLengthBytes )
+BYTE *				sphPackedBlob ( ByteBlob_t dBlob )
 {
-	if ( !iLengthBytes )
+	if ( !dBlob.first ) return nullptr;
+	return const_cast<BYTE*>(dBlob.first-sphCalcZippedLen (dBlob.second));
+}
+
+
+// allocate buf and pack blob dBlob into it, return pointer to buf
+BYTE * sphPackPtrAttr ( ByteBlob_t dBlob )
+{
+	if ( !dBlob.second )
 		return nullptr;
 
-	assert ( pData );
-	BYTE* pPacked = sphAllocateSmall ( sphCalcPackedLength ( iLengthBytes ));
-	sphPackPtrAttr ( pPacked, pData, iLengthBytes );
+	assert ( dBlob.first );
+	BYTE * pPacked = sphAllocateSmall ( sphCalcPackedLength ( dBlob.second ));
+	sphPackPtrAttr ( pPacked, std::move(dBlob) );
 	return pPacked;
 }
 
 // pack blob pData[iLengthBytes] into preallocated buf
-BYTE * sphPackPtrAttr ( BYTE * pPrealloc, const BYTE * pData, int iLengthBytes )
+int sphPackPtrAttr ( BYTE * pPrealloc, ByteBlob_t dBlob )
 {
-	assert ( pPrealloc && pData );
-	pPrealloc += sphZipToPtr ( iLengthBytes, pPrealloc );
-	if ( pPrealloc!=pData )
-		memcpy ( pPrealloc, pData, iLengthBytes );
-	
-	return pPrealloc+iLengthBytes;
+	assert ( pPrealloc && IsValid ( dBlob ) );
+	int iZippedLen = sphZipToPtr ( pPrealloc, dBlob.second );
+	memcpy ( pPrealloc+iZippedLen, dBlob.first, dBlob.second );
+	return iZippedLen+dBlob.second;
 }
 
-// allocate blob for iLengthBytes, pack size, then return pointer to payload in *ppData, and whole blob in result
+void sphPackPtrAttrInPlace ( TightPackedVec_T<BYTE> & dAttr, int iSize )
+{
+	BYTE bSize[20];
+	if ( iSize<0 ) iSize = dAttr.GetLength();
+	int iZippedLen = sphZipToPtr ( bSize, iSize );
+	dAttr.Resize ( iZippedLen+iSize );
+	BYTE * pData = dAttr.Begin ();
+	memmove ( pData+iZippedLen, pData, iSize );
+	memcpy ( pData, bSize, iZippedLen );
+}
+
+// allocate buf for pack of iLengthBytes, pack size, then put pointer to payload in *ppData, and return buf
 BYTE * sphPackPtrAttr ( int iLengthBytes, BYTE ** ppData )
 {
+	assert ( ppData );
 	BYTE * pPacked = sphAllocateSmall ( sphCalcPackedLength ( iLengthBytes ) );
 	*ppData = pPacked;
-	*ppData += sphZipToPtr ( iLengthBytes, pPacked );
+	*ppData += sphZipToPtr ( pPacked, iLengthBytes );
 	return pPacked;
 }
 

@@ -2958,7 +2958,7 @@ volatile int& getParentPID ()
 	return iParentPID;
 }
 
-volatile bool& getHaveJemalloc ()
+volatile bool& getSafeGDB ()
 {
 	static bool bHaveJemalloc = true;
 	return bHaveJemalloc;
@@ -2974,7 +2974,7 @@ static char g_pBacktrace[4096];
 static const char g_sSourceTail[] = "> source.txt\n";
 static const char * g_pArgv[128] = { "addr2line", "-e", "./searchd", "0x0", NULL };
 static CSphString g_sBinaryName;
-static auto& g_bHaveJemalloc = getHaveJemalloc();
+static auto& g_bSafeGDB = getSafeGDB ();
 
 #if HAVE_SYS_PRCTL_H
 static char g_sNameBuf[512] = {0};
@@ -3016,6 +3016,7 @@ static bool DumpGdb ( int iFD )
 	auto & iParentPID = getParentPID ();
 	if ( iParentPID>0 ) // most safe - ask watchdog to do everything
 	{
+		sphSafeInfo ( iFD, "Dump with GDB via watchdog");
 		kill ( iParentPID, SIGUSR1 );
 		sphSleepMsec (3*1000);
 		return true;
@@ -3024,10 +3025,11 @@ static bool DumpGdb ( int iFD )
 	sphSafeInfo ( g_sPid, "%d", getpid () );
 	g_sNameBuf [ ::readlink ( "/proc/self/exe", g_sNameBuf, 511 ) ] = 0;
 
-	if ( g_bHaveJemalloc || iParentPID==-1 ) // jemalloc looks safe, or user explicitly asked to invoke gdb anyway
+	if ( g_bSafeGDB || iParentPID==-1 ) // jemalloc looks safe, or user explicitly asked to invoke gdb anyway
 		return sphDumpGdb ( iFD, g_sNameBuf, g_sPid );
 
 #endif
+	sphSafeInfo ( iFD, "Dump with GDB is not available" );
 	return false;
 }
 
@@ -3092,7 +3094,7 @@ bool sphDumpGdb (int iFD, const char* sName, const char* sPid )
 
 		if ( !iWorker )
 		{
-			sphSafeInfo ( iFD, "Will run gdb on %s, pid %s", sName, sPid );
+			sphSafeInfo ( iFD, "Will run gdb on '%s', pid '%s'", sName, sPid );
 			if ( dup2 ( iFD, STDOUT_FILENO )==-1 )
 				_Exit ( 1 );
 			if ( dup2 ( iFD, STDERR_FILENO )==-1 )
@@ -3104,7 +3106,7 @@ bool sphDumpGdb (int iFD, const char* sName, const char* sPid )
 				"-ex", "bt",
 				"-ex", "echo \nLocal variables:\n",
 				"-ex", "info locals",
-				"-ex", "detach", sName, sPid, nullptr );
+				"-ex", "detach", "-e", sName, "-p", sPid, nullptr );
 
 			// If gdb failed to start, signal back
 			_Exit ( 1 );
@@ -3422,10 +3424,15 @@ void sphBacktraceInit()
 #endif // !HAVE_BACKTRACE
 
 	// check that jemalloc is present
+	bool bSafeGdb = true;
 #if HAVE_DLOPEN
 	void * fnJMalloc = dlsym ( RTLD_DEFAULT, "mallctl" );
-	g_bHaveJemalloc = ( fnJMalloc!=nullptr );
+	bSafeGdb = ( fnJMalloc!=nullptr );
 #endif
+#ifndef NDEBUG
+	bSafeGdb = true;
+#endif
+	g_bSafeGDB = bSafeGdb;
 }
 
 #else // USE_WINDOWS
@@ -4022,4 +4029,49 @@ LogMessage_t::~LogMessage_t ()
 {
 	logMutex ().Unlock ();
 	sphLogDebug ( "%s\n", m_dLog.cstr() );
+}
+
+LocMessage_c::LocMessage_c ( LocMessages_c* pOwner )
+	: m_pOwner ( pOwner )
+{
+//	m_pOwner->m_tLock.Lock();
+}
+
+LocMessage_c::~LocMessage_c ()
+{
+//	m_pOwner->m_tLock.Unlock ();
+	m_pOwner->Append ( m_dLog );
+}
+
+void LocMessages_c::Append ( StringBuilder_c& dMsg )
+{
+	auto pLeaf = new MsgList;
+	dMsg.MoveTo(pLeaf->m_sMsg);
+	pLeaf->m_pNext = m_sMsgs;
+	m_sMsgs = pLeaf;
+	++m_iMsgs;
+}
+
+void LocMessages_c::Swap ( LocMessages_c & rhs ) noexcept
+{
+	::Swap (m_sMsgs, rhs.m_sMsgs);
+	::Swap ( m_iMsgs, rhs.m_iMsgs );
+}
+
+
+int LocMessages_c::Print () const
+{
+	for ( auto pHead = m_sMsgs; pHead; pHead = pHead->m_pNext )
+		sphLogDebug ( "%s", pHead->m_sMsg.scstr() );
+	return m_iMsgs;
+}
+
+LocMessages_c::~LocMessages_c()
+{
+	for ( auto pHead = m_sMsgs; pHead!=nullptr; )
+	{
+		auto pNext = pHead->m_pNext;
+		SafeDelete ( pHead );
+		pHead = pNext;
+	}
 }

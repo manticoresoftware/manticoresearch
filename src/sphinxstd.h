@@ -575,6 +575,27 @@ sphMemberLess ( T C::* pMember )
 	return SphMemberLess_T<T,C> ( pMember );
 }
 
+/// generic comparator initialized by functor
+template<typename COMP>
+struct SphLesser
+{
+	COMP m_fnComp;
+	explicit SphLesser (COMP&& fnComp)
+		: m_fnComp ( std::forward<COMP>(fnComp)) {}
+
+	template <typename T>
+	bool IsLess ( T&& a, T&& b ) const
+	{
+		return m_fnComp ( std::forward<T>(a), std::forward<T>(b) );
+	}
+};
+
+// make
+template<typename FNCOMP>
+SphLesser<FNCOMP> Lesser (FNCOMP&& fnComp)
+{
+	return SphLesser<FNCOMP>(std::forward<FNCOMP>(fnComp));
+}
 
 /// generic accessor
 template < typename T >
@@ -985,10 +1006,28 @@ public:
 		return m_iCount ? m_pData + m_iCount : nullptr;
 	}
 
+	/// get first entry
+	T &First () const
+	{
+		return ( *this )[0];
+	}
+
 	/// get last entry
 	T &Last () const
 	{
 		return ( *this )[m_iCount - 1];
+	}
+
+	/// return idx of the item pointed by pBuf, or -1
+	inline int Idx ( const T* pBuf )
+	{
+		if ( !pBuf )
+			return -1;
+
+		if ( pBuf < m_pData || pBuf >= m_pData + m_iCount )
+			return -1;
+
+		return pBuf - m_pData;
 	}
 
 	/// make possible to pass VecTraits_T<T*> into funcs which need VecTraits_T<const T*>
@@ -1003,6 +1042,12 @@ public:
 	{
 		STATIC_ASSERT ( sizeof ( T )==sizeof ( TT ), SIZE_OF_DERIVED_NOT_SAME_AS_ORIGIN );
 		return *( VecTraits_T<TT> * ) ( this );
+	}
+
+	template<typename TT, typename INT>
+	operator std::pair<TT *, INT> () const
+	{
+		return { (TT*)m_pData, INT(m_iCount * sizeof ( T ) / sizeof ( TT ) ) };
 	}
 
 	/// check if i'm empty
@@ -1465,19 +1510,6 @@ public:
 		m_iCount += iCount;
 		return m_pData + m_iCount - iCount;
 	}
-
-	/// return idx of the item pointed by pBuf, or -1
-	inline int Idx ( const T* pBuf )
-	{
-		if ( !pBuf )
-			return -1;
-
-		if ( pBuf < m_pData || pBuf >= m_pData + m_iLimit )
-			return -1;
-
-		return pBuf - m_pData;
-	}
-
 
 	/// add unique entry (ie. do not add if equal to last one)
 	void AddUnique ( const T & tValue )
@@ -2895,6 +2927,7 @@ public:
 
 	StringBuilder_c &	operator << ( float fVal );
 	StringBuilder_c &	operator << ( double fVal );
+	StringBuilder_c &	operator << ( void* pVal );
 
 	// support for sph::Sprintf - emulate POD 'char*'
 	inline StringBuilder_c &	operator ++() { GrowEnough ( 1 ); ++m_iUsed; return *this; }
@@ -4725,24 +4758,51 @@ struct VecRefPtrs_t : public ISphNoncopyable, public CSphVector<T>
 enum class ETYPE { SINGLE, ARRAY };
 template<typename PTR, ETYPE tp>
 struct Deleter_T {
-	inline static void Delete ( PTR& pArg) { SafeDelete ( pArg) }
+	inline static void Delete ( PTR pArg) { SafeDelete (pArg) }
 };
 
 template<typename PTR>
 struct Deleter_T<PTR,ETYPE::ARRAY>
 {
-	inline static void Delete ( PTR& pArg ) { SafeDeleteArray ( pArg ) }
+	inline static void Delete ( PTR pArg ) { SafeDeleteArray (pArg) }
 };
 
+template<typename PTR, typename DELETER>
+class CustomDeleter_T
+{
+	DELETER m_dDeleter;
+public:
+
+	CustomDeleter_T ( DELETER&& dDeleter )
+		: m_dDeleter { std::forward<DELETER> ( dDeleter ) }
+	{}
+
+	inline void Delete ( PTR & pArg ) {
+		m_dDeleter ( pArg );
+	}
+};
 /// shared pointer for any object, managed by refcount
-template < typename PTR, ETYPE tp, typename REFCOUNTED = ISphRefcountedMT >
+template < typename PTR, typename DELETER, typename REFCOUNTED = ISphRefcountedMT >
 class SharedPtr_T
 {
 	template <typename RefCountedT>
 	struct SharedState_T : public RefCountedT
 	{
 		PTR m_pPtr = nullptr;
-		~SharedState_T() { Deleter_T<PTR,tp>::Delete(m_pPtr); }
+		DELETER m_fnDelete;
+
+		SharedState_T() = default;
+
+		template<typename DEL>
+		explicit SharedState_T ( DEL&& fnDelete )
+			: m_fnDelete ( std::forward<DEL>(fnDelete) )
+		{}
+
+		~SharedState_T()
+		{
+			m_fnDelete.Delete(m_pPtr);
+			m_pPtr = nullptr;
+		}
 	};
 
 	using SharedState_t = SharedState_T<REFCOUNTED>;
@@ -4756,6 +4816,13 @@ public:
 
 	/// construction from raw pointer, creates new shared state!
 	explicit SharedPtr_T ( PTR pPtr ) : m_tState ( new SharedState_t() )
+	{
+		m_tState->m_pPtr = pPtr;
+	}
+
+	template <typename DEL>
+	SharedPtr_T ( PTR pPtr, DEL&& fn )
+		: m_tState ( new SharedState_t (std::forward<DEL>(fn)) )
 	{
 		m_tState->m_pPtr = pPtr;
 	}
@@ -4795,10 +4862,13 @@ public:
 };
 
 template <typename T, typename REFCOUNTED = ISphRefcountedMT>
-using SharedPtr_t = SharedPtr_T<T, ETYPE::SINGLE, REFCOUNTED>;
+using SharedPtr_t = SharedPtr_T<T, Deleter_T<T, ETYPE::SINGLE>, REFCOUNTED>;
 
 template<typename T, typename REFCOUNTED = ISphRefcountedMT>
-using SharedPtrArr_t = SharedPtr_T<T, ETYPE::ARRAY, REFCOUNTED>;
+using SharedPtrArr_t = SharedPtr_T<T, Deleter_T<T, ETYPE::ARRAY>, REFCOUNTED>;
+
+template<typename T, typename DELETER=std::function<void(T)>, typename REFCOUNTED = ISphRefcountedMT>
+using SharedPtrCustom_t = SharedPtr_T<T, CustomDeleter_T<T, DELETER>, REFCOUNTED>;
 
 struct ISphJob
 {
@@ -4888,11 +4958,11 @@ public:
 		{
 			// found matching key? great, return the value
 			Entry_t * p = m_pHash + iIndex;
-			if ( p->m_uState==ENTRY_USED && p->m_Key==k )
+			if ( p->m_uState==Entry_e::USED && p->m_Key==k )
 				return p->m_Value;
 
 			// no matching keys? add it
-			if ( p->m_uState==ENTRY_EMPTY )
+			if ( p->m_uState==Entry_e::EMPTY )
 			{
 				// not enough space? grow the hash and force rescan
 				if ( m_iUsed>=m_iMaxUsed )
@@ -4909,13 +4979,13 @@ public:
 
 				// store the newly added key
 				p->m_Key = k;
-				p->m_uState = ENTRY_USED;
+				p->m_uState = Entry_e::USED;
 				m_iUsed++;
 				return p->m_Value;
 			}
 
 			// is this a dead entry? store its index for (possible) reuse
-			if ( p->m_uState==ENTRY_DELETED )
+			if ( p->m_uState==Entry_e::DELETED )
 				iDead = iIndex;
 
 			// no match so far, keep probing
@@ -4958,7 +5028,7 @@ public:
 	{
 		Entry_t * e = FindEntry(k);
 		if ( e )
-			e->m_uState = ENTRY_DELETED;
+			e->m_uState = Entry_e::DELETED;
 
 		return e!=nullptr;
 	}
@@ -4979,7 +5049,7 @@ public:
 			return nullptr;
 
 		for ( int64_t i = *pIndex; i < m_iSize; i++ )
-			if ( m_pHash[i].m_uState==ENTRY_USED )
+			if ( m_pHash[i].m_uState==Entry_e::USED )
 			{
 				*pIndex = i+1;
 				if ( pKey )
@@ -4991,6 +5061,21 @@ public:
 		return nullptr;
 	}
 
+	// same as above, but without messing of return value/return param
+	std::pair<KEY,VALUE*> Iterate ( int64_t * pIndex ) const
+	{
+		if ( !pIndex || *pIndex<0 )
+			return {0, nullptr};
+
+		for ( int64_t i = *pIndex; i<m_iSize; ++i )
+			if ( m_pHash[i].m_uState==Entry_e::USED ) {
+				*pIndex = i+1;
+				return {m_pHash[i].m_Key, &m_pHash[i].m_Value};
+			}
+
+		return {0,nullptr};
+	}
+
 	void Swap ( MYTYPE& rhs ) noexcept
 	{
 		::Swap ( m_iSize, rhs.m_iSize );
@@ -5000,11 +5085,11 @@ public:
 	}
 
 protected:
-	enum
+	enum class Entry_e
 	{
-		ENTRY_EMPTY,
-		ENTRY_USED,
-		ENTRY_DELETED
+		EMPTY,
+		USED,
+		DELETED
 	};
 
 #pragma pack(push,4)
@@ -5012,9 +5097,8 @@ protected:
 	{
 		KEY		m_Key;
 		VALUE	m_Value;
-		BYTE	m_uState;
-
-		Entry_t() : m_uState ( ENTRY_EMPTY ) {}
+		Entry_e	m_uState { Entry_e::EMPTY };
+		Entry_t ();
 	};
 #pragma pack(pop)
 
@@ -5039,10 +5123,10 @@ protected:
 		Entry_t * pNew = new Entry_t[iNewSize];
 
 		for ( int64_t i=0; i<m_iSize; i++ )
-			if ( m_pHash[i].m_uState==ENTRY_USED )
+			if ( m_pHash[i].m_uState==Entry_e::USED )
 			{
 				int64_t j = HASHFUNC::GetHash ( m_pHash[i].m_Key ) & ( iNewSize-1 );
-				while ( pNew[j].m_uState==ENTRY_USED )
+				while ( pNew[j].m_uState==Entry_e::USED )
 					j = ( j+1 ) & ( iNewSize-1 );
 
 				pNew[j] = m_pHash[i];
@@ -5059,10 +5143,10 @@ protected:
 	{
 		int64_t iIndex = HASHFUNC::GetHash(k) & ( m_iSize-1 );
 
-		while ( m_pHash[iIndex].m_uState!=ENTRY_EMPTY )
+		while ( m_pHash[iIndex].m_uState!=Entry_e::EMPTY )
 		{
 			Entry_t & tEntry = m_pHash[iIndex];
-			if ( tEntry.m_Key==k && tEntry.m_uState!=ENTRY_DELETED )
+			if ( tEntry.m_Key==k && tEntry.m_uState!=Entry_e::DELETED )
 				return &tEntry;
 
 			iIndex = ( iIndex+1 ) & ( m_iSize-1 );
@@ -5075,11 +5159,12 @@ private:
 	static constexpr float LOAD_FACTOR = 0.95f;
 };
 
-template<> inline OpenHash_T<int,int64_t>::Entry_t::Entry_t() : m_Key(0), m_Value(0), m_uState(ENTRY_EMPTY) {}
-template<> inline OpenHash_T<DWORD,int64_t>::Entry_t::Entry_t() : m_Key(0), m_Value(0), m_uState(ENTRY_EMPTY) {}
-template<> inline OpenHash_T<float,int64_t>::Entry_t::Entry_t() : m_Key(0), m_Value(0.0f), m_uState(ENTRY_EMPTY) {}
-template<> inline OpenHash_T<int64_t,int64_t>::Entry_t::Entry_t() : m_Key(0), m_Value(0), m_uState(ENTRY_EMPTY) {}
-template<> inline OpenHash_T<uint64_t,int64_t>::Entry_t::Entry_t() : m_Key(0), m_Value(0), m_uState(ENTRY_EMPTY) {}
+template<typename V, typename K, typename H> OpenHash_T<V,K,H>::Entry_t::Entry_t() = default;
+template<> inline OpenHash_T<int,int64_t>::Entry_t::Entry_t() : m_Key{0}, m_Value{0} {}
+template<> inline OpenHash_T<DWORD,int64_t>::Entry_t::Entry_t() : m_Key{0}, m_Value{0} {}
+template<> inline OpenHash_T<float,int64_t>::Entry_t::Entry_t() : m_Key{0}, m_Value{0.0f} {}
+template<> inline OpenHash_T<int64_t,int64_t>::Entry_t::Entry_t() : m_Key{0}, m_Value{0} {}
+template<> inline OpenHash_T<uint64_t,int64_t>::Entry_t::Entry_t() : m_Key{0}, m_Value{0} {}
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -5452,32 +5537,28 @@ inline int sphCalcZippedLen ( T tValue )
 	while ( tValue )
 	{
 		tValue >>= 7;
-		nBytes++;
+		++nBytes;
 	}
 
 	return nBytes;
 }
 
 
-template <typename T, typename C>
-inline int sphZipValue ( T tValue, C * pClass, void (C::*fnPut)(BYTE) )
+template<typename T, typename WRITER>
+inline int sphZipValue ( WRITER fnPut, T tValue )
 {
 	int nBytes = sphCalcZippedLen ( tValue );
-	for ( int i = nBytes-1; i>=0; i-- )
-		(pClass->*fnPut) ( ( 0x7f & ( tValue >> (7*i) ) ) | ( i ? 0x80 : 0 ) );
+	for ( int i = nBytes-1; i>=0; --i )
+		fnPut ( ( 0x7f & ( tValue >> ( 7 * i ) ) ) | ( i ? 0x80 : 0 ) );
 
 	return nBytes;
 }
 
 
 template <typename T>
-inline int sphZipToPtr ( T tValue, BYTE * pData )
+inline int sphZipToPtr ( BYTE * pData, T tValue )
 {
-	int nBytes = sphCalcZippedLen ( tValue );
-	for ( int i = nBytes-1; i>=0; i-- )
-		*pData++ = ( 0x7f & ( tValue >> (7*i) ) ) | ( i ? 0x80 : 0 );
-
-	return nBytes;
+	return sphZipValue ( [pData] ( BYTE b ) mutable { *pData++ = b; }, tValue );
 }
 
 /// Allocation for small objects (namely - for movable dynamic attributes).
@@ -5491,11 +5572,36 @@ size_t sphGetSmallAllocatedSize ();	// how many allocated right now
 size_t sphGetSmallReservedSize ();	// how many pooled from the sys right now
 #else
 inline BYTE * sphAllocateSmall(int iBytes) {return new BYTE[iBytes];};
-inline void sphDeallocateSmall(BYTE * pBlob, int) {delete[]pBlob;};
-inline void sphDeallocateSmall ( BYTE* pBlob ) { delete[]pBlob; };
+inline void sphDeallocateSmall(const BYTE* pBlob, int) {delete[]pBlob;};
+inline void sphDeallocateSmall(const BYTE* pBlob) {delete[]pBlob;};
 inline size_t sphGetSmallAllocatedSize() {return 0;};    // how many allocated right now
 inline size_t sphGetSmallReservedSize() {return 0;};    // how many pooled from the sys right now
 #endif // USE_SMALLALLOC
+
+// helper to use in vector as custom allocator
+namespace sph {
+	template<typename T>
+	class CustomStorage_T
+	{
+	protected:
+		/// grow enough to hold that much entries.
+		inline static T * Allocate ( int iLimit )
+		{
+			return sphAllocateSmall ( iLimit*sizeof(T) );
+		}
+
+		inline static void Deallocate ( T * pData )
+		{
+			sphDeallocateSmall ( (BYTE*) pData );
+		}
+
+		static const bool is_constructed = true;
+		static const bool is_owned = false;
+	};
+}
+
+template<typename T>
+using TightPackedVec_T = sph::Vector_T<T, sph::DefaultCopy_T<T>, sph::TightRelimit, sph::CustomStorage_T<T>>;
 
 void sphDeallocatePacked ( BYTE * pBlob );
 
@@ -5526,5 +5632,81 @@ private:
 #define LOG( Level, Component ) \
     if (LOG_LEVEL_##Level) \
         LOG_MSG << LOG_COMPONENT_##Component
+
+class LocMessages_c;
+class LocMessage_c
+{
+
+	friend class LocMessages_c;
+	LocMessage_c ( LocMessages_c* pOwner );
+
+public:
+
+	void Swap ( LocMessage_c& rhs ) noexcept
+	{
+		::Swap ( m_dLog, rhs.m_dLog );
+	}
+
+	LocMessage_c ( const LocMessage_c& rhs )
+	{
+		assert (false && "NRVO failed");
+	}
+
+	MOVE_BYSWAP ( LocMessage_c);
+	~LocMessage_c ();
+
+	template<typename T>
+	LocMessage_c & operator<< ( T && t )
+	{
+		m_dLog << std::forward<T> ( t );
+		return *this;
+	}
+
+private:
+	StringBuilder_c m_dLog;
+	LocMessages_c * m_pOwner = nullptr;
+};
+
+struct MsgList
+{
+	CSphString m_sMsg = nullptr;
+	MsgList* m_pNext = nullptr;
+};
+
+class LocMessages_c : public ISphNoncopyable
+{
+public:
+	~LocMessages_c ();
+
+	LocMessage_c GetLoc()
+	{
+		return LocMessage_c(this);
+	}
+
+	int Print() const;
+
+	void Append ( StringBuilder_c & dMsg );
+	void Swap ( LocMessages_c& rhs ) noexcept;
+
+//	CSphMutex m_tLock;
+	MsgList * m_sMsgs = nullptr;
+	int m_iMsgs = 0;
+};
+
+/*
+ * unit logger.
+ * Use LOC_ADD to add logger to a class/struct
+ * Use #define LOG_LEVEL_FOO 1 - to enable logging
+ * Use #define LOG_COMPONENT_BAR as informative prefix
+ * Use logger as LOC(FOO,BAR) << "my cool message" for logging
+ * Use m_dLogger.Print() either as direct call, either as 'evaluate expression' in debugger.
+ */
+
+#define LOC_ADD LocMessages_c    m_dLogger
+#define LOC_SWAP( RHS ) m_dLogger.Swap(RHS.m_dLogger)
+#define LOC_MSG m_dLogger.GetLoc()
+#define LOC( Level, Component ) \
+    if_const (LOG_LEVEL_##Level) \
+        LOC_MSG << LOG_COMPONENT_##Component
 
 #endif // _sphinxstd_

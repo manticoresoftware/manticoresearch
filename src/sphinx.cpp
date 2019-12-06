@@ -7108,22 +7108,22 @@ void CSphSchemaHelper::Reset()
 	m_dDynamicUsed.Reset ();
 }
 
-void CSphSchemaHelper::CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const
+void CSphSchemaHelper::CloneMatch ( CSphMatch & tDst, const CSphMatch & rhs ) const
 {
-	CloneMatchSpecial ( pDst, rhs, m_dDataPtrAttrs );
+	CloneMatchSpecial ( tDst, rhs, m_dDataPtrAttrs );
 }
 
-void CSphSchemaHelper::FreeDataPtrs ( CSphMatch * pMatch ) const
+void CSphSchemaHelper::FreeDataPtrs ( CSphMatch & tMatch ) const
 {
-	FreeDataSpecial ( pMatch, m_dDataPtrAttrs );
+	FreeDataSpecial ( tMatch, m_dDataPtrAttrs );
 }
 
-void CSphSchemaHelper::CopyPtrs ( CSphMatch * pDst, const CSphMatch &rhs ) const
+void CSphSchemaHelper::CopyPtrs ( CSphMatch & tDst, const CSphMatch & rhs ) const
 {
 	// notes on PACKEDFACTORS
 	// not immediately obvious: this is not needed while pushing matches to sorters; factors are held in an outer hash table
 	// but it is necessary to copy factors when combining results from several indexes via a sorter because at this moment matches are the owners of factor data
-	CopyPtrsSpecial ( pDst, rhs.m_pDynamic, m_dDataPtrAttrs );
+	CopyPtrsSpecial ( tDst, rhs, m_dDataPtrAttrs );
 }
 
 CSphVector<int> CSphSchemaHelper::SubsetPtrs ( CSphVector<int> &dDiscarded ) const
@@ -7137,12 +7137,15 @@ CSphVector<int> CSphSchemaHelper::SubsetPtrs ( CSphVector<int> &dDiscarded ) con
 	return dFiltered;
 }
 
-void CSphSchemaHelper::CloneMatchSpecial ( CSphMatch * pDst, const CSphMatch &rhs, const CSphVector<int> &dSpecials ) const
+// in destination free listed attrs, then copy new from rhs
+void CSphSchemaHelper::CloneMatchSpecial ( CSphMatch & tDst, const CSphMatch & rhs,
+		const VecTraits_T<int> & dSpecials ) const
 {
-	assert ( pDst );
-	FreeDataSpecial ( pDst, dSpecials );
-	pDst->Combine ( rhs, GetDynamicSize () );
-	CopyPtrsSpecial ( pDst, rhs.m_pDynamic, dSpecials );
+	FreeDataSpecial ( tDst, dSpecials );
+	tDst.Combine ( rhs, GetDynamicSize () );
+	for ( auto i : m_dDataPtrAttrs )
+		*(BYTE **) ( tDst.m_pDynamic+i ) = nullptr;
+	CopyPtrsSpecial ( tDst, rhs, dSpecials );
 }
 
 // declared in sphinxstd.h
@@ -7155,15 +7158,20 @@ void sphDeallocatePacked ( BYTE * pBlob )
 	sphDeallocateSmall ( pBlob );
 }
 
-void CSphSchemaHelper::FreeDataSpecial ( CSphMatch * pMatch, const CSphVector<int> &dSpecials )
+// fixme! direct reinterpreting rows is not good idea. Use sphGetAttr/sphSetAttr!
+/*
+ * wide (64bit) attributes occupies 2 rows and placed order lo,high
+ * On LE arch (intel) it is ok to reinterpret them back as 64-bit pointer
+ * However on BE (mips) you have problems since such cast gives garbage.
+ */
+void CSphSchemaHelper::FreeDataSpecial ( CSphMatch& tMatch, const VecTraits_T<int> &dSpecials )
 {
-	assert ( pMatch );
-	if ( !pMatch->m_pDynamic )
+	if ( !tMatch.m_pDynamic )
 		return;
 
 	for ( auto iOffset : dSpecials )
 	{
-		BYTE * &pData = *( BYTE ** ) ( pMatch->m_pDynamic + iOffset );
+		BYTE * &pData = *( BYTE ** ) ( tMatch.m_pDynamic + iOffset );
 		sphDeallocatePacked ( pData );
 		pData = nullptr;
 	}
@@ -7176,17 +7184,25 @@ inline int CSphRsetSchema::ActualLen() const
 	return 0;
 }
 
-void CSphSchemaHelper::CopyPtrsSpecial ( CSphMatch * pDst, const void* _pSrc, const CSphVector<int> &dSpecials )
+void CSphSchemaHelper::CopyPtrsSpecial ( CSphMatch & tDst, const CSphMatch& tSrc, const VecTraits_T<int> &dSpecials )
 {
-	auto pSrc = (const CSphRowitem *) _pSrc;
+	auto pSrc = tSrc.m_pDynamic;
+	assert ( pSrc || dSpecials.IsEmpty() );
 	for ( auto i : dSpecials )
 	{
 		const BYTE * pData = *( BYTE ** ) ( pSrc + i );
 		if ( pData )
-		{
-			int nBytes = sphUnpackPtrAttr ( pData, &pData );
-			*( BYTE ** ) ( pDst->m_pDynamic + i ) = sphPackPtrAttr ( pData, nBytes );
-		}
+			*( BYTE ** ) ( tDst.m_pDynamic + i ) = sphPackPtrAttr ( sphUnpackPtrAttr ( pData ) );
+	}
+}
+
+void CSphSchemaHelper::MovePtrsSpecial ( CSphMatch & tDst, CSphMatch & tSrc, const VecTraits_T<int> &dSpecials )
+{
+	auto pSrc = tSrc.m_pDynamic;
+	assert ( pSrc || dSpecials.IsEmpty () );
+	for ( auto i : dSpecials ) {
+		memcpy ( tDst.m_pDynamic+i, pSrc+i, sizeof ( BYTE * ) );
+		*(BYTE **) ( pSrc+i ) = nullptr;
 	}
 }
 
@@ -7543,12 +7559,11 @@ void CSphSchema::AssignTo ( CSphRsetSchema & lhs ) const
 }
 
 
-void CSphSchema::CloneWholeMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const
+void CSphSchema::CloneWholeMatch ( CSphMatch & tDst, const CSphMatch & rhs ) const
 {
-	assert ( pDst );
-	FreeDataPtrs ( pDst );
-	pDst->Combine ( rhs, GetRowSize() );
-	CopyPtrs ( pDst, rhs );
+	FreeDataPtrs ( tDst );
+	tDst.Combine ( rhs, GetRowSize() );
+	CopyPtrs ( tDst, rhs );
 }
 
 
@@ -7828,6 +7843,72 @@ void CSphRsetSchema::SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs )
 	m_pIndexSchema = nullptr;
 }
 
+void CSphRsetSchema::AllocateTLSColumnExpressions ( ExpressionsClone_t& dClones )
+{
+	m_pClones = &dClones;
+	assert ( dClones.IsEmpty() );
+
+	dClones.Reset();
+
+	ARRAY_FOREACH ( i, m_dExtraAttrs )
+		if ( m_dExtraAttrs[i].m_pExpr )
+			dClones.Add(i);
+
+	dClones.AllocateClones ();
+}
+
+ISphExprRefPtr_c CSphRsetSchema::GetThreadColumnExpression ( int iIndex, int iThread ) const
+{
+	iIndex -= ActualLen (); // map index into m_dExtraAttrs
+	if ( iThread<0 ) // original (non-clone) thread invoked.
+		return m_dExtraAttrs[iIndex].m_pExpr;
+
+	assert ( m_pClones );
+
+	auto ppExpr = m_pClones->ExprPtrForThread ( iIndex, iThread );
+	assert ( ppExpr && "wrong column or TLS clone space is not prepared");
+	if ( !ppExpr )
+		return ISphExprRefPtr_c { nullptr };
+
+	if (!*ppExpr)
+		*ppExpr = SafeClone ( m_dExtraAttrs[iIndex].m_pExpr );
+
+	SafeAddRef ( *ppExpr );
+
+	assert ( *ppExpr && "trying to clone null expression" );
+	return ISphExprRefPtr_c { *ppExpr };
+}
+
+ExpressionsClone_t::~ExpressionsClone_t ()
+{
+	m_dExprPool.Apply ( [] ( ISphExpr *& ptr ) { SafeRelease ( ptr ); } );
+}
+
+
+void ExpressionsClone_t::Reset()
+{
+	m_dDynamicColumnsList.Reset ();
+	m_dExprPool.Apply ( [] ( ISphExpr *& ptr ) { SafeRelease ( ptr ); } );
+	m_dExprPool.Reset ();
+}
+
+void ExpressionsClone_t::AllocateClones ()
+{
+	assert ( m_iThreads>0 );
+	m_dExprPool.Resize ( m_iThreads * m_dDynamicColumnsList.GetLength ());
+	m_dExprPool.ZeroVec ();
+}
+
+ISphExpr ** ExpressionsClone_t::ExprPtrForThread ( int iIndex, int iThread ) const
+{
+	assert ( iThread<m_iThreads );
+	assert ( m_dExprPool.GetLength() ==m_iThreads * m_dDynamicColumnsList.GetLength () );
+	int iIdx = m_dDynamicColumnsList.GetFirst ([&] (int iElem) { return iElem==iIndex; } );
+	if ( iIdx<0 )
+		return nullptr;
+
+	return &m_dExprPool[iIdx * m_iThreads+iThread];
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // BIT-ENCODED FILE OUTPUT
@@ -7965,13 +8046,13 @@ void CSphWriter::PutBytes ( const void * pData, int64_t iSize )
 
 void CSphWriter::ZipInt ( DWORD uValue )
 {
-	sphZipValue ( uValue, this, &CSphWriter::PutByte );
+	sphZipValue ( [this] ( BYTE b ) { PutByte ( b ); }, uValue );
 }
 
 
 void CSphWriter::ZipOffset ( uint64_t uValue )
 {
-	sphZipValue ( uValue, this, &CSphWriter::PutByte );
+	sphZipValue ( [this] ( BYTE b ) { PutByte ( b ); }, uValue );
 }
 
 
@@ -8571,7 +8652,7 @@ SphOffset_t FileReader_c::GetFilesize () const
 CSphQueryResult::~CSphQueryResult ()
 {
 	ARRAY_FOREACH ( i, m_dMatches )
-		m_tSchema.FreeDataPtrs ( &m_dMatches[i] );
+		m_tSchema.FreeDataPtrs ( m_dMatches[i] );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -9119,9 +9200,8 @@ void MatchesToNewSchema_c::Process ( CSphMatch * pMatch )
 		case SPH_ATTR_STRING:
 		case SPH_ATTR_JSON:
 			{
-				int iLengthBytes = 0;
-				const BYTE * pData = sphGetBlobAttr ( *pMatch, tOld.m_tLocator, pBlobPool, iLengthBytes );
-				tResult.SetAttr ( tNew.m_tLocator, (SphAttr_t)sphPackPtrAttr ( pData, iLengthBytes ) );
+				auto dBlob = sphGetBlobAttr ( *pMatch, tOld.m_tLocator, pBlobPool );
+				tResult.SetAttr ( tNew.m_tLocator, (SphAttr_t)sphPackPtrAttr ( dBlob ) );
 			}
 			break;
 
@@ -13957,10 +14037,10 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 //////////////////////////////////////////////////////////////////////////
 
 
-struct SphFinalMatchCalc_t : ISphMatchProcessor, ISphNoncopyable
+struct SphFinalMatchCalc_t final : ISphMatchProcessor, ISphNoncopyable
 {
 	const CSphQueryContext &	m_tCtx;
-	int64_t						m_iBadRows {0};
+//	int64_t						m_iBadRows {0};
 	int							m_iTag;
 
 	SphFinalMatchCalc_t ( int iTag, const CSphQueryContext & tCtx )
@@ -14389,7 +14469,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 			ISphMatchSorter * pTop = ppSorters[iSorter];
 			pTop->Finalize ( tFinal, false );
 		}
-		tCtx.m_iBadRows += tFinal.m_iBadRows;
+//		tCtx.m_iBadRows += tFinal.m_iBadRows;
 	}
 
 	if ( tArgs.m_bModifySorterSchemas )
@@ -15586,8 +15666,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 			case SPH_EVAL_PRESORT:
 			case SPH_EVAL_FINAL:
 			{
-				ISphExprRefPtr_c pExpr { tIn.m_pExpr };
-				if ( !pExpr )
+				if ( !tIn.m_pExpr )
 				{
 					pResult->m_sError.SetSprintf ( "INTERNAL ERROR: incoming-schema expression missing evaluator (stage=%d, in=%s)",
 						(int)eStage, sphDumpAttr(tIn).cstr() );
@@ -15598,7 +15677,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 				CalcItem_t tCalc;
 				tCalc.m_eType = tIn.m_eAttrType;
 				tCalc.m_tLoc = tIn.m_tLocator;
-				tCalc.m_pExpr = std::move(pExpr);
+				tCalc.m_pExpr = tInSchema.GetThreadColumnExpression ( iIn, m_iThTag );
 				tCalc.m_pExpr->Command ( SPH_EXPR_SET_BLOB_POOL, (void*)&pBlobPool );
 
 				switch ( eStage )
@@ -16869,6 +16948,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 {
 	assert ( pQuery );
 	CSphQueryProfile * pProfile = pResult->m_pProfile;
+//	sphSleepMsec(50); // test delay
 
 	MEMORY ( MEM_DISK_QUERY );
 
@@ -17380,7 +17460,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 			ISphMatchSorter * pTop = ppSorters[iSorter];
 			pTop->Finalize ( tProcessor, bGotUDF );
 		}
-		pResult->m_iBadRows += tProcessor.m_iBadRows;
+//		pResult->m_iBadRows += tProcessor.m_iBadRows;
 	}
 
 	pRanker->FinalizeCache ( tMaxSorterSchema );
@@ -21013,7 +21093,7 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE * pWord, int iWordLength, int iC
 				AddEntry ( sKey, uHash, iCheckpoint );
 		}
 
-		assert ( (size_t)( pKey-(BYTE*)sKey.m_Data )<=sizeof(sKey.m_Data) );
+		assert ( (size_t)( pKey-(BYTE*)sKey.m_Data )<=int(sizeof(sKey.m_Data)) );
 	}
 }
 
@@ -30563,13 +30643,18 @@ const CSphString & RemoveDictSpecials ( const CSphString & sWord, CSphString & s
 	return *pFixed;
 }
 
-void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits )
+void CSphQueryResultMeta::AddOtherStat ( SmallStringHash_T<WordStat_t>& hTrg, const CSphString & sWord, int64_t iDocs, int64_t iHits )
 {
 	CSphString sBuf;
 	const CSphString & tFixed = RemoveDictSpecials ( sWord, sBuf );
-	WordStat_t & tStats = m_hWordStats.AddUnique ( tFixed );
-	tStats.m_iDocs += iDocs;
-	tStats.m_iHits += iHits;
+	WordStat_t & tStats = hTrg.AddUnique ( tFixed );
+	tStats.first += iDocs;
+	tStats.second += iHits;
+}
+
+void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits )
+{
+	AddOtherStat ( m_hWordStats, sWord, iDocs, iHits );
 }
 
 
@@ -30869,4 +30954,10 @@ volatile int & sphDistThreads ()
 {
 	static int iDistThreads = 0;
 	return iDistThreads;
+}
+
+int sphGetNonZeroDistThreads ()
+{
+	auto& iThreads = sphDistThreads ();
+	return Max ( iThreads, 1 );
 }

@@ -604,18 +604,10 @@ static void DistGetFieldFinish ( DistFieldRes_t & tRes )
 			// found matched docs
 			assert ( iDocFieldsOff<pReply->m_dOff.GetLength() );
 			FieldTrait_t * pFieldDesc = pReply->m_dOff.Begin() + iDocFieldsOff;
-			ARRAY_FOREACH ( iField, tRes.m_dFieldCols )
+			for ( const auto& dCol : tRes.m_dFieldCols )
 			{
-				if ( pFieldDesc->m_iSize )
-				{
-					// copy field data into packed string
-					CSphFixedVector<BYTE> dFieldData ( sphCalcPackedLength ( pFieldDesc->m_iSize ) );
-					int iPackedLen = sphZipToPtr ( pFieldDesc->m_iSize, dFieldData.Begin() );
-					memcpy ( dFieldData.Begin()+iPackedLen, pReply->m_pFieldsRaw + pFieldDesc->m_iOff, pFieldDesc->m_iSize );
-
-					tMatch.SetAttr ( tRes.m_dFieldCols[iField]->m_tLocator, (SphAttr_t)dFieldData.LeakData() );
-				}
-
+				BYTE * pPacked = sphPackPtrAttr ( {pReply->m_pFieldsRaw+pFieldDesc->m_iOff, pFieldDesc->m_iSize} );
+				tMatch.SetAttr ( dCol->m_tLocator, (SphAttr_t) pPacked );
 				pFieldDesc++;
 			}
 

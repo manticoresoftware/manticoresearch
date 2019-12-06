@@ -80,7 +80,7 @@ void ISphMatchSorter::CloneTo ( ISphMatchSorter * pTrg ) const
 	pTrg->m_bRandomize = m_bRandomize;
 	pTrg->m_dJustPopped.Reserve ( m_dJustPopped.GetLimit () );
 	pTrg->m_pSchema = m_pSchema;
-	pTrg->SetState ( m_tState );
+	pTrg->CopyState ( m_tState );
 }
 
 
@@ -90,9 +90,17 @@ typedef int64_t				SphGroupKey_t;
 static const char g_sIntAttrPrefix[] = "@int_str2ptr_";
 static const char g_sIntJsonPrefix[] = "@groupbystr";
 
+class BlobPool_c
+{
+	const BYTE * m_pBlobPool {nullptr};
+
+public:
+	virtual void SetBlobPool ( const BYTE * pBlobPool ) { m_pBlobPool = pBlobPool; }
+	const BYTE * GetBlobPool () const { return m_pBlobPool; }
+};
 
 /// base grouper (class that computes groupby key)
-class CSphGrouper : public ISphRefcountedMT
+class CSphGrouper : public BlobPool_c, public ISphRefcountedMT
 {
 protected:
 	virtual					~CSphGrouper () {}; // =default causes bunch of errors building on wheezy
@@ -101,11 +109,6 @@ public:
 	virtual SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const = 0;
 	virtual void			GetLocator ( CSphAttrLocator & tOut ) const = 0;
 	virtual ESphAttr		GetResultType () const = 0;
-	virtual void			SetBlobPool ( const BYTE * pBlobPool ) { m_pBlobPool = pBlobPool; }
-	virtual const BYTE *	GetBlobPool() { return m_pBlobPool; }
-
-protected:
-	const BYTE *			m_pBlobPool {nullptr};
 };
 
 
@@ -113,42 +116,33 @@ protected:
 class CSphMatchQueueTraits : public ISphMatchSorter, ISphNoncopyable
 {
 protected:
-	CSphMatch *					m_pData;
-	int							m_iUsed = 0;
-	int							m_iSize;
-
-private:
-	const int					m_iDataLength;
+	int							m_iSize;	// size of internal struct we can operate
+	CSphFixedVector<CSphMatch>	m_dData;
+	CSphTightVector<int>		m_dIData;	// indexes into m_pData, to avoid extra moving of matches themselves
+	bool						m_bStorageFilled = false; // false on initial run; true once free chain is not solid
 
 public:
 	/// ctor
 	explicit CSphMatchQueueTraits ( int iSize )
 		: m_iSize ( iSize )
-		, m_iDataLength ( iSize )
+		, m_dData { iSize }
 	{
 		assert ( iSize>0 );
-		m_pData = new CSphMatch [ m_iDataLength ];
-		assert ( m_pData );
-
+		m_iMatchCapacity = iSize;
+		m_dIData.Reserve ( iSize );
 		m_tState.m_iNow = (DWORD) time ( nullptr );
-		m_iMatchCapacity = m_iDataLength;
 	}
 
-	/// dtor
+	/// dtor make FreeDataPtrs here, then ResetDynamic also get called on m_dData d-tr.
 	~CSphMatchQueueTraits () override
 	{
 		if ( m_pSchema )
-		{
-			for ( int i=0; i<m_iDataLength; ++i )
-				m_pSchema->FreeDataPtrs ( m_pData+i );
-		}
-
-		SafeDeleteArray ( m_pData );
+			m_dData.Apply ( [this] ( CSphMatch& tMatch ) { m_pSchema->FreeDataPtrs ( tMatch ); } );
 	}
 
 public:
-	int			GetLength () const override								{ return m_iUsed; }
-	int			GetDataLength () const override							{ return m_iDataLength; }
+	int			GetLength () const override								{ return Used(); }
+//	int			GetDataLength () const override							{ return m_iMatchCapacity; }
 
 	// helper
 	void SwapMatchQueueTraits ( CSphMatchQueueTraits& rhs )
@@ -157,9 +151,48 @@ public:
 		::Swap ( m_iTotal, rhs.m_iTotal );
 
 		// CSphMatchQueueTraits
-		::Swap ( m_pData, rhs.m_pData );
-		::Swap ( m_iUsed, rhs.m_iUsed );
+		m_dData.SwapData ( rhs.m_dData );
+		m_dIData.SwapData ( rhs.m_dIData );
+		::Swap ( m_bStorageFilled, rhs.m_bStorageFilled );
 		assert ( m_iSize==rhs.m_iSize );
+	}
+
+	const VecTraits_T<CSphMatch>& GetMatches() const { return m_dData; }
+
+protected:
+	CSphMatch * Last () const
+	{
+		return &m_dData[m_dIData.Last ()];
+	}
+
+	CSphMatch & Get ( int iElem ) const
+	{
+		return m_dData[m_dIData[iElem]];
+	}
+
+	CSphMatch & Add ()
+	{
+		auto iLast = m_dIData.GetLength ();
+		m_dIData.Add ();
+		if ( !m_bStorageFilled )
+			m_dIData[iLast] = iLast;
+		return m_dData[m_dIData.Last ()];
+	}
+
+	int Used() const
+	{
+		return m_dIData.GetLength();
+	}
+
+	bool IsEmpty() const
+	{
+		return m_dIData.IsEmpty();
+	}
+
+	void ResetAfterFlatten()
+	{
+		m_dIData.Resize(0);
+		m_bStorageFilled = false;
 	}
 };
 
@@ -168,202 +201,104 @@ public:
 //////////////////////////////////////////////////////////////////////////
 
 template < typename COMP >
-struct CompareIndex_fn
+struct InvCompareIndex_fn
 {
-	const CSphMatch * m_pBase;
-	const CSphMatchComparatorState * m_pState;
+	const VecTraits_T<CSphMatch>& m_dBase;
+	const CSphMatchComparatorState & m_tState;
 
-	CompareIndex_fn ( const CSphMatch * pBase, const CSphMatchComparatorState * pState )
-		: m_pBase ( pBase )
-		, m_pState ( pState )
+	explicit InvCompareIndex_fn ( const CSphMatchQueueTraits & dBase )
+		: m_dBase ( dBase.GetMatches () )
+		, m_tState ( dBase.GetComparatorState() )
 	{}
 
-	bool IsLess ( int a, int b ) const
+	bool IsLess ( int a, int b ) const // inverts COMP::IsLess
 	{
-		return COMP::IsLess ( m_pBase[b], m_pBase[a], *m_pState );
+		return COMP::IsLess ( m_dBase[b], m_dBase[a], m_tState );
 	}
 };
 
+#define LOG_COMPONENT_KMQ __LINE__ << " *(" << this << ") "
+#define LOG_LEVEL_DIAG false
+
+#define KMQ LOC(DIAG,KMQ)
 /// heap sorter
 /// plain binary heap based PQ
 template < typename COMP, bool NOTIFICATIONS >
-class CSphMatchQueue : public CSphMatchQueueTraits
+class CSphMatchQueue final : public CSphMatchQueueTraits
 {
 	using MYTYPE = CSphMatchQueue<COMP, NOTIFICATIONS>;
+	InvCompareIndex_fn<COMP> m_dComp;
+	LOC_ADD;
 public:
 	/// ctor
-	CSphMatchQueue ( int iSize )
+	explicit CSphMatchQueue ( int iSize )
 		: CSphMatchQueueTraits ( iSize )
+		, m_dComp ( *this )
 	{
 		if_const ( NOTIFICATIONS )
 			m_dJustPopped.Reserve(1);
 	}
 
 	/// check if this sorter does groupby
-	bool IsGroupby () const override
+	bool IsGroupby () const final
 	{
 		return false;
 	}
 
-	const CSphMatch * GetWorst() const override
+	const CSphMatch * GetWorst() const final
 	{
-		return m_pData;
-	}
-
-	/// generic add entry to the queue
-	template <typename PUSHER, typename MATCH>
-	bool PushT ( PUSHER && PUSH, MATCH && tEntry )
-	{
-		m_iTotal++;
-
-		if_const ( NOTIFICATIONS )
-		{
-			m_iJustPushed = INVALID_ROWID;
-			m_dJustPopped.Resize(0);
-		}
-
-		if ( m_iUsed==m_iSize )
-		{
-			// if it's worse that current min, reject it, else pop off current min
-			if ( COMP::IsLess ( tEntry, m_pData[0], m_tState ) )
-				return true;
-			else
-				Pop ();
-		}
-
-		// do add
-		PUSH ( std::forward<MATCH> ( tEntry ));
-		//		m_pSchema->CloneMatch ( m_pData+m_iUsed, tEntry );
-
-		if_const ( NOTIFICATIONS )
-			m_iJustPushed = tEntry.m_tRowID;
-
-		int iEntry = m_iUsed++;
-
-		// sift up if needed, so that worst (lesser) ones float to the top
-		while ( iEntry )
-		{
-			int iParent = ( iEntry-1 ) >> 1;
-			if ( !COMP::IsLess ( m_pData[iEntry], m_pData[iParent], m_tState ) )
-				break;
-
-			// entry is less than parent, should float to the top
-			Swap ( m_pData[iEntry], m_pData[iParent] );
-			iEntry = iParent;
-		}
-
-		return true;
+		return m_dIData.IsEmpty () ? nullptr : Root ();
 	}
 
 	/// add entry to the queue
-	bool Push ( const CSphMatch & tEntry ) override
+	bool Push ( const CSphMatch & tEntry ) final
 	{
-		return PushT ( [this] ( const CSphMatch & tEntry )
+		KMQ << "push " << tEntry.m_iTag << ":" << tEntry.m_tRowID;
+		return PushT ( tEntry, [this] ( CSphMatch & tTrg, const CSphMatch & tMatch )
 		{
-			m_pSchema->CloneMatch ( m_pData+m_iUsed, tEntry );
-		}, tEntry );
+			m_pSchema->CloneMatch ( tTrg, tMatch );
+		});
 	}
 
 	/// add grouped entry (must not happen)
-	bool PushGrouped ( const CSphMatch &, bool ) override
+	bool PushGrouped ( const CSphMatch &, bool ) final
 	{
 		assert ( false );
 		return false;
 	}
 
-	/// remove root (ie. top priority) entry
-	virtual void Pop ()
-	{
-		assert ( m_iUsed );
-		if ( !(--m_iUsed) ) // empty queue? just return
-			return;
-
-		// make the last entry my new root
-		Swap ( m_pData[0], m_pData[m_iUsed] );
-		m_pSchema->FreeDataPtrs ( &m_pData[m_iUsed] );
-
-		if_const ( NOTIFICATIONS )
-		{
-			if ( m_dJustPopped.GetLength() )
-				m_dJustPopped[0] = m_pData[m_iUsed].m_tRowID;
-			else
-				m_dJustPopped.Add ( m_pData[m_iUsed].m_tRowID );
-		}
-
-		// sift down if needed
-		int iEntry = 0;
-		while (true)
-		{
-			// select child
-			int iChild = (iEntry<<1) + 1;
-			if ( iChild>=m_iUsed )
-				break;
-
-			// select smallest child
-			if ( iChild+1<m_iUsed )
-				if ( COMP::IsLess ( m_pData[iChild+1], m_pData[iChild], m_tState ) )
-					iChild++;
-
-			// if smallest child is less than entry, do float it to the top
-			if ( COMP::IsLess ( m_pData[iChild], m_pData[iEntry], m_tState ) )
-			{
-				Swap ( m_pData[iChild], m_pData[iEntry] );
-				iEntry = iChild;
-				continue;
-			}
-
-			break;
-		}
-	}
-
 	/// store all entries into specified location in sorted order, and remove them from queue
-	int Flatten ( CSphMatch * pTo, int iTag ) override
+	int Flatten ( CSphMatch * pTo, int iTag ) final
 	{
-		assert ( m_iUsed>=0 );
-		pTo += m_iUsed;
-		int iCopied = m_iUsed;
-		while ( m_iUsed>0 )
+		KMQ << "flatten";
+		assert ( !IsEmpty() );
+		int iReadyMatches = Used();
+		pTo += iReadyMatches;
+		while ( !IsEmpty() )
 		{
 			--pTo;
-			m_pSchema->FreeDataPtrs ( pTo );
-			Swap ( *pTo, *m_pData );
+//			m_pSchema->FreeDataPtrs ( *pTo );
+			Swap ( *pTo, *Root() );
 			if ( iTag>=0 )
 				pTo->m_iTag = iTag;
 			Pop ();
 		}
 		m_iTotal = 0;
-		return iCopied;
+		return iReadyMatches;
 	}
 
-	void Finalize ( ISphMatchProcessor & tProcessor, bool bCallProcessInResultSetOrder ) override
+	/// finalize, perform final sort/cut as needed
+	void Finalize ( ISphMatchProcessor & tProcessor, bool bCallProcessInResultSetOrder ) final
 	{
+		KMQ << "finalize";
 		if ( !GetLength() )
 			return;
 
-		if ( !bCallProcessInResultSetOrder )
-		{
-			// just evaluate in heap order
-			CSphMatch * pCur = m_pData;
-			const CSphMatch * pEnd = m_pData + m_iUsed;
-			while ( pCur<pEnd )
-			{
-				tProcessor.Process ( pCur++ );
-			}
-		} else
-		{
-			// means final-stage calls will be evaluated
-			// a) over the final, pre-limit result set
-			// b) in the final result set order
-			CSphFixedVector<int> dIndexes ( GetLength() );
-			ARRAY_FOREACH ( i, dIndexes )
-				dIndexes[i] = i;
-			sphSort ( dIndexes.Begin(), dIndexes.GetLength(), CompareIndex_fn<COMP> ( m_pData, &m_tState ) );
+		if ( bCallProcessInResultSetOrder )
+			m_dIData.Sort ( m_dComp );
 
-			ARRAY_FOREACH ( i, dIndexes )
-			{
-				tProcessor.Process ( m_pData + dIndexes[i] );
-			}
-		}
+		for ( auto iMatch : m_dIData )
+			tProcessor.Process ( &m_dData[iMatch] );
 	}
 
 	// fixme! test
@@ -374,86 +309,360 @@ public:
 		return pClone;
 	}
 
-	// FIXME! todo
+	// FIXME! test CSphMatchQueue
 	void MoveTo ( ISphMatchSorter * pRhs ) final
 	{
-		auto& dRhs = *(MYTYPE *) pRhs;
+		KMQ << "moveto";
+//		m_dLogger.Print ();
 
-		if ( !m_iTotal )
+		auto& dRhs = *(MYTYPE *) pRhs;
+		if ( IsEmpty() )
 			return; // no matches, nothing to do.
 
+//		dRhs.m_dLogger.Print ();
 		// install into virgin sorter - no need to do something; just swap
-		if ( !dRhs.m_iTotal )
+		if ( dRhs.IsEmpty() )
 		{
 			SwapMatchQueueTraits ( dRhs );
 			return;
 		}
 
-		// both are non-empty - need to process.
 		// work as in non-ordered finalize call, but we not need to
 		// clone the matches, may just move them instead.
-		for ( auto * pCur = m_pData; pCur<( m_pData+m_iUsed ); ++pCur )
+
+		// total need special care: just add two values and don't rely
+		// on result of moving, since it will be wrong
+		auto iTotal = dRhs.m_iTotal;
+		for ( auto iMatch : m_dIData )
+			dRhs.PushT ( m_dData[iMatch],
+				[] ( CSphMatch & tTrg, CSphMatch & tMatch ) {
+					Swap ( tTrg, tMatch );
+				});
+		dRhs.m_iTotal = m_iTotal + iTotal;
+	}
+
+private:
+	CSphMatch* Root() const
+	{
+		return &m_dData [ m_dIData.First() ];
+	}
+
+	/// generic add entry to the queue
+	template <typename MATCH, typename PUSHER>
+	bool PushT ( MATCH && tEntry, PUSHER && PUSH )
+	{
+		++m_iTotal;
+
+		if_const ( NOTIFICATIONS )
 		{
-			dRhs.PushT ( [&dRhs] ( CSphMatch & tEntry ) {
-				Swap ( *( dRhs.m_pData+dRhs.m_iUsed ), tEntry );
-			}, *pCur );
+			m_iJustPushed = INVALID_ROWID;
+			m_dJustPopped.Resize(0);
+		}
+
+		if ( Used()==m_iSize )
+		{
+			// if it's worse that current min, reject it, else pop off current min
+			if ( COMP::IsLess ( tEntry, *Root(), m_tState ) )
+				return true;
+			else
+				Pop ();
+		}
+
+		// do add
+		PUSH ( Add(), std::forward<MATCH> ( tEntry ));
+
+		if_const ( NOTIFICATIONS )
+			m_iJustPushed = Last()->m_tRowID;
+
+		int iEntry = Used()-1;
+
+		// shift up if needed, so that worst (lesser) ones float to the top
+		while ( iEntry )
+		{
+			int iParent = ( iEntry-1 ) / 2;
+			if ( !m_dComp.IsLess ( m_dIData[iParent], m_dIData[iEntry] ) )
+				break;
+
+			// entry is less than parent, should float to the top
+			Swap ( m_dIData[iEntry], m_dIData[iParent] );
+			iEntry = iParent;
+		}
+		return true;
+	}
+
+	/// remove root (ie. top priority) entry
+	void Pop ()
+	{
+		m_bStorageFilled = true;
+		assert ( !IsEmpty() );
+
+		auto& iJustRemoved = m_dIData.Pop();
+		if ( IsEmpty() ) // empty queue? just return
+			return;
+
+		// make the last entry my new root
+		Swap ( m_dIData.First(), iJustRemoved );
+		m_pSchema->FreeDataPtrs ( m_dData[iJustRemoved] );
+
+		if_const ( NOTIFICATIONS )
+		{
+			if ( m_dJustPopped.IsEmpty() )
+				m_dJustPopped.Add ( m_dData[iJustRemoved].m_tRowID );
+			else
+				m_dJustPopped[0] = m_dData[iJustRemoved].m_tRowID;
+		}
+
+		// sift down if needed
+		int iEntry = 0;
+		auto iUsed = Used();
+		while (true)
+		{
+			// select child
+			int iChild = (iEntry*2) + 1;
+			if ( iChild>=iUsed )
+				break;
+
+			// select smallest child
+			if ( iChild+1<iUsed )
+				if ( m_dComp.IsLess ( m_dIData[iChild], m_dIData[iChild+1] ) )
+					++iChild;
+
+			// if smallest child is less than entry, do float it to the top
+			if ( m_dComp.IsLess ( m_dIData[iEntry], m_dIData[iChild] ) )
+			{
+				Swap ( m_dIData[iChild], m_dIData[iEntry] );
+				iEntry = iChild;
+				continue;
+			}
+			break;
 		}
 	}
 };
 
+#define LOG_COMPONENT_KBF __LINE__ << " *(" << this << ") "
 
-
+#define KBF LOC(DIAG,KBF)
 //////////////////////////////////////////////////////////////////////////
-
-/// match sorting functor
-template < typename COMP >
-struct MatchSort_fn : public MatchSortAccessor_t
-{
-	CSphMatchComparatorState	m_tState;
-
-	explicit MatchSort_fn ( const CSphMatchComparatorState & tState )
-		: m_tState ( tState )
-	{}
-
-	bool IsLess ( const MEDIAN_TYPE a, const MEDIAN_TYPE b ) const
-	{
-		return COMP::IsLess ( *a, *b, m_tState );
-	}
-};
-
-
 /// K-buffer (generalized double buffer) sorter
 /// faster worst-case but slower average-case than the heap sorter
+/// invoked with select ... OPTION sort_method=kbuffer
 template < typename COMP, bool NOTIFICATIONS >
-class CSphKbufferMatchQueue : public CSphMatchQueueTraits
+class CSphKbufferMatchQueue final : public CSphMatchQueueTraits
 {
-protected:
-	static const int	COEFF = 4;
+	using MYTYPE = CSphKbufferMatchQueue<COMP, NOTIFICATIONS>;
+	InvCompareIndex_fn<COMP> m_dComp;
 
-	CSphMatch *			m_pEnd;
 	CSphMatch *			m_pWorst = nullptr;
 	bool				m_bFinalized = false;
+	int					m_iMaxUsed = -1;
 
+	static const int COEFF = 4;
+	LOC_ADD;
 public:
 	/// ctor
-	CSphKbufferMatchQueue ( int iSize )
+	explicit CSphKbufferMatchQueue ( int iSize )
 		: CSphMatchQueueTraits ( iSize*COEFF )
-		, m_pEnd ( m_pData+iSize*COEFF )
+		, m_dComp ( *this )
 	{
-		if_const ( NOTIFICATIONS )
-			m_dJustPopped.Reserve ( m_iSize );
-
 		m_iSize /= COEFF;
+		if_const ( NOTIFICATIONS )
+			m_dJustPopped.Reserve ( m_iSize*(COEFF-1) );
 	}
 
 	/// check if this sorter does groupby
-	bool IsGroupby () const override
+	bool IsGroupby () const final
 	{
 		return false;
 	}
 
+	/// current result set length
+	int GetLength () const final
+	{
+		return Min ( Used(), m_iSize );
+	}
+
 	/// add entry to the queue
-	bool Push ( const CSphMatch & tEntry ) override
+	bool Push ( const CSphMatch & tEntry ) final
+	{
+		return PushT ( tEntry, [this] ( CSphMatch & tTrg, const CSphMatch & tMatch )
+		{
+			m_pSchema->CloneMatch ( tTrg, tMatch );
+		});
+	}
+
+	/// add grouped entry (must not happen)
+	bool PushGrouped ( const CSphMatch &, bool ) final
+	{
+		assert ( false );
+		return false;
+	}
+
+	/// store all entries into specified location in sorted order, and remove them from queue
+	int Flatten ( CSphMatch * pTo, int iTag ) final
+	{
+		KBF << "Flatten";
+		FinalizeMatches ();
+		auto iReadyMatches = Used();
+
+		for ( auto iMatch : m_dIData )
+		{
+			KBF << "fltn " << m_dData[iMatch].m_iTag << ":" << m_dData[iMatch].m_tRowID;
+			Swap ( *pTo, m_dData[iMatch] );
+			if ( iTag>=0 )
+				pTo->m_iTag = iTag;
+			++pTo;
+		}
+
+		for ( int i = 0; i<m_iMaxUsed; ++i )
+			m_dData[i].ResetDynamic ();
+		m_iMaxUsed = -1;
+
+		// clean up for the next work session
+		m_pWorst = nullptr;
+		m_iTotal = 0;
+		m_bFinalized = false;
+		m_dIData.Resize(0);
+		m_bStorageFilled = false;
+
+		return iReadyMatches;
+	}
+
+	/// finalize, perform final sort/cut as needed
+	void Finalize ( ISphMatchProcessor & tProcessor, bool ) final
+	{
+		KBF << "Finalize";
+		if ( IsEmpty() )
+			return;
+
+		FinalizeMatches();
+		for ( auto iMatch : m_dIData )
+			tProcessor.Process ( &m_dData[iMatch] );
+	}
+
+
+	ISphMatchSorter* Clone() const final
+	{
+		auto pClone = new MYTYPE ( m_iSize );
+		CloneTo ( pClone );
+		return pClone;
+	}
+
+	// FIXME! test CSphKbufferMatchQueue
+	// FIXME! need to deal with justpushed/justpopped any other way!
+	void MoveTo ( ISphMatchSorter * pRhs ) final
+	{
+		auto& dRhs = *(CSphKbufferMatchQueue<COMP, NOTIFICATIONS>*) pRhs;
+
+		if ( IsEmpty () )
+			return;
+
+		if ( dRhs.IsEmpty () )
+		{
+			SwapMatchQueueTraits (dRhs);
+			dRhs.m_pWorst = m_pWorst;
+			dRhs.m_bFinalized = m_bFinalized;
+			return;
+		}
+
+		FinalizeMatches();
+
+
+		// both are non-empty - need to process.
+		// work as finalize call, but don't clone the matches; move them instead.
+
+		// total need special care!
+		auto iTotal = dRhs.m_iTotal;
+		for ( auto iMatch : m_dIData )
+		{
+			dRhs.PushT ( m_dData[iMatch],
+			[] ( CSphMatch & tTrg, CSphMatch & tMatch ) {
+				Swap ( tTrg, tMatch );
+			});
+		}
+		dRhs.m_iTotal = m_iTotal + iTotal;
+	}
+
+private:
+	void SortMatches () // sort from best to worst
+	{
+		m_dIData.Sort ( m_dComp );
+	}
+
+	void FreeMatch ( int iMatch )
+	{
+		if_const ( NOTIFICATIONS )
+			m_dJustPopped.Add ( m_dData[iMatch].m_tRowID );
+		m_pSchema->FreeDataPtrs ( m_dData[iMatch] );
+	}
+
+	void CutTail()
+	{
+		if ( Used()<=m_iSize)
+			return;
+
+		m_iMaxUsed = Max ( m_iMaxUsed, this->m_dIData.GetLength () ); // memorize it for free dynamics later.
+
+		m_dIData.Slice ( m_iSize ).Apply ( [this] ( int iMatch ) { FreeMatch ( iMatch ); } );
+		m_dIData.Resize ( m_iSize );
+	}
+
+	// conception: we have array of N*COEFF elems.
+	// We need only N best elements from it (rest have to be disposed).
+	// direct way: rsort, then take first N elems.
+	// this way: rearrange array by performing one pass of quick sort
+	// if we have exactly N elems left hand from pivot - we're done.
+	// otherwise repeat rearranging only to right or left part until the target achieved.
+	void BinaryPartition ()
+	{
+		int iPivot = m_dIData[m_iSize / COEFF+1];
+		int iMaxIndex = m_iSize-1;
+		int a=0;
+		int b=Used()-1;
+		while (true)
+		{
+			int i=a;
+			int j=b;
+			while (i<=j)
+			{
+				while (m_dComp.IsLess (m_dIData[i],iPivot)) 	++i;
+				while (m_dComp.IsLess (iPivot, m_dIData[j]))	--j;
+				if ( i<=j ) ::Swap( m_dIData[i++], m_dIData[j--]);
+			}
+			if ( iMaxIndex == j )
+				break;
+
+			if ( iMaxIndex < j)
+				b = j;  // too many elems aquired; continue with left part
+			else
+				a = i;  // too less elems aquired; continue with right part
+			iPivot = m_dIData[( a * ( COEFF-1 )+b ) / COEFF];
+		}
+	}
+
+	void RepartitionMatches ()
+	{
+		assert ( Used ()>m_iSize );
+		BinaryPartition ();
+
+		CutTail();
+	}
+
+	void FinalizeMatches ()
+	{
+		if ( m_bFinalized )
+			return;
+
+		m_bFinalized = true;
+
+		if ( Used ()>m_iSize )
+			RepartitionMatches();
+
+		SortMatches();
+	}
+
+	// generic push entry (add it some way to the queue clone or swap, PUSHER depends)
+	template<typename MATCH, typename PUSHER>
+	bool PushT ( MATCH && tEntry, PUSHER && PUSH )
 	{
 		if_const ( NOTIFICATIONS )
 		{
@@ -462,149 +671,49 @@ public:
 		}
 
 		// quick early rejection checks
-		m_iTotal++;
+		++m_iTotal;
 		if ( m_pWorst && COMP::IsLess ( tEntry, *m_pWorst, m_tState ) )
 			return true;
 
 		// quick check passed
 		// fill the data, back to front
 		m_bFinalized = false;
-		m_iUsed++;
-		m_pSchema->CloneMatch ( m_pEnd-m_iUsed, tEntry );
+		PUSH ( Add(), std::forward<MATCH> ( tEntry ));
 
 		if_const ( NOTIFICATIONS )
-			m_iJustPushed = tEntry.m_tRowID;
+			m_iJustPushed = Last()->m_tRowID;
 
 		// do the initial sort once
 		if ( m_iTotal==m_iSize )
 		{
-			assert ( m_iUsed==m_iSize && !m_pWorst );
-			MatchSort_fn<COMP> tComp ( m_tState );
-			sphSort ( m_pEnd-m_iSize, m_iSize, tComp, tComp );
-			m_pWorst = m_pEnd-m_iSize;
+			assert ( Used()==m_iSize && !m_pWorst );
+			SortMatches();
+			m_pWorst = Last();
 			m_bFinalized = true;
 			return true;
 		}
 
+		if ( Used ()<m_iSize*COEFF )
+			return true;
+
+		// that will switch Add() to reuse the indexes
+		m_bStorageFilled = true;
+
 		// do the sort/cut when the K-buffer is full
-		if ( m_iUsed==m_iSize*COEFF )
-		{
-			MatchSort_fn<COMP> tComp ( m_tState );
-			sphSort ( m_pData, m_iUsed, tComp, tComp );
+		assert ( Used ()==m_iSize*COEFF );
 
-			if_const ( NOTIFICATIONS )
-			{
-				for ( CSphMatch * pMatch = m_pData; pMatch < m_pEnd-m_iSize; pMatch++ )
-					m_dJustPopped.Add ( pMatch->m_tRowID );
-			}
-
-			for ( CSphMatch * pMatch = m_pData; pMatch < m_pEnd-m_iSize; pMatch++ )
-				m_pSchema->FreeDataPtrs(pMatch);
-
-			m_iUsed = m_iSize;
-			m_pWorst = m_pEnd-m_iSize;
-			m_bFinalized = true;
-		}
+		RepartitionMatches();
+		SortMatches ();
+		m_pWorst = Last ();
+		m_bFinalized = true;
 		return true;
-	}
-
-	/// add grouped entry (must not happen)
-	bool PushGrouped ( const CSphMatch &, bool ) override
-	{
-		assert ( 0 );
-		return false;
-	}
-
-	/// finalize, perform final sort/cut as needed
-	void Finalize ( ISphMatchProcessor & tProcessor, bool ) override
-	{
-		if ( !GetLength() )
-			return;
-
-		if ( !m_bFinalized )
-		{
-			MatchSort_fn<COMP> tComp ( m_tState );
-			sphSort ( m_pEnd-m_iUsed, m_iUsed, tComp, tComp );
-			for ( int i = m_iSize; i < m_iUsed; i++ )
-			{
-				CSphMatch * pMatch = m_pEnd-i-1;
-				m_pSchema->FreeDataPtrs ( pMatch );
-				pMatch->ResetDynamic();
-			}
-
-			m_iUsed = Min ( m_iUsed, m_iSize );
-			m_bFinalized = true;
-		}
-
-		// reverse order iteration
-		CSphMatch * pCur = m_pEnd - 1;
-		const CSphMatch * pEnd = m_pEnd - m_iUsed;
-		while ( pCur>=pEnd )
-		{
-			tProcessor.Process ( pCur-- );
-		}
-	}
-
-	/// current result set length
-	int GetLength () const override
-	{
-		return Min ( m_iUsed, m_iSize );
-	}
-
-	/// store all entries into specified location in sorted order, and remove them from queue
-	int Flatten ( CSphMatch * pTo, int iTag ) override
-	{
-		const CSphMatch * pBegin = pTo;
-
-		// ensure we are sorted
-		if ( m_iUsed )
-		{
-			MatchSort_fn<COMP> tComp ( m_tState );
-			sphSort ( m_pEnd-m_iUsed, m_iUsed, tComp, tComp );
-		}
-
-		// reverse copy
-		for ( int i=1; i<=Min ( m_iUsed, m_iSize ); i++ )
-		{
-			m_pSchema->FreeDataPtrs ( pTo );
-			Swap ( *pTo, m_pEnd[-i] );
-			if ( iTag>=0 )
-				pTo->m_iTag = iTag;
-			pTo++;
-		}
-
-		// clean up for the next work session
-		m_iTotal = 0;
-		m_iUsed = 0;
-		m_iSize = 0;
-		m_bFinalized = false;
-
-		return ( pTo-pBegin );
-	}
-
-	ISphMatchSorter* Clone() const final
-	{
-		auto pClone = new CSphKbufferMatchQueue<COMP,NOTIFICATIONS> ( m_iSize );
-		CloneTo ( pClone );
-		return pClone;
-	}
-
-	// FIXME! todo
-	void MoveTo ( ISphMatchSorter * pRhs ) final
-	{
-		auto& dRhs = *(CSphKbufferMatchQueue<COMP, NOTIFICATIONS>*) pRhs;
-		if ( !dRhs.m_iTotal )
-		{
-			SwapMatchQueueTraits (dRhs);
-			return;
-		}
 	}
 };
 
 //////////////////////////////////////////////////////////////////////////
 
 /// collector for UPDATE statement
-class CSphUpdateQueue : public CSphMatchQueueTraits
+class CSphUpdateQueue final : public CSphMatchQueueTraits
 {
 	CSphAttrUpdate		m_tWorkSet;
 	CSphIndex *			m_pIndex;
@@ -612,27 +721,6 @@ class CSphUpdateQueue : public CSphMatchQueueTraits
 	CSphString *		m_pWarning;
 	int *				m_pAffected;
 
-private:
-	void DoUpdate()
-	{
-		if ( !m_iUsed )
-			return;
-
-		m_tWorkSet.m_dRowOffset.Resize ( m_iUsed );
-		m_tWorkSet.m_dDocids.Resize ( m_iUsed );
-
-		ARRAY_FOREACH ( i, m_tWorkSet.m_dDocids )
-		{
-			m_tWorkSet.m_dRowOffset[i] = 0;
-			m_tWorkSet.m_dDocids[i] = sphGetDocID ( m_pData[i].m_pStatic ? m_pData[i].m_pStatic : m_pData[i].m_pDynamic );
-		}
-
-		bool bCritical = false;
-		*m_pAffected += m_pIndex->UpdateAttributes ( m_tWorkSet, -1, bCritical, *m_pError, *m_pWarning );
-		assert ( !bCritical ); // fixme! handle this
-
-		m_iUsed = 0;
-	}
 public:
 	/// ctor
 	CSphUpdateQueue ( int iSize, CSphAttrUpdateEx * pUpdate, bool bIgnoreNonexistent, bool bStrict )
@@ -663,11 +751,11 @@ public:
 	{
 		++m_iTotal;
 
-		if ( m_iUsed==m_iSize )
+		if ( Used()==m_iSize )
 			DoUpdate();
 
 		// do add
-		m_pSchema->CloneMatch ( &m_pData[m_iUsed++], tEntry );
+		m_pSchema->CloneMatch ( Add(), tEntry );
 		return true;
 	}
 
@@ -681,7 +769,6 @@ public:
 	/// final update pass
 	int Flatten ( CSphMatch *, int ) final
 	{
-		assert ( m_iUsed>=0 );
 		DoUpdate();
 		m_iTotal = 0;
 		return 0;
@@ -689,17 +776,15 @@ public:
 
 	void Finalize ( ISphMatchProcessor & tProcessor, bool ) final
 	{
-		if ( !GetLength() )
+		if ( IsEmpty() )
 			return;
 
 		// just evaluate in heap order
-		CSphMatch * pCur = m_pData;
-		const CSphMatch * pEnd = m_pData + m_iUsed;
-		while ( pCur<pEnd )
-		{
-			tProcessor.Process ( pCur++ );
-		}
+		for ( auto iMatch : m_dIData )
+			tProcessor.Process ( &m_dData[iMatch] );
 	}
+
+	bool CanBeCloned () final { return false; }
 
 	// stub
 	ISphMatchSorter * Clone () const final
@@ -710,13 +795,36 @@ public:
 	// stub
 	void MoveTo ( ISphMatchSorter* ) final {}
 
+private:
+	void DoUpdate()
+	{
+		if ( IsEmpty() )
+			return;
+
+		m_tWorkSet.m_dRowOffset.Resize ( Used() );
+		m_tWorkSet.m_dDocids.Resize ( Used() );
+
+		ARRAY_FOREACH ( i, m_tWorkSet.m_dDocids )
+		{
+			auto& tMatch = Get(i);
+			m_tWorkSet.m_dRowOffset[i] = 0;
+			m_tWorkSet.m_dDocids[i] = sphGetDocID ( tMatch.m_pStatic ? tMatch.m_pStatic : tMatch.m_pDynamic );
+		}
+
+		bool bCritical = false;
+		*m_pAffected += m_pIndex->UpdateAttributes ( m_tWorkSet, -1, bCritical, *m_pError, *m_pWarning );
+		assert ( !bCritical ); // fixme! handle this
+
+		// fixme! Do we need release/delete cloned matches anyway here? Check with valgrind!
+		m_dIData.Resize(0);
+	}
 };
 
 //////////////////////////////////////////////////////////////////////////
 
 /// collect list of matched DOCIDs
 /// (mainly used to collect docs in `DELETE... WHERE` statement)
-class CSphCollectQueue : public CSphMatchQueueTraits
+class CSphCollectQueue final : public CSphMatchQueueTraits
 {
 public:
 	/// ctor
@@ -758,6 +866,8 @@ public:
 	// stub
 	void Finalize ( ISphMatchProcessor &, bool ) final
 	{}
+
+	bool CanBeCloned () final { return false; }
 
 	// stub
 	ISphMatchSorter * Clone () const final
@@ -917,7 +1027,7 @@ CSphGrouper * getYearGrouper ( const CSphAttrLocator &tLoc )
 }
 
 template <class PRED>
-class CSphGrouperString : public CSphGrouperAttr, public PRED
+class CSphGrouperString final : public CSphGrouperAttr, public PRED
 {
 public:
 	explicit CSphGrouperString ( const CSphAttrLocator & tLoc )
@@ -931,12 +1041,11 @@ public:
 
 	SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const override
 	{
-		int iLen = 0;
-		const BYTE * pStr = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool, iLen );
-		if ( !pStr || !iLen )
+		auto dBlobAttr = tMatch.FetchAttrData ( m_tLocator, GetBlobPool() );
+		if ( IsNull ( dBlobAttr ) )
 			return 0;
 
-		return PRED::Hash ( pStr, iLen );
+		return PRED::Hash ( dBlobAttr.first,dBlobAttr.second );
 	}
 };
 
@@ -944,7 +1053,7 @@ public:
 class BinaryHash_fn
 {
 public:
-	uint64_t Hash ( const BYTE * pStr, int iLen, uint64_t uPrev=SPH_FNV64_SEED ) const
+	static uint64_t Hash ( const BYTE * pStr, int iLen, uint64_t uPrev=SPH_FNV64_SEED )
 	{
 		assert ( pStr && iLen );
 		return sphFNV64 ( pStr, iLen, uPrev );
@@ -978,7 +1087,7 @@ inline static char * FormatInt ( char sBuf[32], T v )
 
 
 /// lookup JSON key, group by looked up value (used in CSphKBufferJsonGroupSorter)
-class CSphGrouperJsonField : public CSphGrouper
+class CSphGrouperJsonField final : public CSphGrouper
 {
 public:
 	CSphGrouperJsonField ( const CSphAttrLocator & tLoc, ISphExpr * pExpr )
@@ -988,59 +1097,52 @@ public:
 		SafeAddRef ( pExpr );
 	}
 
-	void SetBlobPool ( const BYTE * pBlobPool ) override
+	void SetBlobPool ( const BYTE * pBlobPool ) final
 	{
 		CSphGrouper::SetBlobPool ( pBlobPool );
 		if ( m_pExpr )
 			m_pExpr->Command ( SPH_EXPR_SET_BLOB_POOL, (void*)pBlobPool );
 	}
 
-	void GetLocator ( CSphAttrLocator & tOut ) const override
+	void GetLocator ( CSphAttrLocator & tOut ) const final
 	{
 		tOut = m_tLocator;
 	}
 
-	ESphAttr GetResultType () const override
+	ESphAttr GetResultType () const final
 	{
 		return SPH_ATTR_BIGINT;
 	}
 
-	SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const override
+	SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const final
 	{
 		if ( !m_pExpr )
 			return SphGroupKey_t();
 		return m_pExpr->Int64Eval ( tMatch );
 	}
 
-	SphGroupKey_t KeyFromValue ( SphAttr_t ) const override { assert(0); return SphGroupKey_t(); }
+	SphGroupKey_t KeyFromValue ( SphAttr_t ) const final { assert(0); return SphGroupKey_t(); }
 
 protected:
 	CSphAttrLocator				m_tLocator;
 	CSphRefcountedPtr<ISphExpr>	m_pExpr;
-	const BYTE *				m_pBlobPool {nullptr};
 };
 
 
 template <class PRED>
-class CSphGrouperMulti : public CSphGrouper, public PRED
+class CSphGrouperMulti final: public CSphGrouper, public PRED
 {
 public:
-	CSphGrouperMulti ( const CSphVector<CSphAttrLocator> & dLocators, const CSphVector<ESphAttr> & dAttrTypes, const CSphVector<ISphExpr *> & dJsonKeys )
-		: m_dLocators ( dLocators )
-		, m_dAttrTypes ( dAttrTypes )
-		, m_dJsonKeys ( dJsonKeys )
+	CSphGrouperMulti ( CSphVector<CSphAttrLocator> dLocators, CSphVector<ESphAttr> dAttrTypes, VecRefPtrs_t<ISphExpr *> dJsonKeys)
+		: m_dLocators ( std::move(dLocators) )
+		, m_dAttrTypes ( std::move(dAttrTypes) )
+		, m_dJsonKeys ( std::move(dJsonKeys) )
 	{
 		assert ( m_dLocators.GetLength()>1 );
-		assert ( m_dLocators.GetLength()==m_dAttrTypes.GetLength() && m_dLocators.GetLength()==dJsonKeys.GetLength() );
+		assert ( m_dLocators.GetLength()==m_dAttrTypes.GetLength() && m_dLocators.GetLength()==m_dJsonKeys.GetLength() );
 	}
 
-	~CSphGrouperMulti () override
-	{
-		ARRAY_FOREACH ( i, m_dJsonKeys )
-			SafeDelete ( m_dJsonKeys[i] );
-	}
-
-	SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const override
+	SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const final
 	{
 		auto tKey = ( SphGroupKey_t ) SPH_FNV64_SEED;
 
@@ -1049,7 +1151,7 @@ public:
 			if ( m_dAttrTypes[i]==SPH_ATTR_STRING )
 			{
 				int iLen = 0;
-				const BYTE * pStr = sphGetBlobAttr( tMatch, m_dLocators[i], m_pBlobPool, iLen );
+				const BYTE * pStr = sphGetBlobAttr( tMatch, m_dLocators[i], GetBlobPool(), iLen );
 				if ( !pStr || !iLen )
 					continue;
 
@@ -1058,14 +1160,14 @@ public:
 			} else if ( m_dAttrTypes[i]==SPH_ATTR_JSON )
 			{
 				int iLen = 0;
-				const BYTE * pStr = sphGetBlobAttr( tMatch, m_dLocators[i], m_pBlobPool, iLen );
+				const BYTE * pStr = sphGetBlobAttr( tMatch, m_dLocators[i], GetBlobPool(), iLen );
 				if ( !pStr || !iLen )
 					continue;
 
 				uint64_t uPacked = m_dJsonKeys[i]->Int64Eval ( tMatch );
 
 				ESphJsonType eType = sphJsonUnpackType ( uPacked );
-				const BYTE * pValue = m_pBlobPool + sphJsonUnpackOffset ( uPacked );
+				const BYTE * pValue = GetBlobPool () + sphJsonUnpackOffset ( uPacked );
 
 				int i32Val;
 				int64_t i64Val;
@@ -1102,7 +1204,7 @@ public:
 		return tKey;
 	}
 
-	void SetBlobPool ( const BYTE * pBlobPool ) override
+	void SetBlobPool ( const BYTE * pBlobPool ) final
 	{
 		CSphGrouper::SetBlobPool ( pBlobPool );
 		ARRAY_FOREACH ( i, m_dJsonKeys )
@@ -1112,14 +1214,14 @@ public:
 		}
 	}
 
-	SphGroupKey_t KeyFromValue ( SphAttr_t ) const override { assert(0); return SphGroupKey_t(); }
-	void GetLocator ( CSphAttrLocator & ) const override { assert(0); }
-	ESphAttr GetResultType() const override { return SPH_ATTR_BIGINT; }
+	SphGroupKey_t KeyFromValue ( SphAttr_t ) const final { assert(0); return SphGroupKey_t(); }
+	void GetLocator ( CSphAttrLocator & ) const final { assert(0); }
+	ESphAttr GetResultType() const final { return SPH_ATTR_BIGINT; }
 
 private:
 	CSphVector<CSphAttrLocator>	m_dLocators;
 	CSphVector<ESphAttr>		m_dAttrTypes;
-	CSphVector<ISphExpr *>		m_dJsonKeys;
+	VecRefPtrs_t<ISphExpr *>	m_dJsonKeys;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1190,7 +1292,7 @@ public:
 		assert ( m_iFree<m_iLength && "hash overflow" );
 
 		// check if it's already hashed
-		DWORD uHash = DWORD ( HASHFUNC::Hash ( tKey ) ) & ( m_dHash.GetLength()-1 );
+		auto uHash = DWORD ( HASHFUNC::Hash ( tKey ) ) & ( m_dHash.GetLength()-1 );
 		int iPrev = HASH_LIST_END;
 
 		for ( int iEntry=m_dHash[uHash].m_iEntry; iEntry>=0; iPrev=iEntry, iEntry=m_dHash[iEntry].m_iNext )
@@ -1223,7 +1325,7 @@ public:
 	/// get value pointer by key
 	T * operator () ( const KEY & tKey ) const
 	{
-		DWORD uHash = DWORD ( HASHFUNC::Hash ( tKey ) ) & ( m_dHash.GetLength()-1 );
+		auto uHash = DWORD ( HASHFUNC::Hash ( tKey ) ) & ( m_dHash.GetLength()-1 );
 
 		for ( int iEntry=m_dHash[uHash].m_iEntry; iEntry!=HASH_LIST_END; iEntry=m_dHash[iEntry].m_iNext )
 			if ( m_dEntries[iEntry].m_tKey==tKey )
@@ -1235,8 +1337,26 @@ public:
 
 
 /////////////////////////////////////////////////////////////////////////////
+/// (attrvalue,count) pair
+struct SphUngroupedValue_t : public std::pair<SphAttr_t,int>
+{
+	using BASE = std::pair<SphAttr_t,int>;
 
-/// (group,attrvalue) pair
+	FWD_BASECTOR (SphUngroupedValue_t)
+
+	inline bool operator < ( const SphUngroupedValue_t & rhs ) const
+	{
+		if ( first!=rhs.first ) return first<rhs.first;
+		return second>rhs.second;
+	}
+
+	inline bool operator == ( const SphUngroupedValue_t & rhs ) const
+	{
+		return first==rhs.first;
+	}
+};
+
+/// (group,attrvalue,count) tuplet
 struct SphGroupedValue_t
 {
 public:
@@ -1266,33 +1386,6 @@ public:
 	}
 };
 
-/// same as SphGroupedValue_t but without group
-struct SphUngroupedValue_t
-{
-public:
-	SphAttr_t		m_uValue;
-	int				m_iCount;
-
-public:
-	SphUngroupedValue_t () = default;
-
-	SphUngroupedValue_t ( SphAttr_t uValue, int iCount )
-		: m_uValue ( uValue )
-		, m_iCount ( iCount )
-	{}
-
-	inline bool operator < ( const SphUngroupedValue_t & rhs ) const
-	{
-		if ( m_uValue!=rhs.m_uValue ) return m_uValue<rhs.m_uValue;
-		return m_iCount>rhs.m_iCount;
-	}
-
-	inline bool operator == ( const SphUngroupedValue_t & rhs ) const
-	{
-		return m_uValue==rhs.m_uValue;
-	}
-};
-
 
 /// unique values counter
 /// used for COUNT(DISTINCT xxx) GROUP BY yyy queries
@@ -1308,7 +1401,7 @@ public:
 public:
 	int				CountStart ( SphGroupKey_t * pOutGroup );	///< starting counting distinct values, returns count and group key (0 if empty)
 	int				CountNext ( SphGroupKey_t * pOutGroup );	///< continues counting distinct values, returns count and group key (0 if done)
-	void			Compact ( SphGroupKey_t * pRemoveGroups, int iRemoveGroups );
+	void			Compact ( VecTraits_T<SphGroupKey_t> & dRemoveGroups );
 
 protected:
 	int				m_iCountPos = 0;
@@ -1332,9 +1425,9 @@ int CSphUniqounter::CountNext ( SphGroupKey_t * pOutGroup )
 	if ( m_iCountPos>=m_iCount )
 		return 0;
 
-	SphGroupKey_t uGroup = m_pData[m_iCountPos].m_uGroup;
-	SphAttr_t uValue = m_pData[m_iCountPos].m_uValue;
-	int iCount = m_pData[m_iCountPos].m_iCount;
+	auto uGroup = m_pData[m_iCountPos].m_uGroup;
+	auto uValue = m_pData[m_iCountPos].m_uValue;
+	auto iCount = m_pData[m_iCountPos].m_iCount;
 	*pOutGroup = uGroup;
 
 	while ( m_iCountPos<m_iCount && m_pData[m_iCountPos].m_uGroup==uGroup )
@@ -1342,19 +1435,21 @@ int CSphUniqounter::CountNext ( SphGroupKey_t * pOutGroup )
 		if ( m_pData[m_iCountPos].m_uValue!=uValue )
 			iCount += m_pData[m_iCountPos].m_iCount;
 		uValue = m_pData[m_iCountPos].m_uValue;
-		m_iCountPos++;
+		++m_iCountPos;
 	}
 	return iCount;
 }
 
-
-void CSphUniqounter::Compact ( SphGroupKey_t * pRemoveGroups, int iRemoveGroups )
+// works like 'uniq', and also throw away provided values to remove.
+void CSphUniqounter::Compact ( VecTraits_T<SphGroupKey_t>& dRemoveGroups )
 {
 	assert ( m_bSorted );
 	if ( !m_iCount )
 		return;
 
-	sphSort ( pRemoveGroups, iRemoveGroups );
+	dRemoveGroups.Sort();
+	auto * pRemoveGroups = dRemoveGroups.begin ();
+	auto iRemoveGroups = dRemoveGroups.GetLength ();
 
 	SphGroupedValue_t * pSrc = m_pData;
 	SphGroupedValue_t * pDst = m_pData;
@@ -1363,17 +1458,17 @@ void CSphUniqounter::Compact ( SphGroupKey_t * pRemoveGroups, int iRemoveGroups 
 	// skip remove-groups which are not in my list
 	while ( iRemoveGroups && (*pRemoveGroups)<pSrc->m_uGroup )
 	{
-		pRemoveGroups++;
-		iRemoveGroups--;
+		++pRemoveGroups;
+		--iRemoveGroups;
 	}
 
-	for ( ; pSrc<pEnd; pSrc++ )
+	for ( ; pSrc<pEnd; ++pSrc )
 	{
 		// check if this entry needs to be removed
 		while ( iRemoveGroups && (*pRemoveGroups)<pSrc->m_uGroup )
 		{
-			pRemoveGroups++;
-			iRemoveGroups--;
+			++pRemoveGroups;
+			--iRemoveGroups;
 		}
 		if ( iRemoveGroups && pSrc->m_uGroup==*pRemoveGroups )
 			continue;
@@ -1390,15 +1485,29 @@ void CSphUniqounter::Compact ( SphGroupKey_t * pRemoveGroups, int iRemoveGroups 
 }
 
 /////////////////////////////////////////////////////////////////////////////
+/// group sorting functor
+template < typename COMPGROUP >
+struct GroupSorter_fn : public CSphMatchComparatorState, public MatchSortAccessor_t
+{
+	const VecTraits_T<CSphMatch> & m_dBase;
+
+	explicit GroupSorter_fn ( const CSphMatchQueueTraits& dBase )
+		: m_dBase ( dBase.GetMatches() )
+	{}
+
+	bool IsLess ( int a, int b ) const
+	{
+		return COMPGROUP::IsLess ( m_dBase[b], m_dBase[a], *this );
+	}
+};
 
 /// match comparator interface from group-by sorter point of view
 struct ISphMatchComparator : public ISphRefcountedMT
 {
 	virtual bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & tState ) const = 0;
 protected:
-	virtual            ~ISphMatchComparator () = default;
+	            ~ISphMatchComparator () override = default;
 };
-
 
 /// additional group-by sorter settings
 struct CSphGroupSorterSettings
@@ -1406,7 +1515,7 @@ struct CSphGroupSorterSettings
 	CSphAttrLocator		m_tLocGroupby;		///< locator for @groupby
 	CSphAttrLocator		m_tLocCount;		///< locator for @count
 	CSphAttrLocator		m_tLocDistinct;		///< locator for @distinct
-	CSphAttrLocator		m_tDistinctLoc;		///< locator for attribute to compute count(distinct) for
+	CSphAttrLocator		m_tDistinctAttr;	///< locator for attribute to compute count(distinct) for
 	CSphAttrLocator		m_tLocGroupbyStr;	///< locator for @groupbystr
 
 	ESphAttr			m_eDistinctAttr = SPH_ATTR_NONE;	///< type of attribute to compute count(distinct) for
@@ -1423,7 +1532,7 @@ struct CSphGroupSorterSettings
 		sphFixupLocator ( m_tLocGroupby, pOldSchema, pNewSchema );
 		sphFixupLocator ( m_tLocCount, pOldSchema, pNewSchema );
 		sphFixupLocator ( m_tLocDistinct, pOldSchema, pNewSchema );
-		sphFixupLocator ( m_tDistinctLoc, pOldSchema, pNewSchema );
+		sphFixupLocator ( m_tDistinctAttr, pOldSchema, pNewSchema );
 		sphFixupLocator ( m_tLocGroupbyStr, pOldSchema, pNewSchema );
 	}
 };
@@ -1433,10 +1542,10 @@ struct CSphGroupSorterSettings
 class IAggrFunc
 {
 public:
-	virtual			~IAggrFunc() = default;
-	virtual void	Ungroup ( CSphMatch * ) {}
-	virtual void	Update ( CSphMatch * pDst, const CSphMatch * pSrc, bool bGrouped ) = 0;
-	virtual void	Finalize ( CSphMatch * ) {}
+	virtual			~IAggrFunc() {};
+	virtual void	Ungroup ( CSphMatch & ) {}
+	virtual void	Update ( CSphMatch &, const CSphMatch &, bool bGrouped ) = 0;
+	virtual void	Finalize ( CSphMatch & ) {}
 };
 
 
@@ -1446,189 +1555,406 @@ class IAggrFuncTraits : public IAggrFunc
 {
 public:
 	explicit		IAggrFuncTraits ( const CSphAttrLocator & tLocator ) : m_tLocator ( tLocator ) {}
-	T				GetValue ( const CSphMatch * pRow );
-	void			SetValue ( CSphMatch * pRow, T val );
+	T				GetValue ( const CSphMatch & tRow );
+	void			SetValue ( CSphMatch & tRow, T val );
 
 protected:
 	CSphAttrLocator	m_tLocator;
 };
 
 template<>
-inline DWORD IAggrFuncTraits<DWORD>::GetValue ( const CSphMatch * pRow )
+inline DWORD IAggrFuncTraits<DWORD>::GetValue ( const CSphMatch & tRow )
 {
-	return (DWORD)pRow->GetAttr ( m_tLocator );
+	return (DWORD) tRow.GetAttr ( m_tLocator );
 }
 
 template<>
-inline void IAggrFuncTraits<DWORD>::SetValue ( CSphMatch * pRow, DWORD val )
+inline void IAggrFuncTraits<DWORD>::SetValue ( CSphMatch & tRow, DWORD val )
 {
-	pRow->SetAttr ( m_tLocator, val );
+	tRow.SetAttr ( m_tLocator, val );
 }
 
 template<>
-inline int64_t IAggrFuncTraits<int64_t>::GetValue ( const CSphMatch * pRow )
+inline int64_t IAggrFuncTraits<int64_t>::GetValue ( const CSphMatch & tRow )
 {
-	return pRow->GetAttr ( m_tLocator );
+	return tRow.GetAttr ( m_tLocator );
 }
 
 template<>
-inline void IAggrFuncTraits<int64_t>::SetValue ( CSphMatch * pRow, int64_t val )
+inline void IAggrFuncTraits<int64_t>::SetValue ( CSphMatch & tRow, int64_t val )
 {
-	pRow->SetAttr ( m_tLocator, val );
+	tRow.SetAttr ( m_tLocator, val );
 }
 
 template<>
-inline float IAggrFuncTraits<float>::GetValue ( const CSphMatch * pRow )
+inline float IAggrFuncTraits<float>::GetValue ( const CSphMatch & tRow )
 {
-	return pRow->GetAttrFloat ( m_tLocator );
+	return tRow.GetAttrFloat ( m_tLocator );
 }
 
 template<>
-inline void IAggrFuncTraits<float>::SetValue ( CSphMatch * pRow, float val )
+inline void IAggrFuncTraits<float>::SetValue ( CSphMatch & tRow, float val )
 {
-	pRow->SetAttrFloat ( m_tLocator, val );
+	tRow.SetAttrFloat ( m_tLocator, val );
 }
 
 
 
 /// SUM() implementation
 template < typename T >
-class AggrSum_t : public IAggrFuncTraits<T>
+class AggrSum_t final : public IAggrFuncTraits<T>
 {
 public:
 	explicit AggrSum_t ( const CSphAttrLocator & tLoc ) : IAggrFuncTraits<T> ( tLoc )
 	{}
 
-	void Update ( CSphMatch * pDst, const CSphMatch * pSrc, bool ) override
+	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool ) final
 	{
-		this->SetValue ( pDst, this->GetValue(pDst)+this->GetValue(pSrc) );
+		this->SetValue ( tDst, this->GetValue(tDst)+this->GetValue(tSrc) );
 	}
 };
 
 
 /// AVG() implementation
 template < typename T >
-class AggrAvg_t : public IAggrFuncTraits<T>
+class AggrAvg_t final : public IAggrFuncTraits<T>
 {
-protected:
 	CSphAttrLocator m_tCountLoc;
+	using IAggrFuncTraits<T>::GetValue;
+	using IAggrFuncTraits<T>::SetValue;
+
 public:
-	AggrAvg_t ( const CSphAttrLocator & tLoc, const CSphAttrLocator & tCountLoc ) : IAggrFuncTraits<T> ( tLoc ), m_tCountLoc ( tCountLoc )
+	AggrAvg_t ( const CSphAttrLocator & tLoc, const CSphAttrLocator & tCountLoc )
+		: IAggrFuncTraits<T> ( tLoc ), m_tCountLoc ( tCountLoc )
 	{}
 
-	void Ungroup ( CSphMatch * pDst ) override
+	void Ungroup ( CSphMatch & tDst ) final
 	{
-		this->SetValue ( pDst, T ( this->GetValue ( pDst ) * pDst->GetAttr ( m_tCountLoc ) ) );
+		SetValue ( tDst, T ( GetValue ( tDst ) * tDst.GetAttr ( m_tCountLoc ) ) );
 	}
 
-	void Update ( CSphMatch * pDst, const CSphMatch * pSrc, bool bGrouped ) override
+	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped ) final
 	{
 		if ( bGrouped )
-			this->SetValue ( pDst, T ( this->GetValue ( pDst ) + this->GetValue ( pSrc ) * pSrc->GetAttr ( m_tCountLoc ) ) );
+			SetValue ( tDst, T ( GetValue ( tDst ) + GetValue ( tSrc ) * tSrc.GetAttr ( m_tCountLoc ) ) );
 		else
-			this->SetValue ( pDst, this->GetValue ( pDst ) + this->GetValue ( pSrc ) );
+			SetValue ( tDst, GetValue ( tDst ) + GetValue ( tSrc ) );
 	}
 
-	void Finalize ( CSphMatch * pDst ) override
+	void Finalize ( CSphMatch & tDst ) final
 	{
-		auto uAttr = pDst->GetAttr ( m_tCountLoc );
+		auto uAttr = tDst.GetAttr ( m_tCountLoc );
 		if ( uAttr )
-			this->SetValue ( pDst, T ( this->GetValue ( pDst ) / uAttr ) );
+			SetValue ( tDst, T ( GetValue ( tDst ) / uAttr ) );
 	}
 };
 
 
 /// MAX() implementation
 template < typename T >
-class AggrMax_t : public IAggrFuncTraits<T>
+class AggrMax_t final : public IAggrFuncTraits<T>
 {
 public:
 	explicit AggrMax_t ( const CSphAttrLocator & tLoc ) : IAggrFuncTraits<T> ( tLoc )
 	{}
 
-	void Update ( CSphMatch * pDst, const CSphMatch * pSrc, bool ) override
+	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool ) final
 	{
-		this->SetValue ( pDst, Max ( this->GetValue(pDst), this->GetValue(pSrc) ) );
+		this->SetValue ( tDst, Max ( this->GetValue(tDst), this->GetValue(tSrc) ) );
 	}
 };
 
 
 /// MIN() implementation
 template < typename T >
-class AggrMin_t : public IAggrFuncTraits<T>
+class AggrMin_t final : public IAggrFuncTraits<T>
 {
 public:
 	explicit AggrMin_t ( const CSphAttrLocator & tLoc ) : IAggrFuncTraits<T> ( tLoc )
 	{}
 
-	void Update ( CSphMatch * pDst, const CSphMatch * pSrc, bool ) override
+	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool ) final
 	{
-		this->SetValue ( pDst, Min ( this->GetValue(pDst), this->GetValue(pSrc) ) );
+		this->SetValue ( tDst, Min ( this->GetValue(tDst), this->GetValue(tSrc) ) );
 	}
 };
 
+// helpers to serialize
+using BStream_c = TightPackedVec_T<BYTE>;
+
+BStream_c & operator<< ( BStream_c & dOut, const ByteBlob_t & tData )
+{
+	dOut.Append ( tData.first, tData.second );
+	return dOut;
+}
+
+template <typename NUM>
+BStream_c & operator<< ( BStream_c & dOut, NUM iNum )
+{
+	sphUnalignedWrite ( dOut.AddN ( sizeof ( NUM ) ), iNum );
+	return dOut;
+}
+
+template<typename T>
+BStream_c & operator<< ( BStream_c & dOut, const VecTraits_T<T> & tData )
+{
+	dOut << tData.GetLength ();
+	tData.Apply ( [&dOut] ( const T & tChunk ) { dOut << tChunk; } );
+	return dOut;
+}
+
+BStream_c & operator<< ( BStream_c & dOut, const VecTraits_T<BYTE> & tData )
+{
+	return dOut << tData.GetLength () << ByteBlob_t { tData.begin(), tData.GetLength () };
+}
+
+BStream_c & operator<< ( BStream_c & dOut, const CSphString& sData )
+{
+	return dOut << VecTraits_T<BYTE> ( (BYTE*) sData.cstr(), sData.Length() );
+}
+
+BStream_c & operator<< ( BStream_c & dOut, const StringBuilder_c & sData )
+{
+	return dOut << VecTraits_T<BYTE> ( (BYTE*) sData.cstr (), sData.GetLength () );
+}
+
+// helpers to de-serialize
+template<typename NUM>
+ByteBlob_t & operator>> ( ByteBlob_t & dIn, NUM & iNum )
+{
+	assert ( dIn.first );
+	assert ( dIn.second>=(int)sizeof (NUM) );
+	iNum = sphUnalignedRead ( *(NUM *) dIn.first );
+	dIn.first += sizeof ( NUM );
+	dIn.second -= sizeof ( NUM );
+	return dIn;
+}
+
+ByteBlob_t & operator>> ( ByteBlob_t & dIn, ByteBlob_t & tData )
+{
+	assert ( dIn.first );
+	assert ( dIn.second>=tData.second );
+	tData.first = dIn.first;
+	dIn.first += tData.second;
+	dIn.second -= tData.second;
+	return dIn;
+}
+
+template<typename T>
+ByteBlob_t & operator>> ( ByteBlob_t & dIn, CSphVector<T>& tData )
+{
+	int iLen;
+	dIn >> iLen;
+	tData.Resize ( iLen );
+	tData.Apply ( [&dIn] ( T & tChunk ) { dIn >> tChunk; } );
+	return dIn;
+}
+
+ByteBlob_t & operator>> ( ByteBlob_t & dIn, VecTraits_T<BYTE> & tData )
+{
+	int iLen;
+	dIn >> iLen;
+	ByteBlob_t tChunk { nullptr, iLen };
+	dIn >> tChunk;
+	tData = tChunk;
+	return dIn;
+}
 
 /// GROUP_CONCAT() implementation
-class AggrConcat_t : public IAggrFunc
+class AggrConcat_t final : public IAggrFunc
 {
-protected:
 	CSphAttrLocator	m_tLoc;
+	using FixedVectorByte = CSphFixedVector<BYTE, sph::DefaultCopy_T<BYTE>, sph::CustomStorage_T<BYTE>>;
 
 public:
 	explicit AggrConcat_t ( const CSphColumnInfo & tCol )
 		: m_tLoc ( tCol.m_tLocator )
-	{}
-
-	void Ungroup ( CSphMatch * ) override {}
-	void Finalize ( CSphMatch * ) override {}
-
-	void Update ( CSphMatch * pDst, const CSphMatch * pSrc, bool ) override
 	{
-		auto sSrc = (const BYTE*)pSrc->GetAttr(m_tLoc);
-		auto sDst = (const BYTE*)pDst->GetAttr(m_tLoc);
-		auto pOldDst = const_cast<BYTE*> ( sDst );
+		assert ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR );
+		assert ( !m_tLoc.IsBlobAttr ()); // otherwise we will fail on fetching data!
+	}
 
-		int iSrc = sphUnpackPtrAttr ( sSrc, &sSrc );
-		int iDst = sphUnpackPtrAttr ( sDst, &sDst );
+	// here we convert back to plain string
+	void Finalize ( CSphMatch & tMatch ) final
+	{
+		auto dSrc = tMatch.FetchAttrData ( m_tLoc, nullptr ); // expect serialized tagged strings
 
-		assert ( !sDst || *sDst ); // ensure the string is either nullptr, or has data
-		assert ( !sSrc || *sSrc );
-
-		// empty source? kinda weird, but done!
-		if ( !sSrc )
+		// empty match
+		if ( !dSrc.first )
 			return;
 
-		// empty destination? just clone the source
-		if ( !sDst )
+		// already grouped match
+		if ( *dSrc.first )
+			return;
+
+		auto dBlob = dSrc;
+		int iSize, iTag, iFinalSize;
+		BStream_c dOut;
+		VecTraits_T<BYTE> dString;
+
+		BYTE uZero; dBlob >> uZero;
+		dBlob >> iSize;
+		iFinalSize = dBlob.second - ( iSize * 2 * sizeof ( int ) ) + iSize - 1 + 20; // -tag, -len, +commas-1, +packlen
+		dOut.Reserve ( iFinalSize );
+
+		for ( int i=0; i<iSize; ++i )
 		{
-			if ( sSrc )
-				pDst->SetAttr ( m_tLoc, (SphAttr_t)sphPackPtrAttr ( sSrc, iSrc ) );
-			return;
+			if ( i>0 ) dOut << ',';
+			dBlob >> iTag >> dString;
+			dOut << ByteBlob_t { dString.begin (), dString.GetLength () }; // write raw blob, without length
 		}
 
-		// both source and destination present? append source to destination
-		// note that it gotta be manual copying here, as SetSprintf (currently) comes with a 1K limit
-		assert ( sDst && sSrc );
-		CSphFixedVector<BYTE> dNew ( iSrc+iDst+1 ); // OPTIMIZE? careful pre-reserve and/or realloc would be even faster
-		memcpy ( dNew.Begin(), sDst, iDst );
-		dNew[iDst] = ',';
-		memcpy ( dNew.Begin()+iDst+1, sSrc, iSrc );
-
-		// clear dst to avoid leaks
-		// SafeDeleteArray ( pOldDst );
-		sphDeallocatePacked ( pOldDst );
-		pDst->SetAttr ( m_tLoc, (SphAttr_t)sphPackPtrAttr ( dNew.Begin(), iSrc+iDst+1 ) );
+		// release previous, write converted
+		sphDeallocatePacked ( sphPackedBlob ( dSrc ) );
+		sphPackPtrAttrInPlace ( dOut );
+		tMatch.SetAttr ( m_tLoc, (SphAttr_t) dOut.LeakData () );
 	}
-};
 
-
-/// group sorting functor
-template < typename COMPGROUP >
-struct GroupSorter_fn : public CSphMatchComparatorState, public MatchSortAccessor_t
-{
-	bool IsLess ( const MEDIAN_TYPE a, const MEDIAN_TYPE b ) const
+	void Update ( CSphMatch & tDst, const CSphMatch & tSrc, bool ) final
 	{
-		return COMPGROUP::IsLess ( *b, *a, *this );
+		ByteBlob_t dSrc = tSrc.FetchAttrData ( m_tLoc, nullptr ); // ok since it is NOT a blob attr
+		ByteBlob_t dDst = tDst.FetchAttrData ( m_tLoc, nullptr );
+
+		// empty source? kinda weird, but done!
+		if ( !dSrc.first || !dSrc.second )
+			return;
+
+		BStream_c dOut;
+		if ( !dDst.first )
+			dOut << dSrc;
+
+		// first byte is a mark: 0 means data packed, another is part of real string.
+		else if ( *dSrc.first && *dDst.first )
+			AppendStringToString ( dOut, dDst, tDst.m_iTag, dSrc, tSrc.m_iTag );
+		else if ( *dSrc.first && !*dDst.first )
+			AppendBlobToString ( dOut, dSrc, tSrc.m_iTag, dDst, false );
+		else if ( !*dSrc.first && *dDst.first )
+			AppendBlobToString ( dOut, dDst, tDst.m_iTag, dSrc, true );
+		else // if ( !*dSrc.first && !*dDst.first )
+			AppendBlobToBlob ( dOut, dDst, dSrc );
+
+		// Dispose previous packet
+		sphDeallocatePacked ( sphPackedBlob ( dDst ) );
+
+		// update saved data
+		sphPackPtrAttrInPlace (dOut);
+		tDst.SetAttr ( m_tLoc, (SphAttr_t) dOut.LeakData () );
+	}
+
+private:
+
+	// merge two simple matches
+	static void AppendStringToString ( BStream_c& dOut, const ByteBlob_t& dInDst, int iTagDst,
+			const ByteBlob_t& dInSrc, int iTagSrc )
+	{
+		if ( iTagDst==iTagSrc ) // plain concat of 2 strings
+			dOut << dInDst << ',' << dInSrc;
+		else // produce complex match
+			dOut << '\0' << int(2)
+			<< iTagDst << dInDst.second << dInDst
+			<< iTagSrc << dInSrc.second << dInSrc;
+	}
+
+	static void WriteCount ( BStream_c& dOut, int iCount )
+	{
+		// update total num of elements
+		int iCurrentLen = dOut.GetLength ();
+		dOut.Resize ( 1 ); // since 1-st came '\0' mark
+		dOut << iCount;
+		dOut.Resize ( iCurrentLen );
+	}
+
+	// merge two complex matches
+	static void AppendBlobToBlob ( BStream_c& dOut, ByteBlob_t dInDst, ByteBlob_t dInSrc )
+	{
+		int iOut = 0;
+		dOut << '\0' << iOut; // mark of complex and placeholder to num of elems.
+
+		int iSizeSrc = 0, iSizeDst = 0, iTagSrc, iTagDst;
+		VecTraits_T<BYTE> dBlobSrc, dBlobDst;
+
+		// read num of elements in both matches
+		char cZero;
+		dInSrc >> cZero >> iSizeSrc;
+		assert ( cZero=='\0' );
+		dInDst >> cZero >> iSizeDst;
+		assert ( cZero=='\0' );
+
+		auto fnNextSrc = [&] { if (iSizeSrc<=0) iTagSrc = INT_MIN; else {dInSrc >> iTagSrc >> dBlobSrc; --iSizeSrc;} };
+		auto fnNextDst = [&] { if (iSizeDst<=0) iTagDst = INT_MIN; else {dInDst >> iTagDst >> dBlobDst; --iSizeDst;} };
+
+		// merge two matches
+		fnNextSrc ();
+		fnNextDst ();
+		while ( iTagSrc!=INT_MIN || iTagDst!=INT_MIN )
+		{
+			if ( iTagSrc < iTagDst ) {
+				dOut << iTagDst << dBlobDst;
+				fnNextDst();
+			} else if ( iTagDst < iTagSrc ) {
+				dOut << iTagSrc << dBlobSrc;
+				fnNextSrc();
+			} else {
+				assert ( iTagSrc!=INT_MAX || iTagDst!=INT_MAX );
+				dOut << iTagSrc;
+				if ( dBlobDst.IsEmpty() )
+					dOut << dBlobSrc;
+				else
+					dOut << dBlobDst.GetLength() + dBlobSrc.GetLength() + 1
+					<< ByteBlob_t ( dBlobDst.begin(), dBlobDst.GetLength() )
+					<< ',' << ByteBlob_t ( dBlobSrc.begin(), dBlobSrc.GetLength() );
+				fnNextSrc();
+				fnNextDst();
+			}
+			++iOut;
+		}
+
+		WriteCount ( dOut, iOut );
+	}
+
+	// merge string and blob. Last bool determines what will came first
+	static void AppendBlobToString ( BStream_c& dOut, const ByteBlob_t& dString, int iTagString,
+			ByteBlob_t dBlob, bool bStringFirst=true )
+	{
+		int iOut;
+		char cZero;
+		dBlob >> cZero >> iOut;
+		assert ( cZero=='\0' );
+		dOut << cZero << iOut; // mark of complex and placeholder to num of elems.
+
+		int iTagSrc;
+		VecTraits_T<BYTE> dBlobSrc;
+		bool bCopied = false;
+
+		// copy elems looking for the place of new one
+		for ( int i=0, iOldLen=iOut; i<iOldLen; ++i)
+		{
+			dBlob >> iTagSrc >> dBlobSrc;
+			if ( bCopied )
+				dOut << iTagSrc << dBlobSrc;
+			else {
+				if ( !bCopied && iTagString > iTagSrc ) {
+					dOut << iTagString << dString.second << dString << iTagSrc << dBlobSrc;
+					++iOut;
+					bCopied = true;
+				} else if ( !bCopied && iTagString==iTagSrc ) {
+					dOut << iTagString << dString.second + dBlobSrc.GetLength() + 1;
+					if ( bStringFirst )
+						dOut << dString << ',' << ByteBlob_t ( dBlobSrc.begin (), dBlobSrc.GetLength () );
+					else
+						dOut << ByteBlob_t ( dBlobSrc.begin (), dBlobSrc.GetLength () ) << ',' << dString;
+					bCopied = true;
+				} else
+					dOut << iTagSrc << dBlobSrc;
+			}
+		}
+		if ( !bCopied )
+		{
+			dOut << iTagString << dString.second << dString;
+			++iOut;
+		}
+
+		WriteCount ( dOut, iOut );
 	}
 };
 
@@ -1637,12 +1963,12 @@ struct MatchCloner_t
 {
 private:
 	CSphFixedVector<CSphRowitem>	m_dRowBuf { 0 };
-	CSphVector<CSphAttrLocator>		m_dAttrsGrp; // locators for grouping attrs (@groupby, @count, etc.)
+	CSphVector<CSphAttrLocator>		m_dAttrsGrp; // locators for grouping attrs (@groupby, @count, @distinct, etc.)
 	CSphVector<CSphAttrLocator>		m_dAttrsPtr; // locators for group_concat attrs
-	CSphVector<int>					m_dMyPtrRows; // rowids matching m_dAttrsPtr
-	CSphVector<int>					m_dOtherPtrRows; // rest rowids NOT matching m_dAttrsPtr
+	CSphVector<int>					m_dMyPtrRows; // rowids matching m_dAttrsPtr. i.e. grpconcat ptr result I own
+	CSphVector<int>					m_dOtherPtrRows; // rest rowids NOT matching m_dAttrsPtr. i.e. other ptr results
 	const CSphSchemaHelper *		m_pSchema = nullptr;
-	bool							m_bPtrRowsCommited = false;
+	bool							m_bPtrRowsCommited = false; // readiness of m_dMyPtrRows and m_dOtherPtrRows
 
 public:
 	void SetSchema ( const ISphSchema * pSchema )
@@ -1651,41 +1977,79 @@ public:
 		m_dRowBuf.Reset ( m_pSchema->GetDynamicSize() );
 	}
 
-	// clone src to dst, then apply attrs from pGroup according stored locators.
-	void Combine ( CSphMatch * pDst, const CSphMatch * pSrc, const CSphMatch * pGroup )
+	// clone plain part (incl. pointers) from src to dst
+	// keep group part (aggregates, group_concat) of dst intact
+	// it assumes that tDst m_pDynamic contains correct data, or wiped away.
+	void CloneKeepingAggrs ( CSphMatch & tDst, const CSphMatch & tSrc )
 	{
-		assert ( m_pSchema && pDst && pSrc && pGroup );
-		assert ( pDst!=pGroup );
+		assert ( m_pSchema );
 		assert ( m_bPtrRowsCommited );
 
-		// clone
-		m_pSchema->CloneMatchSpecial ( pDst, *pSrc, m_dOtherPtrRows );
+		// memorize old dynamic first
+		memcpy ( m_dRowBuf.Begin(), tDst.m_pDynamic, m_dRowBuf.GetLengthBytes() );
 
-		for ( auto &AttrsRaw : m_dAttrsGrp )
-			pDst->SetAttr ( AttrsRaw, pGroup->GetAttr ( AttrsRaw ) );
+		m_pSchema->FreeDataSpecial ( tDst, m_dOtherPtrRows );
+		m_pSchema->CloneMatchSpecial ( tDst, tSrc, m_dOtherPtrRows );
 
-//		CSphSchemaHelper::FreeDataSpecial ( pDst, m_dMyPtrRows );
-		CSphSchemaHelper::CopyPtrsSpecial ( pDst, pGroup->m_pDynamic, m_dMyPtrRows );
+		/*
+			FreeDataSpecial ( tDst, m_dOtherPtrRows );
+			pDst->Combine ( *pSrc, GetDynamicSize () );
+			CopyPtrsSpecial ( tDst, tSrc, m_dOtherPtrRows );
+		*/
+
+		// restore back group-by attributes
+		for ( auto& dAttrGrp : m_dAttrsGrp )
+			tDst.SetAttr ( dAttrGrp, sphGetRowAttr ( m_dRowBuf.Begin(), dAttrGrp ) );
+
+		// restore back group_concat attribute(s)
+		for ( auto& dAttrPtr : m_dAttrsPtr )
+			tDst.SetAttr ( dAttrPtr, sphGetRowAttr ( m_dRowBuf.Begin (), dAttrPtr ) );
 	}
 
-	void Clone ( CSphMatch * pDst, const CSphMatch * pSrc )
+	// clone plain part (incl. pointers) from src to dst
+	// group part (aggregates, group_concat) is not copied
+	void CloneWithoutAggrs ( CSphMatch & tDst, const CSphMatch & tSrc )
 	{
-		assert ( m_pSchema && pDst && pSrc );
+		assert ( m_pSchema );
 		assert ( m_bPtrRowsCommited );
-		if ( !pDst->m_pDynamic ) // no old match has no data to copy, just a fresh but old match
-		{
-			m_pSchema->CloneMatch ( pDst, *pSrc );
-			return;
-		}
 
-		memcpy ( m_dRowBuf.Begin(), pDst->m_pDynamic, m_dRowBuf.GetLengthBytes() );
-		m_pSchema->CloneMatchSpecial ( pDst, *pSrc, m_dOtherPtrRows );
+		m_pSchema->CloneMatchSpecial ( tDst, tSrc, m_dOtherPtrRows );
+		/*
+			FreeDataSpecial ( tDst, m_dOtherPtrRows );
+			pDst->Combine ( *pSrc, GetDynamicSize () );
+			CopyPtrsSpecial ( tDst, tSrc, m_dOtherPtrRows );
+		*/
+	}
 
-		for ( auto &AttrsRaw : m_dAttrsGrp )
-			pDst->SetAttr ( AttrsRaw, sphGetRowAttr ( m_dRowBuf.Begin(), AttrsRaw ) );
+	// just write group part (aggregates, group_concat) without cloning
+	// assumes tDst has allocated m_pDynamic. Fixme! look to #881 again...
+	void CopyAggrs ( CSphMatch & tDst, const CSphMatch & tSrc )
+	{
+		assert ( m_pSchema );
+		assert ( m_bPtrRowsCommited );
+		assert ( &tDst!=&tSrc );
+		assert ( tDst.m_pDynamic );
 
-		for ( auto &AttrsRaw : m_dAttrsPtr )
-			pDst->SetAttr ( AttrsRaw, sphGetRowAttr ( m_dRowBuf.Begin (), AttrsRaw ) );
+		for ( auto & dAttrGrp : m_dAttrsGrp )
+			tDst.SetAttr ( dAttrGrp, tSrc.GetAttr ( dAttrGrp ));
+
+		CSphSchemaHelper::FreeDataSpecial ( tDst, m_dMyPtrRows );
+		CSphSchemaHelper::CopyPtrsSpecial ( tDst, tSrc, m_dMyPtrRows );
+	}
+
+	// copy group part (aggregates)
+	// move group_concat part without reallocating
+	void MoveAggrs ( CSphMatch & tDst, CSphMatch & tSrc )
+	{
+		assert ( m_pSchema );
+		assert ( m_bPtrRowsCommited );
+		assert ( &tDst!=&tSrc );
+		assert ( tDst.m_pDynamic );
+
+		for ( auto & dAttrGrp : m_dAttrsGrp )
+			tDst.SetAttr ( dAttrGrp, tSrc.GetAttr ( dAttrGrp ));
+
+		CSphSchemaHelper::MovePtrsSpecial( tDst, tSrc, m_dMyPtrRows );
 	}
 
 	inline void AddRaw ( const CSphAttrLocator& tLoc )
@@ -1703,6 +2067,7 @@ public:
 		m_dAttrsPtr.Resize ( 0 );
 	}
 
+	// (re)fill m_dMyPtrRows and m_dOtherPtrRows from m_dAttrsPtr
 	inline void CommitPtrs ()
 	{
 		assert ( m_pSchema );
@@ -1725,99 +2090,57 @@ public:
 	}
 };
 
-
-
-
-
-template <typename MVA, typename T>
-static void AddGroupedMVA ( const BYTE * pMVA, int iLengthBytes, const SphGroupKey_t & tGroupKey, int iCount, T & tUniq )
+template <typename MVA, typename ADDER>
+static void AddGroupedMVA ( ADDER && fnAdd, const ByteBlob_t& dRawMVA )
 {
-	int nValues = iLengthBytes / sizeof(MVA);
-	const MVA * pValues = (const MVA*)pMVA;
-	for ( int i = 0; i < nValues; i++ )
-	{
-		tUniq.Add ( tGroupKey, sphUnalignedRead ( *pValues ), iCount );
-		pValues++;
-	}
+	VecTraits_T<MVA> dMvas {dRawMVA};
+	for ( auto& dValue : dMvas )
+		fnAdd ( sphUnalignedRead ( dValue ) );
 }
 
-
-template <typename T>
-static void AddDistinctKeys ( const CSphMatch & tEntry, const SphGroupKey_t & tGroupKey, int iCount, T & tUniq, CSphAttrLocator & tDistinctLoc, ESphAttr eDistinctAttr, const BYTE * pBlobPool )
+template <typename ADDER>
+static void AddDistinctKeys ( const CSphMatch & tEntry,	CSphAttrLocator & tDistinctLoc,
+		ESphAttr eDistinctAttr, const BYTE * pBlobPool, ADDER&& fnAdd )
 {
 	switch ( eDistinctAttr )
 	{
 	case SPH_ATTR_STRING:
-	case SPH_ATTR_STRINGPTR:
+	case SPH_ATTR_STRINGPTR: // fixme! also json?
 		{
-			int iLen = 0;
-			const BYTE * pStr = nullptr;
-
-			if ( sphIsBlobAttr ( eDistinctAttr ) )
-				pStr = sphGetBlobAttr ( tEntry, tDistinctLoc, pBlobPool, iLen );
-			else
-				iLen = sphUnpackPtrAttr ( (const BYTE *)tEntry.GetAttr ( tDistinctLoc ), &pStr );
-
-			SphAttr_t tAttr = (SphAttr_t)sphFNV64 ( pStr, iLen );
-			tUniq.Add ( tGroupKey, tAttr, iCount );
+			auto dBlob = tEntry.FetchAttrData ( tDistinctLoc, pBlobPool );
+			auto tAttr = (SphAttr_t) sphFNV64 ( dBlob );
+			fnAdd ( tAttr );
 		}
 		break;
 
 	case SPH_ATTR_UINT32SET:
-	case SPH_ATTR_INT64SET:
-		{
-			int iLen = 0;
-			const BYTE * pMVA = nullptr;
-
-			if ( sphIsBlobAttr ( eDistinctAttr ) )
-				pMVA = sphGetBlobAttr ( tEntry, tDistinctLoc, pBlobPool, iLen );
-			else
-				iLen = sphUnpackPtrAttr ( (const BYTE *)tEntry.GetAttr ( tDistinctLoc ), &pMVA );
-
-			if ( eDistinctAttr==SPH_ATTR_UINT32SET || eDistinctAttr==SPH_ATTR_UINT32SET_PTR )
-				AddGroupedMVA<DWORD, T> ( pMVA, iLen, tGroupKey, iCount, tUniq );
-			else
-				AddGroupedMVA<int64_t, T> ( pMVA, iLen, tGroupKey, iCount, tUniq );
-		}
+	case SPH_ATTR_UINT32SET_PTR:
+		AddGroupedMVA<DWORD> ( fnAdd, tEntry.FetchAttrData ( tDistinctLoc, pBlobPool ) );
 		break;
 
+	case SPH_ATTR_INT64SET:
+	case SPH_ATTR_INT64SET_PTR:
+		AddGroupedMVA<int64_t> ( fnAdd, tEntry.FetchAttrData ( tDistinctLoc, pBlobPool ) );
+		break;
+
+	// fixme! what about json?
 	default:
-		tUniq.Add ( tGroupKey, tEntry.GetAttr ( tDistinctLoc ), iCount );
+		fnAdd ( tEntry.GetAttr ( tDistinctLoc ) );
 		break;
 	}
 }
 
-
-template <typename COMPGROUP>
-static void FixupSorterLocators ( CSphGroupSorterSettings & tSettings, ISphSchema * pOldSchema, const ISphSchema * pNewSchema, GroupSorter_fn<COMPGROUP> * pGroupSorter,
-	CSphVector<IAggrFunc *> & dAggregates, MatchCloner_t & tPregroup, bool bRemapCmp )
+class BaseGroupSorter_c : public BlobPool_c, protected CSphGroupSorterSettings
 {
-	// this is the case when we are moving to a new schema with non-pooled attrs
-	if ( !pOldSchema )
-		return;
+	using BASE = CSphGroupSorterSettings;
 
-	tSettings.FixupLocators ( pOldSchema, pNewSchema );
-	if ( pGroupSorter )
-		pGroupSorter->FixupLocators ( pOldSchema, pNewSchema, bRemapCmp );
-
-	for ( auto i : dAggregates )
-		SafeDelete(i);
-
-	dAggregates.Resize(0);
-	tPregroup.ResetAttrs ();
-}
-
-class BaseGroupSorter_c : protected CSphGroupSorterSettings
-{
 protected:
 	MatchCloner_t			m_tPregroup;
 	CSphVector<IAggrFunc *>	m_dAggregates;
 
 public:
-	explicit BaseGroupSorter_c ( const CSphGroupSorterSettings &tSettings )
-		: CSphGroupSorterSettings ( tSettings )
-	{
-	}
+
+	FWD_BASECTOR( BaseGroupSorter_c )
 
 	virtual ~BaseGroupSorter_c()
 	{
@@ -1825,25 +2148,26 @@ public:
 			SafeDelete ( pAggregate );
 	}
 
+protected:
 	/// schema, aggregates setup
 	template <bool DISTINCT>
 	inline void SetupBaseGrouper ( ISphSchema * pSchema, const ESphSortKeyPart * pSortKeyPart = nullptr,
 		const CSphAttrLocator * pAttrLocator=nullptr, CSphVector<IAggrFunc *>* pAvgs = nullptr )
 	{
 		m_tPregroup.SetSchema ( pSchema );
-		m_tPregroup.AddRaw ( m_tLocGroupby );
-		m_tPregroup.AddRaw ( m_tLocCount );
+		m_tPregroup.AddRaw ( m_tLocGroupby ); // @groupby
+		m_tPregroup.AddRaw ( m_tLocCount ); // @count
 		if_const ( DISTINCT )
-			m_tPregroup.AddRaw ( m_tLocDistinct );
+			m_tPregroup.AddRaw ( m_tLocDistinct ); // @distinct
 
 		// extract aggregates
-		for ( int i = 0; i<pSchema->GetAttrsCount (); i++ )
+		for ( int i = 0; i<pSchema->GetAttrsCount (); ++i )
 		{
 			const CSphColumnInfo &tAttr = pSchema->GetAttr ( i );
-			bool bMagicAggr = IsGroupbyMagic ( tAttr.m_sName )
-				|| IsSortStringInternal ( tAttr.m_sName.cstr () ); // magic legacy aggregates
 
-			if ( tAttr.m_eAggrFunc==SPH_AGGR_NONE || bMagicAggr )
+			if ( tAttr.m_eAggrFunc==SPH_AGGR_NONE
+				|| IsGroupbyMagic ( tAttr.m_sName ) // @count, @groupby, @groupbystr, @distinct, count(*), groupby()
+				|| IsSortStringInternal ( tAttr.m_sName.cstr () ) )
 				continue;
 
 			switch ( tAttr.m_eAggrFunc )
@@ -1924,38 +2248,62 @@ public:
 		}
 		m_tPregroup.CommitPtrs();
 	}
-};
-class GroupedUniq_c : public ISphNoncopyable
-{
-public:
-	GroupedUniq_c ( CSphUniqounter & tUniq )
-		: m_tUniq ( tUniq )
-	{}
 
-	void Add ( const SphGroupKey_t & tGroupKey, SphAttr_t tAttr, int iCount )
+	// HAVING filtering
+	bool EvalHAVING ( const CSphMatch& tMatch )
 	{
-		m_tUniq.Add ( SphGroupedValue_t ( tGroupKey, tAttr, iCount ) );
+		return !m_pAggrFilterTrait || m_pAggrFilterTrait->Eval ( tMatch );
 	}
 
-private:
-	CSphUniqounter & m_tUniq;
+	void AggrUpdate ( CSphMatch & tDst, const CSphMatch & tSrc, bool bGrouped )
+	{
+		for ( auto * pAggregate : this->m_dAggregates )
+			pAggregate->Update ( tDst, tSrc, bGrouped );
+	};
+
+	void AggrUngroup ( CSphMatch & tMatch )
+	{
+		for ( auto * pAggregate : this->m_dAggregates )
+			pAggregate->Ungroup ( tMatch );
+	}
 };
 
-
-class UngroupedUniq_c : public ISphNoncopyable
+class SubGroupSorter_fn : public ISphNoncopyable
 {
-public:
-	UngroupedUniq_c ( CSphVector<SphUngroupedValue_t> & dUniq )
-		: m_dUniq ( dUniq )
-	{}
+	const VecTraits_T<CSphMatch> & m_dBase;
+	const CSphMatchComparatorState& m_tState;
+	const ISphMatchComparator * m_pComp;
 
-	void Add ( const SphGroupKey_t & /*tKey*/, SphAttr_t tAttr, int iCount )
+public:
+	SubGroupSorter_fn ( const CSphMatchQueueTraits & dBase, const ISphMatchComparator * pC )
+		: m_dBase ( dBase.GetMatches () )
+		, m_tState ( dBase.GetComparatorState() )
+		, m_pComp ( pC )
 	{
-		m_dUniq.Add ( SphUngroupedValue_t ( tAttr, iCount ) );
+		assert ( m_pComp );
+		m_pComp->AddRef();
 	}
 
-private:
-	CSphVector<SphUngroupedValue_t>	& m_dUniq;
+	~SubGroupSorter_fn()
+	{
+		m_pComp->Release();
+	}
+
+	const ISphMatchComparator * GetComparator() const
+	{
+		return m_pComp;
+	}
+
+	bool MatchIsGreater ( const CSphMatch & a, const CSphMatch & b ) const
+	{
+		return m_pComp->VirtualIsLess ( b, a, m_tState );
+	}
+
+	// inverse order, i.e. work as IsGreater
+	bool IsLess ( int a, int b ) const
+	{
+		return m_pComp->VirtualIsLess ( m_dBase[b], m_dBase[a], m_tState );
+	}
 };
 
 /// match sorter with k-buffering and group-by - common part
@@ -1963,47 +2311,48 @@ template<typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS>
 struct KBufferGroupSorter_T : public CSphMatchQueueTraits, protected BaseGroupSorter_c
 {
 	using MYTYPE = KBufferGroupSorter_T<COMPGROUP,DISTINCT,NOTIFICATIONS>;
-	ESphGroupBy m_eGroupBy;            ///< group-by function
+	ESphGroupBy 				m_eGroupBy;     ///< group-by function
 	CSphRefcountedPtr<CSphGrouper>	m_pGrouper;
-	int				m_iLimit;		///< max matches to be retrieved
-	CSphUniqounter	m_tUniq;
-	bool			m_bSortByDistinct = false;
+	int							m_iLimit;		///< max matches to be retrieved
+	CSphUniqounter				m_tUniq;
+	bool						m_bSortByDistinct = false;
 	GroupSorter_fn<COMPGROUP>	m_tGroupSorter;
-	const ISphMatchComparator *	m_pComp;
+	SubGroupSorter_fn			m_tSubSorter;
 	CSphVector<IAggrFunc *>		m_dAvgs;
-	const BYTE *				m_pBlobPool = nullptr;
 	static const int			GROUPBY_FACTOR = 4;	///< allocate this times more storage when doing group-by (k, as in k-buffer)
 
 public:
 	/// ctor
-	KBufferGroupSorter_T ( const ISphMatchComparator * pComp,
-			const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings, bool bDoubleTraits )
-			: CSphMatchQueueTraits ( pQuery->m_iMaxMatches * GROUPBY_FACTOR * (bDoubleTraits?2:1) )
+	KBufferGroupSorter_T ( const ISphMatchComparator * pComp, const CSphQuery * pQuery,
+			const CSphGroupSorterSettings & tSettings )
+			: CSphMatchQueueTraits ( pQuery->m_iMaxMatches * GROUPBY_FACTOR )
 			, BaseGroupSorter_c ( tSettings )
 			, m_eGroupBy ( pQuery->m_eGroupFunc )
 			, m_pGrouper ( tSettings.m_pGrouper )
 			, m_iLimit ( pQuery->m_iMaxMatches )
-			, m_pComp ( pComp )
+			, m_tGroupSorter (*this)
+			, m_tSubSorter ( *this, pComp )
 	{
 		assert ( GROUPBY_FACTOR>1 );
-		assert ( !DISTINCT || tSettings.m_tDistinctLoc.m_iBitOffset>=0 );
-		SafeAddRef ( pComp );
+		assert ( !DISTINCT || tSettings.m_tDistinctAttr.m_iBitOffset>=0 );
 		if_const ( NOTIFICATIONS )
 			m_dJustPopped.Reserve ( m_iSize );
-	}
-
-	/// dtor
-	~KBufferGroupSorter_T () override
-	{
-		SafeRelease ( m_pComp );
 	}
 
 	/// schema setup
 	void SetSchema ( ISphSchema * pSchema, bool bRemapCmp ) final
 	{
-		FixupSorterLocators ( *this, m_pSchema, pSchema, &m_tGroupSorter, m_dAggregates, m_tPregroup, bRemapCmp );
+		if ( m_pSchema )
+		{
+			FixupLocators ( m_pSchema, pSchema );
+			m_tGroupSorter.FixupLocators ( m_pSchema, pSchema, bRemapCmp );
+			m_tPregroup.ResetAttrs ();
+			m_dAggregates.Apply ( [] ( IAggrFunc * pAggr ) { SafeDelete ( pAggr ); } );
+			m_dAggregates.Resize ( 0 );
+			m_dAvgs.Resize ( 0 );
+		}
+
 		ISphMatchSorter::SetSchema ( pSchema, bRemapCmp );
-		m_dAvgs.Resize ( 0 );
 		SetupBaseGrouper<DISTINCT> ( pSchema, m_tGroupSorter.m_eKeypart, m_tGroupSorter.m_tLocator, &m_dAvgs );
 	}
 
@@ -2016,19 +2365,14 @@ public:
 	/// set blob pool pointer (for string+groupby sorters)
 	void SetBlobPool ( const BYTE * pBlobPool ) final
 	{
-		m_pBlobPool = pBlobPool;
+		BlobPool_c::SetBlobPool ( pBlobPool );
 		m_pGrouper->SetBlobPool ( pBlobPool );
 	}
 
-	const BYTE * GetBlobPool() const
-	{
-		return m_pBlobPool;
-	}
-
 	/// get entries count
-	int GetLength () const final
+	int GetLength () const override
 	{
-		return Min ( m_iUsed, m_iLimit );
+		return Min ( Used(), m_iLimit );
 	}
 
 	/// set group comparator state
@@ -2037,7 +2381,7 @@ public:
 		m_tGroupSorter.m_fnStrCmp = tState.m_fnStrCmp;
 
 		// FIXME! manual bitwise copying.. yuck
-		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
+		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; ++i )
 		{
 			m_tGroupSorter.m_eKeypart[i] = tState.m_eKeypart[i];
 			m_tGroupSorter.m_tLocator[i] = tState.m_tLocator[i];
@@ -2046,9 +2390,9 @@ public:
 		m_tGroupSorter.m_iNow = tState.m_iNow;
 
 		// check whether we sort by distinct
-		if_const ( DISTINCT && m_tDistinctLoc.m_iBitOffset>=0 )
-			for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
-				if ( m_tGroupSorter.m_tLocator[i].m_iBitOffset==m_tDistinctLoc.m_iBitOffset )
+		if_const ( DISTINCT && m_tDistinctAttr.m_iBitOffset>=0 )
+			for ( auto& tLocator : m_tGroupSorter.m_tLocator )
+				if ( tLocator.m_iBitOffset==m_tDistinctAttr.m_iBitOffset )
 				{
 					m_bSortByDistinct = true;
 					break;
@@ -2056,7 +2400,7 @@ public:
 	}
 
 protected:
-	/// count distinct values if necessary
+	/// finalize distinct counters
 	template <typename FIND>
 	void Distinct ( FIND&& fnFind )
 	{
@@ -2064,9 +2408,9 @@ protected:
 		SphGroupKey_t uGroup;
 		for ( int iCount = m_tUniq.CountStart ( &uGroup ); iCount; iCount = m_tUniq.CountNext ( &uGroup ) )
 		{
-			CSphMatch ** ppMatch = fnFind ( uGroup );
-			if ( ppMatch )
-				(*ppMatch)->SetAttr ( m_tLocDistinct, iCount );
+			CSphMatch * pMatch = fnFind ( uGroup );
+			if ( pMatch )
+				pMatch->SetAttr ( m_tLocDistinct, iCount );
 		}
 	}
 
@@ -2079,339 +2423,456 @@ protected:
 	void CloneKBufferGroupSorter ( MYTYPE* pClone ) const
 	{
 		// basic clone
-		this->CloneTo ( pClone );
+		ISphMatchSorter::CloneTo ( pClone );
 
 		// actions from SetGroupState
-		pClone->m_bSortByDistinct = this->m_bSortByDistinct;
-		pClone->m_tGroupSorter.m_fnStrCmp = this->m_tGroupSorter.m_fnStrCmp;
+		pClone->m_bSortByDistinct = m_bSortByDistinct;
+		pClone->m_tGroupSorter.m_fnStrCmp = m_tGroupSorter.m_fnStrCmp;
 		for ( int i = 0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
 		{
-			pClone->m_tGroupSorter.m_eKeypart[i] = this->m_tGroupSorter.m_eKeypart[i];
-			pClone->m_tGroupSorter.m_tLocator[i] = this->m_tGroupSorter.m_tLocator[i];
+			pClone->m_tGroupSorter.m_eKeypart[i] = m_tGroupSorter.m_eKeypart[i];
+			pClone->m_tGroupSorter.m_tLocator[i] = m_tGroupSorter.m_tLocator[i];
 		}
-		pClone->m_tGroupSorter.m_uAttrDesc = this->m_tGroupSorter.m_uAttrDesc;
-		pClone->m_tGroupSorter.m_iNow = this->m_tGroupSorter.m_iNow;
+		pClone->m_tGroupSorter.m_uAttrDesc = m_tGroupSorter.m_uAttrDesc;
+		pClone->m_tGroupSorter.m_iNow = m_tGroupSorter.m_iNow;
 
 		// complete SetSchema
 		pClone->m_dAvgs.Resize ( 0 );
 		pClone->SetupBaseGrouperWrp ( m_pSchema, pClone->m_tGroupSorter.m_eKeypart,
 				pClone->m_tGroupSorter.m_tLocator, &pClone->m_dAvgs );
 	}
+
+	CSphVector<IAggrFunc *> GetAggregatesWithoutAvgs() const
+	{
+		CSphVector<IAggrFunc *> dAggrs;
+		if ( m_dAggregates.GetLength ()!=m_dAvgs.GetLength ())
+		{
+			dAggrs = m_dAggregates;
+			for ( auto * pAvg : this->m_dAvgs )
+				dAggrs.RemoveValue ( pAvg );
+		}
+		return dAggrs;
+	}
+
+	void FreeMatchPtrs ( int iMatch, bool bNotify=true )
+	{
+		if_const ( NOTIFICATIONS && bNotify )
+			m_dJustPopped.Add ( m_dData[iMatch].m_tRowID );
+		m_pSchema->FreeDataPtrs ( m_dData[iMatch] );
+
+		// on final pass we totally wipe match.
+		// That is need, since otherwise such 'garbage' matches with non-null m_pDynamic
+		// will be targeted in d-tr with FreeDataPtrs with possible another(!) schema
+		if ( !bNotify )
+			m_dData[iMatch].ResetDynamic ();
+	}
+
+	inline void UpdateDistinct ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool bGrouped )
+	{
+		int iCount = bGrouped ? (int) tEntry.GetAttr ( m_tLocDistinct ) : 1;
+		AddDistinctKeys ( tEntry, m_tDistinctAttr, m_eDistinctAttr, GetBlobPool(),
+				[this, uGroupKey, iCount] ( SphAttr_t b ) { m_tUniq.Add ( {uGroupKey, b, iCount} ); });
+	}
+
+	void RemoveDistinct ( VecTraits_T<SphGroupKey_t>& dRemove )
+	{
+		// sort and compact
+		if ( !m_bSortByDistinct )
+			m_tUniq.Sort ();
+		m_tUniq.Compact ( dRemove );
+	}
 };
 
 /// match sorter with k-buffering and group-by
+/// invoking by select ... group by ... where only plain attributes (i.e. NO mva, NO jsons)
 template < typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS >
 class CSphKBufferGroupSorter : public KBufferGroupSorter_T<COMPGROUP,DISTINCT,NOTIFICATIONS>
 {
 	using MYTYPE = CSphKBufferGroupSorter<COMPGROUP, DISTINCT, NOTIFICATIONS>;
+	bool m_bMatchesFinalized = false;
+	int m_iMaxUsed = -1;
 
 protected:
 	CSphFixedHash < CSphMatch *, SphGroupKey_t, IdentityHash_fn >	m_hGroup2Match;
-	int				m_iMaxUsed = 0;
 
-	// since we inherit from template, we need either write boring 'using' block, either
-	// refer to members by 'this->'. Will use 'this->' for 1..2..8 local hits, 'using' for mass.
-	using BASE = KBufferGroupSorter_T<COMPGROUP, DISTINCT, NOTIFICATIONS>;
-	using BASE::m_iUsed;
-	using BASE::m_iSize;
-	using BASE::m_pData;
-	using BASE::m_pSchema;
+	// since we inherit from template, we need to write boring 'using' block
+	using KBufferGroupSorter = KBufferGroupSorter_T<COMPGROUP, DISTINCT, NOTIFICATIONS>;
+	using KBufferGroupSorter::m_eGroupBy;
+	using KBufferGroupSorter::m_pGrouper;
+	using KBufferGroupSorter::m_iLimit;
+	using KBufferGroupSorter::m_tUniq;
+	using KBufferGroupSorter::m_bSortByDistinct;
+	using KBufferGroupSorter::m_tGroupSorter;
+	using KBufferGroupSorter::m_tSubSorter;
+	using KBufferGroupSorter::m_dAvgs;
+	using KBufferGroupSorter::GROUPBY_FACTOR;
+	using KBufferGroupSorter::CloneKBufferGroupSorter;
+	using KBufferGroupSorter::GetAggregatesWithoutAvgs;
+	using KBufferGroupSorter::Distinct;
+	using KBufferGroupSorter::UpdateDistinct;
+	using KBufferGroupSorter::RemoveDistinct;
+	using KBufferGroupSorter::FreeMatchPtrs;
+
+	using CSphGroupSorterSettings::m_tLocGroupby;
+	using CSphGroupSorterSettings::m_tLocCount;
+	using CSphGroupSorterSettings::m_tLocDistinct;
+
+	using ISphMatchSorter::m_iTotal;
+	using ISphMatchSorter::m_iJustPushed;
+	using ISphMatchSorter::m_pSchema;
+
+	using BaseGroupSorter_c::EvalHAVING;
+	using BaseGroupSorter_c::AggrUpdate;
+	using BaseGroupSorter_c::AggrUngroup;
+
+	using CSphMatchQueueTraits::m_iSize;
+	using CSphMatchQueueTraits::m_dData;
+	using CSphMatchQueueTraits::m_bStorageFilled;
+	using CSphMatchQueueTraits::Get;
+	using CSphMatchQueueTraits::Add;
+	using CSphMatchQueueTraits::Used;
+	using CSphMatchQueueTraits::ResetAfterFlatten;
 
 public:
 	/// ctor
 	CSphKBufferGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery,
 			const CSphGroupSorterSettings & tSettings )
-		: BASE ( pComp, pQuery, tSettings, false )
-		, m_hGroup2Match ( pQuery->m_iMaxMatches*BASE::GROUPBY_FACTOR )
+		: KBufferGroupSorter ( pComp, pQuery, tSettings )
+		, m_hGroup2Match ( pQuery->m_iMaxMatches*GROUPBY_FACTOR )
 	{}
 
 	/// add entry to the queue
 	bool Push ( const CSphMatch & tEntry ) override
 	{
-		SphGroupKey_t uGroupKey = this->m_pGrouper->KeyFromMatch ( tEntry );
+		SphGroupKey_t uGroupKey = m_pGrouper->KeyFromMatch ( tEntry );
 		return PushEx ( tEntry, uGroupKey, false, false );
 	}
 
 	/// add grouped entry to the queue
 	bool PushGrouped ( const CSphMatch & tEntry, bool ) override
 	{
-		return PushEx ( tEntry, tEntry.GetAttr ( this->m_tLocGroupby ), true, false );
+		return PushEx ( tEntry, tEntry.GetAttr ( m_tLocGroupby ), true, false );
 	}
 
 	/// store all entries into specified location in sorted order, and remove them from queue
 	int Flatten ( CSphMatch * pTo, int iTag ) override
 	{
-		CountDistinct ();
+		FinalizeMatches();
 
-		CalcAvg ( true );
-		SortGroups ();
-
-		CSphVector<IAggrFunc *> dAggrs;
-		if ( this->m_dAggregates.GetLength()!=this->m_dAvgs.GetLength() )
-		{
-			dAggrs = this->m_dAggregates;
-			for ( auto * pAvg : this->m_dAvgs )
-				dAggrs.RemoveValue ( pAvg );
-		}
-
-		// FIXME!!! we should provide up-to max_matches to output buffer
+		auto dAggrs = GetAggregatesWithoutAvgs();
 		const CSphMatch * pBegin = pTo;
-		int iLen = BASE::GetLength ();
-		for ( int i=0; i<iLen; ++i )
+
+		for ( auto iMatch : this->m_dIData )
 		{
-			CSphMatch & tMatch = m_pData[i];
-			for ( auto * pAggr : dAggrs )
-				pAggr->Finalize ( &tMatch );
-
-			// HAVING filtering
-			if ( this->m_pAggrFilterTrait && !this->m_pAggrFilterTrait->Eval ( tMatch ) )
+			CSphMatch & tMatch = m_dData[iMatch];
+			dAggrs.Apply ( [&tMatch] ( IAggrFunc * pAggr ) { pAggr->Finalize ( tMatch ); } );
+			if ( !EvalHAVING ( tMatch ))
+			{
+				FreeMatchPtrs ( iMatch, false );
 				continue;
+			}
 
-			m_pSchema->CloneMatch ( pTo, tMatch );
+			Swap ( *pTo, tMatch );
 			if ( iTag>=0 )
 				pTo->m_iTag = iTag;
-
-			pTo++;
+			++pTo;
 		}
 
-		m_iUsed = 0;
-		this->m_iTotal = 0;
-		m_iMaxUsed = 0;
+		m_iTotal = 0;
+		m_bMatchesFinalized = false;
 
-		m_hGroup2Match.Reset ();
 		if_const ( DISTINCT )
-			this->m_tUniq.Resize ( 0 );
+			m_tUniq.Resize ( 0 );
 
-		return ( pTo-pBegin );
+		ResetAfterFlatten ();
+
+		for ( int i = 0; i<m_iMaxUsed; ++i )
+			m_dData[i].ResetDynamic ();
+		m_iMaxUsed = -1;
+
+		return int ( pTo-pBegin );
 	}
 
 	// TODO! TEST!
 	ISphMatchSorter * Clone () const final
 	{
 		CSphQuery dFoo;
-		dFoo.m_iMaxMatches = this->m_iLimit;
-		dFoo.m_eGroupFunc = this->m_eGroupBy;
-		auto pClone = new MYTYPE ( this->m_pComp, &dFoo, *this );
-		this->CloneKBufferGroupSorter ( pClone );
+		dFoo.m_iMaxMatches = m_iLimit;
+		dFoo.m_eGroupFunc = m_eGroupBy;
+		auto pClone = new MYTYPE ( m_tSubSorter.GetComparator (), &dFoo, *this );
+		CloneKBufferGroupSorter ( pClone );
 		return pClone;
 	}
 
-	// FIXME! todo
+	// FIXME! test CSphKBufferGroupSorter
 	void MoveTo ( ISphMatchSorter * pRhs) final
 	{
+		if ( !Used () )
+			return;
+
 		auto& dRhs = *(MYTYPE *) pRhs;
-		if ( !dRhs.m_iTotal )
+		if ( !dRhs.Used () )
 		{
 			CSphMatchQueueTraits::SwapMatchQueueTraits ( dRhs );
-			::Swap ( m_iMaxUsed, dRhs.m_iMaxUsed );
 			m_hGroup2Match.Swap ( dRhs.m_hGroup2Match );
+			dRhs.m_bMatchesFinalized = m_bMatchesFinalized;
 			return;
 		}
+
+		FinalizeMatches ();
+
+		// just push in heap order
+		// since we have grouped matches, it is not always possible to move them,
+		// so use plain push instead
+		for ( auto iMatch : this->m_dIData )
+			dRhs.PushGrouped ( m_dData[iMatch], false );
 	}
 
 	void Finalize ( ISphMatchProcessor & tProcessor, bool ) override
 	{
-		if ( !BASE::GetLength() )
+		if ( !Used() )
 			return;
 
-		if ( m_iUsed>this->m_iLimit )
-			CutWorst ( this->m_iLimit );
-
-		for ( int i = m_iUsed; i < m_iMaxUsed; i++ )
-			m_pData[i].ResetDynamic();
-		m_iMaxUsed = m_iUsed;
+		FinalizeMatches ();
 
 		// just evaluate in heap order
-		CSphMatch * pCur = m_pData;
-		const CSphMatch * pEnd = m_pData + m_iUsed;
-		while ( pCur<pEnd )
-			tProcessor.Process ( pCur++ );
+		for ( auto iMatch : this->m_dIData )
+			tProcessor.Process ( &m_dData[iMatch] );
 	}
 
 protected:
+	bool PushIntoExistingGroup( CSphMatch & tGroup, const CSphMatch & tEntry, SphGroupKey_t uGroupKey,
+			bool bGrouped, SphAttr_t * pAttr )
+	{
+		assert ( tGroup.GetAttr ( m_tLocGroupby )==uGroupKey );
+		assert ( tGroup.m_pDynamic[-1]==tEntry.m_pDynamic[-1] );
+
+		auto & tLocCount = m_tLocCount;
+		if ( bGrouped )
+			tGroup.AddCounterAttr ( tLocCount, tEntry );
+		else
+			tGroup.AddCounterScalar ( tLocCount, 1 );
+
+		// update aggregates
+		AggrUpdate ( tGroup, tEntry, bGrouped );
+
+		// if new entry is more relevant, update from it
+		if ( m_tSubSorter.MatchIsGreater ( tEntry, tGroup ) )
+		{
+			if_const ( NOTIFICATIONS )
+			{
+				m_iJustPushed = tEntry.m_tRowID;
+				this->m_dJustPopped.Add ( tGroup.m_tRowID );
+			}
+
+			// clone the low part of the match
+			this->m_tPregroup.CloneKeepingAggrs ( tGroup, tEntry );
+			if ( pAttr )
+				UpdateGroupbyStr ( tGroup, pAttr );
+		}
+
+		// submit actual distinct value
+		if_const ( DISTINCT )
+			UpdateDistinct ( tEntry, uGroupKey, bGrouped );
+		return false; // since it is dupe
+	}
+
 	/// add entry to the queue
 	bool PushEx ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey,
 			bool bGrouped, bool, SphAttr_t * pAttr=nullptr )
 	{
 		if_const ( NOTIFICATIONS )
 		{
-			this->m_iJustPushed = INVALID_ROWID;
+			m_iJustPushed = INVALID_ROWID;
 			this->m_dJustPopped.Resize ( 0 );
 		}
-		auto & tLocCount = this->m_tLocCount;
+		auto & tLocCount = m_tLocCount;
+
 		// if this group is already hashed, we only need to update the corresponding match
 		CSphMatch ** ppMatch = m_hGroup2Match ( uGroupKey );
 		if ( ppMatch )
 		{
 			CSphMatch * pMatch = (*ppMatch);
 			assert ( pMatch );
-			assert ( pMatch->GetAttr ( this->m_tLocGroupby )==uGroupKey );
-			assert ( pMatch->m_pDynamic[-1]==tEntry.m_pDynamic[-1] );
-
-			if ( bGrouped )
-			{
-				// it's already grouped match
-				// sum grouped matches count
-				pMatch->SetAttr ( tLocCount, pMatch->GetAttr ( tLocCount ) + tEntry.GetAttr ( tLocCount ) ); // OPTIMIZE! AddAttr()?
-			} else
-			{
-				// it's a simple match
-				// increase grouped matches count
-				pMatch->SetAttr ( tLocCount, 1 + pMatch->GetAttr ( tLocCount ) ); // OPTIMIZE! IncAttr()?
-			}
-
-			// update aggregates
-			for ( auto * pAggregate : this->m_dAggregates )
-				pAggregate->Update ( pMatch, &tEntry, bGrouped );
-
-			// if new entry is more relevant, update from it
-			if ( this->m_pComp->VirtualIsLess ( *pMatch, tEntry, this->m_tState ) )
-			{
-				if_const ( NOTIFICATIONS )
-				{
-					this->m_iJustPushed = tEntry.m_tRowID;
-					this->m_dJustPopped.Add ( pMatch->m_tRowID );
-				}
-
-				// clone the low part of the match
-				this->m_tPregroup.Clone ( pMatch, &tEntry );
-
-				// update @groupbystr value, if available
-				if ( pAttr && this->m_tLocGroupbyStr.m_bDynamic )
-					pMatch->SetAttr ( this->m_tLocGroupbyStr, *pAttr );
-			}
+			assert ( pMatch->GetAttr ( m_tLocGroupby )==uGroupKey );
+			return PushIntoExistingGroup ( *pMatch, tEntry, uGroupKey, bGrouped, pAttr );
 		}
 
-		// submit actual distinct value in all cases
+		// submit actual distinct value
 		if_const ( DISTINCT )
-		{
-			int iCount = 1;
-			if ( bGrouped )
-				iCount = (int)tEntry.GetAttr ( this->m_tLocDistinct );
-
-			GroupedUniq_c tUniq ( this->m_tUniq );
-			AddDistinctKeys ( tEntry, uGroupKey, iCount, tUniq,
-					this->m_tDistinctLoc, this->m_eDistinctAttr, this->m_pBlobPool );
-		}
-
-		// it's a dupe anyway, so we shouldn't update total matches count
-		if ( ppMatch )
-			return false;
+			UpdateDistinct ( tEntry, uGroupKey, bGrouped );
 
 		// if we're full, let's cut off some worst groups
-		if ( m_iUsed==m_iSize )
-			CutWorst ( this->m_iLimit * (int)(BASE::GROUPBY_FACTOR/2) );
+		if ( Used()==m_iSize )
+			CutWorst ( m_iLimit * (int)(GROUPBY_FACTOR/2) );
 
 		// do add
-		assert ( m_iUsed<m_iSize );
-		CSphMatch & tNew = m_pData [ m_iUsed++ ];
-		m_pSchema->CloneMatch ( &tNew, tEntry );
+		assert ( Used()<m_iSize );
+		CSphMatch & tNew = Add();
+		m_pSchema->CloneMatch ( tNew, tEntry );
 
 		if_const ( NOTIFICATIONS )
-			this->m_iJustPushed = tNew.m_tRowID;
+			m_iJustPushed = tNew.m_tRowID;
 
-		if ( !bGrouped )
-		{
-			tNew.SetAttr ( this->m_tLocGroupby, uGroupKey );
+		if ( bGrouped )
+			AggrUngroup ( tNew );
+		else {
+			tNew.SetAttr ( m_tLocGroupby, uGroupKey );
 			tNew.SetAttr ( tLocCount, 1 );
 			if_const ( DISTINCT )
-				tNew.SetAttr ( this->m_tLocDistinct, 0 );
+				tNew.SetAttr ( m_tLocDistinct, 0 );
 
-			// set @groupbystr value if available
-			if ( pAttr && this->m_tLocGroupbyStr.m_bDynamic )
-				tNew.SetAttr ( this->m_tLocGroupbyStr, *pAttr );
-		} else
-		{
-			for ( auto * pAggregate : this->m_dAggregates )
-				pAggregate->Ungroup ( &tNew );
+			if ( pAttr )
+				UpdateGroupbyStr ( tNew, pAttr );
 		}
 
 		m_hGroup2Match.Add ( &tNew, uGroupKey );
-		++this->m_iTotal;
+		++m_iTotal;
 		return true;
 	}
 
 private:
-	void CalcAvg ( bool bGroup )
+	enum class Avg_e { FINALIZE, UNGROUP };
+	void CalcAvg ( Avg_e eGroup )
 	{
-		if ( !this->m_dAvgs.GetLength() )
+		if ( m_dAvgs.IsEmpty() )
 			return;
 
-		CSphMatch * pMatch = m_pData;
-		CSphMatch * pEnd = pMatch + m_iUsed;
-		while ( pMatch<pEnd )
-		{
-			for ( auto * pAvg : this->m_dAvgs )
-			{
-				if ( bGroup )
-					pAvg->Finalize ( pMatch );
-				else
-					pAvg->Ungroup ( pMatch );
-			}
-			++pMatch;
-		}
+		if ( eGroup==Avg_e::FINALIZE )
+			for ( auto i : this->m_dIData )
+				m_dAvgs.Apply( [this,i] ( IAggrFunc * pAvg ) { pAvg->Finalize ( m_dData[i] ); } );
+		else
+			for ( auto i : this->m_dIData )
+				m_dAvgs.Apply ( [this,i] ( IAggrFunc * pAvg ) { pAvg->Ungroup ( m_dData[i] ); } );
 	}
 
-	/// count distinct values if necessary
+	/// finalize counted distinct values
 	void CountDistinct ()
 	{
-		if_const ( DISTINCT )
-			BASE::Distinct ( [this] ( SphGroupKey_t uGroup )->CSphMatch ** { return m_hGroup2Match ( uGroup ); } );
+		Distinct ( [this] ( SphGroupKey_t uGroup )->CSphMatch *
+		{
+			auto ppMatch = m_hGroup2Match ( uGroup );
+			return ppMatch ? *ppMatch : nullptr;
+		});
 	}
 
-	/// cut worst N groups off the buffer tail
-	void CutWorst ( int iBound )
+	// make final order before finalize/flatten call
+	void FinalizeMatches ()
 	{
-		// sort groups
-		if ( this->m_bSortByDistinct )
+		if ( m_bMatchesFinalized )
+			return;
+		m_bMatchesFinalized = true;
+
+		if ( Used ()>m_iLimit )
+			CutWorst ( m_iLimit, true );
+		else {
+			if_const ( DISTINCT )
+				CountDistinct ();
+			CalcAvg ( Avg_e::FINALIZE );
+			SortGroups ();
+		}
+	}
+
+	void RebuildHash ()
+	{
+		for ( auto iMatch : this->m_dIData ) {
+			auto & tMatch = m_dData[iMatch];
+			m_hGroup2Match.Add ( &tMatch, tMatch.GetAttr ( m_tLocGroupby ));
+		}
+	}
+
+	/// cut worst N groups off the buffer tail, and maybe sort the best part
+	void CutWorst ( int iBound, bool bFinalize=false )
+	{
+		// prepare to partition - finalize distinct, avgs to provide smooth sorting
+		if_const ( DISTINCT && m_bSortByDistinct )
 			CountDistinct ();
 
-		CalcAvg ( true );
-		SortGroups ();
-		CalcAvg ( false );
+		CalcAvg ( Avg_e::FINALIZE );
 
-		if_const ( NOTIFICATIONS )
-		{
-			for ( int i = iBound; i < m_iUsed; ++i )
-				this->m_dJustPopped.Add ( m_pData[i].m_tRowID );
-		}
+		// relocate best matches to the low part (up to the iBound)
+		BinaryPartition (iBound);
 
-		// cleanup unused distinct stuff
+		// take worst matches and free them (distinct stuff, data ptrs)
+		auto dWorst = this->m_dIData.Slice ( iBound );
+
 		if_const ( DISTINCT )
 		{
-			// build kill-list
 			CSphVector<SphGroupKey_t> dRemove;
-			dRemove.Resize ( m_iUsed-iBound );
-			ARRAY_FOREACH ( i, dRemove )
-				dRemove[i] = m_pData[iBound+i].GetAttr ( this->m_tLocGroupby );
-
-			// sort and compact
-			if ( !this->m_bSortByDistinct )
-				this->m_tUniq.Sort ();
-			this->m_tUniq.Compact ( &dRemove[0], m_iUsed-iBound );
+			for ( auto iMatch : dWorst )
+				dRemove.Add ( m_dData[iMatch].GetAttr ( m_tLocGroupby ));
+			RemoveDistinct ( dRemove );
 		}
 
-		// rehash
+		dWorst.Apply ( [this,bFinalize] ( int iMatch ) { FreeMatchPtrs ( iMatch, !bFinalize ); } );
+
+		m_iMaxUsed = Max ( m_iMaxUsed, this->m_dIData.GetLength() ); // memorize it for free dynamics later.
+		this->m_dIData.Resize ( iBound );
 		m_hGroup2Match.Reset ();
-		for ( int i=0; i<iBound; i++ )
-			m_hGroup2Match.Add ( m_pData+i, m_pData[i].GetAttr ( this->m_tLocGroupby ) );
 
-		for ( int i = iBound; i < m_iUsed; i++ )
-			m_pSchema->FreeDataPtrs ( m_pData+i );
-
-		m_iMaxUsed = Max ( m_iMaxUsed, m_iUsed );
-
-		// cut groups
-		m_iUsed = iBound;
+		if ( bFinalize ) {
+			SortGroups ();
+			if_const ( DISTINCT && !m_bSortByDistinct ) // since they wasn't counted at the top
+				CountDistinct ();
+		} else {
+			// we've called CalcAvg ( Avg_e::FINALIZE ) before partitioning groups
+			// now we can undo this calculation for the rest apart of thrown away
+			// on finalize (sorting) cut we don't need to ungroup here
+			CalcAvg ( Avg_e::UNGROUP );
+			RebuildHash();
+		}
+		m_bStorageFilled = true;
 	}
 
 	/// sort groups buffer
 	void SortGroups ()
 	{
-		sphSort ( m_pData, m_iUsed, this->m_tGroupSorter, this->m_tGroupSorter );
+		this->m_dIData.Sort ( m_tGroupSorter );
+	}
+
+	// update @groupbystr value, if available
+	void UpdateGroupbyStr ( CSphMatch& tMatch, const SphAttr_t * pAttr )
+	{
+		if ( this->m_tLocGroupbyStr.m_bDynamic )
+			tMatch.SetAttr ( this->m_tLocGroupbyStr, *pAttr );
+	}
+
+	// lazy resort matches so that best are located up to iBound
+	void BinaryPartition ( int iBound )
+	{
+		float COEFF = Max ( 1.0, float(Used ()) / iBound );
+		int iPivot = this->m_dIData[iBound/COEFF];
+
+		--iBound;
+		int a=0;
+		int b=Used()-1;
+		while (true)
+		{
+			int i=a;
+			int j=b;
+			while (i<=j)
+			{
+				while (m_tGroupSorter.IsLess (this->m_dIData[i],iPivot)) 	++i;
+				while (m_tGroupSorter.IsLess (iPivot, this->m_dIData[j]))	--j;
+				if ( i<=j ) ::Swap( this->m_dIData[i++], this->m_dIData[j--]);
+			}
+			if ( iBound == j )
+				break;
+
+			if ( iBound < j)
+				b = j;  // too many elems aquired; continue with left part
+			else
+				a = i;  // too less elems aquired; continue with right part
+			iPivot = this->m_dIData[( a * ( COEFF-1 )+b ) / COEFF];
+		}
 	}
 };
 
+
+#define LOG_COMPONENT_NG __FILE__ << ":" << __LINE__ << " -"
+#define LOG_LEVEL_DIAG false
+
+#define DBG LOC(DIAG,NG)
 
 /// match sorter with k-buffering and N-best group-by
 template < typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS >
@@ -2420,61 +2881,83 @@ class CSphKBufferNGroupSorter : public KBufferGroupSorter_T<COMPGROUP,DISTINCT,N
 	using MYTYPE = CSphKBufferNGroupSorter<COMPGROUP, DISTINCT, NOTIFICATIONS>;
 
 protected:
-	using BASE = KBufferGroupSorter_T<COMPGROUP, DISTINCT, NOTIFICATIONS>;
-	using BASE::m_tLocGroupby;
-	using BASE::m_iUsed;
-	using BASE::m_iSize;
-	using BASE::m_pData;
-	using BASE::m_pSchema;
+	using KBufferGroupSorter = KBufferGroupSorter_T<COMPGROUP, DISTINCT, NOTIFICATIONS>;
+	using KBufferGroupSorter::m_eGroupBy;
+	using KBufferGroupSorter::m_pGrouper;
+	using KBufferGroupSorter::m_iLimit;
+	using KBufferGroupSorter::m_tUniq;
+	using KBufferGroupSorter::m_bSortByDistinct;
+	using KBufferGroupSorter::m_tGroupSorter;
+	using KBufferGroupSorter::m_tSubSorter;
+	using KBufferGroupSorter::m_dAvgs;
+	using KBufferGroupSorter::GROUPBY_FACTOR;
+	using KBufferGroupSorter::CloneKBufferGroupSorter;
+	using KBufferGroupSorter::GetAggregatesWithoutAvgs;
+	using KBufferGroupSorter::Distinct;
+	using KBufferGroupSorter::FreeMatchPtrs;
+	using KBufferGroupSorter::UpdateDistinct;
+	using KBufferGroupSorter::RemoveDistinct;
 
-	OpenHash_T < CSphMatch *, DocID_t >	m_hGroup2Match;
+	using CSphGroupSorterSettings::m_tLocGroupby;
+	using CSphGroupSorterSettings::m_tLocCount;
+	using CSphGroupSorterSettings::m_tLocDistinct;
+//	using CSphGroupSorterSettings::m_tLocGroupbyStr; // check! unimplemented?
+
+	using ISphMatchSorter::m_iTotal;
+	using ISphMatchSorter::m_iJustPushed;
+	using ISphMatchSorter::m_pSchema;
+
+	using BaseGroupSorter_c::EvalHAVING;
+	using BaseGroupSorter_c::AggrUpdate;
+	using BaseGroupSorter_c::AggrUngroup;
+
+	using CSphMatchQueueTraits::m_iSize;
+	using CSphMatchQueueTraits::m_dData;
+
+	int m_iStorageSolidFrom = 0; // edge from witch storage is not yet touched and need no chaining freelist
+	OpenHash_T<int, SphGroupKey_t> m_hGroup2Index; // used to quickly locate group for incoming match
 
 protected:
-	int				m_iGLimit;		///< limit per one group
-	CSphFixedVector<int>	m_dGroupByList {0};	///< chains of equal matches from groups
-	CSphFixedVector<int>	m_dGroupsLen {0};	///< lengths of chains of equal matches from groups
-	int				m_iFreeHeads = 0;		///< insertion point for head matches.
-	CSphFreeList	m_dFreeTails;			///< where to put tails of the subgroups
+	const int		m_iGLimit;		///< limit per one group
 	SphGroupKey_t	m_uLastGroupKey = -1;	///< helps to determine in pushEx whether the new subgroup started
+	int				m_iFree = 0;			///< current insertion point
+	int				m_iUsed = 0;
+
+	// final cached data valid when everything is finalized
+	bool			m_bFinalized = false;	// helper to avoid double work
+	CSphVector<int> m_dFinalizedHeads;	/// < sorted finalized heads
+	int				m_iLastGroupCutoff;	/// < cutof edge of last group to fit limit
+
 #ifndef NDEBUG
 	int				m_iruns = 0;		///< helpers for conditional breakpoints on debug
 	int				m_ipushed = 0;
 #endif
+	LOC_ADD;
 
 public:
 	/// ctor
 	CSphKBufferNGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery,
 			const CSphGroupSorterSettings & tSettings ) // FIXME! make k configurable
-		: BASE ( pComp, pQuery, tSettings, pQuery->m_iGroupbyLimit>1 )
-		, m_hGroup2Match ( pQuery->m_iMaxMatches* this->GROUPBY_FACTOR*2 )
-		, m_iGLimit ( pQuery->m_iGroupbyLimit )
+		: KBufferGroupSorter ( pComp, pQuery, tSettings )
+		, m_hGroup2Index ( pQuery->m_iMaxMatches* GROUPBY_FACTOR )
+		, m_iGLimit ( Min ( pQuery->m_iGroupbyLimit, m_iLimit ) )
 	{
 		assert ( m_iGLimit > 1 );
-
-		// trick! This case we allocated 2*m_iSize mem.
-		// range [0..m_iSize) used for 1-st matches of each subgroup (i.e., for heads)
-		// range [m_iSize..2*m_iSize) used for the tails.
-		m_dGroupByList.Reset ( m_iSize );
-		m_dGroupsLen.Reset ( m_iSize );
-		m_iSize >>= 1;
-		ARRAY_FOREACH ( i, m_dGroupByList )
-		{
-			m_dGroupByList[i] = -1;
-			m_dGroupsLen[i] = 0;
-		}
-		m_dFreeTails.Reset ( m_iSize );
+#ifndef NDEBUG
+		DBG << "Created iruns = " << m_iruns << " ipushed = " << m_ipushed;
+#endif
+		this->m_dIData.Resize ( m_iSize ); // m_iLimit * GROUPBY_FACTOR
 	}
 
-	// only for n-group
-	int GetDataLength () const override
+	int GetLength () const override
 	{
-		return CSphMatchQueueTraits::GetDataLength()/2;
+		return Min ( m_iUsed, m_iLimit );
 	}
 
 	/// add entry to the queue
 	bool Push ( const CSphMatch & tEntry ) override
 	{
-		SphGroupKey_t uGroupKey = this->m_pGrouper->KeyFromMatch ( tEntry );
+		auto uGroupKey = m_pGrouper->KeyFromMatch ( tEntry );
 		return PushEx ( tEntry, uGroupKey, false, false );
 	}
 
@@ -2487,76 +2970,71 @@ public:
 	/// store all entries into specified location in sorted order, and remove them from queue
 	int Flatten ( CSphMatch * pTo, int iTag ) override
 	{
-		CountDistinct ();
-		CalcAvg ( true );
+		if ( !GetLength() )
+			return 0;
 
-		Hash2nd();
-
-		SortGroups ();
-		CSphVector<IAggrFunc *> dAggrs;
-		if ( this->m_dAggregates.GetLength()!=this->m_dAvgs.GetLength() )
+		if ( !m_bFinalized )
 		{
-			dAggrs = this->m_dAggregates;
-			for ( auto * pAvg : this->m_dAvgs )
-				dAggrs.RemoveValue ( pAvg );
+			FinalizeChains ();
+			PrepareForExport ();
+			CountDistinct ();
 		}
 
-		const CSphMatch * pBegin = pTo;
-		int iTotal = BASE::GetLength ();
-		int iTopGroupMatch = 0;
-
-		for ( int iEntry=0; iEntry<iTotal; ++iEntry )
-		{
-			CSphMatch * pMatch = m_pData + iTopGroupMatch;
-			for ( auto * pAggr : dAggrs )
-				pAggr->Finalize ( pMatch );
-			++iTopGroupMatch;
-
-			// check if match (and whole group) is filtered out; skip them if so.
-			if ( this->m_pAggrFilterTrait && !this->m_pAggrFilterTrait->Eval ( *pMatch ) )
-			{
-				auto** ppMatch = m_hGroup2Match.Find ( pMatch->GetAttr ( m_tLocGroupby ));
-				for ( int iNext = ( ppMatch ? *ppMatch - m_pData : -1 ); iNext>=0; iNext = m_dGroupByList[iNext] )
-					++iEntry;
-				continue;
-			}
-
-			// copy top group match
-			m_pSchema->CloneMatch ( pTo, *pMatch );
+		auto fnSwap = [&pTo,iTag] ( CSphMatch & tSrc ) 	{ // the writer
+			Swap ( *pTo, tSrc );
 			if ( iTag>=0 )
 				pTo->m_iTag = iTag;
 			++pTo;
+		};
 
-			// now look for the next match.
-			// In this specific case (2-nd, just after the head)
-			// we have to look it in the hash, not in the linked list!
-			CSphMatch ** ppMatch = m_hGroup2Match.Find ( pMatch->GetAttr ( m_tLocGroupby ) );
-			int iNext = ( ppMatch ? *ppMatch-m_pData : -1 );
-			while ( iNext>=0 )
-			{
-				// copy rest group matches
-				this->m_tPregroup.Combine ( pTo, m_pData+iNext, pMatch );
-				if ( iTag>=0 )
-					pTo->m_iTag = iTag;
-				++pTo;
-				++iEntry;
-				iNext = m_dGroupByList[iNext];
-			}
-		}
-
-		m_iFreeHeads = m_iUsed = 0;
-		this->m_iTotal = 0;
-		ARRAY_FOREACH ( i, m_dGroupByList )
+		const CSphMatch * pBegin = pTo;
+		for ( auto iHead : m_dFinalizedHeads )
 		{
-			m_dGroupByList[i] = -1;
-			m_dGroupsLen[i] = 0;
+			CSphMatch & tGroupHead = m_dData[iHead];
+
+			if ( !EvalHAVING ( tGroupHead ))
+			{
+				DeleteChain ( iHead, false );
+				continue;
+			}
+
+			fnSwap ( tGroupHead ); // move top group match
+			for ( int i=this->m_dIData[iHead]; i!=iHead; i = this->m_dIData[i] )
+				fnSwap ( m_dData[i] ); // move tail matches
 		}
 
-		m_hGroup2Match.Clear();
+		// final clean up before possible next pass
+		m_uLastGroupKey = -1;
+		m_iFree = 0;
+		m_iUsed = 0;
+		m_bFinalized = false;
+		m_iStorageSolidFrom = 0;
+		m_iTotal = 0;
+		m_dFinalizedHeads.Reset ();
+		m_hGroup2Index.Clear();
 		if_const ( DISTINCT )
-			this->m_tUniq.Resize ( 0 );
+			m_tUniq.Resize ( 0 );
 
-		return ( pTo-pBegin );
+		return int ( pTo-pBegin );
+	}
+
+	void Finalize ( ISphMatchProcessor & tProcessor, bool ) override
+	{
+		if ( !GetLength() )
+			return;
+
+		if ( !m_bFinalized ) {
+			FinalizeChains ();
+			PrepareForExport ();
+			CountDistinct ();
+		}
+
+		for ( auto iHead : m_dFinalizedHeads )
+		{
+			tProcessor.Process ( &m_dData[iHead] ); // process top group match
+			for ( int i = this->m_dIData[iHead]; i!=iHead; i = this->m_dIData[i] )
+				tProcessor.Process ( &m_dData[i] ); // process tail matches
+		}
 	}
 
 	// TODO! TEST!
@@ -2564,563 +3042,502 @@ public:
 	{
 		CSphQuery dFoo;
 		dFoo.m_iGroupbyLimit = m_iGLimit;
-		dFoo.m_iMaxMatches = this->m_iLimit;
-		dFoo.m_eGroupFunc = this->m_eGroupBy;
-		auto pClone = new MYTYPE ( this->m_pComp, &dFoo, *this );
-		this->CloneKBufferGroupSorter ( pClone );
+		dFoo.m_iMaxMatches = m_iLimit;
+		dFoo.m_eGroupFunc = m_eGroupBy;
+		auto pClone = new MYTYPE ( this->m_tSubSorter.GetComparator (), &dFoo, *this );
+		CloneKBufferGroupSorter ( pClone );
 		return pClone;
 	}
 
-	// FIXME! todo
+	// FIXME! todo CSphKBufferNGroupSorter
 	void MoveTo ( ISphMatchSorter * pRhs) final
 	{
+#ifndef NDEBUG
+		DBG << " MoveTo " << pRhs << " iRuns:iPushed - " << m_iruns << " " << m_ipushed;
+#endif
 		auto& dRhs = *(MYTYPE *) pRhs;
 		if ( !dRhs.m_iTotal )
 		{
+			DBG << " Rhs is empty, adopt! ";
 			CSphMatchQueueTraits::SwapMatchQueueTraits ( dRhs );
-			m_hGroup2Match.Swap ( dRhs.m_hGroup2Match );
-			m_dGroupByList.SwapData ( dRhs.m_dGroupByList );
-			m_dGroupsLen.SwapData ( dRhs.m_dGroupsLen );
-			::Swap ( m_iFreeHeads, dRhs.m_iFreeHeads );
+			m_hGroup2Index.Swap ( dRhs.m_hGroup2Index );
 			::Swap ( m_uLastGroupKey, dRhs.m_uLastGroupKey );
+			::Swap ( m_iFree, dRhs.m_iFree );
+			::Swap ( m_iUsed, dRhs.m_iUsed );
+			::Swap ( m_bFinalized, dRhs.m_bFinalized );
+			m_dFinalizedHeads.SwapData ( dRhs.m_dFinalizedHeads );
+			::Swap ( m_iStorageSolidFrom, dRhs.m_iStorageSolidFrom );
 #ifndef NDEBUG
 			::Swap ( m_iruns, dRhs.m_iruns );
 			::Swap ( m_ipushed, dRhs.m_ipushed );
+			LOC_SWAP(dRhs);
 #endif
 			return;
 		}
-	}
 
-private:
-
-	#ifndef NDEBUG
-	void CheckIntegrity()
-	{
-		int iTotalLen = 0;
-		for ( int i=0; i<m_iFreeHeads; ++i )
-		{
-			int iLen = 0;
-			int iCur = i;
-			while ( iCur>=0 )
-			{
-				int iNext = m_dGroupByList[iCur];
-				assert ( iNext==-1 || m_pData[iCur].GetAttr ( m_tLocGroupby )==0 || m_pData[iNext].GetAttr ( m_tLocGroupby )==0
-						|| m_pData[iCur].GetAttr ( m_tLocGroupby )==m_pData[iNext].GetAttr ( m_tLocGroupby ) );
-				++iLen;
-				iCur = iNext;
-			}
-			assert ( m_dGroupsLen[i]==iLen );
-			iTotalLen += iLen;
+		if ( !m_bFinalized ) {
+			FinalizeChains ();
+//			PrepareForExport (); // for moving we not need fine-finaled matches; just cleaned is enough
+			CountDistinct ();
 		}
-		assert ( iTotalLen==m_iUsed );
+
+		for ( auto iHead : m_dFinalizedHeads )
+		{
+			auto uGroupKey = m_dData[iHead].GetAttr ( m_tLocGroupby );
+			dRhs.PushEx ( m_dData[iHead], uGroupKey, true, false, true );
+			for ( int i = this->m_dIData[iHead]; i!=iHead; i = this->m_dIData[i] )
+				dRhs.PushEx ( m_dData[i], uGroupKey, false, false, true );
+			DeleteChain ( iHead, false );
+		}
 	}
-#define CHECKINTEGRITY() CheckIntegrity()
-#else
-#define CHECKINTEGRITY()
-#endif
+
+
 protected:
 	/// add entry to the queue
-	virtual bool PushEx ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool bGrouped, bool bNewSet )
+	/*
+	 * Every match according to uGroupKey came to own subset.
+	 * Head match of each group stored in the hash to quickly locate on next pushes
+	 * It hold all calculated stuff from agregates/group_concat until finalization.
+	 */
+	bool PushEx ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey,
+			bool bGrouped, bool bNewSet, bool bTailFinalized=false )
 	{
+
 #ifndef NDEBUG
 		++m_ipushed;
+		DBG << "PushEx: tag" << tEntry.m_iTag << ",g" << uGroupKey << ": pushed" << m_ipushed
+			<< " g" << bGrouped << " n" << bNewSet;
 #endif
-		CHECKINTEGRITY();
+
 		if_const ( NOTIFICATIONS )
 		{
-			this->m_iJustPushed = INVALID_ROWID;
-			this->m_dJustPopped.Resize(0);
+			m_iJustPushed = INVALID_ROWID;
+			this->m_dJustPopped.Resize ( 0 );
 		}
-		auto& tLocCount = this->m_tLocCount;
-		// if this group is already hashed, we only need to update the corresponding match
-		CSphMatch ** ppMatch = m_hGroup2Match.Find ( uGroupKey );
-		if ( ppMatch )
+
+		// place elem into the set
+		auto iNew = AllocateMatch ();
+		CSphMatch & tNew = m_dData[iNew];
+
+		// if such group already hashed
+		int * pGroupIdx = m_hGroup2Index.Find ( uGroupKey );
+		if ( pGroupIdx )
+			return PushAlreadyHashed ( pGroupIdx, iNew, tEntry, uGroupKey, bGrouped, bNewSet, bTailFinalized);
+
+		// match came from MoveTo of another sorter, it is tail and it has no group here (m.b. it is already
+		// deleted during finalization as one of worst). Just discard the whole group in the case.
+		if ( bTailFinalized && !bGrouped )
 		{
-			CSphMatch * pMatch = (*ppMatch);
-			assert ( pMatch );
-			assert ( pMatch->GetAttr ( m_tLocGroupby )==uGroupKey );
-			assert ( pMatch->m_pDynamic[-1]==tEntry.m_pDynamic[-1] );
-
-			if ( bGrouped )
-			{
-				// it's already grouped match
-				// sum grouped matches count
-				if ( bNewSet || uGroupKey!=m_uLastGroupKey )
-				{
-					pMatch->SetAttr ( tLocCount, pMatch->GetAttr ( tLocCount ) + tEntry.GetAttr ( tLocCount ) ); // OPTIMIZE! AddAttr()?
-					m_uLastGroupKey = uGroupKey;
-					bNewSet = true;
-				}
-			} else
-			{
-				// it's a simple match
-				// increase grouped matches count
-				pMatch->SetAttr ( tLocCount, 1 + pMatch->GetAttr ( tLocCount ) ); // OPTIMIZE! IncAttr()?
-			}
-
-			bNewSet |= !bGrouped;
-
-			// update aggregates
-			if ( bNewSet )
-				for ( auto* pAggregate : this->m_dAggregates )
-					pAggregate->Update ( pMatch, &tEntry, bGrouped );
-
-			// if new entry is more relevant, update from it
-			switch ( InsertMatch ( pMatch-m_pData, tEntry, uGroupKey ) )
-			{
-				case InsertRes_e::NOPLACE:
-				{
-					// need to keep all popped values
-					CSphTightVector<RowID_t> dJustPopped;
-					dJustPopped.SwapData ( this->m_dJustPopped );
-
-					// was no insertion because cache cleaning. Recall myself
-					PushEx ( tEntry, uGroupKey, bGrouped, bNewSet );
-
-					// post Push work
-					ARRAY_FOREACH ( i, dJustPopped )
-						this->m_dJustPopped.Add ( dJustPopped[i] );
-					CSphMatch ** ppDec = m_hGroup2Match.Find ( uGroupKey );
-					assert ( ppDec );
-					(*ppDec)->SetAttr ( tLocCount, (*ppDec)->GetAttr ( tLocCount )-1 );
-					break;
-				}
-				case InsertRes_e::ADDED:
-				{
-					if ( bGrouped )
-						return true;
-					++this->m_iTotal;
-				}
-				default: break;
-			}
+			DeallocateMatch ( iNew );
+			return false;
 		}
+
+		m_pSchema->CloneMatch ( tNew, tEntry ); // fixme! check if essential data cloned
+		//	else
+		//			this->m_tPregroup.CloneWithoutAggrs ( tNew, tEntry );
+		//			this->m_tPregroup.CopyAggrs ( tNew, tEntry );
+
 
 		// submit actual distinct value in all cases
 		if_const ( DISTINCT )
-		{
-			int iCount = 1;
-			if ( bGrouped )
-				iCount = (int)tEntry.GetAttr ( this->m_tLocDistinct );
-
-			GroupedUniq_c tUniq ( this->m_tUniq );
-			AddDistinctKeys ( tEntry, uGroupKey, iCount, tUniq,
-					this->m_tDistinctLoc, this->m_eDistinctAttr, this->m_pBlobPool );
-		}
-		CHECKINTEGRITY();
-		// it's a dupe anyway, so we shouldn't update total matches count
-		if ( ppMatch )
-			return false;
-
-		// do add
-		int iNew = GetFreePos ( false );
-		assert ( iNew>=0 && iNew<m_iSize );
-
-		CSphMatch & tNew = m_pData [ iNew ];
-		assert ( !tNew.m_pDynamic );
-		m_pSchema->CloneMatch ( &tNew, tEntry );
-
-		m_dGroupByList [ iNew ] = -1;
-		m_dGroupsLen [ iNew ] = 1;
+			UpdateDistinct ( tNew, uGroupKey, bGrouped );
 
 		if_const ( NOTIFICATIONS )
-			this->m_iJustPushed = tNew.m_tRowID;
+			m_iJustPushed = tNew.m_tRowID;
 
-		if ( !bGrouped )
-		{
-			tNew.SetAttr ( m_tLocGroupby, uGroupKey );
-			tNew.SetAttr ( tLocCount, 1 );
-			if_const ( DISTINCT )
-				tNew.SetAttr ( this->m_tLocDistinct, 0 );
-		} else
+		this->m_dIData[iNew] = iNew; // new head - points to self (0-ring)
+		Verify ( m_hGroup2Index.Add ( uGroupKey, iNew ));
+		++m_iTotal;
+
+		if ( bGrouped )
 		{
 			m_uLastGroupKey = uGroupKey;
-			for ( auto * pAggregate : this->m_dAggregates )
-				pAggregate->Ungroup ( &tNew );
+			AggrUngroup ( m_dData[iNew] );
+		} else
+		{
+			tNew.SetAttr ( m_tLocGroupby, uGroupKey );
+			tNew.SetAttr ( m_tLocCount, 1 );
+			if_const ( DISTINCT )
+				tNew.SetAttr ( m_tLocDistinct, 0 );
 		}
-
-		Verify ( m_hGroup2Match.Add ( uGroupKey, &tNew ) );
-		++this->m_iTotal;
-		CHECKINTEGRITY();
 		return true;
 	}
 
 private:
-	inline int GetFreePos ( bool bTailPos )
+
+	// surely give place for a match (do vacuum-cleaning, if there is no place)
+	inline int AllocateMatch ()
 	{
-		// if we're full, let's cut off some worst groups
+		auto iPlace = TryAllocateMatch ();
+		if ( iPlace<0 )
+		{
+			VacuumClean ();
+			iPlace = TryAllocateMatch ();
+		}
+		assert ( iPlace>=0 && iPlace<m_iSize );
+		DBG << "allocated: " << iPlace;
+		return iPlace;
+	}
+
+	// return match and free it's dataptrs
+	inline void FreeMatch ( int iElem, bool bNotify ) // fixme! intersects with parent by name
+	{
+		FreeMatchPtrs ( iElem, bNotify );
+		DeallocateMatch ( iElem );
+	}
+
+	inline int TryAllocateMatch ()
+	{
 		if ( m_iUsed==m_iSize )
-		{
-			CutWorst ( this->m_iLimit * (int)( this->GROUPBY_FACTOR/2) );
-			// don't return true value for tail this case,
-			// since the context might be changed by the CutWorst!
-			if ( bTailPos )
-				return -1;
-		}
+			return -1; // no more place..
 
-		// do add
-		assert ( m_iUsed<m_iSize );
 		++m_iUsed;
-		if ( bTailPos )
-		{
-			int iRes = m_dFreeTails.Get() + m_iSize;
-			assert ( iRes<CSphMatchQueueTraits::GetDataLength() );
-			return iRes;
-		} else
-		{
-			assert ( m_iFreeHeads<m_iSize );
-			return m_iFreeHeads++;
+		auto iElem = m_iFree;
+		if ( iElem<m_iStorageSolidFrom )
+			m_iFree = this->m_dIData[iElem];
+		else {
+			++m_iFree;
+			m_iStorageSolidFrom = m_iFree;
 		}
+		return iElem;
 	}
 
-	void FreeMatchChain ( int iPos )
+	inline void DeallocateMatch (int iElem)
 	{
-		while ( iPos>=0 )
-		{
-			if_const ( NOTIFICATIONS )
-				this->m_dJustPopped.Add ( m_pData[iPos].m_tRowID );
-
-			int iLastPos = iPos;
-			m_pSchema->FreeDataPtrs ( m_pData + iPos );
-			m_pData[iPos].ResetDynamic();
-			iPos = m_dGroupByList[iPos];
-			m_dGroupByList[iLastPos] = -1;
-			if ( iLastPos>=m_iSize )
-				m_dFreeTails.Free ( iLastPos - m_iSize );
-		}
+		--m_iUsed;
+		this->m_dIData[iElem] = m_iFree; // put to chain
+		m_iFree = iElem;
+		assert ( m_iFree >=0 );
 	}
 
-	// insert a match into subgroup, or discard it
-	// returns:
-	// 	NOPLACE if no place now (need to flush)
-	// 	REPLACED if value was discarded or replaced other existing value
-	// 	ADDED if value was added.
-	enum class InsertRes_e
+	// return length of the matches chain (-1 terminated)
+	int ChainLen(int iPos)
 	{
-		NOPLACE,
-		REPLACED,
-		ADDED
-	};
+		int iChainLen = 1;
+		for ( int i = this->m_dIData[iPos]; i!=iPos; i = this->m_dIData[i] )
+			++iChainLen;
+		return iChainLen;
+	}
 
-	InsertRes_e InsertMatch ( int iPos, const CSphMatch & tEntry, const SphGroupKey_t uGroupKey)
+	// add new match into the chain. Aggregates are relaxed and not managed till finalize
+	/*
+	 * chain of the matches is actually ring of integers. Each one points to the coherent
+	 * match in the storage, and simultaneously next member of the ring.
+	 * We can iterate over the chain starting from the head and looking until same index met again.
+	 */
+	void AddToChain ( int iNew, const CSphMatch & tEntry, int iHead )
 	{
-		const int iHead = iPos;
-		int iPrev = 0;
-		const bool bDoAdd = ( m_dGroupsLen[iHead]<m_iGLimit );
-		while ( iPos>=0 )
-		{
-			CSphMatch * pMatch = m_pData+iPos;
-			if ( this->m_pComp->VirtualIsLess ( *pMatch, tEntry, this->m_tState ) ) // the tEntry is better than current *pMatch
-			{
-				int iNew;
-				if ( bDoAdd )
-				{
-					iNew = GetFreePos ( true ); // add to the tails (2-nd subrange)
-					if ( iNew<0 )
-						return InsertRes_e::NOPLACE;
-				} else
-				{
-					iNew = iPos;
-					int iPreLast = iPrev;
-					while ( m_dGroupByList[iNew]>=0 )
-					{
-						iPreLast = iNew;
-						iNew = m_dGroupByList[iNew];
-					}
+		CSphMatch & tNew = m_dData[iNew];
+		this->m_tPregroup.CloneWithoutAggrs ( tNew, tEntry );
+		if_const ( NOTIFICATIONS )
+			m_iJustPushed = tNew.m_tRowID;
 
-					m_pSchema->FreeDataPtrs ( m_pData + iNew );
-					m_pData[iNew].ResetDynamic();
+		// put after the head
+		auto iPrevChain = this->m_dIData[iHead];
+		this->m_dIData[iNew] = iPrevChain;
+		this->m_dIData[iHead] = iNew;
+	}
 
-					if ( iPreLast>=0 )
-						m_dGroupByList[iPreLast] = -1;
+	// add entry to existing group
+	/*
+	 * If group is not full, and new match is less then head, it will replace the head.
+	 * calculated stuff will be moved and adopted by this new replacement.
+	 * If group is full, and new match is less then head, it will be early rejected.
+	 * In all other cases new match will be inserted into the group right after head
+	 */
+	bool PushAlreadyHashed ( int * pHead, int iNew, const CSphMatch & tEntry,
+			const SphGroupKey_t uGroupKey, bool bGrouped, bool bNewSet, bool bTailFinalized )
+	{
+		int & iHead = *pHead;
 
-					if ( iPos==iNew ) // avoid cycle link to itself
-						iPos = -1;
-				}
+		assert ( m_dData[iHead].GetAttr ( m_tLocGroupby )==uGroupKey );
+		assert ( m_dData[iHead].m_pDynamic[-1]==tEntry.m_pDynamic[-1] );
+		DBG << "existing " << m_dData[iHead].m_iTag << "," << uGroupKey
+			<< " m_pDynamic: " << m_dData[iHead].m_pDynamic;
 
-				CSphMatch & tNew = m_pData [ iNew ];
+		// check if we need to push the match at all
+		if ( m_tSubSorter.MatchIsGreater ( tEntry, m_dData[iHead] ) )
+			AddToChain ( iNew, tEntry, iHead ); // always add; bad will be filtered later in gc
+		else if ( ChainLen ( iHead )>=m_iGLimit ) // less then worst, drop it
+			DeallocateMatch ( iNew );
+		else {
+			AddToChain ( iNew, tEntry, iHead );
+			this->m_tPregroup.MoveAggrs ( m_dData[iNew], m_dData[iHead] );
+			*pHead = iNew;
+		}
 
-				if_const ( NOTIFICATIONS )
-				{
-					this->m_iJustPushed = tEntry.m_tRowID;
-					if ( tNew.m_tRowID!=INVALID_ROWID )
-						this->m_dJustPopped.Add ( tNew.m_tRowID );
-				}
-				if ( bDoAdd )
-					++m_dGroupsLen[iHead];
+		auto & tHeadMatch = m_dData[iHead];
+		// submit actual distinct value in all cases
+		if_const ( DISTINCT )
+			UpdateDistinct ( tEntry, uGroupKey, bGrouped );
 
-				if ( iPos==iHead ) // this is the first elem, need to copy groupby staff from it
-				{
-					// trick point! The first elem MUST live in the low half of the pool.
-					// So, replacing the first is actually moving existing one to the last half,
-					// then overwriting the one in the low half with the new value and link them
-					this->m_tPregroup.Clone ( &tNew, pMatch );
-					this->m_tPregroup.Clone ( pMatch, &tEntry );
-					m_dGroupByList[iNew] = m_dGroupByList[iPos];
-					m_dGroupByList[iPos] = iNew;
-				} else // this is elem somewhere in the chain, just shift it.
-				{
-					this->m_tPregroup.Clone ( &tNew, &tEntry );
-					m_dGroupByList[iPrev] = iNew;
-					m_dGroupByList[iNew] = iPos;
-				}
-				// need to keep group by for whole chain
-				tNew.SetAttr ( m_tLocGroupby, uGroupKey );
-				break;
+		// update group-wide counters
+		auto & tLocCount = m_tLocCount;
+		if ( bGrouped ) {
+			// it's already grouped match
+			// sum grouped matches count
+			if ( bNewSet || uGroupKey!=m_uLastGroupKey ) {
+				tHeadMatch.AddCounterAttr ( tLocCount, tEntry );
+				m_uLastGroupKey = uGroupKey;
+				bNewSet = true;
 			}
-			iPrev = iPos;
-			iPos = m_dGroupByList[iPos];
+		} else if ( !bTailFinalized ) {
+			// it's a simple match
+			// increase grouped matches count
+			tHeadMatch.AddCounterScalar ( tLocCount, 1 );
+			bNewSet = true;
 		}
 
-		if ( iPos<0 && bDoAdd ) // this item is less than everything, but still appropriate
-		{
-			int iNew = GetFreePos ( true ); // add to the tails (2-nd subrange)
-			if ( iNew<0 )
-				return InsertRes_e::NOPLACE;
+		// update aggregates
+		if ( bNewSet )
+			AggrUpdate ( tHeadMatch, tEntry, bGrouped );
 
-			CSphMatch & tNew = m_pData [ iNew ];
-			assert ( !tNew.m_pDynamic );
-			this->m_tPregroup.Clone ( &tNew, &tEntry );
-			m_dGroupByList[iPrev] = iNew;
-			m_dGroupByList[iNew] = iPos;
-			// need to keep group key for whole chain
-			tNew.SetAttr ( m_tLocGroupby, uGroupKey );
-
-			if_const ( NOTIFICATIONS )
-				this->m_iJustPushed = tEntry.m_tRowID;
-			if ( bDoAdd )
-				++m_dGroupsLen[iHead];
-		}
-
-		return bDoAdd ? InsertRes_e::ADDED : InsertRes_e::REPLACED;
+		// since it is dupe (i.e. such group is already pushed) - return false;
+		return false;
 	}
 
-	void CalcAvg ( bool bGroup )
+	enum class Avg_e { FINALIZE, UNGROUP };
+	void CalcAvg ( Avg_e eGroup )
 	{
 		if ( this->m_dAvgs.IsEmpty() )
 			return;
 
-		int iHeadMatch;
-		int iMatch = iHeadMatch = 0;
-		for ( int i=0; i<m_iUsed; ++i )
-		{
-			CSphMatch * pMatch = m_pData + iMatch;
-			for ( auto * pAvg : this->m_dAvgs )
-			{
-				if ( bGroup )
-					pAvg->Finalize ( pMatch );
-				else
-					pAvg->Ungroup ( pMatch );
-			}
-			iMatch = m_dGroupByList [ iMatch ];
-			if ( iMatch<0 )
-				iMatch = ++iHeadMatch;
-		}
+		int64_t i = 0;
+		if ( eGroup==Avg_e::FINALIZE )
+			for ( auto tData = m_hGroup2Index.Iterate ( &i ); tData.second; tData = m_hGroup2Index.Iterate ( &i ))
+				m_dAvgs.Apply ( [this, &tData] ( IAggrFunc * pAvg ) {
+					pAvg->Finalize ( m_dData[*tData.second] );
+				});
+		else
+			for ( auto tData = m_hGroup2Index.Iterate ( &i ); tData.second; tData = m_hGroup2Index.Iterate ( &i ))
+				m_dAvgs.Apply ( [this, &tData] ( IAggrFunc * pAvg ) {
+					pAvg->Ungroup ( m_dData[*tData.second] );
+				});
 	}
 
-	// rebuild m_hGroup2Match to point to the subgroups (2-nd elem and further)
-	// returns true if any such subgroup found
-	void Hash2nd()
+	void BinaryPartitionTail ( VecTraits_T<int>& dData, int iBound )
 	{
-		// let the hash points to the chains from 2-nd elem
-		m_hGroup2Match.Clear();
-		int iHeads = m_iUsed;
-		for ( int i=0; i<iHeads; i++ )
-		{
-			if ( m_dGroupsLen[i]>1 )
-			{
-				int iCount = m_dGroupsLen[i];
-				int iTail = m_dGroupByList[i];
-
-				assert ( iTail>=0 );
-				assert ( m_pData[iTail].GetAttr ( m_tLocGroupby )==0 ||
-						m_pData[i].GetAttr ( m_tLocGroupby )==m_pData[iTail].GetAttr ( m_tLocGroupby ) );
-
-				Verify ( m_hGroup2Match.Add ( m_pData[i].GetAttr ( m_tLocGroupby ), m_pData + iTail ) );
-				iHeads -= iCount - 1;
-				m_dGroupsLen[iTail] = iCount;
+		--iBound;
+		int iPivot = dData[iBound];
+		int a = 0;
+		int b = dData.GetLength ()-1;
+		while (true) {
+			int i = a;
+			int j = b;
+			while (i<=j) {
+				while ( m_tSubSorter.IsLess ( dData[i], iPivot )) ++i;
+				while ( m_tSubSorter.IsLess ( iPivot, dData[j] )) --j;
+				if ( i<=j ) ::Swap ( dData[i++], dData[j--] );
 			}
+			if ( iBound==j )
+				break;
+
+			if ( iBound<j )
+				b = j;  // too many elems aquired; continue with left part
+			else
+				a = i;  // too less elems aquired; continue with right part
+			iPivot = dData[( a+b ) / 2];
 		}
 	}
 
+	CSphVector<int> GetAllHeads()
+	{
+		CSphVector<int> dAllHeads;
+		dAllHeads.Reserve ( m_hGroup2Index.GetLength ());
+		int64_t i = 0;
+		for ( auto tData = m_hGroup2Index.Iterate ( &i ); tData.second; tData = m_hGroup2Index.Iterate ( &i ))
+			dAllHeads.Add ( *tData.second );
+		return dAllHeads;
+	}
+
+	// free place for new matches
+	void VacuumClean()
+	{
+		auto iLimit = m_iLimit * GROUPBY_FACTOR / 2;
+
+		// first try to cut out too long tails
+		int iSize = 0;
+		int64_t i = 0;
+		for ( auto tData = m_hGroup2Index.Iterate(&i); tData.second; tData = m_hGroup2Index.Iterate(&i) )
+			iSize += VacuumTail ( tData.second, m_iGLimit );
+
+		// if we reached the limit now - bail, no need to free more.
+		if ( iSize<=iLimit )
+			return;
+
+		// if we're here, just vacuuming tails wasn't effective enough and some deeper cleaning necessary
+		SortThenVacuumWorstHeads ( iLimit );
+	}
+
+	// final pass before iface finalize/flatten - cut worst, sort everything
+	void FinalizeChains()
+	{
+		if ( m_bFinalized )
+			return;
+		m_bFinalized = true;
+
+		int64_t i = 0;
+		for ( auto tData = m_hGroup2Index.Iterate(&i); tData.second; tData = m_hGroup2Index.Iterate(&i) )
+			VacuumTail ( tData.second, m_iGLimit, Stage_e::FINAL );
+
+		// Continue by cut out whole groups
+		SortThenVacuumWorstHeads ( m_iLimit, Stage_e::FINAL ); // false since it is already sorted
+
+		// also free matches in the chain were cleared with FreeDataPtrs, but *now* we also need to free their dynamics
+		// otherwize in d-tr FreDataPtr on non-zero dynamics will be called again with propably another schema and crash
+		auto iFree = m_iFree;
+		for ( auto iElem = TryAllocateMatch (); iElem>=0; iElem = TryAllocateMatch () )
+			m_dData[iElem].ResetDynamic ();
+		m_iFree = iFree;
+	}
+
+	/*
+	 * Here we
+	 * 1) Cut of very last head if it would exceed the limit.
+	 * 1) Copy all calculated stuff (aggr attributes) from head match to every other match of a group
+	 * 2) Sort group in decreasing order, and then shift the ring ahead to 1 match.
+	 * That is necessary since head is worst match, and next after it is the best one (since just sorted)
+	 * Since it is ring, by moving ahead we will have 1-st match the best, last - the worst.
+	 */
+	void PrepareForExport()
+	{
+		VacuumTail ( &m_dFinalizedHeads.Last(), m_iLastGroupCutoff, Stage_e::FINAL );
+		auto dAggrs = GetAggregatesWithoutAvgs ();
+		for ( auto& iHead : m_dFinalizedHeads ) {
+			for ( auto * pAggr : dAggrs )
+				pAggr->Finalize ( m_dData[iHead] );
+			PropagateAggregates ( iHead );
+			iHead = this->m_dIData[iHead]; // shift
+		}
+	}
+
+	void PropagateAggregates ( int iHead )
+	{
+		for ( auto i = this->m_dIData[iHead]; i!=iHead; i = this->m_dIData[i] )
+			this->m_tPregroup.CopyAggrs ( m_dData[i], m_dData[iHead] );
+	}
+
+	// at collect stage we don't need to strictly sort matches inside groups,
+	// but we need to track pushed/deleted matches.
+	// at finalize stage, in opposite, no tracking need, but matches must be sorted.
+	enum class Stage_e { COLLECT, FINAL };
+
+	// full clean - sort the groups, then iterate on them until iLimit elems counted. Cut out the rest.
+	// if last group is not fit into rest of iLimit, it still keeped whole, no fraction performed over it.
+	// returns desired length of the last chain to make the limit hard ( 1..m_iGLimit )
+	void SortThenVacuumWorstHeads ( int iSoftLimit, Stage_e eStage = Stage_e::COLLECT )
+	{
+		m_dFinalizedHeads = GetAllHeads();
+		CalcAvg ( Avg_e::FINALIZE );
+		m_dFinalizedHeads.Sort ( m_tGroupSorter );
+
+		int iRetainMatches = 0;
+		CSphVector<SphGroupKey_t> dRemovedHeads; // to remove distinct
+
+		// delete worst heads
+		ARRAY_FOREACH ( i, m_dFinalizedHeads )
+			if ( iSoftLimit > iRetainMatches )
+				iRetainMatches += ChainLen ( m_dFinalizedHeads[i] );
+			else {
+				 // all quota exceeded, the rest just to be cut totally
+				auto iRemoved = DeleteChain ( m_dFinalizedHeads[i], eStage==Stage_e::COLLECT );
+				if_const ( DISTINCT )
+					dRemovedHeads.Add( iRemoved );
+				m_dFinalizedHeads.RemoveFast ( i-- );
+			}
+
+		// discard removed distincts
+		if_const ( DISTINCT )
+			RemoveDistinct ( dRemovedHeads );
+
+		CalcAvg ( Avg_e::UNGROUP );
+		m_iLastGroupCutoff = m_iGLimit+iSoftLimit-iRetainMatches;
+	}
+
+	// for given chain throw out worst elems to fit in iLimit quota.
+	// Returns length of the chain
+	int VacuumTail ( int* pHead, int iLimit, Stage_e eStage = Stage_e::COLLECT )
+	{
+		assert ( iLimit>0 );
+		CSphVector<int> dChain;
+		dChain.Add ( *pHead );
+		for ( auto i = this->m_dIData[*pHead]; i!=*pHead; i = this->m_dIData[i] )
+			dChain.Add ( i );
+
+		if ( dChain.GetLength()==1 )
+			return 1; // fast over
+
+		auto dWorstTail = dChain.Slice ( iLimit );
+
+		// if no sort necessary and limit not exceeded - nothing to do
+		if ( eStage==Stage_e::COLLECT && dWorstTail.IsEmpty() )
+			return dChain.GetLength();
+
+		// chain need to be shortened
+		if ( !dWorstTail.IsEmpty () )
+		{
+			BinaryPartitionTail ( dChain, iLimit );
+			dChain.Resize ( iLimit );
+		}
+
+		// sort if necessary and ensure last elem of chain is the worst one
+		if ( eStage==Stage_e::FINAL ) {
+			dChain.Sort( m_tSubSorter ); // sorted in reverse order, so the worst match here is the last one.
+			iLimit = dChain.GetLength();
+		} else {
+			assert ( dChain.GetLength ()==iLimit );
+			// not sorted, need to find worst match for new head
+			int iWorst = 0;
+			for (int i=1; i<iLimit; ++i) {
+				if ( m_tSubSorter.IsLess ( dChain[iWorst], dChain[i] ))
+					iWorst = i;
+			}
+			::Swap ( dChain[iWorst], dChain[iLimit-1] );
+		}
+
+		auto iNewHead = dChain.Last ();
+
+		// move calculated aggregates to the new head
+		if ( iNewHead!=*pHead ) {
+			this->m_tPregroup.MoveAggrs ( m_dData[iNewHead], m_dData[*pHead] );
+			*pHead = iNewHead;
+		}
+
+		// now we can safely free worst matches
+		for ( auto iWorst : dWorstTail )
+			FreeMatch ( iWorst, eStage==Stage_e::COLLECT );
+
+		// recreate the chain. It is actually ring, and external hash points to the minimal elem
+		this->m_dIData[iNewHead] = dChain[0]; // head points to begin of chain
+		for ( int i = 0; i<iLimit-1; ++i ) // each elem points to the next, last again to head
+			this->m_dIData[dChain[i]] = dChain[i+1];
+		return iLimit;
+	}
+
+	// delete whole chain (and remove from hash also).
+	SphGroupKey_t DeleteChain ( int iPos, bool bNotify )
+	{
+		SphGroupKey_t uGroupKey = m_dData[iPos].GetAttr ( m_tLocGroupby );
+		m_hGroup2Index.Delete ( uGroupKey );
+		int iNext = this->m_dIData[iPos];
+		FreeMatch ( iPos, bNotify );
+		for ( auto i = iNext; i!=iPos; i = iNext ) {
+			iNext = this->m_dIData[i];
+			FreeMatch ( i, bNotify );
+		}
+
+		return uGroupKey;
+	}
 
 	/// count distinct values if necessary
 	void CountDistinct ()
 	{
 		if_const ( DISTINCT )
-			BASE::Distinct ( [this] ( SphGroupKey_t uGroup )->CSphMatch ** { return m_hGroup2Match.Find ( uGroup ); } );
-	}
-
-	/// cut worst N groups off the buffer tail
-	void CutWorst ( int iBound )
-	{
-#ifndef NDEBUG
-		++m_iruns;
-#endif
-		CHECKINTEGRITY ();
-
-		// sort groups
-		if ( this->m_bSortByDistinct )
-			CountDistinct ();
-
-		Hash2nd();
-
-		CalcAvg ( true );
-		SortGroups ();
-		CalcAvg ( false );
-
-		int iHead = 0;
-		for ( int iLimit=0; iLimit<iBound; iHead++ )
-		{
-			const CSphMatch * pMatch = m_pData + iHead;
-			CSphMatch ** ppTailMatch = m_hGroup2Match.Find ( pMatch->GetAttr ( m_tLocGroupby ) );
-			int iCount = 1;
-			int iTail = -1;
-			if ( ppTailMatch )
+			Distinct ( [this] ( SphGroupKey_t uGroup )->CSphMatch *
 			{
-				assert ( (*ppTailMatch)->GetAttr ( m_tLocGroupby )==0 ||
-						pMatch->GetAttr ( m_tLocGroupby )==(*ppTailMatch)->GetAttr ( m_tLocGroupby ) );
-				iTail = (*ppTailMatch) - m_pData;
-				iCount = m_dGroupsLen[iTail];
-				assert ( iCount>0 );
-			}
-
-			// whole chain fits limit
-			if ( ( iLimit + iCount )<=iBound )
-			{
-				m_dGroupByList[iHead] = iTail;
-				m_dGroupsLen[iHead] = iCount;
-				iLimit += iCount;
-				continue;
-			}
-
-			// only head match fits limit but not tail match(es)
-			if ( ( iLimit + 1 )==iBound )
-			{
-				m_dGroupByList[iHead] = -1;
-				m_dGroupsLen[iHead] = 1;
-
-				FreeMatchChain ( iTail );
-				iHead++;
-				break;
-			}
-
-			// part of tail fits limit - it our last chain
-			// fix-up chain to fits limit
-			assert ( iBound-iLimit<=iCount );
-			iCount = iBound - iLimit;
-			m_dGroupByList[iHead] = iTail;
-			m_dGroupsLen[iHead] = iCount;
-
-			iCount--;
-			int iPrev = iTail;
-			while ( iCount>0 )
-			{
-				iPrev = iTail;
-				iTail = m_dGroupByList[iTail];
-				iCount--;
-				assert ( !iCount || iTail>=0 );
-			}
-			m_dGroupByList[iPrev] = -1;
-
-			iHead++;
-			FreeMatchChain ( iTail );
-			break;
-		}
-
-		if_const ( DISTINCT )
-		{
-			int iCount = m_iUsed - iHead;
-			CSphFixedVector<SphGroupKey_t> dRemove ( iCount );
-			for ( int i=0; i<iCount; i++ )
-				dRemove[i] = m_pData [ i + iHead ].GetAttr ( m_tLocGroupby );
-
-			if ( !this->m_bSortByDistinct )
-				this->m_tUniq.Sort ();
-
-			this->m_tUniq.Compact ( &dRemove[0], iCount );
-		}
-
-		// cleanup chains after limit
-		for ( int i=iHead; i<m_iFreeHeads; ++i )
-		{
-			CSphMatch * pMatch = m_pData + i;
-			CSphMatch ** ppTailMatch = m_hGroup2Match.Find ( pMatch->GetAttr ( m_tLocGroupby ) );
-			if ( ppTailMatch )
-			{
-				assert ( ( *ppTailMatch )->GetAttr ( m_tLocGroupby )==0 || pMatch->GetAttr ( m_tLocGroupby )==( *ppTailMatch )->GetAttr ( m_tLocGroupby ) );
-				int iTail = ( *ppTailMatch ) - m_pData;
-				assert ( m_dGroupsLen[iTail]>0 );
-				FreeMatchChain ( iTail );
-			}
-
-			if_const ( NOTIFICATIONS )
-				this->m_dJustPopped.Add ( pMatch->m_tRowID );
-			m_pSchema->FreeDataPtrs ( pMatch );
-			pMatch->ResetDynamic();
-
-			m_dGroupByList[i] = -1;
-			m_dGroupsLen[i] = 0;
-		}
-
-		// cleanup chain lengths after hash2nd
-		for ( int i=m_iSize; i<m_dGroupsLen.GetLength(); i++ )
-			m_dGroupsLen[i] = 0;
-
-		// rehash
-		m_hGroup2Match.Clear();
-		for ( int i=0; i<iHead; i++ )
-			Verify ( m_hGroup2Match.Add ( m_pData[i].GetAttr ( m_tLocGroupby ), m_pData + i ) );
-
-		// cut groups
-		m_iUsed = iBound;
-		m_iFreeHeads = iHead;
-		CHECKINTEGRITY();
-	}
-
-	/// sort groups buffer
-	void SortGroups ()
-	{
-		sphSort ( m_pData, m_iFreeHeads, this->m_tGroupSorter, this->m_tGroupSorter );
-	}
-
-	void Finalize ( ISphMatchProcessor & tProcessor, bool ) override
-	{
-		if ( !BASE::GetLength() )
-			return;
-
-		if ( m_iUsed>this->m_iLimit )
-			CutWorst ( this->m_iLimit );
-
-		CSphBitvec dProcessedMatches ( CSphMatchQueueTraits::GetDataLength() );
-
-
-		for ( int iMatch=0; iMatch<m_iFreeHeads; iMatch++ )
-		{
-			// this is head match
-			dProcessedMatches.BitSet ( iMatch );
-
-			int iNext = m_dGroupByList[iMatch];
-			int iCount = m_dGroupsLen[iMatch] - 1;
-			while ( iCount>0 )
-			{
-				dProcessedMatches.BitSet ( iNext );
-				iNext = m_dGroupByList[iNext];
-				iCount--;
-			}
-		}
-
-		for ( int i = 0; i < dProcessedMatches.GetBits(); i++ )
-		{
-			CSphMatch * pMatch = m_pData+i;
-
-			if ( dProcessedMatches.BitGet(i) )
-				tProcessor.Process ( pMatch );
-			else
-			{
-				m_pSchema->FreeDataPtrs ( pMatch );
-				pMatch->ResetDynamic();
-			}
-		}
+				auto pIdx = m_hGroup2Index.Find ( uGroup );
+				return pIdx? &m_dData[*pIdx] : nullptr;
+			});
 	}
 };
 
@@ -3304,8 +3721,9 @@ public:
 
 
 /// implicit group-by sorter
+/// invoked when no 'group-by', but count(*) or count(distinct attr) are in game
 template < typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS >
-class CSphImplicitGroupSorter : public ISphMatchSorter, ISphNoncopyable, protected BaseGroupSorter_c
+class CSphImplicitGroupSorter final : public ISphMatchSorter, ISphNoncopyable, protected BaseGroupSorter_c
 {
 	using MYTYPE = CSphImplicitGroupSorter<COMPGROUP, DISTINCT, NOTIFICATIONS>;
 protected:
@@ -3313,77 +3731,77 @@ protected:
 	bool			m_bDataInitialized = false;
 
 	CSphVector<SphUngroupedValue_t>	m_dUniq;
-	const BYTE *				m_pBlobPool {nullptr};
 
 public:
 	/// ctor
-	CSphImplicitGroupSorter ( const ISphMatchComparator * DEBUGARG(pComp),
-		const CSphQuery *, const CSphGroupSorterSettings & tSettings )
+	CSphImplicitGroupSorter ( const ISphMatchComparator * DEBUGARG(pComp), const CSphQuery *,
+			const CSphGroupSorterSettings & tSettings )
 		: BaseGroupSorter_c ( tSettings )
 	{
-		assert ( DISTINCT==false || tSettings.m_tDistinctLoc.m_iBitOffset>=0 );
+		assert ( !DISTINCT || tSettings.m_tDistinctAttr.m_iBitOffset>=0 );
 		assert ( !pComp );
 
 		if_const ( NOTIFICATIONS )
 			m_dJustPopped.Reserve(1);
 
-		m_dUniq.Reserve ( 16384 );
+		if_const ( DISTINCT )
+			m_dUniq.Reserve ( 16384 );
 		m_iMatchCapacity = 1;
 	}
 
 	/// schema setup
-	void SetSchema ( ISphSchema * pSchema, bool bRemapCmp ) override
+	void SetSchema ( ISphSchema * pSchema, bool bRemapCmp ) final
 	{
-		FixupSorterLocators<void> ( *this, m_pSchema, pSchema, nullptr, m_dAggregates, m_tPregroup, bRemapCmp );
+		if ( m_pSchema )
+		{
+			FixupLocators ( m_pSchema, pSchema );
+			m_tPregroup.ResetAttrs ();
+			m_dAggregates.Apply ( [] ( IAggrFunc * pAggr ) {SafeDelete ( pAggr ); } );
+			m_dAggregates.Resize ( 0 );
+		}
 		ISphMatchSorter::SetSchema ( pSchema, bRemapCmp );
 		SetupBaseGrouper<DISTINCT> ( pSchema );
 	}
 
-	int GetDataLength () const override
-	{
-		return 1;
-	}
-
 	/// check if this sorter does groupby
-	bool IsGroupby () const override
+	bool IsGroupby () const final
 	{
 		return true;
 	}
 
 	/// set blob pool pointer (for string+groupby sorters)
-	void SetBlobPool ( const BYTE * pBlobPool ) override
+	void SetBlobPool ( const BYTE * pBlobPool ) final
 	{
-		m_pBlobPool = pBlobPool;
+		BlobPool_c::SetBlobPool ( pBlobPool );
 	}
 
 	/// add entry to the queue
-	bool Push ( const CSphMatch & tEntry ) override
+	bool Push ( const CSphMatch & tEntry ) final
 	{
 		return PushEx ( tEntry, false );
 	}
 
 	/// add grouped entry to the queue. bNewSet indicates the beginning of resultset returned by an agent.
-	bool PushGrouped ( const CSphMatch & tEntry, bool ) override
+	bool PushGrouped ( const CSphMatch & tEntry, bool ) final
 	{
 		return PushEx ( tEntry, true );
 	}
 
 	/// store all entries into specified location in sorted order, and remove them from queue
-	int Flatten ( CSphMatch * pTo, int iTag ) override
+	int Flatten ( CSphMatch * pTo, int iTag ) final
 	{
 		assert ( m_bDataInitialized );
 
 		CountDistinct ();
 
 		for ( auto * pAggregate : m_dAggregates )
-			pAggregate->Finalize ( &m_tData );
+			pAggregate->Finalize ( m_tData );
 
 		int iCopied = 0;
-		if ( !m_pAggrFilterTrait || m_pAggrFilterTrait->Eval ( m_tData ) )
+		if ( EvalHAVING ( m_tData ) )
 		{
 			iCopied = 1;
-			m_pSchema->CloneMatch ( pTo, m_tData );
-			m_pSchema->FreeDataPtrs ( &m_tData );
+			Swap ( *pTo, m_tData );
 			if ( iTag>=0 )
 				pTo->m_iTag = iTag;
 		}
@@ -3398,7 +3816,7 @@ public:
 	}
 
 	/// finalize, perform final sort/cut as needed
-	void Finalize ( ISphMatchProcessor & tProcessor, bool ) override
+	void Finalize ( ISphMatchProcessor & tProcessor, bool ) final
 	{
 		if ( !GetLength() )
 			return;
@@ -3407,7 +3825,7 @@ public:
 	}
 
 	/// get entries count
-	int GetLength () const override
+	int GetLength () const final
 	{
 		return m_bDataInitialized ? 1 : 0;
 	}
@@ -3421,28 +3839,72 @@ public:
 		return pClone;
 	}
 
-	// FIXME! todo
+	// FIXME! test CSphImplicitGroupSorter
 	void MoveTo ( ISphMatchSorter * pRhs ) final
 	{
+		if (!m_bDataInitialized)
+			return;
+
 		auto& dRhs = *(MYTYPE *) pRhs;
-		if ( !dRhs.m_iTotal )
+		if ( !dRhs.m_bDataInitialized )
 		{
 			// ISphMatchSorter
 			::Swap ( m_iTotal, dRhs.m_iTotal );
-
 			::Swap ( m_tData, dRhs.m_tData );
 			::Swap ( m_bDataInitialized, dRhs.m_bDataInitialized );
 			m_dUniq.SwapData ( dRhs.m_dUniq );
-			::Swap ( m_pBlobPool, dRhs.m_pBlobPool );
 			return;
 		}
+
+		// other step is a bit tricky:
+		// we just can't add current count uniq to final; need to append m_dUniq instead,
+		// so that final flatten will calculate real uniq count.
+		dRhs.AddCount ( m_tData );
+		dRhs.UpdateAggregates ( m_tData );
+		dRhs.CheckReplaceEntry ( m_tData );
+		if_const ( DISTINCT )
+			dRhs.UpdateDistinct ( m_tData );
 	}
 
-protected:
-
+private:
 	inline void SetupBaseGrouperWrp ( ISphSchema * pSchema )
 	{
 		SetupBaseGrouper<DISTINCT> ( pSchema );
+	}
+
+	void AddCount ( const CSphMatch & tEntry )
+	{
+		m_tData.AddCounterAttr ( m_tLocCount, tEntry );
+	}
+
+	void UpdateAggregates ( const CSphMatch & tEntry, bool bGrouped = true )
+	{
+		AggrUpdate ( m_tData, tEntry, bGrouped );
+	}
+
+	// if new entry is more relevant, update from it
+	void CheckReplaceEntry ( const CSphMatch & tEntry )
+	{
+		if ( tEntry.m_tRowID<m_tData.m_tRowID )
+		{
+			if_const ( NOTIFICATIONS )
+			{
+				m_iJustPushed = tEntry.m_tRowID;
+				m_dJustPopped.Add ( m_tData.m_tRowID );
+			}
+			m_tPregroup.CloneKeepingAggrs ( m_tData, tEntry );
+		}
+	}
+
+	// submit actual distinct value in all cases
+	void UpdateDistinct ( const CSphMatch & tEntry, bool bGrouped = true )
+	{
+		int iCount = 1;
+		if ( bGrouped )
+			iCount = (int) tEntry.GetAttr ( m_tLocDistinct );
+
+		AddDistinctKeys ( tEntry, m_tDistinctAttr, m_eDistinctAttr, GetBlobPool (), [this, iCount] ( SphAttr_t b )
+			{ this->m_dUniq.Add ( std::make_pair ( b, iCount ) ); } );
 	}
 
 	/// add entry to the queue
@@ -3462,48 +3924,28 @@ protected:
 			{
 				// it's already grouped match
 				// sum grouped matches count
-				m_tData.SetAttr ( m_tLocCount, m_tData.GetAttr ( m_tLocCount ) + tEntry.GetAttr ( m_tLocCount ) ); // OPTIMIZE! AddAttr()?
+				AddCount ( tEntry );
 			} else
 			{
 				// it's a simple match
 				// increase grouped matches count
-				m_tData.SetAttr ( m_tLocCount, 1 + m_tData.GetAttr ( m_tLocCount ) ); // OPTIMIZE! IncAttr()?
+				m_tData.AddCounterScalar ( m_tLocCount, 1 );
 			}
 
 			// update aggregates
-			for ( auto * pAggregate : m_dAggregates )
-				pAggregate->Update ( &m_tData, &tEntry, bGrouped );
-
-			// if new entry is more relevant, update from it
-			if ( tEntry.m_tRowID<m_tData.m_tRowID )
-			{
-				if_const ( NOTIFICATIONS )
-				{
-					m_iJustPushed = tEntry.m_tRowID;
-					m_dJustPopped.Add ( m_tData.m_tRowID );
-				}
-
-				m_tPregroup.Clone ( &m_tData, &tEntry );
-			}
+			UpdateAggregates ( tEntry, bGrouped );
+			CheckReplaceEntry ( tEntry );
 		}
 
-		// submit actual distinct value in all cases
 		if_const ( DISTINCT )
-		{
-			int iCount = 1;
-			if ( bGrouped )
-				iCount = (int)tEntry.GetAttr ( m_tLocDistinct );
-
-			UngroupedUniq_c tUniq ( m_dUniq );
-			AddDistinctKeys ( tEntry, 0, iCount, tUniq, m_tDistinctLoc, m_eDistinctAttr, m_pBlobPool );
-		}
+			UpdateDistinct ( tEntry, bGrouped );
 
 		// it's a dupe anyway, so we shouldn't update total matches count
 		if ( m_bDataInitialized )
 			return false;
 
 		// add first
-		m_pSchema->CloneMatch ( &m_tData, tEntry );
+		m_pSchema->CloneMatch ( m_tData, tEntry );
 
 		if_const ( NOTIFICATIONS )
 			m_iJustPushed = m_tData.m_tRowID;
@@ -3515,13 +3957,10 @@ protected:
 			if_const ( DISTINCT )
 				m_tData.SetAttr ( m_tLocDistinct, 0 );
 		} else
-		{
-			for ( auto * pAggregate : m_dAggregates )
-				pAggregate->Ungroup ( &m_tData );
-		}
+			AggrUngroup ( m_tData );
 
 		m_bDataInitialized = true;
-		m_iTotal++;
+		++m_iTotal;
 		return true;
 	}
 
@@ -3533,12 +3972,13 @@ protected:
 			assert ( m_bDataInitialized );
 
 			m_dUniq.Sort ();
-			int iCount = 0;
-			ARRAY_FOREACH ( i, m_dUniq )
+			int iCount = m_dUniq[0].second;
+
+			for ( int i = 1, iLen = m_dUniq.GetLength (); i<iLen; ++i )
 			{
-				if ( i>0 && m_dUniq[i-1]==m_dUniq[i] )
+				if ( m_dUniq[i-1]==m_dUniq[i] )
 					continue;
-				iCount += m_dUniq[i].m_iCount;
+				iCount += m_dUniq[i].second;
 			}
 
 			m_tData.SetAttr ( m_tLocDistinct, iCount );
@@ -4485,7 +4925,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 	auto & tSchema = *m_pSorterSchema.Ptr();
 
 	// setup distinct attr
-	m_tGroupSorterSettings.m_tDistinctLoc.m_iBitOffset = -1;
+	m_tGroupSorterSettings.m_tDistinctAttr.m_iBitOffset = -1;
 	if ( !m_tQuery.m_sGroupDistinct.IsEmpty () )
 	{
 		int iDistinct = tSchema.GetAttrIndex ( m_tQuery.m_sGroupDistinct.cstr () );
@@ -4493,7 +4933,7 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 			return Err ( "group-count-distinct attribute '%s' not found", m_tQuery.m_sGroupDistinct.cstr () );
 
 		const auto & tDistinctAttr = tSchema.GetAttr ( iDistinct );
-		m_tGroupSorterSettings.m_tDistinctLoc = tDistinctAttr.m_tLocator;
+		m_tGroupSorterSettings.m_tDistinctAttr = tDistinctAttr.m_tLocator;
 		m_tGroupSorterSettings.m_eDistinctAttr = tDistinctAttr.m_eAttrType;
 	}
 
@@ -4685,7 +5125,7 @@ void QueueCreator_c::AssignOrderByToPresortStage ( const int * pAttrs, int iAttr
 
 
 // expression that transform string pool base + offset -> ptr
-class ExprSortStringAttrFixup_c : public ISphExpr
+class ExprSortStringAttrFixup_c : public BlobPool_c, public ISphExpr
 {
 public:
 	explicit ExprSortStringAttrFixup_c ( const CSphAttrLocator & tLocator )
@@ -4698,9 +5138,7 @@ public:
 	{
 		// our blob strings are not null-terminated!
 		// we can either store nulls in .SPB or add them here
-		int iLengthBytes = 0;
-		const BYTE * pData = sphGetBlobAttr ( tMatch, m_tLocator, m_pBlobPool, iLengthBytes );
-		return sphPackPtrAttr ( pData, iLengthBytes );
+		return sphPackPtrAttr ( sphGetBlobAttr ( tMatch, m_tLocator, GetBlobPool() ) );
 	}
 
 	void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override
@@ -4711,7 +5149,7 @@ public:
 	void Command ( ESphExprCommand eCmd, void * pArg ) override
 	{
 		if ( eCmd==SPH_EXPR_SET_BLOB_POOL )
-			m_pBlobPool = (const BYTE*)pArg;
+			SetBlobPool( (const BYTE*)pArg);
 	}
 
 	uint64_t GetHash ( const ISphSchema &, uint64_t, bool & ) override
@@ -4726,7 +5164,6 @@ public:
 	}
 
 public:
-	const BYTE *		m_pBlobPool {nullptr};	///< string pool; base for offset of string attributes
 	CSphAttrLocator		m_tLocator;				///< string attribute to fix
 
 private:
@@ -4735,7 +5172,7 @@ private:
 
 
 // expression that transform string pool base + offset -> ptr
-class ExprSortJson2StringPtr_c : public ISphExpr
+class ExprSortJson2StringPtr_c : public BlobPool_c, public ISphExpr
 {
 public:
 	ExprSortJson2StringPtr_c ( const CSphAttrLocator & tLocator, ISphExpr * pExpr )
@@ -4752,7 +5189,7 @@ public:
 
 	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const override
 	{
-		if ( !m_pBlobPool || !m_pExpr )
+		if ( !GetBlobPool() || !m_pExpr )
 		{
 			*ppStr = nullptr;
 			return 0;
@@ -4760,7 +5197,7 @@ public:
 
 		uint64_t uPacked = m_pExpr->Int64Eval ( tMatch );
 
-		const BYTE * pVal = m_pBlobPool + sphJsonUnpackOffset ( uPacked );
+		const BYTE * pVal = GetBlobPool() + sphJsonUnpackOffset ( uPacked );
 		ESphJsonType eJson = sphJsonUnpackType ( uPacked );
 
 		CSphString sVal;
@@ -4836,7 +5273,7 @@ public:
 	{
 		if ( eCmd==SPH_EXPR_SET_BLOB_POOL )
 		{
-			m_pBlobPool = (const BYTE*)pArg;
+			SetBlobPool((const BYTE*)pArg);
 			if ( m_pExpr )
 				m_pExpr->Command ( eCmd, pArg );
 		}
@@ -4854,7 +5291,6 @@ public:
 	}
 
 private:
-	const BYTE *		m_pBlobPool {nullptr};	///< string pool; base for offset of string attributes
 	CSphAttrLocator		m_tJsonCol;				///< JSON attribute to fix
 	CSphRefcountedPtr<ISphExpr>	m_pExpr;
 
@@ -5601,18 +6037,13 @@ bool QueueCreator_c::MaybeAddExprColumn ()
 		CSphColumnInfo tCol ( "@expr", SPH_ATTR_FLOAT ); // enforce float type for backwards compatibility
 		// (ie. too lazy to fix those tests right now)
 		bool bHasZonespanlist;
-		tCol.m_pExpr = sphExprParse ( m_tQuery.m_sSortBy.cstr (), *m_pSorterSchema.Ptr(),
-				nullptr, nullptr, m_sError, m_tSettings.m_pProfiler,
-				m_tQuery.m_eCollation, nullptr, &bHasZonespanlist );
-		m_bZonespanlist |= bHasZonespanlist;
 		ExprParseArgs_t tExprArgs;
-//		tExprArgs.m_pProfiler = tQueue.m_pProfiler;
-//		tExprArgs.m_eCollation = tQuery.m_eCollation;
-//		tExprArgs.m_pZonespanlist = &tArgs.m_bHasZonespanlist;
-//
-//		CSphColumnInfo tCol ( "@expr", SPH_ATTR_FLOAT ); // enforce float type for backwards compatibility (ie. too lazy to fix those tests right now)
-//		tCol.m_pExpr = sphExprParse ( tQuery.m_sSortBy.cstr(), tSorterSchema, sError, tExprArgs );
-//		tArgs.m_bNeedZonespanlist |= tArgs.m_bHasZonespanlist;
+		tExprArgs.m_pProfiler = m_tSettings.m_pProfiler;
+		tExprArgs.m_eCollation = m_tQuery.m_eCollation;
+		tExprArgs.m_pZonespanlist = &bHasZonespanlist;
+
+		tCol.m_pExpr = sphExprParse ( m_tQuery.m_sSortBy.cstr (), *m_pSorterSchema.Ptr(), m_sError, tExprArgs );
+		m_bZonespanlist |= bHasZonespanlist;
 		if ( !tCol.m_pExpr )
 			return false;
 		tCol.m_eStage = SPH_EVAL_PRESORT;
@@ -5995,7 +6426,7 @@ bool QueueCreator_c::AddGroupbyStuff ()
 
 	// or else, check in SetupGroupbySettings() would already fail
 	m_bGotGroupby = !m_tQuery.m_sGroupBy.IsEmpty () || m_tGroupSorterSettings.m_bImplicit;
-	m_bGotDistinct = ( m_tGroupSorterSettings.m_tDistinctLoc.m_iBitOffset>=0 );
+	m_bGotDistinct = ( m_tGroupSorterSettings.m_tDistinctAttr.m_iBitOffset>=0 );
 
 	if ( m_bHasGroupByExpr && !m_bGotGroupby )
 		return Err ( "GROUPBY() is allowed only in GROUP BY queries" );

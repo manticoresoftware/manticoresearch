@@ -3604,8 +3604,8 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const CSphQueryResult * pRe
 	{
 		const CSphQueryResultMeta::WordStat_t & tStat = pRes->m_hWordStats.IterateGet();
 		tOut.SendString ( pRes->m_hWordStats.IterateGetKey().cstr() );
-		tOut.SendAsDword ( tStat.m_iDocs );
-		tOut.SendAsDword ( tStat.m_iHits );
+		tOut.SendAsDword ( tStat.first );
+		tOut.SendAsDword ( tStat.second );
 		if ( bAgentMode )
 			tOut.SendByte ( 0 ); // statistics have no expanded terms for now
 	}
@@ -3621,7 +3621,7 @@ void AggrResult_t::FreeMatchesPtrs ( int iLimit, bool bCommonSchema )
 	if ( bCommonSchema )
 	{
 		for ( int i = iLimit; i<m_dMatches.GetLength (); ++i )
-			m_tSchema.FreeDataPtrs ( &m_dMatches[i] );
+			m_tSchema.FreeDataPtrs ( m_dMatches[i] );
 	} else
 	{
 		int nMatches = 0;
@@ -3633,7 +3633,7 @@ void AggrResult_t::FreeMatchesPtrs ( int iLimit, bool bCommonSchema )
 			{
 				int iFrom = Max ( iLimit, nMatches - m_dMatchCounts[i] );
 				for ( int j = iFrom; j<nMatches; ++j )
-					m_dSchemas[i].FreeDataPtrs ( &m_dMatches[j] );
+					m_dSchemas[i].FreeDataPtrs ( m_dMatches[j] );
 			}
 		}
 	}
@@ -3727,7 +3727,7 @@ void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes )
 			}
 			// swap out old (most likely wrong sized) match
 			Swap ( tMatch, tRow );
-			dSchema.FreeDataSpecial ( &tRow, dRowItems );
+			dSchema.FreeDataSpecial ( tRow, dRowItems );
 		}
 
 		iCur = iLimit;
@@ -3883,7 +3883,7 @@ static int KillAllDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes )
 	}
 
 	ARRAY_FOREACH ( i, tRes.m_dMatches )
-		tRes.m_tSchema.FreeDataPtrs ( &(tRes.m_dMatches[i]) );
+		tRes.m_tSchema.FreeDataPtrs ( tRes.m_dMatches[i] );
 
 	tRes.m_dMatches.Reset ();
 	sphFlattenQueue ( pSorter, &tRes, -1 );
@@ -5199,7 +5199,7 @@ static void MergeWordStats ( CSphQueryResultMeta & tDstResult,
 	while ( hSrc.IterateNext() )
 	{
 		const CSphQueryResultMeta::WordStat_t & tSrcStat = hSrc.IterateGet();
-		tDstResult.AddStat ( hSrc.IterateGetKey(), tSrcStat.m_iDocs, tSrcStat.m_iHits );
+		tDstResult.AddStat ( hSrc.IterateGetKey(), tSrcStat.first, tSrcStat.second );
 	}
 }
 
@@ -5251,7 +5251,7 @@ static void RemoveMissedRows ( AggrResult_t & tRes )
 	{
 		if ( !pSrc->m_pStatic )
 		{
-			tRes.m_tSchema.FreeDataPtrs ( pSrc );
+			tRes.m_tSchema.FreeDataPtrs ( *pSrc );
 			pSrc++;
 			continue;
 		}
@@ -6504,7 +6504,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					ARRAY_FOREACH ( i, tRemoteResult.m_dMatches )
 					{
 						tRes.m_dMatches.Add();
-						tRemoteResult.m_tSchema.CloneWholeMatch ( &tRes.m_dMatches.Last(), tRemoteResult.m_dMatches[i] );
+						tRemoteResult.m_tSchema.CloneWholeMatch ( tRes.m_dMatches.Last(), tRemoteResult.m_dMatches[i] );
 						tRes.m_dMatches.Last().m_iTag = ( iOrderTag + iRes - iStart ) | 0x80000000;
 					}
 
@@ -9938,10 +9938,10 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 			dStatus.Add ( tMeta.m_hWordStats.IterateGetKey ( &pWordIt ) );
 
 		if ( dStatus.MatchAddVa ( "docs[%d]", iWord ) )
-			dStatus.Add().SetSprintf ( INT64_FMT, tStat.m_iDocs );
+			dStatus.Add().SetSprintf ( INT64_FMT, tStat.first );
 
 		if ( dStatus.MatchAddVa ( "hits[%d]", iWord ) )
-			dStatus.Add().SetSprintf ( INT64_FMT, tStat.m_iHits );
+			dStatus.Add().SetSprintf ( INT64_FMT, tStat.second );
 
 		++iWord;
 	}
@@ -10537,8 +10537,8 @@ public:
 			return;
 		}
 
-		ReserveGap ( iLen + 9 ); // 9 is taken from MysqlPack() implementation (max possible offset)
-		auto * pStr = MysqlPackInt ( End(), iLen );
+		auto pSpace = AddN ( iLen + 9 ); // 9 is taken from MysqlPack() implementation (max possible offset)
+		auto * pStr = MysqlPackInt ( pSpace, iLen );
 		if ( iLen )
 			memcpy ( pStr, pBlob, iLen );
 		Resize ( Idx ( pStr ) + iLen );
@@ -10920,7 +10920,7 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 		ExprParseArgs_t tExprArgs;
 		tExprArgs.m_pAttrType = &eAttrType;
 		tExprArgs.m_eCollation = eCollation;
-		CSphScopedPtr<ISphExpr> pExpr { sphExprParse ( sFilters, tSchema, sError, tExprArgs ) };
+		ISphExprRefPtr_c pExpr { sphExprParse ( sFilters, tSchema, sError, tExprArgs ) };
 		if ( pExpr )
 		{
 			sError = "";
@@ -10999,7 +10999,7 @@ struct StringPtrTraits_t
 		m_dOff[iOffset] = m_dPackedData.GetLength ();
 
 		BYTE * pPacked = m_dPackedData.AddN ( sphCalcPackedLength(iBlobSize) );
-		pPacked += sphZipToPtr ( iBlobSize, pPacked );
+		pPacked += sphZipToPtr ( pPacked, iBlobSize );
 		return pPacked;
 	}
 };
@@ -12381,7 +12381,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 						{
 							tStrings.m_dOff[iStrCount] = tStrings.m_dPackedData.GetLength();
 							BYTE * pPacked = tStrings.m_dPackedData.AddN ( sphCalcPackedLength ( iParsedLength ) );
-							sphPackPtrAttr ( pPacked, tStrings.m_dParserBuf.Begin(), iParsedLength );
+							sphPackPtrAttr ( pPacked, tStrings.m_dParserBuf );
 						}
 					}
 				}
@@ -15068,12 +15068,12 @@ void HandleMysqlDebug ( SqlRowBuffer_c &tOut, const SqlStmt_t &tStmt, bool bVipC
 	} else if ( bVipConn && sCommand=="setgdb" )
 	{
 		tOut.HeadTuplet ( "command", "result" );
-		const auto& g_bHaveJemalloc = getHaveJemalloc ();
+		const auto& g_bSafeGDB = getSafeGDB ();
 		if ( sParam=="status" )
 		{
 			if ( g_iParentPID>0 )
 				tOut.DataTupletf ( "setgdb", "Enabled, managed by watchdog (pid=%d)", g_iParentPID );
-			else if ( g_bHaveJemalloc )
+			else if ( g_bSafeGDB )
 				tOut.DataTupletf ( "setgdb", "Enabled, managed locally because of jemalloc", g_iParentPID );
 			else if ( g_iParentPID==-1 )
 				tOut.DataTuplet ( "setgdb", "Enabled locally, MAY HANG!" );
@@ -15083,7 +15083,7 @@ void HandleMysqlDebug ( SqlRowBuffer_c &tOut, const SqlStmt_t &tStmt, bool bVipC
 		{
 			if ( g_iParentPID>0 )
 				tOut.DataTupletf ( "setgdb", "Enabled by watchdog (pid=%d)", g_iParentPID );
-			else if ( g_bHaveJemalloc )
+			else if ( g_bSafeGDB )
 				tOut.DataTuplet ( "setgdb", "Enabled locally because of jemalloc" );
 			else if ( sParam=="on" )
 			{

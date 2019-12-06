@@ -1908,6 +1908,34 @@ TEST ( functions, vector_slice )
 	ASSERT_EQ ( dSlice4.begin (), &dVec[1] );
 }
 
+TEST ( functions, vector2pair_and_pair2mva )
+{
+	CSphVector<DWORD> dVec;
+	dVec.Add ( 1 );
+	dVec.Add ( 2 );
+	dVec.Add ( 3 );
+	ASSERT_EQ ( dVec.GetLength(), 3 );
+
+	ByteBlob_t dBlob { dVec };
+
+	ASSERT_EQ ( dBlob.first, (const BYTE*)dVec.begin() );
+	ASSERT_EQ ( dBlob.second, 12 ) << "3 DWORDS are 12 bytes";
+
+	dVec.Add ( 4 );
+	ByteBlob_t dMva {dVec};
+
+	std::pair<int64_t *, int> dTest {dVec};
+	ASSERT_EQ ( dTest.first, (const int64_t *) dVec.begin ());
+	ASSERT_EQ ( dTest.second, 2 ) << "4 DWORDS are 2 int64s";
+
+	VecTraits_T<DWORD> dMva32 { dMva };
+	ASSERT_EQ ( dMva32.GetLength (), 4 ) << "mva32 from 16 bytes contains 4 values";
+	ASSERT_EQ ( dMva32.begin(), dVec.begin() );
+
+	VecTraits_T<int64_t> dMva64 {dMva};
+	ASSERT_EQ ( dMva64.GetLength (), 2 ) << "mva64 from 16 bytes contains 2 values";
+}
+
 TEST ( functions, sphSplit )
 {
 	StrVec_t dParts;
@@ -1949,15 +1977,18 @@ TEST ( functions, valgrind_use )
 
 TEST ( functions, int64_le )
 {
-	DWORD pMva[2] = {0x01020304, 0x05060708};
+	union {
+		DWORD pMva[2] = {0x01020304, 0x05060708};
+		int64_t Mva64;
+	} u;
 
 	// expression from MVA_UPSIZE
-	auto iTest = ( int64_t ) ( ( uint64_t ) pMva[0] | ( ( ( uint64_t ) pMva[1] ) << 32 ) );
-	auto iTest2 = MVA_UPSIZE ( pMva );
+	auto iTest = ( int64_t ) ( ( uint64_t ) u.pMva[0] | ( ( ( uint64_t ) u.pMva[1] ) << 32 ) );
+	auto iTest2 = MVA_UPSIZE ( u.pMva );
 	ASSERT_EQ ( iTest, iTest2 );
 
 #if USE_LITTLE_ENDIAN
-	auto iTestLE = *( int64_t * ) pMva;
+	auto iTestLE = u.Mva64;
 	ASSERT_EQ ( iTest, iTestLE ) << "little endian allows simplify";
 #endif
 }
@@ -2951,4 +2982,209 @@ TEST ( functions, SharedPtr )
 	ASSERT_EQ ( *pFoo, 10 );
 	pFoo = b;
 	ASSERT_EQ ( *pFoo, 20 );
+}
+
+void pr (const VecTraits_T<DWORD>& dData, int a=-1, int b=-1)
+{
+	return;
+	for ( auto i=0,len=dData.GetLength(); i<len; ++i)
+		if (i==a)
+			printf ("/%d, ", dData[i]);
+		else if (i==b)
+			printf ( "%d\\, ", dData[i] );
+		else
+			printf ( "%d, ", dData[i] );
+	printf ( "(%d/%d)\n", b-a+1, dData.GetLength ());
+}
+
+int iCompared;
+
+int make_partition (DWORD iPivot, int iNeedElems, VecTraits_T<DWORD> dData )
+{
+//	printf ( "iPivot=%d, need %d, has %d\n", iPivot, iNeedElems, dData.GetLength() );
+	int iPass = 0;
+	auto cmp = Lesser ( [] ( int a, int b ) {
+		++iCompared;
+		return a>b;
+	} );
+
+	--iNeedElems;
+	int a=0;
+	int b=dData.GetLength()-1;
+	while (true)
+	{
+		int i=a;
+		int j=b;
+//		pr ( dData, i, j );
+		while (i<=j)
+		{
+			while (cmp.IsLess (dData[i],iPivot))
+				++i;
+			while (cmp.IsLess ( iPivot, dData[j]))
+				--j;
+			if ( i<=j ) {
+				::Swap(dData[i],dData[j]);
+//				pr ( dData, i, j );
+				++i;
+				--j;
+			}
+		}
+
+//		printf ( "i=%d, j=%d, Di=%d, Dj=%d\n", i, j, dData[i], dData[j] );
+
+		if ( iNeedElems == j )
+			break;
+
+		if ( iNeedElems < j)
+			b = j;  // too many elems aquired; continue with left part
+		else
+			a = i;  // too less elems aquired; continue with right part
+
+//		iPivot = dData[(a+b)/2];
+		iPivot = dData[( a*3+b ) / 4]; // ( a*(COEF-1)+b)/COEF
+//		printf ( "a=%d, b=%d, pivot=%d\n", a,b,iPivot );
+		++iPass;
+	}
+
+//	printf ( "partitioning completed in %d passes, %d comparisions, new pivot %d\n", iPass, iCompared, iPivot );
+	return iPivot;
+}
+
+int lazy_partition ( VecTraits_T<DWORD>& dData,int iPivot, int COEFF )
+{
+	auto iElems = dData.GetLength();
+	int N = iElems/COEFF;
+
+	if ( iPivot<0 )
+	{
+		auto iPivotIndex = N / COEFF+1;
+		iPivot = dData[iPivotIndex];
+//		printf ("1-st pass\n");
+	}
+
+	return make_partition (iPivot,N,dData);
+}
+
+bool CheckData ( VecTraits_T<DWORD> & dData, int COEFF )
+{
+	auto iElems = dData.GetLength ();
+	auto N = iElems / COEFF;
+
+	DWORD val = 0xFFFFFFFF;
+	for ( auto i=0; i<N; ++i)
+		val = Min(val,dData[i]);
+
+	for ( auto i=N;i<N * ( COEFF-1 ); ++i)
+		if (dData[i]>val)
+		{
+			printf ("%d-f elem %d misplaced (%d)", i, dData[i], val);
+			return false;
+		}
+
+	return true;
+}
+
+TEST ( functions, partition_random )
+{
+	const auto N = 1000;
+
+	const auto COEFF = 4;
+	const auto PASSES = 10000;
+	const auto LIMIT = 1000000000;
+
+	CSphVector<DWORD> dValues;
+	dValues.Reserve ( N*COEFF );
+
+	for ( auto i=0; i<N; ++i)
+		dValues.Add(sphRand()% LIMIT);
+	dValues.Sort( Lesser ( [] ( int a, int b ) { return a>b; } ));
+
+	for ( auto i=0; i<N*( COEFF-1); ++i)
+		dValues.Add ( sphRand ()% LIMIT);
+
+	pr(dValues,0,N-1);
+
+	iCompared = 0;
+	// let's begin
+	int iPivot = -1;
+
+	for ( auto i=0; i<PASSES; ++i)
+	{
+		for (auto j=N;j<N*(COEFF-1);++j)
+			dValues[j] = sphRand()% LIMIT;
+		iPivot = lazy_partition ( dValues, iPivot, COEFF );
+		ASSERT_TRUE ( CheckData ( dValues, COEFF )) << "failed on " << i << " pass.";
+	}
+//	printf ( "After partitioning\n" );
+	pr ( dValues, 0, N-1 );
+
+	printf ("\n avg %f comparisions per pass of %d elems\n", float(iCompared)/float(PASSES), dValues.GetLength());
+//	ASSERT_STREQ ( nullptr, "1.100000" );
+}
+
+TEST ( functions, partition_monoasc )
+{
+	const auto COEFF = 4;
+
+	CSphVector<DWORD> dValues;
+
+	for (auto i=0; i<100; ++i)
+		dValues.Add(1);
+
+	for ( auto i = 0; i<300; ++i )
+		dValues.Add ( 2 );
+
+	pr ( dValues, 0, 99 );
+	lazy_partition ( dValues, -1, COEFF );
+	pr ( dValues, 0, 99 );
+	ASSERT_TRUE ( CheckData ( dValues, COEFF ));
+}
+
+TEST ( functions, partition_monodesc )
+{
+	const auto COEFF = 4;
+
+	CSphVector<DWORD> dValues;
+
+	for ( auto i = 0; i<100; ++i )
+		dValues.Add ( 2 );
+
+	for ( auto i = 0; i<300; ++i )
+		dValues.Add ( 1 );
+
+	pr ( dValues, 0, 99 );
+	lazy_partition ( dValues, -1, COEFF );
+	pr ( dValues, 0, 99 );
+	ASSERT_TRUE ( CheckData ( dValues, COEFF ));
+}
+
+TEST ( functions, partition_ascending )
+{
+	const auto COEFF = 4;
+
+	CSphVector<DWORD> dValues;
+
+	for ( auto i = 0; i<400; ++i )
+		dValues.Add ( i );
+
+	pr ( dValues, 0, 99 );
+	lazy_partition ( dValues, -1, COEFF );
+	pr ( dValues, 0, 99 );
+	ASSERT_TRUE ( CheckData ( dValues, COEFF ));
+}
+
+
+TEST ( functions, partition_descending )
+{
+	const auto COEFF = 4;
+
+	CSphVector<DWORD> dValues;
+
+	for ( auto i = 0; i<400; ++i )
+		dValues.Add ( 1000-i );
+
+	pr ( dValues, 0, 99 );
+	lazy_partition ( dValues, -1, COEFF );
+	pr ( dValues, 0, 99 );
+	ASSERT_TRUE ( CheckData ( dValues, COEFF ));
 }

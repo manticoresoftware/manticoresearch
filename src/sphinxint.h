@@ -583,8 +583,8 @@ public:
 		: MemoryWriter_c ( dBuf )
 	{}
 
-	void ZipOffset ( uint64_t uVal ) { sphZipValue ( uVal, (MemoryWriter_c*)this, &MemoryWriter_c::PutByte ); }
-	void ZipInt ( DWORD uVal ) { sphZipValue ( uVal, (MemoryWriter_c*)this, &MemoryWriter_c::PutByte ); }
+	void ZipOffset ( uint64_t uVal ) { sphZipValue ( [this] ( BYTE b ) { PutByte ( b ); }, uVal ); }
+	void ZipInt ( DWORD uVal ) { sphZipValue ( [this] ( BYTE b ) { PutByte ( b ); }, uVal ); }
 };
 
 
@@ -690,7 +690,7 @@ public:
 	{
 		CSphAttrLocator			m_tLoc;					///< result locator
 		ESphAttr				m_eType { SPH_ATTR_NONE};	///< result type
-		CSphRefcountedPtr<ISphExpr>	m_pExpr;		///< evaluator (non-owned)
+		ISphExprRefPtr_c		m_pExpr;		///< evaluator (non-owned)
 	};
 	CSphVector<CalcItem_t>		m_dCalcFilter;			///< items to compute for filtering
 	CSphVector<CalcItem_t>		m_dCalcSort;			///< items to compute for sorting/grouping
@@ -957,7 +957,17 @@ public:
 		assert ( iIndex>=0 && iIndex<m_iSize );
 		m_dFree.Add ( iIndex );
 	}
+
+	void Swap ( CSphFreeList& rhs ) noexcept
+	{
+		m_dFree.SwapData ( rhs.m_dFree );
+		::Swap ( m_iNextFree, rhs.m_iNextFree );
+#ifndef NDEBUG
+		::Swap ( m_iSize, rhs.m_iSize );
+#endif
+	}
 };
+
 
 //////////////////////////////////////////////////////////////////////////
 // INLINES, FIND_XXX() GENERIC FUNCTIONS

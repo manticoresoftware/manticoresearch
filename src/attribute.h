@@ -94,11 +94,14 @@ bool				sphIsBlobAttr ( ESphAttr eAttr );
 //////////////////////////////////////////////////////////////////////////
 // data ptr attributes
 
-// pack data pointer attr (length+data), return allocated storage
-BYTE *				sphPackPtrAttr ( const BYTE * pData, int iLengthBytes );
+// pack byteblob (length+data), return allocated storage
+BYTE *				sphPackPtrAttr ( ByteBlob_t dBlob );
 
-// pack data pointer attr to preallocated storage, return pointer to end
-BYTE *				sphPackPtrAttr ( BYTE * pPrealloc, const BYTE * pData, int iLengthBytes );
+// pack byteblob attr to preallocated storage, return size of placed packet
+int					sphPackPtrAttr ( BYTE * pPrealloc, ByteBlob_t dBlob );
+
+// pack byteblob attr in-place (add place for size and write packed length before the blob)
+void				sphPackPtrAttrInPlace ( TightPackedVec_T<BYTE>& dAttr, int iSize=-1 );
 
 // allocate buffer, store zipped length, set pointer to free space in buffer
 BYTE *				sphPackPtrAttr ( int iLengthBytes, BYTE ** pData );
@@ -109,6 +112,8 @@ ByteBlob_t			sphUnpackPtrAttr ( const BYTE * pData );
 
 // calculate packed data attr length
 int					sphCalcPackedLength ( int iLengthBytes );
+BYTE *				sphPackedBlob ( ByteBlob_t dBlob );
+
 
 // convert plain attr type to corresponding in-memort (_PTR) attr type
 ESphAttr			sphPlainAttrToPtrAttr ( ESphAttr eAttrType );

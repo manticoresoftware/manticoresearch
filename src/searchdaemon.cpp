@@ -15,6 +15,7 @@
 
 #include "sphinxstd.h"
 #include "searchdaemon.h"
+#include "optional.h"
 
 #if USE_WINDOWS
 	#define USE_PSI_INTERFACE 1
@@ -1692,51 +1693,4 @@ CSphString GetMacAddress()
 #endif
 
 	return sMAC.cstr();
-}
-
-struct Handler_t : public ListNode_t
-{
-	Handler_fn	m_fnCb;
-	Handler_t ( Handler_fn&& fnCb )
-		: m_fnCb ( std::move ( fnCb )) {}
-};
-
-static RwLock_t dShutdownGuard;
-static List_t dShutdownList GUARDED_BY ( dShutdownGuard );
-
-void * searchd::AddShutdownCb ( std::function<void ()> fnCb )
-{
-	auto * pCb = new Handler_t ( std::move ( fnCb ) );
-	ScWL_t tGuard ( dShutdownGuard );
-	dShutdownList.Add ( pCb );
-	return pCb;
-}
-
-// remove previously set shutdown cb by cookie
-void searchd::DeleteShutdownCb ( void * pCookie )
-{
-	if ( !pCookie )
-		return;
-
-	auto * pCb = (Handler_t *) pCookie;
-
-	ScWL_t tGuard ( dShutdownGuard );
-	if ( !dShutdownList.GetLength () )
-		return;
-
-	dShutdownList.Remove ( pCb );
-	SafeDelete ( pCb );
-}
-
-// invoke shutdown handlers
-void searchd::FireShutdownCbs ()
-{
-	ScRL_t tGuard ( dShutdownGuard );
-	while (dShutdownList.GetLength ())
-	{
-		auto * pCb = (Handler_t *) dShutdownList.Begin ();
-		dShutdownList.Remove ( pCb );
-		pCb->m_fnCb();
-		SafeDelete( pCb );
-	}
 }

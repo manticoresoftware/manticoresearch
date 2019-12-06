@@ -417,12 +417,8 @@ private:
 
 	struct StoredMultiHit_t
 	{
-		CSphFixedVector<SphOffset_t>	m_dHitlistOffsets;
+		CSphFixedVector<SphOffset_t>	m_dHitlistOffsets {0};
 		RowID_t							m_tRowID;
-
-		StoredMultiHit_t()
-			: m_dHitlistOffsets(0)
-		{}
 	};
 
 	struct HitInfo_t

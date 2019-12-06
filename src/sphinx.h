@@ -118,6 +118,9 @@ extern int64_t g_iIndexerPoolStartHit;
 
 using ByteBlob_t = std::pair<const BYTE *, int>;
 
+inline bool IsNull ( const ByteBlob_t & dBlob ) { return !dBlob.second; };
+inline bool IsValid ( const ByteBlob_t & dBlob ) { return dBlob.second==0 || (dBlob.first && dBlob.second>0); };
+
 /// Sphinx CRC32 implementation
 extern DWORD	g_dSphinxCRC32 [ 256 ];
 DWORD			sphCRC32 ( const void * pString );
@@ -132,7 +135,7 @@ const uint64_t	SPH_FNV64_SEED = 0xcbf29ce484222325ULL;
 uint64_t		sphFNV64 ( const void * pString );
 uint64_t		sphFNV64 ( const void * s, int iLen, uint64_t uPrev = SPH_FNV64_SEED );
 uint64_t		sphFNV64cont ( const void * pString, uint64_t uPrev );
-uint64_t		sphFNV64 ( const ByteBlob_t& dBlob ) { return sphFNV64 ( dBlob.first, dBlob.second ); }
+inline uint64_t		sphFNV64 ( const ByteBlob_t& dBlob ) { return sphFNV64 ( dBlob.first, dBlob.second ); }
 /// calculate file crc32
 bool			sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 );
 
@@ -1082,14 +1085,20 @@ inline SphAttr_t sphGetRowAttr ( const CSphRowitem * pRow, const CSphAttrLocator
 	assert ( pRow );
 	int iItem = tLoc.m_iBitOffset >> ROWITEM_SHIFT;
 
-	if ( tLoc.m_iBitCount==ROWITEM_BITS )
-		return pRow[iItem];
-
-	if ( tLoc.m_iBitCount==2*ROWITEM_BITS ) // FIXME? write a generalized version, perhaps
-		return SphAttr_t ( pRow[iItem] ) + ( SphAttr_t ( pRow[iItem+1] ) << ROWITEM_BITS );
-
-	int iShift = tLoc.m_iBitOffset & ( ( 1 << ROWITEM_SHIFT )-1 );
-	return ( pRow[iItem] >> iShift ) & ( ( 1UL << tLoc.m_iBitCount )-1 );
+	switch (tLoc.m_iBitCount )
+	{
+	case ROWITEM_BITS:
+		return SphAttr_t ( pRow[iItem] );
+	case 2*ROWITEM_BITS:
+#if USE_LITTLE_ENDIAN
+		return *(SphAttr_t*) (pRow + iItem);
+#else
+		return SphAttr_t ( pRow[iItem] ) + ( SphAttr_t ( pRow[iItem+1] ) << ROWITEM_BITS ); break;
+#endif
+	default: break;
+	}
+	auto iShift = tLoc.m_iBitOffset & (( 1 << ROWITEM_SHIFT )-1 );
+	return ( pRow[iItem] >> iShift ) & (( 1UL << tLoc.m_iBitCount )-1 );
 }
 
 
@@ -1101,13 +1110,16 @@ inline void sphSetRowAttr ( CSphRowitem * pRow, const CSphAttrLocator & tLoc, Sp
 	if ( tLoc.m_iBitCount==2*ROWITEM_BITS )
 	{
 		// FIXME? write a generalized version, perhaps
+#if USE_LITTLE_ENDIAN
+		memcpy( pRow+iItem, &uValue, ROWITEM_BITS/4 ); // actually it became 1 op in release asm
+#else
 		pRow[iItem] = CSphRowitem ( uValue & ( ( SphAttr_t(1) << ROWITEM_BITS )-1 ) );
 		pRow[iItem+1] = CSphRowitem ( uValue >> ROWITEM_BITS );
+#endif
 
 	} else if ( tLoc.m_iBitCount==ROWITEM_BITS )
 	{
-		pRow[iItem] = CSphRowitem ( uValue );
-
+		memcpy ( pRow+iItem, &uValue, ROWITEM_BITS / 8 );
 	} else
 	{
 		int iShift = tLoc.m_iBitOffset & ( ( 1 << ROWITEM_SHIFT )-1);
@@ -1115,6 +1127,62 @@ inline void sphSetRowAttr ( CSphRowitem * pRow, const CSphAttrLocator & tLoc, Sp
 		pRow[iItem] &= ~uMask;
 		pRow[iItem] |= ( uMask & ( uValue << iShift ) );
 	}
+}
+
+/// add numeric value of another attribute
+inline void sphAddCounterAttr ( CSphRowitem * pRow, const CSphRowitem * pVal, const CSphAttrLocator & tLoc )
+{
+	assert( pRow && pVal);
+	int iItem = tLoc.m_iBitOffset >> ROWITEM_SHIFT;
+	SphAttr_t uValue;
+
+	switch (tLoc.m_iBitCount )
+	{
+	case ROWITEM_BITS:
+		uValue = SphAttr_t ( pRow[iItem] ) + SphAttr_t ( pVal[iItem] );
+		memcpy ( pRow+iItem, &uValue, ROWITEM_BITS / 8 );
+		return;
+	case 2*ROWITEM_BITS:
+#if USE_LITTLE_ENDIAN
+		uValue = *(SphAttr_t *) ( pRow+iItem ) +*(SphAttr_t *) ( pVal+iItem );
+		memcpy ( pRow+iItem, &uValue, ROWITEM_BITS / 4 );
+#else
+		uValue = SphAttr_t ( pRow[iItem] ) + ( SphAttr_t ( pRow[iItem+1] ) << ROWITEM_BITS )
+				+SphAttr_t ( pVal[iItem] ) + ( SphAttr_t ( pVal[iItem+1] ) << ROWITEM_BITS );
+		pRow[iItem] = CSphRowitem ( uValue & ( ( SphAttr_t(1) << ROWITEM_BITS )-1 ) );
+		pRow[iItem+1] = CSphRowitem ( uValue >> ROWITEM_BITS );
+#endif
+		return;
+	default: break;
+	}
+	assert ( false && "Unable to add non-aligned attribute " );
+}
+
+/// add scalar value to aligned numeric attribute
+inline void sphAddCounterScalar ( CSphRowitem * pRow, const CSphAttrLocator & tLoc, SphAttr_t uValue )
+{
+	assert( pRow );
+	int iItem = tLoc.m_iBitOffset >> ROWITEM_SHIFT;
+
+	switch (tLoc.m_iBitCount )
+	{
+	case ROWITEM_BITS:
+		uValue += SphAttr_t ( pRow[iItem] );
+		memcpy ( pRow+iItem, &uValue, ROWITEM_BITS / 8 );
+		return;
+	case 2*ROWITEM_BITS:
+#if USE_LITTLE_ENDIAN
+		uValue += *(SphAttr_t *) ( pRow+iItem );
+		memcpy ( pRow+iItem, &uValue, ROWITEM_BITS / 4 );
+#else
+		uValue += SphAttr_t ( pRow[iItem] ) + ( SphAttr_t ( pRow[iItem+1] ) << ROWITEM_BITS );
+		pRow[iItem] = CSphRowitem ( uValue & ( ( SphAttr_t(1) << ROWITEM_BITS )-1 ) );
+		pRow[iItem+1] = CSphRowitem ( uValue >> ROWITEM_BITS );
+#endif
+		return;
+	default: break;
+	}
+	assert ( false && "Unable to add non-aligned attribute " );
 }
 
 
@@ -1234,6 +1302,22 @@ public:
 		assert ( tLoc.m_bDynamic );
 		assert ( tLoc.GetMaxRowitem() < (int)m_pDynamic[-1] );
 		sphSetRowAttr ( m_pDynamic, tLoc, uValue );
+	}
+
+	/// add scalar value to attribute
+	void AddCounterScalar ( const CSphAttrLocator & tLoc, SphAttr_t uValue )
+	{
+		assert ( tLoc.m_bDynamic );
+		assert ( tLoc.GetMaxRowitem ()<(int) m_pDynamic[-1] );
+		sphAddCounterScalar ( m_pDynamic, tLoc, uValue );
+	}
+
+	/// add same-located value from another match
+	void AddCounterAttr ( const CSphAttrLocator & tLoc, const CSphMatch& tValue )
+	{
+		assert ( tLoc.m_bDynamic );
+		assert ( tLoc.GetMaxRowitem ()<(int) m_pDynamic[-1] );
+		sphAddCounterAttr ( m_pDynamic, tLoc.m_bDynamic ? tValue.m_pDynamic : tValue.m_pStatic, tLoc );
 	}
 
 	/// float setter
@@ -1419,12 +1503,21 @@ public:
 	/// get the last one of field length attributes. return -1 if none exist
 	virtual int						GetAttrId_LastFieldLen() const = 0;
 
-	virtual void					FreeDataPtrs ( CSphMatch * pMatch ) const = 0;
+	/// free all allocated attibures. Does NOT free m_pDynamic of match itself!
+	virtual void					FreeDataPtrs ( CSphMatch & tMatch ) const = 0;
 
 	/// simple copy; clones either the entire dynamic part, or a part thereof
-	virtual void					CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const = 0;
+	virtual void					CloneMatch ( CSphMatch & tDst, const CSphMatch & rhs ) const = 0;
 
 	virtual void					SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs ) = 0;
+
+	/// tell the schema that we're going to calculate in parallel. Since
+	/// expressions that might be on some columns are not MT-aware,
+	/// we will make clones of them, and then caller will take a one by GetThreadColumnExpression
+	virtual void					AllocateTLSColumnExpressions ( struct ExpressionsClone_t & tClones ) {}
+
+	/// get thread-local clone of column expression. For usual static schema there are no expressions
+	virtual ISphExprRefPtr_c		GetThreadColumnExpression ( int iIndex, int iThread ) const { return ISphExprRefPtr_c { nullptr} ; }
 };
 
 
@@ -1432,11 +1525,11 @@ public:
 class CSphSchemaHelper : public ISphSchema
 {
 public:
-	void	FreeDataPtrs ( CSphMatch * pMatch ) const final;
-	void	CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const final;
+	void	FreeDataPtrs ( CSphMatch & tMatch ) const final;
+	void	CloneMatch ( CSphMatch & tDst, const CSphMatch & rhs ) const final;
 
 	/// clone all raw attrs and only specified ptrs
-	void	CloneMatchSpecial ( CSphMatch * pDst, const CSphMatch &rhs, const CSphVector<int> &dSpecials ) const;
+	void CloneMatchSpecial ( CSphMatch & tDst, const CSphMatch & rhs, const VecTraits_T<int> & dSpecials ) const;
 
 	/// exclude vec of rowitems from dataPtrAttrs and return diff back
 	CSphVector<int> SubsetPtrs ( CSphVector<int> &dSpecials ) const ;
@@ -1454,12 +1547,13 @@ protected:
 	void			InsertAttr ( CSphVector<CSphColumnInfo> & dAttrs, CSphVector<int> & dUsed, int iPos, const CSphColumnInfo & tCol, bool bDynamic );
 	void			Reset();
 
-	void			CopyPtrs ( CSphMatch * pDst, const CSphMatch & rhs ) const;
+	void CopyPtrs ( CSphMatch & tDst, const CSphMatch & rhs ) const;
 
 public:
 	// free/copy by specified vec of rowitems, assumed to be from SubsetPtrs() call.
-	static void FreeDataSpecial ( CSphMatch * pMatch, const CSphVector<int> &dSpecials );
-	static void	CopyPtrsSpecial ( CSphMatch * pDst, const void* pSrc, const CSphVector<int> &dSpecials );
+	static void FreeDataSpecial ( CSphMatch & tMatch, const VecTraits_T<int> & dSpecials );
+	static void CopyPtrsSpecial ( CSphMatch & tDst, const CSphMatch & tSrc, const VecTraits_T<int> & dSpecials );
+	static void MovePtrsSpecial ( CSphMatch & tDst, CSphMatch & tSrc, const VecTraits_T<int> & dSpecials );
 };
 
 
@@ -1545,8 +1639,8 @@ public:
 
 	static bool				IsReserved ( const char * szToken );
 
-	/// full copy, for purely dynamic matches
-	void					CloneWholeMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const;
+	/// full copy, both static & dynamic became pure dynamic
+	void					CloneWholeMatch ( CSphMatch & tDst, const CSphMatch & rhs ) const;
 
 	// update wordpart settings for a field
 	void					SetFieldWordpart ( int iField, ESphWordpart eWordpart );
@@ -1587,7 +1681,21 @@ protected:
 	void					UpdateHash ( int iStartIdx, int iAddVal );
 };
 
+struct ExpressionsClone_t : ISphNoncopyable
+{
+	CSphVector<int> m_dDynamicColumnsList;	///< list of indexes of columns with non-zero ISphExpr*
+	CSphVector<ISphExpr *> m_dExprPool;		///< extra clones of expressions
+	int					m_iThreads = 0;		///< supposed num of threads
 
+	~ExpressionsClone_t();
+
+	void Reset();
+	bool IsEmpty() const { return m_dDynamicColumnsList.IsEmpty(); }
+	void Add (int iCol ) { m_dDynamicColumnsList.Add(iCol); }
+	void AllocateClones ();
+
+	ISphExpr ** ExprPtrForThread ( int iIndex, int iThread ) const;
+};
 /// lightweight schema to be used in sorters, result sets, etc
 /// avoids copying of static attributes part by keeping a pointer
 /// manages the additional dynamic attributes on its own
@@ -1600,6 +1708,8 @@ protected:
 	const CSphSchema *			m_pIndexSchema = nullptr;		///< original index schema, for the static part
 	CSphVector<CSphColumnInfo>	m_dExtraAttrs;		///< additional dynamic attributes, for the dynamic one
 	CSphVector<int>				m_dRemoved;			///< original indexes that are suppressed from the index schema by RemoveStaticAttr()
+
+	ExpressionsClone_t*			m_pClones = nullptr;
 
 private:
 	int					ActualLen() const;	///< len of m_pIndexSchema accounting removed stuff
@@ -1643,6 +1753,14 @@ public:
 	/// used to create a network result set (ie. rset to be sent and then discarded)
 	/// WARNING, DO NOT USE THIS UNLESS ABSOLUTELY SURE!
 	void				SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs ) final;
+
+	/// tell the schema that we're going to calculate in parallel. Since
+	/// expressions that might be on some columns are not MT-aware,
+	/// we will make clones of them, and then caller will take a one by GetThreadColumnExpression
+	void AllocateTLSColumnExpressions ( ExpressionsClone_t & tClones ) final;
+
+	/// get thread-local clone of column expression.
+	ISphExprRefPtr_c GetThreadColumnExpression ( int iIndex, int iThread ) const final;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2733,11 +2851,7 @@ public:
 	int64_t					m_iCpuTime = 0;			///< user time, microseconds
 	int						m_iMultiplier = 1;		///< multi-query multiplier, -1 to indicate error
 
-	struct WordStat_t
-	{
-		int64_t					m_iDocs = 0;		///< document count for this term
-		int64_t					m_iHits = 0;		///< hit count for this term
-	};
+	using WordStat_t = std::pair<int64_t, int64_t>;
 	SmallStringHash_T<WordStat_t>	m_hWordStats; 	///< hash of i-th search term (normalized word form)
 
 	int						m_iMatches = 0;			///< total matches returned (upto MAX_MATCHES)
@@ -2762,6 +2876,8 @@ public:
 
 	virtual					~CSphQueryResultMeta () {}					///< dtor
 	void					AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits );
+	static void				AddOtherStat ( SmallStringHash_T<WordStat_t>& hTrg,
+			const CSphString & sWord, int64_t iDocs, int64_t iHits);
 };
 
 
@@ -3024,7 +3140,7 @@ public:
 	virtual void		SetSchema ( ISphSchema * pSchema, bool bRemapCmp );
 
 	/// get incoming schema
-	const ISphSchema * GetSchema () const { return m_pSchema; }
+	const ISphSchema * GetSchema () const { return ( ISphSchema *) m_pSchema; }
 
 	/// base push
 	/// returns false if the entry was rejected as duplicate
@@ -3038,7 +3154,7 @@ public:
 	virtual int			GetLength () const = 0;
 
 	/// get internal buffer length
-	virtual int			GetDataLength () const = 0;
+	// virtual int			GetDataLength () const = 0; // everybody uses m_iMatchCapacity instead
 
 	/// get total count of non-duplicates Push()ed through this queue
 	int64_t		GetTotalCount () const { return m_iTotal; }
@@ -3055,6 +3171,11 @@ public:
 	/// get a pointer to the worst element, NULL if there is no fixed location
 	virtual const CSphMatch *	GetWorst() const { return nullptr; }
 
+
+	/// returns whether the sorter can be cloned to distribute processing over multi threads
+	/// (delete and update sorters are too complex by side effects and can't be cloned)
+	virtual bool CanBeCloned () { return true; }
+
 	/// make same sorter (for MT processing)
 	virtual ISphMatchSorter* Clone() const = 0;
 
@@ -3063,6 +3184,8 @@ public:
 
 	/// makes the same sorter
 	void CloneTo ( ISphMatchSorter * pTrg ) const;
+
+	const CSphMatchComparatorState& GetComparatorState() const { return m_tState; }
 };
 
 struct CmpPSortersByRandom_fn
@@ -3666,8 +3789,11 @@ extern CSphString g_sLemmatizerBase;
 // Get global shutdown flag
 volatile bool& sphGetShutdown();
 
-// Access to global max children
+// rw-access to global max children
 volatile int & sphDistThreads ();
+
+// ro-access to global max children, min 1
+int sphGetNonZeroDistThreads();
 
 // Access to global TFO settings
 volatile int& sphGetTFO();

@@ -81,8 +81,7 @@ static void PackData ( CSphVector<BYTE> & dDst, const BYTE * pData, DWORD uSize,
 	{
 		const DWORD GAP = 8;
 		dDst.Resize ( uSize+GAP );
-		BYTE * pEnd = sphPackPtrAttr ( dDst.Begin(), pData, uSize );
-		dDst.Resize ( pEnd-dDst.Begin() );
+		dDst.Resize ( sphPackPtrAttr ( dDst.Begin (), {pData, uSize} ));
 	}
 	else
 	{	
@@ -1602,12 +1601,7 @@ void DocstoreRT_c::AddDoc ( RowID_t tRowID, const DocstoreBuilder_i::Doc_t & tDo
 	BYTE * pPtr = pPacked;
 
 	ARRAY_FOREACH ( i, tDoc.m_dFields )
-	{
-		int iLen = tFieldLengths[i];
-		pPtr += sphZipToPtr ( iLen, pPtr );
-		memcpy ( pPtr, tDoc.m_dFields[i].Begin(), iLen );
-		pPtr += iLen;
-	}
+		pPtr += sphPackPtrAttr ( pPtr, {tDoc.m_dFields[i].Begin (), tFieldLengths[i]} );
 
 	m_iAllocated += iPackedLen;
 

@@ -761,7 +761,7 @@ bool PercolateIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >>
 	if ( !tSrc.Connect ( m_sLastError ) )
 		return false;
 
-	m_tSchema.CloneWholeMatch ( &tSrc.m_tDocInfo, tDoc );
+	m_tSchema.CloneWholeMatch ( tSrc.m_tDocInfo, tDoc );
 
 	bool bEOF = false;
 	if ( !tSrc.IterateStart ( sError ) || !tSrc.IterateDocument ( bEOF, sError ) )
@@ -1878,7 +1878,7 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 		if ( tCtx.m_pFilter && !tCtx.m_pFilter->Eval ( tMatch ) )
 		{
 			tCtx.FreeDataFilter ( tMatch );
-			m_tMatchSchema.FreeDataPtrs ( &tMatch );
+			m_tMatchSchema.FreeDataPtrs ( tMatch );
 			continue;
 		}
 
@@ -1895,7 +1895,7 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 		// stringptr expressions should be duplicated (or taken over) at this point
 		tCtx.FreeDataFilter ( tMatch );
 		tCtx.FreeDataSort ( tMatch );
-		m_tMatchSchema.FreeDataPtrs ( &tMatch );
+		m_tMatchSchema.FreeDataPtrs ( tMatch );
 
 		// handle cutoff
 		if ( bNewMatch && --iCutoff==0 )

@@ -28557,7 +28557,7 @@ void CSphSource_BaseSV::Disconnect()
 {
 	if ( m_pFP )
 	{
-		fclose ( m_pFP );
+		pclose ( m_pFP );
 		m_pFP = nullptr;
 	}
 

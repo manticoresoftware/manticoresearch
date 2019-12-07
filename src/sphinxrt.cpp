@@ -5985,6 +5985,7 @@ void QueryDiskChunks( const CSphQuery * pQuery,
 			pSchema->AllocateTLSColumnExpressions ( dTlsData.m_TlsColumns );
 		}
 
+	std::atomic<bool> bError { false };
 	CSphMutex dWaitMutex;
 	dWaitMutex.Lock ();
 	{
@@ -6000,7 +6001,6 @@ void QueryDiskChunks( const CSphQuery * pQuery,
 			if ( pProfiler )
 				pProfiler->Switch ( SPH_QSTATE_INIT );
 
-			std::atomic<bool> bError { false };
 			if ( bError )
 				break;
 

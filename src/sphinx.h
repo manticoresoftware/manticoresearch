@@ -1511,13 +1511,7 @@ public:
 
 	virtual void					SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs ) = 0;
 
-	/// tell the schema that we're going to calculate in parallel. Since
-	/// expressions that might be on some columns are not MT-aware,
-	/// we will make clones of them, and then caller will take a one by GetThreadColumnExpression
-	virtual void					AllocateTLSColumnExpressions ( struct ExpressionsClone_t & tClones ) {}
-
-	/// get thread-local clone of column expression. For usual static schema there are no expressions
-	virtual ISphExprRefPtr_c		GetThreadColumnExpression ( int iIndex, int iThread ) const { return ISphExprRefPtr_c { nullptr} ; }
+	virtual ISphSchema*				CloneMe() const = 0;
 };
 
 
@@ -1647,6 +1641,8 @@ public:
 
 	virtual void			SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs );
 
+	ISphSchema * 			CloneMe () const;
+
 	bool					HasBlobAttrs() const;
 	int						GetCachedRowSize() const;
 	void					SetupStoredFields ( const StrVec_t & tFields );
@@ -1709,8 +1705,6 @@ protected:
 	CSphVector<CSphColumnInfo>	m_dExtraAttrs;		///< additional dynamic attributes, for the dynamic one
 	CSphVector<int>				m_dRemoved;			///< original indexes that are suppressed from the index schema by RemoveStaticAttr()
 
-	ExpressionsClone_t*			m_pClones = nullptr;
-
 private:
 	int					ActualLen() const;	///< len of m_pIndexSchema accounting removed stuff
 
@@ -1753,14 +1747,8 @@ public:
 	/// used to create a network result set (ie. rset to be sent and then discarded)
 	/// WARNING, DO NOT USE THIS UNLESS ABSOLUTELY SURE!
 	void				SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs ) final;
+	ISphSchema * 		CloneMe () const final;
 
-	/// tell the schema that we're going to calculate in parallel. Since
-	/// expressions that might be on some columns are not MT-aware,
-	/// we will make clones of them, and then caller will take a one by GetThreadColumnExpression
-	void AllocateTLSColumnExpressions ( ExpressionsClone_t & tClones ) final;
-
-	/// get thread-local clone of column expression.
-	ISphExprRefPtr_c GetThreadColumnExpression ( int iIndex, int iThread ) const final;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -3104,7 +3092,6 @@ public:
 
 	RowID_t				m_iJustPushed {INVALID_ROWID};
 	int					m_iMatchCapacity = 0;
-	int					m_iThTag = -1; // key to distinquish clones by current thread id
 	CSphTightVector<RowID_t> m_dJustPopped;
 
 protected:

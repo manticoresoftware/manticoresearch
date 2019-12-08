@@ -7581,6 +7581,12 @@ void CSphSchema::SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs )
 }
 
 
+ISphSchema * CSphSchema::CloneMe () const
+{
+	return new CSphSchema ( *this );
+}
+
+
 bool CSphSchema::HasBlobAttrs() const
 {
 	for ( const auto & i : m_dAttrs )
@@ -7843,41 +7849,19 @@ void CSphRsetSchema::SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs )
 	m_pIndexSchema = nullptr;
 }
 
-void CSphRsetSchema::AllocateTLSColumnExpressions ( ExpressionsClone_t& dClones )
-{
-	m_pClones = &dClones;
-	assert ( dClones.IsEmpty() );
 
-	dClones.Reset();
+ISphSchema * CSphRsetSchema::CloneMe () const
+{
+	auto pClone = new CSphRsetSchema;
+	AssignTo ( *pClone );
 
 	ARRAY_FOREACH ( i, m_dExtraAttrs )
 		if ( m_dExtraAttrs[i].m_pExpr )
-			dClones.Add(i);
+			pClone->m_dExtraAttrs[i].m_pExpr = SafeClone ( m_dExtraAttrs[i].m_pExpr );
 
-	dClones.AllocateClones ();
+	return pClone;
 }
 
-ISphExprRefPtr_c CSphRsetSchema::GetThreadColumnExpression ( int iIndex, int iThread ) const
-{
-	iIndex -= ActualLen (); // map index into m_dExtraAttrs
-	if ( iThread<0 ) // original (non-clone) thread invoked.
-		return m_dExtraAttrs[iIndex].m_pExpr;
-
-	assert ( m_pClones );
-
-	auto ppExpr = m_pClones->ExprPtrForThread ( iIndex, iThread );
-	assert ( ppExpr && "wrong column or TLS clone space is not prepared");
-	if ( !ppExpr )
-		return ISphExprRefPtr_c { nullptr };
-
-	if (!*ppExpr)
-		*ppExpr = SafeClone ( m_dExtraAttrs[iIndex].m_pExpr );
-
-	SafeAddRef ( *ppExpr );
-
-	assert ( *ppExpr && "trying to clone null expression" );
-	return ISphExprRefPtr_c { *ppExpr };
-}
 
 ExpressionsClone_t::~ExpressionsClone_t ()
 {
@@ -14379,7 +14363,6 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );
-	tCtx.m_iThTag = ppSorters[0]->m_iThTag;
 	if ( !tCtx.SetupCalc ( pResult, tMaxSorterSchema, m_tSchema, m_tBlobAttrs.GetWritePtr(), dSorterSchemas ) )
 		return false;
 
@@ -15666,7 +15649,8 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 			case SPH_EVAL_PRESORT:
 			case SPH_EVAL_FINAL:
 			{
-				if ( !tIn.m_pExpr )
+				ISphExprRefPtr_c pExpr { tIn.m_pExpr };
+				if ( !pExpr )
 				{
 					pResult->m_sError.SetSprintf ( "INTERNAL ERROR: incoming-schema expression missing evaluator (stage=%d, in=%s)",
 						(int)eStage, sphDumpAttr(tIn).cstr() );
@@ -15677,7 +15661,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 				CalcItem_t tCalc;
 				tCalc.m_eType = tIn.m_eAttrType;
 				tCalc.m_tLoc = tIn.m_tLocator;
-				tCalc.m_pExpr = tInSchema.GetThreadColumnExpression ( iIn, m_iThTag );
+				tCalc.m_pExpr = std::move(pExpr);
 				tCalc.m_pExpr->Command ( SPH_EXPR_SET_BLOB_POOL, (void*)&pBlobPool );
 
 				switch ( eStage )
@@ -17242,7 +17226,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	tCtx.m_pLocalDocs = tArgs.m_pLocalDocs;
 	tCtx.m_iTotalDocs = ( tArgs.m_iTotalDocs ? tArgs.m_iTotalDocs : m_tStats.m_iTotalDocuments );
 	tCtx.m_pIndexSegment = this;
-	tCtx.m_iThTag = ppSorters[0]->m_iThTag;
 
 	if ( !tCtx.SetupCalc ( pResult, tMaxSorterSchema, m_tSchema, m_tBlobAttrs.GetWritePtr(), dSorterSchemas ) )
 		return false;

@@ -5827,10 +5827,7 @@ public:
 			assert ( dThreadLocalSorters.IsEmpty ());
 			dThreadLocalSorters.Resize ( m_dParentSorters.GetLength ());
 			ARRAY_FOREACH ( i, dThreadLocalSorters )
-			{
 				dThreadLocalSorters[i] = m_dParentSorters[i]->Clone ();
-				dThreadLocalSorters[i]->m_iThTag = iMyThreadOrderNum-1;
-			}
 		}
 		return iMyThreadOrderNum - 1;
 	}
@@ -5942,7 +5939,7 @@ public:
 #else
 	inline intptr_t GetTHD ( int ) const { return m_iTlsOrderNum; }
 	inline void SetTHD ( intptr_t iVal, int ) { m_iTlsOrderNum = iVal; }
-	inline bool CanRun (int) const { return true; }
+	static inline bool CanRun (int) { return true; }
 	inline static int GetNOfThreads () { return sphGetNonZeroDistThreads ();}
 #endif
 };
@@ -5976,14 +5973,6 @@ void QueryDiskChunks( const CSphQuery * pQuery,
 	Tls_context_c dTlsData ( dSorters, pResult );
 
 	bool bMtEnabled = dTlsData.IsEnabled ();
-
-	// tell the schema that we're going to perform multi-thread
-	if ( bMtEnabled )
-		for ( auto& dSorter : dSorters )
-		{
-			auto pSchema = const_cast <ISphSchema *> (dSorter->GetSchema ());
-			pSchema->AllocateTLSColumnExpressions ( dTlsData.m_TlsColumns );
-		}
 
 	std::atomic<bool> bError { false };
 	CSphMutex dWaitMutex;
@@ -6235,7 +6224,6 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	tCtx.m_pLocalDocs = pLocalDocs;
 	tCtx.m_iTotalDocs = iTotalDocs;
 	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
-	tCtx.m_iThTag = dSorters[0]->m_iThTag;
 
 	if ( !tCtx.SetupCalc ( pResult, tMaxSorterSchema, m_tSchema, nullptr, dSorterSchemas ) )
 		return false;

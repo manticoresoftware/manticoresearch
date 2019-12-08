@@ -1780,7 +1780,6 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );
-	tCtx.m_iThTag = ppSorters[0]->m_iThTag;
 	if ( !tCtx.SetupCalc ( pResult, tMaxSorterSchema, m_tMatchSchema, nullptr, dSorterSchemas ) )
 		return false;
 

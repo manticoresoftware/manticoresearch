@@ -79,7 +79,7 @@ void ISphMatchSorter::CloneTo ( ISphMatchSorter * pTrg ) const
 	assert ( pTrg );
 	pTrg->m_bRandomize = m_bRandomize;
 	pTrg->m_dJustPopped.Reserve ( m_dJustPopped.GetLimit () );
-	pTrg->m_pSchema = m_pSchema;
+	pTrg->m_pSchema = m_pSchema->CloneMe();
 	pTrg->CopyState ( m_tState );
 }
 

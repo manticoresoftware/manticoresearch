@@ -278,10 +278,9 @@ public:
 		{
 			--pTo;
 //			m_pSchema->FreeDataPtrs ( *pTo );
-			Swap ( *pTo, *Root() );
+			PopAndProcess_T ( [pTo] ( CSphMatch & tRoot ) { Swap ( *pTo, tRoot ); return true; } );
 			if ( iTag>=0 )
 				pTo->m_iTag = iTag;
-			Pop ();
 		}
 		m_iTotal = 0;
 		return iReadyMatches;
@@ -365,7 +364,7 @@ private:
 			if ( COMP::IsLess ( tEntry, *Root(), m_tState ) )
 				return true;
 			else
-				Pop ();
+				PopAndProcess_T ( [] ( const CSphMatch & ) { return false; } );
 		}
 
 		// do add
@@ -391,25 +390,28 @@ private:
 	}
 
 	/// remove root (ie. top priority) entry
-	void Pop ()
+	template<typename POPPER>
+	void PopAndProcess_T ( POPPER && fnProcess )
 	{
 		m_bStorageFilled = true;
 		assert ( !IsEmpty() );
 
 		auto& iJustRemoved = m_dIData.Pop();
-		if ( IsEmpty() ) // empty queue? just return
-			return;
+		if ( !IsEmpty() ) // for empty just popped is the root
+			Swap ( m_dIData.First (), iJustRemoved );
 
-		// make the last entry my new root
-		Swap ( m_dIData.First(), iJustRemoved );
-		m_pSchema->FreeDataPtrs ( m_dData[iJustRemoved] );
-
-		if_const ( NOTIFICATIONS )
+		if ( !fnProcess ( m_dData[iJustRemoved] ) )
 		{
-			if ( m_dJustPopped.IsEmpty() )
-				m_dJustPopped.Add ( m_dData[iJustRemoved].m_tRowID );
-			else
-				m_dJustPopped[0] = m_dData[iJustRemoved].m_tRowID;
+			// make the last entry my new root
+			if_const ( NOTIFICATIONS )
+			{
+				if ( m_dJustPopped.IsEmpty () )
+					m_dJustPopped.Add (  m_dData[iJustRemoved] .m_tRowID );
+				else
+					m_dJustPopped[0] =  m_dData[iJustRemoved] .m_tRowID;
+			}
+
+			m_pSchema->FreeDataPtrs ( m_dData[iJustRemoved] );
 		}
 
 		// sift down if needed
@@ -3804,6 +3806,10 @@ public:
 			Swap ( *pTo, m_tData );
 			if ( iTag>=0 )
 				pTo->m_iTag = iTag;
+		} else
+		{
+			m_pSchema->FreeDataPtrs ( m_tData );
+			m_tData.ResetDynamic ();
 		}
 
 		m_iTotal = 0;

@@ -5975,12 +5975,11 @@ void QueryDiskChunks( const CSphQuery * pQuery,
 	bool bMtEnabled = dTlsData.IsEnabled ();
 
 	std::atomic<bool> bError { false };
-	CSphMutex dWaitMutex;
-	dWaitMutex.Lock ();
+	OneshotEvent_c dWaitEvent;
 	{
 		// dWaiter is RAII unlock based on smart-pointer. Scope bracket above is exactly for it.
 		// fixme! that is ad-hoc to dispatch call from usual thread to async thread-pool
-		SharedPtrCustom_t <void*> dWaiter ( nullptr, [&dWaitMutex] (void*) { dWaitMutex.Unlock(); } );
+		SharedPtrCustom_t <void*> dWaiter ( nullptr, [&dWaitEvent] (void*) { dWaitEvent.SetEvent(); } );
 
 		for ( int iChunk = iChunks-1; iChunk>=0; --iChunk )
 		{
@@ -6083,12 +6082,14 @@ void QueryDiskChunks( const CSphQuery * pQuery,
 	 * Dumb add-hoc solution over it is to unlock a mutex in deleter. So, we wait for a mutex, and at the moment
 	 * we can lock it, all the tasks are done.
 	 *
+	 * That solution doesn't work on Windows, since to avoid self-lock it allows mutex to be locked from
+	 * the same thread without waiting. So, let's use event instead.
+	 *
 	 * More smart would be possible if the whole search (not just over disk chunks) performed by thread-pool.
 	 * In such case we could just yield here (so that thread will be released and may process another tasks),
 	 * and come back by deleter.
 	*/
-	dWaitMutex.Lock ();
-	dWaitMutex.Unlock ();
+	dWaitEvent.WaitEvent (-1);
 
 	dTlsData.Finalize();
 }

@@ -195,6 +195,16 @@ public:
 		m_tmStamp = sphMicroTimer();
 	}
 
+	void AddMetric ( const CSphQueryProfile& tData )
+	{
+		// fixme! m.b. invent a way to display data from different profilers with kind of multiplier?
+		for ( int i = 0; i<SPH_QSTATE_TOTAL; ++i )
+		{
+			m_dSwitches[i] += tData.m_dSwitches[i];
+			m_tmTotal[i] += tData.m_tmTotal[i];
+		}
+	}
+
 	/// stop profiling
 	void Stop()
 	{
@@ -211,6 +221,8 @@ public:
 	}
 
 	virtual 				~CSphQueryProfile() {};
+
+	virtual CSphQueryProfile*		Clone() const = 0;
 };
 
 

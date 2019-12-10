@@ -291,7 +291,7 @@ static void HttpHandlerIndexPage ( CSphVector<BYTE> & dData )
 	HttpBuildReply ( dData, SPH_HTTP_STATUS_200, sIndexPage.cstr(), sIndexPage.GetLength(), true );
 }
 
-class CSphQueryProfileFormatJson : public CSphQueryProfile
+class CSphQueryProfileFormatJson final : public CSphQueryProfile
 {
 public:
 
@@ -303,6 +303,11 @@ public:
 	const char* GetResultAsStr () const final
 	{
 		return m_sResult.cstr();
+	}
+
+	CSphQueryProfile * Clone () const final
+	{
+		return new CSphQueryProfileFormatJson;
 	}
 
 private:

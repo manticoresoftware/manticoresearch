@@ -5771,9 +5771,10 @@ class Tls_context_c
 	using Sorters_t = VecTraits_T<ISphMatchSorter *>;
 
 	CSphAtomic				m_iInvokedThreads; // each new invoked thread add a value.
-	CSphVector<hWordStats> 	m_ThWordStats;
+	CSphVector<hWordStats> 	m_dThWordStats;
 	CSphVector<CSphVector<ISphMatchSorter *>> m_dThSorters;
 	Sorters_t &				m_dParentSorters;
+	CSphVector<CSphQueryResult> m_dThResults;
 	CSphQueryResult *		m_pResult = nullptr;
 
 	// will use 1 sorter per OS thread; value is used as integer index
@@ -5807,8 +5808,17 @@ public:
 
 		int iThreads = GetNOfThreads();
 		m_dThSorters.Resize (iThreads);
-		m_ThWordStats.Resize (iThreads);
+		m_dThWordStats.Resize ( iThreads);
+		m_dThResults.Resize ( iThreads);
 		m_TlsColumns.m_iThreads = iThreads;
+
+		for ( CSphQueryResult& dResult : m_dThResults )
+		{
+			dResult.m_bHasPrediction = m_pResult->m_bHasPrediction;
+			if ( pResult->m_pProfile )
+				dResult.m_pProfile = pResult->m_pProfile->Clone();
+		}
+
 		++g_iRun;
 	}
 
@@ -5843,8 +5853,16 @@ public:
 	{
 		if ( m_bDisabled )
 			return m_pResult->m_hWordStats;
-		return m_ThWordStats[iThdId];
+		return m_dThWordStats[iThdId];
 	}
+
+	CSphQueryResult * GetTlsResult ( int iThdId )
+	{
+		if ( m_bDisabled )
+			return m_pResult;
+		return &m_dThResults[iThdId];
+	}
+
 
 	bool IsEnabled() const { return !m_bDisabled; }
 
@@ -5870,8 +5888,8 @@ public:
 		}
 
 		// collect word statistic among tls
-		m_ThWordStats.Resize ( iWorkThreads );
-		for ( auto & hResWordStats : m_ThWordStats )
+		m_dThWordStats.Resize ( iWorkThreads );
+		for ( auto & hResWordStats : m_dThWordStats )
 		{
 			if ( m_pResult->m_hWordStats.GetLength ())
 				for ( auto & tStat : m_pResult->m_hWordStats )
@@ -5882,6 +5900,27 @@ public:
 				}
 			else
 				m_pResult->m_hWordStats = hResWordStats;
+		}
+
+		// collect other result data
+		m_dThResults.Resize ( iWorkThreads );
+		for ( auto & tResult : m_dThResults ) {
+
+			// summary warnings and errors
+			if ( !tResult.m_sError.IsEmpty () )
+				m_pResult->m_sError = tResult.m_sError;
+			if ( !tResult.m_sWarning.IsEmpty ())
+				m_pResult->m_sWarning = tResult.m_sWarning;
+
+			if ( m_pResult->m_bHasPrediction )
+				m_pResult->m_tStats.Add ( tResult.m_tStats );
+
+			m_pResult->m_iBadRows += tResult.m_iBadRows;
+			if ( tResult.m_pProfile )
+			{
+				m_pResult->m_pProfile->AddMetric ( *tResult.m_pProfile );
+				SafeDelete ( tResult.m_pProfile );
+			}
 		}
 	}
 
@@ -5956,7 +5995,8 @@ void QueryDiskChunks( const CSphQuery * pQuery,
 		SphWordStatChecker_t tDiskStat,
 		SphWordStatChecker_t tStat,
 		const char * szIndexName,
-		VecTraits_T<const BYTE*>& dDiskBlobPools
+		VecTraits_T<const BYTE*>& dDiskBlobPools,
+		int64_t tmMaxTimer
 		)
 {
 	if ( tGuard.m_dDiskChunks.IsEmpty() )
@@ -5974,7 +6014,7 @@ void QueryDiskChunks( const CSphQuery * pQuery,
 
 	bool bMtEnabled = dTlsData.IsEnabled ();
 
-	std::atomic<bool> bError { false };
+	std::atomic<bool> bInterrupt { false };
 	OneshotEvent_c dWaitEvent;
 	{
 		// dWaiter is RAII unlock based on smart-pointer. Scope bracket above is exactly for it.
@@ -5989,7 +6029,7 @@ void QueryDiskChunks( const CSphQuery * pQuery,
 			if ( pProfiler )
 				pProfiler->Switch ( SPH_QSTATE_INIT );
 
-			if ( bError )
+			if ( bInterrupt )
 				break;
 
 			// capture iChunk and dWaiter by value
@@ -5997,14 +6037,15 @@ void QueryDiskChunks( const CSphQuery * pQuery,
 			// dWaiter as smart-pointer will ensure that mutex is not released until all chunks processed.
 			auto fnCalc = [&, iChunk, dWaiter] () mutable
 			{
-				if ( bError ) // some earlier job met error; abort.
+				if ( bInterrupt ) // some earlier job met error; abort.
 					return;
 
 				auto iThdID = dTlsData.PrepareLocalTlsContext ( iChunk );
 				auto & dLocalSorters = dTlsData.GetTlsSorters(iThdID);
-				auto iSorters = dSorters.GetLength ();
+				auto iSorters = dLocalSorters.GetLength ();
 				CSphQueryResult tChunkResult;
-				tChunkResult.m_pProfile = pResult->m_pProfile;
+				CSphQueryResult* pThResult = dTlsData.GetTlsResult (iThdID);
+				tChunkResult.m_pProfile = pThResult->m_pProfile;
 
 				CSphMultiQueryArgs tMultiArgs ( tArgs.m_iIndexWeight );
 				// storing index in matches tag for finding strings attrs offset later, biased against default zero and segments
@@ -6017,12 +6058,12 @@ void QueryDiskChunks( const CSphQuery * pQuery,
 				// we use sorters in both disk chunks and ram chunks, that's why we don't want to move to a new schema before we searched ram chunks
 				tMultiArgs.m_bModifySorterSchemas = false;
 
-				bError = !tGuard.m_dDiskChunks[iChunk]->MultiQuery ( pQuery,
+				bInterrupt = !tGuard.m_dDiskChunks[iChunk]->MultiQuery ( pQuery,
 						&tChunkResult, iSorters, dLocalSorters.begin(), tMultiArgs );
 
 				// check terms inconsistency among disk chunks
 				const auto & hChunkStats = tChunkResult.m_hWordStats;
-				tStat.DumpDiffer ( hChunkStats, szIndexName, pResult->m_sWarning );
+				tStat.DumpDiffer ( hChunkStats, szIndexName, pThResult->m_sWarning );
 				auto & hResWordStats = dTlsData.GetTlsWordstats(iThdID);
 
 				if ( hResWordStats.GetLength() )
@@ -6045,24 +6086,21 @@ void QueryDiskChunks( const CSphQuery * pQuery,
 					tStat.Set ( hChunkStats );
 
 				dDiskBlobPools[iChunk] = tChunkResult.m_pBlobPool;
-				pResult->m_iBadRows += tChunkResult.m_iBadRows;
+				pThResult->m_iBadRows += tChunkResult.m_iBadRows;
 
-				/*
-				if ( pResult->m_bHasPrediction )
-					pResult->m_tStats.Add ( tChunkResult.m_tStats );
+				if ( pThResult->m_bHasPrediction )
+					pThResult->m_tStats.Add ( tChunkResult.m_tStats );
 
 				if ( iChunk && tmMaxTimer>0 && sphMicroTimer()>=tmMaxTimer )
 				{
-					pResult->m_sWarning = "query time exceeded max_query_time";
-					break;
+					pThResult->m_sWarning = "query time exceeded max_query_time";
+					bInterrupt = true;
 				}
-				*/
 
-				if ( bError )
-				{
+				if ( bInterrupt && !tChunkResult.m_sError.IsEmpty ())
 					// FIXME? maybe handle this more gracefully (convert to a warning)?
-					pResult->m_sError = tChunkResult.m_sError;
-				}
+					pThResult->m_sError = tChunkResult.m_sError;
+
 			};
 
 			if ( bMtEnabled )
@@ -6090,7 +6128,6 @@ void QueryDiskChunks( const CSphQuery * pQuery,
 	 * and come back by deleter.
 	*/
 	dWaitEvent.WaitEvent (-1);
-
 	dTlsData.Finalize();
 }
 
@@ -6199,7 +6236,8 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	CSphVector<const BYTE *> dDiskBlobPools ( tGuard.m_dDiskChunks.GetLength() );
 
-	QueryDiskChunks (pQuery,pResult,tArgs,tGuard,dSorters,pProfiler,bGotLocalDF,pLocalDocs,iTotalDocs,tDiskStat,tStat,m_sIndexName.cstr(), dDiskBlobPools);
+	QueryDiskChunks (pQuery,pResult,tArgs,tGuard,dSorters,pProfiler,bGotLocalDF,pLocalDocs,iTotalDocs,tDiskStat,tStat,
+			m_sIndexName.cstr(), dDiskBlobPools, tmMaxTimer);
 
 	////////////////////
 	// search RAM chunk

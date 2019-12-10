@@ -14530,11 +14530,16 @@ void HandleMysqlShowProfile ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p,
 static void HandleMysqlShowPlan ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p, bool bMoreResultsFollow );
 
 
-class CSphQueryProfileMysql : public CSphQueryProfile
+class CSphQueryProfileMysql final : public CSphQueryProfile
 {
 public:
 	void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t& dZones ) final;
 	const char*	GetResultAsStr() const final;
+
+	CSphQueryProfile * Clone () const final
+	{
+		return new CSphQueryProfileMysql;
+	}
 
 private:
 	CSphString				m_sResult;

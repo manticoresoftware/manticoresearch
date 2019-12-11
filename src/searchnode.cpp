@@ -3312,7 +3312,7 @@ uint64_t ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::GetWordID() const
 template <bool USE_BM25,bool TEST_FIELDS>
 void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::HintRowID ( RowID_t tRowID )
 {
-	if ( m_dNodes[0].m_pQword->m_iDocs )
+	if ( m_dNodes[0].m_pQword->m_iDocs && ( m_bFirstChunk || m_dNodes[0].m_tRowID!=INVALID_ROWID ) )
 	{
 		Advance ( 0, tRowID );
 		m_bFirstChunk = false;

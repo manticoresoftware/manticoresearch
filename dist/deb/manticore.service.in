@@ -19,6 +19,7 @@ KillSignal=SIGTERM
 SendSIGKILL=no
 LimitNOFILE=infinity
 LimitCORE=infinity
+Restart=on-failure
 TimeoutStartSec=infinity
 PIDFile=@RUNDIR@/searchd.pid
 

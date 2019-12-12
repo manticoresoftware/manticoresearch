@@ -307,6 +307,7 @@ TEST_P ( RTN, WeightBoundary )
 
 	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema (), nullptr );
 	tQueueSettings.m_bComputeItems = false;
+	tQueueSettings.m_iMaxMatches = DEFAULT_MAX_MATCHES;
 	SphQueueRes_t tRes;
 	ISphMatchSorter * pSorter = sphCreateQueue ( tQuery, tQueueSettings, tResult.m_sError, tRes, nullptr );
 	ASSERT_TRUE ( pSorter );
@@ -410,6 +411,7 @@ TEST_F ( RT, RankerFactors )
 	CSphMultiQueryArgs tArgs ( 1 );
 	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema (), nullptr );
 	tQueueSettings.m_bComputeItems = true;
+	tQueueSettings.m_iMaxMatches = DEFAULT_MAX_MATCHES;
 	tArgs.m_uPackedFactorFlags = SPH_FACTOR_ENABLE | SPH_FACTOR_CALC_ATC;
 	SphQueueRes_t tRes;
 
@@ -566,6 +568,7 @@ TEST_F ( RT, SendVsMerge )
 
 	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema (), nullptr );
 	tQueueSettings.m_bComputeItems = false;
+	tQueueSettings.m_iMaxMatches = DEFAULT_MAX_MATCHES;
 	SphQueueRes_t tRes;
 	auto pSorter = sphCreateQueue ( tQuery, tQueueSettings, tResult.m_sError, tRes, nullptr );
 	ASSERT_TRUE ( pSorter );

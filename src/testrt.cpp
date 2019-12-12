@@ -57,6 +57,7 @@ void DoSearch ( CSphIndex * pIndex )
 
 	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema(), nullptr );
 	tQueueSettings.m_bComputeItems = false;
+	tQueueSettings.m_iMaxMatches = DEFAULT_MAX_MATCHES;
 	CSphString sError;
 	SphQueueRes_t tRes;
 	ISphMatchSorter * pSorter = sphCreateQueue ( tQuery, tQueueSettings, sError, tRes, nullptr );

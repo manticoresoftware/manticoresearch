@@ -1197,6 +1197,7 @@ struct CSphGroupSorterSettings
 	bool				m_bImplicit = false;///< for queries with aggregate functions but without group by clause
 	const ISphFilter *	m_pAggrFilterTrait = nullptr; ///< aggregate filter that got owned by grouper
 	bool				m_bJson = false;	///< whether we're grouping by Json attribute
+	int					m_iMaxMatches = 0;
 
 	void FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
 	{
@@ -1766,12 +1767,12 @@ public:
 	/// ctor
 	CSphKBufferGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery,
 			const CSphGroupSorterSettings & tSettings )
-		: CSphMatchQueueTraits ( pQuery->m_iMaxMatches*GROUPBY_FACTOR )
+		: CSphMatchQueueTraits ( tSettings.m_iMaxMatches*GROUPBY_FACTOR )
 		, BaseGroupSorter_c ( tSettings )
 		, m_eGroupBy ( pQuery->m_eGroupFunc )
 		, m_pGrouper ( tSettings.m_pGrouper )
-		, m_hGroup2Match ( pQuery->m_iMaxMatches*GROUPBY_FACTOR )
-		, m_iLimit ( pQuery->m_iMaxMatches )
+		, m_hGroup2Match ( tSettings.m_iMaxMatches*GROUPBY_FACTOR )
+		, m_iLimit ( tSettings.m_iMaxMatches )
 		, m_pComp ( pComp )
 	{
 		assert ( GROUPBY_FACTOR>1 );
@@ -2182,12 +2183,12 @@ public:
 	/// ctor
 	CSphKBufferNGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery,
 			const CSphGroupSorterSettings & tSettings ) // FIXME! make k configurable
-		: CSphMatchQueueTraits ( ( pQuery->m_iGroupbyLimit>1 ? 2 : 1 ) * pQuery->m_iMaxMatches * GROUPBY_FACTOR )
+		: CSphMatchQueueTraits ( ( pQuery->m_iGroupbyLimit>1 ? 2 : 1 ) * tSettings.m_iMaxMatches * GROUPBY_FACTOR )
 		, BaseGroupSorter_c ( tSettings )
 		, m_eGroupBy ( pQuery->m_eGroupFunc )
 		, m_pGrouper ( tSettings.m_pGrouper )
-		, m_hGroup2Match ( pQuery->m_iMaxMatches*GROUPBY_FACTOR*2 )
-		, m_iLimit ( pQuery->m_iMaxMatches )
+		, m_hGroup2Match ( tSettings.m_iMaxMatches*GROUPBY_FACTOR*2 )
+		, m_iLimit ( tSettings.m_iMaxMatches )
 		, m_iGLimit ( pQuery->m_iGroupbyLimit )
 		, m_pComp ( pComp )
 	{
@@ -5719,6 +5720,8 @@ static ISphMatchSorter * CreateQueue ( const SphQueueSettings_t & tQueue, const 
 	// spawn the queue
 	///////////////////
 
+	tArgs.m_tSettings.m_iMaxMatches = tQueue.m_iMaxMatches;
+
 	if ( tArgs.m_bHeadWOGroup && tArgs.m_tSettings.m_bImplicit )
 	{
 		tArgs.m_tSettings.m_bImplicit = false;
@@ -5728,11 +5731,11 @@ static ISphMatchSorter * CreateQueue ( const SphQueueSettings_t & tQueue, const 
 	if ( !tArgs.m_bGotGroupby )
 	{
 		if ( tQueue.m_pUpdate )
-			pTop = new CSphUpdateQueue ( tQuery.m_iMaxMatches, tQueue.m_pUpdate, tQuery.m_bIgnoreNonexistent, tQuery.m_bStrict );
+			pTop = new CSphUpdateQueue ( tQueue.m_iMaxMatches, tQueue.m_pUpdate, tQuery.m_bIgnoreNonexistent, tQuery.m_bStrict );
 		else if ( tQueue.m_pCollection )
-			pTop = new CSphCollectQueue ( tQuery.m_iMaxMatches, tQueue.m_pCollection );
+			pTop = new CSphCollectQueue ( tQueue.m_iMaxMatches, tQueue.m_pCollection );
 		else
-			pTop = CreatePlainSorter ( tArgs.m_eMatchFunc, tQuery.m_bSortKbuffer, tQuery.m_iMaxMatches, tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE );
+			pTop = CreatePlainSorter ( tArgs.m_eMatchFunc, tQuery.m_bSortKbuffer, tQueue.m_iMaxMatches, tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE );
 	} else
 		pTop = sphCreateSorter1st ( tArgs.m_eMatchFunc, tArgs.m_eGroupFunc, &tQuery, tArgs.m_tSettings, tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE );
 

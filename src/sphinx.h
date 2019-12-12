@@ -3574,6 +3574,7 @@ struct SphQueueSettings_t : public ISphNoncopyable
 	CSphVector<DocID_t> *		m_pCollection = nullptr;
 	ISphExprHook *				m_pHook = nullptr;
 	const CSphFilterSettings *	m_pAggrFilter = nullptr;
+	int							m_iMaxMatches = 0;
 
 	SphQueueSettings_t ( const ISphSchema & tSchema, CSphQueryProfile * pProfiler = nullptr )
 		: m_tSchema ( tSchema )

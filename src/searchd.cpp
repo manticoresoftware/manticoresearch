@@ -4549,9 +4549,6 @@ static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, boo
 		// first, temporarily patch up sorting clause and max_matches (we will restore them later)
 		Swap ( tQueryCopy.m_sOuterOrderBy, tQueryCopy.m_sGroupBy.IsEmpty() ? tQueryCopy.m_sSortBy : tQueryCopy.m_sGroupSortBy );
 		Swap ( eQuerySort, tQueryCopy.m_eSort );
-		tQueryCopy.m_iMaxMatches *= tRes.m_dMatchCounts.GetLength();
-		// FIXME? probably not right; 20 shards with by 300 matches might be too much
-		// but propagating too small inner max_matches to the outer is not right either
 
 		// second, apply inner limit now, before (!) reordering
 		int iOut = 0;
@@ -4576,6 +4573,15 @@ static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, boo
 	SphQueueSettings_t tQueueSettings ( tRes.m_tSchema );
 	tQueueSettings.m_bComputeItems = false;
 	tQueueSettings.m_pAggrFilter = pAggrFilter;
+
+	// FIXME? probably not right; 20 shards with by 300 matches might be too much
+	// but propagating too small inner max_matches to the outer is not right either
+	if ( tQueryCopy.m_bHasOuter )
+		tQueueSettings.m_iMaxMatches = Min ( tQuery.m_iMaxMatches * tRes.m_dMatchCounts.GetLength(), tRes.m_dMatches.GetLength() );
+	else
+		tQueueSettings.m_iMaxMatches = Min ( tQuery.m_iMaxMatches, tRes.m_dMatches.GetLength() );
+	tQueueSettings.m_iMaxMatches = Max ( tQueueSettings.m_iMaxMatches, 1 );
+
 	SphQueueRes_t tQueueRes;
 	CSphScopedPtr<ISphMatchSorter> pSorter  ( sphCreateQueue ( tQueryCopy, tQueueSettings, tRes.m_sError, tQueueRes, nullptr ) );
 
@@ -4584,7 +4590,6 @@ static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, boo
 	{
 		Swap ( tQueryCopy.m_sOuterOrderBy, tQueryCopy.m_sGroupBy.IsEmpty() ? tQueryCopy.m_sSortBy : tQueryCopy.m_sGroupSortBy );
 		Swap ( eQuerySort, tQueryCopy.m_eSort );
-		tQueryCopy.m_iMaxMatches /= tRes.m_dMatchCounts.GetLength();
 	}
 
 	if ( !pSorter )
@@ -5543,6 +5548,18 @@ void SearchHandler_c::RunLocalSearchMT ( LocalSearch_t &dWork, ThreadLocal_t &tT
 		ppResults[i]->m_iCpuTime = iCpuTime;
 }
 
+static int GetMaxMatches ( int iQueryMaxMatches, const CSphIndex * pIndex )
+{
+	if ( iQueryMaxMatches>DEFAULT_MAX_MATCHES )
+	{
+		int64_t iDocs = Min ( (int)INT_MAX, pIndex->GetStats().m_iTotalDocuments ); // clamp to int max
+		return Min ( iQueryMaxMatches, Max ( iDocs, DEFAULT_MAX_MATCHES ) ); // do not want 0 sorter and sorter longer than query.max_matches
+	} else
+	{
+		return iQueryMaxMatches;
+	}
+}
+
 int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const
 {
 	int iValidSorters = 0;
@@ -5561,6 +5578,7 @@ int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphM
 			tQueueSettings.m_pCollection = m_pDelDocs;
 			tQueueSettings.m_pHook = &m_tHook;
 			StrVec_t * pExtra = ( dExtraSchemas.IsEmpty() ? nullptr : dExtraSchemas.begin() + iQuery - m_iStart );
+			tQueueSettings.m_iMaxMatches = GetMaxMatches ( tQuery.m_iMaxMatches, pIndex );
 
 			ISphMatchSorter * pSorter = sphCreateQueue ( tQuery, tQueueSettings, dErrors[iQuery - m_iStart], tQueueRes, pExtra );
 			if ( !pSorter )
@@ -5578,6 +5596,7 @@ int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphM
 		tQueueSettings.m_pUpdate = m_pUpdates;
 		tQueueSettings.m_pCollection = m_pDelDocs;
 		tQueueSettings.m_pHook = &m_tHook;
+		tQueueSettings.m_iMaxMatches = GetMaxMatches ( m_dQueries[m_iStart].m_iMaxMatches, pIndex );
 
 		const VecTraits_T<CSphQuery> & dQueries = m_dQueries.Slice ( m_iStart );
 		sphCreateMultiQueue ( tQueueSettings, dQueries, dSorters, dErrors, tQueueRes, dExtraSchemas );

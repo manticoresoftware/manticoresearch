@@ -1014,110 +1014,6 @@ private:
 	CSphVector<ISphExpr *>		m_dJsonKeys;
 };
 
-//////////////////////////////////////////////////////////////////////////
-
-/// simple fixed-size hash
-/// doesn't keep the order
-template < typename T, typename KEY, typename HASHFUNC >
-class CSphFixedHash : ISphNoncopyable
-{
-protected:
-	static const int HASH_LIST_END = -1;
-
-	struct HashEntry_t
-	{
-		KEY		m_tKey;
-		T		m_tValue;
-	};
-
-	struct HashTraits_t
-	{
-		int m_iEntry;
-		int m_iNext;
-	};
-
-protected:
-	CSphVector<HashEntry_t>		m_dEntries;		///< key-value pairs storage pool
-	CSphVector<HashTraits_t>	m_dHash;		///< hash into m_dEntries pool
-
-	int							m_iFree = 0;	///< free pairs count
-	int							m_iLength = 0;
-
-public:
-	/// ctor
-	explicit CSphFixedHash ( int iLength )
-	{
-		int iBuckets = ( 1 << sphLog2 ( iLength-1 ) ); // less than 50% bucket usage guaranteed
-		assert ( iLength>0 );
-		assert ( iLength<=iBuckets );
-		m_iLength = iLength;
-
-		m_dEntries.Resize ( iLength );
-		m_dHash.Resize ( iBuckets );
-
-		Reset ();
-	}
-
-	/// cleanup
-	void Reset ()
-	{
-		m_iFree = 0;
-		int iBytes = sizeof(m_dHash[0]) * m_dHash.GetLength();
-		memset ( m_dHash.Begin(), 0xff, iBytes );
-	}
-
-	/// add new entry
-	/// returns nullptr on success
-	/// returns pointer to value if already hashed, or replace it with new one, if insisted.
-	T * Add ( const T & tValue, const KEY & tKey )
-	{
-		assert ( m_iFree<m_iLength && "hash overflow" );
-
-		// check if it's already hashed
-		DWORD uHash = DWORD ( HASHFUNC::Hash ( tKey ) ) & ( m_dHash.GetLength()-1 );
-		int iPrev = HASH_LIST_END;
-
-		for ( int iEntry=m_dHash[uHash].m_iEntry; iEntry>=0; iPrev=iEntry, iEntry=m_dHash[iEntry].m_iNext )
-		{
-			if ( m_dEntries[iEntry].m_tKey==tKey )
-				return &m_dEntries[iEntry].m_tValue;
-		}
-
-		int iNew = m_iFree++;
-		HashEntry_t & tNew = m_dEntries[iNew];
-
-		tNew.m_tKey = tKey;
-		tNew.m_tValue = tValue;
-
-		if ( iPrev>=0 )
-		{
-			assert ( m_dHash[iPrev].m_iNext==HASH_LIST_END );
-			m_dHash[iPrev].m_iNext = iNew;
-			m_dHash[iNew].m_iNext = HASH_LIST_END;
-			m_dHash[iNew].m_iEntry = iNew;
-		} else
-		{
-			assert ( m_dHash[uHash].m_iEntry==HASH_LIST_END );
-			m_dHash[uHash].m_iEntry = iNew;
-			m_dHash[uHash].m_iNext = HASH_LIST_END;
-		}
-		return nullptr;
-	}
-
-	/// get value pointer by key
-	T * operator () ( const KEY & tKey ) const
-	{
-		DWORD uHash = DWORD ( HASHFUNC::Hash ( tKey ) ) & ( m_dHash.GetLength()-1 );
-
-		for ( int iEntry=m_dHash[uHash].m_iEntry; iEntry!=HASH_LIST_END; iEntry=m_dHash[iEntry].m_iNext )
-			if ( m_dEntries[iEntry].m_tKey==tKey )
-				return (T*)&m_dEntries[iEntry].m_tValue;
-
-		return nullptr;
-	}
-};
-
-
 /////////////////////////////////////////////////////////////////////////////
 
 /// (group,attrvalue) pair
@@ -1849,7 +1745,7 @@ class CSphKBufferGroupSorter : public CSphMatchQueueTraits, protected BaseGroupS
 protected:
 	ESphGroupBy		m_eGroupBy;			///< group-by function
 	CSphRefcountedPtr<CSphGrouper>	m_pGrouper;
-	CSphFixedHash < CSphMatch *, SphGroupKey_t, IdentityHash_fn >	m_hGroup2Match;
+	OpenHash_T < CSphMatch *, SphGroupKey_t >	m_hGroup2Match;
 
 protected:
 	int				m_iLimit;		///< max matches to be retrieved
@@ -1941,7 +1837,7 @@ public:
 		}
 
 		// if this group is already hashed, we only need to update the corresponding match
-		CSphMatch ** ppMatch = m_hGroup2Match ( uGroupKey );
+		CSphMatch ** ppMatch = m_hGroup2Match.Find ( uGroupKey );
 		if ( ppMatch )
 		{
 			CSphMatch * pMatch = (*ppMatch);
@@ -2026,7 +1922,7 @@ public:
 				pAggregate->Ungroup ( &tNew );
 		}
 
-		m_hGroup2Match.Add ( &tNew, uGroupKey );
+		Verify ( m_hGroup2Match.Add ( uGroupKey, &tNew ) );
 		m_iTotal++;
 		return true;
 	}
@@ -2091,7 +1987,7 @@ public:
 		m_iTotal = 0;
 		m_iMaxUsed = 0;
 
-		m_hGroup2Match.Reset ();
+		m_hGroup2Match.Clear();
 		if_const ( DISTINCT )
 			m_tUniq.Resize ( 0 );
 
@@ -2138,7 +2034,7 @@ protected:
 			SphGroupKey_t uGroup;
 			for ( int iCount = m_tUniq.CountStart ( &uGroup ); iCount; iCount = m_tUniq.CountNext ( &uGroup ) )
 			{
-				CSphMatch ** ppMatch = m_hGroup2Match(uGroup);
+				CSphMatch ** ppMatch = m_hGroup2Match.Find ( uGroup );
 				if ( ppMatch )
 					(*ppMatch)->SetAttr ( m_tLocDistinct, iCount );
 			}
@@ -2178,9 +2074,9 @@ protected:
 		}
 
 		// rehash
-		m_hGroup2Match.Reset ();
+		m_hGroup2Match.Clear();
 		for ( int i=0; i<iBound; i++ )
-			m_hGroup2Match.Add ( m_pData+i, m_pData[i].GetAttr ( m_tLocGroupby ) );
+			Verify ( m_hGroup2Match.Add ( m_pData[i].GetAttr ( m_tLocGroupby ), m_pData+i ) );
 
 		for ( int i = iBound; i < m_iUsed; i++ )
 			m_pSchema->FreeDataPtrs ( m_pData+i );

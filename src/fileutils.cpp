@@ -22,7 +22,7 @@
 
 // whether to collect IO stats
 static bool g_bCollectIOStats = false;
-static TLS_T<CSphIOStats*> g_pTlsIOStats;
+static thread_local CSphIOStats* g_pTlsIOStats;
 
 
 CSphIOStats::~CSphIOStats ()

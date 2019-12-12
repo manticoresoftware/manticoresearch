@@ -4046,7 +4046,7 @@ static CSphVector<const DocstoreReader_i*> GetUniqueDocstores ( const AggrResult
 }
 
 
-static void SetupPostlimitExprs ( AggrResult_t & tRes, CSphMatch & tMatch, const CSphColumnInfo * pCol, const CSphQuery & tQuery, int64_t iDocstoreSessionId )
+static void SetupPostlimitExprs ( AggrResult_t & tRes, CSphMatch & tMatch, const CSphColumnInfo * pCol, const char * sQuery, int64_t iDocstoreSessionId )
 {
 	DocstoreSession_c::Info_t tSessionInfo;
 	tSessionInfo.m_pDocstore = tRes.m_dTag2Docstore [ tMatch.m_iTag ].m_pDocstore;
@@ -4054,7 +4054,7 @@ static void SetupPostlimitExprs ( AggrResult_t & tRes, CSphMatch & tMatch, const
 
 	assert ( pCol && pCol->m_pExpr );
 	pCol->m_pExpr->Command ( SPH_EXPR_SET_DOCSTORE, &tSessionInfo );
-	pCol->m_pExpr->Command ( SPH_EXPR_SET_QUERY, (void*)&tQuery.m_sQuery);
+	pCol->m_pExpr->Command ( SPH_EXPR_SET_QUERY, (void *)sQuery);
 }
 
 
@@ -4075,14 +4075,14 @@ static void EvalPostlimitExprs ( AggrResult_t & tRes, CSphMatch & tMatch, const 
 struct PostLimitArgs_t
 {
 	const CSphVector<const CSphColumnInfo *> & m_dPostlimit;
-	const CSphQuery & m_tQuery;
+	const char * m_sQuery = nullptr;
 	int m_iFrom = 0;
 	int m_iTo = 0;
 	bool m_bMaster = false;
 
-	PostLimitArgs_t ( const CSphVector<const CSphColumnInfo *> & dPostlimit, const CSphQuery & tQuery )
+	PostLimitArgs_t ( const CSphVector<const CSphColumnInfo *> & dPostlimit, const char * sQuery )
 		: m_dPostlimit ( dPostlimit )
-		, m_tQuery ( tQuery )
+		, m_sQuery ( sQuery )
 	{}
 };
 
@@ -4115,7 +4115,7 @@ static void ProcessPostlimit ( const PostLimitArgs_t & tArgs, AggrResult_t & tRe
 		if ( tMatch.m_iTag!=iLastTag )
 		{
 			for ( const auto & pCol : tArgs.m_dPostlimit )
-				SetupPostlimitExprs ( tRes, tMatch, pCol, tArgs.m_tQuery, tSession.GetUID() );
+				SetupPostlimitExprs ( tRes, tMatch, pCol, tArgs.m_sQuery, tSession.GetUID() );
 
 			iLastTag = tMatch.m_iTag;
 		}
@@ -4125,14 +4125,35 @@ static void ProcessPostlimit ( const PostLimitArgs_t & tArgs, AggrResult_t & tRe
 	}
 }
 
+struct ProcessPostlimitArgs_t
+{
+	int		m_iOffset = 0;
+	int		m_iLimit = 0;
+	int		m_iOuterOffset = 0;
+	int		m_iOuterLimit = 0;
+	bool	m_bMaster = false;
 
-static void ProcessLocalPostlimit ( const CSphQuery & tQuery, bool bMaster, AggrResult_t & tRes )
+	const char * m_sQuery = nullptr;
+
+	ProcessPostlimitArgs_t ( const CSphQuery & tQuery, bool bMaster )
+	{
+		m_iOffset = tQuery.m_iOffset;
+		m_iLimit = tQuery.m_iLimit;
+		m_iOuterOffset = tQuery.m_iOuterOffset;
+		m_iOuterLimit = tQuery.m_iOuterLimit;
+		m_sQuery = tQuery.m_sQuery.cstr();
+
+		m_bMaster = bMaster;
+	}
+};
+
+static void ProcessLocalPostlimit ( const ProcessPostlimitArgs_t & tArgs, AggrResult_t & tRes )
 {
 	bool bGotPostlimit = false;
 	for ( int i=0; i<tRes.m_tSchema.GetAttrsCount() && !bGotPostlimit; i++ )
 	{
 		const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
-		bGotPostlimit = ( tCol.m_eStage==SPH_EVAL_POSTLIMIT && ( bMaster || tCol.m_uFieldFlags==CSphColumnInfo::FIELD_NONE ) );
+		bGotPostlimit = ( tCol.m_eStage==SPH_EVAL_POSTLIMIT && ( tArgs.m_bMaster || tCol.m_uFieldFlags==CSphColumnInfo::FIELD_NONE ) );
 	}
 
 	if ( !bGotPostlimit )
@@ -4148,13 +4169,13 @@ static void ProcessLocalPostlimit ( const CSphQuery & tQuery, bool bMaster, Aggr
 		assert ( iSetNext<=tRes.m_dMatches.GetLength() );
 
 		dPostlimit.Resize ( 0 );
-		ExtractPostlimit ( tRes.m_dSchemas[iSchema], bMaster, dPostlimit );
+		ExtractPostlimit ( tRes.m_dSchemas[iSchema], tArgs.m_bMaster, dPostlimit );
 		if ( !dPostlimit.GetLength() )
 			continue;
 
 		int iTo = iSetCount;
-		int iOff = Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
-		int iCount = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
+		int iOff = Max ( tArgs.m_iOffset, tArgs.m_iOuterOffset );
+		int iCount = ( tArgs.m_iOuterLimit ? tArgs.m_iOuterLimit : tArgs.m_iLimit );
 		iTo = Max ( Min ( iOff + iCount, iTo ), 0 );
 		// we can't estimate limit.offset per result set
 		// as matches got merged and sort next step
@@ -4163,12 +4184,12 @@ static void ProcessLocalPostlimit ( const CSphQuery & tQuery, bool bMaster, Aggr
 		iFrom += iSetStart;
 		iTo += iSetStart;
 
-		PostLimitArgs_t tArgs ( dPostlimit, tQuery );
-		tArgs.m_iFrom = iFrom;
-		tArgs.m_iTo = iTo;
-		tArgs.m_bMaster = bMaster;
+		PostLimitArgs_t tProcessArgs ( dPostlimit, tArgs.m_sQuery );
+		tProcessArgs.m_iFrom = iFrom;
+		tProcessArgs.m_iTo = iTo;
+		tProcessArgs.m_bMaster = tArgs.m_bMaster;
 
-		ProcessPostlimit ( tArgs, tRes );
+		ProcessPostlimit ( tProcessArgs, tRes );
 	}
 }
 
@@ -4598,7 +4619,8 @@ static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, boo
 		if ( bHaveLocals )
 		{
 			CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_EVAL_POST );
-			ProcessLocalPostlimit ( tQueryCopy, bMaster, tRes );
+			ProcessPostlimitArgs_t tProcessArgs ( tQueryCopy, bMaster );
+			ProcessLocalPostlimit ( tProcessArgs, tRes );
 		}
 
 		RemapResult ( &tRes.m_tSchema, &tRes );
@@ -4631,27 +4653,27 @@ static bool ApplyOuterOrder ( AggrResult_t & tRes, const CSphQuery & tQuery )
 }
 
 
-static void ComputePostlimit ( const CSphQuery & tQuery, bool bMaster, AggrResult_t & tRes )
+static void ComputePostlimit ( const ProcessPostlimitArgs_t & tArgs, AggrResult_t & tRes )
 {
 	CSphVector<const CSphColumnInfo *> dPostlimit;
-	ExtractPostlimit ( tRes.m_tSchema, bMaster, dPostlimit );
+	ExtractPostlimit ( tRes.m_tSchema, tArgs.m_bMaster, dPostlimit );
 
 	// post compute matches only between offset - limit
 	// however at agent we can't estimate limit.offset at master merged result set
 	// but master don't provide offset to agents only offset+limit as limit
 	// so computing all matches up to iiner.limit \ outer.limit
 	int iTo = tRes.m_dMatches.GetLength();
-	int iOff = Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
-	int iCount = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
+	int iOff = Max ( tArgs.m_iOffset, tArgs.m_iOuterOffset );
+	int iCount = ( tArgs.m_iOuterLimit ? tArgs.m_iOuterLimit : tArgs.m_iLimit );
 	iTo = Max ( Min ( iOff + iCount, iTo ), 0 );
 	int iFrom = Min ( iOff, iTo );
 
-	PostLimitArgs_t tArgs ( dPostlimit, tQuery );
-	tArgs.m_iFrom = iFrom;
-	tArgs.m_iTo = iTo;
-	tArgs.m_bMaster = bMaster;
+	PostLimitArgs_t tProcessArgs ( dPostlimit, tArgs.m_sQuery );
+	tProcessArgs.m_iFrom = iFrom;
+	tProcessArgs.m_iTo = iTo;
+	tProcessArgs.m_bMaster = tArgs.m_bMaster;
 
-	ProcessPostlimit ( tArgs, tRes );
+	ProcessPostlimit ( tProcessArgs, tRes );
 }
 
 
@@ -4738,7 +4760,8 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	if ( bAllEqual && bHaveLocals )
 	{
 		CSphScopedProfile ( pProfiler, SPH_QSTATE_EVAL_POST );
-		ComputePostlimit ( tQuery, bMaster, tRes );
+		ProcessPostlimitArgs_t tArgs ( tQuery, bMaster );
+		ComputePostlimit ( tArgs, tRes );
 	}
 	if ( bMaster && !dRemotes.IsEmpty() )
 	{

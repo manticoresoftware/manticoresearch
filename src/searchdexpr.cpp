@@ -157,7 +157,7 @@ bool QueryExprTraits_c::Command ( ESphExprCommand eCmd, void * pArg )
 
 	if ( eCmd==SPH_EXPR_SET_QUERY && !m_pQuery ) // don't do this if we have a query expression specified
 	{
-		CSphString sQuery = *(CSphString*)pArg;			
+		CSphString sQuery ( (const char*)pArg );
 		if ( m_bFirstQuery || m_sQuery!=sQuery )
 		{
 			m_sQuery = sQuery;

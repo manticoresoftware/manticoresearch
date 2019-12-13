@@ -417,8 +417,11 @@ private:
 
 	struct StoredMultiHit_t
 	{
-		CSphFixedVector<SphOffset_t>	m_dHitlistOffsets {0};
+		CSphFixedVector<SphOffset_t>	m_dHitlistOffsets;
 		RowID_t							m_tRowID;
+
+		// don't change to default ctr, centos6 will fail to compile!
+		StoredMultiHit_t () : m_dHitlistOffsets ( 0 ) {}
 	};
 
 	struct HitInfo_t

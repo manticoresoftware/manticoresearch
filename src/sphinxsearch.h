@@ -167,4 +167,40 @@ CSphString sphXQNodeGetExtraStr ( const XQNode_t * pNode );
 CSphString sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones );
 CSphString sphExplainQueryBrief ( const XQNode_t * pNode, const CSphSchema & tSchema );
 
+struct ExplainQueryArgs_t
+{
+	const CSphString & m_sQuery;
+	CSphString & m_sRes;
+	CSphString & m_sError;
+
+	const CSphSchema *	m_pSchema = nullptr;
+	DictRefPtr_c		m_pDict;
+	FieldFilterRefPtr_c m_pFieldFilter;
+	const CSphIndexSettings * m_pSettings = nullptr;
+	const ISphTokenizer * m_pQueryTokenizer = nullptr;
+	const ISphWordlist * m_pWordlist = nullptr;
+	int m_iExpandKeywords = 0;
+	int m_iExpansionLimit = 0;
+	bool m_bExpandPrefix = false;
+	const void * m_pIndexData = nullptr;
+
+	ExplainQueryArgs_t ( const CSphString & sQuery, CSphString & sRes, CSphString & sError )
+		: m_sQuery ( sQuery )
+		, m_sRes ( sRes )
+		, m_sError ( sError )
+	{
+	}
+};
+
+bool Explain ( ExplainQueryArgs_t & tArgs );
+
+class WordlistStub_c : public ISphWordlist
+{
+public:
+	WordlistStub_c() {};
+	~WordlistStub_c() override {}
+	void GetPrefixedWords ( const char * , int , const char * , ISphWordlist::Args_t & ) const override {}
+	void GetInfixedWords ( const char * , int , const char * , ISphWordlist::Args_t & ) const override {}
+};
+
 #endif // _sphinxsearch_

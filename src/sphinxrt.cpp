@@ -1154,6 +1154,7 @@ public:
 	void				CreateReader ( int64_t iSessionId ) const final;
 	bool				GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const final;
 	int					GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
+	bool				ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const override;
 
 protected:
 	CSphSourceStats		m_tStats;
@@ -7727,6 +7728,33 @@ bool RtIndex_c::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T
 int RtIndex_c::GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const
 {
 	return m_pDocstoreFields.Ptr() ? m_pDocstoreFields->GetFieldId ( sName, eType ) : -1;
+}
+
+bool RtIndex_c::ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const
+{
+	ExplainQueryArgs_t tArgs ( sQuery, sRes, sError );
+	tArgs.m_pSchema = &GetMatchSchema();
+
+	TokenizerRefPtr_c pQueryTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
+	sphSetupQueryTokenizer ( pQueryTokenizer, IsStarDict(), m_tSettings.m_bIndexExactWords, false );
+
+	tArgs.m_pDict = GetStatelessDict ( m_pDict );
+	SetupStarDict ( tArgs.m_pDict, pQueryTokenizer );
+	SetupExactDict ( tArgs.m_pDict, pQueryTokenizer );
+	if ( m_pFieldFilter )
+		tArgs.m_pFieldFilter = m_pFieldFilter->Clone();
+	tArgs.m_pSettings = &m_tSettings;
+	tArgs.m_pWordlist = this;
+	tArgs.m_pQueryTokenizer = pQueryTokenizer;
+	tArgs.m_iExpandKeywords = m_iExpandKeywords;
+	tArgs.m_iExpansionLimit = m_iExpansionLimit;
+	tArgs.m_bExpandPrefix = ( m_pDict->GetSettings().m_bWordDict && IsStarDict() );
+
+	SphChunkGuard_t tGuard = GetReaderChunks ();
+	tArgs.m_pIndexData = &tGuard.m_dRamChunks;
+
+	return Explain ( tArgs );
+
 }
 
 

@@ -179,6 +179,7 @@ private:
 	void ReplayCommit ( StoredQuery_i * pQuery ) final;
 
 	void GetIndexFiles ( CSphVector<CSphString> & dFiles ) const override;
+	bool ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const override;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2649,4 +2650,28 @@ void PercolateIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles ) const
 {
 	CSphString & sMeta = dFiles.Add();
 	sMeta.SetSprintf ( "%s.meta", m_sFilename.cstr() );
+}
+
+bool PercolateIndex_c::ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const
+{
+	WordlistStub_c tWordlist;
+
+	TokenizerRefPtr_c pQueryTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
+	sphSetupQueryTokenizer ( pQueryTokenizer, IsStarDict(), m_tSettings.m_bIndexExactWords, false );
+
+	ExplainQueryArgs_t tArgs ( sQuery, sRes, sError );
+	tArgs.m_pSchema = &GetInternalSchema();
+	tArgs.m_pDict = GetStatelessDict ( m_pDict );
+	SetupStarDict ( tArgs.m_pDict, pQueryTokenizer );
+	SetupExactDict ( tArgs.m_pDict, pQueryTokenizer );
+	if ( m_pFieldFilter )
+		tArgs.m_pFieldFilter = m_pFieldFilter->Clone();
+	tArgs.m_pSettings = &m_tSettings;
+	tArgs.m_pWordlist = &tWordlist;
+	tArgs.m_pQueryTokenizer = pQueryTokenizer;
+	tArgs.m_iExpandKeywords = m_iExpandKeywords;
+	tArgs.m_iExpansionLimit = m_iExpansionLimit;
+	tArgs.m_bExpandPrefix = ( m_pDict->GetSettings().m_bWordDict && IsStarDict() );
+
+	return Explain ( tArgs );
 }

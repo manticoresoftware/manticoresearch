@@ -1649,6 +1649,7 @@ public:
 	int					DebugCheck ( FILE * ) final { return 0; } // NOLINT
 	void				DebugDumpDict ( FILE * ) final {}
 	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) final {}
+	bool				ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const override;
 };
 
 
@@ -1731,6 +1732,27 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 CSphIndex * sphCreateIndexTemplate ( )
 {
 	return new CSphTokenizerIndex();
+}
+
+bool CSphTokenizerIndex::ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const
+{
+	WordlistStub_c tWordlist;
+	ExplainQueryArgs_t tArgs ( sQuery, sRes, sError );
+	tArgs.m_pDict = GetStatelessDict ( m_pDict );
+	if ( IsStarDict() )
+		tArgs.m_pDict = new CSphDictStarV8 ( tArgs.m_pDict, m_tSettings.m_iMinInfixLen>0 );
+	if ( m_tSettings.m_bIndexExactWords )
+		tArgs.m_pDict = new CSphDictExact ( tArgs.m_pDict );
+	if ( m_pFieldFilter )
+		tArgs.m_pFieldFilter = m_pFieldFilter->Clone();
+	tArgs.m_pSettings = &m_tSettings;
+	tArgs.m_pWordlist = &tWordlist;
+	tArgs.m_pQueryTokenizer = m_pQueryTokenizer;
+	tArgs.m_iExpandKeywords = m_iExpandKeywords;
+	tArgs.m_iExpansionLimit = m_iExpansionLimit;
+	tArgs.m_bExpandPrefix = ( m_pDict->GetSettings().m_bWordDict && IsStarDict() );
+
+	return Explain ( tArgs );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -2609,6 +2631,7 @@ public:
 	void				CreateReader ( int64_t iSessionId ) const final;
 	bool				GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const final;
 	int					GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
+	bool				ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const override;
 
 private:
 	static const int			MIN_WRITE_BUFFER		= 262144;	///< min write buffer size
@@ -7472,7 +7495,7 @@ bool CSphSchema::IsReserved ( const char * szToken )
 {
 	static const char * dReserved[] =
 	{
-		"AND", "AS", "AT", "BY", "DIV", "DEBUG", "FACET", "FALSE", "FROM", "FORCE", "IGNORE", "IN", "INDEXES",
+		"AND", "AS", "AT", "BY", "DIV", "DEBUG", "EXPLAIN", "FACET", "FALSE", "FROM", "FORCE", "IGNORE", "IN", "INDEXES",
 		"IS", "JOIN", "LIMIT", "LOGS",	"MOD", "NOT", "NULL", "OFFSET", "OR", "ORDER", "REGEX", "RELOAD", "SELECT",
 		"SYSFILTERS", "TRUE", "TIMESTAMP", "USE", "KILLLIST_TARGET", "WAIT_TIMEOUT", nullptr
 	};
@@ -18849,6 +18872,166 @@ void CSphIndex_VLN::DebugCheckDocids ( CSphAutoreader & tAttrReader, int64_t iRo
 		if ( dRows[i].m_tDocID==dRows[i-1].m_tDocID )
 			tReporter.Fail ( "duplicate of docid " INT64_FMT " found at rows %u %u", dRows[i].m_tDocID, dRows[i-1].m_tRowID, dRows[i].m_tRowID );
 	}
+}
+
+static void AddFields ( const char * sQuery, CSphSchema & tSchema )
+{
+	CSphColumnInfo tField;
+
+	const char * sToken = sQuery;
+	if ( !sToken )
+	{
+		tField.m_sName = "dummy_field"; // for query with only all fields, @*
+		tSchema.AddField ( tField );
+		return;
+	}
+
+	const char * OPTION_RELAXED = "@@relaxed";
+	const int OPTION_RELAXED_LEN = strlen ( OPTION_RELAXED );
+	if ( strncmp ( sToken, OPTION_RELAXED, OPTION_RELAXED_LEN )==0 && !sphIsAlpha ( sToken[OPTION_RELAXED_LEN] ) )
+		sToken += OPTION_RELAXED_LEN;
+
+	while ( *sToken )
+	{
+		if ( *sToken!='@' )
+		{
+			sToken++;
+			continue;
+		}
+
+		sToken++;
+		if ( !*sToken )
+			break;
+		if ( *sToken=='!' || *sToken=='*' )
+			sToken++;
+		if ( !*sToken )
+			break;
+		bool bBlock = ( *sToken=='(' );
+		if ( bBlock )
+			sToken++;
+		if ( !*sToken )
+			break;
+
+		// handle block with field names
+		while ( *sToken )
+		{
+			const char * sField = sToken;
+			while ( *sToken && sphIsAlpha( *sToken ) )
+				sToken++;
+
+			int iLen = sToken - sField;
+			if ( iLen )
+			{
+				tField.m_sName.SetBinary ( sField, iLen );
+				if ( !tSchema.GetField ( tField.m_sName.cstr() ) )
+					tSchema.AddField ( tField );
+			}
+
+			if ( !bBlock )
+				break;
+
+			if ( *sToken && *sToken==',' )
+				sToken++;
+
+			if ( *sToken && *sToken==')' )
+				break;
+		}
+	}
+
+	if ( !tSchema.GetFieldsCount() )
+	{
+		tField.m_sName = "dummy_field"; // for query with only all fields, @*
+		tSchema.AddField ( tField );
+	}
+}
+
+bool Explain ( ExplainQueryArgs_t & tArgs )
+{
+	if ( tArgs.m_sQuery.IsEmpty() )
+		return true;
+
+	CSphScopedPtr<QueryParser_i> pQueryParser ( sphCreatePlainQueryParser() );
+
+	CSphVector<BYTE> dFiltered;
+	const BYTE * sModifiedQuery = (BYTE *)tArgs.m_sQuery.cstr();
+
+	if ( tArgs.m_pFieldFilter && sModifiedQuery )
+	{
+		if ( tArgs.m_pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
+			sModifiedQuery = dFiltered.Begin();
+	}
+
+	CSphSchema tSchema;
+	const CSphSchema * pSchema = tArgs.m_pSchema;
+	if ( !pSchema )
+	{
+		pSchema = &tSchema;
+		// need to fill up schema with fields from query
+		AddFields ( tArgs.m_sQuery.cstr(), tSchema );
+	}
+
+	XQQuery_t tParsed;
+	if ( !pQueryParser->ParseQuery ( tParsed, (const char*)sModifiedQuery, nullptr, tArgs.m_pQueryTokenizer, nullptr, pSchema, tArgs.m_pDict, *tArgs.m_pSettings ) )
+	{
+		tArgs.m_sError = tParsed.m_sParseError;
+		return false;
+	}
+
+	sphTransformExtendedQuery ( &tParsed.m_pRoot, *tArgs.m_pSettings, false, nullptr );
+
+	int iExpandKeywords = ExpandKeywords ( tArgs.m_iExpandKeywords, QUERY_OPT_DEFAULT, *tArgs.m_pSettings );
+	if ( iExpandKeywords!=KWE_DISABLED )
+	{
+		tParsed.m_pRoot = sphQueryExpandKeywords ( tParsed.m_pRoot, *tArgs.m_pSettings, iExpandKeywords );
+		tParsed.m_pRoot->Check ( true );
+	}
+
+	// this should be after keyword expansion
+	if ( tArgs.m_pSettings->m_uAotFilterMask )
+		TransformAotFilter ( tParsed.m_pRoot, tArgs.m_pDict->GetWordforms(), *tArgs.m_pSettings );
+
+	//// expanding prefix in word dictionary case
+	if ( tArgs.m_bExpandPrefix )
+	{
+		CSphQueryResultMeta tMeta;
+		CSphScopedPayload tPayloads;
+
+		ExpansionContext_t tExpCtx;
+		tExpCtx.m_pWordlist = tArgs.m_pWordlist;
+		tExpCtx.m_pResult = &tMeta;
+		tExpCtx.m_iMinPrefixLen = tArgs.m_pSettings->m_iMinPrefixLen;
+		tExpCtx.m_iMinInfixLen = tArgs.m_pSettings->m_iMinInfixLen;
+		tExpCtx.m_iExpansionLimit = tArgs.m_iExpansionLimit;
+		tExpCtx.m_bHasExactForms = ( tArgs.m_pDict->HasMorphology() || tArgs.m_pSettings->m_bIndexExactWords );
+		tExpCtx.m_bMergeSingles = false;
+		tExpCtx.m_pPayloads = &tPayloads;
+		tExpCtx.m_pIndexData = tArgs.m_pIndexData;
+
+		tParsed.m_pRoot = sphExpandXQNode ( tParsed.m_pRoot, tExpCtx );
+	}
+
+
+	tArgs.m_sRes = sphExplainQuery ( tParsed.m_pRoot, *pSchema, tParsed.m_dZones );
+	return true;
+}
+
+bool CSphIndex_VLN::ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const
+{
+	ExplainQueryArgs_t tArgs ( sQuery, sRes, sError );
+	tArgs.m_pSchema = &GetMatchSchema();
+	tArgs.m_pDict = GetStatelessDict ( m_pDict );
+	SetupStarDict ( tArgs.m_pDict );
+	SetupExactDict ( tArgs.m_pDict );
+	if ( m_pFieldFilter )
+		tArgs.m_pFieldFilter = m_pFieldFilter->Clone();
+	tArgs.m_pSettings = &m_tSettings;
+	tArgs.m_pWordlist = &m_tWordlist;
+	tArgs.m_pQueryTokenizer = m_pQueryTokenizer;
+	tArgs.m_iExpandKeywords = m_iExpandKeywords;
+	tArgs.m_iExpansionLimit = m_iExpansionLimit;
+	tArgs.m_bExpandPrefix = ( m_pDict->GetSettings().m_bWordDict && IsStarDict() );
+
+	return Explain ( tArgs );
 }
 
 //////////////////////////////////////////////////////////////////////////

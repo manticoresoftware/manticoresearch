@@ -6957,7 +6957,8 @@ static const char * g_dSqlStmts[] =
 	"select_dual", "show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
 	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
-	"join_cluster", "cluster_create", "cluster_delete", "cluster_index_add", "cluster_index_delete", "cluster_update"
+	"join_cluster", "cluster_create", "cluster_delete", "cluster_index_add", "cluster_index_delete", "cluster_update",
+	"explain"
 };
 
 
@@ -14573,11 +14574,10 @@ class CSphQueryProfileMysql : public CSphQueryProfile
 {
 public:
 	void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t& dZones ) final;
-	const char*	GetResultAsStr() const final;
+	const char *	GetResultAsStr() const final;
 
 private:
 	CSphString				m_sResult;
-	void					Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t& dZones, int iIdent );
 };
 
 
@@ -16275,6 +16275,45 @@ static void HandleMysqlReloadIndex ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 	tOut.Ok();
 }
 
+void HandleMysqlExplain ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+{
+	CSphString sProc ( tStmt.m_sCallProc );
+	CSphString sError;
+	if ( sProc.ToLower()!="query" )
+	{
+		sError.SetSprintf ( "no such explain procedure %s", tStmt.m_sCallProc.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	auto pIndex = GetServed ( tStmt.m_sIndex );
+	if ( !pIndex )
+	{
+		sError.SetSprintf ( "unknown local index '%s'", tStmt.m_sIndex.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	CSphString sRes;
+	ServedDescRPtr_c pServed ( pIndex );
+
+	if ( !pServed->m_pIndex->ExplainQuery ( tStmt.m_tQuery.m_sQuery, sRes, sError ) )
+	{
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	tOut.HeadBegin ( 2 );
+	tOut.HeadColumn ( "Variable" );
+	tOut.HeadColumn ( "Value" );
+	tOut.HeadEnd ();
+
+	tOut.PutString ( "transformed_tree" );
+	tOut.PutString ( sRes );
+	tOut.Commit();
+	tOut.Eof ();
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 CSphSessionAccum::~CSphSessionAccum()
@@ -16777,6 +16816,11 @@ public:
 				tOut.Error ( sQuery.cstr(), m_tLastMeta.m_sError.cstr() );
 			}
 			return true;
+
+		case STMT_EXPLAIN:
+			HandleMysqlExplain ( tOut, *pStmt );
+			return true;
+
 
 		default:
 			m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );

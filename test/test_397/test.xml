@@ -9,6 +9,11 @@
 </requires>
 
 <config>
+common
+{
+	lemmatizer_base	= <local>lemmatizer_base</local>
+}
+
 indexer
 {
 	mem_limit			= 16M

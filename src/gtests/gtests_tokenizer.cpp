@@ -798,6 +798,8 @@ TEST_F ( QueryParser, soft_whitespace4 )
 
 
 static CSphSourceStats g_tTmpDummyStat;
+static FileAccessSettings_t g_tDummyFASettings;
+
 class CSphDummyIndex : public CSphIndex
 {
 public:
@@ -811,6 +813,7 @@ public:
 	void				Dealloc () override {}
 	void				Preread () override {}
 	void				SetMemorySettings ( const FileAccessSettings_t & ) override {}
+	const FileAccessSettings_t & GetMemorySettings() const override { return g_tDummyFASettings; }
 	void				SetBase ( const char * ) override {}
 	bool				Rename ( const char * ) override { return false; }
 	bool				Lock () override { return true; }

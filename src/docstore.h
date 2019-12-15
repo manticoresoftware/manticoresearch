@@ -102,6 +102,10 @@ DocstoreFields_i *	CreateDocstoreFields();
 void				InitDocstore ( int64_t iCacheSize );
 void				ShutdownDocstore();
 
+class DebugCheckError_c;
+class CSphAutoreader;
+bool				CheckDocstore ( CSphAutoreader & tReader, DebugCheckError_c & tReporter );
+
 #endif
 
 //

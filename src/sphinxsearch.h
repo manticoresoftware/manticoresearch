@@ -39,6 +39,9 @@ struct SkiplistEntry_t
 	int64_t		m_iBaseHitlistPos;	///< delta decoder hitlist offset base
 };
 
+bool operator < ( const SkiplistEntry_t & a, RowID_t b );
+bool operator == ( const SkiplistEntry_t & a, RowID_t b );
+bool operator < ( RowID_t a, const SkiplistEntry_t & b );
 
 /// term, searcher view
 class ISphQword

@@ -24,6 +24,7 @@
 #include "sphinxstem.h"
 #include "sphinxpq.h"
 #include "accumulator.h"
+#include "indexformat.h"
 
 namespace legacy
 {
@@ -40,9 +41,6 @@ STATIC_SIZE_ASSERT ( SphDocID_t, 8 );
 #define MVA_ARENA_FLAG		0x80000000UL	// MVA global-arena flag
 
 const DWORD SPH_SKIPLIST_BLOCK=128;
-
-static const int MAX_KEYWORD_BYTES = SPH_MAX_WORD_LEN*3+4;
-static const int DOCLIST_HINT_THRESH = 256;
 
 static const DWORD META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
 static const DWORD META_VERSION		= 14;			///< current version

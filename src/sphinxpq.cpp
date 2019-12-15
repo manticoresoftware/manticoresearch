@@ -69,6 +69,7 @@ static bool operator < ( int64_t iQUID, const StoredQueryKey_t & tKey )
 }
 
 static int g_iPercolateThreads = 1;
+static FileAccessSettings_t g_tDummyFASettings;
 
 class PercolateIndex_c : public PercolateIndex_i
 {
@@ -83,8 +84,7 @@ public:
 	bool Commit ( int * pDeleted, RtAccum_t * pAccExt ) override;
 	void RollBack ( RtAccum_t * pAccExt ) override;
 
-	StoredQuery_i * AddQuery ( const PercolateQueryArgs_t & tArgs, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError )
-		REQUIRES (!m_tLock);
+	StoredQuery_i * AddQuery ( const PercolateQueryArgs_t & tArgs, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError ) REQUIRES (!m_tLock);
 	StoredQuery_i * Query ( const PercolateQueryArgs_t & tArgs, CSphString & sError ) override REQUIRES (!m_tLock);
 
 	bool Prealloc ( bool bStripPath ) override;
@@ -140,6 +140,7 @@ public:
 	void				DebugDumpDict ( FILE * ) override {}
 	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) override {}
 	void				SetMemorySettings ( const FileAccessSettings_t & ) override {}
+	const FileAccessSettings_t & GetMemorySettings() const override { return g_tDummyFASettings; }
 
 	void				ProhibitSave() override { m_bSaveDisabled = true; }
 	void				EnableSave() override { m_bSaveDisabled = false; }

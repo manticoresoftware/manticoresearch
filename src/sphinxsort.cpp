@@ -4819,6 +4819,8 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 	assert ( m_pSorterSchema );
 	auto & tSchema = *m_pSorterSchema.Ptr();
 
+	m_tGroupSorterSettings.m_iMaxMatches = m_tSettings.m_iMaxMatches;
+
 	// setup distinct attr
 	m_tGroupSorterSettings.m_tDistinctAttr.m_iBitOffset = -1;
 	if ( !m_tQuery.m_sGroupDistinct.IsEmpty () )

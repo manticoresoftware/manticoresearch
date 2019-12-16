@@ -20,8 +20,11 @@
 
 #include <math.h>
 
-//////////////////////////////////////////////////////////////////////////
-// EXTENDED MATCHING V2
+
+bool operator < ( const SkiplistEntry_t & a, RowID_t b )	{ return a.m_tBaseRowIDPlus1<b; }
+bool operator == ( const SkiplistEntry_t & a, RowID_t b )	{ return a.m_tBaseRowIDPlus1==b; }
+bool operator < ( RowID_t a, const SkiplistEntry_t & b )	{ return a<b.m_tBaseRowIDPlus1; }
+
 //////////////////////////////////////////////////////////////////////////
 
 #define SPH_TREE_DUMP			0

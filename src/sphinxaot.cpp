@@ -932,7 +932,7 @@ void sphAotLemmatizeRu1251 ( BYTE * pWord, int iLen )
 	// do lemmatizing
 	// input keyword moves into sForm; LemmatizeWord() will also case fold sForm
 	// we will generate results using sForm into pWord; so we need this extra copy
-	BYTE sForm [ SPH_MAX_WORD_LEN*3+4 ]; // aka MAX_KEYWORD_BYTES
+	BYTE sForm[MAX_KEYWORD_BYTES];
 	int iFormLen = 0;
 
 	// faster than strlen and strcpy..
@@ -987,7 +987,7 @@ void sphAotLemmatize ( BYTE * pWord, int iLang )
 	// do lemmatizing
 	// input keyword moves into sForm; LemmatizeWord() will also case fold sForm
 	// we will generate results using sForm into pWord; so we need this extra copy
-	BYTE sForm [ SPH_MAX_WORD_LEN*3+4 ]; // aka MAX_KEYWORD_BYTES
+	BYTE sForm[MAX_KEYWORD_BYTES];
 	int iFormLen = 0;
 
 	// faster than strlen and strcpy..
@@ -1063,7 +1063,7 @@ void sphAotLemmatizeDe1252 ( BYTE * pWord, int iLen )
 	// do lemmatizing
 	// input keyword moves into sForm; LemmatizeWord() will also case fold sForm
 	// we will generate results using sForm into pWord; so we need this extra copy
-	BYTE sForm [ SPH_MAX_WORD_LEN*3+4 ]; // aka MAX_KEYWORD_BYTES
+	BYTE sForm[MAX_KEYWORD_BYTES];
 	int iFormLen = 0;
 
 	// faster than strlen and strcpy..
@@ -1425,13 +1425,13 @@ class CSphAotTokenizerTmpl : public CSphTokenFilter
 {
 protected:
 	using Base = CSphTokenFilter;
-	BYTE		m_sForm [ SPH_MAX_WORD_LEN*3+4 ];	///< aka MAX_KEYWORD_BYTES
+	BYTE		m_sForm[MAX_KEYWORD_BYTES];
 	int			m_iFormLen = 0;						///< in bytes, but in windows-1251 that is characters, too
 	bool		m_bFound = false;					///< found or predicted?
 	DWORD		m_FindResults[12];					///< max results is like 6
-	int			m_iCurrent = -1;							///< index in m_FindResults that was just returned, -1 means no blending
-	BYTE		m_sToken [ SPH_MAX_WORD_LEN*3+4 ];	///< to hold generated lemmas
-	BYTE		m_sOrigToken [ SPH_MAX_WORD_LEN*3+4 ];	///< to hold original token
+	int			m_iCurrent = -1;					///< index in m_FindResults that was just returned, -1 means no blending
+	BYTE		m_sToken[MAX_KEYWORD_BYTES];		///< to hold generated lemmas
+	BYTE		m_sOrigToken[MAX_KEYWORD_BYTES];	///< to hold original token
 	bool		m_bIndexExact;
 
 	const CSphWordforms *	m_pWordforms = nullptr;

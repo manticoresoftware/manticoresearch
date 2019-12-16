@@ -105,6 +105,8 @@ extern const char * szGDB_SOURCE_DIR;
 #define SPH_MAX_FILENAME_LEN	512
 #define SPH_MAX_FIELDS			256
 
+const int MAX_KEYWORD_BYTES = SPH_MAX_WORD_LEN*3+4;
+
 /////////////////////////////////////////////////////////////////////////////
 
 extern int64_t g_iIndexerCurrentDocID;
@@ -3429,33 +3431,11 @@ private:
 };
 
 
-// simple error reporter for debug checks
-class DebugCheckError_c
-{
-public:
-			DebugCheckError_c ( FILE * pFile );
-
-	void	Fail ( const char * szFmt, ... );
-	void	Msg ( const char * szFmt, ... );
-	void	Progress ( const char * szFmt, ... );
-	void	Done();
-
-	void	SetSegment ( int iSegment );
-	int64_t	GetNumFails() const;
-
-private:
-	FILE *	m_pFile {nullptr};
-	bool	m_bProgress {false};
-	int64_t m_tStartTime {0};
-	int64_t	m_nFails {0};
-	int64_t	m_nFailsPrinted {0};
-	int		m_iSegment {-1};
-};
-
-
 class DocstoreFields_i;
 void SetupDocstoreFields ( DocstoreFields_i & tFields, const CSphSchema & tSchema );
 
+class DiskIndexQwordTraits_c;
+DiskIndexQwordTraits_c * sphCreateDiskIndexQword ( bool bInlineHits );
 
 struct DocstoreDoc_t
 {
@@ -3466,7 +3446,8 @@ struct DocstoreDoc_t
 enum DocstoreDataType_e
 {
 	DOCSTORE_TEXT,
-	DOCSTORE_BIN
+	DOCSTORE_BIN,
+	DOCSTORE_TOTAL
 };
 
 
@@ -3589,6 +3570,7 @@ public:
 	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const = 0;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const = 0;
 	virtual void				GetSuggest ( const SuggestArgs_t & , SuggestResult_t & ) const {}
+	virtual bool				ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const { return true; }
 
 public:
 	/// returns non-negative amount of actually found and updated records on success
@@ -3644,6 +3626,7 @@ public:
 	virtual CSphFixedVector<SphAttr_t> BuildDocList () const;
 
 	virtual void				SetMemorySettings ( const FileAccessSettings_t & tFileAccessSettings ) = 0;
+	virtual const FileAccessSettings_t & GetMemorySettings() const = 0;
 
 	virtual void				GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings );
 
@@ -3713,6 +3696,7 @@ struct SphQueueSettings_t : public ISphNoncopyable
 	CSphVector<DocID_t> *		m_pCollection = nullptr;
 	ISphExprHook *				m_pHook = nullptr;
 	const CSphFilterSettings *	m_pAggrFilter = nullptr;
+	int							m_iMaxMatches = DEFAULT_MAX_MATCHES;
 
 	SphQueueSettings_t ( const ISphSchema & tSchema, CSphQueryProfile * pProfiler = nullptr )
 		: m_tSchema ( tSchema )

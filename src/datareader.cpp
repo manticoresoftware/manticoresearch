@@ -1,0 +1,276 @@
+//
+// Copyright (c) 2017-2019, Manticore Software LTD (http://manticoresearch.com)
+// All rights reserved
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License. You should have
+// received a copy of the GPL license along with this program; if you
+// did not, you can find it at http://www.gnu.org/
+//
+
+#include "datareader.h"
+#include "sphinxint.h"
+
+//////////////////////////////////////////////////////////////////////////
+
+inline static ESphQueryState StateByKind ( DataReaderFactory_c::Kind_e eKind )
+{
+	switch ( eKind )
+	{
+	case DataReaderFactory_c::DOCS: return SPH_QSTATE_READ_DOCS;
+	case DataReaderFactory_c::HITS: return SPH_QSTATE_READ_HITS;
+	default: return SPH_QSTATE_IO;
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+class FileBlockReader_c : public FileBlockReader_i
+{
+public:
+	explicit FileBlockReader_c ( const char * szFileName )
+		: m_szFileName ( szFileName )
+	{}
+
+	RowID_t		UnzipRowid() override { return UnzipInt (); };
+	SphWordID_t	UnzipWordid() override { return UnzipOffset (); };
+
+protected:
+	const char * m_szFileName = nullptr;
+};
+
+//////////////////////////////////////////////////////////////////////////
+
+// imitate CSphReader but fully in memory (intended to be used with mmap)
+class ThinMMapReader_c : public FileBlockReader_c
+{
+public:
+	SphOffset_t GetPos () const final
+	{
+		if ( !m_pPointer )
+			return 0;
+
+		assert ( m_pBase );
+		return m_pPointer - m_pBase;
+	}
+
+	void SeekTo ( SphOffset_t iPos, int /*iSizeHint*/ ) final
+	{
+		m_pPointer = m_pBase + iPos;
+	}
+
+	DWORD		UnzipInt () final;
+	uint64_t	UnzipOffset () final;
+
+	void Reset () final
+	{
+		m_pPointer = m_pBase;
+	}
+
+protected:
+	~ThinMMapReader_c() final {}
+
+private:
+	friend class MMapFactory_c;
+
+	const BYTE *	m_pBase = nullptr;
+	const BYTE *	m_pPointer = nullptr;
+	SphOffset_t		m_iSize = 0;
+
+	ThinMMapReader_c ( const BYTE * pArena, SphOffset_t iSize, const char * sFileName )
+		: FileBlockReader_c ( sFileName )
+	{
+		m_pPointer = m_pBase = pArena;
+		m_iSize = iSize;
+	}
+
+	BYTE GetByte()
+	{
+		auto iPos = m_pPointer - m_pBase;
+		if ( iPos>=0 && iPos<m_iSize )
+			return *m_pPointer++;
+
+		sphWarning( "INTERNAL: out-of-range in ThinMMapReader_c: trying to read '%s' at " INT64_FMT ", from mmap of "
+			INT64_FMT ", query most probably would FAIL; report the fact to dev!",
+			( m_szFileName ? m_szFileName : "" ), int64_t(iPos), int64_t(m_iSize) );
+
+		return 0; // it's better then crash because of unexpected read out-of-range (file reader does the same there)
+	}
+};
+
+
+DWORD ThinMMapReader_c::UnzipInt()
+{
+	SPH_VARINT_DECODE ( DWORD, GetByte() );
+}
+
+
+uint64_t ThinMMapReader_c::UnzipOffset()
+{
+	SPH_VARINT_DECODE ( uint64_t, GetByte() );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+class DirectFileReader_c : public FileBlockReader_c, protected FileReader_c
+{
+	friend class DirectFactory_c;
+
+public:
+	SphOffset_t GetPos () const final
+	{
+		return FileReader_c::GetPos();
+	}
+
+	void SeekTo ( SphOffset_t iPos, int iSizeHint ) final
+	{
+		FileReader_c::SeekTo ( iPos, iSizeHint );
+	}
+
+	DWORD UnzipInt() final
+	{
+		return FileReader_c::UnzipInt();
+	}
+
+	uint64_t UnzipOffset() final
+	{
+		return FileReader_c::UnzipOffset();
+	}
+
+	void Reset() final
+	{
+		FileReader_c::Reset();
+	}
+
+protected:
+	explicit DirectFileReader_c ( BYTE * pBuf, int iSize, const char * szFileName )
+		: FileBlockReader_c ( szFileName )
+		, FileReader_c ( pBuf, iSize )
+	{}
+
+	~DirectFileReader_c() final {}
+};
+
+//////////////////////////////////////////////////////////////////////////
+
+// producer of readers which access by Seek + Read
+class DirectFactory_c : public DataReaderFactory_c
+{
+public:
+	DirectFactory_c ( const CSphString & sFile, CSphString & sError, ESphQueryState eState, int iReadBuffer, int iReadUnhinted )
+		: m_eWorkState ( eState )
+		, m_iReadBuffer ( iReadBuffer )
+		, m_iReadUnhinted ( iReadUnhinted )
+	{
+		SetValid ( m_dReader.Open ( sFile, sError ) );
+	}
+
+	SphOffset_t GetFilesize () const final
+	{
+		return m_dReader.GetFilesize();
+	}
+
+	SphOffset_t GetPos () const final
+	{
+		return m_iPos;
+	}
+
+	void SeekTo ( SphOffset_t iPos ) final
+	{
+		m_iPos = iPos;
+	}
+
+	// returns depended reader sharing same FD as maker
+	FileBlockReader_c * MakeReader ( BYTE * pBuf, int iSize ) final
+	{
+		auto pFileReader = new DirectFileReader_c ( pBuf, iSize, m_dReader.GetFilename().cstr() );
+		pFileReader->SetFile ( m_dReader.GetFD(), m_dReader.GetFilename().cstr() );
+		pFileReader->SetBuffers ( m_iReadBuffer, m_iReadUnhinted );
+		if ( m_iPos )
+			pFileReader->SeekTo ( m_iPos, READ_NO_SIZE_HINT );
+
+		pFileReader->m_pProfile = m_dReader.m_pProfile;
+		pFileReader->m_eProfileState = m_eWorkState;
+		return pFileReader;
+	}
+
+	void SetProfile ( CSphQueryProfile* pProfile ) final
+	{
+		m_dReader.m_pProfile = pProfile;
+	}
+
+protected:
+	~DirectFactory_c() final {} // d-tr only by Release
+
+private:
+	CSphAutoreader	m_dReader;
+	ESphQueryState	m_eWorkState;
+	SphOffset_t		m_iPos = 0;
+	int				m_iReadBuffer = 0;
+	int				m_iReadUnhinted = 0;
+};
+
+//////////////////////////////////////////////////////////////////////////
+
+// producer of readers which access by MMap
+class MMapFactory_c : public DataReaderFactory_c
+{
+public:
+	MMapFactory_c ( const CSphString & sFile, CSphString & sError, FileAccess_e eAccess )
+	{
+		SetValid ( m_tBackendFile.Setup ( sFile, sError ) );
+		if ( eAccess==FileAccess_e::MLOCK )
+			m_tBackendFile.MemLock( sError );
+	}
+
+	SphOffset_t GetFilesize () const final
+	{
+		return m_tBackendFile.GetLength64 ();
+	}
+
+	SphOffset_t GetPos () const final
+	{
+		return m_iPos;
+	}
+
+	void SeekTo ( SphOffset_t iPos ) final
+	{
+		m_iPos = iPos;
+	}
+
+	// returns depended reader sharing same mmap as maker
+	FileBlockReader_c * MakeReader ( BYTE *, int ) final
+	{
+		auto pReader = new ThinMMapReader_c ( m_tBackendFile.GetWritePtr(),
+			m_tBackendFile.GetLength64(), m_tBackendFile.GetFileName() );
+		if ( m_iPos )
+			pReader->SeekTo ( m_iPos, 0 );
+		return pReader;
+	}
+
+protected:
+	~MMapFactory_c() final {} // d-tr only by Release
+
+private:
+	CSphMappedBuffer<BYTE>	m_tBackendFile;
+	SphOffset_t				m_iPos = 0;
+};
+
+//////////////////////////////////////////////////////////////////////////
+
+extern int g_iReadUnhinted;
+
+DataReaderFactory_c * NewProxyReader ( const CSphString & sFile, CSphString & sError, DataReaderFactory_c::Kind_e eKind, int iReadBuffer, FileAccess_e eAccess )
+{
+	auto eState = StateByKind ( eKind );
+	DataReaderFactory_c * pReader = nullptr;
+
+	if ( eAccess==FileAccess_e::FILE )
+		pReader = new DirectFactory_c ( sFile, sError, eState, iReadBuffer, g_iReadUnhinted );
+	else
+		pReader = new MMapFactory_c ( sFile, sError, eAccess );
+
+	if ( !pReader->IsValid ())
+		SafeRelease ( pReader )
+		return pReader;
+}

@@ -24,6 +24,7 @@
 #include "killlist.h"
 #include "secondaryindex.h"
 #include "accumulator.h"
+#include "indexcheck.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -1069,15 +1070,14 @@ public:
 	bool				DeleteDocument ( const DocID_t * pDocs, int iDocs, CSphString & sError, RtAccum_t * pAccExt ) final;
 	bool				Commit ( int * pDeleted, RtAccum_t * pAccExt ) final;
 	void				RollBack ( RtAccum_t * pAccExt ) final;
-	bool				CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_t> & dAccKlist,
-			int * pTotalKilled, bool bForceDump ) EXCLUDES (m_tChunkLock ); // FIXME? protect?
+	bool				CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_t> & dAccKlist, int * pTotalKilled, bool bForceDump ) EXCLUDES (m_tChunkLock ); // FIXME? protect?
 	void				ForceRamFlush ( bool bPeriodic=false ) final;
 	bool				IsFlushNeed() const final;
 	bool				ForceDiskChunk() final;
 	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) 			final  EXCLUDES (m_tReading );
 	bool				Truncate ( CSphString & sError ) final;
 	void				Optimize () final;
-	virtual void				ProgressiveMerge ();
+	void				ProgressiveMerge();
 	CSphIndex *			GetDiskChunk ( int iChunk ) final { return m_dDiskChunks.GetLength()>iChunk ? m_dDiskChunks[iChunk] : nullptr; }
 	ISphTokenizer *		CloneIndexingTokenizer() const final { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 
@@ -1097,6 +1097,7 @@ public:
 	void				Dealloc () final {}
 	void				Preread () final;
 	void				SetMemorySettings ( const FileAccessSettings_t & tFileAccessSettings ) final;
+	const FileAccessSettings_t & GetMemorySettings() const final { return m_tFiles; }
 	void				SetBase ( const char * ) final {}
 	bool				Rename ( const char * ) final { return true; }
 	bool				Lock () final { return true; }
@@ -1157,6 +1158,7 @@ public:
 	void				CreateReader ( int64_t iSessionId ) const final;
 	bool				GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const final;
 	int					GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
+	bool				ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const override;
 
 protected:
 	CSphSourceStats		m_tStats;
@@ -7346,7 +7348,7 @@ void RtIndex_c::Optimize()
 {
 	if ( g_bProgressiveMerge )
 	{
-		ProgressiveMerge ( );
+		ProgressiveMerge();
 		return;
 	}
 
@@ -8028,6 +8030,33 @@ bool RtIndex_c::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T
 int RtIndex_c::GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const
 {
 	return m_pDocstoreFields.Ptr() ? m_pDocstoreFields->GetFieldId ( sName, eType ) : -1;
+}
+
+bool RtIndex_c::ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const
+{
+	ExplainQueryArgs_t tArgs ( sQuery, sRes, sError );
+	tArgs.m_pSchema = &GetMatchSchema();
+
+	TokenizerRefPtr_c pQueryTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
+	sphSetupQueryTokenizer ( pQueryTokenizer, IsStarDict(), m_tSettings.m_bIndexExactWords, false );
+
+	tArgs.m_pDict = GetStatelessDict ( m_pDict );
+	SetupStarDict ( tArgs.m_pDict, pQueryTokenizer );
+	SetupExactDict ( tArgs.m_pDict, pQueryTokenizer );
+	if ( m_pFieldFilter )
+		tArgs.m_pFieldFilter = m_pFieldFilter->Clone();
+	tArgs.m_pSettings = &m_tSettings;
+	tArgs.m_pWordlist = this;
+	tArgs.m_pQueryTokenizer = pQueryTokenizer;
+	tArgs.m_iExpandKeywords = m_iExpandKeywords;
+	tArgs.m_iExpansionLimit = m_iExpansionLimit;
+	tArgs.m_bExpandPrefix = ( m_pDict->GetSettings().m_bWordDict && IsStarDict() );
+
+	SphChunkGuard_t tGuard = GetReaderChunks ();
+	tArgs.m_pIndexData = &tGuard.m_dRamChunks;
+
+	return Explain ( tArgs );
+
 }
 
 

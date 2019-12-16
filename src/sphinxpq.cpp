@@ -69,6 +69,7 @@ static bool operator < ( int64_t iQUID, const StoredQueryKey_t & tKey )
 }
 
 static int g_iPercolateThreads = 1;
+static FileAccessSettings_t g_tDummyFASettings;
 
 class PercolateIndex_c : public PercolateIndex_i
 {
@@ -83,8 +84,7 @@ public:
 	bool Commit ( int * pDeleted, RtAccum_t * pAccExt ) override;
 	void RollBack ( RtAccum_t * pAccExt ) override;
 
-	StoredQuery_i * AddQuery ( const PercolateQueryArgs_t & tArgs, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError )
-		REQUIRES (!m_tLock);
+	StoredQuery_i * AddQuery ( const PercolateQueryArgs_t & tArgs, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError ) REQUIRES (!m_tLock);
 	StoredQuery_i * Query ( const PercolateQueryArgs_t & tArgs, CSphString & sError ) override REQUIRES (!m_tLock);
 
 	bool Prealloc ( bool bStripPath ) override;
@@ -140,6 +140,7 @@ public:
 	void				DebugDumpDict ( FILE * ) override {}
 	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) override {}
 	void				SetMemorySettings ( const FileAccessSettings_t & ) override {}
+	const FileAccessSettings_t & GetMemorySettings() const override { return g_tDummyFASettings; }
 
 	void				ProhibitSave() override { m_bSaveDisabled = true; }
 	void				EnableSave() override { m_bSaveDisabled = false; }
@@ -179,6 +180,7 @@ private:
 	void ReplayCommit ( StoredQuery_i * pQuery ) final;
 
 	void GetIndexFiles ( CSphVector<CSphString> & dFiles ) const override;
+	bool ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const override;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2639,4 +2641,28 @@ void PercolateIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles ) const
 {
 	CSphString & sMeta = dFiles.Add();
 	sMeta.SetSprintf ( "%s.meta", m_sFilename.cstr() );
+}
+
+bool PercolateIndex_c::ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const
+{
+	WordlistStub_c tWordlist;
+
+	TokenizerRefPtr_c pQueryTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
+	sphSetupQueryTokenizer ( pQueryTokenizer, IsStarDict(), m_tSettings.m_bIndexExactWords, false );
+
+	ExplainQueryArgs_t tArgs ( sQuery, sRes, sError );
+	tArgs.m_pSchema = &GetInternalSchema();
+	tArgs.m_pDict = GetStatelessDict ( m_pDict );
+	SetupStarDict ( tArgs.m_pDict, pQueryTokenizer );
+	SetupExactDict ( tArgs.m_pDict, pQueryTokenizer );
+	if ( m_pFieldFilter )
+		tArgs.m_pFieldFilter = m_pFieldFilter->Clone();
+	tArgs.m_pSettings = &m_tSettings;
+	tArgs.m_pWordlist = &tWordlist;
+	tArgs.m_pQueryTokenizer = pQueryTokenizer;
+	tArgs.m_iExpandKeywords = m_iExpandKeywords;
+	tArgs.m_iExpansionLimit = m_iExpansionLimit;
+	tArgs.m_bExpandPrefix = ( m_pDict->GetSettings().m_bWordDict && IsStarDict() );
+
+	return Explain ( tArgs );
 }

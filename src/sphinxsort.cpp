@@ -1226,118 +1226,6 @@ private:
 	VecRefPtrs_t<ISphExpr *>	m_dJsonKeys;
 };
 
-//////////////////////////////////////////////////////////////////////////
-
-/// simple fixed-size hash
-/// doesn't keep the order
-template < typename T, typename KEY, typename HASHFUNC >
-class CSphFixedHash : ISphNoncopyable
-{
-protected:
-	static const int HASH_LIST_END = -1;
-
-	struct HashEntry_t
-	{
-		KEY		m_tKey;
-		T		m_tValue;
-	};
-
-	struct HashTraits_t
-	{
-		int m_iEntry;
-		int m_iNext;
-	};
-
-protected:
-	CSphVector<HashEntry_t>		m_dEntries;		///< key-value pairs storage pool
-	CSphVector<HashTraits_t>	m_dHash;		///< hash into m_dEntries pool
-
-	int							m_iFree = 0;	///< free pairs count
-	int							m_iLength = 0;
-
-public:
-	/// ctor
-	explicit CSphFixedHash ( int iLength )
-	{
-		int iBuckets = ( 1 << sphLog2 ( iLength-1 ) ); // less than 50% bucket usage guaranteed
-		assert ( iLength>0 );
-		assert ( iLength<=iBuckets );
-		m_iLength = iLength;
-
-		m_dEntries.Resize ( iLength );
-		m_dHash.Resize ( iBuckets );
-
-		Reset ();
-	}
-
-	void Swap ( CSphFixedHash<T,KEY,HASHFUNC>& rhs ) noexcept
-	{
-		m_dEntries.SwapData ( rhs.m_dEntries );
-		m_dHash.SwapData (rhs.m_dHash );
-		::Swap ( m_iFree, rhs.m_iFree );
-		::Swap ( m_iLength, rhs.m_iLength );
-	}
-
-	/// cleanup
-	void Reset ()
-	{
-		m_iFree = 0;
-		int iBytes = sizeof(m_dHash[0]) * m_dHash.GetLength();
-		memset ( m_dHash.Begin(), 0xff, iBytes );
-	}
-
-	/// add new entry
-	/// returns nullptr on success
-	/// returns pointer to value if already hashed, or replace it with new one, if insisted.
-	T * Add ( const T & tValue, const KEY & tKey )
-	{
-		assert ( m_iFree<m_iLength && "hash overflow" );
-
-		// check if it's already hashed
-		auto uHash = DWORD ( HASHFUNC::Hash ( tKey ) ) & ( m_dHash.GetLength()-1 );
-		int iPrev = HASH_LIST_END;
-
-		for ( int iEntry=m_dHash[uHash].m_iEntry; iEntry>=0; iPrev=iEntry, iEntry=m_dHash[iEntry].m_iNext )
-		{
-			if ( m_dEntries[iEntry].m_tKey==tKey )
-				return &m_dEntries[iEntry].m_tValue;
-		}
-
-		int iNew = m_iFree++;
-		HashEntry_t & tNew = m_dEntries[iNew];
-
-		tNew.m_tKey = tKey;
-		tNew.m_tValue = tValue;
-
-		if ( iPrev>=0 )
-		{
-			assert ( m_dHash[iPrev].m_iNext==HASH_LIST_END );
-			m_dHash[iPrev].m_iNext = iNew;
-			m_dHash[iNew].m_iNext = HASH_LIST_END;
-			m_dHash[iNew].m_iEntry = iNew;
-		} else
-		{
-			assert ( m_dHash[uHash].m_iEntry==HASH_LIST_END );
-			m_dHash[uHash].m_iEntry = iNew;
-			m_dHash[uHash].m_iNext = HASH_LIST_END;
-		}
-		return nullptr;
-	}
-
-	/// get value pointer by key
-	T * operator () ( const KEY & tKey ) const
-	{
-		auto uHash = DWORD ( HASHFUNC::Hash ( tKey ) ) & ( m_dHash.GetLength()-1 );
-
-		for ( int iEntry=m_dHash[uHash].m_iEntry; iEntry!=HASH_LIST_END; iEntry=m_dHash[iEntry].m_iNext )
-			if ( m_dEntries[iEntry].m_tKey==tKey )
-				return (T*)&m_dEntries[iEntry].m_tValue;
-
-		return nullptr;
-	}
-};
-
-
 /////////////////////////////////////////////////////////////////////////////
 /// (attrvalue,count) pair
 struct SphUngroupedValue_t : public std::pair<SphAttr_t,int>
@@ -1528,6 +1416,7 @@ struct CSphGroupSorterSettings
 	bool				m_bImplicit = false;///< for queries with aggregate functions but without group by clause
 	SharedPtr_t<const ISphFilter *>	m_pAggrFilterTrait; ///< aggregate filter that got owned by grouper
 	bool				m_bJson = false;	///< whether we're grouping by Json attribute
+	int					m_iMaxMatches = 0;
 
 	void FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
 	{
@@ -2327,11 +2216,11 @@ public:
 	/// ctor
 	KBufferGroupSorter_T ( const ISphMatchComparator * pComp, const CSphQuery * pQuery,
 			const CSphGroupSorterSettings & tSettings )
-			: CSphMatchQueueTraits ( pQuery->m_iMaxMatches * GROUPBY_FACTOR )
+			: CSphMatchQueueTraits ( tSettings.m_iMaxMatches*GROUPBY_FACTOR )
 			, BaseGroupSorter_c ( tSettings )
 			, m_eGroupBy ( pQuery->m_eGroupFunc )
 			, m_pGrouper ( tSettings.m_pGrouper )
-			, m_iLimit ( pQuery->m_iMaxMatches )
+			, m_iLimit ( tSettings.m_iMaxMatches )
 			, m_tGroupSorter (*this)
 			, m_tSubSorter ( *this, pComp )
 	{
@@ -2495,7 +2384,7 @@ class CSphKBufferGroupSorter : public KBufferGroupSorter_T<COMPGROUP,DISTINCT,NO
 	int m_iMaxUsed = -1;
 
 protected:
-	CSphFixedHash < CSphMatch *, SphGroupKey_t, IdentityHash_fn >	m_hGroup2Match;
+	OpenHash_T < CSphMatch *, SphGroupKey_t >	m_hGroup2Match;
 
 	// since we inherit from template, we need to write boring 'using' block
 	using KBufferGroupSorter = KBufferGroupSorter_T<COMPGROUP, DISTINCT, NOTIFICATIONS>;
@@ -2540,7 +2429,7 @@ public:
 	CSphKBufferGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery,
 			const CSphGroupSorterSettings & tSettings )
 		: KBufferGroupSorter ( pComp, pQuery, tSettings )
-		, m_hGroup2Match ( pQuery->m_iMaxMatches*GROUPBY_FACTOR )
+		, m_hGroup2Match ( tSettings.m_iMaxMatches*GROUPBY_FACTOR )
 	{}
 
 	/// add entry to the queue
@@ -2691,7 +2580,7 @@ protected:
 		auto & tLocCount = m_tLocCount;
 
 		// if this group is already hashed, we only need to update the corresponding match
-		CSphMatch ** ppMatch = m_hGroup2Match ( uGroupKey );
+		CSphMatch ** ppMatch = m_hGroup2Match.Find ( uGroupKey );
 		if ( ppMatch )
 		{
 			CSphMatch * pMatch = (*ppMatch);
@@ -2728,7 +2617,7 @@ protected:
 				UpdateGroupbyStr ( tNew, pAttr );
 		}
 
-		m_hGroup2Match.Add ( &tNew, uGroupKey );
+		m_hGroup2Match.Add ( uGroupKey, &tNew );
 		++m_iTotal;
 		return true;
 	}
@@ -2753,7 +2642,7 @@ private:
 	{
 		Distinct ( [this] ( SphGroupKey_t uGroup )->CSphMatch *
 		{
-			auto ppMatch = m_hGroup2Match ( uGroup );
+			auto ppMatch = m_hGroup2Match.Find ( uGroup );
 			return ppMatch ? *ppMatch : nullptr;
 		});
 	}
@@ -2779,7 +2668,7 @@ private:
 	{
 		for ( auto iMatch : this->m_dIData ) {
 			auto & tMatch = m_dData[iMatch];
-			m_hGroup2Match.Add ( &tMatch, tMatch.GetAttr ( m_tLocGroupby ));
+			m_hGroup2Match.Add ( tMatch.GetAttr ( m_tLocGroupby ), &tMatch );
 		}
 	}
 
@@ -2810,7 +2699,7 @@ private:
 
 		m_iMaxUsed = Max ( m_iMaxUsed, this->m_dIData.GetLength() ); // memorize it for free dynamics later.
 		this->m_dIData.Resize ( iBound );
-		m_hGroup2Match.Reset ();
+		m_hGroup2Match.Clear();
 
 		if ( bFinalize ) {
 			SortGroups ();
@@ -2941,7 +2830,7 @@ public:
 	CSphKBufferNGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery,
 			const CSphGroupSorterSettings & tSettings ) // FIXME! make k configurable
 		: KBufferGroupSorter ( pComp, pQuery, tSettings )
-		, m_hGroup2Index ( pQuery->m_iMaxMatches* GROUPBY_FACTOR )
+		, m_hGroup2Index ( tSettings.m_iMaxMatches*GROUPBY_FACTOR )
 		, m_iGLimit ( Min ( pQuery->m_iGroupbyLimit, m_iLimit ) )
 	{
 		assert ( m_iGLimit > 1 );
@@ -6466,13 +6355,13 @@ ISphMatchSorter * QueueCreator_c::SpawnQueue()
 	if ( !m_bGotGroupby )
 	{
 		if ( m_tSettings.m_pUpdate )
-			return new CSphUpdateQueue ( m_tQuery.m_iMaxMatches, m_tSettings.m_pUpdate,
+			return new CSphUpdateQueue ( m_tSettings.m_iMaxMatches, m_tSettings.m_pUpdate,
 					m_tQuery.m_bIgnoreNonexistent, m_tQuery.m_bStrict );
 
 		if ( m_tSettings.m_pCollection )
-			return new CSphCollectQueue ( m_tQuery.m_iMaxMatches, m_tSettings.m_pCollection );
+			return new CSphCollectQueue ( m_tSettings.m_iMaxMatches, m_tSettings.m_pCollection );
 
-		return CreatePlainSorter ( m_eMatchFunc, m_tQuery.m_bSortKbuffer, m_tQuery.m_iMaxMatches,
+		return CreatePlainSorter ( m_eMatchFunc, m_tQuery.m_bSortKbuffer, m_tSettings.m_iMaxMatches,
 			m_uPackedFactorFlags & SPH_FACTOR_ENABLE );
 	}
 	return sphCreateSorter1st ( m_eMatchFunc, m_eGroupFunc, &m_tQuery, m_tGroupSorterSettings,

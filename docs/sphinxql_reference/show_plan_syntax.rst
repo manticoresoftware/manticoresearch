@@ -34,7 +34,7 @@ Here's a complete instrumentation example:
       AND(KEYWORD(i, querypos=2)))
     1 row in set (0.00 sec)
 
-And here's a less trivial example that shows how the actually evaluated
+And here's a less trivial example that shows how the evaluated
 query tree can be rather different from the original one because of
 expansions and other transformations:
 
@@ -50,3 +50,4 @@ expansions and other transformations:
       AND(fields=(body), KEYWORD(hey, querypos=2)))
     1 row in set (0.00 sec)
 
+See also :ref:`explain_query_syntax` - it allows to achieve the same before you run a query.

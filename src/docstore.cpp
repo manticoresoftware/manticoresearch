@@ -16,6 +16,7 @@
 
 #include "sphinxint.h"
 #include "attribute.h"
+#include "indexcheck.h"
 #include "lz4/lz4.h"
 #include "lz4/lz4hc.h"
 
@@ -28,7 +29,8 @@ enum BlockFlags_e : BYTE
 enum BlockType_e : BYTE
 {
 	BLOCK_TYPE_SMALL,
-	BLOCK_TYPE_BIG
+	BLOCK_TYPE_BIG,
+	BLOCK_TYPE_TOTAL
 };
 
 enum DocFlags_e : BYTE
@@ -716,6 +718,8 @@ static void CreateFieldRemap ( VecTraits_T<int> & dFieldInRset, const VecTraits_
 
 class Docstore_c : public Docstore_i, public DocstoreSettings_t
 {
+	friend class DocstoreChecker_c;
+
 public:
 						Docstore_c ( const CSphString & sFilename );
 						~Docstore_c();
@@ -764,7 +768,7 @@ private:
 
 	bool						ProcessSmallBlockDoc ( RowID_t tCurDocRowID, RowID_t tRowID, const VecTraits_T<int> * pFieldIds, const CSphFixedVector<int> & dFieldInRset, bool bPack,
 		MemoryReader2_c & tReader, CSphBitvec & tEmptyFields, DocstoreDoc_t & tResult ) const;
-	const void					ProcessBigBlockField ( int iField, const FieldInfo_t & tInfo, int iFieldInRset, bool bPack, int64_t iSessionId, SphOffset_t & tOffset, DocstoreDoc_t & tResult ) const;
+	void						ProcessBigBlockField ( int iField, const FieldInfo_t & tInfo, int iFieldInRset, bool bPack, int64_t iSessionId, SphOffset_t & tOffset, DocstoreDoc_t & tResult ) const;
 };
 
 
@@ -1083,7 +1087,7 @@ BlockCache_c::BlockData_t Docstore_c::UncompressBigBlockField ( SphOffset_t tOff
 }
 
 
-const void Docstore_c::ProcessBigBlockField ( int iField, const FieldInfo_t & tInfo, int iFieldInRset, bool bPack, int64_t iSessionId, SphOffset_t & tOffset, DocstoreDoc_t & tResult ) const
+void Docstore_c::ProcessBigBlockField ( int iField, const FieldInfo_t & tInfo, int iFieldInRset, bool bPack, int64_t iSessionId, SphOffset_t & tOffset, DocstoreDoc_t & tResult ) const
 {
 	if ( tInfo.m_uFlags & FIELD_FLAG_EMPTY )
 		return;
@@ -1737,6 +1741,312 @@ DocstoreSession_c::~DocstoreSession_c()
 
 //////////////////////////////////////////////////////////////////////////
 
+class DocstoreChecker_c
+{
+public:
+						DocstoreChecker_c ( CSphAutoreader & tReader, DebugCheckError_c & tReporter );
+
+	bool				Check();
+
+private:
+	CSphAutoreader &	m_tReader;
+	DebugCheckError_c &	m_tReporter;
+	const char *		m_szFilename = nullptr;
+	DocstoreFields_c	m_tFields;
+	CSphScopedPtr<Compressor_i> m_pCompressor{nullptr};
+
+	void				CheckSmallBlockDoc ( MemoryReader2_c & tReader, CSphBitvec & tEmptyFields, SphOffset_t tOffset );
+	void				CheckSmallBlock ( const Docstore_c::Block_t & tBlock );
+	void				CheckBlock ( const Docstore_c::Block_t & tBlock );
+	void				CheckBigBlockField ( const Docstore_c::FieldInfo_t & tInfo, SphOffset_t & tOffset );
+	void				CheckBigBlock ( const Docstore_c::Block_t & tBlock );
+};
+
+
+DocstoreChecker_c::DocstoreChecker_c ( CSphAutoreader & tReader, DebugCheckError_c & tReporter )
+	: m_tReader ( tReader )
+	, m_tReporter ( tReporter )
+	, m_szFilename ( tReader.GetFilename().cstr() )
+{}
+
+
+bool DocstoreChecker_c::Check()
+{
+	DWORD uStorageVersion = m_tReader.GetDword();
+	if ( uStorageVersion > STORAGE_VERSION )
+		return m_tReporter.Fail ( "Unable to load docstore: %s is v.%d, binary is v.%d", m_szFilename, uStorageVersion, STORAGE_VERSION );
+
+	m_tReader.GetDword();	// block size
+	BYTE uCompression = m_tReader.GetByte();
+	if ( uCompression > 2 )
+		return m_tReporter.Fail ( "Unknown docstore compression %u in %s", uCompression, m_szFilename );
+
+	Compression_e eCompression = Byte2Compression(uCompression);
+	m_pCompressor = CreateCompressor ( eCompression, DEFAULT_COMPRESSION_LEVEL );
+	if ( !m_pCompressor.Ptr() )
+		return m_tReporter.Fail ( "Unable to create compressor in %s", m_szFilename );
+
+	DWORD uNumFields = m_tReader.GetDword();
+	const DWORD MAX_SANE_FIELDS = 32768;
+	if ( uNumFields > MAX_SANE_FIELDS )
+		return m_tReporter.Fail ( "Too many docstore fields (%u) in %s", uNumFields, m_szFilename );
+
+	for ( int i = 0; i < (int)uNumFields; i++ )
+	{
+		BYTE uDataType = m_tReader.GetByte();
+		if ( uDataType > DOCSTORE_TOTAL )
+			return m_tReporter.Fail ( "Unknown docstore data type (%u) in %s", uDataType, m_szFilename );
+
+		DocstoreDataType_e eType = (DocstoreDataType_e)uDataType;
+		CSphString sName = m_tReader.GetString();
+		const int MAX_SANE_FIELD_NAME_LEN = 32768;
+		if ( sName.Length() > MAX_SANE_FIELD_NAME_LEN )
+			return m_tReporter.Fail ( "Docstore field name too long (%d) in %s", sName.Length(), m_szFilename );
+
+		m_tFields.AddField ( sName, eType );
+	}
+
+	DWORD uNumBlocks = m_tReader.GetDword();
+	if ( !uNumBlocks )
+		return m_tReporter.Fail ( "Docstore has 0 blocks in %s", m_szFilename );
+
+	SphOffset_t tHeaderOffset = m_tReader.GetOffset();
+	if ( tHeaderOffset <= 0 || tHeaderOffset >= m_tReader.GetFilesize() )
+		return m_tReporter.Fail ( "Wrong docstore header offset (" INT64_FMT ") in %s", tHeaderOffset, m_szFilename );
+
+	m_tReader.SeekTo ( tHeaderOffset, 0 );
+
+	CSphFixedVector<Docstore_c::Block_t> dBlocks(uNumBlocks);
+
+	DWORD tPrevBlockRowID = 0;
+	SphOffset_t tPrevBlockOffset = 0;
+	for ( auto & i : dBlocks )
+	{
+		RowID_t uUnzipped = m_tReader.UnzipRowid();
+		if ( (int64_t)uUnzipped + tPrevBlockRowID >= (int64_t)0xFFFFFFFF )
+			m_tReporter.Fail ( "Docstore rowid overflow in %s", m_szFilename );
+
+		i.m_tRowID = uUnzipped + tPrevBlockRowID;
+		BYTE uBlockType = m_tReader.GetByte();
+		if ( uBlockType>BLOCK_TYPE_TOTAL )
+			return m_tReporter.Fail ( "Unknown docstore block type (%u) in %s", uBlockType, m_szFilename );
+
+		i.m_eType = (BlockType_e)uBlockType;
+		i.m_tOffset = m_tReader.UnzipOffset() + tPrevBlockOffset;
+		if ( i.m_tOffset <= 0 || i.m_tOffset >= m_tReader.GetFilesize() )
+			return m_tReporter.Fail ( "Wrong docstore block offset (" INT64_FMT ") in %s", i.m_tOffset, m_szFilename );
+
+		if ( i.m_eType==BLOCK_TYPE_BIG )
+			i.m_uHeaderSize = m_tReader.UnzipInt();
+
+		tPrevBlockRowID = i.m_tRowID;
+		tPrevBlockOffset = i.m_tOffset;
+	}
+
+	for ( int i = 1; i<dBlocks.GetLength(); i++ )
+	{
+		if ( dBlocks[i-1].m_tOffset>=dBlocks[i].m_tOffset )
+			return m_tReporter.Fail ( "Descending docstore block offset in %s", m_szFilename );
+
+		dBlocks[i-1].m_uSize = dBlocks[i].m_tOffset-dBlocks[i-1].m_tOffset;
+	}
+
+	dBlocks.Last().m_uSize = tHeaderOffset-dBlocks.Last().m_tOffset;
+
+	for ( auto & i : dBlocks )
+	{
+		if ( i.m_tOffset+i.m_uSize > m_tReader.GetFilesize() )
+			return m_tReporter.Fail ( "Docstore block size+offset out of bounds in %s", m_szFilename );
+
+		CheckBlock(i);
+	}
+
+	if ( m_tReader.GetErrorFlag() )
+		return m_tReporter.Fail ( "%s", m_tReader.GetErrorMessage().cstr() );
+
+	return true;
+}
+
+
+void DocstoreChecker_c::CheckSmallBlockDoc ( MemoryReader2_c & tReader, CSphBitvec & tEmptyFields, SphOffset_t tOffset )
+{
+	BYTE uDocFlags = tReader.GetByte();
+
+	if ( uDocFlags & ( ~(DOC_FLAG_ALL_EMPTY | DOC_FLAG_EMPTY_BITMASK) ) )
+		m_tReporter.Fail ( "Unknown docstore doc flag (%u) in %s (offset " INT64_FMT ")", uDocFlags, m_szFilename, tOffset );
+
+	if ( uDocFlags & DOC_FLAG_ALL_EMPTY )
+		return;
+
+	DWORD uBitMaskSize = tEmptyFields.GetSize()*sizeof(DWORD);
+
+	bool bHasBitmask = !!(uDocFlags & DOC_FLAG_EMPTY_BITMASK);
+	if ( bHasBitmask )
+	{
+		memcpy ( tEmptyFields.Begin(), tReader.Begin()+tReader.GetPos(), uBitMaskSize );
+		tReader.SetPos ( tReader.GetPos()+uBitMaskSize );
+	}
+
+	for ( int iField = 0; iField < m_tFields.GetNumFields(); iField++ )
+		if ( !bHasBitmask || !tEmptyFields.BitGet(iField) )
+		{
+			DWORD uFieldLength = tReader.UnzipInt();
+			tReader.SetPos ( tReader.GetPos()+uFieldLength );
+			if ( tReader.GetPos() > tReader.GetLength() )
+				m_tReporter.Fail ( "Out of bounds in docstore field data in %s (offset " INT64_FMT ")", m_szFilename, tOffset );
+		}
+}
+
+
+void DocstoreChecker_c::CheckSmallBlock ( const Docstore_c::Block_t & tBlock )
+{
+	CSphFixedVector<BYTE> dBlock ( tBlock.m_uSize );
+
+	m_tReader.SeekTo ( tBlock.m_tOffset, 0 );
+	m_tReader.GetBytes ( dBlock.Begin(), dBlock.GetLength() );
+
+	MemoryReader2_c tBlockReader ( dBlock.Begin(), dBlock.GetLength() );
+	BlockCache_c::BlockData_t tResult;
+	tResult.m_uFlags = tBlockReader.GetByte();
+	tResult.m_uNumDocs = tBlockReader.UnzipInt();
+	tResult.m_uSize = tBlockReader.UnzipInt();
+	DWORD uCompressedLength = tResult.m_uSize;
+	bool bCompressed = tResult.m_uFlags & BLOCK_FLAG_COMPRESSED;
+	if ( bCompressed )
+		uCompressedLength = tBlockReader.UnzipInt();
+
+	if ( tResult.m_uFlags!=0 && tResult.m_uFlags!=BLOCK_FLAG_COMPRESSED )
+		m_tReporter.Fail ( "Unknown docstore small block flag (%u) in %s (offset " INT64_FMT ")", tResult.m_uFlags, m_szFilename, tBlock.m_tOffset );
+
+	if ( uCompressedLength>tResult.m_uSize )
+		m_tReporter.Fail ( "Docstore block size mismatch: compressed=%u, uncompressed=%u in %s (offset " INT64_FMT ")", uCompressedLength, tResult.m_uSize, m_szFilename, tBlock.m_tOffset );
+
+	const BYTE * pBody = dBlock.Begin() + tBlockReader.GetPos();
+
+	CSphFixedVector<BYTE> dDecompressed(0);
+	if ( bCompressed )
+	{
+		dDecompressed.Reset ( tResult.m_uSize );
+		if ( !m_pCompressor->Decompress ( VecTraits_T<const BYTE> (pBody, uCompressedLength), dDecompressed) )
+			m_tReporter.Fail ( "Error decompressing small block in %s (offset " INT64_FMT ")", m_szFilename, tBlock.m_tOffset );
+
+		tResult.m_pData = dDecompressed.LeakData();
+	}
+	else
+	{
+		// we can't just pass tResult.m_pData because it doesn't point to the start of the allocated block
+		tResult.m_pData = new BYTE[tResult.m_uSize];
+		memcpy ( tResult.m_pData, pBody, tResult.m_uSize );
+	}
+
+	MemoryReader2_c tReader ( tResult.m_pData, tResult.m_uSize );
+	CSphBitvec tEmptyFields ( m_tFields.GetNumFields() );
+	for ( int i = 0; i < (int)tResult.m_uNumDocs; i++ )
+		CheckSmallBlockDoc ( tReader, tEmptyFields, tBlock.m_tOffset );
+
+	SafeDelete ( tResult.m_pData );
+}
+
+
+void DocstoreChecker_c::CheckBigBlockField ( const Docstore_c::FieldInfo_t & tInfo, SphOffset_t & tOffset )
+{
+	if ( tInfo.m_uFlags & FIELD_FLAG_EMPTY )
+		return;
+
+	bool bCompressed = !!( tInfo.m_uFlags & FIELD_FLAG_COMPRESSED );
+	SphOffset_t tOffsetDelta = bCompressed ? tInfo.m_uCompressedLen : tInfo.m_uUncompressedLen;
+	BlockCache_c::BlockData_t tBlockData;
+
+	CSphFixedVector<BYTE> dField ( tOffsetDelta );
+	m_tReader.SeekTo ( tOffset, 0 );
+	m_tReader.GetBytes ( dField.Begin(), dField.GetLength() );
+
+	tBlockData.m_uSize = tInfo.m_uUncompressedLen;
+
+	if ( bCompressed )
+	{
+		CSphFixedVector<BYTE> dDecompressed(0);
+		dDecompressed.Reset ( tBlockData.m_uSize );
+		if ( !m_pCompressor->Decompress ( dField, dDecompressed ) )
+			m_tReporter.Fail ( "Error decompressing big block in %s (offset " INT64_FMT ")", m_szFilename, tOffset );
+	}
+
+	tOffset += tOffsetDelta;
+
+	if ( tOffset > m_tReader.GetFilesize() )
+		m_tReporter.Fail ( "Docstore block size+offset out of bounds in %s (offset " INT64_FMT ")", m_szFilename, tOffset );
+}
+
+
+void DocstoreChecker_c::CheckBigBlock ( const Docstore_c::Block_t & tBlock )
+{
+	CSphFixedVector<Docstore_c::FieldInfo_t> dFieldInfo ( m_tFields.GetNumFields() );
+
+	CSphFixedVector<BYTE> dBlockHeader(tBlock.m_uHeaderSize);
+	CSphFixedVector<BYTE> dBlock ( tBlock.m_uSize );
+
+	m_tReader.SeekTo ( tBlock.m_tOffset, 0 );
+	m_tReader.GetBytes ( dBlockHeader.Begin(), dBlockHeader.GetLength() );
+
+	MemoryReader2_c tReader ( dBlockHeader.Begin(), dBlockHeader.GetLength() );
+
+	CSphVector<int> dFieldSort;
+	BYTE uBlockFlags = tReader.GetByte();
+	if ( uBlockFlags & ~BLOCK_FLAG_FIELD_REORDER )
+		m_tReporter.Fail ( "Unknown docstore big block flag (%u) in %s (offset " INT64_FMT ")", uBlockFlags, m_szFilename, tBlock.m_tOffset );
+
+	bool bNeedReorder = !!( uBlockFlags & BLOCK_FLAG_FIELD_REORDER );
+	if ( bNeedReorder )
+	{
+		dFieldSort.Resize ( m_tFields.GetNumFields() );
+		for ( auto & i : dFieldSort )
+		{
+			i = tReader.UnzipInt();
+			if ( i<0 || i>m_tFields.GetNumFields() )
+				m_tReporter.Fail ( "Error in docstore field remap (%d) in %s (offset " INT64_FMT ")", i, m_szFilename, tBlock.m_tOffset );
+		}
+	}
+
+	for ( int i = 0; i < m_tFields.GetNumFields(); i++ )
+	{
+		int iField = bNeedReorder ? dFieldSort[i] : i;
+		Docstore_c::FieldInfo_t & tInfo = dFieldInfo[iField];
+
+		tInfo.m_uFlags = tReader.GetByte();
+		if ( tInfo.m_uFlags & (~(FIELD_FLAG_EMPTY | FIELD_FLAG_COMPRESSED) ) )
+			m_tReporter.Fail ( "Unknown docstore big block field flag (%u) in %s (offset " INT64_FMT ")", tInfo.m_uFlags, m_szFilename, tBlock.m_tOffset );
+
+		if ( tInfo.m_uFlags & FIELD_FLAG_EMPTY )
+			continue;
+
+		tInfo.m_uUncompressedLen = tReader.UnzipInt();
+		if ( tInfo.m_uFlags & FIELD_FLAG_COMPRESSED )
+			tInfo.m_uCompressedLen = tReader.UnzipInt();
+
+		if ( tInfo.m_uCompressedLen>tInfo.m_uUncompressedLen )
+			m_tReporter.Fail ( "Docstore block size mismatch: compressed=%u, uncompressed=%u in %s (offset " INT64_FMT ")", tInfo.m_uCompressedLen, tInfo.m_uUncompressedLen, m_szFilename, tBlock.m_tOffset );
+
+		if ( tReader.GetPos() > tReader.GetLength() )
+			m_tReporter.Fail ( "Out of bounds in docstore field data in %s (offset " INT64_FMT ")", m_szFilename, tBlock.m_tOffset );
+	}
+
+	SphOffset_t tOffset = tBlock.m_tOffset+tBlock.m_uHeaderSize;
+
+	for ( int i = 0; i < m_tFields.GetNumFields(); i++ )
+		CheckBigBlockField ( dFieldInfo[bNeedReorder ? dFieldSort[i] : i], tOffset );
+}
+
+
+void DocstoreChecker_c::CheckBlock ( const Docstore_c::Block_t & tBlock )
+{
+	if ( tBlock.m_eType==BLOCK_TYPE_SMALL )
+		CheckSmallBlock(tBlock);
+	else
+		CheckBigBlock(tBlock);
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 Docstore_i * CreateDocstore ( const CSphString & sFilename, CSphString & sError )
 {
 	CSphScopedPtr<Docstore_c> pDocstore ( new Docstore_c(sFilename) );
@@ -1780,4 +2090,11 @@ void ShutdownDocstore()
 {
 	BlockCache_c::Done();
 	DocstoreReaders_c::Done();
+}
+
+
+bool CheckDocstore ( CSphAutoreader & tReader, DebugCheckError_c & tReporter )
+{
+	DocstoreChecker_c tChecker ( tReader, tReporter );
+	return tChecker.Check();
 }

@@ -16,6 +16,7 @@
 
 #include "sphinxint.h"
 #include "sphinxjson.h"
+#include "indexcheck.h"
 
 //////////////////////////////////////////////////////////////////////////
 // blob attributes

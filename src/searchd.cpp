@@ -4050,7 +4050,7 @@ static CSphVector<const DocstoreReader_i*> GetUniqueDocstores ( const AggrResult
 }
 
 
-static void SetupPostlimitExprs ( AggrResult_t & tRes, CSphMatch & tMatch, const CSphColumnInfo * pCol, const CSphQuery & tQuery, int64_t iDocstoreSessionId )
+static void SetupPostlimitExprs ( AggrResult_t & tRes, CSphMatch & tMatch, const CSphColumnInfo * pCol, const char * sQuery, int64_t iDocstoreSessionId )
 {
 	DocstoreSession_c::Info_t tSessionInfo;
 	tSessionInfo.m_pDocstore = tRes.m_dTag2Docstore [ tMatch.m_iTag ].m_pDocstore;
@@ -4058,7 +4058,7 @@ static void SetupPostlimitExprs ( AggrResult_t & tRes, CSphMatch & tMatch, const
 
 	assert ( pCol && pCol->m_pExpr );
 	pCol->m_pExpr->Command ( SPH_EXPR_SET_DOCSTORE, &tSessionInfo );
-	pCol->m_pExpr->Command ( SPH_EXPR_SET_QUERY, (void*)&tQuery.m_sQuery);
+	pCol->m_pExpr->Command ( SPH_EXPR_SET_QUERY, (void *)sQuery);
 }
 
 
@@ -4079,14 +4079,14 @@ static void EvalPostlimitExprs ( AggrResult_t & tRes, CSphMatch & tMatch, const 
 struct PostLimitArgs_t
 {
 	const CSphVector<const CSphColumnInfo *> & m_dPostlimit;
-	const CSphQuery & m_tQuery;
+	const char * m_sQuery = nullptr;
 	int m_iFrom = 0;
 	int m_iTo = 0;
 	bool m_bMaster = false;
 
-	PostLimitArgs_t ( const CSphVector<const CSphColumnInfo *> & dPostlimit, const CSphQuery & tQuery )
+	PostLimitArgs_t ( const CSphVector<const CSphColumnInfo *> & dPostlimit, const char * sQuery )
 		: m_dPostlimit ( dPostlimit )
-		, m_tQuery ( tQuery )
+		, m_sQuery ( sQuery )
 	{}
 };
 
@@ -4119,7 +4119,7 @@ static void ProcessPostlimit ( const PostLimitArgs_t & tArgs, AggrResult_t & tRe
 		if ( tMatch.m_iTag!=iLastTag )
 		{
 			for ( const auto & pCol : tArgs.m_dPostlimit )
-				SetupPostlimitExprs ( tRes, tMatch, pCol, tArgs.m_tQuery, tSession.GetUID() );
+				SetupPostlimitExprs ( tRes, tMatch, pCol, tArgs.m_sQuery, tSession.GetUID() );
 
 			iLastTag = tMatch.m_iTag;
 		}
@@ -4129,14 +4129,35 @@ static void ProcessPostlimit ( const PostLimitArgs_t & tArgs, AggrResult_t & tRe
 	}
 }
 
+struct ProcessPostlimitArgs_t
+{
+	int		m_iOffset = 0;
+	int		m_iLimit = 0;
+	int		m_iOuterOffset = 0;
+	int		m_iOuterLimit = 0;
+	bool	m_bMaster = false;
 
-static void ProcessLocalPostlimit ( const CSphQuery & tQuery, bool bMaster, AggrResult_t & tRes )
+	const char * m_sQuery = nullptr;
+
+	ProcessPostlimitArgs_t ( const CSphQuery & tQuery, bool bMaster )
+	{
+		m_iOffset = tQuery.m_iOffset;
+		m_iLimit = tQuery.m_iLimit;
+		m_iOuterOffset = tQuery.m_iOuterOffset;
+		m_iOuterLimit = tQuery.m_iOuterLimit;
+		m_sQuery = tQuery.m_sQuery.cstr();
+
+		m_bMaster = bMaster;
+	}
+};
+
+static void ProcessLocalPostlimit ( const ProcessPostlimitArgs_t & tArgs, AggrResult_t & tRes )
 {
 	bool bGotPostlimit = false;
 	for ( int i=0; i<tRes.m_tSchema.GetAttrsCount() && !bGotPostlimit; i++ )
 	{
 		const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
-		bGotPostlimit = ( tCol.m_eStage==SPH_EVAL_POSTLIMIT && ( bMaster || tCol.m_uFieldFlags==CSphColumnInfo::FIELD_NONE ) );
+		bGotPostlimit = ( tCol.m_eStage==SPH_EVAL_POSTLIMIT && ( tArgs.m_bMaster || tCol.m_uFieldFlags==CSphColumnInfo::FIELD_NONE ) );
 	}
 
 	if ( !bGotPostlimit )
@@ -4152,13 +4173,13 @@ static void ProcessLocalPostlimit ( const CSphQuery & tQuery, bool bMaster, Aggr
 		assert ( iSetNext<=tRes.m_dMatches.GetLength() );
 
 		dPostlimit.Resize ( 0 );
-		ExtractPostlimit ( tRes.m_dSchemas[iSchema], bMaster, dPostlimit );
+		ExtractPostlimit ( tRes.m_dSchemas[iSchema], tArgs.m_bMaster, dPostlimit );
 		if ( dPostlimit.IsEmpty() )
 			continue;
 
 		int iTo = iSetCount;
-		int iOff = Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
-		int iCount = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
+		int iOff = Max ( tArgs.m_iOffset, tArgs.m_iOuterOffset );
+		int iCount = ( tArgs.m_iOuterLimit ? tArgs.m_iOuterLimit : tArgs.m_iLimit );
 		iTo = Max ( Min ( iOff + iCount, iTo ), 0 );
 		// we can't estimate limit.offset per result set
 		// as matches got merged and sort next step
@@ -4167,12 +4188,12 @@ static void ProcessLocalPostlimit ( const CSphQuery & tQuery, bool bMaster, Aggr
 		iFrom += iSetStart;
 		iTo += iSetStart;
 
-		PostLimitArgs_t tArgs ( dPostlimit, tQuery );
-		tArgs.m_iFrom = iFrom;
-		tArgs.m_iTo = iTo;
-		tArgs.m_bMaster = bMaster;
+		PostLimitArgs_t tProcessArgs ( dPostlimit, tArgs.m_sQuery );
+		tProcessArgs.m_iFrom = iFrom;
+		tProcessArgs.m_iTo = iTo;
+		tProcessArgs.m_bMaster = tArgs.m_bMaster;
 
-		ProcessPostlimit ( tArgs, tRes );
+		ProcessPostlimit ( tProcessArgs, tRes );
 	}
 }
 
@@ -4532,9 +4553,6 @@ static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, boo
 		// first, temporarily patch up sorting clause and max_matches (we will restore them later)
 		Swap ( tQueryCopy.m_sOuterOrderBy, tQueryCopy.m_sGroupBy.IsEmpty() ? tQueryCopy.m_sSortBy : tQueryCopy.m_sGroupSortBy );
 		Swap ( eQuerySort, tQueryCopy.m_eSort );
-		tQueryCopy.m_iMaxMatches *= tRes.m_dMatchCounts.GetLength();
-		// FIXME? probably not right; 20 shards with by 300 matches might be too much
-		// but propagating too small inner max_matches to the outer is not right either
 
 		// second, apply inner limit now, before (!) reordering
 		int iOut = 0;
@@ -4558,6 +4576,15 @@ static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, boo
 	// at this point, we do not need to compute anything; it all must be here
 	SphQueueSettings_t tQueueSettings ( tRes.m_tSchema );
 	tQueueSettings.m_pAggrFilter = pAggrFilter;
+
+	// FIXME? probably not right; 20 shards with by 300 matches might be too much
+	// but propagating too small inner max_matches to the outer is not right either
+	if ( tQueryCopy.m_bHasOuter )
+		tQueueSettings.m_iMaxMatches = Min ( tQuery.m_iMaxMatches * tRes.m_dMatchCounts.GetLength(), tRes.m_dMatches.GetLength() );
+	else
+		tQueueSettings.m_iMaxMatches = Min ( tQuery.m_iMaxMatches, tRes.m_dMatches.GetLength() );
+	tQueueSettings.m_iMaxMatches = Max ( tQueueSettings.m_iMaxMatches, 1 );
+
 	SphQueueRes_t tQueueRes;
 	CSphScopedPtr<ISphMatchSorter> pSorter  ( sphCreateQueue ( tQueueSettings, tQueryCopy,
 			tRes.m_sError, tQueueRes, nullptr ) );
@@ -4567,7 +4594,6 @@ static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, boo
 	{
 		Swap ( tQueryCopy.m_sOuterOrderBy, tQueryCopy.m_sGroupBy.IsEmpty() ? tQueryCopy.m_sSortBy : tQueryCopy.m_sGroupSortBy );
 		Swap ( eQuerySort, tQueryCopy.m_eSort );
-		tQueryCopy.m_iMaxMatches /= tRes.m_dMatchCounts.GetLength();
 	}
 
 	if ( !pSorter )
@@ -4602,7 +4628,8 @@ static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, boo
 		if ( bHaveLocals )
 		{
 			CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_EVAL_POST );
-			ProcessLocalPostlimit ( tQueryCopy, bMaster, tRes );
+			ProcessPostlimitArgs_t tProcessArgs ( tQueryCopy, bMaster );
+			ProcessLocalPostlimit ( tProcessArgs, tRes );
 		}
 
 		RemapResult ( &tRes.m_tSchema, &tRes );
@@ -4635,27 +4662,27 @@ static bool ApplyOuterOrder ( AggrResult_t & tRes, const CSphQuery & tQuery )
 }
 
 
-static void ComputePostlimit ( const CSphQuery & tQuery, bool bMaster, AggrResult_t & tRes )
+static void ComputePostlimit ( const ProcessPostlimitArgs_t & tArgs, AggrResult_t & tRes )
 {
 	CSphVector<const CSphColumnInfo *> dPostlimit;
-	ExtractPostlimit ( tRes.m_tSchema, bMaster, dPostlimit );
+	ExtractPostlimit ( tRes.m_tSchema, tArgs.m_bMaster, dPostlimit );
 
 	// post compute matches only between offset - limit
 	// however at agent we can't estimate limit.offset at master merged result set
 	// but master don't provide offset to agents only offset+limit as limit
 	// so computing all matches up to iiner.limit \ outer.limit
 	int iTo = tRes.m_dMatches.GetLength();
-	int iOff = Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
-	int iCount = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
+	int iOff = Max ( tArgs.m_iOffset, tArgs.m_iOuterOffset );
+	int iCount = ( tArgs.m_iOuterLimit ? tArgs.m_iOuterLimit : tArgs.m_iLimit );
 	iTo = Max ( Min ( iOff + iCount, iTo ), 0 );
 	int iFrom = Min ( iOff, iTo );
 
-	PostLimitArgs_t tArgs ( dPostlimit, tQuery );
-	tArgs.m_iFrom = iFrom;
-	tArgs.m_iTo = iTo;
-	tArgs.m_bMaster = bMaster;
+	PostLimitArgs_t tProcessArgs ( dPostlimit, tArgs.m_sQuery );
+	tProcessArgs.m_iFrom = iFrom;
+	tProcessArgs.m_iTo = iTo;
+	tProcessArgs.m_bMaster = tArgs.m_bMaster;
 
-	ProcessPostlimit ( tArgs, tRes );
+	ProcessPostlimit ( tProcessArgs, tRes );
 }
 
 
@@ -4742,7 +4769,8 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	if ( bAllEqual && bHaveLocals )
 	{
 		CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_EVAL_POST );
-		ComputePostlimit ( tQuery, bMaster, tRes );
+		ProcessPostlimitArgs_t tArgs ( tQuery, bMaster );
+		ComputePostlimit ( tArgs, tRes );
 	}
 	if ( bMaster && !dRemotes.IsEmpty() )
 	{
@@ -5524,6 +5552,18 @@ void SearchHandler_c::RunLocalSearchMT ( LocalSearch_t &dWork, ThreadLocal_t &tT
 		ppResults[i]->m_iCpuTime = iCpuTime;
 }
 
+static int GetMaxMatches ( int iQueryMaxMatches, const CSphIndex * pIndex )
+{
+	if ( iQueryMaxMatches>DEFAULT_MAX_MATCHES )
+	{
+		int64_t iDocs = Min ( (int)INT_MAX, pIndex->GetStats().m_iTotalDocuments ); // clamp to int max
+		return Min ( iQueryMaxMatches, Max ( iDocs, DEFAULT_MAX_MATCHES ) ); // do not want 0 sorter and sorter longer than query.max_matches
+	} else
+	{
+		return iQueryMaxMatches;
+	}
+}
+
 int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const
 {
 	int iValidSorters = 0;
@@ -5542,6 +5582,7 @@ int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphM
 			tQueueSettings.m_pCollection = m_pDelDocs;
 			tQueueSettings.m_pHook = &m_tHook;
 			StrVec_t * pExtra = ( dExtraSchemas.IsEmpty() ? nullptr : dExtraSchemas.begin() + iQuery - m_iStart );
+			tQueueSettings.m_iMaxMatches = GetMaxMatches ( tQuery.m_iMaxMatches, pIndex );
 
 			ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, dErrors[iQuery - m_iStart], tQueueRes, pExtra );
 			if ( !pSorter )
@@ -5559,6 +5600,7 @@ int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphM
 		tQueueSettings.m_pUpdate = m_pUpdates;
 		tQueueSettings.m_pCollection = m_pDelDocs;
 		tQueueSettings.m_pHook = &m_tHook;
+		tQueueSettings.m_iMaxMatches = GetMaxMatches ( m_dQueries[m_iStart].m_iMaxMatches, pIndex );
 
 		const VecTraits_T<CSphQuery> & dQueries = m_dQueries.Slice ( m_iStart );
 		sphCreateMultiQueue ( tQueueSettings, dQueries, dSorters, dErrors, tQueueRes, dExtraSchemas );
@@ -6919,7 +6961,8 @@ static const char * g_dSqlStmts[] =
 	"select_dual", "show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
 	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
-	"join_cluster", "cluster_create", "cluster_delete", "cluster_index_add", "cluster_index_delete", "cluster_update"
+	"join_cluster", "cluster_create", "cluster_delete", "cluster_index_add", "cluster_index_delete", "cluster_update",
+	"explain"
 };
 
 
@@ -14534,7 +14577,7 @@ class CSphQueryProfileMysql final : public CSphQueryProfile
 {
 public:
 	void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t& dZones ) final;
-	const char*	GetResultAsStr() const final;
+	const char *	GetResultAsStr() const final;
 
 	CSphQueryProfile * Clone () const final
 	{
@@ -14543,7 +14586,6 @@ public:
 
 private:
 	CSphString				m_sResult;
-	void					Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t& dZones, int iIdent );
 };
 
 
@@ -16241,6 +16283,45 @@ static void HandleMysqlReloadIndex ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 	tOut.Ok();
 }
 
+void HandleMysqlExplain ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+{
+	CSphString sProc ( tStmt.m_sCallProc );
+	CSphString sError;
+	if ( sProc.ToLower()!="query" )
+	{
+		sError.SetSprintf ( "no such explain procedure %s", tStmt.m_sCallProc.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	auto pIndex = GetServed ( tStmt.m_sIndex );
+	if ( !pIndex )
+	{
+		sError.SetSprintf ( "unknown local index '%s'", tStmt.m_sIndex.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	CSphString sRes;
+	ServedDescRPtr_c pServed ( pIndex );
+
+	if ( !pServed->m_pIndex->ExplainQuery ( tStmt.m_tQuery.m_sQuery, sRes, sError ) )
+	{
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	tOut.HeadBegin ( 2 );
+	tOut.HeadColumn ( "Variable" );
+	tOut.HeadColumn ( "Value" );
+	tOut.HeadEnd ();
+
+	tOut.PutString ( "transformed_tree" );
+	tOut.PutString ( sRes );
+	tOut.Commit();
+	tOut.Eof ();
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 CSphSessionAccum::~CSphSessionAccum()
@@ -16743,6 +16824,11 @@ public:
 				tOut.Error ( sQuery.cstr(), m_tLastMeta.m_sError.cstr() );
 			}
 			return true;
+
+		case STMT_EXPLAIN:
+			HandleMysqlExplain ( tOut, *pStmt );
+			return true;
+
 
 		default:
 			m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );

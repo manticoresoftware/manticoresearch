@@ -5727,7 +5727,7 @@ public:
 	void Command ( ESphExprCommand eCmd, void * pArg ) final
 	{
 		if ( eCmd==SPH_EXPR_SET_QUERY )
-			m_sQuery = *(CSphString*)pArg;
+			m_sQuery = (const char*)pArg;
 	}
 
 	bool IsDataPtrAttr() const final { return true; }

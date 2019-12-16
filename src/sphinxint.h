@@ -503,10 +503,15 @@ public:
 		return m_pData;
 	}
 
+	int GetLength() const
+	{
+		return m_iLen;
+	}
+
 protected:
-	const BYTE * m_pData = nullptr;
-	const int m_iLen = 0;
-	const BYTE * m_pCur = nullptr;
+	const BYTE *	m_pData = nullptr;
+	const int		m_iLen = 0;
+	const BYTE *	m_pCur = nullptr;
 };
 
 class MemoryWriter_c
@@ -609,23 +614,6 @@ namespace sph
 {
 	int rename ( const char * sOld, const char * sNew );
 }
-
-class DebugCheckReader_i
-{
-public:
-	virtual ~DebugCheckReader_i () {};
-	virtual int64_t GetLengthBytes () = 0;
-	virtual bool GetBytes ( void * pData, int iSize ) = 0;
-	virtual bool SeekTo ( int64_t iOff, int iHint ) = 0;
-};
-
-// common code for debug checks
-class DebugCheckHelper_c
-{
-protected:
-	void				DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, DebugCheckReader_i & tBlobs, int64_t nRows, int64_t iMinMaxBytes, const CSphSchema & tSchema, DebugCheckError_c & tReporter );
-	void				DebugCheck_DeadRowMap (  int64_t iSizeBytes, int64_t nRows, DebugCheckError_c & tReporter ) const;
-};
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -2515,6 +2503,31 @@ BYTE PrereadMapping ( const char * sIndexName, const char * sFor, bool bMlock, b
 		sphWarning ( "index '%s': %s for %s", sIndexName, sWarning.cstr(), sFor );
 	return g_uHash;
 }
+
+#if PARANOID
+
+#define SPH_VARINT_DECODE(_type,_getexpr) \
+	register DWORD b = 0; \
+	register _type v = 0; \
+	int it = 0; \
+	do { b = _getexpr; v = ( v<<7 ) + ( b&0x7f ); it++; } while ( b&0x80 ); \
+	assert ( (it-1)*7<=sizeof(_type)*8 ); \
+	return v;
+
+#else
+
+#define SPH_VARINT_DECODE(_type,_getexpr) \
+	register DWORD b = _getexpr; \
+	register _type res = 0; \
+	while ( b & 0x80 ) \
+	{ \
+		res = ( res<<7 ) + ( b & 0x7f ); \
+		b = _getexpr; \
+	} \
+	res = ( res<<7 ) + b; \
+	return res;
+
+#endif // PARANOID
 
 // crash related code
 struct CrashQuery_t

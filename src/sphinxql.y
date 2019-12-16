@@ -59,6 +59,7 @@
 %token	TOK_DIV
 %token	TOK_DOUBLE
 %token	TOK_DROP
+%token	TOK_EXPLAIN
 %token	TOK_FACET
 %token	TOK_FALSE
 %token	TOK_FLOAT
@@ -243,6 +244,7 @@ statement:
 	| join_cluster
 	| create_cluster
 	| delete_cluster
+	| explain_query
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -2003,6 +2005,17 @@ delete_cluster:
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_CLUSTER_DELETE;
 			pParser->ToString ( tStmt.m_sIndex, $3 );
+		}
+	;
+
+explain_query:
+	TOK_EXPLAIN ident ident TOK_QUOTED_STRING
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_EXPLAIN;
+			pParser->ToString ( tStmt.m_sCallProc, $2 );
+			pParser->ToString ( tStmt.m_sIndex, $3 );
+			pParser->m_pQuery->m_sQuery = pParser->ToStringUnescape ( $4 );
 		}
 	;
 

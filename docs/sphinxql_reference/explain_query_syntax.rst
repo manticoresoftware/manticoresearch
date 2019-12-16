@@ -8,8 +8,8 @@ EXPLAIN QUERY syntax
 
     EXPLAIN QUERY index query
 
-EXPLAIN QUERY statement displays the execution tree of the provided full-text query.
-This statements works for any kind of indexes such as template, plain, real-time, percolate.
+EXPLAIN QUERY displays execution tree of the provided full-text query.
+This statement works for any kind of indexes such as template, plain, real-time or percolate.
 
 .. code-block:: none
 
@@ -19,12 +19,12 @@ This statements works for any kind of indexes such as template, plain, real-time
     Variable: transformed_tree
        Value: AND(
       AND(KEYWORD(sally, querypos=1)),
-      AND(KEYWORD(and, querypos=2)),	  
+      AND(KEYWORD(and, querypos=2)),
       AND(KEYWORD(i, querypos=3)))
     1 row in set (0.00 sec)
 
-And here's a less trivial example that shows how the actually evaluated
-query tree can be rather different from the original one because transformations:
+Here's a less trivial example that shows how the evaluated query tree can be rather
+different from the original one because of transformations:
 
 .. code-block:: none
 
@@ -40,7 +40,8 @@ query tree can be rather different from the original one because transformations
     1 row in set (0.00 sec)
 
 
-It is good habit to create template index as base with all settings set 
-and inherit all other indexes from it like main, delta and other to eliminate multiple copies
-of the same settings at every index. This template index could be used in statements such as
-:ref:`call_snippets_syntax` :ref:`call_keywords_syntax` :ref:`explain_query_syntax` and so on.
+It is a good habit to create a template index as a base one with all needed settings set
+and inherit all other indexes from it, for example: main, delta and other to avoid
+config code duplication in every index. That template index can then be used in
+statements such as :ref:`explain_query_syntax`, :ref:`call_snippets_syntax`,
+:ref:`call_keywords_syntax` and others.

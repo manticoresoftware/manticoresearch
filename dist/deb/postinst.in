@@ -13,13 +13,19 @@ if ! getent passwd manticore >/dev/null; then
 fi
 DATADIR=@LOCALSTATEDIR@/lib/manticore
 LOGDIR=@LOCALSTATEDIR@/log/manticore
-SYSCONFDIR=@SYSCONFDIR@/sphinxsearch
+SYSCONFDIR=@SYSCONFDIR@/manticoresearch
 chown manticore:manticore $DATADIR -R
 chown manticore:manticore $LOGDIR -R
 chown manticore:manticore $SYSCONFDIR -R
 
 case "$1" in
-    configure|abort-upgrade|abort-remove|abort-deconfigure)
+    configure)
+        if [ -f @SYSCONFDIR@/sphinxsearch/sphinx.conf ]; then
+	        echo "Moving existing configuration to new location..."
+		    mv @SYSCONFDIR@/sphinxsearch/sphinx.conf @SYSCONFDIR@/manticoresearch/manticore.conf
+	    fi
+	;;
+	abort-upgrade|abort-remove|abort-deconfigure)
     ;;
 
     *)
@@ -28,33 +34,27 @@ case "$1" in
     ;;
 esac
 
-#add manticore init script to system start
 
-#update-rc.d manticore defaults
+echo "Manticore Search (https://manticoresearch.com)"
 echo ""
-echo "Manticore installed!"
+echo "Getting Started with Manticore Search:"
+echo "  https://docs.manticoresearch.com/latest/html/getting-started.html"
 echo ""
-echo "To manage indexes:"
-echo "    editor @SYSCONFDIR@/sphinxsearch/sphinx.conf"
+echo "Learn Manticore with interactive courses:"
+echo "  https://play.manticoresearch.com/"
 echo ""
-echo "To rebuild all disk indexes:"
-echo "    sudo -u manticore indexer --all --rotate"
-echo ""
-echo "To start/stop search daemon:"
+echo "To start Manticore Search service:"
 if [ -x "/usr/bin/deb-systemd-helper" ]; then
-echo "    systemctl start/stop manticore"
+echo "  > systemctl start/stop manticore"
 else
-echo "    service manticore start/stop"
+echo "  > service manticore start/stop"
 fi
-echo "To query search daemon using MySQL client:"
-echo "    mysql -h 0 -P 9306"
-echo "    mysql> SELECT * FROM test1 WHERE MATCH('test');"
 echo ""
-echo "See the manual at docs.manticoresearch.com for details."
+echo "Configuration file:"
+echo "  /etc/manticoresearch/manticore.conf"
 echo ""
-echo "For commercial support please contact Manticore Software Ltd at"
-echo "https://manticoresearch.com/contact/"
-echo ""
+
+
 #start manticore service
 
 #invoke-rc.d manticore start

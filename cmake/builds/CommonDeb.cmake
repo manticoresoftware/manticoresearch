@@ -26,22 +26,22 @@ if ( NOT CPACK_DEBIAN_PACKAGE_ARCHITECTURE )
 endif ()
 
 # block below used to patch the minconf and full conf for debian
-file ( READ "sphinx-min.conf.in" _MINCONF )
-file ( READ "sphinx.conf.in" _FULLCONF )
+file ( READ "manticore-min.conf.in" _MINCONF )
+file ( READ "manticore.conf.in" _FULLCONF )
 string ( REPLACE "@CONFDIR@/log/searchd.pid" "@RUNDIR@/searchd.pid" _MINCONF "${_MINCONF}" )
 string ( REPLACE "@CONFDIR@/log/searchd.pid" "@RUNDIR@/searchd.pid" _FULLCONF "${_FULLCONF}" )
 string ( REPLACE "@CONFDIR@/log" "@LOGDIR@" _FULLCONF "${_FULLCONF}" )
 string ( REPLACE "@CONFDIR@/log" "@LOGDIR@" _FULLCONF "${_FULLCONF}" )
-file ( WRITE "${MANTICORE_BINARY_DIR}/sphinx-min.conf.in" "${_MINCONF}" )
-file ( WRITE "${MANTICORE_BINARY_DIR}/sphinx.conf.in" "${_FULLCONF}" )
+file ( WRITE "${MANTICORE_BINARY_DIR}/manticore-min.conf.in" "${_MINCONF}" )
+file ( WRITE "${MANTICORE_BINARY_DIR}/manticore.conf.in" "${_FULLCONF}" )
 unset ( _MINCONF )
 unset ( _FULLCONF )
 
 set ( CONFDIR "${LOCALSTATEDIR}/lib/manticore" )
 set ( RUNDIR "${LOCALSTATEDIR}/run/manticore" )
 set ( LOGDIR "${LOCALSTATEDIR}/log/manticore" )
-configure_file ( "${MANTICORE_BINARY_DIR}/sphinx-min.conf.in" "${MANTICORE_BINARY_DIR}/sphinx-min.conf.dist" @ONLY )
-configure_file ( "${MANTICORE_BINARY_DIR}/sphinx.conf.in" "${MANTICORE_BINARY_DIR}/sphinx.conf.dist" @ONLY )
+configure_file ( "${MANTICORE_BINARY_DIR}/manticore-min.conf.in" "${MANTICORE_BINARY_DIR}/manticore-min.conf.dist" @ONLY )
+configure_file ( "${MANTICORE_BINARY_DIR}/manticore.conf.in" "${MANTICORE_BINARY_DIR}/manticore.conf.dist" @ONLY )
 
 
 string ( CONFIGURE "${POSTINST_SPECIFIC_IN}" POSTINST_SPECIFIC @ONLY )
@@ -67,8 +67,8 @@ set ( CPACK_COMPONENT_ADM_GROUP "bin" )
 set ( CPACK_COMPONENT_ADM_DISPLAY_NAME "Helper scripts" )
 
 # Copy a default configuration file
-INSTALL ( FILES ${MANTICORE_BINARY_DIR}/sphinx.conf.dist
-		DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/sphinxsearch COMPONENT doc RENAME sphinx.conf )
+INSTALL ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf.dist
+		DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT doc RENAME manticore.conf )
 
 install ( FILES doc/indexer.1 doc/indextool.1 doc/searchd.1 doc/spelldump.1 doc/wordbreaker.1
 		DESTINATION usr/${CMAKE_INSTALL_MANDIR}/man1 COMPONENT doc )
@@ -99,11 +99,7 @@ set ( CPACK_COMPONENT_BIN_DESCRIPTION "Fast standalone full-text SQL search engi
  size-efficient and relevant fulltext search functions to other applications.
  Sphinx was specially designed to integrate well with SQL databases and
  scripting languages. Currently built-in data sources support fetching data
- either via direct connection to MySQL or PostgreSQL, or using XML pipe
- mechanism (a pipe to indexer in special XML-based format which Sphinx
- recognizes).
- .
- Sphinx is an acronym which is officially decoded as SQL Phrase Index." )
+ from  MySQL, PostgreSQL, any database supporting ODBC, XML and CSV files. " )
  
  set  ( CPACK_COMPONENT_CONVERTER_DESCRIPTION "This package provides the index_converter tool for Manticore Search. index_converter upgrade indexes created with Manticore Search 2.x to Manticore Search 3.x format." )
 
@@ -122,6 +118,6 @@ set ( CPACK_DEBIAN_BIN_PACKAGE_CONTROL_EXTRA "${MANTICORE_BINARY_DIR}/conffiles;
 set ( CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION "ON" )
 set ( CPACK_DEBIAN_BIN_PACKAGE_REPLACES "sphinxsearch" )
 
-set ( CONFFILEDIR "${SYSCONFDIR}/sphinxsearch" )
+set ( CONFFILEDIR "${SYSCONFDIR}/manticoresearch" )
 
 #set ( CPACK_DEBIAN_PACKAGE_DEBUG "ON" )

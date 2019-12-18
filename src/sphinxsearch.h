@@ -79,7 +79,7 @@ public:
 	virtual ~ISphQword () {}
 
 	virtual RowID_t				AdvanceTo ( RowID_t tRowID );
-	virtual void				HintRowID ( RowID_t ) {}
+	virtual bool				HintRowID ( RowID_t ) { return false; }
 	virtual const CSphMatch &	GetNextDoc() = 0;
 	virtual void				SeekHitlist ( SphOffset_t uOff ) = 0;
 	virtual Hitpos_t			GetNextHit () = 0;

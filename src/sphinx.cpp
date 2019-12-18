@@ -631,19 +631,21 @@ public:
 
 	RowID_t AdvanceTo ( RowID_t tRowID ) final
 	{
-		HintRowID ( tRowID );
+		if ( m_tDoc.m_tRowID!=INVALID_ROWID && tRowID<=m_tDoc.m_tRowID )
+			return m_tDoc.m_tRowID;
 
-		do
-		{
+		bool bRewound = HintRowID (tRowID);
+		if ( bRewound || m_tDoc.m_tRowID==INVALID_ROWID )
 			ReadNext();
-		}
-		while ( m_tDoc.m_tRowID < tRowID );
+
+		while ( m_tDoc.m_tRowID < tRowID )
+			ReadNext();
 
 		return m_tDoc.m_tRowID;
 	}
 
 
-	void HintRowID ( RowID_t tRowID ) final
+	bool HintRowID ( RowID_t tRowID ) final
 	{
 		// tricky bit
 		// FindSpan() will match a block where tBaseRowIDPlus1[i] <= tRowID < tBaseRowIDPlus1[i+1]
@@ -656,7 +658,7 @@ public:
 		{
 			m_iSkipListBlock = FindSpan ( m_dSkiplist, tRowID );
 			if ( m_iSkipListBlock<0 )
-				return;
+				return false;
 		}
 		else
 		{
@@ -669,22 +671,24 @@ public:
 					auto dSkips = VecTraits_T<SkiplistEntry_t> ( &m_dSkiplist[iNextBlock], m_dSkiplist.GetLength()-iNextBlock );
 					m_iSkipListBlock = FindSpan ( dSkips, tRowID );
 					if ( m_iSkipListBlock<0 )
-						return;
+						return false;
 
 					m_iSkipListBlock += iNextBlock;
 				}
 			}
 			else // we're already at our last block, no need to search
-				return;
+				return false;
 		}
 
 		const SkiplistEntry_t & t = m_dSkiplist[m_iSkipListBlock];
 		if ( t.m_iOffset<=m_rdDoclist->GetPos() )
-			return;
+			return false;
 
 		m_rdDoclist->SeekTo ( t.m_iOffset, -1 );
 		m_tDoc.m_tRowID = t.m_tBaseRowIDPlus1-1;
 		m_uHitPosition = m_iHitlistPos = t.m_iBaseHitlistPos;
+
+		return true;
 	}
 
 	const CSphMatch & GetNextDoc() override

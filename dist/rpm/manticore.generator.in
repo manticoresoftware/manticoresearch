@@ -61,8 +61,8 @@ PermissionsStartOnly=true
 ExecStartPre=/usr/bin/install -omanticore -gmanticore -m755 -d /var/run/manticore
 # Run ExecStart with User=manticore / Group=manticore
 Environment=LD_PRELOAD=$JEMALLOC_LOCATION
-ExecStart=/usr/bin/searchd --config /etc/sphinx/sphinx.conf
-ExecStop=/usr/bin/searchd --config /etc/sphinx/sphinx.conf --stopwait
+ExecStart=/usr/bin/searchd --config /etc/manticoresearch/manticore.conf
+ExecStop=/usr/bin/searchd --config /etc/manticoresearch/manticore.conf --stopwait
 KillMode=process
 KillSignal=SIGTERM
 SendSIGKILL=no

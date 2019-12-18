@@ -589,6 +589,7 @@ if ( WIN32 )
 	install ( DIRECTORY api doc contrib DESTINATION ${SHAREDIR}/doc COMPONENT doc )
 	install ( FILES example.sql DESTINATION ${SHAREDIR}/doc COMPONENT doc )
 	install ( DIRECTORY misc/stopwords DESTINATION ${SHAREDIR} COMPONENT doc )
+	install ( FILES ${ICU_SRC}/source/data/in/icudt65l.dat DESTINATION  ${SHAREDIR}/icu COMPONENT doc)
 
 	install ( FILES COPYING INSTALL manticore.conf.in manticore-min.conf.in
 			DESTINATION . COMPONENT config )
@@ -612,6 +613,7 @@ IF (NOT DISTR_BUILD AND NOT WIN32 )
 	INSTALL ( FILES ${MANTICORE_BINARY_DIR}/manticore-min.conf.dist
                 DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT doc RENAME manticore.conf )
 	install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME} COMPONENT doc)
+	install ( FILES ${ICU_SRC}/source/data/in/icudt65l.dat DESTINATION ${CMAKE_INSTALL_FULL_DATADIR}/${PACKAGE_NAME}/icu COMPONENT doc)
 
 	install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore/data COMPONENT applications)
 	install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/run/manticore COMPONENT applications )

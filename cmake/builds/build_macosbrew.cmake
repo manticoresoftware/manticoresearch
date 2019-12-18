@@ -24,6 +24,7 @@ configure_file ( "${MANTICORE_BINARY_DIR}/manticore-min.conf.in" "${MANTICORE_BI
 INSTALL ( FILES ${MANTICORE_BINARY_DIR}/manticore-min.conf.dist
                 DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticore COMPONENT doc RENAME manticore.conf )
 install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME} COMPONENT doc)
+install ( FILES ${ICU_SRC}/source/data/in/icudt65l.dat DESTINATION ${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME}/icu COMPONENT doc)
 
 # data and log dirs are created by brew formula
 

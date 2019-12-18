@@ -54,6 +54,8 @@ endif()
 set ( CONFIG_OPTIONS "WITH_ODBC=1;WITH_RE2=1;WITH_STEMMER=1;WITH_PGSQL=${WITH_PGSQL};WITH_EXPAT=1;USE_SSL=1" )
 set ( CTEST_BINARY_DIRECTORY "build" )
 
+LIST ( APPEND CONFIG_OPTIONS "CMAKE_INSTALL_DATADIR=${CTEST_SOURCE_DIRECTORY}/build/installdir" )
+
 if ( CTEST_BUILD_CONFIGURATION STREQUAL Debug )
 	# configure coverage
 	set ( WITH_COVERAGE TRUE )
@@ -114,8 +116,14 @@ ctest_configure ()
 if ( WIN_TEST_CI )
 	ctest_build ()
 else ( WIN_TEST_CI )
-	ctest_build ( FLAGS -j5 )
+	ctest_build ( FLAGS "-j5 install" )
 endif ()
+
+# create installdir for ICU data
+file ( MAKE_DIRECTORY "build/installdir" )
+file ( MAKE_DIRECTORY "build/installdir/icu" )
+file ( COPY "build/icu/source/data/in/" DESTINATION "build/installdir/icu/" FILES_MATCHING PATTERN "*.dat" )
+
 if ( COPY_DLL )
 	MESSAGE ( STATUS "copy dll from ${COPY_DLL} to build/src/Debug" )
 	file ( COPY "${COPY_DLL}/" DESTINATION "build/src/Debug/" FILES_MATCHING PATTERN "*.dll" )

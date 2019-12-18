@@ -891,7 +891,7 @@ static KeyDesc_t g_dKeysCommon[] =
 	{ "json_autoconv_keynames",	0, NULL },
 	{ "rlp_root",				KEY_REMOVED, NULL },
 	{ "rlp_environment",		KEY_REMOVED, NULL },
-	{ "icu_data_dir",			0, NULL },
+	{ "icu_data_dir",			KEY_REMOVED, NULL },
 	{ "rlp_max_batch_size",		KEY_REMOVED, NULL },
 	{ "rlp_max_batch_docs",		KEY_REMOVED, NULL },
 	{ "plugin_dir",				0, NULL },
@@ -3537,7 +3537,6 @@ void sphConfigureCommon ( const CSphConfig & hConf )
 
 	CSphConfigSection & hCommon = hConf["common"]["common"];
 	g_sLemmatizerBase = hCommon.GetStr ( "lemmatizer_base" );
-	sphConfigureICU ( hCommon );
 
 	bool bJsonStrict = false;
 	bool bJsonAutoconvNumbers;

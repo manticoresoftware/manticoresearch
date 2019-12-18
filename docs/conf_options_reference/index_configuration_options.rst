@@ -2065,9 +2065,6 @@ other morphology processors specified in the "morphology" option are applied. Wh
 are processed by ICU, only those parts of texts that contain Chinese are passed to
 ICU for segmentation, others can be modified by other means (different morphologies, charset_table etc.)
 
-See also
-:ref:`icu_data_dir`
-
 Additional stemmers provided by
 `Snowball <http://snowball.tartarus.org/>`__ project
 `libstemmer <http://snowball.tartarus.org/dist/libstemmer_c.tgz>`__

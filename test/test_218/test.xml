@@ -107,11 +107,6 @@ index test3 : base
 	rt_attr_string	= title
 	rt_attr_uint	= tag
 }
-
-common
-{
-	icu_data_dir = <local>icu_data_dir</local>
-}
 </config>
 
 <db_create>

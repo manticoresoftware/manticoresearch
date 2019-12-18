@@ -56,11 +56,6 @@ index rt
 	rt_field = text
 	rt_attr_uint = gid
 }
-
-common
-{
-	icu_data_dir = <local>icu_data_dir</local>
-}
 </config>
 
 <db_create>

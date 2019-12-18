@@ -1184,14 +1184,10 @@ class SphinxConfig
 
 	function GetLocal ( $key )
 	{
-		global $g_locals, $g_shared_icu;
+		global $g_locals;
 		
 		if ( !array_key_exists ( $key, $g_locals ) )
 		{
-			// don't need 'icu_data_dir' when icu is built from package
-			if ( $key=='icu_data_dir' && $g_shared_icu )
-				return '';
-
 			printf ( "FATAL: unbound local variable '%s' (go add it at ~/.sphinx).\n", $key );
 			exit ( 1 );
 		}
@@ -3582,7 +3578,7 @@ function CopyDirContents ( $from, $to )
 
 function CheckConfig ( $config, $path )
 {
-	global $g_re2, $g_icu, $g_shared_icu, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli, $g_ssl;
+	global $g_re2, $g_icu, $g_odbc, $windows, $g_locals, $mysql_simulated, $g_repli, $g_ssl;
 	
 	if ( $config->Requires("non-windows") && $windows )
 	{
@@ -3611,12 +3607,6 @@ function CheckConfig ( $config, $path )
 	if ( $config->Requires("icu") && !$g_icu )
 	{
 		printf ( "SKIPPING %s, %s - compile with ICU support to run this test\n", $path, $config->Name () );
-		return false;
-	}
-
-	if ( $config->Requires("icu") && !$g_shared_icu && !isset($g_locals["icu_data_dir"]) )
-	{
-		printf ( "SKIPPING %s, %s - icu_data_dir required, add it to your ~/.sphinx\n", $path, $config->Name () );
 		return false;
 	}
 

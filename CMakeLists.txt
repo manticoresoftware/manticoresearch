@@ -590,7 +590,7 @@ if ( WIN32 )
 	install ( FILES example.sql DESTINATION ${SHAREDIR}/doc COMPONENT doc )
 	install ( DIRECTORY misc/stopwords DESTINATION ${SHAREDIR} COMPONENT doc )
 
-	install ( FILES COPYING INSTALL sphinx.conf.in sphinx-min.conf.in
+	install ( FILES COPYING INSTALL manticore.conf.in manticore-min.conf.in
 			DESTINATION . COMPONENT config )
 	install ( DIRECTORY DESTINATION log COMPONENT config )
 	install ( DIRECTORY DESTINATION data COMPONENT config )
@@ -598,19 +598,19 @@ endif ()
 
 IF (NOT DISTR_BUILD AND NOT WIN32 )
 	SET ( BINPREFIX "usr/" )
-	file ( READ "sphinx-min.conf.in" _MINCONF )
+	file ( READ "manticore-min.conf.in" _MINCONF )
 	string ( REPLACE "@CONFDIR@/log/searchd.pid" "@RUNDIR@/searchd.pid" _MINCONF "${_MINCONF}" )
 	string ( REPLACE "@CONFDIR@/log" "@LOGDIR@" _MINCONF "${_MINCONF}" )
-	file ( WRITE "${MANTICORE_BINARY_DIR}/sphinx-min.conf.in" "${_MINCONF}" )
+	file ( WRITE "${MANTICORE_BINARY_DIR}/manticore-min.conf.in" "${_MINCONF}" )
 	unset ( _MINCONF )
 	set ( CONFDIR "${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore" )
 	set ( RUNDIR "${CMAKE_INSTALL_LOCALSTATEDIR}/run/manticore" )
 	set ( LOGDIR "${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore" )
-	configure_file ( "sphinx.conf.in" "${MANTICORE_BINARY_DIR}/sphinx.conf" @ONLY )
+	configure_file ( "manticore.conf.in" "${MANTICORE_BINARY_DIR}/manticore.conf" @ONLY )
 
-	configure_file ( "${MANTICORE_BINARY_DIR}/sphinx-min.conf.in" "${MANTICORE_BINARY_DIR}/sphinx-min.conf.dist" @ONLY )
-	INSTALL ( FILES ${MANTICORE_BINARY_DIR}/sphinx-min.conf.dist
-                DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/sphinxsearch COMPONENT doc RENAME sphinx.conf )
+	configure_file ( "${MANTICORE_BINARY_DIR}/manticore-min.conf.in" "${MANTICORE_BINARY_DIR}/manticore-min.conf.dist" @ONLY )
+	INSTALL ( FILES ${MANTICORE_BINARY_DIR}/manticore-min.conf.dist
+                DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT doc RENAME manticore.conf )
 	install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME} COMPONENT doc)
 
 	install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore/data COMPONENT applications)

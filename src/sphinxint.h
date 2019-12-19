@@ -2342,7 +2342,7 @@ uint64_t sphCalcExprDepHash ( const char * szTag, ISphExpr * pExpr, const ISphSc
 uint64_t sphCalcExprDepHash ( ISphExpr * pExpr, const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable );
 
 void sphFixupLocator ( CSphAttrLocator & tLocator, const ISphSchema * pOldSchema, const ISphSchema * pNewSchema );
-ISphSchema * sphCreateStandaloneSchema ( const ISphSchema * pSchema );
+ISphSchema * sphCreateStandaloneSchema ( const ISphSchema * pSchema, const VecTraits_T<CSphString> & dTransformed );
 
 // internals attributes are last no need to send them
 void sphGetAttrsToSend ( const ISphSchema & tSchema, bool bAgentMode, bool bNeedId, CSphBitvec & tAttrs );

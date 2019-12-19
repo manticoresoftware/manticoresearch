@@ -5684,7 +5684,7 @@ static void TransformSorterSchema ( ISphMatchSorter * pSorter, const SphChunkGua
 	assert ( pSorter );
 
 	const ISphSchema * pOldSchema = pSorter->GetSchema();
-	ISphSchema * pNewSchema =  sphCreateStandaloneSchema ( pOldSchema );
+	ISphSchema * pNewSchema =  sphCreateStandaloneSchema ( pOldSchema, pSorter->GetFilteredAttrs() );
 	assert ( pOldSchema && pNewSchema );
 
 	RTMatchesToNewSchema_c fnFinal ( pOldSchema, pNewSchema, tGuard, dDiskBlobPools );

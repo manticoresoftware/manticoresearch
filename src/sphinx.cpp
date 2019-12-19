@@ -8607,7 +8607,7 @@ private:
 };
 
 //////////////////////////////////////////////////////////////////////////
-ISphSchema * sphCreateStandaloneSchema ( const ISphSchema * pSchema )
+ISphSchema * sphCreateStandaloneSchema ( const ISphSchema * pSchema, const VecTraits_T<CSphString> & dTransformed )
 {
 	assert ( pSchema );
 
@@ -8615,15 +8615,35 @@ ISphSchema * sphCreateStandaloneSchema ( const ISphSchema * pSchema )
 	for ( int i = 0; i < pSchema->GetFieldsCount(); i++ )
 		pResult->AddField ( pSchema->GetField(i) );
 
-	for ( int i = 0; i < pSchema->GetAttrsCount(); i++ )
+	if ( dTransformed.GetLength() )
 	{
-		CSphColumnInfo tAttr = pSchema->GetAttr(i);
-		tAttr.m_eAttrType = sphPlainAttrToPtrAttr ( tAttr.m_eAttrType );
-		tAttr.m_tLocator.m_iBitOffset = -1;
-		tAttr.m_tLocator.m_iBitCount = -1;
-		tAttr.m_tLocator.m_iBlobAttrId = -1;
-		tAttr.m_tLocator.m_nBlobAttrs = 0;
-		pResult->AddAttr ( tAttr, true );
+		for ( const CSphString & sName : dTransformed )
+		{
+			const CSphColumnInfo * pAttr = pSchema->GetAttr ( sName.cstr() );
+			if ( !pAttr )
+				continue;
+
+			CSphColumnInfo tAttr = *pAttr;
+			tAttr.m_eAttrType = sphPlainAttrToPtrAttr ( tAttr.m_eAttrType );
+			tAttr.m_tLocator.m_iBitOffset = -1;
+			tAttr.m_tLocator.m_iBitCount = -1;
+			tAttr.m_tLocator.m_iBlobAttrId = -1;
+			tAttr.m_tLocator.m_nBlobAttrs = 0;
+			pResult->AddAttr ( tAttr, true );
+		}
+	} else
+	{
+		// no need to filter schema attributes for query with star \ select all items
+		for ( int i = 0; i < pSchema->GetAttrsCount(); i++ )
+		{
+			CSphColumnInfo tAttr = pSchema->GetAttr(i);
+			tAttr.m_eAttrType = sphPlainAttrToPtrAttr ( tAttr.m_eAttrType );
+			tAttr.m_tLocator.m_iBitOffset = -1;
+			tAttr.m_tLocator.m_iBitCount = -1;
+			tAttr.m_tLocator.m_iBlobAttrId = -1;
+			tAttr.m_tLocator.m_nBlobAttrs = 0;
+			pResult->AddAttr ( tAttr, true );
+		}
 	}
 
 	for ( int i = 0; i < pResult->GetAttrsCount(); i++ )
@@ -8649,7 +8669,7 @@ static void PooledAttrsToPtrAttrs ( ISphMatchSorter ** ppSorters, int nSorters, 
 			continue;
 
 		const ISphSchema * pOldSchema = pSorter->GetSchema();
-		ISphSchema * pNewSchema =  sphCreateStandaloneSchema ( pOldSchema );
+		ISphSchema * pNewSchema =  sphCreateStandaloneSchema ( pOldSchema, pSorter->GetFilteredAttrs() );
 		assert ( pOldSchema && pNewSchema );
 
 		DiskMatchesToNewSchema_c fnFinal ( pOldSchema, pNewSchema, pBlobPool );
@@ -12984,14 +13004,9 @@ void CSphMatchComparatorState::FixupLocators ( const ISphSchema * pOldSchema, co
 {
 	for ( int i = 0; i < CSphMatchComparatorState::MAX_ATTRS; i++ )
 	{
+		sphFixupLocator ( m_tLocator[i], pOldSchema, pNewSchema );
 		if ( m_eKeypart[i]==SPH_KEYPART_DOCID_S || m_eKeypart[i]==SPH_KEYPART_DOCID_D )
-		{
-			const CSphColumnInfo * pAttrInNewSchema = pNewSchema->GetAttr ( sphGetDocidName() );
-			assert ( pAttrInNewSchema && pAttrInNewSchema->m_tLocator.m_iBitOffset==0 );
-			m_eKeypart[i] = pAttrInNewSchema->m_tLocator.m_bDynamic ? SPH_KEYPART_DOCID_D : SPH_KEYPART_DOCID_S;
-		}
-		else
-			sphFixupLocator ( m_tLocator[i], pOldSchema, pNewSchema );
+			m_eKeypart[i] = ( m_tLocator[i].m_bDynamic ? SPH_KEYPART_DOCID_D : SPH_KEYPART_DOCID_S );
 
 		// update string keypart into str_ptr
 		if ( bRemapKeyparts && m_eKeypart[i]==SPH_KEYPART_STRING )

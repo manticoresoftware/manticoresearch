@@ -2979,6 +2979,7 @@ public:
 protected:
 	ISphSchema *		m_pSchema { nullptr };	///< sorter schema (adds dynamic attributes on top of index schema)
 	CSphMatchComparatorState	m_tState;		///< protected to set m_iNow automatically on SetState() calls
+	CSphVector<CSphString> m_dTransormed;
 
 public:
 	/// ctor
@@ -3036,6 +3037,10 @@ public:
 
 	/// get a pointer to the worst element, NULL if there is no fixed location
 	virtual const CSphMatch *	GetWorst() const { return NULL; }
+
+	// set attributes list these should copied into result set \ final matches
+	void							SetFilteredAttrs ( const SmallStringHash_T<bool> & hAttrs );
+	const VecTraits_T<CSphString> &	GetFilteredAttrs() const { return m_dTransormed; }
 };
 
 struct CmpPSortersByRandom_fn

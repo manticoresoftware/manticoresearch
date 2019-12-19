@@ -2141,8 +2141,8 @@ void ExtTermHitless_T<USE_BM25>::CollectHits ( const ExtDoc_t * pMatched )
 	if ( !pMatched )
 		return;
 
-	m_dStoredHits.Add().m_tRowID = INVALID_ROWID;
-	StoredHit_t * pStoredHit = m_dStoredHits.Begin();
+	this->m_dStoredHits.Add().m_tRowID = INVALID_ROWID;
+	typename ExtTerm_T<USE_BM25>::StoredHit_t * pStoredHit = this->m_dStoredHits.Begin();
 
 	for ( ; HasDocs(pMatched); pMatched++ )
 	{
@@ -2176,17 +2176,17 @@ void ExtTermHitless_T<USE_BM25>::CollectHits ( const ExtDoc_t * pMatched )
 			}
 	}
 
-	int nHits = m_dHits.GetLength();
-	if ( m_pStats )
-		m_pStats->m_iFetchedHits += nHits;
+	int nHits = this->m_dHits.GetLength();
+	if ( this->m_pStats )
+		this->m_pStats->m_iFetchedHits += nHits;
 
-	if ( m_pNanoBudget )
-		*m_pNanoBudget -= g_iPredictorCostHit*nHits;
+	if ( this->m_pNanoBudget )
+		*(this->m_pNanoBudget) -= g_iPredictorCostHit*nHits;
 
 	// same logic as in ExtTerm_T::CollectHits
-	int nProcessed = pStoredHit-m_dStoredHits.Begin();
-	m_dStoredHits.Pop();	// end marker
-	m_dStoredHits.Remove ( 0, nProcessed );
+	int nProcessed = pStoredHit-this->m_dStoredHits.Begin();
+	this->m_dStoredHits.Pop();	// end marker
+	this->m_dStoredHits.Remove ( 0, nProcessed );
 }
 
 //////////////////////////////////////////////////////////////////////////

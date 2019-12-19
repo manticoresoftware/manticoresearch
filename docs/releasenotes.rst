@@ -1,6 +1,49 @@
 Release notes
 =============
 
+Version 3.2.2, 19 December 2019
+-------------------------------
+
+Features
+~~~~~~~~
+
+* Autoincrement ID for RT indexes
+* Highlight support for docstore via new HIGHLIGHT() function, available also in HTTP API
+* SNIPPET() can use special function QUERY() which returns current MATCH query
+* new field_separator option for highlighting functions.
+
+Improvements and changes
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+* lazy fetch of stored fields for remote nodes (can significantly increase performance)
+* strings and expressions don't break anymore multi-query and FACET optimizations
+* RHEL/CentOS 8 build now uses mysql libclient from mariadb-connector-c-devel
+* ICU data file is now shipped with the packages, icu_data_dir removed 
+* systemd service files include 'Restart=on-failure' policy
+* indextool can now check real-time indexes online
+
+Bugfixes
+~~~~~~~~
+
+* `6ae474c7894a6bee222d5b18e59a44fdbf57843a <https://github.com/manticoresoftware/manticoresearch/commit/6ae474c7894a6bee222d5b18e59a44fdbf57843a>`__ fix crash on SELECT query over HTTP interface
+* `59577513a49eac5a4a3c5e2cb38394d3246b5d35 <https://github.com/manticoresoftware/manticoresearch/commit/59577513a49eac5a4a3c5e2cb38394d3246b5d35>`__ fix RT index saves disk chunks but does not mark some documents deleted
+* `e861f0fca0e88924450695d4e9d6acff7a36558a <https://github.com/manticoresoftware/manticoresearch/commit/e861f0fca0e88924450695d4e9d6acff7a36558a>`__ fix crash on search of multi index or multi queries with dist_threads 
+* `440991fc977b8479800b45cdbc862eeb1ba5d965 <https://github.com/manticoresoftware/manticoresearch/commit/440991fc977b8479800b45cdbc862eeb1ba5d965>`__ fix crash on infix generation for long terms with wide utf8 codepoints
+* `5fd599b48bba527c023e6aa0b262dca51ffb8a1c <https://github.com/manticoresoftware/manticoresearch/commit/5fd599b48bba527c023e6aa0b262dca51ffb8a1c>`__ fix race at adding socket to IOCP
+* `cf10d7d3589f77adfaefbe52a51777bc9c67cf99 <https://github.com/manticoresoftware/manticoresearch/commit/cf10d7d3589f77adfaefbe52a51777bc9c67cf99>`__ fix issue of bool queries vs json select list
+* `996de77f4c3ec103d965e28c36098fd07dba50c4 <https://github.com/manticoresoftware/manticoresearch/commit/996de77f4c3ec103d965e28c36098fd07dba50c4>`__ fix indextool check to report wrong skiplist offset, check of doc2row lookup
+* `6e3fc9e88941c9427410f9d0adeebb7dd09a900f <https://github.com/manticoresoftware/manticoresearch/commit/6e3fc9e88941c9427410f9d0adeebb7dd09a900f>`__ fix indexer produces bad index with negative skiplist offset on large data
+* `faed3220b423a96401982bf47117edf1f62c584e <https://github.com/manticoresoftware/manticoresearch/commit/faed3220b423a96401982bf47117edf1f62c584e>`__ fix JSON converts only numeric to string and JSON string to numeric conversion at expressions
+* `533197200249d648ebcbdaca5d605861ee566348 <https://github.com/manticoresoftware/manticoresearch/commit/533197200249d648ebcbdaca5d605861ee566348>`__ fix indextool exit with error code in case multiple commands set at command line
+* `795520ac351d22e4497ebaf6c249bf25081842b6 <https://github.com/manticoresoftware/manticoresearch/commit/795520ac351d22e4497ebaf6c249bf25081842b6>`__ fix #275 binlog invalid state on error no space left on disk
+* `2284da5e3ff77bf7be4038a4d950c0580e4159c8 <https://github.com/manticoresoftware/manticoresearch/commit/2284da5e3ff77bf7be4038a4d950c0580e4159c8>`__ fix #279 crash on IN filter to JSON attribute
+* `ce2e4b4765111a7d331ffc256911f12770a8942d <https://github.com/manticoresoftware/manticoresearch/commit/ce2e4b4765111a7d331ffc256911f12770a8942d>`__ fix #281 wrong pipe closing call
+* `535589ba8a37baf5c6056afb5ff969fd70476feb <https://github.com/manticoresoftware/manticoresearch/commit/535589ba8a37baf5c6056afb5ff969fd70476feb>`__ fix daemon hung at CALL PQ with recursive JSON attribute encoded as string
+* `a5fc8a36e1644ee051632408ab8b53e79aeb9ff4 <https://github.com/manticoresoftware/manticoresearch/commit/a5fc8a36e1644ee051632408ab8b53e79aeb9ff4>`__ fix advancing beyond the end of the doclist in multiand node
+* `a3628617ef4ee89a811d4ba2c4a04cbbc298c1b5 <https://github.com/manticoresoftware/manticoresearch/commit/a3628617ef4ee89a811d4ba2c4a04cbbc298c1b5>`__ fix retrieving of thread public info
+* `f8d2d7bbbb90af3d2ee97424f97b05927f09d42b <https://github.com/manticoresoftware/manticoresearch/commit/f8d2d7bbbb90af3d2ee97424f97b05927f09d42b>`__ fix docstore cache locks
+
+
 Version 3.2.0, 17 October 2019
 ------------------------------
 

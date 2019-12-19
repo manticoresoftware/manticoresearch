@@ -2141,24 +2141,22 @@ void ExtTermHitless_T<USE_BM25>::CollectHits ( const ExtDoc_t * pMatched )
 	if ( !pMatched )
 		return;
 
-	ExtDoc_t * pDoc = this->m_dDocs;
+	m_dStoredHits.Add().m_tRowID = INVALID_ROWID;
+	StoredHit_t * pStoredHit = m_dStoredHits.Begin();
 
 	for ( ; HasDocs(pMatched); pMatched++ )
 	{
-		while ( pDoc->m_tRowID < pMatched->m_tRowID )
-			pDoc++;
+		while ( pStoredHit->m_tRowID < pMatched->m_tRowID )
+			pStoredHit++;
 
-		if ( !HasDocs(pDoc) )
-			break;
-
-		if ( pDoc->m_tRowID!=pMatched->m_tRowID )
+		if ( pStoredHit->m_tRowID!=pMatched->m_tRowID )
 			continue;
 
 		DWORD uMaxFields = SPH_MAX_FIELDS;
 		if ( !this->m_bHasWideFields )
 		{
 			uMaxFields = 0;
-			DWORD uFields = pDoc->m_uDocFields;
+			DWORD uFields = pMatched->m_uDocFields;
 			while ( uFields ) // count up to highest bit, max value is 32
 			{
 				uFields >>= 1;
@@ -2167,18 +2165,28 @@ void ExtTermHitless_T<USE_BM25>::CollectHits ( const ExtDoc_t * pMatched )
 		}
 
 		for ( DWORD uFieldPos=0; uFieldPos<uMaxFields; uFieldPos++ )
-			if ( ( pDoc->m_uDocFields & ( 1 << uFieldPos ) ) && this->m_dQueriedFields.Test ( uFieldPos ) )
+			if ( ( pMatched->m_uDocFields & ( 1 << uFieldPos ) ) && this->m_dQueriedFields.Test ( uFieldPos ) )
 			{
 				// emit hit
 				ExtHit_t & tHit = this->m_dHits.Add();
-				tHit.m_tRowID = pDoc->m_tRowID;
+				tHit.m_tRowID = pMatched->m_tRowID;
 				tHit.m_uHitpos = HITMAN::Create ( uFieldPos, -1 );
 				tHit.m_uQuerypos = (WORD) (this->m_iAtomPos);
 				tHit.m_uWeight = tHit.m_uMatchlen = tHit.m_uSpanlen = 1;
 			}
-
-		pDoc++;
 	}
+
+	int nHits = m_dHits.GetLength();
+	if ( m_pStats )
+		m_pStats->m_iFetchedHits += nHits;
+
+	if ( m_pNanoBudget )
+		*m_pNanoBudget -= g_iPredictorCostHit*nHits;
+
+	// same logic as in ExtTerm_T::CollectHits
+	int nProcessed = pStoredHit-m_dStoredHits.Begin();
+	m_dStoredHits.Pop();	// end marker
+	m_dStoredHits.Remove ( 0, nProcessed );
 }
 
 //////////////////////////////////////////////////////////////////////////

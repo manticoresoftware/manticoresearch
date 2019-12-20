@@ -25,7 +25,7 @@ or
 
 depending on the distribution used.
 
-At this point you can start using Manticore Search. The configuration file is located at ``/etc/sphinx/sphinx.conf`` (RHEL/CentOS) or ``/etc/sphinxsearch/sphinx.conf`` (Debian/Ubuntu).  The default configuration comes with an empty RT index ready to be used and a sample plain index and interfaces SphinxQL on port 9306 and native API on port 9312.
+At this point you can start using Manticore Search. The configuration file is located at ``/etc/manticoresearch/manticore.conf``.  The default configuration comes with an empty RT index ready to be used and a sample plain index and interfaces SphinxQL on port 9306 and native API on port 9312.
 
 You can also compile Manticore Search from `sources <https://github.com/manticoresoftware/manticore>`__. `Compilation <http://docs.manticoresearch.com/latest/html/installation.html#compiling-manticore-from-source>`__ is easy and uses cmake and you can also create packages for your operating system. 
 
@@ -172,7 +172,7 @@ We also added a `SHOW META  <http://docs.manticoresearch.com/latest/html/sphinxq
 SHOW META returns information about previous executed query, that is number of found records (in total_found), execution time (in time) and statistics about the keywords of the search.
 
 
-To create a new RT index, you need to define it in the sphinx.conf. A simple definition looks like:
+To create a new RT index, you need to define it in the manticore.conf. A simple definition looks like:
 
 .. code-block:: none
 
@@ -192,7 +192,7 @@ Using plain indexes
 ~~~~~~~~~~~~~~~~~~~
 
 Unlike RT, the plain index requires setting up the source and run the indexing process which gathers the data.
-For this we need to edit the sphinx.conf configuration file. The initial configuration comes with a sample plain index along with a source.
+For this we need to edit the manticore.conf configuration file. The initial configuration comes with a sample plain index along with a source.
 For simplicity we use a MySQL source.
 
 First, the database credentials need to be adjusted in the source configuration:
@@ -266,7 +266,7 @@ Once we have this setup, we can run the indexing process:
 .. code-block:: none
 
    $ sudo -u manticore  indexer test1  --rotate
-   using config file '/etc/sphinxsearch/sphinx.conf'...
+   using config file '/etc/sphinxsearch/manticore.conf'...
    indexing index 'test1'...
    collected 4 docs, 0.0 MB
    sorted 0.0 Mhits, 100.0% done

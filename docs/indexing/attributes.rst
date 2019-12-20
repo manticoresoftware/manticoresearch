@@ -46,10 +46,10 @@ title and content, that are full-text fields) as attributes, indexing
 them, and then using API calls to setup filtering, sorting, and
 grouping. Here as an example.
 
-.. _Example sphinx.conf part:
+.. _Example manticore.conf part:
 
-Example sphinx.conf part:
-~~~~~~~~~~~~~~~~~~~~~~~~~
+Example manticore.conf part:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: none
 

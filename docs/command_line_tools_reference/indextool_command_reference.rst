@@ -48,7 +48,7 @@ The commands are as follows:
    particular the entire attribute and field list.
 
 -  ``--dumpconfig FILENAME.sph`` dumps the index definition from the
-   given index header file in (almost) compliant ``sphinx.conf`` file
+   given index header file in (almost) compliant ``manticore.conf`` file
    format.
 
 -  ``--dumpheader INDEXNAME`` dumps index header by index name with
@@ -74,7 +74,7 @@ The commands are as follows:
 
 -  ``--htmlstrip INDEXNAME`` filters stdin using HTML stripper settings
    for a given index, and prints the filtering results to stdout. Note
-   that the settings will be taken from sphinx.conf, and not the index
+   that the settings will be taken from manticore.conf, and not the index
    header.
 
 -  ``--mergeidf NODE1.idf [NODE2.idf ...] --out GLOBAL.idf`` merge several .idf files into a single one.

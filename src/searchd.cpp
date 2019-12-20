@@ -19217,7 +19217,7 @@ void ShowHelp ()
 		"-h, --help\t\tdisplay this help message\n"
 		"-v\t\t\tdisplay version information\n"
 		"-c, --config <file>\tread configuration from specified file\n"
-		"\t\t\t(default is sphinx.conf)\n"
+		"\t\t\t(default is manticore.conf)\n"
 		"--stop\t\t\tsend SIGTERM to currently running searchd\n"
 		"--stopwait\t\tsend SIGTERM and wait until actual exit\n"
 		"--status\t\tget ant print status variables\n"
@@ -19253,9 +19253,9 @@ void ShowHelp ()
 		"--coredump\t\tsave core dump file on crash\n"
 		"\n"
 		"Examples:\n"
-		"searchd --config /usr/local/sphinx/etc/sphinx.conf\n"
+		"searchd --config /usr/local/sphinx/etc/manticore.conf\n"
 #if USE_WINDOWS
-		"searchd --install --config c:\\sphinx\\sphinx.conf\n"
+		"searchd --install --config c:\\sphinx\\manticore.conf\n"
 #endif
 		);
 }
@@ -22729,12 +22729,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	while ( !g_sConfigFile.cstr() )
 	{
 #ifdef SYSCONFDIR
-		g_sConfigFile = SYSCONFDIR "/sphinx.conf";
+		g_sConfigFile = SYSCONFDIR "/manticore.conf";
 		if ( sphIsReadable ( g_sConfigFile.cstr () ) )
 			break;
 #endif
 
-		g_sConfigFile = "./sphinx.conf";
+		g_sConfigFile = "./manticore.conf";
 		if ( sphIsReadable ( g_sConfigFile.cstr () ) )
 			break;
 
@@ -22745,9 +22745,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	if ( !g_sConfigFile.cstr () )
 		sphFatal ( "no readable config file (looked in "
 #ifdef SYSCONFDIR
-			SYSCONFDIR "/sphinx.conf, "
+			SYSCONFDIR "/manticore.conf, "
 #endif
-			"./sphinx.conf)." );
+			"./manticore.conf)." );
 
 	CSphVector<char> dConfig;
 	CheckConfigChanges ( dConfig );

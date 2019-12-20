@@ -17,7 +17,7 @@ unset ( _MINCONF )
 set ( CONFDIR "${CMAKE_INSTALL_LOCALSTATEDIR}/manticore" )
 set ( RUNDIR "${CMAKE_INSTALL_LOCALSTATEDIR}/run/manticore" )
 set ( LOGDIR "${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore" )
-configure_file ( "sphinx.conf.in" "${MANTICORE_BINARY_DIR}/sphinx.conf" @ONLY )
+configure_file ( "manticore.conf.in" "${MANTICORE_BINARY_DIR}/manticore.conf" @ONLY )
 
 # install specific stuff
 configure_file ( "${MANTICORE_BINARY_DIR}/manticore-min.conf.in" "${MANTICORE_BINARY_DIR}/manticore-min.conf.dist" @ONLY )

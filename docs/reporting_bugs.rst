@@ -103,7 +103,7 @@ Uploading your data
 -------------------
 
 To fix your bug developers often need to reproduce it on their machines.
-To do this they need your sphinx.conf, index files, binlog (if present),
+To do this they need your manticore.conf, index files, binlog (if present),
 sometimes data to index (like SQL tables or XMLpipe2 data files) and
 queries.
 

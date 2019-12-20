@@ -16,11 +16,11 @@ The calling syntax for ``indexer`` is as follows:
     indexer [OPTIONS] [indexname1 [indexname2 [...]]]
 
 Essentially you would list the different possible indexes (that you
-would later make available to search) in ``sphinx.conf``, so when
+would later make available to search) in ``manticore.conf``, so when
 calling ``indexer``, as a minimum you need to be telling it what index
 (or indexes) you want to index.
 
-If ``sphinx.conf`` contained details on 2 indexes, ``mybigindex`` and
+If ``manticore.conf`` contained details on 2 indexes, ``mybigindex`` and
 ``mysmallindex``, you could do the following:
 
 .. code-block:: bash
@@ -29,7 +29,7 @@ If ``sphinx.conf`` contained details on 2 indexes, ``mybigindex`` and
     $ indexer mybigindex
     $ indexer mysmallindex mybigindex
 
-As part of the configuration file, ``sphinx.conf``, you specify one or
+As part of the configuration file, ``manticore.conf``, you specify one or
 more indexes for your data. You might call ``indexer`` to reindex one of
 them, ad-hoc, or you can tell it to process all indexes - you are not
 limited to calling just one, or all at once, you can always pick some
@@ -60,24 +60,24 @@ operation is performed. These options are:
 
 -  ``--config <file>`` (``-c <file>`` for short) tells
    ``indexer`` to use the given file as its configuration. Normally, it
-   will look for ``sphinx.conf`` in the installation directory (e.g.
-   ``/usr/local/sphinx/etc/sphinx.conf`` if installed into
+   will look for ``manticore.conf`` in the installation directory (e.g.
+   ``/usr/local/sphinx/etc/manticore.conf`` if installed into
    ``/usr/local/sphinx``), followed by the current directory you are in
    when calling ``indexer`` from the shell. This is most of use in
    shared environments where the binary files are installed somewhere
    like ``/usr/local/sphinx/`` but you want to provide users with the
    ability to make their own custom Manticore set-ups, or if you want to
    run multiple instances on a single server. In cases like those you
-   could allow them to create their own ``sphinx.conf`` files and pass
+   could allow them to create their own ``manticore.conf`` files and pass
    them to ``indexer`` with this option. For example:
 
    .. code-block:: bash
 
 
-       $ indexer --config /home/myuser/sphinx.conf myindex
+       $ indexer --config /home/myuser/manticore.conf myindex
 
 -  ``--all`` tells ``indexer`` to update every index listed in
-   ``sphinx.conf``, instead of listing individual indexes. This would be
+   ``manticore.conf``, instead of listing individual indexes. This would be
    useful in small configurations, or ``cron``-type or maintenance jobs
    where the entire index set will get rebuilt each day, or week, or
    whatever period is best. Example usage:
@@ -85,7 +85,7 @@ operation is performed. These options are:
    .. code-block:: bash
 
 
-       $ indexer --config /home/myuser/sphinx.conf --all
+       $ indexer --config /home/myuser/manticore.conf --all
 
 -  ``--rotate`` is used for rotating indexes. Unless you have the
    situation where you can take the search function offline without

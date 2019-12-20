@@ -12,7 +12,7 @@ The Manticore Search container  doesn't have a persistent storage and in case th
 
 For persistence, there are 3 folders that can be mounted locally:
 
-* /etc/sphinxsearch - location of sphinx.conf 
+* /etc/manticoresearch - location of manticore.conf 
 * /var/lib/manticore/data - used for index files
 * /var/lib/manticore/log -  used for log files
 
@@ -20,9 +20,9 @@ The run command becomes:
 
 .. code-block:: bash
    
-   $ docker run --name manticore -v ~/manticore/etc/:/etc/sphinxsearch/ -v ~/manticore/data/:/var/lib/manticore/data -v ~/manticore/logs/:/var/lib/manticore/log -p 9306:9306 -d manticoresearch/manticore
+   $ docker run --name manticore -v ~/manticore/etc/:/etc/manticoresearch/ -v ~/manticore/data/:/var/lib/manticore/data -v ~/manticore/logs/:/var/lib/manticore/log -p 9306:9306 -d manticoresearch/manticore
    
-In `~/manticore/` you need to create the `etc/` , `data/` and `logs/` folders, as well as add a valid   `sphinx.conf <https://github.com/manticoresoftware/docker/blob/master/sphinx.conf>`__   in `~/manticore/etc/`.  
+In `~/manticore/` you need to create the `etc/` , `data/` and `logs/` folders, as well as add a valid   `manticore.conf <https://github.com/manticoresoftware/docker/blob/master/manticore.conf>`__   in `~/manticore/etc/`.  
 
 Running queries
 ~~~~~~~~~~~~~~~
@@ -166,7 +166,7 @@ We also added a `SHOW META  <http://docs.manticoresearch.com/latest/html/sphinxq
 SHOW META returns information about previous executed query, that is number of found records (in total_found), execution time (in time) and statistics about the keywords of the search.
 
 
-To create a new RT index, you need to define it in the sphinx.conf. A simple definition looks like:
+To create a new RT index, you need to define it in the manticore.conf. A simple definition looks like:
 
 .. code-block:: none
 
@@ -186,7 +186,7 @@ Using plain indexes
 
 Unlike RT, a plain also requires configuring a source for it. In our example we are using a MySQL source.
 
-Add in your sphinx.conf:
+Add in your manticore.conf:
 
 .. code-block:: none
    
@@ -269,7 +269,7 @@ Once we have this setup, we can run the indexing process:
 .. code-block:: none
 
    $ docker exec -it manticore indexer  test1  --rotate
-   using config file '/etc/sphinxsearch/sphinx.conf'...
+   using config file '/etc/sphinxsearch/manticore.conf'...
    indexing index 'test1'...
    collected 4 docs, 0.0 MB
    sorted 0.0 Mhits, 100.0% done

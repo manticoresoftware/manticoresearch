@@ -34,7 +34,7 @@ using the ``indexer`` tool, as in
 .. code-block:: bash
 
 
-    indexer --buildstops dict.txt 100000 --buildfreqs myindex -c /path/to/sphinx.conf
+    indexer --buildstops dict.txt 100000 --buildfreqs myindex -c /path/to/manticore.conf
 
 which will write the 100,000 most frequent words, along with their
 counts, from myindex into dict.txt. The output file is a text file, so

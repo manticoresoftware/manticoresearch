@@ -4111,6 +4111,13 @@ void RtIndex_c::PostSetup()
 {
 	RtIndex_i::PostSetup();
 
+	m_pDocstoreFields.Reset();
+	if ( m_tSchema.HasStoredFields() )
+	{
+		m_pDocstoreFields = CreateDocstoreFields();
+		SetupDocstoreFields ( *m_pDocstoreFields.Ptr(), m_tSchema );
+	}
+
 	m_iMaxCodepointLength = m_pTokenizer->GetMaxCodepointLength();
 
 	// bigram filter

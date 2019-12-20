@@ -1601,7 +1601,7 @@ static void ShowHelp ()
 		"-h, --help\t\tdisplay this help message\n"
 		"-v\t\t\tdisplay version information\n"
 		"--config <file>\t\tread configuration from specified file\n"
-		"\t\t\t(default is sphinx.conf)\n"
+		"\t\t\t(default is manticore.conf)\n"
 		"--all\t\t\treindex all configured indexes\n"
 		"--quiet\t\t\tbe quiet, only print errors\n"
 		"--verbose [debug|debugv|debugvv]\n"
@@ -1628,8 +1628,8 @@ static void ShowHelp ()
 		"--keep-attrs\t\tretain attributes from the old index\n"
 		"\n"
 		"Examples:\n"
-		"indexer --quiet myidx1\treindex 'myidx1' defined in 'sphinx.conf'\n"
-		"indexer --all\t\treindex all indexes defined in 'sphinx.conf'\n" );
+		"indexer --quiet myidx1\treindex 'myidx1' defined in 'manticore.conf'\n"
+		"indexer --all\t\treindex all indexes defined in 'manticore.conf'\n" );
 }
 
 

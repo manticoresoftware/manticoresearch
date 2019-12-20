@@ -2009,12 +2009,12 @@ const char * sphLoadConfig ( const char * sOptConfig, bool bQuiet, CSphConfigPar
 	while ( !sOptConfig )
 	{
 #ifdef SYSCONFDIR
-		sOptConfig = SYSCONFDIR "/sphinx.conf";
+		sOptConfig = SYSCONFDIR "/manticore.conf";
 		if ( sphIsReadable ( sOptConfig ) )
 			break;
 #endif
 
-		sOptConfig = "./sphinx.conf";
+		sOptConfig = "./manticore.conf";
 		if ( sphIsReadable ( sOptConfig ) )
 			break;
 
@@ -2025,9 +2025,9 @@ const char * sphLoadConfig ( const char * sOptConfig, bool bQuiet, CSphConfigPar
 	if ( !sOptConfig )
 		sphDie ( "no readable config file (looked in "
 #ifdef SYSCONFDIR
-		SYSCONFDIR "/sphinx.conf, "
+		SYSCONFDIR "/manticore.conf, "
 #endif
-		"./sphinx.conf)" );
+		"./manticore.conf)" );
 
 	if ( !bQuiet )
 		fprintf ( stdout, "using config file '%s'...\n", sOptConfig );

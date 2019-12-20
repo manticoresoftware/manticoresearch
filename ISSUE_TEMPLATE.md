@@ -24,7 +24,7 @@ If you open a Github issue, it must be a bug or feature request and you need to 
 
 **Steps to reproduce:**
 
-    Include a simple use case than can reproduce the problem, including the sphinx.conf, index files, queries etc.
+    Include a simple use case than can reproduce the problem, including the manticore.conf, index files, queries etc.
     1.
     2.
     3.

@@ -223,7 +223,7 @@ In the following example we'll consider folder ``C:\Manticore`` where we unpack 
 	unzip manticore-2.4.1-171017-3b31a97-release-pgsql-stemmer-x64-bin.zip
 
 
-The zip comes with 2 sample configurations: ``sphinx.conf.in`` and ``sphinx-min.conf.in``. The latter is a stripped-down of comments version of the first.  	
+The zip comes with 2 sample configurations: ``manticore.conf.in`` and ``sphinx-min.conf.in``. The latter is a stripped-down of comments version of the first.  	
 
 The configuration contains a ``@CONFIGDIR@`` string which needs to be replaced. The ``@CONFIGDIR@`` is the root directory of ``data`` and ``log`` folders (first is used as location for indexes, second for logs).
 The zip package comes with these folders, so they will be available at the location where you unzipped the package. If you want to use a different location, the two folders must be created there.
@@ -232,7 +232,7 @@ Install the ``searchd`` system as a Windows service:
 
 .. code-block:: bat
 
-	C:\Manticore\bin> C:\Manticore\bin\searchd --install --config C:\Manticore\sphinx.conf.in --servicename Manticore
+	C:\Manticore\bin> C:\Manticore\bin\searchd --install --config C:\Manticore\manticore.conf.in --servicename Manticore
 
 
 Make sure to use the full path of the configuration file, otherwise searchd.exe will not be able to know the location of it when it's started as service.
@@ -261,9 +261,9 @@ On MacOS Manticore can be installed in 2 easy way:
 	$ mkdir manticore
 	$ tar -zxvf manticore-3.1.0-190716-445e806e-release-osx10.14.4-x86_64-bin.tar -C manticore
 	$ cd manticore
-	$ bin/searchd  -c sphinx.conf
+	$ bin/searchd  -c manticore.conf
 
-The sphinx.conf is located in the root folder.
+The manticore.conf is located in the root folder.
 	
 2. Use official brew tap
 
@@ -282,7 +282,7 @@ Start Manticore as brew service:
 	
 	$ brew services start  manticoresearch
 	
-The configuration is located at ``/usr/local/etc/manticore/sphinx.conf``.
+The configuration is located at ``/usr/local/etc/manticore/manticore.conf``.
 
 	
 .. _upgrade_from_sphinx:
@@ -293,12 +293,12 @@ Upgrading from Sphinx Search
 Manticore Search 2.x maintains  compatibility with  Sphinx Search 2.x  and can load existing indexes created with Sphinx Search.
 In most cases, upgrading is just a matter of replacing the binaries.
 
-In case of Linux distributions, Manticore Search continues to use the usual ``/etc/sphinxsearch/sphinx.conf``, but it runs under a different user and use different folders.
+In case of Linux distributions, Manticore Search continues to use the usual ``/etc/sphinxsearch/manticore.conf``, but it runs under a different user and use different folders.
 
 Service name has changed from ``sphinx``/``sphinxsearch`` to ``manticore`` and will run under ``manticore`` user ( Spinx was using ``sphinx`` or ``sphinxsearch``). It also uses a different folder for the PID file.
 
 Default used folders are ``/var/lib/manticore``, ``/var/log/manticore``, ``/var/run/manticore``.
-You can still use existing ``sphinx.conf``, but you need to manually change the permissions on ``/var/lib/sphinxsearch`` and ``/var/log/sphinxsearch`` folders. 
+You can still use existing ``manticore.conf``, but you need to manually change the permissions on ``/var/lib/sphinxsearch`` and ``/var/log/sphinxsearch`` folders. 
 If you  use other folders (for data, wordforms files etc.) the ownership must be also switched to ``manticore`` user.
 The ``pid_file`` location should be changed to match the manticore.service  to ``/var/run/manticore/searchd.pid``. 
 
@@ -647,13 +647,13 @@ The sample config uses a ``test`` with no password for connecting to MySQL. Adju
 
 .. code-block:: bash
 
-	$ sudo -u manticore indexer -c /etc/sphinxsearch/sphinx.conf test1 --rotate
+	$ sudo -u manticore indexer -c /etc/sphinxsearch/manticore.conf test1 --rotate
 	Manticore 2.3.3 9b7033e@170806 master...origin/master-id64-dev
 	Copyright (c) 2001-2016, Andrew Aksyonoff
 	Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 	Copyright (c) 2017, Manticore Software LTD (http://manticoresearch.com)
 
-	using config file '/etc/sphinxsearch/sphinx.conf'...
+	using config file '/etc/sphinxsearch/manticore.conf'...
 	indexing index 'test1'...
 	collected 4 docs, 0.0 MB
 	sorted 0.0 Mhits, 100.0% done

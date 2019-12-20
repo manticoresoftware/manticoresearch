@@ -36,7 +36,7 @@ Example 3.3. Fully automated live updates
         max_doc_id INTEGER NOT NULL
     );
 
-    # in sphinx.conf
+    # in manticore.conf
     source main
     {
         # ...

@@ -13,7 +13,7 @@ Full SphinxQL reference is available in  :doc:`sphinxql_reference`.
 RT indexes overview
 -------------------
 
-RT indexes should be declared in ``sphinx.conf``, just as every other
+RT indexes should be declared in ``manticore.conf``, just as every other
 index type. Notable differences from the regular, disk-based indexes are
 that a) data sources are not required and ignored, and b) you should
 explicitly enumerate all the text fields, not just attributes. Here's an

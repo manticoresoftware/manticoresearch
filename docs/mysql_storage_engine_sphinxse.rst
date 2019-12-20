@@ -189,7 +189,7 @@ ignored so you can use arbitrary ones.
 Additional columns must be either ``INTEGER``, ``TIMESTAMP``,
 ``BIGINT``, ``VARCHAR``, or ``FLOAT``. They will be bound to attributes
 provided in Manticore result set by name, so their names must match
-attribute names specified in ``sphinx.conf``. If there's no such
+attribute names specified in ``manticore.conf``. If there's no such
 attribute name in Manticore search results, column will have ``NULL``
 values.
 

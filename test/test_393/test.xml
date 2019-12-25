@@ -9,6 +9,10 @@
 searchd
 {
 	<searchd_settings/>
+	<Dynamic>
+		<Variant> dist_threads	= 0</Variant>
+		<Variant> dist_threads	= 2</Variant>
+	</Dynamic>
 }
 
 <agent0>
@@ -64,6 +68,26 @@ index dist_complex3
 	agent = <agent2_address/>:proxy14
 }
 
+index local_index1
+{
+	source			= src_a1
+	stored_fields	= title, body
+	path			= <data_path/>/local_index1
+}
+
+index local_index2
+{
+	source			= src_a2
+	stored_fields	= title, body
+	path			= <data_path/>/local_index2
+}
+
+index dist_local
+{
+	type = distributed
+	local = local_index1
+	local = local_index2
+}
 </agent0>
 
 <agent1>
@@ -269,6 +293,8 @@ insert into test_table values
 <sphinxql>select * from dist_complex2 order by id desc limit 10,10</sphinxql>
 <sphinxql>select * from dist_complex3 order by id desc limit 0,10 </sphinxql>
 <sphinxql>select * from dist_complex3 order by id desc limit 10,10</sphinxql>
+
+<sphinxql>select title from dist_local</sphinxql>
 
 </sphqueries>
 

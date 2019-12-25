@@ -68,16 +68,32 @@ index dist_complex3
 	agent = <agent2_address/>:proxy14
 }
 
+source src_local1
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, title, body FROM test_table where id in ( 1,2 )
+}
+
+source src_local2
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, title, body FROM test_table where id in ( 3,4 )
+}
+
 index local_index1
 {
-	source			= src_a1
+	source			= src_local1
 	stored_fields	= title, body
 	path			= <data_path/>/local_index1
 }
 
 index local_index2
 {
-	source			= src_a2
+	source			= src_local2
 	stored_fields	= title, body
 	path			= <data_path/>/local_index2
 }

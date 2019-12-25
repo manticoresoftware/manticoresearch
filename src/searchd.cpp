@@ -4768,6 +4768,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 		ProcessPostlimitArgs_t tArgs ( tQuery, bMaster );
 		ComputePostlimit ( tArgs, tRes );
 	}
+
 	if ( bMaster && !dRemotes.IsEmpty() )
 	{
 		CSphScopedProfile ( pProfiler, SPH_QSTATE_EVAL_POST );
@@ -5412,6 +5413,7 @@ void SearchHandler_c::RunLocalSearchesParallel()
 			tRes.m_iTotalMatches += pSorter->GetTotalCount();
 
 			tRes.m_pBlobPool = tRaw.m_pBlobPool;
+			tRes.m_pDocstore = tRaw.m_pDocstore;
 			MergeWordStats ( tRes, tRaw.m_hWordStats, &m_dFailuresSet[iQuery], sLocal, sParentIndex );
 
 			tRes.m_bHasPrediction |= tRaw.m_bHasPrediction;

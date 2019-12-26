@@ -5,7 +5,7 @@ usermod -g %{manticore_group} %{manticore_user} 2>/dev/null || true
 chown -R %{manticore_user}:%{manticore_group} /var/lib/manticore /var/log/manticore /var/run/manticore
 
 if [ $1 == 1 ]; then
-    /sbin/chkconfig --add searchd
+    /sbin/chkconfig --add manticore
 fi
 
 if [ $1 == 2 ]; then
@@ -25,7 +25,7 @@ echo "Learn Manticore with interactive courses:"
 echo "  https://play.manticoresearch.com/"
 echo ""
 echo "To start Manticore Search service:"
-echo "  > systemctl start manticore"
+echo "  > service manticore start/stop"
 echo ""
 echo "Configuration file:"
 echo "  /etc/manticoresearch/manticore.conf"

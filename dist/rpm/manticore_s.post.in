@@ -5,9 +5,9 @@ usermod -g %{manticore_group} %{manticore_user} 2>/dev/null || true
 chown -R %{manticore_user}:%{manticore_group} /var/lib/manticore /var/log/manticore /var/run/manticore
 
 /bin/systemctl daemon-reload >/dev/null 2>&1 || :
-%systemd_post searchd.service
+%systemd_post manticore.service
 if [ $1 == 1 ]; then
-    /usr/bin/systemctl enable searchd >/dev/null 2>&1 || :
+    /usr/bin/systemctl enable manticore >/dev/null 2>&1 || :
 	systemd-tmpfiles --create /usr/lib/tmpfiles.d/searchd.conf
 fi
 if [ $1 == 2 ]; then

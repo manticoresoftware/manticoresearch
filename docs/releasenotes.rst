@@ -21,6 +21,8 @@ Improvements and changes
 * ICU data file is now shipped with the packages, icu_data_dir removed 
 * systemd service files include 'Restart=on-failure' policy
 * indextool can now check real-time indexes online
+* default conf is now /etc/manticoresearch/manticore.conf
+* service on RHEL/CentOS renamed to 'manticore' from 'searchd'
 
 Bugfixes
 ~~~~~~~~

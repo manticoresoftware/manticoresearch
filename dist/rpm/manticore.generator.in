@@ -39,10 +39,10 @@ is_jemalloc() {
 
 is_jemalloc
 
-if [ ! -e /usr/lib/systemd/system/searchd.service ]; then
-	M_UNIT_FILE="/usr/lib/systemd/system/searchd.service"
+if [ ! -e /usr/lib/systemd/system/manticore.service ]; then
+	M_UNIT_FILE="/usr/lib/systemd/system/manticore.service"
 else
-	M_UNIT_FILE="$2/searchd.service"
+	M_UNIT_FILE="$2/manticore.service"
 fi
 
 if [ $jemalloc_preload ]; then 

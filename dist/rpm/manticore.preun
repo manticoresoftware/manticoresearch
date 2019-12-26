@@ -1,4 +1,4 @@
 if [ "$1" = 0 ] ; then
-    /sbin/service searchd stop >/dev/null 2>&1
-    /sbin/chkconfig --del searchd
+    /sbin/service manticore stop >/dev/null 2>&1
+    /sbin/chkconfig --del manticore
 fi

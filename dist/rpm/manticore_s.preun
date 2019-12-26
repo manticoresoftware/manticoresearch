@@ -1,1 +1,1 @@
-%systemd_preun searchd.service
+%systemd_preun manticore.service

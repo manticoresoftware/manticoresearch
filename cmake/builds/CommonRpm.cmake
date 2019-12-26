@@ -93,9 +93,9 @@ if ( WITH_SYSTEMD )
 	set ( CPACK_RPM_BIN_POST_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.postun" )
 	set ( CPACK_RPM_BIN_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.preun" )
 
-	configure_file ( "dist/rpm/manticore.tmpfiles.in" "${MANTICORE_BINARY_DIR}/searchd.conf" @ONLY )
+	configure_file ( "dist/rpm/manticore.tmpfiles.in" "${MANTICORE_BINARY_DIR}/manticore.conf" @ONLY )
 	configure_file ( "dist/rpm/manticore.generator.in" "${MANTICORE_BINARY_DIR}/manticore-search-generator" @ONLY )
-	install ( FILES ${MANTICORE_BINARY_DIR}/searchd.conf DESTINATION usr/lib/tmpfiles COMPONENT adm )
+	install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION usr/lib/tmpfiles.d COMPONENT adm )
 	install ( PROGRAMS ${MANTICORE_BINARY_DIR}/manticore-search-generator
 			DESTINATION usr/lib/systemd/system-generators COMPONENT adm )
 
@@ -104,8 +104,8 @@ else ()
 	set ( CPACK_RPM_BIN_PACKAGE_REQUIRES_PREUN "chkconfig, initscripts" )
 	set ( CPACK_RPM_BIN_POST_INSTALL_SCRIPT_FILE "${MANTICORE_BINARY_DIR}/manticore.post")
 	set ( CPACK_RPM_BIN_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore.preun" )
-	configure_file ( "dist/rpm/manticore.init.in" "${MANTICORE_BINARY_DIR}/searchd" @ONLY )
-	install ( PROGRAMS ${MANTICORE_BINARY_DIR}/searchd
+	configure_file ( "dist/rpm/manticore.init.in" "${MANTICORE_BINARY_DIR}/manticore" @ONLY )
+	install ( PROGRAMS ${MANTICORE_BINARY_DIR}/manticore
 			DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/rc.d/init.d COMPONENT adm )
 
 endif ()

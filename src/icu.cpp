@@ -34,7 +34,16 @@
 #include <unicode/udata.h>
 #include <unicode/ustring.h>
 
+#if USE_WINDOWS
+	#include <shlwapi.h>
+
+	#pragma comment(linker, "/defaultlib:Shlwapi.lib")
+	#pragma message("Automatically linking with Shlwapi.lib")
+#endif
+
 extern CSphVector<CharsetAlias_t> g_dCharsetAliases;
+
+static CSphString g_sICUDir = ICU_DATA_DIR;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -45,7 +54,20 @@ static void ConfigureICU()
 	if ( g_bICUInitialized )
 		return;
 
-	u_setDataDirectory ( ICU_DATA_DIR );
+#if USE_WINDOWS
+	if ( PathIsRelative(ICU_DATA_DIR) )
+	{
+		HMODULE hModule = GetModuleHandle(NULL);
+		CHAR szPath[MAX_PATH];
+		GetModuleFileName ( hModule, szPath, MAX_PATH );
+		PathRemoveFileSpec(szPath);
+
+		g_sICUDir.SetSprintf ( "%s\\%s", szPath, ICU_DATA_DIR );
+	}
+#endif
+
+	u_setDataDirectory ( g_sICUDir.cstr() );
+
 	g_bICUInitialized = true;
 }
 
@@ -102,7 +124,7 @@ bool ICUPreprocessor_c::Init ( CSphString & sError )
 	{
 		sError.SetSprintf( "Unable to initialize ICU break iterator: %s", u_errorName(tStatus) );
 		if ( tStatus==U_MISSING_RESOURCE_ERROR )
-			sError.SetSprintf ( "%s. Make sure ICU data file is accessible (using '%s' folder)", sError.cstr(), ICU_DATA_DIR );
+			sError.SetSprintf ( "%s. Make sure ICU data file is accessible (using '%s' folder)", sError.cstr(), g_sICUDir.cstr() );
 
 		return false;			
 	}

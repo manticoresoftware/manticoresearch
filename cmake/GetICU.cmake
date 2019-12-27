@@ -63,7 +63,12 @@ if ( icu_POPULATED )
 endif ()
 
 if ( WIN32 )
-	add_compile_definitions ( ICU_DATA_DIR="${CMAKE_INSTALL_FULL_DATADIR}/icu" )
+	# FIXME! need a proper way to detect if CMAKE_INSTALL_DATADIR is not default
+	if ( NOT CMAKE_INSTALL_DATADIR STREQUAL "share" )
+		add_compile_definitions ( ICU_DATA_DIR="${CMAKE_INSTALL_DATADIR}/icu" )
+	else()
+		add_compile_definitions ( ICU_DATA_DIR="../share/icu" )
+	endif()
 else()
 	add_compile_definitions ( ICU_DATA_DIR="${CMAKE_INSTALL_FULL_DATADIR}/${PACKAGE_NAME}/icu" )
 endif()

@@ -27,8 +27,8 @@ You can install Manticore with command:
 
 .. code-block:: bash
 
-	$ wget https://github.com/manticoresoftware/manticore/releases/download/2.4.1/manticore_2.4.1-171017-3b31a97-release-stemmer.jessie_amd64-bin.deb
-	$ sudo dpkg -i manticore_2.4.1-171017-3b31a97-release-stemmer.jessie_amd64-bin.deb
+	$ wget https://github.com/manticoresoftware/manticoresearch/releases/download/3.2.2/manticore_3.2.2-191226-afd6046-release.jessie_amd64-bin.deb
+	$ sudo dpkg -i manticore_3.2.2-191226-afd6046-release.jessie_amd64-bin.deb
 
 Manticore package depends on zlib and ssl libraries, nothing else is strictly required.
 However if you plan to use 'indexer' tool to create indexes from different sources,
@@ -38,15 +38,16 @@ To know what exactly libraries, run `indexer` tool from Manticore and look at th
 .. code-block:: bash
 
 	$ indexer
-	Manticore 2.4.1 4258276@171019 id64-beta
+	Manticore 3.2.2 62ea5ff0@191220 release
 	Copyright (c) 2001-2016, Andrew Aksyonoff
 	Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-	Copyright (c) 2017, Manticore Software LTD (http://manticoresearch.com)
+	Copyright (c) 2017-2019, Manticore Software LTD (http://manticoresearch.com)
 
 	Built by gcc/clang v 6.3.0,
 
-	Built on Linux d2a57137d4f5 4.8.0-45-generic #48~16.04.1-Ubuntu SMP Fri Mar 24 12:46:56 UTC 2017 x86_64 GNU/Linux
-	Configured by CMake with these definitions: -DCMAKE_BUILD_TYPE=RelWithDebInfo -DDL_UNIXODBC=1 -DUNIXODBC_LIB=libodbc.so.2 -DDL_EXPAT=1 -DEXPAT_LIB=libexpat.so.1 -DDL_MYSQL=1 -DMYSQL_LIB=libmariadbclient.so.18 -DMYSQL_CONFIG_EXECUTABLE=/usr/bin/mysql_config -DDL_PGSQL=1 -DPGSQL_LIB=libpq.so.5 -DSPLIT_SYMBOLS=ON -DUSE_BISON=ON -DUSE_FLEX=ON -DUSE_SYSLOG=1 -DWITH_EXPAT=ON -DWITH_ICONV=ON -DWITH_MYSQL=ON -DWITH_ODBC=ON -DWITH_PGSQL=ON -DWITH_RE2=ON -DWITH_STEMMER=ON -DWITH_ZLIB=ON
+	Built on Linux runner-72989761-project-3858465-concurrent-0 4.19.78-coreos #1 SMP Mon Oct 14 22:56:39 -00 2019 x86_64 GNU/Linux
+
+	Configured by CMake with these definitions: -DCMAKE_BUILD_TYPE=RelWithDebInfo -DDISTR_BUILD=stretch -DUSE_SSL=ON -DDL_UNIXODBC=1 -DUNIXODBC_LIB=libodbc.so.2 -DDL_EXPAT=1 -DEXPAT_LIB=libexpat.so.1 -DUSE_LIBICONV=1 -DDL_MYSQL=1 -DMYSQL_LIB=libmariadbclient.so.18 -DDL_PGSQL=1 -DPGSQL_LIB=libpq.so.5 -DLOCALDATADIR=/var/data -DFULL_SHARE_DIR=/usr/share/manticore -DUSE_ICU=1 -DUSE_BISON=ON -DUSE_FLEX=ON -DUSE_SYSLOG=1 -DWITH_EXPAT=1 -DWITH_ICONV=ON -DWITH_MYSQL=1 -DWITH_ODBC=ON -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 -DWITH_ZLIB=ON -DGALERA_SOVERSION=31 -DSYSCONFDIR=/etc/manticoresearch
 
 Here you can see mentions of `libodbc.so.2`, `libexpat.so.1`, `libmariadbclient.so.18`, and `libpq.so.5`.
 
@@ -190,8 +191,8 @@ Download RedHat RPM from Manticore website and install it:
 
 .. code-block:: bash
 
-	$ wget https://github.com/manticoresoftware/manticore/releases/download/2.4.1/manticore-2.4.1-171017-3b31a97-release-stemmer-rhel7-bin.rpm
-	$ rpm -Uhv manticore-2.4.1-171017-3b31a97-release-stemmer-rhel7-bin.rpm
+	$ wget https://github.com/manticoresoftware/manticoresearch/releases/download/3.2.2/manticore-3.2.2_191226.afd6046-1.el7.centos.x86_64.rpm
+	$ rpm -Uhv manticore-3.2.2_191226.afd6046-1.el7.centos.x86_64.rpm
 
 Starting Manticore Search
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -200,13 +201,13 @@ After preparing configuration file (see :ref:`Quick tour <quick_usage_tour>`), y
 
 .. code-block:: bash
 
-	$ systemctl start searchd
+	$ systemctl start manticore
 	
 To enable Manticore at boot:
 
 .. code-block:: bash
 
-	$ systemctl enable searchd
+	$ systemctl enable manticore
 
 
 
@@ -220,10 +221,10 @@ In the following example we'll consider folder ``C:\Manticore`` where we unpack 
 .. code-block:: bash
 	
 	cd C:\Manticore
-	unzip manticore-2.4.1-171017-3b31a97-release-pgsql-stemmer-x64-bin.zip
+	unzip manticore-3.2.2-191226-afd60463-release-x64-bin.zip
 
 
-The zip comes with 2 sample configurations: ``manticore.conf.in`` and ``sphinx-min.conf.in``. The latter is a stripped-down of comments version of the first.  	
+The zip comes with 2 sample configurations: ``manticore.conf.in`` and ``manticore-min.conf.in``. The latter is a stripped-down of comments version of the first.  	
 
 The configuration contains a ``@CONFIGDIR@`` string which needs to be replaced. The ``@CONFIGDIR@`` is the root directory of ``data`` and ``log`` folders (first is used as location for indexes, second for logs).
 The zip package comes with these folders, so they will be available at the location where you unzipped the package. If you want to use a different location, the two folders must be created there.
@@ -259,7 +260,7 @@ On MacOS Manticore can be installed in 2 easy way:
 .. code-block:: bash
 	
 	$ mkdir manticore
-	$ tar -zxvf manticore-3.1.0-190716-445e806e-release-osx10.14.4-x86_64-bin.tar -C manticore
+	$ tar -zxvf manticore-3.2.2-191226-afd60463-release-osx10.14.4-x86_64-bin.tar.gz -C manticore
 	$ cd manticore
 	$ bin/searchd  -c manticore.conf
 
@@ -293,12 +294,15 @@ Upgrading from Sphinx Search
 Manticore Search 2.x maintains  compatibility with  Sphinx Search 2.x  and can load existing indexes created with Sphinx Search.
 In most cases, upgrading is just a matter of replacing the binaries.
 
-In case of Linux distributions, Manticore Search continues to use the usual ``/etc/sphinxsearch/manticore.conf``, but it runs under a different user and use different folders.
+Manticore Search 3.x breaks compatibility with both Sphinx Search 2.x and Manticore Search 3.x indexes. In this case, indexes must be either remade or converted with the provided index converter tool.
+For more information check :doc:`getting-started/migrate_from_manticore2`.
+
+In case of Linux distributions, Manticore Search switched the configuration location from  ``/etc/sphinxsearch/sphinx.conf`` ``/etc/manticoresearch/manticore.conf``.
 
 Service name has changed from ``sphinx``/``sphinxsearch`` to ``manticore`` and will run under ``manticore`` user ( Spinx was using ``sphinx`` or ``sphinxsearch``). It also uses a different folder for the PID file.
 
 Default used folders are ``/var/lib/manticore``, ``/var/log/manticore``, ``/var/run/manticore``.
-You can still use existing ``manticore.conf``, but you need to manually change the permissions on ``/var/lib/sphinxsearch`` and ``/var/log/sphinxsearch`` folders. 
+Existing file paths can still be used, but permissions should be updated for data,log, run folders.
 If you  use other folders (for data, wordforms files etc.) the ownership must be also switched to ``manticore`` user.
 The ``pid_file`` location should be changed to match the manticore.service  to ``/var/run/manticore/searchd.pid``. 
 
@@ -351,12 +355,12 @@ Please note that any indexed data or configuration change made is lost if the co
 Mounting points 
 ~~~~~~~~~~~~~~~
 
-The configuration folder inside the image is the usual `/etc/sphinxseach`. 
+The configuration folder inside the image is the usual `/etc/manticoresearch`. 
 Index files are located at `/var/lib/manticore/data` and logs at `/var/log/manticore`.  For persistence, mount these points to your local folders.
 
 .. code-block:: bash
    
-   docker run --name manticore -v /path/to/config/:/etc/sphinxsearch/ -v /path/to/data/:/var/lib/manticore/data -v /path/to/logs/:/var/log/manticore -p 9306:9306 -d manticoresearch/manticore
+   docker run --name manticore -v /path/to/config/:/etc/manticoresearch/ -v /path/to/data/:/var/lib/manticore/data -v /path/to/logs/:/var/log/manticore -p 9306:9306 -d manticoresearch/manticore
    
 
    
@@ -401,7 +405,7 @@ General building options
 
 For compiling latest version of Manticore, recommended is checkout the latest code from the github repositiory.
 Alternative, for compiling a certain version, you can either checked that version from github or use it's respective source tarball.
-In last case avoid to use automatic tarballs from github (named there as 'Source code'), but use provided files as **manticore-2.4.1-171017-3b31a97-release.tar.gz**.
+In last case avoid to use automatic tarballs from github (named there as 'Source code'), but use provided files as **manticore-3.2.2-191226-afd6046-release.tar.gz**.
 When building from git clone you need packages **git**, **flex**, **bison**. When building from tarball they are not necessary. This requirement
 may be essential to build on Windows.
 
@@ -411,8 +415,8 @@ may be essential to build on Windows.
 
 .. code-block:: bash
 
-   $ wget https://github.com/manticoresoftware/manticore/releases/download/2.4.1/manticore-2.4.1-171017-3b31a97-release.tar.gz
-   $ tar zcvf manticore-2.4.1-171017-3b31a97-release.tar.gz
+   $ wget https://github.com/manticoresoftware/manticoresearch/releases/download/3.2.2/manticore-3.2.2-191226-afd6046-release.tar.gz
+   $ tar zcvf manticore-3.2.2-191226-afd6046-release.tar.gz
 
 Next step is to configure the building with cmake. Available list of configuration options:
 
@@ -486,7 +490,7 @@ or if we use sources from tarball:
 
 .. code-block:: bash
 
-   $ cmake3 -D WITH_MYSQL=1 -DWITH_RE2=1 ../manticore-2.4.1-171017-3b31a97-release
+   $ cmake3 -D WITH_MYSQL=1 -DWITH_RE2=1 ../manticore-3.2.2-191226-afd6046-release
 
 To simply compile:
 
@@ -648,11 +652,11 @@ The sample config uses a ``test`` with no password for connecting to MySQL. Adju
 .. code-block:: bash
 
 	$ sudo -u manticore indexer -c /etc/sphinxsearch/manticore.conf test1 --rotate
-	Manticore 2.3.3 9b7033e@170806 master...origin/master-id64-dev
+	Manticore 3.2.2 62ea5ff0@191220 release
 	Copyright (c) 2001-2016, Andrew Aksyonoff
 	Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-	Copyright (c) 2017, Manticore Software LTD (http://manticoresearch.com)
-
+	Copyright (c) 2017-2019, Manticore Software LTD (http://manticoresearch.com)
+	
 	using config file '/etc/sphinxsearch/manticore.conf'...
 	indexing index 'test1'...
 	collected 4 docs, 0.0 MB

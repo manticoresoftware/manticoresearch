@@ -1,8 +1,5 @@
 //
-// $Id$
-//
-
-//
+// Copyright (c) 2017-2020, Manticoreee
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -523,6 +520,3 @@ int main ( int argc, char ** argv )
 	return 0;
 }
 
-//
-// $Id$
-//

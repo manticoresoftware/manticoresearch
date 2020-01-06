@@ -1,7 +1,3 @@
-//
-// $Id$
-//
-
 #undef LOC_TABLE_ENTRY
 #undef LOC_TABLE_INDEX
 #define LOC_TABLE_ENTRY		LOC_PREFIX(stem_table_entry_)
@@ -545,7 +541,3 @@ void LOC_PREFIX(stem_ru) ( LOC_CHAR_TYPE * word )
 #undef LOC_CHAR_TYPE
 #undef LOC_PREFIX
 #undef RUS
-
-//
-// $Id$
-//

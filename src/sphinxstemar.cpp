@@ -1,8 +1,4 @@
 //
-// $Id$
-//
-
-//
 // Copyright (c) 2010, Ammar Ali
 // Copyright (c) 2012, Sphinx Technologies Inc
 //
@@ -516,6 +512,3 @@ void stem_ar_utf8 ( BYTE * word )
 	}
 }
 
-//
-// $Id$
-//

@@ -1,6 +1,3 @@
-//
-// $Id$
-//
 
 #ifdef USE_PRAGMA_INTERFACE
 #pragma interface // gcc class implementation
@@ -169,6 +166,3 @@ int sphinx_showfunc_time ( THD *, SHOW_VAR *, char * );
 int sphinx_showfunc_word_count ( THD *, SHOW_VAR *, char * );
 int sphinx_showfunc_words ( THD *, SHOW_VAR *, char * );
 
-//
-// $Id$
-//

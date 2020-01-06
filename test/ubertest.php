@@ -394,8 +394,4 @@ if ( $total_tests_failed ) {
 	exit ( 0 );
 }
 
-//
-// $Id$
-//
-
 ?>

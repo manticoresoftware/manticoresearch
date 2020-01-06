@@ -3995,6 +3995,3 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 	return array ( "tests_total"=>$total, "tests_failed"=>$nfailed, "tests_skipped"=>0 );
 }
 
-//
-// $Id$
-//

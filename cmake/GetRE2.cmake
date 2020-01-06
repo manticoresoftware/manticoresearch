@@ -1,5 +1,5 @@
 #=============================================================================
-# Copyright 2017-2019, Manticore Software LTD (http://manticoresearch.com)
+# Copyright 2017-2020, Manticore Software LTD (http://manticoresearch.com)
 #
 # Distributed under the OSI-approved BSD License (the "License");
 # see accompanying file Copyright.txt for details.

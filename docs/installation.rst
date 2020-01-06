@@ -294,7 +294,7 @@ Upgrading from Sphinx Search
 Manticore Search 2.x maintains  compatibility with  Sphinx Search 2.x  and can load existing indexes created with Sphinx Search.
 In most cases, upgrading is just a matter of replacing the binaries.
 
-Manticore Search 3.x breaks compatibility with both Sphinx Search 2.x and Manticore Search 3.x indexes. In this case, indexes must be either remade or converted with the provided index converter tool.
+Manticore Search 3.x breaks compatibility with both Sphinx Search 2.x and Manticore Search 2.x indexes. In this case, indexes must be either remade or converted with the provided index converter tool.
 For more information check :doc:`getting-started/migrate_from_manticore2`.
 
 In case of Linux distributions, Manticore Search switched the configuration location from  ``/etc/sphinxsearch/sphinx.conf`` ``/etc/manticoresearch/manticore.conf``.

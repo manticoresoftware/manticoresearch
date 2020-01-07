@@ -9029,8 +9029,7 @@ void HandleCommandExcerpt ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c
 		}
 	}
 
-	q.m_bHasBeforePassageMacro = SnippetTransformPassageMacros ( q.m_sBeforeMatch, q.m_sBeforeMatchPassage );
-	q.m_bHasAfterPassageMacro = SnippetTransformPassageMacros ( q.m_sAfterMatch, q.m_sAfterMatchPassage );
+	q.Setup();
 
 	CSphString sPassageBoundaryMode;
 	if ( iVer>=0x103 )
@@ -12686,8 +12685,7 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc
 		return;
 	}
 
-	q.m_bHasBeforePassageMacro = SnippetTransformPassageMacros ( q.m_sBeforeMatch, q.m_sBeforeMatchPassage );
-	q.m_bHasAfterPassageMacro = SnippetTransformPassageMacros ( q.m_sAfterMatch, q.m_sAfterMatchPassage );
+	q.Setup();
 
 	CSphVector<ExcerptQueryChained_t> dQueries;
 	if ( tStmt.m_dInsertValues[0].m_iType==TOK_QUOTED_STRING )

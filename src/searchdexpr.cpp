@@ -255,9 +255,7 @@ Expr_Snippet_c::Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQu
 			return;
 	}
 
-	m_tSnippetQuery.m_bHasBeforePassageMacro = SnippetTransformPassageMacros ( m_tSnippetQuery.m_sBeforeMatch, m_tSnippetQuery.m_sBeforeMatchPassage );
-	m_tSnippetQuery.m_bHasAfterPassageMacro = SnippetTransformPassageMacros ( m_tSnippetQuery.m_sAfterMatch, m_tSnippetQuery.m_sAfterMatchPassage );
-
+	m_tSnippetQuery.Setup();
 	if ( !m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery, sError ) )
 		return;
 
@@ -400,6 +398,7 @@ Expr_Highlight_c::Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, CS
 	else
 		MarkAllFields();
 
+	m_tSnippetQuery.Setup();
 	if ( !m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery, sError ) )
 		return;
 }

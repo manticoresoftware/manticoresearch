@@ -23,7 +23,42 @@
 
 #include <math.h>
 
+
+static bool SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPost )
+{
+	const char sPassageMacro[] = "%PASSAGE_ID%";
+
+	const char * sPass = NULL;
+	if ( !sSrc.IsEmpty() )
+		sPass = strstr ( sSrc.cstr(), sPassageMacro );
+
+	if ( !sPass )
+		return false;
+
+	int iSrcLen = sSrc.Length();
+	int iPassLen = sizeof ( sPassageMacro ) - 1;
+	int iTailLen = iSrcLen - iPassLen - ( sPass - sSrc.cstr() );
+
+	// copy tail
+	if ( iTailLen )
+		sPost.SetBinary ( sPass+iPassLen, iTailLen );
+
+	CSphString sPre;
+	sPre.SetBinary ( sSrc.cstr(), sPass - sSrc.cstr() );
+	sSrc.Swap ( sPre );
+
+	return true;
+}
+
+
 /////////////////////////////////////////////////////////////////////////////
+
+void SnippetQuerySettings_t::Setup()
+{
+	m_bHasBeforePassageMacro = SnippetTransformPassageMacros ( m_sBeforeMatch, m_sBeforeMatchPassage );
+	m_bHasAfterPassageMacro = SnippetTransformPassageMacros ( m_sAfterMatch, m_sAfterMatchPassage );
+}
+
 
 CSphString SnippetQuerySettings_t::AsString() const
 {
@@ -1336,33 +1371,6 @@ bool sphCheckOptionsSPZ ( const SnippetQuerySettings_t & q, ESphSpz eMode, CSphS
 			return false;
 		}
 	}
-
-	return true;
-}
-
-
-bool SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPost )
-{
-	const char sPassageMacro[] = "%PASSAGE_ID%";
-
-	const char * sPass = NULL;
-	if ( !sSrc.IsEmpty() )
-		sPass = strstr ( sSrc.cstr(), sPassageMacro );
-
-	if ( !sPass )
-		return false;
-
-	int iSrcLen = sSrc.Length();
-	int iPassLen = sizeof ( sPassageMacro ) - 1;
-	int iTailLen = iSrcLen - iPassLen - ( sPass - sSrc.cstr() );
-
-	// copy tail
-	if ( iTailLen )
-		sPost.SetBinary ( sPass+iPassLen, iTailLen );
-
-	CSphString sPre;
-	sPre.SetBinary ( sSrc.cstr(), sPass - sSrc.cstr() );
-	sSrc.Swap ( sPre );
 
 	return true;
 }

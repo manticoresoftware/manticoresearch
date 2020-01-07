@@ -113,10 +113,11 @@ insert into test_table2 values
 <sphinxql>select content from test2 where match('code completion')</sphinxql>
 <sphinxql>select snippet(content,query(),'html_strip_mode=retain','limit=0') from test2 where match('code completion')</sphinxql>
 <sphinxql>select highlight({html_strip_mode=retain, limit=0}) from test2 where match('code completion')</sphinxql>
-
 <sphinxql>select snippet(content,query(),'html_strip_mode=strip') from test2 where match('ideas')</sphinxql>
 <sphinxql>select highlight({html_strip_mode=strip}) from test2 where match('ideas')</sphinxql>
 
+<sphinxql>select body,snippet(body,query(), 'before_match=%PASSAGE_ID%','after_match=/%PASSAGE_ID%') from test1 where match('three')</sphinxql>
+<sphinxql>select highlight({before_match='%PASSAGE_ID%',after_match='/%PASSAGE_ID%'}) from test1 where match('three')</sphinxql>
 </sphqueries>
 
 </test>

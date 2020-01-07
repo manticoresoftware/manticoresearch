@@ -67,6 +67,7 @@ struct SnippetQuerySettings_t
 	ESphSpz			m_ePassageSPZ { SPH_SPZ_NONE };
 	bool			m_bJsonQuery { false };
 
+	void			Setup();
 	CSphString		AsString() const;
 };
 
@@ -112,7 +113,6 @@ bool			TestEscaping( const CSphString& sPrefix, const CSphString& sPath );
 ESphSpz			GetPassageBoundary ( const CSphString & sPassageBoundaryMode );
 const char *	PassageBoundarySz ( ESphSpz eBoundary );
 bool			sphCheckOptionsSPZ ( const SnippetQuerySettings_t & q, ESphSpz eMode, CSphString & sError );
-bool			SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPost );
 void			UnpackSnippetData ( const BYTE * pData, int iLength, SnippetResult_t & tRes );
 
 struct FieldSource_t

@@ -25245,17 +25245,8 @@ struct CSphSchemaConfigurator
 				tCol.m_eSrc = SPH_ATTRSRC_FIELD;
 			}
 
-			if ( tCol.m_sName.IsEmpty() )
-			{
-				sError.SetSprintf ( "column number %d has no name", tCol.m_iIndex );
+			if ( !SchemaConfigureCheckAttribute ( tSchema, tCol, sError ) )
 				return false;
-			}
-
-			if ( CSphSchema::IsReserved ( tCol.m_sName.cstr() ) )
-			{
-				sError.SetSprintf ( "%s is not a valid attribute name", tCol.m_sName.cstr() );
-				return false;
-			}
 
 			tSchema.AddAttr ( tCol, true ); // all attributes are dynamic at indexing time
 		}
@@ -25289,19 +25280,24 @@ struct CSphSchemaConfigurator
 };
 
 
-static bool SourceCheckSchema ( const CSphSchema & tSchema, CSphString & sError )
+bool SchemaConfigureCheckAttribute ( const CSphSchema & tSchema, const CSphColumnInfo & tCol, CSphString & sError )
 {
-	SmallStringHash_T<int> hAttrs;
-	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+	if ( tCol.m_sName.IsEmpty() )
 	{
-		const CSphColumnInfo & tAttr = tSchema.GetAttr ( i );
-		bool bUniq = hAttrs.Add ( 1, tAttr.m_sName );
+		sError.SetSprintf ( "column number %d has no name", tCol.m_iIndex );
+		return false;
+	}
 
-		if ( !bUniq )
-		{
-			sError.SetSprintf ( "attribute %s declared multiple times", tAttr.m_sName.cstr() );
-			return false;
-		}
+	if ( tSchema.GetAttr ( tCol.m_sName.cstr() ) )
+	{
+		sError.SetSprintf ( "can not add multiple attributes with same name '%s'", tCol.m_sName.cstr () );
+		return false;
+	}
+
+	if ( CSphSchema::IsReserved ( tCol.m_sName.cstr() ) )
+	{
+		sError.SetSprintf ( "%s is not a valid attribute name", tCol.m_sName.cstr() );
+		return false;
 	}
 
 	return true;
@@ -25634,7 +25630,7 @@ bool CSphSource_XMLPipe2::Setup ( int iFieldBufferMax, bool bFixupUTF8, FILE * p
 	if ( !bOk )
 		return false;
 
-	if ( !SourceCheckSchema ( m_tSchema, sError ) )
+	if ( !DebugCheckSchema ( m_tSchema, sError ) )
 		return false;
 
 	ConfigureFields ( hSource("xmlpipe_field"), bWordDict, m_tSchema );
@@ -27059,7 +27055,7 @@ bool CSphSource_BaseSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe,
 	if ( !SetupSchema ( hSource, bWordDict, sError ) )
 		return false;
 
-	if ( !SourceCheckSchema ( m_tSchema, sError ) )
+	if ( !DebugCheckSchema ( m_tSchema, sError ) )
 		return false;
 
 	if ( !AddAutoAttrs ( sError ) )

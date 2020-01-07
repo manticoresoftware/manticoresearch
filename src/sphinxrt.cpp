@@ -4222,6 +4222,9 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 	if ( m_iWordsCheckpoint!=RTDICT_CHECKPOINT_V5 )
 		tReporter.Fail ( "unexpected number of words per checkpoint (expected 48, got %d)", m_iWordsCheckpoint );
 
+	tReporter.Msg ( "checking schema..." );
+	DebugCheckSchema ( m_tSchema, tReporter );
+
 	ARRAY_FOREACH ( iSegment, m_dRamChunks )
 	{
 		tReporter.Msg ( "checking RT segment %d(%d)...", iSegment, m_dRamChunks.GetLength() );
@@ -9421,6 +9424,9 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 				} else
 					sError.SetSprintf ( "attribute '%s': bitcount is only supported for integer types (bitcount ignored)", tCol.m_sName.cstr() );
 			}
+
+			if ( !SchemaConfigureCheckAttribute ( tSchema, tCol, sError ) )
+				return false;
 
 			tSchema.AddAttr ( tCol, false );
 

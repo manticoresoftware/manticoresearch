@@ -1343,7 +1343,7 @@ struct ColumnNameCmp_fn
 {
 	inline bool IsLess ( const CSphColumnInfo & tColA, const CSphColumnInfo & tColB ) const
 	{
-		return ( strcmp ( tColA.m_sName.cstr(), tColB.m_sName.cstr() )<0 );
+		return ( strcasecmp ( tColA.m_sName.cstr(), tColB.m_sName.cstr() )<0 );
 	}
 };
 
@@ -1373,7 +1373,7 @@ void DebugCheckSchema_T ( const ISphSchema & tSchema, T & tReporter )
 	{
 		const CSphColumnInfo & tPrev = dAttrs[iAttr-1];
 		const CSphColumnInfo & tCur = dAttrs[iAttr];
-		if ( tPrev.m_sName==tCur.m_sName )
+		if ( strcasecmp ( tPrev.m_sName.cstr(), tCur.m_sName.cstr() )==0 )
 			tReporter.Fail ( "duplicate attributes name %s for columns: %s, %s", tCur.m_sName.cstr(), DumpAttr ( tPrev ).cstr(), DumpAttr ( tCur ).cstr() );
 	}
 }

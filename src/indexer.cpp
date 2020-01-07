@@ -656,7 +656,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 		for ( int j = i + 1; j < tParams.m_dAttrs.GetLength(); j++ )
 		{
 			const CSphString & sName = tParams.m_dAttrs[i].m_sName;
-			if ( sName==tParams.m_dAttrs[j].m_sName )
+			if ( strcasecmp ( sName.cstr(), tParams.m_dAttrs[j].m_sName.cstr() )==0 )
 			{
 				fprintf ( stdout, "ERROR: duplicate attribute name: %s\n", sName.cstr() );
 				return false;

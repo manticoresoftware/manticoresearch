@@ -906,12 +906,6 @@ bool SnippetBuilder_c::CheckSettings ( TextSource_i * pSource, CSphString & sErr
 
 	const SnippetQuerySettings_t & tOpt = *m_pQuerySettings;
 
-	if ( pSource->TextFromIndex() && tOpt.m_sStripMode!="index" )
-	{
-		sError = "highlighting stored text requires html_strip_mode=index";
-		return false;
-	}
-
 	if ( tOpt.m_sStripMode=="retain" && !( tOpt.m_iLimit==0 && tOpt.m_iLimitPassages==0 && tOpt.m_iLimitWords==0 ) )
 	{
 		sError = "html_strip_mode=retain requires that all limits are zero";

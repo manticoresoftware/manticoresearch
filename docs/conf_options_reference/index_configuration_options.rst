@@ -2066,8 +2066,8 @@ are processed by ICU, only those parts of texts that contain Chinese are passed 
 ICU for segmentation, others can be modified by other means (different morphologies, charset_table etc.)
 
 Additional stemmers provided by
-`Snowball <http://snowball.tartarus.org/>`__ project
-`libstemmer <http://snowball.tartarus.org/dist/libstemmer_c.tgz>`__
+`Snowball <https://snowballstem.org/>`__ project
+`libstemmer <https://snowballstem.org/dist/libstemmer_c.tgz>`__
 library can be enabled at compile time using ``--with-libstemmer``
 ``configure`` option. Built-in English and Russian stemmers should be
 faster than their libstemmer counterparts, but can produce slightly

@@ -24,6 +24,7 @@ source src1
 index test1
 {
 	source			= src1
+	stored_fields = title,content
 	path			= @CONFDIR@/data/test1
 }
 
@@ -37,6 +38,7 @@ index testrt
 
 	rt_field		= title
 	rt_field		= content
+	stored_fields = title,content
 	rt_attr_uint		= gid
 }
 

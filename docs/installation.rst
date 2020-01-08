@@ -430,7 +430,7 @@ Next step is to configure the building with cmake. Available list of configurati
 	* libstemmer_c folder in the source directory
 	* common system path. Please note that in this case, the linking is dynamic and libstemmer should be available system-wide on the installed systems
 	* libstemmer_c.tgz in  ``LIBS_BUNDLE`` folder.
-	* download from snowball project website. This is done by cmake and no additional tool is required
+	* download from snowball project website (https://snowballstem.org/dist/libstemmer_c.tgz). This is done by cmake and no additional tool is required.
 	* NOTE: if you have libstemmer in the system, but still want to use static version, say, to build a binary for a system without such lib, provide ``WITH_STEMMER_FORCE_STATIC=1`` in advance.
 	
 * ``WITH_RE2`` (bool) - specifies if the build should include the RE2 library. The library can be taken from the following locations:

@@ -15703,6 +15703,7 @@ static void AddPlainIndexStatus ( SqlRowBuffer_c & tOut, const ServedIndex_c * p
 		if ( ServedDesc_t::IsMutable ( pLocked ) )
 		{
 			tOut.DataTuplet ( "ram_chunk", tStatus.m_iRamChunkSize );
+			tOut.DataTuplet ( "ram_chunks_count", tStatus.m_iNumRamChunks );
 			tOut.DataTuplet ( "disk_chunks", tStatus.m_iNumChunks );
 			tOut.DataTuplet ( "mem_limit", tStatus.m_iMemLimit );
 			tOut.DataTuplet ( "ram_bytes_retired", tStatus.m_iRamRetired );

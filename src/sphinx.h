@@ -3158,6 +3158,7 @@ struct CSphIndexStatus
 	int64_t			m_iRamRetired = 0;
 	int64_t			m_iDiskUse = 0;
 	int64_t			m_iRamChunkSize = 0; // not used for plain
+	int				m_iNumRamChunks = 0; // not used for plain
 	int				m_iNumChunks = 0; // not used for plain
 	int64_t			m_iMemLimit = 0; // not used for plain
 	int64_t			m_iTID = 0;

@@ -201,7 +201,7 @@ index purging that would improve the performance may be performed with
 Data in RAM chunk gets saved to disk on clean daemon shutdown, and then
 loaded back on startup. However, on daemon or server crash, updates from
 RAM chunk might be lost. To prevent that, binary logging of transactions
-can be used; see `the section called :ref:`binary_logging` for details.
+can be used; see the section called :ref:`binary_logging` for details.
 
 Full-text changes in RT index are transactional. They are stored in a
 per-thread accumulator until COMMIT, then applied at once. Bigger

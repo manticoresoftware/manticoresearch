@@ -266,25 +266,18 @@ On MacOS Manticore can be installed in 2 easy way:
 
 The manticore.conf is located in the root folder.
 	
-2. Use official brew tap
+2. Use HomeBrew package manager
 
-Add to brew the official Manticore tap and install Manticore. Bottles are available for sierra and mojave.
-  
 .. code-block:: bash
 	
-	$ brew tap  manticoresoftware/tap
 	$ brew install manticoresearch
 	
-For indexing additional dependencies that can be installed using brew are ``mysql@5.7``, ``libpq``, ``unixodbc``.
-	
-Start Manticore as brew service:
+Start Manticore as a brew service:
 
 .. code-block:: bash
 	
 	$ brew services start  manticoresearch
 	
-The configuration is located at ``/usr/local/etc/manticore/manticore.conf``.
-
 	
 .. _upgrade_from_sphinx:
 

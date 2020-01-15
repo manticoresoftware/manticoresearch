@@ -109,7 +109,7 @@ else ()
 			DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/rc.d/init.d COMPONENT adm )
 
 endif ()
-if (NOT NOAPI)
+
 install ( FILES ${MANTICORE_BINARY_DIR}/manticore-min.conf.dist
 		${MANTICORE_BINARY_DIR}/manticore.conf.dist
 		DESTINATION usr/${CMAKE_INSTALL_DOCDIR} COMPONENT doc )
@@ -123,6 +123,7 @@ install ( FILES doc/indexer.1 doc/indextool.1 doc/searchd.1 doc/spelldump.1
 install ( DIRECTORY misc/stopwords DESTINATION usr/${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME} COMPONENT doc )
 install ( FILES ${ICU_SRC}/source/data/in/icudt65l.dat DESTINATION usr/${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME}/icu COMPONENT doc)
 
+if (NOT NOAPI)
 install ( DIRECTORY api DESTINATION usr/${CMAKE_INSTALL_DATADIR}/manticore COMPONENT doc )
 endif()
 

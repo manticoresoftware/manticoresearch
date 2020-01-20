@@ -22,7 +22,7 @@ static auto &g_bRTChangesAllowed = RTChangesAllowed ();
 //////////////////////////////////////////////////////////////////////////
 // percolate index
 
-struct StoredQuery_t : public StoredQuery_i
+struct StoredQuery_t : public StoredQuery_i, public ISphRefcountedMT
 {
 	XQQuery_t *						m_pXQ = nullptr;
 
@@ -46,27 +46,36 @@ static bool NotImplementedError ( CSphString * pError )
 	return false;
 }
 
-struct StoredQueryKey_t
+using PQItemRefPtr_t = CSphRefcountedPtr<StoredQuery_t>;
+struct PQVector_t : public CSphVector<PQItemRefPtr_t>, public ISphRefcountedMT
 {
-	int64_t m_iQUID = 0;
-	StoredQuery_t * m_pQuery = nullptr;
 };
+using PQRefVector_t = CSphRefcountedPtr<PQVector_t>;
 
 // FindSpan vector operators
-static bool operator < ( const StoredQueryKey_t & tKey, int64_t iQUID )
+static bool operator < ( const PQItemRefPtr_t & tQuery, int64_t iQUID )
 {
-	return tKey.m_iQUID<iQUID;
+	return tQuery->m_iQUID<iQUID;
 }
 
-static bool operator == ( const StoredQueryKey_t & tKey, int64_t iQUID )
+static bool operator == ( const PQItemRefPtr_t & tQuery, int64_t iQUID )
 {
-	return tKey.m_iQUID==iQUID;
+	return tQuery->m_iQUID==iQUID;
 }
 
-static bool operator < ( int64_t iQUID, const StoredQueryKey_t & tKey )
+static bool operator < ( int64_t iQUID, const PQItemRefPtr_t & tQuery )
 {
-	return iQUID<tKey.m_iQUID;
+	return iQUID<tQuery->m_iQUID;
 }
+
+// BinarySearch vector operators
+struct PqRefCmp_fn
+{
+	int64_t operator() ( const PQItemRefPtr_t & tQuery ) const
+	{
+		return tQuery->m_iQUID;
+	}
+};
 
 static int g_iPercolateThreads = 1;
 static FileAccessSettings_t g_tDummyFASettings;
@@ -84,17 +93,17 @@ public:
 	bool Commit ( int * pDeleted, RtAccum_t * pAccExt ) override;
 	void RollBack ( RtAccum_t * pAccExt ) override;
 
-	StoredQuery_i * AddQuery ( const PercolateQueryArgs_t & tArgs, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError ) REQUIRES (!m_tLock);
-	StoredQuery_i * Query ( const PercolateQueryArgs_t & tArgs, CSphString & sError ) override REQUIRES (!m_tLock);
+	StoredQuery_i * AddQuery ( const PercolateQueryArgs_t & tArgs, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError );
+	StoredQuery_i * Query ( const PercolateQueryArgs_t & tArgs, CSphString & sError ) override;
 
 	bool Prealloc ( bool bStripPath ) override;
 	void Dealloc () override {}
 	void Preread () override {}
-	void PostSetup() override REQUIRES (!m_tLock);
+	void PostSetup() override;
 	RtAccum_t * CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) override;
 	ISphTokenizer * CloneIndexingTokenizer() const override { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 	void SaveMeta ( bool bShutdown );
-	bool Truncate ( CSphString & ) override EXCLUDES (m_tLock);
+	bool Truncate ( CSphString & ) override;
 
 	// RT index stub
 	bool MultiQuery ( const CSphQuery *, CSphQueryResult *, int, ISphMatchSorter **, const CSphMultiQueryArgs & ) const override;
@@ -107,7 +116,7 @@ public:
 	bool AttachDiskIndex ( CSphIndex * , bool, bool &, CSphString & ) override { return true; }
 	void Optimize () override {}
 	bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const override;
-	bool Reconfigure ( CSphReconfigureSetup & tSetup ) override REQUIRES ( !m_tLock );
+	bool Reconfigure ( CSphReconfigureSetup & tSetup ) override;
 	CSphIndex * GetDiskChunk ( int ) override { return NULL; } // NOLINT
 	int64_t GetLastFlushTimestamp() const override { return m_tmSaved; }
 
@@ -154,20 +163,21 @@ private:
 
 	int								m_iLockFD = -1;
 	CSphSourceStats					m_tStat;
-	TokenizerRefPtr_c			m_pTokenizerIndexing;
+	TokenizerRefPtr_c				m_pTokenizerIndexing;
 	int								m_iMaxCodepointLength = 0;
 	int64_t							m_iSavedTID = 0;
 	int64_t							m_tmSaved = 0;
 	bool							m_bSaveDisabled = false;
 	bool							m_bHasFiles = false;
 
-	CSphVector<StoredQueryKey_t>	m_dStored GUARDED_BY ( m_tLock );
-	mutable RwLock_t				m_tLock;
+	PQRefVector_t					m_pStored { new PQVector_t() };
+	mutable CSphMutex				m_tLock;
+	CSphMutex						m_tWriter;
 
 	CSphFixedVector<StoredQueryDesc_t>	m_dLoadedQueries { 0 };
 	CSphSchema						m_tMatchSchema;
 
-	void DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMatchResult_t & tRes ) REQUIRES ( !m_tLock );
+	void DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMatchResult_t & tRes );
 	bool MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters,
 		ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs &tArgs ) const;
 
@@ -181,6 +191,10 @@ private:
 
 	void GetIndexFiles ( CSphVector<CSphString> & dFiles ) const override;
 	bool ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const override;
+
+	PQRefVector_t CloneStored () const;
+	void SetStored ( PQRefVector_t & tStored );
+	PQRefVector_t GetStored () const;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -716,10 +730,10 @@ PercolateIndex_c::~PercolateIndex_c ()
 	if ( bValid )
 		SaveMeta ( true );
 
-	{ // coverity complains about accessing m_dStored without locking tLock
-		ScWL_t wLock { m_tLock };
-		for ( auto& dStored : m_dStored )
-			SafeDelete ( dStored.m_pQuery );
+	{
+		ScopedMutex_t tWriterLock ( m_tWriter );
+		PQRefVector_t tEmpty { new PQVector_t() };
+		SetStored ( tEmpty );
 	}
 	SafeClose ( m_iLockFD );
 }
@@ -1155,13 +1169,13 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 
 struct PercolateMatchJob_t : public ISphJob
 {
-	const CSphVector<StoredQueryKey_t> & m_dStored;
+	const VecTraits_T<PQItemRefPtr_t> & m_dStored;
 	CSphAtomic & m_tQueryCounter;
 	PercolateMatchContext_t & m_tMatchCtx;
 
 	const CrashQuery_t * m_pCrashQuery = nullptr;
 
-	PercolateMatchJob_t ( const CSphVector<StoredQueryKey_t> & dStored, CSphAtomic & tQueryCounter,
+	PercolateMatchJob_t ( const VecTraits_T<PQItemRefPtr_t> & dStored, CSphAtomic & tQueryCounter,
 		PercolateMatchContext_t & tMatchCtx, const CrashQuery_t * pCrashQuery=nullptr )
 		: m_dStored ( dStored )
 		, m_tQueryCounter ( tQueryCounter )
@@ -1179,7 +1193,7 @@ struct PercolateMatchJob_t : public ISphJob
 		}
 		m_tMatchCtx.m_dMsg.Clear();
 		for ( long iQuery = m_tQueryCounter++; iQuery<m_dStored.GetLength (); iQuery = m_tQueryCounter++ )
-			MatchingWork ( m_dStored[iQuery].m_pQuery, m_tMatchCtx );
+			MatchingWork ( m_dStored[iQuery], m_tMatchCtx );
 	}
 };
 
@@ -1350,8 +1364,8 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 	CrashQuery_t tCrashQuery;
 
 	{
-		ScRL_t rLock ( m_tLock );
-		tRes.m_iTotalQueries = m_dStored.GetLength ();
+		PQRefVector_t tStored ( GetStored() );
+		tRes.m_iTotalQueries = tStored->GetLength ();
 	}
 
 	// pool jobs only for decent amount of queries
@@ -1380,8 +1394,8 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 
 	// queries should be locked for reading now
 	{
-		ScRL_t rLock ( m_tLock );
-		PercolateMatchJob_t tJobMain ( m_dStored, iCurQuery, *dResults[0] ); // still got crash info no need to set it again
+		PQRefVector_t tStored ( GetStored() );
+		PercolateMatchJob_t tJobMain ( *tStored.Ptr(), iCurQuery, *dResults[0] ); // still got crash info no need to set it again
 
 		// work loop
 		if ( pPool )
@@ -1389,7 +1403,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 			tCrashQuery = CrashQueryGet();
 			for ( int i=1; i<dResults.GetLength(); ++i )
 			{
-				auto * pJob = new PercolateMatchJob_t ( m_dStored, iCurQuery, *dResults[i], &tCrashQuery );
+				auto * pJob = new PercolateMatchJob_t ( *tStored.Ptr(), iCurQuery, *dResults[i], &tCrashQuery );
 				pPool->AddJob ( pJob );
 			}
 		}
@@ -1420,8 +1434,8 @@ bool PercolateIndex_c::MatchDocuments ( RtAccum_t * pAccExt, PercolateMatchResul
 
 	// empty txn or no queries just ignore
 	{
-		ScRL_t rLock ( m_tLock );
-		if ( !pAcc->m_uAccumDocs || !m_dStored.GetLength () )
+		PQRefVector_t tStored ( GetStored() );
+		if ( !pAcc->m_uAccumDocs || !tStored->GetLength () )
 		{
 			pAcc->Cleanup ();
 			return true;
@@ -1580,6 +1594,7 @@ StoredQuery_i * PercolateIndex_c::AddQuery ( const PercolateQueryArgs_t & tArgs,
 	pStored->m_dFilterTree = tArgs.m_dFilterTree;
 	pStored->m_bQL = tArgs.m_bQL;
 
+	PQRefVector_t tStored ( GetStored() );
 	bool bAutoID = ( pStored->m_iQUID==0 );
 	if ( bAutoID )
 	{
@@ -1588,17 +1603,12 @@ StoredQuery_i * PercolateIndex_c::AddQuery ( const PercolateQueryArgs_t & tArgs,
 		{
 			// get uuid_short and check it not collide with user provided already stored query
 			pStored->m_iQUID = UidShort();
-			m_tLock.ReadLock();
-			bDuplicate = ( m_dStored.BinarySearch ( bind ( &StoredQueryKey_t::m_iQUID ), pStored->m_iQUID )!=nullptr );
-			m_tLock.Unlock();
+			bDuplicate = ( tStored->BinarySearch ( PqRefCmp_fn(), pStored->m_iQUID )!=nullptr );
 		}
 	} else
 	{
-		m_tLock.ReadLock();
-		const StoredQueryKey_t * pGotStored = m_dStored.BinarySearch ( bind ( &StoredQueryKey_t::m_iQUID ), tArgs.m_iQUID );
-		m_tLock.Unlock();
-
-		if ( pGotStored && !tArgs.m_bReplace )
+		bool bGotStored = ( tStored->BinarySearch ( PqRefCmp_fn(), tArgs.m_iQUID )!=nullptr );
+		if ( bGotStored && !tArgs.m_bReplace )
 		{
 			sError.SetSprintf ( "duplicate id '" INT64_FMT "'", tArgs.m_iQUID );
 			SafeDelete ( pStored );
@@ -1610,29 +1620,27 @@ StoredQuery_i * PercolateIndex_c::AddQuery ( const PercolateQueryArgs_t & tArgs,
 
 void PercolateIndex_c::ReplayCommit ( StoredQuery_i * pQuery )
 {
-	StoredQuery_t * pStored = (StoredQuery_t *)pQuery;
+	ScopedMutex_t tWriterLock ( m_tWriter );
+	PQItemRefPtr_t tStoredQuery ( (StoredQuery_t *)pQuery );
 
 	if ( GetBinlog() )
-		GetBinlog()->BinlogPqAdd ( &m_iTID, m_sIndexName.cstr(), *pStored );
+		GetBinlog()->BinlogPqAdd ( &m_iTID, m_sIndexName.cstr(), *tStoredQuery.Ptr() );
 
-	StoredQueryKey_t tItem;
-	tItem.m_pQuery = pStored;
-	tItem.m_iQUID = pStored->m_iQUID;
+	PQRefVector_t tNewStored ( CloneStored() );
 
-	m_tLock.WriteLock();
-	int iPos = FindSpan ( m_dStored, pStored->m_iQUID );
+	int iPos = FindSpan ( *tNewStored.Ptr(), tStoredQuery->m_iQUID );
 	if ( iPos==-1 )
 	{
-		m_dStored.Insert ( 0, tItem );
-	} else if ( m_dStored[iPos].m_iQUID==tItem.m_iQUID )
+		tNewStored->Insert ( 0, tStoredQuery );
+	} else if ( tNewStored->At ( iPos )->m_iQUID==tStoredQuery->m_iQUID )
 	{
-		SafeDelete ( m_dStored[iPos].m_pQuery );
-		m_dStored[iPos].m_pQuery = tItem.m_pQuery;
+		tNewStored->At ( iPos ) = tStoredQuery;
 	} else
 	{
-		m_dStored.Insert ( iPos+1, tItem );
+		tNewStored->Insert ( iPos+1, tStoredQuery );
 	}
-	m_tLock.Unlock();
+
+	SetStored ( tNewStored );
 }
 
 int PercolateIndex_c::ReplayDeleteQueries ( const int64_t * pQueries, int iCount )
@@ -1640,21 +1648,24 @@ int PercolateIndex_c::ReplayDeleteQueries ( const int64_t * pQueries, int iCount
 	assert ( !iCount || pQueries!=NULL );
 
 	int iDeleted = 0;
-	ScWL_t wLock (m_tLock);
+	ScopedMutex_t tWriterLock ( m_tWriter );
+	PQRefVector_t tNewStored ( CloneStored() );
 
 	for ( int i=0; i<iCount; i++ )
 	{
-		const StoredQueryKey_t * ppElem = m_dStored.BinarySearch ( bind ( &StoredQueryKey_t::m_iQUID ), pQueries[i] );
-		if ( ppElem )
+		const PQItemRefPtr_t * pElem = tNewStored->BinarySearch ( PqRefCmp_fn(), pQueries[i] );
+		if ( pElem )
 		{
-			int iElem = ppElem - m_dStored.Begin();
-			SafeDelete ( m_dStored[iElem].m_pQuery );
-			m_dStored.Remove ( iElem );
+			int iElem = pElem - tNewStored->Begin();
+			tNewStored->Remove ( iElem );
 			iDeleted++;
 		}
 	}
 	if ( iDeleted && GetBinlog() )
 		GetBinlog()->BinlogPqDelete ( &m_iTID, m_sIndexName.cstr(), pQueries, iCount, nullptr );
+
+	if ( iDeleted )
+		SetStored ( tNewStored );
 
 	return iDeleted;
 }
@@ -1668,24 +1679,27 @@ int PercolateIndex_c::ReplayDeleteQueries ( const char * sTags )
 		return 0;
 
 	int iDeleted = 0;
-	ScWL_t wLock ( m_tLock );
+	ScopedMutex_t tWriterLock ( m_tWriter );
+	PQRefVector_t tNewStored ( CloneStored() );
 
-	ARRAY_FOREACH ( i, m_dStored )
+	for ( int i=0; i<tNewStored->GetLength(); i++ )
 	{
-		const StoredQuery_t * pQuery = m_dStored[i].m_pQuery;
+		const StoredQuery_t * pQuery = tNewStored->At ( i );
 		if ( !pQuery->m_dTags.GetLength() )
 			continue;
 
 		if ( TagsMatched ( dTags, pQuery->m_dTags ) )
 		{
-			SafeDelete ( m_dStored[i].m_pQuery );
-			m_dStored.Remove ( i );
+			tNewStored->Remove ( i );
 			i--;
 			iDeleted++;
 		}
 	}
 	if ( iDeleted && GetBinlog() )
 		GetBinlog()->BinlogPqDelete ( &m_iTID, m_sIndexName.cstr(), nullptr, 0, sTags );
+
+	if ( iDeleted )
+		SetStored ( tNewStored );
 
 	return iDeleted;
 }
@@ -1847,19 +1861,11 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 	BYTE * pData = nullptr;
 
 	CSphVector<PercolateQueryDesc> dQueries;
+	PQRefVector_t tStored ( GetStored() );
 
-
-	for ( int iQuery=0; true; ++iQuery ) // iQuery<=m_dStored.GetLength checked under rlock below
+	for ( const StoredQuery_t * pQuery : *tStored.Ptr() )
 	{
-		StoredQuery_t * pQuery = nullptr;
-		{
-			ScRL_t stLock ( m_tLock );
-			if ( iQuery>=m_dStored.GetLength ())
-				break;
-			const StoredQueryKey_t& dQuery = m_dStored[iQuery];
-			pQuery = dQuery.m_pQuery;
-			tMatch.SetAttr ( dID.m_tLocator, dQuery.m_iQUID );
-		}
+		tMatch.SetAttr ( dID.m_tLocator, pQuery->m_iQUID );
 
 		int iLen = pQuery->m_sQuery.Length ();
 		tMatch.SetAttr ( dColQuery.m_tLocator, (SphAttr_t) sphPackPtrAttr ( iLen+2, &pData ) );
@@ -2060,23 +2066,28 @@ void PercolateIndex_c::PostSetup()
 	if ( !bSorted )
 		dStored.Sort ( LoadedQuerySort_fn() );
 
-	CSphString sError;
-	ARRAY_FOREACH ( i, dStored )
 	{
-		const StoredQueryDesc_t & tQuery = *dStored[i];
-		const ISphTokenizer * pTok = tQuery.m_bQL ? pTokenizer : pTokenizerJson;
-		PercolateQueryArgs_t tArgs ( tQuery );
-		StoredQuery_i * pQuery = AddQuery ( tArgs, pTok, pDict, sError );
-		if ( !pQuery )
-		{
-			sphWarning ( "index '%s': %d (id=" INT64_FMT ") query failed to load, ignoring", m_sIndexName.cstr(), i, tQuery.m_iQUID );
-		} else
-		{
-			ReplayCommit ( pQuery );
-		}
-	}
+		// there should be neither writer nor readers as this called on start ot at reconfigure on w-locked index
+		ScopedMutex_t tLockWr ( m_tWriter );
+		m_pStored->Reserve ( m_pStored->GetLength() + dStored.GetLength() );
 
-	m_dLoadedQueries.Reset ( 0 );
+		CSphString sError;
+		ARRAY_FOREACH ( i, dStored )
+		{
+			const StoredQueryDesc_t & tQuery = *dStored[i];
+			const ISphTokenizer * pTok = tQuery.m_bQL ? pTokenizer : pTokenizerJson;
+			PercolateQueryArgs_t tArgs ( tQuery );
+			StoredQuery_i * pQuery = AddQuery ( tArgs, pTok, pDict, sError );
+			if ( !pQuery )
+			{
+				sphWarning ( "index '%s': %d (id=" INT64_FMT ") query failed to load, ignoring", m_sIndexName.cstr(), i, tQuery.m_iQUID );
+			} else
+			{
+				m_pStored->Add ( PQItemRefPtr_t ( (StoredQuery_t *)pQuery ) );
+			}
+		}
+		m_dLoadedQueries.Reset ( 0 );
+	}
 
 	// still need index files for index just created from config
 	if ( !m_bHasFiles )
@@ -2247,14 +2258,11 @@ void PercolateIndex_c::SaveMeta ( bool bShutdown )
 	SaveFieldFilterSettings ( wrMeta, m_pFieldFilter );
 
 	{
-		ScRL_t rLock ( m_tLock );
-		wrMeta.PutDword ( m_dStored.GetLength() );
+		PQRefVector_t tStored ( GetStored() );
+		wrMeta.PutDword ( tStored->GetLength() );
 
-		ARRAY_FOREACH ( i, m_dStored )
-		{
-			const StoredQuery_t * pQuery = m_dStored[i].m_pQuery;
+		for ( const StoredQuery_t * pQuery : *tStored.Ptr() )
 			SaveStoredQuery ( *pQuery, wrMeta );
-		}
 
 		wrMeta.PutOffset ( m_iTID );
 
@@ -2274,12 +2282,9 @@ void PercolateIndex_c::SaveMeta ( bool bShutdown )
 
 bool PercolateIndex_c::Truncate ( CSphString & sError )
 {
-	{
-		ScWL_t wLock ( m_tLock );
-		for ( auto& dStored : m_dStored )
-			SafeDelete ( dStored.m_pQuery );
-		m_dStored.Reset();
-	}
+	ScopedMutex_t tWriterLock ( m_tWriter );
+	PQRefVector_t tEmpty { new PQVector_t() };
+	SetStored ( tEmpty );
 
 	// update and save meta
 	// current TID will be saved, so replay will properly skip preceding txns
@@ -2382,23 +2387,22 @@ bool PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 	m_iMaxCodepointLength = m_pTokenizer->GetMaxCodepointLength();
 	SetupQueryTokenizer();
 
-	{ // scoped wlock
-		ScWL_t StoreWlock ( m_tLock );
-		m_dLoadedQueries.Reset ( m_dStored.GetLength() );
+	{
+		PQRefVector_t tStored ( GetStored() );
+		m_dLoadedQueries.Reset ( tStored->GetLength() );
 		ARRAY_FOREACH ( i, m_dLoadedQueries )
 		{
 			StoredQueryDesc_t & tQuery = m_dLoadedQueries[i];
-			const StoredQuery_t * pStored = m_dStored[i].m_pQuery;
+			const StoredQuery_t * pStored = tStored->At ( i );
 
 			tQuery.m_iQUID = pStored->m_iQUID;
 			tQuery.m_sQuery = pStored->m_sQuery;
 			tQuery.m_sTags = pStored->m_sTags;
 			tQuery.m_dFilters = pStored->m_dFilters;
 			tQuery.m_dFilterTree = pStored->m_dFilterTree;
-
-			SafeDelete ( pStored );
 		}
-		m_dStored.Resize ( 0 );
+		PQRefVector_t tEmpty { new PQVector_t() };
+		SetStored ( tEmpty );
 	}
 
 	PostSetup();
@@ -2675,4 +2679,31 @@ bool PercolateIndex_c::ExplainQuery ( const CSphString & sQuery, CSphString & sR
 	tArgs.m_bExpandPrefix = ( m_pDict->GetSettings().m_bWordDict && IsStarDict() );
 
 	return Explain ( tArgs );
+}
+
+PQRefVector_t PercolateIndex_c::CloneStored () const
+{
+	PQRefVector_t tStored ( GetStored() );
+	PQRefVector_t tCloned { new PQVector_t };
+	tCloned->Resize ( tStored->GetLength() );
+
+	// need to copy vector items not to reference original vector
+	for ( int i=0; i<tStored->GetLength(); i++ )
+		tCloned->At ( i ) = tStored->At ( i );
+
+	return tCloned;
+}
+
+void PercolateIndex_c::SetStored ( PQRefVector_t & tStored )
+{
+	ScopedMutex_t tLock ( m_tLock );
+	m_pStored = tStored;
+}
+
+PQRefVector_t PercolateIndex_c::GetStored () const
+{
+	ScopedMutex_t tLock ( m_tLock );
+	PQRefVector_t tStored ( m_pStored );
+
+	return tStored;
 }

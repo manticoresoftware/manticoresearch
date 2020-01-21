@@ -107,8 +107,6 @@ if ( NOT DISABLE_TESTING )
 	include ( CTest )
 endif ()
 
-option ( SEPARATE_DAEMON "Put searchd into different package" OFF )
-
 set ( SPHINX_TAG "" CACHE STRING "The tag which will be added to build" )
 set ( PKGSUFFIXES ) # list of suffixes which will be append to package name, will be '-'-separated
 set ( PACKAGE_NAME "manticore" )

@@ -95,6 +95,7 @@ must be used for proper sorting:
 
    SELECT * FROM myindex ORDER BY DOUBLE (myjson.myfloat) DESC
    
+JSON objects as well as their properties can be tested against NULL with IS (NOT) NULL operator.
 
 
 Multi-value integer

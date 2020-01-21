@@ -163,7 +163,7 @@ Operators
    
 .. _expr-comp-ops:
 
--  Comparison operators: <, > <=, >=, =, <>
+-  Comparison operators: <, > <=, >=, =, <>, BETWEEN, IN, IS NULL
 
    Comparison operators (eg. = or <=) return 1.0 when the condition is
    true and 0.0 otherwise. For instance, ``(a=b)+3`` will evaluate to 4
@@ -172,6 +172,9 @@ Operators
    introduce a small equality threshold (1e-6 by default). If the
    difference between compared values is within the threshold, they will
    be considered equal.
+   BETWEEN and IN operators in case of multi-value attribute return true if at least one value matches the condition(same as ANY()).
+   IN doesn't support JSON attributes.
+   IS (NOT) NULL is supported only for JSON attributes.
 
 .. _expr-bool-ops:
    

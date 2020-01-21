@@ -95,15 +95,11 @@ install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore/dat
 install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COMPONENT adm )
 
 # tickets per components
-set ( CPACK_COMPONENT_BIN_DESCRIPTION "Fast standalone full-text SQL search engine
- Manticore (ex. Sphinx) is a standalone full text search engine, meant to provide fast,
- size-efficient and relevant fulltext search functions to other applications.
- Sphinx was specially designed to integrate well with SQL databases and
- scripting languages. Currently built-in data sources support fetching data
- from  MySQL, PostgreSQL, any database supporting ODBC, XML and CSV files. " )
+set ( CPACK_COMPONENT_BIN_DESCRIPTION "Manticore Search is a powerful free open source search engine
+with a focus on low latency and high throughput full-text search
+and high volume stream filtering" )
  
- set  ( CPACK_COMPONENT_CONVERTER_DESCRIPTION "This package provides the index_converter tool for Manticore Search. index_converter upgrade indexes created with Manticore Search 2.x to Manticore Search 3.x format." )
-
+set  ( CPACK_COMPONENT_CONVERTER_DESCRIPTION "This package provides the index_converter tool for Manticore Search which converts indexes created with Manticore Search 2.x or Sphinx 2.x to Manticore Search 3.x format" )
 
 set ( CPACK_DEBIAN_PACKAGE_NAME "manticore" )
 # version

@@ -5,7 +5,8 @@ Replication
 ===========
 
 Manticore search daemon can replicate a write transaction (``INSERT``, ``REPLACE``, ``DELETE``, ``TRUNCATE``, ``UPDATE``, etc)
-in an index to other nodes in the cluster. Currently percolate and rt indexes are supported.
+in an index to other nodes in the cluster. 
+Currently percolate and Real-Time indexes are supported.
 Only Linux packages and builds support replication, Windows and MacOS packages do not support replication.
 
 We took advantage of Percona's fork of Galera library which gives the following benefits:
@@ -37,6 +38,17 @@ To use replication in Manticore search:
 - there should be at least one value of :ref:`listen <listen>` for the SphinxAPI protocol directive
 - set unique values on :ref:`server_id <server_id>` for each node. If no value set, the node will try to use the MAC address (or a random number if this fails) to generate a server_id.
 
+Example of searchd configuration block:
+
+.. code-block::  none
+
+  searchd {
+    listen    = 9312
+    listen    = 192.168.1.101:9360-9370:replication
+    data_dir  = /var/lib/manticore/replication/
+    server_id = 123
+    ...
+   }
 
 .. _replication_cluster:
 
@@ -46,8 +58,8 @@ Replication cluster
 Replication cluster is a set of nodes among which a write transaction gets replicated.
 Replication is configured on the per-index basis. One index can be assigned to only
 one cluster. There is no restriction on how many indexes a cluster may have. All
-transactions such as ``INSERT``, ``REPLACE``, ``DELETE``, ``TRUNCATE`` in any
-percolate index belonging to a cluster are replicated to all the other nodes in the
+transactions such as ``INSERT``, ``REPLACE``, ``DELETE``, ``TRUNCATE`` in any 
+index belonging to a cluster are replicated to all the other nodes in the
 cluster. Replication is multi-master, so writes to any particular node or to
 multiple nodes simultaneously work equally well.
 
@@ -65,7 +77,7 @@ Specifies a name for the cluster. Should be unique.
 path
 ~~~~
 
-Data directory for a `write-set cache replication <http://galeracluster.com/documentation-webpages/statetransfer.html#gcache>`_
+Data directory for a `write-set cache replication <https://galeracluster.com/documentation-webpages/documentation/state-transfer.html>`_
 and incoming indexes from other nodes. Should be unique among the other clusters in the node. Default is :ref:`data_dir <data_dir>`.
 
 .. _cluster_nodes:
@@ -84,7 +96,7 @@ options
 ~~~~~~~
 
 Options passed directly to Galera replication plugin as described
-here `Galera Documentation Parameters <http://galeracluster.com/documentation-webpages/galeraparameters.html>`_
+here `Galera Documentation Parameters <https://galeracluster.com/documentation-webpages/documentation/galera-parameters.html>`_
 
 
 .. _replication_create:
@@ -163,11 +175,11 @@ gets removed from all the nodes, but its indexes are left intact and become acti
 Managing indexes
 ----------------
 
-``ALTER CLUSTER <cluster_name> ADD <index_name>`` adds an existing local PQ index to the cluster.
+``ALTER CLUSTER <cluster_name> ADD <index_name>`` adds an existing local index to the cluster.
 The node which receives the ALTER query sends the index to the other nodes in the cluster. All the local
 indexes with the same name on the other nodes of the cluster get replaced with the new index.
 
-``ALTER CLUSTER <cluster_name> DROP <index_name>`` forgets about a local PQ index, i.e., it doesn't remove
+``ALTER CLUSTER <cluster_name> DROP <index_name>`` forgets about a local index, i.e., it doesn't remove
 the index files on the nodes but just makes it an active non-replicated index.
 
 .. code-block:: sql
@@ -286,7 +298,7 @@ Replication plugin options can be changed using :ref:`SET <set_syntax>` statemen
 
      SET CLUSTER click_query GLOBAL 'pc.bootstrap' = 1
 
-See `Galera Documentation Parameters <http://galeracluster.com/documentation-webpages/galeraparameters.html>`_
+See Galera `Documentation Parameters <https://galeracluster.com/documentation-webpages/documentation/galera-parameters.html>`_
 for a list of available options.
 
 .. _replication_restart:

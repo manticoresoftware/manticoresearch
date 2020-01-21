@@ -49,10 +49,6 @@ contains additional optional highlighting parameters:
    How much words to pick around each matching keywords block. Integer,
    default is 5.
 
--  ``exact_phrase``:
-   Whether to highlight exact query phrase matches only instead of
-   individual keywords. Boolean, default is false.
-
 -  ``use_boundaries``:
    Whether to additionally break passages by phrase boundary characters,
    as configured in index settings with
@@ -63,15 +59,6 @@ contains additional optional highlighting parameters:
    Whether to sort the extracted passages in order of relevance
    (decreasing weight), or in order of appearance in the document
    (increasing position). Boolean, default is false.
-
--  ``query_mode``:
-   Whether to handle $words as a query in :ref:`extended
-   syntax <extended_query_syntax>`, or as a bag of words
-   (default behavior). For instance, in query mode (``one two`` \| ``three
-   four``) will only highlight and include those occurrences ``one two`` or
-   ``three four`` when the two words from each pair are adjacent to each
-   other. In default mode, any single occurrence of ``one``, ``two``,
-   ``three``, or ``four`` would be highlighted. Boolean, default is false.
 
 -  ``force_all_words``:
    Ignores the snippet length limit until it includes all the keywords.

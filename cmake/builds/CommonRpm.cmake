@@ -36,15 +36,12 @@ endif ()
 set ( CPACK_RPM_PACKAGE_URL "https://manticoresearch.com/" )
 set ( CPACK_RPM_PACKAGE_GROUP "Applications/Text" )
 set ( CPACK_RPM_BIN_PACKAGE_OBSOLETES "sphinx" )
-set ( CPACK_COMPONENT_BIN_DESCRIPTION "Manticore is a full-text search server that adds many advanced features
-on top of plain old text searching. Data can be fetched directly from
-a database, or streamed in XML format. MySQL, PostgreSQL, SQL Server,
-Oracle, and other databases are supported. Client programs can query
-Sphinx either using native SphinxAPI library, or using regular MySQL
-client programs and libraries via SQL-like SphinxQL interface.")
+set ( CPACK_COMPONENT_BIN_DESCRIPTION "Manticore Search is a powerful free open source search engine
+with a focus on low latency and high throughput full-text search
+and high volume stream filtering")
 
  
- set  ( CPACK_COMPONENT_CONVERTER_DESCRIPTION "This package provides the index_converter tool for Manticore Search. index_converter upgrade indexes created with Manticore Search 2.x to Manticore Search 3.x format." )
+set  ( CPACK_COMPONENT_CONVERTER_DESCRIPTION "This package provides the index_converter tool for Manticore Search which converts indexes created with Manticore Search 2.x or Sphinx 2.x to Manticore Search 3.x format" )
 
 #set ( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST "/usr/include" )
 set ( CPACK_RPM_BIN_USER_FILELIST

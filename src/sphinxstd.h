@@ -983,6 +983,11 @@ public:
 		return m_pData[iIndex];
 	}
 
+	T & At ( int64_t iIndex ) const
+	{
+		return this->operator [] ( iIndex );
+	}
+
 	/// get first entry ptr
 	T * Begin () const
 	{

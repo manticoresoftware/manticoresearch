@@ -296,6 +296,3 @@ DLLEXPORT void hideemail_deinit ( void * userdata )
 // FIXME! add a string function example?
 // FIXME! add a ranker plugin example?
 
-//
-// $Id$
-//

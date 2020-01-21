@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2019, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2017-2020, Manticore Software LTD (http://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -4224,10 +4224,11 @@ public:
 
 		sphLogDebugv ( "%p kqueue remove, ev=0x%u, sock=%d",
 				pEvent->m_tBack.pPtr, pEvent->m_uNetEvents, pEvent->m_iSock );
-		struct kevent tEv[2];
-		EV_SET( &tEv[0], pEvent->m_iSock, EVFILT_WRITE, EV_DELETE | EV_CLEAR, 0, 0, nullptr );
-		EV_SET( &tEv[1], pEvent->m_iSock, EVFILT_READ, EV_DELETE | EV_CLEAR, 0, 0, nullptr );
-		int iRes = kevent ( m_iKQ, tEv, 2, nullptr, 0, nullptr );
+		struct kevent tEv;
+		EV_SET( &tEv, pEvent->m_iSock,
+			( ( pEvent->m_uNetEvents & NetPollEvent_t::READ ) ? EVFILT_READ : EVFILT_WRITE ),
+			EV_DELETE | EV_CLEAR, 0, 0, nullptr );
+		int iRes = kevent ( m_iKQ, &tEv, 1, nullptr, 0, nullptr );
 
 		// might be already closed by worker from thread pool
 		if ( iRes==-1 )

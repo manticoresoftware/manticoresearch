@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2019, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2017-2020, Manticore Software LTD (http://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -3099,6 +3099,7 @@ public:
 protected:
 	SharedPtr_t<ISphSchema*>	m_pSchema;	///< sorter schema (adds dynamic attributes on top of index schema)
 	CSphMatchComparatorState	m_tState;		///< protected to set m_iNow automatically on SetState() calls
+	StrVec_t			m_dTransormed;
 
 public:
 	/// ctor
@@ -3175,6 +3176,10 @@ public:
 	void CloneTo ( ISphMatchSorter * pTrg ) const;
 
 	const CSphMatchComparatorState& GetComparatorState() const { return m_tState; }
+
+	// set attributes list these should copied into result set \ final matches
+	void							SetFilteredAttrs ( const sph::StringSet & hAttrs );
+	const VecTraits_T<CSphString> &	GetFilteredAttrs() const { return m_dTransormed; }
 };
 
 struct CmpPSortersByRandom_fn
@@ -3292,6 +3297,7 @@ struct CSphIndexStatus
 	int64_t			m_iRamRetired = 0;
 	int64_t			m_iDiskUse = 0;
 	int64_t			m_iRamChunkSize = 0; // not used for plain
+	int				m_iNumRamChunks = 0; // not used for plain
 	int				m_iNumChunks = 0; // not used for plain
 	int64_t			m_iMemLimit = 0; // not used for plain
 	int64_t			m_iTID = 0;

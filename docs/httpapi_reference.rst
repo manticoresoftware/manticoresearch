@@ -82,8 +82,7 @@ will be passed inside without any substitutions/url decoding.
 This endpoint expects request body with queries defined as JSON document. Responds with JSON documents containing result and/or information about executed query.
 
 .. warning::
-   Please note that this endpoint is in preview stage. Some functionalities are not yet complete and syntax may suffer changes in future.
-   Read careful changelog of future updates to avoid possible breakages.
+   Please note that this endpoint may suffer changes in future as more functionality is added. Read careful changelog of future updates to avoid possible breakages.
 
 
 .. toctree::

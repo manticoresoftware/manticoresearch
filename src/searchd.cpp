@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2019, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2017-2020, Manticore Software LTD (http://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -4772,6 +4772,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 		ProcessPostlimitArgs_t tArgs ( tQuery, bMaster );
 		ComputePostlimit ( tArgs, tRes );
 	}
+
 	if ( bMaster && !dRemotes.IsEmpty() )
 	{
 		CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_EVAL_POST );
@@ -5416,6 +5417,7 @@ void SearchHandler_c::RunLocalSearchesParallel()
 			tRes.m_iTotalMatches += pSorter->GetTotalCount();
 
 			tRes.m_pBlobPool = tRaw.m_pBlobPool;
+			tRes.m_pDocstore = tRaw.m_pDocstore;
 			MergeWordStats ( tRes, tRaw.m_hWordStats, &m_dFailuresSet[iQuery], sLocal, sParentIndex );
 
 			tRes.m_bHasPrediction |= tRaw.m_bHasPrediction;
@@ -9030,8 +9032,7 @@ void HandleCommandExcerpt ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c
 		}
 	}
 
-	q.m_bHasBeforePassageMacro = SnippetTransformPassageMacros ( q.m_sBeforeMatch, q.m_sBeforeMatchPassage );
-	q.m_bHasAfterPassageMacro = SnippetTransformPassageMacros ( q.m_sAfterMatch, q.m_sAfterMatchPassage );
+	q.Setup();
 
 	CSphString sPassageBoundaryMode;
 	if ( iVer>=0x103 )
@@ -12687,8 +12688,7 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc
 		return;
 	}
 
-	q.m_bHasBeforePassageMacro = SnippetTransformPassageMacros ( q.m_sBeforeMatch, q.m_sBeforeMatchPassage );
-	q.m_bHasAfterPassageMacro = SnippetTransformPassageMacros ( q.m_sAfterMatch, q.m_sAfterMatchPassage );
+	q.Setup();
 
 	CSphVector<ExcerptQueryChained_t> dQueries;
 	if ( tStmt.m_dInsertValues[0].m_iType==TOK_QUOTED_STRING )
@@ -15711,6 +15711,7 @@ static void AddPlainIndexStatus ( SqlRowBuffer_c & tOut, const ServedIndex_c * p
 		if ( ServedDesc_t::IsMutable ( pLocked ) )
 		{
 			tOut.DataTuplet ( "ram_chunk", tStatus.m_iRamChunkSize );
+			tOut.DataTuplet ( "ram_chunks_count", tStatus.m_iNumRamChunks );
 			tOut.DataTuplet ( "disk_chunks", tStatus.m_iNumChunks );
 			tOut.DataTuplet ( "mem_limit", tStatus.m_iMemLimit );
 			tOut.DataTuplet ( "ram_bytes_retired", tStatus.m_iRamRetired );
@@ -19225,7 +19226,7 @@ void ShowHelp ()
 		"-h, --help\t\tdisplay this help message\n"
 		"-v\t\t\tdisplay version information\n"
 		"-c, --config <file>\tread configuration from specified file\n"
-		"\t\t\t(default is sphinx.conf)\n"
+		"\t\t\t(default is manticore.conf)\n"
 		"--stop\t\t\tsend SIGTERM to currently running searchd\n"
 		"--stopwait\t\tsend SIGTERM and wait until actual exit\n"
 		"--status\t\tget ant print status variables\n"
@@ -19261,9 +19262,9 @@ void ShowHelp ()
 		"--coredump\t\tsave core dump file on crash\n"
 		"\n"
 		"Examples:\n"
-		"searchd --config /usr/local/sphinx/etc/sphinx.conf\n"
+		"searchd --config /usr/local/sphinx/etc/manticore.conf\n"
 #if USE_WINDOWS
-		"searchd --install --config c:\\sphinx\\sphinx.conf\n"
+		"searchd --install --config c:\\sphinx\\manticore.conf\n"
 #endif
 		);
 }
@@ -22737,12 +22738,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	while ( !g_sConfigFile.cstr() )
 	{
 #ifdef SYSCONFDIR
-		g_sConfigFile = SYSCONFDIR "/sphinx.conf";
+		g_sConfigFile = SYSCONFDIR "/manticore.conf";
 		if ( sphIsReadable ( g_sConfigFile.cstr () ) )
 			break;
 #endif
 
-		g_sConfigFile = "./sphinx.conf";
+		g_sConfigFile = "./manticore.conf";
 		if ( sphIsReadable ( g_sConfigFile.cstr () ) )
 			break;
 
@@ -22753,9 +22754,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	if ( !g_sConfigFile.cstr () )
 		sphFatal ( "no readable config file (looked in "
 #ifdef SYSCONFDIR
-			SYSCONFDIR "/sphinx.conf, "
+			SYSCONFDIR "/manticore.conf, "
 #endif
-			"./sphinx.conf)." );
+			"./manticore.conf)." );
 
 	CSphVector<char> dConfig;
 	CheckConfigChanges ( dConfig );

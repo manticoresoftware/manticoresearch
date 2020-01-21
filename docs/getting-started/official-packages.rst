@@ -25,7 +25,7 @@ or
 
 depending on the distribution used.
 
-At this point you can start using Manticore Search. The configuration file is located at ``/etc/sphinx/sphinx.conf`` (RHEL/CentOS) or ``/etc/sphinxsearch/sphinx.conf`` (Debian/Ubuntu).  The default configuration comes with an empty RT index ready to be used and a sample plain index and interfaces SphinxQL on port 9306 and native API on port 9312.
+At this point you can start using Manticore Search. The configuration file is located at ``/etc/manticoresearch/manticore.conf``.  The default configuration comes with an empty RT index ready to be used and a sample plain index and interfaces SphinxQL on port 9306 and native API on port 9312.
 
 You can also compile Manticore Search from `sources <https://github.com/manticoresoftware/manticore>`__. `Compilation <http://docs.manticoresearch.com/latest/html/installation.html#compiling-manticore-from-source>`__ is easy and uses cmake and you can also create packages for your operating system. 
 
@@ -59,14 +59,14 @@ Now let's look at our RT index:
 .. code-block:: mysql
 
    mysql> DESCRIBE testrt;
-   +---------+--------+
-   | Field   | Type   |
-   +---------+--------+
-   | id      | bigint |
-   | title   | field  |
-   | content | field  |
-   | gid     | uint   |
-   +---------+--------+
+   +----------+--------+------------+
+   | Field    | Type   | Properties |
+   +----------+--------+------------+
+   | id       | bigint |            |
+   | title    | field  | stored     |
+   | content  | field  | stored     |
+   | gid      | uint   |            |
+   +----------+--------+------------+
    4 rows in set (0.00 sec)
 
 As the RT indexes start empty, let's add some data into it first   
@@ -97,14 +97,14 @@ Fulltext searches are done with the special clause MATCH, which is the main work
 .. code-block:: mysql
 
    mysql>  SELECT * FROM testrt WHERE MATCH('list of laptops');
-   +------+------+
-   | id   | gid  |
-   +------+------+
-   |    1 |   10 |
-   |    2 |   10 |
-   |    3 |   20 |
-   |    5 |   30 |
-   +------+------+
+   +------+------+-------------------------------------+---------------------------+
+   | id   | gid  | title                               | content                   |
+   +------+------+-------------------------------------+---------------------------+
+   |    1 |   10 | List of HP business laptops         | Elitebook Probook         |
+   |    2 |   10 | List of Dell business laptops       | Latitude Precision Vostro |
+   |    3 |   20 | List of Dell gaming laptops         | Inspirion Alienware       |
+   |    5 |   30 | List of ASUS ultrabooks and laptops | Zenbook Vivobook          |
+   +------+------+-------------------------------------+---------------------------+
    4 rows in set (0.00 sec)
 
 
@@ -116,13 +116,14 @@ Now let's add some filtering and more ordering:
 .. code-block:: mysql
   
    mysql>  SELECT *,WEIGHT() FROM testrt WHERE MATCH('list of laptops') AND gid>10  ORDER BY WEIGHT() DESC,gid DESC;
-   +------+------+----------+
-   | id   | gid  | weight() |
-   +------+------+----------+
-   |    5 |   30 |     2334 |
-   |    3 |   20 |     2334 |
-   +------+------+----------+
+   +------+------+-------------------------------------+---------------------+----------+
+   | id   | gid  | title                               | content             | weight() |
+   +------+------+-------------------------------------+---------------------+----------+
+   |    5 |   30 | List of ASUS ultrabooks and laptops | Zenbook Vivobook    |     2334 |
+   |    3 |   20 | List of Dell gaming laptops         | Inspirion Alienware |     2334 |
+   +------+------+-------------------------------------+---------------------+----------+
    2 rows in set (0.00 sec)
+
 
 
 The WEIGHT() function returns the calculated matching score. If no ordering specified, the result is sorted descending by the score provided by WEIGHT().
@@ -133,15 +134,16 @@ The search above does a simple matching, where all words need to be present. But
 .. code-block:: mysql
 
    mysql> SELECT *,WEIGHT() FROM testrt WHERE MATCH('"list of business laptops"/3');
-   +------+------+----------+
-   | id   | gid  | weight() |
-   +------+------+----------+
-   |    1 |   10 |     2397 |
-   |    2 |   10 |     2397 |
-   |    3 |   20 |     2375 |
-   |    5 |   30 |     2375 |
-   +------+------+----------+
+   +------+------+-------------------------------------+---------------------------+----------+
+   | id   | gid  | title                               | content                   | weight() |
+   +------+------+-------------------------------------+---------------------------+----------+
+   |    1 |   10 | List of HP business laptops         | Elitebook Probook         |     2397 |
+   |    2 |   10 | List of Dell business laptops       | Latitude Precision Vostro |     2397 |
+   |    3 |   20 | List of Dell gaming laptops         | Inspirion Alienware       |     2375 |
+   |    5 |   30 | List of ASUS ultrabooks and laptops | Zenbook Vivobook          |     2375 |
+   +------+------+-------------------------------------+---------------------------+----------+
    4 rows in set (0.00 sec)
+
    
    
    mysql> SHOW META;
@@ -172,7 +174,7 @@ We also added a `SHOW META  <http://docs.manticoresearch.com/latest/html/sphinxq
 SHOW META returns information about previous executed query, that is number of found records (in total_found), execution time (in time) and statistics about the keywords of the search.
 
 
-To create a new RT index, you need to define it in the sphinx.conf. A simple definition looks like:
+To create a new RT index, you need to define it in the manticore.conf. A simple definition looks like:
 
 .. code-block:: none
 
@@ -192,7 +194,7 @@ Using plain indexes
 ~~~~~~~~~~~~~~~~~~~
 
 Unlike RT, the plain index requires setting up the source and run the indexing process which gathers the data.
-For this we need to edit the sphinx.conf configuration file. The initial configuration comes with a sample plain index along with a source.
+For this we need to edit the manticore.conf configuration file. The initial configuration comes with a sample plain index along with a source.
 For simplicity we use a MySQL source.
 
 First, the database credentials need to be adjusted in the source configuration:
@@ -249,14 +251,13 @@ In our example group_id and date_added are attributes:
       sql_attr_timestamp      = date_added
 
 
-If we want to also store the texts or enable some features (for example wildcarding), we have to edit the index configuration:
+If we want to also  enable some features (for example wildcarding), we have to edit the index configuration:
 
 .. code-block:: none
 
       index test1
 	  {
 	  ...
-	      stored_fields           = title
           min_infix_len           = 3
 	  ...
 
@@ -266,7 +267,7 @@ Once we have this setup, we can run the indexing process:
 .. code-block:: none
 
    $ sudo -u manticore  indexer test1  --rotate
-   using config file '/etc/sphinxsearch/sphinx.conf'...
+   using config file '/etc/sphinxsearch/manticore.conf'...
    indexing index 'test1'...
    collected 4 docs, 0.0 MB
    sorted 0.0 Mhits, 100.0% done
@@ -290,26 +291,28 @@ Index is created and is ready to be used:
    3 rows in set (0.00 sec)
    
    mysql> SELECT * FROM test1;
-   +------+----------+------------+
-   | id   | group_id | date_added |
-   +------+----------+------------+
-   |    1 |        1 | 1507904567 |
-   |    2 |        1 | 1507904567 |
-   |    3 |        2 | 1507904567 |
-   |    4 |        2 | 1507904567 |
-   +------+----------+------------+
+   +------+----------+------------+-----------------+---------------------------------------------------------------------------+
+   | id   | group_id | date_added | title           | content                                                                   |
+   +------+----------+------------+-----------------+---------------------------------------------------------------------------+
+   |    1 |        1 | 1497982018 | test one        | this is my test document number one. also checking search within phrases. |
+   |    2 |        1 | 1497982018 | test two        | this is my test document number two                                       |
+   |    3 |        2 | 1497982018 | another doc     | this is another group                                                     |
+   |    4 |        2 | 1497982018 | doc number four | this is to test groups                                                    |
+   +------+----------+------------+-----------------+---------------------------------------------------------------------------+
    4 rows in set (0.00 sec)
+
    
 A quick test of a search which should match 2 terms, but not match another one:
 
 .. code-block:: mysql
    
-   mysql> SELECT * FROM test1 WHERE MATCH('test document -one');
-   +------+----------+------------+-------+
-   | id   | group_id | date_added | tag   |
-   +------+----------+------------+-------+
-   |    2 |        1 | 1519040667 | 2,4,6 |
-   +------+----------+------------+-------+
+   mysql>  SELECT * FROM test1 WHERE MATCH('test document -one');
+   +------+----------+------------+----------+-------------------------------------+
+   | id   | group_id | date_added | title    | content                             |
+   +------+----------+------------+----------+-------------------------------------+
+   |    2 |        1 | 1497982018 | test two | this is my test document number two |
+   +------+----------+------------+----------+-------------------------------------+
    1 row in set (0.00 sec)
+
 
    

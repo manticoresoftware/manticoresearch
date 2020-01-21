@@ -23,7 +23,42 @@
 
 #include <math.h>
 
+
+static bool SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPost )
+{
+	const char sPassageMacro[] = "%PASSAGE_ID%";
+
+	const char * sPass = NULL;
+	if ( !sSrc.IsEmpty() )
+		sPass = strstr ( sSrc.cstr(), sPassageMacro );
+
+	if ( !sPass )
+		return false;
+
+	int iSrcLen = sSrc.Length();
+	int iPassLen = sizeof ( sPassageMacro ) - 1;
+	int iTailLen = iSrcLen - iPassLen - ( sPass - sSrc.cstr() );
+
+	// copy tail
+	if ( iTailLen )
+		sPost.SetBinary ( sPass+iPassLen, iTailLen );
+
+	CSphString sPre;
+	sPre.SetBinary ( sSrc.cstr(), sPass - sSrc.cstr() );
+	sSrc.Swap ( sPre );
+
+	return true;
+}
+
+
 /////////////////////////////////////////////////////////////////////////////
+
+void SnippetQuerySettings_t::Setup()
+{
+	m_bHasBeforePassageMacro = SnippetTransformPassageMacros ( m_sBeforeMatch, m_sBeforeMatchPassage );
+	m_bHasAfterPassageMacro = SnippetTransformPassageMacros ( m_sAfterMatch, m_sAfterMatchPassage );
+}
+
 
 CSphString SnippetQuerySettings_t::AsString() const
 {
@@ -906,12 +941,6 @@ bool SnippetBuilder_c::CheckSettings ( TextSource_i * pSource, CSphString & sErr
 
 	const SnippetQuerySettings_t & tOpt = *m_pQuerySettings;
 
-	if ( pSource->TextFromIndex() && tOpt.m_sStripMode!="index" )
-	{
-		sError = "highlighting stored text requires html_strip_mode=index";
-		return false;
-	}
-
 	if ( tOpt.m_sStripMode=="retain" && !( tOpt.m_iLimit==0 && tOpt.m_iLimitPassages==0 && tOpt.m_iLimitWords==0 ) )
 	{
 		sError = "html_strip_mode=retain requires that all limits are zero";
@@ -1342,33 +1371,6 @@ bool sphCheckOptionsSPZ ( const SnippetQuerySettings_t & q, ESphSpz eMode, CSphS
 			return false;
 		}
 	}
-
-	return true;
-}
-
-
-bool SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPost )
-{
-	const char sPassageMacro[] = "%PASSAGE_ID%";
-
-	const char * sPass = NULL;
-	if ( !sSrc.IsEmpty() )
-		sPass = strstr ( sSrc.cstr(), sPassageMacro );
-
-	if ( !sPass )
-		return false;
-
-	int iSrcLen = sSrc.Length();
-	int iPassLen = sizeof ( sPassageMacro ) - 1;
-	int iTailLen = iSrcLen - iPassLen - ( sPass - sSrc.cstr() );
-
-	// copy tail
-	if ( iTailLen )
-		sPost.SetBinary ( sPass+iPassLen, iTailLen );
-
-	CSphString sPre;
-	sPre.SetBinary ( sSrc.cstr(), sPass - sSrc.cstr() );
-	sSrc.Swap ( sPre );
 
 	return true;
 }

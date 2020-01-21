@@ -52,7 +52,7 @@ Example 3.1. Ranged query usage example
 .. code-block:: ini
 
 
-    # in sphinx.conf
+    # in manticore.conf
 
     sql_query_range = SELECT MIN(id),MAX(id) FROM documents
     sql_range_step = 1000

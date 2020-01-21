@@ -39,10 +39,10 @@ is_jemalloc() {
 
 is_jemalloc
 
-if [ ! -e /usr/lib/systemd/system/searchd.service ]; then
-	M_UNIT_FILE="/usr/lib/systemd/system/searchd.service"
+if [ ! -e /usr/lib/systemd/system/manticore.service ]; then
+	M_UNIT_FILE="/usr/lib/systemd/system/manticore.service"
 else
-	M_UNIT_FILE="$2/searchd.service"
+	M_UNIT_FILE="$2/manticore.service"
 fi
 
 if [ $jemalloc_preload ]; then 
@@ -61,8 +61,8 @@ PermissionsStartOnly=true
 ExecStartPre=/usr/bin/install -omanticore -gmanticore -m755 -d /var/run/manticore
 # Run ExecStart with User=manticore / Group=manticore
 Environment=LD_PRELOAD=$JEMALLOC_LOCATION
-ExecStart=/usr/bin/searchd --config /etc/sphinx/sphinx.conf
-ExecStop=/usr/bin/searchd --config /etc/sphinx/sphinx.conf --stopwait
+ExecStart=/usr/bin/searchd --config /etc/manticoresearch/manticore.conf
+ExecStop=/usr/bin/searchd --config /etc/manticoresearch/manticore.conf --stopwait
 KillMode=process
 KillSignal=SIGTERM
 SendSIGKILL=no

@@ -1,0 +1,32 @@
+# create user/group, and update permissions
+groupadd -r %{manticore_group} 2>/dev/null || true
+useradd -M -r -d /var/lib/sphinx -s /bin/bash -c "Manticore server" -g %{manticore_group} %{manticore_user} 2>/dev/null || true
+usermod -g %{manticore_group} %{manticore_user} 2>/dev/null || true
+chown -R %{manticore_user}:%{manticore_group} /var/lib/manticore /var/log/manticore /var/run/manticore
+
+if [ $1 == 1 ]; then
+    /sbin/chkconfig --add manticore
+fi
+
+if [ $1 == 2 ]; then
+        if [ -f @SYSCONFDIR@/sphinx/sphinx.conf ]; then
+	        echo "Moving existing configuration to new location..."
+		    mv @SYSCONFDIR@/sphinx/sphinx.conf @SYSCONFDIR@/manticoresearch/manticore.conf
+	    fi
+fi
+
+# print some further pointers
+echo "Manticore Search (https://manticoresearch.com)"
+echo 
+echo "Getting Started with Manticore Search:"
+echo "  https://docs.manticoresearch.com/latest/html/getting-started.html"
+echo ""
+echo "Learn Manticore with interactive courses:"
+echo "  https://play.manticoresearch.com/"
+echo ""
+echo "To start Manticore Search service:"
+echo "  > service manticore start/stop"
+echo ""
+echo "Configuration file:"
+echo "  /etc/manticoresearch/manticore.conf"
+echo ""

@@ -7,7 +7,7 @@
 #	       all search requests.
 
 ### BEGIN INIT INFO
-# Provides: searchd
+# Provides: manticore
 # Required-Start: $local_fs $network
 # Required-Stop: $local_fs $network
 # Should-Start: $remote_fs
@@ -24,8 +24,8 @@
 exec="@BINDIRFULL@/searchd"
 prog="searchd"
 user="manticore"
-config="@SYSCONFDIR@/sphinx/sphinx.conf"
-lockfile=/var/lock/subsys/searchd
+config="@SYSCONFDIR@/manticoresearch/manticore.conf"
+lockfile=/var/lock/subsys/manticore
 
 start() {
     [ -x $exec ] || exit 5

@@ -15,7 +15,7 @@ SUDO_USER=searchd
 
 BASE_PATH=/release/search
 PID_FILE=$BASE_PATH/searchd.pid
-CONFIG_FILE=$BASE_PATH/sphinx.conf
+CONFIG_FILE=$BASE_PATH/manticore.conf
 
 EXEC_PATH=$BASE_PATH
 LOG_PATH=$EXEC_PATH

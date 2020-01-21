@@ -49,7 +49,7 @@ client programs and libraries via SQL-like SphinxQL interface.")
 #set ( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST "/usr/include" )
 set ( CPACK_RPM_BIN_USER_FILELIST
 		"%config(noreplace) %{_sysconfdir}/logrotate.d/manticore"
-		"%config(noreplace) %{_sysconfdir}/sphinx/sphinx.conf" )
+		"%config(noreplace) %{_sysconfdir}/manticoresearch/manticore.conf" )
 
 set ( CPACK_RPM_SPEC_MORE_DEFINE
 		"%define _scripts ${MANTICORE_BINARY_DIR}
@@ -63,12 +63,12 @@ set ( CPACK_COMPONENT_ADM_GROUP "bin" )
 set ( CPACK_COMPONENT_ADM_DISPLAY_NAME "Scripts and settings" )
 
 # block below used to patch the minconf - add a slash at the end of 'binlog_path' section
-file ( READ "sphinx-min.conf.in" _MINCONF LIMIT 10240 )
+file ( READ "manticore-min.conf.in" _MINCONF LIMIT 10240 )
 string ( REGEX REPLACE "(binlog_path[ \t]+\\=[ \t]+\\@CONFDIR\\@/data)" "\\1/" _MINCONF "${_MINCONF}" )
 string ( REGEX REPLACE "(log/searchd.pid)" "run/manticore/searchd.pid" _MINCONF "${_MINCONF}" )
 string ( REGEX REPLACE "(@CONFDIR@/log/)" "@CONFDIR@/log/manticore/" _MINCONF "${_MINCONF}" )
 string ( REGEX REPLACE "(@CONFDIR@/data/)" "@CONFDIR@/lib/manticore/" _MINCONF "${_MINCONF}" )
-file ( WRITE "${MANTICORE_BINARY_DIR}/sphinx-min.conf.in" "${_MINCONF}")
+file ( WRITE "${MANTICORE_BINARY_DIR}/manticore-min.conf.in" "${_MINCONF}")
 unset (_MINCONF)
 
 # this values set for correct substitution in configure files below
@@ -76,37 +76,42 @@ set ( CONFDIR "${LOCALSTATEDIR}" )
 set ( RUNDIR "${LOCALSTATEDIR}/run/manticore" )
 set ( LOGDIR "${LOCALSTATEDIR}/log/manticore" )
 
-configure_file ( "${MANTICORE_BINARY_DIR}/sphinx-min.conf.in" "${MANTICORE_BINARY_DIR}/sphinx-min.conf.dist" @ONLY )
-configure_file ( "sphinx.conf.in" "${MANTICORE_BINARY_DIR}/sphinx.conf.dist" @ONLY )
+configure_file ( "${MANTICORE_BINARY_DIR}/manticore-min.conf.in" "${MANTICORE_BINARY_DIR}/manticore-min.conf.dist" @ONLY )
+configure_file ( "manticore.conf.in" "${MANTICORE_BINARY_DIR}/manticore.conf.dist" @ONLY )
 
 configure_file ( "dist/rpm/manticore.logrotate.in" "${MANTICORE_BINARY_DIR}/manticore.logrotate" @ONLY )
+
+configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/rpm/manticore_s.post.in"
+		"${MANTICORE_BINARY_DIR}/manticore_s.post" @ONLY )
+configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/rpm/manticore.post.in"
+		"${MANTICORE_BINARY_DIR}/manticore.post" @ONLY )
 
 set ( SCR "${CMAKE_CURRENT_SOURCE_DIR}/dist/rpm" ) # a shortcut
 if ( WITH_SYSTEMD )
 	set ( CPACK_RPM_BIN_BUILDREQUIRES "systemd-units" )
-	set ( CPACK_RPM_BIN_POST_INSTALL_SCRIPT_FILE "${SCR}/manticore_s.post" )
+	set ( CPACK_RPM_BIN_POST_INSTALL_SCRIPT_FILE "${MANTICORE_BINARY_DIR}/manticore_s.post")
 	set ( CPACK_RPM_BIN_POST_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.postun" )
 	set ( CPACK_RPM_BIN_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.preun" )
 
-	configure_file ( "dist/rpm/manticore.tmpfiles.in" "${MANTICORE_BINARY_DIR}/searchd.conf" @ONLY )
+	configure_file ( "dist/rpm/manticore.tmpfiles.in" "${MANTICORE_BINARY_DIR}/manticore.conf" @ONLY )
 	configure_file ( "dist/rpm/manticore.generator.in" "${MANTICORE_BINARY_DIR}/manticore-search-generator" @ONLY )
-	install ( FILES ${MANTICORE_BINARY_DIR}/searchd.conf DESTINATION usr/lib/tmpfiles COMPONENT adm )
+	install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf DESTINATION usr/lib/tmpfiles.d COMPONENT adm )
 	install ( PROGRAMS ${MANTICORE_BINARY_DIR}/manticore-search-generator
 			DESTINATION usr/lib/systemd/system-generators COMPONENT adm )
 
 else ()
 	set ( CPACK_RPM_BIN_PACKAGE_REQUIRES_POST chkconfig )
 	set ( CPACK_RPM_BIN_PACKAGE_REQUIRES_PREUN "chkconfig, initscripts" )
-	set ( CPACK_RPM_BIN_POST_INSTALL_SCRIPT_FILE "${SCR}/manticore.post" )
+	set ( CPACK_RPM_BIN_POST_INSTALL_SCRIPT_FILE "${MANTICORE_BINARY_DIR}/manticore.post")
 	set ( CPACK_RPM_BIN_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore.preun" )
-	configure_file ( "dist/rpm/manticore.init.in" "${MANTICORE_BINARY_DIR}/searchd" @ONLY )
-	install ( PROGRAMS ${MANTICORE_BINARY_DIR}/searchd
+	configure_file ( "dist/rpm/manticore.init.in" "${MANTICORE_BINARY_DIR}/manticore" @ONLY )
+	install ( PROGRAMS ${MANTICORE_BINARY_DIR}/manticore
 			DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/rc.d/init.d COMPONENT adm )
 
 endif ()
-if (NOT NOAPI)
-install ( FILES ${MANTICORE_BINARY_DIR}/sphinx-min.conf.dist
-		${MANTICORE_BINARY_DIR}/sphinx.conf.dist
+
+install ( FILES ${MANTICORE_BINARY_DIR}/manticore-min.conf.dist
+		${MANTICORE_BINARY_DIR}/manticore.conf.dist
 		DESTINATION usr/${CMAKE_INSTALL_DOCDIR} COMPONENT doc )
 
 install ( FILES COPYING example.sql DESTINATION usr/${CMAKE_INSTALL_DOCDIR} COMPONENT doc )
@@ -116,7 +121,9 @@ install ( FILES doc/indexer.1 doc/indextool.1 doc/searchd.1 doc/spelldump.1
 		DESTINATION usr/${CMAKE_INSTALL_MANDIR}/man1 COMPONENT doc )
 
 install ( DIRECTORY misc/stopwords DESTINATION usr/${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME} COMPONENT doc )
+install ( FILES ${ICU_SRC}/source/data/in/icudt65l.dat DESTINATION usr/${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME}/icu COMPONENT doc)
 
+if (NOT NOAPI)
 install ( DIRECTORY api DESTINATION usr/${CMAKE_INSTALL_DATADIR}/manticore COMPONENT doc )
 endif()
 
@@ -124,12 +131,12 @@ endif()
 install ( FILES ${MANTICORE_BINARY_DIR}/manticore.logrotate
 		DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/logrotate.d COMPONENT adm RENAME manticore)
 
-install ( FILES ${MANTICORE_BINARY_DIR}/sphinx-min.conf.dist
-		DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/sphinx COMPONENT adm RENAME sphinx.conf )
+install ( FILES ${MANTICORE_BINARY_DIR}/manticore-min.conf.dist
+		DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT adm RENAME manticore.conf )
 
 install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore COMPONENT adm )
 install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/run/manticore COMPONENT adm )
 install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COMPONENT adm )
 
-set ( CONFFILEDIR "${CMAKE_INSTALL_SYSCONFDIR}/sphinx" )
+set ( CONFFILEDIR "${SYSCONFDIR}/manticoresearch" )
 

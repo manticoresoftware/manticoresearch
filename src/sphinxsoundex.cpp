@@ -1,8 +1,4 @@
 //
-// $Id$
-//
-
-//
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -43,6 +39,3 @@ void stem_soundex ( BYTE * pWord )
 	*pOut++ = '\0';
 }
 
-//
-// $Id$
-//

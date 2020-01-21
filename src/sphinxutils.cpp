@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2019, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2017-2020, Manticore Software LTD (http://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -886,7 +886,7 @@ static KeyDesc_t g_dKeysCommon[] =
 	{ "json_autoconv_keynames",	0, NULL },
 	{ "rlp_root",				KEY_REMOVED, NULL },
 	{ "rlp_environment",		KEY_REMOVED, NULL },
-	{ "icu_data_dir",			0, NULL },
+	{ "icu_data_dir",			KEY_REMOVED, NULL },
 	{ "rlp_max_batch_size",		KEY_REMOVED, NULL },
 	{ "rlp_max_batch_docs",		KEY_REMOVED, NULL },
 	{ "plugin_dir",				0, NULL },
@@ -2004,12 +2004,12 @@ const char * sphLoadConfig ( const char * sOptConfig, bool bQuiet, CSphConfigPar
 	while ( !sOptConfig )
 	{
 #ifdef SYSCONFDIR
-		sOptConfig = SYSCONFDIR "/sphinx.conf";
+		sOptConfig = SYSCONFDIR "/manticore.conf";
 		if ( sphIsReadable ( sOptConfig ) )
 			break;
 #endif
 
-		sOptConfig = "./sphinx.conf";
+		sOptConfig = "./manticore.conf";
 		if ( sphIsReadable ( sOptConfig ) )
 			break;
 
@@ -2020,9 +2020,9 @@ const char * sphLoadConfig ( const char * sOptConfig, bool bQuiet, CSphConfigPar
 	if ( !sOptConfig )
 		sphDie ( "no readable config file (looked in "
 #ifdef SYSCONFDIR
-		SYSCONFDIR "/sphinx.conf, "
+		SYSCONFDIR "/manticore.conf, "
 #endif
-		"./sphinx.conf)" );
+		"./manticore.conf)" );
 
 	if ( !bQuiet )
 		fprintf ( stdout, "using config file '%s'...\n", sOptConfig );
@@ -3527,7 +3527,6 @@ void sphConfigureCommon ( const CSphConfig & hConf )
 
 	CSphConfigSection & hCommon = hConf["common"]["common"];
 	g_sLemmatizerBase = hCommon.GetStr ( "lemmatizer_base" );
-	sphConfigureICU ( hCommon );
 
 	bool bJsonStrict = false;
 	bool bJsonAutoconvNumbers;

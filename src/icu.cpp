@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2019, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2017-2020, Manticore Software LTD (http://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -34,23 +34,44 @@
 #include <unicode/udata.h>
 #include <unicode/ustring.h>
 
-#ifndef ICU_LIB
-#define ICU_LIB "no_icu_configured"
-#endif
+#if USE_WINDOWS
+	#include <shlwapi.h>
 
-#if DL_ICU
-#include "ldicu.inl"
-#else
-#define imp_createWordInstance icu::BreakIterator::createWordInstance
-#define imp_u_errorName u_errorName
-#define imp_u_setDataDirectory u_setDataDirectory
-#define imp_utext_openUTF8 utext_openUTF8
-#define imp_utext_close utext_close
-#define imp_getChinese icu::Locale::getChinese
-#define InitDynamicIcu() (true)
+	#pragma comment(linker, "/defaultlib:Shlwapi.lib")
+	#pragma message("Automatically linking with Shlwapi.lib")
 #endif
 
 extern CSphVector<CharsetAlias_t> g_dCharsetAliases;
+
+static CSphString g_sICUDir = ICU_DATA_DIR;
+
+//////////////////////////////////////////////////////////////////////////
+
+static bool g_bICUInitialized = false;
+
+static void ConfigureICU()
+{
+	if ( g_bICUInitialized )
+		return;
+
+#if USE_WINDOWS
+	if ( PathIsRelative(ICU_DATA_DIR) )
+	{
+		HMODULE hModule = GetModuleHandle(NULL);
+		CHAR szPath[MAX_PATH];
+		GetModuleFileName ( hModule, szPath, MAX_PATH );
+		PathRemoveFileSpec(szPath);
+
+		g_sICUDir.SetSprintf ( "%s\\%s", szPath, ICU_DATA_DIR );
+	}
+#endif
+
+	u_setDataDirectory ( g_sICUDir.cstr() );
+
+	g_bICUInitialized = true;
+}
+
+//////////////////////////////////////////////////////////////////////////
 
 class ICUPreprocessor_c
 {
@@ -93,21 +114,17 @@ ICUPreprocessor_c::~ICUPreprocessor_c()
 
 bool ICUPreprocessor_c::Init ( CSphString & sError )
 {
+	ConfigureICU();
+
 	assert ( !m_pBreakIterator );
 
-	if_const ( !InitDynamicIcu ())
-	{
-		sError.SetSprintf ( "ICU: failed to load icu library (tried "  ICU_LIB ")" );
-		return false;
-	}
-
 	UErrorCode tStatus = U_ZERO_ERROR;
-	m_pBreakIterator = imp_createWordInstance ( imp_getChinese(), tStatus );
+	m_pBreakIterator = icu::BreakIterator::createWordInstance ( icu::Locale::getChinese(), tStatus );
 	if ( U_FAILURE(tStatus) )
 	{
-		sError.SetSprintf( "Unable to initialize ICU break iterator: %s", imp_u_errorName(tStatus) );
+		sError.SetSprintf( "Unable to initialize ICU break iterator: %s", u_errorName(tStatus) );
 		if ( tStatus==U_MISSING_RESOURCE_ERROR )
-			sError.SetSprintf ( "%s. Make sure ICU data file is accessible (icu_data_dir might be missing in config)", sError.cstr() );
+			sError.SetSprintf ( "%s. Make sure ICU data file is accessible (using '%s' folder)", sError.cstr(), g_sICUDir.cstr() );
 
 		return false;			
 	}
@@ -227,16 +244,16 @@ void ICUPreprocessor_c::ProcessBufferICU ( const BYTE * pBuffer, int iLength )
 	assert ( m_pBreakIterator );
 	UErrorCode tStatus = U_ZERO_ERROR;
 	UText * pUText = nullptr;
-	pUText = imp_utext_openUTF8 ( pUText, (const char*)pBuffer, iLength, &tStatus );
+	pUText = utext_openUTF8 ( pUText, (const char*)pBuffer, iLength, &tStatus );
 	if ( U_FAILURE(tStatus) )
-		sphWarning ( "Error processing buffer (ICU): %s", imp_u_errorName(tStatus) );
+		sphWarning ( "Error processing buffer (ICU): %s", u_errorName(tStatus) );
 
 	assert ( pUText );
 	m_pBreakIterator->setText ( pUText, tStatus );
 	if ( U_FAILURE(tStatus) )
-		sphWarning ( "Error processing buffer (ICU): %s", imp_u_errorName(tStatus) );
+		sphWarning ( "Error processing buffer (ICU): %s", u_errorName(tStatus) );
 
-	imp_utext_close ( pUText );
+	utext_close ( pUText );
 
 	m_pBuffer = pBuffer;
 	m_iPrevBoundary = m_iBoundaryIndex = m_pBreakIterator->first();
@@ -447,19 +464,6 @@ bool sphSpawnFilterICU ( FieldFilterRefPtr_c & pFieldFilter, const CSphIndexSett
 	return true;
 }
 
-
-void sphConfigureICU ( CSphConfigSection & hCommon )
-{
-	if_const ( !InitDynamicIcu ())
-	{
-		sphWarning ( "ICU: failed to load icu library (tried "  ICU_LIB ")" );
-		return;
-	}
-
-	CSphString sData = hCommon.GetStr ( "icu_data_dir" );
-	imp_u_setDataDirectory ( sData.cstr() );
-}
-
 #else
 
 
@@ -492,10 +496,6 @@ bool sphCheckTokenizerICU ( CSphIndexSettings &, const CSphTokenizerSettings &, 
 bool sphSpawnFilterICU ( FieldFilterRefPtr_c &, const CSphIndexSettings &, const CSphTokenizerSettings &, const char *, CSphString & )
 {
 	return true;
-}
-
-void sphConfigureICU ( CSphConfigSection & )
-{
 }
 
 #endif

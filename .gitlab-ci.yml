@@ -178,6 +178,7 @@ build_bsd:
     CTEST_BUILD_CONFIGURATION: "Debug"
     LIBS_BUNDLE: "/media/shared/bundle"
     USE_GALERA: 0
+    WITH_ICU: 0
     CTEST_CMAKE_GENERATOR: "Unix Makefiles"
   script:
     - mkdir build && cd build

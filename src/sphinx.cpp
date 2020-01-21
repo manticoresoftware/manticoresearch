@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2019, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2017-2020, Manticore Software LTD (http://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -631,19 +631,21 @@ public:
 
 	RowID_t AdvanceTo ( RowID_t tRowID ) final
 	{
-		HintRowID ( tRowID );
+		if ( m_tDoc.m_tRowID!=INVALID_ROWID && tRowID<=m_tDoc.m_tRowID )
+			return m_tDoc.m_tRowID;
 
-		do
-		{
+		bool bRewound = HintRowID (tRowID);
+		if ( bRewound || m_tDoc.m_tRowID==INVALID_ROWID )
 			ReadNext();
-		}
-		while ( m_tDoc.m_tRowID < tRowID );
+
+		while ( m_tDoc.m_tRowID < tRowID )
+			ReadNext();
 
 		return m_tDoc.m_tRowID;
 	}
 
 
-	void HintRowID ( RowID_t tRowID ) final
+	bool HintRowID ( RowID_t tRowID ) final
 	{
 		// tricky bit
 		// FindSpan() will match a block where tBaseRowIDPlus1[i] <= tRowID < tBaseRowIDPlus1[i+1]
@@ -656,7 +658,7 @@ public:
 		{
 			m_iSkipListBlock = FindSpan ( m_dSkiplist, tRowID );
 			if ( m_iSkipListBlock<0 )
-				return;
+				return false;
 		}
 		else
 		{
@@ -669,22 +671,24 @@ public:
 					auto dSkips = VecTraits_T<SkiplistEntry_t> ( &m_dSkiplist[iNextBlock], m_dSkiplist.GetLength()-iNextBlock );
 					m_iSkipListBlock = FindSpan ( dSkips, tRowID );
 					if ( m_iSkipListBlock<0 )
-						return;
+						return false;
 
 					m_iSkipListBlock += iNextBlock;
 				}
 			}
 			else // we're already at our last block, no need to search
-				return;
+				return false;
 		}
 
 		const SkiplistEntry_t & t = m_dSkiplist[m_iSkipListBlock];
 		if ( t.m_iOffset<=m_rdDoclist->GetPos() )
-			return;
+			return false;
 
 		m_rdDoclist->SeekTo ( t.m_iOffset, -1 );
 		m_tDoc.m_tRowID = t.m_tBaseRowIDPlus1-1;
 		m_uHitPosition = m_iHitlistPos = t.m_iBaseHitlistPos;
+
+		return true;
 	}
 
 	const CSphMatch & GetNextDoc() override
@@ -8695,7 +8699,7 @@ private:
 };
 
 //////////////////////////////////////////////////////////////////////////
-ISphSchema * sphCreateStandaloneSchema ( const ISphSchema * pSchema )
+ISphSchema * sphCreateStandaloneSchema ( const ISphSchema * pSchema, const VecTraits_T<CSphString> & dTransformed )
 {
 	assert ( pSchema );
 
@@ -8703,15 +8707,35 @@ ISphSchema * sphCreateStandaloneSchema ( const ISphSchema * pSchema )
 	for ( int i = 0; i < pSchema->GetFieldsCount(); i++ )
 		pResult->AddField ( pSchema->GetField(i) );
 
-	for ( int i = 0; i < pSchema->GetAttrsCount(); i++ )
+	if ( dTransformed.GetLength() )
 	{
-		CSphColumnInfo tAttr = pSchema->GetAttr(i);
-		tAttr.m_eAttrType = sphPlainAttrToPtrAttr ( tAttr.m_eAttrType );
-		tAttr.m_tLocator.m_iBitOffset = -1;
-		tAttr.m_tLocator.m_iBitCount = -1;
-		tAttr.m_tLocator.m_iBlobAttrId = -1;
-		tAttr.m_tLocator.m_nBlobAttrs = 0;
-		pResult->AddAttr ( tAttr, true );
+		for ( const CSphString & sName : dTransformed )
+		{
+			const CSphColumnInfo * pAttr = pSchema->GetAttr ( sName.cstr() );
+			if ( !pAttr )
+				continue;
+
+			CSphColumnInfo tAttr = *pAttr;
+			tAttr.m_eAttrType = sphPlainAttrToPtrAttr ( tAttr.m_eAttrType );
+			tAttr.m_tLocator.m_iBitOffset = -1;
+			tAttr.m_tLocator.m_iBitCount = -1;
+			tAttr.m_tLocator.m_iBlobAttrId = -1;
+			tAttr.m_tLocator.m_nBlobAttrs = 0;
+			pResult->AddAttr ( tAttr, true );
+		}
+	} else
+	{
+		// no need to filter schema attributes for query with star \ select all items
+		for ( int i = 0; i < pSchema->GetAttrsCount(); i++ )
+		{
+			CSphColumnInfo tAttr = pSchema->GetAttr(i);
+			tAttr.m_eAttrType = sphPlainAttrToPtrAttr ( tAttr.m_eAttrType );
+			tAttr.m_tLocator.m_iBitOffset = -1;
+			tAttr.m_tLocator.m_iBitCount = -1;
+			tAttr.m_tLocator.m_iBlobAttrId = -1;
+			tAttr.m_tLocator.m_nBlobAttrs = 0;
+			pResult->AddAttr ( tAttr, true );
+		}
 	}
 
 	for ( int i = 0; i < pResult->GetAttrsCount(); i++ )
@@ -8737,7 +8761,7 @@ static void PooledAttrsToPtrAttrs ( ISphMatchSorter ** ppSorters, int nSorters, 
 			continue;
 
 		const ISphSchema * pOldSchema = pSorter->GetSchema();
-		ISphSchema * pNewSchema =  sphCreateStandaloneSchema ( pOldSchema );
+		ISphSchema * pNewSchema =  sphCreateStandaloneSchema ( pOldSchema, pSorter->GetFilteredAttrs() );
 		assert ( pOldSchema && pNewSchema );
 
 		DiskMatchesToNewSchema_c fnFinal ( pOldSchema, pNewSchema, pBlobPool );
@@ -13070,14 +13094,9 @@ void CSphMatchComparatorState::FixupLocators ( const ISphSchema * pOldSchema, co
 {
 	for ( int i = 0; i < CSphMatchComparatorState::MAX_ATTRS; ++i )
 	{
+		sphFixupLocator ( m_tLocator[i], pOldSchema, pNewSchema );
 		if ( m_eKeypart[i]==SPH_KEYPART_DOCID_S || m_eKeypart[i]==SPH_KEYPART_DOCID_D )
-		{
-			const CSphColumnInfo * pAttrInNewSchema = pNewSchema->GetAttr ( sphGetDocidName() );
-			assert ( pAttrInNewSchema && pAttrInNewSchema->m_tLocator.m_iBitOffset==0 );
-			m_eKeypart[i] = pAttrInNewSchema->m_tLocator.m_bDynamic ? SPH_KEYPART_DOCID_D : SPH_KEYPART_DOCID_S;
-		}
-		else
-			sphFixupLocator ( m_tLocator[i], pOldSchema, pNewSchema );
+			m_eKeypart[i] = ( m_tLocator[i].m_bDynamic ? SPH_KEYPART_DOCID_D : SPH_KEYPART_DOCID_S );
 
 		// update string keypart into str_ptr
 		if ( bRemapKeyparts && m_eKeypart[i]==SPH_KEYPART_STRING )
@@ -25397,17 +25416,8 @@ struct CSphSchemaConfigurator
 				tCol.m_eSrc = SPH_ATTRSRC_FIELD;
 			}
 
-			if ( tCol.m_sName.IsEmpty() )
-			{
-				sError.SetSprintf ( "column number %d has no name", tCol.m_iIndex );
+			if ( !SchemaConfigureCheckAttribute ( tSchema, tCol, sError ) )
 				return false;
-			}
-
-			if ( CSphSchema::IsReserved ( tCol.m_sName.cstr() ) )
-			{
-				sError.SetSprintf ( "%s is not a valid attribute name", tCol.m_sName.cstr() );
-				return false;
-			}
 
 			tSchema.AddAttr ( tCol, true ); // all attributes are dynamic at indexing time
 		}
@@ -25441,19 +25451,24 @@ struct CSphSchemaConfigurator
 };
 
 
-static bool SourceCheckSchema ( const CSphSchema & tSchema, CSphString & sError )
+bool SchemaConfigureCheckAttribute ( const CSphSchema & tSchema, const CSphColumnInfo & tCol, CSphString & sError )
 {
-	SmallStringHash_T<int> hAttrs;
-	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+	if ( tCol.m_sName.IsEmpty() )
 	{
-		const CSphColumnInfo & tAttr = tSchema.GetAttr ( i );
-		bool bUniq = hAttrs.Add ( 1, tAttr.m_sName );
+		sError.SetSprintf ( "column number %d has no name", tCol.m_iIndex );
+		return false;
+	}
 
-		if ( !bUniq )
-		{
-			sError.SetSprintf ( "attribute %s declared multiple times", tAttr.m_sName.cstr() );
-			return false;
-		}
+	if ( tSchema.GetAttr ( tCol.m_sName.cstr() ) )
+	{
+		sError.SetSprintf ( "can not add multiple attributes with same name '%s'", tCol.m_sName.cstr () );
+		return false;
+	}
+
+	if ( CSphSchema::IsReserved ( tCol.m_sName.cstr() ) )
+	{
+		sError.SetSprintf ( "%s is not a valid attribute name", tCol.m_sName.cstr() );
+		return false;
 	}
 
 	return true;
@@ -25786,7 +25801,7 @@ bool CSphSource_XMLPipe2::Setup ( int iFieldBufferMax, bool bFixupUTF8, FILE * p
 	if ( !bOk )
 		return false;
 
-	if ( !SourceCheckSchema ( m_tSchema, sError ) )
+	if ( !DebugCheckSchema ( m_tSchema, sError ) )
 		return false;
 
 	ConfigureFields ( hSource("xmlpipe_field"), bWordDict, m_tSchema );
@@ -27211,7 +27226,7 @@ bool CSphSource_BaseSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe,
 	if ( !SetupSchema ( hSource, bWordDict, sError ) )
 		return false;
 
-	if ( !SourceCheckSchema ( m_tSchema, sError ) )
+	if ( !DebugCheckSchema ( m_tSchema, sError ) )
 		return false;
 
 	if ( !AddAutoAttrs ( sError ) )

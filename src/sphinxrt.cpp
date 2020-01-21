@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2019, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2017-2020, Manticore Software LTD (http://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -992,7 +992,6 @@ struct SCOPED_CAPABILITY SphChunkGuard_t : public ISphNoncopyable
 	CSphRwlock *							m_pReading = nullptr;
 
 	~SphChunkGuard_t() RELEASE();
-	void Release () RELEASE();
 
 	// moving makes possible return by value
 	explicit SphChunkGuard_t ( CSphRwlock * pReading ) ACQUIRE_SHARED ( *pReading );
@@ -1137,7 +1136,6 @@ public:
 	bool				IsStarDict() const final;
 
 	int64_t				GetUsedRam () const;
-	static int64_t		GetUsedRam ( const SphChunkGuard_t & tGuard );
 
 	bool				IsWordDict () const { return m_bKeywordDict; }
 	int					GetWordCheckoint() const { return m_iWordsCheckpoint; }
@@ -1188,6 +1186,8 @@ private:
 	CSphMutex					m_tFlushLock;
 	CSphMutex					m_tOptimizingLock;
 	int							m_iDoubleBuffer = 0;
+	CSphMutex					m_tSaveFinished;
+	volatile bool				m_bDoubleDump = false;
 
 	int64_t						m_iSoftRamLimit;
 	int64_t						m_iDoubleBufferLimit;
@@ -1222,10 +1222,10 @@ private:
 	RtAccum_t *					CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) final;
 
 	int							CompareWords ( const RtWord_t * pWord1, const RtWord_t * pWord2 ) const;
-	void						MergeAttributes ( RtRowIterator_c & tIt, RtSegment_t * pDestSeg, const RtSegment_t * pSrcSeg, int nBlobs, CSphVector<RowID_t> & dRowMap, RowID_t & tNextRowID );
-	void						MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2, const CSphVector<RowID_t> & dRowMap1, const CSphVector<RowID_t> & dRowMap2 );
-	RtSegment_t *				MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, bool bHasMorphology );
-	void						CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWriter_t & tOutDoc, RtDocReader_t & tInDoc, RtWord_t & tWord, const CSphVector<RowID_t> & tRowMap );
+	void						MergeAttributes ( RtRowIterator_c & tIt, RtSegment_t * pDestSeg, const RtSegment_t * pSrcSeg, int nBlobs, CSphVector<RowID_t> & dRowMap, RowID_t & tNextRowID ) const;
+	void						MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2, const CSphVector<RowID_t> & dRowMap1, const CSphVector<RowID_t> & dRowMap2 ) const;
+	RtSegment_t *				MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, bool bHasMorphology ) const;
+	void						CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWriter_t & tOutDoc, RtDocReader_t & tInDoc, RtWord_t & tWord, const CSphVector<RowID_t> & tRowMap ) const;
 
 	void						SaveMeta ( int64_t iTID, const CSphFixedVector<int> & dChunkNames );
 	void						SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats ) const;
@@ -1250,7 +1250,6 @@ private:
 	void						SetCheckpoint ( SuggestResult_t & tRes, DWORD iCP ) const final;
 	bool						ReadNextWord ( SuggestResult_t & tRes, DictWord_t & tWord ) const final;
 
-	int64_t						GetRamLeft() const; // immediate value counted by cloud of RtSegment_t
 	SphChunkGuard_t				GetReaderChunks() const ACQUIRE_SHARED (m_tReading );
 
 	RtSegmentRefPtf_t			AdoptSegment ( RtSegment_t * pNewSeg );
@@ -1263,6 +1262,9 @@ private:
 
 	void						GetIndexFiles ( CSphVector<CSphString> & dFiles ) const override;
 	DocstoreBuilder_i::Doc_t *	FetchDocFields ( DocstoreBuilder_i::Doc_t & tStoredDoc, CSphSource_StringVector & tSrc ) const;
+
+	bool						MergeSegments ( CSphVector<RtSegmentRefPtf_t> & dSegments, bool bForceDump, int iMemLimit, bool bHasNewSegment );
+	RtSegmentRefPtf_t			MergeDoubleBufSegments() const;
 };
 
 
@@ -1350,6 +1352,23 @@ bool RtIndex_c::IsFlushNeed() const
 	return true;
 }
 
+static int64_t SegmentsGetUsedRam ( const VecTraits_T<RtSegmentRefPtf_t> & dSegments )
+{
+	int64_t iTotal = 0;
+	for ( RtSegment_t * pSeg : dSegments )
+		iTotal += pSeg->GetUsedRam();
+
+	return iTotal;
+}
+
+static int64_t SegmentsGetRamLeft ( const VecTraits_T<RtSegmentRefPtf_t> & dSegments, int64_t iMemLimit )
+{
+	iMemLimit -= SegmentsGetUsedRam ( dSegments );
+	if ( iMemLimit<0 )
+		iMemLimit = 0;
+	return iMemLimit;
+}
+
 void RtIndex_c::ForceRamFlush ( bool bPeriodic ) REQUIRES (!this->m_tFlushLock)
 {
 	if ( !IsFlushNeed() )
@@ -1365,7 +1384,7 @@ void RtIndex_c::ForceRamFlush ( bool bPeriodic ) REQUIRES (!this->m_tFlushLock)
 	int64_t iSavedTID = m_iTID;
 	{
 		SphChunkGuard_t tGuard = GetReaderChunks ();
-		iUsedRam = GetUsedRam ( tGuard );
+		iUsedRam = SegmentsGetUsedRam ( tGuard.m_dRamChunks );
 
 		if ( !SaveRamChunk ( tGuard.m_dRamChunks ) )
 		{
@@ -1408,15 +1427,6 @@ int64_t RtIndex_c::GetUsedRam () const
 	return iTotal;
 }
 
-
-int64_t RtIndex_c::GetUsedRam ( const SphChunkGuard_t & tGuard  )
-{
-	int64_t iTotal = 0;
-	for ( const auto & pSeg : tGuard.m_dRamChunks )
-		iTotal += pSeg->GetUsedRam();
-
-	return iTotal;
-}
 
 //////////////////////////////////////////////////////////////////////////
 // INDEXING
@@ -2187,7 +2197,7 @@ ReplicationCommand_t * RtAccum_t::AddCommand ( ReplicationCommand_e eCmd, const 
 	return pCmd;
 }
 
-void RtIndex_c::CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWriter_t & tOutDoc, RtDocReader_t & tInDoc, RtWord_t & tWord, const CSphVector<RowID_t> & dRowMap )
+void RtIndex_c::CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWriter_t & tOutDoc, RtDocReader_t & tInDoc, RtWord_t & tWord, const CSphVector<RowID_t> & dRowMap ) const
 {
 	// copy docs
 	while (true)
@@ -2361,7 +2371,7 @@ void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, bool bKeywor
 }
 
 
-void RtIndex_c::MergeAttributes ( RtRowIterator_c & tIt, RtSegment_t * pDestSeg, const RtSegment_t * pSrcSeg, int nBlobs, CSphVector<RowID_t> & dRowMap, RowID_t & tNextRowID )
+void RtIndex_c::MergeAttributes ( RtRowIterator_c & tIt, RtSegment_t * pDestSeg, const RtSegment_t * pSrcSeg, int nBlobs, CSphVector<RowID_t> & dRowMap, RowID_t & tNextRowID ) const
 {
 	const CSphRowitem * pRow;
 	while ( !!(pRow=tIt.GetNextAliveRow()) )
@@ -2405,7 +2415,7 @@ int RtIndex_c::CompareWords ( const RtWord_t * pWord1, const RtWord_t * pWord2 )
 }
 
 
-void RtIndex_c::MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2, const CSphVector<RowID_t> & dRowMap1, const CSphVector<RowID_t> & dRowMap2 )
+void RtIndex_c::MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2, const CSphVector<RowID_t> & dRowMap1, const CSphVector<RowID_t> & dRowMap2 ) const
 {
 	tSeg.m_dWords.Reserve ( Max ( tSeg1.m_dWords.GetLength(), tSeg2.m_dWords.GetLength() ) );
 	tSeg.m_dDocs.Reserve ( Max ( tSeg1.m_dDocs.GetLength(), tSeg2.m_dDocs.GetLength() ) );
@@ -2456,7 +2466,7 @@ void RtIndex_c::MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, c
 }
 
 
-RtSegment_t * RtIndex_c::MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, bool bHasMorphology )
+RtSegment_t * RtIndex_c::MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, bool bHasMorphology ) const
 {
 	if ( pSeg1->m_iTag > pSeg2->m_iTag )
 		Swap ( pSeg1, pSeg2 );
@@ -2631,60 +2641,45 @@ int RtIndex_c::ApplyKillList ( const CSphVector<DocID_t> & dAccKlist )
 	return iKilled;
 }
 
-
-bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_t> & dAccKlist, int * pTotalKilled, bool bForceDump )
+static void RemoveEmptySegments ( CSphVector<RtSegmentRefPtf_t> & dSegments )
 {
-	// store statistics, because pNewSeg just might get merged
-	int iNewDocs = pNewSeg ? pNewSeg->m_uRows : 0;
-
-	CSphVector<int64_t> dLens;
-	int iFirstFieldLenAttr = m_tSchema.GetAttrId_FirstFieldLen();
-	if ( pNewSeg && iFirstFieldLenAttr>=0 )
+	ARRAY_FOREACH ( i, dSegments )
 	{
-		assert ( pNewSeg->GetStride()==m_iStride );
-		int iFields = m_tSchema.GetFieldsCount(); // shortcut
-		dLens.Resize ( iFields );
-		dLens.Fill ( 0 );
-		for ( DWORD i=0; i<pNewSeg->m_uRows; ++i )
-			for ( int j=0; j<iFields; ++j )
-				dLens[j] += sphGetRowAttr ( pNewSeg->GetDocinfoByRowID(i), m_tSchema.GetAttr ( j+iFirstFieldLenAttr ).m_tLocator );
+		auto & pSeg = dSegments[i];
+		if ( !pSeg->m_tAliveRows )
+		{
+			pSeg = nullptr; // release it
+			dSegments.RemoveFast ( i );
+			--i;
+		}
 	}
+}
 
-	// phase 1, lock out other writers (but not readers yet)
-	// concurrent readers are ok during merges, as existing segments won't be modified yet
-	// however, concurrent writers are not
-	Verify ( m_tWriting.Lock() );
-
-	// first of all, binlog txn data for recovery
-	g_pRtBinlog->BinlogCommit ( &m_iTID, m_sIndexName.cstr(), pNewSeg, dAccKlist, m_bKeywordDict );
-	int64_t iTID = m_iTID;
-
-	auto dDoubleChunks = m_dRamChunks.Slice ( m_iDoubleBuffer ); // shortcut to slice on doublebuffer
-
-	// prepare new segments vector
-	// create more new segments by merging as needed
-	// do not (!) kill processed old segments just yet, as readers might still need them
-	CSphVector<RtSegmentRefPtf_t> dSegments;
-
-	dSegments.Reserve ( dDoubleChunks.GetLength ()+1 );
-	for ( auto & pChunk : dDoubleChunks )
-		dSegments.Add ( pChunk );
-	if ( pNewSeg )
-		dSegments.Add ( AdoptSegment ( pNewSeg ) );
-
-	int iTotalKilled = ApplyKillList ( dAccKlist );
-
-	bool bHasMorphology = m_pDict->HasMorphology();
-
+bool RtIndex_c::MergeSegments ( CSphVector<RtSegmentRefPtf_t> & dSegments, bool bForceDump, int iMemLimit, bool bHasNewSegment )
+{
 	// enforce RAM usage limit
-	int64_t iRamLeft = GetRamLeft ();
+	int64_t iRamLeft = SegmentsGetRamLeft ( dSegments, iMemLimit );
 
 	// skip merging if no rows were added or no memory left
 	bool bDump = ( iRamLeft==0 || bForceDump );
+
+	// no need to merge segments in these cases:
+	// - remove of document(s) from existed segments
+	// - no free ram left - segments will be saved on disk
+	// - forced flush of segments on disk
+	// - double buffer active - lets just collect new segments but do not merge them till save finished
+	if ( !bHasNewSegment || !iRamLeft || bDump || ( m_iDoubleBuffer>0 ) )
+	{
+		RemoveEmptySegments ( dSegments );
+		return bDump;
+	}
+
+	bool bHasMorphology = m_pDict->HasMorphology();
+
 	const int MAX_SEGMENTS = 32;
 	const int MAX_PROGRESSION_SEGMENT = 8;
 	const int64_t MAX_SEGMENT_VECTOR_LEN = INT_MAX;
-	while ( pNewSeg && iRamLeft>0 )
+	while ( iRamLeft>0 )
 	{
 		// segments sort order: large first, smallest last
 		// merge last smallest segments
@@ -2754,19 +2749,73 @@ bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID
 		pB = nullptr;
 		if ( pMerged )
 			dSegments.Add ( AdoptSegment ( pMerged ));
-		iRamLeft = GetRamLeft ();
+		iRamLeft = SegmentsGetRamLeft ( dSegments, iMemLimit );
 	}
 
-	ARRAY_FOREACH ( i, dSegments )
+	RemoveEmptySegments ( dSegments );
+
+	return bDump;
+}
+
+bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_t> & dAccKlist, int * pTotalKilled, bool bForceDump )
+{
+	// store statistics, because pNewSeg just might get merged
+	int iNewDocs = pNewSeg ? pNewSeg->m_uRows : 0;
+
+	CSphVector<int64_t> dLens;
+	int iFirstFieldLenAttr = m_tSchema.GetAttrId_FirstFieldLen();
+	if ( pNewSeg && iFirstFieldLenAttr>=0 )
 	{
-		auto & pSeg = dSegments[i];
-		if ( !pSeg->m_tAliveRows )
-		{
-			pSeg = nullptr; // release it
-			dSegments.RemoveFast ( i );
-			--i;
-		}
+		assert ( pNewSeg->GetStride()==m_iStride );
+		int iFields = m_tSchema.GetFieldsCount(); // shortcut
+		dLens.Resize ( iFields );
+		dLens.Fill ( 0 );
+		for ( DWORD i=0; i<pNewSeg->m_uRows; ++i )
+			for ( int j=0; j<iFields; ++j )
+				dLens[j] += sphGetRowAttr ( pNewSeg->GetDocinfoByRowID(i), m_tSchema.GetAttr ( j+iFirstFieldLenAttr ).m_tLocator );
 	}
+
+	// phase 1, lock out other writers (but not readers yet)
+	// concurrent readers are ok during merges, as existing segments won't be modified yet
+	// however, concurrent writers are not
+	Verify ( m_tWriting.Lock() );
+
+	// in case no ram left even for double buffer
+	// need to hold clients to prevent commits till save finished
+	if ( m_iDoubleBuffer>0 && m_bDoubleDump )
+	{
+		Verify ( m_tWriting.Unlock() );
+		bool bSaving = m_bDoubleDump;
+		while ( bSaving )
+		{
+			ScopedMutex_t tLock ( m_tSaveFinished );
+			bSaving = m_bDoubleDump;
+		}
+
+		Verify ( m_tWriting.Lock() );
+	}
+
+	// first of all, binlog txn data for recovery
+	g_pRtBinlog->BinlogCommit ( &m_iTID, m_sIndexName.cstr(), pNewSeg, dAccKlist, m_bKeywordDict );
+	int64_t iTID = m_iTID;
+
+	auto dDoubleChunks = m_dRamChunks.Slice ( m_iDoubleBuffer ); // shortcut to slice on doublebuffer
+	int64_t iMemLimit = ( m_iDoubleBuffer ? m_iDoubleBufferLimit : m_iSoftRamLimit );
+
+	// prepare new segments vector
+	// create more new segments by merging as needed
+	// do not (!) kill processed old segments just yet, as readers might still need them
+	CSphVector<RtSegmentRefPtf_t> dSegments;
+
+	dSegments.Reserve ( dDoubleChunks.GetLength ()+1 );
+	for ( auto & pChunk : dDoubleChunks )
+		dSegments.Add ( pChunk );
+	if ( pNewSeg )
+		dSegments.Add ( AdoptSegment ( pNewSeg ) );
+
+	int iTotalKilled = ApplyKillList ( dAccKlist );
+
+	bool bDump = MergeSegments ( dSegments, bForceDump, iMemLimit, ( pNewSeg!=nullptr ) );
 
 	// wipe out readers - now we are only using RAM segments
 	m_tChunkLock.WriteLock ();
@@ -2776,6 +2825,10 @@ bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID
 	m_dRamChunks.Resize ( m_iDoubleBuffer );
 	m_dRamChunks.Append ( dSegments );
 	m_dRamChunks.ZeroTail ();
+	// release temporary vector of collected segments
+	// as no need to keep them here after this point
+	// but vector default release at function exit cause segments to live after SaveDiskChunk
+	dSegments.Reset();
 
 	// phase 3, enable readers again
 	// we might need to dump data to disk now
@@ -2799,14 +2852,19 @@ bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID
 	// double buffer writer stands still till save done
 	// all writers waiting double buffer done
 	// no need to dump or waiting for some writer
-	if ( !bDump || (m_iDoubleBuffer>0) )
+	if ( !bDump || m_iDoubleBuffer>0 )
 	{
+		if ( bDump && m_iDoubleBuffer>0 )
+			m_bDoubleDump = true;
+
 		// all done, enable other writers
 		Verify ( m_tWriting.Unlock() );
 		return true;
 	}
 
-	// scope for guard then retired clean up
+	// scope for guard for released segments to clean up
+	bool bSavedOk = false;
+	while ( true )
 	{
 		// copy stats for disk chunk
 		SphChunkGuard_t tGuard = GetReaderChunks ();
@@ -2815,21 +2873,30 @@ bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID
 		m_iDoubleBuffer = m_dRamChunks.GetLength();
 
 		// need release m_tReading lock to prevent deadlock - commit vs SaveDiskChunk
-		// chunks will keep till this scope and
+		// chunks will keep till this scope end
 		tGuard.m_pReading->Unlock();
 		tGuard.m_pReading = nullptr;
 
 		Verify ( m_tWriting.Unlock() );
 
+		// create pit-stop for further clients these overflows double-buffer
+		// but need release them only after ram chunk guard will free segments
+		// otherwise there will be another save of tiny disk chunk
+		// as segments these released still count as used memory till readers release them
+		m_tSaveFinished.Lock();
+
 		int iSavedChunkId = -1;
 		if ( !SaveDiskChunk ( iTID, tGuard, tStat2Dump, bForceDump, iSavedChunkId ) )
-			return false;
+		{
+			bSavedOk = false;
+			break;
+		}
 
 		g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), iTID, false );
 
 		// notify the disk chunk that we were saving of the documents that were killed while we were saving it
 		ScopedMutex_t tWriteLock ( m_tWriting );
-		ScWL_t tChunksWLock {m_tChunkLock};
+		ScWL_t tChunksWLock { m_tChunkLock };
 
 		CSphIndex * pDiskChunk = nullptr;
 		for ( auto pChunk : m_dDiskChunks )
@@ -2847,8 +2914,15 @@ bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID
 		}
 
 		m_dKillsWhileSaving.Reset();
+		bSavedOk = true;
+		break;
 	}
-	return true;
+
+	// release all clients waiting commit
+	m_bDoubleDump = false;
+	m_tSaveFinished.Unlock();
+
+	return bSavedOk;
 }
 
 void RtIndex_c::RollBack ( RtAccum_t * pAccExt )
@@ -3542,6 +3616,33 @@ void RtIndex_c::SaveMeta ( int64_t iTID, const CSphFixedVector<int> & dChunkName
 }
 
 
+RtSegmentRefPtf_t RtIndex_c::MergeDoubleBufSegments() const
+{
+	RtSegmentRefPtf_t tLast;
+	if ( !m_iDoubleBuffer || m_iDoubleBuffer==m_dRamChunks.GetLength() )
+		return tLast;
+
+	// lets also merge all double buffer segments into single one
+	// as these were not merged during save
+	tLast = m_dRamChunks[m_iDoubleBuffer];
+
+	bool bHasMorphology = m_pDict->HasMorphology();
+
+	for ( int i=m_iDoubleBuffer+1; i<m_dRamChunks.GetLength(); i++ )
+	{
+		RtSegmentRefPtf_t & tNext = m_dRamChunks[i];
+		RtSegmentRefPtf_t tMerged { MergeSegments ( tLast, tNext, bHasMorphology ) };
+
+		// force releasing of parent segments
+		tLast = nullptr;
+		tNext = nullptr;
+		tLast = tMerged;
+	}
+
+	return tLast;
+}
+
+
 bool RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats, bool bForce, int & iSavedChunkId )
 {
 	if ( tGuard.m_dRamChunks.IsEmpty() || m_bSaveDisabled )
@@ -3570,6 +3671,10 @@ bool RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, co
 
 	// get exclusive lock again, gotta reset RAM chunk now
 	Verify ( m_tWriting.Lock() );
+
+	// merge all double buffer segments into single one as these were not merged during save
+	RtSegmentRefPtf_t tLast = MergeDoubleBufSegments();
+
 	Verify ( m_tChunkLock.WriteLock() );
 
 	// save updated meta
@@ -3577,11 +3682,10 @@ bool RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, co
 	g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
 
 	// swap double buffer data
-	int iNewSegmentsCount = ( m_iDoubleBuffer ? m_dRamChunks.GetLength() - m_iDoubleBuffer : 0 );
-	for ( int i=0; i<iNewSegmentsCount; ++i )
-		m_dRamChunks[i] = m_dRamChunks[i+m_iDoubleBuffer];
-	m_dRamChunks.Resize ( iNewSegmentsCount );
-	m_dRamChunks.ZeroTail ();
+	m_dRamChunks.Resize ( 0 );
+	m_dRamChunks.ZeroTail();
+	if ( tLast.Ptr() )
+		m_dRamChunks.Add ( AdoptSegment ( tLast ) );
 
 	m_dDiskChunks.Add ( pDiskChunk );
 
@@ -3612,8 +3716,8 @@ bool RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, co
 
 	tmSave = sphMicroTimer () - tmSave;
 	const char* sReason = bForce ? "forcibly saved" : "saved";
-	sphInfo ( "rt: index %s: diskchunk %d %s in %d.%03d sec",
-			  m_sIndexName.cstr (), iSavedChunkId, sReason, ( int ) ( tmSave / 1000000 ), ( int ) (( tmSave / 1000 ) % 1000 ));
+	sphInfo ( "rt: index %s: diskchunk %d(%d), segments %d %s in %d.%03d sec",
+			  m_sIndexName.cstr (), iSavedChunkId, m_dDiskChunks.GetLength(), tGuard.m_dRamChunks.GetLength(), sReason, ( int ) ( tmSave / 1000000 ), ( int ) (( tmSave / 1000 ) % 1000 ));
 
 	return true;
 }
@@ -4114,6 +4218,13 @@ void RtIndex_c::PostSetup()
 {
 	RtIndex_i::PostSetup();
 
+	m_pDocstoreFields.Reset();
+	if ( m_tSchema.HasStoredFields() )
+	{
+		m_pDocstoreFields = CreateDocstoreFields();
+		SetupDocstoreFields ( *m_pDocstoreFields.Ptr(), m_tSchema );
+	}
+
 	m_iMaxCodepointLength = m_pTokenizer->GetMaxCodepointLength();
 
 	// bigram filter
@@ -4217,6 +4328,9 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 
 	if ( m_iWordsCheckpoint!=RTDICT_CHECKPOINT_V5 )
 		tReporter.Fail ( "unexpected number of words per checkpoint (expected 48, got %d)", m_iWordsCheckpoint );
+
+	tReporter.Msg ( "checking schema..." );
+	DebugCheckSchema ( m_tSchema, tReporter );
 
 	ARRAY_FOREACH ( iSegment, m_dRamChunks )
 	{
@@ -5686,22 +5800,13 @@ static void TransformSorterSchema ( ISphMatchSorter * pSorter, const SphChunkGua
 	assert ( pSorter );
 
 	const ISphSchema * pOldSchema = pSorter->GetSchema();
-	ISphSchema * pNewSchema =  sphCreateStandaloneSchema ( pOldSchema );
+	ISphSchema * pNewSchema =  sphCreateStandaloneSchema ( pOldSchema, pSorter->GetFilteredAttrs() );
 	assert ( pOldSchema && pNewSchema );
 
 	RTMatchesToNewSchema_c fnFinal ( pOldSchema, pNewSchema, tGuard, dDiskBlobPools );
 	pSorter->Finalize ( fnFinal, false );
 
 	pSorter->SetSchema ( pNewSchema, true );
-}
-
-int64_t RtIndex_c::GetRamLeft () const
-{
-	int64_t iRamLeft = m_iDoubleBuffer ? m_iDoubleBufferLimit : m_iSoftRamLimit;
-	iRamLeft -= m_iRamChunksAllocatedRAM;
-	if ( iRamLeft<0 )
-		iRamLeft = 0;
-	return iRamLeft;
 }
 
 SphChunkGuard_t RtIndex_c::GetReaderChunks () const
@@ -5742,15 +5847,10 @@ SphChunkGuard_t & SphChunkGuard_t::operator= ( SphChunkGuard_t && rhs ) noexcept
 }
 
 
-void SphChunkGuard_t::Release ()
+SphChunkGuard_t::~SphChunkGuard_t () RELEASE()
 {
 	if ( m_pReading )
 		m_pReading->Unlock ();
-}
-
-SphChunkGuard_t::~SphChunkGuard_t () RELEASE()
-{
-	Release();
 }
 
 static int g_iRun = 0;
@@ -7748,6 +7848,7 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 		pRes->m_iDiskUse += tDisk.m_iDiskUse;
 	}
 
+	pRes->m_iNumRamChunks = m_dRamChunks.GetLength();
 	pRes->m_iNumChunks = m_dDiskChunks.GetLength();
 
 	pRes->m_iTID = m_iTID;
@@ -9715,6 +9816,9 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 				} else
 					sError.SetSprintf ( "attribute '%s': bitcount is only supported for integer types (bitcount ignored)", tCol.m_sName.cstr() );
 			}
+
+			if ( !SchemaConfigureCheckAttribute ( tSchema, tCol, sError ) )
+				return false;
 
 			tSchema.AddAttr ( tCol, false );
 

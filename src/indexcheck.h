@@ -75,4 +75,8 @@ public:
 
 DiskIndexChecker_i * CreateDiskIndexChecker ( CSphIndex & tIndex, DebugCheckError_c & tReporter );
 
+void DebugCheckSchema ( const ISphSchema & tSchema, DebugCheckError_c & tReporter );
+bool DebugCheckSchema ( const ISphSchema & tSchema, CSphString & sError );
+bool SchemaConfigureCheckAttribute ( const CSphSchema & tSchema, const CSphColumnInfo & tCol, CSphString & sError );
+
 #endif // _indexcheck_

@@ -32,7 +32,7 @@ The options available to ``searchd`` on all builds are:
    ``indexer`` above.
 
 -  ``--stop`` is used to asynchronously stop ``searchd``, using the
-   details of the PID file as specified in the ``sphinx.conf`` file, so
+   details of the PID file as specified in the ``manticore.conf`` file, so
    you may also need to confirm to ``searchd`` which configuration file
    to use with the ``--config`` option. NB, calling ``--stop`` will also
    make sure any changes applied to the indexes with
@@ -42,7 +42,7 @@ The options available to ``searchd`` on all builds are:
    .. code-block:: bash
 
 
-       $ searchd --config /home/myuser/sphinx.conf --stop
+       $ searchd --config /home/myuser/manticore.conf --stop
 
 -  ``--stopwait`` is used to synchronously stop ``searchd``. ``--stop``
    essentially tells the running instance to exit (by sending it a
@@ -54,7 +54,7 @@ The options available to ``searchd`` on all builds are:
    .. code-block:: bash
 
 
-       $ searchd --config /home/myuser/sphinx.conf --stopwait
+       $ searchd --config /home/myuser/manticore.conf --stopwait
 
    Possible exit codes are as follows:
 
@@ -79,7 +79,7 @@ The options available to ``searchd`` on all builds are:
 
 
        $ searchd --status
-       $ searchd --config /home/myuser/sphinx.conf --status
+       $ searchd --config /home/myuser/manticore.conf --status
 
 -  ``--pidfile`` is used to explicitly force using a PID file (where the
    ``searchd`` process number is stored) despite any other debugging
@@ -94,7 +94,7 @@ The options available to ``searchd`` on all builds are:
 -  ``--console`` is used to force ``searchd`` into console mode;
    typically it will be running as a conventional server application,
    and will aim to dump information into the log files (as specified in
-   ``sphinx.conf``). Sometimes though, when debugging issues in the
+   ``manticore.conf``). Sometimes though, when debugging issues in the
    configuration or the daemon itself, or trying to diagnose
    hard-to-track-down problems, it may be easier to force it to dump
    information directly to the console/command line from which it is
@@ -106,7 +106,7 @@ The options available to ``searchd`` on all builds are:
    .. code-block:: bash
 
 
-       $ searchd --config /home/myuser/sphinx.conf --console
+       $ searchd --config /home/myuser/manticore.conf --console
 
 -  ``--logdebug``, ``--logreplication``, ``--logdebugv``, and ``--logdebugvv`` options enable
    additional debug output in the daemon log. They differ by the logging
@@ -116,7 +116,7 @@ The options available to ``searchd`` on all builds are:
    assist with some particularly complicated debugging session.)
 
 -  ``--iostats`` is used in conjunction with the logging options (the
-   ``query_log`` will need to have been activated in ``sphinx.conf``) to
+   ``query_log`` will need to have been activated in ``manticore.conf``) to
    provide more detailed information on a per-query basis as to the
    input/output operations carried out in the course of that query, with
    a slight performance hit and of course bigger logs. 
@@ -132,7 +132,7 @@ The options available to ``searchd`` on all builds are:
    .. code-block:: bash
 
 
-       $ searchd --config /home/myuser/sphinx.conf --iostats
+       $ searchd --config /home/myuser/manticore.conf --iostats
 
 -  ``--cpustats`` is used to provide actual CPU time report (in addition
    to wall time) in both query log file (for every given query) and
@@ -143,7 +143,7 @@ The options available to ``searchd`` on all builds are:
    .. code-block:: bash
 
 
-       $ searchd --config /home/myuser/sphinx.conf --cpustats
+       $ searchd --config /home/myuser/manticore.conf --cpustats
 
 -  ``--port portnumber`` (``-p`` for short) is used to specify the port
    that ``searchd`` should listen on, usually for debugging purposes.
@@ -213,7 +213,7 @@ The options available to ``searchd`` on all builds are:
    .. code-block:: bash
 
 
-       $ searchd --config /home/myuser/sphinx.conf --coredump
+       $ searchd --config /home/myuser/manticore.conf --coredump
 
 -  ``--new-cluster`` bootstraps a replication cluster and makes the daemon a
    reference node with :ref:`cluster restart <replication_restart>` protection
@@ -244,7 +244,7 @@ you install it as a service.
 
 
        C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --install
-          --config C:\Manticore\sphinx.conf
+          --config C:\Manticore\manticore.conf
 
    If you want to have the I/O stats every time you start
    ``searchd``, you need to specify its option on the same line as the
@@ -254,7 +254,7 @@ you install it as a service.
 
 
        C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --install
-          --config C:\Manticore\sphinx.conf --iostats
+          --config C:\Manticore\manticore.conf --iostats
 
 -  ``--delete`` removes the service from the Microsoft Management
    Console and other places where services are registered, after
@@ -286,7 +286,7 @@ you install it as a service.
 
 
        C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --install
-          --config C:\Manticore\sphinx.conf --servicename ManticoreSearch
+          --config C:\Manticore\manticore.conf --servicename ManticoreSearch
 
 -  ``--ntservice`` is the option that is passed by the Management
    Console to ``searchd`` to invoke it as a service on Windows

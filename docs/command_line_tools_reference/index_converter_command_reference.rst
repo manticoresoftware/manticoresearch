@@ -11,13 +11,13 @@ Convert one index at a time:
 
 .. code-block:: bash
 
-    $ index_converter --config /home/myuser/sphinx.conf --index indexname
+    $ index_converter --config /home/myuser/manticore.conf --index indexname
 
 Convert all indexes:
 
 .. code-block:: bash
 
-    $ index_converter --config /home/myuser/sphinx.conf --all
+    $ index_converter --config /home/myuser/manticore.conf --all
 
 Convert indexes found in a folder:
 
@@ -32,7 +32,7 @@ You can save the new index version to a different folder using `--output-dir` op
 
 .. code-block:: bash
 
-    $ index_converter --config /home/myuser/sphinx.conf --all --output-dir /new/path
+    $ index_converter --config /home/myuser/manticore.conf --all --output-dir /new/path
 
 A special case is for indexes containing kill-lists. As the behaviour of how kill-lists works has changed (see :ref:`killlist_target`), the delta index should know which are the target indexes for applying the kill-lists
 There are 3 ways to have a converted index ready for setting targeted indexes for applying kill-lists:
@@ -41,7 +41,7 @@ There are 3 ways to have a converted index ready for setting targeted indexes fo
 
 .. code-block:: bash
 
-    $ index_converter --config /home/myuser/sphinx.conf --index deltaindex --killlist-target mainindex:kl
+    $ index_converter --config /home/myuser/manticore.conf --index deltaindex --killlist-target mainindex:kl
 
 - Add killlist_target in the configuration before doing the conversion
 
@@ -51,8 +51,8 @@ A complete list of ``index_converter`` options:
 
 -  ``--config <file>`` (``-c <file>`` for short) tells
    ``index_converter`` to use the given file as its configuration. Normally, it
-   will look for ``sphinx.conf`` in the installation directory (e.g.
-   ``/usr/local/sphinx/etc/sphinx.conf`` if installed into
+   will look for ``manticore.conf`` in the installation directory (e.g.
+   ``/usr/local/sphinx/etc/manticore.conf`` if installed into
    ``/usr/local/sphinx``), followed by the current directory you are in
    when calling ``index_converter`` from the shell.
 

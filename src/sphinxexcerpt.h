@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2019, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2017-2020, Manticore Software LTD (http://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -67,6 +67,7 @@ struct SnippetQuerySettings_t
 	ESphSpz			m_ePassageSPZ { SPH_SPZ_NONE };
 	bool			m_bJsonQuery { false };
 
+	void			Setup();
 	CSphString		AsString() const;
 };
 
@@ -112,7 +113,6 @@ bool			TestEscaping( const CSphString& sPrefix, const CSphString& sPath );
 ESphSpz			GetPassageBoundary ( const CSphString & sPassageBoundaryMode );
 const char *	PassageBoundarySz ( ESphSpz eBoundary );
 bool			sphCheckOptionsSPZ ( const SnippetQuerySettings_t & q, ESphSpz eMode, CSphString & sError );
-bool			SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPost );
 void			UnpackSnippetData ( const BYTE * pData, int iLength, SnippetResult_t & tRes );
 
 struct FieldSource_t

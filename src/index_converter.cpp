@@ -1,9 +1,5 @@
 //
-// $Id$
-//
-
-//
-// Copyright (c) 2018, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2018-2020, Manticore Software LTD (http://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -2450,9 +2446,9 @@ static void ShowHelp ()
 		"index_converter, a tool to convert index files from 2.X to 3.0 format\n"
 		"\n"
 		"Usage:\n"
-		"index_converter --config sphinx.conf --index test\n"
+		"index_converter --config manticore.conf --index test\n"
 		"index_converter --path path_to_index_files --killlist-target main_idx:id\n"
-		"index_converter --config sphinx.conf --all --output-dir converted\n"
+		"index_converter --config manticore.conf --all --output-dir converted\n"
 		"\n"
 		"Options are:\n"
 		"-c, --config <file>\t\tread configuration from specified file\n"
@@ -2699,6 +2695,3 @@ int main ( int argc, char ** argv )
 	return 0;
 }
 
-//
-// $Id$
-//

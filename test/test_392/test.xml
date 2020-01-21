@@ -27,6 +27,23 @@ index test1
 	path			= <data_path/>/test1
 	stored_fields	= title, body
 }
+
+source test2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id, content from test_table2
+}
+
+index test2
+{
+	source			= test2
+	path			= <data_path/>/test2
+	stored_fields	= content
+	index_sp 		= 1
+	html_strip 		= 1
+}
+
 </config>
 
 <db_create>
@@ -37,7 +54,17 @@ create table test_table
 	body varchar(255) not null
 );
 </db_create>
-<db_drop>drop table if exists test_table;</db_drop>
+
+<db_create>
+create table test_table2
+(                                             
+	id int not null,
+	content varchar(1024) not null
+);
+</db_create>
+
+<db_drop>drop table if exists test_table</db_drop>
+<db_drop>drop table if exists test_table2</db_drop>
 
 <db_insert>
 insert into test_table values
@@ -48,8 +75,14 @@ insert into test_table values
 ( 5, 'document well 5', 'Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.' )
 </db_insert>
 
-<sphqueries>
+<db_insert>
+<![CDATA[
+insert into test_table2 values
+( 1, '<p>The ideas of syntax highlighting overlap significantly with those of <a href="/wiki/Structure_editor" title="Structure editor">syntax-directed editors</a>. One of the first such editors for code was Wilfred Hansens 1969 code editor, Emily.<sup id="cite_ref-hansen_3-0" class="reference"><a href="#cite_note-hansen-3">[3]</a></sup><sup id="cite_ref-4" class="reference"><a href="#cite_note-4">[4]</a></sup> It provided advanced language-independent <a href="/wiki/Autocomplete" title="Autocomplete">code completion</a> facilities, and unlike modern editors with syntax highlighting, actually made it impossible to create syntactically incorrect programs.</p>' )
+]]>
+</db_insert>
 
+<sphqueries>
 <sphinxql>select snippet(body,'followed') from test1 where match('followed')</sphinxql>
 <sphinxql>select snippet(body,query()) from test1 where match('followed')</sphinxql>
 
@@ -77,6 +110,14 @@ insert into test_table values
 
 <sphinxql>select highlight({limit=3}) from test1 where match('three')</sphinxql>
 
+<sphinxql>select content from test2 where match('code completion')</sphinxql>
+<sphinxql>select snippet(content,query(),'html_strip_mode=retain','limit=0') from test2 where match('code completion')</sphinxql>
+<sphinxql>select highlight({html_strip_mode=retain, limit=0}) from test2 where match('code completion')</sphinxql>
+<sphinxql>select snippet(content,query(),'html_strip_mode=strip') from test2 where match('ideas')</sphinxql>
+<sphinxql>select highlight({html_strip_mode=strip}) from test2 where match('ideas')</sphinxql>
+
+<sphinxql>select body,snippet(body,query(), 'before_match=%PASSAGE_ID%','after_match=/%PASSAGE_ID%') from test1 where match('three')</sphinxql>
+<sphinxql>select highlight({before_match='%PASSAGE_ID%',after_match='/%PASSAGE_ID%'}) from test1 where match('three')</sphinxql>
 </sphqueries>
 
 </test>

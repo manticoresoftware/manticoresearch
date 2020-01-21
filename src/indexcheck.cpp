@@ -314,6 +314,7 @@ private:
 	void	CheckDocidLookup();
 	void	CheckDocids();
 	void	CheckDocstore();
+	void	CheckSchema();
 	
 	bool		ReadHeader ( CSphString & sError );
 	CSphString	GetFilename ( ESphExt eExt ) const;
@@ -443,6 +444,7 @@ void DiskIndexChecker_c::Setup ( int64_t iNumRows, int64_t iDocinfoIndex, int64_
 
 void DiskIndexChecker_c::Check()
 {
+	CheckSchema();
 	CheckDictionary();
 	CheckDocs();
 	CheckAttributes();
@@ -1335,4 +1337,82 @@ CSphString DiskIndexChecker_c::GetFilename ( ESphExt eExt ) const
 DiskIndexChecker_i * CreateDiskIndexChecker ( CSphIndex & tIndex, DebugCheckError_c & tReporter )
 {
 	return new DiskIndexChecker_c ( tIndex, tReporter );
+}
+
+struct ColumnNameCmp_fn
+{
+	inline bool IsLess ( const CSphColumnInfo & tColA, const CSphColumnInfo & tColB ) const
+	{
+		return ( strcasecmp ( tColA.m_sName.cstr(), tColB.m_sName.cstr() )<0 );
+	}
+};
+
+static CSphString DumpAttr ( const CSphColumnInfo & tCol )
+{
+	CSphString sRes;
+	if ( tCol.m_tLocator.IsBlobAttr() )
+		sRes.SetSprintf ( "%s at blob@%d", sphTypeName ( tCol.m_eAttrType ), tCol.m_tLocator.m_iBlobAttrId );
+	else
+		sRes.SetSprintf ( "%s at %d@%d", sphTypeName ( tCol.m_eAttrType ), tCol.m_tLocator.m_iBitCount, tCol.m_tLocator.m_iBitOffset );
+
+	return sRes;
+}
+
+template <typename T>
+void DebugCheckSchema_T ( const ISphSchema & tSchema, T & tReporter )
+{
+	// check duplicated names
+	CSphVector<CSphColumnInfo> dAttrs;
+	dAttrs.Reserve ( tSchema.GetAttrsCount() );
+	for ( int iAttr=0; iAttr<tSchema.GetAttrsCount(); iAttr++ )
+		dAttrs.Add ( tSchema.GetAttr ( iAttr ) );
+
+	dAttrs.Sort ( ColumnNameCmp_fn() );
+	
+	for ( int iAttr=1; iAttr<dAttrs.GetLength(); iAttr++ )
+	{
+		const CSphColumnInfo & tPrev = dAttrs[iAttr-1];
+		const CSphColumnInfo & tCur = dAttrs[iAttr];
+		if ( strcasecmp ( tPrev.m_sName.cstr(), tCur.m_sName.cstr() )==0 )
+			tReporter.Fail ( "duplicate attributes name %s for columns: %s, %s", tCur.m_sName.cstr(), DumpAttr ( tPrev ).cstr(), DumpAttr ( tCur ).cstr() );
+	}
+}
+
+void DiskIndexChecker_c::CheckSchema()
+{
+	m_tReporter.Msg ( "checking schema..." );
+	DebugCheckSchema_T ( m_tSchema, m_tReporter );
+}
+
+struct StringReporter_t
+{
+	StringBuilder_c m_sErrors;
+
+	void Fail ( const char * szFmt, ... )
+	{
+		va_list ap;
+		va_start ( ap, szFmt );
+		m_sErrors.vAppendf ( szFmt, ap );
+		va_end ( ap );
+	}
+};
+
+bool DebugCheckSchema ( const ISphSchema & tSchema, CSphString & sError )
+{
+	StringReporter_t tRes;
+	DebugCheckSchema_T ( tSchema, tRes );
+	
+	if ( !tRes.m_sErrors.IsEmpty() )
+	{
+		sError = tRes.m_sErrors.cstr();
+		return false;
+	} else
+	{
+		return true;
+	}
+}
+
+void DebugCheckSchema ( const ISphSchema & tSchema, DebugCheckError_c & tReporter )
+{
+	DebugCheckSchema_T ( tSchema, tReporter );
 }

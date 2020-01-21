@@ -1,8 +1,4 @@
 //
-// $Id$
-//
-
-//
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -812,7 +808,3 @@ void sphinx_snippets_deinit ( UDF_INIT * pUDF )
 	CSphSnippets * pOpts = (CSphSnippets *)pUDF->ptr;
 	SafeDelete ( pOpts );
 }
-
-//
-// $Id$
-//

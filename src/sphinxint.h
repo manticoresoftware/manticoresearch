@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2019, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2017-2020, Manticore Software LTD (http://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -2368,7 +2368,7 @@ uint64_t sphCalcExprDepHash ( const char * szTag, ISphExpr * pExpr, const ISphSc
 uint64_t sphCalcExprDepHash ( ISphExpr * pExpr, const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable );
 
 void sphFixupLocator ( CSphAttrLocator & tLocator, const ISphSchema * pOldSchema, const ISphSchema * pNewSchema );
-ISphSchema * sphCreateStandaloneSchema ( const ISphSchema * pSchema );
+ISphSchema * sphCreateStandaloneSchema ( const ISphSchema * pSchema, const VecTraits_T<CSphString> & dTransformed );
 
 // internals attributes are last no need to send them
 void sphGetAttrsToSend ( const ISphSchema & tSchema, bool bAgentMode, bool bNeedId, CSphBitvec & tAttrs );

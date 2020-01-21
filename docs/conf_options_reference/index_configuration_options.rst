@@ -2065,12 +2065,9 @@ other morphology processors specified in the "morphology" option are applied. Wh
 are processed by ICU, only those parts of texts that contain Chinese are passed to
 ICU for segmentation, others can be modified by other means (different morphologies, charset_table etc.)
 
-See also
-:ref:`icu_data_dir`
-
 Additional stemmers provided by
-`Snowball <http://snowball.tartarus.org/>`__ project
-`libstemmer <http://snowball.tartarus.org/dist/libstemmer_c.tgz>`__
+`Snowball <https://snowballstem.org/>`__ project
+`libstemmer <https://snowballstem.org/dist/libstemmer_c.tgz>`__
 library can be enabled at compile time using ``--with-libstemmer``
 ``configure`` option. Built-in English and Russian stemmers should be
 faster than their libstemmer counterparts, but can produce slightly
@@ -2115,9 +2112,14 @@ as follows:
 
 -  icu_chinese - apply Chinese text segmentation using ICU
 
-Additional values provided by libstemmer are in ‘libstemmer_XXX’
-format, where XXX is libstemmer algorithm codename (refer to
-``libstemmer_c/libstemmer/modules.txt`` for a complete list).
+Additional values provided by libstemmer are in ‘libstemmer_XX’ or 'libstemmer_XXX'
+format, where XX/XXX is libstemmer algorithm codename.
+
+Current list includes: arabic (ar,ara), basque (eu,eus,baq), catalan (ca,cat), danish (da,dan), dutch (nl,dut,nld), english (en,eng), 
+finnish (fi,fin), french (fr,fre,fra), german (de,ger,deu), greek (el,gre,ell), hindi (hi,hin), hungarian (hu,hun), indonesian (id,ind), 
+irish (ga,gle), italian (it,ita), lithuanian (lt,lit), nepali (ne,nep), norwegian (no,nor), portuguese (pt,por), romanian (ro,rum,ron), 
+russian (ru,rus), spanish (es,esl,spa), swedish (sv,swe), tamil (ta,tam), turkish (tr,tur) (refer also to
+``libstemmer_c/libstemmer/modules.txt`` for an up-to-date complete list).
 
 Several stemmers can be specified (comma-separated). They will be
 applied to incoming words in the order they are listed, and the

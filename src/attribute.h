@@ -1,9 +1,5 @@
 //
-// $Id$
-//
-
-//
-// Copyright (c) 2017-2018, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2017-2020, Manticore Software LTD (http://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -138,6 +134,3 @@ inline DocID_t sphGetDocID ( const CSphRowitem * pData )
 
 #endif
 
-//
-// $Id$
-//

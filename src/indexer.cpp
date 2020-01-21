@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2019, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2017-2020, Manticore Software LTD (http://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -658,7 +658,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 		for ( int j = i + 1; j < tParams.m_dAttrs.GetLength(); j++ )
 		{
 			const CSphString & sName = tParams.m_dAttrs[i].m_sName;
-			if ( sName==tParams.m_dAttrs[j].m_sName )
+			if ( strcasecmp ( sName.cstr(), tParams.m_dAttrs[j].m_sName.cstr() )==0 )
 			{
 				fprintf ( stdout, "ERROR: duplicate attribute name: %s\n", sName.cstr() );
 				return false;
@@ -1606,7 +1606,7 @@ static void ShowHelp ()
 		"-h, --help\t\tdisplay this help message\n"
 		"-v\t\t\tdisplay version information\n"
 		"--config <file>\t\tread configuration from specified file\n"
-		"\t\t\t(default is sphinx.conf)\n"
+		"\t\t\t(default is manticore.conf)\n"
 		"--all\t\t\treindex all configured indexes\n"
 		"--quiet\t\t\tbe quiet, only print errors\n"
 		"--verbose [debug|debugv|debugvv]\n"
@@ -1633,8 +1633,8 @@ static void ShowHelp ()
 		"--keep-attrs\t\tretain attributes from the old index\n"
 		"\n"
 		"Examples:\n"
-		"indexer --quiet myidx1\treindex 'myidx1' defined in 'sphinx.conf'\n"
-		"indexer --all\t\treindex all indexes defined in 'sphinx.conf'\n" );
+		"indexer --quiet myidx1\treindex 'myidx1' defined in 'manticore.conf'\n"
+		"indexer --all\t\treindex all indexes defined in 'manticore.conf'\n" );
 }
 
 

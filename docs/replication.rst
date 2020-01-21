@@ -4,10 +4,6 @@
 Replication
 ===========
 
-.. warning::
-  Please note that this feature is in preview stage. Some functionality may be not yet complete and may suffer changes.
-  Read carefully changelogs of future updates to avoid possible breakages.
-
 Manticore search daemon can replicate a write transaction (``INSERT``, ``REPLACE``, ``DELETE``, ``TRUNCATE``, ``UPDATE``, etc)
 in an index to other nodes in the cluster. Currently percolate and rt indexes are supported.
 Only Linux packages and builds support replication, Windows and MacOS packages do not support replication.

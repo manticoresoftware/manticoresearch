@@ -14,7 +14,7 @@ fi
 DATADIR=/var/lib/manticore
 LOGDIR=/var/log/manticore
 RUNDIR=/var/run/manticore
-SYSCONFDIR=/etc/sphinxsearch
+SYSCONFDIR=/etc/manticoresearch
 chown manticore:manticore $DATADIR
 chown manticore:manticore $LOGDIR
 chown manticore:manticore $RUNDIR
@@ -37,7 +37,7 @@ echo ""
 echo "Manticore installed!"
 echo ""
 echo "To manage indexes:"
-echo "    editor /etc/sphinxsearch/sphinx.conf"
+echo "    editor /etc/manticoresearch/manticore.conf"
 echo ""
 echo "To rebuild all disk indexes:"
 echo "    sudo -u manticore indexer --all --rotate"

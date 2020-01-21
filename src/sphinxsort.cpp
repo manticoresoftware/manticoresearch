@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2019, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2017-2020, Manticore Software LTD (http://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -83,6 +83,27 @@ void ISphMatchSorter::CloneTo ( ISphMatchSorter * pTrg ) const
 	pTrg->CopyState ( m_tState );
 }
 
+void ISphMatchSorter::SetFilteredAttrs ( const sph::StringSet & hAttrs )
+{
+	assert ( m_pSchema );
+
+	m_dTransormed.Reserve ( hAttrs.GetLength() );
+
+	// DocID attribute always MUST to be the first
+	// also needed DocID for non group by sorter to merge multiple result sets at KillDupes
+	if ( hAttrs[sphGetDocidName()] || !IsGroupby() )
+		m_dTransormed.Add ( sphGetDocidName() );
+
+	for ( auto& tName : hAttrs )
+	{
+		const CSphColumnInfo * pCol = m_pSchema->GetAttr ( tName.first.cstr() );
+		if ( pCol && pCol->m_sName!=sphGetDocidName() )
+			m_dTransormed.Add ( pCol->m_sName );
+	}
+}
+
+
+//////////////////////////////////////////////////////////////////////////
 
 /// groupby key type
 typedef int64_t				SphGroupKey_t;
@@ -4751,6 +4772,13 @@ class QueueCreator_c
 	bool m_bHeadWOGroup;
 	bool m_bGotDistinct;
 
+	// for sorter to create pooled attributes
+	bool m_bHaveStar = false;
+
+	// fixme! transform to StringSet on end of merge!
+	sph::StringSet m_hQueryColumns; // FIXME!!! unify with Extra schema after merge master into branch
+	sph::StringSet m_hQueryDups;
+	sph::StringSet m_hExtra;
 
 private:
 	// helpers
@@ -5674,10 +5702,9 @@ static ISphMatchSorter * CreatePlainSorter ( ESphSortFunc eMatchFunc, bool bKbuf
 
 void QueueCreator_c::ExtraAddSortkeys ( const int * dAttrs )
 {
-	if ( m_pExtra )
-		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; ++i )
-			if ( dAttrs[i]>=0 )
-				m_pExtra->Add ( m_pSorterSchema->GetAttr ( dAttrs[i] ).m_sName );
+	for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; ++i )
+		if ( dAttrs[i]>=0 )
+			m_hExtra.Add ( m_pSorterSchema->GetAttr ( dAttrs[i] ).m_sName );
 }
 
 bool QueueCreator_c::Err ( const char * sFmt, ... ) const
@@ -5707,8 +5734,12 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 
 	if ( sExpr=="*" )
 	{
-		for ( int i=0; i<m_tSettings.m_tSchema.GetAttrsCount(); i++ )
-			m_hQueryAttrs.Add ( m_tSettings.m_tSchema.GetAttr(i).m_sName );
+		m_bHaveStar = true;
+		for ( int i=0; i<m_tSettings.m_tSchema.GetAttrsCount(); ++i )
+		{
+			m_hQueryDups.Add ( m_tSettings.m_tSchema.GetAttr(i).m_sName );
+			m_hQueryColumns.Add ( m_tSettings.m_tSchema.GetAttr(i).m_sName );
+		}
 	}
 
 	// for now, just always pass "plain" attrs from index to sorter; they will be filtered on searchd level
@@ -5738,7 +5769,11 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	if ( bPlainAttr || IsGroupby ( sExpr ) || bIsCount )
 	{
 		if ( sExpr!="*" && !tItem.m_sAlias.IsEmpty() )
-			m_hQueryAttrs.Add ( tItem.m_sAlias );
+		{
+			m_hQueryDups.Add ( tItem.m_sAlias );
+			if ( bPlainAttr )
+				m_hQueryColumns.Add ( tItem.m_sExpr );
+		}
 		m_bHasGroupByExpr = IsGroupby ( sExpr );
 		return true;
 	}
@@ -5752,7 +5787,7 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	int iSorterAttr = m_pSorterSchema->GetAttrIndex ( tItem.m_sAlias.cstr() );
 	if ( iSorterAttr>=0 )
 	{
-		if ( m_hQueryAttrs[tItem.m_sAlias] )
+		if ( m_hQueryDups[tItem.m_sAlias] )
 			return Err ( "alias '%s' must be unique (conflicts with another alias)",
 					tItem.m_sAlias.cstr() );
 		m_pSorterSchema->RemoveStaticAttr ( iSorterAttr );
@@ -5875,8 +5910,7 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 	{
 		tExprCol.m_eStage = SPH_EVAL_PRESORT; // sorter expects computed expression
 		m_pSorterSchema->AddAttr ( tExprCol, true );
-		if ( m_pExtra )
-			m_pExtra->Add ( tExprCol.m_sName );
+		m_hExtra.Add ( tExprCol.m_sName );
 
 		/// update aggregate dependencies (e.g. SELECT 1+attr f1, min(f1), ...)
 		CSphVector<int> dCur;
@@ -5898,7 +5932,30 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 		}
 	}
 
-	m_hQueryAttrs.Add ( tExprCol.m_sName );
+	m_hQueryDups.Add ( tExprCol.m_sName );
+	m_hQueryColumns.Add ( tExprCol.m_sName );
+
+	// need to add all dependent columns for post limit expressions
+	if ( tExprCol.m_eStage==SPH_EVAL_POSTLIMIT && tExprCol.m_pExpr )
+	{
+		CSphVector<int> dCur;
+		tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
+
+		ARRAY_FOREACH ( j, dCur )
+		{
+			const CSphColumnInfo & tCol = m_pSorterSchema->GetAttr ( dCur[j] );
+			if ( tCol.m_pExpr )
+				tCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
+		}
+		dCur.Uniq ();
+
+		ARRAY_FOREACH ( j, dCur )
+		{
+			const CSphColumnInfo & tDep = m_pSorterSchema->GetAttr ( dCur[j] );
+			m_hQueryColumns.Add ( tDep.m_sName );
+		}
+	}
+
 	return true;
 }
 
@@ -5918,8 +5975,7 @@ bool QueueCreator_c::MaybeAddGeodistColumn ()
 		tCol.m_pExpr = pExpr; // takes ownership, no need to for explicit pExpr release
 		tCol.m_eStage = SPH_EVAL_PREFILTER; // OPTIMIZE? actual stage depends on usage
 		m_pSorterSchema->AddAttr ( tCol, true );
-		if ( m_pExtra )
-			m_pExtra->Add ( tCol.m_sName );
+		m_hExtra.Add ( tCol.m_sName );
 		m_hQueryAttrs.Add ( tCol.m_sName );
 	}
 	return true;
@@ -5961,8 +6017,7 @@ bool QueueCreator_c::MaybeAddExpressionsFromSelectList ()
 			return false;
 
 		// add expressions for stored fields
-		if ( m_tQuery.m_dItems.FindFirst ( [] ( const CSphQueryItem & v )
-			{ return v.m_sExpr=="*"; } ))
+		if ( m_bHaveStar )
 			for ( int i = 0; i<m_tSettings.m_tSchema.GetFieldsCount (); ++i )
 			{
 				const CSphColumnInfo & tField = m_tSettings.m_tSchema.GetField ( i );
@@ -6000,13 +6055,20 @@ bool QueueCreator_c::MaybeAddGroupbyMagic ( bool bGotDistinct )
 		tGroupby.m_eStage = SPH_EVAL_SORTER;
 		tCount.m_eStage = SPH_EVAL_SORTER;
 
-		m_pSorterSchema->AddAttr ( tGroupby, true );
-		m_pSorterSchema->AddAttr ( tCount, true );
+		auto AddColumn = [this] ( const CSphColumnInfo & tCol )
+		{
+			m_pSorterSchema->AddAttr ( tCol, true );
+			m_hQueryColumns.Add ( tCol.m_sName );
+		};
+
+		AddColumn ( tGroupby );
+		AddColumn ( tCount );
+
 		if ( bGotDistinct )
 		{
 			CSphColumnInfo tDistinct ( "@distinct", SPH_ATTR_INTEGER );
 			tDistinct.m_eStage = SPH_EVAL_SORTER;
-			m_pSorterSchema->AddAttr ( tDistinct, true );
+			AddColumn ( tDistinct );
 		}
 
 		// add @groupbystr last in case we need to skip it on sending (like @int_str2ptr_*)
@@ -6017,7 +6079,7 @@ bool QueueCreator_c::MaybeAddGroupbyMagic ( bool bGotDistinct )
 			{
 				CSphColumnInfo tGroupbyStr ( sJsonGroupBy.cstr(), SPH_ATTR_JSON_FIELD );
 				tGroupbyStr.m_eStage = SPH_EVAL_SORTER;
-				m_pSorterSchema->AddAttr ( tGroupbyStr, true );
+				AddColumn ( tGroupbyStr );
 			}
 		}
 	}
@@ -6091,9 +6153,7 @@ void QueueCreator_c::RemapStaticStringsAndJsons ( CSphMatchComparatorState & tSt
 	assert ( m_pSorterSchema );
 	auto & tSorterSchema = *m_pSorterSchema.Ptr();
 
-	#ifndef NDEBUG
 	int iColWasCount = tSorterSchema.GetAttrsCount();
-#endif
 	for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; ++i )
 	{
 		if ( !( tState.m_eKeypart[i]==SPH_KEYPART_STRING || tState.m_tSubKeys[i].m_sKey.cstr() ) )
@@ -6146,6 +6206,10 @@ void QueueCreator_c::RemapStaticStringsAndJsons ( CSphMatchComparatorState & tSt
 		tState.m_tLocator[i] = tSorterSchema.GetAttr ( iRemap ).m_tLocator;
 		tState.m_dAttrs[i] = iRemap;
 	}
+
+	// need another sort keys add after setup remap
+	if ( iColWasCount!=tSorterSchema.GetAttrsCount ())
+		ExtraAddSortkeys ( m_tStateMatch.m_dAttrs );
 }
 
 // matches sorting function
@@ -6196,6 +6260,7 @@ bool QueueCreator_c::SetupMatchesSortingFunc ()
 	}
 
 	SetupSortByDocID ( *m_pSorterSchema.Ptr(), m_tStateMatch, nullptr, m_tSettings.m_bComputeItems );
+	ExtraAddSortkeys ( m_tStateMatch.m_dAttrs );
 
 	// find out what function to use and whether it needs attributes
 	switch (m_tQuery.m_eSort )
@@ -6227,18 +6292,17 @@ bool QueueCreator_c::SetupGroupSortingFunc ( bool bGotDistinct )
 	ExtraAddSortkeys ( m_tStateGroup.m_dAttrs );
 
 	assert ( m_dGroupColumns.GetLength() || m_tGroupSorterSettings.m_bImplicit );
-	if ( m_pExtra && !m_tGroupSorterSettings.m_bImplicit )
+	if ( !m_tGroupSorterSettings.m_bImplicit )
 	{
 		for ( const auto& dGroupColumn : m_dGroupColumns )
-			m_pExtra->Add ( m_pSorterSchema->GetAttr ( dGroupColumn ).m_sName );
+			m_hExtra.Add ( m_pSorterSchema->GetAttr ( dGroupColumn ).m_sName );
 	}
 
 	if ( bGotDistinct )
 	{
 		m_dGroupColumns.Add ( m_pSorterSchema->GetAttrIndex ( m_tQuery.m_sGroupDistinct.cstr() ) );
 		assert ( m_dGroupColumns.Last()>=0 );
-		if ( m_pExtra )
-			m_pExtra->Add ( m_pSorterSchema->GetAttr ( m_dGroupColumns.Last() ).m_sName );
+		m_hExtra.Add ( m_pSorterSchema->GetAttr ( m_dGroupColumns.Last() ).m_sName );
 	}
 
 	if ( !m_dGroupColumns.IsEmpty() ) // implicit case
@@ -6349,6 +6413,14 @@ bool QueueCreator_c::SetGroupSorting ()
 			m_tGroupSorterSettings.m_pAggrFilterTrait = pFilter;
 		}
 	}
+
+	for ( auto& tIdx: m_hExtra )
+	{
+		m_hQueryColumns.Add ( tIdx.first );
+		if ( m_pExtra )
+			m_pExtra->Add ( tIdx.first );
+	}
+
 	return true;
 }
 
@@ -6413,6 +6485,8 @@ ISphMatchSorter * QueueCreator_c::CreateQueue ()
 	pTop->SetGroupState ( m_tStateGroup );
 	pTop->SetSchema ( m_pSorterSchema.LeakPtr(), false );
 	pTop->m_bRandomize = m_bRandomize;
+	if ( !m_bHaveStar && m_hQueryColumns.GetLength ())
+		pTop->SetFilteredAttrs ( m_hQueryColumns );
 
 	if ( m_bRandomize )
 	{

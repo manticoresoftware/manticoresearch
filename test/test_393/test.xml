@@ -9,6 +9,10 @@
 searchd
 {
 	<searchd_settings/>
+	<Dynamic>
+		<Variant> dist_threads	= 0</Variant>
+		<Variant> dist_threads	= 2</Variant>
+	</Dynamic>
 }
 
 <agent0>
@@ -64,6 +68,42 @@ index dist_complex3
 	agent = <agent2_address/>:proxy14
 }
 
+source src_local1
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, title, body FROM test_table where id in ( 1,2 )
+}
+
+source src_local2
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, title, body FROM test_table where id in ( 3,4 )
+}
+
+index local_index1
+{
+	source			= src_local1
+	stored_fields	= title, body
+	path			= <data_path/>/local_index1
+}
+
+index local_index2
+{
+	source			= src_local2
+	stored_fields	= title, body
+	path			= <data_path/>/local_index2
+}
+
+index dist_local
+{
+	type = distributed
+	local = local_index1
+	local = local_index2
+}
 </agent0>
 
 <agent1>
@@ -238,13 +278,13 @@ insert into test_table values
 ( 21, 'document 21', 'Bander pointed its finger and where it pointed the light' ),
 ( 22, 'document 22', 'It pointed it elsewhere and the same thing' ),
 ( 23, 'document 23', 'Trevize grimaced and said, half-aloud' ),
-( 24, 'document 24', 'I’m not sure what the word ‘charlatan’ means' ),
+( 24, 'document 24', 'I`m not sure what the word charlatan means' ),
 ( 25, 'document 25', 'It means one who is not genuine' ),
 ( 26, 'document 26', 'I admit that I love the dramatic' ),
 ( 27, 'document 27', 'what I have shown you is not an effect' ),
 ( 28, 'document 28', 'This heat-conducting rod extends several kilometers downward' ),
 ( 29, 'document 29', 'I know there are similar rods on other estates' ),
-( 30, 'document 30', 'Solaria’s lower regions for the surface' )
+( 30, 'document 30', 'Solaria`s lower regions for the surface' )
 </db_insert>
 
 <sphqueries>
@@ -269,6 +309,8 @@ insert into test_table values
 <sphinxql>select * from dist_complex2 order by id desc limit 10,10</sphinxql>
 <sphinxql>select * from dist_complex3 order by id desc limit 0,10 </sphinxql>
 <sphinxql>select * from dist_complex3 order by id desc limit 10,10</sphinxql>
+
+<sphinxql>select title from dist_local</sphinxql>
 
 </sphqueries>
 

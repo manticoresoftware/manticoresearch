@@ -22,7 +22,7 @@
 
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DAEMON=@BINDIRFULL@/searchd
-DAEMONOPTS='-c @SYSCONFDIR@/sphinxsearch/sphinx.conf'
+DAEMONOPTS='-c @SYSCONFDIR@/manticoresearch/manticoresearch.conf'
 NAME=manticore
 DESC=manticore
 
@@ -99,10 +99,10 @@ do_force_stop() {
 do_start() {
 	test -e @RUNDIR@ || install -m 755 -o root -d root @RUNDIR@
         # Check if we have the configuration file
-        if [ ! -f @SYSCONFDIR@/sphinxsearch/sphinx.conf ]; then
+        if [ ! -f @SYSCONFDIR@/manticoresearch/manticore.conf ]; then
             echo "\n"
-            echo "Please create an @SYSCONFDIR@/sphinxsearch/sphinx.conf configuration file."
-            echo "A template is provided as @SYSCONFDIR@/sphinxsearch/sphinx.conf.sample."
+            echo "Please create an @SYSCONFDIR@/manticoresearch/manticore.conf configuration file."
+            echo "A template is provided as @SYSCONFDIR@/manticoresearch/manticore.conf.sample."
             exit 1
         fi
 

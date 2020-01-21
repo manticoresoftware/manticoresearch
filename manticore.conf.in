@@ -349,7 +349,9 @@ index test1
 	# optional, default is 'keywords'
 	dict			= keywords
 
-
+	# store content of fields
+	stored_fields = title,content
+	
 	# a list of morphology preprocessors to apply
 	# optional, default is empty
 	#
@@ -744,7 +746,9 @@ index testrt
 	# multi-value, mandatory
 	rt_field		= title
 	rt_field		= content
-
+	
+	# store content of fields
+	stored_fields = title,content
 	# unsigned integer attribute declaration
 	# multi-value (an arbitrary number of attributes is allowed), optional
 	# declares an unsigned 32-bit attribute
@@ -1106,12 +1110,6 @@ common
 	# optional, default is unspecified (do nothing)
 	#
 	# json_autoconv_keynames = lowercase
-
-
-	# ICU data directory
-	# optional, defaut is /usr/local/share (see ./configure --datadir)
-	#
-	# icu_data_dir = /usr/local/share/sphinx/icu
 
 
 	# trusted plugin directory

@@ -11,21 +11,22 @@ set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -arch x86_64" )
 
 # generate config files
 set ( CONFDIR "." )
-configure_file ( "sphinx-min.conf.in" "${MANTICORE_BINARY_DIR}/sphinx-min.conf" @ONLY )
-configure_file ( "sphinx.conf.in" "${MANTICORE_BINARY_DIR}/sphinx.conf" @ONLY )
+configure_file ( "manticore-min.conf.in" "${MANTICORE_BINARY_DIR}/manticore-min.conf" @ONLY )
+configure_file ( "manticore.conf.in" "${MANTICORE_BINARY_DIR}/manticore.conf" @ONLY )
 
 # install specific stuff
 install ( DIRECTORY api doc docs contrib DESTINATION . COMPONENT doc )
 
 install ( FILES COPYING INSTALL example.sql
-			"${MANTICORE_BINARY_DIR}/sphinx-min.conf"
-			"${MANTICORE_BINARY_DIR}/sphinx.conf"
+			"${MANTICORE_BINARY_DIR}/manticore-min.conf"
+			"${MANTICORE_BINARY_DIR}/manticore.conf"
 		DESTINATION . COMPONENT doc )
 
 install ( DIRECTORY DESTINATION bin COMPONENT doc )
 install ( DIRECTORY DESTINATION data COMPONENT doc )
 install ( DIRECTORY DESTINATION log COMPONENT doc )
 install ( DIRECTORY misc/stopwords DESTINATION . COMPONENT doc )
+install ( FILES ${ICU_SRC}/source/data/in/icudt65l.dat DESTINATION icu COMPONENT doc)
 
 # package specific
 

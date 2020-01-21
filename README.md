@@ -81,7 +81,7 @@ cmake .. &&  make install
 
 For more details check [compiling](https://docs.manticoresearch.com/latest/html/installation.html#compiling-manticore-from-source). 
 ## Getting started
- The quick way to see Manticore in action is to use the sample RT index preconfigured in sphinx.conf.
+ The quick way to see Manticore in action is to use the sample RT index preconfigured in manticore.conf.
  Inserting data in a RT index is done using SphinxQL and in the same way as for a MySQL table
  
       $ mysql -h 127.0.0.1 -P 9306

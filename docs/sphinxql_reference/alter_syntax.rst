@@ -26,7 +26,7 @@ fail if an index has only one attribute.
 
 ALTER can also reconfigure an existing RT index, so that new
 tokenization, morphology, and other text processing settings from
-sphinx.conf take effect on the newly INSERT-ed rows, while retaining the
+manticore.conf take effect on the newly INSERT-ed rows, while retaining the
 existing rows as they were. Internally, it forcibly saves the current
 RAM chunk as a new disk chunk, and adjusts the index header, so that the
 new rows are tokenized using the new rules. Note that as the queries are

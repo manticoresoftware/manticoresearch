@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>docstore vs ATTACH</name>
+
+<requires>
+<non-rt/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers			= threads
+}
+
+source disk
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+}
+
+index disk
+{
+	source			= disk
+	path			= <data_path/>/disk
+	stored_fields	= title
+}
+
+index rt
+{
+	type			= rt
+	path			= data/rt
+	rt_attr_uint	= gid
+	rt_field		= title
+} 
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert><![CDATA[
+INSERT INTO test_table VALUES
+( 1, 11, 'Fare thee well' ),
+( 2, 11, 'And if for ever got' ),
+( 3, 11, 'Still for ever fare thee well' ),
+( 4, 11, 'under_score <stuff>got removed</stuff>' )
+]]></db_insert>
+
+<sphqueries>
+<sphinxql>SELECT * FROM disk</sphinxql>
+<sphinxql>SELECT * FROM rt</sphinxql>
+<sphinxql>ATTACH INDEX disk TO RTINDEX rt</sphinxql>
+<sphinxql>SELECT * FROM disk</sphinxql>
+<sphinxql>SELECT * FROM rt</sphinxql>
+</sphqueries>
+
+</test>

@@ -1,5 +1,5 @@
 #=============================================================================
-# Copyright 2017-2019, Manticore Software LTD (http://manticoresearch.com)
+# Copyright 2017-2020, Manticore Software LTD (http://manticoresearch.com)
 #
 # Distributed under the OSI-approved BSD License (the "License");
 # see accompanying file Copyright.txt for details.
@@ -13,9 +13,9 @@
 # Then (if it is not found) it try to look into ${LIBS_BUNDLE} for file named 'libstemmer_c.tgz'
 # It is supposed, that file (if any) contains archive from snowball with stemmer's sources.
 # If no file found, it will try to fetch it from
-# http://snowball.tartarus.org/dist/libstemmer_c.tgz
+# https://snowballstem.org/dist/libstemmer_c.tgz
 
-set ( STEMMER_URL "http://snowball.tartarus.org/dist/libstemmer_c.tgz" )
+set ( STEMMER_URL "https://snowballstem.org/dist/libstemmer_c.tgz" )
 mark_as_advanced( STEMMER_URL)
 
 find_package ( stemmer )
@@ -71,7 +71,7 @@ if ( NEED_STEMMER_FROMSOURCES )
 	if ( NOT EXISTS "${STEMMER_BASEDIR}/CMakeLists.txt" )
 		message ( SEND_ERROR "missing libstemmer sources from libstemmer_c.
 Please download the C version of libstemmer library from
-http://snowball.tartarus.org/ and extract its sources over libstemmer_c/
+https://snowballstem.org/ and extract its sources over libstemmer_c/
 subdirectory in order to build Manticore with libstemmer support. Or
 install the package named like 'libstemmer-dev' using your favorite
 package manager." )

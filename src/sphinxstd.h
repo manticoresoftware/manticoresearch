@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2019, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2017-2020, Manticore Software LTD (http://manticoresearch.com)
 // Copyright (c) 2001-2016, Andrew Aksyonoff
 // Copyright (c) 2008-2016, Sphinx Technologies Inc
 // All rights reserved
@@ -3303,6 +3303,11 @@ public:
 		return false;
 	}
 	using BASE::Reset;
+	using BASE::GetLength;
+
+	using BASE::begin;
+	using BASE::end;
+	using Iterator_c = BASE::Iterator_c;
 };
 }
 

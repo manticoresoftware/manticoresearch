@@ -298,7 +298,7 @@ Replication plugin options can be changed using :ref:`SET <set_syntax>` statemen
 
      SET CLUSTER click_query GLOBAL 'pc.bootstrap' = 1
 
-See Galera `Documentation Parameters <http://galeracluster.com/documentation-webpages/galeraparameters.html>`_
+See Galera `Documentation Parameters <https://galeracluster.com/documentation-webpages/documentation/galera-parameters.html>`_
 for a list of available options.
 
 .. _replication_restart:

@@ -6,7 +6,7 @@ SHOW INDEX STATUS syntax
 .. code-block:: mysql
 
 
-    SHOW INDEX index_name STATUS
+    SHOW INDEX index_name STATUS [ LIKE pattern ]
 
 Displays various per-index statistics. Currently, those include:
 
@@ -45,3 +45,5 @@ Displays various per-index statistics. Currently, those include:
     +--------------------+-------------+
     8 rows in set (0.00 sec)
 
+
+An optional LIKE clause is supported. Refer to :ref:`show_meta_syntax` for its syntax details.

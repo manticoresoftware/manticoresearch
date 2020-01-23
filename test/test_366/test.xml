@@ -57,7 +57,7 @@ index rt_mem
 
 <!-- regression flush of disk chunk on every commit -->
 <sphinxql>REPLACE INTO rt_mem ( id, text ) VALUES ( 11, 'test me' ),( 12, 'test framework' ),( 13, 'our test framework' ),( 14, 'best test solution' )</sphinxql>
-<sphinxql>SHOW INDEX rt_mem STATUS</sphinxql>
+<sphinxql>SHOW INDEX rt_mem STATUS LIKE 'disk_chunks'</sphinxql>
 
 </sphqueries>
 

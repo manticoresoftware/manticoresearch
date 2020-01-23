@@ -15551,7 +15551,7 @@ void HandleMysqlShowVariables ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt,
 }
 
 template <typename FORMATFN>
-static void AddQueryStats ( IDataTupleter & tOut, const char * szPrefix, const QueryStats_t & tStats,
+static void AddQueryStats ( VectorLike & dStatus, const char * szPrefix, const QueryStats_t & tStats,
 	//void (*FormatFn)( StringBuilder_c & sBuf, uint64_t uQueries, uint64_t uStat, const char * sType ) )
 	FORMATFN FormatFn )
 
@@ -15590,14 +15590,15 @@ static void AddQueryStats ( IDataTupleter & tOut, const char * szPrefix, const Q
 		sName.Clear();
 		sName << szPrefix << "_" << dStatIntervalNames[i];
 
-		tOut.DataTuplet ( sName.cstr(), sBuf.cstr() );
+		if ( dStatus.MatchAdd ( sName.cstr() ) )
+			dStatus.Add ( sBuf.cstr() );
 	}
 }
 
 
-static void AddQueryTimeStatsToOutput ( SqlRowBuffer_c & tOut, const char * szPrefix, const QueryStats_t & tQueryTimeStats )
+static void AddQueryTimeStatsToOutput ( VectorLike & dStatus, const char * szPrefix, const QueryStats_t & tQueryTimeStats )
 {
-	AddQueryStats ( tOut, szPrefix, tQueryTimeStats,
+	AddQueryStats ( dStatus, szPrefix, tQueryTimeStats,
 		[]( StringBuilder_c & sBuf, uint64_t uQueries, uint64_t uStat, const char * sType )
 		{
 			uQueries ? sBuf.Sprintf( R"("%s_sec":%.3F)", sType, uStat ) : sBuf.AppendName( sType ) << R"("-")";
@@ -15605,9 +15606,9 @@ static void AddQueryTimeStatsToOutput ( SqlRowBuffer_c & tOut, const char * szPr
 }
 
 
-static void AddFoundRowsStatsToOutput ( SqlRowBuffer_c & tOut, const char * szPrefix, const QueryStats_t & tRowsFoundStats )
+static void AddFoundRowsStatsToOutput ( VectorLike & dStatus, const char * szPrefix, const QueryStats_t & tRowsFoundStats )
 {
-	AddQueryStats ( tOut, szPrefix, tRowsFoundStats,
+	AddQueryStats ( dStatus, szPrefix, tRowsFoundStats,
 		[]( StringBuilder_c & sBuf, uint64_t uQueries, uint64_t uStat, const char * sType )
 		{
 			sBuf.AppendName( sType );
@@ -15616,21 +15617,21 @@ static void AddFoundRowsStatsToOutput ( SqlRowBuffer_c & tOut, const char * szPr
 }
 
 
-static void AddIndexQueryStats ( SqlRowBuffer_c & tOut, const ServedStats_c * pStats )
+static void AddIndexQueryStats ( VectorLike & dStatus, const ServedStats_c * pStats )
 {
 	assert ( pStats );
 
 	QueryStats_t tQueryTimeStats, tRowsFoundStats;
 	pStats->CalculateQueryStats ( tRowsFoundStats, tQueryTimeStats );
-	AddQueryTimeStatsToOutput ( tOut, "query_time", tQueryTimeStats );
+	AddQueryTimeStatsToOutput ( dStatus, "query_time", tQueryTimeStats );
 
 #ifndef NDEBUG
 	QueryStats_t tExactQueryTimeStats, tExactRowsFoundStats;
 	pStats->CalculateQueryStatsExact ( tExactQueryTimeStats, tExactRowsFoundStats );
-	AddQueryTimeStatsToOutput ( tOut, "exact_query_time", tQueryTimeStats );
+	AddQueryTimeStatsToOutput ( dStatus, "exact_query_time", tQueryTimeStats );
 #endif
 
-	AddFoundRowsStatsToOutput ( tOut, "found_rows", tRowsFoundStats );
+	AddFoundRowsStatsToOutput ( dStatus, "found_rows", tRowsFoundStats );
 }
 
 static void AddFederatedIndexStatus ( const CSphSourceStats & tStats, const CSphString & sName, SqlRowBuffer_c & tOut )
@@ -15661,7 +15662,14 @@ static void AddFederatedIndexStatus ( const CSphSourceStats & tStats, const CSph
 	tOut.Commit();
 }
 
-static void AddPlainIndexStatus ( SqlRowBuffer_c & tOut, const ServedIndex_c * pServed, bool bModeFederated, const CSphString & sName )
+static void AddMatchedColumns ( const VectorLike & dStatus, SqlRowBuffer_c & tOut )
+{
+	// send rows
+	for ( int iRow=0; iRow<dStatus.GetLength(); iRow+=2 )
+		tOut.DataTuplet ( dStatus[iRow+0].cstr(), dStatus[iRow+1].cstr() );
+}
+
+static void AddPlainIndexStatus ( SqlRowBuffer_c & tOut, const ServedIndex_c * pServed, bool bModeFederated, const CSphString & sName, const CSphString & sPattern )
 {
 	assert ( pServed );
 	ServedDescRPtr_c pLocked ( pServed );
@@ -15670,25 +15678,26 @@ static void AddPlainIndexStatus ( SqlRowBuffer_c & tOut, const ServedIndex_c * p
 
 	if ( !bModeFederated )
 	{
-		tOut.HeadTuplet ( "Variable_name", "Value" );
+		VectorLike dStatus ( sPattern );
 
-		switch ( pLocked->m_eType )
+		if ( dStatus.MatchAdd ( "index_type" ) )
 		{
-		case IndexType_e::PLAIN: tOut.DataTuplet ( "index_type", "disk" );
-			break;
-		case IndexType_e::RT: tOut.DataTuplet ( "index_type", "rt" );
-			break;
-		case IndexType_e::PERCOLATE: tOut.DataTuplet ( "index_type", "percolate" );
-			break;
-		case IndexType_e::TEMPLATE: tOut.DataTuplet ( "index_type", "template" );
-			break;
-		case IndexType_e::DISTR: tOut.DataTuplet ( "index_type", "distributed" );
-			break;
-		default:
-			break;
+			switch ( pLocked->m_eType )
+			{
+			case IndexType_e::PLAIN: dStatus.Add ( "disk" ); break;
+			case IndexType_e::RT: dStatus.Add ( "rt" ); break;
+			case IndexType_e::PERCOLATE: dStatus.Add ( "percolate" ); break;
+			case IndexType_e::TEMPLATE: dStatus.Add ( "template" ); break;
+			case IndexType_e::DISTR: dStatus.Add ( "distributed" ); break;
+			default:
+				break;
+			}
 		}
-		tOut.DataTuplet ( "indexed_documents", pIndex->GetStats().m_iTotalDocuments );
-		tOut.DataTuplet ( "indexed_bytes", pIndex->GetStats().m_iTotalBytes );
+
+		if ( dStatus.MatchAdd ( "indexed_documents" ) )
+			dStatus.Add().SetSprintf ( INT64_FMT, pIndex->GetStats().m_iTotalDocuments );
+		if ( dStatus.MatchAdd ( "indexed_bytes" ) )
+			dStatus.Add().SetSprintf ( INT64_FMT, pIndex->GetStats().m_iTotalBytes );
 
 		const int64_t * pFieldLens = pIndex->GetFieldLens();
 		if ( pFieldLens )
@@ -15696,30 +15705,43 @@ static void AddPlainIndexStatus ( SqlRowBuffer_c & tOut, const ServedIndex_c * p
 			int64_t iTotalTokens = 0;
 			for ( int i=0; i < pIndex->GetMatchSchema().GetFieldsCount(); i++ )
 			{
-				CSphString sKey;
-				sKey.SetSprintf ( "field_tokens_%s", pIndex->GetMatchSchema().GetFieldName(i) );
-				tOut.DataTuplet ( sKey.cstr(), pFieldLens[i] );
+				if ( dStatus.MatchAddVa ( "field_tokens_%s", pIndex->GetMatchSchema().GetFieldName(i) ) )
+					dStatus.Add().SetSprintf ( INT64_FMT, pFieldLens[i] );
 				iTotalTokens += pFieldLens[i];
 			}
-			tOut.DataTuplet ( "total_tokens", iTotalTokens );
+			if ( dStatus.MatchAdd ( "total_tokens" ) )
+				dStatus.Add().SetSprintf ( INT64_FMT, iTotalTokens );
 		}
 
 		CSphIndexStatus tStatus;
 		pIndex->GetStatus ( &tStatus );
-		tOut.DataTuplet ( "ram_bytes", tStatus.m_iRamUse );
-		tOut.DataTuplet ( "disk_bytes", tStatus.m_iDiskUse );
+		if ( dStatus.MatchAdd ( "ram_bytes" ) )
+			dStatus.Add().SetSprintf ( INT64_FMT, tStatus.m_iRamUse );
+		if ( dStatus.MatchAdd ( "disk_bytes" ) )
+			dStatus.Add().SetSprintf ( INT64_FMT, tStatus.m_iDiskUse );
 		if ( ServedDesc_t::IsMutable ( pLocked ) )
 		{
-			tOut.DataTuplet ( "ram_chunk", tStatus.m_iRamChunkSize );
-			tOut.DataTuplet ( "ram_chunks_count", tStatus.m_iNumRamChunks );
-			tOut.DataTuplet ( "disk_chunks", tStatus.m_iNumChunks );
-			tOut.DataTuplet ( "mem_limit", tStatus.m_iMemLimit );
-			tOut.DataTuplet ( "ram_bytes_retired", tStatus.m_iRamRetired );
-			tOut.DataTuplet ( "tid", tStatus.m_iTID );
-			tOut.DataTuplet ( "tid_saved", tStatus.m_iSavedTID );
+			if ( dStatus.MatchAdd ( "ram_chunk" ) )
+				dStatus.Add().SetSprintf ( INT64_FMT, tStatus.m_iRamChunkSize );
+			if ( dStatus.MatchAdd ( "ram_chunks_count" ) )
+				dStatus.Add().SetSprintf ( "%d", tStatus.m_iNumRamChunks );
+			if ( dStatus.MatchAdd ( "disk_chunks" ) )
+				dStatus.Add().SetSprintf ( "%d", tStatus.m_iNumChunks );
+			if ( dStatus.MatchAdd ( "mem_limit" ) )
+				dStatus.Add().SetSprintf ( INT64_FMT, tStatus.m_iMemLimit );
+			if ( dStatus.MatchAdd ( "ram_bytes_retired" ) )
+				dStatus.Add().SetSprintf ( INT64_FMT, tStatus.m_iRamRetired );
+			if ( dStatus.MatchAdd ( "tid" ) )
+				dStatus.Add().SetSprintf ( INT64_FMT, tStatus.m_iTID );
+			if ( dStatus.MatchAdd ( "tid_saved" ) )
+				dStatus.Add().SetSprintf ( INT64_FMT, tStatus.m_iSavedTID );
 		}
 
-		AddIndexQueryStats ( tOut, pServed );
+		AddIndexQueryStats ( dStatus, pServed );
+
+		tOut.HeadTuplet ( "Variable_name", "Value" );
+		AddMatchedColumns ( dStatus, tOut );
+
 	} else
 	{
 		const CSphSourceStats & tStats = pIndex->GetStats();
@@ -15730,16 +15752,21 @@ static void AddPlainIndexStatus ( SqlRowBuffer_c & tOut, const ServedIndex_c * p
 }
 
 
-static void AddDistibutedIndexStatus ( SqlRowBuffer_c & tOut, DistributedIndex_t * pIndex, bool bFederatedUser, const CSphString & sName )
+static void AddDistibutedIndexStatus ( SqlRowBuffer_c & tOut, DistributedIndex_t * pIndex, bool bFederatedUser, const CSphString & sName, const CSphString & sPattern )
 {
 	assert ( pIndex );
 
 	if ( !bFederatedUser )
 	{
-		tOut.HeadTuplet ( "Variable_name", "Value" );
-		tOut.DataTuplet ( "index_type", "distributed" );
+		VectorLike dStatus ( sPattern );
 
-		AddIndexQueryStats ( tOut, pIndex );
+		if ( dStatus.MatchAdd ( "index_type" ) )
+			dStatus.Add ( "distributed" );
+
+		AddIndexQueryStats ( dStatus, pIndex );
+
+		tOut.HeadTuplet ( "Variable_name", "Value" );
+		AddMatchedColumns ( dStatus, tOut );
 	} else
 	{
 		CSphSourceStats tStats;
@@ -15758,14 +15785,14 @@ void HandleMysqlShowIndexStatus ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt
 
 	if ( pServed )
 	{
-		AddPlainIndexStatus ( tOut, pServed, bFederatedUser, tStmt.m_sIndex );
+		AddPlainIndexStatus ( tOut, pServed, bFederatedUser, tStmt.m_sIndex, tStmt.m_sStringParam );
 		return;
 	}
 
 	auto pIndex = GetDistr ( tStmt.m_sIndex );
 
 	if ( pIndex )
-		AddDistibutedIndexStatus ( tOut, pIndex, bFederatedUser, tStmt.m_sIndex );
+		AddDistibutedIndexStatus ( tOut, pIndex, bFederatedUser, tStmt.m_sIndex, tStmt.m_sStringParam );
 	else
 		tOut.Error ( tStmt.m_sStmt, "SHOW INDEX STATUS requires an existing index" );
 }

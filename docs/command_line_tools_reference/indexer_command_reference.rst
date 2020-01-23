@@ -161,7 +161,7 @@ operation is performed. These options are:
    quantity present in the index, which would be useful in establishing
    whether certain words should be considered stopwords if they are too
    prevalent. It will also help with developing “Did you mean…” features
-   where you can how much more common a given word compared to another,
+   where you need to know how much more common a given word compared to another,
    similar one. Example:
 
    .. code-block:: bash

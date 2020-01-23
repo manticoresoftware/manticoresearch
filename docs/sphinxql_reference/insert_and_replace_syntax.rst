@@ -76,28 +76,28 @@ supported for INSERTs yet.
 Auto ID generation
 ~~~~~~~~~~~~~~~~~~
 
-There is auto ID generation functionality for ID column of data
-inserted or replaced into RT or Percolate indexes. That generator produces 
-a UNIQUE ID of a document with some guarantees similar to MySQL UUID_SHORT 
-but should not be considered as an auto-incremented ID.
+There is an auto ID generation functionality for column ID of documents
+inserted or replaced into an RT or a Percolate index. The generator produces 
+a UNIQUE ID of a document with some guarantees (similar to MySQL UUID_SHORT) 
+and should not be considered an auto-incremented ID.
 
-The value of ID generated is guaranteed to be unique for the following conditions:
+The value of ID generated is guaranteed to be unique in the following conditions:
 
- * the :ref:`server_id <server_id>` value of the current daemon is in range from 0 to 127 and is unique among nodes in cluster or it uses default value generated from MAC address as a seed
- * do not set back the system time for a daemon node between daemon restarts
- * use of auto ID fewer than 16 million times per second between daemon restarts 
+ * the :ref:`server_id <server_id>` value of the current daemon is in range of 0 to 127 and is unique among nodes in the cluster or it uses the default value generated from MAC address as a seed
+ * the system time does not change for the daemon node between daemon restarts
+ * auto ID is generated fewer than 16 million times per second between daemon restarts 
 
-An auto ID generator creates 64 bit integer for a document ID and uses following schema:
+An auto ID generator creates 64 bit integer for a document ID and uses the following schema:
 
-* 0 to 23 bits is a counter that got incremented on every call to auto ID generator at daemon
-* 24 to 55 bits is a unix timestamp of a daemon started
-* 56 to 63 bits is a :ref:`server_id <server_id>`
+ * 0 to 23 bits is a counter that gets incremented on every call to auto ID generator
+ * 24 to 55 bits is a unix timestamp of the daemon start
+ * 56 to 63 bits is a :ref:`server_id <server_id>`
 
-Such generator schema allows to be sure ID generated is unique among all nodes at the cluster
-and data inserted into different clusters nodes does not create collisions between these nodes.
+This generator schema allows to be sure that the generated ID is unique among all nodes at the cluster
+and data inserted into different cluster nodes does not create collisions between the nodes.
 
-But that is why first ID from generator used for auto ID is NOT 1 but a large number.
-Also documents stream inserted into index might have not sequental ID values if inserts
-into other indexes happened between the calls to the ID generator as the ID generator
-is the only one at daemon and shared between all indexes.
+That is why the first ID from the generator used for auto ID is NOT 1 but a larger number.
+Also documents stream inserted into an index might have not sequental ID values if inserts
+into other indexes happen between the calls as the ID generator is single in the daemon and
+shared between all its indexes.
 

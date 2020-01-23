@@ -1401,13 +1401,13 @@ Example:
 server_id
 ~~~~~~~~~
 
-Integer number that serves as server identificator used as seed to generate an unique document ID
-for indexes and the nodes these are part of a replication cluster.
+Integer number that serves as a server identifier used as a seed to generate a unique document ID
+for indexes and nodes that are parts of a replication cluster.
 
-Details of unique document ID generation described at :ref:`auto_id_generation <auto_id_generation>`.
+The details of the unique document ID generation are described in :ref:`auto_id_generation <auto_id_generation>`.
 
-The server_id must be unique across the nodes of a cluster and in range from 0 to 127.
-If server_id is not set, MAC address or a random number will be used as seed for the unique document ID.
+The server_id must be unique across nodes of a cluster and in range of 0 to 127.
+If server_id is not set, MAC address or a random number will be used as a seed of the unique document ID.
 
 Example:
 

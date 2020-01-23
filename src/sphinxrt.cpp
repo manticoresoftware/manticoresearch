@@ -1263,7 +1263,7 @@ private:
 	void						GetIndexFiles ( CSphVector<CSphString> & dFiles ) const override;
 	DocstoreBuilder_i::Doc_t *	FetchDocFields ( DocstoreBuilder_i::Doc_t & tStoredDoc, CSphSource_StringVector & tSrc ) const;
 
-	bool						MergeSegments ( CSphVector<RtSegmentRefPtf_t> & dSegments, bool bForceDump, int iMemLimit, bool bHasNewSegment );
+	bool						MergeSegments ( CSphVector<RtSegmentRefPtf_t> & dSegments, bool bForceDump, int64_t iMemLimit, bool bHasNewSegment );
 	RtSegmentRefPtf_t			MergeDoubleBufSegments() const;
 };
 
@@ -2655,7 +2655,7 @@ static void RemoveEmptySegments ( CSphVector<RtSegmentRefPtf_t> & dSegments )
 	}
 }
 
-bool RtIndex_c::MergeSegments ( CSphVector<RtSegmentRefPtf_t> & dSegments, bool bForceDump, int iMemLimit, bool bHasNewSegment )
+bool RtIndex_c::MergeSegments ( CSphVector<RtSegmentRefPtf_t> & dSegments, bool bForceDump, int64_t iMemLimit, bool bHasNewSegment )
 {
 	// enforce RAM usage limit
 	int64_t iRamLeft = SegmentsGetRamLeft ( dSegments, iMemLimit );

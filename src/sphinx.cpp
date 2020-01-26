@@ -2369,7 +2369,14 @@ static char * sphStrMacro ( const char * sTemplate, const char * sMacro, int64_t
 static float sphToFloat ( const char * s )
 {
 	if ( !s ) return 0.0f;
-	return (float)strtod ( s, NULL );
+	double fRes = strtod ( s, NULL );
+	if ( fRes==-HUGE_VAL || fRes<=-FLT_MAX )
+		return -FLT_MAX;
+
+	if ( fRes==HUGE_VAL || fRes>=FLT_MAX )
+		return FLT_MAX;
+
+	return (float)fRes;
 }
 
 

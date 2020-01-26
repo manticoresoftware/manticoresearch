@@ -58,6 +58,7 @@ source src21
 	tsvpipe_attr_uint = gid
 	tsvpipe_attr_uint = uid
 	tsvpipe_attr_uint = gid
+	tsvpipe_attr_float = lat
 }
 
 index tsv21
@@ -75,6 +76,7 @@ source src22
 	tsvpipe_field = content
 	tsvpipe_attr_uint = gid
 	tsvpipe_attr_uint = uid
+	tsvpipe_attr_float = lat
 }
 
 index tsv22

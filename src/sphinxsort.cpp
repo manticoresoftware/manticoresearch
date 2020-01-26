@@ -4801,7 +4801,6 @@ private:
 	ISphFilter * CreateAggrFilter () const;
 	void SetupCollation ();
 	bool Err ( const char * sFmt, ... ) const;
-	ISphMatchSorter * Errz ( const char * sFmt, ... ) const;
 
 public:
 	QueueCreator_c ( const SphQueueSettings_t& tSettings, const CSphQuery & tQuery,
@@ -5716,15 +5715,6 @@ bool QueueCreator_c::Err ( const char * sFmt, ... ) const
 	return false;
 }
 
-ISphMatchSorter * QueueCreator_c::Errz ( const char * sFmt, ... ) const
-{
-	va_list ap;
-	va_start ( ap, sFmt );
-	m_sError.SetSprintfVa ( sFmt, ap );
-	va_end ( ap );
-	return nullptr;
-}
-
 bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 {
 	assert ( m_pSorterSchema );
@@ -6250,7 +6240,10 @@ bool QueueCreator_c::SetupMatchesSortingFunc ()
 	{
 		int iSortAttr = m_pSorterSchema->GetAttrIndex ( m_tQuery.m_sSortBy.cstr() );
 		if ( iSortAttr<0 )
-			return Errz ( "sort-by attribute '%s' not found", m_tQuery.m_sSortBy.cstr() );
+		{
+			Err ( "sort-by attribute '%s' not found", m_tQuery.m_sSortBy.cstr() );
+			return false;
+		}
 
 		const CSphColumnInfo & tAttr = m_pSorterSchema->GetAttr ( iSortAttr );
 		m_tStateMatch.m_eKeypart[0] = Attr2Keypart ( tAttr.m_eAttrType );
@@ -6270,7 +6263,8 @@ bool QueueCreator_c::SetupMatchesSortingFunc ()
 		case SPH_SORT_TIME_SEGMENTS:	m_eMatchFunc = FUNC_TIMESEGS; break;
 		case SPH_SORT_RELEVANCE:	m_eMatchFunc = FUNC_REL_DESC; break;
 		default:
-			return Errz ( "unknown sorting mode %d", m_tQuery.m_eSort );
+			Err ( "unknown sorting mode %d", m_tQuery.m_eSort );
+			return false;
 	}
 	return true;
 }
@@ -6463,10 +6457,10 @@ bool QueueCreator_c::SetupQueue ()
 
 ISphMatchSorter * QueueCreator_c::CreateQueue ()
 {
+	SetupCollation();
 
-	SetupCollation ();
-
-	if ( m_bHeadWOGroup && m_tGroupSorterSettings.m_bImplicit ) {
+	if ( m_bHeadWOGroup && m_tGroupSorterSettings.m_bImplicit )
+	{
 		m_tGroupSorterSettings.m_bImplicit = false;
 		m_bGotGroupby = false;
 	}
@@ -6475,25 +6469,27 @@ ISphMatchSorter * QueueCreator_c::CreateQueue ()
 	// spawn the queue
 	///////////////////
 
-	ISphMatchSorter * pTop = SpawnQueue ();
+	ISphMatchSorter * pTop = SpawnQueue();
 	if ( !pTop )
-	return Errz ( "internal error: unhandled sorting mode (match-sort=%d, group=%d, group-sort=%d)",
-			m_eMatchFunc, m_bGotGroupby, m_eGroupFunc );
+	{
+		Err ( "internal error: unhandled sorting mode (match-sort=%d, group=%d, group-sort=%d)", m_eMatchFunc, m_bGotGroupby, m_eGroupFunc );
+		return nullptr;
+	}
 
 	assert ( pTop );
 	pTop->SetState ( m_tStateMatch );
 	pTop->SetGroupState ( m_tStateGroup );
 	pTop->SetSchema ( m_pSorterSchema.LeakPtr(), false );
 	pTop->m_bRandomize = m_bRandomize;
-	if ( !m_bHaveStar && m_hQueryColumns.GetLength ())
+	if ( !m_bHaveStar && m_hQueryColumns.GetLength() )
 		pTop->SetFilteredAttrs ( m_hQueryColumns );
 
 	if ( m_bRandomize )
 	{
 		if ( m_tQuery.m_iRandSeed>=0 )
-			sphSrand ( (DWORD) m_tQuery.m_iRandSeed );
+			sphSrand ( (DWORD)m_tQuery.m_iRandSeed );
 		else
-			sphAutoSrand ();
+			sphAutoSrand();
 	}
 
 	return pTop;

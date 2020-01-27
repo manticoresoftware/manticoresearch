@@ -4027,7 +4027,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 			break;
 
 		case SPH_RANK_FIELDMASK:
-			pRanker = new ExtRanker_State_T < RankerState_Fieldmask_fn, false > ( tXQ, tTermSetup, bSkipQCache, false );
+			pRanker = new ExtRanker_State_T < RankerState_Fieldmask_fn, false > ( tXQ, tTermSetup, bSkipQCache );
 			break;
 
 		case SPH_RANK_SPH04:

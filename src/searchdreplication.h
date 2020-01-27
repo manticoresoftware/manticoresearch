@@ -15,14 +15,11 @@
 #ifndef _searchdreplication_
 #define _searchdreplication_
 
-// load data from JSON config on daemon start
-void JsonLoadConfig ( const CSphConfigSection & hSearchd );
+bool ReplicationIsEnabled();
+void ReplicationSetIncoming ( const CSphString & sIncoming );
 
-// save clusters and their indexes into JSON config on daemon shutdown
-void JsonDoneConfig();
-
-// load indexes got from JSON config on daemon indexes preload (part of ConfigureAndPreload work done here)
-void JsonConfigConfigureAndPreload ( int & iValidIndexes, int & iCounter  );
+// collect all available into an array
+void ReplicationCollectClusters ( CSphVector<ClusterDesc_t> & dClusters );
 
 // set Galera option for cluster
 bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sName, const CSphString & sVal, CSphString & sError );

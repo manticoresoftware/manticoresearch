@@ -11,6 +11,7 @@
 //
 #include "global_idf.h"
 #include "sphinxint.h"
+#include "fileutils.h"
 
 #include <math.h>
 

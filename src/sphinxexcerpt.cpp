@@ -14,7 +14,7 @@
 #include "sphinxutils.h"
 #include "sphinxsearch.h"
 #include "sphinxquery.h"
-#include "sphinxint.h"
+#include "fileutils.h"
 #include "sphinxstem.h"
 
 #include "snippetfunctor.h"

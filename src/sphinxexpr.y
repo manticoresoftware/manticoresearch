@@ -24,6 +24,7 @@
 %token <iAttrLocator>	TOK_ATTR_MVA64
 %token <iAttrLocator>	TOK_ATTR_STRING
 %token <iAttrLocator>	TOK_ATTR_FACTORS
+%token <iFunc>			TOK_IF
 %token <iFunc>			TOK_FUNC
 %token <iFunc>			TOK_FUNC_IN
 %token <iFunc>			TOK_FUNC_RAND
@@ -202,6 +203,7 @@ ident:
 function:
 	TOK_FUNC '(' ')'				{ $$ = pParser->AddNodeFunc0 ( $1 ); if ( $$<0 ) YYERROR; }
 	| TOK_FUNC '(' arglist ')'		{ $$ = pParser->AddNodeFunc ( $1, $3 ); if ( $$<0 ) YYERROR; }
+	| TOK_IF '(' arglist ')'		{ $$ = pParser->AddNodeFunc ( $1, $3 ); if ( $$<0 ) YYERROR; }
 	| TOK_UDF '(' arglist ')'		{ $$ = pParser->AddNodeUdf ( $1, $3 ); if ( $$<0 ) YYERROR; }
 	| TOK_UDF '(' ')'				{ $$ = pParser->AddNodeUdf ( $1, -1 ); if ( $$<0 ) YYERROR; }
 	| TOK_FUNC_IN '(' arg ',' constlist_or_uservar ')'{ $$ = pParser->AddNodeIn ( $3, $5 ); }

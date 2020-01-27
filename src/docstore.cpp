@@ -11,6 +11,7 @@
 #include "docstore.h"
 
 #include "sphinxint.h"
+#include "fileutils.h"
 #include "attribute.h"
 #include "indexcheck.h"
 #include "lz4/lz4.h"

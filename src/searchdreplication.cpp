@@ -17,6 +17,7 @@
 #include "searchdreplication.h"
 #include "sphinxjson.h"
 #include "accumulator.h"
+#include "fileutils.h"
 #include <math.h>
 
 #if !HAVE_WSREP
@@ -37,11 +38,7 @@ const char * GetReplicationDL()
 }
 
 // global application context for wsrep callbacks
-static CSphString	g_sLogFile;
 
-static CSphString	g_sDataDir;
-static CSphString	g_sConfigPath;
-static bool			g_bCfgHasData = false;
 // FIXME!!! take these timeout from config
 static int			g_iRemoteTimeout = 120 * 1000; // 2 minutes in msec
 // 200 msec is ok as we do not need to any missed nodes in cluster node list
@@ -65,16 +62,6 @@ enum class ClusterState_e
 	SYNCED				// node works as usual
 };
 
-// cluster data that gets stored and loaded
-struct ClusterDesc_t
-{
-	CSphString	m_sName;				// cluster name
-	CSphString	m_sPath;				// path relative to data_dir
-	CSphVector<CSphString> m_dIndexes;	// list of index name in cluster
-	CSphString	m_sClusterNodes;		// string list of comma separated nodes (node - address:API_port)
-
-	SmallStringHash_T<CSphString> m_hOptions;	// options for Galera
-};
 
 // managed port got back into global ports list
 class ScopedPort_c : public ISphNoncopyable
@@ -148,13 +135,6 @@ private:
 	ClusterState_e m_eNodeState { ClusterState_e::CLOSED };
 };
 
-// JSON index description
-struct IndexDesc_t
-{
-	CSphString	m_sName;
-	CSphString	m_sPath;
-	IndexType_e		m_eType = IndexType_e::ERROR_;
-};
 
 // arguments to replication static functions 
 struct ReplicationArgs_t
@@ -223,10 +203,6 @@ static SmallStringHash_T<ReplicationCluster_t *> g_hClusters GUARDED_BY ( g_tClu
 // hack for abort callback to invalidate only specific cluster
 static TLS_T<ReplicationCluster_t*> g_pTlsCluster;
 
-// description of clusters and indexes loaded from JSON config
-static CSphVector<ClusterDesc_t> g_dCfgClusters;
-static CSphVector<IndexDesc_t> g_dCfgIndexes;
-
 /////////////////////////////////////////////////////////////////////////////
 // forward declarations
 /////////////////////////////////////////////////////////////////////////////
@@ -237,24 +213,6 @@ static void ReplicationAbort();
 /////////////////////////////////////////////////////////////////////////////
 // JSON config related functions
 /////////////////////////////////////////////////////////////////////////////
-
-// write info about cluster and indexes into manticore.json
-static bool JsonConfigWrite ( const CSphString & sConfigPath, const SmallStringHash_T<ReplicationCluster_t *> & hClusters, const CSphVector<IndexDesc_t> & dIndexes, CSphString & sError );
-
-// read info about cluster and indexes from manticore.json and validate data
-static bool JsonConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> & hClusters, CSphVector<IndexDesc_t> & dIndexes, CSphString & sError );
-
-// get index list that should be saved into JSON config
-static void GetLocalIndexesFromJson ( CSphVector<IndexDesc_t> & dIndexes );
-
-// JSON reader and writer helper functions
-static void JsonConfigSetIndex ( const IndexDesc_t & tIndex, JsonObj_c & tIndexes );
-static bool JsonLoadIndexDesc ( const JsonObj_c & tJson, CSphString & sError, IndexDesc_t & tIndex );
-static void JsonConfigDumpClusters ( const SmallStringHash_T<ReplicationCluster_t *> & hClusters, StringBuilder_c & tOut );
-static void JsonConfigDumpIndexes ( const CSphVector<IndexDesc_t> & dIndexes, StringBuilder_c & tOut );
-
-// check path exists and also check daemon could write there
-static bool CheckPath ( const CSphString & sPath, bool bCheckWrite, CSphString & sError, const char * sCheckFileName="tmp" );
 
 // create string by join global data_dir and cluster path 
 static CSphString GetClusterPath ( const CSphString & sPath );
@@ -382,6 +340,20 @@ static CSphString g_sIncomingProto;
 static CSphString g_sListenReplicationIP;
 // ports pairs manager
 static FreePortList_c g_tPorts;
+
+
+bool ReplicationIsEnabled()
+{
+	return g_bReplicationEnabled;
+}
+
+
+void ReplicationSetIncoming ( const CSphString & sIncoming )
+{
+	g_sIncomingIP = sIncoming;
+	g_bHasIncoming = !g_sIncomingIP.IsEmpty();
+}
+
 
 ScopedPort_c::~ScopedPort_c()
 {
@@ -536,70 +508,6 @@ static bool CheckClasterState ( const ReplicationCluster_t * pCluster, CSphStrin
 	return CheckClasterState ( eState, bPrimary, pCluster->m_sName, sError );
 }
 
-// get string of cluster options with semicolon delimiter
-static CSphString GetOptions ( const SmallStringHash_T<CSphString> & hOptions, bool bSave )
-{
-	StringBuilder_c tBuf ( ";" );
-	void * pIt = nullptr;
-	while ( hOptions.IterateNext ( &pIt ) )
-	{
-		// skip one time options on save
-		if ( bSave && hOptions.IterateGetKey ( &pIt )=="pc.bootstrap" )
-			continue;
-
-		tBuf.Appendf ( "%s=%s", hOptions.IterateGetKey ( &pIt ).cstr(), hOptions.IterateGet ( &pIt ).cstr() );
-	}
-
-	return tBuf.cstr();
-}
-
-// parse and set cluster options into hash from single string
-static void SetOptions ( const CSphString & sOptions, SmallStringHash_T<CSphString> & hOptions )
-{
-	if ( sOptions.IsEmpty() )
-		return;
-
-	const char * sCur = sOptions.cstr();
-	while ( *sCur )
-	{
-		// skip leading spaces
-		while ( *sCur && sphIsSpace ( *sCur ) )
-			sCur++;
-
-		if ( !*sCur )
-			break;
-
-		// skip all name characters
-		const char * sNameStart = sCur;
-		while ( *sCur && !sphIsSpace ( *sCur ) && *sCur!='=' )
-			sCur++;
-
-		if ( !*sCur )
-			break;
-
-		// set name
-		CSphString sName;
-		sName.SetBinary ( sNameStart, sCur - sNameStart );
-
-		// skip set char and space prior to values
-		while ( *sCur && ( sphIsSpace ( *sCur ) || *sCur=='=' ) )
-			sCur++;
-
-		// skip all value characters and delimiter
-		const char * sValStart = sCur;
-		while ( *sCur && !sphIsSpace ( *sCur ) && *sCur!=';' )
-			sCur++;
-
-		CSphString sVal;
-		sVal.SetBinary ( sValStart, sCur - sValStart );
-
-		hOptions.Add ( sVal, sName );
-
-		// skip delimiter
-		if ( *sCur )
-			sCur++;
-	}
-}
 
 // update cluster state nodes from Galera callback on cluster view changes
 static void UpdateGroupView ( const wsrep_view_info_t * pView, ReplicationCluster_t * pCluster )
@@ -1000,18 +908,16 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	CSphString sFullClusterPath = GetClusterPath ( tArgs.m_pCluster->m_sPath );
 
 	StringBuilder_c sOptions ( ";" );
-	sOptions += GetOptions ( tArgs.m_pCluster->m_hOptions, false ).cstr();
+	sOptions += tArgs.m_pCluster->m_tOptions.AsStr(false).cstr();
 
 	// all replication options below have not stored into cluster config
 
 	// set incoming address
 	if ( g_bHasIncoming )
-	{
 		sOptions.Appendf ( "ist.recv_addr=%s", g_sIncomingIP.cstr() );
-	}
 
 	// change default cache size 
-	if ( !tArgs.m_pCluster->m_hOptions.Exists ( "gcache.size" ) )
+	if ( !tArgs.m_pCluster->m_tOptions.m_hOptions.Exists ( "gcache.size" ) )
 	{
 		int iSize = GetClusterMemLimit ( tArgs.m_iMaxMemLimit, tArgs.m_pCluster->m_dIndexes.GetLength() );
 		sOptions.Appendf ( "gcache.size=%dM", iSize );
@@ -1332,7 +1238,7 @@ bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sName,
 	if ( tOk==WSREP_OK )
 	{
 		ScopedMutex_t tLock ( pCluster->m_tOptsLock );
-		pCluster->m_hOptions.Add ( sVal, sName );
+		pCluster->m_tOptions.m_hOptions.Add ( sVal, sName );
 	} else
 	{
 		sError = GetStatus ( tOk );
@@ -1379,69 +1285,30 @@ void DeleteClusterByName ( const CSphString& sCluster ) EXCLUDES ( g_tClustersLo
 	}
 }
 
-// load data from JSON config on daemon start
-void JsonLoadConfig ( const CSphConfigSection & hSearchd )
+
+static void CollectClusterDesc ( CSphVector<ClusterDesc_t> & dClusters )
 {
-	g_sLogFile = hSearchd.GetStr ( "log", "" );
-
-	// node with empty incoming addresses works as GARB - does not affect FC
-	// might hung on pushing 1500 transactions
-	g_sIncomingIP = hSearchd.GetStr ( "node_address" );
-	g_bHasIncoming = !g_sIncomingIP.IsEmpty();
-
-	g_sDataDir = hSearchd.GetStr ( "data_dir", "" );
-	if ( g_sDataDir.IsEmpty() )
-		return;
-
-	CSphString sError;
-	// check data_dir exists and available
-	if ( !CheckPath ( g_sDataDir, true, sError ) )
+	dClusters.Reset();
+	void * pIt = nullptr;
+	while ( g_hClusters.IterateNext ( &pIt ))
 	{
-		sphWarning ( "%s, replication is disabled", sError.cstr() );
-		g_sDataDir = "";
-		return;
+		const ReplicationCluster_t * pCluster = g_hClusters.IterateGet ( &pIt );
+		dClusters.Add ( *pCluster );
 	}
-
-	g_sConfigPath.SetSprintf ( "%s/manticoresearch.json", g_sDataDir.cstr() );
-	if ( !JsonConfigRead ( g_sConfigPath, g_dCfgClusters, g_dCfgIndexes, sError ) )
-		sphDie ( "failed to use JSON config, %s", sError.cstr() );
 }
 
-// save clusters and their indexes into JSON config on daemon shutdown
-void JsonDoneConfig()  EXCLUDES ( g_tClustersLock )
+
+// collect clusters and their indexes
+void ReplicationCollectClusters ( CSphVector<ClusterDesc_t> & dClusters )  EXCLUDES ( g_tClustersLock )
 {
 	CSphString sError;
 	ScRL_t rLock ( g_tClustersLock );
-	if ( g_bReplicationEnabled && ( g_bCfgHasData || g_hClusters.GetLength()>0 ) )
-	{
-		CSphVector<IndexDesc_t> dIndexes;
-		GetLocalIndexesFromJson ( dIndexes );
-		if ( !JsonConfigWrite ( g_sConfigPath, g_hClusters, dIndexes, sError ) )
-			sphLogFatal ( "%s", sError.cstr() );
-	}
+	if ( !g_bReplicationEnabled && !g_hClusters.GetLength() )
+		return;
+
+	CollectClusterDesc ( dClusters );
 }
 
-// load indexes got from JSON config on daemon indexes preload (part of ConfigureAndPreload work done here)
-void JsonConfigConfigureAndPreload ( int & iValidIndexes, int & iCounter ) REQUIRES ( MainThread )
-{
-	for ( const IndexDesc_t & tIndex : g_dCfgIndexes )
-	{
-		CSphConfigSection hIndex;
-		hIndex.Add ( CSphVariant ( tIndex.m_sPath.cstr() ), "path" );
-		hIndex.Add ( CSphVariant ( GetTypeName ( tIndex.m_eType ).cstr() ), "type" );
-		// dummy
-		hIndex.Add ( CSphVariant ( "text" ), "rt_field" );
-		hIndex.Add ( CSphVariant ( "gid" ), "rt_attr_uint" );
-
-		ESphAddIndex eAdd = ConfigureAndPreloadIndex ( hIndex, tIndex.m_sName.cstr (), true );
-		iValidIndexes += ( eAdd!=ADD_ERROR ? 1 : 0 );
-		iCounter += ( eAdd==ADD_DSBLED ? 1 : 0 );
-		if ( eAdd==ADD_ERROR )
-			sphWarning ( "index '%s': removed from JSON config", tIndex.m_sName.cstr() );
-		else
-			g_bCfgHasData = true;
-	}
-}
 
 // dump all clusters statuses
 void ReplicateClustersStatus ( VectorLike & dStatus ) EXCLUDES ( g_tClustersLock )
@@ -1706,7 +1573,7 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 		}
 		auto* pIndex = ( RtIndex_i* ) pWDesc->m_pIndex;
 		sphLogDebugRpl ( "truncate-commit, index '%s'", tCmd.m_sIndex.cstr ());
-		if ( !pIndex->Truncate ( sError ))
+		if ( !pIndex->Truncate ( true, sError ))
 			sphWarning ( "%s", sError.cstr ());
 		return true;
 	}
@@ -1998,7 +1865,7 @@ bool CommitMonitor_c::CommitNonEmptyCmds ( RtIndex_i* pIndex, const ReplicationC
 	if ( !bOnlyTruncate )
 		return pIndex->Commit ( m_pDeletedCount, &m_tAcc );
 
-	if ( !pIndex->Truncate ( sError ))
+	if ( !pIndex->Truncate ( true, sError ))
 		return false;
 
 	if ( !tCmd.m_bReconfigure )
@@ -2150,262 +2017,13 @@ CommitMonitor_c::~CommitMonitor_c()
 }
 
 
-bool JsonLoadIndexDesc ( const JsonObj_c & tJson, CSphString & sError, IndexDesc_t & tIndex )
-{
-	CSphString sName = tJson.Name();
-	if ( sName.IsEmpty() )
-	{
-		sError = "empty index name";
-		return false;
-	}
-
-	if ( !tJson.FetchStrItem ( tIndex.m_sPath, "path", sError ) )
-		return false;
-
-	CSphString sType;
-	if ( !tJson.FetchStrItem ( sType, "type", sError ) )
-		return false;
-
-	tIndex.m_eType = TypeOfIndexConfig ( sType );
-	if ( tIndex.m_eType==IndexType_e::ERROR_ )
-	{
-		sError.SetSprintf ( "type '%s' is invalid", sType.cstr() );
-		return false;
-	}
-
-	tIndex.m_sName = sName;
-
-	return true;
-}
-
-// read info about cluster and indexes from manticore.json and validate data
-bool JsonConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> & dClusters,
-	CSphVector<IndexDesc_t> & dIndexes, CSphString & sError )
-{
-	if ( !sphIsReadable ( sConfigPath, nullptr ) )
-		return true;
-
-	CSphAutoreader tConfigFile;
-	if ( !tConfigFile.Open ( sConfigPath, sError ) )
-		return false;
-
-	int iSize = tConfigFile.GetFilesize();
-	if ( !iSize )
-		return true;
-	
-	CSphFixedVector<BYTE> dData ( iSize+1 );
-	tConfigFile.GetBytes ( dData.Begin(), iSize );
-
-	if ( tConfigFile.GetErrorFlag() )
-	{
-		sError = tConfigFile.GetErrorMessage();
-		return false;
-	}
-	
-	dData[iSize] = 0; // safe gap
-	JsonObj_c tRoot ( (const char*)dData.Begin() );
-	if ( tRoot.GetError ( (const char *)dData.Begin(), dData.GetLength(), sError ) )
-		return false;
-
-	// FIXME!!! check for path duplicates
-	// check indexes
-	JsonObj_c tIndexes = tRoot.GetItem("indexes");
-	for ( const auto & i : tIndexes )
-	{
-		IndexDesc_t tIndex;
-		if ( !JsonLoadIndexDesc ( i, sError, tIndex ) )
-		{
-			sphWarning ( "index '%s'(%d) error: %s", i.Name(), dIndexes.GetLength(), sError.cstr() );
-			return false;
-		}
-
-		dIndexes.Add ( tIndex );
-	}
-
-	// check clusters
-	JsonObj_c tClusters = tRoot.GetItem("clusters");
-	int iCluster = 0;
-	for ( const auto & i : tClusters )
-	{
-		ClusterDesc_t tCluster;
-
-		bool bGood = true;
-		tCluster.m_sName = i.Name();
-		if ( tCluster.m_sName.IsEmpty() )
-		{
-			sError = "empty cluster name";
-			bGood = false;
-		}
-
-		// optional items such as: options and skipSst
-		CSphString sOptions;
-		if ( i.FetchStrItem ( sOptions, "options", sError, true ) )
-			SetOptions( sOptions, tCluster.m_hOptions );
-		else
-			sphWarning ( "cluster '%s'(%d): %s", tCluster.m_sName.cstr(), iCluster, sError.cstr() );
-
-		bGood &= i.FetchStrItem ( tCluster.m_sClusterNodes, "nodes", sError, true );
-		bGood &= i.FetchStrItem ( tCluster.m_sPath, "path", sError, true );
-
-		// set indexes prior replication init
-		JsonObj_c tIndexes = i.GetItem("indexes");
-		int iItem = 0;
-		for ( const auto & j : tIndexes )
-		{
-			if ( j.IsStr() )
-				tCluster.m_dIndexes.Add ( j.StrVal() );
-			else
-				sphWarning ( "cluster '%s', index %d: name should be a string, skipped", tCluster.m_sName.cstr(), iItem );
-
-			iItem++;
-		}
-
-		if ( !bGood )
-		{
-			sphWarning ( "cluster '%s'(%d): removed from JSON config, %s", tCluster.m_sName.cstr(), iCluster, sError.cstr() );
-			sError = "";
-		} else
-			dClusters.Add ( tCluster );
-
-		iCluster++;
-	}
-
-	return true;
-}
-
-// write info about cluster and indexes into manticore.json
-bool JsonConfigWrite ( const CSphString & sConfigPath, const SmallStringHash_T<ReplicationCluster_t *> & hClusters,
-	const CSphVector<IndexDesc_t> & dIndexes, CSphString & sError ) REQUIRES_SHARED ( g_tClustersLock )
-{
-	StringBuilder_c sConfigData;
-	sConfigData += "{\n\"clusters\":\n";
-	JsonConfigDumpClusters ( hClusters, sConfigData );
-	sConfigData += ",\n\"indexes\":\n";
-	JsonConfigDumpIndexes ( dIndexes, sConfigData );
-	sConfigData += "\n}\n";
-
-	CSphString sNew, sOld;
-	auto& sCur = sConfigPath;
-	sNew.SetSprintf ( "%s.new", sCur.cstr() );
-	sOld.SetSprintf ( "%s.old", sCur.cstr() );
-
-	CSphWriter tConfigFile;
-	if ( !tConfigFile.OpenFile ( sNew, sError ) )
-		return false;
-
-	tConfigFile.PutBytes ( sConfigData.cstr(), sConfigData.GetLength() );
-	tConfigFile.CloseFile();
-	if ( tConfigFile.IsError() )
-		return false;
-
-	if ( sphIsReadable ( sCur, nullptr ) && rename ( sCur.cstr(), sOld.cstr() ) )
-	{
-		sError.SetSprintf ( "failed to rename current to old, '%s'->'%s', error '%s'", sCur.cstr(), sOld.cstr(), strerror(errno) );
-		return false;
-	}
-
-	if ( rename ( sNew.cstr(), sCur.cstr() ) )
-	{
-		sError.SetSprintf ( "failed to rename new to current, '%s'->'%s', error '%s'", sNew.cstr(), sCur.cstr(), strerror(errno) );
-		if ( sphIsReadable ( sOld, nullptr ) && rename ( sOld.cstr(), sCur.cstr() ) )
-			sError.SetSprintf ( "%s, rollback failed too", sError.cstr() );
-		return false;
-	}
-
-	unlink ( sOld.cstr() );
-
-	return true;
-}
-
-// helper function that saves cluster related data into JSON config on clusters got changed
-static bool SaveConfig() EXCLUDES ( g_tClustersLock )
-{
-	CSphVector<IndexDesc_t> dJsonIndexes;
-	CSphString sError;
-	GetLocalIndexesFromJson ( dJsonIndexes );
-	ScRL_t tLock ( g_tClustersLock );
-	bool bOk = JsonConfigWrite( g_sConfigPath, g_hClusters, dJsonIndexes, sError );
-	if ( !bOk ) sphWarning ( "%s", sError.cstr() );
-	return bOk;
-}
-
-void JsonConfigSetIndex ( const IndexDesc_t & tIndex, JsonObj_c & tIndexes )
-{
-	JsonObj_c tIdx;
-	tIdx.AddStr ( "path", tIndex.m_sPath );
-	tIdx.AddStr ( "type", GetTypeName ( tIndex.m_eType ) );
-
-	tIndexes.AddItem ( tIndex.m_sName.cstr(), tIdx );
-}
-
-// saves clusters into string
-void JsonConfigDumpClusters ( const SmallStringHash_T<ReplicationCluster_t *> & hClusters, StringBuilder_c & tOut )
-{
-	JsonObj_c tClusters;
-
-	void * pIt = nullptr;
-	while ( hClusters.IterateNext ( &pIt ) )
-	{
-		const ReplicationCluster_t * pCluster = hClusters.IterateGet ( &pIt );
-
-		CSphString sOptions = GetOptions ( pCluster->m_hOptions, true );
-
-		JsonObj_c tItem;
-		tItem.AddStr ( "path", pCluster->m_sPath );
-		tItem.AddStr ( "nodes", pCluster->m_sClusterNodes );
-		tItem.AddStr ( "options", sOptions );
-
-		// index array
-		JsonObj_c tIndexes ( true );
-		for ( const CSphString & sIndex : pCluster->m_dIndexes )
-		{
-			JsonObj_c tStrItem = JsonObj_c::CreateStr ( sIndex );
-			tIndexes.AddItem ( tStrItem );
-		}
-		tItem.AddItem ( "indexes", tIndexes );
-		tClusters.AddItem ( pCluster->m_sName.cstr(), tItem );
-	}
-
-	tOut += tClusters.AsString(true).cstr();
-}
-
-// saves clusters indexes and indexes from JSON config into string
-void JsonConfigDumpIndexes ( const CSphVector<IndexDesc_t> & dIndexes, StringBuilder_c & tOut )
-{
-	JsonObj_c tIndexes;
-	for ( const auto & i : dIndexes )
-		JsonConfigSetIndex ( i, tIndexes );
-
-	tOut += tIndexes.AsString(true).cstr();
-}
-
-// get index list that should be saved into JSON config
-void GetLocalIndexesFromJson ( CSphVector<IndexDesc_t> & dIndexes )
-{
-	for ( RLockedServedIt_c tIt ( g_pLocalIndexes ); tIt.Next (); )
-	{
-		auto pServed = tIt.Get();
-		if ( !pServed )
-			continue;
-
-		ServedDescRPtr_c tDesc ( pServed );
-		if ( !tDesc->m_bJson )
-			continue;
-
-		IndexDesc_t & tIndex = dIndexes.Add();
-		tIndex.m_sName = tIt.GetName();
-		tIndex.m_sPath = tDesc->m_sIndexPath;
-		tIndex.m_eType = tDesc->m_eType;
-	}
-}
-
 // load index into daemon from disk files for cluster use
 // in case index already exists prohibit it to save on index delete as disk files has fresh data received from remote node
 bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName, const CSphString & sCluster )
 {
 	// delete existed index first, does not allow to save it's data that breaks sync'ed index files
 	// need a scope for RefRtr's to work
-	bool bJson = true;
+	bool bFromReplication = true;
 	{
 		ServedIndexRefPtr_c pServedCur = GetServed ( sIndexName );
 		if ( pServedCur )
@@ -2416,7 +2034,7 @@ bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName
 			{
 				auto * pIndex = (RtIndex_i*)pDesc->m_pIndex;
 				pIndex->ProhibitSave();
-				bJson = pDesc->m_bJson;
+				bFromReplication = pDesc->m_bFromReplication;
 			}
 
 			g_pLocalIndexes->Delete ( sIndexName );
@@ -2432,7 +2050,7 @@ bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName
 
 	ServedIndexRefPtr_c pServed = GetServed ( sIndexName, &dNotLoadedIndexes );
 	ServedDescWPtr_c pDesc ( pServed );
-	pDesc->m_bJson = bJson;
+	pDesc->m_bFromReplication = bFromReplication;
 	pDesc->m_sCluster = sCluster;
 
 	bool bPreload = PreallocNewIndex ( *pDesc, &hIndex, sIndexName.cstr() );
@@ -2445,8 +2063,7 @@ bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName
 }
 
 // load indexes received from another node or existed already into daemon
-static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes,
-	const CSphString & sCluster, CSphString & sError ) EXCLUDES ( g_tClustersLock )
+static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes, const CSphString & sCluster, CSphString & sError ) EXCLUDES ( g_tClustersLock )
 {
 	assert ( g_bReplicationEnabled );
 
@@ -2518,7 +2135,7 @@ static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes,
 		pCluster->UpdateIndexHashes();
 	}
 
-	SaveConfig();
+	SaveConfigInt();
 	return true;
 }
 
@@ -2526,17 +2143,16 @@ static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes,
 CSphString GetClusterPath ( const CSphString & sPath )
 {
 	if ( sPath.IsEmpty() )
-		return g_sDataDir;
+		return GetDataDirInt();
 
 	CSphString sFullPath;
-	sFullPath.SetSprintf ( "%s/%s", g_sDataDir.cstr(), sPath.cstr() );
+	sFullPath.SetSprintf ( "%s/%s", GetDataDirInt().cstr(), sPath.cstr() );
 
 	return sFullPath;
 }
 
 // create string by join global data_dir and cluster path 
-static bool GetClusterPath ( const CSphString & sCluster, CSphString & sClusterPath, CSphString & sError )
-	EXCLUDES ( g_tClustersLock )
+static bool GetClusterPath ( const CSphString & sCluster, CSphString & sClusterPath, CSphString & sError ) EXCLUDES ( g_tClustersLock )
 {
 	ScRL_t tLock ( g_tClustersLock );
 	ReplicationCluster_t ** ppCluster = g_hClusters ( sCluster );
@@ -2550,33 +2166,9 @@ static bool GetClusterPath ( const CSphString & sCluster, CSphString & sClusterP
 	return true;
 }
 
-// check path exists and also check daemon could write there
-bool CheckPath ( const CSphString & sPath, bool bCheckWrite, CSphString & sError, const char * sCheckFileName )
-{
-	if ( !sphIsReadable ( sPath, &sError ) )
-	{
-		sError.SetSprintf ( "cannot access directory %s, %s", sPath.cstr(), sError.cstr() );
-		return false;
-	}
-
-	if ( bCheckWrite )
-	{
-		CSphString sTmp;
-		sTmp.SetSprintf ( "%s/%s", sPath.cstr(), sCheckFileName );
-		CSphAutofile tFile ( sTmp, SPH_O_NEW, sError, true );
-		if ( tFile.GetFD()<0 )
-		{
-			sError.SetSprintf ( "directory %s write error: %s", sPath.cstr(), sError.cstr() );
-			return false;
-		}
-	}
-
-	return true;
-}
 
 // validate clusters paths
-static bool ClusterCheckPath ( const CSphString & sPath, const CSphString & sName, bool bCheckWrite, CSphString & sError )
-	EXCLUDES ( g_tClustersLock )
+static bool ClusterCheckPath ( const CSphString & sPath, const CSphString & sName, bool bCheckWrite, CSphString & sError ) EXCLUDES ( g_tClustersLock )
 {
 	if ( !g_bReplicationEnabled )
 	{
@@ -2721,7 +2313,7 @@ static void SetListener ( const CSphVector<ListenerDesc_t> & dListeners )
 	int iPort = dListeners.GetFirst ( [&] ( const ListenerDesc_t & tListen ) { return tListen.m_eProto==Proto_e::SPHINX; } );
 	if ( iPort==-1 || !bGotReplicationPorts )
 	{
-		if ( g_dCfgClusters.GetLength() )
+		if ( GetClustersInt().GetLength() )
 			sphWarning ( "no 'listen' is found, cannot set incoming addresses, replication is disabled" );
 		return;
 	}
@@ -2731,7 +2323,7 @@ static void SetListener ( const CSphVector<ListenerDesc_t> & dListeners )
 
 	g_sIncomingProto.SetSprintf ( "%s:%d", g_sIncomingIP.cstr(), dListeners[iPort].m_iPort );
 
-	g_bReplicationEnabled = ( !g_sDataDir.IsEmpty() && bGotReplicationPorts );
+	g_bReplicationEnabled = ( !GetDataDirInt().IsEmpty() && bGotReplicationPorts );
 }
 
 // start clusters on daemon start
@@ -2742,14 +2334,14 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 
 	if ( !g_bReplicationEnabled )
 	{
-		if ( g_dCfgClusters.GetLength() )
+		if ( GetClustersInt().GetLength() )
 			sphWarning ( "data_dir option is missing in config or no replication listener is set, replication is disabled" );
 		return;
 	}
 
 	CSphString sError;
 
-	for ( const ClusterDesc_t & tDesc : g_dCfgClusters )
+	for ( const ClusterDesc_t & tDesc : GetClustersInt() )
 	{
 		ReplicationArgs_t tArgs;
 		// global options
@@ -2792,7 +2384,7 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 		CSphScopedPtr<ReplicationCluster_t> pElem ( new ReplicationCluster_t );
 		pElem->m_sName = tDesc.m_sName;
 		pElem->m_sPath = tDesc.m_sPath;
-		pElem->m_hOptions = tDesc.m_hOptions;
+		pElem->m_tOptions = tDesc.m_tOptions;
 		pElem->m_tPort.Set ( tPort.Leak() );
 		pElem->m_sClusterNodes = tDesc.m_sClusterNodes;
 
@@ -2867,8 +2459,7 @@ static bool CheckClusterOption ( const SmallStringHash_T<SqlInsert_t *> & hValue
 }
 
 // validate cluster SphinxQL statement
-static bool CheckClusterStatement ( const CSphString & sCluster, bool bCheckCluster, CSphString & sError )
-	EXCLUDES ( g_tClustersLock )
+static bool CheckClusterStatement ( const CSphString & sCluster, bool bCheckCluster, CSphString & sError ) EXCLUDES ( g_tClustersLock )
 {
 	if ( !g_bReplicationEnabled )
 	{
@@ -2919,7 +2510,8 @@ static bool CheckClusterStatement ( const CSphString & sCluster, const StrVec_t 
 	CSphString sOptions;
 	if ( !CheckClusterOption ( hValues, "options", true, sOptions, sError ) )
 		return false;
-	SetOptions ( sOptions, pElem->m_hOptions );
+
+	pElem->m_tOptions.Parse(sOptions);
 
 	// check cluster path is unique
 	bool bValidPath = ClusterCheckPath ( pElem->m_sPath, pElem->m_sName, true, sError );
@@ -2997,8 +2589,7 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 // cluster creates master node
 /////////////////////////////////////////////////////////////////////////////
 
-bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues,
-	CSphString & sError ) EXCLUDES ( g_tClustersLock )
+bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphString & sError ) EXCLUDES ( g_tClustersLock )
 {
 	ReplicationArgs_t tArgs;
 	CSphScopedPtr<ReplicationCluster_t> pElem ( nullptr );
@@ -3034,7 +2625,7 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 	}
 
 	ClusterState_e eState = tArgs.m_pCluster->WaitReady();
-	SaveConfig();
+	SaveConfigInt();
 	return ( eState==ClusterState_e::DONOR || eState==ClusterState_e::SYNCED );
 }
 
@@ -3652,7 +3243,7 @@ void HandleCommandClusterPq ( CachedOutputBuffer_c & tOut, WORD uCommandVer, Inp
 		{
 			PQRemoteDelete_c::ParseCommand ( tBuf, tCmd );
 			bOk = RemoteClusterDelete ( tCmd.m_sCluster, sError );
-			SaveConfig();
+			SaveConfigInt();
 			if ( bOk )
 				PQRemoteDelete_c::BuildReply ( tRes, tOut );
 		}
@@ -3810,7 +3401,7 @@ bool ClusterDelete ( const CSphString & sCluster, CSphString & sError, CSphStrin
 
 	// after all nodes finished
 	bool bOk = RemoteClusterDelete ( sCluster, sError );
-	SaveConfig();
+	SaveConfigInt();
 
 	return bOk;
 }
@@ -4729,7 +4320,7 @@ bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool
 	else
 		bOk = ClusterAlterDrop ( sCluster, sIndex, sError );
 
-	SaveConfig();
+	SaveConfigInt();
 
 	return bOk;
 }
@@ -5044,7 +4635,7 @@ bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdat
 	PQRemoteClusterUpdateNodes_c tReq;
 	bOk &= PerformRemoteTasks ( dNodes, tReq, tReq, sError );
 
-	SaveConfig();
+	SaveConfigInt();
 
 	return bOk;
 }

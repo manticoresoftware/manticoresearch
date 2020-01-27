@@ -37,6 +37,7 @@
 %token	TOK_BEGIN
 %token	TOK_BETWEEN
 %token	TOK_BIGINT
+%token	TOK_BIT
 %token	TOK_BOOL
 %token	TOK_BY
 %token	TOK_CALL
@@ -59,9 +60,11 @@
 %token	TOK_DIV
 %token	TOK_DOUBLE
 %token	TOK_DROP
+%token	TOK_EXISTS
 %token	TOK_EXPLAIN
 %token	TOK_FACET
 %token	TOK_FALSE
+%token	TOK_FIELD
 %token	TOK_FLOAT
 %token	TOK_FLUSH
 %token	TOK_FOR
@@ -74,9 +77,11 @@
 %token	TOK_GROUP_CONCAT
 %token	TOK_HAVING
 %token	TOK_HOSTNAMES
+%token	TOK_IF
 %token	TOK_IGNORE
 %token	TOK_IN
 %token	TOK_INDEX
+%token	TOK_INDEXED
 %token	TOK_INDEXES
 %token	TOK_INDEXOF
 %token	TOK_INSERT
@@ -100,6 +105,7 @@
 %token	TOK_MULTI
 %token	TOK_MULTI64
 %token	TOK_NAMES
+%token	TOK_NOT
 %token	TOK_NULL
 %token	TOK_OFFSET
 %token	TOK_OPTION
@@ -130,6 +136,7 @@
 %token	TOK_SONAME
 %token	TOK_START
 %token	TOK_STATUS
+%token	TOK_STORED
 %token	TOK_STRING
 %token	TOK_SYSFILTERS
 %token	TOK_SUM
@@ -232,6 +239,8 @@ statement:
 	| truncate
 	| optimize_index
 	| alter
+	| create_table
+	| drop_table
 	| create_plugin
 	| drop_plugin
 	| reload_plugins
@@ -1040,6 +1049,7 @@ expr:
 
 function:
 	TOK_IDENT '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
+	| TOK_IF '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	| TOK_IN '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); } // handle exception from 'ident' rule
 	| json_field TOK_IN '(' arglist ')' { TRACK_BOUNDS ( $$, $1, $5 ); } // handle exception from 'ident' rule
 	| TOK_INTEGER '(' arglist ')'	{ TRACK_BOUNDS ( $$, $1, $4 ); }
@@ -1111,6 +1121,11 @@ show_what:
 	| TOK_PLAN							{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLAN; }
 	| TOK_PLUGINS						{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLUGINS; }
 	| TOK_THREADS opt_option_clause		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_THREADS; }
+	| TOK_CREATE TOK_TABLE ident
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_CREATE_TABLE;
+			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3 );
+		}
 	| TOK_AGENT TOK_QUOTED_STRING TOK_STATUS like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS;
@@ -1583,6 +1598,68 @@ alter:
 			tStmt.m_eStmt = STMT_CLUSTER_ALTER_UPDATE;
 			pParser->ToString ( tStmt.m_sCluster, $3 );
 			pParser->ToString ( tStmt.m_sSetName, $5 );
+		}
+	;
+
+//////////////////////////////////////////////////////////////////////////
+field_flag:
+	TOK_INDEXED			{ pParser->AddFieldFlag ( CSphColumnInfo::FIELD_INDEXED ); }
+	| TOK_STORED		{ pParser->AddFieldFlag ( CSphColumnInfo::FIELD_STORED ); }
+	;
+
+field_flag_list:
+	field_flag
+	| field_flag_list field_flag
+	;
+
+create_table_item:
+	ident alter_col_type 				{ pParser->AddCreateTableCol ( $1, (ESphAttr)$2.m_iValue ); }
+	| ident TOK_BIT '(' const_int ')' 	{ pParser->AddCreateTableBitCol ( $1, $4.m_iValue ); }
+	| ident TOK_FIELD					{ pParser->AddCreateTableField($1); }
+	| ident TOK_FIELD field_flag_list	{ pParser->AddCreateTableField($1); }
+	| ident '=' TOK_QUOTED_STRING		{ pParser->AddCreateTableOption ( $1, $3 ); }
+	;
+
+create_table_item_list:
+	create_table_item
+	| create_table_item_list ',' create_table_item
+	;
+
+create_table:
+	TOK_CREATE TOK_TABLE ident '(' create_table_item_list ')'
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_CREATE_TABLE;
+			tStmt.m_tCreateTable.m_bIfNotExists = false;
+			pParser->ToString ( tStmt.m_sIndex, $3 );
+			tStmt.m_sIndex.ToLower();
+		}
+	| TOK_CREATE TOK_TABLE TOK_IF TOK_NOT TOK_EXISTS ident '(' create_table_item_list ')'
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_CREATE_TABLE;
+			tStmt.m_tCreateTable.m_bIfNotExists = true;
+			pParser->ToString ( tStmt.m_sIndex, $6 );
+			tStmt.m_sIndex.ToLower();
+		}
+	;
+
+drop_table:
+	TOK_DROP TOK_TABLE ident
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_DROP_TABLE;
+			tStmt.m_bIfExists = false;
+			pParser->ToString ( tStmt.m_sIndex, $3 );
+			tStmt.m_sIndex.ToLower();
+		}
+	| TOK_DROP TOK_TABLE TOK_IF TOK_EXISTS ident
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_DROP_TABLE;
+			tStmt.m_bIfExists = true;
+			pParser->ToString ( tStmt.m_sIndex, $5 );
+			tStmt.m_sIndex.ToLower();
 		}
 	;
 

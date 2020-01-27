@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>configless</name>
+<skip_indexer/>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"></data_path>
+}
+</config>
+
+<sphqueries>
+<sphinxql>show tables</sphinxql>
+<sphinxql>create table test1 ( title field, tag integer )</sphinxql>
+<sphinxql>create table test1 ( title field, tag integer, tag2 integer )</sphinxql>
+<sphinxql>create table if not exists test1 ( title field, tag integer, tag2 integer )</sphinxql>
+<sphinxql>show tables</sphinxql>
+<sphinxql>desc test1</sphinxql>
+<sphinxql>insert into test1 values (1,'hello',100)</sphinxql>
+<sphinxql>insert into test1 values (2,'world',200)</sphinxql>
+<sphinxql>select * from test1 where match('hello|world')</sphinxql>
+<sphinxql>show create table test1</sphinxql>
+<sphinxql>drop table test1</sphinxql>
+<sphinxql>show tables</sphinxql>
+
+<sphinxql>drop table test1</sphinxql>
+<sphinxql>drop table if exists test1</sphinxql>
+
+<sphinxql>create table test2 ( title field indexed, body field stored indexed, tag integer, weight float, flags bit(2) )</sphinxql>
+<sphinxql>desc test2</sphinxql>
+<sphinxql>show create table test2</sphinxql>
+<sphinxql>insert into test2 values (1,'title','body',100, 1.1, 1)</sphinxql>
+<sphinxql>select * from test2</sphinxql>
+<sphinxql>drop table test2</sphinxql>
+
+<sphinxql>create table if not exists test3 ( title field, tag integer, stored_fields='title' )</sphinxql>
+<sphinxql>create table if not exists test3 ( title field, tag integer )</sphinxql>
+<sphinxql>insert into test3 values (1,'walked',100)</sphinxql>
+<sphinxql>call keywords ('walked', 'test3')</sphinxql>
+<sphinxql>select * from test3 where match('walk')</sphinxql>
+<sphinxql>drop table test3</sphinxql>
+
+<sphinxql>create table test4 ( title field, tag integer, morphology='stem_en' )</sphinxql>
+<sphinxql>insert into test4 values (1,'walked',100)</sphinxql>
+<sphinxql>call keywords ('walked', 'test4')</sphinxql>
+<sphinxql>select * from test4 where match('walk')</sphinxql>
+<sphinxql>drop table test4</sphinxql>
+</sphqueries>
+
+</test>

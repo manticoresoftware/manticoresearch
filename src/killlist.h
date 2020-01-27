@@ -12,6 +12,7 @@
 #define _killlist_
 
 #include "sphinx.h"
+#include "fileutils.h"
 
 
 class CSphReader;

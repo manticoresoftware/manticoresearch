@@ -20,7 +20,6 @@
 #include <stdarg.h>
 
 #include "sphinxstd.h"
-#include "sphinx.h"
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -230,6 +229,8 @@ public:
 		: m_iTag ( 0 )
 	{}
 
+	void AddEntry ( const char * szKey, const char * szValue );
+
 	/// get integer option value by key and default value
 	int GetInt ( const char * sKey, int iDefault=0 ) const
 	{
@@ -324,26 +325,7 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 /// load config file
 const char *	sphLoadConfig ( const char * sOptConfig, bool bQuiet, CSphConfigParser & cp );
 
-/// configure tokenizer from index definition section
-void			sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings & tSettings );
-
-/// configure dictionary from index definition section
-void			sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tSettings );
-
-/// configure field filter from index definition section
-bool			sphConfFieldFilter ( const CSphConfigSection & hIndex, CSphFieldFilterSettings & tSettings, CSphString & sError );
-
-/// configure index from index definition section
-bool			sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings, const char * szIndexName, const CSphSchema * pSchema, CSphString & sError );
-
-/// try to set dictionary, tokenizer and misc settings for an index (if not already set)
-bool			sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError, bool bStripFile=false );
-
 bool			sphInitCharsetAliasTable ( CSphString & sError );
-
-bool			CheckStoredFields ( const CSphSchema & tSchema, const CSphIndexSettings & tSettings, CSphString & sError );
-
-const char * sphBigramName ( ESphBigram eType );
 
 enum ESphLogLevel
 {
@@ -450,12 +432,6 @@ bool sphIsChineseCode ( int iCode );
 
 /// detect chinese chars in a buffer
 bool sphDetectChinese ( const BYTE * szBuffer, int iLength );
-
-/// returns ranker name as string
-const char * sphGetRankerName ( ESphRankMode eRanker );
-
-/// parses kill-list targets and their options
-bool ParseKillListTargets ( const CSphString & sTargets, CSphVector<KillListTarget_t> & dTargets, const char * szIndexName, CSphString & sError );
 
 class CSphDynamicLibrary : public ISphNoncopyable
 {

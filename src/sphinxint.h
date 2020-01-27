@@ -22,40 +22,11 @@
 #include "sphinxjsonquery.h"
 #include "sphinxutils.h"
 
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <float.h>
-
-#if USE_WINDOWS
-#define stat		_stat64
-#define fstat		_fstat64
-#if _MSC_VER<1400
-#define struct_stat	__stat64
-#else
-#define struct_stat	struct _stat64
-#endif
-#else
-#define struct_stat        struct stat
-#endif
-
 
 //////////////////////////////////////////////////////////////////////////
 // INTERNAL CONSTANTS
 //////////////////////////////////////////////////////////////////////////
-
-#ifdef O_BINARY
-#define SPH_O_BINARY O_BINARY
-#else
-#define SPH_O_BINARY 0
-#endif
-
-#define SPH_O_READ	( O_RDONLY | SPH_O_BINARY )
-#define SPH_O_NEW	( O_CREAT | O_RDWR | O_TRUNC | SPH_O_BINARY )
-#define SPH_O_APPEND ( O_RDWR | O_APPEND | SPH_O_BINARY )
-
-#define MVA_DOWNSIZE		DWORD			// MVA32 offset type
-
-//#define DEFAULT_MAX_MATCHES 1000
 
 // cover on strerror
 inline const char * strerrorm ( int errnum )
@@ -1683,6 +1654,9 @@ struct StoredQueryDesc_t;
 class ISphBinlog : ISphNoncopyable
 {
 public:
+	using CreateTable_fn = CSphIndex * (*)( const CSphString &, const CreateTableSettings_t &, bool, CSphString & );
+	using DropTable_fn = bool (*)( const CSphString &, bool, bool, CSphString & );
+
 	virtual				~ISphBinlog () {}
 
 	virtual void		BinlogUpdateAttributes ( int64_t * pTID, const char * sIndexName, const CSphAttrUpdate & tUpd ) = 0;
@@ -1693,6 +1667,12 @@ public:
 
 	virtual void		BinlogPqAdd ( int64_t * pTID, const char * sIndexName, const StoredQueryDesc_t & tStored ) = 0;
 	virtual void		BinlogPqDelete ( int64_t * pTID, const char * sIndexName, const int64_t * pQueries, int iCount, const char * sTags ) = 0;
+
+	virtual void		BinlogCreateTable ( int64_t * pTID, const char * szIndexName, const CreateTableSettings_t & tCreateTable ) = 0;
+	virtual void		BinlogDropTable ( int64_t * pTID, const char * szIndexName, bool bIfExists ) = 0;
+
+	virtual void		SetCreateTable ( CreateTable_fn pCreateTable ) = 0;
+	virtual void		SetDropTable ( DropTable_fn pDropTable ) = 0;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1730,13 +1710,6 @@ void			WriteSchema ( CSphWriter & fdInfo, const CSphSchema & tSchema );
 void			ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema, DWORD uVersion );
 void			SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettings );
 void			LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion );
-void			SaveTokenizerSettings ( CSphWriter & tWriter, const ISphTokenizer * pTokenizer, int iEmbeddedLimit );
-bool			LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSettings, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning );
-void			SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, bool bForceWordDict, int iEmbeddedLimit );
-void			LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning );
-void			LoadFieldFilterSettings ( CSphReader & tReader, CSphFieldFilterSettings & tFieldFilterSettings );
-void			SaveFieldFilterSettings ( CSphWriter & tWriter, const ISphFieldFilter * pFieldFilter );
-
 bool			AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError );
 
 /// Get current thread local index - internal do not use
@@ -1748,9 +1721,8 @@ void			RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, CSphFixedVec
 // FIXME!!! remove with converter
 const char * CheckFmtMagic ( DWORD uHeader );
 void ReadFileInfo ( CSphReader & tReader, const char * szFilename, bool bSharedStopwords, CSphSavedFile & tFile, CSphString * sWarning );
-void SaveFieldFilterSettings ( CSphWriter & tWriter, const CSphFieldFilterSettings & tSettings );
-bool WriteKillList ( const CSphString & sFilename, const DocID_t * pKlist, int nEntries, const CSphVector<KillListTarget_t> & dTargets, CSphString & sError );
-void WarnAboutKillList ( const CSphVector<DocID_t> & dKillList, const CSphVector<KillListTarget_t> & dTargets );
+bool WriteKillList ( const CSphString & sFilename, const DocID_t * pKlist, int nEntries, const KillListTargets_t & tTargets, CSphString & sError );
+void WarnAboutKillList ( const CSphVector<DocID_t> & dKillList, const KillListTargets_t & tTargets );
 extern const char * g_sTagInfixBlocks;
 extern const char * g_sTagInfixEntries;
 

@@ -17,6 +17,8 @@
 #ifndef _searchdaemon_
 #define _searchdaemon_
 
+#include "searchdconfig.h"
+
 /////////////////////////////////////////////////////////////////////////////
 // MACHINE-DEPENDENT STUFF
 /////////////////////////////////////////////////////////////////////////////
@@ -204,16 +206,6 @@ enum ESphAddIndex
 	ADD_DISTR	= 2, // distributed
 	ADD_SERVED	= 3, // added and active (can be used in queries)
 //	ADD_CLUSTER	= 4,
-};
-
-enum class IndexType_e
-{
-	PLAIN = 0,
-	TEMPLATE,
-	RT,
-	PERCOLATE,
-	DISTR,
-	ERROR_, // simple "ERROR" doesn't work on win due to '#define ERROR 0' somewhere.
 };
 
 struct ListenerDesc_t
@@ -669,7 +661,7 @@ struct ServedDesc_t
 	StrVec_t	m_dKilllistTargets;
 	mutable CSphString	m_sUnlink;
 	IndexType_e	m_eType			= IndexType_e::PLAIN;
-	bool		m_bJson			= false; // index came from replication json config, not from usual config file
+	bool		m_bFromReplication = false; // index came from replication json config, not from usual config file
 	CSphString	m_sCluster;
 	FileAccessSettings_t m_tFileAccessSettings;
 	int			m_iMemLimit = 0;
@@ -689,7 +681,7 @@ struct ServedDesc_t
 	{
 		if ( !pServed )
 			return false;
-		return pServed->m_bJson || !pServed->m_sCluster.IsEmpty ();
+		return pServed->m_bFromReplication || !pServed->m_sCluster.IsEmpty ();
 	}
 
 	// CanSelect is one which supports select ... from (at least full-scan).
@@ -1011,9 +1003,8 @@ inline ServedIndexRefPtr_c GetServed ( const CSphString &sName, GuardedHash_c * 
 }
 
 
-ESphAddIndex ConfigureAndPreloadIndex( const CSphConfigSection& hIndex, const char* sIndexName, bool bJson );
-ESphAddIndex
-AddIndexMT( GuardedHash_c& dPost, const char* szIndexName, const CSphConfigSection& hIndex, bool bReplace = false );
+ESphAddIndex ConfigureAndPreloadIndex( const CSphConfigSection& hIndex, const char* sIndexName, bool bFromReplication );
+ESphAddIndex AddIndexMT( GuardedHash_c& dPost, const char* szIndexName, const CSphConfigSection& hIndex, bool bReplace = false );
 bool PreallocNewIndex( ServedDesc_t& tIdx, const CSphConfigSection* pConfig, const char* szIndexName );
 
 struct AttrUpdateArgs: public CSphAttrUpdateEx
@@ -1050,6 +1041,9 @@ enum SqlStmt_e
 	STMT_CALL, // check.pl STMT_CALL_SNIPPETS STMT_CALL_KEYWORDS
 	STMT_DESCRIBE,
 	STMT_SHOW_TABLES,
+	STMT_CREATE_TABLE,
+	STMT_DROP_TABLE,
+	STMT_SHOW_CREATE_TABLE,
 	STMT_UPDATE,
 	STMT_CREATE_FUNCTION,
 	STMT_DROP_FUNCTION,
@@ -1125,6 +1119,7 @@ struct SqlInsert_t
 	AttrValues_p			m_pVals;
 };
 
+
 /// parsing result
 /// one day, we will start subclassing this
 struct SqlStmt_t
@@ -1178,6 +1173,12 @@ struct SqlStmt_t
 	CSphString				m_sAlterAttr;
 	CSphString				m_sAlterOption;
 	ESphAttr				m_eAlterColType = SPH_ATTR_NONE;
+
+	// CREATE TABLE specific
+	CreateTableSettings_t	m_tCreateTable;
+
+	// DROP TABLE specific
+	bool					m_bIfExists = false;
 
 	// SHOW THREADS specific
 	int						m_iThreadsCols = 0;

@@ -11,8 +11,10 @@
 //
 
 #include "sphinxpq.h"
+#include "fileutils.h"
 #include "icu.h"
 #include "accumulator.h"
+#include "indexsettings.h"
 
 /// protection from concurrent changes during binlog replay
 #ifndef NDEBUG
@@ -103,7 +105,7 @@ public:
 	RtAccum_t * CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) override;
 	ISphTokenizer * CloneIndexingTokenizer() const override { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 	void SaveMeta ( bool bShutdown );
-	bool Truncate ( CSphString & ) override;
+	bool Truncate ( bool AddToBinlog, CSphString & ) override;
 
 	// RT index stub
 	bool MultiQuery ( const CSphQuery *, CSphQueryResult *, int, ISphMatchSorter **, const CSphMultiQueryArgs & ) const override;
@@ -151,6 +153,7 @@ public:
 	void				SetMemorySettings ( const FileAccessSettings_t & ) override {}
 	const FileAccessSettings_t & GetMemorySettings() const override { return g_tDummyFASettings; }
 
+	void				IndexDeleted() override {}
 	void				ProhibitSave() override { m_bSaveDisabled = true; }
 	void				EnableSave() override { m_bSaveDisabled = false; }
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
@@ -2148,10 +2151,10 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath )
 	// load settings
 	ReadSchema ( rdMeta, m_tSchema, uIndexVersion );
 	LoadIndexSettings ( m_tSettings, rdMeta, uIndexVersion );
-	if ( !LoadTokenizerSettings ( rdMeta, tTokenizerSettings, tEmbeddedFiles, m_sLastError ) )
+	if ( !tTokenizerSettings.Load ( rdMeta, tEmbeddedFiles, m_sLastError ) )
 		return false;
 
-	LoadDictionarySettings ( rdMeta, tDictSettings, tEmbeddedFiles, m_sLastWarning );
+	tDictSettings.Load ( rdMeta, tEmbeddedFiles, m_sLastWarning );
 
 	// initialize AOT if needed
 	DWORD uPrevAot = m_tSettings.m_uAotFilterMask;
@@ -2186,7 +2189,7 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath )
 	{
 		FieldFilterRefPtr_c pFieldFilter;
 		CSphFieldFilterSettings tFieldFilterSettings;
-		LoadFieldFilterSettings ( rdMeta, tFieldFilterSettings );
+		tFieldFilterSettings.Load(rdMeta);
 		if ( tFieldFilterSettings.m_dRegexps.GetLength() )
 			pFieldFilter = sphCreateRegexpFilter ( tFieldFilterSettings, m_sLastError );
 
@@ -2245,7 +2248,10 @@ void PercolateIndex_c::SaveMeta ( bool bShutdown )
 	SaveDictionarySettings ( wrMeta, m_pDict, false, m_tSettings.m_iEmbeddedLimit );
 
 	// meta v.6
-	SaveFieldFilterSettings ( wrMeta, m_pFieldFilter );
+	CSphFieldFilterSettings tFieldFilterSettings;
+	if ( m_pFieldFilter.Ptr() )
+		m_pFieldFilter->GetSettings(tFieldFilterSettings);
+	tFieldFilterSettings.Save(wrMeta);
 
 	{
 		PQRefVector_t tStored ( GetStored() );
@@ -2270,7 +2276,7 @@ void PercolateIndex_c::SaveMeta ( bool bShutdown )
 		sphWarning ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)", sMetaNew.cstr(), sMeta.cstr(), errno, strerrorm( errno ) );
 }
 
-bool PercolateIndex_c::Truncate ( CSphString & sError )
+bool PercolateIndex_c::Truncate ( bool /*bBinlogReplay*/, CSphString & sError )
 {
 	ScopedMutex_t tWriterLock ( m_tWriter );
 	PQRefVector_t tEmpty { new PQVector_t() };

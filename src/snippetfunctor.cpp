@@ -345,7 +345,7 @@ TokenFunctorTraits_c::TokenFunctorTraits_c ( ISphTokenizer * pTokenizer, const S
 }
 
 
-void TokenFunctorTraits_c::ResultEmit ( CSphVector<BYTE> & dBuf, const char * pSrc, int iLen, bool bHasPassageMacro, int iPassageId,	const char * pPost, int iPostLen ) const
+void TokenFunctorTraits_c::ResultEmit ( CSphVector<BYTE> & dBuf, const char * pSrc, int iLen, bool bHasPassageMacro, int iPassageId, const char * pPost, int iPostLen ) const
 {
 	dBuf.Append ( pSrc, iLen );
 

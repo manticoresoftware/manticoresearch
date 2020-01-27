@@ -13,6 +13,7 @@
 #include <gtest/gtest.h>
 
 #include "sphinxint.h"
+#include "fileutils.h"
 #include "sphinxutils.h"
 #include "sphinxstem.h"
 

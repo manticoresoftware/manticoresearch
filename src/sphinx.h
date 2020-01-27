@@ -17,6 +17,7 @@
 
 #include "sphinxstd.h"
 #include "sphinxexpr.h" // to remove?
+#include "indexsettings.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -60,9 +61,6 @@ using DocID_t = int64_t;
 const RowID_t INVALID_ROWID = 0xFFFFFFFF;
 #define WORDID_MAX		U64C(0xffffffffffffffff)
 
-typedef uint64_t		SphWordID_t;
-
-STATIC_SIZE_ASSERT ( SphWordID_t, 8 );
 STATIC_SIZE_ASSERT ( DocID_t, 8 );
 STATIC_SIZE_ASSERT ( RowID_t, 4 );
 
@@ -150,11 +148,6 @@ void			sphLockUn ( int iFile );
 
 /// millisecond-precision sleep
 void			sphSleepMsec ( int iMsec );
-
-/// check if file exists and is a readable file
-bool			sphIsReadable ( const char * sFilename, CSphString * pError=NULL );
-bool			sphIsReadable ( const CSphString& sFilename, CSphString * pError = NULL );
-
 
 /// set throttling options
 void			sphSetThrottling ( int iMaxIOps, int iMaxIOSize );
@@ -350,61 +343,6 @@ protected:
 };
 
 /////////////////////////////////////////////////////////////////////////////
-enum
-{
-	// where was TOKENIZER_SBCS=1 once
-	TOKENIZER_UTF8 = 2,
-	TOKENIZER_NGRAM = 3
-};
-
-struct CSphSavedFile
-{
-	CSphString			m_sFilename;
-	SphOffset_t			m_uSize = 0;
-	SphOffset_t			m_uCTime = 0;
-	SphOffset_t			m_uMTime = 0;
-	DWORD				m_uCRC32 = 0;
-};
-
-
-struct CSphEmbeddedFiles
-{
-	bool						m_bEmbeddedSynonyms = false;
-	bool						m_bEmbeddedStopwords = false;
-	bool						m_bEmbeddedWordforms = false;
-	CSphSavedFile				m_tSynonymFile;
-	StrVec_t					m_dSynonyms;
-	CSphVector<CSphSavedFile>	m_dStopwordFiles;
-	CSphVector<SphWordID_t>		m_dStopwords;
-	StrVec_t					m_dWordforms;
-	CSphVector<CSphSavedFile>	m_dWordformFiles;
-	void						Reset();
-};
-
-
-struct CSphTokenizerSettings
-{
-	int					m_iType { TOKENIZER_UTF8 };
-	CSphString			m_sCaseFolding;
-	int					m_iMinWordLen = 1;
-	CSphString			m_sSynonymsFile;
-	CSphString			m_sBoundary;
-	CSphString			m_sIgnoreChars;
-	int					m_iNgramLen = 0;
-	CSphString			m_sNgramChars;
-	CSphString			m_sBlendChars;
-	CSphString			m_sBlendMode;
-};
-
-
-enum ESphBigram
-{
-	SPH_BIGRAM_NONE			= 0,	///< no bigrams
-	SPH_BIGRAM_ALL			= 1,	///< index all word pairs
-	SPH_BIGRAM_FIRSTFREQ	= 2,	///< only index pairs where one of the words is in a frequent words list
-	SPH_BIGRAM_BOTHFREQ		= 3		///< only index pairs where both words are in a frequent words list
-};
-
 
 enum ESphTokenizerClone
 {
@@ -639,25 +577,6 @@ ISphTokenizer *			sphCreateUTF8NgramTokenizer ();
 /////////////////////////////////////////////////////////////////////////////
 // DICTIONARIES
 /////////////////////////////////////////////////////////////////////////////
-
-struct CSphDictSettings
-{
-	CSphString		m_sMorphology;
-	CSphString		m_sMorphFields;
-	CSphString		m_sStopwords;
-	StrVec_t		m_dWordforms;
-	int				m_iMinStemmingLen;
-	bool			m_bWordDict;
-	bool			m_bStopwordsUnstemmed;
-	CSphString		m_sMorphFingerprint;		///< not used for creation; only for a check when loading
-
-	CSphDictSettings ()
-		: m_iMinStemmingLen ( 1 )
-		, m_bWordDict ( true )
-		, m_bStopwordsUnstemmed ( false )
-	{}
-};
-
 
 /// dictionary entry
 /// some of the fields might be unused depending on specific dictionary type
@@ -1377,15 +1296,6 @@ enum ESphAttrSrc
 };
 
 
-/// wordpart processing type
-enum ESphWordpart
-{
-	SPH_WORDPART_WHOLE		= 0,	///< whole-word
-	SPH_WORDPART_PREFIX		= 1,	///< prefix
-	SPH_WORDPART_INFIX		= 2		///< infix
-};
-
-
 /// column unpack format
 enum ESphUnpackFormat
 {
@@ -1413,7 +1323,8 @@ struct CSphColumnInfo
 	enum FieldFlag_e
 	{
 		FIELD_NONE		= 0,
-		FIELD_STORED	= 1<<0
+		FIELD_STORED	= 1<<0,
+		FIELD_INDEXED	= 1<<1
 	};
 
 	CSphString		m_sName;		///< column name
@@ -1432,9 +1343,9 @@ struct CSphColumnInfo
 	ESphAggrFunc	m_eAggrFunc { SPH_AGGR_NONE };	///< aggregate function on top of expression (for GROUP BY)
 	ESphEvalStage	m_eStage { SPH_EVAL_STATIC };///< column evaluation stage (who and how computes this column)
 	bool			m_bPayload = false;
-	bool			m_bFilename = false;		///< column is a file name
-	bool			m_bWeight = false;			///< is a weight column
-	DWORD			m_uFieldFlags = 0;			///< stored/indexed/highlighted etc
+	bool			m_bFilename = false;			///< column is a file name
+	bool			m_bWeight = false;				///< is a weight column
+	DWORD			m_uFieldFlags = FIELD_INDEXED;	///< stored/indexed/highlighted etc
 
 	WORD			m_uNext = 0xFFFF;			///< next in linked list for hash in CSphSchema
 
@@ -1814,27 +1725,6 @@ protected:
 };
 
 
-/// indexing-related source settings
-/// NOTE, newly added fields should be synced with CSphSource::Setup()
-struct CSphSourceSettings
-{
-	int		m_iMinPrefixLen = 0;		///< min indexable prefix (0 means don't index prefixes)
-	int		m_iMinInfixLen = 0;			///< min indexable infix length (0 means don't index infixes)
-	int		m_iMaxSubstringLen = 0;		///< max indexable infix and prefix (0 means don't limit infixes and prefixes)
-	int		m_iBoundaryStep = 0;		///< additional boundary word position increment
-	bool	m_bIndexExactWords = false;	///< exact (non-stemmed) word indexing flag
-	int		m_iOvershortStep = 1;		///< position step on overshort token (default is 1)
-	int		m_iStopwordStep = 1;		///< position step on stopword token (default is 1)
-	bool	m_bIndexSP = false;			///< whether to index sentence and paragraph delimiters
-	bool	m_bIndexFieldLens = false;	///< whether to index field lengths
-
-	StrVec_t m_dPrefixFields;	///< list of prefix fields
-	StrVec_t m_dInfixFields;	///< list of infix fields
-	StrVec_t m_dStoredFields;	///< list of stored fields
-
-	ESphWordpart			GetWordpart ( const char * sField, bool bWordDict );
-};
-
 /// hit vector interface
 /// because specific position type might vary (dword, qword, etc)
 /// but we don't want to template and instantiate everything because of that
@@ -1872,17 +1762,6 @@ public:
 	CSphVector<CSphWordHit> m_dData;
 };
 
-
-struct SphRange_t
-{
-	int m_iStart;
-	int m_iLength;
-};
-
-struct CSphFieldFilterSettings
-{
-	StrVec_t m_dRegexps;
-};
 
 /// field filter
 class ISphFieldFilter : public ISphRefcountedMT
@@ -3193,87 +3072,6 @@ struct CmpPSortersByRandom_fn
 };
 
 
-enum ESphHitless
-{
-	SPH_HITLESS_NONE		= 0,	///< all hits are present
-	SPH_HITLESS_SOME		= 1,	///< some of the hits might be omitted (check the flag bit)
-	SPH_HITLESS_ALL			= 2	///< no hits in this index
-};
-
-
-enum ESphHitFormat
-{
-	SPH_HIT_FORMAT_PLAIN	= 0,	///< all hits are stored in hitlist
-	SPH_HIT_FORMAT_INLINE	= 1	///< hits can be split and inlined into doclist (aka 9-23)
-};
-
-
-enum class Preprocessor_e
-{
-	NONE,			///< no preprocessor
-	ICU				///< ICU chinese preprocessor
-};
-
-
-struct KillListTarget_t
-{
-	enum
-	{
-		USE_KLIST	= 1 << 0,
-		USE_DOCIDS	= 1 << 1
-	};
-
-	CSphString		m_sIndex;
-	DWORD			m_uFlags {USE_KLIST|USE_DOCIDS};
-};
-
-
-enum class Compression_e
-{
-	NONE,
-	LZ4,
-	LZ4HC
-};
-
-
-const DWORD DEFAULT_DOCSTORE_BLOCK = 16384;
-const int DEFAULT_COMPRESSION_LEVEL = 9;
-
-struct DocstoreSettings_t
-{
-	Compression_e	m_eCompression		= Compression_e::LZ4;
-	int				m_iCompressionLevel	= DEFAULT_COMPRESSION_LEVEL;
-	DWORD			m_uBlockSize		= DEFAULT_DOCSTORE_BLOCK;
-};
-
-
-struct CSphIndexSettings : CSphSourceSettings, DocstoreSettings_t
-{
-	ESphHitFormat	m_eHitFormat = SPH_HIT_FORMAT_PLAIN;
-	bool			m_bHtmlStrip = false;
-	CSphString		m_sHtmlIndexAttrs;
-	CSphString		m_sHtmlRemoveElements;
-	CSphString		m_sZones;
-	ESphHitless		m_eHitless = SPH_HITLESS_NONE;
-	CSphString		m_sHitlessFiles;
-	bool			m_bVerbose = false;
-	int				m_iEmbeddedLimit = 0;
-	SphOffset_t		m_tBlobUpdateSpace {0};
-	int				m_iSkiplistBlockSize {32};
-
-	CSphVector<KillListTarget_t> m_dKlistTargets;	///< list of indexes to apply killlist to
-
-	ESphBigram		m_eBigramIndex = SPH_BIGRAM_NONE;
-	CSphString		m_sBigramWords;
-	StrVec_t		m_dBigramWords;
-
-	DWORD			m_uAotFilterMask = 0;			///< lemmatize_XX_all forces us to transform queries on the index level too
-	Preprocessor_e	m_ePreprocessor = Preprocessor_e::NONE;
-
-	CSphString		m_sIndexTokenFilter;	///< indexing time token filter spec string (pretty useless for disk, vital for RT)
-};
-
-
 /// forward refs to internal searcher classes
 class ISphQword;
 class ISphQwordSetup;
@@ -3439,9 +3237,13 @@ private:
 
 class DocstoreFields_i;
 void SetupDocstoreFields ( DocstoreFields_i & tFields, const CSphSchema & tSchema );
+bool CheckStoredFields ( const CSphSchema & tSchema, const CSphIndexSettings & tSettings, CSphString & sError );
 
 class DiskIndexQwordTraits_c;
 DiskIndexQwordTraits_c * sphCreateDiskIndexQword ( bool bInlineHits );
+
+/// returns ranker name as string
+const char * sphGetRankerName ( ESphRankMode eRanker );
 
 struct DocstoreDoc_t
 {
@@ -3592,8 +3394,8 @@ public:
 	virtual bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError ) = 0;
 
 	virtual void				FlushDeadRowMap ( bool bWaitComplete ) const {};
-	virtual bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, CSphVector<KillListTarget_t> & dTargets, CSphString & sError ) const { return true; }
-	virtual bool				AlterKillListTarget ( CSphVector<KillListTarget_t> & dTargets, CSphString & sError ) { return false; }
+	virtual bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, KillListTargets_t & tTargets, CSphString & sError ) const { return true; }
+	virtual bool				AlterKillListTarget ( KillListTargets_t & tTargets, CSphString & sError ) { return false; }
 	virtual void				KillExistingDocids ( CSphIndex * pTarget ) {}
 	int							KillMulti ( const VecTraits_T<DocID_t> & dKlist ) override { return 0; }
 

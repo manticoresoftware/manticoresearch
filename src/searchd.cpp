@@ -12,6 +12,7 @@
 
 #include "sphinx.h"
 #include "sphinxutils.h"
+#include "fileutils.h"
 #include "sphinxexcerpt.h"
 #include "sphinxrt.h"
 #include "sphinxpq.h"
@@ -31,6 +32,7 @@
 #include "docstore.h"
 #include "searchdssl.h"
 #include "searchdexpr.h"
+#include "indexsettings.h"
 
 // services
 #include "taskping.h"
@@ -721,7 +723,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	bAttrsSaveOk = FinallySaveIndexes();
 
 	// right before unlock loop
-	JsonDoneConfig();
+	SaveConfigInt();
 
 	// unlock indexes and release locks if needed
 	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); )
@@ -6956,9 +6958,9 @@ static const char * g_dSqlStmts[] =
 {
 	"parse_error", "dummy", "select", "insert", "replace", "delete", "show_warnings",
 	"show_status", "show_meta", "set", "begin", "commit", "rollback", "call",
-	"desc", "show_tables", "update", "create_func", "drop_func", "attach_index",
-	"flush_rtindex", "flush_ramchunk", "show_variables", "truncate_rtindex", "select_sysvar",
-	"show_collation", "show_character_set", "optimize_index", "show_agent_status",
+	"desc", "show_tables", "create_table", "drop_table", "show_create_table", "update", "create_func",
+	"drop_func", "attach_index", "flush_rtindex", "flush_ramchunk", "show_variables", "truncate_rtindex",
+	"select_sysvar", "show_collation", "show_character_set", "optimize_index", "show_agent_status",
 	"show_index_status", "show_profile", "alter_add", "alter_drop", "show_plan",
 	"select_dual", "show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
 	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
@@ -7053,7 +7055,7 @@ enum class StrList_e {
 	STR_ALL    /// 'hello world' OP ('world', 'hello') true, OP ('a','world','hello') false
 };
 
-struct SqlParser_c : ISphNoncopyable
+class SqlParser_c : ISphNoncopyable
 {
 public:
 	void *			m_pScanner = nullptr;
@@ -7061,19 +7063,16 @@ public:
 	const char *	m_pLastTokenStart = nullptr;
 	CSphString *	m_pParseError = nullptr;
 	CSphQuery *		m_pQuery = nullptr;
-	bool			m_bGotQuery;
 	SqlStmt_t *		m_pStmt = nullptr;
-	CSphVector<SqlStmt_t> & m_dStmt;
 	ESphCollation	m_eCollation;
-	BYTE			m_uSyntaxFlags = 0;
-
+	
 	CSphVector<FilterTreeItem_t> m_dFilterTree;
 	CSphVector<int>				m_dFiltersPerStmt;
 	bool						m_bGotFilterOr = false;
 	CSphString		m_sErrorHeader;
 
 public:
-	explicit		SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation );
+					SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation );
 
 	void			PushQuery ();
 
@@ -7089,46 +7088,13 @@ public:
 	void			AliasLastItem ( SqlNode_t * pAlias );
 
 	/// called on transition from an outer select to inner select
-	void ResetSelect()
-	{
-		if ( m_pQuery )
-			m_pQuery->m_iSQLSelectStart = m_pQuery->m_iSQLSelectEnd = -1;
-	}
+	void			ResetSelect();
 
 	/// called every time we capture a select list item
 	/// (i think there should be a simpler way to track these though)
-	void SetSelect ( SqlNode_t * pStart, SqlNode_t * pEnd=NULL )
-	{
-		if ( m_pQuery )
-		{
-			if ( pStart && ( m_pQuery->m_iSQLSelectStart<0 || m_pQuery->m_iSQLSelectStart>pStart->m_iStart ) )
-				m_pQuery->m_iSQLSelectStart = pStart->m_iStart;
-			if ( !pEnd )
-				pEnd = pStart;
-			if ( pEnd && ( m_pQuery->m_iSQLSelectEnd<0 || m_pQuery->m_iSQLSelectEnd<pEnd->m_iEnd ) )
-				m_pQuery->m_iSQLSelectEnd = pEnd->m_iEnd;
-		}
-	}
-
-	inline CSphString & ToString ( CSphString & sRes, const SqlNode_t & tNode ) const
-	{
-		if ( tNode.m_iType>=0 )
-			sRes.SetBinary ( m_pBuf + tNode.m_iStart, tNode.m_iEnd - tNode.m_iStart );
-		else switch ( tNode.m_iType )
-		{
-			case SPHINXQL_TOK_COUNT:	sRes = "@count"; break;
-			case SPHINXQL_TOK_GROUPBY:	sRes = "@groupby"; break;
-			case SPHINXQL_TOK_WEIGHT:	sRes = "@weight"; break;
-			default:					assert ( 0 && "INTERNAL ERROR: unknown parser ident code" );
-		}
-		return sRes;
-	}
-
-	inline CSphString ToStringUnescape ( const SqlNode_t & tNode ) const
-	{
-		assert ( tNode.m_iType>=0 );
-		return SqlUnescape ( m_pBuf + tNode.m_iStart, tNode.m_iEnd - tNode.m_iStart );
-	}
+	void			SetSelect ( SqlNode_t * pStart, SqlNode_t * pEnd=NULL );
+	CSphString &	ToString ( CSphString & sRes, const SqlNode_t & tNode ) const;
+	CSphString		ToStringUnescape ( const SqlNode_t & tNode ) const;
 
 	bool			AddSchemaItem ( SqlNode_t * pNode );
 	bool			SetMatch ( const SqlNode_t & tValue );
@@ -7148,27 +7114,21 @@ public:
 	bool					AddNullFilter ( const SqlNode_t & tCol, bool bEqualsNull );
 	void			AddHaving ();
 
+	void			AddFieldFlag ( DWORD uFlag );
+	void			AddCreateTableCol ( const SqlNode_t & tCol, ESphAttr eAttrType );
+	void			AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits );
+	void			AddCreateTableField ( const SqlNode_t & tCol );
+	void			AddCreateTableOption ( const SqlNode_t & tName, const SqlNode_t & tValue );
+
 	void			FilterGroup ( SqlNode_t & tNode, SqlNode_t & tExpr );
 	void			FilterOr ( SqlNode_t & tNode, const SqlNode_t & tLeft, const SqlNode_t & tRight );
 	void			FilterAnd ( SqlNode_t & tNode, const SqlNode_t & tLeft, const SqlNode_t & tRight );
 	void			SetOp ( SqlNode_t & tNode );
 
-	inline bool		SetOldSyntax()
-	{
-		m_uSyntaxFlags |= 1;
-		return IsGoodSyntax ();
-	}
-
-	inline bool		SetNewSyntax()
-	{
-		m_uSyntaxFlags |= 2;
-		return IsGoodSyntax ();
-	}
-	bool IsGoodSyntax ();
-	inline bool IsDeprecatedSyntax () const
-	{
-		return m_uSyntaxFlags & 1;
-	}
+	bool			SetOldSyntax();
+	bool			SetNewSyntax();
+	bool			IsGoodSyntax();
+	bool			IsDeprecatedSyntax() const;
 
 	int							AllocNamedVec ();
 	CSphVector<CSphNamedInt> &	GetNamedVec ( int iIndex );
@@ -7189,14 +7149,17 @@ public:
 	void						JoinClusterAt ( const SqlNode_t & tAt );
 
 private:
+	CSphVector<SqlStmt_t> &		m_dStmt;
+	bool						m_bGotQuery = false;
+	BYTE						m_uSyntaxFlags = 0;
+	DWORD						m_uFieldFlags = 0;
+	bool						m_bNamedVecBusy = false;
+	CSphVector<CSphNamedInt>	m_dNamedVec;
+
 	void						AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
 	void						GenericStatement ( SqlNode_t * pNode, SqlStmt_e iStmt );
 
 	bool						CheckInteger ( const CSphString & sOpt, const CSphString & sVal ) const;
-
-protected:
-	bool						m_bNamedVecBusy = false;
-	CSphVector<CSphNamedInt>	m_dNamedVec;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -7365,9 +7328,9 @@ public:
 };
 
 SqlParser_c::SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation )
-	: m_dStmt ( dStmt )
-	, m_eCollation ( eCollation )
+	: m_eCollation ( eCollation )
 	, m_sErrorHeader ( "sphinxql:" )
+	, m_dStmt ( dStmt )
 {
 	assert ( !m_dStmt.GetLength() );
 	PushQuery ();
@@ -7760,6 +7723,47 @@ void SqlParser_c::AliasLastItem ( SqlNode_t * pAlias )
 	}
 }
 
+void SqlParser_c::ResetSelect()
+{
+	if ( m_pQuery )
+		m_pQuery->m_iSQLSelectStart = m_pQuery->m_iSQLSelectEnd = -1;
+}
+
+void SqlParser_c::SetSelect ( SqlNode_t * pStart, SqlNode_t * pEnd )
+{
+	if ( m_pQuery )
+	{
+		if ( pStart && ( m_pQuery->m_iSQLSelectStart<0 || m_pQuery->m_iSQLSelectStart>pStart->m_iStart ) )
+			m_pQuery->m_iSQLSelectStart = pStart->m_iStart;
+		if ( !pEnd )
+			pEnd = pStart;
+		if ( pEnd && ( m_pQuery->m_iSQLSelectEnd<0 || m_pQuery->m_iSQLSelectEnd<pEnd->m_iEnd ) )
+			m_pQuery->m_iSQLSelectEnd = pEnd->m_iEnd;
+	}
+}
+
+CSphString & SqlParser_c::ToString ( CSphString & sRes, const SqlNode_t & tNode ) const
+{
+	if ( tNode.m_iType>=0 )
+		sRes.SetBinary ( m_pBuf + tNode.m_iStart, tNode.m_iEnd - tNode.m_iStart );
+	else switch ( tNode.m_iType )
+	{
+	case SPHINXQL_TOK_COUNT:	sRes = "@count"; break;
+	case SPHINXQL_TOK_GROUPBY:	sRes = "@groupby"; break;
+	case SPHINXQL_TOK_WEIGHT:	sRes = "@weight"; break;
+	default:					assert ( 0 && "INTERNAL ERROR: unknown parser ident code" );
+	}
+	return sRes;
+}
+
+
+CSphString SqlParser_c::ToStringUnescape ( const SqlNode_t & tNode ) const
+{
+	assert ( tNode.m_iType>=0 );
+	return SqlUnescape ( m_pBuf + tNode.m_iStart, tNode.m_iEnd - tNode.m_iStart );
+}
+
+
 void SqlParser_c::AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd )
 {
 	if ( pStart && pEnd )
@@ -8087,7 +8091,60 @@ void SqlParser_c::AddHaving ()
 }
 
 
-bool SqlParser_c::IsGoodSyntax ()
+void SqlParser_c::AddFieldFlag ( DWORD uFlag )
+{
+	m_uFieldFlags |= uFlag;
+}
+
+
+void SqlParser_c::AddCreateTableCol ( const SqlNode_t & tCol, ESphAttr eAttrType )
+{
+	assert(m_pStmt);
+	CSphColumnInfo & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
+	ToString ( tAttr.m_sName, tCol );
+	tAttr.m_sName.ToLower();
+	tAttr.m_eAttrType = eAttrType;
+}
+
+
+void SqlParser_c::AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits )
+{
+	assert(m_pStmt);
+	CSphColumnInfo & tAttr = m_pStmt->m_tCreateTable.m_dAttrs.Add();
+	ToString ( tAttr.m_sName, tCol );
+	tAttr.m_sName.ToLower();
+	tAttr.m_eAttrType = SPH_ATTR_INTEGER;
+	tAttr.m_tLocator.m_iBitCount = iBits;
+}
+
+
+void SqlParser_c::AddCreateTableField ( const SqlNode_t & tCol )
+{
+	assert(m_pStmt);
+	CSphColumnInfo & tField = m_pStmt->m_tCreateTable.m_dFields.Add();
+	ToString ( tField.m_sName, tCol );
+	tField.m_sName.ToLower();
+	tField.m_uFieldFlags = m_uFieldFlags;
+	m_uFieldFlags = 0;
+
+	if ( !tField.m_uFieldFlags )
+		tField.m_uFieldFlags = CSphColumnInfo::FIELD_INDEXED | CSphColumnInfo::FIELD_STORED;
+}
+
+
+void SqlParser_c::AddCreateTableOption ( const SqlNode_t & tName, const SqlNode_t & tValue )
+{
+	assert(m_pStmt);
+	NameValueStr_t & tOpt = m_pStmt->m_tCreateTable.m_dOpts.Add();
+
+	ToString ( tOpt.m_sName, tName );
+	tOpt.m_sValue = ToStringUnescape(tValue);
+	tOpt.m_sName.ToLower();
+	tOpt.m_sValue.ToLower();
+}
+
+
+bool SqlParser_c::IsGoodSyntax()
 {
 	if ( ( m_uSyntaxFlags & 3 )!=3 )
 		return true;
@@ -8136,6 +8193,27 @@ void SqlParser_c::SetOp ( SqlNode_t & tNode )
 {
 	tNode.m_iParsedOp = m_dFilterTree.GetLength() - 1;
 }
+
+
+bool SqlParser_c::SetOldSyntax()
+{
+	m_uSyntaxFlags |= 1;
+	return IsGoodSyntax ();
+}
+
+
+bool SqlParser_c::SetNewSyntax()
+{
+	m_uSyntaxFlags |= 2;
+	return IsGoodSyntax();
+}
+
+
+bool SqlParser_c::IsDeprecatedSyntax() const
+{
+	return m_uSyntaxFlags & 1;
+}
+
 
 void SqlParser_c::FilterGroup ( SqlNode_t & tNode, SqlNode_t & tExpr )
 {
@@ -13274,7 +13352,14 @@ void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 
 		for ( int i = 0; i<tSchema.GetFieldsCount (); i++ )
 		{
-			CSphString sProperties = ( tSchema.GetField(i).m_uFieldFlags & CSphColumnInfo::FIELD_STORED ) ? "stored" : "";
+			StringBuilder_c sProperties(" ");
+			DWORD uFlags = tSchema.GetField(i).m_uFieldFlags;
+			if ( uFlags & CSphColumnInfo::FIELD_INDEXED )
+				sProperties << "indexed";
+
+			if ( uFlags & CSphColumnInfo::FIELD_STORED )
+				sProperties << "stored";
+
 			dCondOut.MatchData3 ( tSchema.GetFieldName(i), "field", sProperties.cstr() );
 		}
 
@@ -13394,6 +13479,141 @@ void HandleMysqlShowTables ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 		dCondOut.MatchData2 ( dPair.m_sName.cstr (), sTypes[dPair.m_iValue] );
 	tOut.Eof();
 }
+
+
+static bool CheckAttrs ( const VecTraits_T<CSphColumnInfo> & dAttrs, CSphString & sError )
+{
+	ARRAY_FOREACH ( i, dAttrs )
+	{
+		const CSphString & sName = dAttrs[i].m_sName;
+		if ( CSphSchema::IsReserved ( sName.cstr() ) || sphIsInternalAttr ( sName ) )
+		{
+			sError.SetSprintf ( "attribute name '%s' is a reserved keyword", sName.cstr() );
+			return false;
+		}
+
+		for ( int j = i+1; j < dAttrs.GetLength(); j++ )
+			if ( dAttrs[j].m_sName==sName )
+			{
+				sError.SetSprintf ( "duplicate attribute name '%s'", sName.cstr() );
+				return false;
+			}
+	}
+
+	return true;
+}
+
+
+static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
+{
+	if ( g_pLocalIndexes->Contains ( tStmt.m_sIndex ) || g_pDistIndexes->Contains ( tStmt.m_sIndex ) )
+	{
+		if ( tStmt.m_tCreateTable.m_bIfNotExists )
+			return true;
+		else
+		{
+			sError.SetSprintf ( "index '%s' already exists", tStmt.m_sIndex.cstr() );
+			return false;
+		}
+	}
+
+	if ( CSphSchema::IsReserved ( tStmt.m_sIndex.cstr() ) )
+	{
+		sError.SetSprintf ( "'%s' is a reserved keyword", tStmt.m_sIndex.cstr() );
+		return false;
+	}
+
+	if ( !CheckAttrs ( tStmt.m_tCreateTable.m_dAttrs, sError ) || !CheckAttrs ( tStmt.m_tCreateTable.m_dFields, sError ) )
+		return false;
+
+	// cross-checks attrs and fields
+	for ( const auto & i : tStmt.m_tCreateTable.m_dAttrs )
+		for ( const auto & j : tStmt.m_tCreateTable.m_dFields )
+			if ( i.m_sName==j.m_sName )
+			{
+				sError.SetSprintf ( "duplicate attribute name '%s'", i.m_sName.cstr() );
+				return false;
+			}
+
+	return true;
+}
+
+
+static void HandleMysqlCreateTable ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+{
+	SearchFailuresLog_c dErrors;
+	CSphString sError;
+
+	if ( !IsConfigless() )
+	{
+		sError = "CREATE TABLE require data_dir to be set in the config file";
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	if ( !CheckCreateTable ( tStmt, sError ) )
+	{
+		sError.SetSprintf ( "index '%s': CREATE TABLE failed: %s", tStmt.m_sIndex.cstr(), sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	if ( !CreateNewIndexInt ( tStmt.m_sIndex, tStmt.m_tCreateTable, false, sError ) )
+	{
+		sError.SetSprintf ( "error adding index '%s': '%s'", tStmt.m_sIndex.cstr(), sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	tOut.Ok();
+}
+
+
+static void HandleMysqlDropTable ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+{
+	CSphString sError;
+
+	if ( !IsConfigless() )
+	{
+		sError = "CREATE TABLE require data_dir to be set in the config file";
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	if ( !DropIndexInt ( tStmt.m_sIndex.cstr(), tStmt.m_bIfExists, false, sError ) )
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+	else
+		tOut.Ok();
+}
+
+
+void HandleMysqlShowCreateTable ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+{
+	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
+	if ( !pServed || !pServed->m_pIndex )
+	{
+		CSphString sError;
+		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_NO_SUCH_TABLE );
+		return;
+	}
+
+	if ( !pServed->m_pIndex->IsRT() )
+	{
+		CSphString sError;
+		sError.SetSprintf ( "index '%s' is not RT", tStmt.m_sIndex.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_NO_SUCH_TABLE );
+		return;
+	}
+
+	// result set header packet
+	tOut.HeadTuplet ( "Table", "Create Table" );
+
+	CSphString sCreateTable = BuildCreateTable ( tStmt.m_sIndex, ((RtIndex_i*)pServed->m_pIndex)->GetInternalSchema() );
+	tOut.DataTuplet ( tStmt.m_sIndex.cstr(), sCreateTable.cstr() );
+	tOut.Eof();
+}
+
 
 // MySQL Workbench (and maybe other clients) crashes without it
 void HandleMysqlShowDatabases ( SqlRowBuffer_c & tOut, SqlStmt_t & )
@@ -15798,101 +16018,6 @@ void HandleMysqlShowIndexStatus ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt
 }
 
 
-void DumpKey ( StringBuilder_c & tBuf, const char * sKey, const char * sVal, bool bCond )
-{
-	if ( bCond )
-		tBuf << sKey << " = " << sVal << "\n";
-}
-
-
-void DumpKey ( StringBuilder_c & tBuf, const char * sKey, int iVal, bool bCond )
-{
-	if ( bCond )
-		tBuf.Appendf ( "%s = %d\n", sKey, iVal );
-}
-
-
-void DumpIndexSettings ( StringBuilder_c & tBuf, CSphIndex * pIndex )
-{
-	const CSphIndexSettings & tSettings = pIndex->GetSettings();
-	DumpKey ( tBuf, "min_prefix_len",		tSettings.m_iMinPrefixLen,				tSettings.m_iMinPrefixLen!=0 );
-	DumpKey ( tBuf, "min_infix_len",		tSettings.m_iMinInfixLen,				tSettings.m_iMinInfixLen!=0 );
-	DumpKey ( tBuf, "max_substring_len",	tSettings.m_iMaxSubstringLen,			tSettings.m_iMaxSubstringLen!=0 );
-	DumpKey ( tBuf, "index_exact_words",	1,										tSettings.m_bIndexExactWords );
-	DumpKey ( tBuf, "html_strip",			1,										tSettings.m_bHtmlStrip );
-	DumpKey ( tBuf, "html_index_attrs",		tSettings.m_sHtmlIndexAttrs.cstr(),		!tSettings.m_sHtmlIndexAttrs.IsEmpty() );
-	DumpKey ( tBuf, "html_remove_elements", tSettings.m_sHtmlRemoveElements.cstr(), !tSettings.m_sHtmlRemoveElements.IsEmpty() );
-	DumpKey ( tBuf, "index_zones",			tSettings.m_sZones.cstr(),				!tSettings.m_sZones.IsEmpty() );
-	DumpKey ( tBuf, "index_field_lengths",	1,										tSettings.m_bIndexFieldLens );
-	DumpKey ( tBuf, "index_sp",				1,										tSettings.m_bIndexSP );
-	DumpKey ( tBuf, "phrase_boundary_step",	tSettings.m_iBoundaryStep,				tSettings.m_iBoundaryStep!=0 );
-	DumpKey ( tBuf, "stopword_step",		tSettings.m_iStopwordStep,				tSettings.m_iStopwordStep!=1 );
-	DumpKey ( tBuf, "overshort_step",		tSettings.m_iOvershortStep,				tSettings.m_iOvershortStep!=1 );
-	DumpKey ( tBuf, "bigram_index", sphBigramName ( tSettings.m_eBigramIndex ), tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE );
-	DumpKey ( tBuf, "bigram_freq_words",	tSettings.m_sBigramWords.cstr(),		!tSettings.m_sBigramWords.IsEmpty() );
-	DumpKey ( tBuf, "index_token_filter",	tSettings.m_sIndexTokenFilter.cstr(),	!tSettings.m_sIndexTokenFilter.IsEmpty() );
-	CSphFieldFilterSettings tFieldFilter;
-	pIndex->GetFieldFilterSettings ( tFieldFilter );
-	ARRAY_FOREACH ( i, tFieldFilter.m_dRegexps )
-		DumpKey ( tBuf, "regexp_filter",	tFieldFilter.m_dRegexps[i].cstr(),		!tFieldFilter.m_dRegexps[i].IsEmpty() );
-
-	CSphVector<KillListTarget_t> dKlistTargets;
-	CSphString sError;
-	if ( pIndex->LoadKillList ( nullptr, dKlistTargets, sError ) )
-	{
-		for ( const auto & tTarget : dKlistTargets )
-		{
-			CSphString sTarget, sFlags;
-
-			DWORD uMask = KillListTarget_t::USE_KLIST | KillListTarget_t::USE_DOCIDS;
-			if ( (tTarget.m_uFlags & uMask) != uMask )
-			{
-				if ( tTarget.m_uFlags & KillListTarget_t::USE_KLIST )
-					sFlags=":kl";
-
-				if ( tTarget.m_uFlags & KillListTarget_t::USE_DOCIDS )
-					sFlags=":id";
-			} else
-				sFlags = "";
-
-			sTarget.SetSprintf ( "%s%s", tTarget.m_sIndex.cstr(), sFlags.cstr() );
-			DumpKey ( tBuf, "killlist_target",		sTarget.cstr(),						true );
-		}
-	}
-
-	if ( pIndex->GetTokenizer() )
-	{
-		const CSphTokenizerSettings & tTokSettings = pIndex->GetTokenizer()->GetSettings();
-		DumpKey ( tBuf, "charset_type",		( tTokSettings.m_iType==TOKENIZER_UTF8 || tTokSettings.m_iType==TOKENIZER_NGRAM )
-											? "utf-8"
-											: "unknown tokenizer (deprecated sbcs?)", true );
-		DumpKey ( tBuf, "charset_table",	tTokSettings.m_sCaseFolding.cstr(),		!tTokSettings.m_sCaseFolding.IsEmpty() );
-		DumpKey ( tBuf, "min_word_len",		tTokSettings.m_iMinWordLen,				tTokSettings.m_iMinWordLen>1 );
-		DumpKey ( tBuf, "ngram_len",		tTokSettings.m_iNgramLen,				tTokSettings.m_iNgramLen && !tTokSettings.m_sNgramChars.IsEmpty() );
-		DumpKey ( tBuf, "ngram_chars",		tTokSettings.m_sNgramChars.cstr(),		tTokSettings.m_iNgramLen && !tTokSettings.m_sNgramChars.IsEmpty() );
-		DumpKey ( tBuf, "exceptions",		tTokSettings.m_sSynonymsFile.cstr(),	!tTokSettings.m_sSynonymsFile.IsEmpty() );
-		DumpKey ( tBuf, "phrase_boundary",	tTokSettings.m_sBoundary.cstr(),		!tTokSettings.m_sBoundary.IsEmpty() );
-		DumpKey ( tBuf, "ignore_chars",		tTokSettings.m_sIgnoreChars.cstr(),		!tTokSettings.m_sIgnoreChars.IsEmpty() );
-		DumpKey ( tBuf, "blend_chars",		tTokSettings.m_sBlendChars.cstr(),		!tTokSettings.m_sBlendChars.IsEmpty() );
-		DumpKey ( tBuf, "blend_mode",		tTokSettings.m_sBlendMode.cstr(),		!tTokSettings.m_sBlendMode.IsEmpty() );
-	}
-
-	if ( pIndex->GetDictionary() )
-	{
-		const CSphDictSettings & tDictSettings = pIndex->GetDictionary()->GetSettings();
-		StringBuilder_c tWordforms;
-		for ( const auto& dWordform : tDictSettings.m_dWordforms )
-			tWordforms << " " << dWordform;
-		DumpKey ( tBuf, "dict",				"keywords",								tDictSettings.m_bWordDict );
-		DumpKey ( tBuf, "morphology",		tDictSettings.m_sMorphology.cstr(),		!tDictSettings.m_sMorphology.IsEmpty() );
-		DumpKey ( tBuf, "stopwords",		tDictSettings.m_sStopwords.cstr (),		!tDictSettings.m_sStopwords.IsEmpty() );
-		DumpKey ( tBuf, "wordforms",		tWordforms.cstr()+1,					tDictSettings.m_dWordforms.GetLength()>0 );
-		DumpKey ( tBuf, "min_stemming_len",	tDictSettings.m_iMinStemmingLen,		tDictSettings.m_iMinStemmingLen>1 );
-		DumpKey ( tBuf, "stopwords_unstemmed", 1,									tDictSettings.m_bStopwordsUnstemmed );
-	}
-}
-
-
 void HandleMysqlShowIndexSettings ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
 	CSphString sError;
@@ -15912,9 +16037,27 @@ void HandleMysqlShowIndexSettings ( SqlRowBuffer_c & tOut, const SqlStmt_t & tSt
 
 	tOut.HeadTuplet ( "Variable_name", "Value" );
 
-	StringBuilder_c sBuf;
-	DumpIndexSettings ( sBuf, pIndex );
-	tOut.DataTuplet ( "settings", sBuf.cstr() );
+	StringBuilder_c tBuf;
+
+	pIndex->GetSettings().Dump(tBuf);
+
+	CSphFieldFilterSettings tFieldFilter;
+	pIndex->GetFieldFilterSettings ( tFieldFilter );
+	tFieldFilter.Dump(tBuf);
+
+	KillListTargets_t tKlistTargets;
+	if ( !pIndex->LoadKillList ( nullptr, tKlistTargets, sError ) )
+		tKlistTargets.m_dTargets.Reset();
+
+	tKlistTargets.Dump(tBuf);
+
+	if ( pIndex->GetTokenizer() )
+		pIndex->GetTokenizer()->GetSettings().Dump(tBuf);
+
+	if ( pIndex->GetDictionary() )
+		pIndex->GetDictionary()->GetSettings().Dump(tBuf);
+
+	tOut.DataTuplet ( "settings", tBuf.cstr() );
 
 	tOut.Eof();
 }
@@ -16113,17 +16256,23 @@ bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSettings & t
 	}
 
 	const CSphConfigSection & hIndex = hConf["index"][sIndex];
-	sphConfTokenizer ( hIndex, tSettings.m_tTokenizer );
-	sphConfDictionary ( hIndex, tSettings.m_tDict );
-	sphConfFieldFilter ( hIndex, tSettings.m_tFieldFilter, sError );
+	CSphString sWarning;
+
+	// fixme: report warnings
+	tSettings.m_tTokenizer.Setup ( hIndex, sWarning );
+	tSettings.m_tDict.Setup ( hIndex, sWarning );
+	tSettings.m_tFieldFilter.Setup ( hIndex, sWarning );
 
 	sphRTSchemaConfigure ( hIndex, tSettings.m_tSchema, sError, true );
 
-	if ( !sphConfIndex ( hIndex, tSettings.m_tIndex, sIndex.cstr(), &tSettings.m_tSchema, sError ) )
+	if ( !tSettings.m_tIndex.Setup ( hIndex, sIndex.cstr(), sWarning, sError ) )
 	{
 		sError.SetSprintf ( "'%s' failed to parse index settings, error '%s'", sIndex.cstr(), sError.cstr() );
 		return false;
 	}
+
+	if ( !CheckStoredFields ( tSettings.m_tSchema, tSettings.m_tIndex, sError ) )
+		return false;
 
 	return true;
 }
@@ -16191,8 +16340,8 @@ static void HandleMysqlAlterKlist ( SqlRowBuffer_c & tOut, const SqlStmt_t & tSt
 
 	CSphString sError;
 
-	CSphVector<KillListTarget_t> dNewTargets;
-	if ( !ParseKillListTargets ( tStmt.m_sAlterOption, dNewTargets, tStmt.m_sIndex.cstr(), sError ) )
+	KillListTargets_t tNewTargets;
+	if ( !tNewTargets.Parse ( tStmt.m_sAlterOption, tStmt.m_sIndex.cstr(), sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
@@ -16217,7 +16366,7 @@ static void HandleMysqlAlterKlist ( SqlRowBuffer_c & tOut, const SqlStmt_t & tSt
 		return;
 	}
 
-	if ( !pWriteLocked->m_pIndex->AlterKillListTarget ( dNewTargets, sError ) )
+	if ( !pWriteLocked->m_pIndex->AlterKillListTarget ( tNewTargets, sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
@@ -16629,6 +16778,18 @@ public:
 
 		case STMT_SHOW_TABLES:
 			HandleMysqlShowTables ( tOut, *pStmt );
+			return true;
+
+		case STMT_CREATE_TABLE:
+			HandleMysqlCreateTable ( tOut, *pStmt );
+			return true;
+
+		case STMT_DROP_TABLE:
+			HandleMysqlDropTable ( tOut, *pStmt );
+			return true;
+
+		case STMT_SHOW_CREATE_TABLE:
+			HandleMysqlShowCreateTable ( tOut, *pStmt );
 			return true;
 
 		case STMT_UPDATE:
@@ -17224,17 +17385,17 @@ void HandleClient ( Proto_e eProto, int iSock, ThdDesc_t & tThd ) REQUIRES (Hand
 static bool ApplyIndexKillList ( CSphIndex * pIndex, CSphString & sWarning, CSphString & sError, bool bShowMessage )
 {
 	CSphFixedVector<DocID_t> dKillList(0);
-	CSphVector<KillListTarget_t> dTargets;
-	if ( !pIndex->LoadKillList ( &dKillList, dTargets, sError ) )
+	KillListTargets_t tTargets;
+	if ( !pIndex->LoadKillList ( &dKillList, tTargets, sError ) )
 		return false;
 
-	if ( !dTargets.GetLength() )
+	if ( !tTargets.m_dTargets.GetLength() )
 		return true;
 
 	if ( bShowMessage )
 		sphInfo ( "applying killlist of index '%s'", pIndex->GetName() );
 
-	for ( const auto & tIndex : dTargets )
+	for ( const auto & tIndex : tTargets.m_dTargets )
 	{
 		// just in case; otherwise we'll be rlocking an already rlocked index
 		if ( tIndex.m_sIndex==pIndex->GetName() )
@@ -17267,7 +17428,7 @@ bool ApplyKillListsTo ( ServedDesc_t & tLockedServed, CSphString & sError )
 {
 	CSphIndex * pKillListTarget = tLockedServed.m_pIndex;
 
-	CSphVector<KillListTarget_t> dTargets;
+	KillListTargets_t tTargets;
 
 	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); )
 	{
@@ -17280,15 +17441,15 @@ bool ApplyKillListsTo ( ServedDesc_t & tLockedServed, CSphString & sError )
 
 		CSphIndex * pIndexWithKillList = tServedWithKlist->m_pIndex;
 		CSphFixedVector<DocID_t> dKillList(0);
-		dTargets.Resize(0);
-		if ( !pIndexWithKillList->LoadKillList ( &dKillList, dTargets, sError ) )
+		tTargets.m_dTargets.Resize(0);
+		if ( !pIndexWithKillList->LoadKillList ( &dKillList, tTargets, sError ) )
 			return false;
 
 		if ( !dKillList.GetLength() )
 			continue;
 
 		// if this index has 'our' index as its killlist_target, apply the killlist
-		for ( const auto & tIndex : dTargets )
+		for ( const auto & tIndex : tTargets.m_dTargets )
 			if ( tIndex.m_sIndex==tLockedServed.m_pIndex->GetName() )
 			{
 				if ( tIndex.m_uFlags & KillListTarget_t::USE_KLIST )
@@ -18201,9 +18362,19 @@ static bool ConfigureRTPercolate (
 
 	// pick config settings
 	// they should be overriden later by Preload() if needed
-	if ( !sphConfIndex ( hIndex, tSettings, szIndexName, &tSchema, sError ) )
+	CSphString sWarning;
+	if ( !tSettings.Setup ( hIndex, szIndexName, sWarning, sError ) )
 	{
-		sphWarning ( "ERROR: index '%s': %s - NOT SERVING", szIndexName, sError.cstr () );
+		sphWarning ( "ERROR: index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
+		return false;
+	}
+
+	if ( !sWarning.IsEmpty() )
+		sphWarning ( "WARNING: index '%s': %s", szIndexName, sWarning.cstr() );
+
+	if ( !CheckStoredFields ( tSchema, tSettings, sError ) )
+	{
+		sphWarning ( "ERROR: index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
 		return false;
 	}
 
@@ -18215,15 +18386,10 @@ static bool ConfigureRTPercolate (
 		// SENTENCE indexing w\o stripper is valid combination
 		if ( *sIndexZones )
 		{
-			sphWarning ( "ERROR: index '%s': has index_sp=%d, index_zones='%s' "
-				"but disabled html_strip - NOT SERVING",
-				szIndexName, iIndexSP, sIndexZones );
+			sphWarning ( "ERROR: index '%s': has index_sp=%d, index_zones='%s' but disabled html_strip - NOT SERVING", szIndexName, iIndexSP, sIndexZones );
 			return false;
 		} else
-		{
-			sphWarning ( "index '%s': has index_sp=%d but disabled html_strip - PARAGRAPH unavailable",
-				szIndexName, iIndexSP );
-		}
+			sphWarning ( "index '%s': has index_sp=%d but disabled html_strip - PARAGRAPH unavailable", szIndexName, iIndexSP );
 	}
 
 	// upgrading schema to store field lengths
@@ -18283,8 +18449,7 @@ ESphAddIndex AddRTIndex ( GuardedHash_c& dPost, const char * szIndexName, const 
 		bWordDict = false;
 	else if ( strcmp ( sIndexType, "keywords" )!=0 )
 	{
-		sphWarning ( "index '%s': unknown dict=%s; only 'keywords' or 'crc' values allowed",
-			szIndexName, sIndexType );
+		sphWarning ( "index '%s': unknown dict=%s; only 'keywords' or 'crc' values allowed", szIndexName, sIndexType );
 		return ADD_ERROR;
 	}
 
@@ -18395,12 +18560,16 @@ static ESphAddIndex AddTemplateIndex ( const char * szIndexName, const CSphConfi
 	tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 
 	CSphIndexSettings s;
-	CSphString sError;
-	if ( !sphConfIndex ( hIndex, s, szIndexName, nullptr, sError ) )
+	CSphString sWarning, sError;
+	if ( !s.Setup ( hIndex, szIndexName, sWarning, sError ) )
 	{
 		sphWarning ( "failed to configure index %s: %s", szIndexName, sError.cstr () );
 		return ADD_ERROR;
 	}
+
+	if ( !sWarning.IsEmpty() )
+		sphWarning ( "ERROR: index '%s': %s - NOT SERVING", szIndexName, sWarning.cstr () );
+
 	tIdx.m_pIndex->Setup ( s );
 
 	if ( !sphFixupIndexSettings ( tIdx.m_pIndex, hIndex, sError, g_bStripPath ) )
@@ -18920,7 +19089,7 @@ static void DoGreedyRotation() REQUIRES ( MainThread )
 static void CheckRotate () REQUIRES ( MainThread ) EXCLUDES ( g_tRotateThreadMutex )
 {
 	// do we need to rotate now? If no sigHUP received, or if we are already rotating - no.
-	if ( !g_bNeedRotate || g_bInRotate )
+	if ( !g_bNeedRotate || g_bInRotate || IsConfigless() )
 		return;
 
 	g_bInRotate = true; // ok, another rotation cycle just started
@@ -22132,13 +22301,13 @@ static void CheckSystemTFO ()
 #endif
 }
 
+
 void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 {
 	if ( !hConf.Exists ( "searchd" ) || !hConf["searchd"].Exists ( "searchd" ) )
 		sphFatal ( "'searchd' config section not found in '%s'", g_sConfigFile.cstr () );
 
 	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
-
 	sphCheckDuplicatePaths ( hConf );
 
 	if ( bOptPIDFile )
@@ -22378,8 +22547,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_sMysqlHandshake[0] = (char)(g_iMysqlHandshake-4); // safe, as long as buffer size is 128
 }
 
-ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName, bool bJson )
-	REQUIRES ( MainThread )
+ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName, bool bFromReplication ) REQUIRES ( MainThread )
 {
 	ESphAddIndex eAdd = AddIndex ( sIndexName, hIndex );
 
@@ -22388,7 +22556,7 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 	{
 		auto pHandle = GetDisabled ( sIndexName );
 		ServedDescWPtr_c pJustAddedLocalWl ( pHandle );
-		pJustAddedLocalWl->m_bJson = bJson;
+		pJustAddedLocalWl->m_bFromReplication = bFromReplication;
 
 		fprintf ( stdout, "precaching index '%s'\n", sIndexName );
 		fflush ( stdout );
@@ -22403,9 +22571,7 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 			{
 				bPreloadOk = sphFixupIndexSettings ( pJustAddedLocalWl->m_pIndex, hIndex, sError, g_bStripPath );
 				if ( !bPreloadOk )
-				{
 					sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );
-				}
 
 			} else
 			{
@@ -22415,9 +22581,7 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 			}
 
 		} else
-		{
 			bPreloadOk = PreallocNewIndex ( *pJustAddedLocalWl, &hIndex, sIndexName );
-		}
 
 		if ( !bPreloadOk )
 		{
@@ -22463,7 +22627,7 @@ static void ConfigureAndPreload ( const CSphConfig & hConf, const StrVec_t & dOp
 		}
 	}
 
-	JsonConfigConfigureAndPreload ( iValidIndexes, iCounter );
+	ConfigureAndPreloadInt ( iValidIndexes, iCounter );
 
 	// we don't have any more unprocessed disabled indexes during startup
 	g_dPostIndexes.ReleaseAndClear ();
@@ -22972,7 +23136,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	/////////////////////
 
 	sphInitCJson();
-	JsonLoadConfig ( hSearchdpre );
+	LoadConfigInt ( hConf, g_sConfigFile );
 
 	ConfigureSearchd ( hConf, bOptPIDFile );
 	sphConfigureCommon ( hConf ); // this also inits plugins now
@@ -23207,7 +23371,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	// startup
 	///////////
 
-	sphRTInit ( hSearchd, bTestMode, hConf("common") ? hConf["common"]("common") : nullptr );
+	sphRTInit ( hSearchd, bTestMode, hConf("common") ? hConf["common"]("common") : nullptr, CreateNewIndexInt, DropIndexInt );
 
 	if ( hSearchd.Exists ( "snippets_file_prefix" ) )
 		g_sSnippetsFilePrefix = hSearchd["snippets_file_prefix"].cstr();

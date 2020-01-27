@@ -12,6 +12,7 @@
 
 #include "sphinx.h"
 #include "sphinxint.h"
+#include "fileutils.h"
 #include "sphinxutils.h"
 #include "sphinxstem.h"
 #include "sphinxplugin.h"
@@ -933,24 +934,43 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 
 	// configure early
 	// (need bigram settings to spawn a proper indexing tokenizer)
-	CSphString sError;
 	CSphIndexSettings tSettings;
-	if ( !sphConfIndex ( hIndex, tSettings, sIndexName, nullptr, sError ) )
-		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
+	{
+		CSphString sWarning, sError;
+		if ( !tSettings.Setup ( hIndex, sIndexName, sWarning, sError ) )
+			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
+
+		if ( !sWarning.IsEmpty() )
+			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sWarning.cstr() );
+	}
 
 	///////////////////
 	// spawn tokenizer
 	///////////////////
 
 	CSphTokenizerSettings tTokSettings;
-	sphConfTokenizer ( hIndex, tTokSettings );
+	{
+		CSphString sWarning;
+		tTokSettings.Setup ( hIndex, sWarning );
+		if ( !sWarning.IsEmpty() )
+			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sWarning.cstr() );
+	}
 
-	if ( !sphCheckTokenizerICU ( tSettings, tTokSettings, sError ) )
-		fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sError.cstr() );
+	{
+		CSphString sWarning;
+		if ( !sphCheckTokenizerICU ( tSettings, tTokSettings, sWarning ) )
+			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sWarning.cstr() );
+	}
 
 	CSphDictSettings tDictSettings;
-	sphConfDictionary ( hIndex, tDictSettings );
+	{
+		CSphString sWarning;
+		tDictSettings.Setup ( hIndex, sWarning );
+		if ( !sWarning.IsEmpty() )
+			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sWarning.cstr() );
+	}
 
+	CSphString sError;
 	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokSettings, NULL, sError ) };
 	if ( !pTokenizer )
 		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
@@ -1014,14 +1034,14 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 
 	FieldFilterRefPtr_c pFieldFilter;
 	CSphFieldFilterSettings tFilterSettings;
-	if ( sphConfFieldFilter ( hIndex, tFilterSettings, sError ) )
+	if ( tFilterSettings.Setup ( hIndex, sError ) )
 		pFieldFilter = sphCreateRegexpFilter ( tFilterSettings, sError );
-
-	if ( !sphSpawnFilterICU ( pFieldFilter, tSettings, tTokSettings, sIndexName, sError ) )
-		sphDie ( "%s", sError.cstr() );
 
 	if ( !sError.IsEmpty () )
 		fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sError.cstr() );
+
+	if ( !sphSpawnFilterICU ( pFieldFilter, tSettings, tTokSettings, sIndexName, sError ) )
+		sphDie ( "%s", sError.cstr() );
 
 	// boundary
 	bool bInplaceEnable = hIndex.GetInt ( "inplace_enable", 0 )!=0;
@@ -1324,8 +1344,8 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 
 	// if src index has dst index as its killlist_target, we should use this killlist
 	CSphFixedVector<DocID_t> dKillList(0);
-	CSphVector<KillListTarget_t> dTargets;
-	if ( !pSrc->LoadKillList ( &dKillList, dTargets, sError ) )
+	KillListTargets_t tTargets;
+	if ( !pSrc->LoadKillList ( &dKillList, tTargets, sError ) )
 	{
 		fprintf ( stdout, "ERROR: %s\n", sError.cstr() );
 		return false;
@@ -1333,7 +1353,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 
 	if ( dKillList.GetLength() )
 	{
-		for ( const auto & tTarget : dTargets )
+		for ( const auto & tTarget : tTargets.m_dTargets )
 			if ( tTarget.m_sIndex==sDst )
 			{
 				if ( tTarget.m_uFlags & KillListTarget_t::USE_KLIST )

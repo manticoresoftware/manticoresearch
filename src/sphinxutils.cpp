@@ -19,6 +19,7 @@
 #include "sphinxplugin.h"
 #include "sphinxstem.h"
 #include "icu.h"
+#include "fileutils.h"
 
 #include <ctype.h>
 #include <fcntl.h>
@@ -46,8 +47,6 @@
 #endif // HAVE_DLERROR
 
 #endif
-
-#include <sys/stat.h>
 
 #if HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
@@ -460,6 +459,37 @@ int64_t sphGetTime64 ( const char* sValue, char** ppErr, int64_t iDefault )
 	}
 	return iRes;
 }
+
+
+void CSphConfigSection::AddEntry ( const char * szKey, const char * szValue )
+{
+	int iTag = m_iTag;
+	m_iTag++;
+	if ( (*this)(szKey) )
+	{
+		if ( (*this)[szKey].m_bTag )
+		{
+			// override value or list with a new value
+			SafeDelete ( (*this)[szKey].m_pNext ); // only leave the first array element
+			(*this)[szKey] = CSphVariant ( szValue, iTag ); // update its value
+			(*this)[szKey].m_bTag = false; // mark it as overridden
+
+		} else
+		{
+			// chain to tail, to keep the order
+			CSphVariant * pTail = &(*this)[szKey];
+			while ( pTail->m_pNext )
+				pTail = pTail->m_pNext;
+			pTail->m_pNext = new CSphVariant ( szValue, iTag );
+		}
+
+	} else
+	{
+		// just add
+		Add ( CSphVariant ( szValue, iTag ), szKey ); // FIXME! be paranoid, verify that it returned true
+	}
+}
+
 
 int64_t CSphConfigSection::GetSize64 ( const char * sKey, int64_t iDefault ) const
 {
@@ -953,31 +983,7 @@ void CSphConfigParser::AddKey ( const char * sKey, char * sValue )
 
 	sValue = trim ( sValue );
 	CSphConfigSection & tSec = m_tConf[m_sSectionType][m_sSectionName];
-	int iTag = tSec.m_iTag;
-	tSec.m_iTag++;
-	if ( tSec(sKey) )
-	{
-		if ( tSec[sKey].m_bTag )
-		{
-			// override value or list with a new value
-			SafeDelete ( tSec[sKey].m_pNext ); // only leave the first array element
-			tSec[sKey] = CSphVariant ( sValue, iTag ); // update its value
-			tSec[sKey].m_bTag = false; // mark it as overridden
-
-		} else
-		{
-			// chain to tail, to keep the order
-			CSphVariant * pTail = &tSec[sKey];
-			while ( pTail->m_pNext )
-				pTail = pTail->m_pNext;
-			pTail->m_pNext = new CSphVariant ( sValue, iTag );
-		}
-
-	} else
-	{
-		// just add
-		tSec.Add ( CSphVariant ( sValue, iTag ), sKey ); // FIXME! be paranoid, verify that it returned true
-	}
+	tSec.AddEntry ( sKey, sValue );
 }
 
 
@@ -1442,561 +1448,6 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 }
 
 /////////////////////////////////////////////////////////////////////////////
-
-void sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings & tSettings )
-{
-	tSettings.m_iNgramLen = Max ( hIndex.GetInt ( "ngram_len" ), 0 );
-
-	if ( hIndex ( "ngram_chars" ) )
-	{
-		if ( tSettings.m_iNgramLen )
-			tSettings.m_iType = TOKENIZER_NGRAM;
-		else
-			sphWarning ( "ngram_chars specified, but ngram_len=0; IGNORED" );
-	}
-
-	tSettings.m_sCaseFolding = hIndex.GetStr ( "charset_table" );
-	tSettings.m_iMinWordLen = Max ( hIndex.GetInt ( "min_word_len", 1 ), 1 );
-	tSettings.m_sNgramChars = hIndex.GetStr ( "ngram_chars" );
-	tSettings.m_sSynonymsFile = hIndex.GetStr ( "exceptions" ); // new option name
-	tSettings.m_sIgnoreChars = hIndex.GetStr ( "ignore_chars" );
-	tSettings.m_sBlendChars = hIndex.GetStr ( "blend_chars" );
-	tSettings.m_sBlendMode = hIndex.GetStr ( "blend_mode" );
-
-	// phrase boundaries
-	int iBoundaryStep = Max ( hIndex.GetInt ( "phrase_boundary_step" ), -1 );
-	if ( iBoundaryStep!=0 )
-		tSettings.m_sBoundary = hIndex.GetStr ( "phrase_boundary" );
-}
-
-void sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tSettings )
-{
-	tSettings.m_sMorphology = hIndex.GetStr ( "morphology" );
-	tSettings.m_sMorphFields = hIndex.GetStr ( "morphology_skip_fields" );
-	tSettings.m_sStopwords = hIndex.GetStr ( "stopwords" );
-	tSettings.m_iMinStemmingLen = hIndex.GetInt ( "min_stemming_len", 1 );
-	tSettings.m_bStopwordsUnstemmed = hIndex.GetInt ( "stopwords_unstemmed" )!=0;
-
-	for ( CSphVariant * pWordforms = hIndex("wordforms"); pWordforms; pWordforms = pWordforms->m_pNext )
-	{
-		if ( !pWordforms->cstr() || !*pWordforms->cstr() )
-			continue;
-
-		StrVec_t dFilesFound;
-
-#if USE_WINDOWS
-		WIN32_FIND_DATA tFFData;
-		const char * sLastSlash = NULL;
-		for ( const char * s = pWordforms->cstr(); *s; s++ )
-			if ( *s=='/' || *s=='\\' )
-				sLastSlash = s;
-
-		CSphString sPath;
-		if ( sLastSlash )
-			sPath = pWordforms->strval().SubString ( 0, sLastSlash - pWordforms->cstr() + 1 );
-
-		HANDLE hFind = FindFirstFile ( pWordforms->cstr(), &tFFData );
-		if ( hFind!=INVALID_HANDLE_VALUE )
-		{
-			if ( !sPath.IsEmpty() )
-			{
-				dFilesFound.Resize ( dFilesFound.GetLength()+1 );
-				dFilesFound.Last().SetSprintf ( "%s%s", sPath.cstr(), tFFData.cFileName );
-			} else
-				dFilesFound.Add ( tFFData.cFileName );
-
-			while ( FindNextFile ( hFind, &tFFData )!=0 )
-			{
-				if ( !sPath.IsEmpty() )
-				{
-					dFilesFound.Resize ( dFilesFound.GetLength()+1 );
-					dFilesFound.Last().SetSprintf ( "%s%s", sPath.cstr(), tFFData.cFileName );
-				} else
-					dFilesFound.Add ( tFFData.cFileName );
-			}
-
-			FindClose ( hFind );
-		}
-#else
-		glob_t tGlob;
-		glob ( pWordforms->cstr(), GLOB_MARK | GLOB_NOSORT, NULL, &tGlob );
-		if ( tGlob.gl_pathv )
-			for ( int i = 0; i < (int)tGlob.gl_pathc; i++ )
-			{
-				const char * szPathName = tGlob.gl_pathv[i];
-				if ( !szPathName )
-					continue;
-
-				size_t iLen = strlen ( szPathName );
-				if ( !iLen || szPathName[iLen-1]=='/' )
-					continue;
-
-				dFilesFound.Add ( szPathName );
-			}
-
-		globfree ( &tGlob );
-#endif
-
-		dFilesFound.Uniq();
-		ARRAY_FOREACH ( i, dFilesFound )
-			tSettings.m_dWordforms.Add ( dFilesFound[i] );
-	}
-
-	if ( hIndex("dict") )
-	{
-		tSettings.m_bWordDict = true; // default to keywords
-		if ( hIndex["dict"]=="crc" )
-		{
-			tSettings.m_bWordDict = false;
-		} else if ( hIndex["dict"]!="keywords" )
-			fprintf ( stdout, "WARNING: unknown dict=%s, defaulting to keywords\n", hIndex["dict"].cstr() );
-	}
-}
-
-#if USE_RE2
-bool sphConfFieldFilter ( const CSphConfigSection & hIndex, CSphFieldFilterSettings & tSettings, CSphString & )
-{
-	// regular expressions
-	tSettings.m_dRegexps.Resize ( 0 );
-	for ( CSphVariant * pFilter = hIndex("regexp_filter"); pFilter; pFilter = pFilter->m_pNext )
-		tSettings.m_dRegexps.Add ( pFilter->cstr() );
-
-	return tSettings.m_dRegexps.GetLength() > 0;
-}
-#else
-bool sphConfFieldFilter ( const CSphConfigSection & hIndex, CSphFieldFilterSettings &, CSphString & sError )
-{
-	if ( hIndex ( "regexp_filter" ) )
-		sError.SetSprintf ( "regexp_filter specified but no regexp support compiled" );
-
-	return false;
-}
-#endif
-
-const char * sphBigramName ( ESphBigram eType )
-{
-	switch ( eType )
-	{
-		case SPH_BIGRAM_ALL:
-			return "all";
-
-		case SPH_BIGRAM_FIRSTFREQ:
-			return "first_freq";
-
-		case SPH_BIGRAM_BOTHFREQ:
-			return "both_freq";
-
-		case SPH_BIGRAM_NONE:
-		default:
-			return "none";
-	}
-}
-
-
-bool ParseKillListTargets ( const CSphString & sTargets, CSphVector<KillListTarget_t> & dTargets, const char * szIndexName, CSphString & sError )
-{
-	StrVec_t dIndexes;
-	sphSplit ( dIndexes, sTargets.cstr(), " \t," );
-
-	dTargets.Resize(dIndexes.GetLength());
-	ARRAY_FOREACH ( i, dTargets )
-	{
-		KillListTarget_t & tTarget = dTargets[i];
-		const char * szTargetName = dIndexes[i].cstr();
-		const char * sSplit = strstr ( szTargetName, ":" );
-		if ( sSplit )
-		{
-			CSphString sOptions = sSplit+1;
-
-			if ( sOptions=="kl" )
-				tTarget.m_uFlags = KillListTarget_t::USE_KLIST;
-			else if ( sOptions=="id" )
-				tTarget.m_uFlags = KillListTarget_t::USE_DOCIDS;
-			else
-			{
-				sError.SetSprintf ( "unknown kill list target option near '%s'\n", dIndexes[i].cstr() );
-				return false;
-			}
-
-			tTarget.m_sIndex = dIndexes[i].SubString ( 0, sSplit-szTargetName );
-		}
-		else
-			tTarget.m_sIndex = szTargetName;
-
-		if ( tTarget.m_sIndex==szIndexName )
-		{
-			sError.SetSprintf ( "cannot apply kill list to myself: killlist_target=%s\n", sTargets.cstr() );
-			return false;
-		}
-	}
-
-	return true;
-}
-
-
-bool ParseDocstoreSettings ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings, CSphString & sWarning, CSphString & sError )
-{
-	tSettings.m_uBlockSize = hIndex.GetSize ( "docstore_block_size", DEFAULT_DOCSTORE_BLOCK );
-	tSettings.m_iCompressionLevel = hIndex.GetInt ( "docstore_compression_level", DEFAULT_COMPRESSION_LEVEL );
-
-	if ( !hIndex.Exists("docstore_compression") )
-		return true;
-
-	CSphString sCompression = hIndex["docstore_compression"].cstr();
-
-	if ( sCompression=="none" )
-		tSettings.m_eCompression = Compression_e::NONE;
-	else if ( sCompression=="lz4" )
-		tSettings.m_eCompression = Compression_e::LZ4;
-	else if ( sCompression=="lz4hc" )
-		tSettings.m_eCompression = Compression_e::LZ4HC;
-	else
-	{
-		sError.SetSprintf ( "unknown compression specified in 'docstore_compression': '%s'\n", sCompression.cstr() ); 
-		return false;
-	}
-
-	if ( hIndex.Exists("docstore_compression_level") && tSettings.m_eCompression!=Compression_e::LZ4HC )
-		sWarning.SetSprintf ( "docstore_compression_level works only with LZ4HC compression" ); 
-
-	return true;
-}
-
-
-bool CheckStoredFields ( const CSphSchema & tSchema, const CSphIndexSettings & tSettings, CSphString & sError )
-{
-	for ( const auto & i : tSettings.m_dStoredFields )
-		if ( tSchema.GetAttr ( i.cstr() ) )
-		{
-			sError.SetSprintf ( "existing attribute specified in stored_fields: '%s'\n", i.cstr() ); 
-			return false;
-		}
-
-	return true;
-}
-
-
-static bool ParseStoredFields ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings, const CSphSchema * pSchema, CSphString & sError )
-{
-	CSphString sFields = hIndex.GetStr ( "stored_fields" );
-	sFields.ToLower();
-	sphSplit ( tSettings.m_dStoredFields, sFields.cstr() );
-
-	if ( pSchema && !CheckStoredFields ( *pSchema, tSettings, sError ) )
-		return false;
-
-	return true;
-}
-
-
-bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings, const char * szIndexName, const CSphSchema * pSchema, CSphString & sError )
-{
-	// misc settings
-	tSettings.m_iMinPrefixLen = Max ( hIndex.GetInt ( "min_prefix_len" ), 0 );
-	tSettings.m_iMinInfixLen = Max ( hIndex.GetInt ( "min_infix_len" ), 0 );
-	tSettings.m_iMaxSubstringLen = Max ( hIndex.GetInt ( "max_substring_len" ), 0 );
-	tSettings.m_iBoundaryStep = Max ( hIndex.GetInt ( "phrase_boundary_step" ), -1 );
-	tSettings.m_bIndexExactWords = hIndex.GetInt ( "index_exact_words" )!=0;
-	tSettings.m_iOvershortStep = Min ( Max ( hIndex.GetInt ( "overshort_step", 1 ), 0 ), 1 );
-	tSettings.m_iStopwordStep = Min ( Max ( hIndex.GetInt ( "stopword_step", 1 ), 0 ), 1 );
-	tSettings.m_iEmbeddedLimit = hIndex.GetSize ( "embedded_limit", 16384 );
-	tSettings.m_bIndexFieldLens = hIndex.GetInt ( "index_field_lengths" )!=0;
-	tSettings.m_sIndexTokenFilter = hIndex.GetStr ( "index_token_filter" );
-	tSettings.m_tBlobUpdateSpace = hIndex.GetSize64 ( "attr_update_reserve", 131072 );
-
-	if ( !ParseKillListTargets ( hIndex.GetStr ( "killlist_target" ), tSettings.m_dKlistTargets, szIndexName, sError ) )
-		return false;
-
-	// prefix/infix fields
-	CSphString sFields;
-
-	sFields = hIndex.GetStr ( "prefix_fields" );
-	sFields.ToLower();
-	sphSplit ( tSettings.m_dPrefixFields, sFields.cstr() );
-
-	sFields = hIndex.GetStr ( "infix_fields" );
-	sFields.ToLower();
-	sphSplit ( tSettings.m_dInfixFields, sFields.cstr() );
-
-	if ( !ParseStoredFields ( hIndex, tSettings, pSchema, sError ) )
-		return false;
-
-	if ( tSettings.m_iMinPrefixLen==0 && tSettings.m_dPrefixFields.GetLength()!=0 )
-	{
-		fprintf ( stdout, "WARNING: min_prefix_len=0, prefix_fields ignored\n" );
-		tSettings.m_dPrefixFields.Reset();
-	}
-
-	if ( tSettings.m_iMinInfixLen==0 && tSettings.m_dInfixFields.GetLength()!=0 )
-	{
-		fprintf ( stdout, "WARNING: min_infix_len=0, infix_fields ignored\n" );
-		tSettings.m_dInfixFields.Reset();
-	}
-
-	// the only way we could have both prefixes and infixes enabled is when specific field subsets are configured
-	if ( tSettings.m_iMinInfixLen>0 && tSettings.m_iMinPrefixLen>0
-		&& ( !tSettings.m_dPrefixFields.GetLength() || !tSettings.m_dInfixFields.GetLength() ) )
-	{
-		sError.SetSprintf ( "prefixes and infixes can not both be enabled on all fields" );
-		return false;
-	}
-
-	tSettings.m_dPrefixFields.Uniq();
-	tSettings.m_dInfixFields.Uniq();
-	tSettings.m_dStoredFields.Uniq();
-
-	ARRAY_FOREACH ( i, tSettings.m_dPrefixFields )
-		if ( tSettings.m_dInfixFields.Contains ( tSettings.m_dPrefixFields[i] ) )
-	{
-		sError.SetSprintf ( "field '%s' marked both as prefix and infix", tSettings.m_dPrefixFields[i].cstr() );
-		return false;
-	}
-
-	if ( tSettings.m_iMaxSubstringLen && tSettings.m_iMaxSubstringLen<tSettings.m_iMinInfixLen )
-	{
-		sError.SetSprintf ( "max_substring_len=%d is less than min_infix_len=%d", tSettings.m_iMaxSubstringLen, tSettings.m_iMinInfixLen );
-		return false;
-	}
-
-	if ( tSettings.m_iMaxSubstringLen && tSettings.m_iMaxSubstringLen<tSettings.m_iMinPrefixLen )
-	{
-		sError.SetSprintf ( "max_substring_len=%d is less than min_prefix_len=%d", tSettings.m_iMaxSubstringLen, tSettings.m_iMinPrefixLen );
-		return false;
-	}
-
-	CSphString sWarning;
-	if ( !ParseDocstoreSettings ( hIndex, tSettings, sWarning, sError ) )
-		return false;
-
-	if ( !sWarning.IsEmpty() )
-		fprintf ( stdout, "WARNING: %s\n", sWarning.cstr() );
-
-	auto sIndexType = hIndex.GetStr ( "dict", "keywords" );
-
-	bool bWordDict = true;
-	if ( strcmp ( sIndexType, "crc" )==0 )
-		bWordDict = false;
-	else if ( strcmp ( sIndexType, "keywords" )!=0 )
-	{
-		sError.SetSprintf ( "index '%s': unknown dict=%s; only 'keywords' or 'crc' values allowed", szIndexName, sIndexType );
-		return false;
-	}
-
-	if ( hIndex("type") && hIndex["type"]=="rt" && ( tSettings.m_iMinInfixLen>0 || tSettings.m_iMinPrefixLen>0 ) && !bWordDict )
-	{
-		sError.SetSprintf ( "RT indexes support prefixes and infixes with only dict=keywords" );
-		return false;
-	}
-
-	if ( bWordDict && tSettings.m_iMaxSubstringLen>0 )
-	{
-		sError.SetSprintf ( "max_substring_len can not be used with dict=keywords" );
-		return false;
-	}
-
-	// html stripping
-	if ( hIndex ( "html_strip" ) )
-	{
-		tSettings.m_bHtmlStrip = hIndex.GetInt ( "html_strip" )!=0;
-		tSettings.m_sHtmlIndexAttrs = hIndex.GetStr ( "html_index_attrs" );
-		tSettings.m_sHtmlRemoveElements = hIndex.GetStr ( "html_remove_elements" );
-	}
-
-	// hit format
-	// TODO! add the description into documentation.
-	tSettings.m_eHitFormat = SPH_HIT_FORMAT_INLINE;
-	if ( hIndex("hit_format") )
-	{
-		if ( hIndex["hit_format"]=="plain" )		tSettings.m_eHitFormat = SPH_HIT_FORMAT_PLAIN;
-		else if ( hIndex["hit_format"]=="inline" )	tSettings.m_eHitFormat = SPH_HIT_FORMAT_INLINE;
-		else
-			fprintf ( stdout, "WARNING: unknown hit_format=%s, defaulting to inline\n", hIndex["hit_format"].cstr() );
-	}
-
-	// hit-less indices
-	if ( hIndex("hitless_words") )
-	{
-		const CSphString & sValue = hIndex["hitless_words"].strval();
-		if ( sValue=="all" )
-		{
-			tSettings.m_eHitless = SPH_HITLESS_ALL;
-		} else
-		{
-			tSettings.m_eHitless = SPH_HITLESS_SOME;
-			tSettings.m_sHitlessFiles = sValue;
-		}
-	}
-
-	// sentence and paragraph indexing
-	tSettings.m_bIndexSP = ( hIndex.GetInt ( "index_sp" )!=0 );
-	tSettings.m_sZones = hIndex.GetStr ( "index_zones" );
-
-	// bigrams
-	tSettings.m_eBigramIndex = SPH_BIGRAM_NONE;
-	if ( hIndex("bigram_index") )
-	{
-		CSphString s = hIndex["bigram_index"].strval();
-		s.ToLower();
-		if ( s=="all" )
-			tSettings.m_eBigramIndex = SPH_BIGRAM_ALL;
-		else if ( s=="first_freq" )
-			tSettings.m_eBigramIndex = SPH_BIGRAM_FIRSTFREQ;
-		else if ( s=="both_freq" )
-			tSettings.m_eBigramIndex = SPH_BIGRAM_BOTHFREQ;
-		else
-		{
-			sError.SetSprintf ( "unknown bigram_index=%s (must be all, first_freq, or both_freq)", s.cstr() );
-			return false;
-		}
-	}
-
-	tSettings.m_sBigramWords = hIndex.GetStr ( "bigram_freq_words" );
-	tSettings.m_sBigramWords.Trim();
-
-	bool bEmptyOk = tSettings.m_eBigramIndex==SPH_BIGRAM_NONE || tSettings.m_eBigramIndex==SPH_BIGRAM_ALL;
-	if ( bEmptyOk!=tSettings.m_sBigramWords.IsEmpty() )
-	{
-		sError.SetSprintf ( "bigram_index=%s, bigram_freq_words must%s be empty", hIndex["bigram_index"].cstr(),
-			bEmptyOk ? "" : " not" );
-		return false;
-	}
-
-	// aot
-	StrVec_t dMorphs;
-	sphSplit ( dMorphs, hIndex.GetStr ( "morphology" ) );
-
-	tSettings.m_uAotFilterMask = 0;
-	for ( int j=0; j<AOT_LENGTH; ++j )
-	{
-		char buf_all[20];
-		sprintf ( buf_all, "lemmatize_%s_all", AOT_LANGUAGES[j] ); //NOLINT
-		ARRAY_FOREACH ( i, dMorphs )
-			if ( dMorphs[i]==buf_all )
-			{
-				tSettings.m_uAotFilterMask |= (1UL) << j;
-				break;
-			}
-	}
-
-	tSettings.m_ePreprocessor = dMorphs.Contains ( "icu_chinese" ) ? Preprocessor_e::ICU : Preprocessor_e::NONE;
-
-	if ( !sphCheckConfigICU ( tSettings, sError ) )
-		return false;
-
-	// all good
-	return true;
-}
-
-
-bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError, /*bool bTemplateDict, */bool bStripPath )
-{
-	bool bTokenizerSpawned = false;
-	//bool bTemplateDict = false; // was param, but was never used
-
-	if ( !pIndex->GetTokenizer () )
-	{
-		CSphTokenizerSettings tSettings;
-		sphConfTokenizer ( hIndex, tSettings );
-
-		TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings, nullptr, sError ) };
-		if ( !pTokenizer )
-			return false;
-
-		bTokenizerSpawned = true;
-		pIndex->SetTokenizer ( pTokenizer );
-	}
-
-	if ( !pIndex->GetDictionary () )
-	{
-		DictRefPtr_c pDict;
-		CSphDictSettings tSettings;
-		/*if ( bTemplateDict )
-		{
-			sphConfDictionary ( hIndex, tSettings );
-			pDict = sphCreateDictionaryTemplate ( tSettings, nullptr, pIndex->GetTokenizer (), pIndex->GetName(), bStripPath, sError );
-			CSphIndexSettings tIndexSettings = pIndex->GetSettings();
-			tIndexSettings.m_uAotFilterMask = sphParseMorphAot ( tSettings.m_sMorphology.cstr() );
-			pIndex->Setup ( tIndexSettings );
-		} else*/
-		{
-			sphConfDictionary ( hIndex, tSettings );
-			pDict = sphCreateDictionaryCRC ( tSettings, nullptr, pIndex->GetTokenizer (), pIndex->GetName(), bStripPath, pIndex->GetSettings().m_iSkiplistBlockSize, sError );
-		}
-		if ( !pDict )
-		{
-			sphWarning ( "index '%s': %s", pIndex->GetName(), sError.cstr() );
-			return false;
-		}
-
-		pIndex->SetDictionary ( pDict );
-	}
-
-	if ( bTokenizerSpawned )
-	{
-		TokenizerRefPtr_c pOldTokenizer { pIndex->LeakTokenizer () };
-		TokenizerRefPtr_c pMultiTokenizer
-			{ ISphTokenizer::CreateMultiformFilter ( pOldTokenizer, pIndex->GetDictionary ()->GetMultiWordforms () ) };
-		pIndex->SetTokenizer ( pMultiTokenizer );
-	}
-
-	pIndex->SetupQueryTokenizer();
-
-	if ( !pIndex->IsStripperInited () )
-	{
-		CSphIndexSettings tSettings = pIndex->GetSettings ();
-
-		if ( hIndex ( "html_strip" ) )
-		{
-			tSettings.m_bHtmlStrip = hIndex.GetInt ( "html_strip" )!=0;
-			tSettings.m_sHtmlIndexAttrs = hIndex.GetStr ( "html_index_attrs" );
-			tSettings.m_sHtmlRemoveElements = hIndex.GetStr ( "html_remove_elements" );
-		}
-		tSettings.m_sZones = hIndex.GetStr ( "index_zones" );
-
-		pIndex->Setup ( tSettings );
-	}
-
-	if ( !pIndex->GetFieldFilter() )
-	{
-		FieldFilterRefPtr_c pFieldFilter;
-		CSphFieldFilterSettings tFilterSettings;
-		if ( sphConfFieldFilter ( hIndex, tFilterSettings, sError ) )
-			pFieldFilter = sphCreateRegexpFilter ( tFilterSettings, sError );
-
-		if ( !sphSpawnFilterICU ( pFieldFilter, pIndex->GetSettings(), pIndex->GetTokenizer()->GetSettings(), pIndex->GetName(), sError ) )
-			sphWarning ( "index '%s': %s", pIndex->GetName(), sError.cstr() );
-
-		pIndex->SetFieldFilter ( pFieldFilter );
-	}
-
-	// exact words fixup, needed for RT indexes
-	// cloned from indexer, remove somehow?
-	DictRefPtr_c pDict { pIndex->GetDictionary() };
-	SafeAddRef ( pDict );
-	assert ( pDict );
-
-	CSphIndexSettings tSettings = pIndex->GetSettings ();
-	bool bNeedExact = ( pDict->HasMorphology() || pDict->GetWordformsFileInfos().GetLength() );
-	if ( tSettings.m_bIndexExactWords && !bNeedExact )
-	{
-		tSettings.m_bIndexExactWords = false;
-		pIndex->Setup ( tSettings );
-		fprintf ( stdout, "WARNING: no morphology, index_exact_words=1 has no effect, ignoring\n" );
-	}
-
-	if ( pDict->GetSettings().m_bWordDict && pDict->HasMorphology() &&
-		( tSettings.m_iMinPrefixLen || tSettings.m_iMinInfixLen || !pDict->GetSettings().m_sMorphFields.IsEmpty() ) && !tSettings.m_bIndexExactWords )
-	{
-		tSettings.m_bIndexExactWords = true;
-		pIndex->Setup ( tSettings );
-		fprintf ( stdout, "WARNING: dict=keywords and prefixes and morphology enabled, forcing index_exact_words=1\n" );
-	}
-
-	pIndex->PostSetup();
-	return true;
-}
-
-//////////////////////////////////////////////////////////////////////////
 
 const char * sphLoadConfig ( const char * sOptConfig, bool bQuiet, CSphConfigParser & cp )
 {
@@ -3589,30 +3040,6 @@ bool sphDetectChinese ( const BYTE * szBuffer, int iLength )
 	return false;
 }
 
-
-static const char * g_dRankerNames[] =
-{
-	"proximity_bm25",
-	"bm25",
-	"none",
-	"wordcount",
-	"proximity",
-	"matchany",
-	"fieldmask",
-	"sph04",
-	"expr",
-	"export",
-	NULL
-};
-
-
-const char * sphGetRankerName ( ESphRankMode eRanker )
-{
-	if ( eRanker<SPH_RANK_PROXIMITY_BM25 || eRanker>=SPH_RANK_TOTAL )
-		return NULL;
-
-	return g_dRankerNames[eRanker];
-}
 
 #if HAVE_DLOPEN
 

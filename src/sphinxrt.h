@@ -66,7 +66,7 @@ public:
 	virtual bool AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) = 0;
 
 	/// truncate index (that is, kill all data)
-	virtual bool Truncate ( CSphString & sError ) = 0;
+	virtual bool Truncate ( bool bBinlogReplay, CSphString & sError ) = 0;
 
 	virtual void Optimize ( ) = 0;
 
@@ -85,21 +85,24 @@ public:
 	// instead of cloning for each AddDocument() call we could just call this method and improve batch inserts speed
 	virtual ISphTokenizer * CloneIndexingTokenizer() const = 0;
 
+	// hint an index that it was deleted and should cleanup its files when destructed
+	virtual void IndexDeleted() = 0;
+	
 	virtual void ProhibitSave() = 0;
 	virtual void EnableSave() = 0;
 	virtual void LockFileState ( CSphVector<CSphString> & dFiles ) = 0;
 	
 	/// acquire thread-local indexing accumulator
 	/// returns NULL if another index already uses it in an open txn
-	RtAccum_t * AcquireAccum ( CSphDict * pDict, RtAccum_t * pAccExt=nullptr,
-		bool bWordDict=true, bool bSetTLS = true, CSphString * sError=nullptr );
+	RtAccum_t * AcquireAccum ( CSphDict * pDict, RtAccum_t * pAccExt=nullptr, bool bWordDict=true, bool bSetTLS = true, CSphString * sError=nullptr );
 };
 
 /// initialize subsystem
 class CSphConfigSection;
-void sphRTInit ( const CSphConfigSection & hSearchd, bool bTestMode, const CSphConfigSection * pCommon );
+void sphRTInit ( const CSphConfigSection & hSearchd, bool bTestMode, const CSphConfigSection * pCommon, ISphBinlog::CreateTable_fn pCreateTable, ISphBinlog::DropTable_fn pDropTable );
 void sphRTConfigure ( const CSphConfigSection & hSearchd, bool bTestMode );
 bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSchema, CSphString & sError, bool bSkipValidation );
+bool sphRTSchemaConfigure ( const CSphVector<CSphColumnInfo> & dFields, const CSphVector<CSphColumnInfo> & dAttrs, CSphSchema & tSchema, CSphString & sError, bool bSkipValidation );
 void sphRTSetTestMode ();
 
 /// deinitialize subsystem

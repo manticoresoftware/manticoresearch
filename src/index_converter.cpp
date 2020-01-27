@@ -11,6 +11,7 @@
 
 #include "sphinxstd.h"
 #include "sphinx.h"
+#include "fileutils.h"
 #include "sphinxutils.h"
 #include "sphinxint.h"
 #include "icu.h"
@@ -21,6 +22,7 @@
 #include "sphinxpq.h"
 #include "accumulator.h"
 #include "indexformat.h"
+#include "indexsettings.h"
 
 namespace legacy
 {
@@ -224,7 +226,7 @@ struct Index_t
 	CSphString m_sPath;
 	CSphString m_sPathOut;
 	bool m_bStripPath = false;
-	CSphVector<KillListTarget_t> m_dKlistTargets;
+	KillListTargets_t m_tKlistTargets;
 
 	// RT specific
 	int64_t m_iTID = 0;
@@ -1549,7 +1551,7 @@ void ConverterPlain_t::SaveHeader ( const Index_t & tIndex, DWORD uKillListSize 
 	tWriter.PutOffset ( m_tMinMaxPos/sizeof(CSphRowitem) );
 
 	// field filter
-	SaveFieldFilterSettings ( tWriter, tIndex.m_tFieldFilterSettings );
+	tIndex.m_tFieldFilterSettings.Save(tWriter);
 
 	// field lengths
 	if ( tIndex.m_tSettings.m_bIndexFieldLens )
@@ -1593,8 +1595,12 @@ bool ConverterPlain_t::Init ( Index_t & tIndex, CSphString & sError )
 	// merge index settings with new defaults
 	CSphConfigSection hIndex;
 	CSphIndexSettings tDefaultSettings;
-	if ( !sphConfIndex ( hIndex, tDefaultSettings, tIndex.m_sName.cstr(), nullptr, sError ) )
+	CSphString sWarning;
+	if ( !tDefaultSettings.Setup ( hIndex, tIndex.m_sName.cstr(), sWarning, sError ) )
 		return false;
+
+	if ( !sWarning.IsEmpty() )
+		sphWarning ( "%s", sWarning.cstr() );
 
 	tIndex.m_tSettings.m_tBlobUpdateSpace = tDefaultSettings.m_tBlobUpdateSpace;
 	tIndex.m_tSettings.m_iSkiplistBlockSize = tDefaultSettings.m_iSkiplistBlockSize;
@@ -1629,10 +1635,10 @@ bool ConverterPlain_t::WriteKillList ( const Index_t & tIndex, bool bIgnoreKlist
 
 	CSphString sName = tIndex.GetFilename(SPH_EXT_SPK);
 
-	if ( !::WriteKillList ( sName, dKillList.Begin(), dKillList.GetLength(), tIndex.m_dKlistTargets, sError ) )
+	if ( !::WriteKillList ( sName, dKillList.Begin(), dKillList.GetLength(), tIndex.m_tKlistTargets, sError ) )
 		return false;
 
-	WarnAboutKillList ( dKillList, tIndex.m_dKlistTargets );
+	WarnAboutKillList ( dKillList, tIndex.m_tKlistTargets );
 
 	return true;
 }
@@ -1992,7 +1998,7 @@ static bool RenameRtIndex ( Index_t & tIndex, CSphString & sError )
 }
 
 
-static bool SaveRtIndex ( Index_t & tIndex, CSphString & sError )
+static bool SaveRtIndex ( Index_t & tIndex, CSphString & sWarning, CSphString & sError )
 {
 	// no disk chunks - need to copy old schema from meta and update it if necessary
 	if ( !tIndex.m_dRtChunkNames.GetLength() )
@@ -2001,7 +2007,7 @@ static bool SaveRtIndex ( Index_t & tIndex, CSphString & sError )
 	// merge index settings with new defaults
 	CSphConfigSection hIndex;
 	CSphIndexSettings tDefaultSettings;
-	if ( !sphConfIndex ( hIndex, tDefaultSettings, tIndex.m_sName.cstr(), nullptr, sError ) )
+	if ( !tDefaultSettings.Setup ( hIndex, tIndex.m_sName.cstr(), sWarning, sError ) )
 		return false;
 
 	// write new meta
@@ -2062,7 +2068,7 @@ static bool SaveRtIndex ( Index_t & tIndex, CSphString & sError )
 	wrMeta.PutByte ( 0 ); // BLOOM_HASHES_COUNT
 
 	// meta v.11
-	SaveFieldFilterSettings ( wrMeta, tIndex.m_tFieldFilterSettings );
+	tIndex.m_tFieldFilterSettings.Save(wrMeta);
 
 	// meta v.12
 	wrMeta.PutDword ( tIndex.m_dRtChunkNames.GetLength () );
@@ -2095,7 +2101,7 @@ static bool SaveRtIndex ( Index_t & tIndex, CSphString & sError )
 }
 
 
-static bool ConvertPlain ( const CSphString & sName, const CSphString & sPath, bool bStripPath, CSphString & sError, const CSphVector<SphDocID_t> & dKilled, const CSphString & sPathOut, const CSphVector<KillListTarget_t> & dKlistTargets, Index_t * pRtIndex, bool bIgnoreKlist=false )
+static bool ConvertPlain ( const CSphString & sName, const CSphString & sPath, bool bStripPath, CSphString & sError, const CSphVector<SphDocID_t> & dKilled, const CSphString & sPathOut, const KillListTargets_t & tKlistTargets, Index_t * pRtIndex, bool bIgnoreKlist=false )
 {
 	// need scope for destructor
 	{
@@ -2104,7 +2110,7 @@ static bool ConvertPlain ( const CSphString & sName, const CSphString & sPath, b
 		tIndex.m_sPath = sPath;
 		tIndex.m_sPathOut = sPathOut;
 		tIndex.m_bStripPath = bStripPath;
-		tIndex.m_dKlistTargets = dKlistTargets;
+		tIndex.m_tKlistTargets = tKlistTargets;
 
 		bool bLoaded = LoadPlainIndexChunk ( tIndex, sError );
 		if ( !bLoaded )
@@ -2242,7 +2248,7 @@ static bool LoadPqIndex ( Index_t & tIndex, CSphString & sError )
 	return true;
 }
 
-static bool SavePqIndex ( Index_t & tIndex, CSphString & sError )
+static bool SavePqIndex ( Index_t & tIndex, CSphString & sWarning, CSphString & sError )
 {
 	ConverterPlain_t tConverter;
 	if ( !tConverter.ConvertSchema ( tIndex, sError ) )
@@ -2251,7 +2257,7 @@ static bool SavePqIndex ( Index_t & tIndex, CSphString & sError )
 	// merge index settings with new defaults
 	CSphConfigSection hIndex;
 	CSphIndexSettings tDefaultSettings;
-	if ( !sphConfIndex ( hIndex, tDefaultSettings, tIndex.m_sName.cstr(), nullptr, sError ) )
+	if ( !tDefaultSettings.Setup ( hIndex, tIndex.m_sName.cstr(), sWarning, sError ) )
 		return false;
 
 	// write new meta
@@ -2295,7 +2301,7 @@ static bool SavePqIndex ( Index_t & tIndex, CSphString & sError )
 	SaveTokenizerSettings ( wrMeta, tIndex.m_pTokenizer, tIndex.m_tSettings.m_iEmbeddedLimit );
 	SaveDictionarySettings ( wrMeta, tIndex.m_pDict, false, tIndex.m_tSettings.m_iEmbeddedLimit );
 
-	SaveFieldFilterSettings ( wrMeta, tIndex.m_tFieldFilterSettings );
+	tIndex.m_tFieldFilterSettings.Save(wrMeta);
 
 	wrMeta.PutDword ( tIndex.m_dStored.GetLength() );
 
@@ -2329,7 +2335,7 @@ static bool SavePqIndex ( Index_t & tIndex, CSphString & sError )
 }
 
 
-static bool Convert ( const CSphString & sName, const CSphString & sPath, IndexType_e eType, bool bStripPath, const CSphString & sPathOut, const CSphVector<KillListTarget_t> & dKlistTargets, CSphString & sError )
+static bool Convert ( const CSphString & sName, const CSphString & sPath, IndexType_e eType, bool bStripPath, const CSphString & sPathOut, const KillListTargets_t & dKlistTargets, CSphString & sError )
 {
 	if ( eType==INDEX_UNKNOWN )
 	{
@@ -2373,7 +2379,7 @@ static bool Convert ( const CSphString & sName, const CSphString & sPath, IndexT
 			sChunkInPath.SetSprintf ( "%s.%d", sPath.cstr(), tIndex.m_dRtChunkNames[iChunk] );
 			sChunkOutPath.SetSprintf ( "%s.%d", sPathOut.cstr(), tIndex.m_dRtChunkNames[iChunk] );
 			Index_t * pSchema = ( iChunk==tIndex.m_dRtChunkNames.GetLength() - 1 ? &tIndex : nullptr );
-			if ( !ConvertPlain ( sName, sChunkInPath, bStripPath, sError, dKilled, sChunkOutPath, CSphVector<KillListTarget_t>(), pSchema, true ) )
+			if ( !ConvertPlain ( sName, sChunkInPath, bStripPath, sError, dKilled, sChunkOutPath, KillListTargets_t(), pSchema, true ) )
 			{
 				sphWarning ( "failed to convert %d disk chunk, error: %s, renaming original disk chunks back ...", iChunk, sError.cstr() );
 				break;
@@ -2398,11 +2404,15 @@ static bool Convert ( const CSphString & sName, const CSphString & sPath, IndexT
 			return false;
 		}
 
-		if ( !SaveRtIndex ( tIndex, sError ) )
+		CSphString sWarning;
+		if ( !SaveRtIndex ( tIndex, sWarning, sError ) )
 		{
 			sError.SetSprintf ( "conversion failed for index '%s', error: %s", sName.cstr(), sError.cstr() );
 			return false;
 		}
+
+		if ( !sWarning.IsEmpty() )
+			sphWarning ( "%s", sWarning.cstr() );
 	} else if ( eType==INDEX_PQ )
 	{
 		Index_t tIndex;
@@ -2416,11 +2426,15 @@ static bool Convert ( const CSphString & sName, const CSphString & sPath, IndexT
 			return false;
 		}
 
-		if ( !SavePqIndex ( tIndex, sError ) )
+		CSphString sWarning;
+		if ( !SavePqIndex ( tIndex, sWarning, sError ) )
 		{
 			sError.SetSprintf ( "conversion failed for index '%s', error: %s", sName.cstr(), sError.cstr() );
 			return false;
 		}
+
+		if ( !sWarning.IsEmpty() )
+			sphWarning ( "%s", sWarning.cstr() );
 
 	} else
 	{
@@ -2555,8 +2569,8 @@ int main ( int argc, char ** argv )
 	if ( bAll && !sKlistTarget.IsEmpty() )
 		sphDie ( "killlist-target not compatible with --all option" );
 
-	CSphVector<KillListTarget_t> dKlistTargets;
-	if ( !sKlistTarget.IsEmpty() && !ParseKillListTargets ( sKlistTarget, dKlistTargets, sIndexFile.cstr(), sError ) )
+	KillListTargets_t tKlistTargets;
+	if ( !sKlistTarget.IsEmpty() && !tKlistTargets.Parse ( sKlistTarget, sIndexFile.cstr(), sError ) )
 		sphDie ( "failed to parse killlist-target, '%s'", sError.cstr() );
 
 	if ( !sphInitCharsetAliasTable ( sError ) )
@@ -2590,7 +2604,7 @@ int main ( int argc, char ** argv )
 				break;
 
 			sIndexName = pIndexes->IterateGetKey();
-			dKlistTargets.Resize ( 0 );
+			tKlistTargets.m_dTargets.Resize(0);
 			sKlistTarget = "";
 		}
 
@@ -2642,10 +2656,10 @@ int main ( int argc, char ** argv )
 				else
 				{
 					sKlistTarget = tIndex["killlist_target"].cstr();
-					if ( !ParseKillListTargets ( sKlistTarget, dKlistTargets, sIndexName.cstr(), sError ) )
+					if ( !tKlistTargets.Parse ( sKlistTarget, sIndexName.cstr(), sError ) )
 					{
 						sphWarning ( "failed to parse killlist_target, '%s'", sError.cstr() );
-						dKlistTargets.Resize ( 0 );
+						tKlistTargets.m_dTargets.Resize(0);
 						sKlistTarget = "";
 						sError = "";
 					}
@@ -2678,7 +2692,7 @@ int main ( int argc, char ** argv )
 			sIndexOut = sIndexIn;
 		}
 
-		bool bOk = legacy::Convert ( sIndexName, sIndexIn, eIndex, bStripPath, sIndexOut, dKlistTargets, sError );
+		bool bOk = legacy::Convert ( sIndexName, sIndexIn, eIndex, bStripPath, sIndexOut, tKlistTargets, sError );
 		if ( !bOk )
 		{
 			sphWarning ( "%s", sError.cstr() );

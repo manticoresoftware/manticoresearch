@@ -14,6 +14,7 @@
 #include "sphinxstd.h"
 #include "sphinxutils.h"
 #include "sphinxint.h"
+#include "fileutils.h"
 #include "sphinxrt.h"
 #include "killlist.h"
 #include "secondaryindex.h"
@@ -843,7 +844,7 @@ struct IndexInfo_t
 	CSphString						m_sName;
 	CSphString						m_sPath;
 	CSphFixedVector<DocID_t>		m_dKilllist;
-	CSphVector<KillListTarget_t>	m_dTargets;
+	KillListTargets_t				m_tTargets;
 	CSphMappedBuffer<BYTE>			m_tLookup;
 	DeadRowMap_Disk_c 				m_tDeadRowMap;
 
@@ -918,7 +919,7 @@ void ApplyKilllists ( CSphConfig & hConf )
 		CSphString sError;
 		{
 			CSphScopedPtr<CSphIndex> pIndex ( sphCreateIndexPhrase ( nullptr, tIndex.m_sPath.cstr() ) );
-			if ( !pIndex->LoadKillList ( &tIndex.m_dKilllist, tIndex.m_dTargets, sError ) )
+			if ( !pIndex->LoadKillList ( &tIndex.m_dKilllist, tIndex.m_tTargets, sError ) )
 			{
 				fprintf ( stdout, "WARNING: unable to load kill-list for index %s: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
 				continue;
@@ -954,12 +955,12 @@ void ApplyKilllists ( CSphConfig & hConf )
 
 	for ( const auto & tIndex : dIndexes )
 	{
-		if ( !tIndex.m_bEnabled || !tIndex.m_dTargets.GetLength() )
+		if ( !tIndex.m_bEnabled || !tIndex.m_tTargets.m_dTargets.GetLength() )
 			continue;
 
 		fprintf ( stdout, "applying kill-list of index %s\n", tIndex.m_sName.cstr() );
 
-		for ( const auto & tTarget : tIndex.m_dTargets )
+		for ( const auto & tTarget : tIndex.m_tTargets.m_dTargets )
 		{
 			if ( tTarget.m_sIndex==tIndex.m_sName )
 			{

@@ -616,7 +616,7 @@ int main ( int argc, char ** argv )
 	g_iFieldsCount = tSrcSchema.GetFieldsCount();
 
 	CSphConfigSection tRTConfig;
-	sphRTInit ( tRTConfig, true, nullptr );
+	sphRTInit ( tRTConfig, true, nullptr, nullptr, nullptr );
 	sphRTConfigure ( tRTConfig, true );
 	SmallStringHash_T< CSphIndex * > dTemp;
 	sphReplayBinlog ( dTemp );

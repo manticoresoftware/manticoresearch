@@ -15,6 +15,7 @@
 
 #include "sphinx.h"
 #include "sphinxint.h"
+#include "fileutils.h"
 #include "sphinxutils.h"
 #include "sphinxstem.h"
 

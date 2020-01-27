@@ -12,7 +12,7 @@
 
 #include "indexcheck.h"
 
-#include "sphinxint.h"
+#include "fileutils.h"
 #include "attribute.h"
 #include "indexformat.h"
 #include "secondaryindex.h"

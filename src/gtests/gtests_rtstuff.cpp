@@ -40,7 +40,7 @@ void TestRTInit ()
 {
 	CSphConfigSection tRTConfig;
 
-	sphRTInit ( tRTConfig, true, nullptr );
+	sphRTInit ( tRTConfig, true, nullptr, nullptr, nullptr );
 	sphRTConfigure ( tRTConfig, true );
 
 	SmallStringHash_T<CSphIndex *> hIndexes;

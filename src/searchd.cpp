@@ -12405,6 +12405,11 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 		if ( iIdIndex>=0 )
 		{
 			tDoc.SetAttr ( tIdLoc, tStmt.m_dInsertValues[iIdIndex + c * iExp], SPH_ATTR_BIGINT );
+			if ( tDoc.GetAttr ( tIdLoc )<0 )
+			{
+				sError.SetSprintf ( "'id' column is " INT64_FMT ". Must be non-zero positive.", (int64_t)tDoc.GetAttr ( tIdLoc ) );
+				break;
+			}
 		} else
 		{
 			assert ( tDoc.GetAttr(tIdLoc)==0 );
@@ -12424,7 +12429,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 			tLoc.m_bDynamic = true;
 
 			int iQuerySchemaIdx = dAttrSchema[i];
-			bool bResult;
+			bool bResult = false;
 			if ( iQuerySchemaIdx < 0 )
 			{
 				bResult = tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );

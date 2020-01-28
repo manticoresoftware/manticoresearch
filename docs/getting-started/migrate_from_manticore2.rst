@@ -85,4 +85,4 @@ Now updates are performed directly on the blob component. One setting that may r
 Document IDs
 ~~~~~~~~~~~~
 
-Doc ids used to be UNSIGNED 64-bit integers. Now they are SIGNED 64-bit integers.
+Doc ids used to be UNSIGNED 64-bit integers. Now they are POSITIVE SIGNED 64-bit integers.

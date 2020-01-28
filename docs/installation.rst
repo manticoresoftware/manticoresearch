@@ -126,12 +126,6 @@ After preparing configuration file (see :ref:`Quick tour <quick_usage_tour>`), y
 
 	$ systemctl start manticore
 
-To enable Manticore at boot:
-
-.. code-block:: bash
-
-	$ systemctl enable manticore
-
 
 
 Installing Manticore packages on RedHat and CentOS
@@ -203,13 +197,6 @@ After preparing configuration file (see :ref:`Quick tour <quick_usage_tour>`), y
 
 	$ systemctl start manticore
 	
-To enable Manticore at boot:
-
-.. code-block:: bash
-
-	$ systemctl enable manticore
-
-
 
 Installing Manticore on Windows
 -------------------------------

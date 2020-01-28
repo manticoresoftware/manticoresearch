@@ -198,7 +198,7 @@ Behaviour changes
 
 * in case of indexes with killists, daemon doesn't rotate indexes in order defined in conf, but follows the chain of killlist targets
 * order of indexes in a search no longer defines the order in which killlists are applied
-* Document IDs are now signed big integers
+* Document IDs are now positive signed big integers
 
 Removed directives
 ~~~~~~~~~~~~~~~~~~

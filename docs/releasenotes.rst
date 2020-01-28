@@ -23,6 +23,7 @@ Improvements and changes
 * indextool can now check real-time indexes online
 * default conf is now /etc/manticoresearch/manticore.conf
 * service on RHEL/CentOS renamed to 'manticore' from 'searchd'
+* removed query_mode and exact_phrase snippeting options
 
 Bugfixes
 ~~~~~~~~

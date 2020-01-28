@@ -210,7 +210,7 @@ Snippeting can be made with the CALL SNIPPETS statement. The function needs the 
 
 .. code-block:: none
    
-   mysql>  CALL SNIPPETS('this is my hello world document text I am snippeting now', 'myindex', 'hello world',  1 as query_mode, 5 as limit_words);
+   mysql>  CALL SNIPPETS('this is my hello world document text I am snippeting now', 'myindex', 'hello world', 5 as limit_words);
    +------------------------------------------------+
    | snippet                                        |
    +------------------------------------------------+

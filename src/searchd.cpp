@@ -4210,7 +4210,7 @@ static bool VerifyMatchCounts ( AggrResult_t & tRes )
 
 	if ( iExpected!=tRes.m_dMatches.GetLength() )
 	{
-		tRes.m_sError.SetSprintf ( "INTERNAL ERROR: expected %d matches in combined result set, got %d",
+		tRes.m_sError.SetSprintf ( "internal error: expected %d matches in combined result set, got %d",
 			iExpected, tRes.m_dMatches.GetLength() );
 		return false;
 	}
@@ -4411,7 +4411,7 @@ bool FrontendSchemaBuilder_c::CheckUnmapped ( CSphString & sError ) const
 		const CSphQueryItem & tItem = m_dItems[i];
 		if ( !m_dKnownAttrs.BinarySearch(i) && tItem.m_sExpr!="id" )
 		{
-			sError.SetSprintf ( "INTERNAL ERROR: column '%s/%s' not found in result set schema", tItem.m_sExpr.cstr(), tItem.m_sAlias.cstr() );
+			sError.SetSprintf ( "internal error: column '%s/%s' not found in result set schema", tItem.m_sExpr.cstr(), tItem.m_sAlias.cstr() );
 			return false;
 		}
 	}
@@ -6359,7 +6359,7 @@ void SearchHandler_c::BuildIndexList ( int iStart, int iEnd, int & iDivideLimits
 			else
 			{
 				for ( int iRes=iStart; iRes<=iEnd; ++iRes )
-					m_dResults[iRes].m_sWarning.SetSprintf ( "distribute multi-index query '%s' doesn't support divide_remote_ranges", tFirst.m_sIndexes.cstr() );
+					m_dResults[iRes].m_sWarning.SetSprintf ( "distributed multi-index query '%s' doesn't support divide_remote_ranges", tFirst.m_sIndexes.cstr() );
 			}
 		}
 
@@ -7751,7 +7751,7 @@ CSphString & SqlParser_c::ToString ( CSphString & sRes, const SqlNode_t & tNode 
 	case SPHINXQL_TOK_COUNT:	sRes = "@count"; break;
 	case SPHINXQL_TOK_GROUPBY:	sRes = "@groupby"; break;
 	case SPHINXQL_TOK_WEIGHT:	sRes = "@weight"; break;
-	default:					assert ( 0 && "INTERNAL ERROR: unknown parser ident code" );
+	default:					assert ( 0 && "internal error: unknown parser ident code" );
 	}
 	return sRes;
 }
@@ -8402,7 +8402,7 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 			const CSphString & sCol = tQuery.m_dFilters[i].m_sAttrName;
 			if ( !strcasecmp ( sCol.cstr(), "@count" ) || !strcasecmp ( sCol.cstr(), "count(*)" ) )
 			{
-				sError.SetSprintf ( "sphinxql: Aggregates in 'where' clause prohibited, use 'having'" );
+				sError.SetSprintf ( "sphinxql: aggregates in 'where' clause prohibited, use 'HAVING'" );
 				return false;
 			}
 		}
@@ -8809,13 +8809,13 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	{
 		if ( pDist->m_dLocal.GetLength()!=1 )
 		{
-			sError.SetSprintf ( "%s", "The distributed index for snippets must have exactly one local agent" );
+			sError.SetSprintf ( "%s", "distributed index for snippets must have exactly one local agent" );
 			return false;
 		}
 
 		if ( !tQuery.m_uFilesMode )
 		{
-			sError.SetSprintf ( "%s", "The distributed index for snippets available only when using external files" );
+			sError.SetSprintf ( "%s", "distributed index for snippets available only when using external files" );
 			return false;
 		}
 
@@ -9945,7 +9945,7 @@ void BuildAgentStatus ( VectorLike &dStatus, const CSphString& sIndexOrAgent )
 			if ( pAgent )
 				BuildOneAgentStatus ( dStatus, pAgent );
 			else if ( dStatus.MatchAdd ( "status_error" ) )
-				dStatus.Add ().SetSprintf ( "No such distr index or agent: %s", sIndexOrAgent.cstr () );
+				dStatus.Add ().SetSprintf ( "No such distributed index or agent: %s", sIndexOrAgent.cstr () );
 		}
 		return;
 	}
@@ -10343,7 +10343,7 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 		case SEARCHD_COMMAND_CALLPQ:	HandleCommandCallPq ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_CLUSTERPQ:	HandleCommandClusterPq ( tOut, uCommandVer, tBuf, tThd.m_sClientName.cstr() ); break;
 		case SEARCHD_COMMAND_GETFIELD:	HandleCommandGetField ( tOut, uCommandVer, tBuf ); break;
-		default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
+		default:						assert ( 0 && "internal error: unhandled command" ); break;
 	}
 
 	// set off query guard
@@ -10974,13 +10974,13 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 
 	if ( dStmt.GetLength()>1 )
 	{
-		sError.SetSprintf ( "internal error: too many FILTERS statements, got %d", dStmt.GetLength() );
+		sError.SetSprintf ( "internal error: too many filter statements, got %d", dStmt.GetLength() );
 		return false;
 	}
 
 	if ( dStmt.GetLength() && dStmt[0].m_eStmt!=STMT_SYSFILTERS )
 	{
-		sError.SetSprintf ( "internal error: not FILTERS statement parsed, got %d", dStmt[0].m_eStmt );
+		sError.SetSprintf ( "internal error: not filter statement parsed, got %d", dStmt[0].m_eStmt );
 		return false;
 	}
 
@@ -13551,7 +13551,7 @@ static void HandleMysqlCreateTable ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 
 	if ( !IsConfigless() )
 	{
-		sError = "CREATE TABLE require data_dir to be set in the config file";
+		sError = "CREATE TABLE requires data_dir to be set in the config file";
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
@@ -13580,7 +13580,7 @@ static void HandleMysqlDropTable ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStm
 
 	if ( !IsConfigless() )
 	{
-		sError = "CREATE TABLE require data_dir to be set in the config file";
+		sError = "CREATE TABLE requires data_dir to be set in the config file";
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
@@ -13606,7 +13606,7 @@ void HandleMysqlShowCreateTable ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt
 	if ( !pServed->m_pIndex->IsRT() )
 	{
 		CSphString sError;
-		sError.SetSprintf ( "index '%s' is not RT", tStmt.m_sIndex.cstr() );
+		sError.SetSprintf ( "index '%s' is not real-time", tStmt.m_sIndex.cstr() );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_NO_SUCH_TABLE );
 		return;
 	}
@@ -14697,7 +14697,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			if ( !pDist || pDist->m_dAgents.IsEmpty() )
 				continue;
 
-			sError.SetSprintf ( "index '%s': DELETE not working on agents when autocommit=0", tStmt.m_sIndex.cstr() );
+			sError.SetSprintf ( "index '%s': DELETE is not supported on agents when autocommit=0", tStmt.m_sIndex.cstr() );
 			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 			return;
 		}
@@ -15119,7 +15119,7 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 	break;
 
 	default:
-		sError.SetSprintf ( "INTERNAL ERROR: unhandle SET mode %d", (int)tStmt.m_eSet );
+		sError.SetSprintf ( "internal error: unhandled SET mode %d", (int)tStmt.m_eSet );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
@@ -16129,7 +16129,7 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * pServ
 
 	if ( tStmt.m_eAlterColType!=SPH_ATTR_STRING && pServed->m_pIndex->GetMatchSchema().GetFieldIndex ( sAttrToAdd.cstr () )!=-1 )
 	{
-		sError.SetSprintf ( "can not add attribute that shadows '%s' field", sAttrToAdd.cstr () );
+		sError.SetSprintf ( "cannot add attribute that shadows '%s' field", sAttrToAdd.cstr () );
 		return;
 	}
 
@@ -16192,7 +16192,7 @@ static void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, b
 		if ( !g_pLocalIndexes->Contains ( sName )
 			&& g_pDistIndexes->Contains ( sName ) )
 		{
-			sError.SetSprintf ( "ALTER is only supported on local (not distributed) indexes" );
+			sError.SetSprintf ( "ALTER is only supported for local (not distributed) indexes" );
 			tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 			return;
 		}
@@ -16249,14 +16249,14 @@ bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSettings & t
 
 	if ( !tCfg.m_tConf.Exists ( "index" ) )
 	{
-		sError.SetSprintf ( "failed to find any index at config file '%s'; using previous settings", g_sConfigFile.cstr () );
+		sError.SetSprintf ( "failed to find any index in config file '%s'; using previous settings", g_sConfigFile.cstr () );
 		return false;
 	}
 
 	const CSphConfig & hConf = tCfg.m_tConf;
 	if ( !hConf["index"].Exists ( sIndex ) )
 	{
-		sError.SetSprintf ( "failed to find index '%s' at config file '%s'; using previous settings", sIndex.cstr(), g_sConfigFile.cstr () );
+		sError.SetSprintf ( "failed to find index '%s' in config file '%s'; using previous settings", sIndex.cstr(), g_sConfigFile.cstr () );
 		return false;
 	}
 
@@ -16302,7 +16302,7 @@ static void HandleMysqlReconfigure ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 	if ( !pServed )
 	{
 		if ( g_pDistIndexes->Contains ( tStmt.m_sIndex ) )
-			sError.SetSprintf ( "ALTER is only supported on local (not distributed) indexes" );
+			sError.SetSprintf ( "ALTER is only supported for local (not distributed) indexes" );
 		else
 			sError.SetSprintf ( "index '%s' not found", tStmt.m_sIndex.cstr () );
 
@@ -16358,12 +16358,12 @@ static void HandleMysqlAlterKlist ( SqlRowBuffer_c & tOut, const SqlStmt_t & tSt
 	if ( !pServed )
 	{
 		if ( g_pDistIndexes->Contains ( tStmt.m_sIndex ) )
-			sError.SetSprintf ( "ALTER is only supported on local (not distributed) indexes" );
+			sError.SetSprintf ( "ALTER is only supported for local (not distributed) indexes" );
 		else
 			sError.SetSprintf ( "index '%s' not found", tStmt.m_sIndex.cstr () );
 	}
 	else if ( ServedDesc_t::IsMutable ( pWriteLocked ) )
-		sError.SetSprintf ( "'%s' does not support ALTER (RT or percolate)", tStmt.m_sIndex.cstr () );
+		sError.SetSprintf ( "'%s' does not support ALTER (real-time or percolate)", tStmt.m_sIndex.cstr () );
 
 	if ( !sError.IsEmpty () )
 	{
@@ -16422,7 +16422,7 @@ static void HandleMysqlReloadIndex ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 		ServedDescRPtr_c pServed ( pIndex );
 		if ( ServedDesc_t::IsMutable ( pServed ) )
 		{
-			sError.SetSprintf ( "can not reload RT or percolate index" );
+			sError.SetSprintf ( "can not reload real-time or percolate index" );
 			tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 			return;
 		}
@@ -16772,7 +16772,7 @@ public:
 				m_tPercolateMeta.m_dDocids.Reset ( 0 ); // free occupied mem
 			} else
 			{
-				m_sError.SetSprintf ( "no such builtin procedure %s", pStmt->m_sCallProc.cstr() );
+				m_sError.SetSprintf ( "no such built-in procedure %s", pStmt->m_sCallProc.cstr() );
 				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
 			}
 			return true;
@@ -17110,7 +17110,7 @@ bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dSt
 
 	if ( dStmt.GetLength()>1 )
 	{
-		sError.SetSprintf ( "multi query not supported" );
+		sError.SetSprintf ( "multi-query not supported" );
 		return false;
 	}
 
@@ -17151,7 +17151,7 @@ bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dSt
 
 	if ( dRealStmt.GetLength()!=1 )
 	{
-		sError.SetSprintf ( "multi query not supported, got queries=%d", dRealStmt.GetLength() );
+		sError.SetSprintf ( "multi-query not supported, got queries=%d", dRealStmt.GetLength() );
 		return false;
 	}
 
@@ -17537,7 +17537,7 @@ bool RotateIndexGreedy (ServedDesc_t &tWlockedIndex, const char * szIndex, CSphS
 	bool bReEnable = ( eRot==RotateFrom_e::REENABLE );
 	if ( eRot==RotateFrom_e::PATH_NEW || eRot==RotateFrom_e::PATH_COPY )
 	{
-		sError.SetSprintf ( "rotating index '%s': can not rotate from new path, switch to seamless_rotate=1; using old index", szIndex );
+		sError.SetSprintf ( "rotating index '%s': cannot rotate from new path, switch to seamless_rotate=1; using old index", szIndex );
 		return false;
 	}
 
@@ -17771,7 +17771,7 @@ static bool RotateIndexMT ( ServedIndex_c* pIndex, const CSphString & sIndex, CS
 		pRotating = GetServed ( sIndex );
 		if ( !pRotating )
 		{
-			sError.SetSprintf ( "rotating index '%s': INTERNAL ERROR, index went AWOL", sIndex.cstr() );
+			sError.SetSprintf ( "rotating index '%s': internal error, index went AWOL", sIndex.cstr() );
 			return false;
 		}
 	}
@@ -17792,7 +17792,7 @@ static bool RotateIndexMT ( ServedIndex_c* pIndex, const CSphString & sIndex, CS
 		ServedDescRPtr_c pCurrentlyServed ( pRotating );
 		if ( !pCurrentlyServed->m_pIndex )
 		{
-			sError.SetSprintf ( "rotating index '%s': INTERNAL ERROR, entry does not have an index", sIndex.cstr() );
+			sError.SetSprintf ( "rotating index '%s': internal error, entry does not have an index", sIndex.cstr() );
 			return false;
 		}
 		// keep settings from current index description
@@ -18319,7 +18319,7 @@ static bool AddLocallyServedIndex ( GuardedHash_c& dPost, const CSphString& sInd
 	g_pLocalIndexes->AddUniq ( nullptr, sIndexName );
 	if ( !dPost.AddUniq ( pIdx, sIndexName ) )
 	{
-		sphWarning ( "INTERNAL ERROR: index '%s': hash add failed - NOT SERVING", sIndexName.cstr() );
+		sphWarning ( "internal error: index '%s': hash add failed - NOT SERVING", sIndexName.cstr() );
 		g_pLocalIndexes->DeleteIfNull ( sIndexName );
 		return false;
 	}
@@ -18595,7 +18595,7 @@ static ESphAddIndex AddTemplateIndex ( const char * szIndexName, const CSphConfi
 		g_pLocalIndexes->AddOrReplace( pIdx, szIndexName );
 	else if ( !g_pLocalIndexes->AddUniq( pIdx, szIndexName ))
 	{
-		sphWarning( "INTERNAL ERROR: index '%s': hash add failed - NOT SERVING", szIndexName );
+		sphWarning( "internal error: index '%s': hash add failed - NOT SERVING", szIndexName );
 		return ADD_ERROR;
 	}
 	tIdx.m_pIndex = nullptr; // leak pointer, so it's destructor won't delete it
@@ -18979,7 +18979,7 @@ static void CheckIndexesForSeamless() REQUIRES ( MainThread )
 
 	if ( dNotCapableForRotation.GetLength () )
 	{
-		sphWarning ( "INTERNAL ERROR: non-empty queue on a rotation cycle start, got %d elements"
+		sphWarning ( "internal error: non-empty queue on a rotation cycle start, got %d elements"
 			, dNotCapableForRotation.GetLength () );
 		for ( dNotCapableForRotation.IterateStart (); dNotCapableForRotation.IterateNext (); )
 		{

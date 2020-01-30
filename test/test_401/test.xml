@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>query cache work</name>
+<requires><non-rt/></requires>
+
+<config>
+indexer
+{
+	mem_limit			= 28M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers					= threads
+}
+
+source src_xml1
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data.xml
+}
+
+index idx_1
+{
+	source			= src_xml1
+	path			= <data_path/>/idx_1
+}
+
+</config>
+
+<sphqueries>
+<sphinxql>SET GLOBAL qcache_thresh_msec=0</sphinxql>
+<sphinxql>SET GLOBAL qcache_max_bytes=16777216</sphinxql>
+<sphinxql>SHOW STATUS LIKE 'qcache_cached%'</sphinxql>
+<sphinxql>SHOW STATUS LIKE 'qcache_hits%'</sphinxql>
+
+<!-- regression wrong release of cache entry -->
+<sphinxql>SELECT id FROM idx_1 WHERE MATCH('this') ORDER BY id ASC</sphinxql>
+<sphinxql>SELECT id FROM idx_1 WHERE MATCH('this') ORDER BY id ASC</sphinxql>
+<sphinxql>SELECT id FROM idx_1 WHERE MATCH('this') ORDER BY id ASC</sphinxql>
+<sphinxql>SHOW STATUS LIKE 'qcache_cached%'</sphinxql>
+<sphinxql>SHOW STATUS LIKE 'qcache_hits%'</sphinxql>
+</sphqueries>
+
+</test>

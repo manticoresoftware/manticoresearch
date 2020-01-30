@@ -3984,7 +3984,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 	if ( !bSkipQCache )
 		pCached = QcacheFind ( pIndex->GetIndexId(), *pQuery, tSorterSchema );
 	if ( pCached )
-		return QcacheRanker ( pCached, tTermSetup );
+		return QcacheRanker ( pCached.Leak(), tTermSetup );
 
 	// setup eval-tree
 	ExtRanker_c * pRanker = nullptr;

@@ -1162,8 +1162,6 @@ public:
 
 	bool				IsStarDict() const final;
 
-	int64_t				GetUsedRam () const;
-
 	bool				IsWordDict () const { return m_bKeywordDict; }
 	int					GetWordCheckoint() const { return m_iWordsCheckpoint; }
 	int					GetMaxCodepointLength() const { return m_iMaxCodepointLength; }
@@ -1293,7 +1291,7 @@ private:
 	DocstoreBuilder_i::Doc_t *	FetchDocFields ( DocstoreBuilder_i::Doc_t & tStoredDoc, CSphSource_StringVector & tSrc ) const;
 
 	bool						MergeSegments ( CSphVector<RtSegmentRefPtf_t> & dSegments, bool bForceDump, int64_t iMemLimit, bool bHasNewSegment );
-	RtSegmentRefPtf_t			MergeDoubleBufSegments() const;
+	RtSegmentRefPtf_t			MergeDoubleBufSegments ( CSphVector<RtSegmentRefPtf_t> & dSegments ) const;
 };
 
 
@@ -1456,16 +1454,6 @@ int64_t RtIndex_c::GetLastFlushTimestamp() const
 }
 
 
-int64_t RtIndex_c::GetUsedRam () const
-{
-	int64_t iTotal = 0;
-	for ( const auto &pSeg : m_dRamChunks )
-		iTotal += pSeg->GetUsedRam();
-
-	return iTotal;
-}
-
-
 //////////////////////////////////////////////////////////////////////////
 // INDEXING
 //////////////////////////////////////////////////////////////////////////
@@ -1550,16 +1538,16 @@ bool RtIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFiel
 	const bool bAutoID = ( tDocID==0 );
 	if ( bAutoID )
 	{
-		CSphScopedRLock tRLock { m_tChunkLock };
+		SphChunkGuard_t tGuard = GetReaderChunks();
 		// get uuid_short and check it will not collide with already provided document
 		bool bDuplicate = true;
 		while ( bDuplicate )
 		{
 			tDocID = UidShort();
 			bDuplicate = false;
-			ARRAY_FOREACH_COND ( i, m_dRamChunks, !bDuplicate )
+			ARRAY_FOREACH_COND ( i, tGuard.m_dRamChunks, !bDuplicate )
 			{
-				bDuplicate = ( m_dRamChunks[i]->FindAliveRow ( tDocID )!=nullptr );
+				bDuplicate = ( tGuard.m_dRamChunks[i]->FindAliveRow ( tDocID )!=nullptr );
 			}
 		}
 
@@ -1580,13 +1568,15 @@ bool RtIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFiel
 
 	if ( !bReplace && !bAutoID )
 	{
-		CSphScopedRLock tRLock { m_tChunkLock };
-		for ( auto & pSegment : m_dRamChunks )
+		SphChunkGuard_t tGuard = GetReaderChunks();
+		for ( const auto & pSegment : tGuard.m_dRamChunks )
+		{
 			if ( pSegment->FindAliveRow ( tDocID ) )
 			{
 				sError.SetSprintf ( "duplicate id '" INT64_FMT "'", tDocID );
 				return false; // already exists and not deleted; INSERT fails
 			}
+		}
 	}
 
 	auto pAcc = ( RtAccum_t * ) AcquireAccum ( m_pDict, pAccExt, m_bKeywordDict, true, &sError );
@@ -2669,6 +2659,7 @@ int RtIndex_c::ApplyKillList ( const CSphVector<DocID_t> & dAccKlist )
 	if ( m_bOptimizing )
 		m_dKillsWhileOptimizing.Append ( dAccKlist );
 
+	// chunks got checked under m_tWriting lock - should be safe to check chunks vectors itself
 	for ( auto & pChunk : m_dDiskChunks )
 		iKilled += pChunk->KillMulti ( dAccKlist );
 
@@ -3660,21 +3651,21 @@ void RtIndex_c::SaveMeta ( int64_t iTID, const CSphFixedVector<int> & dChunkName
 }
 
 
-RtSegmentRefPtf_t RtIndex_c::MergeDoubleBufSegments() const
+RtSegmentRefPtf_t RtIndex_c::MergeDoubleBufSegments ( CSphVector<RtSegmentRefPtf_t> & dSegments ) const
 {
 	RtSegmentRefPtf_t tLast;
-	if ( !m_iDoubleBuffer || m_iDoubleBuffer==m_dRamChunks.GetLength() )
+	if ( !dSegments.GetLength() )
 		return tLast;
 
 	// lets also merge all double buffer segments into single one
 	// as these were not merged during save
-	tLast = m_dRamChunks[m_iDoubleBuffer];
+	tLast = dSegments[0];
 
 	bool bHasMorphology = m_pDict->HasMorphology();
 
-	for ( int i=m_iDoubleBuffer+1; i<m_dRamChunks.GetLength(); i++ )
+	for ( int i=1; i<dSegments.GetLength(); i++ )
 	{
-		RtSegmentRefPtf_t & tNext = m_dRamChunks[i];
+		RtSegmentRefPtf_t & tNext = dSegments[i];
 		RtSegmentRefPtf_t tMerged { MergeSegments ( tLast, tNext, bHasMorphology ) };
 
 		// force releasing of parent segments
@@ -3711,13 +3702,20 @@ bool RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, co
 	if ( !pDiskChunk )
 		return false;
 
-	// FIXME! add binlog cleanup here once we have binlogs
-
 	// get exclusive lock again, gotta reset RAM chunk now
 	Verify ( m_tWriting.Lock() );
 
+	Verify ( m_tChunkLock.ReadLock() );
+	CSphVector<RtSegmentRefPtf_t> dSegments;
+	if ( m_iDoubleBuffer && m_iDoubleBuffer!=m_dRamChunks.GetLength() )
+	{
+		dSegments.Reserve ( m_dRamChunks.GetLength()-m_iDoubleBuffer );
+		for ( int i=m_iDoubleBuffer; i<m_dRamChunks.GetLength(); i++ )
+			dSegments.Add ( m_dRamChunks[i] );
+	}
+	Verify ( m_tChunkLock.Unlock() );
 	// merge all double buffer segments into single one as these were not merged during save
-	RtSegmentRefPtf_t tLast = MergeDoubleBufSegments();
+	RtSegmentRefPtf_t tLast = MergeDoubleBufSegments ( dSegments );
 
 	Verify ( m_tChunkLock.WriteLock() );
 
@@ -7373,10 +7371,10 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 		VecTraits_T<SphAttr_t> dDocsSorted ( dIndexDocList.Begin(), iDocsCount );
 
 		if ( m_bOptimizing )
-			m_dKillsWhileOptimizing.Append ( dIndexDocList );
+			m_dKillsWhileOptimizing.Append ( dDocsSorted );
 
 		for ( const auto & pChunk : m_dDiskChunks )
-			iTotalKilled += pChunk->KillMulti ( dIndexDocList );
+			iTotalKilled += pChunk->KillMulti ( dDocsSorted );
 
 	}
 
@@ -7860,17 +7858,13 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	if ( !pRes )
 		return;
 
-	Verify ( m_tChunkLock.ReadLock() );
+	SphChunkGuard_t tGuard = GetReaderChunks();
 
-	pRes->m_iRamChunkSize = GetUsedRam()
-		+ m_dRamChunks.AllocatedBytes ()
-		+ m_dRamChunks.GetLength()*int(sizeof(RtSegment_t));
+	int64_t iUsedRam = SegmentsGetUsedRam ( tGuard.m_dRamChunks );
 
-	pRes->m_iRamUse = sizeof( RtIndex_c )
-		+ m_dDiskChunks.AllocatedBytes ()
-		+ pRes->m_iRamChunkSize;
-
-	pRes->m_iRamRetired = m_iRamChunksAllocatedRAM-GetUsedRam ();
+	pRes->m_iRamChunkSize = iUsedRam + tGuard.m_dRamChunks.GetLength()*int(sizeof(RtSegment_t));
+	pRes->m_iRamUse = sizeof( RtIndex_c ) + pRes->m_iRamChunkSize;
+	pRes->m_iRamRetired = m_iRamChunksAllocatedRAM - iUsedRam;
 
 	pRes->m_iMemLimit = m_iSoftRamLimit;
 	pRes->m_iDiskUse = 0;
@@ -7887,20 +7881,18 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 			pRes->m_iDiskUse += iFileSize;
 	}
 	CSphIndexStatus tDisk;
-	ARRAY_FOREACH ( i, m_dDiskChunks )
+	ARRAY_FOREACH ( i, tGuard.m_dDiskChunks )
 	{
-		m_dDiskChunks[i]->GetStatus(&tDisk);
+		tGuard.m_dDiskChunks[i]->GetStatus ( &tDisk );
 		pRes->m_iRamUse += tDisk.m_iRamUse;
 		pRes->m_iDiskUse += tDisk.m_iDiskUse;
 	}
 
-	pRes->m_iNumRamChunks = m_dRamChunks.GetLength();
-	pRes->m_iNumChunks = m_dDiskChunks.GetLength();
+	pRes->m_iNumRamChunks = tGuard.m_dRamChunks.GetLength();
+	pRes->m_iNumChunks = tGuard.m_dDiskChunks.GetLength();
 
 	pRes->m_iTID = m_iTID;
 	pRes->m_iSavedTID = m_iSavedTID;
-
-	Verify ( m_tChunkLock.Unlock() );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -8138,9 +8130,9 @@ void RtIndex_c::CreateReader ( int64_t iSessionId ) const
 {
 	// rt docstore doesn't need buffered readers
 	// but disk chunks need them
-	CSphScopedRLock tRLock { m_tChunkLock };
+	SphChunkGuard_t tGuard = GetReaderChunks();
 
-	for ( const auto & i : m_dDiskChunks )
+	for ( const auto & i : tGuard.m_dDiskChunks )
 	{
 		assert(i);
 		i->CreateReader(iSessionId);
@@ -8150,9 +8142,9 @@ void RtIndex_c::CreateReader ( int64_t iSessionId ) const
 
 bool RtIndex_c::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const
 {
-	CSphScopedRLock tRLock { m_tChunkLock };
+	SphChunkGuard_t tGuard = GetReaderChunks();
 
-	for ( const auto & i : m_dRamChunks )
+	for ( const auto & i : tGuard.m_dRamChunks )
 	{
 		assert ( i && i->m_pDocstore.Ptr() );
 		RowID_t tRowID = i->GetRowidByDocid(tDocID);
@@ -8163,7 +8155,7 @@ bool RtIndex_c::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T
 		return true;
 	}
 
-	for ( const auto & i : m_dDiskChunks )
+	for ( const auto & i : tGuard.m_dDiskChunks )
 	{
 		assert(i);
 		if ( i->GetDoc ( tDoc, tDocID, pFieldIds, iSessionId, bPack ) )

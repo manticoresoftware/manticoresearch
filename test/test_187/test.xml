@@ -39,7 +39,7 @@ index disk
 index rt
 {
 	type			= rt
-	path			= data/rt
+	path			= <data_path/>/rt
 	rt_attr_uint	= gid1
 	rt_attr_uint	= gid2
 	rt_field		= title
@@ -67,7 +67,7 @@ index plain
 index rt_arena
 {
 	type			= rt
-	path			= data/rt_arena
+	path			= <data_path/>/rt_arena
 	
 	rt_field		= title
 	rt_attr_string = str1
@@ -93,7 +93,7 @@ index a1
 index rt1
 {
 	type			= rt
-	path			= data/rt1
+	path			= <data_path/>/rt1
 	rt_field		= title
 	rt_field		= body
 	rt_attr_uint	= gid
@@ -123,7 +123,7 @@ index disk3
 index rt_d1
 {
 	type			= rt
-	path			= data/rt_d1
+	path			= <data_path/>/rt_d1
 	rt_field		= title
 	rt_attr_uint	= gid
 } 
@@ -131,7 +131,7 @@ index rt_d1
 index rt_trunc
 {
 	type			= rt
-	path			= data/rt_trunc
+	path			= <data_path/>/rt_trunc
 	rt_attr_uint	= gid1
 	rt_attr_uint	= gid2
 	rt_field		= title
@@ -156,7 +156,7 @@ index disk10
 index rt10
 {
 	type			= rt
-	path			= data/rt10
+	path			= <data_path/>/rt10
 	rt_field		= title
 	rt_attr_uint	= gid
 } 

@@ -383,12 +383,18 @@ public:
 			return 0;
 		}
 
+		int iLen = 0;
 		DocID_t tDocID = sphGetDocID ( tMatch.m_pDynamic ? tMatch.m_pDynamic : tMatch.m_pStatic );
 		DocstoreDoc_t tDoc;
-		Verify ( m_tSession.m_pDocstore->GetDoc ( tDoc, tDocID, &m_dFieldIds, m_tSession.m_iSessionId, false ) );
-		int iLen = tDoc.m_dFields[0].GetLength();
-		assert(iLen>=0);
-		*ppStr = tDoc.m_dFields[0].LeakData();
+		if ( m_tSession.m_pDocstore->GetDoc ( tDoc, tDocID, &m_dFieldIds, m_tSession.m_iSessionId, false ) )
+		{
+			iLen = tDoc.m_dFields[0].GetLength();
+			assert(iLen>=0);
+			*ppStr = tDoc.m_dFields[0].LeakData();
+		} else
+		{
+			ppStr = nullptr;
+		}
 		return iLen;
 	}
 
@@ -399,8 +405,10 @@ public:
 
 		DocID_t tDocID = sphGetDocID ( tMatch.m_pDynamic ? tMatch.m_pDynamic : tMatch.m_pStatic );
 		DocstoreDoc_t tDoc;
-		Verify ( m_tSession.m_pDocstore->GetDoc ( tDoc, tDocID, &m_dFieldIds, m_tSession.m_iSessionId, true ) );
-		return tDoc.m_dFields[0].LeakData();
+		if ( m_tSession.m_pDocstore->GetDoc ( tDoc, tDocID, &m_dFieldIds, m_tSession.m_iSessionId, true ) )
+			return tDoc.m_dFields[0].LeakData();
+		else
+			return nullptr;
 	}
 
 	void Command ( ESphExprCommand eCmd, void * pArg ) final

@@ -198,6 +198,13 @@ previous row versions, and searching performance would degrade. Physical
 index purging that would improve the performance may be performed with
 :ref:`OPTIMIZE <optimize_index_syntax>` command.
 
+When a search is performed, a search thread looks for matches in the RAM chunk and then on each disk chunk.
+The search becomes slower as the disk has more chunks, as a single search thread is used. 
+The effect increases with the number of disk chunks and it's more visible on slower storage.
+Multi-threaded searching over the disk chunks can be enabled by setting :ref:`dist_threads<dist_threads>` to a value greater than one.
+Depending on the value of dist_threads, a number of search threads will be launched in parallel and search over the disk chunks. 
+The search on the RAM chunk is not parallelized.
+
 Data in RAM chunk gets saved to disk on clean daemon shutdown, and then
 loaded back on startup. However, on daemon or server crash, updates from
 RAM chunk might be lost. To prevent that, binary logging of transactions

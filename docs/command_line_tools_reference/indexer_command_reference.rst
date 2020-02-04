@@ -253,9 +253,9 @@ operation is performed. These options are:
    the exact representation of data as received by ``indexer`` and help
    to repeat indexing-time issues. The command perform fetching from the source and creates both index files and the dump file.
    
--  ``--print-rt <rt_index> <index>`` output fetched data from source as INSERTs for a Real-Time index.
-   The first lines of the dump will contain the Real-Time fields and attributes (as reflection of the plain index fields and attributes).
-   The command perform fetching from the source and creates both index files and the dump output.
+-  ``--print-rt <rt_index> <index>`` outputs fetched data from source as INSERTs for a Real-Time index.
+   The first lines of the dump will contain the Real-Time fields and attributes (as a reflection of the plain index fields and attributes).
+   The command performs fetching from the source and creates both index files and the dump output.
    The command can be used as ``sudo -u manticore indexer -c manticore.conf --print-rt indexrt indexplain > dump.sql``.
 
 -  ``--verbose [debug|debugv|debugvv]`` guarantees that every row that caused problems indexing

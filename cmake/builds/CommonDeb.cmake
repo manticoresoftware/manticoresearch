@@ -96,9 +96,9 @@ install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COM
 
 # tickets per components
 set ( CPACK_COMPONENT_BIN_DESCRIPTION "Manticore Search is a powerful free open source search engine
-with a focus on low latency and high throughput full-text search
-and high volume stream filtering" )
- 
+ with a focus on low latency and high throughput full-text search
+ and high volume stream filtering" )
+
 set  ( CPACK_COMPONENT_CONVERTER_DESCRIPTION "This package provides the index_converter tool for Manticore Search which converts indexes created with Manticore Search 2.x or Sphinx 2.x to Manticore Search 3.x format" )
 
 set ( CPACK_DEBIAN_PACKAGE_NAME "manticore" )

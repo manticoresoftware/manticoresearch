@@ -1,4 +1,3 @@
 @SYSCONFDIR@/default/manticore
-@SYSCONFDIR@/init/manticore.conf
 @SYSCONFDIR@/manticoresearch/manticore.conf
 @SYSCONFDIR@/init.d/manticore

@@ -330,6 +330,9 @@ process those files. That speeds up snippet extraction when the total
 amount of document data to process is significant (hundreds of
 megabytes).
 
+Searches in  Real-Time indexes with multiple disk chunks can be parallelized, providing a significant boost in searches.
+Up to ``dist_threads`` threads are be created to search in the disk chunks. 
+
 Up to ``dist_threads`` threads can be created to handle :ref:`CALL PQ <percolate_query_call>` calls.
 
 Example:

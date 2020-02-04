@@ -1,6 +1,50 @@
 Release notes
 =============
 
+Version 3.3.0, 4 February 2020
+------------------------------
+
+Features
+~~~~~~~~
+
+* Parallel Real-Time index searching
+* EXPLAIN QUERY command
+* configuration file without index definitions (alpha version)
+* CREATE/DROP TABLE commands (alpha version)
+* indexer --print-rt - can read from a source and print INSERTs for a Real-Time index
+
+Improvements
+~~~~~~~~~~~~
+
+* Updated to Snowball 2.0 stemmers
+* LIKE filter for SHOW INDEX STATUS
+* improved memory usage for high max_matches
+* SHOW INDEX STATUS adds ram_chunks_count for RT indexes
+* lockless PQ
+* changed LimitNOFILE to 65536
+
+
+Bugfixes
+~~~~~~~~
+
+* `9c33aab8c1fd9059c8644d23d5f58f03010043c6 <https://github.com/manticoresoftware/manticoresearch/commit/9c33aab8c1fd9059c8644d23d5f58f03010043c6>`__ added check of index schema for duplicate attributes #293
+* `a0085f9477e191da9e0e835b91583fb9cfde698e <https://github.com/manticoresoftware/manticoresearch/commit/a0085f9477e191da9e0e835b91583fb9cfde698e>`__ fix crash in hitless terms
+* `68953740af8dca1833026d0f448c71416ed3044a <https://github.com/manticoresoftware/manticoresearch/commit/68953740af8dca1833026d0f448c71416ed3044a>`__ fix loose docstore after ATTACH 
+* `d6f696edea53ea2b9a68251e4054e4816082c285 <https://github.com/manticoresoftware/manticoresearch/commit/d6f696edea53ea2b9a68251e4054e4816082c285>`__ fix docstore issue in distributed setup
+* `bce2b7ec883d208f31094ee42a5b6f01d18a998f <https://github.com/manticoresoftware/manticoresearch/commit/bce2b7ec883d208f31094ee42a5b6f01d18a998f>`__ replace FixedHash with OpenHash in sorter
+* `e0baf7392937969e640fb5d10e8ccb312fe36446 <https://github.com/manticoresoftware/manticoresearch/commit/e0baf7392937969e640fb5d10e8ccb312fe36446>`__ fix attributes with duplicated names at index definition
+* `ca81114bf1ac7ea7adcc8509bdc14d1f30b4f461 <https://github.com/manticoresoftware/manticoresearch/commit/ca81114bf1ac7ea7adcc8509bdc14d1f30b4f461>`__ fix html_strip in HIGHLIGHT()
+*  493a5e916d70fd4a3f14d1ee487234434f4a7ce3 <https://github.com/manticoresoftware/manticoresearch/commit/493a5e916d70fd4a3f14d1ee487234434f4a7ce3>`__ fix passage macro in HIGHLIGHT()
+* `a82d41c775692f837f267d554d7d4a4b499d69f0 <https://github.com/manticoresoftware/manticoresearch/commit/a82d41c775692f837f267d554d7d4a4b499d69f0>`__ fix double buffer issues when RT index creates small or large disk chunk
+* `a404c85de0d41d9d1c75b7540479d8a3af9e61aa <https://github.com/manticoresoftware/manticoresearch/commit/a404c85de0d41d9d1c75b7540479d8a3af9e61aa>`__ fix event deletion for kqueue
+* `8bea0f6fd1666b817995c4dd6e67f6f1c9161638 <https://github.com/manticoresoftware/manticoresearch/commit/8bea0f6fd1666b817995c4dd6e67f6f1c9161638>`__ fix save of disk chunk for large value of rt_mem_limit of RT index
+* `8707f0395b7ace52dc0cba9c8ed92a2bc4392932 <https://github.com/manticoresoftware/manticoresearch/commit/8707f0395b7ace52dc0cba9c8ed92a2bc4392932>`__ fix float overflow on indexing
+* `a56434ce71bb7714b4d8e75278aaa075b27ece80 <https://github.com/manticoresoftware/manticoresearch/commit/a56434ce71bb7714b4d8e75278aaa075b27ece80>`__ fix insert document with negative ID into RT index fails with error now
+* `bbebfd7551a68641154761cac962053b54806759 <https://github.com/manticoresoftware/manticoresearch/commit/bbebfd7551a68641154761cac962053b54806759>`__ fix crash of daemon on ranker fieldmask
+* `3809cc1b0863e3a5a200dc423be3f7c38be56113 <https://github.com/manticoresoftware/manticoresearch/commit/3809cc1b0863e3a5a200dc423be3f7c38be56113>`__ fix crash on using query cache 
+* `dc2a585bc724678679e4297362200bbd49ce32bb <https://github.com/manticoresoftware/manticoresearch/commit/dc2a585bc724678679e4297362200bbd49ce32bb>`__ fix crash on using RT index RAM segments with parallel inserts
+
+
 Version 3.2.2, 19 December 2019
 -------------------------------
 

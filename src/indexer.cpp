@@ -1650,6 +1650,7 @@ static void ShowHelp ()
 		"\t\t\twhere 'attr' is between 'min' and 'max' (inclusive)\n"
 		"--dump-rows <FILE>\tdump indexed rows into FILE\n"
 		"--print-queries\t\tprint SQL queries (for debugging)\n"
+		"--print-rt\t\tprint indexed rows as SQL insert and field mapping for populating a RT index\n"
 		"--keep-attrs\t\tretain attributes from the old index\n"
 		"\n"
 		"Examples:\n"
@@ -1788,7 +1789,12 @@ int main ( int argc, char ** argv )
 			g_bPrintRTQueries = true;
 			g_bProgress = false;
 			g_bQuiet = true;
-			g_sDumpRtIndex = argv[++i];
+			if((i+1)<argc)
+			{
+				g_sDumpRtIndex = argv[++i];
+			}else{
+				break;
+			}
 		} else if ( strcasecmp ( argv[i], "--keep-attrs" )>=0 )
 		{
 			CSphString sArg ( argv[i] );

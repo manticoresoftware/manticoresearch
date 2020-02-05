@@ -185,7 +185,7 @@ To create a new RT index, you need to define it in the manticore.conf. A simple 
          rt_field = title
          rt_attr_uint = attr1
          rt_attr_uint = attr2
-		 stored_field = title
+         stored_field = title
    }
 
 To get the index online you need to either restart the daemon or send a HUP signal to it.

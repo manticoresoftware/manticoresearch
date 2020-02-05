@@ -71,20 +71,20 @@ An example of a plain index configuration using a MySQL source:
 
   source mysource {
     type             = mysql
-	path             = /path/to/realtime
+    path             = /path/to/realtime
     sql_host         = localhost
-	sql_user         = myuser
-	sql_pass         = mypass
-	sql_db           = mydb
-	sql_query        =  SELECT id, title, description, category_id  from mytable
-	sql_attr_uint    = category_id
-	sql_field_string = title
+    sql_user         = myuser
+    sql_pass         = mypass
+    sql_db           = mydb
+    sql_query        =  SELECT id, title, description, category_id  from mytable
+    sql_attr_uint    = category_id
+    sql_field_string = title
    }
    
   index myindex {
     type   = plain
-	source = mysource
-	path   = /path/to/myindex
+    source = mysource
+    path   = /path/to/myindex
     ...
    }
    
@@ -109,13 +109,13 @@ An example of Real-Time index configuration:
 
   index realtime {
     type           = rt
-	path           = /path/to/realtime
-	rt_field       = title
-	rt_field       = description
-	rt_attr_uint   = category_id
-	rt_attr_string = title
-	rt_attr_json   = metadata
-	stored_fields  = description
+    path           = /path/to/realtime
+    rt_field       = title
+    rt_field       = description
+    rt_attr_uint   = category_id
+    rt_attr_string = title
+    rt_attr_json   = metadata
+    stored_fields  = description
     ...
    }
    

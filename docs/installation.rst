@@ -27,8 +27,8 @@ You can install Manticore with command:
 
 .. code-block:: bash
 
-	$ wget https://github.com/manticoresoftware/manticoresearch/releases/download/3.2.2/manticore_3.2.2-191226-afd6046-release.jessie_amd64-bin.deb
-	$ sudo dpkg -i manticore_3.2.2-191226-afd6046-release.jessie_amd64-bin.deb
+	$ wget https://github.com/manticoresoftware/manticoresearch/releases/download/3.3.0/manticore_3.3.0-200204-01fc8ad-release.jessie_amd64-bin.deb
+	$ sudo dpkg -i manticore_3.3.0-200204-01fc8ad-release.jessie_amd64-bin.deb
 
 Manticore package depends on zlib and ssl libraries, nothing else is strictly required.
 However if you plan to use 'indexer' tool to create indexes from different sources,
@@ -38,10 +38,10 @@ To know what exactly libraries, run `indexer` tool from Manticore and look at th
 .. code-block:: bash
 
 	$ indexer
-	Manticore 3.2.2 62ea5ff0@191220 release
+	Manticore 3.3.0 01fc8ad@200204 release
 	Copyright (c) 2001-2016, Andrew Aksyonoff
 	Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-	Copyright (c) 2017-2019, Manticore Software LTD (http://manticoresearch.com)
+	Copyright (c) 2017-2020, Manticore Software LTD (http://manticoresearch.com)
 
 	Built by gcc/clang v 6.3.0,
 
@@ -185,8 +185,8 @@ Download RedHat RPM from Manticore website and install it:
 
 .. code-block:: bash
 
-	$ wget https://github.com/manticoresoftware/manticoresearch/releases/download/3.2.2/manticore-3.2.2_191226.afd6046-1.el7.centos.x86_64.rpm
-	$ rpm -Uhv manticore-3.2.2_191226.afd6046-1.el7.centos.x86_64.rpm
+	$ wget https://github.com/manticoresoftware/manticoresearch/releases/download/3.3.0/manticore-3.3.0_200204.01fc8ad-1.el7.centos.x86_64.rpm
+	$ rpm -Uhv manticore-3.3.0_200204.01fc8ad-1.el7.centos.x86_64.rpm
 
 Starting Manticore Search
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -208,7 +208,7 @@ In the following example we'll consider folder ``C:\Manticore`` where we unpack 
 .. code-block:: bash
 	
 	cd C:\Manticore
-	unzip manticore-3.2.2-191226-afd60463-release-x64-bin.zip
+	unzip manticore-3.3.0-200204-01fc8ad1-release-x64-bin.zip
 
 
 The zip comes with 2 sample configurations: ``manticore.conf.in`` and ``manticore-min.conf.in``. The latter is a stripped-down of comments version of the first.  	
@@ -247,7 +247,7 @@ On MacOS Manticore can be installed in 2 easy way:
 .. code-block:: bash
 	
 	$ mkdir manticore
-	$ tar -zxvf manticore-3.2.2-191226-afd60463-release-osx10.14.4-x86_64-bin.tar.gz -C manticore
+	$ tar -zxvf manticore-3.3.0-200204-01fc8ad1-release-osx10.14.4-x86_64-bin.tar.gz -C manticore
 	$ cd manticore
 	$ bin/searchd  -c manticore.conf
 
@@ -385,7 +385,7 @@ General building options
 
 For compiling latest version of Manticore, recommended is checkout the latest code from the github repositiory.
 Alternative, for compiling a certain version, you can either checked that version from github or use it's respective source tarball.
-In last case avoid to use automatic tarballs from github (named there as 'Source code'), but use provided files as **manticore-3.2.2-191226-afd6046-release.tar.gz**.
+In last case avoid to use automatic tarballs from github (named there as 'Source code'), but use provided files as **manticore-3.3.0-200204-01fc8ad-release.tar.gz**.
 When building from git clone you need packages **git**, **flex**, **bison**. When building from tarball they are not necessary. This requirement
 may be essential to build on Windows.
 
@@ -395,8 +395,8 @@ may be essential to build on Windows.
 
 .. code-block:: bash
 
-   $ wget https://github.com/manticoresoftware/manticoresearch/releases/download/3.2.2/manticore-3.2.2-191226-afd6046-release.tar.gz
-   $ tar zcvf manticore-3.2.2-191226-afd6046-release.tar.gz
+   $ wget https://github.com/manticoresoftware/manticoresearch/releases/download/3.3.0/manticore-3.3.0-200204-01fc8ad-release.tar.gz
+   $ tar zcvf manticore-3.3.0-200204-01fc8ad-release.tar.gz
 
 Next step is to configure the building with cmake. Available list of configuration options:
 
@@ -470,7 +470,7 @@ or if we use sources from tarball:
 
 .. code-block:: bash
 
-   $ cmake3 -D WITH_MYSQL=1 -DWITH_RE2=1 ../manticore-3.2.2-191226-afd6046-release
+   $ cmake3 -D WITH_MYSQL=1 -DWITH_RE2=1 ../manticore-3.3.0-200204-01fc8ad-release
 
 To simply compile:
 
@@ -632,10 +632,10 @@ The sample config uses a ``test`` with no password for connecting to MySQL. Adju
 .. code-block:: bash
 
 	$ sudo -u manticore indexer -c /etc/sphinxsearch/manticore.conf test1 --rotate
-	Manticore 3.2.2 62ea5ff0@191220 release
+	Manticore 3.3.0 01fc8ad@200204 release
 	Copyright (c) 2001-2016, Andrew Aksyonoff
 	Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-	Copyright (c) 2017-2019, Manticore Software LTD (http://manticoresearch.com)
+	Copyright (c) 2017-2020, Manticore Software LTD (http://manticoresearch.com)
 	
 	using config file '/etc/sphinxsearch/manticore.conf'...
 	indexing index 'test1'...

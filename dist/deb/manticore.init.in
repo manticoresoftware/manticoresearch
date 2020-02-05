@@ -22,7 +22,7 @@
 
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DAEMON=@BINDIRFULL@/searchd
-DAEMONOPTS='-c @SYSCONFDIR@/manticoresearch/manticoresearch.conf'
+DAEMONOPTS='-c @SYSCONFDIR@/manticoresearch/manticore.conf'
 NAME=manticore
 DESC=manticore
 

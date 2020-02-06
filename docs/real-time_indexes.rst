@@ -25,7 +25,7 @@ example:
 
     index rt
     {
-        type = testrt
+        type = rt
         path = /var/lib/manticore/data/testrt
         rt_field = title
         rt_field = content

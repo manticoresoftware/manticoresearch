@@ -11062,7 +11062,7 @@ bool CSphIndex_VLN::Build_SetupInplace ( SphOffset_t & iHitsGap, int iHitsMax, i
 }
 
 
-void SetupDocstoreFields ( DocstoreFields_i & tFields, const CSphSchema & tSchema )
+void SetupDocstoreFields ( DocstoreAddField_i & tFields, const CSphSchema & tSchema )
 {
 	int iStored = 0;
 	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )

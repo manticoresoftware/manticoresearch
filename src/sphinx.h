@@ -3235,8 +3235,8 @@ private:
 };
 
 
-class DocstoreFields_i;
-void SetupDocstoreFields ( DocstoreFields_i & tFields, const CSphSchema & tSchema );
+class DocstoreAddField_i;
+void SetupDocstoreFields ( DocstoreAddField_i & tFields, const CSphSchema & tSchema );
 bool CheckStoredFields ( const CSphSchema & tSchema, const CSphIndexSettings & tSettings, CSphString & sError );
 
 class DiskIndexQwordTraits_c;

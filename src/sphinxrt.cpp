@@ -1638,8 +1638,7 @@ bool RtIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFiel
 	pAcc->GrabLastWarning ( sWarning );
 
 	DocstoreBuilder_i::Doc_t tStoredDoc;
-	DocstoreBuilder_i::Doc_t * pStoredDoc;
-	pStoredDoc = FetchDocFields ( tStoredDoc, tSrc );
+	DocstoreBuilder_i::Doc_t * pStoredDoc = FetchDocFields ( tStoredDoc, tSrc );
 	if ( !AddDocument ( pHits, tDoc, bReplace, ppStr, dMvas, pStoredDoc, sError, sWarning, pAcc ) )
 		return false;
 
@@ -1803,6 +1802,21 @@ void RtAccum_t::SetupDocstore()
 	m_pDocstore = CreateDocstoreRT();
 	assert ( m_pDocstore.Ptr() );
 	SetupDocstoreFields ( *m_pDocstore.Ptr(), m_pIndex->GetInternalSchema() );
+}
+
+bool RtAccum_t::SetupDocstore ( RtIndex_i & tIndex, CSphString & sError )
+{
+	const CSphSchema & tSchema = tIndex.GetInternalSchema();
+	if ( !m_pDocstore.Ptr() && !tSchema.HasStoredFields() )
+		return true;
+
+	// might be a case when replicated trx was wo docstore but index has docstore
+	if ( !m_pDocstore.Ptr() )
+		m_pDocstore = CreateDocstoreRT();
+
+	assert ( m_pDocstore.Ptr() );
+	SetupDocstoreFields ( *m_pDocstore.Ptr(), tSchema );
+	return m_pDocstore->CheckFieldsLoaded ( sError );
 }
 
 
@@ -4225,7 +4239,7 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 			pSeg->m_pDocstore = CreateDocstoreRT();
 			SetupDocstoreFields ( *pSeg->m_pDocstore.Ptr(), m_tSchema );
 			assert ( pSeg->m_pDocstore.Ptr() );
-			if ( !pSeg->m_pDocstore->Load ( rdChunk, m_sLastError ) )
+			if ( !pSeg->m_pDocstore->Load ( rdChunk ) )
 				return false;
 		}
 
@@ -9196,9 +9210,9 @@ bool RtBinlog_c::ReplayCommit ( int iBinlog, DWORD uReplayFlags, BinlogReader_c 
 			pSeg->SetupDocstore ( tIndex.m_pRT ? &(tIndex.m_pRT->GetInternalSchema()) : nullptr );
 			assert ( pSeg->m_pDocstore.Ptr() );
 			CSphString sError;
-			if ( !pSeg->m_pDocstore->Load ( tReader, sError ) )
+			if ( !pSeg->m_pDocstore->Load ( tReader ) )
 				sphWarning ( "binlog: commit: docstore load error: %s (index=%s, indextid=" INT64_FMT ", logtid=" INT64_FMT ", pos=" INT64_FMT ")",
-					sError.cstr(), tIndex.m_sName.cstr(), tIndex.m_pRT->m_iTID, iTID, iTxnPos );
+					tReader.GetErrorMessage().cstr(), tIndex.m_sName.cstr(), tIndex.m_pRT->m_iTID, iTID, iTxnPos );
 		}
 
 		pSeg->BuildDocID2RowIDMap();
@@ -9976,6 +9990,13 @@ void RtAccum_t::LoadRtTrx ( const BYTE * pData, int iLen )
 	tReader.GetBytes ( m_dPerDocHitsCount.Begin(), m_dPerDocHitsCount.GetLengthBytes() );
 	m_dPackedKeywords.Reset ( tReader.GetDword() );
 	tReader.GetBytes ( m_dPackedKeywords.Begin(), m_dPackedKeywords.GetLengthBytes() );
+	if ( !!tReader.GetByte() )
+	{
+		if ( !m_pDocstore.Ptr() )
+			m_pDocstore = CreateDocstoreRT();
+		assert ( m_pDocstore.Ptr() );
+		m_pDocstore->Load ( tReader );
+	}
 
 	// delete
 	m_dAccumKlist.Resize ( tReader.GetDword() );
@@ -10001,6 +10022,9 @@ void RtAccum_t::SaveRtTrx ( MemoryWriter_c & tWriter ) const
 	tWriter.PutDword ( iLen );
 	if ( iLen )
 		tWriter.PutBytes ( m_pDictRt->GetPackedKeywords(), iLen );
+	tWriter.PutByte ( m_pDocstore.Ptr()!=0 );
+	if ( m_pDocstore.Ptr() )
+		m_pDocstore->Save ( tWriter );
 
 	// delete
 	tWriter.PutDword ( m_dAccumKlist.GetLength() );

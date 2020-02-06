@@ -204,7 +204,7 @@ public:
 	int				AddField ( const CSphString & sName, DocstoreDataType_e eType ) final;
 	int				GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
 
-	int				GetNumFields() const { return m_dFields.GetLength(); }
+	int				GetNumFields() const final { return m_dFields.GetLength(); }
 	const Field_t &	GetField ( int iField ) const { return m_dFields[iField]; }
 	void			Load ( CSphReader & tReader );
 	void			Save ( CSphWriter & tWriter );
@@ -723,7 +723,6 @@ public:
 
 	bool				Init ( CSphString & sError );
 
-	int					AddField ( const CSphString & sName, DocstoreDataType_e eType ) final;
 	int					GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
 	void				CreateReader ( int64_t iSessionId ) const final;
 	DocstoreDoc_t		GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const final;
@@ -865,13 +864,6 @@ const Docstore_c::Block_t * Docstore_c::FindBlock ( RowID_t tRowID ) const
 	}
 
 	return pFound;
-}
-
-
-int Docstore_c::AddField ( const CSphString & sName, DocstoreDataType_e eType )
-{
-	assert ( 0 && "adding fields to docstore" );
-	return -1;
 }
 
 
@@ -1205,7 +1197,6 @@ public:
 
 	void	AddDoc ( RowID_t tRowID, const Doc_t & tDoc ) final;
 	int		AddField ( const CSphString & sName, DocstoreDataType_e eType ) final;
-	int		GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
 	void	Finalize() final;
 
 private:
@@ -1297,13 +1288,6 @@ void DocstoreBuilder_c::AddDoc ( RowID_t tRowID, const Doc_t & tDoc )
 int DocstoreBuilder_c::AddField ( const CSphString & sName, DocstoreDataType_e eType )
 {
 	return m_tFields.AddField ( sName, eType );
-}
-
-
-int DocstoreBuilder_c::GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const
-{
-	assert ( 0 && "getting field id from docstore builder" );
-	return -1;
 }
 
 
@@ -1554,20 +1538,24 @@ public:
 	DocstoreSettings_t	GetDocstoreSettings() const final;
 	void				CreateReader ( int64_t iSessionId ) const final {};
 
-	bool				Load ( CSphReader & tReader, CSphString & sError ) final;
+	bool				Load ( CSphReader & tReader ) final;
 	void				Save ( CSphWriter & tWriter ) final;
+	void				Load ( MemoryReader_c & tReader ) final;
+	void				Save ( MemoryWriter_c & tWriter ) final;
 
 	void				AddPackedDoc ( RowID_t tRowID, BYTE * pDoc ) final;
 	BYTE *				LeakPackedDoc ( RowID_t tRowID ) final;
 
 	int64_t				AllocatedBytes() const final;
 
+	static int			GetDocSize ( const BYTE * pDoc, int iFieldCount );
+	bool				CheckFieldsLoaded ( CSphString & sError ) const final;
+
 private:
 	CSphVector<BYTE *>	m_dDocs;
+	int					m_iLoadedFieldCount = 0;
 	DocstoreFields_c	m_tFields;
 	int64_t				m_iAllocated = 0;
-
-	int					GetDocSize ( const BYTE * pDoc ) const;
 };
 
 
@@ -1658,42 +1646,84 @@ DocstoreSettings_t DocstoreRT_c::GetDocstoreSettings() const
 }
 
 
-int DocstoreRT_c::GetDocSize ( const BYTE * pDoc ) const
+int DocstoreRT_c::GetDocSize ( const BYTE * pDoc, int iFieldCount )
 {
 	const BYTE * p = pDoc;
-	for ( int iField = 0; iField<m_tFields.GetNumFields(); iField++ )
+	for ( int iField = 0; iField<iFieldCount; iField++ )
 		p += sphUnzipInt(p);
 
 	return p-pDoc;
 }
 
-
-bool DocstoreRT_c::Load ( CSphReader & tReader, CSphString & sError )
+template<typename T>
+int64_t DocstoreLoad_T ( CSphVector<BYTE *> & dDocs, T & tReader )
 {
-	assert ( !m_dDocs.GetLength() && !m_iAllocated );
+	int64_t iAllocated = 0;
 	DWORD uNumDocs = tReader.UnzipInt();
-	m_dDocs.Resize(uNumDocs);
-	for ( auto & i : m_dDocs )
+	dDocs.Resize (uNumDocs);
+	for ( auto & i : dDocs )
 	{
 		DWORD uDocLen = tReader.UnzipInt();
 		i = new BYTE[uDocLen];
 		tReader.GetBytes ( i, uDocLen );
-		m_iAllocated += uDocLen;
+		iAllocated += uDocLen;
 	}
 
-	return !tReader.GetErrorFlag();
+	return iAllocated;
 }
 
 
-void DocstoreRT_c::Save ( CSphWriter & tWriter )
+template<typename T>
+void DocstoreSave_T ( const CSphVector<BYTE *> & dDocs, int iFieldCount , T & tWriter )
 {
-	tWriter.ZipInt ( m_dDocs.GetLength() );
-	for ( const auto & i : m_dDocs )
+	tWriter.ZipInt ( dDocs.GetLength() );
+	for ( const auto & i : dDocs )
 	{
-		int iDocLen = GetDocSize(i);
+		int iDocLen = DocstoreRT_c::GetDocSize ( i, iFieldCount );
 		tWriter.ZipInt ( iDocLen );
 		tWriter.PutBytes ( i, iDocLen );
 	}
+}
+
+bool DocstoreRT_c::Load ( CSphReader & tReader )
+{
+	assert ( !m_dDocs.GetLength() && !m_iAllocated );
+	m_iAllocated += DocstoreLoad_T<CSphReader> ( m_dDocs, tReader );
+	return !tReader.GetErrorFlag();
+}
+
+void DocstoreRT_c::Save ( CSphWriter & tWriter )
+{
+	DocstoreSave_T<CSphWriter> ( m_dDocs, m_tFields.GetNumFields(), tWriter );
+}
+
+void DocstoreRT_c::Load ( MemoryReader_c & tReader )
+{
+	assert ( !m_dDocs.GetLength() && !m_iAllocated );
+	m_iLoadedFieldCount = tReader.GetDword();
+	m_iAllocated += DocstoreLoad_T<MemoryReader_c> ( m_dDocs, tReader );
+}
+
+void DocstoreRT_c::Save ( MemoryWriter_c & tWriter )
+{
+	int iFieldCount = m_tFields.GetNumFields();
+	tWriter.PutDword ( iFieldCount );
+	DocstoreSave_T<MemoryWriter_c> ( m_dDocs, iFieldCount, tWriter );
+}
+
+bool DocstoreRT_c::CheckFieldsLoaded ( CSphString & sError ) const
+{
+	if ( !m_iLoadedFieldCount )
+		return true;
+
+	int iFieldsCount = m_tFields.GetNumFields();
+	if ( m_iLoadedFieldCount!=iFieldsCount )
+	{
+		sError.SetSprintf ( "wrong fields count, loaded %d, stored %d", m_iLoadedFieldCount, iFieldsCount );
+		return false;
+	}
+
+	return true;
 }
 
 
@@ -1701,7 +1731,7 @@ void DocstoreRT_c::AddPackedDoc ( RowID_t tRowID, BYTE * pDoc )
 {
 	assert ( (RowID_t)(m_dDocs.GetLength())==tRowID );
 	m_dDocs.Add(pDoc);
-	m_iAllocated += GetDocSize(pDoc);
+	m_iAllocated += GetDocSize ( pDoc, m_tFields.GetNumFields() );
 }
 
 
@@ -1709,7 +1739,7 @@ BYTE * DocstoreRT_c::LeakPackedDoc ( RowID_t tRowID )
 {
 	BYTE * pPacked = m_dDocs[tRowID];
 	m_dDocs[tRowID] = nullptr;
-	m_iAllocated -= GetDocSize(pPacked);
+	m_iAllocated -= GetDocSize ( pPacked, m_tFields.GetNumFields() );
 	assert ( m_iAllocated>=0 );
 	return pPacked;
 }

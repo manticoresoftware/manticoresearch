@@ -127,6 +127,8 @@ public:
 	const BYTE *	GetPackedKeywords() const;
 	int				GetPackedLen() const;
 
+	bool			SetupDocstore ( RtIndex_i & tIndex, CSphString & sError );
+
 private:
 	CSphRefcountedPtr<ISphRtDictWraper>	m_pDictRt;
 	bool						m_bReplace = false;		///< insert or replace mode (affects CleanupDuplicates() behavior)

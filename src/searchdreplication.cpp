@@ -462,7 +462,8 @@ static void Logger_fn ( wsrep_log_level_t eLevel, const char * sMsg )
 }
 
 // commands version (commands these got replicated via Galera)
-static const WORD g_iReplicateCommandVer = 0x103;
+// ver 0x104 added docstore from RT index
+static const WORD g_iReplicateCommandVer = 0x104;
 
 // log debug info about cluster nodes as current nodes views that
 static void LogGroupView ( const wsrep_view_info_t * pView )
@@ -1590,6 +1591,12 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 	sphLogDebugRpl ( "commit, index '%s', uid " INT64_FMT ", queries %d, tags %s",
 		tCmd.m_sIndex.cstr(), ( tCmd.m_pStored ? tCmd.m_pStored->m_iQUID : int64_t(0) ),
 		tCmd.m_dDeleteQueries.GetLength(), tCmd.m_sDeleteTags.scstr() );
+
+	if ( !tAcc.SetupDocstore ( *pIndex, sError ) )
+	{
+		sphWarning ( "%s, index '%s', command %d", sError.cstr(), tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand );
+		return false;
+	}
 
 	if ( !pIndex->Commit ( nullptr, &tAcc ) )
 		return false;

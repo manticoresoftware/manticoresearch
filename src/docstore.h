@@ -13,19 +13,33 @@
 
 #include "sphinx.h"
 
+class DocstoreAddField_i
+{
+public:
+	virtual		~DocstoreAddField_i() {}
 
-class DocstoreFields_i
+	virtual int	AddField ( const CSphString & sName, DocstoreDataType_e eType ) = 0;
+};
+
+class DocstoreGetField_i
+{
+public:
+	virtual		~DocstoreGetField_i() {}
+
+	virtual int	GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const = 0;
+};
+
+class DocstoreFields_i : public DocstoreAddField_i, public DocstoreGetField_i
 {
 public:
 	virtual		~DocstoreFields_i() {}
 
-	virtual int	AddField ( const CSphString & sName, DocstoreDataType_e eType ) = 0;
-	virtual int	GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const = 0;
+	virtual int GetNumFields() const = 0;
 };
 
 
 // an interface for plain index (disk chunk) document storage
-class Docstore_i : public virtual DocstoreFields_i
+class Docstore_i : public DocstoreGetField_i
 {
 public:
 	virtual void				CreateReader ( int64_t iSessionId ) const = 0;
@@ -34,7 +48,7 @@ public:
 };
 
 
-class DocstoreBuilder_i : public virtual DocstoreFields_i
+class DocstoreBuilder_i : public DocstoreAddField_i
 {
 public:
 	struct Doc_t
@@ -53,18 +67,24 @@ public:
 
 class CSphReader;
 class CSphWriter;
+class MemoryReader_c;
+class MemoryWriter_c;
 
 // an interface for RT index document storage
 class DocstoreRT_i : public Docstore_i, public DocstoreBuilder_i
 {
 public:
-	virtual bool	Load ( CSphReader & tReader, CSphString & sError ) = 0;
+	virtual bool	Load ( CSphReader & tReader ) = 0;
 	virtual void	Save ( CSphWriter & tWriter ) = 0;
+	virtual void	Load ( MemoryReader_c & tReader ) = 0;
+	virtual void	Save ( MemoryWriter_c & tWriter ) = 0;
 
 	virtual void	AddPackedDoc ( RowID_t tRowID, BYTE * pDoc ) = 0;
 	virtual BYTE *	LeakPackedDoc ( RowID_t tRowID ) = 0;
 
 	virtual int64_t	AllocatedBytes() const = 0;
+
+	virtual bool	CheckFieldsLoaded ( CSphString & sError ) const = 0;
 };
 
 

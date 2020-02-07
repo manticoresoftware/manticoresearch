@@ -30,6 +30,7 @@ example:
         rt_field = title
         rt_field = content
         rt_attr_uint = gid
+		stored_fields = title, content
     }
 
 RT index can be accessed using MySQL protocol. INSERT, REPLACE, DELETE,

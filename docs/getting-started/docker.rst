@@ -239,7 +239,7 @@ For a quick test, we're going to use the following sample table in MySQL:
    DROP TABLE IF EXISTS test.documents;
    CREATE TABLE test.documents
    (
-   	id          INTEGER PRIMARY KEY NOT NULL AUTO_INCREMENT,
+    id          INTEGER PRIMARY KEY NOT NULL AUTO_INCREMENT,
     group_id    INTEGER NOT NULL,
     date_added  DATETIME NOT NULL,
     title       VARCHAR(255) NOT NULL,

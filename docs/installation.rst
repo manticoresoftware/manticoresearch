@@ -169,7 +169,7 @@ Install Manticore yum repository by running as root user or with sudo the follow
 
 .. code-block:: bash
 
-	$ yum install http://repo.manticoresearch.com/manticore-repo.noarch.rpm
+	$ yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 
 Install Manticore Search by running:
 

@@ -3916,6 +3916,18 @@ int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp )
 	// check attribute type and width
 	const CSphColumnInfo & tCol = m_pSchema->GetAttr ( iAttr );
 
+	// check for a duplicate attribute created for showing a stored field in the result set
+	if ( tCol.m_uFieldFlags & CSphColumnInfo::FIELD_STORED )
+	{
+		const CSphVector<CSphColumnInfo> & dFields = m_pSchema->GetFields();
+		ARRAY_FOREACH ( i, dFields )
+			if ( dFields[i].m_sName==tCol.m_sName )
+			{
+				lvalp->iAttrLocator = i;
+				return TOK_FIELD;
+			}
+	}
+
 	int iRes = -1;
 	switch ( tCol.m_eAttrType )
 	{

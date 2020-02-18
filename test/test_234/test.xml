@@ -85,6 +85,10 @@ Two"}')
 <!-- expected to success since mode=raw -->
 <query endpoint="sql" method="post">mode=raw&amp;query=select id,1+2 as a, packedfactors() from test where match('tes*') option ranker=expr('1')</query>
 <query endpoint="sql" method="post">mode=raw&amp;query=select id,1+2 as a, packedfactors({json=1}) from test where match('tes*') option ranker=expr('1')</query>
+<!-- any statement via mode=raw -->
+<query endpoint="sql" method="post">mode=raw&amp;query=desc test</query>
+<query endpoint="sql" method="post">mode=raw&amp;query=alter table test add column new1 integer</query>
+<query endpoint="sql" method="post">mode=raw&amp;query=desc test</query>
 
 </httpqueries>
 

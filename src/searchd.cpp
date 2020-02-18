@@ -10386,20 +10386,6 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 // MYSQL_TYPE_STRING = 254
 // MYSQL_TYPE_GEOMETRY = 255
 
-enum MysqlColumnType_e
-{
-	MYSQL_COL_DECIMAL	= 0,
-	MYSQL_COL_LONG		= 3,
-	MYSQL_COL_FLOAT	= 4,
-	MYSQL_COL_LONGLONG	= 8,
-	MYSQL_COL_STRING	= 254
-};
-
-enum MysqlColumnFlag_e
-{
-	MYSQL_COL_UNSIGNED_FLAG = 32
-};
-
 #define SPH_MYSQL_ERROR_MAX_LENGTH 512
 
 void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char * sStmt,
@@ -10505,22 +10491,10 @@ void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, bool bAutoComm
 //////////////////////////////////////////////////////////////////////////
 // Mysql row buffer and command handler
 
-// filter interface for named data
-class IDataTupleter
+class SqlRowBuffer_c : public RowBuffer_i, private LazyVector_T<BYTE>
 {
-public:
-	virtual ~IDataTupleter();
-	virtual void DataTuplet ( const char *, const char *) = 0;
-	virtual void DataTuplet ( const char *, int64_t ) = 0;
-};
-
-IDataTupleter::~IDataTupleter() = default;
-
-class SqlRowBuffer_c : public ISphNoncopyable, public IDataTupleter, private LazyVector_T<BYTE>
-{
-	using BaseVec = LazyVector_T<BYTE>;
-	BYTE &m_uPacketID;
-	ISphOutputBuffer &m_tOut;
+	BYTE & m_uPacketID;
+	ISphOutputBuffer & m_tOut;
 	int m_iCID; // connection ID for error report
 	bool m_bAutoCommit = false;
 #ifndef NDEBUG
@@ -10610,9 +10584,7 @@ public:
 		, m_bAutoCommit ( bAutoCommit )
 	{}
 
-	using BaseVec::Add;
-
-	void PutFloatAsString ( float fVal, const char * sFormat = nullptr )
+	void PutFloatAsString ( float fVal, const char * sFormat ) override
 	{
 		ReserveGap ( SPH_MAX_NUMERIC_STR );
 		auto pSize = End();
@@ -10623,32 +10595,44 @@ public:
 		AddN ( iLen + 1 );
 	}
 
-	template < typename NUM >
-	void PutNumAsString ( NUM tVal )
+	void PutNumAsString ( int64_t iVal ) override
 	{
 		ReserveGap ( SPH_MAX_NUMERIC_STR );
 		auto pSize = End();
-		int iLen = sph::NtoA ( ( char * ) pSize + 1, tVal );
+		int iLen = sph::NtoA ( ( char * ) pSize + 1, iVal );
 		*pSize = BYTE ( iLen );
 		AddN ( iLen + 1 );
 	}
 
-	void PutTimeAsString ( int64_t tmVal )
+	void PutNumAsString ( uint64_t uVal ) override
 	{
-		StringBuilder_c sTime;
-		sTime.Sprintf ("%t", tmVal);
-		PutString ( sTime.cstr() );
+		ReserveGap ( SPH_MAX_NUMERIC_STR );
+		auto pSize = End();
+		int iLen = sph::NtoA ( ( char * ) pSize + 1, uVal );
+		*pSize = BYTE ( iLen );
+		AddN ( iLen + 1 );
 	}
 
-	void PutTimestampAsString ( int64_t tmTimestamp )
+	void PutNumAsString ( int iVal ) override
 	{
-		StringBuilder_c sTime;
-		sTime.Sprintf ( "%T", tmTimestamp );
-		PutString ( sTime.cstr ());
+		ReserveGap ( SPH_MAX_NUMERIC_STR );
+		auto pSize = End();
+		int iLen = sph::NtoA ( ( char * ) pSize + 1, iVal );
+		*pSize = BYTE ( iLen );
+		AddN ( iLen + 1 );
+	}
+
+	void PutNumAsString ( DWORD uVal ) override
+	{
+		ReserveGap ( SPH_MAX_NUMERIC_STR );
+		auto pSize = End();
+		int iLen = sph::NtoA ( ( char * ) pSize + 1, uVal );
+		*pSize = BYTE ( iLen );
+		AddN ( iLen + 1 );
 	}
 
 	// pack raw array (i.e. packed length, then blob) into proto mysql
-	void PutArray ( const void * pBlob, int iLen, bool bSendEmpty = false )
+	void PutArray ( const void * pBlob, int iLen, bool bSendEmpty ) override
 	{
 		if ( iLen<0 )
 			return;
@@ -10666,35 +10650,18 @@ public:
 		Resize ( Idx ( pStr ) + iLen );
 	}
 
-	void PutArray ( const VecTraits_T<BYTE> &dData )
-	{
-		PutArray ( ( const char * ) dData.begin (), dData.GetLength () );
-	}
-
-	void PutArray ( const StringBuilder_c& dData, bool bSendEmpty = true )
-	{
-		PutArray ( ( const char * ) dData.begin (), dData.GetLength (), bSendEmpty );
-	}
-
 	// pack zero-terminated string (or "" if it is zero itself)
-	// const void * used to avoid explicit const char* <> const BYTE* casts
-	void PutString ( const void * _sMsg )
+	void PutString ( const char * sMsg ) override
 	{
-		auto sMsg = (const char*)_sMsg;
 		int iLen = ( sMsg && *sMsg ) ? ( int ) strlen ( sMsg ) : 0;
 
 		if (!sMsg)
 			sMsg = "";
 
-		PutArray ( sMsg, iLen );
+		PutArray ( sMsg, iLen, false );
 	}
 
-	inline void PutString ( const CSphString& sMsg )
-	{
-		PutString ( sMsg.cstr() );
-	}
-
-	void PutMicrosec ( int64_t iUsec )
+	void PutMicrosec ( int64_t iUsec ) override
 	{
 		iUsec = Max ( iUsec, 0 );
 
@@ -10705,50 +10672,15 @@ public:
 		AddN ( iLen + 1 );
 	}
 
-	void PutNULL ()
+	void PutNULL () override
 	{
 		Add ( 0xfb ); // MySQL NULL is 0xfb at VLB length
-	}
-
-	// popular pattern of 2 columns of data
-	void DataTuplet ( const char * pLeft, const char * pRight ) override
-	{
-		PutString ( pLeft );
-		PutString ( pRight );
-		Commit ();
-	}
-
-	void DataTuplet ( const char * pLeft, int64_t iRight ) override
-	{
-		PutString ( pLeft );
-		PutNumAsString (iRight);
-		Commit();
-	}
-
-	template <typename NUM>
-	void DataTuplet ( const char * pLeft, NUM iRight )
-	{
-		PutString ( pLeft );
-		PutNumAsString ( iRight );
-		Commit ();
-	}
-
-	void DataTupletf ( const char * pLeft, const char * sFmt, ... )
-	{
-		StringBuilder_c sRight;
-		PutString ( pLeft );
-		va_list ap;
-		va_start ( ap, sFmt );
-		sRight.vSprintf ( sFmt, ap );
-		va_end ( ap );
-		PutString ( sRight.cstr() );
-		Commit();
 	}
 
 public:
 	/// more high level. Processing the whole tables.
 	// sends collected data, then reset
-	void Commit()
+	void Commit() override
 	{
 		m_tOut.SendLSBDword ( ((m_uPacketID++)<<24) + ( GetLength() ) );
 		m_tOut.SendBytes ( *this );
@@ -10756,29 +10688,17 @@ public:
 	}
 
 	// wrappers for popular packets
-	inline void Eof ( bool bMoreResults=false, int iWarns=0 )
+	void Eof ( bool bMoreResults, int iWarns ) override
 	{
 		SendMysqlEofPacket ( m_tOut, m_uPacketID++, iWarns, bMoreResults, m_bAutoCommit );
 	}
 
-	inline void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr = MYSQL_ERR_PARSE_ERROR )
+	void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr ) override
 	{
 		SendMysqlErrorPacket ( m_tOut, m_uPacketID, sStmt, sError, m_iCID, iErr );
 	}
 
-	inline void ErrorEx ( MysqlErrors_e iErr, const char * sTemplate, ... )
-	{
-		char sBuf[1024];
-		va_list ap;
-
-		va_start ( ap, sTemplate );
-		vsnprintf ( sBuf, sizeof(sBuf), sTemplate, ap );
-		va_end ( ap );
-
-		Error ( nullptr, sBuf, iErr );
-	}
-
-	inline void Ok ( int iAffectedRows=0, int iWarns=0, const char * sMessage=NULL, bool bMoreResults=false, int64_t iLastInsertId=0 )
+	void Ok ( int iAffectedRows, int iWarns, const char * sMessage, bool bMoreResults, int64_t iLastInsertId ) override
 	{
 		SendMysqlOkPacket ( m_tOut, m_uPacketID, iAffectedRows, iWarns, sMessage, bMoreResults, m_bAutoCommit, iLastInsertId );
 		if ( bMoreResults )
@@ -10795,56 +10715,32 @@ public:
 #endif
 	}
 
-	inline void HeadEnd ( bool bMoreResults=false, int iWarns=0 )
+	void HeadEnd ( bool bMoreResults, int iWarns ) override
 	{
 		Eof ( bMoreResults, iWarns );
 		Resize(0);
 	}
 
 	// add the next column. The EOF after the tull set will be fired automatically
-	inline void HeadColumn ( const char * sName, MysqlColumnType_e uType=MYSQL_COL_STRING, WORD uFlags=0 )
+	void HeadColumn ( const char * sName, MysqlColumnType_e uType, WORD uFlags ) override
 	{
 		assert ( m_iColumns-->0 && "you try to send more mysql columns than declared in InitHead" );
 		SendSqlFieldPacket ( sName, uType, uFlags );
 	}
 
-	// Fire he header for table with iSize string columns
-	inline void HeadOfStrings ( const char ** ppNames, size_t iSize )
+	void Add ( BYTE uVal ) override
 	{
-		HeadBegin(iSize);
-		for ( ; iSize>0 ; --iSize )
-			HeadColumn ( *ppNames++ );
-		HeadEnd();
-	}
-
-	// table of 2 columns (we really often use them!)
-	inline void HeadTuplet ( const char * pLeft, const char * pRight )
-	{
-		HeadBegin(2);
-		HeadColumn(pLeft);
-		HeadColumn(pRight);
-		HeadEnd();
-	}
-
-	// table of 3 columns
-	inline void Head3 ( const char * pStr1, const char * pStr2, const char * pStr3 )
-	{
-		HeadBegin(3);
-		HeadColumn(pStr1);
-		HeadColumn(pStr2);
-		HeadColumn(pStr3);
-		HeadEnd();
+		LazyVector_T<BYTE>::Add ( uVal );
 	}
 };
 
 class TableLike : public CheckLike
 				, public ISphNoncopyable
-				, public IDataTupleter
 {
-	SqlRowBuffer_c & m_tOut;
+	RowBuffer_i & m_tOut;
 public:
 
-	explicit TableLike ( SqlRowBuffer_c & tOut, const char * sPattern = nullptr )
+	explicit TableLike ( RowBuffer_i & tOut, const char * sPattern = nullptr )
 		: CheckLike ( sPattern )
 		, m_tOut ( tOut )
 	{}
@@ -10896,12 +10792,12 @@ public:
 	}
 
 	// popular pattern of 2 columns of data
-	void DataTuplet ( const char * pLeft, const char * pRight ) override
+	void DataTuplet ( const char * pLeft, const char * pRight )
 	{
 		MatchData2 ( pLeft, pRight );
 	}
 
-	void DataTuplet ( const char * pLeft, int64_t iRight ) override
+	void DataTuplet ( const char * pLeft, int64_t iRight )
 	{
 		MatchData2 ( pLeft, iRight );
 	}
@@ -10911,7 +10807,7 @@ public:
 class StmtErrorReporter_c : public StmtErrorReporter_i
 {
 public:
-	explicit StmtErrorReporter_c ( SqlRowBuffer_c & tBuffer )
+	explicit StmtErrorReporter_c ( RowBuffer_i & tBuffer )
 		: m_tRowBuffer ( tBuffer )
 	{}
 
@@ -10930,10 +10826,10 @@ public:
 		m_tRowBuffer.Error ( sStmt, sError, iErr );
 	}
 
-	SqlRowBuffer_c * GetBuffer() final { return &m_tRowBuffer; }
+	RowBuffer_i * GetBuffer() final { return &m_tRowBuffer; }
 
 private:
-	SqlRowBuffer_c & m_tRowBuffer;
+	RowBuffer_i & m_tRowBuffer;
 };
 
 bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, const CSphSchema & tSchema,
@@ -11573,8 +11469,7 @@ static void SendAPIPercolateReply ( CachedOutputBuffer_c &tOut, const CPqResult 
 	tOut.SendString ( tRes.m_sMessages.sWarning () );
 }
 
-static void SendMysqlPercolateReply ( SqlRowBuffer_c &tOut
-									  , const CPqResult &tResult, int iShift=0 )
+static void SendMysqlPercolateReply ( RowBuffer_i & tOut, const CPqResult & tResult, int iShift=0 )
 {
 	// shortcuts
 	const PercolateMatchResult_t &tRes = tResult.m_dResult;
@@ -12013,7 +11908,7 @@ void HandleCommandCallPq ( CachedOutputBuffer_c &tOut, WORD uVer, InputBuffer_c 
 	SendAPIPercolateReply ( tOut, tResult, tOpts.m_iShift );
 }
 
-static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSessionAccum & tAcc,
+static void HandleMysqlCallPQ ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessionAccum & tAcc,
 	CPqResult & tResult )
 {
 
@@ -12182,7 +12077,7 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 	SendMysqlPercolateReply ( tOut, tResult, tOpts.m_iShift );
 }
 
-void HandleMysqlPercolateMeta ( const CPqResult &tResult, const CSphString & sWarning, SqlRowBuffer_c & tOut )
+void HandleMysqlPercolateMeta ( const CPqResult &tResult, const CSphString & sWarning, RowBuffer_i & tOut )
 {
 	// shortcuts
 	const PercolateMatchResult_t &tMeta = tResult.m_dResult;
@@ -12670,7 +12565,7 @@ enum
 };
 
 
-void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc_t & tThd )
+void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt, ThdDesc_t & tThd )
 {
 	CSphString sError;
 
@@ -12921,7 +12816,7 @@ bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const
 	return bOk;
 }
 
-void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphString & sWarning )
+void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	CSphString sError;
 
@@ -13170,7 +13065,7 @@ struct CmpDistDocABC_fn
 	}
 };
 
-void HandleMysqlCallSuggest ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, bool bQueryMode )
+void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQueryMode )
 {
 	CSphString sError;
 
@@ -13328,15 +13223,16 @@ void HandleMysqlCallSuggest ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, bool bQu
 }
 
 
-void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
+void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 {
 	TableLike dCondOut ( tOut, tStmt.m_sStringParam.cstr () );
 
 	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
 	if ( pServed && pServed->m_pIndex )
 	{
+		const char * dNames[] = { "Field", "Type", "Properties" };
 		// result set header packet
-		tOut.Head3 ( "Field", "Type", "Properties" );
+		tOut.HeadOfStrings ( dNames, sizeof(dNames)/sizeof(dNames[0]) );
 
 		// data
 		const CSphSchema *pSchema = &pServed->m_pIndex->GetMatchSchema ();
@@ -13440,7 +13336,7 @@ struct IndexNameLess_fn
 };
 
 
-void HandleMysqlShowTables ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
+void HandleMysqlShowTables ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 {
 	// 0 local, 1 distributed, 2 rt, 3 template, 4 percolate, 5 unknown
 	static const char* sTypes[] = {"local", "distributed", "rt", "template", "percolate", "unknown"};
@@ -13544,7 +13440,7 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 }
 
 
-static void HandleMysqlCreateTable ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	SearchFailuresLog_c dErrors;
 	CSphString sError;
@@ -13574,7 +13470,7 @@ static void HandleMysqlCreateTable ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 }
 
 
-static void HandleMysqlDropTable ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+static void HandleMysqlDropTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	CSphString sError;
 
@@ -13592,7 +13488,7 @@ static void HandleMysqlDropTable ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStm
 }
 
 
-void HandleMysqlShowCreateTable ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
 	if ( !pServed || !pServed->m_pIndex )
@@ -13621,7 +13517,7 @@ void HandleMysqlShowCreateTable ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt
 
 
 // MySQL Workbench (and maybe other clients) crashes without it
-void HandleMysqlShowDatabases ( SqlRowBuffer_c & tOut, SqlStmt_t & )
+void HandleMysqlShowDatabases ( RowBuffer_i & tOut, SqlStmt_t & )
 {
 	tOut.HeadBegin ( 1 );
 	tOut.HeadColumn ( "Databases" );
@@ -13630,7 +13526,7 @@ void HandleMysqlShowDatabases ( SqlRowBuffer_c & tOut, SqlStmt_t & )
 }
 
 
-void HandleMysqlShowPlugins ( SqlRowBuffer_c & tOut, SqlStmt_t & )
+void HandleMysqlShowPlugins ( RowBuffer_i & tOut, SqlStmt_t & )
 {
 	CSphVector<PluginInfo_t> dPlugins;
 	sphPluginList ( dPlugins );
@@ -13685,7 +13581,7 @@ static const char * FormatInfo ( const ThdPublicInfo_t & tThd, ThreadInfoFormat_
 		return tThd.m_sRequestDescription.cstr();
 }
 
-void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	int64_t tmNow = sphMicroTimer();
 
@@ -13730,7 +13626,7 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 
 }
 
-void HandleMysqlFlushHostnames ( SqlRowBuffer_c & tOut )
+void HandleMysqlFlushHostnames ( RowBuffer_i & tOut )
 {
 	SmallStringHash_T<DWORD> hHosts;
 
@@ -13767,13 +13663,13 @@ void HandleMysqlFlushHostnames ( SqlRowBuffer_c & tOut )
 	tOut.Ok ( hHosts.GetLength() );
 }
 
-void HandleMysqlFlushLogs ( SqlRowBuffer_c &tOut )
+void HandleMysqlFlushLogs ( RowBuffer_i & tOut )
 {
 	sigusr1(1);
 	tOut.Ok ();
 }
 
-void HandleMysqlReloadIndexes ( SqlRowBuffer_c &tOut )
+void HandleMysqlReloadIndexes ( RowBuffer_i & tOut )
 {
 	g_bReloadForced = true;
 	sighup(1);
@@ -14126,7 +14022,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	tOut.Ok ( iUpdated, iWarns );
 }
 
-bool HandleMysqlSelect ( SqlRowBuffer_c & dRows, SearchHandler_c & tHandler )
+bool HandleMysqlSelect ( RowBuffer_i & dRows, SearchHandler_c & tHandler )
 {
 	// lets check all query for errors
 	CSphString sError;
@@ -14245,7 +14141,7 @@ void sphFormatFactors ( StringBuilder_c & sOut, const unsigned int * pFactors, b
 
 
 static void ReturnZeroCount ( const CSphSchema & tSchema, const CSphBitvec & tAttrsToSend, const StrVec_t & dCounts,
-	SqlRowBuffer_c & dRows )
+	RowBuffer_i & dRows )
 {
 	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
 	{
@@ -14277,7 +14173,7 @@ static void ReturnZeroCount ( const CSphSchema & tSchema, const CSphBitvec & tAt
 			{
 				case SPH_ATTR_STRINGPTR:
 					pExpr->StringEval ( tMatch, &pStr );
-					dRows.PutString ( pStr );
+					dRows.PutString ( (const char *)pStr );
 					SafeDelete ( pStr );
 					break;
 				case SPH_ATTR_INTEGER: dRows.PutNumAsString ( pExpr->IntEval ( tMatch ) ); break;
@@ -14293,7 +14189,7 @@ static void ReturnZeroCount ( const CSphSchema & tSchema, const CSphBitvec & tAt
 }
 
 
-void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow, bool bAddQueryColumn, const CSphString * pQueryColumn, CSphQueryProfile * pProfile )
+void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow, bool bAddQueryColumn, const CSphString * pQueryColumn, CSphQueryProfile * pProfile )
 {
 	CSphScopedProfile tProf ( pProfile, SPH_QSTATE_NET_WRITE );
 
@@ -14485,7 +14381,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 }
 
 
-void HandleMysqlWarning ( const CSphQueryResultMeta & tLastMeta, SqlRowBuffer_c & dRows, bool bMoreResultsFollow )
+void HandleMysqlWarning ( const CSphQueryResultMeta & tLastMeta, RowBuffer_i & dRows, bool bMoreResultsFollow )
 {
 	// can't send simple ok if there are more results to send
 	// as it breaks order of multi-result output
@@ -14512,7 +14408,7 @@ void HandleMysqlWarning ( const CSphQueryResultMeta & tLastMeta, SqlRowBuffer_c 
 	dRows.Eof ( bMoreResultsFollow );
 }
 
-void HandleMysqlMeta ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt, const CSphQueryResultMeta & tLastMeta, bool bMoreResultsFollow )
+void HandleMysqlMeta ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, const CSphQueryResultMeta & tLastMeta, bool bMoreResultsFollow )
 {
 	VectorLike dStatus ( tStmt.m_sStringParam );
 
@@ -14794,8 +14690,8 @@ struct SessionVars_t
 };
 
 // fwd
-void HandleMysqlShowProfile ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p, bool bMoreResultsFollow );
-static void HandleMysqlShowPlan ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p, bool bMoreResultsFollow );
+void HandleMysqlShowProfile ( RowBuffer_i & tOut, const CSphQueryProfile & p, bool bMoreResultsFollow );
+static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const CSphQueryProfile & p, bool bMoreResultsFollow );
 
 
 class CSphQueryProfileMysql final : public CSphQueryProfile
@@ -14827,7 +14723,7 @@ const char* CSphQueryProfileMysql::GetResultAsStr() const
 
 
 void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResultMeta & tLastMeta,
-	SqlRowBuffer_c & dRows, ThdDesc_t & tThd, const CSphString& sWarning )
+	RowBuffer_i & dRows, ThdDesc_t & tThd, const CSphString& sWarning )
 {
 	// select count
 	int iSelect = 0;
@@ -14949,7 +14845,7 @@ static ESphCollation sphCollationFromName ( const CSphString & sName, CSphString
 	return SPH_COLLATION_DEFAULT;
 }
 
-void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & tVars, CSphSessionAccum & tAcc )
+void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVars, CSphSessionAccum & tAcc )
 {
 	MEMORY ( MEM_SQL_SET );
 	CSphString sError;
@@ -15132,7 +15028,7 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 // fwd
 bool PrereadNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection & hIndex, const char * szIndexName );
 
-void HandleMysqlAttach ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	const CSphString & sFrom = tStmt.m_sIndex;
 	const CSphString & sTo = tStmt.m_sStringParam;
@@ -15193,7 +15089,7 @@ void HandleMysqlAttach ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 }
 
 
-void HandleMysqlFlushRtindex ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+void HandleMysqlFlushRtindex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	CSphString sError;
 	ServedDescRPtr_c pIndex ( GetServed ( tStmt.m_sIndex ) );
@@ -15210,7 +15106,7 @@ void HandleMysqlFlushRtindex ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 }
 
 
-void HandleMysqlFlushRamchunk ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+void HandleMysqlFlushRamchunk ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	ServedDescRPtr_c pIndex ( GetServed ( tStmt.m_sIndex ) );
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
@@ -15233,7 +15129,7 @@ void HandleMysqlFlushRamchunk ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 }
 
 
-void HandleMysqlFlush ( SqlRowBuffer_c & tOut, const SqlStmt_t & )
+void HandleMysqlFlush ( RowBuffer_i & tOut, const SqlStmt_t & )
 {
 	int iTag = CommandFlush();
 	tOut.HeadBegin(1);
@@ -15261,7 +15157,7 @@ int GetLogFD ()
 }
 
 
-void HandleMysqlDebug ( SqlRowBuffer_c &tOut, const SqlStmt_t &tStmt, bool bVipConn )
+void HandleMysqlDebug ( RowBuffer_i &tOut, const SqlStmt_t &tStmt, bool bVipConn )
 {
 	CSphString sCommand = tStmt.m_sIndex;
 	CSphString sParam = tStmt.m_sStringParam;
@@ -15482,7 +15378,7 @@ void HandleMysqlDebug ( SqlRowBuffer_c &tOut, const SqlStmt_t &tStmt, bool bVipC
 // fwd
 static bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSettings & tSettings, CSphString & sError );
 
-void HandleMysqlTruncate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	bool bReconfigure = ( tStmt.m_iIntParam==1 );
 
@@ -15532,7 +15428,7 @@ void HandleMysqlTruncate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 }
 
 
-void HandleMysqlOptimize ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	ServedDescRPtr_c pIndex ( GetServed ( tStmt.m_sIndex ) );
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
@@ -15554,7 +15450,7 @@ void HandleMysqlOptimize ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	EnqueueForOptimize ( tStmt.m_sIndex );
 }
 
-void HandleMysqlSelectSysvar ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const SessionVars_t & tVars )
+void HandleMysqlSelectSysvar ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, const SessionVars_t & tVars )
 {
 	bool bStr = ( tStmt.m_tQuery.m_dItems.FindFirst ( [] ( const CSphQueryItem & tItem ) { return tItem.m_sExpr=="@@session.last_insert_id"; } ) );
 
@@ -15622,7 +15518,7 @@ struct ExtraLastInsertID_t : public ISphExtra
 
 
 
-void HandleMysqlSelectDual ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const SessionVars_t & tVars )
+void HandleMysqlSelectDual ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, const SessionVars_t & tVars )
 {
 	CSphString sVar = tStmt.m_tQuery.m_sQuery;
 	CSphSchema	tSchema;
@@ -15673,7 +15569,7 @@ void HandleMysqlSelectDual ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, con
 }
 
 
-void HandleMysqlShowCollations ( SqlRowBuffer_c & tOut )
+void HandleMysqlShowCollations ( RowBuffer_i & tOut )
 {
 	// MySQL Connector/J really expects an answer here
 	// field packets
@@ -15700,7 +15596,7 @@ void HandleMysqlShowCollations ( SqlRowBuffer_c & tOut )
 	return;
 }
 
-void HandleMysqlShowCharacterSet ( SqlRowBuffer_c & tOut )
+void HandleMysqlShowCharacterSet ( RowBuffer_i & tOut )
 {
 	// MySQL Connector/J really expects an answer here
 	// field packets
@@ -15750,7 +15646,7 @@ static const char * LogLevelName ( ESphLogLevel eLevel )
 }
 
 
-void HandleMysqlShowVariables ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt, SessionVars_t & tVars )
+void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, SessionVars_t & tVars )
 {
 	dRows.HeadTuplet ( "Variable_name", "Value" );
 
@@ -15859,7 +15755,7 @@ static void AddIndexQueryStats ( VectorLike & dStatus, const ServedStats_c * pSt
 	AddFoundRowsStatsToOutput ( dStatus, "found_rows", tRowsFoundStats );
 }
 
-static void AddFederatedIndexStatus ( const CSphSourceStats & tStats, const CSphString & sName, SqlRowBuffer_c & tOut )
+static void AddFederatedIndexStatus ( const CSphSourceStats & tStats, const CSphString & sName, RowBuffer_i & tOut )
 {
 	const char * dHeader[] = { "Name", "Engine", "Version", "Row_format", "Rows", "Avg_row_length", "Data_length", "Max_data_length", "Index_length", "Data_free",
 		"Auto_increment", "Create_time", "Update_time", "Check_time", "Collation", "Checksum", "Create_options", "Comment" };
@@ -15887,14 +15783,14 @@ static void AddFederatedIndexStatus ( const CSphSourceStats & tStats, const CSph
 	tOut.Commit();
 }
 
-static void AddMatchedColumns ( const VectorLike & dStatus, SqlRowBuffer_c & tOut )
+static void AddMatchedColumns ( const VectorLike & dStatus, RowBuffer_i & tOut )
 {
 	// send rows
 	for ( int iRow=0; iRow<dStatus.GetLength(); iRow+=2 )
 		tOut.DataTuplet ( dStatus[iRow+0].cstr(), dStatus[iRow+1].cstr() );
 }
 
-static void AddPlainIndexStatus ( SqlRowBuffer_c & tOut, const ServedIndex_c * pServed, bool bModeFederated, const CSphString & sName, const CSphString & sPattern )
+static void AddPlainIndexStatus ( RowBuffer_i & tOut, const ServedIndex_c * pServed, bool bModeFederated, const CSphString & sName, const CSphString & sPattern )
 {
 	assert ( pServed );
 	ServedDescRPtr_c pLocked ( pServed );
@@ -15977,7 +15873,7 @@ static void AddPlainIndexStatus ( SqlRowBuffer_c & tOut, const ServedIndex_c * p
 }
 
 
-static void AddDistibutedIndexStatus ( SqlRowBuffer_c & tOut, DistributedIndex_t * pIndex, bool bFederatedUser, const CSphString & sName, const CSphString & sPattern )
+static void AddDistibutedIndexStatus ( RowBuffer_i & tOut, DistributedIndex_t * pIndex, bool bFederatedUser, const CSphString & sName, const CSphString & sPattern )
 {
 	assert ( pIndex );
 
@@ -16003,7 +15899,7 @@ static void AddDistibutedIndexStatus ( SqlRowBuffer_c & tOut, DistributedIndex_t
 }
 
 
-void HandleMysqlShowIndexStatus ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, bool bFederatedUser )
+void HandleMysqlShowIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool bFederatedUser )
 {
 	CSphString sError;
 	auto pServed = GetServed ( tStmt.m_sIndex );
@@ -16023,7 +15919,7 @@ void HandleMysqlShowIndexStatus ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt
 }
 
 
-void HandleMysqlShowIndexSettings ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	CSphString sError;
 	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
@@ -16068,7 +15964,7 @@ void HandleMysqlShowIndexSettings ( SqlRowBuffer_c & tOut, const SqlStmt_t & tSt
 }
 
 
-void HandleMysqlShowProfile ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p, bool bMoreResultsFollow )
+void HandleMysqlShowProfile ( RowBuffer_i & tOut, const CSphQueryProfile & p, bool bMoreResultsFollow )
 {
 	#define SPH_QUERY_STATE(_name,_desc) _desc,
 	static const char * dStates [ SPH_QSTATE_TOTAL ] = { SPH_QUERY_STATES };
@@ -16165,7 +16061,7 @@ static void RemoveAttrFromIndex ( const SqlStmt_t & tStmt, const ServedDesc_t * 
 }
 
 
-static void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, bool bAdd )
+static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool bAdd )
 {
 	MEMORY ( MEM_SQL_ALTER );
 
@@ -16283,7 +16179,7 @@ bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSettings & t
 }
 
 
-static void HandleMysqlReconfigure ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	MEMORY ( MEM_SQL_ALTER );
 
@@ -16339,7 +16235,7 @@ static void HandleMysqlReconfigure ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 
 static bool ApplyIndexKillList ( CSphIndex * pIndex, CSphString & sWarning, CSphString & sError, bool bShowMessage = false );
 
-static void HandleMysqlAlterKlist ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
+static void HandleMysqlAlterKlist ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	MEMORY ( MEM_SQL_ALTER );
 
@@ -16391,7 +16287,7 @@ static void HandleMysqlAlterKlist ( SqlRowBuffer_c & tOut, const SqlStmt_t & tSt
 }
 
 
-static void HandleMysqlShowPlan ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p, bool bMoreResultsFollow )
+static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const CSphQueryProfile & p, bool bMoreResultsFollow )
 {
 	tOut.HeadBegin ( 2 );
 	tOut.HeadColumn ( "Variable" );
@@ -16407,7 +16303,7 @@ static void HandleMysqlShowPlan ( SqlRowBuffer_c & tOut, const CSphQueryProfile 
 
 static bool RotateIndexMT ( ServedIndex_c* pIndex, const CSphString & sIndex, CSphString & sError );
 static bool RotateIndexGreedy ( ServedDesc_t & tServed, const char * sIndex, CSphString & sError );
-static void HandleMysqlReloadIndex ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	CSphString sError;
 	auto pIndex = GetServed ( tStmt.m_sIndex );
@@ -16465,7 +16361,7 @@ static void HandleMysqlReloadIndex ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 	tOut.Ok();
 }
 
-void HandleMysqlExplain ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+void HandleMysqlExplain ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	CSphString sProc ( tStmt.m_sCallProc );
 	CSphString sError;
@@ -16534,7 +16430,7 @@ RtIndex_i * CSphSessionAccum::GetIndex ()
 
 static bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, CSphString & sFederatedQuery );
 
-class CSphinxqlSession : public ISphNoncopyable
+class CSphinxqlSession : public SphinxqlSession_i
 {
 private:
 	CSphString			m_sError;
@@ -16558,7 +16454,7 @@ public:
 	//
 	// returns true if the current profile should be kept (default)
 	// returns false if profile should be discarded (eg. SHOW PROFILE case)
-	bool Execute ( const CSphString & sQuery, ISphOutputBuffer & tOutput, BYTE & uPacketID, ThdDesc_t & tThd )
+	bool Execute ( const CSphString & sQuery, RowBuffer_i & tOut, ThdDesc_t & tThd ) final
 	{
 		// set on query guard
 		CrashQuery_t tCrashQuery;
@@ -16592,8 +16488,6 @@ public:
 
 		tThd.m_sCommand = g_dSqlStmts[eStmt];
 		ThdState ( ThdState_e::QUERY, tThd );
-
-		SqlRowBuffer_c tOut ( &uPacketID, &tOutput, tThd.m_iConnID, m_tVars.m_bAutoCommit );
 
 		if ( bParsedOK && m_bFederatedUser )
 		{
@@ -17036,7 +16930,16 @@ public:
 	{
 		m_bFederatedUser = true;
 	}
+
+public:
+	CSphinxqlSession () {}
+	~CSphinxqlSession() override {}
 };
+
+SphinxqlSession_i * CreateSphinxqlSession ()
+{
+	return new CSphinxqlSession();
+}
 
 
 /// sphinxql command over API
@@ -17052,9 +16955,11 @@ void HandleCommandSphinxql ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer
 
 	// todo: move upper, if the session variables are also necessary in API access mode.
 	CSphinxqlSession tSession; // FIXME!!! check that no accum related command used via API
+	
+	SqlRowBuffer_c tRows ( &uDummy, &tOut, tThd.m_iConnID, tSession.m_tVars.m_bAutoCommit );
 
 	APICommand_t dOk ( tOut, SEARCHD_OK, VER_COMMAND_SPHINXQL );
-	tSession.Execute ( sCommand, tOut, uDummy, tThd );
+	tSession.Execute ( sCommand, tRows, tThd );
 }
 
 /// json command over API
@@ -17339,14 +17244,17 @@ bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString
 			break;
 
 		case MYSQL_COM_QUERY:
+		{
 			// handle query packet
 			assert ( uMysqlCmd==MYSQL_COM_QUERY );
 			sQuery = tIn.GetRawString ( iPacketLen-1 ); // OPTIMIZE? could be huge; avoid copying?
 			assert ( !tIn.GetError() );
 			ThdState ( ThdState_e::QUERY, tThd );
 			tThd.SetThreadInfo ( "%s", sQuery.cstr() ); // OPTIMIZE? could be huge; avoid copying?
-			bKeepProfile = tSession.Execute ( sQuery, tOut, uPacketID, tThd );
-			break;
+			SqlRowBuffer_c tRows ( &uPacketID, &tOut, tThd.m_iConnID, tSession.m_tVars.m_bAutoCommit );
+			bKeepProfile = tSession.Execute ( sQuery, tRows, tThd );
+		}
+		break;
 
 		default:
 			// default case, unknown command

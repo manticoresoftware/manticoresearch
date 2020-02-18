@@ -1258,7 +1258,7 @@ enum MysqlErrors_e
 	MYSQL_ERR_TOO_MANY_USER_CONNECTIONS	= 1203
 };
 
-class SqlRowBuffer_c;
+class RowBuffer_i;
 
 class StmtErrorReporter_i
 {
@@ -1267,7 +1267,7 @@ public:
 	virtual void Ok ( int iAffectedRows, int nWarnings=0 ) = 0;
 	virtual void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr = MYSQL_ERR_PARSE_ERROR ) = 0;
 
-	virtual SqlRowBuffer_c * GetBuffer() = 0;
+	virtual RowBuffer_i * GetBuffer() = 0;
 };
 
 
@@ -1398,5 +1398,170 @@ void SaveArray ( const VecTraits_T<T> & dBuf, MemoryWriter_c & tOut )
 
 
 void SendErrorReply ( CachedOutputBuffer_c & tOut, const char * sTemplate, ... );
+
+enum MysqlColumnType_e
+{
+	MYSQL_COL_DECIMAL	= 0,
+	MYSQL_COL_LONG		= 3,
+	MYSQL_COL_FLOAT	= 4,
+	MYSQL_COL_LONGLONG	= 8,
+	MYSQL_COL_STRING	= 254
+};
+
+enum MysqlColumnFlag_e
+{
+	MYSQL_COL_UNSIGNED_FLAG = 32
+};
+
+
+class RowBuffer_i : public ISphNoncopyable
+{
+public:
+	virtual ~RowBuffer_i() {}
+
+	virtual void PutFloatAsString ( float fVal, const char * sFormat=nullptr ) = 0;
+
+	virtual void PutNumAsString ( int64_t iVal ) = 0;
+	virtual void PutNumAsString ( uint64_t uVal ) = 0;
+	virtual void PutNumAsString ( int iVal ) = 0;
+	virtual void PutNumAsString ( DWORD uVal ) = 0;
+
+	// pack raw array (i.e. packed length, then blob) into proto mysql
+	virtual void PutArray ( const void * pBlob, int iLen, bool bSendEmpty = false ) = 0;
+
+	// pack zero-terminated string (or "" if it is zero itself)
+	virtual void PutString ( const char * sMsg ) = 0;
+
+	virtual void PutMicrosec ( int64_t iUsec ) = 0;
+
+	virtual void PutNULL() = 0;
+
+	/// more high level. Processing the whole tables.
+	// sends collected data, then reset
+	virtual void Commit() = 0;
+
+	// wrappers for popular packets
+	virtual void Eof ( bool bMoreResults=false, int iWarns=0 ) = 0;
+
+	virtual void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr = MYSQL_ERR_PARSE_ERROR ) = 0;
+
+	virtual void Ok ( int iAffectedRows=0, int iWarns=0, const char * sMessage=nullptr, bool bMoreResults=false, int64_t iLastInsertId=0 ) = 0;
+
+	// Header of the table with defined num of columns
+	virtual void HeadBegin ( int iColumns ) = 0;
+
+	virtual void HeadEnd ( bool bMoreResults=false, int iWarns=0 ) = 0;
+
+	// add the next column. The EOF after the full set will be fired automatically
+	virtual void HeadColumn ( const char * sName, MysqlColumnType_e uType=MYSQL_COL_STRING, WORD uFlags=0 ) = 0;
+
+	virtual void Add ( BYTE uVal ) = 0;
+
+	// common implementations
+	void PutArray ( const VecTraits_T<BYTE> & dData )
+	{
+		PutArray ( ( const char * )dData.begin(), dData.GetLength() );
+	}
+
+	void PutArray ( const StringBuilder_c & dData, bool bSendEmpty=true )
+	{
+		PutArray ( ( const char * )dData.begin(), dData.GetLength(), bSendEmpty );
+	}
+
+	void PutString ( const CSphString & sMsg )
+	{
+		PutString ( sMsg.cstr() );
+	}
+
+	void PutTimeAsString ( int64_t tmVal )
+	{
+		StringBuilder_c sTime;
+		sTime.Sprintf ("%t", tmVal);
+		PutString ( sTime.cstr() );
+	}
+
+	void PutTimestampAsString ( int64_t tmTimestamp )
+	{
+		StringBuilder_c sTime;
+		sTime.Sprintf ( "%T", tmTimestamp );
+		PutString ( sTime.cstr ());
+	}
+
+	void ErrorEx ( MysqlErrors_e iErr, const char * sTemplate, ... )
+	{
+		char sBuf[1024];
+		va_list ap;
+
+		va_start ( ap, sTemplate );
+		vsnprintf ( sBuf, sizeof(sBuf), sTemplate, ap );
+		va_end ( ap );
+
+		Error ( nullptr, sBuf, iErr );
+	}
+
+	// popular pattern of 2 columns of data
+	void DataTuplet ( const char * pLeft, const char * pRight )
+	{
+		PutString ( pLeft );
+		PutString ( pRight );
+		Commit ();
+	}
+
+	template <typename NUM>
+	void DataTuplet ( const char * pLeft, NUM tRight )
+	{
+		PutString ( pLeft );
+		PutNumAsString ( tRight );
+		Commit();
+	}
+
+	void DataTupletf ( const char * pLeft, const char * sFmt, ... )
+	{
+		StringBuilder_c sRight;
+		PutString ( pLeft );
+		va_list ap;
+		va_start ( ap, sFmt );
+		sRight.vSprintf ( sFmt, ap );
+		va_end ( ap );
+		PutString ( sRight.cstr() );
+		Commit();
+	}
+
+	// Fire he header for table with iSize string columns
+	void HeadOfStrings ( const char ** ppNames, size_t iSize )
+	{
+		HeadBegin ( iSize );
+		for ( ; iSize>0 ; --iSize )
+			HeadColumn ( *ppNames++ );
+		HeadEnd();
+	}
+
+	// table of 2 columns (we really often use them!)
+	void HeadTuplet ( const char * pLeft, const char * pRight )
+	{
+		HeadBegin ( 2 );
+		HeadColumn ( pLeft );
+		HeadColumn ( pRight );
+		HeadEnd();
+	}
+};
+
+class SphinxqlSession_i : public ISphNoncopyable
+{
+public:
+	SphinxqlSession_i() {}
+	virtual ~SphinxqlSession_i() {}
+
+	// just execute one sphinxql statement
+	//
+	// IMPORTANT! this does NOT start or stop profiling, as there a few external
+	// things (client net reads and writes) that we want to profile, too
+	//
+	// returns true if the current profile should be kept (default)
+	// returns false if profile should be discarded (eg. SHOW PROFILE case)
+	virtual bool Execute ( const CSphString & sQuery, RowBuffer_i & tOut, ThdDesc_t & tThd ) = 0;
+};
+
+SphinxqlSession_i * CreateSphinxqlSession ();
 
 #endif // _searchdaemon_

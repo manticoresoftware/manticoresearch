@@ -407,7 +407,7 @@ public:
 	virtual void	Ok ( int iAffectedRows, const CSphString & /*sWarning*/, int64_t /*iLastInsertId*/ ) { m_iAffected = iAffectedRows; }
 	virtual void	Ok ( int iAffectedRows, int /*nWarnings*/ ) { m_iAffected = iAffectedRows; }
 	virtual void	Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr );
-	virtual SqlRowBuffer_c * GetBuffer() { return NULL; }
+	virtual RowBuffer_i * GetBuffer() { return NULL; }
 
 	bool			IsError() const { return m_bError; }
 	const char *	GetError() const { return m_sError.cstr(); }
@@ -610,21 +610,7 @@ public:
 protected:
 	QueryParser_i * PreParseQuery() override
 	{
-		const CSphString * pRawQl = nullptr;
-		CSphString sQuery;
-		auto pBaypass = m_tOptions ( "decoded_mode" );
-		if ( pBaypass && !pBaypass->IsEmpty () ) // test for 'mode=raw&query=...'
-		{
-			CSphString &a = *pBaypass;
-			if ( a.SubString (0,10) == "raw&query=" )
-			{
-				sQuery = a.cstr()+10;
-				pRawQl = &sQuery;
-			}
-		}
-
-		if (!pRawQl)
-			pRawQl = m_tOptions ( "query" );
+		const CSphString * pRawQl = m_tOptions ( "query" );
 		if ( !pRawQl || pRawQl->IsEmpty() )
 		{
 			ReportError ( "query missing", SPH_HTTP_STATUS_400 );
@@ -658,6 +644,210 @@ protected:
 	CSphString EncodeResult ( const AggrResult_t & tRes, CSphQueryProfile * pProfile ) override
 	{
 		return sphEncodeResultJson ( tRes, m_tQuery, pProfile );
+	}
+};
+
+typedef std::pair<CSphString,MysqlColumnType_e> ColumnNameType_t;
+
+const char * GetTypeName ( MysqlColumnType_e eType )
+{
+	switch ( eType )
+	{
+		case MYSQL_COL_DECIMAL: return "decimal";
+		case MYSQL_COL_LONG: return "long";
+		case MYSQL_COL_FLOAT: return "float";
+		case MYSQL_COL_LONGLONG: return "long long";
+		case MYSQL_COL_STRING: return "string";
+		default: return "unknown";
+	};
+}
+
+class JsonRowBuffer_c : public RowBuffer_i
+{
+public:
+	JsonRowBuffer_c () {}
+
+	virtual ~JsonRowBuffer_c() {}
+
+	void PutFloatAsString ( float fVal, const char * sFormat ) override
+	{
+		AddDataColumn();
+		m_dBuf.Appendf( "%f", fVal );
+	}
+
+	void PutNumAsString ( int64_t iVal ) override
+	{
+		AddDataColumn();
+		m_dBuf.Appendf( INT64_FMT, iVal );
+	}
+
+	void PutNumAsString ( uint64_t uVal ) override
+	{
+		AddDataColumn();
+		m_dBuf.Appendf( UINT64_FMT, uVal );
+	}
+
+	void PutNumAsString ( int iVal ) override
+	{
+		AddDataColumn();
+		m_dBuf.Appendf ( "%d", iVal );
+	}
+	
+	void PutNumAsString ( DWORD uVal ) override
+	{
+		AddDataColumn();
+		m_dBuf.Appendf ( "%u", uVal );
+	}
+
+	void PutArray ( const void * pBlob, int iLen, bool bSendEmpty ) override
+	{
+		AddDataColumn();
+		CSphString sData;
+		sData.SetBinary ( (const char *)pBlob, iLen );
+		m_dBuf.AppendEscaped ( sData.cstr() );
+	}
+
+	void PutString ( const char * sMsg ) override
+	{
+		AddDataColumn();
+		m_dBuf.AppendEscaped ( sMsg );
+	}
+
+	void PutMicrosec ( int64_t iUsec ) override
+	{
+		PutNumAsString ( iUsec );
+	}
+
+	void PutNULL() override
+	{
+		AddDataColumn();
+		m_dBuf += "null";
+	}
+
+	void Commit() override
+	{
+		m_dBuf += "}";
+		m_iCol = 0;
+		m_iRow++;
+	}
+
+	void Eof ( bool bMoreResults , int iWarns ) override
+	{
+		m_dBuf += "\n],\n";
+	}
+
+	void Error ( const char *, const char * sError, MysqlErrors_e iErr ) override
+	{
+		m_sError = sError;
+	}
+
+	void Ok ( int iAffectedRows, int iWarns, const char * sMessage, bool bMoreResults, int64_t iLastInsertId ) override
+	{
+		m_iTotalRows = iAffectedRows;
+		m_sWarning = sMessage;
+	}
+
+	void HeadBegin ( int ) override
+	{
+		m_dBuf.Clear();
+		m_dBuf += "{";
+	}
+
+	void HeadEnd ( bool , int ) override
+	{
+		{
+			ScopedComma_c tComma ( m_dBuf, ",", R"("columns":[)", "],\n", false );
+			for ( const ColumnNameType_t & tCol : m_dColumns )
+			{
+				ScopedComma_c tColBlock ( m_dBuf.Object() );
+				m_dBuf.AppendName ( tCol.first.cstr() );
+				ScopedComma_c tTypeBlock ( m_dBuf.Object() );
+				m_dBuf.AppendName ( "type" );
+				m_dBuf.AppendEscaped ( GetTypeName ( tCol.second ) );
+			}
+		}
+		
+		m_dBuf.AppendName ( "data" );
+		m_dBuf += "[\n";
+	}
+
+	void HeadColumn ( const char * sName, MysqlColumnType_e eType, WORD ) override
+	{
+		m_dColumns.Add ( ColumnNameType_t { sName, eType } );
+	}
+
+	void Add ( BYTE ) override {};
+
+	const JsonEscapedBuilder & Finish()
+	{
+		if ( m_dBuf.IsEmpty() )
+			m_dBuf += "{\n";
+
+		m_dBuf.Appendf ( R"("total":%d)", m_iTotalRows );
+
+		m_dBuf += ",\n";
+		m_dBuf += R"("error":)";
+		m_dBuf.AppendEscaped ( m_sError.cstr (), EscBld::eEscape );
+
+		m_dBuf += ",\n";
+		m_dBuf += R"("warning":)";
+		m_dBuf.AppendEscaped ( m_sWarning.cstr (), EscBld::eEscape );
+
+		m_dBuf += "\n}";
+
+		return m_dBuf;
+	}
+
+private:
+	JsonEscapedBuilder m_dBuf;
+	CSphVector<ColumnNameType_t> m_dColumns;
+	int m_iCol = 0;
+	int m_iRow = 0;
+
+	CSphString m_sError;
+	CSphString m_sWarning;
+	int m_iTotalRows = 0;
+
+	void AddDataColumn()
+	{
+		if ( !m_iCol && m_iRow )
+			m_dBuf += ",\n";
+		if ( !m_iCol )
+			m_dBuf += "{";
+		if ( m_iCol )
+			m_dBuf += ", ";
+
+		m_dBuf.AppendName ( m_dColumns[m_iCol].first.cstr() );
+		m_iCol++;
+	}
+};
+
+static const char g_sBypassHead[] = "mode=";
+static const char g_sBypassToken[] = "raw&query=";
+
+class HttpRawSqlHandler_c : public HttpHandler_c, public HttpOptionsTraits_c
+{
+public:
+	HttpRawSqlHandler_c ( const char * sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd )
+		: HttpHandler_c ( sQuery, tThd )
+		, HttpOptionsTraits_c ( tOptions )
+	{
+	}
+
+	virtual bool Process () override
+	{
+		CSphString sQuery = m_sQuery + sizeof ( g_sBypassHead ) - 1 + sizeof ( g_sBypassToken ) - 1;
+		CSphString sError;
+
+		JsonRowBuffer_c tOut;
+		CSphScopedPtr<SphinxqlSession_i> pSession { CreateSphinxqlSession() };
+		ThdDesc_t tTmdThd;
+
+		pSession->Execute ( sQuery, tOut, tTmdThd );
+
+		BuildReply ( tOut.Finish(), SPH_HTTP_STATUS_200 );
+
+		return true;
 	}
 };
 
@@ -980,10 +1170,16 @@ private:
 
 static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const char * sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd, http_method eRequestType )
 {
+	const CSphString * pRawSQL = nullptr;
+
 	switch ( eEndpoint )
 	{
 	case SPH_HTTP_ENDPOINT_SQL:
-		return new HttpSearchHandler_SQL_c ( sQuery, tOptions, tThd );
+		pRawSQL = tOptions ( "decoded_mode" );
+		if ( pRawSQL && pRawSQL->Begins ( g_sBypassToken ) ) // test for 'mode=raw&query=...'
+			return new HttpRawSqlHandler_c ( sQuery, tOptions, tThd );
+		else
+			return new HttpSearchHandler_SQL_c ( sQuery, tOptions, tThd );
 
 	case SPH_HTTP_ENDPOINT_JSON_SEARCH:
 		return new HttpHandler_JsonSearch_c ( sQuery, tOptions, tThd );

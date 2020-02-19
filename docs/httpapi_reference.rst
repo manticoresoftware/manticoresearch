@@ -55,11 +55,12 @@ The response is in JSON format and contains hits information and time of executi
     }
 
 For comfortable debugging in browser you can set param 'mode' to 'raw', and then the rest of the query after 'query='
-will be passed inside without any substitutions/url decoding.
+will be passed inside without any substitutions/url decoding. In this mode any SphinxQL statements work via '/sql' endpoint.
+The response is in JSON format with 'columns' and 'data' objects.
 
 .. code-block:: bash
 
-        curl -X POST http://manticoresearch:9308/sql -d "query=select id,packedfactors() from movies where match('star') option ranker=expr('1')"
+        curl -X POST http://manticoresearch:9308/sql -d "query=select id,1+2 as a, packedfactors() from test where match('tes*') option ranker=expr('1')"
 
 
 .. code-block:: json
@@ -68,12 +69,54 @@ will be passed inside without any substitutions/url decoding.
 
 .. code-block:: bash
 
-		curl -X POST http://localhost:9308/sql -d "mode=raw&query=query=select id,packedfactors() from movies where match('star') option ranker=expr('1')"
+		curl -X POST http://localhost:9308/sql -d "mode=raw&query=select id,1+2 as a, packedfactors() from test where match('tes*') option ranker=expr('1')"
 
 .. code-block:: json
 
-    {"took":0,"timed_out":false,"hits":{"total":72,"hits":[{"_id":"5","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":32, "doc_word_count":1, "fields":[{"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"46","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":2, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":8, "min_best_span_pos":8, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"49","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":32, "doc_word_count":1, "fields":[{"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"58","_score":1,"_source":{"packedfactors()":{"bm25":655, "bm25a":0.71596009, "field_mask":34, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":5, "min_best_span_pos":5, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}, {"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":2, "idf":0.24835411}]}}},{"_id":"67","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":2, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":8, "min_best_span_pos":8, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"161","_score":1,"_source":{"packedfactors()":{"bm25":655, "bm25a":0.71596009, "field_mask":34, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":9, "min_best_span_pos":9, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}, {"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":2, "idf":0.24835411}]}}},{"_id":"201","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":2, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":12, "min_best_span_pos":12, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"237","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":32, "doc_word_count":1, "fields":[{"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"238","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":32, "doc_word_count":1, "fields":[{"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"241","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":32, "doc_word_count":1, "fields":[{"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"601","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":32, "doc_word_count":1, "fields":[{"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"673","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":2, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":9, "min_best_span_pos":9, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"779","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":32, "doc_word_count":1, "fields":[{"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"799","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":2, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":6, "min_best_span_pos":6, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"807","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":2, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":2, "min_best_span_pos":2, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"1066","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":2, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":4, "min_best_span_pos":4, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"1068","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":32, "doc_word_count":1, "fields":[{"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"1227","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":2, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":7, "min_best_span_pos":7, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"1336","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":2, "doc_word_count":1, "fields":[{"field":1, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":10, "min_best_span_pos":10, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}},{"_id":"1344","_score":1,"_source":{"packedfactors()":{"bm25":612, "bm25a":0.69104159, "field_mask":32, "doc_word_count":1, "fields":[{"field":5, "lcs":1, "hit_count":1, "word_count":1, "tf_idf":0.24835411, "min_idf":0.24835411, "max_idf":0.24835411, "sum_idf":0.24835411, "min_hit_pos":1, "min_best_span_pos":1, "exact_hit":0, "max_window_hits":1, "min_gaps":0, "exact_order":1, "lccs":1, "wlccs":0.24835411, "atc":0.000000}], "words":[{"tf":1, "idf":0.24835411}]}}}]}}
+		{
+			"columns": [
+				{
+					"id": {
+						"type": "long long"
+					}
+				},
+				{
+					"a": {
+						"type": "long"
+					}
+				},
+				{
+					"packedfactors()": {
+						"type": "string"
+					}
+				}
+			],
+			"data": [
+				{
+					"id": 1,
+					"a": 3,
+					"packedfactors()": "bm25=616, bm25a=0.69689077, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.25595802, min_idf=0.25595802, max_idf=0.25595802, sum_idf=0.25595802, min_hit_pos=1, min_best_span_pos=1, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=0.25595802, atc=0.000000), word0=(tf=1, idf=0.25595802)"
+				},
+				{
+					"id": 8,
+					"a": 3,
+					"packedfactors()": "bm25=616, bm25a=0.69689077, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.25595802, min_idf=0.25595802, max_idf=0.25595802, sum_idf=0.25595802, min_hit_pos=2, min_best_span_pos=2, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=0.25595802, atc=0.000000), word0=(tf=1, idf=0.25595802)"
+				}
+			],
+			"total": 0,
+			"error": "",
+			"warning": ""
+		}
+		
 
+All other SphinxQL statements also work.
+		
+.. code-block:: bash
+
+		curl -X POST http://localhost:9308/sql -d "mode=raw&query=alter table test add column new1 integer"
+		curl -X POST http://localhost:9308/sql -d "mode=raw&query=show tables"
+		curl -X POST http://localhost:9308/sql -d "mode=raw&query=show status"
+		curl -X POST http://localhost:9308/sql -d "mode=raw&query=desc test"
 
 
 /json API

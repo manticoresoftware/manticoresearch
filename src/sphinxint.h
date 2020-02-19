@@ -1468,26 +1468,6 @@ inline CSphString SqlUnescape ( const char * sEscaped, int iLen )
 	return sRes;
 }
 
-
-inline void StripPath ( CSphString & sPath )
-{
-	if ( sPath.IsEmpty() )
-		return;
-
-	const char * s = sPath.cstr();
-	if ( *s!='/' )
-		return;
-
-	const char * sLastSlash = s;
-	for ( ; *s; ++s )
-		if ( *s=='/' )
-			sLastSlash = s;
-
-	auto iPos = (int)( sLastSlash - sPath.cstr() + 1 );
-	auto iLen = (int)( s - sPath.cstr() );
-	sPath = sPath.SubString ( iPos, iLen - iPos );
-}
-
 //////////////////////////////////////////////////////////////////////////
 // DISK INDEX INTERNALS
 //////////////////////////////////////////////////////////////////////////
@@ -1654,9 +1634,6 @@ struct StoredQueryDesc_t;
 class ISphBinlog : ISphNoncopyable
 {
 public:
-	using CreateTable_fn = CSphIndex * (*)( const CSphString &, const CreateTableSettings_t &, bool, CSphString & );
-	using DropTable_fn = bool (*)( const CSphString &, bool, bool, CSphString & );
-
 	virtual				~ISphBinlog () {}
 
 	virtual void		BinlogUpdateAttributes ( int64_t * pTID, const char * sIndexName, const CSphAttrUpdate & tUpd ) = 0;
@@ -1667,12 +1644,6 @@ public:
 
 	virtual void		BinlogPqAdd ( int64_t * pTID, const char * sIndexName, const StoredQueryDesc_t & tStored ) = 0;
 	virtual void		BinlogPqDelete ( int64_t * pTID, const char * sIndexName, const int64_t * pQueries, int iCount, const char * sTags ) = 0;
-
-	virtual void		BinlogCreateTable ( int64_t * pTID, const char * szIndexName, const CreateTableSettings_t & tCreateTable ) = 0;
-	virtual void		BinlogDropTable ( int64_t * pTID, const char * szIndexName, bool bIfExists ) = 0;
-
-	virtual void		SetCreateTable ( CreateTable_fn pCreateTable ) = 0;
-	virtual void		SetDropTable ( DropTable_fn pDropTable ) = 0;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1720,9 +1691,8 @@ void			RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, CSphFixedVec
 
 // FIXME!!! remove with converter
 const char * CheckFmtMagic ( DWORD uHeader );
-void ReadFileInfo ( CSphReader & tReader, const char * szFilename, bool bSharedStopwords, CSphSavedFile & tFile, CSphString * sWarning );
-bool WriteKillList ( const CSphString & sFilename, const DocID_t * pKlist, int nEntries, const KillListTargets_t & tTargets, CSphString & sError );
-void WarnAboutKillList ( const CSphVector<DocID_t> & dKillList, const KillListTargets_t & tTargets );
+bool WriteKillList ( const CSphString & sFilename, const DocID_t * pKlist, int nEntries, const KillListTargets_c & tTargets, CSphString & sError );
+void WarnAboutKillList ( const CSphVector<DocID_t> & dKillList, const KillListTargets_c & tTargets );
 extern const char * g_sTagInfixBlocks;
 extern const char * g_sTagInfixEntries;
 

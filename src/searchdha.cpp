@@ -292,7 +292,7 @@ static bool IsIpAddress ( const char * sURL )
 /// Set flag m_bNeedResolve if address is AF_INET, host is not empty and not plain IP address,
 /// and also if global flag for postponed resolving is set.
 /// Otherwise resolve address now (if appliable) and then forbid any name resolving in future.
-bool ResolveAddress ( AgentDesc_t &tAgent, const WarnInfo_t &tInfo )
+bool ResolveAddress ( AgentDesc_t &tAgent, const WarnInfo_c & tInfo )
 {
 	tAgent.m_bNeedResolve = false;
 	if ( tAgent.m_iFamily!=AF_INET )
@@ -442,7 +442,7 @@ public:
 /// initialize address resolving,
 /// add to agent records of stats,
 /// add agent into global dashboard hash
-static bool ValidateAndAddDashboard ( AgentDesc_t& dAgent, const WarnInfo_t &tInfo )
+static bool ValidateAndAddDashboard ( AgentDesc_t& dAgent, const WarnInfo_c & tInfo )
 {
 	assert ( !dAgent.m_pDash && !dAgent.m_pMetrics );
 	if ( !ResolveAddress ( dAgent, tInfo ) )
@@ -525,8 +525,7 @@ CSphString MultiAgentDesc_c::GetKey ( const CSphVector<AgentDesc_t *> &dTemplate
 	return sKey.cstr();
 }
 
-MultiAgentDesc_c* MultiAgentDesc_c::GetAgent ( const CSphVector<AgentDesc_t*> &dHosts, const AgentOptions_t &tOpt,
-								const WarnInfo_t &tWarn ) NO_THREAD_SAFETY_ANALYSIS
+MultiAgentDesc_c * MultiAgentDesc_c::GetAgent ( const CSphVector<AgentDesc_t*> & dHosts, const AgentOptions_t & tOpt, const WarnInfo_c & tWarn ) NO_THREAD_SAFETY_ANALYSIS
 {
 	auto sKey = GetKey ( dHosts, tOpt );
 	auto &gHash = g_MultiAgents ();
@@ -544,12 +543,12 @@ MultiAgentDesc_c* MultiAgentDesc_c::GetAgent ( const CSphVector<AgentDesc_t*> &d
 	return ( MultiAgentDesc_c * ) gHash.TryAddThenGet ( pAgent, sKey );
 }
 
-bool MultiAgentDesc_c::Init ( const CSphVector<AgentDesc_t *> &dHosts,
-			const AgentOptions_t &tOpt, const WarnInfo_t &tWarn ) NO_THREAD_SAFETY_ANALYSIS
+bool MultiAgentDesc_c::Init ( const CSphVector<AgentDesc_t *> & dHosts, const AgentOptions_t & tOpt, const WarnInfo_c & tWarn ) NO_THREAD_SAFETY_ANALYSIS
 {
 	// initialize options
 	m_eStrategy = tOpt.m_eStrategy;
 	m_iMultiRetryCount = tOpt.m_iRetryCount * tOpt.m_iRetryCountMultiplier;
+	m_sConfigStr = tWarn.m_szAgent;
 
 	// initialize hosts & weights
 	auto iLen = dHosts.GetLength ();
@@ -964,7 +963,7 @@ void track_processing_time ( AgentConn_t &tAgent )
 /// try to parse hostname/ip/port or unixsocket on current pConfigLine.
 /// fill pAgent fields on success and move ppLine pointer next after parsed instance
 /// test cases and test group 'T_ParseAddressPort', are in gtest_searchdaemon.cpp.
-bool ParseAddressPort ( HostDesc_t& dHost, const char ** ppLine, const WarnInfo_t &dInfo )
+bool ParseAddressPort ( HostDesc_t& dHost, const char ** ppLine, const WarnInfo_c & tInfo )
 {
 	// extract host name or path
 	const char *&p = *ppLine;
@@ -981,14 +980,14 @@ bool ParseAddressPort ( HostDesc_t& dHost, const char ** ppLine, const WarnInfo_
 	while ( sphIsAlpha ( *p ) || *p=='.' || *p=='-' || *p=='/' )
 		++p;
 	if ( p==pAnchor )
-		return dInfo.ErrSkip ( "host name or path expected" );
+		return tInfo.ErrSkip ( "host name or path expected" );
 
 	CSphString sSub ( pAnchor, p-pAnchor );
 	if ( eState==apUNIX )
 	{
 #if !USE_WINDOWS
 		if ( strlen ( sSub.cstr () ) + 1>sizeof(((struct sockaddr_un *)0)->sun_path) )
-			return dInfo.ErrSkip ( "UNIX socket path is too long" );
+			return tInfo.ErrSkip ( "UNIX socket path is too long" );
 #endif
 		dHost.m_iFamily = AF_UNIX;
 		dHost.m_sAddr = sSub;
@@ -1003,7 +1002,7 @@ bool ParseAddressPort ( HostDesc_t& dHost, const char ** ppLine, const WarnInfo_
 	if ( *p!=':' )
 	{
 		dHost.m_iPort = IANA_PORT_SPHINXAPI;
-		dInfo.Warn ( "colon and portnum expected before '%s' - Using default IANA %d port", p, dHost.m_iPort );
+		tInfo.Warn ( "colon and portnum expected before '%s' - Using default IANA %d port", p, dHost.m_iPort );
 		return true;
 	}
 	pAnchor = ++p;
@@ -1015,32 +1014,45 @@ bool ParseAddressPort ( HostDesc_t& dHost, const char ** ppLine, const WarnInfo_
 	if ( p==pAnchor )
 	{
 		dHost.m_iPort = IANA_PORT_SPHINXAPI;
-		dInfo.Warn ( "portnum expected before '%s' - Using default IANA %d port", p, dHost.m_iPort );
+		tInfo.Warn ( "portnum expected before '%s' - Using default IANA %d port", p, dHost.m_iPort );
 		--p; /// step back to ':'
 		return true;
 	}
 	dHost.m_iPort = atoi ( pAnchor );
 
 	if ( !IsPortInRange ( dHost.m_iPort ) )
-		return dInfo.ErrSkip ( "invalid port number near '%s'", p );
+		return tInfo.ErrSkip ( "invalid port number near '%s'", p );
 
 	return true;
 }
 
-bool ParseStrategyHA ( const char * sName, HAStrategies_e * pStrategy )
+bool ParseStrategyHA ( const char * sName, HAStrategies_e & eStrategy )
 {
 	if ( sphStrMatchStatic ( "random", sName ) )
-		*pStrategy = HA_RANDOM;
+		eStrategy = HA_RANDOM;
 	else if ( sphStrMatchStatic ( "roundrobin", sName ) )
-		*pStrategy = HA_ROUNDROBIN;
+		eStrategy = HA_ROUNDROBIN;
 	else if ( sphStrMatchStatic ( "nodeads", sName ) )
-		*pStrategy = HA_AVOIDDEAD;
+		eStrategy = HA_AVOIDDEAD;
 	else if ( sphStrMatchStatic ( "noerrors", sName ) )
-		*pStrategy = HA_AVOIDERRORS;
+		eStrategy = HA_AVOIDERRORS;
 	else
 		return false;
 
 	return true;
+}
+
+CSphString HAStrategyToStr ( HAStrategies_e eStrategy )
+{
+	switch ( eStrategy )
+	{
+	case HA_RANDOM:			return "random";
+	case HA_ROUNDROBIN:		return "roundrobin";
+	case HA_AVOIDDEAD:		return "nodeads";
+	case HA_AVOIDERRORS:	return "noerrors";
+	}
+
+	return "";
 }
 
 void ParseIndexList ( const CSphString &sIndexes, StrVec_t &dOut )
@@ -1077,7 +1089,7 @@ void ParseIndexList ( const CSphString &sIndexes, StrVec_t &dOut )
 }
 
 // parse agent's options line and modify pOptions
-bool ParseOptions ( AgentOptions_t * pOptions, const CSphString& sOptions, const WarnInfo_t &dWI )
+bool ParseOptions ( AgentOptions_t * pOptions, const CSphString& sOptions, const WarnInfo_c & tWI )
 {
 	StrVec_t dSplitParts;
 	sphSplit ( dSplitParts, sOptions.cstr (), "," ); // diff. options are ,-separated
@@ -1090,7 +1102,7 @@ bool ParseOptions ( AgentOptions_t * pOptions, const CSphString& sOptions, const
 		StrVec_t dOption;
 		sphSplit ( dOption, sOption.cstr (), "=" );
 		if ( dOption.GetLength ()!=2 )
-			return dWI.ErrSkip ( "option %s error: option and value must be =-separated pair", sOption.cstr () );
+			return tWI.ErrSkip ( "option %s error: option and value must be =-separated pair", sOption.cstr () );
 
 		for ( auto &sOpt : dOption )
 			sOpt.ToLower ().Trim ();
@@ -1106,7 +1118,7 @@ bool ParseOptions ( AgentOptions_t * pOptions, const CSphString& sOptions, const
 			}
 		} else if ( sphStrMatchStatic ( "ha_strategy", sOptName ) )
 		{
-			if ( ParseStrategyHA ( sOptValue, &pOptions->m_eStrategy ) )
+			if ( ParseStrategyHA ( sOptValue, pOptions->m_eStrategy ) )
 				continue;
 		} else if ( sphStrMatchStatic ( "blackhole", sOptName ) )
 		{
@@ -1118,13 +1130,13 @@ bool ParseOptions ( AgentOptions_t * pOptions, const CSphString& sOptions, const
 			pOptions->m_iRetryCountMultiplier = 1;
 			continue;
 		}
-		return dWI.ErrSkip ( "unknown agent option '%s'", sOption.cstr () );
+		return tWI.ErrSkip ( "unknown agent option '%s'", sOption.cstr () );
 	}
 	return true;
 }
 
 // check whether all index(es) in list are valid index names
-bool CheckIndexNames ( const CSphString &sIndexes, const WarnInfo_t& dWI )
+bool CheckIndexNames ( const CSphString &sIndexes, const WarnInfo_c & tWI )
 {
 	StrVec_t dRawIndexes, dParsedIndexes;
 
@@ -1140,26 +1152,26 @@ bool CheckIndexNames ( const CSphString &sIndexes, const WarnInfo_t& dWI )
 	{
 		dRawIndexes[i].Trim();
 		if ( dRawIndexes[i]!= dParsedIndexes[i] )
-			return dWI.ErrSkip ("no such index: %s", dRawIndexes[i].cstr());
+			return tWI.ErrSkip ("no such index: %s", dRawIndexes[i].cstr());
 	}
 	return true;
 }
 
 // parse agent string into template vec of AgentDesc_t, then configure them.
-static bool ConfigureMirrorSet ( CSphVector<AgentDesc_t*> &tMirrors, AgentOptions_t * pOptions, const WarnInfo_t& dWI )
+static bool ConfigureMirrorSet ( CSphVector<AgentDesc_t*> &tMirrors, AgentOptions_t * pOptions, const WarnInfo_c & tWI )
 {
 	assert ( tMirrors.IsEmpty () );
 
 	StrVec_t dSplitParts;
-	sphSplit ( dSplitParts, dWI.m_szAgent, "[]" );
+	sphSplit ( dSplitParts, tWI.m_szAgent, "[]" );
 	if ( dSplitParts.IsEmpty () )
-		return dWI.ErrSkip ( "empty agent definition" );
+		return tWI.ErrSkip ( "empty agent definition" );
 
 	if ( dSplitParts[0].IsEmpty () )
-		return dWI.ErrSkip ( "one or more hosts/sockets expected before [" );
+		return tWI.ErrSkip ( "one or more hosts/sockets expected before [" );
 
 	if ( dSplitParts.GetLength ()<1 || dSplitParts.GetLength ()>2 )
-		return dWI.ErrSkip ( "wrong syntax: expected one or more hosts/sockets, then m.b. []-enclosed options" );
+		return tWI.ErrSkip ( "wrong syntax: expected one or more hosts/sockets, then m.b. []-enclosed options" );
 
 	// parse agents
 	// separate '|'-splitted records, normalize result
@@ -1168,7 +1180,7 @@ static bool ConfigureMirrorSet ( CSphVector<AgentDesc_t*> &tMirrors, AgentOption
 	for ( auto &sAgent : dRawAgents )
 		sAgent.Trim ();
 
-	if ( dSplitParts.GetLength ()==2 && !ParseOptions ( pOptions, dSplitParts[1], dWI ) )
+	if ( dSplitParts.GetLength ()==2 && !ParseOptions ( pOptions, dSplitParts[1], tWI ) )
 		return false;
 
 	assert ( dRawAgents.GetLength ()>0 );
@@ -1182,7 +1194,7 @@ static bool ConfigureMirrorSet ( CSphVector<AgentDesc_t*> &tMirrors, AgentOption
 		tMirrors.Add ( new AgentDesc_t );
 		AgentDesc_t &dMirror = *tMirrors.Last ();
 		const char * sRawAgent = sAgent.cstr ();
-		if ( !ParseAddressPort ( dMirror, &sRawAgent, dWI ) )
+		if ( !ParseAddressPort ( dMirror, &sRawAgent, tWI ) )
 			return false;
 
 		// apply per-mirror options
@@ -1192,14 +1204,14 @@ static bool ConfigureMirrorSet ( CSphVector<AgentDesc_t*> &tMirrors, AgentOption
 		if ( *sRawAgent )
 		{
 			if ( *sRawAgent!=':' )
-				return dWI.ErrSkip ( "after host/socket expected ':', then index(es), but got '%s')", sRawAgent );
+				return tWI.ErrSkip ( "after host/socket expected ':', then index(es), but got '%s')", sRawAgent );
 
 			CSphString sIndexList = ++sRawAgent;
 			sIndexList.Trim ();
 			if ( sIndexList.IsEmpty () )
 				continue;
 
-			if ( !CheckIndexNames ( sIndexList, dWI ) )
+			if ( !CheckIndexNames ( sIndexList, tWI ) )
 				return false;
 
 			dMirror.m_sIndexes = sIndexList;
@@ -1211,7 +1223,7 @@ static bool ConfigureMirrorSet ( CSphVector<AgentDesc_t*> &tMirrors, AgentOption
 		pOptions->m_iRetryCountMultiplier = tMirrors.GetLength ();
 
 	// fixup agent's indexes name: if no index assigned, stick the next one (or the parent).
-	CSphString sLastIndex = dWI.m_szIndexName;
+	CSphString sLastIndex = tWI.m_szIndexName;
 	for ( int i = tMirrors.GetLength () - 1; i>=0; --i )
 		if ( tMirrors[i]->m_sIndexes.IsEmpty () )
 			tMirrors[i]->m_sIndexes = sLastIndex;
@@ -1222,17 +1234,17 @@ static bool ConfigureMirrorSet ( CSphVector<AgentDesc_t*> &tMirrors, AgentOption
 }
 
 // different cases are tested in T_ConfigureMultiAgent, see gtests_searchdaemon.cpp
-MultiAgentDesc_c * ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions )
+MultiAgentDesc_c * ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions, StrVec_t * pWarnings )
 {
 	CSphVector<AgentDesc_t *> tMirrors;
 	auto dFree = AtScopeExit ( [&tMirrors] { tMirrors.Apply( [] ( AgentDesc_t * pMirror ) { SafeDelete ( pMirror ); } ); } );
 
-	WarnInfo_t dWI { szIndexName, szAgent };
+	WarnInfo_c tWI ( szIndexName, szAgent, pWarnings );
 
-	if ( !ConfigureMirrorSet ( tMirrors, &tOptions, dWI ) )
+	if ( !ConfigureMirrorSet ( tMirrors, &tOptions, tWI ) )
 		return nullptr;
 
-	return MultiAgentDesc_c::GetAgent ( tMirrors, tOptions, dWI );
+	return MultiAgentDesc_c::GetAgent ( tMirrors, tOptions, tWI );
 }
 
 HostDesc_t &HostDesc_t::CloneFromHost ( const HostDesc_t &rhs )

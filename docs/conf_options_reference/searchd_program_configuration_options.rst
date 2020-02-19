@@ -362,11 +362,11 @@ docstore_cache_size
 Maximum size of document blocks from document storage that are held in
 memory. Optional, default is 16m (16 megabytes).
 
-When `stored_fields` is used, document blocks are read from disk and
-uncompressed. Since every block typically holds several documents, it
-may be reused when processing the next document. For this purpose,
-the block is held in a daemon-wide cache. The cache holds uncompressed
-blocks.
+When `stored_fields` or `stored_only_fields` options are used, document
+blocks are read from disk and uncompressed. Since every block typically
+holds several documents, it may be reused when processing the next document.
+For this purpose, the block is held in a daemon-wide cache. The cache holds
+uncompressed blocks.
 
 Example:
 

@@ -50,6 +50,22 @@ struct ClusterDesc_t
 };
 
 
+struct IndexDescDistr_t
+{
+	StrVec_t		m_dLocals;
+	StrVec_t		m_dAgents;
+	int				m_iAgentConnectTimeout = 0;
+	int				m_iAgentQueryTimeout = 0;
+	int				m_iAgentRetryCount = 0;
+	bool			m_bDivideRemoteRanges = false;
+	CSphString		m_sHaStrategy;
+
+	bool			Parse ( const JsonObj_c & tJson, CSphString & sWarning, CSphString & sError );
+	void			Save ( JsonObj_c & tIndexes ) const;
+	void			Save ( CSphConfigSection & hIndex ) const;
+};
+
+
 struct IndexDesc_t
 {
 	CSphString	m_sName;
@@ -57,14 +73,17 @@ struct IndexDesc_t
 	IndexType_e	m_eType = IndexType_e::ERROR_;
 	bool		m_bFromReplication = false;
 
-	bool		Parse ( const JsonObj_c & tJson, CSphString & sError );
+	IndexDescDistr_t m_tDistr;
+
+	bool		Parse ( const JsonObj_c & tJson, CSphString & sWarning, CSphString & sError );
 	void		Save ( JsonObj_c & tIndexes ) const;
+	void		Save ( CSphConfigSection & hIndex ) const;
 };
 
 
 // load data from internal config on daemon start
 void		LoadConfigInt ( const CSphConfig & hConf, const CSphString & sConfigFile );
-void		SaveConfigInt();
+bool		SaveConfigInt ( CSphString & sError );
 
 // read info about cluster and indexes from manticore.json and validate data
 bool		ConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> & dClusters, CSphVector<IndexDesc_t> & dIndexes, CSphString & sError );
@@ -72,11 +91,14 @@ bool		ConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> & d
 // load indexes got from internal config on daemon indexes preload (part of ConfigureAndPreload work done here)
 void		ConfigureAndPreloadInt ( int & iValidIndexes, int & iCounter );
 
+FilenameBuilder_i * CreateFilenameBuilder ( const char * szIndex );
+
+void		ModifyBinlogPath ( CSphConfigSection & hSearchd );
 CSphString	GetDataDirInt();
 bool		IsConfigless();
 const CSphVector<ClusterDesc_t> & GetClustersInt();
 
-CSphIndex *	CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, bool bBinlogReplay, CSphString & sError );
-bool		DropIndexInt ( const CSphString & sIndex, bool bIfExists, bool bBinlogReplay, CSphString & sError );
+bool		CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, StrVec_t & dWarnings, CSphString & sError );
+bool		DropIndexInt ( const CSphString & sIndex, bool bIfExists, CSphString & sError );
 
 #endif // _searchdconfig_

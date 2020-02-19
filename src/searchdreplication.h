@@ -15,6 +15,8 @@
 #ifndef _searchdreplication_
 #define _searchdreplication_
 
+#include "searchdsql.h"
+
 bool ReplicationIsEnabled();
 void ReplicationSetIncoming ( const CSphString & sIncoming );
 
@@ -59,8 +61,5 @@ void ReplicateClustersStatus ( VectorLike & dStatus );
 // validate that SphinxQL statement could be run for this cluster:index
 bool CheckIndexCluster ( const CSphString & sIndexName, const ServedDesc_t & tDesc, const CSphString & sStmtCluster, CSphString & sError );
 bool ClusterOperationProhibit ( const ServedDesc_t * pDesc, CSphString & sError, const char * sOp );
-
-
-
 
 #endif // _searchdreplication_

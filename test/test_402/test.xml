@@ -15,49 +15,6 @@ searchd
 	data_dir = <data_path path="data0"></data_path>
 	server_id = <agent_id/>
 }
-
-index rt1
-{
-	type = rt
-	path			= <data_path/>/rt1
-	rt_mem_limit	= 128k
-	
-	rt_field		= t1
-	rt_field		= t2
-	rt_field		= t3
-	rt_attr_uint	= gid
-	
-	stored_fields	= t1
-}
-
-index rt2
-{
-	type = rt
-	path			= <data_path/>/rt2
-	rt_mem_limit	= 128k
-
-	rt_field		= t1
-	rt_field		= t2
-	rt_field		= t3
-	rt_attr_uint	= gid
-	
-	stored_fields	= t1, t3
-}
-
-index rt3
-{
-	type = rt
-	path			= <data_path/>/rt3
-	rt_mem_limit	= 128k
-
-	rt_field		= t1
-	rt_field		= t2
-	rt_field		= t3
-	rt_attr_uint	= gid
-	
-	stored_fields	= t1, t2, t3
-}
-
 </agent0>
 <agent1>
 searchd
@@ -73,6 +30,9 @@ searchd
 
 <sphqueries>
 <!-- request to node 0 -->
+<sphinxql d="0">create table rt1 (t1 text indexed stored, t2 text indexed, t3 text indexed, gid int) rt_mem_limit='128k'</sphinxql>
+<sphinxql d="0">create table rt2 (t1 text indexed stored, t2 text indexed, t3 text indexed stored, gid int) rt_mem_limit='128k'</sphinxql>
+<sphinxql d="0">create table rt3 (t1 text indexed stored, t2 text indexed stored, t3 text indexed stored, gid int) rt_mem_limit='128k'</sphinxql>
 <sphinxql d="0">create cluster test</sphinxql>
 <sphinxql d="0">ALTER CLUSTER test ADD rt1</sphinxql>
 <sphinxql d="0">ALTER CLUSTER test ADD rt2</sphinxql>
@@ -102,6 +62,14 @@ searchd
 <sphinxql d="0">SHOW TABLES</sphinxql> <!-- just to reconnect to agent0 -->
 <sphinxql d="0" system="wait-status-cluster_test_last_committed" wait_value="8"/>
 <sphinxql d="0">SELECT * FROM test:rt3</sphinxql>
+
+<!-- cleanup -->
+<sphinxql d="0">ALTER CLUSTER test DROP rt1</sphinxql>
+<sphinxql d="0">ALTER CLUSTER test DROP rt2</sphinxql>
+<sphinxql d="0">ALTER CLUSTER test DROP rt3</sphinxql>
+<sphinxql d="0">DROP TABLE rt1</sphinxql>
+<sphinxql d="0">DROP TABLE rt2</sphinxql>
+<sphinxql d="0">DROP TABLE rt3</sphinxql>
 
 </sphqueries>
 

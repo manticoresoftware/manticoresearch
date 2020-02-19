@@ -99,13 +99,12 @@ enum HostStats_e
 	ehMaxStat
 };
 
-enum HAStrategies_e {
+enum HAStrategies_e
+{
 	HA_RANDOM,
 	HA_ROUNDROBIN,
 	HA_AVOIDDEAD,
 	HA_AVOIDERRORS,
-	HA_AVOIDDEADTM,			///< the same as HA_AVOIDDEAD, but uses just min timeout instead of weighted random
-	HA_AVOIDERRORSTM,		///< the same as HA_AVOIDERRORS, but uses just min timeout instead of weighted random
 
 	HA_DEFAULT = HA_RANDOM
 };
@@ -268,42 +267,64 @@ void SetGlobalPinger ( IPinger* pPinger );
 
 /// context which keeps name of the index and agent
 /// (mainly for error-reporting)
-struct WarnInfo_t
+class WarnInfo_c
 {
-	const char * m_szIndexName;
-	const char * m_szAgent;
+public:
+	const char *	m_szIndexName = nullptr;
+	const char *	m_szAgent = nullptr;
 
-	void Warn ( const char * sFmt, ... ) const
+	WarnInfo_c ( const char * szIndexName, const char *	szAgent, StrVec_t * pWarnings=nullptr )
+		: m_szIndexName ( szIndexName )
+		, m_szAgent ( szAgent )
+		, m_pWarnings ( pWarnings )
+	{}
+
+	void Warn ( const char * szFmt, ... ) const
 	{
 		va_list ap;
-		va_start ( ap, sFmt );
+		va_start ( ap, szFmt );
+
+		CSphString sWarning;
 		if ( m_szIndexName )
-			sphLogVa ( CSphString ().SetSprintf ( "index '%s': agent '%s': %s", m_szIndexName, m_szAgent, sFmt ).cstr ()
-					   , ap, SPH_LOG_INFO );
+			sWarning.SetSprintf ( "index '%s': agent '%s': %s", m_szIndexName, m_szAgent, szFmt );
 		else
-			sphLogVa ( CSphString ().SetSprintf ( "host '%s': %s", m_szAgent, sFmt ).cstr ()
-					   , ap, SPH_LOG_INFO );
+			sWarning.SetSprintf ( "host '%s': %s", m_szAgent, szFmt );
+
+		sWarning.SetSprintfVa ( sWarning.cstr(), ap );
+		sphInfo ( "%s", sWarning.cstr() );
+
+		if ( m_pWarnings )
+			m_pWarnings->Add(sWarning);
+
 		va_end ( ap );
 	}
 
 	/// format an error message using idx and agent names from own context
 	/// \return always false, to simplify statements
-	bool ErrSkip ( const char * sFmt, ... ) const
+	bool ErrSkip ( const char * szFmt, ... ) const
 	{
 		va_list ap;
-		va_start ( ap, sFmt );
+		va_start ( ap, szFmt );
+
+		CSphString sWarning;
+
 		if ( m_szIndexName )
-			sphLogVa (
-				CSphString ().SetSprintf ( "index '%s': agent '%s': %s, - SKIPPING AGENT", m_szIndexName, m_szAgent
-										   , sFmt ).cstr ()
-				, ap );
+			sWarning.SetSprintf ( "index '%s': agent '%s': %s, - SKIPPING AGENT", m_szIndexName, m_szAgent, szFmt );
 		else
-			sphLogVa (
-				CSphString ().SetSprintf ( "host '%s': %s, - SKIPPING AGENT", m_szAgent, sFmt ).cstr ()
-				, ap );
+			sWarning.SetSprintf ( "host '%s': %s, - SKIPPING AGENT", m_szAgent, szFmt );
+
+		sWarning.SetSprintfVa ( sWarning.cstr(), ap );
+		sphWarning ( "%s", sWarning.cstr() );
+
+		if ( m_pWarnings )
+			m_pWarnings->Add(sWarning);
+
 		va_end ( ap );
 		return false;
 	}
+
+private:
+	StrVec_t *		m_pWarnings = nullptr;
 };
 
 /// descriptor for set of agents (mirrors) (stored in a global hash)
@@ -317,6 +338,7 @@ class MultiAgentDesc_c : public ISphRefcountedMT, public CSphFixedVector<AgentDe
 	HAStrategies_e		m_eStrategy { HA_DEFAULT };
 	int					m_iMultiRetryCount = 0;
 	bool 				m_bNeedPing = false;	/// ping need to hosts if we're HA and NOT bl.
+	CSphString			m_sConfigStr;	/// agent configuration string, straight from .conf
 
 	~MultiAgentDesc_c () final;
 
@@ -326,13 +348,12 @@ public:
 	{}
 
 	// configure using dTemplateHosts as source of urls/indexes
-	static MultiAgentDesc_c* GetAgent ( const CSphVector<AgentDesc_t *> &dTemplateHosts,
-		const AgentOptions_t &tOpt, const WarnInfo_t &tWarn );
+	static MultiAgentDesc_c * GetAgent ( const CSphVector<AgentDesc_t *> & dTemplateHosts, const AgentOptions_t & tOpt, const WarnInfo_c & tWarn );
 
 	// housekeeping: walk throw global hash and finally release all 1-refs agents
 	static void CleanupOrphaned();
 
-	const AgentDesc_t &ChooseAgent () REQUIRES ( !m_dWeightLock );
+	const AgentDesc_t & ChooseAgent() REQUIRES ( !m_dWeightLock );
 
 	inline bool IsHA () const
 	{
@@ -343,6 +364,8 @@ public:
 	{
 		return m_iMultiRetryCount;
 	}
+
+	const CSphString & GetConfigStr() const { return m_sConfigStr; }
 
 	CSphFixedVector<float> GetWeights () const REQUIRES ( !m_dWeightLock )
 	{
@@ -362,7 +385,7 @@ private:
 	void ChooseWeightedRandAgent ( int * pBestAgent, CSphVector<int> &dCandidates ) REQUIRES ( !m_dWeightLock );
 	void CheckRecalculateWeights ( const CSphFixedVector<int64_t> &dTimers ) REQUIRES ( !m_dWeightLock );
 	static CSphString GetKey( const CSphVector<AgentDesc_t *> &dTemplateHosts, const AgentOptions_t &tOpt );
-	bool Init ( const CSphVector<AgentDesc_t *> &dTemplateHosts, const AgentOptions_t &tOpt, const WarnInfo_t &tWarn );
+	bool Init ( const CSphVector<AgentDesc_t *> &dTemplateHosts, const AgentOptions_t &tOpt, const WarnInfo_c & tWarn );
 };
 
 using MultiAgentDescRefPtr_c = CSphRefcountedPtr<MultiAgentDesc_c>;
@@ -652,7 +675,6 @@ struct DistributedIndex_t : public ServedStats_c, public ISphRefcountedMT
 {
 	CSphVector<MultiAgentDesc_c *> m_dAgents;	///< remote agents
 	StrVec_t m_dLocal;								///< local indexes
-	CSphBitvec m_dKillBreak;
 	int m_iAgentConnectTimeout		{ g_iAgentConnectTimeout };	///< in msec
 	int m_iAgentQueryTimeout		{ g_iAgentQueryTimeout };	///< in msec
 	int m_iAgentRetryCount			= 0;			///< overrides global one
@@ -729,7 +751,8 @@ struct SearchdStats_t
 
 extern SearchdStats_t			g_tStats;
 
-namespace Dashboard {
+namespace Dashboard
+{
 	void LinkHost ( HostDesc_t& dHost ); ///< put host into global dashboard and init link to it
 	HostDashboardRefPtr_t FindAgent ( const CSphString& sAgent );
 	VecRefPtrs_t<HostDashboard_t*> GetActiveHosts ();
@@ -737,7 +760,8 @@ namespace Dashboard {
 }
 
 // parse strategy name into enum value
-bool ParseStrategyHA ( const char * sName, HAStrategies_e * pStrategy );
+bool ParseStrategyHA ( const char * sName, HAStrategies_e & eStrategy );
+CSphString HAStrategyToStr ( HAStrategies_e eStrategy );
 
 // parse ','-delimited list of indexes
 void ParseIndexList ( const CSphString &sIndexes, StrVec_t &dOut );
@@ -745,14 +769,14 @@ void ParseIndexList ( const CSphString &sIndexes, StrVec_t &dOut );
 // try to parse hostname/ip/port or unixsocket on current pConfigLine.
 // fill pAgent fields on success and move ppLine pointer next after parsed instance
 // if :port is skipped in the line, IANA 9312 will be used in the case
-bool ParseAddressPort ( HostDesc_t & pAgent, const char ** ppLine, const WarnInfo_t& dInfo );
+bool ParseAddressPort ( HostDesc_t & pAgent, const char ** ppLine, const WarnInfo_c & tInfo );
 
 //! Parse line with agent definition and return addreffed pointer to multiagent (new or from global cache)
 //! \param szAgent - line with agent definition from config
 //! \param szIndexName - index we apply to
 //! \param tOptions - global options affecting agent
 //! \return configured multiagent, or null if failed
-MultiAgentDesc_c * ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions );
+MultiAgentDesc_c * ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions, StrVec_t * pWarnings=nullptr );
 
 class RequestBuilder_i : public ISphNoncopyable
 {

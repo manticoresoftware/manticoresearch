@@ -80,7 +80,7 @@ foreach ( $orig_conf as $line )
 }
 file_put_contents(testdir('config.conf'), $new_conf);
 
-$results[] = "\n" . $ql->Query ( "ALTER RTINDEX rt1 RECONFIGURE" );
+$results[] = "\n" . $ql->Query ( "ALTER TABLE rt1 RECONFIGURE" );
 
 $results[] = 'add 2nd doc';
 $results[] = "\n" . $ql->Query ( "REPLACE INTO rt1 (id, name, idd) VALUES (2, 'TOFU', 1)" );

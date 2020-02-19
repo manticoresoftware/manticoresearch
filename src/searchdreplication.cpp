@@ -1574,7 +1574,7 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 		}
 		auto* pIndex = ( RtIndex_i* ) pWDesc->m_pIndex;
 		sphLogDebugRpl ( "truncate-commit, index '%s'", tCmd.m_sIndex.cstr ());
-		if ( !pIndex->Truncate ( true, sError ))
+		if ( !pIndex->Truncate ( sError ))
 			sphWarning ( "%s", sError.cstr ());
 		return true;
 	}
@@ -1872,7 +1872,7 @@ bool CommitMonitor_c::CommitNonEmptyCmds ( RtIndex_i* pIndex, const ReplicationC
 	if ( !bOnlyTruncate )
 		return pIndex->Commit ( m_pDeletedCount, &m_tAcc );
 
-	if ( !pIndex->Truncate ( true, sError ))
+	if ( !pIndex->Truncate ( sError ))
 		return false;
 
 	if ( !tCmd.m_bReconfigure )
@@ -2026,7 +2026,7 @@ CommitMonitor_c::~CommitMonitor_c()
 
 // load index into daemon from disk files for cluster use
 // in case index already exists prohibit it to save on index delete as disk files has fresh data received from remote node
-bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName, const CSphString & sCluster )
+static bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName, const CSphString & sCluster, CSphString & sError )
 {
 	// delete existed index first, does not allow to save it's data that breaks sync'ed index files
 	// need a scope for RefRtr's to work
@@ -2049,7 +2049,7 @@ bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName
 	}
 
 	GuardedHash_c dNotLoadedIndexes;
-	ESphAddIndex eAdd = AddIndexMT ( dNotLoadedIndexes, sIndexName.cstr(), hIndex );
+	ESphAddIndex eAdd = AddIndexMT ( dNotLoadedIndexes, sIndexName.cstr(), hIndex, false, sError );
 	assert ( eAdd==ADD_DSBLED || eAdd==ADD_ERROR );
 
 	if ( eAdd!=ADD_DSBLED )
@@ -2060,7 +2060,7 @@ bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName
 	pDesc->m_bFromReplication = bFromReplication;
 	pDesc->m_sCluster = sCluster;
 
-	bool bPreload = PreallocNewIndex ( *pDesc, &hIndex, sIndexName.cstr() );
+	bool bPreload = PreallocNewIndex ( *pDesc, &hIndex, sIndexName.cstr(), sError );
 	if ( !bPreload )
 		return false;
 
@@ -2142,8 +2142,7 @@ static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes, co
 		pCluster->UpdateIndexHashes();
 	}
 
-	SaveConfigInt();
-	return true;
+	return SaveConfigInt(sError);
 }
 
 // create string by join global data_dir and cluster path 
@@ -2330,7 +2329,7 @@ static void SetListener ( const CSphVector<ListenerDesc_t> & dListeners )
 
 	g_sIncomingProto.SetSprintf ( "%s:%d", g_sIncomingIP.cstr(), dListeners[iPort].m_iPort );
 
-	g_bReplicationEnabled = ( !GetDataDirInt().IsEmpty() && bGotReplicationPorts );
+	g_bReplicationEnabled = IsConfigless() && bGotReplicationPorts;
 }
 
 // start clusters on daemon start
@@ -2470,7 +2469,7 @@ static bool CheckClusterStatement ( const CSphString & sCluster, bool bCheckClus
 {
 	if ( !g_bReplicationEnabled )
 	{
-		sError = "data_dir option is missed or no replication listeners set";
+		sError = "data_dir option is missing or no replication listeners configured";
 		return false;
 	}
 
@@ -2632,7 +2631,9 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 	}
 
 	ClusterState_e eState = tArgs.m_pCluster->WaitReady();
-	SaveConfigInt();
+	if ( !SaveConfigInt ( sError ) )
+		return false;
+
 	return ( eState==ClusterState_e::DONOR || eState==ClusterState_e::SYNCED );
 }
 
@@ -3250,7 +3251,7 @@ void HandleCommandClusterPq ( CachedOutputBuffer_c & tOut, WORD uCommandVer, Inp
 		{
 			PQRemoteDelete_c::ParseCommand ( tBuf, tCmd );
 			bOk = RemoteClusterDelete ( tCmd.m_sCluster, sError );
-			SaveConfigInt();
+			bOk &= SaveConfigInt(sError);
 			if ( bOk )
 				PQRemoteDelete_c::BuildReply ( tRes, tOut );
 		}
@@ -3408,7 +3409,7 @@ bool ClusterDelete ( const CSphString & sCluster, CSphString & sError, CSphStrin
 
 	// after all nodes finished
 	bool bOk = RemoteClusterDelete ( sCluster, sError );
-	SaveConfigInt();
+	bOk &= SaveConfigInt(sError);
 
 	return bOk;
 }
@@ -3673,9 +3674,9 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 	// dummy
 	hIndex.Add ( CSphVariant ( "text" ), "rt_field" );
 	hIndex.Add ( CSphVariant ( "gid" ), "rt_attr_uint" );
-	if ( !LoadIndex ( hIndex, tCmd.m_sIndex, tCmd.m_sCluster ) )
+	if ( !LoadIndex ( hIndex, tCmd.m_sIndex, tCmd.m_sCluster, sError ) )
 	{
-		sError.SetSprintf ( "failed to load index '%s'", tCmd.m_sIndex.cstr() );
+		sError.SetSprintf ( "failed to load index '%s': %s", tCmd.m_sIndex.cstr(), sError.cstr() );
 		return false;
 	}
 
@@ -4327,7 +4328,7 @@ bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool
 	else
 		bOk = ClusterAlterDrop ( sCluster, sIndex, sError );
 
-	SaveConfigInt();
+	bOk &= SaveConfigInt(sError);
 
 	return bOk;
 }
@@ -4641,8 +4642,7 @@ bool ClusterAlterUpdate ( const CSphString & sCluster, const CSphString & sUpdat
 	GetNodes ( sNodes, dNodes, tReqData );
 	PQRemoteClusterUpdateNodes_c tReq;
 	bOk &= PerformRemoteTasks ( dNodes, tReq, tReq, sError );
-
-	SaveConfigInt();
+	bOk &= SaveConfigInt(sError);
 
 	return bOk;
 }

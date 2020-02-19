@@ -26,7 +26,8 @@ set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp
 		searchdreplication.cpp  searchdtask.cpp taskping.cpp
 		taskmalloctrim.cpp taskoptimize.cpp taskglobalidf.cpp tasksavestate.cpp
 		taskflushbinlog.cpp taskflushattrs.cpp taskflushmutable.cpp taskpreread.cpp
-		searchdaemon.cpp searchdssl.cpp searchdfields.cpp searchdconfig.cpp )
+		searchdaemon.cpp searchdssl.cpp searchdfields.cpp searchdconfig.cpp
+		searchdsql.cpp searchdddl.cpp )
 set ( SEARCHD_SRCS searchd.cpp ${SEARCHD_SRCS_TESTABLE} )
 set ( SPELLDUMP_SRCS spelldump.cpp )
 set ( TESTS_SRCS tests.cpp )
@@ -34,8 +35,8 @@ set ( WORDBREAKER_SRCS sphinxstd.cpp wordbreaker.cpp)
 set ( INDEX_CONVERTER_SRCS sphinxstd.cpp index_converter.cpp)
 set ( LIBSPHINX_BISON sphinxexpr.y sphinxselect.y sphinxquery.y sphinxjson.y )
 set ( LIBSPHINX_FLEX sphinxjson.l )
-set ( SEARCHD_BISON sphinxql.y )
-set ( SEARCHD_FLEX sphinxql.l )
+set ( SEARCHD_BISON sphinxql.y ddl.y )
+set ( SEARCHD_FLEX sphinxql.l ddl.l )
 set ( INDEX_CONV_SRCS index_converter.cpp )
 set ( UDFEXAMPLE_SRC udfexample.c )
 
@@ -102,6 +103,7 @@ if ( USE_BISON )
 	BISON_TARGET ( SelectParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxselect.y" ${BISON_DIR}/bissphinxselect.c )
 	BISON_TARGET ( QueryParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxquery.y" ${BISON_DIR}/bissphinxquery.c )
 	BISON_TARGET ( SQLParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql.y" ${BISON_DIR}/bissphinxql.c )
+	BISON_TARGET ( DDLParser "${CMAKE_CURRENT_SOURCE_DIR}/ddl.y" ${BISON_DIR}/bisddl.c )
 	BISON_TARGET ( JsonParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxjson.y" ${BISON_DIR}/bissphinxjson.c )
 
 	set_property ( SOURCE sphinxexpr.cpp APPEND PROPERTY
@@ -110,8 +112,10 @@ if ( USE_BISON )
 			OBJECT_DEPENDS ${BISON_SelectParser_OUTPUT_SOURCE} )
 	set_property ( SOURCE sphinxquery.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${BISON_QueryParser_OUTPUT_SOURCE} )
-	set_property ( SOURCE searchd.cpp gtests_searchd.cpp APPEND PROPERTY
+	set_property ( SOURCE searchd.cpp searchdsql.cpp searchdddl.cpp  gtests_searchd.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${BISON_SQLParser_OUTPUT_SOURCE} )
+	set_property ( SOURCE searchd.cpp searchdsql.cpp searchdddl.cpp gtests_searchd.cpp APPEND PROPERTY
+			OBJECT_DEPENDS ${BISON_DDLParser_OUTPUT_SOURCE} )
 	set_property ( SOURCE sphinxjson.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${BISON_JsonParser_OUTPUT_SOURCE} )
 
@@ -121,6 +125,7 @@ if ( USE_BISON )
 	list ( APPEND TARBALLDEPENDS ${BISON_SelectParser_OUTPUTS} )
 	list ( APPEND TARBALLDEPENDS ${BISON_QueryParser_OUTPUTS} )
 	list ( APPEND TARBALLDEPENDS ${BISON_SQLParser_OUTPUTS} )
+	list ( APPEND TARBALLDEPENDS ${BISON_DDLParser_OUTPUTS} )
 	list ( APPEND TARBALLDEPENDS ${BISON_JsonParser_OUTPUTS} )
 else()
 	if ( NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/yysphinxselect.h" )
@@ -134,14 +139,18 @@ if ( USE_FLEX )
 
 	FLEX_TARGET ( SQLlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql.l" ${FLEX_DIR}/flexsphinxql.c COMPILE_FLAGS "-i" )
 	FLEX_TARGET ( Jsonlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxjson.l" ${FLEX_DIR}/flexsphinxjson.c COMPILE_FLAGS "-i -Pyy2" )
+	FLEX_TARGET ( DDLlex "${CMAKE_CURRENT_SOURCE_DIR}/ddl.l" ${FLEX_DIR}/flexddl.c COMPILE_FLAGS "-i -Pyy3" )
 
-	set_property ( SOURCE searchd.cpp gtests_searchd.cpp APPEND PROPERTY
+	set_property ( SOURCE searchdsql.cpp gtests_searchd.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${FLEX_SQLlex_OUTPUTS} )
+	set_property ( SOURCE searchdddl.cpp gtests_searchd.cpp APPEND PROPERTY
+			OBJECT_DEPENDS ${FLEX_DDLlex_OUTPUTS} )
 	set_property ( SOURCE sphinxjson.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${FLEX_Jsonlex_OUTPUTS} )
 
 	# also add dependencies for tarball (to always have fresh parsers inside)
 	list ( APPEND TARBALLDEPENDS ${FLEX_SQLlex_OUTPUTS} )
+	list ( APPEND TARBALLDEPENDS ${FLEX_DDLlex_OUTPUTS} )
 	list ( APPEND TARBALLDEPENDS ${FLEX_Jsonlex_OUTPUTS} )
 else ()
 	if ( NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/llsphinxql.c" )

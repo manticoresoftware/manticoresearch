@@ -23,22 +23,17 @@
 %token	TOK_SUBKEY
 %token	TOK_DOT_NUMBER
 
-%token	TOK_ADD
 %token	TOK_AGENT
-%token	TOK_ALTER
 %token	TOK_ALL
 %token	TOK_ANY
 %token	TOK_AS
 %token	TOK_ASC
-%token	TOK_AT
 %token	TOK_ATTACH
 %token	TOK_ATTRIBUTES
 %token	TOK_AVG
 %token	TOK_BEGIN
 %token	TOK_BETWEEN
 %token	TOK_BIGINT
-%token	TOK_BIT
-%token	TOK_BOOL
 %token	TOK_BY
 %token	TOK_CALL
 %token	TOK_CHARACTER
@@ -59,29 +54,23 @@
 %token	TOK_DISTINCT
 %token	TOK_DIV
 %token	TOK_DOUBLE
-%token	TOK_DROP
-%token	TOK_EXISTS
 %token	TOK_EXPLAIN
 %token	TOK_FACET
 %token	TOK_FALSE
-%token	TOK_FIELD
 %token	TOK_FLOAT
 %token	TOK_FLUSH
 %token	TOK_FOR
 %token	TOK_FORCE
 %token	TOK_FROM
-%token	TOK_FUNCTION
 %token	TOK_GLOBAL
 %token	TOK_GROUP
 %token	TOK_GROUPBY
 %token	TOK_GROUP_CONCAT
 %token	TOK_HAVING
 %token	TOK_HOSTNAMES
-%token	TOK_IF
 %token	TOK_IGNORE
 %token	TOK_IN
 %token	TOK_INDEX
-%token	TOK_INDEXED
 %token	TOK_INDEXES
 %token	TOK_INDEXOF
 %token	TOK_INSERT
@@ -90,9 +79,6 @@
 %token	TOK_INTO
 %token	TOK_IS
 %token	TOK_ISOLATION
-%token	TOK_JOIN
-%token	TOK_JSON
-%token	TOK_KILLLIST_TARGET
 %token	TOK_LEVEL
 %token	TOK_LIKE
 %token	TOK_LIMIT
@@ -112,7 +98,6 @@
 %token	TOK_ORDER
 %token	TOK_OPTIMIZE
 %token	TOK_PLAN
-%token	TOK_PLUGIN
 %token	TOK_PLUGINS
 %token	TOK_PROFILE
 %token	TOK_RAND
@@ -124,7 +109,6 @@
 %token	TOK_REPEATABLE
 %token	TOK_REPLACE
 %token	TOK_REMAP
-%token	TOK_RETURNS
 %token	TOK_ROLLBACK
 %token	TOK_RTINDEX
 %token	TOK_SELECT
@@ -136,19 +120,16 @@
 %token	TOK_SONAME
 %token	TOK_START
 %token	TOK_STATUS
-%token	TOK_STORED
 %token	TOK_STRING
 %token	TOK_SYSFILTERS
 %token	TOK_SUM
 %token	TOK_TABLE
 %token	TOK_TABLES
 %token	TOK_THREADS
-%token	TOK_TIMESTAMP
 %token	TOK_TO
 %token	TOK_TRANSACTION
 %token	TOK_TRUE
 %token	TOK_TRUNCATE
-%token	TOK_TYPE
 %token	TOK_UNCOMMITTED
 %token	TOK_UPDATE
 %token	TOK_USE
@@ -176,17 +157,6 @@
 
 // some helpers
 #include <float.h> // for FLT_MAX
-
-static void AddInsval ( SqlParser_c * pParser, CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode )
-{
-	SqlInsert_t & tIns = dVec.Add();
-	tIns.m_iType = tNode.m_iType;
-	tIns.m_iVal = tNode.m_iValue; // OPTIMIZE? copy conditionally based on type?
-	tIns.m_fVal = tNode.m_fValue;
-	if ( tIns.m_iType==TOK_QUOTED_STRING )
-		tIns.m_sVal = pParser->ToStringUnescape ( tNode );
-	tIns.m_pVals = tNode.m_pValues;
-}
 
 static CSphFilterSettings * AddMvaRange ( SqlParser_c * pParser, const SqlNode_t & tNode, int64_t iMin, int64_t iMax )
 {
@@ -227,8 +197,6 @@ statement:
 	| show_variables
 	| show_collation
 	| show_character_set
-	| create_function
-	| drop_function
 	| attach_index
 	| flush_rtindex
 	| flush_ramchunk
@@ -238,11 +206,6 @@ statement:
 	| select_dual
 	| truncate
 	| optimize_index
-	| alter
-	| create_table
-	| drop_table
-	| create_plugin
-	| drop_plugin
 	| reload_plugins
 	| reload_index
 	| reload_indexes
@@ -250,8 +213,6 @@ statement:
 	| flush_logs
 	| sysfilters
 	| debug_clause
-	| join_cluster
-	| create_cluster
 	| delete_cluster
 	| explain_query
 	;
@@ -269,22 +230,22 @@ statement:
 
 ident_set:
 	TOK_IDENT
-	| TOK_ADD | TOK_AGENT | TOK_ALL | TOK_ALTER | TOK_ANY | TOK_ASC | TOK_ATTACH | TOK_ATTRIBUTES
-	| TOK_AVG | TOK_BEGIN | TOK_BETWEEN | TOK_BIGINT | TOK_BOOL| TOK_CALL
+	| TOK_AGENT | TOK_ALL | TOK_ANY | TOK_ASC | TOK_ATTACH | TOK_ATTRIBUTES
+	| TOK_AVG | TOK_BEGIN | TOK_BETWEEN | TOK_BIGINT | TOK_CALL
 	| TOK_CHARACTER | TOK_CHUNK | TOK_CLUSTER | TOK_COLLATION | TOK_COLUMN | TOK_COMMIT
 	| TOK_COMMITTED | TOK_COUNT | TOK_CREATE | TOK_DATABASES | TOK_DELETE
-	| TOK_DESC | TOK_DESCRIBE  | TOK_DISTINCT  | TOK_DOUBLE | TOK_DROP
-	| TOK_FLOAT | TOK_FLUSH | TOK_FOR| TOK_FUNCTION | TOK_GLOBAL | TOK_GROUP
+	| TOK_DESC | TOK_DESCRIBE  | TOK_DISTINCT  | TOK_DOUBLE
+	| TOK_FLOAT | TOK_FLUSH | TOK_FOR| TOK_GLOBAL | TOK_GROUP
 	| TOK_GROUP_CONCAT | TOK_GROUPBY | TOK_HAVING | TOK_HOSTNAMES | TOK_INDEX | TOK_INDEXOF | TOK_INSERT
-	| TOK_INT | TOK_INTEGER | TOK_INTO | TOK_ISOLATION | TOK_JSON | TOK_LEVEL
+	| TOK_INT | TOK_INTEGER | TOK_INTO | TOK_ISOLATION | TOK_LEVEL
 	| TOK_LIKE | TOK_MATCH | TOK_MAX | TOK_META | TOK_MIN | TOK_MULTI
-	| TOK_MULTI64 | TOK_OPTIMIZE | TOK_OPTION | TOK_PLAN | TOK_PLUGIN
+	| TOK_MULTI64 | TOK_OPTIMIZE | TOK_OPTION | TOK_PLAN
 	| TOK_PLUGINS | TOK_PROFILE | TOK_RAMCHUNK | TOK_RAND | TOK_READ
-	| TOK_RECONFIGURE | TOK_REMAP | TOK_REPEATABLE | TOK_REPLACE | TOK_RETURNS
+	| TOK_RECONFIGURE | TOK_REMAP | TOK_REPEATABLE | TOK_REPLACE
 	| TOK_ROLLBACK | TOK_RTINDEX | TOK_SERIALIZABLE | TOK_SESSION | TOK_SET
 	| TOK_SETTINGS | TOK_SHOW | TOK_SONAME | TOK_START | TOK_STATUS | TOK_STRING
 	| TOK_SUM | TOK_TABLE | TOK_TABLES | TOK_THREADS | TOK_TO | TOK_TRUNCATE
-	| TOK_TYPE | TOK_UNCOMMITTED | TOK_UPDATE | TOK_VALUES | TOK_VARIABLES
+	| TOK_UNCOMMITTED | TOK_UPDATE | TOK_VALUES | TOK_VARIABLES
 	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITH | TOK_WITHIN
 	;
 
@@ -1049,7 +1010,6 @@ expr:
 
 function:
 	TOK_IDENT '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
-	| TOK_IF '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	| TOK_IN '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); } // handle exception from 'ident' rule
 	| json_field TOK_IN '(' arglist ')' { TRACK_BOUNDS ( $$, $1, $5 ); } // handle exception from 'ident' rule
 	| TOK_INTEGER '(' arglist ')'	{ TRACK_BOUNDS ( $$, $1, $4 ); }
@@ -1318,8 +1278,8 @@ insert_row:
 	;
 
 insert_vals_list:
-	insert_val							{ AddInsval ( pParser, pParser->m_pStmt->m_dInsertValues, $1 ); }
-	| insert_vals_list ',' insert_val	{ AddInsval ( pParser, pParser->m_pStmt->m_dInsertValues, $3 ); }
+	insert_val							{ pParser->AddInsval ( pParser->m_pStmt->m_dInsertValues, $1 ); }
+	| insert_vals_list ',' insert_val	{ pParser->AddInsval ( pParser->m_pStmt->m_dInsertValues, $3 ); }
 	;
 
 insert_val:
@@ -1366,11 +1326,11 @@ call_proc:
 call_args_list:
 	call_arg
 		{
-			AddInsval ( pParser, pParser->m_pStmt->m_dInsertValues, $1 );
+			pParser->AddInsval ( pParser->m_pStmt->m_dInsertValues, $1 );
 		}
 	| call_args_list ',' call_arg
 		{
-			AddInsval ( pParser, pParser->m_pStmt->m_dInsertValues, $3 );
+			pParser->AddInsval ( pParser->m_pStmt->m_dInsertValues, $3 );
 		}
 	;
 
@@ -1417,7 +1377,7 @@ call_opt:
 	insert_val opt_as call_opt_name
 		{
 			pParser->ToString ( pParser->m_pStmt->m_dCallOptNames.Add(), $3 );
-			AddInsval ( pParser, pParser->m_pStmt->m_dCallOptValues, $1 );
+			pParser->AddInsval ( pParser->m_pStmt->m_dCallOptValues, $1 );
 		}
 	;
 
@@ -1536,135 +1496,6 @@ update_item:
 
 //////////////////////////////////////////////////////////////////////////
 
-alter_col_type:
-	TOK_INTEGER 	{ $$.m_iValue = SPH_ATTR_INTEGER; }
-	| TOK_BIGINT	{ $$.m_iValue = SPH_ATTR_BIGINT; }
-	| TOK_FLOAT		{ $$.m_iValue = SPH_ATTR_FLOAT; }
-	| TOK_BOOL		{ $$.m_iValue = SPH_ATTR_BOOL; }
-	| TOK_MULTI		{ $$.m_iValue = SPH_ATTR_UINT32SET; }
-	| TOK_MULTI64	{ $$.m_iValue = SPH_ATTR_INT64SET; }
-	| TOK_JSON		{ $$.m_iValue = SPH_ATTR_JSON; }
-	| TOK_STRING	{ $$.m_iValue = SPH_ATTR_STRING; }
-	| TOK_INT		{ $$.m_iValue = SPH_ATTR_INTEGER; }
-	| TOK_TIMESTAMP		{ $$.m_iValue = SPH_ATTR_TIMESTAMP; }
-	;
-
-alter:
-	TOK_ALTER TOK_TABLE ident TOK_ADD TOK_COLUMN ident alter_col_type
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_ALTER_ADD;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
-			pParser->ToString ( tStmt.m_sAlterAttr, $6 );
-			tStmt.m_eAlterColType = (ESphAttr)$7.m_iValue;
-		}
-	| TOK_ALTER TOK_TABLE ident TOK_DROP TOK_COLUMN ident
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_ALTER_DROP;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
-			pParser->ToString ( tStmt.m_sAlterAttr, $6 );
-		}
-	| TOK_ALTER TOK_RTINDEX ident TOK_RECONFIGURE
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_ALTER_RECONFIGURE;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
-		}
-	| TOK_ALTER TOK_TABLE ident TOK_KILLLIST_TARGET '=' TOK_QUOTED_STRING
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_ALTER_KLIST_TARGET;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
-			pParser->ToString ( tStmt.m_sAlterOption, $6 ).Unquote();
-		}
-	| TOK_ALTER TOK_CLUSTER ident TOK_ADD ident
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_CLUSTER_ALTER_ADD;
-			pParser->ToString ( tStmt.m_sCluster, $3 );
-			pParser->ToString ( tStmt.m_sIndex, $5 );
-		}
-	| TOK_ALTER TOK_CLUSTER ident TOK_DROP ident
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_CLUSTER_ALTER_DROP;
-			pParser->ToString ( tStmt.m_sCluster, $3 );
-			pParser->ToString ( tStmt.m_sIndex, $5 );
-		}
-	| TOK_ALTER TOK_CLUSTER ident TOK_UPDATE ident
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_CLUSTER_ALTER_UPDATE;
-			pParser->ToString ( tStmt.m_sCluster, $3 );
-			pParser->ToString ( tStmt.m_sSetName, $5 );
-		}
-	;
-
-//////////////////////////////////////////////////////////////////////////
-field_flag:
-	TOK_INDEXED			{ pParser->AddFieldFlag ( CSphColumnInfo::FIELD_INDEXED ); }
-	| TOK_STORED		{ pParser->AddFieldFlag ( CSphColumnInfo::FIELD_STORED ); }
-	;
-
-field_flag_list:
-	field_flag
-	| field_flag_list field_flag
-	;
-
-create_table_item:
-	ident alter_col_type 				{ pParser->AddCreateTableCol ( $1, (ESphAttr)$2.m_iValue ); }
-	| ident TOK_BIT '(' const_int ')' 	{ pParser->AddCreateTableBitCol ( $1, $4.m_iValue ); }
-	| ident TOK_FIELD					{ pParser->AddCreateTableField($1); }
-	| ident TOK_FIELD field_flag_list	{ pParser->AddCreateTableField($1); }
-	| ident '=' TOK_QUOTED_STRING		{ pParser->AddCreateTableOption ( $1, $3 ); }
-	;
-
-create_table_item_list:
-	create_table_item
-	| create_table_item_list ',' create_table_item
-	;
-
-create_table:
-	TOK_CREATE TOK_TABLE ident '(' create_table_item_list ')'
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_CREATE_TABLE;
-			tStmt.m_tCreateTable.m_bIfNotExists = false;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
-			tStmt.m_sIndex.ToLower();
-		}
-	| TOK_CREATE TOK_TABLE TOK_IF TOK_NOT TOK_EXISTS ident '(' create_table_item_list ')'
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_CREATE_TABLE;
-			tStmt.m_tCreateTable.m_bIfNotExists = true;
-			pParser->ToString ( tStmt.m_sIndex, $6 );
-			tStmt.m_sIndex.ToLower();
-		}
-	;
-
-drop_table:
-	TOK_DROP TOK_TABLE ident
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_DROP_TABLE;
-			tStmt.m_bIfExists = false;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
-			tStmt.m_sIndex.ToLower();
-		}
-	| TOK_DROP TOK_TABLE TOK_IF TOK_EXISTS ident
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_DROP_TABLE;
-			tStmt.m_bIfExists = true;
-			pParser->ToString ( tStmt.m_sIndex, $5 );
-			tStmt.m_sIndex.ToLower();
-		}
-	;
-
-//////////////////////////////////////////////////////////////////////////
-
 show_variables:
 	TOK_SHOW opt_scope TOK_VARIABLES opt_show_variables_where
 		{
@@ -1725,37 +1556,6 @@ isolation_level:
 	| TOK_READ TOK_COMMITTED
 	| TOK_REPEATABLE TOK_READ
 	| TOK_SERIALIZABLE
-	;
-
-//////////////////////////////////////////////////////////////////////////
-
-create_function:
-	TOK_CREATE TOK_FUNCTION ident TOK_RETURNS udf_type TOK_SONAME TOK_QUOTED_STRING
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_CREATE_FUNCTION;
-			pParser->ToString ( tStmt.m_sUdfName, $3 );
-			tStmt.m_sUdfLib = pParser->ToStringUnescape ( $7 );
-			tStmt.m_eUdfType = (ESphAttr) $5.m_iValue;
-		}
-	;
-
-udf_type:
-	TOK_INT			{ $$.m_iValue = SPH_ATTR_INTEGER; }
-	| TOK_BIGINT	{ $$.m_iValue = SPH_ATTR_BIGINT; }
-	| TOK_FLOAT		{ $$.m_iValue = SPH_ATTR_FLOAT; }
-	| TOK_STRING	{ $$.m_iValue = SPH_ATTR_STRINGPTR; }
-	| TOK_INTEGER	{ $$.m_iValue = SPH_ATTR_INTEGER; }
-	;
-
-
-drop_function:
-	TOK_DROP TOK_FUNCTION ident
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_DROP_FUNCTION;
-			pParser->ToString ( tStmt.m_sUdfName, $3 );
-		}
 	;
 
 ////////////////////////////////////////////////////////////
@@ -1862,6 +1662,12 @@ truncate:
 			tStmt.m_eStmt = STMT_TRUNCATE_RTINDEX;
 			pParser->SetIndex ( $3 );
 		}
+	| TOK_TRUNCATE TOK_TABLE ident opt_with_reconfigure
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_TRUNCATE_RTINDEX;
+			pParser->SetIndex ( $3 );
+		}
 	;
 
 opt_with_reconfigure:
@@ -1884,27 +1690,6 @@ optimize_index:
 	;
 
 //////////////////////////////////////////////////////////////////////////
-
-create_plugin:
-	TOK_CREATE TOK_PLUGIN ident TOK_TYPE TOK_QUOTED_STRING TOK_SONAME TOK_QUOTED_STRING
-		{
-			SqlStmt_t & s = *pParser->m_pStmt;
-			s.m_eStmt = STMT_CREATE_PLUGIN;
-			pParser->ToString ( s.m_sUdfName, $3 );
-			s.m_sStringParam = pParser->ToStringUnescape ( $5 );
-			s.m_sUdfLib = pParser->ToStringUnescape ( $7 );
-		}
-	;
-
-drop_plugin:
-	TOK_DROP TOK_PLUGIN ident TOK_TYPE TOK_QUOTED_STRING
-		{
-			SqlStmt_t & s = *pParser->m_pStmt;
-			s.m_eStmt = STMT_DROP_PLUGIN;
-			pParser->ToString ( s.m_sUdfName, $3 );
-			s.m_sStringParam = pParser->ToStringUnescape ( $5 );
-		}
-	;
 
 reload_plugins:
 	TOK_RELOAD TOK_PLUGINS TOK_FROM TOK_SONAME TOK_QUOTED_STRING
@@ -2045,36 +1830,6 @@ opt_par:
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $1 );
 			pParser->m_pStmt->m_iIntParam = $2.m_iValue;
 		}
-
-join_cluster:
-	TOK_JOIN TOK_CLUSTER ident cluster_opts_list
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_JOIN_CLUSTER;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
-		}
-	| TOK_JOIN TOK_CLUSTER ident TOK_AT TOK_QUOTED_STRING cluster_opts_list
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_JOIN_CLUSTER;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
-			pParser->JoinClusterAt ( $5 );
-		}
-	;
-
-cluster_opts_list:
-	// empty
-	| call_opts_list
-	;
-
-create_cluster:
-	TOK_CREATE TOK_CLUSTER ident cluster_opts_list
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_CLUSTER_CREATE;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
-		}
-	;
 
 delete_cluster:
 	TOK_DELETE TOK_CLUSTER ident

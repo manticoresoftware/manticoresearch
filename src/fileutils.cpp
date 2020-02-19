@@ -14,14 +14,174 @@
 #include "fileutils.h"
 #include "sphinxint.h"
 
-#include <sys/stat.h>
-
-
 #if USE_WINDOWS
 	#define getcwd		_getcwd
 #else
 	#include <glob.h>
 #endif
+
+// whether to collect IO stats
+static bool g_bCollectIOStats = false;
+static TLS_T<CSphIOStats*> g_pTlsIOStats;
+
+
+CSphIOStats::~CSphIOStats ()
+{
+	Stop();
+}
+
+void CSphIOStats::Start()
+{
+	if ( !g_bCollectIOStats )
+		return;
+
+	m_pPrev = g_pTlsIOStats;
+	g_pTlsIOStats = this;
+	m_bEnabled = true;
+}
+
+void CSphIOStats::Stop()
+{
+	if ( !g_bCollectIOStats )
+		return;
+
+	m_bEnabled = false;
+	g_pTlsIOStats = m_pPrev;
+}
+
+
+void CSphIOStats::Add ( const CSphIOStats & b )
+{
+	m_iReadTime += b.m_iReadTime;
+	m_iReadOps += b.m_iReadOps;
+	m_iReadBytes += b.m_iReadBytes;
+	m_iWriteTime += b.m_iWriteTime;
+	m_iWriteOps += b.m_iWriteOps;
+	m_iWriteBytes += b.m_iWriteBytes;
+}
+
+
+//////////////////////////////////////////////////////////////////////////
+
+CSphIOStats * GetIOStats()
+{
+	if ( !g_bCollectIOStats )
+		return nullptr;
+
+	CSphIOStats * pIOStats = g_pTlsIOStats;
+
+	if ( !pIOStats || !pIOStats->IsEnabled() )
+		return nullptr;
+	return pIOStats;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+bool CSphSavedFile::Collect ( const char * szFilename, CSphString * pError )
+{
+	if ( !szFilename || !*szFilename )
+	{
+		memset ( this, 0, sizeof(*this) );
+		return true;
+	}
+
+	m_sFilename = szFilename;
+
+	struct_stat tStat = {0};
+	if ( stat ( szFilename, &tStat ) < 0 )
+	{
+		if ( pError )
+			*pError = strerrorm ( errno );
+		return false;
+	}
+
+	m_uSize = tStat.st_size;
+	m_uCTime = tStat.st_ctime;
+	m_uMTime = tStat.st_mtime;
+
+	DWORD uCRC32 = 0;
+	if ( !sphCalcFileCRC32 ( szFilename, uCRC32 ) )
+		return false;
+
+	m_uCRC32 = uCRC32;
+
+	return true;
+}
+
+
+void CSphSavedFile::Read ( CSphReader & tReader, const char * szFilename, bool bSharedStopwords, CSphString * sWarning )
+{
+	m_uSize = tReader.GetOffset ();
+	m_uCTime = tReader.GetOffset ();
+	m_uMTime = tReader.GetOffset ();
+	m_uCRC32 = tReader.GetDword ();
+	m_sFilename = szFilename;
+
+	CSphString sName ( szFilename );
+
+	if ( !sName.IsEmpty() && sWarning )
+	{
+		if ( !sphIsReadable ( sName ) && bSharedStopwords )
+		{
+			StripPath ( sName );
+			sName.SetSprintf ( "%s/stopwords/%s", FULL_SHARE_DIR, sName.cstr() );
+		}
+
+		struct_stat tFileInfo;
+		if ( stat ( sName.cstr(), &tFileInfo ) < 0 )
+		{
+			if ( bSharedStopwords )
+				sWarning->SetSprintf ( "failed to stat either %s or %s: %s", szFilename, sName.cstr(), strerrorm(errno) );
+			else
+				sWarning->SetSprintf ( "failed to stat %s: %s", szFilename, strerrorm(errno) );
+		}
+		else
+		{
+			DWORD uMyCRC32 = 0;
+			if ( !sphCalcFileCRC32 ( sName.cstr(), uMyCRC32 ) )
+				sWarning->SetSprintf ( "failed to calculate CRC32 for %s", sName.cstr() );
+			else
+				if ( uMyCRC32!=m_uCRC32 || tFileInfo.st_size!=m_uSize
+					|| tFileInfo.st_ctime!=m_uCTime || tFileInfo.st_mtime!=m_uMTime )
+					sWarning->SetSprintf ( "'%s' differs from the original", sName.cstr() );
+		}
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+extern DWORD g_dSphinxCRC32 [ 256 ];
+
+bool sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 )
+{
+	uCRC32 = 0;
+
+	if ( !szFilename )
+		return false;
+
+	FILE * pFile = fopen ( szFilename, "rb" );
+	if ( !pFile )
+		return false;
+
+	DWORD crc = ~((DWORD)0);
+
+	const int BUFFER_SIZE = 131072;
+	static BYTE * pBuffer = NULL;
+	if ( !pBuffer )
+		pBuffer = new BYTE [ BUFFER_SIZE ];
+
+	int iBytesRead;
+	while ( ( iBytesRead = fread ( pBuffer, 1, BUFFER_SIZE, pFile ) )!=0 )
+	{
+		for ( int i=0; i<iBytesRead; i++ )
+			crc = (crc >> 8) ^ g_dSphinxCRC32 [ (crc ^ pBuffer[i]) & 0xff ];
+	}
+
+	fclose ( pFile );
+
+	uCRC32 = ~crc;
+	return true;
+}
 
 
 bool sphIsReadable ( const char * sPath, CSphString * pError )
@@ -131,6 +291,18 @@ bool sphTruncate ( int iFD )
 }
 
 
+void sphInitIOStats()
+{
+	g_bCollectIOStats = true;
+}
+
+
+void sphDoneIOStats()
+{
+	g_bCollectIOStats = false;
+}
+
+
 CSphString sphNormalizePath( const CSphString& sOrigPath )
 {
 	CSphVector<Str_t> dChunks;
@@ -193,6 +365,32 @@ CSphString sphGetCwd()
 {
 	CSphVector<char> sBuf (65536);
 	return getcwd( sBuf.begin(), sBuf.GetLength());
+}
+
+
+int64_t sphRead ( int iFD, void * pBuf, size_t iCount )
+{
+	CSphIOStats * pIOStats = GetIOStats();
+	int64_t tmStart = 0;
+	if ( pIOStats )
+		tmStart = sphMicroTimer();
+
+	int64_t iRead = ::read ( iFD, pBuf, iCount );
+
+	if ( pIOStats )
+	{
+		pIOStats->m_iReadTime += sphMicroTimer() - tmStart;
+		pIOStats->m_iReadOps++;
+		pIOStats->m_iReadBytes += (-1==iRead) ? 0 : iCount;
+	}
+
+	return iRead;
+}
+
+
+bool sphWrite ( int iFD, const void * pBuf, size_t iSize )
+{
+	return ( iSize==(size_t)::write ( iFD, pBuf, iSize ) );
 }
 
 
@@ -279,6 +477,40 @@ bool MkDir ( const char * szDir )
 }
 
 
+bool CopyFile ( const CSphString & sSource, const CSphString & sDest, CSphString & sError )
+{
+	const int BUFFER_SIZE = 1048576;
+	CSphFixedVector<BYTE> dBuffer(BUFFER_SIZE);
+
+	CSphAutofile tSource;
+	int iSrcFD = tSource.Open ( sSource, SPH_O_READ, sError );
+	if ( iSrcFD<0 )
+		return false;
+
+	CSphAutofile tDest;
+	int iDstFD = tDest.Open ( sDest, SPH_O_NEW, sError );
+	if ( iDstFD<0 )
+		return false;
+
+	int64_t iRead = 0;
+	while ( ( iRead = sphRead ( iSrcFD, dBuffer.Begin(), dBuffer.GetLength() ) ) > 0 )
+	{
+		if ( !sphWrite ( iDstFD, dBuffer.Begin(), iRead ) )
+		{
+			iRead = -1;
+			break;
+		}
+	}
+
+	if ( iRead<0 )
+	{
+		sError.SetSprintf ( "Unable to copy file '%s' to '%s': %s", sSource.cstr(), sDest.cstr(), strerror(errno) );
+		return false;
+	}
+
+	return true;
+}
+
 // check path exists and also check daemon could write there
 bool CheckPath ( const CSphString & sPath, bool bCheckWrite, CSphString & sError, const char * sCheckFileName )
 {
@@ -301,4 +533,31 @@ bool CheckPath ( const CSphString & sPath, bool bCheckWrite, CSphString & sError
 	}
 
 	return true;
+}
+
+
+CSphString & StripPath ( CSphString & sPath )
+{
+	if ( sPath.IsEmpty() )
+		return sPath;
+
+	const char * s = sPath.cstr();
+
+#if !USE_WINDOWS
+	if ( *s!='/' )
+		return sPath;
+#endif
+
+	const char * sLastSlash = s;
+	for ( ; *s; ++s )
+		if ( *s=='/' )
+			sLastSlash = s;
+
+	if ( *sLastSlash!='/' )
+		return sPath;
+
+	auto iPos = (int)( sLastSlash - sPath.cstr() + 1 );
+	auto iLen = (int)( s - sPath.cstr() );
+	sPath = sPath.SubString ( iPos, iLen - iPos );
+	return sPath;
 }

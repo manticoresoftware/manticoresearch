@@ -191,7 +191,7 @@ namespace sph
 				++p;
 
 			// add the token, skip the char
-			fnFilter ( sNext, int ( p-sNext ));
+			fnFilter ( sNext, int(p-sNext) );
 
 			// skip all boundaries
 			while (p<pEnd && strchr ( sBounds, *p ))
@@ -323,7 +323,7 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 /////////////////////////////////////////////////////////////////////////////
 
 /// load config file
-const char *	sphLoadConfig ( const char * sOptConfig, bool bQuiet, CSphConfigParser & cp );
+const char *	sphLoadConfig ( const char * sOptConfig, bool bQuiet, bool bIgnoreIndexes, CSphConfigParser & cp );
 
 bool			sphInitCharsetAliasTable ( CSphString & sError );
 
@@ -391,10 +391,6 @@ namespace TimePrefixed {
 		#define CRASH_EXIT return EXCEPTION_EXECUTE_HANDLER
 	#endif
 #endif
-
-/// simple write wrapper
-/// simplifies partial write checks, and also supresses "fortified" glibc warnings
-bool sphWrite ( int iFD, const void * pBuf, size_t iSize );
 
 /// async safe, BUT NOT THREAD SAFE, fprintf
 void sphSafeInfo ( int iFD, const char * sFmt, ... );

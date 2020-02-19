@@ -1004,8 +1004,8 @@ inline ServedIndexRefPtr_c GetServed ( const CSphString &sName, GuardedHash_c * 
 
 
 ESphAddIndex ConfigureAndPreloadIndex( const CSphConfigSection& hIndex, const char* sIndexName, bool bFromReplication );
-ESphAddIndex AddIndexMT( GuardedHash_c& dPost, const char* szIndexName, const CSphConfigSection& hIndex, bool bReplace = false );
-bool PreallocNewIndex( ServedDesc_t& tIdx, const CSphConfigSection* pConfig, const char* szIndexName );
+ESphAddIndex AddIndexMT ( GuardedHash_c & dPost, const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, CSphString & sError, StrVec_t * pWarnings=nullptr );
+bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, const char * szIndexName, CSphString & sError );
 
 struct AttrUpdateArgs: public CSphAttrUpdateEx
 {
@@ -1021,190 +1021,6 @@ void HandleMySqlExtendedUpdate( AttrUpdateArgs& tArgs );
 /////////////////////////////////////////////////////////////////////////////
 // SERVED INDEX DESCRIPTORS STUFF
 /////////////////////////////////////////////////////////////////////////////
-
-enum SqlStmt_e
-{
-	STMT_PARSE_ERROR = 0,
-	STMT_DUMMY,
-
-	STMT_SELECT,
-	STMT_INSERT,
-	STMT_REPLACE,
-	STMT_DELETE,
-	STMT_SHOW_WARNINGS,
-	STMT_SHOW_STATUS,
-	STMT_SHOW_META,
-	STMT_SET,
-	STMT_BEGIN,
-	STMT_COMMIT,
-	STMT_ROLLBACK,
-	STMT_CALL, // check.pl STMT_CALL_SNIPPETS STMT_CALL_KEYWORDS
-	STMT_DESCRIBE,
-	STMT_SHOW_TABLES,
-	STMT_CREATE_TABLE,
-	STMT_DROP_TABLE,
-	STMT_SHOW_CREATE_TABLE,
-	STMT_UPDATE,
-	STMT_CREATE_FUNCTION,
-	STMT_DROP_FUNCTION,
-	STMT_ATTACH_INDEX,
-	STMT_FLUSH_RTINDEX,
-	STMT_FLUSH_RAMCHUNK,
-	STMT_SHOW_VARIABLES,
-	STMT_TRUNCATE_RTINDEX,
-	STMT_SELECT_SYSVAR,
-	STMT_SHOW_COLLATION,
-	STMT_SHOW_CHARACTER_SET,
-	STMT_OPTIMIZE_INDEX,
-	STMT_SHOW_AGENT_STATUS,
-	STMT_SHOW_INDEX_STATUS,
-	STMT_SHOW_PROFILE,
-	STMT_ALTER_ADD,
-	STMT_ALTER_DROP,
-	STMT_SHOW_PLAN,
-	STMT_SELECT_DUAL,
-	STMT_SHOW_DATABASES,
-	STMT_CREATE_PLUGIN,
-	STMT_DROP_PLUGIN,
-	STMT_SHOW_PLUGINS,
-	STMT_SHOW_THREADS,
-	STMT_FACET,
-	STMT_ALTER_RECONFIGURE,
-	STMT_SHOW_INDEX_SETTINGS,
-	STMT_FLUSH_INDEX,
-	STMT_RELOAD_PLUGINS,
-	STMT_RELOAD_INDEX,
-	STMT_FLUSH_HOSTNAMES,
-	STMT_FLUSH_LOGS,
-	STMT_RELOAD_INDEXES,
-	STMT_SYSFILTERS,
-	STMT_DEBUG,
-	STMT_ALTER_KLIST_TARGET,
-	STMT_JOIN_CLUSTER,
-	STMT_CLUSTER_CREATE,
-	STMT_CLUSTER_DELETE,
-	STMT_CLUSTER_ALTER_ADD,
-	STMT_CLUSTER_ALTER_DROP,
-	STMT_CLUSTER_ALTER_UPDATE,
-	STMT_EXPLAIN,
-
-	STMT_TOTAL
-};
-
-
-enum SqlSet_e
-{
-	SET_LOCAL,
-	SET_GLOBAL_UVAR,
-	SET_GLOBAL_SVAR,
-	SET_INDEX_UVAR,
-	SET_CLUSTER_UVAR
-};
-
-/// refcounted vector
-template < typename T >
-class RefcountedVector_c : public CSphVector<T>, public ISphRefcountedMT
-{
-};
-
-using AttrValues_p = CSphRefcountedPtr < RefcountedVector_c<SphAttr_t> >;
-
-/// insert value
-struct SqlInsert_t
-{
-	int						m_iType = 0;
-	CSphString				m_sVal;		// OPTIMIZE? use char* and point to node?
-	int64_t					m_iVal = 0;
-	float					m_fVal = 0.0;
-	AttrValues_p			m_pVals;
-};
-
-
-/// parsing result
-/// one day, we will start subclassing this
-struct SqlStmt_t
-{
-	SqlStmt_e				m_eStmt = STMT_PARSE_ERROR;
-	int						m_iRowsAffected = 0;
-	const char *			m_sStmt = nullptr; // for error reporting
-
-	// SELECT specific
-	CSphQuery				m_tQuery;
-	ISphTableFunc *			m_pTableFunc = nullptr;
-
-	CSphString				m_sTableFunc;
-	StrVec_t				m_dTableFuncArgs;
-
-	// used by INSERT, DELETE, CALL, DESC, ATTACH, ALTER, RELOAD INDEX
-	CSphString				m_sIndex;
-	CSphString				m_sCluster;
-	bool					m_bClusterUpdateNodes = false;
-
-	// INSERT (and CALL) specific
-	CSphVector<SqlInsert_t>	m_dInsertValues; // reused by CALL
-	StrVec_t				m_dInsertSchema;
-	int						m_iSchemaSz = 0;
-
-	// SET specific
-	CSphString				m_sSetName;		// reused by ATTACH
-	SqlSet_e				m_eSet = SET_LOCAL;
-	int64_t					m_iSetValue = 0;
-	CSphString				m_sSetValue;
-	CSphVector<SphAttr_t>	m_dSetValues;
-//	bool					m_bSetNull = false; // not(yet) used
-
-	// CALL specific
-	CSphString				m_sCallProc;
-	StrVec_t				m_dCallOptNames;
-	CSphVector<SqlInsert_t>	m_dCallOptValues;
-	StrVec_t				m_dCallStrings;
-
-	// UPDATE specific
-	CSphAttrUpdate			m_tUpdate;
-	int						m_iListStart = -1; // < the position of start and end of index's definition in original query.
-	int						m_iListEnd = -1;
-
-	// CREATE/DROP FUNCTION, INSTALL PLUGIN specific
-	CSphString				m_sUdfName; // FIXME! move to arg1?
-	CSphString				m_sUdfLib;
-	ESphAttr				m_eUdfType = SPH_ATTR_NONE;
-
-	// ALTER specific
-	CSphString				m_sAlterAttr;
-	CSphString				m_sAlterOption;
-	ESphAttr				m_eAlterColType = SPH_ATTR_NONE;
-
-	// CREATE TABLE specific
-	CreateTableSettings_t	m_tCreateTable;
-
-	// DROP TABLE specific
-	bool					m_bIfExists = false;
-
-	// SHOW THREADS specific
-	int						m_iThreadsCols = 0;
-	CSphString				m_sThreadFormat;
-
-	// generic parameter, different meanings in different statements
-	// filter pattern in DESCRIBE, SHOW TABLES / META / VARIABLES
-	// target index name in ATTACH
-	// token filter options in INSERT
-	// plugin type in INSTALL PLUGIN
-	// path in RELOAD INDEX
-	CSphString				m_sStringParam;
-
-	// generic integer parameter, used in SHOW SETTINGS, default value -1
-	int						m_iIntParam = -1;
-
-	bool					m_bJson = false;
-	CSphString				m_sEndpoint;
-
-	SqlStmt_t ();
-	~SqlStmt_t();
-
-	bool AddSchemaItem ( const char * psName );
-	// check if the number of fields which would be inserted is in accordance to the given schema
-	bool CheckInsertIntegrity();
-};
 
 /// result set aggregated across indexes
 struct AggrResult_t : CSphQueryResult
@@ -1312,7 +1128,6 @@ enum ESphHttpEndpoint
 bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, CachedOutputBuffer_c & tOut );
 ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster, const ThdDesc_t & tThd );
 void sphFormatFactors ( StringBuilder_c& dOut, const unsigned int * pFactors, bool bJson );
-bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation );
 void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation, CSphVector<int64_t> & dLastIds );
 void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning, const ThdDesc_t & tThd );
 void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphSessionAccum & tAcc, const ThdDesc_t & tThd );
@@ -1323,12 +1138,8 @@ void				sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, cons
 ESphHttpEndpoint	sphStrToHttpEndpoint ( const CSphString & sEndpoint );
 CSphString			sphHttpEndpointToStr ( ESphHttpEndpoint eEndpoint );
 
-// get tokens from sphinxql
-int sphGetTokTypeInt();
-int sphGetTokTypeFloat();
-int sphGetTokTypeStr();
-int sphGetTokTypeConstMVA();
 
+ISphTableFunc *		CreateRemoveRepeats();
 
 struct PercolateOptions_t
 {

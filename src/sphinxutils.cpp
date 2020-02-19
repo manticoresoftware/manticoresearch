@@ -791,6 +791,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "access_doclists",		0, nullptr },
 	{ "access_hitlists",		0, nullptr },
 	{ "stored_fields",			0, nullptr },
+	{ "stored_only_fields",		0, nullptr },
 	{ "docstore_block_size",	0, nullptr },
 	{ "docstore_compression",	0, nullptr },
 	{ "docstore_compression_level",	0, nullptr },
@@ -1449,7 +1450,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 
 /////////////////////////////////////////////////////////////////////////////
 
-const char * sphLoadConfig ( const char * sOptConfig, bool bQuiet, CSphConfigParser & cp )
+const char * sphLoadConfig ( const char * sOptConfig, bool bQuiet, bool bIgnoreIndexes, CSphConfigParser & cp )
 {
 	// fallback to defaults if there was no explicit config specified
 	while ( !sOptConfig )
@@ -1483,7 +1484,7 @@ const char * sphLoadConfig ( const char * sOptConfig, bool bQuiet, CSphConfigPar
 		sphDie ( "failed to parse config file '%s': %s", sOptConfig, TlsMsg::szError() );
 
 	CSphConfig & hConf = cp.m_tConf;
-	if ( !hConf ( "index" ) )
+	if ( !bIgnoreIndexes && !hConf ( "index" ) )
 		sphDie ( "no indexes found in config file '%s'", sOptConfig );
 
 	return sOptConfig;
@@ -2372,12 +2373,6 @@ static int sphVSprintf ( char * pOutput, const char * sFmt, va_list ap )
 	pOutput[iRes++]='\n'; // final zero to EOL
 	return iRes;
 }
-
-bool sphWrite ( int iFD, const void * pBuf, size_t iSize )
-{
-	return ( iSize==(size_t)::write ( iFD, pBuf, iSize ) );
-}
-
 
 static char g_sSafeInfoBuf [ 1024 ];
 

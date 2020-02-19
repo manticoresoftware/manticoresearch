@@ -15,6 +15,7 @@
 #include "searchdaemon.h"
 #include "sphinxjson.h"
 #include "attribute.h"
+#include "searchdsql.h"
 
 #include "json/cJSON.h"
 

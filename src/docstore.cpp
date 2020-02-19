@@ -813,7 +813,9 @@ bool Docstore_c::Init ( CSphString & sError )
 	m_tFields.Load(tReader);
 
 	DWORD uNumBlocks = tReader.GetDword();
-	assert(uNumBlocks);
+	if ( !uNumBlocks )
+		return true;
+
 	SphOffset_t tHeaderOffset = tReader.GetOffset();
 
 	tReader.SeekTo ( tHeaderOffset, 0 );
@@ -1834,9 +1836,6 @@ bool DocstoreChecker_c::Check()
 	}
 
 	DWORD uNumBlocks = m_tReader.GetDword();
-	if ( !uNumBlocks )
-		return m_tReporter.Fail ( "Docstore has 0 blocks in %s", m_szFilename );
-
 	SphOffset_t tHeaderOffset = m_tReader.GetOffset();
 	if ( tHeaderOffset <= 0 || tHeaderOffset >= m_tReader.GetFilesize() )
 		return m_tReporter.Fail ( "Wrong docstore header offset (" INT64_FMT ") in %s", tHeaderOffset, m_szFilename );
@@ -1878,7 +1877,8 @@ bool DocstoreChecker_c::Check()
 		dBlocks[i-1].m_uSize = dBlocks[i].m_tOffset-dBlocks[i-1].m_tOffset;
 	}
 
-	dBlocks.Last().m_uSize = tHeaderOffset-dBlocks.Last().m_tOffset;
+	if ( dBlocks.GetLength() )
+		dBlocks.Last().m_uSize = tHeaderOffset-dBlocks.Last().m_tOffset;
 
 	for ( auto & i : dBlocks )
 	{

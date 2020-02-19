@@ -826,8 +826,8 @@ docstore_block_size
 The size of the block of documents used by document storage. Optional,
 default is 16kb.
 
-When :ref:`stored_fields` are specified, original document text is
-stored inside the index. To use less disk space, documents are compressed.
+When :ref:`stored_fields` or :ref:`stored_only_fields` are specified, original document
+text is stored inside the index. To use less disk space, documents are compressed.
 To get more efficient disk access and better compression ratios on small documents,
 documents are concatenated into blocks. When indexing, documents are collected until
 their total size reaches the threshold. After that, this block of documents is compressed.
@@ -852,8 +852,8 @@ docstore_compression
 The type of compression used to compress blocks of documents used by document storage.
 Known values are 'lz4', 'lz4hc' and 'none'. Optional, default is 'lz4'.
 
-When :ref:`stored_fields` are specified, document storage stores compressed document
-blocks. 'lz4' has fast compression and decompression speeds, 'lz4hc' (high compression)
+When :ref:`stored_fields` or :ref:`stored_only_fields` are specified, document storage stores
+compressed document blocks. 'lz4' has fast compression and decompression speeds, 'lz4hc' (high compression)
 has the same fast decompression but compression speed is traded for better compression ratio.
 'none' disables compression.
 
@@ -3012,6 +3012,28 @@ Example:
 
 
     stored_fields = title,content
+
+
+.. _stored_only_fields:
+
+stored_only_fields
+~~~~~~~~~~~~~~~~~~
+
+A list of fields that will be stored in the index but will be not indexed.
+Optional, default is empty.
+
+Similar to :ref:`stored_fields` except when a field is specified in
+`stored_only_fields` it is only stored, not indexed and can't be searched
+with fulltext queries. It can only be returned with search results.
+
+
+Example:
+
+
+.. code-block:: ini
+
+
+    stored_only_fields = title,content
 
 
 .. _type:

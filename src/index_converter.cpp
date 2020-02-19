@@ -226,7 +226,7 @@ struct Index_t
 	CSphString m_sPath;
 	CSphString m_sPathOut;
 	bool m_bStripPath = false;
-	KillListTargets_t m_tKlistTargets;
+	KillListTargets_c m_tKlistTargets;
 
 	// RT specific
 	int64_t m_iTID = 0;
@@ -346,7 +346,7 @@ static bool LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings 
 	}
 
 	tSettings.m_sSynonymsFile = tReader.GetString ();
-	ReadFileInfo ( tReader, tSettings.m_sSynonymsFile.cstr (), false, tEmbeddedFiles.m_tSynonymFile, tEmbeddedFiles.m_bEmbeddedSynonyms ? NULL : &sWarning );
+	tEmbeddedFiles.m_tSynonymFile.Read ( tReader, tSettings.m_sSynonymsFile.cstr (), false, tEmbeddedFiles.m_bEmbeddedSynonyms ? NULL : &sWarning );
 	tSettings.m_sBoundary = tReader.GetString ();
 	tSettings.m_sIgnoreChars = tReader.GetString ();
 	tSettings.m_iNgramLen = tReader.GetDword ();
@@ -381,7 +381,7 @@ static void LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tS
 	for ( int i = 0; i < nFiles; i++ )
 	{
 		sFile = tReader.GetString ();
-		ReadFileInfo ( tReader, sFile.cstr (), false, tEmbeddedFiles.m_dStopwordFiles[i], tEmbeddedFiles.m_bEmbeddedSynonyms ? NULL : &sWarning );
+		tEmbeddedFiles.m_dStopwordFiles[i].Read ( tReader, sFile.cstr (), false, tEmbeddedFiles.m_bEmbeddedSynonyms ? NULL : &sWarning );
 	}
 
 	tEmbeddedFiles.m_bEmbeddedWordforms = false;
@@ -399,8 +399,7 @@ static void LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tS
 	ARRAY_FOREACH ( i, tSettings.m_dWordforms )
 	{
 		tSettings.m_dWordforms[i] = tReader.GetString();
-		ReadFileInfo ( tReader, tSettings.m_dWordforms[i].cstr(), false,
-			tEmbeddedFiles.m_dWordformFiles[i], tEmbeddedFiles.m_bEmbeddedWordforms ? NULL : &sWarning );
+		tEmbeddedFiles.m_dWordformFiles[i].Read ( tReader, tSettings.m_dWordforms[i].cstr(), false, tEmbeddedFiles.m_bEmbeddedWordforms ? NULL : &sWarning );
 	}
 
 	tSettings.m_iMinStemmingLen = tReader.GetDword ();
@@ -472,13 +471,13 @@ static int GetRowSize ( const CSphVector<CSphColumnInfo> & dAttrs )
 
 static bool SetupWordProcessors ( Index_t & tIndex, CSphString & sError )
 {
-	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tIndex.m_tTokSettings, &tIndex.m_tEmbeddedTok, sError ) };
+	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tIndex.m_tTokSettings, &tIndex.m_tEmbeddedTok, nullptr, sError ) };
 	if ( !pTokenizer )
 		return false;
 
 	DictRefPtr_c pDict { tIndex.m_tDictSettings.m_bWordDict
-		? sphCreateDictionaryKeywords ( tIndex.m_tDictSettings, &tIndex.m_tEmbeddedDict, pTokenizer, tIndex.m_sName.cstr(), false, tIndex.m_tSettings.m_iSkiplistBlockSize, sError )
-		: sphCreateDictionaryCRC ( tIndex.m_tDictSettings, &tIndex.m_tEmbeddedDict, pTokenizer, tIndex.m_sName.cstr(), false, tIndex.m_tSettings.m_iSkiplistBlockSize, sError ) };
+		? sphCreateDictionaryKeywords ( tIndex.m_tDictSettings, &tIndex.m_tEmbeddedDict, pTokenizer, tIndex.m_sName.cstr(), false, tIndex.m_tSettings.m_iSkiplistBlockSize, nullptr, sError )
+		: sphCreateDictionaryCRC ( tIndex.m_tDictSettings, &tIndex.m_tEmbeddedDict, pTokenizer, tIndex.m_sName.cstr(), false, tIndex.m_tSettings.m_iSkiplistBlockSize, nullptr, sError ) };
 
 	if ( !pDict )
 		return false;
@@ -2101,7 +2100,7 @@ static bool SaveRtIndex ( Index_t & tIndex, CSphString & sWarning, CSphString & 
 }
 
 
-static bool ConvertPlain ( const CSphString & sName, const CSphString & sPath, bool bStripPath, CSphString & sError, const CSphVector<SphDocID_t> & dKilled, const CSphString & sPathOut, const KillListTargets_t & tKlistTargets, Index_t * pRtIndex, bool bIgnoreKlist=false )
+static bool ConvertPlain ( const CSphString & sName, const CSphString & sPath, bool bStripPath, CSphString & sError, const CSphVector<SphDocID_t> & dKilled, const CSphString & sPathOut, const KillListTargets_c & tKlistTargets, Index_t * pRtIndex, bool bIgnoreKlist=false )
 {
 	// need scope for destructor
 	{
@@ -2335,7 +2334,7 @@ static bool SavePqIndex ( Index_t & tIndex, CSphString & sWarning, CSphString & 
 }
 
 
-static bool Convert ( const CSphString & sName, const CSphString & sPath, IndexType_e eType, bool bStripPath, const CSphString & sPathOut, const KillListTargets_t & dKlistTargets, CSphString & sError )
+static bool Convert ( const CSphString & sName, const CSphString & sPath, IndexType_e eType, bool bStripPath, const CSphString & sPathOut, const KillListTargets_c & dKlistTargets, CSphString & sError )
 {
 	if ( eType==INDEX_UNKNOWN )
 	{
@@ -2379,7 +2378,7 @@ static bool Convert ( const CSphString & sName, const CSphString & sPath, IndexT
 			sChunkInPath.SetSprintf ( "%s.%d", sPath.cstr(), tIndex.m_dRtChunkNames[iChunk] );
 			sChunkOutPath.SetSprintf ( "%s.%d", sPathOut.cstr(), tIndex.m_dRtChunkNames[iChunk] );
 			Index_t * pSchema = ( iChunk==tIndex.m_dRtChunkNames.GetLength() - 1 ? &tIndex : nullptr );
-			if ( !ConvertPlain ( sName, sChunkInPath, bStripPath, sError, dKilled, sChunkOutPath, KillListTargets_t(), pSchema, true ) )
+			if ( !ConvertPlain ( sName, sChunkInPath, bStripPath, sError, dKilled, sChunkOutPath, KillListTargets_c(), pSchema, true ) )
 			{
 				sphWarning ( "failed to convert %d disk chunk, error: %s, renaming original disk chunks back ...", iChunk, sError.cstr() );
 				break;
@@ -2569,7 +2568,7 @@ int main ( int argc, char ** argv )
 	if ( bAll && !sKlistTarget.IsEmpty() )
 		sphDie ( "killlist-target not compatible with --all option" );
 
-	KillListTargets_t tKlistTargets;
+	KillListTargets_c tKlistTargets;
 	if ( !sKlistTarget.IsEmpty() && !tKlistTargets.Parse ( sKlistTarget, sIndexFile.cstr(), sError ) )
 		sphDie ( "failed to parse killlist-target, '%s'", sError.cstr() );
 
@@ -2580,7 +2579,7 @@ int main ( int argc, char ** argv )
 	const CSphConfigType * pIndexes = nullptr;
 	if ( !sConfig.IsEmpty() )
 	{
-		sphLoadConfig ( sConfig.cstr(), false, tConfig );
+		sphLoadConfig ( sConfig.cstr(), false, false, tConfig );
 		pIndexes = tConfig.m_tConf ( "index" );
 
 		if ( ( bAll || !sIndexName.IsEmpty() ) && !pIndexes )

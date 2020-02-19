@@ -2633,7 +2633,7 @@ public:
 	}
 
 	/// trim leading and trailing spaces
-	void Trim ()
+	CSphString & Trim()
 	{
 		if ( m_sValue )
 		{
@@ -2644,6 +2644,8 @@ public:
 			memmove ( m_sValue, sStart, sEnd-sStart+1 );
 			m_sValue [ sEnd-sStart+1 ] = '\0';
 		}
+
+		return *this;
 	}
 
 	int Length () const

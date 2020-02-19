@@ -15,18 +15,6 @@ searchd
 	data_dir = <data_path path="data0"></data_path>
 	server_id = <agent_id/>
 }
-
-index rt1
-{
-	type = rt
-	path			= <data_path/>/rt1
-	rt_mem_limit	= 128k
-	
-	rt_field		= title
-	rt_attr_multi	= mva1
-	rt_attr_uint	= gid
-	rt_attr_json 	= j1
-}
 </agent0>
 <agent1>
 searchd
@@ -35,19 +23,6 @@ searchd
 	data_dir = <data_path path="data1"></data_path>
 	server_id = <agent_id/>
 }
-
-index rt1
-{
-	type = rt
-	path			= <data_path/>/rt_one
-	rt_mem_limit	= 128k
-	
-	rt_field		= title
-	rt_attr_multi	= mva1
-	rt_attr_uint	= gid
-	rt_attr_json 	= j1
-}
-
 </agent1>
 
 </config>
@@ -55,6 +30,8 @@ index rt1
 
 <sphqueries>
 <!-- request to node 0 -->
+<sphinxql d="0">create table rt1 (title text indexed, mva1 multi, gid int, j1 json) rt_mem_limit='128k'</sphinxql>
+
 <sphinxql d="0">insert into rt1 (id,title,mva1,gid,j1) values (1, 'test 1', (11,12,13), 11, '{"data":"test 1", fd:11}'), (2, 'test 2', (21,22,23), 21, ''), (3, 'test 3', (), 31, '{"data":"test 3", fd:31}')</sphinxql>
 <sphinxql d="0">SELECT * FROM test:rt1</sphinxql>
 <sphinxql d="0">replace into rt1 (id,title,mva1,gid,j1) values (5, 'test 5', (51,52,53), 51, '{"data":"test 5", fd:51}'), (1, 'test 6', (61,62,63), 61, '{"data":"test 6", fd:16}'), (7, 'test 7', (), 71, '')</sphinxql>
@@ -64,6 +41,8 @@ index rt1
 <sphinxql d="0">ALTER CLUSTER test ADD rt1</sphinxql>
 
 <!-- request to node 1 -->
+<sphinxql d="1">create table rt1 (title text indexed, mva1 multi, gid int, j1 json) rt_mem_limit='128k'</sphinxql>
+
 <sphinxql d="1">insert into rt1 (id,title,mva1) values (10, 'test 10', (110,120,130))</sphinxql>
 <sphinxql d="1">SELECT * FROM rt1</sphinxql>
 <sphinxql d="1" cluster_connect="0">join cluster test at '%addr_connect%'</sphinxql>
@@ -72,6 +51,11 @@ index rt1
 <sphinxql d="1">SELECT * FROM test:rt1</sphinxql>
 
 <sphinxql d="0">SELECT * FROM test:rt1</sphinxql>
+
+<!-- cleanup -->
+<sphinxql d="0">ALTER CLUSTER test DROP rt1</sphinxql>
+<sphinxql d="0">DROP TABLE rt1</sphinxql>
+<sphinxql d="1">DROP TABLE rt1</sphinxql>
 
 </sphqueries>
 

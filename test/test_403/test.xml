@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>configless vs stopwords</name>
+<skip_indexer/>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"></data_path>
+}
+</config>
+
+<sphqueries>
+
+<sphinxql>show tables</sphinxql>
+<sphinxql>create table test1 ( title text, tag integer ) stopwords = '<this_test/>/stops.txt'</sphinxql>
+<sphinxql>insert into test1 values (1,'hello',10)</sphinxql>
+<sphinxql>insert into test1 values (2,'title',10)</sphinxql>
+<sphinxql>select * from test1</sphinxql>
+<sphinxql>select * from test1 where match('hello')</sphinxql>
+<sphinxql>drop table test1</sphinxql>
+
+<sphinxql>create table test2 ( title text, tag integer ) wordforms = 'wrong.file' wordforms = '<this_test/>/wordforms.txt'</sphinxql>
+<sphinxql>insert into test2 values (1,'word form',10)</sphinxql>
+<sphinxql>select * from test2 where match('wordform')</sphinxql>
+<sphinxql>drop table test2</sphinxql>
+
+<sphinxql>create table test3 ( title text, tag integer ) exceptions = '<this_test/>/exceptions.txt'</sphinxql>
+<sphinxql>call keywords('microsoft windows', 'test3')</sphinxql>
+<sphinxql>call keywords('Microsoft Windows', 'test3')</sphinxql>
+<sphinxql>drop table test3</sphinxql>
+
+</sphqueries>
+
+</test>

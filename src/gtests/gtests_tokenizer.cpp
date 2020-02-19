@@ -38,7 +38,7 @@ protected:
 		if ( !( uMode & TOK_NO_SHORT ) )
 			tSettings.m_iMinWordLen = 2;
 
-		TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings, NULL, sError ) };
+		TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings, nullptr, nullptr, sError ) };
 		if ( !( uMode & TOK_NO_DASH ) )
 		{
 			Verify ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
@@ -228,7 +228,7 @@ TEST_F ( Tokenizer, Sentence )
 	CSphTokenizerSettings tSettings;
 	tSettings.m_iMinWordLen = 1;
 
-	pTokenizer = ISphTokenizer::Create ( tSettings, NULL, sError );
+	pTokenizer = ISphTokenizer::Create ( tSettings, nullptr, nullptr, sError );
 
 	ASSERT_TRUE ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
 //	ASSERT_TRUE ( pTok->SetBlendChars ( "., &", sError ) ); // NOLINT
@@ -686,7 +686,7 @@ protected:
 
 		CSphDictSettings tDictSettings;
 		tDictSettings.m_bWordDict = false;
-		pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, "query", false, 32, sError );
+		pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, "query", false, 32, nullptr, sError );
 
 		ASSERT_TRUE ( pTokenizer );
 		ASSERT_TRUE ( pDict );

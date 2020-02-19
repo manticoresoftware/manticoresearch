@@ -965,13 +965,13 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	CSphDictSettings tDictSettings;
 	{
 		CSphString sWarning;
-		tDictSettings.Setup ( hIndex, sWarning );
+		tDictSettings.Setup ( hIndex, nullptr, sWarning );
 		if ( !sWarning.IsEmpty() )
 			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sWarning.cstr() );
 	}
 
 	CSphString sError;
-	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokSettings, NULL, sError ) };
+	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokSettings, nullptr, nullptr, sError ) };
 	if ( !pTokenizer )
 		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
@@ -1002,8 +1002,8 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 
 		// multiforms filter
 		pDict = tDictSettings.m_bWordDict
-			? sphCreateDictionaryKeywords ( tDictSettings, NULL, pTokenizer, sIndexName, false, tSettings.m_iSkiplistBlockSize, sError )
-			: sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, sIndexName, false, tSettings.m_iSkiplistBlockSize, sError );
+			? sphCreateDictionaryKeywords ( tDictSettings, NULL, pTokenizer, sIndexName, false, tSettings.m_iSkiplistBlockSize, nullptr, sError )
+			: sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, sIndexName, false, tSettings.m_iSkiplistBlockSize, nullptr, sError );
 		if ( !pDict )
 			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
@@ -1314,7 +1314,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	CSphScopedPtr<CSphIndex> dSrcGuard ( pSrc );
 	CSphScopedPtr<CSphIndex> dDstGuard ( pDst );
 
-		CSphString sError;
+	CSphString sError;
 	if ( !sphFixupIndexSettings ( pSrc, hSrc, sError ) )
 	{
 		fprintf ( stdout, "ERROR: index '%s': %s\n", sSrc, sError.cstr () );
@@ -1344,7 +1344,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 
 	// if src index has dst index as its killlist_target, we should use this killlist
 	CSphFixedVector<DocID_t> dKillList(0);
-	KillListTargets_t tTargets;
+	KillListTargets_c tTargets;
 	if ( !pSrc->LoadKillList ( &dKillList, tTargets, sError ) )
 	{
 		fprintf ( stdout, "ERROR: %s\n", sError.cstr() );
@@ -1859,7 +1859,7 @@ int main ( int argc, char ** argv )
 
 	CSphConfigParser cp;
 	CSphConfig & hConf = cp.m_tConf;
-	sOptConfig = sphLoadConfig ( sOptConfig, g_bQuiet, cp );
+	sOptConfig = sphLoadConfig ( sOptConfig, g_bQuiet, false, cp );
 
 	if ( !hConf ( "source" ) )
 		sphDie ( "no indexes found in config file '%s'", sOptConfig );

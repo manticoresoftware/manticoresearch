@@ -20,6 +20,7 @@
 #include "secondaryindex.h"
 #include <time.h>
 
+static CSphString g_sDataDir;
 
 void StripStdin ( const char * sIndexAttrs, const char * sRemoveElements )
 {
@@ -844,7 +845,7 @@ struct IndexInfo_t
 	CSphString						m_sName;
 	CSphString						m_sPath;
 	CSphFixedVector<DocID_t>		m_dKilllist;
-	KillListTargets_t				m_tTargets;
+	KillListTargets_c				m_tTargets;
 	CSphMappedBuffer<BYTE>			m_tLookup;
 	DeadRowMap_Disk_c 				m_tDeadRowMap;
 
@@ -1076,6 +1077,100 @@ static void SetCmd ( IndextoolCmd_e eCmd )
 	g_eCommand = eCmd;
 }
 
+
+// this must be more or less in sync with our daemon index loading code
+bool ReadJsonConfig ( const CSphString & sConfigPath, CSphConfig & hConf, CSphString & sError )
+{
+	if ( !sphIsReadable ( sConfigPath, nullptr ) )
+		return true;
+
+	CSphAutoreader tConfigFile;
+	if ( !tConfigFile.Open ( sConfigPath, sError ) )
+		return false;
+
+	int iSize = tConfigFile.GetFilesize();
+	if ( !iSize )
+		return true;
+
+	CSphFixedVector<BYTE> dData ( iSize+1 );
+	tConfigFile.GetBytes ( dData.Begin(), iSize );
+
+	if ( tConfigFile.GetErrorFlag() )
+	{
+		sError = tConfigFile.GetErrorMessage();
+		return false;
+	}
+
+	dData[iSize] = 0; // safe gap
+	JsonObj_c tRoot ( (const char*)dData.Begin() );
+	if ( tRoot.GetError ( (const char *)dData.Begin(), dData.GetLength(), sError ) )
+		return false;
+
+	// check indexes
+	JsonObj_c tIndexes = tRoot.GetItem("indexes");
+	for ( const auto & i : tIndexes )
+	{
+		const char * szSection = "index";
+		if ( !hConf.Exists ( szSection ) )
+			hConf.Add ( CSphConfigType(), szSection );
+
+		const CSphString & sIndexName = i.Name();
+		if ( hConf[szSection].Exists ( sIndexName ) )
+			sphDie ( "index '%s' already exists", sIndexName.cstr() );
+
+		hConf[szSection].Add ( CSphConfigSection(), sIndexName );
+
+		CSphConfigSection & tSec = hConf[szSection][sIndexName];
+
+		CSphString sPath, sType;
+		if ( !i.FetchStrItem ( sPath, "path", sError ) )
+			return false;
+
+		if ( !i.FetchStrItem ( sType, "type", sError ) )
+			return false;
+
+		tSec.AddEntry ( "path", sPath.cstr() );
+		tSec.AddEntry ( "type", sType.cstr() );
+		tSec.AddEntry ( "from_json", "1" );
+	}
+
+	return true;
+}
+
+
+static bool LoadJsonConfig ( CSphConfig & hConf, const CSphString & sConfigFile )
+{
+	if ( !hConf.Exists("searchd") )
+		return false;
+
+	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
+	if ( !hSearchd.Exists("data_dir") )
+		return false;
+
+	g_sDataDir = hSearchd["data_dir"].strval();
+
+	if ( hConf.Exists("index") || hConf.Exists("source") || !hConf.Exists("searchd") )
+	{
+		sphDie ( "'data_dir' cannot be mixed with index declarations in '%s'", sConfigFile.cstr() );
+		return false;
+	}
+
+	CSphString sError;
+	if ( !CheckPath ( g_sDataDir, true, sError ) )
+	{
+		sphDie ( "data_dir unusable: %s", sError.cstr() );
+		return false;
+	}
+
+	CSphString sConfigPath;
+	sConfigPath.SetSprintf ( "%s/manticore.json", g_sDataDir.cstr() );
+	if ( !ReadJsonConfig ( sConfigPath, hConf, sError ) )
+		sphDie ( "failed to use JSON config %s: %s", sConfigPath.cstr(), sError.cstr() );
+
+	return true;
+}
+
+
 int main ( int argc, char ** argv )
 {
 	if ( argc<=1 )
@@ -1220,7 +1315,14 @@ int main ( int argc, char ** argv )
 
 	CSphConfigParser cp;
 	CSphConfig & hConf = cp.m_tConf;
-	sphLoadConfig ( sOptConfig, bQuiet, cp );
+	sphLoadConfig ( sOptConfig, bQuiet, true, cp );
+
+	// can't reuse the code from searchdconfig, using a simplified version here
+	LoadJsonConfig ( hConf, sOptConfig );
+
+	// no indexes in both .json and .conf?
+	if ( !hConf ( "index" ) )
+		sphDie ( "no indexes found in config file '%s'", sOptConfig );
 
 	while (true)
 	{
@@ -1319,10 +1421,13 @@ int main ( int argc, char ** argv )
 		if ( hConf["index"][sIndex].Exists ( "dict" ) )
 			bDictKeywords = ( hConf["index"][sIndex]["dict"]!="crc" );
 
+		// don't expect complete index declarations from indexes created with CREATE TABLE
+		bool bFromJson = !!hConf["index"][sIndex]("from_json");
+
 		if ( hConf["index"][sIndex]("type") && hConf["index"][sIndex]["type"]=="rt" )
 		{
 			CSphSchema tSchema;
-			if ( sphRTSchemaConfigure ( hConf["index"][sIndex], tSchema, sError, false ) )
+			if ( bFromJson || sphRTSchemaConfigure ( hConf["index"][sIndex], tSchema, sError, false ) )
 				pIndex = sphCreateIndexRT ( tSchema, sIndex.cstr(), 32*1024*1024, hConf["index"][sIndex]["path"].cstr(), bDictKeywords );
 		} else
 		{

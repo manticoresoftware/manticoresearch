@@ -14,6 +14,7 @@
 #include "searchdtask.h"
 #include "searchdaemon.h"
 #include "sphinxplugin.h"
+#include "searchdsql.h"
 
 /////////////////////////////////////////////////////////////////////////////
 // User variables stuff: store, add, provide hook

@@ -66,7 +66,7 @@ public:
 	virtual bool AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) = 0;
 
 	/// truncate index (that is, kill all data)
-	virtual bool Truncate ( bool bBinlogReplay, CSphString & sError ) = 0;
+	virtual bool Truncate ( CSphString & sError ) = 0;
 
 	virtual void Optimize ( ) = 0;
 
@@ -99,7 +99,7 @@ public:
 
 /// initialize subsystem
 class CSphConfigSection;
-void sphRTInit ( const CSphConfigSection & hSearchd, bool bTestMode, const CSphConfigSection * pCommon, ISphBinlog::CreateTable_fn pCreateTable, ISphBinlog::DropTable_fn pDropTable );
+void sphRTInit ( const CSphConfigSection & hSearchd, bool bTestMode, const CSphConfigSection * pCommon );
 void sphRTConfigure ( const CSphConfigSection & hSearchd, bool bTestMode );
 bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSchema, CSphString & sError, bool bSkipValidation );
 bool sphRTSchemaConfigure ( const CSphVector<CSphColumnInfo> & dFields, const CSphVector<CSphColumnInfo> & dAttrs, CSphSchema & tSchema, CSphString & sError, bool bSkipValidation );

@@ -18,6 +18,7 @@
 #include "sphinxstd.h"
 #include "sphinxexpr.h" // to remove?
 #include "indexsettings.h"
+#include "fileutils.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -136,8 +137,6 @@ uint64_t		sphFNV64 ( const void * pString );
 uint64_t		sphFNV64 ( const void * s, int iLen, uint64_t uPrev = SPH_FNV64_SEED );
 uint64_t		sphFNV64cont ( const void * pString, uint64_t uPrev );
 inline uint64_t		sphFNV64 ( const ByteBlob_t& dBlob ) { return sphFNV64 ( dBlob.first, dBlob.second ); }
-/// calculate file crc32
-bool			sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 );
 
 /// try to obtain an exclusive lock on specified file
 /// bWait specifies whether to wait
@@ -163,37 +162,6 @@ void			sphInterruptNow();
 
 /// check if we got interrupted
 bool			sphInterrupted();
-
-/// initialize IO statistics collecting
-void			sphInitIOStats ();
-
-/// clean up IO statistics collector
-void			sphDoneIOStats ();
-
-
-class CSphIOStats
-{
-public:
-	int64_t		m_iReadTime = 0;
-	DWORD		m_iReadOps = 0;
-	int64_t		m_iReadBytes = 0;
-	int64_t		m_iWriteTime = 0;
-	DWORD		m_iWriteOps = 0;
-	int64_t		m_iWriteBytes = 0;
-
-	~CSphIOStats ();
-
-	void		Start();
-	void		Stop();
-
-	void		Add ( const CSphIOStats & b );
-	bool		IsEnabled() { return m_bEnabled; }
-
-private:
-	bool		m_bEnabled = false;
-	CSphIOStats * m_pPrev = nullptr;
-};
-
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -409,7 +377,7 @@ public:
 	virtual void					Setup ( const CSphTokenizerSettings & tSettings );
 
 	/// create a tokenizer using the given settings
-	static ISphTokenizer *			Create ( const CSphTokenizerSettings & tSettings, const CSphEmbeddedFiles * pFiles, CSphString & sError );
+	static ISphTokenizer *			Create ( const CSphTokenizerSettings & tSettings, const CSphEmbeddedFiles * pFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sError );
 
 	/// create a token filter
 	static ISphTokenizer *			CreateMultiformFilter ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer );
@@ -621,6 +589,16 @@ struct CSphWordforms
 };
 
 
+// converts stopword/wordform/exception file paths for configless mode
+class FilenameBuilder_i
+{
+public:
+	virtual				~FilenameBuilder_i() {}
+
+	virtual CSphString	GetFullPath ( const CSphString & sName ) = 0;
+};
+
+
 /// abstract word dictionary interface
 struct CSphWordHit;
 class CSphAutofile;
@@ -769,13 +747,13 @@ using DictRefPtr_c = CSphRefcountedPtr<CSphDict>;
 CSphDict * GetStatelessDict ( CSphDict * pDict );
 
 /// traits dictionary factory (no storage, only tokenizing, lemmatizing, etc.)
-CSphDict * sphCreateDictionaryTemplate ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile, CSphString & sError );
+CSphDict * sphCreateDictionaryTemplate ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile, FilenameBuilder_i * pFilenameBuilder, CSphString & sError );
 
 /// CRC32/FNV64 dictionary factory
-CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile, int iSkiplistBlockSize, CSphString & sError );
+CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile, int iSkiplistBlockSize, FilenameBuilder_i * pFilenameBuilder, CSphString & sError );
 
 /// keyword-storing dictionary factory
-CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile, int iSkiplistBlockSize, CSphString & sError );
+CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile, int iSkiplistBlockSize, FilenameBuilder_i * pFilenameBuilder, CSphString & sError );
 
 /// clear wordform cache
 void sphShutdownWordforms ();
@@ -1558,7 +1536,7 @@ public:
 
 	bool					HasBlobAttrs() const;
 	int						GetCachedRowSize() const;
-	void					SetupStoredFields ( const StrVec_t & tFields );
+	void					SetupStoredFields ( const StrVec_t & dStored, const StrVec_t & dStoredOnly );
 	bool					HasStoredFields() const;
 	bool					IsFieldStored ( int iField ) const;
 
@@ -3394,8 +3372,8 @@ public:
 	virtual bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError ) = 0;
 
 	virtual void				FlushDeadRowMap ( bool bWaitComplete ) const {};
-	virtual bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, KillListTargets_t & tTargets, CSphString & sError ) const { return true; }
-	virtual bool				AlterKillListTarget ( KillListTargets_t & tTargets, CSphString & sError ) { return false; }
+	virtual bool				LoadKillList ( CSphFixedVector<DocID_t> * pKillList, KillListTargets_c & tTargets, CSphString & sError ) const { return true; }
+	virtual bool				AlterKillListTarget ( KillListTargets_c & tTargets, CSphString & sError ) { return false; }
 	virtual void				KillExistingDocids ( CSphIndex * pTarget ) {}
 	int							KillMulti ( const VecTraits_T<DocID_t> & dKlist ) override { return 0; }
 
@@ -3436,7 +3414,7 @@ public:
 	virtual void				SetMemorySettings ( const FileAccessSettings_t & tFileAccessSettings ) = 0;
 	virtual const FileAccessSettings_t & GetMemorySettings() const = 0;
 
-	virtual void				GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings );
+	virtual void				GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings ) const;
 
 public:
 	int64_t						m_iTID = 0;				///< last committed transaction id

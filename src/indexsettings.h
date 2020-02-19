@@ -15,6 +15,7 @@
 
 #include "sphinxstd.h"
 #include "sphinxutils.h"
+#include "fileutils.h"
 #include "sphinxexpr.h"
 
 typedef uint64_t SphWordID_t;
@@ -22,22 +23,13 @@ STATIC_SIZE_ASSERT ( SphWordID_t, 8 );
 
 class CSphWriter;
 class CSphReader;
+class FilenameBuilder_i;
 
 enum
 {
 	// where was TOKENIZER_SBCS=1 once
 	TOKENIZER_UTF8 = 2,
 	TOKENIZER_NGRAM = 3
-};
-
-
-struct CSphSavedFile
-{
-	CSphString		m_sFilename;
-	SphOffset_t		m_uSize = 0;
-	SphOffset_t		m_uCTime = 0;
-	SphOffset_t		m_uMTime = 0;
-	DWORD			m_uCRC32 = 0;
 };
 
 
@@ -57,8 +49,26 @@ struct CSphEmbeddedFiles
 };
 
 
-struct CSphTokenizerSettings
+class SettingsFormatter_c;
+
+class SettingsWriter_c
 {
+public:
+	virtual			~SettingsWriter_c() {}
+
+	virtual void	Dump ( StringBuilder_c & tBuf, FilenameBuilder_i * pFilenameBuilder ) const;
+	virtual void	DumpCfg ( FILE * pFile, FilenameBuilder_i * pFilenameBuilder ) const;
+	virtual void	DumpReadable ( FILE * pFile, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const;
+	virtual void	DumpCreateTable ( StringBuilder_c & tBuf, FilenameBuilder_i * pFilenameBuilder ) const;
+
+protected:
+	virtual void	Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const = 0;
+};
+
+
+class CSphTokenizerSettings : public SettingsWriter_c
+{
+public:
 	int				m_iType { TOKENIZER_UTF8 };
 	CSphString		m_sCaseFolding;
 	int				m_iMinWordLen = 1;
@@ -72,14 +82,17 @@ struct CSphTokenizerSettings
 
 	void			Setup ( const CSphConfigSection & hIndex, CSphString & sWarning );
 	bool			Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning );
-	void			Dump ( StringBuilder_c & tBuf ) const;
-	void			DumpCfg ( FILE * pFile ) const;
-	void			DumpReadable ( FILE * pFile, const CSphEmbeddedFiles & tEmbeddedFiles ) const;
+
+	void			DumpReadable ( FILE * pFile, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const override;
+
+protected:
+	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
 };
 
 
-struct CSphDictSettings
+class CSphDictSettings : public SettingsWriter_c
 {
+public:
 	CSphString		m_sMorphology;
 	CSphString		m_sMorphFields;
 	CSphString		m_sStopwords;
@@ -89,24 +102,27 @@ struct CSphDictSettings
 	bool			m_bStopwordsUnstemmed = false;
 	CSphString		m_sMorphFingerprint;		///< not used for creation; only for a check when loading
 
-	void			Setup ( const CSphConfigSection & hIndex, CSphString & sWarning );
+	void			Setup ( const CSphConfigSection & hIndex, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
 	void			Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning );
-	void			Dump ( StringBuilder_c & tBuf ) const;
-	void			DumpCfg ( FILE * pFile ) const;
-	void			DumpReadable ( FILE * pFile, const CSphEmbeddedFiles & tEmbeddedFiles ) const;
+
+	void			DumpReadable ( FILE * pFile, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const override;
+
+protected:
+	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
 };
 
 
-struct CSphFieldFilterSettings
+class CSphFieldFilterSettings : public SettingsWriter_c
 {
+public:
 	StrVec_t		m_dRegexps;
 
 	bool			Setup  ( const CSphConfigSection & hIndex, CSphString & sWarning );
 	void			Load ( CSphReader & tReader );
 	void			Save ( CSphWriter & tWriter ) const;
-	void			Dump ( StringBuilder_c & tBuf ) const;
-	void			DumpCfg ( FILE * pFile ) const;
-	void			DumpReadable ( FILE * pFile ) const;
+
+protected:
+	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
 };
 
 
@@ -125,15 +141,15 @@ struct KillListTarget_t
 };
 
 
-struct KillListTargets_t
+class KillListTargets_c : public SettingsWriter_c
 {
+public:
 	CSphVector<KillListTarget_t>	m_dTargets;
 
-
 	bool			Parse ( const CSphString & sTargets, const char * szIndexName, CSphString & sError );
-	void			Dump ( StringBuilder_c & tBuf ) const;
-	void			DumpCfg ( FILE * pFile ) const;
-	void			DumpReadable ( FILE * pFile ) const;
+
+protected:
+	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
 };
 
 /// wordpart processing type
@@ -158,9 +174,10 @@ struct CSphSourceSettings
 	bool	m_bIndexSP = false;			///< whether to index sentence and paragraph delimiters
 	bool	m_bIndexFieldLens = false;	///< whether to index field lengths
 
-	StrVec_t m_dPrefixFields;	///< list of prefix fields
-	StrVec_t m_dInfixFields;	///< list of infix fields
-	StrVec_t m_dStoredFields;	///< list of stored fields
+	StrVec_t m_dPrefixFields;		///< list of prefix fields
+	StrVec_t m_dInfixFields;		///< list of infix fields
+	StrVec_t m_dStoredFields;		///< list of stored fields
+	StrVec_t m_dStoredOnlyFields;	///< list of "fields" that are stored but not indexed
 
 	ESphWordpart GetWordpart ( const char * sField, bool bWordDict );
 };
@@ -216,8 +233,9 @@ enum ESphBigram
 };
 
 
-struct CSphIndexSettings : CSphSourceSettings, DocstoreSettings_t
+class CSphIndexSettings : public CSphSourceSettings, public DocstoreSettings_t, public SettingsWriter_c
 {
+public:
 	ESphHitFormat	m_eHitFormat = SPH_HIT_FORMAT_PLAIN;
 	bool			m_bHtmlStrip = false;
 	CSphString		m_sHtmlIndexAttrs;
@@ -230,7 +248,7 @@ struct CSphIndexSettings : CSphSourceSettings, DocstoreSettings_t
 	SphOffset_t		m_tBlobUpdateSpace {0};
 	int				m_iSkiplistBlockSize {32};
 
-	KillListTargets_t m_tKlistTargets;	///< list of indexes to apply killlist to
+	KillListTargets_c m_tKlistTargets;	///< list of indexes to apply killlist to
 
 	ESphBigram		m_eBigramIndex = SPH_BIGRAM_NONE;
 	CSphString		m_sBigramWords;
@@ -242,9 +260,9 @@ struct CSphIndexSettings : CSphSourceSettings, DocstoreSettings_t
 	CSphString		m_sIndexTokenFilter;	///< indexing time token filter spec string (pretty useless for disk, vital for RT)
 
 	bool			Setup ( const CSphConfigSection & hIndex, const char * szIndexName, CSphString & sWarning, CSphString & sError );
-	void			Dump ( StringBuilder_c & tBuf ) const;
-	void			DumpCfg ( FILE * pFile ) const;
-	void			DumpReadable ( FILE * pFile ) const;
+
+protected:
+	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
 
 private:
 	void			ParseStoredFields ( const CSphConfigSection & hIndex );
@@ -262,28 +280,39 @@ struct RtTypedAttr_t
 int						GetNumRtTypes();
 const RtTypedAttr_t &	GetRtType ( int iType );
 
+
 struct CreateTableSettings_t
 {
 	bool						m_bIfNotExists = false;
 	CSphVector<CSphColumnInfo>	m_dAttrs;
 	CSphVector<CSphColumnInfo>	m_dFields;
 	CSphVector<NameValueStr_t>	m_dOpts;
-
-	bool Load ( CSphReader & tReader );
-	void Save ( CSphWriter & tWriter ) const;
 };
 
 
 class IndexSettingsContainer_c
 {
 public:
-	void			Populate ( const CreateTableSettings_t & tCreateTable );
-	void			Add ( const char * szName, const CSphString & sValue );
+	bool			Populate ( const CreateTableSettings_t & tCreateTable );
+	bool			Add ( const char * szName, const CSphString & sValue );
+	bool			Add ( const CSphString & sName, const CSphString & sValue );
+	CSphString		Get ( const CSphString & sName ) const;
+	bool			Contains ( const char * szName ) const;
+	StrVec_t 		GetFiles() const;
 
-	const CSphConfigSection & AsCfg() const;
+	const CSphConfigSection &	AsCfg() const;
+	const CSphString &			GetError() const { return m_sError; }
 
 private:
 	CSphConfigSection m_hCfg;
+
+	StrVec_t		m_dStopwordFiles;
+	StrVec_t		m_dExceptionFiles;
+	StrVec_t		m_dWordformFiles;
+	CSphString		m_sError;
+
+	bool			AddOption ( const CSphString & sName, const CSphString & sValue );
+	void			RemoveKeys ( const CSphString & sName );
 };
 
 
@@ -296,7 +325,12 @@ void		SaveTokenizerSettings ( CSphWriter & tWriter, const ISphTokenizer * pToken
 void		SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, bool bForceWordDict, int iEmbeddedLimit );
 
 /// try to set dictionary, tokenizer and misc settings for an index (if not already set)
-bool		sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError, bool bStripFile=false );
-CSphString	BuildCreateTable ( const CSphString & sIndex, const CSphSchema & tSchema );
+bool		sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError, bool bStripFile=false, FilenameBuilder_i * pFilenameBuilder=nullptr );
+CSphString	BuildCreateTable ( const CSphIndex * pIndex, const CSphSchema & tSchema );
+
+// daemon-level callback
+using CreateFilenameBuilder_fn = FilenameBuilder_i * (*)( const char * szIndex );
+void		SetIndexFilenameBuilder ( CreateFilenameBuilder_fn pBuilder );
+CreateFilenameBuilder_fn GetIndexFilenameBuilder();
 
 #endif // _indexsettings_

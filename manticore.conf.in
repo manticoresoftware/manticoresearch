@@ -349,8 +349,14 @@ index test1
 	# optional, default is 'keywords'
 	dict			= keywords
 
-	# store content of fields
+	# Original document text from these fields will be stored in the index and
+	# can be retrieved when searching. Optional, default is empty.
 	stored_fields = title,content
+
+	# A list of fields that will be stored in the index but will be not indexed.
+	# Optional, default is empty.
+	#
+	# stored_only_fields = comments
 	
 	# a list of morphology preprocessors to apply
 	# optional, default is empty
@@ -632,11 +638,6 @@ index test1
 	# default is mmap
 	# access_blob_attrs	= mmap
 
-	# Original document text from these fields will be stored in the index and
-	# can be retrieved when searching. Optional, default is empty.
-	#
-	# stored_fields = subject, content
-
 	# The size of the block of documents used by document storage. Optional,
 	# default is 16k.
 	#
@@ -747,8 +748,10 @@ index testrt
 	rt_field		= title
 	rt_field		= content
 	
-	# store content of fields
+	# Original document text from these fields will be stored in the index and
+	# can be retrieved when searching. Optional, default is empty.
 	stored_fields = title,content
+
 	# unsigned integer attribute declaration
 	# multi-value (an arbitrary number of attributes is allowed), optional
 	# declares an unsigned 32-bit attribute

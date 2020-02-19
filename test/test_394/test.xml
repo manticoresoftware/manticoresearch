@@ -17,12 +17,28 @@ source src_a1
 	sql_query		= SELECT id, title, body1,body2,body3,body4,body5,body6 FROM test_table
 }
 
+source empty
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = select * from (select 0, 'text' as title ) t where 0;
+}
+
 index loc1
 {
 	source			= src_a1
 	stored_fields	= title, body1,body2,body3,body4,body5,body6
 	path			= <data_path/>/a1
 }
+
+index loc2
+{
+	source			= empty
+	stored_fields	= title
+	path			= <data_path/>/a2
+}
+
 </config>
 
 <db_create>
@@ -51,6 +67,7 @@ insert into test_table values
 
 <sphqueries>
 <sphinxql>select * from loc1</sphinxql>
+<sphinxql>select * from loc2</sphinxql>
 </sphqueries>
 
 </test>

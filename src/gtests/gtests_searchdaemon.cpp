@@ -122,7 +122,7 @@ class T_ParseAddressPort :  public CustomLogger_c
 {
 protected:
 
-	WarnInfo_t tInfo {"tstidx", "tstagent" };
+	WarnInfo_c tInfo {"tstidx", "tstagent" };
 
 	void ParserTest ( const char * sInExpr, // incoming line
 		bool bExpectedResult,				// expect parsed or not

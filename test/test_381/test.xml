@@ -15,18 +15,6 @@ searchd
 	data_dir = <data_path path="data0"></data_path>
 	server_id = <agent_id/>
 }
-
-index pq1
-{
-	type = percolate
-	path			= <data_path/>/pq1
-}
-
-index pq2
-{
-	type = percolate
-	path			= <data_path/>/pq2
-}
 </agent0>
 <agent1>
 searchd
@@ -50,6 +38,8 @@ searchd
 
 <sphqueries>
 <!-- request to node 0 -->
+<sphinxql d="0">create table pq1 type='pq'</sphinxql>
+<sphinxql d="0">create table pq2 type='pq'</sphinxql>
 <sphinxql d="0">set autocommit=0</sphinxql>
 <sphinxql d="0">insert into pq1 (id,query,tags) values (5, 'test', 't 5'), (6, 'test', 't 6'), (7, 'test', 't 7')</sphinxql>
 <sphinxql d="0">commit</sphinxql>
@@ -96,6 +86,12 @@ searchd
 
 <!-- stream to node 2 -->
 <sphinxql d="2">SELECT * FROM test:pq2</sphinxql>
+
+<!-- cleanup -->
+<sphinxql d="0">ALTER CLUSTER test DROP pq1</sphinxql>
+<sphinxql d="0">ALTER CLUSTER test DROP pq2</sphinxql>
+<sphinxql d="0">drop table pq1</sphinxql>
+<sphinxql d="0">drop table pq2</sphinxql>
 
 </sphqueries>
 

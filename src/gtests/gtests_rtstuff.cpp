@@ -40,7 +40,7 @@ void TestRTInit ()
 {
 	CSphConfigSection tRTConfig;
 
-	sphRTInit ( tRTConfig, true, nullptr, nullptr, nullptr );
+	sphRTInit ( tRTConfig, true, nullptr );
 	sphRTConfigure ( tRTConfig, true );
 
 	SmallStringHash_T<CSphIndex *> hIndexes;
@@ -236,7 +236,7 @@ class RTN : public RT, public ::testing::WithParamInterface<DWORD>
 TEST_P ( RTN, WeightBoundary )
 {
 	using namespace testing;
-	DictRefPtr_c pDict { sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "weight", false, 32, sError ) };
+	DictRefPtr_c pDict { sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "weight", false, 32, nullptr, sError ) };
 
 	tCol.m_sName = "id";
 	tCol.m_eAttrType = SPH_ATTR_BIGINT;
@@ -349,7 +349,7 @@ TEST_F ( RT, RankerFactors )
 	tCol.m_eAttrType = SPH_ATTR_INTEGER;
 	tSrcSchema.AddAttr ( tCol, true );
 
-	auto pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", false, 32, sError );
+	auto pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", false, 32, nullptr, sError );
 
 	auto pSrc = new MockTestDoc_c ( tSrcSchema, ( BYTE ** ) dFields, sizeof ( dFields ) / sizeof ( dFields[0] ) / 2
 									, 2 );
@@ -377,7 +377,7 @@ TEST_F ( RT, RankerFactors )
 	auto pIndex = sphCreateIndexRT ( tSchema, "testrt", 128 * 1024, RT_INDEX_FILE_NAME, false );
 
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
-	pIndex->SetDictionary ( sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", false, 32, sError ) );
+	pIndex->SetDictionary ( sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", false, 32, nullptr, sError ) );
 	pIndex->PostSetup ();
 	Verify ( pIndex->Prealloc ( false ) );
 
@@ -517,7 +517,7 @@ TEST_F ( RT, SendVsMerge )
 {
 	using namespace testing;
 
-	auto pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", false, 32, sError );
+	auto pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", false, 32, nullptr, sError );
 
 	tCol.m_sName = "id";
 	tCol.m_eAttrType = SPH_ATTR_BIGINT;

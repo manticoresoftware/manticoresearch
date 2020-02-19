@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>configless vs distributed</name>
+<skip_indexer/>
+<num_agents>2</num_agents>
+
+<config>
+<agent0>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"></data_path>
+	server_id = <agent_id/>
+}
+</agent0>
+<agent1>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data1"></data_path>
+	server_id = <agent_id/>
+}
+</agent1>
+</config>
+
+<sphqueries>
+
+<sphinxql d="0">create table test1 ( title text, tag uint )</sphinxql>
+<sphinxql d="0">insert into test1 values (1,'word1',100)</sphinxql>
+<sphinxql d="0">insert into test1 values (2,'word2',200)</sphinxql>
+<sphinxql d="0">create table test2 ( title text, tag uint )</sphinxql>
+<sphinxql d="0">insert into test2 values (3,'word3',300)</sphinxql>
+<sphinxql d="0">insert into test2 values (4,'word4',400)</sphinxql>
+<sphinxql d="0">create table distr type='distributed' local='test1' local='test2'</sphinxql>
+
+<sphinxql d="0">show tables</sphinxql>
+<sphinxql d="0">desc distr</sphinxql>
+
+<sphinxql d="0">select * from distr</sphinxql>
+
+<sphinxql d="0">drop table distr</sphinxql>
+
+<sphinxql d="0">show tables</sphinxql>
+
+<sphinxql d="1">create table distr type='distributed' agent='<agent0_address/>:test1'</sphinxql>
+<sphinxql d="1">show tables</sphinxql>
+<sphinxql d="1">select * from distr</sphinxql>
+<sphinxql d="1">drop table distr</sphinxql>
+
+<sphinxql d="0">create table distr type='distributed' local='test1' local='test2'</sphinxql>
+<sphinxql d="0">drop table test1</sphinxql>
+<sphinxql d="0">show tables</sphinxql>
+<sphinxql d="0">select * from distr</sphinxql>
+<sphinxql d="0">drop table test2</sphinxql>
+
+</sphqueries>
+
+</test>

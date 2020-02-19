@@ -41,6 +41,44 @@
 #define SPH_O_READ	( O_RDONLY | SPH_O_BINARY )
 #define SPH_O_NEW	( O_CREAT | O_RDWR | O_TRUNC | SPH_O_BINARY )
 
+class CSphIOStats
+{
+public:
+	int64_t		m_iReadTime = 0;
+	DWORD		m_iReadOps = 0;
+	int64_t		m_iReadBytes = 0;
+	int64_t		m_iWriteTime = 0;
+	DWORD		m_iWriteOps = 0;
+	int64_t		m_iWriteBytes = 0;
+
+				~CSphIOStats();
+
+	void		Start();
+	void		Stop();
+
+	void		Add ( const CSphIOStats & b );
+	bool		IsEnabled() { return m_bEnabled; }
+
+private:
+	bool		m_bEnabled = false;
+	CSphIOStats * m_pPrev = nullptr;
+};
+
+
+class CSphReader;
+
+struct CSphSavedFile
+{
+	CSphString		m_sFilename;
+	SphOffset_t		m_uSize = 0;
+	SphOffset_t		m_uCTime = 0;
+	SphOffset_t		m_uMTime = 0;
+	DWORD			m_uCRC32 = 0;
+
+	bool			Collect ( const char * szFilename, CSphString * pError=nullptr );
+	void			Read ( CSphReader & tReader, const char * szFilename, bool bSharedStopwords, CSphString * sWarning=nullptr );
+};
+
 
 /// open file for reading
 int				sphOpenFile ( const char * sFile, CSphString & sError, bool bWrite );
@@ -58,16 +96,36 @@ int64_t			sphGetFileSize ( const CSphString & sFile, CSphString * sError = nullp
 /// truncate file
 bool			sphTruncate ( int iFD );
 
+/// initialize IO statistics collecting
+void			sphInitIOStats();
+
+/// clean up IO statistics collector
+void			sphDoneIOStats();
+
+CSphIOStats *	GetIOStats();
+
+/// calculate file crc32
+bool			sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 );
+
 // unwind different tricks like "../../../etc/passwd"
 CSphString		sphNormalizePath ( const CSphString& sOrigPath );
 CSphString		sphGetCwd();
 
+// a tiny wrapper over ::read() which additionally performs IO stats update
+int64_t			sphRead ( int iFD, void * pBuf, size_t iCount );
+
+/// simple write wrapper
+/// simplifies partial write checks, and also supresses "fortified" glibc warnings
+bool			sphWrite ( int iFD, const void * pBuf, size_t iSize );
+
 StrVec_t		FindFiles ( const char * szPath, bool bNeedDirs=false );
 bool			MkDir ( const char * szDir );
+bool			CopyFile ( const CSphString & sSource, const CSphString & sDest, CSphString & sError );
 
 // check if path exists and also check if daemon can write there
 bool			CheckPath ( const CSphString & sPath, bool bCheckWrite, CSphString & sError, const char * sCheckFileName="tmp" );
 
+CSphString &	StripPath ( CSphString & sPath );
 
 template < typename T >
 class CSphMappedBuffer : public CSphBufferTrait < T >

@@ -85,7 +85,7 @@ static FileAccessSettings_t g_tDummyFASettings;
 class PercolateIndex_c : public PercolateIndex_i
 {
 public:
-	explicit PercolateIndex_c ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath );
+	PercolateIndex_c ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath );
 	~PercolateIndex_c () override;
 
 	bool AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFields, CSphMatch & tDoc,
@@ -105,7 +105,7 @@ public:
 	RtAccum_t * CreateAccum ( RtAccum_t * pAccExt, CSphString & sError ) override;
 	ISphTokenizer * CloneIndexingTokenizer() const override { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 	void SaveMeta ( bool bShutdown );
-	bool Truncate ( bool AddToBinlog, CSphString & ) override;
+	bool Truncate ( CSphString & ) override;
 
 	// RT index stub
 	bool MultiQuery ( const CSphQuery *, CSphQueryResult *, int, ISphMatchSorter **, const CSphMultiQueryArgs & ) const override;
@@ -153,7 +153,7 @@ public:
 	void				SetMemorySettings ( const FileAccessSettings_t & ) override {}
 	const FileAccessSettings_t & GetMemorySettings() const override { return g_tDummyFASettings; }
 
-	void				IndexDeleted() override {}
+	void				IndexDeleted() override { m_bIndexDeleted = true; }
 	void				ProhibitSave() override { m_bSaveDisabled = true; }
 	void				EnableSave() override { m_bSaveDisabled = false; }
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
@@ -172,6 +172,7 @@ private:
 	int64_t							m_tmSaved = 0;
 	bool							m_bSaveDisabled = false;
 	bool							m_bHasFiles = false;
+	bool							m_bIndexDeleted = false;
 
 	PQRefVector_t					m_pStored { new PQVector_t() };
 	mutable CSphMutex				m_tLock;
@@ -731,14 +732,22 @@ PercolateIndex_c::~PercolateIndex_c ()
 {
 	bool bValid = m_pTokenizer && m_pDict;
 	if ( bValid )
-		SaveMeta ( true );
+		SaveMeta ( sphGetShutdown() );
 
 	{
 		ScopedMutex_t tWriterLock ( m_tWriter );
 		PQRefVector_t tEmpty { new PQVector_t() };
 		SetStored ( tEmpty );
 	}
+
 	SafeClose ( m_iLockFD );
+
+	if ( m_bIndexDeleted )
+	{
+		CSphString sFile;
+		sFile.SetSprintf ( "%s.meta", m_sFilename.cstr() );
+		::unlink ( sFile.cstr() );
+	}
 }
 
 RtAccum_t * PercolateIndex_c::CreateAccum ( RtAccum_t * pAccExt, CSphString & sError )
@@ -2169,13 +2178,16 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath )
 			StripPath ( tDictSettings.m_dWordforms[i] );
 	}
 
+	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
+	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
+
 	// recreate tokenizer
-	m_pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, m_sLastError );
+	m_pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder.Ptr(), m_sLastError );
 	if ( !m_pTokenizer )
 		return false;
 
 	// recreate dictionary
-	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, m_sLastError );
+	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder.Ptr(), m_sLastError );
 	if ( !m_pDict )
 	{
 		m_sLastError.SetSprintf ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
@@ -2276,7 +2288,7 @@ void PercolateIndex_c::SaveMeta ( bool bShutdown )
 		sphWarning ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)", sMetaNew.cstr(), sMeta.cstr(), errno, strerrorm( errno ) );
 }
 
-bool PercolateIndex_c::Truncate ( bool /*bBinlogReplay*/, CSphString & sError )
+bool PercolateIndex_c::Truncate ( CSphString & sError )
 {
 	ScopedMutex_t tWriterLock ( m_tWriter );
 	PQRefVector_t tEmpty { new PQVector_t() };

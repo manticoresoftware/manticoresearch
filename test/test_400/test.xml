@@ -18,10 +18,11 @@ searchd
 </config>
 
 <sphqueries>
+
 <sphinxql>show tables</sphinxql>
-<sphinxql>create table test1 ( title field, tag integer )</sphinxql>
-<sphinxql>create table test1 ( title field, tag integer, tag2 integer )</sphinxql>
-<sphinxql>create table if not exists test1 ( title field, tag integer, tag2 integer )</sphinxql>
+<sphinxql>create table test1 ( title text, tag integer )</sphinxql>
+<sphinxql>create table test1 ( title text, tag integer, tag2 integer )</sphinxql>
+<sphinxql>create table if not exists test1 ( title text, tag integer, tag2 integer )</sphinxql>
 <sphinxql>show tables</sphinxql>
 <sphinxql>desc test1</sphinxql>
 <sphinxql>insert into test1 values (1,'hello',100)</sphinxql>
@@ -34,25 +35,51 @@ searchd
 <sphinxql>drop table test1</sphinxql>
 <sphinxql>drop table if exists test1</sphinxql>
 
-<sphinxql>create table test2 ( title field indexed, body field stored indexed, tag integer, weight float, flags bit(2) )</sphinxql>
+<sphinxql>create table test2 ( title text indexed, body text stored indexed, tag integer, weight float, flags bit(2) )</sphinxql>
 <sphinxql>desc test2</sphinxql>
 <sphinxql>show create table test2</sphinxql>
 <sphinxql>insert into test2 values (1,'title','body',100, 1.1, 1)</sphinxql>
 <sphinxql>select * from test2</sphinxql>
 <sphinxql>drop table test2</sphinxql>
 
-<sphinxql>create table if not exists test3 ( title field, tag integer, stored_fields='title' )</sphinxql>
-<sphinxql>create table if not exists test3 ( title field, tag integer )</sphinxql>
+<sphinxql>create table if not exists test3 ( title text, tag integer ) stored_fields='title'</sphinxql>
+<sphinxql>create table if not exists test3 ( title text, tag integer )</sphinxql>
 <sphinxql>insert into test3 values (1,'walked',100)</sphinxql>
 <sphinxql>call keywords ('walked', 'test3')</sphinxql>
 <sphinxql>select * from test3 where match('walk')</sphinxql>
 <sphinxql>drop table test3</sphinxql>
 
-<sphinxql>create table test4 ( title field, tag integer, morphology='stem_en' )</sphinxql>
+<sphinxql>create table test4 ( title text, tag integer ) morphology='stem_en'</sphinxql>
 <sphinxql>insert into test4 values (1,'walked',100)</sphinxql>
 <sphinxql>call keywords ('walked', 'test4')</sphinxql>
 <sphinxql>select * from test4 where match('walk')</sphinxql>
+<sphinxql>show create table test4</sphinxql>
 <sphinxql>drop table test4</sphinxql>
+
+<sphinxql>create table test5 ( field1 text indexed, field2 text stored, field3 text stored indexed )</sphinxql>
+<sphinxql>desc test5</sphinxql>
+<sphinxql>show create table test5</sphinxql>
+<sphinxql>insert into test5 values (1,'indexed1','stored2','stored3 indexed3')</sphinxql>
+<sphinxql>select * from test5 where match('indexed1')</sphinxql>
+<sphinxql>select * from test5 where match('stored2')</sphinxql>
+<sphinxql>select * from test5 where match('indexed3')</sphinxql>
+<sphinxql>drop table test5</sphinxql>
+
+<sphinxql>create table pq1 ( title text ) type='pq'</sphinxql>
+<sphinxql>show tables</sphinxql>
+<sphinxql>insert into pq1 values('test')</sphinxql>
+<sphinxql>insert into pq1 values( 'test | cat' )</sphinxql>
+<sphinxql>call pq ('pq1', 'test 1', 1 as docs, 0 as docs_json )</sphinxql>
+
+<sphinxql>drop table pq1</sphinxql>
+
+<sphinxql>show tables</sphinxql>
+<sphinxql>create table idx(f text) morphology='icu_chinese' charset_table='non-cjk,cjk'</sphinxql>
+<sphinxql>show tables</sphinxql>
+<sphinxql>create table idx(f text) morphology='icu_chinese' charset_table='non_cjk,cjk'</sphinxql>
+<sphinxql>show tables</sphinxql>
+<sphinxql>drop table idx</sphinxql>
+
 </sphqueries>
 
 </test>

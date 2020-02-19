@@ -595,11 +595,11 @@ int main ( int argc, char ** argv )
 	tDictSettings.m_bWordDict = false;
 
 	TokenizerRefPtr_c pTok {sphCreateUTF8Tokenizer()};
-	DictRefPtr_c pDict {sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt1", false, 32, sError )};
+	DictRefPtr_c pDict {sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt1", false, 32, nullptr, sError )};
 	CSphSource_MySQL * pSrc = SpawnSource ( "test1", hSources, pTok, pDict );
 
 	TokenizerRefPtr_c pTok2 {sphCreateUTF8Tokenizer()};
-	DictRefPtr_c pDict2 {sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt2", false, 32, sError )};
+	DictRefPtr_c pDict2 {sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt2", false, 32, nullptr, sError )};
 	CSphSource_MySQL * pSrc2 = SpawnSource ( "test2", hSources, pTok2, pDict2 );
 
 	CSphSchema tSrcSchema;
@@ -616,7 +616,7 @@ int main ( int argc, char ** argv )
 	g_iFieldsCount = tSrcSchema.GetFieldsCount();
 
 	CSphConfigSection tRTConfig;
-	sphRTInit ( tRTConfig, true, nullptr, nullptr, nullptr );
+	sphRTInit ( tRTConfig, true, nullptr );
 	sphRTConfigure ( tRTConfig, true );
 	SmallStringHash_T< CSphIndex * > dTemp;
 	sphReplayBinlog ( dTemp );

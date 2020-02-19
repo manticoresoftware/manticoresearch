@@ -43,6 +43,15 @@ index test1
 	  <Variant>	docstore_compression = lz4hc </Variant>
     </Dynamic>
 }
+
+index test2
+{
+	source			= test1
+	path			= <data_path/>/test2
+	stored_fields	= body
+	stored_only_fields = title
+}
+
 </config>
 
 <db_create>
@@ -71,6 +80,10 @@ insert into test_table values
 <sphinxql>select body from test1 where id=3</sphinxql>
 <sphinxql>select title, body from test1 where id=5</sphinxql>
 <sphinxql>select * from test1 where id=5</sphinxql>
+
+<sphinxql>desc test2</sphinxql>
+<sphinxql>select * from test2 where match('document')</sphinxql>
+<sphinxql>select * from test2 where match('room')</sphinxql>
 </sphqueries>
 
 </test>

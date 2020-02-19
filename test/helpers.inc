@@ -1079,7 +1079,6 @@ class SphinxConfig
 	private $_dynamic_entries;
 	private $_queries;
 	private $_sphqueries;
-	private $_httpqueries;
 	private $_query_settings;
 	private $_query_attributes;
 	private $_indexer_runs;
@@ -1098,8 +1097,6 @@ class SphinxConfig
 	private $_results_model;
 	private $_prereqs;
 	private $_config;				///< config DOM node
-	private $_use_sphinxql;			///< true, if sphinxql queries exist
-	private $_use_http;				///< true if http queries exist
 	private $_indexdata;			///< data for use "insert into" instead of run indexer
 	private $_connection;			///< mysql connection (since we cound use mysql ans sqphinxql together)
 	private $_testdir;				///< the path to the directory with current test (namely for accessing data without knowing the test name)
@@ -1117,7 +1114,6 @@ class SphinxConfig
 		$this->_dynamic_entries = array ();
 		$this->_queries 		= array ();
 		$this->_sphqueries		= array ();
-		$this->_httpqueries		= array ();
 		$this->_results			= array ();
 		$this->_results_model	= array ();
 		$this->_query_attributes = array ();
@@ -1139,8 +1135,6 @@ class SphinxConfig
 		$this->_custom_test		= "";
 		$this->_compat098		= false;
 		$this->_skip_indexer	= false;
-		$this->_use_sphinxql	= false;
-		$this->_use_http		= false;
 		$this->_indexdata		= array ();
 		$this->_connection		= false;
 		$this->_testdir			= "";
@@ -1159,8 +1153,6 @@ class SphinxConfig
 	function Port ()						{ return $this->_sd_port; }
 	function Requires ( $name )		{ return isset($this->_prereqs[$name]); }
 	function IsQueryTest ()			{ return strlen ( $this->_custom_test ) == 0;	}
-	function IsSphinxqlTest ()		{ return $this->_use_sphinxql; }
-	function IsHttpTest ()			{ return $this->_use_http; }
 	function IsNeedDB()				{ return ! ( empty ( $this->_db_drop )
 										&& empty ( $this->_db_create )
 										&& empty ( $this->_db_insert ) ); }
@@ -1180,7 +1172,10 @@ class SphinxConfig
 	function IsSkipIndexer ()		{ return $this->_skip_indexer; }
 	function ResetResults ()				{ $this->_results = array (); }
 
-	function SetTestDir ( $dir )	{ $this->_testdir = $dir; }
+	function SetTestDir ( $dir )
+	{
+		$this->_testdir = str_replace ( "\\", "/", $dir );
+	}
 
 	function GetLocal ( $key )
 	{
@@ -1341,64 +1336,84 @@ class SphinxConfig
 		return $vals;
 	}
 
-	function ExtractQueries( $xml, $encoding, $section_name, $item_name, $use_meta, $metaindexes, &$flag )
+	function GenerateQueryText ( $node )
 	{
-		$queries = array();
+		global $agents;
+		$result = "";
 
-		// extract queries
-		$qs = GetFirstChild ( $xml, $section_name );
-		if ( $qs )
+		$nodename = strtolower ( $node->nodeName );
+		switch ( $nodename )
 		{
-			$flag = true;
-
-			// new and cool
-			if ( $use_meta )
-			{
-				foreach ( ChildrenArray ( $qs, $item_name ) as $q )
-				{
-					$attrs = $this->SphinxQLAttr($q);
-					$was_replaced = false;
-					foreach ( $metaindexes as $name=>$indexes )
-						foreach ($indexes as $index)
-						{
-							$foo = 0;
-							$res = str_replace ( $name, $index, GetVariants ( $q, $encoding ), $foo );
-							if ($foo>0)
-							{
-								$was_replaced = true;
-								if (!$attrs)
-									foreach ($res as $r)
-										$queries[]=$r;
-								else
-									foreach ($res as $r)
-										$queries[]=array($r,$attrs);
-							}
-						}
-					if (!$was_replaced) // no metaindexes; emit 'as is'
-					{
-						if (!$attrs)
-							foreach ( GetVariants ( $q, $encoding ) as $r)
-								$queries[]=$r;
-						else
-							foreach ( GetVariants ( $q, $encoding ) as $r)
-								$queries[]=array($r,$attrs);
-					}
-				}
-			} else
-			{
-				foreach ( ChildrenArray ( $qs, $item_name ) as $q )
-				{
-					$attrs = $this->SphinxQLAttr($q);
-					if (!$attrs)
-						$queries[] = iconv('utf-8', $encoding, $q->nodeValue);
-					else
-						$queries[] = array(iconv('utf-8', $encoding, $q->nodeValue),$attrs);
-				}
-			}
+			case "#text":			return $node->nodeValue;
+			case "#cdata-section":	return $node->nodeValue;
+			case "static":			return $node->nodeValue;
+			case "this_test":		return $this->_testdir;
+			case "agent0_address":	return $agents[0]["address"].":".$agents[0]["port"];
+			case "agent1_address":	return $agents[1]["address"].":".$agents[1]["port"];
+			case "agent2_address":	return $agents[2]["address"].":".$agents[2]["port"];
 		}
 
-		return $queries;
+		foreach ( ChildrenArray($node) as $child )
+			$result.= $this->GenerateQueryText ( $child );
+
+		return $result;
 	}
+
+	function AddQuery ( $q, $encoding, $use_meta, $metaindexes, $is_http )
+	{
+		$attrs = $this->SphinxQLAttr($q);
+		if ( $use_meta )
+		{
+			$was_replaced = false;
+			foreach ( $metaindexes as $name=>$indexes )
+				foreach ($indexes as $index)
+				{
+					$foo = 0;
+					$res = str_replace ( $name, $index, GetVariants ( $q, $encoding ), $foo );
+					if ($foo>0)
+					{
+						$was_replaced = true;
+						foreach ($res as $r)
+							$this->_sphqueries[]=array($r,$attrs, $is_http);
+					}
+				}
+
+			if (!$was_replaced) // no metaindexes; emit 'as is'
+			{
+				foreach ( GetVariants ( $q, $encoding ) as $r )
+					$this->_sphqueries[]=array($r, $attrs, $is_http);
+			}
+		}
+		else
+		{
+			$query_text = $this->GenerateQueryText ( $q );
+			$this->_sphqueries[] = array ( iconv('utf-8', $encoding, $query_text), $attrs, $is_http );
+		}
+	}
+
+
+	function AddQueries ( $queries, $item_name, $encoding, $use_meta, $metaindexes, $is_http )
+	{
+		foreach ( ChildrenArray ( $queries, $item_name ) as $q )
+			$this->AddQuery ( $q, $encoding, $use_meta, $metaindexes, $is_http );
+	}
+
+
+	function ExtractQueries ( $node, $encoding, $use_meta, $metaindexes )
+	{
+		if ( !empty($node) && $node->hasChildNodes() )
+			for ( $i=0; $i<$node->childNodes->length; $i++ )
+			{
+				$child = $node->childNodes->item ( $i );
+				
+				$lowername = strtolower($child->nodeName);
+				if ( $lowername=="sphqueries" )
+					$this->AddQueries ( $child, "sphinxql", $encoding, $use_meta, $metaindexes, false );
+				else if ( $lowername=="httpqueries" )
+					$this->AddQueries ( $child, "query", $encoding, $use_meta, $metaindexes, true );
+			}
+	}
+
 
 	function Load ( $config_file )
 	{
@@ -1590,8 +1605,7 @@ class SphinxConfig
 		}
 
 		// extract http queries
-		$this->_sphqueries = $this->ExtractQueries ( $xml, $doc->encoding, "sphqueries", "sphinxql", $use_meta, $metaindexes, $this->_use_sphinxql );
-		$this->_httpqueries = $this->ExtractQueries ( $xml, $doc->encoding, "httpqueries", "query", $use_meta, $metaindexes, $this->_use_http );
+		$this->ExtractQueries ( $xml, $doc->encoding, $use_meta, $metaindexes );
 
 		// extract my settings
 		$this->_config = GetFirstChild ( $xml, "config" );
@@ -1675,448 +1689,470 @@ class SphinxConfig
 	{
 		$this->_results[] = $query_result;
 		if ( IsModelGenMode () )
-		{
 			$this->_results_model[$this->SubtestNo ()][] = $query_result;
-		}
 	}
 
-	function RunQueryHttp ( &$error )
+	function RunQueryHttp ( $query, &$error )
 	{
-		global $g_pick_query;
-
-		$total = $done = 0;
-		$qcount = count($this->_httpqueries);
-
-		$qmin = 0;
-		$qmax = $qcount - 1;
 		$http_endpoint = NULL;
 		$http_method = NULL;
 		$http_content = NULL;
 		$use_agent = 0;
 
-		if ( $g_pick_query>0 )
+		if ( !is_array($query) || !$query[1] )
 		{
-			$qmin = $g_pick_query-1;
-			$qmax = $g_pick_query-1;
+			$error = "HTTP endpoint not specified";
+			return false;
 		}
-		
-		for ( $n=$qmin; $n<=$qmax; $n++ )
+
+		foreach ( $query[1] as $k => $v )
 		{
-			$query = $this->_httpqueries[$n];
+			if ($k=="endpoint")
+				$http_endpoint = $v;
+			elseif ($k=="method")
+				$http_method = $v;
+			elseif ($k=="content")
+				$http_content = $v;
+			elseif ( $k="d" )
+				$use_agent = $v;
+		}
 
-			if ( !is_array($query) )
-			{
-				$error = "HTTP endpoint not specified";
-				return false;
-			}
+		$query = $query[0];
 
-			foreach ( $query[1] as $k => $v )
-			{
-				if ($k=="endpoint")
-					$http_endpoint = $v;
-				elseif ($k=="method")
-					$http_method = $v;
-				elseif ($k=="content")
-					$http_content = $v;
-				elseif ( $k="d" )
-					$use_agent = $v;
-			}
+		$http_method = strtoupper($http_method);
+		$post = NULL;
+		if ( !strlen($http_method) || $http_method=="POST" )
+			$post = true;
+		elseif ( $http_method=="GET" )
+			$post = false;
 
-			$query = $query[0];
+		if ( $post===NULL )
+		{
+			$error = "Unknown HTTP method: ".$http_method;
+			return false;
+		}
 
-			$http_method = strtoupper($http_method);
-			$post = NULL;
-			if ( !strlen($http_method) || $http_method=="POST" )
-				$post = true;
-			elseif ( $http_method=="GET" )
-				$post = false;
+		if ( $post )
+			$query_result = HttpQueryPost ( $http_endpoint, $http_content, $query, $use_agent, $this->Requires("https") );
+		else
+			$query_result = HttpQueryGet ( $http_endpoint, $http_content, $query, $use_agent, $this->Requires("https") );
 
-			if ( $post===NULL )
-			{
-				$error = "Unknown HTTP method: ".$http_method;
-				return false;
-			}
-
-			if ( $post )
-				$query_result = HttpQueryPost ( $http_endpoint, $http_content, $query, $use_agent, $this->Requires("https") );
-			else
-				$query_result = HttpQueryGet ( $http_endpoint, $http_content, $query, $use_agent, $this->Requires("https") );
-
-			$query_result['http']=1;
+		$query_result['http']=1;
 			
-			if ( $use_agent>0 )
-				$query_result['agent'] = $use_agent;
+		if ( $use_agent>0 )
+			$query_result['agent'] = $use_agent;
 
-			if ( array_key_exists ( 'rows', $query_result ) )
+		if ( array_key_exists ( 'rows', $query_result ) )
+		{
+			$decoded_rows = json_decode ( $query_result['rows'] );
+			if ( !$decoded_rows )
 			{
-				$decoded_rows = json_decode ( $query_result['rows'] );
-				if ( !$decoded_rows )
-				{
-					$error = "Unable to decode repsonse json'" . $query_result['rows'] . "': ".GetJsonError();
-					return false;
-				}
-
-				if ( property_exists ( $decoded_rows, 'took' ) )
-					unset ( $decoded_rows->took );
-				
-				// fixup floats in json
-				if ( isset ( $decoded_rows->hits ) && isset ( $decoded_rows->hits->hits ) )
-				{
-					foreach ( $decoded_rows->hits->hits as &$hit )
-						RoundFloatValues ( $hit, 6 );
-				}
-
-				$query_result['rows'] = json_encode ( $decoded_rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+				$error = "Unable to decode repsonse json'" . $query_result['rows'] . "': ".GetJsonError();
+				return false;
 			}
-	
-			$this->PickResult ( $query_result );
+
+			if ( property_exists ( $decoded_rows, 'took' ) )
+				unset ( $decoded_rows->took );
+				
+			// fixup floats in json
+			if ( isset ( $decoded_rows->hits ) && isset ( $decoded_rows->hits->hits ) )
+			{
+				foreach ( $decoded_rows->hits->hits as &$hit )
+					RoundFloatValues ( $hit, 6 );
+			}
+
+			$query_result['rows'] = json_encode ( $decoded_rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
 		}
+	
+		$this->PickResult ( $query_result );
 
 		return true;
 	}
 
 
-	function RunQuerySphinxQL ( &$error, $bench=false )
+	function PostprocessQlResult ( $query, &$query_result, $connection, $no_time )
+	{
+		$result = mysqli_wr ($query,$connection);
+		if ($result===true)
+		{
+			$query_result["total_affected"] = mysqli_affected_rows($connection);
+			$query = strtolower ( trim ( $query ) );
+
+			$create_table = "create table";
+			if ( substr($query, 0, strlen($create_table)) === $create_table )
+			{
+				$matches = array();
+				$preg = preg_match_all ( "/(?:(?:wordforms|stopwords|exceptions)[ \t]*=[ \t]*)'([^']+)'/", $query, $matches, PREG_OFFSET_CAPTURE );
+
+				$result_str = "";
+				$prev_offset = 0;
+				foreach ( $matches[1] as $entry )
+				{
+					$result_str.= substr ( $query, $prev_offset, $entry[1]-$prev_offset );
+					$replacement = basename($entry[0]);
+					$result_str.= $replacement;
+					$prev_offset = $entry[1] + strlen($entry[0]);
+				}
+
+				$result_str.= substr ( $query, $prev_offset );
+				$query_result["sphinxql"] = $result_str;
+
+				$query = $result_str;
+				$query = $this->FixupAgentAddress ( $query );
+				$query_result["sphinxql"] = $query;
+			}
+		}
+		else if ($result===false)
+		{
+			$query_result["error"] = $this->FixupErrorMessage ( mysqli_error( $connection ) );
+			$query_result["errno"] = mysqli_errno( $connection );
+
+			// Windows 7 fixup
+			$win7_replace_pos = strpos ( $query_result["error"], "error when sending data: WSA error 10057" );
+			if ( $query_result["errno"]==1064 && $win7_replace_pos!==FALSE )
+				$query_result["error"] = substr ( $query_result["error"], 0, $win7_replace_pos ) . "connect timed out";
+		}
+		else
+		{
+			$query_result["total_rows"] = mysqli_num_rows($result);
+			while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC))
+			{
+				if ( $no_time===true && array_key_exists ( 'Variable_name', $row ) && $row['Variable_name']=='time' )
+					continue;
+				$query_result["rows"][] = $row;
+			}
+			mysqli_free_result($result);
+		}
+	}
+
+
+	function RunQueryQL ( $query, &$error, $bench, &$connection, &$old_agent, &$old_vip )
 	{
 		global $g_pick_query, $agents, $index_data_path;
 
-		$total = $done = 0;
+		$query_ref;
+		$sleep_agent=0;
+		$use_agent=0;
+		$vip_connection=0;
+		$system_cmd = "";
+		$wait_value = 0;
+
+		if ($query[1])
+		{
+			$cluster_connect = -1;
+			$cluster_path;
+			foreach ( $query[1] as $k => $v )
+			{
+				if ($k=="d")
+					$use_agent = $v;
+				elseif ($k=="sleep")
+					$sleep_agent = $v;
+				elseif ($k=="vip")
+					$vip_connection = $v;
+				elseif ($k=="system")
+					$system_cmd = $v;
+				elseif ($k=="cluster_connect")
+					$cluster_connect = $v;
+				elseif ($k=="cluster_path")
+					$cluster_path = $v;
+				elseif ($k=="wait_value")
+					$wait_value = $v;
+			}
+
+			$query = $query[0];
+			if ( $cluster_connect !== -1 )
+				$query_ref = $query;
+				
+			if ( $cluster_connect !== -1 )
+			{
+				$address = $agents[$cluster_connect]["address"] . ":" . $agents[$cluster_connect]["port"];
+				$query = str_replace ( "%addr_connect%", $address, $query );
+			}
+
+			if ( isset ( $cluster_path ) )
+			{
+				$data_path = $agents[$use_agent]["data_path"];
+				$cluster_dir = "$index_data_path/$data_path/$cluster_path";
+				if ( !file_exists ( $cluster_dir ) )
+					mkdir ( $cluster_dir );
+						
+				$query = str_replace ( "%cluster_path%", $cluster_path, $query );
+				unset ( $cluster_path );
+			}
+		}
+		else
+			$query = $query[0];
+			
+		if ( !empty($system_cmd) )
+		{
+			$wait_cmd_name = "wait-cluster-ready-";
+			$wait_status_name = "wait-status-";
+			$status = '';
+			if ( $system_cmd=="restart-daemon" )
+			{
+				mysqli_close($connection);
+				$status = RestartDaemon ($status);
+				$connection = ConnectSpecificQL($use_agent);
+			} else if ( $system_cmd=="start-agent" )
+			{
+				$start = StartSearchd ( $agents[$use_agent]["daemon"]["config"], $agents[$use_agent]["daemon"]["error"], $agents[$use_agent]["daemon"]["pid"], $error,
+					$agents[$use_agent]["daemon"]["watchdog"], $agents[$use_agent]["daemon"]["address"], $agents[$use_agent]["daemon"]["port"] );
+				if ( $start == 0 || $start == 2 )
+					$status .= "; start=ok" . ', return code=' . $start;
+				else
+					$status .=  "; start=failed, return code=" . $start . ", error=" . $error;
+
+				mysqli_close($connection);				
+				$old_agent = -1;
+			} else if ( $system_cmd=="stop-agent" )
+			{
+				$stop = StopWaitSearchd ($agents[$use_agent]["daemon"]["config"], $agents[$use_agent]["daemon"]["pid"]);
+				$status = 'stop=' . ( $stop==0 ? 'ok' : 'error' ) . ', return code=' . $stop;
+				mysqli_close($connection);
+				$old_agent = -1;
+			} else if ( strpos($system_cmd, $wait_cmd_name)===0 )
+			{
+				$name = substr ($system_cmd, strlen($wait_cmd_name));
+				$ql = new QLClient();
+				$ql->SetConnection($connection);
+				$like_name = "cluster_" . $name . "_node_state";
+				$wait_started = MyMicrotime();
+				while ( true )
+				{
+					$status = $ql->Query("show status like '$like_name'");
+					$name_pos = strpos($status, $like_name);
+					$delim_pos = strpos($status, "|" );
+					if ( $name_pos===0 && $delim_pos>0 )
+					{
+						$node_state = trim(explode("\n", substr($status, $delim_pos+1))[0]);
+						if ($node_state==="synced" || $node_state==="donor" )
+							break;
+						else
+							usleep(500);
+					} else
+						break;
+						
+					$tm_delta = MyMicrotime()-$wait_started;
+					if ( $tm_delta>GetTmDelta() )
+					{
+						$status .= sprintf( "; timeout %.3f sec", $tm_delta );
+						break;
+					}
+				}
+			} else if ( strpos($system_cmd, $wait_status_name)===0 )
+			{
+				$name = substr ($system_cmd, strlen($wait_status_name));
+				$ql = new QLClient();
+				$ql->SetConnection($connection);
+				$wait_started = MyMicrotime();
+				while ( true )
+				{
+					$status = $ql->Query("show status like '$name'");
+					$delim_pos = strpos($status, "|" );
+					if ( $delim_pos>0 )
+					{
+						$wait_got_val = trim(explode("\n", substr($status, $delim_pos+1))[0]);
+						if ($wait_got_val>=$wait_value )
+							break;
+						else
+							usleep(500);
+					} else
+						break;
+						
+					$tm_delta = MyMicrotime()-$wait_started;
+					if ( $tm_delta>GetTmDelta() )
+					{
+						$status .= sprintf( "; timeout %.3f sec", $tm_delta );
+						break;
+					}
+				}
+			} else 
+				$status = "unsupported command " . $system_cmd;
+			
+			$r = array("sphinxql"=>$system_cmd . " => " . $status);
+			$this->_results[] = $r;
+			if ( IsModelGenMode () )
+				$this->_results_model[$this->SubtestNo ()][] = $r;
+
+			return true;
+		}
+
+		if ($old_agent!=$use_agent)
+		{
+			if ($old_agent!=-1)
+				mysqli_close($connection);
+			if ($sleep_agent>0)
+				usleep($sleep_agent);
+			if (!($connection = ConnectSpecificQL($use_agent)))
+				return false;
+			$old_agent = $use_agent;
+		}
+
+		if ($this->Requires('vip') && ( $old_vip!=$vip_connection || $connection===NULL ))
+		{
+			if ( $connection )
+				mysqli_close($connection);
+
+			// this is needed to test non-vip connections in maintenance mode
+			if (!($connection = ConnectSpecificQL($use_agent,$vip_connection)))
+			{
+				$query_result = array();
+				$query_result["sphinxql"]=$query;
+				$query_result["error"] = mysqli_connect_error();
+				$query_result["errno"] = mysqli_connect_errno();
+				$this->PickResult($query_result);
+				$connection = NULL;
+				return true;
+			}
+
+			$old_vip = $vip_connection;
+		}
+
+		if ( $query=="RECONNECT" )
+		{
+			mysqli_close($connection);
+			if (!($connection = ConnectSpecificQL($use_agent)))
+				return false;
+
+			$r = array("sphinxql"=>$query, "error"=>"reconnected ok!", "errno"=>0);
+			$this->_results[] = $r;
+			if ( IsModelGenMode () )
+				$this->_results_model[$this->SubtestNo ()][] = $r;
+
+			return true;
+		}
+			
+		$query_result = array ();
+		if ( $vip_connection )
+			$query_result["vip"]=1;
+
+		if ( $use_agent>0 )
+			$query_result["agent"]=$use_agent;
+			
+		$no_time = false;
+		if ( $bench===false && ( stripos ( $query, 'show' )!==false ) && ( stripos ( $query, 'meta' )!==false ) )
+			$no_time = true;
+			
+		if ( strpos ($query, ";")===FALSE ) // process a single-query line
+		// FIXME! If a query contains ';' it would be false positive for such codepath.
+		{
+			if ( isset ( $query_ref ) )
+			{
+				$query_result["sphinxql"]=$query_ref;
+				unset ( $query_ref );
+			} else
+				$query_result["sphinxql"]=$query;
+
+			$this->PostprocessQlResult ( $query, $query_result, $connection, $no_time );
+			$this->PickResult($query_result);
+		} else
+		{
+			$parts = explode (';',$query);
+			$haserror = true;
+			$erroneousquery = $query;
+			if ( mysqli_multi_query ($connection,$query) )
+			{
+				$resultset_num = 0;
+				do
+				{
+					if ($result = mysqli_store_result($connection))
+					{
+						$query_result["total_rows"] = mysqli_num_rows ($result);
+						if (array_key_exists ("rows", $query_result) )
+							unset ($query_result["rows"]);
+						while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC))
+						{
+							if ( $no_time===true && array_key_exists ( 'Variable_name', $row ) && $row['Variable_name']=='time' )
+								continue;
+							if ( array_key_exists ( 'Value', $row ) )
+								$row['Value'] = $this->FixupWarningMessage ( $row['Value'] );
+							$query_result["rows"][] = $row;
+						}
+						mysqli_free_result($result);
+					} else
+					{
+						if (mysqli_field_count($connection)) // there were some fields. An error occured.
+						{
+							$query_result["error"] = mysqli_error( $connection );
+							$query_result["errno"] = mysqli_errno( $connection );
+						} else
+							$query_result["total_affected"] = mysqli_affected_rows($connection);
+					}
+					if ($resultset_num==0)
+						$query_result["sphinxql"]="$query";
+					else
+						$query_result["sphinxql"]=($resultset_num<count($parts)?"$parts[$resultset_num] ":"")."/* result ".($resultset_num+1)." of previous multistatement */";
+					++$resultset_num;
+					$this->PickResult($query_result);
+					$erroneousquery = ($resultset_num<count($parts)?"$parts[$resultset_num] ":"")."/* result ".($resultset_num+1)." of previous multistatement */";
+					if (!mysqli_more_results($connection))
+					{
+						$haserror = false;
+						break;
+					}
+					$query_result = array ();
+				} while (mysqli_next_result($connection));
+			};
+			if ($haserror)
+			{
+				$query_result["sphinxql"]=$erroneousquery;
+				$query_result["error"] = mysqli_error( $connection );
+				$query_result["errno"] = mysqli_errno( $connection );
+				$this->PickResult($query_result);
+			}
+		}
+
+		return true;
+	}
+
+	function RunQlAndHttpQueries ( &$error, $bench=false )
+	{
+		global $g_pick_query;
+
 		$qcount = count($this->_sphqueries);
 		if ( $bench === true )
 			$qcount *= 2;
 
-		$connection=false;
 		$qmin = 0;
 		$qmax = $qcount - 1;
-		$old_agent = -1;
-		$old_vip = -1;
-		$use_agent = 0;
-		$sleep_agent=0;
+
 		if ( $g_pick_query>0 )
 		{
 			$qmin = $g_pick_query-1;
 			$qmax = $g_pick_query-1;
 		}
+
+		$ql_connection=false;
+		$old_agent = -1;
+		$old_vip = -1;
+
+		$ok = true;
+		
 		for ( $n=$qmin; $n<=$qmax; $n++ )
 		{
-			if ( $bench === false )
-			{
+			if ( $bench===false )
 				$query = $this->_sphqueries[$n];
-			} else
+			else
 			{
 				if ( ($n%2)==0 )
 					$query = $this->_sphqueries[$n/2];
 				else
-					$query = 'show meta';
-			}
-			$query_ref;
-			$sleep_agent=0;
-			$use_agent=0;
-			$vip_connection=0;
-			$system_cmd = "";
-			$wait_value = 0;
-			if (is_array($query))
-			{
-				$cluster_connect = -1;
-				$cluster_path;
-				foreach ( $query[1] as $k => $v )
-				{
-					if ($k=="d")
-						$use_agent = $v;
-					elseif ($k=="sleep")
-						$sleep_agent = $v;
-					elseif ($k=="vip")
-						$vip_connection = $v;
-					elseif ($k=="system")
-						$system_cmd = $v;
-					elseif ($k=="cluster_connect")
-						$cluster_connect = $v;
-					elseif ($k=="cluster_path")
-						$cluster_path = $v;
-					elseif ($k=="wait_value")
-						$wait_value = $v;
-				}
-				$query = $query[0];
-				if ( $cluster_connect !== -1 )
-				{
-					$query_ref = $query;
-				}
-					
-				if ( $cluster_connect !== -1 )
-				{
-					$address = $agents[$cluster_connect]["address"] . ":" . $agents[$cluster_connect]["port"];
-					$query = str_replace ( "%addr_connect%", $address, $query );
-				}
-				if ( isset ( $cluster_path ) )
-				{
-					$data_path = $agents[$use_agent]["data_path"];
-					$cluster_dir = "$index_data_path/$data_path/$cluster_path";
-					if ( !file_exists ( $cluster_dir ) )
-						mkdir ( $cluster_dir );
-						
-					$query = str_replace ( "%cluster_path%", $cluster_path, $query );
-					unset ( $cluster_path );
-				}
-			}
-			
-			if ( !empty($system_cmd) )
-			{
-				$wait_cmd_name = "wait-cluster-ready-";
-				$wait_status_name = "wait-status-";
-				$status = '';
-				if ( $system_cmd=="restart-daemon" )
-				{
-					mysqli_close($connection);
-					$status = RestartDaemon ($status);
-					$connection = ConnectSpecificQL($use_agent);
-				} else if ( $system_cmd=="start-agent" )
-				{
-					$start = StartSearchd ( $agents[$use_agent]["daemon"]["config"], $agents[$use_agent]["daemon"]["error"], $agents[$use_agent]["daemon"]["pid"], $error,
-						$agents[$use_agent]["daemon"]["watchdog"], $agents[$use_agent]["daemon"]["address"], $agents[$use_agent]["daemon"]["port"] );
-					if ( $start == 0 || $start == 2 )
-					{
-						$status .= "; start=ok" . ', return code=' . $start;
-					} else
-					{
-						$status .=  "; start=failed, return code=" . $start . ", error=" . $error;
-					}
-					mysqli_close($connection);				
-					$old_agent = -1;
-				} else if ( $system_cmd=="stop-agent" )
-				{
-					$stop = StopWaitSearchd ($agents[$use_agent]["daemon"]["config"], $agents[$use_agent]["daemon"]["pid"]);
-					$status = 'stop=' . ( $stop==0 ? 'ok' : 'error' ) . ', return code=' . $stop;
-					mysqli_close($connection);
-					$old_agent = -1;
-				} else if ( strpos($system_cmd, $wait_cmd_name)===0 )
-				{
-					$name = substr ($system_cmd, strlen($wait_cmd_name));
-					$ql = new QLClient();
-					$ql->SetConnection($connection);
-					$like_name = "cluster_" . $name . "_node_state";
-					$wait_started = MyMicrotime();
-					while ( true ) {
-						$status = $ql->Query("show status like '$like_name'");
-						$name_pos = strpos($status, $like_name);
-						$delim_pos = strpos($status, "|" );
-						if ( $name_pos===0 && $delim_pos>0 )
-						{
-							$node_state = trim(explode("\n", substr($status, $delim_pos+1))[0]);
-							if ($node_state==="synced" || $node_state==="donor" )
-							{
-								break;
-							} else
-							{
-								usleep(500);
-							}
-						} else
-						{
-							break;
-						}
-						
-						$tm_delta = MyMicrotime()-$wait_started;
-						if ( $tm_delta>GetTmDelta() )
-						{
-							$status .= sprintf( "; timeout %.3f sec", $tm_delta );
-							break;
-						}
-					}
-				} else if ( strpos($system_cmd, $wait_status_name)===0 )
-				{
-					$name = substr ($system_cmd, strlen($wait_status_name));
-					$ql = new QLClient();
-					$ql->SetConnection($connection);
-					$wait_started = MyMicrotime();
-					while ( true ) {
-						$status = $ql->Query("show status like '$name'");
-						$delim_pos = strpos($status, "|" );
-						if ( $delim_pos>0 )
-						{
-							$wait_got_val = trim(explode("\n", substr($status, $delim_pos+1))[0]);
-							if ($wait_got_val>=$wait_value )
-							{
-								break;
-							} else
-							{
-								usleep(500);
-							}
-						} else
-						{
-							break;
-						}
-						
-						$tm_delta = MyMicrotime()-$wait_started;
-						if ( $tm_delta>GetTmDelta() )
-						{
-							$status .= sprintf( "; timeout %.3f sec", $tm_delta );
-							break;
-						}
-					}
-				} else 
-				{
-					$status = "unsupported command " . $system_cmd;
-				}
-				$r = array("sphinxql"=>$system_cmd . " => " . $status);
-				$this->_results[] = $r;
-				if ( IsModelGenMode () )
-					$this->_results_model[$this->SubtestNo ()][] = $r;
-				continue;
+					$query = array ( 'show meta', null, false );
 			}
 
-			if ($old_agent!=$use_agent)
-			{
-				if ($old_agent!=-1)
-					mysqli_close($connection);
-				if ($sleep_agent>0)
-					usleep($sleep_agent);
-				if (!($connection = ConnectSpecificQL($use_agent)))
-					return false;
-				$old_agent = $use_agent;
-			}
+			if ( $query[2] )
+				$ok = $this->RunQueryHttp ( $query, $error );
+			else
+				$ok = $this->RunQueryQL ( $query, $error, $bench, $ql_connection, $old_agent, $old_vip );
 
-			if ($this->Requires('vip') && ( $old_vip!=$vip_connection || $connection===NULL ))
-			{
-				if ( $connection )
-					mysqli_close($connection);
-
-				// this is needed to test non-vip connections in maintenance mode
-				if (!($connection = ConnectSpecificQL($use_agent,$vip_connection)))
-				{
-					$query_result = array();
-					$query_result["sphinxql"]=$query;
-					$query_result["error"] = mysqli_connect_error();
-					$query_result["errno"] = mysqli_connect_errno();
-					$this->PickResult($query_result);
-					$connection = NULL;
-					continue;
-				}
-
-				$old_vip = $vip_connection;
-			}
-
-			if ( $query=="RECONNECT" )
-			{
-				mysqli_close($connection);
-				if (!($connection = ConnectSpecificQL($use_agent)))
-					return false;
-
-				$r = array("sphinxql"=>$query, "error"=>"reconnected ok!", "errno"=>0);
-				$this->_results[] = $r;
-				if ( IsModelGenMode () )
-					$this->_results_model[$this->SubtestNo ()][] = $r;
-				continue;
-			}
-			
-			$query_result = array ();
-			if ( $vip_connection )
-				$query_result["vip"]=1;
-			if ( $use_agent>0 )
-				$query_result["agent"]=$use_agent;
-			
-			$no_time = false;
-			if ( $bench===false && ( stripos ( $query, 'show' )!==false ) && ( stripos ( $query, 'meta' )!==false ) )
-				$no_time = true;
-			
-			if ( strpos ($query, ";")===FALSE ) // process a single-query line
-				// FIXME! If a query contains ';' it would be false positive for such codepath.
-			{
-				if ( isset ( $query_ref ) )
-				{
-					$query_result["sphinxql"]=$query_ref;
-					unset ( $query_ref );
-				} else
-				{
-					$query_result["sphinxql"]=$query;
-				}
-					
-				$result = mysqli_wr ($query,$connection);
-				if ($result===true)
-					$query_result["total_affected"] = mysqli_affected_rows($connection);
-				else if ($result===false)
-				{
-					$query_result["error"] = $this->FixupErrorMessage ( mysqli_error( $connection ) );
-					$query_result["errno"] = mysqli_errno( $connection );
-					
-					// Windows 7 fixup
-					$win7_replace_pos = strpos ( $query_result["error"], "error when sending data: WSA error 10057" );
-					if ( $query_result["errno"]==1064 && $win7_replace_pos!==FALSE ) {
-						$query_result["error"] = substr ( $query_result["error"], 0, $win7_replace_pos ) . "connect timed out";
-					}
-					
-				} else
-				{
-					$query_result["total_rows"] = mysqli_num_rows($result);
-					while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC))
-					{
-						if ( $no_time===true && array_key_exists ( 'Variable_name', $row ) && $row['Variable_name']=='time' )
-							continue;
-						$query_result["rows"][] = $row;
-					}
-					mysqli_free_result($result);
-				}
-				$this->PickResult($query_result);
-			} else
-			{
-				$parts = explode (';',$query);
-				$haserror = true;
-				$erroneousquery = $query;
-				if ( mysqli_multi_query ($connection,$query) )
-				{
-					$resultset_num = 0;
-					do
-					{
-						if ($result = mysqli_store_result($connection))
-						{
-							$query_result["total_rows"] = mysqli_num_rows ($result);
-							if (array_key_exists ("rows", $query_result) )
-								unset ($query_result["rows"]);
-							while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC))
-							{
-								if ( $no_time===true && array_key_exists ( 'Variable_name', $row ) && $row['Variable_name']=='time' )
-									continue;
-								if ( array_key_exists ( 'Value', $row ) )
-									$row['Value'] = $this->FixupWarningMessage ( $row['Value'] );
-								$query_result["rows"][] = $row;
-							}
-							mysqli_free_result($result);
-						} else
-						{
-							if (mysqli_field_count($connection)) // there were some fields. An error occured.
-							{
-								$query_result["error"] = mysqli_error( $connection );
-								$query_result["errno"] = mysqli_errno( $connection );
-							} else
-								$query_result["total_affected"] = mysqli_affected_rows($connection);
-						}
-						if ($resultset_num==0)
-							$query_result["sphinxql"]="$query";
-						else
-							$query_result["sphinxql"]=($resultset_num<count($parts)?"$parts[$resultset_num] ":"")."/* result ".($resultset_num+1)." of previous multistatement */";
-						++$resultset_num;
-						$this->PickResult($query_result);
-						$erroneousquery = ($resultset_num<count($parts)?"$parts[$resultset_num] ":"")."/* result ".($resultset_num+1)." of previous multistatement */";
-						if (!mysqli_more_results($connection))
-						{
-							$haserror = false;
-							break;
-						}
-						$query_result = array ();
-					} while (mysqli_next_result($connection));
-				};
-				if ($haserror)
-				{
-					$query_result["sphinxql"]=$erroneousquery;
-					$query_result["error"] = mysqli_error( $connection );
-					$query_result["errno"] = mysqli_errno( $connection );
-					$this->PickResult($query_result);
-				}
-			}
+			if ( !$ok )
+				break;
 		}
 
-		if ( $connection!==NULL )
-			mysqli_close ( $connection );
-
-		return true;
+		if ( $ql_connection )
+			mysqli_close ( $ql_connection );
+		
+		return $ok;
 	}
 
 
@@ -3691,10 +3727,11 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 		$isdemo = true;
 	}
 
+	$config->SetTestDir ( getcwd()."/".$test_dir );
+
 	if ( !$config->Load ( $test_dir."/test.xml" ) )
 		return;
 
-	$config->SetTestDir ( getcwd()."/".$test_dir );
 	$prefix = sprintf ( "testing %s, %s...", $test_dir, $config->Name () );
 
 	if ( !CheckConfig ( $config, $test_dir ) )
@@ -3903,26 +3940,12 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 			}
 		}
 
-		if ( $config->IsSphinxqlTest () )
+		$error = "";
+		if ( !$config->RunQlAndHttpQueries ( $error ) )
 		{
-			$error = "";
-			if ( ! $config->RunQuerySphinxQL ( $error ) )
-			{
-				if ( !HandleFailure ( $config, $report, "$error\n", $nfailed ) )
-					$log .= "\tsubtest $subtest: query error: $error\n";
-				continue;
-			}
-		}
-
-		if ( $config->IsHttpTest () )
-		{
-			$error = "";
-			if ( ! $config->RunQueryHttp ( $error ) )
-			{
-				if ( !HandleFailure ( $config, $report, "$error\n", $nfailed ) )
-					$log .= "\tsubtest $subtest: query error: $error\n";
-				continue;
-			}
+			if ( !HandleFailure ( $config, $report, "$error\n", $nfailed ) )
+				$log .= "\tsubtest $subtest: query error: $error\n";
+			continue;
 		}
 
 		$allmatch = $isdemo || IsModelGenMode() || $config->CompareToModel();

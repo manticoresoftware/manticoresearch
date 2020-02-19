@@ -11,6 +11,7 @@
 #include "searchdconfig.h"
 #include "sphinxjson.h"
 #include "searchdaemon.h"
+#include "searchdha.h"
 #include "searchdreplication.h"
 #include "fileutils.h"
 #include "sphinxint.h"
@@ -29,6 +30,18 @@ static CSphMutex	g_tSaveInProgress;
 extern ISphBinlog * g_pBinlog;
 
 
+static CSphString GetPathForNewIndex ( const CSphString & sIndexName )
+{
+	CSphString sRes;
+	if ( g_sDataDir.Length() && !g_sDataDir.Ends("/") && !g_sDataDir.Ends("\\") )
+		sRes.SetSprintf ( "%s/%s", g_sDataDir.cstr(), sIndexName.cstr() );
+	else
+		sRes.SetSprintf ( "%s%s", g_sDataDir.cstr(), sIndexName.cstr() );
+
+	return sRes;
+}
+
+
 CSphString GetDataDirInt()
 {
 	return g_sDataDir;
@@ -40,10 +53,77 @@ bool IsConfigless()
 	return g_bConfigless;
 }
 
+
 const CSphVector<ClusterDesc_t> & GetClustersInt()
 {
 	return g_dCfgClusters;
 }
+
+
+void ModifyBinlogPath ( CSphConfigSection & hSearchd )
+{
+	if ( !IsConfigless() || hSearchd.Exists("binlog_path") )
+		return;
+
+	CSphString sBinlogDir;
+	sBinlogDir.SetSprintf ( "%s/binlog", GetDataDirInt().cstr() );
+	if ( !sphDirExists ( sBinlogDir.cstr() ) )
+	{
+		if ( !MkDir ( sBinlogDir.cstr() ) )
+		{
+			sphWarning ( "Unable to create binlog dir '%s'", sBinlogDir.cstr() );
+			return;
+		}
+	}
+
+	hSearchd.Delete("binlog_path");
+	hSearchd.AddEntry ( "binlog_path", sBinlogDir.cstr() );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+class FilenameBuilder_c : public FilenameBuilder_i
+{
+public:
+					FilenameBuilder_c ( const char * szIndex );
+
+	CSphString		GetFullPath ( const CSphString & sName ) final;
+
+private:
+	CSphString		m_sIndex;
+};
+
+
+FilenameBuilder_c::FilenameBuilder_c ( const char * szIndex )
+	: m_sIndex ( szIndex )
+{}
+
+
+CSphString FilenameBuilder_c::GetFullPath ( const CSphString & sName )
+{
+	if ( !IsConfigless() || !sName.Length() )
+		return sName;
+
+	CSphString sPath = GetPathForNewIndex ( m_sIndex );
+
+	StrVec_t dFiles;
+	StringBuilder_c sNewValue = " ";
+
+	// we assume that path has been stripped before
+	StrVec_t dValues = sphSplit ( sName.cstr(), sName.Length(), " \t," );
+	for ( auto & i : dValues )
+	{
+		if ( !i.Length() )
+			continue;
+
+		CSphString & sNew = dFiles.Add();
+		sNew.SetSprintf ( "%s/%s", sPath.cstr(), i.Trim().cstr() );
+		sNewValue << sNew;
+	}
+
+	return sNewValue.cstr();
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -176,7 +256,86 @@ void ClusterDesc_t::Save ( JsonObj_c & tClusters ) const
 
 //////////////////////////////////////////////////////////////////////////
 
-bool IndexDesc_t::Parse ( const JsonObj_c & tJson, CSphString & sError )
+bool IndexDescDistr_t::Parse ( const JsonObj_c & tJson, CSphString & sWarning, CSphString & sError )
+{
+	JsonObj_c tLocals = tJson.GetItem("locals");
+	for ( const auto & i : tLocals )
+	{
+		if ( !i.IsStr() )
+		{
+			sWarning = "lists of local indexes must only contain strings, skipped";
+			continue;
+		}
+
+		m_dLocals.Add ( i.StrVal() );
+	}
+
+	if ( !tJson.FetchIntItem ( m_iAgentConnectTimeout, "agent_connect_timeout", sError, true ) )
+		return false;
+
+	if ( !tJson.FetchIntItem ( m_iAgentQueryTimeout, "agent_query_timeout", sError, true ) )
+		return false;
+
+	if ( !tJson.FetchIntItem ( m_iAgentRetryCount, "agent_retry_count", sError, true ) )
+		return false;
+
+	if ( !tJson.FetchBoolItem ( m_bDivideRemoteRanges, "divide_remote_ranges", sError, true ) )
+		return false;
+
+	CSphString sHaStrategy;
+	if ( !tJson.FetchStrItem ( sHaStrategy, "ha_strategy", sError, true ) )
+		return false;
+
+	return true;
+}
+
+
+void IndexDescDistr_t::Save ( JsonObj_c & tIdx ) const
+{
+	if ( !m_dLocals.IsEmpty() )
+	{
+		JsonObj_c tLocals(true);
+		for ( const auto & i : m_dLocals )
+		{
+			JsonObj_c tStr = JsonObj_c::CreateStr(i);
+			tLocals.AddItem(tStr);
+		}
+
+		tIdx.AddItem ( "locals", tLocals );
+	}
+
+	tIdx.AddInt ( "agent_connect_timeout",	m_iAgentConnectTimeout);
+	tIdx.AddInt ( "agent_query_timeout",	m_iAgentQueryTimeout );
+	tIdx.AddInt ( "agent_retry_count",		m_iAgentRetryCount );
+	tIdx.AddBool( "divide_remote_ranges",	m_bDivideRemoteRanges );
+
+	if ( !m_sHaStrategy.IsEmpty() )
+		tIdx.AddStr ( "ha_strategy",		m_sHaStrategy );
+
+	// TODO: agents
+}
+
+
+void IndexDescDistr_t::Save ( CSphConfigSection & hIndex ) const
+{
+	for ( const auto & i : m_dLocals )
+		hIndex.AddEntry ( "local", i.cstr() );
+
+	CSphString sTmp;
+	hIndex.AddEntry ( "agent_connect_timeout",	sTmp.SetSprintf ( "%d", m_iAgentConnectTimeout ).cstr() );
+	hIndex.AddEntry ( "agent_query_timeout",	sTmp.SetSprintf ( "%d", m_iAgentQueryTimeout ).cstr() );
+	hIndex.AddEntry ( "agent_retry_count",		sTmp.SetSprintf ( "%d", m_iAgentRetryCount ).cstr() );
+	hIndex.AddEntry ( "divide_remote_ranges",	m_bDivideRemoteRanges ? "1" : "0" );
+
+	if ( !m_sHaStrategy.IsEmpty() )
+		hIndex.AddEntry ( "ha_strategy",		m_sHaStrategy.cstr() );
+
+	// TODO: add agents
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+bool IndexDesc_t::Parse ( const JsonObj_c & tJson, CSphString & sWarning, CSphString & sError )
 {
 	m_sName = tJson.Name();
 	if ( m_sName.IsEmpty() )
@@ -184,9 +343,6 @@ bool IndexDesc_t::Parse ( const JsonObj_c & tJson, CSphString & sError )
 		sError = "empty index name";
 		return false;
 	}
-
-	if ( !tJson.FetchStrItem ( m_sPath, "path", sError ) )
-		return false;
 
 	CSphString sType;
 	if ( !tJson.FetchStrItem ( sType, "type", sError ) )
@@ -199,8 +355,26 @@ bool IndexDesc_t::Parse ( const JsonObj_c & tJson, CSphString & sError )
 		return false;
 	}
 
-	if ( !tJson.FetchBoolItem ( m_bFromReplication, "from_replication", sError, true ) )
-		return false;
+	if ( m_eType==IndexType_e::DISTR )
+	{
+		bool bParseOk = m_tDistr.Parse ( tJson, sWarning, sError );
+		if ( !sError.IsEmpty() )
+			sError.SetSprintf ( "index %s: %s", m_sName.cstr(), sError.cstr() );
+
+		if ( !sWarning.IsEmpty() )
+			sWarning.SetSprintf ( "index %s: %s", m_sName.cstr(), sWarning.cstr() );
+
+		if ( !bParseOk )
+			return false;
+	}
+	else
+	{
+		if ( !tJson.FetchStrItem ( m_sPath, "path", sError ) )
+			return false;
+
+		if ( !tJson.FetchBoolItem ( m_bFromReplication, "from_replication", sError, true ) )
+			return false;
+	}
 
 	return true;
 }
@@ -209,11 +383,34 @@ bool IndexDesc_t::Parse ( const JsonObj_c & tJson, CSphString & sError )
 void IndexDesc_t::Save ( JsonObj_c & tIndexes ) const
 {
 	JsonObj_c tIdx;
-	tIdx.AddStr ( "path", m_sPath );
 	tIdx.AddStr ( "type", GetTypeName ( m_eType ) );
-	tIdx.AddBool( "from_replication", m_bFromReplication );
+
+	if ( m_eType==IndexType_e::DISTR )
+		m_tDistr.Save(tIdx);
+	else
+	{
+		tIdx.AddStr ( "path", m_sPath );
+		tIdx.AddBool( "from_replication", m_bFromReplication );
+	}
 
 	tIndexes.AddItem ( m_sName.cstr(), tIdx );
+}
+
+
+void IndexDesc_t::Save ( CSphConfigSection & hIndex ) const
+{
+	hIndex.Add ( CSphVariant ( GetTypeName ( m_eType ).cstr() ), "type" );
+
+	if ( m_eType==IndexType_e::DISTR )
+		m_tDistr.Save (hIndex);
+	else
+	{
+		hIndex.Add ( CSphVariant ( m_sPath.cstr() ), "path" );
+
+		// dummy
+		hIndex.Add ( CSphVariant ( "text" ), "rt_field" );
+		hIndex.Add ( CSphVariant ( "gid" ), "rt_attr_uint" );
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -252,11 +449,15 @@ bool ConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> & dC
 	for ( const auto & i : tIndexes )
 	{
 		IndexDesc_t tIndex;
-		if ( !tIndex.Parse ( i, sError ) )
+		CSphString sWarning;
+		if ( !tIndex.Parse ( i, sWarning, sError ) )
 		{
 			sphWarning ( "index '%s'(%d) error: %s", i.Name(), dIndexes.GetLength(), sError.cstr() );
 			return false;
 		}
+
+		if ( !sWarning.IsEmpty() )
+			sphWarning ( "index '%s'(%d) warning: %s", i.Name(), dIndexes.GetLength(), sWarning.cstr() );
 
 		dIndexes.Add(tIndex);
 	}
@@ -340,13 +541,9 @@ void ConfigureAndPreloadInt ( int & iValidIndexes, int & iCounter ) REQUIRES ( M
 	for ( const IndexDesc_t & tIndex : g_dCfgIndexes )
 	{
 		CSphConfigSection hIndex;
-		hIndex.Add ( CSphVariant ( tIndex.m_sPath.cstr() ), "path" );
-		hIndex.Add ( CSphVariant ( GetTypeName ( tIndex.m_eType ).cstr() ), "type" );
-		// dummy
-		hIndex.Add ( CSphVariant ( "text" ), "rt_field" );
-		hIndex.Add ( CSphVariant ( "gid" ), "rt_attr_uint" );
+		tIndex.Save(hIndex);
 
-		ESphAddIndex eAdd = ConfigureAndPreloadIndex ( hIndex, tIndex.m_sName.cstr (), tIndex.m_bFromReplication );
+		ESphAddIndex eAdd = ConfigureAndPreloadIndex ( hIndex, tIndex.m_sName.cstr(), tIndex.m_bFromReplication );
 		iValidIndexes += ( eAdd!=ADD_ERROR ? 1 : 0 );
 		iCounter += ( eAdd==ADD_DSBLED ? 1 : 0 );
 		if ( eAdd==ADD_ERROR )
@@ -355,7 +552,7 @@ void ConfigureAndPreloadInt ( int & iValidIndexes, int & iCounter ) REQUIRES ( M
 }
 
 
-// get index list that should be saved into JSON config
+// collect local indexes that should be saved into JSON config
 static void CollectLocalIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 {
 	for ( RLockedServedIt_c tIt ( g_pLocalIndexes ); tIt.Next (); )
@@ -376,6 +573,37 @@ static void CollectLocalIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 		tIndex.m_eType = tDesc->m_eType;
 		tIndex.m_bFromReplication = tDesc->m_bFromReplication;
 	}
+}
+
+
+// collect distributed indexes that should be saved into JSON config
+static void CollectDistIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
+{
+	for ( RLockedDistrIt_c tIt ( g_pDistIndexes ); tIt.Next (); )
+	{
+		IndexDesc_t & tIndex = dIndexes.Add();
+		tIndex.m_sName = tIt.GetName();
+		tIndex.m_eType = IndexType_e::DISTR;
+
+		tIndex.m_tDistr.m_dLocals				= tIt.Get()->m_dLocal;
+		tIndex.m_tDistr.m_iAgentConnectTimeout	= tIt.Get()->m_iAgentConnectTimeout;
+		tIndex.m_tDistr.m_iAgentQueryTimeout	= tIt.Get()->m_iAgentQueryTimeout;
+		tIndex.m_tDistr.m_iAgentRetryCount		= tIt.Get()->m_iAgentRetryCount;
+		tIndex.m_tDistr.m_bDivideRemoteRanges	= tIt.Get()->m_bDivideRemoteRanges;
+		tIndex.m_tDistr.m_sHaStrategy			= HAStrategyToStr ( tIt.Get()->m_eHaStrategy );
+
+		for ( const auto & i : tIt.Get()->m_dAgents )
+			tIndex.m_tDistr.m_dAgents.Add ( i->GetConfigStr() );
+	}
+}
+
+
+FilenameBuilder_i * CreateFilenameBuilder ( const char * szIndex )
+{
+	if ( IsConfigless() )
+		return new FilenameBuilder_c(szIndex);
+
+	return nullptr;
 }
 
 
@@ -402,6 +630,8 @@ static bool SetupConfiglessMode ( const CSphConfig & hConf, const CSphString & s
 		sError.SetSprintf ( "'data_dir' cannot be mixed with source declarations in '%s'", sConfigFile.cstr() );
 		return false;
 	}
+
+	SetIndexFilenameBuilder ( CreateFilenameBuilder );
 
 	return true;
 }
@@ -448,12 +678,12 @@ void LoadConfigInt ( const CSphConfig & hConf, const CSphString & sConfigFile )
 }
 
 
-void SaveConfigInt() 
+bool SaveConfigInt ( CSphString & sError )
 {
 	ScopedMutex_t tSaving ( g_tSaveInProgress );
 
 	if ( !ReplicationIsEnabled() && !IsConfigless() )
-		return;
+		return true;
 	
 	CSphVector<ClusterDesc_t> dClusters;
 
@@ -463,27 +693,20 @@ void SaveConfigInt()
 
 	CSphVector<IndexDesc_t> dIndexes;
 	CollectLocalIndexesInt ( dIndexes );
+	CollectDistIndexesInt ( dIndexes );
 
-	CSphString sError;
 	if ( !ConfigWrite ( g_sConfigPath, dClusters, dIndexes, sError ) )
+	{
 		sphWarning ( "%s", sError.cstr() );
+		return false;
+	}
+
+	return true;
 }
 
 //////////////////////////////////////////////////////////////////////////
 
-static CSphString GetPathForNewIndex ( const CSphString & sIndexName )
-{
-	CSphString sRes;
-	if ( g_sDataDir.Length() && !g_sDataDir.Ends("/") && !g_sDataDir.Ends("\\") )
-		sRes.SetSprintf ( "%s/%s", g_sDataDir.cstr(), sIndexName.cstr() );
-	else
-		sRes.SetSprintf ( "%s%s", g_sDataDir.cstr(), sIndexName.cstr() );
-
-	return sRes;
-}
-
-
-static bool PrepareDirForNewIndex ( CSphString & sPath, const CSphString & sIndexName, bool bBinlogReplay, CSphString & sError )
+static bool PrepareDirForNewIndex ( CSphString & sPath, CSphString & sIndexPath, const CSphString & sIndexName, CSphString & sError )
 {
 	CSphString sNewPath = GetPathForNewIndex(sIndexName);
 	StringBuilder_c sRes;
@@ -497,7 +720,7 @@ static bool PrepareDirForNewIndex ( CSphString & sPath, const CSphString & sInde
 		if ( dFiles.GetLength() )
 		{
 			bool bLockFileLeft = dFiles.GetLength()==1 && dFiles[0].Ends (".lock");
-			if ( !bLockFileLeft && !bBinlogReplay )
+			if ( !bLockFileLeft )
 			{
 				sError.SetSprintf ( "directory is not empty: %s", sRes.cstr() );
 				return false;
@@ -511,9 +734,25 @@ static bool PrepareDirForNewIndex ( CSphString & sPath, const CSphString & sInde
 			return false;
 		}
 
+	sPath = sRes.cstr();
 	sRes << "/";
 	sRes << sIndexName;
-	sPath = sRes.cstr();
+	sIndexPath = sRes.cstr();
+
+	return true;
+}
+
+
+static bool CopyFilesForNewIndex ( const StrVec_t & dFiles, const CSphString & sDestPath, CSphString & sError )
+{
+	for ( const auto & i : dFiles )
+	{
+		CSphString sDest = i;
+		StripPath(sDest);
+		sDest.SetSprintf ( "%s/%s", sDestPath.cstr(), sDest.cstr() );
+		if ( !CopyFile ( i, sDest, sError ) )
+			return false;			
+	}
 
 	return true;
 }
@@ -521,82 +760,164 @@ static bool PrepareDirForNewIndex ( CSphString & sPath, const CSphString & sInde
 
 static bool CheckCreateTableSettings ( const CreateTableSettings_t & tCreateTable, CSphString & sError )
 {
-	static const char * dForbidden[] = { "path", "type", "stored_fields", "rt_field" };
+	static const char * dForbidden[] = { "path", "stored_fields", "stored_only_fields", "rt_field", "embedded_limit" };
+	static const char * dTypes[] = { "rt", "pq", "percolate", "distributed" };
 
 	for ( const auto & i : tCreateTable.m_dOpts )
 	{
 		for ( const auto & j : dForbidden )
 			if ( i.m_sName==j )
 			{
-				sError.SetSprintf ( "setting not allowed: %s", i.m_sName.cstr() );
+				sError.SetSprintf ( "setting not allowed: %s='%s'", i.m_sName.cstr(), i.m_sValue.cstr() );
 				return false;
 			}
 
 		for ( int j = 0; j < GetNumRtTypes(); j++ )
 			if ( i.m_sName==GetRtType(j).m_szName )
 			{
-				sError.SetSprintf ( "setting not allowed: %s", i.m_sName.cstr() );
+				sError.SetSprintf ( "setting not allowed: %s='%s'", i.m_sName.cstr(), i.m_sValue.cstr() );
 				return false;
 			}
+
+		if ( i.m_sName=="type" )
+		{
+			bool bFound = false;
+			for ( const auto & j : dTypes )
+				bFound |= i.m_sValue==j;
+
+			if ( !bFound )
+			{
+				sError.SetSprintf ( "setting not allowed: %s='%s'", i.m_sName.cstr(), i.m_sValue.cstr() );
+				return false;
+			}
+		}
 	}
 
 	return true;
 }
 
 
-CSphIndex * CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, bool bBinlogReplay, CSphString & sError )
+bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, StrVec_t & dWarnings, CSphString & sError )
 {
 	if ( tCreateTable.m_bIfNotExists && g_pLocalIndexes->Contains(sIndex) )
-		return ServedDescRPtr_c ( GetServed(sIndex) )->m_pIndex;
-
-	CSphString sPath;
-	if ( !PrepareDirForNewIndex ( sPath, sIndex, bBinlogReplay, sError ) )
-		return nullptr;
+		return true;
 
 	if ( !CheckCreateTableSettings ( tCreateTable, sError ) )
-		return nullptr;
+		return false;
 
 	IndexSettingsContainer_c tSettingsContainer;
-	tSettingsContainer.Populate ( tCreateTable );
-	tSettingsContainer.Add ( "path", sPath );
-	tSettingsContainer.Add ( "type", "rt" );
+	if ( !tSettingsContainer.Populate ( tCreateTable ) )
+	{
+		sError = tSettingsContainer.GetError();
+		return false;
+	}
+
+	if ( !tSettingsContainer.Contains("type") )
+		tSettingsContainer.Add ( "type", "rt" );
+
+	bool bDistributed = tSettingsContainer.Get("type")=="distributed";
+	if ( !bDistributed )
+	{
+		CSphString sPath, sIndexPath;
+		if ( !PrepareDirForNewIndex ( sPath, sIndexPath, sIndex, sError ) )
+			return false;
+
+		tSettingsContainer.Add ( "path", sIndexPath );
+		tSettingsContainer.Add ( "embedded_limit", "0" );
+
+		if ( !CopyFilesForNewIndex ( tSettingsContainer.GetFiles(), sPath, sError ) )
+			return false;
+	}
 
 	const CSphConfigSection & hCfg = tSettingsContainer.AsCfg();
 
 	GuardedHash_c dNotLoadedIndexes;
-	ESphAddIndex eAdd = AddIndexMT ( dNotLoadedIndexes, sIndex.cstr(), hCfg );
-	assert ( eAdd==ADD_DSBLED || eAdd==ADD_ERROR );
-	if ( eAdd!=ADD_DSBLED )
-		return nullptr;
+	ESphAddIndex eAdd = AddIndexMT ( dNotLoadedIndexes, sIndex.cstr(), hCfg, false, sError, &dWarnings );
+	assert ( eAdd==ADD_DSBLED || eAdd==ADD_DISTR || eAdd==ADD_ERROR );
+	if ( eAdd==ADD_ERROR )
+		return false;
 
-	ServedIndexRefPtr_c pServed = GetServed ( sIndex, &dNotLoadedIndexes );
-	ServedDescWPtr_c pDesc ( pServed );
-	if ( !PreallocNewIndex ( *pDesc, &hCfg, sIndex.cstr() ) )
-		return nullptr;
+	if ( eAdd==ADD_DSBLED )
+	{
+		ServedIndexRefPtr_c pServed = GetServed ( sIndex, &dNotLoadedIndexes );
+		ServedDescWPtr_c pDesc ( pServed );
+		if ( !PreallocNewIndex ( *pDesc, &hCfg, sIndex.cstr(), sError ) )
+		{
+			g_pLocalIndexes->Delete(sIndex);
+			return false;
+		}
 
-	if ( g_pBinlog && !bBinlogReplay )
-		g_pBinlog->BinlogCreateTable ( &pDesc->m_pIndex->m_iTID, sIndex.cstr(), tCreateTable );
+		g_pLocalIndexes->AddOrReplace ( pServed, sIndex );
+	}
 
-	g_pLocalIndexes->AddOrReplace ( pServed, sIndex );
+	if ( !SaveConfigInt(sError) )
+	{
+		g_pLocalIndexes->Delete(sIndex);
+		return false;
+	}
 
-	return pDesc->m_pIndex;
+	return true;
 }
 
 
-bool DropIndexInt ( const CSphString & sIndex, bool bIfExists, bool bBinlogReplay, CSphString & sError )
+static void DeleteExtraIndexFiles ( CSphIndex * pIndex )
+{
+	assert(pIndex);
+
+	CSphString sTmp;
+	CSphString sPath = GetPathForNewIndex ( pIndex->GetName() );
+
+	// single file
+	const CSphString & sExceptions = pIndex->GetTokenizer()->GetSettings().m_sSynonymsFile;
+	if ( sExceptions.Length() )
+	{
+		sTmp.SetSprintf ( "%s/%s", sPath.cstr(), sExceptions.cstr() );
+		::unlink ( sTmp.cstr() );
+	}
+
+	// space-separated string
+	const CSphString & sStopwords =  pIndex->GetDictionary()->GetSettings().m_sStopwords;
+	StrVec_t dStops = sphSplit ( sStopwords.cstr(), sStopwords.Length(), " \t," );
+	for ( const auto & i : dStops )
+	{
+		sTmp.SetSprintf ( "%s/%s", sPath.cstr(), i.cstr() );
+		::unlink ( sTmp.cstr() );
+	}
+
+	// array
+	for ( const auto & i : pIndex->GetDictionary()->GetSettings().m_dWordforms )
+	{
+		sTmp.SetSprintf ( "%s/%s", sPath.cstr(), i.cstr() );
+		::unlink ( sTmp.cstr() );
+	}
+}
+
+
+static bool DropDistrIndex ( const CSphString & sIndex, CSphString & sError )
+{
+	auto pDistr = GetDistr(sIndex);
+	if ( !pDistr )
+	{
+		sError.SetSprintf ( "DROP TABLE failed: unknown distributed index '%s'", sIndex.cstr() );
+		return false;
+	}
+
+	g_pDistIndexes->Delete(sIndex);
+
+	return true;
+}
+
+
+static bool DropLocalIndex ( const CSphString & sIndex, CSphString & sError )
 {
 	auto pServed = GetServed(sIndex);
 	if ( !pServed )
 	{
-		if ( bIfExists )
-			return true;
-
 		sError.SetSprintf ( "DROP TABLE failed: unknown local index '%s'", sIndex.cstr() );
 		return false;
 	}
 
 	ServedDescWPtr_c pWptr(pServed); // write-lock
-
 	if ( ServedDesc_t::IsCluster(pWptr) )
 	{
 		sError.SetSprintf ( "DROP TABLE failed: unable to drop a cluster index '%s'", sIndex.cstr() );
@@ -610,15 +931,48 @@ bool DropIndexInt ( const CSphString & sIndex, bool bIfExists, bool bBinlogRepla
 		return false;
 	}
 
-	if ( !pRt->Truncate ( bBinlogReplay, sError ) )
+	if ( !pRt->Truncate(sError) )
 		return false;
 
 	pRt->IndexDeleted();
 
+	DeleteExtraIndexFiles(pRt);
+
 	g_pLocalIndexes->Delete(sIndex);
 
-	if ( g_pBinlog && !bBinlogReplay )
-		g_pBinlog->BinlogDropTable ( &pRt->m_iTID, sIndex.cstr(), bIfExists );
+	return true;
+}
+
+
+bool DropIndexInt ( const CSphString & sIndex, bool bIfExists, CSphString & sError )
+{
+	bool bLocal = !!GetServed(sIndex);
+	bool bDistr = !!GetDistr(sIndex);
+	if ( bDistr )
+	{
+		if ( !DropDistrIndex ( sIndex, sError ) )
+			return false;
+	}
+	else if ( bLocal )
+	{
+		if ( !DropLocalIndex ( sIndex, sError ) )
+			return false;
+	}
+	else
+	{
+		if ( bIfExists )
+			return true;
+
+		sError.SetSprintf ( "DROP TABLE failed: unknown index '%s'", sIndex.cstr() );
+		return false;
+	}
+
+	// we are unable to roll back the drop at this point
+	if ( !SaveConfigInt(sError) )
+	{
+		sError.SetSprintf ( "DROP TABLE failed for index '%s': %s", sIndex.cstr(), sError.cstr() );
+		return false;
+	}
 
 	return true;
 }

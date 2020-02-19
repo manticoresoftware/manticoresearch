@@ -17,14 +17,28 @@
 #include "fileutils.h"
 #include "sphinxstem.h"
 #include "icu.h"
-#include "searchdaemon.h"
+#include "attribute.h"
 
 #if !USE_WINDOWS
 	#include <glob.h>
 #endif
 
 
-static const char * sphBigramName ( ESphBigram eType )
+static CreateFilenameBuilder_fn g_fnCreateFilenameBuilder = nullptr;
+
+void SetIndexFilenameBuilder ( CreateFilenameBuilder_fn pBuilder )
+{
+	g_fnCreateFilenameBuilder = pBuilder;
+}
+
+
+CreateFilenameBuilder_fn GetIndexFilenameBuilder()
+{
+	return g_fnCreateFilenameBuilder;
+}
+
+
+static const char * BigramName ( ESphBigram eType )
 {
 	switch ( eType )
 	{
@@ -44,19 +58,115 @@ static const char * sphBigramName ( ESphBigram eType )
 }
 
 
-static void DumpKey ( StringBuilder_c & tBuf, const char * sKey, const char * sVal, bool bCond )
+//////////////////////////////////////////////////////////////////////////
+
+class SettingsFormatter_c
 {
+public:
+				SettingsFormatter_c ( FILE * pFile, const char * szPrefix, const char * szEq, const char * szPostfix, bool bIgnoreConf = false );
+				SettingsFormatter_c ( StringBuilder_c & tBuf, const char * szPrefix, const char * szEq, const char * szPostfix, bool bIgnoreConf = false );
+
+	template <typename T>
+	void		Add ( const char * szKey, T tVal, bool bCond );
+
+	template <typename T>
+	void		AddEmbedded ( const char * szKey, const VecTraits_T<T> & dEmbedded, bool bCond );
+
+private:
+	FILE *				m_pFile = nullptr;
+	StringBuilder_c *	m_pBuf = nullptr;
+	CSphString			m_sPrefix;
+	CSphString			m_sEq;
+	CSphString			m_sPostfix;
+	bool				m_bIgnoreCond = false;
+};
+
+
+SettingsFormatter_c::SettingsFormatter_c ( FILE * pFile, const char * szPrefix, const char * szEq, const char * szPostfix, bool bIgnoreCond )
+	: m_pFile		( pFile )
+	, m_sPrefix		( szPrefix )
+	, m_sEq			( szEq )
+	, m_sPostfix	( szPostfix )
+	, m_bIgnoreCond	( bIgnoreCond )
+
+{}
+
+SettingsFormatter_c::SettingsFormatter_c ( StringBuilder_c & tBuf, const char * szPrefix, const char * szEq, const char * szPostfix, bool bIgnoreCond )
+	: m_pBuf		( &tBuf )
+	, m_sPrefix		( szPrefix )
+	, m_sEq			( szEq )
+	, m_sPostfix	( szPostfix )
+	, m_bIgnoreCond	( bIgnoreCond )
+{}
+
+
+template <typename T>
+void SettingsFormatter_c::Add ( const char * szKey, T tVal, bool bCond )
+{
+	if ( !m_bIgnoreCond && !bCond )
+		return;
+
+	if ( m_pBuf )
+		(*m_pBuf) << m_sPrefix << szKey << m_sEq << tVal << m_sPostfix;
+
+	if ( m_pFile )
+	{
+		StringBuilder_c tBuilder;
+		tBuilder << m_sPrefix << szKey << m_sEq << tVal << m_sPostfix;
+		fputs ( tBuilder.cstr(), m_pFile );
+	}
+}
+
+template <typename T>
+void SettingsFormatter_c::AddEmbedded ( const char * szKey, const VecTraits_T<T> & dEmbedded, bool bCond )
+{
+	CSphString sPlural;
+	sPlural.SetSprintf( "%ss", szKey );
+	Add ( sPlural.cstr(), bCond ? 1 : 0, true );
+
 	if ( bCond )
-		tBuf << sKey << " = " << sVal << "\n";
+	{
+		ARRAY_FOREACH ( i, dEmbedded )
+		{
+			CSphString sName;
+			sName.SetSprintf ( "%s [%d]", szKey, i );
+			Add ( sName.cstr(), dEmbedded[i], true );
+		}
+	}
 }
 
 
-static void DumpKey ( StringBuilder_c & tBuf, const char * sKey, int iVal, bool bCond )
+//////////////////////////////////////////////////////////////////////////
+
+void SettingsWriter_c::Dump ( StringBuilder_c & tBuf, FilenameBuilder_i * pFilenameBuilder ) const
 {
-	if ( bCond )
-		tBuf.Appendf ( "%s = %d\n", sKey, iVal );
+	SettingsFormatter_c tFormatter ( tBuf, "", " = ", "\n" );
+	Format ( tFormatter, pFilenameBuilder );
 }
 
+
+void SettingsWriter_c::DumpCfg ( FILE * pFile, FilenameBuilder_i * pFilenameBuilder ) const
+{
+	SettingsFormatter_c tFormatter ( pFile, "\t", " = ", "\n" );
+	Format ( tFormatter, pFilenameBuilder );
+}
+
+
+void SettingsWriter_c::DumpReadable ( FILE * pFile, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const
+{
+	SettingsFormatter_c tFormatter ( pFile, "", ": ", "\n", true );
+	Format ( tFormatter, pFilenameBuilder );
+}
+
+
+void SettingsWriter_c::DumpCreateTable ( StringBuilder_c & tBuf, FilenameBuilder_i * pFilenameBuilder ) const
+{
+	SettingsFormatter_c tFormatter ( tBuf, "", "='", "' " );
+	Format ( tFormatter, pFilenameBuilder );
+}
+
+
+//////////////////////////////////////////////////////////////////////////
 
 static RtTypedAttr_t g_dRtTypedAttrs[]=
 {
@@ -81,6 +191,15 @@ int	GetNumRtTypes()
 const RtTypedAttr_t & GetRtType ( int iType )
 {
 	return g_dRtTypedAttrs[iType];
+}
+
+
+static CSphString FormatPath ( const CSphString & sFile, FilenameBuilder_i * pFilenameBuilder )
+{
+	if ( !pFilenameBuilder || sFile.IsEmpty() )
+		return sFile;
+
+	return pFilenameBuilder->GetFullPath(sFile);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -152,8 +271,7 @@ bool CSphTokenizerSettings::Load ( CSphReader & tReader, CSphEmbeddedFiles & tEm
 	}
 
 	m_sSynonymsFile = tReader.GetString ();
-	ReadFileInfo ( tReader, m_sSynonymsFile.cstr(), false,
-		tEmbeddedFiles.m_tSynonymFile, tEmbeddedFiles.m_bEmbeddedSynonyms ? NULL : &sWarning );
+	tEmbeddedFiles.m_tSynonymFile.Read ( tReader, m_sSynonymsFile.cstr(), false, tEmbeddedFiles.m_bEmbeddedSynonyms ? NULL : &sWarning );
 	m_sBoundary = tReader.GetString ();
 	m_sIgnoreChars = tReader.GetString ();
 	m_iNgramLen = tReader.GetDword ();
@@ -165,74 +283,36 @@ bool CSphTokenizerSettings::Load ( CSphReader & tReader, CSphEmbeddedFiles & tEm
 }
 
 
-void CSphTokenizerSettings::Dump ( StringBuilder_c & tBuf ) const
+void CSphTokenizerSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const
 {
-	DumpKey ( tBuf, "charset_type",		( m_iType==TOKENIZER_UTF8 || m_iType==TOKENIZER_NGRAM )
-		? "utf-8"
-		: "unknown tokenizer (deprecated sbcs?)", true );
+	bool bKnownTokenizer = ( m_iType==TOKENIZER_UTF8 || m_iType==TOKENIZER_NGRAM );
+	tOut.Add ( "charset_type",		bKnownTokenizer ? "utf-8" : "unknown tokenizer (deprecated sbcs?)", !bKnownTokenizer );
+	tOut.Add ( "charset_table",		m_sCaseFolding,	!m_sCaseFolding.IsEmpty() );
+	tOut.Add ( "min_word_len",		m_iMinWordLen,	m_iMinWordLen>1 );
+	tOut.Add ( "ngram_len",			m_iNgramLen,	m_iNgramLen && !m_sNgramChars.IsEmpty() );
+	tOut.Add ( "ngram_chars",		m_sNgramChars,	m_iNgramLen && !m_sNgramChars.IsEmpty() );
+	tOut.Add ( "phrase_boundary",	m_sBoundary,	!m_sBoundary.IsEmpty() );
+	tOut.Add ( "ignore_chars",		m_sIgnoreChars,	!m_sIgnoreChars.IsEmpty() );
+	tOut.Add ( "blend_chars",		m_sBlendChars,	!m_sBlendChars.IsEmpty() );
+	tOut.Add ( "blend_mode",		m_sBlendMode,	!m_sBlendMode.IsEmpty() );
 
-	DumpKey ( tBuf, "charset_table",	m_sCaseFolding.cstr(),	!m_sCaseFolding.IsEmpty() );
-	DumpKey ( tBuf, "min_word_len",		m_iMinWordLen,			m_iMinWordLen>1 );
-	DumpKey ( tBuf, "ngram_len",		m_iNgramLen,			m_iNgramLen && !m_sNgramChars.IsEmpty() );
-	DumpKey ( tBuf, "ngram_chars",		m_sNgramChars.cstr(),	m_iNgramLen && !m_sNgramChars.IsEmpty() );
-	DumpKey ( tBuf, "exceptions",		m_sSynonymsFile.cstr(),	!m_sSynonymsFile.IsEmpty() );
-	DumpKey ( tBuf, "phrase_boundary",	m_sBoundary.cstr(),		!m_sBoundary.IsEmpty() );
-	DumpKey ( tBuf, "ignore_chars",		m_sIgnoreChars.cstr(),	!m_sIgnoreChars.IsEmpty() );
-	DumpKey ( tBuf, "blend_chars",		m_sBlendChars.cstr(),	!m_sBlendChars.IsEmpty() );
-	DumpKey ( tBuf, "blend_mode",		m_sBlendMode.cstr(),	!m_sBlendMode.IsEmpty() );
+	CSphString sSynonymsFile = FormatPath ( m_sSynonymsFile, pFilenameBuilder );
+	tOut.Add ( "exceptions",		sSynonymsFile,	!sSynonymsFile.IsEmpty() );
 }
 
 
-void CSphTokenizerSettings::DumpCfg ( FILE * fp ) const
+void CSphTokenizerSettings::DumpReadable ( FILE * fp, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const
 {
-	fprintf ( fp, "\tcharset_type = %s\n", ( m_iType==TOKENIZER_UTF8 || m_iType==TOKENIZER_NGRAM )
-		? "utf-8"
-		: "unknown tokenizer (deprecated sbcs?)" );
+	SettingsFormatter_c tFormatter ( fp, "tokenizer-", ": ", "\n", true );
+	Format ( tFormatter, pFilenameBuilder );
 
-	if ( !m_sCaseFolding.IsEmpty() )
-		fprintf ( fp, "\tcharset_table = %s\n", m_sCaseFolding.cstr() );
-	if ( m_iMinWordLen>1 )
-		fprintf ( fp, "\tmin_word_len = %d\n", m_iMinWordLen );
-	if ( m_iNgramLen && !m_sNgramChars.IsEmpty() )
-		fprintf ( fp, "\tngram_len = %d\nngram_chars = %s\n", m_iNgramLen, m_sNgramChars.cstr() );
-	if ( !m_sSynonymsFile.IsEmpty() )
-		fprintf ( fp, "\texceptions = %s\n", m_sSynonymsFile.cstr() );
-	if ( !m_sBoundary.IsEmpty() )
-		fprintf ( fp, "\tphrase_boundary = %s\n", m_sBoundary.cstr() );
-	if ( !m_sIgnoreChars.IsEmpty() )
-		fprintf ( fp, "\tignore_chars = %s\n", m_sIgnoreChars.cstr() );
-	if ( !m_sBlendChars.IsEmpty() )
-		fprintf ( fp, "\tblend_chars = %s\n", m_sBlendChars.cstr() );
-	if ( !m_sBlendMode.IsEmpty() )
-		fprintf ( fp, "\tblend_mode = %s\n", m_sBlendMode.cstr() );
+	tFormatter.AddEmbedded ( "embedded_exception", tEmbeddedFiles.m_dSynonyms, tEmbeddedFiles.m_bEmbeddedSynonyms );
 }
 
-
-void CSphTokenizerSettings::DumpReadable ( FILE * fp, const CSphEmbeddedFiles & tEmbeddedFiles ) const
-{
-	fprintf ( fp, "tokenizer-type: %d\n", m_iType );
-	fprintf ( fp, "tokenizer-case-folding: %s\n", m_sCaseFolding.cstr() );
-	fprintf ( fp, "tokenizer-min-word-len: %d\n", m_iMinWordLen );
-	fprintf ( fp, "tokenizer-ngram-chars: %s\n", m_sNgramChars.cstr() );
-	fprintf ( fp, "tokenizer-ngram-len: %d\n", m_iNgramLen );
-	fprintf ( fp, "tokenizer-exceptions: %s\n", m_sSynonymsFile.cstr() );
-	fprintf ( fp, "tokenizer-phrase-boundary: %s\n", m_sBoundary.cstr() );
-	fprintf ( fp, "tokenizer-ignore-chars: %s\n", m_sIgnoreChars.cstr() );
-	fprintf ( fp, "tokenizer-blend-chars: %s\n", m_sBlendChars.cstr() );
-	fprintf ( fp, "tokenizer-blend-mode: %s\n", m_sBlendMode.cstr() );
-	fprintf ( fp, "tokenizer-blend-mode: %s\n", m_sBlendMode.cstr() );
-
-	fprintf ( fp, "dictionary-embedded-exceptions: %d\n", tEmbeddedFiles.m_bEmbeddedSynonyms ? 1 : 0 );
-	if ( tEmbeddedFiles.m_bEmbeddedSynonyms )
-	{
-		ARRAY_FOREACH ( i, tEmbeddedFiles.m_dSynonyms )
-			fprintf ( fp, "\tdictionary-embedded-exception [%d]: %s\n", i, tEmbeddedFiles.m_dSynonyms[i].cstr() );
-	}
-}
 
 //////////////////////////////////////////////////////////////////////////
 
-void CSphDictSettings::Setup ( const CSphConfigSection & hIndex, CSphString & sWarning )
+void CSphDictSettings::Setup ( const CSphConfigSection & hIndex, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning )
 {
 	m_sMorphology = hIndex.GetStr ( "morphology" );
 	m_sMorphFields = hIndex.GetStr ( "morphology_skip_fields" );
@@ -245,10 +325,16 @@ void CSphDictSettings::Setup ( const CSphConfigSection & hIndex, CSphString & sW
 		if ( !pWordforms->cstr() || !*pWordforms->cstr() )
 			continue;
 
-		StrVec_t dFilesFound = FindFiles ( pWordforms->cstr() );
+		CSphString sWordformFile = FormatPath ( pWordforms->cstr(), pFilenameBuilder );
+		StrVec_t dFilesFound = FindFiles ( sWordformFile.cstr() );
 
-		ARRAY_FOREACH ( i, dFilesFound )
-			m_dWordforms.Add ( dFilesFound[i] );
+		for ( auto & i : dFilesFound )
+		{
+			if ( pFilenameBuilder )
+				StripPath(i);
+
+			m_dWordforms.Add(i);
+		}
 	}
 
 	if ( hIndex("dict") )
@@ -285,7 +371,7 @@ void CSphDictSettings::Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbedde
 	for ( int i = 0; i < nFiles; i++ )
 	{
 		sFile = tReader.GetString ();
-		ReadFileInfo ( tReader, sFile.cstr(), true, tEmbeddedFiles.m_dStopwordFiles[i], tEmbeddedFiles.m_bEmbeddedSynonyms ? NULL : &sWarning );
+		tEmbeddedFiles.m_dStopwordFiles[i].Read ( tReader, sFile.cstr(), true, tEmbeddedFiles.m_bEmbeddedSynonyms ? NULL : &sWarning );
 	}
 
 	tEmbeddedFiles.m_bEmbeddedWordforms = false;
@@ -304,8 +390,7 @@ void CSphDictSettings::Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbedde
 	ARRAY_FOREACH ( i, m_dWordforms )
 	{
 		m_dWordforms[i] = tReader.GetString();
-		ReadFileInfo ( tReader, m_dWordforms[i].cstr(), false,
-			tEmbeddedFiles.m_dWordformFiles[i], tEmbeddedFiles.m_bEmbeddedWordforms ? NULL : &sWarning );
+		tEmbeddedFiles.m_dWordformFiles[i].Read ( tReader, m_dWordforms[i].cstr(), false, tEmbeddedFiles.m_bEmbeddedWordforms ? NULL : &sWarning );
 	}
 
 	m_iMinStemmingLen = tReader.GetDword ();
@@ -317,68 +402,31 @@ void CSphDictSettings::Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbedde
 }
 
 
-void CSphDictSettings::Dump ( StringBuilder_c & tBuf ) const
+void CSphDictSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const
 {
-	StringBuilder_c tWordforms;
-	for ( const auto & dWordform : m_dWordforms )
-		tWordforms << " " << dWordform;
+	tOut.Add ( "dict",					m_bWordDict ? "keywords" : "crc", !m_bWordDict );
+	tOut.Add ( "morphology",			m_sMorphology,		!m_sMorphology.IsEmpty() );
+	tOut.Add ( "min_stemming_len",		m_iMinStemmingLen,	m_iMinStemmingLen>1 );
+	tOut.Add ( "stopwords_unstemmed",	1,					m_bStopwordsUnstemmed );
 
-	DumpKey ( tBuf, "dict",					"keywords",				m_bWordDict );
-	DumpKey ( tBuf, "morphology",			m_sMorphology.cstr(),	!m_sMorphology.IsEmpty() );
-	DumpKey ( tBuf, "stopwords",			m_sStopwords.cstr(),	!m_sStopwords.IsEmpty() );
-	DumpKey ( tBuf, "wordforms",			tWordforms.cstr()+1,	m_dWordforms.GetLength()>0 );
-	DumpKey ( tBuf, "min_stemming_len",		m_iMinStemmingLen,		m_iMinStemmingLen>1 );
-	DumpKey ( tBuf, "stopwords_unstemmed",	1,						m_bStopwordsUnstemmed );
+	CSphString sStopwordsFile = FormatPath ( m_sStopwords, pFilenameBuilder );
+	tOut.Add ( "stopwords",				sStopwordsFile,		!sStopwordsFile.IsEmpty() );
+
+	for ( const auto & i : m_dWordforms )
+	{
+		CSphString sWordformsFile = FormatPath ( i, pFilenameBuilder );
+		tOut.Add ( "wordforms",	sWordformsFile, !sWordformsFile.IsEmpty() );
+	}
 }
 
 
-void CSphDictSettings::DumpCfg ( FILE * fp ) const
+void CSphDictSettings::DumpReadable ( FILE * fp, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const
 {
-	if ( m_bWordDict )
-		fprintf ( fp, "\tdict = keywords\n" );
-	if ( !m_sMorphology.IsEmpty() )
-		fprintf ( fp, "\tmorphology = %s\n", m_sMorphology.cstr() );
-	if ( !m_sStopwords.IsEmpty() )
-		fprintf ( fp, "\tstopwords = %s\n", m_sStopwords.cstr() );
-	if ( m_dWordforms.GetLength() )
-	{
-		fprintf ( fp, "\twordforms =" );
-		for ( const auto & i : m_dWordforms )
-			fprintf ( fp, " %s", i.cstr() );
-		fprintf ( fp, "\n" );
-	}
-	if ( m_iMinStemmingLen>1 )
-		fprintf ( fp, "\tmin_stemming_len = %d\n", m_iMinStemmingLen );
-	if ( m_bStopwordsUnstemmed )
-		fprintf ( fp, "\tstopwords_unstemmed = 1\n" );
-}
+	SettingsFormatter_c tFormatter ( fp, "dictionary-", ": ", "\n", true );
+	Format ( tFormatter, pFilenameBuilder );
 
-
-void CSphDictSettings::DumpReadable ( FILE * fp, const CSphEmbeddedFiles & tEmbeddedFiles ) const
-{
-	fprintf ( fp, "dict: %s\n", m_bWordDict ? "keywords" : "crc" );
-	fprintf ( fp, "dictionary-morphology: %s\n", m_sMorphology.cstr() );
-
-	fprintf ( fp, "dictionary-stopwords-file: %s\n", m_sStopwords.cstr() );
-	fprintf ( fp, "dictionary-embedded-stopwords: %d\n", tEmbeddedFiles.m_bEmbeddedStopwords ? 1 : 0 );
-	if ( tEmbeddedFiles.m_bEmbeddedStopwords )
-	{
-		ARRAY_FOREACH ( i, tEmbeddedFiles.m_dStopwords )
-			fprintf ( fp, "\tdictionary-embedded-stopword [%d]: " UINT64_FMT "\n", i, tEmbeddedFiles.m_dStopwords[i] );
-	}
-
-	ARRAY_FOREACH ( i, m_dWordforms )
-		fprintf ( fp, "dictionary-wordform-file [%d]: %s\n", i, m_dWordforms[i].cstr() );
-
-	fprintf ( fp, "dictionary-embedded-wordforms: %d\n", tEmbeddedFiles.m_bEmbeddedWordforms ? 1 : 0 );
-	if ( tEmbeddedFiles.m_bEmbeddedWordforms )
-	{
-		ARRAY_FOREACH ( i, tEmbeddedFiles.m_dWordforms )
-			fprintf ( fp, "\tdictionary-embedded-wordform [%d]: %s\n", i, tEmbeddedFiles.m_dWordforms[i].cstr() );
-	}
-
-	fprintf ( fp, "min-stemming-len: %d\n", m_iMinStemmingLen );
-	fprintf ( fp, "stopwords-unstemmed: %d\n", m_bStopwordsUnstemmed ? 1 : 0 );
+	tFormatter.AddEmbedded ( "embedded_stopword", tEmbeddedFiles.m_dStopwords, tEmbeddedFiles.m_bEmbeddedStopwords );
+	tFormatter.AddEmbedded ( "embedded_wordform", tEmbeddedFiles.m_dWordforms, tEmbeddedFiles.m_bEmbeddedWordforms );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -421,24 +469,10 @@ void CSphFieldFilterSettings::Save ( CSphWriter & tWriter ) const
 }
 
 
-void CSphFieldFilterSettings::Dump ( StringBuilder_c & tBuf ) const
+void CSphFieldFilterSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * /*pFilenameBuilder*/ ) const
 {
 	for ( const auto & i : m_dRegexps )
-		DumpKey ( tBuf, "regexp_filter", i.cstr(), !i.IsEmpty() );
-}
-
-
-void CSphFieldFilterSettings::DumpCfg ( FILE * pFile ) const
-{
-	for ( const auto & i : m_dRegexps )
-		fprintf ( pFile, "\tregexp_filter = %s\n", i.cstr() );
-}
-
-
-void CSphFieldFilterSettings::DumpReadable ( FILE * pFile ) const
-{
-	for ( const auto & i : m_dRegexps )
-		fprintf ( pFile, "regexp-filter: %s\n", i.cstr() );
+		tOut.Add ( "regexp_filter", i, !i.IsEmpty() );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -464,7 +498,7 @@ CSphString KillListTarget_t::Format() const
 }
 
 
-bool KillListTargets_t::Parse ( const CSphString & sTargets, const char * szIndexName, CSphString & sError )
+bool KillListTargets_c::Parse ( const CSphString & sTargets, const char * szIndexName, CSphString & sError )
 {
 	StrVec_t dIndexes;
 	sphSplit ( dIndexes, sTargets.cstr(), " \t," );
@@ -505,28 +539,14 @@ bool KillListTargets_t::Parse ( const CSphString & sTargets, const char * szInde
 }
 
 
-void KillListTargets_t::Dump ( StringBuilder_c & tBuf ) const
-{
-	for ( const auto & tTarget : m_dTargets )
-		DumpKey ( tBuf, "killlist_target", tTarget.Format().cstr(), true );
-}
-
-
-void KillListTargets_t::DumpCfg ( FILE * pFile ) const
+void KillListTargets_c::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * /*pFilenameBuilder*/ ) const
 {
 	StringBuilder_c sTargets;
 	auto tComma = ScopedComma_c ( sTargets, "," );
 	for ( const auto & i : m_dTargets )
 		sTargets += i.Format().cstr();
 
-	fprintf ( pFile, "\tkilllist_target = %s\n", sTargets.cstr() );
-}
-
-
-void KillListTargets_t::DumpReadable ( FILE * pFile ) const
-{
-	for ( const auto & i : m_dTargets )
-		fprintf ( pFile, "killlist-target: %s %u\n", i.m_sIndex.cstr(), i.m_uFlags );
+	tOut.Add ( "killlist_target", sTargets.cstr(), !sTargets.IsEmpty() );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -536,6 +556,12 @@ void CSphIndexSettings::ParseStoredFields ( const CSphConfigSection & hIndex )
 	CSphString sFields = hIndex.GetStr ( "stored_fields" );
 	sFields.ToLower();
 	sphSplit ( m_dStoredFields, sFields.cstr() );
+	m_dStoredFields.Uniq();
+
+	sFields = hIndex.GetStr ( "stored_only_fields" );
+	sFields.ToLower();
+	sphSplit ( m_dStoredOnlyFields, sFields.cstr() );
+	m_dStoredOnlyFields.Uniq();
 }
 
 
@@ -621,7 +647,6 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 
 	m_dPrefixFields.Uniq();
 	m_dInfixFields.Uniq();
-	m_dStoredFields.Uniq();
 
 	for ( const auto & sField : m_dPrefixFields )
 		if ( m_dInfixFields.Contains(sField) )
@@ -761,144 +786,116 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 }
 
 
-void CSphIndexSettings::Dump ( StringBuilder_c & tBuf ) const
+void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * /*pFilenameBuilder*/ ) const
 {
-	DumpKey ( tBuf, "min_prefix_len",		m_iMinPrefixLen,				m_iMinPrefixLen!=0 );
-	DumpKey ( tBuf, "min_infix_len",		m_iMinInfixLen,					m_iMinInfixLen!=0 );
-	DumpKey ( tBuf, "max_substring_len",	m_iMaxSubstringLen,				m_iMaxSubstringLen!=0 );
-	DumpKey ( tBuf, "index_exact_words",	1,								m_bIndexExactWords );
-	DumpKey ( tBuf, "html_strip",			1,								m_bHtmlStrip );
-	DumpKey ( tBuf, "html_index_attrs",		m_sHtmlIndexAttrs.cstr(),		!m_sHtmlIndexAttrs.IsEmpty() );
-	DumpKey ( tBuf, "html_remove_elements", m_sHtmlRemoveElements.cstr(),	!m_sHtmlRemoveElements.IsEmpty() );
-	DumpKey ( tBuf, "index_zones",			m_sZones.cstr(),				!m_sZones.IsEmpty() );
-	DumpKey ( tBuf, "index_field_lengths",	1,								m_bIndexFieldLens );
-	DumpKey ( tBuf, "index_sp",				1,								m_bIndexSP );
-	DumpKey ( tBuf, "phrase_boundary_step",	m_iBoundaryStep,				m_iBoundaryStep!=0 );
-	DumpKey ( tBuf, "stopword_step",		m_iStopwordStep,				m_iStopwordStep!=1 );
-	DumpKey ( tBuf, "overshort_step",		m_iOvershortStep,				m_iOvershortStep!=1 );
-	DumpKey ( tBuf, "bigram_index", sphBigramName ( m_eBigramIndex ),		m_eBigramIndex!=SPH_BIGRAM_NONE );
-	DumpKey ( tBuf, "bigram_freq_words",	m_sBigramWords.cstr(),			!m_sBigramWords.IsEmpty() );
-	DumpKey ( tBuf, "index_token_filter",	m_sIndexTokenFilter.cstr(),		!m_sIndexTokenFilter.IsEmpty() );
-}
-
-
-void CSphIndexSettings::DumpCfg ( FILE * fp ) const
-{
-	if ( m_iMinPrefixLen )
-		fprintf ( fp, "\tmin_prefix_len = %d\n", m_iMinPrefixLen );
-	if ( m_iMinInfixLen )
-		fprintf ( fp, "\tmin_prefix_len = %d\n", m_iMinInfixLen );
-	if ( m_iMaxSubstringLen )
-		fprintf ( fp, "\tmax_substring_len = %d\n", m_iMaxSubstringLen );
-	if ( m_bIndexExactWords )
-		fprintf ( fp, "\tindex_exact_words = %d\n", m_bIndexExactWords ? 1 : 0 );
-	if ( m_bHtmlStrip )
-		fprintf ( fp, "\thtml_strip = 1\n" );
-	if ( !m_sHtmlIndexAttrs.IsEmpty() )
-		fprintf ( fp, "\thtml_index_attrs = %s\n", m_sHtmlIndexAttrs.cstr() );
-	if ( !m_sHtmlRemoveElements.IsEmpty() )
-		fprintf ( fp, "\thtml_remove_elements = %s\n", m_sHtmlRemoveElements.cstr() );
-	if ( !m_sZones.IsEmpty() )
-		fprintf ( fp, "\tindex_zones = %s\n", m_sZones.cstr() );
-	if ( m_bIndexFieldLens )
-		fprintf ( fp, "\tindex_field_lengths = 1\n" );
-	if ( m_bIndexSP )
-		fprintf ( fp, "\tindex_sp = 1\n" );
-	if ( m_iBoundaryStep!=0 )
-		fprintf ( fp, "\tphrase_boundary_step = %d\n", m_iBoundaryStep );
-	if ( m_iStopwordStep!=1 )
-		fprintf ( fp, "\tstopword_step = %d\n", m_iStopwordStep );
-	if ( m_iOvershortStep!=1 )
-		fprintf ( fp, "\tovershort_step = %d\n", m_iOvershortStep );
-	if ( m_eBigramIndex!=SPH_BIGRAM_NONE )
-		fprintf ( fp, "\tbigram_index = %s\n", sphBigramName ( m_eBigramIndex ) );
-	if ( !m_sBigramWords.IsEmpty() )
-		fprintf ( fp, "\tbigram_freq_words = %s\n", m_sBigramWords.cstr() );
-	if ( !m_sIndexTokenFilter.IsEmpty() )
-		fprintf ( fp, "\tindex_token_filter = %s\n", m_sIndexTokenFilter.cstr() );
-}
-
-
-void CSphIndexSettings::DumpReadable ( FILE * fp ) const
-{
-	fprintf ( fp, "min-prefix-len: %d\n", m_iMinPrefixLen );
-	fprintf ( fp, "min-infix-len: %d\n", m_iMinInfixLen );
-	fprintf ( fp, "max-substring-len: %d\n", m_iMaxSubstringLen );
-	fprintf ( fp, "exact-words: %d\n", m_bIndexExactWords ? 1 : 0 );
-	fprintf ( fp, "html-strip: %d\n", m_bHtmlStrip ? 1 : 0 );
-	fprintf ( fp, "html-index-attrs: %s\n", m_sHtmlIndexAttrs.cstr() );
-	fprintf ( fp, "html-remove-elements: %s\n", m_sHtmlRemoveElements.cstr() );
-	fprintf ( fp, "index-zones: %s\n", m_sZones.cstr() );
-	fprintf ( fp, "index-field-lengths: %d\n", m_bIndexFieldLens ? 1 : 0 );
-	fprintf ( fp, "index-sp: %d\n", m_bIndexSP ? 1 : 0 );
-	fprintf ( fp, "phrase-boundary-step: %d\n", m_iBoundaryStep );
-	fprintf ( fp, "stopword-step: %d\n", m_iStopwordStep );
-	fprintf ( fp, "overshort-step: %d\n", m_iOvershortStep );
-	fprintf ( fp, "bigram-index: %s\n", sphBigramName ( m_eBigramIndex ) );
-	fprintf ( fp, "bigram-freq-words: %s\n", m_sBigramWords.cstr() );
-	fprintf ( fp, "index-token-filter: %s\n", m_sIndexTokenFilter.cstr() );
+	tOut.Add ( "min_prefix_len",		m_iMinPrefixLen,		m_iMinPrefixLen!=0 );
+	tOut.Add ( "min_infix_len",			m_iMinInfixLen,			m_iMinInfixLen!=0 );
+	tOut.Add ( "max_substring_len",		m_iMaxSubstringLen,		m_iMaxSubstringLen!=0 );
+	tOut.Add ( "index_exact_words",		1,						m_bIndexExactWords );
+	tOut.Add ( "html_strip",			1,						m_bHtmlStrip );
+	tOut.Add ( "html_index_attrs",		m_sHtmlIndexAttrs,		!m_sHtmlIndexAttrs.IsEmpty() );
+	tOut.Add ( "html_remove_elements",	m_sHtmlRemoveElements,	!m_sHtmlRemoveElements.IsEmpty() );
+	tOut.Add ( "index_zones",			m_sZones,				!m_sZones.IsEmpty() );
+	tOut.Add ( "index_field_lengths",	1,						m_bIndexFieldLens );
+	tOut.Add ( "index_sp",				1,						m_bIndexSP );
+	tOut.Add ( "phrase_boundary_step",	m_iBoundaryStep,		m_iBoundaryStep!=0 );
+	tOut.Add ( "stopword_step",			m_iStopwordStep,		m_iStopwordStep!=1 );
+	tOut.Add ( "overshort_step",		m_iOvershortStep,		m_iOvershortStep!=1 );
+	tOut.Add ( "bigram_index",			BigramName(m_eBigramIndex), m_eBigramIndex!=SPH_BIGRAM_NONE );
+	tOut.Add ( "bigram_freq_words",		m_sBigramWords,			!m_sBigramWords.IsEmpty() );
+	tOut.Add ( "index_token_filter",	m_sIndexTokenFilter,	!m_sIndexTokenFilter.IsEmpty() );
 }
 
 //////////////////////////////////////////////////////////////////////////
 
-bool CreateTableSettings_t::Load ( CSphReader & tReader )
+static StrVec_t SplitArg ( const CSphString & sValue, StrVec_t & dFiles )
 {
-	m_bIfNotExists = !!tReader.GetByte();
-	m_dFields.Resize ( tReader.GetDword() );
-	for ( auto & i : m_dFields )
+	StrVec_t dValues = sphSplit ( sValue.cstr(), sValue.Length(), " \t," );
+	for ( auto & i : dValues )
 	{
-		i.m_sName = tReader.GetString();
-		i.m_uFieldFlags = tReader.GetDword();
+		dFiles.Add ( i.Trim() );
+		StripPath(i);
 	}
 
-	m_dAttrs.Resize( tReader.GetDword() );
-	for ( auto & i : m_dAttrs )
-	{
-		i.m_sName = tReader.GetString();
-		i.m_eAttrType = (ESphAttr)tReader.GetDword();
-	}
-
-	m_dOpts.Resize ( tReader.GetDword() );
-	for ( auto & i : m_dOpts )
-	{
-		i.m_sName = tReader.GetString();
-		i.m_sValue = tReader.GetString();
-	}
-
-	return !tReader.GetErrorFlag();
+	return dValues;
 }
 
 
-void CreateTableSettings_t::Save ( CSphWriter & tWriter ) const
+bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphString & sValue )
 {
-	tWriter.PutByte ( m_bIfNotExists ? 1 : 0  );
-	tWriter.PutDword ( m_dFields.GetLength() );
-	for ( const auto & i : m_dFields )
+	if ( sName=="type" && sValue=="pq" )
 	{
-		tWriter.PutString ( i.m_sName );
-		tWriter.PutDword ( i.m_uFieldFlags );
+		CSphString sNewValue = "percolate";
+		return Add ( sName, sNewValue );
 	}
 
-	tWriter.PutDword ( m_dAttrs.GetLength() );
-	for ( const auto & i : m_dAttrs )
+	if ( sName=="stopwords" )
 	{
-		tWriter.PutString ( i.m_sName );
-		tWriter.PutDword ( i.m_eAttrType );
+		RemoveKeys(sName);
+		m_dStopwordFiles.Reset();
+
+		StrVec_t dValues = SplitArg ( sValue, m_dStopwordFiles );
+
+		// m_dStopwordFiles now holds the files with olds paths
+		// there's a hack in stopword loading code that modifies the folder to pre-installed
+		// let's use this hack here and copy that file too so that we're fully standalone
+		for ( auto & i : m_dStopwordFiles )
+			if ( !sphIsReadable(i) )
+			{
+				CSphString sFilename = i;
+				sFilename.SetSprintf ( "%s/stopwords/%s", FULL_SHARE_DIR, StripPath(sFilename).cstr() );
+				if ( sphIsReadable ( sFilename.cstr() ) )
+					i = sFilename;
+			}
+
+		StringBuilder_c sNewValue = " ";
+		for ( auto & i : dValues )
+			sNewValue << i;
+
+		return Add ( sName, sNewValue.cstr() );
 	}
 
-	tWriter.PutDword ( m_dOpts.GetLength() );
-	for ( const auto & i : m_dOpts )
+	if ( sName=="exceptions" )
 	{
-		tWriter.PutString ( i.m_sName );
-		tWriter.PutString ( i.m_sValue );
+		RemoveKeys(sName);
+		m_dExceptionFiles.Reset();
+
+		StrVec_t dValues = SplitArg ( sValue, m_dExceptionFiles );
+		if ( dValues.GetLength()>1 )
+		{
+			m_sError = "'exceptions' options only supports a single file";
+			return false;
+		}
+
+		return Add ( sName, dValues[0] );
 	}
+
+	if ( sName=="wordforms" )
+	{
+		RemoveKeys(sName);
+		m_dWordformFiles.Reset();
+
+		StrVec_t dValues = SplitArg ( sValue, m_dWordformFiles );
+		for ( auto & i : dValues )
+			Add ( sName, i );
+
+		return true;
+	}
+
+	return Add ( sName, sValue );
 }
 
-//////////////////////////////////////////////////////////////////////////
 
-void IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateTable )
+void IndexSettingsContainer_c::RemoveKeys ( const CSphString & sName )
+{
+	m_hCfg.Delete(sName);
+}
+
+
+bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateTable )
 {
 	StringBuilder_c sStoredFields(",");
+	StringBuilder_c sStoredOnlyFields(",");
 	for ( const auto & i : tCreateTable.m_dFields )
 	{
 		Add ( "rt_field", i.m_sName );
@@ -907,12 +904,17 @@ void IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateT
 		if ( !uFlags )
 			uFlags = CSphColumnInfo::FIELD_INDEXED | CSphColumnInfo::FIELD_STORED;
 
-		if ( uFlags & CSphColumnInfo::FIELD_STORED )
+		if ( uFlags==CSphColumnInfo::FIELD_STORED )
+			sStoredOnlyFields << i.m_sName;
+		else if ( uFlags & CSphColumnInfo::FIELD_STORED )
 			sStoredFields << i.m_sName;
 	}
 
 	if ( sStoredFields.GetLength() )
 		Add ( "stored_fields", sStoredFields.cstr() );
+
+	if ( sStoredOnlyFields.GetLength() )
+		Add ( "stored_only_fields", sStoredOnlyFields.cstr() );
 
 	for ( const auto & i : tCreateTable.m_dAttrs )
 		for ( const auto & j : g_dRtTypedAttrs )
@@ -929,14 +931,55 @@ void IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateT
 			}
 
 	for ( const auto & i : tCreateTable.m_dOpts )
-		Add ( i.m_sName.cstr(), i.m_sValue );
+		if ( !AddOption ( i.m_sName, i.m_sValue ) )
+			return false;
+
+	return true;
 }
 
 
-void IndexSettingsContainer_c::Add ( const char * szName, const CSphString & sValue )
+bool IndexSettingsContainer_c::Add ( const char * szName, const CSphString & sValue )
 {
 	// same behavior as an ordinary config parser
 	m_hCfg.AddEntry ( szName, sValue.cstr() );
+	return true;
+}
+
+
+bool IndexSettingsContainer_c::Add ( const CSphString & sName, const CSphString & sValue )
+{
+	return Add ( sName.cstr(), sValue );
+}
+
+
+CSphString IndexSettingsContainer_c::Get ( const CSphString & sName ) const
+{
+	if ( !Contains ( sName.cstr() ) )
+		return "";
+
+	return m_hCfg[sName].strval();
+}
+
+
+bool IndexSettingsContainer_c::Contains ( const char * szName ) const
+{
+	return m_hCfg.Exists(szName);
+}
+
+
+StrVec_t IndexSettingsContainer_c::GetFiles() const
+{
+	StrVec_t dFiles;
+	for ( const auto & i : m_dStopwordFiles )
+		dFiles.Add(i);
+
+	for ( const auto & i : m_dExceptionFiles )
+		dFiles.Add(i);
+
+	for ( const auto & i : m_dWordformFiles )
+		dFiles.Add(i);
+
+	return dFiles;
 }
 
 
@@ -1025,7 +1068,7 @@ void SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, bool
 	tWriter.PutDword ( dWFFileInfos.GetLength() );
 	ARRAY_FOREACH ( i, dWFFileInfos )
 	{
-		tWriter.PutString ( dWFFileInfos[i].m_sFilename.cstr() );
+		tWriter.PutString ( tSettings.m_dWordforms[i] );
 		WriteFileInfo ( tWriter, dWFFileInfos[i] );
 	}
 
@@ -1037,10 +1080,9 @@ void SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, bool
 
 //////////////////////////////////////////////////////////////////////////
 
-bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError, /*bool bTemplateDict, */bool bStripPath )
+bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError, bool bStripPath, FilenameBuilder_i * pFilenameBuilder )
 {
 	bool bTokenizerSpawned = false;
-	//bool bTemplateDict = false; // was param, but was never used
 
 	if ( !pIndex->GetTokenizer () )
 	{
@@ -1050,7 +1092,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		if ( !sWarning.IsEmpty() )
 			sphWarning ( "index '%s': %s", pIndex->GetName(), sWarning.cstr() );
 
-		TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings, nullptr, sError ) };
+		TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings, nullptr, pFilenameBuilder, sError ) };
 		if ( !pTokenizer )
 			return false;
 
@@ -1063,11 +1105,11 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		DictRefPtr_c pDict;
 		CSphDictSettings tSettings;
 		CSphString sWarning;
-		tSettings.Setup ( hIndex, sWarning );
+		tSettings.Setup ( hIndex, pFilenameBuilder, sWarning );
 		if ( !sWarning.IsEmpty() )
 			sphWarning ( "index '%s': %s", pIndex->GetName(), sWarning.cstr() );
 
-		pDict = sphCreateDictionaryCRC ( tSettings, nullptr, pIndex->GetTokenizer (), pIndex->GetName(), bStripPath, pIndex->GetSettings().m_iSkiplistBlockSize, sError );
+		pDict = sphCreateDictionaryCRC ( tSettings, nullptr, pIndex->GetTokenizer (), pIndex->GetName(), bStripPath, pIndex->GetSettings().m_iSkiplistBlockSize, pFilenameBuilder, sError );
 
 		if ( !pDict )
 		{
@@ -1179,19 +1221,21 @@ static CSphString GetAttrTypeName ( const CSphColumnInfo & tAttr )
 }
 
 
-CSphString BuildCreateTable ( const CSphString & sIndex, const CSphSchema & tSchema )
+CSphString BuildCreateTable ( const CSphIndex * pIndex, const CSphSchema & tSchema )
 {
+	assert ( pIndex );
+
 	StringBuilder_c sRes;
-	sRes << "CREATE TABLE " << sIndex << " (\n";
+	sRes << "CREATE TABLE " << pIndex->GetName() << " (\n";
 
 	bool bHasAttrs = false;
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
 	{
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
-		if ( sphIsInternalAttr ( tAttr.m_sName ) )
+		if ( sphIsInternalAttr ( tAttr.m_sName ) || tAttr.m_sName==sphGetDocidName() )
 			continue;
 
-		if ( i )
+		if ( bHasAttrs )
 			sRes << ",\n";
 
 		sRes << tAttr.m_sName << " " << GetAttrTypeName(tAttr);
@@ -1205,7 +1249,7 @@ CSphString BuildCreateTable ( const CSphString & sIndex, const CSphSchema & tSch
 		if ( i || bHasAttrs )
 			sRes << ",\n";
 
-		sRes << tField.m_sName << " field";
+		sRes << tField.m_sName << " text";
 		if ( tField.m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED )
 			sRes << " indexed";
 
@@ -1214,6 +1258,32 @@ CSphString BuildCreateTable ( const CSphString & sIndex, const CSphSchema & tSch
 	}
 
 	sRes << "\n)";
+
+	StringBuilder_c tBuf;
+
+	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( g_fnCreateFilenameBuilder ? g_fnCreateFilenameBuilder ( pIndex->GetName() ) : nullptr );
+	pIndex->GetSettings().DumpCreateTable ( tBuf, pFilenameBuilder.Ptr() );
+
+	CSphFieldFilterSettings tFieldFilter;
+	pIndex->GetFieldFilterSettings ( tFieldFilter );
+	tFieldFilter.DumpCreateTable ( tBuf, pFilenameBuilder.Ptr() );
+
+	KillListTargets_c tKlistTargets;
+	// fixme! handle errors
+	CSphString sError;
+	if ( !pIndex->LoadKillList ( nullptr, tKlistTargets, sError ) )
+		tKlistTargets.m_dTargets.Reset();
+
+	tKlistTargets.DumpCreateTable ( tBuf, pFilenameBuilder.Ptr() );
+
+	if ( pIndex->GetTokenizer() )
+		pIndex->GetTokenizer()->GetSettings().DumpCreateTable ( tBuf, pFilenameBuilder.Ptr() );
+
+	if ( pIndex->GetDictionary() )
+		pIndex->GetDictionary()->GetSettings().DumpCreateTable ( tBuf, pFilenameBuilder.Ptr() );
+
+	if ( tBuf.GetLength() )
+		sRes << " " << tBuf.cstr();
 
 	CSphString sResult = sRes.cstr();
 	return sResult;

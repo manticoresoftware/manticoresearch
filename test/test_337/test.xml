@@ -30,6 +30,21 @@ index test1
   stored_fields = title, content
 }
 
+index test2
+{
+  source      = src1
+  path      = <data_path/>/test2
+  stored_fields = title, content
+  min_prefix_len = 3
+}
+
+index test3_nostored
+{
+  source      = src1
+  path      = <data_path/>/test3
+  min_prefix_len = 3
+}
+
 </config>
 
 <db_drop>drop table if exists test_table</db_drop>
@@ -79,6 +94,12 @@ insert into test_table values
 
 <!-- sphinx-style options -->
 <query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "and first" } }, "highlight": { "fields": [], "before_match":"[BEFORE]", "after_match":"[AFTER]" } } }</query>
+
+<!-- crash on highlight of wildcard index --> 
+<query endpoint="json/search">{ "index": "test2", "query": { "match": { "content": "and first" } }, "highlight": { "fields": [ "content", "title" ] } } }</query>
+
+<!-- crash on empty highlight --> 
+<query endpoint="json/search">{ "index": "test3_nostored", "query": { "match": { "content": "and first" } }, "highlight": { "fields": [] } } } }</query>
 
 </httpqueries>
 

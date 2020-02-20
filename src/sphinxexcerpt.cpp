@@ -1256,7 +1256,7 @@ bool SnippetBuilder_c::Setup ( const CSphIndex * pIndex, const SnippetQuerySetti
 
 	if ( tSettings.m_bJsonQuery )
 	{
-		m_pTokenizerJson = pIndex->GetQueryTokenizer()->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT );
+		m_pTokenizerJson = pIndex->GetQueryTokenizer()->Clone ( SPH_CLONE_QUERY );
 		sphSetupQueryTokenizer ( m_pTokenizerJson, pIndex->IsStarDict(), tIndexSettings.m_bIndexExactWords, true );
 		m_pQueryParser = sphCreateJsonQueryParser();
 	}
@@ -1378,6 +1378,9 @@ bool sphCheckOptionsSPZ ( const SnippetQuerySettings_t & q, ESphSpz eMode, CSphS
 
 void UnpackSnippetData ( const BYTE * pData, int iLength, SnippetResult_t & tRes )
 {
+	if ( !iLength )
+		return;
+
 	MemoryReader_c tReader ( pData, iLength );
 
 	tRes.m_dFields.Resize ( tReader.UnzipInt() );

@@ -38,12 +38,12 @@ at the same time. Also, native API is still the default access method.
 MySQL protocol support needs to be additionally configured. This is a
 matter of 1-line config change, adding a new
 :ref:`listener <listen>` with
-mysql41 specified as a protocol:
+mysql specified as a protocol:
 
 .. code-block:: none
 
 
-    listen = localhost:9306:mysql41
+    listen = localhost:9306:mysql
 
 Just supporting the protocol and not the SQL syntax would be useless so
 Manticore now also supports a subset of SQL that we dubbed SphinxQL. It

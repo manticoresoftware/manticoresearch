@@ -542,14 +542,14 @@ You can also specify a protocol handler (listener) to be used for
 connections on this socket. Supported protocol values are :
 
 * ``sphinx`` - native API protocol, used for client connections but also by distributed indexes. Default protocol if none specified.
-* ``mysql41`` - MySQL protocol used since 4.1. More details on MySQL protocol support can be found in :ref:`mysql_protocol_support_and_sphinxql` section.
+* ``mysql`` - MySQL protocol used since 4.1. More details on MySQL protocol support can be found in :ref:`mysql_protocol_support_and_sphinxql` section. Legacy name ``mysql41`` is also supported.
 * ``http`` - HTTP protocol. More details can be found in :ref:`httpapi_reference` section.
 * ``replication`` - replication protocol, used for nodes communication. More details can be found in :ref:`replication` section.
 * ``https`` - HTTPS protocol. It uses OpenSSL library to encrypt HTTP traffic. More details can be found in :ref:`httpapi_reference` section.
 
 
 Adding a "_vip" suffix to a protocol (for instance ``sphinx_vip`` or
-``mysql41_vip``) makes all connections to that port bypass the thread
+``mysql_vip``) makes all connections to that port bypass the thread
 pool and always forcibly create a new dedicated thread. That's useful
 for managing in case of a severe overload when the daemon would either
 stall or not let you connect via a regular port.
@@ -565,7 +565,7 @@ Examples:
     listen = 192.168.0.1:5000
     listen = /var/run/sphinx.s
     listen = 9312
-    listen = localhost:9306:mysql41
+    listen = localhost:9306:mysql
     listen = 127.0.0.1:9308:http
     listen = 192.168.0.1:9320-9328:replication
     listen = 127.0.0.1:9443:https

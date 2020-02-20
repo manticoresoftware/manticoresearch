@@ -168,7 +168,7 @@ The options available to ``searchd`` on all builds are:
    interfaces. Unix path is identified by a leading slash. As the last
    param you can also specify a protocol handler (listener) to be used
    for connections on this socket. Supported protocol values are
-   ‘sphinx’ and ‘mysql41’ (MySQL protocol used since 4.1 upto at least
+   ‘sphinx’ and ‘mysql’ (MySQL protocol used since 4.1 upto at least
    5.1).
 
 -  ``--force-preread`` forbids the daemon to serve any incoming connection until prereading of index files completes. By default, at startup the daemon accepts connections while index files are lazy loaded into memory.

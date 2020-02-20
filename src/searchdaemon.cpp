@@ -171,7 +171,7 @@ static Proto_e SimpleProtoByName ( const CSphString& sProto )
 {
 	if ( sProto=="sphinx" )
 		return Proto_e::SPHINX;
-	if ( sProto=="mysql41" )
+	if ( sProto=="mysql41" || sProto=="mysql" )
 		return Proto_e::MYSQL41;
 	if ( sProto=="http" )
 		return Proto_e::HTTP;

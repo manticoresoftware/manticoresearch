@@ -240,56 +240,58 @@ if ( NOT DISABLE_TESTING )
 	add_executable ( tests ${TESTS_SRCS} )
 	target_link_libraries ( tests libsphinx ${EXTRA_LIBRARIES} )
 
-	# compile rtestconfig.h
-	hsnippet ( rtestconfig testrt.conf "static" )
+	if (WITH_MYSQL)
+		# compile rtestconfig.h
+		hsnippet ( rtestconfig testrt.conf "static" )
 
-	set (DATAFLD "${MANTICORE_BINARY_DIR}/test/data")
-	file ( MAKE_DIRECTORY ${DATAFLD} )
-	add_definitions ( -DDATAFLD="${DATAFLD}/" )
-	source_group ( "Testing config" FILES testrt.conf.in )
-	add_executable ( testrt testrt.cpp testrt.conf )
-	target_link_libraries ( testrt libsphinx ${EXTRA_LIBRARIES} )
+		set (DATAFLD "${MANTICORE_BINARY_DIR}/test/data")
+		file ( MAKE_DIRECTORY ${DATAFLD} )
+		add_definitions ( -DDATAFLD="${DATAFLD}/" )
+		source_group ( "Testing config" FILES testrt.conf.in )
+		add_executable ( testrt testrt.cpp testrt.conf )
+		target_link_libraries ( testrt libsphinx ${EXTRA_LIBRARIES} )
 
-	# testrt is alive, however it needs database 'lj' accessible
-	# in order to work. So, avoid it's calling till the base is persist
-	# in out CI env
-	if (0)
+		# testrt is alive, however it needs database 'lj' accessible
+		# in order to work. So, avoid it's calling till the base is persist
+		# in out CI env
+		if (0)
 
-	add_test ( NAME "\"Remove dump index\""
-			COMMAND ${CMAKE_COMMAND} -E remove "${DATAFLD}/dump.*" )
-	SET_TESTS_PROPERTIES ( "\"Remove dump index\"" PROPERTIES FIXTURES_SETUP TESTRT )
+		add_test ( NAME "\"Remove dump index\""
+				COMMAND ${CMAKE_COMMAND} -E remove "${DATAFLD}/dump.*" )
+		SET_TESTS_PROPERTIES ( "\"Remove dump index\"" PROPERTIES FIXTURES_SETUP TESTRT )
 
-	add_test ( NAME "\"Internal rt src/testrt\""
-			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-			COMMAND testrt )
-	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
-	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt\"" PROPERTIES RESOURCE_LOCK DbAccess )
+		add_test ( NAME "\"Internal rt src/testrt\""
+				WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+				COMMAND testrt )
+		SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
+		SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt\"" PROPERTIES RESOURCE_LOCK DbAccess )
 
-	add_test ( NAME "\"Internal rt src/testrt step 1000\""
-			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-			COMMAND testrt 1000 )
-	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
-	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES RESOURCE_LOCK DbAccess )
+		add_test ( NAME "\"Internal rt src/testrt step 1000\""
+				WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+				COMMAND testrt 1000 )
+		SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
+		SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES RESOURCE_LOCK DbAccess )
 
-	add_test ( NAME "\"Internal rt src/testrt step 100\""
-			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-			COMMAND testrt 100 )
-	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 100\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
-	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES RESOURCE_LOCK DbAccess )
+		add_test ( NAME "\"Internal rt src/testrt step 100\""
+				WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+				COMMAND testrt 100 )
+		SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 100\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
+		SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES RESOURCE_LOCK DbAccess )
 
-	add_test ( NAME "\"Internal rt src/testrt step 10\""
-			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-			COMMAND testrt 10 )
-	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 10\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
-	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES RESOURCE_LOCK DbAccess )
+		add_test ( NAME "\"Internal rt src/testrt step 10\""
+				WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+				COMMAND testrt 10 )
+		SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 10\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
+		SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES RESOURCE_LOCK DbAccess )
 
-	add_test ( NAME "\"Internal rt src/testrt step 1\""
-			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-			COMMAND testrt 1 )
-	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
-	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES RESOURCE_LOCK DbAccess )
+		add_test ( NAME "\"Internal rt src/testrt step 1\""
+				WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+				COMMAND testrt 1 )
+		SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
+		SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES RESOURCE_LOCK DbAccess )
 
-	endif(0)
+		endif(0)
+	endif (WITH_MYSQL)
 
 	# first check syntax
 	find_package ( PythonInterp QUIET )

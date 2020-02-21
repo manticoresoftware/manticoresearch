@@ -5354,7 +5354,9 @@ struct DictEntryRtPayload_t
 
 			const RtExpandedEntry_t * pLast = m_dWordExpand.Begin();
 			tArgs.AddExpanded ( sBase+pLast->m_iNameOff+1, sBase[pLast->m_iNameOff], pLast->m_iDocs, pLast->m_iHits );
-			for ( int i=1; i<m_dWordExpand.GetLength(); i++ )
+			iTotalDocs += pLast->m_iDocs;
+			iTotalHits += pLast->m_iHits;
+			for ( int i=1; i<m_dWordExpand.GetLength(); ++i )
 			{
 				const RtExpandedEntry_t * pCur = m_dWordExpand.Begin() + i;
 

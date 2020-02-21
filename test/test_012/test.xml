@@ -2,7 +2,7 @@
 <Test>
   <Name>stemmers + infixes (throttled)</Name>
   <Config>
-    <Static>indexer
+indexer
 {
 	mem_limit			= 16M
 	max_iops			= 20
@@ -11,28 +11,24 @@
 
 searchd
 {
-</Static>
-<Searchd_Settings/>
-<Static>
+    <Searchd_Settings/>
 }
 
 source srclj
 {
 	type			= mysql
-</Static>
-<Sql_Settings/>
-<Static>
+    <Sql_Settings/>
+
 	sql_query = SELECT id, subject, body, author FROM test_table
 	sql_query_pre = SET NAMES utf8
 }
-</Static>
-<Static>
+
 index lj
 {
 	source			= srclj
-	path			= </Static><Data_Path/><Static>/lj
+	path			= <Data_Path/>/lj
 	min_word_len	= 0
-</Static>
+
     <Dynamic>
       <Variant>	morphology		= stem_en </Variant>
       <Variant>	morphology		= stem_ru </Variant>
@@ -43,7 +39,7 @@ index lj
       <Variant>	min_infix_len	= 0</Variant>
       <Variant>	min_infix_len	= 3</Variant>
     </Dynamic>
-    <Static>}</Static>
+}
   </Config>
   <Query>
     <Query_0>admin</Query_0>

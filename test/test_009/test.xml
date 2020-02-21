@@ -2,23 +2,20 @@
 <Test>
   <Name>attributes over network</Name>
   <Config>
-    <Static>indexer
+indexer
 {
 	mem_limit			= 16M
 }
 
 searchd
 {
-</Static><Searchd_Settings/>
-<Static>
+	  <Searchd_Settings/>
 }
 
 source src1
 {
 	type			= mysql
-</Static>
-<Sql_Settings/>
-<Static>
+	<Sql_Settings/>
 	sql_query = SELECT id, adtext, heading, postcode, lng, lat, section, make_id, transmission_id FROM test_table
 
 	sql_attr_float	= lng
@@ -31,9 +28,7 @@ source src1
 source src2
 {
 	type			= mysql
-</Static>
-<Sql_Settings/>
-<Static>
+	<Sql_Settings/>
 	sql_query = SELECT id, adtext, heading, postcode, lng, lat, section, make_id, transmission_id FROM test_table
 
 	sql_attr_float	= lng
@@ -47,9 +42,7 @@ source src2
 source src3
 {
 	type			= mysql
-</Static>
-<Sql_Settings/>
-<Static>
+	<Sql_Settings/>
 	sql_query = SELECT id, adtext, heading, postcode, lng, lat, section, make_id, transmission_id FROM test_table
 
 	sql_attr_float	= lng
@@ -62,9 +55,7 @@ source src3
 source src4
 {
 	type			= mysql
-</Static>
-<Sql_Settings/>
-<Static>
+	<Sql_Settings/>
 	sql_query = SELECT id, adtext, heading, postcode, lng, lat, section, make_id, transmission_id FROM test_table
 
 	sql_attr_float	= lng
@@ -77,28 +68,28 @@ source src4
 index block1
 {
 	source			= src1
-	path			= </Static><Data_Path/><Static>/block1
+	path			= <Data_Path/>/block1
 	min_word_len	= 1
 }
 
 index block2
 {
 	source			= src2
-	path			= </Static><Data_Path/><Static>/block2
+	path			= <Data_Path/>/block2
 	min_word_len	= 1
 }
 
 index block3
 {
 	source			= src3
-	path			= </Static><Data_Path/><Static>/block3
+	path			= <Data_Path/>/block3
 	min_word_len	= 1
 }
 
 index block4
 {
 	source			= src4
-	path			= </Static><Data_Path/><Static>/block4
+	path			= <Data_Path/>/block4
 	min_word_len	= 1
 }
 
@@ -106,12 +97,11 @@ index dist
 {
 	type					= distributed
 	local					= block1
-	agent					= </Static><Agent_Address/><Static>:block2
+	agent					= <Agent_Address/>:block2
 	agent_connect_timeout	= 1000
 	agent_query_timeout		= 3000
 }
-</Static>
-  </Config>
+</Config>
 
   <Num_Agents>2</Num_Agents>
 
@@ -128,7 +118,7 @@ index dist
   </Query_Settings>
 
   <Query>
-    <Query_0></Query_0>
+    <Query_0 />
   </Query>
   <DB_Create>
 CREATE TABLE `test_table` (

@@ -44,7 +44,7 @@ index lj
   </Query_Attributes>
 
   <Query>
-    <Query_0></Query_0>
+    <Query_0/>
   </Query>
   <DB_Create>
 CREATE TABLE `test_table` (

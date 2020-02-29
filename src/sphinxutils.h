@@ -345,14 +345,21 @@ typedef void ( *SphLogger_fn )( ESphLogLevel, const char *, va_list );
 volatile SphLogger_fn& g_pLogger();
 
 void sphLogVa ( const char * sFmt, va_list ap, ESphLogLevel eLevel = SPH_LOG_WARNING );
-void sphWarning ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
+void sphWarning_impl ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
 void sphLogf ( ESphLogLevel eLevel, const char* sFmt, ... );
-void sphInfo ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
+void sphInfo_impl ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
 void sphLogFatal ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
-void sphLogDebug ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
-void sphLogDebugv ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
-void sphLogDebugvv ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
-void sphLogDebugRpl ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
+void sphLogDebug_impl ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
+void sphLogDebugv_impl ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
+void sphLogDebugvv_impl ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
+void sphLogDebugRpl_impl ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
+
+#define sphWarning( ... ) do if ( g_eLogLevel>=SPH_LOG_WARNING ) sphWarning_impl (__VA_ARGS__); while(0)
+#define sphInfo( ... ) do if ( g_eLogLevel>=SPH_LOG_INFO ) sphInfo_impl (__VA_ARGS__); while(0)
+#define sphLogDebug( ... ) do if ( g_eLogLevel>=SPH_LOG_DEBUG ) sphLogDebug_impl (__VA_ARGS__); while(0)
+#define sphLogDebugv( ... ) do if ( g_eLogLevel>=SPH_LOG_VERBOSE_DEBUG ) sphLogDebugv_impl (__VA_ARGS__); while(0)
+#define sphLogDebugvv( ... ) do if ( g_eLogLevel>=SPH_LOG_VERY_VERBOSE_DEBUG ) sphLogDebugvv_impl (__VA_ARGS__); while(0)
+#define sphLogDebugRpl( ... ) do if ( g_eLogLevel>=SPH_LOG_RPL_DEBUG ) sphLogDebugRpl_impl (__VA_ARGS__); while(0)
 
 // set the prefix to supress the log
 void sphLogSupress ( const char * sPrefix, ESphLogLevel eLevel = SPH_LOG_WARNING );

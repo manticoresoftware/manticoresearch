@@ -1572,7 +1572,7 @@ void sphLogf ( ESphLogLevel eLevel, const char* sFmt, ... )
 	va_end ( ap );
 }
 
-void sphWarning ( const char * sFmt, ... )
+void sphWarning_impl ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
@@ -1580,7 +1580,7 @@ void sphWarning ( const char * sFmt, ... )
 	va_end ( ap );
 }
 
-void sphInfo ( const char * sFmt, ... )
+void sphInfo_impl ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
@@ -1596,7 +1596,7 @@ void sphLogFatal ( const char * sFmt, ... )
 	va_end ( ap );
 }
 
-void sphLogDebug ( const char * sFmt, ... )
+void sphLogDebug_impl ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
@@ -1604,7 +1604,7 @@ void sphLogDebug ( const char * sFmt, ... )
 	va_end ( ap );
 }
 
-void sphLogDebugv ( const char * sFmt, ... )
+void sphLogDebugv_impl ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
@@ -1612,7 +1612,7 @@ void sphLogDebugv ( const char * sFmt, ... )
 	va_end ( ap );
 }
 
-void sphLogDebugvv ( const char * sFmt, ... )
+void sphLogDebugvv_impl ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
@@ -1620,7 +1620,7 @@ void sphLogDebugvv ( const char * sFmt, ... )
 	va_end ( ap );
 }
 
-void sphLogDebugRpl ( const char * sFmt, ... )
+void sphLogDebugRpl_impl ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );

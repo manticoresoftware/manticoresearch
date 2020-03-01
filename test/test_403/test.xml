@@ -37,6 +37,11 @@ searchd
 <sphinxql>call keywords('Microsoft Windows', 'test3')</sphinxql>
 <sphinxql>drop table test3</sphinxql>
 
+<sphinxql>create table test4 ( title text, tag integer ) wordforms = '<this_test/>/wordforms.txt'</sphinxql>
+<sphinxql>drop table test4</sphinxql>
+<sphinxql>create table test4 ( title text, tag integer ) wordforms = '<this_test/>/wordforms.txt'</sphinxql>
+<sphinxql>drop table test4</sphinxql>
+
 </sphqueries>
 
 </test>

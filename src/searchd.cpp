@@ -33,6 +33,7 @@
 #include "searchdssl.h"
 #include "searchdexpr.h"
 #include "indexsettings.h"
+#include "searchdddl.h"
 
 // services
 #include "taskping.h"
@@ -6965,15 +6966,15 @@ static const char * g_dSqlStmts[] =
 {
 	"parse_error", "dummy", "select", "insert", "replace", "delete", "show_warnings",
 	"show_status", "show_meta", "set", "begin", "commit", "rollback", "call",
-	"desc", "show_tables", "create_table", "drop_table", "show_create_table", "update", "create_func",
+	"desc", "show_tables", "create_table", "create_table_like", "drop_table", "show_create_table", "update", "create_func",
 	"drop_func", "attach_index", "flush_rtindex", "flush_ramchunk", "show_variables", "truncate_rtindex",
 	"select_sysvar", "show_collation", "show_character_set", "optimize_index", "show_agent_status",
 	"show_index_status", "show_profile", "alter_add", "alter_drop", "show_plan",
 	"select_dual", "show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
 	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
-	"join_cluster", "cluster_create", "cluster_delete", "cluster_index_add", "cluster_index_delete", "cluster_update",
-	"explain"
+	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
+	"cluster_index_delete", "cluster_update", "explain"
 };
 
 
@@ -11779,7 +11780,7 @@ static bool CheckAttrs ( const VecTraits_T<CSphColumnInfo> & dAttrs, CSphString 
 }
 
 
-static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
+static bool CheckExistingTables ( const SqlStmt_t & tStmt, CSphString & sError )
 {
 	if ( g_pLocalIndexes->Contains ( tStmt.m_sIndex ) || g_pDistIndexes->Contains ( tStmt.m_sIndex ) )
 	{
@@ -11797,6 +11798,15 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 		sError.SetSprintf ( "'%s' is a reserved keyword", tStmt.m_sIndex.cstr() );
 		return false;
 	}
+
+	return true;
+}
+
+
+static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
+{
+	if ( !CheckExistingTables ( tStmt, sError ) )
+		return false;
 
 	if ( !CheckAttrs ( tStmt.m_tCreateTable.m_dAttrs, sError ) || !CheckAttrs ( tStmt.m_tCreateTable.m_dFields, sError ) )
 		return false;
@@ -11851,6 +11861,61 @@ static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 }
 
 
+static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
+{
+	SearchFailuresLog_c dErrors;
+	CSphString sError;
+
+	if ( !IsConfigless() )
+	{
+		sError = "CREATE TABLE requires data_dir to be set in the config file";
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	if ( !CheckExistingTables ( tStmt, sError ) )
+	{
+		sError.SetSprintf ( "index '%s': CREATE TABLE failed: %s", tStmt.m_sIndex.cstr(), sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	const CSphString & sLike = tStmt.m_tCreateTable.m_sLike;
+	ServedDescRPtr_c pServed(GetServed(sLike));
+	auto pDist = GetDistr(sLike);
+	if ( !pServed && !pDist )
+	{
+		sError.SetSprintf ( "index '%s': CREATE TABLE LIKE failed: no index '%s' found", tStmt.m_sIndex.cstr(), sLike.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	CSphString sCreateTable;
+	if ( pServed )
+		sCreateTable = BuildCreateTable ( tStmt.m_sIndex, pServed->m_pIndex, ((RtIndex_i*)pServed->m_pIndex)->GetInternalSchema() );
+	else
+		sCreateTable = BuildCreateTableDistr ( tStmt.m_sIndex, *pDist );
+
+	CSphVector<SqlStmt_t> dCreateTableStmts;
+	if ( !ParseDdl ( sCreateTable.cstr(), sCreateTable.Length(), dCreateTableStmts, sError ) )
+	{
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	if ( dCreateTableStmts.GetLength()!=1 )
+	{
+		tOut.Error ( tStmt.m_sStmt, "CREATE TABLE LIKE failed" );
+		return;
+	}
+
+	SqlStmt_t & tNewCreateTable = dCreateTableStmts[0];
+	tNewCreateTable.m_tCreateTable.m_bIfNotExists = tStmt.m_tCreateTable.m_bIfNotExists;
+
+	HandleMysqlCreateTable ( tOut, tNewCreateTable, sWarning );
+}
+
+
 static void HandleMysqlDropTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	CSphString sError;
@@ -11872,7 +11937,8 @@ static void HandleMysqlDropTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
-	if ( !pServed || !pServed->m_pIndex )
+	auto pDist = GetDistr ( tStmt.m_sIndex );
+	if ( ( !pServed || !pServed->m_pIndex ) && !pDist )
 	{
 		CSphString sError;
 		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
@@ -11880,7 +11946,7 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		return;
 	}
 
-	if ( !pServed->m_pIndex->IsRT() )
+	if ( pServed && !pServed->m_pIndex->IsRT() )
 	{
 		CSphString sError;
 		sError.SetSprintf ( "index '%s' is not real-time", tStmt.m_sIndex.cstr() );
@@ -11890,7 +11956,12 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 
 	// result set header packet
 	tOut.HeadTuplet ( "Table", "Create Table" );
-	CSphString sCreateTable = BuildCreateTable ( pServed->m_pIndex, ((RtIndex_i*)pServed->m_pIndex)->GetInternalSchema() );
+	CSphString sCreateTable;
+	if ( pServed )
+		sCreateTable = BuildCreateTable ( pServed->m_pIndex->GetName(), pServed->m_pIndex, ((RtIndex_i*)pServed->m_pIndex)->GetInternalSchema() );
+	else
+		sCreateTable = BuildCreateTableDistr ( tStmt.m_sIndex, *pDist );
+
 	tOut.DataTuplet ( tStmt.m_sIndex.cstr(), sCreateTable.cstr() );
 	tOut.Eof();
 }
@@ -14513,13 +14584,36 @@ static void HandleMysqlAlter ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool
 }
 
 
-bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSettings & tSettings, CSphString & sError )
+static bool PrepareReconfigure ( const CSphString & sIndex, const CSphConfigSection & hIndex, CSphReconfigureSettings & tSettings, CSphString & sWarning, CSphString & sError )
+{
+	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder ( sIndex.cstr() ) );
+
+	// fixme: report warnings
+	tSettings.m_tTokenizer.Setup ( hIndex, sWarning );
+	tSettings.m_tDict.Setup ( hIndex, pFilenameBuilder.Ptr(), sWarning );
+	tSettings.m_tFieldFilter.Setup ( hIndex, sWarning );
+
+	sphRTSchemaConfigure ( hIndex, tSettings.m_tSchema, sError, true );
+
+	if ( !tSettings.m_tIndex.Setup ( hIndex, sIndex.cstr(), sWarning, sError ) )
+	{
+		sError.SetSprintf ( "'%s' failed to parse index settings, error '%s'", sIndex.cstr(), sError.cstr() );
+		return false;
+	}
+
+	if ( !CheckStoredFields ( tSettings.m_tSchema, tSettings.m_tIndex, sError ) )
+		return false;
+
+	return true;
+}
+
+
+static bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSettings & tSettings, CSphString & sError )
 {
 	CSphConfigParser tCfg;
 	if ( !tCfg.ReParse ( g_sConfigFile.cstr () ) )
 	{
-		sError.SetSprintf ( "failed to parse config file '%s': %s; using previous settings",
-				g_sConfigFile.cstr (), TlsMsg::szError() );
+		sError.SetSprintf ( "failed to parse config file '%s': %s; using previous settings", g_sConfigFile.cstr (), TlsMsg::szError() );
 		return false;
 	}
 
@@ -14536,23 +14630,8 @@ bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSettings & t
 		return false;
 	}
 
-	const CSphConfigSection & hIndex = hConf["index"][sIndex];
 	CSphString sWarning;
-
-	// fixme: report warnings
-	tSettings.m_tTokenizer.Setup ( hIndex, sWarning );
-	tSettings.m_tDict.Setup ( hIndex, nullptr, sWarning );
-	tSettings.m_tFieldFilter.Setup ( hIndex, sWarning );
-
-	sphRTSchemaConfigure ( hIndex, tSettings.m_tSchema, sError, true );
-
-	if ( !tSettings.m_tIndex.Setup ( hIndex, sIndex.cstr(), sWarning, sError ) )
-	{
-		sError.SetSprintf ( "'%s' failed to parse index settings, error '%s'", sIndex.cstr(), sError.cstr() );
-		return false;
-	}
-
-	if ( !CheckStoredFields ( tSettings.m_tSchema, tSettings.m_tIndex, sError ) )
+	if ( !PrepareReconfigure ( sIndex, hConf["index"][sIndex], tSettings, sWarning, sError ) )
 		return false;
 
 	return true;
@@ -14662,6 +14741,154 @@ static void HandleMysqlAlterKlist ( RowBuffer_i & tOut, const SqlStmt_t & tStmt,
 
 	if ( sError.IsEmpty() )
 		tOut.Ok();
+	else
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+}
+
+
+static bool SubstituteExternalIndexFiles ( const StrVec_t & dOldExternalFiles, const StrVec_t & dNewExternalFiles, CSphString & sIndexPath, StrVec_t & dBackupFiles, CSphString & sError )
+{
+	StrVec_t dOnlyNew;
+	for ( const auto & i : dNewExternalFiles )
+	{
+		bool bDupe = false;
+		for ( const auto & j : dOldExternalFiles )
+			bDupe |= i==j;
+
+		if ( !bDupe )
+			dOnlyNew.Add(i);
+	}
+
+	StrVec_t dOnlyOld;
+	for ( const auto & i : dOldExternalFiles )
+	{
+		bool bDupe = false;
+		for ( const auto & j : dNewExternalFiles )
+			bDupe |= i==j;
+
+		if ( !bDupe )
+			dOnlyOld.Add(i);
+	}
+
+	for ( const auto & i : dOnlyOld )
+		dBackupFiles.Add().SetSprintf ( "%s.tmp", i.cstr() );
+
+	if ( !RenameWithRollback ( dOnlyOld, dBackupFiles, sError ) )
+		return false;
+
+	if ( !dOnlyNew.GetLength() )
+		return true;
+
+	if ( !CopyExternalIndexFiles ( dOnlyNew, sIndexPath, sError ) )
+	{
+		// try to rename files back
+		CSphString sTmp;
+		RenameFiles ( dBackupFiles, dOnlyOld, sTmp );
+		return false;
+	}
+
+	return true;
+}
+
+
+static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
+{
+	MEMORY ( MEM_SQL_ALTER );
+
+	CSphString sError;
+	if ( !IsConfigless() )
+	{
+		sError = "ALTER TABLE requires data_dir to be set in the config file";
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	auto pServed = GetServed ( tStmt.m_sIndex.cstr() );
+	ServedDescWPtr_c pWriteLocked ( pServed );
+
+	if ( !pServed )
+	{
+		if ( g_pDistIndexes->Contains ( tStmt.m_sIndex ) )
+			sError.SetSprintf ( "ALTER is only supported for local (not distributed) indexes" );
+		else
+			sError.SetSprintf ( "index '%s' not found", tStmt.m_sIndex.cstr () );
+	}
+
+	if ( !sError.IsEmpty () )
+	{
+		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+		return;
+	}
+
+	RtIndex_i * pRtIndex = (RtIndex_i*)pWriteLocked->m_pIndex;
+
+	// get all table settings as a string
+	CSphString sCreateTable = BuildCreateTable ( pWriteLocked->m_pIndex->GetName(), pWriteLocked->m_pIndex, pRtIndex->GetInternalSchema() );
+
+	CSphVector<SqlStmt_t> dCreateTableStmts;
+	if ( !ParseDdl ( sCreateTable.cstr(), sCreateTable.Length(), dCreateTableStmts, sError ) )
+	{
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	if ( dCreateTableStmts.GetLength()!=1 )
+	{
+		tOut.Error ( tStmt.m_sStmt, "Unable to alter index settings" );
+		return;
+	}
+
+	// parse the options string to old-style config hash
+	IndexSettingsContainer_c tContainer;
+	tContainer.Populate ( dCreateTableStmts[0].m_tCreateTable );
+
+	StrVec_t dOldExternalFiles = tContainer.GetFiles();
+
+	// force override for old options
+	for ( const auto & i : tStmt.m_tCreateTable.m_dOpts )
+		tContainer.RemoveKeys ( i.m_sName );
+
+	for ( const auto & i : tStmt.m_tCreateTable.m_dOpts )
+	{
+		if ( !i.m_sValue.IsEmpty() )
+			tContainer.AddOption ( i.m_sName, i.m_sValue );
+	}
+
+	StrVec_t dBackupFiles;
+	CSphString sIndexPath = GetPathOnly ( pRtIndex->GetFilename() );
+	if ( !SubstituteExternalIndexFiles ( dOldExternalFiles, tContainer.GetFiles(), sIndexPath, dBackupFiles, sError ) )
+	{
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	CSphReconfigureSettings tSettings;
+	if ( !PrepareReconfigure ( tStmt.m_sIndex, tContainer.AsCfg(), tSettings, sWarning, sError ) )
+	{
+		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+		return;
+	}
+
+	CSphReconfigureSetup tSetup;
+	bool bSame = pRtIndex->IsSameSettings ( tSettings, tSetup, sError );
+	if ( !bSame && sError.IsEmpty() )
+	{
+		bool bOk = pRtIndex->Reconfigure(tSetup);
+		if ( !bOk )
+		{
+			sError.SetSprintf ( "index '%s': alter failed; INDEX UNUSABLE (%s)", tStmt.m_sIndex.cstr(), pRtIndex->GetLastError().cstr() );
+			g_pLocalIndexes->Delete ( tStmt.m_sIndex );
+		}
+	}
+
+	if ( sError.IsEmpty() )
+	{
+		// all ok, delete old files
+		for ( const auto & i : dBackupFiles )
+			::unlink ( i.cstr() );
+
+		tOut.Ok();
+	}
 	else
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 }
@@ -15064,6 +15291,11 @@ public:
 			HandleMysqlCreateTable ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 			return true;
 
+		case STMT_CREATE_TABLE_LIKE:
+			m_tLastMeta = CSphQueryResultMeta();
+			HandleMysqlCreateTableLike ( tOut, *pStmt, m_tLastMeta.m_sWarning );
+			return true;
+
 		case STMT_DROP_TABLE:
 			HandleMysqlDropTable ( tOut, *pStmt );
 			return true;
@@ -15223,6 +15455,14 @@ public:
 			m_tLastMeta.m_sWarning = "";
 
 			HandleMysqlAlterKlist ( tOut, *pStmt, m_tLastMeta.m_sWarning );
+			return true;
+
+		case STMT_ALTER_INDEX_SETTINGS:
+			m_tLastMeta = CSphQueryResultMeta();
+			m_tLastMeta.m_sError = m_sError;
+			m_tLastMeta.m_sWarning = "";
+
+			HandleMysqlAlterIndexSettings ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 			return true;
 
 		case STMT_FLUSH_INDEX:
@@ -16566,7 +16806,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 //////////////////////////////////////////////////
 /// configure distributed index and add it to hash
 //////////////////////////////////////////////////
-static ESphAddIndex AddDistributedIndex ( const char * szIndexName, const CSphConfigSection & hIndex, StrVec_t * pWarnings=nullptr ) REQUIRES ( MainThread )
+static ESphAddIndex AddDistributedIndex ( const char * szIndexName, const CSphConfigSection & hIndex, CSphString & sError, StrVec_t * pWarnings=nullptr ) REQUIRES ( MainThread )
 {
 	DistributedIndexRefPtr_t pIdx ( new DistributedIndex_t );
 	ConfigureDistributedIndex ( *pIdx, szIndexName, hIndex, pWarnings );
@@ -16574,13 +16814,15 @@ static ESphAddIndex AddDistributedIndex ( const char * szIndexName, const CSphCo
 	// finally, check and add distributed index to global table
 	if ( pIdx->IsEmpty () )
 	{
-		sphWarning ( "index '%s': no valid local/remote indexes in distributed index - NOT SERVING", szIndexName );
+		sError.SetSprintf ( "index '%s': no valid local/remote indexes in distributed index", szIndexName );
+		sphWarning ( "%s - NOT SERVING", sError.cstr() );
 		return ADD_ERROR;
 	}
 
 	if ( !g_pDistIndexes->AddUniq ( pIdx, szIndexName ) )
 	{
-		sphWarning ( "index '%s': unable to add name (duplicate?) - NOT SERVING", szIndexName );
+		sError.SetSprintf ( "index '%s': unable to add name (duplicate?)", szIndexName );
+		sphWarning ( "%s - NOT SERVING", sError.cstr() );
 		return ADD_ERROR;
 	}
 
@@ -16883,7 +17125,7 @@ ESphAddIndex AddIndexMT ( GuardedHash_c & dPost, const char * szIndexName, const
 	{
 		case IndexType_e::RT:		return AddRTIndex ( dPost, szIndexName, hIndex, bReplace, sError );
 		case IndexType_e::PERCOLATE:return AddPercolateIndex ( dPost, szIndexName, hIndex, bReplace, sError );
-		case IndexType_e::DISTR:	return AddDistributedIndex ( szIndexName, hIndex, pWarnings );
+		case IndexType_e::DISTR:	return AddDistributedIndex ( szIndexName, hIndex, sError, pWarnings );
 
 		default:; // shut up warnings
 	}
@@ -16898,7 +17140,7 @@ static ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection
 	switch ( TypeOfIndexConfig ( hIndex.GetStr ( "type", nullptr )))
 	{
 		case IndexType_e::DISTR:
-			return AddDistributedIndex ( szIndexName, hIndex );
+			return AddDistributedIndex ( szIndexName, hIndex, sError );
 		case IndexType_e::RT:
 		case IndexType_e::PERCOLATE:
 			return AddIndexMT ( g_dPostIndexes, szIndexName, hIndex, bReplace, sError );

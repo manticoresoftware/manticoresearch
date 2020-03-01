@@ -934,6 +934,14 @@ bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateT
 		if ( !AddOption ( i.m_sName, i.m_sValue ) )
 			return false;
 
+	if ( !Contains("type") )
+		Add ( "type", "rt" );
+
+
+	bool bDistributed = Get("type")=="distributed";
+	if ( !bDistributed )
+		Add ( "embedded_limit", "0" );
+
 	return true;
 }
 
@@ -1221,12 +1229,12 @@ static CSphString GetAttrTypeName ( const CSphColumnInfo & tAttr )
 }
 
 
-CSphString BuildCreateTable ( const CSphIndex * pIndex, const CSphSchema & tSchema )
+CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema )
 {
 	assert ( pIndex );
 
 	StringBuilder_c sRes;
-	sRes << "CREATE TABLE " << pIndex->GetName() << " (\n";
+	sRes << "CREATE TABLE " << sName << " (\n";
 
 	bool bHasAttrs = false;
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )

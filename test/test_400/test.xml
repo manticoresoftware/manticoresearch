@@ -78,6 +78,10 @@ searchd
 <sphinxql>show tables</sphinxql>
 <sphinxql>create table idx(f text) morphology='icu_chinese' charset_table='non_cjk,cjk'</sphinxql>
 <sphinxql>show tables</sphinxql>
+<sphinxql>show create table idx</sphinxql>
+<sphinxql>create table idx_clone like idx</sphinxql>
+<sphinxql>show create table idx_clone</sphinxql>
+<sphinxql>drop table idx_clone</sphinxql>
 <sphinxql>drop table idx</sphinxql>
 
 </sphqueries>

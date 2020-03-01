@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>alter table settings</name>
+<skip_indexer/>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"></data_path>
+}
+</config>
+
+<sphqueries>
+
+<sphinxql>create table test1 ( title text, tag integer )</sphinxql>
+<sphinxql>insert into test1 values (1, 'word form', 11)</sphinxql>
+<sphinxql>select * from test1 where match ( 'wordform' )</sphinxql>
+
+<sphinxql>alter table test1 wordforms = '<this_test/>/wordforms.txt'</sphinxql>
+
+<sphinxql>insert into test1 values (2, 'word form', 11)</sphinxql>
+<sphinxql>select * from test1 where match ( 'wordform' )</sphinxql>
+
+<sphinxql>drop table test1</sphinxql>
+
+</sphqueries>
+
+</test>

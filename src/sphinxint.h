@@ -576,16 +576,6 @@ public:
 };
 
 
-namespace sph
-{
-	int rename ( const char * sOld, const char * sNew );
-}
-
-namespace sph
-{
-	int rename ( const char * sOld, const char * sNew );
-}
-
 //////////////////////////////////////////////////////////////////////////
 
 /// generic COM-like uids

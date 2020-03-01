@@ -13731,6 +13731,7 @@ void CSphIndex_VLN::Dealloc ()
 	m_tWordlist.Reset ();
 	m_tDeadRowMap.Dealloc();
 	m_tDocidLookup.Reset();
+	m_pDocstore.Reset();
 
 	m_iDocinfo = 0;
 	m_iMinMaxIndex = 0;
@@ -17531,8 +17532,8 @@ int CSphTemplateDictTraits::InitMorph ( const char * szMorph, int iLength, CSphS
 		return ST_OK;
 
 	sMessage.SetBinary ( szMorph, iLength );
-	sMessage.SetSprintf ( "unknown stemmer %s; skipped", sMessage.cstr() );
-	return ST_WARNING;
+	sMessage.SetSprintf ( "unknown stemmer %s", sMessage.cstr() );
+	return ST_ERROR;
 }
 
 

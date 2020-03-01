@@ -33,6 +33,7 @@ searchd
 <sphinxql d="0">insert into test2 values (3,'word3',300)</sphinxql>
 <sphinxql d="0">insert into test2 values (4,'word4',400)</sphinxql>
 <sphinxql d="0">create table distr type='distributed' local='test1' local='test2'</sphinxql>
+<sphinxql d="0">show create table distr</sphinxql>
 
 <sphinxql d="0">show tables</sphinxql>
 <sphinxql d="0">desc distr</sphinxql>
@@ -44,6 +45,7 @@ searchd
 <sphinxql d="0">show tables</sphinxql>
 
 <sphinxql d="1">create table distr type='distributed' agent='<agent0_address/>:test1'</sphinxql>
+<sphinxql d="1">show create table distr</sphinxql>
 <sphinxql d="1">show tables</sphinxql>
 <sphinxql d="1">select * from distr</sphinxql>
 <sphinxql d="1">drop table distr</sphinxql>

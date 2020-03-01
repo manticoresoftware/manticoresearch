@@ -3573,20 +3573,6 @@ void RtIndex_c::SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_
 	tWriter.CloseFile ();
 }
 
-namespace sph
-{
-	int rename ( const char * sOld, const char * sNew )
-	{
-#if USE_WINDOWS
-		if ( MoveFileEx ( sOld, sNew, MOVEFILE_REPLACE_EXISTING ) )
-			return 0;
-		errno = GetLastError();
-		return -1;
-#else
-		return ::rename ( sOld, sNew );
-#endif
-	}
-}
 
 void RtIndex_c::SaveMeta ( int64_t iTID, const CSphFixedVector<int> & dChunkNames )
 {
@@ -7450,10 +7436,11 @@ bool RtIndex_c::Truncate ( CSphString & )
 			sphWarning ( "rt: truncate failed to unlink %s: %s", sFile.cstr(), strerrorm(errno) );
 
 	// kill all disk chunks files
-	ARRAY_FOREACH ( i, m_dDiskChunks )
+	for ( auto & i : m_dDiskChunks )
 	{
 		StrVec_t v;
-		const char * sChunkFilename = m_dDiskChunks[i]->GetFilename();
+		const char * sChunkFilename = i->GetFilename();
+		i->Dealloc();
 		sphSplit ( v, sChunkFilename, "." ); // split something like "rt.1"
 		const char * sChunkNumber = v.Last().cstr();
 		sFile.SetSprintf ( "%s.%s", m_sPath.cstr(), sChunkNumber );

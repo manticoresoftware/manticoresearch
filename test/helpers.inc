@@ -27,6 +27,11 @@ function sphFormatTime ( $time )
 	return sprintf ( '%d%s:%d%s', $time / 60, $u[0], $time % 60, $u[1] );
 }
 
+function StrBegins ( $str, $substr )
+{
+	return substr($str, 0, strlen($substr)) === $substr;
+}
+
 
 function mysqli_wr ($q, $conn)
 {
@@ -1779,7 +1784,8 @@ class SphinxConfig
 			$query = strtolower ( trim ( $query ) );
 
 			$create_table = "create table";
-			if ( substr($query, 0, strlen($create_table)) === $create_table )
+			$alter_table = "alter table";
+			if ( StrBegins ( $query, $create_table ) || StrBegins ( $query, $alter_table) )
 			{
 				$matches = array();
 				$preg = preg_match_all ( "/(?:(?:wordforms|stopwords|exceptions)[ \t]*=[ \t]*)'([^']+)'/", $query, $matches, PREG_OFFSET_CAPTURE );
@@ -1822,6 +1828,12 @@ class SphinxConfig
 				$query_result["rows"][] = $row;
 			}
 			mysqli_free_result($result);
+
+			if ( isset ( $query_result["rows"] ) && isset ( $query_result["rows"][0] ) && isset ( $query_result["rows"][0]["Create Table"] ) )
+			{
+				$create_res = $query_result["rows"][0]["Create Table"];
+				$query_result["rows"][0]["Create Table"] = $this->FixupAgentAddress ( $create_res );
+			}
 		}
 	}
 
@@ -2032,7 +2044,7 @@ class SphinxConfig
 		$no_time = false;
 		if ( $bench===false && ( stripos ( $query, 'show' )!==false ) && ( stripos ( $query, 'meta' )!==false ) )
 			$no_time = true;
-			
+
 		if ( strpos ($query, ";")===FALSE ) // process a single-query line
 		// FIXME! If a query contains ';' it would be false positive for such codepath.
 		{

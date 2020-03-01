@@ -283,6 +283,7 @@ const RtTypedAttr_t &	GetRtType ( int iType );
 
 struct CreateTableSettings_t
 {
+	CSphString					m_sLike;
 	bool						m_bIfNotExists = false;
 	CSphVector<CSphColumnInfo>	m_dAttrs;
 	CSphVector<CSphColumnInfo>	m_dFields;
@@ -298,6 +299,8 @@ public:
 	bool			Add ( const CSphString & sName, const CSphString & sValue );
 	CSphString		Get ( const CSphString & sName ) const;
 	bool			Contains ( const char * szName ) const;
+	void			RemoveKeys ( const CSphString & sName );
+	bool			AddOption ( const CSphString & sName, const CSphString & sValue );
 	StrVec_t 		GetFiles() const;
 
 	const CSphConfigSection &	AsCfg() const;
@@ -310,9 +313,6 @@ private:
 	StrVec_t		m_dExceptionFiles;
 	StrVec_t		m_dWordformFiles;
 	CSphString		m_sError;
-
-	bool			AddOption ( const CSphString & sName, const CSphString & sValue );
-	void			RemoveKeys ( const CSphString & sName );
 };
 
 
@@ -326,7 +326,7 @@ void		SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, boo
 
 /// try to set dictionary, tokenizer and misc settings for an index (if not already set)
 bool		sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError, bool bStripFile=false, FilenameBuilder_i * pFilenameBuilder=nullptr );
-CSphString	BuildCreateTable ( const CSphIndex * pIndex, const CSphSchema & tSchema );
+CSphString	BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema );
 
 // daemon-level callback
 using CreateFilenameBuilder_fn = FilenameBuilder_i * (*)( const char * szIndex );

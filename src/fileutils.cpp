@@ -511,6 +511,72 @@ bool CopyFile ( const CSphString & sSource, const CSphString & sDest, CSphString
 	return true;
 }
 
+
+bool RenameFiles ( const StrVec_t & dSrc, const StrVec_t & dDst, CSphString & sError )
+{
+	bool bError = false;
+	ARRAY_FOREACH ( i, dSrc )
+	{
+		if ( sph::rename ( dSrc[i].cstr(), dDst[i].cstr() ) )
+		{
+			sError.SetSprintf ( "failed to rename %s to %s", dSrc[i].cstr(), dDst[i].cstr() );
+			bError = true;
+		}
+	}
+
+	return bError;
+}
+
+
+bool RenameWithRollback ( const StrVec_t & dSrc, const StrVec_t & dDst, CSphString & sError )
+{
+	assert ( dSrc.GetLength()==dDst.GetLength() );
+	if ( !dSrc.GetLength() )
+		return true;
+
+	CSphBitvec dRenamed ( dSrc.GetLength() );
+	bool bError = false;
+	ARRAY_FOREACH_COND ( i, dSrc, !bError )
+	{
+		if ( sph::rename ( dSrc[i].cstr(), dDst[i].cstr() ) )
+		{
+			sError.SetSprintf ( "failed to rename %s to %s", dSrc[i].cstr(), dDst[i].cstr() );
+			bError = true;
+		}
+		else
+			dRenamed.BitSet(i);
+	}
+
+	if ( !bError )
+		return true;
+
+	// roll back renaming
+	ARRAY_FOREACH ( i, dSrc )
+	{
+		if ( dRenamed.BitGet(i) )
+			sph::rename ( dDst[i].cstr(), dSrc[i].cstr() ); // ignore errors
+	}
+
+	return false;
+}
+
+
+namespace sph
+{
+	int rename ( const char * sOld, const char * sNew )
+	{
+#if USE_WINDOWS
+		if ( MoveFileEx ( sOld, sNew, MOVEFILE_REPLACE_EXISTING ) )
+			return 0;
+		errno = GetLastError();
+		return -1;
+#else
+		return ::rename ( sOld, sNew );
+#endif
+	}
+}
+
+
 // check path exists and also check daemon could write there
 bool CheckPath ( const CSphString & sPath, bool bCheckWrite, CSphString & sError, const char * sCheckFileName )
 {
@@ -544,7 +610,7 @@ CSphString & StripPath ( CSphString & sPath )
 	const char * s = sPath.cstr();
 
 #if !USE_WINDOWS
-	if ( *s!='/' )
+	if ( *s!='/' && *s!='.' )
 		return sPath;
 #endif
 
@@ -560,4 +626,42 @@ CSphString & StripPath ( CSphString & sPath )
 	auto iLen = (int)( s - sPath.cstr() );
 	sPath = sPath.SubString ( iPos, iLen - iPos );
 	return sPath;
+}
+
+
+CSphString GetPathOnly ( const CSphString & sFullPath )
+{
+	if ( sFullPath.IsEmpty() )
+		return CSphString();
+
+	const char * pStart = sFullPath.cstr();
+	const char * pCur = pStart + sFullPath.Length() - 1;
+
+	if ( *pCur=='/' || *pCur=='\\' )
+		return sFullPath;
+
+	while ( pCur>pStart && pCur[-1]!='/' && pCur[-1]!='\\' )
+		pCur--;
+
+	CSphString sPath;
+	if ( pCur==pStart )
+		sPath = sFullPath;
+	else
+		sPath.SetBinary ( pStart, pCur-pStart );
+
+	return sPath;
+
+}
+
+
+const char * GetExtension ( const CSphString & sFullPath )
+{
+	if ( sFullPath.IsEmpty() )
+		return nullptr;
+
+	const char * pDot = strchr ( sFullPath.cstr(), '.' );
+	if ( !pDot || pDot[1]=='\0' )
+		return nullptr;
+
+	return pDot+1;
 }

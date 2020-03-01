@@ -38,6 +38,7 @@
 %token	TOK_JOIN
 %token	TOK_JSON
 %token	TOK_KILLLIST_TARGET
+%token	TOK_LIKE
 %token	TOK_MULTI
 %token	TOK_MULTI64
 %token	TOK_NOT
@@ -64,6 +65,7 @@ request:
 statement:
 	alter
 	| create_table
+	| create_table_like
 	| drop_table
 	| create_function
 	| drop_function
@@ -128,6 +130,12 @@ alter:
 			tStmt.m_eStmt = STMT_ALTER_KLIST_TARGET;
 			pParser->ToString ( tStmt.m_sIndex, $3 );
 			pParser->ToString ( tStmt.m_sAlterOption, $6 ).Unquote();
+		}
+	| TOK_ALTER TOK_TABLE ident create_table_option_list
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_ALTER_INDEX_SETTINGS;
+			pParser->ToString ( tStmt.m_sIndex, $3 );
 		}
 	| TOK_ALTER TOK_CLUSTER ident TOK_ADD ident
 		{
@@ -206,6 +214,29 @@ create_table:
 			tStmt.m_tCreateTable.m_bIfNotExists = true;
 			pParser->ToString ( tStmt.m_sIndex, $6 );
 			tStmt.m_sIndex.ToLower();
+		}
+	;
+
+create_table_like:
+	TOK_CREATE TOK_TABLE ident TOK_LIKE ident
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_CREATE_TABLE_LIKE;
+			tStmt.m_tCreateTable.m_bIfNotExists = false;
+			pParser->ToString ( tStmt.m_sIndex, $3 );
+			pParser->ToString ( tStmt.m_tCreateTable.m_sLike, $5 );
+			tStmt.m_sIndex.ToLower();
+			tStmt.m_tCreateTable.m_sLike.ToLower();
+		}
+	| TOK_CREATE TOK_TABLE TOK_IF TOK_NOT TOK_EXISTS ident TOK_LIKE ident
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_CREATE_TABLE_LIKE;
+			tStmt.m_tCreateTable.m_bIfNotExists = true;
+			pParser->ToString ( tStmt.m_sIndex, $6 );
+			pParser->ToString ( tStmt.m_tCreateTable.m_sLike, $8 );
+			tStmt.m_sIndex.ToLower();
+			tStmt.m_tCreateTable.m_sLike.ToLower();
 		}
 	;
 

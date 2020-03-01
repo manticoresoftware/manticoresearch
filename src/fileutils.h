@@ -121,11 +121,22 @@ bool			sphWrite ( int iFD, const void * pBuf, size_t iSize );
 StrVec_t		FindFiles ( const char * szPath, bool bNeedDirs=false );
 bool			MkDir ( const char * szDir );
 bool			CopyFile ( const CSphString & sSource, const CSphString & sDest, CSphString & sError );
+bool			RenameFiles ( const StrVec_t & dSrc, const StrVec_t & dDst, CSphString & sError );
+bool			RenameWithRollback ( const StrVec_t & dSrc, const StrVec_t & dDst, CSphString & sError );
 
 // check if path exists and also check if daemon can write there
 bool			CheckPath ( const CSphString & sPath, bool bCheckWrite, CSphString & sError, const char * sCheckFileName="tmp" );
 
 CSphString &	StripPath ( CSphString & sPath );
+CSphString		GetPathOnly ( const CSphString & sFullPath );
+const char *	GetExtension ( const CSphString & sFullPath );
+
+// FIXME! unify this weird zoo of file function naming
+namespace sph
+{
+	int rename ( const char * sOld, const char * sNew );
+}
+
 
 template < typename T >
 class CSphMappedBuffer : public CSphBufferTrait < T >

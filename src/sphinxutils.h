@@ -518,8 +518,6 @@ namespace TlsMsg
 
 // extract basename from path
 const char * GetBaseName ( const CSphString & sFullPath );
-CSphString GetPathOnly ( const CSphString & sFullPath );
-const char * GetExtension ( const CSphString & sFullPath );
 bool HasMvaUpdated ( const CSphString & sIndexPath );
 
 // uuid short generator - static across daemon

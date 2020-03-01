@@ -50,10 +50,18 @@ struct ClusterDesc_t
 };
 
 
+struct AgentConfigDesc_t
+{
+	CSphString		m_sConfig;
+	bool			m_bPersistent = false;
+	bool			m_bBlackhole = false;
+};
+
+
 struct IndexDescDistr_t
 {
 	StrVec_t		m_dLocals;
-	StrVec_t		m_dAgents;
+	CSphVector<AgentConfigDesc_t> m_dAgents;
 	int				m_iAgentConnectTimeout = 0;
 	int				m_iAgentQueryTimeout = 0;
 	int				m_iAgentRetryCount = 0;
@@ -98,7 +106,11 @@ CSphString	GetDataDirInt();
 bool		IsConfigless();
 const CSphVector<ClusterDesc_t> & GetClustersInt();
 
+struct DistributedIndex_t;
+CSphString	BuildCreateTableDistr ( const CSphString & sName, const DistributedIndex_t & tDistr );
+
 bool		CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, StrVec_t & dWarnings, CSphString & sError );
 bool		DropIndexInt ( const CSphString & sIndex, bool bIfExists, CSphString & sError );
+bool		CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestPath, CSphString & sError );
 
 #endif // _searchdconfig_

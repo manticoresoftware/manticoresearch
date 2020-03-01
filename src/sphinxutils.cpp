@@ -3345,42 +3345,6 @@ const char * GetBaseName ( const CSphString & sFullPath )
 	return pCur;
 }
 
-CSphString GetPathOnly ( const CSphString & sFullPath )
-{
-	if ( sFullPath.IsEmpty() )
-		return CSphString();
-
-	const char * pStart = sFullPath.cstr();
-	const char * pCur = pStart + sFullPath.Length() - 1;
-
-	if ( *pCur=='/' || *pCur=='\\' )
-		return sFullPath;
-
-	while ( pCur>pStart && pCur[-1]!='/' && pCur[-1]!='\\' )
-		pCur--;
-	
-	CSphString sPath;
-	if ( pCur==pStart )
-		sPath = sFullPath;
-	else
-		sPath.SetBinary ( pStart, pCur-pStart );
-
-	return sPath;
-
-}
-
-const char * GetExtension ( const CSphString & sFullPath )
-{
-	if ( sFullPath.IsEmpty() )
-		return nullptr;
-
-	const char * pDot = strchr ( sFullPath.cstr(), '.' );
-	if ( !pDot || pDot[1]=='\0' )
-		return nullptr;
-
-	return pDot+1;
-}
-
 static CSphAtomic_T<int64_t> g_iUID { 1 };
 static int64_t g_iUidBase = 0;
 

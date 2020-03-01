@@ -270,6 +270,20 @@ bool IndexDescDistr_t::Parse ( const JsonObj_c & tJson, CSphString & sWarning, C
 		m_dLocals.Add ( i.StrVal() );
 	}
 
+	JsonObj_c tAgents = tJson.GetItem("agents");
+	for ( const auto & i : tAgents )
+	{
+		AgentConfigDesc_t & tNew = m_dAgents.Add();
+		if ( !i.FetchStrItem ( tNew.m_sConfig, "config", sError, false ) )
+			return false;
+
+		if ( !i.FetchBoolItem ( tNew.m_bBlackhole, "blackhole", sError, true ) )
+			return false;
+
+		if ( !i.FetchBoolItem ( tNew.m_bPersistent, "persistent", sError, true ) )
+			return false;
+	}
+
 	if ( !tJson.FetchIntItem ( m_iAgentConnectTimeout, "agent_connect_timeout", sError, true ) )
 		return false;
 
@@ -304,15 +318,30 @@ void IndexDescDistr_t::Save ( JsonObj_c & tIdx ) const
 		tIdx.AddItem ( "locals", tLocals );
 	}
 
+	if ( !m_dAgents.IsEmpty() )
+	{
+		JsonObj_c tAgents(true);
+		for ( const auto & i : m_dAgents )
+		{
+			JsonObj_c tNew;
+			tNew.AddStr ( "config", i.m_sConfig );
+			tNew.AddBool ( "blackhole", i.m_bBlackhole );
+			tNew.AddBool ( "persistent", i.m_bPersistent );
+			tAgents.AddItem(tNew);
+		}
+
+		tIdx.AddItem ( "agents", tAgents );
+	}
+
 	tIdx.AddInt ( "agent_connect_timeout",	m_iAgentConnectTimeout);
 	tIdx.AddInt ( "agent_query_timeout",	m_iAgentQueryTimeout );
-	tIdx.AddInt ( "agent_retry_count",		m_iAgentRetryCount );
+	if ( m_iAgentRetryCount>0 )
+		tIdx.AddInt ( "agent_retry_count",	m_iAgentRetryCount );
+
 	tIdx.AddBool( "divide_remote_ranges",	m_bDivideRemoteRanges );
 
 	if ( !m_sHaStrategy.IsEmpty() )
 		tIdx.AddStr ( "ha_strategy",		m_sHaStrategy );
-
-	// TODO: agents
 }
 
 
@@ -321,16 +350,28 @@ void IndexDescDistr_t::Save ( CSphConfigSection & hIndex ) const
 	for ( const auto & i : m_dLocals )
 		hIndex.AddEntry ( "local", i.cstr() );
 
+	for ( const auto & i : m_dAgents )
+	{
+		const char * szConf = i.m_sConfig.cstr();
+
+		if ( i.m_bBlackhole )
+			hIndex.AddEntry ( "agent_blackhole", szConf );
+		else if ( i.m_bPersistent )
+			hIndex.AddEntry ( "agent_persistent", szConf );
+		else
+			hIndex.AddEntry ( "agent", szConf );
+	}
+
 	CSphString sTmp;
 	hIndex.AddEntry ( "agent_connect_timeout",	sTmp.SetSprintf ( "%d", m_iAgentConnectTimeout ).cstr() );
 	hIndex.AddEntry ( "agent_query_timeout",	sTmp.SetSprintf ( "%d", m_iAgentQueryTimeout ).cstr() );
-	hIndex.AddEntry ( "agent_retry_count",		sTmp.SetSprintf ( "%d", m_iAgentRetryCount ).cstr() );
+	if ( m_iAgentRetryCount > 0 )
+		hIndex.AddEntry ( "agent_retry_count",		sTmp.SetSprintf ( "%d", m_iAgentRetryCount ).cstr() );
+
 	hIndex.AddEntry ( "divide_remote_ranges",	m_bDivideRemoteRanges ? "1" : "0" );
 
 	if ( !m_sHaStrategy.IsEmpty() )
 		hIndex.AddEntry ( "ha_strategy",		m_sHaStrategy.cstr() );
-
-	// TODO: add agents
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -593,7 +634,15 @@ static void CollectDistIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 		tIndex.m_tDistr.m_sHaStrategy			= HAStrategyToStr ( tIt.Get()->m_eHaStrategy );
 
 		for ( const auto & i : tIt.Get()->m_dAgents )
-			tIndex.m_tDistr.m_dAgents.Add ( i->GetConfigStr() );
+		{
+			if ( !i || !i->GetLength() )
+				continue;
+
+			AgentConfigDesc_t & tAgent = tIndex.m_tDistr.m_dAgents.Add();
+			tAgent.m_sConfig		= i->GetConfigStr();
+			tAgent.m_bBlackhole		= (*i)[0].m_bBlackhole;
+			tAgent.m_bPersistent	= (*i)[0].m_bPersistent;
+		}
 	}
 }
 
@@ -743,13 +792,16 @@ static bool PrepareDirForNewIndex ( CSphString & sPath, CSphString & sIndexPath,
 }
 
 
-static bool CopyFilesForNewIndex ( const StrVec_t & dFiles, const CSphString & sDestPath, CSphString & sError )
+bool CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestPath, CSphString & sError )
 {
 	for ( const auto & i : dFiles )
 	{
 		CSphString sDest = i;
 		StripPath(sDest);
 		sDest.SetSprintf ( "%s/%s", sDestPath.cstr(), sDest.cstr() );
+		if ( i==sDest )
+			continue;
+
 		if ( !CopyFile ( i, sDest, sError ) )
 			return false;			
 	}
@@ -760,7 +812,7 @@ static bool CopyFilesForNewIndex ( const StrVec_t & dFiles, const CSphString & s
 
 static bool CheckCreateTableSettings ( const CreateTableSettings_t & tCreateTable, CSphString & sError )
 {
-	static const char * dForbidden[] = { "path", "stored_fields", "stored_only_fields", "rt_field", "embedded_limit" };
+	static const char * dForbidden[] = { "path", "stored_fields", "stored_only_fields", "rt_field", "embedded_limit", "preopen" };
 	static const char * dTypes[] = { "rt", "pq", "percolate", "distributed" };
 
 	for ( const auto & i : tCreateTable.m_dOpts )
@@ -797,6 +849,55 @@ static bool CheckCreateTableSettings ( const CreateTableSettings_t & tCreateTabl
 }
 
 
+CSphString BuildCreateTableDistr ( const CSphString & sName, const DistributedIndex_t & tDistr )
+{
+	StringBuilder_c sRes(" ");
+	sRes << "CREATE TABLE" << sName << "type='distributed'";
+
+	for ( const auto & i : tDistr.m_dLocal )
+	{
+		CSphString sLocal;
+		sRes << sLocal.SetSprintf ( "local='%s'", i.cstr() );
+	}
+
+	for ( const auto & i : tDistr.m_dAgents )
+	{
+		CSphString sAgent;
+
+		if ( !i || !i->GetLength() )
+			continue;
+
+		if ( (*i)[0].m_bBlackhole )
+			sAgent = "agent_blackhole";
+		else if ( (*i)[0].m_bPersistent )
+			sAgent = "agent_persistent";
+		else
+			sAgent = "agent";
+
+		sRes << sAgent.SetSprintf ( "%s='%s'", sAgent.cstr(), i->GetConfigStr().cstr() );
+	}
+
+	DistributedIndexRefPtr_t pDefault ( new DistributedIndex_t );
+	CSphString sOpt;
+	if ( tDistr.m_iAgentConnectTimeout!=pDefault->m_iAgentConnectTimeout )
+		sRes << sOpt.SetSprintf ( "agent_connect_timeout='%d'", tDistr.m_iAgentConnectTimeout );
+
+	if ( tDistr.m_iAgentQueryTimeout!=pDefault->m_iAgentQueryTimeout )
+		sRes << sOpt.SetSprintf ( "agent_query_timeout='%d'", tDistr.m_iAgentQueryTimeout );
+
+	if ( tDistr.m_iAgentRetryCount!=pDefault->m_iAgentRetryCount )
+		sRes << sOpt.SetSprintf ( "agent_retry_count='%d'", tDistr.m_iAgentRetryCount );
+
+	if ( tDistr.m_bDivideRemoteRanges!=pDefault->m_bDivideRemoteRanges )
+		sRes << sOpt.SetSprintf ( "divide_remote_ranges='%d'", tDistr.m_bDivideRemoteRanges ? 1 : 0 );
+
+	if ( tDistr.m_eHaStrategy!=pDefault->m_eHaStrategy )
+		sRes << sOpt.SetSprintf ( "ha_strategy='%s'", HAStrategyToStr ( tDistr.m_eHaStrategy ).cstr() );
+
+	return sRes.cstr();
+}
+
+
 bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, StrVec_t & dWarnings, CSphString & sError )
 {
 	if ( tCreateTable.m_bIfNotExists && g_pLocalIndexes->Contains(sIndex) )
@@ -812,9 +913,6 @@ bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t 
 		return false;
 	}
 
-	if ( !tSettingsContainer.Contains("type") )
-		tSettingsContainer.Add ( "type", "rt" );
-
 	bool bDistributed = tSettingsContainer.Get("type")=="distributed";
 	if ( !bDistributed )
 	{
@@ -823,9 +921,7 @@ bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t 
 			return false;
 
 		tSettingsContainer.Add ( "path", sIndexPath );
-		tSettingsContainer.Add ( "embedded_limit", "0" );
-
-		if ( !CopyFilesForNewIndex ( tSettingsContainer.GetFiles(), sPath, sError ) )
+		if ( !CopyExternalIndexFiles ( tSettingsContainer.GetFiles(), sPath, sError ) )
 			return false;
 	}
 

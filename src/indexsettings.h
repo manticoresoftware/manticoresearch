@@ -306,6 +306,8 @@ public:
 	const CSphConfigSection &	AsCfg() const;
 	const CSphString &			GetError() const { return m_sError; }
 
+	void SetDefaults ();
+
 private:
 	CSphConfigSection m_hCfg;
 

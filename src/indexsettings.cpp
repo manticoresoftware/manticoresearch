@@ -942,6 +942,8 @@ bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateT
 	if ( !bDistributed )
 		Add ( "embedded_limit", "0" );
 
+	SetDefaults();
+
 	return true;
 }
 
@@ -994,6 +996,21 @@ StrVec_t IndexSettingsContainer_c::GetFiles() const
 const CSphConfigSection & IndexSettingsContainer_c::AsCfg() const
 {
 	return m_hCfg;
+}
+
+// TODO: read defaults from file or predefined templates
+static std::pair<const char* , const char *> g_dIndexSettingsDefaults[] =
+{
+	{ "charset_table", "non_cjk" }
+};
+
+void IndexSettingsContainer_c::SetDefaults()
+{
+	for ( const auto & tItem : g_dIndexSettingsDefaults )
+	{
+		if ( !m_hCfg.Exists ( tItem.first ) )
+			Add ( tItem.first, tItem.second );
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////

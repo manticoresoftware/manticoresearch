@@ -1650,7 +1650,7 @@ static void ShowHelp ()
 		"\t\t\twhere 'attr' is between 'min' and 'max' (inclusive)\n"
 		"--dump-rows <FILE>\tdump indexed rows into FILE\n"
 		"--print-queries\t\tprint SQL queries (for debugging)\n"
-		"--print-rt\t\tprint indexed rows as SQL insert and field mapping for populating a RT index\n"
+		"--print-rt\t\tprint indexed rows as SQL insert commands and field mapping info for populating an RT index\n"
 		"--keep-attrs\t\tretain attributes from the old index\n"
 		"\n"
 		"Examples:\n"

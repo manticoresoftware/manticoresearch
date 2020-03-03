@@ -5158,20 +5158,6 @@ int64_t sphCpuTimer ()
 #endif
 }
 
-struct GuardedCrashQuery_t : public ISphNoncopyable
-{
-	const CrashQuery_t m_tReference;
-	explicit GuardedCrashQuery_t ( const CrashQuery_t & tCrashQuery )
-		: m_tReference ( tCrashQuery )
-	{
-	}
-
-	~GuardedCrashQuery_t()
-	{
-		SphCrashLogger_c::SetLastQuery ( m_tReference );
-	}
-};
-
 struct LocalSearchThreadContext_t
 {
 	SphThread_t					m_tThd {0};

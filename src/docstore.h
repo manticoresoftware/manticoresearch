@@ -120,7 +120,7 @@ void				ShutdownDocstore();
 
 class DebugCheckError_c;
 class CSphAutoreader;
-bool				CheckDocstore ( CSphAutoreader & tReader, DebugCheckError_c & tReporter );
+bool				CheckDocstore ( CSphAutoreader & tReader, DebugCheckError_c & tReporter, int64_t iRowsCount );
 
 #endif
 

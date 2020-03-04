@@ -1773,7 +1773,7 @@ DocstoreSession_c::~DocstoreSession_c()
 class DocstoreChecker_c
 {
 public:
-						DocstoreChecker_c ( CSphAutoreader & tReader, DebugCheckError_c & tReporter );
+						DocstoreChecker_c ( CSphAutoreader & tReader, DebugCheckError_c & tReporter, int64_t iRowsCount );
 
 	bool				Check();
 
@@ -1783,6 +1783,7 @@ private:
 	const char *		m_szFilename = nullptr;
 	DocstoreFields_c	m_tFields;
 	CSphScopedPtr<Compressor_i> m_pCompressor{nullptr};
+	int64_t				m_iRowsCount = 0;
 
 	void				CheckSmallBlockDoc ( MemoryReader2_c & tReader, CSphBitvec & tEmptyFields, SphOffset_t tOffset );
 	void				CheckSmallBlock ( const Docstore_c::Block_t & tBlock );
@@ -1792,10 +1793,11 @@ private:
 };
 
 
-DocstoreChecker_c::DocstoreChecker_c ( CSphAutoreader & tReader, DebugCheckError_c & tReporter )
+DocstoreChecker_c::DocstoreChecker_c ( CSphAutoreader & tReader, DebugCheckError_c & tReporter, int64_t iRowsCount )
 	: m_tReader ( tReader )
 	, m_tReporter ( tReporter )
 	, m_szFilename ( tReader.GetFilename().cstr() )
+	, m_iRowsCount ( iRowsCount )
 {}
 
 
@@ -1836,6 +1838,15 @@ bool DocstoreChecker_c::Check()
 	}
 
 	DWORD uNumBlocks = m_tReader.GetDword();
+	// docstore from empty index
+	if ( !uNumBlocks )
+	{
+		if ( !m_iRowsCount )
+			return true;
+
+		return m_tReporter.Fail ( "Docstore has 0 blocks but " INT64_FMT " documents in %s", m_iRowsCount, m_szFilename );
+	}
+
 	SphOffset_t tHeaderOffset = m_tReader.GetOffset();
 	if ( tHeaderOffset <= 0 || tHeaderOffset >= m_tReader.GetFilesize() )
 		return m_tReporter.Fail ( "Wrong docstore header offset (" INT64_FMT ") in %s", tHeaderOffset, m_szFilename );
@@ -1947,6 +1958,9 @@ void DocstoreChecker_c::CheckSmallBlock ( const Docstore_c::Block_t & tBlock )
 
 	if ( uCompressedLength>tResult.m_uSize )
 		m_tReporter.Fail ( "Docstore block size mismatch: compressed=%u, uncompressed=%u in %s (offset " INT64_FMT ")", uCompressedLength, tResult.m_uSize, m_szFilename, tBlock.m_tOffset );
+
+	if ( !tResult.m_uNumDocs )
+		m_tReporter.Fail ( "Docstore block invalid document count: %d", tResult.m_uNumDocs );
 
 	const BYTE * pBody = dBlock.Begin() + tBlockReader.GetPos();
 
@@ -2120,8 +2134,8 @@ void ShutdownDocstore()
 }
 
 
-bool CheckDocstore ( CSphAutoreader & tReader, DebugCheckError_c & tReporter )
+bool CheckDocstore ( CSphAutoreader & tReader, DebugCheckError_c & tReporter, int64_t iRowsCount )
 {
-	DocstoreChecker_c tChecker ( tReader, tReporter );
+	DocstoreChecker_c tChecker ( tReader, tReporter, iRowsCount );
 	return tChecker.Check();
 }

@@ -1174,7 +1174,10 @@ void DiskIndexChecker_c::CheckDocidLookup()
 	CSphAutoreader tLookup;
 	if ( !tLookup.Open ( GetFilename(SPH_EXT_SPT), sError ) )
 	{
-		m_tReporter.Fail ( "unable to lookup file: %s", sError.cstr() );
+		// only if index not empty
+		if ( m_iNumRows )
+			m_tReporter.Fail ( "unable to lookup file: %s", sError.cstr() );
+
 		return;
 	}
 	int64_t iLookupEnd = tLookup.GetFilesize();
@@ -1322,7 +1325,7 @@ void DiskIndexChecker_c::CheckDocstore()
 
 	m_tReporter.Msg ( "checking docstore..." );
 
-	::CheckDocstore ( m_tDocstoreReader, m_tReporter );
+	::CheckDocstore ( m_tDocstoreReader, m_tReporter, m_iNumRows );
 }
 
 

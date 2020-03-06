@@ -596,7 +596,6 @@ if ( WIN32 )
 endif ()
 
 IF (NOT DISTR_BUILD AND NOT WIN32 )
-	SET ( BINPREFIX "usr/" )
 	file ( READ "manticore-min.conf.in" _MINCONF )
 	string ( REPLACE "@CONFDIR@/log/searchd.pid" "@RUNDIR@/searchd.pid" _MINCONF "${_MINCONF}" )
 	string ( REPLACE "@CONFDIR@/log" "@LOGDIR@" _MINCONF "${_MINCONF}" )

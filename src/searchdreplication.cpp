@@ -1865,8 +1865,7 @@ bool CommitMonitor_c::Commit ( CSphString& sError )
 	return false;
 }
 
-bool CommitMonitor_c::CommitNonEmptyCmds ( RtIndex_i* pIndex, const ReplicationCommand_t& tCmd, bool bOnlyTruncate,
-	CSphString & sError ) const
+bool CommitMonitor_c::CommitNonEmptyCmds ( RtIndex_i* pIndex, const ReplicationCommand_t& tCmd, bool bOnlyTruncate, CSphString & sError ) const
 {
 	assert ( pIndex );
 	if ( !bOnlyTruncate )
@@ -1880,7 +1879,8 @@ bool CommitMonitor_c::CommitNonEmptyCmds ( RtIndex_i* pIndex, const ReplicationC
 
 	assert ( tCmd.m_tReconfigure.Ptr ());
 	CSphReconfigureSetup tSetup;
-	bool bSame = pIndex->IsSameSettings ( *tCmd.m_tReconfigure.Ptr (), tSetup, sError );
+	StrVec_t dWarnings;
+	bool bSame = pIndex->IsSameSettings ( *tCmd.m_tReconfigure.Ptr (), tSetup, dWarnings, sError );
 	if ( !bSame && sError.IsEmpty() && !pIndex->Reconfigure ( tSetup ) )
 		return false;
 

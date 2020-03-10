@@ -117,7 +117,7 @@ public:
 	bool ForceDiskChunk () override;
 	bool AttachDiskIndex ( CSphIndex * , bool, bool &, CSphString & ) override { return true; }
 	void Optimize () override {}
-	bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const override;
+	bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const override;
 	bool Reconfigure ( CSphReconfigureSetup & tSetup ) override;
 	CSphIndex * GetDiskChunk ( int ) override { return NULL; } // NOLINT
 	int64_t GetLastFlushTimestamp() const override { return m_tmSaved; }
@@ -2369,7 +2369,7 @@ void FixPercolateSchema ( CSphSchema & tSchema )
 		tSchema.AddField ( CSphColumnInfo ( "text" ) );
 }
 
-bool PercolateIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const
+bool PercolateIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const
 {
 	tSetup.m_tSchema = tSettings.m_tSchema;
 	FixPercolateSchema ( tSetup.m_tSchema );
@@ -2377,8 +2377,8 @@ bool PercolateIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSp
 	CSphString sTmp;
 	bool bSameSchema = m_tSchema.CompareTo ( tSettings.m_tSchema, sTmp, false );
 
-	return CreateReconfigure ( m_sIndexName, IsStarDict(), m_pFieldFilter, m_tSettings,
-		m_pTokenizer->GetSettingsFNV(), m_pDict->GetSettingsFNV(), m_pTokenizer->GetMaxCodepointLength(), bSameSchema, tSettings, tSetup, sError );
+	return CreateReconfigure ( m_sIndexName, IsStarDict(), m_pFieldFilter, m_tSettings,	m_pTokenizer->GetSettingsFNV(), m_pDict->GetSettingsFNV(), m_pTokenizer->GetMaxCodepointLength(),
+		bSameSchema, tSettings, tSetup, dWarnings, sError );
 }
 
 bool PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )

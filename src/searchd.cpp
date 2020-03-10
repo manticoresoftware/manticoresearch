@@ -11810,6 +11810,16 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 }
 
 
+static CSphString ConcatWarnings ( const StrVec_t & dWarnings )
+{
+	StringBuilder_c sRes ( "; " );
+	for ( const auto & i : dWarnings )
+		sRes << i;
+
+	return sRes.cstr();
+}
+
+
 static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	SearchFailuresLog_c dErrors;
@@ -11831,11 +11841,7 @@ static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 
 	StrVec_t dWarnings;
 	bool bCreatedOk = CreateNewIndexInt ( tStmt.m_sIndex, tStmt.m_tCreateTable, dWarnings, sError );
-	StringBuilder_c sRes ( "; " );
-	for ( const auto & i : dWarnings )
-		sRes << i;
-
-	sWarning = sRes.cstr();
+	sWarning = ConcatWarnings(dWarnings);
 
 	if ( !bCreatedOk )
 	{
@@ -14625,7 +14631,7 @@ static bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSetti
 }
 
 
-static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	MEMORY ( MEM_SQL_ALTER );
 
@@ -14660,7 +14666,10 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 		return;
 	}
 
-	bool bSame = ( (const RtIndex_i *) dWLocked->m_pIndex )->IsSameSettings ( tSettings, tSetup, sError );
+	StrVec_t dWarnings;
+	bool bSame = ( (const RtIndex_i *) dWLocked->m_pIndex )->IsSameSettings ( tSettings, tSetup, dWarnings, sError );
+	sWarning = ConcatWarnings(dWarnings);
+
 	if ( !bSame && sError.IsEmpty() )
 	{
 		auto pRT = (RtIndex_i *) dWLocked->m_pIndex;
@@ -14673,7 +14682,7 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	}
 
 	if ( sError.IsEmpty() )
-		tOut.Ok();
+		tOut.Ok ( 0, dWarnings.GetLength() );
 	else
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 }
@@ -14849,6 +14858,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 		return;
 	}
 
+	StrVec_t dWarnings;
 	CSphReconfigureSettings tSettings;
 	if ( !PrepareReconfigure ( tStmt.m_sIndex, tContainer.AsCfg(), tSettings, sWarning, sError ) )
 	{
@@ -14856,8 +14866,13 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 		return;
 	}
 
+	if ( !sWarning.IsEmpty() )
+		dWarnings.Add(sWarning);
+
 	CSphReconfigureSetup tSetup;
-	bool bSame = pRtIndex->IsSameSettings ( tSettings, tSetup, sError );
+	bool bSame = pRtIndex->IsSameSettings ( tSettings, tSetup, dWarnings, sError );
+	sWarning = ConcatWarnings(dWarnings);
+
 	if ( !bSame && sError.IsEmpty() )
 	{
 		bool bOk = pRtIndex->Reconfigure(tSetup);
@@ -14874,7 +14889,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 		for ( const auto & i : dBackupFiles )
 			::unlink ( i.cstr() );
 
-		tOut.Ok();
+		tOut.Ok ( 0, dWarnings.GetLength() );
 	}
 	else
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -15443,7 +15458,11 @@ public:
 			return true;
 
 		case STMT_ALTER_RECONFIGURE:
-			HandleMysqlReconfigure ( tOut, *pStmt );
+			m_tLastMeta = CSphQueryResultMeta();
+			m_tLastMeta.m_sError = m_sError;
+			m_tLastMeta.m_sWarning = "";
+
+			HandleMysqlReconfigure ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 			return true;
 
 		case STMT_ALTER_KLIST_TARGET:

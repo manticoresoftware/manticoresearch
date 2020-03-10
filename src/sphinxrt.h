@@ -71,7 +71,7 @@ public:
 	virtual void Optimize ( ) = 0;
 
 	/// check settings vs current and return back tokenizer and dictionary in case of difference
-	virtual bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const = 0;
+	virtual bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const = 0;
 
 	/// reconfigure index by using new tokenizer, dictionary and index settings
 	/// current data got saved with current settings
@@ -356,7 +356,7 @@ void SetupStarDict ( DictRefPtr_c &pDict, ISphTokenizer * pTokenizer );
 
 bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const ISphFieldFilter * pFieldFilter,
 	const CSphIndexSettings & tIndexSettings, uint64_t uTokHash, uint64_t uDictHash, int iMaxCodepointLength,
-	bool bSame, CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError );
+	bool bSame, CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError );
 
 // Get global flag of w-available RT
 volatile bool &RTChangesAllowed ();

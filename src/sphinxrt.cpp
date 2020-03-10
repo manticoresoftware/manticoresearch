@@ -1157,7 +1157,7 @@ public:
 	// TODO: implement me
 	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) final {}
 
-	bool				IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const final;
+	bool				IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const final;
 	bool				Reconfigure ( CSphReconfigureSetup & tSetup ) final;
 	int64_t				GetLastFlushTimestamp() const final;
 	void				IndexDeleted() final { m_bIndexDeleted = true; }
@@ -7891,13 +7891,12 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 
 bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const ISphFieldFilter * pFieldFilter,
 	const CSphIndexSettings & tIndexSettings, uint64_t uTokHash, uint64_t uDictHash, int iMaxCodepointLength,
-	bool bSame, CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError )
+	bool bSame, CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError )
 {
 	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( sIndexName.cstr() ) : nullptr );
 
 	// FIXME!!! check missed embedded files
-	StrVec_t dWarnings;
 	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings.m_tTokenizer, nullptr, pFilenameBuilder.Ptr(), dWarnings, sError ) };
 	if ( !pTokenizer )
 	{
@@ -7994,16 +7993,16 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 		tSetup.m_tIndex = tSettings.m_tIndex;
 		tSetup.m_pFieldFilter = tFieldFilter.Leak();
 		return false;
-	} else
-	{
-		return true;
 	}
+
+	return true;
 }
 
-bool RtIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const
+
+bool RtIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const
 {
 	return CreateReconfigure ( m_sIndexName, IsStarDict(), m_pFieldFilter, m_tSettings,
-		m_pTokenizer->GetSettingsFNV(), m_pDict->GetSettingsFNV(), m_pTokenizer->GetMaxCodepointLength(), true, tSettings, tSetup, sError );
+		m_pTokenizer->GetSettingsFNV(), m_pDict->GetSettingsFNV(), m_pTokenizer->GetMaxCodepointLength(), true, tSettings, tSetup, dWarnings, sError );
 }
 
 bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
@@ -9411,7 +9410,8 @@ bool RtBinlog_c::ReplayReconfigure ( int iBinlog, DWORD uReplayFlags, BinlogRead
 
 		sError = "";
 		CSphReconfigureSetup tSetup;
-		bool bSame = tIndex.m_pRT->IsSameSettings ( tSettings, tSetup, sError );
+		StrVec_t dWarnings;
+		bool bSame = tIndex.m_pRT->IsSameSettings ( tSettings, tSetup, dWarnings, sError );
 
 		if ( !sError.IsEmpty() )
 			sphWarning ( "binlog: reconfigure: wrong settings (index=%s, indextid=" INT64_FMT ", logtid=" INT64_FMT ", pos=" INT64_FMT ", error=%s)",

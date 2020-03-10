@@ -132,35 +132,91 @@ private:
 class LookupReader_c
 {
 public:
-	LookupReader_c() = default;
+			LookupReader_c() = default;
+			LookupReader_c ( const BYTE * pData );
 
-	LookupReader_c ( const BYTE * pData )
+
+	void	SetData ( const BYTE * pData );
+
+	inline RowID_t Find ( DocID_t tDocID ) const
 	{
-		SetData ( pData );
+		if ( !m_pCheckpoints || tDocID<m_pCheckpoints->m_tBaseDocID || tDocID>m_tMaxDocID )
+			return INVALID_ROWID;
+
+		const DocidLookupCheckpoint_t * pFound = FindCheckpoint ( tDocID, m_pCheckpoints );
+		if ( !pFound )
+			return INVALID_ROWID;
+
+		const BYTE * pCur = m_pData + pFound->m_tOffset;
+		DocID_t tCurDocID = pFound->m_tBaseDocID;
+
+		// 1st entry doesnt have docid
+		RowID_t tRowID = sphUnalignedRead ( *(RowID_t*)pCur );
+		pCur += sizeof(RowID_t);
+
+		if ( tCurDocID==tDocID )
+			return tRowID;
+
+		int iDocsInCheckpoint = IsLastCheckpoint(pFound) ? m_nDocs % m_nDocsPerCheckpoint : m_nDocsPerCheckpoint;
+		for ( int i = 1; i < iDocsInCheckpoint; i++ )
+		{
+			DocID_t tDeltaDocID = sphUnzipOffset(pCur);
+			assert ( tDeltaDocID>=0 );
+			tRowID = sphUnalignedRead ( *(RowID_t*)pCur );
+			pCur += sizeof(RowID_t);
+
+			tCurDocID += tDeltaDocID;
+			if ( tCurDocID==tDocID )
+				return tRowID;
+			else if ( tCurDocID>tDocID )
+				return INVALID_ROWID;
+		}
+
+		return INVALID_ROWID;
 	}
 
+protected:
+	DWORD							m_nDocs {0};
+	DWORD							m_nDocsPerCheckpoint {0};
+	int								m_nCheckpoints {0};
+	DocID_t							m_tMaxDocID {0};
+	const BYTE *					m_pData {nullptr};
+	const DocidLookupCheckpoint_t *	m_pCheckpoints {nullptr};
 
-	void SetData ( const BYTE * pData )
+
+	inline const DocidLookupCheckpoint_t * FindCheckpoint ( DocID_t tDocID, const DocidLookupCheckpoint_t * pStart ) const
 	{
-		m_pData = pData;
+		if ( tDocID<pStart->m_tBaseDocID || tDocID>m_tMaxDocID )
+			return nullptr;
 
-		if ( !pData )
-			return;
+		const DocidLookupCheckpoint_t * pEnd = m_pCheckpoints+m_nCheckpoints-1;
+		const DocidLookupCheckpoint_t * pFound = sphBinarySearchFirst ( pStart, pEnd, bind ( &DocidLookupCheckpoint_t::m_tBaseDocID ), tDocID );
+		assert ( pFound );
 
-		const BYTE * p = pData;
-		m_nDocs = *(DWORD*)p;
-		p += sizeof(DWORD);
-		m_nDocsPerCheckpoint = *(DWORD*)p;
-		p += sizeof(DWORD);
-		m_tMaxDocID = *(DocID_t*)p;
-		p += sizeof(DocID_t);
+		if ( pFound->m_tBaseDocID>tDocID )
+		{
+			if ( pFound==m_pCheckpoints )
+				return nullptr;
 
-		m_nCheckpoints = (m_nDocs+m_nDocsPerCheckpoint-1)/m_nDocsPerCheckpoint;
-		m_pCheckpoints = (DocidLookupCheckpoint_t *)p;
+			return pFound-1;
+		}
 
-		SetCheckpoint ( m_pCheckpoints );
+		return pFound;
 	}
 
+	inline bool IsLastCheckpoint ( const DocidLookupCheckpoint_t * pCheckpoint ) const
+	{
+		return pCheckpoint==m_pCheckpoints+m_nCheckpoints-1;
+	}
+};
+
+
+class LookupReaderIterator_c : private LookupReader_c
+{
+public:
+			LookupReaderIterator_c ( const BYTE * pData );
+
+	void	SetData ( const BYTE * pData );
 
 	inline bool Read ( DocID_t & tDocID, RowID_t & tRowID )
 	{
@@ -223,83 +279,18 @@ public:
 		SetCheckpoint ( FindCheckpoint ( tDocID, m_pCurCheckpoint+1 ) );
 	}
 
-	inline RowID_t Find ( DocID_t tDocID ) const
-	{
-		if ( !m_pCheckpoints || tDocID<m_pCheckpoints->m_tBaseDocID || tDocID>m_tMaxDocID )
-			return INVALID_ROWID;
-
-		const DocidLookupCheckpoint_t * pFound = FindCheckpoint ( tDocID, m_pCheckpoints );
-		if ( !pFound )
-			return INVALID_ROWID;
-
-		const BYTE * pCur = m_pData + pFound->m_tOffset;
-		DocID_t tCurDocID = pFound->m_tBaseDocID;
-
-		// 1st entry doesnt have docid
-		RowID_t tRowID = sphUnalignedRead ( *(RowID_t*)pCur );
-		pCur += sizeof(RowID_t);
-
-		if ( tCurDocID==tDocID )
-			return tRowID;
-
-		int iDocsInCheckpoint = IsLastCheckpoint() ? m_nDocs % m_nDocsPerCheckpoint : m_nDocsPerCheckpoint;
-		for ( int i = 1; i < iDocsInCheckpoint; i++ )
-		{
-			DocID_t tDeltaDocID = sphUnzipOffset(pCur);
-			assert ( tDeltaDocID>=0 );
-			tRowID = sphUnalignedRead ( *(RowID_t*)pCur );
-			pCur += sizeof(RowID_t);
-
-			tCurDocID += tDeltaDocID;
-			if ( tCurDocID==tDocID )
-				return tRowID;
-		}
-
-		return INVALID_ROWID;
-	}
-
-
 private:
-	DWORD							m_nDocs {0};
-	DWORD							m_nDocsPerCheckpoint {0};
-	int								m_nCheckpoints {0};
-	DocID_t							m_tMaxDocID {0};
-	const DocidLookupCheckpoint_t *	m_pCheckpoints {nullptr};
 	const DocidLookupCheckpoint_t *	m_pCurCheckpoint {nullptr};
-
-	const BYTE *					m_pData {nullptr};
 	const BYTE *					m_pCur {nullptr};
 	DocID_t							m_tCurDocID {0};
 	int								m_iProcessedDocs;
 	int								m_iCheckpointDocs;
 
 
-	inline const DocidLookupCheckpoint_t * FindCheckpoint ( DocID_t tDocID, const DocidLookupCheckpoint_t * pStart ) const
-	{
-		if ( tDocID<pStart->m_tBaseDocID || tDocID>m_tMaxDocID )
-			return nullptr;
-
-		const DocidLookupCheckpoint_t * pEnd = m_pCheckpoints+m_nCheckpoints-1;
-		const DocidLookupCheckpoint_t * pFound = sphBinarySearchFirst ( pStart, pEnd, bind ( &DocidLookupCheckpoint_t::m_tBaseDocID ), tDocID );
-		assert ( pFound );
-
-		if ( pFound->m_tBaseDocID>tDocID )
-		{
-			if ( pFound==m_pCheckpoints )
-				return nullptr;
-
-			return pFound-1;
-		}
-
-		return pFound;
-	}
-
-
 	inline bool IsLastCheckpoint() const
 	{
-		return m_pCurCheckpoint==m_pCheckpoints+m_nCheckpoints-1;
+		return LookupReader_c::IsLastCheckpoint(m_pCurCheckpoint);
 	}
-
 
 	inline bool IsEnd() const
 	{

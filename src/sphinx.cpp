@@ -8539,7 +8539,7 @@ void CSphIndex_VLN::Update_CollectRowPtrs ( UpdateContext_t & tCtx )
 
 	tSorted.Sort ( bind ( &DocidIndex_t::m_tDocID ) );
 
-	LookupReader_c tLookupReader ( m_tDocidLookup.GetWritePtr() );
+	LookupReaderIterator_c tLookupReader ( m_tDocidLookup.GetWritePtr() );
 	DocIdIndexReader_c tSortedReader ( tSorted.Begin(), tSorted.GetLength() );
 	RowFinder_c tFunctor ( this, tCtx );
 	Intersect ( tLookupReader, tSortedReader, tFunctor );
@@ -9162,7 +9162,7 @@ bool CSphIndex_VLN::AlterKillListTarget ( KillListTargets_c & tTargets, CSphStri
 void CSphIndex_VLN::KillExistingDocids ( CSphIndex * pTarget )
 {
 	// FIXME! collecting all docids is a waste of memory
-	LookupReader_c tLookup ( m_tDocidLookup.GetWritePtr() );
+	LookupReaderIterator_c tLookup ( m_tDocidLookup.GetWritePtr() );
 	CSphFixedVector<DocID_t> dKillList ( m_iDocinfo );
 	DocID_t tDocID;
 	DWORD uDocidIndex = 0;
@@ -9175,7 +9175,7 @@ void CSphIndex_VLN::KillExistingDocids ( CSphIndex * pTarget )
 
 int CSphIndex_VLN::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 {
-	LookupReader_c tTargetReader ( m_tDocidLookup.GetWritePtr() );
+	LookupReaderIterator_c tTargetReader ( m_tDocidLookup.GetWritePtr() );
 	DocidListReader_c tKillerReader ( dKlist );
 
 	int iTotalKilled = KillByLookup ( tTargetReader, tKillerReader, m_tDeadRowMap );
@@ -12231,8 +12231,8 @@ void CSphIndex_VLN::CreateRowMaps ( const CSphIndex_VLN * pDstIndex, const CSphI
 	{
 		tExtraDeadMap.Reset ( dDstRowMap.GetLength() );
 
-		LookupReader_c tDstLookupReader ( pDstIndex->m_tDocidLookup.GetWritePtr() );
-		LookupReader_c tSrcLookupReader ( pSrcIndex->m_tDocidLookup.GetWritePtr() );
+		LookupReaderIterator_c tDstLookupReader ( pDstIndex->m_tDocidLookup.GetWritePtr() );
+		LookupReaderIterator_c tSrcLookupReader ( pSrcIndex->m_tDocidLookup.GetWritePtr() );
 
 		KillByLookup ( tDstLookupReader, tSrcLookupReader, tExtraDeadMap );
 	}

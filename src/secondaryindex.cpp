@@ -525,7 +525,7 @@ public:
 
 private:
 	int64_t				m_iProcessed {0};
-	LookupReader_c		m_tLookupReader;
+	LookupReaderIterator_c m_tLookupReader;
 	DocidListReader_c	m_tFilterReader;
 	bool				m_bHaveFilterDocs {false};
 	bool				m_bHaveLookupDocs {false};
@@ -596,7 +596,7 @@ public:
 
 protected:
 	int64_t				m_iProcessed {0};
-	LookupReader_c		m_tLookupReader;
+	LookupReaderIterator_c m_tLookupReader;
 	DocID_t				m_tMinValue {0};
 	DocID_t				m_tMaxValue {0};
 };
@@ -1190,3 +1190,41 @@ bool WriteDocidLookup ( const CSphString & sFilename, const CSphFixedVector<Doci
 
 //////////////////////////////////////////////////////////////////////////
 
+LookupReader_c::LookupReader_c ( const BYTE * pData )
+{
+	SetData ( pData );
+}
+
+
+void LookupReader_c::SetData ( const BYTE * pData )
+{
+	m_pData = pData;
+
+	if ( !pData )
+		return;
+
+	const BYTE * p = pData;
+	m_nDocs = *(DWORD*)p;
+	p += sizeof(DWORD);
+	m_nDocsPerCheckpoint = *(DWORD*)p;
+	p += sizeof(DWORD);
+	m_tMaxDocID = *(DocID_t*)p;
+	p += sizeof(DocID_t);
+
+	m_nCheckpoints = (m_nDocs+m_nDocsPerCheckpoint-1)/m_nDocsPerCheckpoint;
+	m_pCheckpoints = (DocidLookupCheckpoint_t *)p;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+LookupReaderIterator_c::LookupReaderIterator_c ( const BYTE * pData )
+{
+	SetData(pData);
+}
+
+
+void LookupReaderIterator_c::SetData ( const BYTE * pData )
+{
+	LookupReader_c::SetData(pData);
+	SetCheckpoint ( m_pCheckpoints );
+}

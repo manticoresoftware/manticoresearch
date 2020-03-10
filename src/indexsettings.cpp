@@ -1105,6 +1105,13 @@ void SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, bool
 
 //////////////////////////////////////////////////////////////////////////
 
+static void AddWarning ( StrVec_t & dWarnings, const CSphString & sWarning )
+{
+	if ( !sWarning.IsEmpty() )
+		dWarnings.Add(sWarning);
+}
+
+
 bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError )
 {
 	bool bTokenizerSpawned = false;
@@ -1114,10 +1121,9 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		CSphTokenizerSettings tSettings;
 		CSphString sWarning;
 		tSettings.Setup ( hIndex, sWarning );
-		if ( !sWarning.IsEmpty() )
-			dWarnings.Add(sWarning);
+		AddWarning ( dWarnings, sWarning );
 
-		TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings, nullptr, pFilenameBuilder, sError ) };
+		TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings, nullptr, pFilenameBuilder, dWarnings, sError ) };
 		if ( !pTokenizer )
 			return false;
 
@@ -1131,8 +1137,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		CSphDictSettings tSettings;
 		CSphString sWarning;
 		tSettings.Setup ( hIndex, pFilenameBuilder, sWarning );
-		if ( !sWarning.IsEmpty() )
-			dWarnings.Add(sWarning);
+		AddWarning ( dWarnings, sWarning );
 
 		pDict = sphCreateDictionaryCRC ( tSettings, nullptr, pIndex->GetTokenizer (), pIndex->GetName(), bStripPath, pIndex->GetSettings().m_iSkiplistBlockSize, pFilenameBuilder, sError );
 		if ( !pDict )
@@ -1179,14 +1184,12 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		{
 			CSphString sWarning;
 			pFieldFilter = sphCreateRegexpFilter ( tFilterSettings, sWarning );
-			if ( !sWarning.IsEmpty() )
-				dWarnings.Add(sWarning);
+			AddWarning ( dWarnings, sWarning );
 		}
 
 		CSphString sWarning;
 		sphSpawnFilterICU ( pFieldFilter, pIndex->GetSettings(), pIndex->GetTokenizer()->GetSettings(), pIndex->GetName(), sWarning );
-		if ( !sWarning.IsEmpty() )
-			dWarnings.Add(sWarning);
+		AddWarning ( dWarnings, sWarning );
 
 		pIndex->SetFieldFilter ( pFieldFilter );
 	}

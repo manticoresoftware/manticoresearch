@@ -471,7 +471,8 @@ static int GetRowSize ( const CSphVector<CSphColumnInfo> & dAttrs )
 
 static bool SetupWordProcessors ( Index_t & tIndex, CSphString & sError )
 {
-	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tIndex.m_tTokSettings, &tIndex.m_tEmbeddedTok, nullptr, sError ) };
+	StrVec_t dWarnings;
+	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tIndex.m_tTokSettings, &tIndex.m_tEmbeddedTok, nullptr, dWarnings, sError ) };
 	if ( !pTokenizer )
 		return false;
 

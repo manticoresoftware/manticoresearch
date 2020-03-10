@@ -2781,7 +2781,7 @@ public:
 	CSphTokenizerBase();
 
 	bool			SetCaseFolding ( const char * sConfig, CSphString & sError ) final;
-	bool			LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError ) final;
+	bool			LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, StrVec_t & dWarnings, CSphString & sError ) final;
 	void			WriteSynonyms ( CSphWriter & tWriter ) const final;
 	void			CloneBase ( const CSphTokenizerBase * pFrom, ESphTokenizerClone eMode );
 
@@ -3889,7 +3889,7 @@ void ISphTokenizer::Setup ( const CSphTokenizerSettings & tSettings )
 }
 
 
-ISphTokenizer * ISphTokenizer::Create ( const CSphTokenizerSettings & tSettings, const CSphEmbeddedFiles * pFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sError )
+ISphTokenizer * ISphTokenizer::Create ( const CSphTokenizerSettings & tSettings, const CSphEmbeddedFiles * pFiles, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError )
 {
 	TokenizerRefPtr_c pTokenizer;
 
@@ -3916,7 +3916,7 @@ ISphTokenizer * ISphTokenizer::Create ( const CSphTokenizerSettings & tSettings,
 		if ( pFilenameBuilder )
 			sSynonymsFile = pFilenameBuilder->GetFullPath(sSynonymsFile);
 
-		if ( !pTokenizer->LoadSynonyms ( sSynonymsFile.cstr(), pFiles && pFiles->m_bEmbeddedSynonyms ? pFiles : nullptr, sError ) )
+		if ( !pTokenizer->LoadSynonyms ( sSynonymsFile.cstr(), pFiles && pFiles->m_bEmbeddedSynonyms ? pFiles : nullptr, dWarnings, sError ) )
 		{
 			sError.SetSprintf ( "'synonyms': %s", sError.cstr() );
 			return nullptr;
@@ -4252,18 +4252,23 @@ bool CSphTokenizerBase::SetBlendChars ( const char * sConfig, CSphString & sErro
 }
 
 
-bool CSphTokenizerBase::LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError )
+bool CSphTokenizerBase::LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, StrVec_t & dWarnings, CSphString & sError )
 {
 	assert ( m_eMode!=SPH_CLONE_QUERY_LIGHTWEIGHT );
 
+	CSphString sWarning;
 	ExceptionsTrieGen_c g;
 	if ( pFiles )
 	{
 		m_tSynFileInfo = pFiles->m_tSynonymFile;
 		ARRAY_FOREACH ( i, pFiles->m_dSynonyms )
 		{
-			if ( !g.ParseLine ( (char*)pFiles->m_dSynonyms[i].cstr(), sError ) )
-				sphWarning ( "%s line %d: %s", pFiles->m_tSynonymFile.m_sFilename.cstr(), i, sError.cstr() );
+			if ( !g.ParseLine ( (char*)pFiles->m_dSynonyms[i].cstr(), sWarning ) )
+			{
+				sWarning.SetSprintf ( "%s line %d: %s", pFiles->m_tSynonymFile.m_sFilename.cstr(), i, sWarning.cstr() );
+				dWarnings.Add(sWarning);
+				sphWarning ( "%s", sWarning.cstr() );
+			}
 		}
 	} else
 	{
@@ -4281,8 +4286,12 @@ bool CSphTokenizerBase::LoadSynonyms ( const char * sFilename, const CSphEmbedde
 		while ( tReader.GetLine ( sBuffer, sizeof(sBuffer) )>=0 )
 		{
 			iLine++;
-			if ( !g.ParseLine ( sBuffer, sError ) )
-				sphWarning ( "%s line %d: %s", sFilename, iLine, sError.cstr() );
+			if ( !g.ParseLine ( sBuffer, sWarning ) )
+			{
+				sWarning.SetSprintf ( "%s line %d: %s", sFilename, iLine, sWarning.cstr() );
+				dWarnings.Add(sWarning);
+				sphWarning ( "%s", sWarning.cstr() );
+			}
 		}
 	}
 
@@ -13859,7 +13868,8 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
 
-	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokSettings, &tEmbeddedFiles, pFilenameBuilder.Ptr(), m_sLastError ) };
+	StrVec_t dWarnings;
+	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokSettings, &tEmbeddedFiles, pFilenameBuilder.Ptr(), dWarnings, m_sLastError ) };
 	if ( !pTokenizer )
 		return false;
 

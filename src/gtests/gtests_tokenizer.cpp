@@ -33,12 +33,13 @@ protected:
 
 	ISphTokenizer * CreateTestTokenizer ( DWORD uMode )
 	{
+		StrVec_t dWarnings;
 		CSphString sError;
 		CSphTokenizerSettings tSettings;
 		if ( !( uMode & TOK_NO_SHORT ) )
 			tSettings.m_iMinWordLen = 2;
 
-		TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings, nullptr, nullptr, sError ) };
+		TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings, nullptr, nullptr, dWarnings, sError ) };
 		if ( !( uMode & TOK_NO_DASH ) )
 		{
 			Verify ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
@@ -50,7 +51,7 @@ protected:
 		}
 		if ( uMode & TOK_EXCEPTIONS )
 		{
-			Verify ( pTokenizer->LoadSynonyms ( g_sMagickTmpfile, NULL, sError ) );
+			Verify ( pTokenizer->LoadSynonyms ( g_sMagickTmpfile, NULL, dWarnings, sError ) );
 		}
 
 		// tricky little shit!
@@ -228,7 +229,8 @@ TEST_F ( Tokenizer, Sentence )
 	CSphTokenizerSettings tSettings;
 	tSettings.m_iMinWordLen = 1;
 
-	pTokenizer = ISphTokenizer::Create ( tSettings, nullptr, nullptr, sError );
+	StrVec_t dWarnings;
+	pTokenizer = ISphTokenizer::Create ( tSettings, nullptr, nullptr, dWarnings, sError );
 
 	ASSERT_TRUE ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
 //	ASSERT_TRUE ( pTok->SetBlendChars ( "., &", sError ) ); // NOLINT
@@ -678,7 +680,8 @@ protected:
 		tTokenizerSetup.m_sSynonymsFile = g_sTmpfile;
 		pBase->Setup ( tTokenizerSetup );
 
-		ASSERT_TRUE ( pBase->LoadSynonyms ( g_sTmpfile, NULL, sError ) );
+		StrVec_t dWarnings;
+		ASSERT_TRUE ( pBase->LoadSynonyms ( g_sTmpfile, NULL, dWarnings, sError ) );
 		ASSERT_TRUE ( sError.IsEmpty() );
 
 		pTokenizer = pBase->Clone ( SPH_CLONE_QUERY );

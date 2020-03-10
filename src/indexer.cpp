@@ -970,8 +970,9 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 			fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sWarning.cstr() );
 	}
 
+	StrVec_t dWarnings;
 	CSphString sError;
-	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokSettings, nullptr, nullptr, sError ) };
+	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokSettings, nullptr, nullptr, dWarnings, sError ) };
 	if ( !pTokenizer )
 		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 

@@ -2182,7 +2182,8 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath )
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
 
 	// recreate tokenizer
-	m_pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder.Ptr(), m_sLastError );
+	StrVec_t dWarnings;
+	m_pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder.Ptr(), dWarnings, m_sLastError );
 	if ( !m_pTokenizer )
 		return false;
 

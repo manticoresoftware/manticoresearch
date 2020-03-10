@@ -138,6 +138,7 @@ void BenchTokenizer ()
 	}
 
 	int iBytes = 0;
+	StrVec_t dWarnings;
 	CSphString sError;
 	for ( int iRun=1; iRun<=2; iRun++ )
 	{
@@ -146,7 +147,7 @@ void BenchTokenizer ()
 		TokenizerRefPtr_c pTokenizer { sphCreateUTF8Tokenizer () };
 		// pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z", sError );
 		if ( iRun==2 )
-			pTokenizer->LoadSynonyms ( g_sTmpfile, NULL, sError );
+			pTokenizer->LoadSynonyms ( g_sTmpfile, NULL, dWarnings, sError );
 		pTokenizer->AddSpecials ( "!-" );
 
 		printf ( "run %d: ", iRun );

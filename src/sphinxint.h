@@ -1559,7 +1559,7 @@ public:
 	bool					SetIgnoreChars ( const char * sIgnored, CSphString & sError ) override	{ return m_pTokenizer->SetIgnoreChars ( sIgnored, sError ); }
 	bool					SetNgramChars ( const char * sConfig, CSphString & sError ) override		{ return m_pTokenizer->SetNgramChars ( sConfig, sError ); }
 	void					SetNgramLen ( int iLen ) override										{ m_pTokenizer->SetNgramLen ( iLen ); }
-	bool					LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError ) override { return m_pTokenizer->LoadSynonyms ( sFilename, pFiles, sError ); }
+	bool					LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, StrVec_t & dWarnings, CSphString & sError ) override { return m_pTokenizer->LoadSynonyms ( sFilename, pFiles, dWarnings, sError ); }
 	void					WriteSynonyms ( CSphWriter & tWriter ) const final						{ return m_pTokenizer->WriteSynonyms ( tWriter ); }
 	bool					SetBoundary ( const char * sConfig, CSphString & sError ) override		{ return m_pTokenizer->SetBoundary ( sConfig, sError ); }
 	void					Setup ( const CSphTokenizerSettings & tSettings ) override				{ m_pTokenizer->Setup ( tSettings ); }

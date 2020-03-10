@@ -359,7 +359,7 @@ public:
 	virtual void					SetNgramLen ( int ) {}
 
 	/// load synonyms list
-	virtual bool					LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError ) = 0;
+	virtual bool					LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, StrVec_t & dWarnings, CSphString & sError ) = 0;
 
 	/// write synonyms to file
 	virtual void					WriteSynonyms ( CSphWriter & tWriter ) const = 0;
@@ -377,7 +377,7 @@ public:
 	virtual void					Setup ( const CSphTokenizerSettings & tSettings );
 
 	/// create a tokenizer using the given settings
-	static ISphTokenizer *			Create ( const CSphTokenizerSettings & tSettings, const CSphEmbeddedFiles * pFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sError );
+	static ISphTokenizer *			Create ( const CSphTokenizerSettings & tSettings, const CSphEmbeddedFiles * pFiles, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError );
 
 	/// create a token filter
 	static ISphTokenizer *			CreateMultiformFilter ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer );

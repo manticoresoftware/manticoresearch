@@ -3895,7 +3895,8 @@ bool RtIndex_c::Prealloc ( bool bStripPath )
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
 
 	// recreate tokenizer
-	m_pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder.Ptr(), m_sLastError );
+	StrVec_t dWarnings;
+	m_pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder.Ptr(), dWarnings, m_sLastError );
 	if ( !m_pTokenizer )
 		return false;
 
@@ -7896,7 +7897,8 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( sIndexName.cstr() ) : nullptr );
 
 	// FIXME!!! check missed embedded files
-	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings.m_tTokenizer, nullptr, pFilenameBuilder.Ptr(), sError ) };
+	StrVec_t dWarnings;
+	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings.m_tTokenizer, nullptr, pFilenameBuilder.Ptr(), dWarnings, sError ) };
 	if ( !pTokenizer )
 	{
 		sError.SetSprintf ( "'%s' failed to create tokenizer, error '%s'", sIndexName.cstr(), sError.cstr() );

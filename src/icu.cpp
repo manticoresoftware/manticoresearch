@@ -411,7 +411,8 @@ bool sphCheckTokenizerICU ( CSphIndexSettings & tSettings, const CSphTokenizerSe
 	if ( tSettings.m_ePreprocessor!=Preprocessor_e::ICU )
 		return true;
 
-	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokSettings, nullptr, nullptr, sError ) };
+	StrVec_t dWarnings;
+	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokSettings, nullptr, nullptr, dWarnings, sError ) };
 	if ( !pTokenizer.Ptr() )
 		return false;
 

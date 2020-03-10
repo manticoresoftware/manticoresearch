@@ -584,7 +584,15 @@ void ConfigureAndPreloadInt ( int & iValidIndexes, int & iCounter ) REQUIRES ( M
 		CSphConfigSection hIndex;
 		tIndex.Save(hIndex);
 
-		ESphAddIndex eAdd = ConfigureAndPreloadIndex ( hIndex, tIndex.m_sName.cstr(), tIndex.m_bFromReplication );
+		CSphString sError;
+		StrVec_t dWarnings;
+		ESphAddIndex eAdd = ConfigureAndPreloadIndex ( hIndex, tIndex.m_sName.cstr(), tIndex.m_bFromReplication, dWarnings, sError );
+		for ( const auto & i : dWarnings )
+			sphWarning ( "index '%s': %s", tIndex.m_sName.cstr(), i.cstr() );
+
+		if ( eAdd==ADD_ERROR )
+			sphWarning ( "index '%s': %s - NOT SERVING", tIndex.m_sName.cstr(), sError.cstr() );
+
 		iValidIndexes += ( eAdd!=ADD_ERROR ? 1 : 0 );
 		iCounter += ( eAdd==ADD_DSBLED ? 1 : 0 );
 		if ( eAdd==ADD_ERROR )
@@ -898,6 +906,62 @@ CSphString BuildCreateTableDistr ( const CSphString & sName, const DistributedIn
 }
 
 
+static void DeleteExtraIndexFiles ( CSphIndex * pIndex )
+{
+	assert(pIndex);
+
+	CSphString sTmp;
+	CSphString sPath = GetPathForNewIndex ( pIndex->GetName() );
+
+	const ISphTokenizer * pTokenizer = pIndex->GetTokenizer();
+	const CSphDict * pDict = pIndex->GetDictionary();
+
+	if ( pTokenizer )
+	{
+		// single file
+		const CSphString & sExceptions = pTokenizer->GetSettings().m_sSynonymsFile;
+		if ( sExceptions.Length() )
+		{
+			sTmp.SetSprintf ( "%s/%s", sPath.cstr(), sExceptions.cstr() );
+			::unlink ( sTmp.cstr() );
+		}
+	}
+
+	if ( pDict )
+	{
+		// space-separated string
+		const CSphString & sStopwords =  pDict->GetSettings().m_sStopwords;
+		StrVec_t dStops = sphSplit ( sStopwords.cstr(), sStopwords.Length(), " \t," );
+		for ( const auto & i : dStops )
+		{
+			sTmp.SetSprintf ( "%s/%s", sPath.cstr(), i.cstr() );
+			::unlink ( sTmp.cstr() );
+		}
+
+		// array
+		for ( const auto & i : pDict->GetSettings().m_dWordforms )
+		{
+			sTmp.SetSprintf ( "%s/%s", sPath.cstr(), i.cstr() );
+			::unlink ( sTmp.cstr() );
+		}
+	}
+}
+
+
+static void CleanupOnError ( const CSphString & sIndex, RtIndex_i * pRt )
+{
+	if ( !pRt )
+	{
+		g_pDistIndexes->Delete(sIndex);
+		return;
+	}
+
+	pRt->IndexDeleted();
+	DeleteExtraIndexFiles(pRt);
+	g_pLocalIndexes->Delete(sIndex);
+}
+
+
 bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, StrVec_t & dWarnings, CSphString & sError )
 {
 	if ( tCreateTable.m_bIfNotExists && g_pLocalIndexes->Contains(sIndex) )
@@ -937,9 +1001,9 @@ bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t 
 	{
 		ServedIndexRefPtr_c pServed = GetServed ( sIndex, &dNotLoadedIndexes );
 		ServedDescWPtr_c pDesc ( pServed );
-		if ( !PreallocNewIndex ( *pDesc, &hCfg, sIndex.cstr(), sError ) )
+		if ( !PreallocNewIndex ( *pDesc, &hCfg, sIndex.cstr(), dWarnings, sError ) )
 		{
-			g_pLocalIndexes->Delete(sIndex);
+			CleanupOnError ( sIndex, (RtIndex_i *)pDesc->m_pIndex );
 			return false;
 		}
 
@@ -948,44 +1012,19 @@ bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t 
 
 	if ( !SaveConfigInt(sError) )
 	{
-		g_pLocalIndexes->Delete(sIndex);
+		ServedIndexRefPtr_c pServed = GetServed(sIndex);
+		if ( pServed )
+		{
+			ServedDescWPtr_c pDesc(pServed);
+			CleanupOnError ( sIndex, (RtIndex_i *)pDesc->m_pIndex );
+		}
+		else
+			CleanupOnError ( sIndex, nullptr );
+
 		return false;
 	}
 
 	return true;
-}
-
-
-static void DeleteExtraIndexFiles ( CSphIndex * pIndex )
-{
-	assert(pIndex);
-
-	CSphString sTmp;
-	CSphString sPath = GetPathForNewIndex ( pIndex->GetName() );
-
-	// single file
-	const CSphString & sExceptions = pIndex->GetTokenizer()->GetSettings().m_sSynonymsFile;
-	if ( sExceptions.Length() )
-	{
-		sTmp.SetSprintf ( "%s/%s", sPath.cstr(), sExceptions.cstr() );
-		::unlink ( sTmp.cstr() );
-	}
-
-	// space-separated string
-	const CSphString & sStopwords =  pIndex->GetDictionary()->GetSettings().m_sStopwords;
-	StrVec_t dStops = sphSplit ( sStopwords.cstr(), sStopwords.Length(), " \t," );
-	for ( const auto & i : dStops )
-	{
-		sTmp.SetSprintf ( "%s/%s", sPath.cstr(), i.cstr() );
-		::unlink ( sTmp.cstr() );
-	}
-
-	// array
-	for ( const auto & i : pIndex->GetDictionary()->GetSettings().m_dWordforms )
-	{
-		sTmp.SetSprintf ( "%s/%s", sPath.cstr(), i.cstr() );
-		::unlink ( sTmp.cstr() );
-	}
 }
 
 

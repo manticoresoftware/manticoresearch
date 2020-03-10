@@ -2060,9 +2060,13 @@ static bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIn
 	pDesc->m_bFromReplication = bFromReplication;
 	pDesc->m_sCluster = sCluster;
 
-	bool bPreload = PreallocNewIndex ( *pDesc, &hIndex, sIndexName.cstr(), sError );
+	StrVec_t dWarnings;
+	bool bPreload = PreallocNewIndex ( *pDesc, &hIndex, sIndexName.cstr(), dWarnings, sError );
 	if ( !bPreload )
 		return false;
+
+	for ( const auto & i : dWarnings )
+		sphWarning ( "index '%s': %s", sIndexName.cstr(), i.cstr() );
 
 	// finally add the index to the hash of enabled.
 	g_pLocalIndexes->AddOrReplace ( pServed, sIndexName );

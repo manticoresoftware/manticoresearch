@@ -11830,18 +11830,19 @@ static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	}
 
 	StrVec_t dWarnings;
-	if ( !CreateNewIndexInt ( tStmt.m_sIndex, tStmt.m_tCreateTable, dWarnings, sError ) )
-	{
-		sError.SetSprintf ( "error adding index '%s': %s", tStmt.m_sIndex.cstr(), sError.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-		return;
-	}
-
+	bool bCreatedOk = CreateNewIndexInt ( tStmt.m_sIndex, tStmt.m_tCreateTable, dWarnings, sError );
 	StringBuilder_c sRes ( "; " );
 	for ( const auto & i : dWarnings )
 		sRes << i;
 
 	sWarning = sRes.cstr();
+
+	if ( !bCreatedOk )
+	{
+		sError.SetSprintf ( "error adding index '%s': %s", tStmt.m_sIndex.cstr(), sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
 
 	tOut.Ok ( 0, dWarnings.GetLength() );
 }
@@ -14894,9 +14895,9 @@ static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const CSphQueryProfile & p
 	tOut.Eof ( bMoreResultsFollow );
 }
 
-static bool RotateIndexMT ( ServedIndex_c* pIndex, const CSphString & sIndex, CSphString & sError );
+static bool RotateIndexMT ( ServedIndex_c* pIndex, const CSphString & sIndex, StrVec_t & dWarnings, CSphString & sError );
 static bool RotateIndexGreedy ( ServedDesc_t & tServed, const char * sIndex, CSphString & sError );
-static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	CSphString sError;
 	auto pIndex = GetServed ( tStmt.m_sIndex );
@@ -14930,9 +14931,10 @@ static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 		}
 	}
 
+	StrVec_t dWarnings;
 	if ( g_bSeamlessRotate )
 	{
-		if ( !RotateIndexMT ( pIndex, tStmt.m_sIndex, sError ) )
+		if ( !RotateIndexMT ( pIndex, tStmt.m_sIndex, dWarnings, sError ) )
 		{
 			sphWarning ( "%s", sError.cstr() );
 			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -14949,6 +14951,15 @@ static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 			// fixme! RotateIndexGreedy does prealloc. Do we need to perform/signal preload also?
 			return;
 		}
+	}
+
+	if ( dWarnings.GetLength() )
+	{
+		StringBuilder_c sWarn ( "; " );
+		for ( const auto & i : dWarnings )
+			sWarn << i;
+
+		sWarning = sWarn.cstr();
 	}
 
 	tOut.Ok();
@@ -15456,17 +15467,23 @@ public:
 			return true;
 
 		case STMT_RELOAD_INDEX:
-			HandleMysqlReloadIndex ( tOut, *pStmt );
+			m_tLastMeta = CSphQueryResultMeta();
+			m_tLastMeta.m_sError = m_sError;
+			m_tLastMeta.m_sWarning = "";
+
+			HandleMysqlReloadIndex ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 			return true;
 
 		case STMT_FLUSH_HOSTNAMES:
 			HandleMysqlFlushHostnames ( tOut );
 			return true;
 
-		case STMT_FLUSH_LOGS: HandleMysqlFlushLogs ( tOut );
+		case STMT_FLUSH_LOGS:
+			HandleMysqlFlushLogs ( tOut );
 			return true;
 
-		case STMT_RELOAD_INDEXES: HandleMysqlReloadIndexes ( tOut );
+		case STMT_RELOAD_INDEXES:
+			HandleMysqlReloadIndexes ( tOut );
 			return true;
 
 		case STMT_DEBUG:
@@ -15489,47 +15506,38 @@ public:
 		case STMT_CLUSTER_DELETE:
 			m_tLastMeta = CSphQueryResultMeta();
 			if ( ClusterDelete ( pStmt->m_sIndex, m_tLastMeta.m_sError, m_tLastMeta.m_sWarning ) )
-			{
 				tOut.Ok ( 0, m_tLastMeta.m_sWarning.IsEmpty() ? 0 : 1 );
-			} else
-			{
+			else
 				tOut.Error ( sQuery.cstr(), m_tLastMeta.m_sError.cstr() );
-			}
 			return true;
 
 		case STMT_CLUSTER_ALTER_ADD:
 		case STMT_CLUSTER_ALTER_DROP:
 			m_tLastMeta = CSphQueryResultMeta();
 			if ( ClusterAlter ( pStmt->m_sCluster, pStmt->m_sIndex, ( eStmt==STMT_CLUSTER_ALTER_ADD ), m_tLastMeta.m_sError, m_tLastMeta.m_sWarning ) )
-			{
 				tOut.Ok ( 0, m_tLastMeta.m_sWarning.IsEmpty() ? 0 : 1 );
-			} else
-			{
+			else
 				tOut.Error ( sQuery.cstr(), m_tLastMeta.m_sError.cstr() );
-			}
 			return true;
 
 		case STMT_CLUSTER_ALTER_UPDATE:
 			m_tLastMeta = CSphQueryResultMeta();
 			if ( ClusterAlterUpdate ( pStmt->m_sCluster, pStmt->m_sSetName, m_tLastMeta.m_sError ) )
-			{
 				tOut.Ok();
-			} else
-			{
+			else
 				tOut.Error ( sQuery.cstr(), m_tLastMeta.m_sError.cstr() );
-			}
 			return true;
 
 		case STMT_EXPLAIN:
 			HandleMysqlExplain ( tOut, *pStmt );
 			return true;
 
-
 		default:
 			m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );
 			tOut.Error ( sQuery.cstr(), m_sError.cstr() );
 			return true;
 		} // switch
+
 		return true; // for cases that break early
 	}
 
@@ -16219,13 +16227,12 @@ void CheckLeaks () REQUIRES ( MainThread )
 
 /// this gets called for every new physical index
 /// that is, local and RT indexes, but not distributed once
-bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, const char * szIndexName, CSphString & sError )
+bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, const char * szIndexName, StrVec_t & dWarnings, CSphString & sError )
 {
-	bool bOk = tIdx.m_pIndex->Prealloc ( g_bStripPath );
-	if ( !bOk )
+	if ( !tIdx.m_pIndex->Prealloc(g_bStripPath) )
 	{
-		sError.SetSprintf ( "index '%s': prealloc: %s", szIndexName, tIdx.m_pIndex->GetLastError ().cstr () );
-		sphWarning ( "%s; NOT SERVING", sError.cstr() );
+		sError.SetSprintf ( "prealloc: %s", tIdx.m_pIndex->GetLastError().cstr() );
+		sphWarning ( "index '%s': %s; NOT SERVING", szIndexName, sError.cstr() );
 		return false;
 	}
 
@@ -16234,18 +16241,17 @@ bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, 
 	// however currently it also ends up configuring dict/tokenizer for fresh RT indexes!
 	// (and for existing RT indexes, settings get loaded during the Prealloc() call)
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder(szIndexName) );
-	if ( pConfig && !sphFixupIndexSettings ( tIdx.m_pIndex, *pConfig, sError, g_bStripPath, pFilenameBuilder.Ptr() ) )
+	if ( pConfig && !sphFixupIndexSettings ( tIdx.m_pIndex, *pConfig, g_bStripPath, pFilenameBuilder.Ptr(), dWarnings, sError ) )
 	{
-		sError.SetSprintf ( "index '%s': %s", szIndexName, sError.cstr() );
-		sphWarning ( "%s; NOT SERVING", sError.cstr() );
+		sphWarning ( "index '%s': %s; NOT SERVING", szIndexName, sError.cstr() );
 		return false;
 	}
 
 	// try to lock it
 	if ( !g_bOptNoLock && !tIdx.m_pIndex->Lock () )
 	{
-		sError.SetSprintf ( "index '%s': lock: %s", szIndexName, tIdx.m_pIndex->GetLastError().cstr() );
-		sphWarning ( "%s; NOT SERVING", sError.cstr() );
+		sError.SetSprintf ( "lock: %s", tIdx.m_pIndex->GetLastError().cstr() );
+		sphWarning ( "index '%s': %s; NOT SERVING", szIndexName, sError.cstr() );
 		return false;
 	}
 
@@ -16256,7 +16262,7 @@ bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, 
 }
 
 // same as above, but self-load config section for given index
-static bool PreallocNewIndex ( ServedDesc_t & tIdx, const char * szIndexName, CSphString & sError ) REQUIRES ( !g_tRotateConfigMutex )
+static bool PreallocNewIndex ( ServedDesc_t & tIdx, const char * szIndexName, StrVec_t & dWarnings, CSphString & sError ) REQUIRES ( !g_tRotateConfigMutex )
 {
 	const CSphConfigSection * pIndexConfig = nullptr;
 	CSphConfigSection tIndexConfig;
@@ -16270,12 +16276,12 @@ static bool PreallocNewIndex ( ServedDesc_t & tIdx, const char * szIndexName, CS
 			pIndexConfig = &tIndexConfig;
 		}
 	}
-	return PreallocNewIndex ( tIdx, pIndexConfig, szIndexName, sError );
+	return PreallocNewIndex ( tIdx, pIndexConfig, szIndexName, dWarnings, sError );
 }
 
 static CSphMutex g_tRotateThreadMutex;
 // called either from MysqlReloadIndex, either from Rotation task (never from main thread).
-static bool RotateIndexMT ( ServedIndex_c* pIndex, const CSphString & sIndex, CSphString & sError )
+static bool RotateIndexMT ( ServedIndex_c* pIndex, const CSphString & sIndex, StrVec_t & dWarnings, CSphString & sError )
 	EXCLUDES ( MainThread, g_tRotateThreadMutex )
 {
 	// only one rotation and reload thread allowed to prevent deadlocks
@@ -16363,9 +16369,9 @@ static bool RotateIndexMT ( ServedIndex_c* pIndex, const CSphString & sIndex, CS
 
 	if ( tNewIndex.m_bOnlyNew )
 	{
-		if ( !PreallocNewIndex ( tNewIndex, sIndex.cstr(), sError ) )
+		if ( !PreallocNewIndex ( tNewIndex, sIndex.cstr(), dWarnings, sError ) )
 			return false;
-	} else if ( !PreallocNewIndex ( tNewIndex, nullptr, sIndex.cstr(), sError ) )
+	} else if ( !PreallocNewIndex ( tNewIndex, nullptr, sIndex.cstr(), dWarnings, sError ) )
 		return false;
 
 	tNewIndex.m_pIndex->Preread();
@@ -16479,11 +16485,11 @@ static void TaskRotation ( void* pRaw ) EXCLUDES ( MainThread )
 	// want to track rotation thread only at work
 	ThreadSystem_t tThdSystemDesc ( "ROTATION" );
 
-	for ( const auto& dIndex : *pUncompletedIndexes.Ptr())
+	for ( const auto & tIndex : *pUncompletedIndexes.Ptr() )
 	{
 		bool bMutable = false;
 		{ // rlock scope
-			ServedDescRPtr_c tLocked ( dIndex.m_pIndex );
+			ServedDescRPtr_c tLocked ( tIndex.m_pIndex );
 			bMutable = ServedDesc_t::IsMutable ( tLocked );
 			// cluster indexes got managed by different path
 			if ( ServedDesc_t::IsCluster ( tLocked ))
@@ -16494,24 +16500,27 @@ static void TaskRotation ( void* pRaw ) EXCLUDES ( MainThread )
 		}
 
 		// prealloc RT and percolate here
+		StrVec_t dWarnings;
 		CSphString sError;
 		if ( bMutable )
 		{
-			ServedDescWPtr_c wLocked( dIndex.m_pIndex );
-			if ( PreallocNewIndex ( *wLocked, dIndex.m_sIndex.cstr(), sError ) )
+			ServedDescWPtr_c wLocked( tIndex.m_pIndex );
+			if ( PreallocNewIndex ( *wLocked, tIndex.m_sIndex.cstr(), dWarnings, sError ) )
 			{
 				wLocked->m_bOnlyNew = false;
-				g_pLocalIndexes->AddOrReplace ( dIndex.m_pIndex, dIndex.m_sIndex );
+				g_pLocalIndexes->AddOrReplace ( tIndex.m_pIndex, tIndex.m_sIndex );
 			} else
-			{
-				g_pLocalIndexes->DeleteIfNull ( dIndex.m_sIndex );
-			}
+				g_pLocalIndexes->DeleteIfNull ( tIndex.m_sIndex );
 		} else
 		{
-			if ( !RotateIndexMT ( dIndex.m_pIndex, dIndex.m_sIndex, sError ))
-				sphWarning( "%s", sError.cstr());
+			if ( !RotateIndexMT ( tIndex.m_pIndex, tIndex.m_sIndex, dWarnings, sError ) )
+				sphWarning ( "index '%s': %s", tIndex.m_sIndex.cstr(), sError.cstr() );
 		}
-		g_pDistIndexes->Delete( dIndex.m_sIndex ); // postponed delete of same-named distributed (if any)
+
+		for ( const auto & i : dWarnings )
+			sphWarning ( "index '%s': %s", tIndex.m_sIndex.cstr(), i.cstr() );
+
+		g_pDistIndexes->Delete ( tIndex.m_sIndex ); // postponed delete of same-named distributed (if any)
 	}
 
 	g_bInRotate = false;
@@ -17078,11 +17087,15 @@ static ESphAddIndex AddTemplateIndex ( const char * szIndexName, const CSphConfi
 	tIdx.m_pIndex->Setup ( s );
 
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder(szIndexName) );
-	if ( !sphFixupIndexSettings ( tIdx.m_pIndex, hIndex, sError, g_bStripPath, pFilenameBuilder.Ptr() ) )
+	StrVec_t dWarnings;
+	if ( !sphFixupIndexSettings ( tIdx.m_pIndex, hIndex, g_bStripPath, pFilenameBuilder.Ptr(), dWarnings, sError ) )
 	{
 		sphWarning ( "index '%s': %s - NOT SERVING", szIndexName, sError.cstr () );
 		return ADD_ERROR;
 	}
+
+	for ( const auto & i : dWarnings )
+		sphWarning ( "index '%s': %s", szIndexName, i.cstr() );
 
 	CSphIndexStatus tStatus;
 	tIdx.m_pIndex->GetStatus ( &tStatus );
@@ -17551,11 +17564,13 @@ static void DoGreedyRotation() REQUIRES ( MainThread )
 			assert ( pWlockedServedDisabledPtr->m_pIndex );
 			assert ( g_pLocalIndexes->Contains ( sDisabledIndex ) );
 
+			StrVec_t dWarnings;
+
 			// prealloc RT and percolate here
 			if ( ServedDesc_t::IsMutable ( pWlockedServedDisabledPtr ) )
 			{
 				pWlockedServedDisabledPtr->m_bOnlyNew = false;
-				if ( PreallocNewIndex ( *pWlockedServedDisabledPtr, &g_pCfg.m_tConf["index"][sDisabledIndex], sDisabledIndex.cstr(), sError ) )
+				if ( PreallocNewIndex ( *pWlockedServedDisabledPtr, &g_pCfg.m_tConf["index"][sDisabledIndex], sDisabledIndex.cstr(), dWarnings, sError ) )
 					g_pLocalIndexes->AddOrReplace ( pDisabledIndex, sDisabledIndex );
 				else
 					g_pLocalIndexes->DeleteIfNull ( sDisabledIndex );
@@ -17565,9 +17580,9 @@ static void DoGreedyRotation() REQUIRES ( MainThread )
 				bool bWasAdded = pWlockedServedDisabledPtr->m_bOnlyNew;
 				bool bOk = RotateIndexGreedy ( *pWlockedServedDisabledPtr, sDisabledIndex.cstr(), sError );
 				if ( !bOk )
-					sphWarning ( "%s", sError.cstr() );
+					sphWarning ( "index '%s': %s - NOT SERVING", sDisabledIndex.cstr(), sError.cstr() );
 
-				if ( bWasAdded && bOk && !sphFixupIndexSettings ( pWlockedServedDisabledPtr->m_pIndex, g_pCfg.m_tConf["index"][sDisabledIndex], sError, g_bStripPath, nullptr ) )
+				if ( bWasAdded && bOk && !sphFixupIndexSettings ( pWlockedServedDisabledPtr->m_pIndex, g_pCfg.m_tConf["index"][sDisabledIndex], g_bStripPath, nullptr, dWarnings, sError ) )
 				{
 					sphWarning ( "index '%s': %s - NOT SERVING", sDisabledIndex.cstr(), sError.cstr() );
 					bOk = false;
@@ -17580,6 +17595,9 @@ static void DoGreedyRotation() REQUIRES ( MainThread )
 				} else
 					g_pLocalIndexes->DeleteIfNull ( sDisabledIndex );
 			}
+
+			for ( const auto & i : dWarnings )
+				sphWarning ( "index '%s': %s", sDisabledIndex.cstr(), i.cstr() );
 		}
 
 		g_dPostIndexes.Delete ( sDisabledIndex );
@@ -21055,10 +21073,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_sMysqlHandshake[0] = (char)(g_iMysqlHandshake-4); // safe, as long as buffer size is 128
 }
 
-ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName, bool bFromReplication ) REQUIRES ( MainThread )
+ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName, bool bFromReplication, StrVec_t & dWarnings, CSphString & sError ) REQUIRES ( MainThread )
 {
-	// fixme: handle reported errors
-	CSphString sError;
 	ESphAddIndex eAdd = AddIndex ( sIndexName, hIndex, false, sError );
 
 	// local plain, rt, percolate added, but need to be at least prealloced before they could work.
@@ -21080,19 +21096,17 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 		if ( RotateIndexGreedy ( *pJustAddedLocalWl, sIndexName, sError ) )
 		{
 			CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder(sIndexName) );
-			bPreloadOk = sphFixupIndexSettings ( pJustAddedLocalWl->m_pIndex, hIndex, sError, g_bStripPath, pFilenameBuilder.Ptr() );
-			if ( !bPreloadOk )
-				sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );
-
+			StrVec_t dWarnings;
+			bPreloadOk = sphFixupIndexSettings ( pJustAddedLocalWl->m_pIndex, hIndex, g_bStripPath, pFilenameBuilder.Ptr(), dWarnings, sError );
 		} else
 		{
 			pJustAddedLocalWl->m_bOnlyNew = false;
-			sphWarning ( "%s", sError.cstr() );
-			bPreloadOk = PreallocNewIndex ( *pJustAddedLocalWl, &hIndex, sIndexName, sError );
+			dWarnings.Add(sError);
+			bPreloadOk = PreallocNewIndex ( *pJustAddedLocalWl, &hIndex, sIndexName, dWarnings, sError );
 		}
 
 	} else
-		bPreloadOk = PreallocNewIndex ( *pJustAddedLocalWl, &hIndex, sIndexName, sError );
+		bPreloadOk = PreallocNewIndex ( *pJustAddedLocalWl, &hIndex, sIndexName, dWarnings, sError );
 
 	if ( !bPreloadOk )
 	{
@@ -21104,7 +21118,7 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 	g_pLocalIndexes->AddOrReplace ( pHandle, sIndexName );
 
 	if ( !pJustAddedLocalWl->m_sGlobalIDFPath.IsEmpty() && !sph::PrereadGlobalIDF ( pJustAddedLocalWl->m_sGlobalIDFPath, sError ) )
-		sphWarning ( "index '%s': global IDF unavailable - IGNORING", sIndexName );
+		dWarnings.Add ( "global IDF unavailable - IGNORING" );
 
 	return eAdd;
 }
@@ -21129,7 +21143,15 @@ static void ConfigureAndPreload ( const CSphConfig & hConf, const StrVec_t & dOp
 			if ( !dOptIndexes.IsEmpty() && !dOptIndexes.FindFirst ( [&] ( const CSphString &rhs )	{ return rhs.EqN ( sIndexName ); } ) )
 				continue;
 
-			ESphAddIndex eAdd = ConfigureAndPreloadIndex ( hIndex, sIndexName, false );
+			StrVec_t dWarnings;
+			CSphString sError;
+			ESphAddIndex eAdd = ConfigureAndPreloadIndex ( hIndex, sIndexName, false, dWarnings, sError );
+			for ( const auto & i : dWarnings )
+				sphWarning ( "index '%s': %s", sIndexName, i.cstr() );
+
+			if ( eAdd==ADD_ERROR )
+				sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );
+
 			iValidIndexes += ( eAdd!=ADD_ERROR ? 1 : 0 );
 			iCounter +=  ( eAdd==ADD_DSBLED ? 1 : 0 );
 		}

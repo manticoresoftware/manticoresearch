@@ -1105,7 +1105,7 @@ void SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, bool
 
 //////////////////////////////////////////////////////////////////////////
 
-bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError, bool bStripPath, FilenameBuilder_i * pFilenameBuilder )
+bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, bool bStripPath, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError )
 {
 	bool bTokenizerSpawned = false;
 
@@ -1115,7 +1115,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		CSphString sWarning;
 		tSettings.Setup ( hIndex, sWarning );
 		if ( !sWarning.IsEmpty() )
-			sphWarning ( "index '%s': %s", pIndex->GetName(), sWarning.cstr() );
+			dWarnings.Add(sWarning);
 
 		TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings, nullptr, pFilenameBuilder, sError ) };
 		if ( !pTokenizer )
@@ -1132,15 +1132,11 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		CSphString sWarning;
 		tSettings.Setup ( hIndex, pFilenameBuilder, sWarning );
 		if ( !sWarning.IsEmpty() )
-			sphWarning ( "index '%s': %s", pIndex->GetName(), sWarning.cstr() );
+			dWarnings.Add(sWarning);
 
 		pDict = sphCreateDictionaryCRC ( tSettings, nullptr, pIndex->GetTokenizer (), pIndex->GetName(), bStripPath, pIndex->GetSettings().m_iSkiplistBlockSize, pFilenameBuilder, sError );
-
 		if ( !pDict )
-		{
-			sphWarning ( "index '%s': %s", pIndex->GetName(), sError.cstr() );
 			return false;
-		}
 
 		pIndex->SetDictionary ( pDict );
 	}
@@ -1148,8 +1144,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 	if ( bTokenizerSpawned )
 	{
 		TokenizerRefPtr_c pOldTokenizer { pIndex->LeakTokenizer () };
-		TokenizerRefPtr_c pMultiTokenizer
-		{ ISphTokenizer::CreateMultiformFilter ( pOldTokenizer, pIndex->GetDictionary ()->GetMultiWordforms () ) };
+		TokenizerRefPtr_c pMultiTokenizer { ISphTokenizer::CreateMultiformFilter ( pOldTokenizer, pIndex->GetDictionary ()->GetMultiWordforms () ) };
 		pIndex->SetTokenizer ( pMultiTokenizer );
 	}
 
@@ -1174,14 +1169,24 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 	{
 		FieldFilterRefPtr_c pFieldFilter;
 		CSphFieldFilterSettings tFilterSettings;
-		if ( tFilterSettings.Setup ( hIndex, sError ) )
-			pFieldFilter = sphCreateRegexpFilter ( tFilterSettings, sError );
+		bool bSetupOk = tFilterSettings.Setup ( hIndex, sError );
 
+		// treat warnings as errors
 		if ( !sError.IsEmpty() )
-			sphWarning ( "index '%s': %s", pIndex->GetName(), sError.cstr() );
+			return false;
 
-		if ( !sphSpawnFilterICU ( pFieldFilter, pIndex->GetSettings(), pIndex->GetTokenizer()->GetSettings(), pIndex->GetName(), sError ) )
-			sphWarning ( "index '%s': %s", pIndex->GetName(), sError.cstr() );
+		if ( bSetupOk )
+		{
+			CSphString sWarning;
+			pFieldFilter = sphCreateRegexpFilter ( tFilterSettings, sWarning );
+			if ( !sWarning.IsEmpty() )
+				dWarnings.Add(sWarning);
+		}
+
+		CSphString sWarning;
+		sphSpawnFilterICU ( pFieldFilter, pIndex->GetSettings(), pIndex->GetTokenizer()->GetSettings(), pIndex->GetName(), sWarning );
+		if ( !sWarning.IsEmpty() )
+			dWarnings.Add(sWarning);
 
 		pIndex->SetFieldFilter ( pFieldFilter );
 	}
@@ -1198,7 +1203,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 	{
 		tSettings.m_bIndexExactWords = false;
 		pIndex->Setup ( tSettings );
-		fprintf ( stdout, "WARNING: no morphology, index_exact_words=1 has no effect, ignoring\n" );
+		dWarnings.Add ( "no morphology, index_exact_words=1 has no effect, ignoring" );
 	}
 
 	if ( pDict->GetSettings().m_bWordDict && pDict->HasMorphology() &&
@@ -1206,7 +1211,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 	{
 		tSettings.m_bIndexExactWords = true;
 		pIndex->Setup ( tSettings );
-		fprintf ( stdout, "WARNING: dict=keywords and prefixes and morphology enabled, forcing index_exact_words=1\n" );
+		dWarnings.Add ( "dict=keywords and prefixes and morphology enabled, forcing index_exact_words=1" );
 	}
 
 	pIndex->PostSetup();

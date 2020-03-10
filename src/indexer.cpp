@@ -1314,17 +1314,30 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	CSphScopedPtr<CSphIndex> dSrcGuard ( pSrc );
 	CSphScopedPtr<CSphIndex> dDstGuard ( pDst );
 
-	CSphString sError;
-	if ( !sphFixupIndexSettings ( pSrc, hSrc, sError ) )
 	{
-		fprintf ( stdout, "ERROR: index '%s': %s\n", sSrc, sError.cstr () );
-		return false;
+		StrVec_t dWarnings;
+		CSphString sError;
+		if ( !sphFixupIndexSettings ( pSrc, hSrc, false, nullptr, dWarnings, sError ) )
+		{
+			fprintf ( stdout, "ERROR: index '%s': %s\n", sSrc, sError.cstr () );
+			return false;
+		}
+
+		for ( const auto & i : dWarnings )
+			fprintf ( stdout, "WARNING: index '%s': %s\n", sSrc, i.cstr() );
 	}
 
-	if ( !sphFixupIndexSettings ( pDst, hDst, sError ) )
 	{
-		fprintf ( stdout, "ERROR: index '%s': %s\n", sDst, sError.cstr () );
-		return false;
+		StrVec_t dWarnings;
+		CSphString sError;
+		if ( !sphFixupIndexSettings ( pDst, hDst, false, nullptr, dWarnings, sError ) )
+		{
+			fprintf ( stdout, "ERROR: index '%s': %s\n", sDst, sError.cstr () );
+			return false;
+		}
+
+		for ( const auto & i : dWarnings )
+			fprintf ( stdout, "WARNING: index '%s': %s\n", sDst, i.cstr() );
 	}
 
 	if ( !bRotate )
@@ -1345,6 +1358,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	// if src index has dst index as its killlist_target, we should use this killlist
 	CSphFixedVector<DocID_t> dKillList(0);
 	KillListTargets_c tTargets;
+	CSphString sError;
 	if ( !pSrc->LoadKillList ( &dKillList, tTargets, sError ) )
 	{
 		fprintf ( stdout, "ERROR: %s\n", sError.cstr() );

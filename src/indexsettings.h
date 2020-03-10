@@ -327,7 +327,7 @@ void		SaveTokenizerSettings ( CSphWriter & tWriter, const ISphTokenizer * pToken
 void		SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, bool bForceWordDict, int iEmbeddedLimit );
 
 /// try to set dictionary, tokenizer and misc settings for an index (if not already set)
-bool		sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError, bool bStripFile=false, FilenameBuilder_i * pFilenameBuilder=nullptr );
+bool		sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, bool bStripFile, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError );
 CSphString	BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema );
 
 // daemon-level callback

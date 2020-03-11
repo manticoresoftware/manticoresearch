@@ -60,24 +60,35 @@ const CSphVector<ClusterDesc_t> & GetClustersInt()
 }
 
 
-void ModifyBinlogPath ( CSphConfigSection & hSearchd )
+void ModifyDaemonPaths ( CSphConfigSection & hSearchd )
 {
-	if ( !IsConfigless() || hSearchd.Exists("binlog_path") )
+	if ( !IsConfigless() )
 		return;
 
-	CSphString sBinlogDir;
-	sBinlogDir.SetSprintf ( "%s/binlog", GetDataDirInt().cstr() );
-	if ( !sphDirExists ( sBinlogDir.cstr() ) )
+	const char * szBinlogKey = "binlog_path";
+	if ( !hSearchd.Exists(szBinlogKey) )
 	{
-		if ( !MkDir ( sBinlogDir.cstr() ) )
+		CSphString sBinlogDir;
+		sBinlogDir.SetSprintf ( "%s/binlog", GetDataDirInt().cstr() );
+		if ( !sphDirExists ( sBinlogDir.cstr() ) )
 		{
-			sphWarning ( "Unable to create binlog dir '%s'", sBinlogDir.cstr() );
-			return;
+			if ( !MkDir ( sBinlogDir.cstr() ) )
+			{
+				sphWarning ( "Unable to create binlog dir '%s'", sBinlogDir.cstr() );
+				return;
+			}
 		}
+
+		hSearchd.AddEntry ( szBinlogKey, sBinlogDir.cstr() );
 	}
 
-	hSearchd.Delete("binlog_path");
-	hSearchd.AddEntry ( "binlog_path", sBinlogDir.cstr() );
+	const char * szSQLStateKey = "sphinxql_state";
+	if ( !hSearchd.Exists(szSQLStateKey) )
+	{
+		CSphString sSQLState;
+		sSQLState.SetSprintf ( "%s/state.sql", GetDataDirInt().cstr() );
+		hSearchd.AddEntry ( szSQLStateKey, sSQLState.cstr() );
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////

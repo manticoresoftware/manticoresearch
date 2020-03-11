@@ -21920,7 +21920,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	// startup
 	///////////
 
-	ModifyBinlogPath ( hSearchd );
+	ModifyDaemonPaths ( hSearchd );
 	sphRTInit ( hSearchd, bTestMode, hConf("common") ? hConf["common"]("common") : nullptr );
 
 	if ( hSearchd.Exists ( "snippets_file_prefix" ) )

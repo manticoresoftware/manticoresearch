@@ -101,7 +101,7 @@ void		ConfigureAndPreloadInt ( int & iValidIndexes, int & iCounter );
 
 FilenameBuilder_i * CreateFilenameBuilder ( const char * szIndex );
 
-void		ModifyBinlogPath ( CSphConfigSection & hSearchd );
+void		ModifyDaemonPaths ( CSphConfigSection & hSearchd );
 CSphString	GetDataDirInt();
 bool		IsConfigless();
 const CSphVector<ClusterDesc_t> & GetClustersInt();

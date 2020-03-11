@@ -22454,11 +22454,10 @@ bool CSphSource_Document::AddAutoAttrs ( CSphString & sError, StrVec_t * pDefaul
 	m_tSchema.RemoveAttr ( szTmpColName, true );
 
 	// auto-computed length attributes
-	if ( m_bIndexFieldLens )
-		return AddFieldLens ( m_tSchema, true, sError );
+	if ( m_bIndexFieldLens && !AddFieldLens ( m_tSchema, true, sError ) )
+		return false;
 
 	m_tSchema.SetupStoredFields ( m_dStoredFields, m_dStoredOnlyFields );
-
 	return true;
 }
 

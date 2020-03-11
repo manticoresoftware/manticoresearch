@@ -52,6 +52,14 @@ index test2
 	stored_only_fields = title
 }
 
+index test3
+{
+	source			= test1
+	path			= <data_path/>/test3
+	stored_fields	= body
+	index_field_lengths = 1
+}
+
 </config>
 
 <db_create>
@@ -84,6 +92,9 @@ insert into test_table values
 <sphinxql>desc test2</sphinxql>
 <sphinxql>select * from test2 where match('document')</sphinxql>
 <sphinxql>select * from test2 where match('room')</sphinxql>
+
+<sphinxql>desc test3</sphinxql>
+<sphinxql>select * from test3 where id=1</sphinxql>
 </sphqueries>
 
 </test>

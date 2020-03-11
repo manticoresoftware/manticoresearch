@@ -3,7 +3,40 @@
 A guide on configuration file
 -----------------------------
 
-Manticore search uses a configuration file for customizing settings and  declaration indexes and sources.
+
+
+Prior Manticore Search 3.3.0, indexes had to be defined in a configuration file, now called  plain mode.
+
+Starting with 3.3.0 a new mode - RT mode - is introduced in which the configuration file contains only daemon settings and indexes can be created/dropped on-the-fly.
+
+.. _rt_mode:
+
+RT mode
+=======
+
+Please note this mode is still in beta and it's possible to suffer syntax changes.
+Starting with 3.3.2 the replication feature is available only in this mode.
+Plain and template indexes are NOT in supported in this mode.
+
+Indexes can be create and dropped with CREATE/DROP TABLE statements, like in traditional databases.
+
+This mode requires no index definition in the configuration and the presence of :ref:`data_dir` directive in 'searchd' section.
+Index files are stored inside :ref:`data_dir`.
+
+.. _plain_mode:
+
+Plain mode
+==========
+
+In this mode, indexes, regardless of their type, must be defined in the configuration file.
+New indexes can be added to configuration file and a SIGHUP sent to searchd or :ref:`reload_indexes_syntax` can bring the index alive.
+
+Dropping indexes is only possible by removing them from configuration or by removing the :ref:`path` setting and sending a HUP signal to daemon or restart it.
+
+Index files path must be explicit defined in this mode. 
+
+Sections
+========
 
 The configuration file is in a plain text format and can be edited with any text editor.
 The configuration is logically split into sections.  It's content is enclosed in ``{`` and ``}``.
@@ -15,10 +48,11 @@ There are 5 types of sections as follow:
 * index   -  can be declared multiple times, supports inheritance, requires declaration of an index name, contains configuration of an index. At least one index must be declared.
 * source  -  can be declared multiple times, supports inheritance, requires declaration of a source name, contains configuration of a source, optional
 
+'index' and 'source' sections are forbidden to be used in node mode.
 
 Indexes and sources are parsed as the configuration file is read. In case of inherited sections, child sections must come after parent declarations. The same applies to distributed indexes with local indexes.
 
-There is no rule for the settings sections. They can declared at the start or end of the file or even mixed between index/source declarations.
+There is no rule for the order of sections. They can declared at the start or end of the file or even mixed between index/source declarations.
 
 .. _special_suffixes:
 

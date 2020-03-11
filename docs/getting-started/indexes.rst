@@ -7,7 +7,7 @@ The Manticore Search daemon can serve multiple data collections, called indexes.
 
 Manticore Search supports two storage index types:
 
-* plain (also called offline or disk) index. Data is indexed once at creation, it supports online rebuilding and online updates for non-text attributes
+* plain (also called offline or disk) index. Data is indexed once at creation, it supports online rebuilding and online updates for non-text attributes (available only for  :ref:`plain_mode`)
 * RealTime index. Similar to a database table, online updates are possible at any given time
 
 In addition, a special index based on RealTime type, called `percolate`, can be used to store :ref:`Percolate Queries <percolate_query>`.
@@ -39,6 +39,9 @@ Manticore Search supports a storeless index type called distributed which allows
 
 Plain indexes
 ~~~~~~~~~~~~~
+
+Starting with 3.3.2 is available only for  :ref:`plain_mode`.
+
 Except numeric (that includes MVA) attributes, the rest of the data in a plain index is immutable. If you need to update/add new records you need to perform again a rebuilding. While index is being rebuilt, existing index is still available to serve requests. When new version is ready, a process called `rotation` is performed which puts the new version online and discards the old one.
 
 The indexing performance process depends on several factors:

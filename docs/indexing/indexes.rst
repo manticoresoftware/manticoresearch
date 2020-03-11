@@ -38,6 +38,8 @@ easily by setting up multiple disk indexes, searching through them all,
 and only rebuilding the one with a fraction of the most recently changed
 data. See :ref:`live_index_updates` for details.
 
+Plain indexes are available only in :ref:`plain_mode` of searchd.
+
 Real-Time indexes
 ~~~~~~~~~~~~~~~~~
 
@@ -66,6 +68,7 @@ Templates indexes
 ~~~~~~~~~~~~~~~~~
 
 Template indexes are indexes with no storage backend. They can be used operations that involve only data from input, like keywords and snippets generation.
+Available only in :ref:`plain_mode`.
 
 Percolate indexes
 ~~~~~~~~~~~~~~~~~
@@ -80,6 +83,7 @@ is specified), or a certain explicitly specified subset. ``searchd``
 utility will serve all the specified indexes, and the clients can
 specify what indexes to search in run time.
 
+.. _index_files:
 
 Index files
 ~~~~~~~~~~~
@@ -222,17 +226,19 @@ searchd restart in most cases.
 Operations on indexes
 ~~~~~~~~~~~~~~~~~~~~~
 
-Declaration
-^^^^^^^^^^^
+In :ref:`rt_mode` supported indexes (RT,PQ and distributed) can be created/dropped with :ref:`create_table_syntax` / :ref:`drop_table_syntax`.
+
+In :ref:`plain_mode` Real-Time, percolate and template indexes can be declared in the configuration and they will be created (with empty data) at daemon start.
 
 Plain indexes can only be created by **indexer** tool.
 If a plain index is only declared in configuration,but not created, the daemon will print a warning about that.
 It must be also noted that the daemon requires at least one index of type RT, percolate or plain in order to start.
 
-Real-Time, percolate and template indexes can be declared in the configuration and they will be created (with empty data) at daemon start.
 
 Loading or discarding indexes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This section is for :ref:`plain_mode`.
 
 At startup, daemon will try to load and make available all indexes found in the configuration file.
 

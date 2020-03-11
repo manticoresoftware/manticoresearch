@@ -14,20 +14,29 @@ The identificator of a document in the index. Document IDs must be **unique posi
 Text
 ^^^^
 
-It is the full-text field part of the index. 
+One or more text columns form the fulltext part of the index.
 The text is passed through an analyzer pipeline that converts the text to words, applies morphology transformations etc.
 Full-text fields can only be used in MATCH() clause and cannot be used for sorting or aggregation.
 Words are stored in an inverted index along with references to the fields they belong and positions in the field.
 This allows to search a word inside each field and to use advanced operators like proximity.
-By default the original text of the fields is only indexed and not stored, thus not possible to be returned in the results.
-Starting with version 3.2.0 it's possible to optionally store and retrieve in results the original content. 
+By default the original text of the fields is  indexed and stored. Prior 3.3.0, texts could only be indexed.
+It's possible to choose to not store the texts for lowering index size, result set size and overall improved query speed.
+
+Starting with version 3.3.2 it's also possible to only store texts and not index them.
+A stored-only column text can't be used in fulltext matches, but is returned in results.
+Compared to string attributes, a stored-only text is retrieved only for the documents that are send back in the result set.
+This make them more suitable than string attributes for big texts or strings that required only to be present in result set, but not used in any operation,
+since they don't consume memory.
+
+Text columns currently can only be defined at index creation. To add/remove a text column, the index needs to be reconstructed.
 
 String
 ^^^^^^^
 
 Unlike full-text fields, the string attributes are stored as they are received and cannot be used in full-text searches.
-Instead they are returned in results, they can be used in WHERE clause for comparison filtering or REGEX and they can be used for sorting and aggregation.
+Instead they are returned in results, they can be used in WHERE clause for literal comparison or REGEX filtering  and they can be used for sorting and aggregation.
 In general it's recommended to not store large texts in string attributes, but use string attributes for metadata like  names, titles, tags, keys.
+String attributes are stored in blob component, along with MVAs and JSON attributes, for which it can be set how to be loaded in memory (see :ref:`index_files`).
 
 Integer
 ^^^^^^^
@@ -97,6 +106,7 @@ must be used for proper sorting:
    
 JSON objects as well as their properties can be tested against NULL with IS (NOT) NULL operator.
 
+JSON attributes are stored in blob component along with string and MVA attributes (see :ref:`index_files`).
 
 Multi-value integer
 ^^^^^^^^^^^^^^^^^^^
@@ -105,6 +115,7 @@ It's a special type that allows storing variable-length lists of 32-bit unsigned
 It supports filtering and aggregation, but not sorting.  Filtering can made of condition that requires at least one element to pass (using ANY()) or all (using :ref:`ALL() <expr-func-all>`).
 Information like least or greatest element and length of the list can be extracted.
 
+MVA attributes are stored in blob component along with string and JSON attributes (see :ref:`index_files`).
 
 Multi-value big integer
 ^^^^^^^^^^^^^^^^^^^^^^^

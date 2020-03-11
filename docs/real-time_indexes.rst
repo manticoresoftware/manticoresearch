@@ -5,15 +5,21 @@ Real-time indexes
 
 Real-time indexes (or RT indexes for brevity) are a backend that lets
 you insert, update, or delete documents (rows) on the fly. While
-querying of RT indexes is possible using any of the SphinxAPI, SphinxQL,
-or SphinxSE, updating them is only possible via SphinxQL at the moment.
-Full SphinxQL reference is available in  :doc:`sphinxql_reference`.
-
+querying of RT indexes is possible using any of the available protocols,
+but updating them is only possible via  :doc:`SphinxQL <sphinxql_reference>`   or  :ref:`http_sql` (starting with 3.3.2).
 
 RT indexes overview
 -------------------
 
-RT indexes should be declared in ``manticore.conf``, just as every other
+RT indexes can be created in :ref:`rt_mode` using :ref:`create_table_syntax`.
+
+.. code-block:: mysql
+
+    mysql> CREATE TABLE myindex (title text, content text, category_id integer);
+	
+
+
+RT indexes can also be used in :ref:`plain_mode`, just as every other
 index type. Notable differences from the regular, disk-based indexes are
 that a) data sources are not required and ignored, and b) you should
 explicitly enumerate all the text fields, not just attributes. Here's an
@@ -125,15 +131,13 @@ logging is enabled, it should also survive crash and/or dirty shutdown,
 and recover on subsequent startup.
 
 
-Known caveats with RT indexes
------------------------------
+Considerations over RT indexes
+------------------------------
 
-RT indexes are currently quality feature, but there are still a few
-known usage quirks. Those quirks are listed in this section.
 
 -  Default conservative RAM chunk limit (``rt_mem_limit``) of 32M can
    lead to poor performance on bigger indexes, you should raise it to
-   256..1024M if you're planning to index gigabytes.
+   256..2048M if you're planning to index gigabytes. While :ref:`dist_threads` can be used to enable parallel searching, the number of chunks needs to be kept under control.
 
 -  High DELETE/REPLACE rate can lead to kill-list fragmentation and
    impact searching performance. Records are not immediately purged, but only marked as delete. 
@@ -232,7 +236,7 @@ binlog files are kept until all of the transactions stored in them (from
 all indexes) are flushed as a disk chunk. Setting the limit to 0 pretty
 much prevents binlog from being unlinked at all while ``searchd`` is
 running; however, it will still be unlinked on clean shutdown.
-(``binlog_max_log_size`` defaults to 0.)
+(``binlog_max_log_size`` defaults to 0)
 
 There are 3 different binlog flushing strategies, controlled by
 :ref:`binlog_flush <binlog_flush>`

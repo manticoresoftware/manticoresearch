@@ -208,11 +208,13 @@ metadata, and lock files, etc).
 Empty value disables binary logging. That improves performance, but puts
 RT index data at risk.
 
-WARNING! It is strongly recommended to always explicitly define
-‘binlog_path’ option in your config. Otherwise, the default path, which
+In case of  :ref:`rt_mode`, binlog path is set by default inside :ref:`data_dir`. 
+
+In  :ref:`plain_mode` it is recommended to be explicitly defined. Otherwise, the default path, which
 in most cases is the same as working folder, may point to the folder
 with no write access (for example, /usr/local/var/data). In this case,
 the searchd will not start at all.
+
 
 Example:
 
@@ -282,11 +284,16 @@ Example:
 data_dir
 ~~~~~~~~~~~~
 
-For now - just path to the dir for replication internal files, optional.
+Mandatory for :ref:`plain_mode`.
 
-In this directory daemon stores replication meta info and state such as cluster
-descriptions and list of indexes replicated to the current node in ``manticore.json``
-file in this directory and uses it as a default directory for cluster contents.
+Directory  path used by daemon for storing :
+
+* metadata about indexes
+* index files
+* replication meta info and state 
+
+
+Binlogs are also stored if :ref:`binlog_path` not defined.
 
 Example:
 
@@ -294,7 +301,7 @@ Example:
 .. code-block:: ini
 
 
-    data_dir = /var/manticore
+    data_dir = /var/lib/manticore
 
 
 .. _dist_threads:

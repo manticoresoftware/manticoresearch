@@ -4,10 +4,12 @@
 Replication
 ===========
 
+.. note::
+  Replication is available only in  :ref:`rt_mode` operation and supported only on Linux platforms.
+
 Manticore search daemon can replicate a write transaction (``INSERT``, ``REPLACE``, ``DELETE``, ``TRUNCATE``, ``UPDATE``, etc)
 in an index to other nodes in the cluster. 
 Currently percolate and Real-Time indexes are supported.
-Only Linux packages and builds support replication, Windows and MacOS packages do not support replication.
 
 We took advantage of Percona's fork of Galera library which gives the following benefits:
 

@@ -1,6 +1,10 @@
 Migrating from Manticore or Sphinx Search 2.x
 ---------------------------------------------
 
+Starting with 3.3.2, Manticore supports two modes of operation: the classic one (:ref:`plain_mode`) in which indexes are defined in the configuration file and a modern approach (:ref:`rt_mode`) that allows creating/dropping indexes using SQL statements/HTTP requests.
+
+:ref:`rt_mode` doesn't support plain and template indexes. This migration guide covers upgrading to :ref:`plain_mode`.
+
 Upgrading from 2.x to 3.x is not straightforward, because the index storage engine received a massive upgrade and the new searchd can't load older indexes and upgrade them to new format on-the-fly.
 
 The upgrade procedure may differ depending on your setup (number of servers in the cluster,

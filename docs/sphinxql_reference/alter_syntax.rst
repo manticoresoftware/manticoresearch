@@ -22,7 +22,7 @@ fail if an index has only one attribute.
 .. code-block:: mysql
 
 
-    ALTER RTINDEX index RECONFIGURE
+    ALTER TABLE index RECONFIGURE
 
 ALTER can also reconfigure an existing RT index, so that new
 tokenization, morphology, and other text processing settings from

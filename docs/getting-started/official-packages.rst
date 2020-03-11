@@ -25,7 +25,7 @@ or
 
 depending on the distribution used.
 
-At this point you can start using Manticore Search. The configuration file is located at ``/etc/manticoresearch/manticore.conf``.  The default configuration comes with an empty RT index ready to be used and a sample plain index and interfaces SphinxQL on port 9306 and native API on port 9312.
+At this point you can start using Manticore Search. The configuration file is located at ``/etc/manticoresearch/manticore.conf``.  
 
 You can also compile Manticore Search from `sources <https://github.com/manticoresoftware/manticore>`__. `Compilation <http://docs.manticoresearch.com/latest/html/installation.html#compiling-manticore-from-source>`__ is easy and uses cmake and you can also create packages for your operating system. 
 
@@ -36,7 +36,7 @@ The simple way to connect and do some tests is to use the `SphinxQL <http://docs
 
 While it implements the MySQL protocol, SphinxQL is not 100% compatible with MySQL syntax. There are specific extensions, like MATCH clause [the most powerful thing in Manticore] or WITHIN GROUP BY and many functions available in MySQL are not implemented (or they are dummy just to allow compatibility with MySQL connector e.g.) or JOINs between indexes which are not supported yet.
 
-First, let's connect to Manticore Search and take a look at the available indexes:
+First, let's connect to Manticore Search and create a new index:
 
 .. code-block:: bash 
    
@@ -45,15 +45,8 @@ First, let's connect to Manticore Search and take a look at the available indexe
 .. code-block:: mysql
 
 
-   mysql> SHOW TABLES;
-   +-------+-------------+
-   | Index | Type        |
-   +-------+-------------+
-   | dist1 | distributed |
-   | testrt| rt          |
-   +-------+-------------+
-   2 rows in set (0.00 sec)
-
+   mysql> CREATE TABLE testrt (title text, content text, gid uint);
+   
 Now let's look at our RT index:
 
 .. code-block:: mysql
@@ -174,25 +167,13 @@ We also added a `SHOW META  <http://docs.manticoresearch.com/latest/html/sphinxq
 SHOW META returns information about previous executed query, that is number of found records (in total_found), execution time (in time) and statistics about the keywords of the search.
 
 
-To create a new RT index, you need to define it in the manticore.conf. A simple definition looks like:
-
-.. code-block:: none
-
-   index myindexname {
-         type = rt
-         path = /path/to/myrtindex
-         rt_mem_limit = 256M
-         rt_field = title
-         rt_attr_uint = attr1
-         rt_attr_uint = attr2
-         stored_field = title
-   }
-
-To get the index online you need to either restart the daemon or send a HUP signal to it.
-
 Using plain indexes
 ~~~~~~~~~~~~~~~~~~~
 
+.. note::
+   Plain indexes are available in :ref:`plain_mode`. If you wish to use them, you need to drop :ref:`data_dir` from the configuration.
+   
+   
 Unlike RT, the plain index requires setting up the source and run the indexing process which gathers the data.
 For this we need to edit the manticore.conf configuration file. The initial configuration comes with a sample plain index along with a source.
 For simplicity we use a MySQL source.

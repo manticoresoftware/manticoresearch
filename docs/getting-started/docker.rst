@@ -8,21 +8,38 @@ Installing and running
 
     $ docker run --name manticore -p 9306:9306 -d manticoresearch/manticore
 
-The Manticore Search container  doesn't have a persistent storage and in case the container is stopped, any changes  are lost.
-
-For persistence, there are 3 folders that can be mounted locally:
-
-* /etc/manticoresearch - location of manticore.conf 
-* /var/lib/manticore/data - used for index files
-* /var/lib/manticore/log -  used for log files
-
-The run command becomes:
+or using composition:
 
 .. code-block:: bash
-   
-   $ docker run --name manticore -v ~/manticore/etc/:/etc/manticoresearch/ -v ~/manticore/data/:/var/lib/manticore/data -v ~/manticore/logs/:/var/lib/manticore/log -p 9306:9306 -d manticoresearch/manticore
-   
-In `~/manticore/` you need to create the `etc/` , `data/` and `logs/` folders, as well as add a valid   `manticore.conf <https://github.com/manticoresoftware/docker/blob/master/manticore.conf>`__   in `~/manticore/etc/`.  
+
+    version: '2.2'
+    
+    services:
+    
+      manticore:
+        image: manticoresearch/manticore:nodemode
+        restart: always
+        ulimits:
+            nproc: 65535
+            nofile:
+                soft: 65535
+                hard: 65535
+            memlock:
+                soft: -1
+                hard: -1
+			
+			
+Configuration file is located at `/etc/manticoresearch/manticore.conf` .
+Data dir is by default at `/var/lib/manticore` as volume.
+Logs are located at `/var/log/manticore`.
+
+
+* /etc/manticoresearch - location of manticore.conf 
+* /var/lib/manticore - used for index files
+* /var/lib/manticore/log -  used for log files
+
+
+By default a small sql file is run to create a sample RT index. 
 
 Running queries
 ~~~~~~~~~~~~~~~
@@ -37,6 +54,12 @@ First, let's connect to Manticore Search and take a look at the available indexe
    
    $ mysql -P9306 -h0
 
+If you don't have the mysql client installed on host, you can use the built-in mysql client shipped in the Manticore image, which connects directly to Manticore:
+
+.. code-block:: bash 
+   
+   docker exec -it manticore mysql 
+
 .. code-block:: mysql
 
 
@@ -46,7 +69,7 @@ First, let's connect to Manticore Search and take a look at the available indexe
    +-------+-------------+
    | testrt| rt          |
    +-------+-------------+
-   2 rows in set (0.00 sec)
+   1 row in set (0.00 sec)
 
 Now let's look at our RT index:
 
@@ -170,149 +193,7 @@ To create a new RT index, you need to define it in the manticore.conf. A simple 
 
 .. code-block:: none
 
-   index myindexname {
-         type = rt
-         path = /path/to/myrtindex
-         rt_mem_limit = 256M
-         rt_field = title
-         rt_attr_uint = attr1
-         rt_attr_uint = attr2
-   }
-
-Remember that rt_fields are only indexed and not stored by default. If you want their values back in the results, you need to add 'stored_fields = title'.
-To get the index online you need to either restart the daemon or send a HUP signal to it.
-
-Using plain indexes
-~~~~~~~~~~~~~~~~~~~
-
-Unlike RT, a plain also requires configuring a source for it. In our example we are using a MySQL source.
-
-Add in your manticore.conf:
-
-.. code-block:: none
-   
-   source src1
-   {
-        type                    = mysql
-
-        sql_host                = 172.17.0.1
-        sql_user                = test
-        sql_pass                = 
-        sql_db                  = test
-        sql_port                = 3306  # optional, default is 3306
-
-        sql_query_pre           = SET NAMES utf8
-
-        sql_query               = \
-                SELECT id, group_id, UNIX_TIMESTAMP(date_added) AS date_added, title, content \
-                FROM documents
-
-        sql_attr_uint           = group_id
-        sql_attr_timestamp      = date_added
-
-   }
-   index test1
-   {
-
-        source                  = src1
-        path                    = /var/lib/manticore/data/test1
-        stored_fields           = title, content
-        min_word_len            = 1
-
-   }
-
-In this example we assume we have a MySQL instance on the local host, but as Manticore Search runs inside a Docker container, we need to use '172.17.0.1', the static IP address of the Docker host. For more details, please check Docker documentation.   
-You also need to adjust the MySQL credentials accordingly.
-
-Then we look after the ``sql_query``, which is the query that grabs the data
-
-.. code-block:: none
-
-        sql_query               = \
-                SELECT id, group_id, UNIX_TIMESTAMP(date_added) AS date_added, title, content \
-                FROM documents
-
-For a quick test, we're going to use the following sample table in MySQL:
-
-.. code-block:: mysql
-
-   DROP TABLE IF EXISTS test.documents;
-   CREATE TABLE test.documents
-   (
-    id          INTEGER PRIMARY KEY NOT NULL AUTO_INCREMENT,
-    group_id    INTEGER NOT NULL,
-    date_added  DATETIME NOT NULL,
-    title       VARCHAR(255) NOT NULL,
-    content     TEXT NOT NULL
-   );
-   
-   INSERT INTO test.documents ( id, group_id,  date_added, title, content ) VALUES
-    ( 1, 1, NOW(), 'test one', 'this is my test document number one. also checking search within phrases.' ),
-    ( 2, 1, NOW(), 'test two', 'this is my test document number two' ),
-    ( 3, 2, NOW(), 'another doc', 'this is another group' ),
-    ( 4, 2, NOW(), 'doc number four', 'this is to test groups' );
+   mysql> CREATE TABLE myindexname (title text, attr1 integer, attr2 integer) rt_mem_limit='256M';
 
 
-
-If you want to use another table, keep in mind that the first column in the result set must be an unsigned unique integer - for most cases this is your primary key id of a table.
-
-If not specified, the rest of the columns are indexed as fulltext fields. Columns which should be used as attributes need to be declared.
-In our example group_id and date_added are attributes:
-
-.. code-block:: none
-
-      sql_attr_uint           = group_id
-      sql_attr_timestamp      = date_added
-
-
-
-Once we have this setup, we can run the indexing process:
-
-.. code-block:: none
-
-   $ docker exec -it manticore indexer  test1  --rotate
-   using config file '/etc/sphinxsearch/manticore.conf'...
-   indexing index 'test1'...
-   collected 4 docs, 0.0 MB
-   sorted 0.0 Mhits, 100.0% done
-   total 4 docs, 193 bytes
-   total 0.015 sec, 12335 bytes/sec, 255.65 docs/sec
-   total 4 reads, 0.000 sec, 8.1 kb/call avg, 0.0 msec/call avg
-   total 12 writes, 0.000 sec, 0.1 kb/call avg, 0.0 msec/call avg
-
-Index is created and is ready to be used:
-
-.. code-block:: mysql
-   
-   mysql> SHOW TABLES;
-   +-------+-------------+
-   | Index | Type        |
-   +-------+-------------+
-   | dist1 | distributed |
-   | rt    | rt          |
-   | test1 | local       |
-   +-------+-------------+
-   3 rows in set (0.00 sec)
-   
-   mysql> SELECT * FROM test1;
-   +------+----------+------------+-----------------+---------------------------------------------------------------------------+
-   | id   | group_id | date_added | title           | content                                                                   |
-   +------+----------+------------+-----------------+---------------------------------------------------------------------------+
-   |    1 |        1 | 1497982018 | test one        | this is my test document number one. also checking search within phrases. |
-   |    2 |        1 | 1497982018 | test two        | this is my test document number two                                       |
-   |    3 |        2 | 1497982018 | another doc     | this is another group                                                     |
-   |    4 |        2 | 1497982018 | doc number four | this is to test groups                                                    |
-   +------+----------+------------+-----------------+---------------------------------------------------------------------------+
-   4 rows in set (0.00 sec)
-   
-A quick test of a search which should match 2 terms, but not match another one:
-
-.. code-block:: mysql
-   
-   mysql> SELECT * FROM test1 WHERE MATCH('test document -one');
-   +------+----------+------------+----------+-------------------------------------+
-   | id   | group_id | date_added | title    | content                             |
-   +------+----------+------------+----------+-------------------------------------+
-   |    2 |        1 | 1497982018 | test two | this is my test document number two |
-   +------+----------+------------+----------+-------------------------------------+
-   1 row in set (0.00 sec)
+More information about how to use Manticore in Docker and parameters that can be passed to containers are found on the `Docker Hub <https://hub.docker.com/r/manticoresearch/manticore/>`_ page.

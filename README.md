@@ -9,6 +9,9 @@
 [![Slack][slack-badge]][slack-url]
 [![Twitter](https://img.shields.io/twitter/follow/manticoresearch.svg?style=social&label=Follow)](https://twitter.com/manticoresearch)
 
+
+### [Download](http://bit.ly/2Q9uGj4) page
+
 ### Docker image
 
 [![Docker Automated build](https://img.shields.io/docker/automated/manticoresearch/manticore.svg)](https://dockr.ly/33biV0U)

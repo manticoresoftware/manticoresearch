@@ -6118,7 +6118,7 @@ public:
 #endif
 };
 
-void QueryDiskChunks( const CSphQuery * pQuery,
+void QueryDiskChunks ( const CSphQuery * pQuery,
 		CSphQueryResult * pResult,
 		const CSphMultiQueryArgs & tArgs,
 		SphChunkGuard_t& tGuard,
@@ -6127,8 +6127,6 @@ void QueryDiskChunks( const CSphQuery * pQuery,
 		bool bGotLocalDF,
 		const SmallStringHash_T<int64_t> * pLocalDocs,
 		int64_t iTotalDocs,
-		SphWordStatChecker_t tDiskStat,
-		SphWordStatChecker_t tStat,
 		const char * szIndexName,
 		VecTraits_T<const BYTE*>& dDiskBlobPools,
 		int64_t tmMaxTimer
@@ -6198,7 +6196,6 @@ void QueryDiskChunks( const CSphQuery * pQuery,
 
 				// check terms inconsistency among disk chunks
 				const auto & hChunkStats = tChunkResult.m_hWordStats;
-				tStat.DumpDiffer ( hChunkStats, szIndexName, pThResult->m_sWarning );
 				auto & hResWordStats = dTlsData.GetTlsWordstats(iThdID);
 
 				if ( hResWordStats.GetLength() )
@@ -6214,11 +6211,6 @@ void QueryDiskChunks( const CSphQuery * pQuery,
 				{
 					hResWordStats = hChunkStats;
 				}
-				// keep last chunk statistics to check vs rt settings
-				if ( iChunk==tGuard.m_dDiskChunks.GetLength ()-1 )
-					tDiskStat.Set ( hChunkStats );
-				if ( !iChunk )
-					tStat.Set ( hChunkStats );
 
 				dDiskBlobPools[iChunk] = tChunkResult.m_pBlobPool;
 				pThResult->m_iBadRows += tChunkResult.m_iBadRows;
@@ -6361,17 +6353,13 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	pResult->m_bHasPrediction = pQuery->m_iMaxPredictedMsec>0;
 
-	SphWordStatChecker_t tDiskStat;
-	SphWordStatChecker_t tStat;
-	tStat.Set ( pResult->m_hWordStats );
-
 	int64_t tmMaxTimer = 0;
 	if ( pQuery->m_uMaxQueryMsec>0 )
 		tmMaxTimer = sphMicroTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
 
 	CSphVector<const BYTE *> dDiskBlobPools ( tGuard.m_dDiskChunks.GetLength() );
 
-	QueryDiskChunks (pQuery,pResult,tArgs,tGuard,dSorters,pProfiler,bGotLocalDF,pLocalDocs,iTotalDocs,tDiskStat,tStat,
+	QueryDiskChunks (pQuery,pResult,tArgs,tGuard,dSorters,pProfiler,bGotLocalDF,pLocalDocs,iTotalDocs,
 			m_sIndexName.cstr(), dDiskBlobPools, tmMaxTimer);
 
 	////////////////////
@@ -6517,10 +6505,6 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			return false;
 
 		tCtx.SetupExtraData ( pRanker.Ptr(), iSorters==1 ? ppSorters[0] : NULL );
-
-		// check terms inconsistency disk chunks vs rt vs previous indexes
-		tDiskStat.DumpDiffer ( pResult->m_hWordStats, m_sIndexName.cstr(), pResult->m_sWarning );
-		tStat.DumpDiffer ( pResult->m_hWordStats, m_sIndexName.cstr(), pResult->m_sWarning );
 
 		pRanker->ExtraData ( EXTRA_SET_POOL_CAPACITY, (void**)&iMatchPoolSize );
 

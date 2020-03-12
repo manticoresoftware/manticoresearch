@@ -5195,24 +5195,14 @@ void LocalSearchThreadFunc ( void * pArg )
 
 
 static void MergeWordStats ( CSphQueryResultMeta & tDstResult,
-	const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrc,
-	SearchFailuresLog_c * pLog, const char * sIndex, const char * sParentIndex )
+	const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrc )
 {
-	assert ( pLog );
-
 	if ( !tDstResult.m_hWordStats.GetLength() )
 	{
 		// nothing has been set yet; just copy
 		tDstResult.m_hWordStats = hSrc;
 		return;
 	}
-
-	CSphString sDiff;
-	SphWordStatChecker_t tDiff;
-	tDiff.Set ( hSrc );
-	tDiff.DumpDiffer ( tDstResult.m_hWordStats, NULL, sDiff );
-	if ( !sDiff.IsEmpty() )
-		pLog->SubmitEx ( sIndex, sParentIndex, "%s", sDiff.cstr() );
 
 	hSrc.IterateStart();
 	while ( hSrc.IterateNext() )
@@ -5408,7 +5398,7 @@ void SearchHandler_c::RunLocalSearchesParallel()
 
 			tRes.m_pBlobPool = tRaw.m_pBlobPool;
 			tRes.m_pDocstore = tRaw.m_pDocstore;
-			MergeWordStats ( tRes, tRaw.m_hWordStats, &m_dFailuresSet[iQuery], sLocal, sParentIndex );
+			MergeWordStats ( tRes, tRaw.m_hWordStats );
 
 			tRes.m_bHasPrediction |= tRaw.m_bHasPrediction;
 			tRes.m_iMultiplier = m_bMultiQueue ? iQueries : 1;
@@ -5753,7 +5743,7 @@ void SearchHandler_c::RunLocalSearches()
 					tRes.m_iCpuTime += tStats.m_iCpuTime / ( m_iEnd-m_iStart+1 );
 					tRes.m_tIOStats.Add ( tStats.m_tIOStats );
 					tRes.m_pBlobPool = tStats.m_pBlobPool;
-					MergeWordStats ( tRes, tStats.m_hWordStats, &m_dFailuresSet[iQuery], sLocal, sParentIndex );
+					MergeWordStats ( tRes, tStats.m_hWordStats );
 					tRes.m_iMultiplier = m_iEnd-m_iStart+1;
 					iQTimeForStats = tStats.m_iQueryTime / ( m_iEnd-m_iStart+1 );
 				} else if ( tRes.m_iMultiplier==-1 )
@@ -6567,7 +6557,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					}
 
 					// merge this agent's words
-					MergeWordStats ( tRes, tRemoteResult.m_hWordStats, &m_dFailuresSet[iRes], tFirst.m_sIndexes.cstr(), NULL );
+					MergeWordStats ( tRes, tRemoteResult.m_hWordStats );
 				}
 
 				// dismissed

@@ -2007,7 +2007,7 @@ private:
 	CSphString					GetIndexFileName ( const char * szExt ) const;
 	void						GetIndexFiles ( CSphVector<CSphString> & dFiles ) const override;
 
-	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, const SphWordStatChecker_t & tStatDiff ) const;
+	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache ) const;
 
 	void						ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, CSphMatch & tMatch, int iCutoff, bool bReverse, bool bRandomize, int iIndexWeight, int64_t tmMaxTimer ) const;
 	bool						MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
@@ -15930,9 +15930,6 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	if ( m_tSettings.m_uAotFilterMask )
 		TransformAotFilter ( tParsed.m_pRoot, pDict->GetWordforms(), m_tSettings );
 
-	SphWordStatChecker_t tStatDiff;
-	tStatDiff.Set ( pResult->m_hWordStats );
-
 	// expanding prefix in word dictionary case
 	CSphScopedPayload tPayloads;
 	XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, pResult, &tPayloads, pQuery->m_uDebugFlags );
@@ -15951,7 +15948,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	tParsed.m_bNeedSZlist = pQuery->m_bZSlist;
 
 	CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
-	bool bResult = ParsedMultiQuery ( pQuery, pResult, iSorters, &dSorters[0], tParsed, pDict, tArgs, &tNodeCache, tStatDiff );
+	bool bResult = ParsedMultiQuery ( pQuery, pResult, iSorters, &dSorters[0], tParsed, pDict, tArgs, &tNodeCache );
 
 	if ( tArgs.m_bModifySorterSchemas )
 	{
@@ -15984,7 +15981,6 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 	SetupExactDict ( pDict );
 
 	CSphFixedVector<XQQuery_t> dXQ ( iQueries );
-	CSphFixedVector<SphWordStatChecker_t> dStatChecker ( iQueries );
 	CSphScopedPayload tPayloads;
 	bool bResult = false;
 	bool bResultScan = false;
@@ -16028,8 +16024,6 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			// this should be after keyword expansion
 			if ( m_tSettings.m_uAotFilterMask )
 				TransformAotFilter ( dXQ[i].m_pRoot, pDict->GetWordforms(), m_tSettings );
-
-			dStatChecker[i].Set ( ppResults[i]->m_hWordStats );
 
 			// expanding prefix in word dictionary case
 			XQNode_t * pPrefixed = ExpandPrefix ( dXQ[i].m_pRoot, ppResults[i], &tPayloads, pQueries[i].m_uDebugFlags );
@@ -16079,7 +16073,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			ppResults[j]->m_tIOStats.Start();
 
 			if ( dXQ[j].m_pRoot && ppSorters[j]
-					&& ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dXQ[j], pDict, tArgs, &tNodeCache, dStatChecker[j] ) )
+					&& ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dXQ[j], pDict, tArgs, &tNodeCache ) )
 			{
 				bResult = true;
 				ppResults[j]->m_iMultiplier = iCommonSubtrees ? iQueries : 1;
@@ -16104,7 +16098,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 
 bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult,
 	int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict,
-	const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache, const SphWordStatChecker_t & tStatDiff ) const
+	const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache ) const
 {
 	assert ( pQuery );
 	assert ( pResult );
@@ -16210,8 +16204,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tXQ, pQuery, pResult, tTermSetup, tCtx, tMaxSorterSchema ) );
 	if ( !pRanker.Ptr() )
 		return false;
-
-	tStatDiff.DumpDiffer ( pResult->m_hWordStats, m_sIndexName.cstr(), pResult->m_sWarning );
 
 	if ( ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE ) && pQuery->m_eRanker!=SPH_RANK_EXPR )
 		pResult->m_sWarning.SetSprintf ( "packedfactors() and bm25f() requires using an expression ranker" );
@@ -28081,38 +28073,6 @@ void sphGetSuggest ( const ISphWordlistSuggest * pWordlist, int iInfixCodepointB
 		return;
 
 	tRes.Flattern ( tArgs.m_iLimit );
-}
-
-
-// all indexes should produce same terms for same query
-void SphWordStatChecker_t::Set ( const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hStat )
-{
-	m_dSrcWords.Reserve ( hStat.GetLength() );
-	for ( auto& tStat : hStat )
-		m_dSrcWords.Add ( sphFNV64 ( tStat.first.cstr() ) );
-
-	m_dSrcWords.Sort();
-}
-
-
-void SphWordStatChecker_t::DumpDiffer ( const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hStat,
-	const char * sIndex, CSphString & sWarning ) const
-{
-	if ( !m_dSrcWords.GetLength() )
-		return;
-
-	StringBuilder_c sProlog;
-	if ( sIndex )
-		sProlog << "index '" << sIndex << "': ";
-	sProlog << "query word(s) mismatch: ";
-
-	StringBuilder_c tWarningBuilder ( ", ", sProlog.cstr ());
-	for ( auto & tStat : hStat )
-		if ( !m_dSrcWords.BinarySearch ( sphFNV64 ( tStat.first.cstr ())))
-			tWarningBuilder << tStat.first;
-
-	if ( !tWarningBuilder.IsEmpty() )
-		tWarningBuilder.MoveTo ( sWarning );
 }
 
 //////////////////////////////////////////////////////////////////////////

@@ -11,9 +11,9 @@
 
 ### Docker image
 
-[![Docker Automated build](https://img.shields.io/docker/automated/manticoresearch/manticore.svg)](https://hub.docker.com/r/manticoresearch/manticore/)
+[![Docker Automated build](https://img.shields.io/docker/automated/manticoresearch/manticore.svg)](https://dockr.ly/33biV0U)
 [![MicroBadger](https://images.microbadger.com/badges/image/manticoresearch/manticore.svg)](https://microbadger.com/images/manticoresearch/manticore)
-[![Docker Stars](https://img.shields.io/docker/stars/manticoresearch/manticore.svg)](https://hub.docker.com/r/manticoresearch/manticore/)
+[![Docker Stars](https://img.shields.io/docker/stars/manticoresearch/manticore.svg)](https://dockr.ly/33biV0U)
 
 ## Introduction
 

@@ -1275,13 +1275,21 @@ bool SnippetBuilder_c::SetQuery ( const CSphString & sQuery, bool bIgnoreFields,
 	assert(m_pIndex);
 	assert(m_pQuerySettings);
 
+	CSphVector<BYTE> dFiltered;
+	const BYTE * szModifiedQuery = (BYTE *)sQuery.cstr();
+	if ( m_pFieldFilter && szModifiedQuery )
+	{
+		if ( m_pFieldFilter->Apply ( szModifiedQuery, strlen ( (char*)szModifiedQuery ), dFiltered, true ) )
+			szModifiedQuery = dFiltered.Begin();
+	}
+
 	m_pExtQuery.Reset();
 	m_pExtQuery = new XQQuery_t;
 
 	const CSphIndexSettings & tIndexSettings = m_pIndex->GetSettings();
 
 	// OPTIMIZE? double lightweight clone here? but then again it's lightweight
-	if ( !m_pQueryParser->ParseQuery ( *m_pExtQuery.Ptr(), sQuery.cstr(), nullptr, m_pQueryTokenizer,	m_pTokenizerJson, &m_pIndex->GetMatchSchema(), m_pDict, tIndexSettings ) )
+	if ( !m_pQueryParser->ParseQuery ( *m_pExtQuery.Ptr(), (const char*)szModifiedQuery, nullptr, m_pQueryTokenizer, m_pTokenizerJson, &m_pIndex->GetMatchSchema(), m_pDict, tIndexSettings ) )
 	{
 		sError = m_pExtQuery->m_sParseError;
 		return false;

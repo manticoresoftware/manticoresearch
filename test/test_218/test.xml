@@ -223,6 +223,8 @@ INSERT INTO test_table VALUES
 <sphinxql>insert into test3 (id, title, tag) values(2,'买新的Apple电脑tested', 2 )</sphinxql>
 <sphinxql>select id, SNIPPET(title, '电脑') from test3 where match ( '电脑' )</sphinxql>
 
+<sphinxql>call snippets('他们在那家餐厅提供美味的比萨饼。', 'test', '美味的')</sphinxql>
+
 </sphqueries>
 
 </test>

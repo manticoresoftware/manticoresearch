@@ -180,6 +180,7 @@ static CSphFilterSettings * AddMvaRange ( SqlParser_c * pParser, const SqlNode_t
 
 request:
 	statement							{ pParser->PushQuery(); }
+	| statement ';'						{ pParser->PushQuery(); }
 	| multi_stmt_list
 	| multi_stmt_list ';'
 	;
@@ -1856,3 +1857,4 @@ explain_query:
 #if USE_WINDOWS
 #pragma warning(pop)
 #endif
+

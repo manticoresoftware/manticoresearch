@@ -41,7 +41,7 @@ Manticore Search is an open source search server designed to be fast, scalable a
 ## Installation
 
 ### Docker images
-Docker images are available on [Docker Hub](https://hub.docker.com/r/manticoresearch/manticore/).
+Docker images are available on [Docker Hub](https://dockr.ly/33biV0U).
 
 To launch a Manticore Search container run
 

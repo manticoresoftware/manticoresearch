@@ -15,7 +15,7 @@
 #include "searchdtask.h"
 
 // Ping API proto
-class PingBuilder_c: public RequestBuilder_i, public ReplyParser_i, public ISphRefcountedMT
+class PingBuilder_c final : public RequestBuilder_i, public ReplyParser_i, public ISphRefcountedMT
 {
 public:
 	explicit PingBuilder_c ( int iCookie )

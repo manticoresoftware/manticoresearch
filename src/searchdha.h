@@ -137,7 +137,7 @@ public:
 
 void ClosePersistentSockets();
 
-struct MetricsAndCounters_t : ISphRefcountedMT
+struct MetricsAndCounters_t final : ISphRefcountedMT
 {
 	// was uint64_t, but for atomic it creates extra tmpl instantiation without practical difference
 	CSphAtomicL m_dCounters[eMaxAgentStat];	// event counters
@@ -328,7 +328,7 @@ private:
 };
 
 /// descriptor for set of agents (mirrors) (stored in a global hash)
-class MultiAgentDesc_c : public ISphRefcountedMT, public CSphFixedVector<AgentDesc_t>
+class MultiAgentDesc_c final : public ISphRefcountedMT, public CSphFixedVector<AgentDesc_t>
 {
 	CSphAtomic			m_iRRCounter;    /// round-robin counter
 	mutable RwLock_t	m_dWeightLock;   /// manages access to m_pWeights

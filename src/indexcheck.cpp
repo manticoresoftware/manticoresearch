@@ -111,14 +111,12 @@ int64_t DebugCheckError_c::GetNumFails() const
 
 //////////////////////////////////////////////////////////////////////////
 
-class FileDebugCheckReader_c : public DebugCheckReader_i
+class FileDebugCheckReader_c final : public DebugCheckReader_i
 {
 public:
-	FileDebugCheckReader_c ( CSphAutoreader * pReader )
+	explicit FileDebugCheckReader_c ( CSphAutoreader * pReader )
 		: m_pReader ( pReader )
 	{}
-
-	~FileDebugCheckReader_c() final {}
 
 	int64_t GetLengthBytes() final
 	{

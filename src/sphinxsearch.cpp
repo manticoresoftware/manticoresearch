@@ -1468,7 +1468,7 @@ struct RankerState_Fieldmask_fn : public ISphExtra
 };
 
 
-struct RankerState_Plugin_fn : public ISphExtra
+struct RankerState_Plugin_fn final : public ISphExtra
 {
 	RankerState_Plugin_fn() = default;
 
@@ -3980,11 +3980,11 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 	bool bSkipQCache = tCtx.m_bSkipQCache;
 
 	// can we serve this from cache?
-	CSphRefcountedPtr<QcacheEntry_c> pCached;
+	QcacheEntryRefPtr_t pCached;
 	if ( !bSkipQCache )
 		pCached = QcacheFind ( pIndex->GetIndexId(), *pQuery, tSorterSchema );
 	if ( pCached )
-		return QcacheRanker ( pCached.Leak(), tTermSetup );
+		return QcacheRanker ( pCached, tTermSetup );
 
 	// setup eval-tree
 	ExtRanker_c * pRanker = nullptr;

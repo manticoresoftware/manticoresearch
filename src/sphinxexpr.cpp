@@ -7448,7 +7448,7 @@ private:
 	{}
 };
 
-class Expr_Regex_c : public Expr_ArgVsSet_c<int>
+class Expr_Regex_c final : public Expr_ArgVsSet_c<int>
 {
 protected:
 	uint64_t m_uFilterHash = SPH_FNV64_SEED;

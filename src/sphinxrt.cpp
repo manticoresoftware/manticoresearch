@@ -808,7 +808,7 @@ void SaveDeleteQuery ( const int64_t * pQueries, int iCount, const char * sTags,
 class RtIndex_c;
 
 /// TLS indexing accumulator (we disallow two uncommitted adds within one thread; and so need at most one)
-static TLS_T<RtAccum_t*> g_pTlsAccum;
+thread_local RtAccum_t* g_pTlsAccum;
 
 /// binlog file view of the index
 /// everything that a given log file needs to know about an index
@@ -1070,7 +1070,8 @@ struct RtQword_t;
 class RtRowIterator_c;
 struct SaveDiskDataContext_t;
 
-class RtIndex_c : public RtIndex_i, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest, public IndexUpdateHelper_c, public IndexAlterHelper_c, public DebugCheckHelper_c
+class RtIndex_c final : public RtIndex_i, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest,
+		public IndexUpdateHelper_c, public IndexAlterHelper_c, public DebugCheckHelper_c
 {
 public:
 	explicit			RtIndex_c ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );

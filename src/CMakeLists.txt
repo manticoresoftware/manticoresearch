@@ -27,7 +27,9 @@ set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp
 		taskmalloctrim.cpp taskoptimize.cpp taskglobalidf.cpp tasksavestate.cpp
 		taskflushbinlog.cpp taskflushattrs.cpp taskflushmutable.cpp taskpreread.cpp
 		searchdaemon.cpp searchdssl.cpp searchdfields.cpp searchdconfig.cpp
-		searchdsql.cpp searchdddl.cpp )
+		searchdsql.cpp searchdddl.cpp networking_daemon.cpp
+		netstate_api.cpp net_action_accept.cpp netreceive_api.cpp
+		netreceive_http.cpp netreceive_https.cpp netreceive_ql.cpp)
 set ( SEARCHD_SRCS searchd.cpp ${SEARCHD_SRCS_TESTABLE} )
 set ( SPELLDUMP_SRCS spelldump.cpp )
 set ( TESTS_SRCS tests.cpp )

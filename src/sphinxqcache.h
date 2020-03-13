@@ -63,6 +63,8 @@ private:
 	void						FlushFrame();
 };
 
+using QcacheEntryRefPtr_t = CSphRefcountedPtr<QcacheEntry_c>;
+
 /// query cache status
 struct QcacheStatus_t
 {

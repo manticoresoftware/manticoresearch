@@ -171,7 +171,7 @@ struct RtWordCheckpoint_t
 
 // this is what actually stores index data
 // RAM chunk consists of such segments
-struct RtSegment_t : IndexSegment_c, ISphRefcountedMT
+struct RtSegment_t final : IndexSegment_c, ISphRefcountedMT
 {
 public:
 	static CSphAtomic	m_iSegments;		///< age tag sequence generator

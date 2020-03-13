@@ -43,7 +43,7 @@ protected:
 //////////////////////////////////////////////////////////////////////////
 
 // imitate CSphReader but fully in memory (intended to be used with mmap)
-class ThinMMapReader_c : public FileBlockReader_c
+class ThinMMapReader_c final : public FileBlockReader_c
 {
 public:
 	SphOffset_t GetPos () const final
@@ -113,7 +113,7 @@ uint64_t ThinMMapReader_c::UnzipOffset()
 
 //////////////////////////////////////////////////////////////////////////
 
-class DirectFileReader_c : public FileBlockReader_c, protected FileReader_c
+class DirectFileReader_c final : public FileBlockReader_c, protected FileReader_c
 {
 	friend class DirectFactory_c;
 
@@ -155,7 +155,7 @@ protected:
 //////////////////////////////////////////////////////////////////////////
 
 // producer of readers which access by Seek + Read
-class DirectFactory_c : public DataReaderFactory_c
+class DirectFactory_c final : public DataReaderFactory_c
 {
 public:
 	DirectFactory_c ( const CSphString & sFile, CSphString & sError, ESphQueryState eState, int iReadBuffer, int iReadUnhinted )
@@ -214,7 +214,7 @@ private:
 //////////////////////////////////////////////////////////////////////////
 
 // producer of readers which access by MMap
-class MMapFactory_c : public DataReaderFactory_c
+class MMapFactory_c final : public DataReaderFactory_c
 {
 public:
 	MMapFactory_c ( const CSphString & sFile, CSphString & sError, FileAccess_e eAccess )

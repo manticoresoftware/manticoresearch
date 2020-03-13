@@ -53,10 +53,10 @@ private:
 };
 
 /// ranker that servers cached results
-class QcacheRanker_c : public ISphRanker
+class QcacheRanker_c final : public ISphRanker
 {
 protected:
-	QcacheEntry_c *				m_pEntry;										///< cache entry we are decoding
+	QcacheEntryRefPtr_t			m_pEntry;										///< cache entry we are decoding
 	CSphMatch					m_dMatches [ QcacheEntry_c::MAX_FRAME_SIZE ];	///< matches buffer
 	BYTE *						m_pCur;											///< current position in compressed data
 	BYTE *						m_pMax;											///< max position in compressed data
@@ -68,7 +68,6 @@ protected:
 
 public:
 	explicit					QcacheRanker_c ( QcacheEntry_c * pEntry, const ISphQwordSetup & tSetup );
-								~QcacheRanker_c() final { SafeRelease ( m_pEntry ); }
 
 	CSphMatch *					GetMatchesBuffer() final { return m_dMatches; }
 	int							GetMatches() final;
@@ -580,8 +579,9 @@ void Qcache_c::DeleteIndex ( int64_t iIndexId )
 //////////////////////////////////////////////////////////////////////////
 
 QcacheRanker_c::QcacheRanker_c ( QcacheEntry_c * pEntry, const ISphQwordSetup & tSetup )
+	: m_pEntry ( pEntry )
 {
-	m_pEntry = pEntry;
+	SafeAddRef ( pEntry );
 	ResetImpl ( tSetup );
 }
 

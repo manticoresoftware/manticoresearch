@@ -220,7 +220,7 @@ private:
 
 	// sets up a TLS for a given thread
 	static void ThreadWrapper( void* pArg );
-	static TLS_T<CrashQuery_t*> m_pTlsCrashQuery;    // pointer to on-stack instance of this class
+	static thread_local CrashQuery_t* m_pTlsCrashQuery;    // pointer to on-stack instance of this class
 };
 
 void GlobalSchedule ( Threads::Handler d_handler );

@@ -3954,7 +3954,7 @@ public:
 
 
 #if POLLING_EPOLL
-class EpollEvents_c : public ISphNetPoller, public EventsList_t, public TimeoutEvents_c
+class EpollEvents_c final : public ISphNetPoller, public EventsList_t, public TimeoutEvents_c
 {
 	CSphVector<epoll_event>		m_dReady;
 	int							m_iReady = 0;

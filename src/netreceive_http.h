@@ -9,12 +9,22 @@
 // received a copy of the GPL license along with this program; if you
 // did not, you can find it at http://www.gnu.org/
 //
-/// @file taskflushbinlog.h
-/// Task to periodically check and flush rt binlog
 
-#ifndef MANTICORE_TASKFLUSHBINLOG_H
-#define MANTICORE_TASKFLUSHBINLOG_H
+#pragma once
 
-void StartRtBinlogFlushing ();
+#include "networking_daemon.h"
+#include "netstate_api.h"
 
-#endif //MANTICORE_TASKFLUSHBINLOG_H
+class NetReceiveDataHttp_c final : public ISphNetAction
+{
+	class Impl_c;
+	Impl_c * m_pImpl = nullptr;
+
+public:
+	explicit NetReceiveDataHttp_c ( NetStateAPI_t * pState );
+	~ NetReceiveDataHttp_c () final;
+
+	NetEvent_e		Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) final;
+	NetEvent_e		Setup ( int64_t tmNow ) final;
+	void			CloseSocket () final;
+};

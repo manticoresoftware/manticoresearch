@@ -3288,7 +3288,7 @@ namespace TlsMsg {
 
 	StringBuilder_c* TlsMsgs(bool bDoClear=true)
 	{
-		static TLS_T<StringBuilder_c*> pContainer;
+		thread_local StringBuilder_c* pContainer;
 		if (!pContainer)
 		{
 			static StringBuilder_c sMsgs;

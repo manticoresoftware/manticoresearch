@@ -293,7 +293,9 @@ Directory  path used by daemon for storing :
 * replication meta info and state 
 
 
-Binlogs are also stored if :ref:`binlog_path` not defined.
+Binlogs are  stored by default inside `data_dir` if :ref:`binlog_path` is not set.
+
+A state sql file with name `state.sql` can be placed in `data_dir` without defining it with :ref:`sphinxql_state`.
 
 Example:
 
@@ -1523,6 +1525,10 @@ prevent a hard-to-diagnose problem: If you load UDF functions, but
 Manticore crashes, when it gets (automatically) restarted, your UDF and
 global variables will no longer be available; using persistent state
 helps a graceful recovery with no such surprises.
+
+If the path is relative, the prefix folder used is :ref:`data_dir`.
+
+In case of  :ref:`rt_mode`, if `sphinxql_state` is not defined, the daemon will lookup in :ref:`data_dir`  for a file named `state.sql` and execute it if exists.
 
 Example:
 

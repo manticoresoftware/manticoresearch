@@ -519,7 +519,7 @@ public:
 };
 
 /// TLS key of memory category stack
-TLS_T<MemCategoryStack_t*> g_tTLSMemCategory;
+thread_local MemCategoryStack_t* g_tTLSMemCategory;
 
 static MemCategoryStack_t * g_pMainTLS = NULL; // category stack of main thread
 
@@ -830,8 +830,8 @@ struct ThreadCall_t
 		char 			m_sName[16];	// used in main thread
 	};
 };
-static TLS_T<ThreadCall_t*> g_pTlsThreadCleanup;
-static TLS_T<> g_pTlsMyThreadStack;
+thread_local ThreadCall_t* g_pTlsThreadCleanup;
+thread_local void* g_pTlsMyThreadStack;
 
 #if USE_WINDOWS
 #define SPH_THDFUNC DWORD __stdcall
@@ -1913,7 +1913,7 @@ static void SetThdName ( const char * )
 static void SetThdName ( const char * ) {}
 #endif
 
-class CSphThdPool : public ISphThdPool
+class CSphThdPool final : public ISphThdPool
 {
 	CSphAutoEvent					m_tWakeup;
 	CSphMutex						m_tJobLock;

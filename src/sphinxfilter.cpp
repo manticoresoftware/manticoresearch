@@ -602,7 +602,7 @@ public:
 };
 
 
-struct Filter_And2 : public ISphFilter
+struct Filter_And2 final : public ISphFilter
 {
 	ISphFilter * m_pArg1;
 	ISphFilter * m_pArg2;
@@ -642,7 +642,7 @@ struct Filter_And2 : public ISphFilter
 };
 
 
-struct Filter_And3 : public ISphFilter
+struct Filter_And3 final : public ISphFilter
 {
 	ISphFilter * m_pArg1;
 	ISphFilter * m_pArg2;
@@ -686,7 +686,7 @@ struct Filter_And3 : public ISphFilter
 };
 
 
-struct Filter_And: public ISphFilter
+struct Filter_And final : public ISphFilter
 {
 	CSphVector<ISphFilter *> m_dFilters;
 
@@ -750,7 +750,7 @@ struct Filter_And: public ISphFilter
 };
 
 
-struct Filter_Or: public ISphFilter
+struct Filter_Or final : public ISphFilter
 {
 	ISphFilter * m_pLeft;
 	ISphFilter * m_pRight;
@@ -793,7 +793,7 @@ struct Filter_Or: public ISphFilter
 
 // not
 
-struct Filter_Not: public ISphFilter
+struct Filter_Not final : public ISphFilter
 {
 	ISphFilter * m_pFilter;
 
@@ -1805,15 +1805,12 @@ void FormatFiltersQL ( const CSphVector<CSphFilterSettings> & dFilters, const CS
 }
 
 
-class PercolateFilterValues_c : public PercolateFilter_i
+class PercolateFilterValues_c final : public PercolateFilter_i
 {
 public:
 	explicit PercolateFilterValues_c ( const CSphFilterSettings & tUID )
 		: m_pValues ( tUID.GetValueArray() )
 		, m_iCount ( tUID.GetNumValues() )
-	{}
-
-	~PercolateFilterValues_c() final
 	{}
 
 	bool Eval ( SphAttr_t uUID ) final
@@ -1830,13 +1827,10 @@ private:
 };
 
 template < bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT >
-class PercolateFilterRange_c : public PercolateFilter_i
+class PercolateFilterRange_c final : public PercolateFilter_i
 {
 public:
 	PercolateFilterRange_c () = default;
-
-	~PercolateFilterRange_c() final
-	{}
 
 	bool Eval ( SphAttr_t uUID ) final
 	{

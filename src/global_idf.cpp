@@ -30,7 +30,7 @@ static const int HASH_BITS = 16;
 using namespace sph;
 
 /// global IDF
-class CSphGlobalIDF : public IDFer_c
+class CSphGlobalIDF final : public IDFer_c
 {
 protected:
 	~CSphGlobalIDF() final {}

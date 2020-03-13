@@ -34,7 +34,7 @@
 //////////////////////////////////////////////////////////////////////////
 
 /// loaded plugin library
-class PluginLib_c : public ISphRefcountedMT
+class PluginLib_c final : public ISphRefcountedMT
 {
 protected:
 	CSphString			m_sName;

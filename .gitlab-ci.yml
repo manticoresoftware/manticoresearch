@@ -46,11 +46,12 @@ simple_tests:
     CTEST_BUILD_CONFIGURATION: "Debug"
   script:
     - ctest -V -S misc/ctest/gltest.cmake
-    - cd build && mkdir here1
-    - cp -r Testing/2*/*.xml here1
+  after_script:
+    - cd build && mkdir xml_simple_tests
+    - cp -r Testing/2*/*.xml xml_simple_tests
   artifacts:
     paths:
-    - build/here1
+    - build/xml_simple_tests
     - build/test/test_*/report.txt
     - build/test/error*.txt
     - build/test/searchd.log
@@ -71,11 +72,12 @@ release_tests:
     CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
   script:
     - ctest -V -S misc/ctest/gltest.cmake
-    - cd build && mkdir here2
-    - cp -r Testing/2*/*.xml here2
+  after_script:
+    - cd build && mkdir xml_release_tests
+    - cp -r Testing/2*/*.xml xml_release_tests
   artifacts:
     paths:
-    - build/here2
+    - build/xml_release_tests
     - build/test/test_*/report.txt
     - build/test/error*.txt
     - build/test/searchd.log
@@ -100,42 +102,18 @@ win_tests:
   script:
     - 'net use x: \\\\VBOXSRV\\shared'
     - export PATH='/cygdrive/x/bundle/openssl-x32:/cygdrive/x/bundle/Expat-1.95.8/Libs:/cygdrive/x/bundle/libiconv-1.9.1/bin:/cygdrive/x/bundle/mysql/bin:/cygdrive/x/php:'$PATH
-    - misc/ctest/win_tests.bat
-    - cd build && mkdir here6
-    - cp -v -r Testing/2*/*.xml here6
+    - tar -jxf /cygdrive/x/mysql/mysql.tar.bz2 -C /cygdrive/c/users/manticore/
+    - /cygdrive/x/mysql/bin/mysqld.exe --defaults-file=c:/users/manticore/mysql/my.ini &
+    - ctest -V -S misc/ctest/gltest.cmake -DCTEST_SOURCE_DIRECTORY='C:/cygwin64/home/manticore/builds/manticoresearch/dev/' -C Debug
+  after_script:
+    - cd build && mkdir xml_win_tests
+    - cp -r Testing/2*/*.xml xml_win_tests
   artifacts:
     paths:
-      - build/here6
+      - build/xml_win_tests
       - build/test/test_*/report.txt
       - build/test/error*.txt
       - build/test/searchd.log
-    expire_in: 12 hrs
-    when: always
-  retry: 1
-
-build_win:
-  stage: routines
-  except:
-    variables:
-      - $WHAT
-  tags:
-    - windows
-    - build
-  dependencies: []
-  variables:
-    CTEST_BUILD_CONFIGURATION: "Debug"
-    LIBS_BUNDLE: "x:/bundle"
-    CTEST_CMAKE_GENERATOR: "Visual Studio 14"
-    OPENSSL_ROOT_DIR: "x:/bundle/openssl-x32"
-  script:
-    - 'net use x: \\\\VBOXSRV\\shared'
-    - mkdir build && cd build
-    - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
-    - mkdir here3
-    - cp -r Testing/2*/*.xml here3
-  artifacts:
-    paths:
-      - build/here3
     expire_in: 12 hrs
     when: always
   retry: 1
@@ -156,11 +134,12 @@ build_mac:
   script:
     - mkdir build && cd build
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
-    - mkdir here4
-    - cp -r Testing/2*/*.xml here4
+  after_script:
+    - cd build && mkdir xml_build_mac
+    - cp -r Testing/2*/*.xml xml_build_mac
   artifacts:
     paths:
-      - build/here4
+      - build/xml_build_mac
     expire_in: 12 hrs
     when: always
   retry: 1
@@ -183,11 +162,12 @@ build_bsd:
   script:
     - mkdir build && cd build
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
-    - mkdir here5
-    - cp -r Testing/2*/*.xml here5
+  after_script:
+    - cd build && mkdir xml_build_bsd
+    - cp -r Testing/2*/*.xml xml_build_bsd
   artifacts:
     paths:
-      - build/here5
+      - build/xml_build_bsd
     expire_in: 12 hrs
     when: always
   retry: 1
@@ -204,7 +184,6 @@ push_results:
     - simple_tests
     - release_tests
     - win_tests
-    - build_win
     - build_mac
     - build_bsd
   variables:

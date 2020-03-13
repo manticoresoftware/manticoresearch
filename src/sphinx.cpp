@@ -1821,7 +1821,7 @@ const CSphRowitem * IndexAlterHelper_c::CopyRowAttrByAttr ( const CSphRowitem * 
 
 //////////////////////////////////////////////////////////////////////////
 
-struct FileDebugCheckReader_c : public DebugCheckReader_i
+struct FileDebugCheckReader_c final : public DebugCheckReader_i
 {
 	FileDebugCheckReader_c ( CSphAutoreader * pReader )
 		: m_pReader ( pReader )
@@ -4000,7 +4000,7 @@ ISphTokenizer * ISphTokenizer::CreateBigramFilter ( ISphTokenizer * pTokenizer, 
 }
 
 
-class PluginFilterTokenizer_c : public CSphTokenFilter
+class PluginFilterTokenizer_c final : public CSphTokenFilter
 {
 protected:
 	const PluginTokenFilter_c *	m_pFilter;		///< plugin descriptor
@@ -10970,14 +10970,14 @@ bool CheckStoredFields ( const CSphSchema & tSchema, const CSphIndexSettings & t
 	for ( const auto & i : tSettings.m_dStoredFields )
 		if ( tSchema.GetAttr ( i.cstr() ) )
 		{
-			sError.SetSprintf ( "existing attribute specified in stored_fields: '%s'\n", i.cstr() ); 
+			sError.SetSprintf ( "existing attribute specified in stored_fields: '%s'\n", i.cstr() );
 			return false;
 		}
 
 	for ( const auto & i : tSettings.m_dStoredOnlyFields )
 		if ( tSchema.GetAttr ( i.cstr() ) )
 		{
-			sError.SetSprintf ( "existing attribute specified in stored_fields: '%s'\n", i.cstr() ); 
+			sError.SetSprintf ( "existing attribute specified in stored_fields: '%s'\n", i.cstr() );
 			return false;
 		}
 
@@ -17134,7 +17134,7 @@ protected:
 	~CSphDictCRC() override {} // fixme! remove
 };
 
-struct CSphDictTemplate : public CSphTemplateDictTraits, CCRCEngine<false> // based on flv64
+struct CSphDictTemplate final : public CSphTemplateDictTraits, CCRCEngine<false> // based on flv64
 {
 	SphWordID_t		GetWordID ( BYTE * pWord ) final;
 	SphWordID_t		GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) final;
@@ -19302,7 +19302,7 @@ ISphInfixBuilder * sphCreateInfixBuilder ( int iCodepointBytes, CSphString * pEr
 // KEYWORDS STORING DICTIONARY
 //////////////////////////////////////////////////////////////////////////
 
-class CSphDictKeywords : public CSphDictCRC<true>
+class CSphDictKeywords final : public CSphDictCRC<true>
 {
 public:
 	// OPTIMIZE? change pointers to 8:24 locators to save RAM on x64 gear?
@@ -20265,7 +20265,7 @@ const char * CSphDictKeywords::HitblockGetKeyword ( SphWordID_t uWordID )
 // KEYWORDS STORING DICTIONARY
 //////////////////////////////////////////////////////////////////////////
 
-class CRtDictKeywords : public ISphRtDictWraper
+class CRtDictKeywords final : public ISphRtDictWraper
 {
 private:
 	DictRefPtr_c		m_pBase;

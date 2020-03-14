@@ -78,7 +78,7 @@ struct PercolateQueryArgs_t
 	bool m_bReplace = false;
 
 	PercolateQueryArgs_t ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree );
-	PercolateQueryArgs_t ( const StoredQueryDesc_t & tDesc );
+	explicit PercolateQueryArgs_t ( const StoredQueryDesc_t & tDesc );
 };
 
 class StoredQuery_i;
@@ -89,11 +89,11 @@ public:
 	PercolateIndex_i ( const char * sIndexName, const char * sFileName ) : RtIndex_i ( sIndexName, sFileName ) {}
 	virtual bool	MatchDocuments ( RtAccum_t * pAccExt, PercolateMatchResult_t & tResult ) = 0;
 
-	virtual StoredQuery_i * Query ( const PercolateQueryArgs_t & tArgs, CSphString & sError ) = 0;
+	virtual StoredQuery_i * CreateQuery ( PercolateQueryArgs_t & tArgs, CSphString & sError ) = 0;
 
 	bool	IsPQ() const override { return true; }
 
-	virtual int ReplayDeleteQueries ( const int64_t * pQueries, int iCount ) = 0;
+	virtual int ReplayDeleteQueries ( const VecTraits_T<int64_t>& dQueries ) = 0;
 	virtual int ReplayDeleteQueries ( const char * sTags ) = 0;
 	virtual void ReplayCommit ( StoredQuery_i * pQuery ) = 0;
 };
@@ -112,7 +112,7 @@ void LoadStoredQueryV6 ( DWORD uVersion, StoredQueryDesc_t & tQuery, CSphReader 
 void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, CSphVector<BYTE> & dOut );
 void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, CSphWriter & tWriter );
 void LoadDeleteQuery ( const BYTE * pData, int iLen, CSphVector<int64_t> & dQueries, CSphString & sTags );
-void SaveDeleteQuery ( const int64_t * pQueries, int iCount, const char * sTags, CSphVector<BYTE> & dOut );
+void SaveDeleteQuery ( const VecTraits_T<int64_t>& dQueries, const char * sTags, CSphVector<BYTE> & dOut );
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -241,9 +241,9 @@ struct PercolateMatchContext_t : public PQMatchContextResult_t
 	const bool m_bUtf8 = false;
 	Warner_c m_dMsg;
 
-	PercolateMatchContext_t ( const RtSegment_t * pSeg, int iMaxCodepointLength, bool bHasMorph, CSphDict * pDictMorph
-							  , const PercolateIndex_i * pIndex, const ISphSchema & tSchema
-							  , const SegmentReject_t & tReject )
+	PercolateMatchContext_t ( const RtSegment_t * pSeg, int iMaxCodepointLength, bool bHasMorph,
+			CSphDict * pDictMorph, const PercolateIndex_i * pIndex, const ISphSchema & tSchema,
+			const SegmentReject_t & tReject )
 		: m_tDictMap ( bHasMorph, pDictMorph )
 		, m_tSchema ( tSchema )
 		, m_tReject ( tReject )

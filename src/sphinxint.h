@@ -1633,7 +1633,7 @@ public:
 	virtual bool		IsActive () = 0; // i.e. binlog is not disabled, say, by empty path.
 
 	virtual void		BinlogPqAdd ( int64_t * pTID, const char * sIndexName, const StoredQueryDesc_t & tStored ) = 0;
-	virtual void		BinlogPqDelete ( int64_t * pTID, const char * sIndexName, const int64_t * pQueries, int iCount, const char * sTags ) = 0;
+	virtual void		BinlogPqDelete ( int64_t * pTID, const char * sIndexName, const VecTraits_T<int64_t>& dQueries, const char * sTags ) = 0;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2090,7 +2090,7 @@ struct ISphQueryFilter
 };
 
 XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx );
-XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & tSettings, int iExpandKeywords );
+void sphQueryExpandKeywords ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, int iExpandKeywords );
 inline int sphGetExpansionMagic ( int iDocs, int iHits )
 {
 	return ( iHits<=256 ? 1 : iDocs + 1 ); // magic threshold; mb make this configurable?

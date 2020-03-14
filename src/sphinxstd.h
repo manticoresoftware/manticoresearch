@@ -319,6 +319,86 @@ template<typename T> using managed_allocator = std::allocator<T>;
 #endif // SPH_DEBUG_LEAKS || SPH_ALLOCS_PROFILER
 
 extern const char * strerrorm ( int errnum ); // defined in sphinxint.h
+
+/////////////////////////////////////////////////////////////////////////////
+// THREAD ANNOTATIONS
+/////////////////////////////////////////////////////////////////////////////
+
+#if defined(__clang__)
+#define THREAD_ANNOTATION_ATTRIBUTE__(x) __attribute__((x))
+#else
+#define THREAD_ANNOTATION_ATTRIBUTE__( x ) // no-op
+#endif
+
+#define CAPABILITY( x ) \
+    THREAD_ANNOTATION_ATTRIBUTE__(capability(x))
+
+#define SCOPED_CAPABILITY \
+    THREAD_ANNOTATION_ATTRIBUTE__(scoped_lockable)
+
+#define GUARDED_BY( x ) \
+    THREAD_ANNOTATION_ATTRIBUTE__(guarded_by(x))
+
+#define PT_GUARDED_BY( x ) \
+    THREAD_ANNOTATION_ATTRIBUTE__(pt_guarded_by(x))
+
+#define ACQUIRED_BEFORE( ... ) \
+    THREAD_ANNOTATION_ATTRIBUTE__(acquired_before(__VA_ARGS__))
+
+#define ACQUIRED_AFTER( ... ) \
+    THREAD_ANNOTATION_ATTRIBUTE__(acquired_after(__VA_ARGS__))
+
+#define REQUIRES( ... ) \
+    THREAD_ANNOTATION_ATTRIBUTE__(requires_capability(__VA_ARGS__))
+
+#define REQUIRES_SHARED( ... ) \
+    THREAD_ANNOTATION_ATTRIBUTE__(requires_shared_capability(__VA_ARGS__))
+
+#define ACQUIRE( ... ) \
+    THREAD_ANNOTATION_ATTRIBUTE__(acquire_capability(__VA_ARGS__))
+
+#define ACQUIRE_SHARED( ... ) \
+    THREAD_ANNOTATION_ATTRIBUTE__(acquire_shared_capability(__VA_ARGS__))
+
+#define RELEASE( ... ) \
+    THREAD_ANNOTATION_ATTRIBUTE__(release_capability(__VA_ARGS__))
+
+#define RELEASE_SHARED( ... ) \
+    THREAD_ANNOTATION_ATTRIBUTE__(release_shared_capability(__VA_ARGS__))
+
+#define TRY_ACQUIRE( ... ) \
+    THREAD_ANNOTATION_ATTRIBUTE__(try_acquire_capability(__VA_ARGS__))
+
+#define TRY_ACQUIRE_SHARED( ... ) \
+    THREAD_ANNOTATION_ATTRIBUTE__(try_acquire_shared_capability(__VA_ARGS__))
+
+#define EXCLUDES( ... ) \
+    THREAD_ANNOTATION_ATTRIBUTE__(locks_excluded(__VA_ARGS__))
+
+#define ASSERT_CAPABILITY( x ) \
+    THREAD_ANNOTATION_ATTRIBUTE__(assert_capability(x))
+
+#define ASSERT_SHARED_CAPABILITY( x ) \
+    THREAD_ANNOTATION_ATTRIBUTE__(assert_shared_capability(x))
+
+#define RETURN_CAPABILITY( x ) \
+    THREAD_ANNOTATION_ATTRIBUTE__(lock_returned(x))
+
+#define NO_THREAD_SAFETY_ANALYSIS \
+    THREAD_ANNOTATION_ATTRIBUTE__(no_thread_safety_analysis)
+
+// Replaced by TRY_ACQUIRE
+#define EXCLUSIVE_TRYLOCK_FUNCTION( ... ) \
+  THREAD_ANNOTATION_ATTRIBUTE__(exclusive_trylock_function(__VA_ARGS__))
+
+// Replaced by TRY_ACQUIRE_SHARED
+#define SHARED_TRYLOCK_FUNCTION( ... ) \
+  THREAD_ANNOTATION_ATTRIBUTE__(shared_trylock_function(__VA_ARGS__))
+
+// Replaced by RELEASE and RELEASE_SHARED
+#define UNLOCK_FUNCTION( ... ) \
+	THREAD_ANNOTATION_ATTRIBUTE__(unlock_function(__VA_ARGS__))
+
 /////////////////////////////////////////////////////////////////////////////
 // HELPERS
 /////////////////////////////////////////////////////////////////////////////
@@ -1098,7 +1178,7 @@ public:
 
 	/// generic sort
 	template < typename F >
-	void Sort ( F&& COMP, int iStart = 0, int iEnd = -1 )
+	void Sort ( F&& COMP, int iStart = 0, int iEnd = -1 ) NO_THREAD_SAFETY_ANALYSIS
 	{
 		if ( m_iCount<2 )
 			return;
@@ -1114,7 +1194,7 @@ public:
 	/// generic binary search
 	/// assumes that the array is sorted in ascending order
 	template < typename U, typename PRED >
-	T * BinarySearch ( const PRED &tPred, U tRef ) const
+	T * BinarySearch ( const PRED &tPred, U tRef ) const NO_THREAD_SAFETY_ANALYSIS
 	{
 		return sphBinarySearch ( m_pData, m_pData + m_iCount - 1, tPred, tRef );
 	}
@@ -1129,7 +1209,7 @@ public:
 	/// generic linear search - 'ARRAY_ANY' replace
 	/// see 'Contains()' below for examlpe of usage.
 	template < typename FILTER >
-	inline bool FindFirst( FILTER&& cond ) const
+	inline bool FindFirst( FILTER&& cond ) const NO_THREAD_SAFETY_ANALYSIS
 	{
 		for ( int i = 0; i<m_iCount; ++i )
 			if ( cond ( m_pData[i] ) )
@@ -1138,7 +1218,7 @@ public:
 	}
 
 	template <typename FILTER >
-	inline int GetFirst( FILTER&& cond ) const
+	inline int GetFirst( FILTER&& cond ) const NO_THREAD_SAFETY_ANALYSIS
 	{
 		for ( int i = 0; i<m_iCount; ++i )
 			if ( cond ( m_pData[i] ) )
@@ -1148,7 +1228,7 @@ public:
 
 	/// generic 'ARRAY_ALL'
 	template <typename FILTER>
-	inline bool TestAll( FILTER&& cond ) const
+	inline bool TestAll( FILTER&& cond ) const NO_THREAD_SAFETY_ANALYSIS
 	{
 		for ( int i = 0; i<m_iCount; ++i )
 			if ( !cond ( m_pData[i] ) )
@@ -1159,21 +1239,21 @@ public:
 	/// Apply an action to every member
 	/// Apply ( [] (T& item) {...} );
 	template < typename ACTION >
-	void Apply( ACTION&& Verb ) const
+	void Apply( ACTION&& Verb ) const NO_THREAD_SAFETY_ANALYSIS
 	{
 		for ( int i = 0; i<m_iCount; ++i )
 			Verb ( m_pData[i] );
 	}
 
 	/// generic linear search
-	bool Contains ( T tRef ) const
+	bool Contains ( T tRef ) const NO_THREAD_SAFETY_ANALYSIS
 	{
 		return FindFirst ( [&] ( const T &v ) { return tRef==v; } );
 	}
 
 	/// generic linear search
 	template < typename FUNCTOR, typename U >
-	bool Contains ( FUNCTOR&& COMP, U tValue )
+	bool Contains ( FUNCTOR&& COMP, U tValue ) NO_THREAD_SAFETY_ANALYSIS
 	{
 		return FindFirst ( [&] ( const T &v ) { return COMP.IsEq ( v, tValue ); } );
 	}
@@ -1486,7 +1566,7 @@ public:
 		assert ( ( &tValue<m_pData || &tValue>=( m_pData + m_iCount ) ) && "inserting own value (like last()) by ref!" );
 		if ( m_iCount>=m_iLimit )
 			Reserve ( 1 + m_iCount );
-		m_pData[m_iCount++] = std::forward<T> ( tValue );
+		m_pData[m_iCount++] = std::move ( tValue );
 	}
 
 	template<typename S=STORE>
@@ -1495,7 +1575,7 @@ public:
 		assert (( &tValue<m_pData || &tValue>=( m_pData+m_iCount )) && "inserting own value (like last()) by ref!" );
 		if ( m_iCount>=m_iLimit )
 			Reserve ( 1+m_iCount );
-		new ( m_pData+m_iCount++ ) T ( std::forward<T> ( tValue ));
+		new ( m_pData+m_iCount++ ) T ( std::move ( tValue ));
 	}
 
 	template<typename S=STORE, class... Args>
@@ -3713,83 +3793,6 @@ const T & SingleC_T ()
 /// what kind of threading lib do we have? The number of frames in the stack depends from it
 bool sphIsLtLib();
 #endif
-
-//////////////////////////////////////////////////////////////////////////
-
-#if defined(__clang__)
-#define THREAD_ANNOTATION_ATTRIBUTE__(x) __attribute__((x))
-#else
-#define THREAD_ANNOTATION_ATTRIBUTE__( x ) // no-op
-#endif
-
-#define CAPABILITY( x ) \
-    THREAD_ANNOTATION_ATTRIBUTE__(capability(x))
-
-#define SCOPED_CAPABILITY \
-    THREAD_ANNOTATION_ATTRIBUTE__(scoped_lockable)
-
-#define GUARDED_BY( x ) \
-    THREAD_ANNOTATION_ATTRIBUTE__(guarded_by(x))
-
-#define PT_GUARDED_BY( x ) \
-    THREAD_ANNOTATION_ATTRIBUTE__(pt_guarded_by(x))
-
-#define ACQUIRED_BEFORE( ... ) \
-    THREAD_ANNOTATION_ATTRIBUTE__(acquired_before(__VA_ARGS__))
-
-#define ACQUIRED_AFTER( ... ) \
-    THREAD_ANNOTATION_ATTRIBUTE__(acquired_after(__VA_ARGS__))
-
-#define REQUIRES( ... ) \
-    THREAD_ANNOTATION_ATTRIBUTE__(requires_capability(__VA_ARGS__))
-
-#define REQUIRES_SHARED( ... ) \
-    THREAD_ANNOTATION_ATTRIBUTE__(requires_shared_capability(__VA_ARGS__))
-
-#define ACQUIRE( ... ) \
-    THREAD_ANNOTATION_ATTRIBUTE__(acquire_capability(__VA_ARGS__))
-
-#define ACQUIRE_SHARED( ... ) \
-    THREAD_ANNOTATION_ATTRIBUTE__(acquire_shared_capability(__VA_ARGS__))
-
-#define RELEASE( ... ) \
-    THREAD_ANNOTATION_ATTRIBUTE__(release_capability(__VA_ARGS__))
-
-#define RELEASE_SHARED( ... ) \
-    THREAD_ANNOTATION_ATTRIBUTE__(release_shared_capability(__VA_ARGS__))
-
-#define TRY_ACQUIRE( ... ) \
-    THREAD_ANNOTATION_ATTRIBUTE__(try_acquire_capability(__VA_ARGS__))
-
-#define TRY_ACQUIRE_SHARED( ... ) \
-    THREAD_ANNOTATION_ATTRIBUTE__(try_acquire_shared_capability(__VA_ARGS__))
-
-#define EXCLUDES( ... ) \
-    THREAD_ANNOTATION_ATTRIBUTE__(locks_excluded(__VA_ARGS__))
-
-#define ASSERT_CAPABILITY( x ) \
-    THREAD_ANNOTATION_ATTRIBUTE__(assert_capability(x))
-
-#define ASSERT_SHARED_CAPABILITY( x ) \
-    THREAD_ANNOTATION_ATTRIBUTE__(assert_shared_capability(x))
-
-#define RETURN_CAPABILITY( x ) \
-    THREAD_ANNOTATION_ATTRIBUTE__(lock_returned(x))
-
-#define NO_THREAD_SAFETY_ANALYSIS \
-    THREAD_ANNOTATION_ATTRIBUTE__(no_thread_safety_analysis)
-
-// Replaced by TRY_ACQUIRE
-#define EXCLUSIVE_TRYLOCK_FUNCTION( ... ) \
-  THREAD_ANNOTATION_ATTRIBUTE__(exclusive_trylock_function(__VA_ARGS__))
-
-// Replaced by TRY_ACQUIRE_SHARED
-#define SHARED_TRYLOCK_FUNCTION( ... ) \
-  THREAD_ANNOTATION_ATTRIBUTE__(shared_trylock_function(__VA_ARGS__))
-
-// Replaced by RELEASE and RELEASE_SHARED
-#define UNLOCK_FUNCTION( ... ) \
-	THREAD_ANNOTATION_ATTRIBUTE__(unlock_function(__VA_ARGS__))
 
 /// capability for tracing threads
 typedef int CAPABILITY ( "role" ) ThreadRole;

@@ -15,7 +15,6 @@
 #include "sphinxint.h"
 #include "sphinxpq.h"
 #include "searchdreplication.h"
-#include "sphinxjson.h"
 #include "accumulator.h"
 #include "fileutils.h"
 #include <math.h>
@@ -1428,7 +1427,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 				return false;
 			}
 
-			PercolateIndex_i * pIndex = (PercolateIndex_i * )pDesc->m_pIndex;
+			auto * pIndex = (PercolateIndex_i * )pDesc->m_pIndex;
 
 			StoredQueryDesc_t tPQ;
 			LoadStoredQuery ( pRequest, iRequestLen, tPQ );
@@ -1437,7 +1436,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 			CSphString sError;
 			PercolateQueryArgs_t tArgs ( tPQ );
 			tArgs.m_bReplace = true;
-			pCmd->m_pStored = pIndex->Query ( tArgs, sError );
+			pCmd->m_pStored = pIndex->CreateQuery ( tArgs, sError );
 
 			if ( !pCmd->m_pStored )
 			{
@@ -1701,7 +1700,7 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 
 		case ReplicationCommand_e::PQUERY_DELETE:
 			assert ( tCmd.m_dDeleteQueries.GetLength() || !tCmd.m_sDeleteTags.IsEmpty() );
-			SaveDeleteQuery ( tCmd.m_dDeleteQueries.Begin(), tCmd.m_dDeleteQueries.GetLength(), tCmd.m_sDeleteTags.cstr(), dBufQueries );
+			SaveDeleteQuery ( tCmd.m_dDeleteQueries, tCmd.m_sDeleteTags.cstr(), dBufQueries );
 
 			ARRAY_FOREACH ( i, tCmd.m_dDeleteQueries )
 			{

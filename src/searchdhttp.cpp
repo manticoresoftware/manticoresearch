@@ -1503,7 +1503,7 @@ bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const Jso
 		tArgs.m_bQL = bQueryQL;
 
 		// add query
-		StoredQuery_i * pStored = pIndex->Query ( tArgs, sError );
+		StoredQuery_i * pStored = pIndex->CreateQuery ( tArgs, sError );
 		if ( pStored )
 		{
 			RtAccum_t tAcc ( false );

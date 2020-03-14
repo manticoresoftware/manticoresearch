@@ -1159,7 +1159,7 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	if ( m_pFieldFilter && szQuery )
 	{
 		pFieldFilter = m_pFieldFilter->Clone();
-		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
+		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, dFiltered, true ) )
 			sModifiedQuery = dFiltered.Begin();
 	}
 
@@ -14923,7 +14923,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	if ( m_pFieldFilter && szQuery )
 	{
 		pFieldFilter = m_pFieldFilter->Clone();
-		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
+		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, dFiltered, true ) )
 			sModifiedQuery = dFiltered.Begin();
 	}
 
@@ -15148,8 +15148,11 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 	return pExpand;
 }
 
-XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & tSettings, int iExpandKeywords )
+void sphQueryExpandKeywords ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, int iExpandKeywords )
 {
+	assert ( ppNode );
+	assert ( *ppNode );
+	auto& pNode = *ppNode;
 	// only if expansion makes sense at all
 	assert ( tSettings.m_iMinInfixLen>0 || tSettings.m_iMinPrefixLen>0 || tSettings.m_bIndexExactWords );
 	assert ( iExpandKeywords!=KWE_DISABLED );
@@ -15159,10 +15162,10 @@ XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & 
 	{
 		ARRAY_FOREACH ( i, pNode->m_dChildren )
 		{
-			pNode->m_dChildren[i] = sphQueryExpandKeywords ( pNode->m_dChildren[i], tSettings, iExpandKeywords );
+			sphQueryExpandKeywords ( &pNode->m_dChildren[i], tSettings, iExpandKeywords );
 			pNode->m_dChildren[i]->m_pParent = pNode;
 		}
-		return pNode;
+		return;
 	}
 
 	// if that's a phrase/proximity node, create a very special, magic phrase/proximity node
@@ -15171,7 +15174,7 @@ XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & 
 		assert ( pNode->m_dWords.GetLength()>1 );
 		ARRAY_FOREACH ( i, pNode->m_dWords )
 		{
-			XQNode_t * pWord = new XQNode_t ( pNode->m_dSpec );
+			auto * pWord = new XQNode_t ( pNode->m_dSpec );
 			pWord->m_dWords.Add ( pNode->m_dWords[i] );
 			pNode->m_dChildren.Add ( ExpandKeyword ( pWord, tSettings, iExpandKeywords ) );
 			pNode->m_dChildren.Last()->m_iAtomPos = pNode->m_dWords[i].m_iAtomPos;
@@ -15179,12 +15182,12 @@ XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & 
 		}
 		pNode->m_dWords.Reset();
 		pNode->m_bVirtuallyPlain = true;
-		return pNode;
+		return;
 	}
 
 	// skip empty plain nodes
 	if ( pNode->m_dWords.GetLength()<=0 )
-		return pNode;
+		return;
 
 	// process keywords for plain nodes
 	assert ( pNode->m_dWords.GetLength()==1 );
@@ -15193,12 +15196,10 @@ XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & 
 	if ( tKeyword.m_sWord.Begins("=")
 		|| tKeyword.m_sWord.Begins("*")
 		|| tKeyword.m_sWord.Ends("*") )
-	{
-		return pNode;
-	}
+		return;
 
 	// do the expansion
-	return ExpandKeyword ( pNode, tSettings, iExpandKeywords );
+	pNode = ExpandKeyword ( pNode, tSettings, iExpandKeywords );
 }
 
 
@@ -15891,7 +15892,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	if ( m_pFieldFilter && sModifiedQuery )
 	{
 		pFieldFilter = m_pFieldFilter->Clone();
-		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
+		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, dFiltered, true ) )
 			sModifiedQuery = dFiltered.Begin();
 	}
 
@@ -15922,7 +15923,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	int iExpandKeywords = ExpandKeywords ( m_iExpandKeywords, pQuery->m_eExpandKeywords, m_tSettings );
 	if ( iExpandKeywords!=KWE_DISABLED )
 	{
-		tParsed.m_pRoot = sphQueryExpandKeywords ( tParsed.m_pRoot, m_tSettings, iExpandKeywords );
+		sphQueryExpandKeywords ( &tParsed.m_pRoot, m_tSettings, iExpandKeywords );
 		tParsed.m_pRoot->Check ( true );
 	}
 
@@ -16017,7 +16018,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			int iExpandKeywords = ExpandKeywords ( m_iExpandKeywords, pQueries[i].m_eExpandKeywords, m_tSettings );
 			if ( iExpandKeywords!=KWE_DISABLED )
 			{
-				dXQ[i].m_pRoot = sphQueryExpandKeywords ( dXQ[i].m_pRoot, m_tSettings, iExpandKeywords );
+				sphQueryExpandKeywords ( &dXQ[i].m_pRoot, m_tSettings, iExpandKeywords );
 				dXQ[i].m_pRoot->Check ( true );
 			}
 
@@ -16907,7 +16908,7 @@ bool Explain ( ExplainQueryArgs_t & tArgs )
 
 	if ( tArgs.m_pFieldFilter && sModifiedQuery )
 	{
-		if ( tArgs.m_pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
+		if ( tArgs.m_pFieldFilter->Apply ( sModifiedQuery, dFiltered, true ) )
 			sModifiedQuery = dFiltered.Begin();
 	}
 
@@ -16932,7 +16933,7 @@ bool Explain ( ExplainQueryArgs_t & tArgs )
 	int iExpandKeywords = ExpandKeywords ( tArgs.m_iExpandKeywords, QUERY_OPT_DEFAULT, *tArgs.m_pSettings );
 	if ( iExpandKeywords!=KWE_DISABLED )
 	{
-		tParsed.m_pRoot = sphQueryExpandKeywords ( tParsed.m_pRoot, *tArgs.m_pSettings, iExpandKeywords );
+		sphQueryExpandKeywords ( &tParsed.m_pRoot, *tArgs.m_pSettings, iExpandKeywords );
 		tParsed.m_pRoot->Check ( true );
 	}
 

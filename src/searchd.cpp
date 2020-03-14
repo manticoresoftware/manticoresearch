@@ -10817,11 +10817,11 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 			tArgs.m_bQL		 = true;
 
 			// add query
-			PercolateIndex_i * pQIndex = (PercolateIndex_i *)pIndex;
-			StoredQuery_i * pStored = pQIndex->Query ( tArgs, sError );
+			auto * pQIndex = (PercolateIndex_i *)pIndex;
+			StoredQuery_i * pStored = pQIndex->CreateQuery ( tArgs, sError );
 			if ( pStored )
 			{
-				ReplicationCommand_t * pCmd = pAccum->AddCommand ( ReplicationCommand_e::PQUERY_ADD, tStmt.m_sCluster, tStmt.m_sIndex );
+				auto * pCmd = pAccum->AddCommand ( ReplicationCommand_e::PQUERY_ADD, tStmt.m_sCluster, tStmt.m_sIndex );
 				pCmd->m_pStored  = pStored;
 
 				dIds.Add ( pStored->m_iQUID );

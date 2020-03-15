@@ -1024,14 +1024,14 @@ DocstoreDoc_t Docstore_c::ReadDocFromSmallBlock ( const Block_t & tBlock, RowID_
 	}
 
 	ScopedBlock_t tScopedBlock;
-	CSphScopedPtr<BYTE> tDataPtr(nullptr);
+	CSphFixedVector<BYTE> tDataPtr {0};	// scoped array ptr
 	if ( bFromCache )
 	{
 		tScopedBlock.m_uUID = m_uUID;
 		tScopedBlock.m_tOffset = tBlock.m_tOffset;
 	}
 	else
-		tDataPtr = tBlockData.m_pData;
+		tDataPtr.Set ( tBlockData.m_pData, 0 );
 
 	CSphFixedVector<int> dFieldInRset (	m_tFields.GetNumFields() );
 	CreateFieldRemap ( dFieldInRset, pFieldIds );
@@ -1102,14 +1102,14 @@ void Docstore_c::ProcessBigBlockField ( int iField, const FieldInfo_t & tInfo, i
 	}
 
 	ScopedBlock_t tScopedBlock;
-	CSphScopedPtr<BYTE> tDataPtr(nullptr);
+	CSphFixedVector<BYTE> tDataPtr {0};	// scoped array ptr
 	if ( bFromCache )
 	{
 		tScopedBlock.m_uUID = m_uUID;
 		tScopedBlock.m_tOffset = tOffset;
 	}
 	else
-		tDataPtr = tBlockData.m_pData;
+		tDataPtr.Set ( tBlockData.m_pData, 0 );
 
 	PackData ( tResult.m_dFields[iFieldInRset], tBlockData.m_pData, tBlockData.m_uSize, m_tFields.GetField(iField).m_eType==DOCSTORE_TEXT, bPack );
 

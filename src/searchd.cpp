@@ -19758,6 +19758,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	for ( const auto &dOptIndex : dOptIndexes )
 		sphSplit ( dExactIndexes, dOptIndex.cstr (), "," );
 
+	SetPercolateQueryParserFactory ( PercolateQueryParserFactory );
 	ConfigureAndPreload ( hConf, dExactIndexes );
 
 	///////////
@@ -19815,7 +19816,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		sphLockUn ( g_iPidFD );
 
 	sphRTConfigure ( hSearchd, bTestMode );
-	SetPercolateQueryParserFactory ( PercolateQueryParserFactory );
 	SetPercolateThreads ( g_iDistThreads );
 	SetUidShort ( bTestMode );
 	InitDocstore ( g_iDocstoreCache );

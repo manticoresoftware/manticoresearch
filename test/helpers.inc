@@ -1902,7 +1902,8 @@ class SphinxConfig
 			$status = '';
 			if ( $system_cmd=="restart-daemon" )
 			{
-				mysqli_close($connection);
+			    if ($connection)
+				    mysqli_close($connection);
 				$status = RestartDaemon ($status);
 				$connection = ConnectSpecificQL($use_agent);
 			} else if ( $system_cmd=="start-agent" )

@@ -471,6 +471,11 @@ bool BlockCache_c::Add ( DWORD uUID, SphOffset_t tOffset, BlockData_t & tData )
 {
 	ScopedMutex_t tLock(m_tLock);
 
+	// if another thread managed to add a similar block while we were uncompressing ours, let it be
+	LinkedBlock_t ** ppBlock = m_tHash.Find ( { uUID, tOffset } );
+	if ( ppBlock )
+		return false;
+
 	DWORD uSpaceNeeded = tData.m_uSize + sizeof(LinkedBlock_t);
 	if ( !HaveSpaceFor ( uSpaceNeeded ) )
 	{
@@ -482,11 +487,6 @@ bool BlockCache_c::Add ( DWORD uUID, SphOffset_t tOffset, BlockData_t & tData )
 		if ( !HaveSpaceFor ( uSpaceNeeded ) )
 			return false;
 	}
-
-#ifndef NDEBUG
-	LinkedBlock_t ** ppBlock = m_tHash.Find ( { uUID, tOffset } );
-	assert ( !ppBlock );
-#endif
 
 	LinkedBlock_t * pBlock = new LinkedBlock_t;
 	*(BlockData_t*)pBlock = tData;

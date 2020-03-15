@@ -1,4 +1,5 @@
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0">
+<xsl:param name="pass" select="'this'"/>
 <xsl:output method="xml" indent="yes"/>
 <!-- convert ctest output to junit format -->
 <!--
@@ -93,7 +94,7 @@ Extended by providing total Start date, total time, total test stats
 
     <xsl:template match="Testing/Test">
         <xsl:variable name="testcasename"><xsl:value-of select="Name"/></xsl:variable>
-        <xsl:variable name="testclassname"><xsl:value-of select=" concat('this', substring(Path,2))"/></xsl:variable>
+        <xsl:variable name="testclassname"><xsl:value-of select="concat($pass, substring(Path,2))"/></xsl:variable>
 		<xsl:variable name="exectime">
 			<xsl:for-each select="Results/NamedMeasurement">
 				<xsl:if test="@name='Execution Time'">

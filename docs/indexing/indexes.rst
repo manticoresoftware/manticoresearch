@@ -40,7 +40,7 @@ data. See :ref:`live_index_updates` for details.
 
 Plain indexes are available only in :ref:`plain_mode` of searchd.
 
-Real-Time indexes
+Real-time indexes
 ~~~~~~~~~~~~~~~~~
 
 **RT indexes** enable you to implement dynamic updates and
@@ -73,7 +73,7 @@ Available only in :ref:`plain_mode`.
 Percolate indexes
 ~~~~~~~~~~~~~~~~~
 
-Percolate indexes are special Real-Time indexes that store queries instead of documents. They are used for prospective searches ( or "search in reverse").
+Percolate indexes are special Real-time indexes that store queries instead of documents. They are used for prospective searches ( or "search in reverse").
 Refer to :ref:`percolate_query` for more details.
 
 
@@ -226,14 +226,12 @@ searchd restart in most cases.
 Operations on indexes
 ~~~~~~~~~~~~~~~~~~~~~
 
-In :ref:`rt_mode` supported indexes (RT,PQ and distributed) can be created/dropped with :ref:`create_table_syntax` / :ref:`drop_table_syntax`.
+In :ref:`rt_mode` supported indexes (RT, PQ and distributed) can be created/dropped with :ref:`create_table_syntax` / :ref:`drop_table_syntax`.
 
-In :ref:`plain_mode` Real-Time, percolate and template indexes can be declared in the configuration and they will be created (with empty data) at daemon start.
+In :ref:`plain_mode` Real-time, percolate and template indexes can be declared in the configuration and they will be created (with empty data) at daemon start.
 
 Plain indexes can only be created by **indexer** tool.
-If a plain index is only declared in configuration,but not created, the daemon will print a warning about that.
-It must be also noted that the daemon requires at least one index of type RT, percolate or plain in order to start.
-
+If a plain index is only declared in configuration, but not created, the daemon will print a warning about that.
 
 Loading or discarding indexes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -243,7 +241,7 @@ This section is for :ref:`plain_mode`.
 At startup, daemon will try to load and make available all indexes found in the configuration file.
 
 HUP signal can be used to make the daemon reload the configuration. This way new indexes can be loaded or existing indexes can be discarded while the daemon is running.
-Changing the type of an index, for example from template to Real-Time, can also be performed during a configuration reload.
+Changing the type of an index, for example from template to Real-time, can also be performed during a configuration reload.
 
 Alternative to signaling HUP to searchd daemon, the :ref:`RELOAD INDEXES<reload_indexes_syntax>` SphinxQL command can be used.
 
@@ -254,7 +252,7 @@ Index changes
 ^^^^^^^^^^^^^
 Index schema can be changed on-the-fly in case of attribute. Full-text fields however require re-creating the index.
 
-Change of tokenization settings requires a remaking in case of plain indexes. For Real-Time indexes, these can be made on-the-fly using
+Change of tokenization settings requires a remaking in case of plain indexes. For Real-time indexes, these can be made on-the-fly using
 :ref:`ALTER RECONFIGURE<alter_syntax>` but they will affect only new content added to index, as it's not possible yet to re-tokenize already indexed texts.
 
 Some settings like :ref:`access_plain_attrs`, which don't alter in any way the index, don't require an index rebuild, just a reload.

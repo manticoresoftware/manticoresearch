@@ -8,9 +8,9 @@ The Manticore Search daemon can serve multiple data collections, called indexes.
 Manticore Search supports two storage index types:
 
 * plain (also called offline or disk) index. Data is indexed once at creation, it supports online rebuilding and online updates for non-text attributes (available only for  :ref:`plain_mode`)
-* RealTime index. Similar to a database table, online updates are possible at any given time
+* Real-time index. Similar to a database table, online updates are possible at any given time
 
-In addition, a special index based on RealTime type, called `percolate`, can be used to store :ref:`Percolate Queries <percolate_query>`.
+In addition, a special index based on Real-time type, called `percolate`, can be used to store :ref:`Percolate Queries <percolate_query>`.
 
 In the current version, indexes use a schema like a normal database table. The schema can have 3 big types of columns:
 
@@ -92,20 +92,20 @@ An example of a plain index configuration using a MySQL source:
    }
    
 
-Real-Time indexes
+Real-time indexes
 ~~~~~~~~~~~~~~~~~
 
-Real-Time indexes allow online updates, but updating full-text data and non-numeric attributes require a full row replace.
+Real-time indexes allow online updates, but updating full-text data and non-numeric attributes require a full row replace.
 
-The Real-Time index  starts empty and you can add, replace, update or delete data in the same fashion as for a database table. The updates are first held into a memory zone, defined by :ref:`rt_mem_limit`. 
+The Real-time index  starts empty and you can add, replace, update or delete data in the same fashion as for a database table. The updates are first held into a memory zone, defined by :ref:`rt_mem_limit`. 
 When this gets filled, it is dumped as disk chunk -  which as structure is similar with a plain index. As the number of disk chunks increase, the search performance decreases, as the searching is done sequentially on the chunks.
 To avoid that, there is a command that can merge the disk chunks into a single one - :ref:`optimize_index_syntax`. 
 
-Populating a Real-Time index can be done in two ways: firing INSERTs or converting a plain index to become RealTime.
+Populating a Real-time index can be done in two ways: firing INSERTs or converting a plain index to become Real-time.
 In case of INSERTs, using a single worker (a script or code) that inserts one record at a time can be slow. You can speed this by batching many rows into one and by using multiple workers that perform inserting. 
 Parallel inserts will be faster but also come at using more CPU. The size of the data buffer memory (which we call RAM chunk) also influence the speed of inserting.
 
-An example of Real-Time index configuration:
+An example of Real-time index configuration:
 
 
 .. code-block::  none

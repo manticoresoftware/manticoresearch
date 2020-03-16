@@ -31,26 +31,26 @@ Columns data types:
 +--------------+---------------------+-------------------+----------------------+
 | integer      | rt_attr_uint        |                   |  int uint            |
 +--------------+---------------------+-------------------+----------------------+
-|  float       | rt_attr_float       |                   |                      |
+| float        | rt_attr_float       |                   |                      |
 +--------------+---------------------+-------------------+----------------------+
-|  multi       | rt_attr_multi       |                   |                      |
+| multi        | rt_attr_multi       |                   |                      |
 +--------------+---------------------+-------------------+----------------------+
-|  multi64     | rt_attr_multi64     |                   |                      |
+| multi64      | rt_attr_multi64     |                   |                      |
 +--------------+---------------------+-------------------+----------------------+
-|  bool        | rt_attr_bool        |                   |                      |
+| bool         | rt_attr_bool        |                   |                      |
 +--------------+---------------------+-------------------+----------------------+
-|  json        | rt_attr_json        |                   |                      |
+| json         | rt_attr_json        |                   |                      |
 +--------------+---------------------+-------------------+----------------------+
-|  string      | rt_attr_string      |                   |                      |
+| string       | rt_attr_string      |                   |                      |
 +--------------+---------------------+-------------------+----------------------+
-|  timestamp   | rt_attr_timestamp   |                   |                      |
+| timestamp    | rt_attr_timestamp   |                   |                      |
 +--------------+---------------------+-------------------+----------------------+
-|  bit(n)      | rt_attr_uint        |                   |                      |
+| bit(n)       | rt_attr_uint        |                   |                      |
 +--------------+---------------------+-------------------+----------------------+
 
-Text type support additional options. By default both options - indexed and stored - are enabled.
+The "text" type supports additional options. By default both "indexed" and "stored" are enabled.
 
-Table options are the same as options defined at :ref:`index_command_reference` and supported by RT, PQ and distributed index types: 
+Table options are the same as defined at :ref:`index_command_reference` and are supported by RT, PQ and distributed index types: 
 
   - :ref:`access_plain_attrs` 
   - :ref:`access_blob_attrs`  
@@ -107,16 +107,16 @@ Table options are the same as options defined at :ref:`index_command_reference` 
   - :ref:`wordforms`
   
   
-Options must be separated by whitespace.
+The options must be separated by whitespace.
 
 Default `type` is rt.
 
-Optional `IF EXISTS` can be used to not return error in case index already exists.
+Optionally `IF EXISTS` can be used to not return error in case the index already exists.
 
 
 .. code-block:: mysql
 
-    mysql> CREATE TABLE test1 ( title text, tag integer ) s;
+    mysql> CREATE TABLE test1 ( title text, tag integer );
     Query OK, 0 rows affected (0.00 sec)
 
     mysql> CREATE TABLE test2 (t1 text indexed stored, t2 text indexed, t3 text indexed, gid int) rt_mem_limit='128k' min_infix_len='3';

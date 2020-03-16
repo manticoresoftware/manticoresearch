@@ -19,7 +19,7 @@ Supported endpoints:
 /sql API
 --------
 
-Allows running a  SphinxQL statement, set as query parameter.
+Allows running a SphinxQL statement, set as query parameter.
 
 The query payload **must** be URL encoded, otherwise query statements with '=' (filtering or setting options) will result in error.
 
@@ -56,9 +56,9 @@ The response is in JSON format and contains hits information and time of executi
       }
     }
 
-By default '/sql' allow only SELECT statements. To run any time of SQL statement, the payload must have parameter 'mode' set to 'raw' value with second parameter being the 'query' with the desired statement to be executed.
-In this case the statement is passed inside without any substitutions/url decoding.
-The response is an equivalent of a SQL result set in JSON format with 'columns' and 'data' objects.
+By default '/sql' allows only SELECT statements. To run any time of SQL statement, the payload must have parameter 'mode' set to 'raw' value with second parameter being the 'query' with the statement to be executed.
+In this case the statement is passed over without any substitutions/url decoding.
+The response is an equivalent of an SQL result set in JSON format with 'columns' and 'data' objects.
 
 
 .. code-block:: bash

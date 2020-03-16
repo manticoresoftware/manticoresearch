@@ -5,35 +5,36 @@ A guide on configuration file
 
 
 
-Prior Manticore Search 3.3.0, indexes had to be defined in a configuration file, now called  plain mode.
+Prior to Manticore Search 3.3.0 indexes had to be defined in a configuration file which is now called "plain mode".
 
-Starting with 3.3.0 a new mode - RT mode - is introduced in which the configuration file contains only daemon settings and indexes can be created/dropped on-the-fly.
+In 3.3.0 "RT mode" was introduced in which the configuration file contains only daemon settings and indexes can be created/dropped on-the-fly.
 
 .. _rt_mode:
 
 RT mode
 =======
 
-Please note this mode is still in beta and it's possible to suffer syntax changes.
-Starting with 3.3.2 the replication feature is available only in this mode.
-Plain and template indexes are NOT in supported in this mode.
-
-Indexes can be create and dropped with CREATE/DROP TABLE statements, like in traditional databases.
-
-This mode requires no index definition in the configuration and the presence of :ref:`data_dir` directive in 'searchd' section.
+Real-time mode requires no index definition in the configuration and the presence of :ref:`data_dir` directive in 'searchd' section.
 Index files are stored inside :ref:`data_dir`.
+
+Starting with 3.3.2 the replication feature is available only in this mode.
+Plain and template indexes are not in supported in this mode.
+
+Indexes can be created and dropped with CREATE/DROP TABLE statements, like in traditional databases.
+
+Please note this mode is still evolving and minor syntax changes are possible in the nearest future.
 
 .. _plain_mode:
 
 Plain mode
 ==========
 
-In this mode, indexes, regardless of their type, must be defined in the configuration file.
+In this mode indexes, regardless of their type, must be defined in the configuration file.
 New indexes can be added to configuration file and a SIGHUP sent to searchd or :ref:`reload_indexes_syntax` can bring the index alive.
 
-Dropping indexes is only possible by removing them from configuration or by removing the :ref:`path` setting and sending a HUP signal to daemon or restart it.
+Dropping indexes is only possible by removing them from the configuration or by removing the :ref:`path` setting and sending a HUP signal to the daemon or restarting it.
 
-Index files path must be explicit defined in this mode. 
+Index files path must be explicitly defined in this mode. 
 
 Sections
 ========

@@ -284,18 +284,18 @@ Example:
 data_dir
 ~~~~~~~~~~~~
 
-Mandatory for :ref:`plain_mode`.
+Mandatory for :ref:`rt_mode` and if you use replication.
 
-Directory  path used by daemon for storing :
+Directory path used by daemon for storing:
 
 * metadata about indexes
 * index files
 * replication meta info and state 
 
 
-Binlogs are  stored by default inside `data_dir` if :ref:`binlog_path` is not set.
+Binlogs are stored by default inside `data_dir` if :ref:`binlog_path` is not set.
 
-A state sql file with name `state.sql` can be placed in `data_dir` without defining it with :ref:`sphinxql_state`.
+State sql file with name `state.sql` will be placed in `data_dir` unless another path is defined with :ref:`sphinxql_state`.
 
 Example:
 
@@ -551,7 +551,7 @@ You can also specify a protocol handler (listener) to be used for
 connections on this socket. Supported protocol values are :
 
 * ``sphinx`` - native API protocol, used for client connections but also by distributed indexes. Default protocol if none specified.
-* ``mysql`` - MySQL protocol used since 4.1. More details on MySQL protocol support can be found in :ref:`mysql_protocol_support_and_sphinxql` section. Legacy name ``mysql41`` is also supported.
+* ``mysql`` - MySQL protocol. More details on MySQL protocol support can be found in :ref:`mysql_protocol_support_and_sphinxql` section. Legacy name ``mysql41`` is also supported.
 * ``http`` - HTTP protocol. More details can be found in :ref:`httpapi_reference` section.
 * ``replication`` - replication protocol, used for nodes communication. More details can be found in :ref:`replication` section.
 * ``https`` - HTTPS protocol. It uses OpenSSL library to encrypt HTTP traffic. More details can be found in :ref:`httpapi_reference` section.

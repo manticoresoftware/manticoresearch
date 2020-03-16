@@ -8,7 +8,7 @@ Installing and running
 
     $ docker run --name manticore -p 9306:9306 -d manticoresearch/manticore
 
-or using composition:
+or using docker-compose:
 
 .. code-block:: bash
 
@@ -28,18 +28,8 @@ or using composition:
                 soft: -1
                 hard: -1
 			
-			
-Configuration file is located at `/etc/manticoresearch/manticore.conf` .
-Data dir is by default at `/var/lib/manticore` as volume.
-Logs are located at `/var/log/manticore`.
+Please find more info on how to get started with Manticore Search docker here https://github.com/manticoresoftware/docker .
 
-
-* /etc/manticoresearch - location of manticore.conf 
-* /var/lib/manticore - used for index files
-* /var/lib/manticore/log -  used for log files
-
-
-By default a small sql file is run to create a sample RT index. 
 
 Running queries
 ~~~~~~~~~~~~~~~

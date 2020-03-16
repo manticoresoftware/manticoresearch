@@ -5,7 +5,7 @@ Replication
 ===========
 
 .. note::
-  Replication is available only in  :ref:`rt_mode` operation and supported only on Linux platforms.
+  Replication is available only in :ref:`rt_mode` and is supported only on Linux platforms.
 
 Manticore search daemon can replicate a write transaction (``INSERT``, ``REPLACE``, ``DELETE``, ``TRUNCATE``, ``UPDATE``, etc)
 in an index to other nodes in the cluster. 

@@ -6,7 +6,8 @@ Real-time indexes
 Real-time indexes (or RT indexes for brevity) are a backend that lets
 you insert, update, or delete documents (rows) on the fly. While
 querying of RT indexes is possible using any of the available protocols,
-but updating them is only possible via  :doc:`SphinxQL <sphinxql_reference>`   or  :ref:`http_sql` (starting with 3.3.2).
+but updating them is only possible via :doc:`SphinxQL <sphinxql_reference>`
+or :ref:`http_sql` (starting with 3.3.2).
 
 RT indexes overview
 -------------------

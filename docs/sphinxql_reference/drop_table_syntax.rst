@@ -10,7 +10,7 @@ DROP TABLE [IF EXISTS] syntax
 
 DROP TABLE removes an index.
 Available for :ref:`rt_mode` only.
-Optional, 'IF EXISTS' can be used to not return an error in case the desired index to be dropped it doesn't exists.
+Optionally 'IF EXISTS' can be used to not return an error in case the index already doesn't exist.
 
 .. code-block:: mysql
 

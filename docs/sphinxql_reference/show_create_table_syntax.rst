@@ -6,10 +6,10 @@ SHOW CREATE TABLE syntax
 .. code-block:: none
 
 
-    SHOW CREATE TABLE  name
+    SHOW CREATE TABLE name
 	
 	
-Print the CREATE TABLE statement that creates the named table. 
+Prints the CREATE TABLE statement that creates the named table. 
 
 .. code-block:: mysql
 

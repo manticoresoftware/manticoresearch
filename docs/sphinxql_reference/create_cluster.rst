@@ -16,9 +16,9 @@ CREATE CLUSTER syntax
 
 By default, the cluster metadata is saved in the :ref:`data_dir` and can contain the metadata for a single cluster.
 Multiple clusters can be created on same instance, but the cluster metadata files can't be shared in the same folder.
-Therefor, it's required to define own folder for cluster data using 'path` option.
+Therefore, it's required to define its own folder for each new cluster data using 'path` option.
 
-An optional list of nodes can be declared with 'nodes' option. Explicit definition of the nodes list may be required in cases where nodes are located 
+An optional list of nodes can be declared with 'nodes' option. Explicit definition of the nodes list may be required in cases where the nodes are located 
 at different network segments or datacenters.
 
 

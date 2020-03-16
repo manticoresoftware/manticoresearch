@@ -10829,9 +10829,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 		} else
 		{
 			pIndex->AddDocument ( dFields, tDoc, bReplace, tStmt.m_sStringParam, dStrings.Begin(), dMvas, sError, sWarning, pAccum );
-
-			if ( iIdIndex>=0 )
-				dIds.Add ( tDoc.GetAttr ( tIdLoc ) );
+			dIds.Add ( tDoc.GetAttr ( tIdLoc ) );
 
 			pAccum->AddCommand ( ReplicationCommand_e::RT_TRX, tStmt.m_sCluster, tStmt.m_sIndex );
 		}

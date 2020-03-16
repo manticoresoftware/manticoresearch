@@ -722,7 +722,7 @@ The languages that are currently NOT supported:
 
 
 All other languages listed in the following list are supported by default:
-`Unicode languages list <http://www.unicode.org/cldr/charts/latest/supplemental/languages_and_scripts.html/>`_.
+`Unicode languages list <https://www.unicode.org/cldr/charts/latest/supplemental/languages_and_scripts.html>`_.
 
 To be able to work with both cjk and non-cjk languages you should set the options
 in your configuration file as shown below:

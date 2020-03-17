@@ -1,3 +1,9 @@
+workflow:
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "master"
+
 stages:
   - mirroring
   - routines
@@ -21,26 +27,22 @@ pages:
   artifacts:
     paths:
     - public
-  only:
-  - master
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master"
 
 job_mirror:
   stage: mirroring
   tags:
     - dev-host
-  only:
-    - master
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master"
   script:
     - ~/gitsync.sh
 
 simple_tests:
   stage: routines
-  except:
-    refs:
-      - /^noci .*$/
-      - /^nocilinux .*$/
-    variables:
-      - $WHAT
+  rules:
+    - if: $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i
   tags:
     - specdocker
   dependencies: []
@@ -64,12 +66,8 @@ simple_tests:
 
 release_tests:
   stage: routines
-  except:
-    refs:
-      - /^noci .*$/
-      - /^nocilinux .*$/
-    variables:
-      - $WHAT
+  rules:
+    - if: $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i
   tags:
     - specdocker
   dependencies: []
@@ -93,12 +91,8 @@ release_tests:
 
 win_tests:
   stage: routines
-  except:
-    refs:
-      - /^noci .*$/
-      - /^nociwindows .*$/
-    variables:
-      - $WHAT
+  rules:
+    - if: $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_TITLE !~ /^nociwindows .*$/i
   tags:
     - windows
     - build
@@ -129,12 +123,8 @@ win_tests:
 
 build_mac:
   stage: routines
-  except:
-    refs:
-      - /^noci .*$/
-      - /^nocimacos .*$/
-    variables:
-      - $WHAT
+  rules:
+    - if: $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_TITLE !~ /^nocimacos .*$/i
   tags:
     - mac
     - build
@@ -158,12 +148,8 @@ build_mac:
 
 build_bsd:
   stage: routines
-  except:
-    refs:
-      - /^noci .*$/
-      - /^nocifreebsd .*$/
-    variables:
-      - $WHAT
+  rules:
+    - if: $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_TITLE !~ /^nocifreebsd .*$/i
   tags:
     - freebsd
     - build
@@ -189,11 +175,9 @@ build_bsd:
 
 push_results:
   stage: publish
-  except:
-    refs:
-       - /^noci .*$/
-    variables:
-      - $WHAT
+  rules:
+    - if: $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i
+      when: always
   tags:
     - specdocker
   image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
@@ -207,7 +191,6 @@ push_results:
     GIT_STRATEGY: fetch
   script:
     - ctest -S misc/ctest/upload.cmake
-  when: always
   artifacts:
     reports:
       junit: build/junit_*.xml

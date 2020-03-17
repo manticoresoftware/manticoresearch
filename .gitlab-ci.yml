@@ -36,8 +36,9 @@ job_mirror:
 simple_tests:
   stage: routines
   except:
-    - /^noci .*$/
-    - /^nocilinux .*$/
+    refs:
+      - /^noci .*$/
+      - /^nocilinux .*$/
     variables:
       - $WHAT
   tags:
@@ -64,8 +65,9 @@ simple_tests:
 release_tests:
   stage: routines
   except:
-    - /^noci .*$/
-    - /^nocilinux .*$/
+    refs:
+      - /^noci .*$/
+      - /^nocilinux .*$/
     variables:
       - $WHAT
   tags:
@@ -92,8 +94,9 @@ release_tests:
 win_tests:
   stage: routines
   except:
-    - /^noci .*$/
-    - /^nociwindows .*$/
+    refs:
+      - /^noci .*$/
+      - /^nociwindows .*$/
     variables:
       - $WHAT
   tags:
@@ -127,8 +130,9 @@ win_tests:
 build_mac:
   stage: routines
   except:
-    - /^noci .*$/
-    - /^nocimacos .*$/
+    refs:
+      - /^noci .*$/
+      - /^nocimacos .*$/
     variables:
       - $WHAT
   tags:
@@ -155,8 +159,9 @@ build_mac:
 build_bsd:
   stage: routines
   except:
-    - /^noci .*$/
-    - /^nocifreebsd .*$/
+    refs:
+      - /^noci .*$/
+      - /^nocifreebsd .*$/
     variables:
       - $WHAT
   tags:
@@ -185,7 +190,8 @@ build_bsd:
 push_results:
   stage: publish
   except:
-    - /^noci .*$/
+    refs:
+       - /^noci .*$/
     variables:
       - $WHAT
   tags:

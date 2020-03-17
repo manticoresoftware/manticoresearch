@@ -1482,14 +1482,18 @@ static bool ParseJsonUpdate ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_
 	if ( !tSource )
 		return false;
 
+	CSphVector<int64_t> dMVA;
+
 	for ( const auto & tItem : tSource )
 	{
 		bool bFloat = tItem.IsNum();
 		bool bInt = tItem.IsInt();
 		bool bBool = tItem.IsBool();
 		bool bString = tItem.IsStr();
+		bool bArray = tItem.IsArray();
+		bool bObject = tItem.IsObj();
 
-		if ( !bFloat && !bInt && !bBool && !bString )
+		if ( !bFloat && !bInt && !bBool && !bString && !bArray && !bObject )
 		{
 			sError = "unsupported value type";
 			return false;
@@ -1520,9 +1524,15 @@ static bool ParseJsonUpdate ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_
 			tUpd.m_dPool.Add ( sphF2DW ( fValue ) );
 			tTypedAttr.m_eType = SPH_ATTR_FLOAT;
 		}
-		else if ( bString )
+		else if ( bString || bObject )
 		{
+			CSphString sEncoded;
 			const char * szValue = tItem.SzVal();
+			if ( bObject )
+			{
+				sEncoded = tItem.AsString();
+				szValue = sEncoded.cstr();
+			}
 
 			int iLength = strlen ( szValue );
 			tUpd.m_dPool.Add ( tUpd.m_dBlobs.GetLength() );
@@ -1537,6 +1547,30 @@ static bool ParseJsonUpdate ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_
 			}
 
 			tTypedAttr.m_eType = SPH_ATTR_STRING;
+		} else if ( bArray )
+		{
+			dMVA.Resize ( 0 );
+			for ( const auto & tArrayItem : tItem )
+			{
+				if ( !tArrayItem.IsInt() )
+				{
+					sError = "MVA elements should be integers";
+					return false;
+				}
+
+				dMVA.Add ( tArrayItem.IntVal() );
+			}
+			dMVA.Uniq();
+
+			tUpd.m_dPool.Add ( dMVA.GetLength()*2 ); // as 64 bit stored into DWORD vector
+			tTypedAttr.m_eType = SPH_ATTR_UINT32SET;
+
+			for ( int64_t uVal : dMVA )
+			{
+				if ( uVal>UINT_MAX )
+					tTypedAttr.m_eType = SPH_ATTR_INT64SET;
+				*(( int64_t* ) tUpd.m_dPool.AddN ( 2 )) = uVal;
+			}
 		}
 	}
 

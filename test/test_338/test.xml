@@ -302,6 +302,21 @@ index test_rt
 
 <query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
 
+<!-- regression update for MVA attribute as array and for JSON attribute as object -->
+<query endpoint="json/update">
+{
+	"index":"test_rt",
+	"doc":
+	{
+		"mva_col" : [101,102,103],
+		"json_col" : {"array":[201,202,203]}
+	},
+
+	"query": { "range": { "int_col": { "gte": 1 } } }
+}
+</query>
+<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+
 </httpqueries>
 
 </test>

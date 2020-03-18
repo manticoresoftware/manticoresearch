@@ -23505,7 +23505,7 @@ void CSphSource_SQL::DumpRowsHeaderSphinxql ()
 		hSqlSchema.Add ( i, SqlFieldName ( i ));
 
 	m_dDumpMap.Reset();
-	m_dDumpMap.Add ( {hSqlSchema["id"], false} );
+	m_dDumpMap.Add ( {hSqlSchema.Exists("id") ? hSqlSchema["id"] : 0, false} );
 
 	for ( int i = 0; i<m_tSchema.GetFieldsCount (); ++i )
 	{

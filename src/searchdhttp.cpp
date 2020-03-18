@@ -822,7 +822,6 @@ private:
 	}
 };
 
-static const char g_sBypassHead[] = "mode=";
 static const char g_sBypassToken[] = "raw&query=";
 
 class HttpRawSqlHandler_c : public HttpHandler_c, public HttpOptionsTraits_c
@@ -834,9 +833,9 @@ public:
 	{
 	}
 
-	virtual bool Process () override
+	bool Process () override
 	{
-		CSphString sQuery = m_sQuery + sizeof ( g_sBypassHead ) - 1 + sizeof ( g_sBypassToken ) - 1;
+		CSphString sQuery = m_sQuery + sizeof ( "mode=" ) - 1 + sizeof ( g_sBypassToken ) - 1;
 		CSphString sError;
 
 		JsonRowBuffer_c tOut;

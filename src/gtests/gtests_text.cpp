@@ -139,7 +139,10 @@ TEST ( Text, Levenshtein )
 	ASSERT_EQ ( ProxyLevenshtein ( "helga", "belgrave" ), 4 );
 	ASSERT_EQ ( ProxyLevenshtein ( "helga", "anhel" ), 4 );
 }
-
+TEST ( sizeof_literal, text_5 )
+{
+	ASSERT_EQ ( sizeof ("text"), 5);
+}
 
 //////////////////////////////////////////////////////////////////////////
 

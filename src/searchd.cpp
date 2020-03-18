@@ -9168,7 +9168,7 @@ public:
 	}
 
 	// Header of the table with defined num of columns
-	inline void HeadBegin ( int iColumns )
+	inline void HeadBegin ( int iColumns ) override
 	{
 		m_tOut.SendLSBDword ( ((m_uPacketID++)<<24) + SqlSizeOf ( iColumns ) );
 		SendSqlInt ( iColumns );

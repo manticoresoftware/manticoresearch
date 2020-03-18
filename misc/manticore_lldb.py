@@ -104,7 +104,8 @@ def __lldb_init_module(debugger, unused):
         'type summary add StringBuilder_c::LazyComma_c --summary-string "${var.m_sPrefix} ${var.m_sComma} ${var.m_sSuffix}"')
 
     #std::pair
-    debugger.HandleCommand('type summary add -x "std::(__1::)?pair<" --inline-children')
+    debugger.HandleCommand('type summary add -x "^std::(__1::)?pair<" --inline-children')
+#    debugger.HandleCommand('type summary add -x "^std::(__1::)?pair<" --summary-string "${var.first}:${var.second}"')
     debugger.HandleCommand('type summary add --inline-children Comma_c')
     debugger.HandleCommand('type summary add Str_t --summary-string "${var.first}"')
 

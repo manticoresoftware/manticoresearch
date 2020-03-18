@@ -1,12 +1,5 @@
 <!--
-Requirements:
-
- * make sure you have read the Contributing guide (see file CONTRIBUTING.md in the root)
- * filling the below template is required
- * the new code pass all existing tests
- * the new code should be accompanied by new tests
-
-For bugs and features we recommend opening an [issue][issues] to discuss first.
+Make sure you have read the Contributing guide (see file CONTRIBUTING.md in the root) before you submit a pull request.
 -->
 
 **Type of change:**

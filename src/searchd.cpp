@@ -20120,7 +20120,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		sphLockUn ( g_iPidFD );
 
 	sphRTConfigure ( hSearchd, bTestMode );
-	SetPercolateThreads ( g_iDistThreads );
 	SetUidShort ( bTestMode );
 	InitDocstore ( g_iDocstoreCache );
 

@@ -14,6 +14,8 @@
 #include "fileutils.h"
 #include "icu.h"
 #include "accumulator.h"
+#include "indexsettings.h"
+#include "coroutine.h"
 
 #include <atomic>
 
@@ -61,7 +63,6 @@ public:
 	{}
 };
 
-static int g_iPercolateThreads = 1;
 static FileAccessSettings_t g_tDummyFASettings;
 
 class PercolateIndex_c : public PercolateIndex_i
@@ -1164,34 +1165,6 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 		tMatchCtx.m_dDocsMatched.Resize ( iDocsOff );
 }
 
-
-struct PercolateMatchJob_t : public ISphJob
-{
-	const SharedPQSlice_t & m_dStored;
-	CSphAtomic & m_tQueryCounter;
-	PercolateMatchContext_t & m_tMatchCtx;
-
-	const CrashQuery_t * m_pCrashQuery = nullptr;
-
-	PercolateMatchJob_t ( const SharedPQSlice_t & dStored, CSphAtomic & tQueryCounter,
-		PercolateMatchContext_t & tMatchCtx, const CrashQuery_t * pCrashQuery=nullptr )
-		: m_dStored ( dStored )
-		, m_tQueryCounter ( tQueryCounter )
-		, m_tMatchCtx ( tMatchCtx )
-		, m_pCrashQuery ( pCrashQuery )
-	{}
-
-	void Call () final
-	{
-		if ( m_pCrashQuery )
-			GlobalCrashQuerySet ( *m_pCrashQuery ); // transfer crash info into container
-		m_tMatchCtx.m_dMsg.Clear();
-		for ( long iQuery = m_tQueryCounter++; iQuery<m_dStored.GetLength (); iQuery = m_tQueryCounter++ )
-			MatchingWork ( m_dStored[iQuery], m_tMatchCtx );
-	}
-};
-
-
 void PercolateQueryDesc::Swap ( PercolateQueryDesc & tOther )
 {
 	::Swap ( m_iQUID, tOther.m_iQUID );
@@ -1374,65 +1347,99 @@ inline void PercolateMergeResults ( const VecTraits_T<PercolateMatchContext_t *>
 	PercolateMergeResults ( VecTraits_T<PQMatchContextResult_t *> ( pMatches, iMatches ), tRes );
 }
 
+
+struct PqMatchContextRef_t
+{
+	PercolateMatchContext_t * m_pMatchCtx;
+
+	PercolateIndex_c * m_pIndex;
+	const RtSegment_t * m_pSeg;
+	const SegmentReject_t & m_tReject;
+	const PercolateMatchResult_t & m_tRes;
+	const CrashQuery_t& m_tCrash;
+
+	PqMatchContextRef_t ( PercolateIndex_c * pIndex, const RtSegment_t * pSeg,
+			const SegmentReject_t & tReject, const PercolateMatchResult_t& tRes,
+			const CrashQuery_t& tCrash )
+		: m_pIndex ( pIndex ), m_pSeg ( pSeg ), m_tReject ( tReject ), m_tRes ( tRes ), m_tCrash ( tCrash )
+	{
+		m_pMatchCtx = pIndex->CreateMatchContext( m_pSeg, m_tReject );
+		m_pMatchCtx->m_bGetDocs = tRes.m_bGetDocs;
+		m_pMatchCtx->m_bGetQuery = tRes.m_bGetQuery;
+		m_pMatchCtx->m_bGetFilters = tRes.m_bGetFilters;
+		m_pMatchCtx->m_bVerbose = tRes.m_bVerbose;
+		SetCrashQuery ();
+	}
+
+	void SetCrashQuery()
+	{
+		GlobalCrashQuerySet ( m_tCrash );
+	}
+
+	inline static bool IsClonable ()
+	{
+		return true;
+	}
+};
+
+struct PqMatchContextClone_t : public PqMatchContextRef_t, ISphNoncopyable
+{
+	explicit PqMatchContextClone_t ( const PqMatchContextRef_t& dParent )
+		: PqMatchContextRef_t ( dParent.m_pIndex, dParent.m_pSeg, dParent.m_tReject,
+			dParent.m_tRes, dParent.m_tCrash )
+	{}
+};
+
+
 void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMatchResult_t & tRes )
 {
 	// reject need bloom filter for either infix or prefix
 	auto tReject = SegmentGetRejects (
 		  pSeg, ( m_tSettings.m_iMinInfixLen>0 || m_tSettings.GetMinPrefixLen ( m_pDict->GetSettings().m_bWordDict )>0 ), m_iMaxCodepointLength>1 );
 
-	CSphAtomic iCurQuery;
-	CSphFixedVector<PercolateMatchContext_t *> dResults ( 1 );
-	ISphThdPool * pPool = nullptr;
-	CrashQuery_t tCrashQuery;
-
-	auto dStored		 = GetStored ();
+	auto dStored = GetStored();
 	tRes.m_iTotalQueries = dStored.GetLength ();
 
-	// pool jobs only for decent amount of queries
-	if ( g_iPercolateThreads>1 && tRes.m_iTotalQueries>4 )
-	{
-		int iThreads = Min ( g_iPercolateThreads, tRes.m_iTotalQueries );
-		dResults.Reset ( iThreads );
-		// one job always goes at current thread
-		CSphString sError;
-		pPool = sphThreadPoolCreate ( iThreads-1, "percolate", sError );
-		if ( !pPool )
-			sphWarning( "failed to create thread_pool, single thread matching used: %s", sError.cstr() );
-	}
+	int iNumOfCoros = Min ( Threads::CoCurrentScheduler ()->WorkingThreads (), tRes.m_iTotalQueries );
+	const int iTimeQuantum = 100;
+	std::atomic<int32_t> iCurQuery {0};
 
-	for ( auto &dCtx: dResults )
-	{
-		dCtx = CreateMatchContext ( pSeg, tReject );
-		dCtx->m_bGetDocs = tRes.m_bGetDocs;
-		dCtx->m_bGetQuery = tRes.m_bGetQuery;
-		dCtx->m_bGetFilters = tRes.m_bGetFilters;
-		dCtx->m_bVerbose = tRes.m_bVerbose;
-	}
+	using PqMatchContextTls_t = FederateCtx_T<PqMatchContextRef_t, PqMatchContextClone_t>;
+	PqMatchContextTls_t dMatchContexts { this, pSeg, tReject, tRes, GlobalCrashQueryGet () };
 
 	if ( tRes.m_bVerbose )
-		tRes.m_tmSetup = sphMicroTimer() + tRes.m_tmSetup;
+		tRes.m_tmSetup = sphMicroTimer ()+tRes.m_tmSetup;
 
-	// queries should be locked for reading now
-	PercolateMatchJob_t tJobMain ( dStored, iCurQuery, *dResults[0] ); // still got crash info no need to set it again
-
-	// work loop
-	if ( pPool )
-	{
-		tCrashQuery = GlobalCrashQueryGet();
-		for ( int i=1; i<dResults.GetLength(); ++i )
+	auto dWaiter = DefferedRestarter ();
+	for ( int i = 0; i < iNumOfCoros; ++i )
+		CoGo ( [&dMatchContexts, &iCurQuery, &dStored, iTimeQuantum] () mutable
 		{
-			auto * pJob = new PercolateMatchJob_t ( dStored, iCurQuery, *dResults[i], &tCrashQuery );
-			pPool->AddJob ( pJob );
-		}
-	}
-	tJobMain.Call();
-	SafeDelete ( pPool );
+			auto pCtx = dMatchContexts.GetContext ();
+			pCtx.m_pMatchCtx->m_dMsg.Clear ();
+			Threads::CoThrottle_c tThrottle ( iTimeQuantum * 1000 );
+
+			while (true)
+			{
+				auto iQuery = iCurQuery.fetch_add ( 1, std::memory_order_relaxed );
+				if ( iQuery>= dStored.GetLength())
+					return; // all is done
+
+				MatchingWork ( dStored[iQuery], *pCtx.m_pMatchCtx );
+
+				// yield and reschedule every quant of time. It gives work to other tasks
+				tThrottle.Throttle ( [&pCtx] { pCtx.SetCrashQuery (); } );
+			}
+		}, dWaiter);
+
+	WaitForDeffered ( std::move ( dWaiter ) );
+
+	// collect and merge result set
+	CSphVector<PercolateMatchContext_t *> dResults;
+	dMatchContexts.ForAll ( [&dResults] ( const PqMatchContextRef_t& tCtx ) { dResults.Add ( tCtx.m_pMatchCtx ); } );
 
 	// merge result set
 	PercolateMergeResults ( dResults, tRes );
-
-	for ( auto & dMatch: dResults )
-		SafeDelete ( dMatch );
+	dResults.Apply ( [] ( PercolateMatchContext_t *& pCtx ) { SafeDelete ( pCtx ); } );
 }
 
 
@@ -2416,11 +2423,6 @@ bool PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 	// note: m_tLockHash and m_tLock is still held here.
 	PostSetupUnl();
 	return true;
-}
-
-void SetPercolateThreads ( int iThreads )
-{
-	g_iPercolateThreads = Max ( 1, iThreads );
 }
 
 bool PercolateIndex_c::IsFlushNeed() const

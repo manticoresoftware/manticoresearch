@@ -104,7 +104,6 @@ void FixPercolateSchema ( CSphSchema & tSchema );
 
 typedef const QueryParser_i * CreateQueryParser_fn ( bool bJson );
 void SetPercolateQueryParserFactory ( CreateQueryParser_fn * pCall );
-void SetPercolateThreads ( int iThreads );
 
 void LoadStoredQuery ( const BYTE * pData, int iLen, StoredQueryDesc_t & tQuery );
 void LoadStoredQuery ( DWORD uVersion, StoredQueryDesc_t & tQuery, CSphReader & tReader );

@@ -587,27 +587,35 @@ static bool ConfigWrite ( const CSphString & sConfigPath, const CSphVector<Clust
 }
 
 
+static ESphAddIndex PreloadIndex ( const IndexDesc_t & tIndex, StrVec_t & dWarnings, CSphString & sError )
+{
+	CSphConfigSection hIndex;
+	tIndex.Save(hIndex);
+
+	ESphAddIndex eAdd = ConfigureAndPreloadIndex ( hIndex, tIndex.m_sName.cstr(), tIndex.m_bFromReplication, dWarnings, sError );
+	if ( eAdd==ADD_ERROR )
+		dWarnings.Add("removed from JSON config");
+
+	return eAdd;
+}
+
+
 // load indexes got from JSON config on daemon indexes preload (part of ConfigureAndPreload work done here)
 void ConfigureAndPreloadInt ( int & iValidIndexes, int & iCounter ) REQUIRES ( MainThread )
 {
 	for ( const IndexDesc_t & tIndex : g_dCfgIndexes )
 	{
-		CSphConfigSection hIndex;
-		tIndex.Save(hIndex);
-
 		CSphString sError;
 		StrVec_t dWarnings;
-		ESphAddIndex eAdd = ConfigureAndPreloadIndex ( hIndex, tIndex.m_sName.cstr(), tIndex.m_bFromReplication, dWarnings, sError );
+		ESphAddIndex eAdd = PreloadIndex ( tIndex, dWarnings, sError );
+		iValidIndexes += ( eAdd!=ADD_ERROR ? 1 : 0 );
+		iCounter += ( eAdd==ADD_DSBLED ? 1 : 0 );
+
 		for ( const auto & i : dWarnings )
 			sphWarning ( "index '%s': %s", tIndex.m_sName.cstr(), i.cstr() );
 
 		if ( eAdd==ADD_ERROR )
 			sphWarning ( "index '%s': %s - NOT SERVING", tIndex.m_sName.cstr(), sError.cstr() );
-
-		iValidIndexes += ( eAdd!=ADD_ERROR ? 1 : 0 );
-		iCounter += ( eAdd==ADD_DSBLED ? 1 : 0 );
-		if ( eAdd==ADD_ERROR )
-			sphWarning ( "index '%s': removed from JSON config", tIndex.m_sName.cstr() );
 	}
 }
 
@@ -829,6 +837,90 @@ bool CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestP
 }
 
 
+static bool CopyExternalFiles ( const CSphString & sIndex, const CSphString & sNewIndexPath, StrVec_t & dCopied, CSphString & sError )
+{
+	CSphSchema tSchemaStub;
+	RtIndex_i * pRT = sphCreateIndexRT ( tSchemaStub, sIndex.cstr(), 32*1024*1024, sNewIndexPath.cstr(), true );
+	if ( !pRT->Prealloc ( false, nullptr ) )
+	{
+		sError.SetSprintf ( "failed to prealloc: %s", pRT->GetLastError().cstr() );
+		return false;
+	}
+
+	if ( !pRT->CopyExternalFiles ( 0, dCopied ) )
+	{
+		sError = pRT->GetLastError();
+		return false;
+	}
+
+	SafeDelete(pRT);
+
+	return true;
+}
+
+
+class ScopedFileCleanup_c
+{
+public:
+	ScopedFileCleanup_c ( const StrVec_t & dFiles )
+		: m_dFiles ( dFiles )
+	{}
+
+	void Ok()
+	{
+		m_bOk = true;
+	}
+
+	~ScopedFileCleanup_c()
+	{
+		if ( m_bOk )
+			return;
+
+		for ( const auto & i : m_dFiles )
+			unlink ( i.cstr() );
+	}
+
+private:
+	const StrVec_t &	m_dFiles;
+	bool				m_bOk = false;
+};
+
+
+
+bool CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex, CSphString & sError )
+{
+	CSphString sPath, sNewIndexPath;
+	if ( !PrepareDirForNewIndex ( sPath, sNewIndexPath, sIndex, sError ) )
+		return false;
+
+	StrVec_t dCopied;
+	ScopedFileCleanup_c tCleanup(dCopied);
+
+	CSphString sFind;
+	sFind.SetSprintf ( "%s.*", sPathToIndex.cstr() );
+	StrVec_t dFoundFiles = FindFiles ( sFind.cstr(), false );
+	for ( const auto & i : dFoundFiles )
+	{
+		CSphString sDest;
+		const char * szExt = GetExtension(i);
+		if ( !szExt )
+			continue;
+
+		sDest.SetSprintf ( "%s.%s", sNewIndexPath.cstr(), szExt );
+		if ( !CopyFile ( i, sDest, sError ) )
+			return false;
+
+		dCopied.Add(sDest);
+	}
+
+	if ( !CopyExternalFiles ( sIndex, sNewIndexPath, dCopied, sError ) )
+		return false;
+
+	tCleanup.Ok();
+	return true;
+}
+
+
 static bool CheckCreateTableSettings ( const CreateTableSettings_t & tCreateTable, CSphString & sError )
 {
 	static const char * dForbidden[] = { "path", "stored_fields", "stored_only_fields", "rt_field", "embedded_limit", "preopen" };
@@ -1035,6 +1127,58 @@ bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t 
 		return false;
 	}
 
+	return true;
+}
+
+
+class ScopedCleanup_c
+{
+public:
+	ScopedCleanup_c ( const CSphString & sIndex )
+		: m_sIndex ( sIndex )
+	{}
+
+	void Ok()
+	{
+		m_bOk = true;
+	}
+
+	~ScopedCleanup_c()
+	{
+		if ( m_bOk )
+			return;
+
+		ServedIndexRefPtr_c pServed = GetServed(m_sIndex);
+		if ( pServed )
+		{
+			ServedDescWPtr_c pDesc(pServed);
+			CleanupOnError ( m_sIndex, (RtIndex_i *)pDesc->m_pIndex );
+		}
+	}
+
+private:
+	CSphString	m_sIndex;
+	bool		m_bOk = false;
+};
+
+
+bool AddExistingIndexInt ( const CSphString & sIndex, StrVec_t & dWarnings, CSphString & sError )
+{
+	ScopedCleanup_c tCleanup(sIndex);
+
+	IndexDesc_t tNewIndex;
+	tNewIndex.m_bFromReplication = false;
+	tNewIndex.m_eType = IndexType_e::RT;
+	tNewIndex.m_sName = sIndex;
+	tNewIndex.m_sPath.SetSprintf ( "%s/%s", GetPathForNewIndex(sIndex).cstr(), sIndex.cstr() );
+
+	if ( PreloadIndex ( tNewIndex, dWarnings, sError )!=ADD_DSBLED )
+		return false;
+
+	if ( !SaveConfigInt(sError) )
+		return false;
+
+	tCleanup.Ok();
 	return true;
 }
 

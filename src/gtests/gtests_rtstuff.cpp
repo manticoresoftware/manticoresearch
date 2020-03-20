@@ -280,7 +280,7 @@ TEST_P ( RTN, WeightBoundary )
 	pIndex->SetTokenizer ( pTok->Clone ( SPH_CLONE_INDEX ) );
 	pIndex->SetDictionary ( pDict->Clone () );
 	pIndex->PostSetup ();
-	EXPECT_TRUE ( pIndex->Prealloc ( false ) );
+	EXPECT_TRUE ( pIndex->Prealloc ( false, nullptr ) );
 
 	CSphVector<int64_t> dMvas;
 	CSphString sFilter;
@@ -379,7 +379,7 @@ TEST_F ( RT, RankerFactors )
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", false, 32, nullptr, sError ) );
 	pIndex->PostSetup ();
-	Verify ( pIndex->Prealloc ( false ) );
+	Verify ( pIndex->Prealloc ( false, nullptr ) );
 
 	CSphString sFilter;
 	CSphVector<int64_t> dMvas;
@@ -558,7 +558,7 @@ TEST_F ( RT, SendVsMerge )
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( pDict );
 	pIndex->PostSetup ();
-	ASSERT_TRUE ( pIndex->Prealloc ( false ) );
+	ASSERT_TRUE ( pIndex->Prealloc ( false, nullptr ) );
 
 	CSphQuery tQuery;
 	CSphQueryResult tResult;

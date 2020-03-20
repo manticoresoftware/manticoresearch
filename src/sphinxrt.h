@@ -87,7 +87,7 @@ public:
 
 	// hint an index that it was deleted and should cleanup its files when destructed
 	virtual void IndexDeleted() = 0;
-	
+
 	virtual void ProhibitSave() = 0;
 	virtual void EnableSave() = 0;
 	virtual void LockFileState ( CSphVector<CSphString> & dFiles ) = 0;

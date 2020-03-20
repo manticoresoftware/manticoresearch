@@ -212,7 +212,7 @@ bool ParseDdl ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CS
 }
 
 
-const char * g_szDDL[] = { "alter", "create", "drop", "join" };
+const char * g_szDDL[] = { "alter", "create", "drop", "join", "import" };
 
 bool IsDdlQuery ( const char * szQuery, int iLen )
 {

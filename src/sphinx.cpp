@@ -1075,7 +1075,7 @@ public:
 
 	int							Build ( const CSphVector<CSphSource*> & , int , int ) override { return 0; }
 	bool						Merge ( CSphIndex * , const CSphVector<CSphFilterSettings> &, bool ) override {return false; }
-	bool				Prealloc ( bool ) final { return false; }
+	bool				Prealloc ( bool, FilenameBuilder_i * ) final { return false; }
 	void				Dealloc () final {}
 	void				Preread () final {}
 	void				SetMemorySettings ( const FileAccessSettings_t & ) final {}
@@ -1883,7 +1883,7 @@ public:
 	int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer ) final;
 	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn pfnProgress ) final { m_tProgress.m_fnProgress = pfnProgress; }
 
-	bool				LoadHeader ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning );
+	bool				LoadHeader ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning );
 
 	void				DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig ) final;
 	void				DebugDumpDocids ( FILE * fp ) final;
@@ -1893,7 +1893,7 @@ public:
 	int					DebugCheck ( FILE * fp ) final;
 	template <class Qword> void		DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
 
-	bool				Prealloc ( bool bStripPath ) final;
+	bool				Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder ) final;
 	void				Dealloc () final;
 	void				Preread () final;
 	void				SetMemorySettings ( const FileAccessSettings_t & tFileAccessSettings ) final;
@@ -1949,6 +1949,8 @@ public:
 	bool				GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const final;
 	int					GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
 	bool				ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const override;
+
+	bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) final;
 
 private:
 	static const int			MIN_WRITE_BUFFER		= 262144;	///< min write buffer size
@@ -10542,7 +10544,7 @@ public:
 		m_pIndex = (CSphIndex_VLN *)sphCreateIndexPhrase ( "keep-attrs", sKeepAttrs.cstr() );
 		m_pIndex->SetMemorySettings ( FileAccessSettings_t() );
 
-		if ( !m_pIndex->Prealloc ( false ) )
+		if ( !m_pIndex->Prealloc ( false, nullptr ) )
 		{
 			if ( !sWarning.IsEmpty() )
 				sError.SetSprintf ( "warning: '%s',", sWarning.cstr() );
@@ -12203,11 +12205,11 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSettings> & dFilters, bool bSupressDstDocids )
 {
 	SetMemorySettings ( FileAccessSettings_t() );
-	if ( !Prealloc ( false ) )
+	if ( !Prealloc ( false, nullptr ) )
 		return false;
 	Preread ();
 	pSource->SetMemorySettings ( FileAccessSettings_t() );
-	if ( !pSource->Prealloc ( false ) )
+	if ( !pSource->Prealloc ( false, nullptr ) )
 	{
 		m_sLastError.SetSprintf ( "source index preload failed: %s", pSource->GetLastError().cstr() );
 		return false;
@@ -13796,7 +13798,7 @@ void LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DW
 }
 
 
-bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning )
+bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder, CSphString & sWarning )
 {
 	const int MAX_HEADER_SIZE = 32768;
 	CSphFixedVector<BYTE> dCacheInfo ( MAX_HEADER_SIZE );
@@ -13865,11 +13867,8 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 	if ( bStripPath )
 		StripPath ( tTokSettings.m_sSynonymsFile );
 
-	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
-
 	StrVec_t dWarnings;
-	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokSettings, &tEmbeddedFiles, pFilenameBuilder.Ptr(), dWarnings, m_sLastError ) };
+	TokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError ) };
 	if ( !pTokenizer )
 		return false;
 
@@ -13884,8 +13883,8 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 	}
 
 	DictRefPtr_c pDict { tDictSettings.m_bWordDict
-		? sphCreateDictionaryKeywords ( tDictSettings, &tEmbeddedFiles, pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder.Ptr(), m_sLastError )
-		: sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder.Ptr(), m_sLastError )};
+		? sphCreateDictionaryKeywords ( tDictSettings, &tEmbeddedFiles, pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError )
+		: sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError )};
 
 	if ( !pDict )
 		return false;
@@ -13944,9 +13943,12 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 
 void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig )
 {
+	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
+	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
+
 	CSphEmbeddedFiles tEmbeddedFiles;
 	CSphString sWarning;
-	if ( !LoadHeader ( sHeaderName, false, tEmbeddedFiles, sWarning ) )
+	if ( !LoadHeader ( sHeaderName, false, tEmbeddedFiles, pFilenameBuilder.Ptr(), sWarning ) )
 		sphDie ( "failed to load header: %s", m_sLastError.cstr ());
 
 	if ( !sWarning.IsEmpty () )
@@ -13989,9 +13991,6 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 		}
 
 		fprintf ( fp, "}\n\nindex $dump\n{\n\tsource = $dump\n\tpath = $dump\n" );
-
-		CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
-		CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
 
 		m_tSettings.DumpCfg ( fp, pFilenameBuilder.Ptr() );
 
@@ -14038,9 +14037,6 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 	// skipped min doc, wordlist checkpoints
 	fprintf ( fp, "total-documents: " INT64_FMT "\n", m_tStats.m_iTotalDocuments );
 	fprintf ( fp, "total-bytes: " INT64_FMT "\n", int64_t(m_tStats.m_iTotalBytes) );
-
-	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
 
 	m_tSettings.DumpReadable ( fp, tEmbeddedFiles, pFilenameBuilder.Ptr() );
 
@@ -14244,7 +14240,7 @@ void CSphIndex_VLN::PopulateHistograms()
 }
 
 
-bool CSphIndex_VLN::Prealloc ( bool bStripPath )
+bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder )
 {
 	MEMORY ( MEM_INDEX_DISK );
 
@@ -14254,7 +14250,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 	CSphEmbeddedFiles tEmbeddedFiles;
 
 	// preload schema
-	if ( !LoadHeader ( GetIndexFileName(SPH_EXT_SPH).cstr(), bStripPath, tEmbeddedFiles, m_sLastWarning ) )
+	if ( !LoadHeader ( GetIndexFileName(SPH_EXT_SPH).cstr(), bStripPath, tEmbeddedFiles, pFilenameBuilder, m_sLastWarning ) )
 		return false;
 
 	tEmbeddedFiles.Reset();
@@ -16983,6 +16979,81 @@ bool CSphIndex_VLN::ExplainQuery ( const CSphString & sQuery, CSphString & sRes,
 	tArgs.m_bExpandPrefix = ( m_pDict->GetSettings().m_bWordDict && IsStarDict() );
 
 	return Explain ( tArgs );
+}
+
+
+bool CSphIndex_VLN::CopyExternalFiles ( int iPostfix, StrVec_t & dCopied )
+{
+	CSphVector<std::pair<CSphString,CSphString>> dExtFiles;
+	if ( m_pTokenizer && !m_pTokenizer->GetSettings().m_sSynonymsFile.IsEmpty() )
+	{
+		CSphString sRenameTo;
+		sRenameTo.SetSprintf ( "exceptions_chunk%d.txt", iPostfix );
+		dExtFiles.Add ( { m_pTokenizer->GetSettings().m_sSynonymsFile, sRenameTo } );
+		const_cast<CSphTokenizerSettings &>(m_pTokenizer->GetSettings()).m_sSynonymsFile = sRenameTo;
+	}
+
+	if ( m_pDict )
+	{
+		const CSphString & sStopwords = m_pDict->GetSettings().m_sStopwords;
+		if ( !sStopwords.IsEmpty() )
+		{
+			StringBuilder_c sNewStopwords(" ");
+			StrVec_t dStops = sphSplit ( sStopwords.cstr(), sStopwords.Length(), " \t," );
+			ARRAY_FOREACH ( i, dStops )
+			{
+				CSphString sTmp;
+				sTmp.SetSprintf ( "stopwords_chunk%d_%d.txt", iPostfix, i );
+				dExtFiles.Add ( { dStops[i], sTmp } );
+
+				sNewStopwords << sTmp;
+			}
+
+			const_cast<CSphDictSettings &>(m_pDict->GetSettings()).m_sStopwords = sNewStopwords.cstr();
+		}
+
+		StrVec_t dNewWordforms;
+		ARRAY_FOREACH ( i, m_pDict->GetSettings().m_dWordforms )
+		{
+			CSphString sTmp;
+			sTmp.SetSprintf ( "wordforms_chunk%d_%d.txt", iPostfix, i );
+			dExtFiles.Add( { m_pDict->GetSettings().m_dWordforms[i], sTmp } );
+			dNewWordforms.Add(sTmp);
+		}
+
+		const_cast<CSphDictSettings &>(m_pDict->GetSettings()).m_dWordforms = dNewWordforms;
+	}
+
+	CSphString sPathOnly = GetPathOnly(m_sFilename);
+	for ( const auto & i : dExtFiles )
+	{
+		CSphString sDest;
+		sDest.SetSprintf ( "%s%s", sPathOnly.cstr(), i.second.cstr() );
+		if ( !CopyFile ( i.first, sDest, m_sLastError ) )
+			return false;
+
+		dCopied.Add(sDest);
+	}
+
+	BuildHeader_t tBuildHeader(m_tStats);
+	*(DictHeader_t*)&tBuildHeader = *(DictHeader_t*)&m_tWordlist;
+	tBuildHeader.m_iDocinfo = m_iDocinfo;
+	tBuildHeader.m_iDocinfoIndex = m_iDocinfoIndex;
+	tBuildHeader.m_iMinMaxIndex = m_iMinMaxIndex;
+
+	WriteHeader_t tWriteHeader;
+	tWriteHeader.m_pSettings = &m_tSettings;
+	tWriteHeader.m_pSchema = &m_tSchema;
+	tWriteHeader.m_pTokenizer = m_pTokenizer;
+	tWriteHeader.m_pDict = m_pDict;
+	tWriteHeader.m_pFieldFilter = m_pFieldFilter;
+	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin();
+
+	// save the header
+	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, GetIndexFileName(SPH_EXT_SPH), m_sLastError ) )
+		return false;
+
+	return true;
 }
 
 //////////////////////////////////////////////////////////////////////////

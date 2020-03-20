@@ -926,7 +926,7 @@ void ApplyKilllists ( CSphConfig & hConf )
 				continue;
 			}
 
-			if ( !pIndex->Prealloc(false) )
+			if ( !pIndex->Prealloc ( false, nullptr ) )
 			{
 				fprintf ( stdout, "WARNING: unable to prealloc index %s: %s\n", tIndex.m_sName.cstr(), sError.cstr() );
 				continue;
@@ -1443,7 +1443,7 @@ int main ( int argc, char ** argv )
 			pIndex->SetDebugCheck ( bCheckIdDups );
 
 		CSphString sWarn;
-		if ( !pIndex->Prealloc ( bStripPath ) )
+		if ( !pIndex->Prealloc ( bStripPath, nullptr ) )
 			sphDie ( "index '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
 
 		if ( g_eCommand==IndextoolCmd_e::MORPH )
@@ -1525,7 +1525,7 @@ int main ( int argc, char ** argv )
 					sphDie ( "index '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
 
 				CSphString sWarn;
-				if ( !pIndex->Prealloc ( bStripPath ) )
+				if ( !pIndex->Prealloc ( bStripPath, nullptr ) )
 					sphDie ( "index '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
 
 				pIndex->Preread();

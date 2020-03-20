@@ -30,8 +30,10 @@
 %token	TOK_DROP
 %token	TOK_EXISTS
 %token	TOK_FLOAT
+%token	TOK_FROM
 %token	TOK_FUNCTION
 %token	TOK_IF
+%token	TOK_IMPORT
 %token	TOK_INDEXED
 %token	TOK_INT
 %token	TOK_INTEGER
@@ -73,6 +75,7 @@ statement:
 	| drop_plugin
 	| create_cluster
 	| join_cluster
+	| import_table
 	;
 
 ident:
@@ -372,6 +375,15 @@ join_cluster:
 		}
 	;
 
+import_table:
+	TOK_IMPORT TOK_TABLE ident TOK_FROM TOK_QUOTED_STRING
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_IMPORT_TABLE;
+			pParser->ToString ( tStmt.m_sIndex, $3 );
+			tStmt.m_sStringParam = pParser->ToStringUnescape ( $5 );
+		}
+	;
 
 %%
 

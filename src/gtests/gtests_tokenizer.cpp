@@ -812,7 +812,7 @@ public:
 
 	int					Build ( const CSphVector<CSphSource*> & , int , int ) override { return 0; }
 	bool				Merge ( CSphIndex * , const CSphVector<CSphFilterSettings> &, bool ) override {return false; }
-	bool				Prealloc ( bool ) override { return false; }
+	bool				Prealloc ( bool, FilenameBuilder_i * ) override { return false; }
 	void				Dealloc () override {}
 	void				Preread () override {}
 	void				SetMemorySettings ( const FileAccessSettings_t & ) override {}

@@ -623,7 +623,7 @@ int main ( int argc, char ** argv )
 	RtIndex_i * pIndex = sphCreateIndexRT ( tSchema, "testrt", 32*1024*1024, DATAFLD "dump", false );
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( pDict );
-	if ( !pIndex->Prealloc ( false ) )
+	if ( !pIndex->Prealloc ( false, nullptr ) )
 		sphDie ( "prealloc failed: %s", pIndex->GetLastError().cstr() );
 	pIndex->PostSetup();
 	g_pIndex = pIndex;

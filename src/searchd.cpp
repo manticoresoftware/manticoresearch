@@ -6950,7 +6950,7 @@ static const char * g_dSqlStmts[] =
 	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
 	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "alter_killlist_target",
 	"alter_index_settings", "join_cluster", "cluster_create", "cluster_delete", "cluster_index_add",
-	"cluster_index_delete", "cluster_update", "explain"
+	"cluster_index_delete", "cluster_update", "explain", "import_table"
 };
 
 
@@ -14983,6 +14983,46 @@ void HandleMysqlExplain ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	tOut.Eof ();
 }
 
+
+void HandleMysqlImportTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
+{
+	CSphString sError;
+	auto pLocal = GetServed ( tStmt.m_sIndex );
+	auto pDist = GetDistr ( tStmt.m_sIndex );
+	if ( pLocal || pDist )
+	{
+		sError.SetSprintf ( "index '%s' already exists", tStmt.m_sIndex.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	if ( !CopyIndexFiles ( tStmt.m_sIndex, tStmt.m_sStringParam, sError ) )
+	{
+		sError.SetSprintf ( "unable to import index '%s': %s", tStmt.m_sIndex.cstr(), sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	StrVec_t dWarnings;
+	if ( !AddExistingIndexInt ( tStmt.m_sIndex, dWarnings, sError ) )
+	{
+		sError.SetSprintf ( "unable to import index '%s': %s", tStmt.m_sIndex.cstr(), sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	if ( dWarnings.GetLength() )
+	{
+		StringBuilder_c sWarn ( "; " );
+		for ( const auto & i : dWarnings )
+			sWarn << i;
+
+		sWarning = sWarn.cstr();
+	}
+
+	tOut.Ok();
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 CSphSessionAccum::~CSphSessionAccum()
@@ -15513,6 +15553,14 @@ public:
 
 		case STMT_EXPLAIN:
 			HandleMysqlExplain ( tOut, *pStmt );
+			return true;
+
+		case STMT_IMPORT_TABLE:
+			m_tLastMeta = CSphQueryResultMeta();
+			m_tLastMeta.m_sError = m_sError;
+			m_tLastMeta.m_sWarning = "";
+
+			HandleMysqlImportTable ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 			return true;
 
 		default:
@@ -16133,7 +16181,7 @@ bool RotateIndexGreedy (ServedDesc_t &tWlockedIndex, const char * szIndex, CSphS
 	DictRefPtr_c		pDictionary { tWlockedIndex.m_pIndex->LeakDictionary () };
 
 //	bool bRolledBack = false;
-	bool bPreallocSuccess = tWlockedIndex.m_pIndex->Prealloc ( g_bStripPath );
+	bool bPreallocSuccess = tWlockedIndex.m_pIndex->Prealloc ( g_bStripPath, nullptr );
 	if ( !bPreallocSuccess )
 	{
 		if ( tWlockedIndex.m_bOnlyNew )
@@ -16149,7 +16197,7 @@ bool RotateIndexGreedy (ServedDesc_t &tWlockedIndex, const char * szIndex, CSphS
 			sphFatal ( "%s", dFiles.FatalMsg ( "rotating" ).cstr () );
 
 		sphLogDebug ( "RotateIndexGreedy: has recovered. Prealloc it." );
-		bPreallocSuccess = tWlockedIndex.m_pIndex->Prealloc ( g_bStripPath );
+		bPreallocSuccess = tWlockedIndex.m_pIndex->Prealloc ( g_bStripPath, nullptr );
 		if ( !bPreallocSuccess )
 			sError.SetSprintf ( "rotating index '%s': .new preload failed; ROLLBACK FAILED; INDEX UNUSABLE", szIndex );
 //		bRolledBack = true;
@@ -16246,7 +16294,8 @@ void CheckLeaks () REQUIRES ( MainThread )
 /// that is, local and RT indexes, but not distributed once
 bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, const char * szIndexName, StrVec_t & dWarnings, CSphString & sError )
 {
-	if ( !tIdx.m_pIndex->Prealloc(g_bStripPath) )
+	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder(szIndexName) );
+	if ( !tIdx.m_pIndex->Prealloc ( g_bStripPath, pFilenameBuilder.Ptr() ) )
 	{
 		sError.SetSprintf ( "prealloc: %s", tIdx.m_pIndex->GetLastError().cstr() );
 		sphWarning ( "index '%s': %s; NOT SERVING", szIndexName, sError.cstr() );
@@ -16257,7 +16306,6 @@ bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, 
 	// fixup was initially intended for (very old) index formats that did not store dict/tokenizer settings
 	// however currently it also ends up configuring dict/tokenizer for fresh RT indexes!
 	// (and for existing RT indexes, settings get loaded during the Prealloc() call)
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder(szIndexName) );
 	if ( pConfig && !sphFixupIndexSettings ( tIdx.m_pIndex, *pConfig, g_bStripPath, pFilenameBuilder.Ptr(), dWarnings, sError ) )
 	{
 		sphWarning ( "index '%s': %s; NOT SERVING", szIndexName, sError.cstr() );

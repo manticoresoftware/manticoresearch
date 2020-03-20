@@ -3328,7 +3328,7 @@ public:
 
 public:
 	/// check all data files, preload schema, and preallocate enough RAM to load memory-cached data
-	virtual bool				Prealloc ( bool bStripPath ) = 0;
+	virtual bool				Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder ) = 0;
 
 	/// deallocate all previously preallocated shared data
 	virtual void				Dealloc () = 0;
@@ -3424,6 +3424,10 @@ public:
 	virtual const FileAccessSettings_t & GetMemorySettings() const = 0;
 
 	virtual void				GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings ) const;
+
+	// put external files (if any) into index folder
+	// copy the rest of the external files to index folder
+	virtual bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) { return true; }
 
 public:
 	int64_t						m_iTID = 0;				///< last committed transaction id

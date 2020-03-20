@@ -80,7 +80,7 @@ public:
 	StoredQuery_i * CreateQuery ( PercolateQueryArgs_t & tArgs, CSphString & sError ) final
 		EXCLUDES ( m_tLockHash, m_tLock );
 
-	bool Prealloc ( bool bStripPath ) override;
+	bool Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder ) override;
 	void Dealloc () override {}
 	void Preread () override {}
 	void PostSetup() override EXCLUDES ( m_tLockHash, m_tLock );
@@ -2091,7 +2091,7 @@ void PercolateIndex_c::PostSetup ()
 	PostSetupUnl();
 }
 
-bool PercolateIndex_c::Prealloc ( bool bStripPath )
+bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder )
 {
 	CSphString sLock;
 	sLock.SetSprintf ( "%s.lock", m_sFilename.cstr() );
@@ -2173,18 +2173,14 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath )
 			StripPath ( tDictSettings.m_dWordforms[i] );
 	}
 
-	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
-
 	// recreate tokenizer
 	StrVec_t dWarnings;
-	m_pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder.Ptr(), dWarnings, m_sLastError );
+	m_pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
 	if ( !m_pTokenizer )
 		return false;
 
 	// recreate dictionary
-	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), bStripPath,
-		  m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder.Ptr(), m_sLastError );
+	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError );
 	if ( !m_pDict )
 	{
 		m_sLastError.SetSprintf ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );

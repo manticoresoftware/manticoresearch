@@ -654,7 +654,7 @@ void LoadStoredQueryV6 ( DWORD uVersion, StoredQueryDesc_t & tQuery, CSphReader 
 		for ( auto& dString : tFilter.m_dStrings )
 			dString = tReader.GetString ();
 	}
-	for ( auto tItem : tQuery.m_dFilterTree )
+	for ( auto & tItem : tQuery.m_dFilterTree )
 	{
 		tItem.m_iLeft = tReader.GetDword();
 		tItem.m_iRight = tReader.GetDword();
@@ -1104,7 +1104,7 @@ public:
 	int					Build ( const CSphVector<CSphSource*> & , int , int ) final { return 0; }
 	bool				Merge ( CSphIndex * , const CSphVector<CSphFilterSettings> &, bool ) final { return false; }
 
-	bool				Prealloc ( bool bStripPath ) final;
+	bool				Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder ) final;
 	void				Dealloc () final {}
 	void				Preread () final;
 	void				SetMemorySettings ( const FileAccessSettings_t & tFileAccessSettings ) final;
@@ -1158,6 +1158,7 @@ public:
 	bool				Reconfigure ( CSphReconfigureSetup & tSetup ) final;
 	int64_t				GetLastFlushTimestamp() const final;
 	void				IndexDeleted() final { m_bIndexDeleted = true; }
+	bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) final;
 	void				ProhibitSave() final;
 	void				EnableSave() final;
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
@@ -1245,7 +1246,7 @@ private:
 	bool						SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard,
 			const ChunkStats_t & tStats, bool bForced, int & iSavedChunkId )
 			EXCLUDES ( m_tWriting ) EXCLUDES ( m_tChunkLock );
-	CSphIndex *					LoadDiskChunk ( const char * sChunk, CSphString & sError ) const;
+	CSphIndex *					LoadDiskChunk ( const char * sChunk, FilenameBuilder_i * pFilenameBuilder, CSphString & sError ) const;
 	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes );
 	bool						SaveRamChunk ( const VecTraits_T<const RtSegmentRefPtf_t>& dSegments );
 
@@ -3683,7 +3684,9 @@ bool RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, co
 	SaveDiskData ( sNewChunk.cstr(), tGuard, tStats );
 
 	// bring new disk chunk online
-	CSphIndex * pDiskChunk = LoadDiskChunk ( sNewChunk.cstr(), m_sLastError );
+	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
+	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
+	CSphIndex * pDiskChunk = LoadDiskChunk ( sNewChunk.cstr(), pFilenameBuilder.Ptr(), m_sLastError );
 	if ( !pDiskChunk )
 		return false;
 
@@ -3750,7 +3753,7 @@ bool RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, co
 }
 
 
-CSphIndex * RtIndex_c::LoadDiskChunk ( const char * sChunk, CSphString & sError ) const
+CSphIndex * RtIndex_c::LoadDiskChunk ( const char * sChunk, FilenameBuilder_i * pFilenameBuilder, CSphString & sError ) const
 {
 	MEMORY ( MEM_INDEX_DISK );
 
@@ -3770,7 +3773,7 @@ CSphIndex * RtIndex_c::LoadDiskChunk ( const char * sChunk, CSphString & sError 
 	if ( m_bDebugCheck )
 		pDiskChunk->SetDebugCheck ( m_bCheckIdDups );
 
-	if ( !pDiskChunk->Prealloc ( m_bPathStripped ) )
+	if ( !pDiskChunk->Prealloc ( m_bPathStripped, pFilenameBuilder ) )
 	{
 		sError.SetSprintf ( "disk chunk %s: prealloc failed: %s", sChunk, pDiskChunk->GetLastError().cstr() );
 		SafeDelete ( pDiskChunk );
@@ -3783,7 +3786,7 @@ CSphIndex * RtIndex_c::LoadDiskChunk ( const char * sChunk, CSphString & sError 
 }
 
 
-bool RtIndex_c::Prealloc ( bool bStripPath )
+bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder )
 {
 	MEMORY ( MEM_INDEX_RT );
 
@@ -3888,17 +3891,14 @@ bool RtIndex_c::Prealloc ( bool bStripPath )
 			StripPath ( tDictSettings.m_dWordforms[i] );
 	}
 
-	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
-
 	// recreate tokenizer
 	StrVec_t dWarnings;
-	m_pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder.Ptr(), dWarnings, m_sLastError );
+	m_pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, pFilenameBuilder, dWarnings, m_sLastError );
 	if ( !m_pTokenizer )
 		return false;
 
 	// recreate dictionary
-	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder.Ptr(), m_sLastError );
+	m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), bStripPath, m_tSettings.m_iSkiplistBlockSize, pFilenameBuilder, m_sLastError );
 	if ( !m_sLastError.IsEmpty() )
 		m_sLastError.SetSprintf ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
 
@@ -3954,7 +3954,7 @@ bool RtIndex_c::Prealloc ( bool bStripPath )
 	{
 		CSphString sChunk;
 		sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), m_dChunkNames[iChunk] );
-		CSphIndex * pIndex = LoadDiskChunk ( sChunk.cstr(), m_sLastError );
+		CSphIndex * pIndex = LoadDiskChunk ( sChunk.cstr(), pFilenameBuilder, m_sLastError );
 		if ( !pIndex )
 			sphDie ( "%s", m_sLastError.cstr() );
 
@@ -4337,6 +4337,8 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 	// FIXME! remove copypasted code from CSphIndex_VLN::DebugCheck
 
 	DebugCheckError_c tReporter(fp);
+	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
+	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
 
 	if ( m_iLockFD<0 )
 		sphWarning ( "failed to load RAM chunks, checking only %d disk chunks", m_dChunkNames.GetLength() );
@@ -4840,7 +4842,7 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 		sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), m_dChunkNames[i] );
 		tReporter.Msg ( "checking disk chunk, extension %d, %d(%d)...", m_dChunkNames[i], i, m_dChunkNames.GetLength() );
 
-		CSphScopedPtr<CSphIndex> pIndex ( LoadDiskChunk ( sChunk.cstr(), m_sLastError ) );
+		CSphScopedPtr<CSphIndex> pIndex ( LoadDiskChunk ( sChunk.cstr(), pFilenameBuilder.Ptr(), m_sLastError ) );
 		if ( pIndex.Ptr() )
 		{
 			iFailsPlain += pIndex->DebugCheck ( fp );
@@ -7473,6 +7475,9 @@ void RtIndex_c::Optimize()
 	ScopedMutex_t tOptimizing ( m_tOptimizingLock );
 	m_bOptimizing = true;
 
+	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
+	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
+
 	int iChunks = m_dDiskChunks.GetLength();
 	CSphSchema tSchema = m_tSchema;
 	CSphString sError;
@@ -7513,7 +7518,7 @@ void RtIndex_c::Optimize()
 		if ( g_bShutdown || m_bOptimizeStop || m_bSaveDisabled )
 			break;
 
-		CSphScopedPtr<CSphIndex> pMerged ( LoadDiskChunk ( sMerged.cstr(), sError ) );
+		CSphScopedPtr<CSphIndex> pMerged ( LoadDiskChunk ( sMerged.cstr(), pFilenameBuilder.Ptr(), sError ) );
 		if ( !pMerged.Ptr() )
 		{
 			sphWarning ( "rt optimize: index %s: failed to load merged chunk (error %s)", m_sIndexName.cstr(), sError.cstr() );
@@ -7649,6 +7654,9 @@ void RtIndex_c::ProgressiveMerge()
 	ScopedMutex_t tOptimizing ( m_tOptimizingLock );
 	m_bOptimizing = true;
 
+	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
+	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
+
 	int iChunks = m_dDiskChunks.GetLength();
 	CSphSchema tSchema = m_tSchema;
 	CSphString sError;
@@ -7711,7 +7719,7 @@ void RtIndex_c::ProgressiveMerge()
 		if ( g_bShutdown || m_bOptimizeStop || m_bSaveDisabled )
 			break;
 
-		CSphScopedPtr<CSphIndex> pMerged ( LoadDiskChunk ( sMerged.cstr(), sError ) );
+		CSphScopedPtr<CSphIndex> pMerged ( LoadDiskChunk ( sMerged.cstr(), pFilenameBuilder.Ptr(), sError ) );
 		if ( !pMerged.Ptr() )
 		{
 			sphWarning ( "rt optimize: index %s: failed to load merged chunk (error %s)",
@@ -8070,6 +8078,73 @@ void RtIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles ) const
 	for ( const CSphIndex * pIndex : tGuard.m_dDiskChunks )
 		pIndex->GetIndexFiles ( dFiles );
 }
+
+
+bool RtIndex_c::CopyExternalFiles ( int /*iPostfix*/, StrVec_t & dCopied )
+{
+	CSphVector<std::pair<CSphString,CSphString>> dExtFiles;
+	if ( m_pTokenizer && !m_pTokenizer->GetSettings().m_sSynonymsFile.IsEmpty() )
+	{
+		const char * szRenameTo = "exceptions.txt";
+		dExtFiles.Add ( { m_pTokenizer->GetSettings().m_sSynonymsFile, szRenameTo } );
+		const_cast<CSphTokenizerSettings &>(m_pTokenizer->GetSettings()).m_sSynonymsFile = szRenameTo;
+	}
+
+	if ( m_pDict )
+	{
+		const CSphString & sStopwords = m_pDict->GetSettings().m_sStopwords;
+		if ( !sStopwords.IsEmpty() )
+		{
+			StringBuilder_c sNewStopwords(" ");
+			StrVec_t dStops = sphSplit ( sStopwords.cstr(), sStopwords.Length(), " \t," );
+			ARRAY_FOREACH ( i, dStops )
+			{
+				CSphString sTmp;
+				sTmp.SetSprintf ( "stopwords_%d.txt", i );
+				dExtFiles.Add ( { dStops[i], sTmp } );
+
+				sNewStopwords << sTmp;
+			}
+
+			const_cast<CSphDictSettings &>(m_pDict->GetSettings()).m_sStopwords = sNewStopwords.cstr();
+		}
+
+		StrVec_t dNewWordforms;
+		ARRAY_FOREACH ( i, m_pDict->GetSettings().m_dWordforms )
+		{
+			CSphString sTmp;
+			sTmp.SetSprintf ( "wordforms_%d.txt", i );
+			dExtFiles.Add( { m_pDict->GetSettings().m_dWordforms[i], sTmp } );
+			dNewWordforms.Add(sTmp);
+		}
+
+		const_cast<CSphDictSettings &>(m_pDict->GetSettings()).m_dWordforms = dNewWordforms;
+	}
+
+	CSphString sPathOnly = GetPathOnly(m_sPath);
+	for ( const auto & i : dExtFiles )
+	{
+		CSphString sDest;
+		sDest.SetSprintf ( "%s%s", sPathOnly.cstr(), i.second.cstr() );
+		if ( !CopyFile ( i.first, sDest, m_sLastError ) )
+			return false;
+
+		dCopied.Add(sDest);
+	}
+
+	CSphFixedVector<int> dChunkNames = GetIndexNames ( m_dDiskChunks, false );
+	SaveMeta ( m_iTID, dChunkNames );
+
+	ARRAY_FOREACH ( i, m_dDiskChunks )
+		if ( !m_dDiskChunks[i]->CopyExternalFiles ( i, dCopied ) )
+		{
+			m_sLastError = m_dDiskChunks[i]->GetLastError();
+			return false;
+		}
+
+	return true;
+}
+
 
 void RtIndex_c::ProhibitSave()
 {

@@ -110,7 +110,9 @@ struct DistributedIndex_t;
 CSphString	BuildCreateTableDistr ( const CSphString & sName, const DistributedIndex_t & tDistr );
 
 bool		CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t & tCreateTable, StrVec_t & dWarnings, CSphString & sError );
+bool		AddExistingIndexInt ( const CSphString & sIndex, StrVec_t & dWarnings, CSphString & sError );
 bool		DropIndexInt ( const CSphString & sIndex, bool bIfExists, CSphString & sError );
 bool		CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestPath, CSphString & sError );
+bool		CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex, CSphString & sError );
 
 #endif // _searchdconfig_

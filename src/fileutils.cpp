@@ -206,6 +206,28 @@ bool sphIsReadable ( const CSphString & sPath, CSphString * pError )
 }
 
 
+bool sphFileExists ( const char * szFilename, CSphString * pError )
+{
+	struct_stat st = {0};
+	if( stat( szFilename, &st ) != 0 )
+	{
+		if ( pError )
+			pError->SetSprintf ( "cannot access %s", szFilename );
+
+		return false;
+	}
+	else if ( st.st_mode & S_IFDIR )
+	{
+		if ( pError )
+			pError->SetSprintf ( "%s is not a file", szFilename );
+
+		return false;
+	}
+
+	return true;
+}
+
+
 bool sphDirExists ( const char * szFilename, CSphString * pError )
 {
 	struct_stat st = {0};

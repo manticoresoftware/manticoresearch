@@ -706,6 +706,12 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	while ( ( ThreadsNum() > 0 ) && ( sphMicroTimer()-tmShutStarted )<g_iShutdownTimeout )
 		sphSleepMsec ( 50 );
 
+	if ( ThreadsNum()>0 )
+	{
+		int64_t tmDelta = sphMicroTimer()-tmShutStarted;
+		sphWarning ( "still %d alive threads during shutdown, after %d.%03d sec", ThreadsNum(), (int)(tmDelta/1000000), (int)((tmDelta/1000)%1000) );
+	}
+
 	if ( g_pThdPool )
 	{
 		g_pThdPool->Shutdown();

@@ -10,7 +10,7 @@
 searchd
 {
 	<searchd_settings/>
-	data_dir = <data_path path="data0"></data_path>
+	data_dir = <data_path path="data0"/>
 	server_id = <agent_id/>
 }
 </agent0>
@@ -18,7 +18,7 @@ searchd
 searchd
 {
 	<searchd_settings/>
-	data_dir = <data_path path="data1"></data_path>
+	data_dir = <data_path path="data1"/>
 	server_id = <agent_id/>
 }
 </agent1>

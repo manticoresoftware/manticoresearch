@@ -8,7 +8,7 @@ searchd
 {
 	<searchd_settings/>
 	workers	= threads
-	thread_stack = 320K
+	thread_stack = 580K
 	binlog_path =
 }
 
@@ -24,19 +24,6 @@ index test
 }
 
 </config>
-
-<db_create>
-CREATE TABLE `test`
-(
-	`document_id` int(11) NOT NULL default '0',
-	`text` varchar(25) NOT NULL default '',
-	`idd` int(11) NOT NULL default '0'
-)
-</db_create>
-
-<db_drop>
-DROP TABLE IF EXISTS `test`
-</db_drop>
 
 <custom_test><![CDATA[
 
@@ -85,6 +72,7 @@ for ( $i=1; $i<1520; $i++ )
 
 $query = "CALL SNIPPETS ( 'fast path word word1000', 'test', '$match', 1 as query_mode, 0 as limit )";
 $results[] = 'snippets fast-path ext query stack overflow';
+//$results[] = $query;
 $res = mysql_query ( $query, $sock );
 if ($res===true)
         $results[] = "total affected ".mysql_affected_rows($sock);
@@ -103,6 +91,7 @@ else
 
 $query = "CALL SNIPPETS ( 'not a fast path is going here word word1000 and might be others', 'test', '$match', 1 as query_mode, 40 as limit )";
 $results[] = 'snippets ext query stack overflow';
+//$results[] = $query;
 $res = mysql_query ( $query, $sock );
 if ($res===true)
         $results[] = "total affected ".mysql_affected_rows($sock);

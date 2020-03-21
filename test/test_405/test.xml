@@ -13,7 +13,7 @@ indexer
 searchd
 {
 	<searchd_Settings/>
-	data_dir = <data_path path="data0"></data_path>
+	data_dir = <data_path path="data0"/>
 }
 </config>
 

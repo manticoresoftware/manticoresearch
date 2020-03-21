@@ -209,7 +209,7 @@ function LegacyConnectDB ()
 	return $conn;
 }
 
-function LegacyCreateDB ( $db_drop, $db_create, $db_insert, $custom_insert )
+function LegacyCreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, &$error )
 {
 	$conn = LegacyConnectDB();
 
@@ -228,7 +228,10 @@ function LegacyCreateDB ( $db_drop, $db_create, $db_insert, $custom_insert )
 			}
 		}
 		if ( !legacy_mysql_wr ( $q, $conn ) )
-			return false;
+        {
+            $error = mysqli_error($conn);
+            return false;
+        }
 	}
 
 	$oneok = count($db_insert)==0;
@@ -248,7 +251,7 @@ function LegacyCreateDB ( $db_drop, $db_create, $db_insert, $custom_insert )
 	return $conn;
 }
 
-function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip )
+function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip, &$error )
 {
 	if ($skip)
 		return ConnectDB();
@@ -263,7 +266,7 @@ function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip )
 	global $mysql_simulated;
 	if ( count($custom_insert)>0 )
 	{
-		$conn = LegacyCreateDB ( $db_drop, $db_create, $db_insert, $custom_insert );
+		$conn = LegacyCreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $error );
 		if (!$mysql_simulated) {
 			@mysql_close($conn);
 			$conn = ConnectDB();
@@ -288,7 +291,10 @@ function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip )
 			}
 		}
 		if ( !mysqli_wr ( $q, $conn ) )
-			return false;
+        {
+            $error = mysqli_error($conn);
+            return false;
+        }
 	}
 
 	$oneok = count($db_insert)==0;
@@ -1674,10 +1680,21 @@ class SphinxConfig
 		return strtr ( $s, $tr );
 	}
 
-	function FixupErrorMessage ( $s )
+	function FixupErrorMessage ( $err, $s )
 	{
 		$s = $this->FixupAgentAddress ( $s );
-		$s = preg_replace ( "/or \d+ other tokens/", "or N other tokens", $s );
+		if ($err!=1064)
+            $s = preg_replace ( '/or \d+ other tokens/', 'or N other tokens', $s );
+		else
+		    $s = preg_replace (
+                [
+                    '/error when sending data: WSA error 10057/', // windows
+                    '/receiving failure .*$/' // linux (errno 111) and mac (errno 64)
+                ],
+                [
+                    "receiving failure (refused or timedout, substituted)",
+                    "receiving failure (refused or timedout, substituted)"
+                ], $s );
 		return $s;
 	}
 
@@ -1839,8 +1856,9 @@ class SphinxConfig
 		else if ($result===false)
 		{
 			$this->PostprocessDDL ( $query, $query_result );
-			$query_result["error"] = $this->FixupErrorMessage ( mysqli_error( $connection ) );
-			$query_result["errno"] = mysqli_errno( $connection );
+			$error = mysqli_errno( $connection );
+			$query_result["errno"] = $error;
+			$query_result["error"] = $this->FixupErrorMessage ( $error, mysqli_error( $connection ) );
 
 			// Windows 7 fixup
 			$win7_replace_pos = strpos ( $query_result["error"], "error when sending data: WSA error 10057" );
@@ -3758,6 +3776,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 	$config = new SphinxConfig;
 	$lmodel = $config->LoadModel ( $model_file );
 	$isdemo = false;
+	$error = "";
 
 	if ( $lmodel==-1 )
 	{
@@ -3787,10 +3806,10 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 
 	if ( $config->IsNeedDB() )
 	{
-		$connection = CreateDB ( $config->DB_Drop(), $config->DB_Create(), $config->DB_Insert(), $config->DB_CustomInsert(), $sd_skip_indexer );
+		$connection = CreateDB ( $config->DB_Drop(), $config->DB_Create(), $config->DB_Insert(), $config->DB_CustomInsert(), $sd_skip_indexer, $error );
 		if ( $connection === false )
 		{
-			printf ( "$prefix FAILED, error creating test DB" );
+			printf ( "$prefix FAILED, error creating test DB: " . $error );
 			return;
 		}
 		$config->SetConnection($connection);

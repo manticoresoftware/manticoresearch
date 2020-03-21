@@ -73,7 +73,7 @@ CREATE TABLE test_table
 (
 	id INTEGER NOT NULL,
 	gid INTEGER NOT NULL,
-	title VARCHAR(16384) NOT NULL
+	title VARCHAR(16000) NOT NULL
 )
 </DB_Create>
 <DB_Drop>DROP TABLE IF EXISTS test_table</DB_Drop>

@@ -142,8 +142,8 @@ index idx3
 CREATE TABLE test_table
 (
 	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
-	title VARCHAR(16384) NOT NULL
-);
+	title TEXT NOT NULL
+) ENGINE=MYISAM;
 </db_create>
 <db_insert>
 INSERT INTO `test_table` VALUES
@@ -168,7 +168,7 @@ INSERT INTO `test_table` VALUES
 ( 17, 'aleph-bet-gimel dalet he wav zajin het' ),
 
 ( 20, 'ein oy vey' ),
-( 21, CONCAT('zwei ',REPEAT('oy vey ho ho ho ',1024)) ),
+( 21, CONCAT('zwei ',REPEAT('oy vey ho ho ho ',1023),'oy vey ho h') ),
 ( 22, 'oy vey drei' )
 </db_insert>
 
@@ -178,8 +178,8 @@ INSERT INTO `test_table` VALUES
 CREATE TABLE test_table2
 (
 	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
-	title VARCHAR(16384) NOT NULL
-);
+	title TEXT(16384) NOT NULL
+) ENGINE=MYISAM;
 </db_create>
 <db_insert>
 INSERT INTO `test_table2` VALUES
@@ -198,8 +198,8 @@ INSERT INTO `test_table2` VALUES
 CREATE TABLE test_table3
 (
 	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
-	title VARCHAR(16384) NOT NULL
-);
+	title TEXT(16384) NOT NULL
+) ENGINE=MYISAM;
 </db_create>
 <db_drop>DROP TABLE IF EXISTS `test_table3`</db_drop>
 <db_insert>

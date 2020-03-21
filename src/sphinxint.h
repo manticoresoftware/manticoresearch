@@ -110,6 +110,7 @@ extern bool g_bJsonKeynamesToLowercase;
 	SPH_QUERY_STATE ( AGGREGATE,	"aggregate" ) \
 	SPH_QUERY_STATE ( NET_WRITE,	"net_write" ) \
 	SPH_QUERY_STATE ( EVAL_POST,	"eval_post" ) \
+	SPH_QUERY_STATE ( EVAL_GETFIELD,"eval_getfield" ) \
 	SPH_QUERY_STATE ( SNIPPET,		"eval_snippet" ) \
 	SPH_QUERY_STATE ( EVAL_UDF,		"eval_udf" ) \
 	SPH_QUERY_STATE ( TABLE_FUNC,	"table_func" )

@@ -293,7 +293,7 @@ private:
 		SphOffset_t	m_tOffset;
 
 		bool operator == ( const HashKey_t & tKey ) const;
-		static DWORD GetHash ( const HashKey_t & tKey );
+		static DWORD Hash ( const HashKey_t & tKey );
 	};
 
 	struct LinkedBlock_t : BlockData_t
@@ -311,7 +311,7 @@ private:
 	int64_t					m_iCacheSize = 0;
 	int64_t					m_iMemUsed = 0;
 	CSphMutex				m_tLock;
-	OpenHash_T<LinkedBlock_t *, HashKey_t, HashKey_t> m_tHash;
+	CSphOrderedHash<LinkedBlock_t *, HashKey_t, HashKey_t, 1024> m_tHash;
 
 	void					MoveToHead ( LinkedBlock_t * pBlock );
 	void					Add ( LinkedBlock_t * pBlock );
@@ -329,7 +329,7 @@ bool BlockCache_c::HashKey_t::operator == ( const HashKey_t & tKey ) const
 }
 
 
-DWORD BlockCache_c::HashKey_t::GetHash ( const HashKey_t & tKey )
+DWORD BlockCache_c::HashKey_t::Hash ( const HashKey_t & tKey )
 {
 	DWORD uCRC32 = sphCRC32 ( &tKey.m_uUID, sizeof(tKey.m_uUID) );
 	return sphCRC32 ( &tKey.m_tOffset, sizeof(tKey.m_tOffset), uCRC32 );
@@ -338,7 +338,6 @@ DWORD BlockCache_c::HashKey_t::GetHash ( const HashKey_t & tKey )
 
 BlockCache_c::BlockCache_c ( int64_t iCacheSize )
 	: m_iCacheSize ( iCacheSize )
-	, m_tHash ( 1024 )
 {}
 
 
@@ -388,7 +387,7 @@ void BlockCache_c::Add ( LinkedBlock_t * pBlock )
 
 	m_pHead = pBlock;
 
-	Verify ( m_tHash.Add ( pBlock->m_tKey, pBlock ) );
+	Verify ( m_tHash.Add ( pBlock, pBlock->m_tKey ) );
 
 	m_iMemUsed += pBlock->m_uSize + sizeof(LinkedBlock_t);
 }
@@ -422,7 +421,7 @@ bool BlockCache_c::Find ( DWORD uUID, SphOffset_t tOffset, BlockData_t & tData )
 {
 	ScopedMutex_t tLock(m_tLock);
 
-	LinkedBlock_t ** ppBlock = m_tHash.Find ( { uUID, tOffset } );
+	LinkedBlock_t ** ppBlock = m_tHash ( { uUID, tOffset } );
 	if ( !ppBlock )
 		return false;
 
@@ -438,7 +437,7 @@ void BlockCache_c::Release ( DWORD uUID, SphOffset_t tOffset )
 {
 	ScopedMutex_t tLock(m_tLock);
 
-	LinkedBlock_t ** ppBlock = m_tHash.Find ( { uUID, tOffset } );
+	LinkedBlock_t ** ppBlock = m_tHash ( { uUID, tOffset } );
 	assert(ppBlock);
 
 	LinkedBlock_t * pBlock = *ppBlock;
@@ -472,7 +471,7 @@ bool BlockCache_c::Add ( DWORD uUID, SphOffset_t tOffset, BlockData_t & tData )
 	ScopedMutex_t tLock(m_tLock);
 
 	// if another thread managed to add a similar block while we were uncompressing ours, let it be
-	LinkedBlock_t ** ppBlock = m_tHash.Find ( { uUID, tOffset } );
+	LinkedBlock_t ** ppBlock = m_tHash ( { uUID, tOffset } );
 	if ( ppBlock )
 		return false;
 
@@ -565,12 +564,12 @@ private:
 		DWORD		m_uDocstoreId;
 		
 		bool operator == ( const HashKey_t & tKey ) const;
-		static DWORD GetHash ( const HashKey_t & tKey );
+		static DWORD Hash ( const HashKey_t & tKey );
 	};
 
 	int			m_iTotalReaderSize = 0;
 	CSphMutex	m_tLock;
-	OpenHash_T<CSphReader *, HashKey_t, HashKey_t> m_tHash;
+	CSphOrderedHash<CSphReader *, HashKey_t, HashKey_t, 1024> m_tHash;
 
 	static DocstoreReaders_c * m_pReaders;
 
@@ -591,7 +590,7 @@ bool DocstoreReaders_c::HashKey_t::operator == ( const HashKey_t & tKey ) const
 }
 
 
-DWORD DocstoreReaders_c::HashKey_t::GetHash ( const HashKey_t & tKey )
+DWORD DocstoreReaders_c::HashKey_t::Hash ( const HashKey_t & tKey )
 {
 	DWORD uCRC32 = sphCRC32 ( &tKey.m_iSessionId, sizeof(tKey.m_iSessionId) );
 	return sphCRC32 ( &tKey.m_uDocstoreId, sizeof(tKey.m_uDocstoreId), uCRC32 );
@@ -600,16 +599,18 @@ DWORD DocstoreReaders_c::HashKey_t::GetHash ( const HashKey_t & tKey )
 
 DocstoreReaders_c::~DocstoreReaders_c()
 {
-	int64_t iIndex = 0;
-	HashKey_t tKey;
-	CSphReader ** ppReader;
-	while ( (ppReader = m_tHash.Iterate ( &iIndex, &tKey )) != nullptr )
-		SafeDelete ( *ppReader );
+	for ( m_tHash.IterateStart(); m_tHash.IterateNext(); )
+		SafeDelete ( m_tHash.IterateGet() );
 }
 
 
 void DocstoreReaders_c::CreateReader ( int64_t iSessionId, DWORD uDocstoreId, const CSphAutofile & tFile, DWORD uBlockSize )
 {
+	ScopedMutex_t tLock(m_tLock);
+
+	if ( m_tHash ( { iSessionId, uDocstoreId } ) )
+		return;
+
 	int iBufferSize = (int)uBlockSize*8;
 	iBufferSize = Min ( iBufferSize, MAX_READER_CACHE_SIZE );
 	iBufferSize = Max ( iBufferSize, MIN_READER_CACHE_SIZE );
@@ -617,15 +618,13 @@ void DocstoreReaders_c::CreateReader ( int64_t iSessionId, DWORD uDocstoreId, co
 	if ( iBufferSize<=(int)uBlockSize )
 		return;
 
-	ScopedMutex_t tLock(m_tLock);
-
 	if ( m_iTotalReaderSize+iBufferSize > MAX_TOTAL_READER_SIZE )
 		return;
 
 	CSphReader * pReader = new CSphReader ( nullptr, iBufferSize );
 	pReader->SetFile(tFile);
 
-	Verify ( m_tHash.Add ( {iSessionId, uDocstoreId}, pReader ) );
+	Verify ( m_tHash.Add ( pReader, {iSessionId, uDocstoreId} ) );
 	m_iTotalReaderSize += iBufferSize;
 }
 
@@ -633,7 +632,7 @@ void DocstoreReaders_c::CreateReader ( int64_t iSessionId, DWORD uDocstoreId, co
 CSphReader * DocstoreReaders_c::GetReader ( int64_t iSessionId, DWORD uDocstoreId )
 {
 	ScopedMutex_t tLock(m_tLock);
-	CSphReader ** ppReader = m_tHash.Find ( { iSessionId, uDocstoreId } );
+	CSphReader ** ppReader = m_tHash ( { iSessionId, uDocstoreId } );
 	return ppReader ? *ppReader : nullptr;
 }
 
@@ -653,12 +652,13 @@ void DocstoreReaders_c::DeleteBySessionId ( int64_t iSessionId )
 	ScopedMutex_t tLock(m_tLock);
 
 	// fixme: create a separate (faster) lookup?
-	int64_t iIndex = 0;
-	HashKey_t tKey;
-	CSphReader ** ppReader;
-	while ( (ppReader = m_tHash.Iterate ( &iIndex, &tKey )) != nullptr )
-		if ( tKey.m_iSessionId==iSessionId )
-			Delete ( *ppReader, tKey );
+	CSphVector<std::pair<CSphReader*,HashKey_t>> dToDelete;
+	for ( m_tHash.IterateStart(); m_tHash.IterateNext(); )
+		if ( m_tHash.IterateGetKey().m_iSessionId==iSessionId )
+			dToDelete.Add ( {m_tHash.IterateGet(), m_tHash.IterateGetKey()} );
+
+	for ( const auto & i : dToDelete )
+		Delete ( i.first, i.second );
 }
 
 
@@ -667,12 +667,13 @@ void DocstoreReaders_c::DeleteByDocstoreId ( DWORD uDocstoreId )
 	ScopedMutex_t tLock(m_tLock);
 
 	// fixme: create a separate (faster) lookup?
-	int64_t iIndex = 0;
-	HashKey_t tKey;
-	CSphReader ** ppReader;
-	while ( (ppReader = m_tHash.Iterate ( &iIndex, &tKey )) != nullptr )
-		if ( tKey.m_uDocstoreId==uDocstoreId )
-			Delete ( *ppReader, tKey );
+	CSphVector<std::pair<CSphReader*,HashKey_t>> dToDelete;
+	for ( m_tHash.IterateStart(); m_tHash.IterateNext(); )
+		if ( m_tHash.IterateGetKey().m_uDocstoreId==uDocstoreId )
+			dToDelete.Add ( {m_tHash.IterateGet(), m_tHash.IterateGetKey()} );
+
+	for ( const auto & i : dToDelete )
+		Delete ( i.first, i.second );
 }
 
 

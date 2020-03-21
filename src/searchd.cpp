@@ -4779,7 +4779,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 
 	if ( bMaster && !dRemotes.IsEmpty() )
 	{
-		CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_EVAL_POST );
+		CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_EVAL_GETFIELD );
 		RemotesGetField ( dRemotes, tQuery, tRes );
 	}
 

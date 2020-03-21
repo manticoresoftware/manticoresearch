@@ -202,7 +202,7 @@ static bool GetIndexes ( const CSphString & sIndexes, CSphString & sError, StrVe
 	return true;
 }
 
-static bool GetFieldFromLocal ( const CSphString & sIndexName, const GetFieldArgs_t & tArgs, GotDocs_t & tGotDocs, GetFieldRes_t & tRes )
+static bool GetFieldFromLocal ( const CSphString & sIndexName, const GetFieldArgs_t & tArgs, int64_t iSessionID, GotDocs_t & tGotDocs, GetFieldRes_t & tRes )
 {
 	auto pServed = GetServed ( sIndexName );
 	if ( !pServed )
@@ -225,9 +225,7 @@ static bool GetFieldFromLocal ( const CSphString & sIndexName, const GetFieldArg
 	SphCrashLogger_c::SetLastQuery ( tCrashQuery );
 
 	const CSphIndex * pIndex = pDesc->m_pIndex;
-
-	DocstoreSession_c tSession;
-	pIndex->CreateReader ( tSession.GetUID() );
+	pIndex->CreateReader ( iSessionID );
 	
 	CSphVector<int> dFieldIds;
 	CSphFixedVector<int> dFieldRemap ( tArgs.m_dFieldNames.GetLength() );
@@ -252,7 +250,7 @@ static bool GetFieldFromLocal ( const CSphString & sIndexName, const GetFieldArg
 		if ( tGotDocs.Exists ( tDocid ) )
 			continue;
 
-		if ( !pIndex->GetDoc ( tDoc, tDocid, &dFieldIds, tSession.GetUID(), false ) )
+		if ( !pIndex->GetDoc ( tDoc, tDocid, &dFieldIds, iSessionID, false ) )
 			continue;
 
 		assert ( tDoc.m_dFields.GetLength()==dFieldIds.GetLength() );
@@ -352,18 +350,24 @@ static bool GetField ( const GetFieldArgs_t & tArgs, GetFieldRes_t & tRes, GotDo
 		ScheduleDistrJobs ( dRemotes, pDistReq.Ptr(), pDistReply.Ptr(), pDistReporter.Ptr() );
 	}
 
-	ARRAY_FOREACH ( i, dLocals )
-	{
-		const CSphString & sLocal = dLocals[i];
-		if ( !GetFieldFromLocal ( sLocal, tArgs, tGotDocs, tRes ) )
-		{
-			bOkLocal = false;
-			break;
-		}
 
-		// early out on fields fetched for all docs
-		if ( i!=dLocals.GetLength() && tGotDocs.Count ( tArgs.m_dDocs )==tArgs.m_dDocs.GetLength() )
-			break;
+	{
+		DocstoreSession_c tSession;
+		ARRAY_FOREACH ( i, dLocals )
+		{
+			int64_t tmStart1 = sphMicroTimer();
+
+			const CSphString & sLocal = dLocals[i];
+			if ( !GetFieldFromLocal ( sLocal, tArgs, tSession.GetUID(), tGotDocs, tRes ) )
+			{
+				bOkLocal = false;
+				break;
+			}
+
+			// early out on fields fetched for all docs
+			if ( i!=dLocals.GetLength() && tGotDocs.Count ( tArgs.m_dDocs )==tArgs.m_dDocs.GetLength() )
+				break;
+		}
 	}
 
 	if ( dRemotes.GetLength() )

@@ -1145,6 +1145,8 @@ public:
 
 	~ScopedCleanup_c()
 	{
+		ReleaseAndClearDisabled();
+
 		if ( m_bOk )
 			return;
 

@@ -1008,6 +1008,7 @@ inline ServedIndexRefPtr_c GetServed ( const CSphString &sName, GuardedHash_c * 
 	return ServedIndexRefPtr_c ( ( ServedIndex_c * ) pHash->Get ( sName ) );
 }
 
+void ReleaseAndClearDisabled();
 
 ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName, bool bFromReplication, StrVec_t & dWarnings, CSphString & sError );
 ESphAddIndex AddIndexMT ( GuardedHash_c & dPost, const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, CSphString & sError, StrVec_t * pWarnings=nullptr );

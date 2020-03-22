@@ -282,6 +282,10 @@ static ServedIndexRefPtr_c GetDisabled ( const CSphString& sName )
 }
 
 
+void ReleaseAndClearDisabled()
+{
+	g_dPostIndexes.ReleaseAndClear();
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // LOGGING

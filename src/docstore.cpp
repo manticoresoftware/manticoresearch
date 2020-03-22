@@ -311,7 +311,7 @@ private:
 	int64_t					m_iCacheSize = 0;
 	int64_t					m_iMemUsed = 0;
 	CSphMutex				m_tLock;
-	CSphOrderedHash<LinkedBlock_t *, HashKey_t, HashKey_t, 1024> m_tHash;
+	CSphOrderedHash<LinkedBlock_t *, HashKey_t, HashKey_t, 32768> m_tHash;
 
 	void					MoveToHead ( LinkedBlock_t * pBlock );
 	void					Add ( LinkedBlock_t * pBlock );

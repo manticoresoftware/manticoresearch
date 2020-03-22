@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>import table</name>
+<skip_indexer/>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"></data_path>
+}
+</config>
+
+<sphqueries>
+
+<sphinxql>show tables</sphinxql>
+<sphinxql>import table test1 from '<this_test/>/data/index'</sphinxql>
+<sphinxql>show tables</sphinxql>
+<sphinxql>select * from test1</sphinxql>
+<sphinxql>drop table test1</sphinxql>
+
+</sphqueries>
+
+</test>

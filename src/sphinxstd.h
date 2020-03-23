@@ -2596,11 +2596,10 @@ public:
 				m_sValue = EMPTY;
 			} else
 			{
-				auto iLen = 1+(int) strlen(sString);
-				m_sValue = new char [ iLen+SAFETY_GAP ];
-
-				strcpy ( m_sValue, sString ); // NOLINT
-				memset ( m_sValue+iLen, 0, SAFETY_GAP );
+				auto iLen = (int) strlen(sString);
+				m_sValue = new char [ iLen+SAFETY_GAP+1 ];
+				memcpy ( m_sValue, sString, iLen ); // NOLINT
+				memset ( m_sValue+iLen, 0, SAFETY_GAP+1 );
 			}
 		}
 	}

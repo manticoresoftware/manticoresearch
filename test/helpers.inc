@@ -1807,6 +1807,30 @@ class SphinxConfig
 				$query = $this->FixupAgentAddress ( $query );
 				$query_result["sphinxql"] = $query;
 			}
+
+			$import_table = "import table";
+			if ( StrBegins ( $query, $import_table ) )
+			{
+				$matches = array();
+				$preg = preg_match_all ( "/(?:.*)'([^']+)'/", $query, $matches, PREG_OFFSET_CAPTURE );
+
+				$result_str = "";
+				$prev_offset = 0;
+				foreach ( $matches[1] as $entry )
+				{
+					$result_str.= substr ( $query, $prev_offset, $entry[1]-$prev_offset );
+					$replacement = basename($entry[0]);
+					$result_str.= $replacement;
+					$prev_offset = $entry[1] + strlen($entry[0]);
+				}
+
+				$result_str.= substr ( $query, $prev_offset );
+				$query_result["sphinxql"] = $result_str;
+
+				$query = $result_str;
+				$query = $this->FixupAgentAddress ( $query );
+				$query_result["sphinxql"] = $query;
+			}
 		}
 		else if ($result===false)
 		{

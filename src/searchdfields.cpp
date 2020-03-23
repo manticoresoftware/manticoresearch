@@ -355,8 +355,6 @@ static bool GetField ( const GetFieldArgs_t & tArgs, GetFieldRes_t & tRes, GotDo
 		DocstoreSession_c tSession;
 		ARRAY_FOREACH ( i, dLocals )
 		{
-			int64_t tmStart1 = sphMicroTimer();
-
 			const CSphString & sLocal = dLocals[i];
 			if ( !GetFieldFromLocal ( sLocal, tArgs, tSession.GetUID(), tGotDocs, tRes ) )
 			{

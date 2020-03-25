@@ -1600,7 +1600,7 @@ JsonObj_c JsonObj_c::GetArrayItem ( const char * szName, CSphString & sError, bo
 
 	if ( !tChild.IsArray() )
 	{
-		sError.SetSprintf ( R"("%s" property value should be an object)", szName );
+		sError.SetSprintf ( R"("%s" property value should be an array)", szName );
 		return JsonNull;
 	}
 

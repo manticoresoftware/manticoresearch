@@ -502,11 +502,7 @@ Fulltext query search results can be highlighted on one or more fields. Field co
       "query": { "match": { "content": "and first" } },
       "highlight":
       {
-        "fields":
-        {
-          "content": {},
-          "title": {}
-        }
+        "fields": [ "content", "title" ]
       }
     }
 

@@ -29,6 +29,7 @@ pages:
     - public
   rules:
     - if: $TEST==null && $CI_COMMIT_BRANCH == "master"
+  cache: {}
 
 job_mirror:
   stage: mirroring
@@ -38,6 +39,7 @@ job_mirror:
     - if: $TEST==null && $CI_COMMIT_BRANCH == "master"
   script:
     - ~/gitsync.sh
+  cache: {}
 
 simple_tests:
   stage: routines
@@ -50,8 +52,9 @@ simple_tests:
   image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
   variables:
     CTEST_BUILD_CONFIGURATION: "Debug"
+    CACHEB: "../cache"
   script:
-    - ctest -V -S misc/ctest/gltest.cmake
+    - ctest -VV -S misc/ctest/gltest.cmake
   after_script:
     - cd build && mkdir xml_simple_tests
     - cp -r Testing/2*/*.xml xml_simple_tests
@@ -63,7 +66,10 @@ simple_tests:
     - build/test/searchd.log
     expire_in: 12 hrs
     when: always
-  retry: 1
+  cache:
+    key: linux_debug
+    paths:
+      - cache/
 
 release_tests:
   stage: routines
@@ -76,6 +82,7 @@ release_tests:
   image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
   variables:
     CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
+    CACHEB: "../cache"
   script:
     - ctest -V -S misc/ctest/gltest.cmake
   after_script:
@@ -89,6 +96,10 @@ release_tests:
     - build/test/searchd.log
     expire_in: 12 hrs
     when: always
+  cache:
+    key: linux_release
+    paths:
+      - cache/
   retry: 1
 
 win_tests:
@@ -102,6 +113,7 @@ win_tests:
   dependencies: []
   variables:
     LIBS_BUNDLE: "x:/bundle"
+    CACHEB: "x:/cache"
     OPENSSL_ROOT_DIR: "x:/bundle/openssl-x32"
     COPY_DLL: "x:/bundle/dll"
     WIN_TEST_CI: "1"
@@ -122,6 +134,7 @@ win_tests:
       - build/test/searchd.log
     expire_in: 12 hrs
     when: always
+  cache: {}
   retry: 1
 
 build_mac:
@@ -135,7 +148,7 @@ build_mac:
   dependencies: []
   variables:
     CTEST_BUILD_CONFIGURATION: "Debug"
-    LIBS_BUNDLE: "/work"
+    CACHEB: "../cache"
     CTEST_CMAKE_GENERATOR: "Unix Makefiles"
   script:
     - mkdir build && cd build
@@ -146,9 +159,13 @@ build_mac:
   artifacts:
     paths:
       - build/xml_build_mac
+      - build/CMakeFiles/CMake*.log
     expire_in: 12 hrs
     when: always
-  retry: 1
+  cache:
+    key: darwin
+    paths:
+      - cache/
 
 build_bsd:
   stage: routines
@@ -161,9 +178,7 @@ build_bsd:
   dependencies: []
   variables:
     CTEST_BUILD_CONFIGURATION: "Debug"
-    LIBS_BUNDLE: "/media/shared/bundle"
-    USE_GALERA: 0
-    WITH_ICU: 0
+    CACHEB: "../cache"
     CTEST_CMAKE_GENERATOR: "Unix Makefiles"
   script:
     - mkdir build && cd build
@@ -174,9 +189,13 @@ build_bsd:
   artifacts:
     paths:
       - build/xml_build_bsd
+      - build/CMakeFiles/CMake*.log
     expire_in: 12 hrs
     when: always
-  retry: 1
+  cache:
+    key: freebsd
+    paths:
+      - cache/
 
 push_results:
   stage: publish
@@ -199,6 +218,7 @@ push_results:
   artifacts:
     reports:
       junit: build/junit_*.xml
+  cache: {}
   environment:
     name: ${CI_COMMIT_REF_NAME}
     url: http://$CDASH_URL/CDash/public/index.php?project=Manticoresearch&filtercount=1&field1=revision&compare1=63&value1=$CI_COMMIT_SHA

@@ -17,6 +17,7 @@ tarball:
       - manticore-*.tar.gz
     when: on_success
     expire_in: 12 hrs
+  cache: {}
 
 
 osx:
@@ -245,3 +246,4 @@ collect:
     when: on_success
     expire_in: 1 week
   allow_failure: false
+  cache: {}

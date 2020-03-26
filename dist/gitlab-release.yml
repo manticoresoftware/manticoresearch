@@ -126,24 +126,6 @@ rhel6:
       - $WHAT =~ /rhel6/
   image: registry.gitlab.com/manticoresearch/dev/centos6_cmake314:latest
 
-
-rhelsplit6:
-  <<: *redhat
-  script:
-    - ln -s $(pwd) /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
-    - cd /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
-    - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DSPLIT_APPS=ON -DNOAPI=ON -DDISTR_BUILD=$DISTR ..
-    - make -j4 package
-    - cp manticore*.rpm ..
-  variables:
-    DISTR: "rhel6"
-  only:
-    variables:
-      - $WHAT == "all"
-      - $WHAT =~ /rhelsplit6/
-  image: registry.gitlab.com/manticoresearch/dev/centos6_cmake314:latest
-
 rhel7:
   <<: *redhat
   variables:

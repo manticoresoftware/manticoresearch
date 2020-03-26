@@ -52,7 +52,7 @@ If you don't have the mysql client installed on host, you can use the built-in m
 
 .. code-block:: mysql
 
-
+   mysql> CREATE TABLE testrt (title TEXT, content TEXT, gid INT);
    mysql> SHOW TABLES;
    +-------+-------------+
    | Index | Type        |
@@ -66,14 +66,14 @@ Now let's look at our RT index:
 .. code-block:: mysql
 
    mysql> DESCRIBE testrt;
-   +----------+--------+------------+
-   | Field    | Type   | Properties |
-   +----------+--------+------------+
-   | id       | bigint |            |
-   | title    | field  | stored     |
-   | content  | field  | stored     |
-   | gid      | uint   |            |
-   +----------+--------+------------+
+   +----------+--------+---------------------+
+   | Field    | Type   | Properties          |
+   +----------+--------+---------------------+
+   | id       | bigint |                     |
+   | title    | text   | stored, indexed     |
+   | content  | text   | stored, indexed     |
+   | gid      | uint   |                     |
+   +----------+--------+---------------------+
    4 rows in set (0.00 sec)
 
 As the RT indexes start empty, let's add some data into it first   
@@ -177,13 +177,5 @@ The search above does a simple matching, where all words need to be present. But
 Here we search for 4 words, but we can have a match even if only 3 words (of 4) are found. The search will rank higher first the documents that contain all the words.
 We also added a `SHOW META  <http://docs.manticoresearch.com/latest/html/sphinxql_reference/show_meta_syntax.html>`__ command. 
 SHOW META returns information about previous executed query, that is number of found records (in total_found), execution time (in time) and statistics about the keywords of the search.
-
-
-To create a new RT index, you need to define it in the manticore.conf. A simple definition looks like:
-
-.. code-block:: none
-
-   mysql> CREATE TABLE myindexname (title text, attr1 integer, attr2 integer) rt_mem_limit='256M';
-
 
 More information about how to use Manticore in Docker and parameters that can be passed to containers are found on the `Docker Hub <https://hub.docker.com/r/manticoresearch/manticore/>`_ page.

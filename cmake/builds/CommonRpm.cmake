@@ -62,12 +62,12 @@ set ( CPACK_COMPONENT_ADM_GROUP "bin" )
 set ( CPACK_COMPONENT_ADM_DISPLAY_NAME "Scripts and settings" )
 
 # block below used to patch the minconf - add a slash at the end of 'binlog_path' section
-file ( READ "manticore-min.conf.in" _MINCONF LIMIT 10240 )
+file ( READ "manticore.conf.in" _MINCONF LIMIT 10240 )
 string ( REGEX REPLACE "(binlog_path[ \t]+\\=[ \t]+\\@CONFDIR\\@/data)" "\\1/" _MINCONF "${_MINCONF}" )
 string ( REGEX REPLACE "(log/searchd.pid)" "run/manticore/searchd.pid" _MINCONF "${_MINCONF}" )
 string ( REGEX REPLACE "(@CONFDIR@/log/)" "@CONFDIR@/log/manticore/" _MINCONF "${_MINCONF}" )
 string ( REGEX REPLACE "(@CONFDIR@/data/)" "@CONFDIR@/lib/manticore/" _MINCONF "${_MINCONF}" )
-file ( WRITE "${MANTICORE_BINARY_DIR}/manticore-min.conf.in" "${_MINCONF}")
+file ( WRITE "${MANTICORE_BINARY_DIR}/manticore.conf.in" "${_MINCONF}")
 unset (_MINCONF)
 
 # this values set for correct substitution in configure files below
@@ -75,8 +75,7 @@ set ( CONFDIR "${LOCALSTATEDIR}" )
 set ( RUNDIR "${LOCALSTATEDIR}/run/manticore" )
 set ( LOGDIR "${LOCALSTATEDIR}/log/manticore" )
 
-configure_file ( "${MANTICORE_BINARY_DIR}/manticore-min.conf.in" "${MANTICORE_BINARY_DIR}/manticore-min.conf.dist" @ONLY )
-configure_file ( "manticore.conf.in" "${MANTICORE_BINARY_DIR}/manticore.conf.dist" @ONLY )
+configure_file ( "${MANTICORE_BINARY_DIR}/manticore.conf.in" "${MANTICORE_BINARY_DIR}/manticore.conf.dist" @ONLY )
 
 configure_file ( "dist/rpm/manticore.logrotate.in" "${MANTICORE_BINARY_DIR}/manticore.logrotate" @ONLY )
 
@@ -109,8 +108,7 @@ else ()
 
 endif ()
 
-install ( FILES ${MANTICORE_BINARY_DIR}/manticore-min.conf.dist
-		${MANTICORE_BINARY_DIR}/manticore.conf.dist
+install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf.dist
 		DESTINATION usr/${CMAKE_INSTALL_DOCDIR} COMPONENT doc )
 
 install ( FILES COPYING example.sql DESTINATION usr/${CMAKE_INSTALL_DOCDIR} COMPONENT doc )
@@ -130,7 +128,7 @@ endif()
 install ( FILES ${MANTICORE_BINARY_DIR}/manticore.logrotate
 		DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/logrotate.d COMPONENT adm RENAME manticore)
 
-install ( FILES ${MANTICORE_BINARY_DIR}/manticore-min.conf.dist
+install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf.dist
 		DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT adm RENAME manticore.conf )
 
 install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore COMPONENT adm )

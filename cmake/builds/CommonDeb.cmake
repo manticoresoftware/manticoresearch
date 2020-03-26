@@ -25,22 +25,16 @@ if ( NOT CPACK_DEBIAN_PACKAGE_ARCHITECTURE )
 	message ( WARNING "No arch for debian build found. Provide CPACK_PACKAGE_ARCHITECTURE var with the value" )
 endif ()
 
-# block below used to patch the minconf and full conf for debian
-file ( READ "manticore-min.conf.in" _MINCONF )
-file ( READ "manticore.conf.in" _FULLCONF )
+# block below used to patch the conf for debian
+file ( READ "manticore.conf.in" _MINCONF )
 string ( REPLACE "@CONFDIR@/log/searchd.pid" "@RUNDIR@/searchd.pid" _MINCONF "${_MINCONF}" )
-string ( REPLACE "@CONFDIR@/log/searchd.pid" "@RUNDIR@/searchd.pid" _FULLCONF "${_FULLCONF}" )
-string ( REPLACE "@CONFDIR@/log" "@LOGDIR@" _FULLCONF "${_FULLCONF}" )
-string ( REPLACE "@CONFDIR@/log" "@LOGDIR@" _FULLCONF "${_FULLCONF}" )
-file ( WRITE "${MANTICORE_BINARY_DIR}/manticore-min.conf.in" "${_MINCONF}" )
-file ( WRITE "${MANTICORE_BINARY_DIR}/manticore.conf.in" "${_FULLCONF}" )
+string ( REPLACE "@CONFDIR@/log" "@LOGDIR@" _MINCONF "${_MINCONF}" )
+file ( WRITE "${MANTICORE_BINARY_DIR}/manticore.conf.in" "${_MINCONF}" )
 unset ( _MINCONF )
-unset ( _FULLCONF )
 
 set ( CONFDIR "${LOCALSTATEDIR}/lib/manticore" )
 set ( RUNDIR "${LOCALSTATEDIR}/run/manticore" )
 set ( LOGDIR "${LOCALSTATEDIR}/log/manticore" )
-configure_file ( "${MANTICORE_BINARY_DIR}/manticore-min.conf.in" "${MANTICORE_BINARY_DIR}/manticore-min.conf.dist" @ONLY )
 configure_file ( "${MANTICORE_BINARY_DIR}/manticore.conf.in" "${MANTICORE_BINARY_DIR}/manticore.conf.dist" @ONLY )
 
 

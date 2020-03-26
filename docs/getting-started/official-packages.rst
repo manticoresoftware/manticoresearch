@@ -45,21 +45,21 @@ First, let's connect to Manticore Search and create a new index:
 .. code-block:: mysql
 
 
-   mysql> CREATE TABLE testrt (title text, content text, gid uint);
+   mysql> CREATE TABLE testrt (title TEXT, content TEXT, gid INT);
    
 Now let's look at our RT index:
 
 .. code-block:: mysql
 
    mysql> DESCRIBE testrt;
-   +----------+--------+------------+
-   | Field    | Type   | Properties |
-   +----------+--------+------------+
-   | id       | bigint |            |
-   | title    | field  | stored     |
-   | content  | field  | stored     |
-   | gid      | uint   |            |
-   +----------+--------+------------+
+   +----------+--------+---------------------+
+   | Field    | Type   | Properties          |
+   +----------+--------+---------------------+
+   | id       | bigint |                     |
+   | title    | text   | stored, indexed     |
+   | content  | text   | stored, indexed     |
+   | gid      | uint   |                     |
+   +----------+--------+---------------------+
    4 rows in set (0.00 sec)
 
 As the RT indexes start empty, let's add some data into it first   
@@ -182,13 +182,21 @@ First, the database credentials need to be adjusted in the source configuration:
 
 .. code-block:: none
    
-   ...
-      sql_host                = localhost
-      sql_user                = test
-      sql_pass                =
-      sql_db                  = test
-      sql_port                = 3306  # optional, default is 3306
-   ...
+   source src1
+    {
+        type			= mysql
+        sql_host		= localhost
+        sql_user		= test
+        sql_pass		=
+        sql_db			= test
+        sql_port		= 3306	# optional, default is 3306
+        sql_query		= \
+            SELECT id, group_id, UNIX_TIMESTAMP(date_added) AS date_added, title, content \
+            FROM documents
+        sql_attr_uint		= group_id
+        sql_attr_timestamp	= date_added
+    }
+
 
 Then we look after the ``sql_query``, which is the query that grabs the data
 
@@ -237,10 +245,11 @@ If we want to also  enable some features (for example wildcarding), we have to e
 .. code-block:: none
 
       index test1
-	  {
-	  ...
-          min_infix_len           = 3
-	  ...
+    {
+        source			= src1
+        path			= /var/lib/manticore/data/test1
+        min_infix_len   = 3
+    }
 
 
 Once we have this setup, we can run the indexing process:

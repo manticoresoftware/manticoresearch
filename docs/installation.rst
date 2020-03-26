@@ -211,7 +211,7 @@ In the following example we'll consider folder ``C:\Manticore`` where we unpack 
 	unzip manticore-3.3.0-200204-01fc8ad1-release-x64-bin.zip
 
 
-The zip comes with 2 sample configurations: ``manticore.conf.in`` and ``manticore-min.conf.in``. The latter is a stripped-down of comments version of the first.  	
+The zip comes with a sample configurations ``manticore.conf.in``.
 
 The configuration contains a ``@CONFIGDIR@`` string which needs to be replaced. The ``@CONFIGDIR@`` is the root directory of ``data`` and ``log`` folders (first is used as location for indexes, second for logs).
 The zip package comes with these folders, so they will be available at the location where you unzipped the package. If you want to use a different location, the two folders must be created there.
@@ -592,186 +592,37 @@ We are going to use SphinxQL protocol as it's the current recommended way and it
 
     $ mysql -h0 -P9306
 
-The default configuration comes with a sample Real-Time. A first step to see it in action is to add several documents to it, then you can start perform searches:
+First we need to create an index, then we add several documents to it:
 	
 .. code-block:: bash
 
-    mysql> INSERT INTO rt VALUES (1, 'this is', 'a sample text', 11);
-	Query OK, 1 row affected (0.00 sec)
+  mysql> CREATE TABLE testrt (title TEXT, content TEXT, gid INT);
+   
+  mysql> INSERT INTO testrt VALUES(1,'List of HP business laptops','Elitebook Probook',10);
+  Query OK, 1 row affected (0.00 sec)
 
-    mysql> INSERT INTO rt VALUES (2, 'some more', 'text here', 22);
-	Query OK, 1 row affected (0.00 sec)
+  mysql> INSERT INTO testrt VALUES(2,'List of Dell business laptops','Latitude Precision Vostro',10);
+  Query OK, 1 row affected (0.00 sec)
 
-	mysql> INSERT INTO rt VALUES (3, 'more about this text', 'can be found in this text', 22);
-	Query OK, 1 row affected (0.00 sec)
+  mysql> INSERT INTO testrt VALUES(3,'List of Dell gaming laptops','Inspirion Alienware',20);
+  Query OK, 1 row affected (0.00 sec)
+  
+  mysql> INSERT INTO testrt VALUES(4,'Lenovo laptops list','Yoga IdeaPad',30);
+  Query OK, 1 row affected (0.01 sec)
 
-
-.. code-block:: mysql
-
-    mysql> SELECT *,weight() FROM rt  WHERE MATCH('text') ORDER BY WEIGHT() DESC;
-	+------+------+----------+
-	| id   | gid  | weight() |
-	+------+------+----------+
-	|    3 |   22 |     2252 |
-	|    1 |   11 |     1319 |
-	|    2 |   22 |     1319 |
-	+------+------+----------+
-	3 rows in set (0.00 sec)
-
-
-In the sample configuration there is also a plain index with MySQL source, which needs to be indexed first in order to start using it.
-First, we populate the sample table in MySQL:
-
-.. code-block:: bash
-
-	mysql> create database test;
-	$ mysql -u test <  /usr/share/doc/manticore/example-conf/example.sql
-
-The sample config uses a ``test`` with no password for connecting to MySQL. Adjust the credentials, then index:
-
-.. code-block:: bash
-
-	$ sudo -u manticore indexer -c /etc/sphinxsearch/manticore.conf test1 --rotate
-	Manticore 3.3.0 01fc8ad@200204 release
-	Copyright (c) 2001-2016, Andrew Aksyonoff
-	Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
-	Copyright (c) 2017-2020, Manticore Software LTD (http://manticoresearch.com)
-	
-	using config file '/etc/sphinxsearch/manticore.conf'...
-	indexing index 'test1'...
-	collected 4 docs, 0.0 MB
-	sorted 0.0 Mhits, 100.0% done
-	total 4 docs, 193 bytes
-	total 0.002 sec, 81503 bytes/sec, 1689.18 docs/sec
-	total 4 reads, 0.000 sec, 8.1 kb/call avg, 0.0 msec/call avg
-	total 12 writes, 0.000 sec, 0.1 kb/call avg, 0.0 msec/call avg
-	rotating indices: successfully sent SIGHUP to searchd (pid=2947).
-
-Now let's run several queries:	
-
-.. code-block:: mysql
-
-	mysql> SELECT *, WEIGHT() FROM test1 WHERE MATCH('"document one"/1');SHOW META;
-	+------+----------+------------+----------+
-	| id   | group_id | date_added | weight() |
-	+------+----------+------------+----------+
-	|    1 |        1 | 1502280778 |     2663 |
-	|    2 |        1 | 1502280778 |     1528 |
-	+------+----------+------------+----------+
-	2 rows in set (0.00 sec)
-
-	+---------------+----------+
-	| Variable_name | Value    |
-	+---------------+----------+
-	| total         | 2        |
-	| total_found   | 2        |
-	| time          | 0.000    |
-	| keyword[0]    | document |
-	| docs[0]       | 2        |
-	| hits[0]       | 2        |
-	| keyword[1]    | one      |
-	| docs[1]       | 1        |
-	| hits[1]       | 2        |
-	+---------------+----------+
-	9 rows in set (0.00 sec)
+  mysql> INSERT INTO testrt VALUES(5,'List of ASUS ultrabooks and laptops','Zenbook Vivobook',30);
+  Query OK, 1 row affected (0.01 sec)
 
 
 .. code-block:: mysql
 
-	mysql>  SET profiling=1;SELECT * FROM test1 WHERE id IN (1,2,4);SHOW PROFILE;
-	Query OK, 0 rows affected (0.00 sec)
-	
-	+------+----------+------------+
-	| id   | group_id | date_added |
-	+------+----------+------------+
-	|    1 |        1 | 1502280778 |
-	|    2 |        1 | 1502280778 |
-	|    4 |        2 | 1502280778 |
-	+------+----------+------------+
-	3 rows in set (0.00 sec)
-	
-	+--------------+----------+----------+---------+
-	| Status       | Duration | Switches | Percent |
-	+--------------+----------+----------+---------+
-	| unknown      | 0.000059 | 4        | 44.70   |
-	| net_read     | 0.000001 | 1        | 0.76    |
-	| local_search | 0.000042 | 1        | 31.82   |
-	| sql_parse    | 0.000012 | 1        | 9.09    |
-	| fullscan     | 0.000001 | 1        | 0.76    |
-	| finalize     | 0.000007 | 1        | 5.30    |
-	| aggregate    | 0.000006 | 2        | 4.55    |
-	| net_write    | 0.000004 | 1        | 3.03    |
-	| eval_post    | 0.000000 | 1        | 0.00    |
-	| total        | 0.000132 | 13       | 0       |
-	+--------------+----------+----------+---------+
-	10 rows in set (0.00 sec)
-
-
-.. code-block:: mysql
-
-	mysql> SELECT id, id%3 idd FROM test1 WHERE MATCH('this is | nothing') GROUP BY idd;SHOW PROFILE;
-	+------+------+
-	| id   | idd  |
-	+------+------+
-	|    1 |    1 |
-	|    2 |    2 |
-	|    3 |    0 |
-	+------+------+
-	3 rows in set (0.00 sec)
-	
-	+--------+----------+----------+---------+
-	| Status | Duration | Switches | Percent |
-	+--------+----------+----------+---------+
-	| total  | 0.000000 | 0        | 0       |
-	+--------+----------+----------+---------+
-	1 row in set (0.00 sec)
-
-
-.. code-block:: none
-
-	mysql> SELECT id FROM test1 WHERE MATCH('is this a good plan?');SHOW PLAN\G
-	Empty set (0.00 sec)
-	
-	*************************** 1. row ***************************
-	Variable: transformed_tree
-		Value: AND(
-		AND(KEYWORD(is, querypos=1)),
-		AND(KEYWORD(this, querypos=2)),
-		AND(KEYWORD(a, querypos=3)),
-		AND(KEYWORD(good, querypos=4)),
-		AND(KEYWORD(plan, querypos=5)))
-	1 row in set (0.00 sec)
-
-
-.. code-block:: mysql
-
-    mysql>  SELECT COUNT(*) c, id%3 idd FROM test1 GROUP BY idd HAVING COUNT(*)>1;
-	+------+------+
-	| c    | idd  |
-	+------+------+
-	|    2 |    1 |
-	+------+------+
-	1 row in set (0.00 sec)
-
-.. code-block:: mysql
-
-    mysql>  SELECT COUNT(*) FROM test1;
-	+----------+
-	| count(*) |
-	+----------+
-	|        4 |
-	+----------+
-	1 row in set (0.00 sec)
-
-.. code-block:: mysql
-
-	mysql>   CALL KEYWORDS ('one two three', 'test1', 1);
-	+------+-----------+------------+------+------+
-	| qpos | tokenized | normalized | docs | hits |
-	+------+-----------+------------+------+------+
-	| 1    | one       | one        | 1    | 2    |
-	| 2    | two       | two        | 1    | 2    |
-	| 3    | three     | three      | 0    | 0    |
-	+------+-----------+------------+------+------+
-	3 rows in set (0.00 sec)
-
+   mysql>  SELECT * FROM testrt WHERE MATCH('list of laptops');
+   +------+------+-------------------------------------+---------------------------+
+   | id   | gid  | title                               | content                   |
+   +------+------+-------------------------------------+---------------------------+
+   |    1 |   10 | List of HP business laptops         | Elitebook Probook         |
+   |    2 |   10 | List of Dell business laptops       | Latitude Precision Vostro |
+   |    3 |   20 | List of Dell gaming laptops         | Inspirion Alienware       |
+   |    5 |   30 | List of ASUS ultrabooks and laptops | Zenbook Vivobook          |
+   +------+------+-------------------------------------+---------------------------+
+   4 rows in set (0.00 sec)

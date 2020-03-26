@@ -620,8 +620,7 @@ Example:
 charset_table
 ~~~~~~~~~~~~~
 
-Accepted characters table, with case folding rules. Optional, default
-value are latin and cyrillic characters.
+Accepted characters table, with case folding rules. Optional, default is non_cjk alias collection.
 
 charset_table is the main workhorse of Manticore tokenization process, ie.
 the process of extracting keywords from document text or query text. It
@@ -682,8 +681,11 @@ Example:
 
 .. code-block:: ini
 
+    # default
+    charset_table = non_cjk
 
-    # default are English and Russian letters
+
+    # only English and Russian letters
     charset_table = 0..9, A..Z->a..z, _, a..z, \
         U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451
 

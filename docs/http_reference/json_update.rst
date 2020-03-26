@@ -19,7 +19,7 @@ Example:
 	  }
 	}
 
-The daemon will respond with a JSON object stating if the operation was successfull or not:
+The daemon will respond with a JSON object stating if the operation was successful or not:
 
 ::
    

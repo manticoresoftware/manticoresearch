@@ -50,10 +50,10 @@ You can also use ``"size"``/``"from"`` synonyms in place of ``"limit"``/``"offse
 
 In case the index contains json attributes, they will be injected into output json as inline objects, so you can simple take and work with them (before they were returned as escaped strings, so you had to parse them into json).
 
-Fulltext queries
-""""""""""""""""
+Full-text queries
+"""""""""""""""""
 
-Fulltext queries can be specified either in SphinxQL or in JSON format.
+Full-text queries can be specified either in SphinxQL or in JSON format.
 One option is to use ``"query_string"`` and write queries in SphinxQL:
 
 ::
@@ -370,6 +370,41 @@ following latitude/longitude formats:
 
 Latitude and longitude are specified in degrees.
 
+geo_distance can be used as a filter in bool queries along with matches or other attribute filters:
+
+.. code-block:: json 
+  
+    {
+      "index": "geodemo",
+      "query": {
+        "bool": {
+          "must": [
+            {
+              "match": {
+                "*": "station"
+              }
+            },
+            {
+              "equals": {
+                "state_code": "ENG"
+              }
+            },
+            {
+              "geo_distance": {
+                "distance_type": "adaptive",
+                "location_anchor": {
+                  "lat": 52.396,
+                  "lon": -1.774
+                },
+                "location_source": "latitude_deg,longitude_deg",
+                "distance": "10000 m"
+              }
+            }
+          ]
+        }
+      }
+    }
+
 Sorting
 """""""
 
@@ -388,7 +423,7 @@ Query results can be sorted by one or more attributes. Example:
       "sort": [ "_score", "id" ]
     }
 
-``"sort"`` specifies an array of attibutes and/or additional properties. Each element of the array can be an attribute name or ``"_score"`` if you want to sort by match weights. In that case sort order defaults to ascending for attributes and descending for ``_score``.
+``"sort"`` specifies an array of attributes and/or additional properties. Each element of the array can be an attribute name or ``"_score"`` if you want to sort by match weights. In that case sort order defaults to ascending for attributes and descending for ``_score``.
 
 You can also specify sort order explicitly. Example:
 
@@ -468,6 +503,58 @@ Example:
 longitude and ``distance_type`` selects distance computation function
 (optional, defaults to “arc”).
 
+To perform a geo search ordered by distance, the query must contain the geo distance in both the filtering and sorting:
+
+.. code-block::  json
+
+  {
+    "index": "geodemo",
+    "sort": [
+      {
+        "_geo_distance": {
+          "location_anchor": {
+            "lat": 52.396,
+            "lon": -1.774
+          },
+          "location_source": [
+            "latitude_deg",
+            "longitude_deg"
+          ]
+        }
+      },
+      {
+        "name": "asc"
+      }
+    ],
+    "query": {
+      "bool": {
+        "must": [
+          {
+            "match": {
+              "*": "station"
+            }
+          },
+          {
+            "equals": {
+              "state_code": "ENG"
+            }
+          },
+          {
+            "geo_distance": {
+              "distance_type": "adaptive",
+              "location_anchor": {
+                "lat": 52.396,
+                "lon": -1.774
+              },
+              "location_source": "latitude_deg,longitude_deg",
+              "distance": "10000 m"
+            }
+          }
+        ]
+      }
+    }
+  }
+
 Expressions
 """""""""""
 
@@ -487,13 +574,71 @@ Expressions are supported via ``script_fields``:
 
 In this example two expressions are created: ``add_all`` and ``title_len``. First expression calculates ``( gid * 10 ) | crc32(title)`` and stores the result in the ``add_all`` attribute. Second expression calculates ``crc32(title)`` and stores the result in the ``title_len`` attribute.
 
-Only ``inline`` expressions are supported for now. The value of ``inline`` property (the expression to compute) has the same syntax as
-SphinxQL expressions.
+Only ``inline`` expressions are supported for now. The value of ``inline`` property (the expression to compute) has the same syntax as SphinxQL expressions.
 
+The expression name can used in filtering or sorting:
+
+.. code-block:: json
+  
+  {
+    "index": "movies_rt",
+    "script_fields": {
+      "cond1": {
+        "script": {
+          "inline": "actor_2_facebook_likes =296 OR movie_facebook_likes =37000"
+        }
+      },
+      "cond2": {
+        "script": {
+          "inline": "IF (IN (content_rating,'TV-PG','PG'),2, IF(IN(content_rating,'TV-14','PG-13'),1,0))"
+        }
+      }
+    },
+    "limit": 10,
+    "sort": [
+      {
+        "cond2": "desc"
+      },
+      {
+        "actor_1_name": "asc"
+      },
+      {
+        "actor_2_name": "desc"
+      }
+    ],
+    "profile": true,
+    "query": {
+      "bool": {
+        "must": [
+          {
+            "match": {
+              "*": "star"
+            }
+          },
+          {
+            "equals": {
+              "cond1": 1
+            }
+          }
+        ],
+        "must_not": [
+          {
+            "equals": {
+              "content_rating": "R"
+            }
+          }
+        ]
+      }
+    }
+  }
+  
+
+The expression values are by default included in the '_source' array of the result set. If the source is selective (see :ref:`json_search_source`) the expressions name can be added to the ``_source`` paramater in the request. 
+  
 Text highlighting
 """""""""""""""""
 
-Fulltext query search results can be highlighted on one or more fields. Field contents has to be stored in document storage (see stored_fields index option). Here’s an example:
+Full-text query search results can be highlighted on one or more fields. Field contents has to be stored in document storage (see stored_fields index option). Here’s an example:
 
 .. code-block:: json
 
@@ -502,7 +647,11 @@ Fulltext query search results can be highlighted on one or more fields. Field co
       "query": { "match": { "content": "and first" } },
       "highlight":
       {
-        "fields": [ "content", "title" ]
+        "fields":
+        {
+          "content": {},
+          "title": {}
+        }
       }
     }
 
@@ -537,7 +686,19 @@ As a result of this query, the values of string attributes called ``content`` an
       }
     }
 
-Highlighting supports all the options that are avilable for ``CALL SNIPPETS``.
+It's possible to return highlights from all fields by passing an empty object to 'highlight':
+
+.. code-block:: json
+
+    {
+      "index": "test",
+      "query": { "match": { "content": "and first" } },
+      "highlight":
+      {
+      }
+    }
+
+Highlighting supports all the options that are available for ``CALL SNIPPETS``.
 In addition, it supports their synonyms:
 
 * ``fields`` object contains attribute names with options.
@@ -643,9 +804,15 @@ Each match in the ``hits`` array has the following properties:
 
 * ``_id``: match id
 * ``_score``: match weight, calculated by ranker
-* ``_source``: an array containing the attributes of this match. By default all attributes are included. However, this behaviour can be changed, see below
+* ``_source``: an array containing the attributes of this match.
 
-You can use the ``_source`` property to select the fields you want to be
+.. _json_search_source:
+
+Source selection
+""""""""""""""""
+
+By default all attributes are returned in the ``_source`` array.
+You can use the ``_source`` property in the request payload to select the fields you want to be
 included in the result set. Example:
 
 .. code-block:: json
@@ -658,7 +825,7 @@ included in the result set. Example:
 
 You can specify the attributes which you want to include in the query result as a string (``"_source": "attr*"``) or as an array of strings (``"_source": [ "attr1", "attri*" ]"``). Each entry can be an attribute name or a wildcard (``*``, ``%`` and ``?`` symbols are supported).
 
-You can also explicitly specify which attributes you want to include and which to exlude from the result set using the ``includes`` and
+You can also explicitly specify which attributes you want to include and which to exclude from the result set using the ``includes`` and
 ``excludes`` properties:
 
 ::
@@ -744,7 +911,7 @@ This feature is somewhat similar to ``SHOW PLAN`` statement in SphinxQL. The res
       }
     }
 
-``query`` property contains the transformed fulltext query tree. Each node contains:
+``query`` property contains the transformed full-text query tree. Each node contains:
 
 * ``type``: node type. Can be ``AND``, ``OR``, ``PHRASE``, ``KEYWORD`` etc.
 * ``description``: query subtree for this node shown as a string (in ``SHOW PLAN`` format)

@@ -1,6 +1,62 @@
 Release notes
 =============
 
+Version 3.4.0, 26 March 2020
+----------------------------
+
+
+Major changes
+~~~~~~~~~~~~~
+
+* daemon works in 2 modes: rt-mode and plain-mode
+   * rt-mode requires data_dir and no index definition in config
+   * in plain-mode indexes are defined in config; no data_dir allowed
+* replication available only in rt-mode
+
+Minor changes
+~~~~~~~~~~~~~
+
+* charset_table defaults to non_cjk alias
+* in rt-mode full-text fields are indexed and stored by default
+* full-text fields in rt-mode renamed from 'field' to 'text'
+* ALTER RTINDEX is renamed to ALTER TABLE
+* TRUNCATE RTINDEX is renamed to TRUNCATE TABLE
+
+Features
+~~~~~~~~
+
+* stored-only fields
+* SHOW CREATE TABLE, IMPORT TABLE
+
+Improvements
+~~~~~~~~~~~~
+
+* lmuch faster ockless PQ
+* /sql can execute any type of SQL statement in mode=raw
+* alias mysql for mysql41 protocol
+* default state.sql in data_dir
+
+
+
+Bugfixes
+~~~~~~~~
+
+* `a5333644 <https://github.com/manticoresoftware/manticoresearch/commit/a5333644e8e0c69746a9f24da8221fc965478e4a>`__ fix crash on wrong field syntax in highlight()
+* `7fbb9f2e <https://github.com/manticoresoftware/manticoresearch/commit/7fbb9f2e618096289cba7f8b834530b46aa94055>`__ fix crash of daemon on replicate RT index with docstore
+* `24a04687 <https://github.com/manticoresoftware/manticoresearch/commit/24a04687eb43b4f4719c7c4a5fe3c19099240467>`__ fix crash on highlight to index with infix or prefix option and to index wo stored fields enabled
+* `3465c1ce <https://github.com/manticoresoftware/manticoresearch/commit/3465c1ce9c860c09f6ccc5b83a63e3c68c241d8d>`__ fix false error about empty docstore and dock-id lookup for empty index
+* `a707722e <https://github.com/manticoresoftware/manticoresearch/commit/b8601b4144b9092be43a7caa7cd6b19cb37e14c7>`__ fix #314 SphinxQL insert command with trailing semicolon
+* `95628c9b <https://github.com/manticoresoftware/manticoresearch/commit/95628c9b9b8f16fe1bd18599a84e9673575adf1a>`__ removed warning on query word(s) mismatch
+* `b8601b41 <https://github.com/manticoresoftware/manticoresearch/commit/b8601b4144b9092be43a7caa7cd6b19cb37e14c7>`__ fix queries in snippets segmented via ICU
+* `5275516c <https://github.com/manticoresoftware/manticoresearch/commit/5275516ca4631c584e6e0127fa161a18d2658fd0>`__ fix find/add race condition in docstore block cache
+* `f06ef97a <https://github.com/manticoresoftware/manticoresearch/commit/f06ef97af5c7390427e82525c150535290e42c3e>`__ fix mem leak in docstore
+* `a7258ba8 <https://github.com/manticoresoftware/manticoresearch/commit/a7258ba8340e246c0d8aaeb4a7a74129eba807eb>`__ fix #316 LAST_INSERT_ID returns empty on INSERT
+* `1ebd5bf8 <https://github.com/manticoresoftware/manticoresearch/commit/1ebd5bf8d74113bcfa138ce63ce11966990a4215>`__ fix #317 json/update HTTP endpoint to support array for MVA and object for JSON attribute
+* `e426950a <https://github.com/manticoresoftware/manticoresearch/commit/e426950a536382a142e2a42ed207c341149ff685>`__ fix rash of indexer dumping rt without explicit id
+
+
+
+
 Version 3.3.0, 4 February 2020
 ------------------------------
 

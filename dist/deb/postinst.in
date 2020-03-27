@@ -45,9 +45,9 @@ echo "  https://play.manticoresearch.com/"
 echo ""
 echo "To start Manticore Search service:"
 if [ -x "/usr/bin/deb-systemd-helper" ]; then
- echo "  > systemctl start/stop manticore"
+ echo "  > systemctl start manticore"
 else
- echo "  > service manticore start/stop"
+ echo "  > service manticore start"
 fi
 echo ""
 echo "Configuration file:"

@@ -71,7 +71,7 @@ file ( WRITE "${MANTICORE_BINARY_DIR}/manticore.conf.in" "${_MINCONF}")
 unset (_MINCONF)
 
 # this values set for correct substitution in configure files below
-set ( CONFDIR "${LOCALSTATEDIR}" )
+set ( CONFDIR "${LOCALSTATEDIR}/lib/manticore" )
 set ( RUNDIR "${LOCALSTATEDIR}/run/manticore" )
 set ( LOGDIR "${LOCALSTATEDIR}/log/manticore" )
 

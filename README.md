@@ -89,17 +89,23 @@ To play with Manticore Search in Docker just run:
 docker run --name manticore --rm -d manticoresearch/manticore && docker exec -it manticore mysql -w && docker stop manticore
 ```
 
-When you exit from the mysql client it stops and removes the container, so use it only for testing / sandboxing purposes. 
-
-The image comes with a sample index which can be loaded like this:
+You can then: create an index, add data and run searches. For example:
 
 ```
-mysql> source /sandbox.sql
+create table movies(title text, year int) morphology='stem_en' html_strip='1' stopwords='en';
+
+insert into movies(title, year) values ('The Seven Samurai', 1954), ('Bonnie and Clyde', 1954), ('Reservoir Dogs', 1992), ('Airplane!', 1980), ('Raging Bull', 1980), ('Groundhog Day', 1993), ('<a href="http://google.com/">Jurassic Park</a>', 1993), ('Ferris Bueller\'s Day Off', 1986);
+
+select highlight(), year from movies where match('the dog');
+
+select highlight(), year from movies where match('days') facet year;
+
+select * from movies where match('google');
 ```
 
-Also the mysql client has in history several sample queries that you can run on the above index, just use Up/Down keys in the client to see and run them.
+When you exit from the mysql client it stops and removes the container, so use this way only for testing / sandboxing purposes. 
 
-Read [the full instruction for the docker image](https://dockr.ly/33biV0U) for more details.
+Read [the full instruction for the docker image](https://dockr.ly/33biV0U) for more details including our recommendations on running it in production.
 
 ### Packages
 

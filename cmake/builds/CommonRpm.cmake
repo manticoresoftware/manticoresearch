@@ -63,11 +63,9 @@ set ( CPACK_COMPONENT_ADM_DISPLAY_NAME "Scripts and settings" )
 
 # block below used to patch the minconf - add a slash at the end of 'binlog_path' section
 file ( READ "manticore.conf.in" _MINCONF LIMIT 10240 )
-string ( REGEX REPLACE "(binlog_path[ \t]+\\=[ \t]+\\@CONFDIR\\@/data)" "\\1/" _MINCONF "${_MINCONF}" )
-string ( REGEX REPLACE "(log/searchd.pid)" "run/manticore/searchd.pid" _MINCONF "${_MINCONF}" )
-string ( REGEX REPLACE "(@CONFDIR@/log/)" "@CONFDIR@/log/manticore/" _MINCONF "${_MINCONF}" )
-string ( REGEX REPLACE "(@CONFDIR@/data/)" "@CONFDIR@/lib/manticore/" _MINCONF "${_MINCONF}" )
-file ( WRITE "${MANTICORE_BINARY_DIR}/manticore.conf.in" "${_MINCONF}")
+string ( REPLACE "@CONFDIR@/log/searchd.pid" "@RUNDIR@/searchd.pid" _MINCONF "${_MINCONF}" )
+string ( REPLACE "@CONFDIR@/log" "@LOGDIR@" _MINCONF "${_MINCONF}" )
+file ( WRITE "${MANTICORE_BINARY_DIR}/manticore.conf.in" "${_MINCONF}" )
 unset (_MINCONF)
 
 # this values set for correct substitution in configure files below

@@ -1089,7 +1089,6 @@ public:
 	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) 			final  EXCLUDES (m_tReading );
 	bool				Truncate ( CSphString & sError ) final;
 	void				Optimize ( int iFrom, int iTo ) final;
-	void				ProgressiveMerge();
 	void				CommonMerge ( Selector_t fnSelector );
 	CSphIndex *			GetDiskChunk ( int iChunk ) final { return m_dDiskChunks.GetLength()>iChunk ? m_dDiskChunks[iChunk] : nullptr; }
 	ISphTokenizer *		CloneIndexingTokenizer() const final { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
@@ -7660,6 +7659,8 @@ void RtIndex_c::Optimize( int iFrom, int iTo )
 		{
 			if (iFrom<0||iFrom>=iChunks||iTo<0||iTo>=iChunks)
 				return false;
+			if (iFrom==iTo) // fool protect
+				return false;
 			assert ( piA );
 			assert ( piB );
 			*piA = iFrom;
@@ -7672,6 +7673,10 @@ void RtIndex_c::Optimize( int iFrom, int iTo )
 
 	if ( g_bProgressiveMerge )
 	{
+		// How does this work:
+		// In order to minimize IO operations we merge chunks in order from the smallest to the largest to build a progression
+		// the timeline is: [older chunks], ..., A, A+1, ..., B, ..., [younger chunks]
+		// this also needs meta v.12 (chunk list with possible skips, instead of a base chunk + length as in meta v.11)
 		CommonMerge ( [this] (int* piA, int* piB) -> bool
 		{
 			if ( m_dDiskChunks.GetLength ()<2 )
@@ -7715,193 +7720,6 @@ void RtIndex_c::Optimize( int iFrom, int iTo )
 		*piB = 1;
 		return true;
 	});
-}
-
-
-//////////////////////////////////////////////////////////////////////////
-// PROGRESSIVE MERGE
-//////////////////////////////////////////////////////////////////////////
-
-// deprecated; remove
-void RtIndex_c::ProgressiveMerge()
-{
-	// How does this work:
-	// In order to minimize IO operations we merge chunks in order from the smallest to the largest to build a progression
-	// the timeline is: [older chunks], ..., A, A+1, ..., B, ..., [younger chunks]
-	// this also needs meta v.12 (chunk list with possible skips, instead of a base chunk + length as in meta v.11)
-
-	int64_t tmStart = sphMicroTimer();
-
-	ScopedMutex_t tOptimizing ( m_tOptimizingLock );
-	m_bOptimizing = true;
-
-	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
-
-	int iChunks = m_dDiskChunks.GetLength();
-	CSphSchema tSchema = m_tSchema;
-	CSphString sError;
-	int iOldKListCount = 0;
-
-	while ( m_dDiskChunks.GetLength()>1 && !g_bShutdown && !m_bOptimizeStop && !m_bSaveDisabled )
-	{
-		const CSphIndex * pOldest = nullptr;
-		const CSphIndex * pOlder = nullptr;
-		int iA = -1;
-		int iB = -1;
-
-		{
-			CSphScopedRLock tChunkLock { m_tChunkLock };
-
-			// merge 'smallest' to 'smaller' and get 'merged' that names like 'A'+.tmp
-			// however 'merged' got placed at 'B' position and 'merged' renamed to 'B' name
-
-			iA = GetNextSmallestChunk ( m_dDiskChunks, 0 );
-			iB = GetNextSmallestChunk ( m_dDiskChunks, iA );
-
-			if ( iA<0 || iB<0 )
-			{
-				sError.SetSprintf ("Couldn't find smallest chunk");
-				return;
-			}
-
-			// we need to make sure that A is the oldest one
-			// indexes go from oldest to newest so A must go before B (A is always older than B)
-			// this is not required by bitmap killlists, but by some other stuff (like ALTER RECONFIGURE)
-			if ( iA > iB )
-				Swap ( iB, iA );
-
-			sphLogDebug ( "progressive merge - merging %d (%d kb) with %d (%d kb)", iA, (int)(GetChunkSize ( m_dDiskChunks, iA )/1024), iB, (int)(GetChunkSize ( m_dDiskChunks, iB )/1024) );
-
-			pOldest = m_dDiskChunks[iA];
-			pOlder = m_dDiskChunks[iB];
-		} // m_tChunkLock scope
-
-		CSphString sOlder, sOldest, sRename, sMerged;
-		sOlder.SetSprintf ( "%s", pOlder->GetFilename() );
-		sOldest.SetSprintf ( "%s", pOldest->GetFilename() );
-		sRename.SetSprintf ( "%s.old", pOlder->GetFilename() );
-		sMerged.SetSprintf ( "%s.tmp", pOldest->GetFilename() );
-
-		// check forced exit after long operation
-		if ( g_bShutdown || m_bOptimizeStop || m_bSaveDisabled )
-			break;
-
-		// merge data to disk ( data is constant during that phase )
-		CSphIndexProgress tProgress;
-		bool bMerged = sphMerge ( pOldest, pOlder, sError, tProgress, &m_bOptimizeStop, true );
-		if ( !bMerged )
-		{
-			sphWarning ( "rt optimize: index %s: failed to merge %s to %s (error %s)",
-				m_sIndexName.cstr(), sOlder.cstr(), sOldest.cstr(), sError.cstr() );
-			break;
-		}
-		// check forced exit after long operation
-		if ( g_bShutdown || m_bOptimizeStop || m_bSaveDisabled )
-			break;
-
-		CSphScopedPtr<CSphIndex> pMerged ( LoadDiskChunk ( sMerged.cstr(), pFilenameBuilder.Ptr(), sError ) );
-		if ( !pMerged.Ptr() )
-		{
-			sphWarning ( "rt optimize: index %s: failed to load merged chunk (error %s)",
-				m_sIndexName.cstr(), sError.cstr() );
-			break;
-		}
-		// check forced exit after long operation
-		if ( g_bShutdown || m_bOptimizeStop || m_bSaveDisabled )
-			break;
-
-		// lets rotate indexes
-
-		// rename older disk chunk to 'old'
-		if ( !const_cast<CSphIndex *>( pOlder )->Rename ( sRename.cstr() ) )
-		{
-			sphWarning ( "rt optimize: index %s: cur to old rename failed (error %s)",
-				m_sIndexName.cstr(), pOlder->GetLastError().cstr() );
-			break;
-		}
-		// rename merged disk chunk to B
-		if ( !pMerged->Rename ( sOlder.cstr() ) )
-		{
-			sphWarning ( "rt optimize: index %s: merged to cur rename failed (error %s)",
-				m_sIndexName.cstr(), pMerged->GetLastError().cstr() );
-
-			if ( !const_cast<CSphIndex *>( pOlder )->Rename ( sOlder.cstr() ) )
-				sphWarning ( "rt optimize: index %s: old to cur rename failed (error %s)",
-					m_sIndexName.cstr(), pOlder->GetLastError().cstr() );
-			break;
-		}
-
-		if ( g_bShutdown || m_bOptimizeStop ) // protection
-			break;
-
-		// merged replaces recent chunk
-		// oldest chunk got deleted
-
-		// Writing lock - to wipe out writers
-		// Chunk wlock - to lock chunks as we are going to modify the chunk vector
-		// order same as GetReaderChunks and SaveDiskChunk to prevent deadlock
-
-		Verify ( m_tWriting.Lock() );
-		Verify ( m_tChunkLock.WriteLock() );
-
-		// apply killlists that were collected while we were merging segments
-		iOldKListCount = KListSort ( iOldKListCount, m_dKillsWhileOptimizing );
-		pMerged->KillMulti ( m_dKillsWhileOptimizing );
-
-		sphLogDebug ( "optimized (progressive) a=%s, b=%s, new=%s",
-				pOldest->GetName(), pOlder->GetName(), pMerged->GetName() );
-
-		m_dDiskChunks[iB] = pMerged.LeakPtr();
-		m_dDiskChunks.Remove ( iA );
-		CSphFixedVector<int> dChunkNames = GetIndexNames ( m_dDiskChunks, false );
-
-		Verify ( m_tChunkLock.Unlock() );
-		SaveMeta ( m_iTID, dChunkNames );
-		Verify ( m_tWriting.Unlock() );
-
-		if ( g_bShutdown || m_bOptimizeStop )
-		{
-			sphWarning ( "rt optimize: index %s: forced to shutdown, remove old index files manually '%s', '%s'",
-				m_sIndexName.cstr(), sRename.cstr(), sOldest.cstr() );
-			break;
-		}
-
-		// exclusive reader (to make sure that disk chunks not used any more) and writer lock here
-		// wipe out writer then way all readers get out - to delete indexes
-		// as readers might keep copy of chunks vector
-		Verify ( m_tWriting.Lock() );
-		Verify ( m_tReading.WriteLock() );
-
-		SafeDelete ( pOlder );
-		SafeDelete ( pOldest );
-
-		Verify ( m_tReading.Unlock() );
-		Verify ( m_tWriting.Unlock() );
-
-		// we might remove old index files
-		sphUnlinkIndex ( sRename.cstr(), true );
-		sphUnlinkIndex ( sOldest.cstr(), true );
-		// FIXEME: wipe out 'merged' index files in case of error
-	}
-
-	m_bOptimizing = false;
-
-	m_tWriting.Lock();
-	m_dKillsWhileOptimizing.Reset();
-	m_tWriting.Unlock();
-
-	int64_t tmPass = sphMicroTimer() - tmStart;
-
-	if ( g_bShutdown )
-	{
-		sphWarning ( "rt: index %s: optimization terminated chunk(s) %d ( of %d ) in %d.%03d sec",
-			m_sIndexName.cstr(), iChunks-m_dDiskChunks.GetLength(), iChunks, (int)(tmPass/1000000), (int)((tmPass/1000)%1000) );
-	} else
-	{
-		sphInfo ( "rt: index %s: optimized (progressive) chunk(s) %d ( of %d ) in %d.%03d sec",
-			m_sIndexName.cstr(), iChunks-m_dDiskChunks.GetLength(), iChunks, (int)(tmPass/1000000), (int)((tmPass/1000)%1000) );
-	}
 }
 
 

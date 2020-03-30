@@ -27,8 +27,8 @@ You can install Manticore with command:
 
 .. code-block:: bash
 
-	$ wget https://github.com/manticoresoftware/manticoresearch/releases/download/3.3.0/manticore_3.3.0-200204-01fc8ad-release.jessie_amd64-bin.deb
-	$ sudo dpkg -i manticore_3.3.0-200204-01fc8ad-release.jessie_amd64-bin.deb
+	$ wget https://github.com/manticoresoftware/manticoresearch/releases/download/3.4.0/manticore_3.4.0-200326-0686d9f-release.jessie_amd64-bin.deb
+	$ sudo dpkg -i manticore_3.4.0-200326-0686d9f-release.jessie_amd64-bin.deb
 
 Manticore package depends on zlib and ssl libraries, nothing else is strictly required.
 However if you plan to use 'indexer' tool to create indexes from different sources,
@@ -38,14 +38,14 @@ To know what exactly libraries, run `indexer` tool from Manticore and look at th
 .. code-block:: bash
 
 	$ indexer
-	Manticore 3.3.0 01fc8ad@200204 release
+	Manticore 3.4.0 0686d9f@200326 release
 	Copyright (c) 2001-2016, Andrew Aksyonoff
 	Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 	Copyright (c) 2017-2020, Manticore Software LTD (http://manticoresearch.com)
 
 	Built by gcc/clang v 6.3.0,
 
-	Built on Linux runner-72989761-project-3858465-concurrent-0 4.19.78-coreos #1 SMP Mon Oct 14 22:56:39 -00 2019 x86_64 GNU/Linux
+	Built on Linux runner-72989761-project-3858465-concurrent-0 4.19.78-coreos #1 SMP Mon Mar 30 22:56:39 -00 2020 x86_64 GNU/Linux
 
 	Configured by CMake with these definitions: -DCMAKE_BUILD_TYPE=RelWithDebInfo -DDISTR_BUILD=stretch -DUSE_SSL=ON -DDL_UNIXODBC=1 -DUNIXODBC_LIB=libodbc.so.2 -DDL_EXPAT=1 -DEXPAT_LIB=libexpat.so.1 -DUSE_LIBICONV=1 -DDL_MYSQL=1 -DMYSQL_LIB=libmariadbclient.so.18 -DDL_PGSQL=1 -DPGSQL_LIB=libpq.so.5 -DLOCALDATADIR=/var/data -DFULL_SHARE_DIR=/usr/share/manticore -DUSE_ICU=1 -DUSE_BISON=ON -DUSE_FLEX=ON -DUSE_SYSLOG=1 -DWITH_EXPAT=1 -DWITH_ICONV=ON -DWITH_MYSQL=1 -DWITH_ODBC=ON -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 -DWITH_ZLIB=ON -DGALERA_SOVERSION=31 -DSYSCONFDIR=/etc/manticoresearch
 
@@ -185,8 +185,8 @@ Download RedHat RPM from Manticore website and install it:
 
 .. code-block:: bash
 
-	$ wget https://github.com/manticoresoftware/manticoresearch/releases/download/3.3.0/manticore-3.3.0_200204.01fc8ad-1.el7.centos.x86_64.rpm
-	$ rpm -Uhv manticore-3.3.0_200204.01fc8ad-1.el7.centos.x86_64.rpm
+	$ wget https://github.com/manticoresoftware/manticoresearch/releases/download/3.4.0/manticore-3.4.0_200327.b212975-1.el7.centos.x86_64.rpm
+	$ rpm -Uhv manticore-3.4.0_200327.b212975-1.el7.centos.x86_64.rpm
 
 Starting Manticore Search
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -208,7 +208,7 @@ In the following example we'll consider folder ``C:\Manticore`` where we unpack 
 .. code-block:: bash
 	
 	cd C:\Manticore
-	unzip manticore-3.3.0-200204-01fc8ad1-release-x64-bin.zip
+	unzip manticore-3.4.0-200326-0686d9f0-release-x64-bin.zip
 
 
 The zip comes with a sample configurations ``manticore.conf.in``.
@@ -247,7 +247,7 @@ On MacOS Manticore can be installed in 2 easy way:
 .. code-block:: bash
 	
 	$ mkdir manticore
-	$ tar -zxvf manticore-3.3.0-200204-01fc8ad1-release-osx10.14.4-x86_64-bin.tar.gz -C manticore
+	$ tar -zxvf manticore-3.4.0-200326-0686d9f0-release-osx10.14.4-x86_64-bin.tar.gz -C manticore
 	$ cd manticore
 	$ bin/searchd  -c manticore.conf
 
@@ -385,7 +385,7 @@ General building options
 
 For compiling latest version of Manticore, recommended is checkout the latest code from the github repositiory.
 Alternative, for compiling a certain version, you can either checked that version from github or use it's respective source tarball.
-In last case avoid to use automatic tarballs from github (named there as 'Source code'), but use provided files as **manticore-3.3.0-200204-01fc8ad-release.tar.gz**.
+In last case avoid to use automatic tarballs from github (named there as 'Source code'), but use provided files as **manticore-3.4.0-200326-0686d9f-release.tar.gz**.
 When building from git clone you need packages **git**, **flex**, **bison**. When building from tarball they are not necessary. This requirement
 may be essential to build on Windows.
 
@@ -395,8 +395,8 @@ may be essential to build on Windows.
 
 .. code-block:: bash
 
-   $ wget https://github.com/manticoresoftware/manticoresearch/releases/download/3.3.0/manticore-3.3.0-200204-01fc8ad-release.tar.gz
-   $ tar zcvf manticore-3.3.0-200204-01fc8ad-release.tar.gz
+   $ wget https://github.com/manticoresoftware/manticoresearch/releases/download/3.4.0/manticore-3.4.0-200326-0686d9f-release.tar.gz
+   $ tar zcvf manticore-3.4.0-200326-0686d9f-release.tar.gz
 
 Next step is to configure the building with cmake. Available list of configuration options:
 
@@ -470,7 +470,7 @@ or if we use sources from tarball:
 
 .. code-block:: bash
 
-   $ cmake3 -D WITH_MYSQL=1 -DWITH_RE2=1 ../manticore-3.3.0-200204-01fc8ad-release
+   $ cmake3 -D WITH_MYSQL=1 -DWITH_RE2=1 ../manticore-3.4.0-200326-0686d9f-release
 
 To simply compile:
 

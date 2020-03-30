@@ -13544,6 +13544,30 @@ int GetLogFD ()
 	return g_iLogFile;
 }
 
+void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+{
+	auto sIndex = tStmt.m_sStringParam;
+	ServedDescRPtr_c pIndex ( GetServed ( sIndex ) );
+	if ( !ServedDesc_t::IsMutable ( pIndex ) )
+	{
+		tOut.Error ( tStmt.m_sStmt, "MERGE requires an existing RT index" );
+		return;
+	}
+
+	tOut.Ok ();
+	auto iFrom = tStmt.m_iListStart;
+	auto iTo = tStmt.m_iListEnd;
+
+	if ( tStmt.m_tQuery.m_bSync )
+	{
+		if ( pIndex->m_pIndex )
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( iFrom, iTo );
+
+		return;
+	}
+
+	EnqueueForOptimize ( sIndex, iFrom, iTo );
+}
 
 void HandleMysqlDebug ( RowBuffer_i &tOut, const SqlStmt_t &tStmt, bool bVipConn )
 {
@@ -13719,6 +13743,11 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, const SqlStmt_t &tStmt, bool bVipConn
 		}
 
 	}
+	else if ( sCommand=="merge" )
+	{
+		HandleMysqlOptimizeManual ( tOut, tStmt );
+		return;
+	}
 	else if ( sCommand=="sched" )
 	{
 		const char* dHeader[] = {
@@ -13758,6 +13787,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, const SqlStmt_t &tStmt, bool bVipConn
 		tOut.DataTuplet ( "tasks", "display global tasks stat" );
 		tOut.DataTuplet ( "systhreads", "display task manager threads" );
 		tOut.DataTuplet ( "sched", "display task manager schedule" );
+		tOut.DataTuplet ( "merge <IDX> N1 N2", "For RT index IDX merge disk chunk N1 into disk chunk N2" );
 	}
 	// done
 	tOut.Eof ();
@@ -13830,7 +13860,7 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	if ( tStmt.m_tQuery.m_bSync )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize();
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize(-1,-1);
 
 		return;
 	}

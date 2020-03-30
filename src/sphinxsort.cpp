@@ -2506,7 +2506,7 @@ public:
 	}
 
 	// TODO! TEST!
-	ISphMatchSorter * Clone () const final
+	ISphMatchSorter * Clone () const override
 	{
 		CSphQuery dFoo;
 		dFoo.m_iMaxMatches = m_iLimit;
@@ -2528,6 +2528,8 @@ public:
 			CSphMatchQueueTraits::SwapMatchQueueTraits ( dRhs );
 			m_hGroup2Match.Swap ( dRhs.m_hGroup2Match );
 			dRhs.m_bMatchesFinalized = m_bMatchesFinalized;
+			dRhs.m_iMaxUsed = m_iMaxUsed;
+			m_iMaxUsed = -1;
 			return;
 		}
 
@@ -3523,6 +3525,15 @@ class CSphKBufferJsonGroupSorter : public CSphKBufferGroupSorter < COMPGROUP, DI
 {
 public:
 	using BASE = CSphKBufferGroupSorter<COMPGROUP, DISTINCT, NOTIFICATIONS>;
+	using MYTYPE = CSphKBufferJsonGroupSorter<COMPGROUP, DISTINCT, NOTIFICATIONS>;
+
+	// since we inherit from template, we need to write boring 'using' block
+	using KBufferGroupSorter = KBufferGroupSorter_T<COMPGROUP, DISTINCT, NOTIFICATIONS>;
+	using KBufferGroupSorter::m_eGroupBy;
+	using KBufferGroupSorter::m_iLimit;
+	using KBufferGroupSorter::m_tSubSorter;
+	using KBufferGroupSorter::CloneKBufferGroupSorter;
+
 	/// ctor
 	FWD_BASECTOR( CSphKBufferJsonGroupSorter );
 
@@ -3628,6 +3639,16 @@ public:
 		// re-group it based on the group key
 		// (first 'this' is for icc; second 'this' is for gcc)
 		return this->PushEx ( tEntry, tEntry.GetAttr ( this->m_tLocGroupby ), true, bNewSet );
+	}
+
+	ISphMatchSorter * Clone () const final
+	{
+		CSphQuery dFoo;
+		dFoo.m_iMaxMatches = m_iLimit;
+		dFoo.m_eGroupFunc = m_eGroupBy;
+		auto pClone = new MYTYPE ( m_tSubSorter.GetComparator (), &dFoo, *this );
+		CloneKBufferGroupSorter ( pClone );
+		return pClone;
 	}
 };
 

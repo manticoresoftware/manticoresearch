@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>sorter at RT disk chunk</name>
+
+<skip_indexer/>
+
+<config>
+common
+{
+	json_autoconv_numbers	= 1
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+
+index rt1
+{
+	type = rt
+	path = <data_path/>/rt1
+	rt_field = title
+	rt_attr_string = title
+	rt_attr_json = j
+}
+
+</config>
+
+<sphqueries>
+<sphinxql>insert into rt1 (id, title, j) values
+	(1, 'test 1', '{i:1, parent:[45, 101]}'),
+	(2, 'test 2', '{i:2, parent:[45, 102]}'),
+	(3, 'test 3', '{i:3, parent:[46, 103]}'),
+	(4, 'test 4', '{i:4, parent:[46, 104]}'),
+	(5, 'test 5', '{i:5, parent:[55, 105]}'),
+	(6, 'test 6', '{i:6, parent:[55, 106]}'),
+	(7, 'test 7', '{i:7, parent:[47, 107]}'),
+	(8, 'test 8', '{i:8, parent:[47, 108]}'),
+	(9, 'test 9', '{i:9, parent:[48, 109]}'),
+	(11, 'test 11', '{i:11, parent:[65, 111]}'),
+	(12, 'test 12', '{i:12, parent:[65, 112]}'),
+	(13, 'test 13', '{i:13, parent:[66, 113]}'),
+	(14, 'test 14', '{i:14, parent:[66, 114]}'),
+	(15, 'test 15', '{i:15, parent:[75, 115]}'),
+	(16, 'test 16', '{i:16, parent:[75, 116]}'),
+	(17, 'test 17', '{i:17, parent:[67, 117]}'),
+	(18, 'test 18', '{i:18, parent:[67, 118]}'),
+	(19, 'test 19', '{i:19, parent:[68, 119]}'),
+	(21, 'test 21', '{i:21, parent:[85, 121]}'),
+	(22, 'test 22', '{i:22, parent:[85, 122]}'),
+	(23, 'test 23', '{i:23, parent:[86, 123]}'),
+	(24, 'test 24', '{i:24, parent:[86, 124]}'),
+	(25, 'test 25', '{i:25, parent:[95, 125]}'),
+	(26, 'test 26', '{i:26, parent:[95, 126]}'),
+	(27, 'test 27', '{i:27, parent:[87, 127]}'),
+	(28, 'test 28', '{i:28, parent:[87, 128]}'),
+	(29, 'test 29', '{i:29, parent:[88, 129]}')
+</sphinxql>
+<sphinxql>FLUSH RAMCHUNK rt1</sphinxql>
+<!-- regression group by on json.field broken at disk chunk of RT index  -->
+<sphinxql>SELECT id, j.parent[0] AS gr, id as i, count(*) as c FROM rt1 GROUP BY gr</sphinxql>
+<!-- regression group by for matches count more than grouper buffer cause to miss some matches data at disk chunk of RT index  -->
+<sphinxql>SELECT id, j.parent[0] AS gr, id as i, count(*) as c FROM rt1 GROUP BY i OPTION max_matches = 4</sphinxql>
+
+</sphqueries>
+
+</test>

@@ -1831,6 +1831,13 @@ opt_par:
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $1 );
 			pParser->m_pStmt->m_iIntParam = $2.m_iValue;
 		}
+	| ident ident TOK_CONST_INT TOK_CONST_INT opt_option_clause
+		{
+			pParser->ToString ( pParser->m_pStmt->m_sIndex, $1 );
+			pParser->ToString ( pParser->m_pStmt->m_sStringParam, $2 );
+			pParser->m_pStmt->m_iListStart = $3.m_iValue;
+			pParser->m_pStmt->m_iListEnd = $4.m_iValue;
+		}
 
 delete_cluster:
 	TOK_DELETE TOK_CLUSTER ident

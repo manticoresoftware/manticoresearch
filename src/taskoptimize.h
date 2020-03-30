@@ -17,6 +17,6 @@
 
 #include "sphinxstd.h"
 
-void EnqueueForOptimize ( CSphString sIndex );
+void EnqueueForOptimize ( CSphString sIndex, int iFrom=-1, int iTo=-1 );
 
 #endif //MANTICORE_TASKOPTIMIZE_H

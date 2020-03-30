@@ -16,16 +16,28 @@
 /////////////////////////////////////////////////////////////////////////////
 // index optimization
 /////////////////////////////////////////////////////////////////////////////
-void EnqueueForOptimize ( CSphString sIndex )
+struct Task_t
+{
+	int m_iFrom;
+	int m_iTo;
+	CSphString m_sIndex;
+
+	Task_t (CSphString sIndex, int iFrom, int iTo)
+	: m_iFrom (iFrom)
+	, m_iTo (iTo)
+	, m_sIndex {std::move (sIndex)}
+	{}
+};
+
+void EnqueueForOptimize ( CSphString sIndex, int iFrom, int iTo )
 {
 	static int iOptimizeTask = -1;
 	if ( iOptimizeTask<0 )
 		iOptimizeTask = TaskManager::RegisterGlobal ( "optimize",
-			[] ( void* pName ) // worker
+			[] ( void* pPayload ) // worker
 			{
-				CSphString sIndex;
-				sIndex.Adopt (( char* ) pName );
-				auto pServed = GetServed ( sIndex );
+				CSphScopedPtr<Task_t> pTask { (Task_t *) pPayload };
+				auto pServed = GetServed ( pTask->m_sIndex );
 
 				if ( !pServed )
 					return;
@@ -39,12 +51,11 @@ void EnqueueForOptimize ( CSphString sIndex )
 
 				// FIXME: MVA update would wait w-lock here for a very long time
 				assert ( dReadLocked->m_eType==IndexType_e::RT );
-				static_cast<RtIndex_i*>( dReadLocked->m_pIndex )->Optimize ();
+				static_cast<RtIndex_i*>( dReadLocked->m_pIndex )->Optimize (pTask->m_iFrom, pTask->m_iTo);
 			},
-			[] ( void* pName ) // releaser
+			[] ( void* pPayload ) // releaser
 			{
-				CSphString sName;
-				sName.Adopt (( char* ) pName );
+				CSphScopedPtr<Task_t> pTask { (Task_t *) pPayload };
 			}, 1 );
-	TaskManager::StartJob ( iOptimizeTask, sIndex.Leak () );
+	TaskManager::StartJob ( iOptimizeTask, new Task_t (std::move(sIndex), iFrom, iTo) );
 }

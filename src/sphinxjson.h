@@ -231,8 +231,8 @@ public:
 };
 
 /// parse JSON, convert it into SphinxBSON blob
-bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, CSphString & sError );
-bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, StringBuilder_c &sMsg );
+bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, bool bCheckSize, CSphString & sError );
+bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, bool bCheckSize, StringBuilder_c & sMsg );
 
 /// convert SphinxBSON blob back to JSON document
 void sphJsonFormat ( JsonEscapedBuilder & dOut, const BYTE * pData );
@@ -508,9 +508,9 @@ class BsonContainer_c : public Bson_c
 {
 	CSphVector<BYTE> m_Bson;
 public:
-	explicit BsonContainer_c ( char* sJson, bool bAutoconv=false, bool bToLowercase=true );
-	explicit BsonContainer_c ( const char * sJsonc, bool bAutoconv=false, bool bToLowercase = true )
-	: BsonContainer_c ( ( char * ) CSphString ( sJsonc ).cstr (), bToLowercase ) {}
+	explicit BsonContainer_c ( char* sJson, bool bAutoconv=false, bool bToLowercase=true, bool bCheckSize=true );
+	explicit BsonContainer_c ( const char * sJsonc, bool bAutoconv=false, bool bToLowercase = true, bool bCheckSize=true )
+	: BsonContainer_c ( ( char * ) CSphString ( sJsonc ).cstr (), bToLowercase, bCheckSize ) {}
 };
 
 class BsonContainer2_c : public Bson_c

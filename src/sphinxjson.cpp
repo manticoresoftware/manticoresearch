@@ -715,15 +715,15 @@ static int yylex ( YYSTYPE * lvalp, JsonParser_c * pParser )
 	#include "yysphinxjson.c"
 #endif
 
-bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, CSphString & sError )
+bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, bool bCheckSize, CSphString & sError )
 {
 	StringBuilder_c sMsg;
-	auto bResult = sphJsonParse ( dData, sData, bAutoconv, bToLowercase, sMsg );
+	auto bResult = sphJsonParse ( dData, sData, bAutoconv, bToLowercase, bCheckSize, sMsg );
 	sMsg.MoveTo ( sError );
 	return bResult;
 }
 
-bool sphJsonParse ( CSphVector<BYTE> &dData, char * sData, bool bAutoconv, bool bToLowercase, StringBuilder_c &sMsg )
+bool sphJsonParse ( CSphVector<BYTE> &dData, char * sData, bool bAutoconv, bool bToLowercase, bool bCheckSize, StringBuilder_c &sMsg )
 {
 	int iLen = strlen ( sData );
 	if ( sData[iLen+1]!=0 )
@@ -750,7 +750,7 @@ bool sphJsonParse ( CSphVector<BYTE> &dData, char * sData, bool bAutoconv, bool 
 
 	tParser.Finalize();
 
-	if ( dData.AllocatedBytes () >= 0x400000 )
+	if ( bCheckSize && dData.AllocatedBytes()>=0x400000 )
 	{
 		sMsg << "data exceeds 0x400000 bytes";
 		iRes = -1;
@@ -759,7 +759,7 @@ bool sphJsonParse ( CSphVector<BYTE> &dData, char * sData, bool bAutoconv, bool 
 	if ( iRes!=0 )
 		dData.Reset();
 
-	return iRes==0;
+	return ( iRes==0 );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -2917,9 +2917,9 @@ bool bson::cJsonToBson ( cJSON * pCJSON, CSphVector<BYTE> &dData, bool bAutoconv
 }
 
 
-BsonContainer_c::BsonContainer_c ( char * sJson, bool bAutoconv, bool bToLowercase )
+BsonContainer_c::BsonContainer_c ( char * sJson, bool bAutoconv, bool bToLowercase, bool bCheckSize )
 {
-	sphJsonParse ( m_Bson, sJson, bAutoconv, bToLowercase, m_sError );
+	sphJsonParse ( m_Bson, sJson, bAutoconv, bToLowercase, bCheckSize, m_sError );
 	if ( m_Bson.IsEmpty () )
 		return;
 	const BYTE * pData = m_Bson.begin ();

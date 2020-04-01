@@ -123,7 +123,7 @@ public:
 		szData[iDataLen] = '\0';
 		szData[iDataLen+1] = '\0';
 
-		return sphJsonParse ( m_dData, szData, g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase, sError );
+		return sphJsonParse ( m_dData, szData, g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase, true, sError );
 	}
 };
 

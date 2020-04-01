@@ -9311,7 +9311,7 @@ static bool String2JsonPack ( char * pStr, CSphVector<BYTE> & dBuf, CSphString &
 	if ( !pStr )
 		return true;
 
-	if ( !sphJsonParse ( dBuf, pStr, g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase, sError ) )
+	if ( !sphJsonParse ( dBuf, pStr, g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase, true, sError ) )
 	{
 		if ( g_bJsonStrict )
 			return false;
@@ -10365,7 +10365,7 @@ static void HandleMysqlCallPQ ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessi
 		{
 			using namespace bson;
 			CSphVector<BYTE> dData;
-			if ( !sphJsonParse ( dData, ( char * ) dDocs[i].cstr (), g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase, sError ) )
+			if ( !sphJsonParse ( dData, (char *)dDocs[i].cstr(), g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase, false, sError ) )
 			{
 				dBadDocs.Add ( i + 1 );
 				continue;

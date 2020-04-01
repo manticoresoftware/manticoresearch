@@ -271,10 +271,10 @@ protected:
 	CSphString sError;
 
 
-	bool testcase ( const char * sJson, bool bAutoconv = false, bool bToLowercase = false )
+	bool testcase ( const char * sJson, bool bAutoconv = false, bool bToLowercase = false, bool bCheckSize = true )
 	{
 		CSphString sText = sJson;
-		return sphJsonParse ( dData, ( char * ) sText.cstr (), bAutoconv, bToLowercase, sError );
+		return sphJsonParse ( dData, ( char * ) sText.cstr (), bAutoconv, bToLowercase, bCheckSize, sError );
 	}
 
 	void TestConv ( const Bson_c& dNode, const char * sProof )
@@ -292,7 +292,7 @@ protected:
 		CSphString sText = sJson;
 		CSphString sError;
 		dData.Reset ();
-		sphJsonParse ( dData, ( char * ) sText.cstr(), false, true, sError );
+		sphJsonParse ( dData, ( char * ) sText.cstr(), false, true, true, sError );
 		if ( dData.IsEmpty () )
 			return nullnode;
 

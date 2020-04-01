@@ -194,7 +194,6 @@ bool InitSphinxqlState ( CSphString dStateFilePath, CSphString& sError )
 	if ( !g_sSphinxqlState.IsEmpty ())
 	{
 		SphinxqlStateRead ( g_sSphinxqlState );
-		SphinxqlStateFlush ();
 
 		CSphWriter tWriter;
 		CSphString sNewState;
@@ -209,6 +208,9 @@ bool InitSphinxqlState ( CSphString dStateFilePath, CSphString& sError )
 			g_sSphinxqlState = ""; // need to disable thread join on shutdown
 			return false;
 		}
+
+		// put here to prevent race with check above
+		SphinxqlStateFlush ();
 	}
 	return true;
 }

@@ -6167,18 +6167,40 @@ void QueueCreator_c::RemapStaticStringsAndJsons ( CSphMatchComparatorState & tSt
 	int iColWasCount = tSorterSchema.GetAttrsCount();
 	for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; ++i )
 	{
-		if ( !( tState.m_eKeypart[i]==SPH_KEYPART_STRING || tState.m_tSubKeys[i].m_sKey.cstr() ) )
-			continue;
+		bool bIsStr = ( tState.m_eKeypart[i]==SPH_KEYPART_STRING );
+		bool bIsJson = ( !tState.m_tSubKeys[i].m_sKey.IsEmpty() );
+		const CSphColumnInfo * pGroupStrBase = nullptr;
+
+		if ( !bIsStr && !bIsJson )
+		{
+			int iAttrSorted = tState.m_dAttrs[i];
+			if ( m_tSettings.m_bComputeItems && iAttrSorted>=0 && iAttrSorted<iColWasCount && tSorterSchema.GetAttr ( iAttrSorted ).m_sName=="@groupby" && m_dGroupColumns.GetLength() )
+			{
+				// FIXME!!! add support of multi group by
+				const CSphColumnInfo & tGroupCol = tSorterSchema.GetAttr ( m_dGroupColumns[0] );
+				if ( tGroupCol.m_eAttrType==SPH_ATTR_STRING || tGroupCol.m_eAttrType==SPH_ATTR_STRINGPTR )
+					pGroupStrBase = &tGroupCol;
+			}
+
+			if ( !pGroupStrBase )
+				continue;
+		}
 
 		assert ( tState.m_dAttrs[i]>=0 && tState.m_dAttrs[i]<iColWasCount );
 
-		bool bIsJson = !tState.m_tSubKeys[i].m_sKey.IsEmpty();
-		bool bIsFunc = bIsJson && tState.m_tSubKeys[i].m_uMask==0;
+		bool bIsFunc = ( bIsJson && tState.m_tSubKeys[i].m_uMask==0 );
+
+		const char * sRemapBaseName = nullptr;
+		if ( pGroupStrBase )
+		{
+			sRemapBaseName = pGroupStrBase->m_sName.cstr();
+		} else
+		{
+			sRemapBaseName = ( bIsJson ? tState.m_tSubKeys[i].m_sKey.cstr() : tSorterSchema.GetAttr ( tState.m_dAttrs[i] ).m_sName.cstr() );
+		}
 
 		CSphString sRemapCol;
-		sRemapCol.SetSprintf ( "%s%s", g_sIntAttrPrefix, bIsJson
-			? tState.m_tSubKeys[i].m_sKey.cstr()
-			: tSorterSchema.GetAttr ( tState.m_dAttrs[i] ).m_sName.cstr() );
+		sRemapCol.SetSprintf ( "%s%s", g_sIntAttrPrefix, sRemapBaseName );
 
 		int iRemap = tSorterSchema.GetAttrIndex ( sRemapCol.cstr() );
 		if ( iRemap==-1 && bIsJson )
@@ -6193,14 +6215,19 @@ void QueueCreator_c::RemapStaticStringsAndJsons ( CSphMatchComparatorState & tSt
 			CSphColumnInfo tRemapCol ( sRemapCol.cstr(), SPH_ATTR_STRINGPTR );
 			tRemapCol.m_eStage = SPH_EVAL_PRESORT;
 			if ( bIsJson )
+			{
 				if ( bIsFunc )
 				{
 					tRemapCol.m_pExpr = tState.m_tSubExpr[i];
 					tRemapCol.m_pExpr->AddRef();
 				} else
+				{
 					tRemapCol.m_pExpr = new ExprSortJson2StringPtr_c ( tState.m_tLocator[i], tState.m_tSubExpr[i] );
-			else
+				}
+			} else
 			{
+				if ( pGroupStrBase )
+					tState.m_tLocator[i] = pGroupStrBase->m_tLocator;
 				tRemapCol.m_pExpr = new ExprSortStringAttrFixup_c ( tState.m_tLocator[i] );
 				tState.m_eKeypart[i] = SPH_KEYPART_STRINGPTR;
 			}
@@ -6213,6 +6240,9 @@ void QueueCreator_c::RemapStaticStringsAndJsons ( CSphMatchComparatorState & tSt
 
 			iRemap = tSorterSchema.GetAttrsCount();
 			tSorterSchema.AddAttr ( tRemapCol, true );
+		} else if ( pGroupStrBase )
+		{
+			tState.m_eKeypart[i] = SPH_KEYPART_STRINGPTR;
 		}
 		tState.m_tLocator[i] = tSorterSchema.GetAttr ( iRemap ).m_tLocator;
 		tState.m_dAttrs[i] = iRemap;

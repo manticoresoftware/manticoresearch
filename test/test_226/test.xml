@@ -217,13 +217,18 @@ insert into facetdemo (id,price,brand_id,title,brand_name,property,categories,j)
 <!-- regression crash on FACET\group by with different attribute sizes -->
 <sphinxql>select * from facet_gr1 order by id asc facet price_i order by id asc facet price_b order by id asc; show meta</sphinxql>
 
-<!-- regression need to keeo implicit group by for main query -->
+<!-- regression need to keep implicit group by for main query -->
 <sphinxql>select id, price_b, count(*) from facet_gr1 order by id asc facet price_b order by id asc; show meta</sphinxql>
 
 <sphinxql>select * from facetdemo where match ('one') limit 0,15 facet brand_name order by facet() asc facet interval(price,200,400,600,800) order by facet() asc;</sphinxql>
 <sphinxql>show meta like 'multiplier'</sphinxql>
 <sphinxql>select * from facetdemo where match ('one') limit 0,15 facet brand_id order by facet() asc facet interval(price,200,400,600,800) order by facet() asc;</sphinxql>
 <sphinxql>show meta like 'multiplier'</sphinxql>
+
+<!-- regression order by string that is group by \ facet key -->
+<sphinxql>select id, property, count(*) c, groupby() gr from facetdemo2 group by property order by gr desc</sphinxql>
+<sphinxql>select id, property from facetdemo2 facet property order by facet() desc;</sphinxql>
+
 
 </sphqueries>
 

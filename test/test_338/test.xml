@@ -317,6 +317,20 @@ index test_rt
 </query>
 <query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
 
+<!-- auto id regression -->
+<query endpoint="json/insert">
+{
+	"index":"test_rt",
+	"doc":
+	{
+	    "int_col" : 1000,
+	    "content" : "document thousand"
+	}
+}
+</query>
+
+<query endpoint="json/search">{ "index": "test_rt", "query": { "match": { "*": "thousand" } } } }</query>
+
 </httpqueries>
 
 </test>

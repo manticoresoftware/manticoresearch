@@ -1189,10 +1189,11 @@ static bool ParseIndexId ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t &
 		return false;
 
 	JsonObj_c tId = tRoot.GetIntItem ( "id", sError );
-	if ( !tId )
-		return false;
 
-	tDocId = tId.IntVal();
+	if ( tId )
+		tDocId = tId.IntVal();
+	else
+		tDocId = 0; 	// enable auto-id
 
 	return true;
 }

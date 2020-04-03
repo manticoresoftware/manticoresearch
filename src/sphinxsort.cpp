@@ -90,9 +90,9 @@ void ISphMatchSorter::SetFilteredAttrs ( const sph::StringSet & hAttrs )
 	m_dTransormed.Reserve ( hAttrs.GetLength() );
 
 	// DocID attribute always MUST to be the first
-	// also needed DocID for non group by sorter to merge multiple result sets at KillDupes
-	if ( hAttrs[sphGetDocidName()] || !IsGroupby() )
-		m_dTransormed.Add ( sphGetDocidName() );
+	// FIXME!!! DocID used at sorter to merge multiple result sets at KillDupes, for cases: for non group, for group but with ranker=none
+	// this auto add DocID should be removed when implicit order by DocID is removed too (WAND ranking maybe?)
+	m_dTransormed.Add ( sphGetDocidName() );
 
 	for ( auto& tName : hAttrs )
 	{

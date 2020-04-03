@@ -56,12 +56,7 @@ class SettingsWriter_c
 public:
 	virtual			~SettingsWriter_c() {}
 
-	virtual void	Dump ( StringBuilder_c & tBuf, FilenameBuilder_i * pFilenameBuilder ) const;
-	virtual void	DumpCfg ( FILE * pFile, FilenameBuilder_i * pFilenameBuilder ) const;
 	virtual void	DumpReadable ( FILE * pFile, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const;
-	virtual void	DumpCreateTable ( StringBuilder_c & tBuf, FilenameBuilder_i * pFilenameBuilder ) const;
-
-protected:
 	virtual void	Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const = 0;
 };
 
@@ -84,8 +79,6 @@ public:
 	bool			Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning );
 
 	void			DumpReadable ( FILE * pFile, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const override;
-
-protected:
 	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
 };
 
@@ -106,8 +99,6 @@ public:
 	void			Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning );
 
 	void			DumpReadable ( FILE * pFile, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const override;
-
-protected:
 	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
 };
 
@@ -120,8 +111,6 @@ public:
 	bool			Setup  ( const CSphConfigSection & hIndex, CSphString & sWarning );
 	void			Load ( CSphReader & tReader );
 	void			Save ( CSphWriter & tWriter ) const;
-
-protected:
 	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
 };
 
@@ -147,8 +136,6 @@ public:
 	CSphVector<KillListTarget_t>	m_dTargets;
 
 	bool			Parse ( const CSphString & sTargets, const char * szIndexName, CSphString & sError );
-
-protected:
 	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
 };
 
@@ -198,14 +185,19 @@ enum class Compression_e
 };
 
 
+CSphString CompressionToStr ( Compression_e eComp );
+
+
 const DWORD DEFAULT_DOCSTORE_BLOCK = 16384;
 const int DEFAULT_COMPRESSION_LEVEL = 9;
 
-struct DocstoreSettings_t
+struct DocstoreSettings_t : public SettingsWriter_c
 {
 	Compression_e	m_eCompression		= Compression_e::LZ4;
 	int				m_iCompressionLevel	= DEFAULT_COMPRESSION_LEVEL;
 	DWORD			m_uBlockSize		= DEFAULT_DOCSTORE_BLOCK;
+
+	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
 };
 
 
@@ -233,7 +225,7 @@ enum ESphBigram
 };
 
 
-class CSphIndexSettings : public CSphSourceSettings, public DocstoreSettings_t, public SettingsWriter_c
+class CSphIndexSettings : public CSphSourceSettings, public DocstoreSettings_t
 {
 public:
 	ESphHitFormat	m_eHitFormat = SPH_HIT_FORMAT_PLAIN;
@@ -260,13 +252,40 @@ public:
 	CSphString		m_sIndexTokenFilter;	///< indexing time token filter spec string (pretty useless for disk, vital for RT)
 
 	bool			Setup ( const CSphConfigSection & hIndex, const char * szIndexName, CSphString & sWarning, CSphString & sError );
-
-protected:
 	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
 
 private:
 	void			ParseStoredFields ( const CSphConfigSection & hIndex );
 	bool			ParseDocstoreSettings ( const CSphConfigSection & hIndex, CSphString & sWarning, CSphString & sError );
+};
+
+
+enum class FileAccess_e
+{
+	FILE,
+	MMAP,
+	MMAP_PREREAD,
+	MLOCK,
+	UNKNOWN
+};
+
+
+const int DEFAULT_READ_BUFFER = 256*1024;
+const int DEFAULT_READ_UNHINTED = 32768;
+
+struct FileAccessSettings_t : public SettingsWriter_c
+{
+	FileAccess_e	m_eAttr;
+	FileAccess_e	m_eBlob;
+	FileAccess_e	m_eDoclist;
+	FileAccess_e	m_eHitlist;
+	int				m_iReadBufferDocList;
+	int				m_iReadBufferHitList;
+
+	bool operator== ( const FileAccessSettings_t & tOther ) const;
+	bool operator!= ( const FileAccessSettings_t & tOther ) const;
+
+	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
 };
 
 
@@ -326,6 +345,10 @@ class CSphIndex;
 void		SaveTokenizerSettings ( CSphWriter & tWriter, const ISphTokenizer * pTokenizer, int iEmbeddedLimit );
 void		SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, bool bForceWordDict, int iEmbeddedLimit );
 
+void		DumpSettings ( StringBuilder_c & tBuf, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder );
+void		DumpSettingsCfg ( FILE * fp, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder );
+void		DumpReadable ( FILE * fp, const CSphIndex & tIndex, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder );
+
 /// try to set dictionary, tokenizer and misc settings for an index (if not already set)
 bool		sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, bool bStripFile, FilenameBuilder_i * pFilenameBuilder, StrVec_t & dWarnings, CSphString & sError );
 CSphString	BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema );
@@ -334,5 +357,8 @@ CSphString	BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 using CreateFilenameBuilder_fn = FilenameBuilder_i * (*)( const char * szIndex );
 void		SetIndexFilenameBuilder ( CreateFilenameBuilder_fn pBuilder );
 CreateFilenameBuilder_fn GetIndexFilenameBuilder();
+
+const char * FileAccessName ( FileAccess_e eValue );
+FileAccess_e ParseFileAccess ( CSphString sVal );
 
 #endif // _indexsettings_

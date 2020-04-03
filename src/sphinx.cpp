@@ -164,8 +164,6 @@ bool				g_bJsonStrict				= false;
 bool				g_bJsonAutoconvNumbers		= false;
 bool				g_bJsonKeynamesToLowercase	= false;
 
-static const int	DEFAULT_READ_BUFFER		= 262144;
-static const int	DEFAULT_READ_UNHINTED	= 32768;
 static const int	MIN_READ_BUFFER			= 8192;
 static const int	MIN_READ_UNHINTED		= 1024;
 
@@ -13992,22 +13990,7 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 
 		fprintf ( fp, "}\n\nindex $dump\n{\n\tsource = $dump\n\tpath = $dump\n" );
 
-		m_tSettings.DumpCfg ( fp, pFilenameBuilder.Ptr() );
-
-		CSphFieldFilterSettings tFieldFilter;
-		GetFieldFilterSettings ( tFieldFilter );
-		tFieldFilter.DumpCfg ( fp, pFilenameBuilder.Ptr() );
-
-		KillListTargets_c tKlistTargets;
-		if ( !LoadKillList ( nullptr, tKlistTargets, sWarning ) )
-			tKlistTargets.m_dTargets.Reset();
-		tKlistTargets.DumpCfg ( fp, pFilenameBuilder.Ptr() );
-
-		if ( m_pTokenizer )
-			m_pTokenizer->GetSettings().DumpCfg ( fp, pFilenameBuilder.Ptr() );
-
-		if ( m_pDict )
-			m_pDict->GetSettings().DumpCfg ( fp, pFilenameBuilder.Ptr() );
+		DumpSettingsCfg ( fp, *this, pFilenameBuilder.Ptr() );
 
 		fprintf ( fp, "}\n" );
 		return;
@@ -14038,22 +14021,7 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 	fprintf ( fp, "total-documents: " INT64_FMT "\n", m_tStats.m_iTotalDocuments );
 	fprintf ( fp, "total-bytes: " INT64_FMT "\n", int64_t(m_tStats.m_iTotalBytes) );
 
-	m_tSettings.DumpReadable ( fp, tEmbeddedFiles, pFilenameBuilder.Ptr() );
-
-	CSphFieldFilterSettings tFieldFilter;
-	GetFieldFilterSettings ( tFieldFilter );
-	tFieldFilter.DumpReadable ( fp, tEmbeddedFiles, pFilenameBuilder.Ptr() );
-
-	KillListTargets_c tKlistTargets;
-	if ( !LoadKillList ( nullptr, tKlistTargets, sWarning ) )
-		tKlistTargets.m_dTargets.Reset();
-	tKlistTargets.DumpReadable ( fp, tEmbeddedFiles, pFilenameBuilder.Ptr() );
-
-	if ( m_pTokenizer )
-		m_pTokenizer->GetSettings().DumpReadable ( fp, tEmbeddedFiles, pFilenameBuilder.Ptr() );
-
-	if ( m_pDict )
-		m_pDict->GetSettings().DumpReadable ( fp, tEmbeddedFiles, pFilenameBuilder.Ptr() );
+	DumpReadable ( fp, *this, tEmbeddedFiles, pFilenameBuilder.Ptr() );
 
 	fprintf ( fp, "min-max-index: " INT64_FMT "\n", m_iMinMaxIndex );
 }

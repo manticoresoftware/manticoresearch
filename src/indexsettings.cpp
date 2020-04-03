@@ -58,6 +58,22 @@ static const char * BigramName ( ESphBigram eType )
 }
 
 
+CSphString CompressionToStr ( Compression_e eComp )
+{
+	switch ( eComp )
+	{
+	case Compression_e::LZ4:
+		return "lz4";
+
+	case Compression_e::LZ4HC:
+		return "lz4hc";
+
+	case Compression_e::NONE:
+	default:
+		return "none";
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 class SettingsFormatter_c
@@ -138,30 +154,9 @@ void SettingsFormatter_c::AddEmbedded ( const char * szKey, const VecTraits_T<T>
 
 //////////////////////////////////////////////////////////////////////////
 
-void SettingsWriter_c::Dump ( StringBuilder_c & tBuf, FilenameBuilder_i * pFilenameBuilder ) const
-{
-	SettingsFormatter_c tFormatter ( tBuf, "", " = ", "\n" );
-	Format ( tFormatter, pFilenameBuilder );
-}
-
-
-void SettingsWriter_c::DumpCfg ( FILE * pFile, FilenameBuilder_i * pFilenameBuilder ) const
-{
-	SettingsFormatter_c tFormatter ( pFile, "\t", " = ", "\n" );
-	Format ( tFormatter, pFilenameBuilder );
-}
-
-
 void SettingsWriter_c::DumpReadable ( FILE * pFile, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const
 {
 	SettingsFormatter_c tFormatter ( pFile, "", ": ", "\n", true );
-	Format ( tFormatter, pFilenameBuilder );
-}
-
-
-void SettingsWriter_c::DumpCreateTable ( StringBuilder_c & tBuf, FilenameBuilder_i * pFilenameBuilder ) const
-{
-	SettingsFormatter_c tFormatter ( tBuf, "", "='", "' " );
 	Format ( tFormatter, pFilenameBuilder );
 }
 
@@ -218,6 +213,17 @@ ESphWordpart CSphSourceSettings::GetWordpart ( const char * sField, bool bWordDi
 	if ( bInfix )
 		return SPH_WORDPART_INFIX;
 	return SPH_WORDPART_WHOLE;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+void DocstoreSettings_t::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const
+{
+	DocstoreSettings_t tDefault;
+
+	tOut.Add ( "docstore_compression",			CompressionToStr(m_eCompression), m_eCompression!=tDefault.m_eCompression );
+	tOut.Add ( "docstore_compression_level",	m_iCompressionLevel,	m_iCompressionLevel!=tDefault.m_iCompressionLevel );
+	tOut.Add ( "docstore_block_size",			m_uBlockSize,			m_uBlockSize!=tDefault.m_uBlockSize );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -287,7 +293,9 @@ void CSphTokenizerSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder
 {
 	bool bKnownTokenizer = ( m_iType==TOKENIZER_UTF8 || m_iType==TOKENIZER_NGRAM );
 	tOut.Add ( "charset_type",		bKnownTokenizer ? "utf-8" : "unknown tokenizer (deprecated sbcs?)", !bKnownTokenizer );
-	tOut.Add ( "charset_table",		m_sCaseFolding,	!m_sCaseFolding.IsEmpty() );
+
+	// fixme! need unified default charset handling
+	tOut.Add ( "charset_table",		m_sCaseFolding,	!m_sCaseFolding.IsEmpty() && m_sCaseFolding!="non_cjk" );
 	tOut.Add ( "min_word_len",		m_iMinWordLen,	m_iMinWordLen>1 );
 	tOut.Add ( "ngram_len",			m_iNgramLen,	m_iNgramLen && !m_sNgramChars.IsEmpty() );
 	tOut.Add ( "ngram_chars",		m_sNgramChars,	m_iNgramLen && !m_sNgramChars.IsEmpty() );
@@ -594,6 +602,8 @@ bool CSphIndexSettings::ParseDocstoreSettings ( const CSphConfigSection & hIndex
 }
 
 
+static const int64_t DEFAULT_ATTR_UPDATE_RESERVE = 131072;
+
 bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * szIndexName, CSphString & sWarning, CSphString & sError )
 {
 	// misc settings
@@ -607,7 +617,7 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 	m_iEmbeddedLimit = hIndex.GetSize ( "embedded_limit", 16384 );
 	m_bIndexFieldLens = hIndex.GetInt ( "index_field_lengths" )!=0;
 	m_sIndexTokenFilter = hIndex.GetStr ( "index_token_filter" );
-	m_tBlobUpdateSpace = hIndex.GetSize64 ( "attr_update_reserve", 131072 );
+	m_tBlobUpdateSpace = hIndex.GetSize64 ( "attr_update_reserve", DEFAULT_ATTR_UPDATE_RESERVE );
 
 	if ( !m_tKlistTargets.Parse ( hIndex.GetStr ( "killlist_target" ), szIndexName, sError ) )
 		return false;
@@ -786,7 +796,7 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 }
 
 
-void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * /*pFilenameBuilder*/ ) const
+void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const
 {
 	tOut.Add ( "min_prefix_len",		m_iMinPrefixLen,		m_iMinPrefixLen!=0 );
 	tOut.Add ( "min_infix_len",			m_iMinInfixLen,			m_iMinInfixLen!=0 );
@@ -804,6 +814,22 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 	tOut.Add ( "bigram_index",			BigramName(m_eBigramIndex), m_eBigramIndex!=SPH_BIGRAM_NONE );
 	tOut.Add ( "bigram_freq_words",		m_sBigramWords,			!m_sBigramWords.IsEmpty() );
 	tOut.Add ( "index_token_filter",	m_sIndexTokenFilter,	!m_sIndexTokenFilter.IsEmpty() );
+	tOut.Add ( "attr_update_reserve",	m_tBlobUpdateSpace,		m_tBlobUpdateSpace!=DEFAULT_ATTR_UPDATE_RESERVE );
+
+	DocstoreSettings_t::Format ( tOut, pFilenameBuilder );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+void FileAccessSettings_t::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const
+{
+	tOut.Add ( "read_buffer_docs",		m_iReadBufferDocList,		m_iReadBufferDocList!=DEFAULT_READ_BUFFER );
+	tOut.Add ( "read_buffer_hits",		m_iReadBufferHitList,		m_iReadBufferHitList!=DEFAULT_READ_BUFFER );
+
+	tOut.Add ( "access_doclists",		FileAccessName(m_eDoclist),	m_eDoclist!=FileAccess_e::FILE );
+	tOut.Add ( "access_hitlists",		FileAccessName(m_eHitlist),	m_eHitlist!=FileAccess_e::FILE );
+	tOut.Add ( "access_plain_attrs",	FileAccessName(m_eAttr) ,	m_eAttr!=FileAccess_e::MMAP_PREREAD );
+	tOut.Add ( "access_blob_attrs",		FileAccessName(m_eBlob) ,	m_eBlob!=FileAccess_e::MMAP_PREREAD );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1105,6 +1131,79 @@ void SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, bool
 
 //////////////////////////////////////////////////////////////////////////
 
+static void FormatAllSettings ( const CSphIndex & tIndex, SettingsFormatter_c & tFormatter, FilenameBuilder_i * pFilenameBuilder )
+{
+	tIndex.GetSettings().Format ( tFormatter, pFilenameBuilder );
+
+	CSphFieldFilterSettings tFieldFilter;
+	tIndex.GetFieldFilterSettings ( tFieldFilter );
+	tFieldFilter.Format ( tFormatter, pFilenameBuilder );
+
+	KillListTargets_c tKlistTargets;
+	CSphString sWarning;
+	if ( !tIndex.LoadKillList ( nullptr, tKlistTargets, sWarning ) )
+		tKlistTargets.m_dTargets.Reset();
+
+	tKlistTargets.Format ( tFormatter, pFilenameBuilder );
+
+	if ( tIndex.GetTokenizer() )
+		tIndex.GetTokenizer()->GetSettings().Format ( tFormatter, pFilenameBuilder );
+
+	if ( tIndex.GetDictionary() )
+		tIndex.GetDictionary()->GetSettings().Format ( tFormatter, pFilenameBuilder );
+
+	tIndex.GetMemorySettings().Format ( tFormatter, pFilenameBuilder );
+}
+
+
+// fixme! this is basically a duplicate of the above function, but has extra code due to embedded
+void DumpReadable ( FILE * fp, const CSphIndex & tIndex, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder )
+{
+	tIndex.GetSettings().DumpReadable ( fp, tEmbeddedFiles, pFilenameBuilder );
+
+	CSphFieldFilterSettings tFieldFilter;
+	tIndex.GetFieldFilterSettings ( tFieldFilter );
+	tFieldFilter.DumpReadable ( fp, tEmbeddedFiles, pFilenameBuilder );
+
+	KillListTargets_c tKlistTargets;
+	CSphString sWarning;
+	if ( !tIndex.LoadKillList ( nullptr, tKlistTargets, sWarning ) )
+		tKlistTargets.m_dTargets.Reset();
+
+	tKlistTargets.DumpReadable ( fp, tEmbeddedFiles, pFilenameBuilder );
+
+	if ( tIndex.GetTokenizer() )
+		tIndex.GetTokenizer()->GetSettings().DumpReadable ( fp, tEmbeddedFiles, pFilenameBuilder );
+
+	if ( tIndex.GetDictionary() )
+		tIndex.GetDictionary()->GetSettings().DumpReadable ( fp, tEmbeddedFiles, pFilenameBuilder );
+
+	tIndex.GetMemorySettings().DumpReadable ( fp, tEmbeddedFiles, pFilenameBuilder );
+}
+
+
+void DumpSettings ( StringBuilder_c & tBuf, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder )
+{
+	SettingsFormatter_c tFormatter ( tBuf, "", " = ", "\n" );
+	FormatAllSettings ( tIndex, tFormatter, pFilenameBuilder );
+}
+
+
+void DumpSettingsCfg ( FILE * fp, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder )
+{
+	SettingsFormatter_c tFormatter ( fp, "\t", " = ", "\n" );
+	FormatAllSettings ( tIndex, tFormatter, pFilenameBuilder );
+}
+
+
+static void DumpCreateTable ( StringBuilder_c & tBuf, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder )
+{
+	SettingsFormatter_c tFormatter ( tBuf, "", "='", "' " );
+	FormatAllSettings ( tIndex, tFormatter, pFilenameBuilder );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 static void AddWarning ( StrVec_t & dWarnings, const CSphString & sWarning )
 {
 	if ( !sWarning.IsEmpty() )
@@ -1295,29 +1394,37 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 	StringBuilder_c tBuf;
 
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( g_fnCreateFilenameBuilder ? g_fnCreateFilenameBuilder ( pIndex->GetName() ) : nullptr );
-	pIndex->GetSettings().DumpCreateTable ( tBuf, pFilenameBuilder.Ptr() );
-
-	CSphFieldFilterSettings tFieldFilter;
-	pIndex->GetFieldFilterSettings ( tFieldFilter );
-	tFieldFilter.DumpCreateTable ( tBuf, pFilenameBuilder.Ptr() );
-
-	KillListTargets_c tKlistTargets;
-	// fixme! handle errors
-	CSphString sError;
-	if ( !pIndex->LoadKillList ( nullptr, tKlistTargets, sError ) )
-		tKlistTargets.m_dTargets.Reset();
-
-	tKlistTargets.DumpCreateTable ( tBuf, pFilenameBuilder.Ptr() );
-
-	if ( pIndex->GetTokenizer() )
-		pIndex->GetTokenizer()->GetSettings().DumpCreateTable ( tBuf, pFilenameBuilder.Ptr() );
-
-	if ( pIndex->GetDictionary() )
-		pIndex->GetDictionary()->GetSettings().DumpCreateTable ( tBuf, pFilenameBuilder.Ptr() );
+	DumpCreateTable ( tBuf, *pIndex, pFilenameBuilder.Ptr() );
 
 	if ( tBuf.GetLength() )
 		sRes << " " << tBuf.cstr();
 
 	CSphString sResult = sRes.cstr();
 	return sResult;
+}
+
+
+const char * FileAccessName ( FileAccess_e eValue )
+{
+	switch ( eValue )
+	{
+	case FileAccess_e::FILE : return "file";
+	case FileAccess_e::MMAP : return "mmap";
+	case FileAccess_e::MMAP_PREREAD : return "mmap_preread";
+	case FileAccess_e::MLOCK : return "mlock";
+	case FileAccess_e::UNKNOWN : return "unknown";
+	default:
+		assert ( 0 && "Not all values of FileAccess_e named");
+		return "";
+	}
+}
+
+
+FileAccess_e ParseFileAccess ( CSphString sVal )
+{
+	if ( sVal=="file" ) return FileAccess_e::FILE;
+	if ( sVal=="mmap" )	return FileAccess_e::MMAP;
+	if ( sVal=="mmap_preread" ) return FileAccess_e::MMAP_PREREAD;
+	if ( sVal=="mlock" ) return FileAccess_e::MLOCK;
+	return FileAccess_e::UNKNOWN;
 }

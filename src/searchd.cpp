@@ -14381,24 +14381,7 @@ void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt 
 
 	StringBuilder_c tBuf;
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder ( pIndex->GetName() ) );
-
-	pIndex->GetSettings().Dump ( tBuf, pFilenameBuilder.Ptr() );
-
-	CSphFieldFilterSettings tFieldFilter;
-	pIndex->GetFieldFilterSettings ( tFieldFilter );
-	tFieldFilter.Dump ( tBuf, pFilenameBuilder.Ptr() );
-
-	KillListTargets_c tKlistTargets;
-	if ( !pIndex->LoadKillList ( nullptr, tKlistTargets, sError ) )
-		tKlistTargets.m_dTargets.Reset();
-
-	tKlistTargets.Dump ( tBuf, pFilenameBuilder.Ptr() );
-
-	if ( pIndex->GetTokenizer() )
-		pIndex->GetTokenizer()->GetSettings().Dump ( tBuf, pFilenameBuilder.Ptr() );
-
-	if ( pIndex->GetDictionary() )
-		pIndex->GetDictionary()->GetSettings().Dump ( tBuf, pFilenameBuilder.Ptr() );
+	DumpSettings ( tBuf, *pIndex, pFilenameBuilder.Ptr() );
 
 	tOut.DataTuplet ( "settings", tBuf.cstr() );
 
@@ -16703,32 +16686,8 @@ void ConfigureTemplateIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIn
 	pIdx->m_iExpandKeywords = ParseKeywordExpansion ( hIndex.GetStr( "expand_keywords", "" ) );
 }
 
-static const char * FileAccessName ( FileAccess_e eValue )
-{
-	switch ( eValue )
-	{
-		case FileAccess_e::FILE : return "file";
-		case FileAccess_e::MMAP : return "mmap";
-		case FileAccess_e::MMAP_PREREAD : return "mmap_preread";
-		case FileAccess_e::MLOCK : return "mlock";
-		case FileAccess_e::UNKNOWN : return "unknown";
-		default:
-			assert ( 0 && "Not all values of FileAccess_e named");
-			return "";
-	}
-}
 
-static FileAccess_e ParseFileAccess ( CSphString sVal )
-{
-	if ( sVal=="file" ) return FileAccess_e::FILE;
-	if ( sVal=="mmap" )	return FileAccess_e::MMAP;
-	if ( sVal=="mmap_preread" ) return FileAccess_e::MMAP_PREREAD;
-	if ( sVal=="mlock" ) return FileAccess_e::MLOCK;
-	return FileAccess_e::UNKNOWN;
-}
-
-static FileAccess_e GetFileAccess (  const CSphConfigSection & hIndex, const char * sKey,
-	bool bList, FileAccess_e eDefault )
+static FileAccess_e GetFileAccess (  const CSphConfigSection & hIndex, const char * sKey, bool bList, FileAccess_e eDefault )
 {
 	// should use original value as default due to deprecated options
 	auto eValue = eDefault;
@@ -16745,12 +16704,12 @@ static FileAccess_e GetFileAccess (  const CSphConfigSection & hIndex, const cha
 	if ( ( bList && eValue==FileAccess_e::MMAP_PREREAD) ||
 		( !bList && eValue==FileAccess_e::FILE) )
 	{
-		sphWarning( "%s invalid value %s, use default %s", sKey,
-			FileAccessName( eValue ), FileAccessName( eDefault ));
+		sphWarning( "%s invalid value %s, use default %s", sKey, FileAccessName(eValue), FileAccessName(eDefault));
 		return eDefault;
 	}
 	return eValue;
 }
+
 
 void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex )
 {
@@ -18810,8 +18769,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_iExpansionLimit = hSearchd.GetInt ( "expansion_limit", 0 );
 
 	// initialize buffering settings
-	SetUnhintedBuffer ( hSearchd.GetSize( "read_unhinted", 32 * 1024 ) );
-	int iReadBuffer = hSearchd.GetSize ( "read_buffer", 256*1024 );
+	SetUnhintedBuffer ( hSearchd.GetSize( "read_unhinted", DEFAULT_READ_UNHINTED ) );
+	int iReadBuffer = hSearchd.GetSize ( "read_buffer", DEFAULT_READ_BUFFER );
 	g_tDefaultFA.m_iReadBufferDocList = hSearchd.GetSize ( "read_buffer_docs", iReadBuffer );
 	g_tDefaultFA.m_iReadBufferHitList = hSearchd.GetSize ( "read_buffer_hits", iReadBuffer );
 	g_tDefaultFA.m_eDoclist = GetFileAccess( hSearchd, "access_doclists", true, FileAccess_e::FILE );

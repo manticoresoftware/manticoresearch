@@ -3255,34 +3255,11 @@ public:
 	virtual int		GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const = 0;
 };
 
-
-enum class FileAccess_e
-{
-	FILE,
-	MMAP,
-	MMAP_PREREAD,
-	MLOCK,
-	UNKNOWN
-};
-
 bool IsMlock ( FileAccess_e eType );
 bool IsOndisk ( FileAccess_e eType );
 
 // returns correct size even if iBuf is 0
 int GetReadBuffer ( int iBuf );
-
-struct FileAccessSettings_t
-{
-	FileAccess_e	m_eAttr;
-	FileAccess_e	m_eBlob;
-	FileAccess_e	m_eDoclist;
-	FileAccess_e	m_eHitlist;
-	int				m_iReadBufferDocList;
-	int				m_iReadBufferHitList;
-
-	bool operator== ( const FileAccessSettings_t & tOther ) const;
-	bool operator!= ( const FileAccessSettings_t & tOther ) const;
-};
 
 /// generic fulltext index interface
 class CSphIndex : public ISphKeywordsStat, public IndexSegment_c, public DocstoreReader_i

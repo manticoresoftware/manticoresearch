@@ -84,6 +84,13 @@ searchd
 <sphinxql>drop table idx_clone</sphinxql>
 <sphinxql>drop table idx</sphinxql>
 
+<sphinxql>create table test1 ( title text ) docstore_compression='lz4hc' docstore_block_size='8192' access_plain_attrs='mmap' attr_update_reserve='100M'  </sphinxql>
+<sphinxql>show create table test1</sphinxql>
+<sphinxql>create table test2 like test1</sphinxql>
+<sphinxql>show create table test2</sphinxql>
+<sphinxql>drop table test1</sphinxql>
+<sphinxql>drop table test2</sphinxql>
+
 </sphqueries>
 
 </test>

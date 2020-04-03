@@ -90,7 +90,7 @@ struct IndexDesc_t
 
 
 // load data from internal config on daemon start
-void		LoadConfigInt ( const CSphConfig & hConf, const CSphString & sConfigFile );
+bool		LoadConfigInt ( const CSphConfig & hConf, const CSphString & sConfigFile, CSphString & sError );
 bool		SaveConfigInt ( CSphString & sError );
 
 // read info about cluster and indexes from manticore.json and validate data

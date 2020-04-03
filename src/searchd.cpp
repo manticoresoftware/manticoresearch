@@ -149,7 +149,7 @@ static auto&			g_iTFO = sphGetTFO ();
 static CSphString		g_sShutdownToken;
 static int				g_iServerID = 0;
 static bool				g_bServerID = false;
-
+static bool				g_bJsonConfigLoadedOk = false;
 
 static CSphVector<Listener_t>	g_dListeners;
 
@@ -728,8 +728,11 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	bAttrsSaveOk = FinallySaveIndexes();
 
 	// right before unlock loop
-	CSphString sError;
-	SaveConfigInt(sError);
+	if ( g_bJsonConfigLoadedOk )
+	{
+		CSphString sError;
+		SaveConfigInt(sError);
+	}
 
 	// unlock indexes and release locks if needed
 	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); )
@@ -19575,7 +19578,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	/////////////////////
 
 	sphInitCJson();
-	LoadConfigInt ( hConf, g_sConfigFile );
+	if ( LoadConfigInt ( hConf, g_sConfigFile, sError ) )
+		g_bJsonConfigLoadedOk = true;
+	else
+		sphFatal ( "%s", sError.cstr() );
 
 	ConfigureSearchd ( hConf, bOptPIDFile );
 	sphConfigureCommon ( hConf ); // this also inits plugins now

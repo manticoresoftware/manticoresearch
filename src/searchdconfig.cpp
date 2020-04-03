@@ -693,7 +693,10 @@ static bool SetupConfiglessMode ( const CSphConfig & hConf, const CSphString & s
 	g_sDataDir = hSearchd["data_dir"].strval();
 
 	if ( !sphDirExists ( g_sDataDir.cstr(), &sError ) )
+	{
+		sError.SetSprintf ( "%s; make sure it is accessible or remove data_dir from the config file", sError.cstr() );
 		return false;
+	}
 
 	if ( hConf.Exists("index") )
 	{
@@ -714,43 +717,34 @@ static bool SetupConfiglessMode ( const CSphConfig & hConf, const CSphString & s
 
 
 // load data from JSON config on daemon start
-void LoadConfigInt ( const CSphConfig & hConf, const CSphString & sConfigFile )
+bool LoadConfigInt ( const CSphConfig & hConf, const CSphString & sConfigFile, CSphString & sError )
 {
 	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
+	g_sLogFile = hSearchd.GetStr ( "log", "" );
 
 	g_bConfigless = hSearchd.Exists("data_dir");
-	if ( g_bConfigless )
-	{
-		CSphString sError;
-		if ( !SetupConfiglessMode ( hConf, sConfigFile, sError ) )
-		{
-			sphWarning ( "%s", sError.cstr() );
-			g_bConfigless = false;
-		}
-	}
+	if ( !g_bConfigless )
+		return true;
 
-	g_sLogFile = hSearchd.GetStr ( "log", "" );
+	if ( !SetupConfiglessMode ( hConf, sConfigFile, sError ) )
+		return false;
 
 	// node with empty incoming addresses works as GARB - does not affect FC
 	// might hung on pushing 1500 transactions
 	ReplicationSetIncoming ( hSearchd.GetStr ( "node_address" ) );
 
-	if ( g_sDataDir.IsEmpty() )
-		return;
-
-	CSphString sError;
-
 	// check data_dir exists and available
 	if ( !CheckPath ( g_sDataDir, true, sError ) )
-	{
-		sphWarning ( "%s, replication is disabled", sError.cstr() );
-		g_sDataDir = "";
-		return;
-	}
+		return false;
 
 	g_sConfigPath.SetSprintf ( "%s/manticore.json", g_sDataDir.cstr() );
 	if ( !ConfigRead ( g_sConfigPath, g_dCfgClusters, g_dCfgIndexes, sError ) )
-		sphDie ( "failed to use JSON config %s: %s", g_sConfigPath.cstr(), sError.cstr() );
+	{
+		sError.SetSprintf ( "failed to use JSON config %s: %s", g_sConfigPath.cstr(), sError.cstr() );
+		return false;
+	}
+
+	return true;
 }
 
 

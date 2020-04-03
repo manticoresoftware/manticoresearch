@@ -819,7 +819,7 @@ static bool PrepareDirForNewIndex ( CSphString & sPath, CSphString & sIndexPath,
 }
 
 
-bool CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestPath, CSphString & sError )
+bool CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestPath, StrVec_t & dCopied, CSphString & sError )
 {
 	for ( const auto & i : dFiles )
 	{
@@ -830,7 +830,9 @@ bool CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestP
 			continue;
 
 		if ( !CopyFile ( i, sDest, sError ) )
-			return false;			
+			return false;
+
+		dCopied.Add(sDest);
 	}
 
 	return true;
@@ -1080,6 +1082,9 @@ bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t 
 		return false;
 	}
 
+	StrVec_t dCopied;
+	ScopedFileCleanup_c tCleanup(dCopied);
+
 	bool bDistributed = tSettingsContainer.Get("type")=="distributed";
 	if ( !bDistributed )
 	{
@@ -1088,7 +1093,7 @@ bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t 
 			return false;
 
 		tSettingsContainer.Add ( "path", sIndexPath );
-		if ( !CopyExternalIndexFiles ( tSettingsContainer.GetFiles(), sPath, sError ) )
+		if ( !CopyExternalIndexFiles ( tSettingsContainer.GetFiles(), sPath, dCopied, sError ) )
 			return false;
 	}
 
@@ -1099,6 +1104,8 @@ bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t 
 	assert ( eAdd==ADD_DSBLED || eAdd==ADD_DISTR || eAdd==ADD_ERROR );
 	if ( eAdd==ADD_ERROR )
 		return false;
+
+	tCleanup.Ok();
 
 	if ( eAdd==ADD_DSBLED )
 	{

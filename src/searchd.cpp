@@ -14773,7 +14773,8 @@ static bool SubstituteExternalIndexFiles ( const StrVec_t & dOldExternalFiles, c
 	if ( !dOnlyNew.GetLength() )
 		return true;
 
-	if ( !CopyExternalIndexFiles ( dOnlyNew, sIndexPath, sError ) )
+	StrVec_t dCopied;
+	if ( !CopyExternalIndexFiles ( dOnlyNew, sIndexPath, dCopied, sError ) )
 	{
 		// try to rename files back
 		CSphString sTmp;

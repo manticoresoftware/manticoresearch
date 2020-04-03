@@ -1774,66 +1774,71 @@ class SphinxConfig
 		return true;
 	}
 
+	function PostprocessDDL ( $query, &$query_result )
+	{
+		$query = strtolower ( trim ( $query ) );
+
+		$create_table = "create table";
+		$alter_table = "alter table";
+		if ( StrBegins ( $query, $create_table ) || StrBegins ( $query, $alter_table) )
+		{
+			$matches = array();
+			$preg = preg_match_all ( "/(?:(?:wordforms|stopwords|exceptions)[ \t]*=[ \t]*)'([^']+)'/", $query, $matches, PREG_OFFSET_CAPTURE );
+
+			$result_str = "";
+			$prev_offset = 0;
+			foreach ( $matches[1] as $entry )
+			{
+				$result_str.= substr ( $query, $prev_offset, $entry[1]-$prev_offset );
+				$replacement = basename($entry[0]);
+				$result_str.= $replacement;
+				$prev_offset = $entry[1] + strlen($entry[0]);
+			}
+
+			$result_str.= substr ( $query, $prev_offset );
+			$query_result["sphinxql"] = $result_str;
+
+			$query = $result_str;
+			$query = $this->FixupAgentAddress ( $query );
+			$query_result["sphinxql"] = $query;
+		}
+
+		$import_table = "import table";
+		if ( StrBegins ( $query, $import_table ) )
+		{
+			$matches = array();
+			$preg = preg_match_all ( "/(?:.*)'([^']+)'/", $query, $matches, PREG_OFFSET_CAPTURE );
+
+			$result_str = "";
+			$prev_offset = 0;
+			foreach ( $matches[1] as $entry )
+			{
+				$result_str.= substr ( $query, $prev_offset, $entry[1]-$prev_offset );
+				$replacement = basename($entry[0]);
+				$result_str.= $replacement;
+				$prev_offset = $entry[1] + strlen($entry[0]);
+			}
+
+			$result_str.= substr ( $query, $prev_offset );
+			$query_result["sphinxql"] = $result_str;
+
+			$query = $result_str;
+			$query = $this->FixupAgentAddress ( $query );
+			$query_result["sphinxql"] = $query;
+		}
+	}
 
 	function PostprocessQlResult ( $query, &$query_result, $connection, $no_time )
 	{
 		$result = mysqli_wr ($query,$connection);
 		if ($result===true)
 		{
+			$this->PostprocessDDL ( $query, $query_result );
 			$query_result["total_affected"] = mysqli_affected_rows($connection);
-			$query = strtolower ( trim ( $query ) );
-
-			$create_table = "create table";
-			$alter_table = "alter table";
-			if ( StrBegins ( $query, $create_table ) || StrBegins ( $query, $alter_table) )
-			{
-				$matches = array();
-				$preg = preg_match_all ( "/(?:(?:wordforms|stopwords|exceptions)[ \t]*=[ \t]*)'([^']+)'/", $query, $matches, PREG_OFFSET_CAPTURE );
-
-				$result_str = "";
-				$prev_offset = 0;
-				foreach ( $matches[1] as $entry )
-				{
-					$result_str.= substr ( $query, $prev_offset, $entry[1]-$prev_offset );
-					$replacement = basename($entry[0]);
-					$result_str.= $replacement;
-					$prev_offset = $entry[1] + strlen($entry[0]);
-				}
-
-				$result_str.= substr ( $query, $prev_offset );
-				$query_result["sphinxql"] = $result_str;
-
-				$query = $result_str;
-				$query = $this->FixupAgentAddress ( $query );
-				$query_result["sphinxql"] = $query;
-			}
-
-			$import_table = "import table";
-			if ( StrBegins ( $query, $import_table ) )
-			{
-				$matches = array();
-				$preg = preg_match_all ( "/(?:.*)'([^']+)'/", $query, $matches, PREG_OFFSET_CAPTURE );
-
-				$result_str = "";
-				$prev_offset = 0;
-				foreach ( $matches[1] as $entry )
-				{
-					$result_str.= substr ( $query, $prev_offset, $entry[1]-$prev_offset );
-					$replacement = basename($entry[0]);
-					$result_str.= $replacement;
-					$prev_offset = $entry[1] + strlen($entry[0]);
-				}
-
-				$result_str.= substr ( $query, $prev_offset );
-				$query_result["sphinxql"] = $result_str;
-
-				$query = $result_str;
-				$query = $this->FixupAgentAddress ( $query );
-				$query_result["sphinxql"] = $query;
-			}
 		}
 		else if ($result===false)
 		{
+			$this->PostprocessDDL ( $query, $query_result );
 			$query_result["error"] = $this->FixupErrorMessage ( mysqli_error( $connection ) );
 			$query_result["errno"] = mysqli_errno( $connection );
 

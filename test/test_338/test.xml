@@ -331,6 +331,20 @@ index test_rt
 
 <query endpoint="json/search">{ "index": "test_rt", "query": { "match": { "*": "thousand" } } } }</query>
 
+<query endpoint="json/insert">
+{
+	"index":"test_rt",
+	"id":1513686608316989453,
+	"doc":
+	{
+		"bint_col" : 1513686608316989453,
+	    "content" : "document big"
+	}
+}
+</query>
+
+<query endpoint="json/search">{ "index": "test_rt", "query": { "match": { "*": "big" } } } }</query>
+
 </httpqueries>
 
 </test>

@@ -1,4 +1,4 @@
-a:1:{i:0;a:40:{i:0;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:280:"
+a:1:{i:0;a:42:{i:0;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:280:"
 {
 	"index":"test_rt",
 	"id":1,
@@ -204,4 +204,14 @@ a:1:{i:0;a:40:{i:0;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_metho
 	    "content" : "document thousand"
 	}
 }
-";s:4:"rows";s:75:"{"_index":"test_rt","_id":0,"created":true,"result":"created","status":201}";s:9:"http_code";i:200;s:4:"http";i:1;}i:39;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:67:"{ "index": "test_rt", "query": { "match": { "*": "thousand" } } } }";s:4:"rows";s:177:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1677721600001","_score":1680,"_source":{"int_col":1000,"bint_col":0,"flt_col":0,"title":"","json_col":null,"mva_col":[]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}}}
+";s:4:"rows";s:75:"{"_index":"test_rt","_id":0,"created":true,"result":"created","status":201}";s:9:"http_code";i:200;s:4:"http";i:1;}i:39;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:67:"{ "index": "test_rt", "query": { "match": { "*": "thousand" } } } }";s:4:"rows";s:177:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1677721600001","_score":1680,"_source":{"int_col":1000,"bint_col":0,"flt_col":0,"title":"","json_col":null,"mva_col":[]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:40;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:134:"
+{
+	"index":"test_rt",
+	"id":1513686608316989453,
+	"doc":
+	{
+		"bint_col" : 1513686608316989453,
+	    "content" : "document big"
+	}
+}
+";s:4:"rows";s:93:"{"_index":"test_rt","_id":1513686608316989453,"created":true,"result":"created","status":201}";s:9:"http_code";i:200;s:4:"http";i:1;}i:41;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:62:"{ "index": "test_rt", "query": { "match": { "*": "big" } } } }";s:4:"rows";s:198:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1513686608316989453","_score":1695,"_source":{"int_col":0,"bint_col":1513686608316989453,"flt_col":0,"title":"","json_col":null,"mva_col":[]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}}}

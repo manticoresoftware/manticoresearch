@@ -1405,7 +1405,7 @@ void JsonObj_c::AddStr ( const char * szName, const CSphString & sValue )
 void JsonObj_c::AddInt ( const char * szName, int64_t iValue )
 {
 	assert ( m_pRoot );
-	cJSON_AddNumberToObject ( m_pRoot, szName, iValue );
+	cJSON_AddItemToObject ( m_pRoot, szName, CreateInt(iValue).Leak() );
 }
 
 
@@ -1648,6 +1648,12 @@ bool JsonObj_c::HasItem ( const char * szItem ) const
 {
 	assert ( m_pRoot );
 	return !!cJSON_HasObjectItem ( m_pRoot, szItem );
+}
+
+
+JsonObj_c JsonObj_c::CreateInt ( int64_t iInt )
+{
+	return JsonObj_c ( cJSON_CreateInteger(iInt) );
 }
 
 

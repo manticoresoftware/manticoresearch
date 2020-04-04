@@ -58,6 +58,20 @@ index test1_nostored
 	path			= <data_path/>/test1_nostored
 }
 
+source test1s
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id, title, body from test_table
+	sql_attr_string	= title
+}
+
+index test1s
+{
+	source			= test1s
+	path			= <data_path/>/test1s
+	stored_fields	= body
+}
 </config>
 
 <db_create>
@@ -138,6 +152,13 @@ insert into test_table2 values
 
 <sphinxql>select highlight() from test1_wild where match('followed')</sphinxql>
 <sphinxql>select highlight() from test1_nostored where match('followed')</sphinxql>
+
+<sphinxql>desc test1s</sphinxql>
+<sphinxql>select highlight({},'body') FROM test1s WHERE MATCH('three')</sphinxql>
+<sphinxql>select highlight({},body) FROM test1s WHERE MATCH('three')</sphinxql>
+<sphinxql>select highlight({},'title') FROM test1s WHERE MATCH('well')</sphinxql>
+<sphinxql>select highlight({},title) FROM test1s WHERE MATCH('well')</sphinxql>
+
 </sphqueries>
 
 </test>

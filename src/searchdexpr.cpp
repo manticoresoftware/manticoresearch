@@ -97,14 +97,11 @@ class QueryExprTraits_c
 {
 public:
 								QueryExprTraits_c ( ISphExpr * pQuery );
+								QueryExprTraits_c ( const QueryExprTraits_c & rhs );
 
 	bool						UpdateQuery ( const CSphMatch & tMatch ) const;
 	const CSphString &			GetQuery() const { return m_sQuery; }
 	bool						Command ( ESphExprCommand eCmd, void * pArg );
-
-	QueryExprTraits_c ( const QueryExprTraits_c& rhs )
-		: m_pQuery ( SafeClone ( rhs.m_pQuery))
-	{}
 
 private:
 	CSphRefcountedPtr<ISphExpr>	m_pQuery;
@@ -121,6 +118,11 @@ QueryExprTraits_c::QueryExprTraits_c ( ISphExpr * pQuery )
 	if ( m_pQuery )
 		SafeAddRef(m_pQuery);
 }
+
+
+QueryExprTraits_c::QueryExprTraits_c ( const QueryExprTraits_c & rhs )
+	: m_pQuery ( SafeClone ( rhs.m_pQuery ) )
+{}
 
 
 bool QueryExprTraits_c::UpdateQuery ( const CSphMatch & tMatch ) const
@@ -175,41 +177,99 @@ bool QueryExprTraits_c::Command ( ESphExprCommand eCmd, void * pArg )
 
 
 //////////////////////////////////////////////////////////////////////////
+class Expr_HighlightTraits_c : public ISphStringExpr, public QueryExprTraits_c
+{
+public:
+				Expr_HighlightTraits_c ( CSphIndex * pIndex, CSphQueryProfile * pProfiler, ISphExpr * pQuery );
 
-/// searchd-level expression function
-class Expr_Snippet_c : public ISphStringExpr, public QueryExprTraits_c
+	void		Command ( ESphExprCommand eCmd, void * pArg ) override;
+	void		FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override;
+	uint64_t	GetHash ( const ISphSchema &, uint64_t, bool & ) final;
+	bool		IsDataPtrAttr () const final { return true; }
+
+protected:
+	CSphRefcountedPtr<ISphExpr>		m_pArgs;
+	CSphRefcountedPtr<ISphExpr>		m_pText;
+	CSphVector<int>					m_dRequestedFieldIds;
+	CSphIndex *						m_pIndex = nullptr;
+	CSphQueryProfile *				m_pProfiler = nullptr;
+	SnippetQuerySettings_t			m_tSnippetQuery;
+	CSphScopedPtr<SnippetBuilder_i>	m_pSnippetBuilder;
+
+
+				Expr_HighlightTraits_c ( const Expr_HighlightTraits_c & rhs );
+};
+
+
+Expr_HighlightTraits_c::Expr_HighlightTraits_c ( CSphIndex * pIndex, CSphQueryProfile * pProfiler, ISphExpr * pQuery )
+	: QueryExprTraits_c ( pQuery )
+	, m_pIndex ( pIndex )
+	, m_pProfiler ( pProfiler )
+	, m_pSnippetBuilder ( CreateSnippetBuilder() )
+{}
+
+
+Expr_HighlightTraits_c::Expr_HighlightTraits_c ( const Expr_HighlightTraits_c & rhs )
+	: QueryExprTraits_c ( rhs )
+	, m_pArgs ( SafeClone ( rhs.m_pArgs ) )
+	, m_pText ( SafeClone ( rhs.m_pText ) )
+	, m_dRequestedFieldIds ( rhs.m_dRequestedFieldIds )
+	, m_pIndex ( rhs.m_pIndex )
+	, m_pProfiler ( rhs.m_pProfiler )
+	, m_tSnippetQuery ( rhs.m_tSnippetQuery )
+	, m_pSnippetBuilder ( CreateSnippetBuilder() )
+{
+	CSphString sError;
+	assert ( m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery, sError ) );
+}
+
+
+void Expr_HighlightTraits_c::FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+{
+	if ( m_pText )
+		m_pText->FixupLocator ( pOldSchema, pNewSchema );
+}
+
+
+void Expr_HighlightTraits_c::Command ( ESphExprCommand eCmd, void * pArg )
+{
+	if ( m_pArgs )
+		m_pArgs->Command ( eCmd, pArg );
+
+	if ( m_pText )
+		m_pText->Command ( eCmd, pArg );
+
+	if ( QueryExprTraits_c::Command ( eCmd, pArg ) )
+	{
+		// fixme! handle errors
+		CSphString sError;
+		m_pSnippetBuilder->SetQuery ( GetQuery(), false, sError );
+	}
+}
+
+
+uint64_t Expr_HighlightTraits_c::GetHash ( const ISphSchema &, uint64_t, bool & )
+{
+	assert ( 0 && "no highlighting in filters" );
+	return 0;
+}
+
+
+//////////////////////////////////////////////////////////////////////////
+class Expr_Snippet_c : public Expr_HighlightTraits_c
 {
 public:
 				Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQueryProfile * pProfiler, CSphString & sError );
 
 	int			StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const override;
-	bool		IsDataPtrAttr () const final { return true; }
-	void		FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override;
-	void		Command ( ESphExprCommand eCmd, void * pArg ) override;
-	uint64_t	GetHash ( const ISphSchema &, uint64_t, bool & ) override;
-	ISphExpr *	Clone () const override;
-
-protected:
-	CSphRefcountedPtr<ISphExpr>		m_pArgs;
-	CSphRefcountedPtr<ISphExpr>		m_pText;
-	CSphIndex *						m_pIndex;
-	SnippetQuerySettings_t			m_tSnippetQuery;
-	CSphQueryProfile *				m_pProfiler;
-	CSphScopedPtr<SnippetBuilder_i>	m_pSnippetBuilder;
-	CSphVector<int>					m_dRequestedFields;
-
-private:
-	Expr_Snippet_c ( const Expr_Snippet_c & rhs ); // need for cloning
+	ISphExpr *	Clone() const override;
 };
 
 
 Expr_Snippet_c::Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQueryProfile * pProfiler, CSphString & sError )
-	: QueryExprTraits_c ( pArglist->GetArg(1) )
-	, m_pArgs ( pArglist )
-	, m_pIndex ( pIndex )
-	, m_pProfiler ( pProfiler )
-	, m_pSnippetBuilder ( CreateSnippetBuilder() )
+	: Expr_HighlightTraits_c ( pIndex, pProfiler, pArglist->GetArg(1) )
 {
+	m_pArgs = pArglist;
 	SafeAddRef ( m_pArgs );
 	assert ( m_pArgs->IsArglist() );
 
@@ -267,7 +327,7 @@ Expr_Snippet_c::Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQu
 	if ( !m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery, sError ) )
 		return;
 
-	m_dRequestedFields.Add(0);
+	m_dRequestedFieldIds.Add(0);
 }
 
 
@@ -302,42 +362,11 @@ int Expr_Snippet_c::StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr )
 	if ( !m_pSnippetBuilder->Build ( pSource.Ptr(), tRes ) )
 		return 0;
 
-	CSphVector<BYTE> dRes = m_pSnippetBuilder->PackResult ( tRes, m_dRequestedFields );
+	CSphVector<BYTE> dRes = m_pSnippetBuilder->PackResult ( tRes, m_dRequestedFieldIds );
 
 	int iResultLength = dRes.GetLength();
 	*ppStr = dRes.LeakData();
 	return iResultLength;
-}
-
-
-void Expr_Snippet_c::FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
-{
-	if ( m_pText )
-		m_pText->FixupLocator ( pOldSchema, pNewSchema );
-}
-
-
-void Expr_Snippet_c::Command ( ESphExprCommand eCmd, void * pArg )
-{
-	if ( m_pArgs )
-		m_pArgs->Command ( eCmd, pArg );
-
-	if ( m_pText )
-		m_pText->Command ( eCmd, pArg );
-
-	if ( QueryExprTraits_c::Command ( eCmd, pArg ) )
-	{
-		// fixme! handle errors
-		CSphString sError;
-		m_pSnippetBuilder->SetQuery ( GetQuery(), false, sError );
-	}
-}
-
-
-uint64_t Expr_Snippet_c::GetHash ( const ISphSchema &, uint64_t, bool & )
-{
-	assert ( 0 && "no snippets in filters" );
-	return 0;
 }
 
 
@@ -346,45 +375,27 @@ ISphExpr * Expr_Snippet_c::Clone () const
 	return new Expr_Snippet_c ( *this );
 }
 
-Expr_Snippet_c::Expr_Snippet_c ( const Expr_Snippet_c& rhs )
-		: QueryExprTraits_c ( rhs )
-		, m_pArgs ( SafeClone ( rhs.m_pArgs ) )
-		, m_pText ( SafeClone ( rhs.m_pText ) )
-		, m_pIndex ( rhs.m_pIndex )
-		, m_tSnippetQuery ( rhs.m_tSnippetQuery )
-		, m_pProfiler ( rhs.m_pProfiler )
-		, m_pSnippetBuilder ( CreateSnippetBuilder () )
-{
-	CSphString sError;
-	assert ( m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery, sError ));
-}
 
 //////////////////////////////////////////////////////////////////////////
 
-class Expr_Highlight_c final : public ISphStringExpr, public QueryExprTraits_c
+class Expr_Highlight_c final : public Expr_HighlightTraits_c
 {
 public:
 				Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQueryProfile * pProfiler, CSphString & sError );
 
 	int			StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final;
 	void		Command ( ESphExprCommand eCmd, void * pArg ) final;
-	void		FixupLocator ( const ISphSchema * /*pOldSchema*/, const ISphSchema * /*pNewSchema*/ ) final {}
-	uint64_t	GetHash ( const ISphSchema &, uint64_t, bool & ) final;
-	ISphExpr *	Clone () const final;
+	ISphExpr *	Clone() const final;
 
 private:
-	CSphIndex *						m_pIndex = nullptr;
-	CSphQueryProfile *				m_pProfiler = nullptr;
-	CSphScopedPtr<SnippetBuilder_i>	m_pSnippetBuilder;
-	DocstoreSession_c::Info_t		m_tSession;
-	SnippetQuerySettings_t			m_tSnippetQuery;
-	CSphVector<int>					m_dRequestedFieldIds;
-	CSphVector<int>					m_dFieldsToFetch;
-	CSphRefcountedPtr<ISphExpr>		m_pArgs;
-	bool							m_bFetchAllFields = false;
+	DocstoreSession_c::Info_t	m_tSession;
+	CSphVector<int>				m_dFieldsToFetch;
+	bool						m_bFetchAllFields = false;
 
 				Expr_Highlight_c ( const Expr_Highlight_c & rhs );
+
 	bool		FetchFieldsFromDocstore ( DocstoreDoc_t & tFetchedDoc, DocID_t & tDocID ) const;
+	CSphVector<FieldSource_t> RearrangeFetchedFields ( const DocstoreDoc_t & tFetchedDoc ) const;
 	void		ParseFields ( ISphExpr * pExpr );
 	bool		ParseOptions ( const VecTraits_T<CSphNamedVariant> & dMap, CSphString & sError );
 	bool		MarkRequestedFields ( CSphString & sError );
@@ -393,10 +404,7 @@ private:
 
 
 Expr_Highlight_c::Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQueryProfile * pProfiler, CSphString & sError )
-	: QueryExprTraits_c ( ( pArglist && pArglist->IsArglist() && pArglist->GetNumArgs()==3 ) ? pArglist->GetArg(2) : nullptr )
-	, m_pIndex ( pIndex )
-	, m_pProfiler ( pProfiler )
-	, m_pSnippetBuilder ( CreateSnippetBuilder() )
+	: Expr_HighlightTraits_c ( pIndex, pProfiler, ( pArglist && pArglist->IsArglist() && pArglist->GetNumArgs()==3 ) ? pArglist->GetArg(2) : nullptr )
 {
 	assert ( m_pIndex );
 
@@ -421,8 +429,18 @@ Expr_Highlight_c::Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, CS
 	if ( iNumArgs>=2 )
 	{
 		assert ( pArglist && pArglist->IsArglist() );
-		ISphExpr * pFields = pArglist->GetArg(1);
-		ParseFields(pFields);
+		ISphExpr * pArg2 = pArglist->GetArg(1);
+
+		// mode 1: it is a list of stored fields
+		// mode 2: it is an expression that needs to be evaluated
+		if ( pArg2->IsConst() )
+			ParseFields(pArg2);
+		else
+		{
+			m_pText = pArg2;
+			SafeAddRef(m_pText);
+			m_dRequestedFieldIds.Add(0);
+		}
 	}
 	else
 		MarkAllFields();
@@ -439,17 +457,97 @@ int	Expr_Highlight_c::StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr
 
 	DocID_t tDocID = sphGetDocID ( tMatch.m_pDynamic ? tMatch.m_pDynamic : tMatch.m_pStatic );
 
+	if ( UpdateQuery(tMatch) )
+	{
+		CSphString sError;
+		if ( !m_pSnippetBuilder->SetQuery ( GetQuery(), true, sError ) )
+			return 0;
+	}
+
 	DocstoreDoc_t tFetchedDoc;
-	if ( !FetchFieldsFromDocstore ( tFetchedDoc, tDocID ) )
+	CSphVector<FieldSource_t> dAllFields;
+	CSphScopedPtr<TextSource_i> pSource(nullptr);
+	CSphFixedVector<BYTE> tScoped {0}; // scoped array ptr
+
+	if ( m_pText )
+	{
+		// highlight an expression
+		const BYTE * szSource = nullptr;
+		int iLen = m_pText->StringEval ( tMatch, &szSource );
+
+		if ( m_pText->IsDataPtrAttr() )
+			tScoped.Set ( (BYTE *)szSource, iLen );
+
+		pSource = CreateSnippetSource ( m_tSnippetQuery.m_uFilesMode, szSource, iLen );
+	}
+	else
+	{
+		// fetch fields and highlight
+		if ( !FetchFieldsFromDocstore ( tFetchedDoc, tDocID ) )
+			return 0;
+
+		dAllFields = RearrangeFetchedFields ( tFetchedDoc );
+		pSource = CreateHighlightSource ( dAllFields );
+	}
+
+	SnippetResult_t tRes;
+	if ( !m_pSnippetBuilder->Build ( pSource.Ptr(), tRes ) )
 		return 0;
 
-	// now we've fetched all stored fields
-	// we need to arrange them as in original index schema
+	CSphVector<BYTE> dPacked = m_pSnippetBuilder->PackResult ( tRes, m_dRequestedFieldIds );
+	int iResultLength = dPacked.GetLength();
+	*ppStr = dPacked.LeakData();
+	return iResultLength;
+}
+
+
+void Expr_Highlight_c::Command ( ESphExprCommand eCmd, void * pArg )
+{
+	Expr_HighlightTraits_c::Command ( eCmd, pArg );
+
+	if ( eCmd==SPH_EXPR_SET_DOCSTORE )
+	{
+		const DocstoreSession_c::Info_t & tSession = *(DocstoreSession_c::Info_t*)pArg;
+		bool bMark = tSession.m_pDocstore!=m_tSession.m_pDocstore;
+		m_tSession = tSession;
+
+		if ( bMark )
+		{
+			// fixme! handle errors
+			CSphString sError;
+			MarkRequestedFields(sError);
+		}
+	}
+}
+
+
+ISphExpr * Expr_Highlight_c::Clone () const
+{
+	return new Expr_Highlight_c ( *this );
+}
+
+
+Expr_Highlight_c::Expr_Highlight_c ( const Expr_Highlight_c& rhs )
+	: Expr_HighlightTraits_c ( rhs )
+{}
+
+
+bool Expr_Highlight_c::FetchFieldsFromDocstore ( DocstoreDoc_t & tFetchedDoc, DocID_t & tDocID ) const
+{
+	if ( !m_tSession.m_pDocstore )
+		return false;
+
+	const CSphVector<int> * pFieldsToFetch = m_bFetchAllFields ? nullptr : &m_dFieldsToFetch;
+	return m_tSession.m_pDocstore->GetDoc ( tFetchedDoc, tDocID, pFieldsToFetch, m_tSession.m_iSessionId, false );
+}
+
+
+CSphVector<FieldSource_t> Expr_Highlight_c::RearrangeFetchedFields ( const DocstoreDoc_t & tFetchedDoc ) const
+{
+	// we need to arrange fetched fields as in original index schema
 	// so that field matching will work as expected
-	const CSphSchema & tSchema = m_pIndex->GetMatchSchema();
-
 	CSphVector<FieldSource_t> dAllFields;
-
+	const CSphSchema & tSchema = m_pIndex->GetMatchSchema();
 	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
 	{
 		const CSphColumnInfo & tInfo = tSchema.GetField(i);
@@ -476,89 +574,7 @@ int	Expr_Highlight_c::StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr
 			tNewField.m_dData = tFetchedDoc.m_dFields[iFetchedFieldId].Slice();
 	}
 
-	if ( UpdateQuery(tMatch) )
-	{
-		CSphString sError;
-		if ( !m_pSnippetBuilder->SetQuery ( GetQuery(), true, sError ) )
-			return 0;
-	}
-	
-	CSphScopedPtr<TextSource_i> pSource ( CreateHighlightSource(dAllFields) );
-
-	SnippetResult_t tRes;
-	if ( !m_pSnippetBuilder->Build ( pSource.Ptr(), tRes ) )
-		return 0;
-
-	CSphVector<BYTE> dPacked = m_pSnippetBuilder->PackResult ( tRes, m_dRequestedFieldIds );
-
-	int iResultLength = dPacked.GetLength();
-	*ppStr = dPacked.LeakData();
-	return iResultLength;
-}
-
-
-void Expr_Highlight_c::Command ( ESphExprCommand eCmd, void * pArg )
-{
-	if ( QueryExprTraits_c::Command ( eCmd, pArg ) )
-	{
-		// fixme! handle errors
-		CSphString sError;
-		m_pSnippetBuilder->SetQuery ( GetQuery(), false, sError );
-	}
-
-	if ( eCmd==SPH_EXPR_SET_DOCSTORE )
-	{
-		const DocstoreSession_c::Info_t & tSession = *(DocstoreSession_c::Info_t*)pArg;
-		bool bMark = tSession.m_pDocstore!=m_tSession.m_pDocstore;
-		m_tSession = tSession;
-
-		if ( bMark )
-		{
-			// fixme! handle errors
-			CSphString sError;
-			MarkRequestedFields(sError);
-		}
-	}
-
-	if ( m_pArgs )
-		m_pArgs->Command ( eCmd, pArg );
-}
-
-
-uint64_t Expr_Highlight_c::GetHash ( const ISphSchema &, uint64_t, bool & )
-{
-	assert ( 0 && "no snippets in filters" );
-	return 0;
-}
-
-
-ISphExpr * Expr_Highlight_c::Clone () const
-{
-	return new Expr_Highlight_c ( *this );
-}
-
-
-Expr_Highlight_c::Expr_Highlight_c ( const Expr_Highlight_c& rhs )
-		: QueryExprTraits_c ( rhs )
-		, m_pIndex ( rhs.m_pIndex )
-		, m_pProfiler ( rhs.m_pProfiler )
-		, m_pSnippetBuilder ( CreateSnippetBuilder () )
-		, m_tSnippetQuery ( rhs.m_tSnippetQuery )
-		, m_dRequestedFieldIds ( rhs.m_dRequestedFieldIds )
-		, m_pArgs ( SafeClone ( rhs.m_pArgs ) )
-{
-	CSphString sError;
-	assert ( m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery, sError ));
-}
-
-
-bool Expr_Highlight_c::FetchFieldsFromDocstore ( DocstoreDoc_t & tFetchedDoc, DocID_t & tDocID ) const
-{
-	if ( !m_tSession.m_pDocstore )
-		return false;
-
-	const CSphVector<int> * pFieldsToFetch = m_bFetchAllFields ? nullptr : &m_dFieldsToFetch;
-	return m_tSession.m_pDocstore->GetDoc ( tFetchedDoc, tDocID, pFieldsToFetch, m_tSession.m_iSessionId, false );
+	return dAllFields;
 }
 
 
@@ -736,9 +752,9 @@ ESphAttr ExprHook_c::GetReturnType ( int iID, const CSphVector<ESphAttr> & dArgs
 			return SPH_ATTR_NONE;
 		}
 
-		if ( dArgs.GetLength()>1 && dArgs[1]!=SPH_ATTR_STRING)
+		if ( dArgs.GetLength()>1 && dArgs[1]!=SPH_ATTR_STRING && dArgs[1]!=SPH_ATTR_STRINGPTR )
 		{
-			sError = "2nd argument to HIGHLIGHT() must be a const string";
+			sError = "2nd argument to HIGHLIGHT() must be a string";
 			return SPH_ATTR_NONE;
 		}
 

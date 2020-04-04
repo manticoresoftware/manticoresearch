@@ -260,6 +260,9 @@ public:
 
 	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final
 	{
+		if ( m_tLocator.IsBlobAttr() && !m_pBlobPool )
+			return 0;
+
 		int iLengthBytes = 0;
 		*ppStr = tMatch.FetchAttrData( m_tLocator, m_pBlobPool, iLengthBytes );
 		return iLengthBytes;

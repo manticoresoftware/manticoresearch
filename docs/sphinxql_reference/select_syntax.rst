@@ -88,6 +88,16 @@ storage and highlighted.
        FROM myIndex WHERE MATCH('my.query')
 
 
+Another way to use the second argument is to specify string attribute or field name
+without quotes. This way the supplied string will be highlighted against the provided
+query, however, field syntax will be ignored.
+
+.. code-block:: mysql
+
+       SELECT HIGHLIGHT({},string_attribute)
+       FROM myIndex WHERE MATCH('my.query')
+
+
 Optional third argument is the query. It is used for highlighting search results
 against a query different than the one used for searching.
 

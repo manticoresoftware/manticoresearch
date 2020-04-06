@@ -12,7 +12,7 @@ set ( CMAKE_USER_MAKE_RULES_OVERRIDE ${CMAKE_CURRENT_SOURCE_DIR}/cmake/c_flag_ov
 set ( CMAKE_USER_MAKE_RULES_OVERRIDE_CXX ${CMAKE_CURRENT_SOURCE_DIR}/cmake/cxx_flag_overrides.cmake )
 
 # set default build type to RelWithDebInfo (if nothing else provided from outside yet)
-IF ( NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES )
+IF ( NOT MSVC AND NOT XCODE AND NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES )
 	SET ( CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Choose the type of build." FORCE )
 	set_property ( CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release"
 			"MinSizeRel" "RelWithDebInfo" )
@@ -23,6 +23,10 @@ set ( CMAKE_DISABLE_FIND_PACKAGE_PkgConfig ON )
 macro( pkg_check_modules )
 endmacro()
 
+if (MSVC)
+	MESSAGE(STATUS "MSVC is ${MSVC}")
+endif()
+
 PROJECT ( MANTICORE )
 SET ( MANTICORE_CMAKE_DIR "${MANTICORE_SOURCE_DIR}/cmake" )
 SET ( CMAKE_MODULE_PATH "${MANTICORE_SOURCE_DIR}/cmake" )
@@ -32,9 +36,38 @@ SET ( EXTRA_SEARCHD_LIBRARIES )
 
 option ( DISABLE_TESTING "Disable all testing (if you just build a distr)" OFF )
 
+if (DEFINED ENV{DIAGNOSTIC})
+	set(DIAGNOSTIC "$ENV{DIAGNOSTIC}")
+endif()
+
+if (DEFINED ENV{LIBS_BUNDLE})
+	set(LIBS_BUNDLE "$ENV{LIBS_BUNDLE}")
+endif()
+
 if ( NOT LIBS_BUNDLE )
-	SET ( LIBS_BUNDLE "${MANTICORE_SOURCE_DIR}/../bundle" )
+	get_filename_component(LIBS_BUNDLE "${MANTICORE_SOURCE_DIR}/../bundle" ABSOLUTE)
 endif ()
+
+if (NOT IS_ABSOLUTE ${LIBS_BUNDLE})
+	set(LIBS_BUNDLE "${MANTICORE_BINARY_DIR}/${LIBS_BUNDLE}")
+endif ()
+
+if (DEFINED ENV{CACHEB})
+	set(CACHEB "$ENV{CACHEB}")
+endif()
+
+if (NOT DEFINED CACHEB)
+	get_filename_component(CACHEB "${LIBS_BUNDLE}/../cache" ABSOLUTE)
+endif()
+
+if (NOT IS_ABSOLUTE ${CACHEB})
+	set(CACHEB "${MANTICORE_BINARY_DIR}/${CACHEB}")
+endif ()
+
+if (DEFINED CACHEB)
+	SET ( CACHEB "${CACHEB}" CACHE PATH "Cache dir where unpacked sources and builds found." )
+endif()
+
 
 # Make release build for the pointed distr
 # That will override defaults and give possibility to build

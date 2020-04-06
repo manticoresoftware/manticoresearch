@@ -1670,6 +1670,7 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 	CSphFixedVector<uint64_t> dBufKeys ( iKeysCount );
 	CSphFixedVector<wsrep_buf_t> dBufProxy ( iKeysCount );
 	CSphFixedVector<wsrep_key_t> dKeys ( iKeysCount );
+	dBufKeys.ZeroVec();
 	int iKey = 0;
 
 	ARRAY_FOREACH ( i, tAcc.m_dCmd )

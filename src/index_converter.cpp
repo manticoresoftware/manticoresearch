@@ -276,7 +276,7 @@ static bool LoadPersistentMVA ( Index_t & tIndex, const CSphString & sPath, CSph
 
 static void LoadIndexSettings ( IndexSettings_t & tSettings, CSphReader & tReader, DWORD uVersion )
 {
-	tSettings.m_iMinPrefixLen = tReader.GetDword ();
+	tSettings.SetMinPrefixLen ( tReader.GetDword() );
 	tSettings.m_iMinInfixLen = tReader.GetDword ();
 
 	if ( uVersion>=38 )
@@ -1516,7 +1516,7 @@ void ConverterPlain_t::SaveHeader ( const Index_t & tIndex, DWORD uKillListSize 
 	tWriter.PutOffset ( tIndex.m_iTotalBytes );
 
 	// index settings
-	tWriter.PutDword ( tIndex.m_tSettings.m_iMinPrefixLen );
+	tWriter.PutDword ( tIndex.m_tSettings.RawMinPrefixLen() );
 	tWriter.PutDword ( tIndex.m_tSettings.m_iMinInfixLen );
 	tWriter.PutDword ( tIndex.m_tSettings.m_iMaxSubstringLen );
 	tWriter.PutByte ( tIndex.m_tSettings.m_bHtmlStrip ? 1 : 0 );
@@ -2028,7 +2028,7 @@ static bool SaveRtIndex ( Index_t & tIndex, CSphString & sWarning, CSphString & 
 	WriteSchema ( wrMeta, tIndex.m_tSchema );
 
 	// index settings
-	wrMeta.PutDword ( tIndex.m_tSettings.m_iMinPrefixLen );
+	wrMeta.PutDword ( tIndex.m_tSettings.RawMinPrefixLen() );
 	wrMeta.PutDword ( tIndex.m_tSettings.m_iMinInfixLen );
 	wrMeta.PutDword ( tIndex.m_tSettings.m_iMaxSubstringLen );
 	wrMeta.PutByte ( tIndex.m_tSettings.m_bHtmlStrip ? 1 : 0 );
@@ -2274,7 +2274,7 @@ static bool SavePqIndex ( Index_t & tIndex, CSphString & sWarning, CSphString & 
 	WriteSchema ( wrMeta, tIndex.m_tSchema );
 
 	// index settings
-	wrMeta.PutDword ( tIndex.m_tSettings.m_iMinPrefixLen );
+	wrMeta.PutDword ( tIndex.m_tSettings.RawMinPrefixLen() );
 	wrMeta.PutDword ( tIndex.m_tSettings.m_iMinInfixLen );
 	wrMeta.PutDword ( tIndex.m_tSettings.m_iMaxSubstringLen );
 	wrMeta.PutByte ( tIndex.m_tSettings.m_bHtmlStrip ? 1 : 0 );

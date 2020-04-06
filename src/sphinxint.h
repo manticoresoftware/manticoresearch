@@ -1661,7 +1661,7 @@ void			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings &
 void			TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, const CSphIndexSettings& tSettings );
 bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, CSphString & sError, CSphIndexProgress & tProgress, volatile bool * pLocalStop, bool bSrcSettings );
 CSphString		sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema );
-int				ExpandKeywords ( int iIndexOpt, QueryOption_e eQueryOpt, const CSphIndexSettings & tSettings );
+int				ExpandKeywords ( int iIndexOpt, QueryOption_e eQueryOpt, const CSphIndexSettings & tSettings, bool bWordDict );
 bool			ParseMorphFields ( const CSphString & sMorphology, const CSphString & sMorphFields, const CSphVector<CSphColumnInfo> & dFields, CSphBitvec & tMorphFields, CSphString & sError );
 
 void			sphSetUnlinkOld ( bool bUnlink );
@@ -2091,7 +2091,7 @@ struct ISphQueryFilter
 };
 
 XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx );
-void sphQueryExpandKeywords ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, int iExpandKeywords );
+void sphQueryExpandKeywords ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, int iExpandKeywords, bool bWordDict );
 inline int sphGetExpansionMagic ( int iDocs, int iHits )
 {
 	return ( iHits<=256 ? 1 : iDocs + 1 ); // magic threshold; mb make this configurable?

@@ -215,6 +215,30 @@ ESphWordpart CSphSourceSettings::GetWordpart ( const char * sField, bool bWordDi
 	return SPH_WORDPART_WHOLE;
 }
 
+int CSphSourceSettings::GetMinPrefixLen ( bool bWordDict ) const
+{
+	if ( !bWordDict )
+		return m_iMinPrefixLen;
+
+	if ( m_iMinPrefixLen )
+		return m_iMinPrefixLen;
+
+	if ( m_iMinInfixLen )
+		return 1;
+
+	return 0;
+}
+
+void CSphSourceSettings::SetMinPrefixLen ( int iMinPrefixLen )
+{
+	m_iMinPrefixLen = iMinPrefixLen;
+}
+
+int CSphSourceSettings::RawMinPrefixLen () const
+{
+	return m_iMinPrefixLen;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 void DocstoreSettings_t::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const
@@ -607,7 +631,7 @@ static const int64_t DEFAULT_ATTR_UPDATE_RESERVE = 131072;
 bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * szIndexName, CSphString & sWarning, CSphString & sError )
 {
 	// misc settings
-	m_iMinPrefixLen = Max ( hIndex.GetInt ( "min_prefix_len" ), 0 );
+	SetMinPrefixLen ( Max ( hIndex.GetInt ( "min_prefix_len" ), 0 ) );
 	m_iMinInfixLen = Max ( hIndex.GetInt ( "min_infix_len" ), 0 );
 	m_iMaxSubstringLen = Max ( hIndex.GetInt ( "max_substring_len" ), 0 );
 	m_iBoundaryStep = Max ( hIndex.GetInt ( "phrase_boundary_step" ), -1 );
@@ -635,7 +659,7 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 
 	ParseStoredFields(hIndex);
 
-	if ( m_iMinPrefixLen==0 && m_dPrefixFields.GetLength()!=0 )
+	if ( RawMinPrefixLen()==0 && m_dPrefixFields.GetLength()!=0 )
 	{
 		sWarning = "WARNING: min_prefix_len=0, prefix_fields ignored\n";
 		m_dPrefixFields.Reset();
@@ -645,14 +669,6 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 	{
 		sWarning = "WARNING: min_infix_len=0, infix_fields ignored\n";
 		m_dInfixFields.Reset();
-	}
-
-	// the only way we could have both prefixes and infixes enabled is when specific field subsets are configured
-	if ( m_iMinInfixLen>0 && m_iMinPrefixLen>0
-		&& ( !m_dPrefixFields.GetLength() || !m_dInfixFields.GetLength() ) )
-	{
-		sError.SetSprintf ( "prefixes and infixes can not both be enabled on all fields" );
-		return false;
 	}
 
 	m_dPrefixFields.Uniq();
@@ -671,9 +687,9 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 		return false;
 	}
 
-	if ( m_iMaxSubstringLen && m_iMaxSubstringLen<m_iMinPrefixLen )
+	if ( m_iMaxSubstringLen && m_iMaxSubstringLen<RawMinPrefixLen() )
 	{
-		sError.SetSprintf ( "max_substring_len=%d is less than min_prefix_len=%d", m_iMaxSubstringLen, m_iMinPrefixLen );
+		sError.SetSprintf ( "max_substring_len=%d is less than min_prefix_len=%d", m_iMaxSubstringLen, RawMinPrefixLen() );
 		return false;
 	}
 
@@ -691,7 +707,7 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 		return false;
 	}
 
-	if ( hIndex("type") && hIndex["type"]=="rt" && ( m_iMinInfixLen>0 || m_iMinPrefixLen>0 ) && !bWordDict )
+	if ( hIndex("type") && hIndex["type"]=="rt" && ( m_iMinInfixLen>0 || RawMinPrefixLen()>0 ) && !bWordDict )
 	{
 		sError.SetSprintf ( "RT indexes support prefixes and infixes with only dict=keywords" );
 		return false;
@@ -700,6 +716,14 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 	if ( bWordDict && m_iMaxSubstringLen>0 )
 	{
 		sError.SetSprintf ( "max_substring_len can not be used with dict=keywords" );
+		return false;
+	}
+
+	// the only way we could have both prefixes and infixes enabled is when specific field subsets are configured
+	if ( !bWordDict && m_iMinInfixLen>0 && RawMinPrefixLen()>0
+		&& ( !m_dPrefixFields.GetLength() || !m_dInfixFields.GetLength() ) )
+	{
+		sError.SetSprintf ( "prefixes and infixes can not both be enabled on all fields" );
 		return false;
 	}
 
@@ -798,7 +822,7 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 
 void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const
 {
-	tOut.Add ( "min_prefix_len",		m_iMinPrefixLen,		m_iMinPrefixLen!=0 );
+	tOut.Add ( "min_prefix_len",		RawMinPrefixLen(),		RawMinPrefixLen()!=0 );
 	tOut.Add ( "min_infix_len",			m_iMinInfixLen,			m_iMinInfixLen!=0 );
 	tOut.Add ( "max_substring_len",		m_iMaxSubstringLen,		m_iMaxSubstringLen!=0 );
 	tOut.Add ( "index_exact_words",		1,						m_bIndexExactWords );
@@ -1309,7 +1333,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 	}
 
 	if ( pDict->GetSettings().m_bWordDict && pDict->HasMorphology() &&
-		( tSettings.m_iMinPrefixLen || tSettings.m_iMinInfixLen || !pDict->GetSettings().m_sMorphFields.IsEmpty() ) && !tSettings.m_bIndexExactWords )
+		( tSettings.RawMinPrefixLen() || tSettings.m_iMinInfixLen || !pDict->GetSettings().m_sMorphFields.IsEmpty() ) && !tSettings.m_bIndexExactWords )
 	{
 		tSettings.m_bIndexExactWords = true;
 		pIndex->Setup ( tSettings );

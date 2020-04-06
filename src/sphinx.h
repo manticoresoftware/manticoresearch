@@ -3293,7 +3293,7 @@ public:
 	virtual bool				IsPQ() const { return false; }
 	void						SetBinlog ( bool bBinlog ) { m_bBinlog = bBinlog; }
 	virtual int64_t *			GetFieldLens() const { return NULL; }
-	virtual bool				IsStarDict() const { return true; }
+	virtual bool				IsStarDict ( bool bWordDict ) const;
 	int64_t						GetIndexId() const { return m_iIndexId; }
 
 public:
@@ -3326,7 +3326,7 @@ public:
 	virtual void				Unlock () = 0;
 
 	/// called when index is loaded and prepared to work
-	virtual void				PostSetup();
+	virtual void				PostSetup() {}
 
 public:
 	/// return index document, bytes totals (FIXME? remove this in favor of GetStatus() maybe?)

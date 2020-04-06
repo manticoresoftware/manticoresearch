@@ -1256,8 +1256,9 @@ bool SnippetBuilder_c::Setup ( const CSphIndex * pIndex, const SnippetQuerySetti
 
 	if ( tSettings.m_bJsonQuery )
 	{
+		bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 		m_pTokenizerJson = pIndex->GetQueryTokenizer()->Clone ( SPH_CLONE_QUERY );
-		sphSetupQueryTokenizer ( m_pTokenizerJson, pIndex->IsStarDict(), tIndexSettings.m_bIndexExactWords, true );
+		sphSetupQueryTokenizer ( m_pTokenizerJson, pIndex->IsStarDict ( bWordDict ), tIndexSettings.m_bIndexExactWords, true );
 		m_pQueryParser = sphCreateJsonQueryParser();
 	}
 	else

@@ -1137,7 +1137,7 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 
 	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
 
-	if ( IsStarDict() )
+	if ( IsStarDict ( pDict->GetSettings().m_bWordDict ) )
 	{
 		pTokenizer->AddPlainChar ( '*' );
 		pDict = new CSphDictStar ( pDict );
@@ -1186,10 +1186,12 @@ CSphIndex * sphCreateIndexTemplate ( )
 
 bool CSphTokenizerIndex::ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const
 {
+	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
+
 	WordlistStub_c tWordlist;
 	ExplainQueryArgs_t tArgs ( sQuery, sRes, sError );
 	tArgs.m_pDict = GetStatelessDict ( m_pDict );
-	if ( IsStarDict() )
+	if ( IsStarDict ( bWordDict ) )
 		tArgs.m_pDict = new CSphDictStarV8 ( tArgs.m_pDict, m_tSettings.m_iMinInfixLen>0 );
 	if ( m_tSettings.m_bIndexExactWords )
 		tArgs.m_pDict = new CSphDictExact ( tArgs.m_pDict );
@@ -1200,7 +1202,7 @@ bool CSphTokenizerIndex::ExplainQuery ( const CSphString & sQuery, CSphString & 
 	tArgs.m_pQueryTokenizer = m_pQueryTokenizer;
 	tArgs.m_iExpandKeywords = m_iExpandKeywords;
 	tArgs.m_iExpansionLimit = m_iExpansionLimit;
-	tArgs.m_bExpandPrefix = ( m_pDict->GetSettings().m_bWordDict && IsStarDict() );
+	tArgs.m_bExpandPrefix = ( bWordDict && IsStarDict ( bWordDict ) );
 
 	return Explain ( tArgs );
 }
@@ -2020,7 +2022,6 @@ private:
 	const DWORD *				GetDocinfoByRowID ( RowID_t tRowID ) const;
 	RowID_t						GetRowIDByDocinfo ( const CSphRowitem * pDocinfo ) const;
 
-	bool						IsStarDict() const override ;
 	void						SetupStarDict ( DictRefPtr_c &pDict ) const;
 	void						SetupExactDict ( DictRefPtr_c &pDict ) const;
 
@@ -6037,9 +6038,9 @@ bool ParseSelectList ( CSphString & sError, CSphQuery & tQuery )
 }
 
 
-int ExpandKeywords ( int iIndexOpt, QueryOption_e eQueryOpt, const CSphIndexSettings & tSettings )
+int ExpandKeywords ( int iIndexOpt, QueryOption_e eQueryOpt, const CSphIndexSettings & tSettings, bool bWordDict )
 {
-	if ( tSettings.m_iMinInfixLen<=0 && tSettings.m_iMinPrefixLen<=0 && !tSettings.m_bIndexExactWords )
+	if ( tSettings.m_iMinInfixLen<=0 && tSettings.GetMinPrefixLen ( bWordDict )<=0 && !tSettings.m_bIndexExactWords )
 		return KWE_DISABLED;
 
 	int iOpt = KWE_DISABLED;
@@ -6050,7 +6051,7 @@ int ExpandKeywords ( int iIndexOpt, QueryOption_e eQueryOpt, const CSphIndexSett
 	 else
 		iOpt = ( eQueryOpt==QUERY_OPT_ENABLED ? KWE_ENABLED : KWE_DISABLED );
 
-	if ( ( iOpt & KWE_STAR )==KWE_STAR && tSettings.m_iMinInfixLen<=0 && tSettings.m_iMinPrefixLen<=0 )
+	if ( ( iOpt & KWE_STAR )==KWE_STAR && tSettings.m_iMinInfixLen<=0 && tSettings.GetMinPrefixLen ( bWordDict )<=0 )
 		iOpt ^= KWE_STAR;
 
 	if ( ( iOpt & KWE_EXACT )==KWE_EXACT && !tSettings.m_bIndexExactWords )
@@ -8148,13 +8149,15 @@ void CSphIndex::SetTokenizer ( ISphTokenizer * pTokenizer )
 
 void CSphIndex::SetupQueryTokenizer()
 {
+	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
+
 	// create and setup a master copy of query time tokenizer
 	// that we can then use to create lightweight clones
 	m_pQueryTokenizer = m_pTokenizer->Clone ( SPH_CLONE_QUERY );
-	sphSetupQueryTokenizer ( m_pQueryTokenizer, IsStarDict(), m_tSettings.m_bIndexExactWords, false );
+	sphSetupQueryTokenizer ( m_pQueryTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
 
 	m_pQueryTokenizerJson = m_pTokenizer->Clone ( SPH_CLONE_QUERY );
-	sphSetupQueryTokenizer ( m_pQueryTokenizerJson, IsStarDict(), m_tSettings.m_bIndexExactWords, true );
+	sphSetupQueryTokenizer ( m_pQueryTokenizerJson, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, true );
 }
 
 
@@ -8181,14 +8184,6 @@ void CSphIndex::Setup ( const CSphIndexSettings & tSettings )
 {
 	m_bStripperInited = true;
 	m_tSettings = tSettings;
-}
-
-void CSphIndex::PostSetup ()
-{
-	// in case infixes got enabled and no prefix set let's enable prefix of any length 
-	if ( m_pDict && m_pDict->GetSettings().m_bWordDict
-		&& m_tSettings.m_iMinPrefixLen==0 && m_tSettings.m_iMinInfixLen>0 )
-		m_tSettings.m_iMinPrefixLen = 1;
 }
 
 void CSphIndex::SetCacheSize ( int iMaxCachedDocs, int iMaxCachedHits )
@@ -9734,7 +9729,7 @@ void WriteSchema ( CSphWriter & fdInfo, const CSphSchema & tSchema )
 
 void SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettings )
 {
-	tWriter.PutDword ( tSettings.m_iMinPrefixLen );
+	tWriter.PutDword ( tSettings.RawMinPrefixLen() );
 	tWriter.PutDword ( tSettings.m_iMinInfixLen );
 	tWriter.PutDword ( tSettings.m_iMaxSubstringLen );
 	tWriter.PutByte ( tSettings.m_bHtmlStrip ? 1 : 0 );
@@ -13576,9 +13571,9 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 		iWordLen = Max ( iWordLen-1, 0 );
 
 		// might match either infix or prefix
-		int iMinLen = Max ( pIndex->m_tSettings.m_iMinPrefixLen, pIndex->m_tSettings.m_iMinInfixLen );
-		if ( pIndex->m_tSettings.m_iMinPrefixLen )
-			iMinLen = Min ( iMinLen, pIndex->m_tSettings.m_iMinPrefixLen );
+		int iMinLen = Max ( pIndex->m_tSettings.GetMinPrefixLen ( bWordDict ), pIndex->m_tSettings.m_iMinInfixLen );
+		if ( pIndex->m_tSettings.GetMinPrefixLen ( bWordDict ) )
+			iMinLen = Min ( iMinLen, pIndex->m_tSettings.GetMinPrefixLen ( bWordDict ) );
 		if ( pIndex->m_tSettings.m_iMinInfixLen )
 			iMinLen = Min ( iMinLen, pIndex->m_tSettings.m_iMinInfixLen );
 
@@ -13756,7 +13751,7 @@ void CSphIndex_VLN::Dealloc ()
 
 void LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion )
 {
-	tSettings.m_iMinPrefixLen = tReader.GetDword ();
+	tSettings.SetMinPrefixLen ( tReader.GetDword() );
 	tSettings.m_iMinInfixLen = tReader.GetDword ();
 	tSettings.m_iMaxSubstringLen = tReader.GetDword();
 
@@ -14574,9 +14569,9 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 }
 
 
-bool CSphIndex_VLN::IsStarDict () const
+bool CSphIndex::IsStarDict ( bool bWordDict ) const
 {
-	return m_tSettings.m_iMinPrefixLen>0 || m_tSettings.m_iMinInfixLen>0;
+	return m_tSettings.GetMinPrefixLen ( bWordDict )>0 || m_tSettings.m_iMinInfixLen>0;
 }
 
 
@@ -14584,7 +14579,7 @@ void CSphIndex_VLN::SetupStarDict ( DictRefPtr_c &pDict ) const
 {
 	// spawn wrapper, and put it in the box
 	// wrapper type depends on version; v.8 introduced new mangling rules
-	if ( IsStarDict() )
+	if ( IsStarDict ( pDict->GetSettings().m_bWordDict ) )
 		pDict = new CSphDictStarV8 ( pDict, m_tSettings.m_iMinInfixLen>0 );
 
 	// FIXME? might wanna verify somehow that the tokenizer has '*' as a character
@@ -14930,12 +14925,14 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 		return true;
 	}
 
+	bool bWordDict = pDict->GetSettings ().m_bWordDict;
+
 	TokenizerRefPtr_c pTokenizer { m_pTokenizer->Clone ( SPH_CLONE_INDEX ) };
 	pTokenizer->EnableTokenizedMultiformTracking ();
 
 	// need to support '*' and '=' but not the other specials
 	// so m_pQueryTokenizer does not work for us, gotta clone and setup one manually
-	if ( IsStarDict () )
+	if ( IsStarDict ( bWordDict ) )
 		pTokenizer->AddPlainChar ( '*' );
 	if ( m_tSettings.m_bIndexExactWords )
 		pTokenizer->AddPlainChar ( '=' );
@@ -14943,7 +14940,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	ExpansionContext_t tExpCtx;
 	// query defined options
 	tExpCtx.m_iExpansionLimit = ( tSettings.m_iExpansionLimit ? tSettings.m_iExpansionLimit : m_iExpansionLimit );
-	bool bExpandWildcards = ( pDict->GetSettings ().m_bWordDict && IsStarDict() && !tSettings.m_bFoldWildcards );
+	bool bExpandWildcards = ( bWordDict && IsStarDict ( bWordDict ) && !tSettings.m_bFoldWildcards );
 
 	CSphPlainQueryFilter tAotFilter;
 	tAotFilter.m_pTokenizer = pTokenizer;
@@ -14955,7 +14952,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	tAotFilter.m_tFoldSettings.m_bFoldWildcards = !bExpandWildcards;
 
 	tExpCtx.m_pWordlist = &m_tWordlist;
-	tExpCtx.m_iMinPrefixLen = m_tSettings.m_iMinPrefixLen;
+	tExpCtx.m_iMinPrefixLen = m_tSettings.GetMinPrefixLen ( bWordDict );
 	tExpCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
 	tExpCtx.m_bHasExactForms = ( m_pDict->HasMorphology() || m_tSettings.m_bIndexExactWords );
 	tExpCtx.m_bMergeSingles = false;
@@ -15068,7 +15065,7 @@ static XQNode_t * CloneKeyword ( const XQNode_t * pNode )
 }
 
 
-static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tSettings, int iExpandKeywords )
+static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tSettings, int iExpandKeywords, bool bWordDict )
 {
 	assert ( pNode );
 
@@ -15089,7 +15086,7 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 		pInfix->m_dWords[0].m_sWord.SetSprintf ( "*%s*", pNode->m_dWords[0].m_sWord.cstr() );
 		pInfix->m_pParent = pExpand;
 		pExpand->m_dChildren.Add ( pInfix );
-	} else if ( tSettings.m_iMinPrefixLen>0 && ( iExpandKeywords & KWE_STAR )==KWE_STAR )
+	} else if ( tSettings.GetMinPrefixLen ( bWordDict )>0 && ( iExpandKeywords & KWE_STAR )==KWE_STAR )
 	{
 		assert ( pNode->m_dChildren.GetLength()==0 );
 		assert ( pNode->m_dWords.GetLength()==1 );
@@ -15112,13 +15109,13 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 	return pExpand;
 }
 
-void sphQueryExpandKeywords ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, int iExpandKeywords )
+void sphQueryExpandKeywords ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, int iExpandKeywords, bool bWordDict )
 {
 	assert ( ppNode );
 	assert ( *ppNode );
 	auto& pNode = *ppNode;
 	// only if expansion makes sense at all
-	assert ( tSettings.m_iMinInfixLen>0 || tSettings.m_iMinPrefixLen>0 || tSettings.m_bIndexExactWords );
+	assert ( tSettings.m_iMinInfixLen>0 || tSettings.GetMinPrefixLen ( bWordDict )>0 || tSettings.m_bIndexExactWords );
 	assert ( iExpandKeywords!=KWE_DISABLED );
 
 	// process children for composite nodes
@@ -15126,7 +15123,7 @@ void sphQueryExpandKeywords ( XQNode_t ** ppNode, const CSphIndexSettings & tSet
 	{
 		ARRAY_FOREACH ( i, pNode->m_dChildren )
 		{
-			sphQueryExpandKeywords ( &pNode->m_dChildren[i], tSettings, iExpandKeywords );
+			sphQueryExpandKeywords ( &pNode->m_dChildren[i], tSettings, iExpandKeywords, bWordDict );
 			pNode->m_dChildren[i]->m_pParent = pNode;
 		}
 		return;
@@ -15140,7 +15137,7 @@ void sphQueryExpandKeywords ( XQNode_t ** ppNode, const CSphIndexSettings & tSet
 		{
 			auto * pWord = new XQNode_t ( pNode->m_dSpec );
 			pWord->m_dWords.Add ( pNode->m_dWords[i] );
-			pNode->m_dChildren.Add ( ExpandKeyword ( pWord, tSettings, iExpandKeywords ) );
+			pNode->m_dChildren.Add ( ExpandKeyword ( pWord, tSettings, iExpandKeywords, bWordDict ) );
 			pNode->m_dChildren.Last()->m_iAtomPos = pNode->m_dWords[i].m_iAtomPos;
 			pNode->m_dChildren.Last()->m_pParent = pNode;
 		}
@@ -15163,7 +15160,7 @@ void sphQueryExpandKeywords ( XQNode_t ** ppNode, const CSphIndexSettings & tSet
 		return;
 
 	// do the expansion
-	pNode = ExpandKeyword ( pNode, tSettings, iExpandKeywords );
+	pNode = ExpandKeyword ( pNode, tSettings, iExpandKeywords, bWordDict );
 }
 
 
@@ -15483,7 +15480,7 @@ bool sphExpandGetWords ( const char * sWord, const ExpansionContext_t & tCtx, IS
 XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta * pResult, CSphScopedPayload * pPayloads, DWORD uQueryDebugFlags ) const
 {
 	if ( !pNode || !m_pDict->GetSettings().m_bWordDict
-			|| ( m_tSettings.m_iMinPrefixLen<=0 && m_tSettings.m_iMinInfixLen<=0 ) )
+			|| ( m_tSettings.GetMinPrefixLen ( m_pDict->GetSettings().m_bWordDict )<=0 && m_tSettings.m_iMinInfixLen<=0 ) )
 		return pNode;
 
 	assert ( m_bPassedAlloc );
@@ -15492,7 +15489,7 @@ XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta *
 	ExpansionContext_t tCtx;
 	tCtx.m_pWordlist = &m_tWordlist;
 	tCtx.m_pResult = pResult;
-	tCtx.m_iMinPrefixLen = m_tSettings.m_iMinPrefixLen;
+	tCtx.m_iMinPrefixLen = m_tSettings.GetMinPrefixLen ( m_pDict->GetSettings().m_bWordDict );
 	tCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
 	tCtx.m_iExpansionLimit = m_iExpansionLimit;
 	tCtx.m_bHasExactForms = ( m_pDict->HasMorphology() || m_tSettings.m_bIndexExactWords );
@@ -15884,10 +15881,11 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 		pProfile->Switch ( SPH_QSTATE_TRANSFORMS );
 	sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, pQuery->m_bSimplify, this );
 
-	int iExpandKeywords = ExpandKeywords ( m_iExpandKeywords, pQuery->m_eExpandKeywords, m_tSettings );
+	bool bWordDict = pDict->GetSettings().m_bWordDict;
+	int iExpandKeywords = ExpandKeywords ( m_iExpandKeywords, pQuery->m_eExpandKeywords, m_tSettings, bWordDict );
 	if ( iExpandKeywords!=KWE_DISABLED )
 	{
-		sphQueryExpandKeywords ( &tParsed.m_pRoot, m_tSettings, iExpandKeywords );
+		sphQueryExpandKeywords ( &tParsed.m_pRoot, m_tSettings, iExpandKeywords, bWordDict );
 		tParsed.m_pRoot->Check ( true );
 	}
 
@@ -15949,6 +15947,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 	CSphScopedPayload tPayloads;
 	bool bResult = false;
 	bool bResultScan = false;
+	bool bWordDict = pDict->GetSettings().m_bWordDict;
 	for ( int i=0; i<iQueries; ++i )
 	{
 		// nothing to do without a sorter
@@ -15979,10 +15978,10 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			// transform query if needed (quorum transform, keyword expansion, etc.)
 			sphTransformExtendedQuery ( &dXQ[i].m_pRoot, m_tSettings, pQueries[i].m_bSimplify, this );
 
-			int iExpandKeywords = ExpandKeywords ( m_iExpandKeywords, pQueries[i].m_eExpandKeywords, m_tSettings );
+			int iExpandKeywords = ExpandKeywords ( m_iExpandKeywords, pQueries[i].m_eExpandKeywords, m_tSettings, bWordDict );
 			if ( iExpandKeywords!=KWE_DISABLED )
 			{
-				sphQueryExpandKeywords ( &dXQ[i].m_pRoot, m_tSettings, iExpandKeywords );
+				sphQueryExpandKeywords ( &dXQ[i].m_pRoot, m_tSettings, iExpandKeywords, bWordDict );
 				dXQ[i].m_pRoot->Check ( true );
 			}
 
@@ -16894,10 +16893,11 @@ bool Explain ( ExplainQueryArgs_t & tArgs )
 
 	sphTransformExtendedQuery ( &tParsed.m_pRoot, *tArgs.m_pSettings, false, nullptr );
 
-	int iExpandKeywords = ExpandKeywords ( tArgs.m_iExpandKeywords, QUERY_OPT_DEFAULT, *tArgs.m_pSettings );
+	bool bWordDict = tArgs.m_pDict->GetSettings().m_bWordDict;
+	int iExpandKeywords = ExpandKeywords ( tArgs.m_iExpandKeywords, QUERY_OPT_DEFAULT, *tArgs.m_pSettings, bWordDict );
 	if ( iExpandKeywords!=KWE_DISABLED )
 	{
-		sphQueryExpandKeywords ( &tParsed.m_pRoot, *tArgs.m_pSettings, iExpandKeywords );
+		sphQueryExpandKeywords ( &tParsed.m_pRoot, *tArgs.m_pSettings, iExpandKeywords, bWordDict );
 		tParsed.m_pRoot->Check ( true );
 	}
 
@@ -16914,7 +16914,7 @@ bool Explain ( ExplainQueryArgs_t & tArgs )
 		ExpansionContext_t tExpCtx;
 		tExpCtx.m_pWordlist = tArgs.m_pWordlist;
 		tExpCtx.m_pResult = &tMeta;
-		tExpCtx.m_iMinPrefixLen = tArgs.m_pSettings->m_iMinPrefixLen;
+		tExpCtx.m_iMinPrefixLen = tArgs.m_pSettings->GetMinPrefixLen ( tArgs.m_pDict->GetSettings().m_bWordDict );
 		tExpCtx.m_iMinInfixLen = tArgs.m_pSettings->m_iMinInfixLen;
 		tExpCtx.m_iExpansionLimit = tArgs.m_iExpansionLimit;
 		tExpCtx.m_bHasExactForms = ( tArgs.m_pDict->HasMorphology() || tArgs.m_pSettings->m_bIndexExactWords );
@@ -16944,7 +16944,7 @@ bool CSphIndex_VLN::ExplainQuery ( const CSphString & sQuery, CSphString & sRes,
 	tArgs.m_pQueryTokenizer = m_pQueryTokenizer;
 	tArgs.m_iExpandKeywords = m_iExpandKeywords;
 	tArgs.m_iExpansionLimit = m_iExpansionLimit;
-	tArgs.m_bExpandPrefix = ( m_pDict->GetSettings().m_bWordDict && IsStarDict() );
+	tArgs.m_bExpandPrefix = ( m_pDict->GetSettings().m_bWordDict && IsStarDict ( m_pDict->GetSettings().m_bWordDict ) );
 
 	return Explain ( tArgs );
 }
@@ -22087,7 +22087,7 @@ bool CSphSource::UpdateSchema ( CSphSchema * pInfo, CSphString & sError )
 
 void CSphSource::Setup ( const CSphSourceSettings & tSettings )
 {
-	m_iMinPrefixLen = Max ( tSettings.m_iMinPrefixLen, 0 );
+	SetMinPrefixLen ( Max ( tSettings.RawMinPrefixLen(), 0 ) );
 	m_iMinInfixLen = Max ( tSettings.m_iMinInfixLen, 0 );
 	m_iMaxSubstringLen = Max ( tSettings.m_iMaxSubstringLen, 0 );
 	m_iBoundaryStep = Max ( tSettings.m_iBoundaryStep, -1 );
@@ -22571,7 +22571,7 @@ void CSphSource_Document::BuildSubstringHits ( RowID_t tRowID, bool bPayload, ES
 	bool bPrefixField = ( eWordpart==SPH_WORDPART_PREFIX );
 	bool bInfixMode = m_iMinInfixLen > 0;
 
-	int iMinInfixLen = bPrefixField ? m_iMinPrefixLen : m_iMinInfixLen;
+	int iMinInfixLen = bPrefixField ? GetMinPrefixLen ( false ) : m_iMinInfixLen;
 	if ( !m_tState.m_bProcessingHits )
 		m_tState.m_iBuildLastStep = 1;
 
@@ -22580,7 +22580,7 @@ void CSphSource_Document::BuildSubstringHits ( RowID_t tRowID, bool bPayload, ES
 
 	int iIterHitCount = BUILD_SUBSTRING_HITS_COUNT;
 	if ( bPrefixField )
-		iIterHitCount += SPH_MAX_WORD_LEN - m_iMinPrefixLen;
+		iIterHitCount += SPH_MAX_WORD_LEN - GetMinPrefixLen ( false );
 	else
 		iIterHitCount += ( ( m_iMinInfixLen+SPH_MAX_WORD_LEN ) * ( SPH_MAX_WORD_LEN-m_iMinInfixLen ) / 2 );
 
@@ -22724,7 +22724,7 @@ void CSphSource_Document::BuildSubstringHits ( RowID_t tRowID, bool bPayload, ES
 void CSphSource_Document::BuildRegularHits ( RowID_t tRowID, bool bPayload, bool bSkipEndMarker )
 {
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
-	bool bGlobalPartialMatch = !bWordDict && ( m_iMinPrefixLen > 0 || m_iMinInfixLen > 0 );
+	bool bGlobalPartialMatch = !bWordDict && ( GetMinPrefixLen ( bWordDict ) > 0 || m_iMinInfixLen > 0 );
 
 	if ( !m_tState.m_bProcessingHits )
 		m_tState.m_iBuildLastStep = 1;

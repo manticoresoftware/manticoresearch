@@ -1382,7 +1382,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 {
 	// reject need bloom filter for either infix or prefix
 	auto tReject = SegmentGetRejects (
-		  pSeg, ( m_tSettings.m_iMinInfixLen > 0 || m_tSettings.m_iMinPrefixLen > 0 ), m_iMaxCodepointLength > 1 );
+		  pSeg, ( m_tSettings.m_iMinInfixLen>0 || m_tSettings.GetMinPrefixLen ( m_pDict->GetSettings().m_bWordDict )>0 ), m_iMaxCodepointLength>1 );
 
 	CSphAtomic iCurQuery;
 	CSphFixedVector<PercolateMatchContext_t *> dResults ( 1 );
@@ -1515,12 +1515,14 @@ StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, CS
 			return pResult;
 	}
 
+	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
+
 	TokenizerRefPtr_c pTokenizer ( m_pTokenizer->Clone ( SPH_CLONE_QUERY ) );
-	sphSetupQueryTokenizer ( pTokenizer, IsStarDict(), m_tSettings.m_bIndexExactWords, false );
+	sphSetupQueryTokenizer ( pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
 
 	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
 
-	if ( IsStarDict () )
+	if ( IsStarDict ( bWordDict ) )
 		SetupStarDict ( pDict, pTokenizer );
 
 	if ( m_tSettings.m_bIndexExactWords )
@@ -1530,7 +1532,7 @@ StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, CS
 		return CreateQuery ( tArgs, pTokenizer, pDict, sError );
 
 	TokenizerRefPtr_c pTokenizerJson ( m_pTokenizer->Clone ( SPH_CLONE_QUERY ));
-	sphSetupQueryTokenizer ( pTokenizerJson, IsStarDict (), m_tSettings.m_bIndexExactWords, true );
+	sphSetupQueryTokenizer ( pTokenizerJson, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, true );
 	return CreateQuery ( tArgs, pTokenizerJson, pDict, sError );
 }
 
@@ -1610,9 +1612,10 @@ StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, co
 	// FIXME!!! provide segments list instead index
 	sphTransformExtendedQuery ( &tParsed->m_pRoot, m_tSettings, false, nullptr );
 
+	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 	if ( m_iExpandKeywords!=KWE_DISABLED )
 	{
-		sphQueryExpandKeywords ( &tParsed->m_pRoot, m_tSettings, m_iExpandKeywords );
+		sphQueryExpandKeywords ( &tParsed->m_pRoot, m_tSettings, m_iExpandKeywords, bWordDict );
 		tParsed->m_pRoot->Check ( true );
 	}
 
@@ -1620,7 +1623,7 @@ StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, co
 	if ( m_tSettings.m_uAotFilterMask )
 		TransformAotFilter ( tParsed->m_pRoot, pDict->GetWordforms(), m_tSettings );
 
-	if ( m_tSettings.m_iMinPrefixLen>0 || m_tSettings.m_iMinInfixLen>0 )
+	if ( m_tSettings.GetMinPrefixLen ( bWordDict )>0 || m_tSettings.m_iMinInfixLen>0 )
 		FixExpanded ( tParsed->m_pRoot );
 
 	auto *pStored = new StoredQuery_t;
@@ -2039,16 +2042,18 @@ void PercolateIndex_c::PostSetupUnl()
 		( !m_tSettings.m_sZones.IsEmpty () && !m_pTokenizerIndexing->EnableZoneIndexing ( m_sLastError )) )
 		m_pTokenizerIndexing = nullptr;
 
+	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
+
 	// create queries
 	TokenizerRefPtr_c pTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
-	sphSetupQueryTokenizer ( pTokenizer, IsStarDict(), m_tSettings.m_bIndexExactWords, false );
+	sphSetupQueryTokenizer ( pTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
 
 	TokenizerRefPtr_c pTokenizerJson { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
-	sphSetupQueryTokenizer ( pTokenizerJson, IsStarDict(), m_tSettings.m_bIndexExactWords, true );
+	sphSetupQueryTokenizer ( pTokenizerJson, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, true );
 
 	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
 
-	if ( IsStarDict () )
+	if ( IsStarDict ( bWordDict ) )
 		SetupStarDict ( pDict, pTokenizer );
 
 	if ( m_tSettings.m_bIndexExactWords )
@@ -2373,7 +2378,7 @@ bool PercolateIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSp
 	CSphString sTmp;
 	bool bSameSchema = m_tSchema.CompareTo ( tSettings.m_tSchema, sTmp, false );
 
-	return CreateReconfigure ( m_sIndexName, IsStarDict(), m_pFieldFilter, m_tSettings, m_pTokenizer->GetSettingsFNV(),
+	return CreateReconfigure ( m_sIndexName, IsStarDict ( m_pDict->GetSettings().m_bWordDict ), m_pFieldFilter, m_tSettings, m_pTokenizer->GetSettingsFNV(),
 		  m_pDict->GetSettingsFNV(), m_pTokenizer->GetMaxCodepointLength(),
 		  bSameSchema, tSettings, tSetup, dWarnings, sError );
 }
@@ -2666,8 +2671,10 @@ bool PercolateIndex_c::ExplainQuery ( const CSphString & sQuery, CSphString & sR
 {
 	WordlistStub_c tWordlist;
 
+	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
+
 	TokenizerRefPtr_c pQueryTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
-	sphSetupQueryTokenizer ( pQueryTokenizer, IsStarDict(), m_tSettings.m_bIndexExactWords, false );
+	sphSetupQueryTokenizer ( pQueryTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
 
 	ExplainQueryArgs_t tArgs ( sQuery, sRes, sError );
 	tArgs.m_pSchema = &GetInternalSchema();
@@ -2681,7 +2688,7 @@ bool PercolateIndex_c::ExplainQuery ( const CSphString & sQuery, CSphString & sR
 	tArgs.m_pQueryTokenizer = pQueryTokenizer;
 	tArgs.m_iExpandKeywords = m_iExpandKeywords;
 	tArgs.m_iExpansionLimit = m_iExpansionLimit;
-	tArgs.m_bExpandPrefix = ( m_pDict->GetSettings().m_bWordDict && IsStarDict() );
+	tArgs.m_bExpandPrefix = ( bWordDict && IsStarDict ( bWordDict ) );
 
 	return Explain ( tArgs );
 }

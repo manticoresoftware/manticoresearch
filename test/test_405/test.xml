@@ -28,7 +28,17 @@ searchd
 <sphinxql>insert into test1 values (2, 'word form', 11)</sphinxql>
 <sphinxql>select * from test1 where match ( 'wordform' )</sphinxql>
 
+<!-- regression CREATE LIKE failed -->
+<sphinxql>CREATE TABLE test11 (title TEXT, category INT) min_infix_len='4'</sphinxql>
+<sphinxql>CREATE TABLE test12 LIKE test11</sphinxql>
+<sphinxql>ALTER TABLE test11 ignore_chars='.'</sphinxql>
+<sphinxql>SHOW INDEX test11 SETTINGS</sphinxql>
+<sphinxql>SHOW INDEX test12 SETTINGS</sphinxql>
+
 <sphinxql>drop table test1</sphinxql>
+<sphinxql>drop table test11</sphinxql>
+<sphinxql>drop table test12</sphinxql>
+
 
 </sphqueries>
 

@@ -149,9 +149,11 @@ enum ESphWordpart
 
 /// indexing-related source settings
 /// NOTE, newly added fields should be synced with CSphSource::Setup()
-struct CSphSourceSettings
+class CSphSourceSettings
 {
 	int		m_iMinPrefixLen = 0;		///< min indexable prefix (0 means don't index prefixes)
+
+public:
 	int		m_iMinInfixLen = 0;			///< min indexable infix length (0 means don't index infixes)
 	int		m_iMaxSubstringLen = 0;		///< max indexable infix and prefix (0 means don't limit infixes and prefixes)
 	int		m_iBoundaryStep = 0;		///< additional boundary word position increment
@@ -167,6 +169,9 @@ struct CSphSourceSettings
 	StrVec_t m_dStoredOnlyFields;	///< list of "fields" that are stored but not indexed
 
 	ESphWordpart GetWordpart ( const char * sField, bool bWordDict );
+	int GetMinPrefixLen ( bool bWordDict ) const;
+	void SetMinPrefixLen ( int iMinPrefixLen );
+	int RawMinPrefixLen () const;
 };
 
 

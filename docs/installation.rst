@@ -415,12 +415,11 @@ Next step is to configure the building with cmake. Available list of configurati
 	
 * ``WITH_RE2`` (bool) - specifies if the build should include the RE2 library. The library can be taken from the following locations:
 
-	* in the folder specified by ``WITH_RE2_ROOT`` parameters
-	* in libre2 folder of the Manticore sources
-	* system wide search, while first looking for headers specified by ``WITH_RE2_INCLUDES`` folder and the lib files in ``WITH_RE2_LIBS`` folder
-	* check presence of master.zip in the ``LIBS_BUNDLE`` folder 
+	* system wide search
+	* check presence of re2-master.zip in the ``LIBS_BUNDLE`` folder.
 	* Download from https://github.com/manticoresoftware/re2/archive/master.zip
-	* NOTE: if you have RE2 in the system, but still want to use static version, say, to build a binary for a system without such lib, provide ``WITH_RE2_FORCE_STATIC=1`` in advance.
+	* NOTE: if you have RE2 in the system, but still want to use static version, say, to build a binary for a system
+        without such lib, provide ``WITH_RE2_FORCE_STATIC=1`` in advance.
 	
 * ``WITH_EXPAT`` (bool)	 enabled compiling with libexpat, used XMLpipe source driver
 * ``WITH_MYSQL`` (bool)	 enabled compiling with MySQL client library, used by MySQL source driver. Additional parameters ``WITH_MYSQL_ROOT``, ``WITH_MYSQL_LIBS`` and ``WITH_MYSQL_INCLUDES`` can be used for custom MySQL files

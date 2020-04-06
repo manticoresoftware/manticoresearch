@@ -10,108 +10,91 @@
 #=============================================================================
 # This file need to get RE2 library sources
 # First it try 'traditional' way - find RE2 lib.
-# Then (if it is not found) it try to look into ${LIBS_BUNDLE} for file named 'master.zip'
+# Then (if it is not found) it try to look into ${LIBS_BUNDLE} for file named 're2-master.zip'
 # It is supposed, that file (if any) contains github's master archive of RE2 sources.
 # If no file found, it will  try to fetch it from github, address
 # https://github.com/manticoresoftware/re2/archive/master.zip
 
-set ( RE2_URL "https://github.com/manticoresoftware/re2/archive/master.zip" )
+set(RE2_GITHUB "https://github.com/manticoresoftware/re2/archive/master.zip")
+set(RE2_BUNDLEZIP "re2-master.zip")
+
+include(update_bundle)
 
 set ( WITH_RE2_INCLUDES "" CACHE PATH "path to re2 header files" )
 set ( WITH_RE2_LIBS "" CACHE PATH "path to re2 libraries" )
 set ( WITH_RE2_ROOT "" CACHE PATH "path to the libre2 bundle (where both header and library lives)" )
-mark_as_advanced ( RE2_URL WITH_RE2_INCLUDES WITH_RE2_LIBS WITH_RE2_ROOT )
+mark_as_advanced ( WITH_RE2_INCLUDES WITH_RE2_LIBS WITH_RE2_ROOT )
 
-find_package ( RE2 )
-if ( RE2_FOUND )
-	set ( USE_RE2 1 )
-	# check whether we will build RE2 from sources ourselves
-	if ( RE2_PATH )
-		message (STATUS "RE2 built from sources")
-		include_directories ( ${RE2_INCLUDE_DIRS} )
-		set ( RE2_BASEDIR "${RE2_PATH}" )
-		add_subdirectory ( ${RE2_PATH} )
-		list ( APPEND EXTRA_LIBRARIES RE2 )
-	else ( RE2_PATH )
-		if ( WITH_RE2_FORCE_STATIC )
-			set (NEED_RE2_FROMSOURCES 1)
-			message ( STATUS "RE2 as sys shared lib found, but need sources" )
-		else()
-			message ( STATUS "RE2 as sys shared library" )
-			include_directories ( ${RE2_INCLUDE_DIRS} )
-			list ( APPEND EXTRA_LIBRARIES ${RE2_LIBRARIES} )
-		endif()
-	endif ( RE2_PATH )
-else()
-	set ( NEED_RE2_FROMSOURCES 1 )
+function (PATCH_GIT RESULT RE2_SRC)
+	find_package(Git QUIET)
+	if (NOT GIT_EXECUTABLE)
+		return()
+	endif()
+	execute_process(COMMAND "${GIT_EXECUTABLE}" apply libre2.patch WORKING_DIRECTORY "${RE2_SRC}" )
+	set(${RESULT} TRUE PARENT_SCOPE)
+endfunction()
+
+function(PATCH_PATCH RESULT RE2_SRC)
+	find_program(PATCH_PROG patch)
+	if (NOT PATCH_PROG)
+		return()
+	endif ()
+	execute_process( COMMAND "${PATCH_PROG}" -p1 --binary -i libre2.patch WORKING_DIRECTORY "${RE2_SRC}" )
+	set(${RESULT} TRUE PARENT_SCOPE)
+endfunction()
+
+# cb to finalize RE2 sources (patch, add cmake)
+function (PREPARE_RE2 RE2_SRC)
+	# check if it is already patched before
+	if (EXISTS "${RE2_SRC}/is_patched.txt")
+		return()
+	endif ()
+
+	if (NOT EXISTS "${RE2_SRC}/MakefileOrig")
+		configure_file("${RE2_SRC}/Makefile" "${RE2_SRC}/MakefileOrig" COPYONLY)
+	endif ()
+
+	file(COPY "${MANTICORE_SOURCE_DIR}/libre2/libre2.patch" DESTINATION "${RE2_SRC}")
+	patch_git(PATCHED ${RE2_SRC})
+	if (NOT PATCHED)
+		patch_patch(PATCHED ${RE2_SRC})
+	endif()
+
+	if (NOT PATCHED)
+		message(FATAL_ERROR "Couldn't patch RE2 distro. No Git or Patch found")
+		return()
+	endif()
+
+	file(WRITE "${RE2_SRC}/is_patched.txt" "ok")
+	configure_file("${MANTICORE_SOURCE_DIR}/libre2/CMakeLists.txt" "${RE2_SRC}/CMakeLists.txt" COPYONLY)
+endfunction()
+
+# cb to realize if we have in-source unpacked RE2
+function(CHECK_RE2_SRC RESULT HINT)
+	if (HINT STREQUAL EMBEDDED AND EXISTS "${MANTICORE_SOURCE_DIR}/libre2/re2/re2.h")
+		set(RE2_SRC "${MANTICORE_SOURCE_DIR}/libre2" PARENT_SCOPE)
+		set(RE2_BUILD "${MANTICORE_SOURCE_DIR}/libre2" PARENT_SCOPE)
+		set(${RESULT} TRUE PARENT_SCOPE)
+	elseif(EXISTS "${HINT}/re2/re2.h")
+		set(${RESULT} TRUE PARENT_SCOPE)
+	endif()
+endfunction()
+
+provide(RE2 "${RE2_GITHUB}" "${RE2_BUNDLEZIP}")
+if (RE2_FROMSOURCES)
+	add_subdirectory(${RE2_SRC} ${RE2_BUILD} EXCLUDE_FROM_ALL)
+	set(RE2_LIBRARIES re2)
+elseif (NOT RE2_FOUND)
+	return()
 endif()
 
-if ( NEED_RE2_FROMSOURCES )
-	set ( RE2_BASEDIR "${MANTICORE_BINARY_DIR}/libre2" )
-	mark_as_advanced ( RE2_BASEDIR )
-	if ( NOT EXISTS "${RE2_BASEDIR}/Makefile" )
-		# check whether we have local copy (to not disturb network)
-		if ( EXISTS "${LIBS_BUNDLE}/master.zip" )
-			message ( STATUS "Unpack RE2 from ${LIBS_BUNDLE}/master.zip" )
-			execute_process (
-					COMMAND "${CMAKE_COMMAND}" -E tar xfz "${LIBS_BUNDLE}/master.zip"
-					WORKING_DIRECTORY "${MANTICORE_BINARY_DIR}" )
-			# download from github as zip archive
-		else ( EXISTS "${LIBS_BUNDLE}/master.zip" )
-			if ( NOT EXISTS "${MANTICORE_BINARY_DIR}/master.zip" )
-				message ( STATUS "Downloading RE2" )
-				file ( DOWNLOAD ${RE2_URL} ${MANTICORE_BINARY_DIR}/master.zip SHOW_PROGRESS )
-			endif ()
-			message ( STATUS "Unpack RE2 from ${MANTICORE_BINARY_DIR}/master.zip" )
-			execute_process (
-					COMMAND "${CMAKE_COMMAND}" -E tar xfz "${MANTICORE_BINARY_DIR}/master.zip"
-					WORKING_DIRECTORY "${MANTICORE_BINARY_DIR}" )
-		endif ( EXISTS "${LIBS_BUNDLE}/master.zip" )
-		file ( RENAME "${MANTICORE_BINARY_DIR}/re2-master" "${RE2_BASEDIR}" )
+list(APPEND EXTRA_LIBRARIES ${RE2_LIBRARIES})
+set(USE_RE2 1)
+memcfgvalues(USE_RE2)
 
-		# also backup original Makefile; it is important step!
-		configure_file ( "${RE2_BASEDIR}/Makefile" "${RE2_BASEDIR}/MakefileOrig" COPYONLY )
-	endif ( NOT EXISTS "${RE2_BASEDIR}/Makefile" )
-
-	# RE2 sources found. Now patch them, if necessary
-	if ( NOT EXISTS "${RE2_BASEDIR}/is_patched.txt" )
-		file ( COPY "${CMAKE_SOURCE_DIR}/libre2/libre2.patch" DESTINATION "${RE2_BASEDIR}" )
-		set ( PATCH_FILE "libre2.patch" )
-
-		mark_as_advanced ( PATCH_FILE )
-		find_package ( Git QUIET )
-		if ( GIT_EXECUTABLE )
-			message ( STATUS "Patching RE2 by git apply" )
-			execute_process ( COMMAND "${GIT_EXECUTABLE}" apply "${PATCH_FILE}"
-					WORKING_DIRECTORY "${RE2_BASEDIR}"
-					)
-			file ( WRITE "${RE2_BASEDIR}/is_patched.txt" "ok" )
-			# no git
-		else ()
-			find_program ( PATCH_PROG patch )
-			message ( STATUS "Patching RE2 by patch -p1" )
-			if ( PATCH_PROG )
-				mark_as_advanced ( PATCH_PROG )
-				execute_process (
-						COMMAND "${PATCH_PROG}" -p1 --binary -i "${PATCH_FILE}"
-						WORKING_DIRECTORY "${RE2_BASEDIR}"
-				)
-				file ( WRITE "${RE2_BASEDIR}/is_patched.txt" "ok" )
-			endif ()
-		endif ()
-	endif ()
-	if ( NOT EXISTS "${RE2_BASEDIR}/is_patched.txt" )
-		message ( ERROR "Couldn't patch RE2 distro. No Git or Patch found" )
-	endif ()
-
-	# copy our CMakeLists there
-	if ( NOT EXISTS "${RE2_BASEDIR}/CMakeLists.txt" )
-		message ( STATUS "${CMAKE_SOURCE_DIR} - source dir" )
-		configure_file ( "${CMAKE_SOURCE_DIR}/libre2/CMakeLists.txt" "${RE2_BASEDIR}/CMakeLists.txt" COPYONLY )
-	endif ()
-	set ( USE_RE2 1 )
-	set ( RE2_INCLUDE_DIRS "${RE2_BASEDIR}" )
-	include_directories ( ${RE2_BASEDIR} )
-	add_subdirectory ( ${RE2_BASEDIR} ${RE2_BASEDIR} EXCLUDE_FROM_ALL )
-	list ( APPEND EXTRA_LIBRARIES RE2 )
-endif ( NEED_RE2_FROMSOURCES )
+diag(RE2_FOUND)
+diag(RE2_INCLUDE_DIRS)
+diag(RE2_LIBRARIES)
+diag(RE2_SRC)
+diag(RE2_BUILD)
+diag(RE2_FROMSOURCES)

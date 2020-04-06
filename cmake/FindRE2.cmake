@@ -11,8 +11,6 @@
 #   RE2_FOUND        - true if libre2 was found
 #   RE2_INCLUDE_DIRS - include search path
 #   RE2_LIBRARIES    - libraries to link
-#   RE2_PATH         - the path to the packet
-
 # The module checks also these variables:
 #   WITH_RE2_ROOT    - the full path to the libre2
 #                       if so, it will have the highest priority to find
@@ -20,7 +18,8 @@
 #   WITH_RE2_LIBS       - where to search for the lib
 
 #=============================================================================
-# Copyright 2015 Sphinx Technologies, Inc.
+# Copyright 2017-2020, Manticore Software LTD (http://manticoresearch.com)
+# Copyright 2015-2016 Sphinx Technologies, Inc.
 #
 # Distributed under the OSI-approved BSD License (the "License");
 # see accompanying file Copyright.txt for details.
@@ -34,47 +33,47 @@
 
 # we may have following variables from the top dir
 #	set (RE2_INCLUDES "/usr/include;/usr/include/re2" CACHE PATH "path to re2 header files")
-#	set (RE2_LIBS "/usr/lib/x86_64-linux-gnu;/usr/lib64;/usr/local/lib64;/usr/lib/i386-linux-gnu;/usr/lib;/usr/local/lib" CACHE PATH "path to re2 libraries")
+#	set (RE2_LIBRARIES "/usr/lib/x86_64-linux-gnu;/usr/lib64;/usr/local/lib64;/usr/lib/i386-linux-gnu;/usr/lib;/usr/local/lib" CACHE PATH "path to re2 libraries")
+
+function(check_re2 HINT)
+	if (RE2_LIBRARY AND NOT EXISTS ${RE2_LIBRARY})
+		unset(RE2_LIBRARY CACHE)
+	endif ()
+	FIND_LIBRARY(RE2_LIBRARY NAMES re2 RE2 libre2.a HINTS ${HINT} NO_DEFAULT_PATH)
+endfunction()
 
 # First check if include path was explicitly given.
 # If so, it has the maximum priority over any other possibilities
 if ( EXISTS "${WITH_RE2_ROOT}/re2/re2.h" )
+	check_re2 ("${WITH_RE2_ROOT}/obj/")
 	set ( RE2_INCLUDE_DIRS ${WITH_RE2_ROOT} )
-	set ( RE2_LIBRARY ${WITH_RE2_ROOT}/obj/libre2.a )
-	if ( EXISTS "${RE2_INCLUDE_DIRS}/Makefile" )
-		set ( RE2_PATH ${RE2_INCLUDE_DIRS} )
-	endif ( EXISTS "${RE2_INCLUDE_DIRS}/Makefile" )
-else ( EXISTS "${WITH_RE2_ROOT}/re2/re2.h" )
 
+else ()
 	# Check if there are any sources in ./libre2 path
-
-
 	if ( EXISTS ${CMAKE_SOURCE_DIR}/libre2/re2/re2.h )
-		set ( RE2_LIBRARY "${CMAKE_SOURCE_DIR}/libre2/obj/libre2.a" )
+		check_re2("${CMAKE_SOURCE_DIR}/libre2/obj/")
 		set ( RE2_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/libre2" )
-		set ( RE2_PATH "${CMAKE_SOURCE_DIR}/libre2" )
-	else ( EXISTS ${CMAKE_SOURCE_DIR}/libre2/re2/re2.h )
 
+	else ()
 		if ( EXISTS ${WITH_RE2_INCLUDES} )
 			set ( RE2_INCLUDE_DIRS "${WITH_RE2_INCLUDES}" )
-		else ( EXISTS ${WITH_RE2_INCLUDES} )
+		else ()
 			find_path ( RE2_INCLUDE_DIRS NAMES re2/re2.h PATHS /usr/include /usr/include/re2 )
-		endif ( EXISTS ${WITH_RE2_INCLUDES} )
+		endif ()
 
-		if ( EXISTS ${WITH_RE2_LIBS} )
-			set ( RE2_LIBRARY ${WITH_RE2_LIBS} )
-		else ( EXISTS ${WITH_RE2_LIBS} )
-			find_file ( RE2_LIBRARY libre2.a
+		if ( WITH_RE2_LIBS )
+			FIND_LIBRARY(RE2_LIBRARY NAMES re2 RE2 libre2.a
+					PATHS
+					${WITH_RE2_LIBS}
 					/usr/lib/x86_64-linux-gnu
 					/usr/lib64
 					/usr/local/lib64
 					/usr/lib/i386-linux-gnu
 					/usr/lib
-					/usr/local/lib
-					)
-		endif ( EXISTS ${WITH_RE2_LIBS} )
-	endif ( EXISTS ${CMAKE_SOURCE_DIR}/libre2/re2/re2.h )
-endif ( EXISTS "${WITH_RE2_ROOT}/re2/re2.h" )
+					/usr/local/lib)
+		endif ()
+	endif ()
+endif ()
 
 mark_as_advanced ( RE2_INCLUDE_DIRS RE2_LIBRARY )
 

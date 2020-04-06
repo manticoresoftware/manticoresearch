@@ -49,9 +49,9 @@ if ( WITH_STEMMER AND STEMMER_BASEDIR )
 			)
 endif()
 
-if ( WITH_RE2 AND RE2_BASEDIR )
-	message ( STATUS "Embedd RE2 sources... ${RE2_BASEDIR}" )
-	file ( COPY ${RE2_BASEDIR}/ DESTINATION ${PACKDIR}/libre2
+if ( WITH_RE2 AND RE2_SRC )
+	message ( STATUS "Embedd RE2 sources... ${RE2_SRC}" )
+	file ( COPY ${RE2_SRC}/ DESTINATION ${PACKDIR}/libre2
 			PATTERN "CMakeFiles" EXCLUDE
 			PATTERN "CTestTestfile.cmake" EXCLUDE
 			PATTERN "cmake_install.cmake" EXCLUDE

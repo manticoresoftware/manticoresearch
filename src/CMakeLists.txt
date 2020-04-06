@@ -170,7 +170,7 @@ add_custom_target (
 		-D WITH_STEMMER=${WITH_STEMMER}
 		-D STEMMER_BASEDIR=${STEMMER_BASEDIR}
 		-D WITH_RE2=${WITH_RE2}
-		-D RE2_BASEDIR=${RE2_BASEDIR}
+		-D RE2_SRC=${RE2_SRC}
 		-P ${CMAKE_SOURCE_DIR}/cmake/mktarball.cmake
 		COMMENT "Making tarball source archive"
 		DEPENDS ${TARBALLDEPENDS}

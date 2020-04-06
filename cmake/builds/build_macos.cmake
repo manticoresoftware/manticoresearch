@@ -24,7 +24,9 @@ install ( DIRECTORY DESTINATION bin COMPONENT doc )
 install ( DIRECTORY DESTINATION data COMPONENT doc )
 install ( DIRECTORY DESTINATION log COMPONENT doc )
 install ( DIRECTORY misc/stopwords DESTINATION . COMPONENT doc )
-install ( FILES ${ICU_SRC}/source/data/in/icudt65l.dat DESTINATION icu COMPONENT doc)
+if (USE_ICU)
+	install ( FILES ${ICU_DATA} DESTINATION icu COMPONENT doc)
+endif()
 
 # package specific
 

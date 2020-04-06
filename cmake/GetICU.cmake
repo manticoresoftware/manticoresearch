@@ -8,74 +8,64 @@
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the License for more information.
 #=============================================================================
+FOREACH (policy CMP0074)
+	IF (POLICY ${policy})
+		CMAKE_POLICY(SET ${policy} NEW)
+	ENDIF ()
+ENDFOREACH ()
 
-IF ( POLICY CMP0074 )
-	CMAKE_POLICY ( SET CMP0074 NEW )
-ENDIF ()
+include(update_bundle)
 
-set ( ICU_LIBDIR "${MANTICORE_BINARY_DIR}/icu-bin" )
-set ( ICU_SRC "${MANTICORE_BINARY_DIR}/icu" )
-mark_as_advanced ( ICU_SRC ICU_LIBDIR )
-set ( ICUZIP "icu4c-65_1-src.tgz" )
+set(ICU_GITHUB "https://github.com/unicode-org/icu/releases/download/release-65-1/icu4c-65_1-src.tgz")
+set(ICU_BUNDLEZIP "icu4c-65_1-src.tgz")
 
-include ( FetchContent )
-# check whether we have local copy (to not disturb network)
-if ( LIBS_BUNDLE AND EXISTS "${LIBS_BUNDLE}/${ICUZIP}" )
-	set ( ICU_URL "${LIBS_BUNDLE}/${ICUZIP}" )
-	file ( SHA1 "${ICU_URL}" SHA1ICU )
-	set ( ICU_URL_HASH "SHA1=${SHA1ICU}" )
-	message ( STATUS "Using ICU from ${ICU_URL} with hash ${SHA1ICU}" )
-
-	FetchContent_Declare ( icu
-			SOURCE_DIR "${ICU_SRC}"
-			BINARY_DIR "${ICU_LIBDIR}"
-			URL "${ICU_URL}"
-			URL_HASH ${ICU_URL_HASH}
-			)
-else ()
-	set ( ICU_URL_GITHUB "https://github.com/unicode-org/icu/releases/download/release-65-1/${ICUZIP}" )
-	message ( STATUS "Using ICU from ${ICU_URL_GITHUB}" )
-	message ( STATUS "(you can download the file and save it as '${ICUZIP}' into ${LIBS_BUNDLE}/) " )
-	FetchContent_Declare ( icu
-			SOURCE_DIR "${ICU_SRC}"
-			BINARY_DIR "${ICU_LIBDIR}"
-			URL "${ICU_URL_GITHUB}"
-			)
-endif ()
-
-FetchContent_GetProperties ( icu )
-if ( NOT icu_POPULATED )
-	FetchContent_Populate ( icu )
-endif ()
-
-mark_as_advanced ( FETCHCONTENT_FULLY_DISCONNECTED FETCHCONTENT_QUIET FETCHCONTENT_UPDATES_DISCONNECTED
-		FETCHCONTENT_SOURCE_DIR_ICU FETCHCONTENT_UPDATES_DISCONNECTED_ICU )
-
-if ( icu_POPULATED )
-	set ( USE_ICU 1 )
-	include_directories ( "${icu_SOURCE_DIR}/source/common" )
-	if ( NOT EXISTS "${ICU_SRC}/CMakeLists.txt" )
-		configure_file ( "${CMAKE_SOURCE_DIR}/libicu/CMakeLists.txt" "${ICU_SRC}/CMakeLists.txt" COPYONLY )
-	endif ()
-	add_subdirectory ( ${icu_SOURCE_DIR} ${icu_BINARY_DIR} )
-	set ( ICU_INCLUDE_DIRS "${ICU_SRC}/source/common" )
-	set ( ICU_LIBRARIES icu )
-endif ()
-
-if ( WIN32 )
-	# FIXME! need a proper way to detect if CMAKE_INSTALL_DATADIR is not default
-	if ( NOT CMAKE_INSTALL_DATADIR STREQUAL "share" )
-		add_compile_definitions ( ICU_DATA_DIR="${CMAKE_INSTALL_DATADIR}/icu" )
-	else()
-		add_compile_definitions ( ICU_DATA_DIR="../share/icu" )
+# cb to check if provided icu dir contains icu src
+function(CHECK_ICU_SRC RESULT HINT)
+	if(EXISTS "${HINT}/as_is")
+		set(${RESULT} TRUE PARENT_SCOPE)
 	endif()
-else()
-	add_compile_definitions ( ICU_DATA_DIR="${CMAKE_INSTALL_FULL_DATADIR}/${PACKAGE_NAME}/icu" )
-endif()
+endfunction()
 
-if ( USE_ICU )
-	include_directories ( ${ICU_INCLUDE_DIRS} )
-	list ( APPEND EXTRA_LIBRARIES ${ICU_LIBRARIES} )
-endif()
+# cb to finalize icu sources (add cmake)
+function(PREPARE_ICU ICU_SRC)
+	# check if it is already patched before
+	if (NOT EXISTS "${ICU_SRC}/CMakeLists.txt")
+		configure_file("${CMAKE_SOURCE_DIR}/libicu/CMakeLists.txt" "${ICU_SRC}/CMakeLists.txt" COPYONLY)
+	endif ()
+endfunction()
 
-memcfgvalues ( USE_ICU )
+set (__icu_namespace "icu::")
+provide(ICU "${ICU_GITHUB}" "${ICU_BUNDLEZIP}")
+if (ICU_FROMSOURCES)
+	add_subdirectory(${ICU_SRC} ${ICU_BUILD} EXCLUDE_FROM_ALL)
+	set(ICU_LIBRARIES icu)
+	set(__icu_namespace)
+elseif (NOT ICU_FOUND)
+	unset(WITH_ICU CACHE)
+	return()
+endif ()
+
+get_target_property(ICU_DATA ${__icu_namespace}icudata INTERFACE_SOURCES)
+
+list(APPEND EXTRA_LIBRARIES ${ICU_LIBRARIES})
+set(USE_ICU 1)
+memcfgvalues(USE_ICU)
+
+if (WIN32)
+	# FIXME! need a proper way to detect if CMAKE_INSTALL_DATADIR is not default
+	if (NOT CMAKE_INSTALL_DATADIR STREQUAL "share")
+		add_compile_definitions(ICU_DATA_DIR="${CMAKE_INSTALL_DATADIR}/icu")
+	else ()
+		add_compile_definitions(ICU_DATA_DIR="../share/icu")
+	endif ()
+else ()
+	add_compile_definitions(ICU_DATA_DIR="${CMAKE_INSTALL_FULL_DATADIR}/${PACKAGE_NAME}/icu")
+endif ()
+
+diag(ICU_FOUND)
+diag(ICU_INCLUDE_DIRS)
+diag(ICU_LIBRARIES)
+diag(ICU_SRC)
+diag(ICU_BUILD)
+diag(ICU_FROMSOURCES)
+diag(ICU_DATA)

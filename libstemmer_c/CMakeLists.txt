@@ -27,7 +27,10 @@ FOREACH ( LINE ${_CONTENT} )
 endforeach ()
 # all the sources parsed. Now just add the lib
 add_library ( stemmer STATIC ${_SOURCES} ${_HEADERS} )
+target_include_directories (stemmer PUBLIC include)
 #SET (STEMMER_INCLUDE_DIR "${SPHINXSEARCH_SOURCE_DIR}/libstemmer_c/include" PARENT_SCOPE )
 #SET (STEMMER_LIBRARIES stemmer PARENT_SCOPE)
 #SET (STEMMER_FOUND TRUE PARENT_SCOPE)
 #MARK_AS_ADVANCED(STEMMER_INCLUDE_DIR )
+
+export(TARGETS stemmer FILE "${CMAKE_CURRENT_BINARY_DIR}/stemmer-targets.cmake" NAMESPACE stemmer:: )

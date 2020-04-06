@@ -39,9 +39,9 @@ file ( COPY ${FULL_SOURCE_DIR}/ DESTINATION ${PACKDIR}
 configure_file ( "${BINARY_DIR}/config/gen_sphinxversion.h"
 		"${PACKDIR}/src/sphinxversion.h" COPYONLY )
 
-if ( WITH_STEMMER AND STEMMER_BASEDIR )
-	message ( STATUS "Embedd stemmer sources... ${STEMMER_BASEDIR}" )
-	file ( COPY ${STEMMER_BASEDIR}/ DESTINATION ${PACKDIR}/libstemmer_c
+if ( WITH_STEMMER AND STEMMER_SRC )
+	message ( STATUS "Embedd stemmer sources... ${STEMMER_SRC}" )
+	file ( COPY ${STEMMER_SRC}/ DESTINATION ${PACKDIR}/libstemmer_c
 			PATTERN "CMakeFiles" EXCLUDE
 			PATTERN "CTestTestfile.cmake" EXCLUDE
 			PATTERN "cmake_install.cmake" EXCLUDE

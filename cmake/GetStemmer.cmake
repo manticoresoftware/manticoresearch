@@ -15,66 +15,52 @@
 # If no file found, it will try to fetch it from
 # https://snowballstem.org/dist/libstemmer_c.tgz
 
-set ( STEMMER_URL "https://snowballstem.org/dist/libstemmer_c.tgz" )
-mark_as_advanced( STEMMER_URL)
+include(update_bundle)
 
-find_package ( stemmer )
+set ( STEMMER_GITHUB "https://snowballstem.org/dist/libstemmer_c.tgz" )
+set ( STEMMER_BUNDLEZIP "libstemmer_c.tgz")
 
-if ( STEMMER_FOUND )
-	SET ( USE_LIBSTEMMER 1 )
-	if ( STEMMER_INTERNAL )
-		include_directories ( ${STEMMER_INCLUDE_DIR} )
-		message (STATUS "Stemmer embedded in sources")
-		add_subdirectory ( ${CMAKE_SOURCE_DIR}/libstemmer_c )
-		list ( APPEND EXTRA_LIBRARIES stemmer )
-	else ()
-		if ( WITH_STEMMER_FORCE_STATIC )
-			set ( NEED_STEMMER_FROMSOURCES 1 )
-			message ( STATUS "Stemmer as sys shared lib found, but need sources")
-		else()
-			include_directories ( ${STEMMER_INCLUDE_DIR} )
-			message ( STATUS "Stemmer as sys shared library" )
-			list ( APPEND EXTRA_LIBRARIES ${STEMMER_LIBRARY} )
-		endif()
-	endif ( STEMMER_INTERNAL )
-else()
-	set ( NEED_STEMMER_FROMSOURCES 1 )
-endif()
-
-if ( NEED_STEMMER_FROMSOURCES )
-	if ( EXISTS "${LIBS_BUNDLE}/libstemmer_c.tgz" )
-		message ( STATUS "Unpack Stemmer from ${LIBS_BUNDLE}/libstemmer_c.tgz" )
-		execute_process (
-				COMMAND "${CMAKE_COMMAND}" -E tar xfz "${LIBS_BUNDLE}/libstemmer_c.tgz"
-				WORKING_DIRECTORY "${MANTICORE_BINARY_DIR}" )
-		# download from github as zip archive
-	else ( EXISTS "${LIBS_BUNDLE}/libstemmer_c.tgz" )
-		if ( NOT EXISTS "${MANTICORE_BINARY_DIR}/libstemmer_c.tgz" )
-			message ( STATUS "Downloading Stemmer" )
-			file ( DOWNLOAD ${STEMMER_URL} ${MANTICORE_BINARY_DIR}/libstemmer_c.tgz SHOW_PROGRESS )
-		endif ()
-		message ( STATUS "Unpack Stemmer from ${MANTICORE_BINARY_DIR}/libstemmer_c.tgz" )
-		execute_process (
-				COMMAND "${CMAKE_COMMAND}" -E tar xfz "${MANTICORE_BINARY_DIR}/libstemmer_c.tgz"
-				WORKING_DIRECTORY "${MANTICORE_BINARY_DIR}" )
-	endif ( EXISTS "${LIBS_BUNDLE}/libstemmer_c.tgz" )
-	set ( STEMMER_BASEDIR "${MANTICORE_BINARY_DIR}/libstemmer_c" )
-	# copy our CMakeLists there
-	if ( NOT EXISTS "${STEMMER_BASEDIR}/CMakeLists.txt" )
-		configure_file ( "${CMAKE_SOURCE_DIR}/libstemmer_c/CMakeLists.txt" "${STEMMER_BASEDIR}/CMakeLists.txt" COPYONLY )
+# cb to finalize stemmer sources (add cmake)
+function(PREPARE_STEMMER STEMMER_SRC)
+	# check if it is already patched before
+	if (NOT EXISTS "${STEMMER_SRC}/CMakeLists.txt")
+		configure_file("${CMAKE_SOURCE_DIR}/libstemmer_c/CMakeLists.txt" "${STEMMER_SRC}/CMakeLists.txt" COPYONLY)
 	endif ()
-	set ( USE_LIBSTEMMER 1 )
-	set ( STEMMER_INCLUDE_DIR "${STEMMER_BASEDIR}/include" )
-	include_directories ( ${STEMMER_BASEDIR}/include )
-	add_subdirectory ( ${STEMMER_BASEDIR} ${STEMMER_BASEDIR} EXCLUDE_FROM_ALL )
-	list ( APPEND EXTRA_LIBRARIES stemmer )
-	if ( NOT EXISTS "${STEMMER_BASEDIR}/CMakeLists.txt" )
-		message ( SEND_ERROR "missing libstemmer sources from libstemmer_c.
+endfunction()
+
+# cb to realize if we have in-source unpacked stemmer
+function(CHECK_STEMMER_SRC RESULT HINT)
+	if (HINT STREQUAL EMBEDDED AND EXISTS ${MANTICORE_SOURCE_DIR}/libstemmer_c/include/libstemmer.h)
+		set(STEMMER_SRC "${MANTICORE_SOURCE_DIR}/libstemmer_c" PARENT_SCOPE)
+		set(STEMMER_BUILD "${MANTICORE_SOURCE_DIR}/libstemmer_c" PARENT_SCOPE)
+		set(${RESULT} TRUE PARENT_SCOPE)
+	elseif(EXISTS ${HINT}/include/libstemmer.h)
+		set(${RESULT} TRUE PARENT_SCOPE)
+	endif()
+endfunction()
+
+
+provide(STEMMER "${STEMMER_GITHUB}" "${STEMMER_BUNDLEZIP}")
+if (STEMMER_FROMSOURCES)
+	add_subdirectory(${STEMMER_SRC} ${STEMMER_BUILD} EXCLUDE_FROM_ALL)
+	set(STEMMER_LIBRARIES stemmer)
+elseif (NOT STEMMER_FOUND)
+	message(SEND_ERROR "missing libstemmer sources from libstemmer_c.
 Please download the C version of libstemmer library from
 https://snowballstem.org/ and extract its sources over libstemmer_c/
 subdirectory in order to build Manticore with libstemmer support. Or
 install the package named like 'libstemmer-dev' using your favorite
-package manager." )
-		unset ( WITH_STEMMER CACHE )
-	endif ()
-ENDIF ( NEED_STEMMER_FROMSOURCES )
+package manager.")
+	unset(WITH_STEMMER CACHE)
+	return()
+endif ()
+
+list(APPEND EXTRA_LIBRARIES ${STEMMER_LIBRARIES})
+set(USE_LIBSTEMMER 1)
+
+diag(STEMMER_FOUND)
+diag(STEMMER_INCLUDE_DIRS)
+diag(STEMMER_LIBRARIES)
+diag(STEMMER_SRC)
+diag(STEMMER_BUILD)
+diag(STEMMER_FROMSOURCES)

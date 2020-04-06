@@ -1,0 +1,15 @@
+cmake_minimum_required(VERSION 2.8.2)
+
+project(boost-context-download NONE)
+
+include(ExternalProject)
+
+ExternalProject_Add(boost-context
+		SOURCE_DIR "@BOOST_CONTEXT_SRC@"
+		BUILD_IN_SOURCE ON
+		CONFIGURE_COMMAND ./bootstrap.sh
+		BUILD_COMMAND ./b2
+		INSTALL_COMMAND ./b2 install --prefix=@BOOST_CONTEXT_BUILD@
+		)
+
+# file configured from cmake/boost-context-local.cmake.in

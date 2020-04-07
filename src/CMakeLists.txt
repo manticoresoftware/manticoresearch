@@ -49,7 +49,7 @@ file ( GLOB HEADERS "sphinx*.h" lz4.h lz4hc.h http/http_parser.h secondaryindex.
 		attribute.h accumulator.h global_idf.h, optional.h, event.h)
 file ( GLOB SEARCHD_H "searchd*.h" "task*.h" threadutils.h )
 
-if ( UNIX AND NOT APPLE )
+if ( USE_GALERA )
 	add_subdirectory ( replication )
 	# add_compile_definitions( HAVE_WSREP ) # need cmake >3.12, let's skip it for a while..
     add_definitions ( -DHAVE_WSREP )
@@ -209,8 +209,10 @@ target_link_libraries ( index_converter libsphinx )
 
 add_library ( udfexample SHARED ${UDFEXAMPLE_SRC} )
 
+diag(BINPREFIX)
 IF ( USE_GALERA )
-    SET_SEARCHD_RPATH ()
+    SET_SEARCHD_RPATH (${GALERA_LIBDIR})
+	galera_install()
 endif ()
 
 include ( helpers )
@@ -224,7 +226,6 @@ if ( SPLIT_SYMBOLS )
        split_dbg ( wordbreaker )
        split_dbg ( index_converter )
 endif()
-
 
 INSTALL ( TARGETS indexer indextool spelldump wordbreaker RUNTIME DESTINATION ${BINPREFIX}bin COMPONENT tools )
 INSTALL ( TARGETS searchd RUNTIME DESTINATION ${BINPREFIX}bin COMPONENT applications )

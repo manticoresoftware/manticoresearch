@@ -111,13 +111,18 @@ endmacro()
 memcfgvalues ( CMAKE_BUILD_TYPE )
 memcfgvalues ( DISTR_BUILD )
 
-option(USE_GALERA "Enable building Galera replication library and using it" ON)
-if (APPLE OR NOT UNIX)
-	set(USE_GALERA OFF)
-endif ()
+if (NOT WIN32)
+	option(USE_GALERA "Enable building Galera replication library and using it" ON)
+endif()
+
+# boost for boost::context, also used in galera build
+include(GetBoostContext)
 
 if (USE_GALERA)
 	include(GetGALERA)
+	if (NOT HAVE_GALERA)
+		set(USE_GALERA OFF CACHE FORCE)
+	endif ()
 endif ()
 
 find_package(OpenSSL COMPONENTS SSL )

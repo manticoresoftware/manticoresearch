@@ -29,8 +29,8 @@
 
 const char * GetReplicationDL()
 {
-#ifdef GALERA_SOVERSION
-	return "libgalera_manticore.so." GALERA_SOVERSION;
+#ifdef GALERA_SONAME
+	return GALERA_SONAME;
 #else
 	return "libgalera_smm.so";
 #endif

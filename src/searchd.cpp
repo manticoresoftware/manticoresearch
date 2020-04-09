@@ -15008,6 +15008,14 @@ void HandleMysqlExplain ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 void HandleMysqlImportTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	CSphString sError;
+
+	if ( !IsConfigless() )
+	{
+		sError = "IMPORT TABLE requires data_dir to be set in the config file";
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
 	auto pLocal = GetServed ( tStmt.m_sIndex );
 	auto pDist = GetDistr ( tStmt.m_sIndex );
 	if ( pLocal || pDist )

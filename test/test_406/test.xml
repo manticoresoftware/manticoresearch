@@ -30,6 +30,9 @@ searchd
 <sphinxql>REPLACE INTO test320 (id, keywords, postingtitle) VALUES (20, 'kw1 of data', 'kw1 at doc20')</sphinxql>
 <sphinxql>select * from test320 where match ( '@keywords kw1' )</sphinxql>
 
+<!-- regression crash on import missed index -->
+<sphinxql>import table test_missed from './none'</sphinxql>
+
 <!--clean up -->
 <sphinxql>drop table test1</sphinxql>
 <sphinxql>drop table test320</sphinxql>

@@ -895,6 +895,32 @@ bool CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex
 	CSphString sFind;
 	sFind.SetSprintf ( "%s.*", sPathToIndex.cstr() );
 	StrVec_t dFoundFiles = FindFiles ( sFind.cstr(), false );
+
+	// checks for source index
+	if ( !dFoundFiles.GetLength() )
+	{
+		sError = "no index files found";
+		return false;
+	}
+	bool bHasMeta = false;
+	bool bHasRam = false;
+	dFoundFiles.TestAll ( [&] ( const CSphString & sFile )
+		{
+			bHasMeta |= sFile.Ends ( ".meta" );
+			bHasRam |= sFile.Ends ( ".ram" );
+			return true;
+		} );
+	if ( !bHasMeta || !bHasRam )
+	{
+		if ( !bHasMeta && !bHasRam )
+			sError.SetSprintf ( "missed .meta and .ram index files at source path %s", sPathToIndex.cstr() );
+		else
+			sError.SetSprintf ( "missed %s index file at source path %s", ( !bHasMeta ? ".meta" : ".ram" ), sPathToIndex.cstr() );
+
+		return false;
+	}
+
+
 	for ( const auto & i : dFoundFiles )
 	{
 		CSphString sDest;

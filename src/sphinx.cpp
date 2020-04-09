@@ -9673,9 +9673,13 @@ static void ReadSchemaField ( CSphReader & rdInfo, CSphColumnInfo & tCol, DWORD 
 		tCol.m_sName = rdInfo.GetString();
 		tCol.m_uFieldFlags = rdInfo.GetDword();
 		tCol.m_bPayload = !!rdInfo.GetByte();
-	}
-	else
+	} else
+	{
 		ReadSchemaColumn ( rdInfo, tCol );
+	}
+
+	if ( uVersion<59 )
+		tCol.m_uFieldFlags |= CSphColumnInfo::FIELD_INDEXED;
 }
 
 

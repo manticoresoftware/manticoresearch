@@ -23,7 +23,16 @@ searchd
 <sphinxql>import table test1 from '<this_test/>/data/index'</sphinxql>
 <sphinxql>show tables</sphinxql>
 <sphinxql>select * from test1</sphinxql>
+
+<!-- regression table from old version can not insert data into full-text columns -->
+<sphinxql>import table test320 from '<this_test/>/data/rel320/idx320'</sphinxql>
+<sphinxql>select * from test320 where match ( '@keywords kw1' )</sphinxql>
+<sphinxql>REPLACE INTO test320 (id, keywords, postingtitle) VALUES (20, 'kw1 of data', 'kw1 at doc20')</sphinxql>
+<sphinxql>select * from test320 where match ( '@keywords kw1' )</sphinxql>
+
+<!--clean up -->
 <sphinxql>drop table test1</sphinxql>
+<sphinxql>drop table test320</sphinxql>
 
 </sphqueries>
 

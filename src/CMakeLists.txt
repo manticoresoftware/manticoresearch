@@ -187,8 +187,7 @@ diag(EXTRA_LIBRARIES)
 
 add_library ( lsearchd OBJECT ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
 if ( USE_SSL )
-	include_directories ( ${OPENSSL_INCLUDE_DIR} )
-	target_link_libraries ( lsearchd OpenSSL::SSL )		
+	target_link_libraries ( lsearchd OpenSSL::SSL )
 endif ( USE_SSL )
 
 add_dependencies ( lsearchd vergen )

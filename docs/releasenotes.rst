@@ -1,6 +1,15 @@
 Release notes
 =============
 
+Version 3.4.2, 10 April 2020
+----------------------------
+
+Critical bugfixes
+~~~~~~~~~~~~~~~~~
+
+* `2ffe2d26 <https://github.com/manticoresoftware/manticoresearch/commit/2ffe2d261793f9681265bc4abe38d695e72c121e5>`__ fix RT index from old version fails to index data
+
+
 Version 3.4.0, 26 March 2020
 ----------------------------
 
@@ -53,8 +62,6 @@ Bugfixes
 * `a7258ba8 <https://github.com/manticoresoftware/manticoresearch/commit/a7258ba8340e246c0d8aaeb4a7a74129eba807eb>`__ fix #316 LAST_INSERT_ID returns empty on INSERT
 * `1ebd5bf8 <https://github.com/manticoresoftware/manticoresearch/commit/1ebd5bf8d74113bcfa138ce63ce11966990a4215>`__ fix #317 json/update HTTP endpoint to support array for MVA and object for JSON attribute
 * `e426950a <https://github.com/manticoresoftware/manticoresearch/commit/e426950a536382a142e2a42ed207c341149ff685>`__ fix rash of indexer dumping rt without explicit id
-
-
 
 
 Version 3.3.0, 4 February 2020

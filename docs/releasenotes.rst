@@ -7,7 +7,7 @@ Version 3.4.2, 10 April 2020
 Critical bugfixes
 ~~~~~~~~~~~~~~~~~
 
-* `2ffe2d26 <https://github.com/manticoresoftware/manticoresearch/commit/2ffe2d261793f9681265bc4abe38d695e72c121e5>`__ fix RT index from old version fails to index data
+* `2ffe2d26 <https://github.com/manticoresoftware/manticoresearch/commit/2ffe2d261793f9681265bc4abe38d695e72c121e>`__ fix RT index from old version fails to index data
 
 
 Version 3.4.0, 26 March 2020

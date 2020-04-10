@@ -11555,10 +11555,11 @@ void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 		}
 
 		const CSphSchema &tSchema = *pSchema;
-		assert ( tSchema.GetAttr(0).m_sName==sphGetDocidName() );
+		assert ( pServed->m_eType==IndexType_e::TEMPLATE || tSchema.GetAttr(0).m_sName==sphGetDocidName() );
 
 		// id comes before fields
-		dCondOut.MatchData3 ( "id", "bigint", "" );
+		if ( pServed->m_eType!=IndexType_e::TEMPLATE )
+			dCondOut.MatchData3 ( "id", "bigint", "" );
 
 		for ( int i = 0; i<tSchema.GetFieldsCount (); i++ )
 		{
@@ -17407,6 +17408,10 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 			{
 				dLocalToDelete[sIndexName] = false;
 				continue;
+			}
+			if ( bGotLocal && bReplaceLocal && eNewType==IndexType_e::TEMPLATE )
+			{
+				dLocalToDelete[sIndexName] = false;
 			}
 		}
 

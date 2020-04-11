@@ -15118,6 +15118,15 @@ public:
 		tCrashQuery.m_bMySQL = true;
 		SphCrashLogger_c::SetLastQuery ( tCrashQuery );
 
+		if (sQuery=="select DATABASE(), USER() limit 1")
+		{
+			// result set header packet
+			tOut.HeadTuplet ( "DATABASE()", "USER()" );
+			tOut.DataTuplet ( "Manticore", m_tVars.m_bVIP ? "VIP" : "Usual" );
+			tOut.Eof ( false );
+			return true;
+		}
+
 		// parse SQL query
 		if ( m_tVars.m_bProfile )
 			m_tProfile.Switch ( SPH_QSTATE_SQL_PARSE );

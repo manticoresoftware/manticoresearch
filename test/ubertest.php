@@ -37,7 +37,8 @@ if ( !is_array($args) || empty($args) )
 	print ( "-i, --indexer <PATH>\tpath to indexer\n" );
 	print ( "-s, --searchd <PATH>\tpath to searchd\n" );
 	print ( "-b, --bindir <PATH>\tpath to all binaries\n" );
-	print ( "-t, --testdir <PATH>\tpath where to work and create artefacts\n" );
+	print ( "-t, --testdir <PATH>\tpath which write to configs when testing\n" );
+	print ( "-tt <PATH>\tpath where ubertest will work and create artefacts\n" );
 	print ( "--ctest\t\tPrint test report to console (for automatic grabbing)\n" );
 	print ( "--strict\t\tterminate on the first failure (for automatic runs)\n" );
 	print ( "--strict-verbose\tterminate on the first failure and copy the last report to report.txt (for automatic runs)\n" );
@@ -69,6 +70,7 @@ if ( !is_array($args) || empty($args) )
 $locals = array();
 $locals['rt_mode'] = false;
 $locals['testdir'] = '';
+$locals['scriptdir'] = '';
 $locals['ctest'] = false;
 
 if ( array_key_exists ( "DBUSER", $_ENV ) && $_ENV["DBUSER"] )
@@ -102,6 +104,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-s" || $arg=="--searchd" )		$locals['searchd'] = $args[++$i];
 	else if ( $arg=="-b" || $arg=="--bindir" )		$locals['bin'] = $args[++$i];
 	else if ( $arg=="-t" || $arg=="--testdir" )		$locals['testdir'] = $args[++$i];
+	else if ( $arg=="-tt" )							$locals['scriptdir'] = $args[++$i];
 	else if ( $arg=="--ctest" )						{ $locals['ctest'] = true; $force_guess = false; }
 	else if ( $arg=="--rt" )						$locals['rt_mode'] = true;
 	else if ( $arg=="--test-thd-pool" )				$locals['use_pool'] = true;
@@ -147,15 +150,39 @@ if ( !$run && !$show )
 	exit ( 1 );
 }
 
+$cygwin = false;
+if ( $locals['scriptdir']!=$locals['testdir'] )
+{
+
+	$fscript = file_get_contents($locals['scriptdir']. "cmake_install.cmake");
+	$ftest = file_get_contents($locals['testdir']. "cmake_install.cmake");
+
+	if ( $fscript && !$ftest)
+	{
+		$cygwin = true;
+		print ("Is +++ cygwin\n\n");
+	}
+	else
+	{
+		$locals['scriptdir'] = $locals['testdir'];
+		print ("Is NOT cygwin\n\n");
+	}
+}
+
+$index_script_path = $locals['scriptdir'].$index_data_path;
+if (!file_exists ($index_script_path))
+	mkdir ($index_script_path);
+
 $index_data_path = $locals['testdir'].$index_data_path;
-if (!file_exists ($index_data_path))
-	mkdir ($index_data_path);
 
 PublishLocals ( $locals, false );
 
 $sd_log				= testdir("searchd.log");
+$ss_log				= scriptdir("searchd.log");
 $sd_query_log		= testdir("query.log");
+$ss_query_log		= scriptdir("query.log");
 $sd_pid_file		= testdir("searchd.pid");
+$ss_pid_file		= scriptdir("searchd.pid");
 
 require_once ( "helpers.inc" );
 
@@ -267,12 +294,12 @@ $sd_sphinxql_port_ref = $sd_sphinxql_port;
 $sd_sphinxql_port_vip_ref = $sd_sphinxql_port_vip;
 $sd_http_port_ref = $sd_http_port;
 
-$name_err_all = $locals['testdir'] . "error_all.txt";
-$name_err = $locals['testdir'] . "error.txt";
+$name_err_all = $locals['scriptdir'] . "error_all.txt";
+$name_err = $locals['scriptdir'] . "error.txt";
 
 foreach ( $tests as $test )
 {
-	$res_path = testdir($test);
+	$res_path = scriptdir($test);
 	if ( $windows && !$sd_managed_searchd )
 	{
 		// avoid an issue with daemons stuck in exit(0) for some seconds
@@ -330,7 +357,7 @@ foreach ( $tests as $test )
 				{
 					$report = file_get_contents ( "$res_path/report.txt" );
 					$report.= "\n Test $test failed\n";
-					file_put_contents(testdir("report.txt"),$report);
+					file_put_contents(scriptdir("report.txt"),$report);
 					$report = "";
 				}
 				break;

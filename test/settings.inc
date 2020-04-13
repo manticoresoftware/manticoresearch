@@ -88,7 +88,7 @@ function GetBanner ()
 function LoadCachedGuesses ()
 {
 	global $g_locals;
-	$guessfile = $g_locals['testdir'].'guess.txt';
+	$guessfile = $g_locals['scriptdir'].'guess.txt';
 
 	if ( file_exists ( $guessfile ))
 	{
@@ -102,7 +102,7 @@ function CacheGuesses ()
 	global $g_locals;
 	global $g_re2, $g_icu, $g_odbc, $g_repli, $g_ssl;
 
-	$guessfile = $g_locals['testdir'].'guess.txt';
+	$guessfile = $g_locals['scriptdir'].'guess.txt';
 
 	$text = "global \$g_guesscached; \$g_guesscached = true;\n";
 	if ( $g_re2 ) $text .= "global \$g_re2; \$g_re2 = true;\n";
@@ -125,6 +125,19 @@ function testdir ($path)
 		return $path;
 
 	return $g_locals['testdir'].$path;
+}
+
+function scriptdir ($path)
+{
+	global $g_locals;
+	if ( !$path || $path=='' )
+		return $g_locals['scriptdir'];
+
+	# linux absolute starts with /, windows have drive letter with :.
+	if ( substr ($path, 0, 1) === '/' || substr ($path, 1, 1) === ':' )
+		return $path;
+
+	return $g_locals['scriptdir'].$path;
 }
 
 function GuessFeature ($config, $testmsg)
@@ -257,7 +270,7 @@ function PublishLocals ( &$locals, $benchmark )
 
 	if ( $windows ) {
 		$ext = ".exe";
-		$pref = $benchmark ? "RelWithDebInfo\\" : "Debug\\";
+		$pref = $benchmark ? "RelWithDebInfo/" : "Debug/";
 	} else
 	{
 		$ext = '';
@@ -268,6 +281,7 @@ function PublishLocals ( &$locals, $benchmark )
 	{
 		if ( !array_key_exists ( $key, $locals ) )
 			$locals[$key] = $locals['bin'] . $pref. $key . $ext;
+//		print ($locals['bin'].$pref.$key.$ext."\n");
 	}
 
 	$g_locals = $locals;

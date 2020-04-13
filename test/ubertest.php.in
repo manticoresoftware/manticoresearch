@@ -5,6 +5,7 @@
 // these variables have to be configured from cmake with configure_file
 $bindir = "@MANTICORE_BINARY_DIR@/src/";
 $testdir = "@MANTICORE_BINARY_DIR@/test/";
+$scriptdir = "@MANTICORE_SCRIPTING_DIR@/test/";
 $testsrc = "@CMAKE_CURRENT_SOURCE_DIR@";
 
 chdir ("$testsrc");
@@ -14,7 +15,7 @@ $args = $_SERVER["argv"];
 array_shift ( $args );
 if ( is_array($args) && !empty($args) )
 {
-	$shellcmd .= " -b \"$bindir\" -t \"$testdir\" ";
+	$shellcmd .= " -b \"$bindir\" -t \"$testdir\" -tt \"$scriptdir\" ";
 	$shellcmd .= join(" ", $args);
 }
 

@@ -431,12 +431,17 @@ function GetTmDelta()
 
 function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watchdog = false, $addr=false, $port=false )
 {
-	global $g_locals, $windows, $action_wait_timeout, $sd_address, $sd_port;
+	global $g_locals, $windows, $cygwin, $action_wait_timeout, $sd_address, $sd_port;
 
 
 	$abs_config_file = testdir($config_file);
-	$abs_error_file = testdir($error_file);
-	$abs_pidfile = testdir($pidfile);
+	$abs_error_file = scriptdir($error_file);
+	$win_error_file = testdir($error_file);
+	$abs_pidfile = scriptdir($pidfile);
+
+//	print ($abs_config_file . "\n");
+//	print ($abs_error_file . "\n");
+//	print ($abs_pidfile . "\n");
 
 	if (!GetSearchd ($path, $error))
 		return 1;
@@ -465,7 +470,7 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 	if ( isset ( $g_locals['extra_searchd_options'] ) )
 		$extra_params .= ' ' . $g_locals['extra_searchd_options'];
 
-	$testdir = $g_locals['testdir'];
+	$testdir = $g_locals['scriptdir'];
 	$cd = ( $testdir!='' );
 	if ($cd) {
 		$backdir = getcwd();
@@ -473,17 +478,31 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 	}
 
 	$retval = 0;
-	if ( $windows )
+	if ( $windows && !$cygwin )
 	{
 		// using start /min to fire it "in background"
 		// using cmd /c for redirection to work
 		if ( file_exists ( $abs_pidfile ) )
 			unlink ( $abs_pidfile );
+//		print ("start /min cmd /c \"$path --config $abs_config_file --pidfile --console $extra_params > $abs_error_file\"\n");
 		$process = popen ("start /min cmd /c \"$path --config $abs_config_file --pidfile --console $extra_params > $abs_error_file\"", "r" );
 		pclose ( $process );
+	} else if ($cygwin)
+	{
+		// using start /min to fire it "in background"
+		// using cmd /c for redirection to work
+		if ( file_exists ( $abs_pidfile ) )
+			unlink ( $abs_pidfile );
+		$scmd = "cygstart --hide bash -c \"$path --config $abs_config_file --pidfile --console $extra_params > $abs_error_file\"";
+		print ("cygwin: $scmd\n");
+		$process = popen ($scmd, "r" );
+		pclose ( $process );
+		print ("started\n");
 	} else
 	{
+//		print  ( "$path --config $abs_config_file $extra_params > $abs_error_file\n" );
 		system ( "$path --config $abs_config_file $extra_params > $abs_error_file", $retval );
+//		print ("started\n");
 	}
 
 	if ($cd)
@@ -3746,11 +3765,11 @@ function MarkTest ( $logfile, $test_dir )
 
 function RunTest ( $test_dir, $skipdemo, $usemarks )
 {
-	global	$index_data_path, $agents, $sd_pid_file, $sd_managed_searchd,
-			$sd_skip_indexer, $windows, $g_locals, $sd_log, $sd_query_log,
+	global	$index_data_path, $agents, $ss_pid_file, $sd_managed_searchd,
+			$sd_skip_indexer, $windows, $g_locals, $ss_log, $ss_query_log,
 			$g_pick_query;
 
-	$res_path = testdir($test_dir);
+	$res_path = scriptdir($test_dir);
 
 	$model_file = $test_dir."/model.bin";
 	$conf_dir 	= $res_path."/Conf";
@@ -3817,20 +3836,20 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 	$oldquerylog = '';
 	if ( $isdemo )
 	{
-		$oldlog = $sd_log;
-		$oldquerylog = $sd_query_log;
-		$sd_log				= "$res_path/searchd.log";
-		$sd_query_log		= "$res_path/query.log";
-		if (file_exists($sd_log))
-			unlink ($sd_log);
-		if (file_exists($sd_query_log))
-			unlink ($sd_query_log);
+		$oldlog = $ss_log;
+		$oldquerylog = $ss_query_log;
+		$ss_log				= "$res_path/searchd.log";
+		$ss_query_log		= "$res_path/query.log";
+		if (file_exists($ss_log))
+			unlink ($ss_log);
+		if (file_exists($ss_query_log))
+			unlink ($ss_query_log);
 	}
 
 	if ( $usemarks )
 	{
-		MarkTest($sd_log,$test_dir);
-		MarkTest($sd_query_log,$test_dir);
+		MarkTest($ss_log,$test_dir);
+		MarkTest($ss_query_log,$test_dir);
 	}
 
 	do
@@ -3853,7 +3872,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 			print ("Interrupted, $msg\n");
 			continue;
 		}
-		$config->WriteConfig ( testdir("config.conf"), "all", $msg, $config->NumAgents () < 2 );
+		$config->WriteConfig ( scriptdir("config.conf"), "all", $msg, $config->NumAgents () < 2 );
 
 		if ( !$sd_skip_indexer )
 			EraseDirContents ( $index_data_path );
@@ -3900,9 +3919,9 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 			if ( $sd_managed_searchd )
 				$searchd_ret = 0;
 			else
-				$searchd_ret = StartSearchd ( "config.conf", "error.txt", $sd_pid_file, $error, $config->Requires ( "watchdog" ) );
+				$searchd_ret = StartSearchd ( "config.conf", "error.txt", $ss_pid_file, $error, $config->Requires ( "watchdog" ) );
 			
-			$stop[testdir("config.conf")] = $sd_pid_file;
+			$stop[scriptdir("config.conf")] = $ss_pid_file;
 
 			if ( $searchd_ret == 1 )
 			{
@@ -3924,8 +3943,8 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 
 				$config_file = "config_".$agent_id.".conf";
 				$pid_file = "searchd_".$agent_id.".pid";
-				$abs_config_file = testdir($config_file);
-				$abs_pid_file = testdir($pid_file);
+				$abs_config_file = scriptdir($config_file);
+				$abs_pid_file = scriptdir($pid_file);
 				$stop[$abs_config_file] = $abs_pid_file;
 				$msg = '';
 				$error_agent = "error_".$agent_id.".txt";
@@ -4016,8 +4035,8 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 
 	if ( $isdemo )
 	{
-		$sd_log				= $oldlog;
-		$sd_query_log		= $oldquerylog;
+		$ss_log				= $oldlog;
+		$ss_query_log		= $oldquerylog;
 	}
 
 	if ( !$sd_managed_searchd )

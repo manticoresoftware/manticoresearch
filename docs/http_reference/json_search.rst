@@ -648,10 +648,7 @@ Full-text query search results can be highlighted on one or more fields. Field c
       "highlight":
       {
         "fields":
-        {
-          "content": {},
-          "title": {}
-        }
+          ["content","title"]
       }
     }
 

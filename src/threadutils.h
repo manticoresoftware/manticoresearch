@@ -225,20 +225,6 @@ private:
 
 void GlobalSchedule ( Threads::Handler d_handler );
 
-struct GuardedCrashQuery_t : public ISphNoncopyable
-{
-	const CrashQuery_t m_tReference;
-	explicit GuardedCrashQuery_t ( const CrashQuery_t & tCrashQuery )
-		: m_tReference ( tCrashQuery )
-	{
-	}
-
-	~GuardedCrashQuery_t()
-	{
-		SphCrashLogger_c::SetLastQuery ( m_tReference );
-	}
-};
-
 // add handler which will be called on daemon's shutdown right after
 // g_bShutdown is set to true. Returns cookie for refer the callback in future.
 using Handler_fn = std::function<void ()>;

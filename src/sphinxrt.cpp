@@ -6137,6 +6137,7 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 
 	// store and manage tls stuff
 	Tls_context_c dTlsData ( dSorters, pResult );
+	CrashQuery_t tCrashQuery = CrashQueryGet();
 
 	bool bMtEnabled = dTlsData.IsEnabled ();
 
@@ -6161,10 +6162,13 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 			// capture iChunk and dWaiter by value
 			// iChunk will provide independent chunk id on each iteration (capturing by ref will mess everything)
 			// dWaiter as smart-pointer will ensure that mutex is not released until all chunks processed.
-			auto fnCalc = [&, iChunk, dWaiter] () mutable
+			auto fnCalc = [&, iChunk, dWaiter, tCrashQuery] () mutable
 			{
 				if ( bInterrupt ) // some earlier job met error; abort.
 					return;
+
+				GuardedCrashQuery_t tCrashQueryClean ( CrashQueryGet() ); // clean up TLS for thread in the pool
+				CrashQuerySetTop ( &tCrashQuery ); // set crash info container
 
 				auto iThdID = dTlsData.PrepareLocalTlsContext ( iChunk );
 				auto & dLocalSorters = dTlsData.GetTlsSorters(iThdID);

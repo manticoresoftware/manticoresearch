@@ -2474,6 +2474,21 @@ typedef CrashQuery_t CrashQueryGet_fn();
 typedef void CrashQuerySet_fn ( const CrashQuery_t & tCrash );
 void CrashQuerySetupHandlers ( CrashQuerySetTop_fn * pSetTop, CrashQueryGet_fn * pGet, CrashQuerySet_fn * pSet );
 
+struct GuardedCrashQuery_t : public ISphNoncopyable
+{
+	const CrashQuery_t m_tReference;
+	explicit GuardedCrashQuery_t ( const CrashQuery_t & tCrashQuery )
+		: m_tReference ( tCrashQuery )
+	{
+	}
+
+	~GuardedCrashQuery_t()
+	{
+		CrashQuerySet ( m_tReference );
+	}
+};
+
+
 // atomic seek+read wrapper
 int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset );
 

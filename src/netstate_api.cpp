@@ -37,14 +37,14 @@ void NetStateAPI_t::CloseSocket ()
 	}
 }
 
-int NetStateAPI_t::SocketIO ( bool bWrite, bool bAfterWrite )
+int64_t NetStateAPI_t::SocketIO ( bool bWrite, bool bAfterWrite )
 {
 	// try next chunk
-	int iRes = 0;
+	int64_t iRes = 0;
 	if ( bWrite )
-		iRes = (int)sphSockSend ( m_iClientSock, (const char*)(m_dBuf.begin() + m_iPos), m_iLeft );
+		iRes = (int64_t)sphSockSend ( m_iClientSock, (const char*)(m_dBuf.begin() + m_iPos), m_iLeft );
 	else
-		iRes = (int)sphSockRecv ( m_iClientSock, (char*)(m_dBuf.begin () + m_iPos), m_iLeft );
+		iRes = (int64_t)sphSockRecv ( m_iClientSock, (char*)(m_dBuf.begin () + m_iPos), m_iLeft );
 
 	// if there was EINTR, retry
 	// if any other error, bail
@@ -87,7 +87,7 @@ NetEvent_e NetSendData_t::Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> &
 
 	for ( ; m_tState->m_iLeft>0; )
 	{
-		int iRes = m_tState->SocketIO ( true );
+		int64_t iRes = m_tState->SocketIO ( true );
 		if ( iRes==-1 )
 		{
 			LogSocketError ( "failed to send data", m_tState.Ptr(), false );
@@ -109,7 +109,7 @@ NetEvent_e NetSendData_t::Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> &
 
 	if ( m_tState->m_bKeepSocket )
 	{
-		sphLogDebugv ( "%p send %s job created, sent=%d, sock=%d, tick=%u", this, ProtoName ( m_eProto ), m_tState->m_iPos, m_iSock, pLoop->m_uTick );
+		sphLogDebugv ( "%p send %s job created, sent=" INT64_FMT ", sock=%d, tick=%u", this, ProtoName ( m_eProto ), m_tState->m_iPos, m_iSock, pLoop->m_uTick );
 		switch ( m_eProto )
 		{
 			case Proto_e::SPHINX:
@@ -152,16 +152,16 @@ NetEvent_e NetSendData_t::Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> &
 NetEvent_e NetSendData_t::Setup ( int64_t tmNow )
 {
 	assert ( m_tState.Ptr() );
-	sphLogDebugv ( "%p send %s setup, keep=%d, buf=%d, client=%s, conn=%d, sock=%d", this,
-			ProtoName ( m_eProto ), (int)(m_tState->m_bKeepSocket), m_tState->m_dBuf.GetLength(),
+	sphLogDebugv ( "%p send %s setup, keep=%d, buf=" INT64_FMT ", client=%s, conn=%d, sock=%d", this,
+			ProtoName ( m_eProto ), (int)(m_tState->m_bKeepSocket), m_tState->m_dBuf.GetLength64(),
 			m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock );
 
 	if ( !m_bContinue )
 	{
 		m_iTimeoutTime = tmNow + MS2SEC * g_iWriteTimeout;
 
-		assert ( m_tState->m_dBuf.GetLength() );
-		m_tState->m_iLeft = m_tState->m_dBuf.GetLength();
+		assert ( m_tState->m_dBuf.GetLength64() );
+		m_tState->m_iLeft = m_tState->m_dBuf.GetLength64();
 		m_tState->m_iPos = 0;
 	}
 	m_bContinue = false;

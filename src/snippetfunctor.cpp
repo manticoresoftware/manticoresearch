@@ -140,8 +140,9 @@ private:
 void TokenSpan_c::Init ( int nStoredTokens )
 {
 	m_iBufferBits = sphLog2 ( nStoredTokens-1 );
-	m_uBufferMask = ( 1<<m_iBufferBits )-1;
-	m_dTokens.Resize ( 1<<m_iBufferBits );
+	DWORD uBufferSize = 1<<m_iBufferBits;
+	m_uBufferMask = uBufferSize-1;
+	m_dTokens.Resize(uBufferSize);
 	Reset ();
 }
 

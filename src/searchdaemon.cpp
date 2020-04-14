@@ -807,7 +807,7 @@ void NetOutputBuffer_c::Flush()
 	if ( m_bError )
 		return;
 
-	int iLen = m_dBuf.GetLength();
+	int64_t iLen = m_dBuf.GetLength64();
 	if ( !iLen )
 		return;
 

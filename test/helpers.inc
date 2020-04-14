@@ -3417,7 +3417,7 @@ class SphinxConfig
 
 	function WriteSearchdSettings ( $fp )
 	{
-		global $sd_log, $sd_query_log, $sd_read_timeout, $sd_max_children, $sd_pid_file;
+		global $sd_log, $sd_query_log, $sd_network_timeout, $sd_max_children, $sd_pid_file;
 		$workers = "threads";
 		if ( $this->Requires("thread_pool") || $this->Requires("http") || $this->Requires("https") )
 			$workers = "thread_pool";
@@ -3453,7 +3453,7 @@ class SphinxConfig
 
 		fwrite ( $fp, "\tlog			= $sd_log\n" );
 		fwrite ( $fp, "\tquery_log		= $sd_query_log\n" );
-		fwrite ( $fp, "\tread_timeout	= $sd_read_timeout\n" );
+		fwrite ( $fp, "\tnetwork_timeout= $sd_network_timeout\n" );
 		fwrite ( $fp, "\tmax_children	= $sd_max_children\n" );
 		fwrite ( $fp, "\tpid_file		= ".$this->_sd_pid_file."\n" );
 		fwrite ( $fp, "\tworkers		= $workers\n" );

@@ -201,7 +201,7 @@ NetEvent_e NetReceiveDataQL_c::Impl_c::LoopQl ( DWORD uGotEvents, CSphNetLoop * 
 	// loop to handle similar operations at once
 	while (true)
 	{
-		int iRes = m_pState->SocketIO ( m_bWrite, bWrite );
+		int64_t iRes = m_pState->SocketIO ( m_bWrite, bWrite );
 		if ( iRes==-1 )
 		{
 			LogSocketError ( g_sErrorNetQL[m_ePhase], m_pState.Ptr(), false );

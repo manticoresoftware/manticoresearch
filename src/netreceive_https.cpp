@@ -137,7 +137,7 @@ NetEvent_e NetReceiveDataHttps_c::Impl_c::LoopHttps ( DWORD uGotEvents, CSphVect
 	bool bGotData = false;
 	while (true)
 	{
-		int iRes = m_tState->SocketIO ( m_bWrite );
+		int64_t iRes = m_tState->SocketIO ( m_bWrite );
 		if ( iRes==-1 )
 		{
 			// FIXME!!! report back to client buffer overflow with 413 error
@@ -149,7 +149,7 @@ NetEvent_e NetReceiveDataHttps_c::Impl_c::LoopHttps ( DWORD uGotEvents, CSphVect
 		m_tState->m_iLeft -= iRes;
 		m_tState->m_iPos += iRes;
 
-		sphLogDebugv ( "%p HTTPS %s len %d(%d), off %d, decrypted=%d, sock=%d, tick=%u", this, m_bWrite ? "write" : "read", iRes, m_tState->m_iLeft, iOff, m_tState->m_dDecrypted.GetLength(), m_pParent->m_iSock, pLoop->m_uTick );
+		sphLogDebugv ( "%p HTTPS %s len " INT64_FMT "(" INT64_FMT "), off %d, decrypted=%d, sock=%d, tick=%u", this, m_bWrite ? "write" : "read", iRes, m_tState->m_iLeft, iOff, m_tState->m_dDecrypted.GetLength(), m_pParent->m_iSock, pLoop->m_uTick );
 
 		// socket would block - going back to polling
 		if ( iRes==0 )
@@ -203,7 +203,7 @@ NetEvent_e NetReceiveDataHttps_c::Impl_c::LoopHttps ( DWORD uGotEvents, CSphVect
 			int iCanGrow = Min ( g_iMaxPacketSize - m_tState->m_iPos, 4096 );
 			if ( !iCanGrow )
 			{
-				sphWarning ( "ill-formed client request (length=%d out of bounds) (client=%s(%d)), sock=%d", m_tState->m_iLeft, m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock );
+				sphWarning ( "ill-formed client request (length=" INT64_FMT " out of bounds) (client=%s(%d)), sock=%d", m_tState->m_iLeft, m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock );
 				return NE_REMOVE;
 			}
 

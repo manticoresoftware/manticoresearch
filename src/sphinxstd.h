@@ -1290,7 +1290,7 @@ template < typename T >
 class DefaultStorage_T
 {
 protected:
-	inline static T * Allocate ( int iLimit )
+	inline static T * Allocate ( int64_t iLimit )
 	{
 		return new T[iLimit];
 	}
@@ -1317,7 +1317,7 @@ public:
 	LazyStorage_T() = default;
 	static const int iSTATICSIZE = STATICSIZE;
 protected:
-	inline T * Allocate ( int iLimit )
+	inline T * Allocate ( int64_t iLimit )
 	{
 		if ( iLimit<=STATICSIZE )
 			return m_dData;
@@ -1344,7 +1344,7 @@ class RawStorage_T
 {
 	using StorageType = typename std::aligned_storage<sizeof ( T ), alignof ( T )>::type;
 protected:
-	inline static T * Allocate ( int iLimit )
+	inline static T * Allocate ( int64_t iLimit )
 	{
 		return ( T * )new StorageType[iLimit];
 	}
@@ -1370,19 +1370,19 @@ template < typename T, bool = IS_TRIVIALLY_COPYABLE(T) >
 class DataMover_T
 {
 public:
-	static inline void Copy ( T * pNew, T * pData, int iLength )
+	static inline void Copy ( T * pNew, T * pData, int64_t iLength )
 	{
 		for ( int i = 0; i<iLength; ++i )
 			pNew[i] = pData[i];
 	}
 
-	static inline void Move ( T * pNew, T * pData, int iLength )
+	static inline void Move ( T * pNew, T * pData, int64_t iLength )
 	{
 		for ( int i = 0; i<iLength; ++i )
 			pNew[i] = std::move ( pData[i] );
 	}
 
-	static inline void Zero ( T * pData, int iLength )
+	static inline void Zero ( T * pData, int64_t iLength )
 	{
 		for ( int i = 0; i<iLength; ++i )
 			pData[i] = 0;
@@ -1393,20 +1393,20 @@ template < typename T > /// Copy/move blob of trivial data using memmove
 class DataMover_T<T, true>
 {
 public:
-	static inline void Copy ( T * pNew, const T * pData, int iLength )
+	static inline void Copy ( T * pNew, const T * pData, int64_t iLength )
 	{
 		if ( iLength ) // m.b. work without this check, but sanitize for paranoids.
 			memmove ( ( void * ) pNew, ( const void * ) pData, iLength * sizeof ( T ) );
 	}
 
-	static inline void Move ( T * pNew, const T * pData, int iLength )
+	static inline void Move ( T * pNew, const T * pData, int64_t iLength )
 	{ Copy ( pNew, pData, iLength ); }
 
 	// append raw blob: defined ONLY in POD specialization.
-	static inline void CopyVoid ( T * pNew, const void * pData, int iLength )
+	static inline void CopyVoid ( T * pNew, const void * pData, int64_t iLength )
 	{ Copy ( pNew, ( T * ) pData, iLength ); }
 
-	static inline void Zero ( T * pData, int iLength )
+	static inline void Zero ( T * pData, int64_t iLength )
 	{ memset ((void *) pData, 0, iLength * sizeof ( T )); }
 };
 
@@ -1428,13 +1428,13 @@ template < typename T >
 class SwapCopy_T
 {
 public:
-	static inline void Copy ( T * pNew, T * pData, int iLength )
+	static inline void Copy ( T * pNew, T * pData, int64_t iLength )
 	{
 		for ( int i = 0; i<iLength; ++i )
 			Swap ( pNew[i], pData[i] );
 	}
 
-	static inline void Move ( T * pNew, T * pData, int iLength )
+	static inline void Move ( T * pNew, T * pData, int64_t iLength )
 	{
 		for ( int i = 0; i<iLength; ++i )
 			Swap ( pNew[i], pData[i] );
@@ -1455,7 +1455,7 @@ class DefaultRelimit
 {
 public:
 	static const int MAGIC_INITIAL_LIMIT = 8;
-	static inline int Relimit ( int iLimit, int iNewLimit )
+	static inline int64_t Relimit ( int64_t iLimit, int64_t iNewLimit )
 	{
 		if ( !iLimit )
 			iLimit = MAGIC_INITIAL_LIMIT;
@@ -1474,7 +1474,7 @@ class TightRelimit : public DefaultRelimit
 {
 public:
 	static const int SLOW_GROW_TRESHOLD = 1024;
-	static inline int Relimit ( int iLimit, int iNewLimit )
+	static inline int64_t Relimit ( int64_t iLimit, int64_t iNewLimit )
 	{
 		if ( !iLimit )
 			iLimit = MAGIC_INITIAL_LIMIT;
@@ -1674,7 +1674,7 @@ public:
 
 public:
 	/// grow enough to hold that much entries, if needed, but do *not* change the length
-	void Reserve ( int iNewLimit )
+	void Reserve ( int64_t iNewLimit )
 	{
 		// check that we really need to be called
 		assert ( iNewLimit>=0 );
@@ -1703,7 +1703,7 @@ public:
 	/// for non-copyable types - work like Reset() + Reserve()
 	/// destroys previous dataset, allocate new one and set size to 0.
 	template<typename S=STORE> typename std::enable_if<!S::is_constructed>::type
-	Reserve_static ( int iNewLimit )
+	Reserve_static ( int64_t iNewLimit )
 	{
 		// check that we really need to be called
 		destroy_at ( 0, m_iCount );
@@ -1733,22 +1733,23 @@ public:
 
 	/// resize
 	template<typename S=STORE>
-	typename std::enable_if<S::is_constructed>::type Resize ( int iNewLength )
+	typename std::enable_if<S::is_constructed>::type Resize ( int64_t iNewLength )
 	{
 		assert ( iNewLength>=0 );
-		if ((unsigned int) iNewLength>(unsigned int) m_iCount )
+		if ( iNewLength > m_iCount )
 			Reserve ( iNewLength );
 		m_iCount = iNewLength;
 	}
 
 	/// for non-constructed imply destroy when shrinking, of construct when widening
 	template<typename S=STORE>
-	typename std::enable_if<!S::is_constructed>::type Resize ( int iNewLength )
+	typename std::enable_if<!S::is_constructed>::type Resize ( int64_t iNewLength )
 	{
 		assert ( iNewLength>=0 );
-		if ((unsigned int) iNewLength<(unsigned int) m_iCount )
+		if ( iNewLength < m_iCount )
 			destroy_at ( iNewLength, m_iCount-iNewLength );
-		else {
+		else
+		{
 			Reserve ( iNewLength );
 			construct_at ( m_iCount, iNewLength-m_iCount );
 		}
@@ -1756,7 +1757,7 @@ public:
 	}
 
 	// doesn't need default c-tr
-	void Shrink ( int iNewLength )
+	void Shrink ( int64_t iNewLength )
 	{
 		assert ( iNewLength<=m_iCount );
 		destroy_at ( iNewLength, m_iCount-iNewLength );
@@ -1796,7 +1797,7 @@ public:
 
 	/// query currently allocated RAM, in bytes
 	/// (could be > GetLengthBytes() since uses limit, not size)
-	inline int AllocatedBytes () const
+	inline int64_t AllocatedBytes() const
 	{
 		return m_iLimit*sizeof(T);
 	}
@@ -1809,7 +1810,7 @@ public:
 			return;
 
 		Sort ();
-		int iLeft = sphUniq ( m_pData, m_iCount );
+		int64_t iLeft = sphUniq ( m_pData, m_iCount );
 		Shrink ( iLeft );
 	}
 
@@ -1854,7 +1855,7 @@ public:
 		if ( rhs.IsEmpty () )
 			return;
 
-		auto iRhsLen = rhs.GetLength();
+		auto iRhsLen = rhs.GetLength64();
 		if ( m_iCount+iRhsLen>m_iLimit )
 			Reserve ( m_iCount+iRhsLen );
 		for ( int i=0; i<iRhsLen; ++i)
@@ -1899,29 +1900,31 @@ public:
 	}
 
 	/// insert into a middle (will fail to compile for swap vector)
-	void Insert ( int iIndex, const T & tValue )
+	void Insert ( int64_t iIndex, const T & tValue )
 	{
 		assert ( iIndex>=0 && iIndex<=this->m_iCount );
 
 		if ( this->m_iCount>=this->m_iLimit )
 			Reserve ( this->m_iCount+1 );
 
-		for ( int i= this->m_iCount-1; i>=iIndex; --i )
+		for ( auto i = this->m_iCount-1; i>=iIndex; --i )
 			POLICY::CopyOrSwap ( this->m_pData [ i+1 ], this->m_pData[i] );
+
 		POLICY::CopyOrSwap ( this->m_pData[iIndex], tValue );
 		++this->m_iCount;
 	}
 
 	/// insert into a middle by policy-defined copier
-	void Insert ( int iIndex, T &tValue )
+	void Insert ( int64_t iIndex, T &tValue )
 	{
 		assert ( iIndex>=0 && iIndex<=m_iCount );
 
 		if ( this->m_iCount>=m_iLimit )
 			Reserve ( this->m_iCount + 1 );
 
-		for ( int i = this->m_iCount - 1; i>=iIndex; --i )
+		for ( auto i = this->m_iCount - 1; i>=iIndex; --i )
 			POLICY::CopyOrSwap ( this->m_pData[i + 1], this->m_pData[i] );
+
 		POLICY::CopyOrSwap ( this->m_pData[iIndex], tValue );
 		++this->m_iCount;
 	}
@@ -1930,23 +1933,23 @@ protected:
 	int64_t		m_iLimit = 0;		///< entries allocated
 
 	template<typename S=STORE>
-	typename std::enable_if<S::is_constructed>::type destroy_at ( int, int ) {}
+	typename std::enable_if<S::is_constructed>::type destroy_at ( int64_t, int64_t ) {}
 
 	template<typename S=STORE>
-	typename std::enable_if<S::is_constructed>::type construct_at ( int, int ) {}
+	typename std::enable_if<S::is_constructed>::type construct_at ( int64_t, int64_t ) {}
 
 	template<typename S=STORE>
-	typename std::enable_if<!S::is_constructed>::type destroy_at ( int iIndex, int iCount )
+	typename std::enable_if<!S::is_constructed>::type destroy_at ( int64_t iIndex, int64_t iCount )
 	{
-		for ( auto i = 0; i<iCount; ++i )
+		for ( int64_t i = 0; i<iCount; ++i )
 			m_pData[iIndex+i].~T ();
 	}
 
 	template<typename S=STORE>
-	typename std::enable_if<!S::is_constructed>::type construct_at ( int iIndex, int iCount )
+	typename std::enable_if<!S::is_constructed>::type construct_at ( int64_t iIndex, int64_t iCount )
 	{
 		assert ( m_pData );
-		for ( auto i = 0; i<iCount; ++i )
+		for ( int64_t i = 0; i<iCount; ++i )
 			new ( m_pData+iIndex+i ) T();
 	}
 };
@@ -1987,7 +1990,7 @@ protected:
 	using VecTraits_T<T>::m_iCount;
 
 public:
-	explicit CSphFixedVector ( int iSize )
+	explicit CSphFixedVector ( int64_t iSize )
 	{
 		m_iCount = iSize;
 		assert ( iSize>=0 );
@@ -2010,7 +2013,7 @@ public:
 		return *this;
 	}
 
-	void Reset ( int iSize )
+	void Reset ( int64_t iSize )
 	{
 		assert ( iSize>=0 );
 		if ( iSize==m_iCount )
@@ -2046,7 +2049,7 @@ public:
 
 	template<typename S=STORE>
 	typename std::enable_if<S::is_constructed && !S::is_owned>::type
-	Set ( T * pData, int iSize )
+	Set ( T * pData, int64_t iSize )
 	{
 		m_pData = pData;
 		m_iCount = iSize;

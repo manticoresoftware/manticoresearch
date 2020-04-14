@@ -10,7 +10,7 @@ $sd_sphinxql_port_vip = 6709;
 
 $sd_log				= "searchd.log";
 $sd_query_log		= "query.log";
-$sd_read_timeout	= 5;
+$sd_network_timeout	= 5;
 $sd_max_children	= 30;
 $sd_pid_file		= "searchd.pid";
 

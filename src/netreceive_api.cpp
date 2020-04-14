@@ -208,7 +208,7 @@ NetEvent_e NetReceiveDataAPI_c::Impl_c::LoopReceiveAPI ( DWORD uGotEvents, CSphV
 	while (true)
 	{
 		bool bWrite = ( m_ePhase==AAPI_HANDSHAKE_OUT );
-		int iRes = m_tState->SocketIO ( bWrite, bWasWrite );
+		int64_t iRes = m_tState->SocketIO ( bWrite, bWasWrite );
 		if ( iRes==-1 )
 		{
 			LogSocketError ( g_sErrorNetAPI[m_ePhase], m_tState.Ptr(), false );
@@ -231,8 +231,8 @@ NetEvent_e NetReceiveDataAPI_c::Impl_c::LoopReceiveAPI ( DWORD uGotEvents, CSphV
 		if ( m_tState->m_iLeft )
 			continue;
 
-		sphLogDebugv ( "%p pre-API phase=%d, buf=%d, write=%d, sock=%d, tick=%u",
-				this, m_ePhase, m_tState->m_dBuf.GetLength(), (int)bWrite,
+		sphLogDebugv ( "%p pre-API phase=%d, buf=" INT64_FMT ", write=%d, sock=%d, tick=%u",
+				this, m_ePhase, m_tState->m_dBuf.GetLength64(), (int)bWrite,
 				m_pParent->m_iSock, pLoop->m_uTick );
 
 		// FIXME!!! handle persist socket timeout
@@ -263,7 +263,7 @@ NetEvent_e NetReceiveDataAPI_c::Impl_c::LoopReceiveAPI ( DWORD uGotEvents, CSphV
 
 				// unknown command, default response header
 				if ( bBadLength )
-					sphWarning ( "ill-formed client request (length=%d out of bounds)", m_tState->m_iLeft );
+					sphWarning ( "ill-formed client request (length=" INT64_FMT " out of bounds)", m_tState->m_iLeft );
 				// if command is insane, low level comm is broken, so we bail out
 				if ( bBadCommand )
 					sphWarning ( "ill-formed client request (command=%d, SEARCHD_COMMAND_TOTAL=%d)", m_eCommand, SEARCHD_COMMAND_TOTAL );
@@ -271,7 +271,7 @@ NetEvent_e NetReceiveDataAPI_c::Impl_c::LoopReceiveAPI ( DWORD uGotEvents, CSphV
 				m_tState->m_dBuf.Resize ( 0 );
 				CachedOutputBuffer_c tOut;
 				tOut.SwapData ( m_tState->m_dBuf );
-				SendErrorReply ( tOut, "invalid command (code=%d, len=%d)", m_eCommand, m_tState->m_iLeft );
+				SendErrorReply ( tOut, "invalid command (code=%d, len=" INT64_FMT ")", m_eCommand, m_tState->m_iLeft );
 
 				tOut.SwapData ( m_tState->m_dBuf );
 				dNextTick.Add ( new NetSendData_t ( m_tState.LeakPtr (), Proto_e::SPHINX ) );

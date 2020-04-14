@@ -18765,8 +18765,16 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		if ( !hSearchd ( "pid_file" ) )
 			sphFatal ( "mandatory option 'pid_file' not found in 'searchd' section" );
 
+	// read_timeout is now deprecated
 	if ( hSearchd.Exists ( "read_timeout" ) && hSearchd["read_timeout"].intval()>=0 )
 		g_iReadTimeout = hSearchd.GetSTimeS ("read_timeout");
+
+	// network_timeout overrides read_timeout
+	if ( hSearchd.Exists ( "network_timeout" ) && hSearchd["network_timeout"].intval()>=0 )
+	{
+		g_iReadTimeout = hSearchd.GetSTimeS ("network_timeout");
+		g_iWriteTimeout = g_iReadTimeout;
+	}
 
 	if ( hSearchd.Exists ( "sphinxql_timeout" ) && hSearchd["sphinxql_timeout"].intval()>=0 )
 		g_iClientQlTimeout = hSearchd.GetSTimeS("sphinxql_timeout");

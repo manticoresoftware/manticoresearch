@@ -365,12 +365,14 @@ public:
 	virtual void *	GetBufPtr () const { return (char*) m_dBuf.begin();}
 
 protected:
-	void WriteInt ( intptr_t iOff, int iValue )
-	{ WriteT<int> ( iOff, htonl ( iValue ) ); }
+	void WriteInt ( int64_t iOff, int iValue )
+	{
+		WriteT<int> ( iOff, htonl ( iValue ) );
+	}
 
 	CSphVector<BYTE>	m_dBuf;
 
-	template < typename T > void WriteT ( intptr_t iOff, T tValue )
+	template < typename T > void WriteT ( int64_t iOff, T tValue )
 	{
 		sphUnalignedWrite ( m_dBuf.Begin () + iOff, tValue );
 	}
@@ -378,7 +380,7 @@ protected:
 private:
 	template < typename T > void	SendT ( T tValue )							///< (was) protected to avoid network-vs-host order bugs
 	{
-		intptr_t iOff = m_dBuf.GetLength();
+		int64_t iOff = m_dBuf.GetLength64();
 		m_dBuf.AddN ( sizeof(T) );
 		WriteT ( iOff, tValue );
 	}

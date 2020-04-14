@@ -24,13 +24,13 @@ struct NetStateAPI_t
 	bool				m_bVIP = false;
 
 	CSphVector<BYTE>	m_dBuf;
-	int					m_iLeft = 0;
-	int					m_iPos = 0;
+	int64_t				m_iLeft = 0;
+	int64_t				m_iPos = 0;
 
 	NetStateAPI_t ();
 	virtual ~NetStateAPI_t ();
 
-	int SocketIO ( bool bWrite, bool bAfterWrite = false );
+	int64_t SocketIO ( bool bWrite, bool bAfterWrite = false );
 	void CloseSocket ();
 };
 

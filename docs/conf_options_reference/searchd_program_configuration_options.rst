@@ -867,6 +867,26 @@ net_throttle_action
 Defines how many requests are processed on each iteration of the network loop in case of thread_poll worker.
 Default is 0 (unlimited), which should be fine for most users. This is a fine tuning option to control the throughput of the network loop in high load scenarios.
 
+
+.. _network_timeout:
+
+network_timeout
+~~~~~~~~~~~~~~~
+
+Defines network client read and write timeouts, in seconds (or :ref:`suffixed <special_suffixes>`). Optional, default is 5
+seconds. ``searchd`` will forcibly close the client connections which fail to send a query within this timeout.
+Also defines the timeout for the daemon to send the response.
+
+Example:
+
+
+.. code-block:: ini
+
+
+    network_timeout = 1
+
+
+
 .. _node_address:
 
 node_address
@@ -1252,6 +1272,12 @@ Example:
 
 
     read_timeout = 1
+
+
+.. warning::
+   The functionality of this directive is taken over by :ref:`network_timeout`.
+   The option is marked as deprecated and will be removed in future versions.
+
 
 .. _read_unhinted:
 

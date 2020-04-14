@@ -56,7 +56,7 @@ public:
 
 	void						Append ( RowID_t uRowid, DWORD uWeight );
 	void						Finish();
-	int							GetSize() const { return sizeof(*this) + m_dFilters.AllocatedBytes () + m_dData.AllocatedBytes () + m_dWeights.AllocatedBytes (); }
+	int64_t						GetSize() const { return sizeof(*this) + m_dFilters.AllocatedBytes() + m_dData.AllocatedBytes() + m_dWeights.AllocatedBytes(); }
 	void						RankerReset();
 
 private:

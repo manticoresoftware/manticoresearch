@@ -235,7 +235,7 @@ NetEvent_e NetReceiveDataHttp_c::Impl_c::LoopHttp ( DWORD uGotEvents, CSphNetLoo
 	// loop to handle similar operations at once
 	while (true)
 	{
-		int iRes = m_tState->SocketIO ( false );
+		int64_t iRes = m_tState->SocketIO ( false );
 		if ( iRes==-1 )
 		{
 			// FIXME!!! report back to client buffer overflow with 413 error

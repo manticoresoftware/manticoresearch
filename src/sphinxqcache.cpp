@@ -545,7 +545,7 @@ void Qcache_c::EnforceLimits ( bool bSizeOnly )
 
 	// first, enforce size limits
 	int iCur = m_iMruHead;
-	int iBytes = 0;
+	int64_t iBytes = 0;
 	while ( iCur>=0 && m_iUsedBytes>m_iMaxBytes )
 	{
 		assert ( IsValidEntry(iCur) );

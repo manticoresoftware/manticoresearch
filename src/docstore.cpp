@@ -1750,7 +1750,7 @@ BYTE * DocstoreRT_c::LeakPackedDoc ( RowID_t tRowID )
 
 int64_t DocstoreRT_c::AllocatedBytes() const
 {
-	return m_iAllocated + m_dDocs.GetLengthBytes64();
+	return m_iAllocated + m_dDocs.AllocatedBytes();
 }
 
 //////////////////////////////////////////////////////////////////////////

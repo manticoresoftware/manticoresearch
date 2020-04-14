@@ -196,13 +196,13 @@ void RtSegment_t::UpdateUsedRam()
 	FixupRAMCounter ( -m_iUsedRam );
 
 	m_iUsedRam = 0;
-	m_iUsedRam += (int64_t)m_dWords.AllocatedBytes();
-	m_iUsedRam += (int64_t)m_dDocs.AllocatedBytes();
-	m_iUsedRam += (int64_t)m_dHits.AllocatedBytes();
-	m_iUsedRam += (int64_t)m_dBlobs.AllocatedBytes();
-	m_iUsedRam += (int64_t)m_dKeywordCheckpoints.AllocatedBytes();
-	m_iUsedRam += (int64_t)m_dRows.AllocatedBytes();
-	m_iUsedRam += (int64_t)m_dInfixFilterCP.AllocatedBytes();
+	m_iUsedRam += m_dWords.AllocatedBytes();
+	m_iUsedRam += m_dDocs.AllocatedBytes();
+	m_iUsedRam += m_dHits.AllocatedBytes();
+	m_iUsedRam += m_dBlobs.AllocatedBytes();
+	m_iUsedRam += m_dKeywordCheckpoints.AllocatedBytes();
+	m_iUsedRam += m_dRows.AllocatedBytes();
+	m_iUsedRam += m_dInfixFilterCP.AllocatedBytes();
 	m_iUsedRam += m_pDocstore.Ptr() ? m_pDocstore->AllocatedBytes() : 0;
 
 	FixupRAMCounter ( m_iUsedRam );

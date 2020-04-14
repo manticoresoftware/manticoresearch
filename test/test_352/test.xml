@@ -39,6 +39,16 @@ index rt
 	rt_attr_json = json_col
 }
 
+index rt2
+{
+	type = rt
+	path	= <data_path/>/rt2
+	
+	rt_field = name
+	rt_attr_json = js
+	rt_attr_multi	= mva
+	rt_attr_json = j2
+}
 </config>
 
 <db_drop>DROP TABLE IF EXISTS `test_table`</db_drop>
@@ -107,6 +117,19 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select * from rt</sphinxql>
 <sphinxql>update rt set json_col='{"update":"updated"}' where id>=4</sphinxql>
 <sphinxql>select * from rt</sphinxql>
+
+<!-- regression mix of inplace and full updates of blog attributes -->
+<sphinxql>replace into rt2 (id, name, js, mva, j2) values(1, 'test', '{"a": 1}', (1), '{"val":1}');</sphinxql>
+<sphinxql>update rt2 set js['a']=12, mva=(11,13) where id=1</sphinxql>
+<sphinxql>select * from rt2</sphinxql>
+<sphinxql>update rt2 set js['a']=23, j2.val=22 where id=1</sphinxql>
+<sphinxql>select * from rt2</sphinxql>
+<sphinxql>update rt2 set mva=(31,32) where id=1</sphinxql>
+<sphinxql>select * from rt2</sphinxql>
+<sphinxql>update rt2 set js['a']=43, mva=(41,43), j2.val=42 where id=1</sphinxql>
+<sphinxql>select * from rt2</sphinxql>
+<sphinxql>update rt2 set js = '{"a":51, "b":"new thing"}', j2.val=56 where id=1</sphinxql>
+<sphinxql>select * from rt2</sphinxql>
 
 </sphqueries>
 

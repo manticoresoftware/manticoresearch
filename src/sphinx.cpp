@@ -1300,6 +1300,7 @@ bool IndexUpdateHelper_c::Update_FixupData ( UpdateContext_t & tCtx, CSphString 
 			tUpdAttr.m_tLocator = tCol.m_tLocator;
 			tUpdAttr.m_pHistogram = tCtx.m_pHistograms ? tCtx.m_pHistograms->Get(tCol.m_sName) : nullptr;
 			tUpdAttr.m_bExisting = true;
+			tUpdAttr.m_iSchemaAttr = iUpdAttrId;
 
 			tCtx.m_dSchemaUpdateMask.BitSet(iUpdAttrId);
 			tCtx.m_bBlobUpdate |= sphIsBlobAttr ( tCol.m_eAttrType );
@@ -1384,10 +1385,12 @@ bool IndexUpdateHelper_c::Update_InplaceJson ( UpdateContext_t & tCtx, CSphStrin
 
 			if ( sphJsonInplaceUpdate ( eType, uValue, tCtx.m_dUpdatedAttrs[i].m_pExpr, tRow.m_pBlobPool, tRow.m_pRow, !bDryRun ) )
 			{
+				assert ( tCtx.m_dUpdatedAttrs[i].m_iSchemaAttr>=0 );
 				tRow.m_bUpdated = true;
 				tCtx.m_uUpdateMask |= ATTRS_BLOB_UPDATED;
-			}
-			else
+				// reset update bit to copy partial updated JSON into new blob
+				tCtx.m_dSchemaUpdateMask.BitClear ( tCtx.m_dUpdatedAttrs[i].m_iSchemaAttr );
+			} else
 			{
 				if ( bDryRun )
 				{

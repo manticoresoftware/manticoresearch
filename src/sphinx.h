@@ -3150,6 +3150,7 @@ struct UpdatedAttribute_t
 	ESphAttr			m_eAttrType {SPH_ATTR_NONE};
 	TypeConversion_e	m_eConversion {CONVERSION_NONE};
 	bool				m_bExisting {false};
+	int					m_iSchemaAttr = -1;
 };
 
 

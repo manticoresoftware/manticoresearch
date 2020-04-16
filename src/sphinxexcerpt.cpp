@@ -84,6 +84,7 @@ CSphString SnippetQuerySettings_t::AsString() const
 	if ( m_bForcePassages!=tDefault.m_bForcePassages )		tOut.Appendf ( "force_passages=%d",		m_bForcePassages ? 1 : 0 );
 	if ( m_bJsonQuery!=tDefault.m_bJsonQuery )				tOut.Appendf ( "json_query=%d",			m_bJsonQuery ? 1 : 0 );
 	if ( m_ePassageSPZ!=tDefault.m_ePassageSPZ )			tOut.Appendf ( "passage_boundary='%s'",	PassageBoundarySz(m_ePassageSPZ) );
+	if ( m_bPackFields!=tDefault.m_bPackFields )			tOut.Appendf ( "pack_fields=%d",		m_bPackFields ? 1 : 0 );
 
 	if ( m_uFilesMode!=tDefault.m_uFilesMode )
 	{
@@ -1163,7 +1164,7 @@ CSphVector<BYTE> SnippetBuilder_c::PackResult ( SnippetResult_t & tRes, const CS
 	CSphVector<BYTE> dRes;
 	MemoryWriter_c tWriter(dRes);
 
-	if ( m_pQuerySettings->m_bJsonQuery )
+	if ( m_pQuerySettings->m_bPackFields )
 		PackAsData ( tWriter, tRes, dRequestedFields );
 	else
 		PackAsString ( tWriter, dRes, tRes, dRequestedFields );

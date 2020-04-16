@@ -5495,6 +5495,7 @@ void SearchHandler_c::RunLocalSearchMT ( LocalSearch_t &dWork, ThreadLocal_t &tT
 	}
 	assert ( pServed->m_pIndex );
 	m_tHook.SetIndex ( pServed->m_pIndex );
+	m_tHook.SetQueryType ( m_eQueryType );
 
 	// create sorters
 	SphQueueRes_t tQueueRes;
@@ -5661,6 +5662,7 @@ void SearchHandler_c::RunLocalSearches()
 			m_bMultiQueue = true;
 
 		m_tHook.SetIndex ( pServed->m_pIndex );
+		m_tHook.SetQueryType ( m_eQueryType );
 
 		CSphFixedVector<CSphString> dErrors ( dSorters.GetLength() );
 		SphQueueRes_t tQueueRes;

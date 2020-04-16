@@ -13,10 +13,8 @@
 #ifndef _searchdexpr_
 #define _searchdexpr_
 
+#include "sphinx.h"
 #include "sphinxexpr.h"
-
-class CSphIndex;
-class CSphQueryProfile;
 
 /// searchd expression hook
 /// needed to implement functions that are builtin for searchd,
@@ -35,10 +33,12 @@ public:
 
 	void		SetIndex ( CSphIndex * pIndex ) { m_pIndex = pIndex; }
 	void		SetProfiler ( CSphQueryProfile * pProfiler ) { m_pProfiler = pProfiler; }
+	void		SetQueryType ( QueryType_e eType ) { m_eQueryType = eType; }
 
 private:
 	CSphIndex *			m_pIndex = nullptr; /// BLOODY HACK
 	CSphQueryProfile *	m_pProfiler = nullptr;
+	QueryType_e			m_eQueryType = QUERY_API;
 };
 
 

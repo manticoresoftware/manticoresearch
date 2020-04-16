@@ -2279,6 +2279,7 @@ static bool ParseSnippetOptsSphinx ( const JsonObj_c & tSnip, SnippetQuerySettin
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bAllowEmpty, "allow_empty", sError, true ) )			return false;
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bEmitZones, "emit_zones", sError, true ) )			return false;
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bForcePassages, "force_passages", sError, true ) )	return false;
+	if ( !tSnip.FetchBoolItem ( tOpt.m_bPackFields, "pack_fields", sError, true ) )			return false;
 
 	JsonObj_c tBoundary = tSnip.GetStrItem ( "passage_boundary", sError, true );
 	if ( tBoundary )
@@ -2295,6 +2296,7 @@ static bool ParseSnippet ( const JsonObj_c & tSnip, CSphQuery & tQuery, CSphStri
 	SnippetOptions_t tOpts;
 	SnippetQuerySettings_t tOptsSphinx;
 	tOptsSphinx.m_bJsonQuery = true;
+	tOptsSphinx.m_bPackFields = true;
 
 	if ( !ParseSnippetFields ( tSnip, tOpts, sError ) )
 		return false;

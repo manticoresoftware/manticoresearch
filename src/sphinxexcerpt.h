@@ -64,8 +64,9 @@ struct SnippetQuerySettings_t
 	CSphString		m_sBeforeMatchPassage;
 	CSphString		m_sAfterMatchPassage;
 
-	ESphSpz			m_ePassageSPZ { SPH_SPZ_NONE };
-	bool			m_bJsonQuery { false };
+	ESphSpz			m_ePassageSPZ = SPH_SPZ_NONE;
+	bool			m_bJsonQuery = false;
+	bool			m_bPackFields = false;	///< whether to pack field results as data or as string
 
 	void			Setup();
 	CSphString		AsString() const;

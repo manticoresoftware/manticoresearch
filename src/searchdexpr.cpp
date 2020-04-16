@@ -69,6 +69,7 @@ static bool ParseSnippetOption ( const CSphNamedVariant & tVariant, SnippetQuery
 	else if ( sName=="force_passages" )		tOpt.m_bForcePassages = bVal;
 	else if ( sName=="passage_boundary" )	tOpt.m_ePassageSPZ = GetPassageBoundary(sVal);
 	else if ( sName=="json_query" )			tOpt.m_bJsonQuery = bVal;
+	else if ( sName=="pack_fields" )		tOpt.m_bPackFields = bVal;
 	else if ( sName=="exact_phrase" )
 	{
 		sError.SetSprintf ( "exact_phrase option is deprecated" );
@@ -259,14 +260,14 @@ uint64_t Expr_HighlightTraits_c::GetHash ( const ISphSchema &, uint64_t, bool & 
 class Expr_Snippet_c : public Expr_HighlightTraits_c
 {
 public:
-				Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQueryProfile * pProfiler, CSphString & sError );
+				Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQueryProfile * pProfiler, QueryType_e eQueryType, CSphString & sError );
 
 	int			StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const override;
 	ISphExpr *	Clone() const override;
 };
 
 
-Expr_Snippet_c::Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQueryProfile * pProfiler, CSphString & sError )
+Expr_Snippet_c::Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQueryProfile * pProfiler, QueryType_e eQueryType, CSphString & sError )
 	: Expr_HighlightTraits_c ( pIndex, pProfiler, pArglist->GetArg(1) )
 {
 	m_pArgs = pArglist;
@@ -323,6 +324,7 @@ Expr_Snippet_c::Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQu
 			return;
 	}
 
+	m_tSnippetQuery.m_bJsonQuery = eQueryType==QUERY_JSON;
 	m_tSnippetQuery.Setup();
 	if ( !m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery, sError ) )
 		return;
@@ -381,7 +383,7 @@ ISphExpr * Expr_Snippet_c::Clone () const
 class Expr_Highlight_c final : public Expr_HighlightTraits_c
 {
 public:
-				Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQueryProfile * pProfiler, CSphString & sError );
+				Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQueryProfile * pProfiler, QueryType_e eQueryType, CSphString & sError );
 
 	int			StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final;
 	void		Command ( ESphExprCommand eCmd, void * pArg ) final;
@@ -403,7 +405,7 @@ private:
 };
 
 
-Expr_Highlight_c::Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQueryProfile * pProfiler, CSphString & sError )
+Expr_Highlight_c::Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQueryProfile * pProfiler, QueryType_e eQueryType, CSphString & sError )
 	: Expr_HighlightTraits_c ( pIndex, pProfiler, ( pArglist && pArglist->IsArglist() && pArglist->GetNumArgs()==3 ) ? pArglist->GetArg(2) : nullptr )
 {
 	assert ( m_pIndex );
@@ -445,6 +447,7 @@ Expr_Highlight_c::Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, CS
 	else
 		MarkAllFields();
 
+	m_tSnippetQuery.m_bJsonQuery = eQueryType==QUERY_JSON;
 	m_tSnippetQuery.Setup();
 	if ( !m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery, sError ) )
 		return;
@@ -688,11 +691,11 @@ ISphExpr * ExprHook_c::CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage * p
 	switch ( iID )
 	{
 	case HOOK_SNIPPET:
-		pRes = new Expr_Snippet_c ( pLeft, m_pIndex, m_pProfiler, sError );
+		pRes = new Expr_Snippet_c ( pLeft, m_pIndex, m_pProfiler, m_eQueryType, sError );
 		break;
 
 	case HOOK_HIGHLIGHT:
-		pRes = new Expr_Highlight_c ( pLeft, m_pIndex, m_pProfiler, sError );
+		pRes = new Expr_Highlight_c ( pLeft, m_pIndex, m_pProfiler, m_eQueryType, sError );
 		break;
 
 	default:

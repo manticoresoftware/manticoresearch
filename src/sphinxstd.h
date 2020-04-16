@@ -1236,6 +1236,33 @@ public:
 		return true;
 	}
 
+	template <typename FILTER>
+	inline bool all_of ( FILTER && cond ) const NO_THREAD_SAFETY_ANALYSIS
+	{
+		return TestAll(cond);
+	}
+
+
+	template <typename FILTER>
+	inline bool any_of ( FILTER && cond ) const NO_THREAD_SAFETY_ANALYSIS
+	{
+		for ( int i = 0; i<m_iCount; ++i )
+			if ( cond ( m_pData[i] ) )
+				return true;
+
+		return false;
+	}
+
+	template <typename FILTER>
+	inline bool none_of ( FILTER && cond ) const NO_THREAD_SAFETY_ANALYSIS
+	{
+		for ( int i = 0; i<m_iCount; ++i )
+			if ( cond ( m_pData[i] ) )
+				return false;
+
+		return true;
+	}
+
 	/// Apply an action to every member
 	/// Apply ( [] (T& item) {...} );
 	template < typename ACTION >

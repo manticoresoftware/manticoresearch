@@ -6167,7 +6167,8 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 				if ( bInterrupt ) // some earlier job met error; abort.
 					return;
 
-				GuardedCrashQuery_t tCrashQueryClean ( CrashQueryGet() ); // clean up TLS for thread in the pool
+				CrashQuery_t tCleanQuery;
+				GuardedCrashQuery_t tCrashQueryClean ( tCleanQuery ); // clean up TLS for thread in the pool
 				CrashQuerySetTop ( &tCrashQuery ); // set crash info container
 
 				auto iThdID = dTlsData.PrepareLocalTlsContext ( iChunk );

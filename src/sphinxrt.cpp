@@ -7350,8 +7350,9 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 	CSphFixedVector<int> dChunkNames = GetIndexNames ( m_dDiskChunks, true );
 
 	// rename that source index to our last chunk
+	int iChunk = dChunkNames.Last();
 	CSphString sChunk;
-	sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), dChunkNames.Last() );
+	sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), iChunk );
 	if ( !pIndex->Rename ( sChunk.cstr() ) )
 	{
 		sError.SetSprintf ( "ATTACH failed, %s", pIndex->GetLastError().cstr() );
@@ -7375,6 +7376,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 	sName.SetSprintf ( "%s_%d", m_sIndexName.cstr(), m_dDiskChunks.GetLength() );
 	pIndex->SetName ( sName.cstr() );
 	pIndex->SetBinlog ( false );
+	pIndex->m_iChunk = iChunk;
 
 	// FIXME? what about copying m_TID etc?
 

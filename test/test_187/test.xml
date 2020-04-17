@@ -161,6 +161,67 @@ index rt10
 	rt_attr_uint	= gid
 } 
 
+source src_d11
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id+10 as id, title, gid from test_table where id=1
+	sql_attr_uint	= gid
+}
+
+source src_d12
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id+20 as id, title, gid from test_table where id=2
+	sql_attr_uint	= gid
+}
+
+source src_d13
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id+30 as id, title, gid from test_table where id=3
+	sql_attr_uint	= gid
+}
+
+source src_d14
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id+40 as id, title, gid from test_table where id=4
+	sql_attr_uint	= gid
+}
+
+
+index d11
+{
+	source			= src_d11
+	path			= <data_path/>/d11
+	charset_table	= a..z, A..Z->a..z
+}
+
+index d12
+{
+	source			= src_d12
+	path			= <data_path/>/d12
+	charset_table	= a..z, A..Z->a..z
+}
+
+index d13
+{
+	source			= src_d13
+	path			= <data_path/>/d13
+	charset_table	= a..z, A..Z->a..z
+}
+
+index d14
+{
+	source			= src_d14
+	path			= <data_path/>/d14
+	charset_table	= a..z, A..Z->a..z
+}
+
 </config>
 
 <db_create>
@@ -227,6 +288,14 @@ INSERT INTO test_table VALUES
 <sphinxql>ATTACH INDEX disk10 TO RTINDEX rt10 WITH TRUNCATE</sphinxql>
 <sphinxql>SELECT * FROM rt10</sphinxql>
 
+<!-- regression disk chunks replace prevoius -->
+<sphinxql>ATTACH INDEX d11 TO RTINDEX rt_d1</sphinxql>
+<sphinxql>ATTACH INDEX d12 TO RTINDEX rt_d1</sphinxql>
+<sphinxql>ATTACH INDEX d13 TO RTINDEX rt_d1</sphinxql>
+<sphinxql>ATTACH INDEX d14 TO RTINDEX rt_d1</sphinxql>
+<sphinxql>SELECT * FROM rt_d1 ORDER by id ASC</sphinxql>
+<sphinxql>OPTIMIZE INDEX rt option sync=1</sphinxql>
+<sphinxql>SELECT * FROM rt_d1 ORDER by id ASC</sphinxql>
 </sphqueries>
 
 </test>

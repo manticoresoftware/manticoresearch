@@ -3409,6 +3409,7 @@ public:
 
 public:
 	int64_t						m_iTID = 0;				///< last committed transaction id
+	int							m_iChunk = 0;
 
 	int							m_iExpandKeywords = KWE_DISABLED;	///< enable automatic query-time keyword expansion (to "( word | =word | *word* )")
 	int							m_iExpansionLimit = 0;

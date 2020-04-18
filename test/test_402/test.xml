@@ -48,7 +48,7 @@ searchd
 
 <!-- request to node 1 -->
 <sphinxql d="1">SHOW TABLES</sphinxql> <!-- just to reconnect to agent1 -->
-<sphinxql d="1" system="wait-status-cluster_test_last_committed" wait_value="6"/>
+<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="6"/>
 <sphinxql d="1">SELECT * FROM test:rt1</sphinxql>
 <sphinxql d="1">SELECT * FROM test:rt2</sphinxql>
 <sphinxql d="1">SELECT * FROM test:rt3</sphinxql>
@@ -60,7 +60,7 @@ searchd
 
 <!-- request to node 0 -->
 <sphinxql d="0">SHOW TABLES</sphinxql> <!-- just to reconnect to agent0 -->
-<sphinxql d="0" system="wait-status-cluster_test_last_committed" wait_value="8"/>
+<sphinxql d="0" system="wait-status" status="cluster_test_last_committed" wait_value="8"/>
 <sphinxql d="0">SELECT * FROM test:rt3</sphinxql>
 
 <!-- cleanup -->

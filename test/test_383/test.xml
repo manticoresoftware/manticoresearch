@@ -88,7 +88,7 @@ searchd
 <!-- start node 0 -->
 <sphinxql d="0" system="start-agent"/>
 <sphinxql d="0">SHOW TABLES</sphinxql> <!-- just to reconnect to agent0 -->
-<sphinxql d="0" system="wait-cluster-ready-test"/>
+<sphinxql d="0" system="wait-ready" cluster="test"/>
 <sphinxql d="0">SELECT * FROM test:rt2</sphinxql>
 
 <!-- request to node 0 -->
@@ -100,7 +100,7 @@ searchd
 
 <!-- request to node 2 -->
 <sphinxql d="2">SHOW TABLES</sphinxql> <!-- just to reconnect to agent2 -->
-<sphinxql d="2" system="wait-status-cluster_test_last_committed" wait_value="14"/>
+<sphinxql d="2" system="wait-status" status="cluster_test_last_committed" wait_value="14"/>
 <sphinxql d="2">SELECT * FROM test:rt2</sphinxql>
 <sphinxql d="2">SELECT * FROM test:rtc</sphinxql>
 
@@ -110,7 +110,7 @@ searchd
 
 <!-- request to node 1 -->
 <sphinxql d="1">SHOW TABLES</sphinxql> <!-- just to reconnect to agent1 -->
-<sphinxql d="1" system="wait-status-cluster_test_last_committed" wait_value="15"/>
+<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="15"/>
 <sphinxql d="1">SELECT * FROM test:rtc</sphinxql>
 
 <!-- cleanup -->

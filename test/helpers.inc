@@ -835,6 +835,13 @@ function GetFirstChildValue ( $node, $name, $default="" )
 	return is_null($child) ? $default : $child->nodeValue;
 }
 
+function ArrVal ( $var, $name, $default="" )
+{
+    if ( array_key_exists ( $name, $var ) )
+        return $var[$name];
+    return $default;
+}
+
 function ConnectSpecificQL($agent, $vip=false)
 {
 	global $agents;
@@ -1338,8 +1345,8 @@ class SphinxConfig
 	{
 		$len = $node->attributes->length;
 		if ( $len == 0 )
-			return false;
-		$vals = array();
+			return array();
+		$vals = array ();
 		foreach( AttrArray( $node ) as $attr )
 		{
 			$vals[$attr->nodeName]=$attr->nodeValue;
@@ -1689,9 +1696,11 @@ class SphinxConfig
 		    $s = preg_replace (
                 [
                     '/error when sending data: WSA error 10057/', // windows
+                    '/connect timed out/', // also windows
                     '/receiving failure .*$/' // linux (errno 111) and mac (errno 64)
                 ],
                 [
+                    "receiving failure (refused or timedout, substituted)",
                     "receiving failure (refused or timedout, substituted)",
                     "receiving failure (refused or timedout, substituted)"
                 ], $s );
@@ -1859,11 +1868,6 @@ class SphinxConfig
 			$error = mysqli_errno( $connection );
 			$query_result["errno"] = $error;
 			$query_result["error"] = $this->FixupErrorMessage ( $error, mysqli_error( $connection ) );
-
-			// Windows 7 fixup
-			$win7_replace_pos = strpos ( $query_result["error"], "error when sending data: WSA error 10057" );
-			if ( $query_result["errno"]==1064 && $win7_replace_pos!==FALSE )
-				$query_result["error"] = substr ( $query_result["error"], 0, $win7_replace_pos ) . "connect timed out";
 		}
 		else
 		{
@@ -1889,74 +1893,59 @@ class SphinxConfig
 	{
 		global $g_pick_query, $agents, $index_data_path;
 
-		$query_ref;
-		$sleep_agent=0;
-		$use_agent=0;
-		$vip_connection=0;
-		$system_cmd = "";
-		$wait_value = 0;
+		$attrs = ArrVal ( $query, 1, [] );
+		$query = $query[0];
+		$query_ref = $query;
 
-		if ($query[1])
-		{
-			$cluster_connect = -1;
-			$cluster_path;
-			foreach ( $query[1] as $k => $v )
-			{
-				if ($k=="d")
-					$use_agent = $v;
-				elseif ($k=="sleep")
-					$sleep_agent = $v;
-				elseif ($k=="vip")
-					$vip_connection = $v;
-				elseif ($k=="system")
-					$system_cmd = $v;
-				elseif ($k=="cluster_connect")
-					$cluster_connect = $v;
-				elseif ($k=="cluster_path")
-					$cluster_path = $v;
-				elseif ($k=="wait_value")
-					$wait_value = $v;
-			}
 
-			$query = $query[0];
-			if ( $cluster_connect !== -1 )
-				$query_ref = $query;
-				
-			if ( $cluster_connect !== -1 )
-			{
-				$address = $agents[$cluster_connect]["address"] . ":" . $agents[$cluster_connect]["port"];
-				$query = str_replace ( "%addr_connect%", $address, $query );
-			}
+        $sleep_agent=ArrVal ($attrs, "sleep", 0);
+        $use_agent=ArrVal ($attrs, "d", 0);
+        $vip_connection=ArrVal ($attrs, "vip", 0);
+        $system_cmd = ArrVal ($attrs, "system");
+        $wait_value = ArrVal ($attrs, "wait_value", 0);
+        $cluster_connect = ArrVal ($attrs, "cluster_connect", -1);
+        $cluster_path = ArrVal ($attrs, "cluster_path");
+        $cluster_name = ArrVal ($attrs, "cluster");
+        $cluster_status = ArrVal ($attrs, "status");
 
-			if ( isset ( $cluster_path ) )
-			{
-				$data_path = $agents[$use_agent]["data_path"];
-				$cluster_dir = "$index_data_path/$data_path/$cluster_path";
-				if ( !file_exists ( $cluster_dir ) )
-					mkdir ( $cluster_dir );
-						
-				$query = str_replace ( "%cluster_path%", $cluster_path, $query );
-				unset ( $cluster_path );
-			}
+		// $query - array, 0 is data, 1 is attributes, 2 is 'is_http' bool.
+
+        $agent = $agents[$use_agent];
+        $daemon = ArrVal ($agent, "daemon", null);
+
+		if ($cluster_connect>=0) {
+            $cluster = $agents[$cluster_connect];
+            $address = $cluster["address"] . ":" . $cluster["port"];
+            $query = str_replace("%addr_connect%", $address, $query);
+        }
+
+		if ( !empty($cluster_path) ) {
+            $data_path = $agent["data_path"];
+            $cluster_dir = "$index_data_path/$data_path/$cluster_path";
+            if ( !file_exists ( $cluster_dir ) )
+                mkdir ( $cluster_dir );
+
+            $query = str_replace ( "%cluster_path%", $cluster_path, $query );
 		}
-		else
-			$query = $query[0];
 			
 		if ( !empty($system_cmd) )
 		{
-			$wait_cmd_name = "wait-cluster-ready-";
-			$wait_status_name = "wait-status-";
 			$status = '';
 			if ( $system_cmd=="restart-daemon" )
 			{
 			    if ($connection)
 				    mysqli_close($connection);
-				$status = RestartDaemon ($status);
+				$status = RestartDaemon ();
 				$connection = ConnectSpecificQL($use_agent);
+			} else if ( $system_cmd=="kill-daemon" )
+			{
+			    if ($connection)
+                    mysqli_close($connection);
+                KillSearchd ( 'config.conf', 'searchd.pid', 'KILL', false );
 			} else if ( $system_cmd=="start-agent" )
 			{
-				$start = StartSearchd ( $agents[$use_agent]["daemon"]["config"], $agents[$use_agent]["daemon"]["error"], $agents[$use_agent]["daemon"]["pid"], $error,
-					$agents[$use_agent]["daemon"]["watchdog"], $agents[$use_agent]["daemon"]["address"], $agents[$use_agent]["daemon"]["port"] );
+				$start = StartSearchd ( $daemon["config"], $daemon["error"], $daemon["pid"], $error,
+					$daemon["watchdog"], $daemon["address"], $daemon["port"] );
 				if ( $start == 0 || $start == 2 )
 					$status .= "; start=ok" . ', return code=' . $start;
 				else
@@ -1966,16 +1955,15 @@ class SphinxConfig
 				$old_agent = -1;
 			} else if ( $system_cmd=="stop-agent" )
 			{
-				$stop = StopWaitSearchd ($agents[$use_agent]["daemon"]["config"], $agents[$use_agent]["daemon"]["pid"]);
+				$stop = StopWaitSearchd ($daemon["config"], $daemon["pid"]);
 				$status = 'stop=' . ( $stop==0 ? 'ok' : 'error' ) . ', return code=' . $stop;
 				mysqli_close($connection);
 				$old_agent = -1;
-			} else if ( strpos($system_cmd, $wait_cmd_name)===0 )
+			} else if ( $system_cmd=="wait-ready" )
 			{
-				$name = substr ($system_cmd, strlen($wait_cmd_name));
 				$ql = new QLClient();
 				$ql->SetConnection($connection);
-				$like_name = "cluster_" . $name . "_node_state";
+				$like_name = "cluster_" . $cluster_name . "_node_state";
 				$wait_started = MyMicrotime();
 				while ( true )
 				{
@@ -1999,15 +1987,14 @@ class SphinxConfig
 						break;
 					}
 				}
-			} else if ( strpos($system_cmd, $wait_status_name)===0 )
+			} else if ( $system_cmd=="wait-status" )
 			{
-				$name = substr ($system_cmd, strlen($wait_status_name));
 				$ql = new QLClient();
 				$ql->SetConnection($connection);
 				$wait_started = MyMicrotime();
 				while ( true )
 				{
-					$status = $ql->Query("show status like '$name'");
+					$status = $ql->Query("show status like '$cluster_status'");
 					$delim_pos = strpos($status, "|" );
 					if ( $delim_pos>0 )
 					{
@@ -2096,12 +2083,8 @@ class SphinxConfig
 		if ( strpos ($query, ";")===FALSE ) // process a single-query line
 		// FIXME! If a query contains ';' it would be false positive for such codepath.
 		{
-			if ( isset ( $query_ref ) )
-			{
-				$query_result["sphinxql"]=$query_ref;
-				unset ( $query_ref );
-			} else
-				$query_result["sphinxql"]=$query;
+			$query_result["sphinxql"]=$query_ref;
+			unset ( $query_ref );
 
 			$this->PostprocessQlResult ( $query, $query_result, $connection, $no_time );
 			$this->PickResult($query_result);

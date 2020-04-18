@@ -62,13 +62,13 @@ searchd
 <!-- start node 2 and check changes from node 0 are here-->
 <sphinxql d="2" system="start-agent"/>
 <sphinxql d="2">SHOW TABLES</sphinxql> <!-- just for reconnect -->
-<sphinxql d="2" system="wait-cluster-ready-test"/>
+<sphinxql d="2" system="wait-ready" cluster="test"/>
 <sphinxql d="2">SELECT * FROM test:pq1</sphinxql>
 
 <!-- start node 1 -->
 <sphinxql d="1" system="start-agent"/>
 <sphinxql d="1">SHOW TABLES</sphinxql> <!-- just for reconnect -->
-<sphinxql d="1" system="wait-cluster-ready-test"/>
+<sphinxql d="1" system="wait-ready" cluster="test"/>
 <sphinxql d="1">SELECT * FROM test:pq1</sphinxql>
 <sphinxql d="1">INSERT INTO test:pq1 VALUES('test 12')</sphinxql>
 

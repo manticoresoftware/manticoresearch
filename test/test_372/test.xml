@@ -12,7 +12,7 @@
 searchd
 {
 	<searchd_settings/>
-	data_dir = <data_path path="data0"></data_path>
+	data_dir = <data_path path="data0"/>
 	server_id = <agent_id/>
 }
 </agent0>
@@ -20,7 +20,7 @@ searchd
 searchd
 {
 	<searchd_settings/>
-	data_dir = <data_path path="data1"></data_path>
+	data_dir = <data_path path="data1"/>
 	server_id = <agent_id/>
 }
 </agent1>
@@ -28,7 +28,7 @@ searchd
 searchd
 {
 	<searchd_settings/>
-	data_dir = <data_path path="data2"></data_path>
+	data_dir = <data_path path="data2"/>
 	server_id = <agent_id/>
 }
 </agent2>
@@ -94,7 +94,7 @@ searchd
 <!-- start node 2 -->
 <sphinxql d="2" system="start-agent"/>
 <sphinxql d="2">SHOW TABLES</sphinxql>
-<sphinxql d="2" system="wait-cluster-ready-test"/>
+<sphinxql d="2" system="wait-ready" cluster="test"/>
 <sphinxql d="2">SELECT * FROM pq1</sphinxql>
 <sphinxql d="2">SELECT * FROM pq2</sphinxql>
 

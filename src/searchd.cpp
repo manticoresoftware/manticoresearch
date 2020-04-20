@@ -15556,11 +15556,26 @@ void HandleMysqlOptimize ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 
 void HandleMysqlSelectSysvar ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const SessionVars_t & tVars )
 {
-	bool bStr = ( tStmt.m_tQuery.m_dItems.FindFirst ( [] ( const CSphQueryItem & tItem ) { return tItem.m_sExpr=="@@session.last_insert_id"; } ) );
-
 	tOut.HeadBegin ( tStmt.m_tQuery.m_dItems.GetLength() );
 	ARRAY_FOREACH ( i, tStmt.m_tQuery.m_dItems )
-		tOut.HeadColumn ( tStmt.m_tQuery.m_dItems[i].m_sAlias.cstr(), bStr ? MYSQL_COL_STRING : MYSQL_COL_LONG );
+	{
+		const CSphString & sVar = tStmt.m_tQuery.m_dItems[i].m_sExpr;
+
+		// MySQL Connector/J, really expects an answer here
+		if ( sVar=="@@session.auto_increment_increment" )
+			tOut.HeadColumn ( tStmt.m_tQuery.m_dItems[i].m_sAlias.cstr(), MYSQL_COL_LONG );
+		else if ( sVar=="@@character_set_client" || sVar=="@@character_set_connection" )
+			tOut.HeadColumn ( tStmt.m_tQuery.m_dItems[i].m_sAlias.cstr(), MYSQL_COL_STRING );
+		// MySQL Go connector, really expects an answer here
+		else if ( sVar=="@@max_allowed_packet" )
+			tOut.HeadColumn ( tStmt.m_tQuery.m_dItems[i].m_sAlias.cstr(), MYSQL_COL_LONG );
+		else if ( sVar=="@@session.last_insert_id" )
+			tOut.HeadColumn ( tStmt.m_tQuery.m_dItems[i].m_sAlias.cstr(), MYSQL_COL_LONG );
+		else if ( sVar=="@@lower_case_table_names")
+			tOut.HeadColumn ( tStmt.m_tQuery.m_dItems[i].m_sAlias.cstr(), MYSQL_COL_LONG );
+		else
+			tOut.HeadColumn ( tStmt.m_tQuery.m_dItems[i].m_sAlias.cstr(), MYSQL_COL_STRING );
+	}
 	tOut.HeadEnd();
 
 	ARRAY_FOREACH ( i, tStmt.m_tQuery.m_dItems )

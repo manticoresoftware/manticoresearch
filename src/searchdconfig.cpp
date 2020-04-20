@@ -91,6 +91,15 @@ void ModifyDaemonPaths ( CSphConfigSection & hSearchd )
 	}
 }
 
+
+// support for old-style absolute paths
+void MakeRelativePath ( CSphString & sPath )
+{
+	bool bAbsolute = strchr ( sPath.cstr(), '/' ) || strchr ( sPath.cstr(), '\\' );
+	if ( !bAbsolute )
+		sPath.SetSprintf ( "%s/%s/%s", GetDataDirInt().cstr(), sPath.cstr(), sPath.cstr() );
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 class FilenameBuilder_c : public FilenameBuilder_i
@@ -424,6 +433,8 @@ bool IndexDesc_t::Parse ( const JsonObj_c & tJson, CSphString & sWarning, CSphSt
 		if ( !tJson.FetchStrItem ( m_sPath, "path", sError ) )
 			return false;
 
+		MakeRelativePath(m_sPath);
+
 		if ( !tJson.FetchBoolItem ( m_bFromReplication, "from_replication", sError, true ) )
 			return false;
 	}
@@ -441,7 +452,8 @@ void IndexDesc_t::Save ( JsonObj_c & tIndexes ) const
 		m_tDistr.Save(tIdx);
 	else
 	{
-		tIdx.AddStr ( "path", m_sPath );
+		CSphString sPath = m_sPath;
+		tIdx.AddStr ( "path", StripPath(sPath) );
 		tIdx.AddBool( "from_replication", m_bFromReplication );
 	}
 

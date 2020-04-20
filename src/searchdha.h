@@ -32,14 +32,14 @@ bool LoadExFunctions ();
 // SOME SHARED GLOBAL VARIABLES
 /////////////////////////////////////////////////////////////////////////////
 
-extern int				g_iReadTimeout; // defined in searchd.cpp
+extern int				g_iReadTimeoutS; // defined in searchd.cpp
 
-extern int64_t			g_iPingInterval;
-extern DWORD			g_uHAPeriodKarma;		// by default use the last 1 minute statistic to determine the best HA agent
+extern int64_t			g_iPingIntervalUs;
+extern DWORD			g_uHAPeriodKarmaS;		// by default use the last 1 minute statistic to determine the best HA agent
 extern int				g_iPersistentPoolSize;
 
-extern int				g_iAgentConnectTimeout;
-extern int				g_iAgentQueryTimeout;	// global (default). May be override by index-scope values, if one specified
+extern int				g_iAgentConnectTimeoutMs;
+extern int				g_iAgentQueryTimeoutMs;	// global (default). May be override by index-scope values, if one specified
 extern bool				g_bHostnameLookup;
 
 const int	STATS_DASH_PERIODS = 15;	///< store the history for last periods
@@ -391,7 +391,7 @@ private:
 using MultiAgentDescRefPtr_c = CSphRefcountedPtr<MultiAgentDesc_c>;
 
 extern int g_iAgentRetryCount;
-extern int g_iAgentRetryDelay;
+extern int g_iAgentRetryDelayMs;
 
 class Reporter_i : public ISphRefcountedMT
 {
@@ -509,8 +509,8 @@ public:
 	int				m_iSock = -1;
 
 	// time-tracking and timeout settings
-	int				m_iMyConnectTimeout { g_iAgentConnectTimeout };	///< populated from parent distr
-	int				m_iMyQueryTimeout { g_iAgentQueryTimeout };		///< in msec
+	int				m_iMyConnectTimeoutMs { g_iAgentConnectTimeoutMs };	///< populated from parent distr
+	int				m_iMyQueryTimeoutMs { g_iAgentQueryTimeoutMs };		///< in msec
 	int64_t			m_iStartQuery = 0;	///< the timestamp of the latest request // actualized
 	int64_t			m_iEndQuery = 0;	///< the timestamp of the end of the latest operation // actual
 	int64_t			m_iWall = 0;		///< wall time spent vs this agent // actualized
@@ -564,10 +564,10 @@ private:
 	MultiAgentDescRefPtr_c m_pMultiAgent { nullptr }; ///< my manager, could turn me into another mirror
 	int			m_iRetries = 0;						///< initialized to max num of tries. 0 mean 1 try, no re-tries.
 	int			m_iMirrorsCount = 1;
-	int			m_iDelay { g_iAgentRetryDelay };	///< delay between retries
+	int			m_iDelay { g_iAgentRetryDelayMs };	///< delay between retries
 
 	// active timeout (directly used by poller)
-	int64_t		m_iPoolerTimeout = -1;	///< m.b. query, or connect+query when TCP_FASTOPEN
+	int64_t			m_iPoolerTimeoutUS = -1;	///< m.b. query, or connect+query when TCP_FASTOPEN
 	ETimeoutKind 	m_eTimeoutKind { TIMEOUT_UNKNOWN };
 
 	// receiving buffer stuff
@@ -675,8 +675,8 @@ struct DistributedIndex_t : public ServedStats_c, public ISphRefcountedMT
 {
 	CSphVector<MultiAgentDesc_c *> m_dAgents;	///< remote agents
 	StrVec_t m_dLocal;								///< local indexes
-	int m_iAgentConnectTimeout		{ g_iAgentConnectTimeout };	///< in msec
-	int m_iAgentQueryTimeout		{ g_iAgentQueryTimeout };	///< in msec
+	int m_iAgentConnectTimeoutMs		{ g_iAgentConnectTimeoutMs };	///< in msec
+	int m_iAgentQueryTimeoutMs		{ g_iAgentQueryTimeoutMs };	///< in msec
 	int m_iAgentRetryCount			= 0;			///< overrides global one
 	bool m_bDivideRemoteRanges		= false;		///< whether we divide big range onto agents or not
 	HAStrategies_e m_eHaStrategy	= HA_DEFAULT;	///< how to select the best of my agents

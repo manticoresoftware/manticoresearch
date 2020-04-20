@@ -12,7 +12,7 @@
 
 #include "netreceive_api.h"
 
-extern int g_iClientTimeout; // from searchd.cpp
+extern int g_iClientTimeoutS; // from searchd.cpp
 extern volatile bool g_bMaintenance;
 extern int g_iThdQueueMax;
 static auto& g_bShutdown = sphGetShutdown ();
@@ -149,10 +149,10 @@ NetEvent_e NetReceiveDataAPI_c::Impl_c::SetupReceiveAPI ( int64_t tmNow )
 
 	if ( !m_tState->m_bKeepSocket )
 	{
-		m_pParent->m_iTimeoutTime = tmNow + MS2SEC * g_iReadTimeout;
+		m_pParent->m_iTimeoutTimeUS = tmNow +S2US * g_iReadTimeoutS;
 	} else
 	{
-		m_pParent->m_iTimeoutTime = tmNow + MS2SEC * g_iClientTimeout;
+		m_pParent->m_iTimeoutTimeUS = tmNow +S2US * g_iClientTimeoutS;
 	}
 
 	return ( m_ePhase==AAPI_HANDSHAKE_OUT ? NE_OUT : NE_IN );

@@ -14,7 +14,7 @@
 #include "netreceive_httpcommon.h"
 #include "searchdssl.h"
 
-extern int g_iClientTimeout; // from searchd.cpp
+extern int g_iClientTimeoutS; // from searchd.cpp
 extern volatile bool g_bMaintenance;
 static auto& g_bShutdown = sphGetShutdown ();
 
@@ -49,7 +49,7 @@ NetEvent_e NetReplyHttps_t::Setup ( int64_t tmNow )
 
 	if ( !m_bContinue )
 	{
-		m_iTimeoutTime = tmNow + MS2SEC * g_iWriteTimeout;
+		m_iTimeoutTimeUS = tmNow +S2US * g_iReadTimeoutS;
 
 		assert ( m_tState->m_dBuf.GetLength() );
 		if ( !SslSend ( m_pState->m_pSession, m_pState->m_dDecrypted, m_pState->m_dBuf ) )
@@ -110,11 +110,11 @@ NetEvent_e NetReceiveDataHttps_c::Impl_c::SetupHttps ( int64_t tmNow )
 
 	if ( !m_tState->m_bKeepSocket )
 	{
-		m_pParent->m_iTimeoutTime = tmNow + MS2SEC * g_iReadTimeout;
+		m_pParent->m_iTimeoutTimeUS = tmNow +S2US * g_iReadTimeoutS;
 	}
 	else
 	{
-		m_pParent->m_iTimeoutTime = tmNow + MS2SEC * g_iClientTimeout;
+		m_pParent->m_iTimeoutTimeUS = tmNow +S2US * g_iClientTimeoutS;
 	}
 	m_bWrite = false;
 

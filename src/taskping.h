@@ -14,7 +14,7 @@
 
 /*
  * How async smart pinger works:
- * 1. We charge oneshot task to be run after host timestamp + g_iPingInterval.
+ * 1. We charge oneshot task to be run after host timestamp + g_iPingIntervalUs.
  * 2. On timeout engaged, the task is REMOVED from scheduler and performed.
  * 3. We check, whether the last host access timestamp is old enough to run the ping action.
  *  (if nothing, but ping in game, it seems that first check will success. If other queries invokes the host

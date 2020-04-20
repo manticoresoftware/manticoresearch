@@ -69,9 +69,9 @@ static void PingWorker ( void* pCookie )
 	pConn->m_tDesc.CloneFromHost ( pHost->m_tHost );
 	assert ( !pHost->m_tHost.m_pDash );
 
-	// fixme! Review the timeouts (g_iPingInterval for both came from legacy)
-	pConn->m_iMyConnectTimeout = g_iPingInterval/1000;
-	pConn->m_iMyQueryTimeout = g_iPingInterval/1000;
+	// fixme! Review the timeouts (g_iPingIntervalUs for both came from legacy)
+	pConn->m_iMyConnectTimeoutMs = g_iPingIntervalUs/1000;
+	pConn->m_iMyQueryTimeoutMs = g_iPingIntervalUs/1000;
 	pConn->m_tDesc.m_pDash = pHost;
 
 	// Run network task

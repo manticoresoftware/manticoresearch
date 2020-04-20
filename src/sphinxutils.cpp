@@ -565,24 +565,24 @@ int64_t CSphConfigSection::GetUsTime64Ms ( const char* sKey, int64_t iDefault ) 
 
 int CSphConfigSection::GetSTimeS ( const char* sKey, int iDefault ) const
 {
-	int64_t iTime = GetUsTime64S ( sKey, iDefault*1000000 ) / 1000000ll;
-	if ( iTime>INT_MAX )
+	int64_t iTimeUs = GetUsTime64S ( sKey, iDefault*1000000 ) / 1000000ll;
+	if ( iTimeUs>INT_MAX )
 	{
-		sphWarning ( "'%s = " INT64_FMT "' clamped to %d(INT_MAX)", sKey, iTime, INT_MAX );
-		iTime = INT_MAX;
+		sphWarning ( "'%s = " INT64_FMT "' clamped to %d(INT_MAX)", sKey, iTimeUs, INT_MAX );
+		iTimeUs = INT_MAX;
 	}
-	return ( int ) iTime;
+	return ( int ) iTimeUs;
 }
 
 int CSphConfigSection::GetMsTimeMs ( const char* sKey, int iDefault ) const
 {
-	int64_t iTime = GetUsTime64Ms ( sKey, iDefault*1000 ) / 1000ll;
-	if ( iTime>INT_MAX )
+	int64_t iTimeUs = GetUsTime64Ms ( sKey, iDefault*1000 ) / 1000ll;
+	if ( iTimeUs>INT_MAX )
 	{
-		sphWarning ( "'%s = " INT64_FMT "' clamped to %d(INT_MAX)", sKey, iTime, INT_MAX );
-		iTime = INT_MAX;
+		sphWarning ( "'%s = " INT64_FMT "' clamped to %d(INT_MAX)", sKey, iTimeUs, INT_MAX );
+		iTimeUs = INT_MAX;
 	}
-	return ( int ) iTime;
+	return ( int ) iTimeUs;
 }
 
 //////////////////////////////////////////////////////////////////////////

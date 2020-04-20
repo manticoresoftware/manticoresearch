@@ -23098,7 +23098,7 @@ bool CSphSource_SQL::RunQueryStep ( const char * sQuery, CSphString & sError )
 	static const int iBufSize = 32;
 	const char * sRes = nullptr;
 
-	sphSleepMsec ( m_tParams.m_iRangedThrottle );
+	sphSleepMsec ( m_tParams.m_iRangedThrottleMs );
 
 	//////////////////////////////////////////////
 	// range query with $start/$end interpolation

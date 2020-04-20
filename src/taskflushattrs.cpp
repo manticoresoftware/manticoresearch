@@ -114,15 +114,15 @@ int CommandFlush () EXCLUDES ( MainThread )
 }
 
 
-static int64_t g_iAttrFlushPeriod = 0;            // in useconds; 0 means "do not flush"
+static int64_t g_iAttrFlushPeriodUs = 0;            // in useconds; 0 means "do not flush"
 void SetAttrFlushPeriod ( int64_t iPeriod )
 {
-	g_iAttrFlushPeriod = iPeriod;
+	g_iAttrFlushPeriodUs = iPeriod;
 }
 
 void ScheduleFlushAttrs ()
 {
-	if ( !g_iAttrFlushPeriod )
+	if ( !g_iAttrFlushPeriodUs )
 		return;
 
 	static TaskID iScheduledSave = -1;
@@ -131,7 +131,7 @@ void ScheduleFlushAttrs ()
 		iScheduledSave = TaskManager::RegisterGlobal ( "Sheduled save indexes",
 		[] (void*) // save task lambda
 		{
-			if ( (g_tFlush.m_iLastCheckFinishedTime + g_iAttrFlushPeriod - 1000 )>sphMicroTimer() )
+			if ( (g_tFlush.m_iLastCheckFinishedTime + g_iAttrFlushPeriodUs - 1000 )>sphMicroTimer() )
 				ScheduleFlushAttrs ();
 			else
 				SaveIndexesMT();
@@ -141,7 +141,7 @@ void ScheduleFlushAttrs ()
 	if ( !g_tFlush.m_iLastCheckFinishedTime )
 		g_tFlush.m_iLastCheckFinishedTime = sphMicroTimer ();
 
-	TaskManager::ScheduleJob ( iScheduledSave, g_tFlush.m_iLastCheckFinishedTime + g_iAttrFlushPeriod);
+	TaskManager::ScheduleJob ( iScheduledSave, g_tFlush.m_iLastCheckFinishedTime + g_iAttrFlushPeriodUs);
 }
 
 // called from main shutdown and expects problem reporting

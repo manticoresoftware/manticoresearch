@@ -14,7 +14,7 @@
 #include "netreceive_https.h" // for MakeReplyHttps_t
 #include "netreceive_httpcommon.h"
 
-extern int g_iClientTimeout; // from searchd.cpp
+extern int g_iClientTimeoutS; // from searchd.cpp
 extern volatile bool g_bMaintenance;
 static auto& g_bShutdown = sphGetShutdown ();
 
@@ -204,10 +204,10 @@ NetEvent_e NetReceiveDataHttp_c::Impl_c::SetupHttp ( int64_t tmNow )
 
 	if ( !m_tState->m_bKeepSocket )
 	{
-		m_pParent->m_iTimeoutTime = tmNow + MS2SEC * g_iReadTimeout;
+		m_pParent->m_iTimeoutTimeUS = tmNow + S2US * g_iReadTimeoutS;
 	} else
 	{
-		m_pParent->m_iTimeoutTime = tmNow + MS2SEC * g_iClientTimeout;
+		m_pParent->m_iTimeoutTimeUS = tmNow +S2US * g_iClientTimeoutS;
 	}
 	return NE_IN;
 }

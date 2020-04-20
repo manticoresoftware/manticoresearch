@@ -2055,7 +2055,7 @@ struct CSphSourceParams_SQL
 	CSphVector<CSphColumnInfo>		m_dAttrs;
 	StrVec_t						m_dFileFields;
 
-	int								m_iRangedThrottle = 0;
+	int								m_iRangedThrottleMs = 0;
 	int								m_iMaxFileBufferSize = 0;
 	ESphOnFileFieldError			m_eOnFileFieldError {FFE_IGNORE_FIELD};
 
@@ -2627,7 +2627,7 @@ struct CSphQuery
 
 	int				m_iRetryCount = -1;		///< retry count, for distributed queries. (-1 means 'use default')
 	int				m_iRetryDelay = -1;		///< retry delay, for distributed queries. (-1 means 'use default')
-	int				m_iAgentQueryTimeout = 0;	///< agent query timeout override, for distributed queries
+	int				m_iAgentQueryTimeoutMs = 0;	///< agent query timeout override, for distributed queries
 
 	bool			m_bGeoAnchor = false;	///< do we have an anchor
 	CSphString		m_sGeoLatAttr;			///< latitude attr name

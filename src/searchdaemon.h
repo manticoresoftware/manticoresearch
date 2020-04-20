@@ -124,12 +124,13 @@ volatile bool& sphGetGotSigterm();
 /////////////////////////////////////////////////////////////////////////////
 
 // these are in searchd.cpp
-extern int g_iReadTimeout;        // defined in searchd.cpp
-extern int g_iWriteTimeout;    // sec
+extern int g_iReadTimeoutS;        // defined in searchd.cpp
+extern int g_iWriteTimeoutS;    // sec
 
 extern int g_iMaxPacketSize;    // in bytes; for both query packets from clients and response packets from agents
 
-static const int64_t MS2SEC = I64C ( 1000000 );
+
+static const int64_t S2US = I64C ( 1000000 );
 
 /////////////////////////////////////////////////////////////////////////////
 // MISC GLOBALS
@@ -530,7 +531,7 @@ public:
 	explicit		NetInputBuffer_c ( int iSock );
 
 	bool			ReadFrom ( int iLen, int iTimeout, bool bIntr=false, bool bAppend=false );
-	bool			ReadFrom ( int iLen ) { return ReadFrom ( iLen, g_iReadTimeout ); }
+	bool			ReadFrom ( int iLen ) { return ReadFrom ( iLen, g_iReadTimeoutS ); }
 
 	bool			IsIntr () const { return m_bIntr; }
 

@@ -613,7 +613,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 	LOC_GETS ( tParams.m_sHookQueryRange,	"hook_query_range" );
 	LOC_GETS ( tParams.m_sHookPostIndex,	"hook_post_index" );
 
-	LOC_GETMS ( tParams.m_iRangedThrottle,	"sql_ranged_throttle" );
+	LOC_GETMS ( tParams.m_iRangedThrottleMs,	"sql_ranged_throttle" );
 
 	SqlAttrsConfigure ( tParams,	hSource("sql_attr_uint"),			SPH_ATTR_INTEGER,	sSourceName );
 	SqlAttrsConfigure ( tParams,	hSource("sql_attr_timestamp"),		SPH_ATTR_TIMESTAMP,	sSourceName );
@@ -667,10 +667,10 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 		}
 
 	// additional checks
-	if ( tParams.m_iRangedThrottle<0 )
+	if ( tParams.m_iRangedThrottleMs<0 )
 	{
 		fprintf ( stdout, "WARNING: sql_ranged_throttle must not be negative; throttling disabled\n" );
-		tParams.m_iRangedThrottle = 0;
+		tParams.m_iRangedThrottleMs = 0;
 	}
 
 	// debug printer

@@ -47,8 +47,8 @@
 	#include <sys/time.h>
 #endif
 
-int64_t			g_iPingInterval		= 0;		// by default ping HA agents every 1 second
-DWORD			g_uHAPeriodKarma	= 60;		// by default use the last 1 minute statistic to determine the best HA agent
+int64_t			g_iPingIntervalUs		= 0;		// by default ping HA agents every 1 second
+DWORD			g_uHAPeriodKarmaS	= 60;		// by default use the last 1 minute statistic to determine the best HA agent
 
 int				g_iPersistentPoolSize	= 0;
 
@@ -103,7 +103,7 @@ int64_t HostDashboard_t::EngageTime () const NO_THREAD_SAFETY_ANALYSIS
 {
 	// m_dMetricsLock is essential when we read/update all metrics a time, atomically.
 	// (for just one m_iLastAnswerTime it is enough that it is atomic itself, no lock necessary)
-	return m_iLastAnswerTime + g_iPingInterval;
+	return m_iLastAnswerTime + g_iPingIntervalUs;
 }
 
 DWORD HostDashboard_t::GetCurSeconds()
@@ -116,7 +116,7 @@ bool HostDashboard_t::IsHalfPeriodChanged ( DWORD * pLast )
 {
 	assert ( pLast );
 	DWORD uSeconds = GetCurSeconds();
-	if ( ( uSeconds - *pLast )>( g_uHAPeriodKarma / 2 ) )
+	if ( ( uSeconds - *pLast )>( g_uHAPeriodKarmaS / 2 ) )
 	{
 		*pLast = uSeconds;
 		return true;
@@ -126,7 +126,7 @@ bool HostDashboard_t::IsHalfPeriodChanged ( DWORD * pLast )
 
 MetricsAndCounters_t& HostDashboard_t::GetCurrentMetrics ()
 {
-	DWORD uCurrentPeriod = GetCurSeconds()/g_uHAPeriodKarma;
+	DWORD uCurrentPeriod = GetCurSeconds()/g_uHAPeriodKarmaS;
 	auto & dCurrentMetrics = m_dPeriodicMetrics[uCurrentPeriod % STATS_DASH_PERIODS];
 	if ( dCurrentMetrics.m_uPeriod!=uCurrentPeriod ) // we have new or reused stat
 	{
@@ -141,11 +141,11 @@ void HostDashboard_t::GetCollectedMetrics ( HostMetricsSnapshot_t& dResult, int 
 {
 	DWORD uSeconds = GetCurSeconds();
 
-	if ( (uSeconds % g_uHAPeriodKarma) < (g_uHAPeriodKarma/2) )
+	if ( (uSeconds % g_uHAPeriodKarmaS) < (g_uHAPeriodKarmaS/2) )
 		++iPeriods;
 	iPeriods = Min ( iPeriods, STATS_DASH_PERIODS );
 
-	DWORD uCurrentPeriod = uSeconds/g_uHAPeriodKarma;
+	DWORD uCurrentPeriod = uSeconds/g_uHAPeriodKarmaS;
 	MetricsAndCounters_t tAccum;
 	tAccum.Reset ();
 
@@ -1650,8 +1650,8 @@ void AgentConn_t::SendingState ()
 	{
 		track_processing_time ( *this );
 		State ( Agent_e::HEALTHY );
-		m_iPoolerTimeout = sphMicroTimer () + 1000 * m_iMyQueryTimeout;
-		LazyDeleteOrChange ( m_iPoolerTimeout ); // assign new time value, don't touch the handler
+		m_iPoolerTimeoutUS = sphMicroTimer () + 1000 * m_iMyQueryTimeoutMs;
+		LazyDeleteOrChange ( m_iPoolerTimeoutUS ); // assign new time value, don't touch the handler
 	}
 }
 
@@ -1705,7 +1705,7 @@ bool AgentConn_t::SwitchBlackhole ()
 // initialize read/write task
 void AgentConn_t::ScheduleCallbacks ()
 {
-	LazyTask ( m_iPoolerTimeout, true, BYTE ( m_dIOVec.HasUnsent () ? 1 : 2 ) );
+	LazyTask ( m_iPoolerTimeoutUS, true, BYTE ( m_dIOVec.HasUnsent () ? 1 : 2 ) );
 }
 
 void FirePoller (); // forward definition
@@ -2005,7 +2005,7 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 		sphLogDebugA ( "%d sendmsg/connectx returned %d", m_iStoreTag, ( size_t ) iRes );
 		sphLogDebugv ( "TFO send succeeded, %zu bytes sent", ( size_t ) iRes );
 		// now 'connect' and 'query' merged, so timeout became common.
-		m_iPoolerTimeout += 1000*m_iMyQueryTimeout;
+		m_iPoolerTimeoutUS += 1000*m_iMyQueryTimeoutMs;
 		return SendQuery ( iRes ) ? 1 : -1;
 	}
 
@@ -2257,7 +2257,7 @@ bool AgentConn_t::DoQuery()
 		m_bConnectHandshake = false;
 		m_pReplyCur += sizeof ( int );
 		m_iStartQuery = iNow; /// copied from old behaviour
-		m_iPoolerTimeout = iNow + 1000 * m_iMyQueryTimeout;
+		m_iPoolerTimeoutUS = iNow + 1000 * m_iMyQueryTimeoutMs;
 		return SendQuery ();
 	}
 
@@ -2274,7 +2274,7 @@ bool AgentConn_t::DoQuery()
 	}
 
 	sphLogDebugA ( "%d branch for not established. Timeout %d", m_iStoreTag, m_iMyConnectTimeout );
-	m_iPoolerTimeout = iNow + 1000 * m_iMyConnectTimeout;
+	m_iPoolerTimeoutUS = iNow + 1000 * m_iMyConnectTimeoutMs;
 	if ( !m_tDesc.m_bNeedResolve )
 		return EstablishConnection ();
 
@@ -2309,7 +2309,7 @@ bool AgentConn_t::EstablishConnection ()
 	// first check if we're in bounds of timeout.
 	// usually it is done by outside callback, however in case of deffered DNS we may be here out of sync and so need
 	// to check it explicitly.
-	if ( m_iPoolerTimeout<sphMicroTimer () )
+	if ( m_iPoolerTimeoutUS<sphMicroTimer () )
 		return Fatal ( eConnectFailures, "connect timeout reached resolving address for %s", m_tDesc.m_sAddr.cstr () );
 
 	if ( m_tDesc.m_iFamily==AF_INET && !m_tDesc.m_uAddr )
@@ -3367,7 +3367,7 @@ private:
 		sphLogDebugL ( "L ProcessChanges for %p, (conn %p) (%d->%d), tm=" INT64_FMT " sock=%d", pTask, pTask->m_pPayload,
 			pTask->m_uIOActive, pTask->m_uIOChanged, pTask->m_iTimeoutTime, pTask->m_ifd );
 
-		assert ( pTask->m_iTimeoutTime!=0);
+		assert ( pTask->m_iTimeoutTimeUS!=0);
 
 		if ( pTask->m_iPlannedTimeout<0 ) // process delete.
 		{
@@ -3385,7 +3385,7 @@ private:
 
 		if ( pTask->m_iPlannedTimeout )
 		{
-			pTask->m_iTimeoutTime = pTask->m_iPlannedTimeout;
+			pTask->m_iTimeoutTimeUS = pTask->m_iPlannedTimeout;
 			pTask->m_iPlannedTimeout = 0;
 			m_dTimeouts.Change ( pTask );
 			sphLogDebugL ( "L change/add timeout for %p, " INT64_FMT " (%d) is changed one", pTask, pTask->m_iTimeoutTime,
@@ -3443,9 +3443,9 @@ private:
 		while ( !m_dTimeouts.IsEmpty () )
 		{
 			auto* pTask = ( Task_t* ) m_dTimeouts.Root ();
-			assert ( pTask->m_iTimeoutTime>0 );
+			assert ( pTask->m_iTimeoutTimeUS>0 );
 
-			m_iNextTimeoutUS = pTask->m_iTimeoutTime - sphMicroTimer ();
+			m_iNextTimeoutUS = pTask->m_iTimeoutTimeUS - sphMicroTimer ();
 			if ( m_iNextTimeoutUS>0 )
 				return bHasTimeout;
 
@@ -3690,27 +3690,27 @@ public:
 		return true;
 	}
 
-	void ChangeDeleteTask ( AgentConn_t * pConnection, int64_t iTimeoutMS )
+	void ChangeDeleteTask ( AgentConn_t * pConnection, int64_t iTimeoutUS )
 	{
 		auto pTask = ( Task_t * ) pConnection->m_pPollerTask;
 		assert ( pTask );
 
 		// check for same timeout as we have. Avoid dupes, if so.
-		if ( !iTimeoutMS || pTask->m_iTimeoutTime==iTimeoutMS )
+		if ( !iTimeoutUS || pTask->m_iTimeoutTimeUS==iTimeoutUS )
 			return;
 
-		pTask->m_iPlannedTimeout = iTimeoutMS;
+		pTask->m_iPlannedTimeout = iTimeoutUS;
 
 		// case of delete: pConn socket m.b. already closed and ==-1. Actualize it right now.
-		if ( iTimeoutMS<0 )
+		if ( iTimeoutUS<0 )
 		{
 			pTask->m_ifd = pConnection->m_iSock;
 			pConnection->m_pPollerTask = nullptr; // this will allow to create another task.
 			sphLogDebugv ( "- %d Delete task (task %p), fd=%d (%d) " INT64_FMT "Us",
-				pConnection->m_iStoreTag, pTask, pTask->m_ifd, pTask->m_iStoredfd, pTask->m_iTimeoutTime );
+				pConnection->m_iStoreTag, pTask, pTask->m_ifd, pTask->m_iStoredfd, pTask->m_iTimeoutTimeUS );
 		} else
 			sphLogDebugv ( "- %d Change task (task %p), fd=%d (%d) " INT64_FMT "Us -> " INT64_FMT "Us",
-				pConnection->m_iStoreTag, pTask, pTask->m_ifd, pTask->m_iStoredfd, pTask->m_iTimeoutTime, iTimeoutMS );
+				pConnection->m_iStoreTag, pTask, pTask->m_ifd, pTask->m_iStoredfd, pTask->m_iTimeoutTimeUS, iTimeoutUS );
 
 		
 		AddToQueue ( pTask, pConnection->InNetLoop () );
@@ -3926,7 +3926,7 @@ class TimeoutEvents_c
 public:
 	void AddOrChangeTimeout ( EnqueuedTimeout_t * pEvent )
 	{
-		if ( pEvent->m_iTimeoutTime>=0 )
+		if ( pEvent->m_iTimeoutTimeUS>=0 )
 			m_dTimeouts.Change ( pEvent );
 	}
 
@@ -3935,17 +3935,14 @@ public:
 		m_dTimeouts.Remove ( pEvent );
 	}
 
-	int GetTimeoutMs ( int iTimeoutMs )
+	int GetNextTimeoutMs ()
 	{
-		if ( iTimeoutMs!=WAIT_UNTIL_TIMEOUT )
-			return iTimeoutMs;
-
 		int64_t iNextTimeoutUS = -1;
 		while (!m_dTimeouts.IsEmpty ())
 		{
 			auto * pNetEvent = (EnqueuedTimeout_t *) m_dTimeouts.Root ();
-			assert ( pNetEvent->m_iTimeoutTime>0 );
-			iNextTimeoutUS = pNetEvent->m_iTimeoutTime-sphMicroTimer ();
+			assert ( pNetEvent->m_iTimeoutTimeUS>0 );
+			iNextTimeoutUS = pNetEvent->m_iTimeoutTimeUS-sphMicroTimer ();
 			if ( iNextTimeoutUS>999 )
 				break;
 
@@ -4007,7 +4004,7 @@ public:
 		if ( !m_tWorkList.GetLength () )
 			return false;
 
-		timeoutMs = GetTimeoutMs ( timeoutMs );
+		timeoutMs = GetNextTimeoutMs ();
 		m_dReady.Resize ( m_tWorkList.GetLength () );
 		// need positive timeout for communicate threads back and shutdown
 		m_iReady = epoll_wait ( m_iEFD, m_dReady.Begin (), m_dReady.GetLength (), timeoutMs );
@@ -4168,7 +4165,7 @@ public:
 		if ( !m_tWorkList.GetLength ())
 			return false;
 
-		timeoutMs = GetTimeoutMs ( timeoutMs );
+		timeoutMs = GetNextTimeoutMs ();
 		m_dReady.Resize ( m_tWorkList.GetLength () );
 
 		timespec ts;
@@ -4351,7 +4348,7 @@ public:
 			return false;
 
 		// need positive timeout for communicate threads back and shutdown
-		timeoutMs = GetTimeoutMs ( timeoutMs );
+		timeoutMs = GetNextTimeoutMs ();
 		m_dEvents.Apply ( [] ( pollfd & dEvent ) { dEvent.revents = 0; } );
 		m_iReady = ::poll ( m_dEvents.Begin (), m_dEvents.GetLength (), timeoutMs );
 

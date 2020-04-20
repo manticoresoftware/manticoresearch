@@ -123,15 +123,15 @@ static bool				g_bLogTty			= false;			// cached isatty(g_iLogFile)
 static bool				g_bLogStdout		= true;				// extra copy of startup log messages to stdout; true until around "accepting connections", then MUST be false
 static LogFormat_e		g_eLogFormat		= LOG_FORMAT_PLAIN;
 static bool				g_bLogCompactIn		= false;			// whether to cut list in IN() clauses.
-static int				g_iQueryLogMinMsec	= 0;				// log 'slow' threshold for query
+static int				g_iQueryLogMinMs	= 0;				// log 'slow' threshold for query
 static char				g_sLogFilter[SPH_MAX_FILENAME_LEN+1] = "\0";
 static int				g_iLogFilterLen = 0;
 static int				g_iLogFileMode = 0;
 
-int						g_iReadTimeout		= 5;	// sec
-int						g_iWriteTimeout		= 5;	// sec
-int						g_iClientTimeout	= 300;
-int						g_iClientQlTimeout	= 900;	// sec
+int						g_iReadTimeoutS		= 5;	// sec
+int						g_iWriteTimeoutS	= 5;	// sec
+int						g_iClientTimeoutS	= 300;
+int						g_iClientQlTimeoutS	= 900;	// sec
 static int				g_iMaxChildren		= 0;
 #if !USE_WINDOWS
 static bool				g_bPreopenIndexes	= true;
@@ -140,7 +140,7 @@ static bool				g_bPreopenIndexes	= false;
 #endif
 static bool				g_bWatchdog			= true;
 static int				g_iExpansionLimit	= 0;
-static int				g_iShutdownTimeout	= 3000000; // default timeout on daemon shutdown and stopwait is 3 seconds
+static int				g_iShutdownTimeoutUs	= 3000000; // default timeout on daemon shutdown and stopwait is 3 seconds
 static int				g_iBacklog			= SEARCHD_BACKLOG;
 static int				g_iThdPoolCount		= 2;
 int						g_iThdQueueMax		= 0;
@@ -175,14 +175,14 @@ static FileAccessSettings_t g_tDefaultFA;
 ISphThdPool *	g_pThdPool			= nullptr;
 static auto&			g_iDistThreads = sphDistThreads ();
 
-int				g_iAgentConnectTimeout = 1000;
-int				g_iAgentQueryTimeout = 3000;	// global (default). May be override by index-scope values, if one specified
+int				g_iAgentConnectTimeoutMs = 1000;
+int				g_iAgentQueryTimeoutMs = 3000;	// global (default). May be override by index-scope values, if one specified
 
 const int	MAX_RETRY_COUNT		= 8;
 const int	MAX_RETRY_DELAY		= 1000;
 
 int						g_iAgentRetryCount = 0;
-int						g_iAgentRetryDelay = MAX_RETRY_DELAY/2;	// global (default) values. May be override by the query options 'retry_count' and 'retry_timeout'
+int						g_iAgentRetryDelayMs = MAX_RETRY_DELAY/2;	// global (default) values. May be override by the query options 'retry_count' and 'retry_timeout'
 bool					g_bHostnameLookup = false;
 CSphString				g_sMySQLVersion = szMANTICORE_VERSION;
 
@@ -706,8 +706,8 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	int64_t tmShutStarted = sphMicroTimer();
 	// stop search threads; up to shutdown_timeout seconds
-	WaitFinishPreread ( g_iShutdownTimeout );
-	while ( ( ThreadsNum() > 0 ) && ( sphMicroTimer()-tmShutStarted )<g_iShutdownTimeout )
+	WaitFinishPreread ( g_iShutdownTimeoutUs );
+	while ( ( ThreadsNum() > 0 ) && ( sphMicroTimer()-tmShutStarted )<g_iShutdownTimeoutUs )
 		sphSleepMsec ( 50 );
 
 	if ( ThreadsNum()>0 )
@@ -1366,9 +1366,9 @@ void AddListener ( const CSphString & sListen, bool bHttpAllowed, CSphVector<Lis
 		return;
 
 #if !USE_WINDOWS
-	if ( !tDesc.m_sUnix.IsEmpty() )
+	if ( !tDesc.m_sUnix.IsEmpty () )
 	{
-		tListener.m_iSock = sphCreateUnixSocket ( tDesc.m_sUnix.cstr() );
+		tListener.m_iSock = sphCreateUnixSocket ( tDesc.m_sUnix.cstr () );
 		tListener.m_bTcp = false;
 	} else
 #endif
@@ -1542,8 +1542,8 @@ void DistributedIndex_t::GetAllHosts ( VectorAgentConn_t &dTarget ) const
 		{
 			auto * pAgent = new AgentConn_t;
 			pAgent->m_tDesc.CloneFrom ( dHost );
-			pAgent->m_iMyQueryTimeout = m_iAgentQueryTimeout;
-			pAgent->m_iMyConnectTimeout = m_iAgentConnectTimeout;
+			pAgent->m_iMyQueryTimeoutMs = m_iAgentQueryTimeoutMs;
+			pAgent->m_iMyConnectTimeoutMs = m_iAgentConnectTimeoutMs;
 			dTarget.Add ( pAgent );
 		}
 }
@@ -1842,7 +1842,7 @@ void SearchRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, CachedOu
 	tOut.SendInt ( VER_COMMAND_SEARCH_MASTER );
 	tOut.SendInt ( m_iEnd-m_iStart+1 );
 	for ( int i=m_iStart; i<=m_iEnd; ++i )
-		SendQuery ( tAgent.m_tDesc.m_sIndexes.cstr (), tOut, m_dQueries[i], tAgent.m_iWeight, tAgent.m_iMyQueryTimeout );
+		SendQuery ( tAgent.m_tDesc.m_sIndexes.cstr (), tOut, m_dQueries[i], tAgent.m_iWeight, tAgent.m_iMyQueryTimeoutMs );
 }
 
 
@@ -2399,7 +2399,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CachedOutputBuffer_c & tOut, CSphQ
 	// daemon-level defaults
 	tQuery.m_iRetryCount = -1;
 	tQuery.m_iRetryDelay = -1;
-	tQuery.m_iAgentQueryTimeout = g_iAgentQueryTimeout;
+	tQuery.m_iAgentQueryTimeoutMs = g_iAgentQueryTimeoutMs;
 
 	// v.1.27+ flags come first
 	DWORD uFlags = 0;
@@ -2902,8 +2902,8 @@ static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
 			tBuf.Appendf ( "ranker=%s(\'%s\')", sRanker, tQuery.m_sRankerExpr.scstr() );
 	}
 
-	if ( tQuery.m_iAgentQueryTimeout!=g_iAgentQueryTimeout )
-		tBuf.Appendf ( "agent_query_timeout=%d", tQuery.m_iAgentQueryTimeout );
+	if ( tQuery.m_iAgentQueryTimeoutMs!=g_iAgentQueryTimeoutMs )
+		tBuf.Appendf ( "agent_query_timeout=%d", tQuery.m_iAgentQueryTimeoutMs );
 
 	if ( tQuery.m_iCutoff!=g_tDefaultQuery.m_iCutoff )
 		tBuf.Appendf ( "cutoff=%d", tQuery.m_iCutoff );
@@ -3172,7 +3172,7 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 
 static void LogQuery ( const CSphQuery & q, const CSphQueryResult & tRes, const CSphVector<int64_t> & dAgentTimes, int iCid )
 {
-	if ( g_iQueryLogMinMsec>0 && tRes.m_iQueryTime<g_iQueryLogMinMsec )
+	if ( g_iQueryLogMinMs>0 && tRes.m_iQueryTime<g_iQueryLogMinMs )
 		return;
 
 	switch ( g_eLogFormat )
@@ -6314,8 +6314,8 @@ void SearchHandler_c::BuildIndexList ( int iStart, int iEnd, int & iDivideLimits
 					pConn->SetMultiAgent ( sIndex, pAgent );
 					pConn->m_iStoreTag = iTagsCount;
 					pConn->m_iWeight = iWeight;
-					pConn->m_iMyConnectTimeout = pDist->m_iAgentConnectTimeout;
-					pConn->m_iMyQueryTimeout = pDist->m_iAgentQueryTimeout;
+					pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
+					pConn->m_iMyQueryTimeoutMs = pDist->m_iAgentQueryTimeoutMs;
 					dRemotes.Add ( pConn );
 					iTagsCount += iTagStep;
 				}
@@ -7281,8 +7281,8 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 		{
 			auto * pConn = new AgentConn_t;
 			pConn->SetMultiAgent ( sIndex, pAgent );
-			pConn->m_iMyConnectTimeout = pDist->m_iAgentConnectTimeout;
-			pConn->m_iMyQueryTimeout = pDist->m_iAgentQueryTimeout;
+			pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
+			pConn->m_iMyQueryTimeoutMs = pDist->m_iAgentQueryTimeoutMs;
 			tRemoteSnippets.m_dAgents.Add ( pConn );
 		}
 
@@ -8287,9 +8287,9 @@ void BuildStatus ( VectorLike & dStatus )
 	if ( dStatus.MatchAdd ( "qcache_max_bytes" ) )
 		dStatus.Add().SetSprintf ( INT64_FMT, s.m_iMaxBytes );
 	if ( dStatus.MatchAdd ( "qcache_thresh_msec" ) )
-		dStatus.Add().SetSprintf ( "%d", s.m_iThreshMsec );
+		dStatus.Add().SetSprintf ( "%d", s.m_iThreshMs );
 	if ( dStatus.MatchAdd ( "qcache_ttl_sec" ) )
-		dStatus.Add().SetSprintf ( "%d", s.m_iTtlSec );
+		dStatus.Add().SetSprintf ( "%d", s.m_iTtlS );
 
 	if ( dStatus.MatchAdd ( "qcache_cached_queries" ) )
 		dStatus.Add().SetSprintf ( "%d", s.m_iCachedQueries );
@@ -8435,7 +8435,7 @@ void BuildAgentStatus ( VectorLike &dStatus, const CSphString& sIndexOrAgent )
 	dStatus.m_sColKey = "Key";
 
 	if ( dStatus.MatchAdd ( "status_period_seconds" ) )
-		dStatus.Add().SetSprintf ( "%d", g_uHAPeriodKarma );
+		dStatus.Add().SetSprintf ( "%d", g_uHAPeriodKarmaS );
 	if ( dStatus.MatchAdd ( "status_stored_periods" ) )
 		dStatus.Add().SetSprintf ( "%d", STATS_DASH_PERIODS );
 
@@ -8648,7 +8648,7 @@ static void HandleClientSphinx ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handle
 
 	// get client version and request
 	int iMagic = 0;
-	int iGot = SockReadFast ( iSock, &iMagic, sizeof(iMagic), g_iReadTimeout );
+	int iGot = SockReadFast ( iSock, &iMagic, sizeof(iMagic), g_iReadTimeoutS );
 
 	bool bReadErr = ( iGot!=sizeof(iMagic) );
 	sphLogDebugv ( "conn %s(" INT64_FMT "): got handshake, major v.%d, err %d", sClientIP, iCID, iMagic, (int)bReadErr );
@@ -8665,7 +8665,7 @@ static void HandleClientSphinx ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handle
 		NetInputBuffer_c tBuf ( iSock );
 		NetOutputBuffer_c tOut ( iSock );
 
-		int iTimeout = bPersist ? 1 : g_iReadTimeout;
+		int iTimeout = bPersist ? 1 : g_iReadTimeoutS;
 
 		// in "persistent connection" mode, we want interruptible waits
 		// so that the worker child could be forcibly restarted
@@ -8694,7 +8694,7 @@ static void HandleClientSphinx ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handle
 		if ( bPersist && !bCommand && sphSockPeekErrno()==ETIMEDOUT )
 		{
 			iPconnIdle += iTimeout;
-			bool bClientTimedout = ( iPconnIdle>=g_iClientTimeout );
+			bool bClientTimedout = ( iPconnIdle>=g_iClientTimeoutS );
 			if ( bClientTimedout )
 				sphLogDebugv ( "conn %s(" INT64_FMT "): bailing idle pconn on client_timeout", sClientIP, iCID );
 
@@ -10132,8 +10132,8 @@ void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t
 		{
 			auto * pConn = new AgentConn_t;
 			pConn->SetMultiAgent ( sIndex, pAgent );
-			pConn->m_iMyConnectTimeout = pDist->m_iAgentConnectTimeout;
-			pConn->m_iMyQueryTimeout = pDist->m_iAgentQueryTimeout;
+			pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
+			pConn->m_iMyQueryTimeoutMs = pDist->m_iAgentQueryTimeoutMs;
 			dAgents.Add ( pConn );
 		}
 
@@ -13346,19 +13346,19 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 			}
 		} else if ( tStmt.m_sSetName=="query_log_min_msec" )
 		{
-			g_iQueryLogMinMsec = (int)tStmt.m_iSetValue;
+			g_iQueryLogMinMs = (int)tStmt.m_iSetValue;
 		} else if ( tStmt.m_sSetName=="qcache_max_bytes" )
 		{
 			const QcacheStatus_t & s = QcacheGetStatus();
-			QcacheSetup ( tStmt.m_iSetValue, s.m_iThreshMsec, s.m_iTtlSec );
+			QcacheSetup ( tStmt.m_iSetValue, s.m_iThreshMs, s.m_iTtlS );
 		} else if ( tStmt.m_sSetName=="qcache_thresh_msec" )
 		{
 			const QcacheStatus_t & s = QcacheGetStatus();
-			QcacheSetup ( s.m_iMaxBytes, (int)tStmt.m_iSetValue, s.m_iTtlSec );
+			QcacheSetup ( s.m_iMaxBytes, (int)tStmt.m_iSetValue, s.m_iTtlS );
 		} else if ( tStmt.m_sSetName=="qcache_ttl_sec" )
 		{
 			const QcacheStatus_t & s = QcacheGetStatus();
-			QcacheSetup ( s.m_iMaxBytes, s.m_iThreshMsec, (int)tStmt.m_iSetValue );
+			QcacheSetup ( s.m_iMaxBytes, s.m_iThreshMs, (int)tStmt.m_iSetValue );
 		} else if ( tStmt.m_sSetName=="log_debug_filter" )
 		{
 			int iLen = tStmt.m_sSetValue.Length();
@@ -15819,7 +15819,7 @@ static bool ReadMySQLPacketHeader ( int iSock, int& iLen, BYTE& uPacketID )
 {
 	const int MAX_PACKET_LEN = 0xffffffL; // 16777215 bytes, max low level packet size
 	NetInputBuffer_c tIn ( iSock );
-	if ( !tIn.ReadFrom ( 4, g_iClientQlTimeout, true ) )
+	if ( !tIn.ReadFrom ( 4, g_iClientQlTimeoutS, true ) )
 		return false;
 	DWORD uAddon = tIn.GetLSBDword ();
 	uPacketID = 1 + ( BYTE ) ( uAddon >> 24 );
@@ -15879,7 +15879,7 @@ static void HandleClientMySQL ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handler
 
 		// keep getting that packet
 		ThdState ( ThdState_e::NET_READ, tThd );
-		if ( !tIn.ReadFrom ( iPacketLen, g_iClientQlTimeout, true ) )
+		if ( !tIn.ReadFrom ( iPacketLen, g_iClientQlTimeoutS, true ) )
 		{
 			sphWarning ( "failed to receive MySQL request body (client=%s(%d), exp=%d, error='%s')", sClientIP, iCID,
 					iPacketLen, sphSockError() );
@@ -15902,7 +15902,7 @@ static void HandleClientMySQL ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handler
 					break;
 				}
 
-				if ( !tIn.ReadFrom ( iAddonLen, g_iClientQlTimeout, true, true ) )
+				if ( !tIn.ReadFrom ( iAddonLen, g_iClientQlTimeoutS, true, true ) )
 				{
 					sphWarning ( "failed to receive MySQL request body2 (client=%s(%d), exp=%d, error='%s')", sClientIP,
 							iCID, iAddonLen, sphSockError() );
@@ -16865,7 +16865,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 		if ( hIndex["agent_connect_timeout"].intval()<=0 )
 			sphWarning ( "index '%s': agent_connect_timeout must be positive, ignored", szIndexName );
 		else
-			tIdx.m_iAgentConnectTimeout = hIndex.GetMsTimeMs ( "agent_connect_timeout" );
+			tIdx.m_iAgentConnectTimeoutMs = hIndex.GetMsTimeMs ( "agent_connect_timeout" );
 	}
 
 	tIdx.m_bDivideRemoteRanges = hIndex.GetInt ( "divide_remote_ranges", 0 )!=0;
@@ -16875,7 +16875,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 		if ( hIndex["agent_query_timeout"].intval()<=0 )
 			sphWarning ( "index '%s': agent_query_timeout must be positive, ignored", szIndexName );
 		else
-			tIdx.m_iAgentQueryTimeout = hIndex.GetMsTimeMs ( "agent_query_timeout");
+			tIdx.m_iAgentQueryTimeoutMs = hIndex.GetMsTimeMs ( "agent_query_timeout");
 	}
 
 	bool bHaveHA = tIdx.m_dAgents.FindFirst ( [] ( MultiAgentDesc_c * ag ) { return ag->IsHA (); } );
@@ -18783,20 +18783,20 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 
 	// read_timeout is now deprecated
 	if ( hSearchd.Exists ( "read_timeout" ) && hSearchd["read_timeout"].intval()>=0 )
-		g_iReadTimeout = hSearchd.GetSTimeS ("read_timeout");
+		g_iReadTimeoutS = hSearchd.GetSTimeS ("read_timeout");
 
 	// network_timeout overrides read_timeout
 	if ( hSearchd.Exists ( "network_timeout" ) && hSearchd["network_timeout"].intval()>=0 )
 	{
-		g_iReadTimeout = hSearchd.GetSTimeS ("network_timeout");
-		g_iWriteTimeout = g_iReadTimeout;
+		g_iReadTimeoutS = hSearchd.GetSTimeS ("network_timeout");
+		g_iWriteTimeoutS = g_iReadTimeoutS;
 	}
 
 	if ( hSearchd.Exists ( "sphinxql_timeout" ) && hSearchd["sphinxql_timeout"].intval()>=0 )
-		g_iClientQlTimeout = hSearchd.GetSTimeS("sphinxql_timeout");
+		g_iClientQlTimeoutS = hSearchd.GetSTimeS("sphinxql_timeout");
 
 	if ( hSearchd.Exists ( "client_timeout" ) && hSearchd["client_timeout"].intval()>=0 )
-		g_iClientTimeout = hSearchd.GetSTimeS ( "client_timeout" );
+		g_iClientTimeoutS = hSearchd.GetSTimeS ( "client_timeout" );
 
 	if ( hSearchd.Exists ( "max_children" ) && hSearchd["max_children"].intval()>=0 )
 		g_iMaxChildren = hSearchd["max_children"].intval();
@@ -18858,14 +18858,14 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_iMaxBatchQueries = hSearchd.GetInt ( "max_batch_queries", g_iMaxBatchQueries );
 	g_iDistThreads = hSearchd.GetInt ( "dist_threads", g_iDistThreads );
 	sphSetThrottling ( hSearchd.GetInt ( "rt_merge_iops", 0 ), hSearchd.GetSize ( "rt_merge_maxiosize", 0 ) );
-	g_iPingInterval = hSearchd.GetUsTime64Ms ( "ha_ping_interval", 1000000 );
-	g_uHAPeriodKarma = hSearchd.GetSTimeS ( "ha_period_karma", 60 );
-	g_iQueryLogMinMsec = hSearchd.GetMsTimeMs ( "query_log_min_msec", g_iQueryLogMinMsec );
-	g_iAgentConnectTimeout = hSearchd.GetMsTimeMs ( "agent_connect_timeout", g_iAgentConnectTimeout );
-	g_iAgentQueryTimeout = hSearchd.GetMsTimeMs ( "agent_query_timeout", g_iAgentQueryTimeout );
-	g_iAgentRetryDelay = hSearchd.GetMsTimeMs ( "agent_retry_delay", g_iAgentRetryDelay );
-	if ( g_iAgentRetryDelay > MAX_RETRY_DELAY )
-		sphWarning ( "agent_retry_delay %d exceeded max recommended %d", g_iAgentRetryDelay, MAX_RETRY_DELAY );
+	g_iPingIntervalUs = hSearchd.GetUsTime64Ms ( "ha_ping_interval", 1000000 );
+	g_uHAPeriodKarmaS = hSearchd.GetSTimeS ( "ha_period_karma", 60 );
+	g_iQueryLogMinMs = hSearchd.GetMsTimeMs ( "query_log_min_msec", g_iQueryLogMinMs );
+	g_iAgentConnectTimeoutMs = hSearchd.GetMsTimeMs ( "agent_connect_timeout", g_iAgentConnectTimeoutMs );
+	g_iAgentQueryTimeoutMs = hSearchd.GetMsTimeMs ( "agent_query_timeout", g_iAgentQueryTimeoutMs );
+	g_iAgentRetryDelayMs = hSearchd.GetMsTimeMs ( "agent_retry_delay", g_iAgentRetryDelayMs );
+	if ( g_iAgentRetryDelayMs > MAX_RETRY_DELAY )
+		sphWarning ( "agent_retry_delay %d exceeded max recommended %d", g_iAgentRetryDelayMs, MAX_RETRY_DELAY );
 	g_iAgentRetryCount = hSearchd.GetInt ( "agent_retry_count", g_iAgentRetryCount );
 	if ( g_iAgentRetryCount > MAX_RETRY_COUNT )
 		sphWarning ( "agent_retry_count %d exceeded max recommended %d", g_iAgentRetryCount, MAX_RETRY_COUNT );
@@ -18912,7 +18912,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		ParsePredictedTimeCosts ( hSearchd["predicted_time_costs"].cstr() );
 
 	if ( hSearchd("shutdown_timeout") )
-		g_iShutdownTimeout = hSearchd.GetUsTime64S ( "shutdown_timeout", 3000000);
+		g_iShutdownTimeoutUs = hSearchd.GetUsTime64S ( "shutdown_timeout", 3000000);
 
 	g_iDocstoreCache = hSearchd.GetSize ( "docstore_cache_size", 16777216 );
 
@@ -18948,9 +18948,9 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 
 	QcacheStatus_t s = QcacheGetStatus();
 	s.m_iMaxBytes = hSearchd.GetSize64 ( "qcache_max_bytes", s.m_iMaxBytes );
-	s.m_iThreshMsec = hSearchd.GetMsTimeMs ( "qcache_thresh_msec", s.m_iThreshMsec );
-	s.m_iTtlSec = hSearchd.GetSTimeS ( "qcache_ttl_sec", s.m_iTtlSec );
-	QcacheSetup ( s.m_iMaxBytes, s.m_iThreshMsec, s.m_iTtlSec );
+	s.m_iThreshMs = hSearchd.GetMsTimeMs ( "qcache_thresh_msec", s.m_iThreshMs );
+	s.m_iTtlS = hSearchd.GetSTimeS ( "qcache_ttl_sec", s.m_iTtlS );
+	QcacheSetup ( s.m_iMaxBytes, s.m_iThreshMs, s.m_iTtlS );
 
 	// hostname_lookup = {config_load | request}
 	g_bHostnameLookup = ( strcmp ( hSearchd.GetStr ( "hostname_lookup", "" ), "request" )==0 );
@@ -19477,7 +19477,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		if ( iPid<=0 )
 			sphFatal ( "stop: failed to read valid pid from '%s'", sPid );
 
-		int iWaitTimeout = g_iShutdownTimeout + 100000;
+		int iWaitTimeout = g_iShutdownTimeoutUs + 100000;
 
 #if USE_WINDOWS
 		bool bTerminatedOk = false;
@@ -19826,14 +19826,14 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	// set up ping service (if necessary) before loading indexes
 	// (since loading ha-mirrors of distributed already assumes ping is usable).
-	if ( g_iPingInterval>0 )
+	if ( g_iPingIntervalUs>0 )
 		Ping::Start();
 
 	ScheduleMallocTrim();
 
 	// initialize timeouts since hook will use them
-	auto iRtFlushPeriod = hSearchd.GetUsTime64S ( "rt_flush_period", 36000000000ll ); // 10h
-	SetRtFlushPeriod ( Max ( iRtFlushPeriod, 10 * 1000000 ) );
+	auto iRtFlushPeriodUs = hSearchd.GetUsTime64S ( "rt_flush_period", 36000000000ll ); // 10h
+	SetRtFlushPeriod ( Max ( iRtFlushPeriodUs, 10 * 1000000 ) );
 	g_pLocalIndexes->SetAddOrReplaceHook ( HookSubscribeMutableFlush );
 	//////////////////////
 	// build indexes hash

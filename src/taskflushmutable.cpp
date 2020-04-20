@@ -14,10 +14,10 @@
 #include "searchdaemon.h"
 
 /// flushing period, defined from `rt_flush_period` config param
-static int64_t g_iRtFlushPeriod = 36000000000ll; // default period is 10 hours
+static int64_t g_iRtFlushPeriodUs = 36000000000ll; // default period is 10 hours
 void SetRtFlushPeriod ( int64_t iPeriod )
 {
-	g_iRtFlushPeriod = iPeriod;
+	g_iRtFlushPeriodUs = iPeriod;
 }
 
 // thread-safe stringset, internally guarded by rwlock
@@ -107,16 +107,16 @@ static void ScheduleFlushTask ( void* pName, int64_t iNextTimestamp=-1 )
 
 				// check timeout, schedule or run immediately.
 				auto iLastTimestamp = pRT->GetLastFlushTimestamp ();
-				auto iPlannedTimestamp = iLastTimestamp+g_iRtFlushPeriod;
+				auto iPlannedTimestamp = iLastTimestamp+g_iRtFlushPeriodUs;
 				bool bNeedFlush = pRT->IsFlushNeed();
 				if ( bNeedFlush && ( iPlannedTimestamp-1000 )<=sphMicroTimer() )
 				{
 					pRT->ForceRamFlush ( true );
-					iPlannedTimestamp = pRT->GetLastFlushTimestamp()+g_iRtFlushPeriod;
+					iPlannedTimestamp = pRT->GetLastFlushTimestamp()+g_iRtFlushPeriodUs;
 				}
 
 				if ( !bNeedFlush )
-					iPlannedTimestamp = sphMicroTimer() + g_iRtFlushPeriod;
+					iPlannedTimestamp = sphMicroTimer() + g_iRtFlushPeriodUs;
 
 				// once more check for disabled - since ForceRamFlush may be long
 				if ( g_Flushable.IsDisabled ())

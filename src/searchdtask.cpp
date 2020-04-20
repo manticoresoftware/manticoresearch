@@ -53,7 +53,7 @@ static const int NUM_TASKS = 32;
 
 inline static bool operator< ( const EnqueuedTimeout_t& dLeft, const EnqueuedTimeout_t& dRight )
 {
-	return dLeft.m_iTimeoutTime<dRight.m_iTimeoutTime;
+	return dLeft.m_iTimeoutTimeUS<dRight.m_iTimeoutTimeUS;
 }
 
 void TimeoutQueue_c::ShiftUp ( int iHole )
@@ -168,7 +168,7 @@ CSphString TimeoutQueue_c::DebugDump ( const char* sPrefix ) const
 {
 	StringBuilder_c tBuild;
 	for ( auto* cTask : m_dQueue )
-		tBuild.Appendf ( tBuild.IsEmpty () ? "%p(" INT64_FMT ")":", %p("	INT64_FMT ")", cTask, cTask->m_iTimeoutTime);
+		tBuild.Appendf ( tBuild.IsEmpty () ? "%p(" INT64_FMT ")":", %p("	INT64_FMT ")", cTask, cTask->m_iTimeoutTimeUS);
 	CSphString sRes;
 	if ( !m_dQueue.IsEmpty ())
 		sRes.SetSprintf ( "%s%d:%s", sPrefix, m_dQueue.GetLength (), tBuild.cstr ());
@@ -360,11 +360,11 @@ struct TaskWorker_t: public ListNode_t
 struct ScheduledJob_t: public EnqueuedTimeout_t
 {
 	TaskRefP_c m_pTask;
-	ScheduledJob_t ( Task_t* pTask, int64_t iTimestamp )
+	ScheduledJob_t ( Task_t* pTask, int64_t iTimestampUS )
 		: m_pTask { pTask }
 	{
 		SafeAddRef ( m_pTask );
-		m_iTimeoutTime = iTimestamp;
+		m_iTimeoutTimeUS = iTimestampUS;
 	}
 };
 
@@ -459,9 +459,9 @@ private:
 		while ( !m_dTimeouts.IsEmpty ())
 		{
 			auto* pScheduledTask = ( ScheduledJob_t* ) m_dTimeouts.Root ();
-			assert ( pScheduledTask->m_iTimeoutTime>0 );
+			assert ( pScheduledTask->m_iTimeoutTimeUS>0 );
 
-			m_iNextTimeoutUS = pScheduledTask->m_iTimeoutTime - sphMicroTimer ();
+			m_iNextTimeoutUS = pScheduledTask->m_iTimeoutTimeUS - sphMicroTimer ();
 			if ( m_iNextTimeoutUS>999 )
 				return bHasTimeout;
 
@@ -852,7 +852,7 @@ public:
 			{
 				auto& dInfo = dRes.Add ();
 				auto* pSheduled = ( ScheduledJob_t* ) pMember;
-				dInfo.m_iTimeoutStamp = pSheduled->m_iTimeoutTime;
+				dInfo.m_iTimeoutStamp = pSheduled->m_iTimeoutTimeUS;
 				dInfo.m_sTask = pSheduled->m_pTask->GetName ();
 			});
 		return dRes;

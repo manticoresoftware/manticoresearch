@@ -2832,7 +2832,7 @@ void GetNodes ( const CSphString & sNodes, VecAgentDesc_t & dNodes )
 	GetNodes_T ( sNodes, tIt );
 }
 
-static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, const PQRemoteData_t & tReq, int iTimeout )
+static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, const PQRemoteData_t & tReq, int iTimeoutMs )
 {
 	AgentConn_t * pAgent = new AgentConn_t;
 	pAgent->m_tDesc.CloneFrom ( tDesc );
@@ -2840,8 +2840,8 @@ static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, const PQRemoteData
 	HostDesc_t tHost;
 	pAgent->m_tDesc.m_pDash = new HostDashboard_t ( tHost );
 
-	pAgent->m_iMyConnectTimeout = iTimeout;
-	pAgent->m_iMyQueryTimeout = iTimeout;
+	pAgent->m_iMyConnectTimeoutMs = iTimeoutMs;
+	pAgent->m_iMyQueryTimeoutMs = iTimeoutMs;
 
 	pAgent->m_pResult = new PQRemoteAgentData_t ( tReq );
 

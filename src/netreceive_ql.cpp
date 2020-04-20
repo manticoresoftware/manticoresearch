@@ -14,7 +14,7 @@
 
 extern char g_sMysqlHandshake[128];
 extern int g_iMysqlHandshake;
-extern int g_iClientQlTimeout;    // sec
+extern int g_iClientQlTimeoutS;    // sec
 extern int g_iThdQueueMax;
 extern volatile bool g_bMaintenance;
 static auto& g_bShutdown = sphGetShutdown ();
@@ -175,7 +175,7 @@ NetEvent_e NetReceiveDataQL_c::Impl_c::SetupQl ( int64_t tmNow )
 	sphLogDebugv ( "%p receive QL setup, phase=%d, client=%s, conn=%d, sock=%d", m_pParent,
 			m_ePhase, m_pState->m_sClientName, m_pState->m_iConnID, m_pState->m_iClientSock );
 
-	m_pParent->m_iTimeoutTime = tmNow + MS2SEC * g_iClientQlTimeout;
+	m_pParent->m_iTimeoutTimeUS = tmNow + S2US * g_iClientQlTimeoutS;
 
 	NetEvent_e eEvent;
 	if ( m_ePhase==AQL_HANDSHAKE )

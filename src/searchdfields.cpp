@@ -185,8 +185,8 @@ static bool GetIndexes ( const CSphString & sIndexes, CSphString & sError, StrVe
 			{
 				auto * pConn = new AgentConn_t;
 				pConn->SetMultiAgent ( sIndex, pAgent );
-				pConn->m_iMyConnectTimeout = pDist->m_iAgentConnectTimeout;
-				pConn->m_iMyQueryTimeout = pDist->m_iAgentQueryTimeout;
+				pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
+				pConn->m_iMyQueryTimeoutMs = pDist->m_iAgentQueryTimeoutMs;
 				pConn->m_pResult = new AgentFieldPaiload_t();
 				dRemotes.Add ( pConn );
 			}
@@ -532,8 +532,8 @@ static void DistGetFieldStart ( DistFieldRes_t & tRes )
 		pAgent->m_tDesc.CloneFrom ( pDesc->m_tDesc );
 		HostDesc_t tHost;
 		pAgent->m_tDesc.m_pDash = new HostDashboard_t ( tHost );
-		pAgent->m_iMyConnectTimeout = pDesc->m_iMyConnectTimeout;
-		pAgent->m_iMyQueryTimeout = pDesc->m_iMyQueryTimeout;
+		pAgent->m_iMyConnectTimeoutMs = pDesc->m_iMyConnectTimeoutMs;
+		pAgent->m_iMyQueryTimeoutMs = pDesc->m_iMyQueryTimeoutMs;
 
 		// update doc count for last agent
 		if ( pAgentData )

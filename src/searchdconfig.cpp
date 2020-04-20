@@ -654,8 +654,8 @@ static void CollectDistIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 		tIndex.m_eType = IndexType_e::DISTR;
 
 		tIndex.m_tDistr.m_dLocals				= tIt.Get()->m_dLocal;
-		tIndex.m_tDistr.m_iAgentConnectTimeout	= tIt.Get()->m_iAgentConnectTimeout;
-		tIndex.m_tDistr.m_iAgentQueryTimeout	= tIt.Get()->m_iAgentQueryTimeout;
+		tIndex.m_tDistr.m_iAgentConnectTimeout	= tIt.Get()->m_iAgentConnectTimeoutMs;
+		tIndex.m_tDistr.m_iAgentQueryTimeout	= tIt.Get()->m_iAgentQueryTimeoutMs;
 		tIndex.m_tDistr.m_iAgentRetryCount		= tIt.Get()->m_iAgentRetryCount;
 		tIndex.m_tDistr.m_bDivideRemoteRanges	= tIt.Get()->m_bDivideRemoteRanges;
 		tIndex.m_tDistr.m_sHaStrategy			= HAStrategyToStr ( tIt.Get()->m_eHaStrategy );
@@ -1000,11 +1000,11 @@ CSphString BuildCreateTableDistr ( const CSphString & sName, const DistributedIn
 
 	DistributedIndexRefPtr_t pDefault ( new DistributedIndex_t );
 	CSphString sOpt;
-	if ( tDistr.m_iAgentConnectTimeout!=pDefault->m_iAgentConnectTimeout )
-		sRes << sOpt.SetSprintf ( "agent_connect_timeout='%d'", tDistr.m_iAgentConnectTimeout );
+	if ( tDistr.m_iAgentConnectTimeoutMs!=pDefault->m_iAgentConnectTimeoutMs )
+		sRes << sOpt.SetSprintf ( "agent_connect_timeout='%d'", tDistr.m_iAgentConnectTimeoutMs );
 
-	if ( tDistr.m_iAgentQueryTimeout!=pDefault->m_iAgentQueryTimeout )
-		sRes << sOpt.SetSprintf ( "agent_query_timeout='%d'", tDistr.m_iAgentQueryTimeout );
+	if ( tDistr.m_iAgentQueryTimeoutMs!=pDefault->m_iAgentQueryTimeoutMs )
+		sRes << sOpt.SetSprintf ( "agent_query_timeout='%d'", tDistr.m_iAgentQueryTimeoutMs );
 
 	if ( tDistr.m_iAgentRetryCount!=pDefault->m_iAgentRetryCount )
 		sRes << sOpt.SetSprintf ( "agent_retry_count='%d'", tDistr.m_iAgentRetryCount );

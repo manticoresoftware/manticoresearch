@@ -16,7 +16,7 @@
 #include "searchdaemon.h"
 #include "searchdddl.h"
 
-extern int g_iAgentQueryTimeout;	// global (default). May be override by index-scope values, if one specified
+extern int g_iAgentQueryTimeoutMs;	// global (default). May be override by index-scope values, if one specified
 
 #define YYSTYPE SqlNode_t
 
@@ -96,7 +96,7 @@ SqlStmt_t::SqlStmt_t()
 	m_tQuery.m_eSort = SPH_SORT_EXTENDED;
 	m_tQuery.m_sSortBy = "@weight desc"; // default order
 	m_tQuery.m_sOrderBy = "@weight desc";
-	m_tQuery.m_iAgentQueryTimeout = g_iAgentQueryTimeout;
+	m_tQuery.m_iAgentQueryTimeoutMs = g_iAgentQueryTimeoutMs;
 	m_tQuery.m_iRetryCount = -1;
 	m_tQuery.m_iRetryDelay = -1;
 }
@@ -354,7 +354,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;
 
-		m_pQuery->m_iAgentQueryTimeout = (int)tValue.m_iValue;
+		m_pQuery->m_iAgentQueryTimeoutMs = (int)tValue.m_iValue;
 
 	} else if ( sOpt=="max_predicted_time" )
 	{

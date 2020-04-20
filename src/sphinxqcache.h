@@ -70,8 +70,8 @@ struct QcacheStatus_t
 {
 	// settings that can be changed
 	int64_t		m_iMaxBytes;		///< max RAM bytes
-	int			m_iThreshMsec;		///< minimum wall time to cache, in msec
-	int			m_iTtlSec;			///< cached query TTL, in msec
+	int			m_iThreshMs;		///< minimum wall time to cache, in msec
+	int			m_iTtlS;			///< cached query TTL, in msec
 
 	// report-only statistics
 	int			m_iCachedQueries;	///< cached queries counts

@@ -17,6 +17,8 @@
 #include "netreceive_https.h"
 #include "netreceive_ql.h"
 
+extern int g_iClientTimeoutS; // from searchd.cpp
+
 NetStateAPI_t::NetStateAPI_t ()
 {
 	m_sClientName[0] = '\0';
@@ -158,7 +160,7 @@ NetEvent_e NetSendData_t::Setup ( int64_t tmNow )
 
 	if ( !m_bContinue )
 	{
-		m_iTimeoutTime = tmNow + MS2SEC * g_iWriteTimeout;
+		m_iTimeoutTimeUS = tmNow + S2US * g_iClientTimeoutS;
 
 		assert ( m_tState->m_dBuf.GetLength64() );
 		m_tState->m_iLeft = m_tState->m_dBuf.GetLength64();

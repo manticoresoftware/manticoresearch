@@ -21,7 +21,7 @@
 /// member type for priority queue used for timeout task managing
 struct EnqueuedTimeout_t
 {
-	int64_t m_iTimeoutTime = -1;    // active timeout (used for bin heap morph in comparing)
+	int64_t m_iTimeoutTimeUS = -1;    // active timeout (used for bin heap morph in comparing)
 	mutable int m_iTimeoutIdx = -1;    // idx inside timeouts bin heap (or -1 if not there), internal
 };
 

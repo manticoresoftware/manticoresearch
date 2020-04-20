@@ -819,7 +819,7 @@ void NetOutputBuffer_c::Flush()
 
 	CSphScopedProfile tProf( m_pProfile, SPH_QSTATE_NET_WRITE );
 
-	const int64_t tmMaxTimer = sphMicroTimer() + MS2SEC * g_iWriteTimeout; // in microseconds
+	const int64_t tmMaxTimer = sphMicroTimer() + S2US * g_iWriteTimeoutS; // in microseconds
 	while ( !m_bError )
 	{
 		auto iRes = sphSockSend ( m_iSock, pBuffer, iLen );

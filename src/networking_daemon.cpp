@@ -289,7 +289,7 @@ class CSphNetLoop::Impl_c
 		m_pPoll->ForAll ([&] ( NetPollEvent_t * pEvent )
 		{
 			auto * pWork = (ISphNetAction *) pEvent;
-			if ( pWork->m_iTimeoutTime<=0 || tmNow<pWork->m_iTimeoutTime )
+			if ( pWork->m_iTimeoutTimeUS<=0 || tmNow<pWork->m_iTimeoutTimeUS )
 				return;
 
 			sphLogDebugv ( "%p bailing on timeout no signal, sock=%d", pWork, pWork->m_iSock );

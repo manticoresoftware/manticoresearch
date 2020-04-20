@@ -254,8 +254,8 @@ Qcache_c::Qcache_c()
 	m_iMaxBytes = 0; // disable qcache in debug builds
 #endif
 
-	m_iThreshMsec = 3000;
-	m_iTtlSec = 60;
+	m_iThreshMs = 3000;
+	m_iTtlS = 60;
 
 	m_iCachedQueries = 0;
 	m_iUsedBytes = 0;
@@ -278,8 +278,8 @@ Qcache_c::~Qcache_c()
 void Qcache_c::Setup ( int64_t iMaxBytes, int iThreshMsec, int iTtlSec )
 {
 	m_iMaxBytes = Max ( iMaxBytes, 0 );
-	m_iThreshMsec = Max ( iThreshMsec, 0 );
-	m_iTtlSec = Max ( iTtlSec, 1 );
+	m_iThreshMs = Max ( iThreshMsec, 0 );
+	m_iTtlS = Max ( iTtlSec, 1 );
 	EnforceLimits ( false );
 }
 
@@ -351,7 +351,7 @@ void Qcache_c::Add ( const CSphQuery & q, QcacheEntry_c * pResult, const ISphSch
 
 	// do not cache too fast queries or too big rsets, for obvious reasons
 	// do not cache full scans, because we'll get an incorrect empty result set here
-	if ( pResult->m_iElapsedMsec < m_iThreshMsec || pResult->GetSize() > m_iMaxBytes )
+	if ( pResult->m_iElapsedMsec < m_iThreshMs || pResult->GetSize() > m_iMaxBytes )
 		return;
 
 	if ( !CanCacheQuery(q) )
@@ -431,7 +431,7 @@ QcacheEntry_c * Qcache_c::Find ( int64_t iIndexId, const CSphQuery & q, const IS
 	
 	ScopedMutex_t dLock (m_tLock);
 
-	int64_t tmMin = sphMicroTimer() - int64_t(m_iTtlSec)*1000000;
+	int64_t tmMin = sphMicroTimer() - int64_t( m_iTtlS)*1000000;
 	int iLenMask = m_hData.GetLength() - 1;
 	int iLoop = m_hData.GetLength();
 	int iRes = -1;
@@ -561,9 +561,9 @@ void Qcache_c::EnforceLimits ( bool bSizeOnly )
 		return;
 
 	// if requested, do a full sweep, and recheck ttl and thresh limits
-	int64_t tmMin = sphMicroTimer() - int64_t(m_iTtlSec)*1000000;
+	int64_t tmMin = sphMicroTimer() - int64_t( m_iTtlS)*1000000;
 	ARRAY_FOREACH ( i, m_hData )
-		if ( IsValidEntry(i) && ( m_hData[i]->m_tmStarted < tmMin || m_hData[i]->m_iElapsedMsec < m_iThreshMsec ) )
+		if ( IsValidEntry(i) && ( m_hData[i]->m_tmStarted < tmMin || m_hData[i]->m_iElapsedMsec < m_iThreshMs ) )
 			DeleteEntry(i);
 
 }

@@ -824,7 +824,7 @@ bool sphCheckBlobRow ( int64_t iOff, DebugCheckReader_i & tBlobs, const CSphSche
 		sError = "Blob row too long";
 
 	CSphFixedVector<BYTE> dLengths ( uAttrLengths );
-	tBlobs.GetBytes ( dLengths.Begin(), dLengths.GetLengthBytes() );
+	tBlobs.GetBytes ( dLengths.Begin(), (int) dLengths.GetLengthBytes() );
 	const BYTE * pLen = dLengths.Begin();
 
 	CSphVector<int> dAttrLengths ( nBlobAttrs );
@@ -859,7 +859,7 @@ bool sphCheckBlobRow ( int64_t iOff, DebugCheckReader_i & tBlobs, const CSphSche
 	}
 
 	CSphFixedVector<BYTE> dAttrs ( uTotalLength );
-	tBlobs.GetBytes ( dAttrs.Begin(), dAttrs.GetLengthBytes() );
+	tBlobs.GetBytes ( dAttrs.Begin(), (int) dAttrs.GetLengthBytes() );
 	const BYTE * pAttr = dAttrs.Begin();
 	for ( int i = 0; i < nBlobAttrs; i++ )
 	{

@@ -81,7 +81,7 @@ char * LoadFile ( const char * sName, int * pLen, bool bReportErrors )
 	}
 	const int MAX_DATA = 10485760;
 	char * sData = new char [ MAX_DATA ];
-	int iData = fread ( sData, 1, MAX_DATA, fp );
+	auto iData = (int) fread ( sData, 1, MAX_DATA, fp );
 	fclose ( fp );
 	if ( iData<=0 )
 	{
@@ -181,7 +181,7 @@ void BenchStripper ()
 
 	const int MAX_SIZE = 1048576;
 	char * sBuf = new char [ MAX_SIZE ];
-	int iLen = fread ( sBuf, 1, MAX_SIZE-1, fp );
+	auto iLen = (int) fread ( sBuf, 1, MAX_SIZE-1, fp );
 	fclose ( fp );
 
 	char * sRef = new char [ MAX_SIZE ];
@@ -733,7 +733,7 @@ void BenchStemmer ()
 	FILE * fp = fopen ( CORPUS, "rb" );
 	if ( !fp )
 		sphDie ( "fopen %s failed", CORPUS );
-	int iLen = fread ( pRaw, 1, POOLSIZE, fp );
+	auto iLen = (int) fread ( pRaw, 1, POOLSIZE, fp );
 	printf ( "read %d bytes\n", iLen );
 	fclose ( fp );
 

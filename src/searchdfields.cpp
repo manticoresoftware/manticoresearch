@@ -270,7 +270,7 @@ static bool GetFieldFromLocal ( const CSphString & sIndexName, const GetFieldArg
 			
 			FieldTrait_t & tFieldDesc = tRes.m_dOff.Add();
 			tFieldDesc.m_iOff = tRes.m_dFields.GetLength();
-			tFieldDesc.m_iSize = tFieldData.GetLengthBytes();
+			tFieldDesc.m_iSize = (int) tFieldData.GetLengthBytes();
 
 			BYTE * pField = tRes.m_dFields.AddN ( tFieldDesc.m_iSize );
 			memcpy ( pField, tFieldData.Begin(), tFieldDesc.m_iSize );

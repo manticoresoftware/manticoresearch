@@ -423,7 +423,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	char * sTtyBuf = sBuf + strlen(sBuf);
 	strncpy ( sTtyBuf, sBanner, 32 ); // 32 is arbitrary; just something that is enough and keeps lint happy
 
-	int iLen = strlen(sBuf);
+	auto iLen = (int) strlen(sBuf);
 
 	// format the message
 	if ( sFmt )
@@ -1461,7 +1461,7 @@ void ISphOutputBuffer::SendBytes ( const char * pBuf )
 {
 	if ( !pBuf )
 		return;
-	SendBytes ( pBuf, strlen ( pBuf ) );
+	SendBytes ( pBuf, (int) strlen ( pBuf ) );
 }
 
 void ISphOutputBuffer::SendBytes ( const CSphString& sStr )
@@ -2245,7 +2245,7 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 		return;
 
 	const char * szQuery = pQuery->m_sRawQuery.cstr ();
-	int iQueryLen = ( szQuery ? strlen(szQuery) : 0 );
+	int iQueryLen = szQuery ? (int) strlen(szQuery) : 0;
 
 	pQuery->m_sQuery.Reserve ( iQueryLen*2+8 );
 	char * szRes = (char*) pQuery->m_sQuery.cstr ();
@@ -2818,7 +2818,7 @@ public:
 	explicit UnBackquote_fn ( const char * pSrc )
 	{
 		m_pDst = pSrc;
-		int iLen = 0;
+		size_t iLen = 0;
 		if ( pSrc && *pSrc )
 			iLen = strlen ( pSrc );
 
@@ -3912,7 +3912,7 @@ static void RecoverAggregateFunctions ( const CSphQuery & tQuery, const AggrResu
 
 		for ( int j=0; j<tRes.m_tSchema.GetAttrsCount(); j++ )
 		{
-			CSphColumnInfo & tCol = const_cast<CSphColumnInfo&> ( tRes.m_tSchema.GetAttr(j) );
+			auto & tCol = const_cast<CSphColumnInfo&> ( tRes.m_tSchema.GetAttr(j) );
 			if ( tCol.m_sName==tItem.m_sAlias )
 			{
 				assert ( tCol.m_eAggrFunc==SPH_AGGR_NONE );
@@ -5051,7 +5051,7 @@ void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphStrin
 
 	OnRunFinished();
 
-	CSphQueryResult & tRes = m_dResults[0];
+	auto & tRes = m_dResults[0];
 
 	tRes.m_iOffset = tQuery.m_iOffset;
 	tRes.m_iCount = Max ( Min ( tQuery.m_iLimit, tRes.m_dMatches.GetLength()-tQuery.m_iOffset ), 0 );
@@ -5328,7 +5328,8 @@ void SearchHandler_c::RunLocalSearchesParallel()
 		t.m_pCurSearch = &iaCursor;
 		t.m_iSearches = dWorks.GetLength();
 		t.m_pSearches = dWorks.Begin();
-		SphCrashLogger_c::ThreadCreate ( &t.m_tThd, LocalSearchThreadFunc, (void*)&t, false, "LocalSearch" ); // FIXME! check result
+		SphCrashLogger_c::ThreadCreate ( &t.m_tThd, LocalSearchThreadFunc, (void*)&t, false, "LocalSearch" );
+		// FIXME! check result
 	}
 
 	// wait for them to complete
@@ -6512,7 +6513,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					if ( !pResult )
 						continue;
 
-					const CSphQueryResult &tRemoteResult = pResult->m_dResults[iRes - iStart];
+					const auto &tRemoteResult = pResult->m_dResults[iRes - iStart];
 
 					// copy errors or warnings
 					if ( !tRemoteResult.m_sError.IsEmpty() )
@@ -8873,7 +8874,7 @@ void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char 
 
 	LogSphinxqlError ( sStmt, sError, iCID );
 
-	int iErrorLen = strlen(sError);
+	auto iErrorLen = (int) strlen(sError);
 
 	// cut the error message to fix isseue with long message for popular clients
 	if ( iErrorLen>SPH_MYSQL_ERROR_MAX_LENGTH )
@@ -8939,7 +8940,7 @@ void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedR
 
 	int iMsgLen = 0;
 	if ( sMessage )
-		iMsgLen = strlen(sMessage);
+		iMsgLen = (int) strlen(sMessage);
 
 	tOut.SendLSBDword ( DWORD (uPacketID<<24) + iLen + iMsgLen + 5);
 	tOut.SendByte ( 0 );				// ok packet
@@ -9006,7 +9007,7 @@ class SqlRowBuffer_c : public RowBuffer_i, private LazyVector_T<BYTE>
 
 	void SendSqlString ( const char * sStr )
 	{
-		int iLen = strlen ( sStr );
+		auto iLen = (int) strlen ( sStr );
 		SendSqlInt ( iLen );
 		m_tOut.SendBytes ( sStr, iLen );
 	}
@@ -15235,7 +15236,8 @@ public:
 				StatCountCommand ( eStmt==STMT_INSERT ? SEARCHD_COMMAND_INSERT : SEARCHD_COMMAND_REPLACE );
 				StmtErrorReporter_c tErrorReporter ( tOut );
 				sphHandleMysqlInsert ( tErrorReporter, *pStmt, eStmt==STMT_REPLACE,
-					m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tLastMeta.m_sWarning, m_tAcc, m_tVars.m_eCollation, m_tVars.m_dLastIds );
+					m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tLastMeta.m_sWarning, m_tAcc,
+					m_tVars.m_eCollation, m_tVars.m_dLastIds );
 				return true;
 			}
 
@@ -15879,7 +15881,8 @@ static void HandleClientMySQL ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handler
 		ThdState ( ThdState_e::NET_READ, tThd );
 		if ( !tIn.ReadFrom ( iPacketLen, g_iClientQlTimeout, true ) )
 		{
-			sphWarning ( "failed to receive MySQL request body (client=%s(%d), exp=%d, error='%s')", sClientIP, iCID, iPacketLen, sphSockError() );
+			sphWarning ( "failed to receive MySQL request body (client=%s(%d), exp=%d, error='%s')", sClientIP, iCID,
+					iPacketLen, sphSockError() );
 			break;
 		}
 
@@ -15894,13 +15897,15 @@ static void HandleClientMySQL ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handler
 			{
 				if ( !ReadMySQLPacketHeader ( iSock, iAddonLen, uPacketID ) )
 				{
-					sphLogDebugv ( "conn %s(%d): bailing on failed MySQL header2 (sockerr=%s)", sClientIP, iCID, sphSockError() );
+					sphLogDebugv ( "conn %s(%d): bailing on failed MySQL header2 (sockerr=%s)", sClientIP, iCID,
+							sphSockError() );
 					break;
 				}
 
 				if ( !tIn.ReadFrom ( iAddonLen, g_iClientQlTimeout, true, true ) )
 				{
-					sphWarning ( "failed to receive MySQL request body2 (client=%s(%d), exp=%d, error='%s')", sClientIP, iCID, iAddonLen, sphSockError() );
+					sphWarning ( "failed to receive MySQL request body2 (client=%s(%d), exp=%d, error='%s')", sClientIP,
+							iCID, iAddonLen, sphSockError() );
 					iAddonLen = -1;
 					break;
 				}
@@ -17288,7 +17293,7 @@ bool CheckConfigChanges ( CSphVector<char>& dContent )
 	} else
 	{
 		while ( bGotLine ) {
-			auto iLen = strlen ( sBuf );
+			auto iLen = (int) strlen ( sBuf );
 			dContent.Append ( sBuf, iLen );
 			bGotLine = !!fgets ( sBuf, sizeof ( sBuf ), fp );
 		}
@@ -17861,7 +17866,7 @@ const char * WinErrorInfo ()
 	DWORD uErr = ::GetLastError ();
 	snprintf ( sBuf, sizeof(sBuf), "code=%d, error=", uErr );
 
-	int iLen = strlen(sBuf);
+	auto iLen = (int) strlen(sBuf);
 	if ( !FormatMessage ( FORMAT_MESSAGE_FROM_SYSTEM, NULL, uErr, 0, sBuf+iLen, sizeof(sBuf)-iLen, NULL ) ) // FIXME? force US-english langid?
 		snprintf ( sBuf+iLen, sizeof(sBuf)-iLen, "(no message)" );
 
@@ -17891,7 +17896,7 @@ void AppendArg ( char * sBuf, int iBufLimit, const char * sArg )
 	if ( sBuf>=sBufMax )
 		return;
 
-	int iArgLen = strlen(sArg);
+	auto iArgLen = (int) strlen(sArg);
 	bool bQuote = false;
 	for ( int i=0; i<iArgLen && !bQuote; i++ )
 		if ( sArg[i]==' ' || sArg[i]=='"' )
@@ -19006,7 +19011,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	if ( g_iMysqlHandshake>=(int)sizeof(g_sMysqlHandshake) )
 	{
 		sphWarning ( "mysql_version_string too long; using default (version=%s)", szMANTICORE_VERSION );
-		g_iMysqlHandshake = sizeof(sHandshake1) + strlen(szMANTICORE_VERSION) + sizeof(sHandshake2) - 1;
+		g_iMysqlHandshake = sizeof(sHandshake1) + (int) strlen(szMANTICORE_VERSION) + sizeof(sHandshake2) - 1;
 		assert ( g_iMysqlHandshake < (int)sizeof(g_sMysqlHandshake) );
 	}
 
@@ -19915,7 +19920,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 		char sPid[16];
 		snprintf ( sPid, sizeof(sPid), "%d\n", (int)getpid() );
-		int iPidLen = strlen(sPid);
+		auto iPidLen = (int) strlen(sPid);
 
 		sphSeek ( g_iPidFD, 0, SEEK_SET );
 		if ( !sphWrite ( g_iPidFD, sPid, iPidLen ) )

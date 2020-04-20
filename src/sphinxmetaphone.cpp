@@ -589,7 +589,7 @@ void stem_dmetaphone ( BYTE * pWord )
 	BYTE	sOriginal [3*SPH_MAX_WORD_LEN+3+EXTRA_RESERVE];
 	BYTE	sPrimary [3*SPH_MAX_WORD_LEN+3];
 	BYTE	sSecondary [ 3*SPH_MAX_WORD_LEN+3 ];
-	int		iLength = strlen ( (const char *)pWord );
+	auto	iLength = (int) strlen ( (const char *)pWord );
 	memcpy ( sOriginal, pWord, iLength + 1 );
 	sPrimary[0] = '\0';
 	sSecondary[0] = '\0';
@@ -610,7 +610,7 @@ void stem_dmetaphone ( BYTE * pWord )
 	CurrentWord_t Word;
 	Word.pWord = sOriginal;
 	Word.iLength = iLength;
-	Word.iLengthPadded = strlen ( (const char *)sOriginal );
+	Word.iLengthPadded = (int) strlen ( (const char *)sOriginal );
 
 	// skip these when at start of word
 	if ( StrAt ( Word, 0, 2, "GN", "KN", "PN", "WR", "PS" ) )

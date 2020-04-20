@@ -128,7 +128,7 @@ namespace {
 void te (const char* src, const char* target)
 {
 	char buf[100];
-	int iRes = JsonUnescape ( buf, src, strlen(src) );
+	int iRes = JsonUnescape ( buf, src, (int)strlen(src) );
 	buf[iRes]='\0';
 	assert ( iRes<=(int)strlen(src));
 	ASSERT_STREQ (target,buf);
@@ -207,7 +207,7 @@ TEST ( bench, DISABLED_json_unescape )
 	cJSON * pJson = cJSON_CreateObject ();
 
 	const char sLiteral[] = R"("In `docs/searching/expressions,_functions,_and_operators.rst` which reflected into\\nhttps://manticoresearch.gitlab.io/dev/searching/expressions,_functions,_and_operators.html\\n\\n1. At the top there is a kind of TOC with shortcuts to the functions described in the section.\\nHowever this TOC is not consistent. I.e., it doesn't refer to all function actually described there.\\n\\nMost prominent example is 'PACKEDFACTORS()' - it absent in the TOC.\\n\\n2. Also consider whether it is better or not to sort function descriptions in the section alphabetically ('REMAP' at the end looks strange, as 'WEIGHT' is before it).")";
-	auto iLen = strlen ( sLiteral );
+	auto iLen = (int) strlen ( sLiteral );
 	char buf[sizeof(sLiteral)];
 
 	auto iTimeSpan = -sphMicroTimer ();
@@ -1188,7 +1188,7 @@ TEST ( bench, DISABLED_bson_vs_cjson )
 	auto uLoops = 1000000;
 
 	const char sLiteral[] = R"({"query":{"percolate":{"document":{"title":"A new tree test in the office office"}}}})";
-	auto iLen = strlen ( sLiteral );
+	auto iLen = (int) strlen ( sLiteral );
 
 	const volatile void * pRes = nullptr;
 	CSphString sBuf;

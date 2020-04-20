@@ -89,8 +89,8 @@ TEST( Text, HTMLStriper )
 
 static int ProxyLevenshtein ( const char * sA, const char * sB )
 {
-	int iLenA = strlen ( sA );
-	int iLenB = strlen ( sB );
+	auto iLenA = (int) strlen ( sA );
+	auto iLenB = (int) strlen ( sB );
 	return sphLevenshtein ( sA, iLenA, sB, iLenB );
 }
 

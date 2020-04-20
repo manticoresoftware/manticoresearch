@@ -892,7 +892,7 @@ void TokenizeDocument ( HitCollector_i & tFunctor, const CSphHTMLStripper * pStr
 
 		// might differ when sbsc got replaced by utf codepoint
 		int iTokenLen = pLastTokenEnd - pTokenStart;
-		int iWordLen = strlen ( ( const char *)sWord );
+		auto iWordLen = (int) strlen ( ( const char *)sWord );
 
 		bool bPopExactMulti = false;
 		if ( tIndexSettings.m_bIndexExactWords )

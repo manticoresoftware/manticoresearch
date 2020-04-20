@@ -1438,7 +1438,7 @@ CSphSource_StringVector::CSphSource_StringVector ( const VecTraits_T<const char 
 	for ( const char* sField : dFields )
 	{
 		m_dFields.Add ( (BYTE*) sField );
-		m_dFieldLengths.Add ( strlen ( sField ) );
+		m_dFieldLengths.Add ( (int) strlen ( sField ) );
 		assert ( sField );
 	}
 	m_dFields.Add (nullptr);
@@ -1831,7 +1831,7 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bRe
 			const char * pStr = ppStr ? ppStr[iStrAttr++] : nullptr;
 			int iLen = 0;
 			if ( tColumn.m_eAttrType==SPH_ATTR_STRING )
-				iLen = ( pStr ? strlen ( pStr ) : 0 );
+				iLen = ( pStr ? (int) strlen ( pStr ) : 0 );
 			else // SPH_ATTR_JSON - packed len + data
 				iLen = sphUnpackPtrAttr ( (const BYTE*)pStr, (const BYTE**)&pStr );
 
@@ -4026,7 +4026,7 @@ static bool LoadVector ( CSphReader & tReader, CSphVector < T, P > & tVector,
 
 	tVector.Resize ( iSize );
 	if ( tVector.GetLength() )
-		tReader.GetBytes ( tVector.Begin(), tVector.GetLengthBytes() );
+		tReader.GetBytes ( tVector.Begin(), (int) tVector.GetLengthBytes() );
 
 	return true;
 }
@@ -4048,7 +4048,7 @@ static bool LoadVector ( BinlogReader_c & tReader, CSphVector < T, P > & tVector
 	STATIC_ASSERT ( IS_TRIVIALLY_COPYABLE(T), NON_TRIVIAL_VECTORS_ARE_UNSERIALIZABLE );
 	tVector.Resize ( (int) tReader.UnzipOffset() ); // FIXME? sanitize?
 	if ( tVector.GetLength() )
-		tReader.GetBytes ( tVector.Begin(), tVector.GetLengthBytes() );
+		tReader.GetBytes ( tVector.Begin(), (int) tVector.GetLengthBytes() );
 	return !tReader.GetErrorFlag();
 }
 
@@ -4471,7 +4471,7 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 					}
 				}
 
-				int iCalcWordLen = strlen ( (const char *)sWord+1 );
+				auto iCalcWordLen = (int) strlen ( (const char *)sWord+1 );
 				if ( iWordLen!=iCalcWordLen )
 				{
 					sWord[sizeof(sWord)-1] = '\0';
@@ -4792,7 +4792,7 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 		{
 			const RtWordCheckpoint_t & tRefCP = dRefCheckpoints[i];
 			const RtWordCheckpoint_t & tCP = tSegment.m_dWordCheckpoints[i];
-			const int iLen = m_bKeywordDict ? strlen ( tCP.m_sWord ) : 0;
+			const int iLen = m_bKeywordDict ? (const int) strlen ( tCP.m_sWord ) : 0;
 			if ( m_bKeywordDict && ( !tCP.m_sWord || ( !strlen ( tRefCP.m_sWord ) || !strlen ( tCP.m_sWord ) ) ) )
 			{
 				tReporter.Fail ( "empty word checkpoint %d ((segment=%d, read_word=%s, read_len=%u, readpos=%d, calc_word=%s, calc_len=%u, calcpos=%d)",
@@ -5336,7 +5336,7 @@ struct DictEntryRtPayload_t
 
 		int iTotalDocs = 0;
 		int iTotalHits = 0;
-		if ( m_dWordExpand.GetLength() )
+		if ( !m_dWordExpand.IsEmpty() )
 		{
 			int iRtExpansionLimit = tArgs.m_iExpansionLimit * m_iSegExpansionLimit;
 			if ( tArgs.m_iExpansionLimit && m_dWordExpand.GetLength()>iRtExpansionLimit )
@@ -5366,7 +5366,8 @@ struct DictEntryRtPayload_t
 					tArgs.m_dExpanded.Last().m_iHits += pCur->m_iHits;
 				} else
 				{
-					tArgs.AddExpanded ( sBase + pCur->m_iNameOff + 1, sBase[pCur->m_iNameOff], pCur->m_iDocs, pCur->m_iHits );
+					tArgs.AddExpanded ( sBase + pCur->m_iNameOff + 1, sBase[pCur->m_iNameOff],
+							pCur->m_iDocs, pCur->m_iHits );
 					pLast = pCur;
 				}
 				iTotalDocs += pCur->m_iDocs;
@@ -5391,13 +5392,15 @@ struct DictEntryRtPayload_t
 				{
 					// sort expansions by frequency desc
 					// per segment clip the less frequent ones if needed, as they are likely misspellings
-					sphSort ( m_dWordPayload.Begin()+tSeg.m_uOff, tSeg.m_uLen, ExpandedOrderDesc_T<RtExpandedPayload_t>() );
+					sphSort ( m_dWordPayload.Begin()+tSeg.m_uOff, tSeg.m_uLen,
+							ExpandedOrderDesc_T<RtExpandedPayload_t>() );
 					tSeg.m_uLen = uExpansionLimit;
 				}
 
 				iPayloads += tSeg.m_uLen;
 				// sort by ascending doc-list offset
-				sphSort ( m_dWordPayload.Begin()+tSeg.m_uOff, tSeg.m_uLen, bind ( &RtExpandedPayload_t::m_uDoclistOff ) );
+				sphSort ( m_dWordPayload.Begin()+tSeg.m_uOff, tSeg.m_uLen,
+						bind ( &RtExpandedPayload_t::m_uDoclistOff ) );
 			}
 
 			auto * pPayload = new RtSubstringPayload_t ( m_dSeg.GetLength(), iPayloads );
@@ -5460,7 +5463,7 @@ void RtIndex_c::GetPrefixedWords ( const char * sSubstring, int iSubLen, const c
 			if ( pCurCheckpoint )
 			{
 				// there could be valid data prior 1st checkpoint that should be unpacked and checked
-				int iCheckpointNameLen = strlen ( pCurCheckpoint->m_sWord );
+				auto iCheckpointNameLen = (int) strlen ( pCurCheckpoint->m_sWord );
 				if ( pCurCheckpoint!=pCurSeg->m_dWordCheckpoints.Begin()
 					|| ( sphDictCmp ( sSubstring, iSubLen, pCurCheckpoint->m_sWord, iCheckpointNameLen )==0 && iSubLen==iCheckpointNameLen ) )
 				{
@@ -5477,7 +5480,8 @@ void RtIndex_c::GetPrefixedWords ( const char * sSubstring, int iSubLen, const c
 			if ( iCmp<0 )
 			{
 				break;
-			} else if ( iCmp==0 && iSubLen<=pWord->m_sWord[0] && sphWildcardMatch ( (const char *)pWord->m_sWord+1+iSkipMagic, sWildcard, pWildcard ) )
+			} else if ( iCmp==0 && iSubLen<=pWord->m_sWord[0]
+				&& sphWildcardMatch ( (const char *)pWord->m_sWord+1+iSkipMagic, sWildcard, pWildcard ) )
 			{
 				tDict2Payload.Add ( pWord, iSeg );
 			}
@@ -6108,7 +6112,7 @@ public:
 #endif
 };
 
-void QueryDiskChunks ( const CSphQuery * pQuery,
+static void QueryDiskChunks ( const CSphQuery * pQuery,
 		CSphQueryResult * pResult,
 		const CSphMultiQueryArgs & tArgs,
 		SphChunkGuard_t& tGuard,
@@ -6413,7 +6417,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	if ( m_pFieldFilter && sModifiedQuery )
 	{
 		pFieldFilter = m_pFieldFilter->Clone();
-		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
+		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, (int) strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
 			sModifiedQuery = dFiltered.Begin();
 	}
 
@@ -6869,7 +6873,7 @@ void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	if ( m_pFieldFilter && sQuery )
 	{
 		pFieldFilter = m_pFieldFilter->Clone();
-		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
+		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, (int) strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
 			sModifiedQuery = dFiltered.Begin();
 	}
 
@@ -6897,7 +6901,7 @@ void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		tExpCtx.m_bMergeSingles = false;
 		tExpCtx.m_pIndexData = &tGuard.m_dRamChunks;
 
-		pTokenizer->SetBuffer ( sModifiedQuery, strlen ( (const char*)sModifiedQuery ) );
+		pTokenizer->SetBuffer ( sModifiedQuery, (int) strlen ( (const char*)sModifiedQuery ) );
 		tAotFilter.GetKeywords ( dKeywords, tExpCtx );
 	} else
 	{
@@ -9783,15 +9787,15 @@ void RtAccum_t::LoadRtTrx ( const BYTE * pData, int iLen )
 
 	// insert and replace
 	m_dAccum.Resize ( tReader.GetDword() );
-	tReader.GetBytes ( m_dAccum.Begin(), m_dAccum.GetLengthBytes() );
+	tReader.GetBytes ( m_dAccum.Begin(),(int) m_dAccum.GetLengthBytes() );
 	m_dAccumRows.Resize ( tReader.GetDword() );
-	tReader.GetBytes ( m_dAccumRows.Begin(), m_dAccumRows.GetLengthBytes() );
+	tReader.GetBytes ( m_dAccumRows.Begin(), (int) m_dAccumRows.GetLengthBytes() );
 	m_dBlobs.Resize ( tReader.GetDword() );
-	tReader.GetBytes ( m_dBlobs.Begin(), m_dBlobs.GetLengthBytes() );
+	tReader.GetBytes ( m_dBlobs.Begin(), (int) m_dBlobs.GetLengthBytes() );
 	m_dPerDocHitsCount.Resize ( tReader.GetDword() );
-	tReader.GetBytes ( m_dPerDocHitsCount.Begin(), m_dPerDocHitsCount.GetLengthBytes() );
+	tReader.GetBytes ( m_dPerDocHitsCount.Begin(), (int) m_dPerDocHitsCount.GetLengthBytes() );
 	m_dPackedKeywords.Reset ( tReader.GetDword() );
-	tReader.GetBytes ( m_dPackedKeywords.Begin(), m_dPackedKeywords.GetLengthBytes() );
+	tReader.GetBytes ( m_dPackedKeywords.Begin(), (int) m_dPackedKeywords.GetLengthBytes() );
 	if ( !!tReader.GetByte() )
 	{
 		if ( !m_pDocstore.Ptr() )
@@ -9802,7 +9806,7 @@ void RtAccum_t::LoadRtTrx ( const BYTE * pData, int iLen )
 
 	// delete
 	m_dAccumKlist.Resize ( tReader.GetDword() );
-	tReader.GetBytes ( m_dAccumKlist.Begin(), m_dAccumKlist.GetLengthBytes() );
+	tReader.GetBytes ( m_dAccumKlist.Begin(), (int) m_dAccumKlist.GetLengthBytes() );
 }
 
 void RtAccum_t::SaveRtTrx ( MemoryWriter_c & tWriter ) const
@@ -9812,15 +9816,15 @@ void RtAccum_t::SaveRtTrx ( MemoryWriter_c & tWriter ) const
 
 	// insert and replace
 	tWriter.PutDword ( m_dAccum.GetLength() );
-	tWriter.PutBytes ( m_dAccum.Begin(), m_dAccum.GetLengthBytes() );
+	tWriter.PutBytes ( m_dAccum.Begin(), (int) m_dAccum.GetLengthBytes() );
 	tWriter.PutDword ( m_dAccumRows.GetLength() );
-	tWriter.PutBytes ( m_dAccumRows.Begin(), m_dAccumRows.GetLengthBytes() );
+	tWriter.PutBytes ( m_dAccumRows.Begin(), (int) m_dAccumRows.GetLengthBytes() );
 	tWriter.PutDword ( m_dBlobs.GetLength() );
-	tWriter.PutBytes ( m_dBlobs.Begin(), m_dBlobs.GetLengthBytes() );
+	tWriter.PutBytes ( m_dBlobs.Begin(), (int) m_dBlobs.GetLengthBytes() );
 	tWriter.PutDword ( m_dPerDocHitsCount.GetLength() );
-	tWriter.PutBytes ( m_dPerDocHitsCount.Begin(), m_dPerDocHitsCount.GetLengthBytes() );
+	tWriter.PutBytes ( m_dPerDocHitsCount.Begin(), (int) m_dPerDocHitsCount.GetLengthBytes() );
 	// packed keywords default length is 1 no need to pass that
-	int iLen = ( m_bKeywordDict && m_pDictRt->GetPackedLen()>1 ? m_pDictRt->GetPackedLen() : 0 );
+	int iLen = ( m_bKeywordDict && m_pDictRt->GetPackedLen()>1 ? (int) m_pDictRt->GetPackedLen() : 0 );
 	tWriter.PutDword ( iLen );
 	if ( iLen )
 		tWriter.PutBytes ( m_pDictRt->GetPackedKeywords(), iLen );
@@ -9830,5 +9834,5 @@ void RtAccum_t::SaveRtTrx ( MemoryWriter_c & tWriter ) const
 
 	// delete
 	tWriter.PutDword ( m_dAccumKlist.GetLength() );
-	tWriter.PutBytes ( m_dAccumKlist.Begin(), m_dAccumKlist.GetLengthBytes() );
+	tWriter.PutBytes ( m_dAccumKlist.Begin(), (int) m_dAccumKlist.GetLengthBytes() );
 }

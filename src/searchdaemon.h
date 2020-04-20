@@ -1260,7 +1260,7 @@ void GetArray ( CSphFixedVector<T> & dBuf, InputBuffer_c & tIn )
 		return;
 
 	dBuf.Reset ( iCount );
-	tIn.GetBytes ( dBuf.Begin(), dBuf.GetLengthBytes() );
+	tIn.GetBytes ( dBuf.Begin(), (int) dBuf.GetLengthBytes() );
 }
 
 template<typename T>
@@ -1271,7 +1271,7 @@ void GetArray ( CSphVector<T> & dBuf, MemoryReader_c & tIn )
 		return;
 
 	dBuf.Resize ( iCount );
-	tIn.GetBytes ( dBuf.Begin(), dBuf.GetLengthBytes() );
+	tIn.GetBytes ( dBuf.Begin(), (int) dBuf.GetLengthBytes() );
 }
 
 template <typename T>
@@ -1416,7 +1416,7 @@ public:
 	// Fire he header for table with iSize string columns
 	void HeadOfStrings ( const char ** ppNames, size_t iSize )
 	{
-		HeadBegin ( iSize );
+		HeadBegin ( (int) iSize );
 		for ( ; iSize>0 ; --iSize )
 			HeadColumn ( *ppNames++ );
 		HeadEnd();

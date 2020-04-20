@@ -209,11 +209,11 @@ void DebugCheckHelper_c::DebugCheck_Attributes ( DebugCheckReader_i & tAttrs, De
 
 	CSphFixedVector<CSphRowitem> dRow ( tSchema.GetRowSize() );
 	const CSphRowitem * pRow = dRow.Begin();
-	tAttrs.SeekTo ( 0, dRow.GetLengthBytes() );
+	tAttrs.SeekTo ( 0, (int) dRow.GetLengthBytes() );
 
 	for ( int64_t iRow=0; iRow<nRows; iRow++ )
 	{
-		tAttrs.GetBytes ( dRow.Begin(), dRow.GetLengthBytes() );
+		tAttrs.GetBytes ( dRow.Begin(), (int) dRow.GetLengthBytes() );
 		DocID_t tDocID = sphGetDocID(pRow);
 
 		///////////////////////////
@@ -536,7 +536,7 @@ void DiskIndexChecker_c::CheckDictionary()
 				iDelta = uPack & 127;
 				iMatch = tDictReader.GetByte();
 			}
-			const int iLastWordLen = strlen(sLastWord);
+			auto iLastWordLen = (const int) strlen(sLastWord);
 			if ( iMatch+iDelta>=(int)sizeof(sLastWord)-1 || iMatch>iLastWordLen )
 			{
 				m_tReporter.Fail ( "wrong word-delta (pos=" INT64_FMT ", word=%s, len=%d, begin=%d, delta=%d)", iDictPos, sLastWord, iLastWordLen, iMatch, iDelta );
@@ -562,7 +562,7 @@ void DiskIndexChecker_c::CheckDictionary()
 				bHitless = true;
 			}
 
-			const int iNewWordLen = strlen(sWord);
+			auto iNewWordLen = (const int) strlen(sWord);
 
 			if ( iNewWordLen==0 )
 				m_tReporter.Fail ( "empty word in dictionary (pos=" INT64_FMT ")", iDictPos );
@@ -620,7 +620,7 @@ void DiskIndexChecker_c::CheckDictionary()
 
 			if ( bWordDict )
 			{
-				const int iLen = strlen ( sWord );
+				auto iLen = (const int) strlen ( sWord );
 				char * sArenaWord = dCheckpointWords.AddN ( iLen + 1 );
 				memcpy ( sArenaWord, sWord, iLen );
 				sArenaWord[iLen] = '\0';
@@ -645,7 +645,7 @@ void DiskIndexChecker_c::CheckDictionary()
 	{
 		CSphWordlistCheckpoint tRefCP = dCheckpoints[i];
 		const CSphWordlistCheckpoint & tCP = m_tWordlist.m_dCheckpoints[i];
-		const int iLen = bWordDict ? strlen ( tCP.m_sWord ) : 0;
+		const int iLen = bWordDict ? (int) strlen ( tCP.m_sWord ) : 0;
 		if ( bWordDict )
 			tRefCP.m_sWord = dCheckpointWords.Begin() + tRefCP.m_uWordID;
 		if ( bWordDict && ( tRefCP.m_sWord[0]=='\0' || tCP.m_sWord[0]=='\0' ) )
@@ -742,7 +742,7 @@ void DiskIndexChecker_c::CheckDocs()
 				iDelta = uPack & 127;
 				iMatch = m_tDictReader.GetByte();
 			}
-			const int iLastWordLen = strlen(sWord);
+			auto iLastWordLen = (const int) strlen(sWord);
 			if ( iMatch+iDelta>=(int)sizeof(sWord)-1 || iMatch>iLastWordLen )
 				m_tDictReader.SkipBytes ( iDelta );
 			else
@@ -1074,7 +1074,7 @@ void DiskIndexChecker_c::CheckBlockIndex()
 
 	CSphFixedVector<CSphRowitem> dRow ( m_tSchema.GetRowSize() );
 	const CSphRowitem * pRow = dRow.Begin();
-	m_tAttrReader.SeekTo ( 0, dRow.GetLengthBytes() );
+	m_tAttrReader.SeekTo ( 0, (int) dRow.GetLengthBytes() );
 
 	const int64_t iMinMaxEnd = sizeof(DWORD) * m_iMinMaxIndex + sizeof(DWORD) * ( m_iDocinfoIndex+1 ) * uStride * 2;
 	CSphFixedVector<DWORD> dMinMax ( uStride*2 );
@@ -1098,15 +1098,15 @@ void DiskIndexChecker_c::CheckBlockIndex()
 			if ( int64_t( iBlockPos + sizeof(DWORD) * uStride) > iMinMaxEnd )
 				m_tReporter.Fail ( "unexpected block index end (row=" INT64_FMT ", block=" INT64_FMT ")", iIndexEntry, iBlock );
 
-			m_tAttrReader.SeekTo ( iBlockPos, dMinMax.GetLengthBytes() );
-			m_tAttrReader.GetBytes ( dMinMax.Begin(), dMinMax.GetLengthBytes() );
+			m_tAttrReader.SeekTo ( iBlockPos, (int) dMinMax.GetLengthBytes() );
+			m_tAttrReader.GetBytes ( dMinMax.Begin(), (int) dMinMax.GetLengthBytes() );
 			if ( m_tAttrReader.GetErrorFlag() )
 				m_tReporter.Fail ( "unexpected block index (row=" INT64_FMT ", block=" INT64_FMT ")", iIndexEntry, iBlock );
 
-			m_tAttrReader.SeekTo ( iPos, dRow.GetLengthBytes() );
+			m_tAttrReader.SeekTo ( iPos, (int) dRow.GetLengthBytes() );
 		}
 
-		m_tAttrReader.GetBytes ( dRow.Begin(), dRow.GetLengthBytes() );
+		m_tAttrReader.GetBytes ( dRow.Begin(), (int) dRow.GetLengthBytes() );
 		const DocID_t tDocID = sphGetDocID(pRow);
 
 		// check values vs blocks range
@@ -1181,7 +1181,7 @@ void DiskIndexChecker_c::CheckDocidLookup()
 	int64_t iLookupEnd = tLookup.GetFilesize();
 
 	CSphFixedVector<CSphRowitem> dRow ( m_tSchema.GetRowSize() );
-	m_tAttrReader.SeekTo ( 0, dRow.GetLengthBytes() );
+	m_tAttrReader.SeekTo ( 0, (int) dRow.GetLengthBytes() );
 	CSphBitvec dRowids ( m_iNumRows );
 
 	int iDocs = tLookup.GetDword();
@@ -1295,7 +1295,7 @@ void DiskIndexChecker_c::CheckDocids()
 	m_tReporter.Msg ( "checking docid douplicates ..." );
 
 	CSphFixedVector<CSphRowitem> dRow ( m_tSchema.GetRowSize() );
-	m_tAttrReader.SeekTo ( 0, dRow.GetLengthBytes() );
+	m_tAttrReader.SeekTo ( 0, (int) dRow.GetLengthBytes() );
 
 	CSphFixedVector<DocidRowidPair_t> dRows ( m_iNumRows );
 	for ( int i=0; i<m_iNumRows; i++ )

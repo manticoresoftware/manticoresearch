@@ -114,7 +114,7 @@ void sphSplitApply ( const char * sIn, int iSize, StrFunctor &&dFunc )
 		return;
 
 	const char * p = ( char * ) sIn;
-	if ( iSize<0 ) iSize = strlen (p);
+	if ( iSize<0 ) iSize = (int) strlen (p);
 	const char * pEnd = p + iSize;
 	while ( p < pEnd )
 	{
@@ -2083,9 +2083,9 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 			if ( !sPercent ) // no formatters, only plain chars
 			{
 				auto uLen = strlen (sFmt-1);
-				Grow ( pOutput, uLen );
-				memcpy ( tail ( pOutput ), sFmt-1, uLen );
-				pOutput += uLen;
+				Grow ( pOutput, (int) uLen );
+				memcpy ( tail ( pOutput ), sFmt-1, (int) uLen );
+				pOutput += (int) uLen;
 				sFmt+=uLen-1;
 				continue;
 			}
@@ -2094,7 +2094,7 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 			if ( uLen )
 			{
 				Grow ( pOutput, uLen );
-				memcpy ( tail ( pOutput ), sFmt - 1, uLen );
+				memcpy ( tail ( pOutput ), sFmt - 1, (int) uLen );
 				pOutput += uLen;
 				sFmt+=uLen;
 			}
@@ -2167,21 +2167,21 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 				if ( iWidth )
 					iWidth-=iValue;
 
-				Grow ( pOutput, iWidth );
+				Grow ( pOutput, (int) iWidth );
 				if ( iWidth && bHeadingSpace )
 				{
-					memset ( tail ( pOutput ), ' ', iWidth );
-					pOutput += iWidth;
+					memset ( tail ( pOutput ), ' ', (int) iWidth );
+					pOutput += (int) iWidth;
 				}
 
-				Grow ( pOutput, iValue );
+				Grow ( pOutput, (int) iValue );
 				memcpy ( tail ( pOutput ), pValue, iValue );
-				pOutput += iValue;
+				pOutput += (int) iValue;
 
 				if ( iWidth && !bHeadingSpace )
 				{
-					memset ( tail ( pOutput ), ' ', iWidth );
-					pOutput += iWidth;
+					memset ( tail ( pOutput ), ' ', (int) iWidth );
+					pOutput += (int) iWidth;
 				}
 
 				state = SNORMAL;
@@ -2192,7 +2192,7 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 			{
 				void * pValue = va_arg ( ap, void * );
 				auto uValue = uint64_t ( pValue );
-				::NtoA_T ( &pOutput, uValue, 16, iWidth, iPrec, cFill );
+				::NtoA_T ( &pOutput, uValue, 16, (int) iWidth, (int) iPrec, cFill );
 				state = SNORMAL;
 				break;
 			}
@@ -2201,14 +2201,14 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 		case 'u': // decimal unsigned
 			{
 				DWORD uValue = va_arg ( ap, DWORD );
-				::NtoA_T ( &pOutput, uValue, ( c=='x' ) ? 16 : 10, iWidth, iPrec, cFill );
+				::NtoA_T ( &pOutput, uValue, ( c=='x' ) ? 16 : 10, (int) iWidth,(int)  iPrec, cFill );
 				state = SNORMAL;
 				break;
 			}
 		case 'd': // decimal integer
 			{
 				int iValue = va_arg ( ap, int );
-				::NtoA_T ( &pOutput, iValue, 10, iWidth, iPrec, cFill );
+				::NtoA_T ( &pOutput, iValue, 10, (int) iWidth, (int) iPrec, cFill );
 				state = SNORMAL;
 				break;
 			}
@@ -2223,7 +2223,7 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 		case 'l': // decimal int64
 			{
 				int64_t iValue = va_arg ( ap, int64_t );
-				::NtoA_T ( &pOutput, iValue, 10, iWidth, iPrec, cFill );
+				::NtoA_T ( &pOutput, iValue, 10, (int) iWidth, (int) iPrec, cFill );
 				state = SNORMAL;
 				break;
 			}
@@ -2231,7 +2231,7 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 		case 'U': // decimal uint64
 			{
 				uint64_t iValue = va_arg ( ap, uint64_t );
-				::NtoA_T ( &pOutput, iValue, 10, iWidth, iPrec, cFill );
+				::NtoA_T ( &pOutput, iValue, 10, (int) iWidth, (int) iPrec, cFill );
 				state = SNORMAL;
 				break;
 			}
@@ -2239,7 +2239,7 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 		case 'D': // fixed-point signed 64-bit
 			{
 				int64_t iValue = va_arg ( ap, int64_t );
-				::IFtoA_T ( &pOutput, iValue, iPrec );
+				::IFtoA_T ( &pOutput, iValue, (int) iPrec );
 				state = SNORMAL;
 				break;
 			}
@@ -2247,7 +2247,7 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 		case 'F': // fixed-point signed 32-bit
 			{
 				int iValue = va_arg ( ap, int );
-				::IFtoA_T ( &pOutput, iValue, iPrec );
+				::IFtoA_T ( &pOutput, iValue, (int) iPrec );
 				state = SNORMAL;
 				break;
 			}
@@ -2255,7 +2255,7 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 		case 't': // timespan given in int64 useconds
 			{
 				int64_t iValue = va_arg ( ap, int64_t );
-				::TMtoA_T ( &pOutput, iValue, iPrec );
+				::TMtoA_T ( &pOutput, iValue, (int) iPrec );
 				state = SNORMAL;
 				break;
 			}
@@ -2263,7 +2263,7 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 		case 'T': // timestamp (related to now()) given in int64 useconds
 			{
 				int64_t iValue = va_arg ( ap, int64_t );
-				::TMStoA_T ( &pOutput, iValue, iPrec );
+				::TMStoA_T ( &pOutput, iValue, (int) iPrec );
 				state = SNORMAL;
 				break;
 			}
@@ -2273,7 +2273,7 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 				double fValue = va_arg ( ap, double );
 
 				// ensure 32 is enough to take any float value.
-				Grow ( pOutput, Max ( iWidth, ( size_t ) 32 ));
+				Grow ( pOutput, Max ( (int) iWidth, 32 ));
 
 				// extract current format from source format line
 				auto *pF = sFmt;

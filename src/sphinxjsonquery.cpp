@@ -79,7 +79,7 @@ QueryTreeBuilder_c::QueryTreeBuilder_c ( const CSphQuery * pQuery, const ISphTok
 
 void QueryTreeBuilder_c::CollectKeywords ( const char * szStr, XQNode_t * pNode, const XQLimitSpec_t & tLimitSpec )
 {
-	m_pTokenizer->SetBuffer ( (const BYTE*)szStr, strlen ( szStr ) );
+	m_pTokenizer->SetBuffer ( (const BYTE*)szStr, (int) strlen ( szStr ) );
 
 	while (true)
 	{
@@ -168,7 +168,7 @@ bool QueryTreeBuilder_c::HandleSpecialFields ( const char * & pPtr, FieldMask_t 
 {
 	if ( *pPtr=='_' )
 	{
-		int iLen = strlen(g_szAll);
+		auto iLen = (int) strlen(g_szAll);
 		if ( !strncmp ( pPtr, g_szAll, iLen ) )
 		{
 			pPtr += iLen;
@@ -1535,7 +1535,7 @@ static bool ParseJsonUpdate ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_
 				szValue = sEncoded.cstr();
 			}
 
-			int iLength = strlen ( szValue );
+			auto iLength = (int) strlen ( szValue );
 			tUpd.m_dPool.Add ( tUpd.m_dBlobs.GetLength() );
 			tUpd.m_dPool.Add ( iLength );
 

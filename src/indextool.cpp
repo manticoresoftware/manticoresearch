@@ -34,7 +34,7 @@ void StripStdin ( const char * sIndexAttrs, const char * sRemoveElements )
 	while ( !feof(stdin) )
 	{
 		char sBuffer[1024];
-		int iLen = fread ( sBuffer, 1, sizeof(sBuffer), stdin );
+		auto iLen = (int) fread ( sBuffer, 1, sizeof(sBuffer), stdin );
 		if ( !iLen )
 			break;
 
@@ -55,7 +55,7 @@ void ApplyMorphology ( CSphIndex * pIndex )
 	char sBuffer[READ_BUFFER_SIZE];
 	while ( !feof(stdin) )
 	{
-		int iLen = fread ( sBuffer, 1, sizeof(sBuffer), stdin );
+		auto iLen = (int) fread ( sBuffer, 1, sizeof(sBuffer), stdin );
 		if ( !iLen )
 			break;
 		dInBuffer.Append ( sBuffer, iLen );
@@ -75,7 +75,7 @@ void ApplyMorphology ( CSphIndex * pIndex )
 			if ( pDict )
 				pDict->ApplyStemmers ( sToken );
 
-			int iLen = strlen ( (char *)sToken );
+			auto iLen = (int) strlen ( (char *)sToken );
 			sToken[iLen] = ' ';
 			dOutBuffer.Append ( sToken, iLen+1 );
 		}
@@ -106,7 +106,7 @@ void CharsetFold ( CSphIndex * pIndex, FILE * fp )
 	int iBuf1 = 0; // how many leftover bytes from previous iteration
 	while ( !feof(fp) )
 	{
-		int iGot = fread ( sBuf1.Begin()+iBuf1, 1, sBuf1.GetLength()-iBuf1, fp );
+		auto iGot = (int) fread ( sBuf1.Begin()+iBuf1, 1, sBuf1.GetLength()-iBuf1, fp );
 		if ( iGot<0 )
 			sphDie ( "read error: %s", strerrorm(errno) );
 

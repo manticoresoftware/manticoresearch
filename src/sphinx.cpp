@@ -1161,7 +1161,7 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 			sModifiedQuery = dFiltered.Begin();
 	}
 
-	pTokenizer->SetBuffer ( sModifiedQuery, strlen ( (const char*)sModifiedQuery) );
+	pTokenizer->SetBuffer ( sModifiedQuery, (int) strlen ( (const char*)sModifiedQuery) );
 
 	CSphTemplateQueryFilter tAotFilter;
 	tAotFilter.m_pTokenizer = pTokenizer;
@@ -2212,12 +2212,12 @@ static char * sphStrMacro ( const char * sTemplate, const char * sMacro, int64_t
 	snprintf ( sExp, sizeof(sExp), INT64_FMT, iValue );
 
 	// calc lengths
-	int iExp = strlen ( sExp );
-	int iMacro = strlen ( sMacro );
+	auto iExp = (int) strlen ( sExp );
+	auto iMacro = (int) strlen ( sMacro );
 	int iDelta = iExp-iMacro;
 
 	// calc result length
-	int iRes = strlen ( sTemplate );
+	auto iRes = (int) strlen ( sTemplate );
 	const char * sCur = sTemplate;
 	while ( ( sCur = strstr ( sCur, sMacro ) )!=NULL )
 	{
@@ -3164,7 +3164,7 @@ public:
 
 			// check pair
 			// in first_freq and both_freq modes, 1st token must be listed
-			m_iFirst = strlen ( (const char*)pFirst );
+			m_iFirst = (int) strlen ( (const char*)pFirst );
 			if ( m_eMode!=SPH_BIGRAM_ALL && !IsFreq ( m_iFirst, pFirst ) )
 				return pFirst;
 
@@ -3183,7 +3183,7 @@ public:
 			// got a pair!
 			// check combined length
 			m_pSecond = pSecond;
-			int iSecond = strlen ( (const char*)pSecond );
+			auto iSecond = (int) strlen ( (const char*)pSecond );
 			if ( m_iFirst+iSecond+1 > SPH_MAX_WORD_LEN )
 			{
 				// too long pair
@@ -3397,7 +3397,7 @@ void CSphLowercaser::AddRemaps ( const CSphVector<CSphRemapRange> & dRemaps, DWO
 void CSphLowercaser::AddSpecials ( const char * sSpecials )
 {
 	assert ( sSpecials );
-	int iSpecials = strlen(sSpecials);
+	auto iSpecials = (int) strlen(sSpecials);
 
 	CSphVector<CSphRemapRange> dRemaps;
 	dRemaps.Resize ( iSpecials );
@@ -3580,7 +3580,7 @@ bool sphInitCharsetAliasTable ( CSphString & sError ) // FIXME!!! move alias gen
 		dConcat.Resize(0);
 		while ( iCurAliasChunk<iTotalChunks && globalaliases[iCurAliasChunk] )
 		{
-			int iChunkLen = strlen(globalaliases[iCurAliasChunk]);
+			auto iChunkLen = (int) strlen(globalaliases[iCurAliasChunk]);
 			char * szChunk = dConcat.AddN(iChunkLen);
 			memcpy ( szChunk, globalaliases[iCurAliasChunk], iChunkLen );
 			iCurAliasChunk++;
@@ -5109,7 +5109,7 @@ bool CSphTokenizerBase2::CheckException ( const BYTE * pStart, const BYTE * pCur
 	m_pCur = pMapEnd;
 	m_pTokenStart = pStart;
 	m_pTokenEnd = pMapEnd;
-	m_iLastTokenLen = strlen ( (char*)m_sAccum );
+	m_iLastTokenLen = (int) strlen ( (char*)m_sAccum );
 
 	m_bWasSynonym = true;
 	return true;
@@ -5996,7 +5996,7 @@ void SelectParser_t::AliasLastItem ( YYSTYPE * pAlias )
 
 bool SelectParser_t::IsTokenEqual ( YYSTYPE * pTok, const char * sRef )
 {
-	int iLen = strlen(sRef);
+	auto iLen = (int) strlen(sRef);
 	if ( iLen!=( pTok->m_iEnd - pTok->m_iStart ) )
 		return false;
 	return strncasecmp ( m_pStart + pTok->m_iStart, sRef, iLen )==0;
@@ -7163,7 +7163,7 @@ void CSphWriter::Flush ()
 
 void CSphWriter::PutString ( const char * szString )
 {
-	int iLen = szString ? strlen ( szString ) : 0;
+	int iLen = szString ? (int) strlen ( szString ) : 0;
 	PutDword ( iLen );
 	if ( iLen )
 		PutBytes ( szString, iLen );
@@ -7679,7 +7679,7 @@ bool CSphReader::Tag ( const char * sTag )
 	assert ( sTag && *sTag ); // empty tags are nonsense
 	assert ( strlen(sTag)<64 ); // huge tags are nonsense
 
-	int iLen = strlen(sTag);
+	auto iLen = (int) strlen(sTag);
 	char sBuf[64];
 	GetBytes ( sBuf, iLen );
 	if ( !memcmp ( sBuf, sTag, iLen ) )
@@ -9877,7 +9877,7 @@ inline int encodeVLB ( BYTE * buf, DWORD v )
 
 inline int encodeKeyword ( BYTE * pBuf, const char * pKeyword )
 {
-	int iLen = strlen ( pKeyword ); // OPTIMIZE! remove this and memcpy and check if thats faster
+	auto iLen = (int) strlen ( pKeyword ); // OPTIMIZE! remove this and memcpy and check if thats faster
 	assert ( iLen>0 && iLen<128 ); // so that ReadVLB()
 
 	*pBuf = (BYTE) iLen;
@@ -12519,7 +12519,7 @@ SphWordID_t CSphDictStar::GetWordID ( BYTE * pWord )
 
 	m_pDict->ApplyStemmers ( pWord );
 
-	int iLen = strlen ( (const char*)pWord );
+	auto iLen = (int) strlen ( (const char*)pWord );
 	assert ( iLen < 16+3*SPH_MAX_WORD_LEN - 1 );
 	// stemmer might squeeze out the word
 	if ( iLen && !pWord[0] )
@@ -12557,7 +12557,7 @@ SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 {
 	char sBuf [ 16+3*SPH_MAX_WORD_LEN ];
 
-	int iLen = strlen ( (const char*)pWord );
+	auto iLen = (int) strlen ( (const char*)pWord );
 	iLen = Min ( iLen, 16+3*SPH_MAX_WORD_LEN - 1 );
 
 	if ( !iLen )
@@ -12582,7 +12582,7 @@ SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 			return 0;
 	}
 
-	iLen = strlen ( (const char*)pWord );
+	iLen = (int) strlen ( (const char*)pWord );
 	assert ( iLen < 16+3*SPH_MAX_WORD_LEN - 2 );
 
 	if ( !iLen || ( bHeadStar && iLen==1 ) )
@@ -12658,7 +12658,7 @@ SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 
 SphWordID_t CSphDictExact::GetWordID ( BYTE * pWord )
 {
-	int iLen = strlen ( (const char*)pWord );
+	auto iLen = (int) strlen ( (const char*)pWord );
 	iLen = Min ( iLen, 16+3*SPH_MAX_WORD_LEN - 1 );
 
 	if ( !iLen )
@@ -13572,7 +13572,7 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 
 	const char * sWord = tWord.m_sDictWord.cstr();
 	const bool bWordDict = pIndex->m_pDict->GetSettings().m_bWordDict;
-	int iWordLen = sWord ? strlen ( sWord ) : 0;
+	int iWordLen = sWord ? (int) strlen ( sWord ) : 0;
 	if ( bWordDict && tWord.m_sWord.Ends("*") )
 	{
 		iWordLen = Max ( iWordLen-1, 0 );
@@ -14072,7 +14072,7 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 	{
 		CSphString sBuf ( sKeyword );
 
-		m_pTokenizer->SetBuffer ( (BYTE*)sBuf.cstr(), strlen ( sBuf.cstr() ) );
+		m_pTokenizer->SetBuffer ( (BYTE*)sBuf.cstr(), (int) strlen ( sBuf.cstr() ) );
 		sTok = m_pTokenizer->GetToken();
 
 		if ( !sTok )
@@ -14965,7 +14965,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	tExpCtx.m_bMergeSingles = false;
 	tExpCtx.m_eHitless = m_tSettings.m_eHitless;
 
-	pTokenizer->SetBuffer ( sModifiedQuery, strlen ( (const char *)sModifiedQuery) );
+	pTokenizer->SetBuffer ( sModifiedQuery, (int) strlen ( (const char *)sModifiedQuery) );
 
 	tAotFilter.GetKeywords ( dKeywords, tExpCtx );
 	return true;
@@ -16685,7 +16685,7 @@ int TaggedHash20_t::FromFIPS ( const char * sFIPS )
 	}
 
 	sFIPS += 2 + HASH20_SIZE * 2;
-	auto len = strlen ( sFIPS );
+	auto len = (int) strlen ( sFIPS );
 
 	if ( sFIPS[len - 1]!='\n' )
 		return -1;
@@ -16808,7 +16808,7 @@ static void AddFields ( const char * sQuery, CSphSchema & tSchema )
 	}
 
 	const char * OPTION_RELAXED = "@@relaxed";
-	const int OPTION_RELAXED_LEN = strlen ( OPTION_RELAXED );
+	const auto OPTION_RELAXED_LEN = (int) strlen ( OPTION_RELAXED );
 	if ( strncmp ( sToken, OPTION_RELAXED, OPTION_RELAXED_LEN )==0 && !sphIsAlpha ( sToken[OPTION_RELAXED_LEN] ) )
 		sToken += OPTION_RELAXED_LEN;
 
@@ -17743,7 +17743,7 @@ SphWordID_t CSphDictCRC<CRC32DICT>::GetWordIDWithMarkers ( BYTE * pWord )
 {
 	ApplyStemmers ( pWord + 1 );
 	SphWordID_t uWordId = tHASH::DoCrc ( pWord + 1 );
-	int iLength = strlen ( (const char *)(pWord + 1) );
+	auto iLength = strlen ( (const char *)(pWord + 1) );
 	pWord [iLength + 1] = MAGIC_WORD_TAIL;
 	pWord [iLength + 2] = '\0';
 	return FilterStopword ( uWordId ) ? tHASH::DoCrc ( pWord ) : 0;
@@ -17802,7 +17802,7 @@ SphWordID_t CSphDictTemplate::GetWordIDWithMarkers ( BYTE * pWord )
 	if ( !pWord[1] )
 		return 0;
 	SphWordID_t uWordId = DoCrc ( pWord + 1 );
-	int iLength = strlen ( (const char *)(pWord + 1) );
+	auto iLength = (int) strlen ( (const char *)(pWord + 1) );
 	pWord [iLength + 1] = MAGIC_WORD_TAIL;
 	pWord [iLength + 2] = '\0';
 	return FilterStopword ( uWordId ) ? DoCrc ( pWord ) : 0;
@@ -17837,7 +17837,7 @@ void CSphTemplateDictTraits::LoadStopwords ( const char * sFiles, const ISphToke
 	m_dSWFileInfos.Resize ( 0 );
 
 	TokenizerRefPtr_c tTokenizer ( pTokenizer->Clone ( SPH_CLONE_INDEX ) );
-	CSphFixedVector<char> dList ( 1+strlen(sFiles) );
+	CSphFixedVector<char> dList ( 1+(int)strlen(sFiles) );
 	strcpy ( dList.Begin(), sFiles ); // NOLINT
 
 	char * pCur = dList.Begin();
@@ -18106,7 +18106,7 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 			break;
 		}
 
-		if ( GetWordID ( pFrom, strlen ( (const char*)pFrom ), true ) )
+		if ( GetWordID ( pFrom, (int)strlen ( (const char*)pFrom ), true ) )
 			dTokens.Add ( (const char*)pFrom );
 		else
 			bStopwordsPresent = true;
@@ -18139,7 +18139,7 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 	}
 
 	CSphVector<CSphNormalForm> dDestTokens;
-	bool bFirstDestIsStop = !GetWordID ( pTo, strlen ( (const char*)pTo ), true );
+	bool bFirstDestIsStop = !GetWordID ( pTo, (int) strlen ( (const char*)pTo ), true );
 	CSphNormalForm & tForm = dDestTokens.Add();
 	tForm.m_sForm = (const char *)pTo;
 	tForm.m_iLengthCP = pTokenizer->GetLastTokenLen();
@@ -18148,7 +18148,7 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 	const BYTE * pDestToken;
 	while ( ( pDestToken = pTokenizer->GetToken() )!=NULL )
 	{
-		bool bStop = ( !GetWordID ( pDestToken, strlen ( (const char*)pDestToken ), true ) );
+		bool bStop = ( !GetWordID ( pDestToken, (int) strlen ( (const char*)pDestToken ), true ) );
 		if ( !bStop )
 		{
 			CSphNormalForm & tNewForm = dDestTokens.Add();
@@ -18612,7 +18612,7 @@ bool CSphTemplateDictTraits::StemById ( BYTE * pWord, int iStemmer ) const
 			sb_stemmer * pStemmer = m_dStemmers [iStemmer - SPH_MORPH_LIBSTEMMER_FIRST];
 			assert ( pStemmer );
 
-			const sb_symbol * sStemmed = sb_stemmer_stem ( pStemmer, (sb_symbol*)pWord, strlen ( (const char*)pWord ) );
+			const sb_symbol * sStemmed = sb_stemmer_stem ( pStemmer, (sb_symbol*)pWord, (int) strlen ( (const char*)pWord ) );
 			int iLen = sb_stemmer_length ( pStemmer );
 
 			memcpy ( pWord, sStemmed, iLen );
@@ -19191,12 +19191,12 @@ void InfixBuilder_c<SIZE>::SaveEntries ( CSphWriter & wrDict )
 		InfixIntvec_t & dData = m_dArena[dIndex[iIndex]].m_tValue;
 		const BYTE * sKey = (const BYTE*) m_dArena[dIndex[iIndex]].m_tKey.m_Data;
 		int iChars = ( SIZE==2 )
-			? strnlen ( (const char*)sKey, sizeof(DWORD)*SIZE )
-			: sphUTF8Len ( (const char*)sKey, sizeof(DWORD)*SIZE );
+			? (int) strnlen ( (const char*)sKey, sizeof(DWORD)*SIZE )
+			: sphUTF8Len ( (const char*)sKey, (int) sizeof(DWORD)*SIZE );
 		assert ( iChars>=2 && iChars<int(1 + sizeof ( Infix_t<SIZE> ) ) );
 
 		// keep track of N-infix blocks
-		int iAppendBytes = strnlen ( (const char*)sKey, sizeof(DWORD)*SIZE );
+		auto iAppendBytes = (int) strnlen ( (const char*)sKey, sizeof(DWORD)*SIZE );
 		if ( !iBlock )
 		{
 			int iOff = m_dBlocksWords.GetLength();
@@ -19321,8 +19321,8 @@ int64_t InfixBuilder_c<SIZE>::SaveEntryBlocks ( CSphWriter & wrDict )
 	wrDict.ZipInt ( m_dBlocks.GetLength() );
 	ARRAY_FOREACH ( i, m_dBlocks )
 	{
-		int iBytes = strlen ( m_dBlocks[i].m_sInfix );
-		wrDict.PutByte ( iBytes );
+		auto iBytes = strlen ( m_dBlocks[i].m_sInfix );
+		wrDict.PutByte ( BYTE(iBytes) );
 		wrDict.PutBytes ( m_dBlocks[i].m_sInfix, iBytes );
 		wrDict.ZipInt ( m_dBlocks[i].m_iOffset ); // maybe delta these on top?
 	}
@@ -19839,7 +19839,7 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphStri
 	while ( qWords.GetLength() )
 	{
 		const DictKeywordTagged_t & tWord = qWords.Root();
-		const int iLen = strlen ( tWord.m_sKeyword ); // OPTIMIZE?
+		auto iLen = (const int) strlen ( tWord.m_sKeyword ); // OPTIMIZE?
 
 		// store checkpoints as needed
 		if ( ( iWords % SPH_WORDLIST_CHECKPOINT )==0 )
@@ -19915,7 +19915,7 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphStri
 
 	ARRAY_FOREACH ( i, m_dCheckpoints )
 	{
-		const int iLen = strlen ( m_dCheckpoints[i].m_sWord );
+		auto iLen = (const int) strlen ( m_dCheckpoints[i].m_sWord );
 
 		assert ( m_dCheckpoints[i].m_iWordlistOffset>0 );
 		assert ( iLen>0 && iLen<MAX_KEYWORD_BYTES );
@@ -19996,7 +19996,7 @@ void CSphDictKeywords::DictFlush ()
 	ARRAY_FOREACH ( i, dWords )
 	{
 		const DictKeyword_t * pWord = dWords[i];
-		int iLen = strlen ( pWord->m_sKeyword );
+		auto iLen = (int) strlen ( pWord->m_sKeyword );
 		m_wrTmpDict.PutByte ( iLen );
 		m_wrTmpDict.PutBytes ( pWord->m_sKeyword, iLen );
 		m_wrTmpDict.ZipOffset ( pWord->m_uOff );
@@ -20038,7 +20038,7 @@ void CSphDictKeywords::DictEntry ( const CSphDictEntry & tEntry )
 	assert ( m_iSkiplistBlockSize>0 );
 
 	DictKeyword_t * pWord = NULL;
-	int iLen = strlen ( (char*)tEntry.m_sKeyword ) + 1;
+	auto iLen = (int) strlen ( (char*)tEntry.m_sKeyword ) + 1;
 
 	while (true)
 	{
@@ -20095,7 +20095,7 @@ SphWordID_t CSphDictKeywords::GetWordID ( BYTE * pWord )
 	if ( !uCRC || !m_bHitblock )
 		return uCRC;
 
-	int iLen = strlen ( (const char *)pWord );
+	auto iLen = (int) strlen ( (const char *)pWord );
 	return HitblockGetID ( (const char *)pWord, iLen, uCRC );
 }
 
@@ -20105,7 +20105,7 @@ SphWordID_t CSphDictKeywords::GetWordIDWithMarkers ( BYTE * pWord )
 	if ( !uCRC || !m_bHitblock )
 		return uCRC;
 
-	int iLen = strlen ( (const char *)pWord );
+	auto iLen = (int) strlen ( (const char *)pWord );
 	return HitblockGetID ( (const char *)pWord, iLen, uCRC );
 }
 
@@ -20115,7 +20115,7 @@ SphWordID_t CSphDictKeywords::GetWordIDNonStemmed ( BYTE * pWord )
 	if ( !uCRC || !m_bHitblock )
 		return uCRC;
 
-	int iLen = strlen ( (const char *)pWord );
+	auto iLen = (int) strlen ( (const char *)pWord );
 	return HitblockGetID ( (const char *)pWord, iLen, uCRC );
 }
 
@@ -20384,7 +20384,7 @@ public:
 private:
 	SphWordID_t AddKeyword ( const BYTE * pWord )
 	{
-		int iLen = strlen ( ( const char * ) pWord );
+		auto iLen = (int) strlen ( ( const char * ) pWord );
 		// stemmer might squeeze out the word
 		if ( !iLen )
 			return 0;
@@ -20555,7 +20555,7 @@ CSphHTMLStripper::CSphHTMLStripper ( bool bDefaultTags )
 		ARRAY_FOREACH ( i, m_dTags )
 		{
 			m_dTags[i].m_sTag = dKnown[i];
-			m_dTags[i].m_iTagLen = strlen ( dKnown[i] );
+			m_dTags[i].m_iTagLen = (int) strlen ( dKnown[i] );
 			m_dTags[i].m_bInline = true;
 		}
 	}
@@ -20639,7 +20639,7 @@ bool CSphHTMLStripper::SetIndexedAttrs ( const char * sConfig, CSphString & sErr
 		{
 			m_dTags.Add();
 			m_dTags.Last().m_sTag = sTag;
-			m_dTags.Last().m_iTagLen = strlen ( sTag );
+			m_dTags.Last().m_iTagLen = (int) strlen ( sTag );
 			iIndexTag = m_dTags.GetLength()-1;
 		}
 
@@ -20722,7 +20722,7 @@ bool CSphHTMLStripper::SetRemovedElements ( const char * sConfig, CSphString & )
 		{
 			m_dTags.Add();
 			m_dTags.Last().m_sTag = sTag;
-			m_dTags.Last().m_iTagLen = strlen ( sTag.cstr() );
+			m_dTags.Last().m_iTagLen = (int) strlen ( sTag.cstr() );
 			m_dTags.Last().m_bRemove = true;
 		}
 	}
@@ -20758,7 +20758,7 @@ void CSphHTMLStripper::EnableParagraphs ()
 		{
 			StripperTag_t& dTag = m_dTags.Add();
 			dTag.m_sTag = sTag;
-			dTag.m_iTagLen = strlen(sTag);
+			dTag.m_iTagLen = (int) strlen(sTag);
 			dTag.m_bPara = true;
 		}
 	}
@@ -21534,7 +21534,7 @@ void CSphHTMLStripper::Strip ( BYTE * sData ) const
 					{
 						for ( iAttr=0; iAttr<pTag->m_dAttrs.GetLength(); iAttr++ )
 						{
-							int iLen = strlen ( pTag->m_dAttrs[iAttr].cstr() );
+							auto iLen = (int) strlen ( pTag->m_dAttrs[iAttr].cstr() );
 							if ( iLen==iAttrLen && !strncasecmp ( pTag->m_dAttrs[iAttr].cstr(), (const char*)sAttr, iLen ) )
 								break;
 						}
@@ -21875,7 +21875,7 @@ int CSphFieldRegExps::Apply ( const BYTE * sField, int iLength, CSphVector<BYTE>
 	if ( !bReplaced )
 		return 0;
 
-	int iDstLen = sRe2.length();
+	auto iDstLen = (int) sRe2.length();
 	dStorage.Resize ( iDstLen+4 ); // string SAFETY_GAP
 	strncpy ( (char *)dStorage.Begin(), sRe2.c_str(), dStorage.GetLength() );
 	return iDstLen;
@@ -22137,7 +22137,7 @@ static void FormatEscaped ( FILE * fp, const char * sLine )
 	}
 
 	// pass one, count the needed buffer size
-	int iLen = strlen(sLine);
+	auto iLen = (int) strlen(sLine);
 	int iOut = 0;
 	for ( int i=0; i<iLen; i++ )
 		switch ( sLine[i] )
@@ -22614,7 +22614,7 @@ void CSphSource_Document::BuildSubstringHits ( RowID_t tRowID, bool bPayload, ES
 		int iLen = m_pTokenizer->GetLastTokenLen ();
 
 		// always index full word (with magic head/tail marker(s))
-		int iBytes = strlen ( (const char*)sWord );
+		auto iBytes = (int) strlen ( (const char*)sWord );
 		memcpy ( sBuf + 1, sWord, iBytes );
 		sBuf[iBytes+1] = '\0';
 
@@ -22642,7 +22642,7 @@ void CSphSource_Document::BuildSubstringHits ( RowID_t tRowID, bool bPayload, ES
 		m_tState.m_iBuildLastStep = m_pTokenizer->TokenIsBlended() ? 0 : 1;
 
 		// restore stemmed word
-		int iStemmedLen = strlen ( ( const char *)sBuf );
+		auto iStemmedLen = (int) strlen ( ( const char *)sBuf );
 		sBuf [iStemmedLen - 1] = '\0';
 
 		// stemmed word w/o markers
@@ -22761,7 +22761,7 @@ void CSphSource_Document::BuildRegularHits ( RowID_t tRowID, bool bPayload, bool
 
 		if ( bGlobalPartialMatch )
 		{
-			int iBytes = strlen ( (const char*)sWord );
+			auto iBytes = strlen ( (const char*)sWord );
 			memcpy ( sBuf + 1, sWord, iBytes );
 			sBuf[0] = MAGIC_WORD_HEAD;
 			sBuf[iBytes+1] = '\0';
@@ -22771,7 +22771,7 @@ void CSphSource_Document::BuildRegularHits ( RowID_t tRowID, bool bPayload, bool
 		ESphTokenMorph eMorph = m_pTokenizer->GetTokenMorph();
 		if ( m_bIndexExactWords && eMorph!=SPH_TOKEN_MORPH_GUESS )
 		{
-			int iBytes = strlen ( (const char*)sWord );
+			auto iBytes = strlen ( (const char*)sWord );
 			memcpy ( sBuf + 1, sWord, iBytes );
 			sBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
 			sBuf[iBytes+1] = '\0';
@@ -23035,7 +23035,7 @@ const char * SubstituteParams ( const char * sQuery, const char * const * dMacro
 {
 	// OPTIMIZE? things can be precalculated
 	const char * sCur = sQuery;
-	int iLen = 0;
+	size_t iLen = 0;
 	while ( *sCur )
 	{
 		if ( *sCur=='$' )
@@ -23081,7 +23081,7 @@ const char * SubstituteParams ( const char * sQuery, const char * const * dMacro
 		*sDst++ = *sCur++;
 	}
 	*sDst++ = '\0';
-	assert ( sDst-sRes==iLen );
+	assert ( sDst-sRes==(int) iLen );
 	return sRes;
 }
 
@@ -25192,8 +25192,8 @@ const char * CSphSource_XMLPipe2::DecorateMessageVA ( const char * sTemplate, va
 	static char sBuf[1024];
 
 	snprintf ( sBuf, sizeof(sBuf), "source '%s': ", m_tSchema.GetName() );
-	int iBufLen = strlen ( sBuf );
-	int iLeft = sizeof(sBuf) - iBufLen;
+	auto iBufLen = strlen ( sBuf );
+	auto iLeft = sizeof(sBuf) - iBufLen;
 	char * szBufStart = sBuf + iBufLen;
 
 	vsnprintf ( szBufStart, iLeft, sTemplate, ap );
@@ -25318,7 +25318,7 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 
 	m_sError = "";
 
-	int iBytesRead = fread ( m_pBuffer, 1, m_iBufferSize, m_pPipe );
+	auto iBytesRead = (int) fread ( m_pBuffer, 1, m_iBufferSize, m_pPipe );
 
 	if ( !ParseNextChunk ( iBytesRead, sError ) )
 		return false;
@@ -25470,7 +25470,7 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( bool & bEOF, CSphString & sError )
 			memmove ( m_pBuffer, m_pBuffer+m_iReparseStart, m_iReparseLen );
 
 		// read more data
-		iReadResult = fread ( m_pBuffer+m_iReparseLen, 1, m_iBufferSize-m_iReparseLen, m_pPipe );
+		iReadResult = (int) fread ( m_pBuffer+m_iReparseLen, 1, m_iBufferSize-m_iReparseLen, m_pPipe );
 		if ( iReadResult==0 )
 			break;
 
@@ -25604,7 +25604,7 @@ static EXMLElem LookupElement ( const char * szName )
 	if ( szName[0]!='s' )
 		return ELEM_NONE;
 
-	int iLen = strlen(szName);
+	auto iLen = strlen(szName);
 	if ( iLen>=11 && iLen<=15 )
 	{
 		char iHash = (char)( ( iLen + szName[7] ) & 15 );
@@ -26171,7 +26171,7 @@ bool CSphSource_ODBC::SqlQuery ( const char * sQuery )
 		if ( m_hColBuffers ( tCol.m_sName ) )
 			iBuffLen = m_hColBuffers [ tCol.m_sName ]; // got explicit user override
 		else if ( uColSize )
-			iBuffLen = Min ( uColSize+1, (SQLULEN) MAX_COL_SIZE ); // got data from driver
+			iBuffLen = (int) Min ( uColSize+1, (SQLULEN) MAX_COL_SIZE ); // got data from driver
 
 		tCol.m_dContents.Resize ( iBuffLen + MS_SQL_BUFFER_GAP );
 		tCol.m_dRaw.Resize ( iBuffLen + MS_SQL_BUFFER_GAP );
@@ -26309,7 +26309,7 @@ bool CSphSource_ODBC::SqlFetchRow ()
 					// WideCharToMultiByte should get NULL terminated string
 					memset ( tCol.m_dRaw.Begin()+tCol.m_iBufferSize, 0, MS_SQL_BUFFER_GAP );
 
-					int iConv = WideCharToMultiByte ( CP_UTF8, 0, LPCWSTR ( tCol.m_dRaw.Begin() ), tCol.m_iInd/sizeof(WCHAR),
+					int iConv = WideCharToMultiByte ( CP_UTF8, 0, LPCWSTR ( tCol.m_dRaw.Begin() ), (int) tCol.m_iInd/sizeof(WCHAR),
 						LPSTR ( tCol.m_dContents.Begin() ), tCol.m_iBufferSize-1, NULL, NULL );
 
 					if ( iConv==0 )
@@ -26808,7 +26808,7 @@ bool CSphSource_BaseSV::IterateStart ( CSphString & sError )
 	m_iDataStart = 0;
 
 	// initial buffer update
-	m_iBufUsed = fread ( m_dBuf.Begin(), 1, m_dBuf.GetLength(), m_pFP );
+	m_iBufUsed = (int) fread ( m_dBuf.Begin(), 1, m_dBuf.GetLength(), m_pFP );
 	if ( !m_iBufUsed )
 	{
 		sError.SetSprintf ( "source '%s': read error '%s'", m_tSchema.GetName(), strerrorm(errno) );
@@ -26860,7 +26860,7 @@ BYTE **	CSphSource_BaseSV::NextDocument ( bool & bEOF, CSphString & sError )
 		if ( tRemap.m_iField!=-1 )
 		{
 			m_dFields[tRemap.m_iField] = m_dBuf.Begin() + iOff;
-			m_dFieldLengths[tRemap.m_iField] = strlen ( (char *)m_dFields[tRemap.m_iField] );
+			m_dFieldLengths[tRemap.m_iField] = (int) strlen ( (char *)m_dFields[tRemap.m_iField] );
 		}
 
 		// attribute column
@@ -26978,7 +26978,7 @@ CSphSource_BaseSV::ESphParseResult CSphSource_TSV::SplitColumns ( CSphString & s
 		}
 
 		// do read
-		int iGot = fread ( m_dBuf.Begin() + m_iBufUsed, 1, m_dBuf.GetLength() - m_iBufUsed, m_pFP );
+		auto iGot = (int) fread ( m_dBuf.Begin() + m_iBufUsed, 1, m_dBuf.GetLength() - m_iBufUsed, m_pFP );
 		if ( !iGot )
 		{
 			if ( !iCol )
@@ -27193,7 +27193,7 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 		}
 
 		// do read
-		int iGot = fread ( m_dBuf.Begin() + m_iBufUsed, 1, m_dBuf.GetLength() - m_iBufUsed, m_pFP );
+		auto iGot = (int) fread ( m_dBuf.Begin() + m_iBufUsed, 1, m_dBuf.GetLength() - m_iBufUsed, m_pFP );
 		if ( !iGot )
 		{
 			if ( !iCol )
@@ -27341,7 +27341,7 @@ uint64_t sphCalcLocatorHash ( const CSphAttrLocator & tLoc, uint64_t uPrevHash )
 
 uint64_t sphCalcExprDepHash ( const char * szTag, ISphExpr * pExpr, const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
 {
-	uint64_t uHash = sphFNV64 ( szTag, strlen(szTag), uPrevHash );
+	uint64_t uHash = sphFNV64 ( szTag, (int) strlen(szTag), uPrevHash );
 	return sphCalcExprDepHash ( pExpr, tSorterSchema, uHash, bDisable );
 }
 
@@ -27773,7 +27773,7 @@ int DecodeUtf8 ( const BYTE * sWord, int * pBuf )
 bool SuggestResult_t::SetWord ( const char * sWord, const ISphTokenizer * pTok, bool bUseLastWord )
 {
 	TokenizerRefPtr_c pTokenizer ( pTok->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) );
-	pTokenizer->SetBuffer ( (BYTE *)sWord, strlen ( sWord ) );
+	pTokenizer->SetBuffer ( (BYTE *)sWord, (int) strlen ( sWord ) );
 
 	const BYTE * pToken = pTokenizer->GetToken();
 	for ( ; pToken!=NULL; )
@@ -27823,7 +27823,7 @@ static void SuggestGetChekpoints ( const ISphWordlistSuggest * pWordlist, int iI
 	const char * sTrigramEnd = sTrigram + dTrigrams.GetLength();
 	while (true)
 	{
-		int iTrigramLen = strlen ( sTrigram );
+		auto iTrigramLen = (int) strlen ( sTrigram );
 		int iInfixLen = sphGetInfixLength ( sTrigram, iTrigramLen, iInfixCodepointBytes );
 
 		// count how many checkpoint we will get

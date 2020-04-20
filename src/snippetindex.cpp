@@ -105,7 +105,7 @@ int SnippetsDocIndex_c::FindStarred ( const char * sWord ) const
 		return -1;
 
 	const BYTE * pBuf = m_dStarBuffer.Begin();
-	int iLen = strlen ( sWord );
+	auto iLen = (int) strlen ( sWord );
 	ARRAY_FOREACH ( i, m_dStars )
 	{
 		const Keyword_t & tTok = m_dStars[i];
@@ -211,13 +211,13 @@ void SnippetsDocIndex_c::ParseQuery ( ISphTokenizer * pTokenizer, CSphDict * pDi
 	if ( eExtQuerySPZ & SPH_SPZ_SENTENCE )
 	{
 		strncpy ( (char *)m_sTmpWord, MAGIC_WORD_SENTENCE, sizeof(m_sTmpWord)-1 );
-		AddWord ( pDict->GetWordID ( m_sTmpWord ), strlen ( (char*)m_sTmpWord ), iQPos );
+		AddWord ( pDict->GetWordID ( m_sTmpWord ), (int) strlen ( (char*)m_sTmpWord ), iQPos );
 		iQPos++;
 	}
 	if ( eExtQuerySPZ & SPH_SPZ_PARAGRAPH )
 	{
 		strncpy ( (char *)m_sTmpWord, MAGIC_WORD_PARAGRAPH, sizeof(m_sTmpWord)-1 );
-		AddWord ( pDict->GetWordID ( m_sTmpWord ), strlen ( (char*)m_sTmpWord ), iQPos );
+		AddWord ( pDict->GetWordID ( m_sTmpWord ), (int) strlen ( (char*)m_sTmpWord ), iQPos );
 		iQPos++;
 	}
 
@@ -225,7 +225,7 @@ void SnippetsDocIndex_c::ParseQuery ( ISphTokenizer * pTokenizer, CSphDict * pDi
 	ARRAY_FOREACH ( i, m_tQuery.m_dZones )
 	{
 		snprintf ( (char *)m_sTmpWord, sizeof(m_sTmpWord)-1, "%c%s", MAGIC_CODE_ZONE, m_tQuery.m_dZones[i].cstr() );
-		AddWord ( pDict->GetWordID ( m_sTmpWord ), strlen ( (char*)m_sTmpWord ), iQPos );
+		AddWord ( pDict->GetWordID ( m_sTmpWord ), (int) strlen ( (char*)m_sTmpWord ), iQPos );
 		iQPos++;
 	}
 
@@ -330,7 +330,7 @@ void SnippetsDocIndex_c::AddWord ( SphWordID_t iWordID, int iLengthCP, int iQpos
 
 void SnippetsDocIndex_c::AddWordStar ( const char * sWord, int iLengthCP, int iQpos )
 {
-	int iLen = strlen ( sWord );
+	auto iLen = (int) strlen ( sWord );
 	int iOff = m_dStarBuffer.GetLength();
 
 	m_dStarBuffer.Append ( sWord, iLen+1);

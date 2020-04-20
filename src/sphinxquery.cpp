@@ -34,7 +34,7 @@ class XQParser_t;
 void XQParseHelper_c::SetString ( const char * szString )
 {
 	assert ( m_pTokenizer );
-	m_pTokenizer->SetBuffer ( (const BYTE*)szString, strlen(szString) );
+	m_pTokenizer->SetBuffer ( (const BYTE*)szString, (int) strlen(szString) );
 	m_iAtomPos = 0;
 }
 
@@ -233,7 +233,7 @@ bool XQParseHelper_c::Error ( const char * sTemplate, ... )
 	char sBuf[256];
 
 	const char * sPrefix = "query error: ";
-	int iPrefix = strlen(sPrefix);
+	auto iPrefix = strlen(sPrefix);
 	memcpy ( sBuf, sPrefix, iPrefix );
 
 	va_list ap;
@@ -253,7 +253,7 @@ void XQParseHelper_c::Warning ( const char * sTemplate, ... )
 	char sBuf[256];
 
 	const char * sPrefix = "query warning: ";
-	int iPrefix = strlen(sPrefix);
+	auto iPrefix = strlen(sPrefix);
 	memcpy ( sBuf, sPrefix, iPrefix );
 
 	va_list ap;
@@ -1721,7 +1721,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 
 	// check for relaxed syntax
 	const char * OPTION_RELAXED = "@@relaxed";
-	const int OPTION_RELAXED_LEN = strlen ( OPTION_RELAXED );
+	auto OPTION_RELAXED_LEN = (const int) strlen ( OPTION_RELAXED );
 
 	m_bStopOnInvalid = true;
 	if ( sQuery && strncmp ( sQuery, OPTION_RELAXED, OPTION_RELAXED_LEN )==0 && !sphIsAlpha ( sQuery[OPTION_RELAXED_LEN] ) )
@@ -1757,7 +1757,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 
 	Setup ( pSchema, pMyTokenizer, pMyDict, &tParsed, tSettings );
 	m_sQuery = (BYTE*) sQuery;
-	m_iQueryLen = sQuery ? strlen(sQuery) : 0;
+	m_iQueryLen = sQuery ? (int) strlen(sQuery) : 0;
 	m_iPendingNulls = 0;
 	m_iPendingType = 0;
 	m_pRoot = NULL;

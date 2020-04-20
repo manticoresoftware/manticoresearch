@@ -240,7 +240,7 @@ public:
 
 	inline void PackStr ( const char * s )
 	{
-		PackStr ( s, strlen(s));
+		PackStr ( s, (int) strlen(s));
 	}
 
 	void PackInt ( DWORD v )
@@ -725,7 +725,7 @@ bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool
 
 bool sphJsonParse ( CSphVector<BYTE> &dData, char * sData, bool bAutoconv, bool bToLowercase, bool bCheckSize, StringBuilder_c &sMsg )
 {
-	int iLen = strlen ( sData );
+	auto iLen = (int) strlen ( sData );
 	if ( sData[iLen+1]!=0 )
 	{
 		sMsg << "internal error: input data passed to sphJsonParse() must be terminated with a double zero";
@@ -774,7 +774,7 @@ DWORD sphJsonKeyMask ( const char * sKey, int iLen )
 
 static inline DWORD KeyMask ( const char * s )
 {
-	return sphJsonKeyMask ( s, strlen ( s ) );
+	return sphJsonKeyMask ( s, (int) strlen ( s ) );
 }
 
 // returns -1 if size is unreachable (for remote agents)
@@ -2241,7 +2241,7 @@ bool Bson_c::StrEq ( const char * sValue ) const
 		return false;
 	const BYTE * p = m_dData.first;
 	int iStrLen = sphJsonUnpackInt ( &p );
-	int iLen = strlen ( sValue );
+	auto iLen = (int) strlen ( sValue );
 	if ( iStrLen==iLen && !memcmp ( p, sValue, iStrLen ) )
 		return true;
 	return false;
@@ -2257,7 +2257,7 @@ NodeHandle_t Bson_c::ChildByName ( const char * sName ) const
 	if ( m_dData.second==JSON_OBJECT )
 		sphJsonUnpackInt ( &p );
 
-	int iLen = strlen ( sName );
+	auto iLen = (int) strlen ( sName );
 
 	// fast reject by bloom filter
 	auto uMask = sphJsonKeyMask ( sName, iLen );
@@ -2431,7 +2431,7 @@ bool Bson_c::HasAnyOf ( int iNames, ... ) const
 	bool bMayBe = false;
 	for ( const char * sName : dNames )
 	{
-		int iLen = strlen ( sName );
+		auto iLen = (int) strlen ( sName );
 		auto uMask = sphJsonKeyMask ( sName, iLen );
 		bMayBe |= ( ( uNodeMask & uMask )==uMask );
 		if ( bMayBe )
@@ -2450,7 +2450,7 @@ bool Bson_c::HasAnyOf ( int iNames, ... ) const
 		int iStrLen = sphJsonUnpackInt ( &p );
 		for ( const char * sName : dNames )
 		{
-			int iLen = strlen ( sName );
+			auto iLen = (int) strlen ( sName );
 			if ( iStrLen==iLen && !memcmp ( p, sName, iStrLen ) )
 				return true;
 		}
@@ -2736,7 +2736,7 @@ public:
 		if ( m_bAutoconv && eOrigType==JSON_STRING )
 		{
 			int64_t iFoo;
-			if ( !sphJsonStringToNumber ( pNode->valuestring, strlen ( pNode->valuestring ), eOrigType, iFoo, pNode->valuedouble ) )
+			if ( !sphJsonStringToNumber ( pNode->valuestring, (int) strlen ( pNode->valuestring ), eOrigType, iFoo, pNode->valuedouble ) )
 				return eOrigType;
 			pNode->valueint = iFoo;
 		}
@@ -2817,7 +2817,7 @@ public:
 			{
 				cJSON_ArrayForEach( pNode, pCJSON )
 				{
-					int iLen = strlen ( pNode->string );
+					auto iLen = (int) strlen ( pNode->string );
 					for ( auto i = 0; i<iLen; ++i )
 						pNode->string[i] = Mytolower ( pNode->string[i] );
 					uMask |= KeyMask ( pNode->string );
@@ -2889,7 +2889,7 @@ public:
 		{
 			cJSON_ArrayForEach( pNode, pCJSON )
 			{
-				int iLen = strlen ( pNode->string );
+				auto iLen = (int) strlen ( pNode->string );
 				for ( auto i = 0; i<iLen; ++i )
 					pNode->string[i] = Mytolower ( pNode->string[i] );
 				uMask |= KeyMask ( pNode->string );
@@ -2936,7 +2936,7 @@ BsonContainer_c::BsonContainer_c ( char * sJson, bool bAutoconv, bool bToLowerca
 BsonContainer2_c::BsonContainer2_c ( const char * sJson, bool bAutoconv, bool bToLowercase )
 {
 	auto pCjson = cJSON_Parse ( sJson );
-	m_Bson.Reserve ( strlen ( sJson ) );
+	m_Bson.Reserve ( (int) strlen ( sJson ) );
 	bson::cJsonToBson ( pCjson, m_Bson, bAutoconv, bToLowercase/*, m_sError*/ );
 	if ( pCjson )
 		cJSON_Delete ( pCjson );

@@ -118,7 +118,7 @@ static void Palatalize ( BYTE * word )
 		return;
 
 	int nRules = sizeof ( g_dPalatalizeRules ) / sizeof ( g_dPalatalizeRules[0] );
-	int iWordLength = strlen ( (char*)word );
+	auto iWordLength = (int) strlen ( (char*)word );
 
 	for ( int i = 0; i < nRules; ++i )
 	{
@@ -142,7 +142,7 @@ static void ApplyRules ( BYTE * word, const ClampRule_t * pRules, int nRules )
 	if ( !word || !pRules )
 		return;
 
-	int iWordLength = strlen ( (char *)word );
+	auto iWordLength = (int) strlen ( (char *)word );
 
 	for ( int i = 0; i < nRules; ++i )
 	{
@@ -160,7 +160,7 @@ static void ApplyRules ( BYTE * word, const ClampRule_t * pRules, int nRules )
 static void RemoveChars ( char * szString, char cChar )
 {
 	char * szPos;
-	int iLength = strlen ( szString );
+	auto iLength = (int) strlen ( szString );
 	while ( ( szPos = strchr ( szString, cChar ) )!=NULL )
 		memmove ( szPos, szPos + 1, iLength - ( szPos - szString ) );
 }

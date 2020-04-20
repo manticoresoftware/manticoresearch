@@ -2847,7 +2847,7 @@ public:
 			sArgs += 2;
 		}
 
-		int iLen = strlen ( sArgs );
+		auto iLen = (int)strlen ( sArgs );
 		if ( dArgs.GetLength()!=iLen )
 		{
 			sError.SetSprintf ( "%s() requires %d argument(s), not %d", sFuncname, iLen, dArgs.GetLength() );
@@ -3587,7 +3587,7 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::PackFactors()
 	memcpy ( pPack, m_dFieldTF.Begin(), m_dFieldTF.GetLength()*sizeof(m_dFieldTF[0]) );
 	pPack += m_dFieldTF.GetLength();
 
-	*pPackStart = (pPack-pPackStart)*sizeof(DWORD);
+	*pPackStart = (DWORD)((pPack-pPackStart)*sizeof(DWORD));
 	assert ( (pPack-pPackStart)*sizeof(DWORD)<=(DWORD)m_tFactorPool.GetElementSize() );
 	return (BYTE*)pPackStart;
 }
@@ -3871,8 +3871,8 @@ public:
 				m_dTFIDF[i], m_dMinIDF[i], m_dMaxIDF[i], m_dSumIDF[i],
 				m_iMinHitPos[i], m_iMinBestSpanPos[i], m_tExactHit.BitGet ( i ), m_iMaxWindowHits[i] );
 
-			int iValLen = strlen ( dVal.Begin() );
-			int iTotalLen = iValLen+strlen(sTmp);
+			auto iValLen = (int) strlen ( dVal.Begin() );
+			auto iTotalLen = iValLen+(int)strlen(sTmp);
 			if ( dVal.GetLength() < iTotalLen+1 )
 				dVal.Resize ( iTotalLen+1 );
 
@@ -3884,8 +3884,8 @@ public:
 			if ( !IsTermSkipped ( i ) )
 		{
 			snprintf ( sTmp, MAX_STR_LEN, ", word%d=(tf=%d, idf=%f)", i, m_dTF[i], m_dIDF[i] );
-			int iValLen = strlen ( dVal.Begin() );
-			int iTotalLen = iValLen+strlen(sTmp);
+			auto iValLen = (int)strlen ( dVal.Begin() );
+			auto iTotalLen = iValLen+(int)strlen(sTmp);
 			if ( dVal.GetLength() < iTotalLen+1 )
 				dVal.Resize ( iTotalLen+1 );
 

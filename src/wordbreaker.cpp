@@ -286,7 +286,7 @@ void UrlBreakInit ( const char * sDict, bool bVerbose )
 
 void UrlBreak ( Split_t & tBest, const char * sWord )
 {
-	const int iLen = strlen(sWord);
+	auto iLen = (const int) strlen(sWord);
 
 	tBest.m_Pos.Resize(0);
 

@@ -3316,7 +3316,7 @@ uint64_t ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::GetWordID() const
 			m_dWordIds[i] = sphFNV64 ( tNode.m_pQword->m_sDictWord.cstr() );
 	}
 
-	return sphFNV64 ( m_dWordIds.Begin(), m_dWordIds.GetLengthBytes() );
+	return sphFNV64 ( m_dWordIds.Begin(), (int) m_dWordIds.GetLengthBytes() );
 }
 
 

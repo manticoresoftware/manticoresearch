@@ -2276,7 +2276,7 @@ private:
 		};
 
 		CSphTightVector<Centroid_t> dValues;
-		dValues.Reserve ( m_dMap.size() );
+		dValues.Reserve ( (int) m_dMap.size() );
 		for ( auto i : m_dMap )
 		{
 			Centroid_t & tCentroid = dValues.Add();
@@ -2496,7 +2496,7 @@ StringBuilder_c & StringBuilder_c::AppendName ( const char * sName )
 	if ( !sName || !strlen ( sName ) )
 		return *this;
 
-	AppendChunk ( {sName, strlen ( sName )}, '"' );
+	AppendChunk ( {sName, (int) strlen ( sName )}, '"' );
 	GrowEnough(2);
 	m_szBuffer[m_iUsed] = ':';
 	m_szBuffer[m_iUsed+1] = '\0';
@@ -2536,7 +2536,7 @@ StringBuilder_c & StringBuilder_c::operator += ( const char * sText )
 	if ( !sText || *sText=='\0' )
 		return *this;
 
-	return AppendChunk ( {sText, strlen ( sText )} );
+	return AppendChunk ( {sText, (int) strlen ( sText )} );
 }
 
 StringBuilder_c & StringBuilder_c::operator+= ( const Str_t& sChunk )
@@ -2710,10 +2710,10 @@ StringBuilder_c::LazyComma_c::LazyComma_c ( const char * sDelim, const char * sP
 	: Comma_c ( sDelim )
 {
 	if ( sPrefix )
-		m_sPrefix = { sPrefix, strlen(sPrefix) };
+		m_sPrefix = { sPrefix, (int) strlen(sPrefix) };
 
 	if ( sTerm )
-		m_sSuffix = { sTerm, strlen(sTerm ) };
+		m_sSuffix = { sTerm, (int) strlen(sTerm ) };
 }
 
 StringBuilder_c::LazyComma_c::LazyComma_c( const StrBlock_t& dBlock )

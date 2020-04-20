@@ -171,7 +171,7 @@ bool sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 )
 		pBuffer = new BYTE [ BUFFER_SIZE ];
 
 	int iBytesRead;
-	while ( ( iBytesRead = fread ( pBuffer, 1, BUFFER_SIZE, pFile ) )!=0 )
+	while ( ( iBytesRead = (int) fread ( pBuffer, 1, BUFFER_SIZE, pFile ) )!=0 )
 	{
 		for ( int i=0; i<iBytesRead; i++ )
 			crc = (crc >> 8) ^ g_dSphinxCRC32 [ (crc ^ pBuffer[i]) & 0xff ];
@@ -397,7 +397,7 @@ int64_t sphRead ( int iFD, void * pBuf, size_t iCount )
 	if ( pIOStats )
 		tmStart = sphMicroTimer();
 
-	int64_t iRead = ::read ( iFD, pBuf, iCount );
+	int64_t iRead = ::read ( iFD, pBuf, (int) iCount );
 
 	if ( pIOStats )
 	{
@@ -412,7 +412,7 @@ int64_t sphRead ( int iFD, void * pBuf, size_t iCount )
 
 bool sphWrite ( int iFD, const void * pBuf, size_t iSize )
 {
-	return ( iSize==(size_t)::write ( iFD, pBuf, iSize ) );
+	return ( iSize==(size_t)::write ( iFD, pBuf, (int) iSize ) );
 }
 
 

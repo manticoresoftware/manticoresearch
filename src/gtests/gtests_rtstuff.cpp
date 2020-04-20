@@ -76,7 +76,7 @@ public:
 		for ( int i = 0; i<m_iFields; i++ )
 		{
 			char * szField = ( char * ) ( m_ppDocs + iDoc * m_iFields )[i];
-			m_dFieldLengths[i] = strlen ( szField );
+			m_dFieldLengths[i] = (int) strlen ( szField );
 		}
 
 		const CSphColumnInfo * pId = m_tSchema.GetAttr ( sphGetDocidName() );
@@ -161,7 +161,7 @@ public:
 			, sphRand(), sphRand(), sphRand(), sphRand(), sphRand() );
 
 		for ( int i=0; i < m_iMaxFields; ++i )
-			m_dFieldLengths[i] = strlen ( m_ppFields[i] );
+			m_dFieldLengths[i] = (int) strlen ( m_ppFields[i] );
 
 		return (BYTE**) &m_ppFields[0];
 	}

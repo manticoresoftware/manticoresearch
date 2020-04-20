@@ -52,7 +52,7 @@ CheckLike::CheckLike( const char* sPattern )
 	if ( !sPattern )
 		return;
 
-	m_sPattern.Reserve( 2 * strlen( sPattern ));
+	m_sPattern.Reserve( 2 * (int) strlen( sPattern ));
 	char* d = const_cast<char*> ( m_sPattern.cstr());
 
 	// remap from SQL LIKE syntax to Sphinx wildcards syntax
@@ -239,7 +239,7 @@ ListenerDesc_t ParseListener( const char* sSpec )
 
 	// check if it all starts with a valid port number
 	auto sPart = dParts[0].cstr();
-	int iLen = strlen( sPart );
+	auto iLen = (int) strlen( sPart );
 
 	bool bAllDigits = true;
 	for ( int i = 0; i<iLen && bAllDigits; ++i )
@@ -650,7 +650,7 @@ ISphOutputBuffer::ISphOutputBuffer( CSphVector<BYTE>& dChunk )
 
 void ISphOutputBuffer::SendString( const char* sStr )
 {
-	int iLen = sStr ? strlen( sStr ) : 0;
+	int iLen = sStr ? (int) strlen( sStr ) : 0;
 	SendInt( iLen );
 	SendBytes( sStr, iLen );
 }
@@ -677,8 +677,8 @@ void CachedOutputBuffer_c::CommitMeasuredLength( intptr_t iStoredPos )
 		return;
 	auto iPos = m_dBlobs.Pop();
 	assert ( iStoredPos==-1 || iStoredPos==iPos );
-	int iBlobLen = m_dBuf.GetLength() - iPos - sizeof( int );
-	WriteInt( iPos, iBlobLen );
+	auto iBlobLen = m_dBuf.GetLength() - iPos - sizeof( int );
+	WriteInt( iPos, (int) iBlobLen );
 }
 
 void CachedOutputBuffer_c::CommitAllMeasuredLengths()
@@ -686,8 +686,8 @@ void CachedOutputBuffer_c::CommitAllMeasuredLengths()
 	while ( !m_dBlobs.IsEmpty())
 	{
 		auto uPos = m_dBlobs.Pop();
-		int iBlobLen = m_dBuf.GetLength() - uPos - sizeof( int );
-		WriteInt( uPos, iBlobLen );
+		auto iBlobLen = m_dBuf.GetLength() - uPos - sizeof( int );
+		WriteInt( uPos, (int) iBlobLen );
 	}
 }
 
@@ -764,7 +764,7 @@ size_t SmartOutputBuffer_t::GetIOVec( CSphVector<sphIovec>& dOut ) const
 	{
 		auto& dIovec = dOut.Add();
 		IOPTR ( dIovec ) = IOBUFTYPE ( GetBufPtr());
-		IOLEN ( dIovec ) = m_dBuf.GetLengthBytes();
+		IOLEN ( dIovec ) = (int) m_dBuf.GetLengthBytes();
 		iOutSize += IOLEN ( dIovec );
 	}
 	assert ( dOut.GetLength()<UIO_MAXIOV );
@@ -1591,7 +1591,7 @@ CSphString GetMacAddress()
 #if USE_WINDOWS
 	CSphFixedVector<IP_ADAPTER_ADDRESSES> dAdapters ( 128 );
 	PIP_ADAPTER_ADDRESSES pAdapter = dAdapters.Begin();
-	DWORD uSize = dAdapters.GetLengthBytes();
+	auto uSize = (DWORD) dAdapters.GetLengthBytes();
 	if ( GetAdaptersAddresses ( 0, 0, nullptr, pAdapter, &uSize )==NO_ERROR )
 	{
 		while ( pAdapter )

@@ -1826,7 +1826,7 @@ public:
 	/// (could be > GetLengthBytes() since uses limit, not size)
 	inline int64_t AllocatedBytes() const
 	{
-		return m_iLimit*sizeof(T);
+		return (int) m_iLimit*sizeof(T);
 	}
 
 public:
@@ -2524,7 +2524,7 @@ public:
 			m_sValue = EMPTY;
 		} else
 		{
-			int iLen = 1 + strlen ( rhs.m_sValue );
+			auto iLen = 1 + (int)strlen ( rhs.m_sValue ) + 1;
 			m_sValue = new char[iLen + SAFETY_GAP];
 
 			memcpy ( m_sValue, rhs.m_sValue, iLen ); // NOLINT
@@ -2596,7 +2596,7 @@ public:
 				m_sValue = EMPTY;
 			} else
 			{
-				int iLen = 1+strlen(sString);
+				auto iLen = 1+(int) strlen(sString);
 				m_sValue = new char [ iLen+SAFETY_GAP ];
 
 				strcpy ( m_sValue, sString ); // NOLINT
@@ -2620,7 +2620,7 @@ public:
 	CSphString SubString ( int iStart, int iCount ) const
 	{
 		#ifndef NDEBUG
-		int iLen = strlen(m_sValue);
+		auto iLen = (int) strlen(m_sValue);
 		iCount = Min( iLen - iStart, iCount );
 		#endif
 		assert ( iStart>=0 && iStart<iLen );
@@ -2735,8 +2735,8 @@ public:
 		if ( !m_sValue || !sSuffix )
 			return false;
 
-		int iVal = strlen ( m_sValue );
-		int iSuffix = strlen ( sSuffix );
+		auto iVal = (int) strlen ( m_sValue );
+		auto iSuffix = (int) strlen ( sSuffix );
 		if ( iVal<iSuffix )
 			return false;
 		return strncmp ( m_sValue+iVal-iSuffix, sSuffix, iSuffix )==0;
@@ -2952,7 +2952,7 @@ public:
 	// standalone - cast to 'Str_t' when necessary
 	explicit Comma_c ( const char * sDelim=nullptr )
 	{
-		m_sComma = sDelim ? Str_t { sDelim, strlen( sDelim ) } : dEmptyStr;
+		m_sComma = sDelim ? Str_t { sDelim, (int) strlen( sDelim ) } : dEmptyStr;
 	}
 
 	explicit Comma_c( Str_t sDelim ): m_sComma( std::move( sDelim )) {}

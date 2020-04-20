@@ -1752,7 +1752,7 @@ public:
 	virtual	int					Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool bQuery ) = 0;
 	int							Apply ( const void* szField, CSphVector<BYTE>& dStorage, bool bQuery )
 	{
-		return Apply ( (const BYTE*)szField, strlen ( (const char*)szField ), dStorage, bQuery );
+		return Apply ( (const BYTE*)szField, (int) strlen ( (const char*)szField ), dStorage, bQuery );
 	}
 
 	int Apply ( ByteBlob_t sField, CSphVector<BYTE>& dStorage, bool bQuery )

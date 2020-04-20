@@ -98,7 +98,7 @@ bool HttpRequestParser_c::Parse ( const BYTE * pData, int iDataLen )
 	http_parser tParser;
 	tParser.data = this;
 	http_parser_init ( &tParser, HTTP_REQUEST );
-	int iParsed = http_parser_execute ( &tParser, &tParserSettings, (const char *)pData, iDataLen );
+	auto iParsed = (int) http_parser_execute ( &tParser, &tParserSettings, (const char *)pData, iDataLen );
 	if ( iParsed!=iDataLen )
 	{
 		m_szError = http_errno_description ( (http_errno)tParser.http_errno );
@@ -247,7 +247,7 @@ int HttpRequestParser_c::ParserUrl ( http_parser * pParser, const char * sAt, si
 int HttpRequestParser_c::ParserHeaderField ( http_parser * pParser, const char * sAt, size_t iLen )
 {
 	assert ( pParser->data );
-	( (HttpRequestParser_c *)pParser->data )->m_sCurField.SetBinary ( sAt, iLen );
+	( (HttpRequestParser_c *)pParser->data )->m_sCurField.SetBinary ( sAt, (int) iLen );
 	return 0;
 }
 
@@ -255,7 +255,7 @@ int HttpRequestParser_c::ParserHeaderValue ( http_parser * pParser, const char *
 {
 	assert ( pParser->data );
 	CSphString sVal;
-	sVal.SetBinary ( sAt, iLen );
+	sVal.SetBinary ( sAt, (int) iLen );
 	auto * pHttpParser = (HttpRequestParser_c *)pParser->data;
 	pHttpParser->m_hOptions.Add ( sVal, pHttpParser->m_sCurField );
 	pHttpParser->m_sCurField = "";
@@ -266,8 +266,8 @@ int HttpRequestParser_c::ParserBody ( http_parser * pParser, const char * sAt, s
 {
 	assert ( pParser->data );
 	auto * pHttpParser = (HttpRequestParser_c *)pParser->data;
-	pHttpParser->ParseList ( sAt, iLen );
-	pHttpParser->m_sRawBody.SetBinary ( sAt, iLen );
+	pHttpParser->ParseList ( sAt, (int) iLen );
+	pHttpParser->m_sRawBody.SetBinary ( sAt, (int) iLen );
 	return 0;
 }
 
@@ -464,7 +464,7 @@ protected:
 			HttpErrorReply ( m_dData, eStatus, szError );
 		else
 		{
-			m_dData.Resize ( strlen(szError) );
+			m_dData.Resize ( (int) strlen ( szError ) );
 			memcpy ( m_dData.Begin(), szError, m_dData.GetLength() );
 		}
 	}

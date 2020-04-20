@@ -513,7 +513,7 @@ public:
 	{
 		int iLen = 0;
 		if ( sVal )
-			iLen = strlen ( sVal );
+			iLen = (int) strlen ( sVal );
 		PutDword ( iLen );
 		if ( iLen )
 			PutBytes ( (const BYTE *)sVal, iLen );
@@ -1793,7 +1793,7 @@ template <typename CP>
 int sphCheckpointCmp ( const char * sWord, int iLen, SphWordID_t iWordID, bool bWordDict, const CP & tCP )
 {
 	if ( bWordDict )
-		return sphDictCmp ( sWord, iLen, tCP.m_sWord, strlen ( tCP.m_sWord ) );
+		return sphDictCmp ( sWord, iLen, tCP.m_sWord, (int) strlen ( tCP.m_sWord ) );
 
 	int iRes = 0;
 	iRes = iWordID<tCP.m_uWordID ? -1 : iRes;
@@ -1805,7 +1805,7 @@ template <typename CP>
 int sphCheckpointCmpStrictly ( const char * sWord, int iLen, SphWordID_t iWordID, bool bWordDict, const CP & tCP )
 {
 	if ( bWordDict )
-		return sphDictCmpStrictly ( sWord, iLen, tCP.m_sWord, strlen ( tCP.m_sWord ) );
+		return sphDictCmpStrictly ( sWord, iLen, tCP.m_sWord, (int) strlen ( tCP.m_sWord ) );
 
 	int iRes = 0;
 	iRes = iWordID<tCP.m_uWordID ? -1 : iRes;

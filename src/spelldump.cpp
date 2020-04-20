@@ -146,7 +146,7 @@ bool CISpellDict::Load ( const char * szFilename )
 		if ( !szResult )
 			break;
 
-		int iPos = strlen ( szWordBuffer ) - 1;
+		auto iPos = (int) strlen ( szWordBuffer ) - 1;
 		while ( iPos>=0 && isspace ( (unsigned char)szWordBuffer[iPos] ) )
 			szWordBuffer [iPos--] = '\0';
 
@@ -248,9 +248,9 @@ CISpellAffixRule::CISpellAffixRule ( RuleType_e eRule, char cFlag, bool bCrossPr
 	, m_sAppend			( szAppend )
 	, m_iWordLen		( 0 )
 {
-	m_iCondLen = szCondition ? strlen ( szCondition ) : 0;
-	m_iStripLen = szStrip ? strlen ( szStrip ) : 0;
-	m_iAppendLen = szAppend ? strlen ( szAppend ) : 0;
+	m_iCondLen = szCondition ? (int) strlen ( szCondition ) : 0;
+	m_iStripLen = szStrip ? (int) strlen ( szStrip ) : 0;
+	m_iAppendLen = szAppend ? (int) strlen ( szAppend ) : 0;
 }
 
 
@@ -262,7 +262,7 @@ bool CISpellAffixRule::Apply ( CSphString & sWord )
 	if ( sWord.IsEmpty () )
 		return false;
 
-	m_iWordLen = strlen ( sWord.cstr () );
+	m_iWordLen = (int) strlen ( sWord.cstr () );
 
 	bool bDotCond = ( m_sCondition=="." );
 	if ( m_eRule==RULE_SUFFIXES )
@@ -765,8 +765,8 @@ bool CISpellAffix::AddToCharset ( char * szRangeL, char * szRangeU )
 	if ( !szRangeL || !szRangeU )
 		return false;
 
-	int iLengthL = strlen ( szRangeL );
-	int iLengthU = strlen ( szRangeU );
+	auto iLengthL = (int) strlen ( szRangeL );
+	auto iLengthU = (int)strlen ( szRangeU );
 
 	bool bSetL = ( iLengthL>0 && szRangeL[0]=='[' && szRangeL[iLengthL-1]==']' );
 	bool bSetR = ( iLengthU>0 && szRangeU[0]=='[' && szRangeU[iLengthU-1]==']' );
@@ -1081,7 +1081,7 @@ int main ( int iArgs, char ** dArgs )
 			continue;
 
 		CSphString sWord, sWordForCross;
-		int iFlagLen = strlen ( pWord->m_sFlags.cstr () );
+		auto iFlagLen = (int) strlen ( pWord->m_sFlags.cstr () );
 		for ( int iFlag1 = 0; iFlag1 < iFlagLen; ++iFlag1 )
 			for ( int iRule1 = 0; iRule1 < Affix.GetNumRules (); ++iRule1 )
 			{
@@ -1151,7 +1151,7 @@ int main ( int iArgs, char ** dArgs )
 						break;
 					}
 
-					int iWordLength = strlen ( dWords[iWord].m_sWord.cstr() );
+					auto iWordLength = (int)strlen ( dWords[iWord].m_sWord.cstr() );
 					if ( iWordLength>iLength )
 					{
 						iLength = iWordLength;

@@ -106,7 +106,7 @@ TEST_F( Tokenizer, exceptions_more )
 
 	for ( int iCur = 0; dTests[iCur]; )
 	{
-		m_pTokenizer->SetBuffer ( ( BYTE * ) dTests[iCur], strlen ( dTests[iCur] ) );
+		m_pTokenizer->SetBuffer ( ( BYTE * ) dTests[iCur], (int) strlen ( dTests[iCur] ) );
 		++iCur;
 
 		for ( BYTE * pToken = m_pTokenizer->GetToken (); pToken; pToken = m_pTokenizer->GetToken () )
@@ -140,7 +140,7 @@ TEST_F ( Tokenizer, special_blended )
 	ASSERT_TRUE ( pTokenizer->SetBlendMode ( "trim_none, skip_pure", sError ) );
 
 	char sTest10[] = "hello =- =world";
-	pTokenizer->SetBuffer ( ( BYTE * ) sTest10, strlen ( sTest10 ) );
+	pTokenizer->SetBuffer ( ( BYTE * ) sTest10, (int) strlen ( sTest10 ) );
 
 	ASSERT_STREQ ( ( const char * ) pTokenizer->GetToken (), "hello" );
 	ASSERT_STREQ ( ( const char * ) pTokenizer->GetToken (), "=world" );
@@ -152,7 +152,7 @@ TEST_F ( Tokenizer, noascii_case )
 	ASSERT_TRUE (
 		pTokenizer->SetCaseFolding ( "U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451", sError ) );
 	char sTest20[] = "abc \xD0\xBE\xD0\xBF\xD0\xB0\x58\xD1\x87\xD0\xB0 def";
-	pTokenizer->SetBuffer ( ( BYTE * ) sTest20, strlen ( sTest20 ) );
+	pTokenizer->SetBuffer ( ( BYTE * ) sTest20, (int) strlen ( sTest20 ) );
 	ASSERT_STREQ ( ( const char * ) pTokenizer->GetToken (), "\xD0\xBE\xD0\xBF\xD0\xB0" );
 	ASSERT_STREQ ( ( const char * ) pTokenizer->GetToken (), "\xD1\x87\xD0\xB0" );
 	ASSERT_FALSE ( pTokenizer->GetToken () );
@@ -239,7 +239,7 @@ TEST_F ( Tokenizer, Sentence )
 	int i = 0;
 	while ( sTest[i] )
 	{
-		pTokenizer->SetBuffer ( ( BYTE * ) sTest[i], strlen ( sTest[i] ) );
+		pTokenizer->SetBuffer ( ( BYTE * ) sTest[i], (int) strlen ( sTest[i] ) );
 		i++;
 
 		BYTE * sTok;
@@ -271,7 +271,7 @@ protected:
 TEST_F ( TokenizerBlended, texas )
 {
 	char sTest1[] = "(texas.\\\")";
-	pTokenizer->SetBuffer ( ( BYTE * ) sTest1, strlen ( sTest1 ) );
+	pTokenizer->SetBuffer ( ( BYTE * ) sTest1, (int) strlen ( sTest1 ) );
 	ASSERT_STREQ ( ( const char * ) pTokenizer->GetToken (), "(" );
 	ASSERT_STREQ ( ( const char * ) pTokenizer->GetToken (), "texas." );
 	ASSERT_TRUE ( pTokenizer->TokenIsBlended () );
@@ -283,7 +283,7 @@ TEST_F ( TokenizerBlended, texas )
 TEST_F ( TokenizerBlended, series2003 )
 {
 	char sTest2[] = "\"series 2003\\-\\\"\"";
-	pTokenizer->SetBuffer ( ( BYTE * ) sTest2, strlen ( sTest2 ) );
+	pTokenizer->SetBuffer ( ( BYTE * ) sTest2, (int) strlen ( sTest2 ) );
 	ASSERT_STREQ (  ( const char * ) pTokenizer->GetToken (), "\"" );
 	ASSERT_STREQ (  ( const char * ) pTokenizer->GetToken (), "series" );
 	ASSERT_STREQ (  ( const char * ) pTokenizer->GetToken (), "2003-" );
@@ -294,7 +294,7 @@ TEST_F ( TokenizerBlended, series2003 )
 TEST_F ( TokenizerBlended, aa_lock_up_bb )
 {
 	char sTest3[] = "aa lock.up bb";
-	pTokenizer->SetBuffer ( ( BYTE * ) sTest3, strlen ( sTest3 ) );
+	pTokenizer->SetBuffer ( ( BYTE * ) sTest3, (int) strlen ( sTest3 ) );
 	ASSERT_STREQ ( ( const char * ) pTokenizer->GetToken (), "aa" );
 	ASSERT_FALSE ( pTokenizer->TokenIsBlended () );
 	ASSERT_FALSE ( pTokenizer->TokenIsBlendedPart () );
@@ -314,7 +314,7 @@ TEST_F ( TokenizerBlended, aa_lock_up_bb )
 TEST_F ( TokenizerBlended, text_3rd )
 {
 	char sTest4[] = "3.rd text";
-	pTokenizer->SetBuffer ( ( BYTE * ) sTest4, strlen ( sTest4 ) );
+	pTokenizer->SetBuffer ( ( BYTE * ) sTest4, (int) strlen ( sTest4 ) );
 	ASSERT_STREQ (  ( const char * ) pTokenizer->GetToken (), "3.rd" );
 	ASSERT_TRUE ( pTokenizer->TokenIsBlended () );
 	ASSERT_TRUE ( pTokenizer->SkipBlended ()==1 );
@@ -326,7 +326,7 @@ TEST_F ( TokenizerBlended, text_3rd )
 TEST_F ( TokenizerBlended, text_123rd )
 {
 	char sTest5[] = "123\\@rd text";
-	pTokenizer->SetBuffer ( ( BYTE * ) sTest5, strlen ( sTest5 ) );
+	pTokenizer->SetBuffer ( ( BYTE * ) sTest5, (int) strlen ( sTest5 ) );
 	ASSERT_STREQ (  ( const char * ) pTokenizer->GetToken (), "123@rd" );
 	ASSERT_TRUE ( pTokenizer->TokenIsBlended () );
 	ASSERT_TRUE ( pTokenizer->SkipBlended ()==2 );
@@ -338,7 +338,7 @@ TEST_F ( TokenizerBlended, text_123rd )
 TEST_F ( TokenizerBlended, at_ta_c_da_bl_ok_yo_pest )
 {
 	char sTest6[] = "at.ta\\.c.da\\.bl.ok yo pest";
-	pTokenizer->SetBuffer ( ( BYTE * ) sTest6, strlen ( sTest6 ) );
+	pTokenizer->SetBuffer ( ( BYTE * ) sTest6, (int) strlen ( sTest6 ) );
 	ASSERT_STREQ (  ( const char * ) pTokenizer->GetToken (), "at.ta.c.da.bl.ok" );
 	ASSERT_TRUE ( pTokenizer->TokenIsBlended () );
 	ASSERT_TRUE ( pTokenizer->SkipBlended ()==5 );
@@ -350,7 +350,7 @@ TEST_F ( TokenizerBlended, at_ta_c_da_bl_ok_yo_pest )
 TEST_F ( TokenizerBlended, text_3_at_rd )
 {
 	char sTest7[] = "3\\@rd text";
-	pTokenizer->SetBuffer ( ( BYTE * ) sTest7, strlen ( sTest7 ) );
+	pTokenizer->SetBuffer ( ( BYTE * ) sTest7, (int) strlen ( sTest7 ) );
 	ASSERT_STREQ ( ( const char * ) pTokenizer->GetToken (), "3@rd" );
 	ASSERT_TRUE ( pTokenizer->TokenIsBlended () );
 	ASSERT_TRUE ( pTokenizer->SkipBlended ()==1 ); // because 3 is overshort!
@@ -441,7 +441,7 @@ TEST_P( TokenizerP, OneLineTests )
 
 	for ( int iCur = 0; dTests[iCur] && ( dTests[iCur++][0]-'0' )<=iRun; )
 	{
-		m_pTokenizer->SetBuffer ( ( BYTE * ) dTests[iCur], strlen ( dTests[iCur] ) );
+		m_pTokenizer->SetBuffer ( ( BYTE * ) dTests[iCur], (int) strlen ( dTests[iCur] ) );
 		iCur++;
 
 		for ( BYTE * pToken = m_pTokenizer->GetToken (); pToken; pToken = m_pTokenizer->GetToken () )
@@ -462,7 +462,7 @@ TEST_P( TokenizerP, MiscOneLineTests )
 	const char * dTests2[] = { "\xC2\x80\xC2\x81\xC2\x82", "\xC2\x80\xC2\x81\xC2\x82", NULL, NULL };
 	for ( int iCur = 0; dTests2[iCur]; )
 	{
-		m_pTokenizer->SetBuffer ( ( BYTE * ) dTests2[iCur], strlen ( dTests2[iCur] ) );
+		m_pTokenizer->SetBuffer ( ( BYTE * ) dTests2[iCur], (int) strlen ( dTests2[iCur] ) );
 		iCur++;
 
 		for ( BYTE * pToken = m_pTokenizer->GetToken (); pToken; pToken = m_pTokenizer->GetToken () )
@@ -497,7 +497,7 @@ TEST_P( TokenizerP, uberlong )
 	memset ( sTok4, 'a', SPH_MAX_WORD_LEN );
 	sTok4[SPH_MAX_WORD_LEN] = '\0';
 
-	m_pTokenizer->SetBuffer ( ( BYTE * ) sLine4, strlen ( sLine4 ) );
+	m_pTokenizer->SetBuffer ( ( BYTE * ) sLine4, (int) strlen ( sLine4 ) );
 	ASSERT_STREQ ( ( char * ) m_pTokenizer->GetToken (), sTok4 );
 	ASSERT_FALSE ( m_pTokenizer->GetToken () );
 	SafeDeleteArray ( sLine4 );
@@ -512,7 +512,7 @@ TEST_P( TokenizerP, uberlong_synonim_only )
 		memset ( sLine4, '/', UBERLONG );
 		sLine4[UBERLONG] = '\0';
 
-		m_pTokenizer->SetBuffer ( ( BYTE * ) sLine4, strlen ( sLine4 ) );
+		m_pTokenizer->SetBuffer ( ( BYTE * ) sLine4, (int) strlen ( sLine4 ) );
 		ASSERT_FALSE( m_pTokenizer->GetToken () );
 
 		for ( int i = 0; i<UBERLONG - 3; i += 3 )
@@ -523,7 +523,7 @@ TEST_P( TokenizerP, uberlong_synonim_only )
 			sLine4[i + 3] = '\0';
 		}
 
-		m_pTokenizer->SetBuffer ( ( BYTE * ) sLine4, strlen ( sLine4 ) );
+		m_pTokenizer->SetBuffer ( ( BYTE * ) sLine4, (int) strlen ( sLine4 ) );
 		for ( int i = 0; i<UBERLONG - 3; i += 3 )
 			ASSERT_STREQ ( ( char * ) m_pTokenizer->GetToken (), "aa" );
 		ASSERT_FALSE ( m_pTokenizer->GetToken () );
@@ -552,7 +552,7 @@ TEST_P ( TokenizerP, short_token_handling )
 
 	for ( int iCur = 0; dTestsShort[iCur]; )
 	{
-		pShortTokenizer->SetBuffer ( ( BYTE * ) ( dTestsShort[iCur] ), strlen ( ( const char * ) dTestsShort[iCur] ) );
+		pShortTokenizer->SetBuffer ( ( BYTE * ) ( dTestsShort[iCur] ), (int) strlen ( ( const char * ) dTestsShort[iCur] ) );
 		iCur++;
 		for ( BYTE * pToken = pShortTokenizer->GetToken (); pToken; pToken = pShortTokenizer->GetToken () )
 		{
@@ -572,7 +572,7 @@ TEST_P( TokenizerP, boundaries )
 	ASSERT_TRUE ( m_pTokenizer->SetBoundary ( "?", sError ) );
 
 	char sLine5[] = "hello world? testing boundaries?";
-	m_pTokenizer->SetBuffer ( ( BYTE * ) sLine5, strlen ( sLine5 ) );
+	m_pTokenizer->SetBuffer ( ( BYTE * ) sLine5, (int) strlen ( sLine5 ) );
 
 	ASSERT_STREQ ( ( const char * ) m_pTokenizer->GetToken (), "hello" );
 	ASSERT_FALSE ( m_pTokenizer->GetBoundary () );
@@ -587,7 +587,7 @@ TEST_P( TokenizerP, boundaries )
 TEST_P( TokenizerP, specials_vs_tokens_start_end_ptrs )
 {
 	char sLine6[] = "abc!def";
-	m_pTokenizer->SetBuffer ( ( BYTE * ) sLine6, strlen ( sLine6 ) );
+	m_pTokenizer->SetBuffer ( ( BYTE * ) sLine6, (int) strlen ( sLine6 ) );
 
 	ASSERT_STREQ ( ( const char * ) m_pTokenizer->GetToken (), "abc" );
 	ASSERT_EQ( *m_pTokenizer->GetTokenStart (), 'a' );

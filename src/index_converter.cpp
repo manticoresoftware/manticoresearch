@@ -2167,12 +2167,12 @@ static void GetKilledDocs ( const CSphFixedVector<int> & dRtChunkNames, int iCur
 			continue;
 		}
 
-		int iCount = tKill.GetFilesize() / sizeof(SphDocID_t);
+		auto iCount = (int) (tKill.GetFilesize() / sizeof(SphDocID_t));
 		if ( !iCount )
 			continue;
 
 		int iOff = dKilled.GetLength();
-		dKilled.Resize ( iOff + iCount );
+		dKilled.Resize ( iOff + (int) iCount );
 		for ( int iElem=0; iElem<iCount; iElem++ )
 			dKilled[iOff+iElem] = tKill.GetOffset();
 	}

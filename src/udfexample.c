@@ -253,7 +253,7 @@ DLLEXPORT char * hideemail_push_token ( void * userdata, char * token, int * ext
 	if ( pos0==0 || pos1==0 )
 		return token;
 
-	len0 = strlen ( token );
+	len0 = (int) strlen ( token );
 
 	// domain size not same as expected - hide email
 	if ( len0-(pos0+1-token)!=len1 )

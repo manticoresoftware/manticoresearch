@@ -4242,7 +4242,7 @@ protected:
 public:
 	explicit SortClauseTokenizer_t ( const char * sBuffer )
 	{
-		int iLen = strlen(sBuffer);
+		auto iLen = (int) strlen(sBuffer);
 		m_pBuf = new char [ iLen+1 ];
 		m_pMax = m_pBuf+iLen;
 		m_pCur = m_pBuf;
@@ -4477,7 +4477,7 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 					if ( pAttr->m_pExpr )
 						pAttr->m_pExpr->AddRef(); // SetupSortRemap uses refcounted pointer, but does not AddRef() itself, so help it
 					tState.m_tSubExpr[iField] = pAttr->m_pExpr;
-					tState.m_tSubKeys[iField] = JsonKey_t ( pTok, strlen ( pTok ) );
+					tState.m_tSubKeys[iField] = JsonKey_t ( pTok, (int) strlen ( pTok ) );
 
 				} else
 				{
@@ -4489,7 +4489,7 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 						{
 							ExprParseArgs_t tExprArgs;
 							tState.m_tSubExpr[iField] = sphExprParse ( pTok, tSchema, sError, tExprArgs );
-							tState.m_tSubKeys[iField] = JsonKey_t ( pTok, strlen ( pTok ) );
+							tState.m_tSubKeys[iField] = JsonKey_t ( pTok, (int) strlen ( pTok ) );
 						}
 					}
 				}
@@ -4505,7 +4505,7 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 				if ( pExpr )
 				{
 					tState.m_tSubExpr[iField] = pExpr;
-					tState.m_tSubKeys[iField] = JsonKey_t ( pTok, strlen(pTok) );
+					tState.m_tSubKeys[iField] = JsonKey_t ( pTok, (int) strlen(pTok) );
 					tState.m_tSubKeys[iField].m_uMask = 0;
 					tState.m_tSubType[iField] = eAttrType;
 					iAttr = 0; // will be remapped in SetupSortRemap
@@ -4754,7 +4754,7 @@ uint64_t ExprGeodist_t::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPr
 	uint64_t uHash = sphCalcExprDepHash ( this, tSorterSchema, uPrevHash, bDisable );
 
 	static const char * EXPR_TAG = "ExprGeodist_t";
-	uHash = sphFNV64 ( EXPR_TAG, strlen(EXPR_TAG), uHash );
+	uHash = sphFNV64 ( EXPR_TAG, (int) strlen(EXPR_TAG), uHash );
 	uHash = sphFNV64 ( &m_fGeoAnchorLat, sizeof(m_fGeoAnchorLat), uHash );
 	uHash = sphFNV64 ( &m_fGeoAnchorLong, sizeof(m_fGeoAnchorLong), uHash );
 
@@ -5603,7 +5603,7 @@ public:
 		BYTE * pDst = dBuf.Begin()+iLen+1;
 		int iDstAvailable = dBuf.GetLength() - iLen - LOCALE_SAFE_GAP;
 
-		int iDstLen = strxfrm ( (char *)pDst, (const char *) dBuf.Begin(), iDstAvailable );
+		auto iDstLen = (int) strxfrm ( (char *)pDst, (const char *) dBuf.Begin(), iDstAvailable );
 		assert ( iDstLen<iDstAvailable+LOCALE_SAFE_GAP );
 
 		uint64_t uAcc = sphFNV64 ( pDst, iDstLen, uPrev );

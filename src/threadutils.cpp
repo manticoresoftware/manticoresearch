@@ -721,9 +721,9 @@ struct ThreadPool_c::Impl_t
 		, m_tService ( iThreadCount==1 )
 	{
 		createWork ();
-		m_dThreads.Resize ( iThreadCount );
+		m_dThreads.Resize ( (int) iThreadCount );
 		for ( size_t i = 0; i<iThreadCount; ++i )
-			m_dThreads[i] = makeTinyThread ( [this] { loop (); }, i, szName );
+			m_dThreads[i] = makeTinyThread ( [this] { loop (); }, (int)i, szName );
 		LOG ( DEBUG, TP ) << "thread pool created with threads: " << iThreadCount;
 	}
 

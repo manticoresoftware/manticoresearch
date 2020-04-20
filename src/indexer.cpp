@@ -1504,10 +1504,10 @@ LONG WINAPI sigsegv ( EXCEPTION_POINTERS * pExc )
 	const char * sFailVer = szMANTICORE_NAME;
 
 	sphBacktrace ( pExc, g_sMinidump );
-	::write ( STDERR_FILENO, sFail1, strlen(sFail1) );
-	::write ( STDERR_FILENO, g_sMinidump, strlen(g_sMinidump) );
-	::write ( STDERR_FILENO, sFail2, strlen(sFail2) );
-	::write ( STDERR_FILENO, sFailVer, strlen(sFailVer) );
+	::write ( STDERR_FILENO, sFail1, (unsigned int) strlen ( sFail1 ) );
+	::write ( STDERR_FILENO, g_sMinidump, (unsigned int) strlen(g_sMinidump) );
+	::write ( STDERR_FILENO, sFail2, (unsigned int) strlen ( sFail2 ) );
+	::write ( STDERR_FILENO, sFailVer, (unsigned int) strlen ( sFailVer ) );
 	::write ( STDERR_FILENO, "\n", 1);
 
 	CRASH_EXIT;

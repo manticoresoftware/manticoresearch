@@ -399,7 +399,7 @@ static void QueryGetTerms ( const XQNode_t * pNode, CSphDict * pDict, DictMap_t 
 		if ( !uWord )
 			continue;
 
-		iLen = strnlen ( (const char *)sTmp, sizeof(sTmp) );
+		iLen = (int) strnlen ( (const char *)sTmp, sizeof(sTmp) );
 		DictTerm_t & tTerm = hDict.m_hTerms.Acquire ( uHash );
 		tTerm.m_uWordID = uWord;
 		tTerm.m_iWordOff = hDict.m_dKeywords.GetLength();
@@ -602,7 +602,7 @@ static Slice_t GetPrefixLocator ( const char * sWord, bool bHasMorphology, const
 		if ( pCheckpoint )
 		{
 			// there could be valid data prior 1st checkpoint that should be unpacked and checked
-			int iNameLen = strnlen ( pCheckpoint->m_sWord, SPH_MAX_KEYWORD_LEN );
+			auto iNameLen = (int) strnlen ( pCheckpoint->m_sWord, SPH_MAX_KEYWORD_LEN );
 			if ( pCheckpoint!=pSeg->m_dWordCheckpoints.Begin() || (sphDictCmp ( sPrefix, iPrefix, pCheckpoint->m_sWord, iNameLen )==0 && iPrefix==iNameLen) )
 				tChPoint.m_uOff = pCheckpoint->m_iOffset;
 
@@ -610,7 +610,7 @@ static Slice_t GetPrefixLocator ( const char * sWord, bool bHasMorphology, const
 			pCheckpoint++;
 			while ( pCheckpoint<=pLast )
 			{
-				iNameLen = strnlen ( pCheckpoint->m_sWord, SPH_MAX_KEYWORD_LEN );
+				iNameLen = (int) strnlen ( pCheckpoint->m_sWord, SPH_MAX_KEYWORD_LEN );
 				int iCmp = sphDictCmp ( sPrefix, iPrefix, pCheckpoint->m_sWord, iNameLen );
 				if ( iCmp==0 && iPrefix==iNameLen )
 					tChPoint.m_uOff = pCheckpoint->m_iOffset;

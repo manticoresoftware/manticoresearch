@@ -1225,7 +1225,7 @@ public:
 			{
 				for ( ; iArg < dEvaluated.GetLength() && dEvaluated[iArg]; iArg++ )
 				{
-					int iLen = strlen ( (const char *)dEvaluated[iArg] );
+					auto iLen = (int) strlen ( (const char *)dEvaluated[iArg] );
 					memcpy ( tArg.m_dBuffer.AddN (iLen), dEvaluated[iArg], iLen );
 				}
 			}
@@ -4915,7 +4915,7 @@ public:
 		auto pFn = (UdfCharptr_fn) m_pCall->m_pUdf->m_fnFunc;
 		char * pRes = pFn ( &m_pCall->m_tInit, &m_pCall->m_tArgs, &m_bError ); // owned now!
 		*ppStr = (const BYTE*) pRes;
-		int iLen = ( pRes ? strlen(pRes) : 0 );
+		int iLen = ( pRes ?(int) strlen(pRes) : 0 );
 		FreeArgs();
 		return iLen;
 	}

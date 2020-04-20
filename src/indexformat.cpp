@@ -535,7 +535,7 @@ void CWordlist::GetPrefixedWords ( const char * sSubstring, int iSubLen, const c
 		if ( pCheckpoint > &m_dCheckpoints.Last() )
 			break;
 
-		if ( sphDictCmp ( sSubstring, iSubLen, pCheckpoint->m_sWord, strlen ( pCheckpoint->m_sWord ) )<0 )
+		if ( sphDictCmp ( sSubstring, iSubLen, pCheckpoint->m_sWord, (int) strlen ( pCheckpoint->m_sWord ) )<0 )
 			break;
 	}
 

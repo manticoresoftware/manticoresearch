@@ -569,7 +569,7 @@ static wsrep_cb_status_t SstDonate_fn ( void * pAppCtx, void * pRecvCtx, const v
 	ReceiverCtx_t * pLocalCtx = (ReceiverCtx_t *)pRecvCtx;
 	
 	CSphString sNode;
-	sNode.SetBinary ( (const char *)sMsg, iMsgLen );
+	sNode.SetBinary ( (const char *)sMsg, (int) iMsgLen );
 
 	wsrep_gtid_t tGtid = *pStateID;
 	char sGtid[WSREP_GTID_STR_LEN];
@@ -640,7 +640,7 @@ static wsrep_cb_status_t Apply_fn ( void * pCtx, const void * pData, size_t uSiz
 	bool bIsolated = ( ( uFlags & WSREP_FLAG_ISOLATION )!=0 );
 	sphLogDebugRpl ( "writeset at apply, seq " INT64_FMT ", size %d, flags %u, on %s", (int64_t)pMeta->gtid.seqno, (int)uSize, uFlags, ( bCommit ? "commit" : "rollback" ) );
 
-	if ( !ParseCmdReplicated ( (const BYTE *)pData, uSize, bIsolated, pLocalCtx->m_pCluster->m_sName, pLocalCtx->m_tAcc, pLocalCtx->m_tUpdAPI, pLocalCtx->m_tQuery ) )
+	if ( !ParseCmdReplicated ( (const BYTE *)pData, (int) uSize, bIsolated, pLocalCtx->m_pCluster->m_sName, pLocalCtx->m_tAcc, pLocalCtx->m_tUpdAPI, pLocalCtx->m_tQuery ) )
 		return WSREP_CB_FAILURE;
 
 	return WSREP_CB_SUCCESS;
@@ -1732,8 +1732,8 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 			bTOI = true;
 			bUpdate = true;
 
-			uQueryHash = sphFNV64 ( pUpd->m_dDocids.Begin(), pUpd->m_dDocids.GetLengthBytes(), uQueryHash );
-			uQueryHash = sphFNV64 ( pUpd->m_dPool.Begin(), pUpd->m_dPool.GetLengthBytes(), uQueryHash );
+			uQueryHash = sphFNV64 ( pUpd->m_dDocids.Begin(), (int) pUpd->m_dDocids.GetLengthBytes(), uQueryHash );
+			uQueryHash = sphFNV64 ( pUpd->m_dPool.Begin(), (int) pUpd->m_dPool.GetLengthBytes(), uQueryHash );
 
 			SaveUpdate ( *pUpd, dBufQueries );
 		}
@@ -1748,8 +1748,8 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 			bTOI = true;
 			bUpdate = true;
 
-			uQueryHash = sphFNV64 ( pUpd->m_dDocids.Begin(), pUpd->m_dDocids.GetLengthBytes(), uQueryHash );
-			uQueryHash = sphFNV64 ( pUpd->m_dPool.Begin(), pUpd->m_dPool.GetLengthBytes(), uQueryHash );
+			uQueryHash = sphFNV64 ( pUpd->m_dDocids.Begin(), (int) pUpd->m_dDocids.GetLengthBytes(), uQueryHash );
+			uQueryHash = sphFNV64 ( pUpd->m_dPool.Begin(), (int) pUpd->m_dPool.GetLengthBytes(), uQueryHash );
 
 			SaveUpdate ( *pUpd, dBufQueries );
 			SaveUpdate ( *tCmd.m_pUpdateCond, dBufQueries );
@@ -2235,7 +2235,7 @@ static bool NewClusterForce ( const CSphString & sPath, CSphString & sError )
 	SphOffset_t iStateSize = tReader.GetFilesize();
 	while ( tReader.GetPos()<iStateSize )
 	{
-		int iLineLen = tReader.GetLine ( dBuf.Begin(), dBuf.GetLengthBytes() );
+		int iLineLen = tReader.GetLine ( dBuf.Begin(), (int) dBuf.GetLengthBytes() );
 		// replace value of safe_to_bootstrap to 1
 		if ( iLineLen>iPatternLen && strncmp ( sPattern, dBuf.Begin(), iPatternLen )==0 )
 			iLineLen = snprintf ( dBuf.Begin(), dBuf.GetLengthBytes(), "%s: 1", sPattern );
@@ -3112,7 +3112,7 @@ public:
 		assert ( tCmd.m_pChunks );
 		GetArray ( tCmd.m_pChunks->m_dBaseNames, tBuf );
 		tCmd.m_pChunks->m_dHashes.Reset ( tCmd.m_pChunks->m_dBaseNames.GetLength() * HASH20_SIZE );
-		tBuf.GetBytes ( tCmd.m_pChunks->m_dHashes.Begin(), tCmd.m_pChunks->m_dHashes.GetLengthBytes() );
+		tBuf.GetBytes ( tCmd.m_pChunks->m_dHashes.Begin(), (int) tCmd.m_pChunks->m_dHashes.GetLengthBytes() );
 	}
 
 	static void BuildReply ( const PQRemoteReply_t & tRes, CachedOutputBuffer_c & tOut )
@@ -4826,7 +4826,7 @@ static void LoadFilter ( CSphFilterSettings & tItem, MemoryReader_c & tReader )
 	if ( iValues )
 	{
 		CSphFixedVector<SphAttr_t> dValues ( iValues );
-		tReader.GetBytes ( dValues.Begin(), dValues.GetLengthBytes() );
+		tReader.GetBytes ( dValues.Begin(), (int) dValues.GetLengthBytes() );
 
 		tItem.SetExternalValues ( dValues.LeakData(), iValues );
 	}

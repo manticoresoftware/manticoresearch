@@ -20,6 +20,7 @@
 #include "searchdtask.h"
 
 #include <utility>
+#include <atomic>
 #include <errno.h>
 
 #if !USE_WINDOWS
@@ -525,7 +526,8 @@ CSphString MultiAgentDesc_c::GetKey ( const CSphVector<AgentDesc_t *> &dTemplate
 	return sKey.cstr();
 }
 
-MultiAgentDesc_c * MultiAgentDesc_c::GetAgent ( const CSphVector<AgentDesc_t*> & dHosts, const AgentOptions_t & tOpt, const WarnInfo_c & tWarn ) NO_THREAD_SAFETY_ANALYSIS
+MultiAgentDesc_c * MultiAgentDesc_c::GetAgent ( const CSphVector<AgentDesc_t*> & dHosts, const AgentOptions_t & tOpt,
+		const WarnInfo_c & tWarn ) NO_THREAD_SAFETY_ANALYSIS
 {
 	auto sKey = GetKey ( dHosts, tOpt );
 	auto &gHash = g_MultiAgents ();
@@ -543,7 +545,8 @@ MultiAgentDesc_c * MultiAgentDesc_c::GetAgent ( const CSphVector<AgentDesc_t*> &
 	return ( MultiAgentDesc_c * ) gHash.TryAddThenGet ( pAgent, sKey );
 }
 
-bool MultiAgentDesc_c::Init ( const CSphVector<AgentDesc_t *> & dHosts, const AgentOptions_t & tOpt, const WarnInfo_c & tWarn ) NO_THREAD_SAFETY_ANALYSIS
+bool MultiAgentDesc_c::Init ( const CSphVector<AgentDesc_t *> &dHosts,
+			const AgentOptions_t &tOpt, const WarnInfo_c &tWarn ) NO_THREAD_SAFETY_ANALYSIS
 {
 	// initialize options
 	m_eStrategy = tOpt.m_eStrategy;
@@ -1876,7 +1879,7 @@ inline SSIZE_T AgentConn_t::RecvChunk ()
 		ScheduleCallbacks ();
 	WSABUF dBuf;
 	dBuf.buf = (CHAR*) m_pReplyCur;
-	dBuf.len = ReplyBufPlace ();
+	dBuf.len = (ULONG) ReplyBufPlace ();
 	DWORD uFlags = 0;
 	m_pPollerTask->m_dRead.Zero ();
 	sphLogDebugA ( "%d Scheduling overlapped WSARecv for %d bytes", m_iStoreTag, ReplyBufPlace () );
@@ -1894,7 +1897,7 @@ inline SSIZE_T AgentConn_t::SendChunk ()
 	m_pPollerTask->m_dWrite.Zero ();
 	sphLogDebugA ( "%d overlaped WSASend called for %d chunks", m_iStoreTag, m_dIOVec.IOSize () );
 	m_pPollerTask->m_dWrite.m_bInUse = true;
-	WSASend ( m_iSock, m_dIOVec.IOPtr (), m_dIOVec.IOSize (), nullptr, 0, &m_pPollerTask->m_dWrite, nullptr );
+	WSASend ( m_iSock, m_dIOVec.IOPtr (), (DWORD) m_dIOVec.IOSize (), nullptr, 0, &m_pPollerTask->m_dWrite, nullptr );
 	return -1;
 }
 
@@ -1999,7 +2002,7 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 	if ( iRes>=0 ) // lucky; we already sent something!
 	{
 		track_processing_time ( *this );
-		sphLogDebugA ( "%d sendmsg/connectx returned %zu", m_iStoreTag, ( size_t ) iRes );
+		sphLogDebugA ( "%d sendmsg/connectx returned %d", m_iStoreTag, ( size_t ) iRes );
 		sphLogDebugv ( "TFO send succeeded, %zu bytes sent", ( size_t ) iRes );
 		// now 'connect' and 'query' merged, so timeout became common.
 		m_iPoolerTimeout += 1000*m_iMyQueryTimeout;
@@ -2437,7 +2440,7 @@ bool AgentConn_t::ReceiveAnswer ( DWORD uRecv )
 
 		m_pReplyCur += iRes;
 		auto iRest = ReplyBufPlace ();
-		sphLogDebugA ( "%d RecvChunk returned %d (%zu bytes rest in input buffer)", m_iStoreTag, ( int ) iRes, iRest );
+		sphLogDebugA ( "%d RecvChunk returned %d (%d bytes rest in input buffer)", m_iStoreTag, ( int ) iRes, iRest );
 
 		// We're in state of receiving the header (m_iReplySize==-1 is the indicator)
 		if ( IsReplyHeader () && iRest<=( REPLY_HEADER_SIZE - 4 ))
@@ -3135,11 +3138,11 @@ private:
 			{
 				iOp = EPOLL_CTL_ADD;
 				++iEvents;
-				sphLogDebugL ( "L EPOLL_CTL_ADD(%d) -> %d, %d+%d events", pTask->m_ifd, tEv.events, m_iEvents, iEvents );
+				sphLogDebugL ( "L EPOLL_CTL_ADD(%d) -> %x, %d+%d events", pTask->m_ifd, tEv.events, m_iEvents, iEvents );
 			} else
 			{
 				iOp = EPOLL_CTL_MOD;
-				sphLogDebugL ( "L EPOLL_CTL_MOD(%d) -> %d, %d+%d events", pTask->m_ifd, tEv.events, m_iEvents, iEvents );
+				sphLogDebugL ( "L EPOLL_CTL_MOD(%d) -> %x, %d+%d events", pTask->m_ifd, tEv.events, m_iEvents, iEvents );
 			}
 		}
 

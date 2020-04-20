@@ -720,7 +720,7 @@ void StringSourceTraits_c::PrepareText ( const VecTraits_T<BYTE> & dSourceText, 
 		if ( dDestText.GetLength() )
 		{
 			pStripper->Strip ( dDestText.Begin() );
-			dDestText.Resize ( strlen ( (const char*)dDestText.Begin() ) );
+			dDestText.Resize ( (int) strlen ( (const char*)dDestText.Begin() ) );
 		}
 	}
 }
@@ -1281,7 +1281,7 @@ bool SnippetBuilder_c::SetQuery ( const CSphString & sQuery, bool bIgnoreFields,
 	const BYTE * szModifiedQuery = (BYTE *)sQuery.cstr();
 	if ( m_pFieldFilter && szModifiedQuery )
 	{
-		if ( m_pFieldFilter->Apply ( szModifiedQuery, strlen ( (char*)szModifiedQuery ), dFiltered, true ) )
+		if ( m_pFieldFilter->Apply ( szModifiedQuery, (int) strlen ( (char*)szModifiedQuery ), dFiltered, true ) )
 			szModifiedQuery = dFiltered.Begin();
 	}
 

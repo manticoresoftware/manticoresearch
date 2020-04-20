@@ -56,6 +56,7 @@ simple_tests:
   before_script:
     - apt-get update
     - apt-get install ca-certificates openssl
+    - apt-get install python-dev
   script:
     - ctest -VV -S misc/ctest/gltest.cmake
   after_script:
@@ -70,7 +71,7 @@ simple_tests:
     expire_in: 12 hrs
     when: always
   cache:
-    key: linux_debug
+    key: ubuntu_bionic
     paths:
       - cache/
 
@@ -89,6 +90,7 @@ release_tests:
   before_script:
     - apt-get update
     - apt-get install ca-certificates openssl
+    - apt-get install python-dev
   script:
     - ctest -V -S misc/ctest/gltest.cmake
   after_script:
@@ -103,7 +105,7 @@ release_tests:
     expire_in: 12 hrs
     when: always
   cache:
-    key: linux_release
+    key: ubuntu_bionic
     paths:
       - cache/
   retry: 1

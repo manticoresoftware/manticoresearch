@@ -53,6 +53,8 @@ simple_tests:
   variables:
     CTEST_BUILD_CONFIGURATION: "Debug"
     CACHEB: "../cache"
+  before_script:
+    - apt-get install ca-certificates
   script:
     - ctest -VV -S misc/ctest/gltest.cmake
   after_script:
@@ -83,6 +85,8 @@ release_tests:
   variables:
     CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
     CACHEB: "../cache"
+  before_script:
+    - apt-get install ca-certificates
   script:
     - ctest -V -S misc/ctest/gltest.cmake
   after_script:
@@ -122,7 +126,7 @@ win_tests:
     - export PATH='/cygdrive/x/bundle/openssl-x32:/cygdrive/x/bundle/Expat-1.95.8/Libs:/cygdrive/x/bundle/libiconv-1.9.1/bin:/cygdrive/x/bundle/mysql/bin:/cygdrive/x/php:'$PATH
     - tar -jxf /cygdrive/x/mysql/mysql.tar.bz2 -C /cygdrive/c/users/manticore/
     - /cygdrive/x/mysql/bin/mysqld.exe --defaults-file=c:/users/manticore/mysql/my.ini &
-    - ctest -V -S misc/ctest/gltest.cmake -DCTEST_SOURCE_DIRECTORY='C:/cygwin64/home/manticore/builds/manticoresearch/dev/' -C Debug
+    - ctest -VV -S misc/ctest/gltest.cmake -DCTEST_SOURCE_DIRECTORY='C:/cygwin64/home/manticore/builds/manticoresearch/dev/' -C Debug
   after_script:
     - cd build && mkdir xml_win_tests
     - cp -r Testing/2*/*.xml xml_win_tests

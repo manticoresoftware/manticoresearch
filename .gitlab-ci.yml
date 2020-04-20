@@ -54,7 +54,8 @@ simple_tests:
     CTEST_BUILD_CONFIGURATION: "Debug"
     CACHEB: "../cache"
   before_script:
-    - apt-get install ca-certificates
+    - apt-get update
+    - apt-get install ca-certificates openssl
   script:
     - ctest -VV -S misc/ctest/gltest.cmake
   after_script:
@@ -86,7 +87,8 @@ release_tests:
     CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
     CACHEB: "../cache"
   before_script:
-    - apt-get install ca-certificates
+    - apt-get update
+    - apt-get install ca-certificates openssl
   script:
     - ctest -V -S misc/ctest/gltest.cmake
   after_script:

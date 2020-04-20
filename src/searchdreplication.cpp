@@ -1186,6 +1186,9 @@ static void ReplicateClusterStats ( ReplicationCluster_t * pCluster, VectorLike 
 	}
 
 	// cluster status
+	// trick
+	if ( !pCluster->m_pProvider->ctx )
+		return;
 	wsrep_stats_var * pVarsStart = pCluster->m_pProvider->stats_get ( pCluster->m_pProvider );
 	if ( !pVarsStart )
 		return;

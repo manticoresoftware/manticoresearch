@@ -56,7 +56,7 @@ simple_tests:
   before_script:
     - apt-get update
     - apt-get install ca-certificates openssl
-    - apt-get install python-dev
+    - apt-get install -y --no-install-recommends python-dev
   script:
     - ctest -VV -S misc/ctest/gltest.cmake
   after_script:
@@ -90,7 +90,7 @@ release_tests:
   before_script:
     - apt-get update
     - apt-get install ca-certificates openssl
-    - apt-get install python-dev
+    - apt-get install -y --no-install-recommends python-dev
   script:
     - ctest -V -S misc/ctest/gltest.cmake
   after_script:

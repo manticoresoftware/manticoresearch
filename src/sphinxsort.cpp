@@ -6554,20 +6554,6 @@ static ISphMatchSorter * CreateQueue ( QueueCreator_c & tCreator, SphQueueRes_t 
 	return pSorter;
 }
 
-
-int sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag )
-{
-	if ( !pQueue || !pQueue->GetLength() )
-		return 0;
-
-	int iOffset = pResult->m_dMatches.GetLength ();
-	pResult->m_dMatches.Resize ( iOffset + pQueue->GetLength() );
-	int iCopied = pQueue->Flatten ( pResult->m_dMatches.Begin() + iOffset, iTag );
-	pResult->m_dMatches.Resize ( iOffset + iCopied );
-	return iCopied;
-}
-
-
 bool sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema )
 {
 	for ( const CSphQueryItem &tItem : tQuery.m_dItems )

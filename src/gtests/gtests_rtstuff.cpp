@@ -15,6 +15,7 @@
 #include "sphinxint.h"
 #include "attribute.h"
 #include "sphinxrt.h"
+#include "searchdaemon.h"
 
 #include <gmock/gmock.h>
 
@@ -300,7 +301,7 @@ TEST_P ( RTN, WeightBoundary )
 	ASSERT_EQ ( pSrc->GetStats ().m_iTotalDocuments, 1) << "docs committed";
 
 	CSphQuery tQuery;
-	CSphQueryResult tResult;
+	AggrResult_t tResult;
 	CSphMultiQueryArgs tArgs ( 1 );
 	tQuery.m_sQuery = "@title cat";
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
@@ -311,7 +312,7 @@ TEST_P ( RTN, WeightBoundary )
 	ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, tResult.m_sError, tRes, nullptr );
 	ASSERT_TRUE ( pSorter );
 	ASSERT_TRUE ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, tArgs ) );
-	sphFlattenQueue ( pSorter, &tResult, 0 );
+	tResult.FillFromQueue ( pSorter, 0 );
 	ASSERT_EQ ( tResult.m_dMatches.GetLength (), 1 ) << "results found";
 	ASSERT_EQ ( tResult.m_dMatches[0].m_tRowID, 0 ) << "rowID" ;
 	ASSERT_EQ ( tResult.m_dMatches[0].m_iWeight, GetParam ()) << "weight" ;
@@ -406,7 +407,7 @@ TEST_F ( RT, RankerFactors )
 	tQuery.m_sSortBy = "@weight desc";
 	tQuery.m_sOrderBy = "@weight desc";
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
-	CSphQueryResult tResult;
+	AggrResult_t tResult;
 	CSphMultiQueryArgs tArgs ( 1 );
 	tArgs.m_uPackedFactorFlags = SPH_FACTOR_ENABLE | SPH_FACTOR_CALC_ATC;
 
@@ -422,7 +423,7 @@ TEST_F ( RT, RankerFactors )
 		auto pSorter = sphCreateQueue ( tQueueSettings, tQuery, tResult.m_sError, tRes, nullptr );
 		ASSERT_TRUE ( pSorter );
 		ASSERT_TRUE ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, tArgs ) );
-		sphFlattenQueue ( pSorter, &tResult, 0 );
+		tResult.FillFromQueue ( pSorter, 0 );
 
 		tResult.m_tSchema = *pSorter->GetSchema ();
 		const CSphAttrLocator &tLoc = tResult.m_tSchema.GetAttr ( "pf" )->m_tLocator;
@@ -561,7 +562,7 @@ TEST_F ( RT, SendVsMerge )
 	ASSERT_TRUE ( pIndex->Prealloc ( false, nullptr ) );
 
 	CSphQuery tQuery;
-	CSphQueryResult tResult;
+	AggrResult_t tResult;
 	CSphMultiQueryArgs tArgs ( 1 );
 	tQuery.m_sQuery = "@title cat";
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
@@ -586,7 +587,7 @@ TEST_F ( RT, SendVsMerge )
 		{
 			pIndex->Commit ( NULL, NULL );
 			EXPECT_TRUE ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, tArgs ) );
-			sphFlattenQueue ( pSorter, &tResult, 0 );
+			tResult.FillFromQueue ( pSorter, 0 );
 		}
 	}
 	pIndex->Commit ( NULL, NULL );

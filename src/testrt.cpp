@@ -13,6 +13,7 @@
 #include "sphinx.h"
 #include "sphinxrt.h"
 #include "sphinxutils.h"
+#include "searchdaemon.h"
 
 #if HAVE_RTESTCONFIG_H
 #include "rtestconfig.h"
@@ -50,7 +51,7 @@ void DoSearch ( CSphIndex * pIndex )
 	printf ( "---\nsearching... " );
 
 	CSphQuery tQuery;
-	CSphQueryResult tResult;
+	AggrResult_t tResult;
 	CSphMultiQueryArgs tArgs ( 1 );
 	tQuery.m_sQuery = "@title cat";
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser ();
@@ -70,7 +71,7 @@ void DoSearch ( CSphIndex * pIndex )
 
 	} else
 	{
-		sphFlattenQueue ( pSorter, &tResult, 0 );
+		tResult.FillFromQueue ( pSorter, 0 );
 		printf ( "%d results found in %d.%03d sec!\n", tResult.m_dMatches.GetLength(), tResult.m_iQueryTime/1000, tResult.m_iQueryTime%1000 );
 		ARRAY_FOREACH ( i, tResult.m_dMatches )
 			printf ( "%d. rowid=%u, weight=%d\n", 1+i, tResult.m_dMatches[i].m_tRowID, tResult.m_dMatches[i].m_iWeight );
@@ -679,4 +680,56 @@ int main ( int argc, char ** argv )
 
 	SafeDelete ( pIndex );
 	sphRTDone ();
+}
+
+
+// BLOODY DIRTY HACK!!!
+// definitions of AggrResult_t members just copy-pasted 'as is' from searchdaemon.cpp
+
+void AggrResult_t::FreeMatchesPtrs ( int iLimit, bool bCommonSchema )
+{
+	if ( m_dMatches.GetLength ()<=iLimit )
+		return;
+
+	if ( bCommonSchema ) {
+		for ( int i = iLimit; i<m_dMatches.GetLength (); ++i )
+			m_tSchema.FreeDataPtrs ( m_dMatches[i] );
+	} else {
+		int nMatches = 0;
+		ARRAY_FOREACH ( i, m_dMatchCounts ) {
+			nMatches += m_dMatchCounts[i];
+
+			if ( iLimit<nMatches ) {
+				int iFrom = Max ( iLimit, nMatches-m_dMatchCounts[i] );
+				for ( int j = iFrom; j<nMatches; ++j )
+					m_dSchemas[i].FreeDataPtrs ( m_dMatches[j] );
+			}
+		}
+	}
+}
+
+void AggrResult_t::ClampMatches ( int iLimit, bool bCommonSchema )
+{
+	FreeMatchesPtrs ( iLimit, bCommonSchema );
+	if ( m_dMatches.GetLength ()<=iLimit )
+		return;
+	m_dMatches.Resize ( iLimit );
+}
+
+
+int AggrResult_t::FillFromQueue ( ISphMatchSorter * pQueue, int iTag )
+{
+	if ( !pQueue || !pQueue->GetLength ())
+		return 0;
+
+	int iOffset = m_dMatches.GetLength ();
+	int iCopied = pQueue->Flatten ( m_dMatches.AddN ( pQueue->GetLength ()), iTag );
+	m_dMatches.Resize ( iOffset+iCopied );
+	return iCopied;
+}
+
+AggrResult_t::~AggrResult_t ()
+{
+	for ( auto & dMatch : m_dMatches )
+		m_tSchema.FreeDataPtrs ( dMatch );
 }

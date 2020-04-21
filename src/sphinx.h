@@ -2737,13 +2737,12 @@ public:
 };
 
 
-/// search query result (meta-info plus actual matches)
+/// search query result (meta-info)
 class CSphQueryProfile;
 class DocstoreReader_i;
 class CSphQueryResult : public CSphQueryResultMeta
 {
 public:
-	CSphSwapVector<CSphMatch>	m_dMatches;			///< top matching documents, no more than MAX_MATCHES
 	CSphSchema				m_tSchema;				///< result schema
 	const BYTE *			m_pBlobPool = nullptr;	///< pointer to blob attr storage
 	const DocstoreReader_i* m_pDocstore = nullptr;	///< pointer to docstore reader
@@ -2751,8 +2750,6 @@ public:
 	int						m_iCount = 0;			///< count which will be actually served (computed from total, offset and limit)
 	int						m_iSuccesses = 0;
 	CSphQueryProfile *		m_pProfile = nullptr;	///< filled when query profiling is enabled; NULL otherwise
-
-							~CSphQueryResult () override; 	///< dtor, which releases all owned stuff
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -3518,9 +3515,6 @@ ISphMatchSorter *	sphCreateQueue ( const SphQueueSettings_t & tQueue, const CSph
 void sphCreateMultiQueue ( const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries,
 		VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes,
 		VecTraits_T<StrVec_t> & dExtras );
-
-/// convert queue to sorted array, and add its entries to result's matches array
-int					sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int iTag );
 
 /// setup per-keyword read buffer sizes
 void SetUnhintedBuffer ( int iReadUnhinted );

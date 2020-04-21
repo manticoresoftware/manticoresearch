@@ -1033,16 +1033,18 @@ void HandleMySqlExtendedUpdate( AttrUpdateArgs& tArgs );
 /////////////////////////////////////////////////////////////////////////////
 
 /// result set aggregated across indexes
-struct AggrResult_t : CSphQueryResult
+struct AggrResult_t final: CSphQueryResult
 {
-	CSphVector<CSphSchema>			m_dSchemas;			///< aggregated result sets schemas (for schema minimization)
-	CSphVector<int>					m_dMatchCounts;		///< aggregated result sets lengths (for schema minimization)
-	CSphVector<const CSphIndex*>	m_dLockedAttrs;		///< indexes which are hold in the memory until sending result
-	StrVec_t						m_dZeroCount;
-	TaggedVector_c					m_dTag2Docstore;	///< tag to docstore mapping
+	CSphVector<CSphSchema>	m_dSchemas;			///< aggregated result sets schemas (for schema minimization)
+	CSphVector<int>			m_dMatchCounts;		///< aggregated result sets lengths (for schema minimization)
+	StrVec_t				m_dZeroCount;
+	TaggedVector_c			m_dTag2Docstore;	///< tag to docstore mapping
+	CSphSwapVector<CSphMatch> m_dMatches;       ///< top matching documents, no more than MAX_MATCHES
 
 	void ClampMatches ( int iLimit, bool bCommonSchema );
 	void FreeMatchesPtrs ( int iLimit, bool bCommonSchema );
+	int FillFromQueue ( ISphMatchSorter * pQueue, int iTag );
+	~AggrResult_t () final;
 };
 
 

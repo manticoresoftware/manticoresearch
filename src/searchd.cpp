@@ -1848,7 +1848,7 @@ void SearchRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, CachedOu
 
 struct cSearchResult : public iQueryResult
 {
-	CSphVector<CSphQueryResult>	m_dResults;
+	CSphVector<AggrResult_t>	m_dResults;
 
 	void Reset () final
 	{
@@ -1857,7 +1857,7 @@ struct cSearchResult : public iQueryResult
 
 	bool HasWarnings () const final
 	{
-		return m_dResults.FindFirst ( [] ( const CSphQueryResult &dRes ) { return !dRes.m_sWarning.IsEmpty (); } );
+		return m_dResults.FindFirst ( [] ( const AggrResult_t &dRes ) { return !dRes.m_sWarning.IsEmpty (); } );
 	}
 };
 
@@ -3510,7 +3510,7 @@ static void SendAttribute ( ISphOutputBuffer & tOut, const CSphMatch & tMatch, c
 }
 
 
-void SendResult ( int iVer, ISphOutputBuffer & tOut, const CSphQueryResult * pRes, bool bAgentMode, const CSphQuery & tQuery, WORD uMasterVer )
+void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t * pRes, bool bAgentMode, const CSphQuery & tQuery, WORD uMasterVer )
 {
 	// multi-query status
 	bool bError = !pRes->m_sError.IsEmpty();
@@ -3656,6 +3656,24 @@ void AggrResult_t::ClampMatches ( int iLimit, bool bCommonSchema )
 	if ( m_dMatches.GetLength()<=iLimit )
 		return;
 	m_dMatches.Resize ( iLimit );
+}
+
+
+int AggrResult_t::FillFromQueue ( ISphMatchSorter * pQueue, int iTag )
+{
+	if ( !pQueue || !pQueue->GetLength() )
+		return 0;
+
+	int iOffset = m_dMatches.GetLength ();
+	int iCopied = pQueue->Flatten ( m_dMatches.AddN ( pQueue->GetLength () ), iTag );
+	m_dMatches.Resize ( iOffset + iCopied );
+	return iCopied;
+}
+
+AggrResult_t::~AggrResult_t ()
+{
+	for ( auto& dMatch : m_dMatches )
+		m_tSchema.FreeDataPtrs ( dMatch );
 }
 
 
@@ -3881,23 +3899,23 @@ static int KillAllDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes )
 
 		// by default, simply remove dupes (select first by tag)
 		DocID_t tPrevDocID = 0;
-		ARRAY_FOREACH ( i, tRes.m_dMatches )
+		for ( const auto& dMatch : tRes.m_dMatches )
 		{
-			DocID_t tDocID = sphGetDocID ( tRes.m_dMatches[i].m_pDynamic );
+			DocID_t tDocID = sphGetDocID ( dMatch.m_pDynamic );
 			if ( tDocID!=tPrevDocID )
-				pSorter->Push ( tRes.m_dMatches[i] );
+				pSorter->Push ( dMatch );
 			else
-				iDupes++;
+				++iDupes;
 
 			tPrevDocID = tDocID;
 		}
 	}
 
-	ARRAY_FOREACH ( i, tRes.m_dMatches )
-		tRes.m_tSchema.FreeDataPtrs ( tRes.m_dMatches[i] );
+	for ( auto& dMatch : tRes.m_dMatches )
+		tRes.m_tSchema.FreeDataPtrs ( dMatch );
 
 	tRes.m_dMatches.Reset ();
-	sphFlattenQueue ( pSorter, &tRes, -1 );
+	tRes.FillFromQueue ( pSorter, -1 );
 	return iDupes;
 }
 
@@ -5244,7 +5262,7 @@ static void FlattenToRes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, int i
 
 		tRes.m_dTag2Docstore[iTag].m_pDocstore = tRes.m_pDocstore;
 
-		int iCopied = sphFlattenQueue ( pSorter, &tRes, iTag );
+		int iCopied = tRes.FillFromQueue ( pSorter, iTag );
 		tRes.m_dMatchCounts.Add ( iCopied );
 
 		// clean up for next index search
@@ -5682,7 +5700,7 @@ void SearchHandler_c::RunLocalSearches()
 		m_bMultiQueue = tQueueRes.m_bAlowMulti;
 
 		// me shortcuts
-		AggrResult_t tStats;
+		CSphQueryResult tStats;
 
 		// do the query
 		CSphMultiQueryArgs tMultiArgs ( iIndexWeight );

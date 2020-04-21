@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends -q \
 	libssl-dev \
 	libboost-system-dev \
 	libboost-program-options-dev \
+	libboost-context-dev \
 	libicu-dev \
     flex \
     bison \
@@ -25,6 +26,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends -q \
     mysql-server \
     wget \
     xsltproc \
+    openssl \
+    ca-certificates \
+    python-dev \
     && rm -rf /var/lib/apt/lists/* \
     && wget --no-check-certificate -q -O /odbc.tar.gz https://dev.mysql.com/get/Downloads/Connector-ODBC/5.3/mysql-connector-odbc-5.3.9-linux-ubuntu16.04-x86-64bit.tar.gz \
     && tar -zxf /odbc.tar.gz \
@@ -34,15 +38,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends -q \
     && mysql -e 'CREATE DATABASE test; CREATE USER test@localhost; GRANT ALL PRIVILEGES ON test.* TO test@localhost;' \
     && mysqladmin shutdown
 
-# add cmake as separate layer. Version 3.13.4 is MANDATORY, since need 'cp' for cdash and doesnt work with later!
-RUN  wget --no-check-certificate -q -O /cmake.tar.gz https://cmake.org/files/v3.13/cmake-3.13.4-Linux-x86_64.tar.gz \
+# add cmake as separate layer.
+RUN  wget --no-check-certificate -q -O /cmake.tar.gz https://cmake.org/files/v3.17/cmake-3.17.1-Linux-x86_64.tar.gz \
     && tar -zxf /cmake.tar.gz \
     && rm /cmake.tar.gz
-ENV PATH $PATH:/cmake-3.13.4-Linux-x86_64/bin
+ENV PATH $PATH:/cmake-3.17.1-Linux-x86_64/bin
 
 ADD sphinx /root/.sphinx
 ADD entry_point.sh /
-VOLUME [ "/work", "/rlp" ]
+VOLUME [ "/work" ]
 WORKDIR /work
 ENTRYPOINT ["bash", "/entry_point.sh"]
 CMD []

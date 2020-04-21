@@ -53,10 +53,6 @@ simple_tests:
   variables:
     CTEST_BUILD_CONFIGURATION: "Debug"
     CACHEB: "../cache"
-  before_script:
-    - apt-get update
-    - apt-get install ca-certificates openssl
-    - apt-get install -y --no-install-recommends python-dev
   script:
     - ctest -VV -S misc/ctest/gltest.cmake
   after_script:
@@ -87,10 +83,6 @@ release_tests:
   variables:
     CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
     CACHEB: "../cache"
-  before_script:
-    - apt-get update
-    - apt-get install ca-certificates openssl
-    - apt-get install -y --no-install-recommends python-dev
   script:
     - ctest -V -S misc/ctest/gltest.cmake
   after_script:

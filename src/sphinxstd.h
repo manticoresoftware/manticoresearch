@@ -1637,7 +1637,7 @@ public:
 	/// remove several elements by index
 	void Remove ( int iIndex, int iCount=1 )
 	{
-		if ( !iCount )
+		if ( iCount<=0 )
 			return;
 
 		assert ( iIndex>=0 && iIndex<m_iCount );
@@ -1700,13 +1700,32 @@ public:
 	}
 
 public:
-	/// grow enough to hold that much entries, if needed, but do *not* change the length
-	void Reserve ( int64_t iNewLimit )
+
+	/// grow enough to hold iNewLimit-iDiscard entries, if needed.
+	/// returns updated index of elem iDiscard.
+	int DiscardAndReserve ( int64_t iDiscard, int64_t iNewLimit )
 	{
-		// check that we really need to be called
 		assert ( iNewLimit>=0 );
+		assert ( iDiscard>=0 );
+
+		// check that we really need to be called
 		if ( iNewLimit<=m_iLimit )
-			return;
+			return iDiscard;
+
+		if ( iDiscard>0 )
+		{
+			// align limit and size
+			iNewLimit -= iDiscard;
+			m_iCount = ( iDiscard<m_iCount ) ? ( m_iCount-iDiscard ) : 0;
+
+			// check, if we still need to be called with aligned limit
+			if ( iNewLimit<=m_iLimit )
+			{
+				if ( m_iCount ) // has something to move back
+					POLICY::Move ( m_pData, m_pData+iDiscard, m_iCount );
+				return 0;
+			}
+		}
 
 		// calc new limit
 		m_iLimit = LIMIT::Relimit ( m_iLimit, iNewLimit );
@@ -1716,15 +1735,22 @@ public:
 		if ( m_iLimit )
 		{
 			pNew = STORE::Allocate ( m_iLimit );
+			__analysis_assume ( m_iCount-iDiscard<=m_iLimit );
+			if ( m_iCount ) // has something to copy from an old storage
+				POLICY::Move ( pNew, m_pData+iDiscard, m_iCount );
 
 			if ( pNew==m_pData )
-				return;
-
-			__analysis_assume ( m_iCount<=m_iLimit );
-			POLICY::Move ( pNew, m_pData, m_iCount );
+				return 0;
 		}
 		Swap ( pNew, m_pData );
 		STORE::Deallocate ( pNew );
+		return 0;
+	}
+
+	/// grow enough to hold that much entries, if needed, but do *not* change the length
+	void Reserve ( int iNewLimit )
+	{
+		DiscardAndReserve ( 0, iNewLimit );
 	}
 
 	/// for non-copyable types - work like Reset() + Reserve()
@@ -4530,12 +4556,15 @@ class CustomDeleter_T
 	DELETER m_dDeleter;
 public:
 
+	CustomDeleter_T () = default;
+
 	CustomDeleter_T ( DELETER&& dDeleter )
 		: m_dDeleter { std::forward<DELETER> ( dDeleter ) }
 	{}
 
 	inline void Delete ( PTR & pArg ) {
-		m_dDeleter ( pArg );
+		if ( m_dDeleter )
+			m_dDeleter ( pArg );
 	}
 };
 /// shared pointer for any object, managed by refcount

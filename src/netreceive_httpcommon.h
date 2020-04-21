@@ -16,16 +16,16 @@
 
 struct HttpHeaderStreamParser_t
 {
-	int m_iHeaderEnd;
-	int m_iFieldContentLenStart;
-	int m_iFieldContentLenVal;
+	int m_iHeaderEnd = 0;
+	int m_iFieldContentLenStart = 0;
+	int m_iFieldContentLenVal = 0;
 
-	int m_iCur;
-	int m_iCRLF;
-	int m_iName;
+	int m_iCur = 0;
+	int m_iCRLF = 0;
+	int m_iName = 0;
 
-	HttpHeaderStreamParser_t ();
 	bool HeaderFound ( const BYTE * pBuf, int iLen );
+	bool HeaderFound ( ByteBlob_t tPacket );
 };
 
 class ThdJobHttp_c final : public ISphJob

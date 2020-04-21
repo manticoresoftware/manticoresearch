@@ -373,7 +373,5 @@ void CSphNetLoop::RemoveIterEvent ( NetPollEvent_t * pEvent )
 
 void ServeNetLoop ( const VecTraits_T<Listener_t> & dListeners )
 {
-	CrashQuery_t tQueryTLS;
-	SphCrashLogger_c::SetTopQueryTLS ( &tQueryTLS );
 	CSphNetLoop ( dListeners ).LoopNetPoll ();
 }

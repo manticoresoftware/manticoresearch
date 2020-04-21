@@ -95,7 +95,7 @@ ThdJobHttp_c::Impl_c::Impl_c ( CSphNetLoop * pLoop, NetStateAPI_t * pState, bool
 void ThdJobHttp_c::Impl_c::CallHttp ()
 {
 	CrashQuery_t tQueryTLS;
-	SphCrashLogger_c::SetTopQueryTLS ( &tQueryTLS );
+	GlobalSetTopQueryTLS ( &tQueryTLS );
 
 	sphLogDebugv ( "%p http job started, buffer len=%d, tick=%u", this, m_tState->m_dBuf.GetLength(), m_pLoop->m_uTick );
 

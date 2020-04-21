@@ -695,9 +695,9 @@ static wsrep_cb_status_t Unordered_fn ( void * pCtx, const void * pData, size_t 
 static void ReplicationRecv_fn ( void * pArgs )
 {
 	CrashQuery_t tQueryTLS;
-	SphCrashLogger_c::SetTopQueryTLS ( &tQueryTLS );
+	GlobalSetTopQueryTLS ( &tQueryTLS );
 
-	ReceiverCtx_t * pCtx = (ReceiverCtx_t *)pArgs;
+	auto * pCtx = (ReceiverCtx_t *)pArgs;
 	assert ( pCtx );
 
 	// grab ownership and release master thread

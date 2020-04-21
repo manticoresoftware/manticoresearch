@@ -6229,7 +6229,7 @@ static void QueryDiskChunks ( const CSphQuery * pQuery,
 			};
 
 			if ( bMtEnabled )
-				GlobalSchedule (fnCalc);
+				GetGlobalScheduler ()->Schedule ( fnCalc, true );
 			else
 				fnCalc();
 		}

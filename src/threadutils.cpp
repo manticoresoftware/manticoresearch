@@ -16,6 +16,7 @@
 #if !USE_WINDOWS
 // UNIX-specific headers and calls
 #include <sys/syscall.h>
+#include <signal.h>
 
 // for thr_self()
 #ifdef __FreeBSD__
@@ -53,6 +54,7 @@ const char* ProtoName ( Proto_e eProto )
 		case Proto_e::HTTP: return "http";
 		case Proto_e::HTTPS: return "https";
 		case Proto_e::REPLICATION: return "replication";
+		default: break;
 	}
 	return "unknown";
 }
@@ -121,12 +123,27 @@ ThreadLocal_t::ThreadLocal_t ( const ThdDesc_t& tDesc )
 	m_tDesc.m_tmConnect = tDesc.m_tmConnect;
 	m_tDesc.m_tmStart = tDesc.m_tmStart;
 
-	m_tDesc.AddToGlobal ();
+	FinishInit();
 }
 
 ThreadLocal_t::~ThreadLocal_t ()
 {
-	m_tDesc.RemoveFromGlobal ();
+	if ( m_bInitialized )
+		m_tDesc.RemoveFromGlobal ();
+}
+
+void ThreadLocal_t::FinishInit()
+{
+	if ( !m_bInitialized )
+		return;
+	m_tDesc.AddToGlobal ();
+	m_bInitialized = true;
+}
+
+void ThreadLocal_t::ThdState ( ThdState_e eState )
+{
+	m_tDesc.m_eThdState = eState;
+	m_tDesc.m_tmStart = sphMicroTimer ();
 }
 
 void Threads::ThdDesc_t::AddToGlobal () EXCLUDES ( g_tThdLock )
@@ -250,10 +267,10 @@ namespace logdetail {
 	int number() { return iNumber; }
 }
 
-#define LOG_COMPONENT_MT logdetail::name() << "#" << logdetail::number() << ": "
+#define LOG_COMPONENT_MT "(" << GetOsThreadId() << ") " << logdetail::name() << "#" << logdetail::number() << ": "
 
 // start joinable thread running functional object (m.b. lambda)
-SphThread_t makeTinyThread ( Handler tHandler, int iNum=0, const char * sName="main" )
+SphThread_t makeTinyThread ( Handler tHandler, int iNum=0, const char * sName="main", bool bDetached=false )
 {
 	// let's place it inside function to avoid any outside usage
 	struct TinyThread_t
@@ -275,6 +292,10 @@ SphThread_t makeTinyThread ( Handler tHandler, int iNum=0, const char * sName="m
 			iNumber = pThis->m_iNumber;
 			LOG( DEBUG, MT ) << "thread created";
 
+			// set up tls here
+			CrashQuery_t tQueryTLS;
+			GlobalSetTopQueryTLS ( &tQueryTLS );
+
 			if ( pThis->m_tHandler )
 				pThis->m_tHandler ();
 			LOG( DEBUG, MT ) << "thread ended";
@@ -286,7 +307,7 @@ SphThread_t makeTinyThread ( Handler tHandler, int iNum=0, const char * sName="m
 	sThdName.Sprintf ( "%s_%d", sName, iNum );
 	SphThread_t tThd;
 	CSphScopedPtr<TinyThread_t> pHandler { new TinyThread_t ( std::move ( tHandler ), sName, iNum) };
-	if ( sphThreadCreate ( &tThd, TinyThread_t::Do, pHandler.Ptr (), false, sThdName.cstr ()) )
+	if ( sphThreadCreate ( &tThd, TinyThread_t::Do, pHandler.Ptr (), bDetached, sThdName.cstr ()) )
 		pHandler.LeakPtr ();
 	return tThd;
 }
@@ -524,6 +545,14 @@ private:
 template<typename Key, typename Value>
 thread_local typename CallStack_c<Key, Value>::Context_c* CallStack_c<Key,Value>::m_pTop = nullptr;
 
+struct Service_i
+{
+	virtual ~Service_i() {}
+	virtual void run() = 0;
+	virtual void reset() = 0;
+};
+
+
 /// performs tasks pushed with post() in one or many threads until they done.
 /// Naming convention of members is inherited from boost::asio as drop-in replacement.
 struct Service_t : public TaskService_t, public Service_i
@@ -550,12 +579,19 @@ public:
 	void post ( const Handler& handler )
 	{
 		// Allocate and construct an operation to wrap the handler.
-		post_immediate_completion ( new CompletionHandler_c<Handler> ( handler ) );
+		post_immediate_completion ( new CompletionHandler_c<Handler> ( handler ), false );
 	}
 
-	void post_immediate_completion ( Service_t::operation * pOp )
+	template<typename Handler>
+	void defer ( const Handler & handler )
 	{
-		if ( m_bOneThread )
+		// Allocate and construct an operation to wrap the handler.
+		post_immediate_completion ( new CompletionHandler_c<Handler> ( handler ), true );
+	}
+
+	void post_immediate_completion ( Service_t::operation * pOp, bool bIsContinuation )
+	{
+		if ( m_bOneThread || bIsContinuation )
 		{
 			auto * pThisThread = ThreadCallStack_c::Contains ( this );
 			if ( pThisThread )
@@ -679,6 +715,11 @@ public:
 		if ( !m_tWakeupEvent.MaybeUnlockAndSignalOne ( dLock ))
 			dLock.Unlock ();
 	}
+
+	long works() const
+	{
+		return m_iOutstandingWork;
+	}
 };
 
 /// helper to hold the service running
@@ -714,58 +755,27 @@ public:
 
 #define LOG_COMPONENT_TP LOG_COMPONENT_MT << "@" << this->szName() << ": "
 
-struct ThreadPool_c::Impl_t
+class ThreadPool_c final : public Scheduler_i
 {
-	Impl_t ( size_t iThreadCount, const char * szName )
-		: m_szName {szName}
-		, m_tService ( iThreadCount==1 )
-	{
-		createWork ();
-		m_dThreads.Resize ( (int) iThreadCount );
-		for ( size_t i = 0; i<iThreadCount; ++i )
-			m_dThreads[i] = makeTinyThread ( [this] { loop (); }, (int)i, szName );
-		LOG ( DEBUG, TP ) << "thread pool created with threads: " << iThreadCount;
-	}
+	using Work = Service_t::Work_c;
 
-	~Impl_t ()
-	{
-		ScopedMutex_t dLock {m_dMutex};
-		m_bStop = true;
-		m_dWork.reset ();
-		dLock.Unlock ();
-		LOG ( DEBUG, TP ) << "stopping thread pool";
-		for ( auto& dThread : m_dThreads )
-			sphThreadJoin ( &dThread );
-		LOG ( DEBUG, TP ) << "thread pool stopped";
-	}
-
-	void Wait ()
-	{
-		LOG ( DETAIL, TP ) << "Wait";
-		ScopedMutex_t dLock {m_dMutex};
-		m_dWork.reset ();
-		while (true)
-		{
-			m_dCond.Clear ( dLock );
-			m_dCond.Wait ( dLock );
-			LOG ( DEBUG, TP ) << "WAIT: waitCompleted: " << !!m_dWork;
-			if ( m_dWork )
-				break;
-		}
-		LOG ( DETAIL, TP ) << "Wait finished";
-	}
+	const char * m_szName = nullptr;
+	Service_t m_tService;
+	Optional_T<Work> m_dWork;
+	CSphVector<SphThread_t> m_dThreads;
+	CSphMutex m_dMutex;
+	sph::Event_c m_dCond;
+	std::atomic<bool> m_bStop {false};
 
 	template<typename F>
-	void Post ( F && f )
+	void Post ( F && f, bool bContinuation = false )
 	{
-		LOG ( DETAIL, TP ) << "Post";
-		m_tService.post ( std::forward<F> ( f ));
+		LOG ( DETAIL, TP ) << "Post " << bContinuation;
+		if ( bContinuation )
+			m_tService.defer ( std::forward<F> ( f ));
+		else
+			m_tService.post ( std::forward<F> ( f ));
 		LOG ( DETAIL, TP ) << "Post finished";
-	}
-
-	const char * szName () const
-	{
-		return m_szName;
 	}
 
 	Service_i & Service ()
@@ -773,7 +783,6 @@ struct ThreadPool_c::Impl_t
 		return m_tService;
 	}
 
-private:
 	void createWork ()
 	{
 		m_dWork.emplace ( m_tService );
@@ -796,41 +805,71 @@ private:
 		}
 	}
 
-	using Work = Service_t::Work_c;
+public:
+	ThreadPool_c ( size_t iThreadCount, const char * szName )
+		: m_szName {szName}
+		, m_tService ( iThreadCount==1 )
+	{
+		createWork ();
+		m_dThreads.Resize ( (int) iThreadCount );
+		for ( size_t i = 0; i<iThreadCount; ++i )
+			m_dThreads[i] = makeTinyThread ( [this] { loop (); }, (int)i, szName );
+		LOG ( DEBUG, TP ) << "thread pool created with threads: " << iThreadCount;
+	}
 
-	const char *	m_szName = nullptr;
-	Service_t		m_tService;
-	Optional_T<Work> m_dWork;
-	CSphVector<SphThread_t> m_dThreads;
-	CSphMutex 		m_dMutex;
-	sph::Event_c	m_dCond;
-	std::atomic<bool> m_bStop { false };
+	~ThreadPool_c () final
+	{
+		ScopedMutex_t dLock {m_dMutex};
+		m_bStop = true;
+		m_dWork.reset ();
+		dLock.Unlock ();
+		LOG ( DEBUG, TP ) << "stopping thread pool";
+		for ( auto& dThread : m_dThreads )
+			sphThreadJoin ( &dThread );
+		LOG ( DEBUG, TP ) << "thread pool stopped";
+	}
+
+	void Schedule ( Handler handler, bool bContinuation ) final
+	{
+		Post ( std::move ( handler ), bContinuation );
+	}
+
+	void Wait () final
+	{
+		LOG ( DETAIL, TP ) << "Wait";
+		ScopedMutex_t dLock {m_dMutex};
+		m_dWork.reset ();
+		while (true)
+		{
+			m_dCond.Clear ( dLock );
+			m_dCond.Wait ( dLock );
+			LOG ( DEBUG, TP ) << "WAIT: waitCompleted: " << !!m_dWork;
+			if ( m_dWork )
+				break;
+		}
+		LOG ( DETAIL, TP ) << "Wait finished";
+	}
+
+	const char * szName () const final
+	{
+		return m_szName;
+	}
+
+	int WorkingThreads () const final
+	{
+		return m_dThreads.GetLength ();
+	}
+
+	long Works () const final
+	{
+		return m_tService.works ();
+	}
 };
 
-ThreadPool_c::ThreadPool_c ( size_t iThreadCount, const char * szName )
-{
-	m_pImpl = new Impl_t ( iThreadCount, szName );
-}
 
-
-ThreadPool_c::~ThreadPool_c ()
+SchedulerSharedPtr_t MakeThreadPool ( size_t iThreadCount, const char * szName )
 {
-	SafeDelete ( m_pImpl );
-}
-
-void ThreadPool_c::Schedule ( Handler handler )
-{
-	m_pImpl->Post ( std::move ( handler ));
-}
-
-void ThreadPool_c::Wait ()
-{
-	m_pImpl->Wait ();
-}
-
-const char * ThreadPool_c::szName () const
-{
-	return m_pImpl->szName ();
+	return SchedulerSharedPtr_t {new ThreadPool_c ( iThreadCount, szName )};
 }
 
 } // namespace Threads
@@ -844,14 +883,14 @@ struct Handler_t : public ListNode_t
 	Handler_t ( Handler_fn && fnCb ) : m_fnCb ( std::move ( fnCb )) {}
 };
 
-static RwLock_t dShutdownGuard;
-static List_t dShutdownList GUARDED_BY ( dShutdownGuard );
+static RwLock_t g_lShutdownGuard;
+static List_t g_dShutdownList GUARDED_BY ( g_lShutdownGuard );
 
 void * searchd::AddShutdownCb ( std::function<void ()> fnCb )
 {
 	auto * pCb = new Handler_t ( std::move ( fnCb ));
-	ScWL_t tGuard ( dShutdownGuard );
-	dShutdownList.Add ( pCb );
+	ScWL_t tGuard ( g_lShutdownGuard );
+	g_dShutdownList.Add ( pCb );
 	return pCb;
 }
 
@@ -863,41 +902,54 @@ void searchd::DeleteShutdownCb ( void * pCookie )
 
 	auto * pCb = (Handler_t *) pCookie;
 
-	ScWL_t tGuard ( dShutdownGuard );
-	if ( !dShutdownList.GetLength ())
+	ScWL_t tGuard ( g_lShutdownGuard );
+	if ( !g_dShutdownList.GetLength ())
 		return;
 
-	dShutdownList.Remove ( pCb );
+	g_dShutdownList.Remove ( pCb );
 	SafeDelete ( pCb );
 }
 
 // invoke shutdown handlers
 void searchd::FireShutdownCbs ()
 {
-	ScRL_t tGuard ( dShutdownGuard );
-	while (dShutdownList.GetLength ()) {
-		auto * pCb = (Handler_t *) dShutdownList.Begin ();
-		dShutdownList.Remove ( pCb );
-		pCb->m_fnCb ();
+	ScRL_t tGuard ( g_lShutdownGuard );
+	while (g_dShutdownList.GetLength ()) {
+		auto * pCb = (Handler_t *) g_dShutdownList.Begin ();
+		g_dShutdownList.Remove ( pCb );
+		auto fnCb = std::move ( pCb->m_fnCb );
 		SafeDelete( pCb );
+		fnCb();
 	}
 }
 
+static int g_iGlobalThreads = 1;
 
-void * pGlobalThreadPoolDeleteCookie = nullptr;
-Optional_T<Threads::ThreadPool_c> dPool;
-
-void InitGlobalThreadPool ()
+void SetGlobalThreads ( int iThreads )
 {
-	int iThreads = sphGetNonZeroDistThreads ();
-	//	iThreads = 1; // for debug purposes
-	dPool.emplace ( iThreads, "rtsearch" );
-	pGlobalThreadPoolDeleteCookie = searchd::AddShutdownCb ( [] { dPool.reset (); } );
+	g_iGlobalThreads = Max (1, iThreads);
 }
 
-void GlobalSchedule ( Threads::Handler dHandler )
+Threads::Scheduler_i * GetGlobalScheduler ()
 {
-	if ( !dPool )
-		InitGlobalThreadPool ();
-	dPool->Schedule ( std::move ( dHandler ));
+	static SchedulerSharedPtr_t pPool;
+	if ( !pPool )
+		pPool = new ThreadPool_c ( g_iGlobalThreads, "work");
+	return pPool;
+}
+
+long GetGlobalQueueSize ()
+{
+	return ((Threads::ThreadPool_c *) GetGlobalScheduler ())->Works ();
+}
+
+long GetGlobalThreads ()
+{
+	return ((Threads::ThreadPool_c *) GetGlobalScheduler ())->WorkingThreads();
+}
+
+thread_local CrashQuery_t * g_pTlsCrashQuery = nullptr;
+void GlobalSetTopQueryTLS ( CrashQuery_t * pQuery )
+{
+	g_pTlsCrashQuery = pQuery;
 }

@@ -31,6 +31,7 @@ enum class ThdState_e
 
 enum class Proto_e
 {
+	UNKNOWN,
 	SPHINX,
 	MYSQL41,
 	HTTP,
@@ -117,8 +118,13 @@ struct ThreadSystem_t
 struct ThreadLocal_t
 {
 	ThdDesc_t m_tDesc;
+	bool m_bInitialized = false;
 	explicit ThreadLocal_t ( const ThdDesc_t& tDesc );
+	ThreadLocal_t () = default;
 	~ThreadLocal_t ();
+
+	void FinishInit();
+	void ThdState ( ThdState_e eState );
 };
 
 int ThreadsNum ();
@@ -136,44 +142,30 @@ using Handler = std::function<void ()>;
 using Predicate = std::function<bool ()>;
 using Handlers = std::initializer_list<Handler>;
 
-struct Service_i
-{
-	virtual ~Service_i() {}
-//	virtual void post() = 0;
-	virtual void run() = 0;
-	virtual void reset() = 0;
-};
-
 struct Scheduler_i
 {
 	virtual ~Scheduler_i() {};
-	virtual void Schedule ( Handler handler ) = 0;
+	virtual void Schedule ( Handler handler, bool bContinuation ) = 0;
 	virtual const char * szName () const { return "<unknown>"; }
+	virtual int WorkingThreads() const = 0;
+	virtual long Works () const = 0;
+	virtual void Wait () = 0;
 };
 
-class ThreadPool_c : public Scheduler_i
-{
-public:
-	explicit ThreadPool_c ( size_t threadCount, const char * name = "" );
+using SchedulerSharedPtr_t = SharedPtr_t<Scheduler_i *>;
 
-	~ThreadPool_c () override;
+// used only in tests
+SchedulerSharedPtr_t MakeThreadPool ( size_t iThreadCount, const char * szName="" );
 
-	void Schedule ( Handler handler ) override;
-
-	const char * szName () const override;
-
-	void Wait ();
-
-private:
-	struct Impl_t;
-	Impl_t* m_pImpl = nullptr;
-};
 
 } // namespace Threads
 
 
 
 extern ThreadRole MainThread;
+
+extern thread_local CrashQuery_t * g_pTlsCrashQuery;
+void GlobalSetTopQueryTLS ( CrashQuery_t * pQuery );
 
 /// This class is basically a pointer to query string and some more additional info.
 /// Each thread which executes query must have exactly one instance of this class on
@@ -200,7 +192,6 @@ public:
 	static void SetLastQuery( const CrashQuery_t& tQuery );
 	static void SetupTimePID();
 	static CrashQuery_t GetQuery();
-	static void SetTopQueryTLS( CrashQuery_t* pQuery );
 
 	// create thread with crash logging
 	static bool ThreadCreate( SphThread_t* pThread, void ( * pCall )( void* ), void* pArg, bool bDetached = false,
@@ -219,10 +210,13 @@ private:
 
 	// sets up a TLS for a given thread
 	static void ThreadWrapper( void* pArg );
-	static thread_local CrashQuery_t* m_pTlsCrashQuery;    // pointer to on-stack instance of this class
 };
 
-void GlobalSchedule ( Threads::Handler d_handler );
+// Scheduler to global thread pool
+Threads::Scheduler_i* GetGlobalScheduler();
+long GetGlobalQueueSize();
+long GetGlobalThreads ();
+void SetGlobalThreads ( int iThreads );
 
 // add handler which will be called on daemon's shutdown right after
 // g_bShutdown is set to true. Returns cookie for refer the callback in future.

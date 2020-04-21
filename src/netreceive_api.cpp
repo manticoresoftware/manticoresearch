@@ -39,7 +39,7 @@ ThdJobAPI_t::ThdJobAPI_t ( CSphNetLoop * pLoop, NetStateAPI_t * pState )
 void ThdJobAPI_t::Call ()
 {
 	CrashQuery_t tQueryTLS;
-	SphCrashLogger_c::SetTopQueryTLS ( &tQueryTLS );
+	GlobalSetTopQueryTLS ( &tQueryTLS );
 
 	sphLogDebugv ( "%p API job started, command=%d, tick=%u", this, m_eCommand, m_pLoop->m_uTick );
 

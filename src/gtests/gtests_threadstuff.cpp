@@ -17,14 +17,16 @@ void SetStderrLogger ();
 
 TEST ( ThreadPool, Empty )
 {
-	Threads::ThreadPool_c tPool ( 4, "tp" );
+	auto pPool = Threads::MakeThreadPool ( 4, "tp" );
+	auto& tPool = *pPool;
 	tPool.Wait();
 }
 
 TEST ( ThreadPool, EmptyWait )
 {
 //	SetStderrLogger ();
-	Threads::ThreadPool_c tPool ( 4, "tp" );
+	auto pPool = Threads::MakeThreadPool ( 4, "tp" );
+	auto & tPool = *pPool;
 	tPool.Wait ();
 	tPool.Wait ();
 	tPool.Wait ();
@@ -48,10 +50,11 @@ TEST ( ThreadPool, movelambda )
 TEST ( ThreadPool, Counter100 )
 {
 //	SetStderrLogger ();
-	Threads::ThreadPool_c tPool ( 4, "tp" );
+	auto pPool = Threads::MakeThreadPool ( 4, "tp" );
+	auto & tPool = *pPool;
 	std::atomic<int> v {0};
 	for ( int i=0; i<100; ++i)
-		tPool.Schedule ([&] { ++v; });
+		tPool.Schedule ([&] { ++v; }, false);
 	tPool.Wait ();
 	ASSERT_EQ ( v, 100 );
 }

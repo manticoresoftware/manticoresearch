@@ -114,7 +114,7 @@ class CSphNetLoop::Impl_c
 	ISphNetPoller *					m_pPoll = nullptr;
 	void *							m_pShutdownCookie = nullptr;
 
-	explicit Impl_c ( CSphVector<Listener_t> & dListeners, DWORD& uTick, CSphNetLoop* pParent )
+	explicit Impl_c ( const VecTraits_T<Listener_t> & dListeners, DWORD& uTick, CSphNetLoop* pParent )
 		: m_uTick ( uTick )
 		, m_pParent ( pParent )
 	{
@@ -337,7 +337,7 @@ class CSphNetLoop::Impl_c
 	}
 };
 
-CSphNetLoop::CSphNetLoop ( CSphVector<Listener_t> & dListeners )
+CSphNetLoop::CSphNetLoop ( const VecTraits_T<Listener_t> & dListeners )
 {
 	m_pImpl = new Impl_c ( dListeners, m_uTick, this );
 }
@@ -371,7 +371,7 @@ void CSphNetLoop::RemoveIterEvent ( NetPollEvent_t * pEvent )
 	m_pImpl->RemoveIterEvent ( pEvent );
 }
 
-void ServeNetLoop ( CSphVector<Listener_t> & dListeners )
+void ServeNetLoop ( const VecTraits_T<Listener_t> & dListeners )
 {
 	CrashQuery_t tQueryTLS;
 	SphCrashLogger_c::SetTopQueryTLS ( &tQueryTLS );

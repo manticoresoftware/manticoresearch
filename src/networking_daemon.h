@@ -77,7 +77,7 @@ public:
 	DWORD							m_uTick = 0;
 
 public:
-	explicit CSphNetLoop ( CSphVector<Listener_t> & dListeners );
+	explicit CSphNetLoop ( const VecTraits_T<Listener_t> & dListeners );
 	~CSphNetLoop();
 	void LoopNetPoll ();
 
@@ -87,4 +87,5 @@ public:
 
 };
 
-void ServeNetLoop ( CSphVector<Listener_t> & dListeners );
+// main entry point - creates netloop and loop it
+void ServeNetLoop ( const VecTraits_T<Listener_t> & dListeners );

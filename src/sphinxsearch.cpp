@@ -2658,7 +2658,7 @@ public:
 		: m_pState ( pState )
 	{}
 
-	int IsKnownIdent ( const char * sIdent ) final
+	int IsKnownIdent ( const char * sIdent ) const final
 	{
 		// OPTIMIZE? hash this some nice long winter night?
 		if ( !strcasecmp ( sIdent, "lcs" ) )
@@ -2710,7 +2710,7 @@ public:
 		return -1;
 	}
 
-	int IsKnownFunc ( const char * sFunc ) final
+	int IsKnownFunc ( const char * sFunc ) const final
 	{
 		if ( !strcasecmp ( sFunc, "sum" ) )
 			return XRANK_SUM;
@@ -2792,7 +2792,7 @@ public:
 		}
 	}
 
-	ESphAttr GetIdentType ( int iID ) final
+	ESphAttr GetIdentType ( int iID ) const final
 	{
 		switch ( iID )
 		{
@@ -2835,7 +2835,7 @@ public:
 	/// s = scalar (int/float)
 	/// h = hash
 	/// signature can also be preceded by "c:" modifier than means that all arguments must be constant
-	bool CheckArgtypes ( const CSphVector<ESphAttr> & dArgs, const char * sFuncname, const char * sArgs, bool bAllConst, CSphString & sError )
+	bool CheckArgtypes ( const CSphVector<ESphAttr> & dArgs, const char * sFuncname, const char * sArgs, bool bAllConst, CSphString & sError )  const
 	{
 		if ( sArgs[0]=='c' && sArgs[1]==':' )
 		{
@@ -2894,7 +2894,7 @@ public:
 		return true;
 	}
 
-	ESphAttr GetReturnType ( int iID, const CSphVector<ESphAttr> & dArgs, bool bAllConst, CSphString & sError ) final
+	ESphAttr GetReturnType ( int iID, const CSphVector<ESphAttr> & dArgs, bool bAllConst, CSphString & sError ) const final
 	{
 		switch ( iID )
 		{

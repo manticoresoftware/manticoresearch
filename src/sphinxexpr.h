@@ -192,11 +192,11 @@ struct ISphExprHook
 	virtual ~ISphExprHook () {}
 	/// checks for an identifier known to the hook
 	/// returns -1 on failure, a non-negative OID on success
-	virtual int IsKnownIdent ( const char * sIdent ) = 0;
+	virtual int IsKnownIdent ( const char * sIdent ) const = 0;
 
 	/// checks for a valid function call
 	/// returns -1 on failure, a non-negative OID on success (possibly adjusted)
-	virtual int IsKnownFunc ( const char * sFunc ) = 0;
+	virtual int IsKnownFunc ( const char * sFunc ) const = 0;
 
 	/// create node by OID
 	/// pEvalStage is an optional out-parameter
@@ -204,11 +204,11 @@ struct ISphExprHook
 	virtual ISphExpr * CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage * pEvalStage, CSphString & sError ) = 0;
 
 	/// get identifier return type by OID
-	virtual ESphAttr GetIdentType ( int iID ) = 0;
+	virtual ESphAttr GetIdentType ( int iID ) const = 0;
 
 	/// get function return type by OID and argument types vector
 	/// must return SPH_ATTR_NONE and fill the message on failure
-	virtual ESphAttr GetReturnType ( int iID, const CSphVector<ESphAttr> & dArgs, bool bAllConst, CSphString & sError ) = 0;
+	virtual ESphAttr GetReturnType ( int iID, const CSphVector<ESphAttr> & dArgs, bool bAllConst, CSphString & sError ) const = 0;
 
 	/// recursive scope check
 	virtual void CheckEnter ( int iID ) = 0;

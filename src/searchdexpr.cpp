@@ -669,7 +669,7 @@ bool Expr_Highlight_c::ParseOptions ( const VecTraits_T<CSphNamedVariant> & dMap
 
 //////////////////////////////////////////////////////////////////////////
 
-int ExprHook_c::IsKnownFunc ( const char * sFunc )
+int ExprHook_c::IsKnownFunc ( const char * sFunc ) const
 {
 	if ( !strcasecmp ( sFunc, "SNIPPET" ) )
 		return HOOK_SNIPPET;
@@ -710,14 +710,14 @@ ISphExpr * ExprHook_c::CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage * p
 }
 
 
-ESphAttr ExprHook_c::GetIdentType ( int )
+ESphAttr ExprHook_c::GetIdentType ( int ) const
 {
 	assert(0);
 	return SPH_ATTR_NONE;
 }
 
 
-ESphAttr ExprHook_c::GetReturnType ( int iID, const CSphVector<ESphAttr> & dArgs, bool, CSphString & sError )
+ESphAttr ExprHook_c::GetReturnType ( int iID, const CSphVector<ESphAttr> & dArgs, bool, CSphString & sError ) const
 {
 	switch ( iID )
 	{

@@ -267,6 +267,9 @@ namespace logdetail {
 	int number() { return iNumber; }
 }
 
+void AddDetachedThread ( SphThread_t tThread );
+void RemoveDetachedThread ( SphThread_t tThread );
+
 #define LOG_COMPONENT_MT "(" << GetOsThreadId() << ") " << logdetail::name() << "#" << logdetail::number() << ": "
 
 // start joinable thread running functional object (m.b. lambda)
@@ -866,10 +869,89 @@ public:
 	}
 };
 
+class AloneThread_c final : public Scheduler_i
+{
+	using Work = Service_t::Work_c;
+
+	CSphString m_sName;
+	int m_iThreadNum;
+	Service_t m_tService;
+	std::atomic<bool> m_bStarted {false};
+	static int m_iRunners;
+	SphThread_t	m_tMyThread;
+
+	template<typename F>
+	void Post ( F && f, bool bContinuation=false )
+	{
+		LOG ( DETAIL, TP ) << "Post " << bContinuation;
+		if ( bContinuation )
+			m_tService.defer ( std::forward<F> ( f ) );
+		else
+			m_tService.post ( std::forward<F> ( f ));
+		LOG ( DETAIL, TP ) << "Post finished";
+		if ( !m_bStarted )
+		{
+			m_bStarted = true;
+			m_tMyThread = makeTinyThread ( [this] { loop (); }, m_iThreadNum, m_sName.cstr (), true );
+			Threads::AddDetachedThread ( m_tMyThread );
+			LOG ( DEBUG, TP ) << "alone thread created";
+		}
+	}
+
+	void loop ()
+	{
+		m_tService.run ();
+		Threads::RemoveDetachedThread ( m_tMyThread );
+		delete this;
+	}
+
+public:
+	explicit AloneThread_c ( int iNum, const char * szName )
+		: m_sName {szName}
+		, m_iThreadNum ( iNum )
+		, m_tService ( true ) // true means 'single-thread'
+	{
+		++m_iRunners;
+		LOG ( DEBUG, TP ) << "alone worker created " << szName;
+	}
+
+	~AloneThread_c () final
+	{
+		LOG ( DEBUG, TP ) << "stopping thread";
+		--m_iRunners;
+		LOG ( DEBUG, TP ) << "thread stopped";
+	}
+
+	void Schedule ( Handler handler, bool bContinuation ) final
+	{
+		Post ( std::move ( handler ), bContinuation );
+	}
+
+	const char * szName () const final { return m_sName.cstr (); }
+
+	int WorkingThreads () const final { return 1; }
+
+	void Wait() final {}
+
+	static int GetRunners () { return m_iRunners; }
+
+	long Works () const final
+	{
+		return GetRunners ();
+	}
+};
+
+int AloneThread_c::m_iRunners = 0;
+
 
 SchedulerSharedPtr_t MakeThreadPool ( size_t iThreadCount, const char * szName )
 {
 	return SchedulerSharedPtr_t {new ThreadPool_c ( iThreadCount, szName )};
+}
+
+SchedulerSharedPtr_t MakeAloneThread ( size_t iOrderNum, const char * szName )
+{
+	return SchedulerSharedPtr_t {new AloneThread_c ( (int) iOrderNum, szName )};
 }
 
 } // namespace Threads
@@ -946,6 +1028,58 @@ long GetGlobalQueueSize ()
 long GetGlobalThreads ()
 {
 	return ((Threads::ThreadPool_c *) GetGlobalScheduler ())->WorkingThreads();
+}
+
+
+Threads::Scheduler_i * GetAloneScheduler ( int iMaxThreads, const char * szName )
+{
+	if ( iMaxThreads>0 && Threads::AloneThread_c::GetRunners ()>=iMaxThreads )
+		return nullptr;
+
+	static int iOrder = 0;
+	return new Threads::AloneThread_c ( iOrder++, szName? szName: "alone" );
+}
+
+CSphMutex g_dDetachedGuard;
+CSphVector<SphThread_t> g_dDetachedThreads GUARDED_BY (g_dDetachedGuard);
+
+void Threads::AddDetachedThread ( SphThread_t tThread )
+{
+	sphLogDebug ( "AddDetachedThread called for %d", (int) GetOsThreadId() );
+	ScopedMutex_t _ (g_dDetachedGuard);
+	g_dDetachedThreads.Add (tThread);
+}
+
+void Threads::RemoveDetachedThread ( SphThread_t tThread )
+{
+	sphLogDebug ( "RemoveDetachedThread called for %d", (int) GetOsThreadId () );
+	ScopedMutex_t _ ( g_dDetachedGuard );
+	g_dDetachedThreads.RemoveValue ( tThread );
+}
+
+
+void Threads::AloneShutdowncatch ()
+{
+#if !USE_WINDOWS
+	searchd::AddShutdownCb ( [&]
+	{
+		sphLogDebug ( "AloneShutdowncatch catch invoked" );
+		bool bAloneFinished;
+		{
+			ScopedMutex_t _ ( g_dDetachedGuard );
+			for ( auto& tThread : g_dDetachedThreads )
+				pthread_kill ( tThread, SIGTERM );
+			bAloneFinished = g_dDetachedThreads.IsEmpty ();
+		}
+
+		while (!bAloneFinished)
+		{
+			sphSleepMsec ( 50 );
+			ScopedMutex_t _ ( g_dDetachedGuard );
+			bAloneFinished = g_dDetachedThreads.IsEmpty();
+		}
+	});
+#endif
 }
 
 thread_local CrashQuery_t * g_pTlsCrashQuery = nullptr;

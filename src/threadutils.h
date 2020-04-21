@@ -154,9 +154,12 @@ struct Scheduler_i
 
 using SchedulerSharedPtr_t = SharedPtr_t<Scheduler_i *>;
 
-// used only in tests
+// none of the functions below used in the code. Both maybe only in tests.
 SchedulerSharedPtr_t MakeThreadPool ( size_t iThreadCount, const char * szName="" );
+SchedulerSharedPtr_t MakeAloneThread ( size_t iOrderNum, const char * szName = "" );
 
+// schedule global watchdog to gracefully join alone threads on exit
+void AloneShutdowncatch ();
 
 } // namespace Threads
 
@@ -217,6 +220,10 @@ Threads::Scheduler_i* GetGlobalScheduler();
 long GetGlobalQueueSize();
 long GetGlobalThreads ();
 void SetGlobalThreads ( int iThreads );
+
+// Scheduler to dedicated thread (or nullptr, if current N of such threads >= iMaxThreads)
+// you MUST schedule at least one job, or explicitly delete non-engaged scheduler (it will leak otherwise).
+Threads::Scheduler_i* GetAloneScheduler ( int iMaxThreads, const char* szName=nullptr );
 
 // add handler which will be called on daemon's shutdown right after
 // g_bShutdown is set to true. Returns cookie for refer the callback in future.

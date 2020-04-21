@@ -230,6 +230,8 @@ public:
 	bool Match( const char* sValue );
 };
 
+using Generator_fn = std::function<CSphString ( void )>;
+
 // string vector with 'like' matcher
 class VectorLike: public StrVec_t, public CheckLike
 {
@@ -245,6 +247,7 @@ public:
 	const char* szColKey() const;
 	const char* szColValue() const;
 	bool MatchAdd( const char* sValue );
+	void MatchAddFn ( const char * sValue, Generator_fn&& fnPrinter );
 	bool MatchAddVa( const char* sTemplate, ... ) __attribute__ (( format ( printf, 2, 3 )));
 };
 

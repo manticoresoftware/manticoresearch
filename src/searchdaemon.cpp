@@ -114,6 +114,16 @@ bool VectorLike::MatchAdd( const char* sValue )
 	return false;
 }
 
+void VectorLike::MatchAddFn ( const char * sValue, Generator_fn && fnPrinter )
+{
+	if ( !Match ( sValue ))
+		return;
+
+	Add ( sValue );
+	Add ( fnPrinter() );
+}
+
+
 bool VectorLike::MatchAddVa( const char* sTemplate, ... )
 {
 	va_list ap;

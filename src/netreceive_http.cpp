@@ -205,7 +205,7 @@ NetEvent_e NetReceiveDataHttp_c::Impl_c::SetupHttp ( int64_t tmNow )
 		m_pParent->m_iTimeoutTimeUS = tmNow + S2US * g_iReadTimeoutS;
 	} else
 	{
-		m_pParent->m_iTimeoutTimeUS = tmNow +S2US * g_iClientTimeoutS;
+		m_pParent->m_iTimeoutTimeUS = tmNow + S2US * g_iClientTimeoutS;
 	}
 	return NE_IN;
 }

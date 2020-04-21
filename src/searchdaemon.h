@@ -468,7 +468,6 @@ private:
 	bool		m_bError = false;
 };
 
-
 /// generic request buffer
 class InputBuffer_c
 {
@@ -480,7 +479,16 @@ public:
 	int				GetInt () { return ntohl ( GetT<int> () ); }
 	WORD			GetWord () { return ntohs ( GetT<WORD> () ); }
 	DWORD			GetDword () { return ntohl ( GetT<DWORD> () ); }
-	DWORD			GetLSBDword () { return GetByte() + ( GetByte()<<8 ) + ( GetByte()<<16 ) + ( GetByte()<<24 ); }
+	DWORD			GetLSBDword ()
+	{
+		return
+#if UNALIGNED_RAM_ACCESS && USE_LITTLE_ENDIAN
+		GetT<DWORD> ();
+#else
+		GetByte() + ( GetByte()<<8 ) + ( GetByte()<<16 ) + ( GetByte()<<24 );
+#endif
+	}
+
 	uint64_t		GetUint64() { uint64_t uRes = GetDword(); return (uRes<<32)+GetDword(); }
 	BYTE			GetByte () { return GetT<BYTE> (); }
 	float			GetFloat () { return sphDW2F ( ntohl ( GetT<DWORD> () ) ); }

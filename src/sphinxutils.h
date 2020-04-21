@@ -257,7 +257,7 @@ public:
 	int64_t GetSize64 ( const char * sKey, int64_t iDefault ) const;
 
 	/// get time option in useconds (1000*1000 useconds = 1 second)
-	/// (plain int, or with us/ms/s/m/h/d/w suffix) value by key and default value
+	/// (plain integer, or with us/ms/s/m/h/d/w suffix) value by key and default value
 	/// if no key specified, GetTime64 considers num in seconds, GetTime64ms in milliseconds.
 	int64_t GetUsTime64S ( const char* sKey, int64_t iDefault ) const;
 	int64_t GetUsTime64Ms ( const char* sKey, int64_t iDefault ) const;

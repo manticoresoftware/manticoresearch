@@ -528,10 +528,10 @@ thread_local typename CallStack_c<Key, Value>::Context_c* CallStack_c<Key,Value>
 /// Naming convention of members is inherited from boost::asio as drop-in replacement.
 struct Service_t : public TaskService_t, public Service_i
 {
-	std::atomic<long> m_iOutstandingWork {0};	/// count of unfinished work
+	std::atomic<long> m_iOutstandingWork {0};	/// count of unfinished works
 	mutable CSphMutex m_dMutex;					/// protect access to internal data
 	bool m_bStopped = false;                	/// dispatcher has been stopped.
-	bool m_bOneThread;                			/// optimize for singhe-threaded use case
+	bool m_bOneThread;                			/// optimize for single-threaded use case
 	sph::Event_c m_tWakeupEvent;				/// event to wake up blocked threads
 	OpQueue_T<SchedulerOperation_t> m_OpQueue;	/// The queue of handlers that are ready to be delivered
 

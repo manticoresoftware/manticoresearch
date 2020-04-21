@@ -697,7 +697,7 @@ void StringSourceTraits_c::PrepareText ( const VecTraits_T<BYTE> & dSourceText, 
 			iSourceLen = dTmp.GetLength();
 		}
 
-		int iGot = pFilter->Apply ( pSource, iSourceLen, dDestText, false );
+		int iGot = pFilter->Apply ( dSourceText, dDestText, false );
 		if ( iGot )
 		{
 			dDestText.Resize(iGot);
@@ -1281,7 +1281,7 @@ bool SnippetBuilder_c::SetQuery ( const CSphString & sQuery, bool bIgnoreFields,
 	const BYTE * szModifiedQuery = (BYTE *)sQuery.cstr();
 	if ( m_pFieldFilter && szModifiedQuery )
 	{
-		if ( m_pFieldFilter->Apply ( szModifiedQuery, (int) strlen ( (char*)szModifiedQuery ), dFiltered, true ) )
+		if ( m_pFieldFilter->Apply ( szModifiedQuery, dFiltered, true ) )
 			szModifiedQuery = dFiltered.Begin();
 	}
 

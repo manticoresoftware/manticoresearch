@@ -5347,7 +5347,8 @@ struct DictEntryRtPayload_t
 				m_dWordExpand.Resize ( iRtExpansionLimit );
 			}
 
-			// lets merge statistics for same words from different segments as hash produce a lot tiny allocations here
+			// lets merge statistics for same words from different segments
+			// as hash produce a lot tiny allocations here
 			const BYTE * sBase = m_dWordBuf.Begin();
 			RtExpandedTraits_fn fnCmp ( sBase );
 			sphSort ( m_dWordExpand.Begin(), m_dWordExpand.GetLength(), fnCmp );
@@ -5379,10 +5380,8 @@ struct DictEntryRtPayload_t
 		{
 			DWORD uExpansionLimit = tArgs.m_iExpansionLimit;
 			int iPayloads = 0;
-			ARRAY_FOREACH ( i, m_dSeg )
+			for ( auto& tSeg: m_dSeg )
 			{
-				Slice_t & tSeg = m_dSeg[i];
-
 				// reverse per segment offset to payload doc-list as offset was the end instead of start
 				assert ( tSeg.m_uOff>=tSeg.m_uLen );
 				tSeg.m_uOff = tSeg.m_uOff - tSeg.m_uLen;
@@ -5411,7 +5410,7 @@ struct DictEntryRtPayload_t
 				const Slice_t & tSeg = m_dSeg[i];
 				const RtExpandedPayload_t * pSrc = m_dWordPayload.Begin() + tSeg.m_uOff;
 				const RtExpandedPayload_t * pEnd = pSrc + tSeg.m_uLen;
-				pPayload->m_dSegment2Doclists[i].m_uOff = pDst - pPayload->m_dDoclist.Begin();
+				pPayload->m_dSegment2Doclists[i].m_uOff = pPayload->m_dDoclist.Idx(pDst);
 				pPayload->m_dSegment2Doclists[i].m_uLen = tSeg.m_uLen;
 				while ( pSrc!=pEnd )
 				{
@@ -5419,8 +5418,8 @@ struct DictEntryRtPayload_t
 					pDst->m_uLen = pSrc->m_iDocs;
 					iTotalDocs += pSrc->m_iDocs;
 					iTotalHits += pSrc->m_iHits;
-					pDst++;
-					pSrc++;
+					++pDst;
+					++pSrc;
 				}
 			}
 			pPayload->m_iTotalDocs = iTotalDocs;
@@ -6417,7 +6416,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	if ( m_pFieldFilter && sModifiedQuery )
 	{
 		pFieldFilter = m_pFieldFilter->Clone();
-		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, (int) strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
+		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, dFiltered, true ) )
 			sModifiedQuery = dFiltered.Begin();
 	}
 
@@ -6519,8 +6518,8 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// empty index, empty result
 	if ( !tGuard.m_dRamChunks.GetLength() && !tGuard.m_dDiskChunks.GetLength() )
 	{
-		for ( auto i : dSorters )
-			TransformSorterSchema ( i, tGuard, dDiskBlobPools );
+		for ( auto dSorter : dSorters )
+			TransformSorterSchema ( dSorter, tGuard, dDiskBlobPools );
 
 		pResult->m_iQueryTime = 0;
 		return true;
@@ -6873,7 +6872,7 @@ void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	if ( m_pFieldFilter && sQuery )
 	{
 		pFieldFilter = m_pFieldFilter->Clone();
-		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, (int) strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
+		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, dFiltered, true ) )
 			sModifiedQuery = dFiltered.Begin();
 	}
 

@@ -183,8 +183,7 @@ extern ThreadRole MainThread;
 class SphCrashLogger_c
 {
 public:
-	SphCrashLogger_c()
-	{}
+	SphCrashLogger_c() = default;
 
 	~SphCrashLogger_c();
 

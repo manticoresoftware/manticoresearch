@@ -233,7 +233,7 @@ bool QueryParserJson_c::IsFullscan ( const CSphQuery & tQuery ) const
 
 bool QueryParserJson_c::IsFullscan ( const XQQuery_t & tQuery ) const
 {
-	return !tQuery.m_pRoot || ( !tQuery.m_pRoot->m_dChildren.GetLength() && !tQuery.m_pRoot->m_dWords.GetLength() );
+	return !( tQuery.m_pRoot && ( tQuery.m_pRoot->m_dChildren.GetLength () || tQuery.m_pRoot->m_dWords.GetLength () ) );
 }
 
 

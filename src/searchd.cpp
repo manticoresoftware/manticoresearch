@@ -368,7 +368,12 @@ void sphLogEntry ( ESphLogLevel , char * sBuf, char * sTtyBuf )
 
 		sphSeek ( g_iLogFile, 0, SEEK_END );
 		if ( g_bLogTty )
+		{
+			memmove ( sBuf+20, sBuf+15, 9);
+			sTtyBuf = sBuf + 19;
+			*sTtyBuf = '[';
 			sphWrite ( g_iLogFile, sTtyBuf, strlen(sTtyBuf) );
+		}
 		else
 			sphWrite ( g_iLogFile, sBuf, strlen(sBuf) );
 
@@ -5615,7 +5620,7 @@ int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphM
 		sphCreateMultiQueue ( tQueueSettings, dQueries, dSorters, dErrors, tQueueRes, dExtraSchemas );
 
 		m_dQueries[m_iStart].m_bZSlist = tQueueRes.m_bZonespanlist;
-		dSorters.Apply ( [&iValidSorters] ( const ISphMatchSorter * pSorter ) { if ( pSorter ) iValidSorters++; } );
+		dSorters.Apply ( [&iValidSorters] ( const ISphMatchSorter * pSorter ) { if ( pSorter ) ++iValidSorters; } );
 		if ( m_bFacetQueue && iValidSorters<dSorters.GetLength() )
 			iValidSorters = 0;
 	}
@@ -5780,7 +5785,7 @@ void SearchHandler_c::RunLocalSearches()
 					continue;
 				}
 
-				tRes.m_iSuccesses++;
+				++tRes.m_iSuccesses;
 				// lets do this schema copy just once
 				tRes.m_tSchema = *pSorter->GetSchema();
 				tRes.m_iTotalMatches += pSorter->GetTotalCount();
@@ -8549,21 +8554,16 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 
 
 	int iWord = 0;
-	// multiple readers might iterate word hash here from multiple client queries
-	// that invalidates internal hash iterator - need external iterator
-	void * pWordIt =  nullptr;
-	while ( tMeta.m_hWordStats.IterateNext( &pWordIt ) )
+	for ( const auto& dWord : tMeta.m_hWordStats )
 	{
-		const CSphQueryResultMeta::WordStat_t & tStat = tMeta.m_hWordStats.IterateGet ( &pWordIt );
-
 		if ( dStatus.MatchAddVa ( "keyword[%d]", iWord ) )
-			dStatus.Add ( tMeta.m_hWordStats.IterateGetKey ( &pWordIt ) );
+			dStatus.Add ( dWord.first );
 
 		if ( dStatus.MatchAddVa ( "docs[%d]", iWord ) )
-			dStatus.Add().SetSprintf ( INT64_FMT, tStat.first );
+			dStatus.Add().SetSprintf ( INT64_FMT, dWord.second.first );
 
 		if ( dStatus.MatchAddVa ( "hits[%d]", iWord ) )
-			dStatus.Add().SetSprintf ( INT64_FMT, tStat.second );
+			dStatus.Add().SetSprintf ( INT64_FMT, dWord.second.second );
 
 		++iWord;
 	}
@@ -8820,13 +8820,13 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 				// FIXME!!! remove that mess
 				if ( bPersist )
 				{
-					bPersist = ( g_iMaxChildren && 1+g_iPersistentInUse.GetValue()<g_iMaxChildren );
+					bPersist = ( g_iMaxChildren && 1+g_iPersistentInUse<g_iMaxChildren );
 					if ( bPersist )
-						g_iPersistentInUse.Inc();
+						++g_iPersistentInUse;
 				} else
 				{
-					if ( g_iPersistentInUse.GetValue()>=1 )
-						g_iPersistentInUse.Dec();
+					if ( g_iPersistentInUse>=1 )
+						--g_iPersistentInUse;
 				}
 			}
 			break;
@@ -12239,7 +12239,8 @@ bool SphinxqlReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & 
 	{
 		*m_pUpdated += MysqlUnpack ( tReq, &uSize );
 		MysqlUnpack ( tReq, &uSize ); ///< int Insert_id (don't used).
-		*m_pWarns += tReq.GetLSBDword(); ///< num of warnings
+		auto uWarnStatus = tReq.GetLSBDword ();
+		*m_pWarns += ( uWarnStatus >> 16 ) & 0xFFFF; ///< num of warnings
 		uSize -= 4;
 		if ( uSize )
 			tReq.GetRawString ( uSize );
@@ -13617,7 +13618,11 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, const SqlStmt_t &tStmt, bool bVipConn
 				if ( sCommand=="shutdown" )
 				{
 					tOut.DataTuplet ( "debug shutdown <password>", "SUCCESS" );
+#if USE_WINDOWS
 					sigterm(1);
+#else
+					kill(0, SIGTERM);
+#endif
 				} else if ( sCommand=="crash")
 				{
 					tOut.DataTuplet ( "debug crash <password>", "SUCCESS" );
@@ -15754,6 +15759,7 @@ bool IsFederatedUser ( const BYTE * pPacket, int iLen )
 	return ( strncmp ( sFederated, sSrc, iLen-32 )==0 );
 }
 
+
 bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, CSphString & sFederatedQuery )
 {
 	if ( !dStmt.GetLength() )
@@ -15970,6 +15976,9 @@ bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString
 {
 	// get command, handle special packets
 	const BYTE uMysqlCmd = tIn.GetByte ();
+
+	sphLogDebugv ( "LoopClientMySQL command %d", uMysqlCmd );
+
 	if ( uMysqlCmd==MYSQL_COM_QUIT )
 		return false;
 
@@ -16020,7 +16029,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString
 		tSession.m_tProfile.Stop();
 	if ( uMysqlCmd==MYSQL_COM_QUERY && bKeepProfile )
 		tSession.m_tLastProfile = tSession.m_tProfile;
-	tOut.SetProfiler ( NULL );
+	tOut.SetProfiler ( nullptr );
 	return true;
 }
 
@@ -18803,7 +18812,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 
 	// read_timeout is now deprecated
 	if ( hSearchd.Exists ( "read_timeout" ) && hSearchd["read_timeout"].intval()>=0 )
-		g_iReadTimeoutS = hSearchd.GetSTimeS ("read_timeout");
+		g_iReadTimeoutS = hSearchd.GetSTimeS ( "read_timeout");
 
 	// network_timeout overrides read_timeout
 	if ( hSearchd.Exists ( "network_timeout" ) && hSearchd["network_timeout"].intval()>=0 )
@@ -18813,7 +18822,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	}
 
 	if ( hSearchd.Exists ( "sphinxql_timeout" ) && hSearchd["sphinxql_timeout"].intval()>=0 )
-		g_iClientQlTimeoutS = hSearchd.GetSTimeS("sphinxql_timeout");
+		g_iClientQlTimeoutS = hSearchd.GetSTimeS( "sphinxql_timeout");
 
 	if ( hSearchd.Exists ( "client_timeout" ) && hSearchd["client_timeout"].intval()>=0 )
 		g_iClientTimeoutS = hSearchd.GetSTimeS ( "client_timeout" );
@@ -20050,8 +20059,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	// almost ready, time to start listening
 	g_iBacklog = hSearchd.GetInt ( "listen_backlog", g_iBacklog );
-	ARRAY_FOREACH ( j, g_dListeners )
-		if ( listen ( g_dListeners[j].m_iSock, g_iBacklog )==-1 )
+	for ( const auto& dListener : g_dListeners )
+		if ( listen ( dListener.m_iSock, g_iBacklog )==-1 )
 		{
 			if ( sphSockGetErrno()==EADDRINUSE )
 				sphFatal ( "listen() failed with EADDRINUSE. A listener with other UID on same address:port?");
@@ -20062,12 +20071,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	if ( g_pThdPool )
 	{
 		// net thread needs non-blocking sockets
-		ARRAY_FOREACH ( iListener, g_dListeners )
+		for ( const auto& dListener : g_dListeners )
 		{
-			if ( sphSetSockNB ( g_dListeners[iListener].m_iSock )<0 )
+			if ( sphSetSockNB ( dListener.m_iSock )<0 )
 			{
 				sphWarning ( "sphSetSockNB() failed: %s", sphSockError() );
-				sphSockClose ( g_dListeners[iListener].m_iSock );
+				sphSockClose ( dListener.m_iSock );
 			}
 		}
 

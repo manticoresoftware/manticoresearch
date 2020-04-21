@@ -506,7 +506,8 @@ void CWordlist::GetPrefixedWords ( const char * sSubstring, int iSubLen, const c
 	int dWildcard [ SPH_MAX_WORD_LEN + 1 ];
 	int * pWildcard = ( sphIsUTF8 ( sWildcard ) && sphUTF8ToWideChar ( sWildcard, dWildcard, SPH_MAX_WORD_LEN ) ) ? dWildcard : NULL;
 
-	const CSphWordlistCheckpoint * pCheckpoint = FindCheckpoint ( sSubstring, iSubLen, 0, true );
+	// assume dict=crc never has word with wordid=0, however just don't consider it and explicitly set nullptr.
+	const CSphWordlistCheckpoint * pCheckpoint = m_bWordDict ? FindCheckpoint ( sSubstring, iSubLen, 0, true ) : nullptr;
 	const int iSkipMagic = ( BYTE(*sSubstring)<0x20 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
 	while ( pCheckpoint )
 	{

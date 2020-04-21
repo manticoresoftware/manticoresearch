@@ -13922,6 +13922,8 @@ void HandleMysqlSelectSysvar ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, cons
 				tBuf.Appendf ( INT64_FMT, iID );
 			tOut.PutString ( tBuf.cstr() );
 		}
+		else if ( sVar=="@@version_comment")
+			tOut.PutString ( szGIT_BRANCH_ID );
 		else
 			tOut.PutString("");
 	}

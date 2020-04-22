@@ -161,6 +161,7 @@ build_mac:
     CACHEB: "../cache"
     CTEST_CMAKE_GENERATOR: "Unix Makefiles"
   script:
+    - brew install openssl
     - mkdir build && cd build
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
   after_script:

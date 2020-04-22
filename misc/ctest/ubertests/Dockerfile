@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends -q \
 	libssl-dev \
 	libicu-dev \
 	libboost-dev \
+	libboost-all-dev \
     flex \
     bison \
     git \

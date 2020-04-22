@@ -699,6 +699,7 @@ bool SnippetBuilder_c::Impl_c::DoHighlighting ( TextSource_i & tSource, SnippetR
 
 	const SnippetQuerySettings_t & tQuerySettings = *m_pQuerySettings;
 
+	SnippetQuerySettings_t tFixedSettings ( tQuerySettings );
 	bool bRetainHtml = ( tQuerySettings.m_sStripMode=="retain" );
 
 	// adjust tokenizer for markup-retaining mode

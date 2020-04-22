@@ -7106,13 +7106,12 @@ struct SnippetChain_t
 	int							m_iHead { EOF_ITEM };
 };
 
-struct ExcerptQueryChained_t : SnippetQuerySettings_t
+struct ExcerptQueryChained_t
 {
 	int64_t			m_iSize = 0;		///< file size, to sort to work-queue order
 	int				m_iSeq = 0;			///< request order, to sort back to request order
 	int				m_iNext = PROCESSED_ITEM; ///< the next one in one-link list for batch processing. -1 terminate the list. -2 sign of other (out-of-the-lists)
 	CSphString		m_sSource;			///< source data
-	CSphString		m_sQuery;			///< source data
 	CSphString		m_sError;
 	CSphVector<BYTE> m_dResult;			///< query result
 };
@@ -7122,9 +7121,11 @@ struct SnippetsRemote_t : ISphNoncopyable
 	VecRefPtrsAgentConn_t				m_dAgents;
 	CSphVector<SnippetChain_t>			m_dTasks;
 	CSphVector<ExcerptQueryChained_t> &	m_dQueries;
+	const SnippetQuerySettings_t *		m_pSettings;
 
-	explicit SnippetsRemote_t ( CSphVector<ExcerptQueryChained_t> & dQueries )
+	explicit SnippetsRemote_t ( CSphVector<ExcerptQueryChained_t> & dQueries, const SnippetQuerySettings_t * pQ )
 		: m_dQueries ( dQueries )
+		, m_pSettings ( pQ )
 	{}
 };
 
@@ -7132,6 +7133,7 @@ struct SnippetJob_t : public ISphJob
 {
 	long						m_iQueries = 0;
 	ExcerptQueryChained_t *		m_pQueries = nullptr;
+	const SnippetQuerySettings_t* m_pSettings = nullptr;
 	CSphAtomic *				m_pCurQuery = nullptr;
 	CSphIndex *					m_pIndex = nullptr;
 	CrashQuery_t				m_tCrashQuery;
@@ -7143,8 +7145,8 @@ struct SnippetJob_t : public ISphJob
 		// fixme! really only one query text and settings for the entire batch
 		// fixme! error handling!
 		CSphScopedPtr<SnippetBuilder_c>	pSnippetBuilder ( new SnippetBuilder_c );
-		pSnippetBuilder->Setup ( m_pIndex, *m_pQueries, m_pQueries->m_sError );
-		pSnippetBuilder->SetQuery ( m_pQueries->m_sQuery.cstr(), true, m_pQueries->m_sError );
+		pSnippetBuilder->Setup ( m_pIndex, *m_pSettings, m_pQueries->m_sError );
+		pSnippetBuilder->SetQuery ( m_pSettings->m_sQuery.cstr(), true, m_pQueries->m_sError );
 
 		CSphVector<int> dRequestedFields;
 		dRequestedFields.Add(0);
@@ -7156,7 +7158,8 @@ struct SnippetJob_t : public ISphJob
 				continue;
 
 			SnippetResult_t tRes;
-			CSphScopedPtr<TextSource_i> pSource ( CreateSnippetSource ( tQuery.m_uFilesMode, (const BYTE*)tQuery.m_sSource.cstr(), tQuery.m_sSource.Length() ) );
+			CSphScopedPtr<TextSource_i> pSource ( CreateSnippetSource ( m_pSettings->m_uFilesMode,
+					(const BYTE*)tQuery.m_sSource.cstr(), tQuery.m_sSource.Length() ) );
 			if ( pSnippetBuilder->Build ( pSource.Ptr(), tRes ) )
 				tQuery.m_dResult = pSnippetBuilder->PackResult ( tRes, dRequestedFields );
 			else
@@ -7205,7 +7208,7 @@ void SnippetRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, CachedO
 		tAgent.m_iStoreTag = iWorker;
 	}
 	auto & dQueries = m_pWorker->m_dQueries;
-	const ExcerptQueryChained_t & q = dQueries[0];
+	const SnippetQuerySettings_t & q = *m_pWorker->m_pSettings;
 	int iHead = m_pWorker->m_dTasks[iWorker].m_iHead;
 	const char * sIndex = tAgent.m_tDesc.m_sIndexes.cstr();
 
@@ -7245,7 +7248,7 @@ bool SnippetReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & t
 		ExcerptQueryChained_t & tQuery = dQueries[iDoc];
 		CSphVector<BYTE> & dRes = tQuery.m_dResult;
 		
-		if ( tQuery.m_uFilesMode & 2 ) // scattered files
+		if ( m_pWorker->m_pSettings->m_uFilesMode & 2 ) // scattered files
 		{
 			if ( !tReq.GetString(dRes) || dRes.IsEmpty() )
 			{
@@ -7281,15 +7284,15 @@ static int64_t GetSnippetDataSize ( const CSphVector<ExcerptQueryChained_t> &dSn
 	return iSize;
 }
 
-bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQueries, CSphString & sError, ThdDesc_t & tThd )
+bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQueries, const SnippetQuerySettings_t& q,
+		CSphString & sError, ThdDesc_t & tThd )
 {
-	SnippetsRemote_t tRemoteSnippets ( dQueries );
-	ExcerptQueryChained_t & tQuery = dQueries[0];
+	SnippetsRemote_t tRemoteSnippets ( dQueries, &q );
 
 	// Both load_files && load_files_scattered report the absent files as errors.
 	// load_files_scattered without load_files just omits the absent files (returns empty strings).
-	auto bScattered = !!( tQuery.m_uFilesMode & 2 );
-	auto bNeedAllFiles = !!( tQuery.m_uFilesMode & 1 );
+	auto bScattered = !!( q.m_uFilesMode & 2 );
+	auto bNeedAllFiles = !!( q.m_uFilesMode & 1 );
 
 	auto pDist = GetDistr ( sIndex );
 	if ( pDist )
@@ -7311,7 +7314,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 			return false;
 		}
 
-		if ( !tQuery.m_uFilesMode )
+		if ( !q.m_uFilesMode )
 		{
 			sError.SetSprintf ( "%s", "distributed index for snippets available only when using external files" );
 			return false;
@@ -7336,10 +7339,10 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	assert ( pIndex );
 
 	CSphScopedPtr<SnippetBuilder_c>	pSnippetBuilder ( new SnippetBuilder_c );
-	if ( !pSnippetBuilder->Setup ( pIndex, tQuery, sError ) ) // same path for single - threaded snippets, bail out here on error
+	if ( !pSnippetBuilder->Setup ( pIndex, q, sError ) ) // same path for single - threaded snippets, bail out here on error
 		return false;
 
-	if ( !pSnippetBuilder->SetQuery ( tQuery.m_sQuery.cstr(), true, sError ) ) // same path for single - threaded snippets, bail out here on error
+	if ( !pSnippetBuilder->SetQuery ( q.m_sQuery.cstr(), true, sError ) ) // same path for single - threaded snippets, bail out here on error
 		return false;
 
 	///////////////////
@@ -7355,7 +7358,8 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 		bool bError = false;
 		for ( auto & tQuery : dQueries )
 		{
-			CSphScopedPtr<TextSource_i> pSource ( CreateSnippetSource ( tQuery.m_uFilesMode, (const BYTE*)tQuery.m_sSource.cstr(), tQuery.m_sSource.Length() ) );
+			CSphScopedPtr<TextSource_i> pSource ( CreateSnippetSource ( q.m_uFilesMode,
+					(const BYTE*)tQuery.m_sSource.cstr(), tQuery.m_sSource.Length() ) );
 			SnippetResult_t tRes;
 			if ( pSnippetBuilder->Build ( pSource.Ptr(), tRes ) )
 				tQuery.m_dResult = pSnippetBuilder->PackResult ( tRes, dRequestedFields );
@@ -7378,7 +7382,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	for ( auto & dQuery : dQueries )
 	{
 		assert ( dQuery.m_iNext == PROCESSED_ITEM );
-		if ( dQuery.m_uFilesMode )
+		if ( q.m_uFilesMode )
 		{
 			CSphString sFilename, sStatError;
 			sFilename.SetSprintf ( "%s%s", g_sSnippetsFilePrefix.cstr(), dQuery.m_sSource.scstr() );
@@ -7403,7 +7407,8 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	}
 
 	// set correct data size for snippets
-	tThd.SetThreadInfo ( R"(snippet datasize=%.1Dk query="%s")", GetSnippetDataSize ( dQueries ), dQueries[0].m_sQuery.scstr () );
+	tThd.SetThreadInfo ( R"(snippet datasize=%.1Dk query="%s")",
+			GetSnippetDataSize ( dQueries ), q.m_sQuery.scstr () );
 
 	// tough jobs first (sort inverse)
 	if ( !bScattered )
@@ -7445,6 +7450,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 		{
 			t.m_iQueries = dQueries.GetLength();
 			t.m_pQueries = dQueries.Begin();
+			t.m_pSettings = &q;
 			t.m_pCurQuery = &iCurQuery;
 			t.m_pIndex = pIndex;
 			t.m_tCrashQuery = tCrashQuery;
@@ -7496,6 +7502,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	{
 		t.m_iQueries = dQueries.GetLength();
 		t.m_pQueries = dQueries.Begin();
+		t.m_pSettings = &q;
 		t.m_pCurQuery = &iCurQuery;
 		t.m_pIndex = pIndex;
 		t.m_tCrashQuery = tCrashQuery;
@@ -7582,7 +7589,7 @@ void HandleCommandExcerpt ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c
 	const int EXCERPT_MAX_ENTRIES			= 1024;
 
 	// v.1.1
-	ExcerptQueryChained_t q;
+	SnippetQuerySettings_t q;
 
 	tReq.GetInt (); // mode field is for now reserved and ignored
 	int iFlags = tReq.GetInt ();
@@ -7652,7 +7659,6 @@ void HandleCommandExcerpt ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c
 
 	for ( auto & dQuery : dQueries )
 	{
-		dQuery = q; // copy settings
 		dQuery.m_sSource = tReq.GetString (); // fetch data
 		if ( tReq.GetError() )
 		{
@@ -7660,8 +7666,9 @@ void HandleCommandExcerpt ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c
 			return;
 		}
 	}
-	tThd.SetThreadInfo ( R"(api-snippet datasize=%.1Dk query="%s")", GetSnippetDataSize ( dQueries ), dQueries[0].m_sQuery.scstr ());
-	if ( !MakeSnippets ( sIndex, dQueries, sError, tThd ) )
+	tThd.SetThreadInfo ( R"(api-snippet datasize=%.1Dk query="%s")",
+			GetSnippetDataSize ( dQueries ), q.m_sQuery.scstr ());
+	if ( !MakeSnippets ( sIndex, dQueries, q, sError, tThd ) )
 	{
 		SendErrorReply ( tOut, "%s", sError.cstr() );
 		return;
@@ -10918,7 +10925,7 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt, ThdDesc_t 
 	// do magics
 	CSphString sIndex = tStmt.m_dInsertValues[1].m_sVal;
 
-	ExcerptQueryChained_t q;
+	SnippetQuerySettings_t q;
 	q.m_sQuery = tStmt.m_dInsertValues[2].m_sVal;
 
 	ARRAY_FOREACH ( i, tStmt.m_dCallOptNames )
@@ -10994,21 +11001,21 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt, ThdDesc_t 
 	CSphVector<ExcerptQueryChained_t> dQueries;
 	if ( tStmt.m_dInsertValues[0].m_iType==TOK_QUOTED_STRING )
 	{
-		q.m_sSource = tStmt.m_dInsertValues[0].m_sVal; // OPTIMIZE?
-		dQueries.Add ( q );
+		auto& dQuery = dQueries.Add ();
+		dQuery.m_sSource = tStmt.m_dInsertValues[0].m_sVal; // OPTIMIZE?
 	} else
 	{
 		dQueries.Resize ( tStmt.m_dCallStrings.GetLength() );
 		ARRAY_FOREACH ( i, tStmt.m_dCallStrings )
 		{
-			dQueries[i] = q; // copy the settings
 			dQueries[i].m_sSource = tStmt.m_dCallStrings[i]; // OPTIMIZE?
 		}
 	}
 
-	tThd.SetThreadInfo ( R"(sphinxql-snippet datasize=%.1Dk query="%s")", GetSnippetDataSize ( dQueries ), dQueries[0].m_sQuery.scstr ());
+	tThd.SetThreadInfo ( R"(sphinxql-snippet datasize=%.1Dk query="%s")",
+			GetSnippetDataSize ( dQueries ), q.m_sQuery.scstr ());
 
-	if ( !MakeSnippets ( sIndex, dQueries, sError, tThd ) )
+	if ( !MakeSnippets ( sIndex, dQueries, q, sError, tThd ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;

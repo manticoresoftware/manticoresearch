@@ -72,6 +72,7 @@ struct SnippetQuerySettings_t : public SnippetLimits_t
 	bool			m_bHasAfterPassageMacro = false;
 	CSphString		m_sBeforeMatchPassage;
 	CSphString		m_sAfterMatchPassage;
+	CSphString		m_sQuery;            ///< source data
 
 	ESphSpz			m_ePassageSPZ = SPH_SPZ_NONE;
 	bool			m_bJsonQuery = false;

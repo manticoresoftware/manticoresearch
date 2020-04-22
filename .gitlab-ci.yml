@@ -159,6 +159,7 @@ build_mac:
   variables:
     CTEST_BUILD_CONFIGURATION: "Debug"
     CACHEB: "../cache"
+    OPENSSL_ROOT_DIR: "/usr/local/opt/openssl"
     CTEST_CMAKE_GENERATOR: "Unix Makefiles"
   script:
     - mkdir build && cd build

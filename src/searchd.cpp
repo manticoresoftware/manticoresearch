@@ -7273,7 +7273,7 @@ static int64_t GetSnippetDataSize ( const CSphVector<ExcerptQueryChained_t> &dSn
 	for ( const auto & dSnippet: dSnippets )
 	{
 		if ( dSnippet.m_iSize )
-			iSize -= dSnippet.m_iSize; // because iSize negative for sorting purpose
+			iSize += dSnippet.m_iSize;
 		else
 			iSize += dSnippet.m_sSource.Length ();
 	}
@@ -7397,17 +7397,17 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 				}
 				dQuery.m_iNext = EOF_ITEM;
 			} else
-				dQuery.m_iSize = -iFileSize; // so that sort would put bigger ones first
+				dQuery.m_iSize = iFileSize; // so that sort would put bigger ones first
 		} else
-			dQuery.m_iSize = -dQuery.m_sSource.Length();
+			dQuery.m_iSize = dQuery.m_sSource.Length();
 	}
 
 	// set correct data size for snippets
 	tThd.SetThreadInfo ( R"(snippet datasize=%.1Dk query="%s")", GetSnippetDataSize ( dQueries ), dQueries[0].m_sQuery.scstr () );
 
-	// tough jobs first
+	// tough jobs first (sort inverse)
 	if ( !bScattered )
-		dQueries.Sort ( bind ( &ExcerptQueryChained_t::m_iSize ) );
+		dQueries.Sort ( Lesser ( [] ( ExcerptQueryChained_t& a, ExcerptQueryChained_t& b ) { return a.m_iSize>b.m_iSize; } ) );
 
 	// build list of absent files (that's ok for scattered).
 	// later all the list will be sent to remotes (and some of them have to answer)
@@ -7483,7 +7483,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 		ARRAY_FOREACH ( i, dQueries )
 		{
 			auto & dHeadTask = *tRemoteSnippets.m_dTasks.begin();
-			dHeadTask.m_iTotal -= dQueries[i].m_iSize; // -= since size stored as negative.
+			dHeadTask.m_iTotal += dQueries[i].m_iSize;
 			// queries sheduled for local still have iNext==PROCESSED_ITEM
 			dQueries[i].m_iNext = dHeadTask.m_iHead;
 			dHeadTask.m_iHead = i;

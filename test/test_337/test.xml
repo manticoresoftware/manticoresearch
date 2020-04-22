@@ -80,7 +80,7 @@ insert into test_table values
 <!-- different match and highlight queries -->
 <query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "and first" } }, "highlight": { "fields": [ "content", "title" ], "highlight_query": { "match": { "_all":"on and not to be it first"} } } } }</query>
 <!-- allow empty -->
-<query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "and first" } }, "highlight": { "fields": [ "content", "title" ], "no_match_size": 1 } } }</query>
+<query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "and first" } }, "highlight": { "fields": [ "content", "title" ], "no_match_size": 0 } } }</query>
 <!-- passages -->
 <query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "and first" } }, "highlight": { "fields": [ "content", "title" ], "highlight_query": { "match": { "_all":"on and not to be it first"} } } } }</query>
 <!-- passages weight sorted-->
@@ -103,6 +103,9 @@ insert into test_table values
 
 <!-- highlighting via script_fields -->
 <query endpoint="json/search">{ "index":"test1", "query": { "query_string":"itself" }, "limit":1, "highlight":{ "fields": [ "title", "content" ] }, "script_fields":{ "title_h":{ "script":{ "inline":"highlight({},'title')" } } }, "_source":{"includes":["title", "content", "title_h" ] } }</query>
+
+<query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "and first" }, "equals" : {"id":14 } }, "highlight": { "fields": { "title":{}, "content":{ "limit":50 } } } } }</query>
+<query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "and first" }, "equals" : {"id":14 } }, "highlight": { "fields": { "title":{}, "content":{ "limit":25 } } } } }</query>
 
 </httpqueries>
 

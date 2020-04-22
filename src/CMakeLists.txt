@@ -18,8 +18,8 @@ set ( LIBSPHINX_SRCS sphinx.cpp sphinxexcerpt.cpp
 		attribute.cpp secondaryindex.cpp killlist.cpp searchnode.cpp json/cJSON.c
 		sphinxpq.cpp icu.cpp global_idf.cpp docstore.cpp lz4/lz4.c lz4/lz4hc.c
 		searchdexpr.cpp snippetfunctor.cpp snippetindex.cpp snippetstream.cpp
-		threadutils.cpp sphinxversion.cpp indexcheck.cpp datareader.cpp
-		indexformat.cpp indexsettings.cpp fileutils.cpp )
+		snippetpassage.cpp threadutils.cpp sphinxversion.cpp indexcheck.cpp
+		datareader.cpp indexformat.cpp indexsettings.cpp fileutils.cpp )
 set ( INDEXER_SRCS indexer.cpp )
 set ( INDEXTOOL_SRCS indextool.cpp )
 set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp

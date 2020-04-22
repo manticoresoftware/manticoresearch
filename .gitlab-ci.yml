@@ -69,7 +69,12 @@ simple_tests:
   cache:
     key: ubuntu_bionic
     paths:
-      - cache/
+      - cache/*-src
+      - cache/galera*64/libgalera*
+      - cache/galera*64/galera-targets.cmake
+      - cache/icu*64/*icu*
+      - cache/re2*64/*re2*
+      - cache/stemmer*64/*stemmer*
 
 release_tests:
   stage: routines
@@ -99,7 +104,12 @@ release_tests:
   cache:
     key: ubuntu_bionic
     paths:
-      - cache/
+      - cache/*-src
+      - cache/galera*64/libgalera*
+      - cache/galera*64/galera-targets.cmake
+      - cache/icu*64/*icu*
+      - cache/re2*64/*re2*
+      - cache/stemmer*64/*stemmer*
   retry: 1
 
 win_tests:
@@ -165,7 +175,12 @@ build_mac:
   cache:
     key: darwin
     paths:
-      - cache/
+      - cache/*-src
+      - cache/galera*64/libgalera*
+      - cache/galera*64/galera-targets.cmake
+      - cache/icu*64/*icu*
+      - cache/re2*64/*re2*
+      - cache/stemmer*64/*stemmer*
 
 build_bsd:
   stage: routines
@@ -195,7 +210,12 @@ build_bsd:
   cache:
     key: freebsd
     paths:
-      - cache/
+      - cache/*-src
+      - cache/galera*64/libgalera*
+      - cache/galera*64/galera-targets.cmake
+      - cache/icu*64/*icu*
+      - cache/re2*64/*re2*
+      - cache/stemmer*64/*stemmer*
 
 push_results:
   stage: publish

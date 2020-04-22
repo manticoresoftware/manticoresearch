@@ -9,10 +9,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends -q \
     libpq-dev \
     unixodbc-dev \
 	libssl-dev \
-	libboost-system-dev \
-	libboost-program-options-dev \
-	libboost-context-dev \
 	libicu-dev \
+	libboost-dev \
     flex \
     bison \
     git \

@@ -232,7 +232,7 @@ protected:
 	CSphIndex *						m_pIndex = nullptr;
 	CSphQueryProfile *				m_pProfiler = nullptr;
 	SnippetQuerySettings_t			m_tSnippetQuery;
-	CSphScopedPtr<SnippetBuilder_i>	m_pSnippetBuilder;
+	CSphScopedPtr<SnippetBuilder_c>	m_pSnippetBuilder;
 
 
 				Expr_HighlightTraits_c ( const Expr_HighlightTraits_c & rhs );
@@ -243,7 +243,7 @@ Expr_HighlightTraits_c::Expr_HighlightTraits_c ( CSphIndex * pIndex, CSphQueryPr
 	: QueryExprTraits_c ( pQuery )
 	, m_pIndex ( pIndex )
 	, m_pProfiler ( pProfiler )
-	, m_pSnippetBuilder ( CreateSnippetBuilder() )
+	, m_pSnippetBuilder ( new SnippetBuilder_c )
 {}
 
 
@@ -255,7 +255,7 @@ Expr_HighlightTraits_c::Expr_HighlightTraits_c ( const Expr_HighlightTraits_c & 
 	, m_pIndex ( rhs.m_pIndex )
 	, m_pProfiler ( rhs.m_pProfiler )
 	, m_tSnippetQuery ( rhs.m_tSnippetQuery )
-	, m_pSnippetBuilder ( CreateSnippetBuilder() )
+	, m_pSnippetBuilder ( new SnippetBuilder_c )
 {
 	CSphString sError;
 	assert ( m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery, sError ) );

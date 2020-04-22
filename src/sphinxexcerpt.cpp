@@ -340,13 +340,13 @@ public:
 
 
 //////////////////////////////////////////////////////////////////////////
-class SnippetBuilder_c : public SnippetBuilder_i
+class SnippetBuilder_c::Impl_c
 {
 public:
-	bool				Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tQuery, CSphString & sError ) final;
-	bool				SetQuery ( const CSphString & sQuery, bool bIgnoreFields, CSphString & sError ) final;
-	bool				Build ( TextSource_i * pSource, SnippetResult_t & tRes ) const final;
-	CSphVector<BYTE>	PackResult ( SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const final;
+	bool				Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tQuery, CSphString & sError );
+	bool				SetQuery ( const CSphString & sQuery, bool bIgnoreFields, CSphString & sError );
+	bool				Build ( TextSource_i * pSource, SnippetResult_t & tRes ) const;
+	CSphVector<BYTE>	PackResult ( SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const;
 
 private:
 	struct ZoneData_t
@@ -411,7 +411,7 @@ private:
 };
 
 
-void SnippetBuilder_c::ExtractPassages ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, const SnippetsDocIndex_c & tContainer, const CSphVector<SphHitMark_t> & dMarked, int iField, PassageContext_t & tContext,
+void SnippetBuilder_c::Impl_c::ExtractPassages ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, const SnippetsDocIndex_c & tContainer, const CSphVector<SphHitMark_t> & dMarked, int iField, PassageContext_t & tContext,
 	SnippetResult_t & tRes ) const
 {
 	assert ( m_pIndex && m_pQuerySettings );
@@ -426,7 +426,7 @@ void SnippetBuilder_c::ExtractPassages ( ScopedStreamers_t & tStreamers, TextSou
 }
 
 
-void SnippetBuilder_c::SelectBestPassages ( const SnippetsDocIndex_c & tContainer, const PassageContext_t & tContext, const SnippetLimits_t & tLimits, DWORD uFoundWords, CSphVector<Passage_t> & dPassages ) const
+void SnippetBuilder_c::Impl_c::SelectBestPassages ( const SnippetsDocIndex_c & tContainer, const PassageContext_t & tContext, const SnippetLimits_t & tLimits, DWORD uFoundWords, CSphVector<Passage_t> & dPassages ) const
 {
 	CSphVector<Passage_t> dNewPassages = tContext.SelectBest ( tLimits, *m_pQuerySettings, tContainer, uFoundWords );
 
@@ -436,7 +436,7 @@ void SnippetBuilder_c::SelectBestPassages ( const SnippetsDocIndex_c & tContaine
 }
 
 
-void SnippetBuilder_c::HighlightPassages ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, CSphVector<Passage_t> & dPassages, const CSphVector<SphHitMark_t> & dMarked,
+void SnippetBuilder_c::Impl_c::HighlightPassages ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, CSphVector<Passage_t> & dPassages, const CSphVector<SphHitMark_t> & dMarked,
 	const FunctorZoneInfo_t & tZoneInfo, SnippetResult_t & tRes ) const
 {
 	// everything should already be highlighted in fields w/o matches
@@ -462,7 +462,7 @@ void SnippetBuilder_c::HighlightPassages ( ScopedStreamers_t & tStreamers, TextS
 }
 
 
-void SnippetBuilder_c::MarkHits ( const SnippetsDocIndex_c & tContainer, CSphVector<SphHitMark_t> & dMarked, const ZoneData_t & tZoneData, SnippetResult_t & tRes ) const
+void SnippetBuilder_c::Impl_c::MarkHits ( const SnippetsDocIndex_c & tContainer, CSphVector<SphHitMark_t> & dMarked, const ZoneData_t & tZoneData, SnippetResult_t & tRes ) const
 {
 	const XQQuery_t & tXQQuery = tContainer.GetQuery();
 
@@ -486,7 +486,7 @@ void SnippetBuilder_c::MarkHits ( const SnippetsDocIndex_c & tContainer, CSphVec
 }
 
 
-void SnippetBuilder_c::SplitSpans ( const SnippetsDocIndex_c & tContainer, CSphVector<SphHitMark_t> & dMarked ) const
+void SnippetBuilder_c::Impl_c::SplitSpans ( const SnippetsDocIndex_c & tContainer, CSphVector<SphHitMark_t> & dMarked ) const
 {
 	const CSphVector<CSphVector<DWORD>> & dDocHits = tContainer.GetDocHits();
 
@@ -540,7 +540,7 @@ void SnippetBuilder_c::SplitSpans ( const SnippetsDocIndex_c & tContainer, CSphV
 }
 
 
-void SnippetBuilder_c::FoldHitsIntoSpans ( CSphVector<SphHitMark_t> & dMarked ) const
+void SnippetBuilder_c::Impl_c::FoldHitsIntoSpans ( CSphVector<SphHitMark_t> & dMarked ) const
 {
 
 	// we just exploded spans into actual matching hits
@@ -564,7 +564,8 @@ void SnippetBuilder_c::FoldHitsIntoSpans ( CSphVector<SphHitMark_t> & dMarked ) 
 }
 
 
-void SnippetBuilder_c::HighlightAll ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, const CSphVector<SphHitMark_t> & dMarked, int iField, SnippetResult_t & tRes ) const
+void SnippetBuilder_c::Impl_c::HighlightAll ( ScopedStreamers_t & tStreamers, TextSource_i & tSource,
+		const CSphVector<SphHitMark_t> & dMarked, int iField, SnippetResult_t & tRes ) const
 {
 	const char * szDoc = (const char*)tSource.GetText(iField).Begin();
 	int iDocLen = tSource.GetText(iField).GetLength();
@@ -574,7 +575,7 @@ void SnippetBuilder_c::HighlightAll ( ScopedStreamers_t & tStreamers, TextSource
 }
 
 
-void SnippetBuilder_c::HighlightFieldStart ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, int iField, SnippetResult_t & tRes ) const
+void SnippetBuilder_c::Impl_c::HighlightFieldStart ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, int iField, SnippetResult_t & tRes ) const
 {
 	assert ( m_pQuerySettings );
 	const SnippetQuerySettings_t & tSettings = *m_pQuerySettings;
@@ -591,7 +592,7 @@ void SnippetBuilder_c::HighlightFieldStart ( ScopedStreamers_t & tStreamers, Tex
 }
 
 
-void SnippetBuilder_c::HighlightAnything ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, SnippetResult_t & tRes ) const
+void SnippetBuilder_c::Impl_c::HighlightAnything ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, SnippetResult_t & tRes ) const
 {
 	assert ( m_pQuerySettings );
 	const SnippetQuerySettings_t & tSettings = *m_pQuerySettings;
@@ -611,7 +612,8 @@ void SnippetBuilder_c::HighlightAnything ( ScopedStreamers_t & tStreamers, TextS
 }
 
 
-void SnippetBuilder_c::CollectHits ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, SnippetsDocIndex_c & tContainer, int iSPZ, DWORD & uFoundWords, ZoneData_t & tZodeData, SnippetResult_t & tRes ) const
+void SnippetBuilder_c::Impl_c::CollectHits ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, SnippetsDocIndex_c & tContainer,
+		int iSPZ, DWORD & uFoundWords, ZoneData_t & tZodeData, SnippetResult_t & tRes ) const
 {
 	assert ( m_pIndex && m_pQuerySettings );
 
@@ -644,7 +646,7 @@ void SnippetBuilder_c::CollectHits ( ScopedStreamers_t & tStreamers, TextSource_
 }
 
 
-bool SnippetBuilder_c::CanHighlightAll ( int iDocLen, const SnippetLimits_t & tLimits ) const
+bool SnippetBuilder_c::Impl_c::CanHighlightAll ( int iDocLen, const SnippetLimits_t & tLimits ) const
 {
 	assert ( m_pQuerySettings );
 	const SnippetQuerySettings_t & tOpts = *m_pQuerySettings;
@@ -660,7 +662,7 @@ bool SnippetBuilder_c::CanHighlightAll ( int iDocLen, const SnippetLimits_t & tL
 }
 
 
-void SnippetBuilder_c::CreateLimits ( ScopedStreamers_t & tStreamers, const TextSource_i & tSource, const SnippetsDocIndex_c & tContainer, DWORD uFoundWords, CSphString & sWarning ) const
+void SnippetBuilder_c::Impl_c::CreateLimits ( ScopedStreamers_t & tStreamers, const TextSource_i & tSource, const SnippetsDocIndex_c & tContainer, DWORD uFoundWords, CSphString & sWarning ) const
 {
 	assert ( m_pQuerySettings );
 
@@ -691,7 +693,7 @@ static void MarkFieldsWithHits ( CSphBitvec & dFieldsWithHits, const CSphVector<
 }
 
 
-bool SnippetBuilder_c::DoHighlighting ( TextSource_i & tSource, SnippetResult_t & tRes ) const
+bool SnippetBuilder_c::Impl_c::DoHighlighting ( TextSource_i & tSource, SnippetResult_t & tRes ) const
 {
 	assert ( m_pIndex && m_pQuerySettings );
 
@@ -782,11 +784,13 @@ bool SnippetBuilder_c::DoHighlighting ( TextSource_i & tSource, SnippetResult_t 
 class StringSourceTraits_c
 {
 public:
-	void PrepareText ( const VecTraits_T<BYTE> & dSourceText, CSphVector<BYTE> & dDestText,  ISphFieldFilter * pFilter, const CSphHTMLStripper * pStripper, bool & bUseOriginal ) const;
+	void PrepareText ( const VecTraits_T<BYTE> & dSourceText, CSphVector<BYTE> & dDestText,  ISphFieldFilter * pFilter,
+			const CSphHTMLStripper * pStripper, bool & bUseOriginal ) const;
 };
 
 
-void StringSourceTraits_c::PrepareText ( const VecTraits_T<BYTE> & dSourceText, CSphVector<BYTE> & dDestText,  ISphFieldFilter * pFilter, const CSphHTMLStripper * pStripper, bool & bUseOriginal ) const
+void StringSourceTraits_c::PrepareText ( const VecTraits_T<BYTE> & dSourceText, CSphVector<BYTE> & dDestText,
+		ISphFieldFilter * pFilter, const CSphHTMLStripper * pStripper, bool & bUseOriginal ) const
 {
 	if ( !pFilter && !pStripper )
 		return;
@@ -1035,15 +1039,9 @@ TextSource_i * CreateHighlightSource ( const CSphVector<FieldSource_t> & dAllFie
 	return new TextSourceFields_c ( dAllFields );
 }
 
-
-SnippetBuilder_i * CreateSnippetBuilder()
-{
-	return new SnippetBuilder_c;
-}
-
 /////////////////////////////////////////////////////////////////////////////
 
-bool SnippetBuilder_c::CheckSettings ( TextSource_i * pSource, CSphString & sError ) const
+bool SnippetBuilder_c::Impl_c::CheckSettings ( TextSource_i * pSource, CSphString & sError ) const
 {
 	assert ( pSource && m_pQuerySettings );
 
@@ -1059,7 +1057,7 @@ bool SnippetBuilder_c::CheckSettings ( TextSource_i * pSource, CSphString & sErr
 }
 
 
-const CSphHTMLStripper * SnippetBuilder_c::GetStripperForText() const
+const CSphHTMLStripper * SnippetBuilder_c::Impl_c::GetStripperForText() const
 {
 	assert(m_pQuerySettings);
 
@@ -1070,7 +1068,7 @@ const CSphHTMLStripper * SnippetBuilder_c::GetStripperForText() const
 }
 
 
-const CSphHTMLStripper * SnippetBuilder_c::GetStripperForTokenization() const
+const CSphHTMLStripper * SnippetBuilder_c::Impl_c::GetStripperForTokenization() const
 {
 	assert(m_pQuerySettings);
 
@@ -1081,7 +1079,8 @@ const CSphHTMLStripper * SnippetBuilder_c::GetStripperForTokenization() const
 }
 
 
-void SnippetBuilder_c::FixupQueryLimits ( SnippetLimits_t & tLimit, const SnippetsDocIndex_c & tContainer, DWORD uFoundTerms, CSphString & sWarning ) const
+void SnippetBuilder_c::Impl_c::FixupQueryLimits ( SnippetLimits_t & tLimit,const SnippetsDocIndex_c & tContainer,
+		 DWORD uFoundTerms, CSphString & sWarning ) const
 {
 	assert(m_pQuerySettings);
 	const SnippetQuerySettings_t & tSettings = *m_pQuerySettings;
@@ -1135,9 +1134,8 @@ void SnippetBuilder_c::FixupQueryLimits ( SnippetLimits_t & tLimit, const Snippe
 	}
 }
 
-
 CSphString g_sSnippetsFilePrefix { "" };
-bool SnippetBuilder_c::Build ( TextSource_i * pSource, SnippetResult_t & tRes ) const
+bool SnippetBuilder_c::Impl_c::Build ( TextSource_i * pSource, SnippetResult_t & tRes ) const
 {
 	assert ( m_pIndex && m_pQuerySettings );
 
@@ -1155,7 +1153,8 @@ bool SnippetBuilder_c::Build ( TextSource_i * pSource, SnippetResult_t & tRes ) 
 }
 
 
-void SnippetBuilder_c::PackAsData ( MemoryWriter_c & tWriter, SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const
+void SnippetBuilder_c::Impl_c::PackAsData ( MemoryWriter_c & tWriter, SnippetResult_t & tRes,
+		const CSphVector<int> & dRequestedFields ) const
 {
 	CSphVector<WeightedPassage_t> dPassageOrder;
 
@@ -1180,7 +1179,7 @@ void SnippetBuilder_c::PackAsData ( MemoryWriter_c & tWriter, SnippetResult_t & 
 }
 
 
-bool SnippetBuilder_c::WeightedPassageSort_fn::IsLess ( const WeightedPassage_t & a, const WeightedPassage_t & b ) const
+bool SnippetBuilder_c::Impl_c::WeightedPassageSort_fn::IsLess ( const WeightedPassage_t & a, const WeightedPassage_t & b ) const
 {
 	if ( a.m_iWeight==b.m_iWeight )
 		return a.m_iId<b.m_iId;
@@ -1189,7 +1188,7 @@ bool SnippetBuilder_c::WeightedPassageSort_fn::IsLess ( const WeightedPassage_t 
 }
 
 
-void SnippetBuilder_c::GetPassageOrder ( const FieldResult_t & tField, CSphVector<WeightedPassage_t> & dPassageOrder ) const
+void SnippetBuilder_c::Impl_c::GetPassageOrder ( const FieldResult_t & tField, CSphVector<WeightedPassage_t> & dPassageOrder ) const
 {
 	dPassageOrder.Resize ( tField.m_dPassages.GetLength() );
 
@@ -1205,9 +1204,11 @@ void SnippetBuilder_c::GetPassageOrder ( const FieldResult_t & tField, CSphVecto
 }
 
 
-void SnippetBuilder_c::PackAsString ( MemoryWriter_c & tWriter, CSphVector<BYTE> & dRes, SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const
+void SnippetBuilder_c::Impl_c::PackAsString ( MemoryWriter_c & tWriter, CSphVector<BYTE> & dRes, SnippetResult_t & tRes,
+		const CSphVector<int> & dRequestedFields ) const
 {
-	if ( tRes.m_dFields.GetLength()==1 && tRes.m_dFields[0].m_dPassages.GetLength()==1 && !tRes.m_dFields[0].m_dPassages[0].m_bStartSeparator && !tRes.m_dFields[0].m_dPassages[0].m_bEndSeparator )
+	if ( tRes.m_dFields.GetLength()==1 && tRes.m_dFields[0].m_dPassages.GetLength()==1 && !tRes.m_dFields[0]
+			.m_dPassages[0].m_bStartSeparator && !tRes.m_dFields[0].m_dPassages[0].m_bEndSeparator )
 	{
 		dRes = std::move ( tRes.m_dFields[0].m_dPassages[0].m_dText );
 		return;
@@ -1258,7 +1259,7 @@ void SnippetBuilder_c::PackAsString ( MemoryWriter_c & tWriter, CSphVector<BYTE>
 }
 
 
-CSphVector<BYTE> SnippetBuilder_c::PackResult ( SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const
+CSphVector<BYTE> SnippetBuilder_c::Impl_c::PackResult ( SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const
 {
 	assert(m_pQuerySettings);
 
@@ -1296,8 +1297,7 @@ static DWORD CollectQuerySPZ ( const XQNode_t * pNode )
 	return eSPZ;
 }
 
-
-bool SnippetBuilder_c::SetupStripperSPZ ( bool bSetupSPZ, CSphString & sError )
+bool SnippetBuilder_c::Impl_c::SetupStripperSPZ ( bool bSetupSPZ, CSphString & sError )
 {
 	m_pStripper.Reset();
 
@@ -1338,7 +1338,7 @@ bool SnippetBuilder_c::SetupStripperSPZ ( bool bSetupSPZ, CSphString & sError )
 }
 
 
-bool SnippetBuilder_c::Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tSettings, CSphString & sError )
+bool SnippetBuilder_c::Impl_c::Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tSettings, CSphString & sError )
 {
 	assert(pIndex);
 	assert(!m_pQuerySettings);
@@ -1351,7 +1351,8 @@ bool SnippetBuilder_c::Setup ( const CSphIndex * pIndex, const SnippetQuerySetti
 
 	// OPTIMIZE! do a lightweight indexing clone here
 	if ( tIndexSettings.m_uAotFilterMask )
-		m_pTokenizer = sphAotCreateFilter ( TokenizerRefPtr_c ( pIndex->GetTokenizer()->Clone ( SPH_CLONE_INDEX ) ), m_pDict, tIndexSettings.m_bIndexExactWords, tIndexSettings.m_uAotFilterMask );
+		m_pTokenizer = sphAotCreateFilter ( TokenizerRefPtr_c ( pIndex->GetTokenizer()->Clone ( SPH_CLONE_INDEX ) ),
+				m_pDict, tIndexSettings.m_bIndexExactWords, tIndexSettings.m_uAotFilterMask );
 	else
 		m_pTokenizer = pIndex->GetTokenizer()->Clone ( SPH_CLONE_INDEX );
 
@@ -1378,7 +1379,7 @@ bool SnippetBuilder_c::Setup ( const CSphIndex * pIndex, const SnippetQuerySetti
 }
 
 
-bool SnippetBuilder_c::SetQuery ( const CSphString & sQuery, bool bIgnoreFields, CSphString & sError )
+bool SnippetBuilder_c::Impl_c::SetQuery ( const CSphString & sQuery, bool bIgnoreFields, CSphString & sError )
 {
 	assert(m_pIndex);
 	assert(m_pQuerySettings);
@@ -1397,7 +1398,8 @@ bool SnippetBuilder_c::SetQuery ( const CSphString & sQuery, bool bIgnoreFields,
 	const CSphIndexSettings & tIndexSettings = m_pIndex->GetSettings();
 
 	// OPTIMIZE? double lightweight clone here? but then again it's lightweight
-	if ( !m_pQueryParser->ParseQuery ( *m_pExtQuery.Ptr(), (const char*)szModifiedQuery, nullptr, m_pQueryTokenizer, m_pTokenizerJson, &m_pIndex->GetMatchSchema(), m_pDict, tIndexSettings ) )
+	if ( !m_pQueryParser->ParseQuery ( *m_pExtQuery.Ptr(), (const char*)szModifiedQuery, nullptr, m_pQueryTokenizer,
+			m_pTokenizerJson, &m_pIndex->GetMatchSchema(), m_pDict, tIndexSettings ) )
 	{
 		sError = m_pExtQuery->m_sParseError;
 		return false;
@@ -1414,7 +1416,9 @@ bool SnippetBuilder_c::SetQuery ( const CSphString & sQuery, bool bIgnoreFields,
 	if ( tIndexSettings.m_uAotFilterMask )
 		TransformAotFilter ( m_pExtQuery->m_pRoot, m_pDict->GetWordforms(), tIndexSettings );
 
-	bool bSetupSPZ = m_pQuerySettings->m_ePassageSPZ!=SPH_SPZ_NONE || m_eExtQuerySPZ!=SPH_SPZ_NONE || m_pQuerySettings->m_sStripMode=="retain";
+	bool bSetupSPZ = m_pQuerySettings->m_ePassageSPZ!=SPH_SPZ_NONE
+			|| m_eExtQuerySPZ!=SPH_SPZ_NONE
+			|| m_pQuerySettings->m_sStripMode=="retain";
 
 	return SetupStripperSPZ ( bSetupSPZ, sError );
 }
@@ -1514,3 +1518,37 @@ void UnpackSnippetData ( const BYTE * pData, int iLength, SnippetResult_t & tRes
 		}
 	}
 }
+
+SnippetBuilder_c::SnippetBuilder_c()
+{
+	m_pImpl = new SnippetBuilder_c::Impl_c;
+}
+
+SnippetBuilder_c::~SnippetBuilder_c()
+{
+	SafeDelete ( m_pImpl );
+}
+
+bool SnippetBuilder_c::Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tQuery, CSphString & sError )
+{
+	assert ( m_pImpl );
+	return m_pImpl->Setup ( pIndex, tQuery, sError );
+}
+
+bool SnippetBuilder_c::SetQuery ( const CSphString & sQuery, bool bIgnoreFields, CSphString & sError )
+{
+	assert ( m_pImpl );
+	return m_pImpl->SetQuery ( sQuery, bIgnoreFields, sError );
+}
+
+bool SnippetBuilder_c::Build ( TextSource_i * pSource, SnippetResult_t & tRes ) const
+{
+	assert ( m_pImpl );
+	return m_pImpl->Build ( pSource, tRes );
+}
+
+CSphVector<BYTE> SnippetBuilder_c::PackResult ( SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const
+{
+	assert ( m_pImpl );
+	return m_pImpl->PackResult ( tRes, dRequestedFields );
+};

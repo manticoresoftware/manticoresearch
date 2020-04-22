@@ -7142,7 +7142,7 @@ struct SnippetJob_t : public ISphJob
 
 		// fixme! really only one query text and settings for the entire batch
 		// fixme! error handling!
-		CSphScopedPtr<SnippetBuilder_i>	pSnippetBuilder ( CreateSnippetBuilder() );
+		CSphScopedPtr<SnippetBuilder_c>	pSnippetBuilder ( new SnippetBuilder_c );
 		pSnippetBuilder->Setup ( m_pIndex, *m_pQueries, m_pQueries->m_sError );
 		pSnippetBuilder->SetQuery ( m_pQueries->m_sQuery.cstr(), true, m_pQueries->m_sError );
 
@@ -7335,7 +7335,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	CSphIndex * pIndex = pServed->m_pIndex;
 	assert ( pIndex );
 
-	CSphScopedPtr<SnippetBuilder_i>	pSnippetBuilder ( CreateSnippetBuilder() );
+	CSphScopedPtr<SnippetBuilder_c>	pSnippetBuilder ( new SnippetBuilder_c );
 	if ( !pSnippetBuilder->Setup ( pIndex, tQuery, sError ) ) // same path for single - threaded snippets, bail out here on error
 		return false;
 

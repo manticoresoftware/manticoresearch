@@ -106,15 +106,18 @@ struct SnippetResult_t
 };
 
 
-class SnippetBuilder_i
+class SnippetBuilder_c
 {
-public:
-	virtual						~SnippetBuilder_i() = default;
+	class Impl_c;
+	Impl_c * m_pImpl = nullptr;
 
-	virtual bool				Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tQuery, CSphString & sError ) = 0;
-	virtual bool				SetQuery ( const CSphString & sQuery, bool bIgnoreFields, CSphString & sError ) = 0;
-	virtual bool				Build ( TextSource_i * pSource, SnippetResult_t & tRes ) const = 0;
-	virtual CSphVector<BYTE>	PackResult ( SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const = 0;
+public:
+						SnippetBuilder_c();
+						~SnippetBuilder_c();
+	bool				Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tQuery, CSphString & sError );
+	bool				SetQuery ( const CSphString & sQuery, bool bIgnoreFields, CSphString & sError );
+	bool				Build ( TextSource_i * pSource, SnippetResult_t & tRes ) const;
+	CSphVector<BYTE>	PackResult ( SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const;
 };
 
 
@@ -133,7 +136,6 @@ struct FieldSource_t
 
 TextSource_i *		CreateSnippetSource ( DWORD uFilesMode, const BYTE * pSource, int iLen );
 TextSource_i *		CreateHighlightSource ( const CSphVector<FieldSource_t> & dAllFields );
-SnippetBuilder_i *	CreateSnippetBuilder();
 
 extern CSphString g_sSnippetsFilePrefix;
 

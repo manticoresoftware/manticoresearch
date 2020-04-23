@@ -184,7 +184,7 @@ a:1:{i:0;a:42:{i:0;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_metho
 
 	"query": { "range": { "int_col": { "gte": 1 } } }
 }
-";s:4:"rows";s:32:"{"_index":"test_rt","updated":2}";s:9:"http_code";i:200;s:4:"http";i:1;}i:35;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:54:"{ "index": "test_rt", "query": { "match_all": {} } } }";s:4:"rows";s:327:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"1","_score":1,"_source":{"int_col":1,"bint_col":0,"flt_col":1.1,"title":"updated title","json_col":{"array":[1,2,3]},"mva_col":[]}},{"_id":"2","_score":1,"_source":{"int_col":2,"bint_col":0,"flt_col":2.2,"title":"updated title","json_col":{"array":[1,2,3]},"mva_col":[]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:36;a:6:{s:13:"http_endpoint";s:11:"json/update";s:11:"http_method";s:4:"POST";s:12:"http_request";s:160:"
+";s:4:"rows";s:32:"{"_index":"test_rt","updated":2}";s:9:"http_code";i:200;s:4:"http";i:1;}i:35;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:54:"{ "index": "test_rt", "query": { "match_all": {} } } }";s:4:"rows";s:327:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"1","_score":1,"_source":{"int_col":1,"bint_col":0,"flt_col":1.1,"title":"updated title","json_col":{"array":[1,2,3]},"mva_col":[]}},{"_id":"2","_score":1,"_source":{"int_col":2,"bint_col":0,"flt_col":2.2,"title":"updated title","json_col":{"array":[1,2,3]},"mva_col":[]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:36;a:6:{s:13:"http_endpoint";s:6:"update";s:11:"http_method";s:4:"POST";s:12:"http_request";s:160:"
 {
 	"index":"test_rt",
 	"doc":
@@ -195,7 +195,7 @@ a:1:{i:0;a:42:{i:0;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_metho
 
 	"query": { "range": { "int_col": { "gte": 1 } } }
 }
-";s:4:"rows";s:32:"{"_index":"test_rt","updated":2}";s:9:"http_code";i:200;s:4:"http";i:1;}i:37;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:54:"{ "index": "test_rt", "query": { "match_all": {} } } }";s:4:"rows";s:361:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"1","_score":1,"_source":{"int_col":1,"bint_col":0,"flt_col":1.1,"title":"updated title","json_col":{"array":[201,202,203]},"mva_col":[101,102,103]}},{"_id":"2","_score":1,"_source":{"int_col":2,"bint_col":0,"flt_col":2.2,"title":"updated title","json_col":{"array":[201,202,203]},"mva_col":[101,102,103]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:38;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:99:"
+";s:4:"rows";s:32:"{"_index":"test_rt","updated":2}";s:9:"http_code";i:200;s:4:"http";i:1;}i:37;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:54:"{ "index": "test_rt", "query": { "match_all": {} } } }";s:4:"rows";s:361:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"1","_score":1,"_source":{"int_col":1,"bint_col":0,"flt_col":1.1,"title":"updated title","json_col":{"array":[201,202,203]},"mva_col":[101,102,103]}},{"_id":"2","_score":1,"_source":{"int_col":2,"bint_col":0,"flt_col":2.2,"title":"updated title","json_col":{"array":[201,202,203]},"mva_col":[101,102,103]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:38;a:6:{s:13:"http_endpoint";s:6:"insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:99:"
 {
 	"index":"test_rt",
 	"doc":
@@ -204,7 +204,7 @@ a:1:{i:0;a:42:{i:0;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_metho
 	    "content" : "document thousand"
 	}
 }
-";s:4:"rows";s:75:"{"_index":"test_rt","_id":0,"created":true,"result":"created","status":201}";s:9:"http_code";i:200;s:4:"http";i:1;}i:39;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:67:"{ "index": "test_rt", "query": { "match": { "*": "thousand" } } } }";s:4:"rows";s:177:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1677721600001","_score":1680,"_source":{"int_col":1000,"bint_col":0,"flt_col":0,"title":"","json_col":null,"mva_col":[]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:40;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:134:"
+";s:4:"rows";s:75:"{"_index":"test_rt","_id":0,"created":true,"result":"created","status":201}";s:9:"http_code";i:200;s:4:"http";i:1;}i:39;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:67:"{ "index": "test_rt", "query": { "match": { "*": "thousand" } } } }";s:4:"rows";s:177:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1677721600001","_score":1680,"_source":{"int_col":1000,"bint_col":0,"flt_col":0,"title":"","json_col":null,"mva_col":[]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:40;a:6:{s:13:"http_endpoint";s:6:"insert";s:11:"http_method";s:4:"POST";s:12:"http_request";s:134:"
 {
 	"index":"test_rt",
 	"id":1513686608316989453,
@@ -214,4 +214,4 @@ a:1:{i:0;a:42:{i:0;a:6:{s:13:"http_endpoint";s:11:"json/insert";s:11:"http_metho
 	    "content" : "document big"
 	}
 }
-";s:4:"rows";s:93:"{"_index":"test_rt","_id":1513686608316989453,"created":true,"result":"created","status":201}";s:9:"http_code";i:200;s:4:"http";i:1;}i:41;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:62:"{ "index": "test_rt", "query": { "match": { "*": "big" } } } }";s:4:"rows";s:198:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1513686608316989453","_score":1695,"_source":{"int_col":0,"bint_col":1513686608316989453,"flt_col":0,"title":"","json_col":null,"mva_col":[]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}}}
+";s:4:"rows";s:93:"{"_index":"test_rt","_id":1513686608316989453,"created":true,"result":"created","status":201}";s:9:"http_code";i:200;s:4:"http";i:1;}i:41;a:6:{s:13:"http_endpoint";s:6:"search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:62:"{ "index": "test_rt", "query": { "match": { "*": "big" } } } }";s:4:"rows";s:198:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1513686608316989453","_score":1695,"_source":{"int_col":0,"bint_col":1513686608316989453,"flt_col":0,"title":"","json_col":null,"mva_col":[]}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}}}

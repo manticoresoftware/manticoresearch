@@ -303,7 +303,7 @@ index test_rt
 <query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
 
 <!-- regression update for MVA attribute as array and for JSON attribute as object -->
-<query endpoint="json/update">
+<query endpoint="update">
 {
 	"index":"test_rt",
 	"doc":
@@ -315,10 +315,10 @@ index test_rt
 	"query": { "range": { "int_col": { "gte": 1 } } }
 }
 </query>
-<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+<query endpoint="search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
 
 <!-- auto id regression -->
-<query endpoint="json/insert">
+<query endpoint="insert">
 {
 	"index":"test_rt",
 	"doc":
@@ -329,9 +329,9 @@ index test_rt
 }
 </query>
 
-<query endpoint="json/search">{ "index": "test_rt", "query": { "match": { "*": "thousand" } } } }</query>
+<query endpoint="search">{ "index": "test_rt", "query": { "match": { "*": "thousand" } } } }</query>
 
-<query endpoint="json/insert">
+<query endpoint="insert">
 {
 	"index":"test_rt",
 	"id":1513686608316989453,
@@ -343,7 +343,7 @@ index test_rt
 }
 </query>
 
-<query endpoint="json/search">{ "index": "test_rt", "query": { "match": { "*": "big" } } } }</query>
+<query endpoint="search">{ "index": "test_rt", "query": { "match": { "*": "big" } } } }</query>
 
 </httpqueries>
 

@@ -115,10 +115,10 @@ class SnippetBuilder_c
 public:
 						SnippetBuilder_c();
 						~SnippetBuilder_c();
-	bool				Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tQuery, CSphString & sError );
+	bool				Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tQuery );
 	bool				SetQuery ( const CSphString & sQuery, bool bIgnoreFields, CSphString & sError );
 	bool				Build ( TextSource_i * pSource, SnippetResult_t & tRes ) const;
-	CSphVector<BYTE>	PackResult ( SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const;
+	CSphVector<BYTE>	PackResult ( SnippetResult_t & tRes, const VecTraits_T<int> & dRequestedFields ) const;
 };
 
 

@@ -257,8 +257,7 @@ Expr_HighlightTraits_c::Expr_HighlightTraits_c ( const Expr_HighlightTraits_c & 
 	, m_tSnippetQuery ( rhs.m_tSnippetQuery )
 	, m_pSnippetBuilder ( new SnippetBuilder_c )
 {
-	CSphString sError;
-	assert ( m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery, sError ) );
+	assert ( m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery ) );
 }
 
 
@@ -363,10 +362,8 @@ Expr_Snippet_c::Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQu
 
 	m_tSnippetQuery.m_bJsonQuery = eQueryType==QUERY_JSON;
 	m_tSnippetQuery.Setup();
-	if ( !m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery, sError ) )
-		return;
-
-	m_dRequestedFieldIds.Add(0);
+	if ( m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery ) )
+		m_dRequestedFieldIds.Add(0);
 }
 
 
@@ -486,8 +483,7 @@ Expr_Highlight_c::Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, CS
 
 	m_tSnippetQuery.m_bJsonQuery = eQueryType==QUERY_JSON;
 	m_tSnippetQuery.Setup();
-	if ( !m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery, sError ) )
-		return;
+	m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery );
 }
 
 

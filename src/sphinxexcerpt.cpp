@@ -343,10 +343,10 @@ public:
 class SnippetBuilder_c::Impl_c
 {
 public:
-	bool				Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tQuery, CSphString & sError );
+	bool				Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tQuery );
 	bool				SetQuery ( const CSphString & sQuery, bool bIgnoreFields, CSphString & sError );
 	bool				Build ( TextSource_i * pSource, SnippetResult_t & tRes ) const;
-	CSphVector<BYTE>	PackResult ( SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const;
+	CSphVector<BYTE>	PackResult ( SnippetResult_t & tRes, const VecTraits_T<int> & dRequestedFields ) const;
 
 private:
 	struct ZoneData_t
@@ -406,8 +406,8 @@ private:
 	void							CreateLimits ( ScopedStreamers_t & tStreamers, const TextSource_i & tSource, const SnippetsDocIndex_c & tContainer, DWORD uFoundWords, CSphString & sWarning ) const;
 
 	void							GetPassageOrder ( const FieldResult_t & tField, CSphVector<WeightedPassage_t> & dPassageOrder ) const;
-	void							PackAsData ( MemoryWriter_c & tWriter, SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const;
-	void							PackAsString ( MemoryWriter_c & tWriter, CSphVector<BYTE> & dRes, SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const;
+	void							PackAsData ( MemoryWriter_c & tWriter, SnippetResult_t & tRes, const VecTraits_T<int> & dRequestedFields ) const;
+	void							PackAsString ( MemoryWriter_c & tWriter, CSphVector<BYTE> & dRes, SnippetResult_t & tRes, const VecTraits_T<int> & dRequestedFields ) const;
 };
 
 
@@ -1155,7 +1155,7 @@ bool SnippetBuilder_c::Impl_c::Build ( TextSource_i * pSource, SnippetResult_t &
 
 
 void SnippetBuilder_c::Impl_c::PackAsData ( MemoryWriter_c & tWriter, SnippetResult_t & tRes,
-		const CSphVector<int> & dRequestedFields ) const
+		const VecTraits_T<int> & dRequestedFields ) const
 {
 	CSphVector<WeightedPassage_t> dPassageOrder;
 
@@ -1206,7 +1206,7 @@ void SnippetBuilder_c::Impl_c::GetPassageOrder ( const FieldResult_t & tField, C
 
 
 void SnippetBuilder_c::Impl_c::PackAsString ( MemoryWriter_c & tWriter, CSphVector<BYTE> & dRes, SnippetResult_t & tRes,
-		const CSphVector<int> & dRequestedFields ) const
+		const VecTraits_T<int> & dRequestedFields ) const
 {
 	if ( tRes.m_dFields.GetLength()==1 && tRes.m_dFields[0].m_dPassages.GetLength()==1 && !tRes.m_dFields[0]
 			.m_dPassages[0].m_bStartSeparator && !tRes.m_dFields[0].m_dPassages[0].m_bEndSeparator )
@@ -1260,7 +1260,7 @@ void SnippetBuilder_c::Impl_c::PackAsString ( MemoryWriter_c & tWriter, CSphVect
 }
 
 
-CSphVector<BYTE> SnippetBuilder_c::Impl_c::PackResult ( SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const
+CSphVector<BYTE> SnippetBuilder_c::Impl_c::PackResult ( SnippetResult_t & tRes, const VecTraits_T<int> & dRequestedFields ) const
 {
 	assert(m_pQuerySettings);
 
@@ -1339,7 +1339,7 @@ bool SnippetBuilder_c::Impl_c::SetupStripperSPZ ( bool bSetupSPZ, CSphString & s
 }
 
 
-bool SnippetBuilder_c::Impl_c::Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tSettings, CSphString & sError )
+bool SnippetBuilder_c::Impl_c::Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tSettings )
 {
 	assert(pIndex);
 	assert(!m_pQuerySettings);
@@ -1530,10 +1530,10 @@ SnippetBuilder_c::~SnippetBuilder_c()
 	SafeDelete ( m_pImpl );
 }
 
-bool SnippetBuilder_c::Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tQuery, CSphString & sError )
+bool SnippetBuilder_c::Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tQuery )
 {
 	assert ( m_pImpl );
-	return m_pImpl->Setup ( pIndex, tQuery, sError );
+	return m_pImpl->Setup ( pIndex, tQuery );
 }
 
 bool SnippetBuilder_c::SetQuery ( const CSphString & sQuery, bool bIgnoreFields, CSphString & sError )
@@ -1548,7 +1548,7 @@ bool SnippetBuilder_c::Build ( TextSource_i * pSource, SnippetResult_t & tRes ) 
 	return m_pImpl->Build ( pSource, tRes );
 }
 
-CSphVector<BYTE> SnippetBuilder_c::PackResult ( SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const
+CSphVector<BYTE> SnippetBuilder_c::PackResult ( SnippetResult_t & tRes, const VecTraits_T<int> & dRequestedFields ) const
 {
 	assert ( m_pImpl );
 	return m_pImpl->PackResult ( tRes, dRequestedFields );

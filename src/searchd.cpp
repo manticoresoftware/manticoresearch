@@ -7145,7 +7145,7 @@ struct SnippetJob_t : public ISphJob
 		// fixme! really only one query text and settings for the entire batch
 		// fixme! error handling!
 		CSphScopedPtr<SnippetBuilder_c>	pSnippetBuilder ( new SnippetBuilder_c );
-		pSnippetBuilder->Setup ( m_pIndex, *m_pSettings, m_pQueries->m_sError );
+		pSnippetBuilder->Setup ( m_pIndex, *m_pSettings );
 		pSnippetBuilder->SetQuery ( m_pSettings->m_sQuery.cstr(), true, m_pQueries->m_sError );
 
 		CSphVector<int> dRequestedFields;
@@ -7288,7 +7288,6 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, co
 		CSphString & sError, ThdDesc_t & tThd )
 {
 	SnippetsRemote_t tRemoteSnippets ( dQueries, &q );
-	ExcerptQuery_t & tQuery = dQueries[0];
 
 	// Both load_files && load_files_scattered report the absent files as errors.
 	// load_files_scattered without load_files just omits the absent files (returns empty strings).
@@ -7340,7 +7339,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, co
 	assert ( pIndex );
 
 	CSphScopedPtr<SnippetBuilder_c>	pSnippetBuilder ( new SnippetBuilder_c );
-	if ( !pSnippetBuilder->Setup ( pIndex, q, sError ) ) // same path for single - threaded snippets, bail out here on error
+	if ( !pSnippetBuilder->Setup ( pIndex, q ) ) // same path for single - threaded snippets, bail out here on error
 		return false;
 
 	if ( !pSnippetBuilder->SetQuery ( q.m_sQuery.cstr(), true, sError ) ) // same path for single - threaded snippets, bail out here on error

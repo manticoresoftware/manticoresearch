@@ -7106,7 +7106,7 @@ struct SnippetChain_t
 	int							m_iHead { EOF_ITEM };
 };
 
-struct ExcerptQueryChained_t
+struct ExcerptQuery_t
 {
 	int64_t			m_iSize = 0;		///< file size, to sort to work-queue order
 	int				m_iSeq = 0;			///< request order, to sort back to request order
@@ -7120,10 +7120,10 @@ struct SnippetsRemote_t : ISphNoncopyable
 {
 	VecRefPtrsAgentConn_t				m_dAgents;
 	CSphVector<SnippetChain_t>			m_dTasks;
-	CSphVector<ExcerptQueryChained_t> &	m_dQueries;
+	CSphVector<ExcerptQuery_t> &		m_dQueries;
 	const SnippetQuerySettings_t *		m_pSettings;
 
-	explicit SnippetsRemote_t ( CSphVector<ExcerptQueryChained_t> & dQueries, const SnippetQuerySettings_t * pQ )
+	explicit SnippetsRemote_t ( CSphVector<ExcerptQuery_t> & dQueries, const SnippetQuerySettings_t * pQ )
 		: m_dQueries ( dQueries )
 		, m_pSettings ( pQ )
 	{}
@@ -7132,7 +7132,7 @@ struct SnippetsRemote_t : ISphNoncopyable
 struct SnippetJob_t : public ISphJob
 {
 	long						m_iQueries = 0;
-	ExcerptQueryChained_t *		m_pQueries = nullptr;
+	ExcerptQuery_t *			m_pQueries = nullptr;
 	const SnippetQuerySettings_t* m_pSettings = nullptr;
 	CSphAtomic *				m_pCurQuery = nullptr;
 	CSphIndex *					m_pIndex = nullptr;
@@ -7245,7 +7245,7 @@ bool SnippetReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & t
 	bool bOk = true;
 	while ( iDoc!=EOF_ITEM )
 	{
-		ExcerptQueryChained_t & tQuery = dQueries[iDoc];
+		ExcerptQuery_t & tQuery = dQueries[iDoc];
 		CSphVector<BYTE> & dRes = tQuery.m_dResult;
 		
 		if ( m_pWorker->m_pSettings->m_uFilesMode & 2 ) // scattered files
@@ -7270,7 +7270,7 @@ bool SnippetReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & t
 	return bOk;
 }
 
-static int64_t GetSnippetDataSize ( const CSphVector<ExcerptQueryChained_t> &dSnippets )
+static int64_t GetSnippetDataSize ( const CSphVector<ExcerptQuery_t> &dSnippets )
 {
 	int64_t iSize = 0;
 	for ( const auto & dSnippet: dSnippets )
@@ -7284,10 +7284,11 @@ static int64_t GetSnippetDataSize ( const CSphVector<ExcerptQueryChained_t> &dSn
 	return iSize;
 }
 
-bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQueries, const SnippetQuerySettings_t& q,
+bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, const SnippetQuerySettings_t& q,
 		CSphString & sError, ThdDesc_t & tThd )
 {
 	SnippetsRemote_t tRemoteSnippets ( dQueries, &q );
+	ExcerptQuery_t & tQuery = dQueries[0];
 
 	// Both load_files && load_files_scattered report the absent files as errors.
 	// load_files_scattered without load_files just omits the absent files (returns empty strings).
@@ -7412,14 +7413,14 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 
 	// tough jobs first (sort inverse)
 	if ( !bScattered )
-		dQueries.Sort ( Lesser ( [] ( ExcerptQueryChained_t& a, ExcerptQueryChained_t& b ) { return a.m_iSize>b.m_iSize; } ) );
+		dQueries.Sort ( Lesser ( [] ( ExcerptQuery_t& a, ExcerptQuery_t& b ) { return a.m_iSize>b.m_iSize; } ) );
 
 	// build list of absent files (that's ok for scattered).
 	// later all the list will be sent to remotes (and some of them have to answer)
 	int iAbsentHead = EOF_ITEM;
 	ARRAY_FOREACH ( i, dQueries )
 	{
-		ExcerptQueryChained_t & tQuery = dQueries[i];
+		ExcerptQuery_t & tQuery = dQueries[i];
 		if ( tQuery.m_iNext==EOF_ITEM )
 		{
 			tQuery.m_iNext = iAbsentHead;
@@ -7465,9 +7466,9 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 
 		// back in query order
 		if ( !bScattered )
-			dQueries.Sort ( bind ( &ExcerptQueryChained_t::m_iSeq ) );
+			dQueries.Sort ( bind ( &ExcerptQuery_t::m_iSeq ) );
 
-		dQueries.Apply ( [&] ( const ExcerptQueryChained_t & tQuery ) { sErrors << tQuery.m_sError; } );
+		dQueries.Apply ( [&] ( const ExcerptQuery_t & tQuery ) { sErrors << tQuery.m_sError; } );
 		sErrors.MoveTo ( sError );
 		return sError.IsEmpty();
 	}
@@ -7540,7 +7541,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 		{
 			int iFailed = 0;
 			// inverse the success/failed state - so that the queries with negative m_iNext are treated as failed
-			dQueries.Apply ( [&] ( ExcerptQueryChained_t &dQuery ) {
+			dQueries.Apply ( [&] ( ExcerptQuery_t &dQuery ) {
 				if ( dQuery.m_iNext!=PROCESSED_ITEM )
 				{
 					dQuery.m_iNext = PROCESSED_ITEM;
@@ -7563,9 +7564,9 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 
 	// back in query order
 	if ( !bScattered )
-		dQueries.Sort ( bind ( &ExcerptQueryChained_t::m_iSeq ) );
+		dQueries.Sort ( bind ( &ExcerptQuery_t::m_iSeq ) );
 
-	dQueries.Apply ( [&] ( const ExcerptQueryChained_t & tQuery ) { sErrors << tQuery.m_sError; } );
+	dQueries.Apply ( [&] ( const ExcerptQuery_t & tQuery ) { sErrors << tQuery.m_sError; } );
 	sErrors.MoveTo ( sError );
 	return sError.IsEmpty();
 }
@@ -7655,7 +7656,7 @@ void HandleCommandExcerpt ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c
 		return;
 	}
 
-	CSphVector<ExcerptQueryChained_t> dQueries { iCount };
+	CSphVector<ExcerptQuery_t> dQueries { iCount };
 
 	for ( auto & dQuery : dQueries )
 	{
@@ -10998,7 +10999,7 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt, ThdDesc_t 
 
 	q.Setup();
 
-	CSphVector<ExcerptQueryChained_t> dQueries;
+	CSphVector<ExcerptQuery_t> dQueries;
 	if ( tStmt.m_dInsertValues[0].m_iType==TOK_QUOTED_STRING )
 	{
 		auto& dQuery = dQueries.Add ();
@@ -11021,7 +11022,7 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt, ThdDesc_t 
 		return;
 	}
 
-	if ( !dQueries.FindFirst ( [] ( const ExcerptQueryChained_t & tQuery ) { return tQuery.m_sError.IsEmpty(); } ) )
+	if ( !dQueries.FindFirst ( [] ( const ExcerptQuery_t & tQuery ) { return tQuery.m_sError.IsEmpty(); } ) )
 	{
 		// just one last error instead of all errors is hopefully ok
 		sError.SetSprintf ( "highlighting failed: %s", sError.cstr() );

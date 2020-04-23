@@ -6327,7 +6327,7 @@ void SearchHandler_c::BuildIndexList ( int iStart, int iEnd, int & iDivideLimits
 				{
 					tDistrStat.m_dAgentIds.Add ( dRemotes.GetLength() );
 					auto * pConn = new AgentConn_t;
-					pConn->SetMultiAgent ( sIndex, pAgent );
+					pConn->SetMultiAgent ( pAgent );
 					pConn->m_iStoreTag = iTagsCount;
 					pConn->m_iWeight = iWeight;
 					pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
@@ -7300,7 +7300,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, co
 		for ( auto * pAgent : pDist->m_dAgents )
 		{
 			auto * pConn = new AgentConn_t;
-			pConn->SetMultiAgent ( sIndex, pAgent );
+			pConn->SetMultiAgent ( pAgent );
 			pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
 			pConn->m_iMyQueryTimeoutMs = pDist->m_iAgentQueryTimeoutMs;
 			tRemoteSnippets.m_dAgents.Add ( pConn );
@@ -10150,7 +10150,7 @@ void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t
 		for ( auto * pAgent : pDist->m_dAgents )
 		{
 			auto * pConn = new AgentConn_t;
-			pConn->SetMultiAgent ( sIndex, pAgent );
+			pConn->SetMultiAgent ( pAgent );
 			pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
 			pConn->m_iMyQueryTimeoutMs = pDist->m_iAgentQueryTimeoutMs;
 			dAgents.Add ( pConn );

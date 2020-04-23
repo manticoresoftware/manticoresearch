@@ -529,7 +529,7 @@ public:
 public:
 	AgentConn_t () = default;
 
-	void SetMultiAgent ( const CSphString &sIndex, MultiAgentDesc_c * pMirror );
+	void SetMultiAgent ( MultiAgentDesc_c * pMirror );
 	inline bool IsBlackhole () const { return m_tDesc.m_bBlackhole; }
 	inline bool InNetLoop() const { return m_bInNetLoop; }
 	inline void SetNetLoop ( bool bInNetLoop = true ) { m_bInNetLoop = bInNetLoop; }

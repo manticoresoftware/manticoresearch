@@ -184,7 +184,7 @@ static bool GetIndexes ( const CSphString & sIndexes, CSphString & sError, StrVe
 			for ( auto * pAgent : pDist->m_dAgents )
 			{
 				auto * pConn = new AgentConn_t;
-				pConn->SetMultiAgent ( sIndex, pAgent );
+				pConn->SetMultiAgent ( pAgent );
 				pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
 				pConn->m_iMyQueryTimeoutMs = pDist->m_iAgentQueryTimeoutMs;
 				pConn->m_pResult = new AgentFieldPaiload_t();

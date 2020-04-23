@@ -2543,7 +2543,7 @@ bool AgentConn_t::CommitResult ()
 }
 
 
-void AgentConn_t::SetMultiAgent ( const CSphString &sIndex, MultiAgentDesc_c * pAgent )
+void AgentConn_t::SetMultiAgent ( MultiAgentDesc_c * pAgent )
 {
 	assert ( pAgent );
 	pAgent->AddRef ();

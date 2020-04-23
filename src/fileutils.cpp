@@ -624,24 +624,24 @@ bool CheckPath ( const CSphString & sPath, bool bCheckWrite, CSphString & sError
 }
 
 
+static bool IsSlash ( char c )
+{
+	return c=='/' || c=='\\';
+}
+
+
 CSphString & StripPath ( CSphString & sPath )
 {
 	if ( sPath.IsEmpty() )
 		return sPath;
 
 	const char * s = sPath.cstr();
-
-#if !USE_WINDOWS
-	if ( *s!='/' && *s!='.' )
-		return sPath;
-#endif
-
 	const char * sLastSlash = s;
 	for ( ; *s; ++s )
-		if ( *s=='/' )
+		if ( IsSlash(*s) )
 			sLastSlash = s;
 
-	if ( *sLastSlash!='/' )
+	if ( !IsSlash ( *sLastSlash ) )
 		return sPath;
 
 	auto iPos = (int)( sLastSlash - sPath.cstr() + 1 );
@@ -659,10 +659,10 @@ CSphString GetPathOnly ( const CSphString & sFullPath )
 	const char * pStart = sFullPath.cstr();
 	const char * pCur = pStart + sFullPath.Length() - 1;
 
-	if ( *pCur=='/' || *pCur=='\\' )
+	if ( IsSlash(*pCur) )
 		return sFullPath;
 
-	while ( pCur>pStart && pCur[-1]!='/' && pCur[-1]!='\\' )
+	while ( pCur>pStart && !IsSlash ( pCur[-1] ) )
 		pCur--;
 
 	CSphString sPath;

@@ -280,12 +280,12 @@ const int DEFAULT_READ_UNHINTED = 32768;
 
 struct FileAccessSettings_t : public SettingsWriter_c
 {
-	FileAccess_e	m_eAttr;
-	FileAccess_e	m_eBlob;
-	FileAccess_e	m_eDoclist;
-	FileAccess_e	m_eHitlist;
-	int				m_iReadBufferDocList;
-	int				m_iReadBufferHitList;
+	FileAccess_e	m_eAttr = FileAccess_e::MMAP_PREREAD;
+	FileAccess_e	m_eBlob = FileAccess_e::MMAP_PREREAD;
+	FileAccess_e	m_eDoclist = FileAccess_e::FILE;
+	FileAccess_e	m_eHitlist = FileAccess_e::FILE;
+	int				m_iReadBufferDocList = DEFAULT_READ_BUFFER;
+	int				m_iReadBufferHitList = DEFAULT_READ_BUFFER;
 
 	bool operator== ( const FileAccessSettings_t & tOther ) const;
 	bool operator!= ( const FileAccessSettings_t & tOther ) const;

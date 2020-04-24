@@ -861,13 +861,15 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 
 void FileAccessSettings_t::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const
 {
-	tOut.Add ( "read_buffer_docs",		m_iReadBufferDocList,		m_iReadBufferDocList!=DEFAULT_READ_BUFFER );
-	tOut.Add ( "read_buffer_hits",		m_iReadBufferHitList,		m_iReadBufferHitList!=DEFAULT_READ_BUFFER );
+	FileAccessSettings_t tDefault;
 
-	tOut.Add ( "access_doclists",		FileAccessName(m_eDoclist),	m_eDoclist!=FileAccess_e::FILE );
-	tOut.Add ( "access_hitlists",		FileAccessName(m_eHitlist),	m_eHitlist!=FileAccess_e::FILE );
-	tOut.Add ( "access_plain_attrs",	FileAccessName(m_eAttr) ,	m_eAttr!=FileAccess_e::MMAP_PREREAD );
-	tOut.Add ( "access_blob_attrs",		FileAccessName(m_eBlob) ,	m_eBlob!=FileAccess_e::MMAP_PREREAD );
+	tOut.Add ( "read_buffer_docs",		m_iReadBufferDocList,		m_iReadBufferDocList!=tDefault.m_iReadBufferDocList );
+	tOut.Add ( "read_buffer_hits",		m_iReadBufferHitList,		m_iReadBufferHitList!=tDefault.m_iReadBufferHitList );
+
+	tOut.Add ( "access_doclists",		FileAccessName(m_eDoclist),	m_eDoclist!=tDefault.m_eDoclist );
+	tOut.Add ( "access_hitlists",		FileAccessName(m_eHitlist),	m_eHitlist!=tDefault.m_eHitlist );
+	tOut.Add ( "access_plain_attrs",	FileAccessName(m_eAttr) ,	m_eAttr!=tDefault.m_eAttr );
+	tOut.Add ( "access_blob_attrs",		FileAccessName(m_eBlob) ,	m_eBlob!=tDefault.m_eBlob );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1171,6 +1173,9 @@ void SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, bool
 
 static void FormatAllSettings ( const CSphIndex & tIndex, SettingsFormatter_c & tFormatter, FilenameBuilder_i * pFilenameBuilder )
 {
+	if ( tIndex.IsPQ() )
+		tFormatter.Add ( "type", "pq", true );
+
 	tIndex.GetSettings().Format ( tFormatter, pFilenameBuilder );
 
 	CSphFieldFilterSettings tFieldFilter;
@@ -1369,6 +1374,7 @@ static RtTypedAttr_t g_dTypeNames[] =
 	{ SPH_ATTR_INT64SET,	"multi64" },
 	{ SPH_ATTR_JSON,		"json" },
 	{ SPH_ATTR_STRING,		"string" },
+	{ SPH_ATTR_STRINGPTR,	"string" },
 	{ SPH_ATTR_TIMESTAMP,	"timestamp" }
 };
 

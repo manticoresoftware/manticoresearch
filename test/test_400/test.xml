@@ -91,6 +91,13 @@ searchd
 <sphinxql>drop table test1</sphinxql>
 <sphinxql>drop table test2</sphinxql>
 
+<sphinxql>create table pq1 ( title text ) type='pq'</sphinxql>
+<sphinxql>show create table pq1</sphinxql>
+<sphinxql>create table pq2 like pq1</sphinxql>
+<sphinxql>show create table pq2</sphinxql>
+<sphinxql>drop table pq1</sphinxql>
+<sphinxql>drop table pq2</sphinxql>
+
 </sphqueries>
 
 </test>

@@ -1891,6 +1891,7 @@ const char*		sphCheckEndian()
 	return NULL;
 }
 
+#if 0
 struct ThdJob_t
 {
 	ISphJob *	m_pItem = nullptr;
@@ -2094,6 +2095,7 @@ ISphThdPool * sphThreadPoolCreate ( int iThreads, const char * sName, CSphString
 
 	return pPool;
 }
+#endif
 
 int sphCpuThreadsCount ()
 {

@@ -4663,6 +4663,7 @@ using SharedPtrArr_t = SharedPtr_T<T, Deleter_T<T, ETYPE::ARRAY>, REFCOUNTED>;
 template<typename T, typename DELETER=std::function<void(T)>, typename REFCOUNTED = ISphRefcountedMT>
 using SharedPtrCustom_t = SharedPtr_T<T, CustomDeleter_T<T, DELETER>, REFCOUNTED>;
 
+#if 0
 struct ISphJob
 {
 	virtual ~ISphJob () {};
@@ -4682,6 +4683,7 @@ struct ISphThdPool
 };
 
 ISphThdPool * sphThreadPoolCreate ( int iThreads, const char * sName, CSphString & sError );
+#endif
 
 int sphCpuThreadsCount ();
 

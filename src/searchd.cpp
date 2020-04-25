@@ -5770,6 +5770,11 @@ struct LocalSearchRef_t
 		ARRAY_FOREACH (i, m_dExtras)
 			m_dExtras[i].Append ( dChild.m_dExtras[i] );
 	}
+
+	inline static bool IsClonable()
+	{
+		return true;
+	}
 };
 
 struct LocalSearchClone_t
@@ -5805,7 +5810,7 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 	CSphFixedVector<bool> bResults ( iNumLocals );
 
 	// store and manage tls stuff
-	FederateCtx_T<LocalSearchRef_t, LocalSearchClone_t> dCtxData ( true, m_tHook, m_dExtraSchemas );
+	FederateCtx_T<LocalSearchRef_t, LocalSearchClone_t> dCtxData { m_tHook, m_dExtraSchemas };
 	bool bMtEnabled = dCtxData.IsEnabled ();
 
 	CrashQuery_t tCrashQuery = GlobalCrashQueryGet (); // transfer query info for crash logger to new thread
@@ -7315,12 +7320,6 @@ enum eExcerpt_Flags
 	EXCERPT_FLAG_FORCEPASSAGES		= 2048
 };
 
-enum
-{
-	PROCESSED_ITEM					= -2,
-	EOF_ITEM						= -1
-};
-
 int PackAPISnippetFlags ( const SnippetQuerySettings_t &q, bool bOnlyScattered = false )
 {
 	int iRawFlags = q.m_iLimitPassages ? EXCERPT_FLAG_SINGLEPASSAGE : 0;
@@ -7336,35 +7335,15 @@ int PackAPISnippetFlags ( const SnippetQuerySettings_t &q, bool bOnlyScattered =
 	return iRawFlags;
 }
 
-struct SnippetChain_t
-{
-	int64_t						m_iTotal = 0;
-	int							m_iHead { EOF_ITEM };
-};
-
 struct ExcerptQuery_t
 {
 	int64_t			m_iSize = 0;		///< file size, to sort to work-queue order
-	int				m_iSeq = 0;			///< request order, to sort back to request order
-	int				m_iNext = PROCESSED_ITEM; ///< the next one in one-link list for batch processing. -1 terminate the list. -2 sign of other (out-of-the-lists)
 	CSphString		m_sSource;			///< source data
 	CSphString		m_sError;
 	CSphVector<BYTE> m_dResult;			///< query result
 };
 
-struct SnippetsRemote_t : ISphNoncopyable
-{
-	VecRefPtrsAgentConn_t				m_dAgents;
-	CSphVector<SnippetChain_t>			m_dTasks;
-	CSphVector<ExcerptQuery_t> &		m_dQueries;
-	const SnippetQuerySettings_t *		m_pSettings;
-
-	explicit SnippetsRemote_t ( CSphVector<ExcerptQuery_t> & dQueries, const SnippetQuerySettings_t * pQ )
-		: m_dQueries ( dQueries )
-		, m_pSettings ( pQ )
-	{}
-};
-
+#if 0
 struct SnippetJob_t : public ISphJob
 {
 	long						m_iQueries = 0;
@@ -7403,107 +7382,103 @@ struct SnippetJob_t : public ISphJob
 		}
 	}
 };
+#endif
 
-
-class SnippetRequestBuilder_c : public RequestBuilder_i
+class SnippetRemote_c : public RequestBuilder_i, public ReplyParser_i
 {
 public:
-	explicit SnippetRequestBuilder_c ( const SnippetsRemote_t * pWorker )
-		: m_pWorker ( pWorker )
+	SnippetRemote_c ( VecTraits_T<ExcerptQuery_t> & dQueries, const SnippetQuerySettings_t& q )
+		: m_dQueries ( dQueries )
+		, m_tSettings ( q )
 	{}
+
 	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final;
-
-private:
-	const SnippetsRemote_t * m_pWorker;
-	mutable CSphAtomic m_iWorker;
-};
-
-
-class SnippetReplyParser_c : public ReplyParser_i
-{
-public:
-	explicit SnippetReplyParser_c ( SnippetsRemote_t * pWorker )
-		: m_pWorker ( pWorker )
-	{}
-
 	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final;
 
 private:
-	const SnippetsRemote_t * m_pWorker;
+	VecTraits_T<ExcerptQuery_t> &			m_dQueries;
+	const SnippetQuerySettings_t &			m_tSettings;
+	mutable CSphAtomic 						m_iWorker;
+
+	bool ParseReplyScattered ( MemInputBuffer_c & tReq, const VecTraits_T<int>& dDocs ) const;
+	bool ParseReplyNonScattered ( MemInputBuffer_c & tReq, const VecTraits_T<int> & dDocs ) const;
+
+public:
+	CSphVector<const VecTraits_T<int> *> m_dTasks;
 };
 
 
-void SnippetRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
+void SnippetRemote_c::BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
 {
 	// it sends either all queries to each agent or sequence of queries to current agent
-//	auto iWorker = ( int ) m_iWorker++;
 	auto iWorker = tAgent.m_iStoreTag;
 	if ( iWorker<0 )
 	{
 		iWorker = ( int ) m_iWorker++;
 		tAgent.m_iStoreTag = iWorker;
 	}
-	auto & dQueries = m_pWorker->m_dQueries;
-	const SnippetQuerySettings_t & q = *m_pWorker->m_pSettings;
-	int iHead = m_pWorker->m_dTasks[iWorker].m_iHead;
-	const char * sIndex = tAgent.m_tDesc.m_sIndexes.cstr();
 
 	APICommand_t tWr { tOut, SEARCHD_COMMAND_EXCERPT, VER_COMMAND_EXCERPT };
 
 	tOut.SendInt ( 0 );
-	tOut.SendInt ( PackAPISnippetFlags ( q, true ) );
-	tOut.SendString ( sIndex );
-	tOut.SendString ( q.m_sQuery.cstr() );
-	tOut.SendString ( q.m_sBeforeMatch.cstr() );
-	tOut.SendString ( q.m_sAfterMatch.cstr() );
-	tOut.SendString ( q.m_sChunkSeparator.cstr() );
-	tOut.SendInt ( q.m_iLimit );
-	tOut.SendInt ( q.m_iAround );
-	tOut.SendInt ( q.m_iLimitPassages );
-	tOut.SendInt ( q.m_iLimitWords );
-	tOut.SendInt ( q.m_iPassageId );
-	tOut.SendString ( q.m_sStripMode.cstr() );
-	tOut.SendString ( PassageBoundarySz ( q.m_ePassageSPZ ) );
+	tOut.SendInt ( PackAPISnippetFlags ( m_tSettings, true ) );
+	tOut.SendString ( tAgent.m_tDesc.m_sIndexes.cstr () );
+	tOut.SendString ( m_tSettings.m_sQuery.cstr() );
+	tOut.SendString ( m_tSettings.m_sBeforeMatch.cstr() );
+	tOut.SendString ( m_tSettings.m_sAfterMatch.cstr() );
+	tOut.SendString ( m_tSettings.m_sChunkSeparator.cstr() );
+	tOut.SendInt ( m_tSettings.m_iLimit );
+	tOut.SendInt ( m_tSettings.m_iAround );
+	tOut.SendInt ( m_tSettings.m_iLimitPassages );
+	tOut.SendInt ( m_tSettings.m_iLimitWords );
+	tOut.SendInt ( m_tSettings.m_iPassageId );
+	tOut.SendString ( m_tSettings.m_sStripMode.cstr() );
+	tOut.SendString ( PassageBoundarySz ( m_tSettings.m_ePassageSPZ ) );
 
-	int iNumDocs = 0;
-	for ( int iDoc = iHead; iDoc!=EOF_ITEM; iDoc = dQueries[iDoc].m_iNext )
-		++iNumDocs;
-
-	tOut.SendInt ( iNumDocs );
-	for ( int iDoc = iHead; iDoc!=EOF_ITEM; iDoc=dQueries[iDoc].m_iNext )
-		tOut.SendString ( dQueries[iDoc].m_sSource.cstr() );
+	const auto& dDocs = *m_dTasks[iWorker];
+	tOut.SendInt ( dDocs.GetLength() );
+	for ( int iDoc : dDocs )
+		tOut.SendString ( m_dQueries[iDoc].m_sSource.cstr() );
 }
 
-bool SnippetReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const
+bool SnippetRemote_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const
 {
-	auto & dQueries = m_pWorker->m_dQueries;
-	int iDoc = m_pWorker->m_dTasks[tAgent.m_iStoreTag].m_iHead;
+	auto& tDocs = *m_dTasks[tAgent.m_iStoreTag];
+	if ( m_tSettings.m_uFilesMode & 2 ) // scattered files
+		return ParseReplyScattered ( tReq, tDocs );
+
+	return ParseReplyNonScattered ( tReq, tDocs );
+}
+
+bool SnippetRemote_c::ParseReplyScattered ( MemInputBuffer_c & tReq, const VecTraits_T<int> & dDocs ) const
+{
 	bool bOk = true;
-	while ( iDoc!=EOF_ITEM )
+	for ( int iDoc : dDocs )
 	{
-		ExcerptQuery_t & tQuery = dQueries[iDoc];
+		ExcerptQuery_t & tQuery = m_dQueries[iDoc];
 		CSphVector<BYTE> & dRes = tQuery.m_dResult;
 
-		if ( m_pWorker->m_pSettings->m_uFilesMode & 2 ) // scattered files
+
+		if ( !tReq.GetString(dRes) || dRes.IsEmpty() )
 		{
-			if ( !tReq.GetString(dRes) || dRes.IsEmpty() )
-			{
-				bOk = false;
-				dRes.Resize(0);
-			} else
-				tQuery.m_sError = "";
+			bOk = false;
+			dRes.Resize(0);
+		} else
+			tQuery.m_sError = "";
+	}
+	return bOk;
+}
 
-			iDoc = tQuery.m_iNext;
-			continue;
-		}
-
-		tReq.GetString(dRes);
-		auto iNextDoc = tQuery.m_iNext;
-		tQuery.m_iNext = PROCESSED_ITEM;
-		iDoc = iNextDoc;
+bool SnippetRemote_c::ParseReplyNonScattered ( MemInputBuffer_c & tReq, const VecTraits_T<int> & dDocs ) const
+{
+	for ( int iDoc : dDocs )
+	{
+		ExcerptQuery_t & tQuery = m_dQueries[iDoc];
+		tReq.GetString ( tQuery.m_dResult );
+		tQuery.m_iSize = -1; // means 'processed'
 	}
 
-	return bOk;
+	return true;
 }
 
 static int64_t GetSnippetDataSize ( const CSphVector<ExcerptQuery_t> &dSnippets )
@@ -7511,37 +7486,336 @@ static int64_t GetSnippetDataSize ( const CSphVector<ExcerptQuery_t> &dSnippets 
 	int64_t iSize = 0;
 	for ( const auto & dSnippet: dSnippets )
 	{
-		if ( dSnippet.m_iSize )
+		if ( dSnippet.m_iSize>0 )
 			iSize += dSnippet.m_iSize;
-		else
+		else if ( !dSnippet.m_iSize )
 			iSize += dSnippet.m_sSource.Length ();
 	}
 	iSize /= 100;
 	return iSize;
 }
 
+static VecRefPtrsAgentConn_t GetDistrAgents ( DistributedIndex_t * pDist )
+{
+	assert ( pDist );
+	VecRefPtrsAgentConn_t tRemotes;
+	for ( auto * pAgent : pDist->m_dAgents )
+	{
+		auto * pConn = new AgentConn_t;
+		pConn->SetMultiAgent ( pAgent );
+		pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
+		pConn->m_iMyQueryTimeoutMs = pDist->m_iAgentQueryTimeoutMs;
+		tRemotes.Add ( pConn );
+	}
+	return tRemotes;
+}
+
+// collect source sizes. For absent files set -1.
+static bool CollectSourceSizes ( CSphVector<ExcerptQuery_t> & dQueries, bool bFileMode, bool bNeedAll, CSphString & sError )
+{
+	// collect source sizes
+	if ( !bFileMode )
+	{
+		dQueries.Apply ( [] ( ExcerptQuery_t & dQuery ) { dQuery.m_iSize = dQuery.m_sSource.Length (); } );
+		return true;
+	}
+
+	for ( auto & dQuery : dQueries )
+	{
+		CSphString sFilename, sStatError;
+		sFilename.SetSprintf ( "%s%s", g_sSnippetsFilePrefix.cstr (), dQuery.m_sSource.scstr () );
+		if ( !TestEscaping ( g_sSnippetsFilePrefix, sFilename ) )
+		{
+			sError.SetSprintf ( "File '%s' escapes '%s' scope", sFilename.scstr (), g_sSnippetsFilePrefix.scstr () );
+			return false;
+		}
+		auto iFileSize = sphGetFileSize ( sFilename, &sStatError );
+		if ( iFileSize<0 )
+		{
+			if ( bNeedAll )
+			{
+				sError = sStatError;
+				return false;
+			}
+			dQuery.m_iSize = -1;
+		} else
+			dQuery.m_iSize = iFileSize;
+	}
+	return true;
+}
+
+// helper, called both for single and for multi snippets
+static inline bool MakeSingleLocalSnippetWithFields ( ExcerptQuery_t & tQuery, const SnippetQuerySettings_t & q,
+		SnippetBuilder_c * pBuilder, const VecTraits_T<int>& dFields )
+{
+	assert ( pBuilder );
+
+	CSphScopedPtr<TextSource_i> pSource ( CreateSnippetSource ( q.m_uFilesMode,
+			(const BYTE*)tQuery.m_sSource.cstr(), tQuery.m_sSource.Length() ) );
+
+	SnippetResult_t tRes;
+	if ( !pBuilder->Build ( pSource.Ptr(), tRes ) )
+	{
+		tQuery.m_sError = std::move ( tRes.m_sError );
+		return false;
+	}
+
+	tQuery.m_dResult = pBuilder->PackResult ( tRes, dFields );
+	return true;
+};
+
+// boring single snippet
+static inline bool MakeSingleLocalSnippet ( ExcerptQuery_t & tQuery, const SnippetQuerySettings_t & q,
+		SnippetBuilder_c * pBuilder, CSphString& sError )
+{
+	CSphVector<int> dStubFields;
+	dStubFields.Add ( 0 );
+
+	if ( MakeSingleLocalSnippetWithFields ( tQuery, q, pBuilder, dStubFields ) )
+		return true;
+
+	sError = tQuery.m_sError;
+	return false;
+}
+
+struct SnippedBuilderCtxRef_t
+{
+	SnippetBuilder_c * m_pBuilder;
+	const CrashQuery_t & m_tCrash;
+
+	SnippedBuilderCtxRef_t ( SnippetBuilder_c * pBuilder, const CrashQuery_t & tCrash )
+		: m_pBuilder ( pBuilder ), m_tCrash ( tCrash )
+	{
+		SetCrashQuery();
+	}
+
+	void SetCrashQuery ()
+	{
+		GlobalCrashQuerySet ( m_tCrash );
+	}
+
+	inline static bool IsClonable ()
+	{
+		return true;
+	}
+};
+
+struct SnippedBuilderCtxClone_t : public SnippedBuilderCtxRef_t, ISphNoncopyable
+{
+	explicit SnippedBuilderCtxClone_t ( const SnippedBuilderCtxRef_t& dParent )
+		: SnippedBuilderCtxRef_t { dParent.m_pBuilder->MakeClone(), dParent.m_tCrash }
+	{}
+
+	// dtr is only for clones!
+	~SnippedBuilderCtxClone_t() { SafeDelete (m_pBuilder); }
+};
+
+// Starts or performs parallel snippets creation with throttling
+static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<ExcerptQuery_t> & dQueries,
+		const SnippetQuerySettings_t& q, SnippetBuilder_c * pBuilder)
+{
+	assert ( pBuilder );
+	sphLogDebug ( "MakeSnippetsCoro invoked for %d tasks", dTasks.GetLength() );
+
+	CrashQuery_t tCrashQuery = GlobalCrashQueryGet (); // transfer query info for crash logger to new thread
+
+	CSphVector<int> dStubFields;
+	dStubFields.Add ( 0 );
+
+	int iNumOfCoros = Min ( Threads::CoCurrentScheduler ()->WorkingThreads (), dTasks.GetLength() );
+	const int iTimeQuantum = 100;
+	std::atomic<int32_t> iCurQuery { 0 };
+
+	using SnippetContextTls_t = FederateCtx_T<SnippedBuilderCtxRef_t, SnippedBuilderCtxClone_t>;
+	SnippetContextTls_t dSnippetContext { pBuilder, tCrashQuery };
+
+	auto dWaiter = DefferedRestarter ();
+	for ( int i = 0; i<iNumOfCoros; ++i )
+		CoGo ( [&] () mutable
+		{
+			sphLogDebug ( "MakeSnippetsCoro Coro started" );
+			auto tCtx = dSnippetContext.GetContext ();
+
+			Threads::CoThrottle_c tThrottle ( iTimeQuantum * 1000 );
+			while ( true )
+			{
+				auto iQuery = iCurQuery.fetch_add ( 1, std::memory_order_relaxed );
+				if ( iQuery>=dTasks.GetLength () )
+					return; // all is done
+
+				sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d[%d]", iQuery, dTasks[iQuery] );
+				MakeSingleLocalSnippetWithFields ( dQueries[dTasks[iQuery]], q, tCtx.m_pBuilder, dStubFields );
+				sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d finished", iQuery );
+
+				// yield and reschedule every quant of time. It gives work to other tasks
+				tThrottle.Throttle ( [&tCtx] { tCtx.SetCrashQuery(); } );
+			}
+		}, dWaiter );
+	sphLogDebug ( "MakeSnippetsCoro waiting..." );
+	WaitForDeffered ( std::move ( dWaiter ) );
+	sphLogDebug ( "MakeSnippetsCoro wait finished" );
+}
+
+// divide set of tasks from dTasks into chunks, having most balanced aggregate iSize in each.
+static CSphVector<CSphVector<int>> DivideTasks ( const VecTraits_T<int> & dTasks,
+		const VecTraits_T<ExcerptQuery_t> & dQueries, int iWorkers )
+{
+	CSphVector<CSphVector<int>> dResults;
+	auto iTasks = dTasks.GetLength();
+	auto iLimit = Min ( iWorkers, iTasks );
+
+	if ( iWorkers>=iTasks )
+	{
+		dResults.Resize ( iLimit );
+		for ( int i=0; i<iLimit; ++i )
+			dResults[i].Add ( dTasks[i] );
+	} else
+	{
+		// helpers
+		using ItemsQueue_c = TimeoutQueue_c;
+		using EnqueuedItem_t = EnqueuedTimeout_t;
+		ItemsQueue_c qTasks;
+		struct PriorityVec_t : EnqueuedItem_t { int m_iRefIdx; };
+		CSphVector<PriorityVec_t> dPriorityResults ( iWorkers );
+		dResults.Resize ( iWorkers );
+
+		// initially fill the queue
+		ARRAY_FOREACH ( i, dPriorityResults )
+		{
+			dResults[i].Add ( dTasks[i] );
+			dPriorityResults[i].m_iTimeoutTimeUS = dQueries[dTasks[i]].m_iSize;
+			dPriorityResults[i].m_iRefIdx = i;
+			qTasks.Change ( &dPriorityResults[i] );
+		}
+
+		// update the queue
+		for ( int i=iWorkers; i<iTasks; ++i )
+		{
+			auto * pBest = (PriorityVec_t *) qTasks.Root ();
+			dResults[pBest->m_iRefIdx].Add ( dTasks[i] );
+			pBest->m_iTimeoutTimeUS += dQueries[dTasks[i]].m_iSize;
+			qTasks.Change ( pBest );
+		}
+	}
+	return dResults;
+}
+
+// remote scattered snippets (with local pass)
+// * dLocal subset is run on local host
+// * dRemote subset is send to each remote agent
+static void MakeRemoteScatteredSnippets ( CSphVector<ExcerptQuery_t> & dQueries,
+		DistributedIndex_t * pDist,
+		SnippetBuilder_c * pBuilder,
+		const SnippetQuerySettings_t & q,
+		const VecTraits_T<int>& dLocal,
+		const VecTraits_T<int>& dAbsent )
+{
+	assert ( pDist );
+	assert ( pBuilder );
+
+	// and finally most interesting remote case with possibly scattered.
+	auto dAgents = GetDistrAgents ( pDist );
+	int iRemoteAgents = dAgents.GetLength();
+
+	SnippetRemote_c tRemotes ( dQueries, q );
+	tRemotes.m_dTasks.Resize ( iRemoteAgents );
+
+	// on scattered case - just push the chain of locally absent files to all remotes
+	for ( auto & pTask : tRemotes.m_dTasks )
+		pTask = &dAbsent;
+
+	// query remote building
+	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter ( GetObserver () );
+	ScheduleDistrJobs ( dAgents, &tRemotes, &tRemotes, tReporter );
+
+	// start local building and wait it to finish
+	MakeSnippetsCoro ( dLocal, dQueries, q, pBuilder );
+
+	// wait remotes to finish also
+	tReporter->Finish ();
+
+	auto iSuccesses = ( int ) tReporter->GetSucceeded ();
+	auto iAgentsDone = ( int ) tReporter->GetFinished ();
+
+	if ( iSuccesses!=iRemoteAgents )
+		sphWarning ( "Remote snippets: some of the agents didn't answered: %d queried, %d finished, %d succeeded",
+				iRemoteAgents, iAgentsDone,	iSuccesses );
+}
+
+// remote non scattered snippets (with local pass)
+// non-scattered assumes, each host has full set of sources, so we don't need to check absent here.
+// * divide set of sources among remotes and local host, balancing size.
+// * assume dPresent has indexes of monotonically decreasing sizes, that's need for balancing.
+static void MakeRemoteNonScatteredSnippets ( CSphVector<ExcerptQuery_t> & dQueries,
+		DistributedIndex_t * pDist,
+		SnippetBuilder_c * pBuilder,
+		const SnippetQuerySettings_t & q,
+		const VecTraits_T<int>& dPresent )
+{
+	assert ( pDist );
+	assert ( pBuilder );
+
+	auto dAgents = GetDistrAgents ( pDist );
+	int iRemoteAgents = dAgents.GetLength();
+
+	SnippetRemote_c tRemotes ( dQueries, q );
+	tRemotes.m_dTasks.Resize ( iRemoteAgents );
+
+	// on non-scattered - distribute set of sources to workers, having 1 local worker in mind.
+	auto dJobSet = DivideTasks ( dPresent, dQueries, iRemoteAgents+1 ) ; // +1 since we also will work locally.
+	auto& dLocalSet = dJobSet[iRemoteAgents];
+	for ( int i = 0; i<iRemoteAgents; ++i )
+		tRemotes.m_dTasks[i] = &dJobSet[i];
+
+	// query remote building
+	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter ( GetObserver () );
+	ScheduleDistrJobs ( dAgents, &tRemotes, &tRemotes, tReporter );
+
+	// start local building and wait it to finish
+	MakeSnippetsCoro ( dLocalSet, dQueries, q, pBuilder );
+
+	// wait remotes to finish also
+	tReporter->Finish ();
+
+	auto iSuccesses = ( int ) tReporter->GetSucceeded ();
+	auto iAgentsDone = ( int ) tReporter->GetFinished ();
+
+	if ( iSuccesses==iRemoteAgents )
+		return;
+
+	sphWarning ( "Remote snippets: some of the agents didn't answered: %d queried, %d finished, %d succeeded",
+			iRemoteAgents, iAgentsDone,	iSuccesses );
+
+	// let's collect failures and make one more pass over them
+	CSphVector<int> dFailed;
+
+	// collect failed nodes
+	dPresent.Apply ( [&] ( int iDoc ) {
+		if ( dQueries[iDoc].m_iSize<0 )
+			dFailed.Add(iDoc);
+	});
+
+	if ( dFailed.IsEmpty() )
+		return;
+
+	// failsafe - one more turn for failed queries on local agent
+	sphWarning ( "Snippets: failsafe for %d failed items", (int) dFailed.GetLength() );
+	MakeSnippetsCoro ( dFailed, dQueries, q, pBuilder );
+}
+
 bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, const SnippetQuerySettings_t& q,
 		CSphString & sError, ThdDesc_t & tThd )
 {
-	SnippetsRemote_t tRemoteSnippets ( dQueries, &q );
+	assert ( !dQueries.IsEmpty() );
 
-	// Both load_files && load_files_scattered report the absent files as errors.
+	// When both load_files & load_files_scattered set, absent files will be reported as errors.
 	// load_files_scattered without load_files just omits the absent files (returns empty strings).
 	auto bScattered = !!( q.m_uFilesMode & 2 );
 	auto bNeedAllFiles = !!( q.m_uFilesMode & 1 );
 
 	auto pDist = GetDistr ( sIndex );
-	if ( pDist )
-		for ( auto * pAgent : pDist->m_dAgents )
-		{
-			auto * pConn = new AgentConn_t;
-			pConn->SetMultiAgent ( pAgent );
-			pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
-			pConn->m_iMyQueryTimeoutMs = pDist->m_iAgentQueryTimeoutMs;
-			tRemoteSnippets.m_dAgents.Add ( pConn );
-		}
+	bool bRemote = pDist && !pDist->m_dAgents.IsEmpty ();
 
-	bool bRemote = !tRemoteSnippets.m_dAgents.IsEmpty ();
 	if ( bRemote )
 	{
 		if ( pDist->m_dLocal.GetLength()!=1 )
@@ -7556,12 +7830,14 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, co
 			return false;
 		}
 
-		if ( g_iDistThreads<=1 && bScattered )
+		if ( g_iDistThreads<=1 && bScattered ) // fixme! remove (not actual with coro)
 		{
 			sError.SetSprintf ( "%s", "load_files_scattered works only together with dist_threads>1" );
 			return false;
 		}
-		sIndex = *pDist->m_dLocal.begin();
+
+		// for remotes index is 1-st local agent of the distr, so move on!
+		sIndex = pDist->m_dLocal[0];
 	}
 
 	ServedDescRPtr_c pServed ( GetServed ( sIndex ) );
@@ -7571,235 +7847,73 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, co
 		return false;
 	}
 
-	CSphIndex * pIndex = pServed->m_pIndex;
-	assert ( pIndex );
+	CSphIndex * pLocalIndex = pServed->m_pIndex;
+	assert ( pLocalIndex );
 
-	CSphScopedPtr<SnippetBuilder_c>	pSnippetBuilder ( new SnippetBuilder_c );
-	pSnippetBuilder->Setup ( pIndex, q ); // same path for single - threaded snippets, bail out here on error
+	///////////////////
+	/// do highlighting
+	///////////////////
 
-	if ( !pSnippetBuilder->SetQuery ( q.m_sQuery.cstr(), true, sError ) ) // same path for single - threaded snippets, bail out here on error
+	// since necessary methods of SnippetBuilder_c are constant, and the builder also has no mutable fields -
+	// it is safe to reuse one builder everywhere, even in parallel.
+	CSphScopedPtr<SnippetBuilder_c>	pBuilder ( new SnippetBuilder_c );
+	pBuilder->Setup ( pLocalIndex, q );
+
+	if ( !pBuilder->SetQuery ( q.m_sQuery.cstr(), true, sError ) )
 		return false;
 
-	///////////////////
-	// do highlighting
-	///////////////////
+	// boring single snippet
+	if ( dQueries.GetLength ()==1 )
+		return MakeSingleLocalSnippet ( dQueries[0], q, pBuilder.Ptr(), sError );
 
-	// boring single threaded loop
-	StringBuilder_c sErrors ( "; " );
-	CSphVector<int> dRequestedFields;
-	dRequestedFields.Add(0);
-	if ( g_iDistThreads<=1 || dQueries.GetLength()<2 )
-	{
-		bool bError = false;
-		for ( auto & tQuery : dQueries )
-		{
-			CSphScopedPtr<TextSource_i> pSource ( CreateSnippetSource ( q.m_uFilesMode,
-					(const BYTE*)tQuery.m_sSource.cstr(), tQuery.m_sSource.Length() ) );
-			SnippetResult_t tRes;
-			if ( pSnippetBuilder->Build ( pSource.Ptr(), tRes ) )
-				tQuery.m_dResult = pSnippetBuilder->PackResult ( tRes, dRequestedFields );
-			else
-			{
-				bError = true;
-				sErrors << tRes.m_sError;
-			}
-		}
-
-		sErrors.MoveTo(sError);
-		return !bError;
-	}
-
-	// not boring mt loop with (may be) scattered.
-	ARRAY_FOREACH ( i, dQueries )
-		dQueries[i].m_iSeq = i;
-
-	// collect file sizes; mark absent with EOF_ITEM
-	for ( auto & dQuery : dQueries )
-	{
-		assert ( dQuery.m_iNext == PROCESSED_ITEM );
-		if ( q.m_uFilesMode )
-		{
-			CSphString sFilename, sStatError;
-			sFilename.SetSprintf ( "%s%s", g_sSnippetsFilePrefix.cstr(), dQuery.m_sSource.scstr() );
-			if ( !TestEscaping ( g_sSnippetsFilePrefix, sFilename ))
-			{
-				sError.SetSprintf( "File '%s' escapes '%s' scope", sFilename.scstr(), g_sSnippetsFilePrefix.scstr());
-				return false;
-			}
-			auto iFileSize = sphGetFileSize (sFilename, &sStatError);
-			if ( iFileSize<0 )
-			{
-				if ( !bScattered )
-				{
-					sError = sStatError;
-					return false;
-				}
-				dQuery.m_iNext = EOF_ITEM;
-			} else
-				dQuery.m_iSize = iFileSize; // so that sort would put bigger ones first
-		} else
-			dQuery.m_iSize = dQuery.m_sSource.Length();
-	}
+	if ( !CollectSourceSizes ( dQueries, q.m_uFilesMode, !bScattered, sError ) )
+		return false;
 
 	// set correct data size for snippets
 	tThd.SetThreadInfo ( R"(snippet datasize=%.1Dk query="%s")",
 			GetSnippetDataSize ( dQueries ), q.m_sQuery.scstr () );
 
-	// tough jobs first (sort inverse)
-	if ( !bScattered )
-		dQueries.Sort ( Lesser ( [] ( ExcerptQuery_t& a, ExcerptQuery_t& b ) { return a.m_iSize>b.m_iSize; } ) );
+	// collect list of existing and empty sources
+	CSphVector<int> dPresent;
+	CSphVector<int> dAbsent;
 
-	// build list of absent files (that's ok for scattered).
-	// later all the list will be sent to remotes (and some of them have to answer)
-	int iAbsentHead = EOF_ITEM;
 	ARRAY_FOREACH ( i, dQueries )
 	{
-		ExcerptQuery_t & tQuery = dQueries[i];
-		if ( tQuery.m_iNext==EOF_ITEM )
-		{
-			tQuery.m_iNext = iAbsentHead;
-			iAbsentHead = i;
-			if ( bNeedAllFiles )
-				tQuery.m_sError.SetSprintf ( "absenthead: failed to stat %s: %s", dQueries[i].m_sSource.cstr(), strerrorm(errno) );
-		}
+		if ( dQueries[i].m_iSize<0 )
+			dAbsent.Add(i);
+		else
+			dPresent.Add(i);
 	}
 
-	// check if all files are available locally.
-	if ( bScattered && iAbsentHead==EOF_ITEM )
+	// check if all files are available locally - then we need no remote pass.
+	if ( bScattered && dAbsent.IsEmpty() )
 		bRemote = false;
 
-	// stuff for thread-pooling
-	auto * pPool = sphThreadPoolCreate ( g_iDistThreads - 1, "snippets", sError );
-	if ( !pPool )
-		sphWarning ( "failed to create thread_pool, single thread snippets used: %s", sError.cstr () );
-	CrashQuery_t tCrashQuery = GlobalCrashQueryGet (); // transfer query info for crash logger to new thread
-	CSphAtomic iCurQuery;
-	CSphVector<SnippetJob_t> dThreads ( Min ( 1, g_iDistThreads ) );
-	SnippetJob_t * pJobLocal = nullptr;
+	if ( bNeedAllFiles && !dAbsent.IsEmpty() )
+		for ( int i : dAbsent )
+			dQueries[i].m_sError.SetSprintf ( "absenthead: failed to stat %s", dQueries[i].m_sSource.cstr () );
 
-	// one more boring case: multithreaded, but no remote agents.
+	// tough jobs first (sort inverse)
+	if ( !bScattered )
+		dPresent.Sort ( Lesser ( [&dQueries] ( int a, int b ) { return dQueries[a].m_iSize>dQueries[b].m_iSize; } ) );
+
 	if ( !bRemote )
 	{
-		// do MT searching
-		for ( auto & t : dThreads )
-		{
-			t.m_iQueries = dQueries.GetLength();
-			t.m_pQueries = dQueries.Begin();
-			t.m_pSettings = &q;
-			t.m_pCurQuery = &iCurQuery;
-			t.m_pIndex = pIndex;
-			t.m_tCrashQuery = tCrashQuery;
-			if ( !pJobLocal )
-				pJobLocal = &t;
-			else if ( pPool )
-				pPool->AddJob ( &t );
-		}
-		if ( pJobLocal )
-			pJobLocal->Call();
-		SafeDelete ( pPool );
+		// multithreaded, but no remote agents.
+		MakeSnippetsCoro ( dPresent, dQueries, q, pBuilder.Ptr() );
 
-		// back in query order
-		if ( !bScattered )
-			dQueries.Sort ( bind ( &ExcerptQuery_t::m_iSeq ) );
-
-		dQueries.Apply ( [&] ( const ExcerptQuery_t & tQuery ) { sErrors << tQuery.m_sError; } );
-		sErrors.MoveTo ( sError );
-		return sError.IsEmpty();
-	}
-
-	// and finally most interesting remote case with possibly scattered.
-
-	int iRemoteAgents = tRemoteSnippets.m_dAgents.GetLength();
-	tRemoteSnippets.m_dTasks.Resize ( iRemoteAgents );
-
-	if ( bScattered )
-	{
-		// on scattered case - just push the chain of absent files to all remotes
-		assert ( iAbsentHead!=EOF_ITEM ); // otherwize why we have remotes?
-		for ( auto & dTask : tRemoteSnippets.m_dTasks )
-			dTask.m_iHead = iAbsentHead;
 	} else
 	{
-		// distribute queries among tasks by total task size
-		ARRAY_FOREACH ( i, dQueries )
-		{
-			auto & dHeadTask = *tRemoteSnippets.m_dTasks.begin();
-			dHeadTask.m_iTotal += dQueries[i].m_iSize;
-			// queries sheduled for local still have iNext==PROCESSED_ITEM
-			dQueries[i].m_iNext = dHeadTask.m_iHead;
-			dHeadTask.m_iHead = i;
-			tRemoteSnippets.m_dTasks.Sort ( bind ( &SnippetChain_t::m_iTotal ) );
-		}
+		assert ( pDist );
+
+		// multithreaded with remotes (scattered and full)
+		if ( bScattered )
+			MakeRemoteScatteredSnippets ( dQueries, pDist, pBuilder.Ptr(), q, dPresent, dAbsent );
+		else
+			MakeRemoteNonScatteredSnippets ( dQueries, pDist, pBuilder.Ptr (), q, dPresent );
 	}
 
-	// do MT searching
-	for ( auto &t : dThreads )
-	{
-		t.m_iQueries = dQueries.GetLength();
-		t.m_pQueries = dQueries.Begin();
-		t.m_pSettings = &q;
-		t.m_pCurQuery = &iCurQuery;
-		t.m_pIndex = pIndex;
-		t.m_tCrashQuery = tCrashQuery;
-		if ( !pJobLocal )
-			pJobLocal = &t;
-		else if ( pPool )
-			pPool->AddJob ( &t );
-	}
-
-	// connect to remote agents and query them
-	SnippetRequestBuilder_c tReqBuilder ( &tRemoteSnippets );
-	SnippetReplyParser_c tParser ( &tRemoteSnippets );
-	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter ( GetObserver() );
-	ScheduleDistrJobs ( tRemoteSnippets.m_dAgents, &tReqBuilder, &tParser, tReporter );
-
-	// run local worker in current thread also
-	if ( pJobLocal )
-		pJobLocal->Call ();
-
-	// wait local jobs to finish
-	SafeDelete ( pPool );
-
-	// wait remotes to finish also
-	tReporter->Finish ();
-
-	auto iSuccesses = ( int ) tReporter->GetSucceeded ();
-	auto iAgentsDone = ( int ) tReporter->GetFinished ();
-
-	if ( iSuccesses!=tRemoteSnippets.m_dAgents.GetLength() )
-	{
-		sphWarning ( "Remote snippets: some of the agents didn't answered: %d queried, %d finished, %d succeeded",
-			tRemoteSnippets.m_dAgents.GetLength(), iAgentsDone,	iSuccesses );
-
-		if ( !bScattered )
-		{
-			int iFailed = 0;
-			// inverse the success/failed state - so that the queries with negative m_iNext are treated as failed
-			dQueries.Apply ( [&] ( ExcerptQuery_t &dQuery ) {
-				if ( dQuery.m_iNext!=PROCESSED_ITEM )
-				{
-					dQuery.m_iNext = PROCESSED_ITEM;
-					++iFailed;
-				} else
-					dQuery.m_iNext = 0;
-			} );
-
-			// failsafe - one more turn for failed queries on local agent
-			if ( iFailed )
-			{
-				sphWarning ( "Snippets: failsafe for %d failed items", iFailed );
-				auto & t = dThreads[0];
-				t.m_pQueries = dQueries.Begin();
-				iCurQuery = 0;
-				t.Call();
-			}
-		}
-	}
-
-	// back in query order
-	if ( !bScattered )
-		dQueries.Sort ( bind ( &ExcerptQuery_t::m_iSeq ) );
-
+	StringBuilder_c sErrors ( "; " );
 	dQueries.Apply ( [&] ( const ExcerptQuery_t & tQuery ) { sErrors << tQuery.m_sError; } );
 	sErrors.MoveTo ( sError );
 	return sError.IsEmpty();

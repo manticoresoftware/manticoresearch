@@ -112,13 +112,16 @@ class SnippetBuilder_c
 	class Impl_c;
 	Impl_c * m_pImpl = nullptr;
 
+	SnippetBuilder_c ( const SnippetBuilder_c & rhs );
+
 public:
 						SnippetBuilder_c();
 						~SnippetBuilder_c();
-	bool				Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tQuery );
+	void				Setup ( const CSphIndex * pIndex, const SnippetQuerySettings_t & tQuery );
 	bool				SetQuery ( const CSphString & sQuery, bool bIgnoreFields, CSphString & sError );
-	bool				Build ( TextSource_i * pSource, SnippetResult_t & tRes ) const;
+	bool				Build ( TextSource_i * pSource, SnippetResult_t & tRes );
 	CSphVector<BYTE>	PackResult ( SnippetResult_t & tRes, const VecTraits_T<int> & dRequestedFields ) const;
+	SnippetBuilder_c*	MakeClone() const;
 };
 
 

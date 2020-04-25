@@ -7339,8 +7339,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, co
 	assert ( pIndex );
 
 	CSphScopedPtr<SnippetBuilder_c>	pSnippetBuilder ( new SnippetBuilder_c );
-	if ( !pSnippetBuilder->Setup ( pIndex, q ) ) // same path for single - threaded snippets, bail out here on error
-		return false;
+	pSnippetBuilder->Setup ( pIndex, q ); // same path for single - threaded snippets, bail out here on error
 
 	if ( !pSnippetBuilder->SetQuery ( q.m_sQuery.cstr(), true, sError ) ) // same path for single - threaded snippets, bail out here on error
 		return false;

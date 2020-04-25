@@ -257,7 +257,7 @@ Expr_HighlightTraits_c::Expr_HighlightTraits_c ( const Expr_HighlightTraits_c & 
 	, m_tSnippetQuery ( rhs.m_tSnippetQuery )
 	, m_pSnippetBuilder ( new SnippetBuilder_c )
 {
-	assert ( m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery ) );
+	m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery );
 }
 
 
@@ -362,8 +362,8 @@ Expr_Snippet_c::Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQu
 
 	m_tSnippetQuery.m_bJsonQuery = eQueryType==QUERY_JSON;
 	m_tSnippetQuery.Setup();
-	if ( m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery ) )
-		m_dRequestedFieldIds.Add(0);
+	m_pSnippetBuilder->Setup ( m_pIndex, m_tSnippetQuery );
+	m_dRequestedFieldIds.Add(0);
 }
 
 

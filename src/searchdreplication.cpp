@@ -3563,14 +3563,17 @@ bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CS
 		CSphString sIndexPath;
 		if ( !GetClusterPath ( tCmd.m_sCluster, sIndexPath, sError ) )
 			return false;
+		// index in its own directory
 		tRes.m_sRemoteIndexPath.SetSprintf ( "%s/%s", sIndexPath.cstr(), tCmd.m_sIndexFileName.cstr() );
+		MkDir ( tRes.m_sRemoteIndexPath.cstr() );
 
 		// set index files names into cluster folder
 		ARRAY_FOREACH ( iFile, tCmd.m_pChunks->m_dBaseNames )
 		{
 			const CSphString & sFile = tCmd.m_pChunks->m_dBaseNames[iFile];
-			tRes.m_pDst->m_dRemotePaths[iFile].SetSprintf ( "%s/%s", sIndexPath.cstr(), sFile.cstr() );
+			tRes.m_pDst->m_dRemotePaths[iFile].SetSprintf ( "%s/%s", tRes.m_sRemoteIndexPath.cstr(), sFile.cstr() );
 		}
+		tRes.m_sRemoteIndexPath.SetSprintf ( "%s/%s/%s", sIndexPath.cstr(), tCmd.m_sIndexFileName.cstr(), tCmd.m_sIndexFileName.cstr() );
 	}
 
 	int iBits = tCmd.m_pChunks->m_dChunks.Last().m_iHashStartItem + tCmd.m_pChunks->m_dChunks.Last().GetChunksCount();

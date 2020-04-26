@@ -3641,7 +3641,7 @@ function HandleFailure ( $config, $report, $error, &$nfailed )
 }
 
 
-function EraseDirContents ( $path )
+function EraseDirContents ( $path, $dir=false )
 {
 	$fp = opendir ( $path );
 
@@ -3650,8 +3650,12 @@ function EraseDirContents ( $path )
 		while ( ( $file = readdir ( $fp ) ) !== false )
 		{ 
 		if ( $file!="." && $file!=".." && $file!="stub.txt" )
-			if (!is_dir("$path/$file"))
-				unlink ( "$path/$file" ); 
+			if (!is_dir("$path/$file")) {
+				unlink ( "$path/$file" );
+			} else if ( $dir ) {
+				EraseDirContents ( "$path/$file", $dir );
+				rmdir ( "$path/$file" );
+			}
 		} 
 
 		closedir ( $fp );
@@ -3819,6 +3823,9 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 
 	if ( !file_exists ( $conf_dir ) )
 		mkdir ( $conf_dir );
+		
+	if ( $config->Requires ( "replication" ) )
+		EraseDirContents ( testdir ( "data/" ), true );
 	
 	$report_path = "$res_path/report";
 	$report_file = "$report_path.txt";

@@ -20,6 +20,7 @@
 #include "snippetfunctor.h"
 #include "snippetindex.h"
 #include "snippetstream.h"
+#include "snippetpassage.h"
 
 #include <math.h>
 
@@ -50,6 +51,16 @@ static bool SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPos
 	return true;
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+void SnippetLimits_t::Format ( StringBuilder_c & tOut, const char * szPrefix ) const
+{
+	SnippetLimits_t tDefault;
+
+	if ( m_iLimit!=tDefault.m_iLimit )						tOut.Appendf ( "%slimit=%d",			szPrefix, m_iLimit );
+	if ( m_iLimitWords!=tDefault.m_iLimitWords )			tOut.Appendf ( "%slimit_words=%d",		szPrefix, m_iLimitWords );
+	if ( m_iLimitPassages!=tDefault.m_iLimitPassages )		tOut.Appendf ( "%slimit_passages=%d",	szPrefix, m_iLimitPassages );
+}
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -66,14 +77,13 @@ CSphString SnippetQuerySettings_t::AsString() const
 	StringBuilder_c tOut;
 	tOut.StartBlock ( ",", "{", "}" );
 
+	SnippetLimits_t::Format ( tOut, "" );
+
 	if ( m_sBeforeMatch!=tDefault.m_sBeforeMatch )			tOut.Appendf ( "before_match='%s'",		m_sBeforeMatch.cstr() );
 	if ( m_sAfterMatch!=tDefault.m_sAfterMatch )			tOut.Appendf ( "after_match='%s'",		m_sAfterMatch.cstr() );
 	if ( m_sChunkSeparator!=tDefault.m_sChunkSeparator )	tOut.Appendf ( "chunk_separator='%s'",	m_sChunkSeparator.cstr() );
 	if ( m_sFieldSeparator!=tDefault.m_sFieldSeparator )	tOut.Appendf ( "field_separator='%s'",	m_sFieldSeparator.cstr() );
 	if ( m_sStripMode!=tDefault.m_sStripMode )				tOut.Appendf ( "strip_mode='%s'",		m_sStripMode.cstr() );
-	if ( m_iLimit!=tDefault.m_iLimit )						tOut.Appendf ( "limit=%d",				m_iLimit );
-	if ( m_iLimitWords!=tDefault.m_iLimitWords )			tOut.Appendf ( "limit_words=%d",		m_iLimitWords );
-	if ( m_iLimitPassages!=tDefault.m_iLimitPassages )		tOut.Appendf ( "limit_passages=%d",		m_iLimitPassages );
 	if ( m_iAround!=tDefault.m_iAround )					tOut.Appendf ( "around=%d",				m_iAround );
 	if ( m_iPassageId!=tDefault.m_iPassageId )				tOut.Appendf ( "start_passage_id=%d",	m_iPassageId );
 	if ( m_bUseBoundaries!=tDefault.m_bUseBoundaries )		tOut.Appendf ( "use_boundaries=%d",		m_bUseBoundaries ? 1 : 0 );
@@ -85,6 +95,14 @@ CSphString SnippetQuerySettings_t::AsString() const
 	if ( m_bJsonQuery!=tDefault.m_bJsonQuery )				tOut.Appendf ( "json_query=%d",			m_bJsonQuery ? 1 : 0 );
 	if ( m_ePassageSPZ!=tDefault.m_ePassageSPZ )			tOut.Appendf ( "passage_boundary='%s'",	PassageBoundarySz(m_ePassageSPZ) );
 	if ( m_bPackFields!=tDefault.m_bPackFields )			tOut.Appendf ( "pack_fields=%d",		m_bPackFields ? 1 : 0 );
+	if ( m_bLimitsPerField!=tDefault.m_bLimitsPerField )	tOut.Appendf ( "limits_per_field=%d",	m_bLimitsPerField ? 1 : 0 );
+
+	for ( m_hPerFieldLimits.IterateStart(); m_hPerFieldLimits.IterateNext(); )
+	{
+		CSphString sPrefix;
+		sPrefix.SetSprintf ( "__%s_", m_hPerFieldLimits.IterateGetKey().cstr() );
+		m_hPerFieldLimits.IterateGet().Format ( tOut, sPrefix.cstr() );
+	}
 
 	if ( m_uFilesMode!=tDefault.m_uFilesMode )
 	{
@@ -303,7 +321,15 @@ int ConvertSPZ ( DWORD eSPZ )
 struct ScopedStreamers_t
 {
 public:
-	CSphVector<CacheStreamer_i*> m_dStreamers;
+	CSphVector<CacheStreamer_i *>	m_dStreamers;
+	CSphVector<SnippetLimits_t>		m_dLimits;
+
+	ScopedStreamers_t ( int iFields )
+	{
+		m_dStreamers.Resize(iFields);
+		m_dStreamers.ZeroVec();
+		m_dLimits.Resize(iFields);
+	}
 
 	~ScopedStreamers_t()
 	{
@@ -358,21 +384,26 @@ private:
 
 	bool							DoHighlighting ( TextSource_i & tSource, SnippetResult_t & tRes ) const;
 
-	void							ExtractPassages ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, SnippetQuerySettings_t & tFixedSettings, const SnippetsDocIndex_c & tContainer,
-										const CSphVector<SphHitMark_t> & dMarked, PassageContext_t & tPassageContext, DWORD uFoundWords, SnippetResult_t & tRes ) const;
+	void							ExtractPassages ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, const SnippetsDocIndex_c & tContainer, const CSphVector<SphHitMark_t> & dMarked, int iField,
+										PassageContext_t & tContext, SnippetResult_t & tRes ) const;
 
-	void							HighlightPassages ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, CSphVector<Passage_t> & dPassages, const SnippetQuerySettings_t & tFixedSettings,
-										const CSphVector<SphHitMark_t> & dMarked, const FunctorZoneInfo_t & tZoneInfo, SnippetResult_t & tRes ) const;
+	void							SelectBestPassages ( const SnippetsDocIndex_c & tContainer, const PassageContext_t & tContext, const SnippetLimits_t & tLimits, DWORD uFoundWords, CSphVector<Passage_t> & dPassages ) const;
 
-	void							HighlightAll ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, const SnippetQuerySettings_t & tQuery, const CSphVector<SphHitMark_t> & dMarked, SnippetResult_t & tRes ) const;
-	void							HighlightDocStart ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, const SnippetQuerySettings_t & tQuery, SnippetResult_t & tRes ) const;
+	void							HighlightPassages ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, CSphVector<Passage_t> & dPassages, const CSphVector<SphHitMark_t> & dMarked,
+										const FunctorZoneInfo_t & tZoneInfo, SnippetResult_t & tRes ) const;
 
-	bool							MarkHits ( const SnippetsDocIndex_c & tContainer, CSphVector<SphHitMark_t> & dMarked, const ZoneData_t & tZoneData, SnippetResult_t & tRes ) const;
+	void							HighlightAll ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, const CSphVector<SphHitMark_t> & dMarked, int iField, SnippetResult_t & tRes ) const;
+	void							HighlightFieldStart ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, int iField, SnippetResult_t & tRes ) const;
+	void							HighlightAnything ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, SnippetResult_t & tRes ) const;
+
+	void							CollectHits ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, SnippetsDocIndex_c & tContainer, int iSPZ, DWORD & uFoundWords, ZoneData_t & tZodeData, SnippetResult_t & tRes ) const;
+	void							MarkHits ( const SnippetsDocIndex_c & tContainer, CSphVector<SphHitMark_t> & dMarked, const ZoneData_t & tZoneData, SnippetResult_t & tRes ) const;
 	void							SplitSpans ( const SnippetsDocIndex_c & tContainer, CSphVector<SphHitMark_t> & dMarked ) const;
 	void							FoldHitsIntoSpans ( CSphVector<SphHitMark_t> & dMarked ) const;
-	void							FixupQueryLimits ( const SnippetsDocIndex_c & tContainer, SnippetQuerySettings_t & tFixedSettings, CSphString & sWarning, DWORD uFoundTerms ) const;
-	bool							CanHighlightAll ( const SnippetQuerySettings_t & tFixedSettings, int iDocLen ) const;
+	void							FixupQueryLimits ( SnippetLimits_t & tLimit, const SnippetsDocIndex_c & tContainer, DWORD uFoundTerms, CSphString & sWarning ) const;
+	bool							CanHighlightAll ( int iDocLen, const SnippetLimits_t & tLimits ) const;
 	bool							SetupStripperSPZ ( bool bSetupSPZ, CSphString & sError );
+	void							CreateLimits ( ScopedStreamers_t & tStreamers, const TextSource_i & tSource, const SnippetsDocIndex_c & tContainer, DWORD uFoundWords, CSphString & sWarning ) const;
 
 	void							GetPassageOrder ( const FieldResult_t & tField, CSphVector<WeightedPassage_t> & dPassageOrder ) const;
 	void							PackAsData ( MemoryWriter_c & tWriter, SnippetResult_t & tRes, const CSphVector<int> & dRequestedFields ) const;
@@ -380,37 +411,37 @@ private:
 };
 
 
-void SnippetBuilder_c::ExtractPassages ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, SnippetQuerySettings_t & tFixedSettings, const SnippetsDocIndex_c & tContainer, const CSphVector<SphHitMark_t> & dMarked,
-	PassageContext_t & tPassageContext, DWORD uFoundWords, SnippetResult_t & tRes ) const
+void SnippetBuilder_c::ExtractPassages ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, const SnippetsDocIndex_c & tContainer, const CSphVector<SphHitMark_t> & dMarked, int iField, PassageContext_t & tContext,
+	SnippetResult_t & tRes ) const
 {
 	assert ( m_pIndex && m_pQuerySettings );
 	const CSphIndexSettings & tIndexSettings = m_pIndex->GetSettings();
+	const SnippetQuerySettings_t & tSettings = *m_pQuerySettings;
 
-	ARRAY_FOREACH ( i, tStreamers.m_dStreamers )
-	{
-		const char * szDoc = (const char*)tSource.GetText(i).Begin();
-		int iDocLen = tSource.GetText(i).GetLength();
+	const char * szDoc = (const char*)tSource.GetText(iField).Begin();
+	int iDocLen = tSource.GetText(iField).GetLength();
 
-		CSphScopedPtr<PassageExtractor_i> pExtractor ( CreatePassageExtractor ( tContainer, tPassageContext, m_pTokenizer, tFixedSettings, tIndexSettings, szDoc, iDocLen, dMarked, uFoundWords, i, tRes ) );
-		tStreamers.m_dStreamers[i]->Tokenize ( *pExtractor.Ptr() );
-
-		if ( i==tStreamers.m_dStreamers.GetLength()-1 )
-		{
-			pExtractor->Finalize();
-			tFixedSettings.m_bWeightOrder = pExtractor->GetWeightOrder();		// might have changed in Finalize()
-		}
-	}
+	CSphScopedPtr<TokenFunctor_i> pExtractor ( CreatePassageExtractor ( tContainer, tContext, m_pTokenizer, tSettings, tStreamers.m_dLimits[iField], tIndexSettings, szDoc, iDocLen, dMarked, iField, tRes ) );
+	tStreamers.m_dStreamers[iField]->Tokenize ( *pExtractor.Ptr() );
 }
 
 
-void SnippetBuilder_c::HighlightPassages ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, CSphVector<Passage_t> & dPassages, const SnippetQuerySettings_t & tFixedSettings,
-	const CSphVector<SphHitMark_t> & dMarked, const FunctorZoneInfo_t & tZoneInfo, SnippetResult_t & tRes ) const
+void SnippetBuilder_c::SelectBestPassages ( const SnippetsDocIndex_c & tContainer, const PassageContext_t & tContext, const SnippetLimits_t & tLimits, DWORD uFoundWords, CSphVector<Passage_t> & dPassages ) const
 {
+	CSphVector<Passage_t> dNewPassages = tContext.SelectBest ( tLimits, *m_pQuerySettings, tContainer, uFoundWords );
+
+	Passage_t * pPassages = dPassages.AddN ( dNewPassages.GetLength() );
+	ARRAY_FOREACH  ( i, dNewPassages )
+		pPassages[i] = std::move ( dNewPassages[i] );
+}
+
+
+void SnippetBuilder_c::HighlightPassages ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, CSphVector<Passage_t> & dPassages, const CSphVector<SphHitMark_t> & dMarked,
+	const FunctorZoneInfo_t & tZoneInfo, SnippetResult_t & tRes ) const
+{
+	// everything should already be highlighted in fields w/o matches
 	if ( !dPassages.GetLength() )
-	{
-		HighlightDocStart ( tStreamers, tSource, tFixedSettings, tRes );
 		return;
-	}
 
 	ARRAY_FOREACH ( iField, tStreamers.m_dStreamers )
 	{
@@ -425,13 +456,13 @@ void SnippetBuilder_c::HighlightPassages ( ScopedStreamers_t & tStreamers, TextS
 		if ( !dFilteredPassages.GetLength() )
 			continue;
 
-		CSphScopedPtr<TokenFunctor_i> pHighlighter ( CreatePassageHighlighter ( dFilteredPassages, m_pTokenizer, tFixedSettings, m_pIndex->GetSettings(), szDoc, iDocLen, dMarked, tZoneInfo, iField, tRes ) );
+		CSphScopedPtr<TokenFunctor_i> pHighlighter ( CreatePassageHighlighter ( dFilteredPassages, m_pTokenizer, *m_pQuerySettings, m_pIndex->GetSettings(), szDoc, iDocLen, dMarked, tZoneInfo, iField, tRes ) );
 		tStreamers.m_dStreamers[iField]->Tokenize ( *pHighlighter.Ptr() );
 	}	
 }
 
 
-bool SnippetBuilder_c::MarkHits ( const SnippetsDocIndex_c & tContainer, CSphVector<SphHitMark_t> & dMarked, const ZoneData_t & tZoneData, SnippetResult_t & tRes ) const
+void SnippetBuilder_c::MarkHits ( const SnippetsDocIndex_c & tContainer, CSphVector<SphHitMark_t> & dMarked, const ZoneData_t & tZoneData, SnippetResult_t & tRes ) const
 {
 	const XQQuery_t & tXQQuery = tContainer.GetQuery();
 
@@ -445,15 +476,13 @@ bool SnippetBuilder_c::MarkHits ( const SnippetsDocIndex_c & tContainer, CSphVec
 	// got a lot of stack allocated variables (up to 30K)
 	// check that query not overflow stack here
 	if ( !sphCheckQueryHeight ( tXQQuery.m_pRoot, tRes.m_sError ) )
-		return false;
+		return;
 
 	CSphScopedPtr<CSphHitMarker> pMarker ( CSphHitMarker::Create ( tXQQuery.m_pRoot, tQwordSetup ) );
 	if ( !pMarker.Ptr() )
-		return false;
+		return;
 
 	pMarker->Mark(dMarked);
-
-	return true;
 }
 
 
@@ -535,92 +564,64 @@ void SnippetBuilder_c::FoldHitsIntoSpans ( CSphVector<SphHitMark_t> & dMarked ) 
 }
 
 
-void SnippetBuilder_c::HighlightAll ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, const SnippetQuerySettings_t & tQuery, const CSphVector<SphHitMark_t> & dMarked, SnippetResult_t & tRes ) const
+void SnippetBuilder_c::HighlightAll ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, const CSphVector<SphHitMark_t> & dMarked, int iField, SnippetResult_t & tRes ) const
 {
-	assert ( m_pIndex && m_pQuerySettings );
-	const CSphIndexSettings & tIndexSettings = m_pIndex->GetSettings();
+	const char * szDoc = (const char*)tSource.GetText(iField).Begin();
+	int iDocLen = tSource.GetText(iField).GetLength();
 
-	ARRAY_FOREACH ( i, tStreamers.m_dStreamers )
-	{
-		const char * szDoc = (const char*)tSource.GetText(i).Begin();
-		int iDocLen = tSource.GetText(i).GetLength();
-
-		CSphScopedPtr<TokenFunctor_i> pHighlighter ( CreateQueryHighlighter ( m_pTokenizer, tQuery, tIndexSettings, szDoc, iDocLen, dMarked, i, tRes ) );
-		tStreamers.m_dStreamers[i]->Tokenize ( *pHighlighter.Ptr() );
-	}
+	CSphScopedPtr<TokenFunctor_i> pHighlighter ( CreateQueryHighlighter ( m_pTokenizer, *m_pQuerySettings, m_pIndex->GetSettings(), szDoc, iDocLen, dMarked, iField, tRes ) );
+	tStreamers.m_dStreamers[iField]->Tokenize ( *pHighlighter.Ptr() );
 }
 
 
-void SnippetBuilder_c::HighlightDocStart ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, const SnippetQuerySettings_t & tQuery, SnippetResult_t & tRes ) const
+void SnippetBuilder_c::HighlightFieldStart ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, int iField, SnippetResult_t & tRes ) const
 {
-	if ( tQuery.m_bAllowEmpty )
+	assert ( m_pQuerySettings );
+	const SnippetQuerySettings_t & tSettings = *m_pQuerySettings;
+
+	if ( tSettings.m_bAllowEmpty )
 		return;
 
-	int iResultLenCP = 0;
-	ARRAY_FOREACH ( i, tStreamers.m_dStreamers )
+	const char * szDoc = (const char*)tSource.GetText(iField).Begin();
+	int iDocLen = tSource.GetText(iField).GetLength();
+
+	int iResultCP = 0;
+	CSphScopedPtr<TokenFunctor_i> pHighlighter ( CreateDocStartHighlighter ( m_pTokenizer, tSettings, tStreamers.m_dLimits[iField], m_pIndex->GetSettings(), szDoc, iDocLen, iField, iResultCP, tRes ) );
+	tStreamers.m_dStreamers[iField]->Tokenize ( *pHighlighter.Ptr() );
+}
+
+
+void SnippetBuilder_c::HighlightAnything ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, SnippetResult_t & tRes ) const
+{
+	assert ( m_pQuerySettings );
+	const SnippetQuerySettings_t & tSettings = *m_pQuerySettings;
+
+	if ( tSettings.m_bAllowEmpty )
+		return;
+
+	int iResultCP = 0;
+	for ( int iField = 0; iField < tSource.GetNumFields(); iField++ )
 	{
-		const char * szDoc = (const char*)tSource.GetText(i).Begin();
-		int iDocLen = tSource.GetText(i).GetLength();
+		const char * szDoc = (const char*)tSource.GetText(iField).Begin();
+		int iDocLen = tSource.GetText(iField).GetLength();
 
-		CSphScopedPtr<DocStartHighlighter_i> pHighlighter ( CreateDocStartHighlighter ( m_pTokenizer, tQuery, m_pIndex->GetSettings(), szDoc, iDocLen, iResultLenCP, i, tRes ) );
-		tStreamers.m_dStreamers[i]->Tokenize ( *pHighlighter.Ptr() );
-
-		// did we collect enough tokens?
-		if ( pHighlighter->CollectionStopped() )
-			break;
+		CSphScopedPtr<TokenFunctor_i> pHighlighter ( CreateDocStartHighlighter ( m_pTokenizer, tSettings, tStreamers.m_dLimits[iField], m_pIndex->GetSettings(), szDoc, iDocLen, iField, iResultCP, tRes ) );
+		tStreamers.m_dStreamers[iField]->Tokenize ( *pHighlighter.Ptr() );
 	}
 }
 
 
-bool SnippetBuilder_c::CanHighlightAll ( const SnippetQuerySettings_t & tFixedSettings, int iDocLen ) const
-{
-	bool bHighlightAll = ( tFixedSettings.m_iLimit==0 || tFixedSettings.m_iLimit>=iDocLen ) && ( tFixedSettings.m_iLimitWords==0 || tFixedSettings.m_iLimitWords>iDocLen/2 )
-		&& tFixedSettings.m_ePassageSPZ==SPH_SPZ_NONE;
-
-	// might need separate passages
-	if ( bHighlightAll && tFixedSettings.m_bForcePassages && ( tFixedSettings.m_iLimit!=0 || tFixedSettings.m_iLimitWords!=0 || tFixedSettings.m_iLimitPassages!=0 ) )
-		bHighlightAll = false;
-
-	return bHighlightAll;
-}
-
-
-bool SnippetBuilder_c::DoHighlighting ( TextSource_i & tSource, SnippetResult_t & tRes ) const
+void SnippetBuilder_c::CollectHits ( ScopedStreamers_t & tStreamers, TextSource_i & tSource, SnippetsDocIndex_c & tContainer, int iSPZ, DWORD & uFoundWords, ZoneData_t & tZodeData, SnippetResult_t & tRes ) const
 {
 	assert ( m_pIndex && m_pQuerySettings );
 
 	const CSphIndexSettings & tIndexSettings = m_pIndex->GetSettings();
 	const SnippetQuerySettings_t & tQuerySettings = *m_pQuerySettings;
 
-	SnippetQuerySettings_t tFixedSettings ( tQuerySettings );
-
-	bool bRetainHtml = ( tFixedSettings.m_sStripMode=="retain" );
-
-	// adjust tokenizer for markup-retaining mode
-	if ( bRetainHtml )
-		m_pTokenizer->AddSpecials ( "<" );
-
-	// create query and hit lists container, parse query
-	SnippetsDocIndex_c tContainer ( *m_pExtQuery.Ptr() );
-	tContainer.ParseQuery ( m_pQueryTokenizer, m_pDict, m_eExtQuerySPZ );
-
-	ScopedStreamers_t tStreamers;
-
-	int iTotalDocLen = 0;
-	for ( int iField = 0; iField < tSource.GetNumFields(); iField++ )
-		iTotalDocLen += tSource.GetText(iField).GetLength();
-
-	bool bHighlightAll = CanHighlightAll ( tFixedSettings, iTotalDocLen );
-	int iSPZ = ConvertSPZ ( m_eExtQuerySPZ | ( bHighlightAll ? 0 : tFixedSettings.m_ePassageSPZ ) );
-
-	ZoneData_t tZodeData;
-
-	tRes.m_dFields.Resize ( tSource.GetNumFields() );
-
-	DWORD uFoundWords = 0;
 	for ( int iField = 0; iField < tSource.GetNumFields(); iField++ )
 	{
-		tRes.m_dFields[iField].m_sName = tSource.GetFieldName(iField);
+		const char * szFieldName = tSource.GetFieldName(iField);
+		tRes.m_dFields[iField].m_sName = szFieldName;
 		tRes.m_dFields[iField].m_dPassages.Resize(1);	// so that non-passage funcs will have something to work on
 
 		const char * szDoc = (const char*)tSource.GetText(iField).Begin();
@@ -633,39 +634,145 @@ bool SnippetBuilder_c::DoHighlighting ( TextSource_i & tSource, SnippetResult_t 
 		// 2nd pass will highlight matching positions only (with some matching engine aid)
 
 		CacheStreamer_i * pStreamer = CreateCacheStreamer(iDocLen);
-		tStreamers.m_dStreamers.Add(pStreamer);
+		tStreamers.m_dStreamers[iField] = pStreamer;
 
-		CSphScopedPtr<HitCollector_i> pHitCollector ( CreateHitCollector ( tContainer, m_pTokenizer, m_pDict, tFixedSettings, tIndexSettings, szDoc, iDocLen, iField, *pStreamer, tZodeData.m_dZones, tZodeData.m_tInfo, tRes ) );
+		CSphScopedPtr<HitCollector_i> pHitCollector ( CreateHitCollector ( tContainer, m_pTokenizer, m_pDict, tQuerySettings, tIndexSettings, szDoc, iDocLen, iField, *pStreamer, tZodeData.m_dZones, tZodeData.m_tInfo, tRes ) );
 		TokenizeDocument ( *pHitCollector.Ptr(), pStripper, iSPZ );
 
 		uFoundWords |= pHitCollector->GetFoundWords();
 	}
+}
+
+
+bool SnippetBuilder_c::CanHighlightAll ( int iDocLen, const SnippetLimits_t & tLimits ) const
+{
+	assert ( m_pQuerySettings );
+	const SnippetQuerySettings_t & tOpts = *m_pQuerySettings;
+
+	bool bHighlightAll = ( tLimits.m_iLimit==0 || tLimits.m_iLimit>=iDocLen ) && ( tLimits.m_iLimitWords==0 || tLimits.m_iLimitWords>iDocLen/2 )
+		&& tOpts.m_ePassageSPZ==SPH_SPZ_NONE;
+
+	// might need separate passages
+	if ( bHighlightAll && tOpts.m_bForcePassages && ( tLimits.m_iLimit!=0 || tLimits.m_iLimitWords!=0 || tLimits.m_iLimitPassages!=0 ) )
+		bHighlightAll = false;
+
+	return bHighlightAll;
+}
+
+
+void SnippetBuilder_c::CreateLimits ( ScopedStreamers_t & tStreamers, const TextSource_i & tSource, const SnippetsDocIndex_c & tContainer, DWORD uFoundWords, CSphString & sWarning ) const
+{
+	assert ( m_pQuerySettings );
+
+	const SnippetQuerySettings_t & tSettings = *m_pQuerySettings;
+	bool bPerFieldLimits = tSource.TextFromIndex() && tSettings.m_bLimitsPerField;
+
+	for ( int iField = 0; iField < tSource.GetNumFields(); iField++ )
+	{
+		SnippetLimits_t & tLimit = tStreamers.m_dLimits[iField];
+
+		tLimit = tSettings;
+		if ( bPerFieldLimits )
+		{
+			const SnippetLimits_t * pPerFieldLimits = tSettings.m_hPerFieldLimits ( tSource.GetFieldName(iField) );
+			if ( pPerFieldLimits )
+				tLimit = *pPerFieldLimits;
+		}
+
+		FixupQueryLimits ( tLimit, tContainer, uFoundWords, sWarning );
+	}
+}
+
+
+static void MarkFieldsWithHits ( CSphBitvec & dFieldsWithHits, const CSphVector<SphHitMark_t> & dMarked )
+{
+	for ( const auto & i : dMarked )
+		dFieldsWithHits.BitSet ( HITMAN::GetField(i.m_uPosition) );
+}
+
+
+bool SnippetBuilder_c::DoHighlighting ( TextSource_i & tSource, SnippetResult_t & tRes ) const
+{
+	assert ( m_pIndex && m_pQuerySettings );
+
+	const SnippetQuerySettings_t & tQuerySettings = *m_pQuerySettings;
+
+	bool bRetainHtml = ( tQuerySettings.m_sStripMode=="retain" );
+
+	// adjust tokenizer for markup-retaining mode
+	if ( bRetainHtml )
+		m_pTokenizer->AddSpecials ( "<" );
+
+	// create query and hit lists container, parse query
+	SnippetsDocIndex_c tContainer ( *m_pExtQuery.Ptr() );
+	tContainer.ParseQuery ( m_pQueryTokenizer, m_pDict, m_eExtQuerySPZ );
+
+	ScopedStreamers_t tStreamers ( tSource.GetNumFields() );
+
+	int iTotalDocLen = 0;
+	for ( int iField = 0; iField < tSource.GetNumFields(); iField++ )
+		iTotalDocLen += tSource.GetText(iField).GetLength();
+
+	bool bGlobalHighlightAll = CanHighlightAll ( iTotalDocLen, tQuerySettings );
+	int iSPZ = ConvertSPZ ( m_eExtQuerySPZ | ( bGlobalHighlightAll ? 0 : tQuerySettings.m_ePassageSPZ ) );
+
+	ZoneData_t tZodeData;
+
+	tRes.m_dFields.Resize ( tSource.GetNumFields() );
+
+	DWORD uFoundWords = 0;
+	CollectHits ( tStreamers, tSource, tContainer, iSPZ, uFoundWords, tZodeData, tRes );
 
 	for ( auto & i : tStreamers.m_dStreamers )
 		i->SetZoneInfo ( tZodeData.m_tInfo );
 
-	FixupQueryLimits ( tContainer, tFixedSettings, tRes.m_sWarning, uFoundWords );
+	CreateLimits ( tStreamers, tSource, tContainer, uFoundWords, tRes.m_sWarning );
 
 	CSphVector<SphHitMark_t> dMarked;
-	if ( !MarkHits ( tContainer, dMarked, tZodeData, tRes ) )
-	{
-		HighlightDocStart ( tStreamers, tSource, tFixedSettings, tRes );
-		return true;
-	}
-
+	MarkHits ( tContainer, dMarked, tZodeData, tRes );
 	SplitSpans ( tContainer, dMarked );
 	FoldHitsIntoSpans(dMarked);
 
-	if ( bHighlightAll )
-		HighlightAll ( tStreamers, tSource, tFixedSettings, dMarked, tRes );
-	else if ( !dMarked.GetLength() )
-		HighlightDocStart ( tStreamers, tSource, tFixedSettings, tRes );
-	else
+	CSphBitvec dFieldsWithHits ( tSource.GetNumFields() );
+	MarkFieldsWithHits ( dFieldsWithHits, dMarked );
+	if ( !dMarked.GetLength() && !tQuerySettings.m_bPackFields )
 	{
-		PassageContext_t tPassageContext;
-		ExtractPassages ( tStreamers, tSource, tFixedSettings, tContainer, dMarked, tPassageContext, uFoundWords, tRes );
-		HighlightPassages ( tStreamers, tSource, tPassageContext.m_dPassages, tFixedSettings, dMarked, tZodeData.m_tInfo, tRes );
+		HighlightAnything ( tStreamers, tSource, tRes );
+		return true;
 	}
+
+	// we either use global passage limits (and global tPassageContext)
+	// or we create new context every time we highlight a field
+	bool bPerFieldLimits = tSource.TextFromIndex() && tQuerySettings.m_bLimitsPerField;
+	CSphVector<Passage_t> dPassages;
+	PassageContext_t tGlobalPassageContext;
+	for ( int iField = 0; iField < tSource.GetNumFields(); iField++ )
+	{
+		bool bHighlightAll = bPerFieldLimits ? CanHighlightAll ( tSource.GetText(iField).GetLength(), tStreamers.m_dLimits[iField] ) : bGlobalHighlightAll;
+
+		if ( !dFieldsWithHits.BitGet(iField) )
+		{
+			// NOTE: this uses only per-field limits. no global limits here
+			if ( tQuerySettings.m_bPackFields  )
+				HighlightFieldStart ( tStreamers, tSource, iField, tRes );
+		}
+		else if ( bHighlightAll )
+			HighlightAll ( tStreamers, tSource, dMarked, iField, tRes );
+		else
+		{
+			PassageContext_t tPerFieldContext;
+			PassageContext_t & tCurContext = bPerFieldLimits ? tPerFieldContext : tGlobalPassageContext;
+			ExtractPassages ( tStreamers, tSource, tContainer, dMarked, iField, tCurContext, tRes );
+
+			if ( bPerFieldLimits )
+				SelectBestPassages ( tContainer, tPerFieldContext, tStreamers.m_dLimits[iField], uFoundWords, dPassages );
+		}
+	}
+
+	if ( !bPerFieldLimits )
+		SelectBestPassages ( tContainer, tGlobalPassageContext, tQuerySettings, uFoundWords, dPassages );
+
+	HighlightPassages ( tStreamers, tSource, dPassages, dMarked, tZodeData.m_tInfo, tRes );
 
 	return true;
 }
@@ -974,12 +1081,12 @@ const CSphHTMLStripper * SnippetBuilder_c::GetStripperForTokenization() const
 }
 
 
-void SnippetBuilder_c::FixupQueryLimits ( const SnippetsDocIndex_c & tContainer, SnippetQuerySettings_t & tFixedSettings, CSphString & sWarning, DWORD uFoundTerms ) const
+void SnippetBuilder_c::FixupQueryLimits ( SnippetLimits_t & tLimit, const SnippetsDocIndex_c & tContainer, DWORD uFoundTerms, CSphString & sWarning ) const
 {
 	assert(m_pQuerySettings);
-	const SnippetQuerySettings_t & tQuerySettings = *m_pQuerySettings;
+	const SnippetQuerySettings_t & tSettings = *m_pQuerySettings;
 
-	if ( tQuerySettings.m_iLimitWords && tQuerySettings.m_bForceAllWords )
+	if ( tLimit.m_iLimitWords && tSettings.m_bForceAllWords )
 	{
 		int iNewWordLimit = 0;
 
@@ -992,14 +1099,14 @@ void SnippetBuilder_c::FixupQueryLimits ( const SnippetsDocIndex_c & tContainer,
 				uFound &= uFound-1;
 		}
 
-		if ( iNewWordLimit > tQuerySettings.m_iLimitWords )
+		if ( iNewWordLimit > tLimit.m_iLimitWords )
 		{
-			sWarning.SetSprintf ( "number of query terms (%d) is greater than the word limit setting (%d): limit increased", iNewWordLimit, tQuerySettings.m_iLimitWords );
-			tFixedSettings.m_iLimitWords = iNewWordLimit;
+			sWarning.SetSprintf ( "number of query terms (%d) is greater than the word limit setting (%d): limit increased", iNewWordLimit, tLimit.m_iLimitWords );
+			tLimit.m_iLimitWords = iNewWordLimit;
 		}
 	}
 
-	if ( tQuerySettings.m_iLimit )
+	if ( tLimit.m_iLimit )
 	{
 		int iTotalLen = 0;
 		int iMaxLen = 0;
@@ -1017,17 +1124,16 @@ void SnippetBuilder_c::FixupQueryLimits ( const SnippetsDocIndex_c & tContainer,
 		}
 
 		int iNewLimit = iMaxLen;
-		if ( tQuerySettings.m_bForceAllWords )
+		if ( tSettings.m_bForceAllWords )
 			iNewLimit = iTotalLen+nTermsUsed-1;
 
-		if ( iNewLimit > tQuerySettings.m_iLimit )
+		if ( iNewLimit > tLimit.m_iLimit )
 		{
-			sWarning.SetSprintf ( "query length (%d) is greater than the limit setting (%d): limit increased", iNewLimit, tQuerySettings.m_iLimit );
-			tFixedSettings.m_iLimit = iNewLimit;
+			sWarning.SetSprintf ( "query length (%d) is greater than the limit setting (%d): limit increased", iNewLimit, tLimit.m_iLimit );
+			tLimit.m_iLimit = iNewLimit;
 		}
 	}
 }
-
 
 
 CSphString g_sSnippetsFilePrefix { "" };

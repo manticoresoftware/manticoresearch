@@ -11817,6 +11817,20 @@ static void HandleMysqlCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 }
 
 
+static const CSphSchema & GetSchemaForCreateTable ( CSphIndex * pIndex )
+{
+	assert ( pIndex );
+	assert ( pIndex->IsRT() || pIndex->IsPQ() );
+
+	const CSphSchema * pSchema = nullptr;
+	if ( pIndex->IsRT() )
+		return ((RtIndex_i*)pIndex)->GetInternalSchema();
+
+	// for pq
+	return pIndex->GetMatchSchema();
+}
+
+
 static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	SearchFailuresLog_c dErrors;
@@ -11846,9 +11860,17 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 		return;
 	}
 
+	if ( pServed && !pServed->m_pIndex->IsRT() && !pServed->m_pIndex->IsPQ() )
+	{
+		CSphString sError;
+		sError.SetSprintf ( "index '%s' is not real-time or percolate", tStmt.m_sIndex.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_NO_SUCH_TABLE );
+		return;
+	}
+
 	CSphString sCreateTable;
 	if ( pServed )
-		sCreateTable = BuildCreateTable ( tStmt.m_sIndex, pServed->m_pIndex, ((RtIndex_i*)pServed->m_pIndex)->GetInternalSchema() );
+		sCreateTable = BuildCreateTable ( tStmt.m_sIndex, pServed->m_pIndex, GetSchemaForCreateTable ( pServed->m_pIndex ) );
 	else
 		sCreateTable = BuildCreateTableDistr ( tStmt.m_sIndex, *pDist );
 
@@ -11902,10 +11924,10 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		return;
 	}
 
-	if ( pServed && !pServed->m_pIndex->IsRT() )
+	if ( pServed && !pServed->m_pIndex->IsRT() && !pServed->m_pIndex->IsPQ() )
 	{
 		CSphString sError;
-		sError.SetSprintf ( "index '%s' is not real-time", tStmt.m_sIndex.cstr() );
+		sError.SetSprintf ( "index '%s' is not real-time or percolate", tStmt.m_sIndex.cstr() );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_NO_SUCH_TABLE );
 		return;
 	}
@@ -11914,7 +11936,7 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	tOut.HeadTuplet ( "Table", "Create Table" );
 	CSphString sCreateTable;
 	if ( pServed )
-		sCreateTable = BuildCreateTable ( pServed->m_pIndex->GetName(), pServed->m_pIndex, ((RtIndex_i*)pServed->m_pIndex)->GetInternalSchema() );
+		sCreateTable = BuildCreateTable ( pServed->m_pIndex->GetName(), pServed->m_pIndex, GetSchemaForCreateTable ( pServed->m_pIndex ) );
 	else
 		sCreateTable = BuildCreateTableDistr ( tStmt.m_sIndex, *pDist );
 
@@ -14816,6 +14838,9 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 		else
 			sError.SetSprintf ( "index '%s' not found", tStmt.m_sIndex.cstr () );
 	}
+
+	if ( !pWriteLocked->m_pIndex->IsRT() )
+		sError.SetSprintf ( "index '%s' is not real-time", tStmt.m_sIndex.cstr() );
 
 	if ( !sError.IsEmpty () )
 	{

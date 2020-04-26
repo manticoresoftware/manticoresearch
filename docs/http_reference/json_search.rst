@@ -698,7 +698,7 @@ It's possible to return highlights from all fields by passing an empty object to
 Highlighting supports all the options that are available for ``CALL SNIPPETS``.
 In addition, it supports their synonyms:
 
-* ``fields`` object contains attribute names with options.
+* ``fields`` object contains attribute names with options. It can also be an array of field names (without any options).
 * ``encoder`` can be set to ``default`` or ``html``. When set to ``html``, retains html markup when highlighting. Works similar to ``html_strip_mode=retain`` in ``CALL SNIPPETS``.
 * ``highlight_query`` makes it possible to highlight against a query other than our search query. Syntax is the same as in the main ``query``:
 
@@ -726,7 +726,8 @@ In addition, it supports their synonyms:
          "post_tags": "_after"
        }
 
-*  ``no_match_size`` works similar to ``allow_empty`` in ``CALL SNIPPETS``. If set to zero value, acts as ``allow_empty=1``, e.g. allows empty string to be returned as highlighting result when a snippet could not be generated. Otherwise, the beginning of the field will be returned. Optional, default is 0. Example:
+*  ``no_match_size`` works similar to ``allow_empty`` in ``CALL SNIPPETS``. If set to zero value, acts as ``allow_empty=1``, e.g. allows empty string to be returned as
+	highlighting result when a snippet could not be generated. Otherwise, the beginning of the field will be returned. Optional, default is 1. Example:
 
    ::
 
@@ -747,7 +748,8 @@ In addition, it supports their synonyms:
          "order": "score"
        }
 
-*  ``fragment_size`` sets maximum fragment size in symbols. Optional, default is 256. Works similar to ``limit`` in ``CALL SNIPPETS``. Example:
+*  ``fragment_size`` sets maximum fragment size in symbols. Can be global or per-field. Per-field options override global options. Optional, default is 256.
+	Works similar to ``limit`` in ``CALL SNIPPETS``. Example:
 
    ::
 
@@ -757,7 +759,45 @@ In addition, it supports their synonyms:
       "fragment_size": 100
     }
 
-*  ``number_of_fragments``: Limits the maximum number of fragments in a snippet. Optional, default is 0 (no limit). Works similar to ``limit_passages`` in ``CALL SNIPPETS``.
+*  ``number_of_fragments``: Limits the maximum number of fragments in a snippet. Just as ``fragment_size``, can be global or per-field. Optional, default is 0 (no limit).
+	Works similar to ``limit_passages`` in ``CALL SNIPPETS``.
+
+
+Options such as ``limit``, ``limit_words``, and ``limit_passages`` can be set as global or per-field options. Global options are used as per-field limits unless per-field
+options override them. In the example below the ``title`` field is highlighted with a default limit settings while the ``content`` field uses a different limit:
+
+.. code-block:: json
+
+    {
+      "index": "test",
+      "query": { "match": { "*": "and first" } },
+      "highlight":
+      {
+		"fields":
+		{
+			"title": {},
+			"content" : { "limit": 50 }
+		}
+      }
+    }
+
+
+Global limits can also be forced by specifying ``limits_per_field=0``. Setting this option means that all combined highlighting results must be within the specified limits.
+The downside is that you may get several passages highlighted in one field and none in another if the highlighting engine decides that they are more relevant. Example:
+
+.. code-block:: json
+
+    {
+      "index": "test",
+      "query": { "match": { "*": "and first" } },
+      "highlight":
+      {
+		"limits_per_field": 0,
+		"fields": ["content","title"]
+      }
+    }
+
+
 
 Result set format
 """""""""""""""""

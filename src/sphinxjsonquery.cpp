@@ -2156,33 +2156,28 @@ void sphBuildProfileJson ( JsonEscapedBuilder &tOut, const XQNode_t * pNode, con
 //////////////////////////////////////////////////////////////////////////
 // Highlight
 
-struct SnippetOptions_t
-{
-	CSphString				m_sQuery;
-	CSphVector<CSphString>	m_dFields;
-};
-
-
-static void FormatSnippetOpts ( const SnippetOptions_t & tOpts, const SnippetQuerySettings_t & tSnippetQuery, CSphQuery & tQuery )
+static void FormatSnippetOpts ( const CSphString & sQuery, const SnippetQuerySettings_t & tSnippetQuery, CSphQuery & tQuery )
 {
 	StringBuilder_c sItem;
 	sItem << "HIGHLIGHT(";
 	sItem << tSnippetQuery.AsString();
 	sItem << ",";
 
-	if ( tOpts.m_dFields.GetLength() )
+	auto & hFieldHash = tSnippetQuery.m_hPerFieldLimits;
+	if ( tSnippetQuery.m_hPerFieldLimits.GetLength() )
 	{
 		sItem.StartBlock ( ",", "'", "'" );
-		for ( const auto & i : tOpts.m_dFields )
-			sItem << i;
+
+		for ( hFieldHash.IterateStart(); hFieldHash.IterateNext(); )
+			sItem << hFieldHash.IterateGetKey();
 
 		sItem.FinishBlock(false);
 	}
 	else
 		sItem << "''";
 
-	if ( !tOpts.m_sQuery.IsEmpty() )
-		sItem.Appendf ( ",'%s'", tOpts.m_sQuery.cstr() );
+	if ( !sQuery.IsEmpty() )
+		sItem.Appendf ( ",'%s'", sQuery.cstr() );
 
 	sItem << ")";
 
@@ -2192,17 +2187,8 @@ static void FormatSnippetOpts ( const SnippetOptions_t & tOpts, const SnippetQue
 }
 
 
-static bool ParseSnippetFields ( const JsonObj_c & tSnip, SnippetOptions_t & tOpts, CSphString & sError )
+static bool ParseFieldsArray ( const JsonObj_c & tFields, SnippetQuerySettings_t & tSettings, CSphString & sError )
 {
-	JsonObj_c tFields = tSnip.GetArrayItem ( "fields", sError, true );
-	if ( !tFields && !sError.IsEmpty() )
-		return false;
-
-	if ( !tFields )
-		return true;
-		
-	tOpts.m_dFields.Reserve ( tFields.Size() );
-
 	for ( const auto & tField : tFields )
 	{
 		if ( !tField.IsStr() )
@@ -2211,14 +2197,75 @@ static bool ParseSnippetFields ( const JsonObj_c & tSnip, SnippetOptions_t & tOp
 			return false;
 		}
 
-		tOpts.m_dFields.Add ( tField.StrVal() );
+		SnippetLimits_t tDefault;
+		tSettings.m_hPerFieldLimits.Add( tDefault, tField.StrVal() );
 	}
 
 	return true;
 }
 
 
-static bool ParseSnippetOptsElastic ( const JsonObj_c & tSnip, SnippetOptions_t & tOpts, SnippetQuerySettings_t & tQuery, CSphString & sError )
+static bool ParseSnippetLimitsElastic ( const JsonObj_c & tSnip, SnippetLimits_t & tLimits, CSphString & sError )
+{
+	if ( !tSnip.FetchIntItem ( tLimits.m_iLimit, "fragment_size", sError, true ) )					return false;
+	if ( !tSnip.FetchIntItem ( tLimits.m_iLimitPassages, "number_of_fragments", sError, true ) )	return false;
+
+	return true;
+}
+
+
+static bool ParseSnippetLimitsSphinx ( const JsonObj_c & tSnip, SnippetLimits_t & tLimits, CSphString & sError )
+{
+	if ( !tSnip.FetchIntItem ( tLimits.m_iLimit, "limit", sError, true ) )					return false;
+	if ( !tSnip.FetchIntItem ( tLimits.m_iLimitPassages, "limit_passages", sError, true ) )	return false;
+	if ( !tSnip.FetchIntItem ( tLimits.m_iLimitWords, "limit_words", sError, true ) )		return false;
+
+	return true;
+}
+
+
+static bool ParseFieldsObject ( const JsonObj_c & tFields, SnippetQuerySettings_t & tSettings, CSphString & sError )
+{
+	for ( const auto & tField : tFields )
+	{
+		if ( !tField.IsObj() )
+		{
+			sError.SetSprintf ( "\"%s\" field should be an object", tField.Name() );
+			return false;
+		}
+
+		SnippetLimits_t & tLimits = tSettings.m_hPerFieldLimits.AddUnique ( tField.Name() );
+
+		if ( !ParseSnippetLimitsElastic ( tField, tLimits, sError ) )
+			return false;
+
+		if ( !ParseSnippetLimitsSphinx ( tField, tLimits, sError ) )
+			return false;
+	}
+
+	return true;
+}
+
+
+
+static bool ParseSnippetFields ( const JsonObj_c & tSnip, SnippetQuerySettings_t & tSettings, CSphString & sError )
+{
+	JsonObj_c tFields = tSnip.GetItem("fields");
+	if ( !tFields )
+		return true;
+
+	if ( tFields.IsArray() )
+		return ParseFieldsArray ( tFields, tSettings, sError );
+
+	if ( tFields.IsObj() )
+		return ParseFieldsObject ( tFields, tSettings, sError );
+
+	sError = R"("fields" property value should be an array or an object)";
+	return false;
+}
+
+
+static bool ParseSnippetOptsElastic ( const JsonObj_c & tSnip, CSphString & sQuery, SnippetQuerySettings_t & tQuery, CSphString & sError )
 {
 	JsonObj_c tEncoder = tSnip.GetStrItem ( "encoder", sError, true );
 	if ( tEncoder )
@@ -2231,22 +2278,22 @@ static bool ParseSnippetOptsElastic ( const JsonObj_c & tSnip, SnippetOptions_t 
 
 	JsonObj_c tHlQuery = tSnip.GetObjItem ( "highlight_query", sError, true );
 	if ( tHlQuery )
-		tOpts.m_sQuery = tHlQuery.AsString();
+		sQuery = tHlQuery.AsString();
 	else if ( !sError.IsEmpty() )
 		return false;
 
-	if ( !tSnip.FetchStrItem ( tQuery.m_sBeforeMatch, "pre_tags", sError, true ) )
-		return false;
+	if ( !tSnip.FetchStrItem ( tQuery.m_sBeforeMatch, "pre_tags", sError, true ) )		return false;
+	if ( !tSnip.FetchStrItem ( tQuery.m_sAfterMatch, "post_tags", sError, true ) )		return false;
 
-	if ( !tSnip.FetchStrItem ( tQuery.m_sAfterMatch, "post_tags", sError, true ) )
-		return false;
+	JsonObj_c tNoMatchSize = tSnip.GetItem ( "no_match_size" );
+	if ( tNoMatchSize )
+	{
+		int iNoMatch = 0;
+		if ( !tSnip.FetchIntItem ( iNoMatch, "no_match_size", sError, true ) )
+			return false;
 
-	int iNoMatch = 0;
-	if ( !tSnip.FetchIntItem ( iNoMatch, "no_match_size", sError, true ) )
-		return false;
-
-	if ( iNoMatch<1 )
-		tQuery.m_bAllowEmpty = true;
+		tQuery.m_bAllowEmpty = iNoMatch<1;
+	}
 
 	JsonObj_c tOrder = tSnip.GetStrItem ( "order", sError, true );
 	if ( tOrder )
@@ -2254,10 +2301,7 @@ static bool ParseSnippetOptsElastic ( const JsonObj_c & tSnip, SnippetOptions_t 
 	else if ( !sError.IsEmpty() )
 		return false;
 
-	if ( !tSnip.FetchIntItem ( tQuery.m_iLimit, "fragment_size", sError, true ) )
-		return false;
-
-	if ( !tSnip.FetchIntItem ( tQuery.m_iLimitPassages, "number_of_fragments", sError, true ) )
+	if ( !ParseSnippetLimitsElastic ( tSnip, tQuery, sError ) )
 		return false;
 
 	return true;
@@ -2266,20 +2310,21 @@ static bool ParseSnippetOptsElastic ( const JsonObj_c & tSnip, SnippetOptions_t 
 
 static bool ParseSnippetOptsSphinx ( const JsonObj_c & tSnip, SnippetQuerySettings_t & tOpt, CSphString & sError )
 {
+	if ( !ParseSnippetLimitsSphinx ( tSnip, tOpt, sError ) )
+		return false;
+
 	if ( !tSnip.FetchStrItem ( tOpt.m_sBeforeMatch, "before_match", sError, true ) )		return false;
 	if ( !tSnip.FetchStrItem ( tOpt.m_sAfterMatch, "after_match", sError, true ) )			return false;
-	if ( !tSnip.FetchIntItem ( tOpt.m_iLimit, "limit", sError, true ) )						return false;
 	if ( !tSnip.FetchIntItem ( tOpt.m_iAround, "around", sError, true ) )					return false;
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bUseBoundaries, "use_boundaries", sError, true ) )	return false;
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bWeightOrder, "weight_order", sError, true ) )		return false;
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bForceAllWords, "force_all_words", sError, true ) )	return false;
-	if ( !tSnip.FetchIntItem ( tOpt.m_iLimitPassages, "limit_passages", sError, true ) )	return false;
-	if ( !tSnip.FetchIntItem ( tOpt.m_iLimitWords, "limit_words", sError, true ) )			return false;
 	if ( !tSnip.FetchStrItem ( tOpt.m_sStripMode, "html_strip_mode", sError, true ) )		return false;
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bAllowEmpty, "allow_empty", sError, true ) )			return false;
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bEmitZones, "emit_zones", sError, true ) )			return false;
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bForcePassages, "force_passages", sError, true ) )	return false;
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bPackFields, "pack_fields", sError, true ) )			return false;
+	if ( !tSnip.FetchBoolItem ( tOpt.m_bLimitsPerField, "limits_per_field", sError, true ) )return false;
 
 	JsonObj_c tBoundary = tSnip.GetStrItem ( "passage_boundary", sError, true );
 	if ( tBoundary )
@@ -2293,23 +2338,23 @@ static bool ParseSnippetOptsSphinx ( const JsonObj_c & tSnip, SnippetQuerySettin
 
 static bool ParseSnippet ( const JsonObj_c & tSnip, CSphQuery & tQuery, CSphString & sError )
 {
-	SnippetOptions_t tOpts;
-	SnippetQuerySettings_t tOptsSphinx;
-	tOptsSphinx.m_bJsonQuery = true;
-	tOptsSphinx.m_bPackFields = true;
+	CSphString sQuery;
+	SnippetQuerySettings_t tSettings;
+	tSettings.m_bJsonQuery = true;
+	tSettings.m_bPackFields = true;
 
-	if ( !ParseSnippetFields ( tSnip, tOpts, sError ) )
+	if ( !ParseSnippetFields ( tSnip, tSettings, sError ) )
 		return false;
 
 	// elastic-style options
-	if ( !ParseSnippetOptsElastic ( tSnip, tOpts, tOptsSphinx, sError ) )
+	if ( !ParseSnippetOptsElastic ( tSnip, sQuery, tSettings, sError ) )
 		return false;
 	
 	// sphinx-style options
-	if ( !ParseSnippetOptsSphinx ( tSnip, tOptsSphinx, sError ) )
+	if ( !ParseSnippetOptsSphinx ( tSnip, tSettings, sError ) )
 		return false;
 
-	FormatSnippetOpts ( tOpts, tOptsSphinx, tQuery );
+	FormatSnippetOpts ( sQuery, tSettings, tQuery );
 	return true;
 }
 

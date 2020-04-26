@@ -41,56 +41,11 @@ struct FunctorZoneInfo_t
 };
 
 
-struct StoredExcerptToken_t
-{
-	int				m_iLengthCP;
-	BYTE			m_iWordFlag;
-};
-
-
-struct Passage_t
-{
-	int					m_iStart;			///< start token index
-	int					m_iTokens;			///< token count
-	int					m_iCodes;			///< codepoints count
-	int					m_iWords;			///< words count
-	DWORD				m_uQwords;			///< matching query words mask
-	int					m_iQwordsWeight;	///< passage weight factor
-	int					m_iQwordCount;		///< passage weight factor
-	int					m_iUniqQwords;		///< passage weight factor
-	int					m_iMaxLCS;			///< passage weight factor
-	int					m_iMinGap;			///< passage weight factor
-	int					m_iStartLimit;		///< start of match in passage
-	int					m_iEndLimit;		///< end of match in passage
-	int					m_iAroundBefore;	///< words before first matched words
-	int					m_iAroundAfter;		///< words after last matched words
-	int					m_iCodesBetweenKeywords;	///< codepoints between m_iStartLimit and m_iEndLimit
-	int					m_iWordsBetweenKeywords;	///< words between m_iStartLimit and m_iEndLimit
-	int					m_iField;			///< field id
-
-	CSphVector<StoredExcerptToken_t> m_dBeforeTokens;	///< stored tokens before match
-	CSphVector<StoredExcerptToken_t> m_dAfterTokens;	///< stored tokens after match
-
-	void		Reset();
-	void		CopyData ( Passage_t & tPassage );
-	inline int	GetWeight () const;
-};
-
-
-struct PassageContext_t
-{
-	DWORD					m_uPassagesQwords = 0;
-	int						m_dQwordWeights[32];
-	CSphVector<int>			m_dTopPassageWeights;
-	CSphVector<Passage_t>	m_dPassages;
-
-	PassageContext_t();
-};
-
-
 typedef uint64_t ZonePacked_t;
 struct SnippetQuerySettings_t;
 struct SnippetResult_t;
+struct Passage_t;
+struct PassageContext_t;
 class CacheStreamer_i;
 
 class TokenFunctor_i
@@ -104,21 +59,6 @@ public:
 	virtual void	OnSPZ ( BYTE iSPZ, DWORD uPosition, const char * szZone, int iZone ) = 0;
 	virtual void	OnTail ( int iStart, int iLen, int iBoundary ) = 0;
 	virtual void	OnFinish() = 0;
-};
-
-
-class DocStartHighlighter_i : public TokenFunctor_i
-{
-public:
-	virtual bool	CollectionStopped() const = 0;
-};
-
-
-class PassageExtractor_i : public TokenFunctor_i
-{
-public:
-	virtual bool	GetWeightOrder() const = 0;
-	virtual void	Finalize() = 0;
 };
 
 
@@ -140,19 +80,19 @@ public:
 };
 
 
-DocStartHighlighter_i *	CreateDocStartHighlighter ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, 
-	int & iResultLenCP, int iField, SnippetResult_t & tRes );
+TokenFunctor_i * CreateDocStartHighlighter ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits, const CSphIndexSettings & tIndexSettings,
+	const char * szDoc, int iDocLen, int iField, int & iResultCP, SnippetResult_t & tRes );
 
-TokenFunctor_i *		CreateQueryHighlighter ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen,
+TokenFunctor_i * CreateQueryHighlighter ( ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen,
 	const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes );
 
-PassageExtractor_i *	CreatePassageExtractor ( const SnippetsDocIndex_c & tContainer, PassageContext_t & tContext, ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
-	const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, DWORD uFoundWords, int iField, SnippetResult_t & tRes );
+TokenFunctor_i * CreatePassageExtractor ( const SnippetsDocIndex_c & tContainer, PassageContext_t & tContext, ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const SnippetLimits_t & tLimits,
+	const CSphIndexSettings & tIndexSettings, const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, int iField, SnippetResult_t & tRes );
 
-TokenFunctor_i *		CreatePassageHighlighter ( CSphVector<Passage_t*> & dPassages, ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
+TokenFunctor_i * CreatePassageHighlighter ( CSphVector<Passage_t*> & dPassages, ISphTokenizer * pTokenizer, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
 	const char * szDoc, int iDocLen, const CSphVector<SphHitMark_t> & dHits, const FunctorZoneInfo_t & tZoneInfo, int iField, SnippetResult_t & tRes );
 
-HitCollector_i *		CreateHitCollector ( SnippetsDocIndex_c & tContainer, ISphTokenizer * pTokenizer, CSphDict * pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
+HitCollector_i * CreateHitCollector ( SnippetsDocIndex_c & tContainer, ISphTokenizer * pTokenizer, CSphDict * pDict, const SnippetQuerySettings_t & tQuery, const CSphIndexSettings & tIndexSettings,
 	const char * szDoc, int iDocLen, int iField, CacheStreamer_i & tTokenContainer, CSphVector<ZonePacked_t> & dZones, FunctorZoneInfo_t & tZoneInfo, SnippetResult_t & tRes );
 
 #endif // _snippetfunctor_

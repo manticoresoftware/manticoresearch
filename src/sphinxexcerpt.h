@@ -37,18 +37,25 @@ public:
 	virtual bool				TextFromIndex() const = 0;
 };
 
+
+struct SnippetLimits_t
+{
+	int				m_iLimit = 256;			///< max chars in snippet (0 if unlimited)
+	int				m_iLimitWords = 0;		///< max words in snippet
+	int				m_iLimitPassages = 0;	///< max passages in snippet
+
+	void			Format ( StringBuilder_c & tOut, const char * szPrefix ) const;
+};
+
 /// a query to generate an excerpt
 /// everything string is expected to be UTF-8
-struct SnippetQuerySettings_t
+struct SnippetQuerySettings_t : public SnippetLimits_t
 {
 	CSphString		m_sBeforeMatch {"<b>"};	///< string to insert before each match
 	CSphString		m_sAfterMatch {"</b>"};	///< string to insert after each match
 	CSphString		m_sChunkSeparator {" ... \0"};	///< string to insert between matching chunks (in limited mode only)
 	CSphString		m_sFieldSeparator {" | "};///< string to insert between fields
 	CSphString		m_sStripMode {"index"};	///< strip mode
-	int				m_iLimit = 256;			///< max chars in snippet (0 if unlimited)
-	int				m_iLimitWords = 0;		///< max words in snippet
-	int				m_iLimitPassages = 0;	///< max passages in snippet
 	int				m_iAround = 5;			///< how much words to highlight around each match
 	int				m_iPassageId = 1;		///< current %PASSAGE_ID% counter value (must start at 1)
 	bool			m_bUseBoundaries = false;	///< whether to extract passages by phrase boundaries setup in tokenizer
@@ -58,6 +65,8 @@ struct SnippetQuerySettings_t
 	bool			m_bAllowEmpty = false;	///< whether to allow empty snippets (by default, return something from the start)
 	bool			m_bEmitZones = false;	///< whether to emit zone for passage
 	bool			m_bForcePassages = false; ///< whether to force passages generation
+	bool			m_bLimitsPerField = true; ///< whether to apply global or per-field limits
+	SmallStringHash_T<SnippetLimits_t> m_hPerFieldLimits;	// snippet per-field limits that override global settings
 
 	bool			m_bHasBeforePassageMacro = false;
 	bool			m_bHasAfterPassageMacro = false;

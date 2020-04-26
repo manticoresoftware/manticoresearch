@@ -79,8 +79,8 @@ CSphString CompressionToStr ( Compression_e eComp )
 class SettingsFormatter_c
 {
 public:
-				SettingsFormatter_c ( FILE * pFile, const char * szPrefix, const char * szEq, const char * szPostfix, bool bIgnoreConf = false );
-				SettingsFormatter_c ( StringBuilder_c & tBuf, const char * szPrefix, const char * szEq, const char * szPostfix, bool bIgnoreConf = false );
+				SettingsFormatter_c ( FILE * pFile, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreConf = false );
+				SettingsFormatter_c ( StringBuilder_c & tBuf, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreConf = false );
 
 	template <typename T>
 	void		Add ( const char * szKey, T tVal, bool bCond );
@@ -94,24 +94,28 @@ private:
 	CSphString			m_sPrefix;
 	CSphString			m_sEq;
 	CSphString			m_sPostfix;
+	CSphString			m_sSeparator;
 	bool				m_bIgnoreCond = false;
+	bool				m_bFirst = true;
 };
 
 
-SettingsFormatter_c::SettingsFormatter_c ( FILE * pFile, const char * szPrefix, const char * szEq, const char * szPostfix, bool bIgnoreCond )
+SettingsFormatter_c::SettingsFormatter_c ( FILE * pFile, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreCond )
 	: m_pFile		( pFile )
 	, m_sPrefix		( szPrefix )
 	, m_sEq			( szEq )
 	, m_sPostfix	( szPostfix )
+	, m_sSeparator	( szSeparator )
 	, m_bIgnoreCond	( bIgnoreCond )
 
 {}
 
-SettingsFormatter_c::SettingsFormatter_c ( StringBuilder_c & tBuf, const char * szPrefix, const char * szEq, const char * szPostfix, bool bIgnoreCond )
+SettingsFormatter_c::SettingsFormatter_c ( StringBuilder_c & tBuf, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreCond )
 	: m_pBuf		( &tBuf )
 	, m_sPrefix		( szPrefix )
 	, m_sEq			( szEq )
 	, m_sPostfix	( szPostfix )
+	, m_sSeparator	( szSeparator )
 	, m_bIgnoreCond	( bIgnoreCond )
 {}
 
@@ -123,14 +127,24 @@ void SettingsFormatter_c::Add ( const char * szKey, T tVal, bool bCond )
 		return;
 
 	if ( m_pBuf )
+	{
+		if ( !m_bFirst )
+			(*m_pBuf) << m_sSeparator;
+
 		(*m_pBuf) << m_sPrefix << szKey << m_sEq << tVal << m_sPostfix;
+	}
 
 	if ( m_pFile )
 	{
 		StringBuilder_c tBuilder;
+		if ( !m_bFirst )
+			tBuilder << m_sSeparator;
+
 		tBuilder << m_sPrefix << szKey << m_sEq << tVal << m_sPostfix;
 		fputs ( tBuilder.cstr(), m_pFile );
 	}
+
+	m_bFirst = false;
 }
 
 template <typename T>
@@ -156,7 +170,7 @@ void SettingsFormatter_c::AddEmbedded ( const char * szKey, const VecTraits_T<T>
 
 void SettingsWriter_c::DumpReadable ( FILE * pFile, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const
 {
-	SettingsFormatter_c tFormatter ( pFile, "", ": ", "\n", true );
+	SettingsFormatter_c tFormatter ( pFile, "", ": ", "", "\n", true );
 	Format ( tFormatter, pFilenameBuilder );
 }
 
@@ -335,7 +349,7 @@ void CSphTokenizerSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder
 
 void CSphTokenizerSettings::DumpReadable ( FILE * fp, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const
 {
-	SettingsFormatter_c tFormatter ( fp, "tokenizer-", ": ", "\n", true );
+	SettingsFormatter_c tFormatter ( fp, "tokenizer-", ": ", "", "\n", true );
 	Format ( tFormatter, pFilenameBuilder );
 
 	tFormatter.AddEmbedded ( "embedded_exception", tEmbeddedFiles.m_dSynonyms, tEmbeddedFiles.m_bEmbeddedSynonyms );
@@ -454,7 +468,7 @@ void CSphDictSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * 
 
 void CSphDictSettings::DumpReadable ( FILE * fp, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const
 {
-	SettingsFormatter_c tFormatter ( fp, "dictionary-", ": ", "\n", true );
+	SettingsFormatter_c tFormatter ( fp, "dictionary-", ": ", "", "\n", true );
 	Format ( tFormatter, pFilenameBuilder );
 
 	tFormatter.AddEmbedded ( "embedded_stopword", tEmbeddedFiles.m_dStopwords, tEmbeddedFiles.m_bEmbeddedStopwords );
@@ -847,13 +861,15 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 
 void FileAccessSettings_t::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const
 {
-	tOut.Add ( "read_buffer_docs",		m_iReadBufferDocList,		m_iReadBufferDocList!=DEFAULT_READ_BUFFER );
-	tOut.Add ( "read_buffer_hits",		m_iReadBufferHitList,		m_iReadBufferHitList!=DEFAULT_READ_BUFFER );
+	FileAccessSettings_t tDefault;
 
-	tOut.Add ( "access_doclists",		FileAccessName(m_eDoclist),	m_eDoclist!=FileAccess_e::FILE );
-	tOut.Add ( "access_hitlists",		FileAccessName(m_eHitlist),	m_eHitlist!=FileAccess_e::FILE );
-	tOut.Add ( "access_plain_attrs",	FileAccessName(m_eAttr) ,	m_eAttr!=FileAccess_e::MMAP_PREREAD );
-	tOut.Add ( "access_blob_attrs",		FileAccessName(m_eBlob) ,	m_eBlob!=FileAccess_e::MMAP_PREREAD );
+	tOut.Add ( "read_buffer_docs",		m_iReadBufferDocList,		m_iReadBufferDocList!=tDefault.m_iReadBufferDocList );
+	tOut.Add ( "read_buffer_hits",		m_iReadBufferHitList,		m_iReadBufferHitList!=tDefault.m_iReadBufferHitList );
+
+	tOut.Add ( "access_doclists",		FileAccessName(m_eDoclist),	m_eDoclist!=tDefault.m_eDoclist );
+	tOut.Add ( "access_hitlists",		FileAccessName(m_eHitlist),	m_eHitlist!=tDefault.m_eHitlist );
+	tOut.Add ( "access_plain_attrs",	FileAccessName(m_eAttr) ,	m_eAttr!=tDefault.m_eAttr );
+	tOut.Add ( "access_blob_attrs",		FileAccessName(m_eBlob) ,	m_eBlob!=tDefault.m_eBlob );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1157,6 +1173,9 @@ void SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, bool
 
 static void FormatAllSettings ( const CSphIndex & tIndex, SettingsFormatter_c & tFormatter, FilenameBuilder_i * pFilenameBuilder )
 {
+	if ( tIndex.IsPQ() )
+		tFormatter.Add ( "type", "pq", true );
+
 	tIndex.GetSettings().Format ( tFormatter, pFilenameBuilder );
 
 	CSphFieldFilterSettings tFieldFilter;
@@ -1208,21 +1227,21 @@ void DumpReadable ( FILE * fp, const CSphIndex & tIndex, const CSphEmbeddedFiles
 
 void DumpSettings ( StringBuilder_c & tBuf, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder )
 {
-	SettingsFormatter_c tFormatter ( tBuf, "", " = ", "\n" );
+	SettingsFormatter_c tFormatter ( tBuf, "", " = ", "", "\n" );
 	FormatAllSettings ( tIndex, tFormatter, pFilenameBuilder );
 }
 
 
 void DumpSettingsCfg ( FILE * fp, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder )
 {
-	SettingsFormatter_c tFormatter ( fp, "\t", " = ", "\n" );
+	SettingsFormatter_c tFormatter ( fp, "\t", " = ", "", "\n" );
 	FormatAllSettings ( tIndex, tFormatter, pFilenameBuilder );
 }
 
 
 static void DumpCreateTable ( StringBuilder_c & tBuf, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder )
 {
-	SettingsFormatter_c tFormatter ( tBuf, "", "='", "' " );
+	SettingsFormatter_c tFormatter ( tBuf, "", "='", "'", " " );
 	FormatAllSettings ( tIndex, tFormatter, pFilenameBuilder );
 }
 
@@ -1355,6 +1374,7 @@ static RtTypedAttr_t g_dTypeNames[] =
 	{ SPH_ATTR_INT64SET,	"multi64" },
 	{ SPH_ATTR_JSON,		"json" },
 	{ SPH_ATTR_STRING,		"string" },
+	{ SPH_ATTR_STRINGPTR,	"string" },
 	{ SPH_ATTR_TIMESTAMP,	"timestamp" }
 };
 

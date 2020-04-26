@@ -1261,16 +1261,37 @@ void sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const c
 }
 
 
-const char * g_dEndpoints[] = { "index.html", "sql", "json/search", "json/index", "json/create", "json/insert", "json/replace", "json/update", "json/delete", "json/bulk", "json/pq" };
+struct Endpoint_t
+{
+	const char * m_szName1;
+	const char * m_szName2;
+};
+
+Endpoint_t g_dEndpoints[] =
+{
+	{ "index.html",	nullptr },
+	{ "sql",		nullptr },
+	{ "search",		"json/search" },
+	{ "index",		"json/index" },
+	{ "create",		"json/create" },
+	{ "insert",		"json/insert" },
+	{ "replace",	"json/replace" },
+	{ "update",		"json/update" },
+	{ "delete",		"json/delete" },
+	{ "bulk",		"json/bulk" },
+	{ "pq",			"json/pq" }
+};
+
 STATIC_ASSERT ( sizeof(g_dEndpoints)/sizeof(g_dEndpoints[0])==SPH_HTTP_ENDPOINT_TOTAL, SPH_HTTP_ENDPOINT_SHOULD_BE_SAME_AS_SPH_HTTP_ENDPOINT_TOTAL );
+
 
 ESphHttpEndpoint sphStrToHttpEndpoint ( const CSphString & sEndpoint )
 {
-	if ( sEndpoint.Begins ( g_dEndpoints[SPH_HTTP_ENDPOINT_PQ] ) )
+	if ( sEndpoint.Begins ( g_dEndpoints[SPH_HTTP_ENDPOINT_PQ].m_szName1 ) || sEndpoint.Begins ( g_dEndpoints[SPH_HTTP_ENDPOINT_PQ].m_szName2 ) )
 		return SPH_HTTP_ENDPOINT_PQ;
 
 	for ( int i = 0; i < SPH_HTTP_ENDPOINT_TOTAL; i++ )
-		if ( sEndpoint==g_dEndpoints[i] )
+		if ( sEndpoint==g_dEndpoints[i].m_szName1 || ( g_dEndpoints[i].m_szName2 && sEndpoint==g_dEndpoints[i].m_szName2 ) )
 			return ESphHttpEndpoint(i);
 
 	return SPH_HTTP_ENDPOINT_TOTAL;
@@ -1280,13 +1301,11 @@ ESphHttpEndpoint sphStrToHttpEndpoint ( const CSphString & sEndpoint )
 CSphString sphHttpEndpointToStr ( ESphHttpEndpoint eEndpoint )
 {
 	assert ( eEndpoint>=SPH_HTTP_ENDPOINT_INDEX && eEndpoint<SPH_HTTP_ENDPOINT_TOTAL );
-	return g_dEndpoints[eEndpoint];
+	return g_dEndpoints[eEndpoint].m_szName1;
 }
 
 
-
-static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, const CSphFixedVector<int64_t> & dDocids,
-	const CSphString & sIndex, JsonEscapedBuilder & tOut )
+static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, const CSphFixedVector<int64_t> & dDocids,	const CSphString & sIndex, JsonEscapedBuilder & tOut )
 {
 	ScopedComma_c sRootBlock ( tOut, ",", "{", "}" );
 

@@ -40,6 +40,18 @@ static int StringBinary2Number ( const char * sStr, int iLen )
 }
 
 
+static bool ParseSnippetLimit ( const CSphString & sName, int iVal, SnippetLimits_t & tOpt )
+{
+	if ( sName=="limit" )				tOpt.m_iLimit = iVal;
+	else if ( sName=="limit_passages" ) tOpt.m_iLimitPassages = iVal;
+	else if ( sName=="limit_words" ) 	tOpt.m_iLimitWords = iVal;
+	else
+		return false;
+
+	return true;
+}
+
+
 static bool ParseSnippetOption ( const CSphNamedVariant & tVariant, SnippetQuerySettings_t & tOpt, CSphString & sError )
 {
 	CSphString sName = tVariant.m_sKey;
@@ -49,17 +61,41 @@ static bool ParseSnippetOption ( const CSphNamedVariant & tVariant, SnippetQuery
 	int iVal = tVariant.m_iValue;
 	bool bVal = tVariant.m_iValue!=0;
 
+	if ( ParseSnippetLimit ( sName, iVal, tOpt ) )
+		return true;
+
+	const char * szBegins = "__";
+	if ( sName.Begins(szBegins) )
+	{
+		int iStartLen = strlen(szBegins);
+		const char * szTmp = sName.cstr()+iStartLen;
+		while ( *szTmp && *szTmp!='_' )
+			szTmp++;
+
+		if ( *szTmp )
+			szTmp++;
+
+		CSphString sField = sName.SubString ( iStartLen, szTmp-sName.cstr()-iStartLen-1 );
+		CSphString sOption = szTmp;
+		SnippetLimits_t tLimits;
+		if ( !ParseSnippetLimit ( sOption, iVal, tLimits ) )
+		{
+			sError.SetSprintf ( "unknown option %s in %s", sName.cstr(), sOption.cstr() );
+			return false;
+		}
+
+		tOpt.m_hPerFieldLimits.AddUnique(sField) = tLimits;
+		return true;
+	}
+
 	if ( sName=="before_match" )			tOpt.m_sBeforeMatch = sVal;
 	else if ( sName=="after_match" ) 		tOpt.m_sAfterMatch = sVal;
 	else if ( sName=="chunk_separator" )	tOpt.m_sChunkSeparator = sVal;
 	else if ( sName=="field_separator" )	tOpt.m_sFieldSeparator = sVal;
-	else if ( sName=="limit" )				tOpt.m_iLimit = iVal;
 	else if ( sName=="around" ) 			tOpt.m_iAround = iVal;
 	else if ( sName=="use_boundaries" )		tOpt.m_bUseBoundaries = bVal;
 	else if ( sName=="weight_order" )		tOpt.m_bWeightOrder = bVal;
 	else if ( sName=="force_all_words" ) 	tOpt.m_bForceAllWords = bVal;
-	else if ( sName=="limit_passages" ) 	tOpt.m_iLimitPassages = iVal;
-	else if ( sName=="limit_words" ) 		tOpt.m_iLimitWords = iVal;
 	else if ( sName=="start_passage_id" )	tOpt.m_iPassageId = iVal;
 	else if ( sName=="load_files" ) 		tOpt.m_uFilesMode |= bVal ? 1 : 0;
 	else if ( sName=="load_files_scattered" ) tOpt.m_uFilesMode |= bVal ? 2 : 0;
@@ -70,6 +106,7 @@ static bool ParseSnippetOption ( const CSphNamedVariant & tVariant, SnippetQuery
 	else if ( sName=="passage_boundary" )	tOpt.m_ePassageSPZ = GetPassageBoundary(sVal);
 	else if ( sName=="json_query" )			tOpt.m_bJsonQuery = bVal;
 	else if ( sName=="pack_fields" )		tOpt.m_bPackFields = bVal;
+	else if ( sName=="limits_per_field" )	tOpt.m_bLimitsPerField = bVal;
 	else if ( sName=="exact_phrase" )
 	{
 		sError.SetSprintf ( "exact_phrase option is deprecated" );

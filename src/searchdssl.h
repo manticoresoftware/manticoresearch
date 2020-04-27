@@ -13,8 +13,8 @@
 /// @file searchdssl.h
 /// SSL 
 
-#ifndef MANTICORE_SEARCHDSSL_H
-#define MANTICORE_SEARCHDSSL_H
+#pragma once
+
 
 struct SslClient_i
 {
@@ -49,6 +49,3 @@ bool SslTick ( SslClient_i * pClient, bool & bWrite, CSphVector<BYTE> & dBuf, in
 
 // encrypt data for sending 
 bool SslSend ( SslClient_i * pClient, CSphVector<BYTE> & dBuf, CSphVector<BYTE> & dDecrypted );
-
-
-#endif //MANTICORE_SEARCHDSSL_H

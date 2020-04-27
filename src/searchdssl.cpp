@@ -30,8 +30,8 @@ bool SslSend ( SslClient_i * pClient, CSphVector<BYTE> & dBuf, CSphVector<BYTE> 
 
 #else
 
-#include "openssl/ssl.h"
-#include "openssl/err.h"
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 
 #define VERBOSE_SSL 0
 
@@ -79,7 +79,7 @@ void fnSslLock ( int iMode, int iLock, const char * , int )
 
 CRYPTO_dynlock_value * fnSslLockDynCreate ( const char * , int )
 {
-	CRYPTO_dynlock_value * pLock = new CRYPTO_dynlock_value;
+	auto * pLock = new CRYPTO_dynlock_value;
 	return pLock;
 }
 

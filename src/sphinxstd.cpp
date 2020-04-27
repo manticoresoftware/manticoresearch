@@ -2009,7 +2009,7 @@ public:
 	{
 		// FIXME!!! start thread only in case of no workers available to offload call site
 		SphThread_t tThd;
-		return sphThreadCreate ( &tThd, Start, pItem, true, ( StringBuilder_c() << m_sName << "_Job" ).cstr () );
+		return sphCrashThreadCreate ( &tThd, Start, pItem, true, ( StringBuilder_c() << m_sName << "_Job" ).cstr () );
 	}
 
 private:

@@ -52,7 +52,8 @@ void ThdJobQL_t::Call ()
 
 	int iTid = GetOsThreadId();
 
-	ThdDesc_t tThdDesc;
+	ThreadLocal_t tThd;
+	auto & tThdDesc = tThd.m_tDesc;
 	tThdDesc.m_eProto = Proto_e::MYSQL41;
 	tThdDesc.m_iClientSock = m_pState->m_iClientSock;
 	tThdDesc.m_sClientName = m_pState->m_sClientName;
@@ -79,7 +80,7 @@ void ThdJobQL_t::Call ()
 	else
 	{
 		bSendResponse = LoopClientMySQL ( m_pState->m_uPacketID, *m_pState->m_pSession, sQuery,
-				m_pState->m_dBuf.GetLength(), bProfile, tThdDesc, tIn, tOut );
+				m_pState->m_dBuf.GetLength(), bProfile, tThd, tIn, tOut );
 		m_pState->m_bKeepSocket = bSendResponse;
 	}
 

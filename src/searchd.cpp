@@ -8600,13 +8600,15 @@ void HandleCommandPing ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c &
 	tOut.SendInt ( iCookie ); // echo the cookie back
 }
 
-static void HandleClientSphinx ( int iSock, ThdDesc_t & tThd ) REQUIRES ( HandlerThread )
+static void HandleClientSphinx ( int iSock, ThreadLocal_t & tThread ) REQUIRES ( HandlerThread )
 {
 	if ( iSock<0 )
 	{
 		sphWarning ( "invalid socket passed to HandleClientSphinx" );
 		return;
 	}
+
+	auto& tThd = tThread.m_tDesc;
 
 	MEMORY ( MEM_API_HANDLE );
 	ThdState ( ThdState_e::HANDSHAKE, tThd );
@@ -15836,8 +15838,10 @@ static bool ReadMySQLPacketHeader ( int iSock, int& iLen, BYTE& uPacketID )
 	return true;
 }
 
-static void HandleClientMySQL ( int iSock, ThdDesc_t & tThd ) REQUIRES ( HandlerThread )
+static void HandleClientMySQL ( int iSock, ThreadLocal_t & tThread ) REQUIRES ( HandlerThread )
 {
+	auto & tThd = tThread.m_tDesc;
+
 	MEMORY ( MEM_SQL_HANDLE );
 	ThdState ( ThdState_e::HANDSHAKE, tThd );
 
@@ -15944,7 +15948,7 @@ static void HandleClientMySQL ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handler
 				continue;
 		}
 
-		bool bRun = LoopClientMySQL ( uPacketID, tSession, sQuery, iPacketLen, bProfile, tThd, tIn, tOut );
+		bool bRun = LoopClientMySQL ( uPacketID, tSession, sQuery, iPacketLen, bProfile, tThread, tIn, tOut );
 
 		if ( !bRun )
 			break;
@@ -15955,7 +15959,7 @@ static void HandleClientMySQL ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handler
 }
 
 bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString & sQuery, int iPacketLen,
-	bool bProfile, ThdDesc_t & tThd, InputBuffer_c & tIn, ISphOutputBuffer & tOut )
+	bool bProfile, ThreadLocal_t & tThd, InputBuffer_c & tIn, ISphOutputBuffer & tOut )
 {
 	// get command, handle special packets
 	const BYTE uMysqlCmd = tIn.GetByte ();
@@ -15987,22 +15991,22 @@ bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString
 			assert ( uMysqlCmd==MYSQL_COM_QUERY );
 			sQuery = tIn.GetRawString ( iPacketLen-1 ); // OPTIMIZE? could be huge; avoid copying?
 			assert ( !tIn.GetError() );
-			ThdState ( ThdState_e::QUERY, tThd );
-			tThd.SetThreadInfo ( "%s", sQuery.cstr() ); // OPTIMIZE? could be huge; avoid copying?
-			SqlRowBuffer_c tRows ( &uPacketID, &tOut, tThd.m_iConnID, tSession.m_tVars.m_bAutoCommit );
-			bKeepProfile = tSession.Execute ( sQuery, tRows, tThd );
+			tThd.ThdState ( ThdState_e::QUERY );
+			tThd.m_tDesc.SetThreadInfo ( "%s", sQuery.cstr() ); // OPTIMIZE? could be huge; avoid copying?
+			SqlRowBuffer_c tRows ( &uPacketID, &tOut, tThd.m_tDesc.m_iConnID, tSession.m_tVars.m_bAutoCommit );
+			bKeepProfile = tSession.Execute ( sQuery, tRows, tThd.m_tDesc );
 		}
 		break;
 
 		default:
 			// default case, unknown command
 			sError.SetSprintf ( "unknown command (code=%d)", uMysqlCmd );
-			SendMysqlErrorPacket ( tOut, uPacketID, NULL, sError.cstr(), tThd.m_iConnID, MYSQL_ERR_UNKNOWN_COM_ERROR );
+			SendMysqlErrorPacket ( tOut, uPacketID, NULL, sError.cstr(), tThd.m_tDesc.m_iConnID, MYSQL_ERR_UNKNOWN_COM_ERROR );
 			break;
 	}
 
 	// send the response packet
-	ThdState ( ThdState_e::NET_WRITE, tThd );
+	tThd.ThdState ( ThdState_e::NET_WRITE );
 	tOut.Flush();
 	if ( tOut.GetError() )
 		return false;
@@ -16020,7 +16024,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString
 // HANDLE-BY-LISTENER
 //////////////////////////////////////////////////////////////////////////
 
-void HandleClient ( Proto_e eProto, int iSock, ThdDesc_t & tThd ) REQUIRES (HandlerThread)
+void HandleClient ( Proto_e eProto, int iSock, ThreadLocal_t & tThd ) REQUIRES (HandlerThread)
 {
 	switch ( eProto )
 	{
@@ -18626,9 +18630,10 @@ void HandlerThreadFunc ( void * pArg ) REQUIRES ( !HandlerThread )
 {
 	ScopedRole_c tHandler ( HandlerThread );
 	// handle that client
-	auto * pThd = (ThdDesc_t*) pArg;
+	auto * pThread = (ThreadLocal_t*) pArg;
+	auto pThd = &pThread->m_tDesc;
 	pThd->m_iTid = GetOsThreadId();
-	HandleClient ( pThd->m_eProto, pThd->m_iClientSock, *pThd );
+	HandleClient ( pThd->m_eProto, pThd->m_iClientSock, *pThread );
 	sphSockClose ( pThd->m_iClientSock );
 
 	// done; remove myself from the table
@@ -18637,7 +18642,7 @@ void HandlerThreadFunc ( void * pArg ) REQUIRES ( !HandlerThread )
 	CloseHandle ( pThd->m_tThd );
 #endif
 	pThd->RemoveFromGlobal ();
-	SafeDelete ( pThd );
+	SafeDelete ( pThread );
 }
 
 
@@ -18680,7 +18685,8 @@ void TickHead () REQUIRES ( MainThread )
 		return;
 	}
 
-	auto * pThd = new ThdDesc_t ();
+	auto * pThread = new ThreadLocal_t;
+	auto * pThd = &pThread->m_tDesc;
 	pThd->m_eProto = pListener->m_eProto;
 	pThd->m_iClientSock = iClientSock;
 	pThd->m_sClientName = sClientName;
@@ -18690,11 +18696,11 @@ void TickHead () REQUIRES ( MainThread )
 
 	pThd->AddToGlobal ();
 
-	if ( !sphCrashThreadCreate ( &pThd->m_tThd, HandlerThreadFunc, pThd, true, "handler" ) )
+	if ( !sphCrashThreadCreate ( &pThd->m_tThd, HandlerThreadFunc, pThread, true, "handler" ) )
 	{
 		int iErr = errno;
 		pThd->RemoveFromGlobal ();
-		SafeDelete ( pThd );
+		SafeDelete ( pThread );
 
 		FailClient ( iClientSock, "failed to create worker thread" );
 		sphWarning ( "failed to create worker thread, threads(%d), error[%d] %s", ThreadsNum(), iErr, strerrorm(iErr) );

@@ -1225,7 +1225,7 @@ bool IsFederatedUser ( const BYTE * pPacket, int iLen );
 bool IsFederatedUser ( ByteBlob_t tPacket );
 
 bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString & sQuery, int iPacketLen,
-		bool bProfile, ThdDesc_t & tThd, InputBuffer_c & tIn, ISphOutputBuffer & tOut );
+		bool bProfile, ThreadLocal_t & tThd, InputBuffer_c & tIn, ISphOutputBuffer & tOut );
 
 void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char * sStmt,
 	const char * sError, int iCID, MysqlErrors_e iErr );

@@ -15,16 +15,16 @@ set_property ( GLOBAL PROPERTY Label P$ENV{CI_PIPELINE_ID} J$ENV{CI_JOB_ID} )
 
 # set defaults for CI Windows test
 if ( WIN_TEST_CI )
-	set ( DISABLE_GTESTS "1" )
 	if ( NOT CTEST_BUILD_CONFIGURATION )
 		set ( CTEST_BUILD_CONFIGURATION "Debug" )
-	endif()
-	if ( NOT CTEST_CMAKE_GENERATOR )
-		set ( CTEST_CMAKE_GENERATOR "Visual Studio 14" )
 	endif()
 	if ( NOT COPY_DLL )
 		set ( COPY_DLL "${LIBS_BUNDLE}/dll/" )
 	endif()
+else()
+	if (NOT CTEST_CMAKE_GENERATOR)
+		set(CTEST_CMAKE_GENERATOR "Unix Makefiles")
+	endif ()
 endif()
 
 # platform specific options
@@ -38,10 +38,6 @@ endif ()
 if ( NOT CTEST_SOURCE_DIRECTORY )
 	set ( CTEST_SOURCE_DIRECTORY ".." )
 endif ()
-
-if ( NOT CTEST_CMAKE_GENERATOR )
-	set ( CTEST_CMAKE_GENERATOR "Unix Makefiles" )
-endif()
 
 if ( DEFINED ENV{WITH_PGSQL} )
 	set ( WITH_PGSQL "$ENV{WITH_PGSQL}" )

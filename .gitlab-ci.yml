@@ -127,6 +127,7 @@ win_tests:
     OPENSSL_ROOT_DIR: "x:/bundle/openssl-x64"
     COPY_DLL: "x:/bundle/dll"
     WIN_TEST_CI: "1"
+    CTEST_BUILD_CONFIGURATION: "Debug"
   script:
     - 'net use x: \\\\VBOXSRV\\shared'
 #    - export PATH='/cygdrive/x/bundle/openssl-x64:/cygdrive/x/bundle/Expat-1.95.8/Libs:/cygdrive/x/bundle/libiconv-1.9.1/bin:/cygdrive/x/bundle/mysql/bin:'$PATH

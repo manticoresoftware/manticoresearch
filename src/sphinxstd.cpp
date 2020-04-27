@@ -1080,7 +1080,7 @@ void * sphThreadGet ( SphThreadKey_t tKey )
 #endif
 }
 
-void * sphMyStack ()
+void * sphThreadStack ()
 {
 	return g_pTlsMyThreadStack;
 }

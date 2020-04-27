@@ -19,7 +19,7 @@ set ( LIBSPHINX_SRCS sphinx.cpp sphinxexcerpt.cpp
 		sphinxpq.cpp icu.cpp global_idf.cpp docstore.cpp lz4/lz4.c lz4/lz4hc.c
 		searchdexpr.cpp snippetfunctor.cpp snippetindex.cpp snippetstream.cpp
 		snippetpassage.cpp threadutils.cpp sphinxversion.cpp indexcheck.cpp
-		datareader.cpp indexformat.cpp indexsettings.cpp fileutils.cpp )
+		datareader.cpp indexformat.cpp indexsettings.cpp fileutils.cpp coroutine.cpp )
 set ( INDEXER_SRCS indexer.cpp )
 set ( INDEXTOOL_SRCS indextool.cpp )
 set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp
@@ -46,7 +46,7 @@ set ( UDFEXAMPLE_SRC udfexample.c )
 # all the (non-generated) headers
 # So if you add headers to the project and NOT see them in visual studio solution - just list them here!
 file ( GLOB HEADERS "sphinx*.h" lz4.h lz4hc.h http/http_parser.h secondaryindex.h searchnode.h killlist.h
-		attribute.h accumulator.h global_idf.h, optional.h, event.h)
+		attribute.h accumulator.h global_idf.h, optional.h, event.h coroutine.h)
 file ( GLOB SEARCHD_H "searchd*.h" "task*.h" threadutils.h )
 
 if ( USE_GALERA )

@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include "threadutils.h"
+#include "coroutine.h"
 #include <atomic>
 
 void SetStderrLogger ();
@@ -57,4 +58,13 @@ TEST ( ThreadPool, Counter100 )
 		tPool.Schedule ([&] { ++v; }, false);
 	tPool.Wait ();
 	ASSERT_EQ ( v, 100 );
+}
+
+TEST ( ThreadPool, Counter100c )
+{
+	SetGlobalThreads (300);
+	int v = 0;
+	for ( int i = 0; i<100000; ++i )
+		Threads::CallCoroutine ( [&] { ++v; } );
+	ASSERT_EQ ( v, 100000 );
 }

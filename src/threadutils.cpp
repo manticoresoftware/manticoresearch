@@ -833,6 +833,12 @@ public:
 		Post ( std::move ( handler ), bContinuation );
 	}
 
+	Keeper_t KeepWorking () final
+	{
+		m_tService.work_started ();
+		return Keeper_t ( nullptr, [this] ( void * ) { m_tService.work_finished (); } );
+	}
+
 	void Wait () final
 	{
 		LOG ( DETAIL, TP ) << "Wait";
@@ -921,6 +927,12 @@ public:
 	void Schedule ( Handler handler, bool bContinuation ) final
 	{
 		Post ( std::move ( handler ), bContinuation );
+	}
+
+	Keeper_t KeepWorking () final
+	{
+		m_tService.work_started ();
+		return Keeper_t ( nullptr, [this] ( void * ) { m_tService.work_finished (); } );
 	}
 
 	const char * szName () const final { return m_sName.cstr (); }

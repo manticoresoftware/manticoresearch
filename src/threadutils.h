@@ -142,10 +142,14 @@ using Handler = std::function<void ()>;
 using Predicate = std::function<bool ()>;
 using Handlers = std::initializer_list<Handler>;
 
+// used to RAII keep Scheduler running (when work finished - it is usually destroyed)
+using Keeper_t = SharedPtrCustom_t<void*>;
+
 struct Scheduler_i
 {
 	virtual ~Scheduler_i() {};
 	virtual void Schedule ( Handler handler, bool bContinuation ) = 0;
+	virtual Keeper_t KeepWorking() = 0;
 	virtual const char * szName () const { return "<unknown>"; }
 	virtual int WorkingThreads() const = 0;
 	virtual long Works () const = 0;
@@ -187,6 +191,8 @@ void SetGlobalThreads ( int iThreads );
 // Scheduler to dedicated thread (or nullptr, if current N of such threads >= iMaxThreads)
 // you MUST schedule at least one job, or explicitly delete non-engaged scheduler (it will leak otherwise).
 Threads::Scheduler_i* GetAloneScheduler ( int iMaxThreads, const char* szName=nullptr );
+
+using SchedulerFabric_fn = std::function<Threads::Scheduler_i * ( void )>;
 
 // add handler which will be called on daemon's shutdown right after
 // g_bShutdown is set to true. Returns cookie for refer the callback in future.

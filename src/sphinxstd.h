@@ -3771,10 +3771,16 @@ void sphThreadKeyDelete ( SphThreadKey_t tKey );
 /// get thread-local key value
 void * sphThreadGet ( SphThreadKey_t tKey );
 
-/// get the pointer to my thread's stack
+/// get the pointer to my job's stack (m.b. different from thread stack in coro)
 void * sphMyStack ();
 
-/// get size of used stack
+/// get size of the stack (either thread, either coro - depends from context)
+int sphMyStackSize();
+
+/// get the pointer to my thread's stack
+void * sphThreadStack ();
+
+/// get size of used stack (threads or coro - depends from context)
 int64_t sphGetStackUsed();
 
 /// set the size of my thread's stack

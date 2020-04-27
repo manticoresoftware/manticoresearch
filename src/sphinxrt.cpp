@@ -6187,8 +6187,9 @@ static void QueryDiskChunks ( const CSphQuery * pQuery,
 				tMultiArgs.m_pLocalDocs = pLocalDocs;
 				tMultiArgs.m_iTotalDocs = iTotalDocs;
 
-				// we use sorters in both disk chunks and ram chunks, that's why we don't want to move to a new schema before we searched ram chunks
-				tMultiArgs.m_bModifySorterSchemas = false;
+			// we use sorters in both disk chunks and ram chunks,
+			// that's why we don't want to move to a new schema before we searched ram chunks
+			tMultiArgs.m_bModifySorterSchemas = false;
 
 				bInterrupt = !tGuard.m_dDiskChunks[iChunk]->MultiQuery ( pQuery,
 						&tChunkResult, iSorters, dLocalSorters.begin(), tMultiArgs );
@@ -6207,9 +6208,7 @@ static void QueryDiskChunks ( const CSphQuery * pQuery,
 									tStat.first, pDstStat->first, pDstStat->second );
 					}
 				} else
-				{
 					hResWordStats = hChunkStats;
-				}
 
 				dDiskBlobPools[iChunk] = tChunkResult.m_pBlobPool;
 				pThResult->m_iBadRows += tChunkResult.m_iBadRows;
@@ -6226,7 +6225,6 @@ static void QueryDiskChunks ( const CSphQuery * pQuery,
 				if ( bInterrupt && !tChunkResult.m_sError.IsEmpty ())
 					// FIXME? maybe handle this more gracefully (convert to a warning)?
 					pThResult->m_sError = tChunkResult.m_sError;
-
 			};
 
 			if ( bMtEnabled )

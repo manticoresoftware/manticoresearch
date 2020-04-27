@@ -178,6 +178,30 @@ void NetSendData_t::CloseSocket()
 		m_tState->CloseSocket();
 }
 
+void JobDoSendNB ( NetSendData_t * pSend, CSphNetLoop * pLoop )
+{
+	assert ( pLoop && pSend );
+	NetEvent_e eRes = pSend->Setup ( sphMicroTimer() );
+
+	// try to push data to socket here then transfer send-action to net-loop in case send needs poll to continue
+	CSphVector<ISphNetAction *> dNext ( 1 );
+	dNext.Resize ( 0 );
+	DWORD uGotEvents = NE_OUT;
+	eRes = pSend->Loop ( uGotEvents, dNext, pLoop );
+	if ( eRes==NE_REMOVE )
+	{
+		SafeDelete ( pSend );
+		assert ( dNext.GetLength()<2 );
+		if ( dNext.GetLength() )
+			pLoop->AddAction ( dNext[0] );
+	} else
+	{
+		pSend->SetContinue();
+		pLoop->AddAction ( pSend );
+	}
+}
+
+// helper
 bool CheckSocketError ( DWORD uGotEvents, const char * sMsg, const NetStateAPI_t * pConn, bool bDebug )
 {
 	bool bReadError = ( ( uGotEvents & NE_IN ) && ( uGotEvents & ( NE_ERR | NE_HUP ) ) );
@@ -213,27 +237,4 @@ void LogSocketError ( const char * sMsg, const NetStateAPI_t * pConn, bool bDebu
 	else
 		sphWarning ( "%s (client=%s(%d)), error: %d '%s', sock=%d",
 				sMsg, pConn->m_sClientName, pConn->m_iConnID, iErrno, sphSockError ( iErrno ), pConn->m_iClientSock );
-}
-
-void JobDoSendNB ( NetSendData_t * pSend, CSphNetLoop * pLoop )
-{
-	assert ( pLoop && pSend );
-	NetEvent_e eRes = pSend->Setup ( sphMicroTimer() );
-
-	// try to push data to socket here then transfer send-action to net-loop in case send needs poll to continue
-	CSphVector<ISphNetAction *> dNext ( 1 );
-	dNext.Resize ( 0 );
-	DWORD uGotEvents = NE_OUT;
-	eRes = pSend->Loop ( uGotEvents, dNext, pLoop );
-	if ( eRes==NE_REMOVE )
-	{
-		SafeDelete ( pSend );
-		assert ( dNext.GetLength()<2 );
-		if ( dNext.GetLength() )
-			pLoop->AddAction ( dNext[0] );
-	} else
-	{
-		pSend->SetContinue();
-		pLoop->AddAction ( pSend );
-	}
 }

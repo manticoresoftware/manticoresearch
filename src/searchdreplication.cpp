@@ -983,7 +983,6 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	pRecvArgs->Release();
 
 	sphLogDebugRpl ( "replicator is created for cluster '%s'", tArgs.m_pCluster->m_sName.cstr() );
-
 	return true;
 }
 

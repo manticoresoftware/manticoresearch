@@ -125,16 +125,6 @@ NetEvent_e NetActionAccept_c::Impl_c::LoopAccept ( DWORD uGotEvents, CSphVector<
 			return NE_KEEP;
 		}
 
-#ifdef	TCP_NODELAY
-		int bNoDelay = 1;
-		if ( saStorage.ss_family==AF_INET && setsockopt ( iClientSock, IPPROTO_TCP, TCP_NODELAY, (char*)&bNoDelay, sizeof(bNoDelay) )<0 )
-		{
-			sphWarning ( "set of TCP_NODELAY failed: %s", sphSockError() );
-			sphSockClose ( iClientSock );
-			return NE_KEEP;
-		}
-#endif
-
 		if ( g_bMaintenance && !m_tListener.m_bVIP )
 		{
 			sphWarning ( "server is in maintenance mode: refusing connection" );
@@ -219,7 +209,7 @@ NetActionAccept_c::~NetActionAccept_c ()
 NetEvent_e NetActionAccept_c::Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dQueue, CSphNetLoop * pLoop )
 {
 	assert ( m_pImpl );
-	return m_pImpl->LoopAccept (uGotEvents, dQueue, pLoop );
+	return m_pImpl->LoopAccept ( uGotEvents, dQueue, pLoop );
 }
 
 bool NetActionAccept_c::GetStats ( int & iConnections )

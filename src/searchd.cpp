@@ -241,8 +241,7 @@ static volatile bool						g_bReloadForced = false;	// true in case reload issued
 
 static CSphVector<SphThread_t>				g_dTickPoolThread;
 
-static CSphMutex							g_tPersLock;
-static CSphAtomic							g_iPersistentInUse;
+CSphAtomic									g_iPersistentInUse;
 
 
 /// command names
@@ -704,12 +703,13 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	// force even long time searches to shut
 	sphInterruptNow();
 
+	int64_t tmShutStarted = sphMicroTimer ();
+
 	// release all planned/scheduled tasks
 	TaskManager::ShutDown();
 
 	ShutdownFlushingMutable();
 
-	int64_t tmShutStarted = sphMicroTimer();
 	// stop search threads; up to shutdown_timeout seconds
 	WaitFinishPreread ( g_iShutdownTimeoutUs );
 	while ( ( ThreadsNum() > 0 ) && ( sphMicroTimer()-tmShutStarted )<g_iShutdownTimeoutUs )
@@ -764,9 +764,9 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	SslDone();
 
-	ARRAY_FOREACH ( i, g_dListeners )
-		if ( g_dListeners[i].m_iSock>=0 )
-			sphSockClose ( g_dListeners[i].m_iSock );
+	for ( auto& dListener : g_dListeners )
+		if ( dListener.m_iSock>=0 )
+			sphSockClose ( dListener.m_iSock );
 
 	ClosePersistentSockets();
 
@@ -1266,14 +1266,6 @@ int sphCreateInetSocket ( DWORD uAddr, int iPort ) REQUIRES ( MainThread )
 #ifdef TCP_NODELAY
 	if ( setsockopt ( iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
 		sphWarning ( "setsockopt(TCP_NODELAY) failed: %s", sphSockError() );
-#endif
-
-#ifdef TCP_FASTOPEN
-	if ( ( g_iTFO!=TFO_ABSENT ) && ( g_iTFO & TFO_LISTEN ) )
-	{
-		if ( setsockopt ( iSock, IPPROTO_TCP, TCP_FASTOPEN, ( char * ) &iOn, sizeof ( iOn ) ) )
-			sphWarning ( "setsockopt(TCP_FASTOPEN) failed: %s", sphSockError () );
-	}
 #endif
 
 	int iTries = 12;
@@ -4895,12 +4887,9 @@ protected:
 
 	void							OnRunFinished ();
 
-	const ServedDesc_t *			GetIndex ( const CSphString &sName ) const;
-
 private:
 	bool							CheckMultiQuery ( int iStart, int iEnd ) const;
 	bool							RLockInvokedIndexes();
-	void							PrepareQueryIndexes ( VectorAgentConn_t &dRemotes, CSphVector<DistrServedByAgent_t> &dDistrServedByAgent );
 	void							UniqLocals ();
 	void							RunActionQuery ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors ); ///< run delete/update
 	void							BuildIndexList ( int iStart, int iEnd, int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent );
@@ -5440,7 +5429,6 @@ void SearchHandler_c::RunLocalSearchesParallel()
 		}
 }
 
-int64_t sphCpuTimer();
 
 const CSphString & SearchHandler_c::GetLocalIndexName ( int iLocal ) const
 {
@@ -15988,7 +15976,6 @@ bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString
 		case MYSQL_COM_QUERY:
 		{
 			// handle query packet
-			assert ( uMysqlCmd==MYSQL_COM_QUERY );
 			sQuery = tIn.GetRawString ( iPacketLen-1 ); // OPTIMIZE? could be huge; avoid copying?
 			assert ( !tIn.GetError() );
 			tThd.ThdState ( ThdState_e::QUERY );

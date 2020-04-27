@@ -1943,7 +1943,7 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 	int iOn = 1;
 	iRes = setsockopt ( m_iSock, IPPROTO_TCP, TCP_FASTOPEN, (char*) &iOn, sizeof ( iOn ) );
 	if ( iRes )
-		sphWarning ( "setsockopt (TCP_FASTOPEN) failed: %s", sphSockError () );
+		sphLogDebug ( "setsockopt (TCP_FASTOPEN) failed: %s", sphSockError () );
 	sphLogDebugA ( "%d TFO branch", m_iStoreTag );
 	// fixme! ConnectEx doesn't accept scattered buffer. Need to prepare plain one for at least MSS size
 #endif
@@ -2505,9 +2505,10 @@ bool AgentConn_t::CommitResult ()
 		return true;
 	}
 
-	if  ( CheckOrphaned() )
+	if ( CheckOrphaned() )
 	{
-		Finish();
+		Finish ();
+		sphLogDebug ( "Orphaned (kind of done) connection detected!" );
 		return true;
 	}
 

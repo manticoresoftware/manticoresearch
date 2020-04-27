@@ -510,10 +510,7 @@ public:
 	bool	GetDwords ( CSphVector<DWORD> & dBuffer, int & iGot, int iMax );
 	bool	GetQwords ( CSphVector<SphAttr_t> & dBuffer, int & iGot, int iMax );
 
-	inline int		HasBytes() const
-	{
-		return ( m_pBuf + m_iLen - m_pCur );
-	}
+	inline int		HasBytes() const { return int ( m_pBuf - m_pCur + m_iLen ); }
 
 protected:
 	const BYTE *	m_pBuf;

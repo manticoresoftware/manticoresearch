@@ -14251,7 +14251,7 @@ static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex,
 	{
 		if ( dStatus.MatchAdd ( "ram_chunk" ) )
 			dStatus.Add().SetSprintf ( INT64_FMT, tStatus.m_iRamChunkSize );
-		if ( dStatus.MatchAdd ( "ram_chunks_count" ) )
+		if ( dStatus.MatchAdd ( "ram_chunk_segments_count" ) )
 			dStatus.Add().SetSprintf ( "%d", tStatus.m_iNumRamChunks );
 		if ( dStatus.MatchAdd ( "disk_chunks" ) )
 			dStatus.Add().SetSprintf ( "%d", tStatus.m_iNumChunks );

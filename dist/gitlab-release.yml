@@ -53,8 +53,8 @@ windows:
     - windev19
     - build
   variables:
-    - LIBS_BUNDLE: "x:/bundle"
-    - OPENSSL_ROOT_DIR: "x:/bundle/openssl-x64"
+    LIBS_BUNDLE: "x:/bundle"
+    OPENSSL_ROOT_DIR: "x:/bundle/openssl-x64"
   script:
     - 'net use x: \\\\VBOXSRV\\shared'
     - mkdir sphinxbin-x64

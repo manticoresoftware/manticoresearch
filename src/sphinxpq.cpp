@@ -1183,12 +1183,8 @@ struct PercolateMatchJob_t : public ISphJob
 
 	void Call () final
 	{
-		CrashQuery_t tQueryTLS;
 		if ( m_pCrashQuery )
-		{
-			CrashQuerySetTop ( &tQueryTLS ); // set crash info container
-			CrashQuerySet ( *m_pCrashQuery ); // transfer crash info into container
-		}
+			GlobalCrashQuerySet ( *m_pCrashQuery ); // transfer crash info into container
 		m_tMatchCtx.m_dMsg.Clear();
 		for ( long iQuery = m_tQueryCounter++; iQuery<m_dStored.GetLength (); iQuery = m_tQueryCounter++ )
 			MatchingWork ( m_dStored[iQuery], m_tMatchCtx );
@@ -1422,7 +1418,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 	// work loop
 	if ( pPool )
 	{
-		tCrashQuery = CrashQueryGet();
+		tCrashQuery = GlobalCrashQueryGet();
 		for ( int i=1; i<dResults.GetLength(); ++i )
 		{
 			auto * pJob = new PercolateMatchJob_t ( dStored, iCurQuery, *dResults[i], &tCrashQuery );

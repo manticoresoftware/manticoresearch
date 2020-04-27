@@ -6137,7 +6137,7 @@ static void QueryDiskChunks ( const CSphQuery * pQuery,
 
 	// store and manage tls stuff
 	Tls_context_c dTlsData ( dSorters, pResult );
-	CrashQuery_t tCrashQuery = CrashQueryGet();
+	CrashQuery_t tCrashQuery = GlobalCrashQueryGet ();
 
 	bool bMtEnabled = dTlsData.IsEnabled ();
 
@@ -6164,12 +6164,17 @@ static void QueryDiskChunks ( const CSphQuery * pQuery,
 			// dWaiter as smart-pointer will ensure that mutex is not released until all chunks processed.
 			auto fnCalc = [&, iChunk, dWaiter, tCrashQuery] () mutable
 			{
+				GlobalCrashQuerySet ( tCrashQuery );
+
 				if ( bInterrupt ) // some earlier job met error; abort.
 					return;
 
 				CrashQuery_t tCleanQuery;
 				GuardedCrashQuery_t tCrashQueryClean ( tCleanQuery ); // clean up TLS for thread in the pool
-				CrashQuerySetTop ( &tCrashQuery ); // set crash info container
+
+				// leaved here as example how WRONG is set pointer to a local variable into global space
+				// (spent a day for debugging a crash because of it)
+				// CrashQuerySetTop ( &tCrashQuery ); // set crash info container
 
 				auto iThdID = dTlsData.PrepareLocalTlsContext ( iChunk );
 				auto & dLocalSorters = dTlsData.GetTlsSorters(iThdID);

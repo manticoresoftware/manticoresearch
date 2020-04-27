@@ -94,9 +94,6 @@ ThdJobHttp_c::Impl_c::Impl_c ( CSphNetLoop * pLoop, NetStateAPI_t * pState, bool
 
 void ThdJobHttp_c::Impl_c::CallHttp ()
 {
-	CrashQuery_t tQueryTLS;
-	GlobalSetTopQueryTLS ( &tQueryTLS );
-
 	sphLogDebugv ( "%p http job started, buffer len=%d, tick=%u", this, m_tState->m_dBuf.GetLength(), m_pLoop->m_uTick );
 
 	int iTid = GetOsThreadId();
@@ -117,7 +114,7 @@ void ThdJobHttp_c::Impl_c::CallHttp ()
 	tCrashQuery.m_pQuery = m_tState->m_dBuf.Begin();
 	tCrashQuery.m_iSize = m_tState->m_dBuf.GetLength();
 	tCrashQuery.m_bHttp = true;
-	SphCrashLogger_c::SetLastQuery ( tCrashQuery );
+	GlobalCrashQuerySet ( tCrashQuery );
 
 
 	if ( g_bMaintenance && !m_tState->m_bVIP )
@@ -131,7 +128,7 @@ void ThdJobHttp_c::Impl_c::CallHttp ()
 		m_tState->m_dBuf = std::move(dResult);
 	}
 
-	SphCrashLogger_c::SetLastQuery ( CrashQuery_t() );
+	GlobalCrashQuerySet ( CrashQuery_t() );
 	tThdDesc.RemoveFromGlobal ();
 
 	sphLogDebugv ( "%p http job done, tick=%u", this, m_pLoop->m_uTick );

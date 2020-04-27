@@ -781,7 +781,6 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	sphInfo ( "shutdown complete" );
 
-	SphCrashLogger_c::Done();
 	sphThreadDone ( g_iLogFile );
 
 #if USE_WINDOWS
@@ -948,21 +947,10 @@ static int		g_iCrashInfoLen = 0;
 static char		g_sMinidump[SPH_TIME_PID_MAX_SIZE] = "";
 #endif
 
-static CrashQuery_t g_tUnhandled;
-
-// lets invalidate pointer when this instance goes out of scope to get immediate crash
-// instead of a reference to incorrect stack frame in case of some programming error
-SphCrashLogger_c::~SphCrashLogger_c () { g_pTlsCrashQuery = nullptr; }
-
-void SphCrashLogger_c::Init ()
-{
-	sphBacktraceInit();
-}
-
 #if !USE_WINDOWS
-void SphCrashLogger_c::HandleCrash ( int sig ) NO_THREAD_SAFETY_ANALYSIS
+void CrashLogger::HandleCrash ( int sig ) NO_THREAD_SAFETY_ANALYSIS
 #else
-LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
+LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 #endif // !USE_WINDOWS
 {
 	if ( g_iLogFile<0 )
@@ -981,7 +969,7 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	sphWrite ( g_iLogFile, g_sCrashInfo, g_iCrashInfoLen );
 
 	// log query
-	CrashQuery_t tQuery = SphCrashLogger_c::GetQuery();
+	CrashQuery_t tQuery = GlobalCrashQueryGet ();
 
 	bool bValidQuery = ( tQuery.m_pQuery && tQuery.m_iSize>0 );
 #if !USE_WINDOWS
@@ -1150,14 +1138,8 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	}
 }
 
-void SphCrashLogger_c::SetLastQuery ( const CrashQuery_t & tQuery )
-{
-	CrashQuery_t * pQuery = g_pTlsCrashQuery;
-	assert ( pQuery );
-	*pQuery = tQuery;
-}
 
-void SphCrashLogger_c::SetupTimePID ()
+void CrashLogger::SetupTimePID ()
 {
 	char sTimeBuf[SPH_TIME_PID_MAX_SIZE];
 	sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
@@ -1166,48 +1148,17 @@ void SphCrashLogger_c::SetupTimePID ()
 		"------- FATAL: CRASH DUMP -------\n[%s] [%5d]\n", sTimeBuf, (int)getpid() );
 }
 
-CrashQuery_t SphCrashLogger_c::GetQuery()
-{
-	const CrashQuery_t * pQuery = g_pTlsCrashQuery;
-
-	// in case TLS not set \ found handler still should process crash
-	// FIXME!!! some service threads use raw threads instead ThreadCreate
-	if ( !pQuery )
-		return g_tUnhandled;
-	else
-		return *pQuery;
-}
-
-bool SphCrashLogger_c::ThreadCreate ( SphThread_t * pThread, void (*pCall)(void*), void * pArg, bool bDetached, const char* sName )
-{
-	auto * pWrapperArg = new CallArgPair_t ( pCall, pArg );
-	bool bSuccess = sphThreadCreate ( pThread, ThreadWrapper, pWrapperArg, bDetached, sName );
-	if ( !bSuccess )
-		SafeDelete ( pWrapperArg );
-	return bSuccess;
-}
-
-void SphCrashLogger_c::ThreadWrapper ( void * pArg )
-{
-	auto * pPair = static_cast<CallArgPair_t *> ( pArg );
-	CrashQuery_t tQueryTLS;
-	GlobalSetTopQueryTLS ( &tQueryTLS );
-	pPair->m_pCall ( pPair->m_pArg );
-	SafeDelete( pPair );
-}
-
-
 #if USE_WINDOWS
 void SetSignalHandlers ( bool )
 {
-	SphCrashLogger_c::Init();
+	sphBacktraceInit ();
 	snprintf ( g_sMinidump, SPH_TIME_PID_MAX_SIZE-1, "%s.%d", g_sPidFile.scstr(), (int)getpid() );
-	SetUnhandledExceptionFilter ( SphCrashLogger_c::HandleCrash );
+	SetUnhandledExceptionFilter ( CrashLogger::HandleCrash );
 }
 #else
 void SetSignalHandlers ( bool bAllowCtrlC=false ) REQUIRES ( MainThread )
 {
-	SphCrashLogger_c::Init();
+	sphBacktraceInit ();
 	struct sigaction sa;
 	sigfillset ( &sa.sa_mask );
 	sa.sa_flags = SA_NOCLDSTOP;
@@ -1240,11 +1191,11 @@ void SetSignalHandlers ( bool bAllowCtrlC=false ) REQUIRES ( MainThread )
 	sigaltstack( &ss, 0 );
 	sa.sa_flags |= SA_ONSTACK;
 
-	sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGSEGV, &sa, NULL )!=0 ) return;
-	sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGBUS, &sa, NULL )!=0 ) return;
-	sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGABRT, &sa, NULL )!=0 ) return;
-	sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGILL, &sa, NULL )!=0 ) return;
-	sa.sa_handler = SphCrashLogger_c::HandleCrash;	if ( sigaction ( SIGFPE, &sa, NULL )!=0 ) return;
+	sa.sa_handler = CrashLogger::HandleCrash;	if ( sigaction ( SIGSEGV, &sa, NULL )!=0 ) return;
+	sa.sa_handler = CrashLogger::HandleCrash;	if ( sigaction ( SIGBUS, &sa, NULL )!=0 ) return;
+	sa.sa_handler = CrashLogger::HandleCrash;	if ( sigaction ( SIGABRT, &sa, NULL )!=0 ) return;
+	sa.sa_handler = CrashLogger::HandleCrash;	if ( sigaction ( SIGILL, &sa, NULL )!=0 ) return;
+	sa.sa_handler = CrashLogger::HandleCrash;	if ( sigaction ( SIGFPE, &sa, NULL )!=0 ) return;
 
 	bSignalsSet = true;
 }
@@ -5202,7 +5153,7 @@ struct LocalSearchThreadContext_t
 	void LocalSearch ()
 	{
 		GuardedCrashQuery_t tGuardedCrash ( m_tCrashQuery );
-		SphCrashLogger_c::SetLastQuery ( m_tCrashQuery );
+		GlobalCrashQuerySet ( m_tCrashQuery );
 
 		ThreadLocal_t tThd ( m_pHandler->m_tThd );
 		tThd.m_tDesc.m_iCookie = m_iLocalThreadID;
@@ -5212,7 +5163,7 @@ struct LocalSearchThreadContext_t
 			const CSphString & sIndex = m_pHandler->GetLocalIndexName ( m_pSearches[iCurSearch].m_iLocal );
 			tCrashQuery.m_pIndex = sIndex.cstr();
 			tCrashQuery.m_iIndexLen = sIndex.Length();
-			SphCrashLogger_c::SetLastQuery ( tCrashQuery );
+			GlobalCrashQuerySet ( tCrashQuery );
 
 			m_pHandler->RunLocalSearchMT ( m_pSearches[iCurSearch], tThd );
 		}
@@ -5334,7 +5285,7 @@ void SearchHandler_c::RunLocalSearchesParallel()
 	// setup threads
 	int iThreads = Min ( g_iDistThreads, dWorks.GetLength () );
 	CSphVector<LocalSearchThreadContext_t> dThreads ( iThreads );
-	CrashQuery_t tCrashQuery = SphCrashLogger_c::GetQuery(); // transfer query info for crash logger to new thread
+	CrashQuery_t tCrashQuery = GlobalCrashQueryGet(); // transfer query info for crash logger to new thread
 
 	// reserve extra schema set for each thread
 	// (that is simpler than ping-pong with mutex on each addition)
@@ -5352,7 +5303,7 @@ void SearchHandler_c::RunLocalSearchesParallel()
 		t.m_pCurSearch = &iaCursor;
 		t.m_iSearches = dWorks.GetLength();
 		t.m_pSearches = dWorks.Begin();
-		SphCrashLogger_c::ThreadCreate ( &t.m_tThd, LocalSearchThreadFunc, (void*)&t, false, "LocalSearch" );
+		sphCrashThreadCreate ( &t.m_tThd, LocalSearchThreadFunc, (void*)&t, false, "LocalSearch" );
 		// FIXME! check result
 	}
 
@@ -5641,7 +5592,7 @@ void SearchHandler_c::RunLocalSearches()
 		return;
 	}
 
-	GuardedCrashQuery_t tRefCrashQuery ( SphCrashLogger_c::GetQuery() );
+	GuardedCrashQuery_t tRefCrashQuery ( GlobalCrashQueryGet () );
 
 	if ( m_dQueries[0].m_bAgent )
 		m_dExtraSchemas.Reset ( m_iEnd-m_iStart+1 );
@@ -5657,7 +5608,7 @@ void SearchHandler_c::RunLocalSearches()
 		CrashQuery_t tCrashQuery = tRefCrashQuery.m_tReference;
 		tCrashQuery.m_pIndex = dLocal.m_sName.cstr();
 		tCrashQuery.m_iIndexLen = dLocal.m_sName.Length();
-		SphCrashLogger_c::SetLastQuery ( tCrashQuery );
+		GlobalCrashQuerySet ( tCrashQuery );
 
 		const auto * pServed = m_dLocked.Get ( sLocal );
 		if ( !pServed )
@@ -7148,7 +7099,7 @@ struct SnippetJob_t : public ISphJob
 
 	void Call () final
 	{
-		CrashQuerySet ( m_tCrashQuery ); // transfer crash info into container
+		GlobalCrashQuerySet ( m_tCrashQuery ); // transfer crash info into container
 
 		// fixme! really only one query text and settings for the entire batch
 		// fixme! error handling!
@@ -7255,7 +7206,7 @@ bool SnippetReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & t
 	{
 		ExcerptQuery_t & tQuery = dQueries[iDoc];
 		CSphVector<BYTE> & dRes = tQuery.m_dResult;
-		
+
 		if ( m_pWorker->m_pSettings->m_uFilesMode & 2 ) // scattered files
 		{
 			if ( !tReq.GetString(dRes) || dRes.IsEmpty() )
@@ -7372,7 +7323,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, co
 				tQuery.m_dResult = pSnippetBuilder->PackResult ( tRes, dRequestedFields );
 			else
 			{
-				bError = true; 
+				bError = true;
 				sErrors << tRes.m_sError;
 			}
 		}
@@ -7444,7 +7395,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, co
 	auto * pPool = sphThreadPoolCreate ( g_iDistThreads - 1, "snippets", sError );
 	if ( !pPool )
 		sphWarning ( "failed to create thread_pool, single thread snippets used: %s", sError.cstr () );
-	CrashQuery_t tCrashQuery = SphCrashLogger_c::GetQuery (); // transfer query info for crash logger to new thread
+	CrashQuery_t tCrashQuery = GlobalCrashQueryGet (); // transfer query info for crash logger to new thread
 	CSphAtomic iCurQuery;
 	CSphVector<SnippetJob_t> dThreads ( Min ( 1, g_iDistThreads ) );
 	SnippetJob_t * pJobLocal = nullptr;
@@ -8798,7 +8749,7 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 	tCrashQuery.m_bMySQL = false;
 	tCrashQuery.m_uCMD = eCommand;
 	tCrashQuery.m_uVer = uCommandVer;
-	SphCrashLogger_c::SetLastQuery ( tCrashQuery );
+	GlobalCrashQuerySet ( tCrashQuery );
 
 	// handle known commands
 	assert ( eCommand<SEARCHD_COMMAND_WRONG );
@@ -8850,7 +8801,7 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 	}
 
 	// set off query guard
-	SphCrashLogger_c::SetLastQuery ( CrashQuery_t() );
+	GlobalCrashQuerySet ( CrashQuery_t () );
 	return bPersist;
 }
 
@@ -15174,7 +15125,7 @@ public:
 		tCrashQuery.m_pQuery = (const BYTE *)sQuery.cstr();
 		tCrashQuery.m_iSize = sQuery.Length();
 		tCrashQuery.m_bMySQL = true;
-		SphCrashLogger_c::SetLastQuery ( tCrashQuery );
+		GlobalCrashQuerySet ( tCrashQuery );
 
 		if (sQuery=="select DATABASE(), USER() limit 1")
 		{
@@ -15893,7 +15844,7 @@ static void HandleClientMySQL ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handler
 	// set off query guard
 	CrashQuery_t tCrashQuery;
 	tCrashQuery.m_bMySQL = true;
-	SphCrashLogger_c::SetLastQuery ( tCrashQuery );
+	GlobalCrashQuerySet ( tCrashQuery );
 
 	int iCID = tThd.m_iConnID;
 	const char * sClientIP = tThd.m_sClientName.cstr();
@@ -16000,7 +15951,7 @@ static void HandleClientMySQL ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handler
 	}
 
 	// set off query guard
-	SphCrashLogger_c::SetLastQuery ( CrashQuery_t() );
+	GlobalCrashQuerySet ( CrashQuery_t() );
 }
 
 bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString & sQuery, int iPacketLen,
@@ -18739,7 +18690,7 @@ void TickHead () REQUIRES ( MainThread )
 
 	pThd->AddToGlobal ();
 
-	if ( !SphCrashLogger_c::ThreadCreate ( &pThd->m_tThd, HandlerThreadFunc, pThd, true, "handler" ) )
+	if ( !sphCrashThreadCreate ( &pThd->m_tThd, HandlerThreadFunc, pThd, true, "handler" ) )
 	{
 		int iErr = errno;
 		pThd->RemoveFromGlobal ();
@@ -19282,6 +19233,10 @@ static void SetUidShort ( bool bTestMode )
 	UidShortSetup ( iServerId, (int)uStartedSec );
 }
 
+namespace {
+	void ExposedSetTopQueryTls ( CrashQuery_t * pQuery );
+}
+
 int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 {
 	ScopedRole_c thMain (MainThread);
@@ -19765,7 +19720,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	// handle my signals
 	SetSignalHandlers ( g_bOptNoDetach );
-	CrashQuerySetupHandlers ( GlobalSetTopQueryTLS, SphCrashLogger_c::GetQuery, SphCrashLogger_c::SetLastQuery );
 
 	// create logs
 	if ( !g_bOptNoLock )
@@ -20119,10 +20073,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		g_dTickPoolThread.Resize ( g_iNetWorkers );
 		ARRAY_FOREACH ( iTick, g_dTickPoolThread )
 		{
-			if ( !sphThreadCreate ( g_dTickPoolThread.Begin ()+iTick, [] (void*)->void
+			if ( !sphCrashThreadCreate ( g_dTickPoolThread.Begin ()+iTick, [] (void*)->void
 				{
-					CrashQuery_t tQueryTLS;
-					GlobalSetTopQueryTLS ( &tQueryTLS );
 					ServeNetLoop ( g_dListeners );
 				}, nullptr, false, StringBuilder_c ().Sprintf ( "TickPool_%d", iTick ).cstr ()) )
 				sphDie ( "failed to create tick pool thread" );
@@ -20130,8 +20082,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	}
 
 	// crash logging for the main thread (for --console case)
+	// fixme! check if it is still actual with coro, and m.b. remove this.
+	// (we never perform queries from main thread now)
 	CrashQuery_t tQueryTLS;
-	GlobalSetTopQueryTLS ( &tQueryTLS );
+	ExposedSetTopQueryTls ( &tQueryTLS );
 
 	// time for replication to sync with cluster
 	ReplicationStart ( hSearchd, dListenerDescs, bNewCluster, bNewClusterForce );
@@ -20145,7 +20099,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	while (true)
 	{
-		SphCrashLogger_c::SetupTimePID();
+		CrashLogger::SetupTimePID();
 		TickHead();
 	}
 } // NOLINT ServiceMain() function length
@@ -20238,4 +20192,14 @@ volatile int & getMaxChildren ()
 {
 	static int iMaxChildren = 0;
 	return iMaxChildren;
+}
+
+// defined in threadutils.cpp
+// exposed _only_ here, to avoid unfair usage
+void GlobalSetTopQueryTLS ( CrashQuery_t * pQuery );
+namespace {
+	void ExposedSetTopQueryTls ( CrashQuery_t * pQuery )
+	{
+		GlobalSetTopQueryTLS ( pQuery );
+	}
 }

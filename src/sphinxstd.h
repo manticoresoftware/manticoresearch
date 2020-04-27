@@ -3750,6 +3750,7 @@ void * sphThreadInit ( bool bDetached=false );
 void sphThreadDone ( int iFD );
 
 /// my create thread wrapper
+/// for threads serving clients use sphCrashThreadCreate instead
 bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg, bool bDetached=false, const char * sName=nullptr );
 
 /// get name of a thread

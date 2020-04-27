@@ -1945,7 +1945,7 @@ public:
 		int iStarted = 0;
 		for ( auto& dWorker : m_dWorkers )
 		{
-			if ( sphThreadCreate ( &dWorker, Tick, this, false,
+			if ( sphCrashThreadCreate ( &dWorker, Tick, this, false,
 				StringBuilder_c().Sprintf ( "%s_%d", m_sName.cstr (), iStarted ).cstr() ) )
 				++iStarted;
 		}

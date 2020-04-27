@@ -167,52 +167,15 @@ void AloneShutdowncatch ();
 
 extern ThreadRole MainThread;
 
-extern thread_local CrashQuery_t * g_pTlsCrashQuery;
-void GlobalSetTopQueryTLS ( CrashQuery_t * pQuery );
 
-/// This class is basically a pointer to query string and some more additional info.
-/// Each thread which executes query must have exactly one instance of this class on
-/// its stack and m_tLastQueryTLS will contain a pointer to that instance.
-/// Main thread has explicitly created SphCrashLogger_c on its stack, other query
-/// threads should be created with SphCrashLogger_c::ThreadCreate()
-class SphCrashLogger_c
+namespace CrashLogger
 {
-public:
-	SphCrashLogger_c() = default;
-
-	~SphCrashLogger_c();
-
-	static void Init() REQUIRES ( MainThread );
-
-	static void Done() REQUIRES ( MainThread )
-	{};
-
 #if !USE_WINDOWS
-	static void HandleCrash( int );
+	void HandleCrash( int );
 #else
-	static LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc );
+	LONG WINAPI HandleCrash ( EXCEPTION_POINTERS * pExc );
 #endif
-	static void SetLastQuery( const CrashQuery_t& tQuery );
-	static void SetupTimePID();
-	static CrashQuery_t GetQuery();
-
-	// create thread with crash logging
-	static bool ThreadCreate( SphThread_t* pThread, void ( * pCall )( void* ), void* pArg, bool bDetached = false,
-		const char* sName = nullptr );
-
-private:
-	struct CallArgPair_t
-	{
-		CallArgPair_t( void ( * pCall )( void* ), void* pArg )
-			: m_pCall( pCall ), m_pArg( pArg )
-		{}
-
-		void ( * m_pCall )( void* );
-		void* m_pArg;
-	};
-
-	// sets up a TLS for a given thread
-	static void ThreadWrapper( void* pArg );
+	void SetupTimePID();
 };
 
 // Scheduler to global thread pool

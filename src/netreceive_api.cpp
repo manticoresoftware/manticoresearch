@@ -38,9 +38,6 @@ ThdJobAPI_t::ThdJobAPI_t ( CSphNetLoop * pLoop, NetStateAPI_t * pState )
 
 void ThdJobAPI_t::Call ()
 {
-	CrashQuery_t tQueryTLS;
-	GlobalSetTopQueryTLS ( &tQueryTLS );
-
 	sphLogDebugv ( "%p API job started, command=%d, tick=%u", this, m_eCommand, m_pLoop->m_uTick );
 
 	int iTid = GetOsThreadId();

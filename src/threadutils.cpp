@@ -295,10 +295,6 @@ SphThread_t makeTinyThread ( Handler tHandler, int iNum=0, const char * sName="m
 			iNumber = pThis->m_iNumber;
 			LOG( DEBUG, MT ) << "thread created";
 
-			// set up tls here
-			CrashQuery_t tQueryTLS;
-			GlobalSetTopQueryTLS ( &tQueryTLS );
-
 			if ( pThis->m_tHandler )
 				pThis->m_tHandler ();
 			LOG( DEBUG, MT ) << "thread ended";
@@ -310,7 +306,7 @@ SphThread_t makeTinyThread ( Handler tHandler, int iNum=0, const char * sName="m
 	sThdName.Sprintf ( "%s_%d", sName, iNum );
 	SphThread_t tThd;
 	CSphScopedPtr<TinyThread_t> pHandler { new TinyThread_t ( std::move ( tHandler ), sName, iNum) };
-	if ( sphThreadCreate ( &tThd, TinyThread_t::Do, pHandler.Ptr (), bDetached, sThdName.cstr ()) )
+	if ( sphCrashThreadCreate ( &tThd, TinyThread_t::Do, pHandler.Ptr (), bDetached, sThdName.cstr ()) )
 		pHandler.LeakPtr ();
 	return tThd;
 }
@@ -1083,7 +1079,49 @@ void Threads::AloneShutdowncatch ()
 }
 
 thread_local CrashQuery_t * g_pTlsCrashQuery = nullptr;
+
 void GlobalSetTopQueryTLS ( CrashQuery_t * pQuery )
 {
 	g_pTlsCrashQuery = pQuery;
 }
+
+void GlobalCrashQuerySet ( const CrashQuery_t & tQuery )
+{
+	CrashQuery_t * pQuery = g_pTlsCrashQuery;
+	assert ( pQuery );
+	*pQuery = tQuery;
+}
+
+static CrashQuery_t g_tUnhandled;
+CrashQuery_t GlobalCrashQueryGet ()
+{
+	const CrashQuery_t * pQuery = g_pTlsCrashQuery;
+
+	// in case TLS not set \ found handler still should process crash
+	// FIXME!!! some service threads use raw threads instead ThreadCreate
+	if ( !pQuery )
+		return g_tUnhandled;
+	else
+		return *pQuery;
+}
+
+using CallArgPair_t = std::pair<void ( * ) ( void * ), void *>;
+
+static void ThreadWrapper ( void * pArg )
+{
+	auto * pPair = static_cast<CallArgPair_t *> ( pArg );
+	CrashQuery_t tQueryTLS;
+	GlobalSetTopQueryTLS ( &tQueryTLS );
+	pPair->first ( pPair->second );
+	delete pPair;
+}
+
+bool sphCrashThreadCreate ( SphThread_t * pThread, void (*pCall)(void*), void * pArg, bool bDetached, const char* sName )
+{
+	auto * pWrapperArg = new CallArgPair_t ( pCall, pArg );
+	bool bSuccess = sphThreadCreate ( pThread, ThreadWrapper, pWrapperArg, bDetached, sName );
+	if ( !bSuccess )
+		delete pWrapperArg;
+	return bSuccess;
+}
+

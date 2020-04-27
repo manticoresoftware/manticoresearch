@@ -3135,38 +3135,6 @@ void RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, CSphFixedVecto
 	assert ( fCheck<=100.000001 && fCheck>=99.99999);
 }
 
-
-// crash related code
-static CrashQuerySetTop_fn * g_pCrashQuerySetTop = nullptr;
-static CrashQueryGet_fn * g_pCrashQueryGet = nullptr;
-static CrashQuerySet_fn * g_pCrashQuerySet = nullptr;
-static CrashQuery_t g_tDummyCrashQuery;
-
-void CrashQuerySetTop ( CrashQuery_t * pQuery )
-{
-	if ( g_pCrashQuerySetTop )
-		g_pCrashQuerySetTop ( pQuery );
-}
-
-CrashQuery_t CrashQueryGet()
-{
-	return ( g_pCrashQueryGet ? g_pCrashQueryGet() : g_tDummyCrashQuery );
-}
-
-void CrashQuerySet ( const CrashQuery_t & tCrash )
-{
-	if ( g_pCrashQuerySet )
-		g_pCrashQuerySet ( tCrash );
-}
-
-void CrashQuerySetupHandlers ( CrashQuerySetTop_fn * pSetTop, CrashQueryGet_fn * pGet, CrashQuerySet_fn * pSet )
-{
-	g_pCrashQuerySetTop = pSetTop;
-	g_pCrashQueryGet = pGet;
-	g_pCrashQuerySet = pSet;
-}
-
-
 /// collect warnings/errors from any suitable context.
 Warner_c::Warner_c ( const char * sDel, const char * sPref, const char * sTerm )
 	: m_sWarnings ( sDel, sPref, sTerm )

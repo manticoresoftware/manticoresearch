@@ -48,9 +48,6 @@ ThdJobQL_t::ThdJobQL_t ( CSphNetLoop * pLoop, NetStateQL_t * pState )
 
 void ThdJobQL_t::Call ()
 {
-	CrashQuery_t tQueryTLS;
-	GlobalSetTopQueryTLS ( &tQueryTLS );
-
 	sphLogDebugv ( "%p QL job started, tick=%u", this, m_pLoop->m_uTick );
 
 	int iTid = GetOsThreadId();

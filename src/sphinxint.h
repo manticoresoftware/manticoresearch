@@ -2465,26 +2465,30 @@ struct CrashQuery_t
 	int				m_iIndexLen = 0;
 };
 
-void CrashQuerySetTop ( CrashQuery_t * pQuery );
-CrashQuery_t CrashQueryGet();
-void CrashQuerySet ( const CrashQuery_t & tCrash );
+// set thread-local crash local
+void GlobalCrashQuerySet ( const CrashQuery_t & tQuery );
 
-typedef void CrashQuerySetTop_fn ( CrashQuery_t * pQuery );
-typedef CrashQuery_t CrashQueryGet_fn();
-typedef void CrashQuerySet_fn ( const CrashQuery_t & tCrash );
-void CrashQuerySetupHandlers ( CrashQuerySetTop_fn * pSetTop, CrashQueryGet_fn * pGet, CrashQuerySet_fn * pSet );
+// get crash info saved thread-locally
+CrashQuery_t GlobalCrashQueryGet ();
+
+// wrapper over sphThreadCreate with key for crash
+bool sphCrashThreadCreate ( SphThread_t * pThread, void (* pCall) ( void * ), void * pArg,
+		bool bDetached, const char * sName );
 
 struct GuardedCrashQuery_t : public ISphNoncopyable
 {
 	const CrashQuery_t m_tReference;
 	explicit GuardedCrashQuery_t ( const CrashQuery_t & tCrashQuery )
 		: m_tReference ( tCrashQuery )
-	{
-	}
+	{}
+
+	GuardedCrashQuery_t ()
+		: m_tReference ( GlobalCrashQueryGet() )
+	{}
 
 	~GuardedCrashQuery_t()
 	{
-		CrashQuerySet ( m_tReference );
+		GlobalCrashQuerySet ( m_tReference );
 	}
 };
 

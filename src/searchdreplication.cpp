@@ -694,9 +694,6 @@ static wsrep_cb_status_t Unordered_fn ( void * pCtx, const void * pData, size_t 
 // callbacks defined above.
 static void ReplicationRecv_fn ( void * pArgs )
 {
-	CrashQuery_t tQueryTLS;
-	GlobalSetTopQueryTLS ( &tQueryTLS );
-
 	auto * pCtx = (ReceiverCtx_t *)pArgs;
 	assert ( pCtx );
 
@@ -973,7 +970,7 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	}
 
 	// let's start listening thread with proper provider set
-	if ( !sphThreadCreate ( &tArgs.m_pCluster->m_tRecvThd, ReplicationRecv_fn, pRecvArgs, false, sMyName.cstr() ) )
+	if ( !sphCrashThreadCreate ( &tArgs.m_pCluster->m_tRecvThd, ReplicationRecv_fn, pRecvArgs, false, sMyName.cstr() ) )
 	{
 		pRecvArgs->Release();
 		sError.SetSprintf ( "failed to start thread %d (%s)", errno, strerror(errno) );

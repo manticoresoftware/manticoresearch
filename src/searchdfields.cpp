@@ -218,11 +218,11 @@ static bool GetFieldFromLocal ( const CSphString & sIndexName, const GetFieldArg
 		return false;
 	}
 
-	GuardedCrashQuery_t tRefCrashQuery ( SphCrashLogger_c::GetQuery() );
+	GuardedCrashQuery_t tRefCrashQuery;
 	CrashQuery_t tCrashQuery = tRefCrashQuery.m_tReference;
 	tCrashQuery.m_pIndex = sIndexName.cstr();
 	tCrashQuery.m_iIndexLen = sIndexName.Length();
-	SphCrashLogger_c::SetLastQuery ( tCrashQuery );
+	GlobalCrashQuerySet ( tCrashQuery );
 
 	const CSphIndex * pIndex = pDesc->m_pIndex;
 	pIndex->CreateReader ( iSessionID );

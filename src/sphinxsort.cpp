@@ -6571,7 +6571,7 @@ bool sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema )
 	return false;
 }
 
-static void CreateSorters ( const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries,
+static void CreateSorters ( const VecTraits_T<CSphQuery> & dQueries,
 	const VecTraits_T<ISphMatchSorter*> & dSorters, const VecTraits_T<QueueCreator_c> & dCreators,
 	const VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes )
 {
@@ -6747,5 +6747,5 @@ void sphCreateMultiQueue ( const SphQueueSettings_t & tQueue, const VecTraits_T<
 {
 	RawVector_T<QueueCreator_c> dCreators;
 	CreateMultiQueue ( dCreators, tQueue, dQueries, dSorters, dErrors, tRes, dExtras );
-	CreateSorters ( tQueue, dQueries, dSorters, dCreators, dErrors, tRes );
+	CreateSorters ( dQueries, dSorters, dCreators, dErrors, tRes );
 }

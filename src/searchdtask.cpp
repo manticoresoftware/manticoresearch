@@ -663,10 +663,11 @@ private:
 
 	void FinishAllWorkers () NO_THREAD_SAFETY_ANALYSIS
 	{
-		KickJobPool ();
-
 		while ( m_dWorkers.GetLength ())
+		{
+			KickJobPool ();
 			sphSleepMsec ( 50 );
+		}
 	}
 
 	static void TheadPoolWorker ( void* pArg ) REQUIRES (!MtJobThread)

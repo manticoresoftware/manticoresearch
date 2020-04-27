@@ -18,12 +18,9 @@
 
 struct NetStateQL_t final : public NetStateAPI_t
 {
-	CSphinxqlSession *	m_pSession;
+	SphinxqlSessionPublic	m_tSession;
 	bool				m_bAuthed = false;
 	BYTE				m_uPacketID = 1;
-
-	NetStateQL_t ();
-	~NetStateQL_t () final;
 };
 
 class NetReceiveDataQL_c final : public ISphNetAction

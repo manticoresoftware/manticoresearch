@@ -15084,7 +15084,7 @@ RtIndex_i * CSphSessionAccum::GetIndex ()
 
 static bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, CSphString & sFederatedQuery );
 
-class CSphinxqlSession : public SphinxqlSession_i
+class CSphinxqlSession
 {
 private:
 	CSphString			m_sError;
@@ -15108,7 +15108,7 @@ public:
 	//
 	// returns true if the current profile should be kept (default)
 	// returns false if profile should be discarded (eg. SHOW PROFILE case)
-	bool Execute ( const CSphString & sQuery, RowBuffer_i & tOut, ThdDesc_t & tThd ) final
+	bool Execute ( const CSphString & sQuery, RowBuffer_i & tOut, ThdDesc_t & tThd )
 	{
 		// set on query guard
 		CrashQuery_t tCrashQuery;
@@ -15617,54 +15617,55 @@ public:
 	{
 		m_bFederatedUser = true;
 	}
-
-public:
-	CSphinxqlSession () {}
-	~CSphinxqlSession() override {}
 };
 
-SphinxqlSession_i * CreateSphinxqlSession ()
+SphinxqlSessionPublic::SphinxqlSessionPublic()
+	: m_pImpl { new CSphinxqlSession }
+{}
+
+SphinxqlSessionPublic::~SphinxqlSessionPublic ()
 {
-	return new CSphinxqlSession();
+	SafeDelete ( m_pImpl );
 }
 
-CSphinxqlSession* MakeSphinxqlSession()
+bool SphinxqlSessionPublic::Execute ( const CSphString & sQuery, RowBuffer_i & tOut, ThdDesc_t & tThd )
 {
-	return new CSphinxqlSession;
+	assert ( m_pImpl );
+	return m_pImpl->Execute ( sQuery, tOut, tThd );
 }
 
-void DestroySphinxqlSession ( CSphinxqlSession * pSession )
+void SphinxqlSessionPublic::SetFederatedUser ()
 {
-	SafeDelete ( pSession );
+	assert ( m_pImpl );
+	m_pImpl->SetFederatedUser ();
 }
 
-void SetFederatedUser ( CSphinxqlSession * pSession )
+bool SphinxqlSessionPublic::IsAutoCommit () const
 {
-	assert ( pSession );
-	pSession->SetFederatedUser ();
+	assert ( m_pImpl );
+	return m_pImpl->m_tVars.m_bAutoCommit;
 }
 
-bool IsAutoCommit ( const CSphinxqlSession * pSession )
+bool SphinxqlSessionPublic::StartProfiling()
 {
-	assert ( pSession );
-	return pSession->m_tVars.m_bAutoCommit;
-}
-
-bool StartProfiling ( CSphinxqlSession * pSession )
-{
-	assert ( pSession );
-	bool bProfile = pSession->m_tVars.m_bProfile; // the current statement might change it
+	assert ( m_pImpl );
+	bool bProfile = m_pImpl->m_tVars.m_bProfile; // the current statement might change it
 	if ( bProfile )
-		pSession->m_tProfile.Start ( SPH_QSTATE_TOTAL );
+		m_pImpl->m_tProfile.Start ( SPH_QSTATE_TOTAL );
 	return bProfile;
 }
 
-void SetVIP ( CSphinxqlSession * pSession, bool bVIP )
+void SphinxqlSessionPublic::SetVIP ( bool bVIP )
 {
-	assert ( pSession );
-	pSession->m_tVars.m_bVIP = bVIP;
+	assert ( m_pImpl );
+	m_pImpl->m_tVars.m_bVIP = bVIP;
 }
 
+CSphinxqlSession & SphinxqlSessionPublic::Impl ()
+{
+	assert ( m_pImpl );
+	return *m_pImpl;
+}
 
 /// sphinxql command over API
 void HandleCommandSphinxql ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t & tThd ) REQUIRES (HandlerThread)

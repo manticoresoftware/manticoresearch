@@ -1209,14 +1209,22 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 	ThdDesc_t & tThd, InputBuffer_c & tBuf, CachedOutputBuffer_c & tOut, bool bManagePersist );
 void HandleCommandPing ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq );
 
-// declare class and functions to agnostically work with class (without explicit definition)
 class CSphinxqlSession;
-CSphinxqlSession * MakeSphinxqlSession ();
-void DestroySphinxqlSession ( CSphinxqlSession * pSession );
-bool StartProfiling ( CSphinxqlSession * pSession );
-void SetVIP ( CSphinxqlSession * pSession, bool bVIP );
-void SetFederatedUser ( CSphinxqlSession * pSession );
-bool IsAutoCommit ( const CSphinxqlSession * pSession );
+class SphinxqlSessionPublic : public ISphNoncopyable
+{
+	CSphinxqlSession * m_pImpl;
+
+public:
+	SphinxqlSessionPublic();
+	~SphinxqlSessionPublic();
+
+	bool Execute ( const CSphString & sQuery, RowBuffer_i & tOut, ThdDesc_t & tThd );
+	void SetFederatedUser ();
+	bool IsAutoCommit () const;
+	bool StartProfiling ();
+	void SetVIP ( bool bVIP );
+	CSphinxqlSession& Impl();
+};
 
 bool IsFederatedUser ( const BYTE * pPacket, int iLen );
 bool IsFederatedUser ( ByteBlob_t tPacket );
@@ -1449,23 +1457,5 @@ public:
 		HeadEnd();
 	}
 };
-
-class SphinxqlSession_i : public ISphNoncopyable
-{
-public:
-	SphinxqlSession_i() {}
-	virtual ~SphinxqlSession_i() {}
-
-	// just execute one sphinxql statement
-	//
-	// IMPORTANT! this does NOT start or stop profiling, as there a few external
-	// things (client net reads and writes) that we want to profile, too
-	//
-	// returns true if the current profile should be kept (default)
-	// returns false if profile should be discarded (eg. SHOW PROFILE case)
-	virtual bool Execute ( const CSphString & sQuery, RowBuffer_i & tOut, ThdDesc_t & tThd ) = 0;
-};
-
-SphinxqlSession_i * CreateSphinxqlSession ();
 
 #endif // _searchdaemon_

@@ -19,16 +19,6 @@ extern int g_iThdQueueMax;
 extern volatile bool g_bMaintenance;
 static auto& g_bShutdown = sphGetShutdown ();
 
-NetStateQL_t::NetStateQL_t ()
-{
-	m_pSession = MakeSphinxqlSession ();
-}
-
-NetStateQL_t::~NetStateQL_t ()
-{
-	DestroySphinxqlSession ( m_pSession );
-}
-
 struct ThdJobQL_t : public ISphJob
 {
 	CSphScopedPtr<NetStateQL_t>		m_pState;
@@ -64,13 +54,13 @@ void ThdJobQL_t::Call ()
 	tThdDesc.AddToGlobal ();
 
 	CSphString sQuery; // to keep data alive for SphCrashQuery_c
-	auto bProfile = StartProfiling ( m_pState->m_pSession );
+	auto bProfile = m_pState->m_tSession.StartProfiling ();
 
 	MemInputBuffer_c tIn ( m_pState->m_dBuf );
 	ISphOutputBuffer tOut;
 
 	// needed to check permission to turn maintenance mode on/off
-	SetVIP ( m_pState->m_pSession, m_pState->m_bVIP );
+	m_pState->m_tSession.SetVIP ( m_pState->m_bVIP );
 
 	m_pState->m_bKeepSocket = false;
 	bool bSendResponse = true;
@@ -79,7 +69,7 @@ void ThdJobQL_t::Call ()
 				tThdDesc.m_iConnID, MYSQL_ERR_UNKNOWN_COM_ERROR );
 	else
 	{
-		bSendResponse = LoopClientMySQL ( m_pState->m_uPacketID, *m_pState->m_pSession, sQuery,
+		bSendResponse = LoopClientMySQL ( m_pState->m_uPacketID, m_pState->m_tSession.Impl(), sQuery,
 				m_pState->m_dBuf.GetLength(), bProfile, tThd, tIn, tOut );
 		m_pState->m_bKeepSocket = bSendResponse;
 	}
@@ -277,11 +267,11 @@ NetEvent_e NetReceiveDataQL_c::Impl_c::LoopQl ( DWORD uGotEvents, CSphNetLoop * 
 			{
 				m_pState->m_bAuthed = true;
 				if ( IsFederatedUser ( m_pState->m_dBuf.Begin(), m_pState->m_dBuf.GetLength() ) )
-					SetFederatedUser( m_pState->m_pSession );
+					m_pState->m_tSession.SetFederatedUser();
 				m_pState->m_dBuf.Resize ( 0 );
 				ISphOutputBuffer tOut;
 				tOut.SwapData ( m_pState->m_dBuf );
-				SendMysqlOkPacket ( tOut, m_pState->m_uPacketID, IsAutoCommit (m_pState->m_pSession) );
+				SendMysqlOkPacket ( tOut, m_pState->m_uPacketID, m_pState->m_tSession.IsAutoCommit() );
 				tOut.SwapData ( m_pState->m_dBuf );
 
 				m_pState->m_iLeft = m_pState->m_dBuf.GetLength();
@@ -357,15 +347,14 @@ NetEvent_e NetReceiveDataQL_c::Impl_c::LoopQl ( DWORD uGotEvents, CSphNetLoop * 
 						case MYSQL_COM_PING:
 						case MYSQL_COM_INIT_DB:
 							// client wants a pong
-							SendMysqlOkPacket ( tOut, m_pState->m_uPacketID, IsAutoCommit ( m_pState->m_pSession ) );
+							SendMysqlOkPacket ( tOut, m_pState->m_uPacketID, m_pState->m_tSession.IsAutoCommit () );
 							break;
 
 						case MYSQL_COM_SET_OPTION:
 							// bMulti = ( tIn.GetWord()==MYSQL_OPTION_MULTI_STATEMENTS_ON );
 							// that's how we could double check and validate multi query
 							// server reporting success in response to COM_SET_OPTION and COM_DEBUG
-							SendMysqlEofPacket ( tOut, m_pState->m_uPacketID, 0, false,
-									IsAutoCommit ( m_pState->m_pSession ) );
+							SendMysqlEofPacket ( tOut, m_pState->m_uPacketID, 0, false, m_pState->m_tSession.IsAutoCommit () );
 							break;
 
 						default:

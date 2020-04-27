@@ -839,10 +839,10 @@ public:
 		CSphString sError;
 
 		JsonRowBuffer_c tOut;
-		CSphScopedPtr<SphinxqlSession_i> pSession { CreateSphinxqlSession() };
 		ThdDesc_t tTmdThd;
 
-		pSession->Execute ( sQuery, tOut, tTmdThd );
+		SphinxqlSessionPublic tSession;
+		tSession.Execute ( sQuery, tOut, tTmdThd );
 
 		BuildReply ( tOut.Finish(), SPH_HTTP_STATUS_200 );
 

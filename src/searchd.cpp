@@ -1342,11 +1342,22 @@ int sphCreateInetSocket ( DWORD uAddr, int iPort ) REQUIRES ( MainThread )
 	return iSock;
 }
 
-void AddListener ( const CSphString & sListen, bool bHttpAllowed, CSphVector<ListenerDesc_t> & dDesc )  REQUIRES (
-	MainThread )
+ListenerDesc_t MakeAnyListener ( int iPort, Proto_e eProto=Proto_e::SPHINX )
 {
-	ListenerDesc_t tDesc = ParseListener ( sListen.cstr() );
-	CHECK_LISTENER ( tDesc );
+	ListenerDesc_t tDesc;
+	tDesc.m_eProto = eProto;
+	tDesc.m_uIP = htonl ( INADDR_ANY );
+	tDesc.m_iPort = iPort;
+	tDesc.m_iPortsCount = 0;
+	tDesc.m_bVIP = false;
+	return tDesc;
+}
+
+// add any listener we will serve by our own (i.e. NO galera's since it is not our deal)
+bool AddGlobalListener ( const ListenerDesc_t& tDesc, bool bHttpAllowed )  REQUIRES ( MainThread )
+{
+	if ( tDesc.m_eProto==Proto_e::REPLICATION )
+		return false;
 
 	Listener_t tListener;
 	tListener.m_eProto = tDesc.m_eProto;
@@ -1356,12 +1367,8 @@ void AddListener ( const CSphString & sListen, bool bHttpAllowed, CSphVector<Lis
 	if ( ( tDesc.m_eProto==Proto_e::HTTP || tDesc.m_eProto == Proto_e::HTTPS ) && !bHttpAllowed )
 	{
 		sphWarning ( "thread_pool disabled, can not listen for http interface, port=%d, use workers=thread_pool", tDesc.m_iPort );
-		return;
+		return false;
 	}
-
-	dDesc.Add ( tDesc );
-	if ( tDesc.m_eProto==Proto_e::REPLICATION )
-		return;
 
 #if !USE_WINDOWS
 	if ( !tDesc.m_sUnix.IsEmpty () )
@@ -1373,6 +1380,7 @@ void AddListener ( const CSphString & sListen, bool bHttpAllowed, CSphVector<Lis
 		tListener.m_iSock = sphCreateInetSocket ( tDesc.m_uIP, tDesc.m_iPort );
 
 	g_dListeners.Add ( tListener );
+	return true;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -19806,38 +19814,32 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	////////////////////
 	// network startup
 	////////////////////
-
-	Listener_t tListener;
-	tListener.m_eProto = Proto_e::SPHINX;
-	tListener.m_bTcp = true;
 	CSphVector<ListenerDesc_t> dListenerDescs;
 
 	// command line arguments override config (but only in --console)
 	if ( bOptListen )
 	{
-		AddListener ( sOptListen, bThdPool, dListenerDescs );
-
+		auto tDesc = ParseListener ( sOptListen.cstr() );
+		dListenerDescs.Add ( tDesc );
+		AddGlobalListener ( tDesc, bThdPool );
 	} else if ( bOptPort )
 	{
-		tListener.m_iSock = sphCreateInetSocket ( htonl ( INADDR_ANY ), iOptPort );
-		g_dListeners.Add ( tListener );
-
+		AddGlobalListener ( MakeAnyListener ( iOptPort ), bThdPool );
 	} else
 	{
 		// listen directives in configuration file
 		for ( CSphVariant * v = hSearchd("listen"); v; v = v->m_pNext )
-			AddListener ( v->strval(), bThdPool, dListenerDescs );
+		{
+			auto tDesc = ParseListener ( v->cstr () );
+			dListenerDescs.Add ( tDesc );
+			AddGlobalListener ( tDesc, bThdPool );
+		}
 
 		// default is to listen on our two ports
-		if ( !g_dListeners.GetLength() )
+		if ( g_dListeners.IsEmpty() )
 		{
-			tListener.m_iSock = sphCreateInetSocket ( htonl ( INADDR_ANY ), SPHINXAPI_PORT );
-			tListener.m_eProto = Proto_e::SPHINX;
-			g_dListeners.Add ( tListener );
-
-			tListener.m_iSock = sphCreateInetSocket ( htonl ( INADDR_ANY ), SPHINXQL_PORT );
-			tListener.m_eProto = Proto_e::MYSQL41;
-			g_dListeners.Add ( tListener );
+			AddGlobalListener ( MakeAnyListener ( SPHINXAPI_PORT ), bThdPool );
+			AddGlobalListener ( MakeAnyListener ( SPHINXQL_PORT, Proto_e::MYSQL41 ), bThdPool );
 		}
 	}
 
@@ -20103,6 +20105,15 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 				sphWarning ( "sphSetSockNB() failed: %s", sphSockError() );
 				sphSockClose ( dListener.m_iSock );
 			}
+
+#if defined (TCP_FASTOPEN)
+			if ( ( g_iTFO!=TFO_ABSENT ) && ( g_iTFO & TFO_LISTEN ) )
+			{
+				int iOn = 1;
+				if ( setsockopt ( dListener.m_iSock, IPPROTO_TCP, TCP_FASTOPEN, ( char * ) &iOn, sizeof ( iOn ) ) )
+					sphLogDebug ( "setsockopt(TCP_FASTOPEN) failed: %s", sphSockError () );
+			}
+#endif
 		}
 
 		g_dTickPoolThread.Resize ( g_iNetWorkers );

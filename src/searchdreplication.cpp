@@ -118,7 +118,7 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	ClusterState_e			GetNodeState() const { return m_eNodeState; }
 	ClusterState_e			WaitReady()
 	{
-		while ( m_eNodeState==ClusterState_e::JOINING ||  m_eNodeState==ClusterState_e::DONOR )
+		while ( m_eNodeState==ClusterState_e::CLOSED || m_eNodeState==ClusterState_e::JOINING || m_eNodeState==ClusterState_e::DONOR )
 			m_tStateChanged.WaitEvent();
 
 		return m_eNodeState;

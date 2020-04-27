@@ -53,6 +53,7 @@ simple_tests:
   variables:
     CTEST_BUILD_CONFIGURATION: "Debug"
     CACHEB: "../cache"
+    DIAGNOSTIC: 1 # let's set it by default forever
   script:
     - ctest -VV -S misc/ctest/gltest.cmake
   after_script:
@@ -128,6 +129,8 @@ win_tests:
     COPY_DLL: "x:/bundle/dll"
     WIN_TEST_CI: "1"
     CTEST_BUILD_CONFIGURATION: "Debug"
+    CTEST_CMAKE_GENERATOR : "Visual Studio 16 2019"
+    DIAGNOSTIC: 1 # let's set it by default forever
   script:
     - 'net use x: \\\\VBOXSRV\\shared'
 #    - export PATH='/cygdrive/x/bundle/openssl-x64:/cygdrive/x/bundle/Expat-1.95.8/Libs:/cygdrive/x/bundle/libiconv-1.9.1/bin:/cygdrive/x/bundle/mysql/bin:'$PATH
@@ -160,6 +163,7 @@ build_mac:
     CACHEB: "../cache"
     OPENSSL_ROOT_DIR: "/usr/local/opt/openssl"
     CTEST_CMAKE_GENERATOR: "Unix Makefiles"
+    DIAGNOSTIC: 1 # let's set it by default forever
   script:
     - mkdir build && cd build
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
@@ -196,6 +200,7 @@ build_bsd:
     CTEST_BUILD_CONFIGURATION: "Debug"
     CACHEB: "../cache"
     CTEST_CMAKE_GENERATOR: "Unix Makefiles"
+    DIAGNOSTIC: 1 # let's set it by default forever
   script:
     - mkdir build && cd build
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..

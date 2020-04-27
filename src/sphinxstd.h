@@ -1748,7 +1748,7 @@ public:
 	}
 
 	/// grow enough to hold that much entries, if needed, but do *not* change the length
-	void Reserve ( int iNewLimit )
+	void Reserve ( int64_t iNewLimit )
 	{
 		DiscardAndReserve ( 0, iNewLimit );
 	}

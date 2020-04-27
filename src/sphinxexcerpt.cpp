@@ -808,18 +808,16 @@ void StringSourceTraits_c::PrepareText ( const VecTraits_T<BYTE> & dSourceText, 
 
 	if ( pFilter )
 	{
-		BYTE * pSource = dSourceText.Begin();
-		int iSourceLen = dSourceText.GetLength();
-		CSphVector<BYTE> dTmp;
-		if ( !bUseOriginal )
+		int iGot;
+		if ( bUseOriginal )
+			iGot = pFilter->Apply ( dSourceText, dDestText, false );
+		else
 		{
-			dTmp.Resize ( dDestText.GetLength() );
-			memcpy ( dTmp.Begin(), dDestText.Begin(), dDestText.GetLength() );
-			pSource = dTmp.Begin();
-			iSourceLen = dTmp.GetLength();
+			CSphVector<BYTE> dTmp;
+			dTmp.Append ( dSourceText );
+			iGot = pFilter->Apply ( dTmp, dDestText, false );
 		}
 
-		int iGot = pFilter->Apply ( dSourceText, dDestText, false );
 		if ( iGot )
 		{
 			dDestText.Resize(iGot);
@@ -831,15 +829,15 @@ void StringSourceTraits_c::PrepareText ( const VecTraits_T<BYTE> & dSourceText, 
 	{
 		if ( bUseOriginal )
 		{
-			dDestText.Resize ( dSourceText.GetLength() );
-			memcpy ( dDestText.Begin(), dSourceText.Begin(), dSourceText.GetLength() );
+			dDestText.Resize(0);
+			dDestText.Append ( dSourceText );
 			bUseOriginal = false;
 		}
 
-		if ( dDestText.GetLength() && dDestText.Last()!='\0' )
+		if ( !( dDestText.IsEmpty () || dDestText.Last ()=='\0' ) )
 			dDestText.Add('\0');
 
-		if ( dDestText.GetLength() )
+		if ( !dDestText.IsEmpty() )
 		{
 			pStripper->Strip ( dDestText.Begin() );
 			dDestText.Resize ( (int) strlen ( (const char*)dDestText.Begin() ) );

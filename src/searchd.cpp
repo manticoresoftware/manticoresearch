@@ -132,7 +132,7 @@ int						g_iReadTimeoutS		= 5;	// sec
 int						g_iWriteTimeoutS	= 5;	// sec
 int						g_iClientTimeoutS	= 300;
 int						g_iClientQlTimeoutS	= 900;	// sec
-static int				g_iMaxChildren		= 0;
+static auto&			g_iMaxChildren		= getMaxChildren ();
 #if !USE_WINDOWS
 static bool				g_bPreopenIndexes	= true;
 #else
@@ -216,9 +216,9 @@ static bool				g_bSafeTrace	= false;
 static bool				g_bStripPath	= false;
 static bool				g_bCoreDump		= false;
 
-static volatile sig_atomic_t g_bGotSighup		= 0;	// we just received SIGHUP; need to log
+static auto& g_bGotSighup		= sphGetGotSighup();	// we just received SIGHUP; need to log
 static auto& g_bGotSigterm		= sphGetGotSigterm();	// we just received SIGTERM; need to shutdown
-static volatile sig_atomic_t g_bGotSigusr1		= 0;	// we just received SIGUSR1; need to reopen logs
+static auto& g_bGotSigusr1		= sphGetGotSigusr1();	// we just received SIGUSR1; need to reopen logs
 
 // pipe to watchdog to inform that daemon is going to close, so no need to restart it in case of crash
 static CSphLargeBuffer<DWORD, true>	g_bDaemonAtShutdown;
@@ -18928,7 +18928,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_iNetWorkers = hSearchd.GetInt ( "net_workers", g_iNetWorkers );
 	g_iNetWorkers = Max ( g_iNetWorkers, 1 );
 	CheckSystemTFO();
-	if ( g_iTFO!=TFO_ABSENT && hSearchd.GetInt ( "listen_tfo" )==0 )
+	if ( g_iTFO!=TFO_ABSENT && hSearchd.GetInt ( "listen_tfo", 1 )==0 )
 	{
 		g_iTFO &= ~TFO_LISTEN;
 	}
@@ -19692,11 +19692,11 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	if ( bThdPool || bTestThdPoolMode )
 	{
-#if HAVE_POLL || HAVE_EPOLL
+#if HAVE_POLL || HAVE_EPOLL || HAVE_KQUEUE
 		bThdPool = true;
 #else
 		bThdPool = false;
-		sphWarning ( "no poll or epoll found, thread pool unavailable, going back to thread workers" );
+		sphWarning ( "no poll, epoll, or kqueue found, thread pool unavailable, going back to thread workers" );
 #endif
 	}
 	if ( g_iMaxPacketSize<128*1024 || g_iMaxPacketSize>128*1024*1024 )
@@ -20209,4 +20209,22 @@ volatile bool& sphGetGotSigterm()
 {
 	static bool bGotSigterm = false;
 	return bGotSigterm;
+}
+
+volatile bool& sphGetGotSighup()
+{
+	static bool bGotSighup = false;
+	return bGotSighup;
+}
+
+volatile bool& sphGetGotSigusr1()
+{
+	static bool bGotSigusr1 = false;
+	return bGotSigusr1;
+}
+
+volatile int & getMaxChildren ()
+{
+	static int iMaxChildren = 0;
+	return iMaxChildren;
 }

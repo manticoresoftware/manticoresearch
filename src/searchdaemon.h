@@ -117,7 +117,13 @@ using namespace Threads;
 // these defined in searchd.cpp
 void sphFatal( const char* sFmt, ... ) __attribute__ (( format ( printf, 1, 2 ))) NO_RETURN;
 void sphFatalLog( const char* sFmt, ... ) __attribute__ (( format ( printf, 1, 2 )));
+
 volatile bool& sphGetGotSigterm();
+volatile bool& sphGetGotSighup();
+volatile bool& sphGetGotSigusr1();
+
+// Get global shutdown flag
+volatile int & getMaxChildren ();
 
 /////////////////////////////////////////////////////////////////////////////
 // SOME SHARED GLOBAL VARIABLES
@@ -1216,6 +1222,7 @@ void SetFederatedUser ( CSphinxqlSession * pSession );
 bool IsAutoCommit ( const CSphinxqlSession * pSession );
 
 bool IsFederatedUser ( const BYTE * pPacket, int iLen );
+bool IsFederatedUser ( ByteBlob_t tPacket );
 
 bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString & sQuery, int iPacketLen,
 		bool bProfile, ThdDesc_t & tThd, InputBuffer_c & tIn, ISphOutputBuffer & tOut );

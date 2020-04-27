@@ -160,12 +160,12 @@ if ( $locals['scriptdir']!=$locals['testdir'] )
 	if ( $fscript && !$ftest)
 	{
 		$cygwin = true;
-		print ("Is +++ cygwin\n\n");
+//		print ("Is +++ cygwin\n\n");
 	}
 	else
 	{
 		$locals['scriptdir'] = $locals['testdir'];
-		print ("Is NOT cygwin\n\n");
+//		print ("Is NOT cygwin\n\n");
 	}
 }
 

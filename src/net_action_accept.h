@@ -29,5 +29,5 @@ public:
 };
 
 // helper to be used from plain workers
-void FillNetState ( NetConnection_t * pState, int iClientSock, int iConnID, bool bVIP,
+void FillNetState ( NetConnection_t * pState, int iClientSock, int iConnID, bool bVIP, bool bSSL,
 		const sockaddr_storage & saStorage );

@@ -760,8 +760,6 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	sph::ShutdownGlobalIDFs ();
 	sphAotShutdown ();
 
-	SslDone();
-
 	for ( auto& dListener : g_dListeners )
 		if ( dListener.m_iSock>=0 )
 			sphSockClose ( dListener.m_iSock );
@@ -19985,6 +19983,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 			AddGlobalListener ( MakeAnyListener ( SPHINXQL_PORT, Proto_e::MYSQL41 ) );
 		}
 	}
+
+	SetServerSSLKeys ( hSearchd ( "ssl_cert" ), hSearchd ( "ssl_key" ), hSearchd ( "ssl_ca" ) );
 
 #if 0
 	bool bNeedSsl = g_dListeners.FindFirst ( [] ( const Listener_t & tDesc ) { return tDesc.m_eProto==Proto_e::HTTPS; } );

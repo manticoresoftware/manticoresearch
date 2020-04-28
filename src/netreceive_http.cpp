@@ -11,6 +11,7 @@
 //
 
 #include "netreceive_http.h"
+#include "searchdssl.h"
 
 extern int g_iClientTimeoutS; // from searchd.cpp
 extern volatile bool g_bMaintenance;
@@ -347,6 +348,9 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 	// needed to check permission to turn maintenance mode on/off
 
 	bool bKeepAlive = false;
+
+	if ( tConn.m_bSSL )
+		tThdesc.m_bSsl = MakeSecureLayer ( pBuf );
 
 	auto & tOut = pBuf->Out ();
 	auto & tIn = pBuf->In ();

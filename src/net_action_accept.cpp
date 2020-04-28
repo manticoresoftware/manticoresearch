@@ -32,14 +32,13 @@ int g_iThrottleAccept = 0;
 extern volatile bool g_bMaintenance;
 static auto & g_iTFO = sphGetTFO ();
 
-#define NET_STATE_BUF_SIZE 65535
-
-void FillNetState ( NetConnection_t * pState, int iClientSock, int iConnID, bool bVIP,
+void FillNetState ( NetConnection_t * pState, int iClientSock, int iConnID, bool bVIP, bool bSSL,
 		const sockaddr_storage & saStorage )
 {
 	pState->m_iClientSock = iClientSock;
 	pState->m_iConnID = iConnID;
 	pState->m_bVIP = bVIP;
+	pState->m_bSSL = bSSL;
 	pState->m_tSockType = saStorage.ss_family;
 
 	// format client address
@@ -77,6 +76,8 @@ void MultiServe ( SockWrapperPtr_c pSock, NetConnection_t * pConn )
 #endif
 		ApiServe ( std::move ( pBuf ), pConn );
 		break;
+	case Proto_e::HTTPS:
+		pConn->m_bSSL = true;
 	case Proto_e::HTTP:
 		HttpServe ( std::move ( pBuf ), pConn );
 		break;
@@ -185,11 +186,12 @@ NetEvent_e NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetL
 		}
 
 		NetConnection_t tConn;
-		FillNetState ( &tConn, iClientSock, iConnID, m_tListener.m_bVIP, saStorage );
+		FillNetState ( &tConn, iClientSock, iConnID, m_tListener.m_bVIP, false, saStorage );
 		SockWrapperPtr_c pSock ( new SockWrapper_c ( iClientSock, false, pClientNetLoop ) );
 
 		switch ( m_tListener.m_eProto )
 		{
+			case Proto_e::HTTPS:
 			case Proto_e::SPHINX:
 			case Proto_e::HTTP :
 			{

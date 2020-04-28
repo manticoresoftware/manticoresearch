@@ -15,7 +15,23 @@
 
 #pragma once
 
+#include "networking_daemon.h"
 
+// set SSL key, certificate and ca-certificate to be used in SSL, if required.
+// does NOT anyway initialize SSL library or call any of it's funcitons.
+void SetServerSSLKeys ( CSphVariant * pSslCert, CSphVariant * pSslKey, CSphVariant * pSslCa );
+
+// Try to initialize SSL, if not yet done. Returns whether it is usable or not (i.e. - no lib, no keys, any error).
+// used to set 'switch-to-ssl' bit in mysql handshake depending from whether we can do it, or not.
+bool CheckWeCanUseSSL ();
+
+// Replace pSource with it's SSL version.
+// any data not consumed from original source will be considered as part of ssl handshake.
+bool MakeSecureLayer ( AsyncNetBufferPtr_c & pSource );
+
+/// old unused stuff. Remove all, including redundand implementations, after refactor.
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#if 0
 struct SslClient_i
 {
 	SslClient_i () = default;
@@ -49,3 +65,4 @@ bool SslTick ( SslClient_i * pClient, bool & bWrite, CSphVector<BYTE> & dBuf, in
 
 // encrypt data for sending 
 bool SslSend ( SslClient_i * pClient, CSphVector<BYTE> & dBuf, CSphVector<BYTE> & dDecrypted );
+#endif

@@ -67,6 +67,7 @@ struct ThdInfo_t
 	ThdState_e	m_eThdState = ThdState_e::HANDSHAKE;
 	const char* m_sCommand	= nullptr;
 	int			m_iConnID	= -1; ///< current conn-id for this thread
+	bool 		m_bSsl = false;
 
 	// stuff for SHOW THREADS
 	int		m_iTid		= 0; ///< OS thread id, or 0 if unknown

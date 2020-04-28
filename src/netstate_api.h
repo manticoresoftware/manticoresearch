@@ -27,6 +27,7 @@ struct NetConnection_t
 	int		m_iConnID = 0;
 	char	m_sClientName[SPH_ADDRPORT_SIZE];
 	bool	m_bVIP = false;
+	bool	m_bSSL = false;
 	sph_sa_family_t m_tSockType;
 
 	NetConnection_t ()

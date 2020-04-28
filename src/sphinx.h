@@ -3535,9 +3535,6 @@ volatile bool& sphGetShutdown();
 // rw-access to global max children
 volatile int & sphDistThreads ();
 
-// ro-access to global max children, min 1
-int sphGetNonZeroDistThreads();
-
 // Access to global TFO settings
 volatile int& sphGetTFO();
 #define TFO_CONNECT 1

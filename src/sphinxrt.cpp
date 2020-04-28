@@ -73,7 +73,6 @@ static auto&	g_bRTChangesAllowed		= RTChangesAllowed ();
 // optimize mode for disk chunks merge
 static bool g_bProgressiveMerge = true;
 static auto& g_bShutdown = sphGetShutdown();
-static auto & g_iDistThreads = sphDistThreads ();
 
 //////////////////////////////////////////////////////////////////////////
 volatile bool &RTChangesAllowed ()
@@ -6107,7 +6106,7 @@ public:
 	inline intptr_t GetTHD ( int ) const { return m_iTlsOrderNum; }
 	inline void SetTHD ( intptr_t iVal, int ) { m_iTlsOrderNum = iVal; }
 	static inline bool CanRun (int) { return true; }
-	inline static int GetNOfThreads () { return sphGetNonZeroDistThreads ();}
+	inline static int GetNOfThreads () { return GetGlobalThreads ();}
 #endif
 };
 

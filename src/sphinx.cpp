@@ -28474,9 +28474,3 @@ volatile int & sphDistThreads ()
 	static int iDistThreads = 0;
 	return iDistThreads;
 }
-
-int sphGetNonZeroDistThreads ()
-{
-	auto& iThreads = sphDistThreads ();
-	return Max ( iThreads, 1 );
-}

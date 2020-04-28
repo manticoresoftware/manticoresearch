@@ -5883,6 +5883,8 @@ static int g_iRun = 0;
 // set to 1 for manual testing/debugging in single thread and predefined sequence of chunks
 #define MODELING 0
 
+namespace { // nameless namespace instead of 'static' modifier
+
 void FlattenToSorter ( ISphMatchSorter* pResult, VecTraits_T<ISphMatchSorter*> pSources )
 {
 	if ( pSources.IsEmpty() )
@@ -6107,7 +6109,7 @@ public:
 #endif
 };
 
-static void QueryDiskChunks ( const CSphQuery * pQuery,
+void QueryDiskChunks ( const CSphQuery * pQuery,
 		CSphQueryResult * pResult,
 		const CSphMultiQueryArgs & tArgs,
 		SphChunkGuard_t& tGuard,
@@ -6255,6 +6257,397 @@ static void QueryDiskChunks ( const CSphQuery * pQuery,
 	dTlsData.Finalize();
 }
 
+void FinalExpressionCalculation( CSphQueryContext& tCtx,
+		const VecTraits_T<RtSegmentRefPtf_t>& dRamChunks,
+		VecTraits_T<ISphMatchSorter *>& dSorters )
+{
+	if ( tCtx.m_dCalcFinal.IsEmpty () )
+		return;
+
+	const int iSegmentsTotal = dRamChunks.GetLength ();
+
+	// at 0 pass processor also fills bitmask of segments these has matches at sorter
+	// then skip sorter processing for these 'empty' segments
+	SphRtFinalMatchCalc_c tFinal ( iSegmentsTotal, tCtx );
+
+	ARRAY_FOREACH_COND ( iSeg, dRamChunks, tFinal.HasSegments() )
+	{
+		if ( !tFinal.NextSegment ( iSeg ) )
+			continue;
+
+		// set blob pool for string on_sort expression fix up
+		tCtx.SetBlobPool ( dRamChunks[iSeg]->m_dBlobs.Begin() );
+		dSorters.Apply ( [&tFinal] ( ISphMatchSorter * pTop ) { pTop->Finalize ( tFinal, false ); } );
+	}
+}
+
+// perform initial query transformations and expansion.
+bool PrepareFTSearch ( const RtIndex_c * pThis,
+		bool bIsStarDict,
+		bool bKeywordDict,
+		int iExpandKeywords,
+		int iExpansionLimit,
+		const char * sModifiedQuery,
+		const CSphIndexSettings& tSettings,
+		const QueryParser_i * pQueryParser,
+		const CSphQuery* pQuery,
+		const CSphSchema & tSchema,
+		void * pIndexData,
+		ISphTokenizer * pTokenizer,
+		ISphTokenizer * pQueryTokenizer,
+		CSphDict* pDict,
+		CSphQueryResult* pResult,
+		CSphQueryProfile* pProfiler,
+		CSphScopedPayload* pPayloads,
+		XQQuery_t & tParsed )
+{
+	// OPTIMIZE! make a lightweight clone here? and/or remove double clone?
+	TokenizerRefPtr_c pQueryTokenizerJson { pTokenizer };
+	sphSetupQueryTokenizer ( pQueryTokenizerJson, bIsStarDict, tSettings.m_bIndexExactWords, true );
+
+	if ( !pQueryParser->ParseQuery ( tParsed, sModifiedQuery, pQuery, pQueryTokenizer
+									 , pQueryTokenizerJson, &tSchema, pDict, tSettings ) )
+	{
+		pResult->m_sError = tParsed.m_sParseError;
+		return false;
+	}
+
+	if ( !tParsed.m_sParseWarning.IsEmpty () )
+		pResult->m_sWarning = tParsed.m_sParseWarning;
+
+	// transform query if needed (quorum transform, etc.)
+	if ( pProfiler )
+		pProfiler->Switch ( SPH_QSTATE_TRANSFORMS );
+
+	// FIXME!!! provide segments list instead index
+	sphTransformExtendedQuery ( &tParsed.m_pRoot, tSettings, pQuery->m_bSimplify, pThis );
+
+	int iExpandKw = ExpandKeywords ( iExpandKeywords, pQuery->m_eExpandKeywords, tSettings, bKeywordDict );
+	if ( iExpandKw!=KWE_DISABLED )
+	{
+		sphQueryExpandKeywords ( &tParsed.m_pRoot, tSettings, iExpandKw, bKeywordDict );
+		tParsed.m_pRoot->Check ( true );
+	}
+
+	// this should be after keyword expansion
+	if ( tSettings.m_uAotFilterMask )
+		TransformAotFilter ( tParsed.m_pRoot, pDict->GetWordforms (), tSettings );
+
+	// expanding prefix in word dictionary case
+	if ( bKeywordDict && bIsStarDict )
+	{
+		ExpansionContext_t tExpCtx;
+		tExpCtx.m_pWordlist = pThis;
+		tExpCtx.m_pBuf = nullptr;
+		tExpCtx.m_pResult = pResult;
+		tExpCtx.m_iMinPrefixLen = tSettings.GetMinPrefixLen ( bKeywordDict );
+		tExpCtx.m_iMinInfixLen = tSettings.m_iMinInfixLen;
+		tExpCtx.m_iExpansionLimit = iExpansionLimit;
+		tExpCtx.m_bHasExactForms = ( pDict->HasMorphology () || tSettings.m_bIndexExactWords );
+		tExpCtx.m_bMergeSingles = ( pQuery->m_uDebugFlags & QUERY_DEBUG_NO_PAYLOAD )==0;
+		tExpCtx.m_pPayloads = pPayloads;
+		tExpCtx.m_pIndexData = pIndexData;
+
+		tParsed.m_pRoot = sphExpandXQNode ( tParsed.m_pRoot, tExpCtx ); // here magics happens
+	}
+	return sphCheckQueryHeight ( tParsed.m_pRoot, pResult->m_sError );
+}
+
+// setup filters
+bool SetupFilters ( const CSphQuery * pQuery,
+		const ISphSchema* pSchema,
+		bool bFullscan,
+		CSphQueryContext & tCtx,
+		CSphString& sError,
+		CSphString& sWarning )
+{
+	CreateFilterContext_t tFlx;
+	tFlx.m_pFilters = &pQuery->m_dFilters;
+	tFlx.m_pFilterTree = &pQuery->m_dFilterTree;
+	tFlx.m_pSchema = pSchema;
+	tFlx.m_eCollation = pQuery->m_eCollation;
+	tFlx.m_bScan = bFullscan;
+	return tCtx.CreateFilters ( tFlx, sError, sWarning );
+}
+
+void PerformFullScan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
+		int iMaxDynamicSize,
+		int iIndexWeight,
+		int iStride,
+		int iCutoff,
+		int64_t tmMaxTimer,
+		CSphQueryProfile* pProfiler,
+		CSphQueryContext& tCtx,
+		VecTraits_T<ISphMatchSorter*>& dSorters,
+		CSphString& sWarning )
+{
+	bool bRandomize = dSorters[0]->m_bRandomize;
+
+	if ( pProfiler )
+		pProfiler->Switch ( SPH_QSTATE_FULLSCAN );
+
+	// full scan
+	// FIXME? OPTIMIZE? add shortcuts here too?
+	CSphMatch tMatch;
+	tMatch.Reset ( iMaxDynamicSize );
+	tMatch.m_iWeight = iIndexWeight;
+
+	ARRAY_FOREACH ( iSeg, dRamChunks )
+	{
+		// set string pool for string on_sort expression fix up
+		tCtx.SetBlobPool ( dRamChunks[iSeg]->m_dBlobs.Begin() );
+		for ( auto* pSorter: dSorters )
+			pSorter->SetBlobPool ( dRamChunks[iSeg]->m_dBlobs.Begin() );
+
+		RtRowIterator_c tIt ( dRamChunks[iSeg], iStride );
+		while (true)
+		{
+			const CSphRowitem * pRow = tIt.GetNextAliveRow();
+			if ( !pRow )
+				break;
+
+			tMatch.m_tRowID = tIt.GetRowID();
+			tMatch.m_pStatic = pRow;
+
+			tCtx.CalcFilter ( tMatch );
+			if ( tCtx.m_pFilter && !tCtx.m_pFilter->Eval ( tMatch ) )
+			{
+				tCtx.FreeDataFilter ( tMatch );
+				continue;
+			}
+
+			if ( bRandomize )
+				tMatch.m_iWeight = ( sphRand() & 0xffff ) * iIndexWeight;
+
+			tCtx.CalcSort ( tMatch );
+
+			// storing segment in matches tag for finding strings attrs offset later, biased against default zero
+			tMatch.m_iTag = iSeg+1;
+
+			bool bNewMatch = false;
+			for ( auto* pSorter: dSorters )
+				bNewMatch |= pSorter->Push ( tMatch );
+
+			// stringptr expressions should be duplicated (or taken over) at this point
+			tCtx.FreeDataFilter ( tMatch );
+			tCtx.FreeDataSort ( tMatch );
+
+			// handle cutoff
+			if ( bNewMatch )
+				if ( --iCutoff==0 )
+					break;
+
+			// handle timer
+			if ( tmMaxTimer && sphMicroTimer()>=tmMaxTimer )
+			{
+				sWarning = "query time exceeded max_query_time";
+				iSeg = dRamChunks.GetLength() - 1;	// outer break
+				break;
+			}
+		}
+
+		if ( !iCutoff )
+			break;
+	}
+}
+
+bool DoFullScanQuery ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
+		const ISphSchema& tMaxSorterSchema,
+		const CSphQuery* pQuery,
+		int iIndexWeight,
+		int iStride,
+		int64_t tmMaxTimer,
+		CSphQueryProfile* pProfiler,
+		CSphQueryContext& tCtx,
+		VecTraits_T<ISphMatchSorter*>& dSorters,
+		CSphQueryResult* pResult )
+{
+	// probably redundant, but just in case
+	if ( pProfiler )
+		pProfiler->Switch ( SPH_QSTATE_INIT );
+
+	// search segments no looking to max_query_time
+	// FIXME!!! move searching at segments before disk chunks as result set is safe with kill-lists
+	if ( !dRamChunks.IsEmpty () )
+	{
+		if ( !SetupFilters ( pQuery, &tMaxSorterSchema, true, tCtx, pResult->m_sError, pResult->m_sWarning ) )
+			return false;
+		// FIXME! OPTIMIZE! check if we can early reject the whole index
+
+		// do searching
+		int iCutoff = pQuery->m_iCutoff;
+		if ( iCutoff<=0 )
+			iCutoff = -1;
+		PerformFullScan ( dRamChunks, tMaxSorterSchema.GetDynamicSize (), iIndexWeight, iStride
+						  , iCutoff, tmMaxTimer, pProfiler, tCtx, dSorters, pResult->m_sWarning );
+	}
+
+	FinalExpressionCalculation ( tCtx, dRamChunks, dSorters );
+	return true;
+}
+
+void PerformFullTextSearch ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
+		RtQwordSetup_t& tTermSetup,
+		ISphRanker* pRanker,
+		int iIndexWeight,
+		int iCutoff,
+		CSphQueryProfile* pProfiler,
+		CSphQueryContext& tCtx,
+		VecTraits_T<ISphMatchSorter*>& dSorters )
+{
+	bool bRandomize = dSorters[0]->m_bRandomize;
+	// query matching
+	ARRAY_FOREACH ( iSeg, dRamChunks )
+	{
+		const RtSegment_t * pSeg = dRamChunks[iSeg];
+
+		if ( pProfiler )
+			pProfiler->Switch ( SPH_QSTATE_INIT_SEGMENT );
+
+		tTermSetup.SetSegment ( iSeg );
+		pRanker->Reset ( tTermSetup );
+
+		// for lookups to work
+		tCtx.m_pIndexData = pSeg;
+		tCtx.m_pIndexSegment = pSeg;
+
+		// set blob pool for string on_sort expression fix up
+		const BYTE * pBlobPool = pSeg->m_dBlobs.Begin ();
+		tCtx.SetBlobPool ( pBlobPool );
+		for ( auto * pSorter : dSorters )
+			pSorter->SetBlobPool ( pBlobPool );
+
+		pRanker->ExtraData ( EXTRA_SET_BLOBPOOL, (void**)&pBlobPool );
+
+		CSphMatch * pMatch = pRanker->GetMatchesBuffer();
+		while (true)
+		{
+			// ranker does profile switches internally in GetMatches()
+			int iMatches = pRanker->GetMatches();
+			if ( iMatches<=0 )
+				break;
+
+			if ( pProfiler )
+				pProfiler->Switch ( SPH_QSTATE_SORT );
+
+			for ( int i=0; i<iMatches; i++ )
+			{
+				pMatch[i].m_pStatic = pSeg->GetDocinfoByRowID ( pMatch[i].m_tRowID );
+				pMatch[i].m_iWeight *= iIndexWeight;
+				if ( bRandomize )
+					pMatch[i].m_iWeight = ( sphRand() & 0xffff ) * iIndexWeight;
+
+				tCtx.CalcSort ( pMatch[i] );
+
+				if ( tCtx.m_pWeightFilter && !tCtx.m_pWeightFilter->Eval ( pMatch[i] ) )
+				{
+					tCtx.FreeDataSort ( pMatch[i] );
+					continue;
+				}
+
+				// storing segment in matches tag for finding strings attrs offset later, biased against default zero
+				pMatch[i].m_iTag = iSeg+1;
+
+				bool bNewMatch = false;
+				for ( auto* pSorter : dSorters )
+				{
+					bNewMatch |= pSorter->Push ( pMatch[i] );
+
+					if ( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
+					{
+						pRanker->ExtraData ( EXTRA_SET_MATCHPUSHED, (void**)&(pSorter->m_iJustPushed) );
+						pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&(pSorter->m_dJustPopped) );
+					}
+				}
+
+				// stringptr expressions should be duplicated (or taken over) at this point
+				tCtx.FreeDataFilter ( pMatch[i] );
+				tCtx.FreeDataSort ( pMatch[i] );
+
+				if ( bNewMatch )
+					if ( --iCutoff==0 )
+						break;
+			}
+
+			if ( iCutoff==0 )
+			{
+				iSeg = dRamChunks.GetLength();
+				break;
+			}
+		}
+	}
+}
+
+bool DoFullTextSearch ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
+		const ISphSchema& tMaxSorterSchema,
+		const CSphQuery* pQuery,
+		const char* szIndexName,
+		int iIndexWeight,
+		int iMatchPoolSize,
+		RtQwordSetup_t& tTermSetup,
+		CSphQueryProfile* pProfiler,
+		CSphQueryContext& tCtx,
+		VecTraits_T<ISphMatchSorter*>& dSorters,
+		XQQuery_t& tParsed,
+		CSphQueryResult* pResult,
+		ISphMatchSorter* pSorter )
+{
+	// set zonespanlist settings
+	tParsed.m_bNeedSZlist = pQuery->m_bZSlist;
+
+	// setup query
+	// must happen before index-level reject, in order to build proper keyword stats
+	CSphScopedPtr<ISphRanker> pRanker ( nullptr );
+	pRanker = sphCreateRanker ( tParsed, pQuery, pResult, tTermSetup, tCtx, tMaxSorterSchema );
+	if ( !pRanker.Ptr () )
+		return false;
+
+	tCtx.SetupExtraData ( pRanker.Ptr (), pSorter );
+
+	pRanker->ExtraData ( EXTRA_SET_POOL_CAPACITY, (void **) &iMatchPoolSize );
+
+	// check for the possible integer overflow in m_dPool.Resize
+	int64_t iPoolSize = 0;
+	if ( pRanker->ExtraData ( EXTRA_GET_POOL_SIZE, (void **) &iPoolSize ) && iPoolSize>INT_MAX )
+	{
+		pResult->m_sError.SetSprintf ( "ranking factors pool too big (%d Mb), reduce max_matches",
+				(int) ( iPoolSize / 1024 / 1024 ) );
+		return false;
+	}
+
+	// probably redundant, but just in case
+	if ( pProfiler )
+		pProfiler->Switch ( SPH_QSTATE_INIT );
+
+	// search segments no looking to max_query_time
+	// FIXME!!! move searching at segments before disk chunks as result set is safe with kill-lists
+	if ( !dRamChunks.IsEmpty () )
+	{
+		if ( !SetupFilters ( pQuery, &tMaxSorterSchema, false, tCtx, pResult->m_sError, pResult->m_sWarning ) )
+			return false;
+		// FIXME! OPTIMIZE! check if we can early reject the whole index
+
+		// do searching
+		int iCutoff = pQuery->m_iCutoff;
+		if ( iCutoff<=0 )
+			iCutoff = -1;
+		PerformFullTextSearch ( dRamChunks, tTermSetup, pRanker.Ptr (), iIndexWeight, iCutoff, pProfiler, tCtx, dSorters );
+	}
+
+	FinalExpressionCalculation ( tCtx, dRamChunks, dSorters );
+
+	//////////////////////
+	// copying match's attributes to external storage in result set
+	//////////////////////
+
+	if ( pProfiler )
+		pProfiler->Switch ( SPH_QSTATE_FINALIZE );
+	pRanker->FinalizeCache ( tMaxSorterSchema );
+	return true;
+}
+
+} // nameless namespace
+
 // FIXME! missing MVA, index_exact_words support
 // FIXME? any chance to factor out common backend agnostic code?
 // FIXME? do we need to support pExtraFilters?
@@ -6356,8 +6749,9 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	CSphVector<const BYTE *> dDiskBlobPools ( tGuard.m_dDiskChunks.GetLength() );
 
-	QueryDiskChunks (pQuery,pResult,tArgs,tGuard,dSorters,pProfiler,bGotLocalDF,pLocalDocs,iTotalDocs,
-			m_sIndexName.cstr(), dDiskBlobPools, tmMaxTimer);
+	if ( !tGuard.m_dDiskChunks.IsEmpty () )
+		QueryDiskChunks (pQuery,pResult,tArgs,tGuard,dSorters,pProfiler,bGotLocalDF,pLocalDocs,iTotalDocs,
+				m_sIndexName.cstr(), dDiskBlobPools, tmMaxTimer);
 
 	////////////////////
 	// search RAM chunk
@@ -6429,7 +6823,6 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	const QueryParser_i * pQueryParser = pQuery->m_pQueryParser;
 	assert ( pQueryParser );
 
-	CSphScopedPtr<ISphRanker> pRanker ( nullptr );
 	CSphScopedPayload tPayloads;
 
 	// FIXME!!! add proper
@@ -6437,307 +6830,39 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// - qcache duplicates removal from killed document at segment #263
 	tCtx.m_bSkipQCache = true;
 
+	bool bParsedAndEnoughStack = true;
+	bool bFullscan = pQueryParser->IsFullscan ( *pQuery ); // use this
 	// no need to create ranker, etc if there's no query
-	if ( !pQueryParser->IsFullscan(*pQuery) )
-	{
-		// OPTIMIZE! make a lightweight clone here? and/or remove double clone?
-		TokenizerRefPtr_c pQueryTokenizerJson { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
-		sphSetupQueryTokenizer ( pQueryTokenizerJson, IsStarDict ( m_bKeywordDict ), m_tSettings.m_bIndexExactWords, true );
+	if ( !bFullscan )
+		bParsedAndEnoughStack = PrepareFTSearch (this, IsStarDict ( m_bKeywordDict ), m_bKeywordDict, m_iExpandKeywords, m_iExpansionLimit,
+			(const char *) sModifiedQuery, m_tSettings, pQueryParser, pQuery, m_tSchema, &tGuard.m_dRamChunks,
+			m_pTokenizer->Clone ( SPH_CLONE_QUERY ), pQueryTokenizer, pDict, pResult, pProfiler,  &tPayloads, tParsed );
 
-		if ( !pQueryParser->ParseQuery ( tParsed, (const char *)sModifiedQuery, pQuery, pQueryTokenizer, pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings ) )
-		{
-			pResult->m_sError = tParsed.m_sParseError;
-			return false;
-		}
-
-		if ( !tParsed.m_sParseWarning.IsEmpty() )
-			pResult->m_sWarning = tParsed.m_sParseWarning;
-
-		// transform query if needed (quorum transform, etc.)
-		if ( pProfiler )
-			pProfiler->Switch ( SPH_QSTATE_TRANSFORMS );
-
-		// FIXME!!! provide segments list instead index
-		sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, pQuery->m_bSimplify, this );
-
-		int iExpandKeywords = ExpandKeywords ( m_iExpandKeywords, pQuery->m_eExpandKeywords, m_tSettings, m_bKeywordDict );
-		if ( iExpandKeywords!=KWE_DISABLED )
-		{
-			sphQueryExpandKeywords ( &tParsed.m_pRoot, m_tSettings, iExpandKeywords, m_bKeywordDict );
-			tParsed.m_pRoot->Check ( true );
-		}
-
-		// this should be after keyword expansion
-		if ( m_tSettings.m_uAotFilterMask )
-			TransformAotFilter ( tParsed.m_pRoot, pDict->GetWordforms(), m_tSettings );
-
-		// expanding prefix in word dictionary case
-		if ( m_bKeywordDict && IsStarDict ( m_bKeywordDict ) )
-		{
-			ExpansionContext_t tExpCtx;
-			tExpCtx.m_pWordlist = this;
-			tExpCtx.m_pBuf = NULL;
-			tExpCtx.m_pResult = pResult;
-			tExpCtx.m_iMinPrefixLen = m_tSettings.GetMinPrefixLen ( m_bKeywordDict );
-			tExpCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
-			tExpCtx.m_iExpansionLimit = m_iExpansionLimit;
-			tExpCtx.m_bHasExactForms = ( m_pDict->HasMorphology() || m_tSettings.m_bIndexExactWords );
-			tExpCtx.m_bMergeSingles = ( pQuery->m_uDebugFlags & QUERY_DEBUG_NO_PAYLOAD )==0;
-			tExpCtx.m_pPayloads = &tPayloads;
-			tExpCtx.m_pIndexData = &tGuard.m_dRamChunks;
-
-			tParsed.m_pRoot = sphExpandXQNode ( tParsed.m_pRoot, tExpCtx );
-		}
-
-		if ( !sphCheckQueryHeight ( tParsed.m_pRoot, pResult->m_sError ) )
-			return false;
-
-		// set zonespanlist settings
-		tParsed.m_bNeedSZlist = pQuery->m_bZSlist;
-
-		// setup query
-		// must happen before index-level reject, in order to build proper keyword stats
-		pRanker = sphCreateRanker ( tParsed, pQuery, pResult, tTermSetup, tCtx, tMaxSorterSchema );
-		if ( !pRanker.Ptr() )
-			return false;
-
-		tCtx.SetupExtraData ( pRanker.Ptr(), iSorters==1 ? ppSorters[0] : NULL );
-
-		pRanker->ExtraData ( EXTRA_SET_POOL_CAPACITY, (void**)&iMatchPoolSize );
-
-		// check for the possible integer overflow in m_dPool.Resize
-		int64_t iPoolSize = 0;
-		if ( pRanker->ExtraData ( EXTRA_GET_POOL_SIZE, (void**)&iPoolSize ) && iPoolSize>INT_MAX )
-		{
-			pResult->m_sError.SetSprintf ( "ranking factors pool too big (%d Mb), reduce max_matches", (int)( iPoolSize/1024/1024 ) );
-			return false;
-		}
-	}
-
-	// empty index, empty result
-	if ( !tGuard.m_dRamChunks.GetLength() && !tGuard.m_dDiskChunks.GetLength() )
+	// empty index, empty result. Must be AFTER PrepareFTSearch, since it prepares list of words
+	if ( tGuard.m_dRamChunks.IsEmpty () )
 	{
 		for ( auto dSorter : dSorters )
 			TransformSorterSchema ( dSorter, tGuard, dDiskBlobPools );
 
+		pResult->m_pDocstore = m_tSchema.HasStoredFields () ? this : nullptr;
 		pResult->m_iQueryTime = 0;
 		return true;
 	}
 
-	// probably redundant, but just in case
-	if ( pProfiler )
-		pProfiler->Switch ( SPH_QSTATE_INIT );
+	if ( !bParsedAndEnoughStack )
+		return false;
 
-	// search segments no looking to max_query_time
-	// FIXME!!! move searching at segments before disk chunks as result set is safe with kill-lists
-	if ( tGuard.m_dRamChunks.GetLength() )
-	{
-		// setup filters
-		// FIXME! setup filters MVA pool
-		bool bFullscan = pQuery->m_pQueryParser->IsFullscan ( *pQuery ) || pQuery->m_pQueryParser->IsFullscan ( tParsed );
+	bool bResult;
+	if ( bFullscan || pQueryParser->IsFullscan ( tParsed ) )
+		bResult = DoFullScanQuery ( tGuard.m_dRamChunks, tMaxSorterSchema, pQuery, tArgs.m_iIndexWeight, m_iStride,
+				tmMaxTimer, pProfiler, tCtx, dSorters, pResult );
+	else
+		bResult = DoFullTextSearch ( tGuard.m_dRamChunks, tMaxSorterSchema, pQuery, m_sIndexName.cstr (),
+				tArgs.m_iIndexWeight, iMatchPoolSize, tTermSetup, pProfiler, tCtx, dSorters,
+				tParsed, pResult, iSorters==1 ? ppSorters[0] : nullptr );
 
-		CreateFilterContext_t tFlx;
-		tFlx.m_pFilters = &pQuery->m_dFilters;
-		tFlx.m_pFilterTree = &pQuery->m_dFilterTree;
-		tFlx.m_pSchema = &tMaxSorterSchema;
-		tFlx.m_eCollation = pQuery->m_eCollation;
-		tFlx.m_bScan = bFullscan;
-
-		if ( !tCtx.CreateFilters ( tFlx, pResult->m_sError, pResult->m_sWarning ) )
-			return false;
-
-		// FIXME! OPTIMIZE! check if we can early reject the whole index
-
-		// do searching
-		bool bRandomize = dSorters[0]->m_bRandomize;
-		int iCutoff = pQuery->m_iCutoff;
-		if ( iCutoff<=0 )
-			iCutoff = -1;
-
-		if ( bFullscan )
-		{
-			if ( pProfiler )
-				pProfiler->Switch ( SPH_QSTATE_FULLSCAN );
-
-			// full scan
-			// FIXME? OPTIMIZE? add shortcuts here too?
-			CSphMatch tMatch;
-			tMatch.Reset ( tMaxSorterSchema.GetDynamicSize() );
-			tMatch.m_iWeight = tArgs.m_iIndexWeight;
-
-			ARRAY_FOREACH ( iSeg, tGuard.m_dRamChunks )
-			{
-				// set string pool for string on_sort expression fix up
-				tCtx.SetBlobPool ( tGuard.m_dRamChunks[iSeg]->m_dBlobs.Begin() );
-				for ( auto* pSorter: dSorters )
-					pSorter->SetBlobPool ( tGuard.m_dRamChunks[iSeg]->m_dBlobs.Begin() );
-
-				RtRowIterator_c tIt ( tGuard.m_dRamChunks[iSeg], m_iStride );
-				while (true)
-				{
-					const CSphRowitem * pRow = tIt.GetNextAliveRow();
-					if ( !pRow )
-						break;
-
-					tMatch.m_tRowID = tIt.GetRowID();
-					tMatch.m_pStatic = pRow;
-
-					tCtx.CalcFilter ( tMatch );
-					if ( tCtx.m_pFilter && !tCtx.m_pFilter->Eval ( tMatch ) )
-					{
-						tCtx.FreeDataFilter ( tMatch );
-						continue;
-					}
-
-					if ( bRandomize )
-						tMatch.m_iWeight = ( sphRand() & 0xffff ) * tArgs.m_iIndexWeight;
-
-					tCtx.CalcSort ( tMatch );
-
-					// storing segment in matches tag for finding strings attrs offset later, biased against default zero
-					tMatch.m_iTag = iSeg+1;
-
-					bool bNewMatch = false;
-					for ( auto* pSorter: dSorters )
-						bNewMatch |= pSorter->Push ( tMatch );
-
-					// stringptr expressions should be duplicated (or taken over) at this point
-					tCtx.FreeDataFilter ( tMatch );
-					tCtx.FreeDataSort ( tMatch );
-
-					// handle cutoff
-					if ( bNewMatch )
-						if ( --iCutoff==0 )
-							break;
-
-					// handle timer
-					if ( tmMaxTimer && sphMicroTimer()>=tmMaxTimer )
-					{
-						pResult->m_sWarning = "query time exceeded max_query_time";
-						iSeg = tGuard.m_dRamChunks.GetLength() - 1;	// outer break
-						break;
-					}
-				}
-
-				if ( iCutoff==0 )
-					break;
-			}
-
-		} else
-		{
-			// query matching
-			ARRAY_FOREACH ( iSeg, tGuard.m_dRamChunks )
-			{
-				const RtSegment_t * pSeg = tGuard.m_dRamChunks[iSeg];
-
-				if ( pProfiler )
-					pProfiler->Switch ( SPH_QSTATE_INIT_SEGMENT );
-
-				tTermSetup.SetSegment ( iSeg );
-				pRanker->Reset ( tTermSetup );
-
-				// for lookups to work
-				tCtx.m_pIndexData = pSeg;
-				tCtx.m_pIndexSegment = pSeg;
-
-				// set blob pool for string on_sort expression fix up
-				const BYTE * pBlobPool = pSeg->m_dBlobs.Begin ();
-				tCtx.SetBlobPool ( pBlobPool );
-				for ( auto * pSorter : dSorters )
-					pSorter->SetBlobPool ( pBlobPool );
-
-				pRanker->ExtraData ( EXTRA_SET_BLOBPOOL, (void**)&pBlobPool );
-
-				CSphMatch * pMatch = pRanker->GetMatchesBuffer();
-				while (true)
-				{
-					// ranker does profile switches internally in GetMatches()
-					int iMatches = pRanker->GetMatches();
-					if ( iMatches<=0 )
-						break;
-
-					if ( pProfiler )
-						pProfiler->Switch ( SPH_QSTATE_SORT );
-
-					for ( int i=0; i<iMatches; i++ )
-					{
-						pMatch[i].m_pStatic = pSeg->GetDocinfoByRowID ( pMatch[i].m_tRowID );
-						pMatch[i].m_iWeight *= tArgs.m_iIndexWeight;
-						if ( bRandomize )
-							pMatch[i].m_iWeight = ( sphRand() & 0xffff ) * tArgs.m_iIndexWeight;
-
-						tCtx.CalcSort ( pMatch[i] );
-
-						if ( tCtx.m_pWeightFilter && !tCtx.m_pWeightFilter->Eval ( pMatch[i] ) )
-						{
-							tCtx.FreeDataSort ( pMatch[i] );
-							continue;
-						}
-
-						// storing segment in matches tag for finding strings attrs offset later, biased against default zero
-						pMatch[i].m_iTag = iSeg+1;
-
-						bool bNewMatch = false;
-						for ( auto* pSorter : dSorters )
-						{
-							bNewMatch |= pSorter->Push ( pMatch[i] );
-
-							if ( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
-							{
-								pRanker->ExtraData ( EXTRA_SET_MATCHPUSHED, (void**)&(pSorter->m_iJustPushed) );
-								pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&(pSorter->m_dJustPopped) );
-							}
-						}
-
-						// stringptr expressions should be duplicated (or taken over) at this point
-						tCtx.FreeDataFilter ( pMatch[i] );
-						tCtx.FreeDataSort ( pMatch[i] );
-
-						if ( bNewMatch )
-							if ( --iCutoff==0 )
-								break;
-					}
-
-					if ( iCutoff==0 )
-					{
-						iSeg = tGuard.m_dRamChunks.GetLength();
-						break;
-					}
-				}
-			}
-		}
-	}
-
-	// do final expression calculations
-	if ( tCtx.m_dCalcFinal.GetLength () )
-	{
-		const int iSegmentsTotal = tGuard.m_dRamChunks.GetLength ();
-
-		// at 0 pass processor also fills bitmask of segments these has matches at sorter
-		// then skip sorter processing for these 'empty' segments
-		SphRtFinalMatchCalc_c tFinal ( iSegmentsTotal, tCtx );
-
-		ARRAY_FOREACH_COND ( iSeg, tGuard.m_dRamChunks, tFinal.HasSegments() )
-		{
-			if ( !tFinal.NextSegment ( iSeg ) )
-				continue;
-
-			// set blob pool for string on_sort expression fix up
-			tCtx.SetBlobPool ( tGuard.m_dRamChunks[iSeg]->m_dBlobs.Begin() );
-			dSorters.Apply ( [&tFinal] ( ISphMatchSorter * pTop ) { pTop->Finalize ( tFinal, false ); } );
-		}
-	}
-
-
-	//////////////////////
-	// copying match's attributes to external storage in result set
-	//////////////////////
-
-	if ( pProfiler )
-		pProfiler->Switch ( SPH_QSTATE_FINALIZE );
-
-	if ( pRanker.Ptr() )
-		pRanker->FinalizeCache ( tMaxSorterSchema );
+	if (!bResult)
+		return false;
 
 	MEMORY ( MEM_RT_RES_STRINGS );
 

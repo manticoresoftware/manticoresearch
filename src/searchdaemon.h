@@ -283,11 +283,7 @@ int sphSockGetErrno();
 void sphSockSetErrno( int );
 int sphSockPeekErrno();
 int sphSetSockNB( int );
-int RecvNBChunk( int iSock, char*& pBuf, int& iLeftBytes );
 int sphPoll( int iSock, int64_t tmTimeout, bool bWrite = false );
-void sphFDSet( int fd, fd_set* fdset );
-void sphFDClr( int fd, fd_set* fdset );
-
 
 /** \brief wrapper over getaddrinfo
 Invokes getaddrinfo for given host which perform name resolving (dns).
@@ -301,10 +297,6 @@ char* sphFormatIP( char* sBuffer, int iBufferSize, DWORD uAddress );
 CSphString GetMacAddress();
 
 bool IsPortInRange( int iPort );
-int sphSockRead( int iSock, void* buf, int iLen, int iReadTimeout, bool bIntr );
-
-// first try to get data, and only then fall into sphSockRead (which poll socket first)
-int SockReadFast( int iSock, void* buf, int iLen, int iReadTimeout );
 
 /////////////////////////////////////////////////////////////////////////////
 // NETWORK BUFFERS
@@ -457,20 +449,14 @@ public:
 #endif
 };
 
-class NetOutputBuffer_c : public CachedOutputBuffer_c
+class NetGenericOutputBuffer_c : public CachedOutputBuffer_c
 {
 public:
-	explicit	NetOutputBuffer_c ( int iSock );
-
-	void	Flush () override;
 	bool	GetError () const override { return m_bError; }
-	int		GetSentCount () const override { return m_iSent; }
 	void	SetProfiler ( CSphQueryProfile * pProfiler ) override { m_pProfile = pProfiler; }
 
-private:
+protected:
 	CSphQueryProfile *	m_pProfile = nullptr;
-	int			m_iSock;			///< my socket
-	int			m_iSent = 0;
 	bool		m_bError = false;
 };
 
@@ -503,8 +489,9 @@ public:
 	bool			GetString ( CSphVector<BYTE> & dBuffer );
 	bool			GetError () { return m_bError; }
 	bool			GetBytes ( void * pBuf, int iLen );
-	const BYTE *	GetBufferPtr () const { return m_pBuf; }
-	int				GetLength() const { return m_iLen; }
+	const BYTE *	GetBufferPtr () const { return m_pCur; }
+	int				GetBufferPos () const { return int ( m_pCur - m_pBuf ); }
+	void			SetBufferPos (int iPos) { m_pCur = m_pBuf + iPos; }
 	bool			GetBytesZerocopy ( const BYTE ** ppData, int iLen );
 
 	bool	GetDwords ( CSphVector<DWORD> & dBuffer, int & iGot, int iMax );
@@ -536,27 +523,6 @@ protected:
 
 /// simple memory request buffer
 using MemInputBuffer_c = InputBuffer_c;
-
-/// simple network request buffer
-class NetInputBuffer_c : private LazyVector_T<BYTE>, public InputBuffer_c
-{
-	using STORE = LazyVector_T<BYTE>;
-public:
-	explicit		NetInputBuffer_c ( int iSock );
-
-	bool			ReadFrom ( int iLen, int iTimeout, bool bIntr=false, bool bAppend=false );
-	bool			ReadFrom ( int iLen ) { return ReadFrom ( iLen, g_iReadTimeoutS ); }
-
-	bool			IsIntr () const { return m_bIntr; }
-
-	using InputBuffer_c::GetLength;
-private:
-	static const int	NET_MINIBUFFER_SIZE = STORE::iSTATICSIZE;
-
-	int					m_iSock;
-	bool				m_bIntr = false;
-};
-
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1221,7 +1187,7 @@ public:
 	bool Execute ( const CSphString & sQuery, RowBuffer_i & tOut, ThdDesc_t & tThd );
 	void SetFederatedUser ();
 	bool IsAutoCommit () const;
-	bool StartProfiling ();
+	CSphQueryProfile* StartProfiling ();
 	void SetVIP ( bool bVIP );
 	CSphinxqlSession& Impl();
 };

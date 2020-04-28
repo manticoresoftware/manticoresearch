@@ -24,8 +24,10 @@ public:
 	explicit NetActionAccept_c ( const Listener_t & tListener );
 	~NetActionAccept_c() final;
 
-	NetEvent_e		Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dQueue, CSphNetLoop * pLoop ) final;
-	NetEvent_e		Setup ( int64_t tmNow ) final { return NE_IN; }
-	bool			GetStats ( int & iConnections ) final;
-	void			CloseSocket () final {}
+	NetEvent_e		Process ( DWORD uGotEvents, CSphNetLoop * pLoop ) final;
+	int				GetStats ();
 };
+
+// helper to be used from plain workers
+void FillNetState ( NetConnection_t * pState, int iClientSock, int iConnID, bool bVIP,
+		const sockaddr_storage & saStorage );

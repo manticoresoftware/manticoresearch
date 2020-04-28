@@ -12,6 +12,8 @@
 
 #include "networking_daemon.h"
 #include "netstate_api.h"
+
+#if 0
 #include "netreceive_api.h"
 #include "netreceive_http.h"
 #include "netreceive_https.h"
@@ -200,8 +202,23 @@ void JobDoSendNB ( NetSendData_t * pSend, CSphNetLoop * pLoop )
 		pLoop->AddAction ( pSend );
 	}
 }
+#endif
 
 // helper
+bool CheckSocketError ( DWORD uGotEvents )
+{
+	const auto ERRHUP = NetPollEvent_t::ERR | NetPollEvent_t::HUP;
+	bool bReadError = ( ( uGotEvents & NetPollEvent_t::READ )
+			&& ( uGotEvents & ERRHUP ) );
+	bool bWriteError = ( ( uGotEvents & NetPollEvent_t::WRITE ) && ( uGotEvents & NetPollEvent_t::ERR ) );
+
+	if ( bReadError && (( uGotEvents & ERRHUP)==ERRHUP) )
+		sphSockSetErrno ( ECONNRESET );
+
+	return bReadError || bWriteError;
+}
+
+#if 0
 bool CheckSocketError ( DWORD uGotEvents, const char * sMsg, const NetStateAPI_t * pConn, bool bDebug )
 {
 	bool bReadError = ( ( uGotEvents & NE_IN ) && ( uGotEvents & ( NE_ERR | NE_HUP ) ) );
@@ -238,3 +255,4 @@ void LogSocketError ( const char * sMsg, const NetStateAPI_t * pConn, bool bDebu
 		sphWarning ( "%s (client=%s(%d)), error: %d '%s', sock=%d",
 				sMsg, pConn->m_sClientName, pConn->m_iConnID, iErrno, sphSockError ( iErrno ), pConn->m_iClientSock );
 }
+#endif

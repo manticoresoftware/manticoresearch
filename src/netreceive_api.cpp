@@ -15,8 +15,14 @@
 extern int g_iClientTimeoutS; // from searchd.cpp
 extern volatile bool g_bMaintenance;
 extern int g_iThdQueueMax;
+extern CSphAtomic g_iPersistentInUse;
 static auto& g_bShutdown = sphGetShutdown ();
+static auto& g_bGotSigterm = sphGetGotSigterm ();    // we just received SIGTERM; need to shutdown
+static auto & g_bGotSighup = sphGetGotSighup ();    // we just received SIGHUP; need to log
 
+static char g_sMaxedOutMessage[] = "maxed out, dismissing client";
+
+#if 0
 struct ThdJobAPI_t : public ISphJob
 {
 	CSphScopedPtr<NetStateAPI_t>		m_tState;
@@ -376,4 +382,177 @@ void NetReceiveDataAPI_c::SetupBodyPhase()
 {
 	assert ( m_pImpl );
 	return m_pImpl->SetupBodyPhase ();
+}
+#endif
+
+// mostly repeats HandleClientSphinx
+void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
+{
+	NetConnection_t & tConn = *pConn;
+
+	// non-vip connections in maintainance should be already rejected on accept
+	assert  ( !g_bMaintenance || tConn.m_bVIP );
+
+	ThdDesc_t tThdesc;
+	tThdesc.m_eProto = Proto_e::SPHINX;
+	tThdesc.m_iClientSock = tConn.m_iClientSock;
+	tThdesc.m_sClientName = tConn.m_sClientName;
+	tThdesc.m_iConnID = tConn.m_iConnID;
+	tThdesc.m_tmStart = tThdesc.m_tmConnect = sphMicroTimer ();
+	tThdesc.m_iTid = GetOsThreadId ();
+
+	ThreadLocal_t tThd ( tThdesc );
+
+	// set off query guard
+	CrashQuery_t tCrashQuery;
+
+	// set off query guard on return
+	auto tRestoreCrash = AtScopeExit ( [] { GlobalCrashQuerySet ( CrashQuery_t () ); } );
+
+	int iCID = tConn.m_iConnID;
+	const char * sClientIP = tConn.m_sClientName;
+
+	// needed to check permission to turn maintenance mode on/off
+	auto& tOut = pBuf->Out();
+	auto& tIn = pBuf->In();
+
+	// send handshake
+	tThd.ThdState ( ThdState_e::HANDSHAKE );
+	tOut.SendDword ( SPHINX_SEARCHD_PROTO ); // that is handshake
+	if ( !tIn.ReadFrom ( 4, g_iReadTimeoutS, true ))
+	{
+		sphWarning ( "failed to receive API handshake (client=%s(%d), exp=%d, error='%s')",
+				sClientIP, iCID, 4, sphSockError ());
+		return;
+	}
+	auto uHandshake = tIn.GetDword();
+	sphLogDebugv ( "conn %s(%d): got handshake, major v.%d", sClientIP, iCID, uHandshake );
+	if ( uHandshake!=SPHINX_CLIENT_VERSION && uHandshake!=0x01000000UL )
+	{
+		sphLogDebugv ( "conn %s(%d): got handshake, major v.%d", sClientIP, iCID, uHandshake );
+		return;
+	}
+	if ( !tIn.HasBytes ()) // old client, it waits for dialogue answer right now.
+		tOut.Flush();
+
+	bool bPersist = false;
+	int iPconnIdleS = 0;
+
+	// main loop for one ore more commands (if persist)
+	do
+	{
+		if ( !tIn.HasBytes ())
+			tIn.DiscardProcessed ();
+
+		auto iTimeoutS = bPersist ? 1 : g_iReadTimeoutS; // default 1 vs 5 seconds
+		sphLogDebugv ( "conn %s(%d): loop start with timeout %d", sClientIP, iCID, iTimeoutS );
+
+		// in "persistent connection" mode, we want interruptible waits
+		// so that the worker child could be forcibly restarted
+		//
+		// currently, the only signal allowed to interrupt this read is SIGTERM
+		// letting SIGHUP interrupt causes trouble under query/rotation pressure
+		// see sphSockRead() and ReadFrom() for details
+		tThd.ThdState ( ThdState_e::NET_IDLE );
+		bool bCommand = tIn.ReadFrom ( 8, iTimeoutS, bPersist );
+
+		if ( !bCommand )
+		{
+			// on SIGTERM, bail unconditionally and immediately, at all times
+			if ( g_bGotSigterm )
+			{
+				sphLogDebugv ( "conn %s(%d): bailing on SIGTERM", sClientIP, iCID );
+				break;
+			}
+
+			// on SIGHUP vs pconn, bail if a pconn was idle for 1 sec
+			if ( bPersist && sphSockPeekErrno ()==ETIMEDOUT )
+			{
+				sphLogDebugv ( "conn %s(%d): persist + timeout condition", sClientIP, iCID );
+				if ( g_bGotSighup )
+				{
+					sphLogDebugv ( "conn %s(%d): bailing idle pconn on SIGHUP", sClientIP, iCID );
+					break;
+				}
+
+				// on pconn that was idle for 300 sec (client_timeout), bail
+				iPconnIdleS += iTimeoutS;
+				bool bClientTimedout = ( iPconnIdleS>=g_iClientTimeoutS );
+				if ( bClientTimedout )
+					sphLogDebugv ( "conn %s(%d): bailing idle pconn on client_timeout", sClientIP, iCID );
+				else
+				{
+					sphLogDebugv ( "conn %s(%d): timeout, not reached, continue", sClientIP, iCID );
+					continue;
+				}
+			}
+			break; // some error, need not to continue.
+		}
+
+		iPconnIdleS = 0;
+
+		tThd.ThdState ( ThdState_e::NET_READ );
+		auto eCommand = (SearchdCommand_e)  tIn.GetWord ();
+		auto uVer = tIn.GetWord ();
+		auto iReplySize = tIn.GetInt ();
+		sphLogDebugv ( "read command %d, version %d, reply size %d", eCommand, uVer, iReplySize );
+
+
+		bool bBadCommand = ( eCommand>=SEARCHD_COMMAND_WRONG );
+		bool bBadLength = ( iReplySize<0 || iReplySize>g_iMaxPacketSize );
+		if ( bBadCommand || bBadLength )
+		{
+			// unknown command, default response header
+			if ( bBadLength )
+				sphWarning ( "ill-formed client request (length=%d out of bounds)", iReplySize );
+			// if command is insane, low level comm is broken, so we bail out
+			if ( bBadCommand )
+				sphWarning ( "ill-formed client request (command=%d, SEARCHD_COMMAND_TOTAL=%d)", eCommand,
+							 SEARCHD_COMMAND_TOTAL );
+
+			SendErrorReply ( tOut, "invalid command (code=%d, len=%d)", eCommand, iReplySize );
+			tOut.Flush();
+			break;
+		}
+
+		if ( iReplySize && !tIn.ReadFrom ( iReplySize, iTimeoutS, true ))
+		{
+			sphWarning ( "failed to receive API body (client=%s(%d), exp=%d, error='%s')",
+					sClientIP, iCID, iReplySize, sphSockError ());
+			break;
+		}
+
+		tCrashQuery.m_pQuery = tIn.GetBufferPtr ();
+		tCrashQuery.m_iSize = iReplySize;
+		tCrashQuery.m_bMySQL = false;
+		tCrashQuery.m_uCMD = eCommand;
+		tCrashQuery.m_uVer = uVer;
+		GlobalCrashQuerySet ( tCrashQuery );
+
+		// special process for 'ping' as immediate answer
+		if ( eCommand ==SEARCHD_COMMAND_PING )
+		{
+			HandleCommandPing ( tOut, uVer, tIn );
+			tOut.Flush();
+			break;
+		}
+
+		// maxed out
+		if ( g_iThdQueueMax && !tConn.m_bVIP && GetGlobalQueueSize ()>=g_iThdQueueMax )
+		{
+			sphWarning ( "%s", g_sMaxedOutMessage );
+			APICommand_t tRetry ( tOut, SEARCHD_RETRY );
+			tOut.SendString ( g_sMaxedOutMessage );
+			tOut.Flush();
+			return;
+		}
+
+		bPersist |= LoopClientSphinx ( eCommand, uVer, iReplySize, tThdesc, tIn, tOut, false );
+		tOut.Flush();
+	} while (bPersist);
+
+	if ( bPersist )
+		--g_iPersistentInUse;
+
+	sphLogDebugv ( "conn %s(%d): exiting", sClientIP, iCID );
 }

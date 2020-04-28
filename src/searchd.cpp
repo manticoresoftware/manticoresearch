@@ -35,6 +35,7 @@
 #include "indexsettings.h"
 #include "searchdddl.h"
 #include "networking_daemon.h"
+#include "query_status.h"
 
 // services
 #include "taskping.h"
@@ -46,6 +47,7 @@
 #include "taskflushattrs.h"
 #include "taskflushmutable.h"
 #include "taskpreread.h"
+#include "coroutine.h"
 
 using namespace Threads;
 
@@ -142,7 +144,6 @@ static bool				g_bWatchdog			= true;
 static int				g_iExpansionLimit	= 0;
 static int				g_iShutdownTimeoutUs	= 3000000; // default timeout on daemon shutdown and stopwait is 3 seconds
 static int				g_iBacklog			= SEARCHD_BACKLOG;
-static int				g_iThdPoolCount		= 2;
 int						g_iThdQueueMax		= 0;
 bool					g_bGroupingInUtc	= false;
 static auto&			g_iTFO = sphGetTFO ();
@@ -172,9 +173,7 @@ static int				g_iDocstoreCache = 0;
 
 static FileAccessSettings_t g_tDefaultFA;
 
-ISphThdPool *	g_pThdPool			= nullptr;
-static auto&			g_iDistThreads = sphDistThreads ();
-
+int				g_iDistThreads		= 0;
 int				g_iAgentConnectTimeoutMs = 1000;
 int				g_iAgentQueryTimeoutMs = 3000;	// global (default). May be override by index-scope values, if one specified
 
@@ -687,7 +686,6 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	{
 		*g_bDaemonAtShutdown.GetWritePtr() = 1;
 	}
-	searchd::FireShutdownCbs();
 
 #if !USE_WINDOWS
 	// stopwait handshake
@@ -721,14 +719,6 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 		sphWarning ( "still %d alive threads during shutdown, after %d.%03d sec", ThreadsNum(), (int)(tmDelta/1000000), (int)((tmDelta/1000)%1000) );
 	}
 
-	if ( g_pThdPool )
-	{
-		g_pThdPool->Shutdown();
-		SafeDelete ( g_pThdPool );
-		ARRAY_FOREACH ( i, g_dTickPoolThread )
-			sphThreadJoin ( g_dTickPoolThread.Begin() + i );
-	}
-
 	// save attribute updates for all local indexes
 	bAttrsSaveOk = FinallySaveIndexes();
 
@@ -738,6 +728,16 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 		CSphString sError;
 		SaveConfigInt(sError);
 	}
+
+	// call scheduled callbacks:
+	// shutdown replication,
+	// shutdown ssl,
+	// shutdown tick threads,
+	// shutdown alone tasks
+	searchd::FireShutdownCbs ();
+
+	ARRAY_FOREACH ( i, g_dTickPoolThread )
+		sphThreadJoin ( g_dTickPoolThread.Begin() + i );
 
 	// unlock indexes and release locks if needed
 	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); )
@@ -754,8 +754,6 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	// clear shut down of rt indexes + binlog
 	sphDoneIOStats();
 	sphRTDone();
-
-	ReplicateClustersDelete();
 
 	ShutdownDocstore();
 	sphShutdownWordforms ();
@@ -1297,7 +1295,7 @@ ListenerDesc_t MakeAnyListener ( int iPort, Proto_e eProto=Proto_e::SPHINX )
 }
 
 // add any listener we will serve by our own (i.e. NO galera's since it is not our deal)
-bool AddGlobalListener ( const ListenerDesc_t& tDesc, bool bHttpAllowed )  REQUIRES ( MainThread )
+bool AddGlobalListener ( const ListenerDesc_t& tDesc ) REQUIRES ( MainThread )
 {
 	if ( tDesc.m_eProto==Proto_e::REPLICATION )
 		return false;
@@ -1306,12 +1304,6 @@ bool AddGlobalListener ( const ListenerDesc_t& tDesc, bool bHttpAllowed )  REQUI
 	tListener.m_eProto = tDesc.m_eProto;
 	tListener.m_bTcp = true;
 	tListener.m_bVIP = tDesc.m_bVIP;
-
-	if ( ( tDesc.m_eProto==Proto_e::HTTP || tDesc.m_eProto == Proto_e::HTTPS ) && !bHttpAllowed )
-	{
-		sphWarning ( "thread_pool disabled, can not listen for http interface, port=%d, use workers=thread_pool", tDesc.m_iPort );
-		return false;
-	}
 
 #if !USE_WINDOWS
 	if ( !tDesc.m_sUnix.IsEmpty () )
@@ -8138,14 +8130,17 @@ void BuildStatus ( VectorLike & dStatus )
 		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iDistQueries );
 
 	// status of thread pool
-	if ( g_pThdPool )
+//	if ( g_pThdPool )
 	{
 		if ( dStatus.MatchAdd ( "workers_total" ) )
-			dStatus.Add().SetSprintf ( "%d", g_pThdPool->GetTotalWorkerCount() );
-		if ( dStatus.MatchAdd ( "workers_active" ) )
-			dStatus.Add().SetSprintf ( "%d", g_pThdPool->GetActiveWorkerCount() );
+			dStatus.Add().SetSprintf ( "%d", (int) GetGlobalThreads() );
+//			dStatus.Add().SetSprintf ( "%d", g_pThdPool->GetTotalWorkerCount() );
+//		if ( dStatus.MatchAdd ( "workers_active" ) )
+//			dStatus.Add("0");
+//		dStatus.Add ().SetSprintf ( "%d", g_pThdPool->GetActiveWorkerCount ());
 		if ( dStatus.MatchAdd ( "work_queue_length" ) )
-			dStatus.Add().SetSprintf ( "%d", g_pThdPool->GetQueueLength() );
+			dStatus.Add ().SetSprintf ( "%d", (int) GetGlobalQueueSize ());
+//			dStatus.Add().SetSprintf ( "%d", g_pThdPool->GetQueueLength() );
 	}
 
 	for ( RLockedDistrIt_c it ( g_pDistIndexes ); it.Next (); )
@@ -8588,6 +8583,7 @@ void HandleCommandPing ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c &
 	tOut.SendInt ( iCookie ); // echo the cookie back
 }
 
+#if 0
 static void HandleClientSphinx ( int iSock, ThreadLocal_t & tThread ) REQUIRES ( HandlerThread )
 {
 	if ( iSock<0 )
@@ -8727,7 +8723,7 @@ static void HandleClientSphinx ( int iSock, ThreadLocal_t & tThread ) REQUIRES (
 
 	sphLogDebugv ( "conn %s(" INT64_FMT "): exiting", sClientIP, iCID );
 }
-
+#endif
 
 bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength,
 	ThdDesc_t & tThd, InputBuffer_c & tBuf, CachedOutputBuffer_c & tOut, bool bManagePersist )
@@ -15646,13 +15642,16 @@ bool SphinxqlSessionPublic::IsAutoCommit () const
 	return m_pImpl->m_tVars.m_bAutoCommit;
 }
 
-bool SphinxqlSessionPublic::StartProfiling()
+CSphQueryProfile * SphinxqlSessionPublic::StartProfiling()
 {
 	assert ( m_pImpl );
-	bool bProfile = m_pImpl->m_tVars.m_bProfile; // the current statement might change it
-	if ( bProfile )
-		m_pImpl->m_tProfile.Start ( SPH_QSTATE_TOTAL );
-	return bProfile;
+	CSphQueryProfile * pProfile = nullptr;
+		if ( m_pImpl->m_tVars.m_bProfile ) // the current statement might change it
+	{
+		pProfile = &m_pImpl->m_tProfile;
+		pProfile->Start ( SPH_QSTATE_TOTAL );
+	}
+	return pProfile;
 }
 
 void SphinxqlSessionPublic::SetVIP ( bool bVIP )
@@ -15728,9 +15727,14 @@ bool IsFederatedUser ( const BYTE * pPacket, int iLen )
 		return false;
 
 	const char * sFederated = "FEDERATED";
-	const char * sSrc = (const char *)pPacket + 32;
+	const char * sSrc = (const char *)pPacket + 4+4+1+23;
 
-	return ( strncmp ( sFederated, sSrc, iLen-32 )==0 );
+	return ( strncmp ( sFederated, sSrc, iLen-(4+4+1+23) )==0 );
+}
+
+bool IsFederatedUser ( ByteBlob_t tPacket )
+{
+	return IsFederatedUser ( tPacket.first, tPacket.second );
 }
 
 
@@ -15815,7 +15819,8 @@ bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dSt
 	return true;
 }
 
-static bool ReadMySQLPacketHeader ( int iSock, int& iLen, BYTE& uPacketID )
+#if 0
+bool ReadMySQLPacketHeader ( int iSock, int& iLen, BYTE& uPacketID )
 {
 	const int MAX_PACKET_LEN = 0xffffffL; // 16777215 bytes, max low level packet size
 	NetInputBuffer_c tIn ( iSock );
@@ -15946,10 +15951,12 @@ static void HandleClientMySQL ( int iSock, ThreadLocal_t & tThread ) REQUIRES ( 
 	// set off query guard
 	GlobalCrashQuerySet ( CrashQuery_t() );
 }
+#endif
 
 bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString & sQuery, int iPacketLen,
 	bool bProfile, ThreadLocal_t & tThd, InputBuffer_c & tIn, ISphOutputBuffer & tOut )
 {
+	auto uHasBytesIn = tIn.HasBytes ();
 	// get command, handle special packets
 	const BYTE uMysqlCmd = tIn.GetByte ();
 
@@ -15993,6 +16000,15 @@ bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString
 			break;
 	}
 
+	auto uBytesConsumed = uHasBytesIn - tIn.HasBytes ();
+	if ( uBytesConsumed<iPacketLen )
+	{
+		uBytesConsumed = iPacketLen - uBytesConsumed;
+		sphLogDebugv ( "LoopClientMySQL disposing unused %d bytes", uBytesConsumed );
+		const BYTE* pFoo = nullptr;
+		tIn.GetBytesZerocopy (&pFoo, uBytesConsumed);
+	}
+
 	// send the response packet
 	tThd.ThdState ( ThdState_e::NET_WRITE );
 	tOut.Flush();
@@ -16008,6 +16024,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString
 	return true;
 }
 
+#if 0
 //////////////////////////////////////////////////////////////////////////
 // HANDLE-BY-LISTENER
 //////////////////////////////////////////////////////////////////////////
@@ -16021,6 +16038,7 @@ void HandleClient ( Proto_e eProto, int iSock, ThreadLocal_t & tThd ) REQUIRES (
 		default:				assert ( 0 && "unhandled protocol type" ); break;
 	}
 }
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 // INDEX ROTATION
@@ -18342,129 +18360,6 @@ void CheckSignals () REQUIRES ( MainThread )
 }
 
 
-void QueryStatus ( CSphVariant * v )
-{
-	char sBuf [ SPH_ADDRESS_SIZE ];
-	char sListen [ 256 ];
-	CSphVariant tListen;
-
-	if ( !v )
-	{
-		snprintf ( sListen, sizeof ( sListen ), "127.0.0.1:%d:sphinx", SPHINXAPI_PORT );
-		tListen = CSphVariant ( sListen );
-		v = &tListen;
-	}
-
-	for ( ; v; v = v->m_pNext )
-	{
-		ListenerDesc_t tDesc = ParseListener ( v->cstr() );
-		CHECK_LISTENER( tDesc );
-		if ( tDesc.m_eProto!=Proto_e::SPHINX )
-			continue;
-
-		int iSock = -1;
-#if !USE_WINDOWS
-		if ( !tDesc.m_sUnix.IsEmpty() )
-		{
-			// UNIX connection
-			struct sockaddr_un uaddr;
-
-			size_t len = strlen ( tDesc.m_sUnix.cstr() );
-			if ( len+1 > sizeof(uaddr.sun_path ) )
-				sphFatal ( "UNIX socket path is too long (len=%d)", (int)len );
-
-			memset ( &uaddr, 0, sizeof(uaddr) );
-			uaddr.sun_family = AF_UNIX;
-			memcpy ( uaddr.sun_path, tDesc.m_sUnix.cstr(), len+1 );
-
-			iSock = socket ( AF_UNIX, SOCK_STREAM, 0 );
-			if ( iSock<0 )
-				sphFatal ( "failed to create UNIX socket: %s", sphSockError() );
-
-			if ( connect ( iSock, (struct sockaddr*)&uaddr, sizeof(uaddr) )<0 )
-			{
-				sphWarning ( "failed to connect to unix://%s: %s\n", tDesc.m_sUnix.cstr(), sphSockError() );
-				sphSockClose ( iSock );
-				continue;
-			}
-
-		} else
-#endif
-		{
-			// TCP connection
-			struct sockaddr_in sin;
-			memset ( &sin, 0, sizeof(sin) );
-			sin.sin_family = AF_INET;
-			sin.sin_addr.s_addr = ( tDesc.m_uIP==htonl ( INADDR_ANY ) )
-				? htonl ( INADDR_LOOPBACK )
-				: tDesc.m_uIP;
-			sin.sin_port = htons ( (short)tDesc.m_iPort );
-
-			iSock = socket ( AF_INET, SOCK_STREAM, 0 );
-			if ( iSock<0 )
-				sphFatal ( "failed to create TCP socket: %s", sphSockError() );
-
-#ifdef TCP_NODELAY
-			int iOn = 1;
-			if ( setsockopt ( iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
-				sphWarning ( "setsockopt() failed: %s", sphSockError() );
-#endif
-
-			if ( connect ( iSock, (struct sockaddr*)&sin, sizeof(sin) )<0 )
-			{
-				sphWarning ( "failed to connect to %s:%d: %s\n", sphFormatIP ( sBuf, sizeof(sBuf), tDesc.m_uIP ), tDesc.m_iPort, sphSockError() );
-				sphSockClose ( iSock );
-				continue;
-			}
-		}
-
-		// send request
-		NetOutputBuffer_c tOut ( iSock );
-		tOut.SendDword ( SPHINX_CLIENT_VERSION );
-		APICommand_t dStatus ( tOut, SEARCHD_COMMAND_STATUS, VER_COMMAND_STATUS );
-		tOut.SendInt ( 1 ); // dummy body
-		tOut.Flush ();
-
-		// get reply
-		NetInputBuffer_c tIn ( iSock );
-		if ( !tIn.ReadFrom ( 12, 5 ) ) // magic_header_size=12, magic_timeout=5
-			sphFatal ( "handshake failure (no response)" );
-
-		DWORD uVer = tIn.GetDword();
-		if ( uVer!=SPHINX_SEARCHD_PROTO && uVer!=0x01000000UL ) // workaround for all the revisions that sent it in host order...
-			sphFatal ( "handshake failure (unexpected protocol version=%d)", uVer );
-
-		if ( tIn.GetWord()!=SEARCHD_OK )
-			sphFatal ( "status command failed" );
-
-		if ( tIn.GetWord()!=VER_COMMAND_STATUS )
-			sphFatal ( "status command version mismatch" );
-
-		if ( !tIn.ReadFrom ( tIn.GetDword(), 5 ) ) // magic_timeout=5
-			sphFatal ( "failed to read status reply" );
-
-		fprintf ( stdout, "\nsearchd status\n--------------\n" );
-
-		int iRows = tIn.GetDword();
-		int iCols = tIn.GetDword();
-		for ( int i=0; i<iRows && !tIn.GetError(); i++ )
-		{
-			for ( int j=0; j<iCols && !tIn.GetError(); j++ )
-			{
-				fprintf ( stdout, "%s", tIn.GetString().cstr() );
-				fprintf ( stdout, ( j==0 ) ? ": " : " " );
-			}
-			fprintf ( stdout, "\n" );
-		}
-
-		// all done
-		sphSockClose ( iSock );
-		return;
-	}
-	sphFatal ( "failed to connect to daemon: please specify listen with sphinx protocol in your config file" );
-}
-
-
 void ShowProgress ( const CSphIndexProgress * pProgress, bool bPhaseEnd )
 {
 	assert ( pProgress );
@@ -18478,7 +18373,7 @@ void ShowProgress ( const CSphIndexProgress * pProgress, bool bPhaseEnd )
 	fflush ( stdout );
 }
 
-
+#if 0
 void FailClient ( int iSock, const char * sMessage )
 {
 	NetOutputBuffer_c tOut ( iSock );
@@ -18632,7 +18527,7 @@ void HandlerThreadFunc ( void * pArg ) REQUIRES ( !HandlerThread )
 	pThd->RemoveFromGlobal ();
 	SafeDelete ( pThread );
 }
-
+#endif
 
 void TickHead () REQUIRES ( MainThread )
 {
@@ -18641,7 +18536,7 @@ void TickHead () REQUIRES ( MainThread )
 	CheckReopenLogs ();
 	CheckRotate ();
 
-	if ( g_pThdPool )
+//	if ( g_pThdPool )
 	{
 		sphInfo ( nullptr ); // flush dupes
 #if USE_WINDOWS
@@ -18654,7 +18549,7 @@ void TickHead () REQUIRES ( MainThread )
 		sphSleepMsec ( tmSleep );
 		return;
 	}
-
+#if 0
 	int iClientSock = -1;
 	char sClientName[SPH_ADDRPORT_SIZE];
 	Listener_t * pListener = DoAccept ( &iClientSock, sClientName );
@@ -18693,6 +18588,7 @@ void TickHead () REQUIRES ( MainThread )
 		FailClient ( iClientSock, "failed to create worker thread" );
 		sphWarning ( "failed to create worker thread, threads(%d), error[%d] %s", ThreadsNum(), iErr, strerrorm(iErr) );
 	}
+#endif
 }
 
 bool g_bVtune = false;
@@ -19769,10 +19665,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	{
 		auto tDesc = ParseListener ( sOptListen.cstr() );
 		dListenerDescs.Add ( tDesc );
-		AddGlobalListener ( tDesc, bThdPool );
+		AddGlobalListener ( tDesc );
 	} else if ( bOptPort )
 	{
-		AddGlobalListener ( MakeAnyListener ( iOptPort ), bThdPool );
+		AddGlobalListener ( MakeAnyListener ( iOptPort ) );
 	} else
 	{
 		// listen directives in configuration file
@@ -19780,17 +19676,18 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		{
 			auto tDesc = ParseListener ( v->cstr () );
 			dListenerDescs.Add ( tDesc );
-			AddGlobalListener ( tDesc, bThdPool );
+			AddGlobalListener ( tDesc );
 		}
 
 		// default is to listen on our two ports
 		if ( g_dListeners.IsEmpty() )
 		{
-			AddGlobalListener ( MakeAnyListener ( SPHINXAPI_PORT ), bThdPool );
-			AddGlobalListener ( MakeAnyListener ( SPHINXQL_PORT, Proto_e::MYSQL41 ), bThdPool );
+			AddGlobalListener ( MakeAnyListener ( SPHINXAPI_PORT ) );
+			AddGlobalListener ( MakeAnyListener ( SPHINXQL_PORT, Proto_e::MYSQL41 ) );
 		}
 	}
 
+#if 0
 	bool bNeedSsl = g_dListeners.FindFirst ( [] ( const Listener_t & tDesc ) { return tDesc.m_eProto==Proto_e::HTTPS; } );
 	if ( bNeedSsl )
 	{
@@ -19825,6 +19722,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 #endif
 		}
 	}
+
+#endif
 
 
 	// set up ping service (if necessary) before loading indexes
@@ -19982,17 +19881,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	// serve clients
 	/////////////////
 
-	if ( bThdPool )
-	{
-		g_iThdQueueMax = hSearchd.GetInt ( "queue_max_length", g_iThdQueueMax );
-		g_iThdPoolCount = Max ( 3*sphCpuThreadsCount()/2, 2 ); // default to 1.5*detected_cores but not less than 2 worker threads
-		if ( hSearchd.Exists ( "max_children" ) && hSearchd["max_children"].intval()>0 )
-			g_iThdPoolCount = hSearchd["max_children"].intval();
-		g_pThdPool = sphThreadPoolCreate ( g_iThdPoolCount, "netloop", sError );
-		SetGlobalThreads ( g_iThdPoolCount );
-		if ( !g_pThdPool )
-			sphDie ( "failed to create thread_pool: %s", sError.cstr() );
-	}
+	g_iThdQueueMax = hSearchd.GetInt ( "queue_max_length", g_iThdQueueMax );
+	SetGlobalThreads ( g_iMaxChildren ? g_iMaxChildren : ( 3 * sphCpuThreadsCount () / 2 ) );
+
 #if USE_WINDOWS
 	if ( g_bService )
 		MySetServiceStatus ( SERVICE_RUNNING, NO_ERROR, 0 );
@@ -20043,7 +19934,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 				sphFatal ( "listen() failed: %s", sphSockError () );
 		}
 
-	if ( g_pThdPool )
+//	if ( g_pThdPool )
 	{
 		// net thread needs non-blocking sockets
 		for ( const auto& dListener : g_dListeners )
@@ -20064,6 +19955,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 #endif
 		}
 
+		// todo! m.b. dedicated net thread for vips?
 		g_dTickPoolThread.Resize ( g_iNetWorkers );
 		ARRAY_FOREACH ( iTick, g_dTickPoolThread )
 		{
@@ -20083,6 +19975,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	// time for replication to sync with cluster
 	ReplicationStart ( hSearchd, dListenerDescs, bNewCluster, bNewClusterForce );
+	searchd::AddShutdownCb ( [] { ReplicateClustersDelete (); } );
 
 	// ready, steady, go
 	sphInfo ( "accepting connections" );

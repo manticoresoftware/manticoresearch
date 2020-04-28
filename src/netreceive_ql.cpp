@@ -11,14 +11,14 @@
 //
 
 #include "netreceive_ql.h"
+#include "coroutine.h"
 
 extern char g_sMysqlHandshake[128];
 extern int g_iMysqlHandshake;
 extern int g_iClientQlTimeoutS;    // sec
-extern int g_iThdQueueMax;
 extern volatile bool g_bMaintenance;
-static auto& g_bShutdown = sphGetShutdown ();
 
+#if 0
 struct ThdJobQL_t : public ISphJob
 {
 	CSphScopedPtr<NetStateQL_t>		m_pState;
@@ -439,4 +439,133 @@ void NetReceiveDataQL_c::CloseSocket()
 {
 	assert ( m_pImpl );
 	m_pImpl->CloseSocketQl ();
+}
+#endif
+
+const int MAX_PACKET_LEN = 0xffffffL; // 16777215 bytes, max low level packet size
+
+void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
+{
+	NetConnection_t& tConn = *pConn;
+
+	// non-vip connections in maintainance should be already rejected on accept
+	assert  ( !g_bMaintenance || tConn.m_bVIP );
+
+	ThreadLocal_t tThd;
+	auto & tThdesc = tThd.m_tDesc;
+	tThdesc.m_iClientSock = tConn.m_iClientSock;
+	tThdesc.m_sClientName = tConn.m_sClientName;
+	tThdesc.m_iConnID = tConn.m_iConnID;
+	tThdesc.m_tmStart = tThdesc.m_tmConnect = sphMicroTimer ();
+	tThdesc.m_iTid = GetOsThreadId ();
+	tThd.FinishInit();
+
+	// set off query guard
+	CrashQuery_t tCrashQuery;
+	tCrashQuery.m_bMySQL = true;
+	GlobalCrashQuerySet ( tCrashQuery );
+
+	// set off query guard on return
+	auto tRestoreCrash = AtScopeExit ( [] { GlobalCrashQuerySet ( CrashQuery_t () ); } );
+
+	int iCID = tConn.m_iConnID;
+	const char * sClientIP = tConn.m_sClientName;
+
+	auto pBuf = MakeAsyncNetBuffer ( std::move ( pSock ));
+
+	// fixme! durty macros to transparently substitute pBuf with ssl version, if necessary.
+	#define tOut pBuf->Out()
+	#define tIn pBuf->In()
+
+	// send handshake first
+	sphLogDebugv ("Sending handshake...");
+	tOut.SendBytes ( g_sMysqlHandshake, g_iMysqlHandshake );
+	tOut.Flush();
+	if ( tOut.GetError () )
+	{
+		int iErrno = sphSockGetErrno (); // fixme!
+		sphWarning ( "failed to send server version (client=%s(%d), error: %d '%s')",
+				sClientIP, iCID, iErrno, sphSockError ( iErrno ) );
+		return;
+	}
+
+	CSphString sQuery; // to keep data alive for SphCrashQuery_c
+	SphinxqlSessionPublic tSession; // session variables and state
+	// needed to check permission to turn maintenance mode on/off
+	tSession.SetVIP ( tConn.m_bVIP );
+	bool bAuthed = false;
+	BYTE uPacketID = 1;
+	bool bKeepAlive = false;
+	int iPacketLen = 0;
+	do
+	{
+		tIn.DiscardProcessed ();
+		iPacketLen = 0;
+
+		// get next packet
+		// we want interruptible calls here, so that shutdowns could be honored
+		sphLogDebugv ( "Receiving command... %d bytes in buf", tIn.HasBytes() );
+		tThd.ThdState ( ThdState_e::NET_IDLE );
+
+		// setup per-query profiling
+		auto pProfile = tSession.StartProfiling(); // fixme! there is SPH_QSTATE_TOTAL there
+		if ( pProfile )
+		{
+			pProfile->Start ( SPH_QSTATE_NET_READ );
+			tOut.SetProfiler ( pProfile );
+		}
+
+		int iChunkLen = MAX_PACKET_LEN;
+
+		auto iStartPacketPos = tIn.GetBufferPos ();
+		while (iChunkLen==MAX_PACKET_LEN)
+		{
+			// inlined AsyncReadMySQLPacketHeader
+			if ( !tIn.ReadFrom ( iPacketLen+4, g_iClientQlTimeoutS ))
+			{
+				sphLogDebugv ( "conn %s(%d): bailing on failed MySQL header (sockerr=%s)",
+						sClientIP, iCID, sphSockError ());
+				return;
+			}
+			tIn.SetBufferPos ( iStartPacketPos + iPacketLen ); // will read at the end of the buffer
+			DWORD uAddon = tIn.GetLSBDword ();
+			tIn.DiscardProcessed ( sizeof ( uAddon )); // move out this header to keep rest of the buff solid
+			tIn.SetBufferPos ( iStartPacketPos ); // rewind back after the read.
+			uPacketID = 1+(BYTE) ( uAddon >> 24 );
+			iChunkLen = ( uAddon & MAX_PACKET_LEN );
+
+			sphLogDebugv ( "AsyncReadMySQLPacketHeader returned %d len...", iChunkLen );
+			iPacketLen += iChunkLen;
+
+			// receive package body
+			tThd.ThdState ( ThdState_e::NET_READ );
+			if ( !tIn.ReadFrom ( iPacketLen, g_iClientQlTimeoutS ))
+			{
+				sphWarning ( "failed to receive MySQL request body (client=%s(%d), exp=%d, error='%s')",
+						sClientIP, iCID, iPacketLen, sphSockError ());
+				return;
+			}
+		}
+
+
+		if ( pProfile )
+			pProfile->Switch ( SPH_QSTATE_UNKNOWN );
+
+		// handle auth packet
+		if ( !bAuthed )
+		{
+			tThd.ThdState ( ThdState_e::NET_WRITE );
+			auto tAnswer = tIn.PopTail ( iPacketLen );
+
+			if ( IsFederatedUser ( tAnswer))
+				tSession.SetFederatedUser();
+			SendMysqlOkPacket ( tOut, uPacketID, tSession.IsAutoCommit());
+			tOut.Flush ();
+			bKeepAlive = !tOut.GetError();
+			bAuthed = true;
+			continue;
+		}
+
+		bKeepAlive = LoopClientMySQL ( uPacketID, tSession.Impl(), sQuery, iPacketLen, !!pProfile, tThd, tIn, tOut );
+	} while ( bKeepAlive );
 }

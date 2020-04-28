@@ -15,7 +15,7 @@
 #include "networking_daemon.h"
 #include "netstate_api.h"
 
-
+#if 0
 struct NetStateQL_t final : public NetStateAPI_t
 {
 	SphinxqlSessionPublic	m_tSession;
@@ -39,3 +39,6 @@ public:
 	void			SetupHandshakePhase();
 	void			SetupBodyPhase();
 };
+#endif
+
+void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t * pConn );

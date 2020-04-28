@@ -377,18 +377,35 @@ int sphSetSockNB( int iSock )
 #endif
 }
 
-int RecvNBChunk( int iSock, char*& pBuf, int& iLeftBytes )
-{
-	// try to receive next chunk
-	auto iRes = sphSockRecv ( iSock, pBuf, iLeftBytes );
+#if USE_WINDOWS
 
-	if ( iRes>0 )
-	{
-		pBuf += iRes;
-		iLeftBytes -= iRes;
-	}
-	return ( int ) iRes;
+/// on Windows, the wrapper just prevents the warnings
+
+#pragma warning(push) // store current warning values
+#pragma warning(disable:4127) // conditional expr is const
+#pragma warning(disable:4389) // signed/unsigned mismatch
+
+static void FDSet ( int fd, fd_set * fdset )
+{
+	FD_SET ( fd, fdset );
 }
+
+#pragma warning(pop) // restore warnings
+
+#else // !USE_WINDOWS
+
+#define SPH_FDSET_OVERFLOW( _fd ) ( (_fd)<0 || (_fd)>=(int)FD_SETSIZE )
+
+/// on UNIX, we also check that the descript won't corrupt the stack
+static void FDSet( int fd, fd_set* set )
+{
+	if ( SPH_FDSET_OVERFLOW( fd ))
+		sphFatal( "FDSet() failed fd=%d, FD_SETSIZE=%d", fd, FD_SETSIZE );
+	else
+		FD_SET ( fd, set );
+}
+
+#endif // USE_WINDOWS
 
 /// wait until socket is readable or writable
 int sphPoll( int iSock, int64_t tmTimeout, bool bWrite )
@@ -403,7 +420,7 @@ int sphPoll( int iSock, int64_t tmTimeout, bool bWrite )
 #else
 	fd_set fdSet;
 	FD_ZERO ( &fdSet );
-	sphFDSet ( iSock, &fdSet );
+	FDSet ( iSock, &fdSet );
 
 	struct timeval tv;
 	tv.tv_sec = (int)( tmTimeout / 1000000 );
@@ -412,49 +429,6 @@ int sphPoll( int iSock, int64_t tmTimeout, bool bWrite )
 	return ::select ( iSock+1, bWrite ? NULL : &fdSet, bWrite ? &fdSet : NULL, NULL, &tv );
 #endif
 }
-
-#if USE_WINDOWS
-
-/// on Windows, the wrapper just prevents the warnings
-
-#pragma warning(push) // store current warning values
-#pragma warning(disable:4127) // conditional expr is const
-#pragma warning(disable:4389) // signed/unsigned mismatch
-
-void sphFDSet ( int fd, fd_set * fdset )
-{
-	FD_SET ( fd, fdset );
-}
-
-void sphFDClr ( int fd, fd_set * fdset )
-{
-	FD_SET ( fd, fdset );
-}
-
-#pragma warning(pop) // restore warnings
-
-#else // !USE_WINDOWS
-
-#define SPH_FDSET_OVERFLOW( _fd ) ( (_fd)<0 || (_fd)>=(int)FD_SETSIZE )
-
-/// on UNIX, we also check that the descript won't corrupt the stack
-void sphFDSet( int fd, fd_set* set )
-{
-	if ( SPH_FDSET_OVERFLOW( fd ))
-		sphFatal( "sphFDSet() failed fd=%d, FD_SETSIZE=%d", fd, FD_SETSIZE );
-	else
-		FD_SET ( fd, set );
-}
-
-void sphFDClr( int fd, fd_set* set )
-{
-	if ( SPH_FDSET_OVERFLOW( fd ))
-		sphFatal( "sphFDClr() failed fd=%d, FD_SETSIZE=%d", fd, FD_SETSIZE );
-	else
-		FD_CLR ( fd, set );
-}
-
-#endif // USE_WINDOWS
 
 
 DWORD sphGetAddress( const char* sHost, bool bFatal, bool bIP )
@@ -514,131 +488,6 @@ char* sphFormatIP( char* sBuffer, int iBufferSize, DWORD uAddress )
 bool IsPortInRange( int iPort )
 {
 	return ( iPort>0 ) && ( iPort<=0xFFFF );
-}
-
-int sphSockRead( int iSock, void* buf, int iLen, int iReadTimeout, bool bIntr )
-{
-	assert ( iLen>0 );
-
-	int64_t tmMaxTimer = sphMicroTimer() + I64C( 1000000 ) * Max( 1, iReadTimeout ); // in microseconds
-	int iLeftBytes = iLen; // bytes to read left
-
-	auto pBuf = ( char* ) buf;
-	int iErr = 0;
-	int iRes = -1;
-
-	while ( iLeftBytes>0 )
-	{
-		int64_t tmMicroLeft = tmMaxTimer - sphMicroTimer();
-		if ( tmMicroLeft<=0 )
-			break; // timed out
-
-#if USE_WINDOWS
-		// Windows EINTR emulation
-		// Ctrl-C will not interrupt select on Windows, so let's handle that manually
-		// forcibly limit select() to 100 ms, and check flag afterwards
-		if ( bIntr )
-			tmMicroLeft = Min ( tmMicroLeft, 100000 );
-#endif
-
-		// wait until there is data
-		iRes = sphPoll( iSock, tmMicroLeft );
-
-		// if there was EINTR, retry
-		// if any other error, bail
-		if ( iRes==-1 )
-		{
-			// only let SIGTERM (of all them) to interrupt, and only if explicitly allowed
-			iErr = sphSockGetErrno();
-			if ( iErr==EINTR )
-			{
-				if ( !( g_bGotSigterm && bIntr ))
-					continue;
-				sphLogDebug( "sphSockRead: select got SIGTERM, exit -1" );
-			}
-			return -1;
-		}
-
-		// if there was a timeout, report it as an error
-		if ( iRes==0 )
-		{
-#if USE_WINDOWS
-			// Windows EINTR emulation
-			if ( bIntr )
-			{
-				// got that SIGTERM
-				if ( g_bGotSigterm )
-				{
-					sphLogDebug ( "sphSockRead: got SIGTERM emulation on Windows, exit -1" );
-					sphSockSetErrno ( EINTR );
-					return -1;
-				}
-
-				// timeout might not be fully over just yet, so re-loop
-				continue;
-			}
-#endif
-
-			sphSockSetErrno( ETIMEDOUT );
-			return -1;
-		}
-
-		// try to receive next chunk
-		iRes = RecvNBChunk( iSock, pBuf, iLeftBytes );
-
-		// if there was eof, we're done
-		if ( !iRes )
-		{
-			sphSockSetErrno( ECONNRESET );
-			return -1;
-		}
-
-		// if there was EINTR, retry
-		// if any other error, bail
-		if ( iRes==-1 )
-		{
-			// only let SIGTERM (of all them) to interrupt, and only if explicitly allowed
-			iErr = sphSockGetErrno();
-			if ( iErr==EINTR )
-			{
-				if ( !( g_bGotSigterm && bIntr ))
-					continue;
-				sphLogDebug( "sphSockRead: select got SIGTERM, exit -1" );
-			}
-			return -1;
-		}
-
-		// avoid partial buffer loss in case of signal during the 2nd (!) read
-		bIntr = false;
-	}
-
-	// if there was a timeout, report it as an error
-	if ( iLeftBytes!=0 )
-	{
-		sphSockSetErrno( ETIMEDOUT );
-		return -1;
-	}
-
-	return iLen;
-}
-
-
-int SockReadFast( int iSock, void* buf, int iLen, int iReadTimeout )
-{
-	auto pBuf = ( char* ) buf;
-	int iFullLen = iLen;
-	// try to receive available chunk
-	int iChunk = RecvNBChunk( iSock, pBuf, iLen );
-	if ( !iLen ) // all read in one-shot
-	{
-		assert ( iChunk==iFullLen );
-		return iFullLen;
-	}
-
-	auto iRes = sphSockRead( iSock, pBuf, iLen, iReadTimeout, false );
-	if ( iRes>=0 )
-		iRes += iChunk;
-	return iRes;
 }
 
 
@@ -802,88 +651,6 @@ void SmartOutputBuffer_t::LeakTo ( CSphVector<ISphOutputBuffer *> dOut )
 }
 #endif
 
-/////////////////////////////////////////////////////////////////////////////
-
-NetOutputBuffer_c::NetOutputBuffer_c( int iSock )
-	: m_iSock( iSock )
-{
-	assert ( m_iSock>0 );
-}
-
-void NetOutputBuffer_c::Flush()
-{
-	CommitAllMeasuredLengths();
-
-	if ( m_bError )
-		return;
-
-	int64_t iLen = m_dBuf.GetLength64();
-	if ( !iLen )
-		return;
-
-	if ( g_bGotSigterm )
-		sphLogDebug( "SIGTERM in NetOutputBuffer::Flush" );
-
-	StringBuilder_c sError;
-	auto* pBuffer = ( const char* ) m_dBuf.Begin();
-
-	CSphScopedProfile tProf( m_pProfile, SPH_QSTATE_NET_WRITE );
-
-	const int64_t tmMaxTimer = sphMicroTimer() + S2US * g_iWriteTimeoutS; // in microseconds
-	while ( !m_bError )
-	{
-		auto iRes = sphSockSend ( m_iSock, pBuffer, iLen );
-		if ( iRes<0 )
-		{
-			int iErrno = sphSockGetErrno();
-			if ( iErrno==EINTR ) // interrupted before any data was sent; just loop
-				continue;
-			if ( iErrno!=EAGAIN && iErrno!=EWOULDBLOCK )
-			{
-				sError.Sprintf( "send() failed: %d: %s", iErrno, sphSockError( iErrno ));
-				sphWarning( "%s", sError.cstr());
-				m_bError = true;
-				break;
-			}
-		} else
-		{
-			m_iSent += iRes;
-			pBuffer += iRes;
-			iLen -= iRes;
-			if ( iLen==0 )
-				break;
-		}
-
-		// wait until we can write
-		int64_t tmMicroLeft = tmMaxTimer - sphMicroTimer();
-		iRes = 0;
-		if ( tmMicroLeft>0 )
-			iRes = sphPoll( m_iSock, tmMicroLeft, true );
-
-		if ( !iRes ) // timeout
-		{
-			sError << "timed out while trying to flush network buffers";
-			sphWarning( "%s", sError.cstr());
-			m_bError = true;
-			break;
-		}
-
-		if ( iRes<0 )
-		{
-			int iErrno = sphSockGetErrno();
-			if ( iErrno==EINTR )
-				break;
-			sError.Sprintf( "sphPoll() failed: %d: %s", iErrno, sphSockError( iErrno ));
-			sphWarning( "%s", sError.cstr());
-			m_bError = true;
-			break;
-		}
-		assert ( iRes>0 );
-	}
-
-	m_dBuf.Resize( 0 );
-}
-
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -1017,45 +784,6 @@ bool InputBuffer_c::GetQwords( CSphVector<SphAttr_t>& dBuffer, int& iGot, int iM
 	if ( m_bError )
 		dBuffer.Reset();
 
-	return !m_bError;
-}
-
-
-/////////////////////////////////////////////////////////////////////////////
-
-NetInputBuffer_c::NetInputBuffer_c( int iSock )
-	: STORE( NET_MINIBUFFER_SIZE ), InputBuffer_c( m_pData, NET_MINIBUFFER_SIZE ), m_iSock( iSock )
-{
-	Resize( 0 );
-}
-
-
-bool NetInputBuffer_c::ReadFrom( int iLen, int iTimeout, bool bIntr, bool bAppend )
-{
-	int iTail = bAppend ? m_iLen : 0;
-
-	m_bIntr = false;
-	if ( iLen<=0 || iLen>g_iMaxPacketSize || m_iSock<0 )
-		return false;
-
-	int iOff = m_pCur - m_pBuf;
-	Resize( m_iLen );
-	Reserve( iTail + iLen );
-	BYTE* pBuf = m_pData + iTail;
-	m_pBuf = m_pData;
-	m_pCur = bAppend ? m_pData + iOff : m_pData;
-	int iGot = sphSockRead( m_iSock, pBuf, iLen, iTimeout, bIntr );
-	if ( g_bGotSigterm )
-	{
-		sphLogDebug( "NetInputBuffer_c::ReadFrom: got SIGTERM, return false" );
-		m_bError = true;
-		m_bIntr = true;
-		return false;
-	}
-
-	m_bError = ( iGot!=iLen );
-	m_bIntr = m_bError && ( sphSockPeekErrno()==EINTR );
-	m_iLen = m_bError ? 0 : iTail + iLen;
 	return !m_bError;
 }
 

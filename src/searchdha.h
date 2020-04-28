@@ -664,6 +664,7 @@ bool RunRemoteTask ( AgentConn_t* pConnection, RequestBuilder_i* pQuery, ReplyPa
 	Deffered_f & pAction, int iQueryRetry = -1, int iQueryDelay = -1 );
 
 // simplified full task - schedule jobs, wait for complete, report num of succeeded
+// uses cooperated wait - i.e. yield instead of pause
 int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser );
 
 /////////////////////////////////////////////////////////////////////////////
@@ -850,10 +851,9 @@ protected:
 
 struct NetPollEvent_t : public EnqueuedTimeout_t
 {
-
-	union {
+	struct {
 		mutable ListNode_t * pPtr = nullptr;
-		int iIdx;
+		mutable int			iIdx = -1;
 	}					m_tBack;
 	int					m_iSock = -1;
 	DWORD				m_uNetEvents = 0;
@@ -865,23 +865,25 @@ struct NetPollEvent_t : public EnqueuedTimeout_t
 
 	enum Events_e : DWORD
 	{
-		READ = 1UL << 0,
-		WRITE = 1UL << 1,
-		HUP = 1UL << 2,
-		ERR = 1UL << 3,
-		PRI = 1UL << 4,
+		READ = 1UL << 0, // 1
+		WRITE = 1UL << 1, // 2
+		HUP = 1UL << 2, // 4
+		ERR = 1UL << 3, // 8
+		PRI = 1UL << 4, // 16
+		ONCE = 1UL << 5, // effective when set up // 32
+		TIMEOUT = ONCE, // effective when return back // 32
 	};
 };
 
 const int WAIT_UNTIL_TIMEOUT = -1;
 
-class ISphNetPoller;
+class NetPooller_c;
 class NetPollReadyIterator_c
 {
 	int m_iIterEv = -1;
-	ISphNetPoller * m_pOwner = nullptr;
+	NetPooller_c * m_pOwner = nullptr;
 public:
-	explicit NetPollReadyIterator_c ( ISphNetPoller* pOwner ) : m_pOwner ( pOwner )
+	explicit NetPollReadyIterator_c ( NetPooller_c* pOwner ) : m_pOwner ( pOwner )
 	{
 		if ( pOwner )
 			operator++();
@@ -891,39 +893,56 @@ public:
 	bool operator!= ( const NetPollReadyIterator_c & rhs ) const;
 };
 
-class ISphNetPoller : public ISphNoncopyable
+class NetPooller_c : public ISphNoncopyable
 {
+	class Impl_c;
+	Impl_c * m_pImpl = nullptr;
+	friend class NetPollReadyIterator_c;
+
 public:
-	virtual ~ISphNetPoller () {};
-	virtual void SetupEvent ( NetPollEvent_t * pEvent ) = 0;
-	virtual bool Wait ( int ) = 0;
-	virtual int GetNumOfReady () = 0;
-	virtual void ForAll ( std::function<void (NetPollEvent_t*)>&& fnAction ) = 0;
-	virtual void RemoveEvent ( NetPollEvent_t * pEvent ) = 0;
-	virtual void ChangeEvent ( NetPollEvent_t * pEvent, NetPollEvent_t::Events_e eFlags ) = 0;
+	explicit NetPooller_c ( int iSizeHint );
+	~NetPooller_c();
+	void SetupEvent ( NetPollEvent_t * pEvent );
+	void Wait ( int );
+	int GetNumOfReady () const;
+	void ForAll ( std::function<void (NetPollEvent_t*)>&& fnAction );
+	void RemoveEvent ( NetPollEvent_t * pEvent );
+	void DeactivateTimer ( NetPollEvent_t * pEvent );
+
+	// unlink before removing, to avoid accidental call over deleted event inside poller
+	// that is typically called from another thread, so avoid races!
+	void Unlink ( NetPollEvent_t * pEvent, bool bWillClose );
+
+	// simplified path on shutdown: close poller, then unlink all events.
+	// events themselves are NOT removed
+	void Shutdown ();
 
 	NetPollReadyIterator_c begin () { return NetPollReadyIterator_c ( this ); }
 	static NetPollReadyIterator_c end () { return NetPollReadyIterator_c ( nullptr ); }
 };
 
-
-// all fresh codeflows use version with poll/epoll/kqueue.
-// legacy also set bFallbackSelect and it invokes 'select' for the case
-// when nothing of poll/epoll/kqueue is available.
-ISphNetPoller * sphCreatePoll ( int iSizeHint );
+// smart compare (just naive tmLeft>tmNow doesn't work with timeouts <1ms)
+bool TimeoutReached ( int64_t tmLeft, int64_t tmNow = -1 );
 
 void RemotesGetField ( const VecRefPtrsAgentConn_t & dRemotes,	const CSphQuery & tQuery, AggrResult_t & tRes );
 void HandleCommandGetField ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq );
 
 // determine which branch will be used
 // defs placed here for easy switch between/debug
+#define NETPOLL_EPOLL 1
+#define NETPOLL_KQUEUE 2
+#define NETPOLL_POLL 3
+
 #if HAVE_EPOLL
 #define POLLING_EPOLL 1
+#define NETPOLL_TYPE NETPOLL_EPOLL
 #elif HAVE_KQUEUE
 #define POLLING_KQUEUE 1
+#define NETPOLL_TYPE NETPOLL_KQUEUE
 #elif HAVE_POLL
 #define POLLING_POLL 1
-#else
-#define POLLING_SELECT 1
+#define NETPOLL_TYPE NETPOLL_POLL
 #endif
+
+//#define NETPOLL_TYPE NETPOLL_POLL
 #endif // _searchdha_

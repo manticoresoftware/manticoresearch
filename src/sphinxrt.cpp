@@ -27,6 +27,7 @@
 #include "accumulator.h"
 #include "indexcheck.h"
 #include "indexsettings.h"
+#include "coroutine.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -5878,236 +5879,98 @@ SphChunkGuard_t::~SphChunkGuard_t () RELEASE()
 		m_pReading->Unlock ();
 }
 
-static int g_iRun = 0;
-
-// set to 1 for manual testing/debugging in single thread and predefined sequence of chunks
-#define MODELING 0
-
 namespace { // nameless namespace instead of 'static' modifier
 
-void FlattenToSorter ( ISphMatchSorter* pResult, VecTraits_T<ISphMatchSorter*> pSources )
+struct DiskChunkSearcherCtx_t
 {
-	if ( pSources.IsEmpty() )
-		return;
-
-	for ( auto* pSource : pSources )
-		pSource->MoveTo ( pResult );
-}
-
-class Tls_context_c
-{
-	using hWordStats = SmallStringHash_T<CSphQueryResultMeta::WordStat_t>;
 	using Sorters_t = VecTraits_T<ISphMatchSorter *>;
 
-	CSphAtomic				m_iInvokedThreads; // each new invoked thread add a value.
-	CSphVector<hWordStats> 	m_dThWordStats;
-	CSphVector<CSphVector<ISphMatchSorter *>> m_dThSorters;
-	Sorters_t &				m_dParentSorters;
-	CSphVector<CSphQueryResult> m_dThResults;
-	CSphQueryResult *		m_pResult = nullptr;
+	Sorters_t&			m_dSorters;
+	CSphQueryResult *	m_pResult;
 
-	// will use 1 sorter per OS thread; value is used as integer index
-#if MODELING
-	static const DWORD NSLOTS = 2;
-	intptr_t	m_WorkerSlots[NSLOTS] = {0};
-
-#else
-	TLS_T<intptr_t> 							m_iTlsOrderNum;
-#endif
-	bool										m_bDisabled;
-
-private:
-	// check whether parent sorters are update or delete sorter (i.e. no MT appliable)
-	bool UpdateOrDelete() const
-	{
-		assert ( !m_dParentSorters.IsEmpty () );
-		return !m_dParentSorters[0]->CanBeCloned ();
-	}
-
-public:
-	Tls_context_c ( Sorters_t & dSorters, CSphQueryResult * pResult )
-		: m_dParentSorters ( dSorters )
+	DiskChunkSearcherCtx_t ( Sorters_t & dSorters, CSphQueryResult * pResult )
+		: m_dSorters ( dSorters )
 		, m_pResult ( pResult )
+	{}
+
+	// called from finalize.
+	void MergeChild ( DiskChunkSearcherCtx_t dChild )
 	{
-		m_bDisabled = UpdateOrDelete ();
-		if ( m_bDisabled )
-			return;
+		// sorting results
+		ARRAY_FOREACH ( i, m_dSorters )
+			if ( dChild.m_dSorters[i] )
+				dChild.m_dSorters[i]->MoveTo ( m_dSorters[i] );
 
-		int iThreads = GetNOfThreads();
-		m_dThSorters.Resize (iThreads);
-		m_dThWordStats.Resize ( iThreads);
-		m_dThResults.Resize ( iThreads);
+		assert ( dChild.m_pResult);
+		auto& dChildRes = *dChild.m_pResult;
 
-		for ( CSphQueryResult& dResult : m_dThResults )
-		{
-			dResult.m_bHasPrediction = m_pResult->m_bHasPrediction;
-			if ( pResult->m_pProfile )
-				dResult.m_pProfile = pResult->m_pProfile->Clone();
-		}
-
-		++g_iRun;
-	}
-
-	int PrepareLocalTlsContext ( int iChunk )
-	{
-		if ( m_bDisabled )
-			return 0;
-
-		intptr_t iMyThreadOrderNum = GetTHD(iChunk); // treat pointer as integer
-		// no clones for this thread; create them!
-		if ( !iMyThreadOrderNum )
-		{
-			iMyThreadOrderNum = ++m_iInvokedThreads;
-			SetTHD ( iMyThreadOrderNum, iChunk);
-			auto & dThreadLocalSorters = m_dThSorters[iMyThreadOrderNum-1];
-			assert ( dThreadLocalSorters.IsEmpty ());
-			dThreadLocalSorters.Resize ( m_dParentSorters.GetLength ());
-			ARRAY_FOREACH ( i, dThreadLocalSorters )
-				dThreadLocalSorters[i] = m_dParentSorters[i]->Clone ();
-		}
-		return iMyThreadOrderNum - 1;
-	}
-
-	Sorters_t& GetTlsSorters( int iThdId )
-	{
-		if ( m_bDisabled )
-			return m_dParentSorters;
-		return m_dThSorters[iThdId];
-	}
-
-	hWordStats& GetTlsWordstats ( int iThdId )
-	{
-		if ( m_bDisabled )
-			return m_pResult->m_hWordStats;
-		return m_dThWordStats[iThdId];
-	}
-
-	CSphQueryResult * GetTlsResult ( int iThdId )
-	{
-		if ( m_bDisabled )
-			return m_pResult;
-		return &m_dThResults[iThdId];
-	}
-
-
-	bool IsEnabled() const { return !m_bDisabled; }
-
-	void Finalize()
-	{
-		if ( m_bDisabled ) // nothing to do; sorters and results are already original
-			return;
-
-		int iWorkThreads = m_iInvokedThreads;
-
-		// collect matches results among tls
-		CSphVector<ISphMatchSorter *> dResultSorters;
-		dResultSorters.Reserve ( iWorkThreads );
-		m_dThSorters.Resize ( iWorkThreads );
-		ARRAY_FOREACH ( i, m_dParentSorters )
-		{
-			dResultSorters.Resize ( 0 );
-			for ( auto & dTlsSorter : m_dThSorters )
-				if ( dTlsSorter[i] )
-					dResultSorters.Add ( dTlsSorter[i] );
-
-			FlattenToSorter ( m_dParentSorters[i], dResultSorters );
-		}
-
-		// collect word statistic among tls
-		m_dThWordStats.Resize ( iWorkThreads );
-		for ( auto & hResWordStats : m_dThWordStats )
-		{
-			if ( m_pResult->m_hWordStats.GetLength ())
-				for ( auto & tStat : m_pResult->m_hWordStats )
-				{
-					const auto * pDstStat = hResWordStats ( tStat.first );
-					if ( pDstStat )
-						m_pResult->AddStat ( tStat.first, pDstStat->first, pDstStat->second );
-				}
-			else
-				m_pResult->m_hWordStats = hResWordStats;
-		}
-
-		// collect other result data
-		m_dThResults.Resize ( iWorkThreads );
-		for ( auto & tResult : m_dThResults ) {
-
-			// summary warnings and errors
-			if ( !tResult.m_sError.IsEmpty () )
-				m_pResult->m_sError = tResult.m_sError;
-			if ( !tResult.m_sWarning.IsEmpty ())
-				m_pResult->m_sWarning = tResult.m_sWarning;
-
-			if ( m_pResult->m_bHasPrediction )
-				m_pResult->m_tStats.Add ( tResult.m_tStats );
-
-			m_pResult->m_iBadRows += tResult.m_iBadRows;
-			if ( tResult.m_pProfile )
+		// word statistics
+		if ( m_pResult->m_hWordStats.GetLength ())
+			for ( auto & tStat : m_pResult->m_hWordStats )
 			{
-				m_pResult->m_pProfile->AddMetric ( *tResult.m_pProfile );
-				SafeDelete ( tResult.m_pProfile );
+				const auto * pDstStat = dChildRes.m_hWordStats ( tStat.first );
+				if ( pDstStat )
+					m_pResult->AddStat ( tStat.first, pDstStat->first, pDstStat->second );
 			}
-		}
+		else
+			m_pResult->m_hWordStats = dChildRes.m_hWordStats;
+
+		// other data (warnings, errors, etc.)
+		// errors
+		if ( !dChildRes.m_sError.IsEmpty ())
+			m_pResult->m_sError = dChildRes.m_sError;
+
+		// warnings
+		if ( !dChildRes.m_sWarning.IsEmpty ())
+			m_pResult->m_sWarning = dChildRes.m_sWarning;
+
+		// prediction counters
+		if ( m_pResult->m_bHasPrediction )
+			m_pResult->m_tStats.Add ( dChildRes.m_tStats );
+
+		// profiling
+		if ( dChildRes.m_pProfile )
+			m_pResult->m_pProfile->AddMetric ( *dChildRes.m_pProfile );
+
+		// bad rows
+		m_pResult->m_iBadRows += dChildRes.m_iBadRows;
 	}
 
-	~Tls_context_c()
+	inline bool IsClonable ()
 	{
-		for ( auto& dResultSorter : m_dThSorters )
-			dResultSorter.Apply ( [] ( ISphMatchSorter *& pSorter ) { SafeDelete ( pSorter ); } );
+		return m_dSorters[0]->CanBeCloned ();
 	}
-
-#if MODELING
-	static int Map (int iJob)
-	{
-		switch ((iJob + g_iRun) % 2) {
-		case 0:
-//			switch (iJob) {
-//			case 138:
-//			case 141:
-//				return 1;
-//			case 139:
-//			case 140:
-				return 0;
-//			default:
-//				return -1;
-//			}
-		case 1:
-//			switch (iJob) {
-//			case 140:
-//			case 141:
-				return 1;
-//			case 138:
-//			case 139:
-//				return 0;
-//			default:
-//				return -1;
-//			}
-		}
-		return -1;
-	}
-
-	intptr_t GetTHD ( int iPar ) const
-	{
-		return m_WorkerSlots [ Map(iPar) % NSLOTS ];
-	}
-
-	void SetTHD ( intptr_t iVal, int iPar )
-	{
-		m_WorkerSlots [ Map(iPar) % NSLOTS ] = iVal;
-	}
-	bool CanRun (int iPar) const
-	{
-		return Map (iPar)>=0;
-	}
-	inline static int GetNOfThreads() { return NSLOTS; }
-
-#else
-	inline intptr_t GetTHD ( int ) const { return m_iTlsOrderNum; }
-	inline void SetTHD ( intptr_t iVal, int ) { m_iTlsOrderNum = iVal; }
-	static inline bool CanRun (int) { return true; }
-	inline static int GetNOfThreads () { return GetGlobalThreads ();}
-#endif
 };
+
+struct DiskChunkSearcherCloneCtx_t
+{
+	CSphVector<ISphMatchSorter *>	m_dSorters;
+	CSphQueryResult					m_dResult;
+
+	explicit DiskChunkSearcherCloneCtx_t ( const DiskChunkSearcherCtx_t& dParent )
+	{
+		m_dSorters.Resize ( dParent.m_dSorters.GetLength ());
+		ARRAY_FOREACH ( i, m_dSorters )
+			m_dSorters[i] = dParent.m_dSorters[i]->Clone ();
+
+		m_dResult.m_bHasPrediction = dParent.m_pResult->m_bHasPrediction;
+		if ( dParent.m_pResult->m_pProfile )
+			m_dResult.m_pProfile = dParent.m_pResult->m_pProfile->Clone ();
+	}
+
+	~DiskChunkSearcherCloneCtx_t()
+	{
+		m_dSorters.Apply ( [] ( ISphMatchSorter *& pSorter ) { SafeDelete ( pSorter ); } );
+		SafeDelete ( m_dResult.m_pProfile );
+	}
+
+	explicit operator DiskChunkSearcherCtx_t()
+	{
+		return { m_dSorters, &m_dResult };
+	}
+};
+
+using FederateChunkCtx_t = FederateCtx_T<DiskChunkSearcherCtx_t, DiskChunkSearcherCloneCtx_t>;
 
 void QueryDiskChunks ( const CSphQuery * pQuery,
 		CSphQueryResult * pResult,
@@ -6129,76 +5992,70 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 	assert ( !dSorters.IsEmpty () );
 
 	// counter of tasks we will issue now
-	CSphAtomic iChunks { tGuard.m_dDiskChunks.GetLength () };
-
-	// fixme! wait for completed tasks via special non-blocking waiter.
+	int iChunks = tGuard.m_dDiskChunks.GetLength ();
 
 	// store and manage tls stuff
-	Tls_context_c dTlsData ( dSorters, pResult );
+	FederateChunkCtx_t dCtxData { dSorters, pResult };
 	CrashQuery_t tCrashQuery = GlobalCrashQueryGet ();
 
-	bool bMtEnabled = dTlsData.IsEnabled ();
+	bool bMtEnabled = dCtxData.IsEnabled ();
 
 	std::atomic<bool> bInterrupt { false };
-	OneshotEvent_c dWaitEvent;
+	auto iStart = sphMicroTimer ();
+	sphLogDebugv ( "Started: " INT64_FMT, sphMicroTimer()-iStart );
+
+	auto dWaiter = DefferedRestarter();
+	for ( int iChunk = iChunks-1; iChunk>=0; --iChunk )
 	{
-		// dWaiter is RAII unlock based on smart-pointer. Scope bracket above is exactly for it.
-		// fixme! that is ad-hoc to dispatch call from usual thread to async thread-pool
-		SharedPtrCustom_t <void*> dWaiter ( nullptr, [&dWaitEvent] (void*) { dWaitEvent.SetEvent(); } );
+		if ( !dCtxData.CanRun ( iChunk ))
+			continue;
+		// because disk chunk search within the loop will switch the profiler state
+		if ( pProfiler )
+			pProfiler->Switch ( SPH_QSTATE_INIT );
 
-		for ( int iChunk = iChunks-1; iChunk>=0; --iChunk )
+		if ( bInterrupt )
+			break;
+
+		// capture iChunk by value
+		// iChunk will provide independent chunk id on each iteration (capturing by ref will mess everything)
+		auto fnCalc = [&, iChunk, tCrashQuery] () mutable
 		{
-			if ( !dTlsData.CanRun ( iChunk ))
-				continue;
-			// because disk chunk search within the loop will switch the profiler state
-			if ( pProfiler )
-				pProfiler->Switch ( SPH_QSTATE_INIT );
+			GlobalCrashQuerySet ( tCrashQuery );
 
-			if ( bInterrupt )
-				break;
+			if ( bInterrupt ) // some earlier job met error; abort.
+				return;
 
-			// capture iChunk and dWaiter by value
-			// iChunk will provide independent chunk id on each iteration (capturing by ref will mess everything)
-			// dWaiter as smart-pointer will ensure that mutex is not released until all chunks processed.
-			auto fnCalc = [&, iChunk, dWaiter, tCrashQuery] () mutable
-			{
-				GlobalCrashQuerySet ( tCrashQuery );
+			GuardedCrashQuery_t tCrashQueryClean ( GlobalCrashQueryGet () ); // clean up TLS for thread in the pool
 
-				if ( bInterrupt ) // some earlier job met error; abort.
-					return;
+			// leaved here as example how WRONG is set pointer to a local variable into global space
+			// (spent a day for debugging a crash because of it)
+			// CrashQuerySetTop ( &tCrashQuery ); // set crash info container
 
-				CrashQuery_t tCleanQuery;
-				GuardedCrashQuery_t tCrashQueryClean ( tCleanQuery ); // clean up TLS for thread in the pool
+			auto tCtx = dCtxData.GetContext ( iChunk );
+			auto & dLocalSorters = tCtx.m_dSorters;
+			auto iSorters = dLocalSorters.GetLength ();
+			CSphQueryResult tChunkResult;
+			CSphQueryResult* pThResult = tCtx.m_pResult;
+			tChunkResult.m_pProfile = pThResult->m_pProfile;
 
-				// leaved here as example how WRONG is set pointer to a local variable into global space
-				// (spent a day for debugging a crash because of it)
-				// CrashQuerySetTop ( &tCrashQuery ); // set crash info container
-
-				auto iThdID = dTlsData.PrepareLocalTlsContext ( iChunk );
-				auto & dLocalSorters = dTlsData.GetTlsSorters(iThdID);
-				auto iSorters = dLocalSorters.GetLength ();
-				CSphQueryResult tChunkResult;
-				CSphQueryResult* pThResult = dTlsData.GetTlsResult (iThdID);
-				tChunkResult.m_pProfile = pThResult->m_pProfile;
-
-				CSphMultiQueryArgs tMultiArgs ( tArgs.m_iIndexWeight );
-				// storing index in matches tag for finding strings attrs offset later, biased against default zero and segments
-				tMultiArgs.m_iTag = tGuard.m_dRamChunks.GetLength ()+iChunk+1;
-				tMultiArgs.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
-				tMultiArgs.m_bLocalDF = bGotLocalDF;
-				tMultiArgs.m_pLocalDocs = pLocalDocs;
-				tMultiArgs.m_iTotalDocs = iTotalDocs;
+			CSphMultiQueryArgs tMultiArgs ( tArgs.m_iIndexWeight );
+			// storing index in matches tag for finding strings attrs offset later, biased against default zero and segments
+			tMultiArgs.m_iTag = tGuard.m_dRamChunks.GetLength ()+iChunk+1;
+			tMultiArgs.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
+			tMultiArgs.m_bLocalDF = bGotLocalDF;
+			tMultiArgs.m_pLocalDocs = pLocalDocs;
+			tMultiArgs.m_iTotalDocs = iTotalDocs;
 
 			// we use sorters in both disk chunks and ram chunks,
 			// that's why we don't want to move to a new schema before we searched ram chunks
 			tMultiArgs.m_bModifySorterSchemas = false;
 
-				bInterrupt = !tGuard.m_dDiskChunks[iChunk]->MultiQuery ( pQuery,
-						&tChunkResult, iSorters, dLocalSorters.begin(), tMultiArgs );
+			bInterrupt = !tGuard.m_dDiskChunks[iChunk]->MultiQuery ( pQuery,
+					&tChunkResult, iSorters, dLocalSorters.begin(), tMultiArgs );
 
-				// check terms inconsistency among disk chunks
-				const auto & hChunkStats = tChunkResult.m_hWordStats;
-				auto & hResWordStats = dTlsData.GetTlsWordstats(iThdID);
+			// check terms inconsistency among disk chunks
+			const auto & hChunkStats = tChunkResult.m_hWordStats;
+			auto & hResWordStats = tCtx.m_pResult->m_hWordStats;
 
 				if ( hResWordStats.GetLength() )
 				{
@@ -6212,49 +6069,32 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 				} else
 					hResWordStats = hChunkStats;
 
-				dDiskBlobPools[iChunk] = tChunkResult.m_pBlobPool;
-				pThResult->m_iBadRows += tChunkResult.m_iBadRows;
+			dDiskBlobPools[iChunk] = tChunkResult.m_pBlobPool;
+			pThResult->m_iBadRows += tChunkResult.m_iBadRows;
 
-				if ( pThResult->m_bHasPrediction )
-					pThResult->m_tStats.Add ( tChunkResult.m_tStats );
+			if ( pThResult->m_bHasPrediction )
+				pThResult->m_tStats.Add ( tChunkResult.m_tStats );
 
-				if ( iChunk && tmMaxTimer>0 && sphMicroTimer()>=tmMaxTimer )
-				{
-					pThResult->m_sWarning = "query time exceeded max_query_time";
-					bInterrupt = true;
-				}
+			if ( iChunk && tmMaxTimer>0 && sphMicroTimer()>=tmMaxTimer )
+			{
+				pThResult->m_sWarning = "query time exceeded max_query_time";
+				bInterrupt = true;
+			}
 
 				if ( bInterrupt && !tChunkResult.m_sError.IsEmpty ())
 					// FIXME? maybe handle this more gracefully (convert to a warning)?
 					pThResult->m_sError = tChunkResult.m_sError;
 			};
 
-			if ( bMtEnabled )
-				GetGlobalScheduler ()->Schedule ( fnCalc, true );
-			else
-				fnCalc();
-		}
-	} // release dWaiter
+		if ( bMtEnabled )
+			CoGo ( fnCalc, dWaiter );
+		else
+			fnCalc();
+	}
 
-	/* wait till all copies of dWaiter are destroyed
-	 * Generic mechanism: we have a smart pointer (which internally manages it's state by refcount)
-	 * and we pass it into tasks, capturing by value. I.e. each added task increases the counter.
-	 * On done, copies are destroyed (i.e. each completed task decreases the counter).
-	 * When everybody released smart pointer, it will be totally destroyed and call provided deleter.
-	 * So, the deleter will be invoked when all the tasks are surely completed.
-	 *
-	 * Dumb add-hoc solution over it is to unlock a mutex in deleter. So, we wait for a mutex, and at the moment
-	 * we can lock it, all the tasks are done.
-	 *
-	 * That solution doesn't work on Windows, since to avoid self-lock it allows mutex to be locked from
-	 * the same thread without waiting. So, let's use event instead.
-	 *
-	 * More smart would be possible if the whole search (not just over disk chunks) performed by thread-pool.
-	 * In such case we could just yield here (so that thread will be released and may process another tasks),
-	 * and come back by deleter.
-	*/
-	dWaitEvent.WaitEvent (-1);
-	dTlsData.Finalize();
+	// wait till all copies of dWaiter are destroyed (each coro has a copy, and we has copy also).
+	WaitForDeffered ( std::move ( dWaiter ) );
+	dCtxData.Finalize();
 }
 
 void FinalExpressionCalculation( CSphQueryContext& tCtx,

@@ -15,7 +15,7 @@
 #include "netreceive_api.h"
 #include "netreceive_ql.h"
 #include "netreceive_http.h"
-#include "netreceive_https.h"
+#include "coroutine.h"
 
 #if USE_WINDOWS
 // Win-specific headers and calls
@@ -30,15 +30,17 @@
 #endif
 int g_iThrottleAccept = 0;
 extern volatile bool g_bMaintenance;
+static auto & g_iTFO = sphGetTFO ();
 
 #define NET_STATE_BUF_SIZE 65535
 
-void FillNetState ( NetStateAPI_t * pState, int iClientSock, int iConnID, bool bVIP,
+void FillNetState ( NetConnection_t * pState, int iClientSock, int iConnID, bool bVIP,
 		const sockaddr_storage & saStorage )
 {
 	pState->m_iClientSock = iClientSock;
 	pState->m_iConnID = iConnID;
 	pState->m_bVIP = bVIP;
+	pState->m_tSockType = saStorage.ss_family;
 
 	// format client address
 	pState->m_sClientName[0] = '\0';
@@ -57,28 +59,53 @@ void FillNetState ( NetStateAPI_t * pState, int iClientSock, int iConnID, bool b
 	}
 }
 
+void MultiServe ( SockWrapperPtr_c pSock, NetConnection_t * pConn )
+{
+	auto pBuf = MakeAsyncNetBuffer ( std::move ( pSock ) );
+	auto eProto = pBuf->In ().Probe ( g_iMaxPacketSize, false );
+	switch ( eProto )
+	{
+	case Proto_e::SPHINX:
+#ifdef    TCP_NODELAY
+	// case of legacy 'crasy squirell' client, which talks using short packages.
+		if ( pBuf->In().HasBytes()==4 && pConn->m_tSockType==AF_INET )
+		{
+			int iOn = 1;
+			if ( setsockopt ( pConn->m_iClientSock, IPPROTO_TCP, TCP_NODELAY, (char *) &iOn, sizeof ( iOn ) ) )
+				sphWarning ( "setsockopt() from MultiServe failed: %s", sphSockError ());
+		}
+#endif
+		ApiServe ( std::move ( pBuf ), pConn );
+		break;
+	case Proto_e::HTTP:
+		HttpServe ( std::move ( pBuf ), pConn );
+		break;
+	default:
+		sphLogDebugv ( "Unkown proto" );
+		break;
+	}
+}
+
 class NetActionAccept_c::Impl_c
 {
-	friend class NetActionAccept_c;
 	Listener_t		m_tListener;
-	int				m_iConnections;
-	NetStateAPI_t	m_tDummy;
+	int				m_iConnections = 0;
 
+public:
 	explicit Impl_c ( const Listener_t & tListener )
 		: m_tListener ( tListener )
-		, m_iConnections (0)
 	{}
 
-	NetEvent_e		LoopAccept ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dQueue, CSphNetLoop * pLoop );
-	bool			GetStatsAccept ( int & iConnections );
+	NetEvent_e	ProcessAccept ( DWORD uGotEvents, CSphNetLoop * pLoop );
+	int			GetStatsAccept ();
 };
 
 
-NetEvent_e NetActionAccept_c::Impl_c::LoopAccept ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dQueue,
-		CSphNetLoop * pLoop )
+NetEvent_e NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * pLoop )
 {
-	if ( CheckSocketError ( uGotEvents, "accept err WTF???", &m_tDummy, true ) )
-		return NE_KEEP;
+	NetEvent_e eRes = NE_ACCEPT;
+	if ( CheckSocketError ( uGotEvents ) )
+		return eRes;
 
 	// handle all incoming requests at once but not too much
 	int iLastConn = m_iConnections;
@@ -90,7 +117,7 @@ NetEvent_e NetActionAccept_c::Impl_c::LoopAccept ( DWORD uGotEvents, CSphVector<
 		if ( g_iThrottleAccept && g_iThrottleAccept<m_iConnections-iLastConn )
 		{
 			sphLogDebugv ( "%p accepted %d connections throttled", this, m_iConnections-iLastConn );
-			return NE_KEEP;
+			return eRes;
 		}
 
 		// accept
@@ -106,13 +133,13 @@ NetEvent_e NetActionAccept_c::Impl_c::LoopAccept ( DWORD uGotEvents, CSphVector<
 					sphLogDebugv ( "%p accepted %d connections all, tick=%u",
 							this, m_iConnections-iLastConn, pLoop->m_uTick );
 
-				return NE_KEEP;
+				return eRes;
 			}
 
 			if ( iErrno==EMFILE || iErrno==ENFILE )
 			{
 				sphWarning ( "accept() failed, raise ulimit -n and restart searchd: %s", sphSockError(iErrno) );
-				return NE_KEEP;
+				return eRes;
 			}
 
 			sphFatal ( "accept() failed: %s", sphSockError(iErrno) );
@@ -122,14 +149,14 @@ NetEvent_e NetActionAccept_c::Impl_c::LoopAccept ( DWORD uGotEvents, CSphVector<
 		{
 			sphWarning ( "sphSetSockNB() failed: %s", sphSockError() );
 			sphSockClose ( iClientSock );
-			return NE_KEEP;
+			return eRes;
 		}
 
 		if ( g_bMaintenance && !m_tListener.m_bVIP )
 		{
 			sphWarning ( "server is in maintenance mode: refusing connection" );
 			sphSockClose ( iClientSock );
-			return NE_KEEP;
+			return eRes;
 		}
 
 		++m_iConnections;
@@ -140,81 +167,82 @@ NetEvent_e NetActionAccept_c::Impl_c::LoopAccept ( DWORD uGotEvents, CSphVector<
 			iConnID = 0;
 		}
 
-		ISphNetAction * pAction = nullptr;
+		/*
+ * Modes of execution:
+ * - usual: default scheduler + non-zero netloop. Polling performed by netloop; working by thread pool.
+ * - vip: alone scheduler and zero netloop. All work (polling and calculations) performed by dedicated alone thread.
+ */
+		auto * pClientNetLoop = pLoop;
+		SchedulerFabric_fn fnMakeScheduler = nullptr;
+		if ( m_tListener.m_bVIP )
+		{
+			pClientNetLoop = nullptr;
+			// fixme! for now pass -1, which means 'no limit N of workers'. M.b. need to obey max_children here.
+			fnMakeScheduler = [] { sphLogDebugv ( "-~-~-~-~-~-~-~-~ Alone sched created -~-~-~-~-~-~-~-~" ); return GetAloneScheduler ( -1 ); };
+		} else
+		{
+			fnMakeScheduler = [] { sphLogDebugv ( "-~-~-~-~-~-~-~-~ MT sched created -~-~-~-~-~-~-~-~" ); return GetGlobalScheduler (); };
+		}
+
+		NetConnection_t tConn;
+		FillNetState ( &tConn, iClientSock, iConnID, m_tListener.m_bVIP, saStorage );
+		SockWrapperPtr_c pSock ( new SockWrapper_c ( iClientSock, false, pClientNetLoop ) );
+
 		switch ( m_tListener.m_eProto )
 		{
 			case Proto_e::SPHINX:
-			{
-				auto * pStateAPI = new NetStateAPI_t ();
-				pStateAPI->m_dBuf.Reserve ( NET_STATE_BUF_SIZE );
-				FillNetState ( pStateAPI, iClientSock, iConnID, m_tListener.m_bVIP, saStorage );
-				pAction = new NetReceiveDataAPI_c ( pStateAPI );
-				break;
-			}
 			case Proto_e::HTTP :
 			{
-				auto * pStateHttp = new NetStateAPI_t ();
-				pStateHttp->m_dBuf.Reserve ( NET_STATE_BUF_SIZE );
-				FillNetState ( pStateHttp, iClientSock, iConnID, false, saStorage );
-				pAction = new NetReceiveDataHttp_c ( pStateHttp );
-				break;
-			}
-			case Proto_e::HTTPS:
-			{
-				auto * pStateHttp = new NetStateHttps_t ();
-				pStateHttp->m_dBuf.Reserve ( NET_STATE_BUF_SIZE );
-				FillNetState ( pStateHttp, iClientSock, iConnID, false, saStorage );
-				pAction = new NetReceiveDataHttps_c ( pStateHttp );
+				Threads::CoGo ( [pSock, tConn] () mutable
+					{ MultiServe ( std::move ( pSock ), &tConn ); }, fnMakeScheduler () );
 				break;
 			}
 			case Proto_e::MYSQL41:
-			default:
 			{
-				auto * pStateQL = new NetStateQL_t ();
-				pStateQL->m_dBuf.Reserve ( NET_STATE_BUF_SIZE );
-				FillNetState ( pStateQL, iClientSock, iConnID, m_tListener.m_bVIP, saStorage );
-				auto * pActionQL = new NetReceiveDataQL_c ( pStateQL );
-				pActionQL->SetupHandshakePhase();
-				pAction = pActionQL;
+				Threads::CoGo ( [pSock, tConn] () mutable
+					{ SqlServe ( std::move ( pSock ), &tConn ); }, fnMakeScheduler() );
 				break;
 			}
+			case Proto_e::REPLICATION:
+				assert (false && "replication must be processed on another level");
+
+			default:
+				break;
 		}
-		dQueue.Add ( pAction );
-		sphLogDebugv ( "%p accepted %s, sock=%d, tick=%u", this, ProtoName(m_tListener.m_eProto),
-				pAction->m_iSock, pLoop->m_uTick );
+		sphLogDebugv ( "%p accepted %s, sock=%d, tick=%u", this,
+				ProtoName(m_tListener.m_eProto), iClientSock, pLoop->m_uTick );
 	}
 }
 
 
-bool NetActionAccept_c::Impl_c::GetStatsAccept ( int & iConnections )
+int NetActionAccept_c::Impl_c::GetStatsAccept ()
 {
-	if ( !m_iConnections )
-		return false;
-
-	iConnections += m_iConnections;
+	auto iResult = m_iConnections;
 	m_iConnections = 0;
-	return true;
+	return iResult;
 }
 
 NetActionAccept_c::NetActionAccept_c ( const Listener_t & tListener )
 	: ISphNetAction ( tListener.m_iSock )
 	, m_pImpl ( new Impl_c ( tListener ))
-{}
+{
+	m_uNetEvents = NetPollEvent_t::READ;
+}
 
 NetActionAccept_c::~NetActionAccept_c ()
 {
 	SafeDelete ( m_pImpl );
 }
 
-NetEvent_e NetActionAccept_c::Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dQueue, CSphNetLoop * pLoop )
+NetEvent_e NetActionAccept_c::Process ( DWORD uGotEvents, CSphNetLoop * pLoop )
 {
 	assert ( m_pImpl );
-	return m_pImpl->LoopAccept ( uGotEvents, dQueue, pLoop );
+	return m_pImpl->ProcessAccept ( uGotEvents, pLoop );
 }
 
-bool NetActionAccept_c::GetStats ( int & iConnections )
+int NetActionAccept_c::GetStats ()
 {
 	assert ( m_pImpl );
-	return m_pImpl->GetStatsAccept ( iConnections );
+	return m_pImpl->GetStatsAccept ();
 }
 

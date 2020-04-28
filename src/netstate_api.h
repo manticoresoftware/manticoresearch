@@ -14,16 +14,31 @@
 
 #include "searchdha.h"
 
-// state for API proto and also common state for the rest
-struct NetStateAPI_t
-{
-	int					m_iClientSock = -1;
-	int					m_iConnID = 0;
-	char				m_sClientName[SPH_ADDRPORT_SIZE];
-	bool				m_bKeepSocket = false;
-	bool				m_bVIP = false;
+#if USE_WINDOWS
+using sph_sa_family_t=ADDRESS_FAMILY;
+#else
+using sph_sa_family_t=sa_family_t;
+#endif
 
-	CSphVector<BYTE>	m_dBuf;
+// state for API proto and also common state for the rest
+struct NetConnection_t
+{
+	int		m_iClientSock = -1;
+	int		m_iConnID = 0;
+	char	m_sClientName[SPH_ADDRPORT_SIZE];
+	bool	m_bVIP = false;
+	sph_sa_family_t m_tSockType;
+
+	NetConnection_t ()
+	{
+		m_sClientName[0] = '\0';
+	}
+};
+
+#if 0
+struct NetStateAPI_t : NetConnection_t
+{
+	bool				m_bKeepSocket = false;
 	int64_t				m_iLeft = 0;
 	int64_t				m_iPos = 0;
 
@@ -48,9 +63,7 @@ struct NetSendData_t : public ISphNetAction
 
 	void SetContinue () { m_bContinue = true; }
 };
-
+#endif
 
 /// helpers
-bool CheckSocketError ( DWORD uGotEvents, const char * sMsg, const NetStateAPI_t * pConn, bool bDebug );
-void LogSocketError ( const char * sMsg, const NetStateAPI_t * pConn, bool bDebug );
-void JobDoSendNB ( NetSendData_t * pSend, CSphNetLoop * pLoop );
+bool CheckSocketError ( DWORD uGotEvents );

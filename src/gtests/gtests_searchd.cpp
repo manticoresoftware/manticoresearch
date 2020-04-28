@@ -267,7 +267,7 @@ class CustomNetloop_c :  public ::testing::Test
 protected:
 	void SetUp () override
 	{
-		m_pPoll = sphCreatePoll ( 1000 );
+		m_pPoll = new NetPooller_c ( 1000 );
 		int64_t tmNow = sphMicroTimer ();
 		SetupEvent ( new CSphWakeupEvent, tmNow );
 		SetupEvent ( new CSphWakeupEvent, tmNow );
@@ -279,14 +279,10 @@ protected:
 		m_pPoll->ForAll ( [] ( NetPollEvent_t * pWork ) {
 			SafeDelete ( pWork );
 		} );
-		SafeDelete ( m_pPoll );
 	}
 
 	void SetupEvent ( ISphNetAction * pWork, int64_t tmNow )
 	{
-
-		NetEvent_e eSetup = pWork->Setup ( tmNow );
-		pWork->m_uNetEvents = ( eSetup==NE_IN ? NetPollEvent_t::READ : NetPollEvent_t::WRITE );
 		m_pPoll->SetupEvent ( pWork );
 	}
 
@@ -307,7 +303,7 @@ protected:
 		return dCleanup;
 	}
 
-	ISphNetPoller * m_pPoll = nullptr;
+	CSphScopedPtr<NetPooller_c> m_pPoll { nullptr };
 };
 
 TEST_F ( CustomNetloop_c, test_usual_remove_1st )

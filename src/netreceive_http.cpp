@@ -11,13 +11,24 @@
 //
 
 #include "netreceive_http.h"
-#include "netreceive_https.h" // for MakeReplyHttps_t
-#include "netreceive_httpcommon.h"
 
 extern int g_iClientTimeoutS; // from searchd.cpp
 extern volatile bool g_bMaintenance;
 static auto& g_bShutdown = sphGetShutdown ();
 
+struct HttpHeaderStreamParser_t
+{
+	int m_iHeaderEnd = 0;
+	int m_iFieldContentLenStart = 0;
+	int m_iFieldContentLenVal = 0;
+
+	int m_iCur = 0;
+	int m_iCRLF = 0;
+	int m_iName = 0;
+
+	bool HeaderFound ( const BYTE * pBuf, int iLen );
+	bool HeaderFound ( ByteBlob_t tPacket );
+};
 
 static const char g_sContentLength[] = "\r\r\n\nCcOoNnTtEeNnTt--LlEeNnGgTtHh\0";
 static const size_t g_sContentLengthSize = sizeof ( g_sContentLength ) - 1;
@@ -72,6 +83,8 @@ bool HttpHeaderStreamParser_t::HeaderFound ( ByteBlob_t tPacket )
 		return false;
 	return HeaderFound ( tPacket.first, tPacket.second );
 }
+
+#if 0
 class ThdJobHttp_c::Impl_c
 {
 	friend class ThdJobHttp_c;
@@ -302,21 +315,78 @@ NetReceiveDataHttp_c::~NetReceiveDataHttp_c()
 {
 	SafeDelete ( m_pImpl );
 }
+#endif
 
-NetEvent_e NetReceiveDataHttp_c::Setup ( int64_t tmNow )
+void HttpServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 {
-	assert ( m_pImpl );
-	return m_pImpl->SetupHttp (tmNow);
-}
+	NetConnection_t & tConn = *pConn;
 
-NetEvent_e NetReceiveDataHttp_c::Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> & , CSphNetLoop * pLoop )
-{
-	assert ( m_pImpl );
-	return m_pImpl->LoopHttp (uGotEvents, pLoop);
-}
+	// non-vip connections in maintainance should be already rejected on accept
+	assert  ( !g_bMaintenance || tConn.m_bVIP );
 
-void NetReceiveDataHttp_c::CloseSocket()
-{
-	assert ( m_pImpl );
-	m_pImpl->CloseSocketHttp();
+	ThdDesc_t tThdesc;
+	tThdesc.m_eProto = Proto_e::HTTP; //< that is default
+	tThdesc.m_iClientSock = tConn.m_iClientSock;
+	tThdesc.m_sClientName = tConn.m_sClientName;
+	tThdesc.m_iConnID = tConn.m_iConnID;
+	tThdesc.m_tmStart = tThdesc.m_tmConnect = sphMicroTimer ();
+	tThdesc.m_iTid = GetOsThreadId ();
+
+	ThreadLocal_t tThd ( tThdesc );
+
+	// set off query guard
+	CrashQuery_t tCrashQuery;
+	tCrashQuery.m_bHttp = true;
+
+	// set off query guard on return
+	auto tRestoreCrash = AtScopeExit ( [] { GlobalCrashQuerySet ( CrashQuery_t () );});
+
+	int iCID = tConn.m_iConnID;
+	const char * sClientIP = tConn.m_sClientName;
+
+	// needed to check permission to turn maintenance mode on/off
+
+	bool bKeepAlive = false;
+
+	auto & tOut = pBuf->Out ();
+	auto & tIn = pBuf->In ();
+
+	do
+	{
+		tIn.DiscardProcessed ( -1 ); // -1 means 'force flush'
+		auto iTimeoutS = bKeepAlive ? g_iReadTimeoutS : g_iClientTimeoutS;
+
+		HttpHeaderStreamParser_t tHeadParser;
+		while ( !tHeadParser.HeaderFound ( tIn.Tail() ))
+		{
+			auto iChunk = tIn.ReadAny ( g_iMaxPacketSize, iTimeoutS );
+			if ( iChunk>0 )
+				continue;
+
+			return; // todo! report - iChunk==0 is limit reached, iChunk<0 is some other error
+		}
+
+		int iPacketLen = tHeadParser.m_iHeaderEnd+tHeadParser.m_iFieldContentLenVal;
+		if ( !tIn.ReadFrom ( iPacketLen, iTimeoutS )) {
+			sphWarning ( "failed to receive HTTP request (client=%s(%d), exp=%d, error='%s')", sClientIP, iCID,
+						 iPacketLen, sphSockError ());
+			return;
+		}
+
+		// Temporary write \0 at the end, since parser wants z-terminated buf
+		auto uOldByte = tIn.Terminate ( iPacketLen, '\0' );
+		auto tPacket = tIn.PopTail (iPacketLen);
+
+		tCrashQuery.m_pQuery = tPacket.first;
+		tCrashQuery.m_iSize = tPacket.second;
+		GlobalCrashQuerySet ( tCrashQuery );
+
+		CSphVector<BYTE> dResult;
+		bKeepAlive = sphLoopClientHttp ( tPacket.first, tPacket.second, dResult, tThdesc );
+
+		tIn.Terminate ( 0, uOldByte ); // return back prev byte
+
+		tOut.SwapData (dResult);
+		tOut.Flush();
+	} while ( bKeepAlive );
 }

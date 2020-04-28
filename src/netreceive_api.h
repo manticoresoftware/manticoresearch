@@ -15,6 +15,7 @@
 #include "networking_daemon.h"
 #include "netstate_api.h"
 
+#if 0
 class NetReceiveDataAPI_c final : public ISphNetAction
 {
 	class Impl_c;
@@ -30,4 +31,6 @@ public:
 
 	void				SetupBodyPhase();
 };
+#endif
 
+void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn );

@@ -15,6 +15,7 @@
 #include "networking_daemon.h"
 #include "netstate_api.h"
 
+#if 0
 class NetReceiveDataHttp_c final : public ISphNetAction
 {
 	class Impl_c;
@@ -28,3 +29,6 @@ public:
 	NetEvent_e		Setup ( int64_t tmNow ) final;
 	void			CloseSocket () final;
 };
+#endif
+
+void HttpServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn );

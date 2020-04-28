@@ -25,6 +25,7 @@
 #endif
 
 #include "replication/wsrep_api.h"
+#include "coroutine.h"
 
 
 const char * GetReplicationDL()
@@ -84,8 +85,7 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	wsrep_t *	m_pProvider = nullptr;
 
 	// receiver thread
-	bool		m_bRecvStarted = false;
-	SphThread_t	m_tRecvThd;
+	CoroEvent_c m_tWorkerFinished;
 
 	// nodes at cluster
 	CSphString	m_sViewNodes; // raw nodes addresses (API and replication) from whole cluster
@@ -130,7 +130,7 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	bool					IsPrimary() const { return ( m_iStatus==WSREP_VIEW_PRIMARY ); }
 
 private:
-	CSphAutoEvent m_tStateChanged;
+	CoroEvent_c m_tStateChanged;
 	ClusterState_e m_eNodeState { ClusterState_e::CLOSED };
 };
 
@@ -381,11 +381,9 @@ int ScopedPort_c::Leak()
 
 
 // data passed to Galera and used at callbacks
-struct ReceiverCtx_t : ISphRefcountedMT
+struct ReceiverCtx_t
 {
 	ReplicationCluster_t *	m_pCluster = nullptr;
-	// event to release main thread after recv thread started
-	CSphAutoEvent			m_tStarted;
 
 	// share of remote commands received between apply and commit callbacks
 	RtAccum_t m_tAcc { false };
@@ -692,21 +690,11 @@ static wsrep_cb_status_t Unordered_fn ( void * pCtx, const void * pData, size_t 
 // This is the listening thread. It blocks in wsrep::recv() call until
 // disconnect from cluster. It will apply and commit writesets through the
 // callbacks defined above.
-static void ReplicationRecv_fn ( void * pArgs )
+static void ReplicationRecv_fn ( SharedPtr_t<ReceiverCtx_t *> pCtx )
 {
-	auto * pCtx = (ReceiverCtx_t *)pArgs;
-	assert ( pCtx );
-
-	// grab ownership and release master thread
-	pCtx->AddRef();
-
-	// set cluster state
-	pCtx->m_pCluster->m_bRecvStarted = true;
 	g_pTlsCluster = pCtx->m_pCluster;
 	pCtx->m_pCluster->SetNodeState ( ClusterState_e::JOINING );
 
-	// send event to free main thread
-	pCtx->m_tStarted.SetEvent();
 	sphLogDebugRpl ( "receiver thread started" );
 
 	wsrep_t * pWsrep = pCtx->m_pCluster->m_pProvider;
@@ -720,7 +708,9 @@ static void ReplicationRecv_fn ( void * pArgs )
 	{
 		pCtx->m_pCluster->SetNodeState ( ClusterState_e::CLOSED );
 	}
-	pCtx->Release();
+	auto* pCluster = pCtx->m_pCluster;
+	pCtx = nullptr;
+	pCluster->m_tWorkerFinished.SetEvent ();
 }
 
 // callback for Galera pfs_instr_cb there all mutex \ threads \ events should be implemented, could also count these operations for extended stats
@@ -900,7 +890,7 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 		sphLogDebugRpl ( "cluster '%s', indexes '%s', nodes '%s'", tArgs.m_pCluster->m_sName.cstr(), sIndexes.cstr(), tArgs.m_pCluster->m_sClusterNodes.cstr() );
 	}
 
-	ReceiverCtx_t * pRecvArgs = new ReceiverCtx_t();
+	SharedPtr_t<ReceiverCtx_t *> pRecvArgs { new ReceiverCtx_t() };
 	pRecvArgs->m_pCluster = tArgs.m_pCluster;
 	CSphString sFullClusterPath = GetClusterPath ( tArgs.m_pCluster->m_sPath );
 
@@ -970,18 +960,8 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	}
 
 	// let's start listening thread with proper provider set
-	if ( !sphCrashThreadCreate ( &tArgs.m_pCluster->m_tRecvThd, ReplicationRecv_fn, pRecvArgs, false, sMyName.cstr() ) )
-	{
-		pRecvArgs->Release();
-		sError.SetSprintf ( "failed to start thread %d (%s)", errno, strerror(errno) );
-		return false;
-	}
-
-	// need to transfer ownership after thread started
-	// freed at recv thread normally
-	pRecvArgs->m_tStarted.WaitEvent();
-	pRecvArgs->Release();
-
+	auto pScheduler = GetAloneScheduler(-1, sMyName.cstr ());
+	Threads::CoGo ( [pRecvArgs] () mutable { ReplicationRecv_fn ( std::move ( pRecvArgs ) ); }, pScheduler );
 	sphLogDebugRpl ( "replicator is created for cluster '%s'", tArgs.m_pCluster->m_sName.cstr() );
 	return true;
 }
@@ -1000,11 +980,8 @@ void ReplicateClusterDone ( ReplicationCluster_t * pCluster )
 
 	// Listening thread are now running and receiving writesets. Wait for them
 	// to join. Thread will join after signal handler closes wsrep connection
-	if ( pCluster->m_bRecvStarted )
-	{
-		sphThreadJoin ( &pCluster->m_tRecvThd );
-		pCluster->m_bRecvStarted = false;
-	}
+	pCluster->m_tWorkerFinished.WaitEvent ();
+	sphLogDebugRpl ( "ReplicateClusterDone finished" );
 }
 
 // check return code from Galera calls
@@ -1258,17 +1235,22 @@ void ReplicationAbort()
 // delete all clusters on daemon shutdown
 void ReplicateClustersDelete() EXCLUDES ( g_tClustersLock )
 {
-	void* pIt = nullptr;
 	ScWL_t wLock ( g_tClustersLock );
-	while ( g_hClusters.IterateNext ( &pIt ))
-	{
-		auto* pCluster = SmallStringHash_T<ReplicationCluster_t *>::IterateGet ( &pIt );
-		auto pProvider = pCluster->m_pProvider;
-		ReplicateClusterDone ( pCluster );
-		SafeDelete( pCluster );
-		if ( pProvider )
-			wsrep_unload( pProvider );
-	}
+	if ( !g_hClusters.GetLength() )
+		return;
+
+	Threads::CallCoroutine ( [] () REQUIRES ( g_tClustersLock ) {
+		void * pIt = nullptr;
+		while ( g_hClusters.IterateNext ( &pIt ))
+		{
+			auto* pCluster = SmallStringHash_T<ReplicationCluster_t *>::IterateGet ( &pIt );
+			auto pProvider = pCluster->m_pProvider;
+			ReplicateClusterDone ( pCluster );
+			SafeDelete( pCluster );
+			if ( pProvider )
+				wsrep_unload( pProvider );
+		}
+	});
 	g_hClusters.Reset ();
 }
 
@@ -2348,6 +2330,7 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 		return;
 	}
 
+	Threads::CallCoroutine ( [bNewCluster,bForce] () EXCLUDES ( g_tClustersLock ) {
 	CSphString sError;
 
 	for ( const ClusterDesc_t & tDesc : GetClustersInt() )
@@ -2442,7 +2425,7 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 			sphLogFatal ( "%s", sError.cstr() );
 			DeleteClusterByName ( tDesc.m_sName );
 		}
-	}
+	}});
 }
 
 // validate cluster option at SphinxQL statement

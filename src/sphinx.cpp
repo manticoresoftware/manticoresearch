@@ -6960,37 +6960,6 @@ ISphSchema * CSphRsetSchema::CloneMe () const
 }
 
 
-ExpressionsClone_t::~ExpressionsClone_t ()
-{
-	m_dExprPool.Apply ( [] ( ISphExpr *& ptr ) { SafeRelease ( ptr ); } );
-}
-
-
-void ExpressionsClone_t::Reset()
-{
-	m_dDynamicColumnsList.Reset ();
-	m_dExprPool.Apply ( [] ( ISphExpr *& ptr ) { SafeRelease ( ptr ); } );
-	m_dExprPool.Reset ();
-}
-
-void ExpressionsClone_t::AllocateClones ()
-{
-	assert ( m_iThreads>0 );
-	m_dExprPool.Resize ( m_iThreads * m_dDynamicColumnsList.GetLength ());
-	m_dExprPool.ZeroVec ();
-}
-
-ISphExpr ** ExpressionsClone_t::ExprPtrForThread ( int iIndex, int iThread ) const
-{
-	assert ( iThread<m_iThreads );
-	assert ( m_dExprPool.GetLength() ==m_iThreads * m_dDynamicColumnsList.GetLength () );
-	int iIdx = m_dDynamicColumnsList.GetFirst ([&] (int iElem) { return iElem==iIndex; } );
-	if ( iIdx<0 )
-		return nullptr;
-
-	return &m_dExprPool[iIdx * m_iThreads+iThread];
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 // BIT-ENCODED FILE OUTPUT
 ///////////////////////////////////////////////////////////////////////////////

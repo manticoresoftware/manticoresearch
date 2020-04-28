@@ -5921,8 +5921,6 @@ private:
 		assert ( !m_dParentSorters.IsEmpty () );
 		return !m_dParentSorters[0]->CanBeCloned ();
 	}
-public:
-	ExpressionsClone_t m_TlsColumns;	// not managed essence, just store
 
 public:
 	Tls_context_c ( Sorters_t & dSorters, CSphQueryResult * pResult )
@@ -5937,7 +5935,6 @@ public:
 		m_dThSorters.Resize (iThreads);
 		m_dThWordStats.Resize ( iThreads);
 		m_dThResults.Resize ( iThreads);
-		m_TlsColumns.m_iThreads = iThreads;
 
 		for ( CSphQueryResult& dResult : m_dThResults )
 		{

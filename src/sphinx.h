@@ -1568,21 +1568,6 @@ protected:
 	void					UpdateHash ( int iStartIdx, int iAddVal );
 };
 
-struct ExpressionsClone_t : ISphNoncopyable
-{
-	CSphVector<int> m_dDynamicColumnsList;	///< list of indexes of columns with non-zero ISphExpr*
-	CSphVector<ISphExpr *> m_dExprPool;		///< extra clones of expressions
-	int					m_iThreads = 0;		///< supposed num of threads
-
-	~ExpressionsClone_t();
-
-	void Reset();
-	bool IsEmpty() const { return m_dDynamicColumnsList.IsEmpty(); }
-	void Add (int iCol ) { m_dDynamicColumnsList.Add(iCol); }
-	void AllocateClones ();
-
-	ISphExpr ** ExprPtrForThread ( int iIndex, int iThread ) const;
-};
 /// lightweight schema to be used in sorters, result sets, etc
 /// avoids copying of static attributes part by keeping a pointer
 /// manages the additional dynamic attributes on its own

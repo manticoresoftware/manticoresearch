@@ -19193,6 +19193,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		"\x01\x00\x00\x00" // thread id
 		"\x01\x02\x03\x04\x05\x06\x07\x08" // salt1 (for auth)
 		"\x00" // filler
+		// fixme! SSL capability must be set only if keys are valid!
 		"\x08\x82" // server capabilities low WORD; CLIENT_PROTOCOL_41 | CLIENT_CONNECT_WITH_DB | CLIENT_SECURE_CONNECTION
 		"\x21" // server language; let it be ut8_general_ci to make different clients happy
 		"\x02\x00" // server status
@@ -19269,6 +19270,19 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 		dWarnings.Add ( "global IDF unavailable - IGNORING" );
 
 	return eAdd;
+}
+
+// modify mysql handshake depending from ssl availability:
+// if we have built with ssl, and context is valid (i.e. keys set in config, verified, etc) - set 'use ssl' bit.
+// otherwise reset it. If remote client supports encryption, we will switch to encrypted mysql connection then.
+void SetSSLHandshakeFlag ( bool bSsl )
+{
+	auto iPos = g_sMysqlHandshake[0] - 48;
+	auto* pFlag = &g_sMysqlHandshake[iPos];
+	if ( bSsl && ( *pFlag & 8)==0 )
+		*pFlag |= 8;
+	else if (!bSsl && ( *pFlag&8) )
+		*pFlag &= ~8;
 }
 
 // invoked once on start from ServiceMain (actually it creates the hashes)

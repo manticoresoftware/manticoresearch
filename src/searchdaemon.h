@@ -1195,6 +1195,7 @@ public:
 bool IsFederatedUser ( const BYTE * pPacket, int iLen );
 bool IsFederatedUser ( ByteBlob_t tPacket );
 
+void SetSSLHandshakeFlag ( bool bSsl );
 bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString & sQuery, int iPacketLen,
 		bool bProfile, ThreadLocal_t & tThd, InputBuffer_c & tIn, ISphOutputBuffer & tOut );
 

@@ -12,6 +12,7 @@
 
 #include "netreceive_ql.h"
 #include "coroutine.h"
+#include "searchdssl.h"
 
 extern char g_sMysqlHandshake[128];
 extern int g_iMysqlHandshake;
@@ -477,6 +478,10 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 	#define tOut pBuf->Out()
 	#define tIn pBuf->In()
 
+	/// mysql is pro-active, we NEED to send handshake before client send us something.
+	/// So, no passive probing possible.
+	SetSSLHandshakeFlag ( CheckWeCanUseSSL () );
+
 	// send handshake first
 	sphLogDebugv ("Sending handshake...");
 	tOut.SendBytes ( g_sMysqlHandshake, g_iMysqlHandshake );
@@ -557,6 +562,15 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 			tThd.ThdState ( ThdState_e::NET_WRITE );
 			auto tAnswer = tIn.PopTail ( iPacketLen );
 
+			// switch to ssl by demand.
+			// You need to set a bit in handshake (g_sMysqlHandshake) in order to suggest client such switching.
+			// Client set this desirable bit only if we say that 'we can' about it before.
+			if ( !tThdesc.m_bSsl && (tAnswer.first[1] & 8) ) // want SSL
+			{
+				tThdesc.m_bSsl = MakeSecureLayer ( pBuf );
+				bKeepAlive = !tOut.GetError ();
+				continue; // next packet will be 'login' again, but received over SSL
+			}
 			if ( IsFederatedUser ( tAnswer))
 				tSession.SetFederatedUser();
 			SendMysqlOkPacket ( tOut, uPacketID, tSession.IsAutoCommit());

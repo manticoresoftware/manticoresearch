@@ -21,6 +21,7 @@
 #include "snippetindex.h"
 #include "snippetstream.h"
 #include "snippetpassage.h"
+#include "coroutine.h"
 
 #include <math.h>
 
@@ -490,14 +491,18 @@ void SnippetBuilder_c::Impl_c::MarkHits ( const SnippetsDocIndex_c & tContainer,
 
 	// got a lot of stack allocated variables (up to 30K)
 	// check that query not overflow stack here
-	if ( !sphCheckQueryHeight ( tXQQuery.m_pRoot, tRes.m_sError ) )
+	auto iStackNeed = ConsiderStack ( tXQQuery.m_pRoot, tRes.m_sError );
+	if ( !iStackNeed )
 		return;
+
+	Threads::CoContinue ( iStackNeed, [&] {
 
 	CSphScopedPtr<CSphHitMarker> pMarker ( CSphHitMarker::Create ( tXQQuery.m_pRoot, tQwordSetup ) );
 	if ( !pMarker.Ptr() )
 		return;
 
 	pMarker->Mark(dMarked);
+	});
 }
 
 

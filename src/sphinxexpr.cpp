@@ -9255,9 +9255,10 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 				dNodes.Add ( tExpr.m_iLeft );
 		}
 
+// fixme! make runtime stack frame detection
 #define SPH_EXPRNODE_STACK_SIZE 160
 		int64_t iExprStack = sphGetStackUsed() + iMaxHeight*SPH_EXPRNODE_STACK_SIZE;
-		if ( g_iThreadStackSize<=iExprStack )
+		if ( sphMyStackSize ()<=iExprStack )
 		{
 			sError.SetSprintf ( "query too complex, not enough stack (thread_stack=%dK or higher required)",
 				(int)( ( iExprStack + 1024 - ( iExprStack%1024 ) ) / 1024 ) );

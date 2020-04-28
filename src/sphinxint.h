@@ -1656,7 +1656,10 @@ void			sphColumnToLowercase ( char * sVal );
 bool			IsSortJsonInternal ( const CSphString& sColumnName );
 CSphString		SortJsonInternalSet ( const CSphString& sColumnName );
 
-bool			sphCheckQueryHeight ( const struct XQNode_t * pRoot, CSphString & sError );
+// returns 0: query can't be run at all (even hardlimit stack will be exceeded), sError is set.
+// returns -1: query might be run on current frame
+// other positive: necessary free size of stack
+int				ConsiderStack ( const struct XQNode_t * pRoot, CSphString & sError );
 void			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, bool bHasBooleanOptimization, const ISphKeywordsStat * pKeywords );
 void			TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, const CSphIndexSettings& tSettings );
 bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, CSphString & sError, CSphIndexProgress & tProgress, volatile bool * pLocalStop, bool bSrcSettings );

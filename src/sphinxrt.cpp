@@ -6122,7 +6122,7 @@ void FinalExpressionCalculation( CSphQueryContext& tCtx,
 }
 
 // perform initial query transformations and expansion.
-bool PrepareFTSearch ( const RtIndex_c * pThis,
+int PrepareFTSearch ( const RtIndex_c * pThis,
 		bool bIsStarDict,
 		bool bKeywordDict,
 		int iExpandKeywords,
@@ -6149,7 +6149,7 @@ bool PrepareFTSearch ( const RtIndex_c * pThis,
 									 , pQueryTokenizerJson, &tSchema, pDict, tSettings ) )
 	{
 		pResult->m_sError = tParsed.m_sParseError;
-		return false;
+		return 0;
 	}
 
 	if ( !tParsed.m_sParseWarning.IsEmpty () )
@@ -6190,7 +6190,7 @@ bool PrepareFTSearch ( const RtIndex_c * pThis,
 
 		tParsed.m_pRoot = sphExpandXQNode ( tParsed.m_pRoot, tExpCtx ); // here magics happens
 	}
-	return sphCheckQueryHeight ( tParsed.m_pRoot, pResult->m_sError );
+	return ConsiderStack ( tParsed.m_pRoot, pResult->m_sError );
 }
 
 // setup filters
@@ -6424,6 +6424,7 @@ bool DoFullTextSearch ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 		const char* szIndexName,
 		int iIndexWeight,
 		int iMatchPoolSize,
+		int iStackNeed,
 		RtQwordSetup_t& tTermSetup,
 		CSphQueryProfile* pProfiler,
 		CSphQueryContext& tCtx,
@@ -6434,6 +6435,8 @@ bool DoFullTextSearch ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 {
 	// set zonespanlist settings
 	tParsed.m_bNeedSZlist = pQuery->m_bZSlist;
+
+	return Threads::CoContinueBool ( iStackNeed, [&] {
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
@@ -6484,6 +6487,7 @@ bool DoFullTextSearch ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 		pProfiler->Switch ( SPH_QSTATE_FINALIZE );
 	pRanker->FinalizeCache ( tMaxSorterSchema );
 	return true;
+	});
 }
 
 } // nameless namespace
@@ -6670,11 +6674,11 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// - qcache duplicates removal from killed document at segment #263
 	tCtx.m_bSkipQCache = true;
 
-	bool bParsedAndEnoughStack = true;
+	int iStackNeed = -1;
 	bool bFullscan = pQueryParser->IsFullscan ( *pQuery ); // use this
 	// no need to create ranker, etc if there's no query
 	if ( !bFullscan )
-		bParsedAndEnoughStack = PrepareFTSearch (this, IsStarDict ( m_bKeywordDict ), m_bKeywordDict, m_iExpandKeywords, m_iExpansionLimit,
+		iStackNeed = PrepareFTSearch (this, IsStarDict ( m_bKeywordDict ), m_bKeywordDict, m_iExpandKeywords, m_iExpansionLimit,
 			(const char *) sModifiedQuery, m_tSettings, pQueryParser, pQuery, m_tSchema, &tGuard.m_dRamChunks,
 			m_pTokenizer->Clone ( SPH_CLONE_QUERY ), pQueryTokenizer, pDict, pResult, pProfiler,  &tPayloads, tParsed );
 
@@ -6689,7 +6693,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		return true;
 	}
 
-	if ( !bParsedAndEnoughStack )
+	if ( !iStackNeed )
 		return false;
 
 	bool bResult;
@@ -6698,7 +6702,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 				tmMaxTimer, pProfiler, tCtx, dSorters, pResult );
 	else
 		bResult = DoFullTextSearch ( tGuard.m_dRamChunks, tMaxSorterSchema, pQuery, m_sIndexName.cstr (),
-				tArgs.m_iIndexWeight, iMatchPoolSize, tTermSetup, pProfiler, tCtx, dSorters,
+				tArgs.m_iIndexWeight, iMatchPoolSize, iStackNeed, tTermSetup, pProfiler, tCtx, dSorters,
 				tParsed, pResult, iSorters==1 ? ppSorters[0] : nullptr );
 
 	if (!bResult)

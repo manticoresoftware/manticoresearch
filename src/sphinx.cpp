@@ -31,6 +31,7 @@
 #include "global_idf.h"
 #include "indexformat.h"
 #include "indexcheck.h"
+#include "coroutine.h"
 
 #include <errno.h>
 #include <ctype.h>
@@ -15005,22 +15006,39 @@ static int sphQueryHeightCalc ( const XQNode_t * pNode )
 
 	return iMaxChild+iHeight;
 }
+#ifdef __clang__
+#ifndef NDEBUG
+#define SPH_EXTNODE_STACK_SIZE (0x120)
+#else
+#define SPH_EXTNODE_STACK_SIZE (0x80)
+#endif
+#else
+#define SPH_EXTNODE_STACK_SIZE (160)
+#endif
 
-#define SPH_EXTNODE_STACK_SIZE 160
-
-bool sphCheckQueryHeight ( const XQNode_t * pRoot, CSphString & sError )
+int ConsiderStack ( const struct XQNode_t * pRoot, CSphString & sError )
 {
 	int iHeight = 0;
 	if ( pRoot )
 		iHeight = sphQueryHeightCalc ( pRoot );
 
-	int64_t iQueryStack = sphGetStackUsed() + iHeight*SPH_EXTNODE_STACK_SIZE;
-	bool bValid = ( g_iThreadStackSize>=iQueryStack );
-	if ( !bValid )
-		sError.SetSprintf ( "query too complex, not enough stack (thread_stack=%dK or higher required)",
-			(int)( ( iQueryStack + 1024 - ( iQueryStack%1024 ) ) / 1024 ) );
-	return bValid;
+	auto iStackNeed = iHeight * SPH_EXTNODE_STACK_SIZE;
+	int64_t iQueryStack = sphGetStackUsed ()+iStackNeed;
+	auto iMyStackSize = sphMyStackSize ();
+	if ( iMyStackSize>=iQueryStack )
+		return -1;
+
+	// align as stack of tree + 32K
+	// (being run in new coro, most probably you'll start near the top of stack, so 32k should be enouth)
+	iQueryStack = iStackNeed + 32*1024;
+	if ( g_iThreadStackSize>=iQueryStack )
+		return iQueryStack;
+
+	sError.SetSprintf ( "query too complex, not enough stack (thread_stack=%dK or higher required)",
+							(int) (( iQueryStack+1024-( iQueryStack % 1024 )) / 1024 ));
+	return 0;
 }
+
 
 static XQNode_t * CloneKeyword ( const XQNode_t * pNode )
 {
@@ -15867,8 +15885,11 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 		return false;
 	tParsed.m_pRoot = pPrefixed;
 
-	if ( !sphCheckQueryHeight ( tParsed.m_pRoot, pResult->m_sError ) )
+	auto iStackNeed = ConsiderStack ( tParsed.m_pRoot, pResult->m_sError );
+	if ( !iStackNeed  )
 		return false;
+
+	return Threads::CoContinueBool ( iStackNeed, [&] {
 
 	// flag common subtrees
 	int iCommonSubtrees = 0;
@@ -15888,6 +15909,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	}
 
 	return bResult;
+	});
 }
 
 
@@ -15914,6 +15936,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 	CSphScopedPayload tPayloads;
 	bool bResult = false;
 	bool bResultScan = false;
+	int iStackNeed = 0;
 	bool bWordDict = pDict->GetSettings().m_bWordDict;
 	for ( int i=0; i<iQueries; ++i )
 	{
@@ -15961,8 +15984,8 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			if ( pPrefixed )
 			{
 				dXQ[i].m_pRoot = pPrefixed;
-
-				if ( sphCheckQueryHeight ( dXQ[i].m_pRoot, ppResults[i]->m_sError ) )
+				iStackNeed = ConsiderStack ( dXQ[i].m_pRoot, ppResults[i]->m_sError );
+				if ( iStackNeed!=0 )
 				{
 					bResult = true;
 				} else
@@ -15988,6 +16011,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 
 	// continue only if we have at least one non-failed
 	if ( bResult )
+		Threads::CoContinue ( iStackNeed, [&]
 	{
 		int iCommonSubtrees = 0;
 		if ( m_iMaxCachedDocs && m_iMaxCachedHits )
@@ -16015,7 +16039,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 
 			ppResults[j]->m_tIOStats.Stop();
 		}
-	}
+	});
 
 	if ( tArgs.m_bModifySorterSchemas )
 	{

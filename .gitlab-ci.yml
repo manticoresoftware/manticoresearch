@@ -1,5 +1,6 @@
 workflow:
   rules:
+    - if: $CI_MERGE_REQUEST_ID
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "master"
     - if: $TEST || $WHAT
@@ -55,7 +56,7 @@ simple_tests:
     CACHEB: "../cache"
     DIAGNOSTIC: 1 # let's set it by default forever
   script:
-    - ctest -VV -S misc/ctest/gltest.cmake
+    - ctest -V -S misc/ctest/gltest.cmake
   after_script:
     - cd build && mkdir xml_simple_tests
     - cp -r Testing/2*/*.xml xml_simple_tests
@@ -134,7 +135,7 @@ win_tests:
   script:
     - 'net use x: \\\\VBOXSRV\\shared'
 #    - export PATH='/cygdrive/x/bundle/openssl-x64:/cygdrive/x/bundle/Expat-1.95.8/Libs:/cygdrive/x/bundle/libiconv-1.9.1/bin:/cygdrive/x/bundle/mysql/bin:'$PATH
-    - ctest -VV -S misc/ctest/gltest.cmake -DCTEST_SOURCE_DIRECTORY='C:/cygwin64/home/manticore/builds/manticoresearch/dev/' -C Debug
+    - ctest -V -S misc/ctest/gltest.cmake -DCTEST_SOURCE_DIRECTORY='C:/cygwin64/home/manticore/builds/manticoresearch/dev/' -C Debug
   after_script:
     - cd build && mkdir xml_win_tests
     - cp -r Testing/2*/*.xml xml_win_tests

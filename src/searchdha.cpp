@@ -4140,8 +4140,8 @@ NetPollEvent_t & NetPollReadyIterator_c::operator* ()
 		pNode->m_uNetEvents |= NetPollEvent_t::HUP;
 	if ( tEv.events & EPOLLERR )
 		pNode->m_uNetEvents |= NetPollEvent_t::ERR;
-	if ( tEv.events & EPOLLPRI )
-		pNode->m_uNetEvents |= NetPollEvent_t::PRI;
+//	if ( tEv.events & EPOLLPRI )
+//		pNode->m_uNetEvents |= NetPollEvent_t::PRI;
 
 	return *pNode;
 };

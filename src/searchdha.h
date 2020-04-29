@@ -869,8 +869,8 @@ struct NetPollEvent_t : public EnqueuedTimeout_t
 		WRITE = 1UL << 1, // 2
 		HUP = 1UL << 2, // 4
 		ERR = 1UL << 3, // 8
-		PRI = 1UL << 4, // 16
-		ONCE = 1UL << 5, // effective when set up // 32
+//		PRI = 1UL << 4, // 16
+		ONCE = 1UL << 4, // effective when set up // 32
 		TIMEOUT = ONCE, // effective when return back // 32
 	};
 };

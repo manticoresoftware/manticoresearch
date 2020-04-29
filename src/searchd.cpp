@@ -7615,6 +7615,8 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 		const SnippetQuerySettings_t& q, SnippetBuilder_c * pBuilder)
 {
 	assert ( pBuilder );
+	if ( dTasks.IsEmpty() )
+		return;
 	sphLogDebug ( "MakeSnippetsCoro invoked for %d tasks", dTasks.GetLength() );
 
 	CrashQuery_t tCrashQuery = GlobalCrashQueryGet (); // transfer query info for crash logger to new thread
@@ -7622,35 +7624,37 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 	CSphVector<int> dStubFields;
 	dStubFields.Add ( 0 );
 
-	int iNumOfCoros = Min ( Threads::CoCurrentScheduler ()->WorkingThreads (), dTasks.GetLength() );
-	const int iTimeQuantum = 100;
-	std::atomic<int32_t> iCurQuery { 0 };
-
 	using SnippetContextTls_t = FederateCtx_T<SnippedBuilderCtxRef_t, SnippedBuilderCtxClone_t>;
 	SnippetContextTls_t dSnippetContext { pBuilder, tCrashQuery };
 
+	int iNumOfCoros = Min ( SnippetContextTls_t::GetNOfContextes(), dTasks.GetLength ()-1 );
+	const int iTimeQuantum = 100;
+	std::atomic<int32_t> iCurQuery { 0 };
+
 	auto dWaiter = DefferedRestarter ();
-	for ( int i = 0; i<iNumOfCoros; ++i )
-		CoGo ( [&] () mutable
+	auto fnWorker = [&] () mutable
+	{
+		sphLogDebug ( "MakeSnippetsCoro Coro started" );
+		auto tCtx = dSnippetContext.GetContext ();
+
+		Threads::CoThrottle_c tThrottle ( iTimeQuantum * 1000 );
+		while ( true )
 		{
-			sphLogDebug ( "MakeSnippetsCoro Coro started" );
-			auto tCtx = dSnippetContext.GetContext ();
+			auto iQuery = iCurQuery.fetch_add ( 1, std::memory_order_relaxed );
+			if ( iQuery>=dTasks.GetLength () )
+				return; // all is done
 
-			Threads::CoThrottle_c tThrottle ( iTimeQuantum * 1000 );
-			while ( true )
-			{
-				auto iQuery = iCurQuery.fetch_add ( 1, std::memory_order_relaxed );
-				if ( iQuery>=dTasks.GetLength () )
-					return; // all is done
+			sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d[%d]", iQuery, dTasks[iQuery] );
+			MakeSingleLocalSnippetWithFields ( dQueries[dTasks[iQuery]], q, tCtx.m_pBuilder, dStubFields );
+			sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d finished", iQuery );
 
-				sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d[%d]", iQuery, dTasks[iQuery] );
-				MakeSingleLocalSnippetWithFields ( dQueries[dTasks[iQuery]], q, tCtx.m_pBuilder, dStubFields );
-				sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d finished", iQuery );
-
-				// yield and reschedule every quant of time. It gives work to other tasks
-				tThrottle.Throttle ( [&tCtx] { tCtx.SetCrashQuery(); } );
-			}
-		}, dWaiter );
+			// yield and reschedule every quant of time. It gives work to other tasks
+			tThrottle.Throttle ( [&tCtx] { tCtx.SetCrashQuery(); } );
+		}
+	};
+	for ( int i = 0; i<iNumOfCoros; ++i )
+		CoGo ( fnWorker, dWaiter );
+	fnWorker();
 	sphLogDebug ( "MakeSnippetsCoro waiting..." );
 	WaitForDeffered ( std::move ( dWaiter ) );
 	sphLogDebug ( "MakeSnippetsCoro wait finished" );

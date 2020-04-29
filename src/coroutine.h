@@ -169,16 +169,16 @@ class FederateCtx_T
 	// returns current context num, m.b. depend from int param
 	inline intptr_t GetTHD ( int ) const { return m_iTlsOrderNum; }
 
-	// No of available contexts. For release = num of threads.
+public:
+	// Num of available childrens (clone contextes). For N threads it is N-1, since parent doesn't need clone.
 	inline static int GetNOfContextes ()
 	{
 		auto pScheduler = CoCurrentScheduler ();
 		if (!pScheduler)
 			pScheduler = GetGlobalScheduler();
-		return Max (pScheduler->WorkingThreads ()-1, 1);
+		return pScheduler->WorkingThreads ()-1;
 	}
 
-public:
 	// whether we need to run at all for given param.
 	// say, I can filter out disk chunks and return true only for param=20, all the rest will be skipped.
 	inline static bool CanRun ( int ) { return true; }

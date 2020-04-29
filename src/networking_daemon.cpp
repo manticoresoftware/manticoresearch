@@ -715,7 +715,7 @@ Proto_e AsyncNetInputBuffer_c::Probe ( int iHardLimit, bool bLight )
 {
 	Proto_e eResult = Proto_e::UNKNOWN;
 	m_bIntr = false;
-	int iRest;
+	int iRest = 0;
 	if ( !HasBytes() )
 	{
 		iRest = GetRoomForTail ( iHardLimit );

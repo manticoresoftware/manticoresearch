@@ -28035,9 +28035,7 @@ void SuggestMatchWords ( const ISphWordlistSuggest * pWordlist, const CSphVector
 			// store in k-buffer up to 2*QLen words
 			if ( !iLastBad || fnCmp.IsLess ( tElem, tRes.m_dMatched[iLastBad] ) )
 			{
-				if ( bMergeWords )
-					tElem.m_iNameHash = sphCRC32 ( sDictWord, iDictWordLen );
-
+				tElem.m_iNameHash = bMergeWords ? sphCRC32 ( sDictWord, iDictWordLen ) : 0;
 				tRes.m_dMatched.Add ( tElem );
 				BYTE * sWord = tRes.m_dBuf.AddN ( iDictWordLen+1 );
 				memcpy ( sWord, sDictWord, iDictWordLen );

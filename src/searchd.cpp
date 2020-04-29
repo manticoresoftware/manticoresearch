@@ -5809,14 +5809,6 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 		m_dExtraSchemas.Reset ( iQueries );
 	CSphFixedVector<bool> bResults ( iNumLocals );
 
-	// store and manage tls stuff
-	FederateCtx_T<LocalSearchRef_t, LocalSearchClone_t> dCtxData { m_tHook, m_dExtraSchemas };
-	bool bMtEnabled = dCtxData.IsEnabled ();
-
-	CrashQuery_t tCrashQuery = GlobalCrashQueryGet (); // transfer query info for crash logger to new thread
-
-	auto dWaiter = DefferedRestarter ();
-
 	// start in mass order
 	CSphFixedVector<int> dOrder {iNumLocals};
 	for ( int i = 0; i<iNumLocals; ++i )
@@ -5824,9 +5816,34 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 
 	// set order by decreasing index mass (heaviest cames first). That is why 'less' implemented by '>'
 	dOrder.Sort ( Lesser ( [this] ( int a, int b ) { return m_dLocal[a].m_iMass>m_dLocal[b].m_iMass; } ));
-	for ( auto iIdx : dOrder )
+
+	// store and manage tls stuff
+	using LocalFederateCtx_t = FederateCtx_T<LocalSearchRef_t, LocalSearchClone_t>;
+	LocalFederateCtx_t dCtxData { m_tHook, m_dExtraSchemas };
+	CrashQuery_t tCrashQuery = GlobalCrashQueryGet (); // transfer query info for crash logger to new thread
+
+	int iNumOfCoros = Min ( LocalFederateCtx_t::GetNOfContextes (), iNumLocals-1 );
+	const int iTimeQuantumMS = 100;
+	std::atomic<int32_t> iCurIdx { 0 };
+
+	if ( !dCtxData.IsEnabled () )
+		iNumOfCoros = 0;
+
+	auto dWaiter = DefferedRestarter ();
+	auto fnCalc = [&] () mutable
 	{
-		auto fnCalc = [&, iIdx, tCrashQuery] () mutable {
+		GuardedCrashQuery_t tCrashQueryClean; // clean up TLS for thread in the pool
+		GlobalCrashQuerySet ( tCrashQuery );
+
+		Threads::CoThrottle_c tThrottle ( iTimeQuantumMS * 1000 );
+
+		while ( true )
+		{
+			auto iJob = iCurIdx.fetch_add ( 1, std::memory_order_relaxed );
+			if ( iJob>=iNumLocals )
+				return; // all is done
+
+			auto iIdx = dOrder[iJob];
 
 			sphLogDebugv ("Tick coro search");
 			int64_t iCpuTime = -sphCpuTimer ();
@@ -5846,7 +5863,8 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 			GlobalCrashQuerySet ( tCrashQuery );
 
 			auto * pServed = m_dLocked.Get ( sIndex );
-			if ( !pServed ) {
+			if ( !pServed )
+			{
 				// FIXME! submit a failure?
 				return;
 			}
@@ -5885,7 +5903,8 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 			// do the query
 			CSphMultiQueryArgs tMultiArgs ( iIndexWeight );
 			tMultiArgs.m_uPackedFactorFlags = tQueueRes.m_uPackedFactorFlags;
-			if ( m_bGotLocalDF ) {
+			if ( m_bGotLocalDF )
+			{
 				tMultiArgs.m_bLocalDF = true;
 				tMultiArgs.m_pLocalDocs = &m_hLocalDocs;
 				tMultiArgs.m_iTotalDocs = m_iTotalDocs;
@@ -5898,7 +5917,8 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 			else
 			{
 				CSphVector<CSphQueryResult *> dpResults ( dResults.GetLength ());
-				ARRAY_FOREACH ( i, dpResults ) {
+				ARRAY_FOREACH ( i, dpResults )
+				{
 					dpResults[i] = &dResults[i];
 					dpResults[i]->m_pBlobPool = nullptr;
 					dpResults[i]->m_pDocstore = nullptr;
@@ -5911,16 +5931,18 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 			iCpuTime += sphCpuTimer ();
 			for ( int i = 0; i<iQueries; ++i )
 				dResults[i].m_iCpuTime = iCpuTime;
-		};
-		if ( bMtEnabled )
-			CoGo ( fnCalc, dWaiter );
-		else
-			fnCalc ();
-	}
+
+			// yield and reschedule every quant of time. It gives work to other tasks
+			tThrottle.Throttle ( [&tCrashQuery] { GlobalCrashQuerySet ( tCrashQuery ); } );
+		}
+	};
+
+	for ( int i = 0; i<iNumOfCoros; ++i )
+		CoGo ( fnCalc, dWaiter );
+	fnCalc (); // last, or only task we performs right here.
 
 	// wait for them to complete
 	WaitForDeffered ( std::move ( dWaiter ));
-
 	dCtxData.Finalize (); // merge extra schemas (if any)
 
 	int iTotalSuccesses = 0;

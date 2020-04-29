@@ -5936,7 +5936,7 @@ struct DiskChunkSearcherCtx_t
 		m_pResult->m_iBadRows += dChildRes.m_iBadRows;
 	}
 
-	inline bool IsClonable ()
+	inline bool IsClonable () const
 	{
 		return m_dSorters[0]->CanBeCloned ();
 	}
@@ -5998,38 +5998,40 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 	FederateChunkCtx_t dCtxData { dSorters, pResult };
 	CrashQuery_t tCrashQuery = GlobalCrashQueryGet ();
 
-	bool bMtEnabled = dCtxData.IsEnabled ();
+	int iNumOfCoros = Min ( FederateChunkCtx_t::GetNOfContextes (), iChunks-1 );
+	const int iTimeQuantumMS = 100;
+	std::atomic<int32_t> iCurChunk { iChunks-1 };
+
+	if ( !dCtxData.IsEnabled () )
+		iNumOfCoros = 0;
 
 	std::atomic<bool> bInterrupt { false };
 	auto iStart = sphMicroTimer ();
 	sphLogDebugv ( "Started: " INT64_FMT, sphMicroTimer()-iStart );
 
 	auto dWaiter = DefferedRestarter();
-	for ( int iChunk = iChunks-1; iChunk>=0; --iChunk )
+	auto fnCalc = [&] () mutable
 	{
-		if ( !dCtxData.CanRun ( iChunk ))
-			continue;
-		// because disk chunk search within the loop will switch the profiler state
-		if ( pProfiler )
-			pProfiler->Switch ( SPH_QSTATE_INIT );
+		GuardedCrashQuery_t tCrashQueryClean; // clean up TLS for thread in the pool
+		GlobalCrashQuerySet ( tCrashQuery );
 
-		if ( bInterrupt )
-			break;
+		// leaved here as example how WRONG is set pointer to a local variable into global space
+		// (spent a day for debugging a crash because of it)
+		// CrashQuerySetTop ( &tCrashQuery ); // set crash info container
 
-		// capture iChunk by value
-		// iChunk will provide independent chunk id on each iteration (capturing by ref will mess everything)
-		auto fnCalc = [&, iChunk, tCrashQuery] () mutable
+		Threads::CoThrottle_c tThrottle ( iTimeQuantumMS * 1000 );
+
+		while ( true )
 		{
-			GlobalCrashQuerySet ( tCrashQuery );
+			auto iChunk = iCurChunk.fetch_sub ( 1, std::memory_order_relaxed );
+			if ( iChunk < 0 )
+				return; // all is done
+
+			if ( !dCtxData.CanRun ( iChunk ) )
+				continue;
 
 			if ( bInterrupt ) // some earlier job met error; abort.
 				return;
-
-			GuardedCrashQuery_t tCrashQueryClean ( GlobalCrashQueryGet () ); // clean up TLS for thread in the pool
-
-			// leaved here as example how WRONG is set pointer to a local variable into global space
-			// (spent a day for debugging a crash because of it)
-			// CrashQuerySetTop ( &tCrashQuery ); // set crash info container
 
 			auto tCtx = dCtxData.GetContext ( iChunk );
 			auto & dLocalSorters = tCtx.m_dSorters;
@@ -6081,16 +6083,22 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 				bInterrupt = true;
 			}
 
-				if ( bInterrupt && !tChunkResult.m_sError.IsEmpty ())
-					// FIXME? maybe handle this more gracefully (convert to a warning)?
-					pThResult->m_sError = tChunkResult.m_sError;
-			};
+			if ( bInterrupt && !tChunkResult.m_sError.IsEmpty ())
+				// FIXME? maybe handle this more gracefully (convert to a warning)?
+				pThResult->m_sError = tChunkResult.m_sError;
 
-		if ( bMtEnabled )
-			CoGo ( fnCalc, dWaiter );
-		else
-			fnCalc();
-	}
+			// yield and reschedule every quant of time. It gives work to other tasks
+			tThrottle.Throttle ( [&tCrashQuery] { GlobalCrashQuerySet ( tCrashQuery ); } );
+		}
+	};
+
+	// because disk chunk search within the loop will switch the profiler state
+	if ( pProfiler )
+		pProfiler->Switch ( SPH_QSTATE_INIT );
+
+	for ( int i = 0; i<iNumOfCoros; ++i )
+		CoGo ( fnCalc, dWaiter );
+	fnCalc(); // last, or only task we performs right here.
 
 	// wait till all copies of dWaiter are destroyed (each coro has a copy, and we has copy also).
 	WaitForDeffered ( std::move ( dWaiter ) );

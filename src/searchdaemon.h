@@ -1192,7 +1192,6 @@ public:
 	CSphinxqlSession& Impl();
 };
 
-bool IsFederatedUser ( const BYTE * pPacket, int iLen );
 bool IsFederatedUser ( ByteBlob_t tPacket );
 
 void SetSSLHandshakeFlag ( bool bSsl );

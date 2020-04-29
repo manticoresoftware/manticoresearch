@@ -16150,7 +16150,7 @@ void StatCountCommand ( SearchdCommand_e eCmd )
 		++g_tStats.m_iCommandCount[eCmd];
 }
 
-bool IsFederatedUser ( const BYTE * pPacket, int iLen )
+bool IsFederatedUser ( ByteBlob_t tPacket )
 {
 	// handshake packet structure
 	// 4              capability flags, CLIENT_PROTOCOL_41 always set
@@ -16159,20 +16159,14 @@ bool IsFederatedUser ( const BYTE * pPacket, int iLen )
 	// string[23]     reserved (all [0])
 	// string[NUL]    username
 
-	if ( !pPacket || iLen<(4+4+1+23+1) )
+	if ( !tPacket.first || tPacket.second<(4+4+1+23+1) )
 		return false;
 
 	const char * sFederated = "FEDERATED";
-	const char * sSrc = (const char *)pPacket + 4+4+1+23;
+	const char * sSrc = (const char *) tPacket.first + 4+4+1+23;
 
-	return ( strncmp ( sFederated, sSrc, iLen-(4+4+1+23) )==0 );
+	return ( strncmp ( sFederated, sSrc, tPacket.second-(4+4+1+23) )==0 );
 }
-
-bool IsFederatedUser ( ByteBlob_t tPacket )
-{
-	return IsFederatedUser ( tPacket.first, tPacket.second );
-}
-
 
 bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, CSphString & sFederatedQuery )
 {

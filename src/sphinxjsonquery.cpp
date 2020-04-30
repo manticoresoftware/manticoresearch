@@ -1161,7 +1161,8 @@ static bool ConstructFilters ( const JsonObj_c & tJson, CSphQuery & tQuery, CSph
 static bool ParseSnippet ( const JsonObj_c & tSnip, CSphQuery & tQuery, CSphString & sError );
 static bool ParseSort ( const JsonObj_c & tSort, CSphQuery & tQuery, bool & bGotWeight, CSphString & sError, CSphString & sWarning );
 static bool ParseSelect ( const JsonObj_c & tSelect, CSphQuery & tQuery, CSphString & sError );
-static bool ParseExpr ( const JsonObj_c & tExpr, CSphQuery & tQuery, CSphString & sError );
+static bool ParseScriptFields ( const JsonObj_c & tExpr, CSphQuery & tQuery, CSphString & sError );
+static bool ParseExpressions ( const JsonObj_c & tExpr, CSphQuery & tQuery, CSphString & sError );
 
 
 static bool ParseIndex ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, CSphString & sError )
@@ -1316,8 +1317,13 @@ bool sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfi
 		return false;
 
 	// expression columns go first to select list
-	JsonObj_c tExpr = tRoot.GetItem ( "script_fields" );
-	if ( tExpr && !ParseExpr ( tExpr, tQuery, sError ) )
+	JsonObj_c tScriptFields = tRoot.GetItem ( "script_fields" );
+	if ( tScriptFields && !ParseScriptFields ( tScriptFields, tQuery, sError ) )
+		return false;
+
+	// a synonym to "script_fields"
+	JsonObj_c tExpressions = tRoot.GetItem ( "expressions" );
+	if ( tExpressions && !ParseExpressions ( tExpressions, tQuery, sError ) )
 		return false;
 
 	JsonObj_c tSnip = tRoot.GetObjItem ( "highlight", sError, true );
@@ -2757,7 +2763,7 @@ static bool ParseSelect ( const JsonObj_c & tSelect, CSphQuery & tQuery, CSphStr
 //////////////////////////////////////////////////////////////////////////
 // script_fields / expressions
 
-static bool ParseExpr ( const JsonObj_c & tExpr, CSphQuery & tQuery, CSphString & sError )
+static bool ParseScriptFields ( const JsonObj_c & tExpr, CSphQuery & tQuery, CSphString & sError )
 {
 	if ( !tExpr )
 		return true;
@@ -2807,6 +2813,48 @@ static bool ParseExpr ( const JsonObj_c & tExpr, CSphQuery & tQuery, CSphString 
 		// add to query
 		CSphQueryItem & tQueryItem = tQuery.m_dItems.Add();
 		tQueryItem.m_sExpr = sExpr;
+		tQueryItem.m_sAlias = tAlias.Name();
+
+		// add to select list
+		sSelect.Appendf ( ", %s as %s", tQueryItem.m_sExpr.cstr(), tQueryItem.m_sAlias.cstr() );
+	}
+
+	sSelect.MoveTo ( tQuery.m_sSelect );
+	return true;
+}
+
+
+static bool ParseExpressions ( const JsonObj_c & tExpr, CSphQuery & tQuery, CSphString & sError )
+{
+	if ( !tExpr )
+		return true;
+
+	if ( !tExpr.IsObj() )
+	{
+		sError = R"("expressions" property should be an object)";
+		return false;
+	}
+
+	StringBuilder_c sSelect;
+	sSelect << tQuery.m_sSelect;
+
+	for ( const auto & tAlias : tExpr )
+	{
+		if ( !tAlias.IsStr() )
+		{
+			sError = R"("expressions" properties should be strings)";
+			return false;
+		}
+
+		if ( CSphString ( tAlias.Name() ).IsEmpty() )
+		{
+			sError = R"("expressions" empty property name)";
+			return false;
+		}
+
+		// add to query
+		CSphQueryItem & tQueryItem = tQuery.m_dItems.Add();
+		tQueryItem.m_sExpr = tAlias.StrVal();
 		tQueryItem.m_sAlias = tAlias.Name();
 
 		// add to select list

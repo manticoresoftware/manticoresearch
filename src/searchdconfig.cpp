@@ -598,7 +598,8 @@ static bool ConfigWrite ( const CSphString & sConfigPath, const CSphVector<Clust
 	return true;
 }
 
-
+// CSphinxqlSession::Execute -> HandleMysqlImportTable -> AddExistingIndexInt -> PreloadIndex
+// ServiceMain -> ConfigureAndPreload -> ConfigureAndPreloadInt -> PreloadIndex
 static ESphAddIndex PreloadIndex ( const IndexDesc_t & tIndex, StrVec_t & dWarnings, CSphString & sError )
 {
 	CSphConfigSection hIndex;
@@ -613,6 +614,7 @@ static ESphAddIndex PreloadIndex ( const IndexDesc_t & tIndex, StrVec_t & dWarni
 
 
 // load indexes got from JSON config on daemon indexes preload (part of ConfigureAndPreload work done here)
+// ServiceMain -> ConfigureAndPreload -> ConfigureAndPreloadInt
 void ConfigureAndPreloadInt ( int & iValidIndexes, int & iCounter ) REQUIRES ( MainThread )
 {
 	for ( const IndexDesc_t & tIndex : g_dCfgIndexes )
@@ -1190,7 +1192,7 @@ private:
 	bool		m_bOk = false;
 };
 
-
+// CSphinxqlSession::Execute -> HandleMysqlImportTable -> AddExistingIndexInt
 bool AddExistingIndexInt ( const CSphString & sIndex, StrVec_t & dWarnings, CSphString & sError )
 {
 	ScopedCleanup_c tCleanup(sIndex);

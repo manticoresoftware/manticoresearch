@@ -19355,7 +19355,12 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_sMysqlHandshake[0] = (char)(g_iMysqlHandshake-4); // safe, as long as buffer size is 128
 }
 
-ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName, bool bFromReplication, StrVec_t & dWarnings, CSphString & sError ) REQUIRES ( MainThread )
+// ServiceMain -> ConfigureAndPreload -> ConfigureAndPreloadIndex
+// ServiceMain -> ConfigureAndPreload -> ConfigureAndPreloadInt -> PreloadIndex -> ConfigureAndPreloadIndex
+// from any another thread:
+// CSphinxqlSession::Execute -> HandleMysqlImportTable -> AddExistingIndexInt -> PreloadIndex -> ConfigureAndPreloadIndex
+ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName, bool bFromReplication,
+		StrVec_t & dWarnings, CSphString & sError )
 {
 	ESphAddIndex eAdd = AddIndex ( sIndexName, hIndex, false, sError );
 
@@ -19419,6 +19424,7 @@ void SetSSLHandshakeFlag ( bool bSsl )
 }
 
 // invoked once on start from ServiceMain (actually it creates the hashes)
+// ServiceMain -> ConfigureAndPreload
 static void ConfigureAndPreload ( const CSphConfig & hConf, const StrVec_t & dOptIndexes ) REQUIRES (MainThread)
 {
 	int iCounter = 0;

@@ -8656,6 +8656,19 @@ void BuildStatus ( VectorLike & dStatus )
 	ReplicateClustersStatus ( dStatus );
 }
 
+// that is returned to MySQL 'statistic' command ('status' in mysql cli)
+void BuildStatusOneline ( StringBuilder_c & sOut )
+{
+	sOut.StartBlock ( " " );
+	sOut
+	<< "Uptime:" << (DWORD) time ( NULL )-g_tStats.m_uStarted
+	<< " Threads:" << GetGlobalThreads ()
+	<< " Queue:" << GetGlobalQueueSize ()
+	<< " Queries:" << g_tStats.m_iQueries;
+	sOut.Sprintf ( " Wall: %t", (int64_t)g_tStats.m_iQueryTime );
+	sOut.Sprintf ( " CPU: %t", (int64_t)g_tStats.m_iQueryTime );
+}
+
 void BuildOneAgentStatus ( VectorLike & dStatus, HostDashboard_t* pDash, const char * sPrefix="agent" )
 {
 	assert ( pDash );

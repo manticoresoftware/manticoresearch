@@ -1133,6 +1133,8 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 	ThdDesc_t & tThd, InputBuffer_c & tBuf, CachedOutputBuffer_c & tOut, bool bManagePersist );
 void HandleCommandPing ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq );
 
+void BuildStatusOneline ( StringBuilder_c& sOut );
+
 class CSphinxqlSession;
 class SphinxqlSessionPublic : public ISphNoncopyable
 {

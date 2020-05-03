@@ -1005,6 +1005,16 @@ bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, CSphS
 			SendMysqlEofPacket ( tOut, uPacketID, 0, false, tSession.IsAutoCommit () );
 			break;
 
+		case MYSQL_COM_STATISTICS:
+		{
+			StringBuilder_c sStats;
+			BuildStatusOneline ( sStats );
+			auto iLen = sStats.GetLength();
+			tOut.SendLSBDword ( ( uPacketID << 24 )+iLen );
+			tOut.SendBytes ( sStats );
+			break;
+		}
+
 		case MYSQL_COM_QUERY:
 		{
 			// handle query packet

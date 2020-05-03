@@ -639,7 +639,15 @@ static SmartSSL_CTX_t GetReadySslCtx ()
 // is global SSL context created and keys set
 bool CheckWeCanUseSSL ()
 {
-	return ( GetReadySslCtx()!=nullptr );
+	static bool bCheckPerformed = false; // to check only once
+	static bool bWeCanUseSSL;
+
+	if ( bCheckPerformed )
+		return bWeCanUseSSL;
+
+	bCheckPerformed = true;
+	bWeCanUseSSL = ( GetReadySslCtx ()!=nullptr );
+	return bWeCanUseSSL;
 }
 
 // translates AsyncNetBuffer_c to openSSL BIO calls.

@@ -1116,48 +1116,6 @@ enum ESphHttpEndpoint
 	SPH_HTTP_ENDPOINT_TOTAL
 };
 
-// our copy of enum_server_command
-// we can't rely on mysql_com.h because it might be unavailable
-//
-// MYSQL_COM_SLEEP = 0
-// MYSQL_COM_QUIT = 1
-// MYSQL_COM_INIT_DB = 2
-// MYSQL_COM_QUERY = 3
-// MYSQL_COM_FIELD_LIST = 4
-// MYSQL_COM_CREATE_DB = 5
-// MYSQL_COM_DROP_DB = 6
-// MYSQL_COM_REFRESH = 7
-// MYSQL_COM_SHUTDOWN = 8
-// MYSQL_COM_STATISTICS = 9
-// MYSQL_COM_PROCESS_INFO = 10
-// MYSQL_COM_CONNECT = 11
-// MYSQL_COM_PROCESS_KILL = 12
-// MYSQL_COM_DEBUG = 13
-// MYSQL_COM_PING = 14
-// MYSQL_COM_TIME = 15
-// MYSQL_COM_DELAYED_INSERT = 16
-// MYSQL_COM_CHANGE_USER = 17
-// MYSQL_COM_BINLOG_DUMP = 18
-// MYSQL_COM_TABLE_DUMP = 19
-// MYSQL_COM_CONNECT_OUT = 20
-// MYSQL_COM_REGISTER_SLAVE = 21
-// MYSQL_COM_STMT_PREPARE = 22
-// MYSQL_COM_STMT_EXECUTE = 23
-// MYSQL_COM_STMT_SEND_LONG_DATA = 24
-// MYSQL_COM_STMT_CLOSE = 25
-// MYSQL_COM_STMT_RESET = 26
-// MYSQL_COM_SET_OPTION = 27
-// MYSQL_COM_STMT_FETCH = 28
-
-enum
-{
-	MYSQL_COM_QUIT		= 1,
-	MYSQL_COM_INIT_DB	= 2,
-	MYSQL_COM_QUERY		= 3,
-	MYSQL_COM_PING		= 14,
-	MYSQL_COM_SET_OPTION	= 27
-};
-
 bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, CachedOutputBuffer_c & tOut );
 ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster, const ThdDesc_t & tThd );
 void sphFormatFactors ( StringBuilder_c& dOut, const unsigned int * pFactors, bool bJson );
@@ -1187,24 +1145,16 @@ public:
 	bool Execute ( const CSphString & sQuery, RowBuffer_i & tOut, ThdDesc_t & tThd );
 	void SetFederatedUser ();
 	bool IsAutoCommit () const;
-	CSphQueryProfile* StartProfiling ();
+	CSphQueryProfile* StartProfiling ( ESphQueryState );
+	void SaveLastProfile();
 	void SetVIP ( bool bVIP );
 	CSphinxqlSession& Impl();
 };
 
-bool IsFederatedUser ( ByteBlob_t tPacket );
+void LogSphinxqlError ( const char * sStmt, const char * sError, int iCid );
 
-void SetSSLHandshakeFlag ( bool bSsl );
-bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString & sQuery, int iPacketLen,
-		bool bProfile, ThreadLocal_t & tThd, InputBuffer_c & tIn, ISphOutputBuffer & tOut );
-
-void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char * sStmt,
-	const char * sError, int iCID, MysqlErrors_e iErr );
-
-void SendMysqlEofPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iWarns, bool bMoreResults, bool bAutoCommit );
-
-// short version
-void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, bool bAutoCommit );
+// that is used from sphinxql command over API
+void RunSingleSphinxqlCommand ( const CSphString & sCommand, CachedOutputBuffer_c & tOut, ThdDesc_t & tThd );
 
 ISphTableFunc *		CreateRemoveRepeats();
 
@@ -1284,11 +1234,6 @@ enum MysqlColumnType_e
 	MYSQL_COL_FLOAT	= 4,
 	MYSQL_COL_LONGLONG	= 8,
 	MYSQL_COL_STRING	= 254
-};
-
-enum MysqlColumnFlag_e
-{
-	MYSQL_COL_UNSIGNED_FLAG = 32
 };
 
 

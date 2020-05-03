@@ -71,9 +71,6 @@ extern "C"
 // 1 - SIGKILL will shut down the whole daemon; 0 - watchdog will reincarnate the daemon
 #define WATCHDOG_SIGKILL		1
 
-#define SPH_MYSQL_FLAG_STATUS_AUTOCOMMIT 2	// mysql.h: SERVER_STATUS_AUTOCOMMIT
-#define SPH_MYSQL_FLAG_MORE_RESULTS 8		// mysql.h: SERVER_MORE_RESULTS_EXISTS
-
 /////////////////////////////////////////////////////////////////////////////
 
 #if USE_WINDOWS
@@ -190,10 +187,6 @@ ThreadRole MainThread; // functions which called only from main thread
 ThreadRole HandlerThread; // thread which serves clients
 
 int								g_iConnectionID = 0;		///< global conn-id
-
-// handshake
-char						g_sMysqlHandshake[128];
-int							g_iMysqlHandshake = 0;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1317,48 +1310,8 @@ bool AddGlobalListener ( const ListenerDesc_t& tDesc ) REQUIRES ( MainThread )
 }
 
 /////////////////////////////////////////////////////////////////////////////
-// encodes Mysql Length-coded binary
-BYTE * MysqlPackInt ( BYTE * pOutput, int64_t iValue )
-{
-	if ( iValue<0 )
-		return pOutput;
-
-	if ( iValue<251 )
-	{
-		*pOutput++ = (BYTE)iValue;
-		return pOutput;
-	}
-
-	if ( iValue<=0xFFFF )
-	{
-		*pOutput++ = (BYTE)'\xFC'; // 252
-		*pOutput++ = (BYTE)iValue;
-		*pOutput++ = (BYTE)( iValue>>8 );
-		return pOutput;
-	}
-
-	if ( iValue<=0xFFFFFF )
-	{
-		*pOutput++ = (BYTE)'\xFD'; // 253
-		*pOutput++ = (BYTE)iValue;
-		*pOutput++ = (BYTE)( iValue>>8 );
-		*pOutput++ = (BYTE)( iValue>>16 );
-		return pOutput;
-	}
-
-	*pOutput++ = (BYTE)'\xFE'; // 254
-	*pOutput++ = (BYTE)iValue;
-	*pOutput++ = (BYTE)( iValue>>8 );
-	*pOutput++ = (BYTE)( iValue>>16 );
-	*pOutput++ = (BYTE)( iValue>>24 );
-	*pOutput++ = (BYTE)( iValue>>32 );
-	*pOutput++ = (BYTE)( iValue>>40 );
-	*pOutput++ = (BYTE)( iValue>>48 );
-	*pOutput++ = (BYTE)( iValue>>56 );
-	return pOutput;
-}
-
-int MysqlUnpack ( InputBuffer_c & tReq, DWORD * pSize )
+// unpack Mysql Length-coded number
+static int MysqlUnpack ( InputBuffer_c & tReq, DWORD * pSize )
 {
 	assert ( pSize );
 
@@ -3122,7 +3075,7 @@ static void LogQuery ( const CSphQuery & q, const CSphQueryResult & tRes, const 
 }
 
 
-static void LogSphinxqlError ( const char * sStmt, const char * sError, int iCid )
+void LogSphinxqlError ( const char * sStmt, const char * sError, int iCid )
 {
 	if ( g_eLogFormat!=LOG_FORMAT_SPHINXQL || g_iQueryLogFile<0 || !sStmt || !sError )
 		return;
@@ -9227,389 +9180,6 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 	GlobalCrashQuerySet ( CrashQuery_t () );
 	return bPersist;
 }
-
-//////////////////////////////////////////////////////////////////////////
-// MYSQLD PRETENDER
-//////////////////////////////////////////////////////////////////////////
-
-// our copy of enum_field_types
-// we can't rely on mysql_com.h because it might be unavailable
-//
-// MYSQL_TYPE_DECIMAL = 0
-// MYSQL_TYPE_TINY = 1
-// MYSQL_TYPE_SHORT = 2
-// MYSQL_TYPE_LONG = 3
-// MYSQL_TYPE_FLOAT = 4
-// MYSQL_TYPE_DOUBLE = 5
-// MYSQL_TYPE_NULL = 6
-// MYSQL_TYPE_TIMESTAMP = 7
-// MYSQL_TYPE_LONGLONG = 8
-// MYSQL_TYPE_INT24 = 9
-// MYSQL_TYPE_DATE = 10
-// MYSQL_TYPE_TIME = 11
-// MYSQL_TYPE_DATETIME = 12
-// MYSQL_TYPE_YEAR = 13
-// MYSQL_TYPE_NEWDATE = 14
-// MYSQL_TYPE_VARCHAR = 15
-// MYSQL_TYPE_BIT = 16
-// MYSQL_TYPE_NEWDECIMAL = 246
-// MYSQL_TYPE_ENUM = 247
-// MYSQL_TYPE_SET = 248
-// MYSQL_TYPE_TINY_BLOB = 249
-// MYSQL_TYPE_MEDIUM_BLOB = 250
-// MYSQL_TYPE_LONG_BLOB = 251
-// MYSQL_TYPE_BLOB = 252
-// MYSQL_TYPE_VAR_STRING = 253
-// MYSQL_TYPE_STRING = 254
-// MYSQL_TYPE_GEOMETRY = 255
-
-#define SPH_MYSQL_ERROR_MAX_LENGTH 512
-
-void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char * sStmt,
-	const char * sError, int iCID, MysqlErrors_e iErr )
-{
-	if ( sError==NULL )
-		sError = "(null)";
-
-	LogSphinxqlError ( sStmt, sError, iCID );
-
-	auto iErrorLen = (int) strlen(sError);
-
-	// cut the error message to fix isseue with long message for popular clients
-	if ( iErrorLen>SPH_MYSQL_ERROR_MAX_LENGTH )
-	{
-		iErrorLen = SPH_MYSQL_ERROR_MAX_LENGTH;
-		char * sErr = const_cast<char *>( sError );
-		sErr[iErrorLen-3] = '.';
-		sErr[iErrorLen-2] = '.';
-		sErr[iErrorLen-1] = '.';
-		sErr[iErrorLen] = '\0';
-	}
-	int iLen = 9 + iErrorLen;
-	int iError = iErr; // pretend to be mysql syntax error for now
-
-	// send packet header
-	tOut.SendLSBDword ( (uPacketID<<24) + iLen );
-	tOut.SendByte ( 0xff ); // field count, always 0xff for error packet
-	tOut.SendByte ( (BYTE)( iError & 0xff ) );
-	tOut.SendByte ( (BYTE)( iError>>8 ) );
-
-	// send sqlstate (1 byte marker, 5 byte state)
-	switch ( iErr )
-	{
-		case MYSQL_ERR_SERVER_SHUTDOWN:
-		case MYSQL_ERR_UNKNOWN_COM_ERROR:
-			tOut.SendBytes ( "#08S01", 6 );
-			break;
-		case MYSQL_ERR_NO_SUCH_TABLE:
-			tOut.SendBytes ( "#42S02", 6 );
-			break;
-		default:
-			tOut.SendBytes ( "#42000", 6 );
-			break;
-	}
-
-	// send error message
-	tOut.SendBytes ( sError, iErrorLen );
-}
-
-void SendMysqlEofPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iWarns, bool bMoreResults, bool bAutoCommit )
-{
-	if ( iWarns<0 ) iWarns = 0;
-	if ( iWarns>65535 ) iWarns = 65535;
-	if ( bMoreResults )
-		iWarns |= ( SPH_MYSQL_FLAG_MORE_RESULTS<<16 );
-	if ( bAutoCommit )
-		iWarns |= ( SPH_MYSQL_FLAG_STATUS_AUTOCOMMIT<<16 );
-
-	tOut.SendLSBDword ( (uPacketID<<24) + 5 );
-	tOut.SendByte ( 0xfe );
-	tOut.SendLSBDword ( iWarns ); // N warnings, 0 status
-}
-
-
-// was defaults ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedRows=0, int iWarns=0, const char * sMessage=nullptr, bool bMoreResults=false, bool bAutoCommit )
-void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedRows, int iWarns, const char * sMessage, bool bMoreResults, bool bAutoCommit, int64_t iLastID )
-{
-	BYTE sVarLen[20] = {0}; // max 18 for packed number, +1 more just for fun
-	BYTE * pBuf = sVarLen;
-	pBuf = MysqlPackInt ( pBuf, iAffectedRows );
-	pBuf = MysqlPackInt ( pBuf, iLastID );
-	int iLen = pBuf - sVarLen;
-
-	int iMsgLen = 0;
-	if ( sMessage )
-		iMsgLen = (int) strlen(sMessage);
-
-	tOut.SendLSBDword ( DWORD (uPacketID<<24) + iLen + iMsgLen + 5);
-	tOut.SendByte ( 0 );				// ok packet
-	tOut.SendBytes ( sVarLen, iLen );	// packed affected rows & insert_id
-	if ( iWarns<0 ) iWarns = 0;
-	if ( iWarns>65535 ) iWarns = 65535;
-	DWORD uWarnStatus = ( iWarns<<16 );
-	// order of WORDs is opposite to EOF packet above
-	if ( bMoreResults )
-		uWarnStatus |= SPH_MYSQL_FLAG_MORE_RESULTS;
-	if ( bAutoCommit )
-		uWarnStatus |= SPH_MYSQL_FLAG_STATUS_AUTOCOMMIT;
-
-	tOut.SendLSBDword ( uWarnStatus );		// 0 status, N warnings
-	if ( sMessage )
-		tOut.SendBytes ( sMessage, iMsgLen );
-}
-
-
-void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, bool bAutoCommit )
-{
-	SendMysqlOkPacket ( tOut, uPacketID, 0, 0, nullptr, false, bAutoCommit, 0 );
-}
-
-
-//////////////////////////////////////////////////////////////////////////
-// Mysql row buffer and command handler
-
-class SqlRowBuffer_c : public RowBuffer_i, private LazyVector_T<BYTE>
-{
-	BYTE & m_uPacketID;
-	ISphOutputBuffer & m_tOut;
-	int m_iCID; // connection ID for error report
-	bool m_bAutoCommit = false;
-#ifndef NDEBUG
-	size_t m_iColumns = 0; // used for head/data columns num sanitize check
-#endif
-
-	// how many bytes this int will occupy in proto mysql
-	static inline int SqlSizeOf ( int iLen )
-	{
-		if ( iLen<251 )
-			return 1;
-		if ( iLen<=0xffff )
-			return 3;
-		if ( iLen<=0xffffff )
-			return 4;
-		return 9;
-	}
-
-	// how many bytes this string will occupy in proto mysql
-	int SqlStrlen ( const char * sStr )
-	{
-		auto iLen = ( int ) strlen ( sStr );
-		return SqlSizeOf ( iLen ) + iLen;
-	}
-
-	void SendSqlInt ( int iVal )
-	{
-		BYTE dBuf[12];
-		auto * pBuf = MysqlPackInt ( dBuf, iVal );
-		m_tOut.SendBytes ( dBuf, ( int ) ( pBuf - dBuf ) );
-	}
-
-	void SendSqlString ( const char * sStr )
-	{
-		auto iLen = (int) strlen ( sStr );
-		SendSqlInt ( iLen );
-		m_tOut.SendBytes ( sStr, iLen );
-	}
-
-	void SendSqlFieldPacket ( const char * sCol, MysqlColumnType_e eType, WORD uFlags )
-	{
-		const char * sDB = "";
-		const char * sTable = "";
-
-		int iLen = 17 + SqlStrlen ( sDB ) + 2 * ( SqlStrlen ( sTable ) + SqlStrlen ( sCol ) );
-
-		int iColLen = 0;
-		switch ( eType )
-		{
-		case MYSQL_COL_DECIMAL: iColLen = 20;
-			break;
-		case MYSQL_COL_LONG: iColLen = 11;
-			break;
-		case MYSQL_COL_FLOAT: iColLen = 20;
-			break;
-		case MYSQL_COL_LONGLONG: iColLen = 20;
-			break;
-		case MYSQL_COL_STRING: iColLen = 255;
-			break;
-		}
-
-		m_tOut.SendLSBDword ( ( ( m_uPacketID++ ) << 24 ) + iLen );
-		SendSqlString ( "def" ); // catalog
-		SendSqlString ( sDB ); // db
-		SendSqlString ( sTable ); // table
-		SendSqlString ( sTable ); // org_table
-		SendSqlString ( sCol ); // name
-		SendSqlString ( sCol ); // org_name
-
-		m_tOut.SendByte ( 12 ); // filler, must be 12 (following pseudo-string length)
-		m_tOut.SendByte ( 0x21 ); // charset_nr, 0x21 is utf8
-		m_tOut.SendByte ( 0 ); // charset_nr
-		m_tOut.SendLSBDword ( iColLen ); // length
-		m_tOut.SendByte ( BYTE ( eType ) ); // type (0=decimal)
-		m_tOut.SendByte ( uFlags & 255 );
-		m_tOut.SendByte ( uFlags >> 8 );
-		m_tOut.SendByte ( 0 ); // decimals
-		m_tOut.SendWord ( 0 ); // filler
-	}
-
-public:
-
-	SqlRowBuffer_c ( BYTE * pPacketID, ISphOutputBuffer * pOut, int iCID, bool bAutoCommit )
-		: m_uPacketID ( *pPacketID )
-		, m_tOut ( *pOut )
-		, m_iCID ( iCID )
-		, m_bAutoCommit ( bAutoCommit )
-	{}
-
-	void PutFloatAsString ( float fVal, const char * sFormat ) override
-	{
-		ReserveGap ( SPH_MAX_NUMERIC_STR );
-		auto pSize = End();
-		int iLen = sFormat
-			? snprintf (( char* ) pSize + 1, SPH_MAX_NUMERIC_STR - 1, sFormat, fVal )
-			: sph::PrintVarFloat (( char* ) pSize + 1, fVal );
-		*pSize = BYTE ( iLen );
-		AddN ( iLen + 1 );
-	}
-
-	void PutNumAsString ( int64_t iVal ) override
-	{
-		ReserveGap ( SPH_MAX_NUMERIC_STR );
-		auto pSize = End();
-		int iLen = sph::NtoA ( ( char * ) pSize + 1, iVal );
-		*pSize = BYTE ( iLen );
-		AddN ( iLen + 1 );
-	}
-
-	void PutNumAsString ( uint64_t uVal ) override
-	{
-		ReserveGap ( SPH_MAX_NUMERIC_STR );
-		auto pSize = End();
-		int iLen = sph::NtoA ( ( char * ) pSize + 1, uVal );
-		*pSize = BYTE ( iLen );
-		AddN ( iLen + 1 );
-	}
-
-	void PutNumAsString ( int iVal ) override
-	{
-		ReserveGap ( SPH_MAX_NUMERIC_STR );
-		auto pSize = End();
-		int iLen = sph::NtoA ( ( char * ) pSize + 1, iVal );
-		*pSize = BYTE ( iLen );
-		AddN ( iLen + 1 );
-	}
-
-	void PutNumAsString ( DWORD uVal ) override
-	{
-		ReserveGap ( SPH_MAX_NUMERIC_STR );
-		auto pSize = End();
-		int iLen = sph::NtoA ( ( char * ) pSize + 1, uVal );
-		*pSize = BYTE ( iLen );
-		AddN ( iLen + 1 );
-	}
-
-	// pack raw array (i.e. packed length, then blob) into proto mysql
-	void PutArray ( const void * pBlob, int iLen, bool bSendEmpty ) override
-	{
-		if ( iLen<0 )
-			return;
-
-		if ( !iLen && bSendEmpty )
-		{
-			PutNULL();
-			return;
-		}
-
-		auto pSpace = AddN ( iLen + 9 ); // 9 is taken from MysqlPack() implementation (max possible offset)
-		auto * pStr = MysqlPackInt ( pSpace, iLen );
-		if ( iLen )
-			memcpy ( pStr, pBlob, iLen );
-		Resize ( Idx ( pStr ) + iLen );
-	}
-
-	// pack zero-terminated string (or "" if it is zero itself)
-	void PutString ( const char * sMsg ) override
-	{
-		int iLen = ( sMsg && *sMsg ) ? ( int ) strlen ( sMsg ) : 0;
-
-		if (!sMsg)
-			sMsg = "";
-
-		PutArray ( sMsg, iLen, false );
-	}
-
-	void PutMicrosec ( int64_t iUsec ) override
-	{
-		iUsec = Max ( iUsec, 0 );
-
-		ReserveGap ( SPH_MAX_NUMERIC_STR+1 );
-		auto pSize = (char*) End();
-		int iLen = sph::IFtoA ( pSize + 1, iUsec, 6 );
-		*pSize = BYTE ( iLen );
-		AddN ( iLen + 1 );
-	}
-
-	void PutNULL () override
-	{
-		Add ( 0xfb ); // MySQL NULL is 0xfb at VLB length
-	}
-
-public:
-	/// more high level. Processing the whole tables.
-	// sends collected data, then reset
-	void Commit() override
-	{
-		m_tOut.SendLSBDword ( ((m_uPacketID++)<<24) + ( GetLength() ) );
-		m_tOut.SendBytes ( *this );
-		Resize(0);
-	}
-
-	// wrappers for popular packets
-	void Eof ( bool bMoreResults, int iWarns ) override
-	{
-		SendMysqlEofPacket ( m_tOut, m_uPacketID++, iWarns, bMoreResults, m_bAutoCommit );
-	}
-
-	void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr ) override
-	{
-		SendMysqlErrorPacket ( m_tOut, m_uPacketID, sStmt, sError, m_iCID, iErr );
-	}
-
-	void Ok ( int iAffectedRows, int iWarns, const char * sMessage, bool bMoreResults, int64_t iLastInsertId ) override
-	{
-		SendMysqlOkPacket ( m_tOut, m_uPacketID, iAffectedRows, iWarns, sMessage, bMoreResults, m_bAutoCommit, iLastInsertId );
-		if ( bMoreResults )
-			m_uPacketID++;
-	}
-
-	// Header of the table with defined num of columns
-	inline void HeadBegin ( int iColumns ) override
-	{
-		m_tOut.SendLSBDword ( ((m_uPacketID++)<<24) + SqlSizeOf ( iColumns ) );
-		SendSqlInt ( iColumns );
-#ifndef NDEBUG
-		m_iColumns = iColumns;
-#endif
-	}
-
-	void HeadEnd ( bool bMoreResults, int iWarns ) override
-	{
-		Eof ( bMoreResults, iWarns );
-		Resize(0);
-	}
-
-	// add the next column. The EOF after the tull set will be fired automatically
-	void HeadColumn ( const char * sName, MysqlColumnType_e uType, WORD uFlags ) override
-	{
-		assert ( m_iColumns-->0 && "you try to send more mysql columns than declared in InitHead" );
-		SendSqlFieldPacket ( sName, uType, uFlags );
-	}
-
-	void Add ( BYTE uVal ) override
-	{
-		LazyVector_T<BYTE>::Add ( uVal );
-	}
-};
 
 class TableLike : public CheckLike
 				, public ISphNoncopyable
@@ -16078,16 +15648,22 @@ bool SphinxqlSessionPublic::IsAutoCommit () const
 	return m_pImpl->m_tVars.m_bAutoCommit;
 }
 
-CSphQueryProfile * SphinxqlSessionPublic::StartProfiling()
+CSphQueryProfile * SphinxqlSessionPublic::StartProfiling ( ESphQueryState eState )
 {
 	assert ( m_pImpl );
 	CSphQueryProfile * pProfile = nullptr;
-		if ( m_pImpl->m_tVars.m_bProfile ) // the current statement might change it
+	if ( m_pImpl->m_tVars.m_bProfile ) // the current statement might change it
 	{
 		pProfile = &m_pImpl->m_tProfile;
-		pProfile->Start ( SPH_QSTATE_TOTAL );
+		pProfile->Start ( eState );
 	}
 	return pProfile;
+}
+
+void SphinxqlSessionPublic::SaveLastProfile ()
+{
+	assert ( m_pImpl );
+	m_pImpl->m_tLastProfile = m_pImpl->m_tProfile;
 }
 
 void SphinxqlSessionPublic::SetVIP ( bool bVIP )
@@ -16108,18 +15684,10 @@ void HandleCommandSphinxql ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer
 	if ( !CheckCommandVersion ( uVer, VER_COMMAND_SPHINXQL, tOut ) )
 		return;
 
-	// parse request
-	CSphString sCommand = tReq.GetString ();
-
-	BYTE uDummy = 0;
-
-	// todo: move upper, if the session variables are also necessary in API access mode.
-	CSphinxqlSession tSession; // FIXME!!! check that no accum related command used via API
-
-	SqlRowBuffer_c tRows ( &uDummy, &tOut, tThd.m_iConnID, tSession.m_tVars.m_bAutoCommit );
-
 	APICommand_t dOk ( tOut, SEARCHD_OK, VER_COMMAND_SPHINXQL );
-	tSession.Execute ( sCommand, tRows, tThd );
+
+	// parse and run request
+	RunSingleSphinxqlCommand ( tReq.GetString (), tOut, tThd );
 }
 
 /// json command over API
@@ -16148,24 +15716,6 @@ void StatCountCommand ( SearchdCommand_e eCmd )
 {
 	if ( eCmd<SEARCHD_COMMAND_TOTAL )
 		++g_tStats.m_iCommandCount[eCmd];
-}
-
-bool IsFederatedUser ( ByteBlob_t tPacket )
-{
-	// handshake packet structure
-	// 4              capability flags, CLIENT_PROTOCOL_41 always set
-	// 4              max-packet size
-	// 1              character set
-	// string[23]     reserved (all [0])
-	// string[NUL]    username
-
-	if ( !tPacket.first || tPacket.second<(4+4+1+23+1) )
-		return false;
-
-	const char * sFederated = "FEDERATED";
-	const char * sSrc = (const char *) tPacket.first + 4+4+1+23;
-
-	return ( strncmp ( sFederated, sSrc, tPacket.second-(4+4+1+23) )==0 );
 }
 
 bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, CSphString & sFederatedQuery )
@@ -16381,80 +15931,8 @@ static void HandleClientMySQL ( int iSock, ThreadLocal_t & tThread ) REQUIRES ( 
 	// set off query guard
 	GlobalCrashQuerySet ( CrashQuery_t() );
 }
-#endif
 
-bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString & sQuery, int iPacketLen,
-	bool bProfile, ThreadLocal_t & tThd, InputBuffer_c & tIn, ISphOutputBuffer & tOut )
-{
-	auto uHasBytesIn = tIn.HasBytes ();
-	// get command, handle special packets
-	const BYTE uMysqlCmd = tIn.GetByte ();
 
-	sphLogDebugv ( "LoopClientMySQL command %d", uMysqlCmd );
-
-	if ( uMysqlCmd==MYSQL_COM_QUIT )
-		return false;
-
-	CSphString sError;
-	bool bKeepProfile = true;
-	switch ( uMysqlCmd )
-	{
-		case MYSQL_COM_PING:
-		case MYSQL_COM_INIT_DB:
-			// client wants a pong
-			SendMysqlOkPacket ( tOut, uPacketID, tSession.m_tVars.m_bAutoCommit );
-			break;
-
-		case MYSQL_COM_SET_OPTION:
-			// bMulti = ( tIn.GetWord()==MYSQL_OPTION_MULTI_STATEMENTS_ON ); // that's how we could double check and validate multi query
-			// server reporting success in response to COM_SET_OPTION and COM_DEBUG
-			SendMysqlEofPacket ( tOut, uPacketID, 0, false, tSession.m_tVars.m_bAutoCommit );
-			break;
-
-		case MYSQL_COM_QUERY:
-		{
-			// handle query packet
-			sQuery = tIn.GetRawString ( iPacketLen-1 ); // OPTIMIZE? could be huge; avoid copying?
-			assert ( !tIn.GetError() );
-			tThd.ThdState ( ThdState_e::QUERY );
-			tThd.m_tDesc.SetThreadInfo ( "%s", sQuery.cstr() ); // OPTIMIZE? could be huge; avoid copying?
-			SqlRowBuffer_c tRows ( &uPacketID, &tOut, tThd.m_tDesc.m_iConnID, tSession.m_tVars.m_bAutoCommit );
-			bKeepProfile = tSession.Execute ( sQuery, tRows, tThd.m_tDesc );
-		}
-		break;
-
-		default:
-			// default case, unknown command
-			sError.SetSprintf ( "unknown command (code=%d)", uMysqlCmd );
-			SendMysqlErrorPacket ( tOut, uPacketID, NULL, sError.cstr(), tThd.m_tDesc.m_iConnID, MYSQL_ERR_UNKNOWN_COM_ERROR );
-			break;
-	}
-
-	auto uBytesConsumed = uHasBytesIn - tIn.HasBytes ();
-	if ( uBytesConsumed<iPacketLen )
-	{
-		uBytesConsumed = iPacketLen - uBytesConsumed;
-		sphLogDebugv ( "LoopClientMySQL disposing unused %d bytes", uBytesConsumed );
-		const BYTE* pFoo = nullptr;
-		tIn.GetBytesZerocopy (&pFoo, uBytesConsumed);
-	}
-
-	// send the response packet
-	tThd.ThdState ( ThdState_e::NET_WRITE );
-	tOut.Flush();
-	if ( tOut.GetError() )
-		return false;
-
-	// finalize query profile
-	if ( bProfile )
-		tSession.m_tProfile.Stop();
-	if ( uMysqlCmd==MYSQL_COM_QUERY && bKeepProfile )
-		tSession.m_tLastProfile = tSession.m_tProfile;
-	tOut.SetProfiler ( nullptr );
-	return true;
-}
-
-#if 0
 //////////////////////////////////////////////////////////////////////////
 // HANDLE-BY-LISTENER
 //////////////////////////////////////////////////////////////////////////
@@ -19312,47 +18790,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 			sphWarning ( "server_id out of range 0 - 127, clamped to %d", g_iServerID );
 		}
 	}
-
-	//////////////////////////////////////////////////
-	// prebuild MySQL wire protocol handshake packets
-	//////////////////////////////////////////////////
-
-	char sHandshake1[] =
-		"\x00\x00\x00" // packet length
-		"\x00" // packet id
-		"\x0A"; // protocol version; v.10
-
-	char sHandshake2[] =
-		"\x01\x00\x00\x00" // thread id
-		"\x01\x02\x03\x04\x05\x06\x07\x08" // salt1 (for auth)
-		"\x00" // filler
-		// fixme! SSL capability must be set only if keys are valid!
-		"\x08\x82" // server capabilities low WORD; CLIENT_PROTOCOL_41 | CLIENT_CONNECT_WITH_DB | CLIENT_SECURE_CONNECTION
-		"\x21" // server language; let it be ut8_general_ci to make different clients happy
-		"\x02\x00" // server status
-		"\x08\x00" // server capabilities hi WORD; CLIENT_PLUGIN_AUTH
-		"\x15\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" // salts length + 10 char filler
-		"\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c" // salt2 (for auth, 4.1+)
-		"\x00"
-		"\x6d\x79\x73\x71\x6c\x5f\x6e\x61\x74\x69\x76\x65\x5f\x70\x61\x73\x73\x77\x6f\x72\x64" // auth plugin name: mysql_native_password
-		"\x00";
-
 	g_sMySQLVersion = hSearchd.GetStr ( "mysql_version_string", szMANTICORE_VERSION );
-	int iLen = g_sMySQLVersion.Length();
-
-	g_iMysqlHandshake = sizeof(sHandshake1) + iLen + sizeof(sHandshake2) - 1;
-	if ( g_iMysqlHandshake>=(int)sizeof(g_sMysqlHandshake) )
-	{
-		sphWarning ( "mysql_version_string too long; using default (version=%s)", szMANTICORE_VERSION );
-		g_iMysqlHandshake = sizeof(sHandshake1) + (int) strlen(szMANTICORE_VERSION) + sizeof(sHandshake2) - 1;
-		assert ( g_iMysqlHandshake < (int)sizeof(g_sMysqlHandshake) );
-	}
-
-	char * p = g_sMysqlHandshake;
-	memcpy ( p, sHandshake1, sizeof(sHandshake1)-1 );
-	memcpy ( p+sizeof(sHandshake1)-1, g_sMySQLVersion.cstr(), iLen+1 );
-	memcpy ( p+sizeof(sHandshake1)+iLen, sHandshake2, sizeof(sHandshake2)-1 );
-	g_sMysqlHandshake[0] = (char)(g_iMysqlHandshake-4); // safe, as long as buffer size is 128
 }
 
 // ServiceMain -> ConfigureAndPreload -> ConfigureAndPreloadIndex
@@ -19408,19 +18846,6 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 		dWarnings.Add ( "global IDF unavailable - IGNORING" );
 
 	return eAdd;
-}
-
-// modify mysql handshake depending from ssl availability:
-// if we have built with ssl, and context is valid (i.e. keys set in config, verified, etc) - set 'use ssl' bit.
-// otherwise reset it. If remote client supports encryption, we will switch to encrypted mysql connection then.
-void SetSSLHandshakeFlag ( bool bSsl )
-{
-	auto iPos = g_sMysqlHandshake[0] - 48;
-	auto* pFlag = &g_sMysqlHandshake[iPos];
-	if ( bSsl && ( *pFlag & 8)==0 )
-		*pFlag |= 8;
-	else if (!bSsl && ( *pFlag&8) )
-		*pFlag &= ~8;
 }
 
 // invoked once on start from ServiceMain (actually it creates the hashes)

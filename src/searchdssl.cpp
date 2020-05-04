@@ -829,9 +829,10 @@ using BIOPtr_c = SharedPtrCustom_t<BIO *>;
 class  AsyncSSLNetInputBuffer_c final : public AsyncNetInputBuffer_c
 {
 	BIOPtr_c m_pSslFrontend;
-	int ReadFromBackend ( BYTE * pBuf, int iNeed, int iHaveSpace, int iReadTimeoutS, bool ) final
+	int ReadFromBackend ( int iNeed, int iHaveSpace, int iReadTimeoutS, bool ) final
 	{
 		assert ( iNeed <= iHaveSpace );
+		auto pBuf = AddN(0);
 
 		// BIO_CTRL_DGRAM_SET_RECV_TIMEOUT is just for convenience, to set timeout. (Something has TIMEOUT in name)
 		BIO_ctrl ( m_pSslFrontend, BIO_CTRL_DGRAM_SET_RECV_TIMEOUT, iReadTimeoutS, nullptr );

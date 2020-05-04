@@ -114,8 +114,13 @@ protected:
 	bool				m_bIntr = false;
 
 	/// lowest func to implement.
-	/// Read into pBuf any chunk of iNeed..iHaveSpace bytes. Return num of bytes read, or 0 on error
-	virtual int 	ReadFromBackend ( BYTE * pBuf, int iNeed, int iHaveSpace, int iReadTimeoutS, bool bIntr ) = 0;
+fix 	/// Read to the end any chunk of iNeed..iHaveSpace bytes. Return num of bytes read, or -1 on error.
+	/// @iNeed is strict N user expects. For example, it needs 100 bytes, 90 are in buffer, and 10 he
+	/// needs extra. So, less than 10 bytes is fail.
+	/// @iHaveSpace is how many bytes is _safe_ to return. If it is requested 10 bytes, but iHaveSpace
+	/// tells 10K - then anything between 10 and 10K is ok. If your backend needs more - see BufferFor()
+	/// to do so.
+	virtual int 	ReadFromBackend ( int iNeed, int iHaveSpace, int iReadTimeoutS, bool bIntr ) = 0;
 
 	/// for iNeed==0 just try oneshot non-blocking read try to look if anything at all arived.
 	/// returns -1 on error, or N of appended bytes.
@@ -123,6 +128,19 @@ protected:
 
 	/// internal - return place available to not exceed iHardLimit. Dispose consumed data, if necesary.
 	int				GetRoomForTail ( int iHardLimit );
+
+	/// internal - ensure iSpace is in reserve, then return pointer to the end of buffer.
+	/// That is to be used in ReadFromBackend, if iHaveSpace param is not enough.
+	/// That is for backends with undesired side effects for returning 'to small' chunks.
+	/// Say, if you have 10K (for example, uncompressed), but backend implies a chunk which after
+	/// processing (decompression) will born 20K. In such case you can igrone @iHaveSpace of ReadfromBackend()
+	/// but fill necessary 20K buffer, pointed by BufferFor (20k).
+	/// ReadFromBackend on return will process results right way, nothing will be lost or ignored desite of @iHaveSpace
+	inline BYTE * BufferFor ( int iSpace )
+	{
+		ReserveGap ( iSpace );
+		return AddN ( 0 );
+	}
 
 public:
 	AsyncNetInputBuffer_c ();

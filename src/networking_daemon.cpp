@@ -800,7 +800,7 @@ int AsyncNetInputBuffer_c::AppendData ( int iNeed, int iSpace, int iTimeoutS, bo
 	m_pBuf = ByteBlob_t ( *this ).first; // realign after possible reserve, byteblob ensures it is not nullptr
 	m_pCur = m_pBuf+iPos;
 
-	int iGot = ReadFromBackend ( AddN(0), iNeed, iSpace, iTimeoutS, bIntr );
+	int iGot = ReadFromBackend ( iNeed, iSpace, iTimeoutS, bIntr );
 	if ( g_bGotSigterm && bIntr )
 	{
 		sphLogDebug ( "AsyncNetInputBuffer_c::AppendData: got SIGTERM, return -1" );
@@ -911,10 +911,10 @@ class AsyncSockInputBuffer_c : public AsyncNetInputBuffer_c
 {
 	SockWrapperPtr_c m_pSocket;
 
-	int ReadFromBackend ( BYTE * pBuf, int iNeed, int iHaveSpace, int iReadTimeoutS, bool bIntr ) final
+	int ReadFromBackend ( int iNeed, int iHaveSpace, int iReadTimeoutS, bool bIntr ) final
 	{
 		assert ( iNeed<=iHaveSpace );
-		return SyncSockRead ( m_pSocket, pBuf, iNeed, iHaveSpace, iReadTimeoutS, bIntr );
+		return SyncSockRead ( m_pSocket, AddN(0), iNeed, iHaveSpace, iReadTimeoutS, bIntr );
 	}
 
 public:

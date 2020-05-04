@@ -114,7 +114,7 @@ protected:
 	bool				m_bIntr = false;
 
 	/// lowest func to implement.
-fix 	/// Read to the end any chunk of iNeed..iHaveSpace bytes. Return num of bytes read, or -1 on error.
+ 	/// Read to the end any chunk of iNeed..iHaveSpace bytes. Return num of bytes read, or -1 on error.
 	/// @iNeed is strict N user expects. For example, it needs 100 bytes, 90 are in buffer, and 10 he
 	/// needs extra. So, less than 10 bytes is fail.
 	/// @iHaveSpace is how many bytes is _safe_ to return. If it is requested 10 bytes, but iHaveSpace

@@ -938,15 +938,13 @@ public:
 	{}
 
 	/// Flush works via federeate netloop
-	void Flush () final
+	void SendBuffer ( const VecTraits_T<BYTE> & dData ) final
 	{
 		assert ( m_pSocket );
-		CommitAllMeasuredLengths ();
-		if ( m_dBuf.IsEmpty() )
+		if ( dData.IsEmpty() )
 			return; // nothing to send
 		CSphScopedProfile tProf ( m_pProfile, SPH_QSTATE_NET_WRITE );
 		m_bError = !SyncSend ( m_pSocket, (const char *) m_dBuf.begin (), m_dBuf.GetLength64 () );
-		m_dBuf.Resize ( 0 );
 	}
 };
 

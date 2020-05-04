@@ -307,12 +307,12 @@ bool IsPortInRange( int iPort );
 /// we just cache all streamed data into internal blob;
 /// NO data sending itself lives in this class.
 
-class ISphOutputBuffer : public ISphRefcountedMT
+class ISphOutputBuffer
 {
 public:
 	ISphOutputBuffer ();
 	explicit ISphOutputBuffer ( CSphVector<BYTE>& dChunk );
-	~ISphOutputBuffer() override {}
+	virtual ~ISphOutputBuffer() {}
 
 	void		SendInt ( int iValue )			{ SendT<int> ( htonl ( iValue ) ); }
 
@@ -358,16 +358,12 @@ public:
 	void		SendArray ( const void * pBuf, int iLen );
 	void		SendArray ( const StringBuilder_c &dBuf );
 
-	virtual void	SwapData ( CSphVector<BYTE> & rhs ) { m_dBuf.SwapData ( rhs ); }
+	void		SwapData ( CSphVector<BYTE> & rhs ) { m_dBuf.SwapData ( rhs ); }
 
-	virtual void	Flush () {}
-	virtual bool	GetError () const { return false; }
-	virtual int		GetSentCount () const { return m_dBuf.GetLength(); }
-	virtual void	SetProfiler ( CSphQueryProfile * ) {}
-	virtual void *	GetBufPtr () const { return (char*) m_dBuf.begin();}
+	int				GetSentCount () const { return m_dBuf.GetLength(); }
+	void *			GetBufPtr () const { return (char*) m_dBuf.begin();}
 
-protected:
-	void WriteInt ( int64_t iOff, int iValue )
+	void WriteInt ( int64_t iOff, int iValue ) // int in network file order
 	{
 		WriteT<int> ( iOff, htonl ( iValue ) );
 	}
@@ -389,55 +385,38 @@ private:
 };
 
 
-// assume buffer never flushed between different Send()
-class CachedOutputBuffer_c : public ISphOutputBuffer
+// RAII Sphinx API block: in ctr reserve place for size, in dtr write hton int into reserved place
+class APIBlob_c
 {
-	CSphVector<intptr_t> m_dBlobs;
-	using BASE = ISphOutputBuffer;
-
+	intptr_t m_iPos = 0;
+	ISphOutputBuffer & m_dOut;
 public:
-	// start blob on create, commit on dtr.
-	class ReqLenCalc : public ISphNoncopyable
+	explicit APIBlob_c ( ISphOutputBuffer& dOut )
+		: m_dOut ( dOut )
 	{
-		CachedOutputBuffer_c &m_dBuff;
-		intptr_t m_iPos;
-	public:
-		ReqLenCalc ( CachedOutputBuffer_c &dBuff, WORD uCommand, WORD uVer = 0 /* SEARCHD_OK */ )
-			: m_dBuff ( dBuff )
-		{
-			m_dBuff.AddRef();
-			m_dBuff.SendWord ( uCommand );
-			m_dBuff.SendWord ( uVer );
-			m_iPos = m_dBuff.StartMeasureLength();
-		}
-
-		~ReqLenCalc ()
-		{
-			m_dBuff.CommitMeasuredLength ( m_iPos );
-			m_dBuff.Release();
-		}
-	};
-
-public:
-	void Flush() override; // just check integrity before flush
-	void SwapData ( CSphVector<BYTE> &rhs ) override { CommitAllMeasuredLengths (); BASE::SwapData (rhs); }
-	inline bool BlobsEmpty () const { return m_dBlobs.IsEmpty (); }
-public:
-	intptr_t StartMeasureLength (); // reserve int in the buf, push it's position, return cur pos.
-	void CommitMeasuredLength ( intptr_t uStoredPos=-1 ); // get last pushed int, write delta count there.
-	void CommitAllMeasuredLengths (); // finalize all nums starting from the last one.
+		m_iPos = (intptr_t) dOut.GetSentCount ();
+		dOut.SendInt ( 0 );
+	}
+	~APIBlob_c()
+	{
+		auto iBlobLen = m_dOut.GetSentCount ()-m_iPos-sizeof ( int );
+		m_dOut.WriteInt ( m_iPos, (int) iBlobLen );
+	}
 };
 
-using APICommand_t = CachedOutputBuffer_c::ReqLenCalc;
+// RAII Start Sphinx API command/request header
+APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer = 0 /* SEARCHD_OK */ );
+
+// RAII Sphinx API answer
+APIBlob_c APIAnswer ( ISphOutputBuffer & dBuff, WORD uVer = 0, WORD uStatus = 0 /* SEARCHD_OK */ );
 
 // buffer that knows if it has requested data or not
-class SmartOutputBuffer_t : public CachedOutputBuffer_c
+class SmartOutputBuffer_t final: public ISphOutputBuffer
 {
 	CSphVector<ISphOutputBuffer *> m_dChunks;
 public:
 	SmartOutputBuffer_t () = default;
-	~SmartOutputBuffer_t () override;
-	int GetSentCount () const override;
+	~SmartOutputBuffer_t () final;
 
 	void StartNewChunk ();
 //	void AppendBuf ( SmartOutputBuffer_t &dBuf );
@@ -449,11 +428,19 @@ public:
 #endif
 };
 
-class NetGenericOutputBuffer_c : public CachedOutputBuffer_c
+class NetGenericOutputBuffer_c : public ISphOutputBuffer
 {
 public:
-	bool	GetError () const override { return m_bError; }
-	void	SetProfiler ( CSphQueryProfile * pProfiler ) override { m_pProfile = pProfiler; }
+	bool	GetError () const { return m_bError; }
+	void	SetProfiler ( CSphQueryProfile * pProfiler ) { m_pProfile = pProfiler; }
+
+	void Flush ()
+	{
+		SendBuffer( m_dBuf );
+		m_dBuf.Resize ( 0 ); // check and fix!
+	};
+
+	virtual void SendBuffer ( const VecTraits_T<BYTE> & dData ) = 0;
 
 protected:
 	CSphQueryProfile *	m_pProfile = nullptr;
@@ -1116,7 +1103,7 @@ enum ESphHttpEndpoint
 	SPH_HTTP_ENDPOINT_TOTAL
 };
 
-bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, CachedOutputBuffer_c & tOut );
+bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut );
 ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster, const ThdDesc_t & tThd );
 void sphFormatFactors ( StringBuilder_c& dOut, const unsigned int * pFactors, bool bJson );
 void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation, CSphVector<int64_t> & dLastIds );
@@ -1130,8 +1117,8 @@ ESphHttpEndpoint	sphStrToHttpEndpoint ( const CSphString & sEndpoint );
 CSphString			sphHttpEndpointToStr ( ESphHttpEndpoint eEndpoint );
 
 bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength,
-	ThdDesc_t & tThd, InputBuffer_c & tBuf, CachedOutputBuffer_c & tOut, bool bManagePersist );
-void HandleCommandPing ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq );
+	ThdDesc_t & tThd, InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist );
+void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
 
 void BuildStatusOneline ( StringBuilder_c& sOut );
 
@@ -1156,7 +1143,7 @@ public:
 void LogSphinxqlError ( const char * sStmt, const char * sError, int iCid );
 
 // that is used from sphinxql command over API
-void RunSingleSphinxqlCommand ( const CSphString & sCommand, CachedOutputBuffer_c & tOut, ThdDesc_t & tThd );
+void RunSingleSphinxqlCommand ( const CSphString & sCommand, ISphOutputBuffer & tOut, ThdDesc_t & tThd );
 
 ISphTableFunc *		CreateRemoveRepeats();
 
@@ -1227,7 +1214,7 @@ void SaveArray ( const VecTraits_T<T> & dBuf, MemoryWriter_c & tOut )
 }
 
 
-void SendErrorReply ( CachedOutputBuffer_c & tOut, const char * sTemplate, ... );
+void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... );
 
 enum MysqlColumnType_e
 {

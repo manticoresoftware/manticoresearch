@@ -2266,7 +2266,7 @@ bool AgentConn_t::DoQuery()
 	if ( IsPersistent() && m_iSock==-1 )
 	{
 		{
-			APICommand_t dPersist ( m_tOutput, SEARCHD_COMMAND_PERSIST );
+			auto tHdr = APIHeader ( m_tOutput, SEARCHD_COMMAND_PERSIST );
 			m_tOutput.SendInt ( 1 ); // set persistent to 1.
 		}
 		m_tOutput.StartNewChunk ();

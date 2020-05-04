@@ -2887,10 +2887,10 @@ public:
 	{
 	}
 
-	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final
+	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
 		// API header
-		APICommand_t tWr { tOut, SEARCHD_COMMAND_CLUSTERPQ, VER_COMMAND_CLUSTERPQ };
+		auto tReply = APIHeader ( tOut, SEARCHD_COMMAND_CLUSTERPQ, VER_COMMAND_CLUSTERPQ );
 		tOut.SendWord ( m_eCmd );
 		BuildCommand ( tAgent, tOut );
 	}
@@ -2910,7 +2910,7 @@ public:
 	}
 
 private:
-	virtual void BuildCommand ( const AgentConn_t &, CachedOutputBuffer_c & tOut ) const = 0;
+	virtual void BuildCommand ( const AgentConn_t &, ISphOutputBuffer & tOut ) const = 0;
 	const PQRemoteCommand_e m_eCmd = PQR_COMMAND_WRONG;
 };
 
@@ -2924,7 +2924,7 @@ public:
 	{
 	}
 
-	void BuildCommand ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final
+	void BuildCommand ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
 		const PQRemoteData_t & tCmd = GetReq ( tAgent );
 		tOut.SendString ( tCmd.m_sCluster.cstr() );
@@ -2935,9 +2935,9 @@ public:
 		tCmd.m_sCluster = tBuf.GetString();
 	}
 
-	static void BuildReply ( const PQRemoteReply_t & tRes, CachedOutputBuffer_c & tOut )
+	static void BuildReply ( const PQRemoteReply_t & tRes, ISphOutputBuffer & tOut )
 	{
-		APICommand_t tReply ( tOut, SEARCHD_OK );
+		auto tReply = APIAnswer ( tOut );
 		tOut.SendByte ( 1 );
 	}
 
@@ -2958,7 +2958,7 @@ public:
 	{
 	}
 
-	void BuildCommand ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final
+	void BuildCommand ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
 		const PQRemoteData_t & tCmd = GetReq ( tAgent );
 		assert ( tCmd.m_pChunks );
@@ -2986,12 +2986,12 @@ public:
 		GetArray ( pSrc->m_dHashes, tBuf );
 	}
 
-	static void BuildReply ( const PQRemoteReply_t & tRes, CachedOutputBuffer_c & tOut )
+	static void BuildReply ( const PQRemoteReply_t & tRes, ISphOutputBuffer & tOut )
 	{
 		assert ( tRes.m_pDst.Ptr() );
 		const SyncDst_t * pDst = tRes.m_pDst.Ptr();
 
-		APICommand_t tReply ( tOut, SEARCHD_OK );
+		auto tReply = APIAnswer ( tOut );
 		tOut.SendString ( tRes.m_sRemoteIndexPath.cstr() );
 		tOut.SendByte ( tRes.m_bIndexActive );
 		SendArray ( pDst->m_dRemotePaths, tOut );
@@ -3026,7 +3026,7 @@ public:
 	{
 	}
 
-	void BuildCommand ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final
+	void BuildCommand ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
 		const PQRemoteData_t & tCmd = GetReq ( tAgent );
 		tOut.SendString ( tCmd.m_sCluster.cstr() );
@@ -3047,9 +3047,9 @@ public:
 		tCmd.m_pSendBuff = (BYTE *)pData;
 	}
 
-	static void BuildReply ( const PQRemoteReply_t & tRes, CachedOutputBuffer_c & tOut )
+	static void BuildReply ( const PQRemoteReply_t & tRes, ISphOutputBuffer & tOut )
 	{
-		APICommand_t tReply ( tOut, SEARCHD_OK );
+		auto tReply = APIAnswer ( tOut );
 		tOut.SendByte ( 1 );
 	}
 
@@ -3069,7 +3069,7 @@ public:
 	{
 	}
 
-	void BuildCommand ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final
+	void BuildCommand ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
 		const PQRemoteData_t & tCmd = GetReq ( tAgent );
 		tOut.SendString ( tCmd.m_sCluster.cstr() );
@@ -3098,9 +3098,9 @@ public:
 		tBuf.GetBytes ( tCmd.m_pChunks->m_dHashes.Begin(), (int) tCmd.m_pChunks->m_dHashes.GetLengthBytes() );
 	}
 
-	static void BuildReply ( const PQRemoteReply_t & tRes, CachedOutputBuffer_c & tOut )
+	static void BuildReply ( const PQRemoteReply_t & tRes, ISphOutputBuffer & tOut )
 	{
-		APICommand_t tReply ( tOut, SEARCHD_OK );
+		auto tReply = APIAnswer ( tOut );
 		tOut.SendByte ( 1 );
 	}
 
@@ -3116,9 +3116,9 @@ class PQRemoteSynced_c : public PQRemoteBase_c
 {
 public:
 	PQRemoteSynced_c();
-	void BuildCommand ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final;
+	void BuildCommand ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final;
 	static void ParseCommand ( InputBuffer_c & tBuf, PQRemoteData_t & tCmd );
-	static void BuildReply ( const PQRemoteReply_t & tRes, CachedOutputBuffer_c & tOut );
+	static void BuildReply ( const PQRemoteReply_t & tRes, ISphOutputBuffer & tOut );
 	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final;
 };
 
@@ -3155,7 +3155,7 @@ public:
 	{
 	}
 
-	void BuildCommand ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final
+	void BuildCommand ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
 		const PQRemoteData_t & tCmd = GetReq ( tAgent );
 		tOut.SendString ( tCmd.m_sCluster.cstr() );
@@ -3168,9 +3168,9 @@ public:
 		tCmd.m_sGTID = tBuf.GetString();
 	}
 
-	static void BuildReply ( const CSphString & sNodes, CachedOutputBuffer_c & tOut )
+	static void BuildReply ( const CSphString & sNodes, ISphOutputBuffer & tOut )
 	{
-		APICommand_t tReply ( tOut, SEARCHD_OK );
+		auto tReply = APIAnswer ( tOut );
 		tOut.SendString ( sNodes.cstr() );
 	}
 
@@ -3192,7 +3192,7 @@ public:
 	{
 	}
 
-	void BuildCommand ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final
+	void BuildCommand ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
 		const PQRemoteData_t & tCmd = GetReq ( tAgent );
 		tOut.SendString ( tCmd.m_sCluster.cstr() );
@@ -3203,9 +3203,9 @@ public:
 		tCmd.m_sCluster = tBuf.GetString();
 	}
 
-	static void BuildReply ( CachedOutputBuffer_c & tOut )
+	static void BuildReply ( ISphOutputBuffer & tOut )
 	{
-		APICommand_t tReply ( tOut, SEARCHD_OK );
+		auto tReply = APIAnswer ( tOut );
 		tOut.SendByte ( 1 );
 	}
 
@@ -3219,7 +3219,7 @@ public:
 
 
 // handler of all remote commands via API parsed at daemon as SEARCHD_COMMAND_CLUSTERPQ
-void HandleCommandClusterPq ( CachedOutputBuffer_c & tOut, WORD uCommandVer, InputBuffer_c & tBuf, const char * sClient )
+void HandleCommandClusterPq ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBuffer_c & tBuf, const char * sClient )
 {
 	if ( !CheckCommandVersion ( uCommandVer, VER_COMMAND_CLUSTERPQ, tOut ) )
 		return;
@@ -3309,7 +3309,7 @@ void HandleCommandClusterPq ( CachedOutputBuffer_c & tOut, WORD uCommandVer, Inp
 
 	if ( !bOk )
 	{
-		APICommand_t tReply ( tOut, SEARCHD_ERROR );
+		auto tReply = APIHeader ( tOut, SEARCHD_ERROR );
 		tOut.SendString ( sError.cstr() );
 		sphLogFatal ( "%s", sError.cstr() );
 	}
@@ -4331,7 +4331,7 @@ PQRemoteSynced_c::PQRemoteSynced_c ()
 {
 }
 
-void PQRemoteSynced_c::BuildCommand ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
+void PQRemoteSynced_c::BuildCommand ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const
 {
 	const PQRemoteData_t & tCmd = GetReq ( tAgent );
 	tOut.SendString ( tCmd.m_sCluster.cstr() );
@@ -4350,9 +4350,9 @@ void PQRemoteSynced_c::ParseCommand ( InputBuffer_c & tBuf, PQRemoteData_t & tCm
 		tCmd.m_dIndexes[i] = tBuf.GetString();
 }
 
-void PQRemoteSynced_c::BuildReply ( const PQRemoteReply_t & tRes, CachedOutputBuffer_c & tOut )
+void PQRemoteSynced_c::BuildReply ( const PQRemoteReply_t & tRes, ISphOutputBuffer & tOut )
 {
-	APICommand_t tReply ( tOut, SEARCHD_OK );
+	auto tReply = APIAnswer ( tOut );
 	tOut.SendByte ( 1 );
 }
 

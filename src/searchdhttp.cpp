@@ -325,7 +325,7 @@ public:
 		// fixme: we can implement replacing indexes in a string (without parsing) if it becomes a performance issue
 	}
 
-	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final
+	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
 		// replace "index" value in the json query
 		m_tQuery.DelItem ( "index" );
@@ -333,7 +333,7 @@ public:
 
 		CSphString sRequest = m_tQuery.AsString();
 
-		APICommand_t tWr { tOut, SEARCHD_COMMAND_JSON, VER_COMMAND_JSON }; // API header
+		auto tWr = APIHeader ( tOut, SEARCHD_COMMAND_JSON, VER_COMMAND_JSON ); // API header
 		tOut.SendString ( m_sEndpoint.cstr() );
 		tOut.SendString ( sRequest.cstr() );
 	}

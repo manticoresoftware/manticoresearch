@@ -783,7 +783,7 @@ class RequestBuilder_i : public ISphNoncopyable
 {
 public:
 	virtual ~RequestBuilder_i () {} // to avoid gcc4 warns
-	virtual void BuildRequest ( const AgentConn_t &tAgent, CachedOutputBuffer_c &tOut ) const = 0;
+	virtual void BuildRequest ( const AgentConn_t &tAgent, ISphOutputBuffer &tOut ) const = 0;
 };
 
 
@@ -826,7 +826,7 @@ class SphinxqlRequestBuilder_c : public RequestBuilder_i
 {
 public:
 			SphinxqlRequestBuilder_c ( const CSphString & sQuery, const SqlStmt_t & tStmt );
-	void	BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final;
+	void	BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final;
 
 protected:
 	const CSphString m_sBegin;
@@ -925,7 +925,7 @@ public:
 bool TimeoutReached ( int64_t tmLeft, int64_t tmNow = -1 );
 
 void RemotesGetField ( const VecRefPtrsAgentConn_t & dRemotes,	const CSphQuery & tQuery, AggrResult_t & tRes );
-void HandleCommandGetField ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq );
+void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
 
 // determine which branch will be used
 // defs placed here for easy switch between/debug

@@ -889,20 +889,18 @@ public:
 		: m_pSslFrontend ( std::move ( pSslFrontend ) )
 	{}
 
-	void Flush () final
+	void SendBuffer ( const VecTraits_T<BYTE> & dData ) final
 	{
 		assert ( m_pSslFrontend );
-		CommitAllMeasuredLengths ();
 		CSphScopedProfile tProf ( m_pProfile, SPH_QSTATE_NET_WRITE );
 		sphLogDebugv ( FRONT "~~ BioFrontWrite (%p) %d bytes" NORM,
-				(BIO*)m_pSslFrontend, m_dBuf.GetLength () );
+				(BIO*)m_pSslFrontend, dData.GetLength () );
 		int iSent = 0;
-		if ( !m_dBuf.IsEmpty ())
-			iSent = BIO_write ( m_pSslFrontend, m_dBuf.begin (), m_dBuf.GetLength () );
+		if ( !dData.IsEmpty ())
+			iSent = BIO_write ( m_pSslFrontend, dData.begin (), dData.GetLength () );
 		auto iRes = BIO_flush ( m_pSslFrontend );
 		sphLogDebugv ( FRONT ">> BioFrontWrite (%p) done (%d) %d bytes of %d" NORM,
-				(BIO*)m_pSslFrontend, iRes, iSent, m_dBuf.GetLength () );
-		m_dBuf.Resize ( 0 ); // check and fix!
+				(BIO*)m_pSslFrontend, iRes, iSent, dData.GetLength () );
 	}
 };
 

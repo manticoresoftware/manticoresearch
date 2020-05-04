@@ -70,12 +70,12 @@ struct GetFieldRequestBuilder_t : public RequestBuilder_i
 	VecTraits_T<RemoteAgentDoc_t> m_dDocs;
 
 	GetFieldRequestBuilder_t() {};
-	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final
+	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
 		AgentFieldPaiload_t * pRes = (AgentFieldPaiload_t *)tAgent.m_pResult.Ptr();
 		assert ( pRes );
 
-		APICommand_t tCmd ( tOut, SEARCHD_COMMAND_GETFIELD, VER_COMMAND_GETFIELD );
+		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_GETFIELD, VER_COMMAND_GETFIELD );
 
 		tOut.SendString ( tAgent.m_tDesc.m_sIndexes.cstr() );
 		tOut.SendDword ( m_dFieldCols.GetLength() );
@@ -117,10 +117,9 @@ struct ProxyFieldRequestBuilder_t : public RequestBuilder_i
 	ProxyFieldRequestBuilder_t ( const GetFieldArgs_t & tArgs )
 		: m_tArgs ( tArgs )
 	{};
-	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final
+	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
-		APICommand_t tCmd ( tOut, SEARCHD_COMMAND_GETFIELD, VER_COMMAND_GETFIELD );
-
+		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_GETFIELD, VER_COMMAND_GETFIELD );
 		tOut.SendString ( tAgent.m_tDesc.m_sIndexes.cstr() );
 		tOut.SendDword ( m_tArgs.m_dFieldNames.GetLength() );
 		ARRAY_FOREACH ( i, m_tArgs.m_dFieldNames )
@@ -377,7 +376,7 @@ static bool GetField ( const GetFieldArgs_t & tArgs, GetFieldRes_t & tRes, GotDo
 	return ( bOkLocal && bOkRemote );
 }
 
-void HandleCommandGetField ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq )
+void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq )
 {
 	if ( !CheckCommandVersion ( uVer, VER_COMMAND_GETFIELD, tOut ) )
 		return;
@@ -416,7 +415,7 @@ void HandleCommandGetField ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer
 	const int iDocsCount = tGotDocs.Count ( tArgs.m_dDocs );
 
 	// send reply
-	APICommand_t dOk ( tOut, SEARCHD_OK, VER_COMMAND_GETFIELD );
+	auto tReply = APIAnswer ( tOut, VER_COMMAND_GETFIELD );
 	tOut.SendDword ( iDocsCount );
 	if ( iDocsCount )
 	{

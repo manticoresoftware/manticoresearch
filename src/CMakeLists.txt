@@ -47,7 +47,8 @@ set ( UDFEXAMPLE_SRC udfexample.c )
 # So if you add headers to the project and NOT see them in visual studio solution - just list them here!
 file ( GLOB HEADERS "sphinx*.h" lz4.h lz4hc.h http/http_parser.h secondaryindex.h searchnode.h killlist.h
 		attribute.h accumulator.h global_idf.h, optional.h, event.h coroutine.h)
-file ( GLOB SEARCHD_H "searchd*.h" "task*.h" threadutils.h query_status.h )
+file ( GLOB SEARCHD_H "searchd*.h" "task*.h" threadutils.h net_action_accept.h netreceive_api.h netreceive_http.h
+		netreceive_ql.h netstate_api.h networking_daemon.h optional.h query_status.h )
 
 if ( USE_GALERA )
 	add_subdirectory ( replication )

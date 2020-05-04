@@ -974,7 +974,7 @@ bool IsFederatedUser ( ByteBlob_t tPacket )
 
 
 bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, CSphString & sQuery, int iPacketLen,
-		CSphQueryProfile * pProfile, ThreadLocal_t & tThd, AsyncNetBuffer_c* pBuf )
+		CSphQueryProfile * pProfile, ThreadLocal_t & tThd, AsyncNetBufferPtr_c pBuf )
 {
 	assert ( pBuf );
 	auto& tIn = pBuf->In();
@@ -1061,7 +1061,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, CSphS
 } // static namespace
 
 // that is used from sphinxql command over API
-void RunSingleSphinxqlCommand ( const CSphString & sCommand, CachedOutputBuffer_c & tOut, ThdDesc_t & tThd )
+void RunSingleSphinxqlCommand ( const CSphString & sCommand, ISphOutputBuffer & tOut, ThdDesc_t & tThd )
 {
 	BYTE uDummy = 0;
 

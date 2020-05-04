@@ -541,8 +541,10 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 		if ( g_iThdQueueMax && !tConn.m_bVIP && GetGlobalQueueSize ()>=g_iThdQueueMax )
 		{
 			sphWarning ( "%s", g_sMaxedOutMessage );
-			APICommand_t tRetry ( tOut, SEARCHD_RETRY );
-			tOut.SendString ( g_sMaxedOutMessage );
+			{
+				auto tHdr = APIHeader ( tOut, SEARCHD_RETRY );
+				tOut.SendString ( g_sMaxedOutMessage );
+			}
 			tOut.Flush();
 			return;
 		}
@@ -555,4 +557,19 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 		--g_iPersistentInUse;
 
 	sphLogDebugv ( "conn %s(%d): exiting", sClientIP, iCID );
+}
+
+
+// Start Sphinx API command/request header
+APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer )
+{
+	dBuff.SendWord ( uCommand );
+	dBuff.SendWord ( uVer );
+	return APIBlob_c ( dBuff );
+}
+
+// Sphinx API answer (sa
+APIBlob_c APIAnswer ( ISphOutputBuffer & dBuff, WORD uVer, WORD uStatus )
+{
+	return APIHeader ( dBuff, uStatus, uVer );
 }

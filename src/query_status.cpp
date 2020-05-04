@@ -33,7 +33,7 @@ class NetOutputBuffer_c : public NetGenericOutputBuffer_c
 public:
 	explicit	NetOutputBuffer_c ( int iSock );
 
-	void	Flush () override;
+	void SendBuffer ( const VecTraits_T<BYTE> & dData ) override;
 
 private:
 	int			m_iSock;			///< my socket
@@ -47,14 +47,12 @@ NetOutputBuffer_c::NetOutputBuffer_c( int iSock )
 	assert ( m_iSock>0 );
 }
 
-void NetOutputBuffer_c::Flush()
+void NetOutputBuffer_c::SendBuffer ( const VecTraits_T<BYTE> & dData )
 {
-	CommitAllMeasuredLengths();
-
 	if ( m_bError )
 		return;
 
-	int64_t iLen = m_dBuf.GetLength64 ();
+	int64_t iLen = dData.GetLength64 ();
 	if ( !iLen )
 		return;
 
@@ -62,7 +60,7 @@ void NetOutputBuffer_c::Flush()
 		sphLogDebug( "SIGTERM in NetOutputBuffer::Flush" );
 
 	StringBuilder_c sError;
-	auto* pBuffer = ( const char* ) m_dBuf.Begin();
+	auto* pBuffer = ( const char* ) dData.Begin();
 
 	CSphScopedProfile tProf( m_pProfile, SPH_QSTATE_NET_WRITE );
 
@@ -116,8 +114,6 @@ void NetOutputBuffer_c::Flush()
 		}
 		assert ( iRes>0 );
 	}
-
-	m_dBuf.Resize( 0 );
 }
 
 /// simple network request buffer
@@ -381,8 +377,10 @@ void QueryStatus ( CSphVariant * v )
 		// send request
 		NetOutputBuffer_c tOut ( iSock );
 		tOut.SendDword ( SPHINX_CLIENT_VERSION );
-		APICommand_t dStatus ( tOut, SEARCHD_COMMAND_STATUS, VER_COMMAND_STATUS );
-		tOut.SendInt ( 1 ); // dummy body
+		{
+			auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_STATUS, VER_COMMAND_STATUS );
+			tOut.SendInt ( 1 ); // dummy body
+		}
 		tOut.Flush ();
 
 		// get reply

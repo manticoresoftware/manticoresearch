@@ -22,10 +22,10 @@ public:
 		: m_iSendCookie ( iCookie )
 	{}
 
-	void BuildRequest ( const AgentConn_t&, CachedOutputBuffer_c& tOut ) const final
+	void BuildRequest ( const AgentConn_t&, ISphOutputBuffer& tOut ) const final
 	{
 		// API header
-		APICommand_t tWr { tOut, SEARCHD_COMMAND_PING, VER_COMMAND_PING };
+		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_PING, VER_COMMAND_PING );
 		tOut.SendInt ( m_iSendCookie );
 	}
 

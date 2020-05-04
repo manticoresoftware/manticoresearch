@@ -514,64 +514,17 @@ void ISphOutputBuffer::SendString( const char* sStr )
 	SendBytes( sStr, iLen );
 }
 
-/////////////////////////////////////////////////////////////////////////////
-
-void CachedOutputBuffer_c::Flush()
-{
-	CommitAllMeasuredLengths();
-	ISphOutputBuffer::Flush();
-}
-
-intptr_t CachedOutputBuffer_c::StartMeasureLength()
-{
-	auto iPos = ( intptr_t ) m_dBuf.GetLength();
-	m_dBlobs.Add( iPos );
-	SendInt( 0 );
-	return iPos;
-}
-
-void CachedOutputBuffer_c::CommitMeasuredLength( intptr_t iStoredPos )
-{
-	if ( m_dBlobs.IsEmpty()) // possible if flush happens before APIheader destroyed.
-		return;
-	auto iPos = m_dBlobs.Pop();
-	assert ( iStoredPos==-1 || iStoredPos==iPos );
-	auto iBlobLen = m_dBuf.GetLength() - iPos - sizeof( int );
-	WriteInt( iPos, (int) iBlobLen );
-}
-
-void CachedOutputBuffer_c::CommitAllMeasuredLengths()
-{
-	while ( !m_dBlobs.IsEmpty())
-	{
-		auto uPos = m_dBlobs.Pop();
-		auto iBlobLen = m_dBuf.GetLength() - uPos - sizeof( int );
-		WriteInt( uPos, (int) iBlobLen );
-	}
-}
-
 /// SmartOutputBuffer_t : chain of blobs could be used in scattered sending
 /////////////////////////////////////////////////////////////////////////////
 SmartOutputBuffer_t::~SmartOutputBuffer_t()
 {
 	m_dChunks.Apply( []( ISphOutputBuffer*& pChunk ) {
-		SafeRelease ( pChunk );
+		SafeDelete ( pChunk );
 	} );
-}
-
-int SmartOutputBuffer_t::GetSentCount() const
-{
-	int iSize = 0;
-	m_dChunks.Apply( [ &iSize ]( ISphOutputBuffer*& pChunk ) {
-		iSize += pChunk->GetSentCount();
-	} );
-	return iSize + m_dBuf.GetLength();
 }
 
 void SmartOutputBuffer_t::StartNewChunk()
 {
-	CommitAllMeasuredLengths();
-	assert ( BlobsEmpty());
 	m_dChunks.Add( new ISphOutputBuffer( m_dBuf ));
 	m_dBuf.Reserve( NETOUTBUF );
 }
@@ -633,7 +586,7 @@ size_t SmartOutputBuffer_t::GetIOVec( CSphVector<sphIovec>& dOut ) const
 void SmartOutputBuffer_t::Reset()
 {
 	m_dChunks.Apply( []( ISphOutputBuffer*& pChunk ) {
-		SafeRelease ( pChunk );
+		SafeDelete ( pChunk );
 	} );
 	m_dChunks.Reset();
 	m_dBuf.Reset();

@@ -17,6 +17,10 @@ extern int g_iClientTimeoutS; // from searchd.cpp
 extern volatile bool g_bMaintenance;
 static auto& g_bShutdown = sphGetShutdown ();
 
+static const char g_sContentLength[] = "\r\r\n\nCcOoNnTtEeNnTt--LlEeNnGgTtHh\0";
+static const size_t g_sContentLengthSize = sizeof ( g_sContentLength ) - 1;
+static const char g_sHeadEnd[] = "\r\n\r\n";
+
 struct HttpHeaderStreamParser_t
 {
 	int m_iHeaderEnd = 0;
@@ -27,63 +31,55 @@ struct HttpHeaderStreamParser_t
 	int m_iCRLF = 0;
 	int m_iName = 0;
 
-	bool HeaderFound ( const BYTE * pBuf, int iLen );
-	bool HeaderFound ( ByteBlob_t tPacket );
-};
-
-static const char g_sContentLength[] = "\r\r\n\nCcOoNnTtEeNnTt--LlEeNnGgTtHh\0";
-static const size_t g_sContentLengthSize = sizeof ( g_sContentLength ) - 1;
-static const char g_sHeadEnd[] = "\r\n\r\n";
-
-bool HttpHeaderStreamParser_t::HeaderFound ( const BYTE * pBuf, int iLen )
-{
-	// early exit at for already found request header
-	if ( m_iHeaderEnd || m_iCur>=iLen )
-		return true;
-
-	const int iCNwoLFSize = ( g_sContentLengthSize-5 )/2; // size of just Content-Length field name
-	for ( ; m_iCur<iLen; ++m_iCur )
+	bool HeaderFound ( ByteBlob_t tPacket )
 	{
-		m_iCRLF = ( pBuf[m_iCur]==g_sHeadEnd[m_iCRLF] ? m_iCRLF+1 : 0 );
-		m_iName = ( !m_iFieldContentLenStart
-				&& ( pBuf[m_iCur]==g_sContentLength[m_iName] || pBuf[m_iCur]==g_sContentLength[m_iName+1] )
-				? m_iName+2 : 0 );
+		if ( IsNull ( tPacket ) )
+			return false;
 
-		// header end found
-		if ( m_iCRLF==sizeof(g_sHeadEnd)-1 )
+		auto pBuf = tPacket.first;
+		auto iLen = tPacket.second;
+		// early exit at for already found request header
+		if ( m_iHeaderEnd || m_iCur>=iLen )
+			return true;
+
+		const int iCNwoLFSize = ( g_sContentLengthSize-5 ) / 2; // size of just Content-Length field name
+		for ( ; m_iCur<iLen; ++m_iCur )
 		{
-			m_iHeaderEnd = m_iCur+1;
+			m_iCRLF = ( pBuf[m_iCur]==g_sHeadEnd[m_iCRLF] ? m_iCRLF+1 : 0 );
+			m_iName = ( !m_iFieldContentLenStart
+					&& ( pBuf[m_iCur]==g_sContentLength[m_iName] || pBuf[m_iCur]==g_sContentLength[m_iName+1] )
+					? m_iName+2 : 0 );
+
+			// header end found
+			if ( m_iCRLF==sizeof ( g_sHeadEnd )-1 )
+			{
+				m_iHeaderEnd = m_iCur+1;
+				break;
+			}
+			// Content-Length field found
+			if ( !m_iFieldContentLenStart && m_iName==g_sContentLengthSize-1 )
+				m_iFieldContentLenStart = m_iCur-iCNwoLFSize+1;
+		}
+
+		// parse Content-Length field value
+		while ( m_iHeaderEnd && m_iFieldContentLenStart )
+		{
+			int iNumStart = m_iFieldContentLenStart+iCNwoLFSize;
+			// skip spaces
+			while ( iNumStart<m_iHeaderEnd && pBuf[iNumStart]==' ' )
+				++iNumStart;
+			if ( iNumStart>=m_iHeaderEnd || pBuf[iNumStart]!=':' )
+				break;
+
+			++iNumStart; // skip ':' delimiter
+			m_iFieldContentLenVal = atoi (
+					(const char *) pBuf+iNumStart ); // atoi handles leading spaces and tail not digital chars
 			break;
 		}
-		// Content-Length field found
-		if ( !m_iFieldContentLenStart && m_iName==g_sContentLengthSize-1 )
-			m_iFieldContentLenStart = m_iCur - iCNwoLFSize + 1;
+
+		return ( m_iHeaderEnd>0 );
 	}
-
-	// parse Content-Length field value
-	while ( m_iHeaderEnd && m_iFieldContentLenStart )
-	{
-		int iNumStart = m_iFieldContentLenStart + iCNwoLFSize;
-		// skip spaces
-		while ( iNumStart<m_iHeaderEnd && pBuf[iNumStart]==' ' )
-			++iNumStart;
-		if ( iNumStart>=m_iHeaderEnd || pBuf[iNumStart]!=':' )
-			break;
-
-		++iNumStart; // skip ':' delimiter
-		m_iFieldContentLenVal = atoi ( (const char *)pBuf + iNumStart ); // atoi handles leading spaces and tail not digital chars
-		break;
-	}
-
-	return ( m_iHeaderEnd>0 );
-}
-
-bool HttpHeaderStreamParser_t::HeaderFound ( ByteBlob_t tPacket )
-{
-	if ( IsNull ( tPacket ) )
-		return false;
-	return HeaderFound ( tPacket.first, tPacket.second );
-}
+};
 
 #if 0
 class ThdJobHttp_c::Impl_c

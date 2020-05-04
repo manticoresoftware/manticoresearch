@@ -368,6 +368,23 @@ public:
 		WriteT<int> ( iOff, htonl ( iValue ) );
 	}
 
+	BYTE* ReservePlace ( int64_t iPlace )
+	{
+		auto pRes = m_dBuf.AddN ( iPlace );
+		m_dBuf.Resize ( m_dBuf.Idx(pRes));
+		return pRes;
+	}
+
+	void CommitZeroCopy ( int64_t iSize )
+	{
+		m_dBuf.AddN ( iSize );
+	}
+
+	void Rewind ( int64_t iPos )
+	{
+		m_dBuf.Resize ( iPos );
+	}
+
 	CSphVector<BYTE>	m_dBuf;
 
 	template < typename T > void WriteT ( int64_t iOff, T tValue )

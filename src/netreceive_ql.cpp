@@ -13,6 +13,7 @@
 #include "netreceive_ql.h"
 #include "coroutine.h"
 #include "searchdssl.h"
+#include "compressed_mysql.h"
 
 extern int g_iClientQlTimeoutS;    // sec
 extern volatile bool g_bMaintenance;
@@ -913,7 +914,7 @@ public:
 };
 
 // send MySQL wire protocol handshake packets
-void SendMysqlProtoHandshake ( ISphOutputBuffer& tOut, bool bSsl, DWORD uConnID )
+void SendMysqlProtoHandshake ( ISphOutputBuffer& tOut, bool bSsl, bool bUseCompression, DWORD uConnID )
 {
 	// packed header here (packedID = 0)
 
@@ -946,7 +947,7 @@ void SendMysqlProtoHandshake ( ISphOutputBuffer& tOut, bool bSsl, DWORD uConnID 
 	tOut.SendBytes ( g_sMySQLVersion.scstr(), iLen );
 	tOut.SendLSBDword( uConnID );
 	tOut.SendBytes ( sHandshake2, sizeof ( sHandshake2 )-1 );
-	tOut.SendByte ( uCapatibilities1stByte );
+	tOut.SendByte ( uCapatibilities1stByte | ( bUseCompression ? 0x20U : 0U ) );
 	// fixme! SSL capability must be set only if keys are valid!
 	tOut.SendByte ( uCapatibilities2ndByte | ( bSsl ? 8U : 0U ) );
 	tOut.SendBytes ( sHandshake3, sizeof ( sHandshake3 ) ); // incl. z-terminator
@@ -1093,6 +1094,8 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 	CrashQuery_t tCrashQuery;
 	tCrashQuery.m_bMySQL = true;
 	GlobalCrashQuerySet ( tCrashQuery );
+	bool bUseCompression = IsCompressionAvailable();
+	bool bCliendUseCompression = false;
 
 	// set off query guard on return
 	auto tRestoreCrash = AtScopeExit ( [] { GlobalCrashQuerySet ( CrashQuery_t () ); } );
@@ -1110,7 +1113,7 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 	/// So, no passive probing possible.
 	// send handshake first
 	sphLogDebugv ("Sending handshake...");
-	SendMysqlProtoHandshake ( tOut, CheckWeCanUseSSL (), iCID );
+	SendMysqlProtoHandshake ( tOut, CheckWeCanUseSSL (), bUseCompression, iCID );
 	tOut.Flush();
 	if ( tOut.GetError () )
 	{
@@ -1187,6 +1190,7 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 			// switch to ssl by demand.
 			// You need to set a bit in handshake (g_sMysqlHandshake) in order to suggest client such switching.
 			// Client set this desirable bit only if we say that 'we can' about it before.
+			bCliendUseCompression = tAnswer.first[0] & 0x20U;
 			if ( !tThdesc.m_bSsl && (tAnswer.first[1] & 8) ) // want SSL
 			{
 				tThdesc.m_bSsl = MakeSecureLayer ( pBuf );
@@ -1199,6 +1203,8 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 			tOut.Flush ();
 			bKeepAlive = !tOut.GetError();
 			bAuthed = true;
+			if ( bCliendUseCompression && bUseCompression )
+				MakeMysqlCompressedLayer ( pBuf );
 			continue;
 		}
 

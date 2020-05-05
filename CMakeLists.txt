@@ -577,6 +577,9 @@ if ( WITH_ICU )
 	include ( GetICU )
 endif ( WITH_ICU )
 
+
+find_package(Valgrind)
+
 # Move this flags here to avoid configuration problems
 if ( HAVE_GCC_LIKE AND CMAKE_BUILD_TYPE STREQUAL Debug )
 	OPTION ( COVERAGE_TEST "Test coverage" OFF )

@@ -134,6 +134,9 @@
 /* Define to 1 if you have the <sys/prctl.h> header file. */
 #cmakedefine HAVE_SYS_PRCTL_H ${HAVE_SYS_PRCTL_H}
 
+/* Define to 1 if you have valgrind headers (might be used in coroutines to mark mem as stack). */
+#cmakedefine HAVE_VALGRIND ${HAVE_VALGRIND}
+
 /* whether 2nd arg to iconv() is const ptr */
 #cmakedefine ICONV_INBUF_CONST ${ICONV_INBUF_CONST}
 

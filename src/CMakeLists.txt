@@ -186,6 +186,10 @@ add_dependencies ( libsphinx vergen )
 target_link_libraries(libsphinx ${EXTRA_LIBRARIES})
 diag(EXTRA_LIBRARIES)
 
+if (VALGRIND_FOUND)
+	target_link_libraries(libsphinx valgrind::valgrind)
+endif()
+
 add_library ( lsearchd OBJECT ${SEARCHD_SRCS_TESTABLE} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
 if ( USE_SSL )
 	target_link_libraries ( lsearchd OpenSSL::SSL )

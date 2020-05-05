@@ -10,8 +10,23 @@
 
 #include "coroutine.h"
 #include "sphinxstd.h"
-#include <boost/context/detail/fcontext.hpp>
 #include <atomic>
+
+#ifndef NDEBUG
+#define BOOST_USE_VALGRIND 1
+#endif
+
+#ifdef BOOST_USE_VALGRIND
+#ifndef HAVE_VALGRIND
+#undef BOOST_USE_VALGRIND
+#endif
+#endif
+
+#include <boost/context/detail/fcontext.hpp>
+
+#if BOOST_USE_VALGRIND
+#include <valgrind/valgrind.h>
+#endif
 
 #define LOG_LEVEL_DIAG false
 #define LOG_LEVEL_DEBUGV false
@@ -34,6 +49,10 @@ class CoRoutine_c
 	State_e m_eState = State_e::Paused;
 	Handler m_fnHandler;
 	CSphFixedVector<BYTE> m_dStack;
+
+#if BOOST_USE_VALGRIND
+	unsigned m_uValgrindStackID = 0;
+#endif
 
 	using Ctx_t = fcontext_t;
 	Ctx_t m_tCoroutineContext;
@@ -59,11 +78,21 @@ private:
 public:
 	explicit CoRoutine_c ( Handler fnHandler, size_t iStack=0 ) : m_fnHandler ( std::move ( fnHandler )), m_dStack ( iStack? (int) iStack: g_iStackSize )
 	{
+#if BOOST_USE_VALGRIND
+		m_uValgrindStackID = VALGRIND_STACK_REGISTER( m_dStack.begin(), &m_dStack.Last () );
+#endif
 		m_tCoroutineContext = make_fcontext ( &m_dStack.Last (), m_dStack.GetLength (), [] ( transfer_t pT )
 		{
 			static_cast<CoRoutine_c *>(pT.data)->WorkerLowest ( pT.fctx );
 		} );
 	}
+
+#if BOOST_USE_VALGRIND
+	~CoRoutine_c()
+	{
+		VALGRIND_STACK_DEREGISTER( m_uValgrindStackID );
+	}
+#endif
 
 	void Run ()
 	{

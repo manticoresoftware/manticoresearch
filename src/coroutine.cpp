@@ -194,11 +194,11 @@ private:
 		{
 			CoroGuard_t pThis (this);
 			m_tCoroutine.Run();
-			if ( m_tCoroutine.IsFinished () )
-			{
-				delete this;
-				return;
-			}
+		}
+		if ( m_tCoroutine.IsFinished () )
+		{
+			delete this;
+			return;
 		}
 		ResetEnteredAndReschedule ();
 	}

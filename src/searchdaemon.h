@@ -328,10 +328,14 @@ public:
 
 	void SendLSBDword ( DWORD v )
 	{
+#if USE_LITTLE_ENDIAN
+		SendT <DWORD> (v);
+#else
 		SendByte ( (BYTE)( v & 0xff ) );
 		SendByte ( (BYTE)( (v>>8) & 0xff ) );
 		SendByte ( (BYTE)( (v>>16) & 0xff ) );
 		SendByte ( (BYTE)( (v>>24) & 0xff) );
+#endif
 	}
 
 	void SendUint64 ( uint64_t uValue )
@@ -477,11 +481,12 @@ public:
 	DWORD			GetDword () { return ntohl ( GetT<DWORD> () ); }
 	DWORD			GetLSBDword ()
 	{
-		return
-#if UNALIGNED_RAM_ACCESS && USE_LITTLE_ENDIAN
-		GetT<DWORD> ();
+#if USE_LITTLE_ENDIAN
+		return GetT<DWORD> ();
 #else
-		GetByte() + ( GetByte()<<8 ) + ( GetByte()<<16 ) + ( GetByte()<<24 );
+		BYTE dB[4];
+		GetBytes(dB,4);
+		return dB[0] + ( dB[1]<<8 ) + ( dB[2]<<16 ) + ( dB[3]<<24 );
 #endif
 	}
 

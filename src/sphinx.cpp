@@ -1655,8 +1655,9 @@ bool IndexAlterHelper_c::Alter_AddRemoveAttr ( const CSphSchema & tOldSchema, co
 
 	if ( bAddAttr )
 	{
+		bool bHasFieldLen = ( tNewSchema.GetAttrId_FirstFieldLen()!=-1 );
 		CSphVector<int> dAttrMap;
-		if ( bHadBlobs!=bHaveBlobs )
+		if ( bHadBlobs!=bHaveBlobs || bHasFieldLen )
 			CreateAttrMap ( dAttrMap, tOldSchema, tNewSchema, -1 );
 
 		const CSphColumnInfo * pNewAttr = tNewSchema.GetAttr ( sAttrName.cstr() );
@@ -1664,10 +1665,13 @@ bool IndexAlterHelper_c::Alter_AddRemoveAttr ( const CSphSchema & tOldSchema, co
 
 		while ( pDocinfo < pDocinfoMax )
 		{
-			if ( bHadBlobs==bHaveBlobs )
-				pNextDocinfo = CopyRow ( pDocinfo, dAttrRow.Begin(), pNewAttr, iOldStride );
+			if ( bHadBlobs==bHaveBlobs && !bHasFieldLen )
+				pNextDocinfo = CopyRow ( pDocinfo, dAttrRow.Begin(), iOldStride );
 			else
 				pNextDocinfo = CopyRowAttrByAttr ( pDocinfo, dAttrRow.Begin(), tOldSchema, tNewSchema, dAttrMap, iOldStride );
+
+			if ( !pNewAttr->m_tLocator.IsBlobAttr() )
+				sphSetRowAttr ( dAttrRow.Begin(), pNewAttr->m_tLocator, 0 );
 
 			if ( bBlob && !Alter_IsMinMax ( pDocinfo, iOldStride ) )
 			{
@@ -1731,23 +1735,35 @@ bool IndexAlterHelper_c::Alter_AddRemoveFromSchema ( CSphSchema & tSchema, const
 	bool bBlob = sphIsBlobAttr ( eAttrType );
 	if ( bAdd )
 	{
+		bool bRebuild = false;
 		if ( bBlob && !pBlobLocator )
 		{
+			bRebuild = true;
 			CSphColumnInfo tCol ( sphGetBlobLocatorName() );
 			tCol.m_eAttrType = SPH_ATTR_BIGINT;
 
 			// should be right after docid
 			tSchema.InsertAttr ( 1, tCol, false );
+		}
 
-			// rebuild locators in the schema
+		CSphColumnInfo tInfo ( sAttrName.cstr(), eAttrType );
+		if ( tSchema.GetAttrId_FirstFieldLen()!=-1 )
+		{
+			bRebuild = true;
+			tSchema.InsertAttr ( tSchema.GetAttrId_FirstFieldLen(), tInfo, false );
+		} else
+		{
+			tSchema.AddAttr ( tInfo, false );
+		}
+
+		// rebuild locators in the schema
+		if ( bRebuild )
+		{
 			const char * szTmpColName = "$_tmp";
 			CSphColumnInfo tTmpCol ( szTmpColName, SPH_ATTR_BIGINT );
 			tSchema.AddAttr ( tTmpCol, false );
 			tSchema.RemoveAttr ( szTmpColName, false );
 		}
-
-		CSphColumnInfo tInfo ( sAttrName.cstr(), eAttrType );
-		tSchema.AddAttr ( tInfo, false );
 	} else
 	{
 		tSchema.RemoveAttr ( sAttrName.cstr(), false );
@@ -1792,12 +1808,9 @@ void IndexAlterHelper_c::CreateAttrMap ( CSphVector<int> & dAttrMap, const CSphS
 }
 
 
-const CSphRowitem * IndexAlterHelper_c::CopyRow ( const CSphRowitem * pDocinfo, DWORD * pTmpDocinfo, const CSphColumnInfo * pNewAttr, int iOldStride )
+const CSphRowitem * IndexAlterHelper_c::CopyRow ( const CSphRowitem * pDocinfo, DWORD * pTmpDocinfo, int iOldStride )
 {
 	memcpy ( pTmpDocinfo, pDocinfo, iOldStride*sizeof(DWORD) );
-	if ( !pNewAttr->m_tLocator.IsBlobAttr() )
-		sphSetRowAttr ( pTmpDocinfo, pNewAttr->m_tLocator, 0 );
-
 	return pDocinfo + iOldStride;
 }
 

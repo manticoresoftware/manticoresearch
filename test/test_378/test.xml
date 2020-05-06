@@ -43,6 +43,17 @@ index rt
 	rt_attr_multi = m3
 }
 
+index rt1
+{
+	type = rt
+	path = <data_path/>/rt1
+	rt_field = title
+	rt_attr_uint = attr1
+	rt_attr_uint = attr2
+    index_field_lengths = 1
+}
+
+
 </config>
 
 <db_create>
@@ -63,6 +74,14 @@ CREATE TABLE `test_table` (
 <sphinxql>select * from rt</sphinxql>
 <sphinxql>ALTER TABLE rt drop column m3</sphinxql>
 <sphinxql>select * from rt</sphinxql>
+
+<!-- regression crash on add attribute to index with index_field_lengths (these should be always last for now)  -->
+<sphinxql>INSERT INTO rt1 (id, title, attr1) VALUES (101, 'text', 201)</sphinxql>
+<sphinxql>alter table rt1 add column m11 multi</sphinxql>
+<sphinxql>alter table rt1 add column m12 multi</sphinxql>
+<sphinxql>INSERT INTO rt1 (id, title, m11, m12) VALUES (102, 'text', (), ())</sphinxql>
+<sphinxql>alter table rt1 add column attr3 uint</sphinxql>
+<sphinxql>INSERT INTO rt1 (id, title, m11, attr3) VALUES (103, 'text', (203, 207, 204), 303)</sphinxql>
 </sphqueries>
 
 </test>

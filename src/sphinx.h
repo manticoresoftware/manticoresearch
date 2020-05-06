@@ -3218,7 +3218,7 @@ protected:
 
 private:
 	void				CreateAttrMap ( CSphVector<int> & dAttrMap, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, int iAttrToRemove );
-	const CSphRowitem *	CopyRow ( const CSphRowitem * pDocinfo, DWORD * pTmpDocinfo, const CSphColumnInfo * pNewAttr, int iOldStride );
+	const CSphRowitem *	CopyRow ( const CSphRowitem * pDocinfo, DWORD * pTmpDocinfo, int iOldStride );
 	const CSphRowitem * CopyRowAttrByAttr ( const CSphRowitem * pDocinfo, DWORD * pTmpDocinfo, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, const CSphVector<int> & dAttrMap, int iOldStride );
 };
 

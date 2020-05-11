@@ -4,14 +4,11 @@
 
 Issues that do not follow these guidelines are likely to be closed.
 
-1.  GitHub is not the place for general questions, but reserved for bug reports and feature requests. For general
-    discussion, post a question to [Forum](https://forum.manticoresearch.com) or [Slack](http://slack.manticoresearch.com)
+1.  GitHub is not the place for general questions, but reserved for bug reports and feature requests. For general discussion, post a question to [Forum](https://forum.manticoresearch.com) or [Slack](http://slack.manticoresearch.com)
 
-2.  If you don't understand how smth works check in [interactive courses](https://play.manticoresearch.com)
-    or [documentation](https://docs.manticoresearch.com)
+2.  If you don't understand how smth works check in [interactive courses](https://play.manticoresearch.com) or [documentation](https://docs.manticoresearch.com)
 
-3.  Please fill out EITHER the feature request block or the bug report block
-    below, and delete the other block.
+3.  Please fill out EITHER the feature request block or the bug report block below, and delete the other block.
 
 -->
 

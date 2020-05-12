@@ -209,7 +209,7 @@ void Threads::ThdState ( ThdState_e eState, ThdDesc_t& tThd )
 	tThd.m_tmStart = sphMicroTimer ();
 }
 
-
+// used only when handling crash; so extra locking/copying is not necessary and even dangerous.
 List_t& Threads::GetUnsafeUnlockedUnprotectedGlobalThreadList () NO_THREAD_SAFETY_ANALYSIS
 {
 	return g_dThd;
@@ -220,6 +220,8 @@ CSphSwapVector<ThdPublicInfo_t> Threads::GetGlobalThreadInfos ()
 	ScRL_t dThdLock ( g_tThdLock );
 	CSphSwapVector<ThdPublicInfo_t> dResult;
 	dResult.Reserve ( g_dThd.GetLength ());
+
+	// fixme! refactor.
 	for ( const ListNode_t* pIt = g_dThd.Begin (); pIt!=g_dThd.End (); pIt = pIt->m_pNext )
 		dResult.Add ((( ThdDesc_t* ) pIt )->GetPublicInfo ());
 	return dResult;

@@ -1088,6 +1088,7 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 	tThdesc.m_iConnID = tConn.m_iConnID;
 	tThdesc.m_tmStart = tThdesc.m_tmConnect = sphMicroTimer ();
 	tThdesc.m_iTid = GetOsThreadId ();
+
 	tThd.FinishInit();
 
 	// set off query guard

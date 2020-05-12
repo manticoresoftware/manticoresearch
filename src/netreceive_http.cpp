@@ -321,7 +321,8 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 	// non-vip connections in maintainance should be already rejected on accept
 	assert  ( !g_bMaintenance || tConn.m_bVIP );
 
-	ThdDesc_t tThdesc;
+	ThreadLocal_t tThd;
+	auto & tThdesc = tThd.m_tDesc;
 	tThdesc.m_eProto = Proto_e::HTTP; //< that is default
 	tThdesc.m_iClientSock = tConn.m_iClientSock;
 	tThdesc.m_sClientName = tConn.m_sClientName;
@@ -329,7 +330,7 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 	tThdesc.m_tmStart = tThdesc.m_tmConnect = sphMicroTimer ();
 	tThdesc.m_iTid = GetOsThreadId ();
 
-	ThreadLocal_t tThd ( tThdesc );
+	tThd.FinishInit ();
 
 	// set off query guard
 	CrashQuery_t tCrashQuery;

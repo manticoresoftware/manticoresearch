@@ -1,0 +1,36 @@
+# docker build -t registry.gitlab.com/manticoresearch/dev/centos8_cmake314 .
+
+FROM centos:8
+
+RUN yum install -y \
+	gcc \
+	gcc-c++ \
+	make \
+	git \
+	flex \
+	bison \
+	rpm-build \
+	mariadb-connector-c-devel \
+	expat-devel \
+	postgresql-devel \
+	unixODBC-devel \
+	libicu-devel \
+	systemd-units \
+	boost-devel \
+&& yum clean all \
+&& rm -rf /var/cache/yum \
+&& mkdir /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789
+
+# add cmake as separate layer
+# file taken from https://github.com/Kitware/CMake/releases/download/v3.14.5/cmake-3.14.5-Linux-x86_64.tar.gz
+ADD cmake-3.14.5-Linux-x86_64.tar.gz /
+ENV PATH $PATH:/cmake-3.14.5-Linux-x86_64/bin
+ENV DISTR rhel8
+
+# this huge path need for building debug package (len of source path
+# must be > then len of path where sources will came in debug pkg)
+WORKDIR /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789
+CMD []
+
+
+

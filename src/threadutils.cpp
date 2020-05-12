@@ -134,7 +134,7 @@ ThreadLocal_t::~ThreadLocal_t ()
 
 void ThreadLocal_t::FinishInit()
 {
-	if ( !m_bInitialized )
+	if ( m_bInitialized )
 		return;
 	m_tDesc.AddToGlobal ();
 	m_bInitialized = true;

@@ -186,8 +186,6 @@ CSphString				g_sMySQLVersion = szMANTICORE_VERSION;
 ThreadRole MainThread; // functions which called only from main thread
 ThreadRole HandlerThread; // thread which serves clients
 
-int								g_iConnectionID = 0;		///< global conn-id
-
 //////////////////////////////////////////////////////////////////////////
 
 static CSphString		g_sConfigFile;

@@ -18,7 +18,6 @@
 extern int g_tmWait;
 extern int g_iThrottleAction;
 extern int g_iThrottleAccept;
-extern int g_iConnectionID;        ///< global conn-id
 
 struct Listener_t
 {

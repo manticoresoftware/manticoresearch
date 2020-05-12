@@ -101,6 +101,11 @@ public:
 	int			GetStatsAccept ();
 };
 
+DWORD NextConnectionID()
+{
+	static std::atomic<DWORD> g_iConnectionID { 0 };        ///< global conn-id
+	return ++g_iConnectionID;
+}
 
 NetEvent_e NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * pLoop )
 {
@@ -161,12 +166,7 @@ NetEvent_e NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetL
 		}
 
 		++m_iConnections;
-		int iConnID = ++g_iConnectionID;
-		if ( g_iConnectionID<0 )
-		{
-			g_iConnectionID = 0;
-			iConnID = 0;
-		}
+		int iConnID = NextConnectionID();
 
 		/*
  * Modes of execution:

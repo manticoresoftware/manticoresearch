@@ -8664,7 +8664,7 @@ void BuildStatusOneline ( StringBuilder_c & sOut )
 	<< " Queue:" << GetGlobalQueueSize ()
 	<< " Queries:" << g_tStats.m_iQueries;
 	sOut.Sprintf ( " Wall: %t", (int64_t)g_tStats.m_iQueryTime );
-	sOut.Sprintf ( " CPU: %t", (int64_t)g_tStats.m_iQueryTime );
+	sOut.Sprintf ( " CPU: %t", (int64_t)g_tStats.m_iQueryCpuTime );
 }
 
 void BuildOneAgentStatus ( VectorLike & dStatus, HostDashboard_t* pDash, const char * sPrefix="agent" )

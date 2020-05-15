@@ -446,13 +446,10 @@ Waiter_t DefferedRestarter ()
 	} );
 }
 
-void WaitForDeffered ( Waiter_t&& dWaiter, Handler fnCleanup )
+void WaitForDeffered ( Waiter_t&& dWaiter )
 {
 	// do nothing. Moved dWaiter will be released outside the coro after yield.
-	CoYieldWith ( [capturedWaiter = std::move ( dWaiter ), &fnCleanup ] {
-		if ( fnCleanup )
-			fnCleanup();
-	} );
+	CoYieldWith ( [capturedWaiter = std::move ( dWaiter ) ] {} );
 }
 }
 

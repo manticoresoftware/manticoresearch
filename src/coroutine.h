@@ -82,8 +82,8 @@ Handler CurrentRestarter ();
 // Returns smart pointer, which will issue rescheduling of current coro on destroy.
 Waiter_t DefferedRestarter();
 
-// yield, then execute passed fnCleanup and release passed waiter.
-void WaitForDeffered ( Waiter_t&&, Handler fnCleanup=nullptr );
+// yield, then release passed waiter.
+void WaitForDeffered ( Waiter_t&& );
 
 // set to 1 for manual testing/debugging in single thread and predefined sequence of chunks
 #define MODELING 0

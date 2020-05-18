@@ -4220,14 +4220,13 @@ CSphHitMarker * CSphHitMarker::Create ( const XQNode_t * pRoot, const ISphQwordS
 	if ( pRoot )
 		pNode = ExtNode_i::Create ( pRoot, tSetup, false );
 
-	if ( !pRoot || pNode )
-	{
-		CSphHitMarker * pMarker = new CSphHitMarker;
-		pMarker->m_pRoot = pNode;
-		pMarker->m_pRoot->SetCollectHits();
-		return pMarker;
-	}
-	return nullptr;
+	if ( !pNode )
+		return nullptr;
+
+	CSphHitMarker * pMarker = new CSphHitMarker;
+	pMarker->m_pRoot = pNode;
+	pMarker->m_pRoot->SetCollectHits();
+	return pMarker;
 }
 
 

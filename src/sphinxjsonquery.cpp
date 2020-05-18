@@ -244,7 +244,7 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 	JsonObj_c tRoot ( szQuery );
 
 	// take only the first item of the query; ignore the rest
-	int iNumIndexes = tRoot.Size();
+	int iNumIndexes = ( tRoot.Empty() ? 0 : tRoot.Size() );
 	if ( !iNumIndexes )
 	{
 		tParsed.m_sParseError = "\"query\" property is empty";

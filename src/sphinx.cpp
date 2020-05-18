@@ -1953,6 +1953,7 @@ public:
 	RowID_t				GetRowidByDocid ( DocID_t tDocID ) const;
 	int					Kill ( DocID_t tDocID ) final;
 	int					KillMulti ( const VecTraits_T<DocID_t> & dKlist ) final;
+	bool				IsAlive ( DocID_t tDocID ) const final;
 
 	const CSphSourceStats &		GetStats () const final { return m_tStats; }
 	int64_t *			GetFieldLens() const final { return m_tSettings.m_bIndexFieldLens ? m_dFieldLens.begin() : nullptr; }
@@ -12790,6 +12791,15 @@ int	CSphIndex_VLN::Kill ( DocID_t tDocID )
 	}
 
 	return 0;
+}
+
+bool CSphIndex_VLN::IsAlive ( DocID_t tDocID ) const
+{
+	RowID_t tRow = GetRowidByDocid ( tDocID );
+	if ( tRow==INVALID_ROWID )
+		return false;
+
+	return ( !m_tDeadRowMap.IsSet ( tRow ) );
 }
 
 

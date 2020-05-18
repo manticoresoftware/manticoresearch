@@ -3363,6 +3363,7 @@ public:
 	virtual bool				AlterKillListTarget ( KillListTargets_c & tTargets, CSphString & sError ) { return false; }
 	virtual void				KillExistingDocids ( CSphIndex * pTarget ) {}
 	int							KillMulti ( const VecTraits_T<DocID_t> & dKlist ) override { return 0; }
+	virtual bool				IsAlive ( DocID_t tDocID ) const { return false; }
 
 	bool						GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const override { return false; }
 	int							GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const override { return -1; }

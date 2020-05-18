@@ -1088,6 +1088,7 @@ public:
 
 	int					Kill ( DocID_t tDocID ) final;
 	int					KillMulti ( const VecTraits_T<DocID_t> & dKlist ) final;
+	bool				IsAlive ( DocID_t tDocID ) const final;
 
 	int					Build ( const CSphVector<CSphSource*> & , int , int ) final { return 0; }
 	bool				Merge ( CSphIndex * , const CSphVector<CSphFilterSettings> &, bool ) final { return false; }
@@ -1549,6 +1550,15 @@ bool RtIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFiel
 				return false; // already exists and not deleted; INSERT fails
 			}
 		}
+		for ( const auto & pChunk : tGuard.m_dDiskChunks )
+		{
+			if ( pChunk->IsAlive ( tDocID ) )
+			{
+				sError.SetSprintf ( "duplicate id '" INT64_FMT "'", tDocID );
+				return false; // already exists and not deleted; INSERT fails
+			}
+		}
+
 	}
 
 	auto pAcc = ( RtAccum_t * ) AcquireAccum ( m_pDict, pAccExt, m_bKeywordDict, true, &sError );
@@ -7923,6 +7933,11 @@ int RtIndex_c::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 	return 0;
 }
 
+bool RtIndex_c::IsAlive ( DocID_t tDocID ) const
+{
+	assert ( 0 && "No external kills for RT");
+	return false;
+}
 
 uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
 {

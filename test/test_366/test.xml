@@ -59,6 +59,17 @@ index rt_mem
 <sphinxql>REPLACE INTO rt_mem ( id, text ) VALUES ( 11, 'test me' ),( 12, 'test framework' ),( 13, 'our test framework' ),( 14, 'best test solution' )</sphinxql>
 <sphinxql>SHOW INDEX rt_mem STATUS LIKE 'disk_chunks'</sphinxql>
 
+<!-- regression insert passed after disk chunk flush -->
+<sphinxql>INSERT INTO rt ( id, text, idd ) VALUES ( 1, 'test all', 11 )</sphinxql>
+<sphinxql>flush ramchunk rt</sphinxql>
+<sphinxql>INSERT INTO rt ( id, text, idd ) VALUES ( 1, 'test all', 11 )</sphinxql>
+<sphinxql>INSERT INTO rt ( id, text, idd ) VALUES ( 5, 'test all', 11 )</sphinxql>
+<sphinxql>flush ramchunk rt</sphinxql>
+<sphinxql>INSERT INTO rt ( id, text, idd ) VALUES ( 6, 'test all', 11 )</sphinxql>
+<sphinxql>flush ramchunk rt</sphinxql>
+<sphinxql>INSERT INTO rt ( id, text, idd ) VALUES ( 1, 'test all', 11 )</sphinxql>
+<sphinxql>select id, idd from rt order by id asc</sphinxql>
+
 </sphqueries>
 
 </test>

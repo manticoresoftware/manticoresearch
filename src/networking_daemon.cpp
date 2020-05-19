@@ -361,7 +361,7 @@ class SockWrapper_c::Impl_c final : public ISphNetAction
 	friend class SockWrapper_c;
 	CSphNetLoop * m_pNetLoop;
 	Handler m_fnRestart = nullptr;
-	bool m_bKeep;
+	bool m_bKeep;		// whether to keep socket as is on destroy, or close it.
 
 	Impl_c ( int iSocket, bool bKeep, CSphNetLoop * pNetLoop );
 	~Impl_c () final;
@@ -410,7 +410,7 @@ void SockWrapper_c::Impl_c::EngageWaiterAndYield ( int64_t tmTimeUntilUs )
 	sphLogDebugv ( "CoYieldWith (m_iEvent=%d), timeout %d", m_uNetEvents, int(tmTimeUntilUs-sphMicroTimer ()) );
 	m_iTimeoutTimeUS = tmTimeUntilUs;
 	m_fnRestart = Threads::CurrentRestarter ();
-	Threads::CoYieldWith ( [this] { m_pNetLoop->AddAction ( this ); } );
+	Threads::CoYieldWith ( [this] { if (m_pNetLoop) m_pNetLoop->AddAction ( this ); } );
 	sphLogDebugv ( "EngageWaiterAndYield awake (m_iSock=%d, events=%d)", m_iSock, m_uNetEvents );
 }
 

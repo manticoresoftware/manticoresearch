@@ -214,7 +214,7 @@ create table test_table1
 (
 	id int not null,
 	gid int not null,
-	title varchar(16384) not null
+	title varchar(8192) not null
 );
 </db_create>
 <db_create>
@@ -244,7 +244,7 @@ create table table_hits
 create table table_inline2
 (
 	id int not null,
-	title varchar(21000) not null
+	title text not null
 ) ENGINE=MYISAM;
 </db_create>
 <db_create>

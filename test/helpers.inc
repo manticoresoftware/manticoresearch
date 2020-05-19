@@ -209,13 +209,16 @@ function LegacyConnectDB ()
 	return $conn;
 }
 
-function LegacyCreateDB ( $db_drop, $db_create, $db_insert, $custom_insert )
+function LegacyCreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, &$error )
 {
 	$conn = LegacyConnectDB();
 
 	foreach ( $db_drop as $q )
 		if ( !legacy_mysql_wr ( $q, $conn ) )
-			return false;
+		{
+            $error = mysqli_error($conn);
+            return false;
+		}
 
 	foreach ( $db_create as $q )
 	{
@@ -227,8 +230,12 @@ function LegacyCreateDB ( $db_drop, $db_create, $db_insert, $custom_insert )
 				$q .= " ENGINE=MEMORY";
 			}
 		}
+
 		if ( !legacy_mysql_wr ( $q, $conn ) )
-			return false;
+		{
+            $error = mysqli_error($conn);
+            return false;
+		}
 	}
 
 	$oneok = count($db_insert)==0;
@@ -248,7 +255,7 @@ function LegacyCreateDB ( $db_drop, $db_create, $db_insert, $custom_insert )
 	return $conn;
 }
 
-function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip )
+function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip, &$error )
 {
 	if ($skip)
 		return ConnectDB();
@@ -263,8 +270,9 @@ function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip )
 	global $mysql_simulated;
 	if ( count($custom_insert)>0 )
 	{
-		$conn = LegacyCreateDB ( $db_drop, $db_create, $db_insert, $custom_insert );
-		if (!$mysql_simulated) {
+		$conn = LegacyCreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $error );
+		if ( !$mysql_simulated )
+		{
 			@mysql_close($conn);
 			$conn = ConnectDB();
 		}
@@ -275,7 +283,10 @@ function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip )
 
 	foreach ( $db_drop as $q )
 		if ( !mysqli_wr ( $q, $conn ) )
-			return false;
+		{
+            $error = mysqli_error($conn);
+            return false;
+		}
 
 	foreach ( $db_create as $q )
 	{
@@ -288,7 +299,10 @@ function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip )
 			}
 		}
 		if ( !mysqli_wr ( $q, $conn ) )
-			return false;
+		{
+            $error = mysqli_error($conn);
+            return false;
+		}
 	}
 
 	$oneok = count($db_insert)==0;
@@ -298,7 +312,6 @@ function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip )
 
 	if ( !$oneok )
 		return false;
-
 
 	return $conn;
 }
@@ -510,7 +523,7 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 		// FIXME! add a better check that searchd is still alive than just file_exists
 		for ( $i=0; $i<$STARTUP_TRIES && file_exists($abs_pidfile); $i++ )
 		{
-			$pid = file($abs_pidfile);
+			$pid = @file($abs_pidfile);
 			if ( count($pid) )
 				break;
 			usleep ( $STARTUP_TICK );
@@ -602,7 +615,7 @@ function RestartDaemon ()
 
 function KillSearchd ( $config, $pidfile, $signal, $unlinkpid=True )
 {
-	global $windows, $action_wait_timeout;
+	global $action_wait_timeout;
 
 	$abs_pidfile = testdir($pidfile);
 	
@@ -612,10 +625,8 @@ function KillSearchd ( $config, $pidfile, $signal, $unlinkpid=True )
 		$pid = fread ( $fp, filesize ( $abs_pidfile ) );
 		fclose ($fp);
 
-		if ( $windows )
-			exec ("kill -f -s $signal $pid");
-		else
-			exec ("kill -s $signal $pid");
+		exec ("kill -s $signal $pid");
+
 		if ( $unlinkpid && file_exists ( $abs_pidfile ) )
 		{
 			usleep ( $action_wait_timeout );
@@ -636,7 +647,7 @@ function RandomWords ( $n, $seed )
 	$words = [];
 	for ( $k=0; $k<$n; $k++ )
 		$words[] = substr ( str_shuffle ( 'abcdefghijklmnopqrstuvwxyz' ), 0, 5 );
-	return join ( $words, " " );
+	return join ( " ", $words );
 }
 
 function RoundFloatValues ( &$values, $roundoff )
@@ -2645,16 +2656,20 @@ class SphinxConfig
 
 		// format header
 		$qinfo = @$this->_queries[$nquery-1];
-		if ( @array_key_exists ( "index", $qinfo ) && $qinfo ["index"] != '*' )
-			$str = "--- Query $nquery (mode=$qinfo[mode_s],ranker=$qinfo[ranker_s],index=$qinfo[index]) ---\n";
-		else
-			$str = "--- Query $nquery (mode=$qinfo[mode_s],ranker=$qinfo[ranker_s]) ---\n";
+		$str = "";
+		if ( $qinfo )
+		{
+			if ( @array_key_exists ( "index", $qinfo ) && $qinfo ["index"] != '*' )
+				$str .= "--- Query $nquery (mode=$qinfo[mode_s],ranker=$qinfo[ranker_s],index=$qinfo[index]) ---\n";
+			else
+				$str .= "--- Query $nquery (mode=$qinfo[mode_s],ranker=$qinfo[ranker_s]) ---\n";
 
-		if ( @$qinfo["groupattr"] )
-			$str .= "GroupBy: attr: '".$qinfo["groupattr"]."' func: '".$qinfo["groupfunc_s"]."' sort: '".$qinfo["groupsort"]."'\n";
+			if ( @$qinfo["groupattr"] )
+				$str .= "GroupBy: attr: '".$qinfo["groupattr"]."' func: '".$qinfo["groupfunc_s"]."' sort: '".$qinfo["groupsort"]."'\n";
 
-		if ( @$qinfo["sortmode"] == SPH_SORT_EXPR )
-			$str .= "Sort: expr: ".$qinfo["sortby"]."\n";
+			if ( @$qinfo["sortmode"] == SPH_SORT_EXPR )
+				$str .= "Sort: expr: ".$qinfo["sortby"]."\n";
+		}
 
 		$str .= @"Query '$result[query]': retrieved $result[total_found] of $result[total] matches in $result[time] sec.\n";
 		if ( @array_key_exists ( "error", $result ) && $result["error"] )
@@ -2805,8 +2820,6 @@ class SphinxConfig
 	/// write difference from the reference result sets
 	function WriteReferenceResultsDiff ( $fp )
 	{
-		global $windows;
-
 		$nquery = 0;
 		if ( !is_array ( $this->_results_model [ $this->SubtestNo() ] ) )
 			return;
@@ -3791,10 +3804,10 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 
 	if ( $config->IsNeedDB() )
 	{
-		$connection = CreateDB ( $config->DB_Drop(), $config->DB_Create(), $config->DB_Insert(), $config->DB_CustomInsert(), $sd_skip_indexer );
+		$connection = CreateDB ( $config->DB_Drop(), $config->DB_Create(), $config->DB_Insert(), $config->DB_CustomInsert(), $sd_skip_indexer, $error );
 		if ( $connection === false )
 		{
-			printf ( "$prefix FAILED, error creating test DB" );
+			printf ( "$prefix FAILED, error creating test DB: " . $error );
 			return;
 		}
 		$config->SetConnection($connection);

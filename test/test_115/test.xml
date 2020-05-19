@@ -126,7 +126,7 @@ index idx2
 CREATE TABLE test_table
 (
 	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
-	title VARCHAR(16384) NOT NULL
+	title VARCHAR(4096) NOT NULL
 );
 </db_create>
 <db_insert>

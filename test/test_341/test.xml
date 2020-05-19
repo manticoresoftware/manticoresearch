@@ -65,7 +65,7 @@ function RandomWordsTest341 ( $n, $seed )
 	$words = [];
 	for ( $k=0; $k<$n; $k++ )
 		$words[] = substr ( str_shuffle ( 'abcdefghijklmnopqrstuvwxyz' ), 0, 5 );
-	return join ( $words, " " );
+	return join ( " ", $words );
 }
 
 $results = array();

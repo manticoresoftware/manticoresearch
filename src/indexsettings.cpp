@@ -1053,7 +1053,11 @@ StrVec_t IndexSettingsContainer_c::GetFiles() const
 		dFiles.Add(i);
 
 	for ( const auto & i : m_dWordformFiles )
-		dFiles.Add(i);
+	{
+		StrVec_t dFilesFound = FindFiles ( i.cstr() );
+		for ( const auto & j : dFilesFound )
+			dFiles.Add(j);
+	}
 
 	return dFiles;
 }

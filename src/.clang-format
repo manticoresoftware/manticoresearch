@@ -1,7 +1,7 @@
 # Manual on options are here: https://clang.llvm.org/docs/ClangFormatStyleOptions.html
 ---
 Language:        Cpp
-Standard:        Cpp11
+Standard: c++11
 Cpp11BracedListStyle: true
 ColumnLimit:     120
 IndentWidth:     4
@@ -19,15 +19,15 @@ AlignOperands:   true
 AlignTrailingComments: true
 
 AllowAllParametersOfDeclarationOnNextLine: false
-AllowShortBlocksOnASingleLine: true
+AllowShortBlocksOnASingleLine: Empty
 AllowShortCaseLabelsOnASingleLine: true
 AllowShortFunctionsOnASingleLine: Inline
-AllowShortIfStatementsOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
 
 AlwaysBreakAfterReturnType: None
 AlwaysBreakBeforeMultilineStrings: false
-AlwaysBreakTemplateDeclarations: Yes
+AlwaysBreakTemplateDeclarations: MultiLine
 
 ExperimentalAutoDetectBinPacking: true
 BinPackArguments: true
@@ -35,11 +35,12 @@ BinPackParameters: true
 
 BreakBeforeBraces: Custom
 BraceWrapping:
+  AfterCaseLabel: false
   AfterClass:      true
   AfterStruct:     true
   AfterUnion:      false
   SplitEmptyRecord: true
-  AfterControlStatement: true
+  AfterControlStatement: MultiLine
   AfterEnum:       false
   AfterFunction:   true
   SplitEmptyFunction: false
@@ -54,7 +55,7 @@ BreakBeforeInheritanceComma: true
 BreakInheritanceList: AfterColon
 BreakBeforeTernaryOperators: true
 BreakConstructorInitializersBeforeComma: false
-BreakConstructorInitializers: BeforeColon
+BreakConstructorInitializers: BeforeComma
 BreakStringLiterals: false
 
 CommentPragmas:  '^ IWYU pragma:'
@@ -80,7 +81,7 @@ IncludeCategories:
     Priority:        10
 IncludeIsMainRegex: '^gtests_'
 IndentCaseLabels: false
-IndentPPDirectives: None
+IndentPPDirectives: BeforeHash
 
 IndentWrappedFunctionNames: true
 KeepEmptyLinesAtTheStartOfBlocks: false
@@ -88,7 +89,7 @@ KeepEmptyLinesAtTheStartOfBlocks: false
 MacroBlockBegin: ''
 MacroBlockEnd:   ''
 MaxEmptyLinesToKeep: 2
-NamespaceIndentation: Inner
+NamespaceIndentation: None
 
 PenaltyBreakAssignment: 2
 PenaltyBreakBeforeFirstCallParameter: 19
@@ -113,7 +114,7 @@ SpaceAfterTemplateKeyword: false
 SpaceBeforeCpp11BracedList: true
 SpaceBeforeCtorInitializerColon: true
 SpaceBeforeInheritanceColon: false
-SpaceBeforeParens: Always
+SpaceBeforeParens: NonEmptyParentheses
 SpacesInParentheses: true
 SpaceBeforeRangeBasedForLoopColon: true
 SpaceInEmptyParentheses: false

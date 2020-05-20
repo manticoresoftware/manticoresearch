@@ -1789,7 +1789,7 @@ class SphinxConfig
 	}
 
 
-	function RemovePathsFromExtFiles ( $query )
+	function RemovePathsFromExtFiles ( &$query )
 	{
 		$lower_query = strtolower ( trim ( $query ) );
 
@@ -1820,14 +1820,16 @@ class SphinxConfig
 			}
 
 			$result_str.= substr ( $query, $prev_offset );
-			return $result_str;
+			$query = $this->FixupAgentAddress($result_str);
+
+			return true;
 		}
 
-		return $query;
+		return false;
 	}
 
 
-	function RemovePathsFromImportTable ( $query )
+	function RemovePathsFromImportTable ( &$query )
 	{
 		$lower_query = strtolower ( trim ( $query ) );
 
@@ -1848,19 +1850,24 @@ class SphinxConfig
 			}
 
 			$result_str.= substr ( $query, $prev_offset );
-			return $result_str;
+			$query = $this->FixupAgentAddress($result_str);
+
+			return true;
 		}
 
-		return $query;
+		return false;
 	}
 
 
-	function PostprocessDDL ( $query )
+	function PostprocessDDL ( &$query )
 	{
-		$query = $this->RemovePathsFromExtFiles($query);
-		$query = $this->RemovePathsFromImportTable($query);
-		$query = $this->FixupAgentAddress($query);
-		return $query;
+		if ( $this->RemovePathsFromExtFiles($query) )
+			return true;
+
+		if ( $this->RemovePathsFromImportTable($query) )
+			return true;
+
+		return false;
 	}
 
 	function PostprocessQlResult ( $query, &$query_result, $connection, $no_time )
@@ -1868,12 +1875,16 @@ class SphinxConfig
 		$result = mysqli_wr ($query,$connection);
 		if ($result===true)
 		{
-			$query_result["sphinxql"] = $this->PostprocessDDL($query);
+			if ( $this->PostprocessDDL($query) )
+				$query_result["sphinxql"] = $query;
+
 			$query_result["total_affected"] = mysqli_affected_rows($connection);
 		}
 		else if ($result===false)
 		{
-			$query_result["sphinxql"] = $this->PostprocessDDL($query);
+			if ( $this->PostprocessDDL($query) )
+				$query_result["sphinxql"] = $query;
+
 			$query_result["error"] = $this->FixupErrorMessage ( mysqli_error( $connection ) );
 			$query_result["errno"] = mysqli_errno( $connection );
 
@@ -1896,7 +1907,8 @@ class SphinxConfig
 			if ( isset ( $query_result["rows"] ) && isset ( $query_result["rows"][0] ) && isset ( $query_result["rows"][0]["Create Table"] ) )
 			{
 				$create_res = $query_result["rows"][0]["Create Table"];
-				$query_result["rows"][0]["Create Table"] = $this->PostprocessDDL($create_res);
+				if ( $this->PostprocessDDL($create_res) )
+					$query_result["rows"][0]["Create Table"] = $create_res;
 			}
 		}
 	}

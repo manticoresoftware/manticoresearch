@@ -142,7 +142,6 @@ void DdlParser_c::AddCreateTableOption ( const SqlNode_t & tName, const SqlNode_
 	ToString ( tOpt.m_sName, tName );
 	tOpt.m_sValue = ToStringUnescape(tValue);
 	tOpt.m_sName.ToLower();
-	tOpt.m_sValue.ToLower();
 }
 
 

@@ -98,6 +98,10 @@ searchd
 <sphinxql>drop table pq1</sphinxql>
 <sphinxql>drop table pq2</sphinxql>
 
+<sphinxql>create table test1(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'</sphinxql>
+<sphinxql>show create table test1</sphinxql>
+<sphinxql>drop table test1</sphinxql>
+
 </sphqueries>
 
 </test>

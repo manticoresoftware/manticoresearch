@@ -458,11 +458,11 @@ void CSphDictSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * 
 	CSphString sStopwordsFile = FormatPath ( m_sStopwords, pFilenameBuilder );
 	tOut.Add ( "stopwords",				sStopwordsFile,		!sStopwordsFile.IsEmpty() );
 
+	StringBuilder_c sAllWordforms(" ");
 	for ( const auto & i : m_dWordforms )
-	{
-		CSphString sWordformsFile = FormatPath ( i, pFilenameBuilder );
-		tOut.Add ( "wordforms",	sWordformsFile, !sWordformsFile.IsEmpty() );
-	}
+		sAllWordforms << FormatPath ( i, pFilenameBuilder );
+
+	tOut.Add ( "wordforms",	sAllWordforms.cstr(), !sAllWordforms.IsEmpty() );
 }
 
 

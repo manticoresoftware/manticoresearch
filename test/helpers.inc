@@ -615,7 +615,7 @@ function RestartDaemon ()
 
 function KillSearchd ( $config, $pidfile, $signal, $unlinkpid=True )
 {
-	global $action_wait_timeout;
+	global $action_wait_timeout, $windows;
 
 	$abs_pidfile = testdir($pidfile);
 	
@@ -625,7 +625,10 @@ function KillSearchd ( $config, $pidfile, $signal, $unlinkpid=True )
 		$pid = fread ( $fp, filesize ( $abs_pidfile ) );
 		fclose ($fp);
 
-		exec ("kill -s $signal $pid");
+		if ( $windows )
+			exec ("kill -f -s $signal $pid");
+		else
+			exec ("kill -s $signal $pid");
 
 		if ( $unlinkpid && file_exists ( $abs_pidfile ) )
 		{
@@ -1785,13 +1788,14 @@ class SphinxConfig
 		return true;
 	}
 
-	function PostprocessDDL ( $query, &$query_result )
+
+	function RemovePathsFromExtFiles ( $query )
 	{
-		$query = strtolower ( trim ( $query ) );
+		$lower_query = strtolower ( trim ( $query ) );
 
 		$create_table = "create table";
 		$alter_table = "alter table";
-		if ( StrBegins ( $query, $create_table ) || StrBegins ( $query, $alter_table) )
+		if ( StrBegins ( $lower_query, $create_table ) || StrBegins ( $lower_query, $alter_table ) )
 		{
 			$matches = array();
 			$preg = preg_match_all ( "/(?:(?:wordforms|stopwords|exceptions)[ \t]*=[ \t]*)'([^']+)'/", $query, $matches, PREG_OFFSET_CAPTURE );
@@ -1800,22 +1804,35 @@ class SphinxConfig
 			$prev_offset = 0;
 			foreach ( $matches[1] as $entry )
 			{
+				$paths = explode (' ', $entry[0]);
+
+				$replacement = '';
+				foreach ( $paths as $single_path )
+				{
+					if ( strlen($replacement) )
+						$replacement .=' ';
+					$replacement .= basename($single_path);
+				}
+
 				$result_str.= substr ( $query, $prev_offset, $entry[1]-$prev_offset );
-				$replacement = basename($entry[0]);
 				$result_str.= $replacement;
 				$prev_offset = $entry[1] + strlen($entry[0]);
 			}
 
 			$result_str.= substr ( $query, $prev_offset );
-			$query_result["sphinxql"] = $result_str;
-
-			$query = $result_str;
-			$query = $this->FixupAgentAddress ( $query );
-			$query_result["sphinxql"] = $query;
+			return $result_str;
 		}
 
+		return $query;
+	}
+
+
+	function RemovePathsFromImportTable ( $query )
+	{
+		$lower_query = strtolower ( trim ( $query ) );
+
 		$import_table = "import table";
-		if ( StrBegins ( $query, $import_table ) )
+		if ( StrBegins ( $lower_query, $import_table ) )
 		{
 			$matches = array();
 			$preg = preg_match_all ( "/(?:.*)'([^']+)'/", $query, $matches, PREG_OFFSET_CAPTURE );
@@ -1831,12 +1848,19 @@ class SphinxConfig
 			}
 
 			$result_str.= substr ( $query, $prev_offset );
-			$query_result["sphinxql"] = $result_str;
-
-			$query = $result_str;
-			$query = $this->FixupAgentAddress ( $query );
-			$query_result["sphinxql"] = $query;
+			return $result_str;
 		}
+
+		return $query;
+	}
+
+
+	function PostprocessDDL ( $query )
+	{
+		$query = $this->RemovePathsFromExtFiles($query);
+		$query = $this->RemovePathsFromImportTable($query);
+		$query = $this->FixupAgentAddress($query);
+		return $query;
 	}
 
 	function PostprocessQlResult ( $query, &$query_result, $connection, $no_time )
@@ -1844,12 +1868,12 @@ class SphinxConfig
 		$result = mysqli_wr ($query,$connection);
 		if ($result===true)
 		{
-			$this->PostprocessDDL ( $query, $query_result );
+			$query_result["sphinxql"] = $this->PostprocessDDL($query);
 			$query_result["total_affected"] = mysqli_affected_rows($connection);
 		}
 		else if ($result===false)
 		{
-			$this->PostprocessDDL ( $query, $query_result );
+			$query_result["sphinxql"] = $this->PostprocessDDL($query);
 			$query_result["error"] = $this->FixupErrorMessage ( mysqli_error( $connection ) );
 			$query_result["errno"] = mysqli_errno( $connection );
 
@@ -1872,7 +1896,7 @@ class SphinxConfig
 			if ( isset ( $query_result["rows"] ) && isset ( $query_result["rows"][0] ) && isset ( $query_result["rows"][0]["Create Table"] ) )
 			{
 				$create_res = $query_result["rows"][0]["Create Table"];
-				$query_result["rows"][0]["Create Table"] = $this->FixupAgentAddress ( $create_res );
+				$query_result["rows"][0]["Create Table"] = $this->PostprocessDDL($create_res);
 			}
 		}
 	}

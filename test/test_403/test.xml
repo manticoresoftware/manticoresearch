@@ -47,6 +47,17 @@ searchd
 <sphinxql>create table movies(title text, year int) morphology='stem_en' html_strip='1' stopwords='<this_test/>/stops.txt' bigram_index='1'</sphinxql>
 <sphinxql>show tables</sphinxql>
 
+<sphinxql>create table test1 (title text) wordforms = 'wrong.file' wordforms = '<this_test/>/wordforms.txt <this_test/>/wordforms2.txt'</sphinxql>
+<sphinxql>show create table test1</sphinxql>
+<sphinxql>create table test2 like test1</sphinxql>
+<sphinxql>show create table test2</sphinxql>
+<sphinxql>insert into test2 values (1,'word form')</sphinxql>
+<sphinxql>insert into test2 values (2,'word1 form1')</sphinxql>
+<sphinxql>select * from test2 where match('wordform')</sphinxql>
+<sphinxql>select * from test2 where match('wordform1')</sphinxql>
+<sphinxql>drop table test1</sphinxql>
+<sphinxql>drop table test2</sphinxql>
+
 </sphqueries>
 
 </test>

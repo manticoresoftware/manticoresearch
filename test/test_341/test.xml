@@ -84,7 +84,7 @@ foreach ( $docs as $k=>$v )
 		$id++;
 	}
 	
-	$sql = sprintf ( "insert into rt (id, title, text, idd) values\n %s", join ( $rows, ",\n  " ) );
+	$sql = sprintf ( "insert into rt (id, title, text, idd) values\n %s", join ( ",\n  ", $rows ) );
 	$results[] = $ql->Query ( $sql );
 	$results[] = $ql->Query ( "flush ramchunk rt" );
 	$results[] = "\n" . 'flushed ' . $id;
@@ -106,7 +106,7 @@ foreach ( $docs as $k=>$v )
 		$id++;
 	}
 	
-	$sql = sprintf ( "replace into rt (id, title, text, idd) values\n %s", join ( $rows, ",\n  " ) );
+	$sql = sprintf ( "replace into rt (id, title, text, idd) values\n %s", join ( ",\n  ", $rows ) );
 	$results[] = $ql->Query ( $sql );
 	$results[] = $ql->Query ( "flush ramchunk rt" );
 	$results[] = "\n" . 'flushed ' . $id;

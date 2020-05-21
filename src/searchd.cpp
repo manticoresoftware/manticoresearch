@@ -211,10 +211,15 @@ static auto& g_bGotSigterm		= sphGetGotSigterm();	// we just received SIGTERM; n
 static auto& g_bGotSigusr1		= sphGetGotSigusr1();	// we just received SIGUSR1; need to reopen logs
 
 // pipe to watchdog to inform that daemon is going to close, so no need to restart it in case of crash
-static CSphLargeBuffer<DWORD, true>	g_bDaemonAtShutdown;
+struct SharedData_t
+{
+	bool m_bDaemonAtShutdown;
+	bool m_bHaveTTY;
+};
+
+static SharedData_t* g_pShared = nullptr;
 static auto&					g_bShutdown = sphGetShutdown();
 volatile bool					g_bMaintenance = false;
-static CSphLargeBuffer<DWORD, true>	g_bHaveTTY;
 
 GuardedHash_c *								g_pLocalIndexes = new GuardedHash_c();	// served (local) indexes hash
 GuardedHash_c *								g_pDistIndexes = new GuardedHash_c ();    // distributed indexes hash
@@ -260,8 +265,8 @@ static CSphQueryResultMeta		g_tLastMeta GUARDED_BY ( g_tLastMetaLock );
 
 void ReleaseTTYFlag()
 {
-	if ( !g_bHaveTTY.IsEmpty() )
-		*g_bHaveTTY.GetWritePtr() = 1;
+	if ( g_pShared )
+		g_pShared->m_bHaveTTY = true;
 }
 
 
@@ -673,10 +678,8 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 #endif
 	bool bAttrsSaveOk = true;
 	g_bShutdown = true;
-	if ( !g_bDaemonAtShutdown.IsEmpty() )
-	{
-		*g_bDaemonAtShutdown.GetWritePtr() = 1;
-	}
+	if ( g_pShared )
+		g_pShared->m_bDaemonAtShutdown = true;
 
 #if !USE_WINDOWS
 	// stopwait handshake
@@ -18023,14 +18026,17 @@ void ShowHelp ()
 }
 
 
-void InitSharedBuffer ( CSphLargeBuffer<DWORD, true> & tBuffer )
+void InitSharedBuffer ()
 {
-	CSphString sError, sWarning;
-	if ( !tBuffer.Alloc ( 1, sError ) )
+	static CSphLargeBuffer<SharedData_t, true> g_dShared;
+	CSphString sError;
+	if ( !g_dShared.Alloc ( 1, sError ) )
 		sphDie ( "failed to allocate shared buffer (msg=%s)", sError.cstr() );
 
-	DWORD * pRes = tBuffer.GetWritePtr();
-	memset ( pRes, 0, sizeof(DWORD) ); // reset
+	// reset
+	g_pShared = g_dShared.GetWritePtr();
+	g_pShared->m_bDaemonAtShutdown = false;
+	g_pShared->m_bHaveTTY = false;
 }
 
 
@@ -18054,8 +18060,7 @@ static char g_sPid[30] = { 0 };
 // returns 'true' only once - at the very start, to show it beatiful way.
 bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 {
-	InitSharedBuffer ( g_bDaemonAtShutdown );
-	InitSharedBuffer ( g_bHaveTTY );
+	InitSharedBuffer ();
 
 	// Fork #1 - detach from controlling terminal
 	switch ( fork() )
@@ -18070,7 +18075,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 
 		default:
 			// tty-controlled parent
-			while ( g_bHaveTTY[0]==0 )
+			while ( !g_pShared->m_bHaveTTY )
 				sphSleepMsec ( 100 );
 
 			exit ( 0 );
@@ -18108,6 +18113,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 	bool bStreamsActive = true;
 	int iChild = 0;
 	g_iParentPID = getpid();
+	assert ( g_pShared );
 	while (true)
 	{
 		if ( eReincarnate!=EFork::Disabled )
@@ -18149,11 +18155,9 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 
 		eReincarnate = EFork::Disabled;
 		int iPid, iStatus;
-		bool bDaemonAtShutdown = 0;
 		while ( ( iPid = wait ( &iStatus ) )>0 )
 		{
-			bDaemonAtShutdown = ( g_bDaemonAtShutdown[0]!=0 );
-			const char * sWillRestart = ( bDaemonAtShutdown ? "will not be restarted (daemon is shutting down)" : "will be restarted" );
+			const char * sWillRestart = ( g_pShared->m_bDaemonAtShutdown ? "will not be restarted (daemon is shutting down)" : "will be restarted" );
 
 			assert ( iPid==iChild );
 			if ( WIFEXITED ( iStatus ) )
@@ -18211,7 +18215,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 				sphInfo ( "watchdog: got error %d, %s", errno, strerrorm ( errno ));
 		}
 
-		if ( bShutdown || g_bGotSigterm || bDaemonAtShutdown )
+		if ( bShutdown || g_bGotSigterm || g_pShared->m_bDaemonAtShutdown )
 		{
 			exit ( 0 );
 		}

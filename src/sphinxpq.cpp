@@ -1412,7 +1412,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 
 	auto dWaiter = DefferedRestarter ();
 	for ( int i = 0; i < iNumOfCoros; ++i )
-		CoGo ( [&dMatchContexts, &iCurQuery, &dStored, iTimeQuantum] () mutable
+		CoCo ( [&dMatchContexts, &iCurQuery, &dStored, iTimeQuantum] () mutable
 		{
 			auto pCtx = dMatchContexts.GetContext ();
 			pCtx.m_pMatchCtx->m_dMsg.Clear ();

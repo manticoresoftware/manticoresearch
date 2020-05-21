@@ -254,18 +254,18 @@ private:
 		}
 	}
 
-	void Schedule()
+	void Schedule(bool bVip=true)
 	{
-		LOG ( DEBUGV, COROW ) << "CoroWorker_c::Schedule (" << m_pScheduler << ")";
+		LOG ( DEBUGV, COROW ) << "CoroWorker_c::Schedule (" << bVip << ", " << m_pScheduler << ")";
 		assert ( m_pScheduler );
-		m_pScheduler->Schedule ( [this] { Run (); }, false ); // false means 'new task'
+		m_pScheduler->Schedule ( [this] { Run (); }, bVip ); // true means 'vip', false - 'secondary'
 	}
 
 	void ScheduleContinuation ()
 	{
-		LOG ( DIAG, COROW ) << "CoroWorker_c::ScheduleContinuation (" << m_pScheduler << ")";
+		LOG ( DEBUGV, COROW ) << "CoroWorker_c::ScheduleContinuation (" << m_pScheduler << ")";
 		assert ( m_pScheduler );
-		m_pScheduler->Schedule ( [this] { Run (); }, true ); // true means 'continuation'
+		m_pScheduler->ScheduleContinuation( [this] { Run (); } );
 	}
 
 public:
@@ -279,9 +279,14 @@ public:
 		(new CoroWorker_c ( std::move ( fnHandler ), pScheduler, std::move ( tWait )))->Schedule ();
 	}
 
+	static void StartOther ( Handler fnHandler, Scheduler_i* pScheduler, size_t iStack, Waiter_t tWait )
+	{
+		( new CoroWorker_c ( std::move ( fnHandler ), pScheduler, std::move ( tWait ), iStack ) )->Schedule (false);
+	}
+
 	static void StartContinuation ( Handler fnHandler, Scheduler_i * pScheduler, size_t iStack, Waiter_t tWait )
 	{
-		(new CoroWorker_c ( std::move(fnHandler), pScheduler, std::move(tWait), iStack))->ScheduleContinuation ();
+		( new CoroWorker_c ( std::move ( fnHandler ), pScheduler, std::move ( tWait ), iStack ) )->ScheduleContinuation ();
 	}
 
 	void Restart ()
@@ -290,10 +295,16 @@ public:
 			Schedule ();
 	}
 
-	void RestartAsContinuation ()
+	void RestartSecondary ()
 	{
 		if (( m_tState.SetFlags ( CoroState_t::Entered_e ) & CoroState_t::Entered_e )==0 )
-			ScheduleContinuation ();
+			Schedule (false);
+	}
+
+	void Continue ()
+	{
+		if ( ( m_tState.SetFlags ( CoroState_t::Entered_e ) & CoroState_t::Entered_e )==0 )
+			ScheduleContinuation();
 	}
 
 	void Done()
@@ -329,14 +340,19 @@ public:
 		Reschedule();
 	}
 
-	Handler Continuation()
+	Handler SecondaryRestarter()
 	{
-		return [this] { RestartAsContinuation (); };
+		return [this] { RestartSecondary (); };
 	}
 
 	Handler Restarter ()
 	{
 		return [this] { Restart (); };
+	}
+
+	Handler Continuator ()
+	{
+		return [this] { Continue(); };
 	}
 
 	BYTE * GetTopOfStack () const
@@ -378,17 +394,17 @@ void CoGo ( Handler fnHandler, Scheduler_i * pScheduler )
 	CoroWorker_c::Start ( std::move(fnHandler), pScheduler );
 }
 
-void CoGo ( Handler fnHandler, Waiter_t tSignaller )
+void CoCo ( Handler fnHandler, Waiter_t tSignaller )
 {
 	auto pScheduler = CoCurrentScheduler ();
 	if ( !pScheduler )
 		pScheduler = GetGlobalScheduler ();
 
 	assert ( pScheduler );
-	CoroWorker_c::Start ( std::move ( fnHandler ), pScheduler, std::move ( tSignaller ));
+	CoroWorker_c::StartOther ( std::move ( fnHandler ), pScheduler, 0, std::move ( tSignaller ) );
 }
 
-void CoContinueHandler ( Handler fnHandler, int iStack )
+void CoContinue ( Handler fnHandler, int iStack )
 {
 	auto pScheduler = CoCurrentScheduler();
 	if ( !pScheduler )
@@ -396,8 +412,8 @@ void CoContinueHandler ( Handler fnHandler, int iStack )
 
 	assert ( pScheduler );
 
-	auto dWaiter = DefferedRestarter ();
-	CoroWorker_c::StartContinuation ( std::move ( fnHandler ), pScheduler, iStack, dWaiter );
+	auto dWaiter = DefferedContinuator ();
+	CoroWorker_c::StartContinuation( std::move ( fnHandler ), pScheduler, iStack, dWaiter );
 	WaitForDeffered ( std::move ( dWaiter ));
 }
 
@@ -422,26 +438,28 @@ void CoMoveTo ( Scheduler_i * pScheduler )
 	CoWorker ()->MoveTo ( pScheduler );
 }
 
-// Async schedule self continuation.
-// Invoking handler will schedule continuation of yielded coroutine and return immediately.
-// Scheduled task ('goto continue...') will be pefromed by scheduler's worker (threadpool, etc.)
-Handler CurrentContinuation ()
-{
-	return CoWorker()->Continuation();
-}
 
 // Async schedule continuation.
 // Invoking handler will schedule continuation of yielded coroutine and return immediately.
 // Scheduled task ('goto continue...') will be pefromed by scheduler's worker (threadpool, etc.)
+// this pushes to primary queue
 Handler CurrentRestarter ()
 {
 	return CoWorker()->Restarter();
 }
 
+
 Waiter_t DefferedRestarter ()
 {
-	return Waiter_t ( nullptr, [fnProceed=CurrentContinuation ()] ( void * )
+	return Waiter_t ( nullptr, [fnProceed= CoWorker ()->SecondaryRestarter ()] ( void * )
 	{
+		fnProceed ();
+	} );
+}
+
+Waiter_t DefferedContinuator ()
+{
+	return Waiter_t ( nullptr, [fnProceed = CoWorker ()->Continuator ()] ( void * ) {
 		fnProceed ();
 	} );
 }

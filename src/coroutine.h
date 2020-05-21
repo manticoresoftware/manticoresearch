@@ -19,12 +19,15 @@ namespace Threads {
 // used as signaller - invokes custom deleter in d-tr.
 using Waiter_t = SharedPtrCustom_t<void *>;
 
-// start handler in coroutine
+// start handler in coroutine, first-priority
 void CoGo ( Handler handler, Scheduler_i* pScheduler );
-void CoGo ( Handler handler, Waiter_t tSignaller );
+
+// start task continuation in coroutine, second-priority
+void CoCo ( Handler handler, Waiter_t tSignaller );
 
 // perform handler in dedicated coro with custom stack (scheduler is same, or global if none)
-void CoContinueHandler ( Handler fnHandler, int iStack=0 );
+// try to run immediately
+void CoContinue ( Handler fnHandler, int iStack=0 );
 
 // perform handler in dedicated coro, being called from plain thread (i.e. use blocking event to wait finish);
 void CallCoroutine ( Handler fnHandler );
@@ -37,7 +40,7 @@ void CoContinue ( int iStack, HANDLER handler )
 		handler ();
 		return;
 	}
-	CoContinueHandler ( handler, iStack );
+	CoContinue ( handler, iStack );
 }
 
 template<typename HANDLER>
@@ -47,7 +50,7 @@ bool CoContinueBool ( int iStack, HANDLER handler )
 		return handler ();
 
 	bool bResult;
-	CoContinueHandler ( [&bResult, fnHandler = std::move ( handler )] { bResult = fnHandler (); }, iStack );
+	CoContinue ( [&bResult, fnHandler = std::move ( handler )] { bResult = fnHandler (); }, iStack );
 	return bResult;
 }
 
@@ -76,11 +79,12 @@ public:
 	}
 };
 
-//Handler CurrentContinuation ();
 Handler CurrentRestarter ();
 
 // Returns smart pointer, which will issue rescheduling of current coro on destroy.
+// restarter - pushes to usual working queue, continuator - try to resume immediately, then pushes to vip queue.
 Waiter_t DefferedRestarter();
+Waiter_t DefferedContinuator();
 
 // yield, then release passed waiter.
 void WaitForDeffered ( Waiter_t&& );

@@ -149,7 +149,11 @@ using Keeper_t = SharedPtrCustom_t<void*>;
 struct Scheduler_i
 {
 	virtual ~Scheduler_i() {};
-	virtual void Schedule ( Handler handler, bool bContinuation ) = 0;
+	virtual void Schedule ( Handler handler, bool bVip ) = 0;
+	virtual void ScheduleContinuation ( Handler handler )
+	{
+		Schedule ( std::move ( handler ), false );
+	}
 	virtual Keeper_t KeepWorking() = 0;
 	virtual const char * szName () const { return "<unknown>"; }
 	virtual int WorkingThreads() const = 0;

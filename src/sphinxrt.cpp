@@ -6097,7 +6097,7 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 		pProfiler->Switch ( SPH_QSTATE_INIT );
 
 	for ( int i = 0; i<iNumOfCoros; ++i )
-		CoGo ( fnCalc, dWaiter );
+		CoCo ( fnCalc, dWaiter );
 	fnCalc(); // last, or only task we performs right here.
 
 	// wait till all copies of dWaiter are destroyed (each coro has a copy, and we has copy also).

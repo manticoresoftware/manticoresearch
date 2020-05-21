@@ -222,8 +222,8 @@ CSphSwapVector<ThdPublicInfo_t> Threads::GetGlobalThreadInfos ()
 	dResult.Reserve ( g_dThd.GetLength ());
 
 	// fixme! refactor.
-	for ( const ListNode_t* pIt = g_dThd.Begin (); pIt!=g_dThd.End (); pIt = pIt->m_pNext )
-		dResult.Add ((( ThdDesc_t* ) pIt )->GetPublicInfo ());
+	for ( const auto& dThd : g_dThd )
+		dResult.Add ((( ThdDesc_t& ) dThd ).GetPublicInfo ());
 	return dResult;
 }
 
@@ -564,6 +564,7 @@ struct Service_t : public TaskService_t, public Service_i
 	bool m_bOneThread;                			/// optimize for single-threaded use case
 	sph::Event_c m_tWakeupEvent;				/// event to wake up blocked threads
 	OpQueue_T<SchedulerOperation_t> m_OpQueue;	/// The queue of handlers that are ready to be delivered
+	OpQueue_T<SchedulerOperation_t> m_OpVipQueue;    /// The queue of handlers that have to be delivered BEFORE OpQueue
 
 	// Per-thread call stack to track the state of each thread in the service.
 	using ThreadCallStack_c = CallStack_c<TaskService_t, TaskServiceThreadInfo_t>;
@@ -590,9 +591,34 @@ public:
 		post_immediate_completion ( new CompletionHandler_c<Handler> ( handler ), true );
 	}
 
-	void post_immediate_completion ( Service_t::operation * pOp, bool bIsContinuation )
+	template<typename Handler>
+	void post_continuationHandler ( const Handler & handler )
 	{
-		if ( m_bOneThread || bIsContinuation )
+		// Allocate and construct an operation to wrap the handler.
+		post_continuation ( new CompletionHandler_c<Handler> ( handler ) );
+	}
+
+	void post_continuation ( Service_t::operation * pOp )
+	{
+		auto * pThisThread = ThreadCallStack_c::Contains ( this );
+		if ( pThisThread )
+		{
+			++pThisThread->m_iPrivateOutstandingWork;
+			pThisThread->m_dPrivateQueue.Push ( pOp );
+			LOG ( DETAIL, MT ) << "post this";
+			return;
+		}
+
+		work_started ();
+		ScopedMutex_t dLock ( m_dMutex );
+		LOG ( DETAIL, MT ) << "post";
+		m_OpVipQueue.Push ( pOp );
+		wake_one_thread_and_unlock ( dLock );
+	}
+
+	void post_immediate_completion ( Service_t::operation * pOp, bool bVip )
+	{
+		if ( m_bOneThread )
 		{
 			auto * pThisThread = ThreadCallStack_c::Contains ( this );
 			if ( pThisThread )
@@ -606,7 +632,10 @@ public:
 		work_started ();
 		ScopedMutex_t dLock ( m_dMutex );
 		LOG ( DETAIL, MT ) << "post";
-		m_OpQueue.Push ( pOp );
+		if ( bVip )
+			m_OpVipQueue.Push ( pOp );
+		else
+			m_OpQueue.Push ( pOp );
 		wake_one_thread_and_unlock ( dLock );
 	}
 
@@ -628,6 +657,11 @@ public:
 			dLock.Lock ();
 	}
 
+	bool queue_empty() const REQUIRES ( m_dMutex )
+	{
+		return m_OpQueue.Empty () && m_OpVipQueue.Empty ();
+	}
+
 	bool do_run_one ( ScopedMutex_t& dLock, TaskServiceThreadInfo_t& this_thread )
 		RELEASE ( dLock ) TRY_ACQUIRE ( false, dLock )
 	{
@@ -635,18 +669,18 @@ public:
 		{
 			LOG ( DETAIL, MT ) << "locked " << dLock.Locked();
 			assert ( dLock.Locked ());
-			if ( m_OpQueue.Empty () )
+			if ( queue_empty() )
 			{
 				m_tWakeupEvent.Clear ( dLock );
 				m_tWakeupEvent.Wait ( dLock );
 				continue;
 			}
 
-			auto * pOp = m_OpQueue.Front ();
-			m_OpQueue.Pop ();
-			bool bMoreHandlers = !m_OpQueue.Empty ();
+			auto & dOpQueue = m_OpVipQueue.Empty () ? m_OpQueue : m_OpVipQueue;
+			auto * pOp = dOpQueue.Front ();
+			dOpQueue.Pop ();
 
-			if ( bMoreHandlers && !m_bOneThread )
+			if ( !queue_empty () && !m_bOneThread )
 				wake_one_thread_and_unlock ( dLock );
 			else
 				dLock.Unlock ();
@@ -663,7 +697,7 @@ public:
 			if ( !this_thread.m_dPrivateQueue.Empty ())
 			{
 				dLock.Lock ();
-				m_OpQueue.Push ( this_thread.m_dPrivateQueue );
+				m_OpVipQueue.Push ( this_thread.m_dPrivateQueue );
 			}
 			return true;
 		}
@@ -769,13 +803,21 @@ class ThreadPool_c final : public Scheduler_i
 	std::atomic<bool> m_bStop {false};
 
 	template<typename F>
-	void Post ( F && f, bool bContinuation = false )
+	void Post ( F && f, bool bVip = false )
 	{
-		LOG ( DETAIL, TP ) << "Post " << bContinuation;
-		if ( bContinuation )
+		LOG ( DETAIL, TP ) << "Post " << bVip;
+		if ( bVip )
 			m_tService.defer ( std::forward<F> ( f ));
 		else
 			m_tService.post ( std::forward<F> ( f ));
+		LOG ( DETAIL, TP ) << "Post finished";
+	}
+
+	template<typename F>
+	void PostContinuation ( F && f )
+	{
+		LOG ( DETAIL, TP ) << "PostContinuation";
+		m_tService.post_continuationHandler( std::forward<F> ( f ));
 		LOG ( DETAIL, TP ) << "Post finished";
 	}
 
@@ -830,9 +872,14 @@ public:
 		LOG ( DEBUG, TP ) << "thread pool stopped";
 	}
 
-	void Schedule ( Handler handler, bool bContinuation ) final
+	void Schedule ( Handler handler, bool bVip ) final
 	{
-		Post ( std::move ( handler ), bContinuation );
+		Post ( std::move ( handler ), bVip );
+	}
+
+	void ScheduleContinuation ( Handler handler ) final
+	{
+		PostContinuation ( std::move ( handler ) );
 	}
 
 	Keeper_t KeepWorking () final
@@ -885,10 +932,10 @@ class AloneThread_c final : public Scheduler_i
 	SphThread_t	m_tMyThread;
 
 	template<typename F>
-	void Post ( F && f, bool bContinuation=false )
+	void Post ( F && f, bool bVip=false )
 	{
-		LOG ( DETAIL, TP ) << "Post " << bContinuation;
-		if ( bContinuation )
+		LOG ( DETAIL, TP ) << "Post " << bVip;
+		if ( bVip )
 			m_tService.defer ( std::forward<F> ( f ) );
 		else
 			m_tService.post ( std::forward<F> ( f ));

@@ -4950,9 +4950,11 @@ void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphStrin
 		return;
 
 	int64_t tmLocal = -sphMicroTimer();
+	int64_t tmCPU = -sphCpuTimer ();
 
 	RunLocalSearches();
 	tmLocal += sphMicroTimer();
+	tmCPU += sphCpuTimer();
 
 	OnRunFinished();
 
@@ -4962,7 +4964,7 @@ void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphStrin
 	tRes.m_iCount = Max ( Min ( tQuery.m_iLimit, tRes.m_dMatches.GetLength()-tQuery.m_iOffset ), 0 );
 
 	tRes.m_iQueryTime += (int)(tmLocal/1000);
-	tRes.m_iCpuTime += tmLocal;
+	tRes.m_iCpuTime += tmCPU;
 
 	if ( !tRes.m_iSuccesses )
 	{
@@ -6601,9 +6603,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	m_iEnd = iEnd;
 
 	// all my stats
-	int64_t tmSubset = sphMicroTimer();
+	int64_t tmSubset = -sphMicroTimer();
 	int64_t tmLocal = 0;
-	int64_t tmCpu = sphCpuTimer ();
+	int64_t tmCpu = -sphCpuTimer ();
 
 	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
 	if ( m_pProfile )
@@ -6933,8 +6935,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// stats
 	/////////
 
-	tmSubset = sphMicroTimer() - tmSubset;
-	tmCpu = sphCpuTimer() - tmCpu;
+	tmSubset += sphMicroTimer();
+	tmCpu += sphCpuTimer();
 
 	CalcTimeStats ( tmCpu, tmSubset, iStart, iEnd, dDistrServedByAgent );
 	CalcPerIndexStats ( iStart, iEnd, dDistrServedByAgent );

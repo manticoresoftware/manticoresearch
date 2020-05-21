@@ -504,6 +504,10 @@ inline double sphQW2D ( uint64_t d )	{ union { double f; uint64_t d; } u; u.d = 
 /// current UNIX timestamp in seconds multiplied by 1000000, plus microseconds since the beginning of current second
 int64_t		sphMicroTimer ();
 
+/// return cpu time, in microseconds. CLOCK_THREAD_CPUTIME_ID, or CLOCK_PROCESS_CPUTIME_ID or fall to sphMicroTimer().
+/// defined in searchd.cpp since depends from g_bCpuStats
+int64_t		sphCpuTimer ();
+
 /// double argument squared
 inline double sqr ( double v ) { return v*v;}
 

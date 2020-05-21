@@ -95,6 +95,8 @@ public:
 	/// acquire thread-local indexing accumulator
 	/// returns NULL if another index already uses it in an open txn
 	RtAccum_t * AcquireAccum ( CSphDict * pDict, RtAccum_t * pAccExt=nullptr, bool bWordDict=true, bool bSetTLS = true, CSphString * sError=nullptr );
+
+	virtual bool NeedStoreWordID () const = 0;
 };
 
 /// initialize subsystem
@@ -155,6 +157,7 @@ struct RtWord_t
 	DWORD m_uDocs = 0;    ///< document count (for stats and/or BM25)
 	DWORD m_uHits = 0;    ///< hit count (for stats and/or BM25)
 	DWORD m_uDoc = 0;        ///< index into segment docs
+	bool m_bHasHitlist = true;
 };
 
 
@@ -245,8 +248,9 @@ struct RtWordReader_t
 	bool m_bWordDict;
 	int m_iWordsCheckpoint;
 	int m_iCheckpoint = 0;
+	const ESphHitless m_eHitlessMode = SPH_HITLESS_NONE;
 
-	RtWordReader_t ( const RtSegment_t * pSeg, bool bWordDict, int iWordsCheckpoint );
+	RtWordReader_t ( const RtSegment_t * pSeg, bool bWordDict, int iWordsCheckpoint, ESphHitless eHitlessMode );
 	void Reset ( const RtSegment_t * pSeg );
 	const RtWord_t * UnzipWord ();
 };
@@ -345,7 +349,7 @@ bool BuildBloom ( const BYTE * sWord, int iLen, int iInfixCodepointCount, bool b
 	int iKeyValCount, BloomCheckTraits_t &tBloom );
 
 void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, bool bKeywordDict, int iMinInfixLen,
-	int iWordsCheckpoint, bool bUtf8 );
+	int iWordsCheckpoint, bool bUtf8, ESphHitless eHitlessMode );
 
 bool ExtractInfixCheckpoints ( const char * sInfix, int iBytes, int iMaxCodepointLength, int iDictCpCount,
 	const CSphTightVector<uint64_t> &dFilter, CSphVector<DWORD> &dCheckpoints );

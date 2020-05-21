@@ -165,6 +165,7 @@ private:
 
 	CSphFixedVector<StoredQueryDesc_t>	m_dLoadedQueries { 0 }; // temporary, just descriptions
 	CSphSchema						m_tMatchSchema;
+	CSphVector<SphWordID_t>			m_dHitlessWords;
 
 	void DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMatchResult_t & tRes );
 	bool MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters,
@@ -191,6 +192,8 @@ private:
 	void AddToStoredUnl ( StoredQuerySharedPtr_t tNew ) REQUIRES ( m_tLockHash, m_tLock );
 	void PostSetupUnl () REQUIRES ( m_tLockHash, m_tLock  );
 	SharedPQSlice_t GetStored () const EXCLUDES ( m_tLock );
+
+	bool NeedStoreWordID () const override { return ( m_tSettings.m_eHitless==SPH_HITLESS_SOME && m_dHitlessWords.GetLength() ); }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -207,7 +210,7 @@ PercolateIndex_i * CreateIndexPercolate ( const CSphSchema & tSchema, const char
 	return new PercolateIndex_c ( tSchema, sIndexName, sPath );
 }
 
-static SegmentReject_t SegmentGetRejects ( const RtSegment_t * pSeg, bool bBuildInfix, bool bUtf8 )
+static SegmentReject_t SegmentGetRejects ( const RtSegment_t * pSeg, bool bBuildInfix, bool bUtf8, ESphHitless eHitless )
 {
 	SegmentReject_t tReject;
 	tReject.m_iRows = pSeg->m_uRows;
@@ -227,7 +230,7 @@ static SegmentReject_t SegmentGetRejects ( const RtSegment_t * pSeg, bool bBuild
 		tReject.m_dWilds.Fill ( 0 );
 	}
 
-	RtWordReader_t tDict ( pSeg, true, PERCOLATE_WORDS_PER_CP );
+	RtWordReader_t tDict ( pSeg, true, PERCOLATE_WORDS_PER_CP, eHitless );
 	const RtWord_t * pWord = nullptr;
 	BloomGenTraits_t tBloom0 ( tReject.m_dWilds.Begin() );
 	BloomGenTraits_t tBloom1 ( tReject.m_dWilds.Begin() + PERCOLATE_BLOOM_WILD_COUNT );
@@ -947,7 +950,7 @@ bool PercolateQwordSetup_c::QwordSetup ( ISphQword * pQword ) const
 	CSphVector<Slice_t> dDictWords;
 	ARRAY_FOREACH ( i, dDictLoc )
 	{
-		RtWordReader_t tReader ( m_pSeg, true, PERCOLATE_WORDS_PER_CP );
+		RtWordReader_t tReader ( m_pSeg, true, PERCOLATE_WORDS_PER_CP, m_eHitless );
 		// locator
 		// m_uOff - Start
 		// m_uLen - End
@@ -1034,10 +1037,10 @@ SphWordID_t DictMap_t::GetTerm ( BYTE * sWord ) const
 	return pTerm->m_uWordID;
 }
 
-PercolateMatchContext_t * PercolateIndex_c::CreateMatchContext ( const RtSegment_t * pSeg, const SegmentReject_t &tReject )
+PercolateMatchContext_t * PercolateIndex_c::CreateMatchContext ( const RtSegment_t * pSeg, const SegmentReject_t & tReject )
 {
 	return new PercolateMatchContext_t ( pSeg, m_iMaxCodepointLength, m_pDict->HasMorphology(), GetStatelessDict ( m_pDict ), this
-												   , m_tSchema, tReject );
+												   , m_tSchema, tReject, m_tSettings.m_eHitless );
 }
 
 // percolate matching
@@ -1382,7 +1385,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 {
 	// reject need bloom filter for either infix or prefix
 	auto tReject = SegmentGetRejects (
-		  pSeg, ( m_tSettings.m_iMinInfixLen>0 || m_tSettings.GetMinPrefixLen ( m_pDict->GetSettings().m_bWordDict )>0 ), m_iMaxCodepointLength>1 );
+		  pSeg, ( m_tSettings.m_iMinInfixLen>0 || m_tSettings.GetMinPrefixLen ( m_pDict->GetSettings().m_bWordDict )>0 ), m_iMaxCodepointLength>1, m_tSettings.m_eHitless );
 
 	CSphAtomic iCurQuery;
 	CSphFixedVector<PercolateMatchContext_t *> dResults ( 1 );
@@ -1462,11 +1465,11 @@ bool PercolateIndex_c::MatchDocuments ( RtAccum_t * pAccExt, PercolateMatchResul
 
 	pAcc->Sort();
 
-	RtSegment_t * pSeg = pAcc->CreateSegment ( m_tSchema.GetRowSize(), PERCOLATE_WORDS_PER_CP );
+	RtSegment_t * pSeg = pAcc->CreateSegment ( m_tSchema.GetRowSize(), PERCOLATE_WORDS_PER_CP, m_tSettings.m_eHitless, m_dHitlessWords );
 	assert ( !pSeg || pSeg->m_uRows>0 );
 	assert ( !pSeg || pSeg->m_tAliveRows>0 );
 	BuildSegmentInfixes ( pSeg, m_pDict->HasMorphology(), true, m_tSettings.m_iMinInfixLen,
-		PERCOLATE_WORDS_PER_CP, ( m_iMaxCodepointLength>1 ) );
+		PERCOLATE_WORDS_PER_CP, ( m_iMaxCodepointLength>1 ), m_tSettings.m_eHitless );
 
 	DoMatchDocuments ( pSeg, tRes );
 	SafeRelease ( pSeg );
@@ -2058,6 +2061,10 @@ void PercolateIndex_c::PostSetupUnl()
 
 	if ( m_tSettings.m_bIndexExactWords )
 		SetupExactDict ( pDict, pTokenizer );
+
+	// hitless
+	if ( !LoadHitlessWords ( m_tSettings.m_sHitlessFiles, m_pTokenizerIndexing, m_pDict, m_dHitlessWords, m_sLastError ) )
+		sphWarning ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
 
 	m_pQueries->ReserveGap( m_dLoadedQueries.GetLength () );
 

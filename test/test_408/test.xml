@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>hitless RT indexes</name>
+
+<requires> <lemmatizer_base/> </requires>
+<skip_indexer/>
+
+<config>
+common
+{
+	lemmatizer_base	= <local>lemmatizer_base</local>
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+index none
+{
+    type = rt    
+	rt_field = title
+	rt_attr_uint = idd
+	path = <data_path/>/none
+}
+
+index some
+{
+    type = rt    
+	rt_field = title
+	rt_attr_uint = idd
+	path = <data_path/>/some
+
+	hitless_words = <this_test/>/words1.txt <this_test/>/words2.txt
+}
+
+index all
+{
+    type = rt    
+	rt_field = title
+	rt_attr_uint = idd
+	path = <data_path/>/all
+
+	hitless_words = all
+}
+
+index some1
+{
+    type = rt    
+	rt_field = title
+	rt_attr_uint = idd
+	path = <data_path/>/some1
+
+	hitless_words = <this_test/>/words1.txt <this_test/>/words2.txt
+	html_strip		= 1
+	index_sp		= 1
+	index_zones		= zone*
+}
+
+index hit_0
+{
+    type = rt    
+	rt_field = title
+	rt_attr_uint = idd
+	path			= <data_path/>/hit_0
+	morphology		= lemmatize_en_all
+}
+
+index hit_1
+{
+    type = rt    
+	rt_field = title
+	rt_attr_uint = idd
+	path			= <data_path/>/hit_1
+	morphology		= lemmatize_en_all
+	hitless_words 	= <this_test/>/words3.txt
+}
+
+</config>
+
+<sphqueries>
+    <sphinxql>insert into none(id, title) values ( 1, 'The Tin Woodman gave a sigh of satisfaction and lowered his axe, which he leaned against the tree.' ),
+    ( 2, 'The Tin Woodman appeared to think deeply for a moment.' ),
+    ( 3, 'The Tin Woodman had asked Dorothy to put the oil-can in her basket.' )
+    </sphinxql>
+    <sphinxql>insert into some(id, title) values ( 1, 'The Tin Woodman gave a sigh of satisfaction and lowered his axe, which he leaned against the tree.' ),
+    ( 2, 'The Tin Woodman appeared to think deeply for a moment.' ),
+    ( 3, 'The Tin Woodman had asked Dorothy to put the oil-can in her basket.' )
+    </sphinxql>
+    <sphinxql>insert into all(id, title) values ( 1, 'The Tin Woodman gave a sigh of satisfaction and lowered his axe, which he leaned against the tree.' ),
+    ( 2, 'The Tin Woodman appeared to think deeply for a moment.' ),
+    ( 3, 'The Tin Woodman had asked Dorothy to put the oil-can in her basket.' )
+    </sphinxql>
+    <sphinxql>insert into some1(id, title) values ( 1, 'The Tin Woodman gave a sigh of satisfaction and lowered his axe, which he leaned against the tree.' ),
+    ( 2, 'The Tin Woodman appeared to think deeply for a moment.' ),
+    ( 3, 'The Tin Woodman had asked Dorothy to put the oil-can in her basket.' )
+    </sphinxql>
+    <sphinxql>insert into hit_0(id, title) values (1, 'protest, to teach, to feed, and'), (2, 'to and windows text')</sphinxql>
+    <sphinxql>insert into hit_1(id, title) values (1, 'protest, to teach, to feed, and'), (2, 'to and windows text')</sphinxql>
+
+	<!-- these should work, weights will differ due to lcs ranking -->
+	<sphinxql>SELECT * FROM none WHERE MATCH(' tin woodman '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM some WHERE MATCH(' tin woodman '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM all  WHERE MATCH(' tin woodman '); SHOW META</sphinxql>
+
+	<sphinxql>SELECT * FROM none WHERE MATCH(' lowered '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM some WHERE MATCH(' lowered '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM all  WHERE MATCH(' lowered '); SHOW META</sphinxql>
+
+	<!-- some will fail -->
+	<sphinxql>SELECT * FROM none WHERE MATCH(' "tin woodman" '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM some WHERE MATCH(' "tin woodman" '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM all  WHERE MATCH(' "tin woodman" '); SHOW META</sphinxql>
+
+	<sphinxql>SELECT * FROM none WHERE MATCH(' "and lowered" '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM some WHERE MATCH(' "and lowered" '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM all  WHERE MATCH(' "and lowered" '); SHOW META</sphinxql>
+
+	<sphinxql>SELECT * FROM none WHERE MATCH(' "tin woodman"~2 '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM some WHERE MATCH(' "tin woodman"~2 '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM all  WHERE MATCH(' "tin woodman"~2 '); SHOW META</sphinxql>
+
+	<!-- these will work on 'some', but not 'all' (conversion to AND) -->
+	<sphinxql>SELECT * FROM none WHERE MATCH(' "lowered his axe" '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM some WHERE MATCH(' "lowered his axe" '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM all  WHERE MATCH(' "lowered his axe" '); SHOW META</sphinxql>
+
+	<sphinxql>SELECT * FROM none WHERE MATCH(' "and lowered his axe" '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM some WHERE MATCH(' "and lowered his axe" '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM all  WHERE MATCH(' "and lowered his axe" '); SHOW META</sphinxql>
+
+	<!-- doesn't matter to quorum, weight will differ though -->
+	<sphinxql>SELECT * FROM none WHERE MATCH(' "tin woodman"/1 '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM some WHERE MATCH(' "tin woodman"/1 '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM all  WHERE MATCH(' "tin woodman"/1 '); SHOW META</sphinxql>
+
+	<!-- these will work, but should give a warning sometimes. weights should match -->
+	<sphinxql>SELECT * FROM none WHERE MATCH(' ^the '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM some WHERE MATCH(' ^the '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM all  WHERE MATCH(' ^the '); SHOW META</sphinxql>
+
+	<sphinxql>SELECT * FROM none WHERE MATCH(' ^tin '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM some WHERE MATCH(' ^tin '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM all  WHERE MATCH(' ^tin '); SHOW META</sphinxql>
+
+	<sphinxql>SELECT * FROM none WHERE MATCH(' basket '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM some WHERE MATCH(' basket '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM all  WHERE MATCH(' basket '); SHOW META</sphinxql>
+
+	<sphinxql>SELECT * FROM none WHERE MATCH(' basket$ '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM some WHERE MATCH(' basket$ '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM all  WHERE MATCH(' basket$ '); SHOW META</sphinxql>
+	
+	<!-- regressions hitless vs extended query operators -->
+	<sphinxql>SELECT * FROM some1 WHERE MATCH(' "and the tree" &lt;&lt; Woodman '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM some1 WHERE MATCH(' Tin Woodman "and the tree" '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM some1 WHERE MATCH(' ZONESPAN:(zoneC,zoneB) Tin Woodman "and the tree" '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM some1 WHERE MATCH(' Woodman NEAR/10 "and the tree" '); SHOW META</sphinxql>
+    
+	<!-- regressions hitless vs multiple terms from lemmatizer -->
+	<sphinxql>SELECT * FROM hit_0 WHERE MATCH(' "teach to feed" '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM hit_1 WHERE MATCH(' "teach to feed" '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM hit_0 WHERE MATCH(' "to feed and" '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM hit_1 WHERE MATCH(' "to feed and" '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM hit_0 WHERE MATCH(' "to feed" '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM hit_1 WHERE MATCH(' "to feed" '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM hit_0 WHERE MATCH(' "to windows text" '); SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM hit_1 WHERE MATCH(' "to windows text" '); SHOW META</sphinxql>
+    
+    <!-- multiple RAM segments -->
+    <sphinxql>insert into some(id, title) values ( 101, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 201, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 102, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 202, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 103, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 203, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 104, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 204, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 105, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 205, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 106, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 206, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 107, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 207, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 108, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 208, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 109, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 209, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 111, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 211, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 112, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 212, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 113, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 213, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 114, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 214, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 115, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 215, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 116, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 216, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 117, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 217, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 118, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 218, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 119, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 219, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 121, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 221, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 122, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 222, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 123, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 223, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 124, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 224, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 125, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 225, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 126, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 226, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 127, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 227, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 128, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 228, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 129, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 229, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 11, 'The Tin Woodman gave a sigh of satisfaction and lowered his axe, which he leaned against the tree.' ), ( 12, 'The Tin Woodman appeared to think deeply for a moment.' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 13, 'The Tin Woodman had asked Dorothy to put the oil-can in her basket.' )</sphinxql>
+
+	<sphinxql>SELECT * FROM some WHERE MATCH(' tin woodman ') order by id asc; SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM some WHERE MATCH(' "lowered his axe" ') order by id asc; SHOW META</sphinxql>    
+    <sphinxql>SELECT * FROM some WHERE MATCH(' "and lowered his axe" ') order by id asc; SHOW META</sphinxql>    
+    
+    <!-- multiple disk chunks -->
+    <sphinxql>flush ramchunk some</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 301, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 401, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 302, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 402, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 303, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 403, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 304, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 404, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 305, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 405, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 306, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 406, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 307, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 407, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 308, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 408, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 309, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 409, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 311, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 411, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 312, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 412, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 313, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 413, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 314, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 414, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 315, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 415, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 316, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 416, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 317, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 417, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 318, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 418, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 319, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 419, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 321, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 421, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 322, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 422, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 323, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 423, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 324, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 424, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 325, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 425, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 326, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 426, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 327, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 427, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 328, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 428, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 329, 'wine white 1977,1978,1979,1980,1981,1982' ), ( 429, 'wine white 1977,1978,1979,1980,1981,1982' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 21, 'The Tin Woodman gave a sigh of satisfaction and lowered his axe, which he leaned against the tree.' ), ( 22, 'The Tin Woodman appeared to think deeply for a moment.' )</sphinxql>
+    <sphinxql>insert into some(id, title) values ( 23, 'The Tin Woodman had asked Dorothy to put the oil-can in her basket.' )</sphinxql>
+    <sphinxql>flush ramchunk some</sphinxql>
+
+	<sphinxql>SELECT * FROM some WHERE MATCH(' tin woodman ') order by id asc; SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM some WHERE MATCH(' "lowered his axe" ') order by id asc; SHOW META</sphinxql>    
+    <sphinxql>SELECT * FROM some WHERE MATCH(' "and lowered his axe" ') order by id asc; SHOW META</sphinxql>    
+    
+    <!-- optimized disk chunks -->
+    <sphinxql>OPTIMIZE INDEX some option sync=1</sphinxql>
+	<sphinxql>SELECT * FROM some WHERE MATCH(' tin woodman ') order by id asc; SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM some WHERE MATCH(' "lowered his axe" ') order by id asc; SHOW META</sphinxql>    
+    <sphinxql>SELECT * FROM some WHERE MATCH(' "and lowered his axe" ') order by id asc; SHOW META</sphinxql>    
+</sphqueries>
+
+</test>

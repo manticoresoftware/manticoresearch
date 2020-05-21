@@ -1984,8 +1984,6 @@ private:
 private:
 	mutable CSphIndexProgress		m_tProgress;
 
-	bool						LoadHitlessWords ( CSphVector<SphWordID_t> & dHitlessWords );
-
 private:
 	int64_t						m_iDocinfo;				///< my docinfo cache size
 	int64_t						m_iDocinfoIndex;		///< docinfo "index" entries count (each entry is 2x docinfo rows, for min/max)
@@ -9773,6 +9771,7 @@ void SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettin
 	tWriter.PutString ( tSettings.m_sIndexTokenFilter );
 	tWriter.PutOffset ( tSettings.m_tBlobUpdateSpace );
 	tWriter.PutDword ( tSettings.m_iSkiplistBlockSize );
+	tWriter.PutString ( tSettings.m_sHitlessFiles );
 }
 
 
@@ -10277,46 +10276,30 @@ bool CSphIndex_VLN::RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSi
 }
 
 
-bool CSphIndex_VLN::LoadHitlessWords ( CSphVector<SphWordID_t> & dHitlessWords )
+bool LoadHitlessWords ( const CSphString & sHitlessFiles, ISphTokenizer * pTok, CSphDict * pDict, CSphVector<SphWordID_t> & dHitlessWords, CSphString & sError )
 {
 	assert ( dHitlessWords.GetLength()==0 );
 
-	if ( m_tSettings.m_sHitlessFiles.IsEmpty() )
+	if ( sHitlessFiles.IsEmpty() )
 		return true;
 
-	const char * szStart = m_tSettings.m_sHitlessFiles.cstr();
+	StrVec_t dFiles;
+	sphSplit ( dFiles, sHitlessFiles.cstr(), ", " );
 
-	while ( *szStart )
+	for ( const CSphString & sFilename : dFiles )
 	{
-		while ( *szStart && ( sphIsSpace ( *szStart ) || *szStart==',' ) )
-			++szStart;
+		CSphAutofile tFile ( sFilename.cstr(), SPH_O_READ, sError );
+		if ( tFile.GetFD()==-1 )
+			return false;
 
-		if ( !*szStart )
-			break;
+		CSphVector<BYTE> dBuffer ( (int)tFile.GetSize() );
+		if ( !tFile.Read ( &dBuffer[0], dBuffer.GetLength(), sError ) )
+			return false;
 
-		const char * szWordStart = szStart;
-
-		while ( *szStart && !sphIsSpace ( *szStart ) && *szStart!=',' )
-			++szStart;
-
-		if ( szStart - szWordStart > 0 )
-		{
-			CSphString sFilename;
-			sFilename.SetBinary ( szWordStart, szStart-szWordStart );
-
-			CSphAutofile tFile ( sFilename.cstr(), SPH_O_READ, m_sLastError );
-			if ( tFile.GetFD()==-1 )
-				return false;
-
-			CSphVector<BYTE> dBuffer ( (int)tFile.GetSize() );
-			if ( !tFile.Read ( &dBuffer[0], dBuffer.GetLength(), m_sLastError ) )
-				return false;
-
-			// FIXME!!! dict=keywords + hitless_words=some
-			m_pTokenizer->SetBuffer ( &dBuffer[0], dBuffer.GetLength() );
-			while ( BYTE * sToken = m_pTokenizer->GetToken() )
-				dHitlessWords.Add ( m_pDict->GetWordID ( sToken ) );
-		}
+		// FIXME!!! dict=keywords + hitless_words=some
+		pTok->SetBuffer ( &dBuffer[0], dBuffer.GetLength() );
+		while ( BYTE * sToken = pTok->GetToken() )
+			dHitlessWords.Add ( pDict->GetWordID ( sToken ) );
 	}
 
 	dHitlessWords.Uniq();
@@ -11047,7 +11030,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	CSphVector<SphWordID_t> dHitlessWords;
 
-	if ( !LoadHitlessWords ( dHitlessWords ) )
+	if ( !LoadHitlessWords ( m_tSettings.m_sHitlessFiles, m_pTokenizer, m_pDict, dHitlessWords, m_sLastError ) )
 		return 0;
 
 	// vars shared between phases
@@ -13818,6 +13801,9 @@ void LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DW
 		tSettings.m_iSkiplistBlockSize = 128;
 	else
 		tSettings.m_iSkiplistBlockSize = (int)tReader.GetDword();
+
+	if ( uVersion>=60 )
+		tSettings.m_sHitlessFiles = tReader.GetString();
 }
 
 
@@ -16773,7 +16759,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	if ( !pIndexChecker->OpenFiles(sError) )
 		return 1;
 
-	if ( !LoadHitlessWords ( pIndexChecker->GetHitlessWords() ) )
+	if ( !LoadHitlessWords ( m_tSettings.m_sHitlessFiles, m_pTokenizer, m_pDict, pIndexChecker->GetHitlessWords(), m_sLastError ) )
 		tReporter.Fail ( "unable to load hitless words: %s", m_sLastError.cstr() );
 
 	CSphSavedFile tStat;
@@ -20346,13 +20332,15 @@ private:
 	CSphString				m_sWarning;
 	int						m_iKeywordsOverrun = 0;
 	CSphString				m_sWord; // For allocation reuse.
+	const bool				m_bStoreID = false;
 
 protected:
 	virtual ~CRtDictKeywords () final {} // fixme! remove
 
 public:
-	explicit CRtDictKeywords ( CSphDict * pBase )
+	explicit CRtDictKeywords ( CSphDict * pBase, bool bStoreID )
 		: m_pBase ( pBase )
+		, m_bStoreID ( bStoreID )
 	{
 		SafeAddRef ( pBase );
 		m_dPackedKeywords.Add ( 0 ); // avoid zero offset at all costs
@@ -20360,22 +20348,34 @@ public:
 
 	SphWordID_t GetWordID ( BYTE * pWord ) final
 	{
-		return m_pBase->GetWordID ( pWord ) ? AddKeyword ( pWord ) : 0;
+		SphWordID_t tWordID = m_pBase->GetWordID ( pWord );
+		if ( tWordID )
+			return AddKeyword ( pWord, tWordID );
+		return 0;
 	}
 
 	SphWordID_t GetWordIDWithMarkers ( BYTE * pWord ) final
 	{
-		return m_pBase->GetWordIDWithMarkers ( pWord ) ? AddKeyword ( pWord ) : 0;
+		SphWordID_t tWordID = m_pBase->GetWordIDWithMarkers ( pWord );
+		if ( tWordID )
+			return AddKeyword ( pWord, tWordID );
+		return 0;
 	}
 
 	SphWordID_t GetWordIDNonStemmed ( BYTE * pWord ) final
 	{
-		return m_pBase->GetWordIDNonStemmed ( pWord ) ? AddKeyword ( pWord ) : 0;
+		SphWordID_t tWordID = m_pBase->GetWordIDNonStemmed ( pWord );
+		if ( tWordID )
+			return AddKeyword ( pWord, tWordID );
+		return 0;
 	}
 
 	SphWordID_t GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) final
 	{
-		return m_pBase->GetWordID ( pWord, iLen, bFilterStops ) ? AddKeyword ( pWord ) : 0;
+		SphWordID_t tWordID = m_pBase->GetWordID ( pWord, iLen, bFilterStops );
+		if ( tWordID )
+			return AddKeyword ( pWord, tWordID );
+		return 0;
 	}
 
 	const BYTE * GetPackedKeywords () final { return m_dPackedKeywords.Begin(); }
@@ -20405,7 +20405,7 @@ public:
 	uint64_t GetSettingsFNV () const final { return m_pBase->GetSettingsFNV(); }
 
 private:
-	SphWordID_t AddKeyword ( const BYTE * pWord )
+	SphWordID_t AddKeyword ( const BYTE * pWord, SphWordID_t tWordID )
 	{
 		int iLen = strlen ( ( const char * ) pWord );
 		// stemmer might squeeze out the word
@@ -20439,9 +20439,14 @@ private:
 		}
 
 		int iOff = m_dPackedKeywords.GetLength ();
-		m_dPackedKeywords.Resize ( iOff + iLen + 1 );
+		int iPackedLen = iOff + iLen + 1;
+		if ( m_bStoreID )
+			iPackedLen += sizeof ( tWordID );
+		m_dPackedKeywords.Resize ( iPackedLen );
 		m_dPackedKeywords[iOff] = ( BYTE ) ( iLen & 0xFF );
 		memcpy ( m_dPackedKeywords.Begin () + iOff + 1, pWord, iLen );
+		if ( m_bStoreID )
+			memcpy ( m_dPackedKeywords.Begin () + iOff + 1 + iLen, &tWordID, sizeof(tWordID) );
 
 		m_hKeywords.Add ( iOff, m_sWord );
 
@@ -20449,9 +20454,9 @@ private:
 	}
 };
 
-ISphRtDictWraper * sphCreateRtKeywordsDictionaryWrapper ( CSphDict * pBase )
+ISphRtDictWraper * sphCreateRtKeywordsDictionaryWrapper ( CSphDict * pBase, bool bStoreID )
 {
-	return new CRtDictKeywords ( pBase );
+	return new CRtDictKeywords ( pBase, bStoreID );
 }
 
 

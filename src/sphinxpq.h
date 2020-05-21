@@ -149,9 +149,10 @@ struct SegmentReject_t
 class PercolateQwordSetup_c : public ISphQwordSetup
 {
 public:
-	PercolateQwordSetup_c ( const RtSegment_t * pSeg, int iMaxCodepointLength )
+	PercolateQwordSetup_c ( const RtSegment_t * pSeg, int iMaxCodepointLength, ESphHitless eHitless )
 		: m_pSeg ( pSeg )
 		, m_iMaxCodepointLength ( iMaxCodepointLength )
+		, m_eHitless ( eHitless )
 	{}
 
 	ISphQword * QwordSpawn ( const XQKeyword_t & ) const final;
@@ -160,6 +161,7 @@ public:
 private:
 	const RtSegment_t * m_pSeg;
 	int m_iMaxCodepointLength;
+	ESphHitless m_eHitless = SPH_HITLESS_NONE;
 };
 
 class PercolateDictProxy_c : public CSphDict
@@ -243,7 +245,7 @@ struct PercolateMatchContext_t : public PQMatchContextResult_t
 
 	PercolateMatchContext_t ( const RtSegment_t * pSeg, int iMaxCodepointLength, bool bHasMorph,
 			CSphDict * pDictMorph, const PercolateIndex_i * pIndex, const ISphSchema & tSchema,
-			const SegmentReject_t & tReject )
+			const SegmentReject_t & tReject, ESphHitless eHitless )
 		: m_tDictMap ( bHasMorph, pDictMorph )
 		, m_tSchema ( tSchema )
 		, m_tReject ( tReject )
@@ -256,7 +258,7 @@ struct PercolateMatchContext_t : public PQMatchContextResult_t
 		m_pCtx->m_pIndexData = pSeg;
 
 		// setup search terms
-		m_pTermSetup = new PercolateQwordSetup_c ( pSeg, iMaxCodepointLength );
+		m_pTermSetup = new PercolateQwordSetup_c ( pSeg, iMaxCodepointLength, eHitless );
 		m_pTermSetup->SetDict ( &m_tDictMap );
 		m_pTermSetup->m_pIndex = pIndex;
 		m_pTermSetup->m_pCtx = m_pCtx.Ptr ();

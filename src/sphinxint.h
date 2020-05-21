@@ -42,7 +42,7 @@ inline const char * strerrorm ( int errnum )
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
-const DWORD		INDEX_FORMAT_VERSION		= 59;				///< my format version
+const DWORD		INDEX_FORMAT_VERSION		= 60;				///< my format version
 
 const char		MAGIC_SYNONYM_WHITESPACE	= 1;				// used internally in tokenizer only
 const char		MAGIC_CODE_SENTENCE			= 2;				// emitted from tokenizer on sentence boundary
@@ -1673,6 +1673,7 @@ void			ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema, DWORD uVersion 
 void			SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettings );
 void			LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion );
 bool			AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError );
+bool			LoadHitlessWords ( const CSphString & sHitlessFiles, ISphTokenizer * pTok, CSphDict * pDict, CSphVector<SphWordID_t> & dHitlessWords, CSphString & sError );
 
 /// Get current thread local index - internal do not use
 class RtIndex_i;
@@ -1888,7 +1889,7 @@ public:
 	virtual void			ResetWarning() = 0;
 };
 
-ISphRtDictWraper * sphCreateRtKeywordsDictionaryWrapper ( CSphDict * pBase );
+ISphRtDictWraper * sphCreateRtKeywordsDictionaryWrapper ( CSphDict * pBase, bool bStoreID );
 
 struct SphExpanded_t
 {

@@ -338,6 +338,7 @@ private:
 	StrVec_t		m_dStopwordFiles;
 	StrVec_t		m_dExceptionFiles;
 	StrVec_t		m_dWordformFiles;
+	StrVec_t		m_dHitlessFiles;
 	CSphString		m_sError;
 };
 

@@ -854,6 +854,15 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 	tOut.Add ( "index_token_filter",	m_sIndexTokenFilter,	!m_sIndexTokenFilter.IsEmpty() );
 	tOut.Add ( "attr_update_reserve",	m_tBlobUpdateSpace,		m_tBlobUpdateSpace!=DEFAULT_ATTR_UPDATE_RESERVE );
 
+	if ( m_eHitless==SPH_HITLESS_ALL )
+	{
+		tOut.Add ( "hitless_words",		"all",					true );
+	} else if ( m_eHitless==SPH_HITLESS_SOME )
+	{
+		CSphString sHitlessFiles = FormatPath ( m_sHitlessFiles, pFilenameBuilder );
+		tOut.Add ( "hitless_words",		sHitlessFiles,			true );
+	}
+
 	DocstoreSettings_t::Format ( tOut, pFilenameBuilder );
 }
 
@@ -946,6 +955,21 @@ bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphS
 			Add ( sName, i );
 
 		return true;
+	}
+
+	if ( sName=="hitless_words" && ( sValue!="none" && sValue!="all" ) )
+	{
+		RemoveKeys ( sName );
+		m_dHitlessFiles.Reset();
+		StrVec_t dValues = SplitArg ( sValue, m_dHitlessFiles );
+
+		// need only names for hitless files
+		StringBuilder_c sTmp ( " " );
+		for ( const CSphString & sVal : dValues )
+			sTmp << sVal;
+
+		return Add ( sName, sTmp.cstr() );
+
 	}
 
 	return Add ( sName, sValue );
@@ -1058,6 +1082,9 @@ StrVec_t IndexSettingsContainer_c::GetFiles() const
 		for ( const auto & j : dFilesFound )
 			dFiles.Add(j);
 	}
+
+	for ( const auto & i : m_dHitlessFiles )
+		dFiles.Add ( i );
 
 	return dFiles;
 }

@@ -118,7 +118,6 @@ ThreadLocal_t::ThreadLocal_t ( const ThdDesc_t& tDesc )
 	m_tDesc.m_eThdState = tDesc.m_eThdState;
 	m_tDesc.m_sCommand = tDesc.m_sCommand;
 	m_tDesc.m_iConnID = tDesc.m_iConnID;
-	m_tDesc.m_iCookie = tDesc.m_iCookie;
 
 	m_tDesc.m_tmConnect = tDesc.m_tmConnect;
 	m_tDesc.m_tmStart = tDesc.m_tmStart;

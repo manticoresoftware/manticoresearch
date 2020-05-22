@@ -74,7 +74,6 @@ struct ThdInfo_t
 	int64_t m_tmConnect = 0; ///< when did the client connect?
 	int64_t m_tmStart	= 0; ///< when did the current request start?
 	bool	m_bSystem	= false;
-	int		m_iCookie	= 0; ///< may be used in case of pool to distinguish threads
 };
 
 // trivial info for public use (no locks, everything owned)

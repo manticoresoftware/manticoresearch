@@ -3041,6 +3041,7 @@ public:
 
 	// get current build value
 	const char *		cstr() const { return m_szBuffer ? m_szBuffer : ""; }
+	operator			CSphString() const { return CSphString (cstr()); }
 
 	// move out (de-own) value
 	BYTE *				Leak();

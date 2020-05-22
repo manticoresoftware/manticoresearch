@@ -13887,41 +13887,47 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 
 void HandleMysqlSelectSysvar ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, const SessionVars_t & tVars )
 {
-	bool bStr = ( tStmt.m_tQuery.m_dItems.FindFirst ( [] ( const CSphQueryItem & tItem ) { return tItem.m_sExpr=="@@session.last_insert_id"; } ) );
-
-	tOut.HeadBegin ( tStmt.m_tQuery.m_dItems.GetLength() );
-	ARRAY_FOREACH ( i, tStmt.m_tQuery.m_dItems )
-		tOut.HeadColumn ( tStmt.m_tQuery.m_dItems[i].m_sAlias.cstr(), bStr ? MYSQL_COL_STRING : MYSQL_COL_LONG );
-	tOut.HeadEnd();
-
-	ARRAY_FOREACH ( i, tStmt.m_tQuery.m_dItems )
+	const struct SysVar_t
 	{
-		const CSphString & sVar = tStmt.m_tQuery.m_dItems[i].m_sExpr;
+		const MysqlColumnType_e m_eType;
+		const char * m_sName;
+		std::function<CSphString ( void )> m_fnValue;
+	} dSysvars[] =
+	{	{ MYSQL_COL_STRING,	nullptr, [] {return "";}}, // stub
+		{ MYSQL_COL_LONG,	"@@session.auto_increment_increment",	[] {return "1";}},
+		{ MYSQL_COL_STRING,	"@@character_set_client", [] {return "utf8";}},
+		{ MYSQL_COL_STRING,	"@@character_set_connection", [] {return "utf8";}},
+		{ MYSQL_COL_LONG,	"@@max_allowed_packet", [] { StringBuilder_c s; s << g_iMaxPacketSize; return s; }},
+		{ MYSQL_COL_STRING,	"@@version_comment", [] { return szGIT_BRANCH_ID;}},
+		{ MYSQL_COL_LONG,	"@@lower_case_table_names", [] { return "1"; }},
+		{ MYSQL_COL_STRING,	"@@session.last_insert_id", [&tVars]
+			{
+				StringBuilder_c s ( "," );
+				tVars.m_dLastIds.Apply ( [&s] ( int64_t iID ) { s << iID; } );
+				return s;
+			}},
+	};
 
-		// MySQL Connector/J, really expects an answer here
-		if ( sVar=="@@session.auto_increment_increment" )
-			tOut.PutString("1");
-		else if ( sVar=="@@character_set_client" || sVar=="@@character_set_connection" )
-			tOut.PutString("utf8");
+	auto fnVar = [&dSysvars] ( const CSphString & sVar )->const SysVar_t& {
+		for ( const auto& dVar : dSysvars )
+			if ( sVar==dVar.m_sName )
+				return dVar;
+		return dSysvars[0];
+	};
 
-		// MySQL Go connector, really expects an answer here
-		else if ( sVar=="@@max_allowed_packet" )
-			tOut.PutNumAsString ( g_iMaxPacketSize );
-		else if ( sVar=="@@session.last_insert_id" )
-		{
-			StringBuilder_c tBuf ( "," );
-			for ( int64_t iID : tVars.m_dLastIds )
-				tBuf.Appendf ( INT64_FMT, iID );
-			tOut.PutString ( tBuf.cstr() );
-		}
-		else if ( sVar=="@@version_comment")
-			tOut.PutString ( szGIT_BRANCH_ID );
-		else
-			tOut.PutString("");
-	}
+	// fill header
+	tOut.HeadBegin ( tStmt.m_tQuery.m_dItems.GetLength () );
+	for ( const auto& dItem : tStmt.m_tQuery.m_dItems )
+		tOut.HeadColumn ( dItem.m_sAlias.cstr (), fnVar ( dItem.m_sExpr ).m_eType );
+	tOut.HeadEnd ();
 
-	tOut.Commit();
-	tOut.Eof();
+	// fill values
+	for ( const auto & dItem : tStmt.m_tQuery.m_dItems )
+		tOut.PutString ( fnVar ( dItem.m_sExpr ).m_fnValue().cstr() );
+
+	// finalize
+	tOut.Commit ();
+	tOut.Eof ();
 }
 
 struct ExtraLastInsertID_t : public ISphExtra

@@ -428,7 +428,7 @@ protected:
 		SingleOverlapped_t					m_dWrite;
 		SingleOverlapped_t					m_dRead;
 		CSphFixedVector<BYTE>				m_dReadBuf { 0 };	// used for canceling recv operation
-		VecRefPtrs_t<ISphOutputBuffer *>	m_dWriteBuf;		// used for canceling send operation
+		CSphVector<ISphOutputBuffer *>		m_dWriteBuf;		// used for canceling send operation
 		CSphVector<sphIovec>				m_dOutIO;			// used for canceling send operation
 		inline bool IsInUse ()
 		{
@@ -440,6 +440,11 @@ protected:
 			m_dRead.Zero();
 			m_dWrite.m_uParentOffset = (LPBYTE) &m_dWrite-(LPBYTE) this;
 			m_dRead.m_uParentOffset = (LPBYTE) &m_dRead-(LPBYTE) this;
+		}
+		~DoubleOverlapped_t ()
+		{
+			for ( auto* pWriteBuf : m_dWriteBuf )
+				SafeDelete (pWriteBuf);
 		}
 	};
 	using LPKEY = DoubleOverlapped_t *;

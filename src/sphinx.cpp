@@ -25250,7 +25250,7 @@ bool CSphSource_XMLPipe2::Setup ( int iFieldBufferMax, bool bFixupUTF8, FILE * p
 
 	m_pBuffer = new BYTE [m_iBufferSize];
 	m_iFieldBufferMax = Max ( iFieldBufferMax, 65536 );
-	m_pFieldBuffer = new BYTE [ m_iFieldBufferMax ];
+	m_pFieldBuffer = new BYTE [ m_iFieldBufferMax+1 ]; // safe gap for tail zero
 	m_bFixupUTF8 = bFixupUTF8;
 	m_pPipe = pPipe;
 	m_tSchema.Reset ();
@@ -25940,7 +25940,7 @@ void CSphSource_XMLPipe2::EndElement ( const char * szName )
 
 		if ( m_bInId )
 		{
-			m_pFieldBuffer [ Min ( m_iFieldBufferLen, m_iFieldBufferMax-1 ) ] = '\0';
+			m_pFieldBuffer [ Min ( m_iFieldBufferLen, m_iFieldBufferMax ) ] = '\0';
 			m_dKillList.Add ( sphToInt64 ( (const char *)m_pFieldBuffer ) );
 			m_iFieldBufferLen = 0;
 			m_bInId = false;
@@ -26024,7 +26024,7 @@ void CSphSource_XMLPipe2::Characters ( const char * pCharacters, int iLen )
 		return;
 	}
 
-	if ( iLen + m_iFieldBufferLen < m_iFieldBufferMax )
+	if ( iLen + m_iFieldBufferLen <= m_iFieldBufferMax )
 	{
 		memcpy ( m_pFieldBuffer + m_iFieldBufferLen, pCharacters, iLen );
 		m_iFieldBufferLen += iLen;

@@ -76,7 +76,7 @@ function(check_imported FOUND BINDIR)
 
 	include("${BINDIR}/galera-targets.cmake")
 	string(TOUPPER "${CMAKE_BUILD_TYPE}" UPB)
-	get_target_property(LBB galera::galera_manticore IMPORTED_LOCATION_${UPB})
+	get_target_property(LBB galera::galera_manticore LOCATION_${UPB})
 	if (NOT EXISTS ${LBB})
 		diags("not exists ${LBB}")
 		return()

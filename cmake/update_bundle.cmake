@@ -22,13 +22,14 @@ diag (DIAGNOSTIC)
 
 SET(SUFF "${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
 string(TOLOWER "${SUFF}" SUFF)
-if (MSVC OR XCODE OR CMAKE_BUILD_TYPE STREQUAL RelWithDebInfo)
-	SET(SUFFD "${SUFF}")
+if (MSVC OR XCODE OR CMAKE_BUILD_TYPE STREQUAL Debug)
+	SET(SUFFD "debug-${SUFF}")
 else()
-	SET(SUFFD "${CMAKE_BUILD_TYPE}-${SUFF}")
+	SET(SUFFD "${SUFF}")
 endif ()
 string(TOLOWER "${SUFFD}" SUFFD)
 diag (CMAKE_BUILD_TYPE)
+diag (SUFFD)
 
 # special cache folder where artefacts keep. Make it absolute also
 if (DEFINED CACHEB)
@@ -180,7 +181,7 @@ function (FIND_LIB_BUILD_DEFAULT LIB SRCDIR BINDIR)
 
 		# for single config - just check existance of single library
 		string(TOUPPER "${CMAKE_BUILD_TYPE}" UPB)
-		get_target_property(LBB ${SLIB}::${SLIB} IMPORTED_LOCATION_${UPB})
+		get_target_property(LBB ${SLIB}::${SLIB} LOCATION_${UPB})
 		if (NOT EXISTS ${LBB})
 			diags("not exists ${LBB}")
 			return()

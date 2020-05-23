@@ -62,4 +62,10 @@ else()
 	target_compile_options ( re2 PRIVATE -Wall -O3 -g -pthread -Wsign-compare -c )
 endif()
 
+set_target_properties(re2 PROPERTIES
+		MAP_IMPORTED_CONFIG_MINSIZEREL RelWithDebInfo
+		MAP_IMPORTED_CONFIG_RELEASE RelWithDebInfo
+		)
+set_target_properties(re2 PROPERTIES EXPORT_PROPERTIES "MAP_IMPORTED_CONFIG_MINSIZEREL;MAP_IMPORTED_CONFIG_RELEASE")
+
 export(TARGETS re2 FILE "${CMAKE_CURRENT_BINARY_DIR}/re2-targets.cmake" NAMESPACE re2:: )

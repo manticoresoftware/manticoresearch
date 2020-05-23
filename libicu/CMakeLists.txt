@@ -175,6 +175,12 @@ endif ()
 
 target_include_directories(icu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/source/common)
 
+set_target_properties(icu PROPERTIES
+		MAP_IMPORTED_CONFIG_MINSIZEREL RelWithDebInfo
+		MAP_IMPORTED_CONFIG_RELEASE RelWithDebInfo
+		)
+set_target_properties(icu PROPERTIES EXPORT_PROPERTIES "MAP_IMPORTED_CONFIG_MINSIZEREL;MAP_IMPORTED_CONFIG_RELEASE")
+
 # separate target for icu data
 file(GLOB ICU_DATA "${CMAKE_CURRENT_SOURCE_DIR}/source/data/in/icu*.dat")
 

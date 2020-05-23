@@ -33,4 +33,10 @@ target_include_directories (stemmer PUBLIC include)
 #SET (STEMMER_FOUND TRUE PARENT_SCOPE)
 #MARK_AS_ADVANCED(STEMMER_INCLUDE_DIR )
 
+set_target_properties(stemmer PROPERTIES
+		MAP_IMPORTED_CONFIG_MINSIZEREL RelWithDebInfo
+		MAP_IMPORTED_CONFIG_RELEASE RelWithDebInfo
+		)
+set_target_properties(stemmer PROPERTIES EXPORT_PROPERTIES "MAP_IMPORTED_CONFIG_MINSIZEREL;MAP_IMPORTED_CONFIG_RELEASE")
+
 export(TARGETS stemmer FILE "${CMAKE_CURRENT_BINARY_DIR}/stemmer-targets.cmake" NAMESPACE stemmer:: )

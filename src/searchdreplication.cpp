@@ -1261,8 +1261,8 @@ void DeleteClusterByName ( const CSphString& sCluster ) EXCLUDES ( g_tClustersLo
 	auto** ppCluster = g_hClusters ( sCluster );
 	if ( ppCluster )
 	{
-		g_hClusters.Delete ( sCluster );
 		SafeDelete ( *ppCluster );
+		g_hClusters.Delete ( sCluster );
 	}
 }
 

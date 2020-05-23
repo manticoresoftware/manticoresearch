@@ -1226,15 +1226,18 @@ int sphCreateUnixSocket ( const char * sPath ) REQUIRES ( MainThread )
 #endif // !USE_WINDOWS
 
 
-int sphCreateInetSocket ( DWORD uAddr, int iPort ) REQUIRES ( MainThread )
+int sphCreateInetSocket ( const ListenerDesc_t & tDesc ) REQUIRES ( MainThread )
 {
+	auto uAddr = tDesc.m_uIP;
+	auto iPort = tDesc.m_iPort;
 	char sAddress[SPH_ADDRESS_SIZE];
 	sphFormatIP ( sAddress, SPH_ADDRESS_SIZE, uAddr );
+	auto sVip = [&tDesc] { return tDesc.m_bVIP?"VIP ":""; };
 
 	if ( uAddr==htonl ( INADDR_ANY ) )
-		sphInfo ( "listening on all interfaces, port=%d", iPort );
+		sphInfo ( "listening on all interfaces for %s%s, port=%d", sVip(), ProtoName ( tDesc.m_eProto), iPort );
 	else
-		sphInfo ( "listening on %s:%d", sAddress, iPort );
+		sphInfo ( "listening on %s:%d for %s%s", sAddress, iPort, sVip(), ProtoName ( tDesc.m_eProto ) );
 
 	static struct sockaddr_in iaddr;
 	memset ( &iaddr, 0, sizeof(iaddr) );
@@ -1304,7 +1307,7 @@ bool AddGlobalListener ( const ListenerDesc_t& tDesc ) REQUIRES ( MainThread )
 		tListener.m_bTcp = false;
 	} else
 #endif
-		tListener.m_iSock = sphCreateInetSocket ( tDesc.m_uIP, tDesc.m_iPort );
+		tListener.m_iSock = sphCreateInetSocket ( tDesc );
 
 	g_dListeners.Add ( tListener );
 	return true;

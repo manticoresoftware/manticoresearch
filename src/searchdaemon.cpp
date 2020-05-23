@@ -179,7 +179,7 @@ void CheckPort( int iPort )
 // check only proto name in lowcase, no '_vip'
 static Proto_e SimpleProtoByName ( const CSphString& sProto )
 {
-	if ( sProto=="sphinx" )
+	if ( sProto=="sphinx" || sProto=="" )
 		return Proto_e::SPHINX;
 	if ( sProto=="mysql41" || sProto=="mysql" )
 		return Proto_e::MYSQL41;

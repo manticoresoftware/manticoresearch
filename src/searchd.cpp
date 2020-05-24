@@ -181,6 +181,7 @@ int						g_iAgentRetryCount = 0;
 int						g_iAgentRetryDelayMs = MAX_RETRY_DELAY/2;	// global (default) values. May be override by the query options 'retry_count' and 'retry_timeout'
 bool					g_bHostnameLookup = false;
 CSphString				g_sMySQLVersion = szMANTICORE_VERSION;
+CSphString				g_sDbName = "Manticore";
 
 // for CLang thread-safety analysis
 ThreadRole MainThread; // functions which called only from main thread
@@ -11927,6 +11928,8 @@ void HandleMysqlShowDatabases ( RowBuffer_i & tOut, SqlStmt_t & )
 	tOut.HeadBegin ( 1 );
 	tOut.HeadColumn ( "Databases" );
 	tOut.HeadEnd();
+	tOut.PutString ( g_sDbName );
+	tOut.Commit ();
 	tOut.Eof();
 }
 
@@ -15147,7 +15150,7 @@ public:
 		{
 			// result set header packet
 			tOut.HeadTuplet ( "DATABASE()", "USER()" );
-			tOut.DataTuplet ( "Manticore", m_tVars.m_bVIP ? "VIP" : "Usual" );
+			tOut.DataTuplet ( g_sDbName.cstr(), m_tVars.m_bVIP ? "VIP" : "Usual" );
 			tOut.Eof ( false );
 			return true;
 		}

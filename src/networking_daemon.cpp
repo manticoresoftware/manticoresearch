@@ -363,11 +363,20 @@ class SockWrapper_c::Impl_c final : public ISphNetAction
 	Handler m_fnRestart = nullptr;
 	bool m_bKeep;		// whether to keep socket as is on destroy, or close it.
 
+	int64_t	m_iWriteTimeoutUS;
+	int64_t m_iReadTimeoutUS;
+
 	Impl_c ( int iSocket, bool bKeep, CSphNetLoop * pNetLoop );
 	~Impl_c () final;
 	int SockPoll ( int64_t tmTimeUntil, bool bWrite );
 	int64_t SockRecv ( char * pBuf, int64_t iLeftBytes );
 	int64_t SockSend ( const char * pBuf, int64_t iLeftBytes );
+
+	int64_t GetTimeoutUS () const;
+	void SetTimeoutUS ( int64_t iTimeoutUS );
+
+	int64_t GetWTimeoutUS () const;
+	void SetWTimeoutUS ( int64_t iTimeoutUS );
 
 	void ResumeWaiterIfAny();
 	void EngageWaiterAndYield( int64_t tmTimeUntil );
@@ -381,6 +390,8 @@ SockWrapper_c::Impl_c::Impl_c ( int iSocket, bool bKeep, CSphNetLoop * pNetLoop 
 	: ISphNetAction ( iSocket )
 	, m_pNetLoop ( pNetLoop )
 	, m_bKeep ( bKeep )
+	, m_iWriteTimeoutUS ( g_iWriteTimeoutS * S2US )
+	, m_iReadTimeoutUS ( g_iReadTimeoutS * S2US )
 {}
 
 SockWrapper_c::Impl_c::~Impl_c ()
@@ -450,7 +461,7 @@ int SockWrapper_c::Impl_c::SockPoll ( int64_t tmTimeUntilUs, bool bWrite )
 		if ( tmMicroLeft<0 )
 			tmMicroLeft = 0;
 		auto iRes = sphPoll ( m_iSock, tmMicroLeft, bWrite );
-		sphLogDebugv ( "sphPoll for alone returned %d", iRes );
+		sphLogDebugv ( "sphPoll for alone returned %d in " INT64_FMT " Us", iRes, tmMicroLeft-tmTimeUntilUs+sphMicroTimer() );
 		return iRes;
 	}
 
@@ -473,6 +484,26 @@ int64_t SockWrapper_c::Impl_c::SockRecv ( char * pBuf, int64_t iLeftBytes )
 {
 	sphLogDebugvv ( "SockRecv %d, for " INT64_FMT " bytes", m_iSock, iLeftBytes );
 	return sphSockRecv ( m_iSock, pBuf, iLeftBytes );
+}
+
+int64_t SockWrapper_c::Impl_c::GetTimeoutUS () const
+{
+	return m_iReadTimeoutUS;
+}
+
+void SockWrapper_c::Impl_c::SetTimeoutUS ( int64_t iTimeoutUS )
+{
+	m_iReadTimeoutUS = iTimeoutUS;
+}
+
+int64_t SockWrapper_c::Impl_c::GetWTimeoutUS () const
+{
+	return m_iWriteTimeoutUS;
+}
+
+void SockWrapper_c::Impl_c::SetWTimeoutUS ( int64_t iTimeoutUS )
+{
+	m_iWriteTimeoutUS = iTimeoutUS;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -506,6 +537,30 @@ int SockWrapper_c::SockPoll ( int64_t tmTimeUntilUs, bool bWrite )
 	return m_pImpl->SockPoll ( tmTimeUntilUs, bWrite );
 }
 
+int64_t SockWrapper_c::GetTimeoutUS () const
+{
+	assert ( m_pImpl );
+	return m_pImpl->GetTimeoutUS();
+}
+
+void SockWrapper_c::SetTimeoutUS ( int64_t iTimeoutUS )
+{
+	assert ( m_pImpl );
+	m_pImpl->SetTimeoutUS (iTimeoutUS);
+}
+
+int64_t SockWrapper_c::GetWTimeoutUS () const
+{
+	assert ( m_pImpl );
+	return m_pImpl->GetWTimeoutUS ();
+}
+
+void SockWrapper_c::SetWTimeoutUS ( int64_t iTimeoutUS )
+{
+	assert ( m_pImpl );
+	m_pImpl->SetWTimeoutUS ( iTimeoutUS );
+}
+
 /////////////////////////////////////////////////////////////////////////////
 /// Helpers
 /////////////////////////////////////////////////////////////////////////////
@@ -514,7 +569,7 @@ int SockWrapper_c::SockPoll ( int64_t tmTimeUntilUs, bool bWrite )
 // Alone worker will use waiting in poll.
 // Cooperative worker will yield and resume instead of waiting.
 // timeout is ruled by g_iWriteTimeoutS.
-static bool SyncSend ( SockWrapper_c* pSock, const char * pBuffer, int64_t iLen )
+static bool SyncSend ( SockWrapper_c* pSock, const char * pBuffer, int64_t iLen)
 {
 	if ( g_bShutdown )
 		sphLogDebug ( "SIGTERM in SockWrapper_c::Send" );
@@ -524,7 +579,7 @@ static bool SyncSend ( SockWrapper_c* pSock, const char * pBuffer, int64_t iLen 
 
 	sphLogDebugv ( "AsyncSend " INT64_FMT " bytes", iLen );
 
-	auto iTimeoutUntilUs = sphMicroTimer () + S2US * g_iWriteTimeoutS; // separate g_iClientQlTimeout?
+	auto iTimeoutUntilUs = sphMicroTimer () + pSock->GetWTimeoutUS();
 	do
 	{
 		auto iRes = pSock->SockSend ( pBuffer, iLen );
@@ -573,7 +628,7 @@ static int AsyncRecvNBChunk ( SockWrapper_c * pSock, BYTE *& pBuf, int & iLeftBy
 
 // flexible receive data from socket. iLen indicates, how many bytes to read. iSpace - how many is _safe_ to read.
 // (i.e. if you want 1 byte and space for 100 - you can read up to 100 bytes, but not 101).
-static int SyncSockRead ( SockWrapper_c * pSock, BYTE* pBuf, int iLen, int iSpace, int iReadTimeoutS, bool bIntr )
+static int SyncSockRead ( SockWrapper_c * pSock, BYTE* pBuf, int iLen, int iSpace, bool bIntr )
 {
 	assert ( iSpace>=iLen );
 
@@ -592,7 +647,7 @@ static int SyncSockRead ( SockWrapper_c * pSock, BYTE* pBuf, int iLen, int iSpac
 	if ( !iLen )
 		return iReceived;
 
-	int64_t tmMaxTimer = sphMicroTimer() + S2US * Max( 1, iReadTimeoutS ); // in microseconds
+	int64_t tmMaxTimer = sphMicroTimer ()+Max ( S2US, pSock->GetTimeoutUS () ); // in microseconds
 
 	int iErr = 0;
 	int iRes = -1;
@@ -721,7 +776,7 @@ Proto_e AsyncNetInputBuffer_c::Probe ( int iHardLimit, bool bLight )
 		iRest = GetRoomForTail ( iHardLimit );
 		if ( !iRest )
 			return eResult; // hard limit reached
-		AppendData ( 0, Min ( iRest, 4096 ), 0, true );
+		AppendData ( 0, Min ( iRest, 4096 ), true );
 	}
 
 	auto iHas = HasBytes();
@@ -733,7 +788,7 @@ Proto_e AsyncNetInputBuffer_c::Probe ( int iHardLimit, bool bLight )
 			return eResult;
 		}
 		sphLogDebugv ( "+++++ Light probing revealed nothing, try blocking" );
-		AppendData ( 1, Min ( iRest, 4096 ), g_iReadTimeoutS, true );
+		AppendData ( 1, Min ( iRest, 4096 ), true );
 		iHas = HasBytes ();
 	}
 
@@ -776,7 +831,7 @@ Proto_e AsyncNetInputBuffer_c::Probe ( int iHardLimit, bool bLight )
 	return eResult;
 }
 
-bool AsyncNetInputBuffer_c::ReadFrom( int iLen, int iTimeoutS, bool bIntr )
+bool AsyncNetInputBuffer_c::ReadFrom( int iLen, bool bIntr )
 {
 	m_bIntr = false;
 	if ( iLen<=0 || iLen>g_iMaxPacketSize )
@@ -786,13 +841,13 @@ bool AsyncNetInputBuffer_c::ReadFrom( int iLen, int iTimeoutS, bool bIntr )
 	if ( iRest<=0 ) // lazy case: prev ReadFrom already achieved requested bytes
 		return true;
 
-	m_bError = AppendData ( iRest, iRest, iTimeoutS, bIntr )<iRest;
+	m_bError = AppendData ( iRest, iRest, bIntr )<iRest;
 	return !m_bError;
 }
 
 // ensure iSpace bytes in buffer, then read at least iNeed, up to vector's GetLimit().
 // returns -1 on error, or N of appended bytes.
-int AsyncNetInputBuffer_c::AppendData ( int iNeed, int iSpace, int iTimeoutS, bool bIntr )
+int AsyncNetInputBuffer_c::AppendData ( int iNeed, int iSpace, bool bIntr )
 {
 	assert ( iNeed<=iSpace );
 	auto iPos = DiscardAndReserve ( int ( m_pCur-m_pBuf ), GetLength()+iSpace );
@@ -800,7 +855,7 @@ int AsyncNetInputBuffer_c::AppendData ( int iNeed, int iSpace, int iTimeoutS, bo
 	m_pBuf = ByteBlob_t ( *this ).first; // realign after possible reserve, byteblob ensures it is not nullptr
 	m_pCur = m_pBuf+iPos;
 
-	int iGot = ReadFromBackend ( iNeed, iSpace, iTimeoutS, bIntr );
+	int iGot = ReadFromBackend ( iNeed, iSpace, bIntr );
 	if ( g_bGotSigterm && bIntr )
 	{
 		sphLogDebug ( "AsyncNetInputBuffer_c::AppendData: got SIGTERM, return -1" );
@@ -824,7 +879,7 @@ int AsyncNetInputBuffer_c::AppendData ( int iNeed, int iSpace, int iTimeoutS, bo
 	return iGot;
 }
 
-int AsyncNetInputBuffer_c::ReadAny ( int iHardLimit, int iTimeoutS )
+int AsyncNetInputBuffer_c::ReadAny ( int iHardLimit )
 {
 	m_bIntr = false;
 
@@ -832,7 +887,7 @@ int AsyncNetInputBuffer_c::ReadAny ( int iHardLimit, int iTimeoutS )
 	if ( !iRest )
 		return 0;
 
-	return AppendData ( 1, Min ( iRest, 4096 ), iTimeoutS, true );
+	return AppendData ( 1, Min ( iRest, 4096 ), true );
 }
 
 
@@ -907,20 +962,30 @@ BYTE AsyncNetInputBuffer_c::Terminate ( int iPos, BYTE uNewVal )
 	return uOld;
 }
 
-class AsyncSockInputBuffer_c : public AsyncNetInputBuffer_c
+class AsyncSockInputBuffer_c final : public AsyncNetInputBuffer_c
 {
 	SockWrapperPtr_c m_pSocket;
 
-	int ReadFromBackend ( int iNeed, int iHaveSpace, int iReadTimeoutS, bool bIntr ) final
+	int ReadFromBackend ( int iNeed, int iHaveSpace, bool bIntr ) final
 	{
 		assert ( iNeed<=iHaveSpace );
-		return SyncSockRead ( m_pSocket, AddN(0), iNeed, iHaveSpace, iReadTimeoutS, bIntr );
+		return SyncSockRead ( m_pSocket, AddN(0), iNeed, iHaveSpace, bIntr );
 	}
 
 public:
 	explicit AsyncSockInputBuffer_c ( SockWrapperPtr_c pSock )
 		: m_pSocket ( std::move ( pSock ) )
 	{}
+
+	void SetTimeoutUS ( int64_t iTimeoutUS ) final
+	{
+		m_pSocket->SetTimeoutUS ( iTimeoutUS );
+	}
+
+	int64_t GetTimeoutUS () const final
+	{
+		return m_pSocket->GetTimeoutUS ();
+	}
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -945,6 +1010,16 @@ public:
 			return; // nothing to send
 		CSphScopedProfile tProf ( m_pProfile, SPH_QSTATE_NET_WRITE );
 		m_bError = !SyncSend ( m_pSocket, (const char *) m_dBuf.begin (), m_dBuf.GetLength64 () );
+	}
+
+	void SetWTimeoutUS ( int64_t iTimeoutUS ) final
+	{
+		m_pSocket->SetWTimeoutUS ( iTimeoutUS );
+	};
+
+	int64_t GetWTimeoutUS () const final
+	{
+		return m_pSocket->GetWTimeoutUS ();
 	}
 };
 

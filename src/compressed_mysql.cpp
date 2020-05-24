@@ -33,18 +33,38 @@ class MysqlCompressedSocket_c final : public AsyncNetBuffer_c, protected AsyncNe
 	void SendLSBSmallDword ( DWORD uValue );
 
 protected:
-	int ReadFromBackend ( int iNeed, int iHaveSpace, int iReadTimeoutS, bool bIntr ) final;
+	int ReadFromBackend ( int iNeed, int iHaveSpace, bool bIntr ) final;
 
 public:
 	explicit MysqlCompressedSocket_c ( AsyncNetBufferPtr_c pFrontend )
 		: m_pFrontend ( std::move (pFrontend) )
 		, m_tIn ( m_pFrontend->In() )
 		, m_tOut ( m_pFrontend->Out() )
-	{}
+	{
+	}
 
 	AsyncNetInputBuffer_c & In () final { return *this; }
 	NetGenericOutputBuffer_c & Out () final { return *this; }
 
+	void SetWTimeoutUS ( int64_t iTimeoutUS ) final
+	{
+		m_tOut.SetWTimeoutUS ( iTimeoutUS );
+	};
+
+	int64_t GetWTimeoutUS () const final
+	{
+		return m_tOut.GetWTimeoutUS();
+	}
+
+	void SetTimeoutUS ( int64_t iTimeoutUS ) final
+	{
+		m_tIn.SetTimeoutUS ( iTimeoutUS );
+	};
+
+	int64_t GetTimeoutUS () const final
+	{
+		return m_tIn.GetTimeoutUS ();
+	}
 
 	void SendBuffer ( const VecTraits_T<BYTE> & dData ) final;
 };
@@ -118,13 +138,13 @@ DWORD MysqlCompressedSocket_c::ReadLSBSmallDword ( InputBuffer_c& tIn )
 	return (DWORD) dNum[2] << 16 | (DWORD) dNum[1] << 8 | (DWORD) dNum[0];
 }
 
-int MysqlCompressedSocket_c::ReadFromBackend ( int iNeed, int iHaveSpace, int iReadTimeoutS, bool bIntr )
+int MysqlCompressedSocket_c::ReadFromBackend ( int iNeed, int iHaveSpace, bool bIntr )
 {
 	int iRead = 0;
 	while ( iNeed>iRead )
 	{
 		// compressed packet header: 3 bytes of raw size, 1 byte packet id, 3 bytes of uncompressed size
-		if ( !m_tIn.ReadFrom ( 7, iReadTimeoutS, bIntr ) )
+		if ( !m_tIn.ReadFrom ( 7, bIntr ) )
 			return -1;
 
 		auto uRawSize = ReadLSBSmallDword (m_tIn);
@@ -132,7 +152,7 @@ int MysqlCompressedSocket_c::ReadFromBackend ( int iNeed, int iHaveSpace, int iR
 		auto uUncompressedSize = (uLongf) ReadLSBSmallDword (m_tIn);
 
 		// read raw packet (compressed or uncompressed)
-		if ( !m_tIn.ReadFrom ( uRawSize, iReadTimeoutS, bIntr ) )
+		if ( !m_tIn.ReadFrom ( uRawSize, bIntr ) )
 			return -1;
 
 		if ( !uUncompressedSize ) // raw uncompressed, return as is

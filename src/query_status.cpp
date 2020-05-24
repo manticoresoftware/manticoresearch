@@ -28,12 +28,14 @@
 static auto & g_bGotSigterm = sphGetGotSigterm ();    // we just received SIGTERM; need to shutdown
 
 
-class NetOutputBuffer_c : public NetGenericOutputBuffer_c
+class NetOutputBuffer_c final : public NetGenericOutputBuffer_c
 {
 public:
 	explicit	NetOutputBuffer_c ( int iSock );
 
-	void SendBuffer ( const VecTraits_T<BYTE> & dData ) override;
+	void SendBuffer ( const VecTraits_T<BYTE> & dData ) final;
+	void SetWTimeoutUS ( int64_t iTimeoutUS ) final {};
+	int64_t GetWTimeoutUS () const final { return 0ll; }
 
 private:
 	int			m_iSock;			///< my socket
@@ -126,8 +128,6 @@ public:
 	explicit		NetInputBuffer_c ( int iSock );
 
 	bool			ReadFrom ( int iLen, int iTimeout, bool bIntr=false, bool bAppend=false );
-	bool			ReadFrom ( int iLen ) { return ReadFrom ( iLen, g_iReadTimeoutS ); }
-
 	bool			IsIntr () const { return m_bIntr; }
 
 	using InputBuffer_c::HasBytes;

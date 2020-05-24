@@ -420,7 +420,7 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 	// send handshake
 	tThd.ThdState ( ThdState_e::HANDSHAKE );
 	tOut.SendDword ( SPHINX_SEARCHD_PROTO ); // that is handshake
-	if ( !tIn.ReadFrom ( 4, g_iReadTimeoutS, true ))
+	if ( !tIn.ReadFrom ( 4, true ))
 	{
 		sphWarning ( "failed to receive API handshake (client=%s(%d), exp=%d, error='%s')",
 				sClientIP, iCID, 4, sphSockError ());
@@ -447,6 +447,7 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 
 		auto iTimeoutS = bPersist ? 1 : g_iReadTimeoutS; // default 1 vs 5 seconds
 		sphLogDebugv ( "conn %s(%d): loop start with timeout %d", sClientIP, iCID, iTimeoutS );
+		tIn.SetTimeoutUS ( S2US * iTimeoutS );
 
 		// in "persistent connection" mode, we want interruptible waits
 		// so that the worker child could be forcibly restarted
@@ -455,7 +456,7 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 		// letting SIGHUP interrupt causes trouble under query/rotation pressure
 		// see sphSockRead() and ReadFrom() for details
 		tThd.ThdState ( ThdState_e::NET_IDLE );
-		bool bCommand = tIn.ReadFrom ( 8, iTimeoutS, bPersist );
+		bool bCommand = tIn.ReadFrom ( 8, bPersist );
 
 		if ( !bCommand )
 		{
@@ -516,7 +517,7 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 			break;
 		}
 
-		if ( iReplySize && !tIn.ReadFrom ( iReplySize, iTimeoutS, true ))
+		if ( iReplySize && !tIn.ReadFrom ( iReplySize, true ))
 		{
 			sphWarning ( "failed to receive API body (client=%s(%d), exp=%d, error='%s')",
 					sClientIP, iCID, iReplySize, sphSockError ());

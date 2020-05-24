@@ -654,7 +654,6 @@ bool CheckWeCanUseSSL ()
 class BioAsyncNetAdapter_c
 {
 	AsyncNetBufferPtr_c m_pBackend;
-	int m_iTimeoutS = 667;
 	NetGenericOutputBuffer_c& m_tOut;
 	AsyncNetInputBuffer_c& m_tIn;
 
@@ -670,7 +669,7 @@ public:
 		sphLogDebugv ( BACK "<< BioBackRead (%p) for %p, %d, in buf %d" NORM, this, pBuf, iLen, m_tIn.HasBytes () );
 		if ( !pBuf || iLen<=0 )
 			return 0;
-		if ( !m_tIn.ReadFrom ( iLen, m_iTimeoutS ))
+		if ( !m_tIn.ReadFrom ( iLen ))
 			iLen = -1;
 		auto dBlob = m_tIn.PopTail ( iLen );
 		if ( IsNull ( dBlob ))
@@ -689,15 +688,28 @@ public:
 		return iLen;
 	}
 
-	int BioCtrl ( int iCmd, long iNum, void * pPtr)
+	long BioCtrl ( int iCmd, long iNum, void * pPtr)
 	{
-		int iRes = 0;
+		long iRes = 0;
 		switch ( iCmd )
 		{
-		case BIO_CTRL_DGRAM_SET_RECV_TIMEOUT:
-			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) timeout %lds" NORM, this, iNum );
-			m_iTimeoutS = (int) iNum;
+		case BIO_CTRL_DGRAM_SET_RECV_TIMEOUT: // BIO_CTRL_DGRAM* used for convenience, as something named 'TIMEOUT'
+			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) set recv tm %lds" NORM, this, iNum );
+			m_tIn.SetTimeoutUS ( iNum );
 			iRes = 1;
+			break;
+		case BIO_CTRL_DGRAM_GET_RECV_TIMEOUT:
+			iRes = m_tIn.GetTimeoutUS();
+			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) get recv tm %lds" NORM, this, iRes );
+			break;
+		case BIO_CTRL_DGRAM_SET_SEND_TIMEOUT:
+			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) set send tm %lds" NORM, this, iNum );
+			m_tOut.SetWTimeoutUS ( iNum );
+			iRes = 1;
+			break;
+		case BIO_CTRL_DGRAM_GET_SEND_TIMEOUT:
+			iRes = m_tOut.GetWTimeoutUS();
+			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) get recv tm %lds" NORM, this, iRes );
 			break;
 		case BIO_CTRL_FLUSH:
 			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) flush" NORM, this );
@@ -706,15 +718,15 @@ public:
 			break;
 		case BIO_CTRL_PENDING:
 			iRes = Max (0, m_tIn.HasBytes () );
-			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) read pending, has %d" NORM, this, iRes );
+			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) read pending, has %ld" NORM, this, iRes );
 			break;
 		case BIO_CTRL_EOF:
 			iRes = m_tIn.GetError() ? 1 : 0;
-			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) eof, is %d" NORM, this, iRes );
+			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) eof, is %ld" NORM, this, iRes );
 			break;
 		case BIO_CTRL_WPENDING:
 			iRes = m_tOut.GetSentCount ();
-			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) write pending, has %d" NORM, this, iRes );
+			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) write pending, has %ld" NORM, this, iRes );
 			break;
 		case BIO_CTRL_PUSH:
 			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) push %p, ignore" NORM, this, pPtr );
@@ -834,22 +846,42 @@ static BIO * BIO_new_coroAsync ( AsyncNetBufferPtr_c pSource )
 
 using BIOPtr_c = SharedPtrCustom_t<BIO *>;
 
-class  AsyncSSLNetInputBuffer_c final : public AsyncNetInputBuffer_c
+class AsyncSSBufferedSocket_c final : public AsyncNetBuffer_c, protected AsyncNetInputBuffer_c, protected NetGenericOutputBuffer_c
 {
-	BIOPtr_c m_pSslFrontend;
-	int ReadFromBackend ( int iNeed, int iHaveSpace, int iReadTimeoutS, bool ) final
+	BIOPtr_c m_pSslBackend;
+
+public:
+	explicit AsyncSSBufferedSocket_c ( BIOPtr_c pSslFrontend )
+		: m_pSslBackend ( std::move ( pSslFrontend ) )
+	{}
+
+	AsyncNetInputBuffer_c & In () final { return *this; }
+	NetGenericOutputBuffer_c & Out () final { return *this; }
+
+	void SendBuffer ( const VecTraits_T<BYTE> & dData ) final
+	{
+		assert ( m_pSslBackend );
+		CSphScopedProfile tProf ( m_pProfile, SPH_QSTATE_NET_WRITE );
+		sphLogDebugv ( FRONT "~~ BioFrontWrite (%p) %d bytes" NORM,
+				(BIO*)m_pSslBackend, dData.GetLength () );
+		int iSent = 0;
+		if ( !dData.IsEmpty ())
+			iSent = BIO_write ( m_pSslBackend, dData.begin (), dData.GetLength () );
+		auto iRes = BIO_flush ( m_pSslBackend );
+		sphLogDebugv ( FRONT ">> BioFrontWrite (%p) done (%d) %d bytes of %d" NORM,
+				(BIO*)m_pSslBackend, iRes, iSent, dData.GetLength () );
+	}
+
+	int ReadFromBackend ( int iNeed, int iHaveSpace, bool ) final
 	{
 		assert ( iNeed <= iHaveSpace );
 		auto pBuf = AddN(0);
 
-		// BIO_CTRL_DGRAM_SET_RECV_TIMEOUT is just for convenience, to set timeout. (Something has TIMEOUT in name)
-		BIO_ctrl ( m_pSslFrontend, BIO_CTRL_DGRAM_SET_RECV_TIMEOUT, iReadTimeoutS, nullptr );
-
 		int iGotTotal = 0;
 		while ( iNeed>0 )
 		{
-			auto iPending = BIO_pending( m_pSslFrontend );
-			if ( !iPending && BIO_eof ( m_pSslFrontend ))
+			auto iPending = BIO_pending( m_pSslBackend );
+			if ( !iPending && BIO_eof ( m_pSslBackend ))
 			{
 				sphLogDebugv ( FRONT "~~ BIO_eof on frontend. Bailing" NORM );
 				return -1;
@@ -857,9 +889,9 @@ class  AsyncSSLNetInputBuffer_c final : public AsyncNetInputBuffer_c
 			auto iCanRead = Max ( iNeed, Min ( iHaveSpace, iPending ));
 			sphLogDebugv ( FRONT "~~ BioReadFront %d..%d, can %d, pending %d" NORM,
 					iNeed, iHaveSpace, iCanRead, iPending );
-			int iGot = BIO_read ( m_pSslFrontend, pBuf, iCanRead );
+			int iGot = BIO_read ( m_pSslBackend, pBuf, iCanRead );
 			sphLogDebugv ( FRONT "<< BioReadFront (%p) done %d from %d..%d" NORM,
-					(BIO *) m_pSslFrontend, iGot, iNeed, iHaveSpace );
+					(BIO *) m_pSslBackend, iGot, iNeed, iHaveSpace );
 			pBuf += iGot;
 			iGotTotal += iGot;
 			iNeed -= iGot;
@@ -867,52 +899,32 @@ class  AsyncSSLNetInputBuffer_c final : public AsyncNetInputBuffer_c
 			if ( !iGot )
 			{
 				sphLogDebugv ( FRONT "<< BioReadFront (%p) breaking on %d" NORM,
-						(BIO *) m_pSslFrontend, iGotTotal );
+						(BIO *) m_pSslBackend, iGotTotal );
 				break;
 			}
 		}
 		return iGotTotal;
 	}
 
-public:
-	explicit AsyncSSLNetInputBuffer_c ( BIOPtr_c pSslFrontend )
-		: m_pSslFrontend ( std::move ( pSslFrontend ) )
-	{}
-};
-
-class AsyncSSLNetOutputBuffer_c final : public NetGenericOutputBuffer_c
-{
-	BIOPtr_c m_pSslFrontend;
-
-public:
-	explicit AsyncSSLNetOutputBuffer_c ( BIOPtr_c pSslFrontend )
-		: m_pSslFrontend ( std::move ( pSslFrontend ) )
-	{}
-
-	void SendBuffer ( const VecTraits_T<BYTE> & dData ) final
+	void SetWTimeoutUS ( int64_t iTimeoutUS ) final
 	{
-		assert ( m_pSslFrontend );
-		CSphScopedProfile tProf ( m_pProfile, SPH_QSTATE_NET_WRITE );
-		sphLogDebugv ( FRONT "~~ BioFrontWrite (%p) %d bytes" NORM,
-				(BIO*)m_pSslFrontend, dData.GetLength () );
-		int iSent = 0;
-		if ( !dData.IsEmpty ())
-			iSent = BIO_write ( m_pSslFrontend, dData.begin (), dData.GetLength () );
-		auto iRes = BIO_flush ( m_pSslFrontend );
-		sphLogDebugv ( FRONT ">> BioFrontWrite (%p) done (%d) %d bytes of %d" NORM,
-				(BIO*)m_pSslFrontend, iRes, iSent, dData.GetLength () );
+		BIO_ctrl ( m_pSslBackend, BIO_CTRL_DGRAM_SET_SEND_TIMEOUT, iTimeoutUS, nullptr );
+	};
+
+	int64_t GetWTimeoutUS () const final
+	{
+		return BIO_ctrl ( m_pSslBackend, BIO_CTRL_DGRAM_GET_SEND_TIMEOUT, 0, nullptr );
 	}
-};
 
-class AsyncSSBufferedSocket_c final : public AsyncNetBuffer_c
-{
-	AsyncSSLNetInputBuffer_c m_tReceiver;
-	AsyncSSLNetOutputBuffer_c m_tSender;
+	void SetTimeoutUS ( int64_t iTimeoutUS ) final
+	{
+		BIO_ctrl ( m_pSslBackend, BIO_CTRL_DGRAM_SET_RECV_TIMEOUT, iTimeoutUS, nullptr );
+	}
 
-public:
-	explicit AsyncSSBufferedSocket_c ( BIOPtr_c && pFrontend ) : m_tReceiver ( pFrontend ), m_tSender ( pFrontend ) {}
-	AsyncNetInputBuffer_c & In () override { return m_tReceiver; }
-	NetGenericOutputBuffer_c & Out () override { return m_tSender; }
+	int64_t GetTimeoutUS () const final
+	{
+		return BIO_ctrl ( m_pSslBackend, BIO_CTRL_DGRAM_GET_RECV_TIMEOUT, 0, nullptr );
+	}
 };
 
 bool MakeSecureLayer ( AsyncNetBufferPtr_c& pSource )

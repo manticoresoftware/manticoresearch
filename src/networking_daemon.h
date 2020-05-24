@@ -99,6 +99,12 @@ public:
 	int64_t SockRecv ( char * pData, int64_t iLen );
 	int64_t SockSend ( const char * pData, int64_t iLen );
 	int SockPoll ( int64_t tmTimeUntil, bool bWrite );
+
+	int64_t GetTimeoutUS() const;
+	void SetTimeoutUS( int64_t iTimeoutUS );
+
+	int64_t GetWTimeoutUS () const;
+	void SetWTimeoutUS ( int64_t iTimeoutUS );
 };
 
 using SockWrapperPtr_c = SharedPtr_t<SockWrapper_c *>;
@@ -119,11 +125,11 @@ protected:
 	/// @iHaveSpace is how many bytes is _safe_ to return. If it is requested 10 bytes, but iHaveSpace
 	/// tells 10K - then anything between 10 and 10K is ok. If your backend needs more - see BufferFor()
 	/// to do so.
-	virtual int 	ReadFromBackend ( int iNeed, int iHaveSpace, int iReadTimeoutS, bool bIntr ) = 0;
+	virtual int 	ReadFromBackend ( int iNeed, int iHaveSpace, bool bIntr ) = 0;
 
 	/// for iNeed==0 just try oneshot non-blocking read try to look if anything at all arived.
 	/// returns -1 on error, or N of appended bytes.
-	int				AppendData ( int iNeed, int iSpace, int iTimeoutS, bool bIntr );
+	int				AppendData ( int iNeed, int iSpace, bool bIntr );
 
 	/// internal - return place available to not exceed iHardLimit. Dispose consumed data, if necesary.
 	int				GetRoomForTail ( int iHardLimit );
@@ -145,14 +151,14 @@ public:
 	AsyncNetInputBuffer_c ();
 
 	/// read at least 1 byte, but no more than 4096 bytes, up to iHardLimit
-	int				ReadAny ( int iHardLimit, int iTimeoutS );
+	int				ReadAny ( int iHardLimit );
 
 	/// try to peek first bytes from socket and imagine proto from this
 	Proto_e			Probe ( int iHardLimit, bool bLight );
 
 	/// Ensure we have iLen bytes available in buffer. If not - read new chunk from backend.
 	/// return true on success
-	bool			ReadFrom ( int iLen, int iTimeoutS, bool bIntr = true );
+	bool			ReadFrom ( int iLen, bool bIntr = true );
 
 	/// discards processed data from the buf, releasing space.
 	/// @param iHowMany determines behaviour as
@@ -176,6 +182,12 @@ public:
 
 	/// len from current position to the end of backend vector.
 	using InputBuffer_c::HasBytes;
+
+	/// set timeout for backend, in microseconds
+	virtual void SetTimeoutUS ( int64_t iTimeoutUS ) = 0;
+
+	/// get timeout from backend, in microseconds
+	virtual int64_t GetTimeoutUS () const = 0;
 };
 
 

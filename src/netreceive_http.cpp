@@ -351,16 +351,14 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 
 	auto & tOut = pBuf->Out ();
 	auto & tIn = pBuf->In ();
-
 	do
 	{
 		tIn.DiscardProcessed ( -1 ); // -1 means 'force flush'
-		auto iTimeoutS = bKeepAlive ? g_iReadTimeoutS : g_iClientTimeoutS;
 
 		HttpHeaderStreamParser_t tHeadParser;
 		while ( !tHeadParser.HeaderFound ( tIn.Tail() ))
 		{
-			auto iChunk = tIn.ReadAny ( g_iMaxPacketSize, iTimeoutS );
+			auto iChunk = tIn.ReadAny ( g_iMaxPacketSize );
 			if ( iChunk>0 )
 				continue;
 
@@ -368,7 +366,7 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 		}
 
 		int iPacketLen = tHeadParser.m_iHeaderEnd+tHeadParser.m_iFieldContentLenVal;
-		if ( !tIn.ReadFrom ( iPacketLen, iTimeoutS )) {
+		if ( !tIn.ReadFrom ( iPacketLen )) {
 			sphWarning ( "failed to receive HTTP request (client=%s(%d), exp=%d, error='%s')", sClientIP, iCID,
 						 iPacketLen, sphSockError ());
 			return;
@@ -383,7 +381,16 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 		GlobalCrashQuerySet ( tCrashQuery );
 
 		CSphVector<BYTE> dResult;
-		bKeepAlive = sphLoopClientHttp ( tPacket.first, tPacket.second, dResult, tThdesc );
+		if ( sphLoopClientHttp ( tPacket.first, tPacket.second, dResult, tThdesc ) )
+		{
+			if ( !bKeepAlive )
+				tIn.SetTimeoutUS ( S2US * g_iClientTimeoutS );
+			bKeepAlive = true;
+		} else {
+			if ( bKeepAlive )
+				tIn.SetTimeoutUS ( S2US * g_iReadTimeoutS );
+			bKeepAlive = false;
+		}
 
 		tIn.Terminate ( 0, uOldByte ); // return back prev byte
 

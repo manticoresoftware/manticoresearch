@@ -985,7 +985,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, CSphS
 	// get command, handle special packets
 	const BYTE uMysqlCmd = tIn.GetByte ();
 
-	sphLogDebugv ( "LoopClientMySQL command %d", uMysqlCmd );
+	sphLogDebugv ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, sQuery.scstr() );
 
 	if ( uMysqlCmd==MYSQL_COM_QUIT )
 		return false;
@@ -1132,6 +1132,7 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 	BYTE uPacketID = 1;
 	bool bKeepAlive = false;
 	int iPacketLen = 0;
+	tIn.SetTimeoutUS ( S2US * g_iClientQlTimeoutS );
 	do
 	{
 		tIn.DiscardProcessed ();
@@ -1153,7 +1154,7 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 		while (iChunkLen==MAX_PACKET_LEN)
 		{
 			// inlined AsyncReadMySQLPacketHeader
-			if ( !tIn.ReadFrom ( iPacketLen+4, g_iClientQlTimeoutS ))
+			if ( !tIn.ReadFrom ( iPacketLen+4 ))
 			{
 				sphLogDebugv ( "conn %s(%d): bailing on failed MySQL header (sockerr=%s)",
 						sClientIP, iCID, sphSockError ());
@@ -1171,7 +1172,7 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 
 			// receive package body
 			tThd.ThdState ( ThdState_e::NET_READ );
-			if ( !tIn.ReadFrom ( iPacketLen, g_iClientQlTimeoutS ))
+			if ( !tIn.ReadFrom ( iPacketLen ))
 			{
 				sphWarning ( "failed to receive MySQL request body (client=%s(%d), exp=%d, error='%s')",
 						sClientIP, iCID, iPacketLen, sphSockError ());

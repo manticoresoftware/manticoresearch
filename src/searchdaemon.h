@@ -463,6 +463,9 @@ public:
 
 	virtual void SendBuffer ( const VecTraits_T<BYTE> & dData ) = 0;
 
+	virtual void SetWTimeoutUS ( int64_t iTimeoutUS ) = 0;
+	virtual int64_t GetWTimeoutUS () const = 0;
+
 protected:
 	CSphQueryProfile *	m_pProfile = nullptr;
 	bool		m_bError = false;

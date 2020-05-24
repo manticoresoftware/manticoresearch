@@ -315,6 +315,28 @@ Range filters support the following properties:
 * ``lte``: value must be less than or equal to
 * ``lt``: value must be less
 
+
+**Set filters**
+
+Set filters check if attribute value is equal to any of the values in the specified set. Example:
+
+::
+
+    {
+      "index":"test1",
+      "query":
+      {
+        "in":
+        {
+          "price": [1,10,100]
+        }
+      }
+    }
+
+
+Set filters work for integer, string and multi-value attributes.
+
+
 **Geo distance filters**
 
 

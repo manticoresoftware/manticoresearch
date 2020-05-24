@@ -37,7 +37,6 @@ bool			sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnin
 
 void			sphBuildProfileJson ( JsonEscapedBuilder &tOut, const XQNode_t * pNode, const CSphSchema &tSchema, const StrVec_t &dZones );
 
-bool			ParseJsonQueryFilters ( const JsonObj_c & tJson, CSphQuery & tQuery, CSphString & sError, CSphString & sWarning );
 bool			NonEmptyQuery ( const JsonObj_c & tQuery );
 
 #endif

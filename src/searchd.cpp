@@ -14810,21 +14810,21 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	}
 
 	auto pServed = GetServed ( tStmt.m_sIndex.cstr() );
-	ServedDescWPtr_c pWriteLocked ( pServed );
-
 	if ( !pServed )
 	{
 		if ( g_pDistIndexes->Contains ( tStmt.m_sIndex ) )
 			sError.SetSprintf ( "ALTER is only supported for local (not distributed) indexes" );
 		else
 			sError.SetSprintf ( "index '%s' not found", tStmt.m_sIndex.cstr () );
+
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
 	}
 
+	ServedDescWPtr_c pWriteLocked ( pServed );
 	if ( !pWriteLocked->m_pIndex->IsRT() )
-		sError.SetSprintf ( "index '%s' is not real-time", tStmt.m_sIndex.cstr() );
-
-	if ( !sError.IsEmpty () )
 	{
+		sError.SetSprintf ( "index '%s' is not real-time", tStmt.m_sIndex.cstr() );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 		return;
 	}

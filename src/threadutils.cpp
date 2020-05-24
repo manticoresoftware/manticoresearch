@@ -1128,11 +1128,21 @@ void Threads::AloneShutdowncatch ()
 			bAloneFinished = g_dDetachedThreads.IsEmpty ();
 		}
 
+		auto iReport = 1000;
+		auto iStart = 0;
+
 		while (!bAloneFinished)
 		{
 			sphSleepMsec ( 50 );
 			ScopedMutex_t _ ( g_dDetachedGuard );
 			bAloneFinished = g_dDetachedThreads.IsEmpty();
+			iStart += 50;
+			if ( iStart >= iReport )
+			{
+				sphLogDebug ( "AloneShutdowncatch catch still has %d alone threads", g_dDetachedThreads.GetLength() );
+				iStart = 0;
+				iReport += 1000;
+			}
 		}
 	});
 #endif

@@ -1099,6 +1099,45 @@ Threads::Scheduler_i * GetAloneScheduler ( int iMaxThreads, const char * szName 
 CSphMutex g_dDetachedGuard;
 CSphVector<SphThread_t> g_dDetachedThreads GUARDED_BY (g_dDetachedGuard);
 
+void Threads::AloneShutdowncatch ()
+{
+#if !USE_WINDOWS
+	static bool bShutdownEngaged = false;
+	if ( !bShutdownEngaged )
+	{
+		bShutdownEngaged = true;
+		searchd::AddShutdownCb ( [&]
+		{
+			sphLogDebug ( "AloneShutdowncatch catch invoked" );
+			bool bAloneFinished;
+			{
+				ScopedMutex_t _ ( g_dDetachedGuard );
+				for ( auto& tThread : g_dDetachedThreads )
+					pthread_kill ( tThread, SIGTERM );
+				bAloneFinished = g_dDetachedThreads.IsEmpty ();
+			}
+
+			auto iReport = 1000;
+			auto iStart = 0;
+
+			while (!bAloneFinished)
+			{
+				sphSleepMsec ( 50 );
+				ScopedMutex_t _ ( g_dDetachedGuard );
+				bAloneFinished = g_dDetachedThreads.IsEmpty();
+				iStart += 50;
+				if ( iStart >= iReport )
+				{
+					sphLogDebug ( "AloneShutdowncatch catch still has %d alone threads", g_dDetachedThreads.GetLength() );
+					iStart = 0;
+					iReport += 1000;
+				}
+			}
+		});
+	}
+#endif
+}
+
 void Threads::AddDetachedThread ( SphThread_t tThread )
 {
 	sphLogDebug ( "AddDetachedThread called for %d", (int) GetOsThreadId() );
@@ -1113,40 +1152,6 @@ void Threads::RemoveDetachedThread ( SphThread_t tThread )
 	g_dDetachedThreads.RemoveValue ( tThread );
 }
 
-
-void Threads::AloneShutdowncatch ()
-{
-#if !USE_WINDOWS
-	searchd::AddShutdownCb ( [&]
-	{
-		sphLogDebug ( "AloneShutdowncatch catch invoked" );
-		bool bAloneFinished;
-		{
-			ScopedMutex_t _ ( g_dDetachedGuard );
-			for ( auto& tThread : g_dDetachedThreads )
-				pthread_kill ( tThread, SIGTERM );
-			bAloneFinished = g_dDetachedThreads.IsEmpty ();
-		}
-
-		auto iReport = 1000;
-		auto iStart = 0;
-
-		while (!bAloneFinished)
-		{
-			sphSleepMsec ( 50 );
-			ScopedMutex_t _ ( g_dDetachedGuard );
-			bAloneFinished = g_dDetachedThreads.IsEmpty();
-			iStart += 50;
-			if ( iStart >= iReport )
-			{
-				sphLogDebug ( "AloneShutdowncatch catch still has %d alone threads", g_dDetachedThreads.GetLength() );
-				iStart = 0;
-				iReport += 1000;
-			}
-		}
-	});
-#endif
-}
 
 thread_local CrashQuery_t * g_pTlsCrashQuery = nullptr;
 

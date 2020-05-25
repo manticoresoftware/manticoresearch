@@ -19897,6 +19897,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	CrashQuery_t tQueryTLS;
 	ExposedSetTopQueryTls ( &tQueryTLS );
 
+	// untill no threads started, schedule stopping of alone threads to very bottom
+	Threads::AloneShutdowncatch ();
+
 	// time for replication to sync with cluster
 	ReplicationStart ( hSearchd, dListenerDescs, bNewCluster, bNewClusterForce );
 	searchd::AddShutdownCb ( [] { ReplicateClustersDelete (); } );

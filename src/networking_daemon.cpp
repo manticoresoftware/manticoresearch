@@ -133,8 +133,6 @@ class CSphNetLoop::Impl_c
 		} else
 			sphWarning ( "net-loop use timeout due to %s", pWakeup->m_sError.cstr () );
 
-		Threads::AloneShutdowncatch ();
-
 		for ( const auto & dListener : dListeners )
 		{
 			auto * pCur = new NetActionAccept_c ( dListener );

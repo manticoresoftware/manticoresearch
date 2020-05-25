@@ -420,8 +420,17 @@ void SockWrapper_c::Impl_c::EngageWaiterAndYield ( int64_t tmTimeUntilUs )
 	assert ( m_pNetLoop );
 	sphLogDebugv ( "CoYieldWith (m_iEvent=%d), timeout %d", m_uNetEvents, int(tmTimeUntilUs-sphMicroTimer ()) );
 	m_iTimeoutTimeUS = tmTimeUntilUs;
-	m_fnRestart = Threads::CurrentRestarter ();
-	Threads::CoYieldWith ( [this] { if (m_pNetLoop) m_pNetLoop->AddAction ( this ); } );
+	if ( m_pNetLoop && !g_bShutdown )
+	{
+		m_fnRestart = Threads::CurrentRestarter ();
+		Threads::CoYieldWith ( [this] {
+			if ( m_pNetLoop && !g_bShutdown ) // secondary check for the case of a race
+				m_pNetLoop->AddAction ( this );
+			else
+				ResumeWaiterIfAny(); // emergency, only on shutdown
+		} );
+	}
+
 	sphLogDebugv ( "EngageWaiterAndYield awake (m_iSock=%d, events=%d)", m_iSock, m_uNetEvents );
 }
 

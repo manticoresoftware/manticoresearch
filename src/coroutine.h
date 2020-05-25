@@ -336,6 +336,12 @@ public:
 
 		// assume if another thread calls "WaitEvent()" here. Since signal is set, it will pass immediately.
 		auto tWaiter = std::move(m_dWaiter);
+
+		// avoid the rare race: tWaiter destroyed first, then tLock.
+		// if continuation of tWaiter assumes destroying the object, locked mutex will cause error and crash,
+		// so unlock it right here.
+		tLock.Unlock();
+
 		// here tWaiter will maybe destroyed, if was engaged.
 	}
 

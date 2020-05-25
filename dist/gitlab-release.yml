@@ -94,6 +94,7 @@ windows:
     - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=$DISTR ..
     - make -j4 package
     - cp manticore*.rpm ..
+    - if [[ $REPO_NAME ]]; then cd .. && /upload_repo.sh; fi
   artifacts:
     paths:
       - manticore*.rpm
@@ -120,6 +121,8 @@ rhel6:
   <<: *redhat
   variables:
     DISTR: "rhel6"
+    REPO_DIST_NAME: "centos"
+    REPO_DIST_VER: "6"
   only:
     variables:
       - $WHAT == "all"
@@ -130,6 +133,8 @@ rhel7:
   <<: *redhat
   variables:
     DISTR: "rhel7"
+    REPO_DIST_NAME: "centos"
+    REPO_DIST_VER: "7"
   only:
     variables:
       - $WHAT == "all"
@@ -145,8 +150,11 @@ rhelsplit7:
     - cmake -DSPHINX_TAG=$RELEASE_TAG -DSPLIT_APPS=ON -DNOAPI=ON -DDISTR_BUILD=$DISTR ..
     - make -j4 package
     - cp manticore*.rpm ..  
+    - if [[ $REPO_NAME ]]; then cd .. && /upload_repo.sh; fi
   variables:
     DISTR: "rhel7"
+    REPO_DIST_NAME: "centos"
+    REPO_DIST_VER: "7"
   only:
     variables:
       - $WHAT == "all"
@@ -157,6 +165,8 @@ rhel8:
   <<: *redhat
   variables:
     DISTR: "rhel8"
+    REPO_DIST_NAME: "centos"
+    REPO_DIST_VER: "8"
     XTRAFLAGS: "-DCMAKE_CXX_FLAGS=\"-Wno-error=stringop-truncation\""
   only:
     variables:

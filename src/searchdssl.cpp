@@ -694,22 +694,22 @@ public:
 		switch ( iCmd )
 		{
 		case BIO_CTRL_DGRAM_SET_RECV_TIMEOUT: // BIO_CTRL_DGRAM* used for convenience, as something named 'TIMEOUT'
-			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) set recv tm %lds" NORM, this, iNum );
+			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) set recv tm %lds" NORM, this, long (iNum / S2US) );
 			m_tIn.SetTimeoutUS ( iNum );
 			iRes = 1;
 			break;
 		case BIO_CTRL_DGRAM_GET_RECV_TIMEOUT:
 			iRes = m_tIn.GetTimeoutUS();
-			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) get recv tm %lds" NORM, this, iRes );
+			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) get recv tm %lds" NORM, this, long (iRes / S2US) );
 			break;
 		case BIO_CTRL_DGRAM_SET_SEND_TIMEOUT:
-			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) set send tm %lds" NORM, this, iNum );
+			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) set send tm %lds" NORM, this, long (iNum / S2US) );
 			m_tOut.SetWTimeoutUS ( iNum );
 			iRes = 1;
 			break;
 		case BIO_CTRL_DGRAM_GET_SEND_TIMEOUT:
 			iRes = m_tOut.GetWTimeoutUS();
-			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) get recv tm %lds" NORM, this, iRes );
+			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) get recv tm %lds" NORM, this, long (iRes / S2US) );
 			break;
 		case BIO_CTRL_FLUSH:
 			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) flush" NORM, this );

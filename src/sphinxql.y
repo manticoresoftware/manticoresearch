@@ -1135,7 +1135,7 @@ opt_chunk:
 //////////////////////////////////////////////////////////////////////////
 
 set_stmt:
-	TOK_SET ident_set '=' boolean_value
+	TOK_SET ident_set '=' bool_or_integer_value
 		{
 			pParser->SetStatement ( $2, SET_LOCAL );
 			pParser->m_pStmt->m_iSetValue = $4.m_iValue;
@@ -1150,10 +1150,14 @@ set_stmt:
 			pParser->SetStatement ( $2, SET_LOCAL );
 //			pParser->m_pStmt->m_bSetNull = true;
 		}
-	| TOK_SET TOK_NAMES set_value		{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
-	| TOK_SET TOK_NAMES set_value TOK_COLLATE set_value { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
+	| TOK_SET TOK_NAMES set_value opt_collate { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	| TOK_SET TOK_SYSVAR '=' set_value	{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	| TOK_SET TOK_CHARACTER TOK_SET set_value { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
+	;
+
+opt_collate:
+	// empty
+	| TOK_COLLATE set_value
 	;
 
 set_global_stmt:
@@ -1199,18 +1203,10 @@ set_string_value:
 	| TOK_QUOTED_STRING
 	;
 
-boolean_value:
+bool_or_integer_value:
 	TOK_TRUE			{ $$.m_iValue = 1; }
 	| TOK_FALSE			{ $$.m_iValue = 0; }
-	| const_int
-		{
-			$$.m_iValue = $1.m_iValue;
-			if ( $$.m_iValue!=0 && $$.m_iValue!=1 )
-			{
-				yyerror ( pParser, "only 0 and 1 could be used as boolean values" );
-				YYERROR;
-			}
-		}
+	| const_int			{ $$.m_iValue = $1.m_iValue; }
 	;
 
 set_value:

@@ -1130,11 +1130,22 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 	tSession.SetVIP ( tConn.m_bVIP );
 	bool bAuthed = false;
 	BYTE uPacketID = 1;
-	bool bKeepAlive = false;
-	int iPacketLen = 0;
-	tIn.SetTimeoutUS ( S2US * g_iClientQlTimeoutS );
+	bool bKeepAlive;
+	int iPacketLen;
+	int iTimeoutS = -1;
 	do
 	{
+		// check for updated timeout
+		auto iCurrentTimeout = tSession.GetBackendTimeoutS(); // by default -1, means 'default'
+		if ( iCurrentTimeout<0 )
+			iCurrentTimeout = g_iClientQlTimeoutS;
+
+		if ( iCurrentTimeout!=iTimeoutS )
+		{
+			iTimeoutS = iCurrentTimeout;
+			tIn.SetTimeoutUS ( S2US * iTimeoutS );
+		}
+
 		tIn.DiscardProcessed ();
 		iPacketLen = 0;
 

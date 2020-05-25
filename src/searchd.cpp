@@ -13094,6 +13094,7 @@ struct SessionVars_t
 	ESphCollation	m_eCollation { g_eCollation };
 	bool			m_bProfile = false;
 	bool			m_bVIP = false;
+	int				m_iTimeoutS = -1;
 	CSphVector<int64_t> m_dLastIds;
 };
 
@@ -13261,6 +13262,20 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 	switch ( tStmt.m_eSet )
 	{
 	case SET_LOCAL:
+
+		if ( tStmt.m_sSetName=="wait_timeout" )
+		{
+			tVars.m_iTimeoutS = tStmt.m_iSetValue;
+			break;
+		}
+
+		// move check here from bison parser. Only boolean allowed below.
+		if ( tStmt.m_iSetValue!=0 && tStmt.m_iSetValue!=1 )
+		{
+			tOut.ErrorEx ( tStmt.m_sStmt, "sphinxql: only 0 and 1 could be used as boolean values near '%d'", tStmt.m_iSetValue );
+			return;
+		}
+
 		if ( tStmt.m_sSetName=="autocommit" )
 		{
 			// per-session AUTOCOMMIT
@@ -13311,8 +13326,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 		} else
 		{
 			// unknown variable, return error
-			sError.SetSprintf ( "Unknown session variable '%s' in SET statement", tStmt.m_sSetName.cstr() );
-			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+			tOut.ErrorEx ( tStmt.m_sStmt, "Unknown session variable '%s' in SET statement", tStmt.m_sSetName.cstr () );
 			return;
 		}
 		break;
@@ -13391,14 +13405,21 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 				g_bMaintenance = !!tStmt.m_iSetValue;
 			else
 			{
-				sError.SetSprintf ( "Only VIP connections can set maintenance mode" );
-				tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+				tOut.Error ( tStmt.m_sStmt, "Only VIP connections can set maintenance mode" );
+				return;
+			}
+		} else if ( tStmt.m_sSetName=="wait_timeout" )
+		{
+			if ( tVars.m_bVIP )
+				g_iClientQlTimeoutS = tStmt.m_iSetValue;
+			else
+			{
+				tOut.Error ( tStmt.m_sStmt, "Only VIP connections can change global wait_timeout value" );
 				return;
 			}
 		} else
 		{
-			sError.SetSprintf ( "Unknown system variable '%s'", tStmt.m_sSetName.cstr() );
-			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+			tOut.ErrorEx ( tStmt.m_sStmt, "Unknown system variable '%s'", tStmt.m_sSetName.cstr () );
 			return;
 		}
 		break;
@@ -13422,8 +13443,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 	break;
 
 	default:
-		sError.SetSprintf ( "internal error: unhandled SET mode %d", (int)tStmt.m_eSet );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.ErrorEx ( tStmt.m_sStmt, "internal error: unhandled SET mode %d", (int) tStmt.m_eSet );
 		return;
 	}
 
@@ -13456,9 +13476,9 @@ void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 			|| pTo->m_eType!=IndexType_e::RT )
 		{
 			if ( !pFrom )
-				tOut.ErrorEx ( MYSQL_ERR_PARSE_ERROR, "no such index '%s'", sFrom.cstr() );
+				tOut.ErrorEx ( nullptr, "no such index '%s'", sFrom.cstr() );
 			else if ( !pTo )
-				tOut.ErrorEx ( MYSQL_ERR_PARSE_ERROR, "no such index '%s'", sTo.cstr() );
+				tOut.ErrorEx ( nullptr, "no such index '%s'", sTo.cstr() );
 			else if ( pFrom->m_eType!=IndexType_e::PLAIN )
 				tOut.Error ( tStmt.m_sStmt, "1st argument to ATTACH must be a plain index" );
 			else if ( pTo->m_eType!=IndexType_e::RT )
@@ -13469,7 +13489,7 @@ void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		// cluster does not implement ATTACH for now
 		if ( ClusterOperationProhibit ( pTo, sError, "ATTACH" ) )
 		{
-			tOut.ErrorEx ( MYSQL_ERR_PARSE_ERROR, "index %s: %s", sTo.cstr(), sError.cstr () );
+			tOut.ErrorEx ( nullptr, "index %s: %s", sTo.cstr(), sError.cstr () );
 			return;
 		}
 	}
@@ -15699,10 +15719,10 @@ void SphinxqlSessionPublic::SetVIP ( bool bVIP )
 	m_pImpl->m_tVars.m_bVIP = bVIP;
 }
 
-CSphinxqlSession & SphinxqlSessionPublic::Impl ()
+int64_t SphinxqlSessionPublic::GetBackendTimeoutS () const
 {
 	assert ( m_pImpl );
-	return *m_pImpl;
+	return m_pImpl->m_tVars.m_iTimeoutS;
 }
 
 /// sphinxql command over API

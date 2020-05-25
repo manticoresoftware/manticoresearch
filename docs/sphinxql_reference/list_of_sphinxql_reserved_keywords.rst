@@ -12,4 +12,4 @@ SphinxQL syntax (and therefore can not be used as identifiers).
     AND, AS, BY, DEBUG, DIV, EXPLAIN, FACET, FALSE, FORCE,
     FROM, IGNORE, IN, INDEXES, IS, LIMIT, LOGS, MOD, NOT,
     NULL, OFFSET, OR, ORDER, REGEX, RELOAD, SELECT, SYSFILTERS,
-    TRUE, USE, WAIT_TIMEOUT
+    TRUE, USE

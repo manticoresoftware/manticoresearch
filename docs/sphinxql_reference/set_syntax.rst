@@ -83,7 +83,9 @@ in the respective scope. Known per-session server variables are:
    connecting to a Manticore server.
 
 -  ``WAIT_TIMEOUT = value``
-   Does nothing; added for improved compatibility with 3rd party MySQL clients
+   Set wait timeout (in seconds) for sphinxql connection. Session variable affects current
+   connection only. Global variable set new value for 'sphinxql_timeout' config setting,
+   and is available only for VIP users (since it m.b. dangerous to allow it for everybody).
 
 -  ``PROFILING = {0 | 1}``
    Enables query profiling in the current session. Defaults to 0. See

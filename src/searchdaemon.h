@@ -1162,7 +1162,9 @@ public:
 	CSphQueryProfile* StartProfiling ( ESphQueryState );
 	void SaveLastProfile();
 	void SetVIP ( bool bVIP );
-	CSphinxqlSession& Impl();
+
+	// manage backend's timeout
+	int64_t GetBackendTimeoutS() const;
 };
 
 void LogSphinxqlError ( const char * sStmt, const char * sError, int iCid );
@@ -1324,7 +1326,7 @@ public:
 		PutString ( sTime.cstr ());
 	}
 
-	void ErrorEx ( MysqlErrors_e iErr, const char * sTemplate, ... )
+	void ErrorEx ( const char * sStmt, const char * sTemplate, ... )
 	{
 		char sBuf[1024];
 		va_list ap;
@@ -1333,7 +1335,7 @@ public:
 		vsnprintf ( sBuf, sizeof(sBuf), sTemplate, ap );
 		va_end ( ap );
 
-		Error ( nullptr, sBuf, iErr );
+		Error ( sStmt, sBuf, MYSQL_ERR_PARSE_ERROR );
 	}
 
 	// popular pattern of 2 columns of data

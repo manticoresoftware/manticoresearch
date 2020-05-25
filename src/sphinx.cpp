@@ -6596,7 +6596,7 @@ bool CSphSchema::IsReserved ( const char * szToken )
 		"FALSE", "FORCE", "FROM", "IGNORE", "IN", "INDEXES", "IS",
 		"LIMIT", "LOGS", "MOD", "NOT", "NULL", "OFFSET", "OR",
 		"ORDER", "REGEX", "RELOAD", "SELECT", "SYSFILTERS",
-		"TRUE", "USE", "WAIT_TIMEOUT", NULL
+		"TRUE", "USE", NULL
 	};
 
 	const char ** p = dReserved;

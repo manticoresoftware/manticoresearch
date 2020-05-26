@@ -1798,7 +1798,7 @@ class SphinxConfig
 		if ( StrBegins ( $lower_query, $create_table ) || StrBegins ( $lower_query, $alter_table ) )
 		{
 			$matches = array();
-			$preg = preg_match_all ( "/(?:(?:wordforms|stopwords|exceptions)[ \t]*=[ \t]*)'([^']+)'/", $query, $matches, PREG_OFFSET_CAPTURE );
+			$preg = preg_match_all ( "/(?:(?:wordforms|stopwords|exceptions|hitless_words)[ \t]*=[ \t]*)'([^']+)'/", $query, $matches, PREG_OFFSET_CAPTURE );
 
 			$result_str = "";
 			$prev_offset = 0;

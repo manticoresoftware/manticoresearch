@@ -1298,7 +1298,7 @@ enum ESphAggrFunc
 /// source column info
 struct CSphColumnInfo
 {
-	enum FieldFlag_e
+	enum
 	{
 		FIELD_NONE		= 0,
 		FIELD_STORED	= 1<<0,

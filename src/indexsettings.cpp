@@ -1428,12 +1428,28 @@ static CSphString GetAttrTypeName ( const CSphColumnInfo & tAttr )
 }
 
 
+static void AddFieldSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tField )
+{
+	DWORD uAllSet = CSphColumnInfo::FIELD_INDEXED | CSphColumnInfo::FIELD_STORED;
+	if ( (tField.m_uFieldFlags & uAllSet) != uAllSet )
+	{
+		if ( tField.m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED )
+			sRes << " indexed";
+
+		if ( tField.m_uFieldFlags & CSphColumnInfo::FIELD_STORED )
+			sRes << " stored";
+	}
+}
+
+
 CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema )
 {
 	assert ( pIndex );
 
 	StringBuilder_c sRes;
 	sRes << "CREATE TABLE " << sName << " (\n";
+
+	CSphVector<const CSphColumnInfo *> dExclude;
 
 	bool bHasAttrs = false;
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
@@ -1445,23 +1461,33 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 		if ( bHasAttrs )
 			sRes << ",\n";
 
-		sRes << tAttr.m_sName << " " << GetAttrTypeName(tAttr);
+		const CSphColumnInfo * pField = tSchema.GetField ( tAttr.m_sName.cstr() );
+		if ( pField && tAttr.m_eAttrType==SPH_ATTR_STRING )
+		{
+			sRes << tAttr.m_sName << " " << GetAttrTypeName(tAttr) << " attribute";
+			AddFieldSettings ( sRes, *pField );
+			dExclude.Add(pField);
+		}
+		else
+			sRes << tAttr.m_sName << " " << GetAttrTypeName(tAttr);
+
 		bHasAttrs = true;
 	}
+
+	dExclude.Uniq();
 
 	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
 	{
 		const CSphColumnInfo & tField = tSchema.GetField(i);
 
+		if ( dExclude.BinarySearch(&tField) )
+			continue;
+
 		if ( i || bHasAttrs )
 			sRes << ",\n";
 
 		sRes << tField.m_sName << " text";
-		if ( tField.m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED )
-			sRes << " indexed";
-
-		if ( tField.m_uFieldFlags & CSphColumnInfo::FIELD_STORED )
-			sRes << " stored";
+		AddFieldSettings ( sRes, tField );
 	}
 
 	sRes << "\n)";

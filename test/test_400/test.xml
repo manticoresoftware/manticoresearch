@@ -102,6 +102,26 @@ searchd
 <sphinxql>show create table test1</sphinxql>
 <sphinxql>drop table test1</sphinxql>
 
+<sphinxql>create table test1(title string indexed)</sphinxql>
+<sphinxql>show create table test1</sphinxql>
+<sphinxql>drop table test1</sphinxql>
+
+<sphinxql>create table test1(title text, str_val string attribute)</sphinxql>
+<sphinxql>show create table test1</sphinxql>
+<sphinxql>drop table test1</sphinxql>
+
+<sphinxql>create table test1(title string attribute indexed)</sphinxql>
+<sphinxql>show create table test1</sphinxql>
+<sphinxql>desc test1</sphinxql>
+<sphinxql>insert into test1 values(1,'title','title')</sphinxql>
+<sphinxql>select * from test1 where match('title')</sphinxql>
+<sphinxql>drop table test1</sphinxql>
+
+<sphinxql>create table test1(title string attribute stored)</sphinxql>
+<sphinxql>create table test2(title string attribute indexed stored)</sphinxql>
+<sphinxql>drop table if exists test1</sphinxql>
+<sphinxql>drop table if exists test2</sphinxql>
+
 </sphqueries>
 
 </test>

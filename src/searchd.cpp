@@ -11751,7 +11751,7 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 	// cross-checks attrs and fields
 	for ( const auto & i : tStmt.m_tCreateTable.m_dAttrs )
 		for ( const auto & j : tStmt.m_tCreateTable.m_dFields )
-			if ( i.m_sName==j.m_sName )
+			if ( i.m_sName==j.m_sName && i.m_eAttrType!=SPH_ATTR_STRING )
 			{
 				sError.SetSprintf ( "duplicate attribute name '%s'", i.m_sName.cstr() );
 				return false;

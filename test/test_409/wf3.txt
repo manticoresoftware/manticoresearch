@@ -1,0 +1,2 @@
+red > color
+blue > color

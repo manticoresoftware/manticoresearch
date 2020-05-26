@@ -203,7 +203,7 @@ const RtTypedAttr_t & GetRtType ( int iType )
 }
 
 
-static CSphString FormatPath ( const CSphString & sFile, FilenameBuilder_i * pFilenameBuilder )
+static CSphString FormatPath ( const CSphString & sFile, const FilenameBuilder_i * pFilenameBuilder )
 {
 	if ( !pFilenameBuilder || sFile.IsEmpty() )
 		return sFile;
@@ -293,7 +293,7 @@ void CSphTokenizerSettings::Setup ( const CSphConfigSection & hIndex, CSphString
 }
 
 
-bool CSphTokenizerSettings::Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning )
+bool CSphTokenizerSettings::Load ( const FilenameBuilder_i * pFilenameBuilder, CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning )
 {
 	m_iType = tReader.GetByte ();
 	if ( m_iType!=TOKENIZER_UTF8 && m_iType!=TOKENIZER_NGRAM )
@@ -315,7 +315,8 @@ bool CSphTokenizerSettings::Load ( CSphReader & tReader, CSphEmbeddedFiles & tEm
 	}
 
 	m_sSynonymsFile = tReader.GetString ();
-	tEmbeddedFiles.m_tSynonymFile.Read ( tReader, m_sSynonymsFile.cstr(), false, tEmbeddedFiles.m_bEmbeddedSynonyms ? NULL : &sWarning );
+	CSphString sFilePath = FormatPath ( m_sSynonymsFile, pFilenameBuilder );
+	tEmbeddedFiles.m_tSynonymFile.Read ( tReader, sFilePath.cstr(), false, tEmbeddedFiles.m_bEmbeddedSynonyms ? NULL : &sWarning );
 	m_sBoundary = tReader.GetString ();
 	m_sIgnoreChars = tReader.GetString ();
 	m_iNgramLen = tReader.GetDword ();

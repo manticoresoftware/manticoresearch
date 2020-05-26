@@ -184,7 +184,7 @@ private:
 	int ReplayDeleteQueries ( const char * sTags ) EXCLUDES ( m_tLockHash ) final;
 	void ReplayCommit ( StoredQuery_i * pQuery ) EXCLUDES ( m_tLockHash, m_tLock ) final;
 
-	void GetIndexFiles ( CSphVector<CSphString> & dFiles ) const override;
+	void GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * ) const override;
 	bool ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const override;
 
 	StoredQuerySharedPtrVecSharedPtr_t MakeClone () const EXCLUDES ( m_tLock );
@@ -2062,8 +2062,16 @@ void PercolateIndex_c::PostSetupUnl()
 	if ( m_tSettings.m_bIndexExactWords )
 		SetupExactDict ( pDict, pTokenizer );
 
+	CSphString sHitlessFiles = m_tSettings.m_sHitlessFiles.cstr();
+	if ( GetIndexFilenameBuilder() )
+	{
+		CSphScopedPtr<const FilenameBuilder_i> pFilenameBuilder ( GetIndexFilenameBuilder() ( m_sIndexName.cstr() ) );
+		if ( pFilenameBuilder )
+			sHitlessFiles = pFilenameBuilder->GetFullPath ( sHitlessFiles );
+	}
+
 	// hitless
-	if ( !LoadHitlessWords ( m_tSettings.m_sHitlessFiles, m_pTokenizerIndexing, m_pDict, m_dHitlessWords, m_sLastError ) )
+	if ( !LoadHitlessWords ( sHitlessFiles, m_pTokenizerIndexing, m_pDict, m_dHitlessWords, m_sLastError ) )
 		sphWarning ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
 
 	m_pQueries->ReserveGap( m_dLoadedQueries.GetLength () );
@@ -2167,7 +2175,7 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 	// load settings
 	ReadSchema ( rdMeta, m_tSchema, uIndexVersion );
 	LoadIndexSettings ( m_tSettings, rdMeta, uIndexVersion );
-	if ( !tTokenizerSettings.Load ( rdMeta, tEmbeddedFiles, m_sLastError ) )
+	if ( !tTokenizerSettings.Load ( pFilenameBuilder, rdMeta, tEmbeddedFiles, m_sLastError ) )
 		return false;
 
 	tDictSettings.Load ( rdMeta, tEmbeddedFiles, m_sLastWarning );
@@ -2481,7 +2489,7 @@ void PercolateIndex_c::LockFileState ( CSphVector<CSphString> & dFiles )
 	ForceRamFlush ( false );
 	m_bSaveDisabled = true;
 
-	GetIndexFiles ( dFiles );
+	GetIndexFiles ( dFiles, nullptr );
 }
 
 
@@ -2668,10 +2676,12 @@ void MergePqResults ( const VecTraits_T<CPqResult *> &dChunks, CPqResult &dRes, 
 	}
 }
 
-void PercolateIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles ) const
+void PercolateIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * ) const
 {
 	CSphString & sMeta = dFiles.Add();
 	sMeta.SetSprintf ( "%s.meta", m_sFilename.cstr() );
+
+	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), nullptr, dFiles );
 }
 
 bool PercolateIndex_c::ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const

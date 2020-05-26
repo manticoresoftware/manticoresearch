@@ -595,7 +595,7 @@ class FilenameBuilder_i
 public:
 	virtual				~FilenameBuilder_i() {}
 
-	virtual CSphString	GetFullPath ( const CSphString & sName ) = 0;
+	virtual CSphString	GetFullPath ( const CSphString & sName ) const = 0;
 };
 
 
@@ -3394,7 +3394,7 @@ public:
 	const char *				GetFilename () const { return m_sFilename.cstr(); }
 
 	/// get actual index files list
-	virtual void				GetIndexFiles ( CSphVector<CSphString> & dFiles ) const {};
+	virtual void				GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * pFilenameBuilder ) const {};
 
 	/// internal make document id list from external docinfo, DO NOT USE
 	virtual CSphFixedVector<SphAttr_t> BuildDocList () const;

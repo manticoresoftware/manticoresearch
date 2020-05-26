@@ -2022,7 +2022,7 @@ private:
 private:
 	CSphString					GetIndexFileName ( ESphExt eExt, bool bTemp=false ) const;
 	CSphString					GetIndexFileName ( const char * szExt ) const;
-	void						GetIndexFiles ( CSphVector<CSphString> & dFiles ) const override;
+	void						GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * pFilenameBuilder ) const override;
 
 	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache ) const;
 
@@ -9224,7 +9224,7 @@ CSphString CSphIndex_VLN::GetIndexFileName ( const char * szExt ) const
 	return sRes;
 }
 
-void CSphIndex_VLN::GetIndexFiles ( CSphVector<CSphString> & dFiles ) const
+void CSphIndex_VLN::GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * pFilenameBuilder ) const
 {
 	for ( int iExt=0; iExt<SPH_EXT_TOTAL; iExt++ )
 	{
@@ -9237,6 +9237,34 @@ void CSphIndex_VLN::GetIndexFiles ( CSphVector<CSphString> & dFiles ) const
 
 		dFiles.Add ( sName );
 	}
+
+	// might be pFilenameBuilder from parent RT index
+	CSphScopedPtr<const FilenameBuilder_i> pFilename ( nullptr );
+	if ( !pFilenameBuilder && GetIndexFilenameBuilder() )
+	{
+		pFilename = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
+		pFilenameBuilder = pFilename.Ptr();
+	}
+
+	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pFilenameBuilder, dFiles );
+}
+
+void GetSettingsFiles ( const ISphTokenizer * pTok, const CSphDict * pDict, const CSphIndexSettings & tSettings, const FilenameBuilder_i * pFilenameBuilder, StrVec_t & dFiles )
+{
+	assert ( pTok );
+	assert ( pDict );
+
+	StringBuilder_c sFiles ( "," );
+	sFiles += pDict->GetSettings().m_sStopwords.cstr();
+	sFiles += pTok->GetSettings().m_sSynonymsFile.cstr();
+	sFiles += tSettings.m_sHitlessFiles.cstr();
+
+	for ( const CSphString & sName : pDict->GetSettings().m_dWordforms )
+		dFiles.Add ( pFilenameBuilder ? pFilenameBuilder->GetFullPath ( sName ) : sName );
+
+	StrVec_t dFileNames = sphSplit ( sFiles.cstr(), ", " );
+	for ( const CSphString & sName : dFileNames )
+		dFiles.Add ( pFilenameBuilder ? pFilenameBuilder->GetFullPath ( sName ) : sName );
 }
 
 
@@ -13870,7 +13898,7 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 	CSphTokenizerSettings tTokSettings;
 
 	// tokenizer stuff
-	if ( !tTokSettings.Load ( rdInfo, tEmbeddedFiles, m_sLastError ) )
+	if ( !tTokSettings.Load ( pFilenameBuilder, rdInfo, tEmbeddedFiles, m_sLastError ) )
 		return false;
 
 	if ( bStripPath )

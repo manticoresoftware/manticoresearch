@@ -1270,7 +1270,7 @@ private:
 	bool						Update_WriteBlobRow ( UpdateContext_t & tCtx, int iUpd, CSphRowitem * pDocinfo, const BYTE * pBlob, int iLength, int nBlobAttrs, bool & bCritical, CSphString & sError ) override;
 	bool						Update_DiskChunks ( UpdateContext_t & tCtx, const SphChunkGuard_t & tGuard,	int & iUpdated, CSphString & sError );
 
-	void						GetIndexFiles ( CSphVector<CSphString> & dFiles ) const override;
+	void						GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * pParentBuilder ) const override;
 	DocstoreBuilder_i::Doc_t *	FetchDocFields ( DocstoreBuilder_i::Doc_t & tStoredDoc, CSphSource_StringVector & tSrc ) const;
 
 	bool						MergeSegments ( CSphVector<RtSegmentRefPtf_t> & dSegments, bool bForceDump, int64_t iMemLimit, bool bHasNewSegment );
@@ -3907,7 +3907,7 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	DWORD uSettingsVer = rdMeta.GetDword();
 	ReadSchema ( rdMeta, m_tSchema, uSettingsVer );
 	LoadIndexSettings ( m_tSettings, rdMeta, uSettingsVer );
-	if ( !tTokenizerSettings.Load ( rdMeta, tEmbeddedFiles, m_sLastError ) )
+	if ( !tTokenizerSettings.Load ( pFilenameBuilder, rdMeta, tEmbeddedFiles, m_sLastError ) )
 		return false;
 
 	tDictSettings.Load ( rdMeta, tEmbeddedFiles, sWarning );
@@ -4317,7 +4317,15 @@ void RtIndex_c::PostSetup()
 		sphWarning ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
 
 	// hitless
-	if ( !LoadHitlessWords ( m_tSettings.m_sHitlessFiles, m_pTokenizerIndexing, m_pDict, m_dHitlessWords, m_sLastError ) )
+	CSphString sHitlessFiles = m_tSettings.m_sHitlessFiles;
+	if ( GetIndexFilenameBuilder() )
+	{
+		CSphScopedPtr<const FilenameBuilder_i> pFilenameBuilder ( GetIndexFilenameBuilder() ( m_sIndexName.cstr() ) );
+		if ( pFilenameBuilder.Ptr() )
+			sHitlessFiles = pFilenameBuilder->GetFullPath ( sHitlessFiles );
+	}
+
+	if ( !LoadHitlessWords ( sHitlessFiles, m_pTokenizerIndexing, m_pDict, m_dHitlessWords, m_sLastError ) )
 		sphWarning ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
 
 	// still need index files for index just created from config
@@ -8017,16 +8025,32 @@ uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
 	return uHash;
 }
 
-void RtIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles ) const
+void RtIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * pParentBuilder ) const
 {
 	CSphString & sMeta = dFiles.Add();
 	sMeta.SetSprintf ( "%s.meta", m_sPath.cstr() );
+
 	CSphString & sRam = dFiles.Add();
 	sRam.SetSprintf ( "%s.ram", m_sPath.cstr() );
+	// RT index might be with flushed RAM into disk chunk
+	CSphString sTmpError;
+	if ( !sphIsReadable ( sRam.cstr(), &sTmpError ) )
+		dFiles.Pop();
+
+	CSphScopedPtr<const FilenameBuilder_i> pFilenameBuilder ( nullptr );
+	if ( !pParentBuilder && GetIndexFilenameBuilder() )
+	{
+		pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
+		pParentBuilder = pFilenameBuilder.Ptr();
+	}
+
+	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pParentBuilder, dFiles );
 
 	auto tGuard = GetReaderChunks ();
 	for ( const CSphIndex * pIndex : tGuard.m_dDiskChunks )
-		pIndex->GetIndexFiles ( dFiles );
+		pIndex->GetIndexFiles ( dFiles, pParentBuilder );
+
+	dFiles.Uniq(); // might be duplicates of tok \ dict files from disk chunks
 }
 
 
@@ -8121,7 +8145,7 @@ void RtIndex_c::LockFileState ( CSphVector<CSphString> & dFiles )
 	ForceRamFlush ( false );
 	m_bSaveDisabled = true;
 
-	GetIndexFiles ( dFiles );
+	GetIndexFiles ( dFiles, nullptr );
 }
 
 
@@ -9397,10 +9421,13 @@ bool RtBinlog_c::ReplayReconfigure ( int iBinlog, DWORD uReplayFlags, BinlogRead
 	CSphTokenizerSettings tTokenizerSettings;
 	CSphDictSettings tDictSettings;
 	CSphEmbeddedFiles tEmbeddedFiles;
+	CSphScopedPtr<const FilenameBuilder_i> pFilenameBuilder ( nullptr );
+	if ( GetIndexFilenameBuilder() )
+		pFilenameBuilder = GetIndexFilenameBuilder() ( tIndex.m_sName.cstr() );
 
 	CSphReconfigureSettings tSettings;
 	LoadIndexSettings ( tSettings.m_tIndex, tReader, INDEX_FORMAT_VERSION );
-	if ( !tSettings.m_tTokenizer.Load ( tReader, tEmbeddedFiles, sError ) )
+	if ( !tSettings.m_tTokenizer.Load ( pFilenameBuilder.Ptr(), tReader, tEmbeddedFiles, sError ) )
 		sphDie ( "binlog: reconfigure: failed to load settings (index=%s, lasttid=" INT64_FMT ", logtid=" INT64_FMT ", pos=" INT64_FMT ", error=%s)",
 			tIndex.m_sName.cstr(), tIndex.m_iMaxTID, iTID, iTxnPos, sError.cstr() );
 

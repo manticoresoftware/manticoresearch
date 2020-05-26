@@ -1,0 +1,2 @@
+ms windows => windows
+msw => windows

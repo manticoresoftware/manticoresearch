@@ -460,6 +460,23 @@ static void Logger_fn ( wsrep_log_level_t eLevel, const char * sMsg )
 	LoggerWrapper ( eLevel, sMsg );
 }
 
+static void WarnReplicationDisabled ( CSphString * pWarning )
+{
+#if !USE_GALERA
+	const char * sWarningReplicationMissed = "binary compiled without replication library support, replication is disabled";
+	if ( pWarning )
+		*pWarning = sWarningReplicationMissed;
+	else
+		sphWarning ( "%s", sWarningReplicationMissed );
+#else
+	const char * sWarningReplicationDisabled = "data_dir option is missing in config or no replication listener is set, replication is disabled";
+	if ( pWarning )
+		*pWarning = sWarningReplicationDisabled;
+	else
+		sphWarning ( "%s", sWarningReplicationDisabled );
+#endif
+}
+
 // commands version (commands these got replicated via Galera)
 // ver 0x104 added docstore from RT index
 static const WORD g_iReplicateCommandVer = 0x104;
@@ -2181,7 +2198,7 @@ static bool ClusterCheckPath ( const CSphString & sPath, const CSphString & sNam
 {
 	if ( !g_bReplicationEnabled )
 	{
-		sError.SetSprintf ( "data_dir option is missing in config or no replication listener is set, replication is disabled" );
+		WarnReplicationDisabled ( &sError );
 		return false;
 	}
 
@@ -2288,6 +2305,10 @@ static void NewClusterClean ( const CSphString & sPath )
 // setup IP, ports and node incoming address
 static void SetListener ( const CSphVector<ListenerDesc_t> & dListeners )
 {
+#if !USE_GALERA
+	return;
+#endif
+
 	bool bGotReplicationPorts = false;
 	ARRAY_FOREACH ( i, dListeners )
 	{
@@ -2344,7 +2365,7 @@ void ReplicationStart ( const CSphConfigSection & hSearchd, const CSphVector<Lis
 	if ( !g_bReplicationEnabled )
 	{
 		if ( GetClustersInt().GetLength() )
-			sphWarning ( "data_dir option is missing in config or no replication listener is set, replication is disabled" );
+			WarnReplicationDisabled ( nullptr );
 		return;
 	}
 
@@ -2472,7 +2493,7 @@ static bool CheckClusterStatement ( const CSphString & sCluster, bool bCheckClus
 {
 	if ( !g_bReplicationEnabled )
 	{
-		sError = "data_dir option is missing or no replication listeners configured";
+		WarnReplicationDisabled ( &sError );
 		return false;
 	}
 

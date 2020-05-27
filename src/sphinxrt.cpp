@@ -1174,7 +1174,7 @@ protected:
 
 private:
 	static const DWORD			META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
-	static const DWORD			META_VERSION		= 16;			///< current version
+	static const DWORD			META_VERSION		= 17;			///< current version
 
 	int							m_iStride;
 	LazyVector_T<RtSegmentRefPtf_t>	m_dRamChunks GUARDED_BY ( m_tChunkLock );
@@ -1237,6 +1237,8 @@ private:
 	RtSegment_t *				MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, bool bHasMorphology ) const;
 	void						CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWriter_t & tOutDoc, RtDocReader_t & tInDoc, RtWord_t & tWord, const CSphVector<RowID_t> & tRowMap ) const;
 
+	bool						LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes );
+	bool						LoadDiskChunks ( FilenameBuilder_i * pFilenameBuilder );
 	void						SaveMeta ( int64_t iTID, const VecTraits_T<int> & dChunkNames );
 	void						SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats ) const;
 	void						SaveDiskData ( const char * sFilename, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats ) const;
@@ -1276,6 +1278,7 @@ private:
 	bool						MergeSegments ( CSphVector<RtSegmentRefPtf_t> & dSegments, bool bForceDump, int64_t iMemLimit, bool bHasNewSegment );
 	RtSegmentRefPtf_t			MergeDoubleBufSegments ( CSphVector<RtSegmentRefPtf_t> & dSegments ) const;
 	bool						NeedStoreWordID () const override;
+	int64_t						GetMemLimit() const final { return m_iSoftRamLimit; }
 };
 
 
@@ -3654,6 +3657,9 @@ void RtIndex_c::SaveMeta ( int64_t iTID, const VecTraits_T<int> & dChunkNames )
 	wrMeta.PutDword ( dChunkNames.GetLength () );
 	wrMeta.PutBytes ( dChunkNames.Begin(), dChunkNames.GetLengthBytes() );
 
+	// meta v.17+
+	wrMeta.PutOffset(m_iSoftRamLimit);
+
 	wrMeta.CloseFile();
 
 	// no need to remove old but good meta in case new meta failed to save
@@ -3822,41 +3828,8 @@ CSphIndex * RtIndex_c::LoadDiskChunk ( const char * sChunk, int iChunk, Filename
 }
 
 
-bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder )
+bool RtIndex_c::LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes )
 {
-	MEMORY ( MEM_INDEX_RT );
-
-	// locking uber alles
-	// in RT backend case, we just must be multi-threaded
-	// so we simply lock here, and ignore Lock/Unlock hassle caused by forks
-	assert ( m_iLockFD<0 );
-
-	CSphString sLock;
-	sLock.SetSprintf ( "%s.lock", m_sPath.cstr() );
-	m_iLockFD = ::open ( sLock.cstr(), SPH_O_NEW, 0644 );
-	if ( m_iLockFD<0 )
-	{
-		m_sLastError.SetSprintf ( "failed to open %s: %s", sLock.cstr(), strerrorm(errno) );
-		return false;
-	}
-
-	if ( !sphLockEx ( m_iLockFD, false ) )
-	{
-		if ( !m_bDebugCheck )
-		{
-			m_sLastError.SetSprintf ( "failed to lock %s: %s", sLock.cstr(), strerrorm(errno) );
-			SafeClose ( m_iLockFD );
-			return false;
-		} else
-		{
-			SafeClose ( m_iLockFD );
-		}
-	}
-
-	/////////////
-	// load meta
-	/////////////
-
 	// check if we have a meta file (kinda-header)
 	CSphString sMeta;
 	sMeta.SetSprintf ( "%s.meta", m_sPath.cstr() );
@@ -3875,7 +3848,8 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 		m_sLastError.SetSprintf ( "invalid meta file %s", sMeta.cstr() );
 		return false;
 	}
-	DWORD uVersion = rdMeta.GetDword();
+
+	uVersion = rdMeta.GetDword();
 	if ( uVersion==0 || uVersion>META_VERSION )
 	{
 		m_sLastError.SetSprintf ( "%s is v.%d, binary is v.%d", sMeta.cstr(), uVersion, META_VERSION );
@@ -3952,7 +3926,6 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	m_iWordsCheckpoint = rdMeta.GetDword();
 
 	// check that infixes definition changed - going to rebuild infixes
-	bool bRebuildInfixes = false;
 	m_iMaxCodepointLength = rdMeta.GetDword();
 	int iBloomKeyLen = rdMeta.GetByte();
 	int iBloomHashesCount = rdMeta.GetByte();
@@ -3960,7 +3933,7 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 
 	if ( bRebuildInfixes )
 		sphWarning ( "infix definition changed (from len=%d, hashes=%d to len=%d, hashes=%d) - rebuilding...",
-					(int)BLOOM_PER_ENTRY_VALS_COUNT, (int)BLOOM_HASHES_COUNT, iBloomKeyLen, iBloomHashesCount );
+			(int)BLOOM_PER_ENTRY_VALS_COUNT, (int)BLOOM_HASHES_COUNT, iBloomKeyLen, iBloomHashesCount );
 
 	FieldFilterRefPtr_c pFieldFilter;
 	CSphFieldFilterSettings tFieldFilterSettings;
@@ -3976,15 +3949,16 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	int iLen = (int)rdMeta.GetDword();
 	m_dChunkNames.Reset ( iLen );
 	rdMeta.GetBytes ( m_dChunkNames.Begin(), iLen*sizeof(int) );
-	if ( m_bDebugCheck )
-		return true;
 
-	///////////////
-	// load chunks
-	///////////////
+	if ( uVersion>=17 )
+		m_iSoftRamLimit = rdMeta.GetOffset();
 
-	m_bPathStripped = bStripPath;
+	return true;
+}
 
+
+bool RtIndex_c::LoadDiskChunks ( FilenameBuilder_i * pFilenameBuilder )
+{
 	// load disk chunks, if any
 	ARRAY_FOREACH ( iName, m_dChunkNames )
 	{
@@ -4012,7 +3986,55 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 		}
 	}
 
-	m_dChunkNames.Reset ( 0 );
+	m_dChunkNames.Reset(0);
+
+	return true;
+}
+
+
+bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder )
+{
+	MEMORY ( MEM_INDEX_RT );
+
+	// locking uber alles
+	// in RT backend case, we just must be multi-threaded
+	// so we simply lock here, and ignore Lock/Unlock hassle caused by forks
+	assert ( m_iLockFD<0 );
+
+	CSphString sLock;
+	sLock.SetSprintf ( "%s.lock", m_sPath.cstr() );
+	m_iLockFD = ::open ( sLock.cstr(), SPH_O_NEW, 0644 );
+	if ( m_iLockFD<0 )
+	{
+		m_sLastError.SetSprintf ( "failed to open %s: %s", sLock.cstr(), strerrorm(errno) );
+		return false;
+	}
+
+	if ( !sphLockEx ( m_iLockFD, false ) )
+	{
+		if ( !m_bDebugCheck )
+		{
+			m_sLastError.SetSprintf ( "failed to lock %s: %s", sLock.cstr(), strerrorm(errno) );
+			SafeClose ( m_iLockFD );
+			return false;
+		} else
+		{
+			SafeClose ( m_iLockFD );
+		}
+	}
+
+	DWORD uVersion = 0;
+	bool bRebuildInfixes = false;
+	if ( !LoadMeta ( pFilenameBuilder, bStripPath, uVersion, bRebuildInfixes ) )
+		return false;
+
+	if ( m_bDebugCheck )
+		return true;
+
+	m_bPathStripped = bStripPath;
+
+	if ( !LoadDiskChunks ( pFilenameBuilder ) )
+		return false;
 
 	// load ram chunk
 	bool bRamLoaded = LoadRamChunk ( uVersion, bRebuildInfixes );
@@ -7830,7 +7852,7 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 //////////////////////////////////////////////////////////////////////////
 
 bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const ISphFieldFilter * pFieldFilter,
-	const CSphIndexSettings & tIndexSettings, uint64_t uTokHash, uint64_t uDictHash, int iMaxCodepointLength,
+	const CSphIndexSettings & tIndexSettings, uint64_t uTokHash, uint64_t uDictHash, int iMaxCodepointLength, int64_t iMemLimit,
 	bool bSame, CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError )
 {
 	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
@@ -7926,12 +7948,13 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	// compare options
 	if ( !bSame || uTokHash!=pTokenizer->GetSettingsFNV() || uDictHash!=tDict->GetSettingsFNV() ||
 		iMaxCodepointLength!=pTokenizer->GetMaxCodepointLength() || sphGetSettingsFNV ( tIndexSettings )!=sphGetSettingsFNV ( tSettings.m_tIndex ) ||
-		!bReFilterSame || !bIcuSame )
+		!bReFilterSame || !bIcuSame || iMemLimit!=tSettings.m_iMemLimit )
 	{
 		tSetup.m_pTokenizer = pTokenizer.Leak();
 		tSetup.m_pDict = tDict.Leak();
 		tSetup.m_tIndex = tSettings.m_tIndex;
 		tSetup.m_pFieldFilter = tFieldFilter.Leak();
+		tSetup.m_iMemLimit = tSettings.m_iMemLimit;
 		return false;
 	}
 
@@ -7941,14 +7964,16 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 
 bool RtIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const
 {
-	return CreateReconfigure ( m_sIndexName, IsStarDict ( m_bKeywordDict ), m_pFieldFilter, m_tSettings,
-		m_pTokenizer->GetSettingsFNV(), m_pDict->GetSettingsFNV(), m_pTokenizer->GetMaxCodepointLength(), true, tSettings, tSetup, dWarnings, sError );
+	return CreateReconfigure ( m_sIndexName, IsStarDict ( m_bKeywordDict ), m_pFieldFilter, m_tSettings, m_pTokenizer->GetSettingsFNV(), m_pDict->GetSettingsFNV(), m_pTokenizer->GetMaxCodepointLength(),
+		GetMemLimit(), true, tSettings, tSetup, dWarnings, sError );
 }
 
 bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 {
 	if ( !ForceDiskChunk() )
 		return false;
+
+	m_iSoftRamLimit = tSetup.m_iMemLimit;
 
 	Setup ( tSetup.m_tIndex );
 	SetTokenizer ( tSetup.m_pTokenizer );

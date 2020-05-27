@@ -39,6 +39,18 @@ searchd
 <sphinxql>drop table test11</sphinxql>
 <sphinxql>drop table test12</sphinxql>
 
+<sphinxql>CREATE TABLE test1 (title text) rt_mem_limit='2G'</sphinxql>
+<sphinxql>CREATE TABLE test2 LIKE test1</sphinxql>
+<sphinxql>SHOW CREATE TABLE test1</sphinxql>
+<sphinxql>SHOW CREATE TABLE test2</sphinxql>
+
+<sphinxql>ALTER TABLE test1 rt_mem_limit='1G'</sphinxql>
+<sphinxql>SHOW CREATE TABLE test1</sphinxql>
+
+<sphinxql>drop table test1</sphinxql>
+<sphinxql>drop table test2</sphinxql>
+
+<sphinxql>ALTER TABLE test1 RECONFIGURE</sphinxql>
 
 </sphqueries>
 

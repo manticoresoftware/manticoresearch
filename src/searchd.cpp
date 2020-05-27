@@ -11819,6 +11819,25 @@ static const CSphSchema & GetSchemaForCreateTable ( CSphIndex * pIndex )
 }
 
 
+static CSphString BuildCreateTableRt ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema )
+{
+	assert(pIndex);
+
+	CSphString sCreateTable = BuildCreateTable ( sName, pIndex, tSchema );
+
+	// FIXME: create a separate struct (and move it to indexsettings.cpp) when there are more RT-specific settings
+	if ( pIndex->IsRT() )
+	{
+		auto * pRt = (RtIndex_i*)pIndex;
+		int64_t iMemLimit = pRt->GetMemLimit();
+		if ( iMemLimit!=DEFAULT_RT_MEM_LIMIT )
+			sCreateTable.SetSprintf ( "%s rt_mem_limit='" INT64_FMT "'", sCreateTable.cstr(), iMemLimit );
+	}
+
+	return sCreateTable;
+}
+
+
 static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	SearchFailuresLog_c dErrors;
@@ -11858,7 +11877,7 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 
 	CSphString sCreateTable;
 	if ( pServed )
-		sCreateTable = BuildCreateTable ( tStmt.m_sIndex, pServed->m_pIndex, GetSchemaForCreateTable ( pServed->m_pIndex ) );
+		sCreateTable = BuildCreateTableRt ( tStmt.m_sIndex, pServed->m_pIndex, GetSchemaForCreateTable ( pServed->m_pIndex ) );
 	else
 		sCreateTable = BuildCreateTableDistr ( tStmt.m_sIndex, *pDist );
 
@@ -11924,7 +11943,7 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	tOut.HeadTuplet ( "Table", "Create Table" );
 	CSphString sCreateTable;
 	if ( pServed )
-		sCreateTable = BuildCreateTable ( pServed->m_pIndex->GetName(), pServed->m_pIndex, GetSchemaForCreateTable ( pServed->m_pIndex ) );
+		sCreateTable = BuildCreateTableRt ( pServed->m_pIndex->GetName(), pServed->m_pIndex, GetSchemaForCreateTable ( pServed->m_pIndex ) );
 	else
 		sCreateTable = BuildCreateTableDistr ( tStmt.m_sIndex, *pDist );
 
@@ -14594,6 +14613,7 @@ static bool PrepareReconfigure ( const CSphString & sIndex, const CSphConfigSect
 	tSettings.m_tTokenizer.Setup ( hIndex, sWarning );
 	tSettings.m_tDict.Setup ( hIndex, pFilenameBuilder.Ptr(), sWarning );
 	tSettings.m_tFieldFilter.Setup ( hIndex, sWarning );
+	tSettings.m_iMemLimit = hIndex.GetSize64 ( "rt_mem_limit", DEFAULT_RT_MEM_LIMIT );
 
 	sphRTSchemaConfigure ( hIndex, tSettings.m_tSchema, sError, true );
 
@@ -14643,6 +14663,12 @@ static bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSetti
 static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	MEMORY ( MEM_SQL_ALTER );
+
+	if ( IsConfigless() )
+	{
+		tOut.Error ( tStmt.m_sStmt, "ALTER RECONFIGURE is not supported in RT mode" );
+		return;
+	}
 
 	const CSphString & sIndex = tStmt.m_sIndex.cstr();
 	CSphString sError;
@@ -17066,7 +17092,7 @@ ESphAddIndex AddRTIndex ( GuardedHash_c & dPost, const char * szIndexName, const
 	}
 
 	// RAM chunk size
-	int64_t iRamSize = hIndex.GetSize64 ( "rt_mem_limit", 128 * 1024 * 1024 );
+	int64_t iRamSize = hIndex.GetSize64 ( "rt_mem_limit", DEFAULT_RT_MEM_LIMIT );
 	if ( iRamSize<128 * 1024 )
 	{
 		sphWarning ( "index '%s': rt_mem_limit extremely low, using 128K instead", szIndexName );

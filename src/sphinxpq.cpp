@@ -144,6 +144,8 @@ public:
 
 	const CSphSchema &GetMatchSchema () const override { return m_tMatchSchema; }
 
+	int64_t				GetMemLimit() const final { return 0; }
+
 private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
 	static const DWORD				META_VERSION = 8;				///< current version, new index format
@@ -2394,7 +2396,7 @@ bool PercolateIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSp
 	bool bSameSchema = m_tSchema.CompareTo ( tSettings.m_tSchema, sTmp, false );
 
 	return CreateReconfigure ( m_sIndexName, IsStarDict ( m_pDict->GetSettings().m_bWordDict ), m_pFieldFilter, m_tSettings, m_pTokenizer->GetSettingsFNV(),
-		  m_pDict->GetSettingsFNV(), m_pTokenizer->GetMaxCodepointLength(),
+		  m_pDict->GetSettingsFNV(), m_pTokenizer->GetMaxCodepointLength(), GetMemLimit(),
 		  bSameSchema, tSettings, tSetup, dWarnings, sError );
 }
 

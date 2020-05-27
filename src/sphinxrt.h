@@ -25,6 +25,8 @@ struct CSphReconfigureSettings;
 struct CSphReconfigureSetup;
 class RtAccum_t;
 
+const int64_t DEFAULT_RT_MEM_LIMIT = 128 * 1024 * 1024;
+
 
 /// RAM based updateable backend interface
 class RtIndex_i : public CSphIndex
@@ -96,7 +98,8 @@ public:
 	/// returns NULL if another index already uses it in an open txn
 	RtAccum_t * AcquireAccum ( CSphDict * pDict, RtAccum_t * pAccExt=nullptr, bool bWordDict=true, bool bSetTLS = true, CSphString * sError=nullptr );
 
-	virtual bool NeedStoreWordID () const = 0;
+	virtual bool	NeedStoreWordID () const = 0;
+	virtual	int64_t	GetMemLimit() const = 0;
 };
 
 /// initialize subsystem
@@ -359,7 +362,7 @@ void SetupExactDict ( DictRefPtr_c &pDict, ISphTokenizer * pTokenizer, bool bAdd
 void SetupStarDict ( DictRefPtr_c &pDict, ISphTokenizer * pTokenizer );
 
 bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const ISphFieldFilter * pFieldFilter,
-	const CSphIndexSettings & tIndexSettings, uint64_t uTokHash, uint64_t uDictHash, int iMaxCodepointLength,
+	const CSphIndexSettings & tIndexSettings, uint64_t uTokHash, uint64_t uDictHash, int iMaxCodepointLength, int64_t iMemLimit,
 	bool bSame, CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError );
 
 // Get global flag of w-available RT

@@ -189,7 +189,7 @@
 #define GALERA_SOVERSION "${GALERA_SOVERSION}"
 
 /* define to use replication */
-#define USE_GALERA ${USE_GALERA}
+#cmakedefine01 USE_GALERA
 
 /* define to set custom directory for shared files */
 #define FULL_SHARE_DIR "${FULL_SHARE_DIR}"

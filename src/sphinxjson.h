@@ -323,6 +323,7 @@ public:
 	JsonObj_c		GetIntItem ( const char * szName1, const char * szName2, CSphString & sError ) const;
 	JsonObj_c		GetBoolItem ( const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
 	JsonObj_c		GetStrItem ( const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
+	JsonObj_c		GetStrItem ( const char * szName1, const char * szName2, CSphString & sError ) const;
 	JsonObj_c		GetObjItem ( const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
 	JsonObj_c		GetArrayItem ( const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
 	bool			FetchIntItem ( int & iValue, const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;

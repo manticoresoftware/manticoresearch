@@ -1576,6 +1576,21 @@ JsonObj_c JsonObj_c::GetStrItem ( const char * szName, CSphString & sError, bool
 }
 
 
+JsonObj_c JsonObj_c::GetStrItem ( const char * szName1, const char * szName2, CSphString & sError ) const
+{
+	JsonObj_c tResult = GetStrItem ( szName1, sError, true );
+	if ( !tResult )
+	{
+		if ( !sError.IsEmpty() )
+			return JsonNull;
+
+		tResult = GetStrItem ( szName2, sError, true );
+	}
+
+	return tResult;
+}
+
+
 JsonObj_c JsonObj_c::GetObjItem ( const char * szName, CSphString & sError, bool bIgnoreMissing ) const
 {
 	JsonObj_c tChild = GetChild ( szName, sError, bIgnoreMissing );

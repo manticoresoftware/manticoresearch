@@ -1672,7 +1672,10 @@ static bool ParseSnippetLimitsElastic ( const JsonObj_c & tSnip, SnippetLimits_t
 static bool ParseSnippetLimitsSphinx ( const JsonObj_c & tSnip, SnippetLimits_t & tLimits, CSphString & sError )
 {
 	if ( !tSnip.FetchIntItem ( tLimits.m_iLimit, "limit", sError, true ) )					return false;
+
 	if ( !tSnip.FetchIntItem ( tLimits.m_iLimitPassages, "limit_passages", sError, true ) )	return false;
+	if ( !tSnip.FetchIntItem ( tLimits.m_iLimitPassages, "limit_snippets", sError, true ) )	return false;
+
 	if ( !tSnip.FetchIntItem ( tLimits.m_iLimitWords, "limit_words", sError, true ) )		return false;
 
 	return true;
@@ -1777,11 +1780,14 @@ static bool ParseSnippetOptsSphinx ( const JsonObj_c & tSnip, SnippetQuerySettin
 	if ( !tSnip.FetchStrItem ( tOpt.m_sStripMode, "html_strip_mode", sError, true ) )		return false;
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bAllowEmpty, "allow_empty", sError, true ) )			return false;
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bEmitZones, "emit_zones", sError, true ) )			return false;
+
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bForcePassages, "force_passages", sError, true ) )	return false;
+	if ( !tSnip.FetchBoolItem ( tOpt.m_bForcePassages, "force_snippets", sError, true ) )	return false;
+
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bPackFields, "pack_fields", sError, true ) )			return false;
 	if ( !tSnip.FetchBoolItem ( tOpt.m_bLimitsPerField, "limits_per_field", sError, true ) )return false;
 
-	JsonObj_c tBoundary = tSnip.GetStrItem ( "passage_boundary", sError, true );
+	JsonObj_c tBoundary = tSnip.GetStrItem ( "passage_boundary", "snippet_boundary", sError );
 	if ( tBoundary )
 		tOpt.m_ePassageSPZ = GetPassageBoundary ( tBoundary.StrVal() );
 	else if ( !sError.IsEmpty() )

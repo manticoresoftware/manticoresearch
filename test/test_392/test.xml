@@ -144,8 +144,8 @@ insert into test_table2 values
 <sphinxql>select snippet(content,query(),'html_strip_mode=strip') from test2 where match('ideas')</sphinxql>
 <sphinxql>select highlight({html_strip_mode=strip}) from test2 where match('ideas')</sphinxql>
 
-<sphinxql>select body,snippet(body,query(), 'before_match=%PASSAGE_ID%','after_match=/%PASSAGE_ID%') from test1 where match('three')</sphinxql>
-<sphinxql>select highlight({before_match='%PASSAGE_ID%',after_match='/%PASSAGE_ID%'}) from test1 where match('three')</sphinxql>
+<sphinxql>select body,snippet(body,query(), 'before_match=%SNIPPET_ID%','after_match=/%SNIPPET_ID%') from test1 where match('three')</sphinxql>
+<sphinxql>select highlight({before_match='%SNIPPET_ID%',after_match='/%SNIPPET_ID%'}) from test1 where match('three')</sphinxql>
 
 <!-- regression for a crash on wrong syntax -->
 <sphinxql>select body,highlight({limit_words=10},body) AS h FROM test1 WHERE MATCH('three')</sphinxql>

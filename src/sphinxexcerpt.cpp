@@ -25,19 +25,17 @@
 #include <math.h>
 
 
-static bool SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPost )
+static bool TransformMacro ( CSphString & sSrc, CSphString & sPost, const char * szMacro )
 {
-	const char sPassageMacro[] = "%PASSAGE_ID%";
-
 	const char * sPass = NULL;
 	if ( !sSrc.IsEmpty() )
-		sPass = strstr ( sSrc.cstr(), sPassageMacro );
+		sPass = strstr ( sSrc.cstr(), szMacro );
 
 	if ( !sPass )
 		return false;
 
 	int iSrcLen = sSrc.Length();
-	int iPassLen = sizeof ( sPassageMacro ) - 1;
+	int iPassLen = strlen(szMacro);
 	int iTailLen = iSrcLen - iPassLen - ( sPass - sSrc.cstr() );
 
 	// copy tail
@@ -51,6 +49,14 @@ static bool SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPos
 	return true;
 }
 
+
+static bool SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPost )
+{
+	bool bRes1 = TransformMacro ( sSrc, sPost, "%PASSAGE_ID%");
+	bool bRes2 = TransformMacro ( sSrc, sPost, "%SNIPPET_ID%");
+	return bRes1 || bRes2;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 void SnippetLimits_t::Format ( StringBuilder_c & tOut, const char * szPrefix ) const
@@ -59,7 +65,7 @@ void SnippetLimits_t::Format ( StringBuilder_c & tOut, const char * szPrefix ) c
 
 	if ( m_iLimit!=tDefault.m_iLimit )						tOut.Appendf ( "%slimit=%d",			szPrefix, m_iLimit );
 	if ( m_iLimitWords!=tDefault.m_iLimitWords )			tOut.Appendf ( "%slimit_words=%d",		szPrefix, m_iLimitWords );
-	if ( m_iLimitPassages!=tDefault.m_iLimitPassages )		tOut.Appendf ( "%slimit_passages=%d",	szPrefix, m_iLimitPassages );
+	if ( m_iLimitPassages!=tDefault.m_iLimitPassages )		tOut.Appendf ( "%slimit_snippets=%d",	szPrefix, m_iLimitPassages );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -81,19 +87,19 @@ CSphString SnippetQuerySettings_t::AsString() const
 
 	if ( m_sBeforeMatch!=tDefault.m_sBeforeMatch )			tOut.Appendf ( "before_match='%s'",		m_sBeforeMatch.cstr() );
 	if ( m_sAfterMatch!=tDefault.m_sAfterMatch )			tOut.Appendf ( "after_match='%s'",		m_sAfterMatch.cstr() );
-	if ( m_sChunkSeparator!=tDefault.m_sChunkSeparator )	tOut.Appendf ( "chunk_separator='%s'",	m_sChunkSeparator.cstr() );
+	if ( m_sChunkSeparator!=tDefault.m_sChunkSeparator )	tOut.Appendf ( "snippet_separator='%s'",m_sChunkSeparator.cstr() );
 	if ( m_sFieldSeparator!=tDefault.m_sFieldSeparator )	tOut.Appendf ( "field_separator='%s'",	m_sFieldSeparator.cstr() );
 	if ( m_sStripMode!=tDefault.m_sStripMode )				tOut.Appendf ( "strip_mode='%s'",		m_sStripMode.cstr() );
 	if ( m_iAround!=tDefault.m_iAround )					tOut.Appendf ( "around=%d",				m_iAround );
-	if ( m_iPassageId!=tDefault.m_iPassageId )				tOut.Appendf ( "start_passage_id=%d",	m_iPassageId );
+	if ( m_iPassageId!=tDefault.m_iPassageId )				tOut.Appendf ( "start_snippet_id=%d",	m_iPassageId );
 	if ( m_bUseBoundaries!=tDefault.m_bUseBoundaries )		tOut.Appendf ( "use_boundaries=%d",		m_bUseBoundaries ? 1 : 0 );
 	if ( m_bWeightOrder!=tDefault.m_bWeightOrder )			tOut.Appendf ( "weight_order=%d",		m_bWeightOrder ? 1 : 0 );
 	if ( m_bForceAllWords!=tDefault.m_bForceAllWords )		tOut.Appendf ( "force_all_words=%d",	m_bForceAllWords ? 1 : 0 );
 	if ( m_bAllowEmpty!=tDefault.m_bAllowEmpty )			tOut.Appendf ( "allow_empty=%d",		m_bAllowEmpty ? 1 : 0 );
 	if ( m_bEmitZones!=tDefault.m_bEmitZones )				tOut.Appendf ( "emit_zones=%d",			m_bEmitZones ? 1 : 0 );
-	if ( m_bForcePassages!=tDefault.m_bForcePassages )		tOut.Appendf ( "force_passages=%d",		m_bForcePassages ? 1 : 0 );
+	if ( m_bForcePassages!=tDefault.m_bForcePassages )		tOut.Appendf ( "force_snippets=%d",		m_bForcePassages ? 1 : 0 );
 	if ( m_bJsonQuery!=tDefault.m_bJsonQuery )				tOut.Appendf ( "json_query=%d",			m_bJsonQuery ? 1 : 0 );
-	if ( m_ePassageSPZ!=tDefault.m_ePassageSPZ )			tOut.Appendf ( "passage_boundary='%s'",	PassageBoundarySz(m_ePassageSPZ) );
+	if ( m_ePassageSPZ!=tDefault.m_ePassageSPZ )			tOut.Appendf ( "snippet_boundary='%s'",	PassageBoundarySz(m_ePassageSPZ) );
 	if ( m_bPackFields!=tDefault.m_bPackFields )			tOut.Appendf ( "pack_fields=%d",		m_bPackFields ? 1 : 0 );
 	if ( m_bLimitsPerField!=tDefault.m_bLimitsPerField )	tOut.Appendf ( "limits_per_field=%d",	m_bLimitsPerField ? 1 : 0 );
 
@@ -1465,11 +1471,11 @@ bool sphCheckOptionsSPZ ( const SnippetQuerySettings_t & q, ESphSpz eMode, CSphS
 	{
 		if ( q.m_iAround==0 )
 		{
-			sError.SetSprintf ( "invalid combination of passage_boundary=%s and around=%d", PassageBoundarySz(eMode), q.m_iAround );
+			sError.SetSprintf ( "invalid combination of snippet_boundary=%s and around=%d", PassageBoundarySz(eMode), q.m_iAround );
 			return false;
 		} else if ( q.m_bUseBoundaries )
 		{
-			sError.SetSprintf ( "invalid combination of passage_boundary=%s and use_boundaries", PassageBoundarySz(eMode) );
+			sError.SetSprintf ( "invalid combination of snippet_boundary=%s and use_boundaries", PassageBoundarySz(eMode) );
 			return false;
 		}
 	}
@@ -1478,7 +1484,7 @@ bool sphCheckOptionsSPZ ( const SnippetQuerySettings_t & q, ESphSpz eMode, CSphS
 	{
 		if ( q.m_ePassageSPZ!=SPH_SPZ_ZONE )
 		{
-			sError.SetSprintf ( "invalid combination of passage_boundary=%s and emit_zones", PassageBoundarySz(eMode) );
+			sError.SetSprintf ( "invalid combination of snippet_boundary=%s and emit_zones", PassageBoundarySz(eMode) );
 			return false;
 		}
 		if ( !( q.m_sStripMode=="strip" || q.m_sStripMode=="index" ) )

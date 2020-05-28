@@ -67,7 +67,7 @@ searchd
 
 <!-- request to node 1 -->
 <sphinxql d="1">SHOW TABLES</sphinxql> <!-- just to reconnect to agent1 -->
-<sphinxql d="1" system="wait-status-cluster_test_last_committed" wait_value="6"/>
+<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="6"/>
 <sphinxql d="1">SELECT * FROM test:rt_many2 where match ('windows rulez'); SHOW META</sphinxql>
 <sphinxql d="1">SELECT * FROM test:rt_many2 where match ('^many things'); SHOW META</sphinxql>
 <sphinxql d="1">SELECT * FROM test:rt_many2 where match ('windows be like'); SHOW META</sphinxql>

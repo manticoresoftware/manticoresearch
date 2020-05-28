@@ -77,9 +77,9 @@ endmacro()
 memcfgvalues ( CMAKE_BUILD_TYPE )
 memcfgvalues ( DISTR_BUILD )
 
-option(USE_GALERA "Enable building Galera replication library and using it" 1)
+option(USE_GALERA "Enable building Galera replication library and using it" ON)
 if (APPLE OR NOT UNIX)
-	set(USE_GALERA 0)
+	set(USE_GALERA OFF)
 endif ()
 
 if (USE_GALERA)

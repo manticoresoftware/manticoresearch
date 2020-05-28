@@ -10,7 +10,6 @@
 <num_agents>2</num_agents>
 
 <config>
-
 <agent0>
 searchd
 {
@@ -27,9 +26,7 @@ searchd
 	server_id = <agent_id/>
 }
 </agent1>
-
 </config>
-
 
 <queries>
 <!-- request to node 0 -->
@@ -56,11 +53,7 @@ searchd
 </sphinxql>
 
 <!-- request to node 1 -->
-<sphinxql d="1">
-	SHOW TABLES
-</sphinxql> <!-- just to reconnect to agent1 -->
-<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="5"/>
-
+<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="6"/>
 <sphinxql d="1">
 	SELECT * FROM test:rt_wf11 where match ('blue'); SHOW META;
 	SELECT * FROM test:rt_wf11 where match ('big sky'); SHOW META;
@@ -82,10 +75,7 @@ searchd
 </sphinxql>
 
 <!-- request to node 1 -->
-<sphinxql d="1">
-	SHOW TABLES
-</sphinxql> <!-- just to reconnect to agent1 -->
-<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="6"/>
+<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="7"/>
 <sphinxql d="1">
 	SELECT * FROM test:rt_many2 where match ('windows rulez'); SHOW META;
 	SELECT * FROM test:rt_many2 where match ('^many things'); SHOW META;

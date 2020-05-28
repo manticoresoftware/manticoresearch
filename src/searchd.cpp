@@ -11562,7 +11562,7 @@ void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 			if ( uFlags & CSphColumnInfo::FIELD_STORED )
 				sProperties << "stored";
 
-			dCondOut.MatchData3 ( tSchema.GetFieldName(i), "field", sProperties.cstr() );
+			dCondOut.MatchData3 ( tSchema.GetFieldName(i), "text", sProperties.cstr() );
 		}
 
 		char sTmp[SPH_MAX_WORD_LEN];

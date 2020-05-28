@@ -873,7 +873,6 @@ public:
 
 	void DiscardOnFork () final
 	{
-		m_dWork.reset ();
 		m_dThreads.Reset();
 	}
 

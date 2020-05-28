@@ -306,7 +306,7 @@ function sphBenchmark ( $name, $locals, $force_reindex )
 			$isOK = $config->RunQuerySphinxQL ( $error, true );
 		} else if ( $mode=='api' && $config->IsQueryTest () )
 		{
-			$isOK = $config->RunQuery ( '*', $error, 'warming-up:' ) && $config->RunQuery ( '*', $error, 'profiling:' );
+			$isOK = $config->RunQuery ( $error, 'warming-up:' ) && $config->RunQuery ( $error, 'profiling:' );
 		} else if ( $mode=='custom' )
 		{
 			$isOK = $config->RunCustomTest ( $error );

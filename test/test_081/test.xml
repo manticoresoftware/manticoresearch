@@ -202,10 +202,7 @@ INSERT INTO test_table1 VALUES (10,1,'bbb bbb bbb bbb aaa aaa aaa aaa aaa aaa aa
 	<!-- regression hitless vs subtree cache -->
 	<sphinxql>select * from all2</sphinxql>
 	<sphinxql>
-	select * from all2 where match('("aaa bbb") ("aaa cc")');
-	select * from all2 where match('("aaa bbb") ("aaa cc")');
-	select * from all2 where match('("aaa bbb") ("aaa cc")');
-	show meta;
+	select * from all2 where match('("aaa bbb") ("aaa cc")');select * from all2 where match('("aaa bbb") ("aaa cc")');select * from all2 where match('("aaa bbb") ("aaa cc")');show meta
 	</sphinxql>
 	
 	<!-- regressions hitless vs multiple terms from lemmatizer -->

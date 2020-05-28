@@ -709,6 +709,14 @@ function CompareResultSetFixup ( &$set, $roundoff, $variants_match )
 		$set["rows"] = json_encode ( $rows );
 	}
 
+    // fixup sphinxql trim
+    if ( isset ( $set['sphinxql'] ) )
+        $set['sphinxql'] = trim ($set['sphinxql']);
+
+    // fixup http_request trim
+    if ( isset ( $set['http_request'] ) )
+        $set['http_request'] = trim ($set['http_request']);
+
 	if ( $g_ignore_weights )
 	{
 		if ( isset($set["matches"]) )
@@ -859,6 +867,12 @@ function ArrVal ( $var, $name, $default="" )
     if ( array_key_exists ( $name, $var ) )
         return $var[$name];
     return $default;
+}
+
+function TouchVal ( &$var, $name, $default="" )
+{
+    if ( !array_key_exists ( $name, $var ) )
+        $var[$name] = $default;
 }
 
 function ConnectSpecificQL($agent, $vip=false)
@@ -1035,58 +1049,52 @@ function RunCurl ( $curl_desc, &$rows )
 	return $http_code;
 }
 
+function HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $http_query, $use_agent, $use_ssl )
+{
+	global $agents;
+	
+	$ssl = $use_ssl ? "https://" : "";
+	
+	$http_port = $agents[$use_agent]["http_port"];
+	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => $ssl . "127.0.0.1:$http_port/" . $http_endpoint );
+	if ( $http_method=="POST" )
+    {
+        $curl_desc[CURLOPT_POST] = 1;
+        $curl_desc[CURLOPT_POSTFIELDS] = $http_query;
+    } else
+        $curl_desc[CURLOPT_URL] = $curl_desc[CURLOPT_URL] . '?' . $http_query;
 
+	if ( $use_ssl )
+	{
+		$curl_desc[CURLOPT_SSL_VERIFYPEER] = false;
+		$curl_desc[CURLOPT_SSL_VERIFYHOST] = false;
+		$curl_desc[CURLOPT_SSLVERSION] = CURL_SSLVERSION_DEFAULT;
+		//$curl_desc[CURLOPT_VERBOSE] = true; // !COMMIT
+	}
+
+	if ( $http_content!==NULL )
+		$curl_desc[CURLOPT_HTTPHEADER] = array("Content-Type: ".$http_content);
+
+	$rows = "";
+	$http_code = RunCurl( $curl_desc, $rows );
+	return array ( 'http_endpoint'=>$http_endpoint, 'http_method'=>$http_method, 'http_request'=>$http_query, 'rows'=>$rows, 'http_code'=>$http_code, 'http'=>1 );
+}
+
+// these two used from custom tests
 function HttpQueryGet ( $http_endpoint, $http_content, $http_get, $use_agent, $use_ssl )
 {
-	global $agents;
-	
-	$ssl = $use_ssl ? "https://" : "";
-	
-	$http_port = $agents[$use_agent]["http_port"];
-	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => $ssl . "127.0.0.1:$http_port/" . $http_endpoint );
-	$curl_desc[CURLOPT_URL] = $curl_desc[CURLOPT_URL] . '?' . $http_get;
-	if ( $use_ssl )
-	{
-		$curl_desc[CURLOPT_SSL_VERIFYPEER] = false;
-		$curl_desc[CURLOPT_SSL_VERIFYHOST] = false;
-		$curl_desc[CURLOPT_SSLVERSION] = CURL_SSLVERSION_DEFAULT;
-		//$curl_desc[CURLOPT_VERBOSE] = true; // !COMMIT
-	}
-
-	if ( $http_content!==NULL )
-		$curl_desc[CURLOPT_HTTPHEADER] = array("Content-Type: ".$http_content);
-
-	$rows = "";
-	$http_code = RunCurl( $curl_desc, $rows );
-	return array ( 'http_endpoint'=>$http_endpoint, 'http_method'=>'GET', 'http_request'=>$http_get, 'rows'=>$rows, 'http_code'=>$http_code );
+    $res = HttpQueryCurl ( "GET", $http_endpoint, $http_content, $http_get, $use_agent, $use_ssl );
+    unset ( $res['http'] );
+    return $res;
 }
 
-
-function HttpQueryPost ( $http_endpoint, $http_content, $http_post, $use_agent, $use_ssl )
+function HttpQueryPost ( $http_endpoint, $http_content, $http_get, $use_agent, $use_ssl )
 {
-	global $agents;
-	
-	$ssl = $use_ssl ? "https://" : "";
-	
-	$http_port = $agents[$use_agent]["http_port"];
-	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => $ssl . "127.0.0.1:$http_port/" . $http_endpoint );
-	$curl_desc[CURLOPT_POST] = 1;
-	$curl_desc[CURLOPT_POSTFIELDS] = $http_post;
-	if ( $use_ssl )
-	{
-		$curl_desc[CURLOPT_SSL_VERIFYPEER] = false;
-		$curl_desc[CURLOPT_SSL_VERIFYHOST] = false;
-		$curl_desc[CURLOPT_SSLVERSION] = CURL_SSLVERSION_DEFAULT;
-		//$curl_desc[CURLOPT_VERBOSE] = true; // !COMMIT
-	}
-
-	if ( $http_content!==NULL )
-		$curl_desc[CURLOPT_HTTPHEADER] = array("Content-Type: ".$http_content);
-
-	$rows = "";
-	$http_code = RunCurl( $curl_desc, $rows );
-	return array ( 'http_endpoint'=>$http_endpoint, 'http_method'=>'POST', 'http_request'=>$http_post, 'rows'=>$rows, 'http_code'=>$http_code );
+    $res = HttpQueryCurl ( "POST", $http_endpoint, $http_content, $http_get, $use_agent, $use_ssl );
+    unset ( $res['http'] );
+    return $res;
 }
+
 
 
 function GetJsonError()
@@ -1102,6 +1110,47 @@ function GetJsonError()
     }
 
 	return 'unknown error';
+}
+
+function GetAttrs ($node)
+{
+    $vals = array ();
+    if (!$node->attributes)
+        return $vals;
+    $len = $node->attributes->length;
+    if ( $len == 0 )
+        return $vals;
+    foreach( AttrArray( $node ) as $attr )
+        $vals[$attr->nodeName]=$attr->nodeValue;
+    return $vals;
+}
+
+ function ParseRange ( $range )
+{
+    if ( !$range )
+        return false;
+
+    $values = explode ( ' ', $range );
+    if ( count($values) != 2 )
+    {
+        printf ( "ERROR: malformed range attribute: '%s'\n", $range );
+        return false;
+    }
+
+    return array ( 'min' => $values[0], 'max' => $values[1] );
+}
+
+function ParseIndexWeights ( $weights )
+{
+    if ( !$weights )
+        return false;
+
+    $result = array();
+    preg_match_all ( '/([^\s]+):(\d+)/', $weights, $matches, PREG_SET_ORDER );
+    foreach ( $matches as $match )
+        $result [ $match[1] ] = (int)$match[2];
+
+    return $result;
 }
 
 
@@ -1332,47 +1381,6 @@ class SphinxConfig
 	}
 
 
-	function ParseRange ( $range )
-	{
-		if ( !$range )
-			return false;
-
-		$values = explode ( ' ', $range );
-		if ( count($values) != 2 )
-		{
-			printf ( "ERROR: malformed range attribute: '%s'\n", $range );
-			return false;
-		}
-
-		return array ( 'min' => $values[0], 'max' => $values[1] );
-	}
-
-	function ParseIndexWeights ( $weights )
-	{
-		if ( !$weights )
-			return false;
-
-		$result = array();
-		preg_match_all ( '/([^\s]+):(\d+)/', $weights, $matches, PREG_SET_ORDER );
-		foreach ( $matches as $match )
-			$result [ $match[1] ] = (int)$match[2];
-
-		return $result;
-	}
-
-	function SphinxQLAttr ($node)
-	{
-		$len = $node->attributes->length;
-		if ( $len == 0 )
-			return array();
-		$vals = array ();
-		foreach( AttrArray( $node ) as $attr )
-		{
-			$vals[$attr->nodeName]=$attr->nodeValue;
-		}
-		return $vals;
-	}
-
 	function GenerateQueryText ( $node )
 	{
 		global $agents;
@@ -1396,10 +1404,148 @@ class SphinxConfig
 		return $result;
 	}
 
-	function AddQuery ( $q, $encoding, $use_meta, $metaindexes, $is_http )
+	function AddAPIQuery ($q, $encoding)
+    {
+        $res = GetAttrs ($q);
+
+        // add query
+        if ( array_key_exists ( "source", $res) )
+        {
+            $source = $res["source"];
+            if ( substr ( $source, 0, 6 ) == "local:" )
+                $source = $this->GetLocal ( substr ( $source, 6 ) );
+            if ( !is_readable($source) )
+            {
+                printf ( "FATAL: query source file '%s' not found.\n", $source );
+                exit ( 1 );
+            }
+            $queries = file ( $source, FILE_IGNORE_NEW_LINES );
+            $limit = $this->GetLocal('qlimit');
+            $res["query"] = $limit ? array_slice( $queries, 0, $limit ) : $queries;
+        } else
+            $res["query"] = array ( iconv ( 'utf-8', $encoding, $q->nodeValue ) );
+
+        // parse query mode
+        $mode = 0;
+        $mode_s = ArrVal ($res,"mode");
+        switch ( $mode_s )
+        {
+            case "":			$mode_s = "(default)"; break;
+            case "all":			$mode = SPH_MATCH_ALL; break;
+            case "any":			$mode = SPH_MATCH_ANY; break;
+            case "phrase":		$mode = SPH_MATCH_PHRASE; break;
+            case "extended":	$mode = SPH_MATCH_EXTENDED; break;
+            case "extended2":	$mode = SPH_MATCH_EXTENDED2; break;
+            case "fullscan":	$mode = SPH_MATCH_FULLSCAN; break;
+            default:
+                return "unknown matching mode '" . $mode_s . "'";
+        }
+        $res["mode"] = $mode;
+        $res["mode_s"] = $mode_s;
+
+        // parse ranker
+        $ranker = 0;
+        $ranker_s = ArrVal ($res, "ranker");
+
+        if ( empty($ranker_s) )
+        {
+            $ranker_s = "(default)";
+        } else
+        {
+            $ranker = @constant("SPH_RANK_" . strtoupper($ranker_s));
+            if ( $ranker===NULL )
+                return "unknown ranker '" . $ranker_s . "'";
+        }
+
+        $res["ranker"] = $ranker;
+        $res["ranker_s"] = $ranker_s;
+
+        // parse filter
+//        TouchVal ( $res, "filter");
+//        TouchVal ( $res, "filter_value");
+        if ( @$res['filter_range'])
+            $res["filter_range"] = ParseRange ($res["filter_range"]);
+//        TouchVal ( $res, "filter_str");
+//        TouchVal ( $res, "filter_exclude");
+
+        // parse sort mode and get clause
+        $sortmode = 0;
+        $sortmode_s = ArrVal ($res,"sortmode");
+        switch ( $sortmode_s )
+        {
+            case "":			$sortmode_s = "(default)"; break;
+            case "extended":	$sortmode = SPH_SORT_EXTENDED; break;
+            case "expr":		$sortmode = SPH_SORT_EXPR; break;
+            case "attr_asc":	$sortmode = SPH_SORT_ATTR_ASC; break;
+            case "attr_desc":	$sortmode = SPH_SORT_ATTR_DESC; break;
+            default:
+                return "unknown sorting mode '" . $sortmode_s . "'";
+        }
+        $res["sortmode"] = $sortmode;
+        $res["sortmode_s" ] = $sortmode_s;
+        TouchVal ( $res, "sortby");
+
+        // groupby
+        $groupfunc = 0;
+        $groupfunc_s = ArrVal ($res,"groupfunc");
+        switch ( $groupfunc_s )
+        {
+            case "":			$groupfunc = SPH_GROUPBY_ATTR; $groupfunc_s = "attr"; break;
+            case "day":			$groupfunc = SPH_GROUPBY_DAY; break;
+            case "week":		$groupfunc = SPH_GROUPBY_WEEK; break;
+            case "month":		$groupfunc = SPH_GROUPBY_MONTH; break;
+            case "year":		$groupfunc = SPH_GROUPBY_YEAR; break;
+            case "attr":		$groupfunc = SPH_GROUPBY_ATTR; break;
+            case "attrpair":	$groupfunc = SPH_GROUPBY_ATTRPAIR; break;
+            default:
+                return "unknown groupby func '" . $groupfunc_s . "'";
+        }
+
+        $res["groupfunc"] = $groupfunc;
+        $res["groupfunc_s"] = $groupfunc_s;
+//        TouchVal ( $res, "groupattr");
+        TouchVal ($res,"groupsort", "@group desc");
+//      TouchVal ($res,"groupdistinct");
+
+//        TouchVal ($res,"resarray");
+        TouchVal ($res,"index", "*");
+//        TouchVal ($res,"select");
+        if (@$res["index_weights"] )
+            @$res["index_weights"] = ParseIndexWeights ( $res["index_weights"]);
+        TouchVal ($res,"roundoff");
+//        TouchVal ($res,"expect_error");
+//        TouchVal ($res,"tag");
+//        TouchVal ($res,"cutoff");
+//        TouchVal ($res,"limits");
+
+        $res['type'] = "api";
+        $this->_queries[] = $res;
+        return true;
+    }
+
+	function AddQuery ( $q, $encoding, $metaindexes )
 	{
-		$attrs = $this->SphinxQLAttr($q);
-		if ( $use_meta )
+		$lowername = strtolower($q->nodeName);
+        $attrs = GetAttrs($q);
+        switch ( $lowername )
+        {
+            case 'query':
+                if (empty(@$attrs['endpoint'])) // that is API query
+                    return $this->AddAPIQuery($q, $encoding);
+                break;
+            case 'sphinxql':
+                break;
+            case 'comment':
+                $this->_queries[] = array (
+                    "query" => iconv('utf-8', $encoding, $this->GenerateQueryText($q)),
+                    "attrs" => $attrs,
+                    "type" => $lowername);
+                return true;
+            default:
+                return true;
+        }
+
+		if ( !empty($metaindexes) )
 		{
 			$was_replaced = false;
 			foreach ( $metaindexes as $name=>$indexes )
@@ -1411,32 +1557,47 @@ class SphinxConfig
 					{
 						$was_replaced = true;
 						foreach ($res as $r)
-							$this->_sphqueries[]=array($r,$attrs, $is_http);
+							$this->_queries[]=array (
+                                "query" => $r,
+                                "attrs" => $attrs,
+                                "type" => $lowername);
 					}
 				}
 
 			if (!$was_replaced) // no metaindexes; emit 'as is'
 			{
 				foreach ( GetVariants ( $q, $encoding ) as $r )
-					$this->_sphqueries[]=array($r, $attrs, $is_http);
+					$this->_queries[]=array (
+                        "query" => $r,
+                        "attrs" => $attrs,
+                        "type" => $lowername);
 			}
 		}
 		else
 		{
-			$query_text = $this->GenerateQueryText ( $q );
-			$this->_sphqueries[] = array ( iconv('utf-8', $encoding, $query_text), $attrs, $is_http );
+            $query_texts = preg_split ( "/;\n/", $this->GenerateQueryText ( $q ), -1, PREG_SPLIT_NO_EMPTY );
+            if ( empty ($query_texts))
+                $this->_queries[] = array (
+                    "query" => "",
+                    "attrs" => $attrs,
+                    "type" => $lowername);
+            foreach ($query_texts as $query_text)
+    			$this->_queries[] = array (
+                    "query" => iconv('utf-8', $encoding, $query_text),
+                    "attrs" => $attrs,
+                    "type" => $lowername);
 		}
+		return true;
 	}
 
-
-	function AddQueries ( $queries, $item_name, $encoding, $use_meta, $metaindexes, $is_http )
+	function AddQueries ( $queries, $encoding, $metaindexes )
 	{
-		foreach ( ChildrenArray ( $queries, $item_name ) as $q )
-			$this->AddQuery ( $q, $encoding, $use_meta, $metaindexes, $is_http );
+		foreach ( ChildrenArray ( $queries ) as $q )
+            $this->AddQuery ( $q, $encoding, $metaindexes );
 	}
 
 
-	function ExtractQueries ( $node, $encoding, $use_meta, $metaindexes )
+	function ExtractQueries ( $node, $encoding, $metaindexes )
 	{
 		if ( !empty($node) && $node->hasChildNodes() )
 			for ( $i=0; $i<$node->childNodes->length; $i++ )
@@ -1444,13 +1605,10 @@ class SphinxConfig
 				$child = $node->childNodes->item ( $i );
 				
 				$lowername = strtolower($child->nodeName);
-				if ( $lowername=="sphqueries" )
-					$this->AddQueries ( $child, "sphinxql", $encoding, $use_meta, $metaindexes, false );
-				else if ( $lowername=="httpqueries" )
-					$this->AddQueries ( $child, "query", $encoding, $use_meta, $metaindexes, true );
+				if ( $lowername=="sphqueries" || $lowername=="httpqueries")
+					$this->AddQueries ( $child, $encoding, $metaindexes );
 			}
 	}
-
 
 	function Load ( $config_file )
 	{
@@ -1484,7 +1642,6 @@ class SphinxConfig
 		}
 
 		// extract meta-indexes
-		$use_meta = true;
 		$metaindexes = array();
 		foreach ( ChildrenArray ( $xml, "metaindex" ) as $meta )
 		{
@@ -1495,134 +1652,22 @@ class SphinxConfig
 			$name = GetFirstAttr ( $meta );
 			$metaindexes[$name->nodeValue] = $tmp;
 		}
-		if ( empty ($metaindexes) )
-			$use_meta = false;
 
 		// extract queries
 		$qs = GetFirstChild ( $xml, "queries" );
 		if ( $qs )
 		{
-			// new and cool
-			foreach ( ChildrenArray ( $qs, "query" ) as $q )
-			{
-				$res = array ( "query" => array ( iconv ( 'utf-8', $doc->encoding, $q->nodeValue ) ) );
-				// parse query mode
-				$mode = 0;
-				$mode_s = $q->getAttribute("mode");
-				switch ( $mode_s )
-				{
-					case "":			$mode_s = "(default)"; break;
-					case "all":			$mode = SPH_MATCH_ALL; break;
-					case "any":			$mode = SPH_MATCH_ANY; break;
-					case "phrase":		$mode = SPH_MATCH_PHRASE; break;
-					case "extended":	$mode = SPH_MATCH_EXTENDED; break;
-					case "extended2":	$mode = SPH_MATCH_EXTENDED2; break;
-					case "fullscan":	$mode = SPH_MATCH_FULLSCAN; break;
-					default:
-						printf ( "$config_file: unknown matching mode '%s'\n", $mode_s );
-						return false;
-				}
-				$res["mode"] = $mode;
-				$res["mode_s"] = $mode_s;
-
-				// parse ranker
-				$ranker = 0;
-				$ranker_s = $q->getAttribute("ranker");
-
-				if ( empty($ranker_s) )
-				{
-					$ranker_s = "(default)";
-				} else
-				{
-					$ranker = @constant("SPH_RANK_" . strtoupper($ranker_s));
-					if ( $ranker===NULL )
-					{
-						printf ( "$config_file: unknown ranker '%s'\n", $ranker_s );
-						return false;
-					}
-				}
-
-				$res["ranker"] = $ranker;
-				$res["ranker_s"] = $ranker_s;
-
-				// parse filter
-				$res["filter"] = $q->getAttribute("filter");
-				$res["filter_value"] = $q->getAttribute("filter_value" );
-				$res["filter_range"] = $this->ParseRange ( $q->getAttribute("filter_range" ) );
-				$res["filter_str"] = $q->getAttribute("filter_str");
-				$res["filter_exclude"] = $q->getAttribute("filter_exclude");
-
-				// parse sort mode and get clause
-				$sortmode = 0;
-				$sortmode_s = $q->getAttribute("sortmode");
-				switch ( $sortmode_s )
-				{
-					case "":			$sortmode_s = "(default)"; break;
-					case "extended":	$sortmode = SPH_SORT_EXTENDED; break;
-					case "expr":		$sortmode = SPH_SORT_EXPR; break;
-					case "attr_asc":	$sortmode = SPH_SORT_ATTR_ASC; break;
-					case "attr_desc":	$sortmode = SPH_SORT_ATTR_DESC; break;
-					default:
-						printf ( "$config_file: unknown sorting mode '%s'\n", $sortmode_s );
-						return false;
-				}
-				$res["sortmode"] = $sortmode;
-				$res["sortmode_s" ] = $sortmode_s;
-				$res["sortby"] = $q->getAttribute("sortby");
-
-				// groupby
-				$groupfunc = 0;
-				$groupfunc_s = $q->getAttribute("groupfunc");
-				switch ( $groupfunc_s )
-				{
-					case "":			$groupfunc = SPH_GROUPBY_ATTR; $groupfunc_s = "attr"; break;
-					case "day":			$groupfunc = SPH_GROUPBY_DAY; break;
-					case "week":		$groupfunc = SPH_GROUPBY_WEEK; break;
-					case "month":		$groupfunc = SPH_GROUPBY_MONTH; break;
-					case "year":		$groupfunc = SPH_GROUPBY_YEAR; break;
-					case "attr":		$groupfunc = SPH_GROUPBY_ATTR; break;
-					case "attrpair":	$groupfunc = SPH_GROUPBY_ATTRPAIR; break;
-					default:
-						printf ( "$config_file: unknown groupby func '%s'\n", $groupfunc_s );
-						return false;
-				}
-
-				$res["groupfunc"] = $groupfunc;
-				$res["groupfunc_s"] = $groupfunc_s;
-				$res["groupattr"] = $q->getAttribute("groupattr");
-				$groupsort = $q->getAttribute("groupsort");
-				if ( $groupsort == "" )
-					$groupsort = "@group desc";
-
-				$res["groupsort"] = $groupsort;
-				$res["groupdistinct"] = $q->getAttribute("groupdistinct");
-
-				$res["resarray"] = $q->getAttribute("resarray");
-				$res["index"] = $q->getAttribute("index");
-				$res["select"] = $q->getAttribute("select");
-				$res["index_weights"] = $this->ParseIndexWeights ( $q->getAttribute("index_weights") );
-				$res["roundoff"] = $q->getAttribute("roundoff");
-				$res["expect_error"] = $q->getAttribute("expect_error");
-				$res["tag"] = $q->getAttribute("tag");
-				$res["cutoff"] = $q->getAttribute("cutoff");
-				$res["limits"] = $q->getAttribute("limits");
-
-				// add query
-				if ( $q->getAttribute("source") )
-				{
-					$source = $q->getAttribute("source");
-					if ( substr ( $source, 0, 6 ) == "local:" )
-						$source = $this->GetLocal ( substr ( $source, 6 ) );
-					if ( !is_readable($source) )
-					{
-						printf ( "FATAL: query source file '%s' not found.\n", $source );
-						exit ( 1 );
-					}
-					$queries = file ( $source, FILE_IGNORE_NEW_LINES );
-					$limit = $this->GetLocal('qlimit');
-					$res["query"] = $limit ? array_slice( $queries, 0, $limit ) : $queries;
-				}
-				$this->_queries[] = $res;
+			// new and cool - everything in <queries>.
+            // <query endpoint=...> - as http, <sphinxql...> - as sphinxql,
+            // rest <query...> - as api.
+            // also <comment...> is suitable here (copied directly into report, doesn't affect result matching)
+			foreach ( ChildrenArray ( $qs ) as $q ) {
+                $res = $this->AddQuery($q, $doc->encoding, $metaindexes);
+                if ($res !== true)
+                {
+                    printf("$config_file: %s\n", $res);
+                    return false;
+                }
 			}
 		}
 		else
@@ -1637,12 +1682,14 @@ class SphinxConfig
 					"mode" => 0,
 					"mode_s" => "(default)",
 					"ranker" => 0,
-					"ranker_s" => "(default)" );
+					"ranker_s" => "(default)",
+                    "index" => "*",
+                    "type" => "api" );
 			}
 		}
 
-		// extract http queries
-		$this->ExtractQueries ( $xml, $doc->encoding, $use_meta, $metaindexes );
+		// old fashion: sphinxql are in <sphqueries>, http are in <httpqueries>
+		$this->ExtractQueries ( $xml, $doc->encoding, $metaindexes );
 
 		// extract my settings
 		$this->_config = GetFirstChild ( $xml, "config" );
@@ -1737,85 +1784,78 @@ class SphinxConfig
 
 	function PickResult ( $query_result )
 	{
-		$this->_results[] = $query_result;
+        array_push ($this->_results, $query_result );
 		if ( IsModelGenMode () )
 			$this->_results_model[$this->SubtestNo ()][] = $query_result;
 	}
 
+	function PickResults( $query_results )
+    {
+        $this->_results = $query_results;
+        if ( IsModelGenMode () )
+            array_push ( $this->_results_model, $query_results );
+    }
+
+	function FixupJsonTimeAndFloats ( &$query_result, &$error )
+    {
+        if ( !array_key_exists ( 'rows', $query_result ) )
+            return true;
+
+        $decoded_rows = json_decode ( $query_result['rows'] );
+        if ( !$decoded_rows )
+        {
+            $error = "Unable to decode repsonse json'" . $query_result['rows'] . "': ".GetJsonError();
+            return false;
+        }
+
+        if ( property_exists ( $decoded_rows, 'took' ) )
+            unset ( $decoded_rows->took );
+
+        // fixup floats in json
+        if ( isset ( $decoded_rows->hits ) && isset ( $decoded_rows->hits->hits ) )
+        {
+            foreach ( $decoded_rows->hits->hits as &$hit )
+                RoundFloatValues ( $hit, 6 );
+        }
+
+        $query_result['rows'] = json_encode ( $decoded_rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+        return true;
+    }
+
 	function RunQueryHttp ( $query, &$error )
 	{
-		$http_endpoint = NULL;
-		$http_method = NULL;
-		$http_content = NULL;
-		$use_agent = 0;
+		$attrs = $query['attrs'];
 
-		if ( !is_array($query) || !$query[1] )
+        $http_endpoint=ArrVal ($attrs, "endpoint", NULL);
+        $http_method=ArrVal ($attrs, "method", "POST");
+        $http_content=ArrVal ($attrs, "content", NULL);
+        $use_agent = ArrVal ($attrs, "d", 0);
+
+
+		if ( !is_array($query) || !$attrs )
 		{
 			$error = "HTTP endpoint not specified";
 			return false;
 		}
 
-		foreach ( $query[1] as $k => $v )
-		{
-			if ($k=="endpoint")
-				$http_endpoint = $v;
-			elseif ($k=="method")
-				$http_method = $v;
-			elseif ($k=="content")
-				$http_content = $v;
-			elseif ( $k="d" )
-				$use_agent = $v;
-		}
-
-		$query = $query[0];
+		$query = trim($query['query']);
 
 		$http_method = strtoupper($http_method);
-		$post = NULL;
-		if ( !strlen($http_method) || $http_method=="POST" )
-			$post = true;
-		elseif ( $http_method=="GET" )
-			$post = false;
+		if ( !($http_method=="POST" || $http_method=="GET") )
+        {
+            $error = "Unknown HTTP method: ".$http_method;
+            return false;
+        }
 
-		if ( $post===NULL )
-		{
-			$error = "Unknown HTTP method: ".$http_method;
-			return false;
-		}
+		$query_result = HttpQueryCurl ( $http_method, $http_endpoint, $http_content, $query, $use_agent, $this->Requires("https") );
 
-		if ( $post )
-			$query_result = HttpQueryPost ( $http_endpoint, $http_content, $query, $use_agent, $this->Requires("https") );
-		else
-			$query_result = HttpQueryGet ( $http_endpoint, $http_content, $query, $use_agent, $this->Requires("https") );
-
-		$query_result['http']=1;
-			
 		if ( $use_agent>0 )
 			$query_result['agent'] = $use_agent;
 
-		if ( array_key_exists ( 'rows', $query_result ) )
-		{
-			$decoded_rows = json_decode ( $query_result['rows'] );
-			if ( !$decoded_rows )
-			{
-				$error = "Unable to decode repsonse json'" . $query_result['rows'] . "': ".GetJsonError();
-				return false;
-			}
+		if ( !$this->FixupJsonTimeAndFloats( $query_result, $error ) )
+		    return false;
 
-			if ( property_exists ( $decoded_rows, 'took' ) )
-				unset ( $decoded_rows->took );
-				
-			// fixup floats in json
-			if ( isset ( $decoded_rows->hits ) && isset ( $decoded_rows->hits->hits ) )
-			{
-				foreach ( $decoded_rows->hits->hits as &$hit )
-					RoundFloatValues ( $hit, 6 );
-			}
-
-			$query_result['rows'] = json_encode ( $decoded_rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
-		}
-	
 		$this->PickResult ( $query_result );
-
 		return true;
 	}
 
@@ -1910,10 +1950,10 @@ class SphinxConfig
 
 	function RunQueryQL ( $query, &$error, $bench, &$connection, &$old_agent, &$old_vip )
 	{
-		global $g_pick_query, $agents, $index_data_path;
+		global $agents, $index_data_path;
 
-		$attrs = ArrVal ( $query, 1, [] );
-		$query = $query[0];
+		$attrs = ArrVal ( $query, 'attrs', [] );
+		$query = $query['query'];
 		$query_ref = $query;
 
 
@@ -2036,10 +2076,7 @@ class SphinxConfig
 				$status = "unsupported command " . $system_cmd;
 			
 			$r = array("sphinxql"=>$system_cmd . " => " . $status);
-			$this->_results[] = $r;
-			if ( IsModelGenMode () )
-				$this->_results_model[$this->SubtestNo ()][] = $r;
-
+	        $this->PickResult ( $r );
 			return true;
 		}
 
@@ -2081,10 +2118,7 @@ class SphinxConfig
 				return false;
 
 			$r = array("sphinxql"=>$query, "error"=>"reconnected ok!", "errno"=>0);
-			$this->_results[] = $r;
-			if ( IsModelGenMode () )
-				$this->_results_model[$this->SubtestNo ()][] = $r;
-
+            $this->PickResult ( $r );
 			return true;
 		}
 			
@@ -2102,7 +2136,7 @@ class SphinxConfig
 		if ( strpos ($query, ";")===FALSE ) // process a single-query line
 		// FIXME! If a query contains ';' it would be false positive for such codepath.
 		{
-			$query_result["sphinxql"]=$query_ref;
+			$query_result["sphinxql"]=trim ( $query_ref );
 			unset ( $query_ref );
 
 			$this->PostprocessQlResult ( $query, $query_result, $connection, $no_time );
@@ -2218,23 +2252,23 @@ class SphinxConfig
 	}
 
 
-	function RunQuery ( $index, &$error, $benchmark = null )
+	function RunQuery ( &$error, $benchmark = false )
 	{
 		global $sd_address, $sd_port, $action_retries, $action_wait_timeout, $g_pick_query;
-		
-		$query_results = array ();		
+
+//      $this->_results = array();
+//		$query_results = array ();
 		$total = $done = 0;
+
 		if ( $benchmark )
 		{
 			foreach ( $this->_queries as $qinfo )
 				$total += count($qinfo['query']);
 			$prefix = $benchmark;
-			$compact = true;
 			$tm = 0;
 			$start = MyMicrotime();
 		}
-		else
-			$compact = false;
+        $compact = $benchmark;
 
 		$cl = new APIClient;
 		$pconn = $benchmark && method_exists ( $cl, 'Open' );
@@ -2244,6 +2278,10 @@ class SphinxConfig
 			$cl->SetServer ( $sd_address, $sd_port );
 			$cl->Open ();
 		}
+
+        $ql_connection=false;
+        $old_agent = -1;
+        $old_vip = -1;
 
 		$retries = 1;
 		if ( !$benchmark )
@@ -2268,10 +2306,21 @@ class SphinxConfig
 			}
 		}
 
+        $bOk = true;
+
 		for ( $n=$qmin; $n<=$qmax; $n++ )
 		{
 			$qinfo = $this->_queries[$n];
-			foreach ( $qinfo['query'] as $query )
+			if ($qinfo['type']=='sphinxql')
+                $bOk = $this->RunQueryQL ( $qinfo, $error, $benchmark, $ql_connection, $old_agent, $old_vip );
+			elseif ($qinfo['type']=='query')
+                $bOk = $this->RunQueryHttp ( $qinfo, $error );
+
+            if (!$bOk)
+			    break;
+
+            if ($qinfo['type']=='api')
+			foreach ( $qinfo['query'] as $query ) // in bench query might be loaded as big set of strings, so it's array.
 			{
 				if ( $benchmark && MyMicrotime() > $tm )
 				{
@@ -2297,7 +2346,6 @@ class SphinxConfig
 					$results = 0;
 					if ( empty($this->_query_settings) )
 					{
-						$my_index = $index;
 						if ( @$qinfo["mode"] )		$cl->SetMatchMode ( $qinfo["mode"] );
 						if ( @$qinfo["ranker"] )	$cl->SetRankingMode ( $qinfo["ranker"] );
 						if ( @$qinfo["sortmode"] )	$cl->SetSortMode ( $qinfo["sortmode"], $qinfo["sortby"] );
@@ -2324,7 +2372,7 @@ class SphinxConfig
 							} elseif ( @$qinfo["filter_str"] )
 								$cl->SetFilterString ( $name, $qinfo["filter_str"], $exclude );
 						}
-						
+
 						$results = $cl->Query ( $query, $my_index, "run".(1+$this->SubtestNo()) );
 						if ( is_array($results) )
 						{
@@ -2335,9 +2383,9 @@ class SphinxConfig
 					else
 					{
 						$run_func = function( $client, $query, $index, &$results ) { eval( "$this->_query_settings" ); };
-						$run_func ( $cl, $query, $index, $results ); 
+						$run_func ( $cl, $query, "*", $results );
 					}
-					
+
 					if ( $results )
 					{
 						// let also work with "array of arrays" result
@@ -2349,7 +2397,8 @@ class SphinxConfig
 							else
 								$results ["query"] = $query;
 
-							array_push ( $query_results, $results );
+                            $this->PickResult ( $results );
+//							array_push ( $query_results, $results );
 						} else
 						foreach ( $results as $result )
 						{
@@ -2359,13 +2408,14 @@ class SphinxConfig
 							else
 								$result ["query"] = $query;
 
-							array_push ( $query_results, $result );
+                            $this->PickResult ( $result );
+//							array_push ( $query_results, $result );
 						}
 					}
 					else if ( @$qinfo["expect_error"] && !$cl->IsConnectError() )
 					{
 						$bOk = true;
-						array_push ( $query_results, array (
+                        $this->PickResult ( array (
 							"query" => $query,
 							"error" => $cl->GetLastError(),
 							"warning" => "",
@@ -2379,7 +2429,7 @@ class SphinxConfig
 							usleep ( $action_wait_timeout );
 						else if ( $benchmark && $done )
 						{
-							array_push ( $query_results, array ( $n, -1, -1, 0 ) );
+                            $this->PickResult ( array ( $n, -1, -1, 0 ) );
 							$bOk = true;
 						}
 						else
@@ -2396,18 +2446,17 @@ class SphinxConfig
 			}
 		}
 
-		$this->_results = $query_results;
+        if ( $ql_connection )
+            mysqli_close ( $ql_connection );
 
-		if ( IsModelGenMode () && count($this->_queries) !=0 )
-			array_push ( $this->_results_model, $query_results );
-
+//        $this->PickResult ( $query_results );
 		if ( $benchmark )
 			printf ( " - done in %s\n", sphFormatTime ( MyMicrotime() - $start ) );
 
 		if ( $pconn )
 			$cl->Close ();
 
-		return TRUE;
+		return $bOk;
 	}
 
 	function RunCustomTest ( & $error )
@@ -2451,11 +2500,7 @@ class SphinxConfig
 		$my_results = array ();
 		$my_results [] = $results;
 
-		$this->_results = $my_results;
-
-		if ( IsModelGenMode () )
-			array_push ( $this->_results_model, $my_results );
-
+        $this->PickResults ( $my_results );
 		return TRUE;
 	}
 
@@ -2665,16 +2710,22 @@ class SphinxConfig
 
 		// format header
 		$qinfo = @$this->_queries[$nquery-1];
-		if ( @array_key_exists ( "index", $qinfo ) && $qinfo ["index"] != '*' )
-			$str = "--- Query $nquery (mode=$qinfo[mode_s],ranker=$qinfo[ranker_s],index=$qinfo[index]) ---\n";
-		else
-			$str = "--- Query $nquery (mode=$qinfo[mode_s],ranker=$qinfo[ranker_s]) ---\n";
+		while ( !@array_key_exists ( "type", $qinfo) || $qinfo['type'] != 'api')
+        {
+            --$nquery;
+            $qinfo = @$this->_queries[$nquery-1];
+        }
 
-		if ( @$qinfo["groupattr"] )
-			$str .= "GroupBy: attr: '".$qinfo["groupattr"]."' func: '".$qinfo["groupfunc_s"]."' sort: '".$qinfo["groupsort"]."'\n";
+        if (@array_key_exists("index", $qinfo) && $qinfo ["index"] != '*')
+            $str = "--- Query $nquery (mode=$qinfo[mode_s],ranker=$qinfo[ranker_s],index=$qinfo[index]) ---\n";
+        else
+            $str = "--- Query $nquery (mode=@$qinfo[mode_s],ranker=@$qinfo[ranker_s]) ---\n";
 
-		if ( @$qinfo["sortmode"] == SPH_SORT_EXPR )
-			$str .= "Sort: expr: ".$qinfo["sortby"]."\n";
+        if (@$qinfo["groupattr"])
+            $str .= "GroupBy: attr: '" . $qinfo["groupattr"] . "' func: '" . $qinfo["groupfunc_s"] . "' sort: '" . $qinfo["groupsort"] . "'\n";
+
+        if (@$qinfo["sortmode"] == SPH_SORT_EXPR)
+            $str .= "Sort: expr: " . $qinfo["sortby"] . "\n";
 
 		$str .= @"Query '$result[query]': retrieved $result[total_found] of $result[total] matches in $result[time] sec.\n";
 		if ( @array_key_exists ( "error", $result ) && $result["error"] )
@@ -3136,8 +3187,8 @@ class SphinxConfig
 							for ( $i=0; $i<count($insert_values); $i++ )
 							{
 								$mva = preg_replace ( "/[a-z\(\)]/i", " ", $insert_values[$i][$attr_index] );
-								$mva = preg_split ( "/[\s,]+/", $mva, -1, PREG_SPLIT_NO_EMPTY );
-								$insert_values[$i][$attr_index] = implode ( ',', $mva );
+                                $mva = preg_split ( "/[\s,]+/", $mva, -1, PREG_SPLIT_NO_EMPTY );
+                                $insert_values[$i][$attr_index] = implode ( ',', $mva );
 							}
 						}
 					}
@@ -3831,6 +3882,9 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 	$report_file = "$report_path.txt";
 	$report = fopen ( $report_file, "w" );
 
+	$example_file = "$res_path/example.txt";
+	$examples = fopen ($example_file, "w");
+
 	$nfailed = 0;
 	$error = "";
 	$log = ""; // subtest failures log
@@ -3990,28 +4044,18 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 		if ( $config->IsRt () )
 			$config->InsertIntoIndexer ( $error );
 
-		if ( $config->IsQueryTest () )
-		{
-			$error = "";
-			if ( ! $config->RunQuery ( "*", $error ) )
-			{
-				if ( !HandleFailure ( $config, $report, "$error\n", $nfailed ) )
-					$log .= "\tsubtest $subtest: query error: $error\n";
-				continue;
-			}
-		}
-		else
-		{
-			if ( ! $config->RunCustomTest ( $error ) )
-			{
-				if ( !HandleFailure ( $config, $report, "$error\n", $nfailed ) )
-					$log .= "\tsubtest $subtest: query error: $error\n";
-				continue;
-			}
-		}
+        $config->ResetResults();
+
+		if ( !$config->IsQueryTest () ) {
+            if (!$config->RunCustomTest($error)) {
+                if (!HandleFailure($config, $report, "$error\n", $nfailed))
+                    $log .= "\tsubtest $subtest: query error: $error\n";
+                continue;
+            }
+        }
 
 		$error = "";
-		if ( !$config->RunQlAndHttpQueries ( $error ) )
+		if ( !$config->RunQuery ( $error ) )
 		{
 			if ( !HandleFailure ( $config, $report, "$error\n", $nfailed ) )
 				$log .= "\tsubtest $subtest: query error: $error\n";

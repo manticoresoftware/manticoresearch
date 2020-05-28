@@ -36,7 +36,6 @@ searchd
 	server_id = <agent_id/>
 }
 </agent2>
-
 </config>
 
 <queries>
@@ -107,10 +106,13 @@ searchd
 }
 </query>
 
+
+<sphinxql d="0" system="wait-status" status="cluster_test_last_committed" wait_value="4" />
 <query d="0" endpoint="json/search">
 	{ "index": "rt1", "query": { "match_all": {} } }
 </query>
 
+<sphinxql d="2" system="wait-status" status="cluster_test_last_committed" wait_value="4" />
 <query d="2" endpoint="json/search">
 	{ "index": "rt1", "query": { "range": { "j1.fd": { "gte": 100 } } } }
 </query>
@@ -153,10 +155,12 @@ searchd
 }
 </query>
 
+<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="7"/>
 <query d="1" endpoint="json/search">
 	{ "index": "rt1", "query": { "match_all": {} } }
 </query>
 
+<sphinxql d="2" system="wait-status" status="cluster_test_last_committed" wait_value="7"/>
 <query d="2" endpoint="json/search">
 	{ "index": "rt1", "query": { "range": { "j1.fd": { "gte": 100 } } } }
 </query>

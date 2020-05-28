@@ -27,50 +27,59 @@ searchd
 
 </config>
 
-
-<sphqueries>
+<queries>
 <!-- request to node 0 -->
-<sphinxql d="0">create table rt1 (t1 text indexed stored, t2 text indexed, t3 text indexed, gid int) rt_mem_limit='128k'</sphinxql>
-<sphinxql d="0">create table rt2 (t1 text indexed stored, t2 text indexed, t3 text indexed stored, gid int) rt_mem_limit='128k'</sphinxql>
-<sphinxql d="0">create table rt3 (t1 text indexed stored, t2 text indexed stored, t3 text indexed stored, gid int) rt_mem_limit='128k'</sphinxql>
-<sphinxql d="0">create cluster test</sphinxql>
-<sphinxql d="0">ALTER CLUSTER test ADD rt1</sphinxql>
-<sphinxql d="0">ALTER CLUSTER test ADD rt2</sphinxql>
-<sphinxql d="0">ALTER CLUSTER test ADD rt3</sphinxql>
+<sphinxql d="0">
+	create table rt1 (t1 text indexed stored, t2 text indexed, t3 text indexed, gid int) rt_mem_limit='128k';
+	create table rt2 (t1 text indexed stored, t2 text indexed, t3 text indexed stored, gid int) rt_mem_limit='128k';
+	create table rt3 (t1 text indexed stored, t2 text indexed stored, t3 text indexed stored, gid int) rt_mem_limit='128k';
+	create cluster test;
+	ALTER CLUSTER test ADD rt1;
+	ALTER CLUSTER test ADD rt2;
+	ALTER CLUSTER test ADD rt3;
+</sphinxql>
 
 <!-- request to node 1 -->
-<sphinxql d="1" cluster_connect="0">join cluster test at '%addr_connect%'</sphinxql>
+<sphinxql d="1" cluster_connect="0">
+	join cluster test at '%addr_connect%'
+</sphinxql>
 
 <!-- request to node 0 -->
-<sphinxql d="0">insert into test:rt1 (id,t1,t2,gid) values (111, 'f1 111', 'f2 111', 1001), (112, 'f1 112', 'f2 112', 1002)</sphinxql>
-<sphinxql d="0">insert into test:rt2 (id,t1,t3,gid) values (211, 'f1 211', 'f3 211', 2001), (212, 'f1 212', 'f3 212', 2002)</sphinxql>
-<sphinxql d="0">insert into test:rt3 (id,t3,t1,t2,gid) values (311, 'f3 311', 'f1 311', 'f2 311', 3001), (312, 'f2 312', 'f1 312', 'f2 312', 3002)</sphinxql>
+<sphinxql d="0">
+	insert into test:rt1 (id,t1,t2,gid) values (111, 'f1 111', 'f2 111', 1001), (112, 'f1 112', 'f2 112', 1002);
+	insert into test:rt2 (id,t1,t3,gid) values (211, 'f1 211', 'f3 211', 2001), (212, 'f1 212', 'f3 212', 2002);
+	insert into test:rt3 (id,t3,t1,t2,gid) values (311, 'f3 311', 'f1 311', 'f2 311', 3001), (312, 'f2 312', 'f1 312', 'f2 312', 3002);
+</sphinxql>
 
 <!-- request to node 1 -->
-<sphinxql d="1">SHOW TABLES</sphinxql> <!-- just to reconnect to agent1 -->
 <sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="6"/>
-<sphinxql d="1">SELECT * FROM test:rt1</sphinxql>
-<sphinxql d="1">SELECT * FROM test:rt2</sphinxql>
-<sphinxql d="1">SELECT * FROM test:rt3</sphinxql>
+<sphinxql d="1">
+	SELECT * FROM test:rt1;
+	SELECT * FROM test:rt2;
+	SELECT * FROM test:rt3;
+
 <!-- case only one stored field replicate -->
-<sphinxql d="1">insert into test:rt3 (id,t2,gid) values (313, 'f2 312', 3001)</sphinxql>
+	insert into test:rt3 (id,t2,gid) values (313, 'f2 312', 3001);
+
 <!-- case no stored field replicate -->
-<sphinxql d="1">insert into test:rt3 (id,gid) values (314, 3001)</sphinxql>
-<sphinxql d="1">SELECT * FROM test:rt3</sphinxql>
+	insert into test:rt3 (id,gid) values (314, 3001);
+	SELECT * FROM test:rt3;
+</sphinxql>
 
 <!-- request to node 0 -->
-<sphinxql d="0">SHOW TABLES</sphinxql> <!-- just to reconnect to agent0 -->
 <sphinxql d="0" system="wait-status" status="cluster_test_last_committed" wait_value="8"/>
-<sphinxql d="0">SELECT * FROM test:rt3</sphinxql>
+<sphinxql d="0">
+	SELECT * FROM test:rt3;
 
 <!-- cleanup -->
-<sphinxql d="0">ALTER CLUSTER test DROP rt1</sphinxql>
-<sphinxql d="0">ALTER CLUSTER test DROP rt2</sphinxql>
-<sphinxql d="0">ALTER CLUSTER test DROP rt3</sphinxql>
-<sphinxql d="0">DROP TABLE rt1</sphinxql>
-<sphinxql d="0">DROP TABLE rt2</sphinxql>
-<sphinxql d="0">DROP TABLE rt3</sphinxql>
+	ALTER CLUSTER test DROP rt1;
+	ALTER CLUSTER test DROP rt2;
+	ALTER CLUSTER test DROP rt3;
+	DROP TABLE rt1;
+	DROP TABLE rt2;
+	DROP TABLE rt3;
+</sphinxql>
 
-</sphqueries>
+</queries>
 
 </test>

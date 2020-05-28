@@ -35,118 +35,167 @@ searchd
 
 </config>
 
-
-<sphqueries>
-<sphinxql d="0">create table pq1 type='pq'</sphinxql>
-<sphinxql d="0">create table pq2 type='pq'</sphinxql>
-<sphinxql d="0">create table pq3 type='pq'</sphinxql>
+<queries>
+<sphinxql d="0">
+	create table pq1 type='pq';
+	create table pq2 type='pq';
+	create table pq3 type='pq';
 
 <!-- request to node 0 -->
-<sphinxql d="0">create cluster test</sphinxql>
+	create cluster test;
+</sphinxql>
+
 <!-- request to node 1 -->
-<sphinxql d="1" cluster_connect="0">join cluster test '%addr_connect%' as nodes</sphinxql>
+<sphinxql d="1" cluster_connect="0">
+	join cluster test '%addr_connect%' as nodes
+</sphinxql>
+
 <!-- request to node 2 -->
-<sphinxql d="2" cluster_connect="0">join cluster test '%addr_connect%' as nodes</sphinxql>
+<sphinxql d="2" cluster_connect="0">
+	join cluster test '%addr_connect%' as nodes
+</sphinxql>
 
 <!-- stream to node 0 -->
-<sphinxql d="0">INSERT INTO pq1 VALUES('test 101')</sphinxql>
-<sphinxql d="0">INSERT INTO test:pq1 VALUES('test none')</sphinxql>
-<sphinxql d="0">INSERT INTO pq1 VALUES('test 102')</sphinxql>
-<sphinxql d="0">INSERT INTO pq1 VALUES('test 103')</sphinxql>
-<sphinxql d="0">INSERT INTO pq2 VALUES('test 201')</sphinxql>
-<sphinxql d="0">SELECT * FROM pq1</sphinxql>
-<sphinxql d="0">ALTER CLUSTER test ADD pq10</sphinxql>
-<sphinxql d="0">ALTER CLUSTER test DROP pq2</sphinxql>
-<sphinxql d="0">ALTER CLUSTER test ADD pq1</sphinxql>
-<sphinxql d="0">ALTER CLUSTER test ADD pq2</sphinxql>
+<sphinxql d="0">
+	INSERT INTO pq1 VALUES('test 101');
+	INSERT INTO test:pq1 VALUES('test none');
+	INSERT INTO pq1 VALUES('test 102');
+	INSERT INTO pq1 VALUES('test 103');
+	INSERT INTO pq2 VALUES('test 201');
+	SELECT * FROM pq1;
+	ALTER CLUSTER test ADD pq10;
+	ALTER CLUSTER test DROP pq2;
+	ALTER CLUSTER test ADD pq1;
+	ALTER CLUSTER test ADD pq2;
+</sphinxql>
 
 <!-- stream to node 2 -->
-<sphinxql d="2">SHOW TABLES</sphinxql>
-<sphinxql d="2">SELECT * FROM pq1</sphinxql>
-<sphinxql d="2">SELECT * FROM pq2</sphinxql>
-<sphinxql d="2">INSERT INTO test:pq1 VALUES('test 110')</sphinxql>
-<sphinxql d="2">INSERT INTO test:pq1 VALUES('test 111')</sphinxql>
-<sphinxql d="2">INSERT INTO test:pq2 VALUES('test 210')</sphinxql>
-<sphinxql d="2">SELECT * FROM pq1</sphinxql>
-<sphinxql d="2">SELECT * FROM pq2</sphinxql>
+<sphinxql d="2" system="wait-status" status="cluster_test_last_committed" wait_value="2"/>
+<sphinxql d="2">
+	SHOW TABLES;
+	SELECT * FROM pq1;
+	SELECT * FROM pq2;
+	INSERT INTO test:pq1 VALUES('test 110');
+	INSERT INTO test:pq1 VALUES('test 111');
+	INSERT INTO test:pq2 VALUES('test 210');
+	SELECT * FROM pq1;
+	SELECT * FROM pq2;
+</sphinxql>
 
 <!-- stream to node 1 -->
-<sphinxql d="1">SHOW TABLES</sphinxql>
-<sphinxql d="1">SELECT * FROM pq1</sphinxql>
-<sphinxql d="1">SELECT * FROM pq2</sphinxql>
+<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="5"/>
+<sphinxql d="1">
+	SHOW TABLES;
+	SELECT * FROM pq1;
+	SELECT * FROM pq2;
+</sphinxql>
 
 <!-- stop node 2 -->
 <sphinxql d="2" system="stop-agent"/>
 
 <!-- stream to node 0 -->
-<sphinxql d="0">INSERT INTO test:pq1 VALUES('test 120')</sphinxql>
-<sphinxql d="0">INSERT INTO test:pq1 VALUES('test 121')</sphinxql>
-<sphinxql d="0">INSERT INTO test:pq2 VALUES('test 222')</sphinxql>
-<sphinxql d="0">SHOW TABLES</sphinxql>
-<sphinxql d="0">SELECT * FROM pq1</sphinxql>
-<sphinxql d="0">SELECT * FROM pq2</sphinxql>
+<sphinxql d="0">
+	INSERT INTO test:pq1 VALUES('test 120');
+	INSERT INTO test:pq1 VALUES('test 121');
+	INSERT INTO test:pq2 VALUES('test 222');
+	SHOW TABLES;
+	SELECT * FROM pq1;
+	SELECT * FROM pq2;
+</sphinxql>
 
 <!-- stream to node 1 -->
-<sphinxql d="1">SHOW TABLES</sphinxql>
-<sphinxql d="1">SELECT * FROM pq1</sphinxql>
-<sphinxql d="1">SELECT * FROM pq2</sphinxql>
+<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="8"/>
+<sphinxql d="1">
+	SHOW TABLES;
+	SELECT * FROM pq1;
+	SELECT * FROM pq2;
+</sphinxql>
 
 <!-- start node 2 -->
 <sphinxql d="2" system="start-agent"/>
-<sphinxql d="2">SHOW TABLES</sphinxql>
 <sphinxql d="2" system="wait-ready" cluster="test"/>
-<sphinxql d="2">SELECT * FROM pq1</sphinxql>
-<sphinxql d="2">SELECT * FROM pq2</sphinxql>
+<sphinxql d="2">
+	SELECT * FROM pq1;
+	SELECT * FROM pq2;
+</sphinxql>
 
 <!-- stream to node 0 -->
-<sphinxql d="0">INSERT INTO test:pq1 VALUES('test 130')</sphinxql>
-<sphinxql d="0">DELETE FROM test:pq1 WHERE id=3</sphinxql>
-<sphinxql d="0">INSERT INTO test:pq2 VALUES('test 232')</sphinxql>
+<sphinxql d="0" system="wait-status" status="cluster_test_last_committed" wait_value="8"/>
+<sphinxql d="0">
+	INSERT INTO test:pq1 VALUES('test 130');
+	DELETE FROM test:pq1 WHERE id=3;
+	INSERT INTO test:pq2 VALUES('test 232');
+</sphinxql>
 
 <!-- stream to node 1 -->
-<sphinxql d="1">SHOW TABLES</sphinxql>
-<sphinxql d="1">SELECT * FROM pq1</sphinxql>
-<sphinxql d="1">SELECT * FROM pq2</sphinxql>
-<sphinxql d="1">TRUNCATE rtindex test:pq2</sphinxql>
-<sphinxql d="1">SELECT * FROM pq2</sphinxql>
+<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="11"/>
+<sphinxql d="1">
+	SHOW TABLES;
+	SELECT * FROM pq1;
+	SELECT * FROM pq2;
+	TRUNCATE rtindex test:pq2;
+	SELECT * FROM pq2;
+</sphinxql>
 
 <!-- stream to node 2 -->
-<sphinxql d="2">SELECT * FROM pq2</sphinxql>
-<sphinxql d="2">ALTER CLUSTER test DROP pq2</sphinxql>
-<sphinxql d="2">INSERT INTO test:pq2 VALUES('test 240')</sphinxql>
-<sphinxql d="2">INSERT INTO pq2 VALUES('test 250')</sphinxql>
-<sphinxql d="2" cluster_path="nextc">create cluster nextc '%cluster_path%' as path</sphinxql>
-<sphinxql d="2">ALTER CLUSTER nextc ADD pq2</sphinxql>
+<sphinxql d="2" system="wait-status" status="cluster_test_last_committed" wait_value="12"/>
+<sphinxql d="2">
+	SELECT * FROM pq2;
+	ALTER CLUSTER test DROP pq2;
+	INSERT INTO test:pq2 VALUES('test 240');
+	INSERT INTO pq2 VALUES('test 250');
+</sphinxql>
+<sphinxql d="2" cluster_path="nextc">
+	create cluster nextc '%cluster_path%' as path;
+</sphinxql>
+<sphinxql d="2">
+	ALTER CLUSTER nextc ADD pq2;
+</sphinxql>
 
 <!-- stream to node 0 -->
-<sphinxql d="0" cluster_connect="2" cluster_path="nextc">join cluster nextc '%addr_connect%' as nodes, '%cluster_path%' as path</sphinxql>
-<sphinxql d="0">INSERT INTO nextc:pq2 VALUES('test 241')</sphinxql>
-<sphinxql d="0">SELECT * FROM pq2</sphinxql>
+<sphinxql d="0" cluster_connect="2" cluster_path="nextc">
+	join cluster nextc '%addr_connect%' as nodes, '%cluster_path%' as path
+</sphinxql>
+<sphinxql d="0">
+	INSERT INTO nextc:pq2 VALUES('test 241');
+	SELECT * FROM pq2;
+</sphinxql>
 
 <!-- stream to node 1 -->
 <!-- index pq2 not in cluster at this node -->
-<sphinxql d="1">SELECT * FROM pq2</sphinxql>
-<sphinxql d="1">INSERT INTO nextc:pq2 VALUES('test 242')</sphinxql>
+<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="13"/>
+<sphinxql d="1">
+	SELECT * FROM pq2;
+	INSERT INTO nextc:pq2 VALUES('test 242');
+</sphinxql>
 
 <!-- stream to node 2 -->
-<sphinxql d="2">SELECT * FROM pq2</sphinxql>
-<sphinxql d="2">DELETE cluster nextc</sphinxql>
+<sphinxql d="2" system="wait-status" status="cluster_test_last_committed" wait_value="13"/>
+<sphinxql d="2">
+	SELECT * FROM pq2;
+	DELETE cluster nextc;
+</sphinxql>
 
 <!-- regression - cluster recreation use index from previous run -->
-<sphinxql d="2" cluster_path="nextc">create cluster nextc '%cluster_path%' as path</sphinxql>
-<sphinxql d="2">ALTER CLUSTER nextc ADD pq2</sphinxql>
+<sphinxql d="2" cluster_path="nextc">
+	create cluster nextc '%cluster_path%' as path;
+</sphinxql>
+<sphinxql d="2">
+	ALTER CLUSTER nextc ADD pq2;
 <!-- regression - remove index from cluster does not free index -->
-<sphinxql d="2">ALTER CLUSTER nextc DROP pq2</sphinxql>
-<sphinxql d="2">ALTER CLUSTER nextc ADD pq2</sphinxql>
-<sphinxql d="2">SELECT * FROM pq2</sphinxql>
+	ALTER CLUSTER nextc DROP pq2;
+	ALTER CLUSTER nextc ADD pq2;
+	SELECT * FROM pq2;
+</sphinxql>
 
 <!-- cleanup -->
-<sphinxql d="0">drop table pq1</sphinxql>
-<sphinxql d="0">ALTER CLUSTER test DROP pq1</sphinxql>
-<sphinxql d="0">drop table pq1</sphinxql>
-<sphinxql d="0">drop table pq2</sphinxql>
-<sphinxql d="0">drop table pq3</sphinxql>
-
-</sphqueries>
+<sphinxql d="0">
+	drop table pq1;
+	ALTER CLUSTER test DROP pq1;
+	drop table pq1;
+	drop table pq2;
+	drop table pq3;
+</sphinxql>
+</queries>
 
 </test>

@@ -12,7 +12,7 @@
 searchd
 {
 	<searchd_settings/>
-	data_dir = <data_path path="data0"></data_path>
+	data_dir = <data_path path="data0"/>
 	server_id = <agent_id/>
 }
 </agent0>
@@ -20,7 +20,7 @@ searchd
 searchd
 {
 	<searchd_settings/>
-	data_dir = <data_path path="data1"></data_path>
+	data_dir = <data_path path="data1"/>
 	server_id = <agent_id/>
 }
 </agent1>
@@ -28,7 +28,7 @@ searchd
 searchd
 {
 	<searchd_settings/>
-	data_dir = <data_path path="data2"></data_path>
+	data_dir = <data_path path="data2"/>
 	server_id = <agent_id/>
 }
 </agent2>
@@ -36,51 +36,65 @@ searchd
 </config>
 
 
-<sphqueries>
+<queries>
 <!-- request to node 0 -->
-<sphinxql d="0">create table pq1 type='pq'</sphinxql>
-<sphinxql d="0">create table pq2 type='pq'</sphinxql>
-<sphinxql d="0">create table pq3 type='pq'</sphinxql>
-<sphinxql d="0" >create cluster test</sphinxql>
-<sphinxql d="0">ALTER CLUSTER test ADD pq1</sphinxql>
-<sphinxql d="0">INSERT INTO test:pq1 VALUES('test 1')</sphinxql>
-<sphinxql d="0">INSERT INTO test:pq1 VALUES('test 2')</sphinxql>
-<sphinxql d="0">INSERT INTO test:pq1 VALUES('test 3')</sphinxql>
+<sphinxql d="0">
+	create table pq1 type='pq';
+	create table pq2 type='pq';
+	create table pq3 type='pq';
+	create cluster test;
+	ALTER CLUSTER test ADD pq1;
+	INSERT INTO test:pq1 VALUES('test 1');
+	INSERT INTO test:pq1 VALUES('test 2');
+	INSERT INTO test:pq1 VALUES('test 3');
+</sphinxql>
 <!-- request to node 1 -->
-<sphinxql d="1" cluster_connect="0">join cluster test '%addr_connect%' as nodes</sphinxql>
+<sphinxql d="1" cluster_connect="0">
+	join cluster test '%addr_connect%' as nodes
+</sphinxql>
 <!-- request to node 2, chain nodes 2>1>0 and update nodes -->
-<sphinxql d="2" cluster_connect="1">join cluster test at '%addr_connect%'</sphinxql>
+<sphinxql d="2" cluster_connect="1">
+	join cluster test at '%addr_connect%'
+</sphinxql>
 
 <!-- stop node 2 and 1 -->
 <sphinxql d="2" system="stop-agent"/>
-<sphinxql d="1">SHOW TABLES</sphinxql> <!-- just for reconnect -->
 <sphinxql d="1" system="stop-agent"/>
 
 <!-- stream to node 0 -->
-<sphinxql d="0">INSERT INTO test:pq1 VALUES('test 11')</sphinxql>
+<sphinxql d="0">
+	INSERT INTO test:pq1 VALUES('test 11');
+</sphinxql>
 
 <!-- start node 2 and check changes from node 0 are here-->
 <sphinxql d="2" system="start-agent"/>
-<sphinxql d="2">SHOW TABLES</sphinxql> <!-- just for reconnect -->
 <sphinxql d="2" system="wait-ready" cluster="test"/>
-<sphinxql d="2">SELECT * FROM test:pq1</sphinxql>
+<sphinxql d="2">
+	SELECT * FROM test:pq1;
+</sphinxql>
 
 <!-- start node 1 -->
 <sphinxql d="1" system="start-agent"/>
-<sphinxql d="1">SHOW TABLES</sphinxql> <!-- just for reconnect -->
 <sphinxql d="1" system="wait-ready" cluster="test"/>
-<sphinxql d="1">SELECT * FROM test:pq1</sphinxql>
-<sphinxql d="1">INSERT INTO test:pq1 VALUES('test 12')</sphinxql>
+<sphinxql d="1">
+	SELECT * FROM test:pq1;
+	INSERT INTO test:pq1 VALUES('test 12');
+</sphinxql>
 
 <!-- stream to node 2 -->
-<sphinxql d="2">SELECT * FROM test:pq1</sphinxql>
+<sphinxql d="2" system="wait-status" status="cluster_test_last_committed" wait_value="6"/>
+<sphinxql d="2">
+	SELECT * FROM test:pq1;
+</sphinxql>
 
 <!-- cleanup -->
-<sphinxql d="0">ALTER CLUSTER test DROP pq1</sphinxql>
-<sphinxql d="0">drop table pq1</sphinxql>
-<sphinxql d="0">drop table pq2</sphinxql>
-<sphinxql d="0">drop table pq3</sphinxql>
+<sphinxql d="0">
+	ALTER CLUSTER test DROP pq1;
+	drop table pq1;
+	drop table pq2;
+	drop table pq3;
+</sphinxql>
 
-</sphqueries>
+</queries>
 
 </test>

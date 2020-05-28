@@ -1994,9 +1994,8 @@ class SphinxConfig
 		global $agents, $index_data_path;
 
 		$attrs = ArrVal ( $query, 'attrs', [] );
-		$query = $query['query'];
+        $query = trim($query['query']);
 		$query_ref = $query;
-
 
         $sleep_agent=ArrVal ($attrs, "sleep", 0);
         $use_agent=ArrVal ($attrs, "d", 0);
@@ -2027,109 +2026,23 @@ class SphinxConfig
 
             $query = str_replace ( "%cluster_path%", $cluster_path, $query );
 		}
-			
-		if ( !empty($system_cmd) )
-		{
-			$status = '';
-			if ( $system_cmd=="restart-daemon" )
-			{
-			    if ($connection)
-				    mysqli_close($connection);
-				$status = RestartDaemon ();
-				$connection = ConnectSpecificQL($use_agent);
-			} else if ( $system_cmd=="kill-daemon" )
-			{
-			    if ($connection)
-                    mysqli_close($connection);
-                KillSearchd ( 'config.conf', 'searchd.pid', 'KILL', false );
-			} else if ( $system_cmd=="start-agent" )
-			{
-				$start = StartSearchd ( $daemon["config"], $daemon["error"], $daemon["pid"], $error,
-					$daemon["watchdog"], $daemon["address"], $daemon["port"] );
-				if ( $start == 0 || $start == 2 )
-					$status .= "; start=ok" . ', return code=' . $start;
-				else
-					$status .=  "; start=failed, return code=" . $start . ", error=" . $error;
 
-				mysqli_close($connection);				
-				$old_agent = -1;
-			} else if ( $system_cmd=="stop-agent" )
-			{
-				$stop = StopWaitSearchd ($daemon["config"], $daemon["pid"]);
-				$status = 'stop=' . ( $stop==0 ? 'ok' : 'error' ) . ', return code=' . $stop;
-				mysqli_close($connection);
-				$old_agent = -1;
-			} else if ( $system_cmd=="wait-ready" )
-			{
-				$ql = new QLClient();
-				$ql->SetConnection($connection);
-				$like_name = "cluster_" . $cluster_name . "_node_state";
-				$wait_started = MyMicrotime();
-				while ( true )
-				{
-					$status = $ql->Query("show status like '$like_name'");
-					$name_pos = strpos($status, $like_name);
-					$delim_pos = strpos($status, "|" );
-					if ( $name_pos===0 && $delim_pos>0 )
-					{
-						$node_state = trim(explode("\n", substr($status, $delim_pos+1))[0]);
-						if ($node_state==="synced" || $node_state==="donor" )
-							break;
-						else
-							usleep(500);
-					} else
-						break;
-						
-					$tm_delta = MyMicrotime()-$wait_started;
-					if ( $tm_delta>GetTmDelta() )
-					{
-						$status .= sprintf( "; timeout %.3f sec", $tm_delta );
-						break;
-					}
-				}
-			} else if ( $system_cmd=="wait-status" )
-			{
-				$ql = new QLClient();
-				$ql->SetConnection($connection);
-				$wait_started = MyMicrotime();
-				while ( true )
-				{
-					$status = $ql->Query("show status like '$cluster_status'");
-					$delim_pos = strpos($status, "|" );
-					if ( $delim_pos>0 )
-					{
-						$wait_got_val = trim(explode("\n", substr($status, $delim_pos+1))[0]);
-						if ($wait_got_val>=$wait_value )
-							break;
-						else
-							usleep(500);
-					} else
-						break;
-						
-					$tm_delta = MyMicrotime()-$wait_started;
-					if ( $tm_delta>GetTmDelta() )
-					{
-						$status .= sprintf( "; timeout %.3f sec", $tm_delta );
-						break;
-					}
-				}
-			} else 
-				$status = "unsupported command " . $system_cmd;
-			
-			$r = array("sphinxql"=>$system_cmd . " => " . $status);
-	        $this->PickResult ( $r );
-			return true;
-		}
+        $query_result = array ();
+        if ( $vip_connection )
+            $query_result["vip"]=1;
 
-		if ($old_agent!=$use_agent)
+        if ( $use_agent>0 )
+            $query_result["agent"]=$use_agent;
+
+        if ($old_agent!=$use_agent && $system_cmd!='start-agent')
 		{
 			if ($old_agent!=-1)
 				mysqli_close($connection);
 			if ($sleep_agent>0)
 				usleep($sleep_agent);
-			if (!($connection = ConnectSpecificQL($use_agent)))
-				return false;
-			$old_agent = $use_agent;
+            if (!($connection = ConnectSpecificQL($use_agent)))
+                return false;
+            $old_agent = $use_agent;
 		}
 
 		if ($this->Requires('vip') && ( $old_vip!=$vip_connection || $connection===NULL ))
@@ -2140,7 +2053,6 @@ class SphinxConfig
 			// this is needed to test non-vip connections in maintenance mode
 			if (!($connection = ConnectSpecificQL($use_agent,$vip_connection)))
 			{
-				$query_result = array();
 				$query_result["sphinxql"]=$query;
 				$query_result["error"] = mysqli_connect_error();
 				$query_result["errno"] = mysqli_connect_errno();
@@ -2150,6 +2062,96 @@ class SphinxConfig
 			}
 
 			$old_vip = $vip_connection;
+		}
+			
+		if ( !empty($system_cmd) )
+		{
+			$status = '';
+            switch ( $system_cmd ) {
+                case 'restart-daemon':
+                    if ($connection)
+                        mysqli_close($connection);
+                    $status = RestartDaemon();
+                    $connection = ConnectSpecificQL($use_agent);
+                    break;
+                case 'kill-daemon':
+                    if ($connection)
+                        mysqli_close($connection);
+                    KillSearchd('config.conf', 'searchd.pid', 'KILL', false);
+                    break;
+                case 'start-agent':
+                    $start = StartSearchd($daemon["config"], $daemon["error"], $daemon["pid"], $error,
+                        $daemon["watchdog"], $daemon["address"], $daemon["port"]);
+                    if ($start == 0 || $start == 2)
+                        $status .= "; start=ok" . ', return code=' . $start;
+                    else
+                        $status .= "; start=failed, return code=" . $start . ", error=" . $error;
+
+                    if ( $connection )
+                        mysqli_close($connection);
+                    $old_agent = -1;
+                    break;
+                case 'stop-agent':
+                    $stop = StopWaitSearchd($daemon["config"], $daemon["pid"]);
+                    $status = 'stop=' . ($stop == 0 ? 'ok' : 'error') . ', return code=' . $stop;
+                    if ( $connection )
+                        mysqli_close($connection);
+                    $old_agent = -1;
+                    break;
+                case 'wait-ready':
+                    $ql = new QLClient();
+                    $ql->SetConnection($connection);
+                    $like_name = "cluster_" . $cluster_name . "_node_state";
+                    $wait_started = MyMicrotime();
+                    while (true) {
+                        $status = $ql->Query("show status like '$like_name'");
+                        $name_pos = strpos($status, $like_name);
+                        $delim_pos = strpos($status, "|");
+                        if ($name_pos === 0 && $delim_pos > 0) {
+                            $node_state = trim(explode("\n", substr($status, $delim_pos + 1))[0]);
+                            if ($node_state === "synced" || $node_state === "donor")
+                                break;
+                            else
+                                usleep(500);
+                        } else
+                            break;
+
+                        $tm_delta = MyMicrotime() - $wait_started;
+                        if ($tm_delta > GetTmDelta()) {
+                            $status .= sprintf("; timeout %.3f sec", $tm_delta);
+                            break;
+                        }
+                    }
+                    break;
+                case 'wait-status':
+                    $ql = new QLClient();
+                    $ql->SetConnection($connection);
+                    $wait_started = MyMicrotime();
+                    while (true) {
+                        $status = $ql->Query("show status like '$cluster_status'");
+                        $delim_pos = strpos($status, "|");
+                        if ($delim_pos > 0) {
+                            $wait_got_val = trim(explode("\n", substr($status, $delim_pos + 1))[0]);
+                            if ($wait_got_val >= $wait_value)
+                                break;
+                            else
+                                usleep(500);
+                        } else
+                            break;
+
+                        $tm_delta = MyMicrotime() - $wait_started;
+                        if ($tm_delta > GetTmDelta()) {
+                            $status .= sprintf("; timeout %.3f sec", $tm_delta);
+                            break;
+                        }
+                    }
+                    break;
+                default:
+                    $status = "unsupported command " . $system_cmd;
+            }
+            $query_result['sphinxql'] = "/* " . $system_cmd . " => " . $status . " */";
+	        $this->PickResult ( $query_result );
+			return true;
 		}
 
 		if ( $query=="RECONNECT" )
@@ -2162,14 +2164,7 @@ class SphinxConfig
             $this->PickResult ( $r );
 			return true;
 		}
-			
-		$query_result = array ();
-		if ( $vip_connection )
-			$query_result["vip"]=1;
 
-		if ( $use_agent>0 )
-			$query_result["agent"]=$use_agent;
-			
 		$no_time = false;
 		if ( $bench===false && ( stripos ( $query, 'show' )!==false ) && ( stripos ( $query, 'meta' )!==false ) )
 			$no_time = true;
@@ -2242,63 +2237,9 @@ class SphinxConfig
 		return true;
 	}
 
-	function RunQlAndHttpQueries ( &$error, $bench=false )
-	{
-		global $g_pick_query;
-
-		$qcount = count($this->_sphqueries);
-		if ( $bench === true )
-			$qcount *= 2;
-
-		$qmin = 0;
-		$qmax = $qcount - 1;
-
-		if ( $g_pick_query>0 )
-		{
-			$qmin = $g_pick_query-1;
-			$qmax = $g_pick_query-1;
-		}
-
-		$ql_connection=false;
-		$old_agent = -1;
-		$old_vip = -1;
-
-		$ok = true;
-		
-		for ( $n=$qmin; $n<=$qmax; $n++ )
-		{
-			if ( $bench===false )
-				$query = $this->_sphqueries[$n];
-			else
-			{
-				if ( ($n%2)==0 )
-					$query = $this->_sphqueries[$n/2];
-				else
-					$query = array ( 'show meta', null, false );
-			}
-
-			if ( $query[2] )
-				$ok = $this->RunQueryHttp ( $query, $error );
-			else
-				$ok = $this->RunQueryQL ( $query, $error, $bench, $ql_connection, $old_agent, $old_vip );
-
-			if ( !$ok )
-				break;
-		}
-
-		if ( $ql_connection )
-			mysqli_close ( $ql_connection );
-		
-		return $ok;
-	}
-
-
 	function RunQuery ( &$error, $benchmark = false )
 	{
 		global $sd_address, $sd_port, $action_retries, $action_wait_timeout, $g_pick_query;
-
-//      $this->_results = array();
-//		$query_results = array ();
 		$total = $done = 0;
 
 		if ( $benchmark )

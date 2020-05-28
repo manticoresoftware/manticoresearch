@@ -1886,10 +1886,8 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 		tMatch.SetAttr ( dID.m_tLocator, pQuery->m_iQUID );
 
 		int iLen = pQuery->m_sQuery.Length ();
-		tMatch.SetAttr ( dColQuery.m_tLocator, (SphAttr_t) sphPackPtrAttr ( iLen+2, &pData ) );
+		tMatch.SetAttr ( dColQuery.m_tLocator, (SphAttr_t) sphPackPtrAttr ( iLen, &pData ) );
 		memcpy ( pData, pQuery->m_sQuery.cstr (), iLen );
-		pData[iLen] = '\0';
-		pData[iLen+1] = pQuery->m_bQL ? 1 : 0;
 
 		if ( pQuery->m_sTags.IsEmpty () )
 			tMatch.SetAttr ( dColTags.m_tLocator, ( SphAttr_t ) 0 );

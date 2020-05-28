@@ -33,7 +33,7 @@ index idx2
 
 </config>
 
-<httpqueries>
+<queries>
 <!-- store queries -->
 <query endpoint="json/pq/idx1/doc">{ "query": { "match": { "title": "test" } }, "tags":["id", "id_x1"] }</query>
 <query endpoint="json/pq/idx1/doc">{ "query": { "match": { "title": { "query": "cat test", "operator": "and" } } }, "tags":["id", "id_x2"] }</query>
@@ -45,13 +45,7 @@ index idx2
 <query endpoint="json/pq/idx1/search">{ "query": { "percolate": { "document" : { "title" : "A new tree test in the office office" } } } }</query>
 <query endpoint="json/pq/idx1/search">{ "query": { "percolate": { "documents" : [{ "title" : "A new tree test in the office" }, { "title" : "A cat test in the office" }, { "title" : "A dog test in the office" }] } } }</query>
 
-</httpqueries>
-
-	<sphqueries>
-	<sphinxql system="restart-daemon"/>
-	</sphqueries>
-
-<httpqueries>
+<sphinxql system="restart-daemon"/>
 
 <!-- issue matching -->
 <query endpoint="json/pq/idx1/search">{ "query": { "percolate": { "document" : { "title" : "A new tree test in the office office" } } } }</query>
@@ -93,6 +87,13 @@ index idx2
 
 <query endpoint="json/pq/idx1/search"/>
 
-</httpqueries>
+<sphinxql>
+	select * from idx1 where query='new | old';
+	select * from idx1 where query='{"match":{"title":"tree"}}';
+	select * from idx1 where tags='id, id_x1';
+	select * from idx1 where filters='gid&lt;3';
+</sphinxql>
+
+</queries>
 
 </test>

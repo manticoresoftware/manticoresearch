@@ -50,19 +50,23 @@ SELECT * FROM test:rt1;
 replace into rt1 (id,title,mva1,gid,j1) values (5, 'test 5', (51,52,53), 51, '{"data":"test 5", fd:51}'), (1, 'test 6', (61,62,63), 61, '{"data":"test 6", fd:16}'), (7, 'test 7', (), 71, '');
 SELECT * FROM test:rt1;
 
+
 create cluster test;
 ALTER CLUSTER test ADD rt1;
 ALTER CLUSTER test ADD rt2;
+show status like 'cluster_test_last_committed';
 </sphinxql>
 
 <!-- request to node 1 -->
 <sphinxql d="1" cluster_connect="0">
 	join cluster test at '%addr_connect%';
+	show status like 'cluster_test_last_committed';
 </sphinxql>
 
 <!-- request to node 2, chain nodes 2>1>0 and update nodes -->
 <sphinxql d="2" cluster_connect="0">
 	join cluster test at '%addr_connect%';
+	show status like 'cluster_test_last_committed';
 </sphinxql>
 
 <!-- stream to node 2 -->
@@ -70,11 +74,14 @@ ALTER CLUSTER test ADD rt2;
 SELECT * FROM test:rt1;
 SELECT * FROM test:rt2;
 UPDATE test:rt1 SET mva1=(31,33) where id=3;
+show status like 'cluster_test_last_committed';
 DELETE FROM test:rt1 WHERE id=7;
+show status like 'cluster_test_last_committed';
 SELECT * FROM test:rt1;
 </sphinxql>
 
 <!-- stream to node 1 -->
+<sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="4"/>
 <sphinxql d="1">
 insert into rt2 (id) values (1001);
 UPDATE rt2 SET mva1=() where id=1001;

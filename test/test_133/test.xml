@@ -109,7 +109,7 @@ create table test_table
 (
 	id int not null,
 	gid int not null,
-	title varchar(16000) not null
+	title varchar(8192) not null
 );
 </db_create>
 <db_drop>drop table if exists test_table;</db_drop>

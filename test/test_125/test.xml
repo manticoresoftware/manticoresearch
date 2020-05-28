@@ -124,7 +124,7 @@ source test_json
 {
 	type			= mysql
 	<sql_settings/>
-	sql_query		= select * from json_table
+	sql_query		= select * from json_src_table
 	sql_attr_uint	= gid
 	sql_attr_json	= j
 }
@@ -192,7 +192,7 @@ CREATE TABLE string_table1
 );
 </db_create>
 <db_create>
-CREATE TABLE json_table (
+CREATE TABLE json_src_table (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `gid` int(11) NOT NULL,
   `title` varchar(255) NOT NULL,
@@ -213,7 +213,7 @@ CREATE TABLE name_table (
 <db_drop>DROP TABLE IF EXISTS cmp_table;</db_drop>
 <db_drop>DROP TABLE IF EXISTS string_table;</db_drop>
 <db_drop>DROP TABLE IF EXISTS string_table1;</db_drop>
-<db_drop>DROP TABLE IF EXISTS json_table;</db_drop>
+<db_drop>DROP TABLE IF EXISTS json_src_table;</db_drop>
 <db_drop>DROP TABLE IF EXISTS name_table;</db_drop>
 
 <db_insert>
@@ -249,7 +249,7 @@ INSERT INTO string_table1 VALUES
 </db_insert>
 
 <db_insert>
-INSERT INTO json_table VALUES
+INSERT INTO json_src_table VALUES
 (1,1,'test one','{"name":"Alice","uid":123, "lon":-0.0798578, "lat":0.937717, "pct":12.4, "sq":9, "poly":"1,2,3,4,5,6.0", "points":[1,2,3,4,5,6.0]}'),
 (2,1,'test two','{"name":"Bob","uid":234,"gid":12, "lon":-0.0799989, "lat":0.891975, "pct":-103.7, "sq":16, "poly":"1,-2,1,2,-5,6", "points":[1,-2,1,2,-5,6]}'),
 (3,2,'another doc','{"name":"Charlie","uid":345, "lon":-0.0721455, "lat":0.926761, "pct":4.1, "sq":225, "poly":"-1,2,12,4,5,6", "points":[-1,2,12,4,5,6]}')

@@ -215,7 +215,10 @@ function LegacyCreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, &$er
 
 	foreach ( $db_drop as $q )
 		if ( !legacy_mysql_wr ( $q, $conn ) )
-			return false;
+		{
+            $error = mysqli_error($conn);
+            return false;
+		}
 
 	foreach ( $db_create as $q )
 	{
@@ -227,6 +230,7 @@ function LegacyCreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, &$er
 				$q .= " ENGINE=MEMORY";
 			}
 		}
+
 		if ( !legacy_mysql_wr ( $q, $conn ) )
         {
             $error = mysqli_error($conn);
@@ -267,7 +271,8 @@ function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip, &$e
 	if ( count($custom_insert)>0 )
 	{
 		$conn = LegacyCreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $error );
-		if (!$mysql_simulated) {
+		if ( !$mysql_simulated )
+		{
 			@mysql_close($conn);
 			$conn = ConnectDB();
 		}
@@ -278,7 +283,10 @@ function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip, &$e
 
 	foreach ( $db_drop as $q )
 		if ( !mysqli_wr ( $q, $conn ) )
-			return false;
+		{
+            $error = mysqli_error($conn);
+            return false;
+		}
 
 	foreach ( $db_create as $q )
 	{
@@ -304,7 +312,6 @@ function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip, &$e
 
 	if ( !$oneok )
 		return false;
-
 
 	return $conn;
 }
@@ -535,7 +542,7 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 		// FIXME! add a better check that searchd is still alive than just file_exists
 		for ( $i=0; $i<$STARTUP_TRIES && file_exists($abs_pidfile); $i++ )
 		{
-			$pid = file($abs_pidfile);
+			$pid = @file($abs_pidfile);
 			if ( count($pid) )
 				break;
 			usleep ( $STARTUP_TICK );
@@ -627,7 +634,7 @@ function RestartDaemon ()
 
 function KillSearchd ( $config, $pidfile, $signal, $unlinkpid=True )
 {
-	global $windows, $action_wait_timeout;
+	global $action_wait_timeout, $windows;
 
 	$abs_pidfile = testdir($pidfile);
 	
@@ -641,6 +648,7 @@ function KillSearchd ( $config, $pidfile, $signal, $unlinkpid=True )
 			exec ("kill -f -s $signal $pid");
 		else
 			exec ("kill -s $signal $pid");
+
 		if ( $unlinkpid && file_exists ( $abs_pidfile ) )
 		{
 			usleep ( $action_wait_timeout );
@@ -661,7 +669,7 @@ function RandomWords ( $n, $seed )
 	$words = [];
 	for ( $k=0; $k<$n; $k++ )
 		$words[] = substr ( str_shuffle ( 'abcdefghijklmnopqrstuvwxyz' ), 0, 5 );
-	return join ( $words, " " );
+	return join ( " ", $words );
 }
 
 function RoundFloatValues ( &$values, $roundoff )
@@ -1859,37 +1867,53 @@ class SphinxConfig
 		return true;
 	}
 
-	function PostprocessDDL ( $query, &$query_result )
+
+	function RemovePathsFromExtFiles ( &$query )
 	{
-		$query = strtolower ( trim ( $query ) );
+		$lower_query = strtolower ( trim ( $query ) );
 
 		$create_table = "create table";
 		$alter_table = "alter table";
-		if ( StrBegins ( $query, $create_table ) || StrBegins ( $query, $alter_table) )
+		if ( StrBegins ( $lower_query, $create_table ) || StrBegins ( $lower_query, $alter_table ) )
 		{
 			$matches = array();
-			$preg = preg_match_all ( "/(?:(?:wordforms|stopwords|exceptions)[ \t]*=[ \t]*)'([^']+)'/", $query, $matches, PREG_OFFSET_CAPTURE );
+			$preg = preg_match_all ( "/(?:(?:wordforms|stopwords|exceptions|hitless_words)[ \t]*=[ \t]*)'([^']+)'/", $query, $matches, PREG_OFFSET_CAPTURE );
 
 			$result_str = "";
 			$prev_offset = 0;
 			foreach ( $matches[1] as $entry )
 			{
+				$paths = explode (' ', $entry[0]);
+
+				$replacement = '';
+				foreach ( $paths as $single_path )
+				{
+					if ( strlen($replacement) )
+						$replacement .=' ';
+					$replacement .= basename($single_path);
+				}
+
 				$result_str.= substr ( $query, $prev_offset, $entry[1]-$prev_offset );
-				$replacement = basename($entry[0]);
 				$result_str.= $replacement;
 				$prev_offset = $entry[1] + strlen($entry[0]);
 			}
 
 			$result_str.= substr ( $query, $prev_offset );
-			$query_result["sphinxql"] = $result_str;
+			$query = $this->FixupAgentAddress($result_str);
 
-			$query = $result_str;
-			$query = $this->FixupAgentAddress ( $query );
-			$query_result["sphinxql"] = $query;
+			return true;
 		}
 
+		return false;
+	}
+
+
+	function RemovePathsFromImportTable ( &$query )
+	{
+		$lower_query = strtolower ( trim ( $query ) );
+
 		$import_table = "import table";
-		if ( StrBegins ( $query, $import_table ) )
+		if ( StrBegins ( $lower_query, $import_table ) )
 		{
 			$matches = array();
 			$preg = preg_match_all ( "/(?:.*)'([^']+)'/", $query, $matches, PREG_OFFSET_CAPTURE );
@@ -1905,12 +1929,24 @@ class SphinxConfig
 			}
 
 			$result_str.= substr ( $query, $prev_offset );
-			$query_result["sphinxql"] = $result_str;
+			$query = $this->FixupAgentAddress($result_str);
 
-			$query = $result_str;
-			$query = $this->FixupAgentAddress ( $query );
-			$query_result["sphinxql"] = $query;
+			return true;
 		}
+
+		return false;
+	}
+
+
+	function PostprocessDDL ( &$query )
+	{
+		if ( $this->RemovePathsFromExtFiles($query) )
+			return true;
+
+		if ( $this->RemovePathsFromImportTable($query) )
+			return true;
+
+		return false;
 	}
 
 	function PostprocessQlResult ( $query, &$query_result, $connection, $no_time )
@@ -1918,12 +1954,16 @@ class SphinxConfig
 		$result = mysqli_wr ($query,$connection);
 		if ($result===true)
 		{
-			$this->PostprocessDDL ( $query, $query_result );
+			if ( $this->PostprocessDDL($query) )
+				$query_result["sphinxql"] = $query;
+
 			$query_result["total_affected"] = mysqli_affected_rows($connection);
 		}
 		else if ($result===false)
 		{
-			$this->PostprocessDDL ( $query, $query_result );
+			if ( $this->PostprocessDDL($query) )
+				$query_result["sphinxql"] = $query;
+
 			$error = mysqli_errno( $connection );
 			$query_result["errno"] = $error;
 			$query_result["error"] = $this->FixupErrorMessage ( $error, mysqli_error( $connection ) );
@@ -1942,7 +1982,8 @@ class SphinxConfig
 			if ( isset ( $query_result["rows"] ) && isset ( $query_result["rows"][0] ) && isset ( $query_result["rows"][0]["Create Table"] ) )
 			{
 				$create_res = $query_result["rows"][0]["Create Table"];
-				$query_result["rows"][0]["Create Table"] = $this->FixupAgentAddress ( $create_res );
+				if ( $this->PostprocessDDL($create_res) )
+					$query_result["rows"][0]["Create Table"] = $create_res;
 			}
 		}
 	}
@@ -2715,17 +2756,20 @@ class SphinxConfig
             --$nquery;
             $qinfo = @$this->_queries[$nquery-1];
         }
+        $str = "";
+		if ( $qinfo )
+		{
+			if ( @array_key_exists ( "index", $qinfo ) && $qinfo ["index"] != '*' )
+				$str .= "--- Query $nquery (mode=$qinfo[mode_s],ranker=$qinfo[ranker_s],index=$qinfo[index]) ---\n";
+			else
+				$str .= "--- Query $nquery (mode=$qinfo[mode_s],ranker=$qinfo[ranker_s]) ---\n";
 
-        if (@array_key_exists("index", $qinfo) && $qinfo ["index"] != '*')
-            $str = "--- Query $nquery (mode=$qinfo[mode_s],ranker=$qinfo[ranker_s],index=$qinfo[index]) ---\n";
-        else
-            $str = "--- Query $nquery (mode=@$qinfo[mode_s],ranker=@$qinfo[ranker_s]) ---\n";
+            if (@$qinfo["groupattr"])
+                $str .= "GroupBy: attr: '" . $qinfo["groupattr"] . "' func: '" . $qinfo["groupfunc_s"] . "' sort: '" . $qinfo["groupsort"] . "'\n";
 
-        if (@$qinfo["groupattr"])
-            $str .= "GroupBy: attr: '" . $qinfo["groupattr"] . "' func: '" . $qinfo["groupfunc_s"] . "' sort: '" . $qinfo["groupsort"] . "'\n";
-
-        if (@$qinfo["sortmode"] == SPH_SORT_EXPR)
-            $str .= "Sort: expr: " . $qinfo["sortby"] . "\n";
+            if (@$qinfo["sortmode"] == SPH_SORT_EXPR)
+                $str .= "Sort: expr: " . $qinfo["sortby"] . "\n";
+        }
 
 		$str .= @"Query '$result[query]': retrieved $result[total_found] of $result[total] matches in $result[time] sec.\n";
 		if ( @array_key_exists ( "error", $result ) && $result["error"] )
@@ -2876,8 +2920,6 @@ class SphinxConfig
 	/// write difference from the reference result sets
 	function WriteReferenceResultsDiff ( $fp )
 	{
-		global $windows;
-
 		$nquery = 0;
 		if ( !is_array ( $this->_results_model [ $this->SubtestNo() ] ) )
 			return;

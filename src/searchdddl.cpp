@@ -93,9 +93,9 @@ DdlParser_c::DdlParser_c ( CSphVector<SqlStmt_t> & dStmt )
 }
 
 
-void DdlParser_c::AddFieldFlag ( DWORD uFlag )
+void DdlParser_c::SetFlag ( DWORD uFlag )
 {
-	m_uFieldFlags |= uFlag;
+	m_uFlags |= uFlag;
 }
 
 
@@ -120,17 +120,55 @@ void DdlParser_c::AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits )
 }
 
 
-void DdlParser_c::AddCreateTableField ( const SqlNode_t & tCol )
+void DdlParser_c::AddField ( const CSphString & sName, DWORD uFlags )
 {
 	assert(m_pStmt);
 	CSphColumnInfo & tField = m_pStmt->m_tCreateTable.m_dFields.Add();
-	ToString ( tField.m_sName, tCol );
-	tField.m_sName.ToLower();
-	tField.m_uFieldFlags = m_uFieldFlags;
-	m_uFieldFlags = 0;
+	tField.m_sName = sName;
+	tField.m_uFieldFlags = uFlags;
+}
 
-	if ( !tField.m_uFieldFlags )
-		tField.m_uFieldFlags = CSphColumnInfo::FIELD_INDEXED | CSphColumnInfo::FIELD_STORED;
+
+bool DdlParser_c::AddCreateTableField ( const SqlNode_t & tCol, CSphString * pError )
+{
+	// actually, this may or may not be a field
+	// it all depends on the combination of flags provided
+	CSphString sName;
+	ToString ( sName, tCol );
+	sName.ToLower();
+
+	if ( m_uFlags & FLAG_ATTRIBUTE )
+	{
+		if ( m_uFlags & FLAG_STORED )
+		{
+			if ( pError )
+				pError->SetSprintf ( "unable to create a stored attribute '%s'", sName.cstr() );
+
+			return false;
+		}
+
+		if ( m_uFlags & FLAG_INDEXED )
+			AddField ( sName, CSphColumnInfo::FIELD_INDEXED );
+
+		// add attribute
+		AddCreateTableCol ( tCol, SPH_ATTR_STRING );
+	}
+	else
+	{
+		// convert flags;
+		DWORD uFieldFlags = 0;
+		uFieldFlags |= ( m_uFlags & FLAG_INDEXED ) ? CSphColumnInfo::FIELD_INDEXED : 0;
+		uFieldFlags |= ( m_uFlags & FLAG_STORED ) ? CSphColumnInfo::FIELD_STORED : 0;
+
+		if ( !uFieldFlags )
+			uFieldFlags = CSphColumnInfo::FIELD_INDEXED | CSphColumnInfo::FIELD_STORED;
+
+		AddField ( sName, uFieldFlags );
+	}
+
+	m_uFlags = 0;
+
+	return true;
 }
 
 
@@ -142,7 +180,6 @@ void DdlParser_c::AddCreateTableOption ( const SqlNode_t & tName, const SqlNode_
 	ToString ( tOpt.m_sName, tName );
 	tOpt.m_sValue = ToStringUnescape(tValue);
 	tOpt.m_sName.ToLower();
-	tOpt.m_sValue.ToLower();
 }
 
 

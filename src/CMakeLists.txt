@@ -14,7 +14,7 @@ set ( LIBSPHINX_SRCS sphinx.cpp sphinxexcerpt.cpp
 		sphinxsort.cpp sphinxexpr.cpp sphinxfilter.cpp
 		sphinxsearch.cpp sphinxrt.cpp sphinxjson.cpp
 		sphinxaot.cpp sphinxplugin.cpp sphinxudf.c
-		sphinxqcache.cpp sphinxjsonquery.cpp
+		sphinxqcache.cpp sphinxjsonquery.cpp jsonqueryfilter.cpp
 		attribute.cpp secondaryindex.cpp killlist.cpp searchnode.cpp json/cJSON.c
 		sphinxpq.cpp icu.cpp global_idf.cpp docstore.cpp lz4/lz4.c lz4/lz4hc.c
 		searchdexpr.cpp snippetfunctor.cpp snippetindex.cpp snippetstream.cpp

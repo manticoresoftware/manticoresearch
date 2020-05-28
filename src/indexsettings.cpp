@@ -203,7 +203,7 @@ const RtTypedAttr_t & GetRtType ( int iType )
 }
 
 
-static CSphString FormatPath ( const CSphString & sFile, FilenameBuilder_i * pFilenameBuilder )
+static CSphString FormatPath ( const CSphString & sFile, const FilenameBuilder_i * pFilenameBuilder )
 {
 	if ( !pFilenameBuilder || sFile.IsEmpty() )
 		return sFile;
@@ -293,7 +293,7 @@ void CSphTokenizerSettings::Setup ( const CSphConfigSection & hIndex, CSphString
 }
 
 
-bool CSphTokenizerSettings::Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning )
+bool CSphTokenizerSettings::Load ( const FilenameBuilder_i * pFilenameBuilder, CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning )
 {
 	m_iType = tReader.GetByte ();
 	if ( m_iType!=TOKENIZER_UTF8 && m_iType!=TOKENIZER_NGRAM )
@@ -315,7 +315,8 @@ bool CSphTokenizerSettings::Load ( CSphReader & tReader, CSphEmbeddedFiles & tEm
 	}
 
 	m_sSynonymsFile = tReader.GetString ();
-	tEmbeddedFiles.m_tSynonymFile.Read ( tReader, m_sSynonymsFile.cstr(), false, tEmbeddedFiles.m_bEmbeddedSynonyms ? NULL : &sWarning );
+	CSphString sFilePath = FormatPath ( m_sSynonymsFile, pFilenameBuilder );
+	tEmbeddedFiles.m_tSynonymFile.Read ( tReader, sFilePath.cstr(), false, tEmbeddedFiles.m_bEmbeddedSynonyms ? NULL : &sWarning );
 	m_sBoundary = tReader.GetString ();
 	m_sIgnoreChars = tReader.GetString ();
 	m_iNgramLen = tReader.GetDword ();
@@ -458,11 +459,11 @@ void CSphDictSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * 
 	CSphString sStopwordsFile = FormatPath ( m_sStopwords, pFilenameBuilder );
 	tOut.Add ( "stopwords",				sStopwordsFile,		!sStopwordsFile.IsEmpty() );
 
+	StringBuilder_c sAllWordforms(" ");
 	for ( const auto & i : m_dWordforms )
-	{
-		CSphString sWordformsFile = FormatPath ( i, pFilenameBuilder );
-		tOut.Add ( "wordforms",	sWordformsFile, !sWordformsFile.IsEmpty() );
-	}
+		sAllWordforms << FormatPath ( i, pFilenameBuilder );
+
+	tOut.Add ( "wordforms",	sAllWordforms.cstr(), !sAllWordforms.IsEmpty() );
 }
 
 
@@ -854,6 +855,15 @@ void CSphIndexSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i *
 	tOut.Add ( "index_token_filter",	m_sIndexTokenFilter,	!m_sIndexTokenFilter.IsEmpty() );
 	tOut.Add ( "attr_update_reserve",	m_tBlobUpdateSpace,		m_tBlobUpdateSpace!=DEFAULT_ATTR_UPDATE_RESERVE );
 
+	if ( m_eHitless==SPH_HITLESS_ALL )
+	{
+		tOut.Add ( "hitless_words",		"all",					true );
+	} else if ( m_eHitless==SPH_HITLESS_SOME )
+	{
+		CSphString sHitlessFiles = FormatPath ( m_sHitlessFiles, pFilenameBuilder );
+		tOut.Add ( "hitless_words",		sHitlessFiles,			true );
+	}
+
 	DocstoreSettings_t::Format ( tOut, pFilenameBuilder );
 }
 
@@ -946,6 +956,21 @@ bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphS
 			Add ( sName, i );
 
 		return true;
+	}
+
+	if ( sName=="hitless_words" && ( sValue!="none" && sValue!="all" ) )
+	{
+		RemoveKeys ( sName );
+		m_dHitlessFiles.Reset();
+		StrVec_t dValues = SplitArg ( sValue, m_dHitlessFiles );
+
+		// need only names for hitless files
+		StringBuilder_c sTmp ( " " );
+		for ( const CSphString & sVal : dValues )
+			sTmp << sVal;
+
+		return Add ( sName, sTmp.cstr() );
+
 	}
 
 	return Add ( sName, sValue );
@@ -1053,7 +1078,14 @@ StrVec_t IndexSettingsContainer_c::GetFiles() const
 		dFiles.Add(i);
 
 	for ( const auto & i : m_dWordformFiles )
-		dFiles.Add(i);
+	{
+		StrVec_t dFilesFound = FindFiles ( i.cstr() );
+		for ( const auto & j : dFilesFound )
+			dFiles.Add(j);
+	}
+
+	for ( const auto & i : m_dHitlessFiles )
+		dFiles.Add ( i );
 
 	return dFiles;
 }
@@ -1397,12 +1429,28 @@ static CSphString GetAttrTypeName ( const CSphColumnInfo & tAttr )
 }
 
 
+static void AddFieldSettings ( StringBuilder_c & sRes, const CSphColumnInfo & tField )
+{
+	DWORD uAllSet = CSphColumnInfo::FIELD_INDEXED | CSphColumnInfo::FIELD_STORED;
+	if ( (tField.m_uFieldFlags & uAllSet) != uAllSet )
+	{
+		if ( tField.m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED )
+			sRes << " indexed";
+
+		if ( tField.m_uFieldFlags & CSphColumnInfo::FIELD_STORED )
+			sRes << " stored";
+	}
+}
+
+
 CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema )
 {
 	assert ( pIndex );
 
 	StringBuilder_c sRes;
 	sRes << "CREATE TABLE " << sName << " (\n";
+
+	CSphVector<const CSphColumnInfo *> dExclude;
 
 	bool bHasAttrs = false;
 	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
@@ -1414,23 +1462,33 @@ CSphString BuildCreateTable ( const CSphString & sName, const CSphIndex * pIndex
 		if ( bHasAttrs )
 			sRes << ",\n";
 
-		sRes << tAttr.m_sName << " " << GetAttrTypeName(tAttr);
+		const CSphColumnInfo * pField = tSchema.GetField ( tAttr.m_sName.cstr() );
+		if ( pField && tAttr.m_eAttrType==SPH_ATTR_STRING )
+		{
+			sRes << tAttr.m_sName << " " << GetAttrTypeName(tAttr) << " attribute";
+			AddFieldSettings ( sRes, *pField );
+			dExclude.Add(pField);
+		}
+		else
+			sRes << tAttr.m_sName << " " << GetAttrTypeName(tAttr);
+
 		bHasAttrs = true;
 	}
+
+	dExclude.Uniq();
 
 	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
 	{
 		const CSphColumnInfo & tField = tSchema.GetField(i);
 
+		if ( dExclude.BinarySearch(&tField) )
+			continue;
+
 		if ( i || bHasAttrs )
 			sRes << ",\n";
 
 		sRes << tField.m_sName << " text";
-		if ( tField.m_uFieldFlags & CSphColumnInfo::FIELD_INDEXED )
-			sRes << " indexed";
-
-		if ( tField.m_uFieldFlags & CSphColumnInfo::FIELD_STORED )
-			sRes << " stored";
+		AddFieldSettings ( sRes, tField );
 	}
 
 	sRes << "\n)";

@@ -107,6 +107,9 @@ insert into test_table values
 <query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "and first" }, "equals" : {"id":14 } }, "highlight": { "fields": { "title":{}, "content":{ "limit":50 } } } } }</query>
 <query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "and first" }, "equals" : {"id":14 } }, "highlight": { "fields": { "title":{}, "content":{ "limit":25 } } } } }</query>
 
+<!-- assert at daemon with missed query field at highlight -->
+<query endpoint="json/search">{ "index": "test1", "source": { "includes":"" }, "highlight": {} }</query>
+
 </httpqueries>
 
 </test>

@@ -145,6 +145,8 @@ public:
 
 	const CSphSchema &GetMatchSchema () const override { return m_tMatchSchema; }
 
+	int64_t				GetMemLimit() const final { return 0; }
+
 private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
 	static const DWORD				META_VERSION = 8;				///< current version, new index format
@@ -166,6 +168,7 @@ private:
 
 	CSphFixedVector<StoredQueryDesc_t>	m_dLoadedQueries { 0 }; // temporary, just descriptions
 	CSphSchema						m_tMatchSchema;
+	CSphVector<SphWordID_t>			m_dHitlessWords;
 
 	void DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMatchResult_t & tRes );
 	bool MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters,
@@ -184,7 +187,7 @@ private:
 	int ReplayDeleteQueries ( const char * sTags ) EXCLUDES ( m_tLockHash ) final;
 	void ReplayCommit ( StoredQuery_i * pQuery ) EXCLUDES ( m_tLockHash, m_tLock ) final;
 
-	void GetIndexFiles ( CSphVector<CSphString> & dFiles ) const override;
+	void GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * ) const override;
 	bool ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const override;
 
 	StoredQuerySharedPtrVecSharedPtr_t MakeClone () const EXCLUDES ( m_tLock );
@@ -192,6 +195,8 @@ private:
 	void AddToStoredUnl ( StoredQuerySharedPtr_t tNew ) REQUIRES ( m_tLockHash, m_tLock );
 	void PostSetupUnl () REQUIRES ( m_tLockHash, m_tLock  );
 	SharedPQSlice_t GetStored () const EXCLUDES ( m_tLock );
+
+	bool NeedStoreWordID () const override { return ( m_tSettings.m_eHitless==SPH_HITLESS_SOME && m_dHitlessWords.GetLength() ); }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -208,7 +213,7 @@ PercolateIndex_i * CreateIndexPercolate ( const CSphSchema & tSchema, const char
 	return new PercolateIndex_c ( tSchema, sIndexName, sPath );
 }
 
-static SegmentReject_t SegmentGetRejects ( const RtSegment_t * pSeg, bool bBuildInfix, bool bUtf8 )
+static SegmentReject_t SegmentGetRejects ( const RtSegment_t * pSeg, bool bBuildInfix, bool bUtf8, ESphHitless eHitless )
 {
 	SegmentReject_t tReject;
 	tReject.m_iRows = pSeg->m_uRows;
@@ -228,7 +233,7 @@ static SegmentReject_t SegmentGetRejects ( const RtSegment_t * pSeg, bool bBuild
 		tReject.m_dWilds.Fill ( 0 );
 	}
 
-	RtWordReader_t tDict ( pSeg, true, PERCOLATE_WORDS_PER_CP );
+	RtWordReader_t tDict ( pSeg, true, PERCOLATE_WORDS_PER_CP, eHitless );
 	const RtWord_t * pWord = nullptr;
 	BloomGenTraits_t tBloom0 ( tReject.m_dWilds.Begin() );
 	BloomGenTraits_t tBloom1 ( tReject.m_dWilds.Begin() + PERCOLATE_BLOOM_WILD_COUNT );
@@ -948,7 +953,7 @@ bool PercolateQwordSetup_c::QwordSetup ( ISphQword * pQword ) const
 	CSphVector<Slice_t> dDictWords;
 	ARRAY_FOREACH ( i, dDictLoc )
 	{
-		RtWordReader_t tReader ( m_pSeg, true, PERCOLATE_WORDS_PER_CP );
+		RtWordReader_t tReader ( m_pSeg, true, PERCOLATE_WORDS_PER_CP, m_eHitless );
 		// locator
 		// m_uOff - Start
 		// m_uLen - End
@@ -1035,10 +1040,10 @@ SphWordID_t DictMap_t::GetTerm ( BYTE * sWord ) const
 	return pTerm->m_uWordID;
 }
 
-PercolateMatchContext_t * PercolateIndex_c::CreateMatchContext ( const RtSegment_t * pSeg, const SegmentReject_t &tReject )
+PercolateMatchContext_t * PercolateIndex_c::CreateMatchContext ( const RtSegment_t * pSeg, const SegmentReject_t & tReject )
 {
 	return new PercolateMatchContext_t ( pSeg, m_iMaxCodepointLength, m_pDict->HasMorphology(), GetStatelessDict ( m_pDict ), this
-												   , m_tSchema, tReject );
+												   , m_tSchema, tReject, m_tSettings.m_eHitless );
 }
 
 // percolate matching
@@ -1395,7 +1400,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 {
 	// reject need bloom filter for either infix or prefix
 	auto tReject = SegmentGetRejects (
-		  pSeg, ( m_tSettings.m_iMinInfixLen>0 || m_tSettings.GetMinPrefixLen ( m_pDict->GetSettings().m_bWordDict )>0 ), m_iMaxCodepointLength>1 );
+		  pSeg, ( m_tSettings.m_iMinInfixLen>0 || m_tSettings.GetMinPrefixLen ( m_pDict->GetSettings().m_bWordDict )>0 ), m_iMaxCodepointLength>1, m_tSettings.m_eHitless );
 
 	auto dStored = GetStored();
 	tRes.m_iTotalQueries = dStored.GetLength ();
@@ -1465,11 +1470,11 @@ bool PercolateIndex_c::MatchDocuments ( RtAccum_t * pAccExt, PercolateMatchResul
 
 	pAcc->Sort();
 
-	RtSegment_t * pSeg = pAcc->CreateSegment ( m_tSchema.GetRowSize(), PERCOLATE_WORDS_PER_CP );
+	RtSegment_t * pSeg = pAcc->CreateSegment ( m_tSchema.GetRowSize(), PERCOLATE_WORDS_PER_CP, m_tSettings.m_eHitless, m_dHitlessWords );
 	assert ( !pSeg || pSeg->m_uRows>0 );
 	assert ( !pSeg || pSeg->m_tAliveRows>0 );
 	BuildSegmentInfixes ( pSeg, m_pDict->HasMorphology(), true, m_tSettings.m_iMinInfixLen,
-		PERCOLATE_WORDS_PER_CP, ( m_iMaxCodepointLength>1 ) );
+		PERCOLATE_WORDS_PER_CP, ( m_iMaxCodepointLength>1 ), m_tSettings.m_eHitless );
 
 	DoMatchDocuments ( pSeg, tRes );
 	SafeRelease ( pSeg );
@@ -2060,6 +2065,18 @@ void PercolateIndex_c::PostSetupUnl()
 	if ( m_tSettings.m_bIndexExactWords )
 		SetupExactDict ( pDict, pTokenizer );
 
+	CSphString sHitlessFiles = m_tSettings.m_sHitlessFiles.cstr();
+	if ( GetIndexFilenameBuilder() )
+	{
+		CSphScopedPtr<const FilenameBuilder_i> pFilenameBuilder ( GetIndexFilenameBuilder() ( m_sIndexName.cstr() ) );
+		if ( pFilenameBuilder )
+			sHitlessFiles = pFilenameBuilder->GetFullPath ( sHitlessFiles );
+	}
+
+	// hitless
+	if ( !LoadHitlessWords ( sHitlessFiles, m_pTokenizerIndexing, m_pDict, m_dHitlessWords, m_sLastError ) )
+		sphWarning ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
+
 	m_pQueries->ReserveGap( m_dLoadedQueries.GetLength () );
 
 	CSphString sError;
@@ -2161,7 +2178,7 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 	// load settings
 	ReadSchema ( rdMeta, m_tSchema, uIndexVersion );
 	LoadIndexSettings ( m_tSettings, rdMeta, uIndexVersion );
-	if ( !tTokenizerSettings.Load ( rdMeta, tEmbeddedFiles, m_sLastError ) )
+	if ( !tTokenizerSettings.Load ( pFilenameBuilder, rdMeta, tEmbeddedFiles, m_sLastError ) )
 		return false;
 
 	tDictSettings.Load ( rdMeta, tEmbeddedFiles, m_sLastWarning );
@@ -2380,7 +2397,7 @@ bool PercolateIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSp
 	bool bSameSchema = m_tSchema.CompareTo ( tSettings.m_tSchema, sTmp, false );
 
 	return CreateReconfigure ( m_sIndexName, IsStarDict ( m_pDict->GetSettings().m_bWordDict ), m_pFieldFilter, m_tSettings, m_pTokenizer->GetSettingsFNV(),
-		  m_pDict->GetSettingsFNV(), m_pTokenizer->GetMaxCodepointLength(),
+		  m_pDict->GetSettingsFNV(), m_pTokenizer->GetMaxCodepointLength(), GetMemLimit(),
 		  bSameSchema, tSettings, tSetup, dWarnings, sError );
 }
 
@@ -2470,7 +2487,7 @@ void PercolateIndex_c::LockFileState ( CSphVector<CSphString> & dFiles )
 	ForceRamFlush ( false );
 	m_bSaveDisabled = true;
 
-	GetIndexFiles ( dFiles );
+	GetIndexFiles ( dFiles, nullptr );
 }
 
 
@@ -2657,10 +2674,12 @@ void MergePqResults ( const VecTraits_T<CPqResult *> &dChunks, CPqResult &dRes, 
 	}
 }
 
-void PercolateIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles ) const
+void PercolateIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * ) const
 {
 	CSphString & sMeta = dFiles.Add();
 	sMeta.SetSprintf ( "%s.meta", m_sFilename.cstr() );
+
+	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), nullptr, dFiles );
 }
 
 bool PercolateIndex_c::ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const

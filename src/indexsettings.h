@@ -76,7 +76,7 @@ public:
 	CSphString		m_sBlendMode;
 
 	void			Setup ( const CSphConfigSection & hIndex, CSphString & sWarning );
-	bool			Load ( CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning );
+	bool			Load ( const FilenameBuilder_i * pFilenameBuilder, CSphReader & tReader, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning );
 
 	void			DumpReadable ( FILE * pFile, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const override;
 	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
@@ -338,6 +338,7 @@ private:
 	StrVec_t		m_dStopwordFiles;
 	StrVec_t		m_dExceptionFiles;
 	StrVec_t		m_dWordformFiles;
+	StrVec_t		m_dHitlessFiles;
 	CSphString		m_sError;
 };
 

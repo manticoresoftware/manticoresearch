@@ -10909,15 +10909,15 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt, ThdDesc_t 
 
 		if ( sOpt=="before_match" )				{ q.m_sBeforeMatch = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
 		else if ( sOpt=="after_match" )			{ q.m_sAfterMatch = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
-		else if ( sOpt=="chunk_separator" )		{ q.m_sChunkSeparator = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
+		else if ( sOpt=="chunk_separator" || sOpt=="snippet_separator" ) { q.m_sChunkSeparator = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
 		else if ( sOpt=="html_strip_mode" )		{ q.m_sStripMode = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
-		else if ( sOpt=="passage_boundary" )	{ q.m_ePassageSPZ = GetPassageBoundary(v.m_sVal); iExpType = TOK_QUOTED_STRING; }
+		else if ( sOpt=="passage_boundary" || sOpt=="snippet_boundary" ) { q.m_ePassageSPZ = GetPassageBoundary(v.m_sVal); iExpType = TOK_QUOTED_STRING; }
 
 		else if ( sOpt=="limit" )				{ q.m_iLimit = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="limit_words" )			{ q.m_iLimitWords = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
-		else if ( sOpt=="limit_passages" )		{ q.m_iLimitPassages = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="limit_passages" || sOpt=="limit_snippets" ) { q.m_iLimitPassages = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="around" )				{ q.m_iAround = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
-		else if ( sOpt=="start_passage_id" )	{ q.m_iPassageId = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="start_passage_id" || sOpt=="start_snippet_id" ) { q.m_iPassageId = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="exact_phrase" )
 		{
 			sError.SetSprintf ( "exact_phrase is deprecated" );
@@ -10940,8 +10940,7 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt, ThdDesc_t 
 		else if ( sOpt=="load_files_scattered" ) { q.m_uFilesMode |= ( v.m_iVal!=0 )?2:0; iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="allow_empty" )			{ q.m_bAllowEmpty = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="emit_zones" )			{ q.m_bEmitZones = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
-		else if ( sOpt=="force_passages" )		{ q.m_bForcePassages = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
-
+		else if ( sOpt=="force_passages" || sOpt=="force_snippets" ) { q.m_bForcePassages = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
 		else
 		{
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr() );
@@ -11741,7 +11740,7 @@ static bool CheckCreateTable ( const SqlStmt_t & tStmt, CSphString & sError )
 	// cross-checks attrs and fields
 	for ( const auto & i : tStmt.m_tCreateTable.m_dAttrs )
 		for ( const auto & j : tStmt.m_tCreateTable.m_dFields )
-			if ( i.m_sName==j.m_sName )
+			if ( i.m_sName==j.m_sName && i.m_eAttrType!=SPH_ATTR_STRING )
 			{
 				sError.SetSprintf ( "duplicate attribute name '%s'", i.m_sName.cstr() );
 				return false;
@@ -11808,6 +11807,25 @@ static const CSphSchema & GetSchemaForCreateTable ( CSphIndex * pIndex )
 }
 
 
+static CSphString BuildCreateTableRt ( const CSphString & sName, const CSphIndex * pIndex, const CSphSchema & tSchema )
+{
+	assert(pIndex);
+
+	CSphString sCreateTable = BuildCreateTable ( sName, pIndex, tSchema );
+
+	// FIXME: create a separate struct (and move it to indexsettings.cpp) when there are more RT-specific settings
+	if ( pIndex->IsRT() )
+	{
+		auto * pRt = (RtIndex_i*)pIndex;
+		int64_t iMemLimit = pRt->GetMemLimit();
+		if ( iMemLimit!=DEFAULT_RT_MEM_LIMIT )
+			sCreateTable.SetSprintf ( "%s rt_mem_limit='" INT64_FMT "'", sCreateTable.cstr(), iMemLimit );
+	}
+
+	return sCreateTable;
+}
+
+
 static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	SearchFailuresLog_c dErrors;
@@ -11847,7 +11865,7 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 
 	CSphString sCreateTable;
 	if ( pServed )
-		sCreateTable = BuildCreateTable ( tStmt.m_sIndex, pServed->m_pIndex, GetSchemaForCreateTable ( pServed->m_pIndex ) );
+		sCreateTable = BuildCreateTableRt ( tStmt.m_sIndex, pServed->m_pIndex, GetSchemaForCreateTable ( pServed->m_pIndex ) );
 	else
 		sCreateTable = BuildCreateTableDistr ( tStmt.m_sIndex, *pDist );
 
@@ -11913,7 +11931,7 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	tOut.HeadTuplet ( "Table", "Create Table" );
 	CSphString sCreateTable;
 	if ( pServed )
-		sCreateTable = BuildCreateTable ( pServed->m_pIndex->GetName(), pServed->m_pIndex, GetSchemaForCreateTable ( pServed->m_pIndex ) );
+		sCreateTable = BuildCreateTableRt ( pServed->m_pIndex->GetName(), pServed->m_pIndex, GetSchemaForCreateTable ( pServed->m_pIndex ) );
 	else
 		sCreateTable = BuildCreateTableDistr ( tStmt.m_sIndex, *pDist );
 
@@ -14617,6 +14635,7 @@ static bool PrepareReconfigure ( const CSphString & sIndex, const CSphConfigSect
 	tSettings.m_tTokenizer.Setup ( hIndex, sWarning );
 	tSettings.m_tDict.Setup ( hIndex, pFilenameBuilder.Ptr(), sWarning );
 	tSettings.m_tFieldFilter.Setup ( hIndex, sWarning );
+	tSettings.m_iMemLimit = hIndex.GetSize64 ( "rt_mem_limit", DEFAULT_RT_MEM_LIMIT );
 
 	sphRTSchemaConfigure ( hIndex, tSettings.m_tSchema, sError, true );
 
@@ -14666,6 +14685,12 @@ static bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSetti
 static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	MEMORY ( MEM_SQL_ALTER );
+
+	if ( IsConfigless() )
+	{
+		tOut.Error ( tStmt.m_sStmt, "ALTER RECONFIGURE is not supported in RT mode" );
+		return;
+	}
 
 	const CSphString & sIndex = tStmt.m_sIndex.cstr();
 	CSphString sError;
@@ -14833,21 +14858,21 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 	}
 
 	auto pServed = GetServed ( tStmt.m_sIndex.cstr() );
-	ServedDescWPtr_c pWriteLocked ( pServed );
-
 	if ( !pServed )
 	{
 		if ( g_pDistIndexes->Contains ( tStmt.m_sIndex ) )
 			sError.SetSprintf ( "ALTER is only supported for local (not distributed) indexes" );
 		else
 			sError.SetSprintf ( "index '%s' not found", tStmt.m_sIndex.cstr () );
+
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
 	}
 
+	ServedDescWPtr_c pWriteLocked ( pServed );
 	if ( !pWriteLocked->m_pIndex->IsRT() )
-		sError.SetSprintf ( "index '%s' is not real-time", tStmt.m_sIndex.cstr() );
-
-	if ( !sError.IsEmpty () )
 	{
+		sError.SetSprintf ( "index '%s' is not real-time", tStmt.m_sIndex.cstr() );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 		return;
 	}
@@ -17032,7 +17057,7 @@ ESphAddIndex AddRTIndex ( GuardedHash_c & dPost, const char * szIndexName, const
 	}
 
 	// RAM chunk size
-	int64_t iRamSize = hIndex.GetSize64 ( "rt_mem_limit", 128 * 1024 * 1024 );
+	int64_t iRamSize = hIndex.GetSize64 ( "rt_mem_limit", DEFAULT_RT_MEM_LIMIT );
 	if ( iRamSize<128 * 1024 )
 	{
 		sphWarning ( "index '%s': rt_mem_limit extremely low, using 128K instead", szIndexName );

@@ -50,7 +50,7 @@ create table test_table
 (
 	id int not null,
 	gid int not null,
-	title varchar(16380) not null
+	title varchar(1024) not null
 );
 </db_create>
 <db_drop>drop table if exists test_table;</db_drop>

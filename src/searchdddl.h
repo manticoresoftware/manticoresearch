@@ -20,12 +20,21 @@
 class DdlParser_c : public SqlParserTraits_c
 {
 public:
+	// this exists because we have separate field/attribute entities in the schema, but not in DDL
+	enum
+	{
+		FLAG_NONE		= 0,
+		FLAG_STORED		= 1<<0,
+		FLAG_INDEXED	= 1<<1,
+		FLAG_ATTRIBUTE	= 1<<2
+	};
+
 			DdlParser_c ( CSphVector<SqlStmt_t> & dStmt );
 
-	void	AddFieldFlag ( DWORD uFlag );
+	void	SetFlag ( DWORD uFlag );
 	void	AddCreateTableCol ( const SqlNode_t & tCol, ESphAttr eAttrType );
 	void	AddCreateTableBitCol ( const SqlNode_t & tCol, int iBits );
-	void	AddCreateTableField ( const SqlNode_t & tCol );
+	bool	AddCreateTableField ( const SqlNode_t & tCol, CSphString * pError=nullptr );
 	void	AddCreateTableOption ( const SqlNode_t & tName, const SqlNode_t & tValue );
 
 	void	JoinClusterAt ( const SqlNode_t & tAt );
@@ -33,7 +42,9 @@ public:
 	void	AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode );
 
 private:
-	DWORD	m_uFieldFlags = 0;
+	DWORD	m_uFlags = 0;
+
+	void	AddField ( const CSphString & sName, DWORD uFlags );
 };
 
 

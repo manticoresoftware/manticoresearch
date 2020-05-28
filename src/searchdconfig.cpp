@@ -107,10 +107,10 @@ class FilenameBuilder_c : public FilenameBuilder_i
 public:
 					FilenameBuilder_c ( const char * szIndex );
 
-	CSphString		GetFullPath ( const CSphString & sName ) final;
+	CSphString		GetFullPath ( const CSphString & sName ) const final;
 
 private:
-	CSphString		m_sIndex;
+	const CSphString		m_sIndex;
 };
 
 
@@ -119,7 +119,7 @@ FilenameBuilder_c::FilenameBuilder_c ( const char * szIndex )
 {}
 
 
-CSphString FilenameBuilder_c::GetFullPath ( const CSphString & sName )
+CSphString FilenameBuilder_c::GetFullPath ( const CSphString & sName ) const
 {
 	if ( !IsConfigless() || !sName.Length() )
 		return sName;

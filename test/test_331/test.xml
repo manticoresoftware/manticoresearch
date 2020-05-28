@@ -55,6 +55,18 @@ insert into test_table values
 <query endpoint="json/search">{ "index": "test", "query": { "match_all": {} }, "script_fields": { "add_all":{ "script": { "inline": "( gid * 10 ) | crc32(title)" } }, "title_len":{ "script": { "inline": "crc32(title)" } } } }</query>
 <query endpoint="json/search">{ "index": "test", "query": { "match_all": {} }, "script_fields": { "cnd":{ "script": { "inline": "interval ( gid, 20, 30, 100)" } } } }</query>
 
+<query endpoint="json/search">
+{
+  "index": "test",
+  "query": { "match_all": {} },
+  "expressions":
+  {
+	"add_all": "( gid * 10 ) | crc32(title)",
+    "title_len": "crc32(title)"
+  }
+}
+</query>
+
 </httpqueries>
 
 </test>

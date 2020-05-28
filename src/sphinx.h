@@ -595,7 +595,7 @@ class FilenameBuilder_i
 public:
 	virtual				~FilenameBuilder_i() {}
 
-	virtual CSphString	GetFullPath ( const CSphString & sName ) = 0;
+	virtual CSphString	GetFullPath ( const CSphString & sName ) const = 0;
 };
 
 
@@ -1298,7 +1298,7 @@ enum ESphAggrFunc
 /// source column info
 struct CSphColumnInfo
 {
-	enum FieldFlag_e
+	enum
 	{
 		FIELD_NONE		= 0,
 		FIELD_STORED	= 1<<0,
@@ -3200,7 +3200,7 @@ protected:
 
 private:
 	void				CreateAttrMap ( CSphVector<int> & dAttrMap, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, int iAttrToRemove );
-	const CSphRowitem *	CopyRow ( const CSphRowitem * pDocinfo, DWORD * pTmpDocinfo, const CSphColumnInfo * pNewAttr, int iOldStride );
+	const CSphRowitem *	CopyRow ( const CSphRowitem * pDocinfo, DWORD * pTmpDocinfo, int iOldStride );
 	const CSphRowitem * CopyRowAttrByAttr ( const CSphRowitem * pDocinfo, DWORD * pTmpDocinfo, const CSphSchema & tOldSchema, const CSphSchema & tNewSchema, const CSphVector<int> & dAttrMap, int iOldStride );
 };
 
@@ -3345,6 +3345,7 @@ public:
 	virtual bool				AlterKillListTarget ( KillListTargets_c & tTargets, CSphString & sError ) { return false; }
 	virtual void				KillExistingDocids ( CSphIndex * pTarget ) {}
 	int							KillMulti ( const VecTraits_T<DocID_t> & dKlist ) override { return 0; }
+	virtual bool				IsAlive ( DocID_t tDocID ) const { return false; }
 
 	bool						GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const override { return false; }
 	int							GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const override { return -1; }
@@ -3375,7 +3376,7 @@ public:
 	const char *				GetFilename () const { return m_sFilename.cstr(); }
 
 	/// get actual index files list
-	virtual void				GetIndexFiles ( CSphVector<CSphString> & dFiles ) const {};
+	virtual void				GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * pFilenameBuilder ) const {};
 
 	/// internal make document id list from external docinfo, DO NOT USE
 	virtual CSphFixedVector<SphAttr_t> BuildDocList () const;

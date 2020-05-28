@@ -178,7 +178,7 @@ INSERT INTO `test_table` VALUES
 CREATE TABLE test_table2
 (
 	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
-	title TEXT(16384) NOT NULL
+	title TEXT(16000) NOT NULL
 ) ENGINE=MYISAM;
 </db_create>
 <db_insert>
@@ -198,7 +198,7 @@ INSERT INTO `test_table2` VALUES
 CREATE TABLE test_table3
 (
 	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
-	title TEXT(16384) NOT NULL
+	title TEXT(16000) NOT NULL
 ) ENGINE=MYISAM;
 </db_create>
 <db_drop>DROP TABLE IF EXISTS `test_table3`</db_drop>

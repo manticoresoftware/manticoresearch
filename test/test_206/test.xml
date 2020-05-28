@@ -46,7 +46,7 @@ source src1
 {
 	type			= mysql
 	<sql_settings/>
-	sql_query		= select *, 1 as gid, 'dummy' as title from json_table where id%3=1
+	sql_query		= select *, 1 as gid, 'dummy' as title from json_src_table where id%3=1
 	sql_attr_uint	= gid
 	sql_attr_json	= j
 }
@@ -54,7 +54,7 @@ source src2
 {
 	type			= mysql
 	<sql_settings/>
-	sql_query		= select *, 2 as gid, 'dummy' as title from json_table where id%3=2
+	sql_query		= select *, 2 as gid, 'dummy' as title from json_src_table where id%3=2
 	sql_attr_uint	= gid
 	sql_attr_json	= j
 }
@@ -62,7 +62,7 @@ source src3
 {
 	type			= mysql
 	<sql_settings/>
-	sql_query		= select *, 3 as gid, 'dummy' as title from json_table where id%3=0
+	sql_query		= select *, 3 as gid, 'dummy' as title from json_src_table where id%3=0
 	sql_attr_uint	= gid
 	sql_attr_json	= j
 }
@@ -377,10 +377,10 @@ And so the teacher turned it out, but still it lingered near.",
 (18,4,'unescaping','{nick:"One
 Two"}')
 </db_insert>
-<db_create>CREATE TABLE `json_table` ( `id` int(11) NOT NULL, `j` varchar(8192) NOT NULL );</db_create>
-<db_drop>DROP TABLE IF EXISTS `json_table`;</db_drop>
+<db_create>CREATE TABLE `json_src_table` ( `id` int(11) NOT NULL, `j` varchar(8192) NOT NULL );</db_create>
+<db_drop>DROP TABLE IF EXISTS `json_src_table`;</db_drop>
 <db_insert>
-INSERT INTO `json_table` VALUES
+INSERT INTO `json_src_table` VALUES
 (1,'{"uid":123}'),
 (2,'{"uid":234}'),
 (3,'{"uid":345}'),

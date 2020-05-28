@@ -43,7 +43,7 @@ static int StringBinary2Number ( const char * sStr, int iLen )
 static bool ParseSnippetLimit ( const CSphString & sName, int iVal, SnippetLimits_t & tOpt )
 {
 	if ( sName=="limit" )				tOpt.m_iLimit = iVal;
-	else if ( sName=="limit_passages" ) tOpt.m_iLimitPassages = iVal;
+	else if ( sName=="limit_passages" || sName=="limit_snippets" ) tOpt.m_iLimitPassages = iVal;
 	else if ( sName=="limit_words" ) 	tOpt.m_iLimitWords = iVal;
 	else
 		return false;
@@ -90,20 +90,20 @@ static bool ParseSnippetOption ( const CSphNamedVariant & tVariant, SnippetQuery
 
 	if ( sName=="before_match" )			tOpt.m_sBeforeMatch = sVal;
 	else if ( sName=="after_match" ) 		tOpt.m_sAfterMatch = sVal;
-	else if ( sName=="chunk_separator" )	tOpt.m_sChunkSeparator = sVal;
+	else if ( sName=="chunk_separator" || sName=="snippet_separator")	tOpt.m_sChunkSeparator = sVal;
 	else if ( sName=="field_separator" )	tOpt.m_sFieldSeparator = sVal;
 	else if ( sName=="around" ) 			tOpt.m_iAround = iVal;
 	else if ( sName=="use_boundaries" )		tOpt.m_bUseBoundaries = bVal;
 	else if ( sName=="weight_order" )		tOpt.m_bWeightOrder = bVal;
 	else if ( sName=="force_all_words" ) 	tOpt.m_bForceAllWords = bVal;
-	else if ( sName=="start_passage_id" )	tOpt.m_iPassageId = iVal;
+	else if ( sName=="start_passage_id" || sName=="start_snippet_id") tOpt.m_iPassageId = iVal;
 	else if ( sName=="load_files" ) 		tOpt.m_uFilesMode |= bVal ? 1 : 0;
 	else if ( sName=="load_files_scattered" ) tOpt.m_uFilesMode |= bVal ? 2 : 0;
 	else if ( sName=="html_strip_mode" )	tOpt.m_sStripMode = sVal;
 	else if ( sName=="allow_empty" ) 		tOpt.m_bAllowEmpty = bVal;
 	else if ( sName=="emit_zones" )			tOpt.m_bEmitZones = bVal;
-	else if ( sName=="force_passages" )		tOpt.m_bForcePassages = bVal;
-	else if ( sName=="passage_boundary" )	tOpt.m_ePassageSPZ = GetPassageBoundary(sVal);
+	else if ( sName=="force_passages" || sName=="force_snippets" )		tOpt.m_bForcePassages = bVal;
+	else if ( sName=="passage_boundary" || sName=="snippet_boundary" )	tOpt.m_ePassageSPZ = GetPassageBoundary(sVal);
 	else if ( sName=="json_query" )			tOpt.m_bJsonQuery = bVal;
 	else if ( sName=="pack_fields" )		tOpt.m_bPackFields = bVal;
 	else if ( sName=="limits_per_field" )	tOpt.m_bLimitsPerField = bVal;

@@ -95,7 +95,7 @@ public:
 	CSphVector<ReplicationCommand_t *> m_dCmd;
 
 	bool						m_bKeywordDict {true};
-	DictRefPtr_c			m_pDict;
+	DictRefPtr_c				m_pDict;
 	CSphDict *					m_pRefDict = nullptr; // not owned, used only for ==-matching
 
 
@@ -109,7 +109,7 @@ public:
 	void			Cleanup();
 
 	void			AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, int iRowSize, const char ** ppStr, const VecTraits_T<int64_t> & dMvas, const DocstoreBuilder_i::Doc_t * pStoredDoc );
-	RtSegment_t *	CreateSegment ( int iRowSize, int iWordsCheckpoint );
+	RtSegment_t *	CreateSegment ( int iRowSize, int iWordsCheckpoint, ESphHitless eHitless, const VecTraits_T<SphWordID_t> & dHitlessWords );
 	void			CleanupDuplicates ( int iRowSize );
 	void			GrabLastWarning ( CSphString & sWarning );
 	void			SetIndex ( RtIndex_i * pIndex );

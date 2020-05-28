@@ -7,6 +7,7 @@
 indexer
 {
 	mem_limit = 16M
+    max_xmlpipe2_field = 103900
 }
 
 searchd
@@ -177,6 +178,17 @@ index embedded1
 	path = <data_path/>/embedded1
 }
 
+source src_large
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data_large.xml
+}
+
+index idx_large
+{
+	source = src_large
+	path = <data_path/>/idx_large
+}
 
 </config>
 
@@ -223,6 +235,9 @@ index embedded1
 <query index="tsv_spec" mode="extended2">"document number"</query>
 <query index="csv_spec" mode="extended2">"document number"</query>
 <query index="embedded1">test</query>
+
+<!-- regression field cut at max_xmlpipe2_field-1  -->
+<query index="idx_large">sometherelargewordgoeshere</query>
 </queries>
 
 </test>

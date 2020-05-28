@@ -13,7 +13,7 @@
 #include "sphinx.h"
 #include "sphinxint.h"
 #include "sphinxjson.h"
-#include "sphinxjsonquery.h"
+#include "jsonqueryfilter.h"
 #include "attribute.h"
 #include "sphinxpq.h"
 

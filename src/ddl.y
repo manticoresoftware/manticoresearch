@@ -20,6 +20,7 @@
 %token	TOK_ALTER
 %token	TOK_AS
 %token	TOK_AT
+%token	TOK_ATTRIBUTE
 %token	TOK_BIGINT
 %token	TOK_BIT
 %token	TOK_BOOL
@@ -166,8 +167,9 @@ alter:
 //////////////////////////////////////////////////////////////////////////
 
 field_flag:
-	TOK_INDEXED			{ pParser->AddFieldFlag ( CSphColumnInfo::FIELD_INDEXED ); }
-	| TOK_STORED		{ pParser->AddFieldFlag ( CSphColumnInfo::FIELD_STORED ); }
+	TOK_INDEXED			{ pParser->SetFlag ( DdlParser_c::FLAG_INDEXED ); }
+	| TOK_STORED		{ pParser->SetFlag ( DdlParser_c::FLAG_STORED ); }
+	| TOK_ATTRIBUTE		{ pParser->SetFlag ( DdlParser_c::FLAG_ATTRIBUTE ); }
 	;
 
 field_flag_list:
@@ -180,6 +182,15 @@ create_table_item:
 	| ident TOK_BIT '(' TOK_CONST_INT ')'	{ pParser->AddCreateTableBitCol ( $1, $4.m_iValue ); }
 	| ident TOK_TEXT						{ pParser->AddCreateTableField($1); }
 	| ident TOK_TEXT field_flag_list		{ pParser->AddCreateTableField($1); }
+	| ident TOK_STRING field_flag_list
+	  {
+		CSphString sError;
+	    if ( !pParser->AddCreateTableField ( $1, &sError ) )
+		{
+			yyerror ( pParser, sError.cstr() );
+			YYERROR;
+		}
+      }
 	;
 
 create_table_item_list:

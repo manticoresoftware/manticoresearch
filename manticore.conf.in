@@ -1,11 +1,11 @@
 searchd
 {
-    listen           = 127.0.0.1:9312
-    listen           = 127.0.0.1:9306:mysql
-    listen           = 127.0.0.1:9308:http
-    log              = @CONFDIR@/log/searchd.log
-    query_log        = @CONFDIR@/log/query.log
-    pid_file         = @CONFDIR@/log/searchd.pid
-    data_dir         = @CONFDIR@
+    listen = 127.0.0.1:9312
+    listen = 127.0.0.1:9306:mysql
+    listen = 127.0.0.1:9308:http
+    log = @CONFDIR@/log/searchd.log
+    query_log = @CONFDIR@/log/query.log
+    pid_file = @CONFDIR@/log/searchd.pid
+    data_dir = @CONFDIR@
     query_log_format = sphinxql
 }

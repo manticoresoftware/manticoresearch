@@ -214,7 +214,7 @@ create table test_table1
 (
 	id int not null,
 	gid int not null,
-	title varchar(16380) not null
+	title varchar(8192) not null
 );
 </db_create>
 <db_create>

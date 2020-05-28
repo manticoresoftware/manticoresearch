@@ -20,6 +20,7 @@
 #include "sphinxstem.h"
 #include "icu.h"
 #include "fileutils.h"
+#include "threadutils.h"
 
 #include <ctype.h>
 #include <fcntl.h>
@@ -1060,6 +1061,8 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 		close ( iRead );
 		close ( STDOUT_FILENO );
 		dup2 ( iWrite, STDOUT_FILENO );
+		searchd::CleanAfterFork ();
+		WipeGlobalSchedulerAfterFork ();
 
 		CSphVector<CSphString> dTmpArgs;
 		CSphVector<char *> dArgs;

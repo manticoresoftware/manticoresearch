@@ -871,6 +871,12 @@ public:
 		LOG ( DEBUG, TP ) << "thread pool stopped";
 	}
 
+	void DiscardOnFork () final
+	{
+		m_dWork.reset ();
+		m_dThreads.Reset();
+	}
+
 	void Schedule ( Handler handler, bool bVip ) final
 	{
 		Post ( std::move ( handler ), bVip );
@@ -1061,6 +1067,11 @@ void searchd::FireShutdownCbs ()
 	}
 }
 
+void searchd::CleanAfterFork () NO_THREAD_SAFETY_ANALYSIS
+{
+	g_dShutdownList.HardReset();
+}
+
 static int g_iGlobalThreads = 1;
 
 void SetGlobalThreads ( int iThreads )
@@ -1068,12 +1079,25 @@ void SetGlobalThreads ( int iThreads )
 	g_iGlobalThreads = Max (1, iThreads);
 }
 
-Threads::Scheduler_i * GetGlobalScheduler ()
+SchedulerSharedPtr_t& GlobalScheduler ()
 {
 	static SchedulerSharedPtr_t pPool;
-	if ( !pPool )
-		pPool = new ThreadPool_c ( g_iGlobalThreads, "work");
 	return pPool;
+}
+
+Threads::Scheduler_i * GetGlobalScheduler ()
+{
+	SchedulerSharedPtr_t& pPool = GlobalScheduler();
+	if ( !pPool )
+		pPool = new ThreadPool_c ( g_iGlobalThreads, "work" );
+	return pPool;
+}
+
+void WipeGlobalSchedulerAfterFork ()
+{
+	SchedulerSharedPtr_t & pPool = GlobalScheduler ();
+	if ( pPool )
+		pPool->DiscardOnFork();
 }
 
 long GetGlobalQueueSize ()

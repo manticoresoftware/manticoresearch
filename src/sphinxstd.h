@@ -5246,6 +5246,13 @@ public:
 		++m_iCount;
 	}
 
+	void HardReset()
+	{
+		m_tStub.m_pPrev = &m_tStub;
+		m_tStub.m_pNext = &m_tStub;
+		m_iCount = 0;
+	}
+
 	void Remove ( ListNode_t * pNode )
 	{
 		if ( !pNode )

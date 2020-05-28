@@ -158,6 +158,7 @@ struct Scheduler_i
 	virtual int WorkingThreads() const = 0;
 	virtual long Works () const = 0;
 	virtual void Wait () = 0;
+	virtual void DiscardOnFork() {};
 };
 
 using SchedulerSharedPtr_t = SharedPtr_t<Scheduler_i *>;
@@ -188,6 +189,7 @@ namespace CrashLogger
 
 // Scheduler to global thread pool
 Threads::Scheduler_i* GetGlobalScheduler();
+void WipeGlobalSchedulerAfterFork();
 long GetGlobalQueueSize();
 long GetGlobalThreads ();
 void SetGlobalThreads ( int iThreads );
@@ -211,6 +213,8 @@ namespace searchd {
 
 	// invoke shutdown handlers
 	void FireShutdownCbs ();
+
+	void CleanAfterFork();
 }
 
 

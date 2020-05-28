@@ -79,12 +79,15 @@ SELECT * FROM test:rt1;
 insert into rt2 (id) values (1001);
 UPDATE rt2 SET mva1=() where id=1001;
 DELETE FROM rt2 WHERE id=1001;
+show status like 'cluster_test_last_committed';
 insert into test:rt2 (id,title,mva1,gid,j1) values (11, 'test 11', (11,12,13), 11, '{"data":"test 11", fd:11}'), (12, 'test 12', (21,22,23), 21, ''), (13, 'test 13', (), 31, '{"data":"test 13", fd:31}');
+show status like 'cluster_test_last_committed';
 </sphinxql>
 
 <!-- request to node 0 -->
 <sphinxql d="0" system="wait-status" status="cluster_test_last_committed" wait_value="5"/>
 <sphinxql d="0">
+show status like 'cluster_test_last_committed';
 SELECT * FROM test:rt2;
 UPDATE test:rt2 SET mva1=(101) where j1.data is not null;
 SELECT * FROM test:rt2;

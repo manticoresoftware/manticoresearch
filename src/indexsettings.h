@@ -340,6 +340,8 @@ private:
 	StrVec_t		m_dWordformFiles;
 	StrVec_t		m_dHitlessFiles;
 	CSphString		m_sError;
+
+	bool			CheckPaths();
 };
 
 

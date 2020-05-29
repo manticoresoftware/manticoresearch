@@ -16,6 +16,8 @@
 
 #if USE_WINDOWS
 	#define getcwd		_getcwd
+
+	#include "shlwapi.h"
 #else
 	#include <glob.h>
 #endif
@@ -627,6 +629,19 @@ bool CheckPath ( const CSphString & sPath, bool bCheckWrite, CSphString & sError
 static bool IsSlash ( char c )
 {
 	return c=='/' || c=='\\';
+}
+
+
+bool IsPathAbsolute ( const CSphString & sPath )
+{
+	if ( !sPath.Length() )
+		return false;
+
+#if USE_WINDOWS
+	return !PathIsRelative ( sPath.cstr() );
+#else
+	return sPath.cstr() && IsSlash ( sPath.cstr()[0] );
+#endif
 }
 
 

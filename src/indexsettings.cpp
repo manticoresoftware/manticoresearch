@@ -1035,6 +1035,9 @@ bool IndexSettingsContainer_c::Populate ( const CreateTableSettings_t & tCreateT
 
 	SetDefaults();
 
+	if ( !CheckPaths() )
+		return false;
+
 	return true;
 }
 
@@ -1109,6 +1112,28 @@ void IndexSettingsContainer_c::SetDefaults()
 		if ( !m_hCfg.Exists ( tItem.first ) )
 			Add ( tItem.first, tItem.second );
 	}
+}
+
+
+bool IndexSettingsContainer_c::CheckPaths()
+{
+	StrVec_t dFiles = GetFiles();
+	for ( const auto & i : dFiles )
+	{
+		if ( !sphIsReadable(i) )
+		{
+			m_sError.SetSprintf ( "file not found: '%s'", i.cstr() );
+			return false;
+		}
+
+		if ( !IsPathAbsolute(i) )
+		{
+			m_sError.SetSprintf ( "paths to external files should be absolute: '%s'" , i.cstr() );
+			return false;
+		}
+	}
+
+	return true;
 }
 
 //////////////////////////////////////////////////////////////////////////

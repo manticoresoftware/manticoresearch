@@ -14887,6 +14887,12 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 			tContainer.AddOption ( i.m_sName, i.m_sValue );
 	}
 
+	if ( !tContainer.CheckPaths() )
+	{
+		tOut.Error ( tStmt.m_sStmt, tContainer.GetError().cstr() );
+		return;
+	}
+
 	StrVec_t dBackupFiles;
 	CSphString sIndexPath = GetPathOnly ( pRtIndex->GetFilename() );
 	if ( !SubstituteExternalIndexFiles ( dOldExternalFiles, tContainer.GetFiles(), sIndexPath, dBackupFiles, sError ) )

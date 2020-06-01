@@ -511,3 +511,45 @@ bool Threads::CoThrottle_c::MaybeThrottle()
 	CoWorker ()->Reschedule ();
 	return true;
 }
+
+Threads::CoroEvent_c::CoroEvent_c()
+	: m_fnResume { CoWorker ()->SecondaryRestarter () }
+	, m_uState { 0 }
+{}
+
+// If 'waited' state detected, resume waiter.
+// else atomically set flag 'signaled'
+void Threads::CoroEvent_c::SetEvent ()
+{
+	DWORD uState = m_uState.load ( std::memory_order_relaxed );
+	do
+	{
+		if ( uState & Waited_e )
+		{
+			m_fnResume ();
+			return;
+		}
+	} while ( !m_uState.compare_exchange_weak ( uState, uState | Signaled_e, std::memory_order_relaxed ) );
+}
+
+// if 'signaled' state detected, clean all flags and return.
+// else yield, then (out of coro) atomically set 'waited' flag, checking also 'signaled' flag again.
+// on resume clean all flags.
+void Threads::CoroEvent_c::WaitEvent ()
+{
+	if ( !( m_uState.load ( std::memory_order_acquire ) & Signaled_e ) )
+		CoYieldWith ( [this] {
+			DWORD uState = m_uState.load ( std::memory_order_relaxed );
+			do
+			{
+				if ( uState & Signaled_e )
+				{
+					m_fnResume ();
+					return;
+				}
+			} while ( !m_uState.compare_exchange_weak ( uState, uState | Waited_e, std::memory_order_relaxed ) );
+		} );
+
+	m_uState.store ( 0, std::memory_order_release );
+}
+

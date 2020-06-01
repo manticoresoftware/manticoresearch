@@ -3992,6 +3992,7 @@ public:
 	}
 
 	/// Explicitly acquire the lock.
+	/// to be used ONLY from the same thread! (call from another is obviously wrong)
 	void Lock () ACQUIRE ()
 	{
 		if ( !m_bLocked )

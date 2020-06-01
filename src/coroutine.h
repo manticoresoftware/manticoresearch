@@ -318,65 +318,20 @@ public:
 #endif
 };
 
-
 class CoroEvent_c
 {
-	std::atomic<bool> m_bSignal { false };    // reporter set it, waiter reset
-	CSphMutex m_tLock;
-	Waiter_t m_dWaiter;
+	enum ESTATE : DWORD
+	{
+		Signaled_e = 1, Waited_e = 2,
+	};
+
+	Handler m_fnResume;
+	std::atomic<DWORD> m_uState;
 
 public:
-	void SetEvent ()
-	{
-		if ( m_bSignal.load (std::memory_order_acquire) ) // 'acquire' means nothing below will come before
-			return; // already signalled, pass.
-
-		ScopedMutex_t tLock ( m_tLock );
-		m_bSignal.store ( true, std::memory_order_relaxed );
-
-		// assume if another thread calls "WaitEvent()" here. Since signal is set, it will pass immediately.
-		auto tWaiter = std::move(m_dWaiter);
-
-		// avoid the rare race: tWaiter destroyed first, then tLock.
-		// if continuation of tWaiter assumes destroying the object, locked mutex will cause error and crash,
-		// so unlock it right here.
-		tLock.Unlock();
-
-		// here tWaiter will maybe destroyed, if was engaged.
-	}
-
-	// yield execution while some works finished
-	void WaitEvent ()
-	{
-		if ( m_bSignal.load ( std::memory_order_acquire ) )
-		{
-			m_bSignal.store(false,std::memory_order_release); // 'release' means nothing above will come after.
-			return;
-		}
-
-		// assume if another thread make 'SetEvent()' here...
-
-		ScopedMutex_t tLock ( m_tLock );
-		// similar check, but already under lock (catches race between mutex locking and previous check)
-		if ( m_bSignal.load ( std::memory_order_acquire ) )
-		{
-			m_bSignal.store ( false, std::memory_order_relaxed );
-			return;
-		}
-
-		m_dWaiter = DefferedRestarter ();
-
-		// yield current task, then unlock mutex
-		CoYieldWith ( [&tLock] () REQUIRES (tLock) RELEASE (tLock) { tLock.Unlock (); } );
-
-		// assume if another thread make 'SetEvent()' here (after Unlock()) happened).
-		// it will set signal, then set m_dWaiter to nullptr, which will destroy current one and invoke DefferedRestart.
-		// That will resume (reschedule continuation of) current coro.
-
-		// that will run _after_ resume
-		assert ( m_bSignal );
-		m_bSignal = false;
-	}
+	CoroEvent_c();
+	void SetEvent ();
+	void WaitEvent ();
 };
 
 } // namespace Threads

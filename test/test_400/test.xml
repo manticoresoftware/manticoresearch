@@ -13,115 +13,120 @@ indexer
 searchd
 {
 	<searchd_Settings/>
-	data_dir = <data_path path="data0"></data_path>
+	data_dir = <data_path path="data0"/>
 }
 </config>
 
-<sphqueries>
+<queries>
+<sphinxql example="test configless">
+	show tables;
+	create table test1 ( title text, tag integer );
+	create table test1 ( title text, tag integer, tag2 integer );
+	create table if not exists test1 ( title text, tag integer, tag2 integer );
+	show tables;
+</sphinxql>
+<sphinxql>
+	<!-- testing configless -->
+	desc test1;
+	insert into test1 values (1,'hello',100);
+	insert into test1 values (2,'world',200);
+	select * from test1 where match('hello|world');
+	show create table test1;
+	drop table test1;
+	show tables;
 
-<sphinxql>show tables</sphinxql>
-<sphinxql>create table test1 ( title text, tag integer )</sphinxql>
-<sphinxql>create table test1 ( title text, tag integer, tag2 integer )</sphinxql>
-<sphinxql>create table if not exists test1 ( title text, tag integer, tag2 integer )</sphinxql>
-<sphinxql>show tables</sphinxql>
-<sphinxql>desc test1</sphinxql>
-<sphinxql>insert into test1 values (1,'hello',100)</sphinxql>
-<sphinxql>insert into test1 values (2,'world',200)</sphinxql>
-<sphinxql>select * from test1 where match('hello|world')</sphinxql>
-<sphinxql>show create table test1</sphinxql>
-<sphinxql>drop table test1</sphinxql>
-<sphinxql>show tables</sphinxql>
+	drop table test1;
+	drop table if exists test1;
 
-<sphinxql>drop table test1</sphinxql>
-<sphinxql>drop table if exists test1</sphinxql>
+	create table test2 ( title text indexed, body text stored indexed, tag integer, weight float, flags bit(2) );
+	desc test2;
+	show create table test2;
+	insert into test2 values (1,'title','body',100, 1.1, 1);
+	select * from test2;
+	drop table test2;
 
-<sphinxql>create table test2 ( title text indexed, body text stored indexed, tag integer, weight float, flags bit(2) )</sphinxql>
-<sphinxql>desc test2</sphinxql>
-<sphinxql>show create table test2</sphinxql>
-<sphinxql>insert into test2 values (1,'title','body',100, 1.1, 1)</sphinxql>
-<sphinxql>select * from test2</sphinxql>
-<sphinxql>drop table test2</sphinxql>
+	create table if not exists test3 ( title text, tag integer ) stored_fields='title';
+	create table if not exists test3 ( title text, tag integer );
+	insert into test3 values (1,'walked',100);
+	call keywords ('walked', 'test3');
+	select * from test3 where match('walk');
+	drop table test3;
 
-<sphinxql>create table if not exists test3 ( title text, tag integer ) stored_fields='title'</sphinxql>
-<sphinxql>create table if not exists test3 ( title text, tag integer )</sphinxql>
-<sphinxql>insert into test3 values (1,'walked',100)</sphinxql>
-<sphinxql>call keywords ('walked', 'test3')</sphinxql>
-<sphinxql>select * from test3 where match('walk')</sphinxql>
-<sphinxql>drop table test3</sphinxql>
+	create table test4 ( title text, tag integer ) morphology='stem_en';
+	insert into test4 values (1,'walked',100);
+	call keywords ('walked', 'test4');
+	select * from test4 where match('walk');
+	show create table test4;
+	drop table test4;
 
-<sphinxql>create table test4 ( title text, tag integer ) morphology='stem_en'</sphinxql>
-<sphinxql>insert into test4 values (1,'walked',100)</sphinxql>
-<sphinxql>call keywords ('walked', 'test4')</sphinxql>
-<sphinxql>select * from test4 where match('walk')</sphinxql>
-<sphinxql>show create table test4</sphinxql>
-<sphinxql>drop table test4</sphinxql>
+	create table test5 ( field1 text indexed, field2 text stored, field3 text stored indexed );
+	desc test5;
+	show create table test5;
+	insert into test5 values (1,'indexed1','stored2','stored3 indexed3');
+	select * from test5 where match('indexed1');
+	select * from test5 where match('stored2');
+	select * from test5 where match('indexed3');
+	drop table test5;
 
-<sphinxql>create table test5 ( field1 text indexed, field2 text stored, field3 text stored indexed )</sphinxql>
-<sphinxql>desc test5</sphinxql>
-<sphinxql>show create table test5</sphinxql>
-<sphinxql>insert into test5 values (1,'indexed1','stored2','stored3 indexed3')</sphinxql>
-<sphinxql>select * from test5 where match('indexed1')</sphinxql>
-<sphinxql>select * from test5 where match('stored2')</sphinxql>
-<sphinxql>select * from test5 where match('indexed3')</sphinxql>
-<sphinxql>drop table test5</sphinxql>
+	<!-- example creating pq -->
 
-<sphinxql>create table pq1 ( title text ) type='pq'</sphinxql>
-<sphinxql>show tables</sphinxql>
-<sphinxql>insert into pq1 values('test')</sphinxql>
-<sphinxql>insert into pq1 values( 'test | cat' )</sphinxql>
-<sphinxql>call pq ('pq1', 'test 1', 1 as docs, 0 as docs_json )</sphinxql>
+	create table pq1 ( title text ) type='pq';
+	show tables;
+	insert into pq1 values('test');
+	insert into pq1 values( 'test | cat' );
+	call pq ('pq1', 'test 1', 1 as docs, 0 as docs_json );
 
-<sphinxql>drop table pq1</sphinxql>
+	drop table pq1;
 
-<sphinxql>show tables</sphinxql>
-<sphinxql>create table idx(f text) morphology='icu_chinese' charset_table='non-cjk,cjk'</sphinxql>
-<sphinxql>show tables</sphinxql>
-<sphinxql>create table idx(f text) morphology='icu_chinese' charset_table='non_cjk,cjk'</sphinxql>
-<sphinxql>show tables</sphinxql>
-<sphinxql>show create table idx</sphinxql>
-<sphinxql>create table idx_clone like idx</sphinxql>
-<sphinxql>show create table idx_clone</sphinxql>
-<sphinxql>drop table idx_clone</sphinxql>
-<sphinxql>drop table idx</sphinxql>
+	show tables;
+	create table idx(f text) morphology='icu_chinese' charset_table='non-cjk,cjk';
+	show tables;
+	create table idx(f text) morphology='icu_chinese' charset_table='non_cjk,cjk';
+	show tables;
+	show create table idx;
+	create table idx_clone like idx;
+	show create table idx_clone;
+	drop table idx_clone;
+	drop table idx;
 
-<sphinxql>create table test1 ( title text ) docstore_compression='lz4hc' docstore_block_size='8192' access_plain_attrs='mmap' attr_update_reserve='100M'  </sphinxql>
-<sphinxql>show create table test1</sphinxql>
-<sphinxql>create table test2 like test1</sphinxql>
-<sphinxql>show create table test2</sphinxql>
-<sphinxql>drop table test1</sphinxql>
-<sphinxql>drop table test2</sphinxql>
+	create table test1 ( title text ) docstore_compression='lz4hc' docstore_block_size='8192' access_plain_attrs='mmap' attr_update_reserve='100M';
+	show create table test1;
+	create table test2 like test1;
+	show create table test2;
+	drop table test1;
+	drop table test2;
 
-<sphinxql>create table pq1 ( title text ) type='pq'</sphinxql>
-<sphinxql>show create table pq1</sphinxql>
-<sphinxql>create table pq2 like pq1</sphinxql>
-<sphinxql>show create table pq2</sphinxql>
-<sphinxql>drop table pq1</sphinxql>
-<sphinxql>drop table pq2</sphinxql>
+	create table pq1 ( title text ) type='pq';
+	show create table pq1;
+	create table pq2 like pq1;
+	show create table pq2;
+	drop table pq1;
+	drop table pq2;
 
-<sphinxql>create table test1(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'</sphinxql>
-<sphinxql>show create table test1</sphinxql>
-<sphinxql>drop table test1</sphinxql>
+	create table test1(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451';
+	show create table test1;
+	drop table test1;
 
-<sphinxql>create table test1(title string indexed)</sphinxql>
-<sphinxql>show create table test1</sphinxql>
-<sphinxql>drop table test1</sphinxql>
+	create table test1(title string indexed);
+	show create table test1;
+	drop table test1;
 
-<sphinxql>create table test1(title text, str_val string attribute)</sphinxql>
-<sphinxql>show create table test1</sphinxql>
-<sphinxql>drop table test1</sphinxql>
+	create table test1(title text, str_val string attribute);
+	show create table test1;
+	drop table test1;
 
-<sphinxql>create table test1(title string attribute indexed)</sphinxql>
-<sphinxql>show create table test1</sphinxql>
-<sphinxql>desc test1</sphinxql>
-<sphinxql>insert into test1 values(1,'title','title')</sphinxql>
-<sphinxql>select * from test1 where match('title')</sphinxql>
-<sphinxql>drop table test1</sphinxql>
+	create table test1(title string attribute indexed);
+	show create table test1;
+	desc test1;
+	insert into test1 values(1,'title','title');
+	select * from test1 where match('title');
+	drop table test1;
 
-<sphinxql>create table test1(title string attribute stored)</sphinxql>
-<sphinxql>create table test2(title string attribute indexed stored)</sphinxql>
-<sphinxql>drop table if exists test1</sphinxql>
-<sphinxql>drop table if exists test2</sphinxql>
-
-</sphqueries>
+	create table test1(title string attribute stored);
+	create table test2(title string attribute indexed stored);
+	drop table if exists test1;
+	drop table if exists test2;
+</sphinxql>
+</queries>
 
 </test>

@@ -2380,7 +2380,6 @@ class SphinxConfig
 								$results ["query"] = $query;
 
                             $this->PickResult ( $results );
-//							array_push ( $query_results, $results );
 						} else
 						foreach ( $results as $result )
 						{
@@ -2391,7 +2390,6 @@ class SphinxConfig
 								$result ["query"] = $query;
 
                             $this->PickResult ( $result );
-//							array_push ( $query_results, $result );
 						}
 					}
 					else if ( @$qinfo["expect_error"] && !$cl->IsConnectError() )
@@ -2431,7 +2429,6 @@ class SphinxConfig
         if ( $ql_connection )
             mysqli_close ( $ql_connection );
 
-//        $this->PickResult ( $query_results );
 		if ( $benchmark )
 			printf ( " - done in %s\n", sphFormatTime ( MyMicrotime() - $start ) );
 

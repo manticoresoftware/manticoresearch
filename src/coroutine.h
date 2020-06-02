@@ -326,10 +326,13 @@ class CoroEvent_c
 	};
 
 	Handler m_fnResume;
-	std::atomic<DWORD> m_uState;
+	volatile std::atomic<DWORD> m_uState;
+
+	const char* m_szName = nullptr;
 
 public:
-	CoroEvent_c();
+	CoroEvent_c(const char* szName );
+	~CoroEvent_c();
 	void SetEvent ();
 	void WaitEvent ();
 };

@@ -5443,6 +5443,8 @@ private:
 	StringBuilder_c m_dLog;
 };
 
+// for LOG (foo, bar) -> define LOG_LEVEL_foo as boolean, define LOG_COMPONENT_bar as expression
+
 #define LOG_MSG LogMessage_t {}
 #define LOG( Level, Component ) \
     if (LOG_LEVEL_##Level) \

@@ -11,7 +11,7 @@ $sd_sphinxql_port_vip = 6709;
 $sd_log				= "searchd.log";
 $sd_query_log		= "query.log";
 $sd_network_timeout	= 5;
-$sd_max_children	= 30;
+$sd_max_children	= 4;
 $sd_pid_file		= "searchd.pid";
 
 $agent_address		= "127.0.0.1";

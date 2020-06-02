@@ -85,7 +85,7 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	wsrep_t *	m_pProvider = nullptr;
 
 	// receiver thread
-	CoroEvent_c m_tWorkerFinished;
+	CoroEvent_c m_tWorkerFinished {"worker_finished"};
 
 	// nodes at cluster
 	CSphString	m_sViewNodes; // raw nodes addresses (API and replication) from whole cluster
@@ -130,7 +130,7 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	bool					IsPrimary() const { return ( m_iStatus==WSREP_VIEW_PRIMARY ); }
 
 private:
-	CoroEvent_c m_tStateChanged;
+	CoroEvent_c m_tStateChanged {"state_changed"};
 	ClusterState_e m_eNodeState { ClusterState_e::CLOSED };
 };
 

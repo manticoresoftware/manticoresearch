@@ -255,6 +255,7 @@ int GetOsThreadId ()
 
 #define LOG_LEVEL_DEBUG false
 #define LOG_LEVEL_DETAIL false
+#define LOG_LEVEL_RESEARCH true
 
 namespace Threads {
 
@@ -789,6 +790,8 @@ public:
 
 #define LOG_COMPONENT_TP LOG_COMPONENT_MT << "@" << this->szName() << ": "
 
+#define LRS if (LOG_LEVEL_RESEARCH) LOG_MSG << LOG_COMPONENT_MT
+
 class ThreadPool_c final : public Scheduler_i
 {
 	using Work = Service_t::Work_c;
@@ -832,6 +835,7 @@ class ThreadPool_c final : public Scheduler_i
 
 	void loop ()
 	{
+		LRS << "pool started";
 		while (true)
 		{
 			m_tService.run ();
@@ -845,6 +849,7 @@ class ThreadPool_c final : public Scheduler_i
 				m_dCond.SignalAll (dLock);
 			}
 		}
+		LRS << "pool finished";
 	}
 
 public:
@@ -955,8 +960,10 @@ class AloneThread_c final : public Scheduler_i
 
 	void loop ()
 	{
+		LRS << "alone started";
 		m_tService.run ();
 		Threads::RemoveDetachedThread ( m_tMyThread );
+		LRS << "alone finished";
 		delete this;
 	}
 

@@ -3797,7 +3797,7 @@ protected:
 	CSphAtomic m_iSucceeded;	//< num of tasks finished successfully
 	CSphAtomic m_iFinished;		//< num of tasks finished.
 	CSphAtomic m_iTasks;		//< total num of tasks
-	CoroEvent_c m_tChanged;		//< the signaller
+	CoroEvent_c m_tChanged {"remote_obs"};		//< the signaller
 
 public:
 	void FeedTask ( bool bAdd ) final
@@ -3840,7 +3840,7 @@ public:
 		if ( bSuccess )
 			++m_iSucceeded;
 		++m_iFinished;
-		m_tChanged.SetEvent ();
+		m_tChanged.SetEvent();
 	}
 
 	// block execution while some works finished

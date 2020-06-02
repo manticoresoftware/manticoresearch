@@ -512,20 +512,35 @@ bool Threads::CoThrottle_c::MaybeThrottle()
 	return true;
 }
 
-Threads::CoroEvent_c::CoroEvent_c()
+#define LOG_LEVEL_RESEARCH true
+#define LOG_COMPONENT_OBJ this << " "
+#define LOG_COMPONENT_COROEV LOG_COMPONENT_OBJ << m_szName << ": "
+#define LEVENT if (LOG_LEVEL_RESEARCH) LOG_MSG << LOG_COMPONENT_COROEV
+
+Threads::CoroEvent_c::CoroEvent_c(const char* szName)
 	: m_fnResume { CoWorker ()->SecondaryRestarter () }
 	, m_uState { 0 }
-{}
+	, m_szName ( szName )
+{
+	LEVENT << "created";
+}
+
+Threads::CoroEvent_c::~CoroEvent_c ()
+{
+	LEVENT << "destroyed having state " << m_uState.load();
+}
 
 // If 'waited' state detected, resume waiter.
 // else atomically set flag 'signaled'
-void Threads::CoroEvent_c::SetEvent ()
+void Threads::CoroEvent_c::SetEvent()
 {
 	DWORD uState = m_uState.load ( std::memory_order_relaxed );
 	do
 	{
+		LEVENT << "SetEvent from state" << uState;
 		if ( uState & Waited_e )
 		{
+			m_uState.store (1); // memory_order_sec_cst - to ensure that next call will not resume again
 			m_fnResume ();
 			return;
 		}
@@ -535,13 +550,14 @@ void Threads::CoroEvent_c::SetEvent ()
 // if 'signaled' state detected, clean all flags and return.
 // else yield, then (out of coro) atomically set 'waited' flag, checking also 'signaled' flag again.
 // on resume clean all flags.
-void Threads::CoroEvent_c::WaitEvent ()
+void Threads::CoroEvent_c::WaitEvent()
 {
-	if ( !( m_uState.load ( std::memory_order_acquire ) & Signaled_e ) )
+	if ( !( m_uState.load ( std::memory_order_relaxed ) & Signaled_e ) )
 		CoYieldWith ( [this] {
 			DWORD uState = m_uState.load ( std::memory_order_relaxed );
 			do
 			{
+				LEVENT << "WaitEvent yielded from state" << uState;
 				if ( uState & Signaled_e )
 				{
 					m_fnResume ();
@@ -550,6 +566,7 @@ void Threads::CoroEvent_c::WaitEvent ()
 			} while ( !m_uState.compare_exchange_weak ( uState, uState | Waited_e, std::memory_order_relaxed ) );
 		} );
 
-	m_uState.store ( 0, std::memory_order_release );
+	m_uState.store ( 0, std::memory_order_relaxed );
+	LEVENT << "WaitEvent resumed";
 }
 

@@ -77,6 +77,17 @@ searchd
 	}
 }
 </query>
+<!-- query error due to missed cluster -->
+<query endpoint="json/insert" d="2">
+{
+	"index":"test:rt1",
+	"id":221,
+	"doc":
+	{
+	    "gid" : 221
+	}
+}
+</query>
 
 <query d="2" endpoint="json/insert">
 {

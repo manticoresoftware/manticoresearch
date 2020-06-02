@@ -4479,15 +4479,21 @@ bool RemoteClusterSynced ( const PQRemoteData_t & tCmd, CSphString & sError ) EX
 }
 
 // validate that SphinxQL statement could be run for this cluster:index 
-bool CheckIndexCluster ( const CSphString & sIndexName, const ServedDesc_t & tDesc, const CSphString & sStmtCluster, CSphString & sError )
+bool CheckIndexCluster ( const CSphString & sIndexName, const ServedDesc_t & tDesc, const CSphString & sStmtCluster, bool bHTTP, CSphString & sError )
 {
 	if ( tDesc.m_sCluster==sStmtCluster )
 		return true;
 
 	if ( tDesc.m_sCluster.IsEmpty() )
+	{
 		sError.SetSprintf ( "index '%s' is not in any cluster, use just '%s'", sIndexName.cstr(), sIndexName.cstr() );
-	else
-		sError.SetSprintf ( "index '%s' is a part of cluster '%s', use '%s:%s'", sIndexName.cstr(), tDesc.m_sCluster.cstr(), tDesc.m_sCluster.cstr(), sIndexName.cstr() );
+	} else
+	{
+		if ( !bHTTP )
+			sError.SetSprintf ( "index '%s' is a part of cluster '%s', use '%s:%s'", sIndexName.cstr(), tDesc.m_sCluster.cstr(), tDesc.m_sCluster.cstr(), sIndexName.cstr() );
+		else
+			sError.SetSprintf ( "index '%s' is a part of cluster '%s', use \"cluster\":\"%s\" and \"index\":\"%s\" properties", sIndexName.cstr(), tDesc.m_sCluster.cstr(), tDesc.m_sCluster.cstr(), sIndexName.cstr() );
+	}
 
 	return false;
 }

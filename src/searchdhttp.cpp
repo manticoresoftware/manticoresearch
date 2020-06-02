@@ -922,6 +922,7 @@ public:
 			return false;
 		}
 
+		tStmt.m_sEndpoint = sphHttpEndpointToStr ( m_bReplace ? SPH_HTTP_ENDPOINT_JSON_REPLACE : SPH_HTTP_ENDPOINT_JSON_INSERT );
 		JsonObj_c tResult = JsonNull;
 		bool bResult = ProcessInsert ( tStmt, tDocId, m_bReplace, tResult );
 

@@ -128,6 +128,8 @@ bool			RenameWithRollback ( const StrVec_t & dSrc, const StrVec_t & dDst, CSphSt
 // check if path exists and also check if daemon can write there
 bool			CheckPath ( const CSphString & sPath, bool bCheckWrite, CSphString & sError, const char * sCheckFileName="tmp" );
 
+bool			IsPathAbsolute ( const CSphString & sPath );
+
 CSphString &	StripPath ( CSphString & sPath );
 CSphString		GetPathOnly ( const CSphString & sFullPath );
 const char *	GetExtension ( const CSphString & sFullPath );

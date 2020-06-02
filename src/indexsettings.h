@@ -326,11 +326,12 @@ public:
 	void			RemoveKeys ( const CSphString & sName );
 	bool			AddOption ( const CSphString & sName, const CSphString & sValue );
 	StrVec_t 		GetFiles() const;
+	bool			CheckPaths();
 
 	const CSphConfigSection &	AsCfg() const;
 	const CSphString &			GetError() const { return m_sError; }
 
-	void SetDefaults ();
+	void			SetDefaults();
 
 private:
 	CSphConfigSection m_hCfg;

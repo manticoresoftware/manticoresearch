@@ -297,6 +297,7 @@ public:
 
 	void RestartSecondary ()
 	{
+		LOG ( RESEARCH, OBJ ) << "RestartSecondary " << m_tState.m_uState;
 		if (( m_tState.SetFlags ( CoroState_t::Entered_e ) & CoroState_t::Entered_e )==0 )
 			Schedule (false);
 	}
@@ -512,27 +513,28 @@ bool Threads::CoThrottle_c::MaybeThrottle()
 	return true;
 }
 
-#define LOG_LEVEL_RESEARCH true
-#define LOG_COMPONENT_OBJ this << " "
-#define LOG_COMPONENT_COROEV LOG_COMPONENT_OBJ << m_szName << ": "
-#define LEVENT if (LOG_LEVEL_RESEARCH) LOG_MSG << LOG_COMPONENT_COROEV
-
-Threads::CoroEvent_c::CoroEvent_c(const char* szName)
-	: m_fnResume { CoWorker ()->SecondaryRestarter () }
-	, m_uState { 0 }
-	, m_szName ( szName )
+Threads::CoroEvent1_c::CoroEvent1_c(const char* szName)
+	: m_szName ( szName )
 {
+	m_pCtx = CoWorker();
 	LEVENT << "created";
 }
 
-Threads::CoroEvent_c::~CoroEvent_c ()
+Threads::CoroEvent1_c::~CoroEvent1_c ()
 {
 	LEVENT << "destroyed having state " << m_uState.load();
 }
 
+inline void fnResume ( volatile void* pCtx )
+{
+	if (!pCtx)
+		return;
+	( (Threads::CoroWorker_c *) pCtx )->RestartSecondary ();
+}
+
 // If 'waited' state detected, resume waiter.
 // else atomically set flag 'signaled'
-void Threads::CoroEvent_c::SetEvent()
+void Threads::CoroEvent1_c::SetEvent()
 {
 	DWORD uState = m_uState.load ( std::memory_order_relaxed );
 	do
@@ -541,7 +543,7 @@ void Threads::CoroEvent_c::SetEvent()
 		if ( uState & Waited_e )
 		{
 			m_uState.store (1); // memory_order_sec_cst - to ensure that next call will not resume again
-			m_fnResume ();
+			fnResume ( m_pCtx );
 			return;
 		}
 	} while ( !m_uState.compare_exchange_weak ( uState, uState | Signaled_e, std::memory_order_relaxed ) );
@@ -550,9 +552,15 @@ void Threads::CoroEvent_c::SetEvent()
 // if 'signaled' state detected, clean all flags and return.
 // else yield, then (out of coro) atomically set 'waited' flag, checking also 'signaled' flag again.
 // on resume clean all flags.
-void Threads::CoroEvent_c::WaitEvent()
+void Threads::CoroEvent1_c::WaitEvent()
 {
 	if ( !( m_uState.load ( std::memory_order_relaxed ) & Signaled_e ) )
+	{
+		if ( m_pCtx!= CoWorker() )
+		{
+			LEVENT << "WaitEvent: Ctx changed from " << (void*) m_pCtx << " to " << (void*) CoWorker();
+			m_pCtx = CoWorker();
+		}
 		CoYieldWith ( [this] {
 			DWORD uState = m_uState.load ( std::memory_order_relaxed );
 			do
@@ -560,11 +568,12 @@ void Threads::CoroEvent_c::WaitEvent()
 				LEVENT << "WaitEvent yielded from state" << uState;
 				if ( uState & Signaled_e )
 				{
-					m_fnResume ();
+					fnResume ( m_pCtx );
 					return;
 				}
 			} while ( !m_uState.compare_exchange_weak ( uState, uState | Waited_e, std::memory_order_relaxed ) );
 		} );
+	}
 
 	m_uState.store ( 0, std::memory_order_relaxed );
 	LEVENT << "WaitEvent resumed";

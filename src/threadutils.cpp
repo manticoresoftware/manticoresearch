@@ -836,8 +836,10 @@ class ThreadPool_c final : public Scheduler_i
 	void loop ()
 	{
 		LRS << "pool started";
+		int iNum = 0;
 		while (true)
 		{
+			LRS << "pool job" << iNum++;
 			m_tService.run ();
 			ScopedMutex_t dLock {m_dMutex};
 			if ( m_bStop )

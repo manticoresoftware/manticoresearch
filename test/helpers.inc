@@ -432,8 +432,8 @@ function GetSearchd ( &$searchd, &$error )
 function GetTmDelta()
 {
 	if ( UseValgrind() )
-		return 10;
-	return 3;
+		return 30;
+	return 10;
 }
 
 function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watchdog = false, $addr=false, $port=false )

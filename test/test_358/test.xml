@@ -37,7 +37,7 @@ index pq_re_1
 </config>
 
 <sphqueries>
-<sphinxql>INSERT INTO pq_re VALUES ( 'test blue' )</sphinxql>
+<sphinxql>INSERT INTO pq_re (query) VALUES ( 'test blue' )</sphinxql>
 <sphinxql>CALL PQ ('pq_re', ('test of red', 'color test'), 1 as docs, 0 as docs_json )</sphinxql>
 <sphinxql system="restart-daemon"/>
 <sphinxql>CALL PQ ('pq_re', ('test of red', 'color test'), 1 as docs, 0 as docs_json )</sphinxql>

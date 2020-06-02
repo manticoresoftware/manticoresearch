@@ -49,11 +49,11 @@ searchd
 <sphinxql d="2" cluster_connect="0">join cluster test '%addr_connect%' as nodes</sphinxql>
 
 <!-- stream to node 0 -->
-<sphinxql d="0">INSERT INTO pq1 VALUES('test 101')</sphinxql>
-<sphinxql d="0">INSERT INTO test:pq1 VALUES('test none')</sphinxql>
-<sphinxql d="0">INSERT INTO pq1 VALUES('test 102')</sphinxql>
-<sphinxql d="0">INSERT INTO pq1 VALUES('test 103')</sphinxql>
-<sphinxql d="0">INSERT INTO pq2 VALUES('test 201')</sphinxql>
+<sphinxql d="0">INSERT INTO pq1 (query) VALUES('test 101')</sphinxql>
+<sphinxql d="0">INSERT INTO test:pq1 (query) VALUES('test none')</sphinxql>
+<sphinxql d="0">INSERT INTO pq1 (query) VALUES('test 102')</sphinxql>
+<sphinxql d="0">INSERT INTO pq1 (query) VALUES('test 103')</sphinxql>
+<sphinxql d="0">INSERT INTO pq2 (query) VALUES('test 201')</sphinxql>
 <sphinxql d="0">SELECT * FROM pq1</sphinxql>
 <sphinxql d="0">ALTER CLUSTER test ADD pq10</sphinxql>
 <sphinxql d="0">ALTER CLUSTER test DROP pq2</sphinxql>
@@ -64,9 +64,9 @@ searchd
 <sphinxql d="2">SHOW TABLES</sphinxql>
 <sphinxql d="2">SELECT * FROM pq1</sphinxql>
 <sphinxql d="2">SELECT * FROM pq2</sphinxql>
-<sphinxql d="2">INSERT INTO test:pq1 VALUES('test 110')</sphinxql>
-<sphinxql d="2">INSERT INTO test:pq1 VALUES('test 111')</sphinxql>
-<sphinxql d="2">INSERT INTO test:pq2 VALUES('test 210')</sphinxql>
+<sphinxql d="2">INSERT INTO test:pq1 (query) VALUES('test 110')</sphinxql>
+<sphinxql d="2">INSERT INTO test:pq1 (query) VALUES('test 111')</sphinxql>
+<sphinxql d="2">INSERT INTO test:pq2 (query) VALUES('test 210')</sphinxql>
 <sphinxql d="2">SELECT * FROM pq1</sphinxql>
 <sphinxql d="2">SELECT * FROM pq2</sphinxql>
 
@@ -79,9 +79,9 @@ searchd
 <sphinxql d="2" system="stop-agent"/>
 
 <!-- stream to node 0 -->
-<sphinxql d="0">INSERT INTO test:pq1 VALUES('test 120')</sphinxql>
-<sphinxql d="0">INSERT INTO test:pq1 VALUES('test 121')</sphinxql>
-<sphinxql d="0">INSERT INTO test:pq2 VALUES('test 222')</sphinxql>
+<sphinxql d="0">INSERT INTO test:pq1 (query) VALUES('test 120')</sphinxql>
+<sphinxql d="0">INSERT INTO test:pq1 (query) VALUES('test 121')</sphinxql>
+<sphinxql d="0">INSERT INTO test:pq2 (query) VALUES('test 222')</sphinxql>
 <sphinxql d="0">SHOW TABLES</sphinxql>
 <sphinxql d="0">SELECT * FROM pq1</sphinxql>
 <sphinxql d="0">SELECT * FROM pq2</sphinxql>
@@ -99,9 +99,9 @@ searchd
 <sphinxql d="2">SELECT * FROM pq2</sphinxql>
 
 <!-- stream to node 0 -->
-<sphinxql d="0">INSERT INTO test:pq1 VALUES('test 130')</sphinxql>
+<sphinxql d="0">INSERT INTO test:pq1 (query) VALUES('test 130')</sphinxql>
 <sphinxql d="0">DELETE FROM test:pq1 WHERE id=3</sphinxql>
-<sphinxql d="0">INSERT INTO test:pq2 VALUES('test 232')</sphinxql>
+<sphinxql d="0">INSERT INTO test:pq2 (query) VALUES('test 232')</sphinxql>
 
 <!-- stream to node 1 -->
 <sphinxql d="1">SHOW TABLES</sphinxql>
@@ -113,20 +113,20 @@ searchd
 <!-- stream to node 2 -->
 <sphinxql d="2">SELECT * FROM pq2</sphinxql>
 <sphinxql d="2">ALTER CLUSTER test DROP pq2</sphinxql>
-<sphinxql d="2">INSERT INTO test:pq2 VALUES('test 240')</sphinxql>
-<sphinxql d="2">INSERT INTO pq2 VALUES('test 250')</sphinxql>
+<sphinxql d="2">INSERT INTO test:pq2 (query) VALUES('test 240')</sphinxql>
+<sphinxql d="2">INSERT INTO pq2 (query) VALUES('test 250')</sphinxql>
 <sphinxql d="2" cluster_path="nextc">create cluster nextc '%cluster_path%' as path</sphinxql>
 <sphinxql d="2">ALTER CLUSTER nextc ADD pq2</sphinxql>
 
 <!-- stream to node 0 -->
 <sphinxql d="0" cluster_connect="2" cluster_path="nextc">join cluster nextc '%addr_connect%' as nodes, '%cluster_path%' as path</sphinxql>
-<sphinxql d="0">INSERT INTO nextc:pq2 VALUES('test 241')</sphinxql>
+<sphinxql d="0">INSERT INTO nextc:pq2 (query) VALUES('test 241')</sphinxql>
 <sphinxql d="0">SELECT * FROM pq2</sphinxql>
 
 <!-- stream to node 1 -->
 <!-- index pq2 not in cluster at this node -->
 <sphinxql d="1">SELECT * FROM pq2</sphinxql>
-<sphinxql d="1">INSERT INTO nextc:pq2 VALUES('test 242')</sphinxql>
+<sphinxql d="1">INSERT INTO nextc:pq2 (query) VALUES('test 242')</sphinxql>
 
 <!-- stream to node 2 -->
 <sphinxql d="2">SELECT * FROM pq2</sphinxql>

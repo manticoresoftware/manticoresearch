@@ -43,9 +43,9 @@ searchd
 <sphinxql d="0">create table pq3 type='pq'</sphinxql>
 <sphinxql d="0" >create cluster test</sphinxql>
 <sphinxql d="0">ALTER CLUSTER test ADD pq1</sphinxql>
-<sphinxql d="0">INSERT INTO test:pq1 VALUES('test 1')</sphinxql>
-<sphinxql d="0">INSERT INTO test:pq1 VALUES('test 2')</sphinxql>
-<sphinxql d="0">INSERT INTO test:pq1 VALUES('test 3')</sphinxql>
+<sphinxql d="0">INSERT INTO test:pq1 (query) VALUES('test 1')</sphinxql>
+<sphinxql d="0">INSERT INTO test:pq1 (query) VALUES('test 2')</sphinxql>
+<sphinxql d="0">INSERT INTO test:pq1 (query) VALUES('test 3')</sphinxql>
 <!-- request to node 1 -->
 <sphinxql d="1" cluster_connect="0">join cluster test '%addr_connect%' as nodes</sphinxql>
 <!-- request to node 2, chain nodes 2>1>0 and update nodes -->
@@ -57,7 +57,7 @@ searchd
 <sphinxql d="1" system="stop-agent"/>
 
 <!-- stream to node 0 -->
-<sphinxql d="0">INSERT INTO test:pq1 VALUES('test 11')</sphinxql>
+<sphinxql d="0">INSERT INTO test:pq1 (query) VALUES('test 11')</sphinxql>
 
 <!-- start node 2 and check changes from node 0 are here-->
 <sphinxql d="2" system="start-agent"/>
@@ -70,7 +70,7 @@ searchd
 <sphinxql d="1">SHOW TABLES</sphinxql> <!-- just for reconnect -->
 <sphinxql d="1" system="wait-cluster-ready-test"/>
 <sphinxql d="1">SELECT * FROM test:pq1</sphinxql>
-<sphinxql d="1">INSERT INTO test:pq1 VALUES('test 12')</sphinxql>
+<sphinxql d="1">INSERT INTO test:pq1 (query) VALUES('test 12')</sphinxql>
 
 <!-- stream to node 2 -->
 <sphinxql d="2">SELECT * FROM test:pq1</sphinxql>

@@ -60,7 +60,7 @@ searchd
 
 <httpqueries>
 
-<!-- query error due to missed cluster -->
+<!-- query errors due to missed cluster or wrong cluster name -->
 <query endpoint="json/insert" d="2">
 {
 	"index":"rt1",
@@ -71,7 +71,6 @@ searchd
 	}
 }
 </query>
-<!-- query error due to missed cluster -->
 <query endpoint="json/insert" d="2">
 {
 	"index":"test:rt1",

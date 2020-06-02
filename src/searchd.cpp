@@ -10511,9 +10511,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 	int iExp = tStmt.m_iSchemaSz;
 	int iGot = tStmt.m_dInsertValues.GetLength();
 	if ( !tStmt.m_dInsertSchema.GetLength()
-		&& iSchemaSz!=tStmt.m_iSchemaSz
-		&& !( bPq && (2==tStmt.m_iSchemaSz || 1==tStmt.m_iSchemaSz) ) // pq allows 'query' orand 'tags'
-		)
+		&& iSchemaSz!=tStmt.m_iSchemaSz )
 	{
 		sError.SetSprintf ( "column count does not match schema (expected %d, got %d)", iSchemaSz, iGot );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -10562,17 +10560,6 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 				dAttrSchema[i]=-1;
 			else
 				dAttrSchema[i] = iAttrId++;
-		}
-
-		// schemaless pq - expect either just 'query', or 'query' and 'tags'. And no id.
-		if ( bPq )
-		{
-			for ( auto & i : dAttrSchema )
-				i = -1;
-
-			iIdIndex	   = -1;
-			dAttrSchema[1] = 0; // query
-			dAttrSchema[2] = ( tStmt.m_iSchemaSz==1 ) ? -1 : 1; // tags
 		}
 	} else
 	{
@@ -10663,7 +10650,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 			tDoc.SetAttr ( tIdLoc, tStmt.m_dInsertValues[iIdIndex + c * iExp], SPH_ATTR_BIGINT );
 			if ( tDoc.GetAttr ( tIdLoc )<0 )
 			{
-				sError.SetSprintf ( "'id' column is " INT64_FMT ". Must be non-zero positive.", (int64_t)tDoc.GetAttr ( tIdLoc ) );
+				sError.SetSprintf ( "'id' column is " INT64_FMT ". Must be positive.", (int64_t)tDoc.GetAttr ( tIdLoc ) );
 				break;
 			}
 		} else
@@ -10818,9 +10805,9 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 		// do add
 		if ( bPq )
 		{
-			if ( iIdIndex>=0 && !tDoc.GetAttr ( tIdLoc ) )
+			if ( iIdIndex>=0 && tDoc.GetAttr ( tIdLoc )<0 )
 			{
-				sError.SetSprintf ( "'id' column parsed as 0. Omit the column to enable auto-id" );
+				sError.SetSprintf ( "'id' column is " INT64_FMT ". Must be positive.", (int64_t)tDoc.GetAttr ( tIdLoc ) );
 				break;
 			}
 

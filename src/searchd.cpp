@@ -454,7 +454,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	}
 
 	// flush if needed
-	if ( false && iLastRepeats!=0 && ( sFmt || tmNow>=tmLastStamp+FLUSH_THRESH_TIME ) )
+	if ( iLastRepeats!=0 && ( sFmt || tmNow>=tmLastStamp+FLUSH_THRESH_TIME ) )
 	{
 		// flush if we actually have something to flush, and
 		// case 1: got a message we can't accumulate

@@ -3385,7 +3385,7 @@ LogMessage_t::LogMessage_t ()
 LogMessage_t::~LogMessage_t ()
 {
 	logMutex ().Unlock ();
-	sphLogf ( SPH_LOG_WARNING, "%s", m_dLog.cstr () );
+	sphLogDebugv ( "%s", m_dLog.cstr() );
 }
 
 LocMessage_c::LocMessage_c ( LocMessages_c* pOwner )

@@ -297,7 +297,6 @@ public:
 
 	void RestartSecondary ()
 	{
-		LOG ( RESEARCH, OBJ ) << "RestartSecondary " << m_tState.m_uState;
 		if (( m_tState.SetFlags ( CoroState_t::Entered_e ) & CoroState_t::Entered_e )==0 )
 			Schedule (false);
 	}
@@ -513,17 +512,6 @@ bool Threads::CoThrottle_c::MaybeThrottle()
 	return true;
 }
 
-Threads::CoroEvent1_c::CoroEvent1_c(const char* szName)
-	: m_szName ( szName )
-{
-	m_pCtx = CoWorker();
-	LEVENT << "created";
-}
-
-Threads::CoroEvent1_c::~CoroEvent1_c ()
-{
-	LEVENT << "destroyed having state " << m_uState.load();
-}
 
 inline void fnResume ( volatile void* pCtx )
 {
@@ -532,14 +520,21 @@ inline void fnResume ( volatile void* pCtx )
 	( (Threads::CoroWorker_c *) pCtx )->RestartSecondary ();
 }
 
+Threads::CoroEvent_c::~CoroEvent_c ()
+{
+	// edge case: event destroyed being in wait state.
+	// Let's resume then.
+	if ( m_pCtx && (m_uState.load() & Waited_e)!=0 )
+		fnResume ( m_pCtx );
+}
+
 // If 'waited' state detected, resume waiter.
 // else atomically set flag 'signaled'
-void Threads::CoroEvent1_c::SetEvent()
+void Threads::CoroEvent_c::SetEvent()
 {
 	DWORD uState = m_uState.load ( std::memory_order_relaxed );
 	do
 	{
-		LEVENT << "SetEvent from state" << uState;
 		if ( uState & Waited_e )
 		{
 			m_uState.store (1); // memory_order_sec_cst - to ensure that next call will not resume again
@@ -552,20 +547,16 @@ void Threads::CoroEvent1_c::SetEvent()
 // if 'signaled' state detected, clean all flags and return.
 // else yield, then (out of coro) atomically set 'waited' flag, checking also 'signaled' flag again.
 // on resume clean all flags.
-void Threads::CoroEvent1_c::WaitEvent()
+void Threads::CoroEvent_c::WaitEvent()
 {
 	if ( !( m_uState.load ( std::memory_order_relaxed ) & Signaled_e ) )
 	{
 		if ( m_pCtx!= CoWorker() )
-		{
-			LEVENT << "WaitEvent: Ctx changed from " << (void*) m_pCtx << " to " << (void*) CoWorker();
 			m_pCtx = CoWorker();
-		}
 		CoYieldWith ( [this] {
 			DWORD uState = m_uState.load ( std::memory_order_relaxed );
 			do
 			{
-				LEVENT << "WaitEvent yielded from state" << uState;
 				if ( uState & Signaled_e )
 				{
 					fnResume ( m_pCtx );
@@ -576,6 +567,6 @@ void Threads::CoroEvent1_c::WaitEvent()
 	}
 
 	m_uState.store ( 0, std::memory_order_relaxed );
-	LEVENT << "WaitEvent resumed";
+	std::atomic_thread_fence ( std::memory_order_release );
 }
 

@@ -2113,8 +2113,7 @@ class SphinxConfig
                                 break;
                             else
                                 usleep(500);
-                        } else
-                            break;
+                        }
 
                         $tm_delta = MyMicrotime() - $wait_started;
                         if ($tm_delta > GetTmDelta()) {
@@ -2136,8 +2135,7 @@ class SphinxConfig
                                 break;
                             else
                                 usleep(500);
-                        } else
-                            break;
+                        }
 
                         $tm_delta = MyMicrotime() - $wait_started;
                         if ($tm_delta > GetTmDelta()) {

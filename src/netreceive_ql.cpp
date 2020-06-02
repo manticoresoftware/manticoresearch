@@ -985,7 +985,8 @@ bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, CSphS
 	// get command, handle special packets
 	const BYTE uMysqlCmd = tIn.GetByte ();
 
-	sphLogDebugv ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, sQuery.scstr() );
+	if ( uMysqlCmd!=MYSQL_COM_QUERY )
+		sphLogDebugv ( "LoopClientMySQL command %d", uMysqlCmd );
 
 	if ( uMysqlCmd==MYSQL_COM_QUIT )
 		return false;
@@ -1021,6 +1022,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, CSphS
 			// handle query packet
 			sQuery = tIn.GetRawString ( iPacketLen-1 ); // OPTIMIZE? could be huge; avoid copying?
 			assert ( !tIn.GetError() );
+			sphLogDebugv ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, sQuery.scstr () );
 			tThd.ThdState ( ThdState_e::QUERY );
 			tThd.m_tDesc.SetThreadInfo ( "%s", sQuery.cstr() ); // OPTIMIZE? could be huge; avoid copying?
 			SqlRowBuffer_c tRows ( &uPacketID, &tOut, tThd.m_tDesc.m_iConnID, tSession.IsAutoCommit () );

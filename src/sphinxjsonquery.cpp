@@ -662,6 +662,15 @@ static bool ParseIndex ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, CSphString 
 	tStmt.m_sIndex = tIndex.StrVal();
 	tStmt.m_tQuery.m_sIndexes = tStmt.m_sIndex;
 
+	const char * sIndexStart = strchr ( tStmt.m_sIndex.cstr(), ':' );
+	if ( sIndexStart!=nullptr )
+	{
+		const char * sIndex = tStmt.m_sIndex.cstr();
+		sError.SetSprintf ( "wrong index at cluster syntax, use \"cluster\": \"%.*s\" and \"index\": \"%s\" properties, instead of '%s'",
+			(int)(sIndexStart-sIndex), sIndex, sIndexStart+1, sIndex );
+		return false;
+	}
+
 	return true;
 }
 

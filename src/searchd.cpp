@@ -10468,6 +10468,11 @@ void HandleMysqlPercolateMeta ( const CPqResult &tResult, const CSphString & sWa
 	tOut.Eof();
 }
 
+static bool IsHttpStmt ( const SqlStmt_t & tStmt )
+{
+	return !tStmt.m_sEndpoint.IsEmpty();
+}
+
 void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool bReplace, bool bCommit,
 	  CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation, CSphVector<int64_t> & dLastIds )
 {
@@ -10522,7 +10527,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 		return;
 	}
 
-	if ( !CheckIndexCluster ( tStmt.m_sIndex, *pServed, tStmt.m_sCluster, sError ) )
+	if ( !CheckIndexCluster ( tStmt.m_sIndex, *pServed, tStmt.m_sCluster, IsHttpStmt ( tStmt ), sError ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
@@ -12301,8 +12306,8 @@ void SphinxqlRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, Cached
 
 //////////////////////////////////////////////////////////////////////////
 
-static void DoExtendedUpdate ( const CSphString & sCluster, const CSphString & sIndex, const char * sDistributed,
-	const CSphAttrUpdate & tUpd, bool bBlobUpdate, const CSphQuery & tQuery, bool bJson,
+static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sIndex, const char * sDistributed,
+	bool bBlobUpdate,
 	int & iSuccesses, int & iUpdated,
 	SearchFailuresLog_c & dFails, CSphString & sWarning, const ServedIndexRefPtr_c & tServed, const ThdDesc_t & tThd )
 {
@@ -12316,7 +12321,7 @@ static void DoExtendedUpdate ( const CSphString & sCluster, const CSphString & s
 			return;
 		}
 
-		if ( !CheckIndexCluster ( sIndex, *tDesc, sCluster, sError ) )
+		if ( !CheckIndexCluster ( sIndex, *tDesc, tStmt.m_sCluster, IsHttpStmt ( tStmt ), sError ) )
 		{
 			dFails.Submit ( sIndex, sDistributed, sError.cstr() );
 			return;
@@ -12324,11 +12329,11 @@ static void DoExtendedUpdate ( const CSphString & sCluster, const CSphString & s
 	}
 
 	RtAccum_t tAcc ( false );
-	ReplicationCommand_t * pCmd = tAcc.AddCommand ( bJson ? ReplicationCommand_e::UPDATE_JSON : ReplicationCommand_e::UPDATE_QL, sCluster, sIndex );
+	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplicationCommand_e::UPDATE_JSON : ReplicationCommand_e::UPDATE_QL, tStmt.m_sCluster, sIndex );
 	assert ( pCmd );
-	pCmd->m_pUpdateAPI = &tUpd;
+	pCmd->m_pUpdateAPI = &tStmt.m_tUpdate;
 	pCmd->m_bBlobUpdate = bBlobUpdate;
-	pCmd->m_pUpdateCond = &tQuery;
+	pCmd->m_pUpdateCond = &tStmt.m_tQuery;
 
 	HandleCmdReplicate ( tAcc, sError, sWarning, iUpdated, tThd );
 
@@ -12414,7 +12419,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		auto pLocked = GetServed ( sReqIndex );
 		if ( pLocked )
 		{
-			DoExtendedUpdate ( tStmt.m_sCluster, sReqIndex, nullptr, tStmt.m_tUpdate, bBlobUpdate, tStmt.m_tQuery, tStmt.m_bJson, iSuccesses, iUpdated, dFails, sWarning, pLocked, tThd );
+			DoExtendedUpdate ( tStmt, sReqIndex, nullptr, bBlobUpdate, iSuccesses, iUpdated, dFails, sWarning, pLocked, tThd );
 
 		} else if ( dDistributed[iIdx] )
 		{
@@ -12425,7 +12430,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			{
 				const char * sLocal = dLocal[i].cstr();
 				auto pServed = GetServed ( sLocal );
-				DoExtendedUpdate ( tStmt.m_sCluster, sLocal, sReqIndex, tStmt.m_tUpdate, bBlobUpdate, tStmt.m_tQuery, tStmt.m_bJson, iSuccesses, iUpdated, dFails, sWarning, pServed, tThd );
+				DoExtendedUpdate ( tStmt, sLocal, sReqIndex, bBlobUpdate, iSuccesses, iUpdated, dFails, sWarning, pServed, tThd );
 			}
 		}
 
@@ -12949,7 +12954,7 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const CSphStr
 		return 0;
 	}
 
-	if ( !CheckIndexCluster ( sName, *pLocked, sCluster, sError ) )
+	if ( !CheckIndexCluster ( sName, *pLocked, sCluster, IsHttpStmt ( tStmt ), sError ) )
 	{
 		dErrors.Submit ( sName, sDistributed, sError.cstr() );
 		return 0;
@@ -13868,7 +13873,7 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 			return;
 		}
 
-		if ( !CheckIndexCluster ( sIndex, *pIndex, tStmt.m_sCluster, sError ) )
+		if ( !CheckIndexCluster ( sIndex, *pIndex, tStmt.m_sCluster, IsHttpStmt ( tStmt ), sError ) )
 		{
 			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 			return;

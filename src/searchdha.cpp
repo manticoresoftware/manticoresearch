@@ -1989,11 +1989,18 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 	sAddr.sae_dstaddr = pSs;
 	sAddr.sae_dstaddrlen = iLen;
 
-//	BuildData ();
+	BuildData ();
+	size_t iSent = 0;
 	auto iRes = connectx ( m_iSock, &sAddr, SAE_ASSOCID_ANY, CONNECT_RESUME_ON_READ_WRITE | CONNECT_DATA_IDEMPOTENT
-						   , nullptr, 0, nullptr, nullptr );
-	if ( !iRes )
-		State ( Agent_e::CONNECTING );
+						   , m_dIOVec.IOPtr (), m_dIOVec.IOSize (), &iSent, nullptr );
+
+	if ( iSent )
+	{
+		sphLogDebugv ( "Mac OS TFO: advancing to %zu with %d, error %d", iSent, iRes, sphSockGetErrno () );
+		m_dIOVec.StepForward ( iSent );
+		if ( iRes<0 && m_dIOVec.HasUnsent () )
+			iRes = 0;
+	}
 #else
 	int iRes = 0;
 	return iRes;
@@ -2899,7 +2906,7 @@ public:
 	inline bool IsEof ()
 	{
 		assert ( m_pEntry );
-		return ( m_pEntry->flags | EV_EOF )!=0;
+		return ( m_pEntry->flags & EV_EOF )!=0;
 	}
 
 	inline bool IsRead ()

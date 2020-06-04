@@ -308,7 +308,7 @@ else ( WIN32 )
 		endif()
 
 		set ( MY_C_FLAGS "${CFLAGS}" )
-		set ( MY_CXX_FLAGS "${CFLAGS} -fno-rtti -std=c++11" )
+		set ( MY_CXX_FLAGS "${CFLAGS} -fno-rtti -std=c++14" )
 
 		# eliminate also some too noisy warnings from CLang
 		if ( CMAKE_CXX_COMPILER_ID MATCHES "Clang" )

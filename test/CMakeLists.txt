@@ -137,8 +137,8 @@ foreach ( test ${tests} )
 		set ( EXPLANATION "Galera library for replication" )
 	endif ()
 
+	STRING(CONFIGURE "${onetest} -- ${test_name}" tst_name @ONLY ESCAPE_QUOTES)
 	if ( ADD_TEST )
-		STRING ( CONFIGURE "${onetest} -- ${test_name}" tst_name @ONLY ESCAPE_QUOTES )
 		# conditionally add plain test
 		if ( NOT "FORCE-RT" IN_LIST REQUIRES )
 			set (tstn "\"test_${tst_name}\"")

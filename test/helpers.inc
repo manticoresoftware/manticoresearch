@@ -39,6 +39,122 @@ function mysqli_wr ($q, $conn)
 	return @$conn->query ( $q );
 }
 
+// return line for text formatting of the table, as +----+---+
+function PrintLine($columns)
+{
+    $str = "+";
+    foreach ( $columns as $sz )
+        $str .= str_pad("",  $sz+2, '-') . "+";
+    $str .= "\n";
+    return $str;
+}
+
+// return formatted line padded by fixed length, like: | foo | bar baz |
+function PrintDataLine($row, $columns)
+{
+    $str = "|";
+
+    foreach ($row as $key => $value) {
+        if (is_null($value))
+            $value = 'NULL';
+        $str .= " " . str_pad ($value, $columns[$key]+1) . "|";
+    }
+    $str .= "\n";
+    return $str;
+}
+
+// format $rows dataset as mysql cli does
+function WriteSphinxqlTable ( $rows )
+{
+    $str = "";
+    $columns=[];
+    foreach ( $rows[0] as $key=>$s )
+        $columns[$key] = strlen($key);
+
+    // collect max lengths
+    foreach ($rows as $row) {
+        foreach ($row as $key => $value) {
+            if (is_null($value))
+                $value = 'NULL';
+            $columns[$key] = max($columns[$key], strlen($value));
+        }
+    }
+
+    // top line
+    $str .= PrintLine ($columns);
+
+    // column names
+    $str .= "|";
+    foreach ( $rows[0] as $key=>$s )
+        $str .= " " . str_pad ($key, $columns[$key]+1) . "|";
+    $str .= "\n";
+
+    // 2-nd line
+    $str .= PrintLine ($columns);
+
+    // rowset
+    foreach ($rows as $row)
+        $str .= PrintDataLine ($row, $columns);
+
+    // tail line
+    $str .= PrintLine ($columns);
+    return $str;
+}
+
+// write single mysql query/result as example
+function WriteSphinxqlExample ( $log, $result )
+{
+    $str = "<!-- request mysql -->\n\n```\n$result[sphinxql];\n```\n\n";
+
+    $str .= "<!-- response mysql -->\n\n```\n";
+
+    if ( array_key_exists ("total_affected", $result) )
+    {
+        $str .= "Query OK, $result[total_affected] rows affected (0.00 sec)\n\n";
+
+    } else if ( array_key_exists ("error", $result) )
+    {
+        $str .= "ERROR $result[errno]: $result[error]\n\n";
+
+    } else if (array_key_exists ("rows", $result) )
+    {
+        $str .= WriteSphinxqlTable ($result["rows"]);
+        $str .="$result[total_rows] rows in set (0.00 sec)\n\n";
+
+    } else if ( isset($result["total_rows"]) )
+    {
+        $str .= "$result[total_rows] rows in set (0.00 sec)\n\n";
+    }
+
+    $str .= "```\n";
+    fwrite ( $log, $str);
+}
+
+// writes (append) whole set of examples to provided file.
+function WriteExamples ( $example_file, $examples )
+{
+    if (empty($examples))
+        return;
+
+    $log = fopen ( $example_file, "a" );
+
+    foreach ( $examples as $name=>$results )
+    {
+        fwrite ( $log, "\n<!-- example $name -->\n");
+
+        foreach ( $results as $result )
+        {
+            if ( array_key_exists ( "sphinxql", $result ) )
+                WriteSphinxqlExample ( $log, $result);
+            // else - other types
+        }
+
+        fwrite ( $log, "<!-- end -->\n");
+    }
+
+    fclose ( $log );
+}
+
 $gl_conn = false;
 
 // The wrappers for fresh php without php_mysql.
@@ -1830,7 +1946,7 @@ class SphinxConfig
         return true;
     }
 
-	function RunQueryHttp ( $query, &$error )
+	function RunQueryHttp ( $query, &$error, &$examples )
 	{
 		$attrs = $query['attrs'];
 
@@ -1949,8 +2065,9 @@ class SphinxConfig
 		return false;
 	}
 
-	function PostprocessQlResult ( $query, &$query_result, $connection, $no_time )
+	function PostprocessQlResult ( $query, &$query_result, &$raw_result, $connection, $no_time )
 	{
+	    $raw_result["sphinxql"] = $query;
 		$result = mysqli_wr ($query,$connection);
 		if ($result===true)
 		{
@@ -1958,6 +2075,7 @@ class SphinxConfig
 				$query_result["sphinxql"] = $query;
 
 			$query_result["total_affected"] = mysqli_affected_rows($connection);
+            $raw_result["total_affected"] = mysqli_affected_rows($connection);
 		}
 		else if ($result===false)
 		{
@@ -1966,13 +2084,18 @@ class SphinxConfig
 
 			$error = mysqli_errno( $connection );
 			$query_result["errno"] = $error;
-			$query_result["error"] = $this->FixupErrorMessage ( $error, mysqli_error( $connection ) );
+            $raw_result["errno"] = $error;
+            $raw_result["error"] = mysqli_error( $connection );
+			$query_result["error"] = $this->FixupErrorMessage ( $error, $raw_result["error"] );
+
 		}
 		else
 		{
-			$query_result["total_rows"] = mysqli_num_rows($result);
+            $raw_result["total_rows"] = mysqli_num_rows($result);
+			$query_result["total_rows"] = $raw_result["total_rows"];
 			while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC))
 			{
+                $raw_result["rows"][] = $row;
 				if ( $no_time===true && array_key_exists ( 'Variable_name', $row ) && $row['Variable_name']=='time' )
 					continue;
 				$query_result["rows"][] = $row;
@@ -1989,7 +2112,7 @@ class SphinxConfig
 	}
 
 
-	function RunQueryQL ( $query, &$error, $bench, &$connection, &$old_agent, &$old_vip )
+	function RunQueryQL ( $query, &$error, &$examples, $bench, &$connection, &$old_agent, &$old_vip )
 	{
 		global $agents, $index_data_path;
 
@@ -2006,6 +2129,7 @@ class SphinxConfig
         $cluster_path = ArrVal ($attrs, "cluster_path");
         $cluster_name = ArrVal ($attrs, "cluster");
         $cluster_status = ArrVal ($attrs, "status");
+        $example = ArrVal ($attrs, "example");
 
 		// $query - array, 0 is data, 1 is attributes, 2 is 'is_http' bool.
 
@@ -2173,8 +2297,13 @@ class SphinxConfig
 			$query_result["sphinxql"]=trim ( $query_ref );
 			unset ( $query_ref );
 
-			$this->PostprocessQlResult ( $query, $query_result, $connection, $no_time );
+            $raw_result = [];
+			$this->PostprocessQlResult ( $query, $query_result, $raw_result, $connection, $no_time );
 			$this->PickResult($query_result);
+			if ($example)
+            {
+                $examples[$example][] = $raw_result;
+            }
 		} else
 		{
 			$parts = explode (';',$query);
@@ -2235,7 +2364,7 @@ class SphinxConfig
 		return true;
 	}
 
-	function RunQuery ( &$error, $benchmark = false )
+	function RunQuery ( &$error, &$examples, $benchmark = false )
 	{
 		global $sd_address, $sd_port, $action_retries, $action_wait_timeout, $g_pick_query;
 		$total = $done = 0;
@@ -2292,9 +2421,9 @@ class SphinxConfig
 		{
 			$qinfo = $this->_queries[$n];
 			if ($qinfo['type']=='sphinxql')
-                $bOk = $this->RunQueryQL ( $qinfo, $error, $benchmark, $ql_connection, $old_agent, $old_vip );
+                $bOk = $this->RunQueryQL ( $qinfo, $error, $examples, $benchmark, $ql_connection, $old_agent, $old_vip );
 			elseif ($qinfo['type']=='query')
-                $bOk = $this->RunQueryHttp ( $qinfo, $error );
+                $bOk = $this->RunQueryHttp ( $qinfo, $error, $examples );
 
             if (!$bOk)
 			    break;
@@ -3860,8 +3989,8 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 	$report_file = "$report_path.txt";
 	$report = fopen ( $report_file, "w" );
 
-	$example_file = "$res_path/example.txt";
-	$examples = fopen ($example_file, "w");
+	$example_file = scriptdir("examples.txt");
+	$examples = [];
 
 	$nfailed = 0;
 	$error = "";
@@ -4033,12 +4162,14 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
         }
 
 		$error = "";
-		if ( !$config->RunQuery ( $error ) )
+		if ( !$config->RunQuery ( $error, $examples ) )
 		{
 			if ( !HandleFailure ( $config, $report, "$error\n", $nfailed ) )
 				$log .= "\tsubtest $subtest: query error: $error\n";
 			continue;
 		}
+
+		WriteExamples ( $example_file, $examples );
 
 		$allmatch = $isdemo || IsModelGenMode() || $config->CompareToModel();
 		if ( !$allmatch )

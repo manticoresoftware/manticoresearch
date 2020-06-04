@@ -24,8 +24,7 @@ searchd
 	create table test1 ( title text, tag integer, tag2 integer );
 	create table if not exists test1 ( title text, tag integer, tag2 integer );
 	show tables;
-</sphinxql>
-<sphinxql>
+
 	<!-- testing configless -->
 	desc test1;
 	insert into test1 values (1,'hello',100);
@@ -34,6 +33,8 @@ searchd
 	show create table test1;
 	drop table test1;
 	show tables;
+</sphinxql>
+<sphinxql>
 
 	drop table test1;
 	drop table if exists test1;

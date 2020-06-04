@@ -101,6 +101,7 @@ release_tests:
     - build/test/test_*/report.txt
     - build/test/error*.txt
     - build/test/searchd.log
+    - build/test/examples.txt
     expire_in: 12 hrs
     when: always
   cache:

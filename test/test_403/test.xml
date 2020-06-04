@@ -32,9 +32,11 @@ searchd
 <sphinxql>select * from test2 where match('wordform')</sphinxql>
 <sphinxql>drop table test2</sphinxql>
 
-<sphinxql>create table test3 ( title text, tag integer ) exceptions = '<this_test/>/exceptions.txt'</sphinxql>
-<sphinxql>call keywords('microsoft windows', 'test3')</sphinxql>
-<sphinxql>call keywords('Microsoft Windows', 'test3')</sphinxql>
+<sphinxql example="configless with exceptions">
+	create table test3 ( title text, tag integer ) exceptions = '<this_test/>/exceptions.txt';
+	call keywords('microsoft windows', 'test3');
+	call keywords('Microsoft Windows', 'test3');
+</sphinxql>
 <sphinxql>drop table test3</sphinxql>
 
 <sphinxql>create table test4 ( title text, tag integer ) wordforms = '<this_test/>/wordforms.txt'</sphinxql>

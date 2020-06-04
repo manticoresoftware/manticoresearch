@@ -2259,7 +2259,7 @@ bool AgentConn_t::DoQuery()
 	auto iNow = sphMicroTimer ();
 	if ( m_iSock>=0 )
 	{
-		sphLogDebugA ( "%d branch for established(%d). Timeout %d", m_iStoreTag, m_iSock, m_iMyQueryTimeout );
+		sphLogDebugA ( "%d branch for established(%d). Timeout %d", m_iStoreTag, m_iSock, m_iMyQueryTimeoutMs );
 		m_bConnectHandshake = false;
 		m_pReplyCur += sizeof ( int );
 		m_iStartQuery = iNow; /// copied from old behaviour
@@ -2279,7 +2279,7 @@ bool AgentConn_t::DoQuery()
 		m_tOutput.StartNewChunk ();
 	}
 
-	sphLogDebugA ( "%d branch for not established. Timeout %d", m_iStoreTag, m_iMyConnectTimeout );
+	sphLogDebugA ( "%d branch for not established. Timeout %d", m_iStoreTag, m_iMyQueryTimeoutMs );
 	m_iPoolerTimeoutUS = iNow + 1000 * m_iMyConnectTimeoutMs;
 	if ( !m_tDesc.m_bNeedResolve )
 		return EstablishConnection ();
@@ -3372,7 +3372,7 @@ private:
 	void ProcessChanges ( Task_t * pTask )
 	{
 		sphLogDebugL ( "L ProcessChanges for %p, (conn %p) (%d->%d), tm=" INT64_FMT " sock=%d", pTask, pTask->m_pPayload,
-			pTask->m_uIOActive, pTask->m_uIOChanged, pTask->m_iTimeoutTime, pTask->m_ifd );
+			pTask->m_uIOActive, pTask->m_uIOChanged, pTask->m_iTimeoutTimeUS, pTask->m_ifd );
 
 		assert ( pTask->m_iTimeoutTimeUS!=0);
 
@@ -3395,8 +3395,8 @@ private:
 			pTask->m_iTimeoutTimeUS = pTask->m_iPlannedTimeout;
 			pTask->m_iPlannedTimeout = 0;
 			m_dTimeouts.Change ( pTask );
-			sphLogDebugL ( "L change/add timeout for %p, " INT64_FMT " (%d) is changed one", pTask, pTask->m_iTimeoutTime,
-				( int ) ( pTask->m_iTimeoutTime - sphMicroTimer () ) );
+			sphLogDebugL ( "L change/add timeout for %p, " INT64_FMT " (%d) is changed one", pTask, pTask->m_iTimeoutTimeUS,
+				( int ) ( pTask->m_iTimeoutTimeUS - sphMicroTimer () ) );
 			sphLogDebugL ( "%s", m_dTimeouts.DebugDump ( "L " ).cstr () );
 		}
 	}

@@ -335,7 +335,7 @@ void CSphNetLoop::AddAction ( ISphNetAction * pElem )
 
 void CSphNetLoop::Unlink ( ISphNetAction * pElem, bool bWillClose )
 {
-	if ( m_pImpl && !g_bShutdown )
+	if ( m_pImpl && !g_bShutdown ) // that check instead of assert added to fix #1418
 		m_pImpl->Unlink ( pElem, bWillClose );
 }
 

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>grouper at RT disk chunk</name>
+
+<skip_indexer/>
+
+<config>
+common
+{
+	json_autoconv_numbers	= 1
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+
+index rt1
+{
+	type = rt
+	path = <data_path/>/rt1
+	rt_field = title
+	rt_attr_string = title
+	rt_attr_json = j
+    rt_attr_multi = mva
+    rt_attr_uint = gid
+}
+
+</config>
+
+<sphqueries>
+<sphinxql>insert into rt1 (id, title, j, mva, gid) values
+	(1, 'test 1', '{i:1, parent:[45, 101]}', (209, 212, 215), 209 ),
+	(2, 'test 2', '{i:2, parent:[45, 102]}', (211, 218), 211 ),
+	(3, 'test 3', '{i:3, parent:[46, 103]}', (207, 209, 213), 209 ),
+	(4, 'test 4', '{i:4, parent:[46, 104]}', (210, 216), 210 ),
+	(5, 'test 5', '{i:5, parent:[55, 105]}', (205, 211), 205 ),
+    (6, 'test 7', '{i:6, parent:[56, 106]}', (205, 209, 211), 205 ),
+    (7, 'test 7', '{i:7, parent:[56, 107]}', (207, 211), 207 )
+</sphinxql>
+
+<sphinxql>SELECT id, groupby() g, count(*) c, mva FROM rt1 GROUP 3 BY mva ORDER BY id ASC</sphinxql>
+<sphinxql>SELECT id, groupby() g, count(*) c, mva FROM rt1 GROUP BY mva ORDER BY id ASC</sphinxql>
+<sphinxql>SELECT id, j.parent[0] AS gr, groupby() g, count(*) as c, j FROM rt1 GROUP BY gr</sphinxql>
+<sphinxql>SELECT id, groupby() g, count(*) c, gid FROM rt1 GROUP 3 BY gid ORDER BY id ASC</sphinxql>
+<sphinxql>SELECT id, groupby() g, count(*) c, gid FROM rt1 GROUP BY gid ORDER BY id ASC</sphinxql>
+<sphinxql>SELECT id, COUNT(*) FROM rt1</sphinxql>
+
+<sphinxql>FLUSH RAMCHUNK rt1</sphinxql>
+
+<sphinxql>SELECT id, groupby() g, count(*) c, mva FROM rt1 GROUP 3 BY mva ORDER BY id ASC</sphinxql>
+<sphinxql>SELECT id, groupby() g, count(*) c, mva FROM rt1 GROUP BY mva ORDER BY id ASC</sphinxql>
+<sphinxql>SELECT id, j.parent[0] AS gr, groupby() g, count(*) as c, j FROM rt1 GROUP BY gr</sphinxql>
+<sphinxql>SELECT id, groupby() g, count(*) c, gid FROM rt1 GROUP 3 BY gid ORDER BY id ASC</sphinxql>
+<sphinxql>SELECT id, groupby() g, count(*) c, gid FROM rt1 GROUP BY gid ORDER BY id ASC</sphinxql>
+<sphinxql>SELECT id, COUNT(*) FROM rt1</sphinxql>
+
+</sphqueries>
+
+</test>

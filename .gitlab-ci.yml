@@ -172,6 +172,22 @@ build_bsd:
     expire_in: 12 hrs
     when: always
   retry: 1
+  allow_failure: true
+
+# build and upload on regular commits
+
+build_master:
+  stage: publish
+  tags:
+    - dev-host
+  rules:
+    - if: $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_BRANCH == "master"
+  script:
+    - ~/upload_repo.sh
+  dependencies: [rhel6, rhel7, rhel8, jessie, stretch, trusty, xenial, bionic, buster]
+  variables:
+    REPO_NAME: dev
+
 
 push_results:
   stage: publish

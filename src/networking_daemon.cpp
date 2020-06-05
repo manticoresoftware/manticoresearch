@@ -335,8 +335,8 @@ void CSphNetLoop::AddAction ( ISphNetAction * pElem )
 
 void CSphNetLoop::Unlink ( ISphNetAction * pElem, bool bWillClose )
 {
-	assert ( m_pImpl );
-	m_pImpl->Unlink ( pElem, bWillClose );
+	if ( m_pImpl && !g_bShutdown )
+		m_pImpl->Unlink ( pElem, bWillClose );
 }
 
 void CSphNetLoop::RemoveIterEvent ( NetPollEvent_t * pEvent ) REQUIRES ( PollThread )

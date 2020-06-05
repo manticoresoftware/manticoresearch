@@ -250,6 +250,7 @@ collect_repo:
   stage: publish
   rules:
     - when: manual
+  allow_failure: true
   tags:
     - dev-host
   script:

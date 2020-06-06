@@ -2952,7 +2952,7 @@ public:
 	}
 
 	// TODO! TEST!
-	ISphMatchSorter * Clone () const
+	ISphMatchSorter * Clone () const override
 	{
 		CSphQuery dFoo;
 		dFoo.m_iGroupbyLimit = m_iGLimit;

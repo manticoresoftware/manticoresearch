@@ -6277,7 +6277,7 @@ void QueueCreator_c::RemapStaticStringsAndJsons ( CSphMatchComparatorState & tSt
 
 	// need another sort keys add after setup remap
 	if ( iColWasCount!=tSorterSchema.GetAttrsCount ())
-		ExtraAddSortkeys ( m_tStateMatch.m_dAttrs );
+		ExtraAddSortkeys ( tState.m_dAttrs );
 }
 
 // matches sorting function

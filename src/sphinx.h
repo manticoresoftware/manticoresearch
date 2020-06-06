@@ -3466,7 +3466,7 @@ struct CSphAttrUpdateEx
 	int						m_iAffected = 0;		///< num of updated rows.
 };
 
-struct SphQueueSettings_t : public ISphNoncopyable
+struct SphQueueSettings_t
 {
 	const ISphSchema &			m_tSchema;
 	CSphQueryProfile *			m_pProfiler;
@@ -3477,7 +3477,7 @@ struct SphQueueSettings_t : public ISphNoncopyable
 	const CSphFilterSettings *	m_pAggrFilter = nullptr;
 	int							m_iMaxMatches = DEFAULT_MAX_MATCHES;
 
-	SphQueueSettings_t ( const ISphSchema & tSchema, CSphQueryProfile * pProfiler = nullptr )
+	explicit SphQueueSettings_t ( const ISphSchema & tSchema, CSphQueryProfile * pProfiler = nullptr )
 		: m_tSchema ( tSchema )
 		, m_pProfiler ( pProfiler )
 	{}

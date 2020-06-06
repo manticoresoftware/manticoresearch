@@ -4932,6 +4932,10 @@ private:
 	void							CalcPerIndexStats ( int iStart, int iEnd, const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ) const;
 	void							CalcGlobalStats ( int64_t tmCpu, int64_t tmSubset, int64_t tmLocal, int iStart, int iEnd, const CSphIOStats & tIO, const VecRefPtrsAgentConn_t & dRemotes ) const;
 	int								CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const;
+	int								CreateSingleSorters( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const;
+	int								CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const;
+
+	SphQueueSettings_t				MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches ) const;
 };
 
 
@@ -5553,54 +5557,70 @@ static int GetMaxMatches ( int iQueryMaxMatches, const CSphIndex * pIndex )
 	}
 }
 
-int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const
+SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches ) const
+{
+	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema (), m_pProfile );
+	tQueueSettings.m_bComputeItems = true;
+	tQueueSettings.m_pUpdate = m_pUpdates;
+	tQueueSettings.m_pCollection = m_pDelDocs;
+	tQueueSettings.m_pHook = &m_tHook;
+	tQueueSettings.m_iMaxMatches = GetMaxMatches ( iMaxMatches, pIndex );
+	return tQueueSettings;
+}
+
+
+int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter *> & dSorters
+		, VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const
 {
 	int iValidSorters = 0;
 
-	if ( !m_bMultiQueue && !m_bFacetQueue )
-	{
-		tQueueRes.m_bAlowMulti = false;
-		for ( int iQuery=m_iStart; iQuery<=m_iEnd; ++iQuery )
-		{
-			CSphQuery & tQuery = m_dQueries[iQuery];
+	auto tQueueSettings = MakeQueueSettings ( pIndex, m_dQueries[m_iStart].m_iMaxMatches );
+	const VecTraits_T<CSphQuery> & dQueries = m_dQueries.Slice ( m_iStart );
+	sphCreateMultiQueue ( tQueueSettings, dQueries, dSorters, dErrors, tQueueRes, dExtraSchemas );
 
-			// create queue
-			SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema(), m_pProfile );
-			tQueueSettings.m_bComputeItems = true;
-			tQueueSettings.m_pUpdate = m_pUpdates;
-			tQueueSettings.m_pCollection = m_pDelDocs;
-			tQueueSettings.m_pHook = &m_tHook;
-			StrVec_t * pExtra = ( dExtraSchemas.IsEmpty() ? nullptr : dExtraSchemas.begin() + iQuery - m_iStart );
-			tQueueSettings.m_iMaxMatches = GetMaxMatches ( tQuery.m_iMaxMatches, pIndex );
-
-			ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, dErrors[iQuery - m_iStart], tQueueRes, pExtra );
-			if ( !pSorter )
-				continue;
-
-			tQuery.m_bZSlist = tQueueRes.m_bZonespanlist;
-			dSorters[iQuery-m_iStart] = pSorter;
+	m_dQueries[m_iStart].m_bZSlist = tQueueRes.m_bZonespanlist;
+	dSorters.Apply ( [&iValidSorters] ( const ISphMatchSorter * pSorter ) {
+		if ( pSorter )
 			++iValidSorters;
-		}
-	} else
+	} );
+	if ( m_bFacetQueue && iValidSorters<dSorters.GetLength () )
 	{
-		CSphString sError;
-		SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema(), m_pProfile );
-		tQueueSettings.m_bComputeItems = true;
-		tQueueSettings.m_pUpdate = m_pUpdates;
-		tQueueSettings.m_pCollection = m_pDelDocs;
-		tQueueSettings.m_pHook = &m_tHook;
-		tQueueSettings.m_iMaxMatches = GetMaxMatches ( m_dQueries[m_iStart].m_iMaxMatches, pIndex );
-
-		const VecTraits_T<CSphQuery> & dQueries = m_dQueries.Slice ( m_iStart );
-		sphCreateMultiQueue ( tQueueSettings, dQueries, dSorters, dErrors, tQueueRes, dExtraSchemas );
-
-		m_dQueries[m_iStart].m_bZSlist = tQueueRes.m_bZonespanlist;
-		dSorters.Apply ( [&iValidSorters] ( const ISphMatchSorter * pSorter ) { if ( pSorter ) iValidSorters++; } );
-		if ( m_bFacetQueue && iValidSorters<dSorters.GetLength() )
-			iValidSorters = 0;
+		dSorters.Apply ( [] ( ISphMatchSorter *& pSorter ) { SafeDelete (pSorter); } );
+		return 0;
 	}
-
 	return iValidSorters;
+}
+
+int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter *> & dSorters
+		, VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const
+{
+	int iValidSorters = 0;
+	tQueueRes.m_bAlowMulti = false;
+	for ( int iQuery = m_iStart; iQuery<=m_iEnd; ++iQuery )
+	{
+		CSphQuery & tQuery = m_dQueries[iQuery];
+
+		// create queue
+		auto tQueueSettings = MakeQueueSettings ( pIndex, tQuery.m_iMaxMatches );
+		StrVec_t * pExtra = ( dExtraSchemas.IsEmpty () ? nullptr : &dExtraSchemas[iQuery-m_iStart] );
+
+		ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, dErrors[iQuery-m_iStart], tQueueRes, pExtra );
+		if ( !pSorter )
+			continue;
+
+		tQuery.m_bZSlist = tQueueRes.m_bZonespanlist;
+		dSorters[iQuery-m_iStart] = pSorter;
+		++iValidSorters;
+	}
+	return iValidSorters;
+}
+
+int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter *> & dSorters
+		, VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const
+{
+	if ( m_bMultiQueue || m_bFacetQueue )
+		return CreateMultiQueryOrFacetSorters ( pIndex, dSorters, dErrors, dExtraSchemas, tQueueRes );
+	return CreateSingleSorters ( pIndex, dSorters, dErrors, dExtraSchemas, tQueueRes );
 }
 
 void SearchHandler_c::RunLocalSearches()

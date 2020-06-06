@@ -4925,7 +4925,6 @@ protected:
 private:
 	bool							CheckMultiQuery ( int iStart, int iEnd ) const;
 	bool							RLockInvokedIndexes();
-	void							PrepareQueryIndexes ( VectorAgentConn_t &dRemotes, CSphVector<DistrServedByAgent_t> &dDistrServedByAgent );
 	void							UniqLocals ();
 	void							RunActionQuery ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors ); ///< run delete/update
 	void							BuildIndexList ( int iStart, int iEnd, int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent );

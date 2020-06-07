@@ -33,6 +33,9 @@ void sphFixupLocator ( CSphAttrLocator & tLocator, const ISphSchema * pOldSchema
 	if ( !pOldSchema )
 		return;
 
+	if ( tLocator.m_iBlobAttrId==-1 && tLocator.m_iBitCount==-1 )
+		return;
+
 	assert ( pNewSchema );
 	for ( int i = 0; i < pOldSchema->GetAttrsCount(); i++ )
 	{
@@ -47,6 +50,35 @@ void sphFixupLocator ( CSphAttrLocator & tLocator, const ISphSchema * pOldSchema
 			}
 		}
 	}
+}
+
+namespace {
+
+const char g_sIntAttrPrefix[] = "@int_str2ptr_";
+const char g_sIntJsonPrefix[] = "@groupbystr";
+
+template <typename FN>
+void FnSortGetStringRemap ( const ISphSchema & tDstSchema, const ISphSchema & tSrcSchema, FN fnProcess )
+{
+	for ( int i = 0; i<tDstSchema.GetAttrsCount (); ++i )
+	{
+		const CSphColumnInfo & tDst = tDstSchema.GetAttr ( i );
+		// remap only static strings
+		if ( tDst.m_eAttrType==SPH_ATTR_STRINGPTR || !IsSortStringInternal ( tDst.m_sName ) )
+			continue;
+
+		auto iSrcCol = tSrcSchema.GetAttrIndex ( tDst.m_sName.cstr ()+sizeof ( g_sIntAttrPrefix )-1 );
+		if ( iSrcCol!=-1 ) // skip internal attributes received from agents
+			fnProcess ( iSrcCol, i );
+	}
+}
+} // unnamed (static) namespace
+
+int GetStringRemapCount ( const ISphSchema & tDstSchema, const ISphSchema & tSrcSchema )
+{
+	int iMaps = 0;
+	FnSortGetStringRemap ( tDstSchema, tSrcSchema, [&iMaps] ( int, int ) { ++iMaps; } );
+	return iMaps;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -102,14 +134,222 @@ void ISphMatchSorter::SetFilteredAttrs ( const sph::StringSet & hAttrs )
 	}
 }
 
+// helper
+class MatchesToNewSchema_c : public ISphMatchProcessor
+{
+	struct MapAction_t {
+
+		// what is to do with current position
+		enum Action_e {
+			SETZERO,		// set default (0)
+			COPY,			// copy as is (plain attribute)
+			COPYBLOB,		// deep copy (unpack/pack) the blob
+			COPYJSONFIELD,	// json field (packed blob with type)
+		};
+
+		const CSphAttrLocator*	m_pFrom;
+		const CSphAttrLocator*	m_pTo;
+		Action_e				m_eAction;
+	};
+
+	int	m_iDynamicSize;		// target dynamic size, from schema
+	CSphVector<MapAction_t> m_dActions;		// the recipe
+	CSphVector<std::pair<CSphAttrLocator, CSphAttrLocator>> m_dRemapCmp;	// remap @int_str2ptr_ATTR -> ATTR
+	CSphVector<int> m_dDataPtrAttrs;		// orphaned attrs we have to free before swap to new attr
+	fnGetBlobPoolFromMatch m_fnGetBlobPool;	// provides base for pool copying
+
+public:
+	MatchesToNewSchema_c ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema, fnGetBlobPoolFromMatch fnGetBlobPool )
+		: m_iDynamicSize ( pNewSchema->GetDynamicSize () )
+		, m_fnGetBlobPool ( std::move ( fnGetBlobPool ) )
+	{
+		assert ( pOldSchema && pNewSchema );
+
+		// prepare transforming recipe
+
+		// initial state: set all new columns to be reset by default
+		for ( int i = 0; i<pNewSchema->GetAttrsCount(); ++i )
+			m_dActions.Add ( { nullptr, &pNewSchema->GetAttr(i).m_tLocator, MapAction_t::SETZERO } );
+
+		// add mapping from old to new according to column type
+		for ( int i = 0; i<pOldSchema->GetAttrsCount(); ++i )
+		{
+			const CSphColumnInfo & dOld = pOldSchema->GetAttr(i);
+			auto iNewIdx = pNewSchema->GetAttrIndex ( dOld.m_sName.cstr () );
+			if ( iNewIdx == -1 )
+			{
+				// dataptr present in old, but not in the new - mark it for releasing
+				if ( sphIsDataPtrAttr ( dOld.m_eAttrType ) && dOld.m_tLocator.m_bDynamic )
+					m_dDataPtrAttrs.Add( dOld.m_tLocator.m_iBitOffset >> ROWITEM_SHIFT );
+				continue;
+			}
+
+			const CSphColumnInfo & dNew = pNewSchema->GetAttr(iNewIdx);
+
+			auto & tAction = m_dActions[iNewIdx];
+			tAction.m_pFrom = &dOld.m_tLocator;
+
+			// same type - just copy attr as is
+			if ( dOld.m_eAttrType==dNew.m_eAttrType )
+			{
+				tAction.m_eAction = MapAction_t::COPY;
+				continue;
+			}
+
+			assert ( !sphIsDataPtrAttr ( dOld.m_eAttrType ) && sphIsDataPtrAttr ( dNew.m_eAttrType ) );
+
+			switch ( dOld.m_eAttrType )
+			{
+				case SPH_ATTR_UINT32SET:
+				case SPH_ATTR_INT64SET:
+				case SPH_ATTR_STRING:
+				case SPH_ATTR_JSON:
+					tAction.m_eAction = MapAction_t::COPYBLOB;
+					break;
+
+				case SPH_ATTR_JSON_FIELD:
+					tAction.m_eAction = MapAction_t::COPYJSONFIELD;
+					break;
+
+				default:
+					assert ( 0 && "Unexpected attribute type" );
+					break;
+			}
+		}
+
+
+		// need to update @int_str2ptr_ locator to use new schema
+		// no need to pass pOldSchema as we remapping only new schema pointers
+		// also need to update group sorter keypart to be str_ptr in caller code SetSchema
+		FnSortGetStringRemap ( *pNewSchema, *pNewSchema, [this, pNewSchema] ( int iSrc, int iDst ) {
+			m_dRemapCmp.Add ( { pNewSchema->GetAttr(iSrc).m_tLocator, pNewSchema->GetAttr(iDst).m_tLocator } );
+		});
+	}
+
+	// performs actual processing acording created plan
+	void Process ( CSphMatch * pMatch ) final
+	{
+		CSphMatch tResult;
+		tResult.Reset ( m_iDynamicSize );
+
+		const BYTE * pBlobPool = m_fnGetBlobPool ( pMatch );
+
+		for ( const auto & tAction : m_dActions )
+		{
+			SphAttr_t uValue = 0;
+			switch ( tAction.m_eAction )
+			{
+			case MapAction_t::SETZERO:
+				break;
+
+			case MapAction_t::COPY:
+				uValue = pMatch->GetAttr ( *tAction.m_pFrom );
+				break;
+
+			case MapAction_t::COPYBLOB:
+				{
+					auto dBlob = sphGetBlobAttr ( *pMatch, *tAction.m_pFrom, pBlobPool );
+					uValue = (SphAttr_t) sphPackPtrAttr ( dBlob );
+				}
+				break;
+
+			case MapAction_t::COPYJSONFIELD:
+				{
+					SphAttr_t uPacked = pMatch->GetAttr ( *tAction.m_pFrom );
+					const BYTE * pStr = uPacked ? pBlobPool+sphJsonUnpackOffset ( uPacked ) : nullptr;
+					ESphJsonType eJson = sphJsonUnpackType ( uPacked );
+
+					if ( pStr && eJson!=JSON_NULL )
+					{
+						int iLengthBytes = sphJsonNodeSize ( eJson, pStr );
+						BYTE * pData = nullptr;
+						uValue = (SphAttr_t) sphPackPtrAttr ( iLengthBytes+1, &pData );
+
+						// store field type before the field
+						*pData = (BYTE) eJson;
+						memcpy ( pData+1, pStr, iLengthBytes );
+					}
+				}
+				break;
+
+			default:
+				assert(false && "Unknown state");
+			}
+
+			tResult.SetAttr ( *tAction.m_pTo, uValue );
+		}
+
+		// remap comparator attributes
+		for ( const auto & tRemap : m_dRemapCmp )
+			tResult.SetAttr ( tRemap.second, tResult.GetAttr ( tRemap.first ) );
+
+		// free original orphaned pointers
+		CSphSchemaHelper::FreeDataSpecial ( *pMatch, m_dDataPtrAttrs );
+
+		Swap ( pMatch->m_pDynamic, tResult.m_pDynamic );
+		pMatch->m_pStatic = nullptr;
+	}
+};
+
+
+void ISphMatchSorter::TransformPooled2StandalonePtrs ( fnGetBlobPoolFromMatch fnBlobPoolFromMatch )
+{
+	auto * pOldSchema = GetSchema ();
+	assert ( pOldSchema );
+
+	// create new standalone schema (from old, or from filtered)
+	auto * pNewSchema = new CSphSchema ( "standalone" );
+	for ( int i = 0; i<pOldSchema->GetFieldsCount (); ++i )
+		pNewSchema->AddField ( pOldSchema->GetField(i) );
+
+	if ( m_dTransormed.IsEmpty() )
+	{
+		// no need to filter schema attributes for query with star \ select all items
+		for ( int i = 0; i<pOldSchema->GetAttrsCount (); ++i )
+		{
+			CSphColumnInfo tAttr = pOldSchema->GetAttr ( i );
+			tAttr.m_eAttrType = sphPlainAttrToPtrAttr ( tAttr.m_eAttrType );
+			tAttr.m_tLocator.m_iBitOffset = -1;
+			tAttr.m_tLocator.m_iBitCount = -1;
+			tAttr.m_tLocator.m_iBlobAttrId = -1;
+			tAttr.m_tLocator.m_nBlobAttrs = 0;
+			pNewSchema->AddAttr ( tAttr, true );
+		}
+	} else
+	{
+		for ( const CSphString & sName : m_dTransormed )
+		{
+			const CSphColumnInfo * pAttr = pOldSchema->GetAttr ( sName.cstr() );
+			if ( !pAttr )
+				continue;
+
+			CSphColumnInfo tAttr = *pAttr;
+			tAttr.m_eAttrType = sphPlainAttrToPtrAttr ( tAttr.m_eAttrType );
+			tAttr.m_tLocator.m_iBitOffset = -1;
+			tAttr.m_tLocator.m_iBitCount = -1;
+			tAttr.m_tLocator.m_iBlobAttrId = -1;
+			tAttr.m_tLocator.m_nBlobAttrs = 0;
+			pNewSchema->AddAttr ( tAttr, true );
+		}
+	}
+
+	for ( int i = 0; i <pNewSchema->GetAttrsCount(); ++i )
+	{
+		auto & pExpr = pNewSchema->GetAttr(i).m_pExpr;
+		if ( pExpr )
+			pExpr->FixupLocator ( pOldSchema, pNewSchema );
+	}
+
+	MatchesToNewSchema_c fnFinal ( pOldSchema, pNewSchema, std::move ( fnBlobPoolFromMatch ) );
+	Finalize ( fnFinal, false );
+	SetSchema ( pNewSchema, true );
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 
 /// groupby key type
 typedef int64_t				SphGroupKey_t;
-
-static const char g_sIntAttrPrefix[] = "@int_str2ptr_";
-static const char g_sIntJsonPrefix[] = "@groupbystr";
 
 class BlobPool_c
 {
@@ -5292,28 +5532,6 @@ CSphString SortJsonInternalSet ( const CSphString& sColumnName )
 	if ( !sColumnName.IsEmpty() )
 		( StringBuilder_c () << g_sIntJsonPrefix << "_" << sColumnName ).MoveTo ( sName );
 	return sName;
-}
-
-
-bool sphSortGetStringRemap ( const ISphSchema & tSorterSchema, const ISphSchema & tIndexSchema,	CSphVector<SphStringSorterRemap_t> & dAttrs )
-{
-	dAttrs.Resize ( 0 );
-	for ( int i=0; i<tSorterSchema.GetAttrsCount(); i++ )
-	{
-		const CSphColumnInfo & tDst = tSorterSchema.GetAttr(i);
-		// remap only static strings
-		if ( !tDst.m_sName.Begins ( g_sIntAttrPrefix ) || tDst.m_eAttrType==SPH_ATTR_STRINGPTR )
-			continue;
-
-		const CSphColumnInfo * pSrcCol = tIndexSchema.GetAttr ( tDst.m_sName.cstr()+sizeof(g_sIntAttrPrefix)-1 );
-		if ( !pSrcCol ) // skip internal attributes received from agents
-			continue;
-
-		SphStringSorterRemap_t & tRemap = dAttrs.Add();
-		tRemap.m_tSrc = pSrcCol->m_tLocator;
-		tRemap.m_tDst = tDst.m_tLocator;
-	}
-	return ( dAttrs.GetLength()>0 );
 }
 
 ////////////////////

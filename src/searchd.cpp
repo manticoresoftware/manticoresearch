@@ -4608,12 +4608,10 @@ static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, boo
 	{
 		// at first we count already existed internal attributes
 		// then check if sorter makes more
-		CSphVector<SphStringSorterRemap_t> dRemapAttr;
-		sphSortGetStringRemap ( tRes.m_tSchema, tRes.m_tSchema, dRemapAttr );
-		int iRemapCount = dRemapAttr.GetLength();
-		sphSortGetStringRemap ( *pSorter->GetSchema(), tRes.m_tSchema, dRemapAttr );
+		int iRemapCount = GetStringRemapCount ( tRes.m_tSchema, tRes.m_tSchema );
+		int iNewCount = GetStringRemapCount ( *pSorter->GetSchema(), tRes.m_tSchema );
 
-		bAllEqual = ( dRemapAttr.GetLength()<=iRemapCount );
+		bAllEqual = ( iNewCount<=iRemapCount );
 	}
 
 	// sorter expects this

@@ -201,7 +201,10 @@ public:
 	static void SetLastQuery( const CrashQuery_t& tQuery );
 	static void SetupTimePID();
 	static CrashQuery_t GetQuery();
-	static void SetTopQueryTLS( CrashQuery_t* pQuery );
+	inline static void SetTopQueryTLS( CrashQuery_t* pQuery )
+	{
+		m_pTlsCrashQuery = pQuery;
+	}
 
 	// create thread with crash logging
 	static bool ThreadCreate( SphThread_t* pThread, void ( * pCall )( void* ), void* pArg, bool bDetached = false,

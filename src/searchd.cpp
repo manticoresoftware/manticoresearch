@@ -943,8 +943,6 @@ static int		g_iCrashInfoLen = 0;
 static char		g_sMinidump[SPH_TIME_PID_MAX_SIZE] = "";
 #endif
 
-thread_local CrashQuery_t* SphCrashLogger_c::m_pTlsCrashQuery = nullptr;    // pointer to on-stack instance of this class
-
 static CrashQuery_t g_tUnhandled;
 
 // lets invalidate pointer when this instance goes out of scope to get immediate crash
@@ -1161,11 +1159,6 @@ void SphCrashLogger_c::SetupTimePID ()
 
 	g_iCrashInfoLen = snprintf ( g_sCrashInfo, SPH_TIME_PID_MAX_SIZE-1,
 		"------- FATAL: CRASH DUMP -------\n[%s] [%5d]\n", sTimeBuf, (int)getpid() );
-}
-
-void SphCrashLogger_c::SetTopQueryTLS ( CrashQuery_t * pQuery )
-{
-	m_pTlsCrashQuery = pQuery;
 }
 
 CrashQuery_t SphCrashLogger_c::GetQuery()

@@ -270,6 +270,8 @@ SphThread_t makeTinyThread ( Handler tHandler, int iNum=0, const char * sName="m
 
 		static void Do ( void * pTr )
 		{
+			CrashQuery_t tQueryTLS;
+			SphCrashLogger_c::SetTopQueryTLS ( &tQueryTLS );
 			auto * pThis = (TinyThread_t *) pTr;
 			szName = pThis->m_szName;
 			iNumber = pThis->m_iNumber;
@@ -901,3 +903,5 @@ void GlobalSchedule ( Threads::Handler dHandler )
 		InitGlobalThreadPool ();
 	dPool->Schedule ( std::move ( dHandler ));
 }
+
+thread_local CrashQuery_t * SphCrashLogger_c::m_pTlsCrashQuery = nullptr;    // pointer to on-stack instance of this class

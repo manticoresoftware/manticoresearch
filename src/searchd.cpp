@@ -16377,7 +16377,6 @@ bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, 
 	if ( !tIdx.m_pIndex->Prealloc ( g_bStripPath, pFilenameBuilder.Ptr() ) )
 	{
 		sError.SetSprintf ( "prealloc: %s", tIdx.m_pIndex->GetLastError().cstr() );
-		sphWarning ( "index '%s': %s; NOT SERVING", szIndexName, sError.cstr() );
 		return false;
 	}
 
@@ -16386,16 +16385,12 @@ bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, 
 	// however currently it also ends up configuring dict/tokenizer for fresh RT indexes!
 	// (and for existing RT indexes, settings get loaded during the Prealloc() call)
 	if ( pConfig && !sphFixupIndexSettings ( tIdx.m_pIndex, *pConfig, g_bStripPath, pFilenameBuilder.Ptr(), dWarnings, sError ) )
-	{
-		sphWarning ( "index '%s': %s; NOT SERVING", szIndexName, sError.cstr() );
 		return false;
-	}
 
 	// try to lock it
 	if ( !g_bOptNoLock && !tIdx.m_pIndex->Lock () )
 	{
 		sError.SetSprintf ( "lock: %s", tIdx.m_pIndex->GetLastError().cstr() );
-		sphWarning ( "index '%s': %s; NOT SERVING", szIndexName, sError.cstr() );
 		return false;
 	}
 
@@ -16654,7 +16649,10 @@ static void TaskRotation ( void* pRaw ) EXCLUDES ( MainThread )
 				wLocked->m_bOnlyNew = false;
 				g_pLocalIndexes->AddOrReplace ( tIndex.m_pIndex, tIndex.m_sIndex );
 			} else
+			{
+				sphWarning ( "index '%s': %s", tIndex.m_sIndex.cstr(), sError.cstr() );
 				g_pLocalIndexes->DeleteIfNull ( tIndex.m_sIndex );
+			}
 		} else
 		{
 			if ( !RotateIndexMT ( tIndex.m_pIndex, tIndex.m_sIndex, dWarnings, sError ) )
@@ -16930,14 +16928,12 @@ static ESphAddIndex AddDistributedIndex ( const char * szIndexName, const CSphCo
 	if ( pIdx->IsEmpty () )
 	{
 		sError.SetSprintf ( "index '%s': no valid local/remote indexes in distributed index", szIndexName );
-		sphWarning ( "%s - NOT SERVING", sError.cstr() );
 		return ADD_ERROR;
 	}
 
 	if ( !g_pDistIndexes->AddUniq ( pIdx, szIndexName ) )
 	{
 		sError.SetSprintf ( "index '%s': unable to add name (duplicate?)", szIndexName );
-		sphWarning ( "%s - NOT SERVING", sError.cstr() );
 		return ADD_ERROR;
 	}
 
@@ -16945,7 +16941,7 @@ static ESphAddIndex AddDistributedIndex ( const char * szIndexName, const CSphCo
 }
 
 // hash any local index (plain, rt, etc.)
-static bool AddLocallyServedIndex ( GuardedHash_c& dPost, const CSphString& sIndexName, ServedDesc_t & tIdx, bool bReplace )
+static bool AddLocallyServedIndex ( GuardedHash_c& dPost, const CSphString& sIndexName, ServedDesc_t & tIdx, bool bReplace, CSphString & sError )
 {
 	assert ( tIdx.m_eType!=IndexType_e::TEMPLATE );
 
@@ -16953,7 +16949,7 @@ static bool AddLocallyServedIndex ( GuardedHash_c& dPost, const CSphString& sInd
 	g_pLocalIndexes->AddUniq ( nullptr, sIndexName );
 	if ( !dPost.AddUniq ( pIdx, sIndexName ) )
 	{
-		sphWarning ( "internal error: index '%s': hash add failed - NOT SERVING", sIndexName.cstr() );
+		sError = "internal error: hash add failed";
 		g_pLocalIndexes->DeleteIfNull ( sIndexName );
 		return false;
 	}
@@ -17048,8 +17044,8 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 }
 
 // common configuration and add percolate or rt index
-static ESphAddIndex AddRTPercolate ( GuardedHash_c& dPost, const char * szIndexName, ServedDesc_t & tIdx,
-	const CSphConfigSection &hIndex, const CSphIndexSettings & tSettings, bool bReplace )
+static ESphAddIndex AddRTPercolate ( GuardedHash_c & dPost, const char * szIndexName, ServedDesc_t & tIdx, const CSphConfigSection & hIndex, const CSphIndexSettings & tSettings,
+	bool bReplace, CSphString & sError )
 {
 	tIdx.m_sIndexPath = hIndex["path"].strval ();
 	ConfigureLocalIndex ( &tIdx, hIndex );
@@ -17067,14 +17063,14 @@ static ESphAddIndex AddRTPercolate ( GuardedHash_c& dPost, const char * szIndexN
 	tIdx.m_iMass = CalculateMass ( tStatus );
 
 	// hash it
-	if ( AddLocallyServedIndex ( dPost, szIndexName, tIdx, bReplace ) )
+	if ( AddLocallyServedIndex ( dPost, szIndexName, tIdx, bReplace, sError ) )
 		return ADD_DSBLED;
 	return ADD_ERROR;
 }
 ///////////////////////////////////////////////
 /// configure realtime index and add it to hash
 ///////////////////////////////////////////////
-ESphAddIndex AddRTIndex ( GuardedHash_c & dPost, const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, CSphString & sError )
+ESphAddIndex AddRTIndex ( GuardedHash_c & dPost, const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, CSphString & sError, StrVec_t * pWarnings )
 {
 	auto sIndexType = hIndex.GetStr ( "dict", "keywords" );
 	bool bWordDict = true;
@@ -17083,7 +17079,6 @@ ESphAddIndex AddRTIndex ( GuardedHash_c & dPost, const char * szIndexName, const
 	else if ( strcmp ( sIndexType, "keywords" )!=0 )
 	{
 		sError.SetSprintf ( "index '%s': unknown dict=%s; only 'keywords' or 'crc' values allowed", szIndexName, sIndexType );
-		sphWarning ( "%s", sError.cstr() );
 		return ADD_ERROR;
 	}
 
@@ -17091,10 +17086,14 @@ ESphAddIndex AddRTIndex ( GuardedHash_c & dPost, const char * szIndexName, const
 	int64_t iRamSize = hIndex.GetSize64 ( "rt_mem_limit", DEFAULT_RT_MEM_LIMIT );
 	if ( iRamSize<128 * 1024 )
 	{
-		sphWarning ( "index '%s': rt_mem_limit extremely low, using 128K instead", szIndexName );
+		if ( pWarnings )
+			pWarnings->Add ( "rt_mem_limit extremely low, using 128K instead" );
 		iRamSize = 128 * 1024;
 	} else if ( iRamSize<8 * 1024 * 1024 )
-		sphWarning ( "index '%s': rt_mem_limit very low (under 8 MB)", szIndexName );
+	{
+		if ( pWarnings )
+			pWarnings->Add ( "rt_mem_limit very low (under 8 MB)" );
+	}
 
 	CSphSchema tSchema ( szIndexName );
 	CSphIndexSettings tSettings;
@@ -17106,7 +17105,7 @@ ESphAddIndex AddRTIndex ( GuardedHash_c & dPost, const char * szIndexName, const
 	tIdx.m_pIndex = sphCreateIndexRT ( tSchema, szIndexName, iRamSize, hIndex["path"].cstr (), bWordDict );
 	tIdx.m_eType = IndexType_e::RT;
 	tIdx.m_iMemLimit = iRamSize;
-	return AddRTPercolate ( dPost, szIndexName, tIdx, hIndex, tSettings, bReplace );
+	return AddRTPercolate ( dPost, szIndexName, tIdx, hIndex, tSettings, bReplace, sError );
 }
 
 ////////////////////////////////////////////////
@@ -17123,28 +17122,27 @@ ESphAddIndex AddPercolateIndex ( GuardedHash_c & dPost, const char * szIndexName
 	ServedDesc_t tIdx;
 	tIdx.m_pIndex = CreateIndexPercolate ( tSchema, szIndexName, hIndex["path"].cstr () );
 	tIdx.m_eType = IndexType_e::PERCOLATE;
-	return AddRTPercolate ( dPost, szIndexName, tIdx, hIndex, tSettings, bReplace );
+	return AddRTPercolate ( dPost, szIndexName, tIdx, hIndex, tSettings, bReplace, sError );
 }
 
 ////////////////////////////////////////////
 /// configure local index and add it to hash
 ////////////////////////////////////////////
-static ESphAddIndex AddPlainIndex ( const char * szIndexName, const CSphConfigSection &hIndex, bool bReplace )
-	REQUIRES ( MainThread )
+static ESphAddIndex AddPlainIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, CSphString & sError ) REQUIRES ( MainThread )
 {
 	ServedDesc_t tIdx;
 
 	// check path
 	if ( !hIndex.Exists ( "path" ) )
 	{
-		sphWarning ( "index '%s': key 'path' not found - NOT SERVING", szIndexName );
+		sError = "key 'path' not found";
 		return ADD_ERROR;
 	}
 
 	// check name
 	if ( !bReplace && g_pLocalIndexes->Contains ( szIndexName ) )
 	{
-		sphWarning ( "index '%s': duplicate name - NOT SERVING", szIndexName );
+		sError = "duplicate name";
 		return ADD_ERROR;
 	}
 
@@ -17165,7 +17163,7 @@ static ESphAddIndex AddPlainIndex ( const char * szIndexName, const CSphConfigSe
 	tIdx.m_iMass = CalculateMass ( tStatus );
 
 	// done
-	if ( AddLocallyServedIndex ( g_dPostIndexes, szIndexName, tIdx, bReplace ) )
+	if ( AddLocallyServedIndex ( g_dPostIndexes, szIndexName, tIdx, bReplace, sError ) )
 		return ADD_DSBLED;
 	return ADD_ERROR;
 }
@@ -17189,7 +17187,7 @@ static ESphAddIndex AddTemplateIndex ( const char * szIndexName, const CSphConfi
 	ConfigureTemplateIndex ( &tIdx, hIndex );
 
 	// try to create index
-	tIdx.m_pIndex = sphCreateIndexTemplate ();
+	tIdx.m_pIndex = sphCreateIndexTemplate ( szIndexName );
 	tIdx.m_pIndex->m_iExpandKeywords = tIdx.m_iExpandKeywords;
 	tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 
@@ -17242,7 +17240,7 @@ ESphAddIndex AddIndexMT ( GuardedHash_c & dPost, const char * szIndexName, const
 {
 	switch ( TypeOfIndexConfig ( hIndex.GetStr ( "type", nullptr ) ) )
 	{
-		case IndexType_e::RT:		return AddRTIndex ( dPost, szIndexName, hIndex, bReplace, sError );
+		case IndexType_e::RT:		return AddRTIndex ( dPost, szIndexName, hIndex, bReplace, sError, pWarnings );
 		case IndexType_e::PERCOLATE:return AddPercolateIndex ( dPost, szIndexName, hIndex, bReplace, sError );
 		case IndexType_e::DISTR:	return AddDistributedIndex ( szIndexName, hIndex, sError, pWarnings );
 
@@ -17266,7 +17264,7 @@ static ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection
 		case IndexType_e::TEMPLATE:
 			return AddTemplateIndex ( szIndexName, hIndex, bReplace );
 		case IndexType_e::PLAIN:
-			return AddPlainIndex ( szIndexName, hIndex, bReplace );
+			return AddPlainIndex ( szIndexName, hIndex, bReplace, sError );
 		case IndexType_e::ERROR_:
 		default:
 			break;
@@ -17697,7 +17695,10 @@ static void DoGreedyRotation() REQUIRES ( MainThread )
 				if ( PreallocNewIndex ( *pWlockedServedDisabledPtr, &g_pCfg.m_tConf["index"][sDisabledIndex], sDisabledIndex.cstr(), dWarnings, sError ) )
 					g_pLocalIndexes->AddOrReplace ( pDisabledIndex, sDisabledIndex );
 				else
+				{
+					sphWarning ( "index '%s': %s - NOT SERVING", sDisabledIndex.cstr(), sError.cstr() );
 					g_pLocalIndexes->DeleteIfNull ( sDisabledIndex );
+				}
 			}
 			else if ( pWlockedServedDisabledPtr->m_eType==IndexType_e::PLAIN )
 			{

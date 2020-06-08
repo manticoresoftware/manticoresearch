@@ -3496,7 +3496,7 @@ struct SphQueueRes_t : public ISphNoncopyable
 CSphIndex *			sphCreateIndexPhrase ( const char* szIndexName, const char * sFilename );
 
 /// create template (tokenizer) index implementation
-CSphIndex *			sphCreateIndexTemplate ( );
+CSphIndex *			sphCreateIndexTemplate ( const char * szIndexName );
 
 /// set JSON attribute indexing options
 /// bStrict is whether to stop indexing on error, or just ignore the attribute value

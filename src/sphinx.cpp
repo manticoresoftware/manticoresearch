@@ -1068,11 +1068,11 @@ static FileAccessSettings_t g_tTmpDummySettings;
 class CSphTokenizerIndex : public CSphIndex
 {
 public:
-	CSphTokenizerIndex () : CSphIndex ( nullptr, nullptr ) {}
-	int							Kill ( DocID_t tDocID ) override { return 0; }
+						CSphTokenizerIndex ( const char * szIndexName ) : CSphIndex ( szIndexName, nullptr ) {}
 
-	int							Build ( const CSphVector<CSphSource*> & , int , int ) override { return 0; }
-	bool						Merge ( CSphIndex * , const CSphVector<CSphFilterSettings> &, bool ) override {return false; }
+	int					Kill ( DocID_t tDocID ) override { return 0; }
+	int					Build ( const CSphVector<CSphSource*> & , int , int ) override { return 0; }
+	bool				Merge ( CSphIndex * , const CSphVector<CSphFilterSettings> &, bool ) override {return false; }
 	bool				Prealloc ( bool, FilenameBuilder_i * ) final { return false; }
 	void				Dealloc () final {}
 	void				Preread () final {}
@@ -1179,9 +1179,9 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 }
 
 
-CSphIndex * sphCreateIndexTemplate ( )
+CSphIndex * sphCreateIndexTemplate ( const char * szIndexName )
 {
-	return new CSphTokenizerIndex();
+	return new CSphTokenizerIndex(szIndexName);
 }
 
 bool CSphTokenizerIndex::ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const

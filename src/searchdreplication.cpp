@@ -1651,7 +1651,7 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 	CSphFixedVector<uint64_t> dBufKeys ( iKeysCount );
 	CSphFixedVector<wsrep_buf_t> dBufProxy ( iKeysCount );
 	CSphFixedVector<wsrep_key_t> dKeys ( iKeysCount );
-	dBufKeys.ZeroVec();
+//	dBufKeys.ZeroVec();
 	int iKey = 0;
 
 	ARRAY_FOREACH ( i, tAcc.m_dCmd )
@@ -1703,7 +1703,9 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 		case ReplicationCommand_e::RT_TRX:
 		{
 			MemoryWriter_c tWriter ( dBufQueries );
+			auto iStartPos = dBufQueries.GetLengthBytes();
 			tAcc.SaveRtTrx ( tWriter );
+			uQueryHash = sphFNV64cont( { dBufQueries.begin() + iStartPos, dBufQueries.GetLengthBytes() - iStartPos }, uQueryHash);
 		}
 		break;
 
@@ -1743,16 +1745,15 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 			return false;
 		}
 
+		// store query hash as key
+		dBufKeys[iKey] = uQueryHash;
+		++iKey;
+
 		if ( tCmd.m_eCommand==ReplicationCommand_e::RT_TRX )
 		{
 			// store ids as keys
 			memcpy ( dBufKeys.Begin() + iKey, tAcc.m_dAccumKlist.Begin(), tAcc.m_dAccumKlist.GetLengthBytes() );
 			iKey += tAcc.m_dAccumKlist.GetLength();
-		} else
-		{
-			// store query hash as key
-			dBufKeys[iKey] = uQueryHash;
-			iKey++;
 		}
 
 		// store request length

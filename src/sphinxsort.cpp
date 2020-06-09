@@ -1831,7 +1831,52 @@ public:
 	}
 };
 
-// helpers to serialize
+/// GROUP_CONCAT
+
+/* What is that magic about?
+ *
+ * In simplest usecase - you have in group matches with 'foo', 'bar' -> group_concat produces 'foo,bar' - no magic.
+ *
+ * Make a bit complex: one and same sorter processes sequentaly several indexes (chunks), and collects group result.
+ * In this case if 1-st chunk gives 'foo', 2-nd gives 'bar', you still can achieve 'foo,bar' naturally, no magic.
+ *
+ * A bit more complex: several sorters process cloud of chunks in parallel, then merge results.
+ * Say, you have 3 chunks, giving 'foo', 'bar' and 'bazz'. Result you've expect is 'foo,bar,bazz'.
+ * In parallel with, say, 2 sorters, one processed 1-st and 3-rd chunk, second - middle.
+ * One gives you 'foo,bazz', second - 'bar'.
+ *
+ * What is to do on merge then?
+ *
+ * Simplest: just merge 'as is'. I.e., return 'foo,bazz,bar' despite the broken order.
+ * However that is appropriate only in the narrow case when ordering is not requested. That is *NOT* our way.
+ *
+ * Each match came from a chunk is tagged with the order num of that chunk.
+ * When we have matches from the same chunk, we just group them usual way with no magic, naturally concatenating strings.
+ * If all the matches tagged same - we just achieve usual string out of the box, with no magic at all.
+ * If into non-empty group came match with another tag, we use this model of blob:
+ *
+ * '\0', <N> <TAG1> <STRLEN1> chars1 <TAG2> <STRLEN2> chars2 ... <TAGN> <STRLEN> bytesN
+ *
+ * First \0 marks that the whole blob is special.
+ * Each tagged string inside includes concatenated values of the matches from that tag.
+ * For described foo-bar-baz in two sorters it will look like:
+ *
+ * '\0' 2 1 3 foo 3 4 bazz // in the 1-st sorter. 2 chunks, from tag 1 with len 3 'foo', from tag 3 with len 4 'bazz'
+ * bar // in the 2-nd sorter. Simple plain 'bar' (tag is not saved here, it is still an attribute of the match itself).
+ *
+ * Then we can merge results, taking tag for value came from 2-nd sorter from that match itself.
+ *
+ * '\0' 3 1 3 foo 2 3 bar 3 4 bazz
+ *
+ * That finally deserializes into expected user string 'foo,bar,bazz'. So, target achieved.
+ *
+ * One optimization here is that we expect matches with monotonically changing tags. I.e., if we have processed chunk 1,
+ * and stay on chunk 3 - then next match will never came with tag 1 or 2, as these numbers already passed.
+ * So, no need to 'insert into middle', we always pushes new data to tail of the blob. That makes everything simpler.
+ *
+ */
+
+// helpers to blob serialization
 using BStream_c = TightPackedVec_T<BYTE>;
 
 BStream_c & operator<< ( BStream_c & dOut, const ByteBlob_t & tData )
@@ -1912,7 +1957,7 @@ ByteBlob_t & operator>> ( ByteBlob_t & dIn, VecTraits_T<BYTE> & tData )
 	return dIn;
 }
 
-/// GROUP_CONCAT() implementation
+// The GROUP_CONCAT() implementation
 class AggrConcat_t final : public IAggrFunc
 {
 	CSphAttrLocator	m_tLoc;
@@ -3029,6 +3074,68 @@ private:
 #define DBG LOC(DIAG,NG)
 
 /// match sorter with k-buffering and N-best group-by
+
+/* Trick explanation
+ *
+ * Here we keep several grouped matches, but each one is not a single match, but a group.
+ * On the backend we have solid vector of real matches. They are allocated once and freed, and never moved around.
+ * To work with them we have vector of indexes, so that each index points to corresponding match in the backend.
+ * So when performing moving operations (sort, etc.) we actually change indexes and never move matches themselves.
+ *
+ * Say, when user pushes matches with weights of 5,2,3,1,4,6 and we then sort them, we will have following relation:
+ *
+ * m5 m2 m3 m1 m4 m6 // backend, placed in natural order as they come here
+ *  1  2  3  4  5  6 // original indexes, just points directly to backend matches.
+ *
+ * After, say, sort by asc matches weights, only index vector modified and becames this:
+ *
+ *  4  2  3  5  1  6 // reading match[i[k]] for k in 0..5 will return matches in weight ascending order.
+ *
+ * When grouping we collect several matches together and sort them.
+ * Say, if one group contains matches m1, m2, m5, m6 and second - m4, m3, we have to keep 2 sets of matches in hash:
+ *
+ * h1: m1 m2 m5 m6
+ * h2: m4 m3
+ *
+ * How to store that sequences?
+ *
+ * Well, we can do it directly, set by set, keeping heads in hash:
+ * m1 m2 m5 m6 m4 m3, heads 1, 5
+ *
+ * going to indirection indexes we have sequence
+ *  4  2  1  6  5  3, hash 1, 4
+ *
+ * That looks ok, but since sets can dynamically change, it is hard to insert more into existing group.
+ * That is like insertion into the middle of vector.
+ *
+ * Let's try to make a list (chain). Don't care about in-group ordering, just keep things chained.
+ * To make things easier, ring the list (connect tail back to head), and store pos of one of the elems in the hash
+ * (since it is ring - that is not important which exactly, just to have something to glue).
+ *
+ * m5 -> 1 heads 1
+ * m2 -> 2, 1 heads 2
+ * m3 -> 2, 1, 3, heads 2, 3
+ * m1 -> 2, 4, 3, 1, heads 4, 3
+ * m4 -> 2, 4, 5, 1, 3, heads 4, 5
+ * m6 -> 2, 4, 5, 6, 3, 1  heads 6, 5
+ *
+ * On insert we store old head into new elem, and new elem into the place of old head.
+ * One thing rest here is indirect ref by position. I.e. we assume that index at position 6 points to match at position 6.
+ * However we can notice, that since it is ring, left elem of 6-th points to it directly by number 6.
+ * So we can just shift heads back by one position - and that's all, indirect assumption no more necessary.
+ * Final sequence will be this one:
+ * m5 m2 m3 m1 m4 m6 - matches in their natural order
+ * 2, 4, 5, 6, 3, 1 - indirection vec. 4, 3. - heads of groups.
+ *
+ * Iteration: take 1-st group with head 4:
+ * 6->1->2->4*. Each num is both index of the link, and index of backend match. So, matches here are:
+ * m6 m5 m2 m1, and we can resort them as necessary (indirectly). Viola!
+ *
+ * On deletion item goes to freelist.
+ * Allocation of an elem is separate task, it is achieved by linear allocation (first), and by freelist (when filled).
+ *
+ */
+
 template < typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS >
 class CSphKBufferNGroupSorter : public KBufferGroupSorter_T<COMPGROUP,DISTINCT,NOTIFICATIONS>
 {
@@ -3547,7 +3654,7 @@ private:
 
 	/*
 	 * Here we
-	 * 1) Cut of very last head if it would exceed the limit.
+	 * 1) Cut off very last head if it would exceed the limit.
 	 * 1) Copy all calculated stuff (aggr attributes) from head match to every other match of a group
 	 * 2) Sort group in decreasing order, and then shift the ring ahead to 1 match.
 	 * That is necessary since head is worst match, and next after it is the best one (since just sorted)

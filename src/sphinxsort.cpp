@@ -2952,7 +2952,7 @@ public:
 	}
 
 	// TODO! TEST!
-	ISphMatchSorter * Clone () const final
+	ISphMatchSorter * Clone () const
 	{
 		CSphQuery dFoo;
 		dFoo.m_iGroupbyLimit = m_iGLimit;
@@ -3505,8 +3505,21 @@ template < typename COMPGROUP, typename MVA, bool DISTINCT, bool NOTIFICATIONS >
 struct MvaGroupSorter_c : public MVAGroupSorter_T < CSphKBufferGroupSorter < COMPGROUP, DISTINCT, NOTIFICATIONS >, MVA >
 {
 	using BASE=MVAGroupSorter_T < CSphKBufferGroupSorter < COMPGROUP, DISTINCT, NOTIFICATIONS >, MVA >;
+	using MYTYPE = MvaGroupSorter_c < COMPGROUP, MVA, DISTINCT, NOTIFICATIONS >;
+
 	/// ctor
 	FWD_BASECTOR( MvaGroupSorter_c );
+
+	ISphMatchSorter * Clone () const final
+	{
+		CSphQuery dFoo;
+		dFoo.m_iMaxMatches = this->m_iLimit;
+		dFoo.m_eGroupFunc = this->m_eGroupBy;
+		auto pClone = new MYTYPE ( this->m_tSubSorter.GetComparator (), &dFoo, *this );
+		this->CloneKBufferGroupSorter ( pClone );
+		pClone->m_tMvaLocator = this->m_tMvaLocator;
+		return pClone;
+	}
 };
 
 
@@ -3514,8 +3527,22 @@ template < typename COMPGROUP, typename MVA, bool DISTINCT, bool NOTIFICATIONS >
 struct MvaNGroupSorter_c : public MVAGroupSorter_T < CSphKBufferNGroupSorter < COMPGROUP, DISTINCT, NOTIFICATIONS >, MVA >
 {
 	using BASE = MVAGroupSorter_T < CSphKBufferNGroupSorter < COMPGROUP, DISTINCT, NOTIFICATIONS >, MVA >;
+	using MYTYPE = MvaNGroupSorter_c < COMPGROUP, MVA, DISTINCT, NOTIFICATIONS >;
+
 	/// ctor
 	FWD_BASECTOR( MvaNGroupSorter_c );
+
+	ISphMatchSorter * Clone () const final
+	{
+		CSphQuery dFoo;
+		dFoo.m_iGroupbyLimit = this->m_iGLimit;
+		dFoo.m_iMaxMatches = this->m_iLimit;
+		dFoo.m_eGroupFunc = this->m_eGroupBy;
+		auto pClone = new MYTYPE ( this->m_tSubSorter.GetComparator (), &dFoo, *this );
+		this->CloneKBufferGroupSorter ( pClone );
+		pClone->m_tMvaLocator = this->m_tMvaLocator;
+		return pClone;
+	}
 };
 
 

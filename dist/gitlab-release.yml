@@ -86,7 +86,7 @@ windows:
     - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=$DISTR ..
     - make -j4 package
     - cp manticore*.rpm ..
-    - if [[ $REPO_NAME ]]; then cd .. && /upload_repo.sh; fi
+
   artifacts:
     paths:
       - manticore*.rpm
@@ -117,6 +117,7 @@ rhel6:
     REPO_DIST_VER: "6"
   only:
     variables:
+      - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /rhel6/
   image: registry.gitlab.com/manticoresearch/dev/centos6_cmake314:latest
@@ -129,6 +130,7 @@ rhel7:
     REPO_DIST_VER: "7"
   only:
     variables:
+      - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /rhel7/
   image: registry.gitlab.com/manticoresearch/dev/centos7_cmake314:latest
@@ -142,14 +144,13 @@ rhelsplit7:
     - cmake -DSPHINX_TAG=$RELEASE_TAG -DSPLIT_APPS=ON -DNOAPI=ON -DDISTR_BUILD=$DISTR ..
     - make -j4 package
     - cp manticore*.rpm ..  
-    - if [[ $REPO_NAME ]]; then cd .. && /upload_repo.sh; fi
+
   variables:
     DISTR: "rhel7"
     REPO_DIST_NAME: "centos"
     REPO_DIST_VER: "7"
   only:
     variables:
-      - $WHAT == "all"
       - $WHAT =~ /rhelsplit7/
   image: registry.gitlab.com/manticoresearch/dev/centos7_cmake314:latest
 
@@ -162,6 +163,7 @@ rhel8:
     XTRAFLAGS: "-DCMAKE_CXX_FLAGS=\"-Wno-error=stringop-truncation\""
   only:
     variables:
+      - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /rhel8/
   image: registry.gitlab.com/manticoresearch/dev/centos8_cmake314:latest
@@ -172,6 +174,7 @@ jessie:
     DISTR: "jessie"
   only:
     variables:
+      - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /jessie/
   image: registry.gitlab.com/manticoresearch/dev/jessie_cmake314:latest
@@ -182,6 +185,7 @@ stretch:
     DISTR: "stretch"
   only:
     variables:
+      - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /stretch/
   image: registry.gitlab.com/manticoresearch/dev/stretch_cmake314:latest
@@ -192,6 +196,7 @@ trusty:
     DISTR: "trusty"
   only:
     variables:
+      - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /trusty/
   image: registry.gitlab.com/manticoresearch/dev/trusty_cmake314:latest
@@ -202,6 +207,7 @@ xenial:
     DISTR: "xenial"
   only:
     variables:
+      - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /xenial/
   image: registry.gitlab.com/manticoresearch/dev/xenial_cmake314:latest
@@ -212,6 +218,7 @@ bionic:
     DISTR: "bionic"
   only:
     variables:
+      - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /bionic/
   image: registry.gitlab.com/manticoresearch/dev/bionic_cmake314:latest
@@ -223,12 +230,29 @@ buster:
     XTRAFLAGS: "-DCMAKE_CXX_FLAGS=\"-Wno-error=stringop-truncation\""
   only:
     variables:
+      - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /buster/
   image: registry.gitlab.com/manticoresearch/dev/buster_cmake314:latest
 
+
+# collect only on demand
+
+collect_repo:
+  stage: publish
+  rules:
+    - when: manual
+  allow_failure: true
+  tags:
+    - dev-host
+  script:
+    - echo "Collected packages"
+    - ls -1
+    - ~/upload_repo.sh
+
 # collect artifacts from all previous jobs.
 # m.b. it has sense to also publish them in one click to github release?
+
 collect:
   stage: publish
   only:
@@ -236,11 +260,14 @@ collect:
       - $WHAT == "all"
       - $WHAT =~ /collect/
   dependencies: [tarball, osx, windows, rhel6, rhel7, rhel8, jessie, stretch, trusty, xenial, bionic, buster]
+  tags:
+    - dev-host
   variables:
     GIT_STRATEGY: none
   script:
     - echo "Collected packages"
     - ls -1
+    - ~/upload_repo.sh
   artifacts:
     paths:
       - manticore*

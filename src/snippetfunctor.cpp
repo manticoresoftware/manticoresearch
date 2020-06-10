@@ -1198,7 +1198,7 @@ void PassageHighlighter_c::EmitSpaces ( int iStart, int iLen, int iBoundary )
 
 void PassageHighlighter_c::UpdatePassage ( int iStart )
 {
-	const Passage_t * pPassage = *(m_dPassages.Begin()+m_iCurPassage);
+	const Passage_t * pPassage = ( m_iCurPassage==-1 ) ? nullptr : *( m_dPassages.Begin ()+m_iCurPassage );
 
 	int iPassage = m_iCurPassage;
 	if ( m_iCurPassage==-1 || m_iCurToken<pPassage->m_iStart || m_iCurToken>( pPassage->m_iStart + pPassage->m_iTokens - 1 ) )

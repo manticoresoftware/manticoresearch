@@ -1643,15 +1643,9 @@ public:
 // MISC FUNCTION PROTOTYPES
 //////////////////////////////////////////////////////////////////////////
 
-struct SphStringSorterRemap_t
-{
-	CSphAttrLocator m_tSrc;
-	CSphAttrLocator m_tDst;
-};
-
 const BYTE *	SkipQuoted ( const BYTE * p );
 
-bool			sphSortGetStringRemap ( const ISphSchema & tSorterSchema, const ISphSchema & tIndexSchema, CSphVector<SphStringSorterRemap_t> & dAttrs );
+int 			GetStringRemapCount ( const ISphSchema & tDstSchema, const ISphSchema & tSrcSchema );
 bool			IsSortStringInternal ( const CSphString& sColumnName );
 /// make string lowercase but keep case of JSON.field
 void			sphColumnToLowercase ( char * sVal );
@@ -2252,23 +2246,6 @@ protected:
 };
 
 
-class MatchesToNewSchema_c : public ISphMatchProcessor
-{
-public:
-							MatchesToNewSchema_c ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema );
-	void					Process ( CSphMatch * pMatch ) final;
-
-private:
-	const ISphSchema *		m_pOldSchema;
-	const ISphSchema *		m_pNewSchema;
-	CSphVector<CSphAttrLocator>	m_dNewAttrs;
-	CSphVector<int>			m_dOld2New;
-	CSphVector<SphStringSorterRemap_t> m_dRemapStringCmp;
-
-	virtual const BYTE *	GetBlobPool ( const CSphMatch * pMatch ) = 0;
-};
-
-
 struct StoredToken_t
 {
 	BYTE			m_sToken [3*SPH_MAX_WORD_LEN+4];
@@ -2298,7 +2275,6 @@ uint64_t sphCalcExprDepHash ( const char * szTag, ISphExpr * pExpr, const ISphSc
 uint64_t sphCalcExprDepHash ( ISphExpr * pExpr, const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable );
 
 void sphFixupLocator ( CSphAttrLocator & tLocator, const ISphSchema * pOldSchema, const ISphSchema * pNewSchema );
-ISphSchema * sphCreateStandaloneSchema ( const ISphSchema * pSchema, const VecTraits_T<CSphString> & dTransformed );
 
 // internals attributes are last no need to send them
 void sphGetAttrsToSend ( const ISphSchema & tSchema, bool bAgentMode, bool bNeedId, CSphBitvec & tAttrs );

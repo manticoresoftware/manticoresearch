@@ -291,6 +291,8 @@ SphThread_t makeTinyThread ( Handler tHandler, int iNum=0, const char * sName="m
 
 		static void Do ( void * pTr )
 		{
+			CrashQuery_t tQueryTLS;
+			SphCrashLogger_c::SetTopQueryTLS ( &tQueryTLS );
 			auto * pThis = (TinyThread_t *) pTr;
 			szName = pThis->m_szName;
 			iNumber = pThis->m_iNumber;

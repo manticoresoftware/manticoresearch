@@ -2933,6 +2933,7 @@ struct ISphMatchProcessor
 	virtual void Process ( CSphMatch * pMatch ) = 0;
 };
 
+using fnGetBlobPoolFromMatch = std::function< const BYTE* ( const CSphMatch * )>;
 
 /// generic match sorter interface
 class ISphMatchSorter
@@ -3026,9 +3027,12 @@ public:
 
 	const CSphMatchComparatorState& GetComparatorState() const { return m_tState; }
 
-	// set attributes list these should copied into result set \ final matches
+	/// set attributes list these should copied into result set \ final matches
 	void							SetFilteredAttrs ( const sph::StringSet & hAttrs );
-	const VecTraits_T<CSphString> &	GetFilteredAttrs() const { return m_dTransormed; }
+
+	/// transform collected matches into standalone (copy all pooled attrs to ptrs, drop unused)
+	/// param fnBlobPoolFromMatch provides pool pointer from currently processed match pointer.
+	void TransformPooled2StandalonePtrs ( fnGetBlobPoolFromMatch fnBlobPoolFromMatch );
 };
 
 struct CmpPSortersByRandom_fn
@@ -3449,7 +3453,7 @@ struct CSphAttrUpdateEx
 	int						m_iAffected = 0;		///< num of updated rows.
 };
 
-struct SphQueueSettings_t : public ISphNoncopyable
+struct SphQueueSettings_t
 {
 	const ISphSchema &			m_tSchema;
 	CSphQueryProfile *			m_pProfiler;
@@ -3460,7 +3464,7 @@ struct SphQueueSettings_t : public ISphNoncopyable
 	const CSphFilterSettings *	m_pAggrFilter = nullptr;
 	int							m_iMaxMatches = DEFAULT_MAX_MATCHES;
 
-	SphQueueSettings_t ( const ISphSchema & tSchema, CSphQueryProfile * pProfiler = nullptr )
+	explicit SphQueueSettings_t ( const ISphSchema & tSchema, CSphQueryProfile * pProfiler = nullptr )
 		: m_tSchema ( tSchema )
 		, m_pProfiler ( pProfiler )
 	{}

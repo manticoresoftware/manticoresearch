@@ -5875,44 +5875,18 @@ public:
 	}
 };
 
-
-class RTMatchesToNewSchema_c : public MatchesToNewSchema_c
-{
-public:
-	RTMatchesToNewSchema_c ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema, const SphChunkGuard_t & tGuard, const CSphVector<const BYTE *> & dDiskBlobPools )
-		: MatchesToNewSchema_c ( pOldSchema, pNewSchema )
-		, m_tGuard ( tGuard )
-		, m_dDiskBlobPools ( dDiskBlobPools )
-	{}
-
-private:
-	const SphChunkGuard_t &				m_tGuard;
-	const CSphVector<const BYTE *> &	m_dDiskBlobPools;
-
-	virtual const BYTE * GetBlobPool ( const CSphMatch * pMatch ) override
-	{
-		int nRamChunks = m_tGuard.m_dRamChunks.GetLength();
-		int iChunkId = pMatch->m_iTag-1;
-		if ( iChunkId < nRamChunks )
-			return m_tGuard.m_dRamChunks[iChunkId]->m_dBlobs.Begin();
-
-		return m_dDiskBlobPools[iChunkId-nRamChunks];
-	}
-};
-
-
 static void TransformSorterSchema ( ISphMatchSorter * pSorter, const SphChunkGuard_t & tGuard, const CSphVector<const BYTE *> & dDiskBlobPools )
 {
 	assert ( pSorter );
+	pSorter->TransformPooled2StandalonePtrs([&] ( const CSphMatch * pMatch )
+	{
+		int nRamChunks = tGuard.m_dRamChunks.GetLength ();
+		int iChunkId = pMatch->m_iTag-1;
+		if ( iChunkId<nRamChunks )
+			return (const BYTE *) tGuard.m_dRamChunks[iChunkId]->m_dBlobs.Begin ();
 
-	const ISphSchema * pOldSchema = pSorter->GetSchema();
-	ISphSchema * pNewSchema =  sphCreateStandaloneSchema ( pOldSchema, pSorter->GetFilteredAttrs() );
-	assert ( pOldSchema && pNewSchema );
-
-	RTMatchesToNewSchema_c fnFinal ( pOldSchema, pNewSchema, tGuard, dDiskBlobPools );
-	pSorter->Finalize ( fnFinal, false );
-
-	pSorter->SetSchema ( pNewSchema, true );
+		return dDiskBlobPools[iChunkId-nRamChunks];
+	});
 }
 
 SphChunkGuard_t RtIndex_c::GetReaderChunks () const

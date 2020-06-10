@@ -306,8 +306,7 @@ TEST_P ( RTN, WeightBoundary )
 	tQuery.m_sQuery = "@title cat";
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
 
-	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema (), nullptr );
-	tQueueSettings.m_iMaxMatches = DEFAULT_MAX_MATCHES;
+	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema () );
 	SphQueueRes_t tRes;
 	ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, tResult.m_sError, tRes, nullptr );
 	ASSERT_TRUE ( pSorter );
@@ -411,9 +410,8 @@ TEST_F ( RT, RankerFactors )
 	CSphMultiQueryArgs tArgs ( 1 );
 	tArgs.m_uPackedFactorFlags = SPH_FACTOR_ENABLE | SPH_FACTOR_CALC_ATC;
 
-	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema (), nullptr );
+	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema () );
 	tQueueSettings.m_bComputeItems = true;
-	tQueueSettings.m_iMaxMatches = DEFAULT_MAX_MATCHES;
 	SphQueueRes_t tRes;
 
 	for ( auto szQuery : dQueries )
@@ -567,8 +565,7 @@ TEST_F ( RT, SendVsMerge )
 	tQuery.m_sQuery = "@title cat";
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
 
-	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema (), nullptr );
-	tQueueSettings.m_iMaxMatches = DEFAULT_MAX_MATCHES;
+	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema () );
 	SphQueueRes_t tRes;
 	auto pSorter = sphCreateQueue ( tQueueSettings, tQuery, tResult.m_sError, tRes, nullptr );
 	ASSERT_TRUE ( pSorter );

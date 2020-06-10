@@ -56,8 +56,7 @@ void DoSearch ( CSphIndex * pIndex )
 	tQuery.m_sQuery = "@title cat";
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser ();
 
-	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema(), nullptr );
-	tQueueSettings.m_iMaxMatches = DEFAULT_MAX_MATCHES;
+	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema() );
 	CSphString sError;
 	SphQueueRes_t tRes;
 	ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, sError, tRes, nullptr );

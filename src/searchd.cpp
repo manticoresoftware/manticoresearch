@@ -5520,27 +5520,9 @@ int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, VecTraits_T
 		if ( !pSorter )
 			continue;
 
-			tQuery.m_bZSlist = tQueueRes.m_bZonespanlist;
-			dSorters[iQuery-m_iStart] = pSorter;
-			++iValidSorters;
-		}
-	} else
-	{
-		CSphString sError;
-		SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema(), m_pProfile );
-		tQueueSettings.m_bComputeItems = true;
-		tQueueSettings.m_pUpdate = m_pUpdates;
-		tQueueSettings.m_pCollection = m_pDelDocs;
-		tQueueSettings.m_pHook = &m_tHook;
-		tQueueSettings.m_iMaxMatches = GetMaxMatches ( m_dQueries[m_iStart].m_iMaxMatches, pIndex );
-
-		const VecTraits_T<CSphQuery> & dQueries = m_dQueries.Slice ( m_iStart );
-		sphCreateMultiQueue ( tQueueSettings, dQueries, dSorters, dErrors, tQueueRes, dExtraSchemas );
-
-		m_dQueries[m_iStart].m_bZSlist = tQueueRes.m_bZonespanlist;
-		dSorters.Apply ( [&iValidSorters] ( const ISphMatchSorter * pSorter ) { if ( pSorter ) ++iValidSorters; } );
-		if ( m_bFacetQueue && iValidSorters<dSorters.GetLength() )
-			iValidSorters = 0;
+		tQuery.m_bZSlist = tQueueRes.m_bZonespanlist;
+		dSorters[iQuery-m_iStart] = pSorter;
+		++iValidSorters;
 	}
 	return iValidSorters;
 }

@@ -268,7 +268,7 @@ namespace logdetail {
 	int number() { return iNumber; }
 }
 
-void AddDetachedThread ( SphThread_t tThread );
+void AddDetachedThread ( SphThread_t tThread, CSphString sName, int iTid );
 void RemoveDetachedThread ( SphThread_t tThread );
 
 #define LOG_COMPONENT_MT "(" << GetOsThreadId() << ") " << logdetail::name() << "#" << logdetail::number() << ": "
@@ -933,7 +933,6 @@ class AloneThread_c final : public Scheduler_i
 	Service_t m_tService;
 	std::atomic<bool> m_bStarted {false};
 	static int m_iRunners;
-	SphThread_t	m_tMyThread;
 
 	template<typename F>
 	void Post ( F && f, bool bVip=false )
@@ -947,16 +946,17 @@ class AloneThread_c final : public Scheduler_i
 		if ( !m_bStarted )
 		{
 			m_bStarted = true;
-			m_tMyThread = makeTinyThread ( [this] { loop (); }, m_iThreadNum, m_sName.cstr (), true );
-			Threads::AddDetachedThread ( m_tMyThread );
+			makeTinyThread ( [this] { loop (); }, m_iThreadNum, m_sName.cstr (), true );
+
 			LOG ( DEBUG, TP ) << "alone thread created";
 		}
 	}
 
 	void loop ()
 	{
+		Threads::AddDetachedThread ( sphThreadSelf (), m_sName, GetOsThreadId() );
 		m_tService.run ();
-		Threads::RemoveDetachedThread ( m_tMyThread );
+		Threads::RemoveDetachedThread ( sphThreadSelf () );
 		delete this;
 	}
 
@@ -1119,8 +1119,16 @@ Threads::Scheduler_i * GetAloneScheduler ( int iMaxThreads, const char * szName 
 	return new Threads::AloneThread_c ( iOrder++, szName? szName: "alone" );
 }
 
+struct LowThreadDesc_t
+{
+	SphThread_t m_tThread;
+	int 		m_iThreadID;
+	CSphString	m_sThreadName;
+//	LowThreadDesc_t ( SphThread_t tThread, int )
+};
+
 CSphMutex g_dDetachedGuard;
-CSphVector<SphThread_t> g_dDetachedThreads GUARDED_BY (g_dDetachedGuard);
+CSphVector<LowThreadDesc_t> g_dDetachedThreads GUARDED_BY (g_dDetachedGuard);
 
 void Threads::AloneShutdowncatch ()
 {
@@ -1129,50 +1137,78 @@ void Threads::AloneShutdowncatch ()
 	if ( !bShutdownEngaged )
 	{
 		bShutdownEngaged = true;
-		searchd::AddShutdownCb ( [&]
+		searchd::AddShutdownCb ( [&] ()
 		{
-			sphLogDebug ( "AloneShutdowncatch catch invoked" );
-			bool bAloneFinished;
+			auto iThreads = g_dDetachedThreads.GetLength();
+			int iTurn = 1;
+			do
 			{
-				ScopedMutex_t _ ( g_dDetachedGuard );
-				for ( auto& tThread : g_dDetachedThreads )
-					pthread_kill ( tThread, SIGTERM );
-				bAloneFinished = g_dDetachedThreads.IsEmpty ();
-			}
-
-			auto iReport = 1000;
-			auto iStart = 0;
-
-			while (!bAloneFinished)
-			{
-				sphSleepMsec ( 50 );
-				ScopedMutex_t _ ( g_dDetachedGuard );
-				bAloneFinished = g_dDetachedThreads.IsEmpty();
-				iStart += 50;
-				if ( iStart >= iReport )
+				CSphVector<LowThreadDesc_t> dToKill;
 				{
-					sphLogDebug ( "AloneShutdowncatch catch still has %d alone threads", g_dDetachedThreads.GetLength() );
-					iStart = 0;
-					iReport += 1000;
+					ScopedMutex_t _ ( g_dDetachedGuard );
+					dToKill = g_dDetachedThreads;
 				}
-			}
+
+				if ( !iThreads )
+					break;
+
+				sphWarning ( "AloneShutdowncatch will kill %d threads", iThreads );
+
+				for ( auto & tThread : dToKill )
+				{
+					sphInfo ("Kill thread '%s' with id %d, try %d",
+							tThread.m_sThreadName.cstr(), tThread.m_iThreadID, iTurn );
+					pthread_kill ( tThread.m_tThread, SIGTERM );
+				}
+
+
+				auto iStart = 0;
+				while (true)
+				{
+					{
+						ScopedMutex_t _ ( g_dDetachedGuard );
+						iThreads = g_dDetachedThreads.GetLength ();
+					}
+					if ( iThreads<=0 )
+							break;
+
+					sphSleepMsec ( 50 );
+					iStart += 50;
+					if ( iStart>=10000 ) // wait 10 seconds between tries
+					{
+						sphWarning ( "AloneShutdowncatch catch still has %d alone threads", iThreads );
+						break;
+					}
+				}
+
+				++iTurn;
+			} while ( iThreads>0 );
 		});
 	}
 #endif
 }
 
-void Threads::AddDetachedThread ( SphThread_t tThread )
+void Threads::AddDetachedThread ( SphThread_t tThread, CSphString sName, int iTid )
 {
-	sphLogDebug ( "AddDetachedThread called for %d", (int) GetOsThreadId() );
-	ScopedMutex_t _ (g_dDetachedGuard);
-	g_dDetachedThreads.Add (tThread);
+	ScopedMutex_t _ ( g_dDetachedGuard );
+	sphLogDebug ( "AddDetachedThread called for '%s', tid %d", sName.cstr(), iTid );
+	g_dDetachedThreads.Add ( { tThread, iTid, std::move ( sName ) } );
 }
 
 void Threads::RemoveDetachedThread ( SphThread_t tThread )
 {
 	sphLogDebug ( "RemoveDetachedThread called for %d", (int) GetOsThreadId () );
 	ScopedMutex_t _ ( g_dDetachedGuard );
-	g_dDetachedThreads.RemoveValue ( tThread );
+	ARRAY_FOREACH ( i, g_dDetachedThreads )
+	{
+		if ( sphSameThreads ( g_dDetachedThreads[i].m_tThread, tThread ) )
+		{
+			sphLogDebug ( "Terminated thread %d, '%s'",
+					g_dDetachedThreads[i].m_iThreadID, g_dDetachedThreads[i].m_sThreadName.cstr () );
+			g_dDetachedThreads.RemoveFast ( i );
+			return;
+		}
+	}
 }
 
 

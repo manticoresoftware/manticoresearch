@@ -3764,6 +3764,12 @@ CSphString GetThreadName ( const SphThread_t * pThread );
 /// my join thread wrapper
 bool sphThreadJoin ( SphThread_t * pThread );
 
+/// my own thread
+SphThread_t sphThreadSelf ();
+
+/// compares two thread ids
+bool sphSameThreads ( SphThread_t first, SphThread_t second );
+
 /// add (cleanup) callback to run on thread exit
 void sphThreadOnExit ( void (*fnCleanup)(void*), void * pArg );
 

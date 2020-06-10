@@ -1036,6 +1036,27 @@ bool sphThreadJoin ( SphThread_t * pThread )
 #endif
 }
 
+
+SphThread_t sphThreadSelf ()
+{
+#if USE_WINDOWS
+	return GetCurrentThreadId();
+#else
+	return pthread_self ();
+#endif
+}
+
+
+bool sphSameThreads ( SphThread_t first, SphThread_t second )
+{
+#if USE_WINDOWS
+	return first==second;
+#else
+	return !!pthread_equal (first, second);
+#endif
+}
+
+
 // Adds a function call (a new task for a wrapper) to a linked list
 // of thread contexts. They will be executed one by one right after
 // the main thread ends its execution. This is a way for a wrapper

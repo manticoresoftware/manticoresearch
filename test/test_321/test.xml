@@ -72,10 +72,10 @@ index pq_stem
 
 
 <sphqueries>
-<sphinxql>INSERT INTO pq VALUES ( 'test' )</sphinxql>
-<sphinxql>INSERT INTO pq VALUES ( 'test | cat' )</sphinxql>
-<sphinxql>INSERT INTO pq VALUES ( 'tes*' )</sphinxql>
-<sphinxql>INSERT INTO pq VALUES ( '*ik*' )</sphinxql>
+<sphinxql>INSERT INTO pq (query) VALUES ( 'test' )</sphinxql>
+<sphinxql>INSERT INTO pq (query) VALUES ( 'test | cat' )</sphinxql>
+<sphinxql>INSERT INTO pq (query) VALUES ( 'tes*' )</sphinxql>
+<sphinxql>INSERT INTO pq (query) VALUES ( '*ik*' )</sphinxql>
 <sphinxql>CALL PQ ('pq', 'test 1', 1 as docs, 0 as docs_json )</sphinxql>
 <sphinxql>CALL PQ ('pq', 'cat like me', 1 as docs, 0 as docs_json )</sphinxql>
 <sphinxql>CALL PQ ('pq', ('test of many fields goes on', 'many fields join together for testik'), 1 as docs, 0 as docs_json )</sphinxql>
@@ -84,7 +84,7 @@ index pq_stem
 <sphinxql>CALL PQ ('pq', ('{"title":"testik goes on"}', '{"title":"cat but not dog"}'), 1 as docs, 1 as docs_json )</sphinxql>
 
 <!-- query with position terms -->
-<sphinxql>INSERT INTO pq VALUES ( '"butter is"' )</sphinxql>
+<sphinxql>INSERT INTO pq (query) VALUES ( '"butter is"' )</sphinxql>
 <sphinxql>CALL PQ ('pq', ('{"title":"butter is good as"}', '{"title":"is butter"}'), 1 as docs, 1 as docs_json )</sphinxql>
 
 <!-- query management by tags -->
@@ -151,9 +151,9 @@ index pq_stem
 <sphinxql>SELECT * FROM pq WHERE tags not any ('city')</sphinxql>
 
 <!-- JSON field id to document uid -->
-<sphinxql>INSERT INTO pq VALUES ( 'butter is' )</sphinxql>
-<sphinxql>INSERT INTO pq VALUES ( 'butter was' )</sphinxql>
-<sphinxql>INSERT INTO pq VALUES ( 'filter test' )</sphinxql>
+<sphinxql>INSERT INTO pq (query) VALUES ( 'butter is' )</sphinxql>
+<sphinxql>INSERT INTO pq (query) VALUES ( 'butter was' )</sphinxql>
+<sphinxql>INSERT INTO pq (query) VALUES ( 'filter test' )</sphinxql>
 <sphinxql>CALL PQ ('pq', ('{"title":"butter is good as", "id":3}', '{"title":"was butter", "id":4}', '{"title":"sas was butter", "id":5}', '{"title":"bas was butter", "id":10}', '{"title":"butter is good as", "id":11}'), 1 as docs, 1 as docs_json, 1 as query, 'id' as docs_id )</sphinxql>
 <sphinxql>CALL PQ ('pq', ('{"title":"filter test | is", "gid":2, "id":3 }', '{"title":"filter test | was", "gid":13, "id":10}'), 1 as docs, 1 as docs_json, 1 as query, 'id' as docs_id )</sphinxql>
 
@@ -166,7 +166,7 @@ index pq_stem
 <sphinxql>CALL PQ ('pq_filter1', ('{"title":"filter test coming", "j":{"gid":3, "viw":3}, "s":"more", "x":"less", "id":1}', '{"title":"filter test passed", "j":{"gid":1, "viw":1}, "s":"no more", "x":"less too", "id":2}', '{"title":"filter test was", "j":{"gid":12, "viw":12}, "s":"more", "x":"less", "id":3}', '{"title":"filter test coming", "j":{"gid":13, "viw":13}, "s":"more or less", "x":"less too", "id":4}', '{"title":"filter test coming", "j":{"gid":11, "viw":11}, "s":"more", "x":"less", "id":5}'), 1 as docs, 1 as docs_json, 1 as query, 'id' as docs_id )</sphinxql>
 
 <!-- JSON duplicates or groups at id field-->
-<sphinxql>INSERT INTO pq VALUES ( 'butter' )</sphinxql>
+<sphinxql>INSERT INTO pq (query) VALUES ( 'butter' )</sphinxql>
 <sphinxql>CALL PQ ('pq', ('{"title":"butter is good as", "group_id":3}', '{"title":"was butter", "group_id":4}', '{"title":"sas was butter", "group_id":3}', '{"title":"bas was butter", "group_id":3}', '{"title":"butter is good as", "group_id":5}'), 1 as docs, 1 as docs_json, 1 as query, 'group_id' as docs_id )</sphinxql>
 
 <!-- negative id field-->
@@ -179,7 +179,7 @@ index pq_stem
 <sphinxql>CALL PQ ('pq_filter1', ('{"title":"orange", "j":{ "price":5 } }', '{"title":"orange", "j":{ "price":3 } }', '{"title":"orange", "j":{ "tag":5 } }', '{"title":"orange", "j":{ "tag":["test"] } }' ), 1 as docs, 1 as docs_json, 1 as query )</sphinxql>
 
 <!-- wildcard vs batch of docs -->
-<sphinxql>INSERT INTO pq_wild1 VALUES ( 'a* b*' )</sphinxql>
+<sphinxql>INSERT INTO pq_wild1 (query) VALUES ( 'a* b*' )</sphinxql>
 <sphinxql>CALL PQ ('pq_wild1', ('{"title":"abc"}','{"title":"acc"}','{"title":"be ce acc"}','{"title":"abc"}'), 1 as docs, 1 as docs_json, 1 as query )</sphinxql>
 
 <!-- MVA filter -->
@@ -224,8 +224,8 @@ index pq_stem
 <sphinxql>select id, count(*) c, tags from pq_mva group by tags</sphinxql>
 
 <!-- regression stemmed terms missed -->
-<sphinxql>INSERT INTO pq_stem VALUES ( 'проверка' )</sphinxql>
-<sphinxql>INSERT INTO pq_stem VALUES ( 'проверки' )</sphinxql>
+<sphinxql>INSERT INTO pq_stem (query) VALUES ( 'проверка' )</sphinxql>
+<sphinxql>INSERT INTO pq_stem (query) VALUES ( 'проверки' )</sphinxql>
 <sphinxql>CALL PQ ('pq_stem', 'была проверка', 1 as docs, 0 as docs_json )</sphinxql>
 <sphinxql>CALL PQ ('pq_stem', 'проверки делом', 1 as docs, 0 as docs_json )</sphinxql>
 </sphqueries>

@@ -44,9 +44,9 @@ searchd
 	create table pq3 type='pq';
 	create cluster test;
 	ALTER CLUSTER test ADD pq1;
-	INSERT INTO test:pq1 VALUES('test 1');
-	INSERT INTO test:pq1 VALUES('test 2');
-	INSERT INTO test:pq1 VALUES('test 3');
+	INSERT INTO test:pq1 (query) VALUES('test 1');
+	INSERT INTO test:pq1 (query) VALUES('test 2');
+	INSERT INTO test:pq1 (query) VALUES('test 3');
 </sphinxql>
 <!-- request to node 1 -->
 <sphinxql d="1" cluster_connect="0">
@@ -63,7 +63,7 @@ searchd
 
 <!-- stream to node 0 -->
 <sphinxql d="0">
-	INSERT INTO test:pq1 VALUES('test 11');
+	INSERT INTO test:pq1 (query) VALUES('test 11');
 </sphinxql>
 
 <!-- start node 2 and check changes from node 0 are here-->
@@ -78,7 +78,7 @@ searchd
 <sphinxql d="1" system="wait-ready" cluster="test"/>
 <sphinxql d="1">
 	SELECT * FROM test:pq1;
-	INSERT INTO test:pq1 VALUES('test 12');
+	INSERT INTO test:pq1 (query) VALUES('test 12');
 </sphinxql>
 
 <!-- stream to node 2 -->

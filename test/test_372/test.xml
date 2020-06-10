@@ -57,11 +57,11 @@ searchd
 
 <!-- stream to node 0 -->
 <sphinxql d="0">
-	INSERT INTO pq1 VALUES('test 101');
-	INSERT INTO test:pq1 VALUES('test none');
-	INSERT INTO pq1 VALUES('test 102');
-	INSERT INTO pq1 VALUES('test 103');
-	INSERT INTO pq2 VALUES('test 201');
+	INSERT INTO pq1 (query) VALUES('test 101');
+	INSERT INTO test:pq1 (query) VALUES('test none');
+	INSERT INTO pq1 (query) VALUES('test 102');
+	INSERT INTO pq1 (query) VALUES('test 103');
+	INSERT INTO pq2 (query) VALUES('test 201');
 	SELECT * FROM pq1;
 	ALTER CLUSTER test ADD pq10;
 	ALTER CLUSTER test DROP pq2;
@@ -75,9 +75,9 @@ searchd
 	SHOW TABLES;
 	SELECT * FROM pq1;
 	SELECT * FROM pq2;
-	INSERT INTO test:pq1 VALUES('test 110');
-	INSERT INTO test:pq1 VALUES('test 111');
-	INSERT INTO test:pq2 VALUES('test 210');
+	INSERT INTO test:pq1 (query) VALUES('test 110');
+	INSERT INTO test:pq1 (query) VALUES('test 111');
+	INSERT INTO test:pq2 (query) VALUES('test 210');
 	SELECT * FROM pq1;
 	SELECT * FROM pq2;
 </sphinxql>
@@ -95,9 +95,9 @@ searchd
 
 <!-- stream to node 0 -->
 <sphinxql d="0">
-	INSERT INTO test:pq1 VALUES('test 120');
-	INSERT INTO test:pq1 VALUES('test 121');
-	INSERT INTO test:pq2 VALUES('test 222');
+	INSERT INTO test:pq1 (query) VALUES('test 120');
+	INSERT INTO test:pq1 (query) VALUES('test 121');
+	INSERT INTO test:pq2 (query) VALUES('test 222');
 	SHOW TABLES;
 	SELECT * FROM pq1;
 	SELECT * FROM pq2;
@@ -122,9 +122,9 @@ searchd
 <!-- stream to node 0 -->
 <sphinxql d="0" system="wait-status" status="cluster_test_last_committed" wait_value="8"/>
 <sphinxql d="0">
-	INSERT INTO test:pq1 VALUES('test 130');
+	INSERT INTO test:pq1 (query) VALUES('test 130');
 	DELETE FROM test:pq1 WHERE id=3;
-	INSERT INTO test:pq2 VALUES('test 232');
+	INSERT INTO test:pq2 (query) VALUES('test 232');
 </sphinxql>
 
 <!-- stream to node 1 -->
@@ -142,8 +142,8 @@ searchd
 <sphinxql d="2">
 	SELECT * FROM pq2;
 	ALTER CLUSTER test DROP pq2;
-	INSERT INTO test:pq2 VALUES('test 240');
-	INSERT INTO pq2 VALUES('test 250');
+	INSERT INTO test:pq2 (query) VALUES('test 240');
+	INSERT INTO pq2 (query) VALUES('test 250');
 </sphinxql>
 <sphinxql d="2" cluster_path="nextc">
 	create cluster nextc '%cluster_path%' as path;
@@ -157,7 +157,7 @@ searchd
 	join cluster nextc '%addr_connect%' as nodes, '%cluster_path%' as path
 </sphinxql>
 <sphinxql d="0">
-	INSERT INTO nextc:pq2 VALUES('test 241');
+	INSERT INTO nextc:pq2 (query) VALUES('test 241');
 	SELECT * FROM pq2;
 </sphinxql>
 
@@ -166,7 +166,7 @@ searchd
 <sphinxql d="1" system="wait-status" status="cluster_test_last_committed" wait_value="13"/>
 <sphinxql d="1">
 	SELECT * FROM pq2;
-	INSERT INTO nextc:pq2 VALUES('test 242');
+	INSERT INTO nextc:pq2 (query) VALUES('test 242');
 </sphinxql>
 
 <!-- stream to node 2 -->

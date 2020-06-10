@@ -69,12 +69,10 @@ searchd
 	select * from test5 where match('indexed3');
 	drop table test5;
 
-	<!-- example creating pq -->
-
 	create table pq1 ( title text ) type='pq';
 	show tables;
-	insert into pq1 values('test');
-	insert into pq1 values( 'test | cat' );
+	insert into pq1 (query) values('test');
+	insert into pq1 (query) values( 'test | cat' );
 	call pq ('pq1', 'test 1', 1 as docs, 0 as docs_json );
 
 	drop table pq1;

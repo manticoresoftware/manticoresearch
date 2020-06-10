@@ -40,5 +40,11 @@ index pq1
 	<sphinxql>select LAST_INSERT_ID()</sphinxql>
 	<sphinxql>insert into rt1 (gid, title) values (131, 'test 131')</sphinxql>
 	<sphinxql>select @@session.last_insert_id</sphinxql>
+    
+    <!-- regression auto-generated id for 0 ID -->
+    <sphinxql>insert into rt1 (id, gid, title) values (0, 301, 'test 301'), (0, 321, 'test 321')</sphinxql>
+    <sphinxql>select * from rt1 order by id desc</sphinxql>
+    <sphinxql>insert into pq1 (id, query) values (0, 'test 301'), (0, 'test 321')</sphinxql>
+    <sphinxql>select * from pq1 order by id desc</sphinxql>
 </sphqueries>	
 </test>

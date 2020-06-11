@@ -45,7 +45,7 @@ $g_ssl = false;
 
 $windows = isset($_SERVER["WINDIR"]) || isset($_SERVER["windir"]) || isset($_SERVER["HOMEDRIVE"]);
 $action_retries			= 20;
-$valgrind_action_retries	= 80;
+$valgrind_action_retries	= 200;
 $action_wait_timeout	= 50000;
 
 $g_locals = null;

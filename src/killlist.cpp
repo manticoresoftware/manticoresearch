@@ -110,10 +110,10 @@ void DeadRowMap_Ram_c::Save ( CSphWriter & tWriter ) const
 
 DWORD DeadRowMap_Ram_c::GetNumAlive() const
 {
+	DWORD uElems = ( m_uRows+31 ) >> 5U;
 	DWORD nAlive = 0;
-	for ( DWORD i = 0; i < m_uRows; i++ )
-		if ( !IsSet(i) )
-			nAlive++;
+	for ( DWORD i = 0; i <uElems; ++i )
+		nAlive += sphBitCount (m_dData[i]);
 
 	return nAlive;
 }

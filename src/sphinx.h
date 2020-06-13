@@ -929,6 +929,11 @@ struct CSphWordHit
 	Hitpos_t	m_uWordPos = EMPTY_HIT;		///< word position in current document
 };
 
+inline bool operator== ( const CSphWordHit& lhs, const CSphWordHit& rhs )
+{
+	return lhs.m_tRowID==rhs.m_tRowID && lhs.m_uWordID==rhs.m_uWordID && lhs.m_uWordPos == rhs.m_uWordPos;
+}
+
 
 /// attribute locator within the row
 struct CSphAttrLocator
@@ -1692,40 +1697,7 @@ protected:
 /// hit vector interface
 /// because specific position type might vary (dword, qword, etc)
 /// but we don't want to template and instantiate everything because of that
-class ISphHits
-{
-public:
-	int Length () const
-	{
-		return m_dData.GetLength();
-	}
-
-	const CSphWordHit * First () const
-	{
-		return m_dData.Begin();
-	}
-
-	const CSphWordHit * Last () const
-	{
-		return &m_dData.Last();
-	}
-
-	void AddHit ( RowID_t tRowID, SphWordID_t uWordid, Hitpos_t uPos )
-	{
-		if ( uWordid )
-		{
-			CSphWordHit & tHit = m_dData.Add();
-			tHit.m_tRowID = tRowID;
-			tHit.m_uWordID = uWordid;
-			tHit.m_uWordPos = uPos;
-			assert ( uPos>0 );
-		}
-	}
-
-public:
-	CSphVector<CSphWordHit> m_dData;
-};
-
+using ISphHits = CSphVector<CSphWordHit>;
 
 /// field filter
 class ISphFieldFilter : public ISphRefcountedMT
@@ -1949,7 +1921,7 @@ protected:
 	bool					CheckFileField ( const BYTE * sField );
 	int						LoadFileField ( BYTE ** ppField, CSphString & sError );
 
-	bool					BuildZoneHits ( RowID_t tRowID, BYTE * sWord );
+	bool					BuildZoneHits ( RowID_t tRowID, BYTE uCode );
 	void					BuildSubstringHits ( RowID_t tRowID, bool bPayload, ESphWordpart eWordpart, bool bSkipEndMarker );
 	void					BuildRegularHits ( RowID_t tRowID, bool bPayload, bool bSkipEndMarker );
 

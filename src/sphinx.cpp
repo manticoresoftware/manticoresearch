@@ -11089,7 +11089,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			// store hits
 			while ( const ISphHits * pDocHits = pSource->IterateHits ( m_sLastWarning ) )
 			{
-				int iDocHits = pDocHits->Length();
+				int iDocHits = pDocHits->GetLength();
 #if PARANOID
 				for ( int i=0; i<iDocHits; i++ )
 				{
@@ -11101,7 +11101,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 				assert ( ( pHits+iDocHits )<=( pHitsMax+MAX_SOURCE_HITS ) );
 
-				memcpy ( pHits, pDocHits->First(), iDocHits*sizeof(CSphWordHit) );
+				memcpy ( pHits, pDocHits->Begin(), iDocHits*sizeof(CSphWordHit) );
 				pHits += iDocHits;
 
 				// check if we need to flush
@@ -11207,8 +11207,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				if ( pSource->m_tDocInfo.m_tRowID==INVALID_ROWID )
 					break;
 
-				int iJoinedHits = pJoinedHits->Length();
-				memcpy ( pHits, pJoinedHits->First(), iJoinedHits*sizeof(CSphWordHit) );
+				int iJoinedHits = pJoinedHits->GetLength();
+				memcpy ( pHits, pJoinedHits->Begin(), iJoinedHits*sizeof(CSphWordHit) );
 				pHits += iJoinedHits;
 
 				// check if we need to flush
@@ -22098,7 +22098,7 @@ bool CSphSource_Document::IterateDocument ( bool & bEOF, CSphString & sError )
 	assert ( m_pTokenizer );
 	assert ( !m_tState.m_bProcessingHits );
 
-	m_tHits.m_dData.Resize ( 0 );
+	m_tHits.Resize ( 0 );
 
 	m_tState.Reset();
 	m_tState.m_iEndField = m_iPlainFieldsLength;
@@ -22219,7 +22219,7 @@ ISphHits * CSphSource_Document::IterateHits ( CSphString & sError )
 	if ( m_tState.m_bDocumentDone )
 		return NULL;
 
-	m_tHits.m_dData.Resize ( 0 );
+	m_tHits.Resize ( 0 );
 
 	BuildHits ( sError, false );
 
@@ -22394,47 +22394,50 @@ void CSphSource_Document::AllocDocinfo()
 // HIT GENERATORS
 //////////////////////////////////////////////////////////////////////////
 
-bool CSphSource_Document::BuildZoneHits ( RowID_t tRowID, BYTE * sWord )
+bool CSphSource_Document::BuildZoneHits ( RowID_t tRowID, BYTE uCode )
 {
-	if ( *sWord==MAGIC_CODE_SENTENCE || *sWord==MAGIC_CODE_PARAGRAPH || *sWord==MAGIC_CODE_ZONE )
+	switch (uCode)
 	{
-		m_tHits.AddHit ( tRowID, m_pDict->GetWordID ( (BYTE*)MAGIC_WORD_SENTENCE ), m_tState.m_iHitPos );
-
-		if ( *sWord==MAGIC_CODE_PARAGRAPH || *sWord==MAGIC_CODE_ZONE )
-			m_tHits.AddHit ( tRowID, m_pDict->GetWordID ( (BYTE*)MAGIC_WORD_PARAGRAPH ), m_tState.m_iHitPos );
-
-		if ( *sWord==MAGIC_CODE_ZONE )
-		{
-			BYTE * pZone = (BYTE*) m_pTokenizer->GetBufferPtr();
-			BYTE * pEnd = pZone;
-			while ( *pEnd && *pEnd!=MAGIC_CODE_ZONE )
-			{
-				pEnd++;
-			}
-
-			if ( *pEnd && *pEnd==MAGIC_CODE_ZONE )
-			{
-				*pEnd = '\0';
-				m_tHits.AddHit ( tRowID, m_pDict->GetWordID ( pZone-1 ), m_tState.m_iHitPos );
-				m_pTokenizer->SetBufferPtr ( (const char*) pEnd+1 );
-			}
-		}
-
+	case MAGIC_CODE_SENTENCE:
+		m_tHits.Add ( { tRowID, m_pDict->GetWordID ( (BYTE *) MAGIC_WORD_SENTENCE ), m_tState.m_iHitPos } );
 		m_tState.m_iBuildLastStep = 1;
 		return true;
+	case MAGIC_CODE_PARAGRAPH:
+		m_tHits.Add ( { tRowID, m_pDict->GetWordID ( (BYTE *) MAGIC_WORD_SENTENCE ), m_tState.m_iHitPos } );
+		m_tHits.Add ( { tRowID, m_pDict->GetWordID ( (BYTE *) MAGIC_WORD_PARAGRAPH ), m_tState.m_iHitPos } );
+		m_tState.m_iBuildLastStep = 1;
+		return true;
+	case MAGIC_CODE_ZONE:
+		m_tHits.Add ( { tRowID, m_pDict->GetWordID ( (BYTE *) MAGIC_WORD_SENTENCE ), m_tState.m_iHitPos } );
+		m_tHits.Add ( { tRowID, m_pDict->GetWordID ( (BYTE *) MAGIC_WORD_PARAGRAPH ), m_tState.m_iHitPos } );
+		{
+			BYTE * pZone = (BYTE *) m_pTokenizer->GetBufferPtr ();
+			BYTE * pEnd = pZone;
+			while ( *pEnd && *pEnd!=MAGIC_CODE_ZONE )
+				++pEnd;
+
+			if ( *pEnd==MAGIC_CODE_ZONE )
+			{
+				*pEnd = '\0';
+				m_tHits.Add ( { tRowID, m_pDict->GetWordID ( pZone-1 ), m_tState.m_iHitPos } );
+				m_pTokenizer->SetBufferPtr ( (const char *) pEnd+1 );
+			}
+		}
+		m_tState.m_iBuildLastStep = 1;
+		return true;
+	default:
+		return false;
 	}
-	return false;
 }
 
 
 // track blended start and reset on not blended token
 static int TrackBlendedStart ( const ISphTokenizer * pTokenizer, int iBlendedHitsStart, int iHitsCount )
 {
-	iBlendedHitsStart = ( ( pTokenizer->TokenIsBlended() || pTokenizer->TokenIsBlendedPart() ) ? iBlendedHitsStart : -1 );
 	if ( pTokenizer->TokenIsBlended() )
-		iBlendedHitsStart = iHitsCount;
+		return iHitsCount;
 
-	return iBlendedHitsStart;
+	return pTokenizer->TokenIsBlendedPart () ? iBlendedHitsStart : -1;
 }
 
 
@@ -22462,10 +22465,10 @@ void CSphSource_Document::BuildSubstringHits ( RowID_t tRowID, bool bPayload, ES
 	int iBlendedHitsStart = -1;
 
 	// index all infixes
-	while ( ( m_iMaxHits==0 || m_tHits.m_dData.GetLength()+iIterHitCount<m_iMaxHits )
+	while ( ( m_iMaxHits==0 || m_tHits.GetLength()+iIterHitCount<m_iMaxHits )
 		&& ( sWord = m_pTokenizer->GetToken() )!=NULL )
 	{
-		int iLastBlendedStart = TrackBlendedStart ( m_pTokenizer, iBlendedHitsStart, m_tHits.Length() );
+		int iLastBlendedStart = TrackBlendedStart ( m_pTokenizer, iBlendedHitsStart, m_tHits.GetLength() );
 
 		if ( !bPayload )
 		{
@@ -22475,7 +22478,7 @@ void CSphSource_Document::BuildSubstringHits ( RowID_t tRowID, bool bPayload, ES
 			m_tState.m_iBuildLastStep = 1;
 		}
 
-		if ( BuildZoneHits ( tRowID, sWord ) )
+		if ( BuildZoneHits ( tRowID, *sWord ) )
 			continue;
 
 		int iLen = m_pTokenizer->GetLastTokenLen ();
@@ -22503,9 +22506,9 @@ void CSphSource_Document::BuildSubstringHits ( RowID_t tRowID, bool bPayload, ES
 		}
 
 		if ( m_bIndexExactWords )
-			m_tHits.AddHit ( tRowID, uExactWordid, m_tState.m_iHitPos );
+			m_tHits.Add ( { tRowID, uExactWordid, m_tState.m_iHitPos } );
 		iBlendedHitsStart = iLastBlendedStart;
-		m_tHits.AddHit ( tRowID, iWord, m_tState.m_iHitPos );
+		m_tHits.Add ( { tRowID, iWord, m_tState.m_iHitPos } );
 		m_tState.m_iBuildLastStep = m_pTokenizer->TokenIsBlended() ? 0 : 1;
 
 		// restore stemmed word
@@ -22514,7 +22517,7 @@ void CSphSource_Document::BuildSubstringHits ( RowID_t tRowID, bool bPayload, ES
 
 		// stemmed word w/o markers
 		if ( strcmp ( (const char *)sBuf + 1, (const char *)sWord ) )
-			m_tHits.AddHit ( tRowID, m_pDict->GetWordID ( sBuf + 1, iStemmedLen - 2, true ), m_tState.m_iHitPos );
+			m_tHits.Add ( { tRowID, m_pDict->GetWordID ( sBuf + 1, iStemmedLen - 2, true ), m_tState.m_iHitPos } );
 
 		// restore word
 		memcpy ( sBuf + 1, sWord, iBytes );
@@ -22525,7 +22528,7 @@ void CSphSource_Document::BuildSubstringHits ( RowID_t tRowID, bool bPayload, ES
 		if ( iMinInfixLen > iLen )
 		{
 			// index full word
-			m_tHits.AddHit ( tRowID, m_pDict->GetWordID ( sWord ), m_tState.m_iHitPos );
+			m_tHits.Add ( { tRowID, m_pDict->GetWordID ( sWord ), m_tState.m_iHitPos } );
 			continue;
 		}
 
@@ -22546,15 +22549,15 @@ void CSphSource_Document::BuildSubstringHits ( RowID_t tRowID, bool bPayload, ES
 
 			for ( int i=iMinInfixLen; i<=iMaxSubLen; i++ )
 			{
-				m_tHits.AddHit ( tRowID, m_pDict->GetWordID ( sInfix, sInfixEnd-sInfix, false ), m_tState.m_iHitPos );
+				m_tHits.Add ( { tRowID, m_pDict->GetWordID ( sInfix, sInfixEnd-sInfix, false ), m_tState.m_iHitPos } );
 
 				// word start: add magic head
 				if ( bInfixMode && iStart==0 )
-					m_tHits.AddHit ( tRowID, m_pDict->GetWordID ( sInfix - 1, sInfixEnd-sInfix + 1, false ), m_tState.m_iHitPos );
+					m_tHits.Add ( { tRowID, m_pDict->GetWordID ( sInfix - 1, sInfixEnd-sInfix + 1, false ), m_tState.m_iHitPos } );
 
 				// word end: add magic tail
 				if ( bInfixMode && i==iLen-iStart )
-					m_tHits.AddHit ( tRowID, m_pDict->GetWordID ( sInfix, sInfixEnd-sInfix+1, false ), m_tState.m_iHitPos );
+					m_tHits.Add ( { tRowID, m_pDict->GetWordID ( sInfix, sInfixEnd-sInfix+1, false ), m_tState.m_iHitPos } );
 
 				sInfixEnd += m_pTokenizer->GetCodepointLength ( *sInfixEnd );
 			}
@@ -22567,9 +22570,9 @@ void CSphSource_Document::BuildSubstringHits ( RowID_t tRowID, bool bPayload, ES
 
 	// mark trailing hits
 	// and compute fields lengths
-	if ( !bSkipEndMarker && !m_tState.m_bProcessingHits && m_tHits.Length() )
+	if ( !bSkipEndMarker && !m_tState.m_bProcessingHits && m_tHits.GetLength() )
 	{
-		CSphWordHit * pTail = const_cast < CSphWordHit * > ( m_tHits.Last() );
+		CSphWordHit * pTail = const_cast < CSphWordHit * > ( &m_tHits.Last() );
 
 		if ( m_pFieldLengthAttrs )
 			m_pFieldLengthAttrs [ HITMAN::GetField ( pTail->m_uWordPos ) ] = HITMAN::GetPos ( pTail->m_uWordPos );
@@ -22577,13 +22580,13 @@ void CSphSource_Document::BuildSubstringHits ( RowID_t tRowID, bool bPayload, ES
 		Hitpos_t uEndPos = pTail->m_uWordPos;
 		if ( iBlendedHitsStart>=0 )
 		{
-			assert ( iBlendedHitsStart>=0 && iBlendedHitsStart<m_tHits.Length() );
-			Hitpos_t uBlendedPos = ( m_tHits.First() + iBlendedHitsStart )->m_uWordPos;
+			assert ( iBlendedHitsStart>=0 && iBlendedHitsStart<m_tHits.GetLength() );
+			Hitpos_t uBlendedPos = m_tHits[iBlendedHitsStart].m_uWordPos;
 			uEndPos = Min ( uEndPos, uBlendedPos );
 		}
 
 		// set end marker for all tail hits
-		const CSphWordHit * pStart = m_tHits.First();
+		const CSphWordHit * pStart = m_tHits.Begin();
 		while ( pStart<=pTail && uEndPos<=pTail->m_uWordPos )
 		{
 			HITMAN::SetEndMarker ( &pTail->m_uWordPos );
@@ -22611,10 +22614,10 @@ void CSphSource_Document::BuildRegularHits ( RowID_t tRowID, bool bPayload, bool
 	bool bMorphDisabled = ( m_tMorphFields.GetBits()>0 && !m_tMorphFields.BitGet ( m_tState.m_iField ) );
 
 	// index words only
-	while ( ( m_iMaxHits==0 || m_tHits.m_dData.GetLength()+BUILD_REGULAR_HITS_COUNT<m_iMaxHits )
+	while ( ( m_iMaxHits==0 || m_tHits.GetLength()+BUILD_REGULAR_HITS_COUNT<m_iMaxHits )
 		&& ( sWord = m_pTokenizer->GetToken() )!=NULL )
 	{
-		int iLastBlendedStart = TrackBlendedStart ( m_pTokenizer, iBlendedHitsStart, m_tHits.Length() );
+		int iLastBlendedStart = TrackBlendedStart ( m_pTokenizer, iBlendedHitsStart, m_tHits.GetLength() );
 
 		if ( !bPayload )
 		{
@@ -22623,7 +22626,7 @@ void CSphSource_Document::BuildRegularHits ( RowID_t tRowID, bool bPayload, bool
 				HITMAN::AddPos ( &m_tState.m_iHitPos, m_iBoundaryStep );
 		}
 
-		if ( BuildZoneHits ( tRowID, sWord ) )
+		if ( BuildZoneHits ( tRowID, *sWord ) )
 			continue;
 
 		if ( bGlobalPartialMatch )
@@ -22632,7 +22635,7 @@ void CSphSource_Document::BuildRegularHits ( RowID_t tRowID, bool bPayload, bool
 			memcpy ( sBuf + 1, sWord, iBytes );
 			sBuf[0] = MAGIC_WORD_HEAD;
 			sBuf[iBytes+1] = '\0';
-			m_tHits.AddHit ( tRowID, m_pDict->GetWordIDWithMarkers ( sBuf ), m_tState.m_iHitPos );
+			m_tHits.Add ( { tRowID, m_pDict->GetWordIDWithMarkers ( sBuf ), m_tState.m_iHitPos } );
 		}
 
 		ESphTokenMorph eMorph = m_pTokenizer->GetTokenMorph();
@@ -22653,7 +22656,7 @@ void CSphSource_Document::BuildRegularHits ( RowID_t tRowID, bool bPayload, bool
 				m_pDict->ApplyStemmers ( sWord );
 
 			if ( !m_pDict->IsStopWord ( sWord ) )
-				m_tHits.AddHit ( tRowID, m_pDict->GetWordIDNonStemmed ( sBuf ), m_tState.m_iHitPos );
+				m_tHits.Add ( { tRowID, m_pDict->GetWordIDNonStemmed ( sBuf ), m_tState.m_iHitPos } );
 
 			m_tState.m_iBuildLastStep = m_pTokenizer->TokenIsBlended() ? 0 : 1;
 			continue;
@@ -22671,9 +22674,9 @@ void CSphSource_Document::BuildRegularHits ( RowID_t tRowID, bool bPayload, bool
 #endif
 			iBlendedHitsStart = iLastBlendedStart;
 			m_tState.m_iBuildLastStep = m_pTokenizer->TokenIsBlended() ? 0 : 1;
-			m_tHits.AddHit ( tRowID, iWord, m_tState.m_iHitPos );
+			m_tHits.Add ( { tRowID, iWord, m_tState.m_iHitPos } );
 			if ( m_bIndexExactWords && eMorph!=SPH_TOKEN_MORPH_GUESS )
-				m_tHits.AddHit ( tRowID, m_pDict->GetWordIDNonStemmed ( sBuf ), m_tState.m_iHitPos );
+				m_tHits.Add ( { tRowID, m_pDict->GetWordIDNonStemmed ( sBuf ), m_tState.m_iHitPos } );
 		} else
 			m_tState.m_iBuildLastStep = m_iStopwordStep;
 	}
@@ -22682,9 +22685,9 @@ void CSphSource_Document::BuildRegularHits ( RowID_t tRowID, bool bPayload, bool
 
 	// mark trailing hit
 	// and compute field lengths
-	if ( !bSkipEndMarker && !m_tState.m_bProcessingHits && m_tHits.Length() )
+	if ( !bSkipEndMarker && !m_tState.m_bProcessingHits && m_tHits.GetLength() )
 	{
-		CSphWordHit * pTail = const_cast < CSphWordHit * > ( m_tHits.Last() );
+		auto * pTail = const_cast < CSphWordHit * > ( &m_tHits.Last() );
 
 		if ( m_pFieldLengthAttrs )
 			m_pFieldLengthAttrs [ HITMAN::GetField ( pTail->m_uWordPos ) ] = HITMAN::GetPos ( pTail->m_uWordPos );
@@ -22692,17 +22695,17 @@ void CSphSource_Document::BuildRegularHits ( RowID_t tRowID, bool bPayload, bool
 		Hitpos_t uEndPos = pTail->m_uWordPos;
 		if ( iBlendedHitsStart>=0 )
 		{
-			assert ( iBlendedHitsStart>=0 && iBlendedHitsStart<m_tHits.Length() );
-			Hitpos_t uBlendedPos = ( m_tHits.First() + iBlendedHitsStart )->m_uWordPos;
+			assert ( iBlendedHitsStart>=0 && iBlendedHitsStart<m_tHits.GetLength() );
+			Hitpos_t uBlendedPos = m_tHits[iBlendedHitsStart].m_uWordPos;
 			uEndPos = Min ( uEndPos, uBlendedPos );
 		}
 
 		// set end marker for all tail hits
-		const CSphWordHit * pStart = m_tHits.First();
+		const CSphWordHit * pStart = m_tHits.Begin();
 		while ( pStart<=pTail && uEndPos<=pTail->m_uWordPos )
 		{
 			HITMAN::SetEndMarker ( &pTail->m_uWordPos );
-			pTail--;
+			--pTail;
 		}
 	}
 }
@@ -23087,7 +23090,7 @@ bool CSphSource_SQL::Connect ( CSphString & sError )
 		return false;
 	}
 
-	m_tHits.m_dData.Reserve ( m_iMaxHits );
+	m_tHits.Reserve ( m_iMaxHits );
 
 	// all good
 	m_bSqlConnected = true;
@@ -23114,9 +23117,9 @@ bool CSphSource_SQL::SetupRanges ( const char * sRangeQuery, const char * sQuery
 		sphWarn ( "sql_range_step=" INT64_FMT ": too small; might hurt indexing performance!", m_tParams.m_iRangeStep );
 
 	// check query for macros
-	for ( int i=0; i<MACRO_COUNT; i++ )
-		if ( !strstr ( sQuery, MACRO_VALUES[i] ) )
-			LOC_ERROR2 ( "%s: macro '%s' not found in match fetch query", sPrefix, MACRO_VALUES[i] );
+	for ( const char* sMacro : MACRO_VALUES )
+		if ( !strstr ( sQuery, sMacro ) )
+			LOC_ERROR2 ( "%s: macro '%s' not found in match fetch query", sPrefix, sMacro );
 
 	// run query
 	if ( !SqlQuery ( sRangeQuery ) )
@@ -23461,7 +23464,7 @@ void CSphSource_SQL::DumpRowsHeaderSphinxql ()
 void CSphSource_SQL::Disconnect ()
 {
 	SafeDeleteArray ( m_pReadFileBuffer );
-	m_tHits.m_dData.Reset();
+	m_tHits.Reset();
 
 	if ( m_bSqlConnected )
 		SqlDisconnect ();
@@ -24019,7 +24022,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 		m_bIdsSorted = true;
 	}
 
-	m_tHits.m_dData.Resize(0);
+	m_tHits.Resize(0);
 
 	// eof check
 	if ( m_iJoinedHitField>=m_tSchema.GetFieldsCount() )
@@ -24084,8 +24087,8 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 			BuildHits ( sError, true );
 
 			// update current position
-			if ( !m_tSchema.GetField(m_iJoinedHitField).m_bPayload && !m_tState.m_bProcessingHits && m_tHits.Length() )
-				m_iJoinedHitPos = HITMAN::GetPos ( m_tHits.Last()->m_uWordPos );
+			if ( !m_tSchema.GetField(m_iJoinedHitField).m_bPayload && !m_tState.m_bProcessingHits && m_tHits.GetLength() )
+				m_iJoinedHitPos = HITMAN::GetPos ( m_tHits.Last().m_uWordPos );
 
 			if ( m_tState.m_bProcessingHits )
 				break;
@@ -24110,7 +24113,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 			// eof check
 			if ( m_iJoinedHitField>=m_tSchema.GetFieldsCount() )
 			{
-				m_tDocInfo.m_tRowID = ( m_tHits.Length() ? 0 : INVALID_ROWID ); // to eof or not to eof
+				m_tDocInfo.m_tRowID = ( m_tHits.GetLength() ? 0 : INVALID_ROWID ); // to eof or not to eof
 				SqlDismissResult ();
 				return &m_tHits;
 			}
@@ -25028,7 +25031,7 @@ void CSphSource_XMLPipe2::Disconnect ()
 		m_pParser = NULL;
 	}
 
-	m_tHits.m_dData.Reset();
+	m_tHits.Reset();
 }
 
 
@@ -25190,7 +25193,7 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 	if ( !ParseNextChunk ( iBytesRead, sError ) )
 		return false;
 
-	m_tHits.m_dData.Reserve ( m_iMaxHits );
+	m_tHits.Reserve ( m_iMaxHits );
 
 	return true;
 }
@@ -26633,7 +26636,7 @@ bool CSphSource_BaseSV::Connect ( CSphString & sError )
 
 	AllocDocinfo();
 
-	m_tHits.m_dData.Reserve ( m_iMaxHits );
+	m_tHits.Reserve ( m_iMaxHits );
 	m_dBuf.Resize ( DEFAULT_READ_BUFFER );
 
 	return true;
@@ -26648,7 +26651,7 @@ void CSphSource_BaseSV::Disconnect()
 		m_pFP = nullptr;
 	}
 
-	m_tHits.m_dData.Reset();
+	m_tHits.Reset();
 }
 
 

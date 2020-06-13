@@ -1481,13 +1481,13 @@ CSphSource_StringVector::CSphSource_StringVector ( const VecTraits_T<VecTraits_T
 bool CSphSource_StringVector::Connect ( CSphString & )
 {
 	// no AddAutoAttrs() here; they should already be in the schema
-	m_tHits.m_dData.Reserve ( 1024 );
+	m_tHits.Reserve ( 1024 );
 	return true;
 }
 
 void CSphSource_StringVector::Disconnect ()
 {
-	m_tHits.m_dData.Reset();
+	m_tHits.Reset();
 }
 
 
@@ -1829,7 +1829,7 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bRe
 	m_dAccumKlist.Add ( tDocID );
 
 	// reserve some hit space on first use
-	if ( pHits && pHits->Length() && !m_dAccum.GetLength() )
+	if ( pHits && pHits->GetLength() && !m_dAccum.GetLength() )
 		m_dAccum.Reserve ( 128*1024 );
 
 	// accumulate row data; expect fully dynamic rows
@@ -1893,20 +1893,19 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bRe
 
 	// accumulate hits
 	int iHits = 0;
-	if ( pHits && pHits->Length() )
+	if ( pHits && pHits->GetLength() )
 	{
 		CSphWordHit tLastHit;
 		tLastHit.m_tRowID = INVALID_ROWID;
 		tLastHit.m_uWordID = 0;
 		tLastHit.m_uWordPos = 0;
 
-		iHits = pHits->Length();
-		m_dAccum.Reserve ( m_dAccum.GetLength()+iHits );
+		m_dAccum.ReserveGap ( pHits->GetLength() );
 		iHits = 0;
-		for ( CSphWordHit * pHit = pHits->m_dData.Begin(); pHit<=pHits->Last(); pHit++ )
+		for ( CSphWordHit * pHit = pHits->Begin(); pHit<pHits->End(); ++pHit )
 		{
 			// ignore duplicate hits
-			if ( pHit->m_tRowID==tLastHit.m_tRowID && pHit->m_uWordID==tLastHit.m_uWordID && pHit->m_uWordPos==tLastHit.m_uWordPos )
+			if ( *pHit==tLastHit )
 				continue;
 
 			// update field lengths
@@ -1916,13 +1915,13 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bRe
 			// need original hit for duplicate removal
 			tLastHit = *pHit;
 			// reset field end for not very last position
-			if ( HITMAN::IsEnd ( pHit->m_uWordPos ) && pHit!=pHits->Last() &&
+			if ( HITMAN::IsEnd ( pHit->m_uWordPos ) && pHit!=&pHits->Last() &&
 				pHit->m_tRowID==pHit[1].m_tRowID && pHit->m_uWordID==pHit[1].m_uWordID && HITMAN::IsEnd ( pHit[1].m_uWordPos ) )
 				pHit->m_uWordPos = HITMAN::GetPosWithField ( pHit->m_uWordPos );
 
 			// accumulate
 			m_dAccum.Add ( *pHit );
-			iHits++;
+			++iHits;
 		}
 		if ( pFieldLens )
 			pFieldLens [ HITMAN::GetField ( tLastHit.m_uWordPos ) ] = HITMAN::GetPos ( tLastHit.m_uWordPos );
@@ -1937,7 +1936,7 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bRe
 		m_pDocstore->AddDoc ( tRowID, *pStoredDoc );
 	}
 
-	m_uAccumDocs++;
+	++m_uAccumDocs;
 }
 
 

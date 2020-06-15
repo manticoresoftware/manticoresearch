@@ -9848,7 +9848,15 @@ void RtAccum_t::LoadRtTrx ( const BYTE * pData, int iLen )
 
 	// insert and replace
 	m_dAccum.Resize ( tReader.GetDword() );
-	tReader.GetBytes ( m_dAccum.Begin(),(int) m_dAccum.GetLengthBytes() );
+	for ( CSphWordHit & tHit : m_dAccum )
+	{
+		// such manual serialization is necessary because CSphWordHit is internally aligned by 8,
+		// and it's size is 3*8, however actually we have 4+8+4 bytes in members.
+		// Sending raw unitialized bytes is not ok, since it may influent crc checking.
+		tReader.GetBytes ( &tHit.m_tRowID, (int) sizeof ( tHit.m_tRowID ) );
+		tReader.GetBytes ( &tHit.m_uWordID, (int) sizeof ( tHit.m_uWordID ) );
+		tReader.GetBytes ( &tHit.m_uWordPos, (int) sizeof ( tHit.m_uWordPos ) );
+	}
 	m_dAccumRows.Resize ( tReader.GetDword() );
 	tReader.GetBytes ( m_dAccumRows.Begin(), (int) m_dAccumRows.GetLengthBytes() );
 	m_dBlobs.Resize ( tReader.GetDword() );
@@ -9877,7 +9885,12 @@ void RtAccum_t::SaveRtTrx ( MemoryWriter_c & tWriter ) const
 
 	// insert and replace
 	tWriter.PutDword ( m_dAccum.GetLength() );
-	tWriter.PutBytes ( m_dAccum.Begin(), (int) m_dAccum.GetLengthBytes() );
+	for ( const CSphWordHit& tHit : m_dAccum )
+	{
+		tWriter.PutBytes ( &tHit.m_tRowID, sizeof ( tHit.m_tRowID ) );
+		tWriter.PutBytes ( &tHit.m_uWordID, sizeof ( tHit.m_uWordID ) );
+		tWriter.PutBytes ( &tHit.m_uWordPos, sizeof ( tHit.m_uWordPos ) );
+	}
 	tWriter.PutDword ( m_dAccumRows.GetLength() );
 	tWriter.PutBytes ( m_dAccumRows.Begin(), (int) m_dAccumRows.GetLengthBytes() );
 	tWriter.PutDword ( m_dBlobs.GetLength() );

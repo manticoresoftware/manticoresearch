@@ -460,7 +460,8 @@ static void Logger_fn ( wsrep_log_level_t eLevel, const char * sMsg )
 
 // commands version (commands these got replicated via Galera)
 // ver 0x104 added docstore from RT index
-static const WORD g_iReplicateCommandVer = 0x104;
+// ver 0x105 fixed CSphWordHit serialization - instead of direct raw blob copy only fields sent (16 bytes vs 24)
+static const WORD g_iReplicateCommandVer = 0x105;
 
 // log debug info about cluster nodes as current nodes views that
 static void LogGroupView ( const wsrep_view_info_t * pView )
@@ -1666,7 +1667,6 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 			tWriter.PutWord ( (WORD)tCmd.m_eCommand );
 			tWriter.PutWord ( g_iReplicateCommandVer );
 			tWriter.PutString ( tCmd.m_sIndex );
-
 		}
 		dBufQueries.AddN ( sizeof(DWORD) );
 		int iLenOff = dBufQueries.GetLength();

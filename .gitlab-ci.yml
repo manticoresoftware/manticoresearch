@@ -184,7 +184,7 @@ build_master:
     - if: $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_BRANCH == "master"
   script:
     - ~/upload_repo.sh
-  dependencies: [rhel6, rhel7, rhel8, jessie, stretch, trusty, xenial, bionic, buster]
+  dependencies: [rhel6, rhel7, rhel8, jessie, stretch, trusty, xenial, bionic, buster, tarball, osx, windows]
   variables:
     REPO_NAME: dev
 

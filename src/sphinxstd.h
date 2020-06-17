@@ -53,6 +53,7 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 #include <utility>
 #include <memory>
 #include <functional>
+#include <atomic>
 
 // for 64-bit types
 #if HAVE_STDINT_H
@@ -4507,29 +4508,30 @@ protected:
 public:
 	inline void AddRef () const
 	{
-		m_iRefCount.Inc();
+		m_iRefCount.fetch_add ( 1, std::memory_order_acquire );
 	}
 
 	inline void Release () const
 	{
-		long uRefs = m_iRefCount.Dec();
-		assert ( uRefs>=1 );
-		if ( uRefs==1 )
+		if ( m_iRefCount.fetch_sub ( 1, std::memory_order_release )==1 )
+		{
+			Verify( m_iRefCount.load ( std::memory_order_acquire )==0 );
 			delete this;
+		}
 	}
 
 	inline long GetRefcount() const
 	{
-		return m_iRefCount;
+		return m_iRefCount.load ( std::memory_order_acquire );
 	}
 
 	inline bool IsLast() const
 	{
-		return 1==m_iRefCount;
+		return 1==m_iRefCount.load ( std::memory_order_acquire );
 	}
 
-protected:
-	mutable CSphAtomic m_iRefCount { 1 };
+private:
+	mutable std::atomic<long> m_iRefCount { 1 };
 };
 
 using RefCountedRefPtr_t = CSphRefcountedPtr<ISphRefcountedMT>;

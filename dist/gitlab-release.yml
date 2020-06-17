@@ -2,6 +2,7 @@ tarball:
   stage: build
   only:
     variables:
+      - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /tarball/
   dependencies: []
@@ -23,6 +24,7 @@ osx:
   stage: build
   only:
     variables:
+      - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /osx/
   dependencies: []
@@ -45,6 +47,7 @@ windows:
   stage: build
   only:
     variables:
+      - $WHAT == null    
       - $WHAT == "all"
       - $WHAT =~ /windows/
   dependencies: []

@@ -86,6 +86,17 @@ index facet1
     path            = <data_path/>/facet1
 }
 
+index rt2
+{
+    type = rt
+    path = <data_path/>/rt1
+    dict = keywords
+    rt_field = title
+    rt_attr_uint = user_id
+	rt_attr_uint = added_at
+    rt_attr_uint = upped_at
+}
+
 </config>
 
 <db_create>
@@ -149,6 +160,22 @@ insert into facet_table values
 
 <!-- crash at multi query with OR -->
 <sphinxql>SELECT * FROM facet1 WHERE (price &gt;= 0 AND price &lt; 10) OR (price &gt;= 100  AND price &lt; 110); SELECT * FROM facet1 WHERE (brand_id &gt;= 0 AND brand_id &lt; 10) OR (brand_id &gt;= 100 AND brand_id &lt; 110)</sphinxql>
+
+<!-- wrong filter for match in middle of WHERE and OR filter -->
+<sphinxql>INSERT INTO rt2 ( id, title, user_id, added_at, upped_at ) VALUES
+( 1, 'test',  74861 , 1549783145 , 1549783145 ),
+( 2, 'test', 240442 , 1519972227 , 1519972227 ),
+( 3, 'test', 157745 , 1527313708 , 1527313708 ),
+( 4, 'test',  43358 , 1529465614 , 1529465614 ),
+( 5, 'test',  43358 , 1529465707 , 1529465707 ),
+( 6, 'test', 369971 , 1489750393 , 1489750393 ),
+( 7, 'test',  12440 , 1536712012 , 1536712012 ),
+( 8, 'test', 220301 , 1512017353 , 1512017353 )
+</sphinxql>
+<sphinxql>SELECT * FROM rt2 WHERE (user_id = 203469) AND (match('test')) AND (added_at &lt; 1558324538 or upped_at &lt; 1558324538)</sphinxql>
+<sphinxql>SELECT * FROM rt2 WHERE (match('test')) AND (added_at &lt; 1558324538 or upped_at &lt; 1558324538) and (user_id = 203469)</sphinxql>
+<sphinxql>SELECT * FROM rt2 WHERE (user_id = 74861) AND (match('test')) AND (added_at &lt; 1558324538 or upped_at &lt; 1558324538)</sphinxql>
+<sphinxql>SELECT * FROM rt2 WHERE (match('test')) AND (user_id = 74861) AND (added_at &lt; 1558324538 or upped_at &lt; 1558324538)</sphinxql>
 </sphqueries>
 
 </test>

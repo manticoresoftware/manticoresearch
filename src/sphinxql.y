@@ -413,7 +413,7 @@ where_expr:
 	| filter_expr
 	| where_item TOK_AND filter_expr
     | filter_expr TOK_AND where_item
-	| filter_expr TOK_AND where_item TOK_AND filter_expr
+	| filter_expr TOK_AND where_item TOK_AND filter_expr	{ pParser->FilterAnd ( $$, $1, $5 ); }
 	;
 
 where_item:

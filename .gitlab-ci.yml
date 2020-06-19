@@ -10,6 +10,8 @@ stages:
   - build
   - publish
 
+include: '/dist/gitlab-release.yml'
+
 pages:
   stage: routines
   tags:
@@ -189,8 +191,6 @@ build_master:
 
 push_results:
   stage: publish
-  trigger:
-    include: '/dist/gitlab-release.yml'
   rules:
     - if: $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i
       when: always

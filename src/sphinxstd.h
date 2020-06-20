@@ -3397,20 +3397,12 @@ private:
 //////////////////////////////////////////////////////////////////////////
 
 /// name+int pair
-struct CSphNamedInt
-{
-	CSphString m_sName;
-	int m_iValue = 0;
+using CSphNamedInt = std::pair<CSphString,int>;
 
-	CSphNamedInt() = default;
-	CSphNamedInt ( const CSphString& sName, int iValue)
-		: m_sName ( sName ), m_iValue (iValue) {};
-};
-
-inline void Swap ( CSphNamedInt & a, CSphNamedInt & b )
+inline StringBuilder_c& operator<< ( StringBuilder_c& tOut, const CSphNamedInt& tValue )
 {
-	a.m_sName.Swap ( b.m_sName );
-	Swap ( a.m_iValue, b.m_iValue );
+	tOut.Sprintf ( "%s=%d", tValue.first.cstr(), tValue.second );
+	return tOut;
 }
 
 

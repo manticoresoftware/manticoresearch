@@ -14264,17 +14264,17 @@ void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema 
 	{
 		ARRAY_FOREACH ( i, pQuery->m_dFieldWeights )
 		{
-			int j = tSchema.GetFieldIndex ( pQuery->m_dFieldWeights[i].m_sName.cstr() );
+			int j = tSchema.GetFieldIndex ( pQuery->m_dFieldWeights[i].first.cstr() );
 			if ( j<0 )
 			{
 				if ( sFieldsNotFound.IsEmpty() )
-					sFieldsNotFound = pQuery->m_dFieldWeights[i].m_sName;
+					sFieldsNotFound = pQuery->m_dFieldWeights[i].first;
 				else
-					sFieldsNotFound.SetSprintf ( "%s %s", sFieldsNotFound.cstr(), pQuery->m_dFieldWeights[i].m_sName.cstr() );
+					sFieldsNotFound.SetSprintf ( "%s %s", sFieldsNotFound.cstr(), pQuery->m_dFieldWeights[i].first.cstr() );
 			}
 
 			if ( j>=0 && j<HEAVY_FIELDS )
-				m_dWeights[j] = pQuery->m_dFieldWeights[i].m_iValue;
+				m_dWeights[j] = pQuery->m_dFieldWeights[i].second;
 		}
 
 		if ( !sFieldsNotFound.IsEmpty() )
@@ -17333,13 +17333,13 @@ int CSphTemplateDictTraits::InitMorph ( const char * szMorph, int iLength, CSphS
 			{
 				if ( m_sMorphFingerprint.IsEmpty() )
 					m_sMorphFingerprint.SetSprintf ( "%s:%08x"
-						, sphAotDictinfo(j).m_sName.cstr()
-						, sphAotDictinfo(j).m_iValue );
+						, sphAotDictinfo(j).first.cstr()
+						, sphAotDictinfo(j).second );
 				else
 					m_sMorphFingerprint.SetSprintf ( "%s;%s:%08x"
 					, m_sMorphFingerprint.cstr()
-					, sphAotDictinfo(j).m_sName.cstr()
-					, sphAotDictinfo(j).m_iValue );
+					, sphAotDictinfo(j).first.cstr()
+					, sphAotDictinfo(j).second );
 				m_dMorph.Add ( iMorph );
 			}
 			return ST_OK;

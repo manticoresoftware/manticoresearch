@@ -1525,6 +1525,18 @@ enum
 	QFLAG_JSON_QUERY			= 1UL << 11
 };
 
+void operator<< ( ISphOutputBuffer & tOut, const CSphNamedInt & tValue )
+{
+	tOut.SendString ( tValue.first.cstr () );
+	tOut.SendInt ( tValue.second );
+}
+
+void operator>> ( InputBuffer_c & dIn, CSphNamedInt & tValue )
+{
+	tValue.first = dIn.GetString ();
+	tValue.second = dIn.GetInt ();
+}
+
 void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer & tOut, const CSphQuery & q, int iWeight, int iAgentQueryTimeout ) const
 {
 	bool bAgentWeight = ( iWeight!=-1 );
@@ -1660,20 +1672,15 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	} else
 	{
 		tOut.SendInt ( q.m_dIndexWeights.GetLength() );
-		ARRAY_FOREACH ( i, q.m_dIndexWeights )
-		{
-			tOut.SendString ( q.m_dIndexWeights[i].m_sName.cstr() );
-			tOut.SendInt ( q.m_dIndexWeights[i].m_iValue );
-		}
+		for ( const auto& dWeight : q.m_dIndexWeights )
+			tOut << dWeight;
 	}
 	DWORD iQueryTimeout = ( q.m_uMaxQueryMsec ? q.m_uMaxQueryMsec : iAgentQueryTimeout );
 	tOut.SendDword ( iQueryTimeout );
 	tOut.SendInt ( q.m_dFieldWeights.GetLength() );
-	ARRAY_FOREACH ( i, q.m_dFieldWeights )
-	{
-		tOut.SendString ( q.m_dFieldWeights[i].m_sName.cstr() );
-		tOut.SendInt ( q.m_dFieldWeights[i].m_iValue );
-	}
+	for ( const auto & dWeight : q.m_dFieldWeights )
+		tOut << dWeight;
+
 	tOut.SendString ( q.m_sComment.cstr() );
 	tOut.SendInt ( 0 ); // WAS: overrides
 	tOut.SendString ( q.m_sSelect.cstr() );
@@ -2379,19 +2386,13 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 	tQuery.m_dIndexWeights.Resize ( tReq.GetInt() ); // FIXME! add sanity check
 	for ( auto& dIndexWeight : tQuery.m_dIndexWeights )
-	{
-		dIndexWeight.m_sName = tReq.GetString ();
-		dIndexWeight.m_iValue = tReq.GetInt ();
-	}
+		tReq >> dIndexWeight;
 
 	tQuery.m_uMaxQueryMsec = tReq.GetDword ();
 
 	tQuery.m_dFieldWeights.Resize ( tReq.GetInt() ); // FIXME! add sanity check
 	for ( auto & dFieldWeight : tQuery.m_dFieldWeights )
-	{
-		dFieldWeight.m_sName = tReq.GetString ();
-		dFieldWeight.m_iValue = tReq.GetInt ();
-	}
+		tReq >> dFieldWeight;
 
 	tQuery.m_sComment = tReq.GetString ();
 
@@ -2772,7 +2773,7 @@ static void FormatList ( const CSphVector<CSphNamedInt> & dValues, StringBuilder
 {
 	ScopedComma_c tComma ( tBuf, ", " );
 	for ( const auto& dValue : dValues )
-		tBuf.Appendf ( "%s=%d", dValue.m_sName.cstr(), dValue.m_iValue );
+		tBuf << dValue;
 }
 
 static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
@@ -6232,12 +6233,12 @@ void SearchHandler_c::SetupLocalDF ( int iStart, int iEnd )
 static int GetIndexWeight ( const CSphString& sName, const CSphVector<CSphNamedInt> & dIndexWeights, int iDefaultWeight )
 {
 	for ( auto& dWeight : dIndexWeights )
-		if ( dWeight.m_sName==sName )
-			return dWeight.m_iValue;
+		if ( dWeight.first==sName )
+			return dWeight.second;
 
 	// distributed index adds {'*', weight} to all agents in case it got custom weight
-	if ( dIndexWeights.GetLength() && dIndexWeights.Last().m_sName=="*" )
-		return dIndexWeights[0].m_iValue;
+	if ( dIndexWeights.GetLength() && dIndexWeights.Last().first=="*" )
+		return dIndexWeights[0].second;
 
 	return iDefaultWeight;
 }
@@ -11642,7 +11643,7 @@ struct IndexNameLess_fn
 {
 	inline bool IsLess ( const CSphNamedInt & a, const CSphNamedInt & b ) const
 	{
-		return strcasecmp ( a.m_sName.cstr(), b.m_sName.cstr() )<0;
+		return strcasecmp ( a.first.cstr(), b.first.cstr() )<0;
 	}
 };
 
@@ -11688,7 +11689,7 @@ void HandleMysqlShowTables ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 	tOut.HeadTuplet ( "Index", "Type" );
 	TableLike dCondOut ( tOut, tStmt.m_sStringParam.cstr() );
 	for ( auto& dPair : dIndexes )
-		dCondOut.MatchData2 ( dPair.m_sName.cstr (), sTypes[dPair.m_iValue] );
+		dCondOut.MatchData2 ( dPair.first.cstr (), sTypes[dPair.second] );
 	tOut.Eof();
 }
 

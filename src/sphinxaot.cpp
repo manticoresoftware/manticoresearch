@@ -706,8 +706,7 @@ bool AotInit ( const CSphString & sDictFile, CSphString & sError, int iLang )
 	while ( b>a && b[-1]!='/' && b[-1]!='\\' )
 		b--;
 
-	g_tDictinfos[iLang].m_sName = b;
-	g_tDictinfos[iLang].m_iValue = (int)uCrc;
+	g_tDictinfos[iLang] = { b, (int) uCrc };
 	return true;
 }
 

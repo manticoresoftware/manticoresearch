@@ -165,7 +165,35 @@ class FederateCtx_T
 
 	// usual working branch. Modeling one is placed at the bottom of the template
 #if !MODELING
-	TLS_T<intptr_t> m_iTlsOrderNum;
+
+	struct tls_intptr_t
+	{
+		SphThreadKey_t m_tKey;
+
+	public:
+		tls_intptr_t()
+		{
+			Verify ( sphThreadKeyCreate( &m_tKey ));
+		}
+
+		~tls_intptr_t()
+		{
+			sphThreadKeyDelete( m_tKey );
+		}
+
+		tls_intptr_t& operator=( intptr_t pValue )
+		{
+			Verify ( sphThreadSet( m_tKey, (void*)pValue ));
+			return *this;
+		}
+
+		operator intptr_t() const
+		{
+			return reinterpret_cast<intptr_t> ( sphThreadGet( m_tKey ) );
+		}
+	};
+
+	tls_intptr_t m_iTlsOrderNum;
 
 	// set current context num, m.b. associated with optional int param.
 	inline void SetTHD ( intptr_t iVal, int ) { m_iTlsOrderNum = iVal; }

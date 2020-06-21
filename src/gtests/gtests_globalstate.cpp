@@ -13,6 +13,7 @@
 #include <gtest/gtest.h>
 
 #include "sphinxint.h"
+#include "threadutils.h"
 
 // global stuff
 
@@ -56,8 +57,8 @@ public:
 	void SetUp () override
 	{
 		char cTopOfMainStack;
-		sphThreadInit ();
-		MemorizeStack ( &cTopOfMainStack );
+		Threads::Init ();
+		Threads::MemorizeStack ( &cTopOfMainStack );
 		CreateSynonymsFile ();
 		CreateSynonymsFile ( g_sMagic );
 

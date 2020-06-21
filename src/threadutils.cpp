@@ -59,24 +59,6 @@ const char* ProtoName ( Proto_e eProto )
 	return "unknown";
 }
 
-ServiceThread_t::~ServiceThread_t ()
-{
-	Join ();
-}
-
-bool ServiceThread_t::Create ( void (* fnThread) ( void* ), void* pArg, const char* sName )
-{
-	m_bCreated = sphThreadCreate ( &m_tThread, fnThread, pArg, false, sName );
-	return m_bCreated;
-}
-
-void ServiceThread_t::Join ()
-{
-	if ( m_bCreated && sphInterrupted () )
-		sphThreadJoin ( &m_tThread );
-	m_bCreated = false;
-}
-
 void ThdDesc_t::SetThreadInfo ( const char* sTemplate, ... )
 {
 	ScopedMutex_t dLock ( m_tQueryLock );
@@ -163,7 +145,7 @@ Threads::ThdPublicInfo_t Threads::ThdDesc_t::GetPublicInfo ()
 	ThdInfo_t& dSemiRes = dResult;
 	dSemiRes = *( ThdInfo_t* ) this;
 
-	dResult.m_sThName = GetThreadName ( &m_tThd );
+	dResult.m_sThName = Threads::GetName ( &m_tThd );
 
 	ScopedMutex_t dLock ( m_tQueryLock );
 	if ( m_pQuery )
@@ -258,59 +240,12 @@ int GetOsThreadId ()
 
 namespace Threads {
 
-namespace {
-	thread_local int iNumber = 0;
-	thread_local const char* szName = "main";
-}
-
 namespace logdetail {
-	const char* name() { return szName; }
-	int number() { return iNumber; }
+	const char* name() { return MyThd ().m_sThreadName.cstr(); }
 }
 
-void AddDetachedThread ( SphThread_t tThread, CSphString sName, int iTid );
-void RemoveDetachedThread ( SphThread_t tThread );
 
-#define LOG_COMPONENT_MT "(" << GetOsThreadId() << ") " << logdetail::name() << "#" << logdetail::number() << ": "
-
-// start joinable thread running functional object (m.b. lambda)
-SphThread_t makeTinyThread ( Handler tHandler, int iNum=0, const char * sName="main", bool bDetached=false )
-{
-	// let's place it inside function to avoid any outside usage
-	struct TinyThread_t
-	{
-		Handler m_tHandler;
-		const char * m_szName;
-		int m_iNumber;
-
-		explicit TinyThread_t ( Handler tHandler, const char* sName, int iNumber )
-			: m_tHandler { std::move ( tHandler ) }
-			, m_szName (sName)
-			, m_iNumber (iNumber)
-		{ }
-
-		static void Do ( void * pTr )
-		{
-			auto * pThis = (TinyThread_t *) pTr;
-			szName = pThis->m_szName;
-			iNumber = pThis->m_iNumber;
-			LOG( DEBUG, MT ) << "thread created";
-
-			if ( pThis->m_tHandler )
-				pThis->m_tHandler ();
-			LOG( DEBUG, MT ) << "thread ended";
-			delete pThis;
-		}
-	};
-
-	StringBuilder_c sThdName;
-	sThdName.Sprintf ( "%s_%d", sName, iNum );
-	SphThread_t tThd;
-	CSphScopedPtr<TinyThread_t> pHandler { new TinyThread_t ( std::move ( tHandler ), sName, iNum) };
-	if ( sphCrashThreadCreate ( &tThd, TinyThread_t::Do, pHandler.Ptr (), bDetached, sThdName.cstr ()) )
-		pHandler.LeakPtr ();
-	return tThd;
-}
+#define LOG_COMPONENT_MT "(" << GetOsThreadId() << ") " << logdetail::name() << ": "
 
 // list (FIFO queue) of operations to perform. Used in service queue.
 template<typename Operation>
@@ -873,7 +808,7 @@ public:
 	}
 };
 
-#define LOG_COMPONENT_TP LOG_COMPONENT_MT << "@" << this->szName() << ": "
+#define LOG_COMPONENT_TP LOG_COMPONENT_MT << ": "
 
 class ThreadPool_c final : public Scheduler_i
 {
@@ -940,8 +875,8 @@ public:
 	{
 		createWork ();
 		m_dThreads.Resize ( (int) iThreadCount );
-		for ( size_t i = 0; i<iThreadCount; ++i )
-			m_dThreads[i] = makeTinyThread ( [this] { loop (); }, (int)i, szName );
+		ARRAY_FOREACH ( i, m_dThreads )
+			Threads::CreateQ ( &m_dThreads[i], [this] { loop (); }, false, m_szName, i );
 		LOG ( DEBUG, TP ) << "thread pool created with threads: " << iThreadCount;
 	}
 
@@ -953,7 +888,7 @@ public:
 		dLock.Unlock ();
 		LOG ( DEBUG, TP ) << "stopping thread pool";
 		for ( auto& dThread : m_dThreads )
-			sphThreadJoin ( &dThread );
+			Threads::Join ( &dThread );
 		LOG ( DEBUG, TP ) << "thread pool stopped";
 	}
 
@@ -994,19 +929,14 @@ public:
 		LOG ( DETAIL, TP ) << "Wait finished";
 	}
 
-	const char * szName () const final
-	{
-		return m_szName;
-	}
-
 	int WorkingThreads () const final
 	{
 		return m_dThreads.GetLength ();
 	}
 
-	long Works () const final
+	int Works () const final
 	{
-		return m_tService.works ();
+		return (int)m_tService.works ();
 	}
 };
 
@@ -1032,7 +962,8 @@ class AloneThread_c final : public Scheduler_i
 		if ( !m_bStarted )
 		{
 			m_bStarted = true;
-			makeTinyThread ( [this] { loop (); }, m_iThreadNum, m_sName.cstr (), true );
+			SphThread_t tThd; // dummy, since we're starting detached
+			Threads::CreateQ ( &tThd, [this] { loop (); }, true, m_sName.cstr (), m_iThreadNum );
 
 			LOG ( DEBUG, TP ) << "alone thread created";
 		}
@@ -1040,9 +971,9 @@ class AloneThread_c final : public Scheduler_i
 
 	void loop ()
 	{
-		Threads::AddDetachedThread ( sphThreadSelf (), m_sName, GetOsThreadId() );
+		Detached::AddThread ( &MyThd () );
 		m_tService.run ();
-		Threads::RemoveDetachedThread ( sphThreadSelf () );
+		Detached::RemoveThread ( &MyThd () );
 		delete this;
 	}
 
@@ -1074,15 +1005,13 @@ public:
 		return Keeper_t ( nullptr, [this] ( void * ) { m_tService.work_finished (); } );
 	}
 
-	const char * szName () const final { return m_sName.cstr (); }
-
 	int WorkingThreads () const final { return 1; }
 
 	void Wait() final {}
 
 	static int GetRunners () { return m_iRunners; }
 
-	long Works () const final
+	int Works () const final
 	{
 		return GetRunners ();
 	}
@@ -1205,109 +1134,342 @@ Threads::Scheduler_i * GetAloneScheduler ( int iMaxThreads, const char * szName 
 	return new Threads::AloneThread_c ( iOrder++, szName? szName: "alone" );
 }
 
-struct LowThreadDesc_t
+#if !USE_WINDOWS
+void * Threads::Init ( bool bDetached )
+#else
+void * Threads::Init ( bool )
+#endif
 {
-	SphThread_t m_tThread;
-	int 		m_iThreadID;
-	CSphString	m_sThreadName;
-//	LowThreadDesc_t ( SphThread_t tThread, int )
+	static bool bInit = false;
+#if !USE_WINDOWS
+	static pthread_attr_t tJoinableAttr;
+	static pthread_attr_t tDetachedAttr;
+#endif
+
+	if ( !bInit )
+	{
+#if SPH_DEBUG_LEAKS || SPH_ALLOCS_PROFILER
+		sphMemStatInit();
+#endif
+
+#if !USE_WINDOWS
+		if ( pthread_attr_init ( &tJoinableAttr ) )
+			sphDie ( "FATAL: pthread_attr_init( joinable ) failed" );
+
+		if ( pthread_attr_init ( &tDetachedAttr ) )
+			sphDie ( "FATAL: pthread_attr_init( detached ) failed" );
+
+		if ( pthread_attr_setdetachstate ( &tDetachedAttr, PTHREAD_CREATE_DETACHED ) )
+			sphDie ( "FATAL: pthread_attr_setdetachstate( detached ) failed" );
+#endif
+		bInit = true;
+	}
+#if !USE_WINDOWS
+	if ( pthread_attr_setstacksize ( &tJoinableAttr, g_iThreadStackSize + PTHREAD_STACK_MIN ) )
+		sphDie ( "FATAL: pthread_attr_setstacksize( joinable ) failed" );
+
+	if ( pthread_attr_setstacksize ( &tDetachedAttr, g_iThreadStackSize + PTHREAD_STACK_MIN ) )
+		sphDie ( "FATAL: pthread_attr_setstacksize( detached ) failed" );
+
+	return bDetached ? &tDetachedAttr : &tJoinableAttr;
+#else
+	return NULL;
+#endif
+}
+
+
+#if SPH_DEBUG_LEAKS || SPH_ALLOCS_PROFILER
+void Threads::Done ( int iFD )
+{
+	sphMemStatDump ( iFD );
+	sphMemStatDone();
+}
+#else
+void Threads::Done ( int )
+{
+}
+#endif
+
+
+/// get name of a thread
+CSphString Threads::GetName ( const SphThread_t * pThread )
+{
+	if ( !pThread || !*pThread )
+		return "";
+
+#if HAVE_PTHREAD_GETNAME_NP
+	char sClippedName[16];
+	pthread_getname_np ( *pThread, sClippedName, 16 );
+	return sClippedName;
+#else
+	return "";
+#endif
+}
+
+/// my join thread wrapper
+bool Threads::Join ( SphThread_t * pThread )
+{
+#if USE_WINDOWS
+	DWORD uWait = WaitForSingleObject ( *pThread, INFINITE );
+	CloseHandle ( *pThread );
+	*pThread = NULL;
+	return ( uWait==WAIT_OBJECT_0 || uWait==WAIT_ABANDONED );
+#else
+	return pthread_join ( *pThread, nullptr )==0;
+#endif
+}
+
+/// my own thread
+SphThread_t Threads::Self ()
+{
+#if USE_WINDOWS
+	return GetCurrentThread();
+#else
+	return pthread_self ();
+#endif
+}
+
+/// compares two thread ids
+bool Threads::Same ( SphThread_t first, SphThread_t second )
+{
+#if USE_WINDOWS
+	return first==second;
+#else
+	return pthread_equal ( first, second )!=0;
+#endif
+}
+
+struct RuntimeThreadContext_t : ISphNoncopyable
+{
+	LowThreadDesc_t	m_tDesc;
+	const void *	m_pMyThreadStack = nullptr;
+	OpSchedule_t	m_pThreadCleanup;
+	Handler			m_fnRun;
+
+#if USE_GPROF
+	pthread_mutex_t	m_dlock;
+	pthread_cond_t	m_dwait;
+	itimerval		m_ditimer;
+#endif
+
+#if SPH_ALLOCS_PROFILER
+	void * m_pTLS = nullptr;
+#endif
+
+	// main thread execution func
+	void Run ( const void * pStack );
+
+	// prepare everything to make *this most robust
+	void Prepare ( const void * pStack );
+
+	// save name stored in desc as OS thread name
+	void PropagateName ();
 };
 
-CSphMutex g_dDetachedGuard;
-CSphVector<LowThreadDesc_t> g_dDetachedThreads GUARDED_BY (g_dDetachedGuard);
-
-void Threads::AloneShutdowncatch ()
+namespace { // static func
+RuntimeThreadContext_t*& RuntimeThreadContext ()
 {
-#if !USE_WINDOWS
-	static bool bShutdownEngaged = false;
-	if ( !bShutdownEngaged )
+	static RuntimeThreadContext_t tStubForMain;
+	static thread_local RuntimeThreadContext_t* pLocalThread = &tStubForMain;
+	return pLocalThread;
+}
+}
+
+// to be used globally from thread env
+RuntimeThreadContext_t& MyThreadContext()
+{
+	return *RuntimeThreadContext();
+}
+
+LowThreadDesc_t& Threads::MyThd ()
+{
+	return RuntimeThreadContext ()->m_tDesc;
+}
+
+void Threads::SetSysThreadName ()
+{
+	RuntimeThreadContext ()->PropagateName ();
+}
+
+// Adds a function call (a new task for a wrapper) to a linked list
+// of thread contexts. They will be executed one by one right after
+// the main thread ends its execution. This is a way for a wrapper
+// to free local resources allocated by its main thread.
+void Threads::OnExitThread ( Threads::Handler fnHandle )
+{
+	auto pCb = ( new CompletionHandler_c<Handler> ( std::move(fnHandle) ) );
+	MyThreadContext().m_pThreadCleanup.Push_front ( pCb );
+}
+
+const void * Threads::TopOfStack ()
+{
+	return MyThreadContext().m_pMyThreadStack;
+}
+
+void Threads::MemorizeStack ( const void * PStack )
+{
+	MyThreadContext ().Prepare ( PStack );
+}
+
+void RuntimeThreadContext_t::PropagateName ()
+{
+	// set name of self
+#if HAVE_PTHREAD_SETNAME_NP
+	if ( !m_tDesc.m_sThreadName.IsEmpty() )
 	{
-		bShutdownEngaged = true;
-		searchd::AddShutdownCb ( [&] ()
-		{
-			auto iThreads = g_dDetachedThreads.GetLength();
-			int iTurn = 1;
-			do
-			{
-				CSphVector<LowThreadDesc_t> dToKill;
-				{
-					ScopedMutex_t _ ( g_dDetachedGuard );
-					dToKill = g_dDetachedThreads;
-				}
-
-				if ( !iThreads )
-					break;
-
-				sphWarning ( "AloneShutdowncatch will kill %d threads", iThreads );
-
-				for ( auto & tThread : dToKill )
-				{
-					sphInfo ("Kill thread '%s' with id %d, try %d",
-							tThread.m_sThreadName.cstr(), tThread.m_iThreadID, iTurn );
-					pthread_kill ( tThread.m_tThread, SIGTERM );
-				}
-
-
-				auto iStart = 0;
-				while (true)
-				{
-					{
-						ScopedMutex_t _ ( g_dDetachedGuard );
-						iThreads = g_dDetachedThreads.GetLength ();
-					}
-					if ( iThreads<=0 )
-							break;
-
-					sphSleepMsec ( 50 );
-					iStart += 50;
-					if ( iStart>=10000 ) // wait 10 seconds between tries
-					{
-						sphWarning ( "AloneShutdowncatch catch still has %d alone threads", iThreads );
-						break;
-					}
-				}
-
-				++iTurn;
-			} while ( iThreads>0 );
-		});
+		auto sSafeName = m_tDesc.m_sThreadName.SubString ( 0, 15 );
+		assert ( sSafeName.cstr ()!=nullptr );
+#if HAVE_PTHREAD_SETNAME_NP_1ARG
+		pthread_setname_np ( sSafeName.cstr() );
+#else
+		pthread_setname_np ( m_tDesc.m_tThread, sSafeName.cstr() );
+#endif
 	}
 #endif
 }
 
-void Threads::AddDetachedThread ( SphThread_t tThread, CSphString sName, int iTid )
+void RuntimeThreadContext_t::Prepare ( const void * pStack )
 {
-	ScopedMutex_t _ ( g_dDetachedGuard );
-	sphLogDebug ( "AddDetachedThread called for '%s', tid %d", sName.cstr(), iTid );
-	g_dDetachedThreads.Add ( { tThread, iTid, std::move ( sName ) } );
+	m_pMyThreadStack = pStack;
+	m_tDesc.m_iThreadID = GetOsThreadId ();
+	m_tDesc.m_tThread = Threads::Self ();
+
+#if USE_GPROF
+	// Set the profile timer value
+	setitimer ( ITIMER_PROF, &m_ditimer, NULL );
+
+	// Tell the calling thread that we don't need its data anymore
+	pthread_mutex_lock ( &m_dlock );
+	pthread_cond_signal ( &m_dwait );
+	pthread_mutex_unlock ( &m_dlock );
+#endif
+
+	PropagateName ();
 }
 
-void Threads::RemoveDetachedThread ( SphThread_t tThread )
+void RuntimeThreadContext_t::Run ( const void * pStack )
 {
-	sphLogDebug ( "RemoveDetachedThread called for %d", (int) GetOsThreadId () );
-	ScopedMutex_t _ ( g_dDetachedGuard );
-	ARRAY_FOREACH ( i, g_dDetachedThreads )
+	RuntimeThreadContext () = this;
+	Prepare ( pStack );
+
+#if SPH_ALLOCS_PROFILER
+	m_pTLS = sphMemStatThdInit();
+#endif
+
+	LOG( DEBUG, MT ) << "thread created";
+	m_fnRun();
+	LOG( DEBUG, MT ) << "thread ended";
+
+	while ( !m_pThreadCleanup.Empty () )
 	{
-		if ( sphSameThreads ( g_dDetachedThreads[i].m_tThread, tThread ) )
-		{
-			sphLogDebug ( "Terminated thread %d, '%s'",
-					g_dDetachedThreads[i].m_iThreadID, g_dDetachedThreads[i].m_sThreadName.cstr () );
-			g_dDetachedThreads.RemoveFast ( i );
-			return;
-		}
+		auto * pOp = m_pThreadCleanup.Front ();
+		m_pThreadCleanup.Pop ();
+		pOp->Complete ( pOp );
 	}
+
+#if SPH_ALLOCS_PROFILER
+	sphMemStatThdCleanup ( m_pTLS );
+#endif
 }
 
+#if USE_WINDOWS
+#define SPH_THDFUNC DWORD __stdcall
+#else
+#define SPH_THDFUNC void *
+#endif
 
-thread_local CrashQuery_t * g_pTlsCrashQuery = nullptr;
+SPH_THDFUNC ThreadProcWrapper_fn ( void * pArg )
+{
+	// This is the first local variable in the new thread. So, its address is the top of the stack.
+	// We need to know thread stack size for both expression and query evaluating engines.
+	// We store expressions as a linked tree of structs and execution is a calls of mutually
+	// recursive methods. Before executing we compute tree height and multiply it by a constant
+	// with experimentally measured value to check whether we have enough stack to execute current query.
+	// The check is not ideal and do not work for all compilers and compiler settings.
+	char	cTopOfMyStack;
+
+	CSphScopedPtr<RuntimeThreadContext_t> pCtx { (RuntimeThreadContext_t *) pArg };
+	pCtx->Run ( &cTopOfMyStack );
+
+	return (SPH_THDFUNC) 0;
+}
+
+bool Threads::Create ( SphThread_t * pThread, Handler fnRun, bool bDetached, const char * sName, int iNum )
+{
+	// we can not put this on current stack because wrapper need to see
+	// it all the time and it will destroy this data from heap by itself
+	CSphScopedPtr<RuntimeThreadContext_t> pCtx { new RuntimeThreadContext_t };
+	pCtx->m_fnRun = std::move ( fnRun );
+
+	if ( sName )
+	{
+		if ( iNum<0 )
+			pCtx->m_tDesc.m_sThreadName = sName;
+		else
+			pCtx->m_tDesc.m_sThreadName.SetSprintf ( "%s_%d", sName, iNum );
+	}
+
+	// create thread
+#if USE_WINDOWS
+	Threads::Init ( bDetached );
+	*pThread = CreateThread ( NULL, g_iThreadStackSize, ThreadProcWrapper_fn, pCtx.Ptr(), 0, NULL );
+	if ( *pThread )
+	{
+		pCtx.LeakPtr();
+		return true;
+	}
+#else
+
+#if USE_GPROF
+	getitimer ( ITIMER_PROF, &pCtx->m_ditimer );
+	pthread_cond_init ( &pCtx->m_dwait, NULL );
+	pthread_mutex_init ( &pCtx->m_dlock, NULL );
+	pthread_mutex_lock ( &pCtx->m_dlock );
+#endif
+
+	void * pAttr = Threads::Init ( bDetached );
+	errno = pthread_create ( pThread, (pthread_attr_t*) pAttr, ThreadProcWrapper_fn, pCtx.Ptr() );
+
+#if USE_GPROF
+	if ( !errno )
+		pthread_cond_wait ( &pCtx->m_dwait, &pCtx->m_dlock );
+
+	pthread_mutex_unlock ( &pCtx->m_dlock );
+	pthread_mutex_destroy ( &pCtx->m_dlock );
+	pthread_cond_destroy ( &pCtx->m_dwait );
+#endif
+
+	if ( !errno )
+	{
+		pCtx.LeakPtr();
+		return true;
+	}
+
+#endif // USE_WINDOWS
+
+	// thread creation failed so we need to cleanup ourselves
+	return false;
+}
+
+// Thread with crash query
+
+
+namespace { // static func
+CrashQuery_t** g_ppTlsCrashQuery ()
+{
+	static thread_local CrashQuery_t* pTlsCrashQuery = nullptr;
+	return &pTlsCrashQuery;
+}
+}
 
 void GlobalSetTopQueryTLS ( CrashQuery_t * pQuery )
 {
-	g_pTlsCrashQuery = pQuery;
+	*g_ppTlsCrashQuery() = pQuery;
 }
 
 void GlobalCrashQuerySet ( const CrashQuery_t & tQuery )
 {
-	CrashQuery_t * pQuery = g_pTlsCrashQuery;
+	CrashQuery_t * pQuery = *g_ppTlsCrashQuery();
 	assert ( pQuery );
 	*pQuery = tQuery;
 }
@@ -1315,7 +1477,7 @@ void GlobalCrashQuerySet ( const CrashQuery_t & tQuery )
 static CrashQuery_t g_tUnhandled;
 CrashQuery_t GlobalCrashQueryGet ()
 {
-	const CrashQuery_t * pQuery = g_pTlsCrashQuery;
+	const CrashQuery_t * pQuery = *g_ppTlsCrashQuery ();
 
 	// in case TLS not set \ found handler still should process crash
 	// FIXME!!! some service threads use raw threads instead ThreadCreate
@@ -1325,23 +1487,16 @@ CrashQuery_t GlobalCrashQueryGet ()
 		return *pQuery;
 }
 
-using CallArgPair_t = std::pair<void ( * ) ( void * ), void *>;
-
-static void ThreadWrapper ( void * pArg )
+// create thread for query - it will have set CrashQuery to valid obj inside, alive during whole thread's live time.
+bool Threads::CreateQ ( SphThread_t * pThread, Handler fnRun, bool bDetached, const char * sName, int iNum )
 {
-	auto * pPair = static_cast<CallArgPair_t *> ( pArg );
-	CrashQuery_t tQueryTLS;
-	GlobalSetTopQueryTLS ( &tQueryTLS );
-	pPair->first ( pPair->second );
-	delete pPair;
-}
-
-bool sphCrashThreadCreate ( SphThread_t * pThread, void (*pCall)(void*), void * pArg, bool bDetached, const char* sName )
-{
-	auto * pWrapperArg = new CallArgPair_t ( pCall, pArg );
-	bool bSuccess = sphThreadCreate ( pThread, ThreadWrapper, pWrapperArg, bDetached, sName );
-	if ( !bSuccess )
-		delete pWrapperArg;
-	return bSuccess;
+	return Create ( pThread, [fnCrashRun = std::move ( fnRun )]
+	{
+		CrashQuery_t tQueryTLS;
+		GlobalSetTopQueryTLS ( &tQueryTLS );
+		LOG( DEBUG, MT ) << "thread created";
+		fnCrashRun();
+		LOG( DEBUG, MT ) << "thread ended";
+	}, bDetached, sName, iNum );
 }
 

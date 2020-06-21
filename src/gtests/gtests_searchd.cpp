@@ -35,7 +35,7 @@ static ServedIndexRefPtr_c GetTestLocal ( const CSphString &sName )
 	return pRes;
 }
 
-void ThdSearch ( void * )
+void ThdSearch ()
 {
 	for ( auto i = 0; i<ITERATIONS; ++i )
 	{
@@ -53,7 +53,7 @@ void ThdSearch ( void * )
 	}
 }
 
-void ThdRotate ( void * )
+void ThdRotate ()
 {
 	for ( auto i = 0; i<ITERATIONS; ++i )
 	{
@@ -85,20 +85,20 @@ TEST ( searchd_stuff, crash_on_exists )
 	}
 
 	SphThread_t th1, th2, th3, th4, th5, thRot;
-	sphThreadCreate ( &th1, ThdSearch, nullptr );
-	sphThreadCreate ( &th2, ThdSearch, nullptr );
-	sphThreadCreate ( &th3, ThdSearch, nullptr );
-	sphThreadCreate ( &th4, ThdSearch, nullptr );
-	sphThreadCreate ( &th5, ThdSearch, nullptr );
+	Threads::Create ( &th1, ThdSearch );
+	Threads::Create ( &th2, ThdSearch );
+	Threads::Create ( &th3, ThdSearch );
+	Threads::Create ( &th4, ThdSearch );
+	Threads::Create ( &th5, ThdSearch );
 
-	sphThreadCreate ( &thRot, ThdRotate, nullptr );
+	Threads::Create ( &thRot, ThdRotate );
 
-	sphThreadJoin ( &th1 );
-	sphThreadJoin ( &th2 );
-	sphThreadJoin ( &th3 );
-	sphThreadJoin ( &th4 );
-	sphThreadJoin ( &th5 );
-	sphThreadJoin ( &thRot );
+	Threads::Join ( &th1 );
+	Threads::Join ( &th2 );
+	Threads::Join ( &th3 );
+	Threads::Join ( &th4 );
+	Threads::Join ( &th5 );
+	Threads::Join ( &thRot );
 }
 
 #if POLLING_EPOLL

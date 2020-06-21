@@ -2454,10 +2454,6 @@ void GlobalCrashQuerySet ( const CrashQuery_t & tQuery );
 // get crash info saved thread-locally
 CrashQuery_t GlobalCrashQueryGet ();
 
-// wrapper over sphThreadCreate with key for crash
-bool sphCrashThreadCreate ( SphThread_t * pThread, void (* pCall) ( void * ), void * pArg,
-		bool bDetached, const char * sName );
-
 struct GuardedCrashQuery_t : public ISphNoncopyable
 {
 	const CrashQuery_t m_tReference;

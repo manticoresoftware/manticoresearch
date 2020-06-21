@@ -731,7 +731,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	searchd::FireShutdownCbs ();
 
 	ARRAY_FOREACH ( i, g_dTickPoolThread )
-		sphThreadJoin ( g_dTickPoolThread.Begin() + i );
+		Threads::Join ( g_dTickPoolThread.Begin() + i );
 
 	// unlock indexes and release locks if needed
 	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); )
@@ -771,7 +771,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	sphInfo ( "shutdown complete" );
 
-	sphThreadDone ( g_iLogFile );
+	Threads::Done ( g_iLogFile );
 
 #if USE_WINDOWS
 	CloseHandle ( g_hPipe );
@@ -19887,10 +19887,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		g_dTickPoolThread.Resize ( g_iNetWorkers );
 		ARRAY_FOREACH ( iTick, g_dTickPoolThread )
 		{
-			if ( !sphCrashThreadCreate ( g_dTickPoolThread.Begin ()+iTick, [] (void*)->void
+			if ( !Threads::CreateQ ( g_dTickPoolThread.Begin ()+iTick, []
 				{
 					ServeNetLoop ( g_dListeners );
-				}, nullptr, false, StringBuilder_c ().Sprintf ( "TickPool_%d", iTick ).cstr ()) )
+				}, false, "TickPool", iTick ))
 				sphDie ( "failed to create tick pool thread" );
 		}
 	}
@@ -19902,7 +19902,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	ExposedSetTopQueryTls ( &tQueryTLS );
 
 	// untill no threads started, schedule stopping of alone threads to very bottom
-	Threads::AloneShutdowncatch ();
+	Detached::AloneShutdowncatch ();
 
 	// time for replication to sync with cluster
 	ReplicationStart ( hSearchd, dListenerDescs, bNewCluster, bNewClusterForce );
@@ -19934,9 +19934,8 @@ inline int mainimpl ( int argc, char **argv )
 {
 	// threads should be initialized before memory allocations
 	char cTopOfMainStack;
-	sphThreadInit();
+	Threads::Init();
 	MemorizeStack ( &cTopOfMainStack );
-
 	sphSetDieCallback ( DieCallback );
 	g_pLogger() = sphLog;
 	g_pUservarsHook = UservarsHook;

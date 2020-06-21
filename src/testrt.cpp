@@ -582,8 +582,8 @@ int main ( int argc, char ** argv )
 
 	// threads should be initialized before memory allocations
 	char cTopOfMainStack;
-	sphThreadInit();
-	MemorizeStack ( &cTopOfMainStack );
+	Threads::Init();
+	Threads::MemorizeStack ( &cTopOfMainStack );
 
 	CSphConfigParser cp;
 	CSphConfig &hConf = cp.m_tConf;
@@ -632,10 +632,10 @@ int main ( int argc, char ** argv )
 	int64_t tmStart = sphMicroTimer();
 
 	SphThread_t t1, t2;
-	sphThreadCreate ( &t1, IndexingThread, pSrc );
-	sphThreadCreate ( &t2, IndexingThread, pSrc2 );
-	sphThreadJoin ( &t1 );
-	sphThreadJoin ( &t2 );
+	Threads::Create ( &t1, [pSrc] { IndexingThread ( pSrc ); } );
+	Threads::Create ( &t2, [pSrc2] { IndexingThread ( pSrc2 ); } );
+	Threads::Join ( &t1 );
+	Threads::Join ( &t2 );
 
 #if 0
 	// update

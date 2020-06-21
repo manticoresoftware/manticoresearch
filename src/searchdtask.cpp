@@ -569,12 +569,11 @@ private:
 		m_dTimeouts.Change ( pScheduled );
 	}
 
-	static void WorkerFunc ( void* pArg ) REQUIRES ( !TaskThread )
+	void WorkerFunc () REQUIRES ( !TaskThread )
 	{
 		ScopedRole_c thLazy ( TaskThread );
-		auto* pThis = ( LazyJobs_c* ) pArg;
 		DebugT ( "LazyJobs_c::WorkerFunc started" );
-		pThis->EventLoop ();
+		EventLoop ();
 	}
 
 	static void SchedulerFunc ( void* pScheduledJob ) REQUIRES ( TaskThread )
@@ -643,7 +642,7 @@ private:
 		StringBuilder_c thName;
 		thName.Sprintf ("TaskW_%d", pThreadWorkerContext->m_iMyThreadID);
 		SphThread_t tThd;
-		if ( sphThreadCreate ( &tThd, TheadPoolWorker, pThreadWorkerContext.Ptr (), true, thName.cstr() ))
+		if ( Threads::Create ( &tThd, [pArg=pThreadWorkerContext.Ptr()] { TheadPoolWorker(pArg); }, true, thName.cstr() ))
 		{
 			m_dWorkers.Add ( pThreadWorkerContext.LeakPtr ());
 			++m_iIdleWorkers;
@@ -668,7 +667,7 @@ private:
 		}
 	}
 
-	static void TheadPoolWorker ( void* pArg ) REQUIRES (!MtJobThread)
+	static void TheadPoolWorker ( TaskWorker_t* pArg ) REQUIRES (!MtJobThread)
 	{
 		DebugM ( "LazyJobs_c::TheadPoolWorker started" );
 		ScopedRole_c thMtThread ( MtJobThread );
@@ -743,7 +742,7 @@ public:
 	LazyJobs_c ()
 	{
 		SphThread_t tThd;
-		sphThreadCreate ( &tThd, WorkerFunc, this, true, "TaskSched" );
+		Threads::Create ( &tThd, [this] { WorkerFunc(); }, true, "TaskSched" );
 		m_iScheduler = TaskManager::RegisterGlobal ( "Scheduler",
 			[] ( void* pScheduledJob ) REQUIRES ( TaskThread )
 			{

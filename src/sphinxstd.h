@@ -271,6 +271,11 @@ void			sphAllocsCheck ();
 
 void			sphMemStatDump ( int iFD );
 
+/// per thread cleanup of memory statistic's
+void			sphMemStatThdCleanup ( void * pTLS );
+
+void *			sphMemStatThdInit ();
+
 void			sphMemStatMMapAdd ( int64_t iSize );
 void			sphMemStatMMapDel ( int64_t iSize );
 
@@ -3741,30 +3746,14 @@ typedef pthread_t SphThread_t;
 typedef pthread_key_t SphThreadKey_t;
 #endif
 
-/// my threading initialize routine
-void * sphThreadInit ( bool bDetached=false );
+/// init of memory statistic's data
+void sphMemStatInit ();
 
-/// my threading deinitialize routine
-void sphThreadDone ( int iFD );
+/// cleanup of memory statistic's data
+void sphMemStatDone ();
 
-/// my create thread wrapper
-/// for threads serving clients use sphCrashThreadCreate instead
-bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg, bool bDetached=false, const char * sName=nullptr );
-
-/// get name of a thread
-CSphString GetThreadName ( const SphThread_t * pThread );
-
-/// my join thread wrapper
-bool sphThreadJoin ( SphThread_t * pThread );
-
-/// my own thread
-SphThread_t sphThreadSelf ();
-
-/// compares two thread ids
-bool sphSameThreads ( SphThread_t first, SphThread_t second );
-
-/// add (cleanup) callback to run on thread exit
-void sphThreadOnExit ( void (*fnCleanup)(void*), void * pArg );
+//bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg, bool bDetached=false, const char * sName=nullptr );
+// function was removed. Use Threads::Create instead
 
 /// alloc thread-local key
 bool sphThreadKeyCreate ( SphThreadKey_t * pKey );
@@ -3775,71 +3764,20 @@ void sphThreadKeyDelete ( SphThreadKey_t tKey );
 /// get thread-local key value
 void * sphThreadGet ( SphThreadKey_t tKey );
 
+/// set thread-local key value
+bool sphThreadSet ( SphThreadKey_t tKey, void * pValue );
+
 /// get the pointer to my job's stack (m.b. different from thread stack in coro)
-void * sphMyStack ();
+const void * sphMyStack ();
 
 /// get size of the stack (either thread, either coro - depends from context)
 int sphMyStackSize();
-
-/// get the pointer to my thread's stack
-void * sphThreadStack ();
 
 /// get size of used stack (threads or coro - depends from context)
 int64_t sphGetStackUsed();
 
 /// set the size of my thread's stack
 void sphSetMyStackSize ( int iStackSize );
-
-/// store the address in the TLS
-void MemorizeStack ( void* PStack );
-
-/// set thread-local key value
-bool sphThreadSet ( SphThreadKey_t tKey, void * pValue );
-
-
-template < typename PTR=void* >
-class TLS_T final
-{
-	SphThreadKey_t m_tKey;
-
-public:
-	TLS_T()
-	{
-		Verify ( sphThreadKeyCreate( &m_tKey ));
-	}
-
-	~TLS_T()
-	{
-		sphThreadKeyDelete( m_tKey );
-	}
-
-	TLS_T& operator=( PTR pValue )
-	{
-		Verify ( sphThreadSet( m_tKey, (void*)pValue ));
-		return *this;
-	}
-
-	const PTR operator*() const
-	{
-		return ( PTR ) sphThreadGet( m_tKey );
-	}
-
-	PTR operator->() const
-	{
-		return (PTR) sphThreadGet( m_tKey );
-	}
-
-	operator bool() const
-	{
-		return sphThreadGet ( m_tKey )!=nullptr;
-	}
-
-	operator PTR() const
-	{
-		return reinterpret_cast<PTR> ( sphThreadGet( m_tKey ) );
-	}
-};
-
 
 /// a singleton. Since C++11 it is thread-safe, and so, looks really simple
 template<typename T, typename T_tag = T>

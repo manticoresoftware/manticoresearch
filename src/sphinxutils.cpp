@@ -2676,7 +2676,7 @@ void sphBacktrace ( int iFD, bool bSafe )
 
 	bool bOk = true;
 
-	void * pMyStack = NULL;
+	const void * pMyStack = nullptr;
 	int iStackSize = 0;
 	if ( !bSafe )
 	{

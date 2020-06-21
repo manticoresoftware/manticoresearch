@@ -1642,12 +1642,6 @@ bool RtIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFiel
 	return true;
 }
 
-static void AccumCleanup ( void * pArg )
-{
-	auto pAcc = (RtAccum_t *) pArg;
-	SafeDelete ( pAcc );
-}
-
 
 RtAccum_t * RtIndex_i::AcquireAccum ( CSphDict * pDict, RtAccum_t * pAcc,
 	bool bWordDict, bool bSetTLS, CSphString* sError )
@@ -1668,7 +1662,7 @@ RtAccum_t * RtIndex_i::AcquireAccum ( CSphDict * pDict, RtAccum_t * pAcc,
 		if ( bSetTLS )
 		{
 			g_pTlsAccum = pAcc;
-			sphThreadOnExit ( AccumCleanup, pAcc );
+			Threads::OnExitThread( [pAcc] { delete pAcc; } );
 		}
 	}
 

@@ -15,6 +15,7 @@
 #include "sphinxint.h"
 #include "sphinxutils.h"
 #include "json/cJSON.h"
+#include "threadutils.h"
 #include <cmath>
 
 // Miscelaneous short functional tests: TDigest, SpanSearch,
@@ -789,7 +790,7 @@ TEST ( functions, Log2 )
 
 CSphMutex g_Mutex1;
 
-void TimedLockTest ( void * )
+void TimedLockTest ()
 {
 	ASSERT_FALSE ( g_Mutex1.TimedLock ( 1000 ) ) << "timedlock attempt 1";
 	ASSERT_FALSE ( g_Mutex1.TimedLock ( 1000 ) ) << "timedlock attempt 2";
@@ -802,10 +803,10 @@ TEST (functions, Mutex)
 {
 	SphThread_t th;
 	ASSERT_TRUE ( g_Mutex1.Lock () ) << "locked";
-	ASSERT_TRUE ( sphThreadCreate ( &th, TimedLockTest, NULL ) ) << "timedlock thread created";
+	ASSERT_TRUE ( Threads::Create ( &th, TimedLockTest ) ) << "timedlock thread created";
 	sphSleepMsec ( 3500 );
 	ASSERT_TRUE ( g_Mutex1.Unlock () ) << "unlocked";
-	ASSERT_TRUE ( sphThreadJoin ( &th ) ) << "timedlock thread done";
+	ASSERT_TRUE ( Threads::Join ( &th ) ) << "timedlock thread done";
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -841,14 +842,14 @@ TEST ( functions, RWLock )
 	g_iRwlock = 0;
 	for ( int i = 0; i<NPAIRS; i++ )
 	{
-		ASSERT_TRUE ( sphThreadCreate ( &dReaders[i], RwlockReader, ( void * ) &iRead[i] ) );
-		ASSERT_TRUE ( sphThreadCreate ( &dWriters[i], RwlockWriter, reinterpret_cast<void *>(1 + i) ) );
+		ASSERT_TRUE ( Threads::Create ( &dReaders[i], [&,i] { RwlockReader ( &iRead[i] );} ));
+		ASSERT_TRUE ( Threads::Create ( &dWriters[i], [&,i] { RwlockWriter ( reinterpret_cast<void *>(1 + i) );} ));
 	}
 
 	for ( int i = 0; i<NPAIRS; i++ )
 	{
-		ASSERT_TRUE ( sphThreadJoin ( &dReaders[i] ) );
-		ASSERT_TRUE ( sphThreadJoin ( &dWriters[i] ) );
+		ASSERT_TRUE ( Threads::Join ( &dReaders[i] ) );
+		ASSERT_TRUE ( Threads::Join ( &dWriters[i] ) );
 	}
 
 	ASSERT_EQ ( g_iRwlock, NPAIRS * ( 1 + NPAIRS ) / 2 );
@@ -872,7 +873,7 @@ int getms()
 	return (sphMicroTimer () - tmNow)/1000;
 }
 
-void AutoEventest ( void* )
+void AutoEventest ()
 {
 	printf("\n%d thread started", getms());
 	for ( int i=0; i<5; ++i)
@@ -882,7 +883,7 @@ void AutoEventest ( void* )
 	}
 }
 
-void AutoEventestTimed ( void* )
+void AutoEventestTimed ()
 {
 	printf ( "\n%d B1: started", getms ());
 	for ( int i = 0; i<5; ++i )
@@ -912,7 +913,7 @@ TEST ( functions, MultiAutoEvent )
 
 
 	// now start the thread, it will receive events
-	ASSERT_TRUE ( sphThreadCreate ( &th, AutoEventest, nullptr )) << "autoevent thread created";
+	ASSERT_TRUE ( Threads::Create ( &th, AutoEventest )) << "autoevent thread created";
 	printf ( "\n%d A2: created working thread", getms () );
 	// sleep half-a-second and set last event.
 	sphSleepMsec ( 500 );
@@ -920,7 +921,7 @@ TEST ( functions, MultiAutoEvent )
 	g_multievent.SetEvent ();
 
 	sphSleepMsec ( 100 );
-	ASSERT_TRUE ( sphThreadJoin ( &th )) << "autoevent thread done";
+	ASSERT_TRUE ( Threads::Join ( &th )) << "autoevent thread done";
 }
 
 TEST ( functions, MultiAutoEventTimed )
@@ -936,7 +937,7 @@ TEST ( functions, MultiAutoEventTimed )
 	g_multievent.SetEvent ();
 
 	// now start the thread, it will receive events
-	ASSERT_TRUE ( sphThreadCreate ( &th, AutoEventestTimed, nullptr ) ) << "autoeventtimed thread created";
+	ASSERT_TRUE ( Threads::Create ( &th, AutoEventestTimed ) ) << "autoeventtimed thread created";
 	printf ( "\n%d A2: created working thread", getms () );
 
 	// sleep half-a-second and set last event.
@@ -948,10 +949,10 @@ TEST ( functions, MultiAutoEventTimed )
 	g_multievent.SetEvent ();
 	g_multievent.SetEvent ();
 	sphSleepMsec ( 100 );
-	ASSERT_TRUE ( sphThreadJoin ( &th ) ) << "autoevent thread done";
+	ASSERT_TRUE ( Threads::Join ( &th ) ) << "autoevent thread done";
 }
 
-void OneshotEventTest ( void* )
+void OneshotEventTest()
 {
 	printf ( "\n%d thread started", getms ());
 	for ( int i = 0; i<2; ++i )
@@ -961,7 +962,7 @@ void OneshotEventTest ( void* )
 	}
 }
 
-void OneshotEventTestTimed ( void* )
+void OneshotEventTestTimed()
 {
 	printf ( "\n%d B1: started", getms ());
 	bool bRes=g_oneevent.WaitEvent ( 500 ); ASSERT_TRUE ( bRes ) << "WaitEvent";
@@ -989,7 +990,7 @@ TEST ( functions, OneshotAutoEvent )
 	g_oneevent.SetEvent ();
 
 	// now start the thread, it will receive events
-	ASSERT_TRUE ( sphThreadCreate ( &th, OneshotEventTest, nullptr )) << "autoevent thread created";
+	ASSERT_TRUE ( Threads::Create ( &th, OneshotEventTest )) << "autoevent thread created";
 	printf ( "\n%d A2: created working thread", getms ());
 
 	// sleep half-a-second and set last event.
@@ -997,7 +998,7 @@ TEST ( functions, OneshotAutoEvent )
 	printf ( "\n%d A3: set event", getms ());
 	g_oneevent.SetEvent ();
 	sphSleepMsec ( 100 );
-	ASSERT_TRUE ( sphThreadJoin ( &th )) << "autoevent thread done";
+	ASSERT_TRUE ( Threads::Join ( &th )) << "autoevent thread done";
 }
 
 // oneshot event - we can set it N times, but only once it waited, and then will block.
@@ -1014,7 +1015,7 @@ TEST ( functions, OneshotAutoEventTimed )
 	g_oneevent.SetEvent ();
 
 	// now start the thread, it will receive events
-	ASSERT_TRUE ( sphThreadCreate ( &th, OneshotEventTestTimed, nullptr ) ) << "autoevent thread created";
+	ASSERT_TRUE ( Threads::Create ( &th, OneshotEventTestTimed ) ) << "autoevent thread created";
 	printf ( "\n%d A2: created working thread", getms () );
 
 	// sleep half-a-second and set last event.
@@ -1026,19 +1027,14 @@ TEST ( functions, OneshotAutoEventTimed )
 	g_oneevent.SetEvent ();
 	g_oneevent.SetEvent ();
 	sphSleepMsec ( 100 );
-	ASSERT_TRUE ( sphThreadJoin ( &th ) ) << "autoevent thread done";
+	ASSERT_TRUE ( Threads::Join ( &th ) ) << "autoevent thread done";
 }
 
 //////////////////////////////////////////////////////////////////////////
 
-void CleanupCallback ( void * pArg )
-{
-	*( bool * ) pArg = true;
-}
-
 void CleanupThread ( void * pArg )
 {
-	sphThreadOnExit ( CleanupCallback, pArg );
+	Threads::OnExitThread ( [=] { *(bool *) pArg = true; } );
 }
 
 TEST ( functions, Cleanup )
@@ -1050,10 +1046,10 @@ TEST ( functions, Cleanup )
 
 	SphThread_t thd[CLEANUP_COUNT];
 	for ( int i = 0; i<CLEANUP_COUNT; i++ )
-		ASSERT_TRUE ( sphThreadCreate ( &thd[i], CleanupThread, &bCleanup[i] ) );
+		ASSERT_TRUE ( Threads::Create ( &thd[i], [&,i] { CleanupThread ( &bCleanup[i] ); } ) );
 
 	for ( auto & th : thd )
-		ASSERT_TRUE ( sphThreadJoin ( &th ) );
+		ASSERT_TRUE ( Threads::Join ( &th ) );
 
 	for ( auto & bClean : bCleanup )
 		ASSERT_TRUE ( bClean );

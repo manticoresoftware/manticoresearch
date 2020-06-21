@@ -360,6 +360,10 @@ class DNSResolver_c
 		m_bCallbackInvoked = true;
 	};
 
+// platform-specific part starts here.
+#if HAVE_GETADDRINFO_A
+	struct gaicb m_dReq, *m_pReq;
+
 	static void ResolvingRoutine ( void * pResolver )
 	{
 		auto * pThis = ( DNSResolver_c * ) pResolver;
@@ -367,10 +371,6 @@ class DNSResolver_c
 			pThis->Resolve ();
 		SafeDelete ( pThis );
 	}
-
-// platform-specific part starts here.
-#if HAVE_GETADDRINFO_A
-	struct gaicb m_dReq, *m_pReq;
 
 	static void ResolvingWrapper ( sigval dSigval )
 	{
@@ -401,7 +401,7 @@ class DNSResolver_c
 
 	void ResolveBegin ()
 	{
-		sphThreadCreate ( &m_dResolverThread, ResolvingRoutine, this, true );
+		Threads::Create ( &m_dResolverThread, [this] { Resolve(); delete this; }, true );
 	}
 
 	void Resolve ()
@@ -3435,6 +3435,7 @@ private:
 	/// main event loop run in separate thread.
 	void EventLoop () REQUIRES ( LazyThread )
 	{
+		sphLogDebugL ( "L LazyNetEvents_c::EventLoop started" );
 		while ( true )
 			if ( !EventTick () )
 				break;
@@ -3652,7 +3653,10 @@ public:
 	explicit LazyNetEvents_c ( int iSizeHint )
 	{
 		events_create ( iSizeHint );
-		sphCrashThreadCreate ( &m_dWorkingThread, WorkerFunc, this, false, "AgentsPoller" );
+		Threads::CreateQ ( &m_dWorkingThread, [this] {
+			ScopedRole_c thLazy ( LazyThread );
+			EventLoop ();
+		}, false, "AgentsPoller" );
 	}
 
 	~LazyNetEvents_c ()
@@ -3661,7 +3665,7 @@ public:
 		Fire();
 		// might be crash - no need to hung waiting thread
 		if ( sphInterrupted () )
-			sphThreadJoin ( &m_dWorkingThread );
+			Threads::Join ( &m_dWorkingThread );
 		events_destroy();
 	}
 

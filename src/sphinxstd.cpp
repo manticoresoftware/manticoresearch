@@ -524,7 +524,7 @@ thread_local MemCategoryStack_t* g_tTLSMemCategory;
 static MemCategoryStack_t * g_pMainTLS = NULL; // category stack of main thread
 
 // memory statistic's per thread factory
-static MemCategoryStack_t * sphMemStatThdInit ()
+void * sphMemStatThdInit ()
 {
 	MemCategoryStack_t * pTLS = (MemCategoryStack_t *)sphDebugNew ( sizeof ( MemCategoryStack_t ) );
 	pTLS->Reset();
@@ -534,22 +534,22 @@ static MemCategoryStack_t * sphMemStatThdInit ()
 }
 
 // per thread cleanup of memory statistic's
-static void sphMemStatThdCleanup ( MemCategoryStack_t * pTLS )
+void sphMemStatThdCleanup ( void * pTLS )
 {
-	sphDebugDelete ( pTLS );
+	sphDebugDelete ( (MemCategoryStack_t *)pTLS );
 }
 
 // init of memory statistic's data
-static void sphMemStatInit ()
+void sphMemStatInit ()
 {
 	// main thread statistic's creation
 	assert ( g_pMainTLS==NULL );
-	g_pMainTLS = sphMemStatThdInit();
+	g_pMainTLS = (MemCategoryStack_t *) sphMemStatThdInit();
 	assert ( g_pMainTLS!=NULL );
 }
 
 // cleanup of memory statistic's data
-static void sphMemStatDone ()
+void sphMemStatDone ()
 {
 	assert ( g_pMainTLS!=NULL );
 	sphMemStatThdCleanup ( g_pMainTLS );
@@ -809,267 +809,8 @@ DWORD sphRand ()
 // THREADING FUNCTIONS
 //////////////////////////////////////////////////////////////////////////
 
-// This is a working context for a thread wrapper. It wraps every thread to
-// store information about it's stack size, cleanup threads and something else.
-// This struct always should be allocated in the heap, cause wrapper need
-// to see it all the time and it frees it out of the heap by itself. Wrapper thread function
-// receives as an argument a pointer to ThreadCall_t with one function pointer to
-// a main thread function. Afterwards, thread can set up one or more cleanup functions
-// which will be executed by a wrapper in the linked list order after it dies.
-struct ThreadCall_t
-{
-	void			( *m_pCall )( void * pArg );
-	void *			m_pArg;
-#if USE_GPROF
-	pthread_mutex_t	m_dlock;
-	pthread_cond_t	m_dwait;
-	itimerval		m_ditimer;
-#endif
-	union {
-		ThreadCall_t *	m_pNext; 		// used in exit chain
-		char 			m_sName[16];	// used in main thread
-	};
-};
-thread_local ThreadCall_t* g_pTlsThreadCleanup;
-thread_local void* g_pTlsMyThreadStack;
-
-#if USE_WINDOWS
-#define SPH_THDFUNC DWORD __stdcall
-#else
-#define SPH_THDFUNC void *
-#endif
-
-SPH_THDFUNC sphThreadProcWrapper ( void * pArg )
-{
-	// This is the first local variable in the new thread. So, its address is the top of the stack.
-	// We need to know thread stack size for both expression and query evaluating engines.
-	// We store expressions as a linked tree of structs and execution is a calls of mutually
-	// recursive methods. Before executing we compute tree height and multiply it by a constant
-	// with experimentally measured value to check whether we have enough stack to execute current query.
-	// The check is not ideal and do not work for all compilers and compiler settings.
-	char	cTopOfMyStack;
-	assert ( !g_pTlsThreadCleanup );
-	assert ( !g_pTlsMyThreadStack );
-
-#if SPH_ALLOCS_PROFILER
-	MemCategoryStack_t * pTLS = sphMemStatThdInit();
-#endif
-
-#if USE_GPROF
-	// Set the profile timer value
-	setitimer ( ITIMER_PROF, &( (ThreadCall_t*) pArg )->m_ditimer, NULL );
-
-	// Tell the calling thread that we don't need its data anymore
-	pthread_mutex_lock ( &( (ThreadCall_t*) pArg)->m_dlock );
-	pthread_cond_signal ( &( (ThreadCall_t*) pArg)->m_dwait );
-	pthread_mutex_unlock ( &( (ThreadCall_t*) pArg)->m_dlock );
-#endif
-
-	auto * pCall = (ThreadCall_t*) pArg;
-	MemorizeStack ( & cTopOfMyStack );
-
-	// set name of self
-#if HAVE_PTHREAD_SETNAME_NP
-	if ( pCall->m_sName[0]!='\0' )
-	{
-		assert ( strlen ( pCall->m_sName )<16 );
-#if HAVE_PTHREAD_SETNAME_NP_1ARG
-		pthread_setname_np ( pCall->m_sName );
-#else
-		pthread_setname_np ( pthread_self(), pCall->m_sName );
-#endif
-	}
-#endif
-
-	pCall->m_pCall ( pCall->m_pArg );
-	SafeDelete ( pCall );
-
-	ThreadCall_t * pCleanup = g_pTlsThreadCleanup;
-	while ( pCleanup )
-	{
-		pCall = pCleanup;
-		pCall->m_pCall ( pCall->m_pArg );
-		pCleanup = pCall->m_pNext;
-		SafeDelete ( pCall );
-	}
-
-#if SPH_ALLOCS_PROFILER
-	sphMemStatThdCleanup ( pTLS );
-#endif
-
-	return 0;
-}
-
-#if !USE_WINDOWS
-void * sphThreadInit ( bool bDetached )
-#else
-void * sphThreadInit ( bool )
-#endif
-{
-	static bool bInit = false;
-#if !USE_WINDOWS
-	static pthread_attr_t tJoinableAttr;
-	static pthread_attr_t tDetachedAttr;
-#endif
-
-	if ( !bInit )
-	{
-#if SPH_DEBUG_LEAKS || SPH_ALLOCS_PROFILER
-		sphMemStatInit();
-#endif
-
-#if !USE_WINDOWS
-		if ( pthread_attr_init ( &tJoinableAttr ) )
-			sphDie ( "FATAL: pthread_attr_init( joinable ) failed" );
-
-		if ( pthread_attr_init ( &tDetachedAttr ) )
-			sphDie ( "FATAL: pthread_attr_init( detached ) failed" );
-
-		if ( pthread_attr_setdetachstate ( &tDetachedAttr, PTHREAD_CREATE_DETACHED ) )
-			sphDie ( "FATAL: pthread_attr_setdetachstate( detached ) failed" );
-#endif
-		bInit = true;
-	}
-#if !USE_WINDOWS
-	if ( pthread_attr_setstacksize ( &tJoinableAttr, g_iThreadStackSize + PTHREAD_STACK_MIN ) )
-		sphDie ( "FATAL: pthread_attr_setstacksize( joinable ) failed" );
-
-	if ( pthread_attr_setstacksize ( &tDetachedAttr, g_iThreadStackSize + PTHREAD_STACK_MIN ) )
-		sphDie ( "FATAL: pthread_attr_setstacksize( detached ) failed" );
-
-	return bDetached ? &tDetachedAttr : &tJoinableAttr;
-#else
-	return NULL;
-#endif
-}
-
-
-#if SPH_DEBUG_LEAKS || SPH_ALLOCS_PROFILER
-void sphThreadDone ( int iFD )
-{
-	sphMemStatDump ( iFD );
-	sphMemStatDone();
-}
-#else
-void sphThreadDone ( int )
-{
-}
-#endif
-
-
-bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg, bool bDetached, const char * sName )
-{
-	// we can not put this on current stack because wrapper need to see
-	// it all the time and it will destroy this data from heap by itself
-	auto * pCall = new ThreadCall_t;
-	pCall->m_pCall = fnThread;
-	pCall->m_pArg = pArg;
-	pCall->m_pNext = nullptr;
-
-#if HAVE_PTHREAD_SETNAME_NP
-	if ( sName )
-		strncpy ( pCall->m_sName, sName, 15 );
-	pCall->m_sName[15] = '\0';
-#endif
-
-	// create thread
-#if USE_WINDOWS
-	sphThreadInit ( bDetached );
-	*pThread = CreateThread ( NULL, g_iThreadStackSize, sphThreadProcWrapper, pCall, 0, NULL );
-	if ( *pThread )
-		return true;
-#else
-
-#if USE_GPROF
-	getitimer ( ITIMER_PROF, &pCall->m_ditimer );
-	pthread_cond_init ( &pCall->m_dwait, NULL );
-	pthread_mutex_init ( &pCall->m_dlock, NULL );
-	pthread_mutex_lock ( &pCall->m_dlock );
-#endif
-
-	void * pAttr = sphThreadInit ( bDetached );
-	errno = pthread_create ( pThread, (pthread_attr_t*) pAttr, sphThreadProcWrapper, pCall );
-
-#if USE_GPROF
-	if ( !errno )
-		pthread_cond_wait ( &pCall->m_dwait, &pCall->m_dlock );
-
-	pthread_mutex_unlock ( &pCall->m_dlock );
-	pthread_mutex_destroy ( &pCall->m_dlock );
-	pthread_cond_destroy ( &pCall->m_dwait );
-#endif
-
-	if ( !errno )
-		return true;
-
-#endif
-
-	// thread creation failed so we need to cleanup ourselves
-	SafeDelete ( pCall );
-	return false;
-}
-
-CSphString GetThreadName ( const SphThread_t * pThread )
-{
-	if ( !pThread || !*pThread )
-		return "";
-
-#if HAVE_PTHREAD_GETNAME_NP
-	char sClippedName[16];
-	pthread_getname_np ( *pThread, sClippedName, 16 );
-	return sClippedName;
-#else
-	return "";
-#endif
-}
-
-
-bool sphThreadJoin ( SphThread_t * pThread )
-{
-#if USE_WINDOWS
-	DWORD uWait = WaitForSingleObject ( *pThread, INFINITE );
-	CloseHandle ( *pThread );
-	*pThread = NULL;
-	return ( uWait==WAIT_OBJECT_0 || uWait==WAIT_ABANDONED );
-#else
-	return pthread_join ( *pThread, nullptr )==0;
-#endif
-}
-
-
-SphThread_t sphThreadSelf ()
-{
-#if USE_WINDOWS
-	return GetCurrentThread();
-#else
-	return pthread_self ();
-#endif
-}
-
-
-bool sphSameThreads ( SphThread_t first, SphThread_t second )
-{
-#if USE_WINDOWS
-	return first==second;
-#else
-	return !!pthread_equal (first, second);
-#endif
-}
-
-
-// Adds a function call (a new task for a wrapper) to a linked list
-// of thread contexts. They will be executed one by one right after
-// the main thread ends its execution. This is a way for a wrapper
-// to free local resources allocated by its main thread.
-void sphThreadOnExit ( void (*fnCleanup)(void*), void * pArg )
-{
-	auto pCleanup = new ThreadCall_t;
-	pCleanup->m_pCall = fnCleanup;
-	pCleanup->m_pArg = pArg;
-	pCleanup->m_pNext = g_pTlsThreadCleanup;
-	g_pTlsThreadCleanup = pCleanup;
-}
-
+/// all generic thread manipulation stuff moved to threadutils.cpp
+/// here only TLS key management and stack size routines left.
 
 bool sphThreadKeyCreate ( SphThreadKey_t * pKey )
 {
@@ -1101,16 +842,11 @@ void * sphThreadGet ( SphThreadKey_t tKey )
 #endif
 }
 
-void * sphThreadStack ()
-{
-	return g_pTlsMyThreadStack;
-}
-
 
 int64_t sphGetStackUsed()
 {
 	BYTE cStack;
-	BYTE * pStackTop = (BYTE*)sphMyStack();
+	auto * pStackTop = (const BYTE*)sphMyStack();
 	if ( !pStackTop )
 		return 0;
 	int64_t iHeight = pStackTop - &cStack;
@@ -1120,15 +856,7 @@ int64_t sphGetStackUsed()
 void sphSetMyStackSize ( int iStackSize )
 {
 	g_iThreadStackSize = iStackSize;
-	sphThreadInit ( false );
 }
-
-
-void MemorizeStack ( void* PStack )
-{
-	g_pTlsMyThreadStack = PStack;
-}
-
 
 bool sphThreadSet ( SphThreadKey_t tKey, void * pValue )
 {

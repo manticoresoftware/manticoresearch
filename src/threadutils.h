@@ -46,17 +46,22 @@ int GetOsThreadId ();
 
 namespace Threads {
 
-struct ServiceThread_t
+// most basic struct with details interested not only to thread itself, but also observable from outside
+// Describes just 'execution'. Used as is from main to handle detached threads on shutdown
+// each thread own such structure by design, ref from inside m.b. accessed by Threads::MyThd()
+struct LowThreadDesc_t
 {
-	SphThread_t m_tThread;
-	bool m_bCreated = false;
-
-	~ServiceThread_t ();
-	bool Create ( void (* fnThread) ( void* ), void* pArg, const char* sName = nullptr );
-	void Join ();
+	SphThread_t			m_tThread;		///< m.b. used to send signals to the thread
+	int					m_iThreadID;	///< OS thread id
+	CSphString			m_sThreadName;
 };
 
-// common thread properties
+// thread-local description available globaly from any thread
+LowThreadDesc_t& MyThd ();
+
+// save name from my local LowThreadDesc into OS thread name
+void SetSysThreadName();
+
 struct ThdInfo_t
 {
 	Proto_e	   m_eProto		 = Proto_e::MYSQL41;
@@ -90,8 +95,6 @@ struct ThdPublicInfo_t : ThdInfo_t, public ISphNoncopyable
 	ThdPublicInfo_t( ThdPublicInfo_t&& rhs) noexcept;
 	ThdPublicInfo_t& operator= ( ThdPublicInfo_t&& rhs) noexcept;
 };
-
-
 
 struct ThdDesc_t: public ThdInfo_t, private ListNode_t
 {
@@ -154,9 +157,8 @@ struct Scheduler_i
 		Schedule ( std::move ( handler ), false );
 	}
 	virtual Keeper_t KeepWorking() = 0;
-	virtual const char * szName () const { return "<unknown>"; }
 	virtual int WorkingThreads() const = 0;
-	virtual long Works () const = 0;
+	virtual int Works () const = 0;
 	virtual void Wait () = 0;
 	virtual void DiscardOnFork() {};
 };
@@ -167,12 +169,41 @@ using SchedulerSharedPtr_t = SharedPtr_t<Scheduler_i *>;
 SchedulerSharedPtr_t MakeThreadPool ( size_t iThreadCount, const char * szName="" );
 SchedulerSharedPtr_t MakeAloneThread ( size_t iOrderNum, const char * szName = "" );
 
-// schedule global watchdog to gracefully join alone threads on exit
-void AloneShutdowncatch ();
+/// add (cleanup) callback to run on thread exit
+void OnExitThread ( Handler fnHandle );
+
+/// get the pointer to my thread's stack
+const void * TopOfStack ();
+
+/// store the address in the TLS
+void MemorizeStack ( const void * PStack );
+
+/// my threading initialize routine
+void * Init ( bool bDetached = false );
+
+/// my threading deinitialize routine
+void Done ( int iFD );
+
+/// get name of a thread
+CSphString GetName ( const SphThread_t * pThread );
+
+/// my join thread wrapper
+bool Join ( SphThread_t * pThread );
+
+/// my own thread
+SphThread_t Self ();
+
+/// compares two thread ids
+bool Same ( SphThread_t first, SphThread_t second );
+
+/// my create thread wrapper
+/// for threads serving clients use CreateQ instead
+bool Create ( SphThread_t * pThread, Handler fnRun, bool bDetached = false, const char * sName = nullptr, int iNum=-1 );
+
+/// create thread and run thread func having global CrashQuery_t initialized
+bool CreateQ ( SphThread_t * pThread, Handler fnRun, bool bDetached = false, const char * sName = nullptr, int iNum=-1 );
 
 } // namespace Threads
-
-
 
 extern ThreadRole MainThread;
 
@@ -204,17 +235,31 @@ using SchedulerFabric_fn = std::function<Threads::Scheduler_i * ( void )>;
 // sphInterrupted() is set to true. Returns cookie for refer the callback in future.
 using Handler_fn = std::function<void ()>;
 
-namespace searchd {
+namespace searchd
+{
 
 	void* AddShutdownCb ( Handler_fn fnCb );
 
 	// remove previously set shutdown cb by cookie
 	void DeleteShutdownCb ( void* pCookie );
 
-	// invoke shutdown handlers
+	// execute shutdown handlers
 	void FireShutdownCbs ();
 
+	// Shutdown cb chain also forked, but don't need to be executed on fork
 	void CleanAfterFork();
+}
+
+// add and remove unjoined threads to global tracer which will
+// send them SIGTERM on shutdown
+namespace Detached
+{
+	void AddThread ( Threads::LowThreadDesc_t* pThread );
+
+	void RemoveThread ( Threads::LowThreadDesc_t* pThread );
+
+	// schedule global watchdog to gracefully join alone threads on exit
+	void AloneShutdowncatch ();
 }
 
 

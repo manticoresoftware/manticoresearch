@@ -17,6 +17,7 @@
 #include "sphinxrt.h"
 #include "sphinxint.h"
 #include "sphinxstem.h"
+#include "threadutils.h"
 #include <cmath>
 
 #define SNOWBALL 0
@@ -386,11 +387,11 @@ void BenchThreads ()
 		for ( int iBatch=0; iBatch<BATCHES; iBatch++ )
 		{
 			for ( int i=0; i<BATCH_THREADS; i++ )
-				if ( !sphThreadCreate ( pThd+i, ( iRun==1 ) ? DummyThread : MutexBenchThread, &tMutex) )
+				if ( !Threads::Create ( pThd+i, [&] { if (iRun!=1)  MutexBenchThread ( &tMutex ); } ) )
 					sphDie ( "failed to create thread (batch %d thd %d)", iBatch, i );
 
 			for ( int i=0; i<BATCH_THREADS; i++ )
-				if ( !sphThreadJoin ( pThd+i ) )
+				if ( !Threads::Join ( pThd+i ) )
 					sphDie ( "failed to join to thread (batch %d thd %d)", iBatch, i );
 		}
 		tmThd = sphMicroTimer()-tmThd;
@@ -892,12 +893,12 @@ void BenchMisc()
 
 	int64_t tmStart = sphMicroTimer();
 	int64_t tmEnd [ THREADS ];
-	sphThreadInit ( false );
+	Threads::Init ();
 
-	for ( int i=0; i<THREADS; i++ )
-		sphThreadCreate ( &dThd[i], BenchTimerThread, &tmEnd[i], false );
-	for ( int i=0; i<THREADS; i++ )
-		if ( !sphThreadJoin ( &dThd[i] ) )
+	for ( int i=0; i<THREADS; ++i )
+		Threads::Create ( &dThd[i], [&tmEnd,i] { BenchTimerThread ( &tmEnd[i] ); } );
+	for ( int i=0; i<THREADS; ++i )
+		if ( !Threads::Join ( &dThd[i] ) )
 			sphDie ( "thread_join failed" );
 
 	int64_t iMin = INT64_MAX;
@@ -945,8 +946,8 @@ int main ()
 {
 	// threads should be initialized before memory allocations
 	char cTopOfMainStack;
-	sphThreadInit();
-	MemorizeStack ( &cTopOfMainStack );
+	Threads::Init();
+	Threads::MemorizeStack ( &cTopOfMainStack );
 	setvbuf ( stdout, NULL, _IONBF, 0 );
 
 #if USE_WINDOWS

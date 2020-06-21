@@ -471,11 +471,11 @@ void WaitForDeffered ( Waiter_t&& dWaiter )
 }
 }
 
-void * sphMyStack ()
+const void * sphMyStack ()
 {
 	auto pWorker = Threads::CoroWorker_c::CurrentWorker ();
 	if (!pWorker)
-		return sphThreadStack();
+		return Threads::TopOfStack();
 	return pWorker->GetTopOfStack ();
 }
 

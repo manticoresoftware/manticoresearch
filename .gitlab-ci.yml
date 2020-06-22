@@ -206,7 +206,5 @@ deploy_hook:
   rules:
     - if: $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i
       when: always
-  dependencies:
-    - push_results
   trigger:
     include: '/dist/gitlab-release.yml'

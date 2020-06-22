@@ -8,6 +8,7 @@ stages:
   - mirroring
   - routines
   - publish
+  - hooks
 
 pages:
   stage: routines
@@ -202,7 +203,7 @@ push_results:
   allow_failure: true
 
 deploy_hook:
-  stage: publish
+  stage: hooks
   rules:
     - if: $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i
       when: always

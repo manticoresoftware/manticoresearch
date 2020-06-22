@@ -1,3 +1,7 @@
+stages:
+  - build
+  - publish
+
 tarball:
   stage: build
   only:
@@ -285,3 +289,15 @@ collect:
     when: on_success
     expire_in: 1 week
   allow_failure: false
+
+build_master:
+  stage: publish
+  tags:
+    - dev-host
+  rules:
+    - if: $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_BRANCH == "master"
+  script:
+    - ~/upload_repo.sh
+  dependencies: [rhel6, rhel7, rhel8, jessie, stretch, trusty, xenial, bionic, buster, tarball, osx, windows]
+  variables:
+    REPO_NAME: dev

@@ -256,7 +256,7 @@ buster:
 collect_repo:
   stage: publish
   rules:
-    - when: manual
+    - when: on_success
   allow_failure: true
   tags:
     - dev-host

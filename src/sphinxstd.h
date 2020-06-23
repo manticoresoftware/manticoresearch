@@ -4492,15 +4492,23 @@ struct VecRefPtrs_t : public ISphNoncopyable, public CSphVector<T>
 enum class ETYPE { SINGLE, ARRAY };
 template<typename PTR, ETYPE tp>
 struct Deleter_T {
-	inline static void Delete ( PTR pArg) { SafeDelete (pArg) }
+	inline static void Delete ( void * pArg ) { if (pArg) delete (PTR) pArg; }
 };
 
 template<typename PTR>
 struct Deleter_T<PTR,ETYPE::ARRAY>
 {
-	inline static void Delete ( PTR pArg ) { SafeDeleteArray (pArg) }
+	inline static void Delete ( void * pArg ) { if (pArg) delete [] (PTR) pArg; }
 };
 
+// stateless (i.e. may use pointer to fn)
+template<typename PTR, typename DELETER>
+struct StaticDeleter_t
+{
+	inline static void Delete ( void * pArg ) { if ( pArg ) DELETER () ( PTR (pArg )); }
+};
+
+// statefull (i.e. contains state, implies using of lambda with captures)
 template<typename PTR, typename DELETER>
 class CustomDeleter_T
 {
@@ -4513,9 +4521,9 @@ public:
 		: m_dDeleter { std::forward<DELETER> ( dDeleter ) }
 	{}
 
-	inline void Delete ( PTR & pArg ) {
+	inline void Delete ( void * pArg ) {
 		if ( m_dDeleter )
-			m_dDeleter ( pArg );
+			m_dDeleter ( (PTR) pArg );
 	}
 };
 /// shared pointer for any object, managed by refcount

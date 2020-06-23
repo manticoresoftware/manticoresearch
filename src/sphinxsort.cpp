@@ -1675,7 +1675,7 @@ struct CSphGroupSorterSettings
 	bool				m_bMva64 = false;
 	CSphRefcountedPtr<CSphGrouper>		m_pGrouper;///< group key calculator
 	bool				m_bImplicit = false;///< for queries with aggregate functions but without group by clause
-	SharedPtr_t<const ISphFilter *>	m_pAggrFilterTrait; ///< aggregate filter that got owned by grouper
+	SharedPtr_t<ISphFilter *>	m_pAggrFilterTrait; ///< aggregate filter that got owned by grouper
 	bool				m_bJson = false;	///< whether we're grouping by Json attribute
 	int					m_iMaxMatches = 0;
 

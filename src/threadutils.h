@@ -54,6 +54,7 @@ struct LowThreadDesc_t
 	SphThread_t			m_tThread;		///< m.b. used to send signals to the thread
 	int					m_iThreadID;	///< OS thread id
 	CSphString			m_sThreadName;
+	std::atomic<void *> m_pHazards;		///< my hazard pointers
 };
 
 // thread-local description available globaly from any thread
@@ -61,6 +62,12 @@ LowThreadDesc_t& MyThd ();
 
 // save name from my local LowThreadDesc into OS thread name
 void SetSysThreadName();
+
+using ThreadFN = std::function<void ( Threads::LowThreadDesc_t * )>;
+
+void IterateActive ( ThreadFN fnHandler );
+
+int GetNumOfRunning();
 
 struct ThdInfo_t
 {

@@ -1104,6 +1104,23 @@ void WipeGlobalSchedulerAfterFork ()
 		pPool->DiscardOnFork();
 }
 
+namespace {
+	static std::atomic<int> g_iRunningThreads {0};
+
+}
+
+int Threads::GetNumOfRunning()
+{
+	return g_iRunningThreads.load ( std::memory_order_relaxed );
+}
+
+// iterate over all (pooled and alone) threads.
+// over pooled we're not using locks, since pool is living 'as whole', so no lock accessing individual elem need.
+// iteration func, however, must check if param is nullptr.
+void Threads::IterateActive ( ThreadFN fnHandler )
+{
+	// todo
+}
 
 Threads::Scheduler_i * GetAloneScheduler ( int iMaxThreads, const char * szName )
 {
@@ -1336,9 +1353,11 @@ void RuntimeThreadContext_t::Run ( const void * pStack )
 	m_pTLS = sphMemStatThdInit();
 #endif
 
+	g_iRunningThreads.fetch_add ( 1, std::memory_order_acq_rel );
 	LOG( DEBUG, MT ) << "thread created";
 	m_fnRun();
 	LOG( DEBUG, MT ) << "thread ended";
+	g_iRunningThreads.fetch_sub ( 1, std::memory_order_acq_rel );
 
 	while ( !m_pThreadCleanup.Empty () )
 	{

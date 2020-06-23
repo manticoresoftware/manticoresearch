@@ -16,22 +16,6 @@
 
 void SetStderrLogger ();
 
-TEST ( ThreadPool, Empty )
-{
-	auto pPool = Threads::MakeThreadPool ( 4, "tp" );
-	auto& tPool = *pPool;
-	tPool.Wait();
-}
-
-TEST ( ThreadPool, EmptyWait )
-{
-//	SetStderrLogger ();
-	auto pPool = Threads::MakeThreadPool ( 4, "tp" );
-	auto & tPool = *pPool;
-	tPool.Wait ();
-	tPool.Wait ();
-	tPool.Wait ();
-}
 
 // here intentionally added initialized lambda capture
 // it will always show compiler warning on ancient compilers
@@ -56,13 +40,13 @@ TEST ( ThreadPool, Counter100 )
 	std::atomic<int> v {0};
 	for ( int i=0; i<100; ++i)
 		tPool.Schedule ([&] { ++v; }, false);
-	tPool.Wait ();
+	tPool.StopAll ();
 	ASSERT_EQ ( v, 100 );
 }
 
 TEST ( ThreadPool, Counter100c )
 {
-	SetGlobalThreads (300);
+	SetMaxChildrenThreads ( 300 );
 	int v = 0;
 	for ( int i = 0; i<100000; ++i )
 		Threads::CallCoroutine ( [&] { ++v; } );

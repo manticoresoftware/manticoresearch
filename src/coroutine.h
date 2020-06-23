@@ -208,7 +208,7 @@ public:
 	{
 		auto pScheduler = CoCurrentScheduler ();
 		if (!pScheduler)
-			pScheduler = GetGlobalScheduler();
+			pScheduler = GlobalWorkPool ();
 		return pScheduler->WorkingThreads ()-1;
 	}
 

@@ -801,11 +801,6 @@ public:
 	{
 		m_tServiceRef.work_finished();
 	}
-
-	Service_t& GetService() const
-	{
-		return m_tServiceRef;
-	}
 };
 
 #define LOG_COMPONENT_TP LOG_COMPONENT_MT << ": "
@@ -913,22 +908,6 @@ public:
 		return Keeper_t ( nullptr, [this] ( void * ) { m_tService.work_finished (); } );
 	}
 
-	void Wait () final
-	{
-		LOG ( DETAIL, TP ) << "Wait";
-		ScopedMutex_t dLock {m_dMutex};
-		m_dWork.reset ();
-		while (true)
-		{
-			m_dCond.Clear ( dLock );
-			m_dCond.Wait ( dLock );
-			LOG ( DEBUG, TP ) << "WAIT: waitCompleted: " << !!m_dWork;
-			if ( m_dWork )
-				break;
-		}
-		LOG ( DETAIL, TP ) << "Wait finished";
-	}
-
 	int WorkingThreads () const final
 	{
 		return m_dThreads.GetLength ();
@@ -938,17 +917,28 @@ public:
 	{
 		return (int)m_tService.works ();
 	}
+
+	void StopAll () final
+	{
+		ScopedMutex_t dLock { m_dMutex };
+		m_bStop = true;
+		m_dWork.reset ();
+		dLock.Unlock ();
+		LOG ( DEBUG, TP ) << "stopping thread pool";
+		for ( auto & dThread : m_dThreads )
+			Threads::Join ( &dThread );
+		LOG ( DEBUG, TP ) << "thread pool stopped";
+		m_dThreads.Resize ( 0 );
+	}
 };
 
 class AloneThread_c final : public Scheduler_i
 {
-	using Work = Service_t::Work_c;
-
 	CSphString m_sName;
 	int m_iThreadNum;
 	Service_t m_tService;
 	std::atomic<bool> m_bStarted {false};
-	static int m_iRunners;
+	static int m_iRunningAlones;
 
 	template<typename F>
 	void Post ( F && f, bool bVip=false )
@@ -983,14 +973,14 @@ public:
 		, m_iThreadNum ( iNum )
 		, m_tService ( true ) // true means 'single-thread'
 	{
-		++m_iRunners;
+		++m_iRunningAlones;
 		LOG ( DEBUG, TP ) << "alone worker created " << szName;
 	}
 
 	~AloneThread_c () final
 	{
 		LOG ( DEBUG, TP ) << "stopping thread";
-		--m_iRunners;
+		--m_iRunningAlones;
 		LOG ( DEBUG, TP ) << "thread stopped";
 	}
 
@@ -1007,9 +997,9 @@ public:
 
 	int WorkingThreads () const final { return 1; }
 
-	void Wait() final {}
+	void StopAll () final {}
 
-	static int GetRunners () { return m_iRunners; }
+	static int GetRunners () { return m_iRunningAlones; }
 
 	int Works () const final
 	{
@@ -1017,7 +1007,7 @@ public:
 	}
 };
 
-int AloneThread_c::m_iRunners = 0;
+int AloneThread_c::m_iRunningAlones = 0;
 
 
 SchedulerSharedPtr_t MakeThreadPool ( size_t iThreadCount, const char * szName )
@@ -1086,42 +1076,32 @@ void searchd::CleanAfterFork () NO_THREAD_SAFETY_ANALYSIS
 	g_dShutdownList.HardReset();
 }
 
-static int g_iGlobalThreads = 1;
+static int g_iMaxChildrenThreads = 1;
 
-void SetGlobalThreads ( int iThreads )
+void SetMaxChildrenThreads ( int iThreads )
 {
-	g_iGlobalThreads = Max (1, iThreads);
+	g_iMaxChildrenThreads = Max ( 1, iThreads);
 }
 
-SchedulerSharedPtr_t& GlobalScheduler ()
+SchedulerSharedPtr_t& GlobalPoolSingletone ()
 {
 	static SchedulerSharedPtr_t pPool;
 	return pPool;
 }
 
-Threads::Scheduler_i * GetGlobalScheduler ()
+Threads::Scheduler_i * GlobalWorkPool ()
 {
-	SchedulerSharedPtr_t& pPool = GlobalScheduler();
+	SchedulerSharedPtr_t& pPool = GlobalPoolSingletone ();
 	if ( !pPool )
-		pPool = new ThreadPool_c ( g_iGlobalThreads, "work" );
+		pPool = new ThreadPool_c ( g_iMaxChildrenThreads, "work" );
 	return pPool;
 }
 
 void WipeGlobalSchedulerAfterFork ()
 {
-	SchedulerSharedPtr_t & pPool = GlobalScheduler ();
+	SchedulerSharedPtr_t & pPool = GlobalPoolSingletone ();
 	if ( pPool )
 		pPool->DiscardOnFork();
-}
-
-long GetGlobalQueueSize ()
-{
-	return ((Threads::ThreadPool_c *) GetGlobalScheduler ())->Works ();
-}
-
-long GetGlobalThreads ()
-{
-	return ((Threads::ThreadPool_c *) GetGlobalScheduler ())->WorkingThreads();
 }
 
 

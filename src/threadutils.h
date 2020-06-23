@@ -159,7 +159,7 @@ struct Scheduler_i
 	virtual Keeper_t KeepWorking() = 0;
 	virtual int WorkingThreads() const = 0;
 	virtual int Works () const = 0;
-	virtual void Wait () = 0;
+	virtual void StopAll () = 0;
 	virtual void DiscardOnFork() {};
 };
 
@@ -219,11 +219,9 @@ namespace CrashLogger
 };
 
 // Scheduler to global thread pool
-Threads::Scheduler_i* GetGlobalScheduler();
+Threads::Scheduler_i* GlobalWorkPool ();
 void WipeGlobalSchedulerAfterFork();
-long GetGlobalQueueSize();
-long GetGlobalThreads ();
-void SetGlobalThreads ( int iThreads );
+void SetMaxChildrenThreads ( int iThreads );
 
 // Scheduler to dedicated thread (or nullptr, if current N of such threads >= iMaxThreads)
 // you MUST schedule at least one job, or explicitly delete non-engaged scheduler (it will leak otherwise).

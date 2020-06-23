@@ -417,7 +417,7 @@ void CoCo ( Handler fnHandler, Waiter_t tSignaller )
 {
 	auto pScheduler = CoCurrentScheduler ();
 	if ( !pScheduler )
-		pScheduler = GetGlobalScheduler ();
+		pScheduler = GlobalWorkPool ();
 
 	assert ( pScheduler );
 	CoroWorker_c::StartOther ( std::move ( fnHandler ), pScheduler, 0, std::move ( tSignaller ) );
@@ -428,7 +428,7 @@ void CoContinue ( Handler fnHandler, int iStack )
 {
 	auto pScheduler = CoCurrentScheduler();
 	if ( !pScheduler )
-		pScheduler = GetGlobalScheduler ();
+		pScheduler = GlobalWorkPool ();
 
 	assert ( pScheduler );
 
@@ -441,7 +441,7 @@ void CoContinue ( Handler fnHandler, int iStack )
 // used to call things from plain (non-coroutined) thread. Thread execution will be locked on event until finish.
 void CallCoroutine ( Handler fnHandler )
 {
-	auto pScheduler = GetGlobalScheduler ();
+	auto pScheduler = GlobalWorkPool ();
 	CSphAutoEvent tEvent;
 	auto dWaiter = Waiter_t ( nullptr, [&tEvent] ( void * ) { tEvent.SetEvent (); } );
 	CoroWorker_c::StartCall ( std::move ( fnHandler ), pScheduler, std::move(dWaiter) );

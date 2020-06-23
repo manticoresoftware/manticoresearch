@@ -3799,12 +3799,12 @@ bool sphIsLtLib();
 #endif
 
 /// capability for tracing threads
-typedef int CAPABILITY ( "role" ) ThreadRole;
+using ThreadRole CAPABILITY ( "role" ) = bool;
 
 inline void AcquireRole ( ThreadRole R ) ACQUIRE(R) NO_THREAD_SAFETY_ANALYSIS
 {}
 
-inline void ReleaseRole ( ThreadRole R ) RELEASE( R ) NO_THREAD_SAFETY_ANALYSIS
+inline void ReleaseRole ( ThreadRole R ) RELEASE(R) NO_THREAD_SAFETY_ANALYSIS
 {}
 
 class SCOPED_CAPABILITY ScopedRole_c

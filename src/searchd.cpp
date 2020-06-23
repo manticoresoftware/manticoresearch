@@ -8516,13 +8516,13 @@ void BuildStatus ( VectorLike & dStatus )
 //	if ( g_pThdPool )
 	{
 		if ( dStatus.MatchAdd ( "workers_total" ) )
-			dStatus.Add().SetSprintf ( "%d", (int) GetGlobalThreads() );
+			dStatus.Add().SetSprintf ( "%d", GlobalWorkPool()->WorkingThreads() );
 //			dStatus.Add().SetSprintf ( "%d", g_pThdPool->GetTotalWorkerCount() );
 //		if ( dStatus.MatchAdd ( "workers_active" ) )
 //			dStatus.Add("0");
 //		dStatus.Add ().SetSprintf ( "%d", g_pThdPool->GetActiveWorkerCount ());
 		if ( dStatus.MatchAdd ( "work_queue_length" ) )
-			dStatus.Add ().SetSprintf ( "%d", (int) GetGlobalQueueSize ());
+			dStatus.Add ().SetSprintf ( "%d", GlobalWorkPool()->Works());
 //			dStatus.Add().SetSprintf ( "%d", g_pThdPool->GetQueueLength() );
 	}
 
@@ -8655,8 +8655,8 @@ void BuildStatusOneline ( StringBuilder_c & sOut )
 	sOut.StartBlock ( " " );
 	sOut
 	<< "Uptime:" << (DWORD) time ( NULL )-g_tStats.m_uStarted
-	<< " Threads:" << GetGlobalThreads ()
-	<< " Queue:" << GetGlobalQueueSize ()
+	<< " Threads:" << GlobalWorkPool()->WorkingThreads()
+	<< " Queue:" << GlobalWorkPool()->Works()
 	<< " Queries:" << g_tStats.m_iQueries;
 	sOut.Sprintf ( " Wall: %t", (int64_t)g_tStats.m_iQueryTime );
 	sOut.Sprintf ( " CPU: %t", (int64_t)g_tStats.m_iQueryCpuTime );
@@ -19810,7 +19810,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	/////////////////
 
 	g_iThdQueueMax = hSearchd.GetInt ( "queue_max_length", g_iThdQueueMax );
-	SetGlobalThreads ( g_iMaxChildren ? g_iMaxChildren : ( 3 * sphCpuThreadsCount () / 2 ) );
+	SetMaxChildrenThreads ( g_iMaxChildren ? g_iMaxChildren : ( 3 * sphCpuThreadsCount () / 2 ) );
 
 #if USE_WINDOWS
 	if ( g_bService )

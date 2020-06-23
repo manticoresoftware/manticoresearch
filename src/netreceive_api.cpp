@@ -538,7 +538,7 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 		}
 
 		// maxed out
-		if ( g_iThdQueueMax && !tConn.m_bVIP && GetGlobalQueueSize ()>=g_iThdQueueMax )
+		if ( g_iThdQueueMax && !tConn.m_bVIP && GlobalWorkPool()->Works()>=g_iThdQueueMax )
 		{
 			sphWarning ( "%s", g_sMaxedOutMessage );
 			{

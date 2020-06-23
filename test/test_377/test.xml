@@ -43,6 +43,17 @@ index test1
 	index_sp		= 1
 }
 
+index multiand
+{
+	type = rt
+	rt_mem_limit = 128k
+	path = <data_path/>/multiand
+
+	rt_field = text
+	rt_attr_string = text
+	rt_attr_uint = idd
+}
+
 </config>
 
 <db_create>
@@ -107,6 +118,14 @@ INSERT INTO test1 (id, title) VALUES
 
 <!-- regression for dot hit after buffer of regular matches -->
 <sphinxql> SELECT * FROM test1 WHERE MATCH (' one SENTENCE two' ) ORDER BY id DESC </sphinxql>
+
+<!-- regression multi and term setup for segments broken -->
+<sphinxql>insert into multiand (id, text) values(1, 'abc')</sphinxql>
+<sphinxql>insert into multiand (id, text) values(3, 'abc')</sphinxql>
+<sphinxql>insert into multiand (id, text) values(4, 'def')</sphinxql>
+<sphinxql>insert into multiand (id, text) values(5, 'def')</sphinxql>
+<sphinxql>SELECT * FROM multiand WHERE MATCH ('abc def' ) ORDER BY id DESC </sphinxql>
+
 
 </sphqueries>
 

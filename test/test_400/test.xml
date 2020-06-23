@@ -122,6 +122,14 @@ searchd
 <sphinxql>drop table if exists test1</sphinxql>
 <sphinxql>drop table if exists test2</sphinxql>
 
+<!-- regression percolate index column names -->
+<sphinxql>create table pq2 (f text, Abc int) type='percolate'</sphinxql>
+<sphinxql>insert into pq2 (filters) values('Abc > 5')</sphinxql>
+<sphinxql>select * from pq2</sphinxql>
+<sphinxql>call pq ('pq2', '{"Abc":10}')</sphinxql>
+<sphinxql>call pq ('pq2', '{"abc":10}')</sphinxql>
+<sphinxql>drop table pq2</sphinxql>
+
 </sphqueries>
 
 </test>

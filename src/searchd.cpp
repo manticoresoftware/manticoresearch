@@ -9474,6 +9474,7 @@ static bool ParseBsonDocument ( const VecTraits_T<BYTE>& dDoc, const SchemaItemH
 	for ( ; dChild; dChild.Next () )
 	{
 		CSphString sName = dChild.GetName ();
+		sphColumnToLowercase ( const_cast<char *>( sName.cstr() ) );
 		const SchemaItemVariant_t * pItem = tLoc.Find ( sphFNV64 ( sName.cstr() ) );
 
 		// FIXME!!! warn on unknown JSON fields
@@ -10323,8 +10324,13 @@ static void HandleMysqlCallPQ ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessi
 		sOpt.ToLower();
 		int iExpType = TOK_CONST_INT;
 
-		if ( sOpt=="docs_id" ) 			{ tOpts.m_sIdAlias = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
-		else if ( sOpt=="docs" )		tOpts.m_bGetDocs = ( v.m_iVal!=0 );
+		if ( sOpt=="docs_id" )
+		{
+			tOpts.m_sIdAlias = v.m_sVal;
+			iExpType = TOK_QUOTED_STRING;
+			sphColumnToLowercase ( const_cast<char *>( tOpts.m_sIdAlias.cstr() ) );
+
+		} else if ( sOpt=="docs" )		tOpts.m_bGetDocs = ( v.m_iVal!=0 );
 		else if ( sOpt=="verbose" )		tOpts.m_bVerbose = ( v.m_iVal!=0 );
 		else if ( sOpt=="docs_json" )	tOpts.m_bJsonDocs = ( v.m_iVal!=0 );
 		else if ( sOpt=="query" )		tOpts.m_bGetQuery = ( v.m_iVal!=0 );

@@ -76,7 +76,9 @@ private:
 	}
 
 public:
-	explicit CoRoutine_c ( Handler fnHandler, size_t iStack=0 ) : m_fnHandler ( std::move ( fnHandler )), m_dStack ( iStack? (int) iStack: g_iStackSize )
+	explicit CoRoutine_c ( Handler fnHandler, size_t iStack=0 )
+		: m_fnHandler ( std::move ( fnHandler ) )
+		, m_dStack ( iStack? (int) iStack: g_iStackSize )
 	{
 #if BOOST_USE_VALGRIND
 		m_uValgrindStackID = VALGRIND_STACK_REGISTER( m_dStack.begin(), &m_dStack.Last () );
@@ -142,7 +144,8 @@ struct CoroState_t
 {
 	enum ESTATE : DWORD
 	{
-		Entered_e = 1, Done_e = 2,
+		Entered_e = 1,	// if coro scheduled (and m.b. running) or not.
+		Done_e = 2,		// if set, will auto schedule again after yield
 	};
 
 	std::atomic<DWORD> m_uState {Entered_e};
@@ -201,22 +204,27 @@ class CoroWorker_c
 	};
 
 private:
-	CoroWorker_c ( Handler fnHandler, Scheduler_i* pScheduler )
-	: m_pScheduler ( pScheduler )
-	, m_tKeepSchedulerAlive { pScheduler->KeepWorking () }
-	, m_tCoroutine {std::move (fnHandler), 0 }
-	{
-		assert ( m_pScheduler );
-	}
 
+	// called from StartPrimary from CoGo - Multiserve, Sphinxql, replication recv
+	CoroWorker_c ( Handler fnHandler, Scheduler_i* pScheduler )
+		: m_pScheduler ( pScheduler )
+		, m_tKeepSchedulerAlive { pScheduler->KeepWorking () }
+		, m_tCoroutine { std::move (fnHandler), 0 }
+		{
+			assert ( m_pScheduler );
+		}
+
+	// from CallCoroutine - StartCall (blocking run);
+	// from CoCo - StartOther - all secondary parallel things in non-vip queue
+	// from Cocontinue - StartContinuation - same context, another stack, run as fast as possible
 	CoroWorker_c ( Handler fnHandler, Scheduler_i* pScheduler, Waiter_t tTracer, size_t iStack=0 )
-	: m_pScheduler ( pScheduler )
-	, m_tKeepSchedulerAlive { pScheduler->KeepWorking () }
-	, m_tTracer ( std::move(tTracer))
-	, m_tCoroutine {std::move (fnHandler), iStack}
-	{
-		assert ( m_pScheduler );
-	}
+		: m_pScheduler ( pScheduler )
+		, m_tKeepSchedulerAlive { pScheduler->KeepWorking () }
+		, m_tTracer ( std::move(tTracer))
+		, m_tCoroutine { std::move (fnHandler), iStack }
+		{
+			assert ( m_pScheduler );
+		}
 
 	void Run ()
 	{
@@ -269,21 +277,31 @@ private:
 	}
 
 public:
-	static void Start ( Handler fnHandler, Scheduler_i* pScheduler )
+	// invoked from CoGo - Multiserve, Sphinxql, replication recv. Schedule into primary queue.
+	// Agnostic to parent's task info (if any). Should create and use it's own.
+	static void StartPrimary ( Handler fnHandler, Scheduler_i* pScheduler )
 	{
-		(new CoroWorker_c ( std::move ( fnHandler ), pScheduler ))->Schedule ();
+		( new CoroWorker_c ( std::move ( fnHandler ), pScheduler ) )->Schedule ();
 	}
 
-	static void Start ( Handler fnHandler, Scheduler_i* pScheduler, Waiter_t tWait )
+	// from CoCo -> all parallel tasks (snippets, local searches, pq, disk chunks). Schedule into secondary queue.
+	// May refer to parent's task info as read-only. For changes has dedicated mini info, also can create and use it's own local.
+	static void StartOther ( Handler fnHandler, Scheduler_i * pScheduler, size_t iStack, Waiter_t tWait )
 	{
-		(new CoroWorker_c ( std::move ( fnHandler ), pScheduler, std::move ( tWait )))->Schedule ();
+		( new CoroWorker_c ( std::move ( fnHandler ), pScheduler, std::move ( tWait ), iStack ) )->Schedule ( false );
 	}
 
-	static void StartOther ( Handler fnHandler, Scheduler_i* pScheduler, size_t iStack, Waiter_t tWait )
+	// invoked from CallCoroutine -> ReplicationStart on daemon startup. Schedule into primary queue.
+	// Adopt parent's task info (if any), and may change it exclusively.
+	// Parent thread at the moment blocked and may display info about it
+	static void StartCall ( Handler fnHandler, Scheduler_i* pScheduler, Waiter_t tWait )
 	{
-		( new CoroWorker_c ( std::move ( fnHandler ), pScheduler, std::move ( tWait ), iStack ) )->Schedule (false);
+		( new CoroWorker_c ( std::move ( fnHandler ), pScheduler, std::move ( tWait ) ) )->Schedule ();
 	}
 
+	// from CoContinue -> all continuations (main purpose - continue with extended stack).
+	// Adopt parent's task info (if any), and may change it exclusively.
+	// Parent thread is not blocked and may freely switch to another tasks
 	static void StartContinuation ( Handler fnHandler, Scheduler_i * pScheduler, size_t iStack, Waiter_t tWait )
 	{
 		( new CoroWorker_c ( std::move ( fnHandler ), pScheduler, std::move ( tWait ), iStack ) )->ScheduleContinuation ();
@@ -301,7 +319,7 @@ public:
 			Schedule (false);
 	}
 
-	void Continue ()
+	void Continue () // continue previously run task. As continue calculation with extended stack
 	{
 		if ( ( m_tState.SetFlags ( CoroState_t::Entered_e ) & CoroState_t::Entered_e )==0 )
 			ScheduleContinuation();
@@ -328,7 +346,7 @@ public:
 	void YieldWith ( Handler fnHandler )
 	{
 		m_fnProceeder = std::move (fnHandler);
-		m_tCoroutine.Yield_ ();
+		Yield_ ();
 	}
 
 	void MoveTo ( Scheduler_i * pScheduler )
@@ -384,16 +402,17 @@ CoroWorker_c * CoWorker ()
 	return pWorker;
 }
 
-
+// start primary task
 void CoGo ( Handler fnHandler, Scheduler_i * pScheduler )
 {
 	if ( !pScheduler )
 		return;
 
 	assert ( pScheduler );
-	CoroWorker_c::Start ( std::move(fnHandler), pScheduler );
+	CoroWorker_c::StartPrimary ( std::move(fnHandler), pScheduler );
 }
 
+// start secondary subtasks (parallell search, pq processing, etc)
 void CoCo ( Handler fnHandler, Waiter_t tSignaller )
 {
 	auto pScheduler = CoCurrentScheduler ();
@@ -404,6 +423,7 @@ void CoCo ( Handler fnHandler, Waiter_t tSignaller )
 	CoroWorker_c::StartOther ( std::move ( fnHandler ), pScheduler, 0, std::move ( tSignaller ) );
 }
 
+// resize stack and continue as fast as possible (continuation task in same thread, or post to vip queue)
 void CoContinue ( Handler fnHandler, int iStack )
 {
 	auto pScheduler = CoCurrentScheduler();
@@ -417,12 +437,14 @@ void CoContinue ( Handler fnHandler, int iStack )
 	WaitForDeffered ( std::move ( dWaiter ));
 }
 
+// invoke handler as function, but in dedicated coro (i.e. with possibility of context switching)
+// used to call things from plain (non-coroutined) thread. Thread execution will be locked on event until finish.
 void CallCoroutine ( Handler fnHandler )
 {
 	auto pScheduler = GetGlobalScheduler ();
 	CSphAutoEvent tEvent;
 	auto dWaiter = Waiter_t ( nullptr, [&tEvent] ( void * ) { tEvent.SetEvent (); } );
-	CoroWorker_c::Start ( std::move ( fnHandler ), pScheduler, std::move(dWaiter) );
+	CoroWorker_c::StartCall ( std::move ( fnHandler ), pScheduler, std::move(dWaiter) );
 	tEvent.WaitEvent ();
 }
 

@@ -26,7 +26,7 @@ void CoGo ( Handler handler, Scheduler_i* pScheduler );
 void CoCo ( Handler handler, Waiter_t tSignaller );
 
 // perform handler in dedicated coro with custom stack (scheduler is same, or global if none)
-// try to run immediately
+// try to run immediately (if thread wasn't switched yet), or push to first-priority queue
 void CoContinue ( Handler fnHandler, int iStack=0 );
 
 // perform handler in dedicated coro, being called from plain thread (i.e. use blocking event to wait finish);
@@ -43,6 +43,7 @@ void CoContinue ( int iStack, HANDLER handler )
 	CoContinue ( handler, iStack );
 }
 
+// if iStack<0, just immediately invoke the handler (that is bypass). Returns boolean result from handler
 template<typename HANDLER>
 bool CoContinueBool ( int iStack, HANDLER handler )
 {

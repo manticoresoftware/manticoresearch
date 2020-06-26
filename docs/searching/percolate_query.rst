@@ -260,7 +260,7 @@ and repopulating the index with queries back.
 .. code-block:: sql
 
 
-    mysql> DESC pq1;
+    mysql> DESC pq1 TABLE;
     +-------+--------+
     | Field | Type   |
     +-------+--------+
@@ -286,7 +286,7 @@ Add `JSON` attribute to the index config ``rt_attr_json = json_data``, then issu
 
     mysql> ALTER RTINDEX pq1 RECONFIGURE;
 
-    mysql> DESC pq1;
+    mysql> DESC pq1 TABLE;
     +-----------+--------+
     | Field     | Type   |
     +-----------+--------+

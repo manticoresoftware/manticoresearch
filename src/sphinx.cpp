@@ -22143,6 +22143,9 @@ bool CSphSource_Document::IterateDocument ( bool & bEOF, CSphString & sError )
 		if ( bEOF )
 			return true;
 
+		if ( !m_tState.m_dFields )
+			return false;
+
 		const int * pFieldLengths = GetFieldLengths ();
 		for ( int iField=0; iField<m_tState.m_iEndField; iField++ )
 		{
@@ -22155,9 +22158,6 @@ bool CSphSource_Document::IterateDocument ( bool & bEOF, CSphString & sError )
 				memcpy ( m_dDocFields[iField].Begin(), m_tState.m_dFields[iField], iFieldLen );
 			}
 		}
-
-		if ( !m_tState.m_dFields )
-			return false;
 
 		// tricky bit
 		// we can only skip document indexing from here, IterateHits() is too late

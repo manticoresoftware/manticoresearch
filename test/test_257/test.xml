@@ -136,6 +136,50 @@ index csv_l1
     dict = keywords
 	index_field_lengths = 1
 }
+
+source movies
+{
+    type = csvpipe
+    csvpipe_command = cat <this_test/>/data2.csv
+    csvpipe_field = color
+    csvpipe_field = director_name
+    csvpipe_attr_uint = num_critic_for_reviews
+    csvpipe_attr_uint = duration
+    csvpipe_attr_uint = director_facebook_likes
+    csvpipe_attr_uint = actor_3_facebook_likes
+    csvpipe_field = actor_2_name
+    csvpipe_attr_uint = actor_1_facebook_likes
+    csvpipe_attr_uint = gross
+    csvpipe_field = genres
+    csvpipe_field = actor_1_name
+    csvpipe_field = movie_title
+    csvpipe_attr_uint = num_voted_users
+    csvpipe_attr_uint = cast_total_facebook_likes
+    csvpipe_field = actor_3_name
+    csvpipe_attr_uint = facenumber_in_poster
+    csvpipe_field = plot_keywords
+    csvpipe_field = movie_imdb_link
+    csvpipe_attr_uint = num_user_for_reviews
+    csvpipe_field = language
+    csvpipe_field = country
+    csvpipe_field = content_rating
+    csvpipe_attr_uint = budget
+    csvpipe_attr_uint = title_year
+    csvpipe_attr_uint = actor_2_facebook_likes
+    csvpipe_attr_float = imdb_score
+    csvpipe_attr_float = aspect_ration
+    csvpipe_attr_uint = movie_facebook_likes
+}
+
+index movies
+{
+    type = plain
+    path  = movies
+    source = movies
+    min_infix_len = 2
+    stored_fields = director_name,actor_2_name,actor_1_name,movie_title,actor_3_name
+    stored_only_fields = color,movie_imdb_link,language,country,content_rating
+}
 </config>
 
 <sphqueries>

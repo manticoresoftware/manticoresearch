@@ -242,7 +242,7 @@ focal:
   <<: *debian
   variables:
     DISTR: "focal"
-    XTRAFLAGS: "-DCMAKE_CXX_FLAGS=\"-Wno-error=stringop-truncation -Wno-error=deprecated-copy\""
+    XTRAFLAGS: "-DCMAKE_CXX_FLAGS=\"-Wno-error=deprecated-copy\""
   only:
     variables:
       - $WHAT == null

@@ -1696,6 +1696,37 @@ int64_t sphMicroTimer()
 #endif // USE_WINDOWS
 }
 
+/// return cpu time, in microseconds
+int64_t sphCpuTimer ()
+{
+	if ( !sphGetbCpuStat() )
+		return 0;
+
+#ifdef HAVE_CLOCK_GETTIME
+#if defined (CLOCK_THREAD_CPUTIME_ID)
+// CPU time (user+sys), Linux style, current thread
+#define LOC_CLOCK CLOCK_THREAD_CPUTIME_ID
+#elif defined(CLOCK_PROCESS_CPUTIME_ID)
+// CPU time (user+sys), Linux style
+#define LOC_CLOCK CLOCK_PROCESS_CPUTIME_ID
+#elif defined(CLOCK_PROF)
+// CPU time (user+sys), FreeBSD style
+#define LOC_CLOCK CLOCK_PROF
+#else
+// POSIX fallback (wall time)
+#define LOC_CLOCK CLOCK_REALTIME
+#endif
+
+	struct timespec tp;
+	if ( clock_gettime ( LOC_CLOCK, &tp ) )
+		return 0;
+
+	return tp.tv_sec*1000000 + tp.tv_nsec/1000;
+#else
+	return sphMicroTimer();
+#endif
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 int CSphStrHashFunc::Hash ( const CSphString & sKey )

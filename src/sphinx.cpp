@@ -28337,3 +28337,9 @@ volatile int &sphGetTFO ()
 	static int iTFO = 0;
 	return iTFO;
 }
+
+volatile bool& sphGetbCpuStat ()
+{
+	static bool bCpuStat = false;
+	return bCpuStat;
+}

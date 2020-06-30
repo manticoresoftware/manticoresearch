@@ -238,6 +238,18 @@ bionic:
       - $WHAT =~ /bionic/
   image: registry.gitlab.com/manticoresearch/dev/bionic_cmake314:latest
 
+focal:
+  <<: *debian
+  variables:
+    DISTR: "focal"
+    XTRAFLAGS: "-DCMAKE_CXX_FLAGS=\"-Wno-error=stringop-truncation -Wno-error=deprecated-copy\""
+  only:
+    variables:
+      - $WHAT == null
+      - $WHAT == "all"
+      - $WHAT =~ /focal/
+  image: registry.gitlab.com/manticoresearch/dev/focal_cmake314:latest
+
 buster:
   <<: *debian
   variables:
@@ -298,6 +310,6 @@ build_master:
     - if: $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_BRANCH == "master"
   script:
     - ~/upload_repo.sh
-  dependencies: [rhel6, rhel7, rhel8, jessie, stretch, trusty, xenial, bionic, buster, tarball, osx, windows]
+  dependencies: [rhel6, rhel7, rhel8, jessie, stretch, trusty, xenial, bionic, buster, focal, tarball, osx, windows]
   variables:
     REPO_NAME: dev

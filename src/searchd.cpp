@@ -13428,6 +13428,15 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 		{
 			g_bGroupingInUtc = !!tStmt.m_iSetValue;
 			setGroupingInUtc ( g_bGroupingInUtc );
+		} else if ( tStmt.m_sSetName=="cpustat")
+		{
+			g_bCpuStats = !!tStmt.m_iSetValue;
+		} else if ( tStmt.m_sSetName=="iostat")
+		{
+			g_bIOStats = !!tStmt.m_iSetValue;
+		} else if ( tStmt.m_sSetName=="coredump")
+		{
+			g_bCoreDump = !!tStmt.m_iSetValue;
 		} else if ( tStmt.m_sSetName=="maintenance")
 		{
 			if ( tVars.m_bVIP )

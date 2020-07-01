@@ -454,13 +454,15 @@ public:
 	bool	GetError () const { return m_bError; }
 	void	SetProfiler ( CSphQueryProfile * pProfiler ) { m_pProfile = pProfiler; }
 
-	void Flush ()
+	bool Flush ()
 	{
-		SendBuffer( m_dBuf );
+		if ( !SendBuffer ( m_dBuf ) )
+			return false;
 		m_dBuf.Resize ( 0 ); // check and fix!
+		return true;
 	};
 
-	virtual void SendBuffer ( const VecTraits_T<BYTE> & dData ) = 0;
+	virtual bool SendBuffer ( const VecTraits_T<BYTE> & dData ) = 0;
 
 	virtual void SetWTimeoutUS ( int64_t iTimeoutUS ) = 0;
 	virtual int64_t GetWTimeoutUS () const = 0;

@@ -467,7 +467,10 @@ int SockWrapper_c::Impl_c::SockPollNetloop ( int64_t tmTimeUntilUs, bool bWrite 
 	m_uNetEvents = NetPollEvent_t::ONCE | ( bWrite ? NetPollEvent_t::WRITE : NetPollEvent_t::READ );
 	EngageWaiterAndYield ( tmTimeUntilUs );
 	if ( m_uNetEvents == NetPollEvent_t::TIMEOUT )
+	{
+		sphSockSetErrno ( ETIMEDOUT );
 		return 0;
+	}
 	if ( CheckSocketError ( m_uNetEvents ) )
 		return -1;
 	return 1;
@@ -980,13 +983,17 @@ class AsyncBufferedSocket_c final : public AsyncNetBuffer_c
 		return SyncSockRead ( m_pSocket, AddN ( 0 ), iNeed, iHaveSpace, bIntr );
 	}
 
-	void SendBuffer ( const VecTraits_T<BYTE> & dData ) final
+	bool SendBuffer ( const VecTraits_T<BYTE> & dData ) final
 	{
 		assert ( m_pSocket );
 		if ( dData.IsEmpty () )
-			return; // nothing to send
+			return true; // nothing to send
 		CSphScopedProfile tProf ( m_pProfile, SPH_QSTATE_NET_WRITE );
-		NetGenericOutputBuffer_c::m_bError = !SyncSend ( m_pSocket, (const char *) m_dBuf.begin (), m_dBuf.GetLength64 () );
+		if ( SyncSend ( m_pSocket, (const char *) m_dBuf.begin (), m_dBuf.GetLength64 () ) )
+			return true;
+
+		NetGenericOutputBuffer_c::m_bError = true;
+		return false;
 	}
 
 public:

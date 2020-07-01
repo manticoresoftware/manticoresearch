@@ -713,8 +713,7 @@ public:
 			break;
 		case BIO_CTRL_FLUSH:
 			sphLogDebugv ( BACKN "~~ BioBackCtrl (%p) flush" NORM, this );
-			m_tOut.Flush();
-			iRes = 1;
+			iRes = m_tOut.Flush () ? 1 : -1;
 			break;
 		case BIO_CTRL_PENDING:
 			iRes = Max (0, m_tIn.HasBytes () );
@@ -850,7 +849,7 @@ class AsyncSSBufferedSocket_c final : public AsyncNetBuffer_c
 {
 	BIOPtr_c m_pSslBackend;
 
-	void SendBuffer ( const VecTraits_T<BYTE> & dData ) final
+	bool SendBuffer ( const VecTraits_T<BYTE> & dData ) final
 	{
 		assert ( m_pSslBackend );
 		CSphScopedProfile tProf ( m_pProfile, SPH_QSTATE_NET_WRITE );
@@ -862,6 +861,7 @@ class AsyncSSBufferedSocket_c final : public AsyncNetBuffer_c
 		auto iRes = BIO_flush ( m_pSslBackend );
 		sphLogDebugv ( FRONT ">> BioFrontWrite (%p) done (%d) %d bytes of %d" NORM,
 				(BIO*)m_pSslBackend, iRes, iSent, dData.GetLength () );
+		return ( iRes>0 );
 	}
 
 	int ReadFromBackend ( int iNeed, int iHaveSpace, bool ) final

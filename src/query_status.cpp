@@ -31,7 +31,12 @@ class NetOutputBuffer_c final : public NetGenericOutputBuffer_c
 public:
 	explicit	NetOutputBuffer_c ( int iSock );
 
-	void SendBuffer ( const VecTraits_T<BYTE> & dData ) final;
+	void SendBufferImpl ( const VecTraits_T<BYTE> & dData );
+
+	bool SendBuffer ( const VecTraits_T<BYTE> & dData ) final
+	{
+		SendBufferImpl ( dData ); return true;
+	}
 	void SetWTimeoutUS ( int64_t iTimeoutUS ) final {};
 	int64_t GetWTimeoutUS () const final { return 0ll; }
 
@@ -47,7 +52,7 @@ NetOutputBuffer_c::NetOutputBuffer_c( int iSock )
 	assert ( m_iSock>0 );
 }
 
-void NetOutputBuffer_c::SendBuffer ( const VecTraits_T<BYTE> & dData )
+void NetOutputBuffer_c::SendBufferImpl ( const VecTraits_T<BYTE> & dData )
 {
 	if ( m_bError )
 		return;

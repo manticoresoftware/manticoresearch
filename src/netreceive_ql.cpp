@@ -1056,9 +1056,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, CSphS
 	}
 
 	// send the response packet
-	tThd.ThdState ( ThdState_e::NET_WRITE );
-	tOut.Flush();
-	if ( tOut.GetError() )
+	if ( !tOut.Flush () )
 		return false;
 
 	// finalize query profile
@@ -1125,10 +1123,9 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 	// send handshake first
 	sphLogDebugv ("Sending handshake...");
 	SendMysqlProtoHandshake ( tOut, CheckWeCanUseSSL (), bCanCompression, iCID );
-	tOut.Flush();
-	if ( tOut.GetError () )
+	if ( !tOut.Flush () )
 	{
-		int iErrno = sphSockGetErrno (); // fixme!
+		int iErrno = sphSockGetErrno ();
 		sphWarning ( "failed to send server version (client=%s(%d), error: %d '%s')",
 				sClientIP, iCID, iErrno, sphSockError ( iErrno ) );
 		return;
@@ -1223,8 +1220,7 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 			if ( UsernameIsFEDERATED ( tAnswer ))
 				tSession.SetFederatedUser();
 			SendMysqlOkPacket ( tOut, uPacketID, tSession.IsAutoCommit());
-			tOut.Flush ();
-			bKeepAlive = !tOut.GetError();
+			bKeepAlive = tOut.Flush ();
 			bAuthed = true;
 			if ( bCanCompression && UserWantsCompression ( tAnswer ) )
 				MakeMysqlCompressedLayer ( pBuf );

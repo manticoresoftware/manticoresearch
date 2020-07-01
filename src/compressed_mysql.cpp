@@ -27,7 +27,7 @@ class MysqlCompressedSocket_c final : public AsyncNetBuffer_c
 	NetGenericOutputBuffer_c & m_tOut;
 	BYTE m_uPackedID = 0;
 
-	void SendPacket ( ByteBlob_t dBlob );
+	bool SendPacket ( ByteBlob_t dBlob );
 
 	DWORD ReadLSBSmallDword ( InputBuffer_c & tIn );
 	void SendLSBSmallDword ( DWORD uValue );
@@ -63,7 +63,7 @@ public:
 		return m_tIn.GetTimeoutUS ();
 	}
 
-	void SendBuffer ( const VecTraits_T<BYTE> & dData ) final;
+	bool SendBuffer ( const VecTraits_T<BYTE> & dData ) final;
 };
 
 void MakeMysqlCompressedLayer ( AsyncNetBufferPtr_c & pSource )
@@ -87,7 +87,7 @@ void MysqlCompressedSocket_c::SendLSBSmallDword ( DWORD uValue )
 	#endif
 }
 
-void MysqlCompressedSocket_c::SendPacket ( ByteBlob_t dBlob )
+bool MysqlCompressedSocket_c::SendPacket ( ByteBlob_t dBlob )
 {
 	// send as uncompressed
 	if ( dBlob.second<MIN_COMPRESS_LENGTH )
@@ -96,8 +96,7 @@ void MysqlCompressedSocket_c::SendPacket ( ByteBlob_t dBlob )
 		m_tOut.SendByte ( ++m_uPackedID );
 		SendLSBSmallDword ( 0 );
 		m_tOut.SendBytes ( dBlob );
-		m_tOut.Flush ();
-		return;
+		return m_tOut.Flush ();
 	}
 
 	// compress and send compressed blob
@@ -112,20 +111,22 @@ void MysqlCompressedSocket_c::SendPacket ( ByteBlob_t dBlob )
 	m_tOut.Rewind ( iPos );
 	SendLSBSmallDword ( uSpace );
 	m_tOut.CommitZeroCopy ( uSpace+4 );
-	m_tOut.Flush ();
+	return m_tOut.Flush ();
 }
 
-void MysqlCompressedSocket_c::SendBuffer ( const VecTraits_T<BYTE> & dData )
+bool MysqlCompressedSocket_c::SendBuffer ( const VecTraits_T<BYTE> & dData )
 {
 	ByteBlob_t dBlob = dData;
 	static const int iMaxOneCompressedPacketLen = 0x01000000U - 6;
 	while ( !IsNull ( dBlob ) )
 	{
 		auto iSize = Min ( dBlob.second, iMaxOneCompressedPacketLen );
-		SendPacket ( { dBlob.first, iSize } );
+		if ( !SendPacket ( { dBlob.first, iSize } ) )
+			return false;
 		dBlob.first += iSize;
 		dBlob.second -= iSize;
 	}
+	return true;
 }
 
 DWORD MysqlCompressedSocket_c::ReadLSBSmallDword ( InputBuffer_c& tIn )

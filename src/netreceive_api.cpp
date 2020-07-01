@@ -430,8 +430,11 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 		sphLogDebugv ( "conn %s(%d): got handshake, major v.%d", sClientIP, iCID, uHandshake );
 		return;
 	}
-	if ( !tIn.HasBytes ()) // old client, it waits for dialogue answer right now.
-		tOut.Flush();
+	if ( !tIn.HasBytes () && !tOut.Flush ())
+	{
+		sphLogDebugv ( "conn %s(%d): timeout when sending handshake", sClientIP, iCID );
+		return;
+	}
 
 	bool bPersist = false;
 	int iPconnIdleS = 0;
@@ -510,7 +513,7 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 							 SEARCHD_COMMAND_TOTAL );
 
 			SendErrorReply ( tOut, "invalid command (code=%d, len=%d)", eCommand, iReplySize );
-			tOut.Flush();
+			tOut.Flush(); // no need to check return code since we anyway break
 			break;
 		}
 
@@ -532,7 +535,7 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 		if ( eCommand ==SEARCHD_COMMAND_PING )
 		{
 			HandleCommandPing ( tOut, uVer, tIn );
-			tOut.Flush();
+			tOut.Flush(); // no need to check return code since we anyway break
 			break;
 		}
 
@@ -544,12 +547,13 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 				auto tHdr = APIHeader ( tOut, SEARCHD_RETRY );
 				tOut.SendString ( g_sMaxedOutMessage );
 			}
-			tOut.Flush();
+			tOut.Flush(); // no need to check return code since we anyway break
 			break;
 		}
 
 		bPersist |= LoopClientSphinx ( eCommand, uVer, iReplySize, tThdesc, tIn, tOut, false );
-		tOut.Flush();
+		if ( !tOut.Flush () )
+			break;
 	} while (bPersist);
 
 	sphLogDebugv ( "conn %s(%d): exiting", sClientIP, iCID );

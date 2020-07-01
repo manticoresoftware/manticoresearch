@@ -394,6 +394,7 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 		tIn.Terminate ( 0, uOldByte ); // return back prev byte
 
 		tOut.SwapData (dResult);
-		tOut.Flush();
+		if ( !tOut.Flush () )
+			break;
 	} while ( bKeepAlive );
 }

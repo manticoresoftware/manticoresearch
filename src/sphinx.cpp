@@ -150,8 +150,6 @@ void gmtime_r ( const time_t * clock, struct tm * res )
 // forward decl
 void sphWarn ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );
 
-static auto& g_bShutdown = sphGetShutdown();
-
 /////////////////////////////////////////////////////////////////////////////
 // GLOBALS
 /////////////////////////////////////////////////////////////////////////////
@@ -11791,7 +11789,7 @@ public:
 		tHit.m_sKeyword = sWord;
 		tHit.m_dFieldMask.UnsetAll();
 
-		while ( CSphMerger::NextDocument ( tQword, pSourceIndex, pFilter, dRows ) && !g_bShutdown  && !*pLocalStop )
+		while ( CSphMerger::NextDocument ( tQword, pSourceIndex, pFilter, dRows ) && !sphInterrupted()  && !*pLocalStop )
 		{
 			if ( tQword.m_bHasHitlist )
 				TransferHits ( tQword, tHit, dRows );
@@ -11875,7 +11873,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 	if ( !tSrcHits )
 		return false;
 
-	if ( !sError.IsEmpty () || g_bShutdown || *pLocalStop )
+	if ( !sError.IsEmpty () || sphInterrupted () || *pLocalStop )
 		return false;
 
 	DataReaderFactoryPtr_c tDstDocs {
@@ -11892,7 +11890,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 	if ( !tDstHits )
 		return false;
 
-	if ( !sError.IsEmpty() || g_bShutdown || *pLocalStop )
+	if ( !sError.IsEmpty() || sphInterrupted () || *pLocalStop )
 		return false;
 
 	CSphMerger tMerger(pHitBuilder);
@@ -11919,7 +11917,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 			iWords = 0;
 		}
 
-		if ( g_bShutdown || *pLocalStop )
+		if ( sphInterrupted () || *pLocalStop )
 			return false;
 
 		const int iCmp = tDstReader.CmpWord ( tSrcReader );
@@ -11963,7 +11961,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 			// transfer hits from destination
 			while ( tMerger.NextDocument ( tDstQword, pDstIndex, pFilter, dDstRows ) )
 			{
-				if ( g_bShutdown || *pLocalStop )
+				if ( sphInterrupted () || *pLocalStop )
 					return false;
 
 				if ( bHitless )
@@ -11981,7 +11979,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 			// transfer hits from source
 			while ( tMerger.NextDocument ( tSrcQword, pSrcIndex, NULL, dSrcRows ) )
 			{
-				if ( g_bShutdown || *pLocalStop )
+				if ( sphInterrupted () || *pLocalStop )
 					return false;
 
 				if ( bHitless )
@@ -12099,7 +12097,7 @@ bool CSphIndex_VLN::MergeAttributes ( volatile bool * pLocalStop, const CSphInde
 
 	for ( int i = 0; i < dRowMap.GetLength(); i++, pRow += iStride )
 	{
-		if ( g_bShutdown || *pLocalStop )
+		if ( sphInterrupted () || *pLocalStop )
 			return false;
 
 		if ( dRowMap[i]==INVALID_ROWID )
@@ -12228,7 +12226,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	CSphAutofile tTmpDict ( pDstIndex->GetIndexFileName("spi.tmp"), SPH_O_NEW, sError, true );
 	CSphAutofile tDict ( pDstIndex->GetIndexFileName ( SPH_EXT_SPI, true ), SPH_O_NEW, sError );
 
-	if ( !sError.IsEmpty() || tTmpDict.GetFD()<0 || tDict.GetFD()<0 || g_bShutdown || *pLocalStop )
+	if ( !sError.IsEmpty() || tTmpDict.GetFD()<0 || tDict.GetFD()<0 || sphInterrupted () || *pLocalStop )
 		return false;
 
 	DictRefPtr_c pDict { pSettings->m_pDict->Clone() };
@@ -12264,7 +12262,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	if ( !WriteDeadRowMap ( pDstIndex->GetIndexFileName ( SPH_EXT_SPM, true ), tResultRowID, sError ) )
 		return false;
 
-	if ( g_bShutdown || *pLocalStop )
+	if ( sphInterrupted () || *pLocalStop )
 		return false;
 
 	// finalize
@@ -28332,12 +28330,6 @@ bool IndexFiles_c::ReadKlistTargets ( StrVec_t & dTargets, const char * szType )
 	}
 
 	return true;
-}
-
-volatile bool& sphGetShutdown ()
-{
-	static bool bShutdown = false;
-	return bShutdown;
 }
 
 volatile int &sphGetTFO ()

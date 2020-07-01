@@ -25,8 +25,6 @@
 
 #endif
 
-static auto & g_bGotSigterm = sphGetGotSigterm ();    // we just received SIGTERM; need to shutdown
-
 
 class NetOutputBuffer_c final : public NetGenericOutputBuffer_c
 {
@@ -58,7 +56,7 @@ void NetOutputBuffer_c::SendBuffer ( const VecTraits_T<BYTE> & dData )
 	if ( !iLen )
 		return;
 
-	if ( g_bGotSigterm )
+	if ( sphInterrupted () )
 		sphLogDebug( "SIGTERM in NetOutputBuffer::Flush" );
 
 	StringBuilder_c sError;
@@ -189,7 +187,7 @@ int sphSockRead( int iSock, void* buf, int iLen, int iReadTimeout, bool bIntr )
 			iErr = sphSockGetErrno();
 			if ( iErr==EINTR )
 			{
-				if ( !( g_bGotSigterm && bIntr ))
+				if ( !( sphInterrupted () && bIntr ))
 					continue;
 				sphLogDebug( "sphSockRead: select got SIGTERM, exit -1" );
 			}
@@ -204,7 +202,7 @@ int sphSockRead( int iSock, void* buf, int iLen, int iReadTimeout, bool bIntr )
 			if ( bIntr )
 			{
 				// got that SIGTERM
-				if ( g_bGotSigterm )
+				if ( sphInterrupted() )
 				{
 					sphLogDebug ( "sphSockRead: got SIGTERM emulation on Windows, exit -1" );
 					sphSockSetErrno ( EINTR );
@@ -238,7 +236,7 @@ int sphSockRead( int iSock, void* buf, int iLen, int iReadTimeout, bool bIntr )
 			iErr = sphSockGetErrno();
 			if ( iErr==EINTR )
 			{
-				if ( !( g_bGotSigterm && bIntr ))
+				if ( !( sphInterrupted () && bIntr ))
 					continue;
 				sphLogDebug( "sphSockRead: select got SIGTERM, exit -1" );
 			}
@@ -281,7 +279,7 @@ bool NetInputBuffer_c::ReadFrom( int iLen, int iTimeout, bool bIntr, bool bAppen
 	m_pBuf = m_pData;
 	m_pCur = bAppend ? m_pData + iOff : m_pData;
 	int iGot = sphSockRead( m_iSock, pBuf, iLen, iTimeout, bIntr );
-	if ( g_bGotSigterm )
+	if ( sphInterrupted () )
 	{
 		sphLogDebug( "NetInputBuffer_c::ReadFrom: got SIGTERM, return false" );
 		m_bError = true;

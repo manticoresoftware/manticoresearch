@@ -44,14 +44,13 @@ private:
 	mutable int m_iReceivedCookie = 0;
 };
 
-static auto& g_bShutdown = sphGetShutdown ();
 void SchedulePing ( HostDashboard_t* pHost );
 
 static void PingWorker ( void* pCookie )
 {
 	ThreadSystem_t tThdSystemDesc ( "PING" );
 	CSphRefcountedPtr<HostDashboard_t> pHost (( HostDashboard_t* ) pCookie );
-	if ( g_bShutdown || pHost->m_iNeedPing<1 )
+	if ( sphInterrupted () || pHost->m_iNeedPing<1 )
 		return;
 
 	auto iEngage = pHost->EngageTime ();

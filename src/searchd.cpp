@@ -208,7 +208,6 @@ static bool				g_bStripPath	= false;
 static bool				g_bCoreDump		= false;
 
 static auto& g_bGotSighup		= sphGetGotSighup();	// we just received SIGHUP; need to log
-static auto& g_bGotSigterm		= sphGetGotSigterm();	// we just received SIGTERM; need to shutdown
 static auto& g_bGotSigusr1		= sphGetGotSigusr1();	// we just received SIGUSR1; need to reopen logs
 
 // pipe to watchdog to inform that daemon is going to close, so no need to restart it in case of crash
@@ -218,9 +217,8 @@ struct SharedData_t
 	bool m_bHaveTTY;
 };
 
-static SharedData_t* g_pShared = nullptr;
-static auto&					g_bShutdown = sphGetShutdown();
-volatile bool					g_bMaintenance = false;
+static SharedData_t* 		g_pShared = nullptr;
+volatile bool				g_bMaintenance = false;
 
 GuardedHash_c *								g_pLocalIndexes = new GuardedHash_c();	// served (local) indexes hash
 GuardedHash_c *								g_pDistIndexes = new GuardedHash_c ();    // distributed indexes hash
@@ -674,11 +672,13 @@ public:
 /////////////////////////////////////////////////////////////////////////////
 void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 {
+	// force even long time searches to shut
+	sphInterruptNow ();
+
 #if !USE_WINDOWS
 	int fdStopwait = -1;
 #endif
 	bool bAttrsSaveOk = true;
-	g_bShutdown = true;
 	if ( g_pShared )
 		g_pShared->m_bDaemonAtShutdown = true;
 
@@ -693,8 +693,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	}
 #endif
 
-	// force even long time searches to shut
-	sphInterruptNow();
+
 
 	int64_t tmShutStarted = sphMicroTimer ();
 
@@ -798,7 +797,6 @@ void sigterm ( int )
 	// we can't call exit() here because malloc()/free() are not re-entrant
 	// we could call _exit() but let's try to die gracefully on TERM
 	// and let signal sender wait and send KILL as needed
-	g_bGotSigterm = 1;
 	sphInterruptNow();
 }
 
@@ -12491,7 +12489,7 @@ bool HandleMysqlSelect ( RowBuffer_i & dRows, SearchHandler_c & tHandler )
 	// actual searching
 	tHandler.RunQueries();
 
-	if ( g_bGotSigterm )
+	if ( sphInterrupted() )
 	{
 		sphLogDebug ( "HandleClientMySQL: got SIGTERM, sending the packet MYSQL_ERR_SERVER_SHUTDOWN" );
 		dRows.Error ( NULL, "Server shutdown in progress", MYSQL_ERR_SERVER_SHUTDOWN );
@@ -13255,7 +13253,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		else if ( eStmt==STMT_SHOW_PLAN )
 			HandleMysqlShowPlan ( dRows, tProfile, bMoreResultsFollow );
 
-		if ( g_bGotSigterm )
+		if ( sphInterrupted() )
 		{
 			sphLogDebug ( "HandleMultiStmt: got SIGTERM, sending the packet MYSQL_ERR_SERVER_SHUTDOWN" );
 			dRows.Error ( NULL, "Server shutdown in progress", MYSQL_ERR_SERVER_SHUTDOWN );
@@ -18130,10 +18128,7 @@ void InitSharedBuffer ()
 BOOL WINAPI CtrlHandler ( DWORD )
 {
 	if ( !g_bService )
-	{
-		g_bGotSigterm = 1;
 		sphInterruptNow();
-	}
 	return TRUE;
 }
 #endif
@@ -18301,7 +18296,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 				sphInfo ( "watchdog: got error %d, %s", errno, strerrorm ( errno ));
 		}
 
-		if ( bShutdown || g_bGotSigterm || g_pShared->m_bDaemonAtShutdown )
+		if ( bShutdown || sphInterrupted() || g_pShared->m_bDaemonAtShutdown )
 		{
 			exit ( 0 );
 		}
@@ -18330,7 +18325,7 @@ void CheckSignals () REQUIRES ( MainThread )
 		g_bGotSighup = 0;
 	}
 
-	if ( g_bGotSigterm )
+	if ( sphInterrupted() )
 	{
 		sphInfo ( "caught SIGTERM, shutting down" );
 		Shutdown ();
@@ -18353,7 +18348,6 @@ void CheckSignals () REQUIRES ( MainThread )
 				break;
 
 			case 1:
-				g_bGotSigterm = 1;
 				sphInterruptNow();
 				if ( g_bService )
 					g_bServiceStop = true;
@@ -19973,7 +19967,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 bool DieCallback ( const char * sMessage )
 {
-	g_bShutdown = true;
+	sphInterruptNow();
 	sphLogFatal ( "%s", sMessage );
 	return false; // caller should not log
 }
@@ -20035,12 +20029,6 @@ int main ( int argc, char ** argv )
 	return mainimpl ( argc, argv );
 }
 #endif
-
-volatile bool& sphGetGotSigterm()
-{
-	static bool bGotSigterm = false;
-	return bGotSigterm;
-}
 
 volatile bool& sphGetGotSighup()
 {

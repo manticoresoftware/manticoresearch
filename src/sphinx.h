@@ -3492,8 +3492,7 @@ void				sphCollationInit ();
 
 extern CSphString g_sLemmatizerBase;
 
-// Get global shutdown flag
-volatile bool& sphGetShutdown();
+volatile bool & sphGetbCpuStat ();
 
 // Access to global TFO settings
 volatile int& sphGetTFO();

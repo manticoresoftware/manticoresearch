@@ -16,8 +16,6 @@ extern int g_iClientTimeoutS; // from searchd.cpp
 extern volatile bool g_bMaintenance;
 extern int g_iThdQueueMax;
 extern CSphAtomic g_iPersistentInUse;
-static auto& g_bShutdown = sphGetShutdown ();
-static auto& g_bGotSigterm = sphGetGotSigterm ();    // we just received SIGTERM; need to shutdown
 static auto & g_bGotSighup = sphGetGotSighup ();    // we just received SIGHUP; need to log
 
 static char g_sMaxedOutMessage[] = "maxed out, dismissing client";
@@ -461,7 +459,7 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 		if ( !bCommand )
 		{
 			// on SIGTERM, bail unconditionally and immediately, at all times
-			if ( g_bGotSigterm )
+			if ( sphInterrupted () )
 			{
 				sphLogDebugv ( "conn %s(%d): bailing on SIGTERM", sClientIP, iCID );
 				break;
@@ -548,7 +546,7 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 				tOut.SendString ( g_sMaxedOutMessage );
 			}
 			tOut.Flush();
-			return;
+			break;
 		}
 
 		bPersist |= LoopClientSphinx ( eCommand, uVer, iReplySize, tThdesc, tIn, tOut, false );

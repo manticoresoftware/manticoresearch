@@ -13,7 +13,6 @@
 #include "searchdtask.h"
 #include "searchdaemon.h"
 
-static auto& g_bShutdown = sphGetShutdown ();
 OneshotEvent_c g_tPrereadFinished;
 
 static void PrereadFunc ( void* )
@@ -32,7 +31,7 @@ static void PrereadFunc ( void* )
 	sphInfo ( "prereading %d indexes", dIndexes.GetLength ());
 	int iReaded = 0;
 
-	for ( int i = 0; i<dIndexes.GetLength () && !g_bShutdown; ++i )
+	for ( int i = 0; i<dIndexes.GetLength () && !sphInterrupted (); ++i )
 	{
 		const CSphString& sName = dIndexes[i];
 		auto pServed = GetServed ( sName );

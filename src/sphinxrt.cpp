@@ -74,7 +74,6 @@ static auto&	g_bRTChangesAllowed		= RTChangesAllowed ();
 
 // optimize mode for disk chunks merge
 static bool g_bProgressiveMerge = true;
-static auto& g_bShutdown = sphGetShutdown();
 
 //////////////////////////////////////////////////////////////////////////
 volatile bool &RTChangesAllowed ()
@@ -1344,7 +1343,7 @@ RtIndex_c::~RtIndex_c ()
 
 	// might be NULL during startup
 	if ( g_pBinlog )
-		g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, g_bShutdown );
+		g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, sphInterrupted () );
 
 	if ( m_bIndexDeleted )
 	{
@@ -7539,7 +7538,7 @@ void RtIndex_c::CommonMerge( Selector_t fnSelector )
 	int iA = -1;
 	int iB = -1;
 
-	while ( fnSelector ( &iA, &iB ) && !g_bShutdown && !m_bOptimizeStop && !m_bSaveDisabled )
+	while ( fnSelector ( &iA, &iB ) && !sphInterrupted () && !m_bOptimizeStop && !m_bSaveDisabled )
 	{
 		const CSphIndex * pOldest = nullptr;
 		const CSphIndex * pOlder = nullptr;
@@ -7562,7 +7561,7 @@ void RtIndex_c::CommonMerge( Selector_t fnSelector )
 		sMerged.SetSprintf ( "%s.tmp", pOldest->GetFilename() );
 
 		// check forced exit after long operation
-		if ( g_bShutdown || m_bOptimizeStop || m_bSaveDisabled )
+		if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted ())
 			break;
 
 		// merge data to disk ( data is constant during that phase )
@@ -7576,7 +7575,7 @@ void RtIndex_c::CommonMerge( Selector_t fnSelector )
 		}
 
 		// check forced exit after long operation
-		if ( g_bShutdown || m_bOptimizeStop || m_bSaveDisabled )
+		if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted ())
 			break;
 
 		CSphScopedPtr<CSphIndex> pMerged ( LoadDiskChunk ( sMerged.cstr(), pOlder->m_iChunk, pFilenameBuilder.Ptr(), sError, pOlder->GetName() ) );
@@ -7587,7 +7586,7 @@ void RtIndex_c::CommonMerge( Selector_t fnSelector )
 			break;
 		}
 		// check forced exit after long operation
-		if ( g_bShutdown || m_bOptimizeStop || m_bSaveDisabled )
+		if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted ())
 			break;
 
 		// lets rotate indexes
@@ -7611,7 +7610,7 @@ void RtIndex_c::CommonMerge( Selector_t fnSelector )
 			break;
 		}
 
-		if ( g_bShutdown || m_bOptimizeStop ) // protection
+		if ( m_bOptimizeStop || sphInterrupted ()) // protection
 			break;
 
 		// merged replaces recent chunk
@@ -7639,7 +7638,7 @@ void RtIndex_c::CommonMerge( Selector_t fnSelector )
 		SaveMeta ( m_iTID, dChunkNames );
 		Verify ( m_tWriting.Unlock() );
 
-		if ( g_bShutdown || m_bOptimizeStop )
+		if ( m_bOptimizeStop || sphInterrupted () )
 		{
 			sphWarning ( "rt optimize: index %s: forced to shutdown, remove old index files manually '%s', '%s'",
 				m_sIndexName.cstr(), sRename.cstr(), sOldest.cstr() );
@@ -7670,7 +7669,7 @@ void RtIndex_c::CommonMerge( Selector_t fnSelector )
 	m_bOptimizing = false;
 	int64_t tmPass = sphMicroTimer() - tmStart;
 
-	if ( g_bShutdown )
+	if ( sphInterrupted () )
 	{
 		sphWarning ( "rt: index %s: optimization terminated chunk(s) %d ( of %d ) in %d.%03d sec",
 			m_sIndexName.cstr(), iChunks-m_dDiskChunks.GetLength(), iChunks, (int)(tmPass/1000000), (int)((tmPass/1000)%1000) );

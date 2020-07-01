@@ -29,8 +29,6 @@
 
 int g_tmWait = -1;
 int	g_iThrottleAction = 0;
-static auto& g_bShutdown = sphGetShutdown ();
-static auto& g_bGotSigterm = sphGetGotSigterm ();
 
 /////////////////////////////////////////////////////////////////////////////
 /// CSphWakeupEvent - used to kick poller from outside
@@ -220,7 +218,7 @@ class CSphNetLoop::Impl_c
 	void LoopNetPoll () REQUIRES ( PollThread )
 	{
 		int64_t tmLastWait = sphMicroTimer();
-		while ( !g_bShutdown )
+		while ( !sphInterrupted() )
 		{
 			m_tPrf.Start();
 
@@ -335,7 +333,7 @@ void CSphNetLoop::AddAction ( ISphNetAction * pElem )
 
 void CSphNetLoop::Unlink ( ISphNetAction * pElem, bool bWillClose )
 {
-	if ( m_pImpl && !g_bShutdown ) // that check instead of assert added to fix #1418
+	if ( m_pImpl && !sphInterrupted () ) // that check instead of assert added to fix #1418
 		m_pImpl->Unlink ( pElem, bWillClose );
 }
 
@@ -418,11 +416,11 @@ void SockWrapper_c::Impl_c::EngageWaiterAndYield ( int64_t tmTimeUntilUs )
 	assert ( m_pNetLoop );
 	sphLogDebugv ( "CoYieldWith (m_iEvent=%d), timeout %d", m_uNetEvents, int(tmTimeUntilUs-sphMicroTimer ()) );
 	m_iTimeoutTimeUS = tmTimeUntilUs;
-	if ( m_pNetLoop && !g_bShutdown )
+	if ( m_pNetLoop && !sphInterrupted () )
 	{
 		m_fnRestart = Threads::CurrentRestarter ();
 		Threads::CoYieldWith ( [this] {
-			if ( m_pNetLoop && !g_bShutdown ) // secondary check for the case of a race
+			if ( m_pNetLoop && !sphInterrupted () ) // secondary check for the case of a race
 				m_pNetLoop->AddAction ( this );
 			else
 				ResumeWaiterIfAny(); // emergency, only on shutdown
@@ -578,7 +576,7 @@ void SockWrapper_c::SetWTimeoutUS ( int64_t iTimeoutUS )
 // timeout is ruled by g_iWriteTimeoutS.
 static bool SyncSend ( SockWrapper_c* pSock, const char * pBuffer, int64_t iLen)
 {
-	if ( g_bShutdown )
+	if ( sphInterrupted () )
 		sphLogDebug ( "SIGTERM in SockWrapper_c::Send" );
 
 	if ( iLen<=0 )
@@ -686,7 +684,7 @@ static int SyncSockRead ( SockWrapper_c * pSock, BYTE* pBuf, int iLen, int iSpac
 			iErr = sphSockGetErrno();
 			if ( iErr==EINTR )
 			{
-				if ( !( g_bGotSigterm && bIntr ))
+				if ( !( sphInterrupted () && bIntr ))
 					continue;
 				sphLogDebug( "SyncSockRead: select got SIGTERM, exit -1" );
 			}
@@ -701,7 +699,7 @@ static int SyncSockRead ( SockWrapper_c * pSock, BYTE* pBuf, int iLen, int iSpac
 			if ( bIntr )
 			{
 				// got that SIGTERM
-				if ( g_bGotSigterm )
+				if ( sphInterrupted() )
 				{
 					sphLogDebug ( "SyncSockRead: got SIGTERM emulation on Windows, exit -1" );
 					sphSockSetErrno ( EINTR );
@@ -737,7 +735,7 @@ static int SyncSockRead ( SockWrapper_c * pSock, BYTE* pBuf, int iLen, int iSpac
 			iErr = sphSockGetErrno();
 			if ( iErr==EINTR )
 			{
-				if ( !( g_bGotSigterm && bIntr ))
+				if ( !( sphInterrupted () && bIntr ))
 					continue;
 				sphLogDebug( "SyncSockRead: select got SIGTERM, exit -1" );
 			}
@@ -863,7 +861,7 @@ int AsyncNetInputBuffer_c::AppendData ( int iNeed, int iSpace, bool bIntr )
 	m_pCur = m_pBuf+iPos;
 
 	int iGot = ReadFromBackend ( iNeed, iSpace, bIntr );
-	if ( g_bGotSigterm && bIntr )
+	if ( sphInterrupted () && bIntr )
 	{
 		sphLogDebug ( "AsyncNetInputBuffer_c::AppendData: got SIGTERM, return -1" );
 		m_bError = true;

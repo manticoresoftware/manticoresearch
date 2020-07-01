@@ -15,7 +15,6 @@
 
 extern int g_iClientTimeoutS; // from searchd.cpp
 extern volatile bool g_bMaintenance;
-static auto& g_bShutdown = sphGetShutdown ();
 
 static const char g_sContentLength[] = "\r\r\n\nCcOoNnTtEeNnTt--LlEeNnGgTtHh\0";
 static const size_t g_sContentLengthSize = sizeof ( g_sContentLength ) - 1;

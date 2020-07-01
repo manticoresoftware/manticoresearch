@@ -118,7 +118,6 @@ using namespace Threads;
 void sphFatal( const char* sFmt, ... ) __attribute__ (( format ( printf, 1, 2 ))) NO_RETURN;
 void sphFatalLog( const char* sFmt, ... ) __attribute__ (( format ( printf, 1, 2 )));
 
-volatile bool& sphGetGotSigterm();
 volatile bool& sphGetGotSighup();
 volatile bool& sphGetGotSigusr1();
 

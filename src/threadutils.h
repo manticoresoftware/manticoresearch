@@ -201,7 +201,7 @@ Threads::Scheduler_i* GetAloneScheduler ( int iMaxThreads, const char* szName=nu
 using SchedulerFabric_fn = std::function<Threads::Scheduler_i * ( void )>;
 
 // add handler which will be called on daemon's shutdown right after
-// g_bShutdown is set to true. Returns cookie for refer the callback in future.
+// sphInterrupted() is set to true. Returns cookie for refer the callback in future.
 using Handler_fn = std::function<void ()>;
 
 namespace searchd {

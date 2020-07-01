@@ -72,7 +72,7 @@ bool ServiceThread_t::Create ( void (* fnThread) ( void* ), void* pArg, const ch
 
 void ServiceThread_t::Join ()
 {
-	if ( m_bCreated && sphGetShutdown ())
+	if ( m_bCreated && sphInterrupted ())
 		sphThreadJoin ( &m_tThread );
 	m_bCreated = false;
 }

@@ -734,7 +734,7 @@ PercolateIndex_c::~PercolateIndex_c ()
 {
 	bool bValid = m_pTokenizer && m_pDict;
 	if ( bValid )
-		SaveMeta ( sphGetShutdown () );
+		SaveMeta ( sphInterrupted() );
 	SafeClose ( m_iLockFD );
 
 	if ( m_bIndexDeleted )

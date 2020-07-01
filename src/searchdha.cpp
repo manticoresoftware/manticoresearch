@@ -48,10 +48,8 @@
 
 int64_t			g_iPingIntervalUs		= 0;		// by default ping HA agents every 1 second
 DWORD			g_uHAPeriodKarmaS	= 60;		// by default use the last 1 minute statistic to determine the best HA agent
-
 int				g_iPersistentPoolSize	= 0;
 
-static auto& g_bShutdown = sphGetShutdown();
 static auto& g_iTFO = sphGetTFO ();
 
 CSphString HostDesc_t::GetMyUrl() const
@@ -3535,10 +3533,10 @@ private:
 		++m_iTickNo;
 		if ( !m_iTickNo ) ++m_iTickNo; // skip 0
 
-		if ( g_bShutdown )
+		if ( sphInterrupted() )
 		{
 			AbortScheduled();
-			sphLogDebugL ( "EventTick() exit because of shutdown=%d", g_bShutdown );
+			sphLogDebugL ( "EventTick() exit because of shutdown=%d", sphInterrupted() );
 			return false;
 		}
 
@@ -3659,10 +3657,10 @@ public:
 
 	~LazyNetEvents_c ()
 	{
-		sphLogDebug ( "~LazyNetEvents_c. Shutdown=%d", g_bShutdown );
+		sphLogDebug ( "~LazyNetEvents_c. Shutdown=%d", sphInterrupted() );
 		Fire();
 		// might be crash - no need to hung waiting thread
-		if ( g_bShutdown )
+		if ( sphInterrupted () )
 			sphThreadJoin ( &m_dWorkingThread );
 		events_destroy();
 	}

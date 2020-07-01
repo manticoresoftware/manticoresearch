@@ -42,8 +42,6 @@
 #define DebugM( ... ) DebugL(M, __VA_ARGS__)
 #define DebugX( ... ) DebugL(X, __VA_ARGS__)
 
-static auto& g_bShutdown = sphGetShutdown ();
-
 // period of idle, after which workers will finish.
 static int64_t IDLE_TIME_TO_FINISH = 600 * 1000000LL; // 10m
 
@@ -511,10 +509,10 @@ private:
 		auto VARIABLE_IS_NOT_USED iWaited = sphMicroTimer () - iStarted;
 		DebugT ( "waited %t, reason=%s", iWaited, bWasKicked ? "kicked": "timeout or error" );
 
-		if ( g_bShutdown || m_bShutdown )
+		if ( sphInterrupted () || m_bShutdown )
 		{
 			AbortScheduled ();
-			DebugT ( "EventTick() exit because of shutdown=%d", g_bShutdown );
+			DebugT ( "EventTick() exit because of shutdown=%d", sphInterrupted () );
 			return false;
 		}
 		return true;
@@ -563,7 +561,7 @@ private:
 	{
 		DebugT ( "ProcessSchedulingEnqueue (%p)", pScheduled );
 
-		if ( g_bShutdown )
+		if ( sphInterrupted () )
 			SafeDelete ( pScheduled );
 
 		if ( !pScheduled )
@@ -592,7 +590,7 @@ private:
 	bool JobTick ( TaskWorker_t& tWorker ) REQUIRES ( MtJobThread )
 	{
 		DebugM ( "------------------ JobTick() %d", tWorker.m_iMyThreadID );
-		if ( m_bShutdown || g_bShutdown )
+		if ( m_bShutdown || sphInterrupted () )
 		{
 			KickJobPool (); // kick next one before dead
 			return false;
@@ -761,7 +759,7 @@ public:
 
 	~LazyJobs_c ()
 	{
-		DebugX ( "~LazyJobs_c. Shutdown=%d", g_bShutdown );
+		DebugX ( "~LazyJobs_c. Shutdown=%d", sphInterrupted () );
 		Shutdown();
 	}
 

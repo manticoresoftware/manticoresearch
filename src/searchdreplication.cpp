@@ -347,7 +347,7 @@ bool ReplicationIsEnabled()
 }
 
 
-void ReplicationSetIncoming ( const CSphString & sIncoming )
+void ReplicationSetIncoming ( CSphString sIncoming )
 {
 	g_sIncomingIP = sIncoming;
 	g_bHasIncoming = !g_sIncomingIP.IsEmpty();

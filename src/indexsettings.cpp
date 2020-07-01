@@ -810,7 +810,7 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 
 	// aot
 	StrVec_t dMorphs;
-	sphSplit ( dMorphs, hIndex.GetStr ( "morphology" ) );
+	sphSplit ( dMorphs, hIndex.GetStr ( "morphology" ).cstr() );
 
 	m_uAotFilterMask = 0;
 	for ( int j=0; j<AOT_LENGTH; ++j )

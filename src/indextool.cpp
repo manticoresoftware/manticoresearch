@@ -1557,7 +1557,7 @@ int main ( int argc, char ** argv )
 				const CSphConfigSection & hIndex = hConf["index"][sIndex];
 				if ( hIndex.GetInt ( "html_strip" )==0 )
 					sphDie ( "HTML stripping is not enabled in index '%s'", sIndex.cstr() );
-				StripStdin ( hIndex.GetStr ( "html_index_attrs" ), hIndex.GetStr ( "html_remove_elements" ) );
+				StripStdin ( hIndex.GetStr ( "html_index_attrs" ).cstr(), hIndex.GetStr ( "html_remove_elements" ).cstr() );
 			}
 			break;
 

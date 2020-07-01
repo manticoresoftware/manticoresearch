@@ -26503,9 +26503,9 @@ CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * 
 CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName )
 {
 	CSphString sError;
-	const char * sDelimiter = pSource->GetStr ( "csvpipe_delimiter", "" );
+	auto sDelimiter = pSource->GetStr ( "csvpipe_delimiter" );
 	auto * pCSV = new CSphSource_CSV(sSourceName);
-	pCSV->SetDelimiter ( sDelimiter );
+	pCSV->SetDelimiter ( sDelimiter.cstr() );
 	if ( !pCSV->Setup ( *pSource, pPipe, sError ) )
 	{
 		SafeDelete ( pCSV );

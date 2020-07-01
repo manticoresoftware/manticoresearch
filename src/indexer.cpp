@@ -1116,7 +1116,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 
 		if ( bHtmlStrip )
 		{
-			if ( !pSource->SetStripHTML ( sHtmlIndexAttrs.cstr(), sHtmlRemoveElements.cstr(), bIndexSP, hIndex.GetStr("index_zones"), sError ) )
+			if ( !pSource->SetStripHTML ( sHtmlIndexAttrs.cstr(), sHtmlRemoveElements.cstr(), bIndexSP, hIndex.GetStr("index_zones").cstr(), sError ) )
 			{
 				fprintf ( stdout, "ERROR: source '%s': %s.\n", pSourceName->cstr(), sError.cstr() );
 				return false;

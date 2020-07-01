@@ -16735,7 +16735,7 @@ static int ParseKeywordExpansion ( const char * sValue )
 
 void ConfigureTemplateIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex )
 {
-	pIdx->m_iExpandKeywords = ParseKeywordExpansion ( hIndex.GetStr( "expand_keywords", "" ) );
+	pIdx->m_iExpandKeywords = ParseKeywordExpansion ( hIndex.GetStr( "expand_keywords" ).cstr() );
 }
 
 
@@ -16743,12 +16743,12 @@ static FileAccess_e GetFileAccess (  const CSphConfigSection & hIndex, const cha
 {
 	// should use original value as default due to deprecated options
 	auto eValue = eDefault;
-	auto sVal = hIndex.GetStr( sKey, nullptr );
-	if ( sVal )
-		eValue = ParseFileAccess ( sVal );
+	auto sVal = hIndex.GetStr(sKey);
+	if ( !sVal.IsEmpty() )
+		eValue = ParseFileAccess ( sVal.cstr() );
 	if ( eValue==FileAccess_e::UNKNOWN )
 	{
-		sphWarning( "%s unknown value %s, use default %s", sKey, sVal, FileAccessName( eDefault ));
+		sphWarning( "%s unknown value %s, use default %s", sKey, sVal.cstr(), FileAccessName( eDefault ));
 		eValue = eDefault;
 	}
 
@@ -16772,15 +16772,15 @@ void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex
 
 	tFileSettings = g_tDefaultFA;
 	// DEPRICATED - remove these 2 options
-	if ( hIndex.GetInt ( "mlock", 0 )==1 )
+	if ( hIndex.GetBool ( "mlock", false ) )
 	{
 		tFileSettings.m_eAttr = FileAccess_e::MLOCK;
 		tFileSettings.m_eBlob = FileAccess_e::MLOCK;
 	}
 	if ( hIndex.Exists ( "ondisk_attrs" ) )
 	{
-		bool bOnDiskAttrs = ( hIndex.GetInt ( "ondisk_attrs", 0 )==1 );
-		bool bOnDiskPools = ( strcmp ( hIndex.GetStr ( "ondisk_attrs" ), "pool" )==0 );
+		bool bOnDiskAttrs = hIndex.GetBool ( "ondisk_attrs", false );
+		bool bOnDiskPools = ( hIndex.GetStr ( "ondisk_attrs" )=="pool" );
 
 		if ( bOnDiskAttrs || bOnDiskPools )
 			tFileSettings.m_eAttr = FileAccess_e::MMAP;
@@ -17001,14 +17001,14 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 	}
 
 	int iIndexSP = hIndex.GetInt ( "index_sp" );
-	const char * sIndexZones = hIndex.GetStr ( "index_zones", "" );
+	auto sIndexZones = hIndex.GetStr ( "index_zones" );
 	bool bHasStripEnabled ( hIndex.GetInt ( "html_strip" )!=0 );
-	if ( ( iIndexSP!=0 || ( *sIndexZones ) ) && !bHasStripEnabled )
+	if ( ( iIndexSP!=0 || !sIndexZones.IsEmpty() ) && !bHasStripEnabled )
 	{
 		// SENTENCE indexing w\o stripper is valid combination
-		if ( *sIndexZones )
+		if ( !sIndexZones.IsEmpty() )
 		{
-			sphWarning ( "ERROR: index '%s': has index_sp=%d, index_zones='%s' but disabled html_strip - NOT SERVING", szIndexName, iIndexSP, sIndexZones );
+			sphWarning ( "ERROR: index '%s': has index_sp=%d, index_zones='%s' but disabled html_strip - NOT SERVING", szIndexName, iIndexSP, sIndexZones.cstr() );
 			return false;
 		} else
 			sphWarning ( "index '%s': has index_sp=%d but disabled html_strip - PARAGRAPH unavailable", szIndexName, iIndexSP );
@@ -17067,11 +17067,11 @@ ESphAddIndex AddRTIndex ( GuardedHash_c & dPost, const char * szIndexName, const
 {
 	auto sIndexType = hIndex.GetStr ( "dict", "keywords" );
 	bool bWordDict = true;
-	if ( strcmp ( sIndexType, "crc" )==0 )
+	if ( sIndexType=="crc" )
 		bWordDict = false;
-	else if ( strcmp ( sIndexType, "keywords" )!=0 )
+	else if ( sIndexType!="keywords" )
 	{
-		sError.SetSprintf ( "index '%s': unknown dict=%s; only 'keywords' or 'crc' values allowed", szIndexName, sIndexType );
+		sError.SetSprintf ( "index '%s': unknown dict=%s; only 'keywords' or 'crc' values allowed", szIndexName, sIndexType.cstr() );
 		return ADD_ERROR;
 	}
 
@@ -18686,31 +18686,21 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 			sphFatal ( "mandatory option 'pid_file' not found in 'searchd' section" );
 
 	// read_timeout is now deprecated
-	if ( hSearchd.Exists ( "read_timeout" ) && hSearchd["read_timeout"].intval()>=0 )
-		g_iReadTimeoutS = hSearchd.GetSTimeS ( "read_timeout");
+	g_iReadTimeoutS = hSearchd.GetSTimeS ( "read_timeout", 5);
 
 	// network_timeout overrides read_timeout
-	if ( hSearchd.Exists ( "network_timeout" ) && hSearchd["network_timeout"].intval()>=0 )
-	{
-		g_iReadTimeoutS = hSearchd.GetSTimeS ("network_timeout");
-		g_iWriteTimeoutS = g_iReadTimeoutS;
-	}
+	g_iReadTimeoutS = hSearchd.GetSTimeS ( "network_timeout", g_iReadTimeoutS );
+	g_iWriteTimeoutS = g_iReadTimeoutS;
 
-	if ( hSearchd.Exists ( "sphinxql_timeout" ) && hSearchd["sphinxql_timeout"].intval()>=0 )
-		g_iClientQlTimeoutS = hSearchd.GetSTimeS( "sphinxql_timeout");
+	g_iClientQlTimeoutS = hSearchd.GetSTimeS( "sphinxql_timeout", 900);
+	g_iClientTimeoutS = hSearchd.GetSTimeS ( "client_timeout", 300 );
 
-	if ( hSearchd.Exists ( "client_timeout" ) && hSearchd["client_timeout"].intval()>=0 )
-		g_iClientTimeoutS = hSearchd.GetSTimeS ( "client_timeout" );
+	g_iMaxChildren = hSearchd.GetInt ( "max_children" );
 
-	if ( hSearchd.Exists ( "max_children" ) && hSearchd["max_children"].intval()>=0 )
-		g_iMaxChildren = hSearchd["max_children"].intval();
-
-	if ( hSearchd.Exists ( "persistent_connections_limit" ) && hSearchd["persistent_connections_limit"].intval()>=0 )
-		g_iPersistentPoolSize = hSearchd["persistent_connections_limit"].intval();
-
-	g_bPreopenIndexes = hSearchd.GetInt ( "preopen_indexes", (int)g_bPreopenIndexes )!=0;
-	sphSetUnlinkOld ( hSearchd.GetInt ( "unlink_old", 1 )!=0 );
-	g_iExpansionLimit = hSearchd.GetInt ( "expansion_limit", 0 );
+	g_iPersistentPoolSize = hSearchd.GetInt ("persistent_connections_limit");
+	g_bPreopenIndexes = hSearchd.GetBool ( "preopen_indexes" );
+	sphSetUnlinkOld ( hSearchd.GetBool ( "unlink_old" ) );
+	g_iExpansionLimit = hSearchd.GetInt ( "expansion_limit" );
 
 	// initialize buffering settings
 	SetUnhintedBuffer ( hSearchd.GetSize( "read_unhinted", DEFAULT_READ_UNHINTED ) );
@@ -18723,8 +18713,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_tDefaultFA.m_eAttr = FileAccess_e::MMAP_PREREAD;
 	g_tDefaultFA.m_eBlob = FileAccess_e::MMAP_PREREAD;
 
-	bool bOnDiskAttrs = ( hSearchd.GetInt ( "ondisk_attrs_default", 0 )==1 );
-	bool bOnDiskPools = ( strcmp ( hSearchd.GetStr ( "ondisk_attrs_default", "" ), "pool" )==0 );
+	bool bOnDiskAttrs = hSearchd.GetBool ( "ondisk_attrs_default", false );
+	bool bOnDiskPools = hSearchd.GetStr ( "ondisk_attrs_default" )=="pool";
 	if ( bOnDiskAttrs || bOnDiskPools )
 		g_tDefaultFA.m_eAttr = FileAccess_e::MMAP;
 
@@ -18785,9 +18775,9 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	}
 	if ( hSearchd ( "collation_libc_locale" ) )
 	{
-		const char * sLocale = hSearchd.GetStr ( "collation_libc_locale" );
-		if ( !setlocale ( LC_COLLATE, sLocale ) )
-			sphWarning ( "setlocale failed (locale='%s')", sLocale );
+		auto sLocale = hSearchd.GetStr ( "collation_libc_locale" );
+		if ( !setlocale ( LC_COLLATE, sLocale.cstr() ) )
+			sphWarning ( "setlocale failed (locale='%s')", sLocale.cstr() );
 	}
 
 	if ( hSearchd ( "collation_server" ) )
@@ -18857,7 +18847,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	QcacheSetup ( s.m_iMaxBytes, s.m_iThreshMs, s.m_iTtlS );
 
 	// hostname_lookup = {config_load | request}
-	g_bHostnameLookup = ( strcmp ( hSearchd.GetStr ( "hostname_lookup", "" ), "request" )==0 );
+	g_bHostnameLookup = ( hSearchd.GetStr ( "hostname_lookup" ) == "request" );
 
 	CSphVariant * pLogMode = hSearchd ( "query_log_mode" );
 	if ( pLogMode && !pLogMode->strval().IsEmpty() )
@@ -19735,21 +19725,20 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	else
 		g_sSnippetsFilePrefix.SetSprintf("%s/", sphGetCwd().scstr());
 
-	const char* sLogFormat = hSearchd.GetStr ( "query_log_format", "plain" );
-	if ( !strcmp ( sLogFormat, "sphinxql" ) )
+	auto sLogFormat = hSearchd.GetStr ( "query_log_format", "plain" );
+	if ( sLogFormat=="sphinxql" )
 		g_eLogFormat = LOG_FORMAT_SPHINXQL;
-	else if ( strcmp ( sLogFormat, "plain" ) )
+	else if ( sLogFormat=="plain" )
 	{
 		StrVec_t dParams;
-		sphSplit ( dParams, sLogFormat );
-		ARRAY_FOREACH ( j, dParams )
+		sphSplit ( dParams, sLogFormat.cstr() );
+		for ( const auto& sParam : dParams )
 		{
-			sLogFormat = dParams[j].cstr();
-			if ( !strcmp ( sLogFormat, "sphinxql" ) )
+			if ( sParam=="sphinxql" )
 				g_eLogFormat = LOG_FORMAT_SPHINXQL;
-			else if ( !strcmp ( sLogFormat, "plain" ) )
+			else if ( sParam=="plain" )
 				g_eLogFormat = LOG_FORMAT_PLAIN;
-			else if ( !strcmp ( sLogFormat, "compact_in" ) )
+			else if ( sParam=="compact_in" )
 				g_bLogCompactIn = true;
 		}
 	}

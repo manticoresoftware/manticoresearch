@@ -246,10 +246,17 @@ public:
 	}
 
 	/// get string option value by key and default value
-	const char * GetStr ( const char * sKey, const char * sDefault="" ) const
+	CSphString GetStr ( const char * sKey, const char * sDefault="" ) const
 	{
 		CSphVariant * pEntry = (*this)( sKey );
-		return pEntry ? pEntry->strval().cstr() : sDefault;
+		return pEntry ? pEntry->strval() : sDefault;
+	}
+
+	/// get bool option value by key and default value
+	bool GetBool ( const char * sKey, bool bDefault = true ) const
+	{
+		CSphVariant * pEntry = ( *this ) ( sKey );
+		return pEntry ? (pEntry->intval ()!=0) : bDefault;
 	}
 
 	/// get size option (plain int, or with K/M suffix) value by key and default value

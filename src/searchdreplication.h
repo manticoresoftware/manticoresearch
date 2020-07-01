@@ -18,7 +18,7 @@
 #include "searchdsql.h"
 
 bool ReplicationIsEnabled();
-void ReplicationSetIncoming ( const CSphString & sIncoming );
+void ReplicationSetIncoming ( CSphString sIncoming );
 
 // collect all available into an array
 void ReplicationCollectClusters ( CSphVector<ClusterDesc_t> & dClusters );

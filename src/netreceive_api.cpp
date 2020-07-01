@@ -14,10 +14,7 @@
 
 extern int g_iClientTimeoutS; // from searchd.cpp
 extern volatile bool g_bMaintenance;
-extern int g_iThdQueueMax;
 static auto & g_bGotSighup = sphGetGotSighup ();    // we just received SIGHUP; need to log
-
-static char g_sMaxedOutMessage[] = "maxed out, dismissing client";
 
 #if 0
 struct ThdJobAPI_t : public ISphJob
@@ -519,8 +516,7 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf )
 			break;
 		}
 
-		// maxed out
-		if ( g_iThdQueueMax && !tConn.m_bVIP && GlobalWorkPool()->Works()>=g_iThdQueueMax )
+		if ( IsMaxedOut() )
 		{
 			sphWarning ( "%s", g_sMaxedOutMessage );
 			{

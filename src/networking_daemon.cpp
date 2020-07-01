@@ -30,6 +30,7 @@
 
 int g_tmWait = -1;
 int	g_iThrottleAction = 0;
+const char * g_sMaxedOutMessage = "maxed out, dismissing client";
 
 /////////////////////////////////////////////////////////////////////////////
 /// CSphWakeupEvent - used to kick poller from outside

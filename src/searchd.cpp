@@ -7035,6 +7035,13 @@ bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tO
 	return true;
 }
 
+bool IsMaxedOut ()
+{
+	return !myinfo::IsVIP()
+		&& ( ( g_iThdQueueMax && g_iThdQueueMax<=GlobalWorkPool ()->Works () )
+			|| ( g_iMaxChildren && g_iMaxChildren<=myinfo::CountClients () ) );
+}
+
 void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq )
 {
 	MEMORY ( MEM_API_SEARCH );
@@ -18731,6 +18738,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_iClientTimeoutS = hSearchd.GetSTimeS ( "client_timeout", 300 );
 
 	g_iMaxChildren = hSearchd.GetInt ( "max_children" );
+	g_iThdQueueMax = hSearchd.GetInt ( "queue_max_length" );
 
 	g_iPersistentPoolSize = hSearchd.GetInt ("persistent_connections_limit");
 	g_bPreopenIndexes = hSearchd.GetBool ( "preopen_indexes" );
@@ -19875,8 +19883,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	// serve clients
 	/////////////////
 
-	g_iThdQueueMax = hSearchd.GetInt ( "queue_max_length", g_iThdQueueMax );
-	SetMaxChildrenThreads ( g_iMaxChildren ? g_iMaxChildren : ( 3 * sphCpuThreadsCount () / 2 ) );
+	SetMaxChildrenThreads ( sphCpuThreadsCount () );
 
 #if USE_WINDOWS
 	if ( g_bService )

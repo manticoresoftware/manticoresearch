@@ -347,7 +347,13 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf )
 			if ( iChunk>0 )
 				continue;
 
-			return; // todo! report - iChunk==0 is limit reached, iChunk<0 is some other error
+			if ( iChunk<0 )
+				sphWarning ( "failed to receive HTTP request (client=%s(%d)) error='%s')", sClientIP, iCID, sphSockError () );
+			else
+				sphWarning ( "failed to receive HTTP request (client=%s(%d)) max packet size(%d) exceeded)", sClientIP, iCID
+							 , g_iMaxPacketSize );
+
+			return;
 		}
 
 		int iPacketLen = tHeadParser.m_iHeaderEnd+tHeadParser.m_iFieldContentLenVal;
@@ -361,10 +367,18 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf )
 		auto uOldByte = tIn.Terminate ( iPacketLen, '\0' );
 		auto tPacket = tIn.PopTail (iPacketLen);
 
+		CSphVector<BYTE> dResult;
+		if ( IsMaxedOut() )
+		{
+			sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_503, g_sMaxedOutMessage );
+			tOut.SwapData ( dResult );
+			tOut.Flush (); // no need to check return code since we break anyway
+			break;
+		}
+
 		tCrashQuery.m_pQuery = tPacket.first;
 		tCrashQuery.m_iSize = tPacket.second;
 
-		CSphVector<BYTE> dResult;
 		if ( sphLoopClientHttp ( tPacket.first, tPacket.second, dResult ) )
 		{
 			if ( !bKeepAlive )

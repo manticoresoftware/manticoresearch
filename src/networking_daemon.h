@@ -19,6 +19,8 @@ extern int g_tmWait;
 extern int g_iThrottleAction;
 extern int g_iThrottleAccept;
 
+extern const char* g_sMaxedOutMessage;
+
 struct Listener_t
 {
 	int					m_iSock;

@@ -1129,6 +1129,7 @@ enum ESphHttpEndpoint
 };
 
 bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut );
+bool IsMaxedOut ();
 ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster );
 void sphFormatFactors ( StringBuilder_c& dOut, const unsigned int * pFactors, bool bJson );
 void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation, CSphVector<int64_t> & dLastIds );

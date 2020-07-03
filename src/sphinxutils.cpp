@@ -886,7 +886,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "net_throttle_accept",	0, NULL },
 	{ "net_send_job",			0, NULL },
 	{ "net_workers",			0, NULL },
-	{ "queue_max_length",		0, NULL },
+	{ "queue_max_length",		KEY_DEPRECATED, "jobs_queue_size" },
 	{ "qcache_ttl_sec",			0, NULL },
 	{ "qcache_max_bytes",		0, NULL },
 	{ "qcache_thresh_msec",		0, NULL },
@@ -909,6 +909,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "ssl_ca",					0, nullptr },
 	{ "max_connections",		0, nullptr },
 	{ "threads",				0, nullptr },
+	{ "jobs_queue_size",		0, nullptr },
 	{ NULL,						0, NULL }
 };
 

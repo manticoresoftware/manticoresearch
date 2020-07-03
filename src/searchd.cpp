@@ -18738,19 +18738,9 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_iClientQlTimeoutS = hSearchd.GetSTimeS( "sphinxql_timeout", 900);
 	g_iClientTimeoutS = hSearchd.GetSTimeS ( "client_timeout", 300 );
 
-	if ( hSearchd.Exists ( "max_children" ) )
-		g_iMaxConnection = hSearchd.GetInt ( "max_children" );
 	g_iMaxConnection = hSearchd.GetInt ( "max_connections", g_iMaxConnection );
-
-	if ( hSearchd.Exists ( "threads" ) )
-	{
-		g_iThreads = hSearchd.GetInt ( "threads", g_iThreads );
-	} else
-	{
-		g_iThreads = sphCpuThreadsCount();
-	}
-
-	g_iThdQueueMax = hSearchd.GetInt ( "queue_max_length" );
+	g_iThreads = hSearchd.GetInt ( "threads", sphCpuThreadsCount() );
+	g_iThdQueueMax = hSearchd.GetInt ( "jobs_queue_size", g_iThdQueueMax );
 
 	g_iPersistentPoolSize = hSearchd.GetInt ("persistent_connections_limit");
 	g_bPreopenIndexes = hSearchd.GetBool ( "preopen_indexes" );

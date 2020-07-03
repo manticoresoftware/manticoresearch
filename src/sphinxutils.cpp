@@ -827,7 +827,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "read_timeout",			KEY_DEPRECATED, "network_timeout" },
 	{ "network_timeout",		0, NULL },
 	{ "client_timeout",			0, NULL },
-	{ "max_children",			0, NULL },
+	{ "max_children",			KEY_DEPRECATED, "max_connections" },
 	{ "pid_file",				0, NULL },
 	{ "max_matches",			KEY_REMOVED, NULL },
 	{ "seamless_rotate",		0, NULL },
@@ -907,6 +907,8 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "ssl_cert",				0, nullptr },
 	{ "ssl_key",				0, nullptr },
 	{ "ssl_ca",					0, nullptr },
+	{ "max_connections",		0, nullptr },
+	{ "threads",				0, nullptr },
 	{ NULL,						0, NULL }
 };
 

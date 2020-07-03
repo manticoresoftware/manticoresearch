@@ -131,7 +131,8 @@ int						g_iReadTimeoutS		= 5;	// sec
 int						g_iWriteTimeoutS	= 5;	// sec
 int						g_iClientTimeoutS	= 300;
 int						g_iClientQlTimeoutS	= 900;	// sec
-static auto&			g_iMaxChildren		= getMaxChildren ();
+static int				g_iMaxConnection	= 0; // unlimited
+static int				g_iThreads			= 2;
 #if !USE_WINDOWS
 static bool				g_bPreopenIndexes	= true;
 #else
@@ -7039,7 +7040,7 @@ bool IsMaxedOut ()
 {
 	return !myinfo::IsVIP()
 		&& ( ( g_iThdQueueMax && g_iThdQueueMax<=GlobalWorkPool ()->Works () )
-			|| ( g_iMaxChildren && g_iMaxChildren<=myinfo::CountClients () ) );
+			|| ( g_iMaxConnection && g_iMaxConnection<=myinfo::CountClients () ) );
 }
 
 void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq )
@@ -18737,7 +18738,18 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_iClientQlTimeoutS = hSearchd.GetSTimeS( "sphinxql_timeout", 900);
 	g_iClientTimeoutS = hSearchd.GetSTimeS ( "client_timeout", 300 );
 
-	g_iMaxChildren = hSearchd.GetInt ( "max_children" );
+	if ( hSearchd.Exists ( "max_children" ) )
+		g_iMaxConnection = hSearchd.GetInt ( "max_children" );
+	g_iMaxConnection = hSearchd.GetInt ( "max_connections", g_iMaxConnection );
+
+	if ( hSearchd.Exists ( "threads" ) )
+	{
+		g_iThreads = hSearchd.GetInt ( "threads", g_iThreads );
+	} else
+	{
+		g_iThreads = sphCpuThreadsCount();
+	}
+
 	g_iThdQueueMax = hSearchd.GetInt ( "queue_max_length" );
 
 	g_iPersistentPoolSize = hSearchd.GetInt ("persistent_connections_limit");
@@ -19883,7 +19895,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	// serve clients
 	/////////////////
 
-	SetMaxChildrenThreads ( sphCpuThreadsCount () );
+	SetMaxChildrenThreads ( g_iThreads );
 
 #if USE_WINDOWS
 	if ( g_bService )
@@ -20070,12 +20082,6 @@ volatile bool& sphGetGotSigusr1()
 {
 	static bool bGotSigusr1 = false;
 	return bGotSigusr1;
-}
-
-volatile int & getMaxChildren ()
-{
-	static int iMaxChildren = 0;
-	return iMaxChildren;
 }
 
 // defined in threadutils.cpp

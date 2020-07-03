@@ -121,9 +121,6 @@ void sphFatalLog( const char* sFmt, ... ) __attribute__ (( format ( printf, 1, 2
 volatile bool& sphGetGotSighup();
 volatile bool& sphGetGotSigusr1();
 
-// Get global shutdown flag
-volatile int & getMaxChildren ();
-
 /////////////////////////////////////////////////////////////////////////////
 // SOME SHARED GLOBAL VARIABLES
 /////////////////////////////////////////////////////////////////////////////

@@ -598,11 +598,11 @@ static SmartSSL_CTX_t GetSslCtx ()
 		#else
 		pMode = SSLv23_server_method();
 		#endif
-		pSslCtx = SmartSSL_CTX_t ( SSL_CTX_new ( pMode ), [] ( SSL_CTX *)
+		pSslCtx = SmartSSL_CTX_t ( SSL_CTX_new ( pMode ), [] ( SSL_CTX * pCtx )
 		{
 			sphLogDebugv ( BACKN "~~ Releasing ssl context." NORM );
 			BIO_s_coroAsync ( true );
-			SslFreeCtx ( pSslCtx );
+			SslFreeCtx ( pCtx );
 		});
 		SSL_CTX_set_verify ( pSslCtx, SSL_VERIFY_NONE, nullptr );
 

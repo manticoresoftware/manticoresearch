@@ -2,6 +2,11 @@
 <test>
 
 <name>configless</name>
+
+<requires>
+	<icu/>
+</requires>
+
 <skip_indexer/>
 
 <config>

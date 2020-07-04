@@ -1272,6 +1272,7 @@ static void CollectClusterDesc ( CSphVector<ClusterDesc_t> & dClusters )
 {
 	dClusters.Reset();
 	void * pIt = nullptr;
+	ScRL_t tLock ( g_tClustersLock );
 	while ( g_hClusters.IterateNext ( &pIt ))
 	{
 		const ReplicationCluster_t * pCluster = g_hClusters.IterateGet ( &pIt );

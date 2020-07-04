@@ -3801,27 +3801,28 @@ void FirePoller ()
 class CRemoteAgentsObserver : public RemoteAgentsObserver_i
 {
 protected:
-	CSphAtomic m_iSucceeded;	//< num of tasks finished successfully
-	CSphAtomic m_iFinished;		//< num of tasks finished.
-	CSphAtomic m_iTasks;		//< total num of tasks
+	std::atomic<int> m_iSucceeded { 0 };	//< num of tasks finished successfully
+	std::atomic<int> m_iFinished { 0 };		//< num of tasks finished.
+	std::atomic<int> m_iTasks { 0 };		//< total num of tasks
 	CoroEvent_c m_tChanged;		//< the signaller
 
 public:
 	void FeedTask ( bool bAdd ) final
 	{
 		if ( bAdd )
-			++m_iTasks;
+			m_iTasks.fetch_add ( 1, std::memory_order_acq_rel );
 		else
-			--m_iTasks;
+			m_iTasks.fetch_sub ( 1, std::memory_order_acq_rel );
 	}
 
 	// check that there are no works to do
 	bool IsDone () const final
 	{
-		if ( m_iFinished > m_iTasks )
-			sphWarning ( "Orphaned chain detected (expected %d, got %d)", (int)m_iTasks, (int)m_iFinished );
+		if ( m_iFinished.load(std::memory_order_relaxed) > m_iTasks.load ( std::memory_order_relaxed ) )
+			sphWarning ( "Orphaned chain detected (expected %d, got %d)",
+				m_iTasks.load ( std::memory_order_relaxed ), m_iFinished.load ( std::memory_order_relaxed ) );
 
-		return m_iFinished>=m_iTasks;
+		return m_iFinished.load ( std::memory_order_acquire )>=m_iTasks.load ( std::memory_order_acquire );
 	}
 
 	// block execution until all tasks are finished
@@ -3833,20 +3834,20 @@ public:
 
 	inline long GetSucceeded() const final
 	{
-		return m_iSucceeded;
+		return m_iSucceeded.load ( std::memory_order_relaxed );
 	}
 
 	inline long GetFinished () const final
 	{
-		return m_iFinished;
+		return m_iFinished.load ( std::memory_order_relaxed );
 	}
 
 public:
 	void Report ( bool bSuccess ) final
 	{
 		if ( bSuccess )
-			++m_iSucceeded;
-		++m_iFinished;
+			m_iSucceeded.fetch_add ( 1, std::memory_order_relaxed );
+		m_iFinished.fetch_add ( 1, std::memory_order_acq_rel );
 		m_tChanged.SetEvent ();
 	}
 

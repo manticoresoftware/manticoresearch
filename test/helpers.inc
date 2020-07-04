@@ -1294,6 +1294,7 @@ class SphinxConfig
 	private $_indexer_runs;
 	private $_custom_test;
 	private	$_sd_address;
+	private $_sd_log;
 	private	$_sd_port;
 	private $_sd_sphinxql_port;
 	private	$_sd_http_port;
@@ -1432,11 +1433,15 @@ class SphinxConfig
 	}
 
 
-	function SetAgent ( $agent )
+	function SetAgent ( $agent, $i )
 	{
 		if ( !is_array ( $agent ) )
 			return;
 
+		if ( $i>0 )
+		    $this->_sd_log = "searchd$i.log";
+		else
+            $this->_sd_log = "searchd.log";
 		$this->_sd_address = $agent ["address"];
 		$this->_sd_port = $agent ["port"];
 		$this->_sd_sphinxql_port = $agent ["sqlport"];
@@ -3595,7 +3600,7 @@ class SphinxConfig
 
 	function WriteSearchdSettings ( $fp )
 	{
-		global $sd_log, $sd_query_log, $sd_network_timeout, $sd_max_children, $sd_pid_file;
+		global $sd_log, $sd_split_logs, $sd_query_log, $sd_network_timeout, $sd_max_children, $sd_pid_file;
 		$workers = "threads";
 		if ( $this->Requires("thread_pool") || $this->Requires("http") || $this->Requires("https") )
 			$workers = "thread_pool";
@@ -3629,7 +3634,10 @@ class SphinxConfig
 			}
 		}
 
-		fwrite ( $fp, "\tlog			= $sd_log\n" );
+		if ( $sd_split_logs )
+		    fwrite ( $fp, "\tlog			= {$this->_sd_log}\n" );
+		else
+            fwrite ( $fp, "\tlog			= $sd_log\n" );
 		fwrite ( $fp, "\tquery_log		= $sd_query_log\n" );
 		fwrite ( $fp, "\tnetwork_timeout= $sd_network_timeout\n" );
 		fwrite ( $fp, "\tmax_children	= $sd_max_children\n" );
@@ -4033,7 +4041,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 		print ( "$prefix $subtest/$nsubtests\r" );
 		$config->WriteReportHeader ( $report );
 
-		$config->SetAgent ( $agents [0] );
+		$config->SetAgent ( $agents [0], 0 );
 		$msg = '';
 		if (!$config->WriteConfig ( $conf_dir."/"."config_".$config->SubtestNo ().".conf", "all", $msg, false))
 		{
@@ -4116,7 +4124,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 				$stop[$abs_config_file] = $abs_pid_file;
 				$msg = '';
 				$error_agent = "error_".$agent_id.".txt";
-				$config->SetAgent ( $agents [$i] );
+				$config->SetAgent ( $agents [$i], 0 );
 				$config->SetPIDFile ( $abs_pid_file );
 				if ( !$config->WriteConfig ( $abs_config_file, $i, $msg ) )
 					continue;

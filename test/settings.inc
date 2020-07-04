@@ -9,6 +9,7 @@ $sd_replication_port = 6720;
 $sd_sphinxql_port_vip = 6709;
 
 $sd_log				= "searchd.log";
+$sd_split_logs		= false; // if we want one log per agent, its easier to investigate problems!
 $sd_query_log		= "query.log";
 $sd_network_timeout	= 5;
 $sd_max_children	= 30;

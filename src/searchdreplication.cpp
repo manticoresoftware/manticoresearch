@@ -85,7 +85,7 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	wsrep_t *	m_pProvider = nullptr;
 
 	// receiver thread
-	CoroEvent_c m_tWorkerFinished;
+	CSphAutoEvent m_tWorkerFinished;
 
 	// nodes at cluster
 	CSphString	m_sViewNodes; // raw nodes addresses (API and replication) from whole cluster
@@ -973,16 +973,20 @@ void ReplicateClusterDone ( ReplicationCluster_t * pCluster )
 	if ( !pCluster )
 		return;
 
-	if ( pCluster->m_pProvider )
-	{
-		pCluster->m_pProvider->disconnect ( pCluster->m_pProvider );
-		pCluster->m_pProvider = nullptr;
-	}
+	auto pProvider = pCluster->m_pProvider;
+	pCluster->m_pProvider = nullptr;
 
+	if ( pProvider )
+		pProvider->disconnect ( pProvider );
+
+	sphLogDebug ( "disconnect from cluster invoked" );
 	// Listening thread are now running and receiving writesets. Wait for them
 	// to join. Thread will join after signal handler closes wsrep connection
 	pCluster->m_tWorkerFinished.WaitEvent ();
-	sphLogDebugRpl ( "ReplicateClusterDone finished" );
+
+	delete pCluster;
+	wsrep_unload ( pProvider );
+	sphLogDebug ( "ReplicateClusterDone finished, cluster deleted lib %p unloaded", pProvider );
 }
 
 // check return code from Galera calls
@@ -1236,22 +1240,18 @@ void ReplicationAbort()
 // delete all clusters on daemon shutdown
 void ReplicateClustersDelete() EXCLUDES ( g_tClustersLock )
 {
+	sphLogDebug ( "ReplicateClustersDelete invoked" );
 	ScWL_t wLock ( g_tClustersLock );
 	if ( !g_hClusters.GetLength() )
 		return;
 
-	Threads::CallCoroutine ( [] () REQUIRES ( g_tClustersLock ) {
-		void * pIt = nullptr;
-		while ( g_hClusters.IterateNext ( &pIt ))
-		{
-			auto* pCluster = SmallStringHash_T<ReplicationCluster_t *>::IterateGet ( &pIt );
-			auto pProvider = pCluster->m_pProvider;
-			ReplicateClusterDone ( pCluster );
-			SafeDelete( pCluster );
-			if ( pProvider )
-				wsrep_unload( pProvider );
-		}
-	});
+	for ( auto& tCluster: g_hClusters )
+	{
+		sphLogDebug ( "ReplicateClustersDelete for %s", tCluster.first.cstr() );
+		ReplicateClusterDone ( tCluster.second );
+	}
+
+	sphLogDebug ( "ReplicateClustersDelete done" );
 	g_hClusters.Reset ();
 }
 
@@ -3347,13 +3347,7 @@ bool RemoteClusterDelete ( const CSphString & sCluster, CSphString & sError ) EX
 		pCluster->m_dIndexHashes.Reset();
 	}
 
-	wsrep_t* pProvider = pCluster->m_pProvider;
 	ReplicateClusterDone ( pCluster );
-	SafeDelete ( pCluster );
-
-	if ( pProvider )
-		wsrep_unload ( pProvider );
-
 	return true;
 }
 

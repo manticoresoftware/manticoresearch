@@ -342,7 +342,7 @@ public:
 		if ( m_pFront )
 		{
 			auto * tmp = m_pFront;
-			m_pFront = m_pFront->m_pNext;
+			m_pFront = tmp->m_pNext;
 			if ( !m_pFront )
 				m_pBack = nullptr;
 			tmp->m_pNext = nullptr;
@@ -359,6 +359,20 @@ public:
 			m_pBack = pOp;
 		} else
 			m_pFront = m_pBack = pOp;
+	}
+
+	// Push an operation on to the front of the queue.
+	void Push_front ( Operation * pOp )
+	{
+		if ( m_pFront )
+		{
+			pOp->m_pNext = m_pFront;
+			m_pFront = pOp;
+		} else
+		{
+			pOp->m_pNext = nullptr;
+			m_pFront = m_pBack = pOp;
+		}
 	}
 
 	// Push all operations from another queue on to the back of the queue. The
@@ -389,6 +403,68 @@ public:
 	bool IsEnqueued ( Operation * pOp ) const
 	{
 		return pOp->m_pNext || m_pBack==pOp;
+	}
+
+	// find elem (linear search), remove from list and destroy
+	void RemoveAndDestroy ( Operation * pOp )
+	{
+		if ( !pOp )
+			return;
+
+		if ( m_pFront==pOp )
+		{
+			m_pFront = pOp->m_pNext;
+		} else
+		{
+			for ( auto pCurOp = m_pFront; pCurOp!=nullptr; pCurOp = pCurOp->m_pNext )
+			{
+				if ( pCurOp->m_pNext==pOp )
+				{
+					pCurOp->m_pNext = pOp->m_pNext;
+					if ( !pCurOp->m_pNext )
+						m_pBack = pCurOp;
+					break;
+				}
+			}
+		}
+		if ( !m_pFront )
+			m_pBack = nullptr;
+		pOp->Destroy ();
+	}
+
+	class Iterator_c
+	{
+		Operation * m_pIterator = nullptr;
+	public:
+		explicit Iterator_c ( Operation * pIterator = nullptr ) : m_pIterator ( pIterator )
+		{}
+
+		Operation & operator* ()
+		{
+			return *m_pIterator;
+		};
+
+		Iterator_c & operator++ ()
+		{
+			m_pIterator = m_pIterator->m_pNext;
+			return *this;
+		}
+
+		bool operator!= ( const Iterator_c & rhs ) const
+		{
+			return m_pIterator!=rhs.m_pIterator;
+		}
+	};
+
+	// c++11 style iteration
+	Iterator_c begin () const
+	{
+		return Iterator_c ( m_pFront );
+	}
+
+	Iterator_c end () const
+	{
+		return Iterator_c();
 	}
 };
 

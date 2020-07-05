@@ -1040,7 +1040,7 @@ bool sphThreadJoin ( SphThread_t * pThread )
 SphThread_t sphThreadSelf ()
 {
 #if USE_WINDOWS
-	return GetCurrentThreadId();
+	return GetCurrentThread();
 #else
 	return pthread_self ();
 #endif

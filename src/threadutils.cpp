@@ -630,6 +630,7 @@ struct Service_i
 	virtual void reset() = 0;
 };
 
+#define LOG_LEVEL_WORKS false
 
 /// performs tasks pushed with post() in one or many threads until they done.
 /// Naming convention of members is inherited from boost::asio as drop-in replacement.
@@ -721,6 +722,7 @@ public:
 		LOG ( DETAIL, MT ) << "run " << m_iOutstandingWork << " st:" << !!m_bStopped;
 		if ( m_iOutstandingWork==0 )
 		{
+			LOG ( WORKS, MT ) << "run m_iOutstandingWork " << m_iOutstandingWork << " " << &m_iOutstandingWork<< " stop!";
 			stop();
 			return;
 		}
@@ -766,7 +768,10 @@ public:
 
 			LOG ( DETAIL, MT ) << "completed & unlocked";
 			if ( this_thread.m_iPrivateOutstandingWork>1 )
+			{
 				m_iOutstandingWork += this_thread.m_iPrivateOutstandingWork-1;
+				LOG ( WORKS, MT ) << "do_run_one m_iOutstandingWork " << m_iOutstandingWork << " " << &m_iOutstandingWork;
+			}
 			else if ( this_thread.m_iPrivateOutstandingWork<1 )
 				work_finished ();
 
@@ -806,6 +811,7 @@ public:
 	{
 		LOG ( DETAIL, MT ) << "work_started from " << m_iOutstandingWork;
 		++m_iOutstandingWork;
+		LOG ( WORKS, MT ) << "work_started m_iOutstandingWork " << m_iOutstandingWork << " " << &m_iOutstandingWork;
 	}
 
 	// Notify that some work has finished.
@@ -814,6 +820,8 @@ public:
 		LOG ( DETAIL, MT ) << "work_finished " << m_iOutstandingWork;
 		if ( --m_iOutstandingWork==0 )
 			stop ();
+
+		LOG ( WORKS, MT ) << "work_finished m_iOutstandingWork " << m_iOutstandingWork << " " << &m_iOutstandingWork;
 	}
 
 	void stop_all_threads ( ScopedMutex_t & dLock ) REQUIRES ( dLock )

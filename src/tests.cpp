@@ -17,7 +17,7 @@
 #include "sphinxrt.h"
 #include "sphinxint.h"
 #include "sphinxstem.h"
-#include <math.h>
+#include <cmath>
 
 #define SNOWBALL 0
 #define CROSSCHECK 0

@@ -15,7 +15,7 @@
 #include "sphinxint.h"
 #include "sphinxutils.h"
 #include "json/cJSON.h"
-#include <math.h>
+#include <cmath>
 
 // Miscelaneous short functional tests: TDigest, SpanSearch,
 // stringbuilder, CJson, TaggedHash, Log2

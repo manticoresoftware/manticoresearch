@@ -80,8 +80,8 @@ index idx
 CREATE TABLE test_table
 (
 	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
-	title TEXT NOT NULL
-) ENGINE=MYISAM
+	title varchar(10) NOT NULL
+)
 </db_create>
 <db_insert>
 insert into test_table values (1, 'aaaaa')

@@ -72,7 +72,7 @@ bool ServiceThread_t::Create ( void (* fnThread) ( void* ), void* pArg, const ch
 
 void ServiceThread_t::Join ()
 {
-	if ( m_bCreated && sphInterrupted ())
+	if ( m_bCreated && sphInterrupted () )
 		sphThreadJoin ( &m_tThread );
 	m_bCreated = false;
 }
@@ -497,6 +497,8 @@ protected:
 	~SchedulerOperation_t () {}
 };
 
+using OpSchedule_t = OpQueue_T<SchedulerOperation_t>;
+
 // actual operation which completes given Handler
 template <typename Handler>
 class CompletionHandler_c : public SchedulerOperation_t
@@ -504,7 +506,7 @@ class CompletionHandler_c : public SchedulerOperation_t
 	Handler m_Handler;
 
 public:
-	CompletionHandler_c ( const Handler& h )
+	explicit CompletionHandler_c ( Handler h )
 		: SchedulerOperation_t ( &CompletionHandler_c::DoComplete )
 		, m_Handler ( static_cast<const Handler&> ( h )) // force copying
 	{}
@@ -534,7 +536,7 @@ public:
 
 struct TaskServiceThreadInfo_t
 {
-	OpQueue_T <SchedulerOperation_t> m_dPrivateQueue;
+	OpSchedule_t m_dPrivateQueue;
 	long m_iPrivateOutstandingWork = 0;
 };
 
@@ -638,8 +640,8 @@ struct Service_t : public TaskService_t, public Service_i
 	bool m_bStopped = false;                	/// dispatcher has been stopped.
 	bool m_bOneThread;                			/// optimize for single-threaded use case
 	sph::Event_c m_tWakeupEvent;				/// event to wake up blocked threads
-	OpQueue_T<SchedulerOperation_t> m_OpQueue;	/// The queue of handlers that are ready to be delivered
-	OpQueue_T<SchedulerOperation_t> m_OpVipQueue;    /// The queue of handlers that have to be delivered BEFORE OpQueue
+	OpSchedule_t m_OpQueue;						/// The queue of handlers that are ready to be delivered
+	OpSchedule_t m_OpVipQueue;					/// The queue of handlers that have to be delivered BEFORE OpQueue
 
 	// Per-thread call stack to track the state of each thread in the service.
 	using ThreadCallStack_c = CallStack_c<TaskService_t, TaskServiceThreadInfo_t>;
@@ -653,24 +655,24 @@ public:
 	: m_bOneThread ( bOneThread ) {}
 
 	template<typename Handler>
-	void post ( const Handler& handler )
+	void post ( Handler handler ) // post into secondary queue
 	{
 		// Allocate and construct an operation to wrap the handler.
-		post_immediate_completion ( new CompletionHandler_c<Handler> ( handler ), false );
+		post_immediate_completion ( new CompletionHandler_c<Handler> ( std::move ( handler ) ), false );
 	}
 
 	template<typename Handler>
-	void defer ( const Handler & handler )
+	void defer ( Handler handler ) // post into primary queue
 	{
 		// Allocate and construct an operation to wrap the handler.
-		post_immediate_completion ( new CompletionHandler_c<Handler> ( handler ), true );
+		post_immediate_completion ( new CompletionHandler_c<Handler> ( std::move ( handler ) ), true );
 	}
 
 	template<typename Handler>
-	void post_continuationHandler ( const Handler & handler )
+	void post_continuationHandler ( Handler handler ) // try to execute immediately, or then post to primary queue
 	{
 		// Allocate and construct an operation to wrap the handler.
-		post_continuation ( new CompletionHandler_c<Handler> ( handler ) );
+		post_continuation ( new CompletionHandler_c<Handler> ( std::move ( handler ) ) );
 	}
 
 	void post_continuation ( Service_t::operation * pOp )
@@ -878,7 +880,7 @@ class ThreadPool_c final : public Scheduler_i
 	std::atomic<bool> m_bStop {false};
 
 	template<typename F>
-	void Post ( F && f, bool bVip = false )
+	void Post ( F && f, bool bVip = false ) // post to primary (vip) or secondary queue
 	{
 		LOG ( DETAIL, TP ) << "Post " << bVip;
 		if ( bVip )
@@ -889,7 +891,7 @@ class ThreadPool_c final : public Scheduler_i
 	}
 
 	template<typename F>
-	void PostContinuation ( F && f )
+	void PostContinuation ( F && f ) // 'very vip' - try to execute immediately, or post to the primary queue
 	{
 		LOG ( DETAIL, TP ) << "PostContinuation";
 		m_tService.post_continuationHandler( std::forward<F> ( f ));
@@ -1053,9 +1055,9 @@ public:
 		LOG ( DEBUG, TP ) << "thread stopped";
 	}
 
-	void Schedule ( Handler handler, bool bContinuation ) final
+	void Schedule ( Handler handler, bool bVip ) final
 	{
-		Post ( std::move ( handler ), bContinuation );
+		Post ( std::move ( handler ), bVip );
 	}
 
 	Keeper_t KeepWorking () final

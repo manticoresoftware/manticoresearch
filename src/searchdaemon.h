@@ -1322,6 +1322,11 @@ public:
 
 	void PutTimeAsString ( int64_t tmVal )
 	{
+		if ( tmVal==-1 )
+		{
+			PutString ( "none" );
+			return;
+		}
 		StringBuilder_c sTime;
 		sTime.Sprintf ("%t", tmVal);
 		PutString ( sTime.cstr() );

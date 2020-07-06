@@ -19879,6 +19879,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		}
 
 		g_pTickPoolThread = Threads::MakeThreadPool ( g_iNetWorkers, "TickPool" );
+		WipeSchedulerOnFork ( g_pTickPoolThread );
+
 		g_dNetLoops.Resize ( g_iNetWorkers );
 		for ( auto & pNetLoop : g_dNetLoops )
 		{
@@ -19894,11 +19896,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	ExposedSetTopQueryTls ( &tQueryTLS );
 
 	// untill no threads started, schedule stopping of alone threads to very bottom
+	WipeGlobalSchedulerOnShutdownAndFork();
 	Detached::AloneShutdowncatch ();
 
 	// time for replication to sync with cluster
 	ReplicationStart ( hSearchd, dListenerDescs, bNewCluster, bNewClusterForce );
-	searchd::AddShutdownCb ( [] { ReplicateClustersDelete (); } );
+	searchd::AddShutdownCb ( ReplicateClustersDelete );
 
 	// ready, steady, go
 	sphInfo ( "accepting connections" );

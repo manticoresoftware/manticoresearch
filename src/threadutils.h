@@ -227,8 +227,12 @@ namespace CrashLogger
 
 // Scheduler to global thread pool
 Threads::Scheduler_i* GlobalWorkPool ();
-void WipeGlobalSchedulerAfterFork();
 void SetMaxChildrenThreads ( int iThreads );
+
+/// schedule stop of the global thread pool
+void WipeGlobalSchedulerOnShutdownAndFork ();
+
+void WipeSchedulerOnFork ( Threads::Scheduler_i * );
 
 // Scheduler to dedicated thread (or nullptr, if current N of such threads >= iMaxThreads)
 // you MUST schedule at least one job, or explicitly delete non-engaged scheduler (it will leak otherwise).
@@ -238,15 +242,14 @@ using SchedulerFabric_fn = std::function<Threads::Scheduler_i * ( void )>;
 
 // add handler which will be called on daemon's shutdown right after
 // sphInterrupted() is set to true. Returns cookie for refer the callback in future.
-using Handler_fn = std::function<void ()>;
-
 namespace searchd
 {
+	// add global (process-wide) callback to be called on shutdown.
+	// That is stack, i.e. LIFO sequence.
+	void AddShutdownCb ( Threads::Handler fnCb );
 
-	void* AddShutdownCb ( Handler_fn fnCb );
-
-	// remove previously set shutdown cb by cookie
-	void DeleteShutdownCb ( void* pCookie );
+	// add global cb to be called on fork. LIFO
+	void AddOnForkCleanupCb ( Threads::Handler fnCb );
 
 	// execute shutdown handlers
 	void FireShutdownCbs ();

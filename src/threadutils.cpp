@@ -1023,57 +1023,67 @@ SchedulerSharedPtr_t MakeAloneThread ( size_t iOrderNum, const char * szName )
 } // namespace Threads
 
 
+namespace {
+	RwLock_t & g_lShutdownGuard ()
+	{
+		static RwLock_t lShutdownGuard;
+		return lShutdownGuard;
+	}
 
-struct Handler_t : public ListNode_t
-{
-	Handler_fn m_fnCb;
+	OpSchedule_t & g_dShutdownList ()
+	{
+		static OpSchedule_t dShutdownList GUARDED_BY ( g_lShutdownGuard () );
+		return dShutdownList;
+	}
 
-	Handler_t ( Handler_fn && fnCb ) : m_fnCb ( std::move ( fnCb )) {}
-};
-
-static RwLock_t g_lShutdownGuard;
-static List_t g_dShutdownList GUARDED_BY ( g_lShutdownGuard );
-
-void * searchd::AddShutdownCb ( std::function<void ()> fnCb )
-{
-	auto * pCb = new Handler_t ( std::move ( fnCb ));
-	ScWL_t tGuard ( g_lShutdownGuard );
-	g_dShutdownList.Add ( pCb );
-	return pCb;
+	OpSchedule_t & g_dOnForkList ()
+	{
+		static OpSchedule_t dOnForkList GUARDED_BY ( g_lShutdownGuard () );
+		return dOnForkList;
+	}
 }
 
-// remove previously set shutdown cb by cookie
-void searchd::DeleteShutdownCb ( void * pCookie )
+void searchd::AddShutdownCb ( Handler fnCb )
 {
-	if ( !pCookie )
-		return;
+	auto pCb = ( new CompletionHandler_c<Handler> ( std::move ( fnCb ) ) );
+	ScWL_t tGuard ( g_lShutdownGuard() );
+	g_dShutdownList().Push_front( pCb );
+}
 
-	auto * pCb = (Handler_t *) pCookie;
-
-	ScWL_t tGuard ( g_lShutdownGuard );
-	if ( !g_dShutdownList.GetLength ())
-		return;
-
-	g_dShutdownList.Remove ( pCb );
-	SafeDelete ( pCb );
+void searchd::AddOnForkCleanupCb ( Threads::Handler fnCb )
+{
+	auto pCb = ( new CompletionHandler_c<Handler> ( std::move ( fnCb ) ) );
+	ScWL_t tGuard ( g_lShutdownGuard () );
+	g_dOnForkList ().Push_front ( pCb );
 }
 
 // invoke shutdown handlers
 void searchd::FireShutdownCbs ()
 {
-	ScRL_t tGuard ( g_lShutdownGuard );
-	while (g_dShutdownList.GetLength ()) {
-		auto * pCb = (Handler_t *) g_dShutdownList.Begin ();
-		g_dShutdownList.Remove ( pCb );
-		auto fnCb = std::move ( pCb->m_fnCb );
-		SafeDelete( pCb );
-		fnCb();
+	ScRL_t tGuard ( g_lShutdownGuard() );
+	while ( !g_dShutdownList().Empty () )
+	{
+		auto * pOp = g_dShutdownList().Front ();
+		g_dShutdownList().Pop ();
+		pOp->Complete ( pOp );
 	}
 }
 
 void searchd::CleanAfterFork () NO_THREAD_SAFETY_ANALYSIS
 {
-	g_dShutdownList.HardReset();
+	while ( !g_dOnForkList ().Empty () )
+	{
+		auto * pOp = g_dOnForkList ().Front ();
+		g_dOnForkList ().Pop ();
+		pOp->Complete ( pOp );
+	}
+
+	while ( !g_dShutdownList().Empty () )
+	{
+		auto * pOp = g_dShutdownList().Front ();
+		g_dShutdownList().Pop ();
+		pOp->Destroy();
+	}
 }
 
 static int g_iMaxChildrenThreads = 1;
@@ -1083,10 +1093,12 @@ void SetMaxChildrenThreads ( int iThreads )
 	g_iMaxChildrenThreads = Max ( 1, iThreads);
 }
 
+namespace {
 SchedulerSharedPtr_t& GlobalPoolSingletone ()
 {
 	static SchedulerSharedPtr_t pPool;
 	return pPool;
+}
 }
 
 Threads::Scheduler_i * GlobalWorkPool ()
@@ -1097,16 +1109,38 @@ Threads::Scheduler_i * GlobalWorkPool ()
 	return pPool;
 }
 
-void WipeGlobalSchedulerAfterFork ()
+void WipeGlobalSchedulerOnShutdownAndFork ()
 {
-	SchedulerSharedPtr_t & pPool = GlobalPoolSingletone ();
-	if ( pPool )
-		pPool->DiscardOnFork();
+#ifndef NDEBUG
+	static bool bAlreadyInvoked = false;
+	assert (!bAlreadyInvoked);
+	bAlreadyInvoked = true;
+#endif
+
+	searchd::AddOnForkCleanupCb ( [] {
+		SchedulerSharedPtr_t & pPool = GlobalPoolSingletone ();
+		if ( pPool )
+			pPool->DiscardOnFork ();
+	} );
+
+	searchd::AddShutdownCb ( [] {
+		SchedulerSharedPtr_t & pPool = GlobalPoolSingletone ();
+		if ( pPool )
+			pPool->StopAll ();
+	} );
 }
+
+void WipeSchedulerOnFork ( Threads::Scheduler_i * pScheduler )
+{
+	searchd::AddOnForkCleanupCb ( [pScheduler] {
+		if ( pScheduler )
+			pScheduler->DiscardOnFork ();
+	} );
+}
+
 
 namespace {
 	static std::atomic<int> g_iRunningThreads {0};
-
 }
 
 int Threads::GetNumOfRunning()

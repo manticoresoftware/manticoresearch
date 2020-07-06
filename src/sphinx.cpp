@@ -32,6 +32,7 @@
 #include "indexformat.h"
 #include "indexcheck.h"
 #include "coroutine.h"
+#include "mini_timer.h"
 
 #include <errno.h>
 #include <ctype.h>
@@ -13103,7 +13104,7 @@ void Fullscan ( T & tIterator, const CSphQueryContext & tCtx, CSphQueryResult * 
 		}
 
 		// handle timer
-		if ( tmMaxTimer && sphMicroTimer()>=tmMaxTimer )
+		if ( tmMaxTimer && sph::TimeExceeded ( tmMaxTimer ) )
 		{
 			pResult->m_sWarning = "query time exceeded max_query_time";
 			bStop = true;
@@ -13214,7 +13215,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	int64_t tmCpuQueryStart = sphTaskCpuTimer();
 	int64_t tmMaxTimer = 0;
 	if ( pQuery->m_uMaxQueryMsec>0 )
-		tmMaxTimer = sphMicroTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
+		tmMaxTimer = sph::MiniTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
 
 	ScopedThreadPriority_c tPrio ( pQuery->m_bLowPriority );
 
@@ -16004,7 +16005,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	tTermSetup.m_iDynamicRowitems = tMaxSorterSchema.GetDynamicSize();
 
 	if ( pQuery->m_uMaxQueryMsec>0 )
-		tTermSetup.m_iMaxTimer = sphMicroTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
+		tTermSetup.m_iMaxTimer = sph::MiniTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
 	tTermSetup.m_pWarning = &pResult->m_sWarning;
 	tTermSetup.m_pCtx = &tCtx;
 	tTermSetup.m_pNodeCache = pNodeCache;

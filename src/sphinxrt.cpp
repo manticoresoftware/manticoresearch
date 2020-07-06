@@ -29,6 +29,7 @@
 #include "indexsettings.h"
 #include "indexformat.h"
 #include "coroutine.h"
+#include "mini_timer.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -6118,7 +6119,7 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 			if ( pThResult->m_bHasPrediction )
 				pThResult->m_tStats.Add ( tChunkResult.m_tStats );
 
-			if ( iChunk && tmMaxTimer>0 && sphMicroTimer()>=tmMaxTimer )
+			if ( iChunk && tmMaxTimer>0 && sph::TimeExceeded ( tmMaxTimer ) )
 			{
 				pThResult->m_sWarning = "query time exceeded max_query_time";
 				bInterrupt = true;
@@ -6327,7 +6328,7 @@ void PerformFullScan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 					break;
 
 			// handle timer
-			if ( tmMaxTimer && sphMicroTimer()>=tmMaxTimer )
+			if ( tmMaxTimer && sph::TimeExceeded ( tmMaxTimer ) )
 			{
 				sWarning = "query time exceeded max_query_time";
 				iSeg = dRamChunks.GetLength() - 1;	// outer break
@@ -6639,7 +6640,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	int64_t tmMaxTimer = 0;
 	if ( pQuery->m_uMaxQueryMsec>0 )
-		tmMaxTimer = sphMicroTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
+		tmMaxTimer = sph::MiniTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
 
 	CSphVector<const BYTE *> dDiskBlobPools ( tGuard.m_dDiskChunks.GetLength() );
 
@@ -6681,7 +6682,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_iDynamicRowitems = tMaxSorterSchema.GetDynamicSize();
 	if ( pQuery->m_uMaxQueryMsec>0 )
-		tTermSetup.m_iMaxTimer = sphMicroTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
+		tTermSetup.m_iMaxTimer = sph::MiniTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
 	tTermSetup.m_pWarning = &pResult->m_sWarning;
 	tTermSetup.SetSegment ( -1 );
 	tTermSetup.m_pCtx = &tCtx;

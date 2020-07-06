@@ -16,6 +16,7 @@
 #include "accumulator.h"
 #include "indexsettings.h"
 #include "coroutine.h"
+#include "mini_timer.h"
 
 #include <atomic>
 
@@ -1819,7 +1820,7 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 	int64_t tmQueryStart = sphMicroTimer ();
 	int64_t tmMaxTimer = 0;
 	if ( pQuery->m_uMaxQueryMsec>0 )
-		tmMaxTimer = sphMicroTimer () + pQuery->m_uMaxQueryMsec * 1000; // max_query_time
+		tmMaxTimer = sph::MiniTimer () + pQuery->m_uMaxQueryMsec * 1000; // max_query_time
 
 	// select the sorter with max schema
 	// uses GetAttrsCount to get working facets (was GetRowSize)
@@ -1931,7 +1932,7 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 			break;
 
 		// handle timer
-		if ( tmMaxTimer && sphMicroTimer ()>=tmMaxTimer )
+		if ( tmMaxTimer && sph::TimeExceeded ( tmMaxTimer ) )
 		{
 			pResult->m_sWarning = "query time exceeded max_query_time";
 			break;

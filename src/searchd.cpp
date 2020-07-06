@@ -7038,9 +7038,16 @@ bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tO
 
 bool IsMaxedOut ()
 {
-	return !myinfo::IsVIP()
-		&& ( ( g_iThdQueueMax && g_iThdQueueMax<=GlobalWorkPool ()->Works () )
-			|| ( g_iMaxConnection && g_iMaxConnection<=myinfo::CountClients () ) );
+	if ( myinfo::IsVIP() )
+		return false;
+
+	if ( g_iThdQueueMax!=0 )
+		return GlobalWorkPool()->Works() > g_iThdQueueMax;
+
+	if ( g_iMaxConnection!=0 )
+		return myinfo::CountClients() > g_iMaxConnection;
+
+	return false;
 }
 
 void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq )

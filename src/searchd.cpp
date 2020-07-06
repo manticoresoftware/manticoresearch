@@ -1103,20 +1103,30 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 #endif
 
 	// threads table
-	const auto& g_dThd = Threads::GetUnsafeUnlockedUnprotectedGlobalThreadList();
-	sphSafeInfo ( g_iLogFile, "--- %d active threads ---", g_dThd.GetLength() );
-
+	sphSafeInfo ( g_iLogFile, "--- active threads ---" );
 	int iThd = 0;
-	for ( const ListNode_t * pIt = g_dThd.Begin (); pIt!=g_dThd.End(); pIt = pIt->m_pNext )
+	int iAllThd = 0;
+	Threads::IterateActive ( [&iThd,&iAllThd] ( Threads::LowThreadDesc_t * pThread )
 	{
-		auto * pThd = (ThdDesc_t *)pIt;
-		sphSafeInfo ( g_iLogFile, "thd %d, proto %s, state %s, command %s",
-			iThd,
-			ProtoName(pThd->m_eProto),
-			ThdStateName(pThd->m_eThdState),
-			pThd->m_sCommand ? pThd->m_sCommand : "-" );
-		++iThd;
-	}
+		if ( pThread )
+		{
+			auto pSrc = (ClientTaskInfo_t *) pThread->m_pTaskInfo.load ( std::memory_order_relaxed );
+			if ( pSrc ) ++iAllThd;
+			for ( ; pSrc; pSrc = (ClientTaskInfo_t *) pSrc->m_pPrev.load ( std::memory_order_relaxed ) )
+				if ( pSrc->m_eType==ClientTaskInfo_t::m_eTask )
+				{
+					sphSafeInfo ( g_iLogFile, "thd %d (%s), proto %s, state %s, command %s", iThd,
+							pThread->m_sThreadName.cstr(),
+							ProtoName (pSrc->m_eProto),
+							ThdStateName (pSrc->m_eThdState),
+							pSrc->m_sCommand ? pSrc->m_sCommand : "-" );
+					++iThd;
+					break;
+				}
+		}
+	} );
+
+	sphSafeInfo ( g_iLogFile, "--- Totally %d threads, and %d client-working threads ---", iAllThd, iThd );
 
 	// memory info
 #if SPH_ALLOCS_PROFILER

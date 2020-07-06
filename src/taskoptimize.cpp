@@ -47,7 +47,7 @@ void EnqueueForOptimize ( CSphString sIndex, int iFrom, int iTo )
 					return;
 
 				// want to track optimize only at work
-				ThreadSystem_t tThdSystemDesc ( "OPTIMIZE" );
+				auto pDesc = PublishSystemInfo ( "OPTIMIZE" );
 
 				// FIXME: MVA update would wait w-lock here for a very long time
 				assert ( dReadLocked->m_eType==IndexType_e::RT );

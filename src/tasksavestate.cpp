@@ -248,7 +248,7 @@ static void SphinxqlStateThreadFunc ( void* )
 	// save UDFs
 	/////////////
 
-	ThreadSystem_t tThdSystemDesc ( "SphinxQL state save" );
+	auto pDesc = PublishSystemInfo ( "SphinxQL state save" );
 
 	sphPluginSaveState ( tWriter ); // refactor!
 

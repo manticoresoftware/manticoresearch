@@ -17,7 +17,7 @@ static void ScheduleFlushBinlogNext ();
 
 static void OnceFlushFtBinlog ( void* )
 {
-	ThreadSystem_t tThdSystemDesc ( "FLUSH RT BINLOG" );
+	auto pDesc = PublishSystemInfo ( "FLUSH RT BINLOG" );
 	sphFlushBinlog ();
 	ScheduleFlushBinlogNext ();
 }

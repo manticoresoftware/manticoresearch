@@ -48,7 +48,7 @@ void SchedulePing ( HostDashboard_t* pHost );
 
 static void PingWorker ( void* pCookie )
 {
-	ThreadSystem_t tThdSystemDesc ( "PING" );
+	auto pDesc = PublishSystemInfo ( "PING" );
 	CSphRefcountedPtr<HostDashboard_t> pHost (( HostDashboard_t* ) pCookie );
 	if ( sphInterrupted () || pHost->m_iNeedPing<1 )
 		return;

@@ -16611,7 +16611,7 @@ static void TaskRotation ( void* pRaw ) EXCLUDES ( MainThread )
 	CSphScopedPtr<VecIndexForRotation_t> pUncompletedIndexes (( VecIndexForRotation_t* ) pRaw );
 
 	// want to track rotation thread only at work
-	ThreadSystem_t tThdSystemDesc ( "ROTATION" );
+	auto pDesc = PublishSystemInfo ( "ROTATION" );
 
 	for ( const auto & tIndex : *pUncompletedIndexes.Ptr() )
 	{

@@ -34,7 +34,7 @@ static void CheckRotateGlobalIDFs ( void* )
 			dFiles.Add ( pIndex->m_sGlobalIDFPath );
 	}
 
-	ThreadSystem_t tThdSystemDesc ( "ROTATE global IDF" );
+	auto pDesc = PublishSystemInfo ( "ROTATE global IDF" );
 	sph::UpdateGlobalIDFs ( dFiles );
 }
 

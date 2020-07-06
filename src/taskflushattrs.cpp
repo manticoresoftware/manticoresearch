@@ -83,7 +83,7 @@ static void SaveIndexesMT ( void* = nullptr )
 	else
 		sphLogDebug ( "attrflush: doing periodic check" );
 
-	ThreadSystem_t tThdSystemDesc ( "SAVE indexes" );
+	auto pDesc = PublishSystemInfo ( "SAVE indexes" );
 	if ( CheckSaveIndexes ()==Saved_e::NOTHING )
 		sphLogDebug ( "attrflush: no dirty indexes found" );
 

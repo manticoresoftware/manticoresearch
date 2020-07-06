@@ -17,7 +17,7 @@ OneshotEvent_c g_tPrereadFinished;
 
 static void PrereadFunc ( void* )
 {
-	ThreadSystem_t tThdSystemDesc ( "PREREAD" );
+	auto pDesc = PublishSystemInfo ( "PREREAD" );
 
 	int64_t tmStart = sphMicroTimer ();
 

@@ -1080,9 +1080,26 @@ void RunSingleSphinxqlCommand ( const CSphString & sCommand, ISphOutputBuffer & 
 	tSession.Execute ( sCommand, tRows );
 }
 
+// add 'compressed' flag
+struct QlCompressedInfo_t : public TaskInfo_t
+{
+	DECLARE_RENDER( QlCompressedInfo_t );
+	bool m_bCompressed = false;
+};
+
+DEFINE_RENDER( QlCompressedInfo_t )
+{
+	auto & tInfo = *(QlCompressedInfo_t *) pSrc;
+	if ( tInfo.m_bCompressed )
+		dDst.m_sProto << "compressed";
+}
+
 // main sphinxql server
 void SqlServe ( SockWrapperPtr_c pSock )
 {
+	// to display 'compressed' flag, if any.
+	auto pCompressedFlag = PublishTaskInfo ( new QlCompressedInfo_t );
+
 	myinfo::SetProto ( Proto_e::MYSQL41 );
 
 	// non-vip connections in maintainance should be already rejected on accept
@@ -1213,7 +1230,10 @@ void SqlServe ( SockWrapperPtr_c pSock )
 			bAuthed = true;
 
 			if ( bCanCompression && UserWantsCompression ( tAnswer ) )
+			{
 				MakeMysqlCompressedLayer ( pBuf );
+				pCompressedFlag->m_bCompressed = true;
+			}
 			continue;
 		}
 

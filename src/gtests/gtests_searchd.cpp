@@ -276,7 +276,7 @@ protected:
 
 	void TearDown () override
 	{
-		m_pPoll->ForAll ( [] ( NetPollEvent_t * pWork ) {
+		m_pPoll->ProcessAll( [] ( NetPollEvent_t * pWork ) {
 			SafeDelete ( pWork );
 		} );
 	}
@@ -291,7 +291,7 @@ protected:
 		CSphVector<ISphNetAction *> dCleanup;
 		int ev = -1;
 		// remove outdated items on no signals
-		m_pPoll->ForAll ( [&] ( NetPollEvent_t * pEvent ) {
+		m_pPoll->ProcessAll ( [&] ( NetPollEvent_t * pEvent ) {
 			++ev;
 			if ( ev!=iOutdate && ev!=iOutdate2)
 				return;

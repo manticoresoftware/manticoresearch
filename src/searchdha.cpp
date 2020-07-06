@@ -3746,15 +3746,6 @@ public:
 		sphLogDebugL ("L Fire an event invoked");
 		fire_event ();
 	}
-
-private:
-	static void WorkerFunc ( void * pArg ) REQUIRES ( !LazyThread )
-	{
-		ScopedRole_c thLazy ( LazyThread );
-		auto * pThis = ( LazyNetEvents_c * ) pArg;
-		sphLogDebugL ( "L RemoteAgentsPoller_t::WorkerFunc started" );
-		pThis->EventLoop ();
-	}
 };
 
 //! Get static (singletone) instance of lazy poller
@@ -3884,60 +3875,6 @@ bool sphNBSockEof ( int iSock )
 	return false;
 }
 
-
-// in case of epoll/kqueue the full set of polled sockets are stored
-// in a cache inside kernel, so once added, we can't iterate over all of the items.
-// So, we store them in linked list for that purpose.
-
-struct NetListedNode_t : public ListedData_t
-{
-	explicit NetListedNode_t ( const NetPollEvent_t * pEvent )
-		: ListedData_t ( pEvent ) {}
-
-	NetPollEvent_t * GetEvent() const
-	{
-		return ( NetPollEvent_t * ) m_pData;
-	}
-};
-
-// store and iterate over the list of items
-struct EventsList_t
-{
-	List_t m_tWorkList;
-
-	NetListedNode_t * AddNewEvent ( const NetPollEvent_t * pEvent )
-	{
-		assert ( pEvent );
-		auto * pIntData = new NetListedNode_t ( pEvent );
-		pEvent->m_tBack.pPtr = pIntData;
-		m_tWorkList.Add ( pIntData );
-		return pIntData;
-	}
-
-	void RemoveElem ( ListNode_t * pElem )
-	{
-		m_tWorkList.Remove ( pElem );
-		SafeDelete ( pElem );
-	}
-
-	void RemoveNetEvent ( NetPollEvent_t * pEvent )
-	{
-		auto* pList = ( NetListedNode_t* ) pEvent->m_tBack.pPtr;
-		pEvent->m_tBack.pPtr = nullptr;
-		RemoveElem ( pList );
-	}
-
-	virtual ~EventsList_t ()
-	{
-		while ( m_tWorkList.GetLength() )
-		{
-			auto * pItem = (NetListedNode_t *)m_tWorkList.Begin();
-			m_tWorkList.Remove ( pItem );
-			SafeDelete( pItem );
-		}
-	}
-};
-
 class TimeoutEvents_c
 {
 	TimeoutQueue_c	m_dTimeouts;
@@ -3971,420 +3908,6 @@ public:
 	}
 };
 
-
-#if ( NETPOLL_TYPE==NETPOLL_EPOLL )
-class NetPooller_c::Impl_c : public EventsList_t, public TimeoutEvents_c
-{
-	friend class NetPooller_c;
-	CSphVector<epoll_event>		m_dReady;
-	int							m_iReady = 0;
-	int							m_iLastReportedErrno = -1;
-	int							m_iEFD;
-	friend class NetPollReadyIterator_c;
-
-public:
-	explicit Impl_c ( int iSizeHint )
-	{
-		m_iEFD = epoll_create ( iSizeHint ); // 1000 is dummy, see man
-		if ( m_iEFD==-1 )
-			sphDie ( "failed to create epoll main FD, errno=%d, %s", errno, strerrorm ( errno ) );
-
-		sphLogDebugv ( "epoll %d created", m_iEFD );
-		m_dReady.Reserve ( iSizeHint );
-	}
-
-	~Impl_c () final
-	{
-		sphLogDebugv ( "epoll %d closed", m_iEFD );
-		SafeClose ( m_iEFD );
-	}
-
-	void SetupEvent ( NetPollEvent_t * pData )
-	{
-		assert ( pData && pData->m_iSock >=0 );
-		auto uEvents = pData->m_uNetEvents; // shortcut
-		assert (( uEvents & NetPollEvent_t::WRITE )!=0 || ( uEvents & NetPollEvent_t::READ )!=0 );
-
-		int iOp = EPOLL_CTL_MOD;
-		auto * pIntData = pData->m_tBack.pPtr;
-		if ( !pIntData ) // new event, need to add
-		{
-			iOp = EPOLL_CTL_ADD;
-			pIntData = AddNewEvent ( pData );
-		}
-
-		AddOrChangeTimeout ( pData );
-
-		epoll_event tEv;
-		tEv.data.ptr = pIntData;
-		tEv.events = (( uEvents & NetPollEvent_t::READ )!=0 ) ? EPOLLIN : EPOLLOUT;
-		if ( uEvents & NetPollEvent_t::ONCE )
-			tEv.events |= EPOLLONESHOT | EPOLLET;
-
-		sphLogDebugv ("%p epoll %d setup, ev=0x%u, op=%d, sock=%d", pData, m_iEFD, tEv.events, iOp, pData->m_iSock);
-
-		int iRes = epoll_ctl ( m_iEFD, iOp, pData->m_iSock, &tEv );
-		if ( iRes==-1 )
-			sphWarning ( "failed to setup epoll event for sock %d, errno=%d, %s",
-					pData->m_iSock, errno, strerrorm ( errno ) );
-	}
-
-	void Wait ( int timeoutMs )
-	{
-		if ( !m_tWorkList.GetLength () )
-			return;
-
-		if ( timeoutMs==WAIT_UNTIL_TIMEOUT )
-			timeoutMs = GetNextTimeoutMs ();
-
-		m_dReady.Resize ( m_tWorkList.GetLength () );
-		// need positive timeout for communicate threads back and shutdown
-		m_iReady = epoll_wait ( m_iEFD, m_dReady.Begin (), m_dReady.GetLength (), timeoutMs );
-
-		if ( m_iReady>=0 )
-			return;
-
-		int iErrno = sphSockGetErrno ();
-		// common recoverable errors
-		if ( iErrno==EINTR || iErrno==EAGAIN || iErrno==EWOULDBLOCK )
-			return;
-
-		if ( m_iLastReportedErrno!=iErrno )
-		{
-			sphWarning ( "epoll tick failed: %s", sphSockError ( iErrno ) );
-			m_iLastReportedErrno = iErrno;
-		}
-	}
-
-	void ForAll ( std::function<void ( NetPollEvent_t * )> && fnAction )
-	{
-		for ( auto& tElem : m_tWorkList )
-		{
-			auto pNode = (NetListedNode_t *) &tElem;
-			if ( pNode->GetEvent () )
-				fnAction ( pNode->GetEvent () );
-			else
-				RemoveElem ( pNode );
-		}
-	}
-
-	int GetNumOfReady () const
-	{
-		return m_iReady;
-	}
-
-	void DeactivateTimer ( NetPollEvent_t * pEvent )
-	{
-		assert ( pEvent );
-		RemoveTimeout ( pEvent );
-	}
-
-	// that is called from another thread
-	void Unlink ( NetPollEvent_t * pEvent, bool bWillClose )
-	{
-		assert ( pEvent );
-		assert ( pEvent->m_iTimeoutIdx == -1 );
-		auto * pIntData = (ListedData_t *) pEvent->m_tBack.pPtr;
-		if ( !pIntData )
-			return;
-		pIntData->m_pData = nullptr;
-		pEvent->m_tBack.pPtr = nullptr;
-
-		if ( !bWillClose ) // for persistent we also delete socket from kqueue
-		{
-			epoll_event tEv;
-			epoll_ctl ( m_iEFD, EPOLL_CTL_DEL, pEvent->m_iSock, &tEv );
-		}
-		// EventsList_t::RemoveEvent ( pEvent ); // that is not mt-safe, will deffer delete from net loop
-	}
-
-	void RemoveEvent ( NetPollEvent_t * pEvent )
-	{
-		assert ( pEvent );
-
-		sphLogDebugv ( "%p epoll remove, ev=0x%u, sock=%d",
-					   pEvent->m_tBack.pPtr, pEvent->m_uNetEvents, pEvent->m_iSock );
-		epoll_event tEv;
-		int iRes = epoll_ctl ( m_iEFD, EPOLL_CTL_DEL, pEvent->m_iSock, &tEv );
-
-		// might be already closed by worker from thread pool
-		if ( iRes==-1 )
-			sphLogDebugv ( "failed to remove epoll event for sock %d(%p), errno=%d, %s",
-					pEvent->m_iSock, pEvent->m_tBack.pPtr, errno, strerrorm ( errno ) );
-
-		RemoveTimeout ( pEvent );
-		EventsList_t::RemoveNetEvent( pEvent );
-	}
-
-	void Shutdown()
-	{
-		SafeCloseSocket ( m_iEFD );
-		while ( m_tWorkList.GetLength () )
-		{
-			auto * pItem = (NetListedNode_t *) m_tWorkList.Begin ();
-			m_tWorkList.Remove ( pItem );
-			NetPollEvent_t * pEvent = pItem->GetEvent();
-			if ( pEvent )
-			{
-				pEvent->m_tBack.pPtr = nullptr;
-				pEvent->m_iTimeoutIdx = -1;
-			}
-			SafeDelete( pItem );
-		}
-	}
-};
-
-NetPollEvent_t & NetPollReadyIterator_c::operator* ()
-{
-	NetPollEvent_t * pNode = nullptr;
-	auto * pOwner = m_pOwner->m_pImpl;
-	const epoll_event & tEv = pOwner->m_dReady[m_iIterEv];
-	pNode = ((NetListedNode_t *) ( tEv.data.ptr ))->GetEvent ();
-
-	pNode->m_uNetEvents = 0;
-	if ( tEv.events & EPOLLIN )
-		pNode->m_uNetEvents |= NetPollEvent_t::READ;
-	if ( tEv.events & EPOLLOUT )
-		pNode->m_uNetEvents |= NetPollEvent_t::WRITE;
-	if ( tEv.events & EPOLLHUP )
-		pNode->m_uNetEvents |= NetPollEvent_t::HUP;
-	if ( tEv.events & EPOLLERR )
-		pNode->m_uNetEvents |= NetPollEvent_t::ERR;
-//	if ( tEv.events & EPOLLPRI )
-//		pNode->m_uNetEvents |= NetPollEvent_t::PRI;
-
-	return *pNode;
-};
-
-NetPollReadyIterator_c & NetPollReadyIterator_c::operator++ ()
-{
-	++m_iIterEv;
-	return *this;
-}
-
-bool NetPollReadyIterator_c::operator!= ( const NetPollReadyIterator_c & rhs ) const
-{
-	auto* pOwner = m_pOwner->m_pImpl;
-	return rhs.m_pOwner || m_iIterEv<pOwner->m_iReady;
-}
-
-#endif
-
-#if ( NETPOLL_TYPE == NETPOLL_KQUEUE )
-
-class NetPooller_c::Impl_c final : public EventsList_t, public TimeoutEvents_c
-{
-	friend class NetPooller_c;
-	friend class NetPollReadyIterator_c;
-
-	CSphVector<struct kevent>	m_dReady;
-	int							m_iReady = 0;
-	int							m_iLastReportedErrno = -1;
-	int							m_iKQ;
-
-public:
-	explicit Impl_c ( int iSizeHint )
-	{
-		m_iKQ = kqueue ();
-		if ( m_iKQ==-1 )
-			sphDie ( "failed to create kqueue main FD, errno=%d, %s", errno, strerrorm ( errno ) );
-
-		sphLogDebugv ( "kqueue %d created", m_iKQ );
-		m_dReady.Reserve ( iSizeHint );
-	}
-
-	~Impl_c () final
-	{
-		sphLogDebugv ( "kqueue %d closed", m_iKQ );
-		SafeCloseSocket ( m_iKQ );
-	}
-
-	void SetupEvent ( NetPollEvent_t * pData )
-	{
-		assert ( pData && pData->m_iSock>=0 );
-		auto uEvents = pData->m_uNetEvents; // shortcut
-		assert ( ( uEvents & NetPollEvent_t::WRITE )!=0 || ( uEvents & NetPollEvent_t::READ )!=0 );
-
-		auto * pIntData = pData->m_tBack.pPtr;
-		if ( !pIntData ) // new event, need to add
-			pIntData = AddNewEvent ( pData );
-
-		AddOrChangeTimeout ( pData );
-		DWORD uFlags = ( uEvents & NetPollEvent_t::ONCE ) ? EV_ADD | EV_ONESHOT | EV_CLEAR : EV_ADD;
-
-		struct kevent tEv;
-		EV_SET ( &tEv, pData->m_iSock, ( uEvents&NetPollEvent_t::READ ? EVFILT_READ : EVFILT_WRITE),
-				uFlags, 0, 0, pIntData );
-
-		sphLogDebugv ( "%p kqueue %d setup, ev=%d, fl=%d sock=%d", pData, m_iKQ, tEv.filter, uFlags, pData->m_iSock );
-
-		int iRes = kevent (m_iKQ, &tEv, 1, nullptr, 0, nullptr);
-		if ( iRes==-1 )
-			sphWarning ( "failed to setup kqueue event for sock %d, errno=%d, %s",
-					pData->m_iSock, errno, strerrorm ( errno ) );
-	}
-
-	void Wait ( int timeoutMs )
-	{
-		if ( !m_tWorkList.GetLength ())
-			return;
-
-		if ( timeoutMs==WAIT_UNTIL_TIMEOUT )
-			timeoutMs = GetNextTimeoutMs ();
-
-		m_dReady.Resize ( m_tWorkList.GetLength () );
-
-		timespec ts;
-		timespec *pts = nullptr;
-		if ( timeoutMs>=0 )
-		{
-			ts.tv_sec = timeoutMs/1000;
-			ts.tv_nsec = (long)(timeoutMs-ts.tv_sec*1000)*1000000;
-			pts = &ts;
-		}
-		// need positive timeout for communicate threads back and shutdown
-		m_iReady = kevent (m_iKQ, nullptr, 0, m_dReady.begin(), m_dReady.GetLength(), pts);
-
-		if ( m_iReady>=0 )
-			return;
-
-		int iErrno = sphSockGetErrno ();
-		// common recoverable errors
-		if ( iErrno==EINTR || iErrno==EAGAIN || iErrno==EWOULDBLOCK )
-			return;
-
-		if ( m_iLastReportedErrno!=iErrno )
-		{
-			sphWarning ( "kqueue tick failed: %s", sphSockError ( iErrno ) );
-			m_iLastReportedErrno = iErrno;
-		}
-	}
-
-	void ForAll ( std::function<void ( NetPollEvent_t * )> && fnAction )
-	{
-		for ( auto & tElem : m_tWorkList )
-		{
-			auto pNode = (NetListedNode_t *) &tElem;
-			if ( pNode->GetEvent () )
-				fnAction ( pNode->GetEvent () );
-			else
-				RemoveElem ( pNode );
-		}
-	}
-
-	int GetNumOfReady () const
-	{
-		return m_iReady;
-	}
-
-	void DeactivateTimer ( NetPollEvent_t * pEvent )
-	{
-		assert ( pEvent );
-		RemoveTimeout ( pEvent );
-	}
-
-
-	void RemoveEvent ( NetPollEvent_t * pEvent )
-	{
-		assert ( pEvent );
-
-		sphLogDebugv ( "%p kqueue remove, ev=%u, sock=%d",
-				pEvent->m_tBack.pPtr, pEvent->m_uNetEvents, pEvent->m_iSock );
-		struct kevent tEv;
-		EV_SET( &tEv, pEvent->m_iSock,
-			( ( pEvent->m_uNetEvents & NetPollEvent_t::READ ) ? EVFILT_READ : EVFILT_WRITE ),
-			EV_DELETE | EV_CLEAR, 0, 0, nullptr );
-		int iRes = kevent ( m_iKQ, &tEv, 1, nullptr, 0, nullptr );
-
-		// might be already closed by worker from thread pool
-		if ( iRes==-1 )
-			sphLogDebugv ( "failed to remove kqueue event for sock %d(%p), errno=%d, %s",
-					pEvent->m_iSock, pEvent->m_tBack.pPtr, errno, strerrorm (errno));
-
-		RemoveTimeout ( pEvent );
-		RemoveNetEvent ( pEvent );
-	}
-
-	// that is called from another thread
-	// unlink pEvent from kqueue, so that any further events on the socket
-	// will not cause any processing. Also, if socket will not be closed promptly (i.e., persistent)
-	// remove it totally from kqueue; we don't want to poll it more.
-	void Unlink ( NetPollEvent_t * pEvent, bool bWillClose ) const
-	{
-		assert ( pEvent );
-		auto * pIntData = (ListedData_t *) pEvent->m_tBack.pPtr;
-		if ( !pIntData )
-			return;
-		pIntData->m_pData = nullptr;
-		pEvent->m_tBack.pPtr = nullptr;
-
-		if ( !bWillClose ) // for persistent we also delete socket from kqueue
-		{
-			struct kevent tEv;
-			EV_SET( &tEv, pEvent->m_iSock,
-				( ( pEvent->m_uNetEvents & NetPollEvent_t::READ ) ? EVFILT_READ : EVFILT_WRITE ),
-				EV_DELETE | EV_CLEAR, 0, 0, nullptr );
-			kevent ( m_iKQ, &tEv, 1, nullptr, 0, nullptr );
-		}
-		// EventsList_t::RemoveEvent ( pEvent ); // that is not mt-safe, will deffer delete from net loop
-	}
-
-
-	void Shutdown()
-	{
-		SafeCloseSocket ( m_iKQ );
-		while ( m_tWorkList.GetLength () )
-		{
-			auto * pItem = (NetListedNode_t *) m_tWorkList.Begin ();
-			m_tWorkList.Remove ( pItem );
-			NetPollEvent_t * pEvent = pItem->GetEvent();
-			if ( pEvent )
-			{
-				pEvent->m_tBack.pPtr = nullptr;
-				pEvent->m_iTimeoutIdx = -1;
-			}
-			SafeDelete( pItem );
-		}
-	}
-};
-
-NetPollEvent_t & NetPollReadyIterator_c::operator* ()
-{
-	NetPollEvent_t * pNode = nullptr;
-	auto * pOwner = m_pOwner->m_pImpl;
-	const struct kevent & tEv = pOwner->m_dReady[m_iIterEv];
-	pNode = ((NetListedNode_t *) ( tEv.udata ))->GetEvent ();
-	assert ( pNode && "deleted event recognized");
-	pNode->m_uNetEvents = 0;
-	if ( tEv.filter==EVFILT_READ )
-		pNode->m_uNetEvents |= NetPollEvent_t::READ;
-	if ( tEv.filter==EVFILT_WRITE )
-		pNode->m_uNetEvents |= NetPollEvent_t::WRITE;
-	if ( tEv.flags & EV_ERROR )
-		pNode->m_uNetEvents |= NetPollEvent_t::ERR;
-	if ( tEv.flags & EV_EOF )
-		pNode->m_uNetEvents |= NetPollEvent_t::HUP;
-//	if ( tEv.flags & EV_OOBAND )
-//		pNode->m_uNetEvents |= NetPollEvent_t::PRI;
-
-	return *pNode;
-};
-
-NetPollReadyIterator_c & NetPollReadyIterator_c::operator++ ()
-{
-	++m_iIterEv;
-	return *this;
-}
-
-bool NetPollReadyIterator_c::operator!= ( const NetPollReadyIterator_c & rhs ) const
-{
-	auto * pOwner = m_pOwner->m_pImpl;
-	return rhs.m_pOwner || m_iIterEv<pOwner->m_iReady;
-}
-
-#endif
-
-// fixme! check if one general version is enough for all flavours.
 bool TimeoutReached ( int64_t tmLeft, int64_t tmNow )
 {
 	if (tmNow<0)
@@ -4393,55 +3916,323 @@ bool TimeoutReached ( int64_t tmLeft, int64_t tmNow )
 	return ( tmLeft-1000 )<tmNow;
 }
 
-#if ( NETPOLL_TYPE == NETPOLL_POLL )
-class NetPooller_c::Impl_c : public TimeoutEvents_c
+#if ( NETPOLL_TYPE==NETPOLL_KQUEUE || NETPOLL_TYPE==NETPOLL_EPOLL )
+
+// both epoll and kqueue have events in hash, so we use also linked list to track them explicitly.
+// both stores pointer to the list item in pPtr of backend
+
+// store and iterate over the list of items
+class EventsList_c
+{
+	List_t m_tWorkList;
+
+	inline void RemoveAndDelete ( ListNode_t * pElem )
+	{
+		assert ( pElem );
+		m_tWorkList.Remove ( pElem );
+		SafeDelete ( pElem );
+	}
+
+public:
+	void * MakeLinked ( const NetPollEvent_t * pEvent )
+	{
+		assert ( pEvent );
+		auto * pIntData = (ListedData_t*) pEvent->m_tBack.pPtr;
+		if ( pIntData )
+			return pIntData;
+
+		pIntData = new ListedData_t ( pEvent );
+		pEvent->m_tBack.pPtr = pIntData;
+		m_tWorkList.Add ( pIntData );
+		return pIntData;
+	}
+
+	void RemoveLink ( NetPollEvent_t * pEvent )
+	{
+		auto* pList = (ListedData_t* ) pEvent->m_tBack.pPtr;
+		pEvent->m_tBack.pPtr = nullptr;
+		RemoveAndDelete ( pList );
+	}
+
+	// apply fnAction for all non-empty nodes;
+	// totally remove and wipe out all empty
+	void ProcessAll ( std::function<void ( NetPollEvent_t * )> fnAction )
+	{
+		for ( ListNode_t& tElem : m_tWorkList )
+		{
+			auto* pNode = (ListedData_t*) &tElem;
+			if ( pNode->m_pData )
+				fnAction ( (NetPollEvent_t *) pNode->m_pData );
+			else
+				RemoveAndDelete ( pNode );
+		}
+	}
+
+	inline int GetLength () const
+	{
+		return m_tWorkList.GetLength();
+	}
+
+	~EventsList_c ()
+	{
+		while ( GetLength () )
+			RemoveAndDelete ( (ListedData_t *) m_tWorkList.Begin () );
+	}
+};
+
+// specific different function for kqueue/epoll
+// keep them elementary and tiny for easy debugging across platforms
+namespace { // unnamed static
+#if ( NETPOLL_TYPE==NETPOLL_KQUEUE )
+	using pollev = struct kevent;
+	inline int create_poller ( int ) { return kqueue (); }
+	inline void * get_data ( const pollev & tEv ) { return tEv.udata; }
+	inline DWORD translate_events ( const pollev & tEv)
+	{
+		return (DWORD) ( ( tEv.flags & EV_ERROR ) ? NetPollEvent_t::ERR : 0 )
+				| ( ( tEv.flags & EV_EOF ) ? NetPollEvent_t::HUP : 0 )
+				| ( ( tEv.filter==EVFILT_READ ) ? NetPollEvent_t::READ : NetPollEvent_t::WRITE );
+	}
+#elif ( NETPOLL_TYPE==NETPOLL_EPOLL )
+	using pollev = epoll_event;
+	inline int create_poller ( int iSizeHint ) { return epoll_create ( iSizeHint ); }
+	inline void* get_data ( const pollev& tEv ) { return tEv.data.ptr; }
+	inline DWORD translate_events ( const pollev & tEv)
+	{
+		return (DWORD) ( ( tEv.events & EPOLLERR ) ? NetPollEvent_t::ERR : 0 )
+				| ( ( tEv.events & EPOLLHUP ) ? NetPollEvent_t::HUP : 0 )
+				| ( ( tEv.events==EPOLLIN ) ? NetPollEvent_t::READ : 0 )
+				| ( ( tEv.events==EPOLLOUT ) ? NetPollEvent_t::WRITE : 0 );
+}
+#endif
+}
+
+// common for both epoll and kqueue
+class NetPooller_c::Impl_c final
 {
 	friend class NetPooller_c;
 	friend class NetPollReadyIterator_c;
 
-	CSphVector<NetPollEvent_t *>	m_dWork;
-	CSphVector<pollfd>	m_dEvents;
-	CSphVector<int>		m_dDefferedRemove;
-	int					m_iReady = 0;
-	int					m_iLastReportedErrno = -1;
+	TimeoutEvents_c					m_dTimeouts			GUARDED_BY ( NetPoollingThread );
+	CSphVector<pollev>				m_dFiredEvents		GUARDED_BY ( NetPoollingThread );
+	EventsList_c					m_dEvents			GUARDED_BY ( NetPoollingThread );
 
-	/*
-	void DumpEvents(const char* szLegend) {
-		StringBuilder_c ss;
-		ss << szLegend << " " << m_dEvents.GetLength () << " events: ";
-		ss.StartBlock ( ", " );
-		for ( const auto& tElem : m_dEvents )
-			ss.Sprintf ( "%d(%d)", tElem.fd, tElem.revents );
-		sphLogDebugv ( "%s", ss.cstr () );
-	} */
+	int							m_iReady = 0;
+	int							m_iLastReportedErrno = -1;
+	int							m_iPl;
 
-	// since remove() may be call from inside iteration,
-	// let's keep kill-list and apply later instead of immediate delete
-	void RemoveDeffered ()
+public:
+
+	explicit Impl_c ( int iSizeHint )
 	{
-		if ( m_dDefferedRemove.IsEmpty () )
+		m_iPl = create_poller ( iSizeHint );
+		if ( m_iPl==-1 )
+			sphDie ( "failed to create poller main FD, errno=%d, %s", errno, strerrorm ( errno ) );
+
+		sphLogDebugv ( "poller %d created", m_iPl );
+		m_dFiredEvents.Reserve ( iSizeHint );
+	}
+
+	~Impl_c ()
+	{
+		sphLogDebugv ( "poller %d closed", m_iPl );
+		SafeCloseSocket ( m_iPl );
+	}
+
+	void SetupEvent ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread )
+	{
+		assert ( pEvent && pEvent->m_iSock>=0 );
+		auto uEvents = pEvent->m_uNetEvents; // shortcut
+		assert ( ( uEvents & NetPollEvent_t::WRITE )!=0 || ( uEvents & NetPollEvent_t::READ )!=0 );
+
+		m_dTimeouts.AddOrChangeTimeout ( pEvent );
+
+		int iRes = set_polling_for ( pEvent->m_iSock, m_dEvents.MakeLinked ( pEvent ),
+				uEvents & NetPollEvent_t::READ,	uEvents & NetPollEvent_t::ONCE, !pEvent->m_tBack.pPtr);
+
+		if ( iRes==-1 )
+			sphWarning ( "failed to setup kqueue event for sock %d, errno=%d, %s", pEvent->m_iSock, errno, strerrorm ( errno ) );
+	}
+
+	void Wait ( int timeoutMs ) REQUIRES ( NetPoollingThread )
+	{
+		if ( !m_dEvents.GetLength ())
 			return;
 
-		m_dDefferedRemove.Uniq ();
-		// need to walk removal index list backward to remove items from m_dWork that just passed by
-		m_dDefferedRemove.RSort ();
+		if ( timeoutMs==WAIT_UNTIL_TIMEOUT )
+			timeoutMs = m_dTimeouts.GetNextTimeoutMs ();
 
-		//DumpEvents ( "Before remove" );
+		m_dFiredEvents.Resize ( m_dEvents.GetLength () );
 
-		for ( int iToRemove : m_dDefferedRemove )
+		// need positive timeout for communicate threads back and shutdown
+		m_iReady = poll_events ( m_dFiredEvents.Begin (), m_dFiredEvents.GetLength (), timeoutMs );
+
+		if ( m_iReady>=0 )
+			return;
+
+		int iErrno = sphSockGetErrno ();
+		// common recoverable errors
+		if ( iErrno==EINTR || iErrno==EAGAIN || iErrno==EWOULDBLOCK )
+			return;
+
+		if ( m_iLastReportedErrno!=iErrno )
 		{
-			auto pEvent=m_dWork[iToRemove];
-			RemoveTimeout ( pEvent );
-			m_dEvents.RemoveFast ( iToRemove );
-			m_dWork.RemoveFast ( iToRemove );
-			sphLogDebugvv ( "Removed deffered %d", iToRemove );
-			// restore index
-			if ( iToRemove<m_dWork.GetLength() )
-				m_dWork[iToRemove]->m_tBack.iIdx = iToRemove;
+			sphWarning ( "polling tick failed: %s", sphSockError ( iErrno ) );
+			m_iLastReportedErrno = iErrno;
 		}
-		m_dDefferedRemove.Resize (0);
-		//DumpEvents ( "After remove" );
 	}
+
+	void ProcessAll ( std::function<void ( NetPollEvent_t * )> fnAction ) REQUIRES ( NetPoollingThread )
+	{
+		m_dEvents.ProcessAll ( std::move ( fnAction ) );
+	}
+
+	int GetNumOfReady () const
+	{
+		return m_iReady;
+	}
+
+	void RemoveTimeout ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread )
+	{
+		assert ( pEvent );
+		m_dTimeouts.RemoveTimeout ( pEvent );
+	}
+
+	// called when client detected error or timeout
+	void RemoveEvent ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread )
+	{
+		assert ( pEvent );
+		RemoveTimeout ( pEvent );
+
+		sphLogDebugv ( "%p polling remove, ev=%u, sock=%d",
+				pEvent->m_tBack.pPtr, pEvent->m_uNetEvents, pEvent->m_iSock );
+
+		int iRes = remove_polling_for ( pEvent->m_iSock, pEvent->m_uNetEvents & NetPollEvent_t::READ );
+
+		// might be already closed by worker from thread pool
+		if ( iRes==-1 )
+			sphLogDebugv ( "failed to remove polling event for sock %d(%p), errno=%d, %s",
+					pEvent->m_iSock, pEvent->m_tBack.pPtr, errno, strerrorm (errno));
+
+		// since event already removed from kqueue - it is safe to remove it from the list of events also,
+		// and totally unlink
+		m_dEvents.RemoveLink( pEvent );
+	}
+
+	// platform-specific members. Tiny and simple to reduce divergention among platforms
+#if ( NETPOLL_TYPE==NETPOLL_EPOLL )
+
+	inline int poll_events ( pollev* pEvents, int iEventNum, int timeoutMs )
+	{
+		return epoll_wait ( m_iPl, pEvents, iEventNum, timeoutMs );
+	};
+
+	inline int set_polling_for ( int iSock, void* pData, bool bRead, bool bOneshot, bool bAdd )
+	{
+		int iOp = bAdd ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
+		epoll_event tEv;
+		tEv.data.ptr = pData;
+		tEv.events = bRead ? EPOLLIN : EPOLLOUT;
+		if ( bOneshot )
+			tEv.events |= EPOLLONESHOT | EPOLLET;
+
+		sphLogDebugv ("%p epoll %d setup, ev=0x%u, op=%d, sock=%d", pData, m_iPl, tEv.events, iOp, iSock) ;
+		return epoll_ctl ( m_iPl, iOp, iSock, &tEv );
+	}
+
+	inline int remove_polling_for ( int iSock, bool )
+	{
+		epoll_event tEv;
+		return epoll_ctl ( m_iPl, EPOLL_CTL_DEL, iSock, &tEv );
+	}
+
+#elif ( NETPOLL_TYPE==NETPOLL_KQUEUE )
+
+	inline int poll_events ( pollev* pEvents, int iEventNum, int timeoutMs )
+	{
+		timespec ts;
+		timespec * pts = nullptr;
+		if ( timeoutMs>=0 )
+		{
+			ts.tv_sec = timeoutMs / 1000;
+			ts.tv_nsec = (long) ( timeoutMs-ts.tv_sec * 1000 ) * 1000000;
+			pts = &ts;
+		}
+		return kevent ( m_iPl, nullptr, 0, pEvents, iEventNum, pts );
+	};
+
+	inline int set_polling_for ( int iSock, void* pData, bool bRead, bool bOneshot, bool )
+	{
+		struct kevent tEv;
+		EV_SET ( &tEv, iSock, bRead?EVFILT_READ:EVFILT_WRITE, bOneshot ? EV_ADD | EV_ONESHOT | EV_CLEAR : EV_ADD, 0, 0, pData );
+		sphLogDebugv ( "%p kqueue %d setup, ev=%d, fl=%d sock=%d", pData, m_iPl, tEv.filter, tEv.flags, iSock );
+		return kevent ( m_iPl, &tEv, 1, nullptr, 0, nullptr );
+	}
+
+	inline int remove_polling_for ( int iSock, bool bRead )
+	{
+		struct kevent tEv;
+		EV_SET( &tEv, iSock, ( bRead ? EVFILT_READ : EVFILT_WRITE ), EV_DELETE | EV_CLEAR, 0, 0, nullptr );
+		return kevent ( m_iPl, &tEv, 1, nullptr, 0, nullptr );
+	}
+
+#endif // NETPOLL_KQUEUE
+};
+
+// more common for NETPOLL_TYPE==NETPOLL_KQUEUE || NETPOLL_TYPE==NETPOLL_EPOLL
+
+// wipe out any kind of ref to netpoller from pEvent
+// That is necessary when event itself finished and is destroying, but NetPool still alive. Event is not active.
+// note, since we're in another thread, we can't unlist the event here.
+void NetPooller_c::Unlink ( NetPollEvent_t * pEvent )
+{
+	sphLogDebugv ( "Unlink %p, fd=%d", pEvent->m_tBack.pPtr, pEvent->m_iSock );
+	assert ( pEvent );
+	auto * pIntData = (ListedData_t *) pEvent->m_tBack.pPtr;
+	if ( pIntData ) // is linked
+	{
+		pIntData->m_pData = nullptr; // that will cause next 'ProcessAll' to finally remove elem itself from the list
+		pEvent->m_tBack.pPtr = nullptr;
+	}
+}
+
+NetPollEvent_t & NetPollReadyIterator_c::operator* ()
+{
+	auto * pOwner = m_pOwner->m_pImpl;
+	const pollev & tEv = pOwner->m_dFiredEvents[m_iIterEv];
+	auto * pNode = (NetPollEvent_t *) ( (ListedData_t *) get_data (tEv) )->m_pData;
+	assert ( pNode && "deleted event recognized");
+	pNode->m_uNetEvents = translate_events(tEv);
+	return *pNode;
+};
+
+NetPollReadyIterator_c & NetPollReadyIterator_c::operator++ ()
+{
+	++m_iIterEv;
+	return *this;
+}
+
+bool NetPollReadyIterator_c::operator!= ( const NetPollReadyIterator_c & rhs ) const
+{
+	auto * pOwner = m_pOwner->m_pImpl;
+	return rhs.m_pOwner || m_iIterEv<pOwner->m_iReady;
+}
+
+#endif // #if ( NETPOLL_TYPE==NETPOLL_KQUEUE || NETPOLL_TYPE==NETPOLL_EPOLL )
+
+#if ( NETPOLL_TYPE == NETPOLL_POLL )
+
+class NetPooller_c::Impl_c final
+{
+	friend class NetPooller_c;
+	friend class NetPollReadyIterator_c;
+
+	TimeoutEvents_c					m_dTimeouts			GUARDED_BY ( NetPoollingThread );
+	CSphVector<NetPollEvent_t *>	m_dWork				GUARDED_BY ( NetPoollingThread );
+	CSphVector<pollfd>				m_dEvents			GUARDED_BY ( NetPoollingThread );
+
+	int								m_iReady = 0;
+	int								m_iLastReportedErrno = -1;
 
 public:
 	explicit Impl_c ( int iSizeHint )
@@ -4450,48 +4241,45 @@ public:
 		m_dEvents.Reserve ( iSizeHint );
 	}
 
-	void SetupEvent ( NetPollEvent_t * pData )
+	void SetupEvent ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread )
 	{
-		assert ( pData && pData->m_iSock>=0 );
-		auto uEvents = pData->m_uNetEvents; // shortcut
-		assert ( ( uEvents & ( NetPollEvent_t::WRITE | NetPollEvent_t::READ ) ) !=0 );
-		RemoveDeffered ();
+		assert ( m_dEvents.GetLength ()==m_dWork.GetLength () );
+		assert ( pEvent && pEvent->m_iSock>=0 );
+		auto uEvents = pEvent->m_uNetEvents; // shortcut
+		assert ( ( uEvents & NetPollEvent_t::WRITE )!=0 || ( uEvents & NetPollEvent_t::READ )!=0 );
 
-		AddOrChangeTimeout ( pData );
+		m_dTimeouts.AddOrChangeTimeout ( pEvent );
 
-		assert ( m_dEvents.GetLength()==m_dWork.GetLength() );
-
+		auto uNetEvents = ( ( uEvents & NetPollEvent_t::READ )!=0 ) ? POLLIN : POLLOUT;
 		pollfd* pEv = nullptr;
-		auto iIdx = pData->m_tBack.iIdx;
-		auto uNetEvents = ( ( uEvents & NetPollEvent_t::READ ) != 0 ) ? POLLIN : POLLOUT;
-		if ( iIdx>=0 && iIdx<m_dWork.GetLength () && !m_dWork[iIdx] ) // was already enqueued
+		auto& iBackIdx = pEvent->m_tBack.iIdx;
+		if ( iBackIdx>=0 && iBackIdx<m_dWork.GetLength () && !m_dWork[iBackIdx] ) // was already enqueued, just change events
 		{
-			pEv = &m_dEvents[iIdx];
-			m_dWork[iIdx] = pData;
-			sphLogDebugvv ( "SetupEvent [%d] old %d events %d", pData->m_tBack.iIdx, pData->m_iSock, uNetEvents );
+			m_dWork[iBackIdx] = pEvent;
+			pEv = &m_dEvents[iBackIdx];
+			sphLogDebugvv ( "SetupEvent [%d] old %d events %d", pEvent->m_tBack.iIdx, pEvent->m_iSock, uNetEvents );
 		} else
 		{
-			pData->m_tBack.iIdx = m_dWork.GetLength ();
-			m_dWork.Add ( pData );
+			iBackIdx = m_dWork.GetLength ();
+			m_dWork.Add ( pEvent );
 			pEv = &m_dEvents.Add ();
-			sphLogDebugvv ( "SetupEvent [%d] new %d events %d", pData->m_tBack.iIdx, pData->m_iSock, uNetEvents );
+			sphLogDebugvv ( "SetupEvent [%d] new %d events %d", pEvent->m_tBack.iIdx, pEvent->m_iSock, uNetEvents );
 		}
 
-		pEv->fd = pData->m_iSock;
+		pEv->fd = pEvent->m_iSock;
 		pEv->events = ( ( uEvents & NetPollEvent_t::READ )!=0 ) ? POLLIN : POLLOUT;
-		sphLogDebugvv ( "SetupEvent [%d] for %d events %d", pData->m_tBack.iIdx, pData->m_iSock, pEv->events );
+		sphLogDebugvv ( "SetupEvent [%d] for %d events %d", pEvent->m_tBack.iIdx, pEvent->m_iSock, pEv->events );
 	}
 
-	void Wait ( int timeoutMs )
+	void Wait ( int timeoutMs ) REQUIRES ( NetPoollingThread )
 	{
 		m_iReady = 0;
-		RemoveDeffered ();
 		if ( m_dEvents.IsEmpty() )
 			return;
 
 		// need positive timeout for communicate threads back and shutdown
 		if ( timeoutMs==WAIT_UNTIL_TIMEOUT )
-			timeoutMs = GetNextTimeoutMs ();
+			timeoutMs = m_dTimeouts.GetNextTimeoutMs ();
 
 		m_dEvents.Apply ( [] ( pollfd & dEvent ) { dEvent.revents = 0; } );
 		m_iReady = ::poll ( m_dEvents.Begin (), m_dEvents.GetLength (), timeoutMs );
@@ -4499,7 +4287,6 @@ public:
 		if ( m_iReady>=0 )
 		{
 			sphLogDebugvv ( "Wait returned %d events", m_iReady );
-			//DumpEvents ( "Wait" );
 			return;
 		}
 
@@ -4511,25 +4298,29 @@ public:
 
 		if ( m_iLastReportedErrno!=iErrno )
 		{
-			sphWarning ( "poll tick failed: %s", sphSockError ( iErrno ) );
+			sphWarning ( "polling tick failed: %s", sphSockError ( iErrno ) );
 			m_iLastReportedErrno = iErrno;
 		}
 	}
 
-	void ForAll ( std::function<void ( NetPollEvent_t * )> && fnAction )
+	void ProcessAll ( std::function<void ( NetPollEvent_t * )> fnAction ) REQUIRES ( NetPoollingThread )
 	{
-		RemoveDeffered ();
 		ARRAY_FOREACH ( i, m_dWork )
 		{
-			auto pData = m_dWork[i];
-			if ( pData && pData->m_tBack.iIdx >= 0 )
-				fnAction ( pData );
+			auto* pNode = m_dWork[i];
+			if ( pNode && pNode->m_tBack.iIdx >= 0 )
+			{
+				pNode->m_tBack.iIdx = i; // adjust index, it might be broken because of RemoveFast
+				fnAction ( pNode );
+			}
 			else
 			{
-				sphLogDebugvv ( "Remove unlinked %d via 'all' iteration", i );
-				m_dDefferedRemove.Add ( i ); // unlinked event
+				m_dEvents.RemoveFast ( i );
+				m_dWork.RemoveFast ( i );
+				--i;
 			}
 		}
+		assert ( m_dEvents.GetLength ()==m_dWork.GetLength () );
 	}
 
 	int GetNumOfReady () const
@@ -4537,48 +4328,38 @@ public:
 		return m_iReady;
 	}
 
-	void DeactivateTimer ( NetPollEvent_t * pEvent )
+	void RemoveTimeout ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread )
+	{
+		assert ( pEvent );
+		m_dTimeouts.RemoveTimeout ( pEvent );
+	}
+
+	// called when client detected error or timeout
+	void RemoveEvent ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread )
 	{
 		assert ( pEvent );
 		RemoveTimeout ( pEvent );
-	}
 
-	// that is called from another thread
-	static void Unlink ( NetPollEvent_t * pEvent, bool )
-	{
-		sphLogDebugvv ( "Unlink %d, fd=%d", pEvent->m_tBack.iIdx, pEvent->m_iSock );
-		assert ( pEvent );
-		assert ( pEvent->m_iTimeoutIdx==-1 );
-		// assert ( pEvent->m_uNetEvents & NetPollEvent_t::ONCE ); // ensure that is oneshot
-
-		pEvent->m_tBack.iIdx = -1;
-		// EventsList_t::RemoveEvent ( pEvent ); // that is not mt-safe, will deffer delete from net loop
-	}
-
-	void RemoveEvent ( NetPollEvent_t * pEvent )
-	{
-		assert ( pEvent->m_tBack.iIdx>=0 && pEvent->m_tBack.iIdx<m_dEvents.GetLength ());
-		assert ( m_dEvents.GetLength ()==m_dWork.GetLength ());
-
-		RemoveTimeout ( pEvent );
-		m_dDefferedRemove.Add ( pEvent->m_tBack.iIdx );
 		sphLogDebugvv ( "RemoveEvent for %d, fd=%d", pEvent->m_tBack.iIdx, pEvent->m_iSock );
-	}
 
-	void Shutdown ()
-	{
-		m_dWork.Apply ( [] ( NetPollEvent_t * pEvent)
-		{
-			pEvent->m_tBack.iIdx = -1;
-			pEvent->m_iTimeoutIdx = -1;
-		});
-		m_dWork.Reset();
-		m_dEvents.Reset ();
-		m_dDefferedRemove.Reset();
+		if ( pEvent->m_tBack.iIdx<0 ) // already removed by iteration
+			return;
+
+		assert ( pEvent->m_tBack.iIdx<m_dEvents.GetLength ());
+
+		m_dEvents[pEvent->m_tBack.iIdx].fd = -1;
+		m_dWork[pEvent->m_tBack.iIdx] = nullptr;
+		pEvent->m_tBack.iIdx = -1;
 	}
 };
 
+// No special unlinking for poll necessary, since we're oneshoting.
+// so, if we're enqueued - socket can't finish by itself. If already shoted - it is removed anyway.
+void NetPooller_c::Unlink ( NetPollEvent_t * pEvent )
+{
+}
 
+// trick: here we unlink ready oneshoted from the list
 NetPollEvent_t & NetPollReadyIterator_c::operator* ()
 {
 	auto * pOwner = m_pOwner->m_pImpl;
@@ -4591,6 +4372,7 @@ NetPollEvent_t & NetPollReadyIterator_c::operator* ()
 	{
 		tEv.fd = -tEv.fd;
 		pOwner->m_dWork[m_iIterEv] = nullptr;
+		pNode->m_tBack.iIdx = -1;
 	}
 
 	pNode->m_uNetEvents &= ~(NetPollEvent_t::ONCE);
@@ -4609,7 +4391,8 @@ NetPollEvent_t & NetPollReadyIterator_c::operator* ()
 NetPollReadyIterator_c & NetPollReadyIterator_c::operator++ ()
 {
 	auto * pOwner = m_pOwner->m_pImpl;
-	while (true) {
+	while (true)
+	{
 		++m_iIterEv;
 		if ( m_iIterEv>=pOwner->m_dEvents.GetLength ())
 			return *this;
@@ -4659,10 +4442,16 @@ int NetPooller_c::GetNumOfReady () const
 	return m_pImpl->GetNumOfReady();
 }
 
-void NetPooller_c::ForAll ( std::function<void ( NetPollEvent_t * )> && fnAction )
+void NetPooller_c::ProcessAll ( std::function<void ( NetPollEvent_t * )> fnAction )
 {
 	assert ( m_pImpl );
-	m_pImpl->ForAll ( std::move ( fnAction ) );
+	m_pImpl->ProcessAll ( std::move ( fnAction ) );
+}
+
+void NetPooller_c::RemoveTimeout ( NetPollEvent_t * pEvent )
+{
+	assert ( m_pImpl );
+	m_pImpl->RemoveTimeout ( pEvent );
 }
 
 void NetPooller_c::RemoveEvent ( NetPollEvent_t * pEvent )
@@ -4671,20 +4460,5 @@ void NetPooller_c::RemoveEvent ( NetPollEvent_t * pEvent )
 	m_pImpl->RemoveEvent ( pEvent );
 }
 
-void NetPooller_c::DeactivateTimer ( NetPollEvent_t * pEvent )
-{
-	assert ( m_pImpl );
-	m_pImpl->DeactivateTimer ( pEvent );
-}
 
-void NetPooller_c::Unlink ( NetPollEvent_t * pEvent, bool bWillClose )
-{
-	assert ( m_pImpl );
-	m_pImpl->Unlink ( pEvent, bWillClose );
-}
-
-void NetPooller_c::Shutdown ()
-{
-	assert ( m_pImpl );
-	m_pImpl->Shutdown ();
-}
+ThreadRole NetPoollingThread;

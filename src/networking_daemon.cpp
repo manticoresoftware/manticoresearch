@@ -97,8 +97,6 @@ struct ThdJobCleanup_t final : public ISphJob
 /// CSphNetLoop - main poller. Used for serving accepts and all socket operations
 /////////////////////////////////////////////////////////////////////////////
 
-ThreadRole PollThread; // thread which serves network polling
-
 class CSphNetLoop::Impl_c
 {
 	// since it is impl, everything is private and accessible by friendship
@@ -150,11 +148,11 @@ class CSphNetLoop::Impl_c
 		for ( auto* pWork : m_dWorkExternal )
 			pWork->Destroy ();
 
-		m_pPoll->ForAll ( [] ( NetPollEvent_t * pWork ) { ((ISphNetAction *) pWork)->Destroy (); } );
+		m_pPoll->ProcessAll ( [] ( NetPollEvent_t * pWork ) { ((ISphNetAction *) pWork)->Destroy (); } );
 	}
 
 	// add actions planned by jobs
-	void PickNewActions () REQUIRES ( PollThread )
+	void PickNewActions () REQUIRES ( NetPoollingThread )
 	{
 		if ( !m_bGotExternal )
 			return;
@@ -168,7 +166,7 @@ class CSphNetLoop::Impl_c
 		m_tPrf.EndTask ();
 	}
 
-	int ProcessReady () REQUIRES ( PollThread )
+	int ProcessReady () REQUIRES ( NetPoollingThread )
 	{
 		int iConnections = 0;
 		int iMaxIters = 0;
@@ -180,7 +178,7 @@ class CSphNetLoop::Impl_c
 			m_tPrf.StartAt ();
 			assert ( dReady.m_uNetEvents );
 			auto pWork = (ISphNetAction *) &dReady;
-			m_pPoll->DeactivateTimer ( pWork ); // ensure that timer (if any) will no more fire
+			m_pPoll->RemoveTimeout ( pWork ); // ensure that timer (if any) will no more fire
 
 			NetEvent_e eEv = pWork->Process ( dReady.m_uNetEvents, m_pParent );
 			++m_tPrf.m_iPerfEv;
@@ -197,7 +195,7 @@ class CSphNetLoop::Impl_c
 		return iMaxIters;
 	}
 
-	void Poll ( int64_t tmLastWait ) REQUIRES ( PollThread )
+	void Poll ( int64_t tmLastWait ) REQUIRES ( NetPoollingThread )
 	{
 		// lets spin net-loop thread without syscall\sleep\wait up to net_wait period
 		// in case we got events recently or call job that might finish early
@@ -215,7 +213,7 @@ class CSphNetLoop::Impl_c
 		m_tPrf.EndTask ();
 	}
 
-	void LoopNetPoll () REQUIRES ( PollThread )
+	void LoopNetPoll () REQUIRES ( NetPoollingThread )
 	{
 		int64_t tmLastWait = sphMicroTimer();
 		while ( !sphInterrupted() )
@@ -236,7 +234,7 @@ class CSphNetLoop::Impl_c
 
 			// setup or refresh handlers
 			m_tPrf.StartNext();
-			m_dWorkInternal.Apply ( [&] ( ISphNetAction * pWork ) REQUIRES ( PollThread )
+			m_dWorkInternal.Apply ( [&] ( ISphNetAction * pWork ) REQUIRES ( NetPoollingThread )
 			{
 				assert ( pWork && pWork->m_iSock>=0 );
 				m_pPoll->SetupEvent ( pWork );
@@ -253,14 +251,14 @@ class CSphNetLoop::Impl_c
 		}
 	}
 
-	int RemoveOutdated () REQUIRES ( PollThread )
+	int RemoveOutdated () REQUIRES ( NetPoollingThread )
 	{
 		int64_t tmNow = sphMicroTimer();
 		m_tPrf.StartRemove();
 		int iRemoved = 0;
 
 		// remove outdated items on no signals
-		m_pPoll->ForAll ([&] ( NetPollEvent_t * pEvent )
+		m_pPoll->ProcessAll([&] ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread )
 		{
 			auto * pWork = (ISphNetAction *) pEvent;
 
@@ -297,10 +295,10 @@ class CSphNetLoop::Impl_c
 	// mark externally destroyed action as removed - to avoid race call
 	void Unlink ( ISphNetAction * pElem, bool bWillClose )
 	{
-		m_pPoll->Unlink ( pElem, bWillClose );
+		m_pPoll->Unlink ( pElem );
 	}
 
-	void RemoveIterEvent ( NetPollEvent_t * pEvent ) REQUIRES ( PollThread )
+	void RemoveIterEvent ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread )
 	{
 		m_pPoll->RemoveEvent ( pEvent );
 	}
@@ -319,7 +317,7 @@ CSphNetLoop::~CSphNetLoop ()
 	sphLogDebugv ( "~CSphNetLoop() (%p) completed", this );
 }
 
-void CSphNetLoop::LoopNetPoll () REQUIRES ( PollThread )
+void CSphNetLoop::LoopNetPoll () REQUIRES ( NetPoollingThread )
 {
 	assert ( m_pImpl );
 	m_pImpl->LoopNetPoll();
@@ -337,7 +335,7 @@ void CSphNetLoop::Unlink ( ISphNetAction * pElem, bool bWillClose )
 		m_pImpl->Unlink ( pElem, bWillClose );
 }
 
-void CSphNetLoop::RemoveIterEvent ( NetPollEvent_t * pEvent ) REQUIRES ( PollThread )
+void CSphNetLoop::RemoveIterEvent ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread )
 {
 	assert ( m_pImpl );
 	m_pImpl->RemoveIterEvent ( pEvent );
@@ -345,7 +343,7 @@ void CSphNetLoop::RemoveIterEvent ( NetPollEvent_t * pEvent ) REQUIRES ( PollThr
 
 void ServeNetLoop ( const VecTraits_T<Listener_t> & dListeners )
 {
-	ScopedRole_c thPoll ( PollThread );
+	ScopedRole_c thPoll ( NetPoollingThread );
 	CSphNetLoop ( dListeners ).LoopNetPoll ();
 }
 
@@ -378,7 +376,7 @@ class SockWrapper_c::Impl_c final : public ISphNetAction
 	void EngageWaiterAndYield( int64_t tmTimeUntil );
 
 public:
-	NetEvent_e Process ( DWORD uGotEvents, CSphNetLoop * ) REQUIRES ( PollThread ) final;
+	NetEvent_e Process ( DWORD uGotEvents, CSphNetLoop * ) REQUIRES ( NetPoollingThread ) final;
 	void Destroy () final;
 };
 
@@ -431,7 +429,7 @@ void SockWrapper_c::Impl_c::EngageWaiterAndYield ( int64_t tmTimeUntilUs )
 }
 
 //  called from netloop
-NetEvent_e SockWrapper_c::Impl_c::Process ( DWORD uGotEvents, CSphNetLoop * ) REQUIRES ( PollThread )
+NetEvent_e SockWrapper_c::Impl_c::Process ( DWORD uGotEvents, CSphNetLoop * ) REQUIRES ( NetPoollingThread )
 {
 	if ( CheckSocketError ( uGotEvents ) && ( m_iTimeoutIdx!=-1 ) ) // we were enqueued
 		m_pNetLoop->RemoveIterEvent ( this );

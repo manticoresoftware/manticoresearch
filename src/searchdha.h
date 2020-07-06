@@ -854,14 +854,16 @@ protected:
 //////////////////////////////////////////////////////////////////////////
 // wrapper around epoll/kqueue/poll
 
+extern ThreadRole NetPoollingThread;
+
 struct NetPollEvent_t : public EnqueuedTimeout_t
 {
 	struct {
-		mutable ListNode_t * pPtr = nullptr;
-		mutable int			iIdx = -1;
+		mutable void *		pPtr = nullptr; // opaque pointer to internals of poller
+		mutable int			iIdx = -1;		// or opaque index to internals of poller
 	}					m_tBack;
 	int					m_iSock = -1;
-	DWORD				m_uNetEvents = 0;
+	volatile DWORD		m_uNetEvents = 0;
 
 	explicit NetPollEvent_t ( int iSock )
 		: m_iSock ( iSock ) {}
@@ -893,9 +895,9 @@ public:
 		if ( pOwner )
 			operator++();
 	}
-	NetPollEvent_t & operator* ();
-	NetPollReadyIterator_c & operator++ ();
-	bool operator!= ( const NetPollReadyIterator_c & rhs ) const;
+	NetPollEvent_t & operator* ()									REQUIRES ( NetPoollingThread );
+	NetPollReadyIterator_c & operator++ ()						 	REQUIRES ( NetPoollingThread );
+	bool operator!= ( const NetPollReadyIterator_c & rhs ) const	REQUIRES ( NetPoollingThread );
 };
 
 class NetPooller_c : public ISphNoncopyable
@@ -907,20 +909,16 @@ class NetPooller_c : public ISphNoncopyable
 public:
 	explicit NetPooller_c ( int iSizeHint );
 	~NetPooller_c();
-	void SetupEvent ( NetPollEvent_t * pEvent );
-	void Wait ( int );
+	void SetupEvent ( NetPollEvent_t * pEvent )				REQUIRES ( NetPoollingThread );
+	void Wait ( int )										REQUIRES ( NetPoollingThread );
 	int GetNumOfReady () const;
-	void ForAll ( std::function<void (NetPollEvent_t*)>&& fnAction );
-	void RemoveEvent ( NetPollEvent_t * pEvent );
-	void DeactivateTimer ( NetPollEvent_t * pEvent );
+	void ProcessAll ( std::function<void (NetPollEvent_t*)> fnAction ) REQUIRES ( NetPoollingThread );
+	void RemoveTimeout ( NetPollEvent_t * pEvent )			REQUIRES ( NetPoollingThread );
+	void RemoveEvent ( NetPollEvent_t * pEvent )			REQUIRES ( NetPoollingThread );
 
 	// unlink before removing, to avoid accidental call over deleted event inside poller
 	// that is typically called from another thread, so avoid races!
-	void Unlink ( NetPollEvent_t * pEvent, bool bWillClose );
-
-	// simplified path on shutdown: close poller, then unlink all events.
-	// events themselves are NOT removed
-	void Shutdown ();
+	static void Unlink ( NetPollEvent_t * pEvent );
 
 	NetPollReadyIterator_c begin () { return NetPollReadyIterator_c ( this ); }
 	static NetPollReadyIterator_c end () { return NetPollReadyIterator_c ( nullptr ); }

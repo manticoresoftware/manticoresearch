@@ -9175,6 +9175,7 @@ static void HandleClientSphinx ( int iSock, ThreadLocal_t & tThread ) REQUIRES (
 bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength,
 	InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist )
 {
+	myinfo::ThdState ( ThdState_e::QUERY );
 	// set on query guard
 	auto& tCrashQuery = GlobalCrashQueryGetRef();
 	tCrashQuery.m_pQuery = tBuf.GetBufferPtr();

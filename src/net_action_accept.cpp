@@ -72,7 +72,7 @@ void MultiServe ( SockWrapperPtr_c pSock, NetConnection2_t tConn )
 				sphWarning ( "setsockopt() from MultiServe failed: %s", sphSockError ());
 		}
 #endif
-		ApiServe ( std::move ( pBuf ), nullptr );
+		ApiServe ( std::move ( pBuf ) );
 		break;
 	case Proto_e::HTTPS:
 		myinfo::SetSSL();

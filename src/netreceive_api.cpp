@@ -383,35 +383,21 @@ void NetReceiveDataAPI_c::SetupBodyPhase()
 #endif
 
 // mostly repeats HandleClientSphinx
-void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
+void ApiServe ( AsyncNetBufferPtr_c pBuf )
 {
-	NetConnection_t & tConn = *pConn;
-
 	// non-vip connections in maintainance should be already rejected on accept
-	assert  ( !g_bMaintenance || tConn.m_bVIP );
-
-	ThreadLocal_t tThd;
-	auto & tThdesc = tThd.m_tDesc;
-	tThdesc.m_eProto = Proto_e::SPHINX;
-	tThdesc.m_iClientSock = tConn.m_iClientSock;
-	tThdesc.m_sClientName = tConn.m_sClientName;
-	tThdesc.m_iConnID = tConn.m_iConnID;
-	tThdesc.m_tmStart = tThdesc.m_tmConnect = sphMicroTimer ();
-	tThdesc.m_iTid = GetOsThreadId ();
-
-	tThd.FinishInit ();
+	assert  ( !g_bMaintenance || myinfo::IsVIP () );
 
 	myinfo::SetProto ( Proto_e::SPHINX );
-
-	int iCID = tConn.m_iConnID;
-	const char * sClientIP = tConn.m_sClientName;
+	int iCID = myinfo::ConnID();
+	const char * sClientIP = myinfo::szClientName();
 
 	// needed to check permission to turn maintenance mode on/off
 	auto& tOut = *(NetGenericOutputBuffer_c *) pBuf;
 	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf;
 
 	// send handshake
-	tThd.ThdState ( ThdState_e::HANDSHAKE );
+	myinfo::ThdState( ThdState_e::HANDSHAKE );
 	tOut.SendDword ( SPHINX_SEARCHD_PROTO ); // that is handshake
 	if ( !tIn.ReadFrom ( 4, true ))
 	{
@@ -451,7 +437,6 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 		// currently, the only signal allowed to interrupt this read is SIGTERM
 		// letting SIGHUP interrupt causes trouble under query/rotation pressure
 		// see sphSockRead() and ReadFrom() for details
-		tThd.ThdState ( ThdState_e::NET_IDLE );
 		bool bCommand = tIn.ReadFrom ( 8, bPersist );
 
 		if ( !bCommand )
@@ -489,7 +474,6 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 
 		iPconnIdleS = 0;
 
-		tThd.ThdState ( ThdState_e::NET_READ );
 		auto eCommand = (SearchdCommand_e)  tIn.GetWord ();
 		auto uVer = tIn.GetWord ();
 		auto iReplySize = tIn.GetInt ();

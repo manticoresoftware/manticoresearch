@@ -955,7 +955,7 @@ void SendMysqlProtoHandshake ( ISphOutputBuffer& tOut, bool bSsl, bool bUseCompr
 
 const int MAX_PACKET_LEN = 0xffffffL; // 16777215 bytes, max low level packet size
 
-bool IsFederatedUser ( ByteBlob_t tPacket )
+inline bool UsernameIsFEDERATED ( const ByteBlob_t& tPacket )
 {
 	// handshake packet structure
 	// 4              capability flags, CLIENT_PROTOCOL_41 always set
@@ -973,6 +973,15 @@ bool IsFederatedUser ( ByteBlob_t tPacket )
 	return ( strncmp ( sFederated, sSrc, tPacket.second-(4+4+1+23) )==0 );
 }
 
+inline bool UserWantsSSL ( const ByteBlob_t & tPacket )
+{
+	return ( tPacket.first[1] & 8 )!=0;
+}
+
+inline bool UserWantsCompression ( const ByteBlob_t & tPacket )
+{
+	return ( tPacket.first[0] & 0x20U)!=0;
+}
 
 bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, CSphString & sQuery, int iPacketLen,
 		CSphQueryProfile * pProfile, ThreadLocal_t & tThd, AsyncNetBufferPtr_c pBuf )
@@ -1097,8 +1106,7 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 	CrashQuery_t tCrashQuery;
 	tCrashQuery.m_bMySQL = true;
 	GlobalCrashQuerySet ( tCrashQuery );
-	bool bUseCompression = IsCompressionAvailable();
-	bool bCliendUseCompression = false;
+	const bool bCanCompression = IsCompressionAvailable();
 
 	// set off query guard on return
 	auto tRestoreCrash = AtScopeExit ( [] { GlobalCrashQuerySet ( CrashQuery_t () ); } );
@@ -1116,7 +1124,7 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 	/// So, no passive probing possible.
 	// send handshake first
 	sphLogDebugv ("Sending handshake...");
-	SendMysqlProtoHandshake ( tOut, CheckWeCanUseSSL (), bUseCompression, iCID );
+	SendMysqlProtoHandshake ( tOut, CheckWeCanUseSSL (), bCanCompression, iCID );
 	tOut.Flush();
 	if ( tOut.GetError () )
 	{
@@ -1205,20 +1213,20 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 			// switch to ssl by demand.
 			// You need to set a bit in handshake (g_sMysqlHandshake) in order to suggest client such switching.
 			// Client set this desirable bit only if we say that 'we can' about it before.
-			bCliendUseCompression = tAnswer.first[0] & 0x20U;
-			if ( !tThdesc.m_bSsl && (tAnswer.first[1] & 8) ) // want SSL
+
+			if ( !tThdesc.m_bSsl && UserWantsSSL ( tAnswer ) ) // want SSL
 			{
 				tThdesc.m_bSsl = MakeSecureLayer ( pBuf );
 				bKeepAlive = !tOut.GetError ();
 				continue; // next packet will be 'login' again, but received over SSL
 			}
-			if ( IsFederatedUser ( tAnswer))
+			if ( UsernameIsFEDERATED ( tAnswer ))
 				tSession.SetFederatedUser();
 			SendMysqlOkPacket ( tOut, uPacketID, tSession.IsAutoCommit());
 			tOut.Flush ();
 			bKeepAlive = !tOut.GetError();
 			bAuthed = true;
-			if ( bCliendUseCompression && bUseCompression )
+			if ( bCanCompression && UserWantsCompression ( tAnswer ) )
 				MakeMysqlCompressedLayer ( pBuf );
 			continue;
 		}

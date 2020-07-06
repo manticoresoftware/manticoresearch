@@ -29,6 +29,15 @@ namespace {
 	}
 }
 
+// walk over list of running detached threads and apply fnHandler to each of them
+// Each call made under r-lock to keep thread list intact
+void Iterate ( ThreadFN& fnHandler )
+{
+	ScRL_t _ ( g_dDetachedGuard () );
+	for ( auto * pThread : g_dDetachedThreads () )
+		fnHandler ( pThread );
+}
+
 // register shutdown action that will walk over list of running detached threads and send SIGTERM to each of them.
 // then wait until they're finished.
 // Also register iterations right now;
@@ -39,6 +48,8 @@ void Detached::AloneShutdowncatch ()
 	assert ( !bAlreadyInvoked );
 	bAlreadyInvoked = true;
 #endif
+
+	Threads::RegisterIterator ( Iterate );
 
 	// all about windows that we use pthread_kill right now.
 	// if analogue exists there, the limitation can be removed.

@@ -64,10 +64,15 @@ LowThreadDesc_t& MyThd ();
 void SetSysThreadName();
 
 using ThreadFN = std::function<void ( Threads::LowThreadDesc_t * )>;
+using ThreadIteratorFN = std::function<void ( ThreadFN& )>;
 
+// apply handler to all running threads
 void IterateActive ( ThreadFN fnHandler );
 
-int GetNumOfRunning();
+// add function which will be invoked from IterateActive
+void RegisterIterator ( ThreadIteratorFN fnIterator );
+
+int GetNumOfRunning ();
 
 struct ThdInfo_t
 {
@@ -168,6 +173,7 @@ struct Scheduler_i
 	virtual int Works () const = 0;
 	virtual void StopAll () = 0;
 	virtual void DiscardOnFork() {};
+	virtual void IterateChildren ( ThreadFN & fnHandler ) {};
 };
 
 using SchedulerSharedPtr_t = SharedPtr_t<Scheduler_i *>;

@@ -817,6 +817,10 @@ class ThreadPool_c final : public Scheduler_i
 	sph::Event_c m_dCond;
 	std::atomic<bool> m_bStop {false};
 
+	// support iteration over children for show threads and hazards
+	RwLock_t m_dChildGuard;
+	CSphVector<LowThreadDesc_t *> m_dChildren GUARDED_BY ( m_dChildGuard);
+
 	template<typename F>
 	void Post ( F && f, bool bVip = false ) // post to primary (vip) or secondary queue
 	{
@@ -846,8 +850,12 @@ class ThreadPool_c final : public Scheduler_i
 		m_dWork.emplace ( m_tService );
 	}
 
-	void loop ()
+	void loop (int iChild)
 	{
+		{
+			ScWL_t _ ( m_dChildGuard );
+			m_dChildren[iChild] = &MyThd ();
+		}
 		while (true)
 		{
 			m_tService.run ();
@@ -861,6 +869,8 @@ class ThreadPool_c final : public Scheduler_i
 				m_dCond.SignalAll (dLock);
 			}
 		}
+		ScWL_t _ ( m_dChildGuard );
+		m_dChildren[iChild] = nullptr;
 	}
 
 public:
@@ -870,21 +880,17 @@ public:
 	{
 		createWork ();
 		m_dThreads.Resize ( (int) iThreadCount );
+		m_dChildren.Resize ( (int) iThreadCount );
+		m_dChildren.ZeroVec(); // avoid iterations over not-yet-started threads with garbage here
 		ARRAY_FOREACH ( i, m_dThreads )
-			Threads::CreateQ ( &m_dThreads[i], [this] { loop (); }, false, m_szName, i );
+			Threads::CreateQ ( &m_dThreads[i], [this,i] { loop (i); }, false, m_szName, i );
 		LOG ( DEBUG, TP ) << "thread pool created with threads: " << iThreadCount;
 	}
 
 	~ThreadPool_c () final
 	{
-		ScopedMutex_t dLock {m_dMutex};
-		m_bStop = true;
-		m_dWork.reset ();
-		dLock.Unlock ();
-		LOG ( DEBUG, TP ) << "stopping thread pool";
-		for ( auto& dThread : m_dThreads )
-			Threads::Join ( &dThread );
-		LOG ( DEBUG, TP ) << "thread pool stopped";
+		StopAll();
+		ScWL_t _ ( m_dChildGuard ); // that will keep children list if smbody still iterates over it
 	}
 
 	void DiscardOnFork () final
@@ -916,6 +922,13 @@ public:
 	int Works () const final
 	{
 		return (int)m_tService.works ();
+	}
+
+	void IterateChildren ( ThreadFN& fnHandler ) final
+	{
+		ScRL_t _ ( m_dChildGuard );
+		for ( auto* pThread : m_dChildren )
+			fnHandler ( pThread );
 	}
 
 	void StopAll () final
@@ -1117,6 +1130,12 @@ void WipeGlobalSchedulerOnShutdownAndFork ()
 	bAlreadyInvoked = true;
 #endif
 
+	Threads::RegisterIterator ( [] ( ThreadFN & fnHandler ) {
+		SchedulerSharedPtr_t & pPool = GlobalPoolSingletone ();
+		if ( pPool )
+			pPool->IterateChildren ( fnHandler );
+	} );
+
 	searchd::AddOnForkCleanupCb ( [] {
 		SchedulerSharedPtr_t & pPool = GlobalPoolSingletone ();
 		if ( pPool )
@@ -1132,6 +1151,11 @@ void WipeGlobalSchedulerOnShutdownAndFork ()
 
 void WipeSchedulerOnFork ( Threads::Scheduler_i * pScheduler )
 {
+	Threads::RegisterIterator ( [pScheduler] ( ThreadFN & fnHandler ) {
+		if ( pScheduler )
+			pScheduler->IterateChildren ( fnHandler );
+	} );
+
 	searchd::AddOnForkCleanupCb ( [pScheduler] {
 		if ( pScheduler )
 			pScheduler->DiscardOnFork ();
@@ -1148,12 +1172,81 @@ int Threads::GetNumOfRunning()
 	return g_iRunningThreads.load ( std::memory_order_relaxed );
 }
 
-// iterate over all (pooled and alone) threads.
-// over pooled we're not using locks, since pool is living 'as whole', so no lock accessing individual elem need.
-// iteration func, however, must check if param is nullptr.
+//////////////////////////////////////////////////////////////////////////
+/// helpers to iterate over all registered threads
+
+namespace { // static
+
+	class IterationHandler_c : public SchedulerOperation_t
+	{
+		ThreadIteratorFN m_Handler;
+
+	public:
+		explicit IterationHandler_c ( ThreadIteratorFN h )
+				: SchedulerOperation_t ( &IterationHandler_c::DoComplete )
+				  , m_Handler ( std::move ( h ) )
+		{}
+
+		static void DoComplete ( void * pOwner, SchedulerOperation_t * pBase )
+		{
+			auto * pHandler = (IterationHandler_c *) pBase;
+			if ( pOwner )
+				pHandler->m_Handler ( *(ThreadFN *) pOwner );
+			else
+				delete pHandler;
+		}
+	};
+
+	struct IteratorsQueue_t
+	{
+		RwLock_t m_tQueueGuard;
+		OpSchedule_t m_tQueue GUARDED_BY ( m_tQueueGuard );
+
+		void RegisterIterator ( ThreadIteratorFN fnIterator )
+		{
+			auto pCb = ( new IterationHandler_c ( std::move ( fnIterator ) ) );
+			ScWL_t tGuard ( m_tQueueGuard );
+			m_tQueue.Push_front ( pCb );
+		}
+
+		// iterate over all (pooled and alone) threads.
+		// over pooled we're not using locks, since pool is living 'as whole', so no lock accessing individual elem need.
+		// iteration func, however, must check if param is nullptr.
+		// note, non-iteratable threads can't use hazard pointers (just nobody knows they're hold something).
+		void IterateActive ( ThreadFN fnHandler )
+		{
+			ScRL_t tGuard ( m_tQueueGuard );
+			for ( auto & dOp : m_tQueue )
+				dOp.Complete ( &fnHandler );
+		}
+
+		~IteratorsQueue_t()
+		{
+			ScWL_t tGuard ( m_tQueueGuard );
+			while ( !m_tQueue.Empty () )
+			{
+				auto * pOp = m_tQueue.Front ();
+				m_tQueue.Pop ();
+				pOp->Complete ( nullptr );
+			}
+		}
+	};
+
+	IteratorsQueue_t & g_dIteratorsList ()
+	{
+		static IteratorsQueue_t dIteratorsList;
+		return dIteratorsList;
+	}
+}
+
+void Threads::RegisterIterator ( ThreadIteratorFN fnIterator )
+{
+	g_dIteratorsList ().RegisterIterator ( std::move ( fnIterator ) );
+}
+
 void Threads::IterateActive ( ThreadFN fnHandler )
 {
-	// todo
+	g_dIteratorsList ().IterateActive ( std::move ( fnHandler ) );
 }
 
 Threads::Scheduler_i * GetAloneScheduler ( int iMaxThreads, const char * szName )

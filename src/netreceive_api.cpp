@@ -564,7 +564,7 @@ APIBlob_c APIHeader ( ISphOutputBuffer & dBuff, WORD uCommand, WORD uVer )
 	return APIBlob_c ( dBuff );
 }
 
-// Sphinx API answer (sa
+// Sphinx API answer (same as APIHeader, but 2-nd and 3-rd params interchanged. Fixme! Unify.
 APIBlob_c APIAnswer ( ISphOutputBuffer & dBuff, WORD uVer, WORD uStatus )
 {
 	return APIHeader ( dBuff, uStatus, uVer );

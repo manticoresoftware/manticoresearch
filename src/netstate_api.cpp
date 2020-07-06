@@ -208,8 +208,7 @@ void JobDoSendNB ( NetSendData_t * pSend, CSphNetLoop * pLoop )
 bool CheckSocketError ( DWORD uGotEvents )
 {
 	const auto ERRHUP = NetPollEvent_t::ERR | NetPollEvent_t::HUP;
-	bool bReadError = ( ( uGotEvents & NetPollEvent_t::READ )
-			&& ( uGotEvents & ERRHUP ) );
+	bool bReadError = ( ( uGotEvents & NetPollEvent_t::READ ) && ( uGotEvents & ERRHUP ) );
 	bool bWriteError = ( ( uGotEvents & NetPollEvent_t::WRITE ) && ( uGotEvents & NetPollEvent_t::ERR ) );
 
 	if ( bReadError && (( uGotEvents & ERRHUP)==ERRHUP) )

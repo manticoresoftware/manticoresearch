@@ -77,7 +77,7 @@ void MultiServe ( SockWrapperPtr_c pSock, NetConnection2_t tConn )
 	case Proto_e::HTTPS:
 		myinfo::SetSSL();
 	case Proto_e::HTTP:
-		HttpServe ( std::move ( pBuf ), nullptr );
+		HttpServe ( std::move ( pBuf ) );
 		break;
 	default:
 		sphLogDebugv ( "Unkown proto" );

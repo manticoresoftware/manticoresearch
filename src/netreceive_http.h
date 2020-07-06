@@ -13,7 +13,6 @@
 #pragma once
 
 #include "networking_daemon.h"
-#include "netstate_api.h"
 
 #if 0
 class NetReceiveDataHttp_c final : public ISphNetAction
@@ -31,4 +30,4 @@ public:
 };
 #endif
 
-void HttpServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn );
+void HttpServe ( AsyncNetBufferPtr_c pBuf );

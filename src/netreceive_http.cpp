@@ -313,23 +313,10 @@ NetReceiveDataHttp_c::~NetReceiveDataHttp_c()
 }
 #endif
 
-void HttpServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
+void HttpServe ( AsyncNetBufferPtr_c pBuf )
 {
-	NetConnection_t & tConn = *pConn;
-
 	// non-vip connections in maintainance should be already rejected on accept
-	assert  ( !g_bMaintenance || tConn.m_bVIP );
-
-	ThreadLocal_t tThd;
-	auto & tThdesc = tThd.m_tDesc;
-	tThdesc.m_eProto = Proto_e::HTTP; //< that is default
-	tThdesc.m_iClientSock = tConn.m_iClientSock;
-	tThdesc.m_sClientName = tConn.m_sClientName;
-	tThdesc.m_iConnID = tConn.m_iConnID;
-	tThdesc.m_tmStart = tThdesc.m_tmConnect = sphMicroTimer ();
-	tThdesc.m_iTid = GetOsThreadId ();
-
-	tThd.FinishInit ();
+	assert  ( !g_bMaintenance || myinfo::IsVIP() );
 
 	myinfo::SetProto ( Proto_e::HTTP );
 
@@ -337,15 +324,15 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 	auto & tCrashQuery = GlobalCrashQueryGetRef();
 	tCrashQuery.m_bHttp = true;
 
-	int iCID = tConn.m_iConnID;
-	const char * sClientIP = tConn.m_sClientName;
+	int iCID = myinfo::ConnID();
+	const char * sClientIP = myinfo::szClientName();
 
 	// needed to check permission to turn maintenance mode on/off
 
 	bool bKeepAlive = false;
 
-	if ( tConn.m_bSSL )
-		tThdesc.m_bSsl = MakeSecureLayer ( pBuf );
+	if ( myinfo::IsSSL() )
+		myinfo::SetSSL ( MakeSecureLayer ( pBuf ) );
 
 	auto& tOut = *(NetGenericOutputBuffer_c *) pBuf;
 	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf;

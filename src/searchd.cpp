@@ -8576,8 +8576,10 @@ void BuildStatus ( VectorLike & dStatus )
 		if ( dStatus.MatchAdd ( "workers_total" ) )
 			dStatus.Add().SetSprintf ( "%d", GlobalWorkPool()->WorkingThreads() );
 //			dStatus.Add().SetSprintf ( "%d", g_pThdPool->GetTotalWorkerCount() );
-//		if ( dStatus.MatchAdd ( "workers_active" ) )
-//			dStatus.Add("0");
+		if ( dStatus.MatchAdd ( "workers_active" ) )
+			dStatus.Add().SetSprintf( "%d", myinfo::CountAll());
+		if ( dStatus.MatchAdd ( "workers_clients" ) )
+			dStatus.Add ().SetSprintf ( "%d", myinfo::CountClients());
 //		dStatus.Add ().SetSprintf ( "%d", g_pThdPool->GetActiveWorkerCount ());
 		if ( dStatus.MatchAdd ( "work_queue_length" ) )
 			dStatus.Add ().SetSprintf ( "%d", GlobalWorkPool()->Works());
@@ -8715,6 +8717,8 @@ void BuildStatusOneline ( StringBuilder_c & sOut )
 	<< "Uptime:" << (DWORD) time ( NULL )-g_tStats.m_uStarted
 	<< " Threads:" << GlobalWorkPool()->WorkingThreads()
 	<< " Queue:" << GlobalWorkPool()->Works()
+	<< " Clients:" << myinfo::CountClients()
+	<< " Tasks:" << myinfo::CountAll()
 	<< " Queries:" << g_tStats.m_iQueries;
 	sOut.Sprintf ( " Wall: %t", (int64_t)g_tStats.m_iQueryTime );
 	sOut.Sprintf ( " CPU: %t", (int64_t)g_tStats.m_iQueryCpuTime );

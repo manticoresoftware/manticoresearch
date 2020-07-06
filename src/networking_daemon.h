@@ -40,10 +40,12 @@ struct ISphNetAction : ISphNoncopyable, NetPollEvent_t
 	/// @param pLoop		where you can put your derived action (say, Accept -> SqlServe )
 	/// timer is always removed when processing.
 	/// If it is timeout - the event is also already removed from the poller.
+	/// timer is always removed when processing. If it is timeout - the event is also already removed from the poller.
 	virtual void		Process ( DWORD uGotEvents, CSphNetLoop * pLoop ) = 0;
 
 	/// invoked when CSphNetLoop with this action destroyed
-	virtual void			Destroy () { delete this; };
+	/// usually action is owned by netloop (signaller, acceptor), so it just destroys itself here.
+	virtual void NetLoopDestroying () { delete this; };
 };
 
 // event that wakes-up poll net loop from finished thread pool job
@@ -61,22 +63,24 @@ public:
 /// NETWORK THREAD
 /////////////////////////////////////////////////////////////////////////////
 
-class CSphNetLoop
+class CSphNetLoop : public ISphRefcountedMT
 {
 	class Impl_c;
 	Impl_c * m_pImpl = nullptr;
+
+protected:
+	~CSphNetLoop ();
 
 public:
 	DWORD							m_uTick = 0;
 
 public:
 	explicit CSphNetLoop ( const VecTraits_T<Listener_t> & dListeners );
-	~CSphNetLoop();
 	void LoopNetPoll ();
+	void StopNetLoop ();
 
 	void AddAction ( ISphNetAction * pElem );
-	void Unlink ( ISphNetAction * pEvent );
-	void RemoveIterEvent ( NetPollEvent_t * pEvent );
+	void RemoveEvent ( NetPollEvent_t * pEvent );
 };
 
 // redirect async socket io to netloop
@@ -195,6 +199,3 @@ public:
 using AsyncNetBufferPtr_c = SharedPtr_t<AsyncNetBuffer_c *>;
 
 AsyncNetBufferPtr_c MakeAsyncNetBuffer ( SockWrapperPtr_c pSock );
-
-// main entry point - creates netloop and loop it
-void ServeNetLoop ( const VecTraits_T<Listener_t> & dListeners );

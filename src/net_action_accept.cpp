@@ -102,9 +102,9 @@ DWORD NextConnectionID()
 	return g_iConnectionID.fetch_add ( 1, std::memory_order_relaxed );
 }
 
-void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * pLoop )
+void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * _pLoop )
 {
-	if ( CheckSocketError ( uGotEvents ) )
+	if ( CheckSocketError ( uGotEvents ) || sphInterrupted () )
 		return;
 
 	// handle all incoming requests at once but not too much
@@ -113,6 +113,8 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 	sockaddr_storage saStorage = {0};
 	socklen_t uLength = sizeof(saStorage);
 
+	CSphRefcountedPtr<CSphNetLoop> pLoop { _pLoop };
+	SafeAddRef (_pLoop);
 	while (true)
 	{
 		if ( g_iThrottleAccept && g_iThrottleAccept<iAccepted )
@@ -167,7 +169,7 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
  * - usual: default scheduler + non-zero netloop. Polling performed by netloop; working by thread pool.
  * - vip: alone scheduler and zero netloop. All work (polling and calculations) performed by dedicated alone thread.
  */
-		auto * pClientNetLoop = pLoop;
+		auto pClientNetLoop = pLoop;
 		SchedulerFabric_fn fnMakeScheduler = nullptr;
 		if ( m_tListener.m_bVIP )
 		{

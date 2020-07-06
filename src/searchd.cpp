@@ -233,8 +233,8 @@ static volatile bool						g_bNeedRotate = false;		// true if there were pending 
 static volatile bool						g_bInRotate = false;		// true while we are rotating
 static volatile bool						g_bReloadForced = false;	// true in case reload issued via SphinxQL
 
-static CSphVector<SphThread_t>				g_dTickPoolThread;
-
+static SchedulerSharedPtr_t					g_pTickPoolThread;
+static CSphVector<CSphNetLoop*>				g_dNetLoops;
 
 /// command names
 static const char * g_dApiCommands[] =
@@ -702,14 +702,6 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	// stop search threads; up to shutdown_timeout seconds
 	WaitFinishPreread ( g_iShutdownTimeoutUs );
-	while ( ( ThreadsNum() > 0 ) && ( sphMicroTimer()-tmShutStarted )<g_iShutdownTimeoutUs )
-		sphSleepMsec ( 50 );
-
-	if ( ThreadsNum()>0 )
-	{
-		int64_t tmDelta = sphMicroTimer()-tmShutStarted;
-		sphWarning ( "still %d alive threads during shutdown, after %d.%03d sec", ThreadsNum(), (int)(tmDelta/1000000), (int)((tmDelta/1000)%1000) );
-	}
 
 	// save attribute updates for all local indexes
 	bAttrsSaveOk = FinallySaveIndexes();
@@ -721,6 +713,16 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 		SaveConfigInt(sError);
 	}
 
+	// stop netloop processing
+	for ( auto & pNetLoop : g_dNetLoops )
+	{
+		pNetLoop->StopNetLoop ();
+		SafeRelease ( pNetLoop );
+	}
+
+	// stop netloop threads
+	g_pTickPoolThread->StopAll ();
+
 	// call scheduled callbacks:
 	// shutdown replication,
 	// shutdown ssl,
@@ -728,8 +730,15 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	// shutdown alone tasks
 	searchd::FireShutdownCbs ();
 
-	ARRAY_FOREACH ( i, g_dTickPoolThread )
-		Threads::Join ( g_dTickPoolThread.Begin() + i );
+	while ( ( ThreadsNum()>0 ) && ( sphMicroTimer ()-tmShutStarted )<g_iShutdownTimeoutUs )
+		sphSleepMsec ( 50 );
+
+	if ( ThreadsNum()>0 )
+	{
+		int64_t tmDelta = sphMicroTimer ()-tmShutStarted;
+		sphWarning ( "still %d alive tasks during shutdown, after %d.%03d sec", ThreadsNum(), (int) ( tmDelta
+				/ 1000000 ), (int) ( ( tmDelta / 1000 ) % 1000 ) );
+	}
 
 	// unlock indexes and release locks if needed
 	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); )
@@ -19869,15 +19878,12 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 #endif
 		}
 
-		// todo! m.b. dedicated net thread for vips?
-		g_dTickPoolThread.Resize ( g_iNetWorkers );
-		ARRAY_FOREACH ( iTick, g_dTickPoolThread )
+		g_pTickPoolThread = Threads::MakeThreadPool ( g_iNetWorkers, "TickPool" );
+		g_dNetLoops.Resize ( g_iNetWorkers );
+		for ( auto & pNetLoop : g_dNetLoops )
 		{
-			if ( !Threads::CreateQ ( g_dTickPoolThread.Begin ()+iTick, []
-				{
-					ServeNetLoop ( g_dListeners );
-				}, false, "TickPool", iTick ))
-				sphDie ( "failed to create tick pool thread" );
+			pNetLoop = new CSphNetLoop ( g_dListeners );
+			g_pTickPoolThread->Schedule ( [pNetLoop] { pNetLoop->LoopNetPoll (); }, false );
 		}
 	}
 

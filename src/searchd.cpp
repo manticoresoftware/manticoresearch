@@ -4963,11 +4963,11 @@ void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphStrin
 		return;
 
 	int64_t tmLocal = -sphMicroTimer();
-	int64_t tmCPU = -sphCpuTimer ();
+	int64_t tmCPU = -sphTaskCpuTimer ();
 
 	RunLocalSearches();
 	tmLocal += sphMicroTimer();
-	tmCPU += sphCpuTimer();
+	tmCPU += sphTaskCpuTimer();
 
 	OnRunFinished();
 
@@ -5792,7 +5792,7 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 			auto iIdx = dOrder[iJob];
 
 			sphLogDebugv ("Tick coro search");
-			int64_t iCpuTime = -sphCpuTimer ();
+			int64_t iCpuTime = -sphTaskCpuTimer ();
 
 			ThreadLocal_t tThd ( m_tThd );
 			// FIXME!!! handle different proto
@@ -5873,7 +5873,7 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 			}
 			dResults[0].m_tIOStats.Stop ();
 
-			iCpuTime += sphCpuTimer ();
+			iCpuTime += sphTaskCpuTimer ();
 			for ( int i = 0; i<iQueries; ++i )
 				dResults[i].m_iCpuTime = iCpuTime;
 
@@ -6594,7 +6594,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// all my stats
 	int64_t tmSubset = -sphMicroTimer();
 	int64_t tmLocal = 0;
-	int64_t tmCpu = -sphCpuTimer ();
+	int64_t tmCpu = -sphTaskCpuTimer ();
 
 	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
 	if ( m_pProfile )
@@ -6689,7 +6689,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			m_pProfile->Switch ( SPH_QSTATE_LOCAL_SEARCH );
 
 		tmLocal = -sphMicroTimer();
+		tmCpu -= sphTaskCpuTimer ();
 		RunLocalSearches();
+		tmCpu += sphTaskCpuTimer ();
 		tmLocal += sphMicroTimer();
 	}
 
@@ -6925,7 +6927,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	/////////
 
 	tmSubset += sphMicroTimer();
-	tmCpu += sphCpuTimer();
+	tmCpu += sphTaskCpuTimer();
 
 	CalcTimeStats ( tmCpu, tmSubset, iStart, iEnd, dDistrServedByAgent );
 	CalcPerIndexStats ( iStart, iEnd, dDistrServedByAgent );

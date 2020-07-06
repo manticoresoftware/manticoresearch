@@ -1421,6 +1421,7 @@ void Threads::JobStarted ()
 	auto& tDesc = Threads::MyThd ();
 	tDesc.m_tmLastJobDoneTimeUS = -1;
 	tDesc.m_tmLastJobStartTimeUS = sphMicroTimer ();
+	tDesc.m_tmLastJobStartCPUTimeUS = sphCpuTimer ();
 }
 
 void Threads::JobFinished ( bool bIsDone )
@@ -1430,6 +1431,7 @@ void Threads::JobFinished ( bool bIsDone )
 	if ( bIsDone )
 		++tDesc.m_iTotalJobsDone;
 	tDesc.m_tmTotalWorkedTimeUS += tDesc.m_tmLastJobDoneTimeUS-tDesc.m_tmLastJobStartTimeUS;
+	tDesc.m_tmTotalWorkedCPUTimeUS += sphCpuTimer()-tDesc.m_tmLastJobStartCPUTimeUS;
 }
 
 // Adds a function call (a new task for a wrapper) to a linked list

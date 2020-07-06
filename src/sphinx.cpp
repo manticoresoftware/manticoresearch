@@ -13211,6 +13211,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 	// start counting
 	int64_t tmQueryStart = sphMicroTimer();
+	int64_t tmCpuQueryStart = sphTaskCpuTimer();
 	int64_t tmMaxTimer = 0;
 	if ( pQuery->m_uMaxQueryMsec>0 )
 		tmMaxTimer = sphMicroTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
@@ -13254,6 +13255,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 		if ( !tCtx.m_pFilter->EvalBlock ( pMinEntry, pMaxEntry ) )
 		{
 			pResult->m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
+			pResult->m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 			return true;
 		}
 	}
@@ -13327,6 +13329,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	pResult->m_pBlobPool = m_tBlobAttrs.GetWritePtr();
 	pResult->m_pDocstore = m_pDocstore.Ptr() ? this : nullptr;
 	pResult->m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
+	pResult->m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 	pResult->m_iBadRows += tCtx.m_iBadRows;
 
 	return true;
@@ -15925,6 +15928,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	// start counting
 	int64_t tmQueryStart = sphMicroTimer();
+	auto tmCpuQueryStart = sphTaskCpuTimer ();
 
 	CSphQueryProfile * pProfile = pResult->m_pProfile;
 	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
@@ -16179,6 +16183,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	// query timer
 	int64_t tmWall = sphMicroTimer() - tmQueryStart;
 	pResult->m_iQueryTime += (int)( tmWall/1000 );
+	pResult->m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 
 #if 0
 	printf ( "qtm %d, %d, %d, %d, %d\n", int(tmWall), tQueryStats.m_iFetchedDocs,

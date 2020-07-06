@@ -56,8 +56,10 @@ struct LowThreadDesc_t
 	int					m_iThreadID;	///< OS thread id
 	int64_t				m_tmStart;		///< when did the current thread started? Initialized from thread itself
 	int64_t 			m_tmLastJobStartTimeUS = -1; ///< last time where I've started something useful
+	int64_t 			m_tmLastJobStartCPUTimeUS = -1; ///< last time where I've started something useful
 	int64_t				m_tmLastJobDoneTimeUS = -1;	///< last time where I've done something useful
 	int64_t				m_tmTotalWorkedTimeUS = 0;	///< total time I've worked on useful tasks
+	int64_t				m_tmTotalWorkedCPUTimeUS = 0;    ///< total time I've worked on useful tasks
 	int64_t				m_iTotalJobsDone = 0;		///< total jobs I've completed
 	CSphString			m_sThreadName;
 	std::atomic<void *> m_pHazards;		///< my hazard pointers

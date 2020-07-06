@@ -6573,6 +6573,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// start counting
 	pResult->m_iQueryTime = 0;
 	int64_t tmQueryStart = sphMicroTimer();
+	auto tmCpuQueryStart = sphTaskCpuTimer();
 	CSphQueryProfile * pProfiler = pResult->m_pProfile;
 	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
 
@@ -6775,7 +6776,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	pResult->m_pDocstore = m_tSchema.HasStoredFields() ? this : nullptr;
 	pResult->m_iQueryTime = int ( ( sphMicroTimer()-tmQueryStart )/1000 );
-
+	pResult->m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 	return true;
 }
 

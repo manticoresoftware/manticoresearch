@@ -514,6 +514,9 @@ int64_t		sphMicroTimer ();
 /// defined in searchd.cpp since depends from g_bCpuStats
 int64_t		sphCpuTimer ();
 
+/// returns sphCpuTimer() adjusted to current coro task (coro may jump from thread to thread, so sphCpuTimer() is irrelevant)
+int64_t		sphTaskCpuTimer ();
+
 /// double argument squared
 inline double sqr ( double v ) { return v*v;}
 

@@ -188,6 +188,9 @@ class CoroWorker_c
 	static thread_local CoroWorker_c * m_pTlsThis;
 	CoroWorker_c * m_pPreviousWorker = nullptr;
 
+	// operative stuff to be as near as possible
+	int64_t m_tmCpuTimeBase = 0; // add sphCpuTime() to this value to get truly cpu time ticks
+
 	// RAII worker's keeper
 	struct CoroGuard_t
 	{
@@ -195,11 +198,14 @@ class CoroWorker_c
 		{
 			pWorker->m_pPreviousWorker = CoroWorker_c::m_pTlsThis;
 			CoroWorker_c::m_pTlsThis = pWorker;
+			pWorker->m_tmCpuTimeBase -= sphCpuTimer();
 		}
 
 		~CoroGuard_t ()
 		{
-			CoroWorker_c::m_pTlsThis = CoroWorker_c::m_pTlsThis->m_pPreviousWorker;
+			auto pWork = CoroWorker_c::m_pTlsThis;
+			pWork->m_tmCpuTimeBase += sphCpuTimer ();
+			CoroWorker_c::m_pTlsThis = pWork->m_pPreviousWorker;
 		}
 	};
 
@@ -388,6 +394,11 @@ public:
 		return m_pScheduler;
 	}
 
+	int64_t GetCurrentCpuTimeBase() const
+	{
+		return m_tmCpuTimeBase;
+	}
+
 	static CoroWorker_c* CurrentWorker()
 	{
 		return m_pTlsThis;
@@ -507,6 +518,15 @@ int sphMyStackSize ()
 	if ( !pWorker )
 		return g_iThreadStackSize;
 	return pWorker->GetStackSize ();
+}
+
+int64_t sphTaskCpuTimer ()
+{
+	auto pWorker = Threads::CoroWorker_c::CurrentWorker ();
+	if ( pWorker )
+		return pWorker->GetCurrentCpuTimeBase ()+sphCpuTimer ();
+
+	return sphCpuTimer();
 }
 
 Threads::Scheduler_i * Threads::CoCurrentScheduler ()

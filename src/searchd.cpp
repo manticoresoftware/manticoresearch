@@ -2769,7 +2769,9 @@ static void FormatOrderBy ( StringBuilder_c * pBuf, const char * sPrefix, ESphSo
 	auto sUnquoted = RemoveBackQuotes ( sSubst );
 	sSubst = sUnquoted.cstr();
 
-	*pBuf << " " << sPrefix << " ";
+	// for simplicity check that sPrefix is already prefixed/suffixed by spaces.
+	assert ( sPrefix && sPrefix[0]==' ' && sPrefix[strlen ( sPrefix )-1]==' ' );
+	*pBuf << sPrefix;
 	switch ( eSort )
 	{
 	case SPH_SORT_ATTR_DESC:		*pBuf << sSubst << " DESC"; break;
@@ -2777,7 +2779,7 @@ static void FormatOrderBy ( StringBuilder_c * pBuf, const char * sPrefix, ESphSo
 	case SPH_SORT_TIME_SEGMENTS:	*pBuf << "TIME_SEGMENT(" << sSubst << ")"; break;
 	case SPH_SORT_EXTENDED:			*pBuf << sSubst; break;
 	case SPH_SORT_EXPR:				*pBuf << "BUILTIN_EXPR()"; break;
-	case SPH_SORT_RELEVANCE:		*pBuf << "weight() desc" << ( sSubst && *sSubst ? ", " : nullptr ) << ( sSubst && *sSubst ? sSubst : nullptr ); break;
+	case SPH_SORT_RELEVANCE:		*pBuf << "weight() desc"; if ( sSubst ) *pBuf << ", " << sSubst; break;
 	default:						pBuf->Appendf ( "mode-%d", (int)eSort ); break;
 	}
 }
@@ -2902,6 +2904,7 @@ static void AppendHint ( const char * szHint, const StrVec_t & dIndexes, StringB
 
 static void FormatIndexHints ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
 {
+	ScopedComma_c sMatch ( tBuf, nullptr );
 	StrVec_t dUse, dForce, dIgnore;
 	for ( const auto & i : tQuery.m_dIndexHints )
 	{
@@ -2947,11 +2950,11 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes
 	tBuf += sTimeBuf;
 
 	if ( tRes.m_iMultiplier>1 )
-		tBuf.Appendf ( " conn %d real %d.%03d wall %d.%03d x%d found " INT64_FMT " *""/ ", myinfo::ConnID(),
-				 iRealTime/1000, iRealTime%1000, iQueryTime/1000, iQueryTime%1000, tRes.m_iMultiplier, tRes.m_iTotalMatches );
+		tBuf.Sprintf ( " conn %d real %0.3F wall %0.3F x%d found " INT64_FMT " *""/ ",
+				 myinfo::ConnID(), iRealTime, iQueryTime, tRes.m_iMultiplier, tRes.m_iTotalMatches );
 	else
-		tBuf.Appendf ( " conn %d real %d.%03d wall %d.%03d found " INT64_FMT " *""/ ", myinfo::ConnID(),
-				 iRealTime/1000, iRealTime%1000, iQueryTime/1000, iQueryTime%1000, tRes.m_iTotalMatches );
+		tBuf.Sprintf ( " conn %d real %0.3F wall %0.3F found " INT64_FMT " *""/ ",
+				 myinfo::ConnID(), iRealTime, iQueryTime, tRes.m_iTotalMatches );
 
 	///////////////////////////////////
 	// format request as SELECT query
@@ -3040,18 +3043,18 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 	if ( q.m_sGroupBy.IsEmpty() )
 	{
 		if ( !q.m_sSortBy.IsEmpty() ) // case API SPH_MATCH_EXTENDED2 - SPH_SORT_RELEVANCE
-			FormatOrderBy ( &tBuf, " ORDER BY", q.m_eSort, q.m_sSortBy );
+			FormatOrderBy ( &tBuf, " ORDER BY ", q.m_eSort, q.m_sSortBy );
 	} else
 	{
 		tBuf.Appendf ( " GROUP BY %s", q.m_sGroupBy.cstr() );
-		FormatOrderBy ( &tBuf, "WITHIN GROUP ORDER BY", q.m_eSort, q.m_sSortBy );
+		FormatOrderBy ( &tBuf, " WITHIN GROUP ORDER BY ", q.m_eSort, q.m_sSortBy );
 		if ( !q.m_tHaving.m_sAttrName.IsEmpty() )
 		{
 			ScopedComma_c sHawing ( tBuf, nullptr," HAVING ");
 			FormatFilterQL ( q.m_tHaving, tBuf, iCompactIN );
 		}
 		if ( q.m_sGroupSortBy!="@group desc" )
-			FormatOrderBy ( &tBuf, "ORDER BY", SPH_SORT_EXTENDED, q.m_sGroupSortBy );
+			FormatOrderBy ( &tBuf, " ORDER BY ", SPH_SORT_EXTENDED, q.m_sGroupSortBy );
 	}
 
 	// LIMIT clause
@@ -3060,7 +3063,6 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 
 	// OPTION clause
 	FormatOption ( q, tBuf );
-
 	FormatIndexHints ( q, tBuf );
 
 	// outer order by, limit

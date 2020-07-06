@@ -4301,7 +4301,7 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 	ReplicationCommand_t * pAddCmd = tAcc.AddCommand ( ReplicationCommand_e::CLUSTER_ALTER_ADD, sCluster, sIndex );
 	pAddCmd->m_bCheckIndex = false;
 
-	return HandleCmdReplicate ( tAcc, sError, nullptr, nullptr, nullptr, nullptr, pIndexDesc.Ptr() );
+	return HandleCmdReplicate ( tAcc, sError, nullptr, nullptr, nullptr, pIndexDesc.Ptr() );
 }
 
 // cluster ALTER statement

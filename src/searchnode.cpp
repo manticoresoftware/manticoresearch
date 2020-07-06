@@ -454,6 +454,7 @@ private:
 	bool							m_bCollectHits {false};
 	CSphVector<NodeInfo_t>			m_dNodes;
 	CSphVector<StoredMultiHit_t>	m_dStoredHits;
+	int								m_iNodesSet {0};
 
 	int64_t							m_iMaxTimer {0};
 	CSphString *					m_pWarning {nullptr};
@@ -2785,6 +2786,7 @@ ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::ExtMultiAnd_T ( const VecTraits_T<XQNode_t*
 	}
 
 	m_dNodes.Sort ( SelectivitySorter_t() );
+	m_iNodesSet = m_dNodes.GetLength();
 
 	m_pWarning = tSetup.m_pWarning;
 	m_iMaxTimer = tSetup.m_iMaxTimer;
@@ -2914,7 +2916,7 @@ const ExtDoc_t * ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::GetDocsChunk()
 
 	if ( m_bFirstChunk )
 	{
-		if ( !m_dNodes[0].m_pQword->m_iDocs )
+		if ( m_iNodesSet!=m_dNodes.GetLength() || !m_dNodes[0].m_pQword->m_iDocs )
 			return nullptr;
 
 		Advance(0);
@@ -3222,13 +3224,17 @@ template <bool USE_BM25,bool TEST_FIELDS>
 void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::Reset ( const ISphQwordSetup & tSetup )
 {
 	m_bFirstChunk = true;
+	m_iNodesSet = 0;
 	m_iMaxTimer = tSetup.m_iMaxTimer;
 	for ( auto & i : m_dNodes )
 	{
 		i.m_tRowID = INVALID_ROWID;
 		i.m_bHitsOver = false;
 		i.m_pQword->Reset ();
-		tSetup.QwordSetup ( i.m_pQword );
+		// need to track active nodes for every segment
+		// however AND requires all nodes that is why can use fast reject
+		if ( tSetup.QwordSetup ( i.m_pQword ) )
+			m_iNodesSet++;
 	}
 	
 	m_dStoredHits.Resize(0);
@@ -3328,6 +3334,9 @@ void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::HintRowID ( RowID_t tRowID )
 
 	if ( m_bFirstChunk || ( m_dNodes[0].m_tRowID!=INVALID_ROWID && tRowID>m_dNodes[0].m_tRowID ) )
 	{
+		if ( m_bFirstChunk && m_iNodesSet!=m_dNodes.GetLength() )
+			return;
+
 		Advance ( 0, tRowID );
 		m_bFirstChunk = false;
 	}

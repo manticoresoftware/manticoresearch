@@ -16,10 +16,6 @@ macro( packflex src )
 	endif ()
 endmacro()
 
-if ( WITH_STEMMER )
-	set (SUFFIX -stemmer)
-endif()
-
 set ( FNAME "${TARBALL_FILE_NAME}${SUFFIX}" )
 set ( PACKDIR "${BINARY_DIR}/sources/${FNAME}" )
 

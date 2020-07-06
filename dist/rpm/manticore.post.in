@@ -1,6 +1,6 @@
 # create user/group, and update permissions
 groupadd -r %{manticore_group} 2>/dev/null || true
-useradd -M -r -d /var/lib/sphinx -s /bin/bash -c "Manticore server" -g %{manticore_group} %{manticore_user} 2>/dev/null || true
+useradd -M -r -d /var/lib/sphinx -s /bin/false -c "Manticore server" -g %{manticore_group} %{manticore_user} 2>/dev/null || true
 usermod -g %{manticore_group} %{manticore_user} 2>/dev/null || true
 chown -R %{manticore_user}:%{manticore_group} /var/lib/manticore /var/log/manticore /var/run/manticore
 

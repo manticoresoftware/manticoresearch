@@ -8,10 +8,8 @@ workflow:
 stages:
   - mirroring
   - routines
-  - build
   - publish
-
-include: '/dist/gitlab-release.yml'
+  - hooks
 
 pages:
   stage: routines
@@ -227,18 +225,6 @@ build_bsd:
 
 # build and upload on regular commits
 
-build_master:
-  stage: publish
-  tags:
-    - dev-host
-  rules:
-    - if: $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_BRANCH == "master"
-  script:
-    - ~/upload_repo.sh
-  dependencies: [rhel6, rhel7, rhel8, jessie, stretch, trusty, xenial, bionic, buster]
-  variables:
-    REPO_NAME: dev
-
 
 push_results:
   stage: publish
@@ -267,3 +253,11 @@ push_results:
     url: http://$CDASH_URL/CDash/public/index.php?project=Manticoresearch&filtercount=1&field1=revision&compare1=63&value1=$CI_COMMIT_SHA
   retry: 1
   allow_failure: true
+
+deploy_hook:
+  stage: hooks
+  rules:
+    - if: $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i
+      when: always
+  trigger:
+    include: '/dist/gitlab-release.yml'

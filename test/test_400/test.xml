@@ -130,6 +130,14 @@ searchd
 	create table test2(title string attribute indexed stored);
 	drop table if exists test1;
 	drop table if exists test2;
+
+<!-- regression percolate index column names -->
+create table pq2 (f text, Abc int) type='percolate';
+insert into pq2 (filters) values('Abc > 5');
+select * from pq2;
+call pq ('pq2', '{"Abc":10}');
+call pq ('pq2', '{"abc":10}');
+drop table pq2;
 </sphinxql>
 </queries>
 

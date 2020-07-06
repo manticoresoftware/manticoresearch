@@ -1,7 +1,12 @@
+stages:
+  - build
+  - publish
+
 tarball:
   stage: build
   only:
     variables:
+      - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /tarball/
   dependencies: []
@@ -24,6 +29,7 @@ osx:
   stage: build
   only:
     variables:
+      - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /osx/
   dependencies: []
@@ -46,6 +52,7 @@ windows:
   stage: build
   only:
     variables:
+      - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /windows/
   dependencies: []
@@ -223,6 +230,18 @@ bionic:
       - $WHAT =~ /bionic/
   image: registry.gitlab.com/manticoresearch/dev/bionic_cmake314:latest
 
+focal:
+  <<: *debian
+  variables:
+    DISTR: "focal"
+    XTRAFLAGS: "-DCMAKE_CXX_FLAGS=\"-Wno-error=deprecated-copy\""
+  only:
+    variables:
+      - $WHAT == null
+      - $WHAT == "all"
+      - $WHAT =~ /focal/
+  image: registry.gitlab.com/manticoresearch/dev/focal_cmake314:latest
+
 buster:
   <<: *debian
   variables:
@@ -241,7 +260,7 @@ buster:
 collect_repo:
   stage: publish
   rules:
-    - when: manual
+    - when: on_success
   allow_failure: true
   tags:
     - dev-host
@@ -275,3 +294,15 @@ collect:
     expire_in: 1 week
   allow_failure: false
   cache: {}
+
+build_master:
+  stage: publish
+  tags:
+    - dev-host
+  rules:
+    - if: $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_BRANCH == "master"
+  script:
+    - ~/upload_repo.sh
+  dependencies: [rhel6, rhel7, rhel8, jessie, stretch, trusty, xenial, bionic, buster, focal, tarball, osx, windows]
+  variables:
+    REPO_NAME: dev

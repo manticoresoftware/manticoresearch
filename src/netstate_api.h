@@ -11,31 +11,6 @@
 //
 
 #pragma once
-
-#include "searchdha.h"
-
-#if USE_WINDOWS
-using sph_sa_family_t=ADDRESS_FAMILY;
-#else
-using sph_sa_family_t=sa_family_t;
-#endif
-
-// state for API proto and also common state for the rest
-struct NetConnection_t
-{
-	int		m_iClientSock = -1;
-	int		m_iConnID = 0;
-	char	m_sClientName[SPH_ADDRPORT_SIZE];
-	bool	m_bVIP = false;
-	bool	m_bSSL = false;
-	sph_sa_family_t m_tSockType;
-
-	NetConnection_t ()
-	{
-		m_sClientName[0] = '\0';
-	}
-};
-
 #if 0
 struct NetStateAPI_t : NetConnection_t
 {

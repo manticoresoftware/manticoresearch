@@ -54,9 +54,9 @@ void FormatClientAddress ( char szClientName[SPH_ADDRPORT_SIZE], const sockaddr_
 	}
 }
 
-using NetConnection2_t = std::pair<int, sph_sa_family_t>;
+using NetConnection_t = std::pair<int, sph_sa_family_t>;
 
-void MultiServe ( SockWrapperPtr_c pSock, NetConnection2_t tConn )
+void MultiServe ( SockWrapperPtr_c pSock, NetConnection_t tConn )
 {
 	auto pBuf = MakeAsyncNetBuffer ( std::move ( pSock ) );
 	auto eProto = pBuf->Probe ( g_iMaxPacketSize, false );
@@ -187,7 +187,7 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 		pClientInfo->m_iConnID = iConnID;
 		pClientInfo->m_bVip = m_tListener.m_bVIP;
 
-		NetConnection2_t tConn = { iClientSock, saStorage.ss_family };
+		NetConnection_t tConn = { iClientSock, saStorage.ss_family };
 		SockWrapperPtr_c pSock ( new SockWrapper_c ( iClientSock, pClientNetLoop ) );
 
 		switch ( m_tListener.m_eProto )

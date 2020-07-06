@@ -615,20 +615,8 @@ InputBuffer_c::InputBuffer_c ( const VecTraits_T<BYTE> & dBuf )
 
 CSphString InputBuffer_c::GetString()
 {
-	CSphString sRes;
-
 	int iLen = GetInt();
-	if ( m_bError || iLen<0 || iLen>g_iMaxPacketSize || ( m_pCur + iLen>m_pBuf + m_iLen ))
-	{
-		SetError( true );
-		return sRes;
-	}
-
-	if ( iLen )
-		sRes.SetBinary(( char* ) m_pCur, iLen );
-
-	m_pCur += iLen;
-	return sRes;
+	return GetRawString ( iLen );
 }
 
 

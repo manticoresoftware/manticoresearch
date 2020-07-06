@@ -13,7 +13,15 @@
 #pragma once
 
 #include "networking_daemon.h"
-#include "netstate_api.h"
+
+enum class NetloopState_e : BYTE;
+struct ListenTaskInfo_t : public TaskInfo_t
+{
+	DECLARE_RENDER( ListenTaskInfo_t );
+	NetloopState_e m_eThdState;
+	DWORD	m_uWorks = 0;
+	DWORD	m_uTick = 0;
+};
 
 class NetActionAccept_c final : public ISphNetAction
 {
@@ -26,7 +34,3 @@ public:
 
 	void Process ( DWORD uGotEvents, CSphNetLoop * pLoop ) final;
 };
-
-// helper to be used from plain workers
-void FillNetState ( NetConnection_t * pState, int iClientSock, int iConnID, bool bVIP, bool bSSL,
-		const sockaddr_storage & saStorage );

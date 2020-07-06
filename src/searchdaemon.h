@@ -103,6 +103,7 @@
 #include "sphinxint.h"
 #include "sphinxrt.h"
 #include "threadutils.h"
+#include "task_info.h"
 using namespace Threads;
 
 #define SPHINXAPI_PORT            9312

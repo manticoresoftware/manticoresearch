@@ -13,6 +13,7 @@
 #include "networking_daemon.h"
 #include "loop_profiler.h"
 #include "net_action_accept.h"
+#include "netstate_api.h"
 #include "coroutine.h"
 
 #if USE_WINDOWS
@@ -92,6 +93,38 @@ struct ThdJobCleanup_t final : public ISphJob
 };
 #endif
 
+enum class NetloopState_e : BYTE
+{
+	UNKNOWN,
+	DESTRUCTING,
+	PROCESS_READY,
+	PROCESS_NEW,
+	REMOVE_OUTDATED,
+	POLL_IDLE,
+};
+
+const char* NetloopStateName ( NetloopState_e eState )
+{
+	switch (eState)
+	{
+		case NetloopState_e::UNKNOWN: return "-";
+		case NetloopState_e::DESTRUCTING: return "finishing";
+		case NetloopState_e::PROCESS_READY: return "process ready";
+		case NetloopState_e::PROCESS_NEW: return "process new";
+		case NetloopState_e::REMOVE_OUTDATED: return "remove outdated";
+		case NetloopState_e::POLL_IDLE: return "in polling";
+	}
+	return "unknown";
+}
+
+// display incoming string as client name in show threads
+DEFINE_RENDER( ListenTaskInfo_t )
+{
+	auto & tInfo = *(ListenTaskInfo_t *) pSrc;
+	dDst.m_sDescription << "tick: " << tInfo.m_uTick << " works: " << tInfo.m_uWorks << " state: " << NetloopStateName ( tInfo.m_eThdState );
+}
+
+
 /////////////////////////////////////////////////////////////////////////////
 /// CSphNetLoop - main poller. Used for serving accepts and all socket operations
 /////////////////////////////////////////////////////////////////////////////
@@ -101,7 +134,6 @@ class CSphNetLoop::Impl_c
 	// since it is impl, everything is private and accessible by friendship
 	friend class CSphNetLoop;
 
-	DWORD &							m_uTick;
 	CSphNetLoop *					m_pParent; // that is weak ref
 
 	CSphVector<ISphNetAction *> 	m_dWorkInternal;
@@ -113,9 +145,8 @@ class CSphNetLoop::Impl_c
 	CSphScopedPtr<NetPooller_c>		m_pPoll;
 	CSphAutoEvent					m_tWorkerFinished;
 
-	explicit Impl_c ( const VecTraits_T<Listener_t> & dListeners, DWORD& uTick, CSphNetLoop* pParent )
-		: m_uTick ( uTick )
-		, m_pParent ( pParent )
+	explicit Impl_c ( const VecTraits_T<Listener_t> & dListeners, CSphNetLoop* pParent )
+		: m_pParent ( pParent )
 		, m_pPoll { new NetPooller_c ( 1000 )}
 	{
 		CSphScopedPtr<CSphWakeupEvent> pWakeup ( new CSphWakeupEvent );
@@ -136,6 +167,17 @@ class CSphNetLoop::Impl_c
 
 		m_dWorkExternal.Reserve ( 1000 );
 		m_dWorkInternal.Reserve ( 1000 );
+	}
+
+	inline ListenTaskInfo_t* pMyInfo()
+	{
+#ifndef NDEBUG
+		auto pRes = myinfo::ref<ListenTaskInfo_t>();
+		assert (pRes);
+		return pRes;
+#else
+		return myinfo::ref<ListenTaskInfo_t>();
+#endif
 	}
 
 	void TerminateSessions() REQUIRES ( NetPoollingThread )
@@ -198,29 +240,36 @@ class CSphNetLoop::Impl_c
 		m_tPrf.StartPoll ();
 		// need positive timeout for communicate threads back and shutdown
 		Threads::IdleTimer_t _;
+		pMyInfo ()->m_eThdState = NetloopState_e::POLL_IDLE;
 		m_pPoll->Wait ( iWaitMs );
 		m_tPrf.EndTask ();
 	}
 
 	void LoopNetPoll () REQUIRES ( NetPoollingThread )
 	{
+		auto _ = PublishTaskInfo ( new ListenTaskInfo_t );
+		pMyInfo ()->m_uWorks = m_dWorkInternal.GetLength();
 		int64_t tmLastWait = sphMicroTimer();
 		while ( !sphInterrupted() )
 		{
 			m_tPrf.Start();
 
 			Poll ( tmLastWait );
-			++m_uTick;
+			pMyInfo ()->m_eThdState = NetloopState_e::PROCESS_READY;
+			++pMyInfo ()->m_uTick;
 
 			// add actions planned by jobs
 			if ( m_bGotExternal )
 				PickNewActions ();
+			pMyInfo ()->m_uWorks = m_dWorkInternal.GetLength ();
 
 			// handle events and collect stats
 			m_tPrf.StartTick();
-			sphLogDebugv ( "got events=%d, tick=%u, interrupted=%d", m_pPoll->GetNumOfReady (), m_uTick, !!sphInterrupted () );
+			sphLogDebugv ( "got events=%d, tick=%u, interrupted=%d", m_pPoll->GetNumOfReady (), pMyInfo ()->m_uTick, !!sphInterrupted () );
 			auto iProcessed = ProcessReady();
 			m_tPrf.EndTask();
+
+			pMyInfo ()->m_eThdState = NetloopState_e::PROCESS_NEW;
 
 			// setup or refresh handlers
 			m_tPrf.StartNext();
@@ -244,6 +293,7 @@ class CSphNetLoop::Impl_c
 
 	int RemoveOutdated () REQUIRES ( NetPoollingThread )
 	{
+		pMyInfo ()->m_eThdState = NetloopState_e::REMOVE_OUTDATED;
 		int64_t tmNow = sphMicroTimer();
 		m_tPrf.StartRemove();
 		int iRemoved = 0;
@@ -305,7 +355,7 @@ class CSphNetLoop::Impl_c
 
 CSphNetLoop::CSphNetLoop ( const VecTraits_T<Listener_t> & dListeners )
 {
-	m_pImpl = new Impl_c ( dListeners, m_uTick, this );
+	m_pImpl = new Impl_c ( dListeners, this );
 }
 
 CSphNetLoop::~CSphNetLoop ()
@@ -481,6 +531,8 @@ int SockWrapper_c::Impl_c::SockPollNetloop ( int64_t tmTimeUntilUs, bool bWrite 
 // as usual sphPoll - returns 1 on success, 0 on timeout, -1 on error.
 int SockWrapper_c::Impl_c::SockPoll ( int64_t tmTimeUntilUs, bool bWrite )
 {
+	myinfo::ThdState ( ThdState_e::NET_IDLE );
+	auto _ = AtScopeExit([bWrite] { myinfo::ThdState ( bWrite ? ThdState_e::NET_WRITE : ThdState_e::NET_READ ); });
 	return m_pNetLoop ? SockPollNetloop ( tmTimeUntilUs, bWrite ) : SockPollClassic ( tmTimeUntilUs, bWrite );
 }
 

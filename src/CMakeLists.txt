@@ -20,7 +20,7 @@ set ( LIBSPHINX_SRCS sphinx.cpp sphinxexcerpt.cpp
 		searchdexpr.cpp snippetfunctor.cpp snippetindex.cpp snippetstream.cpp
 		snippetpassage.cpp threadutils.cpp sphinxversion.cpp indexcheck.cpp
 		datareader.cpp indexformat.cpp indexsettings.cpp fileutils.cpp coroutine.cpp
-		threads_detached.cpp hazard_pointer.cpp task_info.cpp )
+		threads_detached.cpp hazard_pointer.cpp task_info.cpp mini_timer.cpp )
 set ( INDEXER_SRCS indexer.cpp )
 set ( INDEXTOOL_SRCS indextool.cpp )
 set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp
@@ -48,7 +48,7 @@ set ( UDFEXAMPLE_SRC udfexample.c )
 # So if you add headers to the project and NOT see them in visual studio solution - just list them here!
 file ( GLOB HEADERS "sphinx*.h" lz4.h lz4hc.h http/http_parser.h secondaryindex.h searchnode.h killlist.h
 		attribute.h accumulator.h global_idf.h, optional.h, event.h coroutine.h threadutils.h hazard_pointer.h
-		task_info.h )
+		task_info.h mini_timer.h)
 file ( GLOB SEARCHD_H "searchd*.h" "task*.h"  net_action_accept.h netreceive_api.h netreceive_http.h
 		netreceive_ql.h netstate_api.h networking_daemon.h optional.h query_status.h compressed_mysql.h )
 

@@ -20,6 +20,7 @@
 #if USE_WINDOWS
 // Win-specific headers and calls
 #include <io.h>
+using sph_sa_family_t=ADDRESS_FAMILY;
 #else
 // UNIX-specific headers and calls
 #include <sys/wait.h>
@@ -27,38 +28,35 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 
+using sph_sa_family_t = sa_family_t;
 #endif
+
 int g_iThrottleAccept = 0;
 extern volatile bool g_bMaintenance;
 static auto & g_iTFO = sphGetTFO ();
 
-void FillNetState ( NetConnection_t * pState, int iClientSock, int iConnID, bool bVIP, bool bSSL,
-		const sockaddr_storage & saStorage )
+void FormatClientAddress ( char szClientName[SPH_ADDRPORT_SIZE], const sockaddr_storage & saStorage )
 {
-	pState->m_iClientSock = iClientSock;
-	pState->m_iConnID = iConnID;
-	pState->m_bVIP = bVIP;
-	pState->m_bSSL = bSSL;
-	pState->m_tSockType = saStorage.ss_family;
-
 	// format client address
-	pState->m_sClientName[0] = '\0';
+	szClientName[0] = '\0';
 	if ( saStorage.ss_family==AF_INET )
 	{
-		struct sockaddr_in * pSa = ((struct sockaddr_in *)&saStorage);
-		sphFormatIP ( pState->m_sClientName, SPH_ADDRESS_SIZE, pSa->sin_addr.s_addr );
+		struct sockaddr_in * pSa = ( (struct sockaddr_in *) &saStorage );
+		sphFormatIP ( szClientName, SPH_ADDRESS_SIZE, pSa->sin_addr.s_addr );
 
-		char * d = pState->m_sClientName;
+		char * d = szClientName;
 		while ( *d )
 			d++;
-		snprintf ( d, 7, ":%d", (int)ntohs ( pSa->sin_port ) ); //NOLINT
+		snprintf ( d, 7, ":%d", (int) ntohs ( pSa->sin_port ) ); //NOLINT
 	} else if ( saStorage.ss_family==AF_UNIX )
 	{
-		strncpy ( pState->m_sClientName, "(local)", SPH_ADDRESS_SIZE );
+		strncpy ( szClientName, "(local)", 8 );
 	}
 }
 
-void MultiServe ( SockWrapperPtr_c pSock, NetConnection_t * pConn )
+using NetConnection2_t = std::pair<int, sph_sa_family_t>;
+
+void MultiServe ( SockWrapperPtr_c pSock, NetConnection2_t tConn )
 {
 	auto pBuf = MakeAsyncNetBuffer ( std::move ( pSock ) );
 	auto eProto = pBuf->Probe ( g_iMaxPacketSize, false );
@@ -67,19 +65,19 @@ void MultiServe ( SockWrapperPtr_c pSock, NetConnection_t * pConn )
 	case Proto_e::SPHINX:
 #ifdef    TCP_NODELAY
 	// case of legacy 'crasy squirell' client, which talks using short packages.
-		if ( pBuf->HasBytes()==4 && pConn->m_tSockType==AF_INET )
+		if ( pBuf->HasBytes()==4 && tConn.second==AF_INET )
 		{
 			int iOn = 1;
-			if ( setsockopt ( pConn->m_iClientSock, IPPROTO_TCP, TCP_NODELAY, (char *) &iOn, sizeof ( iOn ) ) )
+			if ( setsockopt ( tConn.first, IPPROTO_TCP, TCP_NODELAY, (char *) &iOn, sizeof ( iOn ) ) )
 				sphWarning ( "setsockopt() from MultiServe failed: %s", sphSockError ());
 		}
 #endif
-		ApiServe ( std::move ( pBuf ), pConn );
+		ApiServe ( std::move ( pBuf ), nullptr );
 		break;
 	case Proto_e::HTTPS:
-		pConn->m_bSSL = true;
+		myinfo::SetSSL();
 	case Proto_e::HTTP:
-		HttpServe ( std::move ( pBuf ), pConn );
+		HttpServe ( std::move ( pBuf ), nullptr );
 		break;
 	default:
 		sphLogDebugv ( "Unkown proto" );
@@ -134,7 +132,7 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 			{
 				if ( iAccepted )
 					sphLogDebugv ( "%p accepted %d connections all, tick=%u",
-							this, iAccepted, pLoop->m_uTick );
+							this, iAccepted, myinfo::ref<ListenTaskInfo_t> ()->m_uTick );
 				return;
 			}
 
@@ -181,8 +179,15 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 			fnMakeScheduler = [] { sphLogDebugv ( "-~-~-~-~-~-~-~-~ MT sched created -~-~-~-~-~-~-~-~" ); return GlobalWorkPool (); };
 		}
 
-		NetConnection_t tConn;
-		FillNetState ( &tConn, iClientSock, iConnID, m_tListener.m_bVIP, false, saStorage );
+		char szClientName[SPH_ADDRPORT_SIZE];
+		FormatClientAddress ( szClientName, saStorage );
+
+		CSphScopedPtr<ClientTaskInfo_t> pClientInfo ( new ClientTaskInfo_t );
+		pClientInfo->m_sClientName = szClientName;
+		pClientInfo->m_iConnID = iConnID;
+		pClientInfo->m_bVip = m_tListener.m_bVIP;
+
+		NetConnection2_t tConn = { iClientSock, saStorage.ss_family };
 		SockWrapperPtr_c pSock ( new SockWrapper_c ( iClientSock, pClientNetLoop ) );
 
 		switch ( m_tListener.m_eProto )
@@ -191,14 +196,20 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 			case Proto_e::SPHINX:
 			case Proto_e::HTTP :
 			{
-				Threads::CoGo ( [pSock, tConn] () mutable
-					{ MultiServe ( std::move ( pSock ), &tConn ); }, fnMakeScheduler () );
+				Threads::CoGo ( [pSock = std::move ( pSock ), tConn, pInfo = pClientInfo.LeakPtr () ] () mutable
+					{
+						ScopedClientInfo_t _ { pInfo }; // make visible task info
+						MultiServe ( std::move ( pSock ), tConn );
+					}, fnMakeScheduler () );
 				break;
 			}
 			case Proto_e::MYSQL41:
 			{
-				Threads::CoGo ( [pSock, tConn] () mutable
-					{ SqlServe ( std::move ( pSock ), &tConn ); }, fnMakeScheduler() );
+				Threads::CoGo ( [pSock = std::move ( pSock ), pInfo = pClientInfo.LeakPtr () ] () mutable
+					{
+						ScopedClientInfo_t _ { pInfo }; // make visible task info
+						SqlServe ( std::move ( pSock ), nullptr );
+					}, fnMakeScheduler () );
 				break;
 			}
 			case Proto_e::REPLICATION:
@@ -208,7 +219,7 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 				break;
 		}
 		sphLogDebugv ( "%p accepted %s, sock=%d, tick=%u", this,
-				ProtoName(m_tListener.m_eProto), iClientSock, pLoop->m_uTick );
+				ProtoName(m_tListener.m_eProto), iClientSock, myinfo::ref<ListenTaskInfo_t> ()->m_uTick );
 	}
 }
 

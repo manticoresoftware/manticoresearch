@@ -72,9 +72,6 @@ protected:
 	~CSphNetLoop ();
 
 public:
-	DWORD							m_uTick = 0;
-
-public:
 	explicit CSphNetLoop ( const VecTraits_T<Listener_t> & dListeners );
 	void LoopNetPoll ();
 	void StopNetLoop ();

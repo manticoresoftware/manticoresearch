@@ -12007,7 +12007,7 @@ enum ThreadInfoFormat_e
 	THD_FORMAT_SPHINXQL
 };
 
-static const char * FormatInfo ( const ThdPublicInfo_t & tThd, ThreadInfoFormat_e eFmt, QuotationEscapedBuilder & tBuf )
+static const char * FormatInfo ( const PublicThreadDesc_t & tThd, ThreadInfoFormat_e eFmt, QuotationEscapedBuilder & tBuf )
 {
 	if ( tThd.m_pQuery && eFmt==THD_FORMAT_SPHINXQL && tThd.m_eProto!=Proto_e::MYSQL41 )
 	{
@@ -12015,7 +12015,7 @@ static const char * FormatInfo ( const ThdPublicInfo_t & tThd, ThreadInfoFormat_
 		if ( tThd.m_pQuery )
 		{
 			tBuf.Clear();
-			FormatSphinxql ( *tThd.m_pQuery, 0, tBuf );
+			FormatSphinxql ( *tThd.m_pQuery.Ptr(), 0, tBuf );
 			bGotQuery = true;
 		}
 
@@ -12024,55 +12024,83 @@ static const char * FormatInfo ( const ThdPublicInfo_t & tThd, ThreadInfoFormat_
 			return tBuf.cstr();
 	}
 
-	if ( tThd.m_sRequestDescription.IsEmpty () && tThd.m_sCommand )
+	if ( tThd.m_sDescription.IsEmpty () && tThd.m_sCommand )
 		return tThd.m_sCommand;
 	else
-		return tThd.m_sRequestDescription.cstr();
+		return tThd.m_sDescription.cstr();
 }
 
 void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	int64_t tmNow = sphMicroTimer();
 
-
-	tOut.HeadBegin ( 7 );
+	tOut.HeadBegin ( 14 );
 	tOut.HeadColumn ( "Tid" );
 	tOut.HeadColumn ( "Name" );
 	tOut.HeadColumn ( "Proto" );
 	tOut.HeadColumn ( "State" );
 	tOut.HeadColumn ( "Host" );
+	tOut.HeadColumn ( "ConnID" );
 	tOut.HeadColumn ( "Time" );
+	tOut.HeadColumn ( "Work time" );
+	tOut.HeadColumn ( "Work time CPU" );
+	tOut.HeadColumn ( "Thd efficency");
+	tOut.HeadColumn ( "Jobs done" );
+	tOut.HeadColumn ( "Last job take" );
+	tOut.HeadColumn ( "In idle" );
 	tOut.HeadColumn ( "Info" );
 	tOut.HeadEnd();
 
 	QuotationEscapedBuilder tBuf;
 	ThreadInfoFormat_e eFmt = THD_FORMAT_NATIVE;
+	bool bAll = false;
 	if ( tStmt.m_sThreadFormat=="sphinxql" )
 		eFmt = THD_FORMAT_SPHINXQL;
+	else if ( tStmt.m_sThreadFormat=="all" )
+		bAll = true;
 
-	auto dThreads = Threads::GetGlobalThreadInfos();
-	for ( const ThdPublicInfo_t& dThd : dThreads )
+//	sphLogDebug ( "^^ Show threads. Current info is %p", GetTaskInfo () );
+
+	CSphSwapVector<PublicThreadDesc_t> dFinal;
+	Threads::IterateActive([&dFinal] ( Threads::LowThreadDesc_t * pThread ){
+		if ( pThread )
+			dFinal.Add ( GatherPublicTaskInfo ( pThread ) );
+	});
+
+	for ( const auto & dThd : dFinal )
 	{
-		int iLen = dThd.m_sRequestDescription.Length ();
-		if ( tStmt.m_iThreadsCols>0 && iLen>tStmt.m_iThreadsCols )
+		if ( !bAll && dThd.m_eThdState==ThdState_e::UNKNOWN )
+			continue;
+		tOut.PutNumAsString ( dThd.m_iThreadID );
+		tOut.PutString ( dThd.m_sThreadName );
+		tOut.PutString ( dThd.m_sProto.cstr() );
+		tOut.PutString ( ThdStateName ( dThd.m_eThdState ) );
+		tOut.PutString ( dThd.m_sClientName ); // Host
+		tOut.PutNumAsString ( dThd.m_iConnID ); // ConnID
+		tOut.PutMicrosec ( tmNow-dThd.m_tmStart.get_value_or(tmNow) ); // time
+		tOut.PutTimeAsString ( dThd.m_tmTotalWorkedTimeUS ); // work time
+		tOut.PutTimeAsString ( dThd.m_tmTotalWorkedCPUTimeUS ); // work CPU time
+		tOut.PutPercentAsString ( dThd.m_tmTotalWorkedCPUTimeUS, dThd.m_tmTotalWorkedTimeUS ); // work CPU time %
+		tOut.PutNumAsString ( dThd.m_iTotalJobsDone ); // jobs done
+		if ( dThd.m_tmLastJobStartTimeUS<0 )
 		{
-			auto pBuf = const_cast<char*>(dThd.m_sRequestDescription.cstr ());
-			pBuf[tStmt.m_iThreadsCols] = '\0';
+			tOut.PutString ( "-" ); // last job take
+			tOut.PutString ( "-" ); // idle for
+		} else if ( dThd.m_tmLastJobDoneTimeUS<0 )
+		{
+			tOut.PutTimeAsString ( tmNow-dThd.m_tmLastJobStartTimeUS ); // last job take
+			tOut.PutString ( "No (working)" ); // idle for
+		} else
+		{
+			tOut.PutTimeAsString ( dThd.m_tmLastJobDoneTimeUS-dThd.m_tmLastJobStartTimeUS ); // last job take
+			tOut.PutTimestampAsString ( dThd.m_tmLastJobDoneTimeUS ); // idle for
 		}
 
-		tOut.PutNumAsString ( dThd.m_iTid );
-		tOut.PutString ( dThd.m_sThName );
-		tOut.PutString ( dThd.m_bSystem ? "-" : ProtoName ( dThd.m_eProto ) );
-		tOut.PutString ( dThd.m_bSystem ? "-" : ThdStateName ( dThd.m_eThdState ) );
-		tOut.PutString ( dThd.m_sClientName );
-		tOut.PutMicrosec ( tmNow - dThd.m_tmStart );
-		tOut.PutString ( FormatInfo ( dThd, eFmt, tBuf ) );
-
+		tOut.PutString ( FormatInfo ( dThd, eFmt, tBuf ) ); // Info m_pTaskInfo
 		tOut.Commit();
 	}
 
 	tOut.Eof();
-
 }
 
 void HandleMysqlFlushHostnames ( RowBuffer_i & tOut )

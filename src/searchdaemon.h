@@ -1258,6 +1258,16 @@ public:
 
 	virtual void PutFloatAsString ( float fVal, const char * sFormat=nullptr ) = 0;
 
+	void PutPercentAsString ( int64_t iVal, int64_t iBase )
+	{
+		StringBuilder_c sTime;
+		if ( iBase )
+			sTime.Sprintf ( "%0.2F%%", iVal*10000/iBase );
+		else
+			sTime << "100%";
+		PutString ( sTime.cstr () );
+	}
+
 	virtual void PutNumAsString ( int64_t iVal ) = 0;
 	virtual void PutNumAsString ( uint64_t uVal ) = 0;
 	virtual void PutNumAsString ( int iVal ) = 0;

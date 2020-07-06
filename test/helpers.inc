@@ -3640,7 +3640,7 @@ class SphinxConfig
             fwrite ( $fp, "\tlog			= $sd_log\n" );
 		fwrite ( $fp, "\tquery_log		= $sd_query_log\n" );
 		fwrite ( $fp, "\tnetwork_timeout= $sd_network_timeout\n" );
-		fwrite ( $fp, "\tmax_children	= $sd_max_children\n" );
+		fwrite ( $fp, "\tmax_connections	= $sd_max_children\n" );
 		fwrite ( $fp, "\tpid_file		= ".$this->_sd_pid_file."\n" );
 		fwrite ( $fp, "\tworkers		= $workers\n" );
 		fwrite ( $fp, "#\tbinlog_path		=\n" );

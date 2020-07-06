@@ -293,7 +293,7 @@ class CSphNetLoop::Impl_c
 	}
 
 	// mark externally destroyed action as removed - to avoid race call
-	void Unlink ( ISphNetAction * pElem, bool bWillClose )
+	void Unlink ( ISphNetAction * pElem )
 	{
 		m_pPoll->Unlink ( pElem );
 	}
@@ -329,10 +329,10 @@ void CSphNetLoop::AddAction ( ISphNetAction * pElem )
 	m_pImpl->AddAction ( pElem );
 }
 
-void CSphNetLoop::Unlink ( ISphNetAction * pElem, bool bWillClose )
+void CSphNetLoop::Unlink ( ISphNetAction * pElem )
 {
 	if ( m_pImpl && !sphInterrupted () ) // that check instead of assert added to fix #1418
-		m_pImpl->Unlink ( pElem, bWillClose );
+		m_pImpl->Unlink ( pElem );
 }
 
 void CSphNetLoop::RemoveIterEvent ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread )
@@ -355,12 +355,11 @@ class SockWrapper_c::Impl_c final : public ISphNetAction
 	friend class SockWrapper_c;
 	CSphNetLoop * m_pNetLoop;
 	Handler m_fnRestart = nullptr;
-	bool m_bKeep;		// whether to keep socket as is on destroy, or close it.
 
 	int64_t	m_iWriteTimeoutUS;
 	int64_t m_iReadTimeoutUS;
 
-	Impl_c ( int iSocket, bool bKeep, CSphNetLoop * pNetLoop );
+	Impl_c ( int iSocket, CSphNetLoop * pNetLoop );
 	~Impl_c () final;
 	int SockPoll ( int64_t tmTimeUntil, bool bWrite );
 	int64_t SockRecv ( char * pBuf, int64_t iLeftBytes );
@@ -380,10 +379,9 @@ public:
 	void Destroy () final;
 };
 
-SockWrapper_c::Impl_c::Impl_c ( int iSocket, bool bKeep, CSphNetLoop * pNetLoop )
+SockWrapper_c::Impl_c::Impl_c ( int iSocket, CSphNetLoop * pNetLoop )
 	: ISphNetAction ( iSocket )
 	, m_pNetLoop ( pNetLoop )
-	, m_bKeep ( bKeep )
 	, m_iWriteTimeoutUS ( g_iWriteTimeoutS * S2US )
 	, m_iReadTimeoutUS ( g_iReadTimeoutS * S2US )
 {}
@@ -391,8 +389,8 @@ SockWrapper_c::Impl_c::Impl_c ( int iSocket, bool bKeep, CSphNetLoop * pNetLoop 
 SockWrapper_c::Impl_c::~Impl_c ()
 {
 	if ( m_pNetLoop )
-		m_pNetLoop->Unlink (this, !m_bKeep);
-	if ( !m_bKeep && m_iSock>=0 )
+		m_pNetLoop->Unlink (this );
+	if ( m_iSock>=0 )
 	{
 		sphLogDebugv ( "closing sock=%d", m_iSock );
 		sphSockClose ( m_iSock );
@@ -447,7 +445,7 @@ void SockWrapper_c::Impl_c::Destroy ()
 {
 	m_iTimeoutIdx = -1;
 	if ( m_pNetLoop )
-		m_pNetLoop->Unlink ( this, true );
+		m_pNetLoop->Unlink ( this );
 	m_pNetLoop = nullptr;
 	m_uNetEvents = TIMEOUT;
 	sphSockSetErrno ( EINTR );
@@ -513,8 +511,8 @@ void SockWrapper_c::Impl_c::SetWTimeoutUS ( int64_t iTimeoutUS )
 /// SockWrapper_c frontend implementation
 /////////////////////////////////////////////////////////////////////////////
 
-SockWrapper_c::SockWrapper_c ( int iSocket, bool bKeep, CSphNetLoop * pNetLoop )
-		: m_pImpl ( new Impl_c ( iSocket, bKeep, pNetLoop ) )
+SockWrapper_c::SockWrapper_c ( int iSocket, CSphNetLoop * pNetLoop )
+		: m_pImpl ( new Impl_c ( iSocket, pNetLoop ) )
 {}
 
 SockWrapper_c::~SockWrapper_c ()

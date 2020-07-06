@@ -15,7 +15,6 @@
 extern int g_iClientTimeoutS; // from searchd.cpp
 extern volatile bool g_bMaintenance;
 extern int g_iThdQueueMax;
-extern CSphAtomic g_iPersistentInUse;
 static auto & g_bGotSighup = sphGetGotSighup ();    // we just received SIGHUP; need to log
 
 static char g_sMaxedOutMessage[] = "maxed out, dismissing client";
@@ -552,9 +551,6 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 		bPersist |= LoopClientSphinx ( eCommand, uVer, iReplySize, tThdesc, tIn, tOut, false );
 		tOut.Flush();
 	} while (bPersist);
-
-	if ( bPersist )
-		--g_iPersistentInUse;
 
 	sphLogDebugv ( "conn %s(%d): exiting", sClientIP, iCID );
 }

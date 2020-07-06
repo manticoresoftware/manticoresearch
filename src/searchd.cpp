@@ -235,8 +235,6 @@ static volatile bool						g_bReloadForced = false;	// true in case reload issued
 
 static CSphVector<SphThread_t>				g_dTickPoolThread;
 
-CSphAtomic									g_iPersistentInUse;
-
 
 /// command names
 static const char * g_dApiCommands[] =
@@ -9156,18 +9154,6 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 				sphLogDebugv ( "conn %s(%d): pconn is now %s", tThd.m_sClientName.cstr(), tThd.m_iConnID, bPersist ? "on" : "off" );
 				if ( !bManagePersist ) // thread pool handles all persist connections
 					break;
-
-				// FIXME!!! remove that mess
-				if ( bPersist )
-				{
-					bPersist = ( g_iMaxChildren && 1+g_iPersistentInUse<g_iMaxChildren );
-					if ( bPersist )
-						++g_iPersistentInUse;
-				} else
-				{
-					if ( g_iPersistentInUse>=1 )
-						--g_iPersistentInUse;
-				}
 			}
 			break;
 		case SEARCHD_COMMAND_STATUS:	HandleCommandStatus ( tOut, uCommandVer, tBuf ); break;

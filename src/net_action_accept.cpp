@@ -187,7 +187,7 @@ NetEvent_e NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetL
 
 		NetConnection_t tConn;
 		FillNetState ( &tConn, iClientSock, iConnID, m_tListener.m_bVIP, false, saStorage );
-		SockWrapperPtr_c pSock ( new SockWrapper_c ( iClientSock, false, pClientNetLoop ) );
+		SockWrapperPtr_c pSock ( new SockWrapper_c ( iClientSock, pClientNetLoop ) );
 
 		switch ( m_tListener.m_eProto )
 		{

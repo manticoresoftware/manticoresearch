@@ -82,7 +82,7 @@ public:
 	void LoopNetPoll ();
 
 	void AddAction ( ISphNetAction * pElem );
-	void Unlink ( ISphNetAction * pEvent, bool bWillClose );
+	void Unlink ( ISphNetAction * pEvent );
 	void RemoveIterEvent ( NetPollEvent_t * pEvent );
 };
 
@@ -93,7 +93,7 @@ class SockWrapper_c
 	Impl_c * m_pImpl = nullptr;
 
 public:
-	SockWrapper_c ( int iSocket, bool bKeep, CSphNetLoop* pNetLoop );
+	SockWrapper_c ( int iSocket, CSphNetLoop* pNetLoop );
 	~SockWrapper_c ();
 
 	int64_t SockRecv ( char * pData, int64_t iLen );
@@ -138,9 +138,9 @@ protected:
 	/// That is to be used in ReadFromBackend, if iHaveSpace param is not enough.
 	/// That is for backends with undesired side effects for returning 'to small' chunks.
 	/// Say, if you have 10K (for example, uncompressed), but backend implies a chunk which after
-	/// processing (decompression) will born 20K. In such case you can igrone @iHaveSpace of ReadfromBackend()
+	/// processing (decompression) will born 20K. In such case you can ignore @iHaveSpace of ReadfromBackend()
 	/// but fill necessary 20K buffer, pointed by BufferFor (20k).
-	/// ReadFromBackend on return will process results right way, nothing will be lost or ignored desite of @iHaveSpace
+	/// ReadFromBackend on return will process results right way, nothing will be lost or ignored despite of @iHaveSpace
 	inline BYTE * BufferFor ( int iSpace )
 	{
 		ReserveGap ( iSpace );

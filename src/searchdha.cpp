@@ -3847,6 +3847,7 @@ public:
 	// block execution while some works finished
 	void WaitChanges () final
 	{
+		CrashQueryKeeper_c _; // that will keep our crash query over context switch possible in WaitEvent()
 		m_tChanged.WaitEvent ();
 	}
 };

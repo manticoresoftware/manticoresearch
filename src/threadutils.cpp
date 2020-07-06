@@ -1500,25 +1500,43 @@ void GlobalSetTopQueryTLS ( CrashQuery_t * pQuery )
 	*g_ppTlsCrashQuery() = pQuery;
 }
 
+namespace {
 void GlobalCrashQuerySet ( const CrashQuery_t & tQuery )
 {
 	CrashQuery_t * pQuery = *g_ppTlsCrashQuery();
 	assert ( pQuery );
 	*pQuery = tQuery;
 }
+}
 
 static CrashQuery_t g_tUnhandled;
-CrashQuery_t GlobalCrashQueryGet ()
+
+CrashQuery_t & GlobalCrashQueryGetRef ()
 {
-	const CrashQuery_t * pQuery = *g_ppTlsCrashQuery ();
+	CrashQuery_t * pQuery = *g_ppTlsCrashQuery ();
 
 	// in case TLS not set \ found handler still should process crash
-	// FIXME!!! some service threads use raw threads instead ThreadCreate
-	if ( !pQuery )
-		return g_tUnhandled;
-	else
+	if ( pQuery )
 		return *pQuery;
+
+	sphWarning ("GlobalCrashQueryGetRef: thread-local info is not set! Use ad-hoc");
+	return g_tUnhandled;
 }
+
+CrashQueryKeeper_c::CrashQueryKeeper_c ()
+	: m_tReference ( GlobalCrashQueryGetRef() )
+{}
+
+CrashQueryKeeper_c::~CrashQueryKeeper_c ()
+{
+	RestoreCrashQuery();
+}
+
+void CrashQueryKeeper_c::RestoreCrashQuery () const
+{
+	GlobalCrashQuerySet ( m_tReference );
+}
+
 
 // create thread for query - it will have set CrashQuery to valid obj inside, alive during whole thread's live time.
 bool Threads::CreateQ ( SphThread_t * pThread, Handler fnRun, bool bDetached, const char * sName, int iNum )
@@ -1533,3 +1551,13 @@ bool Threads::CreateQ ( SphThread_t * pThread, Handler fnRun, bool bDetached, co
 	}, bDetached, sName, iNum );
 }
 
+// capture crash query and set it before running fnHandler.
+Threads::Handler Threads::WithCopiedCrashQuery ( Threads::Handler fnHandler )
+{
+	auto tParentCrashQuery = GlobalCrashQueryGetRef ();
+	return [tCrashQuery = std::move ( tParentCrashQuery ), fnHandler = std::move ( fnHandler )] {
+		// CrashQueryKeeper_c _; // restore previous crash query on exit. Seems, that is not necessary
+		GlobalCrashQuerySet ( tCrashQuery );
+		fnHandler ();
+	};
+}

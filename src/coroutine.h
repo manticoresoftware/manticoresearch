@@ -63,20 +63,29 @@ void CoYieldWith ( Handler handler );
 // move coroutine to another scheduler
 void CoMoveTo ( Scheduler_i * pScheduler );
 
-class CoThrottle_c
+class CoThrottler_c
 {
-	int64_t m_tmTimestamp;
-	int64_t m_tmPeriodUs;
-	bool MaybeThrottle();
+	static const int tmThrotleTimeQuantumMs = 100; // how long task may work before rescheduling (in milliseconds)
+
+	int64_t m_tmNextThrottleTimestamp;
+	int64_t m_tmThrottlePeriodUs;
+
+	bool MaybeThrottle ();
 
 public:
-	explicit CoThrottle_c ( int64_t tmPeriodUs );
+	explicit CoThrottler_c ( int64_t tmPeriodUs = tmThrotleTimeQuantumMs * 1000 );
+
+	// common throttle action - republish stored crash query to TLS on resume
+	void ThrottleAndKeepCrashQuery ();
+
+	// simple reschedule on timeout
+	inline void SimpleThrottle () { MaybeThrottle(); }
 
 	template<typename FN_AFTER_RESUME>
-	void Throttle( FN_AFTER_RESUME fnAction )
+	void ThrottleAndProceed ( FN_AFTER_RESUME fnProceeder )
 	{
 		if ( MaybeThrottle () )
-			fnAction ();
+			fnProceeder ();
 	}
 };
 

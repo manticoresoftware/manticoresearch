@@ -517,23 +517,34 @@ Threads::Scheduler_i * Threads::CoCurrentScheduler ()
 	return pWorker->CurrentScheduler ();
 }
 
-Threads::CoThrottle_c::CoThrottle_c ( int64_t tmPeriodUs )
-	: m_tmPeriodUs ( tmPeriodUs )
+
+Threads::CoThrottler_c::CoThrottler_c ( int64_t tmThrottlePeriodUs )
+	: m_tmThrottlePeriodUs ( tmThrottlePeriodUs )
 {
-	m_tmTimestamp = sphMicroTimer() +m_tmPeriodUs;
+	m_tmNextThrottleTimestamp = sphMicroTimer() + m_tmThrottlePeriodUs;
 }
 
-bool Threads::CoThrottle_c::MaybeThrottle()
+bool Threads::CoThrottler_c::MaybeThrottle ()
 {
 	auto tmNow = sphMicroTimer ();
-	if ( tmNow < m_tmTimestamp )
+	if ( tmNow < m_tmNextThrottleTimestamp )
 		return false;
 
-	m_tmTimestamp = tmNow +m_tmPeriodUs;
+	m_tmNextThrottleTimestamp = tmNow + m_tmThrottlePeriodUs;
 	CoWorker ()->Reschedule ();
 	return true;
 }
 
+void Threads::CoThrottler_c::ThrottleAndKeepCrashQuery ()
+{
+	auto tmNow = sphMicroTimer ();
+	if ( tmNow<m_tmNextThrottleTimestamp )
+		return;
+
+	m_tmNextThrottleTimestamp = tmNow+m_tmThrottlePeriodUs;
+	CrashQueryKeeper_c _;
+	CoWorker ()->Reschedule ();
+}
 
 inline void fnResume ( volatile void* pCtx )
 {

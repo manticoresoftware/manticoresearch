@@ -332,11 +332,8 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 	tThd.FinishInit ();
 
 	// set off query guard
-	CrashQuery_t tCrashQuery;
+	auto & tCrashQuery = GlobalCrashQueryGetRef();
 	tCrashQuery.m_bHttp = true;
-
-	// set off query guard on return
-	auto tRestoreCrash = AtScopeExit ( [] { GlobalCrashQuerySet ( CrashQuery_t () );});
 
 	int iCID = tConn.m_iConnID;
 	const char * sClientIP = tConn.m_sClientName;
@@ -377,7 +374,6 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 
 		tCrashQuery.m_pQuery = tPacket.first;
 		tCrashQuery.m_iSize = tPacket.second;
-		GlobalCrashQuerySet ( tCrashQuery );
 
 		CSphVector<BYTE> dResult;
 		if ( sphLoopClientHttp ( tPacket.first, tPacket.second, dResult, tThdesc ) )

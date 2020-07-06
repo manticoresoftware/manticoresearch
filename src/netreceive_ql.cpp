@@ -1101,13 +1101,8 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 	tThd.FinishInit();
 
 	// set off query guard
-	CrashQuery_t tCrashQuery;
-	tCrashQuery.m_bMySQL = true;
-	GlobalCrashQuerySet ( tCrashQuery );
+	GlobalCrashQueryGetRef ().m_bMySQL = true;
 	const bool bCanCompression = IsCompressionAvailable();
-
-	// set off query guard on return
-	auto tRestoreCrash = AtScopeExit ( [] { GlobalCrashQuerySet ( CrashQuery_t () ); } );
 
 	int iCID = tConn.m_iConnID;
 	const char * sClientIP = tConn.m_sClientName;

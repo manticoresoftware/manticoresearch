@@ -6042,10 +6042,8 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 
 	// store and manage tls stuff
 	FederateChunkCtx_t dCtxData { dSorters, pResult };
-	CrashQuery_t tCrashQuery = GlobalCrashQueryGet ();
 
 	int iNumOfCoros = Min ( FederateChunkCtx_t::GetNOfContextes (), iChunks-1 );
-	const int iTimeQuantumMS = 100;
 	std::atomic<int32_t> iCurChunk { iChunks-1 };
 
 	if ( !dCtxData.IsEnabled () )
@@ -6058,14 +6056,11 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 	auto dWaiter = DefferedRestarter();
 	auto fnCalc = [&] () mutable
 	{
-		GuardedCrashQuery_t tCrashQueryClean; // clean up TLS for thread in the pool
-		GlobalCrashQuerySet ( tCrashQuery );
-
 		// leaved here as example how WRONG is set pointer to a local variable into global space
 		// (spent a day for debugging a crash because of it)
 		// CrashQuerySetTop ( &tCrashQuery ); // set crash info container
 
-		Threads::CoThrottle_c tThrottle ( iTimeQuantumMS * 1000 );
+		Threads::CoThrottler_c tThrottle;
 
 		while ( true )
 		{
@@ -6134,7 +6129,7 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 				pThResult->m_sError = tChunkResult.m_sError;
 
 			// yield and reschedule every quant of time. It gives work to other tasks
-			tThrottle.Throttle ( [&tCrashQuery] { GlobalCrashQuerySet ( tCrashQuery ); } );
+			tThrottle.ThrottleAndKeepCrashQuery ();
 		}
 	};
 
@@ -6143,7 +6138,7 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 		pProfiler->Switch ( SPH_QSTATE_INIT );
 
 	for ( int i = 0; i<iNumOfCoros; ++i )
-		CoCo ( fnCalc, dWaiter );
+		CoCo ( Threads::WithCopiedCrashQuery ( fnCalc ), dWaiter );
 	fnCalc(); // last, or only task we performs right here.
 
 	// wait till all copies of dWaiter are destroyed (each coro has a copy, and we has copy also).

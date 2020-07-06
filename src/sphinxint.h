@@ -2438,37 +2438,36 @@ BYTE PrereadMapping ( const char * sIndexName, const char * sFor, bool bMlock, b
 // crash related code
 struct CrashQuery_t
 {
-	const BYTE *	m_pQuery = nullptr;	// last query
+//	ByteBlob_t 		m_dQuery;
+	const BYTE *	m_pQuery = nullptr;	// last query // fixme! byteblob?
 	int				m_iSize = 0;		// last query size
 	WORD			m_uCMD = 0;			// last command (header)
 	WORD			m_uVer = 0;			// last command's version (header)
-	bool			m_bMySQL = false;	// is query from MySQL or API
+	bool			m_bMySQL = false;	// is query from MySQL or API // fixme! unify into enum
 	bool			m_bHttp = false;	// is query from HTTP
-	const char *	m_pIndex = nullptr;
+//	ByteBlob_t		m_dIndex;
+	const char *	m_pIndex = nullptr;	// fixme! byteblob?
 	int				m_iIndexLen = 0;
 };
 
-// set thread-local crash local
-void GlobalCrashQuerySet ( const CrashQuery_t & tQuery );
+// get ref to crash info saved thread-locally (beware: it will became invalid after switching context!)
+// use manual get/set, or CrashQueryKeeper_c around context switching (like: throttle, coro event) to survive.
+CrashQuery_t & GlobalCrashQueryGetRef ();
 
-// get crash info saved thread-locally
-CrashQuery_t GlobalCrashQueryGet ();
-
-struct GuardedCrashQuery_t : public ISphNoncopyable
+// RAII keeps copy of TLS crash query (just define this guard to pass context switch)
+class CrashQueryKeeper_c : public ISphNoncopyable, public ISphNonmovable
 {
 	const CrashQuery_t m_tReference;
-	explicit GuardedCrashQuery_t ( const CrashQuery_t & tCrashQuery )
-		: m_tReference ( tCrashQuery )
-	{}
 
-	GuardedCrashQuery_t ()
-		: m_tReference ( GlobalCrashQueryGet() )
-	{}
+public:
+	// will store currently active crash query from current TLS
+	CrashQueryKeeper_c ();
 
-	~GuardedCrashQuery_t()
-	{
-		GlobalCrashQuerySet ( m_tReference );
-	}
+	// will restore saved crash query to current TLS
+	~CrashQueryKeeper_c ();
+
+	// will restore saved crash query to current TLS
+	void RestoreCrashQuery () const;
 };
 
 

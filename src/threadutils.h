@@ -210,6 +210,9 @@ bool Create ( SphThread_t * pThread, Handler fnRun, bool bDetached = false, cons
 /// create thread and run thread func having global CrashQuery_t initialized
 bool CreateQ ( SphThread_t * pThread, Handler fnRun, bool bDetached = false, const char * sName = nullptr, int iNum=-1 );
 
+/// place copy of current crash query into fnHandler context
+Handler WithCopiedCrashQuery ( Handler fnHandler );
+
 } // namespace Threads
 
 extern ThreadRole MainThread;

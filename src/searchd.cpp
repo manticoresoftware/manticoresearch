@@ -965,7 +965,7 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	sphWrite ( g_iLogFile, g_sCrashInfo, g_iCrashInfoLen );
 
 	// log query
-	CrashQuery_t tQuery = GlobalCrashQueryGet ();
+	auto& tQuery = GlobalCrashQueryGetRef ();
 
 	bool bValidQuery = ( tQuery.m_pQuery && tQuery.m_iSize>0 );
 #if !USE_WINDOWS
@@ -5525,7 +5525,6 @@ void SearchHandler_c::RunLocalSearches()
 	}
 
 	/// todo! remove this, remove local searches parallel, keep only coro version.
-	GuardedCrashQuery_t tRefCrashQuery ( GlobalCrashQueryGet () ); //mt
 
 	if ( m_dQueries[0].m_bAgent )
 		m_dExtraSchemas.Reset ( m_iEnd-m_iStart+1 );
@@ -5538,10 +5537,9 @@ void SearchHandler_c::RunLocalSearches()
 		int iOrderTag = dLocal.m_iOrderTag; // mt
 		int iIndexWeight = dLocal.m_iWeight;
 
-		CrashQuery_t tCrashQuery = tRefCrashQuery.m_tReference; //mt
+		CrashQuery_t& tCrashQuery = GlobalCrashQueryGetRef(); //mt
 		tCrashQuery.m_pIndex = dLocal.m_sName.cstr(); // mt
 		tCrashQuery.m_iIndexLen = dLocal.m_sName.Length(); // mt
-		GlobalCrashQuerySet ( tCrashQuery ); // mt
 
 		// this part is like RunLocalSearchMT
 		const auto * pServed = m_dLocked.Get ( sLocal );
@@ -5773,10 +5771,8 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 	// store and manage tls stuff
 	using LocalFederateCtx_t = FederateCtx_T<LocalSearchRef_t, LocalSearchClone_t>;
 	LocalFederateCtx_t dCtxData { m_tHook, m_dExtraSchemas };
-	CrashQuery_t tCrashQuery = GlobalCrashQueryGet (); // transfer query info for crash logger to new thread
 
 	int iNumOfCoros = Min ( LocalFederateCtx_t::GetNOfContextes (), iNumLocals-1 );
-	const int iTimeQuantumMS = 100;
 	std::atomic<int32_t> iCurIdx { 0 };
 
 	if ( !dCtxData.IsEnabled () )
@@ -5785,11 +5781,7 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 	auto dWaiter = DefferedRestarter ();
 	auto fnCalc = [&] () mutable
 	{
-		GuardedCrashQuery_t tCrashQueryClean; // clean up TLS for thread in the pool
-		GlobalCrashQuerySet ( tCrashQuery );
-
-		Threads::CoThrottle_c tThrottle ( iTimeQuantumMS * 1000 );
-
+		Threads::CoThrottler_c tThrottle;
 		while ( true )
 		{
 			auto iJob = iCurIdx.fetch_add ( 1, std::memory_order_relaxed );
@@ -5801,7 +5793,6 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 			sphLogDebugv ("Tick coro search");
 			int64_t iCpuTime = -sphCpuTimer ();
 
-			GuardedCrashQuery_t tGuardedCrash ( tCrashQuery );
 			ThreadLocal_t tThd ( m_tThd );
 			// FIXME!!! handle different proto
 			tThd.m_tDesc.SetThreadInfo ( R"(api-search query="%s" comment="%s" index="%s")",
@@ -5811,9 +5802,9 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 			tThd.m_tDesc.m_tmStart = sphMicroTimer ();
 
 			const CSphString & sIndex = GetLocalIndexName ( iIdx );
+			auto& tCrashQuery = GlobalCrashQueryGetRef();
 			tCrashQuery.m_pIndex = sIndex.cstr ();
 			tCrashQuery.m_iIndexLen = sIndex.Length ();
-			GlobalCrashQuerySet ( tCrashQuery );
 
 			auto * pServed = m_dLocked.Get ( sIndex );
 			if ( !pServed )
@@ -5886,12 +5877,12 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 				dResults[i].m_iCpuTime = iCpuTime;
 
 			// yield and reschedule every quant of time. It gives work to other tasks
-			tThrottle.Throttle ( [&tCrashQuery] { GlobalCrashQuerySet ( tCrashQuery ); } );
+			tThrottle.ThrottleAndKeepCrashQuery (); // we set CrashQuery anyway at the start of the loop
 		}
 	};
 
 	for ( int i = 0; i<iNumOfCoros; ++i )
-		CoCo ( fnCalc, dWaiter );
+		CoCo ( Threads::WithCopiedCrashQuery ( fnCalc ), dWaiter );
 	fnCalc (); // last, or only task we performs right here.
 
 	// wait for them to complete
@@ -7556,29 +7547,14 @@ static inline bool MakeSingleLocalSnippet ( ExcerptQuery_t & tQuery, const Snipp
 struct SnippedBuilderCtxRef_t
 {
 	SnippetBuilder_c * m_pBuilder;
-	const CrashQuery_t & m_tCrash;
-
-	SnippedBuilderCtxRef_t ( SnippetBuilder_c * pBuilder, const CrashQuery_t & tCrash )
-		: m_pBuilder ( pBuilder ), m_tCrash ( tCrash )
-	{
-		SetCrashQuery();
-	}
-
-	void SetCrashQuery ()
-	{
-		GlobalCrashQuerySet ( m_tCrash );
-	}
-
-	inline static bool IsClonable ()
-	{
-		return true;
-	}
+	SnippedBuilderCtxRef_t ( SnippetBuilder_c * pBuilder ) : m_pBuilder ( pBuilder ) {}
+	inline static bool IsClonable () { return true; }
 };
 
 struct SnippedBuilderCtxClone_t : public SnippedBuilderCtxRef_t, ISphNoncopyable
 {
 	explicit SnippedBuilderCtxClone_t ( const SnippedBuilderCtxRef_t& dParent )
-		: SnippedBuilderCtxRef_t { dParent.m_pBuilder->MakeClone(), dParent.m_tCrash }
+		: SnippedBuilderCtxRef_t { dParent.m_pBuilder->MakeClone() }
 	{}
 
 	// dtr is only for clones!
@@ -7594,25 +7570,21 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 		return;
 	sphLogDebug ( "MakeSnippetsCoro invoked for %d tasks", dTasks.GetLength() );
 
-	CrashQuery_t tCrashQuery = GlobalCrashQueryGet (); // transfer query info for crash logger to new thread
-
 	CSphVector<int> dStubFields;
 	dStubFields.Add ( 0 );
 
 	using SnippetContextTls_t = FederateCtx_T<SnippedBuilderCtxRef_t, SnippedBuilderCtxClone_t>;
-	SnippetContextTls_t dSnippetContext { pBuilder, tCrashQuery };
+	SnippetContextTls_t dActualpBuilder { pBuilder };
 
 	int iNumOfCoros = Min ( SnippetContextTls_t::GetNOfContextes(), dTasks.GetLength ()-1 );
-	const int iTimeQuantum = 100;
 	std::atomic<int32_t> iCurQuery { 0 };
 
 	auto dWaiter = DefferedRestarter ();
 	auto fnWorker = [&] () mutable
 	{
 		sphLogDebug ( "MakeSnippetsCoro Coro started" );
-		auto tCtx = dSnippetContext.GetContext ();
-
-		Threads::CoThrottle_c tThrottle ( iTimeQuantum * 1000 );
+		auto tCtx = dActualpBuilder.GetContext ();
+		Threads::CoThrottler_c tThrottler;
 		while ( true )
 		{
 			auto iQuery = iCurQuery.fetch_add ( 1, std::memory_order_relaxed );
@@ -7624,7 +7596,7 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 			sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d finished", iQuery );
 
 			// yield and reschedule every quant of time. It gives work to other tasks
-			tThrottle.Throttle ( [&tCtx] { tCtx.SetCrashQuery(); } );
+			tThrottler.ThrottleAndKeepCrashQuery();
 		}
 	};
 	for ( int i = 0; i<iNumOfCoros; ++i )
@@ -9132,13 +9104,12 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 	ThdDesc_t & tThd, InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist )
 {
 	// set on query guard
-	CrashQuery_t tCrashQuery;
+	auto& tCrashQuery = GlobalCrashQueryGetRef();
 	tCrashQuery.m_pQuery = tBuf.GetBufferPtr();
 	tCrashQuery.m_iSize = iLength;
 	tCrashQuery.m_bMySQL = false;
 	tCrashQuery.m_uCMD = eCommand;
 	tCrashQuery.m_uVer = uCommandVer;
-	GlobalCrashQuerySet ( tCrashQuery );
 
 	// handle known commands
 	assert ( eCommand<SEARCHD_COMMAND_WRONG );
@@ -9177,8 +9148,6 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 		default:						assert ( 0 && "internal error: unhandled command" ); break;
 	}
 
-	// set off query guard
-	GlobalCrashQuerySet ( CrashQuery_t () );
 	return bPersist;
 }
 
@@ -15173,11 +15142,10 @@ public:
 	bool Execute ( const CSphString & sQuery, RowBuffer_i & tOut, ThdDesc_t & tThd )
 	{
 		// set on query guard
-		CrashQuery_t tCrashQuery;
+		auto& tCrashQuery = GlobalCrashQueryGetRef();
 		tCrashQuery.m_pQuery = (const BYTE *)sQuery.cstr();
 		tCrashQuery.m_iSize = sQuery.Length();
 		tCrashQuery.m_bMySQL = true;
-		GlobalCrashQuerySet ( tCrashQuery );
 
 		if (sQuery=="select DATABASE(), USER() limit 1")
 		{

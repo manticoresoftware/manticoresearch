@@ -1361,24 +1361,16 @@ struct PqMatchContextRef_t
 	const RtSegment_t * m_pSeg;
 	const SegmentReject_t & m_tReject;
 	const PercolateMatchResult_t & m_tRes;
-	const CrashQuery_t& m_tCrash;
 
 	PqMatchContextRef_t ( PercolateIndex_c * pIndex, const RtSegment_t * pSeg,
-			const SegmentReject_t & tReject, const PercolateMatchResult_t& tRes,
-			const CrashQuery_t& tCrash )
-		: m_pIndex ( pIndex ), m_pSeg ( pSeg ), m_tReject ( tReject ), m_tRes ( tRes ), m_tCrash ( tCrash )
+			const SegmentReject_t & tReject, const PercolateMatchResult_t& tRes )
+		: m_pIndex ( pIndex ), m_pSeg ( pSeg ), m_tReject ( tReject ), m_tRes ( tRes )
 	{
 		m_pMatchCtx = pIndex->CreateMatchContext( m_pSeg, m_tReject );
 		m_pMatchCtx->m_bGetDocs = tRes.m_bGetDocs;
 		m_pMatchCtx->m_bGetQuery = tRes.m_bGetQuery;
 		m_pMatchCtx->m_bGetFilters = tRes.m_bGetFilters;
 		m_pMatchCtx->m_bVerbose = tRes.m_bVerbose;
-		SetCrashQuery ();
-	}
-
-	void SetCrashQuery()
-	{
-		GlobalCrashQuerySet ( m_tCrash );
 	}
 
 	inline static bool IsClonable ()
@@ -1391,7 +1383,7 @@ struct PqMatchContextClone_t : public PqMatchContextRef_t, ISphNoncopyable
 {
 	explicit PqMatchContextClone_t ( const PqMatchContextRef_t& dParent )
 		: PqMatchContextRef_t ( dParent.m_pIndex, dParent.m_pSeg, dParent.m_tReject,
-			dParent.m_tRes, dParent.m_tCrash )
+			dParent.m_tRes )
 	{}
 };
 
@@ -1406,22 +1398,21 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 	tRes.m_iTotalQueries = dStored.GetLength ();
 
 	int iNumOfCoros = Min ( Threads::CoCurrentScheduler ()->WorkingThreads (), tRes.m_iTotalQueries );
-	const int iTimeQuantum = 100;
 	std::atomic<int32_t> iCurQuery {0};
 
 	using PqMatchContextTls_t = FederateCtx_T<PqMatchContextRef_t, PqMatchContextClone_t>;
-	PqMatchContextTls_t dMatchContexts { this, pSeg, tReject, tRes, GlobalCrashQueryGet () };
+	PqMatchContextTls_t dMatchContexts { this, pSeg, tReject, tRes };
 
 	if ( tRes.m_bVerbose )
 		tRes.m_tmSetup = sphMicroTimer ()+tRes.m_tmSetup;
 
 	auto dWaiter = DefferedRestarter ();
 	for ( int i = 0; i < iNumOfCoros; ++i )
-		CoCo ( [&dMatchContexts, &iCurQuery, &dStored, iTimeQuantum] () mutable
+		CoCo ( Threads::WithCopiedCrashQuery ( [&dMatchContexts, &iCurQuery, &dStored] () mutable
 		{
 			auto pCtx = dMatchContexts.GetContext ();
 			pCtx.m_pMatchCtx->m_dMsg.Clear ();
-			Threads::CoThrottle_c tThrottle ( iTimeQuantum * 1000 );
+			Threads::CoThrottler_c tThrottle;
 
 			while (true)
 			{
@@ -1432,9 +1423,9 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 				MatchingWork ( dStored[iQuery], *pCtx.m_pMatchCtx );
 
 				// yield and reschedule every quant of time. It gives work to other tasks
-				tThrottle.Throttle ( [&pCtx] { pCtx.SetCrashQuery (); } );
+				tThrottle.ThrottleAndKeepCrashQuery ();
 			}
-		}, dWaiter);
+		}), dWaiter);
 
 	WaitForDeffered ( std::move ( dWaiter ) );
 

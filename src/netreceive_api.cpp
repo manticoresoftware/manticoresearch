@@ -401,12 +401,6 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 
 	tThd.FinishInit ();
 
-	// set off query guard
-	CrashQuery_t tCrashQuery;
-
-	// set off query guard on return
-	auto tRestoreCrash = AtScopeExit ( [] { GlobalCrashQuerySet ( CrashQuery_t () ); } );
-
 	int iCID = tConn.m_iConnID;
 	const char * sClientIP = tConn.m_sClientName;
 
@@ -524,12 +518,12 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 			break;
 		}
 
+		auto& tCrashQuery = GlobalCrashQueryGetRef();
 		tCrashQuery.m_pQuery = tIn.GetBufferPtr ();
 		tCrashQuery.m_iSize = iReplySize;
 		tCrashQuery.m_bMySQL = false;
 		tCrashQuery.m_uCMD = eCommand;
 		tCrashQuery.m_uVer = uVer;
-		GlobalCrashQuerySet ( tCrashQuery );
 
 		// special process for 'ping' as immediate answer
 		if ( eCommand ==SEARCHD_COMMAND_PING )

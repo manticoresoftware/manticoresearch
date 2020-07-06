@@ -1308,6 +1308,69 @@ TEST ( bench, DISABLED_custom_tolower )
 	std::cout << uLoops << " of prepared tolower took " << iTimeSpan << " uSec\n";
 
 }
+
+// function placed in searchd.cpp, near line 2700. Here is direct copy-paste for testing only.
+namespace {
+CSphString RemoveBackQuotes ( const char * pSrc )
+{
+	CSphString sResult;
+	if ( !pSrc )
+		return sResult;
+
+	size_t iLen = strlen ( pSrc );
+	if ( !iLen )
+		return sResult;
+
+	auto szResult = new char[iLen+1];
+
+	auto * sMax = pSrc+iLen;
+	auto d = szResult;
+	while ( pSrc<sMax )
+	{
+		auto sQuote = (const char *) memchr ( pSrc, '`', sMax-pSrc );
+		if ( !sQuote )
+			sQuote = sMax;
+		auto iChunk = sQuote-pSrc;
+		memmove ( d, pSrc, iChunk );
+		d += iChunk;
+		pSrc += iChunk+1; // +1 to skip the quote
+	}
+	*d = '\0';
+	if ( !*szResult ) // never return allocated, but empty str. Prefer to return nullptr instead.
+		SafeDeleteArray( szResult );
+	sResult.Adopt ( &szResult );
+	return sResult;
+}
+}
+
+TEST (b, backquote)
+{
+	ASSERT_STREQ( "", RemoveBackQuotes ( nullptr ).scstr () );
+	char c = '\0';
+	ASSERT_STREQ( "", RemoveBackQuotes ( &c ).scstr () );
+	ASSERT_STREQ( "", RemoveBackQuotes ( "" ).scstr () );
+	ASSERT_STREQ( "", RemoveBackQuotes ( "`" ).scstr () );
+	ASSERT_STREQ( "", RemoveBackQuotes ( "``" ).scstr () );
+	ASSERT_STREQ( "", RemoveBackQuotes ( "```" ).scstr () );
+
+	ASSERT_STREQ( "a", RemoveBackQuotes ( "a" ).scstr () );
+	ASSERT_STREQ( "a", RemoveBackQuotes ( "a`" ).scstr () );
+	ASSERT_STREQ( "a", RemoveBackQuotes ( "a``" ).scstr () );
+	ASSERT_STREQ( "a", RemoveBackQuotes ( "a```" ).scstr () );
+
+	ASSERT_STREQ( "aa", RemoveBackQuotes ( "a`a" ).scstr () );
+	ASSERT_STREQ( "aa", RemoveBackQuotes ( "a``a" ).scstr () );
+	ASSERT_STREQ( "aa", RemoveBackQuotes ( "a```a" ).scstr () );
+
+	ASSERT_STREQ( "a", RemoveBackQuotes ( "`a" ).scstr () );
+	ASSERT_STREQ( "a", RemoveBackQuotes ( "``a" ).scstr () );
+	ASSERT_STREQ( "a", RemoveBackQuotes ( "```a" ).scstr () );
+
+	ASSERT_STREQ( "a", RemoveBackQuotes ( "``a`" ).scstr () );
+	ASSERT_STREQ( "a", RemoveBackQuotes ( "```a``" ).scstr () );
+}
+
+
 TEST ( bench, DISABLED_format_cjson_vs_stringbuilder )
 {
 	auto uLoops = 100000;

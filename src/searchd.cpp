@@ -2723,38 +2723,38 @@ void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 #endif
 }
 
-class UnBackquote_fn : public ISphNoncopyable
+namespace {
+CSphString RemoveBackQuotes ( const char * pSrc )
 {
-	CSphString m_sBuf;
-	const char * m_pDst;
+	CSphString sResult;
+	if ( !pSrc )
+		return sResult;
 
-public:
-	explicit UnBackquote_fn ( const char * pSrc )
+	size_t iLen = strlen ( pSrc );
+	if ( !iLen )
+		return sResult;
+
+	auto szResult = new char[iLen+1];
+
+	auto * sMax = pSrc+iLen;
+	auto d = szResult;
+	while ( pSrc<sMax )
 	{
-		m_pDst = pSrc;
-		size_t iLen = 0;
-		if ( pSrc && *pSrc )
-			iLen = strlen ( pSrc );
-
-		if ( iLen && memchr ( pSrc, '`', iLen ) )
-		{
-			m_sBuf = pSrc;
-			char * pDst = const_cast<char *>( m_sBuf.cstr() );
-			const char * pEnd = pSrc + iLen;
-
-			while ( pSrc<pEnd )
-			{
-				*pDst = *pSrc++;
-				if ( *pDst!='`' )
-					pDst++;
-			}
-			*pDst = '\0';
-			m_pDst = m_sBuf.cstr();
-		}
+		auto sQuote = (const char *) memchr ( pSrc, '`', sMax-pSrc );
+		if ( !sQuote )
+			sQuote = sMax;
+		auto iChunk = sQuote-pSrc;
+		memmove ( d, pSrc, iChunk );
+		d += iChunk;
+		pSrc += iChunk+1; // +1 to skip the quote
 	}
-
-	const char * cstr() { return m_pDst; }
-};
+	*d = '\0';
+	if ( !*szResult ) // never return allocated, but empty str. Prefer to return nullptr instead.
+		SafeDeleteArray( szResult );
+	sResult.Adopt ( &szResult );
+	return sResult;
+}
+}
 
 static void FormatOrderBy ( StringBuilder_c * pBuf, const char * sPrefix, ESphSortOrder eSort, const CSphString & sSort )
 {
@@ -2766,8 +2766,8 @@ static void FormatOrderBy ( StringBuilder_c * pBuf, const char * sPrefix, ESphSo
 	if ( sSort!="@relevance" )
 			sSubst = sSort.cstr();
 
-	UnBackquote_fn tUnquoted ( sSubst );
-	sSubst = tUnquoted.cstr();
+	auto sUnquoted = RemoveBackQuotes ( sSubst );
+	sSubst = sUnquoted.cstr();
 
 	*pBuf << " " << sPrefix << " ";
 	switch ( eSort )
@@ -3022,8 +3022,10 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 	if ( q.m_bHasOuter )
 		tBuf += "SELECT * FROM (";
 
-	UnBackquote_fn tUnquoted ( q.m_sSelect.IsEmpty() ? "*" : q.m_sSelect.cstr() );
-	tBuf.Appendf ( "SELECT %s FROM %s", tUnquoted.cstr(), q.m_sIndexes.cstr() );
+	if ( q.m_sSelect.IsEmpty() )
+		tBuf.Appendf ( "SELECT * FROM %s", q.m_sIndexes.cstr () );
+	else
+		tBuf.Appendf ( "SELECT %s FROM %s", RemoveBackQuotes ( q.m_sSelect.cstr () ).cstr (), q.m_sIndexes.cstr () );
 
 	// WHERE clause
 	// (m_sRawQuery is empty when using MySQL handler)

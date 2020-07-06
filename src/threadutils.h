@@ -21,7 +21,7 @@
 
 struct CSphQuery;
 
-enum class ThdState_e
+enum class ThdState_e // fixme! Rename to TaskState_e
 {
 	UNKNOWN,
 	HANDSHAKE,
@@ -114,7 +114,7 @@ struct Scheduler_i
 {
 	virtual ~Scheduler_i() {};
 	virtual void Schedule ( Handler handler, bool bVip ) = 0;
-	virtual void ScheduleContinuation ( Handler handler )
+	virtual void ScheduleContinuation ( Handler handler ) // if task already started
 	{
 		Schedule ( std::move ( handler ), false );
 	}

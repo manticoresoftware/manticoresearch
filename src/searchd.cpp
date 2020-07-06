@@ -7072,7 +7072,7 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 		if ( !ParseSearchQuery ( tReq, tOut, dQuery, uVer, uMasterVer ) )
 			return;
 
-	if ( tHandler.m_dQueries.GetLength() )
+	if ( !tHandler.m_dQueries.IsEmpty() )
 	{
 		QueryType_e eQueryType = tHandler.m_dQueries[0].m_eQueryType;
 

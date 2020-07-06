@@ -1484,6 +1484,7 @@ static ISphFilter * CreateFilterNode ( CreateFilterContext_t & tCtx, int iNode, 
 				return nullptr;
 			}
 
+			// NON-obvious, legacy! Liveness of value in tCtx.m_pFilters depends from tCtx.m_dUserVals here.
 			tCtx.m_dUserVals.Add ( pUservar );
 			tUservar = *pFilterSettings;
 			tUservar.m_eType = SPH_FILTER_VALUES;
@@ -1491,6 +1492,7 @@ static ISphFilter * CreateFilterNode ( CreateFilterContext_t & tCtx, int iNode, 
 			pFilterSettings = &tUservar;
 		}
 
+		// fixme! What's the mess? It is exactly 'return sphCreateFilter(...)', isn't it?
 		ISphFilter * pFilter = sphCreateFilter ( *pFilterSettings, tCtx, sError, sWarning );
 		if ( !pFilter )
 			return nullptr;

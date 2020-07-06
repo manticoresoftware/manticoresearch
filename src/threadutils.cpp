@@ -802,7 +802,7 @@ class AloneThread_c final : public Scheduler_i
 	static int m_iRunningAlones;
 
 	template<typename F>
-	void Post ( F && f, bool bVip=false )
+	void Post ( F && f, bool bVip=false ) // post to primary (vip) or secondary queue
 	{
 		LOG ( DETAIL, TP ) << "Post " << bVip;
 		if ( bVip )

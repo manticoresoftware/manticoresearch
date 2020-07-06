@@ -1040,7 +1040,7 @@ struct AggrResult_t final: CSphQueryResult
 };
 
 
-class ISphSearchHandler
+class ISphSearchHandler // fixme! refactor to use pimpl instead (no multi inheritance, used only to hide stuff...)
 {
 public:
 									ISphSearchHandler () {}

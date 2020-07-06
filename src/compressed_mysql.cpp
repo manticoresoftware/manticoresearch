@@ -17,7 +17,7 @@
 bool IsCompressionAvailable () { return true; }
 
 // payloads below this threshold will be send as 'uncompressed' packets
-static const DWORD MIN_COMPRESS_LENGTH = 50;
+static const int MIN_COMPRESS_LENGTH = 50;
 static const int LEVEL_COMPRESSION = Z_DEFAULT_COMPRESSION;
 
 class MysqlCompressedSocket_c final : public AsyncNetBuffer_c
@@ -106,8 +106,7 @@ bool MysqlCompressedSocket_c::SendPacket ( ByteBlob_t dBlob )
 	m_tOut.SendBytes ( &uSpace, 3 );
 	m_tOut.SendByte ( ++m_uPackedID );
 	SendLSBSmallDword ( dBlob.second );
-	auto iZRes = compress2 ( pOut+7, &uSpace, dBlob.first, dBlob.second, LEVEL_COMPRESSION );
-	assert ( iZRes==Z_OK );
+	compress2 ( pOut+7, &uSpace, dBlob.first, dBlob.second, LEVEL_COMPRESSION );
 	m_tOut.Rewind ( iPos );
 	SendLSBSmallDword ( uSpace );
 	m_tOut.CommitZeroCopy ( uSpace+4 );

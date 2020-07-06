@@ -2436,6 +2436,9 @@ public:
 public:
 						CSphFilterSettings () = default;
 
+						// fixme! Dependency from external values implies, that CsphFilterSettings is NOT standalone,
+						// and it's state is no way 'undependent'. It would be good to capture external values, at least
+						// with ref-counted technique, exactly here, to locate all usecases near each other.
 	void				SetExternalValues ( const SphAttr_t * pValues, int nValues );
 
 	SphAttr_t			GetValue ( int iIdx ) const	{ assert ( iIdx<GetNumValues() ); return m_pValues ? m_pValues[iIdx] : m_dValues[iIdx]; }

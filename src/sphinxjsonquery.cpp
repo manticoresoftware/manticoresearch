@@ -749,7 +749,7 @@ bool sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfi
 		return false;
 	}
 
-	tQuery.m_sRawQuery = szQuery;
+	tQuery.m_sRawQuery = szQuery; // fixme! query might be huge. Find a way to use zero-copy
 
 	JsonObj_c tIndex = tRoot.GetStrItem ( "index", sError );
 	if ( !tIndex )

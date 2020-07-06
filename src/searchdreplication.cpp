@@ -613,6 +613,12 @@ void ReceiverCtx_t::Cleanup()
 
 	for ( CSphFilterSettings & tItem : m_tQuery.m_dFilters )
 	{
+		// fixme! What a legacy WTF? you take val from tItem.GetValueArray, compare with tItem.m_dValues,
+		// then first invoke delete[] and then(!) call SetExternalValues. Why it is here? Why not put it as tItem member,
+		// and let it do 'cleanup' action, instead this out-of-encapsulation strange actions upon totally other object
+		// with implicitly unknown structure?
+		// If will surely lead to UB (most probably - crash), if you delete uservars placed to external values,
+		// since they're shared, not owned!
 		const SphAttr_t * pVals = tItem.GetValueArray();
 		if ( pVals && pVals!=tItem.m_dValues.Begin() )
 		{

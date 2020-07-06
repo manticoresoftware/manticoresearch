@@ -4448,7 +4448,7 @@ public:
 	{
 		if ( m_iRefCount.fetch_sub ( 1, std::memory_order_release )==1 )
 		{
-			Verify( m_iRefCount.load ( std::memory_order_acquire )==0 );
+			assert ( m_iRefCount.load ( std::memory_order_acquire )==0 );
 			delete this;
 		}
 	}

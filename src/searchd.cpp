@@ -2891,19 +2891,12 @@ static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
 
 static void AppendHint ( const char * szHint, const StrVec_t & dIndexes, StringBuilder_c & tBuf )
 {
-	if ( !dIndexes.GetLength() )
+	if ( dIndexes.IsEmpty() )
 		return;
-
-	tBuf.Appendf ( " %s INDEX (", szHint );
-	ARRAY_FOREACH ( i, dIndexes )
-	{
-		if ( i )
-			tBuf.Appendf ( "%s", dIndexes[i].cstr() );
-		else
-			tBuf.Appendf ( ",%s", dIndexes[i].cstr() );
-	}
-
-	tBuf += ")";
+	tBuf << " " << szHint;
+	ScopedComma_c sIndex ( tBuf, ",", " INDEX (", ")" );
+	for ( const auto & sIndex : dIndexes )
+		tBuf << sIndex;
 }
 
 

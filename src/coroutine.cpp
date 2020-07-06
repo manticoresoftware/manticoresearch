@@ -10,6 +10,7 @@
 
 #include "coroutine.h"
 #include "sphinxstd.h"
+#include "task_info.h"
 #include <atomic>
 
 #ifndef NDEBUG
@@ -189,6 +190,7 @@ class CoroWorker_c
 	CoroWorker_c * m_pPreviousWorker = nullptr;
 
 	// operative stuff to be as near as possible
+	void * m_pCurrentTaskInfo = nullptr;
 	int64_t m_tmCpuTimeBase = 0; // add sphCpuTime() to this value to get truly cpu time ticks
 
 	// RAII worker's keeper
@@ -198,6 +200,8 @@ class CoroWorker_c
 		{
 			pWorker->m_pPreviousWorker = CoroWorker_c::m_pTlsThis;
 			CoroWorker_c::m_pTlsThis = pWorker;
+			pWorker->m_pCurrentTaskInfo =
+					MyThd ().m_pTaskInfo.exchange ( pWorker->m_pCurrentTaskInfo, std::memory_order_relaxed );
 			pWorker->m_tmCpuTimeBase -= sphCpuTimer();
 		}
 
@@ -205,6 +209,7 @@ class CoroWorker_c
 		{
 			auto pWork = CoroWorker_c::m_pTlsThis;
 			pWork->m_tmCpuTimeBase += sphCpuTimer ();
+			pWork->m_pCurrentTaskInfo = MyThd ().m_pTaskInfo.exchange ( pWork->m_pCurrentTaskInfo, std::memory_order_relaxed );
 			CoroWorker_c::m_pTlsThis = pWork->m_pPreviousWorker;
 		}
 	};
@@ -294,7 +299,7 @@ public:
 	// May refer to parent's task info as read-only. For changes has dedicated mini info, also can create and use it's own local.
 	static void StartOther ( Handler fnHandler, Scheduler_i * pScheduler, size_t iStack, Waiter_t tWait )
 	{
-		( new CoroWorker_c ( std::move ( fnHandler ), pScheduler, std::move ( tWait ), iStack ) )->Schedule ( false );
+		( new CoroWorker_c ( myinfo::OwnMini ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ), iStack ) )->Schedule ( false );
 	}
 
 	// invoked from CallCoroutine -> ReplicationStart on daemon startup. Schedule into primary queue.
@@ -302,7 +307,7 @@ public:
 	// Parent thread at the moment blocked and may display info about it
 	static void StartCall ( Handler fnHandler, Scheduler_i* pScheduler, Waiter_t tWait )
 	{
-		( new CoroWorker_c ( std::move ( fnHandler ), pScheduler, std::move ( tWait ) ) )->Schedule ();
+		( new CoroWorker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ) ) )->Schedule ();
 	}
 
 	// from CoContinue -> all continuations (main purpose - continue with extended stack).
@@ -310,7 +315,7 @@ public:
 	// Parent thread is not blocked and may freely switch to another tasks
 	static void StartContinuation ( Handler fnHandler, Scheduler_i * pScheduler, size_t iStack, Waiter_t tWait )
 	{
-		( new CoroWorker_c ( std::move ( fnHandler ), pScheduler, std::move ( tWait ), iStack ) )->ScheduleContinuation ();
+		( new CoroWorker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ), iStack ) )->ScheduleContinuation ();
 	}
 
 	void Restart ()
@@ -507,17 +512,18 @@ void WaitForDeffered ( Waiter_t&& dWaiter )
 const void * sphMyStack ()
 {
 	auto pWorker = Threads::CoroWorker_c::CurrentWorker ();
-	if (!pWorker)
-		return Threads::TopOfStack();
-	return pWorker->GetTopOfStack ();
+	if ( pWorker )
+		return pWorker->GetTopOfStack ();
+	return Threads::TopOfStack();
+
 }
 
 int sphMyStackSize ()
 {
 	auto pWorker = Threads::CoroWorker_c::CurrentWorker ();
-	if ( !pWorker )
-		return g_iThreadStackSize;
-	return pWorker->GetStackSize ();
+	if ( pWorker )
+		return pWorker->GetStackSize ();
+	return g_iThreadStackSize;
 }
 
 int64_t sphTaskCpuTimer ()

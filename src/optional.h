@@ -97,6 +97,14 @@ public:
 		this->emplace_assign ( std::forward<Args> ( args )... );
 	}
 
+	// construct the object in place, but only if it is not assigned yet
+	template<class... Args>
+	void emplace_once ( Args && ... args )
+	{
+		if ( !this->m_bInitialized )
+			this->emplace_assign ( std::forward<Args> ( args )... );
+	}
+
 	// reset object
 	void reset () noexcept
 	{

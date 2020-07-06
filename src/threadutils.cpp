@@ -36,6 +36,7 @@ const char* ThdStateName ( ThdState_e eState )
 {
 	switch (eState)
 	{
+		case ThdState_e::UNKNOWN: return "-";
 		case ThdState_e::HANDSHAKE: return "handshake";
 		case ThdState_e::NET_READ: return "net_read";
 		case ThdState_e::NET_WRITE: return "net_write";
@@ -1476,6 +1477,7 @@ void RuntimeThreadContext_t::Prepare ( const void * pStack )
 	m_pMyThreadStack = pStack;
 	m_tDesc.m_iThreadID = GetOsThreadId ();
 	m_tDesc.m_tmStart = sphMicroTimer();
+	m_tDesc.m_pTaskInfo.store ( nullptr, std::memory_order_release );
 	m_tDesc.m_pHazards.store ( nullptr, std::memory_order_release );
 	m_tDesc.m_tThread = Threads::Self ();
 

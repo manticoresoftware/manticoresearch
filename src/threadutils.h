@@ -23,6 +23,7 @@ struct CSphQuery;
 
 enum class ThdState_e
 {
+	UNKNOWN,
 	HANDSHAKE,
 	NET_READ,
 	NET_WRITE,
@@ -62,6 +63,7 @@ struct LowThreadDesc_t
 	int64_t				m_tmTotalWorkedCPUTimeUS = 0;    ///< total time I've worked on useful tasks
 	int64_t				m_iTotalJobsDone = 0;		///< total jobs I've completed
 	CSphString			m_sThreadName;
+	std::atomic<void *>	m_pTaskInfo;	///< what kind of task I'm doing now (nullptr - idle, i.e. nothing)
 	std::atomic<void *> m_pHazards;		///< my hazard pointers
 };
 

@@ -208,7 +208,7 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 				Threads::CoGo ( [pSock = std::move ( pSock ), pInfo = pClientInfo.LeakPtr () ] () mutable
 					{
 						ScopedClientInfo_t _ { pInfo }; // make visible task info
-						SqlServe ( std::move ( pSock ), nullptr );
+						SqlServe ( std::move ( pSock ) );
 					}, fnMakeScheduler () );
 				break;
 			}

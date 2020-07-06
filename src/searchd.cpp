@@ -15211,6 +15211,7 @@ public:
 	bool Execute ( const CSphString & sQuery, RowBuffer_i & tOut )
 	{
 		// set on query guard
+		myinfo::ThdState ( ThdState_e::QUERY );
 		auto iQuerySize = sQuery.Length ();
 		auto& tCrashQuery = GlobalCrashQueryGetRef();
 		tCrashQuery.m_pQuery = (const BYTE *)sQuery.cstr();

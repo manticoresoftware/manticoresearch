@@ -1053,6 +1053,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, int i
 	}
 
 	// send the response packet
+	myinfo::ThdState ( ThdState_e::NET_WRITE );
 	if ( !tOut.Flush () )
 		return false;
 
@@ -1080,31 +1081,19 @@ void RunSingleSphinxqlCommand ( const CSphString & sCommand, ISphOutputBuffer & 
 }
 
 // main sphinxql server
-void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
+void SqlServe ( SockWrapperPtr_c pSock )
 {
-	NetConnection_t& tConn = *pConn;
+	myinfo::SetProto ( Proto_e::MYSQL41 );
 
 	// non-vip connections in maintainance should be already rejected on accept
-	assert  ( !g_bMaintenance || tConn.m_bVIP );
-
-	ThreadLocal_t tThd;
-	auto & tThdesc = tThd.m_tDesc;
-	tThdesc.m_iClientSock = tConn.m_iClientSock;
-	tThdesc.m_sClientName = tConn.m_sClientName;
-	tThdesc.m_iConnID = tConn.m_iConnID;
-	tThdesc.m_tmStart = tThdesc.m_tmConnect = sphMicroTimer ();
-	tThdesc.m_iTid = GetOsThreadId ();
-
-	tThd.FinishInit();
-
-	myinfo::SetProto ( Proto_e::MYSQL41 );
+	assert ( !g_bMaintenance || myinfo::IsVIP () );
 
 	// set off query guard
 	GlobalCrashQueryGetRef ().m_bMySQL = true;
 	const bool bCanCompression = IsCompressionAvailable();
 
-	int iCID = tConn.m_iConnID;
-	const char * sClientIP = tConn.m_sClientName;
+	int iCID = myinfo::ConnID();
+	const char * sClientIP = myinfo::szClientName();
 
 	auto pBuf = MakeAsyncNetBuffer ( std::move ( pSock ));
 
@@ -1115,8 +1104,10 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 	/// mysql is pro-active, we NEED to send handshake before client send us something.
 	/// So, no passive probing possible.
 	// send handshake first
+	myinfo::ThdState ( ThdState_e::HANDSHAKE );
 	sphLogDebugv ("Sending handshake...");
 	SendMysqlProtoHandshake ( tOut, CheckWeCanUseSSL (), bCanCompression, iCID );
+	myinfo::ThdState ( ThdState_e::NET_WRITE );
 	if ( !tOut.Flush () )
 	{
 		int iErrno = sphSockGetErrno ();
@@ -1150,7 +1141,6 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 		// get next packet
 		// we want interruptible calls here, so that shutdowns could be honored
 		sphLogDebugv ( "Receiving command... %d bytes in buf", tIn.HasBytes() );
-		tThd.ThdState ( ThdState_e::NET_IDLE );
 
 		// setup per-query profiling
 		auto pProfile = tSession.StartProfiling ( SPH_QSTATE_NET_READ ); // fixme! there is SPH_QSTATE_TOTAL there
@@ -1180,7 +1170,6 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 			iPacketLen += iChunkLen;
 
 			// receive package body
-			tThd.ThdState ( ThdState_e::NET_READ );
 			if ( !tIn.ReadFrom ( iPacketLen ))
 			{
 				sphWarning ( "failed to receive MySQL request body (client=%s(%d), exp=%d, error='%s')",
@@ -1195,16 +1184,16 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 		// handle auth packet
 		if ( !bAuthed )
 		{
-			tThd.ThdState ( ThdState_e::NET_WRITE );
+			myinfo::ThdState ( ThdState_e::HANDSHAKE );
 			auto tAnswer = tIn.PopTail ( iPacketLen );
 
 			// switch to ssl by demand.
 			// You need to set a bit in handshake (g_sMysqlHandshake) in order to suggest client such switching.
 			// Client set this desirable bit only if we say that 'we can' about it before.
 
-			if ( !tThdesc.m_bSsl && UserWantsSSL ( tAnswer ) ) // want SSL
+			if ( !myinfo::IsSSL() && UserWantsSSL(tAnswer) ) // want SSL
 			{
-				tThdesc.m_bSsl = MakeSecureLayer ( pBuf );
+				myinfo::SetSSL ( MakeSecureLayer ( pBuf ) );
 				bKeepAlive = !tOut.GetError ();
 				continue; // next packet will be 'login' again, but received over SSL
 			}
@@ -1222,6 +1211,7 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 			SendMysqlOkPacket ( tOut, uPacketID, tSession.IsAutoCommit());
 			bKeepAlive = tOut.Flush ();
 			bAuthed = true;
+
 			if ( bCanCompression && UserWantsCompression ( tAnswer ) )
 				MakeMysqlCompressedLayer ( pBuf );
 			continue;

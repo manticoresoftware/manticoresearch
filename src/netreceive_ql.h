@@ -13,7 +13,6 @@
 #pragma once
 
 #include "networking_daemon.h"
-#include "netstate_api.h"
 
 #if 0
 struct NetStateQL_t final : public NetStateAPI_t
@@ -41,4 +40,4 @@ public:
 };
 #endif
 
-void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t * pConn );
+void SqlServe ( SockWrapperPtr_c pSock );

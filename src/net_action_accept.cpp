@@ -92,17 +92,14 @@ class NetActionAccept_c::Impl_c
 	Listener_t		m_tListener;
 
 public:
-	explicit Impl_c ( const Listener_t & tListener )
-		: m_tListener ( tListener )
-	{}
-
+	explicit Impl_c ( const Listener_t & tListener ) : m_tListener ( tListener ) {}
 	void ProcessAccept ( DWORD uGotEvents, CSphNetLoop * pLoop );
 };
 
 DWORD NextConnectionID()
 {
-	static std::atomic<DWORD> g_iConnectionID { 0 };        ///< global conn-id
-	return ++g_iConnectionID;
+	static std::atomic<DWORD> g_iConnectionID { 1 };        ///< global conn-id
+	return g_iConnectionID.fetch_add ( 1, std::memory_order_relaxed );
 }
 
 void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * pLoop )

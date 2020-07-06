@@ -54,6 +54,11 @@ struct LowThreadDesc_t
 {
 	SphThread_t			m_tThread;		///< m.b. used to send signals to the thread
 	int					m_iThreadID;	///< OS thread id
+	int64_t				m_tmStart;		///< when did the current thread started? Initialized from thread itself
+	int64_t 			m_tmLastJobStartTimeUS = -1; ///< last time where I've started something useful
+	int64_t				m_tmLastJobDoneTimeUS = -1;	///< last time where I've done something useful
+	int64_t				m_tmTotalWorkedTimeUS = 0;	///< total time I've worked on useful tasks
+	int64_t				m_iTotalJobsDone = 0;		///< total jobs I've completed
 	CSphString			m_sThreadName;
 	std::atomic<void *> m_pHazards;		///< my hazard pointers
 };
@@ -74,6 +79,23 @@ void IterateActive ( ThreadFN fnHandler );
 void RegisterIterator ( ThreadIteratorFN fnIterator );
 
 int GetNumOfRunning ();
+
+// track the time
+void JobStarted();
+void JobFinished( bool bIsDone=true );
+
+// RAII time tracker
+struct JobTimer_t
+{
+	JobTimer_t () { JobStarted (); }
+	~JobTimer_t () { JobFinished (); }
+};
+
+struct IdleTimer_t
+{
+	IdleTimer_t () { JobFinished (false); }
+	~IdleTimer_t () { JobStarted (); }
+};
 
 struct ThdInfo_t
 {

@@ -197,6 +197,7 @@ class CSphNetLoop::Impl_c
 
 		m_tPrf.StartPoll ();
 		// need positive timeout for communicate threads back and shutdown
+		Threads::IdleTimer_t _;
 		m_pPoll->Wait ( iWaitMs );
 		m_tPrf.EndTask ();
 	}
@@ -456,6 +457,7 @@ int SockWrapper_c::Impl_c::SockPollClassic ( int64_t tmTimeUntilUs, bool bWrite 
 	if ( tmMicroLeft<0 )
 		tmMicroLeft = 0;
 
+	Threads::IdleTimer_t _;
 	int iRes = sphPoll ( m_iSock, tmMicroLeft, bWrite );
 	sphLogDebugv ( "sphPoll for alone returned %d in " INT64_FMT " Us", iRes, tmMicroLeft-tmTimeUntilUs+sphMicroTimer() );
 	return iRes;

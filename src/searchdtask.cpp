@@ -238,6 +238,7 @@ public:
 
 	void Action ()
 	{
+		Threads::JobTimer_t dTrack;
 		DebugT ( "Task_t %s Action (%p)", GetName (), m_pPayload );
 		++Prop ().m_iCurrentRunners;
 		auto itmStart = sphMicroTimer ();
@@ -280,15 +281,10 @@ ThreadRole TaskThread;
 class LazyJobs_c;
 struct TaskWorker_t: public ListNode_t
 {
-	int64_t m_iMyStartTimestamp = 0;	// time where I've started
-	int64_t m_iLastJobStartTime = -1;    // time where I've done something useful
-	int64_t m_iLastJobDoneTime = -1;	// time where I've done something useful
-	int64_t m_iTotalWorkedTime = -1;	// total time I've worked on useful tasks
-	int64_t m_iTotalJobsDone = 0;		// total jobs I've completed
+	Threads::LowThreadDesc_t& m_tDesc = Threads::MyThd (); // not owned, not need to me, need for outside iterations.
 	int64_t m_iTotalTicked = 0;			// total num of times I've waked up
 	int m_iMyTaskFlavour = 0;			// round-robin of tasks' flavours
 	int m_iMyThreadID = 0;				// my id in workers queue
-	int m_iMyOSThreadID = 0;            // my id in OS
 
 	// dig all the queues and extract the task we can work with
 	Task_t* ExtractJobToWork () REQUIRES ( MtJobThread )
@@ -334,21 +330,16 @@ struct TaskWorker_t: public ListNode_t
 	void PerformTask ( Task_t* pTask ) REQUIRES (MtJobThread)
 	{
 		assert ( pTask );
-		m_iLastJobDoneTime = -1;
-		m_iLastJobStartTime = sphMicroTimer ();
 		// we've extracted the task and going to work on it.
 		pTask->Action ();
-		m_iLastJobDoneTime = sphMicroTimer ();
-		++m_iTotalJobsDone;
-		m_iTotalWorkedTime += m_iLastJobDoneTime - m_iLastJobStartTime;
 		DebugL (M, "%d Done %d jobs, spend " INT64_FMT "us",
-				   m_iMyThreadID, ( int ) m_iTotalJobsDone, m_iTotalWorkedTime );
+				   m_iMyThreadID, ( int ) m_tDesc.m_iTotalJobsDone, m_tDesc.m_tmTotalWorkedTimeUS; );
 	}
 
 	// returns timeout after which we'll regarded idle too much
 	int TimeToDeadMS ( int64_t iIdlePeriod )
 	{
-		auto iLastJob = (m_iLastJobDoneTime>0) ? m_iLastJobDoneTime : sphMicroTimer();
+		auto iLastJob = (m_tDesc.m_tmLastJobDoneTimeUS>0) ? m_tDesc.m_tmLastJobDoneTimeUS : sphMicroTimer();
 		auto mSecs = (( iLastJob + iIdlePeriod ) - sphMicroTimer ()) / 1000;
 		return Max ( mSecs, 0 );
 	}
@@ -366,24 +357,27 @@ struct ScheduledJob_t: public EnqueuedTimeout_t
 	}
 };
 
+void IterateLazyThreads ( Threads::ThreadFN & fnHandler );
+
 LazyJobs_c& LazyTasker ();
 class LazyJobs_c: ISphNoncopyable
 {
 	// stuff to transfer (enqueue) tasks
 	VectorTask_c  m_dInternalTasks; // internal queue where we add our tasks without mutex
 	VectorTask_c* m_pEnqueuedTasks GUARDED_BY ( m_dActiveLock ) = nullptr; // ext. mt queue where we add tasks
-	CSphMutex m_dActiveLock;
+	RwLock_t m_dActiveLock;
 	TimeoutQueue_c m_dTimeouts;
 	int64_t m_iNextTimeoutUS = 0;
 	OneshotEvent_c m_tSignal;
 	TaskID m_iScheduler = -1;
+	Threads::LowThreadDesc_t* m_pSchedulerThread = nullptr;
 
 	// thread pool
 	List_t m_dWorkers GUARDED_BY ( m_dWorkersLock );
 	int m_iNextThreadId = 0;
-	CSphMutex m_dWorkersLock;
-	CSphAtomic m_iIdleWorkers;
-	int64_t m_iIdlePeriod = IDLE_TIME_TO_FINISH; // workers will be finished after idle of this time, in uS
+	RwLock_t m_dWorkersLock;
+	std::atomic<long> m_iIdleWorkers;
+	int64_t m_tmIdlePeriodUS = IDLE_TIME_TO_FINISH; // workers will be finished after idle of this time, in uS
 	CSphAutoEvent m_tJobSignal;
 	volatile bool m_bShutdown = false;
 	int m_iMaxWorkers = 32;
@@ -395,7 +389,7 @@ private:
 		// atomically get current vec; put zero instead.
 		VectorTask_c* pReadyQueue = nullptr;
 		{
-			ScopedMutex_t tLock ( m_dActiveLock );
+			ScWL_t tLock ( m_dActiveLock );
 			pReadyQueue = m_pEnqueuedTasks;
 			m_pEnqueuedTasks = nullptr;
 		}
@@ -449,7 +443,7 @@ private:
 				break;
 	}
 
-	/// abandon and release all tiemouted events.
+	/// abandon and release all timeouted events.
 	/// \return next active timeout (in uS), or -1 for infinite.
 	bool HasTimeoutActions () REQUIRES ( TaskThread )
 	{
@@ -540,7 +534,7 @@ private:
 			return;
 
 		pTask->AddRef();
-		ScopedMutex_t tLock ( m_dActiveLock );
+		ScWL_t tLock ( m_dActiveLock );
 		if ( !m_pEnqueuedTasks )
 			m_pEnqueuedTasks = new VectorTask_c;
 		m_pEnqueuedTasks->Add ( pTask );
@@ -571,16 +565,11 @@ private:
 
 	void WorkerFunc () REQUIRES ( !TaskThread )
 	{
+		m_pSchedulerThread = &Threads::MyThd ();
 		ScopedRole_c thLazy ( TaskThread );
 		DebugT ( "LazyJobs_c::WorkerFunc started" );
 		EventLoop ();
-	}
-
-	static void SchedulerFunc ( void* pScheduledJob ) REQUIRES ( TaskThread )
-	{
-		auto& tThis = LazyTasker ();
-		DebugT ( "LazyJobs_c::SchedulerFunc" );
-		tThis.ProcessSchedulingEnqueue (( ScheduledJob_t* ) pScheduledJob );
+		m_pSchedulerThread = nullptr;
 	}
 
 private:
@@ -596,15 +585,15 @@ private:
 		}
 		++tWorker.m_iTotalTicked;
 
-		bool bSignaled = m_tJobSignal.WaitEvent ( tWorker.TimeToDeadMS ( m_iIdlePeriod ));
+		bool bSignaled = m_tJobSignal.WaitEvent ( tWorker.TimeToDeadMS ( m_tmIdlePeriodUS ));
 		if ( !bSignaled ) // idle timeout happened. Fixme! m.b. better way to determine idles need.
 		{
 			DebugM ( "%d finishes because idle period exceeded", tWorker.m_iMyThreadID );
 			return false;
 		}
 
-		--m_iIdleWorkers;
-		auto dFreeIdle = AtScopeExit ( [this] { ++m_iIdleWorkers; } );
+		m_iIdleWorkers.fetch_sub ( 1, std::memory_order_relaxed );
+		auto dFreeIdle = AtScopeExit ( [this] { m_iIdleWorkers.fetch_add ( 1, std::memory_order_relaxed ); } );
 
 		while (true)
 		{
@@ -617,45 +606,43 @@ private:
 	}
 
 	/// main event loop run in separate thread.
-	void JobLoop ( TaskWorker_t* pWorker ) REQUIRES ( MtJobThread )
+	void JobLoop () REQUIRES ( MtJobThread )
 	{
-		pWorker->m_iMyOSThreadID = GetOsThreadId ();
-		pWorker->m_iMyStartTimestamp = sphMicroTimer ();
+		auto pWorker = new TaskWorker_t;
+		CSphScopedPtr<TaskWorker_t> pThreadWorkerContext { pWorker };
+
+		pWorker->m_iMyThreadID = ++m_iNextThreadId;
+		Threads::MyThd ().m_sThreadName.SetSprintf( "TaskW_%d", pWorker->m_iMyThreadID );
+		Threads::SetSysThreadName();
+
+		{
+			ScWL_t _ { m_dWorkersLock };
+			m_dWorkers.Add ( pWorker );
+		}
+
 
 		DebugM ( "JobLoop started for %d", pWorker->m_iMyThreadID );
 		while ( true )
 			if ( !JobTick ( *pWorker ) )
 				break;
 
-		RemoveAndDeleteWorker ( pWorker );
+		m_iIdleWorkers.fetch_sub ( 1, std::memory_order_relaxed );
+		ScWL_t _ { m_dWorkersLock };
+		m_dWorkers.Remove ( pWorker );
 	}
 
 	// adds a worker, until limit exceeded.
 	void AddWorker ()
 	{
-		ScopedMutex_t tWorkersLock ( m_dWorkersLock );
-		if ( m_dWorkers.GetLength ()>=m_iMaxWorkers )
-			return;
-
-		CSphScopedPtr<TaskWorker_t> pThreadWorkerContext { new TaskWorker_t };
-		pThreadWorkerContext->m_iMyThreadID = ++m_iNextThreadId;
-		StringBuilder_c thName;
-		thName.Sprintf ("TaskW_%d", pThreadWorkerContext->m_iMyThreadID);
-		SphThread_t tThd;
-		if ( Threads::Create ( &tThd, [pArg=pThreadWorkerContext.Ptr()] { TheadPoolWorker(pArg); }, true, thName.cstr() ))
 		{
-			m_dWorkers.Add ( pThreadWorkerContext.LeakPtr ());
-			++m_iIdleWorkers;
+			ScRL_t _ ( m_dWorkersLock );
+			if ( m_dWorkers.GetLength ()>=m_iMaxWorkers )
+				return;
 		}
-	}
 
-	void RemoveAndDeleteWorker ( TaskWorker_t* pWorker )
-	{
-		assert ( pWorker );
-		CSphScopedPtr<TaskWorker_t> pThreadWorkerContext { pWorker };
-		--m_iIdleWorkers;
-		ScopedMutex_t tWorkersLock ( m_dWorkersLock );
-		m_dWorkers.Remove ( pWorker );
+		SphThread_t tThd;
+		if ( Threads::Create ( &tThd, TheadPoolWorker, true ))
+			m_iIdleWorkers.fetch_add ( 1, std::memory_order_relaxed );
 	}
 
 	void FinishAllWorkers () NO_THREAD_SAFETY_ANALYSIS
@@ -667,11 +654,11 @@ private:
 		}
 	}
 
-	static void TheadPoolWorker ( TaskWorker_t* pArg ) REQUIRES (!MtJobThread)
+	static void TheadPoolWorker () REQUIRES (!MtJobThread)
 	{
 		DebugM ( "LazyJobs_c::TheadPoolWorker started" );
 		ScopedRole_c thMtThread ( MtJobThread );
-		LazyTasker ().JobLoop (( TaskWorker_t* ) pArg );
+		LazyTasker ().JobLoop ( );
 	}
 
 	static void RemoveAllJobs ()
@@ -726,7 +713,7 @@ private:
 			DebugX ( "AddNewMTJob %s(%p) success (%d in queue)", pJob->GetName (), pJob, iQueueLen );
 		}
 
-		if ( !m_iIdleWorkers && dProp.m_iCurrentRunners<pJob->Descr ().m_iMaxRunners )
+		if ( !m_iIdleWorkers.load(std::memory_order_relaxed) && dProp.m_iCurrentRunners<pJob->Descr ().m_iMaxRunners )
 			AddWorker ();
 		KickJobPool ();
 	}
@@ -741,6 +728,8 @@ private:
 public:
 	LazyJobs_c ()
 	{
+		Threads::RegisterIterator ( IterateLazyThreads );
+
 		SphThread_t tThd;
 		Threads::Create ( &tThd, [this] { WorkerFunc(); }, true, "TaskSched" );
 		m_iScheduler = TaskManager::RegisterGlobal ( "Scheduler",
@@ -825,19 +814,20 @@ public:
 	CSphVector<TaskManager::ThreadInfo_t> GetThreadsInfo ()
 	{
 		CSphVector<TaskManager::ThreadInfo_t> dRes;
-		ScopedMutex_t tWorkersLock ( m_dWorkersLock );
-		for ( const ListNode_t* pIt = m_dWorkers.Begin (); pIt!=m_dWorkers.End (); pIt = pIt->m_pNext )
+		ScRL_t _ ( m_dWorkersLock );
+		for ( const auto& tNode : m_dWorkers )
 		{
-			auto* pThd = ( TaskWorker_t* ) pIt;
+			auto* pThd = (TaskWorker_t *) &tNode;
+			auto& dThdDesc = pThd->m_tDesc;
 			auto& dInfo = dRes.Add ();
-			dInfo.m_iMyStartTimestamp = pThd->m_iMyStartTimestamp;
-			dInfo.m_iLastJobStartTime = pThd->m_iLastJobStartTime;
-			dInfo.m_iLastJobDoneTime = pThd->m_iLastJobDoneTime;
-			dInfo.m_iTotalWorkedTime = pThd->m_iTotalWorkedTime;
-			dInfo.m_iTotalJobsDone = pThd->m_iTotalJobsDone;
+			dInfo.m_iMyStartTimestamp = dThdDesc.m_tmStart;
+			dInfo.m_iLastJobStartTime = dThdDesc.m_tmLastJobStartTimeUS;
+			dInfo.m_iLastJobDoneTime = dThdDesc.m_tmLastJobDoneTimeUS;
+			dInfo.m_iTotalWorkedTime = dThdDesc.m_tmTotalWorkedTimeUS;
+			dInfo.m_iTotalJobsDone = dThdDesc.m_iTotalJobsDone;
 			dInfo.m_iTotalTicked = pThd->m_iTotalTicked;
 			dInfo.m_iMyThreadID = pThd->m_iMyThreadID;
-			dInfo.m_iMyOSThreadID = pThd->m_iMyOSThreadID;
+			dInfo.m_iMyOSThreadID = dThdDesc.m_iThreadID;
 
 		}
 		return dRes;
@@ -855,6 +845,18 @@ public:
 			});
 		return dRes;
 	}
+
+	void IterateThreads ( Threads::ThreadFN& fnHandler )
+	{
+		{
+			ScRL_t _ ( m_dWorkersLock );
+			for ( const auto & tNode : m_dWorkers )
+				fnHandler ( &( (TaskWorker_t *) &tNode )->m_tDesc );
+		}
+
+		ScRL_t _ { m_dActiveLock };
+		fnHandler ( m_pSchedulerThread );
+	}
 };
 
 //! Get static (singletone) instance of lazy poller
@@ -863,6 +865,11 @@ LazyJobs_c& LazyTasker ()
 {
 	static LazyJobs_c dEvents;
 	return dEvents;
+}
+
+void IterateLazyThreads ( Threads::ThreadFN & fnHandler )
+{
+	LazyTasker ().IterateThreads ( fnHandler );
 }
 
 TaskID TaskManager::RegisterGlobal( CSphString sName, fnThread_t fnThread, fnThread_t fnFree, int iThreads, int iJobs )

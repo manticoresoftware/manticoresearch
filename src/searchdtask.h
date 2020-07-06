@@ -13,9 +13,7 @@
 /// @file searchdtask.h
 /// Task manager
 
-#ifndef MANTICORE_SEARCHDTASK_H
-#define MANTICORE_SEARCHDTASK_H
-
+#pragma once
 #include "sphinxutils.h"
 
 /// member type for priority queue used for timeout task managing
@@ -140,7 +138,4 @@ namespace TaskManager {
 	CSphVector<TaskInfo_t> GetTaskInfo ();
 	CSphVector<ThreadInfo_t> GetThreadsInfo ();
 	CSphVector<ScheduleInfo_t> GetSchedInfo ();
-
 }
-
-#endif //MANTICORE_SEARCHDTASK_H

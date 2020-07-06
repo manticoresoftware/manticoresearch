@@ -460,6 +460,7 @@ public:
 		// Make the upcall if required.
 		if ( pOwner )
 		{
+			Threads::JobTimer_t dTrack;
 			dLocalHandler();
 
 			// barrier ensures that no operations till here would be reordered below.
@@ -1415,6 +1416,22 @@ void Threads::SetSysThreadName ()
 	RuntimeThreadContext ()->PropagateName ();
 }
 
+void Threads::JobStarted ()
+{
+	auto& tDesc = Threads::MyThd ();
+	tDesc.m_tmLastJobDoneTimeUS = -1;
+	tDesc.m_tmLastJobStartTimeUS = sphMicroTimer ();
+}
+
+void Threads::JobFinished ( bool bIsDone )
+{
+	auto & tDesc = Threads::MyThd ();
+	tDesc.m_tmLastJobDoneTimeUS = sphMicroTimer ();
+	if ( bIsDone )
+		++tDesc.m_iTotalJobsDone;
+	tDesc.m_tmTotalWorkedTimeUS += tDesc.m_tmLastJobDoneTimeUS-tDesc.m_tmLastJobStartTimeUS;
+}
+
 // Adds a function call (a new task for a wrapper) to a linked list
 // of thread contexts. They will be executed one by one right after
 // the main thread ends its execution. This is a way for a wrapper
@@ -1456,6 +1473,7 @@ void RuntimeThreadContext_t::Prepare ( const void * pStack )
 {
 	m_pMyThreadStack = pStack;
 	m_tDesc.m_iThreadID = GetOsThreadId ();
+	m_tDesc.m_tmStart = sphMicroTimer();
 	m_tDesc.m_pHazards.store ( nullptr, std::memory_order_release );
 	m_tDesc.m_tThread = Threads::Self ();
 

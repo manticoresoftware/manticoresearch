@@ -847,6 +847,19 @@ static int GetClusterMemLimit ( int iMemLimit, int iIndexes )
 	return iSize;
 }
 
+// display incoming string as client name in show threads
+struct ReplInfo_t : public TaskInfo_t
+{
+	DECLARE_RENDER( ReplInfo_t );
+	CSphString m_sIncoming;	// set once on create, so is th-safe
+};
+
+DEFINE_RENDER( ReplInfo_t )
+{
+	auto & tInfo = *(ReplInfo_t *) pSrc;
+	dDst.m_sClientName << "wsrep" << tInfo.m_sIncoming.cstr();
+}
+
 // create cluster from desc and become master node or join existed cluster
 bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 {
@@ -959,7 +972,15 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 
 	// let's start listening thread with proper provider set
 	auto pScheduler = GetAloneScheduler(-1, sMyName.cstr ());
-	Threads::CoGo ( [pRecvArgs] () mutable { ReplicationRecv_fn ( std::move ( pRecvArgs ) ); }, pScheduler );
+	Threads::CoGo ( [pRecvArgs,sIncoming] () mutable
+	{
+		// publish stuff in 'show threads'
+		auto pDisplayIncoming = new ReplInfo_t;
+		pDisplayIncoming->m_sIncoming = sIncoming;
+		ScopedInfo_T<ReplInfo_t> _ { pDisplayIncoming };
+
+		ReplicationRecv_fn ( std::move ( pRecvArgs ) );
+	}, pScheduler );
 	sphLogDebugRpl ( "replicator is created for cluster '%s'", tArgs.m_pCluster->m_sName.cstr() );
 	return true;
 }

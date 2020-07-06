@@ -966,80 +966,40 @@ BYTE AsyncNetInputBuffer_c::Terminate ( int iPos, BYTE uNewVal )
 	return uOld;
 }
 
-class AsyncSockInputBuffer_c final : public AsyncNetInputBuffer_c
+
+/////////////////////////////////////////////////////////////////////////////
+/// AsyncBufferedSocket_c - provides wrapper for sending and receiving
+/////////////////////////////////////////////////////////////////////////////
+class AsyncBufferedSocket_c final : public AsyncNetBuffer_c
 {
 	SockWrapperPtr_c m_pSocket;
 
 	int ReadFromBackend ( int iNeed, int iHaveSpace, bool bIntr ) final
 	{
 		assert ( iNeed<=iHaveSpace );
-		return SyncSockRead ( m_pSocket, AddN(0), iNeed, iHaveSpace, bIntr );
+		return SyncSockRead ( m_pSocket, AddN ( 0 ), iNeed, iHaveSpace, bIntr );
 	}
 
-public:
-	explicit AsyncSockInputBuffer_c ( SockWrapperPtr_c pSock )
-		: m_pSocket ( std::move ( pSock ) )
-	{}
-
-	void SetTimeoutUS ( int64_t iTimeoutUS ) final
-	{
-		m_pSocket->SetTimeoutUS ( iTimeoutUS );
-	}
-
-	int64_t GetTimeoutUS () const final
-	{
-		return m_pSocket->GetTimeoutUS ();
-	}
-};
-
-/////////////////////////////////////////////////////////////////////////////
-/// AsyncNetOutputBuffer_c
-/////////////////////////////////////////////////////////////////////////////
-
-/// Flush works via generic socket wrapper netloop
-class AsyncNetOutputBuffer_c final : public NetGenericOutputBuffer_c
-{
-	SockWrapperPtr_c m_pSocket;
-
-public:
-	explicit AsyncNetOutputBuffer_c ( SockWrapperPtr_c pSock )
-			: m_pSocket ( std::move ( pSock ) )
-	{}
-
-	/// Flush works via federeate netloop
 	void SendBuffer ( const VecTraits_T<BYTE> & dData ) final
 	{
 		assert ( m_pSocket );
-		if ( dData.IsEmpty() )
+		if ( dData.IsEmpty () )
 			return; // nothing to send
 		CSphScopedProfile tProf ( m_pProfile, SPH_QSTATE_NET_WRITE );
-		m_bError = !SyncSend ( m_pSocket, (const char *) m_dBuf.begin (), m_dBuf.GetLength64 () );
+		NetGenericOutputBuffer_c::m_bError = !SyncSend ( m_pSocket, (const char *) m_dBuf.begin (), m_dBuf.GetLength64 () );
 	}
-
-	void SetWTimeoutUS ( int64_t iTimeoutUS ) final
-	{
-		m_pSocket->SetWTimeoutUS ( iTimeoutUS );
-	};
-
-	int64_t GetWTimeoutUS () const final
-	{
-		return m_pSocket->GetWTimeoutUS ();
-	}
-};
-
-/////////////////////////////////////////////////////////////////////////////
-/// AsyncBufferedSocket_c - provides wrapper for sending and receiving
-/////////////////////////////////////////////////////////////////////////////
-
-class AsyncBufferedSocket_c : public AsyncNetBuffer_c
-{
-	AsyncSockInputBuffer_c m_tReceiver;
-	AsyncNetOutputBuffer_c m_tSender;
 
 public:
-	explicit AsyncBufferedSocket_c ( SockWrapperPtr_c && pSock ) : m_tReceiver ( pSock ), m_tSender ( pSock ) {}
-	AsyncNetInputBuffer_c & In () override { return m_tReceiver; }
-	NetGenericOutputBuffer_c & Out () override { return m_tSender; }
+	explicit AsyncBufferedSocket_c ( SockWrapperPtr_c pSock )
+		: m_pSocket ( std::move ( pSock ) )
+	{
+	}
+
+	void SetWTimeoutUS ( int64_t iTimeoutUS ) final { m_pSocket->SetWTimeoutUS ( iTimeoutUS ); };
+	int64_t GetWTimeoutUS () const final { return m_pSocket->GetWTimeoutUS (); }
+	void SetTimeoutUS ( int64_t iTimeoutUS ) final { m_pSocket->SetTimeoutUS ( iTimeoutUS ); };
+	int64_t GetTimeoutUS () const final { return m_pSocket->GetTimeoutUS (); }
+
 };
 
 // main fabric

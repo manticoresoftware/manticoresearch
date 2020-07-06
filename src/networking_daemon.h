@@ -188,12 +188,8 @@ public:
 };
 
 
-class AsyncNetBuffer_c
+class AsyncNetBuffer_c : public AsyncNetInputBuffer_c, public NetGenericOutputBuffer_c
 {
-public:
-	virtual ~AsyncNetBuffer_c () = default;
-	virtual AsyncNetInputBuffer_c& In() = 0;
-	virtual NetGenericOutputBuffer_c& Out() = 0;
 };
 
 using AsyncNetBufferPtr_c = SharedPtr_t<AsyncNetBuffer_c *>;

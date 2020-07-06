@@ -348,8 +348,8 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 	if ( tConn.m_bSSL )
 		tThdesc.m_bSsl = MakeSecureLayer ( pBuf );
 
-	auto & tOut = pBuf->Out ();
-	auto & tIn = pBuf->In ();
+	auto& tOut = *(NetGenericOutputBuffer_c *) pBuf;
+	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf;
 	do
 	{
 		tIn.DiscardProcessed ( -1 ); // -1 means 'force flush'

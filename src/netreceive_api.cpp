@@ -411,8 +411,8 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 	const char * sClientIP = tConn.m_sClientName;
 
 	// needed to check permission to turn maintenance mode on/off
-	auto& tOut = pBuf->Out();
-	auto& tIn = pBuf->In();
+	auto& tOut = *(NetGenericOutputBuffer_c *) pBuf;
+	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf;
 
 	// send handshake
 	tThd.ThdState ( ThdState_e::HANDSHAKE );

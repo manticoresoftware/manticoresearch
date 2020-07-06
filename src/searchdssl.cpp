@@ -660,8 +660,8 @@ class BioAsyncNetAdapter_c
 public:
 	explicit BioAsyncNetAdapter_c ( AsyncNetBufferPtr_c pSource )
 		: m_pBackend ( std::move (pSource) )
-		, m_tOut ( m_pBackend->Out() )
-		, m_tIn ( m_pBackend->In() )
+		, m_tOut ( *m_pBackend )
+		, m_tIn ( *m_pBackend )
 	{}
 
 	int BioRead ( char * pBuf, int iLen )
@@ -846,17 +846,9 @@ static BIO * BIO_new_coroAsync ( AsyncNetBufferPtr_c pSource )
 
 using BIOPtr_c = SharedPtrCustom_t<BIO *>;
 
-class AsyncSSBufferedSocket_c final : public AsyncNetBuffer_c, protected AsyncNetInputBuffer_c, protected NetGenericOutputBuffer_c
+class AsyncSSBufferedSocket_c final : public AsyncNetBuffer_c
 {
 	BIOPtr_c m_pSslBackend;
-
-public:
-	explicit AsyncSSBufferedSocket_c ( BIOPtr_c pSslFrontend )
-		: m_pSslBackend ( std::move ( pSslFrontend ) )
-	{}
-
-	AsyncNetInputBuffer_c & In () final { return *this; }
-	NetGenericOutputBuffer_c & Out () final { return *this; }
 
 	void SendBuffer ( const VecTraits_T<BYTE> & dData ) final
 	{
@@ -905,6 +897,11 @@ public:
 		}
 		return iGotTotal;
 	}
+
+public:
+	explicit AsyncSSBufferedSocket_c ( BIOPtr_c pSslFrontend )
+		: m_pSslBackend ( std::move ( pSslFrontend ) )
+	{}
 
 	void SetWTimeoutUS ( int64_t iTimeoutUS ) final
 	{

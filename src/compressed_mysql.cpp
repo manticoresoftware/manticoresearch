@@ -20,7 +20,7 @@ bool IsCompressionAvailable () { return true; }
 static const DWORD MIN_COMPRESS_LENGTH = 50;
 static const int LEVEL_COMPRESSION = Z_DEFAULT_COMPRESSION;
 
-class MysqlCompressedSocket_c final : public AsyncNetBuffer_c, protected AsyncNetInputBuffer_c, protected NetGenericOutputBuffer_c
+class MysqlCompressedSocket_c final : public AsyncNetBuffer_c
 {
 	AsyncNetBufferPtr_c m_pFrontend;
 	AsyncNetInputBuffer_c & m_tIn;
@@ -38,13 +38,10 @@ protected:
 public:
 	explicit MysqlCompressedSocket_c ( AsyncNetBufferPtr_c pFrontend )
 		: m_pFrontend ( std::move (pFrontend) )
-		, m_tIn ( m_pFrontend->In() )
-		, m_tOut ( m_pFrontend->Out() )
+		, m_tIn ( *m_pFrontend )
+		, m_tOut ( *m_pFrontend )
 	{
 	}
-
-	AsyncNetInputBuffer_c & In () final { return *this; }
-	NetGenericOutputBuffer_c & Out () final { return *this; }
 
 	void SetWTimeoutUS ( int64_t iTimeoutUS ) final
 	{

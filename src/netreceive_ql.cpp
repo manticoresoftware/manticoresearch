@@ -978,8 +978,8 @@ bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, CSphS
 		CSphQueryProfile * pProfile, ThreadLocal_t & tThd, AsyncNetBufferPtr_c pBuf )
 {
 	assert ( pBuf );
-	auto& tIn = pBuf->In();
-	auto& tOut = pBuf->Out();
+	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf;
+	auto& tOut = *(NetGenericOutputBuffer_c *) pBuf;
 
 	auto uHasBytesIn = tIn.HasBytes ();
 	// get command, handle special packets
@@ -1108,9 +1108,9 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 
 	auto pBuf = MakeAsyncNetBuffer ( std::move ( pSock ));
 
-	// fixme! durty macros to transparently substitute pBuf with ssl version, if necessary.
-	#define tOut pBuf->Out()
-	#define tIn pBuf->In()
+	// fixme! durty macros to transparently substitute pBuf on the fly (to ssl, compressed, whatever)
+	#define tOut (*(NetGenericOutputBuffer_c*)pBuf)
+	#define tIn (*(AsyncNetInputBuffer_c*)pBuf)
 
 	/// mysql is pro-active, we NEED to send handshake before client send us something.
 	/// So, no passive probing possible.

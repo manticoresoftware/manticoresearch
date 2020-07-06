@@ -61,13 +61,13 @@ void FillNetState ( NetConnection_t * pState, int iClientSock, int iConnID, bool
 void MultiServe ( SockWrapperPtr_c pSock, NetConnection_t * pConn )
 {
 	auto pBuf = MakeAsyncNetBuffer ( std::move ( pSock ) );
-	auto eProto = pBuf->In ().Probe ( g_iMaxPacketSize, false );
+	auto eProto = pBuf->Probe ( g_iMaxPacketSize, false );
 	switch ( eProto )
 	{
 	case Proto_e::SPHINX:
 #ifdef    TCP_NODELAY
 	// case of legacy 'crasy squirell' client, which talks using short packages.
-		if ( pBuf->In().HasBytes()==4 && pConn->m_tSockType==AF_INET )
+		if ( pBuf->HasBytes()==4 && pConn->m_tSockType==AF_INET )
 		{
 			int iOn = 1;
 			if ( setsockopt ( pConn->m_iClientSock, IPPROTO_TCP, TCP_NODELAY, (char *) &iOn, sizeof ( iOn ) ) )

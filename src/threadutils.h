@@ -17,6 +17,7 @@
 
 #include "sphinxstd.h"
 #include "sphinxint.h"
+#include "hazard_pointer.h"
 
 struct CSphQuery;
 

@@ -1456,6 +1456,7 @@ void RuntimeThreadContext_t::Prepare ( const void * pStack )
 {
 	m_pMyThreadStack = pStack;
 	m_tDesc.m_iThreadID = GetOsThreadId ();
+	m_tDesc.m_pHazards.store ( nullptr, std::memory_order_release );
 	m_tDesc.m_tThread = Threads::Self ();
 
 #if USE_GPROF

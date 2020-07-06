@@ -776,6 +776,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	if ( g_bPidIsMine && !g_sPidFile.IsEmpty() )
 		::unlink ( g_sPidFile.cstr() );
 
+	hazard::Shutdown ();
 	sphInfo ( "shutdown complete" );
 
 	Threads::Done ( g_iLogFile );

@@ -102,7 +102,6 @@
 #include "sphinxutils.h"
 #include "sphinxint.h"
 #include "sphinxrt.h"
-#include "threadutils.h"
 #include "task_info.h"
 using namespace Threads;
 
@@ -1014,7 +1013,6 @@ bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, 
 struct AttrUpdateArgs: public CSphAttrUpdateEx
 {
 	const CSphQuery* m_pQuery = nullptr;
-	const ThdDesc_t* m_pThd = nullptr;
 	const ServedDesc_t* m_pDesc = nullptr;
 	const CSphString* m_pIndexName = nullptr;
 	bool m_bJson = false;
@@ -1131,20 +1129,19 @@ enum ESphHttpEndpoint
 };
 
 bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut );
-ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster, const ThdDesc_t & tThd );
+ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster );
 void sphFormatFactors ( StringBuilder_c& dOut, const unsigned int * pFactors, bool bJson );
 void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation, CSphVector<int64_t> & dLastIds );
-void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning, const ThdDesc_t & tThd );
-void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphSessionAccum & tAcc, const ThdDesc_t & tThd );
+void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning );
+void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphSessionAccum & tAcc );
 
-bool				sphLoopClientHttp ( const BYTE * pRequest, int iRequestLen, CSphVector<BYTE> & dResult, const ThdDesc_t & tThd );
-bool				sphProcessHttpQueryNoResponce ( ESphHttpEndpoint eEndpoint, const char * sQuery, const SmallStringHash_T<CSphString> & tOptions, const ThdDesc_t & tThd, CSphVector<BYTE> & dResult );
+bool				sphLoopClientHttp ( const BYTE * pRequest, int iRequestLen, CSphVector<BYTE> & dResult );
+bool				sphProcessHttpQueryNoResponce ( ESphHttpEndpoint eEndpoint, const char * sQuery, const SmallStringHash_T<CSphString> & tOptions, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );
 ESphHttpEndpoint	sphStrToHttpEndpoint ( const CSphString & sEndpoint );
 CSphString			sphHttpEndpointToStr ( ESphHttpEndpoint eEndpoint );
 
-bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength,
-	ThdDesc_t & tThd, InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist );
+bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist );
 void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
 
 void BuildStatusOneline ( StringBuilder_c& sOut );
@@ -1158,21 +1155,20 @@ public:
 	SphinxqlSessionPublic();
 	~SphinxqlSessionPublic();
 
-	bool Execute ( const CSphString & sQuery, RowBuffer_i & tOut, ThdDesc_t & tThd );
+	bool Execute ( const CSphString & sQuery, RowBuffer_i & tOut );
 	void SetFederatedUser ();
 	bool IsAutoCommit () const;
 	CSphQueryProfile* StartProfiling ( ESphQueryState );
 	void SaveLastProfile();
-	void SetVIP ( bool bVIP );
 
 	// manage backend's timeout
 	int64_t GetBackendTimeoutS() const;
 };
 
-void LogSphinxqlError ( const char * sStmt, const char * sError, int iCid );
+void LogSphinxqlError ( const char * sStmt, const char * sError );
 
 // that is used from sphinxql command over API
-void RunSingleSphinxqlCommand ( const CSphString & sCommand, ISphOutputBuffer & tOut, ThdDesc_t & tThd );
+void RunSingleSphinxqlCommand ( const CSphString & sCommand, ISphOutputBuffer & tOut );
 
 ISphTableFunc *		CreateRemoveRepeats();
 

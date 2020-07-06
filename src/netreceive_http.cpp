@@ -331,6 +331,8 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 
 	tThd.FinishInit ();
 
+	myinfo::SetProto ( Proto_e::HTTP );
+
 	// set off query guard
 	auto & tCrashQuery = GlobalCrashQueryGetRef();
 	tCrashQuery.m_bHttp = true;
@@ -376,7 +378,7 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 		tCrashQuery.m_iSize = tPacket.second;
 
 		CSphVector<BYTE> dResult;
-		if ( sphLoopClientHttp ( tPacket.first, tPacket.second, dResult, tThdesc ) )
+		if ( sphLoopClientHttp ( tPacket.first, tPacket.second, dResult ) )
 		{
 			if ( !bKeepAlive )
 				tIn.SetTimeoutUS ( S2US * g_iClientTimeoutS );

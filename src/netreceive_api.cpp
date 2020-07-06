@@ -401,6 +401,8 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 
 	tThd.FinishInit ();
 
+	myinfo::SetProto ( Proto_e::SPHINX );
+
 	int iCID = tConn.m_iConnID;
 	const char * sClientIP = tConn.m_sClientName;
 
@@ -545,7 +547,7 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t * pConn )
 			break;
 		}
 
-		bPersist |= LoopClientSphinx ( eCommand, uVer, iReplySize, tThdesc, tIn, tOut, false );
+		bPersist |= LoopClientSphinx ( eCommand, uVer, iReplySize, tIn, tOut, false );
 		if ( !tOut.Flush () )
 			break;
 	} while (bPersist);

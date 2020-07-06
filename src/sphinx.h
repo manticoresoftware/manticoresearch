@@ -2639,6 +2639,7 @@ struct CSphQuery
 
 	StrVec_t m_dIncludeItems;
 	StrVec_t m_dExcludeItems;
+	const void*		m_pCookie = nullptr;	///< opaque mark, used to manage lifetime of the vec of queries
 };
 
 /// parse select list string into items

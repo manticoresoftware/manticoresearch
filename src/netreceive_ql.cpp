@@ -571,12 +571,12 @@ enum
 };
 
 void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char * sStmt,
-	const char * sError, int iCID, MysqlErrors_e iErr )
+	const char * sError, MysqlErrors_e iErr )
 {
 	if ( sError==NULL )
 		sError = "(null)";
 
-	LogSphinxqlError ( sStmt, sError, iCID );
+	LogSphinxqlError ( sStmt, sError );
 
 	auto iErrorLen = (int) strlen(sError);
 
@@ -676,7 +676,6 @@ class SqlRowBuffer_c : public RowBuffer_i, private LazyVector_T<BYTE>
 {
 	BYTE & m_uPacketID;
 	ISphOutputBuffer & m_tOut;
-	int m_iCID; // connection ID for error report
 	bool m_bAutoCommit = false;
 #ifndef NDEBUG
 	size_t m_iColumns = 0; // used for head/data columns num sanitize check
@@ -756,10 +755,9 @@ class SqlRowBuffer_c : public RowBuffer_i, private LazyVector_T<BYTE>
 
 public:
 
-	SqlRowBuffer_c ( BYTE * pPacketID, ISphOutputBuffer * pOut, int iCID, bool bAutoCommit )
+	SqlRowBuffer_c ( BYTE * pPacketID, ISphOutputBuffer * pOut, bool bAutoCommit )
 		: m_uPacketID ( *pPacketID )
 		, m_tOut ( *pOut )
-		, m_iCID ( iCID )
 		, m_bAutoCommit ( bAutoCommit )
 	{}
 
@@ -874,7 +872,7 @@ public:
 
 	void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr ) override
 	{
-		SendMysqlErrorPacket ( m_tOut, m_uPacketID, sStmt, sError, m_iCID, iErr );
+		SendMysqlErrorPacket ( m_tOut, m_uPacketID, sStmt, sError, iErr );
 	}
 
 	void Ok ( int iAffectedRows, int iWarns, const char * sMessage, bool bMoreResults, int64_t iLastInsertId ) override
@@ -983,8 +981,8 @@ inline bool UserWantsCompression ( const ByteBlob_t & tPacket )
 	return ( tPacket.first[0] & 0x20U)!=0;
 }
 
-bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, CSphString & sQuery, int iPacketLen,
-		CSphQueryProfile * pProfile, ThreadLocal_t & tThd, AsyncNetBufferPtr_c pBuf )
+bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, int iPacketLen,
+		CSphQueryProfile * pProfile, AsyncNetBufferPtr_c pBuf )
 {
 	assert ( pBuf );
 	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf;
@@ -1029,20 +1027,19 @@ bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, CSphS
 		case MYSQL_COM_QUERY:
 		{
 			// handle query packet
-			sQuery = tIn.GetRawString ( iPacketLen-1 ); // OPTIMIZE? could be huge; avoid copying?
+			myinfo::SetDescription ( tIn.GetRawString ( iPacketLen-1 ), iPacketLen-1 ); // OPTIMIZE? could be huge, but string has gap at the end.
 			assert ( !tIn.GetError() );
-			sphLogDebugv ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, sQuery.scstr () );
-			tThd.ThdState ( ThdState_e::QUERY );
-			tThd.m_tDesc.SetThreadInfo ( "%s", sQuery.cstr() ); // OPTIMIZE? could be huge; avoid copying?
-			SqlRowBuffer_c tRows ( &uPacketID, &tOut, tThd.m_tDesc.m_iConnID, tSession.IsAutoCommit () );
-			bKeepProfile = tSession.Execute ( sQuery, tRows, tThd.m_tDesc );
+			sphLogDebugv ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, myinfo::UnsafeDescription().scstr () );
+			myinfo::ThdState ( ThdState_e::QUERY );
+			SqlRowBuffer_c tRows ( &uPacketID, &tOut, tSession.IsAutoCommit () );
+			bKeepProfile = tSession.Execute ( myinfo::UnsafeDescription(), tRows );
 		}
 		break;
 
 		default:
 			// default case, unknown command
 			sError.SetSprintf ( "unknown command (code=%d)", uMysqlCmd );
-			SendMysqlErrorPacket ( tOut, uPacketID, NULL, sError.cstr(), tThd.m_tDesc.m_iConnID, MYSQL_ERR_UNKNOWN_COM_ERROR );
+			SendMysqlErrorPacket ( tOut, uPacketID, NULL, sError.cstr(), MYSQL_ERR_UNKNOWN_COM_ERROR );
 			break;
 	}
 
@@ -1071,15 +1068,15 @@ bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, CSphS
 } // static namespace
 
 // that is used from sphinxql command over API
-void RunSingleSphinxqlCommand ( const CSphString & sCommand, ISphOutputBuffer & tOut, ThdDesc_t & tThd )
+void RunSingleSphinxqlCommand ( const CSphString & sCommand, ISphOutputBuffer & tOut )
 {
 	BYTE uDummy = 0;
 
 	// todo: move upper, if the session variables are also necessary in API access mode.
 	SphinxqlSessionPublic tSession; // FIXME!!! check that no accum related command used via API
 
-	SqlRowBuffer_c tRows ( &uDummy, &tOut, tThd.m_iConnID, true );
-	tSession.Execute ( sCommand, tRows, tThd );
+	SqlRowBuffer_c tRows ( &uDummy, &tOut, true );
+	tSession.Execute ( sCommand, tRows );
 }
 
 // main sphinxql server
@@ -1099,6 +1096,8 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 	tThdesc.m_iTid = GetOsThreadId ();
 
 	tThd.FinishInit();
+
+	myinfo::SetProto ( Proto_e::MYSQL41 );
 
 	// set off query guard
 	GlobalCrashQueryGetRef ().m_bMySQL = true;
@@ -1126,10 +1125,7 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 		return;
 	}
 
-	CSphString sQuery; // to keep data alive for SphCrashQuery_c
 	SphinxqlSessionPublic tSession; // session variables and state
-	// needed to check permission to turn maintenance mode on/off
-	tSession.SetVIP ( tConn.m_bVIP );
 	bool bAuthed = false;
 	BYTE uPacketID = 1;
 	bool bKeepAlive;
@@ -1212,6 +1208,15 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 				bKeepAlive = !tOut.GetError ();
 				continue; // next packet will be 'login' again, but received over SSL
 			}
+
+			if ( IsMaxedOut() )
+			{
+				sphWarning ( "%s", g_sMaxedOutMessage );
+				SendMysqlErrorPacket ( tOut, uPacketID, nullptr, g_sMaxedOutMessage, MYSQL_ERR_UNKNOWN_COM_ERROR );
+				tOut.Flush ();
+				break;
+			}
+
 			if ( UsernameIsFEDERATED ( tAnswer ))
 				tSession.SetFederatedUser();
 			SendMysqlOkPacket ( tOut, uPacketID, tSession.IsAutoCommit());
@@ -1222,6 +1227,6 @@ void SqlServe ( SockWrapperPtr_c pSock, NetConnection_t* pConn )
 			continue;
 		}
 
-		bKeepAlive = LoopClientMySQL ( uPacketID, tSession, sQuery, iPacketLen, pProfile, tThd, pBuf );
+		bKeepAlive = LoopClientMySQL ( uPacketID, tSession, iPacketLen, pProfile, pBuf );
 	} while ( bKeepAlive );
 }

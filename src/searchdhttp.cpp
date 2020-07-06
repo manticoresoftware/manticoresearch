@@ -432,9 +432,8 @@ void HttpErrorReporter_c::Error ( const char * /*sStmt*/, const char * sError, M
 class HttpHandler_c
 {
 public:
-	HttpHandler_c ( const char * sQuery, const ThdDesc_t & tThd )
+	HttpHandler_c ( const char * sQuery )
 		: m_sQuery ( sQuery )
-		, m_tThd ( tThd )
 	{}
 
 	virtual ~HttpHandler_c()
@@ -456,7 +455,6 @@ protected:
 	const char *		m_sQuery;
 	bool				m_bNeedHttpResponse {false};
 	CSphVector<BYTE>	m_dData;
-	const ThdDesc_t &	m_tThd;
 
 	void ReportError ( const char * szError, ESphHttpStatus eStatus )
 	{
@@ -544,8 +542,8 @@ protected:
 class HttpSearchHandler_c : public HttpHandler_c, public HttpOptionsTraits_c
 {
 public:
-	HttpSearchHandler_c ( const char * sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd )
-		: HttpHandler_c ( sQuery, tThd )
+	HttpSearchHandler_c ( const char * sQuery, const OptionsHash_t & tOptions )
+		: HttpHandler_c ( sQuery )
 		, HttpOptionsTraits_c ( tOptions )
 	{}
 
@@ -558,7 +556,7 @@ public:
 			return false;
 
 		m_tQuery.m_pQueryParser = pQueryParser;
-		CSphScopedPtr<ISphSearchHandler> tHandler ( sphCreateSearchHandler ( 1, pQueryParser, m_eQueryType, true, m_tThd ) );
+		CSphScopedPtr<ISphSearchHandler> tHandler ( sphCreateSearchHandler ( 1, pQueryParser, m_eQueryType, true ) );
 
 		CSphQueryProfileFormatJson tProfile;
 		if ( m_bProfile )
@@ -603,8 +601,8 @@ protected:
 class HttpSearchHandler_SQL_c : public HttpSearchHandler_c
 {
 public:
-	HttpSearchHandler_SQL_c ( const char * sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd )
-		: HttpSearchHandler_c ( sQuery, tOptions, tThd )
+	HttpSearchHandler_SQL_c ( const char * sQuery, const OptionsHash_t & tOptions )
+		: HttpSearchHandler_c ( sQuery, tOptions )
 	{}
 
 protected:
@@ -827,8 +825,8 @@ static const char g_sBypassToken[] = "raw&query=";
 class HttpRawSqlHandler_c : public HttpHandler_c, public HttpOptionsTraits_c
 {
 public:
-	HttpRawSqlHandler_c ( const char * sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd )
-		: HttpHandler_c ( sQuery, tThd )
+	HttpRawSqlHandler_c ( const char * sQuery, const OptionsHash_t & tOptions )
+		: HttpHandler_c ( sQuery )
 		, HttpOptionsTraits_c ( tOptions )
 	{
 	}
@@ -839,10 +837,9 @@ public:
 		CSphString sError;
 
 		JsonRowBuffer_c tOut;
-		ThdDesc_t tTmdThd;
 
 		SphinxqlSessionPublic tSession;
-		tSession.Execute ( sQuery, tOut, tTmdThd );
+		tSession.Execute ( sQuery, tOut );
 
 		BuildReply ( tOut.Finish(), SPH_HTTP_STATUS_200 );
 
@@ -854,8 +851,8 @@ public:
 class HttpHandler_JsonSearch_c : public HttpSearchHandler_c
 {
 public:	
-	HttpHandler_JsonSearch_c ( const char * sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd )
-		: HttpSearchHandler_c ( sQuery, tOptions, tThd )
+	HttpHandler_JsonSearch_c ( const char * sQuery, const OptionsHash_t & tOptions )
+		: HttpSearchHandler_c ( sQuery, tOptions )
 	{}
 
 	QueryParser_i * PreParseQuery() override
@@ -905,8 +902,8 @@ protected:
 class HttpHandler_JsonInsert_c : public HttpHandler_c, public HttpJsonInsertTraits_c
 {
 public:
-	HttpHandler_JsonInsert_c ( const char * sQuery, bool bReplace, const ThdDesc_t & tThd )
-		: HttpHandler_c ( sQuery, tThd )
+	HttpHandler_JsonInsert_c ( const char * sQuery, bool bReplace )
+		: HttpHandler_c ( sQuery )
 		, m_bReplace ( bReplace )
 	{}
 
@@ -940,11 +937,11 @@ private:
 class HttpJsonUpdateTraits_c
 {
 protected:
-	bool ProcessUpdate ( const char * szRawRequest, const SqlStmt_t & tStmt, DocID_t tDocId, const ThdDesc_t & tThd, JsonObj_c & tResult )
+	bool ProcessUpdate ( const char * szRawRequest, const SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult )
 	{
 		HttpErrorReporter_c tReporter;
 		CSphString sWarning;
-		sphHandleMysqlUpdate ( tReporter, tStmt, szRawRequest, sWarning, tThd );
+		sphHandleMysqlUpdate ( tReporter, tStmt, szRawRequest, sWarning );
 
 		if ( tReporter.IsError() )
 			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
@@ -959,8 +956,8 @@ protected:
 class HttpHandler_JsonUpdate_c : public HttpHandler_c, HttpJsonUpdateTraits_c
 {
 public:
-	HttpHandler_JsonUpdate_c ( const char * sQuery, const ThdDesc_t & tThd )
-		: HttpHandler_c ( sQuery, tThd )
+	HttpHandler_JsonUpdate_c ( const char * sQuery )
+		: HttpHandler_c ( sQuery )
 	{}
 
 	bool Process () override
@@ -993,7 +990,7 @@ protected:
 
 	virtual bool ProcessQuery ( const SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult )
 	{
-		return ProcessUpdate ( m_sQuery, tStmt, tDocId, m_tThd, tResult );
+		return ProcessUpdate ( m_sQuery, tStmt, tDocId, tResult );
 	}
 };
 
@@ -1001,12 +998,12 @@ protected:
 class HttpJsonDeleteTraits_c
 {
 protected:
-	bool ProcessDelete ( const char * szRawRequest, const SqlStmt_t & tStmt, DocID_t tDocId, const ThdDesc_t & tThd, JsonObj_c & tResult )
+	bool ProcessDelete ( const char * szRawRequest, const SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult )
 	{
 		CSphSessionAccum tAcc;
 		HttpErrorReporter_c tReporter;
 		CSphString sWarning;
-		sphHandleMysqlDelete ( tReporter, tStmt, szRawRequest, true, tAcc, tThd );
+		sphHandleMysqlDelete ( tReporter, tStmt, szRawRequest, true, tAcc );
 
 		if ( tReporter.IsError() )
 			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
@@ -1021,8 +1018,8 @@ protected:
 class HttpHandler_JsonDelete_c : public HttpHandler_JsonUpdate_c, public HttpJsonDeleteTraits_c
 {
 public:
-	HttpHandler_JsonDelete_c ( const char * sQuery, const ThdDesc_t & tThd )
-		: HttpHandler_JsonUpdate_c ( sQuery, tThd )
+	HttpHandler_JsonDelete_c ( const char * sQuery )
+		: HttpHandler_JsonUpdate_c ( sQuery )
 	{}
 
 protected:
@@ -1034,7 +1031,7 @@ protected:
 
 	bool ProcessQuery ( const SqlStmt_t & tStmt, DocID_t tDocId, JsonObj_c & tResult ) override
 	{
-		return ProcessDelete ( m_sQuery, tStmt, tDocId, m_tThd, tResult );
+		return ProcessDelete ( m_sQuery, tStmt, tDocId, tResult );
 	}
 };
 
@@ -1042,8 +1039,8 @@ protected:
 class HttpHandler_JsonBulk_c : public HttpHandler_c, public HttpOptionsTraits_c, public HttpJsonInsertTraits_c, public HttpJsonUpdateTraits_c, public HttpJsonDeleteTraits_c
 {
 public:
-	HttpHandler_JsonBulk_c ( const char * sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd )
-		: HttpHandler_c ( sQuery, tThd )
+	HttpHandler_JsonBulk_c ( const char * sQuery, const OptionsHash_t & tOptions )
+		: HttpHandler_c ( sQuery )
 		, HttpOptionsTraits_c ( tOptions )
 	{}
 
@@ -1106,12 +1103,12 @@ public:
 
 			case STMT_UPDATE:
 				tStmt.m_sEndpoint = sphHttpEndpointToStr ( SPH_HTTP_ENDPOINT_JSON_UPDATE );
-				bResult = ProcessUpdate ( sQuery.cstr(), tStmt, tDocId, m_tThd, tResult );
+				bResult = ProcessUpdate ( sQuery.cstr(), tStmt, tDocId, tResult );
 				break;
 
 			case STMT_DELETE:
 				tStmt.m_sEndpoint = sphHttpEndpointToStr ( SPH_HTTP_ENDPOINT_JSON_DELETE );
-				bResult = ProcessDelete ( sQuery.cstr(), tStmt, tDocId, m_tThd, tResult );
+				bResult = ProcessDelete ( sQuery.cstr(), tStmt, tDocId, tResult );
 				break;
 
 			default:
@@ -1148,9 +1145,8 @@ private:
 class HttpHandlerPQ_c : public HttpHandler_c
 {
 public:	
-	HttpHandlerPQ_c (  const char * sQuery, const OptionsHash_t& tOptions,
-		const ThdDesc_t& tThd )
-		: HttpHandler_c ( sQuery, tThd )
+	HttpHandlerPQ_c (  const char * sQuery, const OptionsHash_t& tOptions )
+		: HttpHandler_c ( sQuery )
 		, m_tOptions ( tOptions )
 	{}
 
@@ -1168,7 +1164,7 @@ private:
 };
 
 
-static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const char * sQuery, const OptionsHash_t & tOptions, const ThdDesc_t & tThd, http_method eRequestType )
+static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const char * sQuery, const OptionsHash_t & tOptions, http_method eRequestType )
 {
 	const CSphString * pRawSQL = nullptr;
 
@@ -1177,30 +1173,30 @@ static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const cha
 	case SPH_HTTP_ENDPOINT_SQL:
 		pRawSQL = tOptions ( "decoded_mode" );
 		if ( pRawSQL && pRawSQL->Begins ( g_sBypassToken ) ) // test for 'mode=raw&query=...'
-			return new HttpRawSqlHandler_c ( sQuery, tOptions, tThd );
+			return new HttpRawSqlHandler_c ( sQuery, tOptions );
 		else
-			return new HttpSearchHandler_SQL_c ( sQuery, tOptions, tThd );
+			return new HttpSearchHandler_SQL_c ( sQuery, tOptions );
 
 	case SPH_HTTP_ENDPOINT_JSON_SEARCH:
-		return new HttpHandler_JsonSearch_c ( sQuery, tOptions, tThd );
+		return new HttpHandler_JsonSearch_c ( sQuery, tOptions );
 
 	case SPH_HTTP_ENDPOINT_JSON_INDEX:
 	case SPH_HTTP_ENDPOINT_JSON_CREATE:
 	case SPH_HTTP_ENDPOINT_JSON_INSERT:
 	case SPH_HTTP_ENDPOINT_JSON_REPLACE:
-		return new HttpHandler_JsonInsert_c ( sQuery, eEndpoint==SPH_HTTP_ENDPOINT_JSON_INDEX || eEndpoint==SPH_HTTP_ENDPOINT_JSON_REPLACE, tThd );
+		return new HttpHandler_JsonInsert_c ( sQuery, eEndpoint==SPH_HTTP_ENDPOINT_JSON_INDEX || eEndpoint==SPH_HTTP_ENDPOINT_JSON_REPLACE );
 
 	case SPH_HTTP_ENDPOINT_JSON_UPDATE:
-		return new HttpHandler_JsonUpdate_c ( sQuery, tThd );
+		return new HttpHandler_JsonUpdate_c ( sQuery );
 
 	case SPH_HTTP_ENDPOINT_JSON_DELETE:
-		return new HttpHandler_JsonDelete_c ( sQuery, tThd );
+		return new HttpHandler_JsonDelete_c ( sQuery );
 
 	case SPH_HTTP_ENDPOINT_JSON_BULK:
-		return new HttpHandler_JsonBulk_c ( sQuery, tOptions, tThd );
+		return new HttpHandler_JsonBulk_c ( sQuery, tOptions );
 
 	case SPH_HTTP_ENDPOINT_PQ:
-		return new HttpHandlerPQ_c ( sQuery, tOptions, tThd );
+		return new HttpHandlerPQ_c ( sQuery, tOptions );
 
 	default:
 		break;
@@ -1210,9 +1206,9 @@ static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const cha
 }
 
 
-static bool sphProcessHttpQuery ( ESphHttpEndpoint eEndpoint, const char * sQuery, const SmallStringHash_T<CSphString> & tOptions, const ThdDesc_t & tThd, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
+static bool sphProcessHttpQuery ( ESphHttpEndpoint eEndpoint, const char * sQuery, const SmallStringHash_T<CSphString> & tOptions, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
 {
-	CSphScopedPtr<HttpHandler_c> pHandler ( CreateHttpHandler ( eEndpoint, sQuery, tOptions, tThd, eRequestType ) );
+	CSphScopedPtr<HttpHandler_c> pHandler ( CreateHttpHandler ( eEndpoint, sQuery, tOptions, eRequestType ) );
 	if ( !pHandler )
 		return false;
 
@@ -1224,13 +1220,13 @@ static bool sphProcessHttpQuery ( ESphHttpEndpoint eEndpoint, const char * sQuer
 }
 
 
-bool sphProcessHttpQueryNoResponce ( ESphHttpEndpoint eEndpoint, const char * sQuery, const SmallStringHash_T<CSphString> & tOptions, const ThdDesc_t & tThd, CSphVector<BYTE> & dResult )
+bool sphProcessHttpQueryNoResponce ( ESphHttpEndpoint eEndpoint, const char * sQuery, const SmallStringHash_T<CSphString> & tOptions, CSphVector<BYTE> & dResult )
 {
-	return sphProcessHttpQuery ( eEndpoint, sQuery, tOptions, tThd, dResult, false, HTTP_GET );
+	return sphProcessHttpQuery ( eEndpoint, sQuery, tOptions, dResult, false, HTTP_GET );
 }
 
 
-bool sphLoopClientHttp ( const BYTE * pRequest, int iRequestLen, CSphVector<BYTE> & dResult, const ThdDesc_t & tThd )
+bool sphLoopClientHttp ( const BYTE * pRequest, int iRequestLen, CSphVector<BYTE> & dResult )
 {
 	HttpRequestParser_c tParser;
 	if ( !tParser.Parse ( pRequest, iRequestLen ) )
@@ -1240,7 +1236,7 @@ bool sphLoopClientHttp ( const BYTE * pRequest, int iRequestLen, CSphVector<BYTE
 	}
 
 	ESphHttpEndpoint eEndpoint = tParser.GetEndpoint();
-	if ( !sphProcessHttpQuery ( eEndpoint, tParser.GetBody().cstr(), tParser.GetOptions(), tThd, dResult, true, tParser.GetRequestType() ) )
+	if ( !sphProcessHttpQuery ( eEndpoint, tParser.GetBody().cstr(), tParser.GetOptions(), dResult, true, tParser.GetRequestType() ) )
 	{
 		if ( eEndpoint==SPH_HTTP_ENDPOINT_INDEX )
 			HttpHandlerIndexPage ( dResult );
@@ -1555,7 +1551,7 @@ bool HttpHandlerPQ_c::ListQueries ( const CSphString & sIndex )
 	StringBuilder_c sQuery;
 	sQuery.Sprintf(R"({"index":"%s"})", sIndex.scstr());
 	CSphScopedPtr<HttpHandler_c> pHandler (
-		new HttpHandler_JsonSearch_c ( sQuery.cstr(), m_tOptions, m_tThd ));
+		new HttpHandler_JsonSearch_c ( sQuery.cstr(), m_tOptions ));
 	if ( !pHandler )
 		return false;
 

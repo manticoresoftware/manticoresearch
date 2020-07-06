@@ -160,18 +160,16 @@ public:
 		: m_tAcc ( tAcc )
 		, m_pDeletedCount ( pDeletedCount )
 	{}
-	CommitMonitor_c ( RtAccum_t & tAcc, CSphString * pWarning, int * pUpdated, const ThdDesc_t * pThd )
+	CommitMonitor_c ( RtAccum_t & tAcc, CSphString * pWarning, int * pUpdated )
 		: m_tAcc ( tAcc )
 		, m_pWarning ( pWarning )
 		, m_pUpdated ( pUpdated )
-		, m_pThd ( pThd )
 	{}
-	CommitMonitor_c ( RtAccum_t & tAcc, int * pDeletedCount, CSphString * pWarning, int * pUpdated, const ThdDesc_t * pThd )
+	CommitMonitor_c ( RtAccum_t & tAcc, int * pDeletedCount, CSphString * pWarning, int * pUpdated )
 		: m_tAcc ( tAcc )
 		, m_pDeletedCount ( pDeletedCount )
 		, m_pWarning ( pWarning )
 		, m_pUpdated ( pUpdated )
-		, m_pThd ( pThd )
 	{}
 	~CommitMonitor_c();
 
@@ -188,7 +186,6 @@ private:
 	int * m_pDeletedCount = nullptr;
 	CSphString * m_pWarning = nullptr;
 	int * m_pUpdated = nullptr;
-	const ThdDesc_t * m_pThd = nullptr;
 
 	bool CommitNonEmptyCmds ( RtIndex_i* pIndex, const ReplicationCommand_t& tCmd, bool bOnlyTruncate,
 		CSphString& sError ) const;
@@ -1525,8 +1522,7 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 	{
 		int iUpd = -1;
 		CSphString sWarning;
-		ThdDesc_t tThd;
-		CommitMonitor_c tCommit ( tAcc, &sWarning, &iUpd, &tThd );
+		CommitMonitor_c tCommit ( tAcc, &sWarning, &iUpd );
 		bool bOk = tCommit.Update ( sError );
 		if ( !bOk )
 			sphWarning ( "%s", sError.cstr() );
@@ -1587,9 +1583,9 @@ bool HandleCmdReplicated ( RtAccum_t & tAcc )
 }
 
 // single point there all commands passed these might be replicated, even if no cluster
-static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pDeletedCount, CSphString * pWarning, int * pUpdated, const ThdDesc_t * pThd ) EXCLUDES ( g_tClustersLock )
+static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pDeletedCount, CSphString * pWarning, int * pUpdated ) EXCLUDES ( g_tClustersLock )
 {
-	CommitMonitor_c tMonitor ( tAcc, pDeletedCount, pWarning, pUpdated, pThd );
+	CommitMonitor_c tMonitor ( tAcc, pDeletedCount, pWarning, pUpdated );
 
 	// without cluster path
 	if ( !IsClusterCommand ( tAcc ) )
@@ -1784,17 +1780,17 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 
 bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError )
 {
-	return HandleCmdReplicate ( tAcc, sError, nullptr, nullptr, nullptr, nullptr );
+	return HandleCmdReplicate ( tAcc, sError, nullptr, nullptr, nullptr );
 }
 
 bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int & iDeletedCount )
 {
-	return HandleCmdReplicate ( tAcc, sError, &iDeletedCount, nullptr, nullptr, nullptr );
+	return HandleCmdReplicate ( tAcc, sError, &iDeletedCount, nullptr, nullptr );
 }
 
-bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, CSphString & sWarning, int & iUpdated, const ThdDesc_t & tThd )
+bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, CSphString & sWarning, int & iUpdated )
 {
-	return HandleCmdReplicate ( tAcc, sError, nullptr, &sWarning, &iUpdated, &tThd );
+	return HandleCmdReplicate ( tAcc, sError, nullptr, &sWarning, &iUpdated );
 }
 
 // commit for common commands
@@ -1971,7 +1967,6 @@ bool CommitMonitor_c::Update ( CSphString & sError )
 		}
 	} else
 	{
-		assert ( m_pThd );
 		assert ( tCmd.m_pUpdateCond );
 
 		AttrUpdateArgs tUpd;
@@ -1979,7 +1974,6 @@ bool CommitMonitor_c::Update ( CSphString & sError )
 		tUpd.m_pError = &sError;
 		tUpd.m_pWarning = m_pWarning;
 		tUpd.m_pQuery = tCmd.m_pUpdateCond;
-		tUpd.m_pThd = m_pThd;
 		tUpd.m_pIndexName = &tCmd.m_sIndex;
 		tUpd.m_bJson = ( tCmd.m_eCommand==ReplicationCommand_e::UPDATE_JSON );
 

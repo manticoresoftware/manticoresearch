@@ -29,7 +29,7 @@ bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sName,
 // single point there all commands passed these might be replicated, even if no cluster
 bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError );
 bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int & iDeletedCount );
-bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, CSphString & sWarning, int & iUpdated, const ThdDesc_t & tThd );
+bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, CSphString & sWarning, int & iUpdated );
 
 // delete all clusters on daemon shutdown
 void ReplicateClustersDelete();

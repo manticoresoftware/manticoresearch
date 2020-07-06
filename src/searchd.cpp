@@ -8464,7 +8464,7 @@ void BuildStatus ( VectorLike & dStatus )
 	if ( dStatus.MatchAdd ( "uptime" ) )
 		dStatus.Add().SetSprintf ( "%u", (DWORD)time(NULL)-g_tStats.m_uStarted );
 	if ( dStatus.MatchAdd ( "connections" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iConnections );
+		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iConnections.load(std::memory_order_relaxed) );
 	if ( dStatus.MatchAdd ( "maxed_out" ) )
 		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iMaxedOut );
 	if ( dStatus.MatchAdd ( "version" ) )

@@ -732,7 +732,7 @@ inline DistributedIndexRefPtr_t GetDistr ( const CSphString &sName )
 struct SearchdStats_t
 {
 	DWORD			m_uStarted = 0;
-	CSphAtomicL		m_iConnections;
+	std::atomic<int>		m_iConnections {0};
 	CSphAtomicL		m_iMaxedOut;
 	CSphAtomicL		m_iCommandCount[SEARCHD_COMMAND_TOTAL];
 	CSphAtomicL		m_iAgentConnect;

@@ -90,15 +90,13 @@ void MultiServe ( SockWrapperPtr_c pSock, NetConnection_t * pConn )
 class NetActionAccept_c::Impl_c
 {
 	Listener_t		m_tListener;
-	int				m_iConnections = 0;
 
 public:
 	explicit Impl_c ( const Listener_t & tListener )
 		: m_tListener ( tListener )
 	{}
 
-	NetEvent_e	ProcessAccept ( DWORD uGotEvents, CSphNetLoop * pLoop );
-	int			GetStatsAccept ();
+	void ProcessAccept ( DWORD uGotEvents, CSphNetLoop * pLoop );
 };
 
 DWORD NextConnectionID()
@@ -107,23 +105,23 @@ DWORD NextConnectionID()
 	return ++g_iConnectionID;
 }
 
-NetEvent_e NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * pLoop )
+void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * pLoop )
 {
-	NetEvent_e eRes = NE_ACCEPT;
 	if ( CheckSocketError ( uGotEvents ) )
-		return eRes;
+		return;
 
 	// handle all incoming requests at once but not too much
-	int iLastConn = m_iConnections;
+	int iAccepted = 0;
+	auto _ = AtScopeExit([&iAccepted] {	g_tStats.m_iConnections.fetch_add ( iAccepted, std::memory_order_relaxed ); });
 	sockaddr_storage saStorage = {0};
 	socklen_t uLength = sizeof(saStorage);
 
 	while (true)
 	{
-		if ( g_iThrottleAccept && g_iThrottleAccept<m_iConnections-iLastConn )
+		if ( g_iThrottleAccept && g_iThrottleAccept<iAccepted )
 		{
-			sphLogDebugv ( "%p accepted %d connections throttled", this, m_iConnections-iLastConn );
-			return eRes;
+			sphLogDebugv ( "%p accepted %d connections throttled", this, iAccepted );
+			return;
 		}
 
 		// accept
@@ -135,17 +133,16 @@ NetEvent_e NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetL
 			const int iErrno = sphSockGetErrno();
 			if ( iErrno==EINTR || iErrno==ECONNABORTED || iErrno==EAGAIN || iErrno==EWOULDBLOCK )
 			{
-				if ( m_iConnections!=iLastConn )
+				if ( iAccepted )
 					sphLogDebugv ( "%p accepted %d connections all, tick=%u",
-							this, m_iConnections-iLastConn, pLoop->m_uTick );
-
-				return eRes;
+							this, iAccepted, pLoop->m_uTick );
+				return;
 			}
 
 			if ( iErrno==EMFILE || iErrno==ENFILE )
 			{
 				sphWarning ( "accept() failed, raise ulimit -n and restart searchd: %s", sphSockError(iErrno) );
-				return eRes;
+				return;
 			}
 
 			sphFatal ( "accept() failed: %s", sphSockError(iErrno) );
@@ -155,17 +152,17 @@ NetEvent_e NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetL
 		{
 			sphWarning ( "sphSetSockNB() failed: %s", sphSockError() );
 			sphSockClose ( iClientSock );
-			return eRes;
+			return;
 		}
 
 		if ( g_bMaintenance && !m_tListener.m_bVIP )
 		{
 			sphWarning ( "server is in maintenance mode: refusing connection" );
 			sphSockClose ( iClientSock );
-			return eRes;
+			return;
 		}
 
-		++m_iConnections;
+		++iAccepted;
 		int iConnID = NextConnectionID();
 
 		/*
@@ -216,14 +213,6 @@ NetEvent_e NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetL
 	}
 }
 
-
-int NetActionAccept_c::Impl_c::GetStatsAccept ()
-{
-	auto iResult = m_iConnections;
-	m_iConnections = 0;
-	return iResult;
-}
-
 NetActionAccept_c::NetActionAccept_c ( const Listener_t & tListener )
 	: ISphNetAction ( tListener.m_iSock )
 	, m_pImpl ( new Impl_c ( tListener ))
@@ -236,15 +225,9 @@ NetActionAccept_c::~NetActionAccept_c ()
 	SafeDelete ( m_pImpl );
 }
 
-NetEvent_e NetActionAccept_c::Process ( DWORD uGotEvents, CSphNetLoop * pLoop )
+void NetActionAccept_c::Process ( DWORD uGotEvents, CSphNetLoop * pLoop )
 {
 	assert ( m_pImpl );
-	return m_pImpl->ProcessAccept ( uGotEvents, pLoop );
-}
-
-int NetActionAccept_c::GetStats ()
-{
-	assert ( m_pImpl );
-	return m_pImpl->GetStatsAccept ();
+	m_pImpl->ProcessAccept ( uGotEvents, pLoop );
 }
 

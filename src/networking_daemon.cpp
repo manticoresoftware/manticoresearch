@@ -56,11 +56,10 @@ void CSphWakeupEvent::Wakeup ()
 	sphLogDebugv ( "failed to wakeup net thread ( error %d,'%s')", iErrno, strerrorm ( iErrno ) );
 }
 
-NetEvent_e CSphWakeupEvent::Process ( DWORD uGotEvents, CSphNetLoop * )
+void CSphWakeupEvent::Process ( DWORD uGotEvents, CSphNetLoop * )
 {
 	if ( uGotEvents & NetPollEvent_t::READ )
 		DisposeEvent();
-	return NE_KEEP;
 }
 
 
@@ -168,9 +167,7 @@ class CSphNetLoop::Impl_c
 
 	int ProcessReady () REQUIRES ( NetPoollingThread )
 	{
-		int iConnections = 0;
 		int iMaxIters = 0;
-
 		for ( NetPollEvent_t & dReady : *m_pPoll.Ptr() )
 		{
 			if ( g_iThrottleAction && iMaxIters>=g_iThrottleAction )
@@ -179,19 +176,12 @@ class CSphNetLoop::Impl_c
 			assert ( dReady.m_uNetEvents );
 			auto pWork = (ISphNetAction *) &dReady;
 			m_pPoll->RemoveTimeout ( pWork ); // ensure that timer (if any) will no more fire
-
-			NetEvent_e eEv = pWork->Process ( dReady.m_uNetEvents, m_pParent );
+			pWork->Process ( dReady.m_uNetEvents, m_pParent );
 			++m_tPrf.m_iPerfEv;
 			++iMaxIters;
 
-			if ( eEv==NE_ACCEPT )
-				iConnections += ( (NetActionAccept_c *) pWork )->GetStats ();
-
 			m_tPrf.EndTask ();
 		}
-		// update stats
-		if ( iConnections )
-			g_tStats.m_iConnections += iConnections;
 		return iMaxIters;
 	}
 
@@ -375,7 +365,7 @@ class SockWrapper_c::Impl_c final : public ISphNetAction
 	void EngageWaiterAndYield( int64_t tmTimeUntil );
 
 public:
-	NetEvent_e Process ( DWORD uGotEvents, CSphNetLoop * ) REQUIRES ( NetPoollingThread ) final;
+	void Process ( DWORD uGotEvents, CSphNetLoop * ) REQUIRES ( NetPoollingThread ) final;
 	void Destroy () final;
 };
 
@@ -427,14 +417,13 @@ void SockWrapper_c::Impl_c::EngageWaiterAndYield ( int64_t tmTimeUntilUs )
 }
 
 //  called from netloop
-NetEvent_e SockWrapper_c::Impl_c::Process ( DWORD uGotEvents, CSphNetLoop * ) REQUIRES ( NetPoollingThread )
+void SockWrapper_c::Impl_c::Process ( DWORD uGotEvents, CSphNetLoop * ) REQUIRES ( NetPoollingThread )
 {
 	if ( CheckSocketError ( uGotEvents ) && ( m_iTimeoutIdx!=-1 ) ) // we were enqueued
 		m_pNetLoop->RemoveIterEvent ( this );
 
 	m_uNetEvents = uGotEvents;
 	ResumeWaiterIfAny ();
-	return NE_KEEP;
 }
 
 // special destroy rules for socket wrapper:

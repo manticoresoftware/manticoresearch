@@ -24,8 +24,7 @@ public:
 	explicit NetActionAccept_c ( const Listener_t & tListener );
 	~NetActionAccept_c() final;
 
-	NetEvent_e		Process ( DWORD uGotEvents, CSphNetLoop * pLoop ) final;
-	int				GetStats ();
+	void Process ( DWORD uGotEvents, CSphNetLoop * pLoop ) final;
 };
 
 // helper to be used from plain workers

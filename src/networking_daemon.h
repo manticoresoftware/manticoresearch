@@ -27,13 +27,6 @@ struct Listener_t
 	bool				m_bVIP;
 };
 
-enum NetEvent_e : DWORD
-{
-	NE_KEEP = 0,
-	NE_ACCEPT = 1,
-};
-using NetEvBits_e = DWORD;
-
 class CSphNetLoop;
 struct ISphNetAction : ISphNoncopyable, NetPollEvent_t
 {
@@ -45,9 +38,9 @@ struct ISphNetAction : ISphNoncopyable, NetPollEvent_t
 	///
 	/// @param uGotEvents	bitfield of arived events, as NetPollEvent_t::Event_e
 	/// @param pLoop		where you can put your derived action (say, Accept -> SqlServe )
-	/// @return one of three directions:
-	/// 		NE_KEEP - continue polling, NE_ACCEPT - connections was accepted.
-	virtual NetEvent_e		Process ( DWORD uGotEvents, CSphNetLoop * pLoop ) = 0;
+	/// timer is always removed when processing.
+	/// If it is timeout - the event is also already removed from the poller.
+	virtual void		Process ( DWORD uGotEvents, CSphNetLoop * pLoop ) = 0;
 
 	/// invoked when CSphNetLoop with this action destroyed
 	virtual void			Destroy () { delete this; };
@@ -60,7 +53,7 @@ class CSphWakeupEvent final : public PollableEvent_t, public ISphNetAction
 public:
 	CSphWakeupEvent ();
 	~CSphWakeupEvent () final;
-	NetEvent_e Process ( DWORD uGotEvents, CSphNetLoop * ) final;
+	void Process ( DWORD uGotEvents, CSphNetLoop * ) final;
 	void Wakeup ();
 };
 

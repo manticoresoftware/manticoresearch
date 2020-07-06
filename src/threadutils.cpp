@@ -25,11 +25,6 @@
 
 #endif
 
-
-static RwLock_t g_tThdLock;
-static List_t g_dThd GUARDED_BY ( g_tThdLock );   ///< existing threads table
-static const char* g_sSystemName = "SYSTEM";
-
 using namespace Threads;
 
 const char* ThdStateName ( ThdState_e eState )
@@ -50,8 +45,9 @@ const char* ProtoName ( Proto_e eProto )
 {
 	switch ( eProto )
 	{
-		case Proto_e::SPHINX: return "sphinxapi";
-		case Proto_e::MYSQL41: return "sphinxql";
+		case Proto_e::UNKNOWN: return "-";
+		case Proto_e::SPHINX: return "sphinx";
+		case Proto_e::MYSQL41: return "mysql";
 		case Proto_e::HTTP: return "http";
 		case Proto_e::HTTPS: return "https";
 		case Proto_e::REPLICATION: return "replication";
@@ -59,156 +55,6 @@ const char* ProtoName ( Proto_e eProto )
 	}
 	return "unknown";
 }
-
-void ThdDesc_t::SetThreadInfo ( const char* sTemplate, ... )
-{
-	ScopedMutex_t dLock ( m_tQueryLock );
-	m_sBuf.Clear();
-	va_list ap;
-	va_start ( ap, sTemplate );
-	m_sBuf.vSprintf ( sTemplate, ap );
-	va_end ( ap );
-}
-
-void ThdDesc_t::SetSearchQuery ( const CSphQuery* pQuery )
-{
-	ScopedMutex_t dLock (m_tQueryLock);
-	m_pQuery = pQuery;
-}
-
-ThreadSystem_t::ThreadSystem_t ( const char* sName )
-{
-	m_tDesc.m_bSystem = true;
-	m_tDesc.m_tmStart = sphMicroTimer ();
-	m_tDesc.m_iTid = GetOsThreadId ();
-	m_tDesc.SetThreadInfo ( "SYSTEM %s", sName );
-	m_tDesc.m_sCommand = g_sSystemName;
-
-	m_tDesc.AddToGlobal();
-}
-
-ThreadSystem_t::~ThreadSystem_t ()
-{
-	m_tDesc.RemoveFromGlobal ();
-}
-
-ThreadLocal_t::ThreadLocal_t ( const ThdDesc_t& tDesc )
-{
-	m_tDesc.m_iTid = GetOsThreadId ();
-	m_tDesc.m_eProto = tDesc.m_eProto;
-	m_tDesc.m_iClientSock = tDesc.m_iClientSock;
-	m_tDesc.m_sClientName = tDesc.m_sClientName;
-	m_tDesc.m_eThdState = tDesc.m_eThdState;
-	m_tDesc.m_sCommand = tDesc.m_sCommand;
-	m_tDesc.m_iConnID = tDesc.m_iConnID;
-
-	m_tDesc.m_tmConnect = tDesc.m_tmConnect;
-	m_tDesc.m_tmStart = tDesc.m_tmStart;
-
-	FinishInit();
-}
-
-ThreadLocal_t::~ThreadLocal_t ()
-{
-	if ( m_bInitialized )
-		m_tDesc.RemoveFromGlobal ();
-}
-
-void ThreadLocal_t::FinishInit()
-{
-	if ( m_bInitialized )
-		return;
-	m_tDesc.AddToGlobal ();
-	m_bInitialized = true;
-}
-
-void ThreadLocal_t::ThdState ( ThdState_e eState )
-{
-	m_tDesc.m_eThdState = eState;
-	m_tDesc.m_tmStart = sphMicroTimer ();
-}
-
-void Threads::ThdDesc_t::AddToGlobal () EXCLUDES ( g_tThdLock )
-{
-	ScWL_t dThdLock ( g_tThdLock );
-	g_dThd.Add ( this );
-}
-
-void Threads::ThdDesc_t::RemoveFromGlobal () EXCLUDES ( g_tThdLock )
-{
-	ScWL_t dThdLock ( g_tThdLock );
-	g_dThd.Remove ( this );
-}
-
-Threads::ThdPublicInfo_t Threads::ThdDesc_t::GetPublicInfo ()
-{
-	ThdPublicInfo_t dResult;
-	ThdInfo_t& dSemiRes = dResult;
-	dSemiRes = *( ThdInfo_t* ) this;
-
-	dResult.m_sThName = Threads::GetName ( &m_tThd );
-
-	ScopedMutex_t dLock ( m_tQueryLock );
-	if ( m_pQuery )
-		dResult.m_pQuery = new CSphQuery ( *m_pQuery );
-	dResult.m_sRequestDescription = m_sBuf.cstr();
-	return dResult;
-}
-
-Threads::ThdPublicInfo_t::~ThdPublicInfo_t ()
-{
-	SafeDelete ( m_pQuery );
-}
-
-void Threads::ThdPublicInfo_t::Swap( ThdPublicInfo_t& rhs )
-{
-	::Swap ( (*(ThdInfo_t*)(this)), *(ThdInfo_t*)(&rhs));
-	::Swap ( m_sThName, rhs.m_sThName );
-	::Swap( m_pQuery, rhs.m_pQuery );
-	::Swap( m_sRequestDescription, rhs.m_sRequestDescription );
-}
-
-Threads::ThdPublicInfo_t::ThdPublicInfo_t( ThdPublicInfo_t && rhs) noexcept
-{
-	Swap(rhs);
-}
-
-Threads::ThdPublicInfo_t& Threads::ThdPublicInfo_t::operator=( ThdPublicInfo_t && rhs ) noexcept
-{
-	Swap(rhs);
-	return *this;
-}
-
-int Threads::ThreadsNum () EXCLUDES ( g_tThdLock )
-{
-	ScRL_t dThdLock ( g_tThdLock );
-	return g_dThd.GetLength ();
-}
-
-void Threads::ThdState ( ThdState_e eState, ThdDesc_t& tThd )
-{
-	tThd.m_eThdState = eState;
-	tThd.m_tmStart = sphMicroTimer ();
-}
-
-// used only when handling crash; so extra locking/copying is not necessary and even dangerous.
-List_t& Threads::GetUnsafeUnlockedUnprotectedGlobalThreadList () NO_THREAD_SAFETY_ANALYSIS
-{
-	return g_dThd;
-}
-
-CSphSwapVector<ThdPublicInfo_t> Threads::GetGlobalThreadInfos ()
-{
-	ScRL_t dThdLock ( g_tThdLock );
-	CSphSwapVector<ThdPublicInfo_t> dResult;
-	dResult.Reserve ( g_dThd.GetLength ());
-
-	// fixme! refactor.
-	for ( const auto& dThd : g_dThd )
-		dResult.Add ((( ThdDesc_t& ) dThd ).GetPublicInfo ());
-	return dResult;
-}
-
 
 int GetOsThreadId ()
 {

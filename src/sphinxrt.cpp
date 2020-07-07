@@ -7498,19 +7498,6 @@ bool RtIndex_c::Truncate ( CSphString & )
 // OPTIMIZE
 //////////////////////////////////////////////////////////////////////////
 
-static int KListSort ( int iOldCount, CSphVector<DocID_t> & dKList )
-{
-	// kill-list might have multiple accumulators - need to sort by id asc and remove duplicates
-	// but do uniq only once after new data added
-	if ( iOldCount!=dKList.GetLength() )
-	{
-		dKList.Uniq();
-		iOldCount = dKList.GetLength();
-	}
-
-	return iOldCount;
-}
-
 static int64_t GetChunkSize ( const CSphVector<CSphIndex*> & dDiskChunks, int iIndex )
 {
 	if (iIndex<0)
@@ -7549,10 +7536,9 @@ void RtIndex_c::CommonMerge( Selector_t fnSelector )
 	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
 
-	int iChunks = m_dDiskChunks.GetLength();
+	int iChunks = 0;
 	CSphSchema tSchema = m_tSchema;
 	CSphString sError;
-	int iOldKListCount = 0;
 
 	int iA = -1;
 	int iB = -1;
@@ -7582,6 +7568,11 @@ void RtIndex_c::CommonMerge( Selector_t fnSelector )
 		// check forced exit after long operation
 		if ( g_bShutdown || m_bOptimizeStop || m_bSaveDisabled )
 			break;
+
+		// need klist for merged chunk only after we got disk chunks and going to merge them
+		Verify ( m_tWriting.Lock() );
+		m_dKillsWhileOptimizing.Reset();
+		Verify ( m_tWriting.Unlock() );
 
 		// merge data to disk ( data is constant during that phase )
 		CSphIndexProgress tProgress;
@@ -7643,11 +7634,12 @@ void RtIndex_c::CommonMerge( Selector_t fnSelector )
 		Verify ( m_tChunkLock.WriteLock() );
 
 		// apply killlists that were collected while we were merging segments
-		iOldKListCount = KListSort ( iOldKListCount, m_dKillsWhileOptimizing );
-		pMerged->KillMulti ( m_dKillsWhileOptimizing );
+		m_dKillsWhileOptimizing.Uniq();
+		int iKilled = pMerged->KillMulti ( m_dKillsWhileOptimizing );
+		m_dKillsWhileOptimizing.Reset();
 
-		sphLogDebug ( "optimized a=%s, b=%s, new=%s",
-				pOldest->GetFilename(), pOlder->GetFilename(), pMerged->GetFilename() );
+		sphLogDebug ( "optimized a=%s, b=%s, new=%s, killed=%d",
+				pOldest->GetFilename(), pOlder->GetFilename(), pMerged->GetFilename(), iKilled );
 
 		m_dDiskChunks[iB] = pMerged.LeakPtr();
 		m_dDiskChunks.Remove ( iA );
@@ -7656,6 +7648,8 @@ void RtIndex_c::CommonMerge( Selector_t fnSelector )
 		Verify ( m_tChunkLock.Unlock() );
 		SaveMeta ( m_iTID, dChunkNames );
 		Verify ( m_tWriting.Unlock() );
+
+		iChunks++;
 
 		if ( g_bShutdown || m_bOptimizeStop )
 		{
@@ -7681,21 +7675,17 @@ void RtIndex_c::CommonMerge( Selector_t fnSelector )
 		// FIXEME: wipe out 'merged' index files in case of error
 	}
 
-	Verify ( m_tWriting.Lock() );
-	m_dKillsWhileOptimizing.Reset();
-	Verify ( m_tWriting.Unlock() );
-
 	m_bOptimizing = false;
 	int64_t tmPass = sphMicroTimer() - tmStart;
 
 	if ( g_bShutdown )
 	{
-		sphWarning ( "rt: index %s: optimization terminated chunk(s) %d ( of %d ) in %d.%03d sec",
-			m_sIndexName.cstr(), iChunks-m_dDiskChunks.GetLength(), iChunks, (int)(tmPass/1000000), (int)((tmPass/1000)%1000) );
+		sphWarning ( "rt: index %s: optimization terminated chunk(s) %d ( left %d ) in %d.%03d sec",
+			m_sIndexName.cstr(), iChunks, m_dDiskChunks.GetLength(), (int)(tmPass/1000000), (int)((tmPass/1000)%1000) );
 	} else
 	{
-		sphInfo ( "rt: index %s: optimized chunk(s) %d ( of %d ) in %d.%03d sec",
-			m_sIndexName.cstr(), iChunks-m_dDiskChunks.GetLength(), iChunks, (int)(tmPass/1000000), (int)((tmPass/1000)%1000) );
+		sphInfo ( "rt: index %s: optimized %s chunk(s) %d ( left %d ) in %d.%03d sec",
+			m_sIndexName.cstr(), g_bProgressiveMerge ? "progressive" : "regular", iChunks, m_dDiskChunks.GetLength(), (int)(tmPass/1000000), (int)((tmPass/1000)%1000) );
 	}
 }
 

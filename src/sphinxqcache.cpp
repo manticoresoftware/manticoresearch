@@ -242,7 +242,7 @@ void QcacheEntry_c::Finish()
 #endif
 
 	m_hWeights.Reset(0);
-	m_iElapsedMsec = (int)( ( sph::MiniTimer() - m_tmStarted + 500 )/1000 );
+	m_iElapsedMsec = (int)( ( sphMicroTimer() - m_tmStarted + 500 )/1000 );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -432,7 +432,7 @@ QcacheEntry_c * Qcache_c::Find ( int64_t iIndexId, const CSphQuery & q, const IS
 	
 	ScopedMutex_t dLock (m_tLock);
 
-	int64_t tmMin = sph::MiniTimer() - int64_t( m_iTtlS)*1000000;
+	int64_t tmMin = sphMicroTimer() - int64_t( m_iTtlS)*1000000;
 	int iLenMask = m_hData.GetLength() - 1;
 	int iLoop = m_hData.GetLength();
 	int iRes = -1;
@@ -562,7 +562,7 @@ void Qcache_c::EnforceLimits ( bool bSizeOnly )
 		return;
 
 	// if requested, do a full sweep, and recheck ttl and thresh limits
-	int64_t tmMin = sph::MiniTimer() - int64_t( m_iTtlS)*1000000;
+	int64_t tmMin = sphMicroTimer() - int64_t( m_iTtlS)*1000000;
 	ARRAY_FOREACH ( i, m_hData )
 		if ( IsValidEntry(i) && ( m_hData[i]->m_tmStarted < tmMin || m_hData[i]->m_iElapsedMsec < m_iThreshMs ) )
 			DeleteEntry(i);

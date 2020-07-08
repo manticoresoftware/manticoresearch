@@ -132,7 +132,7 @@ int						g_iWriteTimeoutS	= 5;	// sec
 int						g_iClientTimeoutS	= 300;
 int						g_iClientQlTimeoutS	= 900;	// sec
 static int				g_iMaxConnection	= 0; // unlimited
-static int				g_iThreads			= 2;
+static int				g_iThreads;				// defined in config, or =cpu cores
 #if !USE_WINDOWS
 static bool				g_bPreopenIndexes	= true;
 #else
@@ -18753,6 +18753,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 
 	g_iMaxConnection = hSearchd.GetInt ( "max_connections", g_iMaxConnection );
 	g_iThreads = hSearchd.GetInt ( "threads", sphCpuThreadsCount() );
+	SetMaxChildrenThreads ( g_iThreads );
 	g_iThdQueueMax = hSearchd.GetInt ( "jobs_queue_size", g_iThdQueueMax );
 
 	g_iPersistentPoolSize = hSearchd.GetInt ("persistent_connections_limit");
@@ -19672,6 +19673,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	}
 #endif
 
+	StartGlobalWorkPool ();
+
 	////////////////////
 	// network startup
 	////////////////////
@@ -19894,11 +19897,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	if ( g_bQuerySyslog )
 		sphFatal ( "Wrong query_log file! You have to reconfigure --with-syslog and rebuild daemon if you want to use syslog there." );
 #endif
+
 	/////////////////
 	// serve clients
 	/////////////////
-
-	SetMaxChildrenThreads ( g_iThreads );
 
 #if USE_WINDOWS
 	if ( g_bService )

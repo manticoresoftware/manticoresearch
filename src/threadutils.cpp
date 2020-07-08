@@ -949,10 +949,6 @@ void searchd::CleanAfterFork () NO_THREAD_SAFETY_ANALYSIS
 
 static int g_iMaxChildrenThreads = 1;
 
-void SetMaxChildrenThreads ( int iThreads )
-{
-	g_iMaxChildrenThreads = Max ( 1, iThreads);
-}
 
 namespace {
 SchedulerSharedPtr_t& GlobalPoolSingletone ()
@@ -962,11 +958,23 @@ SchedulerSharedPtr_t& GlobalPoolSingletone ()
 }
 }
 
+void StartGlobalWorkPool ()
+{
+	sphLogDebug ( "StartGlobalWorkpool" );
+	SchedulerSharedPtr_t & pPool = GlobalPoolSingletone ();
+	pPool = new ThreadPool_c ( g_iMaxChildrenThreads, "work" );
+}
+
+void SetMaxChildrenThreads ( int iThreads )
+{
+	sphLogDebug ( "SetMaxChildrenThreads to %d", iThreads );
+	g_iMaxChildrenThreads = Max ( 1, iThreads );
+}
+
 Threads::Scheduler_i * GlobalWorkPool ()
 {
 	SchedulerSharedPtr_t& pPool = GlobalPoolSingletone ();
-	if ( !pPool )
-		pPool = new ThreadPool_c ( g_iMaxChildrenThreads, "work" );
+	assert ( pPool && "invoke StartGlobalWorkPool first");
 	return pPool;
 }
 

@@ -187,6 +187,7 @@ namespace CrashLogger
 // Scheduler to global thread pool
 Threads::Scheduler_i* GlobalWorkPool ();
 void SetMaxChildrenThreads ( int iThreads );
+void StartGlobalWorkPool ();
 
 /// schedule stop of the global thread pool
 void WipeGlobalSchedulerOnShutdownAndFork ();

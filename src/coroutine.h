@@ -29,7 +29,7 @@ void CoCo ( Handler handler, Waiter_t tSignaller );
 // try to run immediately (if thread wasn't switched yet), or push to first-priority queue
 void CoContinue ( Handler fnHandler, int iStack=0 );
 
-// perform handler in dedicated coro, being called from plain thread (i.e. use blocking event to wait finish);
+// perform handler in plain coro (as continuation), or in dedicated (if called from plain thread)
 void CallCoroutine ( Handler fnHandler );
 
 // if iStack<0, just immediately invoke the handler (that is bypass)

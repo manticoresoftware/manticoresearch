@@ -453,9 +453,7 @@ void CoContinue ( Handler fnHandler, int iStack )
 	WaitForDeffered ( std::move ( dWaiter ));
 }
 
-// invoke handler as function, but in dedicated coro (i.e. with possibility of context switching)
-// used to call things from plain (non-coroutined) thread. Thread execution will be locked on event until finish.
-void CallCoroutine ( Handler fnHandler )
+void CallPlainCoroutine ( Handler fnHandler )
 {
 	auto pScheduler = GlobalWorkPool ();
 	CSphAutoEvent tEvent;
@@ -464,6 +462,25 @@ void CallCoroutine ( Handler fnHandler )
 	tEvent.WaitEvent ();
 }
 
+// if called from coroutine - just makes continuation.
+// if called from plain thread (non-contexted) - creates coro, run and wait until it finished.
+void CallCoroutine ( Handler fnHandler )
+{
+	if ( !CoroWorker_c::CurrentWorker () )
+	{
+		CallPlainCoroutine(std::move(fnHandler));
+		return;
+	}
+	auto pScheduler = CoCurrentScheduler ();
+	if ( !pScheduler )
+		pScheduler = GlobalWorkPool ();
+
+	assert ( pScheduler );
+
+	auto dWaiter = DefferedContinuator ();
+	CoroWorker_c::StartContinuation ( std::move ( fnHandler ), pScheduler, 0, dWaiter );
+	WaitForDeffered ( std::move ( dWaiter ) );
+}
 
 void CoYieldWith ( Handler fnHandler )
 {

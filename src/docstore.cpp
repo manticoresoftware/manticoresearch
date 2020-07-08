@@ -1546,8 +1546,7 @@ public:
 	void				Load ( MemoryReader_c & tReader ) final;
 	void				Save ( MemoryWriter_c & tWriter ) final;
 
-	void				AddPackedDoc ( RowID_t tRowID, BYTE * pDoc ) final;
-	BYTE *				LeakPackedDoc ( RowID_t tRowID ) final;
+	void				AddPackedDoc ( RowID_t tRowID, const DocstoreRT_i * pSrcDocstore, RowID_t tSrcRowID ) final;
 
 	int64_t				AllocatedBytes() const final;
 
@@ -1730,23 +1729,24 @@ bool DocstoreRT_c::CheckFieldsLoaded ( CSphString & sError ) const
 }
 
 
-void DocstoreRT_c::AddPackedDoc ( RowID_t tRowID, BYTE * pDoc )
+void DocstoreRT_c::AddPackedDoc ( RowID_t tRowID, const DocstoreRT_i * pSrcDocstore, RowID_t tSrcRowID )
 {
+	const DocstoreRT_c * pSrc = (const DocstoreRT_c *)pSrcDocstore;
+	int iFieldsCount = m_tFields.GetNumFields();
+	assert ( iFieldsCount==pSrc->m_tFields.GetNumFields() );
+
+	// get raw doc and its length
+	const BYTE * pSrcPacked = pSrc->m_dDocs[tSrcRowID];
+	const int iSrcPackedLen = pSrc->GetDocSize ( pSrcPacked, iFieldsCount );
+	
+	// copy doc into new place
+	BYTE * pDst = new BYTE[iSrcPackedLen];
+	memcpy ( pDst, pSrcPacked, iSrcPackedLen );
+
 	assert ( (RowID_t)(m_dDocs.GetLength())==tRowID );
-	m_dDocs.Add(pDoc);
-	m_iAllocated += GetDocSize ( pDoc, m_tFields.GetNumFields() );
+	m_dDocs.Add ( pDst );
+	m_iAllocated += GetDocSize ( pDst, iFieldsCount );
 }
-
-
-BYTE * DocstoreRT_c::LeakPackedDoc ( RowID_t tRowID )
-{
-	BYTE * pPacked = m_dDocs[tRowID];
-	m_dDocs[tRowID] = nullptr;
-	m_iAllocated -= GetDocSize ( pPacked, m_tFields.GetNumFields() );
-	assert ( m_iAllocated>=0 );
-	return pPacked;
-}
-
 
 int64_t DocstoreRT_c::AllocatedBytes() const
 {

@@ -2446,7 +2446,7 @@ void RtIndex_c::MergeAttributes ( RtRowIterator_c & tIt, RtSegment_t * pDestSeg,
 		}
 
 		if ( pDestSeg->m_pDocstore )
-			pDestSeg->m_pDocstore->AddPackedDoc ( tNextRowID, pSrcSeg->m_pDocstore->LeakPackedDoc ( tIt.GetRowID() ) );
+			pDestSeg->m_pDocstore->AddPackedDoc ( tNextRowID, pSrcSeg->m_pDocstore.Ptr(), tIt.GetRowID() );
 
 		dRowMap[tIt.GetRowID()] = tNextRowID++;
 	}

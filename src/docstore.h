@@ -79,8 +79,7 @@ public:
 	virtual void	Load ( MemoryReader_c & tReader ) = 0;
 	virtual void	Save ( MemoryWriter_c & tWriter ) = 0;
 
-	virtual void	AddPackedDoc ( RowID_t tRowID, BYTE * pDoc ) = 0;
-	virtual BYTE *	LeakPackedDoc ( RowID_t tRowID ) = 0;
+	virtual void	AddPackedDoc ( RowID_t tRowID, const DocstoreRT_i * pSrcDocstore, RowID_t tSrcRowID ) = 0;
 
 	virtual int64_t	AllocatedBytes() const = 0;
 

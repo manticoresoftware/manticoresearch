@@ -333,7 +333,7 @@ struct TaskWorker_t: public ListNode_t
 		// we've extracted the task and going to work on it.
 		pTask->Action ();
 		DebugL (M, "%d Done %d jobs, spend " INT64_FMT "us",
-				   m_iMyThreadID, ( int ) m_tDesc.m_iTotalJobsDone, m_tDesc.m_tmTotalWorkedTimeUS; );
+				   m_iMyThreadID, ( int ) m_tDesc.m_iTotalJobsDone, m_tDesc.m_tmTotalWorkedTimeUS );
 	}
 
 	// returns timeout after which we'll regarded idle too much

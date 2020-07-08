@@ -629,3 +629,77 @@ void Threads::CoroEvent_c::WaitEvent()
 	std::atomic_thread_fence ( std::memory_order_release );
 }
 
+bool Threads::IsInsideCoroutine ()
+{
+	return CoWorker ()!=nullptr;
+}
+
+/*
+ * Legend for m_uLock:
+ * highest bit indicates exclusive lock, others - num of acquired shared locks
+ *
+ * Possible values:
+ * 0x0 - unlocked;
+ * 0x21 - 33 r-locks acquired, may acquire and release other shared locks.
+ * 0x10000021 - 33 r-locks acquired, and w-lock is waiting. will NOT acquire more r-locks, just release existing.
+ * 0x10000000 - exclusive lock acquired. May be only released.
+ */
+
+
+static const DWORD uWL = 0x10000000; // flag for write-lock
+static const DWORD uMWL = ~uWL; // mask for write-log flag (0x7FFFFFFF)
+static const DWORD uINC = 1; // increment for r-lock to avoid touching w-lock
+
+/*
+ * w-locking:
+ * pending = (m_uLock & uWL)? ~0 : ~uWL; // if somebody pending - check later all bits. Otherwise only low
+ * m_uLock |= uWL;	// set bit that we're want lock. So, readers will no more acquire the lock
+ * m_uLock&pending==0 ? m_uLock=uWL; return // exclusive lock acquired
+ * else reschedule
+ *
+ * r-locking:
+ * m_uLock&uWL==0? ++m_uLock; return // r-lock acquired
+ * else reschedule // w-locked, bail
+ *
+ * unlocking:
+ * if m_uLock&~uWL: --m_uLock; return
+ * if m_uLock&uWL : m_uLock&=~uWL; return
+ * assert (!m_uLock)
+ */
+bool Threads::CoroRWLock_c::WriteLock ()
+{
+	assert ( IsInsideCoroutine () );
+	auto uPrevState = m_uLock.fetch_or ( uWL, std::memory_order_acq_rel );
+	auto uCheckMask = uPrevState | uMWL; // == 0xFFFFFFFF if w-locked, 0x7FFFFFFF, if free
+	uPrevState |= uWL;
+
+	do {
+		if ( ( uPrevState & uCheckMask )!=0 ) // for previously wlocked - check whole, for free - only low bits
+			CoWorker ()->Reschedule ();
+		uPrevState &= ~uCheckMask; // expect 0, if was locked. Or ignore wlock bit, if not (we're set it ourselves)
+	} while ( !m_uLock.compare_exchange_weak ( uPrevState, uWL, std::memory_order_acq_rel ) );
+	return true;
+}
+
+bool Threads::CoroRWLock_c::ReadLock ()
+{
+	assert ( IsInsideCoroutine () );
+	auto uPrevState = m_uLock.load ( std::memory_order_acquire );
+	do {
+		if ( ( uPrevState & uWL )!=0 )
+			CoWorker ()->Reschedule ();
+		uPrevState &= uMWL;
+	} while ( !m_uLock.compare_exchange_weak ( uPrevState, uPrevState+uINC, std::memory_order_acq_rel ) );
+	assert ( ( uPrevState & uMWL )!=uMWL ); // hope, 31 bit is enough to count all re-entered r-locks.
+	return true;
+}
+
+bool Threads::CoroRWLock_c::Unlock ()
+{
+	assert ( IsInsideCoroutine () );
+	if ( m_uLock.load ( std::memory_order_acquire )==uWL )
+		m_uLock.store ( 0, std::memory_order_release ); // released exclusive lock
+	else
+		m_uLock.fetch_sub ( uINC, std::memory_order_acq_rel ); // released shared lock
+	return true;
+}

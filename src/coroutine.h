@@ -377,5 +377,20 @@ public:
 	void WaitEvent ();
 };
 
+bool IsInsideCoroutine ();
+
+// instead of real blocking it yield current coro, so, MUST be used only with coro context
+class CAPABILITY ( "mutex" ) CoroRWLock_c : public ISphNoncopyable
+{
+	std::atomic<DWORD> m_uLock {0};
+
+public:
+	bool WriteLock() ACQUIRE();
+	bool ReadLock() ACQUIRE_SHARED();
+	bool Unlock() UNLOCK_FUNCTION();
+};
+
+using SccRL_t = CSphScopedRLock_T<CoroRWLock_c>;
+using SccWL_t = CSphScopedWLock_T<CoroRWLock_c>;
 
 } // namespace Threads

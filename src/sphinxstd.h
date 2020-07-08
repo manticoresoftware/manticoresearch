@@ -4024,45 +4024,47 @@ public:
 
 
 /// scoped shared (read) lock
-class SCOPED_CAPABILITY CSphScopedRLock : ISphNoncopyable
+template<class LOCKED=CSphRwlock>
+class SCOPED_CAPABILITY CSphScopedRLock_T : ISphNoncopyable
 {
 public:
 	/// lock on creation
-	explicit CSphScopedRLock ( CSphRwlock & tLock ) ACQUIRE_SHARED ( tLock )
+	explicit CSphScopedRLock_T ( LOCKED & tLock ) ACQUIRE_SHARED ( tLock )
 		: m_tLock ( tLock )
 	{
 		m_tLock.ReadLock();
 	}
 
 	/// unlock on going out of scope
-	~CSphScopedRLock () RELEASE ()
+	~CSphScopedRLock_T () RELEASE ()
 	{
 		m_tLock.Unlock();
 	}
 
 protected:
-	CSphRwlock & m_tLock;
+	LOCKED & m_tLock;
 };
 
 /// scoped exclusive (write) lock
-class SCOPED_CAPABILITY CSphScopedWLock : ISphNoncopyable
+template<class LOCKED=CSphRwlock>
+class SCOPED_CAPABILITY CSphScopedWLock_T : ISphNoncopyable
 {
 public:
 	/// lock on creation
-	explicit CSphScopedWLock ( CSphRwlock & tLock ) ACQUIRE ( tLock ) EXCLUDES ( tLock )
+	explicit CSphScopedWLock_T ( LOCKED & tLock ) ACQUIRE ( tLock ) EXCLUDES ( tLock )
 		: m_tLock ( tLock )
 	{
 		m_tLock.WriteLock();
 	}
 
 	/// unlock on going out of scope
-	~CSphScopedWLock () RELEASE ()
+	~CSphScopedWLock_T () RELEASE ()
 	{
 		m_tLock.Unlock();
 	}
 
 protected:
-	CSphRwlock & m_tLock;
+	LOCKED & m_tLock;
 };
 
 /// scoped lock owner - unlock in dtr
@@ -4104,6 +4106,8 @@ protected:
 	LOCKED * m_pLock;
 };
 
+using CSphScopedRLock = CSphScopedRLock_T<>;
+using CSphScopedWLock = CSphScopedWLock_T<>;
 // shortcuts (original names sometimes looks too long)
 using ScRL_t = CSphScopedRLock;
 using ScWL_t = CSphScopedWLock;

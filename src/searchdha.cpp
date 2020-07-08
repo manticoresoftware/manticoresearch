@@ -87,7 +87,7 @@ HostDashboard_t::HostDashboard_t ( const HostDesc_t & tHost )
 {
 	assert ( !tHost.m_pDash );
 	m_tHost.CloneFromHost ( tHost );
-	m_iLastQueryTime = m_iLastAnswerTime = sph::MiniTimer ();
+	m_iLastQueryTime = m_iLastAnswerTime = sphMicroTimer ();
 	for ( auto & dMetric : m_dPeriodicMetrics )
 		dMetric.m_dMetrics.Reset ();
 }
@@ -106,7 +106,7 @@ int64_t HostDashboard_t::EngageTime () const NO_THREAD_SAFETY_ANALYSIS
 
 DWORD HostDashboard_t::GetCurSeconds()
 {
-	int64_t iNow = sph::MiniTimer()/1000000;
+	int64_t iNow = sphMicroTimer()/1000000;
 	return DWORD ( iNow & 0xFFFFFFFF );
 }
 
@@ -3395,7 +3395,7 @@ private:
 			pTask->m_iPlannedTimeout = 0;
 			m_dTimeouts.Change ( pTask );
 			sphLogDebugL ( "L change/add timeout for %p, " INT64_FMT " (%d) is changed one", pTask, pTask->m_iTimeoutTimeUS,
-				( int ) ( pTask->m_iTimeoutTimeUS - sph::MiniTimer () ) );
+				( int ) ( pTask->m_iTimeoutTimeUS - sphMicroTimer () ) );
 			sphLogDebugL ( "%s", m_dTimeouts.DebugDump ( "L " ).cstr () );
 		}
 	}

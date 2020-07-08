@@ -6639,8 +6639,9 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	pResult->m_bHasPrediction = pQuery->m_iMaxPredictedMsec>0;
 
 	int64_t tmMaxTimer = 0;
+	sph::MiniTimer_c dTimerGuard;
 	if ( pQuery->m_uMaxQueryMsec>0 )
-		tmMaxTimer = sph::MiniTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
+		tmMaxTimer = dTimerGuard.MiniTimerEngage ( pQuery->m_uMaxQueryMsec ); // max_query_time
 
 	CSphVector<const BYTE *> dDiskBlobPools ( tGuard.m_dDiskChunks.GetLength() );
 
@@ -6682,7 +6683,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_iDynamicRowitems = tMaxSorterSchema.GetDynamicSize();
 	if ( pQuery->m_uMaxQueryMsec>0 )
-		tTermSetup.m_iMaxTimer = sph::MiniTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
+		tTermSetup.m_iMaxTimer = dTimerGuard.MiniTimerEngage ( pQuery->m_uMaxQueryMsec ); // max_query_time
 	tTermSetup.m_pWarning = &pResult->m_sWarning;
 	tTermSetup.SetSegment ( -1 );
 	tTermSetup.m_pCtx = &tCtx;

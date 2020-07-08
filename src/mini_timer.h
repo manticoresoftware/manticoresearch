@@ -17,8 +17,19 @@ namespace sph
 	/// how often timing thread 'ticks'. Default 1ms, but note that thread quantum might be different depending from OS!
 	static const int MINI_TIMER_TICK_MS = 1;
 
-	/// millisecond precision timestamp, returned in microsecond (to be exchangable with sphMicroTimer)
-	int64_t MiniTimer ();
+	/// RAII timer thread ticker. While instance of the class exists and engaged - internal thread will tick every
+	/// MINI_TIMER_TICK_MS milliseconds, and update internal timestamp.
+	/// When all consumers gone - internal thread will sleep and not consume CPU time idling.
+	class MiniTimer_c
+	{
+		bool m_bEngaged = false;
+
+	public:
+		/// that is made non-static, to avoid using engage outside living MiniTimer_c
+		int64_t MiniTimerEngage ( int64_t iTimePeriodMS );
+
+		~MiniTimer_c();
+	};
 
 	/// returns true if provided timestamp is already reached or not
 	bool TimeExceeded ( int64_t tmMicroTimestamp );

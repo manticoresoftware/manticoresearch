@@ -1819,8 +1819,9 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 	// start counting
 	int64_t tmQueryStart = sphMicroTimer ();
 	int64_t tmMaxTimer = 0;
+	sph::MiniTimer_c dTimerGuard;
 	if ( pQuery->m_uMaxQueryMsec>0 )
-		tmMaxTimer = sph::MiniTimer () + pQuery->m_uMaxQueryMsec * 1000; // max_query_time
+		tmMaxTimer = dTimerGuard.MiniTimerEngage ( pQuery->m_uMaxQueryMsec ); // max_query_time
 
 	// select the sorter with max schema
 	// uses GetAttrsCount to get working facets (was GetRowSize)

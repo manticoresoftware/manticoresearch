@@ -13214,8 +13214,9 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	int64_t tmQueryStart = sphMicroTimer();
 	int64_t tmCpuQueryStart = sphTaskCpuTimer();
 	int64_t tmMaxTimer = 0;
+	sph::MiniTimer_c dTimerGuard;
 	if ( pQuery->m_uMaxQueryMsec>0 )
-		tmMaxTimer = sph::MiniTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
+		tmMaxTimer = dTimerGuard.MiniTimerEngage ( pQuery->m_uMaxQueryMsec ); // max_query_time
 
 	ScopedThreadPriority_c tPrio ( pQuery->m_bLowPriority );
 
@@ -16004,8 +16005,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_iDynamicRowitems = tMaxSorterSchema.GetDynamicSize();
 
+	sph::MiniTimer_c dTimerGuard;
 	if ( pQuery->m_uMaxQueryMsec>0 )
-		tTermSetup.m_iMaxTimer = sph::MiniTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
+		tTermSetup.m_iMaxTimer = dTimerGuard.MiniTimerEngage ( pQuery->m_uMaxQueryMsec ); // max_query_time
 	tTermSetup.m_pWarning = &pResult->m_sWarning;
 	tTermSetup.m_pCtx = &tCtx;
 	tTermSetup.m_pNodeCache = pNodeCache;

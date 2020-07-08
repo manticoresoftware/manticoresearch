@@ -16,6 +16,7 @@
 #include "sphinxstd.h"
 #include "searchdaemon.h"
 #include "optional.h"
+#include "coroutine.h"
 
 #if USE_WINDOWS
 	#define USE_PSI_INTERFACE 1
@@ -1119,7 +1120,7 @@ void ServedIndex_c::Unlock() const
 }
 
 ServedIndex_c::ServedIndex_c( const ServedDesc_t& tDesc )
-	: m_tLock( ServedDesc_t::IsMutable( &tDesc ))
+//	: m_tLock( ServedDesc_t::IsMutable( &tDesc ))
 {
 	*( ServedDesc_t* ) ( this ) = tDesc;
 }

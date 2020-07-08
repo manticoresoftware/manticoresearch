@@ -13,6 +13,7 @@
 #include "taskflushattrs.h"
 #include "searchdtask.h"
 #include "searchdaemon.h"
+#include "coroutine.h"
 
 //////////////////////////////////////////////////////////////////////////
 struct FlushState_t
@@ -147,5 +148,7 @@ void ScheduleFlushAttrs ()
 // called from main shutdown and expects problem reporting
 bool FinallySaveIndexes ()
 {
-	return CheckSaveIndexes ()!=Saved_e::NOT_ALL;
+	bool bRes;
+	Threads::CallCoroutine ( [&bRes] { bRes = CheckSaveIndexes ()!=Saved_e::NOT_ALL; });
+	return bRes;
 }

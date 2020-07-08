@@ -12,6 +12,7 @@
 
 #include "searchdtask.h"
 #include "searchdaemon.h"
+#include "coroutine.h"
 
 #ifndef VERBOSE_TASKMANAGER
 #define VERBOSE_TASKMANAGER 0
@@ -242,7 +243,7 @@ public:
 		DebugT ( "Task_t %s Action (%p)", GetName (), m_pPayload );
 		++Prop ().m_iCurrentRunners;
 		auto itmStart = sphMicroTimer ();
-		Descr ().m_fnWorker ( m_pPayload );
+		Threads::CallCoroutine ( [this] { Descr ().m_fnWorker ( m_pPayload ); } );
 		m_pPayload = nullptr;
 		auto itmEnd = sphMicroTimer ();
 		Prop ().m_iLastFinished = itmEnd;
@@ -261,7 +262,7 @@ public:
 		if ( bCount )
 			++Prop ().m_iTotalDropped;
 		if ( m_pPayload && Descr ().m_fnReleasePayload )
-			Descr ().m_fnReleasePayload ( m_pPayload );
+			Threads::CallCoroutine ( [this] { Descr ().m_fnReleasePayload ( m_pPayload ); } );
 		m_pPayload = nullptr;
 	}
 

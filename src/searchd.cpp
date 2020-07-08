@@ -744,7 +744,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	// unlock indexes and release locks if needed
 	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); )
 	{
-		ServedDescRPtr_c pIdx ( it.Get() );
+		auto pIdx = (const ServedDesc_t *) it.Get(); // breaks any access, but we're finishing, that's ok.
 		if ( pIdx && pIdx->m_pIndex )
 			pIdx->m_pIndex->Unlock();
 	}
@@ -18592,7 +18592,7 @@ void TickHead () REQUIRES ( MainThread )
 	CheckSignals ();
 	CheckLeaks ();
 	CheckReopenLogs ();
-	CheckRotate ();
+	Threads::CallCoroutine ( CheckRotate );
 
 //	if ( g_pThdPool )
 	{
@@ -19772,7 +19772,11 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		sphSplit ( dExactIndexes, dOptIndex.cstr (), "," );
 
 	SetPercolateQueryParserFactory ( PercolateQueryParserFactory );
-	ConfigureAndPreload ( hConf, dExactIndexes );
+	Threads::CallCoroutine ( [&hConf, &dExactIndexes]
+	{
+		ScopedRole_c thMain ( MainThread );
+		ConfigureAndPreload ( hConf, dExactIndexes );
+	} );
 
 	///////////
 	// startup
@@ -19858,6 +19862,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	SetConsoleCtrlHandler ( CtrlHandler, TRUE );
 #endif
 
+	Threads::CallCoroutine( [bWatched] {
 	StrVec_t dFailed;
 	if ( !g_bOptNoDetach && !bWatched && !g_bService )
 	{
@@ -19878,6 +19883,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		for ( const auto& sFailed : dFailed )
 			g_pLocalIndexes->Delete ( sFailed );
 	}
+	});
 
 	// if we're running in test console mode, dump queries to tty as well
 	// unless we're explicitly asked not to!
@@ -19909,12 +19915,15 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	// replay last binlog
 	SmallStringHash_T<CSphIndex*> hIndexes;
-	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); ) // FIXME!!!
+	Threads::CallCoroutine ([&hIndexes]
 	{
-		ServedDescRPtr_c pLocked ( it.Get () );
-		if ( pLocked )
-			hIndexes.Add ( pLocked->m_pIndex, it.GetName () );
-	}
+		for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); ) // FIXME!!!
+		{
+			ServedDescRPtr_c pLocked ( it.Get () );
+			if ( pLocked )
+				hIndexes.Add ( pLocked->m_pIndex, it.GetName () );
+		}
+	});
 
 	sphReplayBinlog ( hIndexes, uReplayFlags, DumpMemStat );
 	hIndexes.Reset();

@@ -103,6 +103,8 @@
 #include "sphinxint.h"
 #include "sphinxrt.h"
 #include "task_info.h"
+#include "coroutine.h"
+
 using namespace Threads;
 
 #define SPHINXAPI_PORT            9312
@@ -703,7 +705,7 @@ struct ServedDesc_t
 // create ServedDesc[R|W]Ptr_c instance to have actual access to the members.
 class ServedIndex_c : public ISphRefcountedMT, private ServedDesc_t, public ServedStats_c
 {
-	mutable RwLock_t m_tLock;
+	mutable CoroRWLock_c m_tLock;
 private:
 	friend class ServedDescRPtr_c;
 	friend class ServedDescWPtr_c;

@@ -23,14 +23,14 @@ void SetRtFlushPeriod ( int64_t iPeriod )
 // thread-safe stringset, internally guarded by rwlock
 class StringSetMT
 {
-	RwLock_t m_dGuard;
+	Threads::CoroRWLock_c m_dGuard;
 	sph::StringSet m_dSet GUARDED_BY ( m_dGuard );
-	bool m_dDisabled = false;
+	volatile bool m_dDisabled = false;
 
 public:
 	bool AddUniq ( const CSphString& sName ) EXCLUDES ( m_dGuard )
 	{
-		ScWL_t wLock ( m_dGuard );
+		SccWL_t wLock ( m_dGuard );
 		if ( m_dSet[sName] )
 			return false;
 
@@ -40,7 +40,7 @@ public:
 
 	void Delete ( const CSphString& sName ) EXCLUDES ( m_dGuard )
 	{
-		ScWL_t wLock ( m_dGuard );
+		SccWL_t wLock ( m_dGuard );
 		m_dSet.Delete ( sName );
 	}
 
@@ -48,7 +48,7 @@ public:
 	{
 		if ( m_dDisabled )
 			return false;
-		ScRL_t rLock ( m_dGuard );
+		SccRL_t rLock ( m_dGuard );
 		return m_dSet[sName];
 	}
 

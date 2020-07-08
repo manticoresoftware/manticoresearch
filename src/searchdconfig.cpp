@@ -15,6 +15,7 @@
 #include "searchdreplication.h"
 #include "fileutils.h"
 #include "sphinxint.h"
+#include "coroutine.h"
 
 // description of clusters and indexes loaded from internal config
 static CSphVector<ClusterDesc_t> g_dCfgClusters;
@@ -776,8 +777,11 @@ bool SaveConfigInt ( CSphString & sError )
 		ReplicationCollectClusters ( dClusters );
 
 	CSphVector<IndexDesc_t> dIndexes;
-	CollectLocalIndexesInt ( dIndexes );
-	CollectDistIndexesInt ( dIndexes );
+	Threads::CallCoroutine ( [&dIndexes]
+	{
+		CollectLocalIndexesInt ( dIndexes );
+		CollectDistIndexesInt ( dIndexes );
+	});
 
 	if ( !ConfigWrite ( g_sConfigPath, dClusters, dIndexes, sError ) )
 	{

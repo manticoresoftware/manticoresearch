@@ -12066,9 +12066,9 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	tOut.HeadColumn ( "Time" );
 	tOut.HeadColumn ( "Work time" );
 	tOut.HeadColumn ( "Work time CPU" );
-	tOut.HeadColumn ( "Thd efficency");
+	tOut.HeadColumn ( "Thd efficiency");
 	tOut.HeadColumn ( "Jobs done" );
-	tOut.HeadColumn ( "Last job take" );
+	tOut.HeadColumn ( "Last job took" );
 	tOut.HeadColumn ( "In idle" );
 	tOut.HeadColumn ( "Info" );
 	tOut.HeadEnd();

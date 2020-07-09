@@ -828,12 +828,15 @@ public:
 	}
 
 	// pack zero-terminated string (or "" if it is zero itself)
-	void PutString ( const char * sMsg ) override
+	void PutString ( const char * sMsg, int iMaxLen=-1 ) override
 	{
 		int iLen = ( sMsg && *sMsg ) ? ( int ) strlen ( sMsg ) : 0;
 
 		if (!sMsg)
 			sMsg = "";
+
+		if ( iMaxLen>=0 )
+			iLen = Min ( iLen, iMaxLen );
 
 		PutArray ( sMsg, iLen, false );
 	}

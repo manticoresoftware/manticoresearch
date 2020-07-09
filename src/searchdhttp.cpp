@@ -705,10 +705,10 @@ public:
 		m_dBuf.AppendEscaped ( sData.cstr() );
 	}
 
-	void PutString ( const char * sMsg ) override
+	void PutString ( const char * sMsg, int iLen=-1 ) override
 	{
 		AddDataColumn();
-		m_dBuf.AppendEscaped ( sMsg );
+		m_dBuf.AppendEscaped ( sMsg, EscBld::eAll, iLen );
 	}
 
 	void PutMicrosec ( int64_t iUsec ) override

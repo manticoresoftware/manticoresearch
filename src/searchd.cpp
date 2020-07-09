@@ -12118,7 +12118,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 			tOut.PutTimestampAsString ( dThd.m_tmLastJobDoneTimeUS ); // idle for
 		}
 
-		tOut.PutString ( FormatInfo ( dThd, eFmt, tBuf ) ); // Info m_pTaskInfo
+		tOut.PutString ( FormatInfo ( dThd, eFmt, tBuf ), tStmt.m_iThreadsCols ); // Info m_pTaskInfo
 		tOut.Commit();
 	}
 

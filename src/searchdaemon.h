@@ -1277,7 +1277,7 @@ public:
 	virtual void PutArray ( const void * pBlob, int iLen, bool bSendEmpty = false ) = 0;
 
 	// pack zero-terminated string (or "" if it is zero itself)
-	virtual void PutString ( const char * sMsg ) = 0;
+	virtual void PutString ( const char * sMsg, int iMaxLen=-1 ) = 0;
 
 	virtual void PutMicrosec ( int64_t iUsec ) = 0;
 

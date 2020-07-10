@@ -514,10 +514,6 @@ static CSphString GetNamedPipeName ( int iPid )
 }
 #endif
 
-void LogWarning ( const char * sWarning )
-{
-	sphWarning ( "%s", sWarning );
-}
 
 void LogChangeMode ( int iFile, int iMode )
 {
@@ -13548,9 +13544,6 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 	tOut.Ok();
 }
 
-
-// fwd
-bool PrereadNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection & hIndex, const char * szIndexName );
 
 void HandleMysqlAttach ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {

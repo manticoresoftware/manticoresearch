@@ -221,7 +221,7 @@ struct SqlStmt_t
 	bool					m_bIfExists = false;
 
 	// SHOW THREADS specific
-	int						m_iThreadsCols = 0;
+	int						m_iThreadsCols = -1;
 	CSphString				m_sThreadFormat;
 
 	// generic parameter, different meanings in different statements

@@ -927,6 +927,12 @@ struct CSphWordHit
 	RowID_t		m_tRowID;		///< document ID
 	SphWordID_t	m_uWordID = WORDID_MAX;		///< word ID in current dictionary
 	Hitpos_t	m_uWordPos = EMPTY_HIT;		///< word position in current document
+	CSphWordHit () = default;
+	CSphWordHit ( RowID_t tRowID, SphWordID_t uWordID, Hitpos_t uWordPos )
+		: m_tRowID { tRowID }
+		, m_uWordID { uWordID }
+		, m_uWordPos { uWordPos }
+	{}
 };
 
 inline bool operator== ( const CSphWordHit& lhs, const CSphWordHit& rhs )

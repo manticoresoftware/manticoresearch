@@ -18723,7 +18723,7 @@ static void CheckSystemTFO ()
 }
 
 
-void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
+void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMode )
 {
 	if ( !hConf.Exists ( "searchd" ) || !hConf["searchd"].Exists ( "searchd" ) )
 		sphFatal ( "'searchd' config section not found in '%s'", g_sConfigFile.cstr () );
@@ -18795,7 +18795,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	// sha1 password hash for shutdown action
 	g_sShutdownToken = hSearchd.GetStr ("shutdown_token");
 
-	if ( !g_bSeamlessRotate && g_bPreopenIndexes )
+	if ( !g_bSeamlessRotate && g_bPreopenIndexes && !bTestMode )
 		sphWarning ( "preopen_indexes=1 has no effect with seamless_rotate=0" );
 
 	SetAttrFlushPeriod ( hSearchd.GetUsTime64S ( "attr_flush_period", 0 ));
@@ -19538,7 +19538,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	else
 		sphFatal ( "%s", sError.cstr() );
 
-	ConfigureSearchd ( hConf, bOptPIDFile );
+	ConfigureSearchd ( hConf, bOptPIDFile, bTestMode );
 	sphConfigureCommon ( hConf ); // this also inits plugins now
 
 	g_bWatchdog = hSearchdpre.GetInt ( "watchdog", g_bWatchdog )!=0;
@@ -19613,7 +19613,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 			sphFatal ( "failed to parse config file '%s': %s", g_sConfigFile.cstr (), TlsMsg::szError() );
 
 		sphInfo ( "Reconfigure the daemon" );
-		ConfigureSearchd ( hConf, bOptPIDFile );
+		ConfigureSearchd ( hConf, bOptPIDFile, bTestMode );
 	}
 	dConfig.Reset();
 

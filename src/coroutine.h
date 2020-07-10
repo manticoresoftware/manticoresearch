@@ -31,6 +31,7 @@ void CoContinue ( Handler fnHandler, int iStack=0 );
 
 // perform handler in plain coro (as continuation), or in dedicated (if called from plain thread)
 void CallCoroutine ( Handler fnHandler );
+bool CallCoroutineRes ( Predicate fnHandler );
 
 // if iStack<0, just immediately invoke the handler (that is bypass)
 template<typename HANDLER>
@@ -390,7 +391,18 @@ public:
 	bool Unlock() UNLOCK_FUNCTION();
 };
 
+class CAPABILITY ( "mutex" ) CoroMutex_c : public ISphNoncopyable
+{
+	std::atomic<bool> m_bLocked { false };
+public:
+
+	~CoroMutex_c ();
+	void Lock () ACQUIRE();
+	void Unlock () RELEASE();
+};
+
 using SccRL_t = CSphScopedRLock_T<CoroRWLock_c>;
 using SccWL_t = CSphScopedWLock_T<CoroRWLock_c>;
+using ScopedCoroMutex_t = CSphScopedLock<CoroMutex_c>;
 
 } // namespace Threads

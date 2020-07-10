@@ -482,6 +482,13 @@ void CallCoroutine ( Handler fnHandler )
 	WaitForDeffered ( std::move ( dWaiter ) );
 }
 
+bool CallCoroutineRes ( Predicate fnHandler )
+{
+	bool bResult;
+	CallCoroutine ( [&bResult, &fnHandler] { bResult = fnHandler(); } );
+	return bResult;
+}
+
 void CoYieldWith ( Handler fnHandler )
 {
 	CoWorker ()->YieldWith ( std::move(fnHandler) );
@@ -719,4 +726,27 @@ bool Threads::CoroRWLock_c::Unlock ()
 	else
 		m_uLock.fetch_sub ( uINC, std::memory_order_acq_rel ); // released shared lock
 	return true;
+}
+
+Threads::CoroMutex_c::~CoroMutex_c ()
+{
+	assert ( !m_bLocked.load ( std::memory_order_relaxed ) );
+}
+
+void Threads::CoroMutex_c::Lock()
+{
+	assert ( Threads::IsInsideCoroutine () );
+	while ( true )
+	{
+		bool bCurrent = false;
+		if ( m_bLocked.compare_exchange_weak ( bCurrent, true, std::memory_order_acquire ) )
+			break;
+		Threads::CoWorker ()->Reschedule ();
+	}
+}
+
+void Threads::CoroMutex_c::Unlock()
+{
+	assert ( Threads::IsInsideCoroutine () );
+	m_bLocked.store ( false, std::memory_order_release );
 }

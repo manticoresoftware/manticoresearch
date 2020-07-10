@@ -117,6 +117,14 @@ yum install https://repo.manticoresearch.com/manticore-repo.noarch.rpm
 yum install manticore
 ```
 
+### APT repo for Ubuntu/Debian
+```
+wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
+dpkg -i manticore-repo.noarch.deb
+apt update
+apt install manticore-bin
+```
+
 ### Homebrew on MacOS
 ```
 brew install manticoresearch

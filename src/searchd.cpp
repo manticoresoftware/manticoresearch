@@ -12025,7 +12025,7 @@ enum ThreadInfoFormat_e
 	THD_FORMAT_SPHINXQL
 };
 
-static const char * FormatInfo ( const PublicThreadDesc_t & tThd, ThreadInfoFormat_e eFmt, QuotationEscapedBuilder & tBuf )
+static std::pair<const char *, int> FormatInfo ( const PublicThreadDesc_t & tThd, ThreadInfoFormat_e eFmt, QuotationEscapedBuilder & tBuf )
 {
 	if ( tThd.m_pQuery && eFmt==THD_FORMAT_SPHINXQL && tThd.m_eProto!=Proto_e::MYSQL41 )
 	{
@@ -12039,13 +12039,13 @@ static const char * FormatInfo ( const PublicThreadDesc_t & tThd, ThreadInfoForm
 
 		// query might be removed prior to lock then go to common path
 		if ( bGotQuery )
-			return tBuf.cstr();
+			return { tBuf.cstr (), tBuf.GetLength () };
 	}
 
 	if ( tThd.m_sDescription.IsEmpty () && tThd.m_sCommand )
-		return tThd.m_sCommand;
+		return { tThd.m_sCommand, strlen ( tThd.m_sCommand ) };
 	else
-		return tThd.m_sDescription.cstr();
+		return { tThd.m_sDescription.cstr (), tThd.m_sDescription.GetLength () };
 }
 
 void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
@@ -12114,7 +12114,8 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 			tOut.PutTimestampAsString ( dThd.m_tmLastJobDoneTimeUS ); // idle for
 		}
 
-		tOut.PutString ( FormatInfo ( dThd, eFmt, tBuf ), tStmt.m_iThreadsCols ); // Info m_pTaskInfo
+		auto tInfo = FormatInfo ( dThd, eFmt, tBuf );
+		tOut.PutString ( tInfo.first, Min ( tInfo.second, tStmt.m_iThreadsCols ) ); // Info m_pTaskInfo
 		tOut.Commit();
 	}
 

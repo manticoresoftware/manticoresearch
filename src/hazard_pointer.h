@@ -171,7 +171,6 @@ struct AtomicPointer_t
 class Guard_c : ISphNoncopyable
 {
 	AtomicPointer_t* m_pGuard;
-
 public:
 	Guard_c();
 	~Guard_c();

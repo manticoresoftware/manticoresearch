@@ -14,6 +14,10 @@
 static const int MIN_POINTERS = 100;
 static const int MULTIPLIER = 2;
 
+// if one hazard object owns another, etc. - how deep they can be nested.
+// on finish we will stop unwinding under this N of steps and report error.
+static const int NESTED_LEVELS = 16;
+
 using namespace hazard;
 
 namespace {
@@ -34,11 +38,16 @@ using VecListedPointers_t = CSphFixedVector<ListedPointer_t>;
 // raw pointer and specific deleter which knows how to deal with the pointer
 using RetiredPointer_t = std::pair <void*,Deleter_fn>;
 
+// for tracking that alloc/dealloc of hazard is in one thread
+ThreadRole thHazardThread;
+
+using fnHazardProcessor=std::function<void ( const Pointer_t )>;
+
 // to be write-used in single thread, so no need to sync anything
 // that is lowest level which actually stores current pointers.
 struct Storage_t : public VecListedPointers_t
 {
-	ListedPointer_t* m_pHead;
+	ListedPointer_t* m_pHead GUARDED_BY ( thHazardThread );
 	explicit Storage_t ( int iSize )
 		: VecListedPointers_t ( iSize )
 	{
@@ -52,13 +61,14 @@ struct Storage_t : public VecListedPointers_t
 		m_pHead = m_pData;
 	}
 
-	bool IsFull() const
+	bool IsFull() const REQUIRES ( thHazardThread )
 	{
 		return !m_pHead;
 	}
 
-	ListedPointer_t* Alloc ()
+	ListedPointer_t* Alloc () REQUIRES ( thHazardThread )
 	{
+		AcquireRole ( thHazardThread );
 		assert (!IsFull());
 
 		auto pElem = m_pHead;
@@ -66,7 +76,7 @@ struct Storage_t : public VecListedPointers_t
 		return pElem;
 	}
 
-	void Dealloc ( ListedPointer_t* pElem ) noexcept
+	void Dealloc ( ListedPointer_t* pElem ) noexcept REQUIRES ( thHazardThread )
 	{
 		if (!pElem)
 			return;
@@ -74,48 +84,50 @@ struct Storage_t : public VecListedPointers_t
 		pElem->m_pData.store ( nullptr, std::memory_order_release );
 		pElem->m_pNext = m_pHead;
 		m_pHead = pElem;
+		ReleaseRole ( thHazardThread );
 	}
 };
+
+// to ensure whole retiring operation done in one thread
+ThreadRole thRetiringThread;
 
 using VecRetiredPointers_t = CSphVector<RetiredPointer_t>;
 
 // that is single-threaded in use, so no lock-free loops necessary.
 struct VecOfRetired_t : public VecRetiredPointers_t, public ISphNoncopyable
 {
-	std::atomic<int> m_iCurrent { 0 };
+	int m_iCurrent GUARDED_BY ( thRetiringThread ) = 0;
 
-	inline bool IsFull() const noexcept
+	inline bool IsFull () const noexcept REQUIRES ( thRetiringThread )
 	{
-		return m_iCurrent.load ( std::memory_order_relaxed )==GetLength ();
+		return m_iCurrent>=GetLength ();
+	}
+
+	inline bool NotEmpty () const noexcept REQUIRES ( thRetiringThread )
+	{
+		return m_iCurrent>0;
 	}
 
 	// retire element, and return false, if storage is full
-	bool Retire (RetiredPointer_t&& tData) noexcept
+	bool Retire ( RetiredPointer_t && tData ) noexcept REQUIRES ( thRetiringThread )
 	{
-		auto iCurrent = m_iCurrent.load(std::memory_order_relaxed);
-		At ( iCurrent ) = tData;
-		m_iCurrent.store ( iCurrent+1, std::memory_order_relaxed );
-		return ( iCurrent+1 )<GetLength ();
+		At ( m_iCurrent++ ) = tData;
+		return m_iCurrent<GetLength ();
 	}
 
-	void Swap ( VecOfRetired_t& rhs)
+	void Swap ( VecOfRetired_t& rhs) REQUIRES ( thRetiringThread )
 	{
 		// this long line is for atomic 'swap ( m_iCurrent, rhs.m_iCurrent )'
-		m_iCurrent.store ( rhs.m_iCurrent.exchange ( m_iCurrent.load ( std::memory_order_acquire ), std::memory_order_acq_rel )
-					   , std::memory_order_release );
+		::Swap ( m_iCurrent, rhs.m_iCurrent );
 		SwapData ( rhs );
 	}
 };
 
 // main hazard pointer storage class (per-thread)
-struct ThreadState_t : public ISphNoncopyable
+class ThreadState_c : public ISphNoncopyable
 {
 	Storage_t	m_tHazards;
-	VecOfRetired_t m_tRetired;
-
-public:
-	ThreadState_t ();
-	~ThreadState_t ();
+	VecOfRetired_t m_tRetired  GUARDED_BY ( thRetiringThread );
 
 	// generic main GC procedure
 	void Scan();
@@ -123,7 +135,19 @@ public:
 	// the part where only trimming (no resize adopt, no resize at the end).
 	void PruneRetired ();
 
+public:
+	ThreadState_c ();
+	~ThreadState_c ();
+
+	// Main point to retire (delete) pointer. bNow forces to try actual removing right now
 	void Retire ( RetiredPointer_t tPtr, bool bNow );
+
+	// called once globally when daemon finishes - to finally delete everything
+	void Shutdown();
+
+	AtomicPointer_t* HazardAlloc();
+	void HazardDealloc ( AtomicPointer_t * pPointer );
+	void IterateHazards ( fnHazardProcessor fnProcessor ) const;
 };
 
 namespace { // unnamed (static)
@@ -146,6 +170,14 @@ void PrunePointer ( RetiredPointer_t* pPtr )
 	- [2003] Maged M.Michael "Hazard Pointers: Safe memory reclamation for lock-free objects"
 	- [2004] Andrei Alexandrescy, Maged Michael "Lock-free Data Structures with Hazard Pointers"
 	- Inspired with libcds by Maxim Khizhinsky (libcds.dev@gmail.com) - http://github.com/khizmax/libcds/
+ 	Gc performed in four steps:
+ 		1. We walk over all currently running threads and collect their hazard pointers
+ 		2. Sort and uniq the collection
+ 		3. Walk over current list of retired: if pointer is not reffered by any hazard - it is finaly pruned
+ 		4. Keep list of alive (reffered) pointers back to list of retired.
+
+ 		Since size of the list is by design greater then N of threads * N of hazards per thread, it WILL prune
+ 		some pointers definitely.
  */
 CSphVector<Pointer_t> CollectActiveHazardPointers()
 {
@@ -153,21 +185,16 @@ CSphVector<Pointer_t> CollectActiveHazardPointers()
 	CSphVector <Pointer_t> dActive;
 	dActive.Reserve ( Threads::GetNumOfRunning () * POINTERS_PER_THREAD );
 
-	// stage 1. Walk over ALL threads and collect their hazard pointers
+	// stage 1. Walk over ALL currently running threads and collect their hazard pointers
 	Threads::IterateActive ([&dActive] ( Threads::LowThreadDesc_t * pDesc )
 	{
 		if (!pDesc)
 			return;
-		auto pOtherThreadState = (ThreadState_t *) pDesc->m_pHazards.load ( std::memory_order_relaxed );
+		auto pOtherThreadState = (ThreadState_c *) pDesc->m_pHazards.load ( std::memory_order_relaxed );
 		if ( !pOtherThreadState )
 			return;
-		for ( const auto& tHazard : pOtherThreadState->m_tHazards )
-		{
-			// here 'acquire' semantic is complement to 'release' semantic on thread saving hazard ptr.
-			auto pData = tHazard.m_pData.load ( std::memory_order_acquire );
-			if ( pData )
-				dActive.Add ( pData );
-		}
+
+		pOtherThreadState->IterateHazards ( [&dActive] ( const Pointer_t pPtr ) { dActive.Add ( pPtr ); } );
 	});
 
 	// stage 2. sort and uniq; we will use binsearch then
@@ -175,8 +202,10 @@ CSphVector<Pointer_t> CollectActiveHazardPointers()
 	return dActive;
 }
 
-// provided blob of retired pointers, returns size of compacted blob after gc.
-int PruneRetired ( RetiredPointer_t * pData, size_t iSize )
+// Perform real work. If pruning object, in turn, includes hazard-guarded data inside,
+// it will be retired into retiring list of current thread.
+// Alive will be moved to the beginning of provided array, and function returns their quantity.
+int PruneRetiredImpl ( RetiredPointer_t * pData, size_t iSize )
 {
 	if ( !iSize )
 		return 0;
@@ -192,7 +221,7 @@ int PruneRetired ( RetiredPointer_t * pData, size_t iSize )
 	{
 		if ( !dActive.BinarySearch ( pSrc->first ) )
 			PrunePointer (pSrc); // stage 3 - delete non-alive
-		else { // stage 4 - copy alive
+		else { // stage 4 - copy alive, back in the list
 			if (pDst!=pSrc)
 				*pDst=*pSrc;
 			++pDst;
@@ -203,7 +232,7 @@ int PruneRetired ( RetiredPointer_t * pData, size_t iSize )
 }
 
 // that is shortcut for the special cases, like retiring huge blob of mem.
-// We try to prune it immediately, and if not success, add it to usual list of retired
+// We try to prune it immediately and return whether it was success or not
 bool TryPruneOnePointer ( RetiredPointer_t* pSrc )
 {
 	auto dActive = CollectActiveHazardPointers ();
@@ -216,78 +245,55 @@ bool TryPruneOnePointer ( RetiredPointer_t* pSrc )
 
 // when thread hazard destructes, it may still have some alive retired
 // we will leak them into this sink, and sometimes refine with another threads.
-struct RetiredSink_t
+class RetiredSink_c
 {
-	std::atomic<int> m_iSize {0};
 	CSphMutex m_dGuard;
 	VecRetiredPointers_t m_dSink GUARDED_BY (m_dGuard);
 
-	bool IsEmpty()
+	void PruneSink () REQUIRES ( m_dGuard )
 	{
-		return m_iSize.load ( std::memory_order_relaxed )==0;
-	}
-
-	// adopt retired chunk from finishing thread
-	void AddSink ( const VecRetiredPointers_t& dRetired ) EXCLUDES ( m_dGuard )
-	{
-		RetireSink();
-
-		if ( dRetired.IsEmpty() )
-			return;
-
-		ScopedMutex_t _ ( m_dGuard );
-		m_dSink.Append ( dRetired );
-		m_iSize.store ( m_dSink.GetLength (), std::memory_order_relaxed );
-	}
-
-	// prune sinked if necessary
-	// returns num of still non-deleted elements
-	int RetireSink ( bool bForce = false ) EXCLUDES ( m_dGuard )
-	{
-		if ( m_iSize.load ( std::memory_order_relaxed )<GetCleanupSize () )
-			return 0;
-
-		ScopedMutex_t _ ( m_dGuard );
-		auto iCompressed = PruneRetired ( m_dSink.begin(), m_dSink.GetLength() );
+		auto iCompressed = PruneRetiredImpl ( m_dSink.begin (), m_dSink.GetLength () );
 		m_dSink.Resize ( iCompressed );
-		m_iSize.store ( iCompressed, std::memory_order_relaxed );
-		return iCompressed;
 	}
 
-	void RetireAll() NO_THREAD_SAFETY_ANALYSIS
+	void MaybePruneSink () REQUIRES ( m_dGuard )
 	{
-		VecRetiredPointers_t tOldRetired;
-		{
-			ScopedMutex_t _ ( m_dGuard );
-			tOldRetired.SwapData ( m_dSink );
-		}
-
-		for ( auto & dPointer: tOldRetired )
-			PrunePointer ( &dPointer );
-
-		{
-			ScopedMutex_t _ ( m_dGuard );
-			tOldRetired.SwapData ( m_dSink );
-		}
+		if ( m_dSink.GetLength()>=GetCleanupSize () )
+			PruneSink();
 	}
+
+public:
+	// adopt retired chunk from finishing thread
+	// called from thread d-tr, to sink pointers finaly alived.
+	// called from Shutdown, to sink last pointers in the process.
+	void AdoptRetired ( VecOfRetired_t& dRetired ) EXCLUDES ( m_dGuard )
+	{
+		ScopedMutex_t _ ( m_dGuard );
+		ScopedRole_c r ( thRetiringThread );
+		m_dSink.Append ( dRetired.Slice ( 0, dRetired.m_iCurrent ) );
+		dRetired.m_iCurrent = 0;
+		MaybePruneSink ();
+	}
+
+	// prune as many as possible.
+	// rest just retire and finally clean sink
+	void FinallyPruneSink () EXCLUDES ( m_dGuard );
 };
 
-RetiredSink_t& dGlobalSink()
+RetiredSink_c& dGlobalSink ()
 {
-	static RetiredSink_t g_dGlobalSink;
+	static RetiredSink_c g_dGlobalSink;
 	return g_dGlobalSink;
 }
-
-
 } // unnamed namespace
 
-ThreadState_t & ThreadState ()
+ThreadState_c & ThreadState ()
 {
-	static thread_local ThreadState_t tState;
+	static thread_local ThreadState_c tState;
 	return tState;
 }
 
-ThreadState_t::ThreadState_t ()
+ThreadState_c::ThreadState_c ()
 	: m_tHazards { POINTERS_PER_THREAD }
 {
 	m_tRetired.Resize ( GetCleanupSize () );
@@ -295,50 +301,49 @@ ThreadState_t::ThreadState_t ()
 }
 
 
-ThreadState_t::~ThreadState_t ()
+ThreadState_c::~ThreadState_c ()
 {
-	PruneRetired ();
-
-	// here in m_tRetired m.b. left elements which are still in use by some other thread.
-	m_tRetired.Resize ( m_tRetired.m_iCurrent );
-	dGlobalSink ().AddSink ( m_tRetired );
+	while ( m_tRetired.NotEmpty() )
+		dGlobalSink ().AdoptRetired ( m_tRetired );
 }
 
 // GC enterpoint - called when no more place for retired
-void ThreadState_t::Scan ()
+void ThreadState_c::Scan () REQUIRES ( thRetiringThread )
 {
 	// Before start, check if num of threads grown and so, we just need more space for retired
 	if ( m_tRetired.GetLength() >= GetCleanupSize() )
 		PruneRetired ();
-
-	m_tRetired.Resize ( GetCleanupSize () );
+	else
+		m_tRetired.Resize ( GetCleanupSize () );
 }
 
 // main GC worker
-void ThreadState_t::PruneRetired ()
+void ThreadState_c::PruneRetired () REQUIRES ( thRetiringThread )
 {
-	// actually task is quite simple: we call ::PruneRetired, it keeps all alive pointers, prune all deads and return
+	// actually task is quite simple: we call ::PruneRetiredImpl, it keeps all alive pointers, prune all deads and return
 	// the new size of our vec, containing only alive.
 	// The problem is that deleting non-alive may include more to retire (if deleting object also has something to retire).
 	// Since we're in call PruneRetired because we're full, we can't right now retire any more pointers.
 	// So, we use this ping-pong with tmp vector to give room for nested retiring.
-	VecOfRetired_t tOldRetired;
-	tOldRetired.Resize ( GetCleanupSize () );
+	VecOfRetired_t tCurrentRetired;
+	tCurrentRetired.Resize ( GetCleanupSize () );
 
-	m_tRetired.Swap ( tOldRetired );
-	auto iRest = ::PruneRetired ( tOldRetired.begin (), tOldRetired.m_iCurrent.load ( std::memory_order_relaxed ) );
-	m_tRetired.Swap ( tOldRetired );
-	m_tRetired.m_iCurrent.store ( iRest, std::memory_order_relaxed );
+	m_tRetired.Swap ( tCurrentRetired );
+	auto iRest = ::PruneRetiredImpl ( tCurrentRetired.begin (), tCurrentRetired.m_iCurrent );
+	m_tRetired.Swap ( tCurrentRetired );
+	m_tRetired.m_iCurrent = iRest;
 
-	tOldRetired.Resize( tOldRetired.m_iCurrent.load ( std::memory_order_relaxed ) );
-	for (auto dTailed : tOldRetired ) // some nested prune happened
+	tCurrentRetired.Resize( tCurrentRetired.m_iCurrent );
+	for ( auto dTailed : tCurrentRetired ) // some nested prune happened
 		Retire ( dTailed, false );
 }
 
-void ThreadState_t::Retire ( RetiredPointer_t tPtr, bool bNow )
+void ThreadState_c::Retire ( RetiredPointer_t tPtr, bool bNow )
 {
 	if ( bNow && TryPruneOnePointer ( &tPtr ) )
 		return;
+
+	ScopedRole_c _ ( thRetiringThread );
 
 	if ( m_tRetired.Retire( std::move (tPtr) ) )
 		return;
@@ -348,6 +353,62 @@ void ThreadState_t::Retire ( RetiredPointer_t tPtr, bool bNow )
 		Scan();
 
 	assert (!m_tRetired.IsFull());
+}
+
+AtomicPointer_t * ThreadState_c::HazardAlloc () REQUIRES ( thHazardThread )
+{
+	return m_tHazards.Alloc();
+}
+
+void ThreadState_c::HazardDealloc ( AtomicPointer_t * pPointer ) REQUIRES ( thHazardThread )
+{
+	m_tHazards.Dealloc ( (ListedPointer_t *) pPointer );
+}
+
+void ThreadState_c::IterateHazards ( fnHazardProcessor fnProcessor ) const
+{
+	for ( const auto & tHazard : m_tHazards )
+	{
+		// here 'acquire' semantic is complement to 'release' semantic on thread saving hazard ptr.
+		auto pData = tHazard.m_pData.load ( std::memory_order_acquire );
+		if ( pData )
+			fnProcessor ( pData );
+	}
+}
+
+void RetiredSink_c::FinallyPruneSink ()
+	{
+		ScopedMutex_t _ ( m_dGuard );
+		PruneSink ();
+
+		// retire all non-sinked active
+		for ( auto& dTailed : m_dSink )
+			ThreadState ().Retire ( dTailed, false );
+		m_dSink.Reset();
+	}
+
+void ThreadState_c::Shutdown ()
+{
+	ScopedRole_c _ ( thRetiringThread );
+	dGlobalSink ().FinallyPruneSink ();
+
+	int iIteration=1;
+	while ( m_tRetired.NotEmpty () )
+	{
+		PruneRetired ();
+		sphLogDebug ( "ThreadState_c::Shutdown() iteration %d, has %d", iIteration, m_tRetired.m_iCurrent );
+		++iIteration;
+
+		if ( iIteration>NESTED_LEVELS ) // assume there are max 10 nested levels, change
+		{
+			auto iActive = CollectActiveHazardPointers ().GetLength();
+			auto iRunning = Threads::GetNumOfRunning ();
+			auto iPointers = m_tRetired.m_iCurrent;
+			sphWarning ( "Still %d threads, %d pointers, %d active pointers; assume deadlock, abort",
+				iRunning, iPointers, iActive );
+			return;
+		}
+	};
 }
 
 CSphVector<int> hazard::GetListOfPointed ( Accessor_fn fnAccess, int iCount )
@@ -362,16 +423,17 @@ CSphVector<int> hazard::GetListOfPointed ( Accessor_fn fnAccess, int iCount )
 	return dResult;
 }
 
-hazard::Guard_c::Guard_c()
+
+hazard::Guard_c::Guard_c() ACQUIRE ( thHazardThread ) NO_THREAD_SAFETY_ANALYSIS
 {
-	m_pGuard = ThreadState ().m_tHazards.Alloc ();
+	m_pGuard = ThreadState ().HazardAlloc ();
 	assert ( m_pGuard && "couldn't alloc hazard pointer. Not enough slots?" );
 }
 
-hazard::Guard_c::~Guard_c()
+hazard::Guard_c::~Guard_c() RELEASE ( thHazardThread ) NO_THREAD_SAFETY_ANALYSIS
 {
 	if ( m_pGuard )
-		ThreadState ().m_tHazards.Dealloc ( (ListedPointer_t *) m_pGuard );
+		ThreadState ().HazardDealloc ( (ListedPointer_t *) m_pGuard );
 }
 
 // main entry point to delete. On-the-fly filter out nullptr values.
@@ -383,12 +445,6 @@ void hazard::Retire ( Pointer_t pData, Deleter_fn fnDelete, bool bNow )
 
 void hazard::Shutdown ()
 {
-	auto & tState = ThreadState ();
-	do {
-		tState.m_tRetired.Resize ( tState.m_tRetired.m_iCurrent );
-		dGlobalSink ().AddSink ( tState.m_tRetired );
-		tState.m_tRetired.m_iCurrent = 0;
-		dGlobalSink ().RetireAll ();
-	} while ( tState.m_tRetired.m_iCurrent>0 );
-	sphLogDebug ( "hazard::Shutdown() done");
+	ThreadState ().Shutdown();
+	sphLogDebug ( "hazard::Shutdown() done" );
 }

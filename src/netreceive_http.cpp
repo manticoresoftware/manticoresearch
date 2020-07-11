@@ -347,11 +347,9 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf )
 			if ( iChunk>0 )
 				continue;
 
-			if ( iChunk<0 )
-				sphWarning ( "failed to receive HTTP request (client=%s(%d)) error='%s')", sClientIP, iCID, sphSockError () );
-			else
-				sphWarning ( "failed to receive HTTP request (client=%s(%d)) max packet size(%d) exceeded)", sClientIP, iCID
-							 , g_iMaxPacketSize );
+			if ( !iChunk )
+				sphWarning ( "failed to receive HTTP request (client=%s(%d)) max packet size(%d) exceeded)",
+					sClientIP, iCID, g_iMaxPacketSize );
 
 			return;
 		}

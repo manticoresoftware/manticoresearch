@@ -1,6 +1,7 @@
 stages:
   - build
   - publish
+  - deploy
 
 tarball:
   stage: build
@@ -255,8 +256,6 @@ buster:
   image: registry.gitlab.com/manticoresearch/dev/buster_cmake314:latest
 
 
-# collect only on demand
-
 collect_repo:
   stage: publish
   rules:
@@ -268,6 +267,16 @@ collect_repo:
     - echo "Collected packages"
     - ls -1
     - ~/upload_repo.sh
+  dependencies: [rhel6, rhel7, rhel8, jessie, stretch, trusty, xenial, bionic, buster, focal, tarball, osx, windows]
+
+
+build_docker:
+  stage: deploy
+  rules:
+    - if: $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_BRANCH == "master"
+  script:
+    - curl -XPOST "$DOCKER_HUB_BUILD_URL"
+  dependencies: [collect_repo]
 
 # collect artifacts from all previous jobs.
 # m.b. it has sense to also publish them in one click to github release?
@@ -295,14 +304,3 @@ collect:
   allow_failure: false
   cache: {}
 
-build_master:
-  stage: publish
-  tags:
-    - dev-host
-  rules:
-    - if: $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_BRANCH == "master"
-  script:
-    - ~/upload_repo.sh
-  dependencies: [rhel6, rhel7, rhel8, jessie, stretch, trusty, xenial, bionic, buster, focal, tarball, osx, windows]
-  variables:
-    REPO_NAME: dev

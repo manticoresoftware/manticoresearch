@@ -19135,9 +19135,152 @@ static void SetUidShort ( bool bTestMode )
 	UidShortSetup ( iServerId, (int)uStartedSec );
 }
 
-namespace {
-	void ExposedSetTopQueryTls ( CrashQuery_t * pQuery );
+namespace { // static
+void ExposedSetTopQueryTls ( CrashQuery_t * pQuery );
+
+// implement '--stop' and '--stopwait' (connect and stop another instance by pid file from config)
+void StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread )
+{
+	if ( !v )
+		sphFatal ( "stop: option 'pid_file' not found in '%s' section 'searchd'", g_sConfigFile.cstr () );
+
+	const char * sPid = v->cstr (); // shortcut
+	FILE * fp = fopen ( sPid, "r" );
+	if ( !fp )
+		sphFatal ( "stop: pid file '%s' does not exist or is not readable", sPid );
+
+	char sBuf[16];
+	int iLen = (int) fread ( sBuf, 1, sizeof(sBuf)-1, fp );
+	sBuf[iLen] = '\0';
+	fclose ( fp );
+
+	int iPid = atoi(sBuf);
+	if ( iPid<=0 )
+		sphFatal ( "stop: failed to read valid pid from '%s'", sPid );
+
+	int iWaitTimeout = g_iShutdownTimeoutUs + 100000;
+
+#if USE_WINDOWS
+	bool bTerminatedOk = false;
+
+	snprintf ( szPipeName, sizeof(szPipeName), "\\\\.\\pipe\\searchd_%d", iPid );
+
+	HANDLE hPipe = INVALID_HANDLE_VALUE;
+
+	while ( hPipe==INVALID_HANDLE_VALUE )
+	{
+		hPipe = CreateFile ( szPipeName, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL );
+
+		if ( hPipe==INVALID_HANDLE_VALUE )
+		{
+			if ( GetLastError()!=ERROR_PIPE_BUSY )
+			{
+				fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
+				break;
+			}
+
+			if ( !WaitNamedPipe ( szPipeName, iWaitTimeout/1000 ) )
+			{
+				fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
+				break;
+			}
+		}
+	}
+
+	if ( hPipe!=INVALID_HANDLE_VALUE )
+	{
+		DWORD uWritten = 0;
+		BYTE uWrite = 1;
+		BOOL bResult = WriteFile ( hPipe, &uWrite, 1, &uWritten, NULL );
+		if ( !bResult )
+			fprintf ( stdout, "WARNING: failed to send SIGHTERM to searchd (pid=%d, GetLastError()=%d)\n", iPid, GetLastError () );
+
+		bTerminatedOk = !!bResult;
+
+		CloseHandle ( hPipe );
+	}
+
+	if ( bTerminatedOk )
+	{
+		sphInfo ( "stop: successfully terminated pid %d", iPid );
+		exit ( 0 );
+	} else
+		sphFatal ( "stop: error terminating pid %d", iPid );
+#else
+	CSphString sPipeName;
+	int iPipeCreated = -1;
+	int fdPipe = -1;
+	if ( bWait )
+	{
+		sPipeName = GetNamedPipeName ( iPid );
+		::unlink ( sPipeName.cstr () ); // avoid garbage to pollute us
+		iPipeCreated = mkfifo ( sPipeName.cstr(), 0666 );
+		if ( iPipeCreated!=-1 )
+			fdPipe = ::open ( sPipeName.cstr(), O_RDONLY | O_NONBLOCK );
+
+		if ( iPipeCreated==-1 )
+			sphWarning ( "mkfifo failed (path=%s, err=%d, msg=%s); will NOT wait", sPipeName.cstr(), errno, strerrorm(errno) );
+		else if ( fdPipe<0 )
+			sphWarning ( "open failed (path=%s, err=%d, msg=%s); will NOT wait", sPipeName.cstr(), errno, strerrorm(errno) );
+	}
+
+	if ( kill ( iPid, SIGTERM ) )
+		sphFatal ( "stop: kill() on pid %d failed: %s", iPid, strerrorm(errno) );
+	else
+		sphInfo ( "stop: successfully sent SIGTERM to pid %d", iPid );
+
+	int iExitCode = ( bWait && ( iPipeCreated==-1 || fdPipe<0 ) ) ? 1 : 0;
+	bool bHandshake = true;
+	if ( bWait && fdPipe>=0 )
+		while ( true )
+		{
+			int iReady = sphPoll ( fdPipe, iWaitTimeout );
+
+			// error on wait
+			if ( iReady<0 )
+			{
+				iExitCode = 3;
+				sphWarning ( "stopwait%s error '%s'", ( bHandshake ? " handshake" : " " ), strerrorm(errno) );
+				break;
+			}
+
+			// timeout
+			if ( iReady==0 )
+			{
+				if ( !bHandshake )
+					continue;
+
+				iExitCode = 1;
+				break;
+			}
+
+			// reading data
+			DWORD uStatus = 0;
+			int iRead = ::read ( fdPipe, &uStatus, sizeof(DWORD) );
+			if ( iRead!=sizeof(DWORD) )
+			{
+				sphWarning ( "stopwait read fifo error '%s'", strerrorm(errno) );
+				iExitCode = 3; // stopped demon crashed during stop
+				break;
+			} else
+			{
+				iExitCode = ( uStatus==1 ? 0 : 2 ); // uStatus == 1 - AttributeSave - ok, other values - error
+			}
+
+			if ( !bHandshake )
+				break;
+
+			bHandshake = false;
+		}
+	::unlink ( sPipeName.cstr () ); // is ok on linux after it is opened.
+
+	if ( fdPipe>=0 )
+		::close ( fdPipe );
+
+	exit ( iExitCode );
+#endif
 }
+} // static namespace
 
 int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 {
@@ -19378,144 +19521,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	if ( bOptStop )
 	{
-		if ( !hSearchdpre("pid_file") )
-			sphFatal ( "stop: option 'pid_file' not found in '%s' section 'searchd'", g_sConfigFile.cstr () );
-
-		const char * sPid = hSearchdpre["pid_file"].cstr(); // shortcut
-		FILE * fp = fopen ( sPid, "r" );
-		if ( !fp )
-			sphFatal ( "stop: pid file '%s' does not exist or is not readable", sPid );
-
-		char sBuf[16];
-		int iLen = (int) fread ( sBuf, 1, sizeof(sBuf)-1, fp );
-		sBuf[iLen] = '\0';
-		fclose ( fp );
-
-		int iPid = atoi(sBuf);
-		if ( iPid<=0 )
-			sphFatal ( "stop: failed to read valid pid from '%s'", sPid );
-
-		int iWaitTimeout = g_iShutdownTimeoutUs + 100000;
-
-#if USE_WINDOWS
-		bool bTerminatedOk = false;
-
-		snprintf ( szPipeName, sizeof(szPipeName), "\\\\.\\pipe\\searchd_%d", iPid );
-
-		HANDLE hPipe = INVALID_HANDLE_VALUE;
-
-		while ( hPipe==INVALID_HANDLE_VALUE )
-		{
-			hPipe = CreateFile ( szPipeName, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL );
-
-			if ( hPipe==INVALID_HANDLE_VALUE )
-			{
-				if ( GetLastError()!=ERROR_PIPE_BUSY )
-				{
-					fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
-					break;
-				}
-
-				if ( !WaitNamedPipe ( szPipeName, iWaitTimeout/1000 ) )
-				{
-					fprintf ( stdout, "WARNING: could not open pipe (GetLastError()=%d)\n", GetLastError () );
-					break;
-				}
-			}
-		}
-
-		if ( hPipe!=INVALID_HANDLE_VALUE )
-		{
-			DWORD uWritten = 0;
-			BYTE uWrite = 1;
-			BOOL bResult = WriteFile ( hPipe, &uWrite, 1, &uWritten, NULL );
-			if ( !bResult )
-				fprintf ( stdout, "WARNING: failed to send SIGHTERM to searchd (pid=%d, GetLastError()=%d)\n", iPid, GetLastError () );
-
-			bTerminatedOk = !!bResult;
-
-			CloseHandle ( hPipe );
-		}
-
-		if ( bTerminatedOk )
-		{
-			sphInfo ( "stop: successfully terminated pid %d", iPid );
-			exit ( 0 );
-		} else
-			sphFatal ( "stop: error terminating pid %d", iPid );
-#else
-		CSphString sPipeName;
-		int iPipeCreated = -1;
-		int fdPipe = -1;
-		if ( bOptStopWait )
-		{
-			sPipeName = GetNamedPipeName ( iPid );
-			::unlink ( sPipeName.cstr () ); // avoid garbage to pollute us
-			iPipeCreated = mkfifo ( sPipeName.cstr(), 0666 );
-			if ( iPipeCreated!=-1 )
-				fdPipe = ::open ( sPipeName.cstr(), O_RDONLY | O_NONBLOCK );
-
-			if ( iPipeCreated==-1 )
-				sphWarning ( "mkfifo failed (path=%s, err=%d, msg=%s); will NOT wait", sPipeName.cstr(), errno, strerrorm(errno) );
-			else if ( fdPipe<0 )
-				sphWarning ( "open failed (path=%s, err=%d, msg=%s); will NOT wait", sPipeName.cstr(), errno, strerrorm(errno) );
-		}
-
-		if ( kill ( iPid, SIGTERM ) )
-			sphFatal ( "stop: kill() on pid %d failed: %s", iPid, strerrorm(errno) );
-		else
-			sphInfo ( "stop: successfully sent SIGTERM to pid %d", iPid );
-
-		int iExitCode = ( bOptStopWait && ( iPipeCreated==-1 || fdPipe<0 ) ) ? 1 : 0;
-		bool bHandshake = true;
-		if ( bOptStopWait && fdPipe>=0 )
-			while ( true )
-			{
-				int iReady = sphPoll ( fdPipe, iWaitTimeout );
-
-				// error on wait
-				if ( iReady<0 )
-				{
-					iExitCode = 3;
-					sphWarning ( "stopwait%s error '%s'", ( bHandshake ? " handshake" : " " ), strerrorm(errno) );
-					break;
-				}
-
-				// timeout
-				if ( iReady==0 )
-				{
-					if ( !bHandshake )
-						continue;
-
-					iExitCode = 1;
-					break;
-				}
-
-				// reading data
-				DWORD uStatus = 0;
-				int iRead = ::read ( fdPipe, &uStatus, sizeof(DWORD) );
-				if ( iRead!=sizeof(DWORD) )
-				{
-					sphWarning ( "stopwait read fifo error '%s'", strerrorm(errno) );
-					iExitCode = 3; // stopped demon crashed during stop
-					break;
-				} else
-				{
-					iExitCode = ( uStatus==1 ? 0 : 2 ); // uStatus == 1 - AttributeSave - ok, other values - error
-				}
-
-				if ( !bHandshake )
-					break;
-
-				bHandshake = false;
-			}
-		::unlink ( sPipeName.cstr () ); // is ok on linux after it is opened.
-
-		if ( fdPipe>=0 )
-			::close ( fdPipe );
-
-		exit ( iExitCode );
-#endif
+		StopOrStopWaitAnother ( hSearchdpre ( "pid_file" ), bOptStopWait );
+		assert ( 0 && "StopOrStopWaitAnother should not return " );
+		exit ( 0 );
 	}
 
 	////////////////////////////////

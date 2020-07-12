@@ -66,7 +66,7 @@ struct Storage_t : public VecListedPointers_t
 		return !m_pHead;
 	}
 
-	ListedPointer_t* Alloc () REQUIRES ( thHazardThread )
+	ListedPointer_t* Alloc () ACQUIRE ( thHazardThread ) NO_THREAD_SAFETY_ANALYSIS
 	{
 		AcquireRole ( thHazardThread );
 		assert (!IsFull());
@@ -76,7 +76,7 @@ struct Storage_t : public VecListedPointers_t
 		return pElem;
 	}
 
-	void Dealloc ( ListedPointer_t* pElem ) noexcept REQUIRES ( thHazardThread )
+	void Dealloc ( ListedPointer_t* pElem ) noexcept RELEASE ( thHazardThread ) NO_THREAD_SAFETY_ANALYSIS
 	{
 		if (!pElem)
 			return;
@@ -355,12 +355,12 @@ void ThreadState_c::Retire ( RetiredPointer_t tPtr, bool bNow )
 	assert (!m_tRetired.IsFull());
 }
 
-AtomicPointer_t * ThreadState_c::HazardAlloc () REQUIRES ( thHazardThread )
+AtomicPointer_t * ThreadState_c::HazardAlloc () ACQUIRE ( thHazardThread )
 {
 	return m_tHazards.Alloc();
 }
 
-void ThreadState_c::HazardDealloc ( AtomicPointer_t * pPointer ) REQUIRES ( thHazardThread )
+void ThreadState_c::HazardDealloc ( AtomicPointer_t * pPointer ) RELEASE ( thHazardThread )
 {
 	m_tHazards.Dealloc ( (ListedPointer_t *) pPointer );
 }

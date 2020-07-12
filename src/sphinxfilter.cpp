@@ -1471,13 +1471,13 @@ static ISphFilter * CreateFilterNode ( CreateFilterContext_t & tCtx, int iNode, 
 		if ( pFilterSettings->m_eType==SPH_FILTER_USERVAR )
 		{
 			const CSphString * sVar = pFilterSettings->m_dStrings.GetLength()==1 ? pFilterSettings->m_dStrings.Begin() : NULL;
-			if ( !g_pUservarsHook || !sVar )
+			if ( !UservarsAvailable() || !sVar )
 			{
 				sError = "no global variables found";
 				return nullptr;
 			}
 
-			const UservarIntSet_c pUservar = g_pUservarsHook ( *sVar );
+			const UservarIntSet_c pUservar = Uservars( *sVar );
 			if ( !pUservar )
 			{
 				sError.SetSprintf ( "undefined global variable '%s'", sVar->cstr() );
@@ -1608,13 +1608,13 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 		if ( pFilterSettings->m_eType==SPH_FILTER_USERVAR )
 		{
 			const CSphString * sVar = pFilterSettings->m_dStrings.GetLength()==1 ? pFilterSettings->m_dStrings.Begin() : nullptr;
-			if ( !g_pUservarsHook || !sVar )
+			if ( !UservarsAvailable() || !sVar )
 			{
 				sError = "no global variables found";
 				return false;
 			}
 
-			const UservarIntSet_c pUservar = g_pUservarsHook ( *sVar );
+			const UservarIntSet_c pUservar = Uservars ( *sVar );
 			if ( !pUservar )
 			{
 				sError.SetSprintf ( "undefined global variable '%s'", sVar->cstr() );

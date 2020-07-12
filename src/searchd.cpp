@@ -19939,6 +19939,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	if ( !InitSphinxqlState ( hSearchd.GetStr ( "sphinxql_state" ), sError ))
 		sphWarning ( "sphinxql_state flush disabled: %s", sError.cstr ());
 
+	ServeUserVars ();
+
 	if ( bForcedPreread )
 		DoPreread();
 	else
@@ -20031,7 +20033,6 @@ inline int mainimpl ( int argc, char **argv )
 	MemorizeStack ( &cTopOfMainStack );
 	sphSetDieCallback ( DieCallback );
 	g_pLogger() = sphLog;
-	g_pUservarsHook = UservarsHook;
 	sphCollationInit ();
 	sphBacktraceSetBinaryName ( argv[0] );
 	GeodistInit();

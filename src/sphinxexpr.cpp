@@ -34,8 +34,31 @@
 #define M_LOG10E	0.434294481903251827651
 #endif
 
-// hack hack hack
-UservarIntSet_c ( *g_pUservarsHook )( const CSphString & sUservar );
+namespace { // static
+fnGetUserVar& refUservars()
+{
+	static fnGetUserVar pUservarsHook = nullptr;
+	return pUservarsHook;
+}
+}
+
+void SetUserVarsHook ( fnGetUserVar fnHook )
+{
+	refUservars () = fnHook;
+}
+
+bool UservarsAvailable ()
+{
+	return refUservars ()!=nullptr;
+}
+
+UservarIntSet_c Uservars ( const CSphString & sUservar )
+{
+	assert ( UservarsAvailable () );
+	return refUservars () ( sUservar );
+}
+
+
 
 //////////////////////////////////////////////////////////////////////////
 // EVALUATION ENGINE
@@ -7772,13 +7795,13 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 		// create IN(arg,uservar)
 		case TOK_USERVAR:
 		{
-			if ( !g_pUservarsHook )
+			if ( !UservarsAvailable() )
 			{
 				m_sCreateError.SetSprintf ( "internal error: no uservars hook" );
 				return nullptr;
 			}
 
-			UservarIntSet_c pUservar = g_pUservarsHook ( m_dUservars[(int)tRight.m_iConst] );
+			UservarIntSet_c pUservar = Uservars ( m_dUservars[(int)tRight.m_iConst] );
 			if ( !pUservar )
 			{
 				m_sCreateError.SetSprintf ( "undefined user variable '%s'", m_dUservars[(int)tRight.m_iConst].cstr() );

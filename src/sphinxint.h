@@ -1614,8 +1614,13 @@ uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings );
 // USER VARIABLES
 //////////////////////////////////////////////////////////////////////////
 
-/// value container for the intset uservar type
-extern UservarIntSet_c ( *g_pUservarsHook )( const CSphString & sUservar );
+using fnGetUserVar = UservarIntSet_c ( * ) ( const CSphString & sUservar );
+
+void SetUserVarsHook ( fnGetUserVar fnHook );
+
+bool UservarsAvailable();
+
+UservarIntSet_c Uservars ( const CSphString & sUservar );
 
 //////////////////////////////////////////////////////////////////////////
 // BINLOG INTERNALS

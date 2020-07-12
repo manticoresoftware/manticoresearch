@@ -35,7 +35,7 @@ struct Uservar_t
 void SetLocalUserVar ( const CSphString& sName, CSphVector<SphAttr_t>& dSetValues );
 
 // provide variable to outside
-UservarIntSet_c UservarsHook ( const CSphString& sUservar );
+void ServeUserVars();
 
 void SphinxqlStateFlush ();
 bool InitSphinxqlState ( CSphString dStateFilePath, CSphString& sError);

@@ -14881,7 +14881,7 @@ static int sphQueryHeightCalc ( const XQNode_t * pNode )
 #endif
 #else
 #if USE_WINDOWS
-#define SPH_EXTNODE_STACK_SIZE (336)
+#define SPH_EXTNODE_STACK_SIZE (600)
 #else
 #define SPH_EXTNODE_STACK_SIZE (160)
 #endif

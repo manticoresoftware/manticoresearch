@@ -1,15 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
-<name>query vs stack overflow</name>
+<name>query vs stack overflow Windows</name>
 
-<requires><non-windows/></requires>
 <skip_indexer/>
 <config>
 searchd
 {
 	<searchd_settings/>
 	workers	= threads
-	thread_stack = 580K
+	thread_stack = 1M
 	binlog_path =
 }
 

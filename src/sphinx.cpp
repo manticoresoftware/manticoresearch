@@ -23649,7 +23649,7 @@ void CSphSource_SQL::DumpDocumentSphinxql ()
 	ARRAY_FOREACH ( i, m_dDumpMap )
 	{
 		if ( m_dDumpMap[i].second )
-			m_sCollectDump.AppendEscaped ( SqlColumn ( m_dDumpMap[i].first ) );
+			m_sCollectDump.FixupSpacedAndAppendEscaped ( SqlColumn ( m_dDumpMap[i].first ) );
 		else
 			m_sCollectDump << SqlColumn ( m_dDumpMap[i].first );
 	}

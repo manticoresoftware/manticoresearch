@@ -2590,18 +2590,11 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 //////////////////////////////////////////////////////////////////////////
 
-struct EscapeQuotation_t
+struct EscapeQuotation_t : public BaseQuotation_t
 {
-	static const char cQuote = '\'';
-
 	inline static bool IsEscapeChar ( char c )
 	{
 		return ( c=='\\' || c=='\'' );
-	}
-
-	inline static char GetEscapedChar ( char c )
-	{
-		return c;
 	}
 };
 
@@ -2690,7 +2683,7 @@ void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 	if ( !sQuery.IsEmpty() )
 	{
 		tBuf += " ";
-		tBuf.AppendEscaped ( sQuery.cstr(), EscBld::eFixupSpace );
+		tBuf.FixupSpacesAndAppend ( sQuery.cstr() );
 	}
 
 #if USE_SYSLOG
@@ -3022,7 +3015,7 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 		if ( !sQuery.IsEmpty() )
 		{
 			ScopedComma_c sMatch (tBuf, nullptr, "MATCH(", ")");
-			tBuf.AppendEscaped ( sQuery.cstr() );
+			tBuf.FixupSpacedAndAppendEscaped ( sQuery.cstr() );
 		}
 
 		FormatFiltersQL ( q.m_dFilters, q.m_dFilterTree, tBuf, iCompactIN );

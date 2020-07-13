@@ -2041,14 +2041,12 @@ struct CSphSourceParams_SQL
 	CSphString						m_sHookPostIndex;
 };
 
-struct SqlQuotation_t
+struct SqlQuotation_t : public BaseQuotation_t
 {
-	static const char cQuote = '\'';
 	inline static bool IsEscapeChar ( char c )
 	{
 		return ( c=='\\' || c=='\'' || c=='\t' );
 	}
-	inline static char GetEscapedChar ( char c ) { return c; }
 };
 
 using SqlEscapedBuilder_c = EscapedStringBuilder_T<SqlQuotation_t>;

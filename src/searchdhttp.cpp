@@ -700,15 +700,16 @@ public:
 	void PutArray ( const void * pBlob, int iLen, bool bSendEmpty ) override
 	{
 		AddDataColumn();
-		CSphString sData;
-		sData.SetBinary ( (const char *)pBlob, iLen );
-		m_dBuf.AppendEscaped ( sData.cstr() );
+		m_dBuf.FixupSpacedAndAppendEscaped ( (const char*) pBlob, iLen );
 	}
 
 	void PutString ( const char * sMsg, int iLen=-1 ) override
 	{
 		AddDataColumn();
-		m_dBuf.AppendEscaped ( sMsg, EscBld::eAll, iLen );
+		if ( iLen<0 )
+			m_dBuf.FixupSpacedAndAppendEscaped ( sMsg );
+		else
+			m_dBuf.FixupSpacedAndAppendEscaped ( sMsg, iLen );
 	}
 
 	void PutMicrosec ( int64_t iUsec ) override
@@ -761,7 +762,7 @@ public:
 				m_dBuf.AppendName ( tCol.first.cstr() );
 				ScopedComma_c tTypeBlock ( m_dBuf.Object() );
 				m_dBuf.AppendName ( "type" );
-				m_dBuf.AppendEscaped ( GetTypeName ( tCol.second ) );
+				m_dBuf.FixupSpacedAndAppendEscaped ( GetTypeName ( tCol.second ) );
 			}
 		}
 		
@@ -785,11 +786,11 @@ public:
 
 		m_dBuf += ",\n";
 		m_dBuf += R"("error":)";
-		m_dBuf.AppendEscaped ( m_sError.cstr (), EscBld::eEscape );
+		m_dBuf.AppendEscapedWithComma ( m_sError.cstr () );
 
 		m_dBuf += ",\n";
 		m_dBuf += R"("warning":)";
-		m_dBuf.AppendEscaped ( m_sWarning.cstr (), EscBld::eEscape );
+		m_dBuf.AppendEscapedWithComma ( m_sWarning.cstr () );
 
 		m_dBuf += "\n}";
 
@@ -1329,7 +1330,7 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 		else
 		{
 			ScopedComma_c sBrackets ( tOut, nullptr, R"("_source":{ "query": {"ql":)", " } }");
-			tOut.AppendEscaped ( tDesc.m_sQuery.cstr(), EscBld::eEscape );
+			tOut.AppendEscapedWithComma ( tDesc.m_sQuery.cstr() );
 		}
 
 		// document count + document id(s)

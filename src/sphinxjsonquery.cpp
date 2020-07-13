@@ -1186,7 +1186,7 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes
 				case 1: // ql
 				{
 					ScopedComma_c sBrackets ( tOut, nullptr, R"({"ql":)", "}" );
-					tOut.AppendEscaped (( const char* ) pString, EscBld::eEscape, iLen );
+					tOut.AppendEscapedWithComma (( const char* ) pString, iLen );
 					break;
 				}
 				case 0: // json
@@ -1198,7 +1198,7 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes
 			}
 			break;
 		}
-		tOut.AppendEscaped ( ( const char * ) pString, EscBld::eEscape, iLen );
+		tOut.AppendEscapedWithComma ( ( const char * ) pString, iLen );
 	}
 	break;
 
@@ -1317,7 +1317,7 @@ static void EncodeHighlight ( const CSphMatch & tMatch, int iAttr, const ISphSch
 
 		// we might want to add passage separators to field text here
 		for ( const auto & tPassage : tField.m_dPassages )
-			tOut.AppendEscaped ( (const char *)tPassage.m_dText.Begin(), EscBld::eEscape, tPassage.m_dText.GetLength() );
+			tOut.AppendEscapedWithComma ( (const char *)tPassage.m_dText.Begin(), tPassage.m_dText.GetLength() );
 	}
 }
 
@@ -1330,7 +1330,7 @@ CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQ
 	if ( !tRes.m_iSuccesses )
 	{
 		tOut.StartBlock ( nullptr, R"({"error":{"type":"Error","reason":)", "}}" );
-		tOut.AppendEscaped ( tRes.m_sError.cstr (), EscBld::eEscape );
+		tOut.AppendEscapedWithComma ( tRes.m_sError.cstr () );
 		tOut.FinishBlock (false);
 		tOut.MoveTo (sResult); // since simple return tOut.cstr() will cause copy of string, then returning it.
 		return sResult;
@@ -1342,7 +1342,7 @@ CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQ
 	if ( !tRes.m_sWarning.IsEmpty() )
 	{
 		tOut.StartBlock ( nullptr, R"("warning":{"reason":)", "}" );
-		tOut.AppendEscaped ( tRes.m_sWarning.cstr (), EscBld::eEscape );
+		tOut.AppendEscapedWithComma ( tRes.m_sWarning.cstr () );
 		tOut.FinishBlock ( false );
 	}
 
@@ -1547,7 +1547,7 @@ void AddAccessSpecs ( JsonEscapedBuilder &tOut, const XQNode_t * pNode, const CS
 		ScopedComma_c sFieldsArray ( tOut, ",", "\"fields\":[", "]" );
 		for ( int i = 0; i<tSchema.GetFieldsCount (); ++i )
 			if ( tSpec.m_dFieldMask.Test ( i ) )
-				tOut.AppendEscaped ( tSchema.GetFieldName ( i ), EscBld::eEscape );
+				tOut.AppendEscapedWithComma ( tSchema.GetFieldName ( i ) );
 	}
 	tOut.Sprintf ( "\"max_field_pos\":%d", tSpec.m_iFieldMaxPos );
 
@@ -1555,7 +1555,7 @@ void AddAccessSpecs ( JsonEscapedBuilder &tOut, const XQNode_t * pNode, const CS
 	{
 		ScopedComma_c sZoneDelim ( tOut, ",", tSpec.m_bZoneSpan ? "\"zonespans\":[" : "\"zones\":[", "]" );
 		for ( int iZone : tSpec.m_dZones )
-			tOut.AppendEscaped ( dZones[iZone].cstr(), EscBld::eEscape );
+			tOut.AppendEscapedWithComma ( dZones[iZone].cstr() );
 	}
 }
 
@@ -1563,7 +1563,7 @@ void CreateKeywordNode ( JsonEscapedBuilder & tOut, const XQKeyword_t &tKeyword 
 {
 	ScopedComma_c sRoot ( tOut, ",", "{", "}");
 	tOut << R"("type":"KEYWORD")";
-	tOut << "\"word\":"; tOut.AppendEscaped ( tKeyword.m_sWord.cstr (), EscBld::eEscape | EscBld::eSkipComma );
+	tOut << "\"word\":"; tOut.AppendEscapedSkippingComma ( tKeyword.m_sWord.cstr () );
 	tOut.Sprintf ( R"("querypos":%d)", tKeyword.m_iAtomPos);
 
 	if ( tKeyword.m_bExcluded )
@@ -1591,15 +1591,15 @@ void sphBuildProfileJson ( JsonEscapedBuilder &tOut, const XQNode_t * pNode, con
 	auto dRootBlock = tOut.StartBlock ( ",", "{", "}" );
 
 	CSphString sNodeName ( sphXQNodeToStr ( pNode ) );
-	tOut << "\"type\":"; tOut.AppendEscaped ( sNodeName.cstr (), EscBld::eEscape | EscBld::eSkipComma );
+	tOut << "\"type\":"; tOut.AppendEscapedSkippingComma ( sNodeName.cstr () );
 
 	CSphString sDescription ( sphExplainQueryBrief ( pNode, tSchema ) );
-	tOut << "\"description\":"; tOut.AppendEscaped ( sDescription.cstr (), EscBld::eEscape | EscBld::eSkipComma );
+	tOut << "\"description\":"; tOut.AppendEscapedSkippingComma ( sDescription.cstr () );
 
 	CSphString sNodeOptions ( sphXQNodeGetExtraStr ( pNode ) );
 	if ( !sNodeOptions.IsEmpty () )
 	{
-		tOut << "\"options\":"; tOut.AppendEscaped ( sNodeOptions.cstr (), EscBld::eEscape | EscBld::eSkipComma );
+		tOut << "\"options\":"; tOut.AppendEscapedSkippingComma ( sNodeOptions.cstr () );
 	}
 
 	AddAccessSpecs ( tOut, pNode, tSchema, dZones );

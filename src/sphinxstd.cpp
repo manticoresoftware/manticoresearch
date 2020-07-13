@@ -690,50 +690,61 @@ void operator delete [] ( void * pPtr ) throw ()
 // HELPERS
 /////////////////////////////////////////////////////////////////////////////
 
-static SphDieCallback_t g_pfDieCallback = NULL;
-
+static SphDieCallback_t g_pfDieCallback = nullptr;
 
 void sphSetDieCallback ( SphDieCallback_t pfDieCallback )
 {
 	g_pfDieCallback = pfDieCallback;
 }
 
-
-void sphDie ( const char * sTemplate, ... )
+void vDie ( const char * sFmt, va_list ap )
 {
-	char sBuf[1024];
-
-	va_list ap;
-	va_start ( ap, sTemplate );
-	vsnprintf ( sBuf, sizeof(sBuf), sTemplate, ap );
-	va_end ( ap );
-
 	// if there's no callback,
 	// or if callback returns true,
 	// log to stdout
-	if ( !g_pfDieCallback || g_pfDieCallback ( sBuf ) )
+	if ( !g_pfDieCallback || g_pfDieCallback ( true, sFmt, ap ) )
+	{
+		char sBuf[1024];
+		vsnprintf ( sBuf, sizeof ( sBuf ), sFmt, ap );
 		fprintf ( stdout, "FATAL: %s\n", sBuf );
+	}
+}
 
+void sphDie ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	vDie ( sFmt, ap );
+	va_end ( ap );
 	exit ( 1 );
 }
 
-
-void sphDieRestart ( const char * sTemplate, ... )
+void sphDieRestart ( const char * sFmt, ... )
 {
-	char sBuf[1024];
-
 	va_list ap;
-	va_start ( ap, sTemplate );
-	vsnprintf ( sBuf, sizeof(sBuf), sTemplate, ap );
+	va_start ( ap, sFmt );
+	vDie ( sFmt, ap );
 	va_end ( ap );
-
-	// if there's no callback,
-	// or if callback returns true,
-	// log to stdout
-	if ( !g_pfDieCallback || g_pfDieCallback ( sBuf ) )
-		fprintf ( stdout, "FATAL: %s\n", sBuf );
-
 	exit ( 2 ); // almost CRASH_EXIT
+}
+
+void sphFatal ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	g_pLogger () ( SPH_LOG_FATAL, sFmt, ap );
+	if ( g_pfDieCallback )
+		g_pfDieCallback ( false, sFmt, ap );
+	va_end ( ap );
+	exit ( 1 );
+}
+
+void sphFatalLog ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	g_pLogger() ( SPH_LOG_FATAL, sFmt, ap );
+	va_end ( ap );
 }
 
 //////////////////////////////////////////////////////////////////////////

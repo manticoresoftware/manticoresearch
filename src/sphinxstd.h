@@ -458,13 +458,19 @@ inline int sphBitCount ( DWORD n )
 	return ( (tmp + (tmp >> 3) ) & 030707070707) % 63;
 }
 
-typedef			bool ( *SphDieCallback_t ) ( const char * );
+using SphDieCallback_t = bool (*) ( bool bDie, const char *, va_list );
 
 /// crash with an error message, and do not have searchd watchdog attempt to resurrect
-void			sphDie ( const char * sMessage, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );
+void			sphDie ( const char * sFmt, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) ) NO_RETURN;
 
 /// crash with an error message, but have searchd watchdog attempt to resurrect
-void			sphDieRestart ( const char * sMessage, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );
+void			sphDieRestart ( const char * sMessage, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) ) NO_RETURN;
+
+/// shutdown (not crash) on unrrecoverable error
+void			sphFatal ( const char * sFmt, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) ) NO_RETURN;
+
+/// log fatal error, not shutdown
+void			sphFatalLog ( const char * sFmt, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );
 
 /// setup a callback function to call from sphDie() before exit
 /// if callback returns false, sphDie() will not log to stdout

@@ -283,9 +283,6 @@ void ReleaseAndClearDisabled()
 // LOGGING
 /////////////////////////////////////////////////////////////////////////////
 
-void Shutdown (); // forward ref for sphFatal()
-
-
 /// format current timestamp for logging
 int sphFormatCurrentTime ( char * sTimeBuf, int iBufLen )
 {
@@ -482,28 +479,23 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	sphLogEntry ( eLevel, sBuf, sTtyBuf );
 }
 
+void Shutdown (); // forward
 
-void sphFatal ( const char * sFmt, ... )
+bool DieOrFatalWithShutdownCb ( bool bDie, const char * sFmt, va_list ap )
 {
-	va_list ap;
-	va_start ( ap, sFmt );
-	g_pLogger() ( SPH_LOG_FATAL, sFmt, ap );
-	va_end ( ap );
-#ifndef SUPRESS_SEARCHD_MAIN
-	Shutdown ();
-#endif
-	exit ( 1 );
+	if ( bDie )
+		g_pLogger () ( SPH_LOG_FATAL, sFmt, ap );
+	else
+		Shutdown ();
+	return false; // don't lot to stdout
 }
 
-
-void sphFatalLog ( const char * sFmt, ... )
+bool DieOrFatalCb ( bool bDie, const char * sFmt, va_list ap )
 {
-	va_list ap;
-	va_start ( ap, sFmt );
-	g_pLogger() ( SPH_LOG_FATAL, sFmt, ap );
-	va_end ( ap );
+	if ( bDie )
+		g_pLogger () ( SPH_LOG_FATAL, sFmt, ap );
+	return false; // don't lot to stdout
 }
-
 
 #if !USE_WINDOWS
 static CSphString GetNamedPipeName ( int iPid )
@@ -718,7 +710,8 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	}
 
 	// stop netloop threads
-	g_pTickPoolThread->StopAll ();
+	if ( g_pTickPoolThread )
+		g_pTickPoolThread->StopAll ();
 
 	// call scheduled callbacks:
 	// shutdown replication,
@@ -19677,6 +19670,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	StartGlobalWorkPool ();
 
+	// since that moment any 'fatal' will assume calling 'shutdown' function.
+	sphSetDieCallback ( DieOrFatalWithShutdownCb );
+
 	////////////////////
 	// network startup
 	////////////////////
@@ -20025,21 +20021,13 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	}
 } // NOLINT ServiceMain() function length
 
-
-bool DieCallback ( const char * sMessage )
-{
-	sphInterruptNow();
-	sphLogFatal ( "%s", sMessage );
-	return false; // caller should not log
-}
-
 inline int mainimpl ( int argc, char **argv )
 {
 	// threads should be initialized before memory allocations
 	char cTopOfMainStack;
 	Threads::Init();
 	MemorizeStack ( &cTopOfMainStack );
-	sphSetDieCallback ( DieCallback );
+	sphSetDieCallback ( DieOrFatalCb );
 	g_pLogger() = sphLog;
 	sphCollationInit ();
 	sphBacktraceSetBinaryName ( argv[0] );

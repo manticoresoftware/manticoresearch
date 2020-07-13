@@ -18716,7 +18716,7 @@ static void CheckSystemTFO ()
 }
 
 
-void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMode )
+void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMode ) REQUIRES ( MainThread )
 {
 	if ( !hConf.Exists ( "searchd" ) || !hConf["searchd"].Exists ( "searchd" ) )
 		sphFatal ( "'searchd' config section not found in '%s'", g_sConfigFile.cstr () );
@@ -19544,7 +19544,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	g_bWatchdog = hSearchdpre.GetInt ( "watchdog", g_bWatchdog )!=0;
 
-	bool bThdPool = true;
+	bool bThdPool = true; // fixme! retired piece, left only to the end of coro migration
 	if ( hSearchdpre("workers") )
 	{
 		if ( hSearchdpre["workers"]=="threads" )

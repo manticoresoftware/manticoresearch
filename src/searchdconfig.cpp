@@ -732,7 +732,7 @@ static bool SetupConfiglessMode ( const CSphConfig & hConf, const CSphString & s
 
 
 // load data from JSON config on daemon start
-bool LoadConfigInt ( const CSphConfig & hConf, const CSphString & sConfigFile, CSphString & sError )
+bool LoadConfigInt ( const CSphConfig & hConf, const CSphString & sConfigFile, CSphString & sError ) REQUIRES (MainThread)
 {
 	const CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
 	g_sLogFile = hSearchd.GetStr ( "log", "" );

@@ -301,7 +301,7 @@ bool NetInputBuffer_c::ReadFrom( int iLen, int iTimeout, bool bIntr, bool bAppen
 
 
 // fixme! refactor to common flavour
-void QueryStatus ( CSphVariant * v )
+void QueryStatus ( CSphVariant * v ) REQUIRES ( MainThread )
 {
 	char sBuf [ SPH_ADDRESS_SIZE ];
 	char sListen [ 256 ];

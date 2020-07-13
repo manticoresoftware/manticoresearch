@@ -1455,32 +1455,34 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 }
 
 /////////////////////////////////////////////////////////////////////////////
+const char * sphGetConfigFile ( const char * sHint )
+{
+	if ( sHint )
+		return sHint;
+
+	// fallback to defaults if there was no explicit config specified
+#ifdef SYSCONFDIR
+	static const char* sConfigFile = SYSCONFDIR "/manticore.conf";
+	if ( sphIsReadable ( g_sConfigFile.cstr () ) )
+		return sConfigFile;
+#endif
+
+	static const char* sWorkingConfiFile = "./manticore.conf";
+	if ( sphIsReadable ( sWorkingConfiFile ) )
+		return sWorkingConfiFile;
+
+	sphFatal ( "no readable config file (looked in "
+#ifdef SYSCONFDIR
+		SYSCONFDIR "/manticore.conf, "
+#endif
+		"./manticore.conf)." );
+	return nullptr;
+}
 
 const char * sphLoadConfig ( const char * sOptConfig, bool bQuiet, bool bIgnoreIndexes, CSphConfigParser & cp )
 {
 	// fallback to defaults if there was no explicit config specified
-	while ( !sOptConfig )
-	{
-#ifdef SYSCONFDIR
-		sOptConfig = SYSCONFDIR "/manticore.conf";
-		if ( sphIsReadable ( sOptConfig ) )
-			break;
-#endif
-
-		sOptConfig = "./manticore.conf";
-		if ( sphIsReadable ( sOptConfig ) )
-			break;
-
-		sOptConfig = NULL;
-		break;
-	}
-
-	if ( !sOptConfig )
-		sphDie ( "no readable config file (looked in "
-#ifdef SYSCONFDIR
-		SYSCONFDIR "/manticore.conf, "
-#endif
-		"./manticore.conf)" );
+	sOptConfig = sphGetConfigFile ( sOptConfig );
 
 	if ( !bQuiet )
 		fprintf ( stdout, "using config file '%s'...\n", sOptConfig );

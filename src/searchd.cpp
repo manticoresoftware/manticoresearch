@@ -191,8 +191,7 @@ ThreadRole HandlerThread; // thread which serves clients
 //////////////////////////////////////////////////////////////////////////
 
 static CSphString		g_sConfigFile;
-static DWORD			g_uCfgCRC32		= 0;
-static struct stat		g_tCfgStat;
+static bool				g_bCleanLoadedConfig = true; // whether to clean config when it parsed and no more necessary
 
 #if USE_WINDOWS
 static bool				g_bSeamlessRotate	= false;
@@ -17311,9 +17310,13 @@ static ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection
 }
 
 // check if config changed, and also cache content into dContent (will be used instead of one more config touching)
-bool CheckConfigChanges ( CSphVector<char>& dContent )
+CSphVector<char> g_dConfig;
+bool LoadAndCheckConfig ()
 {
-	dContent.Reset();
+	static DWORD			uCfgCRC32		= 0;
+	static struct stat		tCfgStat;
+
+	g_dConfig.Reset();
 	DWORD uCRC32 = 0;
 	struct_stat tStat = {0};
 
@@ -17350,33 +17353,39 @@ bool CheckConfigChanges ( CSphVector<char>& dContent )
 	{
 		sBuf[BUF_SIZE-1] = '\0'; // just safety
 		fclose ( fp );
-		if ( !TryToExec ( p+2, g_sConfigFile.cstr(), dContent ) )
+		if ( !TryToExec ( p+2, g_sConfigFile.cstr(), g_dConfig ) )
 		{
-			dContent.Reset();
+			g_dConfig.Reset();
 			return true;
 		}
 
-		uCRC32 = sphCRC32 ( dContent.Begin(), dContent.GetLength() );
+		uCRC32 = sphCRC32 ( g_dConfig.Begin(), g_dConfig.GetLength() );
 	} else
 	{
 		while ( bGotLine ) {
 			auto iLen = (int) strlen ( sBuf );
-			dContent.Append ( sBuf, iLen );
+			g_dConfig.Append ( sBuf, iLen );
 			bGotLine = !!fgets ( sBuf, sizeof ( sBuf ), fp );
 		}
-		dContent.Add('\0');
+		g_dConfig.Add('\0');
 		fclose ( fp );
-		uCRC32 = sphCRC32 ( dContent.Begin (), dContent.GetLength ());
+		uCRC32 = sphCRC32 ( g_dConfig.Begin (), g_dConfig.GetLength ());
 	}
 
-	if ( g_uCfgCRC32==uCRC32 && tStat.st_size==g_tCfgStat.st_size
-		&& tStat.st_mtime==g_tCfgStat.st_mtime && tStat.st_ctime==g_tCfgStat.st_ctime )
+	if ( uCfgCRC32==uCRC32 && tStat.st_size==tCfgStat.st_size
+		&& tStat.st_mtime==tCfgStat.st_mtime && tStat.st_ctime==tCfgStat.st_ctime )
 			return false;
 
-	g_uCfgCRC32 = uCRC32;
-	g_tCfgStat = tStat;
+	uCfgCRC32 = uCRC32;
+	tCfgStat = tStat;
 
 	return true;
+}
+
+void CleanLoadedConfig ()
+{
+	if ( g_bCleanLoadedConfig )
+		g_dConfig.Reset();
 }
 
 // add or remove persistent pools to hosts
@@ -17789,18 +17798,16 @@ static void CheckRotate () REQUIRES ( MainThread ) EXCLUDES ( g_tRotateThreadMut
 	g_dPostIndexes.ReleaseAndClear ();
 	{
 		ScWL_t dRotateConfigMutexWlocked { g_tRotateConfigMutex };
-		CSphVector<char> dConfig;
-		if ( CheckConfigChanges ( dConfig ) || g_bReloadForced )
+		if ( LoadAndCheckConfig () || g_bReloadForced )
 		{
-			sphInfo( "Config changed (read %d chars)", dConfig.GetLength());
-			if ( !dConfig.IsEmpty() && g_pCfg.ReParse ( g_sConfigFile.cstr (), dConfig.begin ()))
+			sphInfo( "Config changed (read %d chars)", g_dConfig.GetLength());
+			if ( !g_dConfig.IsEmpty() && g_pCfg.ReParse ( g_sConfigFile.cstr (), g_dConfig.begin ()))
 				ReloadIndexSettings ( g_pCfg );
 			else
 				sphWarning ( "failed to parse config file '%s': %s; using previous settings",
 						g_sConfigFile.cstr (), TlsMsg::szError ());
 		}
-		dConfig.Reset ();
-
+		CleanLoadedConfig();
 		g_bReloadForced = false;
 	}
 
@@ -19397,7 +19404,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 		// handle 1-arg options
 		else if ( (i+1)>=argc )		break;
-		OPT ( "-c", "--config" )	g_sConfigFile = argv[++i];
+		OPT ( "-c", "--config" ) 	g_sConfigFile = sphGetConfigFile (argv[++i] );
 		OPT ( "-p", "--port" )		{ bOptPort = true; iOptPort = atoi ( argv[++i] ); }
 		OPT ( "-l", "--listen" )	{ bOptListen = true; sOptListen = argv[++i]; }
 		OPT ( "-i", "--index" )		dOptIndexes.Add ( argv[++i] );
@@ -19458,45 +19465,14 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	// parse config file
 	/////////////////////
 
-	// fallback to defaults if there was no explicit config specified
-	while ( !g_sConfigFile.cstr() )
-	{
-#ifdef SYSCONFDIR
-		g_sConfigFile = SYSCONFDIR "/manticore.conf";
-		if ( sphIsReadable ( g_sConfigFile.cstr () ) )
-			break;
-#endif
+	LoadAndCheckConfig ();
+	sphInfo( "using config file '%s' (%d chars)...", g_sConfigFile.cstr(), g_dConfig.GetLength());
+	// do parse
+	// don't aqcuire wlock, since we're in single main thread here.
+	if ( !g_pCfg.Parse ( g_sConfigFile.cstr (), g_dConfig.begin () ) )
+		sphFatal ( "failed to parse config file '%s': %s", g_sConfigFile.cstr (), TlsMsg::szError() );
+	CleanLoadedConfig();
 
-		g_sConfigFile = "./manticore.conf";
-		if ( sphIsReadable ( g_sConfigFile.cstr () ) )
-			break;
-
-		g_sConfigFile = NULL;
-		break;
-	}
-
-	if ( !g_sConfigFile.cstr () )
-		sphFatal ( "no readable config file (looked in "
-#ifdef SYSCONFDIR
-			SYSCONFDIR "/manticore.conf, "
-#endif
-			"./manticore.conf)." );
-
-	CSphVector<char> dConfig;
-	CheckConfigChanges ( dConfig );
-
-	sphInfo( "using config file '%s' (%d chars)...", g_sConfigFile.cstr(), dConfig.GetLength());
-
-	{
-		ScWL_t dWLock { g_tRotateConfigMutex };
-		// do parse
-		if ( !g_pCfg.Parse ( g_sConfigFile.cstr (), dConfig.begin () ) )
-			sphFatal ( "failed to parse config file '%s': %s", g_sConfigFile.cstr (), TlsMsg::szError() );
-	}
-	dConfig.Reset ();
-
-	// strictly speaking we must hold g_tRotateConfigMutex all the way we work with config.
-	// but in this very case we're starting in single main thread, no concurrency yet.
 	const CSphConfig & hConf = g_pCfg.m_tConf;
 
 	if ( !hConf.Exists ( "searchd" ) || !hConf["searchd"].Exists ( "searchd" ) )
@@ -19605,18 +19581,19 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	g_bPidIsMine = true;
 
 	// Actions on resurrection
-	if ( bWatched && !bVisualLoad && CheckConfigChanges(dConfig) )
+	if ( bWatched && !bVisualLoad && LoadAndCheckConfig () )
 	{
 		// reparse the config file
-		sphInfo ( "Reloading the config (%d chars)", dConfig.GetLength() );
-		ScWL_t dWLock { g_tRotateConfigMutex };
-		if ( !g_pCfg.ReParse ( g_sConfigFile.cstr (), dConfig.begin () ) )
+		sphInfo ( "Reloading the config (%d chars)", g_dConfig.GetLength() );
+
+		// don't aqcuire wlock, since we're in single main thread here.
+		if ( !g_pCfg.ReParse ( g_sConfigFile.cstr (), g_dConfig.begin () ) )
 			sphFatal ( "failed to parse config file '%s': %s", g_sConfigFile.cstr (), TlsMsg::szError() );
 
 		sphInfo ( "Reconfigure the daemon" );
 		ConfigureSearchd ( hConf, bOptPIDFile, bTestMode );
 	}
-	dConfig.Reset();
+	CleanLoadedConfig();
 
 	// hSearchdpre might be dead if we reloaded the config.
 	CSphConfigSection & hSearchd = hConf["searchd"]["searchd"];
@@ -19668,6 +19645,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	}
 #endif
 
+	// after next line executed we're in mt env, need to take rwlock accessing config.
 	StartGlobalWorkPool ();
 
 	// since that moment any 'fatal' will assume calling 'shutdown' function.

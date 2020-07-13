@@ -35,7 +35,13 @@
 namespace Threads {
 
 static const size_t g_iStackSize = 1024 * 128; // stack size - 128K
+static const size_t STACK_ALIGN = 16; // stack align - let it be 16 bytes for convenience
 #define LOG_COMPONENT_CORO "Stack: " << m_dStack.GetLength() << " (" << m_eState << ") "
+
+inline static size_t AlignUpTo (size_t iSize)
+{
+	return ( iSize+STACK_ALIGN-1 ) & ~( STACK_ALIGN-1 );
+}
 
 //////////////////////////////////////////////////////////////
 /// Coroutine - uses boost::context to switch between jobs
@@ -79,7 +85,7 @@ private:
 public:
 	explicit CoRoutine_c ( Handler fnHandler, size_t iStack=0 )
 		: m_fnHandler ( std::move ( fnHandler ) )
-		, m_dStack ( iStack? (int) iStack: g_iStackSize )
+		  , m_dStack ( iStack ? (int)AlignUpTo ( iStack ) : g_iStackSize )
 	{
 #if BOOST_USE_VALGRIND
 		m_uValgrindStackID = VALGRIND_STACK_REGISTER( m_dStack.begin(), &m_dStack.Last () );

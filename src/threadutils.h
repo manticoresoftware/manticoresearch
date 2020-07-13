@@ -132,11 +132,17 @@ using SchedulerSharedPtr_t = SharedPtr_t<Scheduler_i *>;
 SchedulerSharedPtr_t MakeThreadPool ( size_t iThreadCount, const char * szName="" );
 SchedulerSharedPtr_t MakeAloneThread ( size_t iOrderNum, const char * szName = "" );
 
+/// stack of a thread (that is NOT stack of the coroutine!)
+static const DWORD STACK_SIZE = Max ( PTHREAD_STACK_MIN, 128 * 1024 );
+
 /// add (cleanup) callback to run on thread exit
 void OnExitThread ( Handler fnHandle );
 
 /// get the pointer to my thread's stack
 const void * TopOfStack ();
+
+/// limit size for my coro stacks
+void SetMaxCoroStackSize ( int iStackSize );
 
 /// store the address in the TLS
 void MemorizeStack ( const void * PStack );

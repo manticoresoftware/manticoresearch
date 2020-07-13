@@ -14902,7 +14902,7 @@ int ConsiderStack ( const struct XQNode_t * pRoot, CSphString & sError )
 	// align as stack of tree + 32K
 	// (being run in new coro, most probably you'll start near the top of stack, so 32k should be enouth)
 	iQueryStack = iStackNeed + 32*1024;
-	if ( g_iThreadStackSize>=iQueryStack )
+	if ( g_iMaxCoroStackSize>=iQueryStack )
 		return iQueryStack;
 
 	sError.SetSprintf ( "query too complex, not enough stack (thread_stack=%dK or higher required)",

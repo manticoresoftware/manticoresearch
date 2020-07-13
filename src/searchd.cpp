@@ -18835,7 +18835,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 			sphWarning ( "%s", sError.cstr() );
 	}
 
-	if ( hSearchd("thread_stack") )
+	if ( hSearchd("thread_stack") ) // fixme! rename? That is limit for stack of the coro, not of the thread!
 	{
 		int iThreadStackSizeMin = 65536;
 		int iThreadStackSizeMax = 8*1024*1024;
@@ -18845,7 +18845,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 
 		iStackSize = Min ( iStackSize, iThreadStackSizeMax );
 		iStackSize = Max ( iStackSize, iThreadStackSizeMin );
-		sphSetMyStackSize ( iStackSize );
+		Threads::SetMaxCoroStackSize ( iStackSize );
 	}
 
 	if ( hSearchd("predicted_time_costs") )

@@ -2685,7 +2685,7 @@ void sphBacktrace ( int iFD, bool bSafe )
 	if ( !bSafe )
 	{
 		pMyStack = sphMyStack();
-		iStackSize = g_iThreadStackSize;
+		iStackSize = g_iMaxCoroStackSize;
 	}
 	sphSafeInfo ( iFD, "Stack bottom = 0x%p, thread stack size = 0x%x", pMyStack, iStackSize );
 

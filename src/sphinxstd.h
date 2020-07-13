@@ -4071,7 +4071,7 @@ public:
 
 //////////////////////////////////////////////////////////////////////////
 
-extern int g_iThreadStackSize;
+extern int g_iMaxCoroStackSize;
 
 /// my thread handle and thread func magic
 #if USE_WINDOWS
@@ -4111,9 +4111,6 @@ int sphMyStackSize();
 
 /// get size of used stack (threads or coro - depends from context)
 int64_t sphGetStackUsed();
-
-/// set the size of my thread's stack
-void sphSetMyStackSize ( int iStackSize );
 
 /// a singleton. Since C++11 it is thread-safe, and so, looks really simple
 template<typename T, typename T_tag = T>

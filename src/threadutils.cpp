@@ -1145,10 +1145,10 @@ void * Threads::Init ( bool )
 		bInit = true;
 	}
 #if !USE_WINDOWS
-	if ( pthread_attr_setstacksize ( &tJoinableAttr, g_iThreadStackSize + PTHREAD_STACK_MIN ) )
+	if ( pthread_attr_setstacksize ( &tJoinableAttr, STACK_SIZE ) )
 		sphDie ( "FATAL: pthread_attr_setstacksize( joinable ) failed" );
 
-	if ( pthread_attr_setstacksize ( &tDetachedAttr, g_iThreadStackSize + PTHREAD_STACK_MIN ) )
+	if ( pthread_attr_setstacksize ( &tDetachedAttr, STACK_SIZE ) )
 		sphDie ( "FATAL: pthread_attr_setstacksize( detached ) failed" );
 
 	return bDetached ? &tDetachedAttr : &tJoinableAttr;
@@ -1304,6 +1304,11 @@ const void * Threads::TopOfStack ()
 	return MyThreadContext().m_pMyThreadStack;
 }
 
+void Threads::SetMaxCoroStackSize ( int iStackSize )
+{
+	g_iMaxCoroStackSize = iStackSize;
+}
+
 void Threads::MemorizeStack ( const void * PStack )
 {
 	MyThreadContext ().Prepare ( PStack );
@@ -1415,7 +1420,7 @@ bool Threads::Create ( SphThread_t * pThread, Handler fnRun, bool bDetached, con
 	// create thread
 #if USE_WINDOWS
 	Threads::Init ( bDetached );
-	*pThread = CreateThread ( NULL, g_iThreadStackSize, ThreadProcWrapper_fn, pCtx.Ptr(), 0, NULL );
+	*pThread = CreateThread ( NULL, STACK_SIZE, ThreadProcWrapper_fn, pCtx.Ptr(), 0, NULL );
 	if ( *pThread )
 	{
 		pCtx.LeakPtr();

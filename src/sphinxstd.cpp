@@ -24,7 +24,7 @@
 
 #endif
 
-int g_iThreadStackSize = 1024*1024;
+int g_iMaxCoroStackSize = 1024*1024;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -861,12 +861,7 @@ int64_t sphGetStackUsed()
 	if ( !pStackTop )
 		return 0;
 	int64_t iHeight = pStackTop - &cStack;
-	return ( iHeight>=0 ) ? iHeight : -iHeight;
-}
-
-void sphSetMyStackSize ( int iStackSize )
-{
-	g_iThreadStackSize = iStackSize;
+	return ( iHeight>=0 ) ? iHeight : -iHeight; // on different arch stack may grow in different directions
 }
 
 bool sphThreadSet ( SphThreadKey_t tKey, void * pValue )

@@ -553,7 +553,7 @@ int sphMyStackSize ()
 	auto pWorker = Threads::CoroWorker_c::CurrentWorker ();
 	if ( pWorker )
 		return pWorker->GetStackSize ();
-	return g_iThreadStackSize;
+	return Threads::STACK_SIZE;
 }
 
 int64_t sphTaskCpuTimer ()

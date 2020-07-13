@@ -17324,7 +17324,7 @@ bool LoadAndCheckConfig ()
 	char sBuf [ BUF_SIZE ];
 	FILE * fp = nullptr;
 
-	fp = fopen ( g_sConfigFile.cstr (), "rb" );
+	fp = fopen ( g_sConfigFile.scstr(), "rb" );
 	if ( !fp )
 		return true;
 	if ( fstat ( fileno ( fp ), &tStat )<0 )
@@ -19163,6 +19163,7 @@ void StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread
 #if USE_WINDOWS
 	bool bTerminatedOk = false;
 
+	char szPipeName[64];
 	snprintf ( szPipeName, sizeof(szPipeName), "\\\\.\\pipe\\searchd_%d", iPid );
 
 	HANDLE hPipe = INVALID_HANDLE_VALUE;
@@ -19469,7 +19470,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	sphInfo( "using config file '%s' (%d chars)...", g_sConfigFile.cstr(), g_dConfig.GetLength());
 	// do parse
 	// don't aqcuire wlock, since we're in single main thread here.
-	if ( !g_pCfg.Parse ( g_sConfigFile.cstr (), g_dConfig.begin () ) )
+	if ( !g_pCfg.Parse ( g_sConfigFile.scstr(), g_dConfig.begin() ) )
 		sphFatal ( "failed to parse config file '%s': %s", g_sConfigFile.cstr (), TlsMsg::szError() );
 	CleanLoadedConfig();
 

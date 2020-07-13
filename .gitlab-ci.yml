@@ -75,6 +75,7 @@ simple_tests:
       - cache/icu*64/*icu*
       - cache/re2*64/*re2*
       - cache/stemmer*64/*stemmer*
+  retry: 1
 
 release_tests:
   stage: routines

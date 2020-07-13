@@ -17309,7 +17309,7 @@ static ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection
 	return ADD_ERROR;
 }
 
-// check if config changed, and also cache content into dContent (will be used instead of one more config touching)
+// check if config changed, and also cache content into g_dConfig (will be used instead of one more config touching)
 CSphVector<char> g_dConfig;
 bool LoadAndCheckConfig ()
 {
@@ -19354,6 +19354,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	bool			bForcedPreread = false;
 	bool			bNewCluster = false;
 	bool			bNewClusterForce = false;
+	const char*		szCmdConfigFile = nullptr;
 
 	DWORD			uReplayFlags = 0;
 
@@ -19405,7 +19406,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 		// handle 1-arg options
 		else if ( (i+1)>=argc )		break;
-		OPT ( "-c", "--config" ) 	g_sConfigFile = sphGetConfigFile (argv[++i] );
+		OPT ( "-c", "--config" )	szCmdConfigFile = argv[++i];
 		OPT ( "-p", "--port" )		{ bOptPort = true; iOptPort = atoi ( argv[++i] ); }
 		OPT ( "-l", "--listen" )	{ bOptListen = true; sOptListen = argv[++i]; }
 		OPT ( "-i", "--index" )		dOptIndexes.Add ( argv[++i] );
@@ -19420,6 +19421,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	if ( i!=argc )
 		sphFatal ( "malformed or unknown option near '%s'; use '-h' or '--help' to see available options.", argv[i] );
 
+	g_sConfigFile = sphGetConfigFile ( szCmdConfigFile );
 #if USE_WINDOWS
 	// init WSA on Windows
 	// we need to do it this early because otherwise gethostbyname() from config parser could fail

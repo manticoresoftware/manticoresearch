@@ -10,6 +10,10 @@
 
 #include "mini_timer.h"
 #include "threadutils.h"
+#include "optional.h"
+
+/// Explicitly destroy timer on shutdown (keep valgrind calm)
+void DestroyTimer ();
 
 class TinyTimer_c
 {
@@ -40,7 +44,8 @@ class TinyTimer_c
 public:
 	TinyTimer_c()
 	{
-		m_bCreated = Threads::Create ( &m_tCounterThread, [this] { Loop(); }, true, "sphTimer" );
+		m_bCreated = Threads::Create ( &m_tCounterThread, [this] { Loop (); }, true, "sphTimer" );
+		searchd::AddShutdownCb ( DestroyTimer );
 	}
 
 	~TinyTimer_c()
@@ -75,10 +80,21 @@ public:
 	}
 };
 
-TinyTimer_c& g_TinyTimer()
+Optional_T<TinyTimer_c>& g_TinyTimerStore()
 {
-	static TinyTimer_c tTimer;
+	static Optional_T<TinyTimer_c> tTimer;
 	return tTimer;
+}
+
+void DestroyTimer()
+{
+	g_TinyTimerStore ().reset();
+}
+
+TinyTimer_c & g_TinyTimer ()
+{
+	g_TinyTimerStore ().emplace_once();
+	return g_TinyTimerStore().get();
 }
 
 sph::MiniTimer_c::~MiniTimer_c ()

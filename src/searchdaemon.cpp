@@ -392,7 +392,7 @@ static void FDSet ( int fd, fd_set * fdset )
 #pragma warning(pop) // restore warnings
 
 #else // !USE_WINDOWS
-
+#if !HAVE_POLL
 #define SPH_FDSET_OVERFLOW( _fd ) ( (_fd)<0 || (_fd)>=(int)FD_SETSIZE )
 
 /// on UNIX, we also check that the descript won't corrupt the stack
@@ -404,6 +404,7 @@ static void FDSet( int fd, fd_set* set )
 		FD_SET ( fd, set );
 }
 
+#endif // !HAVE_POLL
 #endif // USE_WINDOWS
 
 /// wait until socket is readable or writable

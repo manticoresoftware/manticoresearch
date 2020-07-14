@@ -2589,7 +2589,8 @@ bool sphDumpGdb (int iFD, const char* sName, const char* sPid )
 				if ( iWorker )
 				{
 					sphSafeInfo ( g_sNameBuf, "pkill -KILL -P %d", iWorker );
-					::system ( g_sNameBuf );
+					auto iFoo = ::system ( g_sNameBuf );
+					(void) iFoo; // that is unused
 				}
 			} else if ( iExited == iWait60 )
 			{

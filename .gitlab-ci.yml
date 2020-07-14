@@ -246,6 +246,8 @@ push_results:
   script:
     - ctest -S misc/ctest/upload.cmake
   artifacts:
+    paths:
+      - build/junit_*.xml
     reports:
       junit: build/junit_*.xml
   cache: {}

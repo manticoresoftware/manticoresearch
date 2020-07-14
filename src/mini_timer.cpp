@@ -10,7 +10,6 @@
 
 #include "mini_timer.h"
 #include "threadutils.h"
-#include "optional.h"
 
 /// Explicitly destroy timer on shutdown (keep valgrind calm)
 void DestroyTimer ();
@@ -44,17 +43,13 @@ class TinyTimer_c
 public:
 	TinyTimer_c()
 	{
-		m_bCreated = Threads::Create ( &m_tCounterThread, [this] { Loop (); }, true, "sphTimer" );
+		m_bCreated = Threads::Create ( &m_tCounterThread, [this] { Loop (); }, false, "sphTimer" );
 		searchd::AddShutdownCb ( DestroyTimer );
 	}
 
 	~TinyTimer_c()
 	{
-		if ( m_bCreated )
-		{
-			m_tSignal.SetEvent ();
-			Threads::Join ( &m_tCounterThread );
-		}
+		Stop();
 	}
 
 	int64_t MiniTimerEngage ( int64_t iTimePeriodMS )
@@ -78,23 +73,28 @@ public:
 	{
 		m_iUsers.fetch_sub ( 1, std::memory_order_relaxed );
 	}
+
+	void Stop()
+	{
+		if ( !m_bCreated )
+			return;
+
+		m_iUsers.store ( 0, std::memory_order_relaxed );
+		m_tSignal.SetEvent ();
+		Threads::Join ( &m_tCounterThread );
+		m_bCreated = false;
+	}
 };
 
-Optional_T<TinyTimer_c>& g_TinyTimerStore()
+TinyTimer_c& g_TinyTimer()
 {
-	static Optional_T<TinyTimer_c> tTimer;
+	static TinyTimer_c tTimer;
 	return tTimer;
 }
 
 void DestroyTimer()
 {
-	g_TinyTimerStore ().reset();
-}
-
-TinyTimer_c & g_TinyTimer ()
-{
-	g_TinyTimerStore ().emplace_once();
-	return g_TinyTimerStore().get();
+	g_TinyTimer().Stop();
 }
 
 sph::MiniTimer_c::~MiniTimer_c ()

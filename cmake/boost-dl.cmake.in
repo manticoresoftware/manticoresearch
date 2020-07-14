@@ -5,9 +5,8 @@ project(boost-context-download NONE)
 include(ExternalProject)
 
 ExternalProject_Add(boost-context
-		GIT_REPOSITORY https://github.com/boostorg/boost.git
-		GIT_TAG boost-1.71.0
-		GIT_SHALLOW ON
+        URL https://github.com/Kitware/CMake/releases/download/v3.17.3/cmake-3.17.3-Linux-x86_64.tar.gz
+        URL_HASH MD5=e2b0b1eac302880461bcbef097171758
 		SOURCE_DIR "@BOOST_CONTEXT_SRC@"
 		BUILD_IN_SOURCE ON
 		CONFIGURE_COMMAND ./bootstrap.sh
@@ -17,4 +16,4 @@ ExternalProject_Add(boost-context
 
 ExternalProject_Add_StepTargets(boost-context download install)
 
-# file configured from cmake/boost-git.cmake.in
+# file configured from cmake/boost-dl.cmake.in

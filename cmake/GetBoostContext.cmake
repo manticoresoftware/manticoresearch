@@ -240,7 +240,7 @@ file(REMOVE_RECURSE ${BOOST_CONTEXT_SRC})
 # no on-board sources, will fetch from git
 get_build(BOOST_CONTEXT_BUILD boost)
 
-configure_file(${MANTICORE_MODULE_PATH}/boost${WIN_SUFF}-git.cmake.in
+configure_file(${MANTICORE_MODULE_PATH}/boost${WIN_SUFF}-dl.cmake.in
 		${BOOST_DOWNLOAD_DIR}/CMakeLists.txt @ONLY)
 configure_boost(${BOOST_DOWNLOAD_DIR})
 download_boost("${BOOST_DOWNLOAD_DIR}")

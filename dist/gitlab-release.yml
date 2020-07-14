@@ -23,7 +23,11 @@ tarball:
       - manticore-*.tar.gz
     when: on_success
     expire_in: 12 hrs
-  cache: {}
+  cache:
+    key: xenial-local
+    paths:
+      - cache/*-src
+      - cache/boost*64
 
 
 osx:

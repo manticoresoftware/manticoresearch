@@ -1463,7 +1463,7 @@ const char * sphGetConfigFile ( const char * sHint )
 	// fallback to defaults if there was no explicit config specified
 #ifdef SYSCONFDIR
 	static const char* sConfigFile = SYSCONFDIR "/manticore.conf";
-	if ( sphIsReadable ( g_sConfigFile.cstr () ) )
+	if ( sphIsReadable ( sConfigFile ) )
 		return sConfigFile;
 #endif
 

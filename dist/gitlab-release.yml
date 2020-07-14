@@ -34,6 +34,9 @@ osx:
       - $WHAT == "all"
       - $WHAT =~ /osx/
   dependencies: []
+  variables:
+    CACHEB: "../cache"
+    OPENSSL_ROOT_DIR: "/usr/local/opt/openssl"
   tags:
     - mac
     - build
@@ -47,6 +50,16 @@ osx:
       - manticore-*.tar.gz
     when: on_success
     expire_in: 12 hrs
+  cache:
+    key: darwin-release
+    paths:
+      - cache/*-src
+      - cache/galera*64/libgalera*
+      - cache/galera*64/galera-targets.cmake
+      - cache/icu*64/*icu*
+      - cache/re2*64/*re2*
+      - cache/stemmer*64/*stemmer*
+      - cache/boost*64
 
 
 windows:
@@ -62,6 +75,7 @@ windows:
     - build
   variables:
     LIBS_BUNDLE: "x:/bundle"
+    CACHEB: "x:/cache"
     OPENSSL_ROOT_DIR: "x:/bundle/openssl-x64"
   script:
     - 'net use x: \\\\VBOXSRV\\shared'
@@ -81,6 +95,7 @@ windows:
       - manticore-*.zip
     when: on_success
     expire_in: 12 hrs
+  cache: {}
 
 .redhat_based: &redhat
   stage: build

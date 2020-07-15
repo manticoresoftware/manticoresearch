@@ -303,6 +303,7 @@ if ( NOT DISABLE_TESTING )
 	endif (WITH_MYSQL)
 
 	# first check syntax
+	if (NOT CYGWIN )
 	find_package ( PythonInterp QUIET )
 	if ( PYTHONINTERP_FOUND AND NOT DISABLE_GTESTS )
 		set ( RESERVED_TEST "\"SphinxQL reserved keywords consistency\"" )
@@ -311,6 +312,7 @@ if ( NOT DISABLE_TESTING )
 				WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 				COMMAND ${PYTHON_EXECUTABLE} reserved.py )
 		SET_TESTS_PROPERTIES ( ${RESERVED_TEST} PROPERTIES LABELS LINTER )
+	endif()
 	endif()
 	add_test ( NAME "\"Internal src/tests\""
 			#    	CONFIGURATIONS Debug

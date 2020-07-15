@@ -126,7 +126,8 @@ win_tests:
   variables:
     LIBS_BUNDLE: "x:/bundle"
     CACHEB: "x:/cache"
-    OPENSSL_ROOT_DIR: "x:/bundle/openssl-x64"
+    OPENSSL_ROOT: "x:/bundle/openssl-x64"
+    BOOST_ROOT: "x:/boost_1_72_0"
     COPY_DLL: "x:/bundle/dll"
     WIN_TEST_CI: "1"
     CTEST_BUILD_CONFIGURATION: "Debug"

@@ -74,12 +74,13 @@ windows:
   variables:
     LIBS_BUNDLE: "x:/bundle"
     CACHEB: "x:/cache"
-    OPENSSL_ROOT_DIR: "x:/bundle/openssl-x64"
+    OPENSSL_ROOT: "x:/bundle/openssl-x64"
+    BOOST_ROOT: "x:/boost_1_72_0"
   script:
     - 'net use x: \\\\VBOXSRV\\shared'
     - mkdir sphinxbin-x64
     - cd sphinxbin-x64
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=default -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 USE_SSL=1 ..
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=default -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 -DUSE_SSL=1 ..
     - cmake --build . --target package --config RelWithDebInfo
     - cp manticore-*.zip ..
     - cd ..

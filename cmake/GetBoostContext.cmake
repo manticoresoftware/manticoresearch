@@ -42,7 +42,7 @@
 # Following rebuilds will immediately reuse these artefacts without need to rebuild.
 #
 
-FOREACH (policy CMP0054)
+FOREACH (policy CMP0054 CMP0074)
 	IF (POLICY ${policy})
 		CMAKE_POLICY(SET ${policy} NEW)
 	ENDIF ()
@@ -131,8 +131,7 @@ endfunction()
 
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_LIBS ON)
-#set(Boost_USE_STATIC_RUNTIME ON)
-
+set(Boost_USE_STATIC_RUNTIME ON)
 #if (FALSE) # for debug purposes
 
 find_package(Boost 1.61.0 COMPONENTS context)

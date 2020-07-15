@@ -303,7 +303,7 @@ if ( NOT DISABLE_TESTING )
 	endif (WITH_MYSQL)
 
 	# first check syntax
-	if (NOT CYGWIN )
+	if (NOT WIN32 )
 	find_package ( PythonInterp QUIET )
 	if ( PYTHONINTERP_FOUND AND NOT DISABLE_GTESTS )
 		set ( RESERVED_TEST "\"SphinxQL reserved keywords consistency\"" )

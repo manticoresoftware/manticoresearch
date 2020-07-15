@@ -1752,7 +1752,7 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 			MemoryWriter_c tWriter ( dBufQueries );
 			auto iStartPos = dBufQueries.GetLengthBytes();
 			tAcc.SaveRtTrx ( tWriter );
-			uQueryHash = sphFNV64cont( { dBufQueries.begin() + iStartPos, dBufQueries.GetLengthBytes() - iStartPos }, uQueryHash);
+			uQueryHash = sphFNV64cont( { dBufQueries.begin() + iStartPos, (int64_t)(dBufQueries.GetLengthBytes() - iStartPos) }, uQueryHash);
 		}
 		break;
 

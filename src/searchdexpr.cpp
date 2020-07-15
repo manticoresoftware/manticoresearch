@@ -67,7 +67,7 @@ static bool ParseSnippetOption ( const CSphNamedVariant & tVariant, SnippetQuery
 	const char * szBegins = "__";
 	if ( sName.Begins(szBegins) )
 	{
-		int iStartLen = strlen(szBegins);
+		auto iStartLen = (int)strlen(szBegins);
 		const char * szTmp = sName.cstr()+iStartLen;
 		while ( *szTmp && *szTmp!='_' )
 			szTmp++;

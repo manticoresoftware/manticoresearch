@@ -36,7 +36,7 @@ static bool TransformMacro ( CSphString & sSrc, CSphString & sPost, const char *
 		return false;
 
 	int iSrcLen = sSrc.Length();
-	int iPassLen = strlen(szMacro);
+	auto iPassLen = (int)strlen(szMacro);
 	int iTailLen = iSrcLen - iPassLen - ( sPass - sSrc.cstr() );
 
 	// copy tail

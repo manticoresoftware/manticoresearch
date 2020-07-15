@@ -12028,7 +12028,7 @@ static std::pair<const char *, int> FormatInfo ( const PublicThreadDesc_t & tThd
 	}
 
 	if ( tThd.m_sDescription.IsEmpty () && tThd.m_sCommand )
-		return { tThd.m_sCommand, strlen ( tThd.m_sCommand ) };
+		return { tThd.m_sCommand, (int)strlen ( tThd.m_sCommand ) };
 	else
 		return { tThd.m_sDescription.cstr (), tThd.m_sDescription.GetLength () };
 }

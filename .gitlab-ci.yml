@@ -160,8 +160,9 @@ build_mac:
   variables:
     CTEST_BUILD_CONFIGURATION: "Debug"
     CACHEB: "../cache"
-    OPENSSL_ROOT_DIR: "/usr/local/opt/openssl"
-    CTEST_CMAKE_GENERATOR: "Unix Makefiles"
+    OPENSSL_ROOT: "/usr/local/opt/openssl"
+    WITH_ICU: 1
+    USE_GALERA: 1
     DIAGNOSTIC: 1 # let's set it by default forever
   script:
     - mkdir build && cd build
@@ -198,8 +199,8 @@ build_bsd:
   variables:
     CTEST_BUILD_CONFIGURATION: "Debug"
     CACHEB: "../cache"
-    CTEST_CMAKE_GENERATOR: "Unix Makefiles"
     DIAGNOSTIC: 1 # let's set it by default forever
+    USE_GALERA: 1
   script:
     - mkdir build && cd build
     - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..

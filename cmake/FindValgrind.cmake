@@ -49,7 +49,7 @@ mark_as_advanced (VALGRIND_PROGRAM VALGRIND_INCLUDE_DIR )
 #  itself includes this FindLibArchive when built with an older CMake that does
 #  not provide it.  The older CMake also does not have CMAKE_CURRENT_LIST_DIR.)
 include ( ${CMAKE_ROOT}/Modules/FindPackageHandleStandardArgs.cmake )
-find_package_handle_standard_args ( VALGRIND REQUIRED_VARS VALGRIND_INCLUDE_DIR )
+find_package_handle_standard_args ( Valgrind REQUIRED_VARS VALGRIND_INCLUDE_DIR )
 
 if ( VALGRIND_FOUND )
 	add_library(valgrind::valgrind INTERFACE IMPORTED)

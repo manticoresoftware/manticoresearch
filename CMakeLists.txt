@@ -318,7 +318,7 @@ else ( WIN32 )
 		endif ()
 	endif ( HAVE_GCC_LIKE )
 
-	find_package (jemalloc)
+	find_package (Jemalloc)
 	if ( JEMALLOC_FOUND )
 		option ( USE_JEMALLOC "Use jemalloc allocator" OFF )
 		mark_as_advanced (USE_JEMALLOC)

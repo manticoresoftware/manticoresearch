@@ -91,7 +91,7 @@ mark_as_advanced ( ICONV_INCLUDE_DIRS LIBICONV_LIBRARY HAVE_CONST_ICONV )
 #  itself includes this FindLibArchive when built with an older CMake that does
 #  not provide it.  The older CMake also does not have CMAKE_CURRENT_LIST_DIR.)
 include ( ${CMAKE_ROOT}/Modules/FindPackageHandleStandardArgs.cmake )
-find_package_handle_standard_args ( Iconv
+find_package_handle_standard_args ( ICONV
 		REQUIRED_VARS HAVE_LIBICONV ICONV_INCLUDE_DIRS
 		)
 

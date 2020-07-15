@@ -57,7 +57,7 @@ mark_as_advanced ( JEMALLOC_LIBRARY JEMALLOC_CONFIG_PROGRAM )
 #  itself includes this FindLibArchive when built with an older CMake that does
 #  not provide it.  The older CMake also does not have CMAKE_CURRENT_LIST_DIR.)
 include ( ${CMAKE_ROOT}/Modules/FindPackageHandleStandardArgs.cmake )
-find_package_handle_standard_args ( JEMALLOC REQUIRED_VARS JEMALLOC_LIBRARY )
+find_package_handle_standard_args ( Jemalloc REQUIRED_VARS JEMALLOC_LIBRARY )
 
 if ( JEMALLOC_FOUND )
 	set ( JEMALLOC_LIBRARIES ${JEMALLOC_LIBRARY} )

@@ -128,15 +128,13 @@ win_tests:
     CACHEB: "x:/cache"
     OPENSSL_ROOT: "x:/bundle/openssl-x64"
     BOOST_ROOT: "x:/boost_1_72_0"
-    COPY_DLL: "x:/bundle/dll"
     WIN_TEST_CI: "1"
-    CTEST_BUILD_CONFIGURATION: "Debug"
-    CTEST_CMAKE_GENERATOR : "Visual Studio 16 2019"
+    CTEST_CMAKE_GENERATOR: "Visual Studio 16 2019"
     DIAGNOSTIC: 1 # let's set it by default forever
   script:
     - 'net use x: \\\\VBOXSRV\\shared'
 #    - export PATH='/cygdrive/x/bundle/openssl-x64:/cygdrive/x/bundle/Expat-1.95.8/Libs:/cygdrive/x/bundle/libiconv-1.9.1/bin:/cygdrive/x/bundle/mysql/bin:'$PATH
-    - ctest -V -S misc/ctest/gltest.cmake -DCTEST_SOURCE_DIRECTORY='C:/cygwin64/home/manticore/builds/manticoresearch/dev/' -C Debug
+    - ctest -V -S misc/ctest/gltest.cmake -C Debug
   after_script:
     - cd build && mkdir xml_win_tests
     - cp -r Testing/2*/*.xml xml_win_tests

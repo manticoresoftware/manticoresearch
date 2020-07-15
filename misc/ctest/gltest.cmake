@@ -7,7 +7,6 @@ set ( CTEST_CMAKE_GENERATOR "$ENV{CTEST_CMAKE_GENERATOR}" )
 set ( LIBS_BUNDLE "$ENV{LIBS_BUNDLE}" )
 set ( OPENSSL_ROOT_DIR "$ENV{OPENSSL_ROOT_DIR}" )
 set ( DISABLE_GTESTS "$ENV{DISABLE_GTESTS}" )
-set ( COPY_DLL "$ENV{COPY_DLL}" )
 set ( CTEST_REGEX "$ENV{CTEST_REGEX}" )
 set ( WIN_TEST_CI "$ENV{WIN_TEST_CI}" )
 set ( SEARCHD_CLI_EXTRA "$ENV{SEARCHD_CLI_EXTRA}" )
@@ -18,14 +17,13 @@ if ( WIN_TEST_CI )
 	if ( NOT CTEST_BUILD_CONFIGURATION )
 		set ( CTEST_BUILD_CONFIGURATION "Debug" )
 	endif()
-	if ( NOT COPY_DLL )
-		set ( COPY_DLL "${LIBS_BUNDLE}/dll/" )
-	endif()
-else()
-	if (NOT CTEST_CMAKE_GENERATOR)
-		set(CTEST_CMAKE_GENERATOR "Unix Makefiles")
-	endif ()
 endif()
+
+MESSAGE (STATUS "WINTEST: ${WIN_TEST_CI}, config ${CTEST_BUILD_CONFIGURATION}")
+
+if (NOT CTEST_CMAKE_GENERATOR)
+	set(CTEST_CMAKE_GENERATOR "Unix Makefiles")
+endif ()
 
 # platform specific options
 set ( CTEST_SITE "$ENV{CI_SERVER_NAME} ${CTEST_BUILD_CONFIGURATION}" )
@@ -50,7 +48,11 @@ endif()
 set ( CONFIG_OPTIONS "WITH_ODBC=1;WITH_RE2=1;WITH_STEMMER=1;WITH_PGSQL=${WITH_PGSQL};WITH_EXPAT=1;USE_SSL=1" )
 set ( CTEST_BINARY_DIRECTORY "build" )
 
-LIST ( APPEND CONFIG_OPTIONS "CMAKE_INSTALL_DATADIR=${CTEST_SOURCE_DIRECTORY}/build/installdir" )
+if ( WIN_TEST_CI )
+	LIST(APPEND CONFIG_OPTIONS "CMAKE_INSTALL_PREFIX=.") # fixme! check if it could be used not only for win...
+else()
+	LIST(APPEND CONFIG_OPTIONS "CMAKE_INSTALL_DATADIR=${CTEST_SOURCE_DIRECTORY}/build/installdir")
+endif()
 
 if ( CTEST_BUILD_CONFIGURATION STREQUAL Debug )
 	# configure coverage
@@ -59,7 +61,6 @@ if ( CTEST_BUILD_CONFIGURATION STREQUAL Debug )
 	LIST ( APPEND CONFIG_OPTIONS "COVERAGE_TEST=1" )
 	LIST ( APPEND CTEST_CUSTOM_COVERAGE_EXCLUDE "googletest-src/.*" )
 endif ()
-
 
 if ( DISABLE_GTESTS )
 	LIST ( APPEND CONFIG_OPTIONS "DISABLE_GTESTS=${DISABLE_GTESTS}" )
@@ -110,20 +111,20 @@ ctest_start ( "Continuous" )
 ctest_update ()
 ctest_configure ()
 if ( WIN_TEST_CI )
-	ctest_build ()
+	ctest_build ( TARGET install )
+
+	# dirty hack for icu: executables located at CTEST_BINARY_DIRECTORY/src/Debug/*.exe
+	# same folder used as install prefix, and everything installed there. So we could push icu data
+	# into expected place using installed icu from known location
+	file(MAKE_DIRECTORY "${CTEST_BINARY_DIRECTORY}/src/share/icu")
+	file(COPY "${CTEST_BINARY_DIRECTORY}/share/icu/" DESTINATION "${CTEST_BINARY_DIRECTORY}/src/share/icu/" FILES_MATCHING PATTERN "*.dat")
+
+	# the same hack for dlls. They with binaries placed in the bin folder by installation
+	file(COPY "${CTEST_BINARY_DIRECTORY}/bin/" DESTINATION "${CTEST_BINARY_DIRECTORY}/src/Debug/" FILES_MATCHING PATTERN "*.dll")
 else ( WIN_TEST_CI )
-	ctest_build ( FLAGS "-j5 install" )
+	ctest_build ( TARGET install FLAGS "-j5" )
 endif ()
 
-# create installdir for ICU data
-file ( MAKE_DIRECTORY "build/installdir" )
-file ( MAKE_DIRECTORY "build/installdir/icu" )
-file ( COPY "build/icu/source/data/in/" DESTINATION "build/installdir/icu/" FILES_MATCHING PATTERN "*.dat" )
-
-if ( COPY_DLL )
-	MESSAGE ( STATUS "copy dll from ${COPY_DLL} to build/src/Debug" )
-	file ( COPY "${COPY_DLL}/" DESTINATION "build/src/Debug/" FILES_MATCHING PATTERN "*.dll" )
-endif()
 if ( CTEST_REGEX )
 	ctest_test ( RETURN_VALUE retcode INCLUDE "${CTEST_REGEX}" )
 else()

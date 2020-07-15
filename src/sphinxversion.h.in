@@ -1,4 +1,4 @@
-// this is the main place where version number is defined
+// this is the main place where version number is defined SPH_GIT_COMMIT_ID: $Format:%h$  GIT_TIMESTAMP_ID: $Format:%aI$
 #define VERNUMBERS "3.4.3"
 #define SPH_GIT_COMMIT_ID "@SPH_GIT_COMMIT_ID@"
 #define GIT_TIMESTAMP_ID "@GIT_TIMESTAMP_ID@"

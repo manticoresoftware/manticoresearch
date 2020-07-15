@@ -28,10 +28,6 @@ endif ()
 # platform specific options
 set ( CTEST_SITE "$ENV{CI_SERVER_NAME} ${CTEST_BUILD_CONFIGURATION}" )
 
-if ( NOT CTEST_SOURCE_DIRECTORY )
-	set ( CTEST_SOURCE_DIRECTORY "${CI_PROJECT_DIR}" )
-endif ()
-
 # fallback to run without ctest
 if ( NOT CTEST_SOURCE_DIRECTORY )
 	set ( CTEST_SOURCE_DIRECTORY ".." )

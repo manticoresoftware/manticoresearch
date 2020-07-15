@@ -259,6 +259,9 @@ push_results:
 
 deploy_hook:
   stage: hooks
+  variables:
+    WHAT: $WHAT
+    REPO_NAME: $REPO_NAME
   rules:
     - if: $CI_COMMIT_TITLE !~ /^noci .*$/i
       when: always

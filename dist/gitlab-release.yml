@@ -265,31 +265,30 @@ build_docker:
     - if: $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_BRANCH == "master"
   script:
     - curl -XPOST "$DOCKER_HUB_BUILD_URL"
-  dependencies: [collect_repo]
 
 # collect artifacts from all previous jobs.
 # m.b. it has sense to also publish them in one click to github release?
 
-collect:
-  stage: publish
-  only:
-    variables:
-      - $WHAT == "all"
-      - $WHAT =~ /collect/
-  dependencies: [tarball, osx, windows, rhel6, rhel7, rhel8, jessie, stretch, trusty, xenial, bionic, buster]
-  tags:
-    - dev-host
-  variables:
-    GIT_STRATEGY: none
-  script:
-    - echo "Collected packages"
-    - ls -1
-    - ~/upload_repo.sh
-  artifacts:
-    paths:
-      - manticore*
-    when: on_success
-    expire_in: 1 week
-  allow_failure: false
-  cache: {}
+#collect:
+#  stage: publish
+#  only:
+#    variables:
+#      - $WHAT == "all"
+#      - $WHAT =~ /collect/
+#  dependencies: [tarball, osx, windows, rhel6, rhel7, rhel8, jessie, stretch, trusty, xenial, bionic, buster]
+#  tags:
+#    - dev-host
+#  variables:
+#    GIT_STRATEGY: none
+#  script:
+#    - echo "Collected packages"
+#    - ls -1
+#    - ~/upload_repo.sh
+#  artifacts:
+#    paths:
+#      - manticore*
+#    when: on_success
+#    expire_in: 1 week
+#  allow_failure: false
+#  cache: {}
 

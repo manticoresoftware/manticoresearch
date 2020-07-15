@@ -92,6 +92,7 @@ list(APPEND EXTRA_LIBRARIES ${RE2_LIBRARIES})
 set(USE_RE2 1)
 memcfgvalues(USE_RE2)
 
+message(STATUS "library: ${RE2_LIBRARIES}")
 diag(RE2_FOUND)
 diag(RE2_INCLUDE_DIRS)
 diag(RE2_LIBRARIES)

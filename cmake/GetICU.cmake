@@ -62,6 +62,7 @@ else ()
 	add_compile_definitions(ICU_DATA_DIR="${CMAKE_INSTALL_FULL_DATADIR}/${PACKAGE_NAME}/icu")
 endif ()
 
+message(STATUS "library: ${ICU_LIBRARIES}, icu-data: ${ICU_DATA}")
 diag(ICU_FOUND)
 diag(ICU_INCLUDE_DIRS)
 diag(ICU_LIBRARIES)

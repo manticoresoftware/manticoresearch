@@ -257,7 +257,7 @@ collect_repo:
     - echo "Collected packages"
     - ls -1
     - ~/upload_repo.sh
-  dependencies: [rhel6, rhel7, rhel8, jessie, stretch, trusty, xenial, bionic, buster, focal, tarball, osx, windows]
+  dependencies: [rhel6, rhel7, rhel8, rhelsplit7, jessie, stretch, trusty, xenial, bionic, buster, focal, tarball, osx, windows]
 
 
 build_docker:

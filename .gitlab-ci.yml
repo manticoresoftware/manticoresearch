@@ -225,8 +225,6 @@ build_bsd:
       - cache/stemmer*64/*stemmer*
 
 # build and upload on regular commits
-
-
 push_results:
   stage: publish
   rules:

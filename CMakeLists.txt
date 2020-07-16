@@ -68,6 +68,11 @@ if (DEFINED CACHEB)
 	SET ( CACHEB "${CACHEB}" CACHE PATH "Cache dir where unpacked sources and builds found." )
 endif()
 
+# simpler packages: provide -DPACK=1, and DISTR_BUILD will be set from env $DISTR, easier in dockers
+if (PACK)
+	set(DISTR_BUILD "$ENV{DISTR}")
+endif ()
+
 
 # Make release build for the pointed distr
 # That will override defaults and give possibility to build

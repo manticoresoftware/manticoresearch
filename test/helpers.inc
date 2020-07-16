@@ -750,7 +750,7 @@ function RestartDaemon ()
 
 function KillSearchd ( $config, $pidfile, $signal, $unlinkpid=True )
 {
-	global $action_wait_timeout, $windows;
+	global $action_wait_timeout, $windows, $cygwin;
 
 	$abs_pidfile = testdir($pidfile);
 	
@@ -760,7 +760,7 @@ function KillSearchd ( $config, $pidfile, $signal, $unlinkpid=True )
 		$pid = fread ( $fp, filesize ( $abs_pidfile ) );
 		fclose ($fp);
 
-		if ( $windows )
+		if ( $windows || $cygwin )
 			exec ("kill -f -s $signal $pid");
 		else
 			exec ("kill -s $signal $pid");

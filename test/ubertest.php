@@ -154,8 +154,8 @@ $cygwin = false;
 if ( $locals['scriptdir']!=$locals['testdir'] )
 {
 
-	$fscript = file_get_contents($locals['scriptdir']. "cmake_install.cmake");
-	$ftest = file_get_contents($locals['testdir']. "cmake_install.cmake");
+	$fscript = @file_get_contents($locals['scriptdir']. "cmake_install.cmake");
+	$ftest = @file_get_contents($locals['testdir']. "cmake_install.cmake");
 
 	if ( $fscript && !$ftest)
 	{

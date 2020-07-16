@@ -13,7 +13,7 @@ test_variable:
 tarball:
   stage: build
   rules:
-    - if: $WHAT==null || $WHAT=="all" || $WHAT =~ /tarball/
+    - if: $WHAT=="$WHAT" || $WHAT==null || $WHAT=="all" || $WHAT =~ /tarball/
   dependencies: []
   tags:
     - dev-host

@@ -7,7 +7,7 @@ stages:
 test_variable:
   stage: build
   script:
-    - echo $WHAT
+    - echo ${WHAT}
     - echo $REPO_NAME
 
 tarball:

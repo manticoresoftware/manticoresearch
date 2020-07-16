@@ -3,6 +3,13 @@ stages:
   - publish
   - deploy
 
+
+test_variable:
+  stage: build
+  script:
+    - echo $WHAT
+    - echo $REPO_NAME
+
 tarball:
   stage: build
   rules:

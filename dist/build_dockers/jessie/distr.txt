@@ -1,0 +1,1 @@
+distr=$(basename $(pwd))

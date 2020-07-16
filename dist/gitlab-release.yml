@@ -59,7 +59,6 @@ osx:
       - cache/stemmer*64/*stemmer*
       - cache/boost*64
 
-
 windows:
   stage: build
   only:
@@ -99,13 +98,15 @@ windows:
 .redhat_based: &redhat
   stage: build
   dependencies: []
+  variables:
+    REPO_DIST_NAME: "centos"
   tags:
     - docker
   script:
     - ln -s $(pwd) /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
     - cd /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=$DISTR $XTRAFLAGS ..
+    - cmake -DPACK=1 -DSPHINX_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - make -j4 package
     - cp manticore*.rpm ..
 
@@ -122,7 +123,7 @@ windows:
     - docker
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=$DISTR $XTRAFLAGS ..
+    - cmake -DPACK=1 -DSPHINX_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - make -j4 package
     - cp manticore*deb ..
   artifacts:
@@ -134,50 +135,45 @@ windows:
 rhel6:
   <<: *redhat
   variables:
-    REPO_DIST_NAME: "centos"
     REPO_DIST_VER: "6"
   only:
     variables:
       - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /rhel6/
-  image: registry.gitlab.com/manticoresearch/dev/centos6_cmake317:latest
+  image: registry.gitlab.com/manticoresearch/dev/centos6_cmake:317
 
 rhel7:
   <<: *redhat
   variables:
-    REPO_DIST_NAME: "centos"
     REPO_DIST_VER: "7"
   only:
     variables:
       - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /rhel7/
-  image: registry.gitlab.com/manticoresearch/dev/centos7_cmake317:latest
+  image: registry.gitlab.com/manticoresearch/dev/centos7_cmake:317
 
 rhelsplit7:
   <<: *redhat
   variables:
     XTRAFLAGS: "-DSPLIT_APPS=ON -DNOAPI=ON"
-    REPO_DIST_NAME: "centos"
     REPO_DIST_VER: "7"
   only:
     variables:
       - $WHAT =~ /rhelsplit7/
-  image: registry.gitlab.com/manticoresearch/dev/centos7_cmake317:latest
+  image: registry.gitlab.com/manticoresearch/dev/centos7_cmake:317
 
 rhel8:
   <<: *redhat
   variables:
-    REPO_DIST_NAME: "centos"
     REPO_DIST_VER: "8"
-    XTRAFLAGS: "-DCMAKE_CXX_FLAGS=\"-Wno-error=stringop-truncation\""
   only:
     variables:
       - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /rhel8/
-  image: registry.gitlab.com/manticoresearch/dev/centos8_cmake317:latest
+  image: registry.gitlab.com/manticoresearch/dev/centos8_cmake:317
 
 jessie:
   <<: *debian
@@ -186,7 +182,7 @@ jessie:
       - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /jessie/
-  image: registry.gitlab.com/manticoresearch/dev/jessie_cmake317:latest
+  image: registry.gitlab.com/manticoresearch/dev/jessie_cmake:317
 
 stretch:
   <<: *debian
@@ -195,7 +191,7 @@ stretch:
       - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /stretch/
-  image: registry.gitlab.com/manticoresearch/dev/stretch_cmake317:latest
+  image: registry.gitlab.com/manticoresearch/dev/stretch_cmake:317
 
 trusty:
   <<: *debian
@@ -204,7 +200,7 @@ trusty:
       - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /trusty/
-  image: registry.gitlab.com/manticoresearch/dev/trusty_cmake317:latest
+  image: registry.gitlab.com/manticoresearch/dev/trusty_cmake:317
 
 xenial:
   <<: *debian
@@ -213,7 +209,7 @@ xenial:
       - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /xenial/
-  image: registry.gitlab.com/manticoresearch/dev/xenial_cmake317:latest
+  image: registry.gitlab.com/manticoresearch/dev/xenial_cmake:317
 
 bionic:
   <<: *debian
@@ -222,29 +218,25 @@ bionic:
       - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /bionic/
-  image: registry.gitlab.com/manticoresearch/dev/bionic_cmake317:latest
+  image: registry.gitlab.com/manticoresearch/dev/bionic_cmake:317
 
 focal:
   <<: *debian
-  variables:
-    XTRAFLAGS: "-DCMAKE_CXX_FLAGS=\"-Wno-error=deprecated-copy\""
   only:
     variables:
       - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /focal/
-  image: registry.gitlab.com/manticoresearch/dev/focal_cmake317:latest
+  image: registry.gitlab.com/manticoresearch/dev/focal_cmake:317
 
 buster:
   <<: *debian
-  variables:
-    XTRAFLAGS: "-DCMAKE_CXX_FLAGS=\"-Wno-error=stringop-truncation\""
   only:
     variables:
       - $WHAT == null
       - $WHAT == "all"
       - $WHAT =~ /buster/
-  image: registry.gitlab.com/manticoresearch/dev/buster_cmake317:latest
+  image: registry.gitlab.com/manticoresearch/dev/buster_cmake:317
 
 
 collect_repo:

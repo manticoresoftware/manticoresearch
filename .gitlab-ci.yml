@@ -126,7 +126,7 @@ win_tests:
   variables:
     LIBS_BUNDLE: "x:/bundle"
     CACHEB: "x:/cache"
-    OPENSSL_ROOT: "x:/bundle/openssl-x64"
+    OPENSSL_ROOT_DIR: "x:/bundle/openssl-x64"
     BOOST_ROOT: "x:/boost_1_72_0"
     WIN_TEST_CI: "1"
     CTEST_CMAKE_GENERATOR: "Visual Studio 16 2019"
@@ -160,7 +160,7 @@ build_mac:
   variables:
     CTEST_BUILD_CONFIGURATION: "Debug"
     CACHEB: "../cache"
-    OPENSSL_ROOT: "/usr/local/opt/openssl"
+    OPENSSL_ROOT_DIR: "/usr/local/opt/openssl"
     WITH_ICU: 1
     USE_GALERA: 1
     DIAGNOSTIC: 1 # let's set it by default forever

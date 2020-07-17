@@ -1007,7 +1007,7 @@ TEST ( functions, OneshotAutoEvent )
 }
 
 // oneshot event - we can set it N times, but only once it waited, and then will block.
-TEST ( functions, OneshotAutoEventTimed )
+TEST ( functions, DISABLED_OneshotAutoEventTimed )
 {
 	tmNow=sphMicroTimer ();
 	SphThread_t th;

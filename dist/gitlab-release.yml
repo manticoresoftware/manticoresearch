@@ -31,7 +31,7 @@ tarball:
 osx:
   stage: build
   rules:
-    - if: $WHAT==null || $WHAT=="all" || $WHAT =~ /osx/
+    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /osx/
   dependencies: []
   variables:
     CACHEB: "../cache"
@@ -63,7 +63,7 @@ osx:
 windows:
   stage: build
   rules:
-    - if: $WHAT==null || $WHAT=="all" || $WHAT =~ /windows/
+    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /windows/
   dependencies: []
   tags:
     - windev19
@@ -133,7 +133,7 @@ windows:
 rhel6:
   <<: *redhat
   rules:
-    - if: $WHAT==null || $WHAT=="all" || $WHAT =~ /rhel6/
+    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /rhel6/
   variables:
     REPO_DIST_VER: "6"
   image: registry.gitlab.com/manticoresearch/dev/centos6_cmake:317
@@ -141,7 +141,7 @@ rhel6:
 rhel7:
   <<: *redhat
   rules:
-    - if: $WHAT==null || $WHAT=="all" || $WHAT =~ /rhel7/
+    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /rhel7/
   variables:
     REPO_DIST_VER: "7"
   image: registry.gitlab.com/manticoresearch/dev/centos7_cmake:317
@@ -158,7 +158,7 @@ rhelsplit7:
 rhel8:
   <<: *redhat
   rules:
-    - if: $WHAT==null || $WHAT=="all" || $WHAT =~ /rhel8/
+    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /rhel8/
   variables:
     REPO_DIST_VER: "8"
   image: registry.gitlab.com/manticoresearch/dev/centos8_cmake:317
@@ -166,43 +166,43 @@ rhel8:
 jessie:
   <<: *debian
   rules:
-    - if: $WHAT==null || $WHAT=="all" || $WHAT =~ /jessie/
+    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /jessie/
   image: registry.gitlab.com/manticoresearch/dev/jessie_cmake:317
 
 stretch:
   <<: *debian
   rules:
-    - if: $WHAT==null || $WHAT=="all" || $WHAT =~ /stretch/
+    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /stretch/
   image: registry.gitlab.com/manticoresearch/dev/stretch_cmake:317
 
 trusty:
   <<: *debian
   rules:
-    - if: $WHAT==null || $WHAT=="all" || $WHAT =~ /trusty/
+    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /trusty/
   image: registry.gitlab.com/manticoresearch/dev/trusty_cmake:317
 
 xenial:
   <<: *debian
   rules:
-    - if: $WHAT==null || $WHAT=="all" || $WHAT =~ /xenial/
+    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /xenial/
   image: registry.gitlab.com/manticoresearch/dev/xenial_cmake:317
 
 bionic:
   <<: *debian
   rules:
-    - if: $WHAT==null || $WHAT=="all" || $WHAT =~ /bionic/
+    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /bionic/
   image: registry.gitlab.com/manticoresearch/dev/bionic_cmake:317
 
 focal:
   <<: *debian
   rules:
-    - if: $WHAT==null || $WHAT=="all" || $WHAT =~ /focal/
+    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /focal/
   image: registry.gitlab.com/manticoresearch/dev/focal_cmake:317
 
 buster:
   <<: *debian
   rules:
-    - if: $WHAT==null || $WHAT=="all" || $WHAT =~ /buster/
+    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /buster/
   image: registry.gitlab.com/manticoresearch/dev/buster_cmake:317
 
 
@@ -223,7 +223,7 @@ collect_repo:
 build_docker:
   stage: deploy
   rules:
-    - if: $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_BRANCH == "master"
+    - if: $WHAT=='$WHAT' || $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_BRANCH == "master"
   script:
     - curl -XPOST "$DOCKER_HUB_BUILD_URL"
   dependencies: [collect_repo]

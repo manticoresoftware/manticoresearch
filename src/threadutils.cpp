@@ -500,7 +500,7 @@ public:
 		wake_one_thread_and_unlock ( dLock );
 	}
 
-	void run () override
+	void run () override NO_THREAD_SAFETY_ANALYSIS
 	{
 		LOG ( DETAIL, MT ) << "run " << m_iOutstandingWork << " st:" << !!m_bStopped;
 		if ( m_iOutstandingWork==0 )
@@ -525,7 +525,7 @@ public:
 	}
 
 	bool do_run_one ( ScopedMutex_t& dLock, TaskServiceThreadInfo_t& this_thread )
-		RELEASE ( dLock ) TRY_ACQUIRE ( false, dLock )
+		REQUIRES ( dLock ) RELEASE ( dLock ) TRY_ACQUIRE ( false, dLock )
 	{
 		while ( !m_bStopped )
 		{

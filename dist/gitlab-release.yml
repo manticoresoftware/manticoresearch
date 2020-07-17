@@ -201,8 +201,6 @@ buster:
 
 collect_repo:
   stage: publish
-  rules:
-    - when: on_success
   allow_failure: true
   tags:
     - dev-host

@@ -266,6 +266,5 @@ deploy_hook:
   rules:
     - if: $CI_COMMIT_TITLE !~ /^noci .*$/i
       when: always
-  cache: {}
   trigger:
     include: '/dist/gitlab-release.yml'

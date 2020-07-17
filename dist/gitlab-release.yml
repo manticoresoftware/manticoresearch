@@ -216,7 +216,7 @@ collect_repo:
 build_docker:
   stage: deploy
   rules:
-    - if: $WHAT=='$WHAT' || $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_BRANCH == "master"
+    - if: $WHAT=='$WHAT' || $WHAT==null && $CI_COMMIT_BRANCH == "master"
   script:
     - curl -XPOST "$DOCKER_HUB_BUILD_URL"
   dependencies: [collect_repo]

@@ -5,6 +5,8 @@ workflow:
     - if: $CI_COMMIT_BRANCH == "master"
     - if: $TEST || $WHAT
 
+# to skip ci add [ci skip] or [skip ci] in commit message in any capitalization
+
 stages:
   - mirroring
   - routines
@@ -43,7 +45,7 @@ job_mirror:
 simple_tests:
   stage: routines
   rules:
-    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i
+    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i
     - if: $TEST =~ /simple/
   tags:
     - specdocker
@@ -80,7 +82,7 @@ simple_tests:
 release_tests:
   stage: routines
   rules:
-    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i
+    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i
     - if: $TEST =~ /release/
   tags:
     - specdocker
@@ -117,7 +119,7 @@ release_tests:
 win_tests:
   stage: routines
   rules:
-    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_TITLE !~ /^nociwindows .*$/i
+    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^nociwindows .*$/i
     - if: $TEST =~ /windows/
   tags:
     - windev19
@@ -151,7 +153,7 @@ win_tests:
 build_mac:
   stage: routines
   rules:
-    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_TITLE !~ /^nocimacos .*$/i
+    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^nocimacos .*$/i
     - if: $TEST =~ /macos/
   tags:
     - mac
@@ -191,7 +193,7 @@ build_mac:
 build_bsd:
   stage: routines
   rules:
-    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i && $CI_COMMIT_TITLE !~ /^nocifreebsd .*$/i
+    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^nocifreebsd .*$/i
     - if: $TEST =~ /freebsd/
   tags:
     - freebsd
@@ -229,7 +231,7 @@ build_bsd:
 push_results:
   stage: publish
   rules:
-    - if: $WHAT==null && $CI_COMMIT_TITLE !~ /^noci .*$/i
+    - if: $WHAT==null
       when: always
   tags:
     - specdocker

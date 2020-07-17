@@ -190,7 +190,7 @@ function GetVersion ()
 
 function GuessReplication()
 {
-	$repli_on = 'DGALERA_SOVERSION';
+	$repli_on = 'DGALERA_SONAME';
 	global $g_repli;
 	
 	$banner = GetBanner();

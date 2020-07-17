@@ -10,8 +10,8 @@ ExternalProject_Add(boost-context
 		SOURCE_DIR "@BOOST_CONTEXT_SRC@"
 		BUILD_IN_SOURCE ON
 		CONFIGURE_COMMAND ./bootstrap.sh
-		BUILD_COMMAND ./b2 --wight-context --with-system runtime-link=static
-		INSTALL_COMMAND ./b2 install --wight-context --with-system runtime-link=static --prefix=@BOOST_CONTEXT_BUILD@
+		BUILD_COMMAND ./b2 --with-context --with-system runtime-link=static
+		INSTALL_COMMAND ./b2 install --with-context --with-system runtime-link=static --prefix=@BOOST_CONTEXT_BUILD@
 		)
 
 ExternalProject_Add_StepTargets(boost-context download install)

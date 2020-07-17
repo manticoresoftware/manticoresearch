@@ -1,20 +1,7 @@
-# production system for ubertesting
+# production system for ubertesting. Look base at dist/build_dockers/bionic/cmake_317
 
-FROM ubuntu:bionic
-ENV DEBIAN_FRONTEND noninteractive
+FROM registry.gitlab.com/manticoresearch/dev/bionic_cmake:317
 RUN apt-get update && apt-get install -y --no-install-recommends -q \
-    build-essential \
-    libmysqlclient-dev \
-    libexpat-dev \
-    libpq-dev \
-    unixodbc-dev \
-	libssl-dev \
-	libicu-dev \
-	libboost-dev \
-	libboost-all-dev \
-    flex \
-    bison \
-    git \
     php \
     php-mysql \
     php-curl \
@@ -23,10 +10,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends -q \
     python \
     ssh \
     mysql-server \
-    wget \
     xsltproc \
     openssl \
-    ca-certificates \
     python-dev \
     && rm -rf /var/lib/apt/lists/* \
     && wget --no-check-certificate -q -O /odbc.tar.gz https://dev.mysql.com/get/Downloads/Connector-ODBC/5.3/mysql-connector-odbc-5.3.9-linux-ubuntu16.04-x86-64bit.tar.gz \
@@ -37,11 +22,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends -q \
     && mysql -e 'CREATE DATABASE test; CREATE USER test@localhost; GRANT ALL PRIVILEGES ON test.* TO test@localhost;' \
     && mysqladmin shutdown
 
-# add cmake as separate layer.
-RUN  wget --no-check-certificate -q -O /cmake.tar.gz https://cmake.org/files/v3.17/cmake-3.17.1-Linux-x86_64.tar.gz \
-    && tar -zxf /cmake.tar.gz \
-    && rm /cmake.tar.gz
-ENV PATH $PATH:/cmake-3.17.1-Linux-x86_64/bin
+# update stuff that may exipre
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+&& rm -rf /var/lib/apt/lists/* \
+&& mc update
 
 ADD sphinx /root/.sphinx
 ADD entry_point.sh /
@@ -49,3 +34,5 @@ VOLUME [ "/work" ]
 WORKDIR /work
 ENTRYPOINT ["bash", "/entry_point.sh"]
 CMD []
+
+# docker build -t registry.gitlab.com/manticoresearch/dev/ubertests_public .

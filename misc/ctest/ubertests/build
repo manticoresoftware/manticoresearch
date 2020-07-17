@@ -1,1 +1,1 @@
-docker build -t registry.gitlab.com/manticoresearch/dev/ubertests .
+docker build -t registry.gitlab.com/manticoresearch/dev/ubertests_public .

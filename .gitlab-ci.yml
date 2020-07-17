@@ -50,12 +50,14 @@ simple_tests:
   tags:
     - specdocker
   dependencies: []
-  image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
+  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:latest
   variables:
     CTEST_BUILD_CONFIGURATION: "Debug"
     CACHEB: "../cache"
     DIAGNOSTIC: 1 # let's set it by default forever
   script:
+    - mc config host add dev $MINIO_HOST
+    - mc mirror --overwrite dev/uploads/aot/ /work/aot/
     - ctest -V -S misc/ctest/gltest.cmake
   after_script:
     - cd build && mkdir xml_simple_tests
@@ -85,13 +87,16 @@ release_tests:
     - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i
     - if: $TEST =~ /release/
   tags:
-    - specdocker
+    - specdocker # once test 58 fixed, m.b. change to 'docker' and gitlab then cloud will help us testing.
   dependencies: []
-  image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
+  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:latest
   variables:
     CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
     CACHEB: "../cache"
+    DIAGNOSTIC: 1 # let's set it by default forever
   script:
+    - mc config host add dev $MINIO_HOST
+    - mc mirror --overwrite dev/uploads/aot/ /work/aot/
     - ctest -V -S misc/ctest/gltest.cmake
   after_script:
     - cd build && mkdir xml_release_tests
@@ -234,8 +239,8 @@ push_results:
     - if: $WHAT==null
       when: always
   tags:
-    - specdocker
-  image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
+    - docker
+  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:latest
   dependencies:
     - simple_tests
     - release_tests

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>json vs count distinct</name>
+<skip_indexer/>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_Settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<sphqueries>
+
+<sphinxql>create table t(f text, j json)</sphinxql>
+<sphinxql>insert into t(id,j) values(1,'{"id":6}')</sphinxql>
+<sphinxql>insert into t(id,j) values(2,'{"id":7}')</sphinxql>
+<sphinxql>select j.id i, count(distinct i) from t</sphinxql>
+
+<sphinxql>flush ramchunk t</sphinxql>
+<sphinxql>select j.id i, count(distinct i) from t</sphinxql>
+
+<sphinxql>drop table t</sphinxql>
+
+</sphqueries>
+
+</test>

@@ -12,6 +12,9 @@ set ( WIN_TEST_CI "$ENV{WIN_TEST_CI}" )
 set ( SEARCHD_CLI_EXTRA "$ENV{SEARCHD_CLI_EXTRA}" )
 set_property ( GLOBAL PROPERTY Label P$ENV{CI_PIPELINE_ID} J$ENV{CI_JOB_ID} )
 
+# how may times try the test before it is considered failed
+set (RETRIES 5)
+
 # set defaults for CI Windows test
 if ( WIN_TEST_CI )
 	if ( NOT CTEST_BUILD_CONFIGURATION )
@@ -122,9 +125,9 @@ else ( WIN_TEST_CI )
 endif ()
 
 if ( CTEST_REGEX )
-	ctest_test ( RETURN_VALUE retcode INCLUDE "${CTEST_REGEX}" )
+	ctest_test ( RETURN_VALUE retcode INCLUDE "${CTEST_REGEX}" REPEAT UNTIL_PASS:${RETRIES})
 else()
-	ctest_test ( RETURN_VALUE retcode )
+	ctest_test ( RETURN_VALUE retcode REPEAT UNTIL_PASS:${RETRIES})
 endif()
 #ctest_test ( START 24 END 25 RETURN_VALUE retcode )
 #ctest_test ( STRIDE 50 )

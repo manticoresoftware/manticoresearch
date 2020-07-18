@@ -574,30 +574,28 @@ Threads::Scheduler_i * Threads::CoCurrentScheduler ()
 }
 
 
-Threads::CoThrottler_c::CoThrottler_c ( int64_t tmThrottlePeriodUs )
-	: m_tmThrottlePeriodUs ( tmThrottlePeriodUs )
+Threads::CoThrottler_c::CoThrottler_c ( int64_t tmThrottlePeriodMs )
+	: m_tmThrottlePeriodMs ( tmThrottlePeriodMs )
 {
-	m_tmNextThrottleTimestamp = sphMicroTimer() + m_tmThrottlePeriodUs;
+	m_tmNextThrottleTimestamp = m_dTimerGuard.MiniTimerEngage( m_tmThrottlePeriodMs );
 }
 
 bool Threads::CoThrottler_c::MaybeThrottle ()
 {
-	auto tmNow = sphMicroTimer ();
-	if ( tmNow < m_tmNextThrottleTimestamp )
+	if ( !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) )
 		return false;
 
-	m_tmNextThrottleTimestamp = tmNow + m_tmThrottlePeriodUs;
+	m_tmNextThrottleTimestamp = m_dTimerGuard.MiniTimerEngage ( m_tmThrottlePeriodMs );
 	CoWorker ()->Reschedule ();
 	return true;
 }
 
 bool Threads::CoThrottler_c::ThrottleAndKeepCrashQuery ()
 {
-	auto tmNow = sphMicroTimer ();
-	if ( tmNow<m_tmNextThrottleTimestamp )
+	if ( !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) )
 		return false;
 
-	m_tmNextThrottleTimestamp = tmNow+m_tmThrottlePeriodUs;
+	m_tmNextThrottleTimestamp = m_dTimerGuard.MiniTimerEngage ( m_tmThrottlePeriodMs );
 	CrashQueryKeeper_c _;
 	CoWorker ()->Reschedule ();
 	return true;

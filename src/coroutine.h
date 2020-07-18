@@ -12,6 +12,7 @@
 
 #include "threadutils.h"
 #include "optional.h"
+#include "mini_timer.h"
 #include <atomic>
 
 namespace Threads {
@@ -69,12 +70,14 @@ class CoThrottler_c
 	static const int tmThrotleTimeQuantumMs = 100; // how long task may work before rescheduling (in milliseconds)
 
 	int64_t m_tmNextThrottleTimestamp;
-	int64_t m_tmThrottlePeriodUs;
+	int64_t m_tmThrottlePeriodMs;
+
+	sph::MiniTimer_c m_dTimerGuard;
 
 	bool MaybeThrottle ();
 
 public:
-	explicit CoThrottler_c ( int64_t tmPeriodUs = tmThrotleTimeQuantumMs * 1000 );
+	explicit CoThrottler_c ( int64_t tmPeriodMs = tmThrotleTimeQuantumMs );
 
 	// common throttle action - republish stored crash query to TLS on resume
 	bool ThrottleAndKeepCrashQuery ();

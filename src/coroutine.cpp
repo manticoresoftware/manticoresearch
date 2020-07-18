@@ -591,15 +591,16 @@ bool Threads::CoThrottler_c::MaybeThrottle ()
 	return true;
 }
 
-void Threads::CoThrottler_c::ThrottleAndKeepCrashQuery ()
+bool Threads::CoThrottler_c::ThrottleAndKeepCrashQuery ()
 {
 	auto tmNow = sphMicroTimer ();
 	if ( tmNow<m_tmNextThrottleTimestamp )
-		return;
+		return false;
 
 	m_tmNextThrottleTimestamp = tmNow+m_tmThrottlePeriodUs;
 	CrashQueryKeeper_c _;
 	CoWorker ()->Reschedule ();
+	return true;
 }
 
 inline void fnResume ( volatile void* pCtx )

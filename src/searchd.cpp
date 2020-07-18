@@ -7661,18 +7661,21 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 		sphLogDebug ( "MakeSnippetsCoro Coro started" );
 		auto tCtx = dActualpBuilder.GetContext ();
 		Threads::CoThrottler_c tThrottler;
+		int iTick=1;
 		while ( true )
 		{
 			auto iQuery = iCurQuery.fetch_add ( 1, std::memory_order_relaxed );
 			if ( iQuery>=dTasks.GetLength () )
 				return; // all is done
 
+			myinfo::SetThreadInfo ( "%d s %d:", iTick, iQuery );
 			sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d[%d]", iQuery, dTasks[iQuery] );
 			MakeSingleLocalSnippetWithFields ( dQueries[dTasks[iQuery]], q, tCtx.m_pBuilder, dStubFields );
 			sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d finished", iQuery );
 
 			// yield and reschedule every quant of time. It gives work to other tasks
-			tThrottler.ThrottleAndKeepCrashQuery();
+			if ( tThrottler.ThrottleAndKeepCrashQuery() )
+				++iTick;
 		}
 	};
 	for ( int i = 0; i<iNumOfCoros; ++i )

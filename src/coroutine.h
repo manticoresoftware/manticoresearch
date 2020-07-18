@@ -77,16 +77,20 @@ public:
 	explicit CoThrottler_c ( int64_t tmPeriodUs = tmThrotleTimeQuantumMs * 1000 );
 
 	// common throttle action - republish stored crash query to TLS on resume
-	void ThrottleAndKeepCrashQuery ();
+	bool ThrottleAndKeepCrashQuery ();
 
-	// simple reschedule on timeout
-	inline void SimpleThrottle () { MaybeThrottle(); }
+	// simple reschedule on timeout. Returns true if throttle happened
+	inline bool SimpleThrottle () { return MaybeThrottle(); }
 
 	template<typename FN_AFTER_RESUME>
-	void ThrottleAndProceed ( FN_AFTER_RESUME fnProceeder )
+	bool ThrottleAndProceed ( FN_AFTER_RESUME fnProceeder )
 	{
 		if ( MaybeThrottle () )
+		{
 			fnProceeder ();
+			return true;
+		}
+		return false;
 	}
 };
 

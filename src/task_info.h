@@ -54,7 +54,7 @@ struct PublicThreadDesc_t
 
 	StringBuilder_c		m_sChain;
 	StringBuilder_c		m_sClientName	{" "};
-	StringBuilder_c		m_sDescription;
+	StringBuilder_c		m_sDescription	{" "};
 	StringBuilder_c		m_sProto		{","};
 
 	int64_t				m_tmConnect		= -1; ///< when did the client connect?

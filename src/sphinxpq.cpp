@@ -1413,16 +1413,19 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 		auto pCtx = dMatchContexts.GetContext ();
 		pCtx.m_pMatchCtx->m_dMsg.Clear ();
 		Threads::CoThrottler_c tThrottle;
+		int iTick=1;
 		while (true)
 		{
 			auto iQuery = iCurQuery.fetch_add ( 1, std::memory_order_relaxed );
 			if ( iQuery>= dStored.GetLength())
 				return; // all is done
 
+			myinfo::SetThreadInfo ( "%d q %d:", iTick, iQuery );
 			MatchingWork ( dStored[iQuery], *pCtx.m_pMatchCtx );
 
 			// yield and reschedule every quant of time. It gives work to other tasks
-			tThrottle.ThrottleAndKeepCrashQuery ();
+			if ( tThrottle.ThrottleAndKeepCrashQuery () )
+				++iTick;
 		}
 	};
 

@@ -1095,6 +1095,7 @@ DEFINE_RENDER( QlCompressedInfo_t )
 	auto & tInfo = *(QlCompressedInfo_t *) pSrc;
 	if ( tInfo.m_bCompressed )
 		dDst.m_sProto << "compressed";
+	dDst.m_sChain << (int) tInfo.m_eType << ":QlCompressed ";
 }
 
 // main sphinxql server

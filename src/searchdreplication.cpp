@@ -874,6 +874,7 @@ struct ReplInfo_t : public TaskInfo_t
 DEFINE_RENDER( ReplInfo_t )
 {
 	auto & tInfo = *(ReplInfo_t *) pSrc;
+	dDst.m_sChain << (int) tInfo.m_eType << ":Repl ";
 	dDst.m_sClientName << "wsrep" << tInfo.m_sIncoming.cstr();
 }
 

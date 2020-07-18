@@ -72,6 +72,7 @@ void PublicThreadDesc_t::Swap ( PublicThreadDesc_t & rhs )
 	::Swap ( m_iConnID, rhs.m_iConnID );
 	::Swap ( m_eProto, rhs.m_eProto );
 	::Swap ( m_eThdState, rhs.m_eThdState );
+	::Swap ( m_sChain, rhs.m_sChain );
 }
 
 
@@ -121,6 +122,7 @@ DEFINE_RENDER ( MiniTaskInfo_t )
 	dDst.m_tmStart.emplace_once ( tInfo.m_tmStart );
 	dDst.m_sCommand = tInfo.m_sCommand;
 	hazard::Guard_c tGuard;
+	dDst.m_sChain << (int) tInfo.m_eType << ":Mini ";
 	auto pDescription = tGuard.Protect ( tInfo.m_pHazardDescription );
 	if ( pDescription )
 		dDst.m_sDescription << *pDescription;
@@ -128,9 +130,17 @@ DEFINE_RENDER ( MiniTaskInfo_t )
 
 DEFINE_RENDER ( ClientTaskInfo_t )
 {
-	MiniTaskInfo_t::Render ( pSrc, dDst );
-
 	auto & tInfo = *(ClientTaskInfo_t *) pSrc;
+
+	// MiniTaskInfo_t::Render, but without chain
+	dDst.m_tmStart.emplace_once ( tInfo.m_tmStart );
+	dDst.m_sCommand = tInfo.m_sCommand;
+	hazard::Guard_c tGuard;
+	auto pDescription = tGuard.Protect ( tInfo.m_pHazardDescription );
+	if ( pDescription )
+		dDst.m_sDescription << *pDescription;
+
+	// Client render
 	dDst.m_sClientName << tInfo.m_sClientName;
 	if ( tInfo.m_bVip )
 		dDst.m_sClientName << "vip";
@@ -138,6 +148,7 @@ DEFINE_RENDER ( ClientTaskInfo_t )
 	dDst.m_eThdState = tInfo.m_eThdState;
 	dDst.m_eProto = tInfo.m_eProto;
 	dDst.m_sProto << ProtoName ( tInfo.m_eProto );
+	dDst.m_sChain << (int) tInfo.m_eType << ":Client ";
 	if ( tInfo.m_bSsl )
 		dDst.m_sProto << "ssl";
 }

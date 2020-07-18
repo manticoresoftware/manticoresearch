@@ -52,6 +52,7 @@ struct PublicThreadDesc_t
 	int64_t				m_iTotalJobsDone = -1;		///< total jobs I've completed
 	CSphString			m_sThreadName;
 
+	StringBuilder_c		m_sChain;
 	StringBuilder_c		m_sClientName	{" "};
 	StringBuilder_c		m_sDescription;
 	StringBuilder_c		m_sProto		{","};

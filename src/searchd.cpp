@@ -6636,6 +6636,7 @@ struct QueryInfo_t : public TaskInfo_t
 DEFINE_RENDER ( QueryInfo_t )
 {
 	auto & tInfo = *(QueryInfo_t *) pSrc;
+	dDst.m_sChain << (int) tInfo.m_eType << ":Query ";
 	hazard::Guard_c tGuard;
 	auto pQuery = tGuard.Protect ( tInfo.m_pHazardQuery );
 	if ( pQuery && myinfo::GetProto()!=Proto_e::MYSQL41 ) // cheat: for mysql query not used, so will not copy it then
@@ -12037,7 +12038,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
 	int64_t tmNow = sphMicroTimer();
 
-	tOut.HeadBegin ( 14 );
+	tOut.HeadBegin ( 14 ); // 15 with chain
 	tOut.HeadColumn ( "Tid" );
 	tOut.HeadColumn ( "Name" );
 	tOut.HeadColumn ( "Proto" );
@@ -12051,6 +12052,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	tOut.HeadColumn ( "Jobs done" );
 	tOut.HeadColumn ( "Last job took" );
 	tOut.HeadColumn ( "In idle" );
+//	tOut.HeadColumn ( "Chain" );
 	tOut.HeadColumn ( "Info" );
 	tOut.HeadEnd();
 
@@ -12099,6 +12101,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 			tOut.PutTimestampAsString ( dThd.m_tmLastJobDoneTimeUS ); // idle for
 		}
 
+//		tOut.PutString ( dThd.m_sChain.cstr () ); // Chain
 		auto tInfo = FormatInfo ( dThd, eFmt, tBuf );
 		tOut.PutString ( tInfo.first, Min ( tInfo.second, tStmt.m_iThreadsCols ) ); // Info m_pTaskInfo
 		tOut.Commit();

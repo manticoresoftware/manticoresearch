@@ -744,6 +744,8 @@ function RestartDaemon ()
 	if ( $start == 0 || $start == 2 )
 	{
 		$status .= "; start=ok" . ', return code=' . $start;
+        if ( $start==2 )
+            $status .= ", error=" . $error;
 	} else
 	{
 		$status .=  "; start=failed, return code=" . $start . ", error=" . $error;

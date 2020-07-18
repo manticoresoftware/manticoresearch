@@ -5923,7 +5923,7 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 
 	for ( int i = 0; i<iNumOfCoros; ++i )
 		CoCo ( Threads::WithCopiedCrashQuery ( fnCalc ), dWaiter );
-	fnCalc (); // last, or only task we performs right here.
+	myinfo::OwnMini ( fnCalc ) (); // last, or only task we performs right here.
 
 	// wait for them to complete
 	WaitForDeffered ( std::move ( dWaiter ));
@@ -7676,8 +7676,8 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 		}
 	};
 	for ( int i = 0; i<iNumOfCoros; ++i )
-		CoCo ( fnWorker, dWaiter );
-	fnWorker();
+		CoCo ( Threads::WithCopiedCrashQuery ( fnWorker ), dWaiter );
+	myinfo::OwnMini ( fnWorker ) (); // last, or only task we performs right here.
 	sphLogDebug ( "MakeSnippetsCoro waiting..." );
 	WaitForDeffered ( std::move ( dWaiter ) );
 	sphLogDebug ( "MakeSnippetsCoro wait finished" );

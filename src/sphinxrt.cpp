@@ -6140,7 +6140,7 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 
 	for ( int i = 0; i<iNumOfCoros; ++i )
 		CoCo ( Threads::WithCopiedCrashQuery ( fnCalc ), dWaiter );
-	fnCalc(); // last, or only task we performs right here.
+	myinfo::OwnMini ( fnCalc )(); // last, or only task we performs right here.
 
 	// wait till all copies of dWaiter are destroyed (each coro has a copy, and we has copy also).
 	WaitForDeffered ( std::move ( dWaiter ) );

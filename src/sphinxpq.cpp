@@ -1408,26 +1408,27 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 		tRes.m_tmSetup = sphMicroTimer ()+tRes.m_tmSetup;
 
 	auto dWaiter = DefferedRestarter ();
-	for ( int i = 0; i < iNumOfCoros; ++i )
-		CoCo ( Threads::WithCopiedCrashQuery ( [&dMatchContexts, &iCurQuery, &dStored] () mutable
+	auto fnWorker = [&dMatchContexts, &iCurQuery, &dStored] () mutable
+	{
+		auto pCtx = dMatchContexts.GetContext ();
+		pCtx.m_pMatchCtx->m_dMsg.Clear ();
+		Threads::CoThrottler_c tThrottle;
+		while (true)
 		{
-			auto pCtx = dMatchContexts.GetContext ();
-			pCtx.m_pMatchCtx->m_dMsg.Clear ();
-			Threads::CoThrottler_c tThrottle;
+			auto iQuery = iCurQuery.fetch_add ( 1, std::memory_order_relaxed );
+			if ( iQuery>= dStored.GetLength())
+				return; // all is done
 
-			while (true)
-			{
-				auto iQuery = iCurQuery.fetch_add ( 1, std::memory_order_relaxed );
-				if ( iQuery>= dStored.GetLength())
-					return; // all is done
+			MatchingWork ( dStored[iQuery], *pCtx.m_pMatchCtx );
 
-				MatchingWork ( dStored[iQuery], *pCtx.m_pMatchCtx );
+			// yield and reschedule every quant of time. It gives work to other tasks
+			tThrottle.ThrottleAndKeepCrashQuery ();
+		}
+	};
 
-				// yield and reschedule every quant of time. It gives work to other tasks
-				tThrottle.ThrottleAndKeepCrashQuery ();
-			}
-		}), dWaiter);
-
+	for ( int i = 0; i<iNumOfCoros; ++i )
+		CoCo ( Threads::WithCopiedCrashQuery ( fnWorker ), dWaiter );
+	myinfo::OwnMini ( fnWorker ) (); // last, or only task we performs right here.
 	WaitForDeffered ( std::move ( dWaiter ) );
 
 	// collect and merge result set

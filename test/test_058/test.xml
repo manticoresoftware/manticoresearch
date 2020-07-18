@@ -5,6 +5,7 @@
 
 <requires>
 <non-rt/>
+<heavy />
 </requires>
 
 <config>
@@ -12,6 +13,7 @@ searchd
 {
 	<searchd_settings/>
 	expansion_limit = 2
+	shutdown_timeout = 30s
 	<dynamic>
 		<variant>
 			seamless_rotate = 0

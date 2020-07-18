@@ -723,6 +723,9 @@ function StopSearchd ( $config, $pidfile )
 			usleep ( $action_wait_timeout );
 			$i++;
 		}
+		// finally kill, since otherwise stacked daemon will ruine following tests
+		if ( file_exists ( $abs_pidfile ) )
+			KillSearchd($config, $pidfile, 'KILL', true);
 	}
 	return $ret;
 }

@@ -29,20 +29,23 @@ if ( NOT DISABLE_TESTING AND NOT DISABLE_GTESTS AND NOT WIN32 )
 	configure_file ( ${CMAKE_CURRENT_SOURCE_DIR}/smoke_data.csv ${CMAKE_CURRENT_BINARY_DIR}/smoke_data.csv COPYONLY )
 	configure_file ( ${CMAKE_CURRENT_SOURCE_DIR}/smoke_test.conf ${CMAKE_CURRENT_BINARY_DIR}/smoke_test.conf COPYONLY )
 
-	set ( test "\"Prepare API test\"" )
-	add_test ( NAME "${test}" COMMAND indexer -c smoke_test.conf --all
+	# since cmake 3.18 names need fixup
+	include(fixup_test_name)
+
+	fixup_test_name ( test "Prepare API test" )
+	add_test ( NAME ${test} COMMAND indexer -c smoke_test.conf --all
 			WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} )
-	SET_TESTS_PROPERTIES ( "${test}" PROPERTIES LABELS "API"
+	SET_TESTS_PROPERTIES ( ${test} PROPERTIES LABELS "API"
 			FIXTURES_SETUP APIINDEX  )
 
-	set ( test "\"Perform API smoke test\"" )
-	add_test ( NAME "${test}" COMMAND ${CMAKE_COMMAND}
+	fixup_test_name ( test "Perform API smoke test" )
+	add_test ( NAME ${test} COMMAND ${CMAKE_COMMAND}
 			-D SEARCHD=$<TARGET_FILE:searchd>
 			-D CLI=$<TARGET_FILE:testcli>
 			-D SRCDIR=${CMAKE_CURRENT_SOURCE_DIR}
 			-P ${CMAKE_CURRENT_SOURCE_DIR}/smoke.cmake
 			WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} )
-	SET_TESTS_PROPERTIES ( "${test}" PROPERTIES LABELS "API"
+	SET_TESTS_PROPERTIES ( ${test} PROPERTIES LABELS "API"
 			FIXTURES_REQUIRED APIINDEX )
 
 endif()

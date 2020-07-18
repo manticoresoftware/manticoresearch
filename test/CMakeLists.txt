@@ -40,19 +40,23 @@ if ( NOT "${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_BINARY_DIR}")
 	configure_file ( "ubertest.php.in" "${MANTICORE_BINARY_DIR}/test/ubertest.php" @ONLY )
 endif()
 	
-	
 if ( NOT SEARCHD_CLI_EXTRA )
 	set ( SEARCHD_CLI_EXTRA "" )
 endif()
 
-add_test ( NAME "\"Cleaning guess cache\""
+# since cmake 3.18 names need fixup
+include(fixup_test_name)
+
+fixup_test_name(tst "Cleaning guess cache")
+add_test ( NAME ${tst}
 		#    	CONFIGURATIONS Debug
 		COMMAND ${CMAKE_COMMAND} -E remove guess.txt )
-SET_TESTS_PROPERTIES ( "\"Cleaning guess cache\"" PROPERTIES FIXTURES_SETUP UBER )
-	
-add_test ( NAME "\"Cleaning errors\""
+SET_TESTS_PROPERTIES (${tst} PROPERTIES FIXTURES_SETUP UBER )
+
+fixup_test_name(tst "Cleaning errors")
+add_test ( NAME ${tst}
 		COMMAND ${CMAKE_COMMAND} -E remove error_all.txt )
-SET_TESTS_PROPERTIES ( "\"Cleaning errors\"" PROPERTIES FIXTURES_SETUP UBER )
+SET_TESTS_PROPERTIES ( ${tst} PROPERTIES FIXTURES_SETUP UBER )
 
 foreach ( test ${tests} )
 	# get the last dir (filename)
@@ -141,7 +145,7 @@ foreach ( test ${tests} )
 	if ( ADD_TEST )
 		# conditionally add plain test
 		if ( NOT "FORCE-RT" IN_LIST REQUIRES )
-			set (tstn "\"test_${tst_name}\"")
+			fixup_test_name (tstn "test_${tst_name}")
 			add_test ( NAME "${tstn}"
 					#    	CONFIGURATIONS Debug
 					WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -166,7 +170,7 @@ foreach ( test ${tests} )
 
 		# conditionally add rt test
 		if ( NOT "NON-RT" IN_LIST REQUIRES )
-			set ( tstn "\"rt_${tst_name}\"" )
+			fixup_test_name(tstn "rt_${tst_name}")
 			add_test ( NAME "${tstn}"
 					#			CONFIGURATIONS "Debug"
 					WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"

@@ -338,9 +338,11 @@ if ( NOT DISABLE_TESTING )
 
 	# first check syntax
 	if (NOT WIN32 )
+	# since cmake 3.18 names need fixup
+	include(fixup_test_name)
 	find_package ( PythonInterp QUIET )
 	if ( PYTHONINTERP_FOUND AND NOT DISABLE_GTESTS )
-		set ( RESERVED_TEST "\"SphinxQL reserved keywords consistency\"" )
+		fixup_test_name ( RESERVED_TEST "SphinxQL reserved keywords consistency" )
 		message ( STATUS "python binary is ${PYTHON_EXECUTABLE}" ) # !COMMIT
 		add_test ( NAME ${RESERVED_TEST}
 				WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -348,7 +350,9 @@ if ( NOT DISABLE_TESTING )
 		SET_TESTS_PROPERTIES ( ${RESERVED_TEST} PROPERTIES LABELS LINTER )
 	endif()
 	endif()
-	add_test ( NAME "\"Internal src/tests\""
+
+	fixup_test_name (tst "Internal src/tests")
+	add_test ( NAME ${tst}
 			#    	CONFIGURATIONS Debug
 			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 			COMMAND "tests" )

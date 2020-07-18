@@ -238,6 +238,20 @@ macro( OPTION_MENU PACKAGE PROMPT OUTVAR LIB_DIR )
 	ENDIF ( WITH_${PACKAGE} )
 endmacro()
 
+function(parse_tbd RAWLIB OUTVAR)
+	FILE(READ "${RAWLIB}" _CONTENT)
+	# replace lf into ';' (it makes list from the line)
+	STRING(REGEX REPLACE "\n" ";" _CONTENT "${_CONTENT}")
+	foreach (LINE ${_CONTENT})
+		# match definitions like - // GIT_*_ID VALUE
+		if ("${LINE}" MATCHES "^install-name:[ \t]+(.*)")
+			set(DYLIB "${CMAKE_MATCH_1}")
+			break()
+		endif ()
+	endforeach ()
+	set("${OUTVAR}" "${DYLIB}" PARENT_SCOPE)
+endfunction()
+
 function ( GET_SONAME RAWLIB OUTVAR )
 	if ( NOT MSVC )
 		if ( NOT DEFINED CMAKE_OBJDUMP )
@@ -248,6 +262,12 @@ function ( GET_SONAME RAWLIB OUTVAR )
 		endif ()
 		mark_as_advanced ( CMAKE_OBJDUMP BinUtils_DIR )
 		if ( APPLE )
+			GET_FILENAME_COMPONENT(EXTNAME "${RAWLIB}" EXT)
+			if (EXTNAME STREQUAL ".tbd")
+				parse_tbd("${RAWLIB}" dylib)
+				set("${OUTVAR}" "${dylib}" PARENT_SCOPE)
+				return()
+			endif()
 			execute_process ( COMMAND "${CMAKE_OBJDUMP}" -macho -dylib-id "${RAWLIB}"
 					WORKING_DIRECTORY "${SOURCE_DIR}"
 					RESULT_VARIABLE res

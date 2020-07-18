@@ -21,15 +21,9 @@ searchd
 	binlog_path =
 	<dynamic>
 		<variant>
-			workers = threads
 			seamless_rotate = 0
 		</variant>
 		<variant>
-			workers = threads
-			seamless_rotate = 1
-		</variant>
-		<variant>
-			workers = fork
 			seamless_rotate = 1
 		</variant>
 	</dynamic>

@@ -8,7 +8,6 @@ searchd
 {
 	<searchd_settings/>
 	binlog_path =
-	workers = threads
 }
 
 common

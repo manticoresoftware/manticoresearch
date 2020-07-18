@@ -18,7 +18,6 @@ searchd
 	<searchd_settings/>
 	binlog_flush = 1
 	binlog_path = <data_path/>
-	workers = threads
 }
 
 source src

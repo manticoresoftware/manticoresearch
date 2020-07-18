@@ -12,7 +12,6 @@
 searchd
 {
 	<searchd_settings/>
-	workers = threads
 }
 
 source plain_stem_src

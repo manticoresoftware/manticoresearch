@@ -16,7 +16,6 @@ searchd
 		dist_threads = 4
 	  </variant>
 	</dynamic>	
-	workers					= threads
 }
 
 index facetdemo

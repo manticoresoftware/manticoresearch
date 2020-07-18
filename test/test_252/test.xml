@@ -8,7 +8,6 @@
 <config>
 searchd
 {
-	workers = threads
 	<searchd_settings/>
 }
 

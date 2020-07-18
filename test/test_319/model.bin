@@ -14,8 +14,8 @@ flushed 811";i:13;s:10:"query test";i:14;s:16:"
 701
 702
 703
-3 rows";i:17;s:47:"stop=ok, return code=0; start=ok, return code=2";i:18;s:3:"
-OK";i:19;s:47:"stop=ok, return code=0; start=ok, return code=2";i:20;s:16:"
+3 rows";i:17;s:47:"stop=ok, return code=0; start=ok, return code=0";i:18;s:3:"
+OK";i:19;s:47:"stop=ok, return code=0; start=ok, return code=0";i:20;s:16:"
 disk_chunks | 1";i:21;s:10:"query test";i:22;s:16:"
 11
 12

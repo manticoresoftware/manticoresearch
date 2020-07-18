@@ -15,7 +15,6 @@ searchd
 {
 	<searchd_settings/>
 	binlog_path = #
-	workers = threads
 	attr_flush_period = 3600 # not autoflush during test run but be able to do FlushAttributes command
 }
 

@@ -10,7 +10,6 @@ searchd
 {
 	<searchd_settings/>
 	binlog_path =
-	workers = threads
 	<dynamic>
 		<variant>
 			seamless_rotate = 0

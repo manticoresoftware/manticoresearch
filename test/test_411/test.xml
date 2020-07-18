@@ -7,7 +7,6 @@
 searchd
 {
 	<searchd_settings/>
-	workers	= threads
 	thread_stack = 1M
 	binlog_path =
 }

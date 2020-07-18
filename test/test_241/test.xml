@@ -15,7 +15,6 @@ indexer
 searchd
 {
 	<searchd_settings/>
-	workers					= threads
 	listen 					= <testdir/>data/searchd-test-241.sock
 }
 

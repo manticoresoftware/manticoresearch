@@ -12,7 +12,6 @@ indexer
 searchd
 {
 	<searchd_settings/>
-	workers = threads
 }
 
 source test

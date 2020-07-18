@@ -13,7 +13,6 @@
 searchd
 {
 	<searchd_settings/>
-	workers = threads
 }
 
 index pq_re

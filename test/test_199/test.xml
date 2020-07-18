@@ -13,8 +13,6 @@ searchd
 {
 	<searchd_settings/>
 	binlog_path = #
-	workers = threads
-	
 	sphinxql_state = <data_path/>/startup.sql
 }
 

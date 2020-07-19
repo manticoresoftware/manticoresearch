@@ -12,7 +12,7 @@
 #include "threadutils.h"
 
 namespace { // static
-	static const size_t NINFOS = 256;
+	const size_t NINFOS = 256;
 	RenderFnPtr pInfos[NINFOS] = { nullptr };
 	std::atomic<int> dCounters[NINFOS];
 	BYTE uFreeInfoSlot = 1; // 0-th slot is a mark of 'invalid'
@@ -306,7 +306,7 @@ const CSphString& myinfo::UnsafeDescription ()
 
 	static const CSphString sDummy;
 	if ( pNode )
-		return pNode->m_pHazardDescription ? *pNode->m_pHazardDescription : sDummy;
+		return pNode->m_pHazardDescription ? *(const CSphString *)pNode->m_pHazardDescription : sDummy;
 
 	sphWarning ( "internal error: myinfo::Description () invoked with empty tls!" );
 	return sDummy;

@@ -43,7 +43,7 @@
 namespace hazard {
 
 // 2 pointers per thread should be enough for the beginning
-static const size_t POINTERS_PER_THREAD = 2;
+static const int POINTERS_PER_THREAD = 2;
 
 // backend pointer type
 using Pointer_t = void*;
@@ -68,7 +68,7 @@ void RetireArray ( PTR pData, bool bNow=false )
 
 // collect indexes of collection which is still used
 using Accessor_fn = std::function<void*(int)>;
-CSphVector<int> GetListOfPointed ( Accessor_fn fnAccess, int iCount );
+CSphVector<int> GetListOfPointed ( Accessor_fn&& fnAccess, int iCount );
 
 template<typename T>
 CSphVector<int> GetListOfPointed ( const VecTraits_T<T>& dCollection )
@@ -120,12 +120,12 @@ public:
 		return m_pPtr.load ( std::memory_order_relaxed )!=nullptr;
 	}
 
-	operator PTR () const
+	explicit operator PTR () const
 	{
 		return m_pPtr.load ( std::memory_order_relaxed );
 	}
 
-	operator ATOMIC_PTR& ()
+	explicit operator ATOMIC_PTR& ()
 	{
 		return m_pPtr;
 	}

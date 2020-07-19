@@ -11,7 +11,7 @@
 #include "hazard_pointer.h"
 #include "threadutils.h"
 
-static const int MIN_POINTERS = 100;
+static const DWORD MIN_POINTERS = 100;
 static const int MULTIPLIER = 2;
 
 // if one hazard object owns another, etc. - how deep they can be nested.
@@ -41,7 +41,7 @@ using RetiredPointer_t = std::pair <void*,Deleter_fn>;
 // for tracking that alloc/dealloc of hazard is in one thread
 ThreadRole thHazardThread;
 
-using fnHazardProcessor=std::function<void ( const Pointer_t )>;
+using fnHazardProcessor=std::function<void ( Pointer_t )>;
 
 // to be write-used in single thread, so no need to sync anything
 // that is lowest level which actually stores current pointers.
@@ -147,7 +147,7 @@ public:
 
 	AtomicPointer_t* HazardAlloc();
 	void HazardDealloc ( AtomicPointer_t * pPointer );
-	void IterateHazards ( fnHazardProcessor fnProcessor ) const;
+	void IterateHazards ( fnHazardProcessor&& fnProcessor ) const;
 };
 
 namespace { // unnamed (static)
@@ -194,7 +194,7 @@ CSphVector<Pointer_t> CollectActiveHazardPointers()
 		if ( !pOtherThreadState )
 			return;
 
-		pOtherThreadState->IterateHazards ( [&dActive] ( const Pointer_t pPtr ) { dActive.Add ( pPtr ); } );
+		pOtherThreadState->IterateHazards ( [&dActive] ( Pointer_t pPtr ) { dActive.Add ( pPtr ); } );
 	});
 
 	// stage 2. sort and uniq; we will use binsearch then
@@ -365,7 +365,7 @@ void ThreadState_c::HazardDealloc ( AtomicPointer_t * pPointer ) RELEASE ( thHaz
 	m_tHazards.Dealloc ( (ListedPointer_t *) pPointer );
 }
 
-void ThreadState_c::IterateHazards ( fnHazardProcessor fnProcessor ) const
+void ThreadState_c::IterateHazards ( fnHazardProcessor&& fnProcessor ) const
 {
 	for ( const auto & tHazard : m_tHazards )
 	{
@@ -411,7 +411,7 @@ void ThreadState_c::Shutdown ()
 	};
 }
 
-CSphVector<int> hazard::GetListOfPointed ( Accessor_fn fnAccess, int iCount )
+CSphVector<int> hazard::GetListOfPointed ( Accessor_fn&& fnAccess, int iCount )
 {
 	CSphVector<int> dResult;
 	auto dActive = CollectActiveHazardPointers ();

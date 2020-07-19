@@ -302,10 +302,11 @@ if ( NOT DISABLE_TESTING )
 		endif(0)
 	endif (WITH_MYSQL)
 
-	# first check syntax
-	if (NOT WIN32 )
 	# since cmake 3.18 names need fixup
 	include(fixup_test_name)
+
+	# first check syntax
+	if (NOT WIN32 )
 	find_package ( PythonInterp QUIET )
 	if ( PYTHONINTERP_FOUND AND NOT DISABLE_GTESTS )
 		fixup_test_name ( RESERVED_TEST "SphinxQL reserved keywords consistency" )

@@ -5985,7 +5985,7 @@ struct DiskChunkSearcherCtx_t
 
 	inline bool IsClonable () const
 	{
-		return m_dSorters.all_of ( [] ( auto p ) { return p->CanBeCloned (); } );
+		return m_dSorters.all_of ( [] ( const ISphMatchSorter * p ) { return p->CanBeCloned (); } );
 	}
 };
 

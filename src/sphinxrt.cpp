@@ -5941,7 +5941,7 @@ struct DiskChunkSearcherCtx_t
 	{}
 
 	// called from finalize.
-	void MergeChild ( DiskChunkSearcherCtx_t dChild )
+	void MergeChild ( DiskChunkSearcherCtx_t dChild ) const
 	{
 		// sorting results
 		ARRAY_FOREACH ( i, m_dSorters )
@@ -5985,7 +5985,7 @@ struct DiskChunkSearcherCtx_t
 
 	inline bool IsClonable () const
 	{
-		return m_dSorters[0]->CanBeCloned ();
+		return m_dSorters.all_of ( [] ( auto p ) { return p->CanBeCloned (); } );
 	}
 };
 
@@ -6070,7 +6070,7 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 			if ( iChunk < 0 )
 				return; // all is done
 
-			if ( !dCtxData.CanRun ( iChunk ) )
+			if ( !FederateChunkCtx_t::CanRun ( iChunk ) )
 				continue;
 
 			if ( bInterrupt ) // some earlier job met error; abort.

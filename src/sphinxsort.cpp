@@ -1047,7 +1047,7 @@ public:
 			tProcessor.Process ( &m_dData[iMatch] );
 	}
 
-	bool CanBeCloned () final { return false; }
+	bool CanBeCloned () const final { return false; }
 
 	// stub
 	ISphMatchSorter * Clone () const final
@@ -1130,7 +1130,7 @@ public:
 	void Finalize ( ISphMatchProcessor &, bool ) final
 	{}
 
-	bool CanBeCloned () final { return false; }
+	bool CanBeCloned () const final { return false; }
 
 	// stub
 	ISphMatchSorter * Clone () const final
@@ -2697,6 +2697,11 @@ public:
 				}
 	}
 
+	bool CanBeCloned () const final
+	{
+		return !DISTINCT;
+	}
+
 protected:
 	/// finalize distinct counters
 	template <typename FIND>
@@ -4160,6 +4165,11 @@ public:
 	int GetLength () const final
 	{
 		return m_bDataInitialized ? 1 : 0;
+	}
+
+	bool CanBeCloned () const final
+	{
+		return !DISTINCT;
 	}
 
 	// TODO! test.

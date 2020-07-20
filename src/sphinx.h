@@ -2994,7 +2994,7 @@ public:
 
 	/// returns whether the sorter can be cloned to distribute processing over multi threads
 	/// (delete and update sorters are too complex by side effects and can't be cloned)
-	virtual bool CanBeCloned () { return true; }
+	virtual bool CanBeCloned () const { return true; }
 
 	/// make same sorter (for MT processing)
 	virtual ISphMatchSorter* Clone() const = 0;

@@ -23,8 +23,8 @@ using namespace hazard;
 namespace {
 inline int GetCleanupSize ()
 {
-	int uSize = Threads::GetNumOfRunning () * POINTERS_PER_THREAD * MULTIPLIER;
-	return Max ( uSize, MIN_POINTERS );
+	DWORD uSize = Threads::GetNumOfRunning () * POINTERS_PER_THREAD * MULTIPLIER;
+	return (int) Max ( uSize, MIN_POINTERS );
 }
 }
 

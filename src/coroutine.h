@@ -178,7 +178,7 @@ class FederateCtx_T
 {
 	REFCONTEXT m_dParentContext;
 	CSphFixedVector<Optional_T<CONTEXT> > m_dChildrenContexts {0};
-	CSphAtomic m_iUniqueThreads; // each new previously unknown thread adds a value.
+	std::atomic<int> m_iUniqueThreads {0}; // each new previously unknown thread adds a value.
 	bool m_bDisabled;
 
 	// usual working branch. Modeling one is placed at the bottom of the template
@@ -192,6 +192,7 @@ class FederateCtx_T
 		tls_intptr_t()
 		{
 			Verify ( sphThreadKeyCreate( &m_tKey ));
+			sphThreadSet ( m_tKey, nullptr );
 		}
 
 		~tls_intptr_t()
@@ -262,17 +263,20 @@ public:
 
 		intptr_t iMyIdx = GetTHD ( iParam ); // treat pointer as integer
 		// iMyIdx == 0 - default value, need init. ==1 - parent object (not yet need to clone). >1 - make clone.
-		if ( !iMyIdx ) {
-			iMyIdx = ++m_iUniqueThreads;
+		if ( iMyIdx==0 )
+		{
+			iMyIdx = m_iUniqueThreads.fetch_add ( 1, std::memory_order_acq_rel )+1;
 			SetTHD ( iMyIdx, iParam );
-
-			if ( iMyIdx>1 )
-			{
-				auto & dCtx = m_dChildrenContexts[iMyIdx-2];
-				dCtx.emplace ( m_dParentContext );
-			}
 		}
-		return ( iMyIdx==1 ) ? m_dParentContext : (REFCONTEXT) m_dChildrenContexts[iMyIdx-2].get ();
+		assert ( iMyIdx>0 );
+
+		if ( iMyIdx==1)
+			return m_dParentContext;
+
+		iMyIdx-=2;
+		auto & dCtx = m_dChildrenContexts[iMyIdx];
+		dCtx.emplace ( m_dParentContext );
+		return (REFCONTEXT) m_dChildrenContexts[iMyIdx].get ();
 	}
 
 	bool IsEnabled () const { return !m_bDisabled; }

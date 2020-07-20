@@ -1,3 +1,3 @@
 #!/bin/bash
 . distr.txt
-docker build -t build_base:${distr} build_base
+docker build -t base_build:${distr} base_build

@@ -22,11 +22,11 @@ RUN  yum install -y wget \
 && mkdir /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789
 ENV PATH $PATH:/opt/rh/devtoolset-2/root/usr/bin
 
-ADD https://dl.min.io/client/mc/release/linux-amd64/mc /
-RUN chmod +x mc && mv mc /usr/local/bin/
+RUN cd / && wget https://dl.min.io/client/mc/release/linux-amd64/mc \
+    && chmod +x mc && mv mc /usr/local/bin/
 
 WORKDIR /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789
 ENV DISTR rhel6
 CMD []
 
-# docker build -t build_base:centos6 .
+# docker build -t base_build:centos6 .

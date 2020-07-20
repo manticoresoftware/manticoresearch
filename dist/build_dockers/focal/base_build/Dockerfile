@@ -1,4 +1,4 @@
-FROM ubuntu:trusty
+FROM ubuntu:focal
 ENV DEBIAN_FRONTEND noninteractive
 
 RUN apt-get update && apt-get install -y \
@@ -15,10 +15,11 @@ RUN apt-get update && apt-get install -y \
     wget \
 && rm -rf /var/lib/apt/lists/*
 
-ADD https://dl.min.io/client/mc/release/linux-amd64/mc /
-RUN chmod +x mc && mv mc /usr/local/bin/
+RUN cd / && wget https://dl.min.io/client/mc/release/linux-amd64/mc \
+    && chmod +x mc && mv mc /usr/local/bin/
 
-ENV DISTR trusty
+ENV DISTR focal
+ENV CXXFLAGS "-Wno-error=deprecated-copy"
 CMD []
 
-# docker build -t build_base:trusty .
+# docker build -t base_build:focal .

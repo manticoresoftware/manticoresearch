@@ -1,4 +1,4 @@
-FROM centos:8
+FROM centos:7
 
 RUN yum install -y \
         gcc \
@@ -8,22 +8,22 @@ RUN yum install -y \
         flex \
         bison \
         rpm-build \
-        mariadb-connector-c-devel \
+        mysql-devel \
         expat-devel \
         postgresql-devel \
         unixODBC-devel \
         systemd-units \
+        python-devel \
         wget \
 && yum clean all \
 && rm -rf /var/cache/yum \
 && mkdir /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789
 
-ADD https://dl.min.io/client/mc/release/linux-amd64/mc /
-RUN chmod +x mc && mv mc /usr/local/bin/
+RUN cd / && wget https://dl.min.io/client/mc/release/linux-amd64/mc \
+    && chmod +x mc && mv mc /usr/local/bin/
 
 WORKDIR /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789
-ENV DISTR rhel8
-ENV CXXFLAGS "-Wno-error=stringop-truncation"
+ENV DISTR rhel7
 CMD []
 
-# docker build -t build_base:centos8 .
+# docker build -t base_build:centos7 .

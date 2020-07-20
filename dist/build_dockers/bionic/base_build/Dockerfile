@@ -1,4 +1,4 @@
-FROM debian:jessie
+FROM ubuntu:bionic
 ENV DEBIAN_FRONTEND noninteractive
 
 RUN apt-get update && apt-get install -y \
@@ -15,10 +15,10 @@ RUN apt-get update && apt-get install -y \
     wget \
 && rm -rf /var/lib/apt/lists/*
 
-ADD https://dl.min.io/client/mc/release/linux-amd64/mc /
-RUN chmod +x mc && mv mc /usr/local/bin/
+RUN cd / && wget https://dl.min.io/client/mc/release/linux-amd64/mc \
+    && chmod +x mc && mv mc /usr/local/bin/
 
-ENV DISTR jessie
+ENV DISTR bionic
 CMD []
 
-# docker build -t build_base:jessie .
+# docker build -t base_build:bionic .

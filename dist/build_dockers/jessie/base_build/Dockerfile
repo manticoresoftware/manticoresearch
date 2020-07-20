@@ -1,9 +1,8 @@
-FROM debian:stretch
+FROM debian:jessie
 ENV DEBIAN_FRONTEND noninteractive
 
-# note, no boost, no icu here, since we build them from sources
 RUN apt-get update && apt-get install -y \
-    default-libmysqlclient-dev \
+    libmysqlclient-dev \
     libexpat-dev \
     libpq-dev \
     unixodbc-dev \
@@ -16,10 +15,10 @@ RUN apt-get update && apt-get install -y \
     wget \
 && rm -rf /var/lib/apt/lists/*
 
-ADD https://dl.min.io/client/mc/release/linux-amd64/mc /
-RUN chmod +x mc && mv mc /usr/local/bin/
+RUN cd / && wget https://dl.min.io/client/mc/release/linux-amd64/mc \
+    && chmod +x mc && mv mc /usr/local/bin/
 
-ENV DISTR stretch
+ENV DISTR jessie
 CMD []
 
-# docker build -t build_base:stretch .
+# docker build -t base_build:jessie .

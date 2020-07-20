@@ -19,6 +19,7 @@ RUN  yum install -y wget \
     systemd-units \
     wget \
 && yum clean all \
+&& rm -rf /var/cache/yum \
 && mkdir /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789
 ENV PATH $PATH:/opt/rh/devtoolset-2/root/usr/bin
 

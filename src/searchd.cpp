@@ -5826,7 +5826,7 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 		Threads::CoThrottler_c tThrottle;
 		while ( true )
 		{
-			auto iJob = iCurIdx.fetch_add ( 1, std::memory_order_relaxed );
+			auto iJob = iCurIdx.fetch_add ( 1, std::memory_order_acq_rel );
 			if ( iJob>=iNumLocals )
 				return; // all is done
 
@@ -7664,7 +7664,7 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 		int iTick=1;
 		while ( true )
 		{
-			auto iQuery = iCurQuery.fetch_add ( 1, std::memory_order_relaxed );
+			auto iQuery = iCurQuery.fetch_add ( 1, std::memory_order_acq_rel );
 			if ( iQuery>=dTasks.GetLength () )
 				return; // all is done
 
@@ -7884,8 +7884,6 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries,
 	/// do highlighting
 	///////////////////
 
-	// since necessary methods of SnippetBuilder_c are constant, and the builder also has no mutable fields -
-	// it is safe to reuse one builder everywhere, even in parallel.
 	CSphScopedPtr<SnippetBuilder_c>	pBuilder ( new SnippetBuilder_c );
 	pBuilder->Setup ( pLocalIndex, q );
 

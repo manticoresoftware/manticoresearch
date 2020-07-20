@@ -1416,7 +1416,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 		int iTick=1;
 		while (true)
 		{
-			auto iQuery = iCurQuery.fetch_add ( 1, std::memory_order_relaxed );
+			auto iQuery = iCurQuery.fetch_add ( 1, std::memory_order_acq_rel );
 			if ( iQuery>= dStored.GetLength())
 				return; // all is done
 

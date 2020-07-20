@@ -6066,7 +6066,7 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 
 		while ( true )
 		{
-			auto iChunk = iCurChunk.fetch_sub ( 1, std::memory_order_relaxed );
+			auto iChunk = iCurChunk.fetch_sub ( 1, std::memory_order_acq_rel );
 			if ( iChunk < 0 )
 				return; // all is done
 

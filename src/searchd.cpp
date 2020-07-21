@@ -19923,7 +19923,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	ServeUserVars ();
 
 	if ( bForcedPreread )
-		DoPreread();
+		Threads::CallCoroutine (DoPreread);
 	else
 		StartPreread();
 

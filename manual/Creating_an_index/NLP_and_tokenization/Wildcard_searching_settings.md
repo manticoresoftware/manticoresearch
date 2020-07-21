@@ -18,14 +18,14 @@ For instance, if you index word "example" with min_prefix_len=3 you will be able
 
 Be aware that in case of [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict)=crc min_prefix_len will also affect index size as each word expansion will be stored additionally.
 
-Manticore can diffirentiate perfect word matches from prefix matches and rank the former higher if you conform the following conditions:
+Manticore can differentiate perfect word matches from prefix matches and rank the former higher if you conform the following conditions:
 * [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict)=keywords (on by default)
 * [index_exact_words](Creating_an_index/NLP_and_tokenization/Morphology.md#index_exact_words)=1 (off by default),
 * [expand_keywords](Searching/Options.md#expand_keywords)=1 (also off by default)
 
 Note that either with the [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict)=crc mode or with any of the above options disabled, there is no way to differentiate between the prefixes and full words, and thus perfect word matches can't be ranked higher.
 
-When [mininum infix length](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) is set to a positive number, mininum prefix length is always considered 1.
+When [minimum infix length](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) is set to a positive number, minimum prefix length is always considered 1.
 
 
 <!-- intro -->
@@ -90,7 +90,7 @@ Minimum infix prefix length to index and search. Optional, default is 0 (do not 
 
 Infix length setting enables wildcard searches with term patterns like `start*`, `*end`, `*middle*`, and so on. It also lets you disable too short wildcards if those are too expensive to search for.
 
-Manticore can diffirentiate perfect word matches from infix matches and rank the former higher if you conform the following conditions:
+Manticore can differentiate perfect word matches from infix matches and rank the former higher if you conform the following conditions:
 * [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict)=keywords (on by default)
 * [index_exact_words](Creating_an_index/NLP_and_tokenization/Morphology.md#index_exact_words)=1 (off by default),
 * [expand_keywords](Searching/Options.md#expand_keywords)=1 (also off by default)
@@ -101,7 +101,7 @@ Infix wildcard search query time can vary greatly, depending on how many keyword
 
 Infixes must be at least 2 characters long, wildcards like `*a*` are not allowed for performance reasons.
 
-When mininum infix length is set to a positive number, [mininum prefix length](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len) is considered 1. For [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict) word infixing and prefixing cannot be both enabled at the same. For [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict) it is possible to specify only some fields to have infixes declared with [infix_fields](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#infix_fields) and other fields to have prefixes declared with [prefix_fields](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#prefix_fields), but it's forbidden to declare same field in the both lists.
+When minimum infix length is set to a positive number, [minimum prefix length](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len) is considered 1. For [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict) word infixing and prefixing cannot be both enabled at the same. For [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict) it is possible to specify only some fields to have infixes declared with [infix_fields](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#infix_fields) and other fields to have prefixes declared with [prefix_fields](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#prefix_fields), but it's forbidden to declare same field in the both lists.
 
 In case of dict=keywords, beside the wildcard `*` two other wildcard characters can be used:
 * `?` can match any(one) character: `t?st` will match `test`, but not `teast`

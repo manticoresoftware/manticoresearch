@@ -13,7 +13,7 @@ The below table includes a complete list of supported languages. You can use it 
 
 | Language | Supported | Stopwords file name | Advanced morphology | Notes |
 | - | - | - | - | - |
-| Africaans | charset_table=non_cjk | af | - | |
+| Afrikaans | charset_table=non_cjk | af | - | |
 | Arabic | charset_table=non_cjk | ar | morphology=stem_ar (Arabic stemmer); morphology=libstemmer_ar  | |
 | Armenian | charset_table=non_cjk | hy | - | |
 | Assamese | specify charset_table specify charset_table manually | - | - | |
@@ -25,7 +25,7 @@ The below table includes a complete list of supported languages. You can use it 
 | Catalan | charset_table=non_cjk | ca | morphology=libstemmer_ca | | 
 | Chinese | charset_table=chinese or ngram_chars=chinese | zh | morphology=icu_chinese or ngram_chars=1 correspondingly | ICU dictionary based segmentation is much more accurate than ngram-based |
 | Croatian | charset_table=non_cjk | hr | - | |
-| Curdish | charset_table=non_cjk | ckb | - | | 
+| Kurdish | charset_table=non_cjk | ckb | - | |
 | Czech | charset_table=non_cjk | cz | morphology=stem_cz (Czech stemmer) | | 
 | Danish | charset_table=non_cjk | da | morphology=libstemmer_da | |
 | Dutch | charset_table=non_cjk | nl | morphology=libstemmer_nl | |

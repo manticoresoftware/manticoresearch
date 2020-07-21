@@ -19,7 +19,7 @@ In this case all search queries will be sent to syslog daemon with `LOG_INFO` pr
 
 Two query log formats are supported. Plain text format is still the default one. However, while it might be more convenient for manual monitoring and review, but hard to replay for benchmarks, it only logs *search* queries but not the other types of requests, does not always contain the complete search query data, etc.
 
-The default text format is also harder (and sometimes impossible) to replay for benchmarking purposes. The `sphinxql` format alleviates that. It aims to be complete and automatable, even though at the cost of brevity and readability.
+The default text format is also harder (and sometimes impossible) to replay for benchmarking purposes. The `sphinxql` format alleviates that. It aims to be complete and re-playable, even though at the cost of brevity and readability.
 
 ### Plain log format 
 
@@ -100,7 +100,7 @@ The features of Manticore SQL log format compared to the default text one are as
 * All request types should be logged. (This is still work in progress.)
 * Full statement data will be logged where possible.
 * Errors and warnings are logged.
-* The log should be automatically replayable via SphinxQL.
+* The log should be automatically re-playable via SphinxQL.
 * Additional performance counters (currently, per-agent distributed query times) are logged.
 
 Use `sphinxql:compact_in` to shorten your `IN()` clauses in log if you have too many values in it.

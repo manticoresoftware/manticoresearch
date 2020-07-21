@@ -1,6 +1,6 @@
 # Data tokenization
 
-Manticire doesn't store text as is for performing full-text searching on it. Instead it extracts words and creates several structures that allow fast full-text searching. From the found words, a dictionary is built, which allows a quick look to discover if the word is present or not in the index. In addition, other structures record the documents and fields in which the word was found (as well as position of it inside a field). All these are used when a full-text match is performed.
+Manticore doesn't store text as is for performing full-text searching on it. Instead it extracts words and creates several structures that allow fast full-text searching. From the found words, a dictionary is built, which allows a quick look to discover if the word is present or not in the index. In addition, other structures record the documents and fields in which the word was found (as well as position of it inside a field). All these are used when a full-text match is performed.
 
 The process of demarcating and classifying words is called tokenization. The tokenization is applied at both indexing and searching and it  operates at character and word level.
 

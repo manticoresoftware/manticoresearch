@@ -67,7 +67,7 @@ The Manticore index that is linked via `FEDERATED` **must** be an index with sto
 
 FEDERATED table should have columns with same names as remote Manticore index attributes as will be bound to attributes provided in Manticore result set by name, however might map not all attributes but only some of them. Arbitrary expression from query select list which name "hides" index attribute will be used at result set.
 
-Manticore server identifies query from FEDERATED client by user name "FEDERATED". `CONNECTION` string parameter should be used to specify searchd host, SQL port and indexes for queries issued using thistable. Connection string syntax is as follows:
+Manticore server identifies query from FEDERATED client by user name "FEDERATED". `CONNECTION` string parameter should be used to specify searchd host, SQL port and indexes for queries issued using this table. Connection string syntax is as follows:
 
 ```ini
 CONNECTION="mysql://FEDERATED@HOST:PORT/DB/INDEXNAME"

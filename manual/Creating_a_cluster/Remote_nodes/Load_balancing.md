@@ -101,7 +101,7 @@ For a distributed index with agent mirrors in it, server tracks several differen
 
 After beginning a new block, master may still use the accumulated values from the previous one, until the new one is half full. Thus, any previous history stops affecting the mirror choice after 1.5 times ha_period_karma seconds at most.
 
-Despite that at most 2 blocks are used for mirror selection, upto 15 last blocks are actually stored, for instrumentation purposes. They can be inspected using `SHOW AGENT STATUS` statement.
+Despite that at most 2 blocks are used for mirror selection, up to 15 last blocks are actually stored, for instrumentation purposes. They can be inspected using `SHOW AGENT STATUS` statement.
 
 ### ha_ping_interval
 

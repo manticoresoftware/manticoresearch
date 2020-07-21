@@ -38,7 +38,7 @@ Query results can be sorted by one or more attributes. Example:
 }
 ```
 
-`"sort"` specifies an array of attibutes and/or additional properties. Each element of the array can be an attribute name or `"_score"` if you want to sort by match weights. In that case sort order defaults to ascending for attributes and descending for `_score`.
+`"sort"` specifies an array of attributes and/or additional properties. Each element of the array can be an attribute name or `"_score"` if you want to sort by match weights. In that case sort order defaults to ascending for attributes and descending for `_score`.
 
 You can also specify sort order explicitly. Example:
 

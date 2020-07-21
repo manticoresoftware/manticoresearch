@@ -10,7 +10,7 @@ The easiest way to see high-level information about your Manticore node is by ru
 * uptime
 * number of [threads](Server_settings/Searchd#threads)
 * number of [jobs in queue](Server_settings/Searchd#jobs_queue_size)
-* number of connectons (`clients`)
+* number of connections (`clients`)
 * number of tasks being processed now
 * number of queries made since start
 

@@ -74,12 +74,12 @@ index products {
 
 Alternatively you can use one of the default stop word files that come with Manticore. Currently stop words for 50 languages are available. Here is the full list of aliases for them:
 
-* af - Africaans
+* af - Afrikaans
 * ar - Arabic
 * bg - Bulgarian
 * bn - Bengali
 * ca - Catalan
-* ckb- Curdish
+* ckb- Kurdish
 * cz - Czech
 * da - Danish
 * de - German

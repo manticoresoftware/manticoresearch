@@ -897,7 +897,7 @@ Percolate queries were made with high throughput and big data volume in mind, so
 There are two modes of distribution of a percolate index and how a percolate query can work against it:
 
 * **Sparsed. Default.** When it is good: too many documents, PQ indexes are mirrored. The batch of documents you pass will be split into parts according to the number of agents, so each of the nodes will receive and process only a part of the documents from your request. It will be beneficial when your set of documents is quite big, but the set of queries stored in the pq index is quite small. Assuming that all the hosts are mirrors Manticore will split your set of documents and distribute the chunks among the mirrors. Once the agents are done with the queries it will collect and merge all the results and return final query set as if it comes from one solid index. You can use [replication](References.md#Replication) to help the process.
-* **Sharded**. When it is good: too many PQ rules, the rules are split among PQ indexes. The whole documents set will be broadcasted to all indexes of the distributed PQ index without any initial documents split. It is beneficial when you push relatively small set of documents, but the number of stored queries is huge. So in this case it is more appropriate to store just part of PQ rules on each node and then merge the results returned from the nodes that process one and the same set of documents against different sets of PQ rules. This mode has to be explicitly set since first of all it implies multiplication of network payload and secondly it expects indexes with different PQ which [replication](References.md#Replication) cannot do out of the box.
+* **Sharded**. When it is good: too many PQ rules, the rules are split among PQ indexes. The whole documents set will be broad-casted to all indexes of the distributed PQ index without any initial documents split. It is beneficial when you push relatively small set of documents, but the number of stored queries is huge. So in this case it is more appropriate to store just part of PQ rules on each node and then merge the results returned from the nodes that process one and the same set of documents against different sets of PQ rules. This mode has to be explicitly set since first of all it implies multiplication of network payload and secondly it expects indexes with different PQ which [replication](References.md#Replication) cannot do out of the box.
 
 Let's assume you have index `pq_d2` which is defined as:
 
@@ -1194,7 +1194,7 @@ $response = $client->pq()->search($params);
 
 <!-- end -->
 
-That was an example of the default **sparsed** mode. To demonstrate the **sharded** mode let's create a ditributed PQ index consisting of 2 local PQ indexes and add 2 documents to "products1" and 1 document to "products2":
+That was an example of the default **sparsed** mode. To demonstrate the **sharded** mode let's create a distributed PQ index consisting of 2 local PQ indexes and add 2 documents to "products1" and 1 document to "products2":
 ```sql
 create table products1(title text, color string) type='pq';
 create table products2(title text, color string) type='pq';

@@ -58,7 +58,7 @@ searchd {
 
 ### Recovery
 
-On recovery after an unclean shutdown, binlogs are replayed and all logged transactions since the last good on-disk state are restored. Transactions are checksummed so in case of binlog file corruption garbage data will **not** be replayed; such a broken transaction will be detected and will stop replay. Transactions also start with a magic marker and timestamped, so in case of binlog damage in the middle of the file, it's technically possible to skip broken  transactions and keep replaying from the next good one, and/or it'spossible to replay transactions until a given timestamp (point-in-time recovery), but none of that is implemented yet.
+On recovery after an unclean shutdown, binlogs are replayed and all logged transactions since the last good on-disk state are restored. Transactions are checksummed so in case of binlog file corruption garbage data will **not** be replayed; such a broken transaction will be detected and will stop replay. Transactions also start with a magic marker and timestamped, so in case of binlog damage in the middle of the file, it is technically possible to skip broken  transactions and keep replaying from the next good one, and/or it is possible to replay transactions until a given timestamp (point-in-time recovery), but none of that is implemented yet.
 
 
 ### Flushing RT RAM chunks

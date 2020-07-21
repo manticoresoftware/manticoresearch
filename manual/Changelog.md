@@ -46,7 +46,7 @@
 * [`expressions`](Searching/Expressions#expressions) in HTTP JSON.
 * [You can now change `rt_mem_limit` on the fly](https://github.com/manticoresoftware/manticoresearch/issues/344) in RT mode, i.e. can do `ALTER ... rt_mem_limit=<new value>`.
 * You can now use [separate CJK charset tables](Creating_an_index/NLP_and_tokenization/CJK): `chinese`, `japanese` and `korean`. 
-* [`SET GLOBAL cpustat=1`](Server_settings/Setting_variables_online#SET).
+* [`SET GLOBAL cpustats=1`](Server_settings/Setting_variables_online#SET).
 * [thread_stack](Server_settings/Searchd#thread_stack) now limits maximum thread stack, not initial.
 * Mysql interface now supports encryption
 * Improved `SHOW THREADS` output
@@ -87,7 +87,7 @@
   +-------+--------+----------------+
   ```
   <!-- \more -->
-* Cyryllic `и` doesn't map to `i` in `non_cjk` charset_table (which is a default) as it affected Russian stemmers and lemmatizers too much.
+* Cyrillic `и` doesn't map to `i` in `non_cjk` charset_table (which is a default) as it affected Russian stemmers and lemmatizers too much.
 * `read_timeout`. Use [network_timeout](Server_settings/Searchd#network_timeout) instead which controls both reading and writing. 
 
 
@@ -174,7 +174,7 @@
 * SHOW CREATE TABLE, IMPORT TABLE
 
 ### Improvements
-* lmuch faster ockless PQ
+* much faster lockless PQ
 * /sql can execute any type of SQL statement in mode=raw
 * alias mysql for mysql41 protocol
 * default state.sql in data_dir
@@ -244,7 +244,7 @@
 * indextool can now check real-time indexes online
 * default conf is now /etc/manticoresearch/manticore.conf
 * service on RHEL/CentOS renamed to 'manticore' from 'searchd'
-* removed query_mode and exact_phrase snippeting options
+* removed query_mode and exact_phrase snippet's options
 
 ### Bugfixes
 * [6ae474c7](https://github.com/manticoresoftware/manticoresearch/commit/6ae474c7894a6bee222d5b18e59a44fdbf57843a) fix crash on SELECT query over HTTP interface
@@ -511,7 +511,7 @@ development libraries.
 * [34b0324](https://github.com/manticoresoftware/manticoresearch/commit/34b032499afd42ce47a4c7247814b4031094388a) fixed queue_max_length bad reply for SQL and API at thread pool worker mode
 * [ae4b320](https://github.com/manticoresoftware/manticoresearch/commit/ae4b3202cbdb8014cabe2b90e269d5cf74f49871) fixed crash on adding full-scan query to PQ index with regexp or rlp options set
 * [f80f8d5](https://github.com/manticoresoftware/manticoresearch/commit/f80f8d5d7560187078868aed9a9575f4549e98aa) fixed crash when call one PQ after another
-* [9742f5f](https://github.com/manticoresoftware/manticoresearch/commit/9742f5f0866af73f8cd8483ecd18a507ea80dd65) refactor AquireAccum
+* [9742f5f](https://github.com/manticoresoftware/manticoresearch/commit/9742f5f0866af73f8cd8483ecd18a507ea80dd65) refactor AcquireAccum
 * [39e5bc3](https://github.com/manticoresoftware/manticoresearch/commit/39e5bc3751b7295222eb76407c5d72ce1dad545b) fixed leak of memory after call pq
 * [21bcc6d](https://github.com/manticoresoftware/manticoresearch/commit/21bcc6d17395f0f57dde79f6716ef303b7ea527d) cosmetic refactor (c++11 style c-trs, defaults, nullptrs)
 * [2d69039](https://github.com/manticoresoftware/manticoresearch/commit/2d690398f14c736956cfdd66feb4d3091d6b3a4d) fixed memory leak on trying to insert duplicate into PQ index
@@ -559,7 +559,7 @@ development libraries.
 * Manticore SQL [DEBUG](Reporting_bugs.md#DEBUG) command which can run various subcommands
 * [shutdown_token](Server_settings/Searchd.md#shutdown_token) - SHA1 hash of password needed to invoke `shutdown` using DEBUG command
 * new stats to SHOW AGENT STATUS (_ping, _has_perspool, _need_resolve)
-* --verbose option of indexer now accept \[debugdebugvv\] for printing debug messages
+* --verbose option of indexer now accept \[debugvv\] for printing debug messages
 
 ### Bugfixes
 * [390082](https://github.com/manticoresoftware/manticoresearch/commit/390082a7be0a1f9539b30361d11d54de35c62a44) removed wlock at optimize
@@ -674,7 +674,7 @@ development libraries.
 
 ### Bugfixes
 * [72dcf66](https://github.com/manticoresoftware/manticoresearch/commit/72dcf669744e9b7d636dfc213d24df85ab301f6b) fixed crash on searching ram segments; deadlock on save disk chunk with double buffer; deadlock on save disk chunk during optimize
-* [3613714](https://github.com/manticoresoftware/manticoresearch/commit/36137149a1c3c0893bdda5a28fc7e8244bf2d4ae) fixed indexer crash on xml embeded schema with empty attribute name
+* [3613714](https://github.com/manticoresoftware/manticoresearch/commit/36137149a1c3c0893bdda5a28fc7e8244bf2d4ae) fixed indexer crash on xml embedded schema with empty attribute name
 * [48d7e80](https://github.com/manticoresoftware/manticoresearch/commit/48d7e8001d2a66466ca64577f27ddc5421a67251) fixed erroneous unlinking of not-owned pid-file
 * [a5563a4](https://github.com/manticoresoftware/manticoresearch/commit/a5563a465ddc59ef71e65f17b68bc33f9700e838) fixed orphaned fifos sometimes left in temp folder
 * [2376e8f](https://github.com/manticoresoftware/manticoresearch/commit/2376e8fc4508944b96959bd10686c6d51f5145e8) fixed empty FACET result set with wrong NULL row

@@ -4,7 +4,7 @@ Multi-queries, or query batches, let you send multiple queries to Manticore in o
 
 👍 Why use multi-queries?
 
-Generally, it all boils down to performance. First, by sending requests to `searchd` in a batch instead of one by one, you always save a bit by doing less network roundtrips. Second, and somewhat more important, sending queries in a batch enables `searchd` to perform certain internal optimizations. In the case when there aren't any possible batch optimizations to apply, queries will be processed one by one internally.
+Generally, it all boils down to performance. First, by sending requests to `searchd` in a batch instead of one by one, you always save a bit by doing less network round-trips. Second, and somewhat more important, sending queries in a batch enables `searchd` to perform certain internal optimizations. In the case when there aren't any possible batch optimizations to apply, queries will be processed one by one internally.
 
 ⛔ When not to use multi-queries?
 

@@ -124,7 +124,7 @@ Array
 `Info` column shows:
 
 * raw text of queries run through Manticore SQL interface
-* full text syntax, comments and data size for queries run via internal Manticore binary protocl (e.g. from a remote Manticore instance)
+* full text syntax, comments and data size for queries run via internal Manticore binary protocol (e.g. from a remote Manticore instance)
 
 Maximum width of the `Info` column can be limited by specifying the `columns=N` option (notice the second row in the example table).
 

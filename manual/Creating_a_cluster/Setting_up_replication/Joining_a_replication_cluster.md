@@ -77,4 +77,4 @@ $response = $client->cluster->join($params);
 
 <!-- end -->
 
-`JOIN CLUSTER` completes when a node receives all the neccesary data to be in sync with all the other nodes in the cluster.
+`JOIN CLUSTER` completes when a node receives all the necessary data to be in sync with all the other nodes in the cluster.

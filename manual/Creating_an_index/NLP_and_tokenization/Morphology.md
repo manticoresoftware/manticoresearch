@@ -31,8 +31,6 @@ Lemmatizers require a dictionary that needs to be additionally downloaded from t
 
 Chinese segmentation using [ICU](http://site.icu-project.org/) is also available. It is a much more precise, but a little bit slower way (compared to n-grams) to segment Chinese documents. [charset_table](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table) must contain all Chinese characters (you can use alias "cjk"). In case of "morphology=icu_chinese" documents are first pre-processed by ICU, then the result is processed by the tokenizer (according to your charset_table) and then other morphology processors specified in the  "morphology" option are applied. When the documents are processed by ICU, only those parts of texts that contain Chinese are passed to ICU for segmentation, others can be modified by other means (different morphologies, charset_table etc.)
 
-See also [icu_data_dir](Server_settings/Common.md#icu_data_dir)
-
 Built-in English and Russian stemmers should be faster than their libstemmer counterparts, but can produce slightly different results, because they are based on an older version.
 
 Soundex implementation matches that of MySQL. Metaphone implementation is based on Double Metaphone algorithm and indexes the primary code.

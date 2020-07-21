@@ -69,14 +69,3 @@ Example:
 ```ini
 plugin_dir = /usr/local/sphinx/lib
 ```
-
-icu_data_dir
---------------
-
-A folder that contains data used by ICU to segment Chinese text. Should only be specified if you have built ICU from sources. If ICU is loaded as a dynamic library (supplied in a package provided by us, e.g. `libicu_dev`), it doesn't require any external data. This folder must contain a .dat file (e.g. `icudt64l.dat`).
-
-Example:
-
-```ini
-icu_data_dir = /home/myuser/icu_data
-```

@@ -6044,18 +6044,16 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 	// store and manage tls stuff
 	FederateChunkCtx_t dCtxData { dSorters, pResult };
 
-	int iNumOfCoros = Min ( FederateChunkCtx_t::GetNOfContextes (), iChunks-1 );
-	std::atomic<int32_t> iCurChunk { iChunks-1 };
-
-	if ( !dCtxData.IsEnabled () )
-		iNumOfCoros = 0;
-
-	std::atomic<bool> bInterrupt { false };
 	auto iStart = sphMicroTimer ();
 	sphLogDebugv ( "Started: " INT64_FMT, sphMicroTimer()-iStart );
 
-	auto dWaiter = DefferedRestarter();
-	auto fnCalc = [&] () mutable
+	// because disk chunk search within the loop will switch the profiler state
+	if ( pProfiler )
+		pProfiler->Switch ( SPH_QSTATE_INIT );
+
+	std::atomic<bool> bInterrupt {false};
+	std::atomic<int32_t> iCurChunk {iChunks-1};
+	CoExecuteN ( [&] () mutable
 	{
 		// leaved here as example how WRONG is set pointer to a local variable into global space
 		// (spent a day for debugging a crash because of it)
@@ -6136,18 +6134,7 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 				// report current disk chunk processing
 				++iTick;
 		}
-	};
-
-	// because disk chunk search within the loop will switch the profiler state
-	if ( pProfiler )
-		pProfiler->Switch ( SPH_QSTATE_INIT );
-
-	for ( int i = 0; i<iNumOfCoros; ++i )
-		CoCo ( Threads::WithCopiedCrashQuery ( fnCalc ), dWaiter );
-	myinfo::OwnMini ( fnCalc )(); // last, or only task we performs right here.
-
-	// wait till all copies of dWaiter are destroyed (each coro has a copy, and we has copy also).
-	WaitForDeffered ( std::move ( dWaiter ) );
+	}, dCtxData.Concurrency ( iChunks ));
 	dCtxData.Finalize();
 }
 

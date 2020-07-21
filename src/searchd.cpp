@@ -5814,14 +5814,8 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 	using LocalFederateCtx_t = FederateCtx_T<LocalSearchRef_t, LocalSearchClone_t>;
 	LocalFederateCtx_t dCtxData { m_tHook, m_dExtraSchemas };
 
-	int iNumOfCoros = Min ( LocalFederateCtx_t::GetNOfContextes (), iNumLocals-1 );
 	std::atomic<int32_t> iCurIdx { 0 };
-
-	if ( !dCtxData.IsEnabled () )
-		iNumOfCoros = 0;
-
-	auto dWaiter = DefferedRestarter ();
-	auto fnCalc = [&] () mutable
+	CoExecuteN ( [&] () mutable
 	{
 		Threads::CoThrottler_c tThrottle;
 		while ( true )
@@ -5919,14 +5913,7 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 			// yield and reschedule every quant of time. It gives work to other tasks
 			tThrottle.ThrottleAndKeepCrashQuery (); // we set CrashQuery anyway at the start of the loop
 		}
-	};
-
-	for ( int i = 0; i<iNumOfCoros; ++i )
-		CoCo ( Threads::WithCopiedCrashQuery ( fnCalc ), dWaiter );
-	myinfo::OwnMini ( fnCalc ) (); // last, or only task we performs right here.
-
-	// wait for them to complete
-	WaitForDeffered ( std::move ( dWaiter ));
+	}, dCtxData.Concurrency ( iNumLocals ));
 	dCtxData.Finalize (); // merge extra schemas (if any)
 
 	int iTotalSuccesses = 0;
@@ -7652,11 +7639,8 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 	using SnippetContextTls_t = FederateCtx_T<SnippedBuilderCtxRef_t, SnippedBuilderCtxClone_t>;
 	SnippetContextTls_t dActualpBuilder { pBuilder };
 
-	int iNumOfCoros = Min ( SnippetContextTls_t::GetNOfContextes(), dTasks.GetLength ()-1 );
 	std::atomic<int32_t> iCurQuery { 0 };
-
-	auto dWaiter = DefferedRestarter ();
-	auto fnWorker = [&] () mutable
+	CoExecuteN ( [&] () mutable
 	{
 		sphLogDebug ( "MakeSnippetsCoro Coro started" );
 		auto tCtx = dActualpBuilder.GetContext ();
@@ -7677,13 +7661,7 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 			if ( tThrottler.ThrottleAndKeepCrashQuery() )
 				++iTick;
 		}
-	};
-	for ( int i = 0; i<iNumOfCoros; ++i )
-		CoCo ( Threads::WithCopiedCrashQuery ( fnWorker ), dWaiter );
-	myinfo::OwnMini ( fnWorker ) (); // last, or only task we performs right here.
-	sphLogDebug ( "MakeSnippetsCoro waiting..." );
-	WaitForDeffered ( std::move ( dWaiter ) );
-	sphLogDebug ( "MakeSnippetsCoro wait finished" );
+	}, dActualpBuilder.Concurrency ( dTasks.GetLength ()));
 }
 
 // divide set of tasks from dTasks into chunks, having most balanced aggregate iSize in each.
@@ -12029,10 +12007,10 @@ static std::pair<const char *, int> FormatInfo ( const PublicThreadDesc_t & tThd
 			return { tBuf.cstr (), tBuf.GetLength () };
 	}
 
-	if ( tThd.m_sDescription.IsEmpty () && tThd.m_sCommand )
-		return { tThd.m_sCommand, (int)strlen ( tThd.m_sCommand ) };
-	else
-		return { tThd.m_sDescription.cstr (), tThd.m_sDescription.GetLength () };
+	if ( !tThd.m_sDescription.IsEmpty () )
+		return {tThd.m_sDescription.cstr (), tThd.m_sDescription.GetLength ()};
+
+	return { tThd.m_sCommand, (int)strlen ( tThd.m_sCommand ) };
 }
 
 void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )

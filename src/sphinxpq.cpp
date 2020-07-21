@@ -1398,17 +1398,14 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 	auto dStored = GetStored();
 	tRes.m_iTotalQueries = dStored.GetLength ();
 
-	int iNumOfCoros = Min ( Threads::CoCurrentScheduler ()->WorkingThreads (), tRes.m_iTotalQueries );
-	std::atomic<int32_t> iCurQuery {0};
-
 	using PqMatchContextTls_t = FederateCtx_T<PqMatchContextRef_t, PqMatchContextClone_t>;
 	PqMatchContextTls_t dMatchContexts { this, pSeg, tReject, tRes };
 
 	if ( tRes.m_bVerbose )
 		tRes.m_tmSetup = sphMicroTimer ()+tRes.m_tmSetup;
 
-	auto dWaiter = DefferedRestarter ();
-	auto fnWorker = [&dMatchContexts, &iCurQuery, &dStored] () mutable
+	std::atomic<int32_t> iCurQuery {0};
+	CoExecuteN ( [&dMatchContexts, &iCurQuery, &dStored] () mutable
 	{
 		auto pCtx = dMatchContexts.GetContext ();
 		pCtx.m_pMatchCtx->m_dMsg.Clear ();
@@ -1427,12 +1424,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 			if ( tThrottle.ThrottleAndKeepCrashQuery () )
 				++iTick;
 		}
-	};
-
-	for ( int i = 0; i<iNumOfCoros; ++i )
-		CoCo ( Threads::WithCopiedCrashQuery ( fnWorker ), dWaiter );
-	myinfo::OwnMini ( fnWorker ) (); // last, or only task we performs right here.
-	WaitForDeffered ( std::move ( dWaiter ) );
+	}, dMatchContexts.Concurrency ( tRes.m_iTotalQueries ));
 
 	// collect and merge result set
 	CSphVector<PercolateMatchContext_t *> dResults;

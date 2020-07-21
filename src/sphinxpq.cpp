@@ -1047,8 +1047,108 @@ PercolateMatchContext_t * PercolateIndex_c::CreateMatchContext ( const RtSegment
 												   , m_tSchema, tReject, m_tSettings.m_eHitless );
 }
 
+namespace {
+
+// full scan when no docs required
+int FullscanWithoutDocs ( PercolateMatchContext_t & tMatchCtx )
+{
+	const CSphIndex * pIndex = tMatchCtx.m_pTermSetup->m_pIndex;
+	auto uRows = ((RtSegment_t *) tMatchCtx.m_pCtx->m_pIndexData)->m_uRows;
+
+	CSphMatch tDoc;
+	int iMatchesCount = 0;
+	for ( DWORD i = 0; i<uRows; ++i )
+	{
+		tDoc.m_tRowID = i;
+		if ( !pIndex->EarlyReject ( tMatchCtx.m_pCtx.Ptr(), tDoc ))
+			++iMatchesCount;
+	}
+	return iMatchesCount;
+}
+
+// full scan and collect docs
+int FullScanCollectingDocs ( PercolateMatchContext_t & tMatchCtx )
+{
+	const CSphIndex * pIndex = tMatchCtx.m_pTermSetup->m_pIndex;
+	const RtSegment_t * pSeg = (RtSegment_t *) tMatchCtx.m_pCtx->m_pIndexData;
+	int iStride = tMatchCtx.m_tSchema.GetRowSize ();
+
+	int iCountIdx = tMatchCtx.m_dDocsMatched.GetLength ();
+	tMatchCtx.m_dDocsMatched.Add ( 0 ); // placeholder for counter
+
+	const CSphRowitem * pRow = pSeg->m_dRows.Begin ();
+	CSphMatch tDoc;
+	int iMatchesCount = 0;
+	for ( DWORD i = 0; i<pSeg->m_uRows; ++i )
+	{
+		tDoc.m_tRowID = i;
+		if ( !pIndex->EarlyReject ( tMatchCtx.m_pCtx.Ptr(), tDoc ) )
+		{
+			tMatchCtx.m_dDocsMatched.Add ( sphGetDocID ( pRow ));
+			++iMatchesCount;
+		}
+		pRow += iStride;
+	}
+
+	if ( iMatchesCount ) // write counter of docs into placeholder
+		tMatchCtx.m_dDocsMatched[iCountIdx] = iMatchesCount;
+	else
+		tMatchCtx.m_dDocsMatched.Resize ( iCountIdx ); // pop's up reserved but not used matched counter
+	return iMatchesCount;
+}
+
+// full-text search when no docs required
+int FtMatchingWithoutDocs ( const StoredQuery_t * pStored, PercolateMatchContext_t & tMatchCtx )
+{
+	tMatchCtx.m_tDictMap.SetMap ( pStored->m_hDict ); // set terms dictionary
+	CSphQueryResult tTmpResult;
+	CSphScopedPtr<ISphRanker> pRanker { sphCreateRanker ( *pStored->m_pXQ.Ptr(), &tMatchCtx.m_tDummyQuery,
+			&tTmpResult, *tMatchCtx.m_pTermSetup.Ptr(), *tMatchCtx.m_pCtx.Ptr(), tMatchCtx.m_tSchema ) };
+
+	if ( !pRanker )
+		return 0;
+
+	int iMatchesCount = 0;
+	for ( auto iMatches = pRanker->GetMatches (); iMatches!=0; iMatches = pRanker->GetMatches ())
+		iMatchesCount += iMatches;
+	return iMatchesCount;
+}
+
+// full-text search and collect docs
+int FtMatchingCollectingDocs ( const StoredQuery_t * pStored, PercolateMatchContext_t & tMatchCtx )
+{
+	tMatchCtx.m_tDictMap.SetMap ( pStored->m_hDict ); // set terms dictionary
+	CSphQueryResult tTmpResult;
+	CSphScopedPtr<ISphRanker> pRanker { sphCreateRanker ( *pStored->m_pXQ.Ptr(), &tMatchCtx.m_tDummyQuery,
+			&tTmpResult, *tMatchCtx.m_pTermSetup.Ptr(), *tMatchCtx.m_pCtx.Ptr(), tMatchCtx.m_tSchema ) };
+
+	if ( !pRanker )
+		return 0;
+
+	int iCountIdx = tMatchCtx.m_dDocsMatched.GetLength();
+	int iMatchesCount = 0;
+	// reserve space for matched docs counter
+	tMatchCtx.m_dDocsMatched.Add ( iMatchesCount );
+
+	const RtSegment_t * pSeg = (RtSegment_t *) tMatchCtx.m_pCtx->m_pIndexData;
+	const CSphMatch * pMatch = pRanker->GetMatchesBuffer();
+	for ( auto iMatches = pRanker->GetMatches (); iMatches!=0; iMatches = pRanker->GetMatches ())
+	{
+		int * pDocids = tMatchCtx.m_dDocsMatched.AddN ( iMatches );
+		for ( int i = 0; i<iMatches; ++i )
+			pDocids[i] = sphGetDocID ( pSeg->GetDocinfoByRowID ( pMatch[i].m_tRowID ) );
+		iMatchesCount += iMatches;
+	}
+
+	if ( iMatchesCount ) // write counter of docs into placeholder
+		tMatchCtx.m_dDocsMatched[iCountIdx] = iMatchesCount;
+	else
+		tMatchCtx.m_dDocsMatched.Resize ( iCountIdx ); // pop's up reserved but not used matched counter
+	return iMatchesCount;
+}
+
 // percolate matching
-static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_t & tMatchCtx )
+void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_t & tMatchCtx )
 {
 	int64_t tmQueryStart = ( tMatchCtx.m_bVerbose ? sphMicroTimer() : 0 );
 	tMatchCtx.m_iOnlyTerms += ( pStored->m_bOnlyTerms ? 1 : 0 );
@@ -1082,94 +1182,41 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 		return;
 	}
 
-	const bool bCollectDocs = tMatchCtx.m_bGetDocs;
-	int iDocsOff = tMatchCtx.m_dDocsMatched.GetLength();
-	int iMatchCount = 0;
-	// reserve space for matched docs counter
-	if ( bCollectDocs )
-		tMatchCtx.m_dDocsMatched.Add ( 0 );
+	int iMatchesCount;
+	if ( tMatchCtx.m_bGetDocs )
+		iMatchesCount = pStored->IsFullscan ()
+				? FullScanCollectingDocs ( tMatchCtx )
+				: FtMatchingCollectingDocs ( pStored, tMatchCtx );
+	else
+		iMatchesCount = pStored->IsFullscan ()
+				? FullscanWithoutDocs ( tMatchCtx )
+				: FtMatchingWithoutDocs ( pStored, tMatchCtx );
 
+	if ( !iMatchesCount )
+		return;
 
-	if ( !pStored->IsFullscan() ) // matching path
+	// collect matched pq, if any
+	tMatchCtx.m_iDocsMatched += iMatchesCount;
+	PercolateQueryDesc & tDesc = tMatchCtx.m_dQueryMatched.Add();
+	tDesc.m_iQUID = pStored->m_iQUID;
+	if ( tMatchCtx.m_bGetQuery )
 	{
-		// set terms dictionary
-		tMatchCtx.m_tDictMap.SetMap ( pStored->m_hDict );
-		CSphQueryResult tTmpResult;
-		CSphScopedPtr<ISphRanker> pRanker { sphCreateRanker ( *pStored->m_pXQ.Ptr(), &tMatchCtx.m_tDummyQuery,
-				&tTmpResult, *tMatchCtx.m_pTermSetup.Ptr(), *tMatchCtx.m_pCtx.Ptr(), tMatchCtx.m_tSchema ) };
+		tDesc.m_sQuery = pStored->m_sQuery;
+		tDesc.m_sTags = pStored->m_sTags;
+		tDesc.m_bQL = pStored->m_bQL;
 
-		if ( !pRanker )
-			return;
-
-		const CSphMatch * pMatch = pRanker->GetMatchesBuffer();
-		while ( true )
+		if ( tMatchCtx.m_bGetFilters && pStored->m_dFilters.GetLength() )
 		{
-			int iMatches = pRanker->GetMatches();
-			if ( !iMatches )
-				break;
-
-			if ( bCollectDocs )
-			{
-				// docs encoding: docs-count (reserved above); docs matched
-				int * pDocids = tMatchCtx.m_dDocsMatched.AddN ( iMatches );
-				for ( int iMatch=0; iMatch<iMatches; ++iMatch )
-				{
-					const auto *pData = pSeg->GetDocinfoByRowID ( pMatch[iMatch].m_tRowID );
-					pDocids[iMatch] = sphGetDocID ( pData );
-				}
-			}
-
-			iMatchCount += iMatches;
-		}
-	} else // full-scan path
-	{
-		CSphMatch tDoc;
-		int iStride = tMatchCtx.m_tSchema.GetRowSize();
-		const CSphIndex * pIndex = tMatchCtx.m_pTermSetup->m_pIndex;
-		const CSphRowitem * pRow = pSeg->m_dRows.Begin();
-		for ( DWORD i = 0; i<pSeg->m_uRows; ++i )
-		{
-			tDoc.m_tRowID = i;
-			const auto *pData = pRow;
-			pRow += iStride;
-			if ( pIndex->EarlyReject ( tMatchCtx.m_pCtx.Ptr(), tDoc ) )
-				continue;
-
-			++iMatchCount;
-			if ( bCollectDocs ) // keep matched docs
-				tMatchCtx.m_dDocsMatched.Add ( sphGetDocID ( pData ) );
+			StringBuilder_c sFilters;
+			FormatFiltersQL ( pStored->m_dFilters, pStored->m_dFilterTree, sFilters );
+			sFilters.MoveTo ( tDesc.m_sFilters );
 		}
 	}
 
-	// collect matched pq, if any
-	if ( iMatchCount )
-	{
-		tMatchCtx.m_iDocsMatched += iMatchCount;
-
-		PercolateQueryDesc & tDesc = tMatchCtx.m_dQueryMatched.Add();
-		tDesc.m_iQUID = pStored->m_iQUID;
-		if ( bCollectDocs )
-			tMatchCtx.m_dDocsMatched[iDocsOff] = iMatchCount;
-		if ( tMatchCtx.m_bGetQuery )
-		{
-			tDesc.m_sQuery = pStored->m_sQuery;
-			tDesc.m_sTags = pStored->m_sTags;
-			tDesc.m_bQL = pStored->m_bQL;
-
-			if ( tMatchCtx.m_bGetFilters && pStored->m_dFilters.GetLength() )
-			{
-				StringBuilder_c sFilters;
-				FormatFiltersQL ( pStored->m_dFilters, pStored->m_dFilterTree, sFilters );
-				sFilters.MoveTo ( tDesc.m_sFilters );
-			}
-		}
-
-		if ( tMatchCtx.m_bVerbose )
-			tMatchCtx.m_dDt.Add ( (int)( sphMicroTimer() - tmQueryStart ) );
-
-	} else if ( bCollectDocs ) // pop's up reserved but not used matched counter
-		tMatchCtx.m_dDocsMatched.Resize ( iDocsOff );
+	if ( tMatchCtx.m_bVerbose )
+		tMatchCtx.m_dDt.Add ( (int)( sphMicroTimer() - tmQueryStart ) );
 }
+} // static namespace
 
 void PercolateQueryDesc::Swap ( PercolateQueryDesc & tOther )
 {

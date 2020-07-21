@@ -3,7 +3,7 @@
 <!-- example pq -->
 Percolate index is a special index which stores queries instead of documents. It is used for prospective searches (or "search in reverse").
 
-* See section [Percolate query](Searching/Percolate_query.md) for more details about performing a search query against a percolat index.
+* See section [Percolate query](Searching/Percolate_query.md) for more details about performing a search query against a percolate index.
 * See section [Adding rules to a percolate index](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md) to learn how to prepare an index for searching.
 
 The schema of a percolate index is fixed and contains the following fields:

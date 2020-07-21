@@ -4,7 +4,7 @@ By default the first columns from the result set of `sql_query` is indexed as th
 
 Document ID *MUST* be the very first field, and it *MUST BE UNIQUE UNSIGNED POSITIVE (NON-ZERO, NON-NEGATIVE) INTEGER NUMBER*.
 
-You can specify up to 32 full-text fields (formally, upto `SPH_MAX_FIELDS` from sphinx.h), and an arbitrary amount of attributes. All of the columns that are neither document ID (the first one) nor attributes will be indexed as full-text fields.
+You can specify up to 32 full-text fields (formally, up to `SPH_MAX_FIELDS` from sphinx.h), and an arbitrary amount of attributes. All of the columns that are neither document ID (the first one) nor attributes will be indexed as full-text fields.
 
 
 ## Declaration of attributes:

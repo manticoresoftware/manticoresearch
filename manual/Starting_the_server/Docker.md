@@ -78,7 +78,7 @@ services:
         hard: -1
     volumes:
       - ./data:/var/lib/manticore
-#      - ./manticore.conf:/etc/manticoresearch/manticore.conf # uncommment if you use a custom config
+#      - ./manticore.conf:/etc/manticoresearch/manticore.conf # uncomment if you use a custom config
 ```
 
 Besides using the exposed ports 9306 and 9308 you can log into the instance by running `docker-compose exec manticore mysql`.

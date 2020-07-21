@@ -34,7 +34,7 @@ The following directives can be used to declare the types of the indexed columns
 ## Declaration of CSV stream
 `tsvpipe_command` directive is mandatory and contains the shell command invoked to produce the TSV stream which gets indexed. The command can just read a CSV file but it can also be a program that generates on-the-fly the comma delimited content.
 
-##  CSV ndexed columns 
+##  CSV indexed columns
 
 The following directives can be used to declare the types of the indexed columns:
 

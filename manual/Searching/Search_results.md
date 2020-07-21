@@ -4,7 +4,7 @@
 
 ## HTTP
 
-Via HTTP JSON iterface query result is sent as a JSON document. Example:
+Via HTTP JSON interface query result is sent as a JSON document. Example:
 
 ```json
 {

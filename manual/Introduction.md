@@ -43,7 +43,7 @@ Manticore is not fully ACID-compliant, but it supports isolated transactions for
 Data can be distributed across servers and data-centers. Any Manticore Search node can be both a load balancer and a data node. Manticore implements synchronous multi-master [replication](https://play.manticoresearch.com/replication/) using [Galera library](https://galeracluster.com/) which guarantees consistency between all data nodes and no data loss.
 
 #### Can sync from MySQL/PostgreSQL/ODBC/xml/csv out of the box
-Manticore `indexer` tool and rich configuration syntax helps to sync existing data from MySQL, PostgreSQL, any datatbase which speaks ODBC and any other technology which can generate a simple XML or CSV.
+Manticore `indexer` tool and rich configuration syntax helps to sync existing data from MySQL, PostgreSQL, any database which speaks ODBC and any other technology which can generate a simple XML or CSV.
 
 #### Integrations
 You can integrate Manticore Search with MySQL/MariaDB server via a [FEDERATED engine](Extensions/FEDERATED.md) or use Manticore through [ProxySQL](https://manticoresearch.com/2018/06/18/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/)

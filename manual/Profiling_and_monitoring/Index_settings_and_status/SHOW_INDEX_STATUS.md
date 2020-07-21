@@ -15,7 +15,7 @@ Displayed statistics include:
 * `indexed_documents` and `indexed_bytes`: number of the documents indexed and their text size in bytes, respectively.
 * `field_tokens_XXX`: sums of per-field lengths (in tokens) over the entire index (that is used internally in `BM25A` and `BM25F` functions for ranking purposes). Only available for indexes built with `index_field_lengths=1`.
 * `ram_bytes`: total size (in bytes) of the RAM-resident index portion.
-* `query_time_*`: query exectution time statistics of last 1 minute, 5 minutes, 15 minutes and total since server start; data is encapsulated as a JSON object which includes the number of queries and min, max, avg, 95 and 99 percentile values.
+* `query_time_*`: query execution time statistics of last 1 minute, 5 minutes, 15 minutes and total since server start; data is encapsulated as a JSON object which includes the number of queries and min, max, avg, 95 and 99 percentile values.
 * `found_rows_*`: statistics of rows found by queries; provided for last 1 minute, 5 minutes, 15 minutes and total since server start; data is encapsulated as a JSON object which includes the number of queries and min, max, avg, 95 and 99 percentile values.
 
 <!-- intro -->

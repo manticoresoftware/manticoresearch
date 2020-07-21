@@ -19,7 +19,7 @@ There are the following classes of the variables:
 3.  global user variable
 4.  global distributed variable
 
-Global user variables are shared between concurrent sessions. Currently, the only supported value type is the list of BIGINTs, and these variables can only be used along with IN() for filtering purpose. The intended usage scenario is uploading huge lists of values to `searchd` (once) and reusing them (many times) later, saving on network overheads. Global user variables might be either transferred to all agents of distributed index or set locally in case of local index defined at distibuted index. Example:
+Global user variables are shared between concurrent sessions. Currently, the only supported value type is the list of BIGINTs, and these variables can only be used along with IN() for filtering purpose. The intended usage scenario is uploading huge lists of values to `searchd` (once) and reusing them (many times) later, saving on network overheads. Global user variables might be either transferred to all agents of distributed index or set locally in case of local index defined at distributed index. Example:
 
 ```sql
 // in session 1
@@ -57,7 +57,7 @@ Known global server variables are:
 * `MAINTENANCE = {0 | 1}` When set to 1, puts the server in maintenance mode. Only clients with vip connections can execute queries in this mode. All new non-vip incoming connections are refused.
 * `GROUPING_IN_UTC = {0 | 1}` When set to 1, cause timed grouping functions (day(), month(), year(), yearmonth(), yearmonthday()) to be calculated in utc. Read the doc for [grouping_in_utc](Server_settings/Searchd.md) config params for more details.
 * `QUERY_LOG_MIN_MSEC = <value>` Changes the [query_log_min_msec](Server_settings/Searchd.md#query_log_min_msec) searchd settings value. In this case it expects value exactly in milliseconds and doesn't parse time suffixes, as in config.
-* `LOG_DEBUG_FILTER = <string value>` Option exists since Sphinx 2.11 and gives a chance to filter out redundand log messages. If the value is set, then all logs with level > INFO (i.e., `DEBUG`, `DEBUGV`, etc.) will be compared with the string and outputed only in the case they starts with given value.
+* `LOG_DEBUG_FILTER = <string value>` Option exists since Sphinx 2.11 and gives a chance to filter out redundant log messages. If the value is set, then all logs with level > INFO (i.e., `DEBUG`, `DEBUGV`, etc.) will be compared with the string and output only in the case they starts with given value.
 
 
 > Warning

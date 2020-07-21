@@ -1,6 +1,6 @@
 # Transactions
 
-Manticore supports basic transactions when performing deleting and insertion into real-time and percolate indexes. That is: each change to the index first saved into internal changeset, and then actually commited to the index. By default each command is wrapped into individual automatic transaction, making it transparent: you just 'insert' something, and can see inserted result after it completes, having no care about transactions. However that behaviour can be explicitly managed by starting and commiting transactions manually.
+Manticore supports basic transactions when performing deleting and insertion into real-time and percolate indexes. That is: each change to the index first saved into internal changeset, and then actually committed to the index. By default each command is wrapped into individual automatic transaction, making it transparent: you just 'insert' something, and can see inserted result after it completes, having no care about transactions. However that behaviour can be explicitly managed by starting and committing transactions manually.
 
 ## Automatic and manual mode
 
@@ -65,7 +65,7 @@ select * from indexrt where id=4;
 Empty set (0.00 sec)
 ```
 
-Here changes is NOT automatically commited. So, insertion is not visible even in the same session, since they're not commited. Also, despite absent `BEGIN` statement, transaction is implicitly started.
+Here changes is NOT automatically committed. So, insertion is not visible even in the same session, since they're not committed. Also, despite absent `BEGIN` statement, transaction is implicitly started.
 
 So, let's finally commit it: 
 

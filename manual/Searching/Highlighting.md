@@ -118,7 +118,7 @@ Note that snippet generation options such as `limit`, `limit_words`, `limit_snip
 
 Highlighting algorithm currently favors better snippets (with closer phrase matches), and then snippets with keywords not yet included in the result. Generally, it will try to highlight the best match with the query, and it will also try to highlight all the query keywords, as made possible by the limits. If there are no matches in the current field, the beginning of the document trimmed down according to the limits will be return by default. You can also return an empty string instead by setting `allow_empty` option to 1.
 
-Highligting is performed on a so-called `post limit` stage, meaning that snippet generation is postponed not just until the entire final result set is ready, but even after the LIMIT clause is applied. For example, with a LIMIT 20,10 clause, `HIGHLIGHT()` function will be called at most 10 times.
+Highlighting is performed on a so-called `post limit` stage, meaning that snippet generation is postponed not just until the entire final result set is ready, but even after the LIMIT clause is applied. For example, with a LIMIT 20,10 clause, `HIGHLIGHT()` function will be called at most 10 times.
 
 ## Highlighting options
 
@@ -333,7 +333,7 @@ Highlight for content:
 `HIGHLIGHT()` function can be used to highlight search results. Here's the syntax:
 
 ```sql
-HIGHLIGT([options], [field_list], [query] )
+HIGHLIGHT([options], [field_list], [query] )
 ```
 
 <!-- example highlight() no args -->

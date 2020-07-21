@@ -14,7 +14,7 @@ Reload also is seamless, meaning that some version of a reloaded plugin will be 
 
 In case of any failure `RELOAD PLUGINS` does absolutely nothing, keeps the old plugins, and reports an error.
 
-On Windows, either overwriting or deleting a DLL library currently in use seems to be an issue. However, you can still rename it, then put a new version under the old name, and `RELOAD` will then work. After a succesful reload you will also be able to delete the renamed old library, too.
+On Windows, either overwriting or deleting a DLL library currently in use seems to be an issue. However, you can still rename it, then put a new version under the old name, and `RELOAD` will then work. After a successful reload you will also be able to delete the renamed old library, too.
 
 ```sql
 mysql> RELOAD PLUGINS FROM SONAME 'udfexample.dll';

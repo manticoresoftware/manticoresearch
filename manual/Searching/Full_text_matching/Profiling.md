@@ -625,4 +625,4 @@ The function returns:
 * list with each field that returned a hit 
 * list with each keyword from the query and their tf and idf values
 
-The values can be used to understand why certain documents get scored lower or higher in a search or to improve the existing ranking expresion. 
+The values can be used to understand why certain documents get scored lower or higher in a search or to improve the existing ranking expression.

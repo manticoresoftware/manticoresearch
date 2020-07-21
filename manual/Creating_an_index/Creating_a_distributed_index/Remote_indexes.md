@@ -1,7 +1,7 @@
 # Remote indexes
 
 Remote indexes are represented by [agent](Creating_an_index/Creating_a_distributed_index/Creating_a_distributed_index.md) in the definition of a distributed index.
-Any number of locals and agents may be combined in a distributed index. If no locals provided, it will be purely remote index, which serves just as a proxy. For example, you may have a frontend Manticore instance which listens on a number of ports and serves dufferent protocols, and then just redirects queries to backends that accept connections only via Manticore's internal binary protocol with, perhaps, persistent connections to avoid a connection establishing overhead.
+Any number of locals and agents may be combined in a distributed index. If no locals provided, it will be purely remote index, which serves just as a proxy. For example, you may have a frontend Manticore instance which listens on a number of ports and serves different protocols, and then just redirects queries to backends that accept connections only via Manticore's internal binary protocol with, perhaps, persistent connections to avoid a connection establishing overhead.
 Despite the fact, that such distributed index doesn't serve local indexes itself, it still consumes machine resources, since it still needs to make final calculations such as merging results and calculating final aggregated values. 
 
 ## agent
@@ -129,11 +129,11 @@ These options manage overall behaviour regarding remote agents. They are to be s
 
   For example, if you have 10 mirrors, and set `agent_retry_count=5`, then server will retry up to 50 times, assuming average 5 tries per every of 10 mirrors (in case of option `ha_strategy = roundrobin` it will be actually exactly 5 times per mirror).
 
-  At the same time value provided as [retry_count](Searching/Options.md#retry_count) option of `agent` definition serves as absolute limit. Otherwords, `[retry_count=2]` option in agent definition means always at most 2 tries, no mean if you have 1 or 10 mirrors in a line.
+  At the same time value provided as [retry_count](Searching/Options.md#retry_count) option of `agent` definition serves as absolute limit. Other words, `[retry_count=2]` option in agent definition means always at most 2 tries, no mean if you have 1 or 10 mirrors in a line.
 
 ### agent_retry_delay
 
-`agent_retry_delay` integer, specifies the delay manticore rest before retrying to query a remore agent, if it fails. Value is in in milliseconds (or, may include time suffix). The value has sense only if non-zero `agent_retry_count` or non-zero per-query `OPTION retry_count` specified. Default is 500 (i.e., half a second). This value may be also specified on per-query basis using `OPTION retry_delay=XXX` clause. If per-query option exists, it will override the one specified in config.
+`agent_retry_delay` integer, specifies the delay manticore rest before retrying to query a remote agent, if it fails. Value is in in milliseconds (or, may include time suffix). The value has sense only if non-zero `agent_retry_count` or non-zero per-query `OPTION retry_count` specified. Default is 500 (i.e., half a second). This value may be also specified on per-query basis using `OPTION retry_delay=XXX` clause. If per-query option exists, it will override the one specified in config.
 
 ### client_timeout
 
@@ -157,7 +157,7 @@ For general knowledge about TCP Fast Open extension you can visit Wikipedia. Sho
 
 In practice using TFO in many situation may optimize client-agent network efficiency as if `agent_persistent` are in play, but without holding active connections, and also without limitation for the maximum num of connections.
 
-On modern OS TFO support usually switched 'on' on the system level, but this is just 'capability', not the rule. Linux (as most progressive) supports it since 2011, on kernels starting from 3.7 (for server side). Windows supports it from some build of Windows 10. Anothers (FreeBSD, MacOS) also in game.
+On modern OS TFO support usually switched 'on' on the system level, but this is just 'capability', not the rule. Linux (as most progressive) supports it since 2011, on kernels starting from 3.7 (for server side). Windows supports it from some build of Windows 10. Another (FreeBSD, MacOS) also in game.
 
 For Linux system server checks variable `/proc/sys/net/ipv4/tcp_fastopen` and behaves according to it. Bit 0 manages client side, bit 1 rules listeners. By default system has this param set to 1, i.e. clients enabled, listeners disabled.
 
@@ -167,9 +167,9 @@ For Linux system server checks variable `/proc/sys/net/ipv4/tcp_fastopen` and be
 persistent_connections_limit = 29 # assume that each host of agents has max_connections = 30 (or 29).
 ```
 
-`persistent_connections_limit` defines maximum # of simultaneous persistent connections to remote persistent agents. This is instance-wide option and has to be defined in searchd config section. Each time connecting agent defined under `agent_persistent` we try to reuse existing connection (if any), or connect and save the connection for the future. However we can't hold unlimited # of such persistent connections, since each one holds a worker on agent size (and finally we'll receive the 'maxed out' error, when all of them are busy). This very directive limits the number. It affects the num of connections to each agent's host, across all distributed indexes.
+`persistent_connections_limit` defines maximum # of simultaneous persistent connections to remote persistent agents. This is instance-wide option and has to be defined in searchd config section. Each time connecting agent defined under `agent_persistent` we try to reuse existing connection (if any), or connect and save the connection for the future. However we can't hold unlimited # of such persistent connections, since each one holds a worker on agent's side (and finally we'll receive the 'maxed out' error, when all of them are busy). This very directive limits the number. It affects the num of connections to each agent's host, across all distributed indexes.
 
-It is reasonable to set the value equal or less than [max_connections](Server_settings/Searchd#max_connections) option of the agents config.
+It is reasonable to set the value equal or less than [max_connections](Server_settings/Searchd#max_connections) option of the agent's config.
 
 ## Distributed snippets creation
 

@@ -51,7 +51,7 @@ part.
 The expected value format is a commas-separated list of mappings. Two simplest mappings simply declare a character as valid, and map a single character to another single character, respectively. But specifying the whole table in such form would result in bloated and barely manageable specifications. So there are several syntax shortcuts that let you map ranges of characters at once. The complete list is as follows:
 
 * `A->a` - Single char mapping, declares source char 'A' as allowed to occur within keywords and maps it to destination char 'a' (but does *not* declare 'a' as allowed).
-* `A..Z->a..z` - Range mapping, declares all chars in source range as allowed and maps them to the destination range. Does *not* declare destination range as allowed. Also checks ranges's lengths (the lengths must be equal).
+* `A..Z->a..z` - Range mapping, declares all chars in source range as allowed and maps them to the destination range. Does *not* declare destination range as allowed. Also checks range's lengths (the lengths must be equal).
 * `a` - Stray char mapping, declares a character as allowed and maps it to itself. Equivalent to a->a single char mapping.
 * `a..z` - Stray range mapping, declares all characters in range as allowed and maps them to themselves. Equivalent to a..z->a..z range mapping.
 * `A..Z/2` - Checkerboard range map. Maps every pair of chars to the second char. More formally, declares odd characters in range as allowed and maps them to the even ones; also declares even characters as allowed and maps them to themselves. For instance, A..Z/2 is equivalent to A->B, B->B, C->D, D->D, ..., Y->Z, Z->Z. This mapping shortcut is helpful for a number of Unicode blocks where uppercase and lowercase letters go in such interleaved order instead of contiguous chunks.
@@ -690,7 +690,7 @@ Bigram indexing is a feature to accelerate phrase searches. When indexing, it st
 * `first_freq`, only index word pairs where the *first* word is in a list of frequent words (see [bigram_freq_words](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)). For example, with `bigram_freq_words = the, in, i, a`, indexing "alone in the dark" text will result in "in the" and "the dark" pairs being stored as bigrams, because they begin with a frequent keyword (either "in" or "the" respectively), but "alone in" would **not** be indexed, because "in" is a *second* word in that pair.
 * `both_freq`, only index word pairs where both words are frequent. Continuing with the same example, in this mode indexing "alone in the dark" would only store "in the" (the very worst of them all from searching perspective) as a bigram, but none of the other word pairs.
 
-For most usecases, `both_freq` would be the best mode, but your mileage may vary.
+For most use cases, `both_freq` would be the best mode, but your mileage may vary.
 
 <!-- request SQL -->
 
@@ -879,7 +879,7 @@ embedded_limit = size
 <!-- example embedded_limit -->
 Embedded exceptions, wordforms, or stop words file size limit. Optional, default is 16K.
 
-When you create an index the abovementioned files can be either saved externally along with the index or embedded directly into the index. Files sized under `embedded_limit` get stored into the index. For bigger files, only the file names are stored. This also simplifies moving index files to a different machine; you may get by just copying a single file.
+When you create an index the above mentioned files can be either saved externally along with the index or embedded directly into the index. Files sized under `embedded_limit` get stored into the index. For bigger files, only the file names are stored. This also simplifies moving index files to a different machine; you may get by just copying a single file.
 
 With smaller files, such embedding reduces the number of the external files on which the index depends, and helps maintenance. But at the same time it makes no sense to embed a 100 MB wordforms dictionary into a tiny delta index. So there needs to be a size threshold, and `embedded_limit` is that threshold.
 
@@ -912,7 +912,7 @@ The easiest way to fix that issue is to create and utilize a global frequency di
 
 IDF files can be shared across multiple indexes. Only a single copy of an IDF file will be loaded by `searchd`, even when many indexes refer to that file. Should the contents of an IDF file change, the new contents can be loaded with a SIGHUP.
 
-You can build an .idf file using [indextool](Miscellaneous_tools.md#indextool) utility, by dumping dictionaries using `--dumpdict dict.txt --stats` switch first, then converting those to .idf format using `--buildidf`, then merging all the .idf files across cluser using `--mergeidf`.
+You can build an .idf file using [indextool](Miscellaneous_tools.md#indextool) utility, by dumping dictionaries using `--dumpdict dict.txt --stats` switch first, then converting those to .idf format using `--buildidf`, then merging all the .idf files across cluster using `--mergeidf`.
 
 <!-- request SQL -->
 

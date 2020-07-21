@@ -45,7 +45,7 @@ CALL KEYWORDS(text, index [, options])
 | N as expansion_limit | Override [expansion_limit](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) defined in the server configuration, default is 0 (use value from the configuration) |
 | docs/hits as sort_mode | Sort output results by either 'docs' or 'hits'. Default no sorting |
 
-The examples show how it works if assuming the user is trying to get an autocomplete for "my cat ...". So on the applicaton side all you need to do is to suggest the user the endings from the column "normalized" for each new word. It often makes sense to sort by hits or docs using `'hits' as sort_mode` or `'docs' as sort_mode`.
+The examples show how it works if assuming the user is trying to get an autocomplete for "my cat ...". So on the application side all you need to do is to suggest the user the endings from the column "normalized" for each new word. It often makes sense to sort by hits or docs using `'hits' as sort_mode` or `'docs' as sort_mode`.
 
 <!-- intro -->
 ##### Examples:

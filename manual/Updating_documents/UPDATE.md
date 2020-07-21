@@ -258,7 +258,7 @@ Array(
 
 <!-- example full JSON update -->
 
-Updating other data types or changing property type in a JSON attribute requries a full JSON update.
+Updating other data types or changing property type in a JSON attribute requires a full JSON update.
 
 <!-- intro -->
 ##### SQL:
@@ -512,7 +512,7 @@ The options are the same as for [SELECT](Searching/Full_text_matching/Basic_usag
 
 Updates using HTTP protocol are performed via the `/update` endpoint. Syntax is similar to the [/insert endpoint](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md), but this time the `doc` property is mandatory.
 
-The server will respond with a JSON object stating if the operation was successfull or not.
+The server will respond with a JSON object stating if the operation was successful or not.
 
 <!-- example JSON update -->
 

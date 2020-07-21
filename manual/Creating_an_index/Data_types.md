@@ -147,7 +147,7 @@ Below is the list of data types supported by Manticore Search:
 
 ## Document ID
 
-The identificator of a document in the index. Document IDs must be **unique signed positive non-zero 64-bit integers**. Note that no negative or zero values are allowed. Document IDs are implicit and have no declaration. Update operation is forbidden on document ids.
+The identifier of a document in the index. Document IDs must be **unique signed positive non-zero 64-bit integers**. Note that no negative or zero values are allowed. Document IDs are implicit and have no declaration. Update operation is forbidden on document ids.
 
 ## Text
 

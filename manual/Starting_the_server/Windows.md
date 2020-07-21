@@ -1,6 +1,6 @@
 # Starting Manticore in Windows
 
-On Windows if you want Mantiocore to start at boot, install [Manticore as Windows Service](Installation/Windows.md).
+On Windows if you want Manticore to start at boot, install [Manticore as Windows Service](Installation/Windows.md).
 
 Manticore can be started and stopped from the Control Panel or from the command line:
 

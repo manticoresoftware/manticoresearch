@@ -8,7 +8,7 @@
 agent = node1|node2|node3:9312:shard2
 ```
 
-The above example declares that 'node1:9312', 'node2:9312', and 'node3:9312' all have an index called shard2, and can be used as interchangeable mirrors. If any single of those servers go down, the queries will be distributed between the other two. When it gets back up, master will detect that and begin routing queries to all three nodees again.
+The above example declares that 'node1:9312', 'node2:9312', and 'node3:9312' all have an index called shard2, and can be used as interchangeable mirrors. If any single of those servers go down, the queries will be distributed between the other two. When it gets back up, master will detect that and begin routing queries to all three nodes again.
 
 Mirror may also include individual index list, as:
 

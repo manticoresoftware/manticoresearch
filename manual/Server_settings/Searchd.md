@@ -48,7 +48,7 @@ Note, that if you use [agent_mirrors](Creating_an_index/Creating_a_distributed_i
 
 For example, if you have 10 mirrors, and set `agent_retry_count=5`, then server will retry up to 50 times, assuming average 5 tries per every of 10 mirrors. (in case of option `ha_strategy = roundrobin` it will be actually so).
 
-In the same time value provided as `retry_count` option of [agent](Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) definition serves as absolute limit. Otherwords, `[retry_count=2]` option in agent definition means always at most 2 tries, no mean if you have 1 or 10 mirrors in a line.
+In the same time value provided as `retry_count` option of [agent](Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) definition serves as absolute limit. Other words, `[retry_count=2]` option in agent definition means always at most 2 tries, no mean if you have 1 or 10 mirrors in a line.
 
 
 ### agent_retry_delay
@@ -394,7 +394,7 @@ For general knowledge about TCP Fast Open extension you can visit Wikipedia. Sho
 
 In practice using TFO in many situation may optimize client-agent network efficiency as if [persistent agents](Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) are in play, but without holding active connections, and also without limitation for the maximum num of connections.
 
-On modern OS TFO support usually switched 'on' on the system level, but this is just 'capability', not the rule. Linux (as most progressive) supports it since 2011, on kernels starting from 3.7 (for server side). Windows supports it from some build of Windows 10. Anothers (FreeBSD, MacOS) also in game.
+On modern OS TFO support usually switched 'on' on the system level, but this is just 'capability', not the rule. Linux (as most progressive) supports it since 2011, on kernels starting from 3.7 (for server side). Windows supports it from some build of Windows 10. Another (FreeBSD, MacOS) also in game.
 
 For Linux system server checks variable `/proc/sys/net/ipv4/tcp_fastopen` and behaves according to it. Bit 0 manages client side, bit 1 rules listeners. By default system has this param set to 1, i.e. clients enabled, listeners disabled.
 

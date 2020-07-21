@@ -5,9 +5,9 @@ Deleting is only supported for [Real-Time](Creating_an_index/Local_indexes/Real-
 <!-- example delete 1 -->
 Deleting works for SQL and HTTP interfaces. 
 
-SQL response for successfull operation will show the number of rows deleted. 
+SQL response for successful operation will show the number of rows deleted.
 
-json/delete is an HTTP endpoint for for deleting. The server will respond with a JSON object stating if the operation was successfull or not and the number of rows deleted.
+json/delete is an HTTP endpoint for for deleting. The server will respond with a JSON object stating if the operation was successful or not and the number of rows deleted.
 
 
 <!-- intro -->

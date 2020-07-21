@@ -4,7 +4,7 @@ Manticore Search has a single level of hierarchy of indexes.
 
 There is no concept of grouping tables in databases like in other DBMS. Still, Manticore accepts `SHOW DATABASES` statements for interoperability with SQL dialect, but the statement doesn't return anything.
 
-While the data collections in Manticore are called indexes, the statement that displays them is `SHOW TABLES` for compability with miscellaneous SQL clients.
+While the data collections in Manticore are called indexes, the statement that displays them is `SHOW TABLES` for compatibility with miscellaneous SQL clients.
 
 <!-- example listing -->
 ## SHOW TABLES

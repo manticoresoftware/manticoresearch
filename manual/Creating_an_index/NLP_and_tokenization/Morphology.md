@@ -23,7 +23,7 @@ The morphology processors that come with our own built-in Manticore implementati
 * English, Russian, and German lemmatizers
 * English, Russian, Arabic, and Czech stemmers
 * SoundEx and MetaPhone phonetic algorithms
-* Chinese word breaking alogorithm
+* Chinese word breaking algorithm
 
 You can also link with **libstemmer** library for even more stemmers (see details below). With libstemmer, Manticore also supports morphological processing for more than [15 other languages](Creating_an_index/NLP_and_tokenization/Supported_languages.md). Binary packages should come prebuilt with libstemmer support, too.
 

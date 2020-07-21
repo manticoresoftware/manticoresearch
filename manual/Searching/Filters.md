@@ -45,7 +45,7 @@ Here's an example of several filters in a `bool` query:
 }
 ```
 
-This is a fulltext query that matches all the documents containing product in any field. These documents must have a price greather or equal than 500 (`gte`) and less or equal than 1000 (`lte`). All of these documents must not have a revision less than 15 (`lt`).
+This is a fulltext query that matches all the documents containing product in any field. These documents must have a price greater or equal than 500 (`gte`) and less or equal than 1000 (`lte`). All of these documents must not have a revision less than 15 (`lt`).
 
 ### bool query
 

@@ -656,7 +656,6 @@ struct ServedDesc_t
 	StrVec_t	m_dKilllistTargets;
 	mutable CSphString	m_sUnlink;
 	IndexType_e	m_eType			= IndexType_e::PLAIN;
-	bool		m_bFromReplication = false; // index came from replication json config, not from usual config file
 	CSphString	m_sCluster;
 	FileAccessSettings_t m_tFileAccessSettings;
 	int			m_iMemLimit = 0;
@@ -676,7 +675,7 @@ struct ServedDesc_t
 	{
 		if ( !pServed )
 			return false;
-		return pServed->m_bFromReplication || !pServed->m_sCluster.IsEmpty ();
+		return !pServed->m_sCluster.IsEmpty ();
 	}
 
 	// CanSelect is one which supports select ... from (at least full-scan).
@@ -1005,7 +1004,7 @@ inline ServedIndexRefPtr_c GetServed ( const CSphString &sName, GuardedHash_c * 
 
 void ReleaseAndClearDisabled();
 
-ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName, bool bFromReplication, StrVec_t & dWarnings, CSphString & sError );
+ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName, StrVec_t & dWarnings, CSphString & sError );
 ESphAddIndex AddIndexMT ( GuardedHash_c & dPost, const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, CSphString & sError, StrVec_t * pWarnings=nullptr );
 bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, const char * szIndexName, StrVec_t & dWarnings, CSphString & sError );
 

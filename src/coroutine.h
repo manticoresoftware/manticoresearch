@@ -275,7 +275,7 @@ public:
 
 		iMyIdx-=2;
 		auto & dCtx = m_dChildrenContexts[iMyIdx];
-		dCtx.emplace ( m_dParentContext );
+		dCtx.emplace_once ( m_dParentContext );
 		return (REFCONTEXT) m_dChildrenContexts[iMyIdx].get ();
 	}
 

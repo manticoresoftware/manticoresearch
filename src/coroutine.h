@@ -57,7 +57,16 @@ bool CoContinueBool ( int iStack, HANDLER handler )
 	return bResult;
 }
 
+// Run handler in single or many user threads.
+// iConcurrency = -1 - automatically expand to all available threads in current scheduler.
+// iConcurrency = 0 - run in the same thread (but with dedicated task info).
+// iConcurrency > 0 - run one in the same thread, and the rest in dedicated coros.
+void CoExecuteN ( Handler&& handler, int iConcurrency=-1 );
+
 Scheduler_i * CoCurrentScheduler ();
+
+// N of running threads in scheduler, or in global scheduler
+int NThreads ( Scheduler_i * pScheduler = CoCurrentScheduler () );
 
 // yield (pause), and then run handler outside
 void CoYieldWith ( Handler handler );
@@ -221,15 +230,6 @@ class FederateCtx_T
 	inline intptr_t GetTHD ( int ) const { return m_iTlsOrderNum; }
 
 public:
-	// Num of available childrens (clone contextes). For N threads it is N-1, since parent doesn't need clone.
-	inline static int GetNOfContextes ()
-	{
-		auto pScheduler = CoCurrentScheduler ();
-		if (!pScheduler)
-			pScheduler = GlobalWorkPool ();
-		return pScheduler->WorkingThreads ()-1;
-	}
-
 	// whether we need to run at all for given param.
 	// say, I can filter out disk chunks and return true only for param=20, all the rest will be skipped.
 	inline static bool CanRun ( int ) { return true; }
@@ -244,8 +244,8 @@ public:
 		if ( m_bDisabled )
 			return;
 
-		int iThreads = GetNOfContextes ();
-		m_dChildrenContexts.Reset ( iThreads );
+		int iContextes = NThreads()-1;
+		m_dChildrenContexts.Reset ( iContextes );
 	}
 
 	~FederateCtx_T()
@@ -265,7 +265,7 @@ public:
 		// iMyIdx == 0 - default value, need init. ==1 - parent object (not yet need to clone). >1 - make clone.
 		if ( iMyIdx==0 )
 		{
-			iMyIdx = m_iUniqueThreads.fetch_add ( 1, std::memory_order_acq_rel )+1;
+			iMyIdx = 1 + m_iUniqueThreads.fetch_add ( 1, std::memory_order_acq_rel );
 			SetTHD ( iMyIdx, iParam );
 		}
 		assert ( iMyIdx>0 );
@@ -277,6 +277,18 @@ public:
 		auto & dCtx = m_dChildrenContexts[iMyIdx];
 		dCtx.emplace ( m_dParentContext );
 		return (REFCONTEXT) m_dChildrenContexts[iMyIdx].get ();
+	}
+
+	// Num of available childrens (clone contextes). For N threads it is N-1, since parent doesn't need clone.
+	inline int NContextes ()
+	{
+		return m_dChildrenContexts.GetLength ();
+	}
+
+	// Num of parallel threads to perform iTasks.
+	inline int Concurrency ( int iTasks )
+	{
+		return Min ( m_dChildrenContexts.GetLength (), iTasks);
 	}
 
 	bool IsEnabled () const { return !m_bDisabled; }

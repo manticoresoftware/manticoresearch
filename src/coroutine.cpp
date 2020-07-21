@@ -573,6 +573,31 @@ Threads::Scheduler_i * Threads::CoCurrentScheduler ()
 	return pWorker->CurrentScheduler ();
 }
 
+int Threads::NThreads ( Scheduler_i * pScheduler )
+{
+	if ( !pScheduler )
+		pScheduler = GlobalWorkPool ();
+	return pScheduler->WorkingThreads ();
+}
+
+void Threads::CoExecuteN ( Threads::Handler&& fnWorker, int iConcurrency )
+{
+	if ( !iConcurrency )
+	{
+		myinfo::OwnMini ( fnWorker ) ();
+		return;
+	}
+
+	if ( iConcurrency<0 )
+		iConcurrency = NThreads()-1;
+
+	auto dWaiter = DefferedRestarter ();
+	for ( int i = 0; i<iConcurrency; ++i )
+		CoCo ( Threads::WithCopiedCrashQuery ( fnWorker ), dWaiter );
+	myinfo::OwnMini ( fnWorker ) ();
+	WaitForDeffered ( std::move ( dWaiter ));
+}
+
 
 Threads::CoThrottler_c::CoThrottler_c ( int64_t tmThrottlePeriodMs )
 	: m_tmThrottlePeriodMs ( tmThrottlePeriodMs )

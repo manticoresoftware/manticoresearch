@@ -2056,7 +2056,6 @@ static bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIn
 {
 	// delete existed index first, does not allow to save it's data that breaks sync'ed index files
 	// need a scope for RefRtr's to work
-	bool bFromReplication = true;
 	{
 		ServedIndexRefPtr_c pServedCur = GetServed ( sIndexName );
 		if ( pServedCur )
@@ -2067,7 +2066,6 @@ static bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIn
 			{
 				auto * pIndex = (RtIndex_i*)pDesc->m_pIndex;
 				pIndex->ProhibitSave();
-				bFromReplication = pDesc->m_bFromReplication;
 			}
 
 			g_pLocalIndexes->Delete ( sIndexName );
@@ -2083,7 +2081,6 @@ static bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIn
 
 	ServedIndexRefPtr_c pServed = GetServed ( sIndexName, &dNotLoadedIndexes );
 	ServedDescWPtr_c pDesc ( pServed );
-	pDesc->m_bFromReplication = bFromReplication;
 	pDesc->m_sCluster = sCluster;
 
 	StrVec_t dWarnings;

@@ -79,7 +79,6 @@ struct IndexDesc_t
 	CSphString	m_sName;
 	CSphString	m_sPath;
 	IndexType_e	m_eType = IndexType_e::ERROR_;
-	bool		m_bFromReplication = false;
 
 	IndexDescDistr_t m_tDistr;
 

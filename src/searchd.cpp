@@ -18931,7 +18931,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 // ServiceMain -> ConfigureAndPreload -> ConfigureAndPreloadInt -> PreloadIndex -> ConfigureAndPreloadIndex
 // from any another thread:
 // CSphinxqlSession::Execute -> HandleMysqlImportTable -> AddExistingIndexInt -> PreloadIndex -> ConfigureAndPreloadIndex
-ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName, bool bFromReplication,
+ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		StrVec_t & dWarnings, CSphString & sError )
 {
 	ESphAddIndex eAdd = AddIndex ( sIndexName, hIndex, false, sError );
@@ -18942,7 +18942,6 @@ ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const 
 
 	auto pHandle = GetDisabled ( sIndexName );
 	ServedDescWPtr_c pJustAddedLocalWl ( pHandle );
-	pJustAddedLocalWl->m_bFromReplication = bFromReplication;
 
 	fprintf ( stdout, "precaching index '%s'\n", sIndexName );
 	fflush ( stdout );
@@ -19005,7 +19004,7 @@ static void ConfigureAndPreload ( const CSphConfig & hConf, const StrVec_t & dOp
 
 			StrVec_t dWarnings;
 			CSphString sError;
-			ESphAddIndex eAdd = ConfigureAndPreloadIndex ( hIndex, sIndexName, false, dWarnings, sError );
+			ESphAddIndex eAdd = ConfigureAndPreloadIndex ( hIndex, sIndexName, dWarnings, sError );
 			for ( const auto & i : dWarnings )
 				sphWarning ( "index '%s': %s", sIndexName, i.cstr() );
 

@@ -435,9 +435,6 @@ bool IndexDesc_t::Parse ( const JsonObj_c & tJson, CSphString & sWarning, CSphSt
 			return false;
 
 		MakeRelativePath(m_sPath);
-
-		if ( !tJson.FetchBoolItem ( m_bFromReplication, "from_replication", sError, true ) )
-			return false;
 	}
 
 	return true;
@@ -455,7 +452,6 @@ void IndexDesc_t::Save ( JsonObj_c & tIndexes ) const
 	{
 		CSphString sPath = m_sPath;
 		tIdx.AddStr ( "path", StripPath(sPath) );
-		tIdx.AddBool( "from_replication", m_bFromReplication );
 	}
 
 	tIndexes.AddItem ( m_sName.cstr(), tIdx );
@@ -606,7 +602,7 @@ static ESphAddIndex PreloadIndex ( const IndexDesc_t & tIndex, StrVec_t & dWarni
 	CSphConfigSection hIndex;
 	tIndex.Save(hIndex);
 
-	ESphAddIndex eAdd = ConfigureAndPreloadIndex ( hIndex, tIndex.m_sName.cstr(), tIndex.m_bFromReplication, dWarnings, sError );
+	ESphAddIndex eAdd = ConfigureAndPreloadIndex ( hIndex, tIndex.m_sName.cstr(), dWarnings, sError );
 	if ( eAdd==ADD_ERROR )
 		dWarnings.Add("removed from JSON config");
 
@@ -646,7 +642,7 @@ static void CollectLocalIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 
 		ServedDescRPtr_c tDesc ( pServed );
 
-		bool bCollectIndex = ( ReplicationIsEnabled() && tDesc->m_bFromReplication ) || IsConfigless();
+		bool bCollectIndex = IsConfigless();
 		if ( !bCollectIndex )
 			continue;
 
@@ -654,7 +650,6 @@ static void CollectLocalIndexesInt ( CSphVector<IndexDesc_t> & dIndexes )
 		tIndex.m_sName = tIt.GetName();
 		tIndex.m_sPath = tDesc->m_sIndexPath;
 		tIndex.m_eType = tDesc->m_eType;
-		tIndex.m_bFromReplication = tDesc->m_bFromReplication;
 	}
 }
 
@@ -1203,7 +1198,6 @@ bool AddExistingIndexInt ( const CSphString & sIndex, StrVec_t & dWarnings, CSph
 	ScopedCleanup_c tCleanup(sIndex);
 
 	IndexDesc_t tNewIndex;
-	tNewIndex.m_bFromReplication = false;
 	tNewIndex.m_eType = IndexType_e::RT;
 	tNewIndex.m_sName = sIndex;
 	tNewIndex.m_sPath.SetSprintf ( "%s/%s", GetPathForNewIndex(sIndex).cstr(), sIndex.cstr() );

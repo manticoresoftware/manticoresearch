@@ -82,13 +82,17 @@ searchd
 	SELECT * FROM test:rt_many2 where match ('windows be like'); SHOW META;
 </sphinxql>
 
+<!-- regression drop table failed being called not at initial node -->
+<sphinxql d="1">
+ALTER CLUSTER test DROP rt_wf11;
+DROP TABLE rt_wf11;
+</sphinxql>
+
 <!-- cleanup -->
 <sphinxql d="0">
-	ALTER CLUSTER test DROP rt_wf11;
 	ALTER CLUSTER test DROP rt_st1;
 	ALTER CLUSTER test DROP rt_many1;
 	ALTER CLUSTER test DROP rt_many2;
-	DROP TABLE rt_wf11;
 	DROP TABLE rt_st1;
 	DROP TABLE rt_many1;
 	DROP TABLE rt_many2;

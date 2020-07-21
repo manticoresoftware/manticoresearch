@@ -1,0 +1,23 @@
+check_docs:
+  stage: build
+  image: docker:git
+  script:
+    - cp "$CI_PROJECT_DIR/gitlab-ci-main.yml" gen-con.yml
+    - VAR_SET=" 1"
+    - git diff-tree --no-commit-id --name-only -r "$CI_COMMIT_SHA" 
+    - res=$(echo $(git diff-tree --no-commit-id --name-only -r "$CI_COMMIT_SHA" | grep -v '^manual/'))
+    - if [ "$res" == "" ]; then echo -e "  DOCS_COMMIT_ONLY:$VAR_SET" >> gen-con.yml; fi
+    - res=$(echo $(git diff-tree --no-commit-id --name-only -r "$CI_COMMIT_SHA" | grep '^manual/'))
+    - if [ "$res" != "" ]; then echo -e "  DOCS_COMMIT:$VAR_SET" >> gen-con.yml; fi
+    - cat gen-con.yml
+  artifacts:
+    paths:
+      - gen-con.yml
+
+
+main:
+  trigger:
+    include:
+      - artifact: gen-con.yml
+        job: check_docs
+ 

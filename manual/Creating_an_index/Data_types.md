@@ -118,7 +118,6 @@ POST /search
 <!-- request PHP -->
 
 ```php
-// operator 'in' is not in 3.4.2, need to add it in PHP client
 $client->search([
         'index' => 'forum',
         'query' => 

@@ -9,6 +9,7 @@ SQL response for successful operation will show the number of rows deleted.
 
 json/delete is an HTTP endpoint for for deleting. The server will respond with a JSON object stating if the operation was successful or not and the number of rows deleted.
 
+To delete all documents from an index it's recommended to use instead the [index truncation](Emptying_an_index.md) as it's a much faste operation.
 
 <!-- intro -->
 ##### SQL:

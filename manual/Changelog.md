@@ -1,6 +1,6 @@
 # Changelog
 
-## Version 3.5.0, ?? Jun 2020
+## Version 3.5.0, 22 Jul 2020
 
 ### Major new features:
 * This release took so long, because we were working hard on changing multitasking mode from threads to **coroutines**. It makes configuration simpler and queries parallelization much more straightforward: Manticore just uses given number of threads (see new setting [threads](Server_settings/Searchd#threads)) and the new mode makes sure it's done in the most optimal way.
@@ -50,6 +50,7 @@
 * [thread_stack](Server_settings/Searchd#thread_stack) now limits maximum thread stack, not initial.
 * Mysql interface now supports encryption
 * Improved `SHOW THREADS` output
+* Display progress of long CALL PQ in SHOW THREADS
 
 ### Breaking changes:
 * **Index format has been changed.** Indexes built in 3.5.0 cannot be loaded by Manticore version < 3.5.0, but Manticore 3.5.0 understands older formats.
@@ -150,6 +151,10 @@
 51. [#352](https://github.com/manticoresoftware/manticoresearch/issues/352) Master-agent communication fails on Mac OS
 52. [#328](https://github.com/manticoresoftware/manticoresearch/issues/328) Error when connecting to Manticore with Connector.Net/Mysql 8.0.19
 53. [daa760d2](https://github.com/manticoresoftware/manticoresearch/commit/daa760d2fe83668038318f0f384ceefc0d075e18) Fixed escaping of \0 and optimized performance
+54. [9bc5c01a](https://github.com/manticoresoftware/manticoresearch/commit/9bc5c01a493db993b90ff6c1ad51aeae028f629c) Fixed count distinct vs json
+55. [4f89a965](https://github.com/manticoresoftware/manticoresearch/commit/4f89a965a3af0db548ae9d1763731ebaebe21f5a) Fixed rop table at other node failed
+56. [952af5a5](https://github.com/manticoresoftware/manticoresearch/commit/952af5a5931fd72b87edc169588777778b365231) Fix crashes on tightly running call pq
+
 
 ## Version 3.4.2, 10 April 2020
 ### Critical bugfixes

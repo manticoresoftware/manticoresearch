@@ -5,7 +5,7 @@
 </p>
 
 <h1 align="center">
-  Manticore Search 3.4.2
+  Manticore Search 3.5.0
 </h1>
 
 <h3 align="center">
@@ -122,7 +122,7 @@ yum install manticore
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 dpkg -i manticore-repo.noarch.deb
 apt update
-apt install manticore-bin
+apt install manticore
 ```
 
 ### Homebrew on MacOS

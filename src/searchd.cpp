@@ -7843,12 +7843,6 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries,
 			return false;
 		}
 
-		if ( g_iDistThreads<=1 && bScattered ) // fixme! remove (not actual with coro)
-		{
-			sError.SetSprintf ( "%s", "load_files_scattered works only together with dist_threads>1" );
-			return false;
-		}
-
 		// for remotes index is 1-st local agent of the distr, so move on!
 		sIndex = pDist->m_dLocal[0];
 	}

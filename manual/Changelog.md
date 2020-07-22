@@ -47,13 +47,11 @@
 * [`expressions`](Searching/Expressions#expressions) in HTTP JSON.
 * [You can now change `rt_mem_limit` on the fly](https://github.com/manticoresoftware/manticoresearch/issues/344) in RT mode, i.e. can do `ALTER ... rt_mem_limit=<new value>`.
 * You can now use [separate CJK charset tables](Creating_an_index/NLP_and_tokenization/CJK): `chinese`, `japanese` and `korean`. 
-* [`SET GLOBAL cpustats=1`](Server_settings/Setting_variables_online#SET).
 * [thread_stack](Server_settings/Searchd#thread_stack) now limits maximum thread stack, not initial.
-* Mysql interface now supports encryption
-* Improved `SHOW THREADS` output
-* Display progress of long `CALL PQ` in `SHOW THREADS`
-* cpustat, iostat, coredump can be changed during runtime with SET
-* `SET [GLOBAL] wait_timeout=NUM` implemented 
+* Improved `SHOW THREADS` output.
+* Display progress of long `CALL PQ` in `SHOW THREADS`.
+* cpustat, iostat, coredump can be changed during runtime with [SET](Server_settings/Setting_variables_online#SET).
+* `SET [GLOBAL] wait_timeout=NUM` implemented ,
 
 ### Breaking changes:
 * **Index format has been changed.** Indexes built in 3.5.0 cannot be loaded by Manticore version < 3.5.0, but Manticore 3.5.0 understands older formats.

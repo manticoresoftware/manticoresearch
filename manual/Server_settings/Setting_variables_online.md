@@ -44,7 +44,7 @@ Per-session and global server variables affect certain server settings in the re
 *   `CHARACTER_SET_RESULTS = charset_name` Does nothing; a placeholder to support frameworks, clients, and connectors that attempt to automatically enforce a charset when connecting to a Manticore server.
 *   `SQL_AUTO_IS_NULL = value` Does nothing; a placeholder to support frameworks, clients, and connectors that attempt to automatically enforce a charset when connecting to a Manticore server.
 *   `SQL_MODE = value` Does nothing; a placeholder to support frameworks, clients, and connectors that attempt to automatically enforce a charset when connecting to a Manticore server.
-*   `WAIT_TIMEOUT = value` Set connection timeout, either per session or change the global one. Can only be set on a VIP connection.
+*   `WAIT_TIMEOUT = value` Set connection timeout, either per session or global. Global can only be set on a VIP connection.
 *   `PROFILING = {0 | 1}` Enables query profiling in the current session. Defaults to 0. See also [show profile](Profiling_and_monitoring/Profiling/Query_profile.md)
 
 Known global server variables are:

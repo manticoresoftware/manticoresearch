@@ -1,0 +1,833 @@
+# UPDATE 
+
+<!-- example update -->
+
+Attribute updates replace attribute values of existing documents in the specified index with new values. Note that you can't update the contents of a fulltext field. If there's a need to change the contents of a fields, use [REPLACE](Updating_documents/REPLACE.md).
+
+Attribute updates are supported for RT, PQ and disk indexes. All attributes types can be updated.
+
+
+Note that document `id` attribute cannot be updated.
+:::
+
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+UPDATE products SET enabled=0 WHERE id=10;
+```
+
+<!-- response -->
+
+```sql
+Query OK, 1 row affected (0.00 sec)
+```
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```http
+POST /update
+
+{
+  "index":"products",
+  "id":10,
+  "doc":
+  {
+    "enabled":0
+  }
+}
+```
+
+<!-- response HTTP -->
+```http
+{
+  "_index":"products",
+  "updated":1
+}
+```
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$index->updateDocument([
+    'enabled'=>0
+],10);
+```
+
+<!-- response PHP -->
+```php
+Array(
+    [_index] => products
+    [_id] => 10
+    [result] => updated
+)
+```
+
+<!-- end -->
+
+<!-- example update multiple attributes -->
+
+Multiple attributes can be updated in a single statement.
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+UPDATE products
+SET price=100000000000,
+    coeff=3465.23,
+    tags1=(3,6,4),
+    tags2=()
+WHERE MATCH('phone') AND enabled=1;
+```
+
+<!-- response -->
+
+```sql
+Query OK, 148 rows affected (0.0 sec)
+```
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```http
+POST /update
+{
+  "index":"products",
+  "doc":
+  {
+    "price":100000000000,
+    "coeff":3465.23,
+    "tags1":[3,6,4],
+    "tags2":[]
+  },
+  "query":
+  {
+	"match": { "*": "phone" },
+	"equals": { "enabled": 1 }
+  }
+}
+```
+
+<!-- response HTTP -->
+```http
+{
+  "_index":"products",
+  "updated":148
+}
+```
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$query= new BoolQuery();
+$query->must(new Match('phone','*'));
+$query->must(new Equals('enabled',1));
+$index->updateDocuments([
+    'price' => 100000000000,
+    'coeff' => 3465.23,
+    'tags1' => [3,6,4],
+    'tags2' => []
+    ],
+    $query
+);
+```
+
+<!-- response PHP -->
+```php
+Array(
+    [_index] => products
+    [updated] => 148
+)
+```
+<!-- end -->
+
+When assigning out-of-range values to 32-bit attributes, they will be trimmed to their lower 32 bits without a prompt. For example, if you try to update the 32-bit unsigned int with a value of 4294967297, the value of 1 will actually be stored, because the lower 32 bits of 4294967297 (0x100000001 in hex) amount to 1 (0x00000001 in hex).
+
+<!-- example partial JSON update -->
+ 
+`UPDATE` can be used to perform partial JSON updates on numeric data types or arrays of numeric data types. 
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+insert into products values (1,'title','{"tags":[1,2,3]}');
+
+update products set data.tags[0]=100 where id=1;
+```
+
+<!-- response -->
+
+```sql
+Query OK, 1 row affected (0.00 sec)
+
+Query OK, 1 row affected (0.00 sec)
+```
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```http
+POST /insert
+{
+	"index":"products",
+	"id":1,
+	"doc":
+	{
+		"title":"title",
+		"tags":[1,2,3]
+	}
+}
+
+POST /update
+{
+	"index":"products",
+	"id":1,
+	"doc":
+	{
+		"data.tags[0]":100
+	}
+}
+```
+
+<!-- response HTTP -->
+```http
+{
+   "_index":"products",
+   "_id":1,
+   "created":true,
+   "result":"created",
+   "status":201
+}
+
+{
+  "_index":"products",
+  "updated":1
+}
+```
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$index->insertDocument([
+    'title' => 'title',
+    'tags' => [1,2,3]
+],1);
+$index->updateDocument([
+    'data.tags[0]' => 100
+],1);
+```
+
+<!-- response PHP -->
+```php
+Array(
+    [_index] => products
+    [_id] => 1
+    [created] => true
+    [result] => created
+)
+
+Array(
+    [_index] => products
+    [updated] => 1
+)
+```
+
+<!-- end -->
+
+<!-- example full JSON update -->
+
+Updating other data types or changing property type in a JSON attribute requires a full JSON update.
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+insert into products values (1,'title','{"tags":[1,2,3]}');
+
+update products set data='{"tags":["one","two","three"]}' where id=1;
+```
+
+<!-- response -->
+
+```sql
+Query OK, 1 row affected (0.00 sec)
+
+Query OK, 1 row affected (0.00 sec)
+```
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```http
+POST /insert
+{
+	"index":"products",
+	"id":1,
+	"doc":
+	{
+		"title":"title",
+		"data":"{\"tags\":[1,2,3]}"
+	}
+}
+
+POST /update
+{
+	"index":"products",
+	"id":1,
+	"doc":
+	{
+		"data":"{\"tags\":[\"one\",\"two\",\"three\"]}"
+	}
+}
+```
+
+<!-- response HTTP -->
+```http
+{
+  "_index":"products",
+  "updated":1
+}
+```
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$index->insertDocument([
+    'title'=> 'title',
+    'data' => [
+         'tags' => [1,2,3]
+    ]
+],1);
+
+$index->updateDocument([
+    'data' => [
+            'one', 'two', 'three'
+    ]
+],1);
+```
+
+<!-- response PHP -->
+```php
+Array(
+    [_index] => products
+    [_id] => 1
+    [created] => true
+    [result] => created
+)
+
+Array(
+    [_index] => products
+    [updated] => 1
+)
+```
+
+<!-- end -->
+
+<!-- example cluster update -->
+
+When using replication, index name should be prepended with `cluster_name:` (in SQL) so that updates will be propagated to all nodes in the cluster. For queries via HTTP you should set a `cluster` property. See [setting up replication](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) for more info.
+
+```json
+{
+  "cluster":"nodes4",
+  "index":"test",
+  "id":1,
+  "doc":
+  {
+    "gid" : 100,
+    "price" : 1000
+  }
+}
+```
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+update weekly:posts set enabled=0 where id=1;
+```
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```http
+POST /update
+{
+	"cluster":"weekly",
+	"index":"products",
+	"id":1,
+	"doc":
+	{
+		"enabled":0
+	}
+}
+```
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$index->setName('products')->setCluster('weekly');
+$index->updateDocument(['enabled'=>0],1);
+```
+
+<!-- end -->
+
+
+## Updates via SQL
+
+Here is the syntax for the SQL `UPDATE` statement:
+
+```sql
+UPDATE index SET col1 = newval1 [, ...] WHERE where_condition [OPTION opt_name = opt_value [, ...]]
+```
+
+
+`where_condition` has the same syntax as in the [SELECT](Searching/Full_text_matching/Basic_usage.md#SQL) statement.
+
+<!-- example MVA empty update -->
+
+Multi-value attribute value sets must be specified as comma-separated lists in parentheses. To remove all values from a multi-value attribute, just assign `()` to it.
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+UPDATE products SET tags1=(3,6,4) WHERE id=1;
+
+UPDATE products SET tags1=() WHERE id=1;
+```
+
+<!-- intro -->
+##### SQL:
+<!-- request SQL -->
+
+```sql
+insert into products values (1,'title','{"tags":[1,2,3]}');
+
+update products set data.tags[0]=100 where id=1;
+```
+
+<!-- response -->
+
+```sql
+Query OK, 1 row affected (0.00 sec)
+
+Query OK, 1 row affected (0.00 sec)
+```
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```http
+POST /update
+
+{
+	"index":"products",
+	"_id":1,
+	"doc":
+	{
+		"data.tags[0]":100
+	}
+}
+```
+
+<!-- response HTTP -->
+```http
+{
+  "_index":"products",
+  "updated":1
+}
+```
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$index->updateDocument(['data.tags[0]'=>100],1);
+```
+
+<!-- response PHP -->
+```php
+Array(
+    [_index] => products
+    [updated] => 1
+)
+```
+
+<!-- end -->
+
+
+`OPTION` clause is a Manticore-specific extension that lets you control a number of per-update options. The syntax is:
+
+```sql
+OPTION <optionname>=<value> [ , ... ]
+```
+
+The options are the same as for [SELECT](Searching/Full_text_matching/Basic_usage.md#SQL) statement. Specifically for `UPDATE` statement you can use these options:
+
+*   'ignore_nonexistent_columns' - If set to **1** points that the update will silently ignore any warnings about trying to update a column which is not exists in current index schema. Default value is  **0**.
+*   'strict' - this option is used in partial JSON attribute updates. By default (strict=1), `UPDATE` will end in an error if the `UPDATE` query tries to perform an update on non-numeric properties. With strict=0 if multiple properties are updated and some are not allowed, the `UPDATE` will not end in error and will perform the changes only on allowed properties (with the rest being ignored). If none of the `SET` changes of the `UPDATE` are not permitted, the command will end in an error even with strict=0.
+
+
+## Updates via HTTP
+
+Updates using HTTP protocol are performed via the `/update` endpoint. Syntax is similar to the [/insert endpoint](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md), but this time the `doc` property is mandatory.
+
+The server will respond with a JSON object stating if the operation was successful or not.
+
+<!-- example JSON update -->
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```http
+POST /update
+{
+  "index":"test",
+  "id":1,
+  "doc":
+   {
+     "gid" : 100,
+     "price" : 1000
+    }
+}
+```
+
+<!-- response HTTP -->
+``` http
+{
+  "_index": "test",
+  "_id": 1,
+  "result": "updated"
+} 
+```
+
+<!-- end -->
+
+<!-- example JSON Example_2 -->
+
+The id of the document that needs to be updated can be set directly using the `id` property (as in the example above) or you can do an update by query and apply the update to all the documents that match the query:
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```json
+POST /update
+
+{
+  "index":"test",
+  "doc":
+  {
+    "price" : 1000
+  },
+  "query":
+  {
+    "match": { "*": "apple" }
+  }
+}
+```
+
+<!-- response HTTP -->
+
+```json
+{
+  "_index":"products",
+  "updated":1
+}
+```
+
+<!-- end -->
+
+Query syntax is the same as in the [/search endpoint](Searching/Full_text_matching/Basic_usage.md#HTTP). Note that you can't specify `id` and `query` at the same time.
+
+## Flushing attributes
+
+```sql
+FLUSH ATTRIBUTES
+```
+
+Flushes all in-memory attribute updates in all the active disk indexes to disk. Returns a tag that identifies the result on-disk state (basically, a number of actual disk attribute saves performed since the server startup).
+
+```sql
+mysql> UPDATE testindex SET channel_id=1107025 WHERE id=1;
+Query OK, 1 row affected (0.04 sec)
+
+mysql> FLUSH ATTRIBUTES;
++------+
+| tag  |
++------+
+|    1 |
++------+
+1 row in set (0.19 sec)
+```
+See also [attr_flush_period](Updating_documents/UPDATE.md#attr_flush_period) setting. 
+
+
+## Bulk updates
+
+<!-- example bulk update -->
+
+Several update operations can be performed in a single call using the `/bulk` endpoint. This endpoint only works with data that has `Content-Type` set to `application/x-ndjson`. The data itself should be formatted as a newline-delimited json (NDJSON). Basically it means that each line should contain exactly one json statement and end with a newline `\n` and maybe a `\r`.
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```json
+POST /bulk
+
+{ "update" : { "index" : "products", "id" : 1, "doc": { "price" : 10 } } }
+{ "update" : { "index" : "products", "id" : 2, "doc": { "price" : 20 } } }
+```
+
+<!-- response HTTP -->
+
+```json
+{
+   "items":
+   [
+      {
+         "update":
+         {
+            "_index":"products",
+            "_id":1,
+            "result":"updated"
+         }
+      },
+      {
+         "update":
+         {
+            "_index":"products",
+            "_id":2,
+            "result":"updated"
+         }
+      }
+   ],
+   "errors":false
+}
+```
+
+<!-- end -->
+
+`/bulk` endpoint supports inserts, replaces and deletes. Each statement starts with an action type (in this case, `update`). Here's a list of the supported actions:
+
+* `insert`: Inserts a document. Syntax is the same as in the [/insert endpoint](Quick_start_guide.md#Add-documents).
+* `create`: a synonym for `insert`
+* `replace`: Replaces a document. Syntax is the same as in the [/replace](Updating_documents/REPLACE.md#HTTP:).
+* `index`: a synonym for `replace`
+* `update`: Updates a document. Syntax is the same as in [/update](Updating_documents/UPDATE.md#Updates-via-HTTP).
+* `delete`: Deletes a document. Syntax is the same as in [/delete endpoint](Deleting_documents.md).
+
+Updates by query and deletes by query are also supported.
+
+<!-- example bulk by query -->
+
+<!-- intro -->
+##### HTTP:
+
+<!-- request HTTP -->
+
+```json
+POST /bulk
+
+{ "update" : { "index" : "products", "doc": { "tag" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } }
+{ "update" : { "index" : "products", "doc": { "tag" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } }
+```
+
+<!-- response HTTP -->
+
+```json
+{
+  "items":
+  [
+    {
+      "update":
+      {
+        "_index":"products",
+        "updated":0
+      }
+    },
+    {
+      "update":
+      {
+        "_index":"products",
+        "updated":3
+      }
+    }
+  ],
+  "errors":false
+}
+```
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+
+$client->bulk([
+    ['update'=>[
+            'index' => 'products',
+             'doc' => [
+                'tag' => 100
+            ],
+            'query' => [
+                'range' => ['price'=>['gte'=>1000]]
+            ]   
+        ]
+    ],
+    ['update'=>[
+            'index' => 'products',
+             'doc' => [
+                'tag' => 0
+            ],
+            'query' => [
+                'range' => ['price'=>['lt'=>1000]]
+            ]   
+        ]
+    ]
+]);
+```
+
+<!-- response HTTP -->
+
+```php
+Array(
+    [items] => Array (
+        Array(
+            [update] => Array(
+                [_index] => products
+                [updated] => 0
+            ) 
+        )   
+        Array(
+             [update] => Array(
+                 [_index] => products
+                 [updated] => 3
+             ) 
+        )    
+)
+ 
+```
+<!-- end -->
+
+
+
+Note that the bulk operation stops at the first query that results in an error.
+
+## Settings related with updates
+
+#### attr_update_reserve
+
+```ini
+attr_update_reserve=size
+```
+
+<!-- example attr_update_reserve -->
+attr_update_reserve is a per-index setting which sets the space to be reserved for blob attribute updates. Optional, default value is 128k.
+
+When blob attributes (MVAs, strings, JSON), are updated, their length may change. If the updated string (or MVA, or JSON) is shorter than the old one, it overwrites the old one in the .SPB file. But if the updated string is longer, updates are written to the end of the .SPB file. This file is memory mapped, that's why resizing it may be a rather slow process, depending on the OS implementation of memory mapped files.
+
+To avoid frequent resizes, you can specify the extra space to be reserved at the end of the .SPB file by using this option.
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+create table products(title text, price float) attr_update_reserve = '1M'
+```
+
+<!-- request HTTP -->
+
+```http
+POST /sql -d "mode=raw&query=
+create table products(title text, price float) attr_update_reserve = '1M'"
+```
+
+<!-- request PHP -->
+
+```php
+$params = [
+    'body' => [
+        'settings' => [
+            'attr_update_reserve' => '1M'
+        ],
+        'columns' => [
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ]
+    ],
+    'index' => 'products'
+];
+$index = new \Manticoresearch\Index($client);
+$index->create($params);
+```
+
+<!-- request CONFIG -->
+
+```ini
+index products {
+  attr_update_reserve = 1M
+  type = rt
+  path = idx
+  rt_field = title
+  rt_attr_uint = price
+}
+```
+<!-- end -->
+
+
+#### attr_flush_period
+
+```
+attr_flush_period = 900 # persist updates to disk every 15 minutes
+```
+
+When updating attributes the changes are first written to in-memory copy of attributes. This setting allows to set the interval between flushing the updates to disk.

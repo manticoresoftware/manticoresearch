@@ -12007,10 +12007,10 @@ static std::pair<const char *, int> FormatInfo ( const PublicThreadDesc_t & tThd
 			return { tBuf.cstr (), tBuf.GetLength () };
 	}
 
-	if ( !tThd.m_sDescription.IsEmpty () )
-		return {tThd.m_sDescription.cstr (), tThd.m_sDescription.GetLength ()};
-
-	return { tThd.m_sCommand, (int)strlen ( tThd.m_sCommand ) };
+	if ( tThd.m_sDescription.IsEmpty () && tThd.m_sCommand )
+		return { tThd.m_sCommand, (int)strlen ( tThd.m_sCommand ) };
+	else
+		return { tThd.m_sDescription.cstr (), tThd.m_sDescription.GetLength () };
 }
 
 void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )

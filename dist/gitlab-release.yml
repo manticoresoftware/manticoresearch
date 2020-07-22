@@ -108,7 +108,7 @@ windows:
 #    - tar -zcf cache.tar.gz cache/*-src cache/*/*-targets.cmake cache/*/lib*.a cache/*/lib*.so*
 #    - mc cp cache.tar.gz dev/runner-cache/releases/$DISTR/
     - tar -zcf cache/cache-src.tar.gz cache/*-src
-    - mc mirror --exclude "*.dir" --exclude "*.o" --exclude "*/CMakeFiles/*" --exclude "*/Makefile" --exclude "*-src/*" --overwrite cache/ dev/runner-cache/releases/$DISTR/
+    - mc mirror --exclude "*.dir" --exclude "*.o" --exclude "*/CMakeFiles/*" --exclude "*/Makefile" --exclude "*-src/*" --exclude "galera-*/*.a" --exclude "*/cmake_install.cmake" --overwrite cache/ dev/runner-cache/releases/$DISTR/
   artifacts:
     paths:
       - manticore*.rpm
@@ -135,7 +135,7 @@ windows:
 #    - tar -zcf cache.tar.gz cache/*-src cache/*/*-targets.cmake cache/*/lib*.a cache/*/lib*.so*
 #    - mc cp cache.tar.gz dev/runner-cache/releases/$DISTR/
     - tar -zcf cache/cache-src.tar.gz cache/*-src
-    - mc mirror --exclude "*.dir" --exclude "*.o" --exclude "*/CMakeFiles/*" --exclude "*/Makefile" --exclude "*-src/*" --overwrite cache/ dev/runner-cache/releases/$DISTR/
+    - mc mirror --exclude "*.dir" --exclude "*.o" --exclude "*/CMakeFiles/*" --exclude "*/Makefile" --exclude "*-src/*" --exclude "galera-*/*.a" --exclude "*/cmake_install.cmake" --overwrite cache/ dev/runner-cache/releases/$DISTR/
   artifacts:
     paths:
       - manticore*deb

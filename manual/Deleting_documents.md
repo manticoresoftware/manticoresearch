@@ -1,0 +1,287 @@
+# Deleting documents 
+
+Deleting is only supported for [Real-Time](Creating_an_index/Local_indexes/Real-time_index.md) and [percolate](Creating_an_index/Local_indexes/Percolate_index.md) indexes and for distributed that contain only RT indexes as agents. You can delete existing rows (documents) from an existing index based on ID or conditions.
+
+<!-- example delete 1 -->
+Deleting works for SQL and HTTP interfaces. 
+
+SQL response for successful operation will show the number of rows deleted.
+
+json/delete is an HTTP endpoint for for deleting. The server will respond with a JSON object stating if the operation was successful or not and the number of rows deleted.
+
+To delete all documents from an index it's recommended to use instead the [index truncation](Emptying_an_index.md) as it's a much faste operation.
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+DELETE FROM index WHERE where_condition
+```
+
+* `index` is a name of the index from which the row should be deleted.
+* `where_condition` for SQL has the same syntax as in the [SELECT](Searching/Full_text_matching/Basic_usage.md#SQL) statement.
+
+<!-- request HTTP -->
+``` json
+POST /delete -d '
+    {
+     "index": "test",
+     "id": 1
+    }'
+POST /delete -d '
+    {
+        "index": "test",
+        "query":
+        {
+            "match": { "*": "apple" }
+        }
+    }'
+```
+
+* `id` for JSON is the row `id` which should be deleted.
+* `query` for JSON is the full-text condition and has the same syntax as in the [JSON/update](Updating_documents/UPDATE.md#Updates-via-HTTP).
+* `cluster` for JSON is cluster name property and should be set along with `index` property to delete a row from an index which is inside a [replication cluster](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster).
+
+<!-- end -->
+
+<!-- example delete 2 -->
+In this example we are deleting all documents that match full-text query `dummy` from index named `test`:
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+select * from test;
+
+delete from test where match ('dummy');
+
+select * from test;
+```
+
+<!-- response SQL -->
+
+```sql
++------+------+-------------+------+
+| id   | gid  | mva1        | mva2 |
++------+------+-------------+------+
+|  100 | 1000 | 100,201     | 100  |
+|  101 | 1001 | 101,202     | 101  |
+|  102 | 1002 | 102,203     | 102  |
+|  103 | 1003 | 103,204     | 103  |
+|  104 | 1004 | 104,204,205 | 104  |
+|  105 | 1005 | 105,206     | 105  |
+|  106 | 1006 | 106,207     | 106  |
+|  107 | 1007 | 107,208     | 107  |
++------+------+-------------+------+
+8 rows in set (0.00 sec)
+
+Query OK, 2 rows affected (0.00 sec)
+
++------+------+-------------+------+
+| id   | gid  | mva1        | mva2 |
++------+------+-------------+------+
+|  100 | 1000 | 100,201     | 100  |
+|  101 | 1001 | 101,202     | 101  |
+|  102 | 1002 | 102,203     | 102  |
+|  103 | 1003 | 103,204     | 103  |
+|  104 | 1004 | 104,204,205 | 104  |
+|  105 | 1005 | 105,206     | 105  |
++------+------+-------------+------+
+6 rows in set (0.00 sec)
+```
+
+<!-- request HTTP -->
+
+``` json
+POST /delete -d '
+    {
+        "index":"test",
+        "query":
+        {
+            "match": { "*": "dummy" }
+        }
+    }'
+```
+
+<!-- response json -->
+
+``` json
+    {
+        "_index":"test",
+        "deleted":2,
+    }
+```    
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+ 
+```php
+$index->deleteDocuments(new Match('dummy','*'));
+```
+
+<!-- response json -->
+
+``` php
+Array(
+    [_index] => test
+    [deleted] => 2
+)
+```
+<!-- end -->
+
+<!-- example delete 3 -->
+Here - deleting a document with `id` 100 from index named `test`:
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+delete from test where id=100;
+
+select * from test;
+```
+
+<!-- response SQL -->
+
+```sql
+Query OK, 1 rows affected (0.00 sec)
+
++------+------+-------------+------+
+| id   | gid  | mva1        | mva2 |
++------+------+-------------+------+
+|  101 | 1001 | 101,202     | 101  |
+|  102 | 1002 | 102,203     | 102  |
+|  103 | 1003 | 103,204     | 103  |
+|  104 | 1004 | 104,204,205 | 104  |
+|  105 | 1005 | 105,206     | 105  |
++------+------+-------------+------+
+5 rows in set (0.00 sec)
+```
+
+<!-- request HTTP -->
+
+``` json
+POST /delete -d '
+    {
+        "index":"test",
+        "id": 100
+    }'
+```
+
+<!-- response json -->
+
+``` json
+    {
+        "_index":"test",
+        "_id":100,
+        "found":true,
+        "result":"deleted"      
+    }
+```    
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$index->deleteDocument(100);
+```
+
+<!-- response json -->
+
+``` php
+Array(
+    [_index] => test
+    [_id] => 100
+    [found] => true
+    [result] => deleted
+)
+```
+<!-- end -->
+
+<!-- example delete 4 -->
+Manticore SQL allows to use complex conditions for the `DELETE` statement.
+
+For example here we are deleting documents that match full-text query `dummy` and have attribute `mva1` with a value greater than 206 or `mva1` values 100 or 103 from index named `test`:
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+delete from test where match ('dummy') and ( mva1>206 or mva1 in (100, 103) );
+
+select * from test;
+```
+
+<!-- response SQL -->
+
+```sql
+Query OK, 4 rows affected (0.00 sec)
+
++------+------+-------------+------+
+| id   | gid  | mva1        | mva2 |
++------+------+-------------+------+
+|  101 | 1001 | 101,202     | 101  |
+|  102 | 1002 | 102,203     | 102  |
+|  104 | 1004 | 104,204,205 | 104  |
+|  105 | 1005 | 105,206     | 105  |
++------+------+-------------+------+
+6 rows in set (0.00 sec)
+```
+<!-- end -->
+
+<!-- example delete 5 -->
+Here is an example of deleting documents in cluster `nodes4`'s index `test`:
+
+
+<!-- intro -->
+##### SQL:
+
+<!-- request SQL -->
+
+```sql
+delete from nodes4:test where id=100;
+```
+
+<!-- request HTTP -->
+``` json
+POST /delete -d '
+    {
+      "cluster":"nodes4",
+      "index":"test",
+      "id": 100
+    }'
+```
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$index->setCluster('nodes4');
+$index->deleteDocument(100);
+```
+
+<!-- response json -->
+
+``` php
+Array(
+    [_index] => test
+    [_id] => 100
+    [found] => true
+    [result] => deleted
+)
+```
+<!-- end -->

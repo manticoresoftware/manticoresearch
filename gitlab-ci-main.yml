@@ -293,6 +293,7 @@ deploy_hook:
     REPO_NAME: $REPO_NAME
     DOCKER_HUB_BUILD_URL: $DOCKER_HUB_BUILD_URL
   rules:
+    - if: $FORCE_BUILDS != null
     - if: $CI_COMMIT_TITLE !~ /^noci .*$/i && $DOCS_COMMIT_ONLY == null
       when: always
   trigger:

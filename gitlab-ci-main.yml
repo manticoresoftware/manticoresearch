@@ -299,4 +299,3 @@ deploy_hook:
     include: '/dist/gitlab-release.yml'
     
 variables:
-    

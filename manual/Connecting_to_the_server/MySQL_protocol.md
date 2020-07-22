@@ -42,6 +42,22 @@ The easiest way to connect to Manticore is by using a standard MySQL client:
 ```shell
 mysql -P9306 -h0
 ```
+
+## Secured MySQL connection
+
+The MySQL protocol supports [SSL encryption](Security/SSL.md). The secured connections  can be made on the same `mysql` listening port.
+
+## Compressed MySQL connection
+
+Compression can be used with MySQL Connections and available to clients by default. The client just need to specify the connection to use compression.
+
+An example with the MySQL client:
+
+```shell
+mysql -P9306 -h0 -C
+```
+
+Compression can be used in both secured and non-secured connections.
  
 ## Notes on MySQL connectors
 The official MySQL connectors can be used to connect to Manticore Search, however they might require certain settings passed in the DSN string as the connector can try running certain SQL commands not implemented yet in Manticore.

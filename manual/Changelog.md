@@ -40,6 +40,7 @@
 
 ### Minor changes
 * You can now [highlight string attributes](Searching/Highlighting#Highlighting-via-SQL).
+* SSL and compression support for SQL interface
 * Support of mysql client [`status`](Profiling_and_monitoring/Node_status#STATUS) command.
 * [Replication](Creating_a_cluster/Setting_up_replication/Setting_up_replication#Setting-up-replication) can now replicate external files (stopwords, exceptions etc.).
 * Filter operator [`in`](Searching/Filters#Set-filters) is now available via HTTP JSON interface.
@@ -51,6 +52,8 @@
 * Mysql interface now supports encryption
 * Improved `SHOW THREADS` output
 * Display progress of long CALL PQ in SHOW THREADS
+* cpustat, iostat, coredump can be changed during runtime with SET
+* SET [GLOBAL] wait_timeout=NUM implemented 
 
 ### Breaking changes:
 * **Index format has been changed.** Indexes built in 3.5.0 cannot be loaded by Manticore version < 3.5.0, but Manticore 3.5.0 understands older formats.
@@ -152,7 +155,7 @@
 52. [#328](https://github.com/manticoresoftware/manticoresearch/issues/328) Error when connecting to Manticore with Connector.Net/Mysql 8.0.19
 53. [daa760d2](https://github.com/manticoresoftware/manticoresearch/commit/daa760d2fe83668038318f0f384ceefc0d075e18) Fixed escaping of \0 and optimized performance
 54. [9bc5c01a](https://github.com/manticoresoftware/manticoresearch/commit/9bc5c01a493db993b90ff6c1ad51aeae028f629c) Fixed count distinct vs json
-55. [4f89a965](https://github.com/manticoresoftware/manticoresearch/commit/4f89a965a3af0db548ae9d1763731ebaebe21f5a) Fixed rop table at other node failed
+55. [4f89a965](https://github.com/manticoresoftware/manticoresearch/commit/4f89a965a3af0db548ae9d1763731ebaebe21f5a) Fixed drop table at other node failed
 56. [952af5a5](https://github.com/manticoresoftware/manticoresearch/commit/952af5a5931fd72b87edc169588777778b365231) Fix crashes on tightly running call pq
 
 

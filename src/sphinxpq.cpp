@@ -1434,6 +1434,23 @@ struct PqMatchContextClone_t : public PqMatchContextRef_t, ISphNoncopyable
 	{}
 };
 
+// display progress of pq execution
+struct PQInfo_t : public TaskInfo_t
+{
+	DECLARE_RENDER( PQInfo_t );
+	int m_iTotal = 0;
+	int m_iCurrent = 0;
+};
+
+DEFINE_RENDER( PQInfo_t )
+{
+	auto & tInfo = *(PQInfo_t *) pSrc;
+	dDst.m_sChain << (int) tInfo.m_eType << ":PQ ";
+	if ( tInfo.m_iTotal )
+		dDst.m_sDescription.Sprintf ( "%d%% of %d:", tInfo.m_iCurrent * 100 / tInfo.m_iTotal, tInfo.m_iTotal );
+	else
+		dDst.m_sDescription.Sprintf ( "100% of %d:",tInfo.m_iTotal);
+}
 
 void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMatchResult_t & tRes )
 {
@@ -1453,6 +1470,8 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 	std::atomic<int32_t> iCurQuery {0};
 	CoExecuteN ( [&dMatchContexts, &iCurQuery, &dStored] () mutable
 	{
+		auto pInfo = PublishTaskInfo ( new PQInfo_t );
+		pInfo->m_iTotal = dStored.GetLength ();
 		Optional_T<PqMatchContextRef_t> pCtx;
 		pCtx.emplace ( dMatchContexts.GetContext () );
 		pCtx->m_pMatchCtx->m_dMsg.Clear ();
@@ -1464,7 +1483,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 			if ( iQuery>= dStored.GetLength())
 				return; // all is done
 
-			myinfo::SetThreadInfo ( "%d q %d:", iTick, iQuery );
+			pInfo->m_iCurrent = iQuery;
 			MatchingWork ( dStored[iQuery], *pCtx->m_pMatchCtx );
 
 			// yield and reschedule every quant of time. It gives work to other tasks

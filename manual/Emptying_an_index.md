@@ -12,6 +12,8 @@ TRUNCATE TABLE index_name [WITH RECONFIGURE]
 
 When this statement is executed, it clears the RT index completely. It disposes the in-memory data, unlinks all the index data files, and releases the associated binary logs.
 
+An index can also be emptied with `DELETE FROM index WHERE id>0`, but it's not recommended as it's much slower than `TRUNCATE`.
+
 <!-- intro -->
 ##### SQL:
 <!-- request SQL -->

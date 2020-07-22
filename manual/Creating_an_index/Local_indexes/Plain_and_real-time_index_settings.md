@@ -328,14 +328,14 @@ Read [more about data types here](Creating_an_index/Data_types.md).
 
 | Type | Equivalent in a configuration file | Notes | Aliases |
 | - | - | - | - |
-| text | rt_field  | indexed, stored. Default - **both**. To keep text stored, but indexed specify "stored" only. To keep text indexed only specify only "indexed". At least one "text" field should be specified in an index | | 
+| text | rt_field  | Options: indexed, stored. Default - **both**. To keep text stored, but indexed specify "stored" only. To keep text indexed only specify only "indexed". At least one "text" field should be specified in an index | | 
 | integer | rt_attr_uint	| integer	 | int, uint |
 | float | rt_attr_float   | float  |   |
 | multi | rt_attr_multi   | multi-integer |   |
 | multi64 | rt_attr_multi_64 | multi-bigint  |   |
 | bool | rt_attr_bool | boolean |   |
 | json | rt_attr_json | JSON |   |
-| string | rt_attr_string | string  |   |
+| string | rt_attr_string | string. Option: indexed - also index the strings in a full-text field with same name.   |   |
 | timestamp |	rt_attr_timestamp | timestamp  |   |
 | bit(n) | rt_attr_uint field_name:N | N is the max number of bits to keep  |   |
 

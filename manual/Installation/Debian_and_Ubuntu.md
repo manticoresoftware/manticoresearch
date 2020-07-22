@@ -11,6 +11,7 @@ Supported releases:
   * 14.04 LTS (Trusty)
   * 16.04 LTS (Xenial)
   * 18.04 LTS (Bionic)
+  * 20.04 LTS (Focal)
 
 Supported platforms:
 * x86
@@ -27,7 +28,7 @@ apt update
 and then install Manticore Search with just `apt install`:
 
 ```bash
-apt install manticore-bin
+apt install manticore
 ```
 
 In case you want to install "Nightly" (development) version:
@@ -35,7 +36,7 @@ In case you want to install "Nightly" (development) version:
 wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb
 dpkg -i manticore-dev-repo.noarch.deb
 apt update
-apt install manticore-bin
+apt install manticore
 ```
 
 You can also download individual .deb files from [our site](https://manticoresearch.com/downloads/).
@@ -44,7 +45,7 @@ Manticore package depends on zlib and ssl libraries, nothing else is strictly re
 
 ```bash
 $ indexer
-Manticore 3.4.2 6903305@200410 release
+Manticore 3.5.0 6903305@200722 release
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-2020, Manticore Software LTD (http://manticoresearch.com)
@@ -65,6 +66,7 @@ Below is a reference table with list of all the client libraries for different D
 |  Ubuntu Trusy  |  libmysqlclient.so.18   |  libpq.so.5  | libexpat.so.1 |  libodbc.so.1 |
 |  Ubuntu Xenial  |  libmysqlclient.so.20   |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |
 |  Ubuntu Bionic  |  libmysqlclient.so.20   |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |
+|  Ubuntu Focal  |  libmysqlclient.so.21   |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |
 |  Debian Jessie  | libmysqlclient.so.18    |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |
 |  Debian Stretch  | libmariadbclient.so.18 |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |
 |  Debian Buster  |  libmariadb.so.3        |  libpq.so.5  | libexpat.so.1 |  libodbc.so.2 |

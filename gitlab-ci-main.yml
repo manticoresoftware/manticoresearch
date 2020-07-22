@@ -3,15 +3,38 @@ workflow:
     - if: $CI_MERGE_REQUEST_ID
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "master"
+    - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/
     - if: $TEST || $WHAT
 
 # to skip ci add [ci skip] or [skip ci] in commit message in any capitalization
 
 stages:
+  - docs
   - mirroring
   - routines
   - publish
   - hooks
+
+docs_deploy:
+  stage: docs
+  rules:
+    - if: $DOCS_COMMIT != null  && $CI_COMMIT_BRANCH == "master"
+      changes:
+        - manual/**/*
+    - if: $DOCS_COMMIT != null  && $CI_COMMIT_BRANCH =~ /^manticore-.*$/
+      changes:
+        - manual/**/*
+  image: registry.gitlab.com/manticoresearch/doc/k8s_autodeploy:latest
+  cache: {}
+  services:
+    - docker:18.09.7-dind
+  script:
+    - sh /Deploy/autoupdate.sh k8s
+  variables:
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2   
+    COMMIT_DIR: manual
+    RELEASE_FILENAME: latest_release_version
 
 pages:
   stage: routines
@@ -29,7 +52,7 @@ pages:
     paths:
     - public
   rules:
-    - if: $TEST==null && $CI_COMMIT_BRANCH == "master"
+    - if: $TEST==null && $CI_COMMIT_BRANCH == "master" && $DOCS_COMMIT_ONLY == null
   cache: {}
 
 job_mirror:
@@ -37,7 +60,7 @@ job_mirror:
   tags:
     - dev-host
   rules:
-    - if: $TEST==null && $CI_COMMIT_BRANCH == "master"
+    - if: $TEST==null && $CI_COMMIT_BRANCH == "master" && $DOCS_COMMIT_ONLY == null
   script:
     - ~/gitsync.sh
   cache: {}
@@ -45,8 +68,8 @@ job_mirror:
 simple_tests:
   stage: routines
   rules:
-    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i
-    - if: $TEST =~ /simple/
+    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $DOCS_COMMIT_ONLY == null
+    - if: $TEST =~ /simple/ && $DOCS_COMMIT_ONLY == null
   tags:
     - specdocker
   dependencies: []
@@ -84,8 +107,8 @@ simple_tests:
 release_tests:
   stage: routines
   rules:
-    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i
-    - if: $TEST =~ /release/
+    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $DOCS_COMMIT_ONLY == null
+    - if: $TEST =~ /release/ && $DOCS_COMMIT_ONLY == null
   tags:
     - specdocker # once test 58 fixed, m.b. change to 'docker' and gitlab then cloud will help us testing.
   dependencies: []
@@ -124,8 +147,8 @@ release_tests:
 win_tests:
   stage: routines
   rules:
-    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^nociwindows .*$/i
-    - if: $TEST =~ /windows/
+    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^nociwindows .*$/i && $DOCS_COMMIT_ONLY == null
+    - if: $TEST =~ /windows/ && $DOCS_COMMIT_ONLY == null
   tags:
     - windev19
     - build
@@ -158,8 +181,8 @@ win_tests:
 build_mac:
   stage: routines
   rules:
-    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^nocimacos .*$/i
-    - if: $TEST =~ /macos/
+    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^nocimacos .*$/i && $DOCS_COMMIT_ONLY == null
+    - if: $TEST =~ /macos/ && $DOCS_COMMIT_ONLY == null
   tags:
     - mac
     - build
@@ -198,8 +221,8 @@ build_mac:
 build_bsd:
   stage: routines
   rules:
-    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^nocifreebsd .*$/i
-    - if: $TEST =~ /freebsd/
+    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^nocifreebsd .*$/i && $DOCS_COMMIT_ONLY == null
+    - if: $TEST =~ /freebsd/ && $DOCS_COMMIT_ONLY == null
   tags:
     - freebsd
     - build
@@ -236,7 +259,7 @@ build_bsd:
 push_results:
   stage: publish
   rules:
-    - if: $WHAT==null
+    - if: $WHAT==null && $DOCS_COMMIT_ONLY == null
       when: always
   tags:
     - docker
@@ -270,7 +293,10 @@ deploy_hook:
     REPO_NAME: $REPO_NAME
     DOCKER_HUB_BUILD_URL: $DOCKER_HUB_BUILD_URL
   rules:
-    - if: $CI_COMMIT_TITLE !~ /^noci .*$/i
+    - if: $CI_COMMIT_TITLE !~ /^noci .*$/i && $DOCS_COMMIT_ONLY == null
       when: always
   trigger:
     include: '/dist/gitlab-release.yml'
+    
+variables:
+    

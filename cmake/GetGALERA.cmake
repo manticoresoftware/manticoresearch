@@ -158,6 +158,13 @@ if (EXISTS "${GALERA_SRC}/README")
 	set(GALERA_LIBDIR "${GALERA_BUILD}")
 	add_subdirectory(${GALERA_SRC} ${GALERA_BUILD})
 	set(HAVE_GALERA 1)
+	if (NOT GALERA_SONAME) # ad-hoc, find more proper way!
+		if (APPLE)
+			set(GALERA_SONAME "libgalera_manticore.${GALERA_SOVERSION}.dylib")
+		else()
+			set(GALERA_SONAME "libgalera_manticore.so.${GALERA_SOVERSION}")
+		endif()
+	endif()
 	return()
 endif()
 

@@ -4,10 +4,10 @@ check_docs:
   script:
     - cp "$CI_PROJECT_DIR/gitlab-ci-main.yml" gen-con.yml
     - VAR_SET=" 1"
-    - git diff-tree --no-commit-id --name-only -r "$CI_COMMIT_SHA" 
-    - res=$(echo $(git diff-tree --no-commit-id --name-only -r "$CI_COMMIT_SHA" | grep -v "^$DOCS_DIR"))
+    - git diff-tree --no-commit-id --name-only -r -m "$CI_COMMIT_SHA" 
+    - res=$(echo $(git diff-tree --no-commit-id --name-only -r -m "$CI_COMMIT_SHA" | grep -v "^$DOCS_DIR"))
     - if [ "$res" == "" ]; then echo -e "  DOCS_COMMIT_ONLY:$VAR_SET" >> gen-con.yml; fi
-    - res=$(echo $(git diff-tree --no-commit-id --name-only -r "$CI_COMMIT_SHA" | grep "^$DOCS_DIR"))
+    - res=$(echo $(git diff-tree --no-commit-id --name-only -r -m "$CI_COMMIT_SHA" | grep "^$DOCS_DIR"))
     - if [ "$res" != "" ]; then echo -e "  DOCS_COMMIT:$VAR_SET" >> gen-con.yml; fi
     - cat gen-con.yml
   artifacts:

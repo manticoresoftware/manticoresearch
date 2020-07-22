@@ -298,5 +298,4 @@ deploy_hook:
   trigger:
     include: '/dist/gitlab-release.yml'
     
-variables:
-    
+variables:    

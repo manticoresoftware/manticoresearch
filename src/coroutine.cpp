@@ -611,7 +611,9 @@ bool Threads::CoThrottler_c::MaybeThrottle ()
 		return false;
 
 	m_tmNextThrottleTimestamp = m_dTimerGuard.MiniTimerEngage ( m_tmThrottlePeriodMs );
+	auto iOldThread = MyThd ().m_iThreadID;
 	CoWorker ()->Reschedule ();
+	m_bSameThread = ( iOldThread==MyThd ().m_iThreadID );
 	return true;
 }
 
@@ -622,7 +624,9 @@ bool Threads::CoThrottler_c::ThrottleAndKeepCrashQuery ()
 
 	m_tmNextThrottleTimestamp = m_dTimerGuard.MiniTimerEngage ( m_tmThrottlePeriodMs );
 	CrashQueryKeeper_c _;
+	auto iOldThread = MyThd ().m_iThreadID;
 	CoWorker ()->Reschedule ();
+	m_bSameThread = ( iOldThread==MyThd ().m_iThreadID );
 	return true;
 }
 

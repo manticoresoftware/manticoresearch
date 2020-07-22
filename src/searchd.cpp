@@ -7643,7 +7643,8 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 	CoExecuteN ( [&] () mutable
 	{
 		sphLogDebug ( "MakeSnippetsCoro Coro started" );
-		auto tCtx = dActualpBuilder.GetContext ();
+		Optional_T<SnippedBuilderCtxRef_t> pCtx;
+		pCtx.emplace ( dActualpBuilder.GetContext () );
 		Threads::CoThrottler_c tThrottler;
 		int iTick=1;
 		while ( true )
@@ -7654,12 +7655,16 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 
 			myinfo::SetThreadInfo ( "%d s %d:", iTick, iQuery );
 			sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d[%d]", iQuery, dTasks[iQuery] );
-			MakeSingleLocalSnippetWithFields ( dQueries[dTasks[iQuery]], q, tCtx.m_pBuilder, dStubFields );
+			MakeSingleLocalSnippetWithFields ( dQueries[dTasks[iQuery]], q, pCtx->m_pBuilder, dStubFields );
 			sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d finished", iQuery );
 
 			// yield and reschedule every quant of time. It gives work to other tasks
 			if ( tThrottler.ThrottleAndKeepCrashQuery() )
+			{
 				++iTick;
+				if ( !tThrottler.SameThread () )
+					pCtx.emplace ( dActualpBuilder.GetContext () );
+			}
 		}
 	}, dActualpBuilder.Concurrency ( dTasks.GetLength ()));
 }

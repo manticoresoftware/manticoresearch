@@ -82,6 +82,7 @@ class CoThrottler_c
 	int64_t m_tmThrottlePeriodMs;
 
 	sph::MiniTimer_c m_dTimerGuard;
+	bool m_bSameThread = true;
 
 	bool MaybeThrottle ();
 
@@ -90,6 +91,10 @@ public:
 
 	// common throttle action - republish stored crash query to TLS on resume
 	bool ThrottleAndKeepCrashQuery ();
+
+	// whether we are in same thread, or it was switched after throttling.
+	// value cached between successfull throttling, i.e. when MaybeThrottle() returns true.
+	inline bool SameThread() const { return m_bSameThread; }
 
 	// simple reschedule on timeout. Returns true if throttle happened
 	inline bool SimpleThrottle () { return MaybeThrottle(); }
@@ -271,10 +276,14 @@ public:
 		assert ( iMyIdx>0 );
 
 		if ( iMyIdx==1)
+		{
+//			sphLogDebug ( "%d, From slot -1 returning parent context", m_iTlsOrderNum.m_tKey );
 			return m_dParentContext;
+		}
 
 		iMyIdx-=2;
 		auto & dCtx = m_dChildrenContexts[iMyIdx];
+//		sphLogDebug ("%d Emplacing to slot %d", m_iTlsOrderNum.m_tKey, iMyIdx);
 		dCtx.emplace_once ( m_dParentContext );
 		return (REFCONTEXT) m_dChildrenContexts[iMyIdx].get ();
 	}

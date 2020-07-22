@@ -15147,7 +15147,8 @@ void HandleMysqlImportTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphS
 		return;
 	}
 
-	if ( !CopyIndexFiles ( tStmt.m_sIndex, tStmt.m_sStringParam, sError ) )
+	bool bPQ = false;
+	if ( !CopyIndexFiles ( tStmt.m_sIndex, tStmt.m_sStringParam, bPQ, sError ) )
 	{
 		sError.SetSprintf ( "unable to import index '%s': %s", tStmt.m_sIndex.cstr(), sError.cstr() );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -15155,7 +15156,7 @@ void HandleMysqlImportTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphS
 	}
 
 	StrVec_t dWarnings;
-	if ( !AddExistingIndexInt ( tStmt.m_sIndex, dWarnings, sError ) )
+	if ( !AddExistingIndexInt ( tStmt.m_sIndex, bPQ ? IndexType_e::PERCOLATE : IndexType_e::RT, dWarnings, sError ) )
 	{
 		sError.SetSprintf ( "unable to import index '%s': %s", tStmt.m_sIndex.cstr(), sError.cstr() );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );

@@ -16,6 +16,7 @@
 #include "fileutils.h"
 #include "sphinxint.h"
 #include "coroutine.h"
+#include "sphinxpq.h"
 
 // description of clusters and indexes loaded from internal config
 static CSphVector<ClusterDesc_t> g_dCfgClusters;
@@ -847,23 +848,60 @@ bool CopyExternalIndexFiles ( const StrVec_t & dFiles, const CSphString & sDestP
 }
 
 
-static bool CopyExternalFiles ( const CSphString & sIndex, const CSphString & sNewIndexPath, StrVec_t & dCopied, CSphString & sError )
+static CSphIndex * TryToPreallocRt ( const CSphString & sIndex, const CSphString & sNewIndexPath, CSphString & sError )
 {
 	CSphSchema tSchemaStub;
-	RtIndex_i * pRT = sphCreateIndexRT ( tSchemaStub, sIndex.cstr(), 32*1024*1024, sNewIndexPath.cstr(), true );
+	CSphScopedPtr<RtIndex_i> pRT ( sphCreateIndexRT ( tSchemaStub, sIndex.cstr(), 32*1024*1024, sNewIndexPath.cstr(), true ) );
 	if ( !pRT->Prealloc ( false, nullptr ) )
 	{
 		sError.SetSprintf ( "failed to prealloc: %s", pRT->GetLastError().cstr() );
-		return false;
+		return nullptr;
 	}
 
-	if ( !pRT->CopyExternalFiles ( 0, dCopied ) )
+	return pRT.LeakPtr();
+}
+
+
+static CSphIndex * TryToPreallocPq ( const CSphString & sIndex, const CSphString & sNewIndexPath, CSphString & sError )
+{
+	CSphSchema tSchemaStub;
+	CSphScopedPtr<PercolateIndex_i> pPQ ( CreateIndexPercolate ( tSchemaStub, sIndex.cstr(), sNewIndexPath.cstr() ) );
+	if ( !pPQ->Prealloc ( false, nullptr ) )
 	{
-		sError = pRT->GetLastError();
-		return false;
+		sError.SetSprintf ( "failed to prealloc: %s", pPQ->GetLastError().cstr() );
+		return nullptr;
 	}
 
-	SafeDelete(pRT);
+	// FIXME! just Prealloc is not enough for PQ index to properly save meta on deallocation
+	pPQ->PostSetup();
+
+	return pPQ.LeakPtr();
+}
+
+
+static bool CopyExternalFiles ( const CSphString & sIndex, const CSphString & sNewIndexPath, StrVec_t & dCopied, bool & bPQ, CSphString & sError )
+{
+	bPQ = false;
+
+	CSphString sRtError, sPqError;
+	CSphScopedPtr<CSphIndex> pIndex ( TryToPreallocRt ( sIndex, sNewIndexPath, sRtError ) );
+	if ( !pIndex )
+	{
+		pIndex = TryToPreallocPq ( sIndex, sNewIndexPath, sPqError );
+		if ( !pIndex )
+		{
+			sError = sRtError;
+			return false;
+		}
+
+		bPQ = true;
+	}
+
+	if ( !pIndex->CopyExternalFiles ( 0, dCopied ) )
+	{
+		sError = pIndex->GetLastError();
+		return false;
+	}
 
 	return true;
 }
@@ -897,7 +935,7 @@ private:
 
 
 
-bool CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex, CSphString & sError )
+bool CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex, bool & bPQ, CSphString & sError )
 {
 	CSphString sPath, sNewIndexPath;
 	if ( !PrepareDirForNewIndex ( sPath, sNewIndexPath, sIndex, sError ) )
@@ -937,7 +975,7 @@ bool CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex
 		dCopied.Add(sDest);
 	}
 
-	if ( !CopyExternalFiles ( sIndex, sNewIndexPath, dCopied, sError ) )
+	if ( !CopyExternalFiles ( sIndex, sNewIndexPath, dCopied, bPQ, sError ) )
 		return false;
 
 	tCleanup.Ok();
@@ -1193,12 +1231,12 @@ private:
 };
 
 // CSphinxqlSession::Execute -> HandleMysqlImportTable -> AddExistingIndexInt
-bool AddExistingIndexInt ( const CSphString & sIndex, StrVec_t & dWarnings, CSphString & sError )
+bool AddExistingIndexInt ( const CSphString & sIndex, IndexType_e eType, StrVec_t & dWarnings, CSphString & sError )
 {
 	ScopedCleanup_c tCleanup(sIndex);
 
 	IndexDesc_t tNewIndex;
-	tNewIndex.m_eType = IndexType_e::RT;
+	tNewIndex.m_eType = eType;
 	tNewIndex.m_sName = sIndex;
 	tNewIndex.m_sPath.SetSprintf ( "%s/%s", GetPathForNewIndex(sIndex).cstr(), sIndex.cstr() );
 

@@ -37,6 +37,12 @@ searchd
 <sphinxql>drop table test1</sphinxql>
 <sphinxql>drop table test320</sphinxql>
 
+<sphinxql>show tables</sphinxql>
+<sphinxql>import table pq from '<this_test/>/data/pq'</sphinxql>
+<sphinxql>show tables</sphinxql>
+<sphinxql>call pq ('pq', 'test 1', 1 as docs, 0 as docs_json )</sphinxql>
+<sphinxql>drop table pq</sphinxql>
+
 </sphqueries>
 
 </test>

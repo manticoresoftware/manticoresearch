@@ -1430,8 +1430,7 @@ struct PqMatchContextRef_t
 struct PqMatchContextClone_t : public PqMatchContextRef_t, ISphNoncopyable
 {
 	explicit PqMatchContextClone_t ( const PqMatchContextRef_t& dParent )
-		: PqMatchContextRef_t ( dParent.m_pIndex, dParent.m_pSeg, dParent.m_tReject,
-			dParent.m_tRes )
+		: PqMatchContextRef_t ( dParent.m_pIndex, dParent.m_pSeg, dParent.m_tReject, dParent.m_tRes )
 	{}
 };
 
@@ -1454,9 +1453,10 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 	std::atomic<int32_t> iCurQuery {0};
 	CoExecuteN ( [&dMatchContexts, &iCurQuery, &dStored] () mutable
 	{
-		auto pCtx = dMatchContexts.GetContext ();
-		pCtx.m_pMatchCtx->m_dMsg.Clear ();
-		Threads::CoThrottler_c tThrottle;
+		Optional_T<PqMatchContextRef_t> pCtx;
+		pCtx.emplace ( dMatchContexts.GetContext () );
+		pCtx->m_pMatchCtx->m_dMsg.Clear ();
+		Threads::CoThrottler_c tThrottler;
 		int iTick=1;
 		while (true)
 		{
@@ -1465,11 +1465,15 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 				return; // all is done
 
 			myinfo::SetThreadInfo ( "%d q %d:", iTick, iQuery );
-			MatchingWork ( dStored[iQuery], *pCtx.m_pMatchCtx );
+			MatchingWork ( dStored[iQuery], *pCtx->m_pMatchCtx );
 
 			// yield and reschedule every quant of time. It gives work to other tasks
-			if ( tThrottle.ThrottleAndKeepCrashQuery () )
+			if ( tThrottler.ThrottleAndKeepCrashQuery () )
+			{
 				++iTick;
+				if ( !tThrottler.SameThread() )
+					pCtx.emplace ( dMatchContexts.GetContext () );
+			}
 		}
 	}, dMatchContexts.Concurrency ( tRes.m_iTotalQueries ));
 

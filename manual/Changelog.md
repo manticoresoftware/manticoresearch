@@ -51,24 +51,24 @@
 * [thread_stack](Server_settings/Searchd#thread_stack) now limits maximum thread stack, not initial.
 * Mysql interface now supports encryption
 * Improved `SHOW THREADS` output
-* Display progress of long CALL PQ in SHOW THREADS
+* Display progress of long `CALL PQ` in `SHOW THREADS`
 * cpustat, iostat, coredump can be changed during runtime with SET
-* SET [GLOBAL] wait_timeout=NUM implemented 
+* `SET [GLOBAL] wait_timeout=NUM` implemented 
 
 ### Breaking changes:
 * **Index format has been changed.** Indexes built in 3.5.0 cannot be loaded by Manticore version < 3.5.0, but Manticore 3.5.0 understands older formats.
-* [INSERT INTO PQ VALUES()](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index) (i.e. without providing column list) previously expected exactly `(query, tags)` as the values. It's been changed to `(id,query,tags,filters)`. The id can be set to 0 if you want it to be auto-generated.
+* [`INSERT INTO PQ VALUES()`](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index) (i.e. without providing column list) previously expected exactly `(query, tags)` as the values. It's been changed to `(id,query,tags,filters)`. The id can be set to 0 if you want it to be auto-generated.
 * [`allow_empty=0`](Searching/Highlighting#allow_empty) is a new default in highlighting via HTTP JSON interface.
 * Only absolute paths are allowed for external files (stopwords, exceptions etc.) in `CREATE TABLE`/`ALTER TABLE`.
 
 ### Deprecations:
 * `ram_chunks_count` was renamed to `ram_chunk_segments_count` in `SHOW INDEX STATUS`.
-* `workers` is deprecated. There's only one workers mode now.
-* `dist_threads` is deprecated. All queries are as much parallel as possible now (limited by `threads` and `jobs_queue_size`).
-* `max_children` is deprecated. Use [threads](Server_settings/Searchd#threads) to set the number of threads Manticore will use (set to the # of CPU cores by default).
-* `queue_max_length` is deprecated. Instead of that in case it's really needed use [jobs_queue_size](Server_settings/Searchd#jobs_queue_size) to fine-tune internal jobs queue size (unlimited by default).
+* `workers` is obsolete. There's only one workers mode now.
+* `dist_threads` is obsolete. All queries are as much parallel as possible now (limited by `threads` and `jobs_queue_size`).
+* `max_children` is obsolete. Use [threads](Server_settings/Searchd#threads) to set the number of threads Manticore will use (set to the # of CPU cores by default).
+* `queue_max_length` is obsolete. Instead of that in case it's really needed use [jobs_queue_size](Server_settings/Searchd#jobs_queue_size) to fine-tune internal jobs queue size (unlimited by default).
 * All `/json/*` endpoints are now available w/o `/json/`, e.g. `/search`, `/insert`, `/delete`, `/pq` etc.
-* `field` is deprecated in `describe`. Full-text field type is now called `text`. 
+* `field` meaning "full-text field" was renamed to "text" in `describe`.
   <!-- more -->
   **3.4.2:**
   ```sql
@@ -97,7 +97,7 @@
 
 ### Packages
 
-* Ubuntu 20.04 official package
+* Ubuntu Focal 20.04 official package
 * deb package name changed from `manticore-bin` to `manticore`
 
 ### Bugfixes:

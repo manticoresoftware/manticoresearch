@@ -113,10 +113,16 @@ windows:
   tags:
     - docker
   script:
+    - mc config host add dev $MINIO_HOST
+    - mc mirror dev/runner-cache/releases/$DISTR/ cache/
     - mkdir build && cd build
     - cmake -DPACK=1 -DSPHINX_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - make -j4 package
     - cp manticore*deb ..
+    - cd ..
+#    - tar -zcf cache.tar.gz cache/*-src cache/*/*-targets.cmake cache/*/lib*.a cache/*/lib*.so*
+#    - mc cp cache.tar.gz dev/runner-cache/releases/$DISTR/
+    - mc mirror --exclude "*.dir" --exclude "*.o" --exclude "*/CMakeFiles/*" --exclude "*/Makefile" --overwrite cache/ dev/runner-cache/releases/$DISTR/
   artifacts:
     paths:
       - manticore*deb

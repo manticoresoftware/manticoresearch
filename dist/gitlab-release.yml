@@ -96,11 +96,11 @@ windows:
     - docker
   script:
     - ln -s $(pwd) /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
-    - cd /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
+    - cd /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789
     - mc config host add dev $MINIO_HOST
     - mc mirror dev/runner-cache/releases/$DISTR/ cache/
     - test -e cache/cache-src.tar.gz && tar -zxf cache/cache-src.tar.gz
-    - mkdir build && cd build
+    - cd src && mkdir build && cd build
     - cmake -DPACK=1 -DSPHINX_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - make -j4 package
     - cp manticore*.rpm ..

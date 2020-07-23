@@ -298,5 +298,3 @@ deploy_hook:
       when: always
   trigger:
     include: '/dist/gitlab-release.yml'
-    
-variables:

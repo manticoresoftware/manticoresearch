@@ -29,6 +29,7 @@ osx:
   variables:
     CACHEB: "../cache"
     OPENSSL_ROOT_DIR: "/usr/local/opt/openssl"
+    DIAGNOSTIC: 1
   tags:
     - mac
     - build
@@ -66,6 +67,7 @@ windows:
     CACHEB: "x:/cache"
     OPENSSL_ROOT: "x:/bundle/openssl-x64"
     BOOST_ROOT: "x:/boost_1_72_0"
+    DIAGNOSTIC: 1
   script:
     - 'net use x: \\\\VBOXSRV\\shared'
     - mkdir sphinxbin-x64
@@ -91,22 +93,22 @@ windows:
   dependencies: []
   variables:
     REPO_DIST_NAME: "centos"
+    CACHEB: "../cache"
     DIAGNOSTIC: 1 # let's set it by default forever
   tags:
     - docker
+  before_script:
+    - mc config host add dev $MINIO_HOST
   script:
     - ln -s $(pwd) /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
-    - cd /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789
-    - mc config host add dev $MINIO_HOST
+    - cd /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
     - mc mirror dev/runner-cache/releases/$DISTR/ cache/
     - test -e cache/cache-src.tar.gz && tar -zxf cache/cache-src.tar.gz
-    - cd src && mkdir build && cd build
+    - mkdir build && cd build
     - cmake -DPACK=1 -DSPHINX_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - make -j4 package
     - cp manticore*.rpm ..
     - cd /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789
-#    - tar -zcf cache.tar.gz cache/*-src cache/*/*-targets.cmake cache/*/lib*.a cache/*/lib*.so*
-#    - mc cp cache.tar.gz dev/runner-cache/releases/$DISTR/
     - tar -zcf cache/cache-src.tar.gz cache/*-src
     - mc mirror --exclude "*.dir" --exclude "*.o" --exclude "*/CMakeFiles/*" --exclude "*/Makefile" --exclude "*-src/*" --exclude "galera-*/*.a" --exclude "*/cmake_install.cmake" --overwrite cache/ dev/runner-cache/releases/$DISTR/
   artifacts:
@@ -121,9 +123,11 @@ windows:
   tags:
     - docker
   variables:
+    CACHEB: "../cache"
     DIAGNOSTIC: 1 # let's set it by default forever
-  script:
+  before_script:
     - mc config host add dev $MINIO_HOST
+  script:
     - mc mirror dev/runner-cache/releases/$DISTR/ cache/
     - test -e cache/cache-src.tar.gz && tar -zxf cache/cache-src.tar.gz
     - mkdir build && cd build
@@ -131,8 +135,6 @@ windows:
     - make -j4 package
     - cp manticore*deb ..
     - cd ..
-#    - tar -zcf cache.tar.gz cache/*-src cache/*/*-targets.cmake cache/*/lib*.a cache/*/lib*.so*
-#    - mc cp cache.tar.gz dev/runner-cache/releases/$DISTR/
     - tar -zcf cache/cache-src.tar.gz cache/*-src
     - mc mirror --exclude "*.dir" --exclude "*.o" --exclude "*/CMakeFiles/*" --exclude "*/Makefile" --exclude "*-src/*" --exclude "galera-*/*.a" --exclude "*/cmake_install.cmake" --overwrite cache/ dev/runner-cache/releases/$DISTR/
   artifacts:

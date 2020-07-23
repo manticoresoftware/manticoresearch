@@ -719,6 +719,7 @@ void SqlServe ( SockWrapperPtr_c pSock )
 	bool bKeepAlive;
 	int iPacketLen;
 	int iTimeoutS = -1;
+	int iThrottlingMS = -1;
 	do
 	{
 		// check for updated timeout
@@ -730,6 +731,14 @@ void SqlServe ( SockWrapperPtr_c pSock )
 		{
 			iTimeoutS = iCurrentTimeout;
 			tIn.SetTimeoutUS ( S2US * iTimeoutS );
+		}
+
+		// check for throttling
+		auto iCurrentThrottling = tSession.GetBackendThrottlingMS();
+		if ( iCurrentThrottling!=iThrottlingMS )
+		{
+			iThrottlingMS = iCurrentThrottling;
+			myinfo::ref<ClientTaskInfo_t>()->m_iThrottlingPeriod = iThrottlingMS;
 		}
 
 		tIn.DiscardProcessed ();

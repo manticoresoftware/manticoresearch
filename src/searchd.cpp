@@ -5524,7 +5524,7 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 	std::atomic<int32_t> iCurIdx { 0 };
 	CoExecuteN ( [&] () mutable
 	{
-		Threads::CoThrottler_c tThrottle;
+		Threads::CoThrottler_c tThrottler ( myinfo::ref<ClientTaskInfo_t> ()->m_iThrottlingPeriod );
 		while ( true )
 		{
 			auto iJob = iCurIdx.fetch_add ( 1, std::memory_order_acq_rel );
@@ -5618,7 +5618,7 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 				dResults[i].m_iCpuTime = iCpuTime;
 
 			// yield and reschedule every quant of time. It gives work to other tasks
-			tThrottle.ThrottleAndKeepCrashQuery (); // we set CrashQuery anyway at the start of the loop
+			tThrottler.ThrottleAndKeepCrashQuery (); // we set CrashQuery anyway at the start of the loop
 		}
 	}, dCtxData.Concurrency ( iNumLocals ));
 	dCtxData.Finalize (); // merge extra schemas (if any)
@@ -7312,7 +7312,7 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 		sphLogDebug ( "MakeSnippetsCoro Coro started" );
 		Optional_T<SnippedBuilderCtxRef_t> pCtx;
 		pCtx.emplace ( dActualpBuilder.GetContext () );
-		Threads::CoThrottler_c tThrottler;
+		Threads::CoThrottler_c tThrottler ( myinfo::ref<ClientTaskInfo_t> ()->m_iThrottlingPeriod );
 		int iTick=1;
 		while ( true )
 		{
@@ -12668,6 +12668,7 @@ struct SessionVars_t
 	ESphCollation	m_eCollation { g_eCollation };
 	bool			m_bProfile = false;
 	int				m_iTimeoutS = -1;
+	int				m_iThrottlingMS = -1;
 	CSphVector<int64_t> m_dLastIds;
 };
 
@@ -12841,6 +12842,12 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 			break;
 		}
 
+		if ( tStmt.m_sSetName=="throttling_period" )
+		{
+			tVars.m_iThrottlingMS = tStmt.m_iSetValue;
+			break;
+		}
+
 		// move check here from bison parser. Only boolean allowed below.
 		if ( tStmt.m_iSetValue!=0 && tStmt.m_iSetValue!=1 )
 		{
@@ -12996,6 +13003,15 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 			else
 			{
 				tOut.Error ( tStmt.m_sStmt, "Only VIP connections can change global wait_timeout value" );
+				return;
+			}
+		} else if ( tStmt.m_sSetName=="throttling_period" )
+		{
+			if ( myinfo::IsVIP() )
+				Threads::CoThrottler_c::SetDefaultThrottlingPeriodMS ( tStmt.m_iSetValue );
+			else
+			{
+				tOut.Error ( tStmt.m_sStmt, "Only VIP connections can change global throttling_period value" );
 				return;
 			}
 		} else
@@ -15306,10 +15322,16 @@ void SphinxqlSessionPublic::SaveLastProfile ()
 	m_pImpl->m_tLastProfile = m_pImpl->m_tProfile;
 }
 
-int64_t SphinxqlSessionPublic::GetBackendTimeoutS () const
+int SphinxqlSessionPublic::GetBackendTimeoutS () const
 {
 	assert ( m_pImpl );
 	return m_pImpl->m_tVars.m_iTimeoutS;
+}
+
+int SphinxqlSessionPublic::GetBackendThrottlingMS () const
+{
+	assert ( m_pImpl );
+	return m_pImpl->m_tVars.m_iThrottlingMS;
 }
 
 /// sphinxql command over API

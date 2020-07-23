@@ -1161,7 +1161,8 @@ public:
 	void SaveLastProfile();
 
 	// manage backend's timeout
-	int64_t GetBackendTimeoutS() const;
+	int GetBackendTimeoutS() const;
+	int GetBackendThrottlingMS() const;
 };
 
 void LogSphinxqlError ( const char * sStmt, const char * sError );

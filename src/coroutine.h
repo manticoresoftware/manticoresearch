@@ -74,12 +74,13 @@ void CoYieldWith ( Handler handler );
 // move coroutine to another scheduler
 void CoMoveTo ( Scheduler_i * pScheduler );
 
+static const int tmDefaultThrotleTimeQuantumMs = 100; // default value, if nothing specified
 class CoThrottler_c
 {
-	static const int tmThrotleTimeQuantumMs = 100; // how long task may work before rescheduling (in milliseconds)
+	static int tmThrotleTimeQuantumMs; // how long task may work before rescheduling (in milliseconds)
 
 	int64_t m_tmNextThrottleTimestamp;
-	int64_t m_tmThrottlePeriodMs;
+	int m_tmThrottlePeriodMs;
 
 	sph::MiniTimer_c m_dTimerGuard;
 	bool m_bSameThread = true;
@@ -87,7 +88,16 @@ class CoThrottler_c
 	bool MaybeThrottle ();
 
 public:
-	explicit CoThrottler_c ( int64_t tmPeriodMs = tmThrotleTimeQuantumMs );
+	// -1 means 'use value of tmThrotleTimeQuantumMs'
+	// 0 means 'don't throttle'
+	// any other positive expresses throttling interval in milliseconds
+	explicit CoThrottler_c ( int tmPeriodMs = -1 );
+
+	// that changes default daemon-wide
+	inline static void SetDefaultThrottlingPeriodMS ( int tmPeriodMs )
+	{
+		tmThrotleTimeQuantumMs = tmPeriodMs<0 ? tmDefaultThrotleTimeQuantumMs : tmPeriodMs;
+	}
 
 	// common throttle action - republish stored crash query to TLS on resume
 	bool ThrottleAndKeepCrashQuery ();

@@ -176,6 +176,7 @@ struct ClientTaskInfo_t : public MiniTaskInfo_t
 	ThdState_e	m_eThdState = ThdState_e::UNKNOWN; // fixme! rename to m_eTaskState
 	Proto_e		m_eProto = Proto_e::UNKNOWN;
 	int			m_iConnID = -1;
+	int 		m_iThrottlingPeriod = -1;
 	CSphString	m_sClientName; // set once before info is published and never changes. So, assume always mt-safe
 	bool 		m_bSsl = false;
 	bool 		m_bVip = false;

@@ -6059,7 +6059,7 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 		// (spent a day for debugging a crash because of it)
 		// CrashQuerySetTop ( &tCrashQuery ); // set crash info container
 
-		Threads::CoThrottler_c tThrottle;
+		Threads::CoThrottler_c tThrottler ( myinfo::ref<ClientTaskInfo_t> ()->m_iThrottlingPeriod );
 		int iTick=1; // num of times coro rescheduled by throttler
 
 		while ( true )
@@ -6130,7 +6130,7 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 				pThResult->m_sError = tChunkResult.m_sError;
 
 			// yield and reschedule every quant of time. It gives work to other tasks
-			if ( tThrottle.ThrottleAndKeepCrashQuery () )
+			if ( tThrottler.ThrottleAndKeepCrashQuery () )
 				// report current disk chunk processing
 				++iTick;
 		}

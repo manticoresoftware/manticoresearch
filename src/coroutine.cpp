@@ -598,16 +598,21 @@ void Threads::CoExecuteN ( Threads::Handler&& fnWorker, int iConcurrency )
 	WaitForDeffered ( std::move ( dWaiter ));
 }
 
+int Threads::CoThrottler_c::tmThrotleTimeQuantumMs = Threads::tmDefaultThrotleTimeQuantumMs;
 
-Threads::CoThrottler_c::CoThrottler_c ( int64_t tmThrottlePeriodMs )
+Threads::CoThrottler_c::CoThrottler_c ( int tmThrottlePeriodMs )
 	: m_tmThrottlePeriodMs ( tmThrottlePeriodMs )
 {
-	m_tmNextThrottleTimestamp = m_dTimerGuard.MiniTimerEngage( m_tmThrottlePeriodMs );
+	if ( tmThrottlePeriodMs<0 )
+		m_tmThrottlePeriodMs = tmThrotleTimeQuantumMs;
+
+	if ( m_tmThrottlePeriodMs )
+		m_tmNextThrottleTimestamp = m_dTimerGuard.MiniTimerEngage( m_tmThrottlePeriodMs );
 }
 
 bool Threads::CoThrottler_c::MaybeThrottle ()
 {
-	if ( !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) )
+	if ( !m_tmThrottlePeriodMs || !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) )
 		return false;
 
 	m_tmNextThrottleTimestamp = m_dTimerGuard.MiniTimerEngage ( m_tmThrottlePeriodMs );
@@ -619,7 +624,7 @@ bool Threads::CoThrottler_c::MaybeThrottle ()
 
 bool Threads::CoThrottler_c::ThrottleAndKeepCrashQuery ()
 {
-	if ( !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) )
+	if ( !m_tmThrottlePeriodMs || !sph::TimeExceeded ( m_tmNextThrottleTimestamp ) )
 		return false;
 
 	m_tmNextThrottleTimestamp = m_dTimerGuard.MiniTimerEngage ( m_tmThrottlePeriodMs );

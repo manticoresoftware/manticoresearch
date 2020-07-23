@@ -1475,7 +1475,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 		Optional_T<PqMatchContextRef_t> pCtx;
 		pCtx.emplace ( dMatchContexts.GetContext () );
 		pCtx->m_pMatchCtx->m_dMsg.Clear ();
-		Threads::CoThrottler_c tThrottler;
+		Threads::CoThrottler_c tThrottler ( myinfo::ref<ClientTaskInfo_t> ()->m_iThrottlingPeriod );
 		int iTick=1;
 		while (true)
 		{

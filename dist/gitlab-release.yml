@@ -108,7 +108,7 @@ windows:
     - cmake -DPACK=1 -DSPHINX_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - make -j4 package
     - cp manticore*.rpm ..
-    - cd /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789
+    - cd ..
     - tar -zcf cache/cache-src.tar.gz cache/*-src
     - mc mirror --exclude "*.dir" --exclude "*.o" --exclude "*/CMakeFiles/*" --exclude "*/Makefile" --exclude "*-src/*" --exclude "galera-*/*.a" --exclude "*/cmake_install.cmake" --overwrite cache/ dev/runner-cache/releases/$DISTR/
   artifacts:

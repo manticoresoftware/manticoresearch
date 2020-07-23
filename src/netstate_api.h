@@ -11,35 +11,6 @@
 //
 
 #pragma once
-#if 0
-struct NetStateAPI_t : NetConnection_t
-{
-	bool				m_bKeepSocket = false;
-	int64_t				m_iLeft = 0;
-	int64_t				m_iPos = 0;
-
-	NetStateAPI_t ();
-	virtual ~NetStateAPI_t ();
-
-	int64_t SocketIO ( bool bWrite, bool bAfterWrite = false );
-	void CloseSocket ();
-};
-
-struct NetSendData_t : public ISphNetAction
-{
-	CSphScopedPtr<NetStateAPI_t>		m_tState;
-	Proto_e								m_eProto;
-	bool								m_bContinue;
-
-	NetSendData_t ( NetStateAPI_t * pState, Proto_e eProto );
-
-	NetEvent_e		Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) override;
-	NetEvent_e		Setup ( int64_t tmNow ) override;
-	void			CloseSocket () override;
-
-	void SetContinue () { m_bContinue = true; }
-};
-#endif
 
 /// helpers
 bool CheckSocketError ( DWORD uGotEvents );

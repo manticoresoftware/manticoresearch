@@ -800,7 +800,7 @@ void sigterm ( int )
 
 void sigusr1 ( int )
 {
-	g_bGotSigusr1 = 1;
+	g_bGotSigusr1 = true;
 }
 
 struct QueryCopyState_t
@@ -5095,43 +5095,6 @@ void SearchHandler_c::OnRunFinished()
 }
 
 
-#if 0
-struct LocalSearchThreadContext_t
-{
-	SphThread_t					m_tThd {0};
-	SearchHandler_c *			m_pHandler = nullptr;
-	CrashQuery_t				m_tCrashQuery;
-	long						m_iSearches = 0;
-	LocalSearch_t *				m_pSearches = nullptr;
-	CSphAtomic *				m_pCurSearch = nullptr;
-	int							m_iLocalThreadID = 0;
-
-	void LocalSearch ()
-	{
-		GuardedCrashQuery_t tGuardedCrash ( m_tCrashQuery );
-		GlobalCrashQuerySet ( m_tCrashQuery );
-
-		ThreadLocal_t tThd ( m_pHandler->m_tThd );
-		tThd.m_tDesc.m_iCookie = m_iLocalThreadID;
-		for ( long iCurSearch = ( *m_pCurSearch )++; iCurSearch<m_iSearches; iCurSearch = ( *m_pCurSearch )++ )
-		{
-			CrashQuery_t tCrashQuery = m_tCrashQuery;
-			const CSphString & sIndex = m_pHandler->GetLocalIndexName ( m_pSearches[iCurSearch].m_iLocal );
-			tCrashQuery.m_pIndex = sIndex.cstr();
-			tCrashQuery.m_iIndexLen = sIndex.Length();
-			GlobalCrashQuerySet ( tCrashQuery );
-
-			m_pHandler->RunLocalSearchMT ( m_pSearches[iCurSearch], tThd );
-		}
-	}
-};
-
-void LocalSearchThreadFunc ( void * pArg )
-{
-	( ( LocalSearchThreadContext_t * ) pArg )->LocalSearch ();
-}
-#endif
-
 static void MergeWordStats ( CSphQueryResultMeta & tDstResult,
 	const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrc )
 {
@@ -5212,267 +5175,11 @@ static void RemoveMissedRows ( AggrResult_t & tRes )
 	tRes.m_dMatches.Resize ( pDst - tRes.m_dMatches.Begin() );
 }
 
-#if 0
-void SearchHandler_c::RunLocalSearchesParallel()
-{
-	int64_t tmLocal = sphMicroTimer();
-
-	// setup local searches
-	const int iQueries = m_iEnd-m_iStart+1;
-	CSphFixedVector<LocalSearch_t> dWorks { m_dLocal.GetLength() };
-	CSphFixedVector<CSphQueryResult> dResults { m_dLocal.GetLength()*iQueries };
-	CSphFixedVector<ISphMatchSorter*> dSorters { m_dLocal.GetLength()*iQueries };
-	CSphFixedVector<CSphQueryResult*> dResultPtrs ( m_dLocal.GetLength()*iQueries );
-	dSorters.Fill ( nullptr );
-
-
-	ARRAY_FOREACH ( i, dResultPtrs )
-		dResultPtrs[i] = &dResults[i];
-
-	ARRAY_FOREACH ( i, m_dLocal )
-	{
-		dWorks[i].m_iLocal = i;
-		dWorks[i].m_iMass = -m_dLocal[i].m_iMass; // minus for reverse order
-		dWorks[i].m_ppSorters = &dSorters [ i*iQueries ];
-		dWorks[i].m_ppResults = &dResultPtrs [ i*iQueries ];
-	}
-	dWorks.Sort ( bind ( &LocalSearch_t::m_iMass ) );
-
-	// setup threads
-	int iThreads = Min ( g_iDistThreads, dWorks.GetLength () );
-	CSphVector<LocalSearchThreadContext_t> dThreads ( iThreads );
-	CrashQuery_t tCrashQuery = GlobalCrashQueryGet(); // transfer query info for crash logger to new thread
-
-	// reserve extra schema set for each thread
-	// (that is simpler than ping-pong with mutex on each addition)
-	if ( m_dQueries[0].m_bAgent )
-		m_dExtraSchemas.Reset ( iThreads * iQueries );
-
-	// fire searcher threads
-	CSphAtomic iaCursor;
-	ARRAY_FOREACH ( i, dThreads )
-	{
-		auto& t = dThreads[i];
-		t.m_iLocalThreadID = i;
-		t.m_pHandler = this;
-		t.m_tCrashQuery = tCrashQuery;
-		t.m_pCurSearch = &iaCursor;
-		t.m_iSearches = dWorks.GetLength();
-		t.m_pSearches = dWorks.Begin();
-		sphCrashThreadCreate ( &t.m_tThd, LocalSearchThreadFunc, (void*)&t, false, "LocalSearch" );
-		// FIXME! check result
-	}
-
-	// wait for them to complete
-	for ( auto &t : dThreads )
-		sphThreadJoin ( &t.m_tThd );
-
-	int iTotalSuccesses = 0;
-
-	// now merge the results
-	ARRAY_FOREACH ( iLocal, dWorks )
-	{
-		bool bResult = dWorks[iLocal].m_bResult;
-		const char * sLocal = m_dLocal[iLocal].m_sName.cstr();
-		const char * sParentIndex = m_dLocal[iLocal].m_sParentIndex.cstr();
-		int iOrderTag = m_dLocal[iLocal].m_iOrderTag;
-
-		if ( !bResult )
-		{
-			// failed
-			for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
-			{
-				int iResultIndex = iLocal*iQueries;
-				if ( !m_bMultiQueue )
-					iResultIndex += iQuery - m_iStart;
-				m_dFailuresSet[iQuery].Submit ( sLocal, sParentIndex, dResults[iResultIndex].m_sError.cstr() );
-			}
-			continue;
-		}
-
-		// multi-query succeeded
-		for ( int iQuery=m_iStart; iQuery<=m_iEnd; ++iQuery )
-		{
-			// base result set index
-			// in multi-queue case, the only (!) result set actually filled with meta info
-			// in non-multi-queue case, just a first index, we fix it below
-			int iResultIndex = iLocal*iQueries;
-
-			// current sorter ALWAYS resides at this index, in all cases
-			// (current as in sorter for iQuery-th query against iLocal-th index)
-			int iSorterIndex = iResultIndex + iQuery - m_iStart;
-
-			if ( !m_bMultiQueue )
-			{
-				// non-multi-queue case
-				// means that we have mere 1:1 mapping between results and sorters
-				// so let's adjust result set index
-				iResultIndex = iSorterIndex;
-
-			} else if ( dResults[iResultIndex].m_iMultiplier==-1 )
-			{
-				// multi-queue case
-				// need to additionally check per-query failures of MultiQueryEx
-				// those are reported through multiplier
-				// note that iSorterIndex just below is NOT a typo
-				// separate errors still go into separate result sets
-				// even though regular meta does not
-				m_dFailuresSet[iQuery].Submit ( sLocal, sParentIndex, dResults[iSorterIndex].m_sError.cstr() );
-				continue;
-			}
-
-			// no sorter, no fun
-			ISphMatchSorter * pSorter = dSorters [ iSorterIndex ];
-			if ( !pSorter )
-				continue;
-
-			// this one seems OK
-			AggrResult_t & tRes = m_dResults[iQuery];
-			CSphQueryResult & tRaw = dResults[iResultIndex];
-
-			++iTotalSuccesses;
-
-			++tRes.m_iSuccesses;
-			tRes.m_iTotalMatches += pSorter->GetTotalCount();
-
-			tRes.m_pBlobPool = tRaw.m_pBlobPool;
-			tRes.m_pDocstore = tRaw.m_pDocstore;
-			MergeWordStats ( tRes, tRaw.m_hWordStats );
-
-			tRes.m_bHasPrediction |= tRaw.m_bHasPrediction;
-			tRes.m_iMultiplier = m_bMultiQueue ? iQueries : 1;
-			tRes.m_iCpuTime += tRaw.m_iCpuTime / tRes.m_iMultiplier;
-			tRes.m_tIOStats.Add ( tRaw.m_tIOStats );
-			if ( tRaw.m_bHasPrediction )
-			{
-				tRes.m_tStats.Add ( tRaw.m_tStats );
-				tRes.m_iPredictedTime = CalcPredictedTimeMsec ( tRes );
-			}
-			if ( tRaw.m_iBadRows )
-				tRes.m_sWarning.SetSprintf ( "query result is inaccurate because of " INT64_FMT " missed documents", tRaw.m_iBadRows );
-
-			m_dQueryIndexStats[iLocal].m_dStats[iQuery-m_iStart].m_iSuccesses = 1;
-			m_dQueryIndexStats[iLocal].m_dStats[iQuery-m_iStart].m_uFoundRows = pSorter->GetTotalCount();
-
-			// extract matches from sorter
-			FlattenToRes ( pSorter, tRes, iOrderTag+iQuery-m_iStart );
-
-			if ( tRaw.m_iBadRows )
-				RemoveMissedRows ( tRes );
-
-			// take over the schema from sorter, it doesn't need it anymore
-			tRes.m_tSchema = *pSorter->GetSchema();
-
-			if ( !tRaw.m_sWarning.IsEmpty() )
-				m_dFailuresSet[iQuery].Submit ( sLocal, sParentIndex, tRaw.m_sWarning.cstr() );
-
-			// merge extra schemas from threads
-			if ( !m_dExtraSchemas.IsEmpty() )
-			{
-				StrVec_t & dExtra = m_dExtraSchemas[(iQuery - m_iStart) * iThreads];
-				for ( int iThd=1; iThd<iThreads; iThd++ )
-				{
-					const StrVec_t & dMerge = m_dExtraSchemas[(iQuery - m_iStart) * iThreads + iThd];
-					dExtra.Append ( dMerge );
-				}
-			}
-		}
-	}
-
-	for ( auto & pSorter : dSorters )
-		SafeDelete ( pSorter );
-
-	// update our wall time for every result set
-	tmLocal = sphMicroTimer() - tmLocal;
-	for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
-		m_dResults[iQuery].m_iQueryTime += (int)( tmLocal/1000 );
-
-	ARRAY_FOREACH ( iLocal, dWorks )
-		for ( int iQuery=m_iStart; iQuery<=m_iEnd; ++iQuery )
-		{
-			QueryStat_t & tStat = m_dQueryIndexStats[iLocal].m_dStats[iQuery-m_iStart];
-			if ( tStat.m_iSuccesses )
-				tStat.m_uQueryTime = (int)( tmLocal/1000/iTotalSuccesses );
-		}
-}
-#endif
 
 const CSphString & SearchHandler_c::GetLocalIndexName ( int iLocal ) const
 {
 	return m_dLocal[iLocal].m_sName;
 }
-#if 0
-// invoked from MT searches. So, must be MT-aware!
-void SearchHandler_c::RunLocalSearchMT ( LocalSearch_t &dWork, ThreadLocal_t &tThd )
-{
-
-	// FIXME!!! handle different proto
-	tThd.m_tDesc.SetThreadInfo ( R"(api-search query="%s" comment="%s" index="%s")"
-								 , m_dQueries[m_iStart].m_sQuery.scstr (), m_dQueries[m_iStart].m_sComment.scstr ()
-								 , m_dLocal[dWork.m_iLocal].m_sName.scstr () );
-	tThd.m_tDesc.m_tmStart = sphMicroTimer ();
-
-	int64_t iCpuTime = -sphCpuTimer ();;
-	const int iQueries = m_iEnd-m_iStart+1;
-	dWork.m_bResult = false;
-	auto ppResults = dWork.m_ppResults;
-	auto ppSorters = dWork.m_ppSorters;
-	auto iLocal = dWork.m_iLocal;
-	auto * pServed = m_dLocked.Get ( m_dLocal[dWork.m_iLocal].m_sName );
-	if ( !pServed )
-	{
-		// FIXME! submit a failure?
-		return;
-	}
-	assert ( pServed->m_pIndex );
-	m_tHook.SetIndex ( pServed->m_pIndex );
-	m_tHook.SetQueryType ( m_eQueryType );
-
-	// create sorters
-	SphQueueRes_t tQueueRes;
-	VecTraits_T<ISphMatchSorter *> dSorters ( ppSorters, iQueries );
-	VecTraits_T<StrVec_t> dExtraSchemas = m_dExtraSchemas.Slice ( iQueries * tThd.m_tDesc.m_iCookie, iQueries );
-	CSphFixedVector<CSphString> dErrors ( dSorters.GetLength() );
-	int iValidSorters = CreateSorters ( pServed->m_pIndex, dSorters, dErrors, dExtraSchemas, tQueueRes );
-	if ( iValidSorters<dSorters.GetLength() )
-	{
-		ARRAY_FOREACH ( i, dErrors )
-		{
-			if ( !dErrors[i].IsEmpty() )
-				ppResults[i]->m_sError = dErrors[i].cstr();
-		}
-	}
-
-	if ( !iValidSorters )
-		return;
-
-	m_bMultiQueue = tQueueRes.m_bAlowMulti;
-
-	int iIndexWeight = m_dLocal[iLocal].m_iWeight;
-
-	// do the query
-	CSphMultiQueryArgs tMultiArgs ( iIndexWeight );
-	tMultiArgs.m_uPackedFactorFlags = tQueueRes.m_uPackedFactorFlags;
-	if ( m_bGotLocalDF )
-	{
-		tMultiArgs.m_bLocalDF = true;
-		tMultiArgs.m_pLocalDocs = &m_hLocalDocs;
-		tMultiArgs.m_iTotalDocs = m_iTotalDocs;
-	}
-
-	ppResults[0]->m_tIOStats.Start();
-	if ( m_bMultiQueue )
-		dWork.m_bResult = pServed->m_pIndex->MultiQuery ( &m_dQueries[m_iStart], ppResults[0], iQueries, ppSorters, tMultiArgs );
-	else
-		dWork.m_bResult = pServed->m_pIndex->MultiQueryEx ( iQueries, &m_dQueries[m_iStart], ppResults, ppSorters, tMultiArgs );
-
-	ppResults[0]->m_tIOStats.Stop();
-
-	iCpuTime += sphCpuTimer();
-	for ( int i=0; i<iQueries; ++i )
-		ppResults[i]->m_iCpuTime = iCpuTime;
-}
-#endif
 
 static int GetMaxMatches ( int iQueryMaxMatches, const CSphIndex * pIndex )
 {
@@ -7372,46 +7079,6 @@ struct ExcerptQuery_t
 	CSphVector<BYTE> m_dResult;			///< query result
 };
 
-#if 0
-struct SnippetJob_t : public ISphJob
-{
-	long						m_iQueries = 0;
-	ExcerptQuery_t *			m_pQueries = nullptr;
-	const SnippetQuerySettings_t* m_pSettings = nullptr;
-	CSphAtomic *				m_pCurQuery = nullptr;
-	CSphIndex *					m_pIndex = nullptr;
-	CrashQuery_t				m_tCrashQuery;
-
-	void Call () final
-	{
-		GlobalCrashQuerySet ( m_tCrashQuery ); // transfer crash info into container
-
-		// fixme! really only one query text and settings for the entire batch
-		// fixme! error handling!
-		CSphScopedPtr<SnippetBuilder_c>	pSnippetBuilder ( new SnippetBuilder_c );
-		pSnippetBuilder->Setup ( m_pIndex, *m_pSettings );
-		pSnippetBuilder->SetQuery ( m_pSettings->m_sQuery.cstr(), true, m_pQueries->m_sError );
-
-		CSphVector<int> dRequestedFields;
-		dRequestedFields.Add(0);
-
-		for ( long iQuery = (*m_pCurQuery)++; iQuery<m_iQueries; iQuery = (*m_pCurQuery)++ )
-		{
-			auto & tQuery = m_pQueries[iQuery];
-			if ( tQuery.m_iNext!=PROCESSED_ITEM )
-				continue;
-
-			SnippetResult_t tRes;
-			CSphScopedPtr<TextSource_i> pSource ( CreateSnippetSource ( m_pSettings->m_uFilesMode,
-					(const BYTE*)tQuery.m_sSource.cstr(), tQuery.m_sSource.Length() ) );
-			if ( pSnippetBuilder->Build ( pSource.Ptr(), tRes ) )
-				tQuery.m_dResult = pSnippetBuilder->PackResult ( tRes, dRequestedFields );
-			else
-				m_pQueries->m_sError = tRes.m_sError;
-		}
-	}
-};
-#endif
 
 class SnippetRemote_c : public RequestBuilder_i, public ReplyParser_i
 {
@@ -8546,20 +8213,14 @@ void BuildStatus ( VectorLike & dStatus )
 		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iDistQueries );
 
 	// status of thread pool
-//	if ( g_pThdPool )
-	{
-		if ( dStatus.MatchAdd ( "workers_total" ) )
-			dStatus.Add().SetSprintf ( "%d", GlobalWorkPool()->WorkingThreads() );
-//			dStatus.Add().SetSprintf ( "%d", g_pThdPool->GetTotalWorkerCount() );
-		if ( dStatus.MatchAdd ( "workers_active" ) )
-			dStatus.Add().SetSprintf( "%d", myinfo::CountAll());
-		if ( dStatus.MatchAdd ( "workers_clients" ) )
-			dStatus.Add ().SetSprintf ( "%d", myinfo::CountClients());
-//		dStatus.Add ().SetSprintf ( "%d", g_pThdPool->GetActiveWorkerCount ());
-		if ( dStatus.MatchAdd ( "work_queue_length" ) )
-			dStatus.Add ().SetSprintf ( "%d", GlobalWorkPool()->Works());
-//			dStatus.Add().SetSprintf ( "%d", g_pThdPool->GetQueueLength() );
-	}
+	if ( dStatus.MatchAdd ( "workers_total" ) )
+		dStatus.Add().SetSprintf ( "%d", GlobalWorkPool()->WorkingThreads() );
+	if ( dStatus.MatchAdd ( "workers_active" ) )
+		dStatus.Add().SetSprintf( "%d", myinfo::CountAll());
+	if ( dStatus.MatchAdd ( "workers_clients" ) )
+		dStatus.Add ().SetSprintf ( "%d", myinfo::CountClients());
+	if ( dStatus.MatchAdd ( "work_queue_length" ) )
+		dStatus.Add ().SetSprintf ( "%d", GlobalWorkPool()->Works());
 
 	for ( RLockedDistrIt_c it ( g_pDistIndexes ); it.Next (); )
 	{
@@ -9016,147 +8677,6 @@ void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 	tOut.SendInt ( iCookie ); // echo the cookie back
 }
 
-#if 0
-static void HandleClientSphinx ( int iSock, ThreadLocal_t & tThread ) REQUIRES ( HandlerThread )
-{
-	if ( iSock<0 )
-	{
-		sphWarning ( "invalid socket passed to HandleClientSphinx" );
-		return;
-	}
-
-	auto& tThd = tThread.m_tDesc;
-
-	MEMORY ( MEM_API_HANDLE );
-	ThdState ( ThdState_e::HANDSHAKE, tThd );
-
-	int64_t iCID = tThd.m_iConnID;
-	const char * sClientIP = tThd.m_sClientName.cstr();
-
-	// send my version
-	DWORD uServer = htonl ( SPHINX_SEARCHD_PROTO );
-	if ( sphSockSend ( iSock, (char*)&uServer, sizeof(uServer) )!=sizeof(uServer) )
-	{
-		sphWarning ( "failed to send server version (client=%s(" INT64_FMT "))", sClientIP, iCID );
-		return;
-	}
-
-	// get client version and request
-	int iMagic = 0;
-	int iGot = SockReadFast ( iSock, &iMagic, sizeof(iMagic), g_iReadTimeoutS );
-
-	bool bReadErr = ( iGot!=sizeof(iMagic) );
-	sphLogDebugv ( "conn %s(" INT64_FMT "): got handshake, major v.%d, err %d", sClientIP, iCID, iMagic, (int)bReadErr );
-	if ( bReadErr )
-	{
-		sphLogDebugv ( "conn %s(" INT64_FMT "): exiting on handshake error", sClientIP, iCID );
-		return;
-	}
-
-	bool bPersist = false;
-	int iPconnIdle = 0;
-	do
-	{
-		NetInputBuffer_c tBuf ( iSock );
-		NetOutputBuffer_c tOut ( iSock );
-
-		int iTimeout = bPersist ? 1 : g_iReadTimeoutS;
-
-		// in "persistent connection" mode, we want interruptible waits
-		// so that the worker child could be forcibly restarted
-		//
-		// currently, the only signal allowed to interrupt this read is SIGTERM
-		// letting SIGHUP interrupt causes trouble under query/rotation pressure
-		// see sphSockRead() and ReadFrom() for details
-		ThdState ( ThdState_e::NET_IDLE, tThd );
-		bool bCommand = tBuf.ReadFrom ( 8, iTimeout, bPersist );
-
-		// on SIGTERM, bail unconditionally and immediately, at all times
-		if ( !bCommand && g_bGotSigterm )
-		{
-			sphLogDebugv ( "conn %s(" INT64_FMT "): bailing on SIGTERM", sClientIP, iCID );
-			break;
-		}
-
-		// on SIGHUP vs pconn, bail if a pconn was idle for 1 sec
-		if ( bPersist && !bCommand && g_bGotSighup && sphSockPeekErrno()==ETIMEDOUT )
-		{
-			sphLogDebugv ( "conn %s(" INT64_FMT "): bailing idle pconn on SIGHUP", sClientIP, iCID );
-			break;
-		}
-
-		// on pconn that was idle for 300 sec (client_timeout), bail
-		if ( bPersist && !bCommand && sphSockPeekErrno()==ETIMEDOUT )
-		{
-			iPconnIdle += iTimeout;
-			bool bClientTimedout = ( iPconnIdle>=g_iClientTimeoutS );
-			if ( bClientTimedout )
-				sphLogDebugv ( "conn %s(" INT64_FMT "): bailing idle pconn on client_timeout", sClientIP, iCID );
-
-			if ( !bClientTimedout )
-				continue;
-			else
-				break;
-		}
-		iPconnIdle = 0;
-
-		// on any other signals vs pconn, ignore and keep looping
-		// (redundant for now, as the only allowed interruption is SIGTERM, but.. let's keep it)
-		if ( bPersist && !bCommand && tBuf.IsIntr() )
-			continue;
-
-		// okay, signal related mess should be over, try to parse the command
-		// (but some other socket error still might had happened, so beware)
-		ThdState ( ThdState_e::NET_READ, tThd );
-		auto eCommand = ( SearchdCommand_e ) tBuf.GetWord ();
-		WORD uCommandVer = tBuf.GetWord ();
-		int iLength = tBuf.GetInt ();
-		if ( tBuf.GetError() )
-		{
-			// under high load, there can be pretty frequent accept() vs connect() timeouts
-			// lets avoid agent log flood
-			//
-			// sphWarning ( "failed to receive client version and request (client=%s, error=%s)", sClientIP, sphSockError() );
-			sphLogDebugv ( "conn %s(" INT64_FMT "): bailing on failed request header (sockerr=%s)", sClientIP, iCID, sphSockError() );
-			break;
-		}
-
-		// check request
-		if ( eCommand>=SEARCHD_COMMAND_WRONG || iLength<0 || iLength>g_iMaxPacketSize )
-		{
-			// unknown command, default response header
-			SendErrorReply ( tOut, "invalid command (code=%d, len=%d)", eCommand, iLength );
-			tOut.Flush ();
-
-			// if request length is insane, low level comm is broken, so we bail out
-			if ( iLength<0 || iLength>g_iMaxPacketSize )
-				sphWarning ( "ill-formed client request (length=%d out of bounds)", iLength );
-
-			// if command is insane, low level comm is broken, so we bail out
-			if ( eCommand>=SEARCHD_COMMAND_WRONG )
-				sphWarning ( "ill-formed client request (command=%d, SEARCHD_COMMAND_TOTAL=%d)", eCommand, SEARCHD_COMMAND_TOTAL );
-
-			break;
-		}
-
-		// get request body
-		assert ( iLength>=0 && iLength<=g_iMaxPacketSize );
-		if ( iLength && !tBuf.ReadFrom ( iLength ) )
-		{
-			sphWarning ( "failed to receive client request body (client=%s(" INT64_FMT "), exp=%d, error='%s')", sClientIP, iCID, iLength, sphSockError() );
-			break;
-		}
-
-		bPersist |= LoopClientSphinx ( eCommand, uCommandVer, iLength, tThd, tBuf, tOut, true );
-		tOut.Flush();
-	} while ( bPersist );
-
-	if ( bPersist )
-		g_iPersistentInUse.Dec();
-
-	sphLogDebugv ( "conn %s(" INT64_FMT "): exiting", sClientIP, iCID );
-}
-#endif
 
 bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength,
 	InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist )
@@ -12278,6 +11798,7 @@ SphinxqlReplyParser_c::SphinxqlReplyParser_c ( int * pUpd, int * pWarns )
 	, m_pWarns ( pWarns )
 {}
 
+// fixme! reuse code from sphinxql, leave only refs here
 bool SphinxqlReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
 {
 	DWORD uSize = ( tReq.GetLSBDword() & 0x00ffffff ) - 1;
@@ -15912,155 +15433,6 @@ bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dSt
 	return true;
 }
 
-#if 0
-bool ReadMySQLPacketHeader ( int iSock, int& iLen, BYTE& uPacketID )
-{
-	const int MAX_PACKET_LEN = 0xffffffL; // 16777215 bytes, max low level packet size
-	NetInputBuffer_c tIn ( iSock );
-	if ( !tIn.ReadFrom ( 4, g_iClientQlTimeoutS, true ) )
-		return false;
-	DWORD uAddon = tIn.GetLSBDword ();
-	uPacketID = 1 + ( BYTE ) ( uAddon >> 24 );
-	iLen = ( uAddon & MAX_PACKET_LEN );
-	return true;
-}
-
-static void HandleClientMySQL ( int iSock, ThreadLocal_t & tThread ) REQUIRES ( HandlerThread )
-{
-	auto & tThd = tThread.m_tDesc;
-
-	MEMORY ( MEM_SQL_HANDLE );
-	ThdState ( ThdState_e::HANDSHAKE, tThd );
-
-	// set off query guard
-	CrashQuery_t tCrashQuery;
-	tCrashQuery.m_bMySQL = true;
-	GlobalCrashQuerySet ( tCrashQuery );
-
-	int iCID = tThd.m_iConnID;
-	const char * sClientIP = tThd.m_sClientName.cstr();
-
-	if ( sphSockSend ( iSock, g_sMysqlHandshake, g_iMysqlHandshake )!=g_iMysqlHandshake )
-	{
-		int iErrno = sphSockGetErrno ();
-		sphWarning ( "failed to send server version (client=%s(%d), error: %d '%s')", sClientIP, iCID, iErrno, sphSockError ( iErrno ) );
-		return;
-	}
-
-	CSphString sQuery; // to keep data alive for SphCrashQuery_c
-	CSphinxqlSession tSession; // session variables and state
-	tSession.m_tVars.m_bVIP = tThd.m_bVip;
-	bool bAuthed = false;
-	BYTE uPacketID = 1;
-	int iPacketLen = 0;
-
-	const int MAX_PACKET_LEN = 0xffffffL; // 16777215 bytes, max low level packet size
-	while (true)
-	{
-		NetOutputBuffer_c tOut ( iSock ); // OPTIMIZE? looks like buffer size matters a lot..
-		NetInputBuffer_c tIn ( iSock );
-
-		// get next packet
-		// we want interruptible calls here, so that shutdowns could be honored
-		ThdState ( ThdState_e::NET_IDLE, tThd );
-		if ( !ReadMySQLPacketHeader ( iSock, iPacketLen, uPacketID ) )
-		{
-			sphLogDebugv ( "conn %s(%d): bailing on failed MySQL header (sockerr=%s)", sClientIP, iCID, sphSockError() );
-			break;
-		}
-
-		// setup per-query profiling
-		bool bProfile = tSession.m_tVars.m_bProfile; // the current statement might change it
-		if ( bProfile )
-		{
-			tSession.m_tProfile.Start ( SPH_QSTATE_NET_READ );
-			tOut.SetProfiler ( &tSession.m_tProfile );
-		}
-
-		// keep getting that packet
-		ThdState ( ThdState_e::NET_READ, tThd );
-		if ( !tIn.ReadFrom ( iPacketLen, g_iClientQlTimeoutS, true ) )
-		{
-			sphWarning ( "failed to receive MySQL request body (client=%s(%d), exp=%d, error='%s')", sClientIP, iCID,
-					iPacketLen, sphSockError() );
-			break;
-		}
-
-		if ( bProfile )
-			tSession.m_tProfile.Switch ( SPH_QSTATE_UNKNOWN );
-
-		// handle big packets
-		if ( iPacketLen==MAX_PACKET_LEN )
-		{
-			int iAddonLen = -1;
-			do
-			{
-				if ( !ReadMySQLPacketHeader ( iSock, iAddonLen, uPacketID ) )
-				{
-					sphLogDebugv ( "conn %s(%d): bailing on failed MySQL header2 (sockerr=%s)", sClientIP, iCID,
-							sphSockError() );
-					break;
-				}
-
-				if ( !tIn.ReadFrom ( iAddonLen, g_iClientQlTimeoutS, true, true ) )
-				{
-					sphWarning ( "failed to receive MySQL request body2 (client=%s(%d), exp=%d, error='%s')", sClientIP,
-							iCID, iAddonLen, sphSockError() );
-					iAddonLen = -1;
-					break;
-				}
-				iPacketLen += iAddonLen;
-			} while ( iAddonLen==MAX_PACKET_LEN );
-			if ( iAddonLen<0 )
-				break;
-			if ( iPacketLen<0 || iPacketLen>g_iMaxPacketSize )
-			{
-				sphWarning ( "ill-formed client request (length=%d out of bounds)", iPacketLen );
-				break;
-			}
-		}
-
-		// handle auth packet
-		if ( !bAuthed )
-		{
-			ThdState ( ThdState_e::NET_WRITE, tThd );
-			bAuthed = true;
-			if ( IsFederatedUser ( tIn.GetBufferPtr(), tIn.GetLength() ) )
-				tSession.SetFederatedUser();
-			SendMysqlOkPacket ( tOut, uPacketID, tSession.m_tVars.m_bAutoCommit );
-			tOut.Flush();
-			if ( tOut.GetError() )
-				break;
-			else
-				continue;
-		}
-
-		bool bRun = LoopClientMySQL ( uPacketID, tSession, sQuery, iPacketLen, bProfile, tThread, tIn, tOut );
-
-		if ( !bRun )
-			break;
-	}
-
-	// set off query guard
-	GlobalCrashQuerySet ( CrashQuery_t() );
-}
-
-
-//////////////////////////////////////////////////////////////////////////
-// HANDLE-BY-LISTENER
-//////////////////////////////////////////////////////////////////////////
-
-void HandleClient ( Proto_e eProto, int iSock, ThreadLocal_t & tThd ) REQUIRES (HandlerThread)
-{
-	switch ( eProto )
-	{
-		case Proto_e::SPHINX:		HandleClientSphinx ( iSock, tThd ); break;
-		case Proto_e::MYSQL41:		HandleClientMySQL ( iSock, tThd ); break;
-		default:				assert ( 0 && "unhandled protocol type" ); break;
-	}
-}
-#endif
-
 /////////////////////////////////////////////////////////////////////////////
 // INDEX ROTATION
 /////////////////////////////////////////////////////////////////////////////
@@ -18400,162 +17772,6 @@ void ShowProgress ( const CSphIndexProgress * pProgress, bool bPhaseEnd )
 	fflush ( stdout );
 }
 
-#if 0
-void FailClient ( int iSock, const char * sMessage )
-{
-	NetOutputBuffer_c tOut ( iSock );
-	tOut.SendInt ( SPHINX_CLIENT_VERSION );
-	APICommand_t tHeader ( tOut, SEARCHD_RETRY );
-	tOut.SendString ( sMessage );
-	tOut.Flush ();
-
-	// FIXME? without some wait, client fails to receive the response on windows
-	sphSockClose ( iSock );
-}
-
-static const char * g_dSphinxQLMaxedOutPacket = "\x17\x00\x00\x00\xff\x10\x04Too many connections";
-static const int g_iSphinxQLMaxedOutLen = 27;
-
-
-void MysqlMaxedOut ( int iSock )
-{
-	if ( sphSockSend ( iSock, g_dSphinxQLMaxedOutPacket, g_iSphinxQLMaxedOutLen ) <0 )
-	{
-		int iErrno = sphSockGetErrno ();
-		sphWarning ( "send() failed: %d: %s", iErrno, sphSockError ( iErrno ) );
-	}
-	sphSockClose ( iSock );
-}
-
-
-Listener_t * DoAccept ( int * pClientSock, char * sClientName ) REQUIRES ( MainThread )
-{
-	assert ( pClientSock );
-	assert ( *pClientSock==-1 );
-
-	int iMaxFD = 0;
-	fd_set fdsAccept;
-	FD_ZERO ( &fdsAccept );
-
-	ARRAY_FOREACH ( i, g_dListeners )
-	{
-		sphFDSet ( g_dListeners[i].m_iSock, &fdsAccept );
-		iMaxFD = Max ( iMaxFD, g_dListeners[i].m_iSock );
-	}
-	iMaxFD++;
-
-	struct timeval tvTimeout;
-	tvTimeout.tv_sec = USE_WINDOWS ? 0 : 1;
-	tvTimeout.tv_usec = USE_WINDOWS ? 50000 : 0;
-
-	// select should be OK here as listener sockets are created early and get low FDs
-	int iRes = ::select ( iMaxFD, &fdsAccept, NULL, NULL, &tvTimeout );
-	if ( iRes==0 )
-		return NULL;
-
-	if ( iRes<0 )
-	{
-		int iErrno = sphSockGetErrno();
-		if ( iErrno==EINTR || iErrno==EAGAIN || iErrno==EWOULDBLOCK )
-			return NULL;
-
-		static int iLastErrno = -1;
-		if ( iLastErrno!=iErrno )
-			sphWarning ( "select() failed: %s", sphSockError(iErrno) );
-		iLastErrno = iErrno;
-		return NULL;
-	}
-
-	ARRAY_FOREACH ( i, g_dListeners )
-	{
-		if ( !FD_ISSET ( g_dListeners[i].m_iSock, &fdsAccept ) )
-			continue;
-
-		// accept
-		struct sockaddr_storage saStorage;
-		socklen_t uLength = sizeof(saStorage);
-		int iClientSock = accept ( g_dListeners[i].m_iSock, (struct sockaddr *)&saStorage, &uLength );
-
-		// handle failures
-		if ( iClientSock<0 )
-		{
-			const int iErrno = sphSockGetErrno();
-			if ( iErrno==EINTR || iErrno==ECONNABORTED || iErrno==EAGAIN || iErrno==EWOULDBLOCK )
-				return NULL;
-
-			sphFatal ( "accept() failed: %s", sphSockError(iErrno) );
-		}
-
-#ifdef TCP_NODELAY
-		int iOn = 1;
-		if ( g_dListeners[i].m_bTcp && setsockopt ( iClientSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
-			sphWarning ( "setsockopt() failed: %s", sphSockError() );
-#endif
-		g_tStats.m_iConnections.Inc();
-
-		if ( ++g_iConnectionID<0 )
-			g_iConnectionID = 0;
-
-		// format client address
-		if ( sClientName )
-		{
-			sClientName[0] = '\0';
-			if ( saStorage.ss_family==AF_INET )
-			{
-				struct sockaddr_in * pSa = ((struct sockaddr_in *)&saStorage);
-				sphFormatIP ( sClientName, SPH_ADDRESS_SIZE, pSa->sin_addr.s_addr );
-
-				char * d = sClientName;
-				while ( *d )
-					d++;
-				snprintf ( d, 7, ":%d", (int)ntohs ( pSa->sin_port ) ); //NOLINT
-			}
-			if ( saStorage.ss_family==AF_UNIX )
-				strncpy ( sClientName, "(local)", SPH_ADDRESS_SIZE );
-		}
-
-		// accepted!
-#if !USE_WINDOWS && !HAVE_POLL
-		// when there is no poll(), we use select(),
-		// which can only handle a limited range of fds..
-		if ( SPH_FDSET_OVERFLOW ( iClientSock ) )
-		{
-			// otherwise, we fail this client (we have to)
-			FailClient ( iClientSock, SEARCHD_RETRY, "server maxed out, retry in a second" );
-			sphWarning ( "maxed out, dismissing client (socket=%d)", iClientSock );
-			sphSockClose ( iClientSock );
-			return NULL;
-		}
-#endif
-
-		*pClientSock = iClientSock;
-		return &g_dListeners[i];
-	}
-
-	return NULL;
-}
-
-
-void HandlerThreadFunc ( void * pArg ) REQUIRES ( !HandlerThread )
-{
-	ScopedRole_c tHandler ( HandlerThread );
-	// handle that client
-	auto * pThread = (ThreadLocal_t*) pArg;
-	auto pThd = &pThread->m_tDesc;
-	pThd->m_iTid = GetOsThreadId();
-	HandleClient ( pThd->m_eProto, pThd->m_iClientSock, *pThread );
-	sphSockClose ( pThd->m_iClientSock );
-
-	// done; remove myself from the table
-#if USE_WINDOWS
-	// FIXME? this is sort of automatic on UNIX (pthread_exit() gets implicitly called on return)
-	CloseHandle ( pThd->m_tThd );
-#endif
-	pThd->RemoveFromGlobal ();
-	SafeDelete ( pThread );
-}
-#endif
-
 void TickHead () REQUIRES ( MainThread )
 {
 	CheckSignals ();
@@ -18563,59 +17779,15 @@ void TickHead () REQUIRES ( MainThread )
 	CheckReopenLogs ();
 	Threads::CallCoroutine ( CheckRotate );
 
-//	if ( g_pThdPool )
-	{
-		sphInfo ( nullptr ); // flush dupes
+	sphInfo ( nullptr ); // flush dupes
 #if USE_WINDOWS
-		// at windows there is no signals that interrupt sleep
-		// need to sleep less to make main loop more responsible
-		int tmSleep = 100;
+	// at windows there is no signals that interrupt sleep
+	// need to sleep less to make main loop more responsible
+	int tmSleep = 100;
 #else
-		int tmSleep = 500;
+	int tmSleep = 500;
 #endif
-		sphSleepMsec ( tmSleep );
-		return;
-	}
-#if 0
-	int iClientSock = -1;
-	char sClientName[SPH_ADDRPORT_SIZE];
-	Listener_t * pListener = DoAccept ( &iClientSock, sClientName );
-	if ( !pListener )
-		return;
-
-	if ( !g_pThdPool && g_iMaxChildren && ThreadsNum()>=g_iMaxChildren )
-	{
-		if ( pListener->m_eProto==Proto_e::SPHINX )
-			FailClient ( iClientSock, "server maxed out, retry in a second" );
-		else
-			MysqlMaxedOut ( iClientSock );
-		sphWarning ( "maxed out, dismissing client" );
-
-		g_tStats.m_iMaxedOut.Inc();
-		return;
-	}
-
-	auto * pThread = new ThreadLocal_t;
-	auto * pThd = &pThread->m_tDesc;
-	pThd->m_eProto = pListener->m_eProto;
-	pThd->m_iClientSock = iClientSock;
-	pThd->m_sClientName = sClientName;
-	pThd->m_iConnID = g_iConnectionID;
-	pThd->m_tmConnect = sphMicroTimer();
-	pThd->m_bVip = pListener->m_bVIP;
-
-	pThd->AddToGlobal ();
-
-	if ( !sphCrashThreadCreate ( &pThd->m_tThd, HandlerThreadFunc, pThread, true, "handler" ) )
-	{
-		int iErr = errno;
-		pThd->RemoveFromGlobal ();
-		SafeDelete ( pThread );
-
-		FailClient ( iClientSock, "failed to create worker thread" );
-		sphWarning ( "failed to create worker thread, threads(%d), error[%d] %s", ThreadsNum(), iErr, strerrorm(iErr) );
-	}
-#endif
+	sphSleepMsec ( tmSleep );
 }
 
 bool g_bVtune = false;
@@ -19110,7 +18282,6 @@ static void SetUidShort ( bool bTestMode )
 }
 
 namespace { // static
-void ExposedSetTopQueryTls ( CrashQuery_t * pQuery );
 
 // implement '--stop' and '--stopwait' (connect and stop another instance by pid file from config)
 void StopOrStopWaitAnother ( CSphVariant * v, bool bWait ) REQUIRES ( MainThread )
@@ -19323,7 +18494,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	CSphString		sOptListen;
 	bool			bOptListen = false;
 	bool			bTestMode = false;
-	bool			bTestThdPoolMode = false;
 	bool			bOptDebugQlog = true;
 	bool			bForcedPreread = false;
 	bool			bNewCluster = false;
@@ -19365,7 +18535,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		OPT1 ( "--logreplication" )	g_eLogLevel = Max ( g_eLogLevel, SPH_LOG_RPL_DEBUG );
 		OPT1 ( "--safetrace" )		g_bSafeTrace = true;
 		OPT1 ( "--test" )			{ g_bWatchdog = false; bTestMode = true; } // internal option, do NOT document
-		OPT1 ( "--test-thd-pool" )	{ g_bWatchdog = false; bTestMode = true; bTestThdPoolMode = true; } // internal option, do NOT document
+		OPT1 ( "--test-thd-pool" )	{ g_bWatchdog = false; bTestMode = true; } // internal option, do NOT document
 		OPT1 ( "--strip-path" )		g_bStripPath = true;
 		OPT1 ( "--vtune" )			g_bVtune = true;
 		OPT1 ( "--noqlog" )			bOptDebugQlog = false;
@@ -19497,27 +18667,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	g_bWatchdog = hSearchdpre.GetInt ( "watchdog", g_bWatchdog )!=0;
 
-	bool bThdPool = true; // fixme! retired piece, left only to the end of coro migration
-	if ( hSearchdpre("workers") )
-	{
-		if ( hSearchdpre["workers"]=="threads" )
-		{
-			bThdPool = false;
-		} else if ( hSearchdpre["workers"]=="thread_pool" )
-		{
-			bThdPool = true;
-		}
-	}
-
-	if ( bThdPool || bTestThdPoolMode )
-	{
-#if HAVE_POLL || HAVE_EPOLL || HAVE_KQUEUE
-		bThdPool = true;
-#else
-		bThdPool = false;
-		sphWarning ( "no poll, epoll, or kqueue found, thread pool unavailable, going back to thread workers" );
-#endif
-	}
 	if ( g_iMaxPacketSize<128*1024 || g_iMaxPacketSize>128*1024*1024 )
 		sphFatal ( "max_packet_size out of bounds (128K..128M)" );
 
@@ -19662,45 +18811,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	SetServerSSLKeys ( hSearchd ( "ssl_cert" ), hSearchd ( "ssl_key" ), hSearchd ( "ssl_ca" ) );
 
-#if 0
-	bool bNeedSsl = g_dListeners.FindFirst ( [] ( const Listener_t & tDesc ) { return tDesc.m_eProto==Proto_e::HTTPS; } );
-	if ( bNeedSsl )
-	{
-		bool bSslValid = SslInit();
-		bool bSslKeysValid = true;
-		if ( bSslValid )
-		{
-			const char * sSslCert = hSearchd ( "ssl_cert" ) ? hSearchd ( "ssl_cert" )->cstr() : nullptr;
-			const char * sSslKey = hSearchd ( "ssl_key" ) ? hSearchd ( "ssl_key" )->cstr() : nullptr;
-			const char * sSslCa = hSearchd ( "ssl_ca" ) ? hSearchd ( "ssl_ca" )->cstr() : nullptr;
-			if ( sSslCert || sSslKey || sSslCa )
-			{
-				bSslValid = SetKeys ( sSslCert, sSslKey, sSslCa );
-			} else
-			{
-				bSslKeysValid = false;
-			}
-		}
-
-		if ( !bSslValid || !bSslKeysValid )
-		{
-			for ( Listener_t & tDesc : g_dListeners )
-			{
-				if ( tDesc.m_eProto!=Proto_e::HTTPS )
-					continue;
-				tDesc.m_eProto = Proto_e::HTTP;
-			}
-#if USE_SSL
-			sphWarning ( "no SSL %s found, all HTTPS listeners replaced with HTTP", bSslKeysValid ? "library" : "keys" );
-#else
-			sphWarning ( "binary compiled without SSL library support, set CMake option USE_SSL=1, all HTTPS listeners replaced with HTTP" );
-#endif
-		}
-	}
-
-#endif
-
-
 	// set up ping service (if necessary) before loading indexes
 	// (since loading ha-mirrors of distributed already assumes ping is usable).
 	if ( g_iPingIntervalUs>0 )
@@ -19712,6 +18822,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	auto iRtFlushPeriodUs = hSearchd.GetUsTime64S ( "rt_flush_period", 36000000000ll ); // 10h
 	SetRtFlushPeriod ( Max ( iRtFlushPeriodUs, 10 * 1000000 ) );
 	g_pLocalIndexes->SetAddOrReplaceHook ( HookSubscribeMutableFlush );
+
 	//////////////////////
 	// build indexes hash
 	//////////////////////
@@ -19725,7 +18836,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		sphSplit ( dExactIndexes, dOptIndex.cstr (), "," );
 
 	SetPercolateQueryParserFactory ( PercolateQueryParserFactory );
-	Threads::CallCoroutine ( [&hConf, &dExactIndexes]
+	Threads::CallCoroutine ( [&hConf, &dExactIndexes] // clang doesn't need hConf to capture, but win/gcc fails, if not.
 	{
 		ScopedRole_c thMain ( MainThread );
 		ConfigureAndPreload ( hConf, dExactIndexes );
@@ -19916,45 +19027,36 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 				sphFatal ( "listen() failed: %s", sphSockError () );
 		}
 
-//	if ( g_pThdPool )
+	// net thread needs non-blocking sockets
+	for ( const auto& dListener : g_dListeners )
 	{
-		// net thread needs non-blocking sockets
-		for ( const auto& dListener : g_dListeners )
+		if ( sphSetSockNB ( dListener.m_iSock )<0 )
 		{
-			if ( sphSetSockNB ( dListener.m_iSock )<0 )
-			{
-				sphWarning ( "sphSetSockNB() failed: %s", sphSockError() );
-				sphSockClose ( dListener.m_iSock );
-			}
+			sphWarning ( "sphSetSockNB() failed: %s", sphSockError() );
+			sphSockClose ( dListener.m_iSock );
+		}
 
 #if defined (TCP_FASTOPEN)
-			if ( ( g_iTFO!=TFO_ABSENT ) && ( g_iTFO & TFO_LISTEN ) )
-			{
-				int iOn = 1;
-				if ( setsockopt ( dListener.m_iSock, IPPROTO_TCP, TCP_FASTOPEN, ( char * ) &iOn, sizeof ( iOn ) ) )
-					sphLogDebug ( "setsockopt(TCP_FASTOPEN) failed: %s", sphSockError () );
-			}
-#endif
-		}
-
-		g_pTickPoolThread = Threads::MakeThreadPool ( g_iNetWorkers, "TickPool" );
-		WipeSchedulerOnFork ( g_pTickPoolThread );
-
-		g_dNetLoops.Resize ( g_iNetWorkers );
-		for ( auto & pNetLoop : g_dNetLoops )
+		if ( ( g_iTFO!=TFO_ABSENT ) && ( g_iTFO & TFO_LISTEN ) )
 		{
-			pNetLoop = new CSphNetLoop ( g_dListeners );
-			g_pTickPoolThread->Schedule ( [pNetLoop] { pNetLoop->LoopNetPoll (); }, false );
+			int iOn = 1;
+			if ( setsockopt ( dListener.m_iSock, IPPROTO_TCP, TCP_FASTOPEN, ( char * ) &iOn, sizeof ( iOn ) ) )
+				sphLogDebug ( "setsockopt(TCP_FASTOPEN) failed: %s", sphSockError () );
 		}
+#endif
 	}
 
-	// crash logging for the main thread (for --console case)
-	// fixme! check if it is still actual with coro, and m.b. remove this.
-	// (we never perform queries from main thread now)
-	CrashQuery_t tQueryTLS;
-	ExposedSetTopQueryTls ( &tQueryTLS );
+	g_pTickPoolThread = Threads::MakeThreadPool ( g_iNetWorkers, "TickPool" );
+	WipeSchedulerOnFork ( g_pTickPoolThread );
 
-	// untill no threads started, schedule stopping of alone threads to very bottom
+	g_dNetLoops.Resize ( g_iNetWorkers );
+	for ( auto & pNetLoop : g_dNetLoops )
+	{
+		pNetLoop = new CSphNetLoop ( g_dListeners );
+		g_pTickPoolThread->Schedule ( [pNetLoop] { pNetLoop->LoopNetPoll (); }, false );
+	}
+
+	// until no threads started, schedule stopping of alone threads to very bottom
 	WipeGlobalSchedulerOnShutdownAndFork();
 	Detached::AloneShutdowncatch ();
 
@@ -20042,14 +19144,4 @@ volatile bool& sphGetGotSigusr1()
 {
 	static bool bGotSigusr1 = false;
 	return bGotSigusr1;
-}
-
-// defined in threadutils.cpp
-// exposed _only_ here, to avoid unfair usage
-void GlobalSetTopQueryTLS ( CrashQuery_t * pQuery );
-namespace {
-	void ExposedSetTopQueryTls ( CrashQuery_t * pQuery )
-	{
-		GlobalSetTopQueryTLS ( pQuery );
-	}
 }

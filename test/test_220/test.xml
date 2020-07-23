@@ -20,7 +20,6 @@ searchd
 
 	# needed for "do not fetch too much" test below
 	max_packet_size = 128K
-	workers = threads
 }
 
 source base

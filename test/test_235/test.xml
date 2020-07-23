@@ -16,7 +16,6 @@ indexer
 searchd
 {
   <searchd_settings/>
-  workers = threads
   predicted_time_costs = doc=100000000, hit=1000000, skip=0, match=0
 }
 

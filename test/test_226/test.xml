@@ -5,7 +5,6 @@
 searchd
 {
 	<searchd_settings/>
-	workers					= threads
 }
 
 index facetdemo

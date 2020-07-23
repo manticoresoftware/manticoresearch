@@ -14,30 +14,4 @@
 
 #include "networking_daemon.h"
 
-#if 0
-struct NetStateQL_t final : public NetStateAPI_t
-{
-	SphinxqlSessionPublic	m_tSession;
-	bool				m_bAuthed = false;
-	BYTE				m_uPacketID = 1;
-};
-
-class NetReceiveDataQL_c final : public ISphNetAction
-{
-	class Impl_c;
-	Impl_c * m_pImpl = nullptr;
-
-public:
-	explicit NetReceiveDataQL_c ( NetStateQL_t * pState );
-	~NetReceiveDataQL_c() final;
-
-	NetEvent_e		Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) final;
-	NetEvent_e		Setup ( int64_t tmNow ) final;
-	void			CloseSocket () final;
-
-	void			SetupHandshakePhase();
-	void			SetupBodyPhase();
-};
-#endif
-
 void SqlServe ( SockWrapperPtr_c pSock );

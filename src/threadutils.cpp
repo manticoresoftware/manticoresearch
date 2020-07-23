@@ -1468,14 +1468,12 @@ CrashQuery_t** g_ppTlsCrashQuery ()
 	static thread_local CrashQuery_t* pTlsCrashQuery = nullptr;
 	return &pTlsCrashQuery;
 }
-}
 
 void GlobalSetTopQueryTLS ( CrashQuery_t * pQuery )
 {
 	*g_ppTlsCrashQuery() = pQuery;
 }
 
-namespace {
 void GlobalCrashQuerySet ( const CrashQuery_t & tQuery )
 {
 	CrashQuery_t * pQuery = *g_ppTlsCrashQuery();
@@ -1529,8 +1527,8 @@ bool Threads::CreateQ ( SphThread_t * pThread, Handler fnRun, bool bDetached, co
 // capture crash query and set it before running fnHandler.
 Threads::Handler Threads::WithCopiedCrashQuery ( Threads::Handler fnHandler )
 {
-	auto tParentCrashQuery = GlobalCrashQueryGetRef ();
-	return [tCrashQuery = std::move ( tParentCrashQuery ), fnHandler = std::move ( fnHandler )] {
+	CrashQuery_t tParentCrashQuery = GlobalCrashQueryGetRef ();
+	return [tCrashQuery = tParentCrashQuery, fnHandler = std::move ( fnHandler )] {
 		// CrashQueryKeeper_c _; // restore previous crash query on exit. Seems, that is not necessary
 		GlobalCrashQuerySet ( tCrashQuery );
 		fnHandler ();

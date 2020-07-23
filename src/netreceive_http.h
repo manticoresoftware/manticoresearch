@@ -14,20 +14,4 @@
 
 #include "networking_daemon.h"
 
-#if 0
-class NetReceiveDataHttp_c final : public ISphNetAction
-{
-	class Impl_c;
-	Impl_c * m_pImpl = nullptr;
-
-public:
-	explicit NetReceiveDataHttp_c ( NetStateAPI_t * pState );
-	~ NetReceiveDataHttp_c () final;
-
-	NetEvent_e		Loop ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) final;
-	NetEvent_e		Setup ( int64_t tmNow ) final;
-	void			CloseSocket () final;
-};
-#endif
-
 void HttpServe ( AsyncNetBufferPtr_c pBuf );

@@ -16,7 +16,6 @@ searchd
 	max_packet_size 	= 18M
 	dist_threads			= 4
 	read_timeout			= 1
-	workers = threads
 }
 
 source src1

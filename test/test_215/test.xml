@@ -16,7 +16,6 @@ indexer
 searchd
 {
 	<searchd_settings/>
-	workers = threads
 	<dynamic>
 		<variant>dist_threads = 0</variant>
 		<variant>dist_threads = 4</variant>

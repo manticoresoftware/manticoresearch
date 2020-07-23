@@ -18,7 +18,6 @@ searchd
 {
 	<searchd_settings/>
 	attr_flush_period = 10000
-	workers = threads
 }
 
 source src

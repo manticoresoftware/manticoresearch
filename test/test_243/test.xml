@@ -10,7 +10,6 @@ indexer
 
 searchd
 {
-	workers				= thread_pool
     read_timeout        = 90000
     client_timeout      = 90000
 	<searchd_settings/>

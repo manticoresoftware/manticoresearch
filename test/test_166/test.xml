@@ -14,8 +14,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
-	workers = threads
-	
+
 	collation_libc_locale = C
 	<dynamic>
 		<variant>collation_server = utf8_general_ci</variant>

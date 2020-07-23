@@ -64,36 +64,6 @@ void CSphWakeupEvent::Process ( DWORD uGotEvents, CSphNetLoop * )
 		DisposeEvent();
 }
 
-
-#if 0
-struct ThdJobCleanup_t final : public ISphJob
-{
-	CSphVector<ISphNetAction *> m_dCleanup;
-
-	explicit ThdJobCleanup_t ( CSphVector<ISphNetAction *>&& dCleanup )
-		: m_dCleanup ( std::move ( dCleanup ))
-	{}
-	~ThdJobCleanup_t () final { Clear(); }
-	void				Call () final { Clear(); };
-	void				Clear()
-	{
-		if ( g_eLogLevel>=SPH_LOG_VERBOSE_DEBUG && m_dCleanup.GetLength() )
-		{
-			StringBuilder_c sTmp;
-			ARRAY_FOREACH ( i, m_dCleanup )
-				sTmp.Sprintf ( "%p(%d), ", m_dCleanup[i], m_dCleanup[i]->m_iSock );
-
-			sphLogDebugv ( "cleaned jobs(sock)=%d, %s", m_dCleanup.GetLength (), sTmp.cstr ());
-		}
-
-		ARRAY_FOREACH ( i, m_dCleanup )
-			SafeDelete ( m_dCleanup[i] );
-
-		m_dCleanup.Reset();
-	}
-};
-#endif
-
 enum class NetloopState_e : BYTE
 {
 	UNKNOWN,

@@ -86,7 +86,7 @@ windows:
     expire_in: 12 hrs
   cache: {}
 
-.redhat_based: &redhat
+.redhat_based:
   stage: build
   dependencies: []
   variables:
@@ -115,13 +115,12 @@ windows:
     when: on_success
     expire_in: 12 hrs
 
-.debian_based: &debian
+.debian_based:
   stage: build
   dependencies: []
   tags:
     - docker
   variables:
-    CACHEB: "../cache"
     DIAGNOSTIC: 1 # let's set it by default forever
   script:
     - mc config host add dev $MINIO_HOST
@@ -143,7 +142,8 @@ windows:
     expire_in: 12 hrs
 
 rhel6:
-  <<: *redhat
+  extends:
+    - .redhat_based
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /rhel6/
   variables:
@@ -151,7 +151,8 @@ rhel6:
   image: registry.gitlab.com/manticoresearch/dev/centos6_cmake:317
 
 rhel7:
-  <<: *redhat
+  extends:
+    - .redhat_based
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /rhel7/
   variables:
@@ -159,7 +160,8 @@ rhel7:
   image: registry.gitlab.com/manticoresearch/dev/centos7_cmake:317
 
 rhelsplit7:
-  <<: *redhat
+  extends:
+    - .redhat_based
   rules:
     - if: $WHAT =~ /rhelsplit7/
   variables:
@@ -168,7 +170,8 @@ rhelsplit7:
   image: registry.gitlab.com/manticoresearch/dev/centos7_cmake:317
 
 rhel8:
-  <<: *redhat
+  extends:
+    - .redhat_based
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /rhel8/
   variables:
@@ -176,43 +179,50 @@ rhel8:
   image: registry.gitlab.com/manticoresearch/dev/centos8_cmake:317
 
 jessie:
-  <<: *debian
+  extends:
+    - .debian_based
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /jessie/
   image: registry.gitlab.com/manticoresearch/dev/jessie_cmake:317
 
 stretch:
-  <<: *debian
+  extends:
+    - .debian_based
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /stretch/
   image: registry.gitlab.com/manticoresearch/dev/stretch_cmake:317
 
 trusty:
-  <<: *debian
+  extends:
+    - .debian_based
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /trusty/
   image: registry.gitlab.com/manticoresearch/dev/trusty_cmake:317
 
 xenial:
-  <<: *debian
+  extends:
+    - .debian_based
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /xenial/
   image: registry.gitlab.com/manticoresearch/dev/xenial_cmake:317
 
 bionic:
-  <<: *debian
+  extends:
+    - .debian_based
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /bionic/
   image: registry.gitlab.com/manticoresearch/dev/bionic_cmake:317
 
 focal:
-  <<: *debian
+  extends:
+    - .debian_based
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /focal/
   image: registry.gitlab.com/manticoresearch/dev/focal_cmake:317
 
 buster:
-  <<: *debian
+  extends:
+    - .debian_based
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /buster/
   image: registry.gitlab.com/manticoresearch/dev/buster_cmake:317

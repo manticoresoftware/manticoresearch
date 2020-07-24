@@ -25,7 +25,9 @@ set (GALERANAME "galera-cmake-3.x-5.7")
 set (GALERA_BUNDLEZIP "${GALERANAME}.zip")
 
 # fixme! Republish into public repo when migration done
-set(GALERA_GITHUB "https://github.com/klirichek/galera/archive/cmake-3.x-5.7.zip")
+# that is strict link to github revision
+set(GALERA_GITHUB "https://github.com/klirichek/galera/archive/6612223e8915fe2f1d2a579f5c48b2f6e2dd7257.zip")
+#set(GALERA_GITHUB "https://github.com/klirichek/galera/archive/cmake-3.x-5.7.zip")
 #set(GALERA_GITHUB "https://github.com/manticoresoftware/galera/archive/cmake-3.x-5.7.zip")
 
 function(get_galera_api_version OUTVAR HEADER)

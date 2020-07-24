@@ -17,6 +17,7 @@
 
 include(update_bundle)
 
+# md5 should be f8288a861db7c97dc4750020c7c7aa6f for deterministic build
 set ( STEMMER_GITHUB "https://snowballstem.org/dist/libstemmer_c.tgz" )
 set ( STEMMER_BUNDLEZIP "libstemmer_c.tgz")
 

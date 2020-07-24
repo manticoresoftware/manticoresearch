@@ -6,6 +6,9 @@ FOREACH ( policy CMP0012 CMP0013 CMP0014 CMP0048 CMP0074 )
 	ENDIF ()
 ENDFOREACH ()
 
+STRING(TIMESTAMP BUILD_DATE "%s")
+set(ENV{SOURCE_DATE_EPOCH} ${BUILD_DATE})
+
 # override default options which affects windows builds
 # that is necessary to change /MD to /MT, and also to set libraries on win to implicitly defined
 set ( CMAKE_USER_MAKE_RULES_OVERRIDE ${CMAKE_CURRENT_SOURCE_DIR}/cmake/c_flag_overrides.cmake )
@@ -347,7 +350,7 @@ else ( WIN32 )
 
 	message ( STATUS "Storing system name" )
 	if ( UNIX AND NOT CYGWIN )
-		execute_process ( COMMAND "uname" "-a" OUTPUT_VARIABLE OS_UNAME )
+		execute_process ( COMMAND "uname" "-s" "-m" OUTPUT_VARIABLE OS_UNAME )
 		remove_crlf ( OS_UNAME ${OS_UNAME} )
 	endif ( UNIX AND NOT CYGWIN )
 

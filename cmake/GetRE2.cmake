@@ -15,7 +15,9 @@
 # If no file found, it will  try to fetch it from github, address
 # https://github.com/manticoresoftware/re2/archive/master.zip
 
-set(RE2_GITHUB "https://github.com/manticoresoftware/re2/archive/master.zip")
+#set(RE2_GITHUB "https://github.com/manticoresoftware/re2/archive/master.zip")
+# download specific revision by tag
+set(RE2_GITHUB "https://github.com/manticoresoftware/re2/archive/2015-06-01.zip")
 set(RE2_BUNDLEZIP "re2-master.zip")
 
 include(update_bundle)

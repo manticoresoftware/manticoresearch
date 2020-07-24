@@ -34,6 +34,15 @@ function(guess_from_git)
 	string(SUBSTRING "${GIT_TIMESTAMP_ID}" 2 -1 GIT_TIMESTAMP_ID)
 	set(GIT_TIMESTAMP_ID "${GIT_TIMESTAMP_ID}" PARENT_SCOPE)
 
+	# timestamp for reproducable packages
+	execute_process(COMMAND "${GIT_EXECUTABLE}" log -1 --pretty=%ct
+			WORKING_DIRECTORY "${SOURCE_DIR}"
+			RESULT_VARIABLE res
+			OUTPUT_VARIABLE GIT_EPOCH_ID
+			ERROR_QUIET
+			OUTPUT_STRIP_TRAILING_WHITESPACE)
+	set(SOURCE_DATE_EPOCH ${GIT_EPOCH_ID} PARENT_SCOPE)
+
 	# extract branch name (top of 'git status -s -b'), throw out leading '## '
 	execute_process(COMMAND "${GIT_EXECUTABLE}" status -s -b
 			WORKING_DIRECTORY "${SOURCE_DIR}"
@@ -67,6 +76,8 @@ function(extract_from_git_slug HEADER)
 		string(REPLACE "-" "" GIT_TIMESTAMP_ID "${GIT_TIMESTAMP_ID}")
 		string(SUBSTRING "${GIT_TIMESTAMP_ID}" 2 6 GIT_TIMESTAMP_ID)
 		set(GIT_TIMESTAMP_ID "${GIT_TIMESTAMP_ID}" PARENT_SCOPE)
+		# epoch for packaging
+		set(SOURCE_DATE_EPOCH ${GIT_EPOCH_ID} PARENT_SCOPE)
 		# branch id
 		set(GIT_BRANCH_ID "from tarball" PARENT_SCOPE)
 	endif ()
@@ -84,6 +95,8 @@ function (extract_from_header HEADER )
 				set(${CMAKE_MATCH_1} "${CMAKE_MATCH_2}" PARENT_SCOPE)
 			endif ()
 		endforeach ()
+		STRING(TIMESTAMP GIT_EPOCH_ID "%s")
+		set(SOURCE_DATE_EPOCH ${GIT_EPOCH_ID} PARENT_SCOPE)
 		set(GIT_BRANCH_ID "from tarball" PARENT_SCOPE)
 	endif()
 endfunction()
@@ -99,6 +112,8 @@ function(guess_from_dir_name SOURCE_DIR)
 	set(SPH_GIT_COMMIT_ID "${CMAKE_MATCH_3}" PARENT_SCOPE)
 	set(SPHINX_TAG "${CMAKE_MATCH_4}" PARENT_SCOPE)
 	set(GIT_BRANCH_ID "from the folder '${DIR}'" PARENT_SCOPE)
+	STRING(TIMESTAMP GIT_EPOCH_ID "%s")
+	set(SOURCE_DATE_EPOCH ${GIT_EPOCH_ID} PARENT_SCOPE)
 endfunction()
 
 # function definitions finished, execution starts from here

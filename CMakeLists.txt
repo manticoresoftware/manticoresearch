@@ -675,6 +675,7 @@ set ( CPACK_SOURCE_IGNORE_FILES "/\\\\.idea/" "/\\\\.git/"
 set ( CPACK_SOURCE_GENERATOR TGZ )
 
 set ( CPACK_PACKAGE_CONTACT "${PACKAGE_NAME} package builds <build@manticoresearch.com>" )
+set ( CMAKE_PROJECT_HOMEPAGE_URL "http://manticoresearch.com" )
 set ( CPACK_PACKAGE_NAME "${PACKAGE_NAME}" )
 set ( CPACK_PACKAGE_VENDOR "${COMPANY_NAME}" )
 set ( CPACK_RESOURCE_FILE_LICENSE "${MANTICORE_BINARY_DIR}/COPYING.txt" )

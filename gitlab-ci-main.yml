@@ -32,7 +32,7 @@ docs_deploy:
     - sh /Deploy/autoupdate.sh k8s
   variables:
     DOCKER_HOST: tcp://docker:2375/
-    DOCKER_DRIVER: overlay2   
+    DOCKER_DRIVER: overlay2
     COMMIT_DIR: manual
     RELEASE_FILENAME: latest_release_version
 
@@ -50,7 +50,7 @@ pages:
     - mv .public public
   artifacts:
     paths:
-    - public
+      - public
   rules:
     - if: $TEST==null && $CI_COMMIT_BRANCH == "master" && $DOCS_COMMIT_ONLY == null
   cache: {}
@@ -87,10 +87,10 @@ simple_tests:
     - cp -r Testing/2*/*.xml xml_simple_tests
   artifacts:
     paths:
-    - build/xml_simple_tests
-    - build/test/test_*/report.txt
-    - build/test/error*.txt
-    - build/test/searchd.log
+      - build/xml_simple_tests
+      - build/test/test_*/report.txt
+      - build/test/error*.txt
+      - build/test/searchd.log
     expire_in: 12 hrs
     when: always
   cache:
@@ -126,11 +126,11 @@ release_tests:
     - cp -r Testing/2*/*.xml xml_release_tests
   artifacts:
     paths:
-    - build/xml_release_tests
-    - build/test/test_*/report.txt
-    - build/test/error*.txt
-    - build/test/searchd.log
-    - build/test/examples.txt
+      - build/xml_release_tests
+      - build/test/test_*/report.txt
+      - build/test/error*.txt
+      - build/test/searchd.log
+      - build/test/examples.txt
     expire_in: 12 hrs
     when: always
   cache:
@@ -291,12 +291,13 @@ deploy_hook:
   variables:
     WHAT: $WHAT
     REPO_NAME: $REPO_NAME
-    DOCKER_HUB_BUILD_URL: $DOCKER_HUB_BUILD_URL
+    DOCKER_USER: $DOCKER_USER
+    DOCKER_PASSWORD: $DOCKER_PASSWORD
   rules:
     - if: $FORCE_BUILDS != null
     - if: $CI_COMMIT_TITLE !~ /^noci .*$/i && $DOCS_COMMIT_ONLY == null
       when: always
   trigger:
     include: '/dist/gitlab-release.yml'
-    
+
 variables:

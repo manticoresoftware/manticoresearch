@@ -1,10 +1,11 @@
 stages:
   - build
-  - publish
+  - repoupload
   - deploy
 
 tarball:
   stage: build
+  interruptible: true
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /tarball/
   dependencies: []
@@ -23,6 +24,8 @@ tarball:
 
 osx:
   stage: build
+  interruptible: true
+  retry: 1
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /osx/
   dependencies: []
@@ -56,6 +59,7 @@ osx:
 
 windows:
   stage: build
+  interruptible: true
   rules:
     - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /windows/
   dependencies: []
@@ -79,7 +83,7 @@ windows:
     - mkdir sphinxconvbin-x64
     - cd sphinxconvbin-x64
     - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISABLE_TESTING=1 -DWITH_RE2=0 -DWITH_STEMMER=0 -DWITH_RE2=0 -DWITH_STEMMER=0 -WITH_EXPAT=0 -WITH_ICONV=0 -WITH_MYSQL=0 ..
-    - cmake --build . --target package --config RelWithDebInfo --clean-first    
+    - cmake --build . --target package --config RelWithDebInfo --clean-first
     - cp manticore-*-converter.zip ..
   artifacts:
     paths:
@@ -90,6 +94,7 @@ windows:
 
 .redhat_based:
   stage: build
+  interruptible: true
   dependencies: []
   variables:
     REPO_DIST_NAME: "centos"
@@ -119,6 +124,7 @@ windows:
 
 .debian_based:
   stage: build
+  interruptible: true
   dependencies: []
   tags:
     - docker
@@ -231,8 +237,10 @@ buster:
 
 
 collect_repo:
-  stage: publish
-  allow_failure: true
+  stage: repoupload
+  interruptible: true
+  rules:
+    - if: $SOME_VAR==null #strange hack but without that - the job is skips
   tags:
     - dev-host
   script:
@@ -244,18 +252,23 @@ collect_repo:
 
 build_docker:
   stage: deploy
+  interruptible: true
   rules:
+    - if: $REPO_NAME=='$REPO_NAME'
     - if: $WHAT=='$WHAT' || $WHAT==null && $CI_COMMIT_BRANCH == "master"
+  tags:
+    - dev-host
   script:
-    - curl -XPOST "$DOCKER_HUB_BUILD_URL"
-  dependencies: [collect_repo]
+    - echo "Build docker image"
+    - ~/build.sh
 
 # collect artifacts from all previous jobs.
 # m.b. it has sense to also publish them in one click to github release?
 
 # use hidden job instead of commented out
 .collect:
-  stage: publish
+  stage: deploy
+  interruptible: true
   rules:
     - if: $WHAT=="all" || $WHAT =~ /collect/
   dependencies: [tarball, osx, windows, rhel6, rhel7, rhel8, jessie, stretch, trusty, xenial, bionic, buster]

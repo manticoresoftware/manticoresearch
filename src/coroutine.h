@@ -58,10 +58,8 @@ bool CoContinueBool ( int iStack, HANDLER handler )
 }
 
 // Run handler in single or many user threads.
-// iConcurrency = -1 - automatically expand to all available threads in current scheduler.
-// iConcurrency = 0 - run in the same thread (but with dedicated task info).
-// iConcurrency > 0 - run one in the same thread, and the rest in dedicated coros.
-void CoExecuteN ( Handler&& handler, int iConcurrency=-1 );
+// NOTE! even with concurrency==1 it is not sticked to the same OS thread, so avoid using thread-local storage.
+void CoExecuteN ( int iConcurrency, Handler&& handler );
 
 Scheduler_i * CoCurrentScheduler ();
 
@@ -161,7 +159,7 @@ void WaitForDeffered ( Waiter_t&& );
 	 	bool IsClonable() { return true; }
 	 };
 
-	 struct Context // full clones or copies: will be used instead of originals in another threads.
+	 struct Context // full clones or copies: will be used instead of originals in other coroutines.
 	 {
 	 	FOO m_dFoo;
 	 	FEE m_pFee;
@@ -171,146 +169,81 @@ void WaitForDeffered ( Waiter_t&& );
 	 	operator RefContext() { return { m_dFoo, &m_pFee }; }
 	 }
 
-	 For sharing, create context. C-tr params is directly forwarded to ctr of RefContext.
-	 i.e., for RefContext (FOO & dFoo, FEE * pFee) ctr will be  FederateCtx_T<RefContext,... > (FOO & dFoo, FEE * pFee)
+	 1. Before work, create context. C-tr params is directly forwarded to ctr of RefContext.
+	 i.e., for RefContext (FOO & dFoo, FEE * pFee) ctr will be  ClonableCtx_T<RefContext,... > (FOO & dFoo, FEE * pFee)
 
-	 FOO dParentFoo;
-	 FEE dParentFee;
-	 ...
-	 FederateCtx_T<RefContext, Context> dCtx (dParentFoo, &dParentFee);
+		 FOO dParentFoo;
+		 FEE dParentFee;
+		 ...
+		 ClonableCtx_T<RefContext, Context> dCtx (dParentFoo, &dParentFee);
 
-	 Provide ref or pointer to dCtx to the tasks (say, capture them by ref in lambdas). Use dCtx.GetContext() to get
-	 instance inside the task.
+	 2. Pass ref to created context to coroutines (via capturing by ref, pointer, whatever).
+	 3. Run tasks, using result of Concurrency ( NJobs ) as number of workers.
+	 3. Inside worker, call member CloneNewContext() and use it exclusively.
+		 For first call it just returns ref to the context by c-tr, no overhead for extra cloning.
+		 Every next call will clone that original context and provide you ref to it, use it exlcusively.
+		 That is good to check first, if you really need the context (say, if whole queue of tasks to proceed is already
+		 abandoned - you have nothing to do and most probably don't need this clone.
 
-	 Use dCtx.GetMyContext().m_dFoo, *dCtx.GetMycontext().m_pFee instead of original dParentFoo and dParentFee.
+	 When parent is non-clonable, concurrency will return '1', and so, the only task will be in work.
+	 If it *is* clonable - you may have up to concurrency parallel workers (but it is no necessary that all of them
+	 actually will be in game; quite often ones started earlier completes whole queue before later run).
 
-	 If cloning disabled, dTxt.GetContext() just always returns references to original dFoo and pFee, nothing else happens.
-	 That happens if RefContext::IsClonable() returns false, or when it runs in alone thread worker.
-
-	 If cloning possible, it works this way:
-	 - Thread A takes the task. since it 1-st. context returns ref to original objects.
-	 - Thread B takes the task. Context creates another clone, and provides it to the job.
-	 - Thread A takes another task. Context sees, that it already worked and return previous used refs.
-	 - Thread C busy by another tasks and not participating in tasks. Nothing cloned for that senior.
-
-	 When all tasks processed, call cTxt.Finalize().
-	 For alone (disabled) context it will do nothing.
-	 For parallelized it will call RefContext::MergeChild for each created clone in order to summarize results.
+	 After finish, if you collect some state, use either Finalize() - will provide results to bottom context from
+	 children (if any). Or ForAll() - to just iterate all contextes
 	**/
 template <typename REFCONTEXT, typename CONTEXT>
-class FederateCtx_T
+class ClonableCtx_T
 {
 	REFCONTEXT m_dParentContext;
 	CSphFixedVector<Optional_T<CONTEXT> > m_dChildrenContexts {0};
-	std::atomic<int> m_iUniqueThreads {0}; // each new previously unknown thread adds a value.
-	bool m_bDisabled;
 
-	// usual working branch. Modeling one is placed at the bottom of the template
-#if !MODELING
-
-	struct tls_intptr_t
-	{
-		SphThreadKey_t m_tKey;
-
-	public:
-		tls_intptr_t()
-		{
-			Verify ( sphThreadKeyCreate( &m_tKey ));
-			sphThreadSet ( m_tKey, nullptr );
-		}
-
-		~tls_intptr_t()
-		{
-			sphThreadKeyDelete( m_tKey );
-		}
-
-		tls_intptr_t& operator=( intptr_t pValue )
-		{
-			Verify ( sphThreadSet( m_tKey, (void*)pValue ));
-			return *this;
-		}
-
-		operator intptr_t() const
-		{
-			return reinterpret_cast<intptr_t> ( sphThreadGet( m_tKey ) );
-		}
-	};
-
-	tls_intptr_t m_iTlsOrderNum;
-
-	// set current context num, m.b. associated with optional int param.
-	inline void SetTHD ( intptr_t iVal, int ) { m_iTlsOrderNum = iVal; }
-
-	// returns current context num, m.b. depend from int param
-	inline intptr_t GetTHD ( int ) const { return m_iTlsOrderNum; }
-
-public:
-	// whether we need to run at all for given param.
-	// say, I can filter out disk chunks and return true only for param=20, all the rest will be skipped.
-	inline static bool CanRun ( int ) { return true; }
-#endif
+	std::atomic<int> m_iTasks {0};	// each call to CloneNewContext() increases value
+	bool m_bDisabled = true;		// ctr with disabled (single-thread) working
 
 public:
 	template <typename... PARAMS >
-	explicit FederateCtx_T ( PARAMS && ... tParams  )
+	explicit ClonableCtx_T ( PARAMS && ... tParams  )
 		: m_dParentContext ( std::forward<PARAMS> ( tParams )... )
 	{
-		m_bDisabled = !m_dParentContext.IsClonable();
-		if ( m_bDisabled )
+		if ( !m_dParentContext.IsClonable() )
 			return;
 
 		int iContextes = NThreads()-1;
+		if ( !iContextes )
+			return;
+
 		m_dChildrenContexts.Reset ( iContextes );
+		m_bDisabled = false;
 	}
 
-	~FederateCtx_T()
+	~ClonableCtx_T()
 	{
 		for ( auto& dCtx : m_dChildrenContexts )
 			dCtx.reset();
 	}
 
-	// param is optional. Return reference to safe context for current worker
-	// (for MT each thread has single context. For testing - whatever you decide).
-	REFCONTEXT GetContext ( int iParam=0 )
+	// called once per coroutine, when it really has to process something
+	REFCONTEXT CloneNewContext()
 	{
 		if ( m_bDisabled )
 			return m_dParentContext;
 
-		intptr_t iMyIdx = GetTHD ( iParam ); // treat pointer as integer
-		// iMyIdx == 0 - default value, need init. ==1 - parent object (not yet need to clone). >1 - make clone.
-		if ( iMyIdx==0 )
-		{
-			iMyIdx = 1 + m_iUniqueThreads.fetch_add ( 1, std::memory_order_acq_rel );
-			SetTHD ( iMyIdx, iParam );
-		}
-		assert ( iMyIdx>0 );
-
-		if ( iMyIdx==1)
-		{
-//			sphLogDebug ( "%d, From slot -1 returning parent context", m_iTlsOrderNum.m_tKey );
+		auto iMyIdx = m_iTasks.fetch_add ( 1, std::memory_order_acq_rel );
+		if ( !iMyIdx )
 			return m_dParentContext;
-		}
 
-		iMyIdx-=2;
+		--iMyIdx; // make it back 0-based
 		auto & dCtx = m_dChildrenContexts[iMyIdx];
-//		sphLogDebug ("%d Emplacing to slot %d", m_iTlsOrderNum.m_tKey, iMyIdx);
 		dCtx.emplace_once ( m_dParentContext );
 		return (REFCONTEXT) m_dChildrenContexts[iMyIdx].get ();
 	}
 
-	// Num of available childrens (clone contextes). For N threads it is N-1, since parent doesn't need clone.
-	inline int NContextes ()
-	{
-		return m_dChildrenContexts.GetLength ();
-	}
-
-	// Num of parallel threads to perform iTasks.
+	// Num of parallel workers to complete iTasks jobs
 	inline int Concurrency ( int iTasks )
 	{
-		return Min ( m_dChildrenContexts.GetLength (), iTasks);
+		return Min ( m_dChildrenContexts.GetLength ()+1, iTasks ); // +1 since parent is also an extra context
 	}
-
-	bool IsEnabled () const { return !m_bDisabled; }
 
 	template <typename FNPROCESSOR>
 	void ForAll(FNPROCESSOR fnProcess, bool bIncludeRoot=true )
@@ -321,7 +254,7 @@ public:
 		if (bIncludeRoot)
 			fnProcess ( m_dParentContext );
 
-		for ( int i = 0, iWorkThreads = m_iUniqueThreads-1; i<iWorkThreads; ++i )
+		for ( int i = 0, iWorkThreads = m_iTasks-1; i<iWorkThreads; ++i )
 		{
 			assert ( m_dChildrenContexts[i] );
 			auto tCtx = (REFCONTEXT)m_dChildrenContexts[i].get ();
@@ -333,70 +266,6 @@ public:
 	{
 		ForAll ( [this] ( REFCONTEXT dContext ) { m_dParentContext.MergeChild ( dContext ); }, false );
 	}
-
-// for testing purposes: will use 1 sorter per OS thread; value is used as integer index
-// feel free to edit during experimenting; don't forget to define MODELING 1 then.
-#if MODELING
-private:
-	static const DWORD NSLOTS = 2;
-	intptr_t	m_WorkerSlots[NSLOTS] = {0};
-
-	int& iRun () // debug purposes: make result depended from run N.
-	{
-		static int iPass = 0;
-		return iPass;
-	}
-
-	int Map (int iJob)
-	{
-		switch ((iJob + iRun()) % 2) {
-		case 0:
-//			switch (iJob) {
-//			case 138:
-//			case 141:
-//				return 1;
-//			case 139:
-//			case 140:
-				return 0;
-//			default:
-//				return -1;
-//			}
-		case 1:
-//			switch (iJob) {
-//			case 140:
-//			case 141:
-				return 1;
-//			case 138:
-//			case 139:
-//				return 0;
-//			default:
-//				return -1;
-//			}
-		}
-		return -1;
-	}
-
-	intptr_t GetTHD ( int iPar ) const
-	{
-		return m_WorkerSlots [ Map(iPar) % NSLOTS ];
-	}
-
-	void SetTHD ( intptr_t iVal, int iPar )
-	{
-		m_WorkerSlots [ Map(iPar) % NSLOTS ] = iVal;
-	}
-	inline int GetNOfContextes()
-	{
-		iRun() += 1;
-		return NSLOTS;
-	}
-
-public:
-	bool CanRun (int iPar) const
-	{
-		return Map (iPar)>=0;
-	}
-#endif
 };
 
 #define LOG_LEVEL_RESEARCH true

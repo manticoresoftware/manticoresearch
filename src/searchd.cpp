@@ -5517,22 +5517,22 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 	// set order by decreasing index mass (heaviest cames first). That is why 'less' implemented by '>'
 	dOrder.Sort ( Lesser ( [this] ( int a, int b ) { return m_dLocal[a].m_iMass>m_dLocal[b].m_iMass; } ));
 
-	// store and manage tls stuff
-	using LocalFederateCtx_t = FederateCtx_T<LocalSearchRef_t, LocalSearchClone_t>;
-	LocalFederateCtx_t dCtxData { m_tHook, m_dExtraSchemas };
+	// the context
+	ClonableCtx_T<LocalSearchRef_t, LocalSearchClone_t> dCtx { m_tHook, m_dExtraSchemas };
 
-	std::atomic<int32_t> iCurIdx { 0 };
-	CoExecuteN ( [&] () mutable
+	const auto iJobs = iNumLocals;
+	std::atomic<int32_t> iCurJob { 0 };
+	CoExecuteN ( dCtx.Concurrency ( iJobs ), [&]
 	{
+		auto iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
+		if ( iJob>=iJobs )
+			return; // already nothing to do, early finish.
+
+		auto tCtx = dCtx.CloneNewContext();
 		Threads::CoThrottler_c tThrottler ( myinfo::ref<ClientTaskInfo_t> ()->m_iThrottlingPeriod );
 		while ( true )
 		{
-			auto iJob = iCurIdx.fetch_add ( 1, std::memory_order_acq_rel );
-			if ( iJob>=iNumLocals )
-				return; // all is done
-
 			auto iIdx = dOrder[iJob];
-
 			sphLogDebugv ("Tick coro search");
 			int64_t iCpuTime = -sphTaskCpuTimer ();
 
@@ -5554,8 +5554,6 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 				return;
 			}
 			assert ( pServed->m_pIndex );
-
-			auto tCtx = dCtxData.GetContext ( iIdx );
 			tCtx.m_tHook.SetIndex ( pServed->m_pIndex );
 			tCtx.m_tHook.SetQueryType ( m_eQueryType );
 
@@ -5617,11 +5615,15 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 			for ( int i = 0; i<iQueries; ++i )
 				dResults[i].m_iCpuTime = iCpuTime;
 
+			iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
+			if ( iJob>=iNumLocals )
+				return; // all is done
+
 			// yield and reschedule every quant of time. It gives work to other tasks
 			tThrottler.ThrottleAndKeepCrashQuery (); // we set CrashQuery anyway at the start of the loop
 		}
-	}, dCtxData.Concurrency ( iNumLocals ));
-	dCtxData.Finalize (); // merge extra schemas (if any)
+	});
+	dCtx.Finalize (); // merge extra schemas (if any)
 
 	int iTotalSuccesses = 0;
 
@@ -7296,44 +7298,42 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 		const SnippetQuerySettings_t& q, SnippetBuilder_c * pBuilder)
 {
 	assert ( pBuilder );
-	if ( dTasks.IsEmpty() )
+	auto iJobs = dTasks.GetLength();
+	if ( !iJobs )
 		return;
-	sphLogDebug ( "MakeSnippetsCoro invoked for %d tasks", dTasks.GetLength() );
+	sphLogDebug ( "MakeSnippetsCoro invoked for %d tasks", iJobs );
 
 	CSphVector<int> dStubFields;
 	dStubFields.Add ( 0 );
 
-	using SnippetContextTls_t = FederateCtx_T<SnippedBuilderCtxRef_t, SnippedBuilderCtxClone_t>;
-	SnippetContextTls_t dActualpBuilder { pBuilder };
+	// the context
+	ClonableCtx_T<SnippedBuilderCtxRef_t, SnippedBuilderCtxClone_t> dCtx { pBuilder };
 
-	std::atomic<int32_t> iCurQuery { 0 };
-	CoExecuteN ( [&] () mutable
+	std::atomic<int32_t> iCurJob { 0 };
+	CoExecuteN ( dCtx.Concurrency ( iJobs ), [&]
 	{
 		sphLogDebug ( "MakeSnippetsCoro Coro started" );
-		Optional_T<SnippedBuilderCtxRef_t> pCtx;
-		pCtx.emplace ( dActualpBuilder.GetContext () );
-		Threads::CoThrottler_c tThrottler ( myinfo::ref<ClientTaskInfo_t> ()->m_iThrottlingPeriod );
-		int iTick=1;
-		while ( true )
-		{
-			auto iQuery = iCurQuery.fetch_add ( 1, std::memory_order_acq_rel );
-			if ( iQuery>=dTasks.GetLength () )
-				return; // all is done
+		auto iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
+		if ( iJob>=iJobs )
+			return; // already nothing to do, early finish.
 
-			myinfo::SetThreadInfo ( "%d s %d:", iTick, iQuery );
-			sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d[%d]", iQuery, dTasks[iQuery] );
-			MakeSingleLocalSnippetWithFields ( dQueries[dTasks[iQuery]], q, pCtx->m_pBuilder, dStubFields );
-			sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d finished", iQuery );
+		auto tCtx = dCtx.CloneNewContext ();
+		Threads::CoThrottler_c tThrottler ( myinfo::ref<ClientTaskInfo_t> ()->m_iThrottlingPeriod );
+		while (true)
+		{
+			myinfo::SetThreadInfo ( "s %d:", iJob );
+			sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d[%d]", iJob, dTasks[iJob] );
+			MakeSingleLocalSnippetWithFields ( dQueries[dTasks[iJob]], q, tCtx.m_pBuilder, dStubFields );
+			sphLogDebug ( "MakeSnippetsCoro Coro loop tick %d finished", iJob );
+
+			iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
+			if ( iJob>=iJobs )
+				return;
 
 			// yield and reschedule every quant of time. It gives work to other tasks
-			if ( tThrottler.ThrottleAndKeepCrashQuery() )
-			{
-				++iTick;
-				if ( !tThrottler.SameThread () )
-					pCtx.emplace ( dActualpBuilder.GetContext () );
-			}
+			tThrottler.ThrottleAndKeepCrashQuery ();
 		}
-	}, dActualpBuilder.Concurrency ( dTasks.GetLength ()));
+	});
 }
 
 // divide set of tasks from dTasks into chunks, having most balanced aggregate iSize in each.

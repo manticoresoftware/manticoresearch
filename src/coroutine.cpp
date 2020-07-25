@@ -580,19 +580,20 @@ int Threads::NThreads ( Scheduler_i * pScheduler )
 	return pScheduler->WorkingThreads ();
 }
 
-void Threads::CoExecuteN ( Threads::Handler&& fnWorker, int iConcurrency )
+void Threads::CoExecuteN ( int iConcurrency, Threads::Handler&& fnWorker )
 {
-	if ( !iConcurrency )
+	if ( iConcurrency==1 )
 	{
 		myinfo::OwnMini ( fnWorker ) ();
 		return;
 	}
 
-	if ( iConcurrency<0 )
-		iConcurrency = NThreads()-1;
+	assert ( iConcurrency ); // must be positive
+	if ( !iConcurrency )	// however don't crash even there, just do nothing.
+		return;
 
 	auto dWaiter = DefferedRestarter ();
-	for ( int i = 0; i<iConcurrency; ++i )
+	for ( int i = 1; i<iConcurrency; ++i )
 		CoCo ( Threads::WithCopiedCrashQuery ( fnWorker ), dWaiter );
 	myinfo::OwnMini ( fnWorker ) ();
 	WaitForDeffered ( std::move ( dWaiter ));

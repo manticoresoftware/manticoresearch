@@ -1459,46 +1459,45 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 		  pSeg, ( m_tSettings.m_iMinInfixLen>0 || m_tSettings.GetMinPrefixLen ( m_pDict->GetSettings().m_bWordDict )>0 ), m_iMaxCodepointLength>1, m_tSettings.m_eHitless );
 
 	auto dStored = GetStored();
-	tRes.m_iTotalQueries = dStored.GetLength ();
+	auto iJobs = dStored.GetLength ();
+	tRes.m_iTotalQueries = iJobs;
+	if ( !iJobs )
+		return;
 
-	using PqMatchContextTls_t = FederateCtx_T<PqMatchContextRef_t, PqMatchContextClone_t>;
-	PqMatchContextTls_t dMatchContexts { this, pSeg, tReject, tRes };
+	// the context
+	ClonableCtx_T<PqMatchContextRef_t, PqMatchContextClone_t> dCtx { this, pSeg, tReject, tRes };
 
 	if ( tRes.m_bVerbose )
 		tRes.m_tmSetup = sphMicroTimer ()+tRes.m_tmSetup;
 
-	std::atomic<int32_t> iCurQuery {0};
-	CoExecuteN ( [&dMatchContexts, &iCurQuery, &dStored] () mutable
+	std::atomic<int32_t> iCurJob {0};
+	CoExecuteN ( dCtx.Concurrency ( iJobs ), [&]
 	{
+		auto iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
+		if ( iJob>=iJobs )
+			return; // already nothing to do, early finish.
+
 		auto pInfo = PublishTaskInfo ( new PQInfo_t );
-		pInfo->m_iTotal = dStored.GetLength ();
-		Optional_T<PqMatchContextRef_t> pCtx;
-		pCtx.emplace ( dMatchContexts.GetContext () );
-		pCtx->m_pMatchCtx->m_dMsg.Clear ();
+		pInfo->m_iTotal = iJobs;
+		auto tCtx = dCtx.CloneNewContext ();
 		Threads::CoThrottler_c tThrottler ( myinfo::ref<ClientTaskInfo_t> ()->m_iThrottlingPeriod );
-		int iTick=1;
 		while (true)
 		{
-			auto iQuery = iCurQuery.fetch_add ( 1, std::memory_order_acq_rel );
-			if ( iQuery>= dStored.GetLength())
-				return; // all is done
+			pInfo->m_iCurrent = iJob;
+			MatchingWork ( dStored[iJob], *tCtx.m_pMatchCtx );
 
-			pInfo->m_iCurrent = iQuery;
-			MatchingWork ( dStored[iQuery], *pCtx->m_pMatchCtx );
+			iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
+			if ( iJob>=iJobs )
+				return;
 
 			// yield and reschedule every quant of time. It gives work to other tasks
-			if ( tThrottler.ThrottleAndKeepCrashQuery () )
-			{
-				++iTick;
-				if ( !tThrottler.SameThread() )
-					pCtx.emplace ( dMatchContexts.GetContext () );
-			}
+			tThrottler.ThrottleAndKeepCrashQuery ();
 		}
-	}, dMatchContexts.Concurrency ( tRes.m_iTotalQueries ));
+	});
 
 	// collect and merge result set
 	CSphVector<PercolateMatchContext_t *> dResults;
-	dMatchContexts.ForAll ( [&dResults] ( const PqMatchContextRef_t& tCtx ) { dResults.Add ( tCtx.m_pMatchCtx ); } );
+	dCtx.ForAll ( [&dResults] ( const PqMatchContextRef_t& tCtx ) { dResults.Add ( tCtx.m_pMatchCtx ); } );
 
 	// merge result set
 	PercolateMergeResults ( dResults, tRes );

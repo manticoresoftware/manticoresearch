@@ -6017,8 +6017,6 @@ struct DiskChunkSearcherCloneCtx_t
 	}
 };
 
-using FederateChunkCtx_t = FederateCtx_T<DiskChunkSearcherCtx_t, DiskChunkSearcherCloneCtx_t>;
-
 void QueryDiskChunks ( const CSphQuery * pQuery,
 		CSphQueryResult * pResult,
 		const CSphMultiQueryArgs & tArgs,
@@ -6039,10 +6037,10 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 	assert ( !dSorters.IsEmpty () );
 
 	// counter of tasks we will issue now
-	int iChunks = tGuard.m_dDiskChunks.GetLength ();
+	int iJobs = tGuard.m_dDiskChunks.GetLength ();
 
-	// store and manage tls stuff
-	FederateChunkCtx_t dCtxData { dSorters, pResult };
+	// the context
+	ClonableCtx_T<DiskChunkSearcherCtx_t, DiskChunkSearcherCloneCtx_t> dCtx { dSorters, pResult };
 
 	auto iStart = sphMicroTimer ();
 	sphLogDebugv ( "Started: " INT64_FMT, sphMicroTimer()-iStart );
@@ -6052,30 +6050,19 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 		pProfiler->Switch ( SPH_QSTATE_INIT );
 
 	std::atomic<bool> bInterrupt {false};
-	std::atomic<int32_t> iCurChunk {iChunks-1};
-	CoExecuteN ( [&] () mutable
+	std::atomic<int32_t> iCurChunk { iJobs-1 };
+	CoExecuteN ( dCtx.Concurrency ( iJobs ), [&]
 	{
-		// leaved here as example how WRONG is set pointer to a local variable into global space
-		// (spent a day for debugging a crash because of it)
-		// CrashQuerySetTop ( &tCrashQuery ); // set crash info container
+		auto iChunk = iCurChunk.fetch_sub ( 1, std::memory_order_acq_rel );
+		if ( iChunk<0 || bInterrupt )
+			return; // already nothing to do, early finish.
 
+		auto tCtx = dCtx.CloneNewContext ();
 		Threads::CoThrottler_c tThrottler ( myinfo::ref<ClientTaskInfo_t> ()->m_iThrottlingPeriod );
 		int iTick=1; // num of times coro rescheduled by throttler
-
-		while ( true )
+		while ( !bInterrupt ) // some earlier job met error; abort.
 		{
-			auto iChunk = iCurChunk.fetch_sub ( 1, std::memory_order_acq_rel );
-			if ( iChunk < 0 )
-				return; // all is done
-
-			if ( !FederateChunkCtx_t::CanRun ( iChunk ) )
-				continue;
-
-			if ( bInterrupt ) // some earlier job met error; abort.
-				return;
-
 			myinfo::SetThreadInfo ( "%d ch %d:", iTick, iChunk );
-			auto tCtx = dCtxData.GetContext ( iChunk );
 			auto & dLocalSorters = tCtx.m_dSorters;
 			auto iSorters = dLocalSorters.GetLength ();
 			CSphQueryResult tChunkResult;
@@ -6101,17 +6088,17 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 			const auto & hChunkStats = tChunkResult.m_hWordStats;
 			auto & hResWordStats = tCtx.m_pResult->m_hWordStats;
 
-				if ( hResWordStats.GetLength() )
+			if ( hResWordStats.GetLength() )
+			{
+				for ( auto & tStat : hResWordStats )
 				{
-					for ( auto & tStat : hResWordStats )
-					{
-						const auto * pDstStat = hChunkStats ( tStat.first );
-						if ( pDstStat )
-							CSphQueryResult::AddOtherStat ( hResWordStats,
-									tStat.first, pDstStat->first, pDstStat->second );
-					}
-				} else
-					hResWordStats = hChunkStats;
+					const auto * pDstStat = hChunkStats ( tStat.first );
+					if ( pDstStat )
+						CSphQueryResult::AddOtherStat ( hResWordStats,
+								tStat.first, pDstStat->first, pDstStat->second );
+				}
+			} else
+				hResWordStats = hChunkStats;
 
 			dDiskBlobPools[iChunk] = tChunkResult.m_pBlobPool;
 			pThResult->m_iBadRows += tChunkResult.m_iBadRows;
@@ -6129,13 +6116,17 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 				// FIXME? maybe handle this more gracefully (convert to a warning)?
 				pThResult->m_sError = tChunkResult.m_sError;
 
+			iChunk = iCurChunk.fetch_sub ( 1, std::memory_order_acq_rel );
+			if ( iChunk<0 || bInterrupt )
+				return; // all is done
+
 			// yield and reschedule every quant of time. It gives work to other tasks
 			if ( tThrottler.ThrottleAndKeepCrashQuery () )
 				// report current disk chunk processing
 				++iTick;
 		}
-	}, dCtxData.Concurrency ( iChunks ));
-	dCtxData.Finalize();
+	});
+	dCtx.Finalize();
 }
 
 void FinalExpressionCalculation( CSphQueryContext& tCtx,

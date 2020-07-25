@@ -4091,18 +4091,6 @@ void sphMemStatDone ();
 //bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg, bool bDetached=false, const char * sName=nullptr );
 // function was removed. Use Threads::Create instead
 
-/// alloc thread-local key
-bool sphThreadKeyCreate ( SphThreadKey_t * pKey );
-
-/// free thread-local key
-void sphThreadKeyDelete ( SphThreadKey_t tKey );
-
-/// get thread-local key value
-void * sphThreadGet ( SphThreadKey_t tKey );
-
-/// set thread-local key value
-bool sphThreadSet ( SphThreadKey_t tKey, void * pValue );
-
 /// get the pointer to my job's stack (m.b. different from thread stack in coro)
 const void * sphMyStack ();
 

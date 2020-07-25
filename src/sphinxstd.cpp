@@ -819,41 +819,6 @@ DWORD sphRand ()
 //////////////////////////////////////////////////////////////////////////
 // THREADING FUNCTIONS
 //////////////////////////////////////////////////////////////////////////
-
-/// all generic thread manipulation stuff moved to threadutils.cpp
-/// here only TLS key management and stack size routines left.
-
-bool sphThreadKeyCreate ( SphThreadKey_t * pKey )
-{
-#if USE_WINDOWS
-	*pKey = TlsAlloc();
-	return *pKey!=TLS_OUT_OF_INDEXES;
-#else
-	return pthread_key_create ( pKey, NULL )==0;
-#endif
-}
-
-
-void sphThreadKeyDelete ( SphThreadKey_t tKey )
-{
-#if USE_WINDOWS
-	TlsFree ( tKey );
-#else
-	pthread_key_delete ( tKey );
-#endif
-}
-
-
-void * sphThreadGet ( SphThreadKey_t tKey )
-{
-#if USE_WINDOWS
-	return TlsGetValue ( tKey );
-#else
-	return pthread_getspecific ( tKey );
-#endif
-}
-
-
 int64_t sphGetStackUsed()
 {
 	BYTE cStack;
@@ -862,15 +827,6 @@ int64_t sphGetStackUsed()
 		return 0;
 	int64_t iHeight = pStackTop - &cStack;
 	return ( iHeight>=0 ) ? iHeight : -iHeight; // on different arch stack may grow in different directions
-}
-
-bool sphThreadSet ( SphThreadKey_t tKey, void * pValue )
-{
-#if USE_WINDOWS
-	return TlsSetValue ( tKey, pValue )!=FALSE;
-#else
-	return pthread_setspecific ( tKey, pValue )==0;
-#endif
 }
 
 #if !USE_WINDOWS

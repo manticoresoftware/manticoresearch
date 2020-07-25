@@ -71,7 +71,7 @@ void PublicThreadDesc_t::Swap ( PublicThreadDesc_t & rhs )
 	::Swap ( m_sCommand, rhs.m_sCommand );
 	::Swap ( m_iConnID, rhs.m_iConnID );
 	::Swap ( m_eProto, rhs.m_eProto );
-	::Swap ( m_eThdState, rhs.m_eThdState );
+	::Swap ( m_eTaskState, rhs.m_eTaskState );
 	::Swap ( m_sChain, rhs.m_sChain );
 }
 
@@ -145,7 +145,7 @@ DEFINE_RENDER ( ClientTaskInfo_t )
 	if ( tInfo.m_bVip )
 		dDst.m_sClientName << "vip";
 	dDst.m_iConnID = tInfo.m_iConnID;
-	dDst.m_eThdState = tInfo.m_eTaskState;
+	dDst.m_eTaskState = tInfo.m_eTaskState;
 	dDst.m_eProto = tInfo.m_eProto;
 	dDst.m_sProto << ProtoName ( tInfo.m_eProto );
 	dDst.m_sChain << (int) tInfo.m_eType << ":Client ";

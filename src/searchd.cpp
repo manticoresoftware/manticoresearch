@@ -11571,12 +11571,12 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 
 	for ( const auto & dThd : dFinal )
 	{
-		if ( !bAll && dThd.m_eThdState==TaskState_e::UNKNOWN )
+		if ( !bAll && dThd.m_eTaskState==TaskState_e::UNKNOWN )
 			continue;
 		tOut.PutNumAsString ( dThd.m_iThreadID );
 		tOut.PutString ( dThd.m_sThreadName );
 		tOut.PutString ( dThd.m_sProto.cstr() );
-		tOut.PutString ( TaskStateName ( dThd.m_eThdState ) );
+		tOut.PutString ( TaskStateName ( dThd.m_eTaskState ) );
 		tOut.PutString ( dThd.m_sClientName ); // Host
 		tOut.PutNumAsString ( dThd.m_iConnID ); // ConnID
 		tOut.PutMicrosec ( tmNow-dThd.m_tmStart.get_value_or(tmNow) ); // time

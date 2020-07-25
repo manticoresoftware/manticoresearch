@@ -4146,7 +4146,7 @@ public:
 
 	int GetOvershortCount() final
 	{
-		return Max ( 0, m_iPosDelta-1 );
+		return m_iPosDelta-1;
 	}
 
 	bool TokenIsBlended() const final
@@ -22482,7 +22482,7 @@ void CSphSource_Document::BuildSubstringHits ( RowID_t tRowID, bool bPayload, ES
 
 		if ( !bPayload )
 		{
-			HITMAN::AddPos ( &m_tState.m_iHitPos, m_tState.m_iBuildLastStep + m_pTokenizer->GetOvershortCount()*m_iOvershortStep );
+			HITMAN::AddPos ( &m_tState.m_iHitPos, Max ( m_tState.m_iBuildLastStep + m_pTokenizer->GetOvershortCount()*m_iOvershortStep, 0 ) );
 			if ( m_pTokenizer->GetBoundary() )
 				HITMAN::AddPos ( &m_tState.m_iHitPos, m_iBoundaryStep );
 			m_tState.m_iBuildLastStep = 1;

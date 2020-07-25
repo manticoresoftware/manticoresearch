@@ -94,12 +94,13 @@ void RenderPublicTaskInfo ( const void * pSrc, PublicThreadDesc_t & dDst, BYTE e
 		pInfos[eType] ( pSrc, dDst );
 }
 
-PublicThreadDesc_t GatherPublicTaskInfo ( const Threads::LowThreadDesc_t * pSrc )
+PublicThreadDesc_t GatherPublicTaskInfo ( const Threads::LowThreadDesc_t * pSrc, int iCols )
 {
 	PublicThreadDesc_t dDst;
 	if (!pSrc)
 		return dDst;
 
+	dDst.m_iDescriptionLimit = iCols; // works as call-back
 	hazard::Guard_c tGuard;
 	auto pSrcInfo = (TaskInfo_t *) tGuard.Protect ( pSrc->m_pTaskInfo );
 	while ( pSrcInfo )
@@ -138,7 +139,12 @@ DEFINE_RENDER ( ClientTaskInfo_t )
 	hazard::Guard_c tGuard;
 	auto pDescription = tGuard.Protect ( tInfo.m_pHazardDescription );
 	if ( pDescription )
-		dDst.m_sDescription << *pDescription;
+	{
+		if ( dDst.m_iDescriptionLimit<0 ) // no limit
+			dDst.m_sDescription << *pDescription;
+		else
+			dDst.m_sDescription.AppendChunk( { pDescription->scstr(), Min ( tInfo.m_iDescriptionLen, dDst.m_iDescriptionLimit ) });
+	}
 
 	// Client render
 	dDst.m_sClientName << tInfo.m_sClientName;

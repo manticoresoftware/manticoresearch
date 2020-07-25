@@ -8347,16 +8347,21 @@ void BuildStatus ( VectorLike & dStatus )
 // that is returned to MySQL 'statistic' command ('status' in mysql cli)
 void BuildStatusOneline ( StringBuilder_c & sOut )
 {
+	auto iThreads = GlobalWorkPool ()->WorkingThreads ();
+	auto iQueue = GlobalWorkPool ()->Works ();
+	auto iTasks = myinfo::CountAll ();
 	sOut.StartBlock ( " " );
 	sOut
 	<< "Uptime:" << (DWORD) time ( NULL )-g_tStats.m_uStarted
-	<< " Threads:" << GlobalWorkPool()->WorkingThreads()
-	<< " Queue:" << GlobalWorkPool()->Works()
+	<< " Threads:" << iThreads
+	<< " Queue:" << iQueue
 	<< " Clients:" << myinfo::CountClients()
-	<< " Tasks:" << myinfo::CountAll()
+	<< " Tasks:" << iTasks
 	<< " Queries:" << g_tStats.m_iQueries;
 	sOut.Sprintf ( " Wall: %t", (int64_t)g_tStats.m_iQueryTime );
 	sOut.Sprintf ( " CPU: %t", (int64_t)g_tStats.m_iQueryCpuTime );
+	sOut.Sprintf ( "\nQueue/Th: %0.1F%", iQueue * 10 / iThreads );
+	sOut.Sprintf ( " Tasks/Th: %0.1F%", iTasks * 10 / iThreads );
 }
 
 void BuildOneAgentStatus ( VectorLike & dStatus, HostDashboard_t* pDash, const char * sPrefix="agent" )

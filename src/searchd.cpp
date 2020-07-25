@@ -11533,8 +11533,6 @@ static std::pair<const char *, int> FormatInfo ( const PublicThreadDesc_t & tThd
 
 void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 {
-	int64_t tmNow = sphMicroTimer();
-
 	tOut.HeadBegin ( 14 ); // 15 with chain
 	tOut.HeadColumn ( "Tid" );
 	tOut.HeadColumn ( "Name" );
@@ -11579,6 +11577,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		tOut.PutString ( TaskStateName ( dThd.m_eTaskState ) );
 		tOut.PutString ( dThd.m_sClientName ); // Host
 		tOut.PutNumAsString ( dThd.m_iConnID ); // ConnID
+		int64_t tmNow = sphMicroTimer (); // short-term cache
 		tOut.PutMicrosec ( tmNow-dThd.m_tmStart.get_value_or(tmNow) ); // time
 		tOut.PutTimeAsString ( dThd.m_tmTotalWorkedTimeUS ); // work time
 		tOut.PutTimeAsString ( dThd.m_tmTotalWorkedCPUTimeUS ); // work CPU time

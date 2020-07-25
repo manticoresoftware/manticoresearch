@@ -217,6 +217,27 @@ Threads::Handler myinfo::OwnMini ( Threads::Handler fnHandler )
 	};
 }
 
+// returns ClientTaskInfo_t::m_iThrottlingPeriod
+int myinfo::ThrottlingPeriodMS()
+{
+	auto pConn = HazardGetClient ();
+	if ( pConn )
+		return pConn->m_iThrottlingPeriod;
+
+	sphWarning ( "internal error: myinfo::ThrottlingPeriodMS () invoked with empty tls!" );
+	return 0;
+}
+
+// set ClientTaskInfo_t::m_iThrottlingPeriod
+void myinfo::SetThrottlingPeriodMS ( int iValue )
+{
+	auto pNode = HazardGetClient ();
+	if ( pNode )
+		pNode->m_iThrottlingPeriod = iValue;
+	else
+		sphWarning ( "internal error: myinfo::SetThrottlingPeriodMS () invoked with empty tls!" );
+}
+
 int myinfo::ConnID ()
 {
 	auto pConn = HazardGetClient();

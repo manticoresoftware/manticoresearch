@@ -5528,7 +5528,7 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 			return; // already nothing to do, early finish.
 
 		auto tCtx = dCtx.CloneNewContext();
-		Threads::CoThrottler_c tThrottler ( myinfo::ref<ClientTaskInfo_t> ()->m_iThrottlingPeriod );
+		Threads::CoThrottler_c tThrottler ( myinfo::ThrottlingPeriodMS () );
 		while ( true )
 		{
 			auto iIdx = dOrder[iJob];
@@ -7317,7 +7317,7 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 			return; // already nothing to do, early finish.
 
 		auto tCtx = dCtx.CloneNewContext ();
-		Threads::CoThrottler_c tThrottler ( myinfo::ref<ClientTaskInfo_t> ()->m_iThrottlingPeriod );
+		Threads::CoThrottler_c tThrottler ( myinfo::ThrottlingPeriodMS () );
 		while (true)
 		{
 			myinfo::SetThreadInfo ( "s %d:", iJob );

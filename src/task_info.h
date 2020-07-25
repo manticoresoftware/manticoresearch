@@ -224,6 +224,12 @@ namespace myinfo {
 		return (TASKINFO *) GetHazardTypedNode ( TASKINFO::m_eTask );
 	}
 
+	// returns ClientTaskInfo_t::m_iThrottlingPeriod
+	int ThrottlingPeriodMS();
+
+	// set ClientTaskInfo_t::m_iThrottlingPeriod
+	void SetThrottlingPeriodMS ( int iValue );
+
 	// returns ClientTaskInfo_t::m_iConnID
 	int ConnID ();
 

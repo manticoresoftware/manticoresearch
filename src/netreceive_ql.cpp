@@ -738,7 +738,7 @@ void SqlServe ( SockWrapperPtr_c pSock )
 		if ( iCurrentThrottling!=iThrottlingMS )
 		{
 			iThrottlingMS = iCurrentThrottling;
-			myinfo::ref<ClientTaskInfo_t>()->m_iThrottlingPeriod = iThrottlingMS;
+			myinfo::SetThrottlingPeriodMS ( iThrottlingMS );
 		}
 
 		tIn.DiscardProcessed ();

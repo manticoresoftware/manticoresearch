@@ -107,15 +107,15 @@ windows:
   script:
     - ln -s $(pwd) /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
     - cd /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
-    - mc mirror -a dev/runner-cache/releases/$DISTR/ cache/
-    - test -e cache/cache-src.tar.gz && tar -zxf cache/cache-src.tar.gz && chmod +x cache/galera*/libgalera_manticore*
+    - mc mirror dev/runner-cache/releases/$DISTR/ cache/
+    - test -e cache/cache-src.tar.gz && tar -zxf cache/cache-src.tar.gz
     - mkdir build && cd build
     - cmake -DPACK=1 -DSPHINX_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - make -j4 package
     - cp manticore*.rpm ..
     - cd ..
     - tar -zcf cache/cache-src.tar.gz cache/*-src
-    - mc mirror --exclude "*.dir" --exclude "*.o" --exclude "*/CMakeFiles/*" --exclude "*/Makefile" --exclude "*-src/*" --exclude "galera-*/*.a" --exclude "*/cmake_install.cmake" --overwrite -a cache/ dev/runner-cache/releases/$DISTR/
+    - mc mirror --exclude "*.dir" --exclude "*.o" --exclude "*/CMakeFiles/*" --exclude "*/Makefile" --exclude "*-src/*" --exclude "galera-*/*.a" --exclude "*/cmake_install.cmake" --overwrite cache/ dev/runner-cache/releases/$DISTR/
   artifacts:
     paths:
       - manticore*.rpm
@@ -134,15 +134,15 @@ windows:
   before_script:
     - mc config host add dev $MINIO_HOST
   script:
-    - mc mirror -a dev/runner-cache/releases/$DISTR/ cache/
-    - test -e cache/cache-src.tar.gz && tar -zxf cache/cache-src.tar.gz && chmod +x cache/galera*/libgalera_manticore*
+    - mc mirror dev/runner-cache/releases/$DISTR/ cache/
+    - test -e cache/cache-src.tar.gz && tar -zxf cache/cache-src.tar.gz
     - mkdir build && cd build
     - cmake -DPACK=1 -DSPHINX_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - make -j4 package
     - cp manticore*deb ..
     - cd ..
     - tar -zcf cache/cache-src.tar.gz cache/*-src
-    - mc mirror --exclude "*.dir" --exclude "*.o" --exclude "*/CMakeFiles/*" --exclude "*/Makefile" --exclude "*-src/*" --exclude "galera-*/*.a" --exclude "*/cmake_install.cmake" --overwrite -a cache/ dev/runner-cache/releases/$DISTR/
+    - mc mirror --exclude "*.dir" --exclude "*.o" --exclude "*/CMakeFiles/*" --exclude "*/Makefile" --exclude "*-src/*" --exclude "galera-*/*.a" --exclude "*/cmake_install.cmake" --overwrite cache/ dev/runner-cache/releases/$DISTR/
   artifacts:
     paths:
       - manticore*deb

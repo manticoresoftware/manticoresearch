@@ -104,7 +104,7 @@ function(galera_install)
 	if (GALERA_LIBRARY)
 		# can't make 'true install' for imported target; only file installation available
 		diags ("Install galera as usual file from imported target")
-		install(FILES ${GALERA_LIBRARY} DESTINATION ${GALERA_PATH} COMPONENT applications NAMELINK_SKIP)
+		install(PROGRAMS ${GALERA_LIBRARY} DESTINATION ${GALERA_PATH} COMPONENT applications )
 	else()
 		diags("Install galera as usual file from imported target")
 		install(TARGETS galera_manticore LIBRARY DESTINATION ${GALERA_PATH} COMPONENT applications NAMELINK_SKIP)

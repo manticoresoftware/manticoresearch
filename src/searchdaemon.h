@@ -1160,9 +1160,10 @@ public:
 	CSphQueryProfile* StartProfiling ( ESphQueryState );
 	void SaveLastProfile();
 
-	// manage backend's timeout
+	// manage backend's timeout and variables
 	int GetBackendTimeoutS() const;
 	int GetBackendThrottlingMS() const;
+	int GetBackendDistThreads() const;
 };
 
 void LogSphinxqlError ( const char * sStmt, const char * sError );

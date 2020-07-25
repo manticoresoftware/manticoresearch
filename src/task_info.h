@@ -178,6 +178,7 @@ struct ClientTaskInfo_t : public MiniTaskInfo_t
 	Proto_e		m_eProto = Proto_e::UNKNOWN;
 	int			m_iConnID = -1;
 	int 		m_iThrottlingPeriod = -1;
+	int 		m_iDistThreads = 0;
 	CSphString	m_sClientName; // set once before info is published and never changes. So, assume always mt-safe
 	bool 		m_bSsl = false;
 	bool 		m_bVip = false;
@@ -224,6 +225,12 @@ namespace myinfo {
 		return (TASKINFO *) GetHazardTypedNode ( TASKINFO::m_eTask );
 	}
 
+	// returns ClientTaskInfo_t::m_iDistThreads
+	int DistThreads();
+
+	// set ClientTaskInfo_t::m_iDistThreads
+	void SetDistThreads ( int iValue );
+
 	// returns ClientTaskInfo_t::m_iThrottlingPeriod
 	int ThrottlingPeriodMS();
 
@@ -268,3 +275,8 @@ namespace myinfo {
 	const CSphString & UnsafeDescription ();
 
 } // namespace myinfo
+
+volatile int &getDistThreads ();
+
+// provides daemon-wide global dist-threads, or task-local, if any exists, or 0 if none
+int GetEffectiveDistThreads ();

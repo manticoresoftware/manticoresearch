@@ -1466,6 +1466,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 
 	// the context
 	ClonableCtx_T<PqMatchContextRef_t, PqMatchContextClone_t> dCtx { this, pSeg, tReject, tRes };
+	dCtx.LimitConcurrency ( GetEffectiveDistThreads () );
 
 	if ( tRes.m_bVerbose )
 		tRes.m_tmSetup = sphMicroTimer ()+tRes.m_tmSetup;

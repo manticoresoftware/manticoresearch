@@ -217,6 +217,27 @@ Threads::Handler myinfo::OwnMini ( Threads::Handler fnHandler )
 	};
 }
 
+// returns ClientTaskInfo_t::m_iDistThreads
+int myinfo::DistThreads()
+{
+	auto pConn = HazardGetClient ();
+	if ( pConn )
+		return pConn->m_iDistThreads;
+
+	sphWarning ( "internal error: myinfo::DistThreads () invoked with empty tls!" );
+	return 0;
+}
+
+// set ClientTaskInfo_t::m_iDistThreads
+void myinfo::SetDistThreads ( int iValue )
+{
+	auto pNode = HazardGetClient ();
+	if ( pNode )
+		pNode->m_iDistThreads = iValue;
+	else
+		sphWarning ( "internal error: myinfo::ClientTaskInfo_t () invoked with empty tls!" );
+}
+
 // returns ClientTaskInfo_t::m_iThrottlingPeriod
 int myinfo::ThrottlingPeriodMS()
 {
@@ -416,4 +437,16 @@ MiniTaskInfo_t * MakeSystemInfo ( const char * sDescription )
 ScopedMiniInfo_t PublishSystemInfo ( const char * sDescription )
 {
 	return ScopedMiniInfo_t ( MakeSystemInfo ( sDescription ) );
+}
+
+volatile int &getDistThreads ()
+{
+	static int iDistThreads = 0;
+	return iDistThreads;
+}
+
+int GetEffectiveDistThreads ()
+{
+	auto iSessionVal = myinfo::DistThreads ();
+	return iSessionVal ? iSessionVal : getDistThreads ();
 }

@@ -217,6 +217,20 @@ public:
 		m_bDisabled = false;
 	}
 
+	void LimitConcurrency ( int iDistThreads )
+	{
+		assert (m_iTasks==0); // can be run only when no work started
+		if ( !iDistThreads ) // 0 as for dist_threads means 'no limit'
+			return;
+
+		auto iContextes = iDistThreads-1; // one context is always clone-free
+		if ( m_dChildrenContexts.GetLength ()<=iContextes )
+			return; // nothing to align
+
+		m_bDisabled = iContextes==0;
+		m_dChildrenContexts.Reset ( iContextes );
+	}
+
 	~ClonableCtx_T()
 	{
 		for ( auto& dCtx : m_dChildrenContexts )

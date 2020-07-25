@@ -6041,6 +6041,7 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 
 	// the context
 	ClonableCtx_T<DiskChunkSearcherCtx_t, DiskChunkSearcherCloneCtx_t> dCtx { dSorters, pResult };
+	dCtx.LimitConcurrency ( GetEffectiveDistThreads () );
 
 	auto iStart = sphMicroTimer ();
 	sphLogDebugv ( "Started: " INT64_FMT, sphMicroTimer()-iStart );

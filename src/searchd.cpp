@@ -171,7 +171,7 @@ static int				g_iDocstoreCache = 0;
 
 static FileAccessSettings_t g_tDefaultFA;
 
-int				g_iDistThreads		= 0;
+auto &			g_iDistThreads		= getDistThreads();
 int				g_iAgentConnectTimeoutMs = 1000;
 int				g_iAgentQueryTimeoutMs = 3000;	// global (default). May be override by index-scope values, if one specified
 
@@ -5518,6 +5518,7 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 
 	// the context
 	ClonableCtx_T<LocalSearchRef_t, LocalSearchClone_t> dCtx { m_tHook, m_dExtraSchemas };
+	dCtx.LimitConcurrency ( GetEffectiveDistThreads () );
 
 	const auto iJobs = iNumLocals;
 	std::atomic<int32_t> iCurJob { 0 };
@@ -7307,6 +7308,7 @@ static void MakeSnippetsCoro ( const VecTraits_T<int>& dTasks, CSphVector<Excerp
 
 	// the context
 	ClonableCtx_T<SnippedBuilderCtxRef_t, SnippedBuilderCtxClone_t> dCtx { pBuilder };
+	dCtx.LimitConcurrency ( GetEffectiveDistThreads () );
 
 	std::atomic<int32_t> iCurJob { 0 };
 	CoExecuteN ( dCtx.Concurrency ( iJobs ), [&]
@@ -12672,6 +12674,7 @@ struct SessionVars_t
 	bool			m_bProfile = false;
 	int				m_iTimeoutS = -1;
 	int				m_iThrottlingMS = -1;
+	int				m_iDistThreads = 0;
 	CSphVector<int64_t> m_dLastIds;
 };
 
@@ -12851,6 +12854,12 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 			break;
 		}
 
+		if ( tStmt.m_sSetName=="dist_threads" )
+		{
+			tVars.m_iDistThreads = tStmt.m_iSetValue;
+			break;
+		}
+
 		// move check here from bison parser. Only boolean allowed below.
 		if ( tStmt.m_iSetValue!=0 && tStmt.m_iSetValue!=1 )
 		{
@@ -13017,6 +13026,9 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 				tOut.Error ( tStmt.m_sStmt, "Only VIP connections can change global throttling_period value" );
 				return;
 			}
+		} else if ( tStmt.m_sSetName=="dist_threads" )
+		{
+			g_iDistThreads = tStmt.m_iSetValue; // that is not dangerous to allow everybody change the value
 		} else
 		{
 			tOut.ErrorEx ( tStmt.m_sStmt, "Unknown system variable '%s'", tStmt.m_sSetName.cstr () );
@@ -15335,6 +15347,12 @@ int SphinxqlSessionPublic::GetBackendThrottlingMS () const
 {
 	assert ( m_pImpl );
 	return m_pImpl->m_tVars.m_iThrottlingMS;
+}
+
+int SphinxqlSessionPublic::GetBackendDistThreads () const
+{
+	assert ( m_pImpl );
+	return m_pImpl->m_tVars.m_iDistThreads;
 }
 
 /// sphinxql command over API

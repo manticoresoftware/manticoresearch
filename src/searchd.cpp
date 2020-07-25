@@ -1106,8 +1106,7 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 				{
 					sphSafeInfo ( g_iLogFile, "thd %d (%s), proto %s, state %s, command %s", iThd,
 							pThread->m_sThreadName.cstr(),
-							ProtoName (pSrc->m_eProto),
-							ThdStateName (pSrc->m_eTaskState),
+							ProtoName (pSrc->m_eProto), TaskStateName ( pSrc->m_eTaskState ),
 							pSrc->m_sCommand ? pSrc->m_sCommand : "-" );
 					++iThd;
 					break;
@@ -11577,7 +11576,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 		tOut.PutNumAsString ( dThd.m_iThreadID );
 		tOut.PutString ( dThd.m_sThreadName );
 		tOut.PutString ( dThd.m_sProto.cstr() );
-		tOut.PutString ( ThdStateName ( dThd.m_eThdState ) );
+		tOut.PutString ( TaskStateName ( dThd.m_eThdState ) );
 		tOut.PutString ( dThd.m_sClientName ); // Host
 		tOut.PutNumAsString ( dThd.m_iConnID ); // ConnID
 		tOut.PutMicrosec ( tmNow-dThd.m_tmStart.get_value_or(tmNow) ); // time

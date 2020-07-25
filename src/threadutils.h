@@ -41,7 +41,7 @@ enum class Proto_e
 	HTTPS
 };
 
-const char* ThdStateName( TaskState_e eState);
+const char* TaskStateName ( TaskState_e eState );
 const char* ProtoName ( Proto_e eProto );
 
 int GetOsThreadId ();

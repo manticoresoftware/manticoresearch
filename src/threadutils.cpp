@@ -27,7 +27,7 @@
 
 using namespace Threads;
 
-const char* ThdStateName ( TaskState_e eState )
+const char* TaskStateName ( TaskState_e eState )
 {
 	switch (eState)
 	{

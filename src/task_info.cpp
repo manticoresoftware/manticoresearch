@@ -278,7 +278,7 @@ Proto_e myinfo::GetProto ()
 	return Proto_e::UNKNOWN;
 }
 
-void myinfo::ThdState ( TaskState_e eState )
+void myinfo::TaskState ( TaskState_e eState )
 {
 	auto pNode = HazardGetClient ();
 	if ( pNode )
@@ -286,7 +286,7 @@ void myinfo::ThdState ( TaskState_e eState )
 		pNode->m_eTaskState = eState;
 		pNode->m_tmStart = sphMicroTimer();
 	} else
-		sphWarning ( "internal error: myinfo::ThdState () invoked with empty tls!" );
+		sphWarning ( "internal error: myinfo::TaskState () invoked with empty tls!" );
 }
 
 const char* myinfo::szClientName()

@@ -245,7 +245,7 @@ namespace myinfo {
 	Proto_e GetProto ();
 
 	// set ClientTaskInfo_t::m_eThdState fixme! rename to TaskState
-	void ThdState ( TaskState_e eState );
+	void TaskState ( TaskState_e eState );
 
 	// returns ClientTaskInfo_t::m_sClientName
 	const char * szClientName ();

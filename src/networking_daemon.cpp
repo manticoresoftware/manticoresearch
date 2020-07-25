@@ -503,8 +503,8 @@ int SockWrapper_c::Impl_c::SockPollNetloop ( int64_t tmTimeUntilUs, bool bWrite 
 // as usual sphPoll - returns 1 on success, 0 on timeout, -1 on error.
 int SockWrapper_c::Impl_c::SockPoll ( int64_t tmTimeUntilUs, bool bWrite )
 {
-	myinfo::ThdState ( TaskState_e::NET_IDLE );
-	auto _ = AtScopeExit([bWrite] { myinfo::ThdState ( bWrite ? TaskState_e::NET_WRITE : TaskState_e::NET_READ ); });
+	myinfo::TaskState ( TaskState_e::NET_IDLE );
+	auto _ = AtScopeExit([bWrite] { myinfo::TaskState ( bWrite ? TaskState_e::NET_WRITE : TaskState_e::NET_READ ); });
 	return m_pNetLoop ? SockPollNetloop ( tmTimeUntilUs, bWrite ) : SockPollClassic ( tmTimeUntilUs, bWrite );
 }
 

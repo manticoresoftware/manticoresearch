@@ -8680,7 +8680,7 @@ void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength,
 	InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist )
 {
-	myinfo::ThdState ( TaskState_e::QUERY );
+	myinfo::TaskState ( TaskState_e::QUERY );
 	// set on query guard
 	auto& tCrashQuery = GlobalCrashQueryGetRef();
 	tCrashQuery.m_pQuery = tBuf.GetBufferPtr();
@@ -14768,7 +14768,7 @@ public:
 	bool Execute ( const CSphString & sQuery, RowBuffer_i & tOut )
 	{
 		// set on query guard
-		myinfo::ThdState ( TaskState_e::QUERY );
+		myinfo::TaskState ( TaskState_e::QUERY );
 		auto iQuerySize = sQuery.Length ();
 		auto& tCrashQuery = GlobalCrashQueryGetRef();
 		tCrashQuery.m_pQuery = (const BYTE *)sQuery.cstr();

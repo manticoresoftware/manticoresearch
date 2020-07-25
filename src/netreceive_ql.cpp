@@ -609,7 +609,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, int i
 			myinfo::SetDescription ( tIn.GetRawString ( iPacketLen-1 ), iPacketLen-1 ); // OPTIMIZE? could be huge, but string has gap at the end.
 			assert ( !tIn.GetError() );
 			sphLogDebugv ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, myinfo::UnsafeDescription().scstr () );
-			myinfo::ThdState ( TaskState_e::QUERY );
+			myinfo::TaskState ( TaskState_e::QUERY );
 			SqlRowBuffer_c tRows ( &uPacketID, &tOut, tSession.IsAutoCommit () );
 			bKeepProfile = tSession.Execute ( myinfo::UnsafeDescription(), tRows );
 		}
@@ -632,7 +632,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, int i
 	}
 
 	// send the response packet
-	myinfo::ThdState ( TaskState_e::NET_WRITE );
+	myinfo::TaskState ( TaskState_e::NET_WRITE );
 	if ( !tOut.Flush () )
 		return false;
 
@@ -701,10 +701,10 @@ void SqlServe ( SockWrapperPtr_c pSock )
 	/// mysql is pro-active, we NEED to send handshake before client send us something.
 	/// So, no passive probing possible.
 	// send handshake first
-	myinfo::ThdState ( TaskState_e::HANDSHAKE );
+	myinfo::TaskState ( TaskState_e::HANDSHAKE );
 	sphLogDebugv ("Sending handshake...");
 	SendMysqlProtoHandshake ( tOut, CheckWeCanUseSSL (), bCanCompression, iCID );
-	myinfo::ThdState ( TaskState_e::NET_WRITE );
+	myinfo::TaskState ( TaskState_e::NET_WRITE );
 	if ( !tOut.Flush () )
 	{
 		int iErrno = sphSockGetErrno ();
@@ -790,7 +790,7 @@ void SqlServe ( SockWrapperPtr_c pSock )
 		// handle auth packet
 		if ( !bAuthed )
 		{
-			myinfo::ThdState ( TaskState_e::HANDSHAKE );
+			myinfo::TaskState ( TaskState_e::HANDSHAKE );
 			auto tAnswer = tIn.PopTail ( iPacketLen );
 
 			// switch to ssl by demand.

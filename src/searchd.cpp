@@ -1107,7 +1107,7 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 					sphSafeInfo ( g_iLogFile, "thd %d (%s), proto %s, state %s, command %s", iThd,
 							pThread->m_sThreadName.cstr(),
 							ProtoName (pSrc->m_eProto),
-							ThdStateName (pSrc->m_eThdState),
+							ThdStateName (pSrc->m_eTaskState),
 							pSrc->m_sCommand ? pSrc->m_sCommand : "-" );
 					++iThd;
 					break;

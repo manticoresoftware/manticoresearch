@@ -173,7 +173,7 @@ struct ClientTaskInfo_t : public MiniTaskInfo_t
 {
 	DECLARE_RENDER( ClientTaskInfo_t );
 
-	ThdState_e	m_eThdState = ThdState_e::UNKNOWN; // fixme! rename to m_eTaskState
+	ThdState_e	m_eTaskState = ThdState_e::UNKNOWN;
 	Proto_e		m_eProto = Proto_e::UNKNOWN;
 	int			m_iConnID = -1;
 	int 		m_iThrottlingPeriod = -1;

@@ -145,7 +145,7 @@ DEFINE_RENDER ( ClientTaskInfo_t )
 	if ( tInfo.m_bVip )
 		dDst.m_sClientName << "vip";
 	dDst.m_iConnID = tInfo.m_iConnID;
-	dDst.m_eThdState = tInfo.m_eThdState;
+	dDst.m_eThdState = tInfo.m_eTaskState;
 	dDst.m_eProto = tInfo.m_eProto;
 	dDst.m_sProto << ProtoName ( tInfo.m_eProto );
 	dDst.m_sChain << (int) tInfo.m_eType << ":Client ";
@@ -283,7 +283,7 @@ void myinfo::ThdState ( ThdState_e eState )
 	auto pNode = HazardGetClient ();
 	if ( pNode )
 	{
-		pNode->m_eThdState = eState;
+		pNode->m_eTaskState = eState;
 		pNode->m_tmStart = sphMicroTimer();
 	} else
 		sphWarning ( "internal error: myinfo::ThdState () invoked with empty tls!" );

@@ -63,7 +63,7 @@ struct PublicThreadDesc_t
 	int					m_iConnID		= -1; ///< current conn-id for this thread. For logging and tracking in mysql
 
 	Proto_e				m_eProto		= Proto_e::UNKNOWN; /// used in show threads to format or not format query
-	ThdState_e			m_eThdState		= ThdState_e::UNKNOWN; /// show threads, crash dumping
+	TaskState_e			m_eThdState		= TaskState_e::UNKNOWN; /// show threads, crash dumping
 
 	PublicThreadDesc_t() = default;
 	void Swap (PublicThreadDesc_t& rhs);
@@ -173,7 +173,7 @@ struct ClientTaskInfo_t : public MiniTaskInfo_t
 {
 	DECLARE_RENDER( ClientTaskInfo_t );
 
-	ThdState_e	m_eTaskState = ThdState_e::UNKNOWN;
+	TaskState_e	m_eTaskState = TaskState_e::UNKNOWN;
 	Proto_e		m_eProto = Proto_e::UNKNOWN;
 	int			m_iConnID = -1;
 	int 		m_iThrottlingPeriod = -1;
@@ -245,7 +245,7 @@ namespace myinfo {
 	Proto_e GetProto ();
 
 	// set ClientTaskInfo_t::m_eThdState fixme! rename to TaskState
-	void ThdState ( ThdState_e eState );
+	void ThdState ( TaskState_e eState );
 
 	// returns ClientTaskInfo_t::m_sClientName
 	const char * szClientName ();

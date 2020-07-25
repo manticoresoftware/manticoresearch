@@ -31,7 +31,7 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf )
 	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf;
 
 	// send handshake
-	myinfo::ThdState( ThdState_e::HANDSHAKE );
+	myinfo::ThdState( TaskState_e::HANDSHAKE );
 	tOut.SendDword ( SPHINX_SEARCHD_PROTO ); // that is handshake
 	if ( !tIn.ReadFrom ( 4, true ))
 	{

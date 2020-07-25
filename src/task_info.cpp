@@ -278,7 +278,7 @@ Proto_e myinfo::GetProto ()
 	return Proto_e::UNKNOWN;
 }
 
-void myinfo::ThdState ( ThdState_e eState )
+void myinfo::ThdState ( TaskState_e eState )
 {
 	auto pNode = HazardGetClient ();
 	if ( pNode )

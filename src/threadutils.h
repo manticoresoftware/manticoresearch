@@ -21,7 +21,7 @@
 
 struct CSphQuery;
 
-enum class ThdState_e // fixme! Rename to TaskState_e
+enum class TaskState_e
 {
 	UNKNOWN,
 	HANDSHAKE,
@@ -41,7 +41,7 @@ enum class Proto_e
 	HTTPS
 };
 
-const char* ThdStateName( ThdState_e eState);
+const char* ThdStateName( TaskState_e eState);
 const char* ProtoName ( Proto_e eProto );
 
 int GetOsThreadId ();

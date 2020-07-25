@@ -8681,7 +8681,7 @@ void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength,
 	InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist )
 {
-	myinfo::ThdState ( ThdState_e::QUERY );
+	myinfo::ThdState ( TaskState_e::QUERY );
 	// set on query guard
 	auto& tCrashQuery = GlobalCrashQueryGetRef();
 	tCrashQuery.m_pQuery = tBuf.GetBufferPtr();
@@ -11572,7 +11572,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 
 	for ( const auto & dThd : dFinal )
 	{
-		if ( !bAll && dThd.m_eThdState==ThdState_e::UNKNOWN )
+		if ( !bAll && dThd.m_eThdState==TaskState_e::UNKNOWN )
 			continue;
 		tOut.PutNumAsString ( dThd.m_iThreadID );
 		tOut.PutString ( dThd.m_sThreadName );
@@ -14769,7 +14769,7 @@ public:
 	bool Execute ( const CSphString & sQuery, RowBuffer_i & tOut )
 	{
 		// set on query guard
-		myinfo::ThdState ( ThdState_e::QUERY );
+		myinfo::ThdState ( TaskState_e::QUERY );
 		auto iQuerySize = sQuery.Length ();
 		auto& tCrashQuery = GlobalCrashQueryGetRef();
 		tCrashQuery.m_pQuery = (const BYTE *)sQuery.cstr();

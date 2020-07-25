@@ -27,16 +27,16 @@
 
 using namespace Threads;
 
-const char* ThdStateName ( ThdState_e eState )
+const char* ThdStateName ( TaskState_e eState )
 {
 	switch (eState)
 	{
-		case ThdState_e::UNKNOWN: return "-";
-		case ThdState_e::HANDSHAKE: return "handshake";
-		case ThdState_e::NET_READ: return "net_read";
-		case ThdState_e::NET_WRITE: return "net_write";
-		case ThdState_e::QUERY: return "query";
-		case ThdState_e::NET_IDLE: return "net_idle";
+		case TaskState_e::UNKNOWN: return "-";
+		case TaskState_e::HANDSHAKE: return "handshake";
+		case TaskState_e::NET_READ: return "net_read";
+		case TaskState_e::NET_WRITE: return "net_write";
+		case TaskState_e::QUERY: return "query";
+		case TaskState_e::NET_IDLE: return "net_idle";
 	}
 	return "unknown";
 }

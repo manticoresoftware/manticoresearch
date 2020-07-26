@@ -272,7 +272,7 @@ namespace myinfo {
 	void SetThreadInfo ( const char * sTemplate, ... );
 
 	// returns non-guarded ref to MiniTaskInfo_t::m_pHazardDescription (to be used in same scope as set functions)
-	const CSphString & UnsafeDescription ();
+	Str_t UnsafeDescription ();
 
 } // namespace myinfo
 

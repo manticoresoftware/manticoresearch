@@ -218,8 +218,7 @@ static bool GetFieldFromLocal ( const CSphString & sIndexName, const GetFieldArg
 	}
 
 	auto& tRefCrashQuery = GlobalCrashQueryGetRef();
-	tRefCrashQuery.m_pIndex = sIndexName.cstr();
-	tRefCrashQuery.m_iIndexLen = sIndexName.Length();
+	tRefCrashQuery.m_dIndex = { sIndexName.cstr(), sIndexName.Length() };
 
 	const CSphIndex * pIndex = pDesc->m_pIndex;
 	pIndex->CreateReader ( iSessionID );

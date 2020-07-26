@@ -118,6 +118,7 @@ int64_t			sphRead ( int iFD, void * pBuf, size_t iCount );
 /// simple write wrapper
 /// simplifies partial write checks, and also supresses "fortified" glibc warnings
 bool			sphWrite ( int iFD, const void * pBuf, size_t iSize );
+bool			sphWrite ( int iFD, const Str_t& dBuf );
 
 StrVec_t		FindFiles ( const char * szPath, bool bNeedDirs=false );
 bool			MkDir ( const char * szDir );

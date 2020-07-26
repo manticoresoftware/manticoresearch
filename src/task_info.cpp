@@ -347,17 +347,21 @@ const char* myinfo::szClientName()
 	return "";
 }
 
-const CSphString& myinfo::UnsafeDescription ()
+Str_t myinfo::UnsafeDescription ()
 {
 	auto pNode = HazardGetMini ();
 	assert (pNode);
 
-	static const CSphString sDummy;
 	if ( pNode )
-		return pNode->m_pHazardDescription ? *(const CSphString *)pNode->m_pHazardDescription : sDummy;
+	{
+		if ( pNode->m_pHazardDescription )
+			return { pNode->m_pHazardDescription->cstr (), pNode->m_iDescriptionLen };
+		else
+			return dEmptyStr;
+	}
 
 	sphWarning ( "internal error: myinfo::Description () invoked with empty tls!" );
-	return sDummy;
+	return dEmptyStr;
 }
 
 void SetMiniDescription ( MiniTaskInfo_t * pNode, CSphString * pString, int iLen )

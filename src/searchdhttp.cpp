@@ -318,9 +318,9 @@ private:
 class JsonRequestBuilder_c : public RequestBuilder_i
 {
 public:
-	JsonRequestBuilder_c ( const CSphString & sQuery, const CSphString & sEndpoint )
-		: m_sEndpoint ( sEndpoint )
-		, m_tQuery ( sQuery.cstr() )
+	JsonRequestBuilder_c ( const char* szQuery, CSphString sEndpoint )
+			: m_sEndpoint ( std::move ( sEndpoint ) )
+			, m_tQuery ( szQuery )
 	{
 		// fixme: we can implement replacing indexes in a string (without parsing) if it becomes a performance issue
 	}
@@ -380,12 +380,12 @@ QueryParser_i * CreateQueryParser( bool bJson )
 		return sphCreatePlainQueryParser();
 }
 
-RequestBuilder_i * CreateRequestBuilder (const CSphString & sQuery, const SqlStmt_t & tStmt )
+RequestBuilder_i * CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt )
 {
 	if ( tStmt.m_bJson )
 	{
 		assert ( !tStmt.m_sEndpoint.IsEmpty() );
-		return new JsonRequestBuilder_c ( sQuery, tStmt.m_sEndpoint );
+		return new JsonRequestBuilder_c ( sQuery.first, tStmt.m_sEndpoint );
 	} else
 	{
 		return new SphinxqlRequestBuilder_c ( sQuery, tStmt );
@@ -840,7 +840,7 @@ public:
 		JsonRowBuffer_c tOut;
 
 		SphinxqlSessionPublic tSession;
-		tSession.Execute ( sQuery, tOut );
+		tSession.Execute ( FromStr ( sQuery ), tOut );
 
 		BuildReply ( tOut.Finish(), SPH_HTTP_STATUS_200 );
 
@@ -942,7 +942,7 @@ protected:
 	{
 		HttpErrorReporter_c tReporter;
 		CSphString sWarning;
-		sphHandleMysqlUpdate ( tReporter, tStmt, szRawRequest, sWarning );
+		sphHandleMysqlUpdate ( tReporter, tStmt, FromSz ( szRawRequest ), sWarning );
 
 		if ( tReporter.IsError() )
 			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
@@ -1004,7 +1004,7 @@ protected:
 		CSphSessionAccum tAcc;
 		HttpErrorReporter_c tReporter;
 		CSphString sWarning;
-		sphHandleMysqlDelete ( tReporter, tStmt, szRawRequest, true, tAcc );
+		sphHandleMysqlDelete ( tReporter, tStmt, FromSz ( szRawRequest ), true, tAcc );
 
 		if ( tReporter.IsError() )
 			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );

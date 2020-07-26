@@ -120,7 +120,8 @@ extern int64_t g_iIndexerPoolStartHit;
 using ByteBlob_t = std::pair<const BYTE *, int>;
 
 inline bool IsNull ( const ByteBlob_t & dBlob ) { return !dBlob.second; };
-inline bool IsValid ( const ByteBlob_t & dBlob ) { return dBlob.second==0 || (dBlob.first && dBlob.second>0); };
+inline bool IsFilled ( const ByteBlob_t & dBlob ) { return dBlob.first && dBlob.second>0; }
+inline bool IsValid ( const ByteBlob_t & dBlob ) { return IsNull ( dBlob ) || IsFilled ( dBlob ); };
 
 /// Sphinx CRC32 implementation
 extern DWORD	g_dSphinxCRC32 [ 256 ];

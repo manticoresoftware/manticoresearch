@@ -2443,16 +2443,12 @@ BYTE PrereadMapping ( const char * sIndexName, const char * sFor, bool bMlock, b
 // crash related code
 struct CrashQuery_t
 {
-//	ByteBlob_t 		m_dQuery;
-	const BYTE *	m_pQuery = nullptr;	// last query // fixme! byteblob?
-	int				m_iSize = 0;		// last query size
+	ByteBlob_t		m_dQuery { nullptr, 0 };
+	Str_t			m_dIndex { nullptr, 0 };
 	WORD			m_uCMD = 0;			// last command (header)
 	WORD			m_uVer = 0;			// last command's version (header)
-	bool			m_bMySQL = false;	// is query from MySQL or API // fixme! unify into enum
-	bool			m_bHttp = false;	// is query from HTTP
-//	ByteBlob_t		m_dIndex;
-	const char *	m_pIndex = nullptr;	// fixme! byteblob?
-	int				m_iIndexLen = 0;
+	QueryType_e		m_eType = QUERY_API;
+
 };
 
 // get ref to crash info saved thread-locally (beware: it will became invalid after switching context!)

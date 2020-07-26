@@ -2548,6 +2548,20 @@ struct IdentityHash_fn
 
 /////////////////////////////////////////////////////////////////////////////
 
+inline bool StrEq ( const char * l, const char * r )
+{
+	if ( !l || !r )
+		return ( ( !r && !l ) || ( !r && l && !*l ) || ( !l && r && !*r ) );
+	return strcmp ( l, r )==0;
+}
+
+inline bool StrEqN ( const char * l, const char * r )
+{
+	if ( !l || !r )
+		return ( ( !r && !l ) || ( !r && l && !*l ) || ( !l && r && !*r ) );
+	return strcasecmp ( l, r )==0;
+}
+
 /// immutable C string proxy
 struct CSphString
 {
@@ -2614,9 +2628,7 @@ public:
 
 	inline bool operator == ( const char * t ) const
 	{
-		if ( !t || !m_sValue )
-			return ( ( !t && !m_sValue ) || ( !t && m_sValue && !*m_sValue ) || ( !m_sValue && t && !*t ) );
-		return strcmp ( m_sValue, t )==0;
+		return StrEq ( t, m_sValue );
 	}
 
 	inline bool operator == ( const CSphString & t ) const
@@ -2637,9 +2649,7 @@ public:
 	// compare ignoring case
 	inline bool EqN ( const char * t ) const
 	{
-		if ( !t || !m_sValue )
-			return ( ( !t && !m_sValue ) || ( !t && m_sValue && !*m_sValue ) || ( !m_sValue && t && !*t ) );
-		return strcasecmp ( m_sValue, t )==0;
+		return StrEqN ( t, m_sValue );
 	}
 
 	inline bool EqN ( const CSphString &t ) const
@@ -3001,6 +3011,11 @@ public:
 /// Use out << comma << "foo"; out << comma << "bar"; in the case
 using Str_t = std::pair<const char*, int>;
 const Str_t dEmptyStr = { "", 0 };
+inline bool IsEmpty ( const Str_t & dBlob ) { return dBlob.second==0; }
+inline bool IsFilled ( const Str_t & dBlob ) { return dBlob.first && dBlob.second>0; }
+inline Str_t FromSz ( const char * szString ) { return { szString, (int) strlen ( szString ) }; }
+inline Str_t FromStr ( const CSphString& sString ) { return { sString.cstr(), (int) sString.Length() }; }
+
 class Comma_c
 {
 protected:

@@ -957,7 +957,7 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	// log query
 	auto& tQuery = GlobalCrashQueryGetRef ();
 
-	bool bValidQuery = ( tQuery.m_pQuery && tQuery.m_iSize>0 );
+	bool bValidQuery = IsFilled ( tQuery.m_dQuery );
 #if !USE_WINDOWS
 	if ( bValidQuery )
 	{
@@ -972,35 +972,27 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 		char dPages = 0;
 #endif
 
-		uintptr_t pPageStart = (uintptr_t )( tQuery.m_pQuery );
+		auto pPageStart = (uintptr_t) tQuery.m_dQuery.first;
 		pPageStart &= ~( iPageSize - 1 );
 		bValidQuery &= ( mincore ( ( void * ) pPageStart, 1, &dPages )==0 );
 
-		uintptr_t pPageEnd = (uintptr_t )( tQuery.m_pQuery + tQuery.m_iSize - 1 );
+		auto pPageEnd = (uintptr_t) ( tQuery.m_dQuery.first+tQuery.m_dQuery.second-1 );
 		pPageEnd &= ~( iPageSize - 1 );
 		bValidQuery &= ( mincore ( ( void * ) pPageEnd, 1, &dPages )==0 );
 	}
 #endif
 
 	// request dump banner
-	const char * pBanner = g_sCrashedBannerAPI;
-	int iBannerLen = sizeof(g_sCrashedBannerAPI) - 1;
-	if ( tQuery.m_bMySQL )
-	{
-		pBanner = g_sCrashedBannerMySQL;
-		iBannerLen = sizeof(g_sCrashedBannerMySQL) - 1;
-	}
-	if ( tQuery.m_bHttp )
-	{
-		pBanner = g_sCrashedBannerHTTP;
-		iBannerLen = sizeof(g_sCrashedBannerHTTP) - 1;
-	}
+	Str_t dBanner = { g_sCrashedBannerAPI, sizeof ( g_sCrashedBannerAPI )-1 };
+	if ( tQuery.m_eType==QUERY_SQL )
+		dBanner = { g_sCrashedBannerMySQL, sizeof ( g_sCrashedBannerMySQL )-1 };
+	else if ( tQuery.m_eType==QUERY_JSON )
+		dBanner = { g_sCrashedBannerHTTP, sizeof ( g_sCrashedBannerHTTP )-1 };
+
 	if ( !bValidQuery )
-	{
-		iBannerLen = sizeof(g_sCrashedBannerBad) - 1;
-		pBanner = g_sCrashedBannerBad;
-	}
-	sphWrite ( g_iLogFile, pBanner, iBannerLen );
+		dBanner = { g_sCrashedBannerBad, sizeof ( g_sCrashedBannerBad )-1 };
+
+	sphWrite ( g_iLogFile, dBanner );
 
 	// query
 	if ( bValidQuery )
@@ -1008,11 +1000,11 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 		QueryCopyState_t tCopyState;
 		tCopyState.m_pDst = g_dCrashQueryBuff;
 		tCopyState.m_pDstEnd = g_dCrashQueryBuff + sizeof(g_dCrashQueryBuff);
-		tCopyState.m_pSrc = tQuery.m_pQuery;
-		tCopyState.m_pSrcEnd = tQuery.m_pQuery + tQuery.m_iSize;
+		tCopyState.m_pSrc = tQuery.m_dQuery.first;
+		tCopyState.m_pSrcEnd = tQuery.m_dQuery.first + tQuery.m_dQuery.second;
 
 		CopyQuery_fn * pfnCopy = NULL;
-		if ( !tQuery.m_bMySQL && !tQuery.m_bHttp )
+		if ( tQuery.m_eType==QUERY_API )
 		{
 			pfnCopy = &sphCopyEncodedBase64;
 
@@ -1022,11 +1014,11 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 				(BYTE)( tQuery.m_uCMD & 0xff ),
 				(BYTE)( ( tQuery.m_uVer>>8 ) & 0xff ),
 				(BYTE)( tQuery.m_uVer & 0xff ),
-				(BYTE)( ( tQuery.m_iSize>>24 ) & 0xff ),
-				(BYTE)( ( tQuery.m_iSize>>16 ) & 0xff ),
-				(BYTE)( ( tQuery.m_iSize>>8 ) & 0xff ),
-				(BYTE)( tQuery.m_iSize & 0xff ),
-				*tQuery.m_pQuery
+				(BYTE)( ( tQuery.m_dQuery.second>>24 ) & 0xff ),
+				(BYTE)( ( tQuery.m_dQuery.second>>16 ) & 0xff ),
+				(BYTE)( ( tQuery.m_dQuery.second>>8 ) & 0xff ),
+				(BYTE)( tQuery.m_dQuery.second & 0xff ),
+				*tQuery.m_dQuery.first
 			};
 
 			QueryCopyState_t tHeaderState;
@@ -1038,7 +1030,7 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 			assert ( tHeaderState.m_pSrc==tHeaderState.m_pSrcEnd );
 			tCopyState.m_pDst = tHeaderState.m_pDst;
 			tCopyState.m_pSrc++;
-		} else if ( tQuery.m_bHttp )
+		} else if ( tQuery.m_eType==QUERY_JSON )
 		{
 			pfnCopy = &sphCopySphinxHttp;
 		} else
@@ -1065,8 +1057,8 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 
 	// index name
 	sphWrite ( g_iLogFile, g_sCrashedIndex, sizeof (g_sCrashedIndex)-1 );
-	if ( tQuery.m_pIndex && tQuery.m_iIndexLen )
-		sphWrite ( g_iLogFile, tQuery.m_pIndex, tQuery.m_iIndexLen );
+	if ( IsFilled ( tQuery.m_dIndex ) )
+		sphWrite ( g_iLogFile, tQuery.m_dIndex );
 	sphWrite ( g_iLogFile, g_sEndLine, sizeof (g_sEndLine)-1 );
 
 	sphSafeInfo ( g_iLogFile, szMANTICORE_NAME );
@@ -1074,10 +1066,10 @@ LONG WINAPI CrashLogger::HandleCrash ( EXCEPTION_POINTERS * pExc )
 #if USE_WINDOWS
 	// mini-dump reference
 	int iMiniDumpLen = snprintf ( (char *)g_dCrashQueryBuff, sizeof(g_dCrashQueryBuff),
-		"%s %s.%p.mdmp\n", g_sMinidumpBanner, g_sMinidump, tQuery.m_pQuery );
+		"%s %s.%p.mdmp\n", g_sMinidumpBanner, g_sMinidump, tQuery.m_dQuery.first );
 	sphWrite ( g_iLogFile, g_dCrashQueryBuff, iMiniDumpLen );
 	snprintf ( (char *)g_dCrashQueryBuff, sizeof(g_dCrashQueryBuff), "%s.%p.mdmp",
-		g_sMinidump, tQuery.m_pQuery );
+		g_sMinidump, tQuery.m_dQuery.first );
 #endif
 
 	// log trace
@@ -5278,8 +5270,7 @@ void SearchHandler_c::RunLocalSearches()
 		int iIndexWeight = dLocal.m_iWeight;
 
 		CrashQuery_t& tCrashQuery = GlobalCrashQueryGetRef(); //mt
-		tCrashQuery.m_pIndex = dLocal.m_sName.cstr(); // mt
-		tCrashQuery.m_iIndexLen = dLocal.m_sName.Length(); // mt
+		tCrashQuery.m_dIndex = FromStr ( dLocal.m_sName ); // mt
 
 		// this part is like RunLocalSearchMT
 		const auto * pServed = m_dLocked.Get ( sLocal );
@@ -5540,8 +5531,7 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 
 			const CSphString & sIndex = GetLocalIndexName ( iIdx );
 			auto& tCrashQuery = GlobalCrashQueryGetRef();
-			tCrashQuery.m_pIndex = sIndex.cstr ();
-			tCrashQuery.m_iIndexLen = sIndex.Length ();
+			tCrashQuery.m_dIndex = FromStr ( sIndex );
 
 			auto * pServed = m_dLocked.Get ( sIndex );
 			if ( !pServed )
@@ -8686,9 +8676,8 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 	myinfo::TaskState ( TaskState_e::QUERY );
 	// set on query guard
 	auto& tCrashQuery = GlobalCrashQueryGetRef();
-	tCrashQuery.m_pQuery = tBuf.GetBufferPtr();
-	tCrashQuery.m_iSize = iLength;
-	tCrashQuery.m_bMySQL = false;
+	tCrashQuery.m_eType = QUERY_API;
+	tCrashQuery.m_dQuery = { tBuf.GetBufferPtr(), iLength };
 	tCrashQuery.m_uCMD = eCommand;
 	tCrashQuery.m_uVer = uCommandVer;
 
@@ -11833,9 +11822,9 @@ bool SphinxqlReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & 
 }
 
 
-SphinxqlRequestBuilder_c::SphinxqlRequestBuilder_c ( const CSphString& sQuery, const SqlStmt_t & tStmt )
-	: m_sBegin ( sQuery.cstr(), tStmt.m_iListStart )
-	, m_sEnd ( sQuery.cstr() + tStmt.m_iListEnd, sQuery.Length() - tStmt.m_iListEnd )
+SphinxqlRequestBuilder_c::SphinxqlRequestBuilder_c ( Str_t sQuery, const SqlStmt_t & tStmt )
+	: m_sBegin { sQuery.first, tStmt.m_iListStart }
+	, m_sEnd ( sQuery.first + tStmt.m_iListEnd, sQuery.second - tStmt.m_iListEnd )
 {
 }
 
@@ -11918,7 +11907,7 @@ void HandleMySqlExtendedUpdate ( AttrUpdateArgs & tArgs )
 }
 
 
-void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning )
+void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery, CSphString & sWarning )
 {
 	// extract index names
 	StrVec_t dIndexNames;
@@ -12543,7 +12532,7 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const CSphStr
 }
 
 
-void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit,
+void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery, bool bCommit,
 		CSphSessionAccum & tAcc )
 {
 	MEMORY ( MEM_SQL_DELETE );
@@ -14772,17 +14761,16 @@ public:
 	//
 	// returns true if the current profile should be kept (default)
 	// returns false if profile should be discarded (eg. SHOW PROFILE case)
-	bool Execute ( const CSphString & sQuery, RowBuffer_i & tOut )
+	bool Execute ( Str_t sQuery, RowBuffer_i & tOut )
 	{
 		// set on query guard
 		myinfo::TaskState ( TaskState_e::QUERY );
-		auto iQuerySize = sQuery.Length ();
 		auto& tCrashQuery = GlobalCrashQueryGetRef();
-		tCrashQuery.m_pQuery = (const BYTE *)sQuery.cstr();
-		tCrashQuery.m_iSize = iQuerySize;
-		tCrashQuery.m_bMySQL = true;
+		tCrashQuery.m_eType = QUERY_SQL;
+		tCrashQuery.m_dQuery = { (const BYTE*) sQuery.first, sQuery.second };
 
-		if (sQuery=="select DATABASE(), USER() limit 1")
+		// ad-hoc, make generalized select()
+		if ( StrEq ( sQuery.first, "select DATABASE(), USER() limit 1" ) )
 		{
 			// result set header packet
 			tOut.HeadTuplet ( "DATABASE()", "USER()" );
@@ -14796,7 +14784,7 @@ public:
 			m_tProfile.Switch ( SPH_QSTATE_SQL_PARSE );
 
 		CSphVector<SqlStmt_t> dStmt;
-		bool bParsedOK = sphParseSqlQuery ( sQuery.cstr(), iQuerySize, dStmt, m_sError, m_tVars.m_eCollation );
+		bool bParsedOK = sphParseSqlQuery ( sQuery.first, sQuery.second, dStmt, m_sError, m_tVars.m_eCollation );
 
 		if ( m_tVars.m_bProfile )
 			m_tProfile.Switch ( SPH_QSTATE_UNKNOWN );
@@ -14805,7 +14793,7 @@ public:
 		if ( bParsedOK )
 		{
 			eStmt = dStmt[0].m_eStmt;
-			dStmt[0].m_sStmt = sQuery.cstr();
+			dStmt[0].m_sStmt = sQuery.first;
 		}
 		const SqlStmt_e ePrevStmt = m_eLastStmt;
 		if ( eStmt!=STMT_SHOW_META )
@@ -14823,7 +14811,7 @@ public:
 				m_tLastMeta = CSphQueryResultMeta();
 				m_tLastMeta.m_sError = m_sError;
 				m_tLastMeta.m_sWarning = "";
-				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
+				tOut.Error ( sQuery.first, m_sError.cstr() );
 				return true;
 			}
 		}
@@ -14843,7 +14831,7 @@ public:
 			m_tLastMeta = CSphQueryResultMeta();
 			m_tLastMeta.m_sError = m_sError;
 			m_tLastMeta.m_sWarning = "";
-			tOut.Error ( sQuery.cstr(), m_sError.cstr() );
+			tOut.Error ( sQuery.first, m_sError.cstr() );
 			return true;
 
 		case STMT_SELECT:
@@ -14930,7 +14918,7 @@ public:
 					RtAccum_t * pAccum = m_tAcc.GetAcc ( pIndex, m_sError );
 					if ( !m_sError.IsEmpty() )
 					{
-						tOut.Error ( sQuery.cstr(), m_sError.cstr() );
+						tOut.Error ( sQuery.first, m_sError.cstr() );
 						return true;
 					}
 					HandleCmdReplicate ( *pAccum, m_sError );
@@ -14950,7 +14938,7 @@ public:
 					RtAccum_t * pAccum = m_tAcc.GetAcc ( pIndex, m_sError );
 					if ( !m_sError.IsEmpty() )
 					{
-						tOut.Error ( sQuery.cstr(), m_sError.cstr() );
+						tOut.Error ( sQuery.first, m_sError.cstr() );
 						return true;
 					}
 					if ( eStmt==STMT_COMMIT )
@@ -14995,7 +14983,7 @@ public:
 			} else
 			{
 				m_sError.SetSprintf ( "no such built-in procedure %s", pStmt->m_sCallProc.cstr() );
-				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
+				tOut.Error ( sQuery.first, m_sError.cstr() );
 			}
 			return true;
 
@@ -15042,7 +15030,7 @@ public:
 
 		case STMT_CREATE_FUNCTION:
 			if ( !sphPluginCreate ( pStmt->m_sUdfLib.cstr(), PLUGIN_FUNCTION, pStmt->m_sUdfName.cstr(), pStmt->m_eUdfType, m_sError ) )
-				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
+				tOut.Error ( sQuery.first, m_sError.cstr() );
 			else
 				tOut.Ok();
 			SphinxqlStateFlush ();
@@ -15050,7 +15038,7 @@ public:
 
 		case STMT_DROP_FUNCTION:
 			if ( !sphPluginDrop ( PLUGIN_FUNCTION, pStmt->m_sUdfName.cstr(), m_sError ) )
-				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
+				tOut.Error ( sQuery.first, m_sError.cstr() );
 			else
 				tOut.Ok();
 			SphinxqlStateFlush ();
@@ -15076,7 +15064,7 @@ public:
 
 				// report
 				if ( !bRes )
-					tOut.Error ( sQuery.cstr(), m_sError.cstr() );
+					tOut.Error ( sQuery.first, m_sError.cstr() );
 				else
 					tOut.Ok();
 				SphinxqlStateFlush ();
@@ -15087,7 +15075,7 @@ public:
 			if ( sphPluginReload ( pStmt->m_sUdfLib.cstr(), m_sError ) )
 				tOut.Ok();
 			else
-				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
+				tOut.Error ( sQuery.first, m_sError.cstr() );
 			return true;
 
 		case STMT_ATTACH_INDEX:
@@ -15222,13 +15210,13 @@ public:
 			if ( ClusterJoin ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, pStmt->m_bClusterUpdateNodes, m_sError ) )
 				tOut.Ok();
 			else
-				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
+				tOut.Error ( sQuery.first, m_sError.cstr() );
 			return true;
 		case STMT_CLUSTER_CREATE:
 			if ( ClusterCreate ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, m_sError ) )
 				tOut.Ok();
 			else
-				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
+				tOut.Error ( sQuery.first, m_sError.cstr() );
 			return true;
 
 		case STMT_CLUSTER_DELETE:
@@ -15236,7 +15224,7 @@ public:
 			if ( ClusterDelete ( pStmt->m_sIndex, m_tLastMeta.m_sError, m_tLastMeta.m_sWarning ) )
 				tOut.Ok ( 0, m_tLastMeta.m_sWarning.IsEmpty() ? 0 : 1 );
 			else
-				tOut.Error ( sQuery.cstr(), m_tLastMeta.m_sError.cstr() );
+				tOut.Error ( sQuery.first, m_tLastMeta.m_sError.cstr() );
 			return true;
 
 		case STMT_CLUSTER_ALTER_ADD:
@@ -15245,7 +15233,7 @@ public:
 			if ( ClusterAlter ( pStmt->m_sCluster, pStmt->m_sIndex, ( eStmt==STMT_CLUSTER_ALTER_ADD ), m_tLastMeta.m_sError, m_tLastMeta.m_sWarning ) )
 				tOut.Ok ( 0, m_tLastMeta.m_sWarning.IsEmpty() ? 0 : 1 );
 			else
-				tOut.Error ( sQuery.cstr(), m_tLastMeta.m_sError.cstr() );
+				tOut.Error ( sQuery.first, m_tLastMeta.m_sError.cstr() );
 			return true;
 
 		case STMT_CLUSTER_ALTER_UPDATE:
@@ -15253,7 +15241,7 @@ public:
 			if ( ClusterAlterUpdate ( pStmt->m_sCluster, pStmt->m_sSetName, m_tLastMeta.m_sError ) )
 				tOut.Ok();
 			else
-				tOut.Error ( sQuery.cstr(), m_tLastMeta.m_sError.cstr() );
+				tOut.Error ( sQuery.first, m_tLastMeta.m_sError.cstr() );
 			return true;
 
 		case STMT_EXPLAIN:
@@ -15270,7 +15258,7 @@ public:
 
 		default:
 			m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );
-			tOut.Error ( sQuery.cstr(), m_sError.cstr() );
+			tOut.Error ( sQuery.first, m_sError.cstr() );
 			return true;
 		} // switch
 
@@ -15292,7 +15280,7 @@ SphinxqlSessionPublic::~SphinxqlSessionPublic ()
 	SafeDelete ( m_pImpl );
 }
 
-bool SphinxqlSessionPublic::Execute ( const CSphString & sQuery, RowBuffer_i & tOut )
+bool SphinxqlSessionPublic::Execute ( Str_t sQuery, RowBuffer_i & tOut )
 {
 	assert ( m_pImpl );
 	return m_pImpl->Execute ( sQuery, tOut );
@@ -15355,7 +15343,9 @@ void HandleCommandSphinxql ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 	auto tReply = APIAnswer ( tOut, VER_COMMAND_SPHINXQL );
 
 	// parse and run request
-	RunSingleSphinxqlCommand ( tReq.GetString (), tOut );
+	CSphVector<BYTE> dString;
+	tReq.GetString ( dString );
+	RunSingleSphinxqlCommand ( dString, tOut );
 }
 
 /// json command over API

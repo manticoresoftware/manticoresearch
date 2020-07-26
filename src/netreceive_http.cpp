@@ -115,7 +115,7 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf )
 
 	// set off query guard
 	auto & tCrashQuery = GlobalCrashQueryGetRef();
-	tCrashQuery.m_bHttp = true;
+	tCrashQuery.m_eType = QUERY_JSON;
 
 	int iCID = myinfo::ConnID();
 	const char * sClientIP = myinfo::szClientName();
@@ -168,8 +168,7 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf )
 			break;
 		}
 
-		tCrashQuery.m_pQuery = tPacket.first;
-		tCrashQuery.m_iSize = tPacket.second;
+		tCrashQuery.m_dQuery = tPacket;
 
 		if ( sphLoopClientHttp ( tPacket.first, tPacket.second, dResult ) )
 		{

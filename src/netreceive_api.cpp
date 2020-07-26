@@ -157,9 +157,8 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf )
 		}
 
 		auto& tCrashQuery = GlobalCrashQueryGetRef();
-		tCrashQuery.m_pQuery = tIn.GetBufferPtr ();
-		tCrashQuery.m_iSize = iReplySize;
-		tCrashQuery.m_bMySQL = false;
+		tCrashQuery.m_dQuery = { tIn.GetBufferPtr (), iReplySize };
+		tCrashQuery.m_eType = QUERY_API;
 		tCrashQuery.m_uCMD = eCommand;
 		tCrashQuery.m_uVer = uVer;
 

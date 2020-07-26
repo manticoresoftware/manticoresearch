@@ -1100,7 +1100,7 @@ class RequestBuilder_i;
 class ReplyParser_i;
 
 QueryParser_i * CreateQueryParser ( bool bJson );
-RequestBuilder_i * CreateRequestBuilder ( const CSphString & sQuery, const SqlStmt_t & tStmt );
+RequestBuilder_i * CreateRequestBuilder ( Str_t sQuery, const SqlStmt_t & tStmt );
 ReplyParser_i * CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings );
 
 enum ESphHttpStatus
@@ -1139,8 +1139,8 @@ bool IsMaxedOut ();
 ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster );
 void sphFormatFactors ( StringBuilder_c& dOut, const unsigned int * pFactors, bool bJson );
 void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation, CSphVector<int64_t> & dLastIds );
-void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning );
-void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphSessionAccum & tAcc );
+void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery, CSphString & sWarning );
+void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery, bool bCommit, CSphSessionAccum & tAcc );
 
 bool				sphLoopClientHttp ( const BYTE * pRequest, int iRequestLen, CSphVector<BYTE> & dResult );
 bool				sphProcessHttpQueryNoResponce ( ESphHttpEndpoint eEndpoint, const char * sQuery, const SmallStringHash_T<CSphString> & tOptions, CSphVector<BYTE> & dResult );
@@ -1162,7 +1162,7 @@ public:
 	SphinxqlSessionPublic();
 	~SphinxqlSessionPublic();
 
-	bool Execute ( const CSphString & sQuery, RowBuffer_i & tOut );
+	bool Execute ( Str_t sQuery, RowBuffer_i & tOut );
 	void SetFederatedUser ();
 	bool IsAutoCommit () const;
 	CSphQueryProfile* StartProfiling ( ESphQueryState );
@@ -1177,7 +1177,7 @@ public:
 void LogSphinxqlError ( const char * sStmt, const char * sError );
 
 // that is used from sphinxql command over API
-void RunSingleSphinxqlCommand ( const CSphString & sCommand, ISphOutputBuffer & tOut );
+void RunSingleSphinxqlCommand ( Str_t sCommand, ISphOutputBuffer & tOut );
 
 ISphTableFunc *		CreateRemoveRepeats();
 

@@ -606,9 +606,9 @@ bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, int i
 		case MYSQL_COM_QUERY:
 		{
 			// handle query packet
-			myinfo::SetDescription ( tIn.GetRawString ( iPacketLen-1 ), iPacketLen-1 ); // OPTIMIZE? could be huge, but string has gap at the end.
+			myinfo::SetDescription ( tIn.GetRawString ( iPacketLen-1 ), iPacketLen-1 ); // OPTIMIZE? could be huge, but string is hazard.
 			assert ( !tIn.GetError() );
-			sphLogDebugv ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, myinfo::UnsafeDescription().scstr () );
+			sphLogDebugv ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, myinfo::UnsafeDescription().first );
 			myinfo::TaskState ( TaskState_e::QUERY );
 			SqlRowBuffer_c tRows ( &uPacketID, &tOut, tSession.IsAutoCommit () );
 			bKeepProfile = tSession.Execute ( myinfo::UnsafeDescription(), tRows );
@@ -648,7 +648,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, int i
 } // static namespace
 
 // that is used from sphinxql command over API
-void RunSingleSphinxqlCommand ( const CSphString & sCommand, ISphOutputBuffer & tOut )
+void RunSingleSphinxqlCommand ( Str_t sCommand, ISphOutputBuffer & tOut )
 {
 	BYTE uDummy = 0;
 
@@ -686,7 +686,7 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 	assert ( !g_bMaintenance || myinfo::IsVIP () );
 
 	// set off query guard
-	GlobalCrashQueryGetRef ().m_bMySQL = true;
+	GlobalCrashQueryGetRef ().m_eType = QUERY_SQL;
 	const bool bCanCompression = IsCompressionAvailable();
 
 	int iCID = myinfo::ConnID();

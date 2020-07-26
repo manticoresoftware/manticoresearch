@@ -417,6 +417,11 @@ bool sphWrite ( int iFD, const void * pBuf, size_t iSize )
 	return ( iSize==(size_t)::write ( iFD, pBuf, (int) iSize ) );
 }
 
+bool sphWrite ( int iFD, const Str_t & dBuf )
+{
+	return ( dBuf.second==(int) ::write ( iFD, dBuf.first, (int) dBuf.second) );
+}
+
 
 #if USE_WINDOWS
 static void AddFile ( StrVec_t & dFilesFound, const CSphString & sPath, const WIN32_FIND_DATA & tFFData, bool bNeedDirs )

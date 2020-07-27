@@ -322,7 +322,7 @@ TEST_P ( RTN, WeightBoundary )
 	SafeDelete ( pSrc );
 }
 
-INSTANTIATE_TEST_CASE_P ( RT_N, RTN, ::testing::Values ( 1500, 1500, 1500, 1500, 1500 ) );
+INSTANTIATE_TEST_SUITE_P ( RT_N, RTN, ::testing::Values ( 1500, 1500, 1500, 1500, 1500 ) );
 
 
 TEST_F ( RT, RankerFactors )

@@ -614,7 +614,7 @@ TEST_P( TokenizerP, embedded_zeroes )
 	ASSERT_FALSE( m_pTokenizer->GetToken () );
 }
 
-INSTANTIATE_TEST_CASE_P ( Run3Times, TokenizerP, ::testing::Values ( 1, 2, 3 ) );
+INSTANTIATE_TEST_SUITE_P ( Run3Times, TokenizerP, ::testing::Values ( 1, 2, 3 ) );
 
 //////////////////////////////////////////////////////////////////////////
 

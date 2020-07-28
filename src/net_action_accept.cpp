@@ -219,7 +219,7 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 				break;
 		}
 		sphLogDebugv ( "%p accepted %s, sock=%d, tick=%u", this,
-				ProtoName(m_tListener.m_eProto), iClientSock, myinfo::ref<ListenTaskInfo_t> ()->m_uTick );
+				RelaxedProtoName(m_tListener.m_eProto), iClientSock, myinfo::ref<ListenTaskInfo_t> ()->m_uTick );
 	}
 }
 

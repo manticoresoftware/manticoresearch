@@ -1237,12 +1237,12 @@ int sphCreateInetSocket ( const ListenerDesc_t & tDesc ) REQUIRES ( MainThread )
 	auto iPort = tDesc.m_iPort;
 	char sAddress[SPH_ADDRESS_SIZE];
 	sphFormatIP ( sAddress, SPH_ADDRESS_SIZE, uAddr );
-	auto sVip = [&tDesc] { return tDesc.m_bVIP?"VIP ":""; };
+	const char * sVip = tDesc.m_bVIP ? "VIP " : "";
 
 	if ( uAddr==htonl ( INADDR_ANY ) )
-		sphInfo ( "listening on all interfaces for %s%s, port=%d", sVip(), ProtoName ( tDesc.m_eProto), iPort );
+		sphInfo ( "listening on all interfaces for %s%s, port=%d", sVip, RelaxedProtoName ( tDesc.m_eProto), iPort );
 	else
-		sphInfo ( "listening on %s:%d for %s%s", sAddress, iPort, sVip(), ProtoName ( tDesc.m_eProto ) );
+		sphInfo ( "listening on %s:%d for %s%s", sAddress, iPort, sVip, RelaxedProtoName ( tDesc.m_eProto ) );
 
 	static struct sockaddr_in iaddr;
 	memset ( &iaddr, 0, sizeof(iaddr) );

@@ -56,6 +56,22 @@ const char* ProtoName ( Proto_e eProto )
 	return "unknown";
 }
 
+const char * RelaxedProtoName ( Proto_e eProto )
+{
+	switch ( eProto )
+	{
+		case Proto_e::UNKNOWN: return "-";
+		case Proto_e::MYSQL41: return "mysql";
+		case Proto_e::REPLICATION: return "replication";
+		case Proto_e::SPHINX:
+		case Proto_e::HTTP:
+		case Proto_e::HTTPS: return "sphinx and http(s)";
+		default: break;
+	}
+	return "unknown";
+}
+
+
 int GetOsThreadId ()
 {
 #if USE_WINDOWS

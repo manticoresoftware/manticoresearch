@@ -43,6 +43,7 @@ enum class Proto_e
 
 const char* TaskStateName ( TaskState_e eState );
 const char* ProtoName ( Proto_e eProto );
+const char* RelaxedProtoName ( Proto_e eProto );
 
 int GetOsThreadId ();
 

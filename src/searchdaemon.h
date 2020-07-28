@@ -1029,11 +1029,15 @@ void HandleMySqlExtendedUpdate( AttrUpdateArgs& tArgs );
 /// result set aggregated across indexes
 struct AggrResult_t final: CSphQueryResult
 {
+	CSphSchema				m_tSchema;			///< result schema
 	CSphVector<CSphSchema>	m_dSchemas;			///< aggregated result sets schemas (for schema minimization)
 	CSphVector<int>			m_dMatchCounts;		///< aggregated result sets lengths (for schema minimization)
 	StrVec_t				m_dZeroCount;
 	TaggedVector_c			m_dTag2Docstore;	///< tag to docstore mapping
 	CSphSwapVector<CSphMatch> m_dMatches;       ///< top matching documents, no more than MAX_MATCHES
+	int						m_iOffset = 0;		///< requested offset into matches array
+	int						m_iCount = 0;		///< count which will be actually served (computed from total, offset and limit)
+	int						m_iSuccesses = 0;
 
 	void ClampMatches ( int iLimit, bool bCommonSchema );
 	void FreeMatchesPtrs ( int iLimit, bool bCommonSchema );

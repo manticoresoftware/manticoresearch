@@ -1488,7 +1488,7 @@ private:
 	int					m_iStart;
 	int					m_iEnd;
 
-	void				ParseSchema ( CSphQueryResult & tRes, MemInputBuffer_c & tReq ) const;
+	void				ParseSchema ( AggrResult_t & tRes, MemInputBuffer_c & tReq ) const;
 	void				ParseMatch ( CSphMatch & tMatch, MemInputBuffer_c & tReq, const CSphSchema & tSchema, bool bAgent64 ) const;
 };
 
@@ -1846,7 +1846,7 @@ void SearchReplyParser_c::ParseMatch ( CSphMatch & tMatch, MemInputBuffer_c & tR
 }
 
 
-void SearchReplyParser_c::ParseSchema ( CSphQueryResult & tRes, MemInputBuffer_c & tReq ) const
+void SearchReplyParser_c::ParseSchema ( AggrResult_t & tRes, MemInputBuffer_c & tReq ) const
 {
 	CSphSchema & tSchema = tRes.m_tSchema;
 	tSchema.Reset ();
@@ -3311,7 +3311,8 @@ static ESphAttr FixupAttrForNetwork ( const CSphColumnInfo & tCol, WORD uMasterV
 }
 
 
-static void SendSchema ( ISphOutputBuffer & tOut, const CSphQueryResult & tRes, const CSphBitvec & tAttrsToSend, WORD uMasterVer, bool bAgentMode )
+static void SendSchema ( ISphOutputBuffer & tOut, const AggrResult_t & tRes, const CSphBitvec & tAttrsToSend,
+		WORD uMasterVer, bool bAgentMode )
 {
 	tOut.SendInt ( tRes.m_tSchema.GetFieldsCount() );
 	for ( int i=0; i < tRes.m_tSchema.GetFieldsCount(); ++i )

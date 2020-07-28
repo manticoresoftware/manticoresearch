@@ -2712,12 +2712,8 @@ class DocstoreReader_i;
 class CSphQueryResult : public CSphQueryResultMeta
 {
 public:
-	CSphSchema				m_tSchema;				///< result schema
 	const BYTE *			m_pBlobPool = nullptr;	///< pointer to blob attr storage
 	const DocstoreReader_i* m_pDocstore = nullptr;	///< pointer to docstore reader
-	int						m_iOffset = 0;			///< requested offset into matches array
-	int						m_iCount = 0;			///< count which will be actually served (computed from total, offset and limit)
-	int						m_iSuccesses = 0;
 	CSphQueryProfile *		m_pProfile = nullptr;	///< filled when query profiling is enabled; NULL otherwise
 };
 

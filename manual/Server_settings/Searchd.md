@@ -354,12 +354,14 @@ You can also specify a protocol handler (listener) to be used for connections on
 * **Not specified** - Manticore will accept connections at this port from
   - other Manticore agents (i.e. a remote distributed index)
   - clients via HTTP and HTTPS
+  - binary based Manticore clients
   This is a default setting and mostly you need to specify another `listen` only for connecting via MySQL protocol and for replication.
 * `mysql` - MySQL protocol for connections from MySQL clients. More details on MySQL protocol support can be found in [mysql_protocol_support_and_sphinxql](Connecting_to_the_server/HTTP.md#SQL-over-HTTP) section.
 * `replication` - replication protocol, used for nodes communication. More details can be found in [replication](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) section.
 * `http` - HTTP protocol. Use it to allow only http connections.
 * `https` - HTTPS protocol. It uses OpenSSL library to encrypt HTTP traffic. More details can be found in [SSL](Security/SSL.md) section. Use it to allow only http connections.
 * `sphinx` - Binary protocol. Use it to allow only connections from remote Manticore agents or clients based on binary protocol.
+* `sphinxse` - [SphinxSE](Extensions/SphinxSE) protocol. Use it for connections from SphinxSE.
 
 Adding a `_vip` suffix to a protocol (for instance `mysql_vip` or `http_vip`) makes all connections to that port bypass the thread pool and always forcibly create a new dedicated thread. That's useful for managing in case of a severe overload when the server would either stall or not let you connect via a regular port.
 

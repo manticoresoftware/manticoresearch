@@ -188,6 +188,8 @@ static Proto_e SimpleProtoByName ( const CSphString& sProto )
 		return Proto_e::HTTPS;
 	if ( sProto=="replication" )
 		return Proto_e::REPLICATION;
+	if ( sProto=="sphinxse" )
+		return Proto_e::SPHINXSE;
 	sphFatal( "unknown listen protocol type '%s'", sProto.scstr());
 	return Proto_e::SPHINX;
 }

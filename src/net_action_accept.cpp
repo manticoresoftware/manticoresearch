@@ -56,15 +56,15 @@ void FormatClientAddress ( char szClientName[SPH_ADDRPORT_SIZE], const sockaddr_
 
 using NetConnection_t = std::pair<int, sph_sa_family_t>;
 
-void MultiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t tConn )
+void MultiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t tConn, bool bSphinxSE )
 {
-	auto eProto = pBuf->Probe ( g_iMaxPacketSize, false );
+	auto eProto = bSphinxSE ? Proto_e::SPHINX : pBuf->Probe ( g_iMaxPacketSize, false );
 	switch ( eProto )
 	{
 	case Proto_e::SPHINX:
 #ifdef    TCP_NODELAY
 	// case of legacy 'crasy squirell' client, which talks using short packages.
-		if ( pBuf->HasBytes ()==4 && tConn.second==AF_INET )
+		if ( bSphinxSE || ( pBuf->HasBytes ()==4 && tConn.second==AF_INET ) )
 		{
 			int iOn = 1;
 			if ( setsockopt ( tConn.first, IPPROTO_TCP, TCP_NODELAY, (char *) &iOn, sizeof ( iOn ) ) )
@@ -189,17 +189,21 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 		NetConnection_t tConn = { iClientSock, saStorage.ss_family };
 		SockWrapperPtr_c pSock ( new SockWrapper_c ( iClientSock, pClientNetLoop ) );
 		auto pBuf = MakeAsyncNetBuffer ( std::move ( pSock ) );
+		bool bActive = false;
 
 		switch ( m_tListener.m_eProto )
 		{
+			case Proto_e::SPHINXSE:
+				bActive = true;
+				// no break;
 			case Proto_e::HTTPS:
 			case Proto_e::SPHINX:
 			case Proto_e::HTTP :
 			{
-				Threads::CoGo ( [pBuf = std::move ( pBuf ), tConn, pInfo = pClientInfo.LeakPtr () ] () mutable
+				Threads::CoGo ( [pBuf = std::move ( pBuf ), tConn, pInfo = pClientInfo.LeakPtr(), bActive ] () mutable
 					{
 						ScopedClientInfo_t _ { pInfo }; // make visible task info
-						MultiServe ( std::move ( pBuf ), tConn );
+						MultiServe ( std::move ( pBuf ), tConn, bActive );
 					}, fnMakeScheduler () );
 				break;
 			}

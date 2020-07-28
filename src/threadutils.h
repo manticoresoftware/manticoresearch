@@ -38,7 +38,8 @@ enum class Proto_e
 	MYSQL41,
 	HTTP,
 	REPLICATION,
-	HTTPS
+	HTTPS,
+	SPHINXSE,
 };
 
 const char* TaskStateName ( TaskState_e eState );

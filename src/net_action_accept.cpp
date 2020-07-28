@@ -33,7 +33,6 @@ using sph_sa_family_t = sa_family_t;
 
 int g_iThrottleAccept = 0;
 extern volatile bool g_bMaintenance;
-static auto & g_iTFO = sphGetTFO ();
 
 void FormatClientAddress ( char szClientName[SPH_ADDRPORT_SIZE], const sockaddr_storage & saStorage )
 {

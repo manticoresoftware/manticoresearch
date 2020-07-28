@@ -54,6 +54,7 @@
 * `SET [GLOBAL] wait_timeout=NUM` implemented ,
 
 ### Breaking changes:
+* **There's a [known issue](https://github.com/manticoresoftware/manticoresearch/issues/379) with connections from SphinxSE (MySQL/MariaDB engine to connect to Sphinx/Manticore from inside MySQL/MariaDB) which will be solved in the next release. If you are using SphinxSE don't upgrade to 3.5.0**!
 * **Index format has been changed.** Indexes built in 3.5.0 cannot be loaded by Manticore version < 3.5.0, but Manticore 3.5.0 understands older formats.
 * [`INSERT INTO PQ VALUES()`](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index) (i.e. without providing column list) previously expected exactly `(query, tags)` as the values. It's been changed to `(id,query,tags,filters)`. The id can be set to 0 if you want it to be auto-generated.
 * [`allow_empty=0`](Searching/Highlighting#allow_empty) is a new default in highlighting via HTTP JSON interface.

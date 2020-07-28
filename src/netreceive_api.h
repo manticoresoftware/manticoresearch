@@ -14,4 +14,5 @@
 
 #include "networking_daemon.h"
 
-void ApiServe ( AsyncNetBufferPtr_c pBuf );
+// legacy client is sphinx se, it needs explicit handshake
+void ApiServe ( AsyncNetBufferPtr_c pBuf, bool bClientWaitsHandshake );

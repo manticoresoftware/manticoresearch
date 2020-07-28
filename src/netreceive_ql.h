@@ -14,4 +14,4 @@
 
 #include "networking_daemon.h"
 
-void SqlServe ( SockWrapperPtr_c pSock );
+void SqlServe ( AsyncNetBufferPtr_c pBuf );

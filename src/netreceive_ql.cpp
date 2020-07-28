@@ -675,7 +675,7 @@ DEFINE_RENDER( QlCompressedInfo_t )
 }
 
 // main sphinxql server
-void SqlServe ( SockWrapperPtr_c pSock )
+void SqlServe ( AsyncNetBufferPtr_c pBuf )
 {
 	// to display 'compressed' flag, if any.
 	auto pCompressedFlag = PublishTaskInfo ( new QlCompressedInfo_t );
@@ -691,8 +691,6 @@ void SqlServe ( SockWrapperPtr_c pSock )
 
 	int iCID = myinfo::ConnID();
 	const char * sClientIP = myinfo::szClientName();
-
-	auto pBuf = MakeAsyncNetBuffer ( std::move ( pSock ));
 
 	// fixme! durty macros to transparently substitute pBuf on the fly (to ssl, compressed, whatever)
 	#define tOut (*(NetGenericOutputBuffer_c*)pBuf)

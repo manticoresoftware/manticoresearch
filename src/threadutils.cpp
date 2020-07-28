@@ -46,7 +46,8 @@ const char* ProtoName ( Proto_e eProto )
 	switch ( eProto )
 	{
 		case Proto_e::UNKNOWN: return "-";
-		case Proto_e::SPHINX: return "sphinx";
+		case Proto_e::SPHINX:
+		case Proto_e::SPHINXSE: return "sphinx";
 		case Proto_e::MYSQL41: return "mysql";
 		case Proto_e::HTTP: return "http";
 		case Proto_e::HTTPS: return "https";
@@ -55,6 +56,23 @@ const char* ProtoName ( Proto_e eProto )
 	}
 	return "unknown";
 }
+
+const char * RelaxedProtoName ( Proto_e eProto )
+{
+	switch ( eProto )
+	{
+		case Proto_e::UNKNOWN: return "-";
+		case Proto_e::MYSQL41: return "mysql";
+		case Proto_e::REPLICATION: return "replication";
+		case Proto_e::SPHINX:
+		case Proto_e::HTTP:
+		case Proto_e::HTTPS: return "sphinx and http(s)";
+		case Proto_e::SPHINXSE: return "sphinx (to connect from SphinxSE)";
+		default: break;
+	}
+	return "unknown";
+}
+
 
 int GetOsThreadId ()
 {

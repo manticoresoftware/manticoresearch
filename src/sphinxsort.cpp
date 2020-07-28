@@ -3789,6 +3789,23 @@ private:
 	// at finalize stage, in opposite, no tracking need, but matches must be sorted.
 	enum class Stage_e { COLLECT, FINAL };
 
+	// sorts by next-to-worst element in the chain
+	struct FinalGroupSorter_t
+	{
+		const GroupSorter_fn<COMPGROUP> &	m_tGroupSorter;
+		const CSphTightVector<int> &		m_dIData;
+
+		FinalGroupSorter_t ( const GroupSorter_fn<COMPGROUP> & tSorter, const CSphTightVector<int> & dIData )
+			: m_tGroupSorter ( tSorter )
+			, m_dIData ( dIData )
+		{}
+
+		bool IsLess ( int a, int b ) const
+		{
+			return m_tGroupSorter.IsLess ( m_dIData[a], m_dIData[b] );
+		}
+	};
+
 	// full clean - sort the groups, then iterate on them until iLimit elems counted. Cut out the rest.
 	// if last group is not fit into rest of iLimit, it still keeped whole, no fraction performed over it.
 	// returns desired length of the last chain to make the limit hard ( 1..m_iGLimit )
@@ -3796,7 +3813,10 @@ private:
 	{
 		m_dFinalizedHeads = GetAllHeads();
 		CalcAvg ( Avg_e::FINALIZE );
-		m_dFinalizedHeads.Sort ( m_tGroupSorter );
+
+		// in this final sort we need to keep the heads but to sort by next-to-head element (which is the best in group)
+		FinalGroupSorter_t tFinalSorter ( m_tGroupSorter, this->m_dIData );
+		m_dFinalizedHeads.Sort ( tFinalSorter );
 
 		int iRetainMatches = 0;
 		CSphVector<SphGroupKey_t> dRemovedHeads; // to remove distinct

@@ -70,7 +70,7 @@ void MultiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t tConn, bool bSphinxS
 				sphWarning ( "setsockopt() from MultiServe failed: %s", sphSockError ());
 		}
 #endif
-		ApiServe ( std::move ( pBuf ) );
+		ApiServe ( std::move ( pBuf ), bSphinxSE );
 		break;
 	case Proto_e::HTTPS:
 		myinfo::SetSSL();

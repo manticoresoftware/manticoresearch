@@ -17,7 +17,7 @@ extern volatile bool g_bMaintenance;
 static auto & g_bGotSighup = sphGetGotSighup ();    // we just received SIGHUP; need to log
 
 // mostly repeats HandleClientSphinx
-void ApiServe ( AsyncNetBufferPtr_c pBuf )
+void ApiServe ( AsyncNetBufferPtr_c pBuf, bool bClientWaitsHandshake )
 {
 	// non-vip connections in maintainance should be already rejected on accept
 	assert  ( !g_bMaintenance || myinfo::IsVIP () );
@@ -33,6 +33,13 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf )
 	// send handshake
 	myinfo::TaskState ( TaskState_e::HANDSHAKE );
 	tOut.SendDword ( SPHINX_SEARCHD_PROTO ); // that is handshake
+
+	// SphinxSE - legacy client, waits first handshake from us to be send, and answers only when it is done.
+	if ( bClientWaitsHandshake && !tOut.Flush () )
+	{
+		sphLogDebugv ( "conn %s(%d): legacy client timeout when sending handshake", sClientIP, iCID );
+		return;
+	}
 	if ( !tIn.ReadFrom ( 4, true ))
 	{
 		sphWarning ( "failed to receive API handshake (client=%s(%d), exp=%d, error='%s')",
@@ -46,9 +53,10 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf )
 		sphLogDebugv ( "conn %s(%d): got handshake, major v.%d", sClientIP, iCID, uHandshake );
 		return;
 	}
-	if ( !tIn.HasBytes () && !tOut.Flush ())
+	// legacy client - sends us exactly 4 bytes of handshake, so we have to flush our handshake also before continue.
+	if ( !bClientWaitsHandshake && !tIn.HasBytes () && !tOut.Flush ())
 	{
-		sphLogDebugv ( "conn %s(%d): timeout when sending handshake", sClientIP, iCID );
+		sphLogDebugv ( "conn %s(%d): legacy client timeout when exchanging handshake", sClientIP, iCID );
 		return;
 	}
 

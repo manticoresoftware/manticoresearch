@@ -174,7 +174,7 @@ source movies
 index movies
 {
     type = plain
-    path  = movies
+    path  = <data_path/>/movies
     source = movies
     min_infix_len = 2
     stored_fields = director_name,actor_2_name,actor_1_name,movie_title,actor_3_name

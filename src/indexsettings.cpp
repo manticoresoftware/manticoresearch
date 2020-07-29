@@ -683,13 +683,13 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 
 	if ( RawMinPrefixLen()==0 && m_dPrefixFields.GetLength()!=0 )
 	{
-		sWarning = "WARNING: min_prefix_len=0, prefix_fields ignored\n";
+		sWarning = "min_prefix_len=0, prefix_fields ignored";
 		m_dPrefixFields.Reset();
 	}
 
 	if ( m_iMinInfixLen==0 && m_dInfixFields.GetLength()!=0 )
 	{
-		sWarning = "WARNING: min_infix_len=0, infix_fields ignored\n";
+		sWarning = "min_infix_len=0, infix_fields ignored";
 		m_dInfixFields.Reset();
 	}
 
@@ -765,7 +765,7 @@ bool CSphIndexSettings::Setup ( const CSphConfigSection & hIndex, const char * s
 		if ( hIndex["hit_format"]=="plain" )		m_eHitFormat = SPH_HIT_FORMAT_PLAIN;
 		else if ( hIndex["hit_format"]=="inline" )	m_eHitFormat = SPH_HIT_FORMAT_INLINE;
 		else
-			sWarning.SetSprintf ( "WARNING: unknown hit_format=%s, defaulting to inline\n", hIndex["hit_format"].cstr() );
+			sWarning.SetSprintf ( "unknown hit_format=%s, defaulting to inline", hIndex["hit_format"].cstr() );
 	}
 
 	// hit-less indices

@@ -16424,7 +16424,7 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 	}
 
 	if ( !sWarning.IsEmpty() )
-		sphWarning ( "WARNING: index '%s': %s", szIndexName, sWarning.cstr() );
+		sphWarning ( "index '%s': %s", szIndexName, sWarning.cstr() );
 
 	if ( !CheckStoredFields ( tSchema, tSettings, sError ) )
 	{
@@ -16455,7 +16455,7 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 		}
 
 	if ( bWordDict && ( tSettings.m_dPrefixFields.GetLength () || tSettings.m_dInfixFields.GetLength () ) )
-		sphWarning ( "WARNING: index '%s': prefix_fields and infix_fields has no effect with dict=keywords, ignoring\n", szIndexName);
+		sphWarning ( "index '%s': prefix_fields and infix_fields has no effect with dict=keywords, ignoring", szIndexName);
 
 	if ( bWordDict && tSettings.m_iMinInfixLen==1 )
 	{

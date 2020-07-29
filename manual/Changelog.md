@@ -14,7 +14,7 @@
 
 * In RT mode a field can now be [text and string attribute](Creating_an_index/Data_types#String) at the same time - [GitHub issue #331](https://github.com/manticoresoftware/manticoresearch/issues/331). 
   
-  In [plain mode](Read_this_first#Real-time-mode-vs-plain-mode) it's called `sql_field_string` and `rt_field_string`. Now it's available in [RT mode](Read_this_first#Real-time-mode-vs-plain-mode) too. You can use it as shown in the example:
+  In [plain mode](Read_this_first#Real-time-mode-vs-plain-mode) it's called `sql_field_string`. Now it's available in [RT mode](Read_this_first#Real-time-mode-vs-plain-mode) for real-time indexes too. You can use it as shown in the example:
 
   <!-- more --> 
   ```sql

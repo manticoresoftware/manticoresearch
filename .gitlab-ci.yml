@@ -36,25 +36,6 @@ docs_deploy:
     COMMIT_DIR: manual
     RELEASE_FILENAME: latest_release_version
 
-pages:
-  stage: routines
-  rules:
-    - if: $TEST==null && $CI_COMMIT_BRANCH == "master" && $DOCS_COMMIT_ONLY == null
-  tags:
-    - docker
-  image: registry.gitlab.com/manticoresearch/dev/manticoredocs:latest
-  script:
-    - cd docs
-    - make html
-    - cd -
-    - mkdir .public
-    - cp -r docs/build/html/* .public
-    - mv .public public
-  artifacts:
-    paths:
-      - public
-  cache: {}
-
 job_mirror:
   stage: mirroring
   rules:

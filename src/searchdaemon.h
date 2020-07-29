@@ -1041,17 +1041,19 @@ struct AggrResult_t final: CSphQueryResult
 	~AggrResult_t () final;
 };
 
-
-class ISphSearchHandler // fixme! refactor to use pimpl instead (no multi inheritance, used only to hide stuff...)
+class SearchHandler_c;
+class PubSearchHandler_c
 {
-public:
-									ISphSearchHandler () {}
-	virtual							~ISphSearchHandler() {}
-	virtual void					RunQueries () = 0;					///< run all queries, get all results
+	SearchHandler_c * m_pImpl = nullptr;
 
-	virtual void					SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc ) = 0;
-	virtual void					SetProfile ( CSphQueryProfile * pProfile ) = 0;
-	virtual AggrResult_t *			GetResult ( int iResult ) = 0;
+public:
+	PubSearchHandler_c ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster );
+	~PubSearchHandler_c ();
+
+	void				RunQueries ();					///< run all queries, get all results
+	void				SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc );
+	void				SetProfile ( CSphQueryProfile * pProfile );
+	AggrResult_t *		GetResult ( int iResult );
 };
 
 
@@ -1136,7 +1138,6 @@ enum ESphHttpEndpoint
 
 bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut );
 bool IsMaxedOut ();
-ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster );
 void sphFormatFactors ( StringBuilder_c& dOut, const unsigned int * pFactors, bool bJson );
 void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation, CSphVector<int64_t> & dLastIds );
 void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery, CSphString & sWarning );

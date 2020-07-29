@@ -556,7 +556,7 @@ public:
 			return false;
 
 		m_tQuery.m_pQueryParser = pQueryParser;
-		CSphScopedPtr<ISphSearchHandler> tHandler ( sphCreateSearchHandler ( 1, pQueryParser, m_eQueryType, true ) );
+		CSphScopedPtr<PubSearchHandler_c> tHandler { new PubSearchHandler_c ( 1, pQueryParser, m_eQueryType, true ) };
 
 		CSphQueryProfileFormatJson tProfile;
 		if ( m_bProfile )

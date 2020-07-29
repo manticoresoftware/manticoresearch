@@ -4752,19 +4752,19 @@ struct LocalSearch_t
 	int64_t				m_iMass;
 };
 
-class SearchHandler_c final : public ISphSearchHandler
+class SearchHandler_c
 {
 public:
 									SearchHandler_c ( int iQueries, const QueryParser_i * pParser, QueryType_e eQueryType, bool bMaster );
-									~SearchHandler_c() final;
+									~SearchHandler_c();
 
-	void							RunQueries () final;					///< run all queries, get all results
+	void							RunQueries ();					///< run all queries, get all results
 	void							RunUpdates ( const CSphQuery & tQuery, const CSphString & sIndex, CSphAttrUpdateEx * pUpdates ); ///< run Update command instead of Search
 	void							RunDeletes ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, CSphVector<DocID_t> * pDelDocs );
-	void							SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc ) final;
+	void							SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc );
 	void							SetQueryParser ( const QueryParser_i * pParser, QueryType_e eQueryType );
-	void							SetProfile ( CSphQueryProfile * pProfile ) final;
-	AggrResult_t *					GetResult ( int iResult ) final { return m_dResults.Begin() + iResult; }
+	void							SetProfile ( CSphQueryProfile * pProfile );
+	AggrResult_t *					GetResult ( int iResult ) { return m_dResults.Begin() + iResult; }
 	void							SetFederatedUser () { m_bFederatedUser = true; }
 	const CSphString &				GetLocalIndexName ( int iLocal ) const;
 
@@ -4825,10 +4825,38 @@ private:
 	SphQueueSettings_t				MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches ) const;
 };
 
-
-ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster )
+PubSearchHandler_c::PubSearchHandler_c ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster )
 {
-	return new SearchHandler_c ( iQueries, pQueryParser, eQueryType, bMaster );
+	m_pImpl = new SearchHandler_c ( iQueries, pQueryParser, eQueryType, bMaster );
+}
+
+PubSearchHandler_c::~PubSearchHandler_c ()
+{
+	delete m_pImpl;
+}
+
+void PubSearchHandler_c::RunQueries ()
+{
+	assert ( m_pImpl );
+	m_pImpl->RunQueries();
+}
+
+void PubSearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc )
+{
+	assert ( m_pImpl );
+	m_pImpl->SetQuery ( iQuery, tQuery, pTableFunc );
+}
+
+void PubSearchHandler_c::SetProfile ( CSphQueryProfile * pProfile )
+{
+	assert ( m_pImpl );
+	m_pImpl->SetProfile ( pProfile );
+}
+
+AggrResult_t * PubSearchHandler_c::GetResult ( int iResult )
+{
+	assert ( m_pImpl );
+	return m_pImpl->GetResult (iResult);
 }
 
 

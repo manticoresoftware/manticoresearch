@@ -76,11 +76,31 @@ CSphString CompressionToStr ( Compression_e eComp )
 
 //////////////////////////////////////////////////////////////////////////
 
+struct SettingsFormatterState_t
+{
+	FILE *				m_pFile = nullptr;
+	StringBuilder_c *	m_pBuf = nullptr;
+	bool				m_bFirst = true;
+
+						SettingsFormatterState_t ( FILE * pFile );
+						SettingsFormatterState_t ( StringBuilder_c & tBuf );
+};
+
+
+SettingsFormatterState_t::SettingsFormatterState_t ( FILE * pFile )
+	: m_pFile ( pFile )
+{}
+
+
+SettingsFormatterState_t::SettingsFormatterState_t ( StringBuilder_c & tBuf )
+	: m_pBuf ( &tBuf )
+{}
+
+
 class SettingsFormatter_c
 {
 public:
-				SettingsFormatter_c ( FILE * pFile, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreConf = false );
-				SettingsFormatter_c ( StringBuilder_c & tBuf, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreConf = false );
+				SettingsFormatter_c ( SettingsFormatterState_t & tState, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreConf = false );
 
 	template <typename T>
 	void		Add ( const char * szKey, T tVal, bool bCond );
@@ -89,36 +109,23 @@ public:
 	void		AddEmbedded ( const char * szKey, const VecTraits_T<T> & dEmbedded, bool bCond );
 
 private:
-	FILE *				m_pFile = nullptr;
-	StringBuilder_c *	m_pBuf = nullptr;
+	SettingsFormatterState_t & m_tState;
 	CSphString			m_sPrefix;
 	CSphString			m_sEq;
 	CSphString			m_sPostfix;
 	CSphString			m_sSeparator;
 	bool				m_bIgnoreCond = false;
-	bool				m_bFirst = true;
 };
 
 
-SettingsFormatter_c::SettingsFormatter_c ( FILE * pFile, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreCond )
-	: m_pFile		( pFile )
-	, m_sPrefix		( szPrefix )
-	, m_sEq			( szEq )
-	, m_sPostfix	( szPostfix )
-	, m_sSeparator	( szSeparator )
-	, m_bIgnoreCond	( bIgnoreCond )
-
-{}
-
-SettingsFormatter_c::SettingsFormatter_c ( StringBuilder_c & tBuf, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreCond )
-	: m_pBuf		( &tBuf )
+SettingsFormatter_c::SettingsFormatter_c ( SettingsFormatterState_t & tState, const char * szPrefix, const char * szEq, const char * szPostfix, const char * szSeparator, bool bIgnoreCond )
+	: m_tState		( tState )
 	, m_sPrefix		( szPrefix )
 	, m_sEq			( szEq )
 	, m_sPostfix	( szPostfix )
 	, m_sSeparator	( szSeparator )
 	, m_bIgnoreCond	( bIgnoreCond )
 {}
-
 
 template <typename T>
 void SettingsFormatter_c::Add ( const char * szKey, T tVal, bool bCond )
@@ -126,25 +133,25 @@ void SettingsFormatter_c::Add ( const char * szKey, T tVal, bool bCond )
 	if ( !m_bIgnoreCond && !bCond )
 		return;
 
-	if ( m_pBuf )
+	if ( m_tState.m_pBuf )
 	{
-		if ( !m_bFirst )
-			(*m_pBuf) << m_sSeparator;
+		if ( !m_tState.m_bFirst )
+			(*m_tState.m_pBuf) << m_sSeparator;
 
-		(*m_pBuf) << m_sPrefix << szKey << m_sEq << tVal << m_sPostfix;
+		(*m_tState.m_pBuf) << m_sPrefix << szKey << m_sEq << tVal << m_sPostfix;
 	}
 
-	if ( m_pFile )
+	if ( m_tState.m_pFile )
 	{
 		StringBuilder_c tBuilder;
-		if ( !m_bFirst )
+		if ( !m_tState.m_bFirst )
 			tBuilder << m_sSeparator;
 
 		tBuilder << m_sPrefix << szKey << m_sEq << tVal << m_sPostfix;
-		fputs ( tBuilder.cstr(), m_pFile );
+		fputs ( tBuilder.cstr(), m_tState.m_pFile );
 	}
 
-	m_bFirst = false;
+	m_tState.m_bFirst = false;
 }
 
 template <typename T>
@@ -168,9 +175,9 @@ void SettingsFormatter_c::AddEmbedded ( const char * szKey, const VecTraits_T<T>
 
 //////////////////////////////////////////////////////////////////////////
 
-void SettingsWriter_c::DumpReadable ( FILE * pFile, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const
+void SettingsWriter_c::DumpReadable ( SettingsFormatterState_t & tState, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const
 {
-	SettingsFormatter_c tFormatter ( pFile, "", ": ", "", "\n", true );
+	SettingsFormatter_c tFormatter ( tState, "", ": ", "", "\n", true );
 	Format ( tFormatter, pFilenameBuilder );
 }
 
@@ -348,9 +355,9 @@ void CSphTokenizerSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder
 }
 
 
-void CSphTokenizerSettings::DumpReadable ( FILE * fp, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const
+void CSphTokenizerSettings::DumpReadable ( SettingsFormatterState_t & tState, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const
 {
-	SettingsFormatter_c tFormatter ( fp, "tokenizer-", ": ", "", "\n", true );
+	SettingsFormatter_c tFormatter ( tState, "tokenizer-", ": ", "", "\n", true );
 	Format ( tFormatter, pFilenameBuilder );
 
 	tFormatter.AddEmbedded ( "embedded_exception", tEmbeddedFiles.m_dSynonyms, tEmbeddedFiles.m_bEmbeddedSynonyms );
@@ -467,9 +474,9 @@ void CSphDictSettings::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * 
 }
 
 
-void CSphDictSettings::DumpReadable ( FILE * fp, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const
+void CSphDictSettings::DumpReadable ( SettingsFormatterState_t & tState, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder ) const
 {
-	SettingsFormatter_c tFormatter ( fp, "dictionary-", ": ", "", "\n", true );
+	SettingsFormatter_c tFormatter ( tState, "dictionary-", ": ", "", "\n", true );
 	Format ( tFormatter, pFilenameBuilder );
 
 	tFormatter.AddEmbedded ( "embedded_stopword", tEmbeddedFiles.m_dStopwords, tEmbeddedFiles.m_bEmbeddedStopwords );
@@ -1259,46 +1266,50 @@ static void FormatAllSettings ( const CSphIndex & tIndex, SettingsFormatter_c & 
 // fixme! this is basically a duplicate of the above function, but has extra code due to embedded
 void DumpReadable ( FILE * fp, const CSphIndex & tIndex, const CSphEmbeddedFiles & tEmbeddedFiles, FilenameBuilder_i * pFilenameBuilder )
 {
-	tIndex.GetSettings().DumpReadable ( fp, tEmbeddedFiles, pFilenameBuilder );
+	SettingsFormatterState_t tState(fp);
+	tIndex.GetSettings().DumpReadable ( tState, tEmbeddedFiles, pFilenameBuilder );
 
 	CSphFieldFilterSettings tFieldFilter;
 	tIndex.GetFieldFilterSettings ( tFieldFilter );
-	tFieldFilter.DumpReadable ( fp, tEmbeddedFiles, pFilenameBuilder );
+	tFieldFilter.DumpReadable ( tState, tEmbeddedFiles, pFilenameBuilder );
 
 	KillListTargets_c tKlistTargets;
 	CSphString sWarning;
 	if ( !tIndex.LoadKillList ( nullptr, tKlistTargets, sWarning ) )
 		tKlistTargets.m_dTargets.Reset();
 
-	tKlistTargets.DumpReadable ( fp, tEmbeddedFiles, pFilenameBuilder );
+	tKlistTargets.DumpReadable ( tState, tEmbeddedFiles, pFilenameBuilder );
 
 	if ( tIndex.GetTokenizer() )
-		tIndex.GetTokenizer()->GetSettings().DumpReadable ( fp, tEmbeddedFiles, pFilenameBuilder );
+		tIndex.GetTokenizer()->GetSettings().DumpReadable ( tState, tEmbeddedFiles, pFilenameBuilder );
 
 	if ( tIndex.GetDictionary() )
-		tIndex.GetDictionary()->GetSettings().DumpReadable ( fp, tEmbeddedFiles, pFilenameBuilder );
+		tIndex.GetDictionary()->GetSettings().DumpReadable ( tState, tEmbeddedFiles, pFilenameBuilder );
 
-	tIndex.GetMemorySettings().DumpReadable ( fp, tEmbeddedFiles, pFilenameBuilder );
+	tIndex.GetMemorySettings().DumpReadable ( tState, tEmbeddedFiles, pFilenameBuilder );
 }
 
 
 void DumpSettings ( StringBuilder_c & tBuf, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder )
 {
-	SettingsFormatter_c tFormatter ( tBuf, "", " = ", "", "\n" );
+	SettingsFormatterState_t tState(tBuf);
+	SettingsFormatter_c tFormatter ( tState, "", " = ", "", "\n" );
 	FormatAllSettings ( tIndex, tFormatter, pFilenameBuilder );
 }
 
 
 void DumpSettingsCfg ( FILE * fp, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder )
 {
-	SettingsFormatter_c tFormatter ( fp, "\t", " = ", "", "\n" );
+	SettingsFormatterState_t tState(fp);
+	SettingsFormatter_c tFormatter ( tState, "\t", " = ", "", "\n" );
 	FormatAllSettings ( tIndex, tFormatter, pFilenameBuilder );
 }
 
 
 static void DumpCreateTable ( StringBuilder_c & tBuf, const CSphIndex & tIndex, FilenameBuilder_i * pFilenameBuilder )
 {
-	SettingsFormatter_c tFormatter ( tBuf, "", "='", "'", " " );
+	SettingsFormatterState_t tState(tBuf);
+	SettingsFormatter_c tFormatter ( tState, "", "='", "'", " " );
 	FormatAllSettings ( tIndex, tFormatter, pFilenameBuilder );
 }
 

@@ -13853,7 +13853,7 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 
 	DumpReadable ( fp, *this, tEmbeddedFiles, pFilenameBuilder.Ptr() );
 
-	fprintf ( fp, "min-max-index: " INT64_FMT "\n", m_iMinMaxIndex );
+	fprintf ( fp, "\nmin-max-index: " INT64_FMT "\n", m_iMinMaxIndex );
 }
 
 

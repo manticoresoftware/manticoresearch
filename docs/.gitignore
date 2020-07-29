@@ -1,7 +1,0 @@
-*.swp
-/_build
-/build
-/doctrees
-/html
-/locale
-*.pyc

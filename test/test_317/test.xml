@@ -2,7 +2,9 @@
 
 <test>
 <name>RECONFIGURE in RT indexes (chunk merge order)</name>
-
+<requires>
+    <force-rt/>
+</requires>
 <skip_indexer/>
 <config>
 searchd

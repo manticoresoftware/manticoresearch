@@ -2,14 +2,12 @@
 <test>
 
 <name>rtmerge</name>
+<requires>
+	<force-rt/>
+</requires>
 <skip_indexer/>
 
 <config>
-indexer
-{
-	mem_limit		= 16M
-}
-
 searchd
 {
 	<searchd_settings/>
@@ -41,7 +39,7 @@ index rt_mva
 	path			= <data_path/>/rt_mva
 	docinfo			= extern
 
-	rt_field			= title
+	rt_field		= title
 	rt_attr_multi	= mva1
 	rt_attr_uint	= gid
 }

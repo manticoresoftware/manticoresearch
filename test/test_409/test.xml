@@ -5,6 +5,8 @@
 <requires>
 	<replication/>
 	<non-windows/>
+	<non-rt/>
+	<heavy/>
 </requires>
 <skip_indexer/>
 <num_agents>2</num_agents>

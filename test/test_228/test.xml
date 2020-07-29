@@ -6,6 +6,7 @@
 <requires>
 <odbc/>
 <variant_match/>
+<non-rt/>
 </requires>
 
 <config>

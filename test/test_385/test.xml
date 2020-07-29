@@ -2,7 +2,12 @@
 <test>
 <name>replication for RT with different local index files</name>
 
-<requires><replication/><non-windows/></requires>
+<requires>
+	<replication/>
+	<non-windows/>
+	<force-rt/>
+	<heavy/>
+</requires>
 <skip_indexer/>
 <num_agents>2</num_agents>
 

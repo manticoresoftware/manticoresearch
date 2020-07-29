@@ -6,6 +6,8 @@
 	<replication/>
 	<non-windows/>
 	<http/>
+	<force-rt/>
+	<heavy/>
 </requires>
 <skip_indexer/>
 <num_agents>3</num_agents>

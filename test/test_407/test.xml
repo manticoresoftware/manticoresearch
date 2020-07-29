@@ -3,6 +3,9 @@
 
 <name>sorter at RT disk chunk</name>
 
+<requires>
+	<force-rt/>
+</requires>
 <skip_indexer/>
 
 <config>

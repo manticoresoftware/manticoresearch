@@ -1,13 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 <name>ondisk_attrs for rt indexes</name>
+<requires>
+	<force-rt/>
+</requires>
 <skip_indexer/>
 <config>
-indexer
-{
-	mem_limit			= 28M
-}
-
 searchd
 {
 	<searchd_settings/>

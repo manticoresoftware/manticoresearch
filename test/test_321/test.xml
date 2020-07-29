@@ -2,7 +2,9 @@
 <test>
 
 <name>percolate query</name>
-
+	<requires>
+		<force-rt/>
+	</requires>
 <skip_indexer/>
 
 <config>

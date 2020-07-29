@@ -2,13 +2,12 @@
 <test>
 
 <name>long warnings</name>
+<requires>
+	<force-rt/>
+</requires>
+<skip_indexer/>
 
 <config>
-indexer
-{
-	mem_limit		= 16M
-}
-
 searchd
 {
 	<searchd_settings/>
@@ -16,17 +15,11 @@ searchd
 	agent_query_timeout = 10000
 }
 
-source src
-{
-	type			= mysql
-	<sql_settings/>
-	sql_query		= SELECT * FROM test_table
-}
-
 index index_with_very_long_name_enough_to_quickly_hit_default_1024_0
 {
-	source			= src
+	type			= rt
 	path			= <data_path/>/idx
+	rt_field		= title
 	min_prefix_len = 3
 }
 
@@ -72,20 +65,12 @@ index idx
 
 </config>
 
-<sphqueries>
-<sphinxql>select * from idx where match('a*');show meta</sphinxql>
-</sphqueries>
+<queries>
+<sphinxql>
+	insert into index_with_very_long_name_enough_to_quickly_hit_default_1024_0 ( id, title ) values ( 1, 'aaaaa' );
+	select * from idx where match('a*');show meta;
+</sphinxql>
+</queries>
 
-<db_create>
-CREATE TABLE test_table
-(
-	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
-	title varchar(10) NOT NULL
-)
-</db_create>
-<db_insert>
-insert into test_table values (1, 'aaaaa')
-</db_insert>
-<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
 
 </test>

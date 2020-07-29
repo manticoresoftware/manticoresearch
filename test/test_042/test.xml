@@ -2,6 +2,9 @@
 
 <test>
 <name>persistent connections</name>
+<requires>
+	<heavy/>
+</requires>
 
 <config>
 indexer

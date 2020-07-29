@@ -5,16 +5,12 @@
 
 <requires>
 	<icu/>
+	<force-rt/>
 </requires>
 
 <skip_indexer/>
 
 <config>
-indexer
-{
-	mem_limit		= 16M
-}
-
 searchd
 {
 	<searchd_Settings/>

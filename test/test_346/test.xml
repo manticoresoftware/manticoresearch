@@ -2,32 +2,16 @@
 <test>
 
 <name>morph fields at RT index</name>
+<requires>
+	<force-rt/>
+</requires>
+<skip_indexer/>
 
 <config>
-indexer
-{
-	mem_limit		= 16M
-}
-
 searchd
 {
 	<searchd_settings/>
 }
-
-source dummy
-{
-	type			= mysql
-	<sql_settings/>
-	sql_query		= select * from test_table
-	sql_attr_uint	= idd
-}
-
-index dummy
-{
-	source			= dummy
-	path			= <data_path/>/dummy
-}
-
 
 index test1
 {
@@ -163,17 +147,5 @@ index test4
 <sphinxql>SELECT * FROM test4 WHERE MATCH('=running') order by id asc</sphinxql>
 
 </sphqueries>
-
-<db_create>
-CREATE TABLE `test_table`
-(
-	`document_id` int(11) NOT NULL default '0',
-	`idd` int(11),
-	`text` varchar(255) NOT NULL default ''
-)
-</db_create>
-
-<db_drop>DROP TABLE IF EXISTS `test_table`</db_drop>
-<db_insert>INSERT INTO `test_table` VALUES ( 1, 11, 'dummy' )</db_insert>
 
 </test>

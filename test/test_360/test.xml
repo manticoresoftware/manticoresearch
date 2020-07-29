@@ -3,8 +3,11 @@
 
 <name>stopwords vs RT index disk chunks</name>
 <skip_indexer/>
-<config>
+<requires>
+	<force-rt/>
+</requires>
 
+<config>
 searchd
 {
 	<searchd_settings/>

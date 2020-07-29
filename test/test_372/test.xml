@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 <name>replication base</name>
-
-<requires><replication/><non-windows/></requires>
+<requires>
+	<replication/>
+	<non-windows/>
+	<force-rt/>
+	<heavy/>
+</requires>
 <skip_indexer/>
 <num_agents>3</num_agents>
 

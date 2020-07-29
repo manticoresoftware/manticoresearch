@@ -6,6 +6,7 @@
 
 <requires>
 <lemmatizer_base/>
+<non-rt/>
 </requires>
 
 <config>

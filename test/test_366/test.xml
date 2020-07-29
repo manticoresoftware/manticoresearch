@@ -3,6 +3,9 @@
 
 <name>RT index total documents</name>
 <skip_indexer/>
+<requires>
+	<force-rt/>
+</requires>
 
 <config>
 indexer

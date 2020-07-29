@@ -2,7 +2,9 @@
 
 <test>
 <name>optimize with progressive merge</name>
-
+    <requires>
+        <force-rt/>
+    </requires>
 <skip_indexer/>
 <config>
 searchd

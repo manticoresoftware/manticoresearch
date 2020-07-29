@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 <Name>percolate: basic transactional syntax</Name>
-
+<requires>
+	<force-rt/>
+</requires>
 <skip_indexer/>
 
 <config>

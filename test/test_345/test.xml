@@ -5,6 +5,7 @@
 
 <requires>
 <http/>
+<force-rt/>
 </requires>
 <skip_indexer/>
 

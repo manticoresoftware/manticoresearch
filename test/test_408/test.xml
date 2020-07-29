@@ -3,7 +3,10 @@
 
 <name>hitless RT indexes</name>
 
-<requires> <lemmatizer_base/> </requires>
+<requires>
+    <lemmatizer_base/>
+    <force-rt/>
+</requires>
 <skip_indexer/>
 
 <config>

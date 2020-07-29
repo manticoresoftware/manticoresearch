@@ -2,7 +2,9 @@
 <test>
 
 <name>query cache at RT index</name>
-
+<requires>
+	<force-rt/>
+</requires>
 <skip_indexer/>
 <config>
 indexer

@@ -2,6 +2,9 @@
 <test>
 
 <name>configless vs distributed</name>
+<requires>
+	<force-rt/>
+</requires>
 <skip_indexer/>
 <num_agents>2</num_agents>
 

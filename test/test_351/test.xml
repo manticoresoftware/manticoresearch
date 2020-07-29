@@ -4,7 +4,11 @@
 <name>large packet via HTTP</name>
 
 <skip_indexer/>
-<requires><http/></requires>
+<requires>
+    <http/>
+    <force-rt/>
+    <heavy/>
+</requires>
 
 <config>
 searchd

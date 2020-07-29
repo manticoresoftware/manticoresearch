@@ -2,6 +2,9 @@
 <test>
 
 <name>configless vs stopwords</name>
+<requires>
+	<force-rt/>
+</requires>
 <skip_indexer/>
 
 <config>

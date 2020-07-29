@@ -3,9 +3,11 @@
 
 <name>percolate query vs docs matched</name>
 <skip_indexer/>
+<requires>
+	<force-rt/>
+</requires>
 
 <config>
-
 searchd
 {
 	<searchd_settings/>

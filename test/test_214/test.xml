@@ -2,31 +2,16 @@
 <test>
 
 <name>ALTER in RT indexes</name>
+<requires>
+    <force-rt/>
+    <heavy/>
+</requires>
+<skip-indexer/>
 
 <config>
-indexer
-{
-	mem_limit				= 16M
-}
-
 searchd
 {
 	<searchd_settings/>
-}
-
-
-source src
-{
-  type      = mysql
-  <sql_settings/>
-  sql_query     = SELECT id, gid, title FROM test_table
-  sql_attr_uint   = gid
-}
-
-index test
-{
-  source      = src
-  path      = <data_path/>/test
 }
 
 index rt
@@ -46,21 +31,6 @@ index rt
 </dynamic>
 }
 </config>
-
-<db_create>
-CREATE TABLE `test_table` (
-  `id` int(11) NOT NULL,
-  `gid` int(11) NOT NULL,
-  `title` varchar(255) NOT NULL
-);
-</db_create>
-
-<db_drop>DROP TABLE IF EXISTS `test_table`;</db_drop>
-
-<db_insert>
-INSERT INTO `test_table` VALUES
-(1,1,'test')
-</db_insert>
 
 <custom_test><![CDATA[
 $query = function ( $query,$sock,&$results )

@@ -6086,8 +6086,7 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 	sphLogDebugv ( "Started: " INT64_FMT, sphMicroTimer()-iStart );
 
 	// because disk chunk search within the loop will switch the profiler state
-	if ( pProfiler )
-		pProfiler->Switch ( SPH_QSTATE_INIT );
+	SwitchProfile ( pProfiler, SPH_QSTATE_INIT );
 
 	std::atomic<bool> bInterrupt {false};
 	std::atomic<int32_t> iCurChunk { iJobs-1 };
@@ -6228,8 +6227,7 @@ int PrepareFTSearch ( const RtIndex_c * pThis,
 		pResult->m_sWarning = tParsed.m_sParseWarning;
 
 	// transform query if needed (quorum transform, etc.)
-	if ( pProfiler )
-		pProfiler->Switch ( SPH_QSTATE_TRANSFORMS );
+	SwitchProfile ( pProfiler, SPH_QSTATE_TRANSFORMS );
 
 	// FIXME!!! provide segments list instead index
 	sphTransformExtendedQuery ( &tParsed.m_pRoot, tSettings, pQuery->m_bSimplify, pThis );
@@ -6295,8 +6293,7 @@ void PerformFullScan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 {
 	bool bRandomize = dSorters[0]->m_bRandomize;
 
-	if ( pProfiler )
-		pProfiler->Switch ( SPH_QSTATE_FULLSCAN );
+	SwitchProfile ( pProfiler, SPH_QSTATE_FULLSCAN );
 
 	// full scan
 	// FIXME? OPTIMIZE? add shortcuts here too?
@@ -6375,8 +6372,7 @@ bool DoFullScanQuery ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 		CSphQueryResult* pResult )
 {
 	// probably redundant, but just in case
-	if ( pProfiler )
-		pProfiler->Switch ( SPH_QSTATE_INIT );
+	SwitchProfile ( pProfiler, SPH_QSTATE_INIT );
 
 	// search segments no looking to max_query_time
 	// FIXME!!! move searching at segments before disk chunks as result set is safe with kill-lists
@@ -6413,8 +6409,7 @@ void PerformFullTextSearch ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 	{
 		const RtSegment_t * pSeg = dRamChunks[iSeg];
 
-		if ( pProfiler )
-			pProfiler->Switch ( SPH_QSTATE_INIT_SEGMENT );
+		SwitchProfile ( pProfiler, SPH_QSTATE_INIT_SEGMENT );
 
 		tTermSetup.SetSegment ( iSeg );
 		pRanker->Reset ( tTermSetup );
@@ -6439,8 +6434,7 @@ void PerformFullTextSearch ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 			if ( iMatches<=0 )
 				break;
 
-			if ( pProfiler )
-				pProfiler->Switch ( SPH_QSTATE_SORT );
+			SwitchProfile ( pProfiler, SPH_QSTATE_SORT );
 
 			for ( int i=0; i<iMatches; i++ )
 			{
@@ -6531,8 +6525,7 @@ bool DoFullTextSearch ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 	}
 
 	// probably redundant, but just in case
-	if ( pProfiler )
-		pProfiler->Switch ( SPH_QSTATE_INIT );
+	SwitchProfile ( pProfiler, SPH_QSTATE_INIT );
 
 	// search segments no looking to max_query_time
 	// FIXME!!! move searching at segments before disk chunks as result set is safe with kill-lists
@@ -6555,8 +6548,7 @@ bool DoFullTextSearch ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 	// copying match's attributes to external storage in result set
 	//////////////////////
 
-	if ( pProfiler )
-		pProfiler->Switch ( SPH_QSTATE_FINALIZE );
+	SwitchProfile ( pProfiler, SPH_QSTATE_FINALIZE );
 	pRanker->FinalizeCache ( tMaxSorterSchema );
 	return true;
 	});
@@ -6598,10 +6590,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	int64_t tmQueryStart = sphMicroTimer();
 	auto tmCpuQueryStart = sphTaskCpuTimer();
 	CSphQueryProfile * pProfiler = pResult->m_pProfile;
-	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
-
-	if ( pProfiler )
-		eOldState = pProfiler->Switch ( SPH_QSTATE_DICT_SETUP );
+	CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_DICT_SETUP );
 
 	// force ext2 mode for them
 	// FIXME! eliminate this const breakage
@@ -6633,9 +6622,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	bool bGotLocalDF = tArgs.m_bLocalDF;
 	if ( tArgs.m_bLocalDF && !tArgs.m_pLocalDocs && !pQuery->m_sQuery.IsEmpty() && tGuard.m_dDiskChunks.GetLength() )
 	{
-		if ( pProfiler )
-			pProfiler->Switch ( SPH_QSTATE_LOCAL_DF );
-
+		SwitchProfile ( pProfiler, SPH_QSTATE_LOCAL_DF );
 		GetKeywordsSettings_t tSettings;
 		tSettings.m_bStats = true;
 		CSphVector < CSphKeywordInfo > dKeywords;
@@ -6649,8 +6636,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		bGotLocalDF = true;
 	}
 
-	if ( pProfiler )
-		pProfiler->Switch ( SPH_QSTATE_INIT );
+	SwitchProfile ( pProfiler, SPH_QSTATE_INIT );
 
 	// FIXME! each result will point to its own MVA and string pools
 
@@ -6675,8 +6661,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// search RAM chunk
 	////////////////////
 
-	if ( pProfiler )
-		pProfiler->Switch ( SPH_QSTATE_INIT );
+	SwitchProfile ( pProfiler, SPH_QSTATE_INIT );
 
 	// select the sorter with max schema
 	// uses GetAttrsCount to get working facets (was GetRowSize)
@@ -6733,8 +6718,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	}
 
 	// parse query
-	if ( pProfiler )
-		pProfiler->Switch ( SPH_QSTATE_PARSE );
+	SwitchProfile ( pProfiler, SPH_QSTATE_PARSE );
 
 	XQQuery_t tParsed;
 	// FIXME!!! provide segments list instead index to tTermSetup.m_pIndex
@@ -6785,16 +6769,12 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	MEMORY ( MEM_RT_RES_STRINGS );
 
-	if ( pProfiler )
-		pProfiler->Switch ( SPH_QSTATE_DYNAMIC );
+	SwitchProfile ( pProfiler, SPH_QSTATE_DYNAMIC );
 
 	// create new standalone schema for sorters (independent of any external indexes/pools/storages)
 	// modify matches inside the sorters to work with the new schema
 	for ( auto i : dSorters )
 		TransformSorterSchema ( i, tGuard, dDiskBlobPools );
-
-	if ( pProfiler )
-		pProfiler->Switch ( eOldState );
 
 	if ( pResult->m_bHasPrediction )
 		pResult->m_tStats.Add ( tQueryStats );

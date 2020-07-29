@@ -1877,7 +1877,6 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 	assert ( tArgs.m_iTag>=0 );
 
 	CSphQueryProfile * pProfiler = pResult->m_pProfile;
-	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
 
 	// we count documents only (before filters)
 	if ( pQuery->m_iMaxPredictedMsec )
@@ -1940,8 +1939,7 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 	// Does it intended?
 	tMatch.m_iTag = tCtx.m_dCalcFinal.GetLength () ? -1 : tArgs.m_iTag;
 
-	if ( pProfiler )
-		eOldState = pProfiler->Switch ( SPH_QSTATE_FULLSCAN );
+	CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_FULLSCAN );
 
 	int iCutoff = ( pQuery->m_iCutoff<=0 ) ? -1 : pQuery->m_iCutoff;
 	BYTE * pData = nullptr;
@@ -2010,8 +2008,7 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 		}
 	}
 
-	if ( pProfiler )
-		pProfiler->Switch ( SPH_QSTATE_FINALIZE );
+	SwitchProfile ( pProfiler, SPH_QSTATE_FINALIZE );
 
 	// do final expression calculations
 	if ( tCtx.m_dCalcFinal.GetLength () )
@@ -2024,9 +2021,6 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 				pTop->Finalize ( tFinal, false );
 		}
 	}
-
-	if ( pProfiler )
-		pProfiler->Switch ( eOldState );
 
 	pResult->m_iQueryTime += ( int ) ( ( sphMicroTimer () - tmQueryStart ) / 1000 );
 	pResult->m_iBadRows += tCtx.m_iBadRows;

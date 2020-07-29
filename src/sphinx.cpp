@@ -12803,9 +12803,7 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 									ISphRanker * pRanker, int iTag, int iIndexWeight ) const
 {
 	CSphQueryProfile * pProfile = pCtx->m_pProfile;
-	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
-	if ( pProfile )
-		eOldState = pProfile->m_eState;
+	CSphScopedProfile tProf (pProfile, SPH_QSTATE_UNKNOWN);
 
 	int iCutoff = pQuery->m_iCutoff;
 	if ( iCutoff<=0 )
@@ -12820,8 +12818,7 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 		if ( iMatches<=0 )
 			break;
 
-		if ( pProfile )
-			pProfile->Switch ( SPH_QSTATE_SORT );
+		SwitchProfile ( pProfile, SPH_QSTATE_SORT );
 
 		for ( int i=0; i<iMatches; i++ )
 		{
@@ -12883,9 +12880,6 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 		if ( iCutoff==0 )
 			break;
 	}
-
-	if ( pProfile )
-		pProfile->Switch ( eOldState );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -13286,8 +13280,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	// Does it intended?
 	tMatch.m_iTag = tCtx.m_dCalcFinal.GetLength() ? -1 : tArgs.m_iTag;
 
-	if ( pResult->m_pProfile )
-		pResult->m_pProfile->Switch ( SPH_QSTATE_FULLSCAN );
+	SwitchProfile ( pResult->m_pProfile, SPH_QSTATE_FULLSCAN );
 
 	// run full scan with block and row filtering for everything else
 	bool bReverse = pQuery->m_bReverseScan; // shortcut
@@ -13313,8 +13306,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	else
 		ScanByBlocks ( tCtx, pResult, iSorters, ppSorters, tMatch, iCutoff, bReverse, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer );
 
-	if ( pResult->m_pProfile )
-		pResult->m_pProfile->Switch ( SPH_QSTATE_FINALIZE );
+	SwitchProfile ( pResult->m_pProfile, SPH_QSTATE_FINALIZE );
 
 	// do final expression calculations
 	if ( tCtx.m_dCalcFinal.GetLength() )
@@ -13330,8 +13322,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 	if ( tArgs.m_bModifySorterSchemas )
 	{
-		if ( pResult->m_pProfile )
-			pResult->m_pProfile->Switch ( SPH_QSTATE_DYNAMIC );
+		SwitchProfile ( pResult->m_pProfile, SPH_QSTATE_DYNAMIC );
 		PooledAttrsToPtrAttrs ( ppSorters, iSorters, m_tBlobAttrs.GetWritePtr() );
 	}
 
@@ -15742,8 +15733,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	if ( pQueryParser->IsFullscan ( *pQuery ) )
 		return MultiScan ( pQuery, pResult, iSorters, &dSorters[0], tArgs );
 
-	if ( pProfile )
-		pProfile->Switch ( SPH_QSTATE_DICT_SETUP );
+	SwitchProfile ( pProfile, SPH_QSTATE_DICT_SETUP );
 
 	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
 	SetupStarDict ( pDict );
@@ -15761,8 +15751,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	}
 
 	// parse query
-	if ( pProfile )
-		pProfile->Switch ( SPH_QSTATE_PARSE );
+	SwitchProfile ( pProfile, SPH_QSTATE_PARSE );
 
 	XQQuery_t tParsed;
 	if ( !pQueryParser->ParseQuery ( tParsed, (const char*)sModifiedQuery, pQuery, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings ) )
@@ -15780,8 +15769,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 		pResult->m_sWarning = tParsed.m_sParseWarning;
 
 	// transform query if needed (quorum transform, etc.)
-	if ( pProfile )
-		pProfile->Switch ( SPH_QSTATE_TRANSFORMS );
+	SwitchProfile ( pProfile, SPH_QSTATE_TRANSFORMS );
 	sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, pQuery->m_bSimplify, this );
 
 	bool bWordDict = pDict->GetSettings().m_bWordDict;
@@ -15821,8 +15809,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 
 	if ( tArgs.m_bModifySorterSchemas )
 	{
-		if ( pProfile )
-			pProfile->Switch ( SPH_QSTATE_DYNAMIC );
+		SwitchProfile ( pProfile, SPH_QSTATE_DYNAMIC );
 		PooledAttrsToPtrAttrs ( &dSorters[0], iSorters, m_tBlobAttrs.GetWritePtr() );
 	}
 
@@ -15961,8 +15948,8 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 
 	if ( tArgs.m_bModifySorterSchemas )
 	{
-		if ( ppResults[0] && ppResults[0]->m_pProfile )
-			ppResults[0]->m_pProfile->Switch ( SPH_QSTATE_DYNAMIC );
+		if ( ppResults[0] )
+			SwitchProfile ( ppResults[0]->m_pProfile, SPH_QSTATE_DYNAMIC );
 		PooledAttrsToPtrAttrs ( ppSorters, iQueries, m_tBlobAttrs.GetWritePtr() );
 	}
 
@@ -16024,8 +16011,8 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	// open files
 	DataReaderFactoryPtr_c pDoclist = m_pDoclistFile;
 	DataReaderFactoryPtr_c pHitlist = m_pHitlistFile;
-	if ( pProfile && ( !pDoclist || !pHitlist ) )
-		pProfile->Switch ( SPH_QSTATE_OPEN );
+	if ( !pDoclist || !pHitlist )
+		SwitchProfile ( pProfile, SPH_QSTATE_OPEN );
 
 	if ( !pDoclist )
 	{
@@ -16046,8 +16033,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	pDoclist->SetProfile ( pProfile );
 	pHitlist->SetProfile ( pProfile );
 
-	if ( pProfile )
-		pProfile->Switch ( SPH_QSTATE_INIT );
+	SwitchProfile ( pProfile, SPH_QSTATE_INIT );
 
 	// setup search terms
 	DiskIndexQwordSetup_c tTermSetup ( pDoclist, pHitlist, m_tSkiplists.GetWritePtr(), m_tSettings.m_iSkiplistBlockSize, true, m_iDocinfo );
@@ -16077,7 +16063,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tXQ, pQuery, pResult, tTermSetup, tCtx, tMaxSorterSchema ) );
+	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tXQ, pQuery, pResult, tTermSetup, tCtx, tMaxSorterSchema )  );
 	if ( !pRanker.Ptr() )
 		return false;
 
@@ -16208,8 +16194,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	// cook result sets
 	////////////////////
 
-	if ( pProfile )
-		pProfile->Switch ( SPH_QSTATE_FINALIZE );
+	SwitchProfile ( pProfile, SPH_QSTATE_FINALIZE );
 
 	// adjust result sets
 	if ( bFinalPass )
@@ -16245,8 +16230,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		tQueryStats.m_iFetchedHits, tQueryStats.m_iSkips, ppSorters[0]->GetTotalCount() );
 #endif
 
-	if ( pProfile )
-		pProfile->Switch ( eOldState );
+	SwitchProfile ( pProfile, eOldState );
 
 	if ( bCollectPredictionCounters )
 	{

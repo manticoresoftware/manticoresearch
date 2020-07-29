@@ -461,7 +461,7 @@ void ExtRanker_c::UpdateQcache ( int iMatches )
 {
 	if ( m_pQcacheEntry )
 	{
-		CSphScopedProfile tProfile ( m_pCtx->m_pProfile, SPH_QSTATE_QCACHE_UP );
+		CSphScopedProfile tProf ( m_pCtx->m_pProfile, SPH_QSTATE_QCACHE_UP );
 		for ( int i=0; i<iMatches; i++ )
 			m_pQcacheEntry->Append ( m_dMatches[i].m_tRowID, m_dMatches[i].m_iWeight );
 	}
@@ -472,7 +472,7 @@ void ExtRanker_c::FinalizeCache ( const ISphSchema & tSorterSchema )
 {
 	if ( m_pQcacheEntry )
 	{
-		CSphScopedProfile tProfile ( m_pCtx->m_pProfile, SPH_QSTATE_QCACHE_FINAL );
+		CSphScopedProfile tProf ( m_pCtx->m_pProfile, SPH_QSTATE_QCACHE_FINAL );
 		QcacheAdd ( m_pCtx->m_tQuery, m_pQcacheEntry, tSorterSchema );
 	}
 
@@ -830,19 +830,16 @@ const ExtDoc_t * ExtRanker_T<USE_BM25>::GetFilteredDocs ()
 	while (true)
 	{
 		// get another chunk
-		if ( m_pCtx->m_pProfile )
-			m_pCtx->m_pProfile->Switch ( SPH_QSTATE_GET_DOCS );
+		SwitchProfile ( m_pCtx->m_pProfile, SPH_QSTATE_GET_DOCS );
 		const ExtDoc_t * pCand = m_pRoot->GetDocsChunk();
 		if ( !pCand )
 		{
-			if ( m_pCtx->m_pProfile )
-				m_pCtx->m_pProfile->Switch ( SPH_QSTATE_RANK );
+			SwitchProfile ( m_pCtx->m_pProfile, SPH_QSTATE_RANK );
 			return nullptr;
 		}
 
 		// create matches, and filter them
-		if ( m_pCtx->m_pProfile )
-			m_pCtx->m_pProfile->Switch ( SPH_QSTATE_FILTER );
+		SwitchProfile ( m_pCtx->m_pProfile, SPH_QSTATE_FILTER );
 		int iDocs = 0;
 		RowID_t tMaxRowID = 0;
 		while ( pCand->m_tRowID!=INVALID_ROWID )
@@ -867,8 +864,7 @@ const ExtDoc_t * ExtRanker_T<USE_BM25>::GetFilteredDocs ()
 			pCand++;
 		}
 
-		if ( m_pCtx->m_pProfile )
-			m_pCtx->m_pProfile->Switch ( SPH_QSTATE_RANK );
+		SwitchProfile ( m_pCtx->m_pProfile, SPH_QSTATE_RANK );
 
 		// clean up zone hash
 		if ( !m_bZSlist )
@@ -893,9 +889,7 @@ int ExtRanker_WeightSum_c<USE_BM25>::GetMatches ()
 	if ( !this->m_pRoot )
 		return 0;
 
-	if ( this->m_pCtx->m_pProfile )
-		this->m_pCtx->m_pProfile->Switch ( SPH_QSTATE_RANK );
-
+	SwitchProfile ( this->m_pCtx->m_pProfile, SPH_QSTATE_RANK );
 	const ExtDoc_t * pDoc = this->m_pDoclist;
 	int iMatches = 0;
 	const int iWeights = Min ( m_iWeights, 32 );
@@ -943,9 +937,7 @@ int ExtRanker_None_c::GetMatches ()
 	if ( !m_pRoot )
 		return 0;
 
-	if ( m_pCtx->m_pProfile )
-		m_pCtx->m_pProfile->Switch ( SPH_QSTATE_RANK );
-
+	SwitchProfile ( m_pCtx->m_pProfile, SPH_QSTATE_RANK );
 	const ExtDoc_t * pDoc = m_pDoclist;
 	int iMatches = 0;
 
@@ -998,9 +990,7 @@ int ExtRanker_State_T<STATE,USE_BM25>::GetMatches ()
 	if ( !this->m_pRoot )
 		return 0;
 
-	if ( this->m_pCtx->m_pProfile )
-		this->m_pCtx->m_pProfile->Switch ( SPH_QSTATE_RANK );
-
+	SwitchProfile ( this->m_pCtx->m_pProfile, SPH_QSTATE_RANK );
 	CSphQueryProfile * pProfile = this->m_pCtx->m_pProfile;
 	int iMatches = 0;
 	const ExtHit_t * pHlist = this->m_pHitlist;

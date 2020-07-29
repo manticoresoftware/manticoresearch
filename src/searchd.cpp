@@ -5821,8 +5821,7 @@ void SearchHandler_c::SetupLocalDF ( int iStart, int iEnd )
 	if ( m_dLocal.GetLength()<2 )
 		return;
 
-	if ( m_pProfile )
-		m_pProfile->Switch ( SPH_QSTATE_LOCAL_DF );
+	SwitchProfile ( m_pProfile, SPH_QSTATE_LOCAL_DF );
 
 	bool bGlobalIDF = true;
 	ARRAY_FOREACH_COND ( i, m_dLocal, bGlobalIDF )
@@ -6371,9 +6370,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	int64_t tmLocal = 0;
 	int64_t tmCpu = -sphTaskCpuTimer ();
 
-	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
-	if ( m_pProfile )
-		eOldState = m_pProfile->m_eState;
+	CSphScopedProfile tProf ( m_pProfile, SPH_QSTATE_UNKNOWN );
 
 
 	// prepare for descent
@@ -6437,8 +6434,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	CSphScopedPtr<ReplyParser_i> tParser { nullptr };
 	if ( !dRemotes.IsEmpty() )
 	{
-		if ( m_pProfile )
-			m_pProfile->Switch ( SPH_QSTATE_DIST_CONNECT );
+		SwitchProfile(m_pProfile, SPH_QSTATE_DIST_CONNECT);
 
 		tReqBuilder = new SearchRequestBuilder_c ( m_dQueries, iStart, iEnd, iDivideLimits );
 		tParser = new SearchReplyParser_c ( iStart, iEnd );
@@ -6460,8 +6456,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	{
 		SetupLocalDF ( iStart, iEnd );
 
-		if ( m_pProfile )
-			m_pProfile->Switch ( SPH_QSTATE_LOCAL_SEARCH );
+		SwitchProfile ( m_pProfile, SPH_QSTATE_LOCAL_SEARCH );
 
 		tmLocal = -sphMicroTimer();
 		tmCpu -= sphTaskCpuTimer ();
@@ -6476,8 +6471,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 	if ( !dRemotes.IsEmpty() )
 	{
-		if ( m_pProfile )
-			m_pProfile->Switch ( SPH_QSTATE_DIST_WAIT );
+		SwitchProfile ( m_pProfile, SPH_QSTATE_DIST_WAIT );
 
 		bool bDistDone = false;
 		while ( !bDistDone )
@@ -6605,8 +6599,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// merge all results
 	/////////////////////
 
-	if ( m_pProfile )
-		m_pProfile->Switch ( SPH_QSTATE_AGGREGATE );
+	SwitchProfile ( m_pProfile, SPH_QSTATE_AGGREGATE );
 
 	CSphIOStats tIO;
 
@@ -6690,8 +6683,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		// FIXME! log such queries properly?
 		if ( pTableFunc )
 		{
-			if ( m_pProfile )
-				m_pProfile->Switch ( SPH_QSTATE_TABLE_FUNC );
+			SwitchProfile ( m_pProfile, SPH_QSTATE_TABLE_FUNC );
 			if ( !pTableFunc->Process ( &tRes, tRes.m_sError ) )
 				tRes.m_iSuccesses = 0;
 		}
@@ -6707,9 +6699,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	CalcTimeStats ( tmCpu, tmSubset, iStart, iEnd, dDistrServedByAgent );
 	CalcPerIndexStats ( iStart, iEnd, dDistrServedByAgent );
 	CalcGlobalStats ( tmCpu, tmSubset, tmLocal, iStart, iEnd, tIO, dRemotes );
-
-	if ( m_pProfile )
-		m_pProfile->Switch ( eOldState );
 }
 
 

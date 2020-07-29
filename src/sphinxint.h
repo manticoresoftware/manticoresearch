@@ -140,7 +140,7 @@ public:
 	int64_t			m_tmTotal [ SPH_QSTATE_TOTAL+1 ];	///< total time spent per state
 
 	/// create empty and stopped profile
-	CSphQueryProfile()
+	CSphQueryProfile ()
 	{
 		Start ( SPH_QSTATE_TOTAL );
 	}
@@ -196,6 +196,13 @@ public:
 
 	virtual CSphQueryProfile*		Clone() const = 0;
 };
+
+// acquire common pattern 'check, then switch if not null'
+inline void SwitchProfile ( CSphQueryProfile* pProfile, ESphQueryState eState )
+{
+	if ( pProfile )
+		pProfile->Switch ( eState );
+}
 
 
 class CSphScopedProfile

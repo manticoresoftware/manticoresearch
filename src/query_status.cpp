@@ -66,7 +66,7 @@ void NetOutputBuffer_c::SendBufferImpl ( const VecTraits_T<BYTE> & dData )
 	StringBuilder_c sError;
 	auto* pBuffer = ( const char* ) dData.Begin();
 
-	CSphScopedProfile tProf( m_pProfile, SPH_QSTATE_NET_WRITE );
+	CSphScopedProfile tProf ( m_pProfile, SPH_QSTATE_NET_WRITE );
 
 	const int64_t tmMaxTimer = sphMicroTimer() + S2US * g_iWriteTimeoutS; // in microseconds
 	while ( !m_bError )

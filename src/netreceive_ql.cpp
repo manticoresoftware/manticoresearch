@@ -791,8 +791,7 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 			}
 		}
 
-		if ( pProfile )
-			pProfile->Switch ( SPH_QSTATE_UNKNOWN );
+		SwitchProfile ( pProfile, SPH_QSTATE_UNKNOWN );
 
 		// handle auth packet
 		if ( !bAuthed )

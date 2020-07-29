@@ -369,7 +369,7 @@ Expr_Snippet_c::Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQu
 
 int Expr_Snippet_c::StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
 {
-	CSphScopedProfile ( m_pProfiler, SPH_QSTATE_SNIPPET );
+	CSphScopedProfile tProf ( m_pProfiler, SPH_QSTATE_SNIPPET );
 
 	*ppStr = nullptr;
 
@@ -489,7 +489,7 @@ Expr_Highlight_c::Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, CS
 
 int	Expr_Highlight_c::StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
 {
-	CSphScopedProfile ( m_pProfiler, SPH_QSTATE_SNIPPET );
+	CSphScopedProfile tProf ( m_pProfiler, SPH_QSTATE_SNIPPET );
 
 	DocID_t tDocID = sphGetDocID ( tMatch.m_pDynamic ? tMatch.m_pDynamic : tMatch.m_pStatic );
 

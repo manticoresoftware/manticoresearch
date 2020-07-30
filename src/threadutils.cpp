@@ -1398,13 +1398,12 @@ void RuntimeThreadContext_t::Run ( const void * pStack )
 #endif
 }
 
-#if USE_WINDOWS
-#define SPH_THDFUNC DWORD __stdcall
-#else
-#define SPH_THDFUNC void *
-#endif
 
-SPH_THDFUNC ThreadProcWrapper_fn ( void * pArg )
+#if USE_WINDOWS
+DWORD __stdcall ThreadProcWrapper_fn ( void * pArg )
+#else
+void * ThreadProcWrapper_fn ( void * pArg )
+#endif
 {
 	// This is the first local variable in the new thread. So, its address is the top of the stack.
 	// We need to know thread stack size for both expression and query evaluating engines.
@@ -1417,7 +1416,7 @@ SPH_THDFUNC ThreadProcWrapper_fn ( void * pArg )
 	CSphScopedPtr<RuntimeThreadContext_t> pCtx { (RuntimeThreadContext_t *) pArg };
 	pCtx->Run ( &cTopOfMyStack );
 
-	return (SPH_THDFUNC) 0;
+	return 0;
 }
 
 bool Threads::Create ( SphThread_t * pThread, Handler fnRun, bool bDetached, const char * sName, int iNum )

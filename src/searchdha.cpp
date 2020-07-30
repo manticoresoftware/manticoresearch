@@ -1364,14 +1364,19 @@ void IOVec_c::StepForward ( size_t uStep )
 	auto iLen = m_dIOVec.GetLength ();
 	for ( ; m_iIOChunks>0; --m_iIOChunks )
 	{
-		auto &dIOVec = m_dIOVec[iLen - m_iIOChunks];
-		if ( uStep<IOLEN( dIOVec ) )
+		auto & tIOVec = m_dIOVec[iLen - m_iIOChunks];
+		if ( uStep < IOLEN ( tIOVec ) )
 		{
-			IOPTR ( dIOVec ) = IOBUFTYPE ( ( BYTE * ) IOPTR ( dIOVec ) + uStep );
-			IOLEN( dIOVec ) -= uStep;
+			IOPTR ( tIOVec ) = IOBUFTYPE ( ( BYTE * ) IOPTR ( tIOVec ) + uStep );
+
+#if USE_WINDOWS
+			IOLEN ( tIOVec ) -= (DWORD)uStep;
+#else
+			IOLEN ( tIOVec ) -= uStep;
+#endif
 			break;
 		}
-		uStep -= IOLEN ( dIOVec );
+		uStep -= IOLEN ( tIOVec );
 	}
 }
 
@@ -3004,14 +3009,14 @@ private:
 				{
 					sphLogDebugL ( "L canceling read" );
 					pTask->m_pPayload->LeakRecvTo ( pTask->m_dReadBuf );
-					CancelIoEx ( (HANDLE) pTask->m_ifd, &pTask->m_dRead );
+					CancelIoEx ( (HANDLE)(ULONG_PTR)pTask->m_ifd, &pTask->m_dRead );
 				}
 
 				if ( pTask->m_dWrite.m_bInUse && pTask->m_dWriteBuf.IsEmpty () && pTask->m_dOutIO.IsEmpty () )
 				{
 					sphLogDebugL ( "L canceling write" );
 					pTask->m_pPayload->LeakSendTo ( pTask->m_dWriteBuf, pTask->m_dOutIO );
-					CancelIoEx ( (HANDLE) pTask->m_ifd, &pTask->m_dWrite );
+					CancelIoEx ( (HANDLE)(ULONG_PTR)pTask->m_ifd, &pTask->m_dWrite );
 				}
 			}
 
@@ -3033,7 +3038,7 @@ private:
 		if ( !pTask->m_uIOActive )
 		{
 			sphLogDebugL ( "L Associate %d with iocp %d, %d events before", pTask->m_ifd, m_IOCP, m_iEvents );
-			if ( !CreateIoCompletionPort ( (HANDLE) pTask->m_ifd, m_IOCP, (ULONG_PTR) pTask->m_ifd, 0 ) )
+			if ( !CreateIoCompletionPort ( (HANDLE)(ULONG_PTR)pTask->m_ifd, m_IOCP, (ULONG_PTR) pTask->m_ifd, 0 ) )
 				sphLogDebugv ( "L Associate %d with port %d failed with error %d", pTask->m_ifd, m_IOCP, GetLastError () );
 			return 2;
 		}
@@ -4361,6 +4366,12 @@ void NetPooller_c::Unlink ( NetPollEvent_t * pEvent )
 {
 }
 
+// on windows pollfd.fd is unsigned for some unknown reason, hence the warning
+#ifdef _WIN32
+#pragma warning(push)
+#pragma warning(disable:4146)
+#endif
+
 // trick: here we unlink ready oneshoted from the list
 NetPollEvent_t & NetPollReadyIterator_c::operator* ()
 {
@@ -4389,6 +4400,10 @@ NetPollEvent_t & NetPollReadyIterator_c::operator* ()
 
 	return *pNode;
 }
+
+#ifdef _WIN32
+#pragma warning(pop)
+#endif
 
 NetPollReadyIterator_c & NetPollReadyIterator_c::operator++ ()
 {

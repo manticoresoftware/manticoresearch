@@ -830,7 +830,7 @@ void RwlockReader ( void * pArg )
 void RwlockWriter ( void * pArg )
 {
 	ASSERT_TRUE ( g_tRwlock.WriteLock () );
-	g_iRwlock += size_t ( pArg );
+	g_iRwlock += static_cast<int>(reinterpret_cast<intptr_t>(pArg));
 	sphSleepMsec ( 3 );
 	ASSERT_TRUE ( g_tRwlock.Unlock () );
 }
@@ -842,13 +842,13 @@ TEST ( functions, RWLock )
 	const int NPAIRS = 10;
 	SphThread_t dReaders[NPAIRS];
 	SphThread_t dWriters[NPAIRS];
-	int iRead[NPAIRS];
+	int dRead[NPAIRS];
 
 	g_iRwlock = 0;
 	for ( int i = 0; i<NPAIRS; i++ )
 	{
-		ASSERT_TRUE ( Threads::Create ( &dReaders[i], [&,i] { RwlockReader ( &iRead[i] );} ));
-		ASSERT_TRUE ( Threads::Create ( &dWriters[i], [&,i] { RwlockWriter ( reinterpret_cast<void *>(1 + i) );} ));
+		ASSERT_TRUE ( Threads::Create ( &dReaders[i], [&,i] { RwlockReader ( &dRead[i] );} ));
+		ASSERT_TRUE ( Threads::Create ( &dWriters[i], [&,i] { RwlockWriter ( reinterpret_cast<void *>(static_cast<intptr_t>(1 + i) ) );} ));
 	}
 
 	for ( int i = 0; i<NPAIRS; i++ )
@@ -862,7 +862,7 @@ TEST ( functions, RWLock )
 
 	int iReadSum = 0;
 	for ( int i = 0; i<NPAIRS; i++ )
-		iReadSum += iRead[i];
+		iReadSum += dRead[i];
 
 	RecordProperty ( "read_sum", iReadSum );
 }
@@ -2214,11 +2214,11 @@ TEST ( functions, DISABLED_bench_strchr )
 	bool bRes = false;
 
 	for ( DWORD i = 0; i<uTries; ++i )
-		bRes |= dChars[i & 0x7F];
+		bRes |= !!dChars[i & 0x7F];
 
 	*pTime++ = sphMicroTimer ();
 	for ( DWORD i = 0; i<uTries; ++i )
-		bRes |= dChars[i & 0x7F];
+		bRes |= !!dChars[i & 0x7F];
 
 	*pTime++ = sphMicroTimer (); // control empty pass
 	for ( DWORD i=0; i<uTries; ++i)
@@ -2238,11 +2238,11 @@ TEST ( functions, DISABLED_bench_strchr )
 
 	*pTime++ = sphMicroTimer ();
 	for ( DWORD i = 0; i<uTries; ++i )
-		bRes |= GetEscapedChar1( dChars[i & 0x7F] ); // get switch
+		bRes |= !!GetEscapedChar1( dChars[i & 0x7F] ); // get switch
 
 	*pTime++ = sphMicroTimer ();
 	for ( DWORD i = 0; i<uTries; ++i )
-		bRes |= GetEscapedChar2( dChars[i & 0x7F] ); // short lookup
+		bRes |= !!GetEscapedChar2( dChars[i & 0x7F] ); // short lookup
 
 	*pTime++ = sphMicroTimer ();
 	for ( DWORD i = 0; i<uTries; ++i )
@@ -2250,17 +2250,17 @@ TEST ( functions, DISABLED_bench_strchr )
 
 	*pTime++ = sphMicroTimer ();
 	for ( DWORD i = 0; i<uTries; ++i )
-		bRes |= GetEscapedChar3( dChars[i & 0x7F] ); // common lookup get
+		bRes |= !!GetEscapedChar3( dChars[i & 0x7F] ); // common lookup get
 
 	*pTime++ = sphMicroTimer ();
 	for ( DWORD i = 0; i<uTries; ++i )
 		if ( IsEscapeChar2 ( dChars[i & 0x7F] ) )	// combo usual
-			bRes |= GetEscapedChar1 ( dChars[i & 0x7F] );
+			bRes |= !!GetEscapedChar1 ( dChars[i & 0x7F] );
 
 	*pTime++ = sphMicroTimer ();
 	for ( DWORD i = 0; i<uTries; ++i )
 		if ( IsEscapeChar5 ( dChars[i & 0x7F] ) )	// combo common
-			bRes |= GetEscapedChar3combo ( dChars[i & 0x7F] );
+			bRes |= !!GetEscapedChar3combo ( dChars[i & 0x7F] );
 
 	*pTime++ = sphMicroTimer ();
 

@@ -6358,7 +6358,7 @@ CSphSchema & CSphSchema::operator = ( const ISphSchema & rhs )
 
 	m_sName = rhs.GetName();
 
-	for ( int i = 0; i < rhs.GetAttrsCount(); i++ )
+	for ( int i = 0; i < rhs.GetAttrsCount(); ++i )
 	{
 		const CSphColumnInfo & tAttr = rhs.GetAttr(i);
 
@@ -6368,7 +6368,7 @@ CSphSchema & CSphSchema::operator = ( const ISphSchema & rhs )
 			m_dAttrs.Add ( tAttr );
 	}
 
-	for ( int i = 0 ; i < rhs.GetFieldsCount(); i++ )
+	for ( int i = 0 ; i < rhs.GetFieldsCount(); ++i )
 		AddField ( rhs.GetField(i) );
 
 	RebuildHash();

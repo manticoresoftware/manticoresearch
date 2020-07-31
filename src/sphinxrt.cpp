@@ -1174,7 +1174,7 @@ protected:
 
 private:
 	static const DWORD			META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
-	static const DWORD			META_VERSION		= 17;			///< current version
+	static const DWORD			META_VERSION		= 17;			///< current version fixme! Also change version in indextool.cpp, and support the changes!
 
 	int							m_iStride;
 	LazyVector_T<RtSegmentRefPtf_t>	m_dRamChunks GUARDED_BY ( m_tChunkLock );
@@ -6792,7 +6792,7 @@ bool RtIndex_c::MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQu
 		if ( MultiQuery ( &ppQueries[i], ppResults[i], 1, &ppSorters[i], tArgs ) )
 			bResult = true;
 		else
-			ppResults[i]->m_iMultiplier = -1;
+			ppResults[i]->m_iMultiplier = -1; // -1 means 'error'
 
 	return bResult;
 }

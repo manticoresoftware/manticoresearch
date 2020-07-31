@@ -48,7 +48,7 @@ index dist
 </config>
 
 <queries>
-<query index="dist"></query>
+<query index="dist"/>
 </queries>
 
 <sphqueries>

@@ -1620,7 +1620,6 @@ bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings
 	return false;
 }
 
-
 void AddAccessSpecs ( JsonEscapedBuilder &tOut, const XQNode_t * pNode, const CSphSchema &tSchema, const StrVec_t &dZones )
 {
 	assert ( pNode );

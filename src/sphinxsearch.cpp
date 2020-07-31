@@ -314,7 +314,7 @@ void RenderBsonPlan ( bson::NodeHandle_t dBson, StringBuilder_c & tRes, bool bWi
 	if ( iIndent )
 		tRes += szLinebreak;
 
-	for ( int i=0; i<iIndent; ++i )
+	for ( int i = 0; i<iIndent; ++i )
 		tRes += szIndent;
 
 	tRes << String ( tBson.ChildByName ( SZ_TYPE ) );

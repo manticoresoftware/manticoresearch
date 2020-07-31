@@ -1209,7 +1209,7 @@ public:
 	}
 
 	/// integer setter
-	void SetAttr ( const CSphAttrLocator & tLoc, SphAttr_t uValue )
+	void SetAttr ( const CSphAttrLocator & tLoc, SphAttr_t uValue ) const
 	{
 		assert ( tLoc.m_bDynamic );
 		assert ( tLoc.GetMaxRowitem() < (int)m_pDynamic[-1] );
@@ -1217,7 +1217,7 @@ public:
 	}
 
 	/// add scalar value to attribute
-	void AddCounterScalar ( const CSphAttrLocator & tLoc, SphAttr_t uValue )
+	void AddCounterScalar ( const CSphAttrLocator & tLoc, SphAttr_t uValue ) const
 	{
 		assert ( tLoc.m_bDynamic );
 		assert ( tLoc.GetMaxRowitem ()<(int) m_pDynamic[-1] );
@@ -1225,7 +1225,7 @@ public:
 	}
 
 	/// add same-located value from another match
-	void AddCounterAttr ( const CSphAttrLocator & tLoc, const CSphMatch& tValue )
+	void AddCounterAttr ( const CSphAttrLocator & tLoc, const CSphMatch& tValue ) const
 	{
 		assert ( tLoc.m_bDynamic );
 		assert ( tLoc.GetMaxRowitem ()<(int) m_pDynamic[-1] );
@@ -1233,7 +1233,7 @@ public:
 	}
 
 	/// float setter
-	void SetAttrFloat ( const CSphAttrLocator & tLoc, float fValue )
+	void SetAttrFloat ( const CSphAttrLocator & tLoc, float fValue ) const
 	{
 		assert ( tLoc.m_bDynamic );
 		assert ( tLoc.GetMaxRowitem() < (int)m_pDynamic[-1] );
@@ -3306,7 +3306,12 @@ public:
 public:
 	virtual bool				EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const = 0;
 	void						SetCacheSize ( int iMaxCachedDocs, int iMaxCachedHits );
+
+	/// one regular query vs many sorters (like facets, or similar for common-tree optimization)
 	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const = 0;
+
+	/// many regular queries with one sorter attached to each query.
+	/// returns true if at least one query succeeded. The failed queries indicated with pResult->m_iMultiplier==-1
 	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const = 0;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const = 0;
 	virtual void				GetSuggest ( const SuggestArgs_t & , SuggestResult_t & ) const {}

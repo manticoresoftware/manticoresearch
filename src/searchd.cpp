@@ -531,15 +531,10 @@ static int CmpString ( const CSphString & a, const CSphString & b )
 
 struct SearchFailure_t
 {
-public:
 	CSphString	m_sParentIndex;
 	CSphString	m_sIndex;	///< searched index name
 	CSphString	m_sError;	///< search error message
 
-public:
-	SearchFailure_t () {}
-
-public:
 	bool operator == ( const SearchFailure_t & r ) const
 	{
 		return m_sIndex==r.m_sIndex && m_sError==r.m_sError && m_sParentIndex==r.m_sParentIndex;
@@ -555,7 +550,7 @@ public:
 		return iRes<0;
 	}
 
-	const SearchFailure_t & operator = ( const SearchFailure_t & r )
+	SearchFailure_t & operator = ( const SearchFailure_t & r )
 	{
 		if ( this!=&r )
 		{
@@ -1767,7 +1762,7 @@ void SearchReplyParser_c::ParseMatch ( CSphMatch & tMatch, MemInputBuffer_c & tR
 		tReq.GetDword();
 
 	tMatch.m_iWeight = tReq.GetInt ();
-	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+	for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
 	{
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
 
@@ -1782,7 +1777,7 @@ void SearchReplyParser_c::ParseMatch ( CSphMatch & tMatch, MemInputBuffer_c & tR
 				BYTE * pData = nullptr;
 				BYTE * pPacked = sphPackPtrAttr ( iValues*sizeof(DWORD), &pData );
 				tMatch.SetAttr ( tAttr.m_tLocator, (SphAttr_t)pPacked );
-				DWORD * pMVA = (DWORD *)pData;
+				auto * pMVA = (DWORD *)pData;
 				if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET_PTR )
 				{
 					while ( iValues-- )
@@ -1968,7 +1963,7 @@ bool SearchReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 		}
 
 		// read per-word stats
-		for ( int i=0; i<iWordsCount; i++ )
+		for ( int i=0; i<iWordsCount; ++i )
 		{
 			const CSphString sWord = tReq.GetString ();
 			const int64_t iDocs = (unsigned int)tReq.GetInt ();
@@ -2932,7 +2927,7 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes
 	///////////////
 
 	// next block ecnlosed in /* .. */, space-separated
-	tBuf.StartBlock ( " ", R"( /*)", " */" );
+	tBuf.StartBlock ( " ", " /*", " */" );
 	if ( !tRes.m_sError.IsEmpty() )
 	{
 		// all we have is an error
@@ -3963,7 +3958,7 @@ static void SetupPostlimitExprs ( AggrResult_t & tRes, CSphMatch & tMatch, const
 	tSessionInfo.m_iSessionId = iDocstoreSessionId;
 
 	assert ( pCol && pCol->m_pExpr );
-	pCol->m_pExpr->Command ( SPH_EXPR_SET_DOCSTORE, &tSessionInfo );
+	pCol->m_pExpr->Command ( SPH_EXPR_SET_DOCSTORE, &tSessionInfo ); // value is copied; no leak of pointer to local here.
 	pCol->m_pExpr->Command ( SPH_EXPR_SET_QUERY, (void *)sQuery);
 }
 
@@ -4730,8 +4725,8 @@ struct DistrServedByAgent_t : StatsPerQuery_t
 /// manage collection of pre-locked indexes (to avoid multilocks)
 /// Get(name) - returns an index from collection.
 /// AddRLocked(name) - add local idx to collection, read-locking it.
-/// AddUnmanaged(name,pidx) - add pre-locked idx, to make it available with GetIndex()
-/// d-tr unlocks indexes, added with AddRLockedIndex.
+/// AddUnmanaged(name,pidx) - add pre-locked idx, to make it available with Get()
+/// d-tr unlocks indexes added with AddRLockedIndex.
 class LockedCollection_c : public ISphNoncopyable
 {
 	SmallStringHash_T<ServedDescRPtr_c*> m_hUsed;
@@ -4819,10 +4814,14 @@ private:
 	void							BuildIndexList ( int iStart, int iEnd, int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent );
 	void							CalcTimeStats ( int64_t tmCpu, int64_t tmSubset, int iStart, int iEnd, const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent );
 	void							CalcPerIndexStats ( int iStart, int iEnd, const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ) const;
-	void							CalcGlobalStats ( int64_t tmCpu, int64_t tmSubset, int64_t tmLocal, int iStart, int iEnd, const CSphIOStats & tIO, const VecRefPtrsAgentConn_t & dRemotes ) const;
-	int								CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const;
-	int								CreateSingleSorters( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const;
-	int								CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters, VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const;
+	void							CalcGlobalStats ( int64_t tmCpu, int64_t tmSubset, int64_t tmLocal, int iStart, int iEnd, const CSphIOStats & tIO,
+			const VecRefPtrsAgentConn_t & dRemotes ) const;
+	int								CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters,
+			VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const;
+	int								CreateSingleSorters( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters,
+			VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const;
+	int								CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters,
+			VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const;
 
 	SphQueueSettings_t				MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches ) const;
 };
@@ -5176,13 +5175,13 @@ static void RemoveMissedRows ( AggrResult_t & tRes )
 		if ( !pSrc->m_pStatic )
 		{
 			tRes.m_tSchema.FreeDataPtrs ( *pSrc );
-			pSrc++;
+			++pSrc;
 			continue;
 		}
 
 		Swap ( *pSrc, *pDst );
-		pSrc++;
-		pDst++;
+		++pSrc;
+		++pDst;
 	}
 
 	tRes.m_dMatchCounts.Last() = pDst - pStart;
@@ -12213,7 +12212,7 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 	{
 		int iAttrsToSend = tAttrsToSend.BitCount();
 		if ( bAddQueryColumn )
-			iAttrsToSend++;
+			++iAttrsToSend;
 
 		dRows.HeadBegin ( iAttrsToSend );
 		for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); ++i )

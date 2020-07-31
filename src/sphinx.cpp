@@ -1083,7 +1083,7 @@ public:
 	void				Unlock () final {}
 	bool				EarlyReject ( CSphQueryContext * , CSphMatch & ) const final { return false; }
 	const CSphSourceStats &	GetStats () const final { return g_tTmpDummyStat; }
-	void			GetStatus ( CSphIndexStatus* ) const final {}
+	void				GetStatus ( CSphIndexStatus* ) const final {}
 	bool				MultiQuery ( const CSphQuery * , CSphQueryResult * , int , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const final { return false; }
 	bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult ** , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const final { return false; }
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const final ;
@@ -15700,7 +15700,7 @@ void sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & t
 		sphOptimizeBoolean ( ppNode, pKeywords );
 }
 
-/// one regular query vs many sorters
+/// one regular query vs many sorters (like facets, or similar for common-tree optimization)
 bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult,
 	int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
 {

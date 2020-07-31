@@ -152,7 +152,7 @@ public:
 	{
 		int64_t tmNow = sphMicroTimer();
 		ESphQueryState eOld = m_eState;
-		m_dSwitches [ eOld ]++;
+		++m_dSwitches [ eOld ];
 		m_tmTotal [ eOld ] += tmNow - m_tmStamp;
 		m_eState = eNew;
 		m_tmStamp = tmNow;

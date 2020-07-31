@@ -3,11 +3,19 @@ stages:
   - repoupload
   - deploy
 
+start:
+  stage: build
+  script:
+    - echo "Build started."
+
 tarball:
   stage: build
   interruptible: true
   rules:
-    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /tarball/
+    - if: $WHAT=='$WHAT' && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT==null && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT=="all" && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT =~ /tarball/ && $DOCS_COMMIT_ONLY == null
   dependencies: []
   tags:
     - dev-host
@@ -27,7 +35,10 @@ osx:
   interruptible: true
   retry: 1
   rules:
-    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /osx/
+    - if: $WHAT=='$WHAT' && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT==null && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT=="all" && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT =~ /osx/ && $DOCS_COMMIT_ONLY == null
   dependencies: []
   variables:
     CACHEB: "../cache"
@@ -61,7 +72,10 @@ windows:
   stage: build
   interruptible: true
   rules:
-    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /windows/
+    - if: $WHAT=='$WHAT' && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT==null && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT=="all" && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT =~ /windows/ && $DOCS_COMMIT_ONLY == null
   dependencies: []
   tags:
     - windev19
@@ -83,7 +97,7 @@ windows:
     - mkdir sphinxconvbin-x64
     - cd sphinxconvbin-x64
     - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISABLE_TESTING=1 -DWITH_RE2=0 -DWITH_STEMMER=0 -DWITH_RE2=0 -DWITH_STEMMER=0 -WITH_EXPAT=0 -WITH_ICONV=0 -WITH_MYSQL=0 ..
-    - cmake --build . --target package --config RelWithDebInfo --clean-first
+    - cmake --build . --target package --config RelWithDebInfo --clean-first    
     - cp manticore-*-converter.zip ..
   artifacts:
     paths:
@@ -107,15 +121,15 @@ windows:
   script:
     - ln -s $(pwd) /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
     - cd /manticore012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789/src
-    - mc mirror dev/runner-cache/releases/$DISTR/ cache/
-    - test -e cache/cache-src.tar.gz && tar -zxf cache/cache-src.tar.gz
+    - mc mirror -a dev/runner-cache/releases/$DISTR/ cache/
+    - test -e cache/cache-src.tar.gz && tar -zxf cache/cache-src.tar.gz && chmod +x cache/galera*/libgalera_manticore*
     - mkdir build && cd build
     - cmake -DPACK=1 -DSPHINX_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - make -j4 package
     - cp manticore*.rpm ..
     - cd ..
     - tar -zcf cache/cache-src.tar.gz cache/*-src
-    - mc mirror --exclude "*.dir" --exclude "*.o" --exclude "*/CMakeFiles/*" --exclude "*/Makefile" --exclude "*-src/*" --exclude "galera-*/*.a" --exclude "*/cmake_install.cmake" --overwrite cache/ dev/runner-cache/releases/$DISTR/
+    - mc mirror --exclude "*.dir" --exclude "*.o" --exclude "*/CMakeFiles/*" --exclude "*/Makefile" --exclude "*-src/*" --exclude "galera-*/*.a" --exclude "*/cmake_install.cmake" --overwrite -a cache/ dev/runner-cache/releases/$DISTR/
   artifacts:
     paths:
       - manticore*.rpm
@@ -153,7 +167,10 @@ rhel6:
   extends:
     - .redhat_based
   rules:
-    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /rhel6/
+    - if: $WHAT=='$WHAT' && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT==null && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT=="all" && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT =~ /rhel6/ && $DOCS_COMMIT_ONLY == null
   variables:
     REPO_DIST_VER: "6"
   image: registry.gitlab.com/manticoresearch/dev/centos6_cmake:317
@@ -162,7 +179,10 @@ rhel7:
   extends:
     - .redhat_based
   rules:
-    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /rhel7/
+    - if: $WHAT=='$WHAT' && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT==null && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT=="all" && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT =~ /rhel7/ && $DOCS_COMMIT_ONLY == null
   variables:
     REPO_DIST_VER: "7"
   image: registry.gitlab.com/manticoresearch/dev/centos7_cmake:317
@@ -171,7 +191,7 @@ rhelsplit7:
   extends:
     - .redhat_based
   rules:
-    - if: $WHAT =~ /rhelsplit7/
+    - if: $WHAT =~ /rhelsplit7/ && $DOCS_COMMIT_ONLY == null
   variables:
     XTRAFLAGS: "-DSPLIT_APPS=ON -DNOAPI=ON"
     REPO_DIST_VER: "7"
@@ -181,7 +201,10 @@ rhel8:
   extends:
     - .redhat_based
   rules:
-    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /rhel8/
+    - if: $WHAT=='$WHAT' && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT==null && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT=="all" && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT =~ /rhel8/ && $DOCS_COMMIT_ONLY == null
   variables:
     REPO_DIST_VER: "8"
   image: registry.gitlab.com/manticoresearch/dev/centos8_cmake:317
@@ -190,49 +213,70 @@ jessie:
   extends:
     - .debian_based
   rules:
-    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /jessie/
+    - if: $WHAT=='$WHAT' && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT==null && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT=="all" && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT =~ /jessie/ && $DOCS_COMMIT_ONLY == null
   image: registry.gitlab.com/manticoresearch/dev/jessie_cmake:317
 
 stretch:
   extends:
     - .debian_based
   rules:
-    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /stretch/
+    - if: $WHAT=='$WHAT' && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT==null && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT=="all" && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT =~ /stretch/ && $DOCS_COMMIT_ONLY == null
   image: registry.gitlab.com/manticoresearch/dev/stretch_cmake:317
 
 trusty:
   extends:
     - .debian_based
   rules:
-    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /trusty/
+    - if: $WHAT=='$WHAT' && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT==null && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT=="all" && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT =~ /trusty/ && $DOCS_COMMIT_ONLY == null
   image: registry.gitlab.com/manticoresearch/dev/trusty_cmake:317
 
 xenial:
   extends:
     - .debian_based
   rules:
-    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /xenial/
+    - if: $WHAT=='$WHAT' && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT==null && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT=="all" && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT =~ /xenial/ && $DOCS_COMMIT_ONLY == null
   image: registry.gitlab.com/manticoresearch/dev/xenial_cmake:317
 
 bionic:
   extends:
     - .debian_based
   rules:
-    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /bionic/
+    - if: $WHAT=='$WHAT' && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT==null && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT=="all" && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT =~ /bionic/ && $DOCS_COMMIT_ONLY == null
   image: registry.gitlab.com/manticoresearch/dev/bionic_cmake:317
 
 focal:
   extends:
     - .debian_based
   rules:
-    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /focal/
+    - if: $WHAT=='$WHAT' && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT==null && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT=="all" && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT =~ /focal/ && $DOCS_COMMIT_ONLY == null
   image: registry.gitlab.com/manticoresearch/dev/focal_cmake:317
 
 buster:
   extends:
     - .debian_based
   rules:
-    - if: $WHAT=='$WHAT' || $WHAT==null || $WHAT=="all" || $WHAT =~ /buster/
+    - if: $WHAT=='$WHAT' && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT==null && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT=="all" && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT =~ /buster/ && $DOCS_COMMIT_ONLY == null
   image: registry.gitlab.com/manticoresearch/dev/buster_cmake:317
 
 
@@ -240,7 +284,7 @@ collect_repo:
   stage: repoupload
   interruptible: true
   rules:
-    - if: $SOME_VAR==null #strange hack but without that - the job is skips
+    - if: $DOCS_COMMIT_ONLY == null  # initially $SOME_VAR==null  #strange hack but without that - the job is skips
   tags:
     - dev-host
   script:
@@ -254,13 +298,15 @@ build_docker:
   stage: deploy
   interruptible: true
   rules:
-    - if: $REPO_NAME=='$REPO_NAME'
-    - if: $WHAT=='$WHAT' || $WHAT==null && $CI_COMMIT_BRANCH == "master"
+    - if: $REPO_NAME=='$REPO_NAME' && $DOCS_COMMIT_ONLY == null 
+    - if: $WHAT=='$WHAT' && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT==null && $CI_COMMIT_BRANCH == "master" && $DOCS_COMMIT_ONLY == null
   tags:
     - dev-host
   script:
     - echo "Build docker image"
     - ~/build.sh
+
 
 # collect artifacts from all previous jobs.
 # m.b. it has sense to also publish them in one click to github release?
@@ -270,7 +316,8 @@ build_docker:
   stage: deploy
   interruptible: true
   rules:
-    - if: $WHAT=="all" || $WHAT =~ /collect/
+    - if: $WHAT=="all" && $CI_COMMIT_BRANCH == "master" && $DOCS_COMMIT_ONLY == null
+    - if: $WHAT =~ /collect/ && $CI_COMMIT_BRANCH == "master" && $DOCS_COMMIT_ONLY == null
   dependencies: [tarball, osx, windows, rhel6, rhel7, rhel8, jessie, stretch, trusty, xenial, bionic, buster]
   tags:
     - dev-host
@@ -288,3 +335,5 @@ build_docker:
   allow_failure: false
   cache: {}
 
+
+variables:

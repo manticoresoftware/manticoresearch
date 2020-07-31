@@ -2,9 +2,128 @@
 
 ## SQL
 
+<!-- example sql1 -->
+When you run a query via SQL over mysql protocol as a result you get the requested columns back or empty result set in case nothing is found. 
+
+<!-- request SQL -->
+```sql
+select * from idx;
+```
+
+<!-- response SQL -->
+```sql
++------+------+--------+
+| id   | age  | name   |
++------+------+--------+
+|    1 |   25 | joe    |
+|    2 |   25 | mary   |
+|    3 |   33 | albert |
++------+------+--------+
+3 rows in set (0.00 sec)
+```
+<!-- end -->
+
+<!-- example sql2 -->
+In addition to that you can use [SHOW META](Profiling_and_monitoring/SHOW_META) call to see additional meta-information about the latest query. 
+
+<!-- request SQL -->
+```sql
+select * from idx where match('joe'); show meta;
+```
+
+<!-- response SQL -->
+```sql
++------+------+------+
+| id   | age  | name |
++------+------+------+
+|    1 |   25 | joe  |
++------+------+------+
+1 row in set (0.00 sec)
+
++---------------+-------+
+| Variable_name | Value |
++---------------+-------+
+| total         | 1     |
+| total_found   | 1     |
+| time          | 0.000 |
+| keyword[0]    | joe   |
+| docs[0]       | 1     |
+| hits[0]       | 1     |
++---------------+-------+
+6 rows in set (0.00 sec)
+```
+<!-- end -->
+
+<!-- example sql3 -->
+In some cases, e.g. when you do [faceted search](Searching/Faceted_search) you can get multiple result sets as a response to your SQL query. 
+
+<!-- request SQL -->
+```sql
+select * from idx where match('joe') facet age;
+```
+
+<!-- response SQL -->
+```sql
++------+------+
+| id   | age  |
++------+------+
+|    1 |   25 |
++------+------+
+1 row in set (0.00 sec)
+
++------+----------+
+| age  | count(*) |
++------+----------+
+|   25 |        1 |
++------+----------+
+1 row in set (0.00 sec)
+```
+<!-- end -->
+
+<!-- example sql4 -->
+In case of a warning the result set will include a warning flag and you can see the warning using [SHOW WARNINGS](Profiling_and_monitoring/SHOW_WARNINGS).
+<!-- request SQL -->
+```sql
+select * from idx where match('"joe"/3'); show warnings;
+```
+
+<!-- response SQL -->
+```sql
++------+------+------+
+| id   | age  | name |
++------+------+------+
+|    1 |   25 | joe  |
++------+------+------+
+1 row in set, 1 warning (0.00 sec)
+
++---------+------+--------------------------------------------------------------------------------------------+
+| Level   | Code | Message                                                                                    |
++---------+------+--------------------------------------------------------------------------------------------+
+| warning | 1000 | quorum threshold too high (words=1, thresh=3); replacing quorum operator with AND operator |
++---------+------+--------------------------------------------------------------------------------------------+
+1 row in set (0.00 sec)
+```
+<!-- end -->
+
+<!-- example sql5 -->
+If your query fails you will get an error:
+
+<!-- request SQL -->
+```sql
+select * from idx where match('@surname joe');
+```
+
+<!-- response SQL -->
+```sql
+ERROR 1064 (42000): index idx: query error: no field 'surname' found in schema
+```
+
+<!-- end -->
+
+
 ## HTTP
 
-Via HTTP JSON interface query result is sent as a JSON document. Example:
+Via HTTP JSON iterface query result is sent as a JSON document. Example:
 
 ```json
 {

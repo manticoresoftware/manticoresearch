@@ -16,13 +16,13 @@
 /////////////////////////////////////////////////////////////////////////////
 // index optimization
 /////////////////////////////////////////////////////////////////////////////
-struct Task_t
+struct OptimizeTask_t
 {
 	int m_iFrom;
 	int m_iTo;
 	CSphString m_sIndex;
 
-	Task_t (CSphString sIndex, int iFrom, int iTo)
+	OptimizeTask_t (CSphString sIndex, int iFrom, int iTo)
 	: m_iFrom (iFrom)
 	, m_iTo (iTo)
 	, m_sIndex {std::move (sIndex)}
@@ -36,7 +36,7 @@ void EnqueueForOptimize ( CSphString sIndex, int iFrom, int iTo )
 		iOptimizeTask = TaskManager::RegisterGlobal ( "optimize",
 			[] ( void* pPayload ) // worker
 			{
-				CSphScopedPtr<Task_t> pTask { (Task_t *) pPayload };
+				CSphScopedPtr<OptimizeTask_t> pTask { (OptimizeTask_t *) pPayload };
 				auto pServed = GetServed ( pTask->m_sIndex );
 
 				if ( !pServed )
@@ -55,7 +55,7 @@ void EnqueueForOptimize ( CSphString sIndex, int iFrom, int iTo )
 			},
 			[] ( void* pPayload ) // releaser
 			{
-				CSphScopedPtr<Task_t> pTask { (Task_t *) pPayload };
+				CSphScopedPtr<OptimizeTask_t> pTask { (OptimizeTask_t *) pPayload };
 			}, 1 );
-	TaskManager::StartJob ( iOptimizeTask, new Task_t (std::move(sIndex), iFrom, iTo) );
+	TaskManager::StartJob ( iOptimizeTask, new OptimizeTask_t (std::move(sIndex), iFrom, iTo) );
 }

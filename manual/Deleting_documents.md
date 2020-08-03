@@ -23,6 +23,10 @@ DELETE FROM index WHERE where_condition
 * `index` is a name of the index from which the row should be deleted.
 * `where_condition` for SQL has the same syntax as in the [SELECT](Searching/Full_text_matching/Basic_usage.md#SQL) statement.
 
+
+<!-- intro -->
+##### HTTP:
+
 <!-- request HTTP -->
 ``` json
 POST /delete -d '
@@ -43,6 +47,46 @@ POST /delete -d '
 * `id` for JSON is the row `id` which should be deleted.
 * `query` for JSON is the full-text condition and has the same syntax as in the [JSON/update](Updating_documents/UPDATE.md#Updates-via-HTTP).
 * `cluster` for JSON is cluster name property and should be set along with `index` property to delete a row from an index which is inside a [replication cluster](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster).
+
+<!-- response HTTP -->
+```
+{
+  "_index": "test",
+  "_id": 1,
+  "found": true,
+  "result": "deleted"
+}
+
+
+{
+  "_index": "test",
+  "deleted": 4
+}
+```
+
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+``` php
+$index->deleteDocument(1);
+$index->deleteDocuments(['match'=>['*'=>'apple']]);
+```
+
+<!-- response PHP -->
+``` php
+Array(
+  [_index] => test
+  [_id] => 1
+  [found] => true
+  [result] => deleted
+)
+
+Array(
+  [_index] => test
+  [deleted] => 4
+)
+```
 
 <!-- end -->
 

@@ -9,13 +9,13 @@ cd C:\Manticore
 unzip manticore-3.5.0-200722-1d34c491-release-x64-bin.zip
 ```
 
-The zip comes with a sample configuration file in `sphinx.conf.in`.
+The zip comes with a sample configuration file in `manticore.conf.in`.
 The configuration contains a `@CONFDIR@` string which needs to be replaced with your data directory location. It will be the root directory of `data` and `log` folders (first is used to store indexes, second for logs). The zip package also comes with these folders, so they will be available at the location where you unzipped the package. If you want to use a different location, the two folders must be created there.
 
 To install the `searchd` (Manticore search server) as a Windows service run:
 
 ```bat
-C:\Manticore\bin\searchd --install --config C:\Manticore\sphinx.conf.in --servicename Manticore
+C:\Manticore\bin\searchd --install --config C:\Manticore\manticore.conf.in --servicename Manticore
 ```
 
 Make sure to use the full path of the configuration file, otherwise searchd.exe will not be able to know its location when it's started as service.

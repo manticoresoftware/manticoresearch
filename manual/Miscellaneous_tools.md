@@ -21,14 +21,14 @@ The commands are as follows:
 *   `--buildidf DICTFILE1 [DICTFILE2 ...] --out IDFILE` build IDF file from one or several dictionary dumps. Additional parameter `-skip-uniq` will skip unique (df=1) words.
 *   `--build-infixes INDEXNAME` build infixes for an existing dict=keywords index (upgrades .sph, .spi in place). You can use this option for legacy index files that already use dict=keywords, but now need to support infix searching too; updating the index files with indextool may prove easier or faster than regenerating them from scratch with indexer.
 *   `--dumpheader FILENAME.sph` quickly dumps the provided index header file without touching any other index files or even the configuration file. The report provides a breakdown of all the index settings, in particular the entire attribute and field list.
-*   `--dumpconfig FILENAME.sph` dumps the index definition from the given index header file in (almost) compliant `sphinx.conf` file format.
+*   `--dumpconfig FILENAME.sph` dumps the index definition from the given index header file in (almost) compliant `manticore.conf` file format.
 *   `--dumpheader INDEXNAME` dumps index header by index name with looking up the header path in the configuration file.
 *   `--dumpdict INDEXNAME` dumps dictionary. Additional `-stats` switch will dump to dictionary the total number of documents. It is required for dictionary files that are used for creation of IDF files.
 *   `--dumpdocids INDEXNAME` dumps document IDs by index name.
 *   `--dumphitlist INDEXNAME KEYWORD` dumps all the hits (occurrences) of a given keyword in a given index, with keyword specified as text.
 *   `--dumphitlist INDEXNAME --wordid ID` dumps all the hits (occurrences) of a given keyword in a given index, with keyword specified as internal numeric ID.
 *   `--fold INDEXNAME OPTFILE` This options is useful too see how actually tokenizer proceeds input. You can feed indextool with text from file if specified or from stdin otherwise. The output will contain spaces instead of separators (accordingly to your `charset_table` settings) and lowercased letters in words.
-*   `--htmlstrip INDEXNAME` filters stdin using HTML stripper settings for a given index, and prints the filtering results to stdout. Note that the settings will be taken from sphinx.conf, and not the index header.
+*   `--htmlstrip INDEXNAME` filters stdin using HTML stripper settings for a given index, and prints the filtering results to stdout. Note that the settings will be taken from manticore.conf, and not the index header.
 *   `--mergeidf NODE1.idf [NODE2.idf ...] --out GLOBAL.idf` merge several .idf files into a single one. Additional parameter `-skip-uniq` will skip unique (df=1) words.
 *   `--morph INDEXNAME` applies morphology to the given stdin and prints the result to stdout.
 *   `--check INDEXNAME` checks the index data files for consistency errors that might be introduced either by bugs in `indexer` and/or hardware faults. `--check` also works on RT indexes, RAM and disk chunks.
@@ -70,7 +70,7 @@ zoning > zoning
 
 ## wordbreaker
 
-`wordbreaker` is used to split compound words, as usual in URLs, into its component words. For example, this tool can split "lordoftherings" into its four component words, or `http://manofsteel.warnerbros.com` into "man of steel warner bros". This helps searching, without requiring prefixes or infixes: searching for "sphinx" wouldn't match "sphinxsearch" but if you break the compound word and index the separate components, you'll get a match without the costs of prefix and infix larger index files.
+`wordbreaker` is used to split compound words, as usual in URLs, into its component words. For example, this tool can split "lordoftherings" into its four component words, or `http://manofsteel.warnerbros.com` into "man of steel warner bros". This helps searching, without requiring prefixes or infixes: searching for "manticore" wouldn't match "manticoresearch" but if you break the compound word and index the separate components, you'll get a match without the costs of prefix and infix larger index files.
 
 Examples of its usage are:
 
@@ -84,7 +84,7 @@ The input stream will be separated in words using the `-dict` dictionary file. I
 Wordbreaker needs a dictionary to recognize individual substrings within a string. To differentiate between different guesses, it uses the relative frequency of each word in the dictionary: higher frequency means higher split probability. You can generate such a file using the `indexer` tool:
 
 ```bash
-indexer --buildstops dict.txt 100000 --buildfreqs myindex -c /path/to/sphinx.conf
+indexer --buildstops dict.txt 100000 --buildfreqs myindex -c /path/to/manticore.conf
 ```
 
 which will write the 100,000 most frequent words, along with their counts, from myindex into dict.txt. The output file is a text file, so you can edit it by hand, if need be, to add or remove words.

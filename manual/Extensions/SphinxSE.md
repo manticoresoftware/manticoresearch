@@ -116,7 +116,7 @@ SELECT * FROM t1 WHERE query='test it;mode=any';
 
 First 3 columns of search table *must* have a type `BIGINT` for the 1st column (document id), `INTEGER` or `BIGINT` for the 2nd column (match weight), and `VARCHAR`  or `TEXT` for the 3rd column (your query), respectively. This mapping is fixed; you can not omit any of these three required columns, or move them around, or change types. Also, query column must be indexed; all the others must be kept unindexed. Column names are ignored so you can use arbitrary ones.
 
-Additional columns must be either `INTEGER`, `TIMESTAMP`, `BIGINT`, `VARCHAR`, or `FLOAT`. They will be bound to attributes provided in Manticore result set by name, so their names must match attribute names specified in `sphinx.conf`. If there's no such attribute name in Manticore search results, column will have `NULL` values.
+Additional columns must be either `INTEGER`, `TIMESTAMP`, `BIGINT`, `VARCHAR`, or `FLOAT`. They will be bound to attributes provided in Manticore result set by name, so their names must match attribute names specified in `manticore.conf`. If there's no such attribute name in Manticore search results, column will have `NULL` values.
 
 Special "virtual" attributes names can also be bound to SphinxSE columns. `_sph_` needs to be used instead of `@` for that. For instance,  to obtain the values of `@groupby`, `@count`, or `@distinct` virtualattributes, use `_sph_groupby`, `_sph_count` or `_sph_distinct` column names, respectively.
 

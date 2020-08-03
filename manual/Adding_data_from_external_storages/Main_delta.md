@@ -16,7 +16,7 @@ CREATE TABLE sph_counter
     max_doc_id INTEGER NOT NULL
 );
 
-# in sphinx.conf
+# in manticore.conf
 source main
 {
     # ...

@@ -85,7 +85,7 @@
 * [/pq/idx/doc](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md#HTTP) - Inserts a PQ rule into a percolate index
 * [/update](Updating_documents/UPDATE.md#Updates-via-HTTP) - Updates a document in a real-time index
 * [/replace](Updating_documents/REPLACE.md#HTTP:) - Replaces a document in a real-time index
-* [/pq/idx/doc/N?refresh=1] - Replaces a PQ rule in a percolate index
+* [/pq/idx/doc/N?refresh=1](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md#Replacing-rules-in-a-PQ-index) - Replaces a PQ rule in a percolate index
 * [/delete](Deleting_documents.md) - Deletes a document in an index
 * [/bulk](Updating_documents/UPDATE.md#Bulk-updates) - Perform several insert, update or delete operations in a single call
 * [/search](Quick_start_guide.md#Connect-via-JSON-over-HTTP) - Performs search

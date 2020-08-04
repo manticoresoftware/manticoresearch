@@ -2,11 +2,11 @@
 
 ### SQL commands
 ##### Schema management
-* [CREATE TABLE [IF NOT EXISTS]](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#General-syntax-of-CREATE-TABLE) - Creates new table
+* [CREATE TABLE %5BIF NOT EXISTS%5D](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#General-syntax-of-CREATE-TABLE) - Creates new table
 * [CREATE TABLE LIKE](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Creating-a-real-time-index-online-via-CREATE-TABLE) - Creates table using another one as a template
 * [DESCRIBE](Listing_indexes.md#DESCRIBE) - Prints out table's field list and their types
 * [ALTER TABLE](Updating_index_schema.md) - Changes table schema / settings
-* [DROP TABLE [IF EXISTS]](Deleting_an_index.md#Deleting-an-index) - Deletes table [if it exists]
+* [DROP TABLE %5BIF EXISTS%5D](Deleting_an_index.md#Deleting-an-index) - Deletes table [if it exists]
 * [SHOW TABLES](Listing_indexes.md#SHOW-TABLES) - Shows tables list
 * [SHOW CREATE TABLE](Listing_indexes.md#SHOW-CREATE-TABLE) - Shows SQL command how to create the table
 * [SHOW INDEX STATUS](Profiling_and_monitoring/Index_settings_and_status/SHOW_INDEX_STATUS.md) - Shows information about current table status
@@ -188,7 +188,7 @@
 * [MAYBE](Searching/Full_text_matching/Operators.md#MAYBE-operator)
 * [NOT](Searching/Full_text_matching/Operators.md#Negation-operator) - operator NOT
 * [@field](Searching/Full_text_matching/Operators.md#Field-search-operator) - field search operator
-* [@field[N]](Searching/Full_text_matching/Operators.md#Field-search-operator) - field position limit modifier
+* [@field%5BN%5D](Searching/Full_text_matching/Operators.md#Field-search-operator) - field position limit modifier
 * [@(field1,field2,...)](Searching/Full_text_matching/Operators.md#Field-search-operator) - multiple-field search operator
 * [@!field](Searching/Full_text_matching/Operators.md#Field-search-operator) - ignore field search operator
 * [@!(field1,field2,...)](Searching/Full_text_matching/Operators.md#Field-search-operator) - ignore multiple-field search operator

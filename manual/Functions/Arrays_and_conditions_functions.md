@@ -40,7 +40,7 @@ SELECT TO_STRING(id*321) secret FROM test WHERE secret ANY('1000','3210');
 
 ### CONTAINS()
 
-`CONTAINS(polygon, x, y)` checks whether the (x,y) point is within the given polygon, and returns 1 if true, or 0 if false. The polygon has to be specified using either the  [POLY2D()] (/Documentation/docs_restructured/Functions/Geo_spatial_functions.md#POLY2D%28%29) function. The former function is intended for "small" polygons, meaning less than 500 km (300 miles) a side, and it doesn't take into account the Earth's curvature for speed. For larger distances, you should use `GEOPOLY2D`, which tessellates the given polygon in smaller parts, accounting for the Earth's curvature.
+`CONTAINS(polygon, x, y)` checks whether the (x,y) point is within the given polygon, and returns 1 if true, or 0 if false. The polygon has to be specified using either the  [POLY2D()](/Documentation/docs_restructured/Functions/Geo_spatial_functions.md#POLY2D%28%29) function. The former function is intended for "small" polygons, meaning less than 500 km (300 miles) a side, and it doesn't take into account the Earth's curvature for speed. For larger distances, you should use `GEOPOLY2D`, which tessellates the given polygon in smaller parts, accounting for the Earth's curvature.
 
 ### IF()
 

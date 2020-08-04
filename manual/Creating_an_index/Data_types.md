@@ -817,7 +817,7 @@ index products
 
 <!-- example for INDEXOF() json -->
 
-JSON properties can be used in most operations. There are also special functions such as [ALL()](Functions/Arrays_and_conditions_functions#ALL%28%29), [ANY()](Functions/Arrays_and_conditions_functions#ANY%28%29), [GREATEST()](Functions/Mathematical_functions#GREATEST%28%29), [LEAST()](Functions/Mathematical_functions#LEAST%28%29) and [INDEXOF()](Functions/Arrays_and_conditions_functions#INDEXOF%28%29) that allow traversal of property arrays.
+JSON properties can be used in most operations. There are also special functions such as [ALL()](Functions/Arrays_and_conditions_functions.md#ALL%28%29), [ANY()](Functions/Arrays_and_conditions_functions.md#ANY%28%29), [GREATEST()](Functions/Mathematical_functions.md#GREATEST%28%29), [LEAST()](Functions/Mathematical_functions.md#LEAST%28%29) and [INDEXOF()](Functions/Arrays_and_conditions_functions.md#INDEXOF%28%29) that allow traversal of property arrays.
 
 <!-- intro -->
 ##### SQL:
@@ -853,7 +853,7 @@ $index->setName('products')->search('')->expression('idx','indexof(x>2 for x in 
 
 <!-- example for REGEX() json -->
 
-Text properties are treated same as strings so it's not possible to use them in full-text matches expressions, but string functions like [REGEX()](Functions/String_functions#REGEX%28%29) can be used.
+Text properties are treated same as strings so it's not possible to use them in full-text matches expressions, but string functions like [REGEX()](Functions/String_functions.md#REGEX%28%29) can be used.
 
 <!-- intro -->
 ##### SQL:
@@ -893,7 +893,7 @@ $index->setName('products')->search('')->expression('idx',"regex(data.name, 'est
 
 <!-- example for DOUBLE() -->
 
-In case of JSON properties, enforcing data type is required to be casted in some situations for proper functionality. For example in case of float values [DOUBLE()](Functions/Type_casting_functions#DOUBLE%28%29) must be used for proper sorting.
+In case of JSON properties, enforcing data type is required to be casted in some situations for proper functionality. For example in case of float values [DOUBLE()](Functions/Type_casting_functions.md#DOUBLE%28%29) must be used for proper sorting.
 
 <!-- intro -->
 ##### SQL:
@@ -986,7 +986,7 @@ index products
 
 
 <!-- example for any/all MVA -->
-It supports filtering and aggregation, but not sorting. Filtering can made of condition that requires at least one element to pass (using [ANY()](Functions/Arrays_and_conditions_functions#ANY%28%29)) or all ([ALL()](Functions/Arrays_and_conditions_functions#ALL%28%29)).
+It supports filtering and aggregation, but not sorting. Filtering can made of condition that requires at least one element to pass (using [ANY()](Functions/Arrays_and_conditions_functions.md#ANY%28%29)) or all ([ALL()](Functions/Arrays_and_conditions_functions.md#ALL%28%29)).
 
 <!-- intro -->
 ##### SQL:
@@ -1025,7 +1025,7 @@ $index->setName('products')->search('')->filter('any(product_codes)','equals',3)
 
 <!-- example for least/greatest MVA -->
 
-Information like [least](Functions/Mathematical_functions#LEAST%28%29) or [greatest](Functions/Mathematical_functions#GREATEST%28%29) element and length of the list can be extracted. An example shows ordering by the least element of a multi-value attribute.
+Information like [least](Functions/Mathematical_functions.md#LEAST%28%29) or [greatest](Functions/Mathematical_functions.md#GREATEST%28%29) element and length of the list can be extracted. An example shows ordering by the least element of a multi-value attribute.
 
 <!-- intro -->
 ##### SQL:

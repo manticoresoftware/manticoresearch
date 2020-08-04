@@ -3,7 +3,7 @@
 ## SQL
 
 <!-- example sql1 -->
-When you run a query via SQL over mysql protocol as a result you get the requested columns back or empty result set in case nothing is found. 
+When you run a query via SQL over mysql protocol as a result you get the requested columns back or empty result set in case nothing is found.  
 
 <!-- request SQL -->
 ```sql
@@ -24,7 +24,7 @@ select * from idx;
 <!-- end -->
 
 <!-- example sql2 -->
-In addition to that you can use [SHOW META](Profiling_and_monitoring/SHOW_META) call to see additional meta-information about the latest query. 
+In addition to that you can use [SHOW META](Profiling_and_monitoring/SHOW_META.md) call to see additional meta-information about the latest query. 
 
 <!-- request SQL -->
 ```sql
@@ -55,7 +55,7 @@ select * from idx where match('joe'); show meta;
 <!-- end -->
 
 <!-- example sql3 -->
-In some cases, e.g. when you do [faceted search](Searching/Faceted_search) you can get multiple result sets as a response to your SQL query. 
+In some cases, e.g. when you do [faceted search](Searching/Faceted_search.md) you can get multiple result sets as a response to your SQL query. 
 
 <!-- request SQL -->
 ```sql
@@ -81,7 +81,7 @@ select * from idx where match('joe') facet age;
 <!-- end -->
 
 <!-- example sql4 -->
-In case of a warning the result set will include a warning flag and you can see the warning using [SHOW WARNINGS](Profiling_and_monitoring/SHOW_WARNINGS).
+In case of a warning the result set will include a warning flag and you can see the warning using [SHOW WARNINGS](Profiling_and_monitoring/SHOW_WARNINGS.md).
 <!-- request SQL -->
 ```sql
 select * from idx where match('"joe"/3'); show warnings;

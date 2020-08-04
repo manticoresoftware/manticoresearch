@@ -42,7 +42,7 @@ So, how do you write and use a plugin? Four-line crash course goes as follows:
 
 Note that while UDFs are first-class plugins they are nevertheless installed using a separate [CREATE FUNCTION](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md) statement. It lets you specify the return type neatly so there was especially little reason to ruin backwards compatibility *and* change the syntax.
 
-Multiple plugins (and/or UDFs) may reside in a single library file. So you might choose to either put all your project-specific plugins in a single common big library; or you might choose to have a separate library for every UDF and plugin; that is up to you.
+Dynamic plugins are supported in threads and thread_pool workers. Multiple plugins (and/or UDFs) may reside in a single library file. So you might choose to either put all your project-specific plugins in a single common big library; or you might choose to have a separate library for every UDF and plugin; that is up to you.
 
 Just as with UDFs, you want to include `src/sphinxudf.h` header file. At the very least, you will need the `SPH_UDF_VERSION` constant to implement a proper version function. Depending on the specific plugin type, you might or might not need to link your plugin with `src/sphinxudf.c`. However, all the functions implemented in  `sphinxudf.c` are about unpacking the `PACKEDFACTORS()` blob, and no plugin types are exposed to that kind of data. So currently, you would never need to link with the C-file, just the header would be sufficient. (In fact, if you copy over the UDF version number, then for some of the plugin types you would not even need the header file.)
 

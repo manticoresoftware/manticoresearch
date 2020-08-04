@@ -18,7 +18,7 @@ It returns a table with following columns:
 * `ConnID`: connection id (starting from 0)
 * `Time`: current job's duration (in seconds, with microsecond precision) or uptime of the thread in case of `format=all` when the thread is idling
 * `Work time`: uptime of the thread
-* `Work time CPU`: effective CPU time (requires [`--cpustats`](Starting_the_server/Manually#searchd-command-line-options))
+* `Work time CPU`: effective CPU time (requires [`--cpustats`](Starting_the_server/Manually.md#searchd-command-line-options))
 * `Jobs done`: how many jobs this thread has completed
 * `Last job took`: last job's duration
 * `In idle`: whether the thread is idling now or when it was last idling

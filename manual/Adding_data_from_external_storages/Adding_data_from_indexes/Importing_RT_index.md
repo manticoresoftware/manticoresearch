@@ -1,6 +1,6 @@
 # Importing real-time index
 
-When searchd is switched from [Plain mode](Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain mode%29) to [RT mode](Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%28), real-time indexes can be imported using the `IMPORT TABLE` statement. The general syntax is as follows:
+When searchd is switched from [Plain mode](Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain mode%29) to [RT mode](Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29), real-time indexes can be imported using the `IMPORT TABLE` statement. The general syntax is as follows:
 
 ```sql
 IMPORT TABLE table_name FROM 'path'

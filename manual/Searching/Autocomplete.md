@@ -2,7 +2,7 @@
 
 Autocomplete (or word completion) is a feature in which an application predicts the rest of a word a user is typing. On websites it's used in search boxes, where a user starts to type a word and a dropdown with suggestions pops up so the user can select the ending from the list.
 
-![Autocomplete](autocomplete.png)
+![Autocomplete](autocomplete.png.md)
 
 There are few ways how you can do autocomplete in Manticore:
 ##### Autocomplete a sentence

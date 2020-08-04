@@ -3,18 +3,18 @@
 ## Version 3.5.0, 22 Jul 2020
 
 ### Major new features:
-* This release took so long, because we were working hard on changing multitasking mode from threads to **coroutines**. It makes configuration simpler and queries parallelization much more straightforward: Manticore just uses given number of threads (see new setting [threads](Server_settings/Searchd#threads)) and the new mode makes sure it's done in the most optimal way.
-* Changes in [highlighting](Searching/Highlighting#Highlighting-options):
+* This release took so long, because we were working hard on changing multitasking mode from threads to **coroutines**. It makes configuration simpler and queries parallelization much more straightforward: Manticore just uses given number of threads (see new setting [threads](Server_settings/Searchd.md#threads)) and the new mode makes sure it's done in the most optimal way.
+* Changes in [highlighting](Searching/Highlighting.md#Highlighting-options):
   - any highlighting that works with several fields (`highlight({},'field1, field2'`) or `highlight` in json queries) now applies limits per-field by default.
   - any highlighting that works with plain text (`highlight({}, string_attr)` or `snippet()` now applies limits to the whole document.
-  - [per-field limits](Searching/Highlighting#limits_per_field) can be switched to global limits by `limits_per_field=0` option (`1` by default).
-  - [allow_empty](Searching/Highlighting#allow_empty) is now `0` by default for highlighting via HTTP JSON.
+  - [per-field limits](Searching/Highlighting.md#limits_per_field) can be switched to global limits by `limits_per_field=0` option (`1` by default).
+  - [allow_empty](Searching/Highlighting.md#allow_empty) is now `0` by default for highlighting via HTTP JSON.
 
-* The same port [can now be used](Server_settings/Searchd#listen) for http, https and binary API (to accept connections from a remote Manticore instance). `listen = *:mysql` is still required for connections via mysql protocol. Manticore now detects automatically the type of client trying to connect to it except for MySQL (due to restrictions of the protocol).
+* The same port [can now be used](Server_settings/Searchd.md#listen) for http, https and binary API (to accept connections from a remote Manticore instance). `listen = *:mysql` is still required for connections via mysql protocol. Manticore now detects automatically the type of client trying to connect to it except for MySQL (due to restrictions of the protocol).
 
-* In RT mode a field can now be [text and string attribute](Creating_an_index/Data_types#String) at the same time - [GitHub issue #331](https://github.com/manticoresoftware/manticoresearch/issues/331). 
+* In RT mode a field can now be [text and string attribute](Creating_an_index/Data_types.md#String) at the same time - [GitHub issue #331](https://github.com/manticoresoftware/manticoresearch/issues/331). 
   
-  In [plain mode](Read_this_first#Real-time-mode-vs-plain-mode) it's called `sql_field_string`. Now it's available in [RT mode](Read_this_first#Real-time-mode-vs-plain-mode) for real-time indexes too. You can use it as shown in the example:
+  In [plain mode](Read_this_first.md#Real-time-mode-vs-plain-mode) it's called `sql_field_string`. Now it's available in [RT mode](Read_this_first.md#Real-time-mode-vs-plain-mode) for real-time indexes too. You can use it as shown in the example:
 
   <!-- more --> 
   ```sql
@@ -39,32 +39,32 @@
   <!-- \more -->
 
 ### Minor changes
-* You can now [highlight string attributes](Searching/Highlighting#Highlighting-via-SQL).
+* You can now [highlight string attributes](Searching/Highlighting.md#Highlighting-via-SQL).
 * SSL and compression support for SQL interface
-* Support of mysql client [`status`](Profiling_and_monitoring/Node_status#STATUS) command.
-* [Replication](Creating_a_cluster/Setting_up_replication/Setting_up_replication#Setting-up-replication) can now replicate external files (stopwords, exceptions etc.).
-* Filter operator [`in`](Searching/Filters#Set-filters) is now available via HTTP JSON interface.
-* [`expressions`](Searching/Expressions#expressions) in HTTP JSON.
+* Support of mysql client [`status`](Profiling_and_monitoring/Node_status.md#STATUS) command.
+* [Replication](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Setting-up-replication) can now replicate external files (stopwords, exceptions etc.).
+* Filter operator [`in`](Searching/Filters.md#Set-filters) is now available via HTTP JSON interface.
+* [`expressions`](Searching/Expressions.md#expressions) in HTTP JSON.
 * [You can now change `rt_mem_limit` on the fly](https://github.com/manticoresoftware/manticoresearch/issues/344) in RT mode, i.e. can do `ALTER ... rt_mem_limit=<new value>`.
-* You can now use [separate CJK charset tables](Creating_an_index/NLP_and_tokenization/CJK): `chinese`, `japanese` and `korean`. 
-* [thread_stack](Server_settings/Searchd#thread_stack) now limits maximum thread stack, not initial.
+* You can now use [separate CJK charset tables](Creating_an_index/NLP_and_tokenization/CJK.md): `chinese`, `japanese` and `korean`. 
+* [thread_stack](Server_settings/Searchd.md#thread_stack) now limits maximum thread stack, not initial.
 * Improved `SHOW THREADS` output.
 * Display progress of long `CALL PQ` in `SHOW THREADS`.
-* cpustat, iostat, coredump can be changed during runtime with [SET](Server_settings/Setting_variables_online#SET).
+* cpustat, iostat, coredump can be changed during runtime with [SET](Server_settings/Setting_variables_online.md#SET).
 * `SET [GLOBAL] wait_timeout=NUM` implemented ,
 
 ### Breaking changes:
 * **Index format has been changed.** Indexes built in 3.5.0 cannot be loaded by Manticore version < 3.5.0, but Manticore 3.5.0 understands older formats.
-* [`INSERT INTO PQ VALUES()`](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index) (i.e. without providing column list) previously expected exactly `(query, tags)` as the values. It's been changed to `(id,query,tags,filters)`. The id can be set to 0 if you want it to be auto-generated.
-* [`allow_empty=0`](Searching/Highlighting#allow_empty) is a new default in highlighting via HTTP JSON interface.
+* [`INSERT INTO PQ VALUES()`](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md) (i.e. without providing column list) previously expected exactly `(query, tags)` as the values. It's been changed to `(id,query,tags,filters)`. The id can be set to 0 if you want it to be auto-generated.
+* [`allow_empty=0`](Searching/Highlighting.md#allow_empty) is a new default in highlighting via HTTP JSON interface.
 * Only absolute paths are allowed for external files (stopwords, exceptions etc.) in `CREATE TABLE`/`ALTER TABLE`.
 
 ### Deprecations:
 * `ram_chunks_count` was renamed to `ram_chunk_segments_count` in `SHOW INDEX STATUS`.
 * `workers` is obsolete. There's only one workers mode now.
 * `dist_threads` is obsolete. All queries are as much parallel as possible now (limited by `threads` and `jobs_queue_size`).
-* `max_children` is obsolete. Use [threads](Server_settings/Searchd#threads) to set the number of threads Manticore will use (set to the # of CPU cores by default).
-* `queue_max_length` is obsolete. Instead of that in case it's really needed use [jobs_queue_size](Server_settings/Searchd#jobs_queue_size) to fine-tune internal jobs queue size (unlimited by default).
+* `max_children` is obsolete. Use [threads](Server_settings/Searchd.md#threads) to set the number of threads Manticore will use (set to the # of CPU cores by default).
+* `queue_max_length` is obsolete. Instead of that in case it's really needed use [jobs_queue_size](Server_settings/Searchd.md#jobs_queue_size) to fine-tune internal jobs queue size (unlimited by default).
 * All `/json/*` endpoints are now available w/o `/json/`, e.g. `/search`, `/insert`, `/delete`, `/pq` etc.
 * `field` meaning "full-text field" was renamed to "text" in `describe`.
   <!-- more -->
@@ -90,7 +90,7 @@
   ```
   <!-- \more -->
 * Cyrillic `и` doesn't map to `i` in `non_cjk` charset_table (which is a default) as it affected Russian stemmers and lemmatizers too much.
-* `read_timeout`. Use [network_timeout](Server_settings/Searchd#network_timeout) instead which controls both reading and writing. 
+* `read_timeout`. Use [network_timeout](Server_settings/Searchd.md#network_timeout) instead which controls both reading and writing. 
 
 
 ### Packages
@@ -672,7 +672,7 @@ development libraries.
 ## Version 2.6.2 GA, 23 February 2018
 ### Improvements
 * improved [Percolate Queries](Searching/Percolate_query.md) performance in case of using NOT operator and for batched documents.
-* [percolate_query_call](Searching/Percolate_query.md) can use multiple threads depending on [dist_threads](Server_settings/Searchd.md#dist_threads)
+* [percolate_query_call](Searching/Percolate_query.md) can use multiple threads depending on [dist_threads](Server_settings/Searchd.md#threads)
 * new full-text matching operator NOTNEAR/N
 * LIMIT for SELECT on percolate indexes
 * [expand_keywords](Searching/Options.md#expand_keywords) can accept 'start','exact' (where 'star,exact' has same effect as '1')

@@ -46,7 +46,7 @@ sudo systemctl start manticore
 * Download Windows archive from https://manticoresearch.com/downloads/
 * Extract all from the archive to C:\Manticore
 * ```bash
-  C:\Manticore\bin\searchd --install --config C:\Manticore\manticore.conf.in --servicename Manticore
+  C:\Manticore\bin\searchd --install --config C:\Manticore\sphinx.conf.in --servicename Manticore
   ```
 * Start Manticore from the Services snap-in of the Microsoft Management Console
 
@@ -61,13 +61,12 @@ brew services start manticoresearch
 
 <!-- intro -->
 ### Docker
-
 <!-- request Docker -->
 ```bash
 docker pull manticoresearch/manticore
 docker run --name manticore -p9306:9306 -p9308:9308 -p9312:9312 -d manticoresearch/manticore
 ```
-For persisting your data directory read [how to use Manticore docker in production](Starting_the_server/Docker#Production-use)
+For persisting your data directory read [how to use Manticore docker in production](Starting_the_server/Docker.md#Production-use)
 <!-- end -->
 
 <!-- example connect -->

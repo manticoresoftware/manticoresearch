@@ -17,7 +17,7 @@ If you are looking for a quick understanding of how Manticore works in general [
 ##### Using examples
 Each query example has a little icon 📋 in the top-right corner:
 
-![Copy example](copy_example.png)
+![Copy example](copy_example.png.md)
 
 You can use it to copy examples to clipboard. **If the query is an HTTP request it will be copied as a CURL command**. You can configure the host/port if you press ⚙️.
 
@@ -25,7 +25,7 @@ You can use it to copy examples to clipboard. **If the query is an HTTP request 
 
 We love search and we've made our best to make searching in this manual as convenient as possible. Of course it's backed by Manticore Search. Besides using the search bar which requires opening the manual first there is a very easy way to find something by just opening **mnt.cr/your-search-keyword** :
 
-![mnt.cr quick manual search](mnt.cr.gif)
+![mnt.cr quick manual search](mnt.cr.gif.md)
 
 ## Best practices
 There are few things you need to understand about Manticore Search that can help you follow the best practices of using it.

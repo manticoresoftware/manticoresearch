@@ -2,7 +2,7 @@
 
 Faceted search is as essential function of a modern search application as [autocomplete](Searching/Autocomplete.md), [spell correction](Searching/Spell_correction.md) and search keywords [highlighting](Searching/Highlighting.md). Especially in E-commerce products.
 
-![Faceted search](faceted.png)
+![Faceted search](faceted.png.md)⛔
 
 It comes to the rescue when we deal with large amounts of data and various properties related to each other, whether it is size, color, manufacturer or something else. When querying large amounts of data search results often include large swaths of entries which does not fit user’s expectations. Faceted search allows an end-user to explicitly specify the dimensions that they want their search results to meet.
 
@@ -159,7 +159,7 @@ FACET price_range AS price_range,brand_name ORDER BY brand_name asc;
 
 ### Ordering in facet result
 
-<!-- example Example_4 -->
+<!-- example Example_4 -->⛔
 
 Facets support `ORDER BY` clause as same as a standard query. Each facet can have it's or own ordering and the facet ordering doesn't affect in any way the ordering of the main result set, which is ordered by the main query's `ORDER BY`. Sorting can be made on attribute name, count (using `COUNT(*)`) or special `FACET()` function can be used, which provides the aggregated data values.
 
@@ -241,7 +241,7 @@ FACET brand_name BY brand_id order BY COUNT(*) DESC;
 
 ### Size of facet result
 
-<!-- example Example_4 -->
+<!-- example Example_4 -->⛔
 
 By default each facet result set is limited to 20 values. The number of facet values can be controlled with `LIMIT` clause individually for each facet  by providing either a number of values to return in format `LIMIT count` or with an offset as `LIMIT offset, count`. 
 

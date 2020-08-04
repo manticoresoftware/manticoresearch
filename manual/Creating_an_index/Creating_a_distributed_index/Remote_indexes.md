@@ -31,7 +31,7 @@ In other words, you can point every single agent to one or more remote indexes, 
 * sharding over multiple agent servers, mirrored for HA/LB (High Availability and Load Balancing) purposes
 * sharding within localhost, to utilize multiple cores (however, it is simpler just to use multiple local indexes)
 
-All agents are searched in parallel. An index list is passed verbatim to the remote agent. How exactly that list is searched within the agent (ie. sequentially or in parallel too) depends solely on the agent configuration (ie. [threads](Server_settings/Searchd#threads) setting). Master has no remote control over that.
+All agents are searched in parallel. An index list is passed verbatim to the remote agent. How exactly that list is searched within the agent (ie. sequentially or in parallel too) depends solely on the agent configuration (ie. [threads](Server_settings/Searchd.md#threads) setting). Master has no remote control over that.
 
 The value can additionally enumerate per agent options such as:
 * [ha_strategy](Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) - random, roundrobin, nodeads, noerrors (replaces index-wide `ha_strategy` for particular agent)
@@ -169,7 +169,7 @@ persistent_connections_limit = 29 # assume that each host of agents has max_conn
 
 `persistent_connections_limit` defines maximum # of simultaneous persistent connections to remote persistent agents. This is instance-wide option and has to be defined in searchd config section. Each time connecting agent defined under `agent_persistent` we try to reuse existing connection (if any), or connect and save the connection for the future. However we can't hold unlimited # of such persistent connections, since each one holds a worker on agent's side (and finally we'll receive the 'maxed out' error, when all of them are busy). This very directive limits the number. It affects the num of connections to each agent's host, across all distributed indexes.
 
-It is reasonable to set the value equal or less than [max_connections](Server_settings/Searchd#max_connections) option of the agent's config.
+It is reasonable to set the value equal or less than [max_connections](Server_settings/Searchd.md#max_connections) option of the agent's config.
 
 ## Distributed snippets creation
 

@@ -8,8 +8,8 @@ The easiest way to see high-level information about your Manticore node is by ru
 * whether SSL is in effect or not
 * current TCP port/unix socket
 * uptime
-* number of [threads](Server_settings/Searchd#threads)
-* number of [jobs in queue](Server_settings/Searchd#jobs_queue_size)
+* number of [threads](Server_settings/Searchd.md#threads)
+* number of [jobs in queue](Server_settings/Searchd.md#jobs_queue_size)
 * number of connections (`clients`)
 * number of tasks being processed now
 * number of queries made since start

@@ -315,7 +315,7 @@ Hostnames renew strategy. By default, IP addresses of agent host names are cache
 
 Defines how many "jobs" can be in the queue at the same time. Unlimited by default.
 
-In most cases "job" means one query to a single local index (plain index or a disk chunk of a real-time index), i.e. if you have a distributed index consisting of 2 local indexes or a real-time index which has 2 disk chunks a search query to either of them will mostly put 2 jobs to the queue and then the thread pool whose size is defined by [threads](Server_settings/Searchd#threads) will process them, but in some cases if the query is too complex more jobs can be created. Changing this setting recommended when [max_connections](Server_settings/Searchd#max_connections) and [thread](Server_settings/Searchd#threads) are not enough to find a balance between the desired performance and load on the server.
+In most cases "job" means one query to a single local index (plain index or a disk chunk of a real-time index), i.e. if you have a distributed index consisting of 2 local indexes or a real-time index which has 2 disk chunks a search query to either of them will mostly put 2 jobs to the queue and then the thread pool whose size is defined by [threads](Server_settings/Searchd.md#threads) will process them, but in some cases if the query is too complex more jobs can be created. Changing this setting recommended when [max_connections](Server_settings/Searchd.md#max_connections) and [thread](Server_settings/Searchd.md#threads) are not enough to find a balance between the desired performance and load on the server.
 
 ### listen_backlog
 
@@ -354,14 +354,12 @@ You can also specify a protocol handler (listener) to be used for connections on
 * **Not specified** - Manticore will accept connections at this port from
   - other Manticore agents (i.e. a remote distributed index)
   - clients via HTTP and HTTPS
-  - binary based Manticore clients
   This is a default setting and mostly you need to specify another `listen` only for connecting via MySQL protocol and for replication.
 * `mysql` - MySQL protocol for connections from MySQL clients. More details on MySQL protocol support can be found in [mysql_protocol_support_and_sphinxql](Connecting_to_the_server/HTTP.md#SQL-over-HTTP) section.
 * `replication` - replication protocol, used for nodes communication. More details can be found in [replication](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) section.
 * `http` - HTTP protocol. Use it to allow only http connections.
 * `https` - HTTPS protocol. It uses OpenSSL library to encrypt HTTP traffic. More details can be found in [SSL](Security/SSL.md) section. Use it to allow only http connections.
 * `sphinx` - Binary protocol. Use it to allow only connections from remote Manticore agents or clients based on binary protocol.
-* `sphinxse` - [SphinxSE](Extensions/SphinxSE) protocol. Use it for connections from SphinxSE.
 
 Adding a `_vip` suffix to a protocol (for instance `mysql_vip` or `http_vip`) makes all connections to that port bypass the thread pool and always forcibly create a new dedicated thread. That's useful for managing in case of a severe overload when the server would either stall or not let you connect via a regular port.
 
@@ -621,7 +619,7 @@ Instance-wide defaults for [ondisk_attrs](Creating_an_index/Local_indexes/Plain_
 ### persistent_connections_limit
 
 <!-- example conf persistent_connections_limit -->
-The maximum # of simultaneous persistent connections to remote [persistent agents](Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md). Each time connecting agent defined under 'agent_persistent' we try to reuse existing connection (if any), or connect and save the connection for the future. However we can't hold unlimited # of such persistent connections, since each one holds a worker on agent size (and finally we'll receive the 'maxed out' error, when all of them are busy). This very directive limits the number. It affects the num of connections to each agent's host, across all distributed indexes.
+The maximum # of simultaneous persistent connections to remote [persistent agents](Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md). Each time connecting agent defined under 'agent_persistent' we try to reuse xisting connection (if any), or connect and save the connection for the future. However we can't hold unlimited # of such persistent connections, since each one holds a worker on agent size (and finally we'll receive the 'maxed out' error, when all of them are busy). This very directive limits the number. It affects the num of connections to each agent's host, across all distributed indexes.
 
 It is reasonable to set the value equal or less than [max_connections](Server_settings/Searchd.md#max_connections) option of the agents.
 
@@ -813,7 +811,7 @@ query_log_mode  = 666
 
 <!-- example max_connections -->
 Maximum number of simultaneous client connections. Unlimited by default.
-When the limit is exceeded you can still connect to the server using [the VIP connection](Connecting_to_the_server/MySQL_protocol#VIP-connection)
+When the limit is exceeded you can still connect to the server using [the VIP connection](Connecting_to_the_server/MySQL_protocol.md#VIP-connection)
 
 <!-- request Example -->
 ```ini

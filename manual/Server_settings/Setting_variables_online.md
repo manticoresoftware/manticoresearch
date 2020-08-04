@@ -67,8 +67,8 @@ Known global server variables are:
 This is very specific and 'hard' variable; filtered out messages will be just dropped and not written into the log at all. Better just filter your log with something like 'grep', in this case you'll have at least full original log as backup.
 
 * `NET_WAIT = {-1 | 0 | POSITIVE_INT_VALUE}` Changes the [net_wait_tm](Server_settings/Searchd.md#net_wait_tm) searchd settings value.
-* `cpustats= {1|0}` Turns on/off [cpu time tracking](Starting_the_server/Manually#searchd-command-line-options).
-* `coredump= {1|0}` Tunes on/off saving a core file or a minidump of the server on crash. More details [here](Starting_the_server/Manually#searchd-command-line-options).
+* `cpustats= {1|0}` Turns on/off [cpu time tracking](Starting_the_server/Manually.md#searchd-command-line-options).
+* `coredump= {1|0}` Tunes on/off saving a core file or a minidump of the server on crash. More details [here](Starting_the_server/Manually.md#searchd-command-line-options).
 
 Examples:
 

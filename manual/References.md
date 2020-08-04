@@ -237,7 +237,7 @@
 ##### Searching and ranking
 * [BM25F()](Functions/Searching_and_ranking_functions.md#BM25F%28%29) - Returns precise BM25F formula value
 * [EXIST()](Functions/Searching_and_ranking_functions.md#EXIST%28%29) - Replaces non-existing columns with default values
-* [GROUP_CONCAT()](Functions/Searching_and_ranking_functions.md#GROUP_CONCAT%28%29) - Produces a comma-separated list of the attribute values of all documents in the group
+* [GROUP_CONCAT()](Searching/Grouping.md#GROUP_CONCAT%28field%29) - Produces a comma-separated list of the attribute values of all documents in the group
 * [HIGHLIGHT()](Searching/Highlighting.md) - Highlights search results
 * [MIN_TOP_SORTVAL()](Functions/Searching_and_ranking_functions.md#MIN_TOP_SORTVAL%28%29) - Returns sort key value of the worst found element in the current top-N matches
 * [MIN_TOP_WEIGHT()](Functions/Searching_and_ranking_functions.md#MIN_TOP_WEIGHT%28%29) - Returns weight of the worst found element in the current top-N matches
@@ -373,7 +373,7 @@ To be put to section `searchd {}` in configuration file:
   * [client_timeout](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#client_timeout) - Maximum time to wait between requests when using persistent connections
   * [collation_libc_locale](Server_settings/Searchd.md#collation_libc_locale) - Server libc locale
   * [collation_server](Server_settings/Searchd.md#collation_server) - Default server collation
-  * [data_dir](Server_settings/Searchd.md#data_dir) - Path to data directory where Manticore stores everything ([RT mode](Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%28))
+  * [data_dir](Server_settings/Searchd.md#data_dir) - Path to data directory where Manticore stores everything ([RT mode](Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29))
   * [docstore_cache_size](Server_settings/Searchd.md#docstore_cache_size) - Maximum size of document blocks from document storage that are held in memory
   * [expansion_limit](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#expansion_limit) - Maximum number of expanded keywords for a single wildcard
   * [grouping_in_utc](Server_settings/Searchd.md#grouping_in_utc) - Turns on using UTC timezone where grouping time fields

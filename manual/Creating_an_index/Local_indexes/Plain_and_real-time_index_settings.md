@@ -96,7 +96,7 @@ Value: comma separated list of **full-text** fields that should be stored. Defau
 
 <!-- example stored_fields -->
 
-A list of fields to be stored in the index. Optional, default is empty (do not store original field text) for [Plain mode](Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain mode%29), but enabled for every field for [RT mode](Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%28).
+A list of fields to be stored in the index. Optional, default is empty (do not store original field text) for [Plain mode](Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain mode%29), but enabled for every field for [RT mode](Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29).
 
 By default, original document text is not stored in the index in the [Plain mode](Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain mode%29). If stored_fields option is set (or RT mode is used), the field's full text is stored in the index. It can be returned with search results.
 
@@ -274,7 +274,7 @@ rt_mem_limit = 512M
 
 RAM chunk size limit. Optional, default is 128M.
 
-RT index keeps some data in memory (so-called RAM chunk) and also maintains a number of on-disk indexes (so-called disk chunks). This directive lets you control the RAM chunk size. Once there’s too much data to keep in RAM, RT index will flush it to disk, activate a newly created disk chunk, and reset the RAM chunk. It can also [trigger binlog cleanup](Logging/Binary_logging#Log-size).
+RT index keeps some data in memory (so-called RAM chunk) and also maintains a number of on-disk indexes (so-called disk chunks). This directive lets you control the RAM chunk size. Once there’s too much data to keep in RAM, RT index will flush it to disk, activate a newly created disk chunk, and reset the RAM chunk.
 
 The limit is pretty strict; RT index should never allocate more memory than it’s limited to. The memory is not preallocated either, hence, specifying 512 MB limit and only inserting 3 MB of data should result in allocating 3 MB, not 512 MB.
 

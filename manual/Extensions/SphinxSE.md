@@ -11,7 +11,7 @@ Obvious SphinxSE applications include:
 
 ## Installing SphinxSE
 
-Unless you are using MariaDB where SphinxSE can be easily enabled you will need to obtain a copy of MySQL sources, prepare those, and then recompile MySQL binary. MySQL sources (mysql-5.x.yy.tar.gz) could be obtained from <http://dev.mysql.com> Web site.
+You will need to obtain a copy of MySQL sources, prepare those, and then recompile MySQL binary. MySQL sources (mysql-5.x.yy.tar.gz) could be obtained from <http://dev.mysql.com> Web site.
 
 ### Compiling MySQL 5.0.x with SphinxSE 
 
@@ -88,35 +88,26 @@ mysql> show engines;
 
 ## Using SphinxSE
 
-<!-- example listen -->
-First of all make sure that in your Manticore Search configuration file you have `[listen](Server_settings/Searchd#listen) = host:port:sphinxse` setting, on the following step you will need these host:port pair.
-
-<!-- request configuration -->
-```ini
-listen = localhost:9313:sphinxse
-```
-<!-- end -->
-
-To search via SphinxSE, you would also need to create special ENGINE=SPHINX "search table", and then `SELECT` from it with full text query put into `WHERE` clause for query column.
+To search via SphinxSE, you would need to create special ENGINE=SPHINX "search table", and then `SELECT` from it with full text query put into `WHERE` clause for query column.
 
 Let's begin with an example create statement and search query:
 
 ```sql
 CREATE TABLE t1
 (
-    id          BIGINT NOT NULL,
+    id          INTEGER UNSIGNED NOT NULL,
     weight      INTEGER NOT NULL,
     query       VARCHAR(3072) NOT NULL,
     group_id    INTEGER,
     INDEX(query)
-) ENGINE=SPHINX CONNECTION="sphinx://localhost:9313/test";
+) ENGINE=SPHINX CONNECTION="sphinx://localhost:9312/test";
 
 SELECT * FROM t1 WHERE query='test it;mode=any';
 ```
 
-First 3 columns of search table *must* have a type `BIGINT` for the 1st column (document id), `INTEGER` or `BIGINT` for the 2nd column (match weight), and `VARCHAR`  or `TEXT` for the 3rd column (your query), respectively. This mapping is fixed; you can not omit any of these three required columns, or move them around, or change types. Also, query column must be indexed; all the others must be kept unindexed. Column names are ignored so you can use arbitrary ones.
+First 3 columns of search table *must* have a types of `INTEGER UNSINGED` or `BIGINT` for the 1st column (document id), `INTEGER` or `BIGINT` for the 2nd column (match weight), and `VARCHAR`  or `TEXT` for the 3rd column (your query), respectively. This mapping is fixed; you can not omit any of these three required columns, or move them around, or change types. Also, query column must be indexed; all the others must be kept unindexed. Column names are ignored so you can use arbitrary ones.
 
-Additional columns must be either `INTEGER`, `TIMESTAMP`, `BIGINT`, `VARCHAR`, or `FLOAT`. They will be bound to attributes provided in Manticore result set by name, so their names must match attribute names specified in `manticore.conf`. If there's no such attribute name in Manticore search results, column will have `NULL` values.
+Additional columns must be either `INTEGER`, `TIMESTAMP`, `BIGINT`, `VARCHAR`, or `FLOAT`. They will be bound to attributes provided in Manticore result set by name, so their names must match attribute names specified in `sphinx.conf`. If there's no such attribute name in Manticore search results, column will have `NULL` values.
 
 Special "virtual" attributes names can also be bound to SphinxSE columns. `_sph_` needs to be used instead of `@` for that. For instance,  to obtain the values of `@groupby`, `@count`, or `@distinct` virtualattributes, use `_sph_groupby`, `_sph_count` or `_sph_distinct` column names, respectively.
 

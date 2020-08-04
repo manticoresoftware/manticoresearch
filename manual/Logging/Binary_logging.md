@@ -4,7 +4,7 @@ Binary logs are essentially a recovery mechanism for [Real-Time](Creating_an_ind
 
 ## Enabling binary logging
 
-In [RT mode](Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%28) binary logging is enabled by default and the binary log files are written inside the `data_dir` folder.
+In [RT mode](Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29) binary logging is enabled by default and the binary log files are written inside the `data_dir` folder.
 
 Binary logging can be disabled by setting `binlog_path` to empty:
 

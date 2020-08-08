@@ -470,7 +470,7 @@ bool MergeIDF ( const CSphString & sFilename, const StrVec_t & dFiles, CSphStrin
 
 //////////////////////////////////////////////////////////////////////////
 static const DWORD META_HEADER_MAGIC = 0x54525053;    ///< my magic 'SPRT' header
-static const DWORD META_VERSION = 13;
+static const DWORD META_VERSION = 17;
 
 const char * AttrType2Str ( ESphAttr eAttrType )
 {
@@ -509,15 +509,13 @@ static void InfoMetaSchemaColumn ( CSphReader &rdInfo,  DWORD uVersion )
 	fprintf ( stdout, "%s", sName.cstr());
 	fprintf ( stdout, " %s", AttrType2Str ((ESphAttr)rdInfo.GetDword ()) );
 
-	if ( uVersion>=5 ) // m_uVersion for searching
+	if ( uVersion<57 ) // m_uVersion for searching
 	{
 		fprintf ( stdout, " (rowitem %d)", rdInfo.GetDword () );
 		fprintf ( stdout, " %d/", rdInfo.GetDword () );
 		fprintf ( stdout, "%d", rdInfo.GetDword () );
 	}
-
-	if ( uVersion>=16 ) // m_uVersion for searching
-		fprintf ( stdout, " payload %d", rdInfo.GetByte () );
+	fprintf ( stdout, " payload %d", rdInfo.GetByte () );
 }
 
 void InfoMetaSchema ( CSphReader &rdMeta, DWORD uVersion )
@@ -526,7 +524,7 @@ void InfoMetaSchema ( CSphReader &rdMeta, DWORD uVersion )
 	int iNumFields = rdMeta.GetDword ();
 	fprintf ( stdout, "\n  Fields: %d", iNumFields );
 
-	for ( int i = 0; i<iNumFields; i++ )
+	for ( int i = 0; i<iNumFields; ++i )
 	{
 		fprintf ( stdout, "\n%02d. ", i + 1 );
 		InfoMetaSchemaColumn ( rdMeta, uVersion );
@@ -537,79 +535,39 @@ void InfoMetaSchema ( CSphReader &rdMeta, DWORD uVersion )
 	for ( int i = 0; i<iNumAttrs; i++ )
 	{
 		fprintf ( stdout, "\n%02d. ", i + 1 );
-		InfoMetaSchemaColumn ( rdMeta, uVersion );
+		InfoMetaSchemaColumn ( rdMeta, 0 );
 	}
 }
 
 void InfoMetaIndexSettings ( CSphReader &tReader, DWORD uVersion )
 {
 	fprintf ( stdout, "\n ======== INDEX SETTINGS ========" );
-	if ( uVersion>=8 )
-	{
-		fprintf ( stdout, "\nMinPrefixLen: %d", tReader.GetDword () );
-		fprintf ( stdout, "\nMinInfixLen: %d", tReader.GetDword () );
-	} else if ( uVersion>=6 )
-	{
-		bool bPrefixesOnly = ( tReader.GetByte ()!=0 );
-		fprintf ( stdout, "\nPrefixes only: %d", bPrefixesOnly );
-		fprintf ( stdout, "\nMinInfix/PrefixLen: %d", tReader.GetDword () );
-	}
-
-	if ( uVersion>=38 )
-		fprintf ( stdout, "\nMaxSubstringLen: %d", tReader.GetDword () );
-
-	if ( uVersion>=9 )
-	{
-		fprintf ( stdout, "\nbHtmlStrip: %d", tReader.GetByte () );
-		fprintf ( stdout, "\nsHtmlIndexAttrs: %s", tReader.GetString ().cstr() );
-		fprintf ( stdout, "\nsHtmlRemoveElements: %s", tReader.GetString ().cstr() );
-	}
-
-	if ( uVersion>=12 )
-		fprintf ( stdout, "\nbIndexExactWords: %d", tReader.GetByte () );
-
-	if ( uVersion>=18 )
-		fprintf ( stdout, "\neHitless: %d", tReader.GetDword () );
-
-	if ( uVersion>=19 )
-		fprintf ( stdout, "\neHitFormat: %d", tReader.GetDword () );
-
-
-	if ( uVersion>=21 )
-		fprintf ( stdout, "\nbIndexSP: %d", tReader.GetByte () );
-
-	if ( uVersion>=22 )
-		fprintf ( stdout, "\nsZones: %s", tReader.GetString ().cstr () );
-
-	if ( uVersion>=23 )
-	{
-		fprintf ( stdout, "\niBoundaryStep: %d", tReader.GetDword () );
-		fprintf ( stdout, "\niStopwordStep: %d", tReader.GetDword () );
-	}
-
-	if ( uVersion>=28 )
-		fprintf ( stdout, "\niOvershortStep: %d", tReader.GetDword () );
-
-	if ( uVersion>=30 )
-		fprintf ( stdout, "\niEmbeddedLimit: %d", tReader.GetDword () );
-
-	if ( uVersion>=32 )
-	{
-		fprintf ( stdout, "\neBigramIndex: %d", tReader.GetByte () );
-		fprintf ( stdout, "\nsBigramWords: %s", tReader.GetString ().cstr () );
-	}
-
-	if ( uVersion>=35 )
-		fprintf ( stdout, "\nbIndexFieldLens: %d", tReader.GetByte () );
-
-	if ( uVersion>=39 )
-	{
-		fprintf ( stdout, "\nePreprocessor: %d", tReader.GetByte () );
-		tReader.GetString();	// was: RLP context
-	}
-
-	if ( uVersion>=41 )
-		fprintf ( stdout, "\nsIndexTokenFilter: %s", tReader.GetString ().cstr () );
+	fprintf ( stdout, "\nMinPrefixLen: %d", tReader.GetDword () );
+	fprintf ( stdout, "\nMinInfixLen: %d", tReader.GetDword () );
+	fprintf ( stdout, "\nMaxSubstringLen: %d", tReader.GetDword () );
+	fprintf ( stdout, "\nbHtmlStrip: %d", tReader.GetByte () );
+	fprintf ( stdout, "\nsHtmlIndexAttrs: %s", tReader.GetString ().cstr() );
+	fprintf ( stdout, "\nsHtmlRemoveElements: %s", tReader.GetString ().cstr() );
+	fprintf ( stdout, "\nbIndexExactWords: %d", tReader.GetByte () );
+	fprintf ( stdout, "\neHitless: %d", tReader.GetDword () );
+	fprintf ( stdout, "\neHitFormat: %d", tReader.GetDword () );
+	fprintf ( stdout, "\nbIndexSP: %d", tReader.GetByte () );
+	fprintf ( stdout, "\nsZones: %s", tReader.GetString ().cstr () );
+	fprintf ( stdout, "\niBoundaryStep: %d", tReader.GetDword () );
+	fprintf ( stdout, "\niStopwordStep: %d", tReader.GetDword () );
+	fprintf ( stdout, "\niOvershortStep: %d", tReader.GetDword () );
+	fprintf ( stdout, "\niEmbeddedLimit: %d", tReader.GetDword () );
+	fprintf ( stdout, "\neBigramIndex: %d", tReader.GetByte () );
+	fprintf ( stdout, "\nsBigramWords: %s", tReader.GetString ().cstr () );
+	fprintf ( stdout, "\nbIndexFieldLens: %d", tReader.GetByte () );
+	fprintf ( stdout, "\nePreprocessor: %d", tReader.GetByte () );
+	tReader.GetString();	// was: RLP context
+	fprintf ( stdout, "\nsIndexTokenFilter: %s", tReader.GetString ().cstr () );
+	fprintf ( stdout, "\ntBlobUpdateSpace: " INT64_FMT, tReader.GetOffset () );
+	if ( uVersion>=56 )
+		fprintf ( stdout, "\niSkiplistBlockSize: %d", tReader.GetDword () );
+	if ( uVersion>=60 )
+		fprintf ( stdout, "\nsHitlessFiles: %s", tReader.GetString ().cstr () );
 }
 
 static void InfoMetaFileInfo ( CSphReader &tReader )
@@ -625,8 +583,6 @@ bool InfoMetaTokenizerSettings ( CSphReader &tReader, DWORD uVersion)
 {
 	fprintf ( stdout, "\n ======== TOKENIZER SETTINGS ========" );
 
-	if ( uVersion<9 )
-		return true;
 
 	int m_iType = tReader.GetByte ();
 	fprintf ( stdout, "\niType: %d", m_iType );
@@ -639,8 +595,7 @@ bool InfoMetaTokenizerSettings ( CSphReader &tReader, DWORD uVersion)
 	fprintf ( stdout, "\nsCaseFolding: %s", tReader.GetString ().cstr () );
 	fprintf ( stdout, "\niMinWordLen: %d", tReader.GetDword() );
 
-	if ( uVersion>=30 )
-	{
+
 		bool bsyn = !!tReader.GetByte ();
 		fprintf ( stdout, "\nbEmbeddedSynonyms: %d", bsyn );
 		if ( bsyn )
@@ -650,7 +605,6 @@ bool InfoMetaTokenizerSettings ( CSphReader &tReader, DWORD uVersion)
 			for ( int i=0; i<nSynonyms; ++i)
 				fprintf ( stdout, "\nEmbedded Syn(%d): %s", i, tReader.GetString ().cstr () );
 		}
-	}
 
 	fprintf ( stdout, "\nsSynonymsFile: %s", tReader.GetString ().cstr () );
 	InfoMetaFileInfo ( tReader );
@@ -658,90 +612,67 @@ bool InfoMetaTokenizerSettings ( CSphReader &tReader, DWORD uVersion)
 	fprintf ( stdout, "\nsIgnoreChars : %s", tReader.GetString ().cstr () );
 	fprintf ( stdout, "\niNgramLen : %d", tReader.GetDword ());
 	fprintf ( stdout, "\nsNgramChars : %s", tReader.GetString ().cstr () );
-	if ( uVersion>=15 )
-		fprintf ( stdout, "\nsBlendChars : %s", tReader.GetString ().cstr () );
-	if ( uVersion>=24 )
-		fprintf ( stdout, "\nsBlendMode : %s", tReader.GetString ().cstr () );
+	fprintf ( stdout, "\nsBlendChars : %s", tReader.GetString ().cstr () );
+	fprintf ( stdout, "\nsBlendMode : %s", tReader.GetString ().cstr () );
 
 	return true;
 }
 
-void InfoMetaDictionarySettings ( CSphReader &tReader, DWORD uVersion )
+void InfoMetaDictionarySettings ( CSphReader &tReader )
 {
 	fprintf ( stdout, "\n ======== DICTIONARY SETTINGS ========" );
 
-	if ( uVersion<9 )
-		return;
-
 	fprintf ( stdout, "\nsMorphology : %s", tReader.GetString ().cstr () );
-	if ( uVersion>=43 )
-		fprintf ( stdout, "\nsMorphFields : %s", tReader.GetString ().cstr () );
+	fprintf ( stdout, "\nsMorphFields : %s", tReader.GetString ().cstr () );
 
-
-	if ( uVersion>=30 )
+	bool bEmbeddedStopwords = !!tReader.GetByte ();
+	fprintf ( stdout, "\nbEmbeddedStopwords : %d", bEmbeddedStopwords );
+	if ( bEmbeddedStopwords )
 	{
-		bool bEmbeddedStopwords = !!tReader.GetByte ();
-		fprintf ( stdout, "\nbEmbeddedStopwords : %d", bEmbeddedStopwords );
-		if ( bEmbeddedStopwords )
-		{
-			int nStopwords = ( int ) tReader.GetDword ();
-			fprintf ( stdout, "\nnStopwords : %d", nStopwords );
-			for ( int i = 0; i<nStopwords; ++i )
-				fprintf ( stdout, "\nEmbedded Stp(%d): " INT64_FMT, i, tReader.UnzipOffset () );
-		}
+		int nStopwords = ( int ) tReader.GetDword ();
+		fprintf ( stdout, "\nnStopwords : %d", nStopwords );
+		for ( int i = 0; i<nStopwords; ++i )
+			fprintf ( stdout, "\nEmbedded Stp(%d): " INT64_FMT, i, tReader.UnzipOffset () );
 	}
+
 
 	fprintf ( stdout, "\nsStopwords : %s", tReader.GetString ().cstr () );
 
 	int nFiles = tReader.GetDword ();
 	fprintf ( stdout, "\nnFiles : %d", nFiles );
 
-	for ( int i = 0; i<nFiles; i++ )
+	for ( int i = 0; i<nFiles; ++i )
 	{
 		fprintf ( stdout, "\nFile %d: %s", i+1, tReader.GetString ().cstr () );
 		InfoMetaFileInfo ( tReader );
 	}
 
-	if ( uVersion>=30 )
-	{
-		bool bEmbeddedWordforms = !!tReader.GetByte ();
-		fprintf ( stdout, "\nbEmbeddedWordforms : %d", bEmbeddedWordforms );
+	bool bEmbeddedWordforms = !!tReader.GetByte ();
+	fprintf ( stdout, "\nbEmbeddedWordforms : %d", bEmbeddedWordforms );
 
-		if ( bEmbeddedWordforms )
-		{
-			int nWordforms = ( int ) tReader.GetDword ();
-			fprintf ( stdout, "\nnWordforms : %d", nWordforms );
-			for ( int i = 0; i<nWordforms; ++i )
-				fprintf ( stdout, "\nEmbedded Wrd(%d): %s", i, tReader.GetString ().cstr() );
-		}
+	if ( bEmbeddedWordforms )
+	{
+		int nWordforms = ( int ) tReader.GetDword ();
+		fprintf ( stdout, "\nnWordforms : %d", nWordforms );
+		for ( int i = 0; i<nWordforms; ++i )
+			fprintf ( stdout, "\nEmbedded Wrd(%d): %s", i, tReader.GetString ().cstr() );
 	}
 
-	int iWrdForms = 1;
-	if ( uVersion>=29 )
-	{
-		iWrdForms = tReader.GetDword ();
-		fprintf ( stdout, "\niWordForms : %d", iWrdForms );
-	}
 
-	for ( int i = 0; i<iWrdForms; i++ )
+	int iWrdForms = tReader.GetDword ();
+	fprintf ( stdout, "\niWordForms : %d", iWrdForms );
+
+
+	for ( int i = 0; i<iWrdForms; ++i )
 	{
 		fprintf ( stdout, "\nFile %d: %s", i + 1, tReader.GetString ().cstr () );
 		InfoMetaFileInfo ( tReader );
 	}
 
-	if ( uVersion>=13 )
-		fprintf ( stdout, "\niMinStemmingLen : %d", tReader.GetDword () );
-
-	if ( uVersion>=21 )
-	{
-		fprintf ( stdout, "\nbWordDict : %d", tReader.GetByte () );
-	}
-
-	if ( uVersion>=36 )
-		fprintf ( stdout, "\nbStopwordsUnstemmed : %d", tReader.GetByte () );
-
-	if ( uVersion>=37 )
-		fprintf ( stdout, "\nsMorphFingerprint : %s", tReader.GetString ().cstr() );
+	fprintf ( stdout, "\niMinStemmingLen : %d", tReader.GetDword () );
+	fprintf ( stdout, "\nbWordDict : %d", tReader.GetByte () );
+	fprintf ( stdout, "\nbStopwordsUnstemmed : %d", tReader.GetByte () );
+	fprintf ( stdout, "\nsMorphFingerprint : %s", tReader.GetString ().cstr() );
 
 }
 
@@ -756,8 +687,6 @@ void InfoMetaFieldFilterSettings ( CSphReader &tReader )
 
 	for (int i=0; i<nRegexps; ++i)
 		fprintf (stdout, "\n Filter(%d) = %s", i, tReader.GetString ().cstr());
-
-	fprintf(stdout, "\n Deprecated utf-8 flag = %d", tReader.GetByte ());
 }
 
 void InfoMeta ( const CSphString &sMeta )
@@ -785,56 +714,36 @@ void InfoMeta ( const CSphString &sMeta )
 		fprintf ( stdout, "%s is v.%d, binary is v.%d", sMeta.cstr (), uVersion, META_VERSION );
 		return;
 	}
-	dwFoo = rdMeta.GetDword (); // disk chunks
-	fprintf ( stdout, "\ndisk chunks: %d", dwFoo );
-	if ( uVersion>=6 )
-	{
-		fprintf ( stdout, "\ndisk base: %d", rdMeta.GetDword () );
-	} else
-		fprintf ( stdout, "\ndisk base assumed 0 (not written in this ver of meta)" );
+
 	fprintf ( stdout, "\nTotal documents: %d", rdMeta.GetDword());
 	fprintf ( stdout, "\nTotal bytes: " INT64_FMT, rdMeta.GetOffset () );
-	if ( uVersion>=2 )
-		fprintf ( stdout, "\nTID: " INT64_FMT, rdMeta.GetOffset () );
+	fprintf ( stdout, "\nTID: " INT64_FMT, rdMeta.GetOffset () );
 
-	if ( uVersion>=4 )
-	{
-		DWORD uSettingsVer = rdMeta.GetDword ();
-		fprintf (stdout, "\n Settings ver: %d", uSettingsVer );
-		InfoMetaSchema(rdMeta, uSettingsVer);
-		InfoMetaIndexSettings(rdMeta, uSettingsVer);
-		InfoMetaTokenizerSettings (rdMeta, uSettingsVer);
-		InfoMetaDictionarySettings(rdMeta,uSettingsVer);
-	}
 
-	if ( uVersion>=5 )
-	{
-		fprintf ( stdout, "\niWordsCheckpoint: %d", rdMeta.GetDword () );
-	}
+	DWORD uSettingsVer = rdMeta.GetDword ();
+	fprintf (stdout, "\n Settings ver: %d", uSettingsVer );
+	InfoMetaSchema(rdMeta, uSettingsVer);
+	InfoMetaIndexSettings(rdMeta, uSettingsVer);
+	InfoMetaTokenizerSettings (rdMeta, uSettingsVer);
+	InfoMetaDictionarySettings(rdMeta);
 
-	if ( uVersion>=7 )
-	{
-		fprintf ( stdout, "\niMaxCodepointLength: %d", rdMeta.GetDword () );
-		fprintf ( stdout, "\niBloomKeyLen: %d", rdMeta.GetByte () );
-		fprintf ( stdout, "\niBloomHashesCount: %d", rdMeta.GetByte () );
-	}
+	fprintf ( stdout, "\niWordsCheckpoint: %d", rdMeta.GetDword () );
+	fprintf ( stdout, "\niMaxCodepointLength: %d", rdMeta.GetDword () );
+	fprintf ( stdout, "\niBloomKeyLen: %d", rdMeta.GetByte () );
+	fprintf ( stdout, "\niBloomHashesCount: %d", rdMeta.GetByte () );
 
-	if ( uVersion>=11 )
-	{
-		InfoMetaFieldFilterSettings ( rdMeta );
-	}
+	InfoMetaFieldFilterSettings ( rdMeta );
 
-	if ( uVersion>=12 )
-	{
-		CSphFixedVector<int> dChunkNames ( 0 );
-		int iLen = ( int ) rdMeta.GetDword ();
-		fprintf ( stdout, "\nNum of Chunknames: %d", iLen );
-		dChunkNames.Reset ( iLen );
-		rdMeta.GetBytes ( dChunkNames.Begin (), iLen * sizeof ( int ) );
-		for ( int nm : dChunkNames)
-			fprintf (stdout, "\n %d", nm);
-	}
+	CSphFixedVector<int> dChunkNames ( 0 );
+	int iLen = ( int ) rdMeta.GetDword ();
+	fprintf ( stdout, "\nNum of Chunknames: %d", iLen );
+	dChunkNames.Reset ( iLen );
+	rdMeta.GetBytes ( dChunkNames.Begin (), iLen * sizeof ( int ) );
+	for ( int nm : dChunkNames)
+		fprintf (stdout, "\n %d", nm);
 
+	if ( uVersion>=17 )
+		fprintf ( stdout, "\nSoft RAM limit: " INT64_FMT, rdMeta.GetOffset () );
 }
 
 

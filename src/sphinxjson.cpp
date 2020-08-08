@@ -200,79 +200,63 @@ struct JsonNode_t
 };
 #define YYSTYPE JsonNode_t
 
-// store, pack, unpack, bloom, etc.
-class BsonHelper : ISphNoncopyable
+namespace // static unnamed
 {
-public:
-	CSphVector<BYTE> &m_dBsonBuffer;
-
-	BsonHelper ( CSphVector<BYTE> & dBuffer )
-	: m_dBsonBuffer ( dBuffer )
+	void StoreInt ( CSphVector<BYTE> & dBsonBuffer, int v )
 	{
-		// reserve 4 bytes for Bloom mask
-		StoreInt ( 0 );
+		StoreNUM32LE ( dBsonBuffer.AddN ( sizeof ( DWORD ) ), v );
 	}
 
-	void StoreInt ( int v )
+	void StoreBigint ( CSphVector<BYTE> & dBsonBuffer, int64_t v )
 	{
-		StoreNUM32LE ( m_dBsonBuffer.AddN ( sizeof ( DWORD ) ), v );
+		StoreBigintLE ( dBsonBuffer.AddN ( sizeof ( int64_t ) ), v );
 	}
 
-	void StoreBigint ( int64_t v )
-	{
-		StoreBigintLE ( m_dBsonBuffer.AddN ( sizeof ( int64_t ) ), v );
-	}
-
-	inline void Add ( BYTE b )
-	{
-		m_dBsonBuffer.Add ( b );
-	}
-
-	inline void PackStr ( const char * s, int iLen )
-	{
-		assert ( iLen<=0x00FFFFFF );
-		iLen = Min ( iLen, 0x00ffffff );
-		PackInt ( iLen );
-		auto * pOut = m_dBsonBuffer.AddN ( iLen );
-		if ( iLen )
-			memmove ( pOut, s, iLen );
-	}
-
-	inline void PackStr ( const char * s )
-	{
-		PackStr ( s, (int) strlen(s));
-	}
-
-	void PackInt ( DWORD v )
+	void PackInt ( CSphVector<BYTE> & dBsonBuffer, DWORD v )
 	{
 //		assert ( v<16777216 ); // strings over 16M bytes and arrays over 16M entries are not supported
 		if ( v<0x000000FC )
 		{
-			m_dBsonBuffer.Add ( BYTE ( v ) );
+			dBsonBuffer.Add ( BYTE ( v ) );
 		} else if ( v<0x00010000 )
 		{
-			m_dBsonBuffer.Add ( 252 );
-			m_dBsonBuffer.Add ( BYTE ( v & 255 ) );
-			m_dBsonBuffer.Add ( BYTE ( v >> 8 ) );
+			dBsonBuffer.Add ( 252 );
+			dBsonBuffer.Add ( BYTE ( v & 255 ) );
+			dBsonBuffer.Add ( BYTE ( v >> 8 ) );
 		} else if ( v<0x1000000 )
 		{
-			m_dBsonBuffer.Add ( 253 );
-			m_dBsonBuffer.Add ( BYTE ( v & 255 ) );
-			m_dBsonBuffer.Add ( BYTE ( ( v >> 8 ) & 255 ) );
-			m_dBsonBuffer.Add ( BYTE ( v >> 16 ) );
+			dBsonBuffer.Add ( 253 );
+			dBsonBuffer.Add ( BYTE ( v & 255 ) );
+			dBsonBuffer.Add ( BYTE ( ( v >> 8 ) & 255 ) );
+			dBsonBuffer.Add ( BYTE ( v >> 16 ) );
 		} else
 		{
-			m_dBsonBuffer.Add ( 254 );
-			StoreInt ( v );
+			dBsonBuffer.Add ( 254 );
+			StoreInt ( dBsonBuffer, v );
 		}
 	}
 
-	BYTE * PackStrUnescaped ( const char * s, int iLen )
+	inline void PackStr ( CSphVector<BYTE> & dBsonBuffer, const char * s, int iLen )
+	{
+		assert ( iLen<=0x00FFFFFF );
+		iLen = Min ( iLen, 0x00ffffff );
+		PackInt ( dBsonBuffer, iLen );
+		auto * pOut = dBsonBuffer.AddN ( iLen );
+		if ( iLen )
+			memmove ( pOut, s, iLen );
+	}
+
+	inline void PackStr ( CSphVector<BYTE> & dBsonBuffer, const char * s )
+	{
+		PackStr ( dBsonBuffer, s, (int) strlen(s));
+	}
+
+	BYTE * PackStrUnescaped ( CSphVector<BYTE> & dBsonBuffer, const char * s, int iLen )
 	{
 		iLen = Min ( iLen, 0x00ffffff );
 		auto iLenSize = PackedLen ( iLen );
-		int iOfs = m_dBsonBuffer.GetLength ();
-		auto * pOut = m_dBsonBuffer.AddN ( iLen + iLenSize ) + iLenSize;
+		int iOfs = dBsonBuffer.GetLength ();
+		auto * pOut = dBsonBuffer.AddN ( iLen + iLenSize ) + iLenSize;
 		if ( iLen )
 			iLen = JsonUnescape ( ( char * ) pOut, s, iLen );
 
@@ -282,24 +266,24 @@ public:
 			assert ( iLenSize>0 && "Strange, unescaped json need more place than escaped" );
 			memmove ( pOut - iLenSize, pOut, iLen );
 		}
-		m_dBsonBuffer.Resize ( iOfs );
-		PackInt ( iLen );
-		return m_dBsonBuffer.AddN ( iLen );
+		dBsonBuffer.Resize ( iOfs );
+		PackInt ( dBsonBuffer, iLen );
+		return dBsonBuffer.AddN ( iLen );
 	}
 
-	inline DWORD JsonKeyMask ( const BlobLocator_t &sKey )
+	inline DWORD JsonKeyMask ( CSphVector<BYTE> & dBsonBuffer, const BlobLocator_t &sKey )
 	{
-		return sphJsonKeyMask ( ( const char * ) &m_dBsonBuffer[sKey.m_iStart], sKey.m_iLen );
+		return sphJsonKeyMask ( ( const char * ) &dBsonBuffer[sKey.m_iStart], sKey.m_iLen );
 	}
 
-	void StoreMask ( int iOfs, DWORD uMask )
+	void StoreMask ( CSphVector<BYTE> & dBsonBuffer, int iOfs, DWORD uMask )
 	{
 #if UNALIGNED_RAM_ACCESS && USE_LITTLE_ENDIAN
-		*( DWORD * ) ( m_dBsonBuffer.begin () + iOfs ) = uMask;
+		*( DWORD * ) ( dBsonBuffer.begin () + iOfs ) = uMask;
 #else
 		for ( int i=0; i<4; ++i )
 		{
-			m_dBsonBuffer[iOfs+i] = BYTE ( uMask & 0xff );
+			dBsonBuffer[iOfs+i] = BYTE ( uMask & 0xff );
 			uMask >>= 8;
 		}
 #endif
@@ -308,34 +292,34 @@ public:
 
 	/// reserve a single byte for a yet-unknown length, to be written later with PackSize()
 	/// returns its offset, to be used by PackSize() to both calculate and stored the length
-	int ReserveSize ()
+	int ReserveSize ( CSphVector<BYTE> & dBsonBuffer )
 	{
-		int iOfs = m_dBsonBuffer.GetLength ();
-		m_dBsonBuffer.Resize ( iOfs + 1 );
+		int iOfs = dBsonBuffer.GetLength ();
+		dBsonBuffer.Resize ( iOfs + 1 );
 		return iOfs;
 	}
 
 	/// compute current length from the offset reserved with ReserveSize(), and pack the value back there
 	/// in most cases that single byte is enough; if not, we make room by memmove()ing the data
-	void PackSize ( int iOfs )
+	void PackSize ( CSphVector<BYTE> & dBsonBuffer, int iOfs )
 	{
-		int iSize = m_dBsonBuffer.GetLength () - iOfs - 1;
+		int iSize = dBsonBuffer.GetLength () - iOfs - 1;
 		int iPackLen = PackedLen ( iSize );
 
 		if ( iPackLen!=1 )
 		{
-			m_dBsonBuffer.Resize ( iOfs + iPackLen + iSize );
-			memmove ( m_dBsonBuffer.Begin () + iOfs + iPackLen, m_dBsonBuffer.Begin () + iOfs + 1, iSize );
+			dBsonBuffer.Resize ( iOfs + iPackLen + iSize );
+			memmove ( dBsonBuffer.Begin () + iOfs + iPackLen, dBsonBuffer.Begin () + iOfs + 1, iSize );
 		}
 
-		m_dBsonBuffer.Resize ( iOfs );
-		PackInt ( iSize );
-		m_dBsonBuffer.AddN ( iSize );
+		dBsonBuffer.Resize ( iOfs );
+		PackInt ( dBsonBuffer, iSize );
+		dBsonBuffer.AddN ( iSize );
 	}
 
-	void Finalize ()
+	void Finalize ( CSphVector<BYTE> & dBsonBuffer )
 	{
-		m_dBsonBuffer.Add ( JSON_EOF );
+		dBsonBuffer.Add ( JSON_EOF );
 	}
 
 	void DebugIndent ( int iLevel )
@@ -463,15 +447,134 @@ public:
 		*ppData = p;
 	}
 
-	void DebugDump ( const BYTE * p )
+	void DebugDump ( CSphVector<BYTE> & dBsonBuffer, const BYTE * p )
 	{
 		JsonEscapedBuilder dOut;
-		sphJsonFormat ( dOut, m_dBsonBuffer.Begin () );
+		sphJsonFormat ( dOut, dBsonBuffer.Begin () );
 		printf ( "sphJsonFormat: %s\n", dOut.cstr () );
-		printf ( "Blob size: %d bytes\n", m_dBsonBuffer.GetLength () );
+		printf ( "Blob size: %d bytes\n", dBsonBuffer.GetLength () );
 		ESphJsonType eType = sphJsonFindFirst ( &p );
 		DebugDump ( eType, &p, 0 );
 		printf ( "\n" );
+	}
+
+	void AddStringData ( CSphVector<BYTE> & dBson, const VecTraits_T<CSphString> & dData )
+	{
+		auto iStartPos = ReserveSize ( dBson );
+		PackInt ( dBson, dData.GetLength () );
+		dData.Apply ( [&dBson] ( const CSphString & s ) { PackStr ( dBson, s.cstr () ); } );
+		PackSize ( dBson, iStartPos );
+	}
+
+	void AddStringData ( CSphVector<BYTE> & dBson, const VecTraits_T<const char *> & dData )
+	{
+		auto iStartPos = ReserveSize ( dBson );
+		PackInt ( dBson, dData.GetLength () );
+		dData.Apply ( [&dBson] ( const char * sz ) { PackStr ( dBson, sz ); } );
+		PackSize ( dBson, iStartPos );
+	}
+
+	void AddIntData ( CSphVector<BYTE> & dBson, const VecTraits_T<int> & dData )
+	{
+		PackInt ( dBson, dData.GetLength () );
+		dData.Apply ( [&dBson] ( int i ) { StoreInt ( dBson, i ); } );
+	}
+
+	void AddIntData ( CSphVector<BYTE> & dBson, const VecTraits_T<int64_t> & dData )
+	{
+		PackInt ( dBson, dData.GetLength () );
+		dData.Apply ( [&dBson] ( int64_t i ) { StoreInt ( dBson, int ( i ) ); } );
+	}
+
+	void AddBigintData ( CSphVector<BYTE> & dBson, const VecTraits_T<int64_t> & dData )
+	{
+		PackInt ( dBson, dData.GetLength () );
+		dData.Apply ( [&dBson] ( int64_t i ) { StoreBigint ( dBson, i ); } );
+	}
+
+	void AddDoubleData ( CSphVector<BYTE> & dBson, const VecTraits_T<double> & dData )
+	{
+		PackInt ( dBson, dData.GetLength () );
+		dData.Apply ( [&dBson] ( double f ) { StoreBigint ( dBson, sphD2QW ( f ) ); } );
+	}
+}
+
+// store, pack, unpack, bloom, etc.
+class BsonHelper : ISphNoncopyable
+{
+public:
+	CSphVector<BYTE> &m_dBsonBuffer;
+
+	BsonHelper ( CSphVector<BYTE> & dBuffer )
+	: m_dBsonBuffer ( dBuffer )
+	{
+		// reserve 4 bytes for Bloom mask
+		StoreInt ( 0 );
+	}
+
+	inline void StoreInt ( int v )
+	{
+		::StoreInt ( m_dBsonBuffer, v );
+	}
+
+	inline void StoreBigint ( int64_t v )
+	{
+		::StoreBigint ( m_dBsonBuffer, v );
+	}
+
+	inline void Add ( BYTE b )
+	{
+		m_dBsonBuffer.Add ( b );
+	}
+
+	inline void PackStr ( const char * s, int iLen )
+	{
+		::PackStr ( m_dBsonBuffer, s, iLen );
+	}
+
+	inline void PackStr ( const char * s )
+	{
+		::PackStr ( m_dBsonBuffer, s );
+	}
+
+	inline void PackInt ( DWORD v )
+	{
+		::PackInt ( m_dBsonBuffer, v );
+	}
+
+	inline BYTE * PackStrUnescaped ( const char * s, int iLen )
+	{
+		return ::PackStrUnescaped ( m_dBsonBuffer, s, iLen );
+	}
+
+	inline DWORD JsonKeyMask ( const BlobLocator_t &sKey )
+	{
+		return ::JsonKeyMask ( m_dBsonBuffer, sKey );
+	}
+
+	inline void StoreMask ( int iOfs, DWORD uMask )
+	{
+		::StoreMask ( m_dBsonBuffer, iOfs, uMask );
+	}
+
+	inline int ReserveSize ()
+	{
+		return ::ReserveSize ( m_dBsonBuffer );
+	}
+
+	inline void PackSize ( int iOfs )
+	{
+		::PackSize ( m_dBsonBuffer, iOfs );
+	}
+
+	inline void Finalize ()
+	{
+		::Finalize ( m_dBsonBuffer );
+	}
+
+	inline void DebugDump ( const BYTE * p )
+	{
+		::DebugDump ( m_dBsonBuffer, p );
 	}
 };
 
@@ -1973,7 +2076,7 @@ CSphString bson::String ( const NodeHandle_t &tLocator )
 	return sResult;
 }
 
-void bson::ForEach ( const NodeHandle_t &tLocator, Action_f fAction )
+void bson::ForEach ( const NodeHandle_t &tLocator, Action_f&& fAction )
 {
 	const BYTE * p = tLocator.first;
 	switch ( tLocator.second )
@@ -2021,7 +2124,7 @@ void bson::ForEach ( const NodeHandle_t &tLocator, Action_f fAction )
 	}
 }
 
-void bson::ForEach ( const NodeHandle_t &tLocator, NamedAction_f fAction )
+void bson::ForEach ( const NodeHandle_t &tLocator, NamedAction_f&& fAction )
 {
 	const BYTE * p = tLocator.first;
 	switch ( tLocator.second )
@@ -2063,7 +2166,7 @@ void bson::ForEach ( const NodeHandle_t &tLocator, NamedAction_f fAction )
 			int iStrLen = sphJsonUnpackInt ( &p );
 			CSphString sName ( ( const char * ) p, iStrLen );
 			p += iStrLen; // skip name
-			fAction ( sName, { p, eType } );
+			fAction ( std::move (sName), { p, eType } );
 			sphJsonSkipNode ( eType, &p );
 		}
 	}
@@ -2071,7 +2174,7 @@ void bson::ForEach ( const NodeHandle_t &tLocator, NamedAction_f fAction )
 	}
 }
 
-void bson::ForSome ( const NodeHandle_t &tLocator, CondAction_f fAction )
+void bson::ForSome ( const NodeHandle_t &tLocator, CondAction_f&& fAction )
 {
 	const BYTE * p = tLocator.first;
 	switch ( tLocator.second )
@@ -2122,7 +2225,7 @@ void bson::ForSome ( const NodeHandle_t &tLocator, CondAction_f fAction )
 	}
 }
 
-void bson::ForSome ( const NodeHandle_t &tLocator, CondNamedAction_f fAction )
+void bson::ForSome ( const NodeHandle_t &tLocator, CondNamedAction_f&& fAction )
 {
 	const BYTE * p = tLocator.first;
 	switch ( tLocator.second )
@@ -2166,7 +2269,7 @@ void bson::ForSome ( const NodeHandle_t &tLocator, CondNamedAction_f fAction )
 			int iStrLen = sphJsonUnpackInt ( &p );
 			CSphString sName ( ( const char * ) p, iStrLen );
 			p += iStrLen; // skip name
-			if ( !fAction ( sName, { p, eType } ) )
+			if ( !fAction ( std::move (sName), { p, eType } ) )
 				return;
 			sphJsonSkipNode ( eType, &p );
 		}
@@ -2468,6 +2571,94 @@ bool Bson_c::HasAnyOf ( int iNames, ... ) const
 			auto iLen = (int) strlen ( sName );
 			if ( iStrLen==iLen && !memcmp ( p, sName, iStrLen ) )
 				return true;
+		}
+		p += iStrLen;
+		sphJsonSkipNode ( eType, &p );
+	}
+}
+
+bool Bson_c::HasAnyOf ( std::initializer_list<const char *> dNames ) const
+{
+	// access by key available only for 'root' or 'object' types
+	if ( !IsAssoc () )
+		return false;
+
+	const BYTE * p = m_dData.first;
+	if ( m_dData.second==JSON_OBJECT )
+		sphJsonUnpackInt ( &p );
+
+	// fast reject by bloom filter
+	DWORD uNodeMask = sphGetDword ( p );
+	bool bMayBe = false;
+	for ( const char * sName : dNames )
+	{
+		auto iLen = (int) strlen ( sName );
+		auto uMask = sphJsonKeyMask ( sName, iLen );
+		bMayBe |= ( ( uNodeMask & uMask )==uMask );
+		if ( bMayBe )
+			break;
+	}
+
+	if ( !bMayBe ) // all bloom tries rejected
+		return false;
+
+	p += 4; // skip the bloom
+	while ( true )
+	{
+		auto eType = (ESphJsonType) *p++;
+		if ( eType==JSON_EOF )
+			return false;
+		int iStrLen = sphJsonUnpackInt ( &p );
+		for ( const char * sName : dNames )
+		{
+			auto iLen = (int) strlen ( sName );
+			if ( iStrLen==iLen && !memcmp ( p, sName, iStrLen ) )
+				return true;
+		}
+		p += iStrLen;
+		sphJsonSkipNode ( eType, &p );
+	}
+}
+
+std::pair<int, NodeHandle_t> Bson_c::GetFirstOf ( std::initializer_list<const char *> dNames ) const
+{
+	// access by key available only for 'root' or 'object' types
+	if ( !IsAssoc () )
+		return { -1, nullnode };
+
+	const BYTE * p = m_dData.first;
+	if ( m_dData.second==JSON_OBJECT )
+		sphJsonUnpackInt ( &p );
+
+	// fast reject by bloom filter
+	DWORD uNodeMask = sphGetDword ( p );
+	bool bMayBe = false;
+	for ( const char * sName : dNames )
+	{
+		auto iLen = (int) strlen ( sName );
+		auto uMask = sphJsonKeyMask ( sName, iLen );
+		bMayBe |= ( ( uNodeMask & uMask )==uMask );
+		if ( bMayBe )
+			break;
+	}
+
+	if ( !bMayBe ) // all bloom tries rejected
+		return { -1, nullnode };
+
+	p += 4; // skip the bloom
+	while ( true )
+	{
+		auto eType = (ESphJsonType) *p++;
+		if ( eType==JSON_EOF )
+			return { -1, nullnode };
+		int iStrLen = sphJsonUnpackInt ( &p );
+		int iIdx = 0;
+		for ( const char * sName : dNames )
+		{
+			auto iLen = (int) strlen ( sName );
+			if ( iStrLen==iLen && !memcmp ( p, sName, iStrLen ) )
+				return { iIdx, { p+iStrLen, eType } };
+			++iIdx;
 		}
 		p += iStrLen;
 		sphJsonSkipNode ( eType, &p );
@@ -3322,3 +3513,360 @@ const char * JsonTypeName ( ESphJsonType eType )
 	assert ( eType>=JSON_EOF && eType<JSON_TOTAL );
 	return g_dTypeNames[eType];
 }
+
+void bson::Assoc_c::StartTypedNode ( ESphJsonType eType, const char * szName )
+{
+	m_uBloomMask |= KeyMask ( szName );
+	m_dBson.Add ( eType );
+
+	if ( szName )
+		PackStr ( m_dBson, szName );
+}
+
+void bson::Assoc_c::AddInt ( const char * szName, int64_t iValue )
+{
+	if ( int ( iValue )==iValue )
+	{
+		StartTypedNode ( JSON_INT32, szName );
+		StoreInt ( m_dBson, (int) iValue );
+	} else
+	{
+		StartTypedNode ( JSON_INT64, szName );
+		StoreBigint ( m_dBson, iValue );
+	}
+}
+
+void bson::Assoc_c::AddDouble ( const char * szName, double fValue )
+{
+	StartTypedNode ( JSON_DOUBLE, szName );
+	StoreBigint ( m_dBson, sphD2QW ( fValue ) );
+}
+
+void bson::Assoc_c::AddString ( const char * szName, const char * szValue )
+{
+	StartTypedNode ( JSON_STRING, szName );
+	PackStr ( m_dBson, szValue );
+}
+
+void bson::Assoc_c::AddBlob ( const char * szName, const ByteBlob_t & dValue )
+{
+	StartTypedNode ( JSON_STRING, szName );
+	PackStr ( m_dBson, (const char *) dValue.first, dValue.second );
+}
+
+void bson::Assoc_c::AddBool ( const char * szName, bool bValue )
+{
+	StartTypedNode ( bValue ? JSON_TRUE : JSON_FALSE, szName );
+}
+
+void bson::Assoc_c::AddNull( const char * szName )
+{
+	StartTypedNode ( JSON_NULL, szName );
+}
+
+void bson::Assoc_c::AddStringVec ( const char * szName, const VecTraits_T<CSphString> & dData )
+{
+	StartTypedNode ( JSON_STRING_VECTOR, szName );
+	AddStringData ( m_dBson, dData );
+}
+
+void bson::Assoc_c::AddStringVec ( const char * szName, const VecTraits_T<const char *> & dData )
+{
+	StartTypedNode ( JSON_STRING_VECTOR, szName );
+	AddStringData ( m_dBson, dData );
+}
+
+void bson::Assoc_c::AddIntVec ( const char * szName, const VecTraits_T<int> & dData )
+{
+	StartTypedNode ( JSON_INT32_VECTOR, szName );
+	AddIntData ( m_dBson, dData );
+}
+
+void bson::Assoc_c::AddIntVec ( const char * szName, const VecTraits_T<int64_t> & dData )
+{
+	if ( dData.any_of ( [] ( int64_t iValue ) { return ( iValue!=int ( iValue ) ); } ) )
+	{
+		StartTypedNode ( JSON_INT64_VECTOR, szName );
+		AddBigintData ( m_dBson, dData );
+	} else
+	{
+		StartTypedNode ( JSON_INT32_VECTOR, szName );
+		AddIntData ( m_dBson, dData );
+	}
+}
+
+void bson::Assoc_c::AddDoubleVec ( const char * szName, const VecTraits_T<double> & dData )
+{
+	StartTypedNode ( JSON_DOUBLE_VECTOR, szName );
+	AddDoubleData ( m_dBson, dData );
+}
+
+
+CSphVector<BYTE> & bson::Assoc_c::StartObj ( const char * szName )
+{
+	StartTypedNode ( JSON_OBJECT, szName );
+	return m_dBson;
+}
+
+CSphVector<BYTE> & bson::Assoc_c::StartStringVec ( const char * szName )
+{
+	StartTypedNode ( JSON_STRING_VECTOR, szName );
+	return m_dBson;
+}
+
+CSphVector<BYTE> & bson::Assoc_c::StartIntVec ( const char * szName )
+{
+	StartTypedNode ( JSON_INT32_VECTOR, szName );
+	return m_dBson;
+}
+
+CSphVector<BYTE> & bson::Assoc_c::StartBigintVec ( const char * szName )
+{
+	StartTypedNode ( JSON_INT64_VECTOR, szName );
+	return m_dBson;
+}
+
+CSphVector<BYTE> & bson::Assoc_c::StartDoubleVec ( const char * szName )
+{
+	StartTypedNode ( JSON_DOUBLE_VECTOR, szName );
+	return m_dBson;
+}
+
+CSphVector<BYTE> & bson::Assoc_c::StartMixedVec ( const char * szName )
+{
+	StartTypedNode ( JSON_MIXED_VECTOR, szName );
+	return m_dBson;
+}
+
+bson::Root_c::Root_c ( CSphVector<BYTE> & dBsonTarget )
+	: Assoc_c { dBsonTarget }
+{
+	StoreInt ( m_dBson, 0 );
+}
+
+bson::Root_c::~Root_c ()
+{
+	Finalize ( m_dBson );
+	StoreMask ( m_dBson, 0, m_uBloomMask );
+}
+
+bson::Obj_c::Obj_c ( CSphVector<BYTE> & dBsonTarget )
+	: Assoc_c { dBsonTarget }
+{
+	m_iStartPos = ReserveSize ( m_dBson );
+	StoreInt ( m_dBson, 0 );
+}
+
+bson::Obj_c::~Obj_c ()
+{
+	Finalize ( m_dBson );
+	StoreMask ( m_dBson, m_iStartPos+1, m_uBloomMask );
+	PackSize ( m_dBson, m_iStartPos ); // MUST be in this order, because PackSize() might move the data!
+}
+
+bson::MixedVector_c::MixedVector_c ( CSphVector<BYTE> & dBson, int iSize )
+		: m_dBson ( dBson )
+{
+	m_iStartPos = ReserveSize ( m_dBson );
+	PackInt ( m_dBson, iSize );
+};
+
+bson::MixedVector_c::~MixedVector_c()
+{
+	PackSize ( m_dBson, m_iStartPos );
+}
+
+void bson::MixedVector_c::AddInt (  int64_t iValue )
+{
+	if ( int ( iValue )==iValue )
+	{
+		m_dBson.Add ( JSON_INT32 );
+		StoreInt ( m_dBson, (int) iValue );
+	} else
+	{
+		m_dBson.Add ( JSON_INT64 );
+		StoreBigint ( m_dBson, iValue );
+	}
+}
+
+void bson::MixedVector_c::AddDouble (  double fValue )
+{
+	m_dBson.Add ( JSON_DOUBLE );
+	StoreBigint ( m_dBson, sphD2QW ( fValue ) );
+}
+
+void bson::MixedVector_c::AddString ( const char * szValue )
+{
+	m_dBson.Add ( JSON_STRING );
+	PackStr ( m_dBson, szValue );
+}
+
+void bson::MixedVector_c::AddBlob ( const ByteBlob_t & dValue )
+{
+	m_dBson.Add ( JSON_STRING );
+	PackStr ( m_dBson, (const char *) dValue.first, dValue.second );
+}
+
+void bson::MixedVector_c::AddBool ( bool bValue )
+{
+	m_dBson.Add ( bValue ? JSON_TRUE : JSON_FALSE );
+}
+
+void bson::MixedVector_c::AddNull()
+{
+	m_dBson.Add ( JSON_NULL );
+}
+
+void bson::MixedVector_c::AddStringVec ( const VecTraits_T<CSphString> & dData )
+{
+	m_dBson.Add ( JSON_STRING_VECTOR );
+	AddStringData ( m_dBson, dData );
+}
+
+void bson::MixedVector_c::AddStringVec ( const VecTraits_T<const char *> & dData )
+{
+	m_dBson.Add ( JSON_STRING_VECTOR );
+	AddStringData ( m_dBson, dData );
+}
+
+void bson::MixedVector_c::AddIntVec ( const VecTraits_T<int> & dData )
+{
+	m_dBson.Add ( JSON_INT32_VECTOR );
+	AddIntData ( m_dBson, dData );
+}
+
+void bson::MixedVector_c::AddIntVec ( const VecTraits_T<int64_t> & dData )
+{
+	if ( dData.any_of ( [] ( int64_t iValue ) { return ( iValue!=int ( iValue ) ); } ) )
+	{
+		m_dBson.Add ( JSON_INT64_VECTOR );
+		AddBigintData ( m_dBson, dData );
+	} else
+	{
+		m_dBson.Add ( JSON_INT32_VECTOR );
+		AddIntData ( m_dBson, dData );
+	}
+}
+
+void bson::MixedVector_c::AddDoubleVec ( const VecTraits_T<double> & dData )
+{
+	m_dBson.Add ( JSON_DOUBLE_VECTOR );
+	AddDoubleData ( m_dBson, dData );
+}
+
+CSphVector<BYTE> & bson::MixedVector_c::StartObj ()
+{
+	m_dBson.Add ( JSON_OBJECT );
+	return m_dBson;
+}
+
+CSphVector<BYTE> & bson::MixedVector_c::StartStringVec ()
+{
+	m_dBson.Add ( JSON_STRING_VECTOR );
+	return m_dBson;
+}
+
+CSphVector<BYTE> & bson::MixedVector_c::StartIntVec ()
+{
+	m_dBson.Add ( JSON_INT32_VECTOR );
+	return m_dBson;
+}
+
+CSphVector<BYTE> & bson::MixedVector_c::StartBigintVec ()
+{
+	m_dBson.Add ( JSON_INT64_VECTOR );
+	return m_dBson;
+}
+
+CSphVector<BYTE> & bson::MixedVector_c::StartDoubleVec ()
+{
+	m_dBson.Add ( JSON_DOUBLE_VECTOR );
+	return m_dBson;
+}
+
+CSphVector<BYTE> & bson::MixedVector_c::StartMixedVec ()
+{
+	m_dBson.Add ( JSON_MIXED_VECTOR );
+	return m_dBson;
+}
+
+bson::StringVector_c::StringVector_c ( CSphVector<BYTE> & dBson, int iSize )
+		: m_dBson ( dBson )
+{
+	m_iStartPos = ReserveSize ( m_dBson );
+	PackInt ( m_dBson, iSize );
+};
+
+bson::StringVector_c::~StringVector_c ()
+{
+	PackSize ( m_dBson, m_iStartPos );
+}
+
+void bson::StringVector_c::AddValue ( const char * szValue )
+{
+	PackStr ( m_dBson, szValue );
+}
+
+void bson::StringVector_c::AddValue ( const ByteBlob_t & dValue )
+{
+	PackStr ( m_dBson, (const char*) dValue.first, dValue.second );
+}
+
+void bson::StringVector_c::AddValues ( const VecTraits_T<CSphString> & dData )
+{
+	dData.Apply ( [this] ( const CSphString & s ) { PackStr ( m_dBson, s.cstr () ); } );
+}
+
+void bson::StringVector_c::AddValues ( const VecTraits_T<const char *> & dData )
+{
+	dData.Apply ( [this] ( const char * sz ) { PackStr ( m_dBson, sz ); } );
+}
+
+bson::IntVector_c::IntVector_c ( CSphVector<BYTE> & dBson, int iSize )
+		: m_dBson ( dBson )
+{
+	PackInt ( m_dBson, iSize );
+};
+
+void bson::IntVector_c::AddValue ( int iValue )
+{
+	StoreInt ( m_dBson, iValue );
+}
+
+void bson::IntVector_c::AddValues ( const VecTraits_T<int> & dData )
+{
+	dData.Apply ( [this] ( int i ) { StoreInt ( m_dBson, i ); } );
+}
+
+bson::BigintVector_c::BigintVector_c ( CSphVector<BYTE> & dBson, int iSize )
+		: m_dBson ( dBson )
+{
+	PackInt ( m_dBson, iSize );
+};
+
+void bson::BigintVector_c::AddValue ( int64_t iValue )
+{
+	StoreBigint ( m_dBson, iValue );
+}
+
+void bson::BigintVector_c::AddValues ( const VecTraits_T<int64_t> & dData )
+{
+	dData.Apply ( [this] ( int64_t i ) { StoreBigint ( m_dBson, i ); } );
+}
+
+bson::DoubleVector_c::DoubleVector_c ( CSphVector<BYTE> & dBson, int iSize )
+		: m_dBson ( dBson )
+{
+	PackInt ( m_dBson, iSize );
+};
+
+void bson::DoubleVector_c::AddValue ( double fValue )
+{
+	StoreBigint ( m_dBson, sphD2QW ( fValue ) );
+}
+
+void bson::DoubleVector_c::AddValues ( const VecTraits_T<double> & dData )
+{
+	dData.Apply ( [this] ( double f ) { StoreBigint ( m_dBson, sphD2QW ( f ) ); } );
+}
+

@@ -401,10 +401,13 @@ protected:
 
 namespace bson {
 
-
-
 using NodeHandle_t = std::pair< const BYTE *, ESphJsonType>;
 const NodeHandle_t nullnode = { nullptr, JSON_EOF };
+
+inline NodeHandle_t MakeHandle ( const VecTraits_T<BYTE>& dData )
+{
+	return dData.IsEmpty () ? nullnode : NodeHandle_t ( { dData.begin (), JSON_ROOT } );
+}
 
 bool IsAssoc ( const NodeHandle_t & );
 bool IsArray ( const NodeHandle_t & );
@@ -423,19 +426,19 @@ inline bool IsNullNode ( const NodeHandle_t & dNode ) { return dNode==nullnode; 
 
 // iterate over mixed vec/ string vec/ object (without names).
 using Action_f = std::function<void ( const NodeHandle_t &tNode )>;
-void ForEach ( const NodeHandle_t &tLocator, Action_f fAction );
+void ForEach ( const NodeHandle_t &tLocator, Action_f&& fAction );
 
 // iterate over mixed vec/ string vec/ object (incl. names).
-using NamedAction_f = std::function<void ( CSphString sName, const NodeHandle_t &tNode )>;
-void ForEach ( const NodeHandle_t &tLocator, NamedAction_f fAction );
+using NamedAction_f = std::function<void ( CSphString&& sName, const NodeHandle_t &tNode )>;
+void ForEach ( const NodeHandle_t &tLocator, NamedAction_f&& fAction );
 
 // iterate over mixed vec/ string vec/ object (without names). Return false from action means 'stop iteration'
 using CondAction_f = std::function<bool ( const NodeHandle_t &tNode )>;
-void ForSome ( const NodeHandle_t &tLocator, CondAction_f fAction );
+void ForSome ( const NodeHandle_t &tLocator, CondAction_f&& fAction );
 
 // iterate over mixed vec/ string vec/ object (incl. names).  Return false from action means 'stop iteration'
-using CondNamedAction_f = std::function<bool ( CSphString sName, const NodeHandle_t &tNode )>;
-void ForSome ( const NodeHandle_t &tLocator, CondNamedAction_f fAction );
+using CondNamedAction_f = std::function<bool ( CSphString&& sName, const NodeHandle_t &tNode )>;
+void ForSome ( const NodeHandle_t &tLocator, CondNamedAction_f&& fAction );
 
 // suitable for strings and vectors of pods as int, int64, double.
 std::pair<const char*, int> RawBlob ( const NodeHandle_t &tLocator );
@@ -484,6 +487,8 @@ public:
 	// rapid lookup by name helpers. Ellipsis must be list of str literals,
 	// like HasAnyOf (2, "foo", "bar"); HasAnyOf (3, "foo", "bar", "baz")
 	bool HasAnyOf ( int iNames, ... ) const;
+	bool HasAnyOf ( std::initializer_list<const char*> dNames ) const;
+	std::pair<int,NodeHandle_t> GetFirstOf ( std::initializer_list<const char *> dNames ) const;
 
 	// access to my values
 	bool Bool () const;
@@ -551,7 +556,129 @@ public:
 bool	JsonObjToBson ( JsonObj_c & tJSON, CSphVector<BYTE> &dData, bool bAutoconv, bool bToLowercase/*, StringBuilder_c &sMsg*/ );
 bool	cJsonToBson ( cJSON * pCJSON, CSphVector<BYTE> &dData, bool bAutoconv=false, bool bToLowercase = true /*, StringBuilder_c &sMsg */);
 
-}; // namespace sph
+
+// this are generic purpose serializer (bson as any object)
+class Assoc_c
+{
+protected:
+	CSphVector<BYTE>&	m_dBson;
+	DWORD				m_uBloomMask = 0;
+	void StartTypedNode ( ESphJsonType eType, const char* szName=nullptr );
+
+public:
+	explicit Assoc_c ( CSphVector<BYTE> & dBsonTarget )
+			: m_dBson ( dBsonTarget )
+	{}
+
+	void AddInt ( const char* szName, int64_t iValue );
+	void AddDouble ( const char * szName, double fValue );
+	void AddString ( const char * szName, const char* szValue );
+	void AddBlob ( const char * szName, const ByteBlob_t & dValue ); // blob of bytes as string
+	void AddBool ( const char * szName, bool bValue );
+	void AddNull ( const char * szName );
+	void AddStringVec ( const char * szName, const VecTraits_T<CSphString> & dData );
+	void AddStringVec ( const char * szName, const VecTraits_T<const char *> & dData );
+	void AddIntVec ( const char * szName, const VecTraits_T<int> & dData );
+	void AddIntVec ( const char * szName, const VecTraits_T<int64_t> & dData );
+	void AddDoubleVec ( const char * szName, const VecTraits_T<double> & dData );
+	CSphVector<BYTE> & StartObj ( const char * szName );
+	CSphVector<BYTE> & StartStringVec ( const char * szName );
+	CSphVector<BYTE> & StartIntVec ( const char * szName );
+	CSphVector<BYTE> & StartBigintVec ( const char * szName );
+	CSphVector<BYTE> & StartDoubleVec ( const char * szName );
+	CSphVector<BYTE> & StartMixedVec ( const char * szName );
+};
+
+class Root_c : public Assoc_c
+{
+public:
+	explicit Root_c ( CSphVector<BYTE> & dBsonTarget );
+	~Root_c ();
+};
+
+class Obj_c : public Assoc_c
+{
+	int m_iStartPos;
+public:
+	explicit Obj_c ( CSphVector<BYTE> & dBsonTarget );
+	~Obj_c ();
+};
+
+class MixedVector_c
+{
+	CSphVector<BYTE>& m_dBson;
+	int m_iStartPos;
+
+public:
+	MixedVector_c ( CSphVector<BYTE> & dBson, int iSize );
+	~MixedVector_c();
+
+	void AddInt ( int64_t iValue );
+	void AddDouble ( double fValue );
+	void AddString ( const char* szValue );
+	void AddBlob ( const ByteBlob_t& dValue ); // blob of bytes as string
+	void AddBool ( bool bValue );
+	void AddNull ();
+	void AddStringVec ( const VecTraits_T<CSphString> & dData );
+	void AddStringVec ( const VecTraits_T<const char*> & dData );
+	void AddIntVec ( const VecTraits_T<int> & dData );
+	void AddIntVec ( const VecTraits_T<int64_t> & dData );
+	void AddDoubleVec ( const VecTraits_T<double> & dData );
+	CSphVector<BYTE> & StartObj ();
+	CSphVector<BYTE> & StartStringVec ();
+	CSphVector<BYTE> & StartIntVec ();
+	CSphVector<BYTE> & StartBigintVec ();
+	CSphVector<BYTE> & StartDoubleVec ();
+	CSphVector<BYTE> & StartMixedVec ();
+};
+
+
+class StringVector_c
+{
+	CSphVector<BYTE>& m_dBson;
+	int m_iStartPos;
+
+public:
+	StringVector_c ( CSphVector<BYTE> & dBson, int iSize );
+	~StringVector_c();
+
+	void AddValue ( const char * szValue );
+	void AddValue ( const ByteBlob_t& dValue );
+	void AddValues ( const VecTraits_T<CSphString> & dData );
+	void AddValues ( const VecTraits_T<const char *> & dData );
+};
+
+class IntVector_c
+{
+	CSphVector<BYTE>& m_dBson;
+
+public:
+	IntVector_c ( CSphVector<BYTE> & dBson, int iSize );
+	void AddValue ( int iValue );
+	void AddValues ( const VecTraits_T<int> & dData );
+};
+
+class BigintVector_c
+{
+	CSphVector<BYTE>& m_dBson;
+
+public:
+	BigintVector_c ( CSphVector<BYTE> & dBson, int iSize );
+	void AddValue ( int64_t iValue );
+	void AddValues ( const VecTraits_T<int64_t> & dData );
+};
+
+class DoubleVector_c
+{
+	CSphVector<BYTE>& m_dBson;
+
+public:
+	DoubleVector_c ( CSphVector<BYTE> & dBson, int iSize );
+	void AddValue ( double iValue );
+	void AddValues ( const VecTraits_T<double> & dData );
+};
+
+}; // namespace bson
 
 #endif // _sphinxjson_
 

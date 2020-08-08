@@ -461,13 +461,13 @@ TEST_F ( TJson, bson_foreach_namedvec )
 	ESphJsonType dTypes[] = { JSON_INT32, JSON_INT64, JSON_DOUBLE, JSON_TRUE, JSON_FALSE, JSON_STRING, JSON_STRING
 							  , JSON_STRING, JSON_OBJECT, JSON_MIXED_VECTOR };
 	int iIdx = 0;
-	tst.ForEach ( [&] ( CSphString sName, const NodeHandle_t &dNode ) {
+	tst.ForEach ( [&] ( CSphString&& sName, const NodeHandle_t &dNode ) {
 		ASSERT_STREQ (sName.cstr(),"");
 		ASSERT_EQ ( dNode.second, dTypes[iIdx++] );
 	} );
 
 	iIdx = 0;
-	tst.ForEach ( [&] ( CSphString sName, Bson_c dNode ) {
+	tst.ForEach ( [&] ( CSphString&& sName, Bson_c dNode ) {
 		ASSERT_STREQ ( sName.cstr (), "" );
 		ASSERT_EQ ( dNode.GetType (), dTypes[iIdx++] );
 	} );
@@ -501,13 +501,13 @@ TEST_F ( TJson, bson_foreach_namedobj )
 						 "h", // note that name is lowercase in opposite 'H' in the object
 						 "i","j"};
 	int iIdx = 0;
-	tst.ForEach ( [&] ( CSphString sName, const NodeHandle_t &dNode ) {
+	tst.ForEach ( [&] ( CSphString&& sName, const NodeHandle_t &dNode ) {
 		ASSERT_STREQ ( sName.cstr (), sNames[iIdx] );
 		ASSERT_EQ ( dNode.second, dTypes[iIdx++] );
 	} );
 
 	iIdx = 0;
-	tst.ForEach ( [&] ( CSphString sName, Bson_c dNode ) {
+	tst.ForEach ( [&] ( CSphString&& sName, Bson_c dNode ) {
 		ASSERT_STREQ ( sName.cstr (), sNames[iIdx] );
 		ASSERT_EQ ( dNode.GetType (), dTypes[iIdx++] );
 	} );
@@ -547,7 +547,7 @@ TEST_F ( TJson, bson_forsome_namedvec )
 	ESphJsonType dTypes[] = { JSON_INT32, JSON_INT64, JSON_DOUBLE, JSON_TRUE, JSON_FALSE, JSON_STRING, JSON_STRING
 							  , JSON_STRING, JSON_OBJECT, JSON_MIXED_VECTOR };
 	int iIdx = 0;
-	tst.ForSome ( [&] ( CSphString sName, const NodeHandle_t &dNode ) {
+	tst.ForSome ( [&] ( CSphString&& sName, const NodeHandle_t &dNode ) {
 		[&] () {
 			ASSERT_STREQ ( sName.cstr (), "" );
 			ASSERT_EQ ( dNode.second, dTypes[iIdx++] );
@@ -557,7 +557,7 @@ TEST_F ( TJson, bson_forsome_namedvec )
 	ASSERT_EQ ( iIdx, 4 );
 
 	iIdx = 0;
-	tst.ForSome ( [&] ( CSphString sName, Bson_c dNode ) {
+	tst.ForSome ( [&] ( CSphString&& sName, Bson_c dNode ) {
 		[&] () {
 			ASSERT_STREQ ( sName.cstr (), "" );
 			ASSERT_EQ ( dNode.GetType (), dTypes[iIdx++] );
@@ -600,7 +600,7 @@ TEST_F ( TJson, bson_forsome_namedobj )
 							  , // note that name is lowercase in opposite 'H' in the object
 		"i", "j" };
 	int iIdx = 0;
-	tst.ForSome ( [&] ( CSphString sName, const NodeHandle_t &dNode ) {
+	tst.ForSome ( [&] ( CSphString&& sName, const NodeHandle_t &dNode ) {
 		[&] () {
 			ASSERT_STREQ ( sName.cstr (), sNames[iIdx] );
 			ASSERT_EQ ( dNode.second, dTypes[iIdx++] );
@@ -610,7 +610,7 @@ TEST_F ( TJson, bson_forsome_namedobj )
 	ASSERT_EQ (iIdx, 4);
 
 	iIdx = 0;
-	tst.ForSome ( [&] ( CSphString sName, Bson_c dNode ) {
+	tst.ForSome ( [&] ( CSphString&& sName, Bson_c dNode ) {
 		[&] () {
 			ASSERT_STREQ ( sName.cstr (), sNames[iIdx] );
 			ASSERT_EQ ( dNode.GetType (), dTypes[iIdx++] );
@@ -1436,4 +1436,95 @@ TEST ( bench, DISABLED_format_cjson_vs_stringbuilder )
 	iTimeSpan += sphMicroTimer ();
 	std::cout << uLoops << " of stringbuilder construct took " << iTimeSpan << " uSec\n"
 			  << "json is " << sResult.cstr ();
+}
+
+class TBson : public ::testing::Test
+{
+protected:
+	virtual void SetUp ()
+	{
+		dData.Reset();
+	}
+	CSphVector<BYTE> dData;
+
+
+	void Check ( const char * sProof )
+	{
+		CSphString sResult;
+		Bson_c ( dData ).BsonToJson ( sResult );
+		ASSERT_STREQ ( sResult.cstr (), sProof );
+	}
+};
+
+TEST_F ( TBson, bson_empty )
+{
+	{
+		Root_c foo ( dData );
+	}
+	Check ( "{}" );
+}
+
+TEST_F ( TBson, bson_simple )
+{
+	{
+		Root_c foo ( dData );
+		foo.AddBool ( "true", true );
+		foo.AddBool ( "false", false );
+		foo.AddNull ( "empty" );
+		foo.AddDouble ( "float", 0.2345 );
+		foo.AddInt( "int", -10 );
+		foo.AddInt ( "bigint", -1000000000000 );
+		foo.AddString ("string", "hello");
+	}
+	Check ( R"({"true":true,"false":false,"empty":null,"float":0.234500,"int":-10,"bigint":-1000000000000,"string":"hello"})" );
+}
+
+TEST_F ( TBson, bson_arr_empty )
+{
+	{
+		Root_c foo ( dData );
+		MixedVector_c fee ( foo.StartMixedVec ( "mixed" ), 0 );
+		StringVector_c bar ( foo.StartStringVec ( "string" ), 0 );
+		Obj_c baz ( foo.StartObj ( "obj" ) );
+	}
+	Check ( R"({"mixed":[],"string":[],"obj":{}})" );
+}
+
+TEST_F ( TBson, bson_stringvec )
+{
+	{
+		Root_c foo ( dData );
+		StringVector_c bar ( foo.StartStringVec ( "string_vec" ), 3 );
+		bar.AddValue("one");
+		bar.AddValue("two");
+		bar.AddValue("three");
+	}
+	Check ( R"({"string_vec":["one","two","three"]})" );
+}
+
+TEST_F ( TBson, bson_mixed_vec )
+{
+	{
+		Root_c foo ( dData );
+		MixedVector_c bar ( foo.StartMixedVec ( "mixed_vec" ), 8 );
+		{
+			Obj_c baz ( bar.StartObj () );
+		}
+		{
+			StringVector_c baz ( bar.StartStringVec (), 2 );
+			baz.AddValue ( "one" );
+			baz.AddValue ( "two" );
+		}
+		{
+			MixedVector_c baz ( bar.StartMixedVec (), 2 );
+			baz.AddString( "one" );
+			baz.AddInt( 10 );
+		}
+		bar.AddInt ( 1000000000000 );
+		bar.AddDouble( 1.1234 );
+		bar.AddBool(true);
+		bar.AddBool(false);
+		bar.AddNull();
+	}
+	Check ( R"({"mixed_vec":[{},["one","two"],["one",10],1000000000000,1.123400,true,false,null]})" );
 }

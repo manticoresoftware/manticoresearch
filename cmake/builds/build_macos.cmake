@@ -14,7 +14,7 @@ set ( CONFDIR "." )
 configure_file ( "manticore.conf.in" "${MANTICORE_BINARY_DIR}/manticore.conf" @ONLY )
 
 # install specific stuff
-install ( DIRECTORY api doc docs contrib DESTINATION . COMPONENT doc )
+install ( DIRECTORY api doc manual contrib DESTINATION . COMPONENT doc )
 
 install ( FILES COPYING INSTALL example.sql
 			"${MANTICORE_BINARY_DIR}/manticore.conf"

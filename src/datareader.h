@@ -47,7 +47,7 @@ public:
 	virtual SphOffset_t			GetPos () const = 0;
 	virtual void				SeekTo ( SphOffset_t ) = 0;
 	virtual FileBlockReader_i *	MakeReader ( BYTE * pBuf, int iSize ) = 0;
-	virtual void				SetProfile ( CSphQueryProfile * ) {};
+	virtual void				SetProfile ( QueryProfile_t * ) {};
 
 protected:
 								~DataReaderFactory_c () override {}

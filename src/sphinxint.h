@@ -130,7 +130,7 @@ enum ESphQueryState
 STATIC_ASSERT ( SPH_QSTATE_UNKNOWN==0, BAD_QUERY_STATE_ENUM_BASE );
 
 /// search query profile
-class CSphQueryProfile
+struct QueryProfile_t
 {
 public:
 	ESphQueryState	m_eState;							///< current state
@@ -140,7 +140,7 @@ public:
 	int64_t			m_tmTotal [ SPH_QSTATE_TOTAL+1 ];	///< total time spent per state
 
 	/// create empty and stopped profile
-	CSphQueryProfile ()
+	QueryProfile_t ()
 	{
 		Start ( SPH_QSTATE_TOTAL );
 	}
@@ -167,7 +167,7 @@ public:
 		m_tmStamp = sphMicroTimer();
 	}
 
-	void AddMetric ( const CSphQueryProfile& tData )
+	void AddMetric ( const QueryProfile_t& tData )
 	{
 		// fixme! m.b. invent a way to display data from different profilers with kind of multiplier?
 		for ( int i = 0; i<SPH_QSTATE_TOTAL; ++i )
@@ -192,13 +192,13 @@ public:
 		return nullptr;
 	}
 
-	virtual 				~CSphQueryProfile() {};
+	virtual 				~QueryProfile_t() {};
 
-	virtual CSphQueryProfile*		Clone() const = 0;
+	virtual QueryProfile_t*		Clone() const = 0;
 };
 
 // acquire common pattern 'check, then switch if not null'
-inline void SwitchProfile ( CSphQueryProfile* pProfile, ESphQueryState eState )
+inline void SwitchProfile ( QueryProfile_t* pProfile, ESphQueryState eState )
 {
 	if ( pProfile )
 		pProfile->Switch ( eState );
@@ -208,11 +208,11 @@ inline void SwitchProfile ( CSphQueryProfile* pProfile, ESphQueryState eState )
 class CSphScopedProfile
 {
 private:
-	CSphQueryProfile *	m_pProfile;
+	QueryProfile_t *	m_pProfile;
 	ESphQueryState		m_eOldState;
 
 public:
-	explicit CSphScopedProfile ( CSphQueryProfile * pProfile, ESphQueryState eNewState )
+	explicit CSphScopedProfile ( QueryProfile_t * pProfile, ESphQueryState eNewState )
 	{
 		m_pProfile = pProfile;
 		m_eOldState = SPH_QSTATE_UNKNOWN;
@@ -314,7 +314,7 @@ public:
 class CSphReader
 {
 public:
-	CSphQueryProfile *	m_pProfile = nullptr;
+	QueryProfile_t *	m_pProfile = nullptr;
 	ESphQueryState		m_eProfileState { SPH_QSTATE_IO };
 
 public:
@@ -665,7 +665,7 @@ public:
 	CSphVector<CalcItem_t>		m_dCalcFinal;			///< items to compute when finalizing result set
 
 	const void *							m_pIndexData = nullptr;	///< backend specific data
-	CSphQueryProfile *						m_pProfile = nullptr;
+	QueryProfile_t *						m_pProfile = nullptr;
 	const SmallStringHash_T<int64_t> *		m_pLocalDocs = nullptr;
 	int64_t									m_iTotalDocs = 0;
 	int64_t									m_iBadRows = 0;

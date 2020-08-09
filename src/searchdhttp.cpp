@@ -291,7 +291,7 @@ static void HttpHandlerIndexPage ( CSphVector<BYTE> & dData )
 	HttpBuildReply ( dData, SPH_HTTP_STATUS_200, sIndexPage.cstr(), sIndexPage.GetLength(), true );
 }
 
-class CSphQueryProfileFormatJson final : public CSphQueryProfile
+class CSphQueryProfileFormatJson final : public QueryProfile_t
 {
 public:
 
@@ -305,7 +305,7 @@ public:
 		return m_sResult.cstr();
 	}
 
-	CSphQueryProfile * Clone () const final
+	QueryProfile_t * Clone () const final
 	{
 		return new CSphQueryProfileFormatJson;
 	}
@@ -594,7 +594,7 @@ protected:
 	CSphString				m_sWarning;
 
 	virtual QueryParser_i * PreParseQuery() = 0;
-	virtual CSphString		EncodeResult ( const AggrResult_t & tRes, CSphQueryProfile * pProfile ) = 0;
+	virtual CSphString		EncodeResult ( const AggrResult_t & tRes, QueryProfile_t * pProfile ) = 0;
 };
 
 
@@ -639,7 +639,7 @@ protected:
 		return sphCreatePlainQueryParser();
 	}
 
-	CSphString EncodeResult ( const AggrResult_t & tRes, CSphQueryProfile * pProfile ) override
+	CSphString EncodeResult ( const AggrResult_t & tRes, QueryProfile_t * pProfile ) override
 	{
 		return sphEncodeResultJson ( tRes, m_tQuery, pProfile );
 	}
@@ -872,7 +872,7 @@ public:
 	}
 
 protected:
-	CSphString EncodeResult ( const AggrResult_t & tRes, CSphQueryProfile * pProfile ) override
+	CSphString EncodeResult ( const AggrResult_t & tRes, QueryProfile_t * pProfile ) override
 	{
 		return sphEncodeResultJson ( tRes, m_tQuery, pProfile );
 	}

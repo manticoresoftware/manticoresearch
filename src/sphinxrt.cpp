@@ -6057,7 +6057,7 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 		const CSphMultiQueryArgs & tArgs,
 		SphChunkGuard_t& tGuard,
 		VecTraits_T<ISphMatchSorter *>& dSorters,
-		CSphQueryProfile * pProfiler,
+		QueryProfile_t * pProfiler,
 		bool bGotLocalDF,
 		const SmallStringHash_T<int64_t> * pLocalDocs,
 		int64_t iTotalDocs,
@@ -6208,7 +6208,7 @@ int PrepareFTSearch ( const RtIndex_c * pThis,
 		ISphTokenizer * pQueryTokenizer,
 		CSphDict* pDict,
 		CSphQueryResult* pResult,
-		CSphQueryProfile* pProfiler,
+		QueryProfile_t* pProfiler,
 		CSphScopedPayload* pPayloads,
 		XQQuery_t & tParsed )
 {
@@ -6286,7 +6286,7 @@ void PerformFullScan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 		int iStride,
 		int iCutoff,
 		int64_t tmMaxTimer,
-		CSphQueryProfile* pProfiler,
+		QueryProfile_t* pProfiler,
 		CSphQueryContext& tCtx,
 		VecTraits_T<ISphMatchSorter*>& dSorters,
 		CSphString& sWarning )
@@ -6366,7 +6366,7 @@ bool DoFullScanQuery ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 		int iIndexWeight,
 		int iStride,
 		int64_t tmMaxTimer,
-		CSphQueryProfile* pProfiler,
+		QueryProfile_t* pProfiler,
 		CSphQueryContext& tCtx,
 		VecTraits_T<ISphMatchSorter*>& dSorters,
 		CSphQueryResult* pResult )
@@ -6399,7 +6399,7 @@ void PerformFullTextSearch ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 		ISphRanker* pRanker,
 		int iIndexWeight,
 		int iCutoff,
-		CSphQueryProfile* pProfiler,
+		QueryProfile_t* pProfiler,
 		CSphQueryContext& tCtx,
 		VecTraits_T<ISphMatchSorter*>& dSorters )
 {
@@ -6492,7 +6492,7 @@ bool DoFullTextSearch ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 		int iMatchPoolSize,
 		int iStackNeed,
 		RtQwordSetup_t& tTermSetup,
-		CSphQueryProfile* pProfiler,
+		QueryProfile_t* pProfiler,
 		CSphQueryContext& tCtx,
 		VecTraits_T<ISphMatchSorter*>& dSorters,
 		XQQuery_t& tParsed,
@@ -6589,7 +6589,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	pResult->m_iQueryTime = 0;
 	int64_t tmQueryStart = sphMicroTimer();
 	auto tmCpuQueryStart = sphTaskCpuTimer();
-	CSphQueryProfile * pProfiler = pResult->m_pProfile;
+	QueryProfile_t * pProfiler = pResult->m_pProfile;
 	CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_DICT_SETUP );
 
 	// force ext2 mode for them

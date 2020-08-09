@@ -292,13 +292,13 @@ enum ESphCollation
 /// fills pAttrType with result type (for now, can be SPH_ATTR_SINT or SPH_ATTR_FLOAT)
 /// fills pUsesWeight with a flag whether match relevance is referenced in expression AST
 /// fills pEvalStage with a required (!) evaluation stage
-class CSphQueryProfile;
+struct QueryProfile_t;
 
 struct ExprParseArgs_t
 {
 	ESphAttr *			m_pAttrType = nullptr;
 	bool *				m_pUsesWeight = nullptr;
-	CSphQueryProfile *	m_pProfiler = nullptr;
+	QueryProfile_t *	m_pProfiler = nullptr;
 	ESphCollation		m_eCollation = SPH_COLLATION_DEFAULT;
 	ISphExprHook *		m_pHook = nullptr;
 	bool *				m_pZonespanlist = nullptr;

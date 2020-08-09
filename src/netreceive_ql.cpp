@@ -561,7 +561,7 @@ inline bool UserWantsCompression ( const ByteBlob_t & tPacket )
 }
 
 bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, int iPacketLen,
-		CSphQueryProfile * pProfile, AsyncNetBufferPtr_c pBuf )
+		QueryProfile_t * pProfile, AsyncNetBufferPtr_c pBuf )
 {
 	assert ( pBuf );
 	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf;

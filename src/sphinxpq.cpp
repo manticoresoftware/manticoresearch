@@ -1876,7 +1876,7 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 {
 	assert ( tArgs.m_iTag>=0 );
 
-	CSphQueryProfile * pProfiler = pResult->m_pProfile;
+	QueryProfile_t * pProfiler = pResult->m_pProfile;
 
 	// we count documents only (before filters)
 	if ( pQuery->m_iMaxPredictedMsec )

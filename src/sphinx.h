@@ -2707,14 +2707,14 @@ public:
 
 
 /// search query result (meta-info)
-class CSphQueryProfile;
+struct QueryProfile_t;
 class DocstoreReader_i;
 class CSphQueryResult : public CSphQueryResultMeta
 {
 public:
 	const BYTE *			m_pBlobPool = nullptr;	///< pointer to blob attr storage
 	const DocstoreReader_i* m_pDocstore = nullptr;	///< pointer to docstore reader
-	CSphQueryProfile *		m_pProfile = nullptr;	///< filled when query profiling is enabled; NULL otherwise
+	QueryProfile_t *		m_pProfile = nullptr;	///< filled when query profiling is enabled; NULL otherwise
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -3435,7 +3435,7 @@ struct CSphAttrUpdateEx
 struct SphQueueSettings_t
 {
 	const ISphSchema &			m_tSchema;
-	CSphQueryProfile *			m_pProfiler;
+	QueryProfile_t *			m_pProfiler;
 	bool						m_bComputeItems = false;
 	CSphAttrUpdateEx *			m_pUpdate = nullptr;
 	CSphVector<DocID_t> *		m_pCollection = nullptr;
@@ -3443,7 +3443,7 @@ struct SphQueueSettings_t
 	const CSphFilterSettings *	m_pAggrFilter = nullptr;
 	int							m_iMaxMatches = DEFAULT_MAX_MATCHES;
 
-	explicit SphQueueSettings_t ( const ISphSchema & tSchema, CSphQueryProfile * pProfiler = nullptr )
+	explicit SphQueueSettings_t ( const ISphSchema & tSchema, QueryProfile_t * pProfiler = nullptr )
 		: m_tSchema ( tSchema )
 		, m_pProfiler ( pProfiler )
 	{}

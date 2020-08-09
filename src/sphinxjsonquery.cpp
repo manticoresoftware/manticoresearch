@@ -1322,7 +1322,7 @@ static void EncodeHighlight ( const CSphMatch & tMatch, int iAttr, const ISphSch
 }
 
 
-CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQuery, CSphQueryProfile * pProfile )
+CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQuery, QueryProfile_t * pProfile )
 {
 	JsonEscapedBuilder tOut;
 	CSphString sResult;

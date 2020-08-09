@@ -27,7 +27,7 @@ bool			sphParseJsonUpdate ( const char * szUpdate, SqlStmt_t & tStmt, DocID_t & 
 bool			sphParseJsonDelete ( const char * szDelete, SqlStmt_t & tStmt, DocID_t & tDocId, CSphString & sError );
 bool			sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString & sStmt, CSphString & sQuery, DocID_t & tDocId, CSphString & sError );
 
-CSphString		sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQuery, CSphQueryProfile * pProfile );
+CSphString		sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQuery, QueryProfile_t * pProfile );
 JsonObj_c		sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, DocID_t tDocId );
 JsonObj_c		sphEncodeUpdateResultJson ( const char * szIndex, DocID_t tDocId, int iAffected );
 JsonObj_c 		sphEncodeDeleteResultJson ( const char * szIndex, DocID_t tDocId, int iAffected );

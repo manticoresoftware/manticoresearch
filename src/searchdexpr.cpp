@@ -218,7 +218,7 @@ bool QueryExprTraits_c::Command ( ESphExprCommand eCmd, void * pArg )
 class Expr_HighlightTraits_c : public ISphStringExpr, public QueryExprTraits_c
 {
 public:
-				Expr_HighlightTraits_c ( CSphIndex * pIndex, CSphQueryProfile * pProfiler, ISphExpr * pQuery );
+				Expr_HighlightTraits_c ( CSphIndex * pIndex, QueryProfile_t * pProfiler, ISphExpr * pQuery );
 
 	void		Command ( ESphExprCommand eCmd, void * pArg ) override;
 	void		FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override;
@@ -230,7 +230,7 @@ protected:
 	CSphRefcountedPtr<ISphExpr>		m_pText;
 	CSphVector<int>					m_dRequestedFieldIds;
 	CSphIndex *						m_pIndex = nullptr;
-	CSphQueryProfile *				m_pProfiler = nullptr;
+	QueryProfile_t *				m_pProfiler = nullptr;
 	SnippetQuerySettings_t			m_tSnippetQuery;
 	CSphScopedPtr<SnippetBuilder_c>	m_pSnippetBuilder;
 
@@ -239,7 +239,7 @@ protected:
 };
 
 
-Expr_HighlightTraits_c::Expr_HighlightTraits_c ( CSphIndex * pIndex, CSphQueryProfile * pProfiler, ISphExpr * pQuery )
+Expr_HighlightTraits_c::Expr_HighlightTraits_c ( CSphIndex * pIndex, QueryProfile_t * pProfiler, ISphExpr * pQuery )
 	: QueryExprTraits_c ( pQuery )
 	, m_pIndex ( pIndex )
 	, m_pProfiler ( pProfiler )
@@ -296,14 +296,14 @@ uint64_t Expr_HighlightTraits_c::GetHash ( const ISphSchema &, uint64_t, bool & 
 class Expr_Snippet_c : public Expr_HighlightTraits_c
 {
 public:
-				Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQueryProfile * pProfiler, QueryType_e eQueryType, CSphString & sError );
+				Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, QueryProfile_t * pProfiler, QueryType_e eQueryType, CSphString & sError );
 
 	int			StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const override;
 	ISphExpr *	Clone() const override;
 };
 
 
-Expr_Snippet_c::Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQueryProfile * pProfiler, QueryType_e eQueryType, CSphString & sError )
+Expr_Snippet_c::Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, QueryProfile_t * pProfiler, QueryType_e eQueryType, CSphString & sError )
 	: Expr_HighlightTraits_c ( pIndex, pProfiler, pArglist->GetArg(1) )
 {
 	m_pArgs = pArglist;
@@ -417,7 +417,7 @@ ISphExpr * Expr_Snippet_c::Clone () const
 class Expr_Highlight_c final : public Expr_HighlightTraits_c
 {
 public:
-				Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQueryProfile * pProfiler, QueryType_e eQueryType, CSphString & sError );
+				Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, QueryProfile_t * pProfiler, QueryType_e eQueryType, CSphString & sError );
 
 	int			StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final;
 	void		Command ( ESphExprCommand eCmd, void * pArg ) final;
@@ -439,7 +439,7 @@ private:
 };
 
 
-Expr_Highlight_c::Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQueryProfile * pProfiler, QueryType_e eQueryType, CSphString & sError )
+Expr_Highlight_c::Expr_Highlight_c ( ISphExpr * pArglist, CSphIndex * pIndex, QueryProfile_t * pProfiler, QueryType_e eQueryType, CSphString & sError )
 	: Expr_HighlightTraits_c ( pIndex, pProfiler, ( pArglist && pArglist->IsArglist() && pArglist->GetNumArgs()==3 ) ? pArglist->GetArg(2) : nullptr )
 {
 	assert ( m_pIndex );

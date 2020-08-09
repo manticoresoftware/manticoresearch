@@ -4450,7 +4450,8 @@ void FrontendSchemaBuilder_c::SwapAttrs ( CSphSchema & tSchema )
 
 //////////////////////////////////////////////////////////////////////////
 
-static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, bool bAllEqual, bool bMaster, const CSphFilterSettings * pAggrFilter, CSphQueryProfile * pProfiler )
+static bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, bool bAllEqual,
+		bool bMaster, const CSphFilterSettings * pAggrFilter, QueryProfile_t * pProfiler )
 {
 	ESphSortOrder eQuerySort = ( tQuery.m_sOuterOrderBy.IsEmpty() ? SPH_SORT_RELEVANCE : SPH_SORT_EXTENDED );
 	CSphQuery tQueryCopy = tQuery;
@@ -4592,8 +4593,8 @@ static void ComputePostlimit ( const ProcessPostlimitArgs_t & tArgs, AggrResult_
 
 
 /// merges multiple result sets, remaps columns, does reorder for outer selects
-bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, const sph::StringSet & hExtraColumns, CSphQueryProfile * pProfiler,
-	const CSphFilterSettings * pAggrFilter, bool bForceRefItems, bool bMaster, VecRefPtrsAgentConn_t & dRemotes )
+bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, const sph::StringSet & hExtraColumns,
+	QueryProfile_t * pProfiler, const CSphFilterSettings * pAggrFilter, bool bForceRefItems, bool bMaster, VecRefPtrsAgentConn_t & dRemotes )
 {
 	if ( !VerifyMatchCounts(tRes) )
 		return false;
@@ -4764,7 +4765,7 @@ public:
 	void							RunDeletes ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, CSphVector<DocID_t> * pDelDocs );
 	void							SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc );
 	void							SetQueryParser ( const QueryParser_i * pParser, QueryType_e eQueryType );
-	void							SetProfile ( CSphQueryProfile * pProfile );
+	void							SetProfile ( QueryProfile_t * pProfile );
 	AggrResult_t *					GetResult ( int iResult ) { return m_dResults.Begin() + iResult; }
 	void							SetFederatedUser () { m_bFederatedUser = true; }
 	const CSphString &				GetLocalIndexName ( int iLocal ) const;
@@ -4794,7 +4795,7 @@ protected:
 	CSphAttrUpdateEx *				m_pUpdates = nullptr;	///< holder for updates
 	CSphVector<DocID_t> *			m_pDelDocs = nullptr;	///< this query is for deleting
 
-	CSphQueryProfile *				m_pProfile = nullptr;
+	QueryProfile_t *				m_pProfile = nullptr;
 	QueryType_e						m_eQueryType {QUERY_API}; ///< queries from sphinxql require special handling
 	const QueryParser_i *			m_pQueryParser;	///< parser used for queries in this handler. e.g. plain or json-style
 
@@ -4848,7 +4849,7 @@ void PubSearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTa
 	m_pImpl->SetQuery ( iQuery, tQuery, pTableFunc );
 }
 
-void PubSearchHandler_c::SetProfile ( CSphQueryProfile * pProfile )
+void PubSearchHandler_c::SetProfile ( QueryProfile_t * pProfile )
 {
 	assert ( m_pImpl );
 	m_pImpl->SetProfile ( pProfile );
@@ -5068,7 +5069,7 @@ void SearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTable
 }
 
 
-void SearchHandler_c::SetProfile ( CSphQueryProfile * pProfile )
+void SearchHandler_c::SetProfile ( QueryProfile_t * pProfile )
 {
 	assert ( pProfile );
 	m_pProfile = pProfile;
@@ -12179,7 +12180,8 @@ static void ReturnZeroCount ( const CSphSchema & tSchema, const CSphBitvec & tAt
 }
 
 
-void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow, bool bAddQueryColumn, const CSphString * pQueryColumn, CSphQueryProfile * pProfile )
+void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow, bool bAddQueryColumn,
+		const CSphString * pQueryColumn, QueryProfile_t * pProfile )
 {
 	CSphScopedProfile tProf ( pProfile, SPH_QSTATE_NET_WRITE );
 
@@ -12678,17 +12680,17 @@ struct SessionVars_t
 };
 
 // fwd
-void HandleMysqlShowProfile ( RowBuffer_i & tOut, const CSphQueryProfile & p, bool bMoreResultsFollow );
-static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const CSphQueryProfile & p, bool bMoreResultsFollow );
+void HandleMysqlShowProfile ( RowBuffer_i & tOut, const QueryProfile_t & p, bool bMoreResultsFollow );
+static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_t & p, bool bMoreResultsFollow );
 
 
-class CSphQueryProfileMysql final : public CSphQueryProfile
+class CSphQueryProfileMysql final : public QueryProfile_t
 {
 public:
 	void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t& dZones ) final;
 	const char *	GetResultAsStr() const final;
 
-	CSphQueryProfile * Clone () const final
+	QueryProfile_t * Clone () const final
 	{
 		return new CSphQueryProfileMysql;
 	}
@@ -14049,7 +14051,7 @@ void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt 
 }
 
 
-void HandleMysqlShowProfile ( RowBuffer_i & tOut, const CSphQueryProfile & p, bool bMoreResultsFollow )
+void HandleMysqlShowProfile ( RowBuffer_i & tOut, const QueryProfile_t & p, bool bMoreResultsFollow )
 {
 	#define SPH_QUERY_STATE(_name,_desc) _desc,
 	static const char * dStates [ SPH_QSTATE_TOTAL ] = { SPH_QUERY_STATES };
@@ -14554,7 +14556,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 }
 
 
-static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const CSphQueryProfile & p, bool bMoreResultsFollow )
+static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_t & p, bool bMoreResultsFollow )
 {
 	tOut.HeadBegin ( 2 );
 	tOut.HeadColumn ( "Variable" );
@@ -15317,10 +15319,10 @@ bool SphinxqlSessionPublic::IsAutoCommit () const
 	return m_pImpl->m_tVars.m_bAutoCommit;
 }
 
-CSphQueryProfile * SphinxqlSessionPublic::StartProfiling ( ESphQueryState eState )
+QueryProfile_t * SphinxqlSessionPublic::StartProfiling ( ESphQueryState eState )
 {
 	assert ( m_pImpl );
-	CSphQueryProfile * pProfile = nullptr;
+	QueryProfile_t * pProfile = nullptr;
 	if ( m_pImpl->m_tVars.m_bProfile ) // the current statement might change it
 	{
 		pProfile = &m_pImpl->m_tProfile;

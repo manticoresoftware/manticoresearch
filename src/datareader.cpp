@@ -195,7 +195,7 @@ public:
 		return pFileReader;
 	}
 
-	void SetProfile ( CSphQueryProfile* pProfile ) final
+	void SetProfile ( QueryProfile_t* pProfile ) final
 	{
 		m_dReader.m_pProfile = pProfile;
 	}

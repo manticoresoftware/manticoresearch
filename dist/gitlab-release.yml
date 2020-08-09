@@ -296,7 +296,10 @@ collect_repo:
 
 build_docker:
   stage: deploy
+  dependencies: []
   interruptible: true
+  variables:
+    GIT_STRATEGY: none
   rules:
     - if: $REPO_NAME=='$REPO_NAME' && $DOCS_COMMIT_ONLY == null 
     - if: $WHAT=='$WHAT' && $DOCS_COMMIT_ONLY == null

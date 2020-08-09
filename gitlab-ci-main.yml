@@ -15,10 +15,14 @@ pages:
   tags:
     - docker
   dependencies: []
+  variables:
+    REDIR_URL: "https://manual.manticoresearch.com/dev/"
   script:
-    - export REDIR_URL="https://manual.manticoresearch.com/dev/"
+    - mkdir .public
+    - cd .public
     - echo "<!DOCTYPE html><html><head><meta http-equiv='refresh' content = '0; url = $REDIR_URL' /></head></html>" >> index.html
-    - cp -r index.html public/index.html
+    - cd -
+    - mv .public public
   artifacts:
     paths:
     - public

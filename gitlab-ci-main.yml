@@ -6,7 +6,7 @@ stages:
 start:
   stage: mirroring
   script:
-    - echo "Main started."
+    - echo "Main started. Env is TEST=$TEST, WHAT=$WHAT, CI_COMMIT_TITLE=$CI_COMMIT_TITLE, DOCS_COMMIT_ONLY=$DOCS_COMMIT_ONLY "
 
 pages:
   stage: routines

@@ -834,7 +834,7 @@ public:
 
 	bool Process () override
 	{
-		CSphString sQuery = m_sQuery + sizeof ( "mode=" ) - 1 + sizeof ( g_sBypassToken ) - 1;
+		CSphString sQuery = m_sQuery + sizeof ( g_sBypassToken ) - 1;
 		CSphString sError;
 
 		JsonRowBuffer_c tOut;
@@ -1173,8 +1173,14 @@ static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const cha
 	{
 	case SPH_HTTP_ENDPOINT_SQL:
 		pRawSQL = tOptions ( "decoded_mode" );
-		if ( pRawSQL && pRawSQL->Begins ( g_sBypassToken ) ) // test for 'mode=raw&query=...'
+		if ( pRawSQL && pRawSQL->Begins ( g_sBypassToken ) ) // test for 'raw&query=...'
+		{
+			if (!sQuery)
+				sQuery = pRawSQL->cstr ();
+			else
+				sQuery += sizeof ( "mode=" )-1;
 			return new HttpRawSqlHandler_c ( sQuery, tOptions );
+		}
 		else
 			return new HttpSearchHandler_SQL_c ( sQuery, tOptions );
 

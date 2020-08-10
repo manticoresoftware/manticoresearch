@@ -118,7 +118,7 @@ public:
 	void								SuffixGetChekpoints ( const SuggestResult_t & tRes, const char * sSuffix, int iLen, CSphVector<DWORD> & dCheckpoints ) const override;
 	void								SetCheckpoint ( SuggestResult_t & tRes, DWORD iCP ) const override;
 	bool								ReadNextWord ( SuggestResult_t & tRes, DictWord_t & tWord ) const override;
-	int									GetWordsEnd() const { return m_iWordsEnd; }
+	SphOffset_t							GetWordsEnd() const { return m_iWordsEnd; }
 
 	void								DebugPopulateCheckpoints();
 

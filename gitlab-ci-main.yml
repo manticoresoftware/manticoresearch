@@ -42,7 +42,7 @@ job_mirror:
 simple_tests:
   stage: routines
   rules:
-    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $DOCS_COMMIT_ONLY == null
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $DOCS_COMMIT_ONLY == null
     - if: $TEST =~ /simple/ && $DOCS_COMMIT_ONLY == null
   tags:
     - specdocker
@@ -81,7 +81,7 @@ simple_tests:
 release_tests:
   stage: routines
   rules:
-    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $DOCS_COMMIT_ONLY == null
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $DOCS_COMMIT_ONLY == null
     - if: $TEST =~ /release/ && $DOCS_COMMIT_ONLY == null
   tags:
     - specdocker # once test 58 fixed, m.b. change to 'docker' and gitlab then cloud will help us testing.
@@ -121,7 +121,7 @@ release_tests:
 win_tests:
   stage: routines
   rules:
-    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^nociwindows .*$/i && $DOCS_COMMIT_ONLY == null
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nociwindows .*$/i && $DOCS_COMMIT_ONLY == null
     - if: $TEST =~ /windows/ && $DOCS_COMMIT_ONLY == null
   tags:
     - windev19
@@ -155,7 +155,7 @@ win_tests:
 build_mac:
   stage: routines
   rules:
-    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^nocimacos .*$/i && $DOCS_COMMIT_ONLY == null
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocimacos .*$/i && $DOCS_COMMIT_ONLY == null
     - if: $TEST =~ /macos/ && $DOCS_COMMIT_ONLY == null
   tags:
     - mac
@@ -194,7 +194,7 @@ build_mac:
 build_bsd:
   stage: routines
   rules:
-    - if: $TEST==null && $WHAT==null && $CI_COMMIT_TITLE !~ /^nocifreebsd .*$/i && $DOCS_COMMIT_ONLY == null
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocifreebsd .*$/i && $DOCS_COMMIT_ONLY == null
     - if: $TEST =~ /freebsd/ && $DOCS_COMMIT_ONLY == null
   tags:
     - freebsd
@@ -231,7 +231,7 @@ build_bsd:
 push_results:
   stage: publish
   rules:
-    - if: $WHAT==null && $DOCS_COMMIT_ONLY == null
+    - if: $DOCS_COMMIT_ONLY == null
       when: always
   tags:
     - docker

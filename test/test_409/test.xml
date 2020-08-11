@@ -38,6 +38,10 @@ searchd
 	ALTER CLUSTER test ADD rt_wf11;
 	ALTER CLUSTER test ADD rt_st1;
 	ALTER CLUSTER test ADD rt_many1;
+	create table rt_st2 (t1 text indexed stored, gid int) stopwords = 'en';
+	create table pq_st2 (t1 text indexed stored, gid int) stopwords = 'en' type='percolate';
+	ALTER CLUSTER test ADD rt_st2;
+	ALTER CLUSTER test ADD pq_st2;
 </sphinxql>
 
 <!-- request to node 1 -->
@@ -50,6 +54,8 @@ searchd
 	insert into test:rt_wf11 (id,t1,gid) values (111, 'any color good for me', 1001), (112, 'large blue sky', 1002);
 	insert into test:rt_st1 (id,t1,gid) values (111, 'me and you', 1001), (112, 'be like you', 1002);
 	insert into test:rt_many1 (id,t1,gid) values (111, 'msw rulez', 1001), (112, 'ms windows many things considered', 1002), (113, 'msw be like no one', 1003);
+	insert into test:rt_st2 (id,t1,gid) values (111, 'test 222', 1001);
+	insert into test:pq_st2 (query) values ('test 222');
 </sphinxql>
 
 <!-- request to node 1 -->
@@ -62,6 +68,8 @@ searchd
 	SELECT * FROM test:rt_many1 where match ('windows rulez'); SHOW META;
 	SELECT * FROM test:rt_many1 where match ('^many things'); SHOW META;
 	SELECT * FROM test:rt_many1 where match ('windows be like'); SHOW META;
+	SELECT * FROM test:rt_st2;
+	SELECT * FROM test:pq_st2;
 </sphinxql>
 
 <!-- disk chunks -->
@@ -93,9 +101,13 @@ DROP TABLE rt_wf11;
 	ALTER CLUSTER test DROP rt_st1;
 	ALTER CLUSTER test DROP rt_many1;
 	ALTER CLUSTER test DROP rt_many2;
+	ALTER CLUSTER test DROP rt_st2;
+	ALTER CLUSTER test DROP pq_st2;
 	DROP TABLE rt_st1;
 	DROP TABLE rt_many1;
 	DROP TABLE rt_many2;
+	DROP TABLE rt_st2;
+	DROP TABLE pq_st2;
 </sphinxql>
 
 </queries>

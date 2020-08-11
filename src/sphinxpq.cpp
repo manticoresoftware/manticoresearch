@@ -2733,12 +2733,19 @@ void MergePqResults ( const VecTraits_T<CPqResult *> &dChunks, CPqResult &dRes, 
 	}
 }
 
-void PercolateIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * ) const
+void PercolateIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * pParentBuilder ) const
 {
 	CSphString & sMeta = dFiles.Add();
 	sMeta.SetSprintf ( "%s.meta", m_sFilename.cstr() );
 
-	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), nullptr, dFiles );
+	CSphScopedPtr<const FilenameBuilder_i> pFilenameBuilder ( nullptr );
+	if ( !pParentBuilder && GetIndexFilenameBuilder() )
+	{
+		pFilenameBuilder = GetIndexFilenameBuilder() ( m_sIndexName.cstr() );
+		pParentBuilder = pFilenameBuilder.Ptr();
+	}
+
+	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pParentBuilder, dFiles );
 }
 
 bool PercolateIndex_c::ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const

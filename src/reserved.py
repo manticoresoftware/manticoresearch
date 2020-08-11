@@ -38,9 +38,9 @@ handled.append('COLLATE')
 res = sorted(diff(res, handled))
 
 # load reserved keywords list from docs
-r = re.search('\.\. code\-block:: mysql(.*)', load('../docs/sphinxql_reference/list_of_sphinxql_reserved_keywords.rst'), re.MULTILINE + re.DOTALL)
+r = re.search('```(.*)```', load('../manual/list_of_sphinxql_reserved_keywords.md'), re.MULTILINE + re.DOTALL)
 if not r:
-	die('failed to extract reserved keywords from docs/sphinxql_reference/list_of_sphinxql_reserved_keywords.rst')
+	die('failed to extract reserved keywords from manual/list_of_sphinxql_reserved_keywords.md')
 doc = [k for k in re.findall('(\w+)', r.group(1))]
 
 # load reserved keywords list from sources

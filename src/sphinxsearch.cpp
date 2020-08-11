@@ -242,90 +242,221 @@ private:
 };
 
 //////////////////////////////////////////////////////////////////////////
+namespace { // static
 
-static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t * pZones, StringBuilder_c & tRes,
-	int iIndent, const char * szIndent, const char * szLinebreak )
+// dump spec for keyword nodes
+void RenderAccessSpecs ( StringBuilder_c & tRes, const bson::Bson_c& tBson, bool bWithZones )
 {
+	using namespace bson;
+	{
+		ScopedComma_c dFieldsComma ( tRes, ", ", "fields=(", ")" );
+		Bson_c ( tBson.ChildByName ( SZ_FIELDS ) ).ForEach ( [&tRes] ( const NodeHandle_t & tNode ) {
+			tRes << String ( tNode );
+		} );
+	}
+	int iPos = Int ( tBson.ChildByName ( SZ_MAX_FIELD_POS ) );
+	if ( iPos )
+		tRes.Sprintf ( "max_field_pos=%d", iPos );
+
+	if ( !bWithZones )
+		return;
+
+	auto tZones = tBson.GetFirstOf ( { SZ_ZONES, SZ_ZONESPANS } );
+	ScopedComma_c dZoneDelim ( tRes, ", ", ( tZones.first==1 ) ? "zonespans=(" : "zones=(", ")" );
+	Bson_c ( tZones.second ).ForEach ( [&tRes] ( const NodeHandle_t & tNode ) {
+		tRes << String ( tNode );
+	} );
+}
+
+bool RenderKeywordNode ( StringBuilder_c & tRes, const bson::Bson_c& tBson )
+{
+	using namespace bson;
+	auto tWord = tBson.ChildByName ( SZ_WORD );
+	if ( IsNullNode ( tWord ) )
+		return false;
+
+	ScopedComma_c ExplainComma ( tRes, ", ", "KEYWORD(", ")" );
+	tRes << String ( tWord );
+	tRes.Sprintf ( "querypos=%d", Int ( tBson.ChildByName ( SZ_QUERYPOS ) ) );
+	if ( Bool ( tBson.ChildByName ( SZ_EXCLUDED ) ) )
+		tRes += "excluded";
+	if ( Bool ( tBson.ChildByName ( SZ_EXPANDED ) ) )
+		tRes += "expanded";
+	if ( Bool ( tBson.ChildByName ( SZ_FIELD_START ) ) )
+		tRes += "field_start";
+	if ( Bool ( tBson.ChildByName ( SZ_FIELD_END ) ) )
+		tRes += "field_end";
+	if ( Bool ( tBson.ChildByName ( SZ_MORPHED ) ) )
+		tRes += "morphed";
+	auto tBoost = tBson.ChildByName ( SZ_BOOST );
+	if ( !IsNullNode ( tBoost ) )
+	{
+		auto fBoost = Double ( tBoost );
+		if ( fBoost!=1.0f ) // really comparing floats?
+			tRes.Appendf ( "boost=%f", fBoost );
+	}
+	return true;
+}
+
+void RenderBsonPlan ( bson::NodeHandle_t dBson, StringBuilder_c & tRes, bool bWithZones,
+		int iIndent, const char * szIndent, const char * szLinebreak )
+{
+	using namespace bson;
+	if ( dBson==nullnode )
+		return;
+
+	Bson_c tBson ( dBson );
+	if ( RenderKeywordNode ( tRes, tBson ) )
+		return;
+
 	ScopedComma_c sEmpty ( tRes, nullptr );
+
 	if ( iIndent )
 		tRes += szLinebreak;
 
 	for ( int i=0; i<iIndent; ++i )
 		tRes += szIndent;
 
-	tRes << sphXQNodeToStr(pNode);
+	tRes << String ( tBson.ChildByName ( SZ_TYPE ) );
 
 	// enclose the rest in brackets, comma-separated
 	ScopedComma_c ExplainComma ( tRes, ", ", "(", ")" );
-	tRes << sphXQNodeGetExtraStr ( pNode );
-	if ( pNode->m_dChildren.GetLength() && pNode->m_dWords.GetLength() )
+	Bson_c ( tBson.ChildByName ( SZ_OPTIONS ) ).ForEach ( [&tRes] ( CSphString&& sName, const NodeHandle_t & tNode ) {
+		tRes.Sprintf ( "%s=%d", sName.cstr (), (int) Int ( tNode ) );
+	} );
+	if ( Bool ( tBson.ChildByName ( SZ_VIRTUALLY_PLAIN ) ) )
 		tRes += "virtually-plain";
 
 	// dump spec for keyword nodes
-	// FIXME? double check that spec does *not* affect non keyword nodes
-	if ( !pNode->m_dSpec.IsEmpty() && pNode->m_dWords.GetLength() )
-	{
-		const XQLimitSpec_t & s = pNode->m_dSpec;
-		if ( s.m_bFieldSpec && !s.m_dFieldMask.TestAll ( true ) )
-		{
-			ScopedComma_c dFieldsComma (tRes, ", ", "fields=(", ")" );
-			for ( int i = 0; i < tSchema.GetFieldsCount(); ++i )
-				if ( s.m_dFieldMask.Test(i) )
-					tRes << tSchema.GetFieldName ( i );
-		}
+	RenderAccessSpecs ( tRes, dBson, bWithZones );
 
-		if ( s.m_iFieldMaxPos )
-			tRes.Appendf ( "max_field_pos=%d", s.m_iFieldMaxPos );
-
-		if ( pZones && s.m_dZones.GetLength() )
-		{
-			ScopedComma_c dZoneDelim ( tRes, ", ", s.m_bZoneSpan ? "zonespans=(" : "zones=(", ")" );
-			for ( int iZone : s.m_dZones )
-				tRes << (*pZones) [iZone ];
-		}
-	}
-
-	if ( !pNode->m_dChildren.IsEmpty() )
-		for ( const auto& dChild : pNode->m_dChildren )
-			Explain ( dChild, tSchema, pZones, tRes, iIndent+1, szIndent, szLinebreak );
-	else
-		for ( const XQKeyword_t &w : pNode->m_dWords )
-		{
-			ScopedComma_c dKeyword ( tRes, ", ", "KEYWORD(", ")");
-			tRes << w.m_sWord;
-			tRes.Appendf ( "querypos=%d", w.m_iAtomPos );
-			if ( w.m_bExcluded )
-				tRes += "excluded";
-			if ( w.m_bExpanded )
-				tRes += "expanded";
-			if ( w.m_bFieldStart )
-				tRes += "field_start";
-			if ( w.m_bFieldEnd )
-				tRes += "field_end";
-			if ( w.m_bMorphed )
-				tRes += "morphed";
-			if ( w.m_fBoost!=1.0f ) // really comparing floats?
-				tRes.Appendf ( "boost=%f", w.m_fBoost );
-		}
+	Bson_c ( tBson.ChildByName ( SZ_CHILDREN ) ).ForEach ( [&] ( const NodeHandle_t & tNode ) {
+		RenderBsonPlan ( tNode, tRes, bWithZones, iIndent+1, szIndent, szLinebreak );
+	} );
 }
 
+void XQNodeGetExtraBson ( bson::Assoc_c & tNode, const XQNode_t * pNode )
+{
+	switch ( pNode->GetOp() )
+	{
+	case SPH_QUERY_PROXIMITY:
+	case SPH_QUERY_NEAR:	bson::Obj_c ( tNode.StartObj (SZ_OPTIONS) ).AddInt ( "distance", pNode->m_iOpArg ); break;
+	case SPH_QUERY_QUORUM:	bson::Obj_c ( tNode.StartObj (SZ_OPTIONS) ).AddInt ( "count", pNode->m_iOpArg ); break;
+	default:					break;
+	}
+}
+
+void AddAccessSpecsBson ( bson::Assoc_c & tNode, const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones )
+{
+	assert ( pNode );
+	// dump spec for keyword nodes
+	// FIXME? double check that spec does *not* affect non keyword nodes
+	if ( pNode->m_dSpec.IsEmpty () || pNode->m_dWords.IsEmpty () )
+		return;
+
+	const XQLimitSpec_t & s = pNode->m_dSpec;
+	if ( s.m_bFieldSpec && !s.m_dFieldMask.TestAll ( true ) )
+	{
+		StrVec_t dFields;
+		for ( int i = 0; i<tSchema.GetFieldsCount (); ++i )
+			if ( s.m_dFieldMask.Test ( i ) )
+				dFields.Add ( tSchema.GetFieldName ( i ) );
+		tNode.AddStringVec( SZ_FIELDS, dFields );
+	}
+	if ( s.m_iFieldMaxPos )
+		tNode.AddInt ( SZ_MAX_FIELD_POS, s.m_iFieldMaxPos );
+	if ( s.m_dZones.GetLength () )
+		tNode.AddStringVec ( s.m_bZoneSpan ? SZ_ZONESPANS : SZ_ZONES, dZones );
+}
+
+void CreateKeywordBson ( bson::Assoc_c& tWord, const XQKeyword_t & tKeyword )
+{
+	tWord.AddString ( SZ_TYPE, "KEYWORD" );
+	tWord.AddString ( SZ_WORD, tKeyword.m_sWord.cstr () );
+	tWord.AddInt ( SZ_QUERYPOS, tKeyword.m_iAtomPos );
+	if ( tKeyword.m_bExcluded )
+		tWord.AddBool ( SZ_EXCLUDED, true );
+	if ( tKeyword.m_bExpanded )
+		tWord.AddBool ( SZ_EXPANDED, true );
+	if ( tKeyword.m_bFieldStart )
+		tWord.AddBool ( SZ_FIELD_START, true );
+	if ( tKeyword.m_bFieldEnd )
+		tWord.AddBool ( SZ_FIELD_END, true );
+	if ( tKeyword.m_bMorphed )
+		tWord.AddBool ( SZ_MORPHED, true );
+	if ( tKeyword.m_fBoost!=1.0f )
+		tWord.AddDouble ( SZ_BOOST, tKeyword.m_fBoost );
+}
+
+void BuildProfileBson ( bson::Assoc_c& tPlan, const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones )
+{
+	using namespace bson;
+	tPlan.AddString ( SZ_TYPE, sphXQNodeToStr ( pNode ).cstr() );
+	XQNodeGetExtraBson ( tPlan, pNode );
+	AddAccessSpecsBson ( tPlan, pNode, tSchema, dZones );
+
+	if ( pNode->m_dChildren.GetLength () && pNode->m_dWords.GetLength () )
+		tPlan.AddBool ( SZ_VIRTUALLY_PLAIN, true );
+
+	if ( pNode->m_dChildren.IsEmpty () )
+	{
+		MixedVector_c dChildren ( tPlan.StartMixedVec( SZ_CHILDREN ), pNode->m_dWords.GetLength() );
+		for ( const auto & i : pNode->m_dWords )
+		{
+			Obj_c tWord ( dChildren.StartObj () );
+			CreateKeywordBson ( tWord, i );
+		}
+	} else
+	{
+		MixedVector_c dChildren ( tPlan.StartMixedVec ( SZ_CHILDREN ), pNode->m_dChildren.GetLength () );
+		for ( const auto & i : pNode->m_dChildren )
+		{
+			Obj_c tChild ( dChildren.StartObj () );
+			BuildProfileBson ( tChild, i, tSchema, dZones );
+		}
+	}
+}
+
+} // namespace static
+
+CSphString sph::RenderBsonQuery ( const bson::NodeHandle_t & dBson )
+{
+	StringBuilder_c tRes;
+	RenderBsonPlan ( dBson, tRes, true, 0, "  ", "\n" );
+#if 0
+	CSphString sResult1;
+	bson::Bson_c ( dBson ).BsonToJson ( sResult1 );
+	tRes << "raw: " << sResult1;
+#endif
+	CSphString sResult;
+	tRes.MoveTo ( sResult );
+	return sResult;
+}
+
+CSphString sph::RenderBsonQueryBrief ( const bson::NodeHandle_t& dBson )
+{
+	StringBuilder_c tRes;
+	RenderBsonPlan ( dBson, tRes, false, 0, "", " " );
+	CSphString sResult;
+	tRes.MoveTo ( sResult );
+	return sResult;
+}
 
 CSphString sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones )
 {
-	StringBuilder_c tRes;
-	Explain ( pNode, tSchema, &dZones, tRes, 0, "  ", "\n" );
-	CSphString sResult;
-	tRes.MoveTo ( sResult );
-	return sResult;
+	CSphVector<BYTE> dPlan;
+	{
+		bson::Root_c tPlan ( dPlan );
+		::BuildProfileBson ( tPlan, pNode, tSchema, dZones );
+	}
+	return sph::RenderBsonQuery ( bson::MakeHandle ( dPlan ) );
 }
 
-CSphString sphExplainQueryBrief ( const XQNode_t * pNode, const CSphSchema & tSchema )
+void QueryProfile_t::BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t & dZones )
 {
-	StringBuilder_c tRes;
-	Explain ( pNode, tSchema, nullptr, tRes, 0, "", " " );
-	CSphString sResult;
-	tRes.MoveTo ( sResult );
-	return sResult;
+	m_dPlan.Reset();
+	bson::Root_c tPlan ( m_dPlan );
+	::BuildProfileBson ( tPlan, pRoot, tSchema, dZones );
 }
 
 ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, bool bSkipQCache, bool bCollectHits, bool bUseBM25 )
@@ -4245,20 +4376,4 @@ CSphString sphXQNodeToStr ( const XQNode_t * pNode )
 	CSphString sTmp;
 	sTmp.SetSprintf ( "OPERATOR-%d", pNode->GetOp() );
 	return sTmp; 
-}
-
-
-CSphString sphXQNodeGetExtraStr ( const XQNode_t * pNode )
-{
-	CSphString sTmp("");
-
-	switch ( pNode->GetOp() )
-	{
-	case SPH_QUERY_PROXIMITY:	sTmp.SetSprintf ( "distance=%d", pNode->m_iOpArg ); break;
-	case SPH_QUERY_QUORUM:		sTmp.SetSprintf ( "count=%d", pNode->m_iOpArg ); break;
-	case SPH_QUERY_NEAR:		sTmp.SetSprintf ( "distance=%d", pNode->m_iOpArg ); break;
-	default:					break;
-	}
-
-	return sTmp;
 }

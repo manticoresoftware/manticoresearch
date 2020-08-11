@@ -138,6 +138,7 @@ public:
 
 	int				m_dSwitches [ SPH_QSTATE_TOTAL+1 ];	///< number of switches to given state
 	int64_t			m_tmTotal [ SPH_QSTATE_TOTAL+1 ];	///< total time spent per state
+	CSphVector<BYTE>	m_dPlan; 						///< bson with plan
 
 	/// create empty and stopped profile
 	QueryProfile_t ()
@@ -182,20 +183,26 @@ public:
 	{
 		Switch ( SPH_QSTATE_TOTAL );
 	}
-
-	virtual void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t & dZones ) = 0;
-
-
-	virtual const char *	GetResultAsStr() const
-	{
-		assert ( 0 && "Not implemented" );
-		return nullptr;
-	}
-
-	virtual 				~QueryProfile_t() {};
-
-	virtual QueryProfile_t*		Clone() const = 0;
+	void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t & dZones );
 };
+
+// shorter names for more compact bson
+#define SZ_TYPE				"a"
+#define SZ_VIRTUALLY_PLAIN	"b"
+#define SZ_CHILDREN			"c"
+#define SZ_OPTIONS			"d"
+#define SZ_FIELDS			"e"
+#define SZ_MAX_FIELD_POS	"f"
+#define SZ_WORD				"g"
+#define SZ_QUERYPOS			"h"
+#define SZ_EXCLUDED			"i"
+#define SZ_EXPANDED			"j"
+#define SZ_FIELD_START		"k"
+#define SZ_FIELD_END		"l"
+#define SZ_MORPHED			"m"
+#define SZ_BOOST			"n"
+#define SZ_ZONES            "o"
+#define SZ_ZONESPANS        "p"
 
 // acquire common pattern 'check, then switch if not null'
 inline void SwitchProfile ( QueryProfile_t* pProfile, ESphQueryState eState )

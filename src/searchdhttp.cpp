@@ -291,29 +291,6 @@ static void HttpHandlerIndexPage ( CSphVector<BYTE> & dData )
 	HttpBuildReply ( dData, SPH_HTTP_STATUS_200, sIndexPage.cstr(), sIndexPage.GetLength(), true );
 }
 
-class CSphQueryProfileFormatJson final : public QueryProfile_t
-{
-public:
-
-	void BuildResult ( XQNode_t * pRoot, const CSphSchema &tSchema, const StrVec_t &dZones ) final
-	{
-		sphBuildProfileJson ( m_sResult, pRoot, tSchema, dZones );
-	}
-
-	const char* GetResultAsStr () const final
-	{
-		return m_sResult.cstr();
-	}
-
-	QueryProfile_t * Clone () const final
-	{
-		return new CSphQueryProfileFormatJson;
-	}
-
-private:
-	JsonEscapedBuilder m_sResult;
-};
-
 //////////////////////////////////////////////////////////////////////////
 class JsonRequestBuilder_c : public RequestBuilder_i
 {
@@ -558,7 +535,7 @@ public:
 		m_tQuery.m_pQueryParser = pQueryParser;
 		CSphScopedPtr<PubSearchHandler_c> tHandler { new PubSearchHandler_c ( 1, pQueryParser, m_eQueryType, true ) };
 
-		CSphQueryProfileFormatJson tProfile;
+		QueryProfile_t tProfile;
 		if ( m_bProfile )
 			tHandler->SetProfile ( &tProfile );
 

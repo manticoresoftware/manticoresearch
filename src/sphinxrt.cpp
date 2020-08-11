@@ -6037,7 +6037,7 @@ struct DiskChunkSearcherCloneCtx_t
 
 		m_dResult.m_bHasPrediction = dParent.m_pResult->m_bHasPrediction;
 		if ( dParent.m_pResult->m_pProfile )
-			m_dResult.m_pProfile = dParent.m_pResult->m_pProfile->Clone ();
+			m_dResult.m_pProfile = new QueryProfile_t;
 	}
 
 	~DiskChunkSearcherCloneCtx_t()

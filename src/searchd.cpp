@@ -12683,35 +12683,6 @@ struct SessionVars_t
 void HandleMysqlShowProfile ( RowBuffer_i & tOut, const QueryProfile_t & p, bool bMoreResultsFollow );
 static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_t & p, bool bMoreResultsFollow );
 
-
-class CSphQueryProfileMysql final : public QueryProfile_t
-{
-public:
-	void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t& dZones ) final;
-	const char *	GetResultAsStr() const final;
-
-	QueryProfile_t * Clone () const final
-	{
-		return new CSphQueryProfileMysql;
-	}
-
-private:
-	CSphString				m_sResult;
-};
-
-
-void CSphQueryProfileMysql::BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t& dZones )
-{
-	m_sResult = sphExplainQuery ( pRoot, tSchema, dZones );
-}
-
-
-const char* CSphQueryProfileMysql::GetResultAsStr() const
-{
-	return m_sResult.cstr();
-}
-
-
 void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResultMeta & tLastMeta, RowBuffer_i & dRows,
 		const CSphString & sWarning )
 {
@@ -12730,7 +12701,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	// setup query for searching
 	SearchHandler_c tHandler ( iSelect, sphCreatePlainQueryParser(), QUERY_SQL, true );
 	SessionVars_t tVars;
-	CSphQueryProfileMysql tProfile;
+	QueryProfile_t tProfile;
 
 	iSelect = 0;
 	ARRAY_FOREACH ( i, dStmt )
@@ -14564,7 +14535,8 @@ static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_t & p, 
 	tOut.HeadEnd ( bMoreResultsFollow );
 
 	tOut.PutString ( "transformed_tree" );
-	tOut.PutString ( p.GetResultAsStr() );
+	auto sPlan = sph::RenderBsonQuery ( bson::MakeHandle ( p.m_dPlan ) );
+	tOut.PutString ( sPlan.cstr() );
 	tOut.Commit();
 
 	tOut.Eof ( bMoreResultsFollow );
@@ -14771,8 +14743,8 @@ private:
 
 public:
 	SessionVars_t			m_tVars;
-	CSphQueryProfileMysql	m_tProfile;
-	CSphQueryProfileMysql	m_tLastProfile;
+	QueryProfile_t			m_tProfile;
+	QueryProfile_t			m_tLastProfile;
 
 public:
 	// just execute one sphinxql statement

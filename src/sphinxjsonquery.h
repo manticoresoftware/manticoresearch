@@ -35,8 +35,6 @@ JsonObj_c		sphEncodeInsertErrorJson ( const char * szIndex, const char * szError
 
 bool			sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate );
 
-void			sphBuildProfileJson ( JsonEscapedBuilder &tOut, const XQNode_t * pNode, const CSphSchema &tSchema, const StrVec_t &dZones );
-
 bool			NonEmptyQuery ( const JsonObj_c & tQuery );
 
 #endif

@@ -191,9 +191,13 @@ public:
 //////////////////////////////////////////////////////////////////////////
 
 CSphString sphXQNodeToStr ( const XQNode_t * pNode );
-CSphString sphXQNodeGetExtraStr ( const XQNode_t * pNode );
 CSphString sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones );
-CSphString sphExplainQueryBrief ( const XQNode_t * pNode, const CSphSchema & tSchema );
+
+namespace sph
+{
+	CSphString RenderBsonQuery ( const bson::NodeHandle_t & dBson );
+	CSphString RenderBsonQueryBrief ( const bson::NodeHandle_t & dBson );
+}
 
 struct ExplainQueryArgs_t
 {

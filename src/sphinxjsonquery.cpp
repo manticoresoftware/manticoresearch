@@ -1298,8 +1298,8 @@ static bool NeedToSkipAttr ( const CSphString & sName, const CSphQuery & tQuery 
 	return !bInclude;
 }
 
-
-static void EncodeHighlight ( const CSphMatch & tMatch, int iAttr, const ISphSchema & tSchema, JsonEscapedBuilder & tOut )
+namespace { // static
+void EncodeHighlight ( const CSphMatch & tMatch, int iAttr, const ISphSchema & tSchema, JsonEscapedBuilder & tOut )
 {
 	const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
 
@@ -1321,6 +1321,95 @@ static void EncodeHighlight ( const CSphMatch & tMatch, int iAttr, const ISphSch
 	}
 }
 
+void JsonRenderAccessSpecs ( JsonEscapedBuilder & tRes, const bson::Bson_c & tBson, bool bWithZones )
+{
+	using namespace bson;
+	{
+		ScopedComma_c sFieldsArray ( tRes, ",", "\"fields\":[", "]" );
+		Bson_c ( tBson.ChildByName ( SZ_FIELDS ) ).ForEach ( [&tRes] ( const NodeHandle_t & tNode ) {
+			tRes.AppendEscapedWithComma ( String ( tNode ).cstr() );
+		} );
+	}
+	int iPos = Int ( tBson.ChildByName ( SZ_MAX_FIELD_POS ) );
+	if ( iPos )
+		tRes.Sprintf ( "\"max_field_pos\":%d", iPos );
+
+	if ( !bWithZones )
+		return;
+
+	auto tZones = tBson.GetFirstOf ( { SZ_ZONES, SZ_ZONESPANS } );
+	ScopedComma_c dZoneDelim ( tRes, ", ", ( tZones.first==1 ) ? "\"zonespans\":[" : "\"zones\":[", "]" );
+	Bson_c ( tZones.second ).ForEach ( [&tRes] ( const NodeHandle_t & tNode ) {
+		tRes << String ( tNode );
+	} );
+}
+
+bool JsonRenderKeywordNode ( JsonEscapedBuilder & tRes, const bson::Bson_c& tBson )
+{
+	using namespace bson;
+	auto tWord = tBson.ChildByName ( SZ_WORD );
+	if ( IsNullNode ( tWord ) )
+		return false;
+
+	ScopedComma_c sRoot ( tRes.Object() );
+	tRes << R"("type":"KEYWORD")";
+	tRes << "\"word\":";
+	tRes.AppendEscapedSkippingComma ( String ( tWord ).cstr () );
+	tRes.Sprintf ( R"("querypos":%d)", Int ( tBson.ChildByName ( SZ_QUERYPOS ) ) );
+
+	if ( Bool ( tBson.ChildByName ( SZ_EXCLUDED ) ) )
+		tRes << R"("excluded":true)";
+	if ( Bool ( tBson.ChildByName ( SZ_EXPANDED ) ) )
+		tRes << R"("expanded":true)";
+	if ( Bool ( tBson.ChildByName ( SZ_FIELD_START ) ) )
+		tRes << R"("field_start":true)";
+	if ( Bool ( tBson.ChildByName ( SZ_FIELD_END ) ) )
+		tRes << R"("field_end":true)";
+	if ( Bool ( tBson.ChildByName ( SZ_FIELD_END ) ) )
+		tRes << R"("morphed":true)";
+	auto tBoost = tBson.ChildByName ( SZ_BOOST );
+	if ( !IsNullNode ( tBoost ) )
+	{
+		auto fBoost = Double ( tBoost );
+		if ( fBoost!=1.0f ) // really comparing floats?
+			tRes.Sprintf ( R"("boost":%f)", fBoost );
+	}
+	return true;
+}
+
+void FormatJsonPlanFromBson ( JsonEscapedBuilder& tOut, bson::NodeHandle_t dBson )
+{
+	using namespace bson;
+	if ( dBson==nullnode )
+		return;
+
+	Bson_c tBson ( dBson );
+
+	if ( JsonRenderKeywordNode ( tOut, tBson) )
+		return;
+
+	auto dRootBlock = tOut.ObjectBlock();
+
+	tOut << "\"type\":";
+	tOut.AppendEscapedSkippingComma ( String ( tBson.ChildByName ( SZ_TYPE ) ).cstr() );
+
+	tOut << "\"description\":";
+	tOut.AppendEscapedSkippingComma ( sph::RenderBsonQueryBrief ( dBson ).cstr () );
+
+	Bson_c ( tBson.ChildByName ( SZ_OPTIONS ) ).ForEach ( [&tOut] ( CSphString&& sName, const NodeHandle_t & tNode ) {
+		tOut.Sprintf ( R"("options":"%s=%d")", sName.cstr (), (int) Int ( tNode ) );
+	} );
+
+	JsonRenderAccessSpecs ( tOut, dBson, true );
+
+	tOut.StartBlock ( ",", "\"children\":[", "]" );
+	Bson_c ( tBson.ChildByName ( SZ_CHILDREN ) ).ForEach ( [&] ( const NodeHandle_t & tNode ) {
+		FormatJsonPlanFromBson ( tOut, tNode );
+	} );
+	tOut.FinishBlocks ( dRootBlock );
+}
+
+} // static
 
 CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQuery, QueryProfile_t * pProfile )
 {
@@ -1419,12 +1508,12 @@ CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQ
 
 	if ( pProfile )
 	{
-		const char * sProfileResult = pProfile->GetResultAsStr();
-		// FIXME: result can be empty if we run a fullscan
-		if ( sProfileResult && strlen ( sProfileResult ) )
-			tOut.Sprintf ( R"("profile":{"query":%s})", sProfileResult );
-		else
+		JsonEscapedBuilder sPlan;
+		FormatJsonPlanFromBson ( sPlan, bson::MakeHandle ( pProfile->m_dPlan ) );
+		if ( sPlan.IsEmpty() )
 			tOut << R"("profile":null)";
+		else
+			tOut.Sprintf ( R"("profile":{"query":%s})", sPlan.cstr () );
 	}
 
 	tOut.FinishBlocks (); tOut.MoveTo ( sResult ); return sResult;
@@ -1562,8 +1651,8 @@ void AddAccessSpecs ( JsonEscapedBuilder &tOut, const XQNode_t * pNode, const CS
 void CreateKeywordNode ( JsonEscapedBuilder & tOut, const XQKeyword_t &tKeyword )
 {
 	ScopedComma_c sRoot ( tOut, ",", "{", "}");
-	tOut << R"("type":"KEYWORD")";
-	tOut << "\"word\":"; tOut.AppendEscapedSkippingComma ( tKeyword.m_sWord.cstr () );
+	tOut << "\"" SZ_TYPE "\":\"KEYWORD\")";
+	tOut << "\"" SZ_WORD "\":"; tOut.AppendEscapedSkippingComma ( tKeyword.m_sWord.cstr () );
 	tOut.Sprintf ( R"("querypos":%d)", tKeyword.m_iAtomPos);
 
 	if ( tKeyword.m_bExcluded )
@@ -1583,38 +1672,6 @@ void CreateKeywordNode ( JsonEscapedBuilder & tOut, const XQKeyword_t &tKeyword 
 
 	if ( tKeyword.m_fBoost!=1.0f ) // really comparing floats?
 		tOut.Sprintf ( R"("boost":%f)", tKeyword.m_fBoost) ;
-}
-
-void sphBuildProfileJson ( JsonEscapedBuilder &tOut, const XQNode_t * pNode, const CSphSchema &tSchema, const StrVec_t &dZones )
-{
-	assert ( pNode );
-	auto dRootBlock = tOut.StartBlock ( ",", "{", "}" );
-
-	CSphString sNodeName ( sphXQNodeToStr ( pNode ) );
-	tOut << "\"type\":"; tOut.AppendEscapedSkippingComma ( sNodeName.cstr () );
-
-	CSphString sDescription ( sphExplainQueryBrief ( pNode, tSchema ) );
-	tOut << "\"description\":"; tOut.AppendEscapedSkippingComma ( sDescription.cstr () );
-
-	CSphString sNodeOptions ( sphXQNodeGetExtraStr ( pNode ) );
-	if ( !sNodeOptions.IsEmpty () )
-	{
-		tOut << "\"options\":"; tOut.AppendEscapedSkippingComma ( sNodeOptions.cstr () );
-	}
-
-	AddAccessSpecs ( tOut, pNode, tSchema, dZones );
-
-	tOut.StartBlock ( ",", "\"children\":[", "]" );
-	if ( pNode->m_dChildren.GetLength () )
-	{
-		for ( const auto& i : pNode->m_dChildren )
-			sphBuildProfileJson ( tOut, i, tSchema, dZones );
-	} else
-	{
-		for ( const auto& i : pNode->m_dWords )
-			CreateKeywordNode ( tOut, i );
-	}
-	tOut.FinishBlocks ( dRootBlock );
 }
 
 //////////////////////////////////////////////////////////////////////////

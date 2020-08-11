@@ -1,5 +1,4 @@
-List of SphinxQL reserved keywords
-----------------------------------
+# List of SphinxQL reserved keywords
 
 A complete alphabetical list of keywords that are currently reserved in
 SphinxQL syntax (and therefore can not be used as identifiers).

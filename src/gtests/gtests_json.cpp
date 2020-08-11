@@ -1419,7 +1419,7 @@ TEST ( bench, DISABLED_format_cjson_vs_stringbuilder )
 	{
 		{
 			JsonEscapedBuilder tOut;
-			tOut.StartBlock (",","{","}");
+			tOut.StartBlock (dJsonObj);
 			{
 				ScopedComma_c sIndexes (tOut, ",", "\"indexes\":[", "]");
 				for ( auto &dIdx : dIndexes )

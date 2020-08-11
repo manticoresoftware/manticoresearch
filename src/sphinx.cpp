@@ -23693,7 +23693,7 @@ void CSphSource_SQL::DumpDocumentSphinxql ()
 		m_sCollectDump.Sprintf ( "INSERT INTO %s VALUES ", m_tParams.m_sDumpRTIndex.cstr() );
 		m_sCollectDump.StartBlock (",",nullptr,";\n");
 	}
-	m_sCollectDump.StartBlock(",","(",")");
+	m_sCollectDump.StartBlock( dBracketsComma );
 	ARRAY_FOREACH ( i, m_dDumpMap )
 	{
 		if ( m_dDumpMap[i].second )

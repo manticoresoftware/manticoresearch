@@ -82,7 +82,7 @@ CSphString SnippetQuerySettings_t::AsString() const
 {
 	SnippetQuerySettings_t tDefault;
 	StringBuilder_c tOut;
-	tOut.StartBlock ( ",", "{", "}" );
+	tOut.StartBlock ( dJsonObj );
 
 	SnippetLimits_t::Format ( tOut, "" );
 

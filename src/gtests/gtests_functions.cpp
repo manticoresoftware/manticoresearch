@@ -357,7 +357,7 @@ TEST ( functions, stringbuilder_autoclose )
 	ASSERT_STREQ ( builder.cstr (), "[one: two" ) << "simple pushed block";
 
 	// starting block doesn't mean any output yet, so content is the same
-	builder.StartBlock(",","(",")");
+	builder.StartBlock( dBracketsComma );
 	ASSERT_STREQ ( builder.cstr (), "[one: two" ) << "simple pushed block";
 
 	// note that now ': ' of outer block prepended to the suffix '(' of the current block.
@@ -381,7 +381,7 @@ TEST ( functions, stringbuilder_close_of_empty )
 	ASSERT_STREQ ( builder.cstr (), "[one: two" ) << "simple pushed block";
 
 	// starting block doesn't output anything by itself, but modify future output
-	builder.StartBlock ( ",", "(", ")" );
+	builder.StartBlock ( dBracketsComma );
 	ASSERT_STREQ ( builder.cstr (), "[one: two" ) << "started new block";
 
 	// finishing of empty block outputs also nothing
@@ -398,7 +398,7 @@ TEST ( functions, stringbuilder_clear )
 {
 	StringBuilder_c builder ( ": ", "[", "]" );
 	builder << "one" << "two";
-	builder.StartBlock ( ",", "(", ")" );
+	builder.StartBlock ( dBracketsComma );
 	builder << "abc" << "def";
 	builder.Clear();
 	ASSERT_STREQ ( builder.cstr (), "" ) << "emtpy";
@@ -413,7 +413,7 @@ TEST ( functions, stringbuilder_twoopenoneclose )
 {
 	StringBuilder_c builder ( ": ", "[", "]" );
 	builder << "one" << "two";
-	builder.StartBlock ( ",", "(", ")" );
+	builder.StartBlock ( dBracketsComma );
 	builder << "abc" << "def";
 	builder.FinishBlocks ();
 	ASSERT_STREQ ( builder.cstr (), "[one: two: (abc,def)]" ) << "simple pushed block 3";
@@ -425,7 +425,7 @@ TEST ( functions, stringbuilder_finishnoopen )
 {
 	StringBuilder_c builder ( ":", "[", "]" );
 	auto pLev = builder.StartBlock ( ";", "(", ")" );
-	builder.StartBlock ( ",", "{", "}" );
+	builder.StartBlock ( dJsonObj );
 	builder.FinishBlocks ( pLev );
 	ASSERT_STREQ ( builder.cstr (), "" ) << "nothing outputed";
 }
@@ -442,7 +442,7 @@ TEST ( functions, stringbuilder_ret_to_level )
 	builder << "one" << "two";
 
 	// internal block
-	builder.StartBlock ( ",", "{", "}" );
+	builder.StartBlock ( dJsonObj );
 	builder << "three" << "four";
 	ASSERT_STREQ ( builder.cstr (), "[exone:extwo:(one;two;{three,four" );
 
@@ -2578,7 +2578,7 @@ TEST ( functions, sph_Sprintf_to_builder )
 	ASSERT_STREQ ( sBuf.cstr (), "-0.000010000" );
 	sBuf.Clear ();
 
-	sBuf.StartBlock ( ",", "{", "}" );
+	sBuf.StartBlock ( dJsonObj );
 	sBuf.Sprintf ( "%d %d %d", 1, -1, 100);
 	sBuf.Sprintf ( "%d %d %d", 2, -2, 200 );
 	sBuf.FinishBlock ();

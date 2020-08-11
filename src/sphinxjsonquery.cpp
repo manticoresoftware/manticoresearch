@@ -1161,7 +1161,7 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes
 	case SPH_ATTR_UINT32SET_PTR:
 	case SPH_ATTR_INT64SET_PTR:
 	{
-		tOut.StartBlock( ",", "[", "]" );
+		tOut.ArrayBlock ();
 		const BYTE * pMVA = ( const BYTE * ) tMatch.GetAttr ( tLoc );
 		if ( eAttrType==SPH_ATTR_UINT32SET_PTR )
 			PackedShortMVA2Json ( tOut, pMVA );
@@ -1336,7 +1336,7 @@ CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQ
 		return sResult;
 	}
 
-	tOut.StartBlock( ",", "{", "}" );
+	tOut.ObjectBlock();
 
 	tOut.Sprintf (R"("took":%d,"timed_out":false)", tRes.m_iQueryTime);
 	if ( !tRes.m_sWarning.IsEmpty() )

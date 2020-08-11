@@ -3062,6 +3062,7 @@ using StrBlock_t = std::tuple<Str_t, Str_t, Str_t>;
 const StrBlock_t dEmptyBl { dEmptyStr, dEmptyStr, dEmptyStr }; // empty
 const StrBlock_t dJsonObj { {",",1}, {"{",1}, {"}",1} }; // json object
 const StrBlock_t dJsonArr { {",",1}, {"[",1}, {"]",1} }; // json array
+const StrBlock_t dBracketsComma { {",",1}, {"(",1}, {")",1} }; // collection in brackets, comma separated
 
 const StrBlock_t dJsonObjW { {",\n",2}, {"{\n",2}, {"\n}",2} }; // json object with formatting
 const StrBlock_t dJsonArrW { {",\n",2}, {"[\n",2}, {"\n]",2} }; // json array with formatting

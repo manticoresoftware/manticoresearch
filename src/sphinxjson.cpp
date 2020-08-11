@@ -1135,26 +1135,26 @@ const BYTE * sphJsonFieldFormat ( JsonEscapedBuilder & sOut, const BYTE * pData,
 
 		case JSON_STRING_VECTOR:
 			sOut.GrowEnough ( sphJsonUnpackInt ( &p ) );
-			sOut.StartBlock ( ",", "[", "]");
+			sOut.ArrayBlock();
 			for ( int i= sphJsonUnpackInt ( &p ); i>0; --i )
 				p = JsonFormatStr ( sOut, p );
 			sOut.FinishBlock ( false );
 			break;
 
 		case JSON_INT32_VECTOR:
-			sOut.StartBlock ( ",", "[", "]" );
+			sOut.ArrayBlock();
 			for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
 				sOut.Sprintf ( "%d", sphJsonLoadInt ( &p ) );
 			sOut.FinishBlock ( false );
 		break;
 		case JSON_INT64_VECTOR:
-			sOut.StartBlock ( ",", "[", "]" );
+			sOut.ArrayBlock ();
 			for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
 				sOut.Sprintf ( "%l", sphJsonLoadBigint ( &p ) );
 			sOut.FinishBlock ( false );
 			break;
 		case JSON_DOUBLE_VECTOR:
-			sOut.StartBlock ( ",", "[", "]" );
+			sOut.ArrayBlock ();
 			for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
 			{
 				auto iLen = snprintf ( sDouble, szDouble, "%lf", sphQW2D ( sphJsonLoadBigint ( &p ) ) ); // NOLINT
@@ -1165,7 +1165,7 @@ const BYTE * sphJsonFieldFormat ( JsonEscapedBuilder & sOut, const BYTE * pData,
 
 		case JSON_MIXED_VECTOR:
 			{
-				sOut.StartBlock ( ",", "[", "]" );
+				sOut.ArrayBlock ();
 				sphJsonUnpackInt ( &p );
 				for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
 				{
@@ -1181,7 +1181,7 @@ const BYTE * sphJsonFieldFormat ( JsonEscapedBuilder & sOut, const BYTE * pData,
 				if ( eType==JSON_OBJECT )
 					sphJsonUnpackInt ( &p );
 				p += 4; // skip bloom table
-				sOut.StartBlock ( ",", "{", "}" );
+				sOut.ObjectBlock();
 				while (true)
 				{
 					ScopedComma_c sMuteCommas ( sOut, nullptr );

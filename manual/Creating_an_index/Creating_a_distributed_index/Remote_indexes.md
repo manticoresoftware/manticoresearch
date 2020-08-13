@@ -193,4 +193,4 @@ For DPQ the operations of listing stored queries and searching through them ([CA
 
 If you mention a non-percolate index among the agents, the behaviour will be undefined. Most likely in case if the erroneous agent has the same schema as the outer schema of the pq index (id, query, tags, filters) - it will not trigger an error when listing stored PQ rules hence may pollute the list of actual PQ rules stored in PQ indexes with it's own non-pq strings, so be aware of the confusion! `CALL PQ` to such wrong agent will definitely trigger an error.
 
-Read more about [making queries to a distribute percolate index](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#Distributed-percolate-indexes-%28DPQ-indexes%29).
+Read more about [making queries to a distribute percolate index](Searching/Percolate_query.md#Performing-a-percolate-query).

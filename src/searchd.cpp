@@ -5960,7 +5960,7 @@ static int GetIndexWeight ( const CSphString& sName, const CSphVector<CSphNamedI
 	return iDefaultWeight;
 }
 
-static uint64_t CalculateMass ( const CSphIndexStatus & dStats )
+uint64_t CalculateMass ( const CSphIndexStatus & dStats )
 {
 	auto iOvermapped = dStats.m_iMapped-dStats.m_iMappedResident;
 	if ( iOvermapped<0 ) // it could be negative since resident is rounded up to page edge
@@ -5972,9 +5972,7 @@ static uint64_t CalculateMass ( const CSphIndexStatus & dStats )
 
 static uint64_t GetIndexMass ( const CSphString & sName )
 {
-	ServedDescRPtr_c pIdx ( GetServed ( sName ) );
-	uint64_t iMass = pIdx ? pIdx->m_iMass : 0;
-	return iMass;
+	return ServedDesc_t::GetIndexMass ( ServedDescRPtr_c ( GetServed ( sName ) ) );
 }
 
 struct TaggedLocalSorter_fn
@@ -15802,9 +15800,7 @@ bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, 
 		return false;
 	}
 
-	CSphIndexStatus tStatus;
-	tIdx.m_pIndex->GetStatus ( &tStatus );
-	tIdx.m_iMass = CalculateMass ( tStatus );
+	ServedDesc_t::UpdateMass( &tIdx );
 	return true;
 }
 
@@ -15922,6 +15918,7 @@ static bool RotateIndexMT ( ServedIndex_c* pIndex, const CSphString & sIndex, St
 		return false;
 
 	tNewIndex.m_pIndex->Preread();
+	ServedDesc_t::UpdateMass ( &tNewIndex );
 
 	//////////////////////
 	// activate new index
@@ -17124,6 +17121,7 @@ static void DoGreedyRotation() REQUIRES ( MainThread )
 				if ( bOk )
 				{
 					pWlockedServedDisabledPtr->m_pIndex->Preread();
+					ServedDesc_t::UpdateMass( pWlockedServedDisabledPtr );
 					g_pLocalIndexes->AddOrReplace ( pDisabledIndex, sDisabledIndex );
 				} else
 					g_pLocalIndexes->DeleteIfNull ( sDisabledIndex );

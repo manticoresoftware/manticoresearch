@@ -47,6 +47,7 @@ static void PrereadFunc ( void* )
 		sphLogDebug ( "prereading index '%s'", sName.cstr ());
 
 		dReadLock->m_pIndex->Preread ();
+		ServedDesc_t::UpdateMass ( dReadLock );
 		if ( !dReadLock->m_pIndex->GetLastWarning ().IsEmpty ())
 			sphWarning ( "'%s' preread: %s", sName.cstr (), dReadLock->m_pIndex->GetLastWarning ().cstr ());
 

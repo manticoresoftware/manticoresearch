@@ -645,6 +645,8 @@ private:
 							QueryStats_t & tQueryTimeStats ) const EXCLUDES ( m_tStatsLock );
 };
 
+// calculate index mass based on status
+uint64_t CalculateMass ( const CSphIndexStatus & dStats );
 
 struct ServedDesc_t
 {
@@ -698,6 +700,25 @@ struct ServedDesc_t
 		return pServed->m_eType==IndexType_e::PLAIN
 			|| pServed->m_eType==IndexType_e::RT
 			|| pServed->m_eType==IndexType_e::DISTR; // fixme! distrs not necessary ft.
+	}
+
+	// Update index mass for searching. Mass after preread typically will be less.
+	static void UpdateMass ( const ServedDesc_t* pServed )
+	{
+		if ( !pServed )
+			return;
+		CSphIndexStatus tStatus;
+		pServed->m_pIndex->GetStatus ( &tStatus );
+		// break const, since mass value is not critical for races
+		const_cast<ServedDesc_t *>(pServed)->m_iMass = CalculateMass ( tStatus );
+	}
+
+	// Update index mass for searching. Mass after preread typically will be less.
+	static uint64_t GetIndexMass ( const ServedDesc_t* pServed )
+	{
+		if ( !pServed )
+			return 0;
+		return pServed->m_iMass;
 	}
 
 	virtual                ~ServedDesc_t ();

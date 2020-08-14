@@ -1238,14 +1238,14 @@ private:
 	void						CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWriter_t & tOutDoc, RtDocReader_t & tInDoc, RtWord_t & tWord, const CSphVector<RowID_t> & tRowMap ) const;
 
 	bool						LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes );
-	bool						LoadDiskChunks ( FilenameBuilder_i * pFilenameBuilder );
+	bool						PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder );
 	void						SaveMeta ( int64_t iTID, const VecTraits_T<int> & dChunkNames );
 	void						SaveDiskHeader ( SaveDiskDataContext_t & tCtx, const ChunkStats_t & tStats ) const;
 	void						SaveDiskData ( const char * sFilename, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats ) const;
 	bool						SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard,
 			const ChunkStats_t & tStats, bool bForced, const VecTraits_T<int> & dChunkNames, int & iSavedChunkId )
 			EXCLUDES ( m_tWriting ) EXCLUDES ( m_tChunkLock );
-	CSphIndex *					LoadDiskChunk ( const char * sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, CSphString & sError, const char * sName=nullptr ) const;
+	CSphIndex *					PreallocDiskChunk ( const char * sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, CSphString & sError, const char * sName=nullptr ) const;
 	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes );
 	bool						SaveRamChunk ( const VecTraits_T<const RtSegmentRefPtf_t>& dSegments );
 
@@ -3730,7 +3730,7 @@ bool RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, co
 	// bring new disk chunk online
 	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
-	CSphIndex * pDiskChunk = LoadDiskChunk ( sNewChunk.cstr(), iChunk, pFilenameBuilder.Ptr(), m_sLastError );
+	CSphIndex * pDiskChunk = PreallocDiskChunk ( sNewChunk.cstr(), iChunk, pFilenameBuilder.Ptr(), m_sLastError );
 	if ( !pDiskChunk )
 	{
 		sphWarning ( "rt: index %s failed to load disk chunk after RAM save: %s", m_sIndexName.cstr(), m_sLastError.cstr() );
@@ -3800,7 +3800,7 @@ bool RtIndex_c::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, co
 }
 
 
-CSphIndex * RtIndex_c::LoadDiskChunk ( const char * sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, CSphString & sError, const char * sName ) const
+CSphIndex * RtIndex_c::PreallocDiskChunk ( const char * sChunk, int iChunk, FilenameBuilder_i * pFilenameBuilder, CSphString & sError, const char * sName ) const
 {
 	MEMORY ( MEM_INDEX_DISK );
 
@@ -3827,8 +3827,6 @@ CSphIndex * RtIndex_c::LoadDiskChunk ( const char * sChunk, int iChunk, Filename
 		SafeDelete ( pDiskChunk );
 		return NULL;
 	}
-	if ( !m_bDebugCheck )
-		pDiskChunk->Preread();
 
 	return pDiskChunk;
 }
@@ -3963,7 +3961,7 @@ bool RtIndex_c::LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath
 }
 
 
-bool RtIndex_c::LoadDiskChunks ( FilenameBuilder_i * pFilenameBuilder )
+bool RtIndex_c::PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder )
 {
 	// load disk chunks, if any
 	ARRAY_FOREACH ( iName, m_dChunkNames )
@@ -3971,7 +3969,7 @@ bool RtIndex_c::LoadDiskChunks ( FilenameBuilder_i * pFilenameBuilder )
 		int iChunkIndex = m_dChunkNames[iName];
 		CSphString sChunk;
 		sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), iChunkIndex );
-		CSphIndex * pIndex = LoadDiskChunk ( sChunk.cstr(), iChunkIndex, pFilenameBuilder, m_sLastError );
+		CSphIndex * pIndex = PreallocDiskChunk ( sChunk.cstr(), iChunkIndex, pFilenameBuilder, m_sLastError );
 		if ( !pIndex )
 			sphDie ( "%s", m_sLastError.cstr() );
 
@@ -3993,7 +3991,6 @@ bool RtIndex_c::LoadDiskChunks ( FilenameBuilder_i * pFilenameBuilder )
 	}
 
 	m_dChunkNames.Reset(0);
-
 	return true;
 }
 
@@ -4039,7 +4036,7 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 
 	m_bPathStripped = bStripPath;
 
-	if ( !LoadDiskChunks ( pFilenameBuilder ) )
+	if ( !PreallocDiskChunks ( pFilenameBuilder ) )
 		return false;
 
 	// load ram chunk
@@ -4059,7 +4056,9 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 
 void RtIndex_c::Preread ()
 {
-	// !COMMIT move disk chunks prereading here
+	ScRL_t tChunkRLock ( m_tChunkLock );
+	for ( auto & dDiskChunk : m_dDiskChunks )
+		dDiskChunk->Preread();
 }
 
 
@@ -4919,7 +4918,7 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 		sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), iChunk );
 		tReporter.Msg ( "checking disk chunk, extension %d, %d(%d)...", m_dChunkNames[i], i, m_dChunkNames.GetLength() );
 
-		CSphScopedPtr<CSphIndex> pIndex ( LoadDiskChunk ( sChunk.cstr(), iChunk, pFilenameBuilder.Ptr(), m_sLastError ) );
+		CSphScopedPtr<CSphIndex> pIndex ( PreallocDiskChunk ( sChunk.cstr(), iChunk, pFilenameBuilder.Ptr(), m_sLastError ) );
 		if ( pIndex.Ptr() )
 		{
 			iFailsPlain += pIndex->DebugCheck ( fp );
@@ -7564,7 +7563,7 @@ void RtIndex_c::CommonMerge( Selector_t fnSelector )
 		if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted ())
 			break;
 
-		CSphScopedPtr<CSphIndex> pMerged ( LoadDiskChunk ( sMerged.cstr(), pOlder->m_iChunk, pFilenameBuilder.Ptr(), sError, pOlder->GetName() ) );
+		CSphScopedPtr<CSphIndex> pMerged ( PreallocDiskChunk ( sMerged.cstr(), pOlder->m_iChunk, pFilenameBuilder.Ptr(), sError, pOlder->GetName() ) );
 		if ( !pMerged.Ptr() )
 		{
 			sphWarning ( "rt optimize: index %s: failed to load merged chunk (error %s)",

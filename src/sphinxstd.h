@@ -5120,6 +5120,11 @@ public:
 		return m_iUsed;
 	}
 
+	int64_t GetLengthBytes () const
+	{
+		return m_iSize * sizeof ( Entry_t );
+	}
+
 	/// iterate the hash by entry index, starting from 0
 	/// finds the next alive key-value pair starting from the given index
 	/// returns that pair and updates the index on success

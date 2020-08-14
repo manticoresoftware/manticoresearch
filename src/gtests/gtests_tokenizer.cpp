@@ -824,7 +824,7 @@ public:
 	void				PostSetup() override {}
 	bool				EarlyReject ( CSphQueryContext * , CSphMatch & ) const override { return false; }
 	const CSphSourceStats &	GetStats () const override { return g_tTmpDummyStat; }
-	void				GetStatus ( CSphIndexStatus* pRes ) const override { if ( pRes ) { pRes->m_iDiskUse = 0; pRes->m_iRamUse = 0;} }
+	void				GetStatus ( CSphIndexStatus* ) const override {}
 	bool				MultiQuery ( const CSphQuery * , CSphQueryResult * , int , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const override { return false; }
 	bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult ** , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const override { return false; }
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & , CSphString * ) const override { return false; }

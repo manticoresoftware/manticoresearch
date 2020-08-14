@@ -5962,7 +5962,12 @@ static int GetIndexWeight ( const CSphString& sName, const CSphVector<CSphNamedI
 
 static uint64_t CalculateMass ( const CSphIndexStatus & dStats )
 {
-	return dStats.m_iNumChunks * 1000000 + dStats.m_iRamUse + dStats.m_iDiskUse * 10;
+	auto iOvermapped = dStats.m_iMapped-dStats.m_iMappedResident;
+	if ( iOvermapped<0 ) // it could be negative since resident is rounded up to page edge
+		iOvermapped = 0;
+	return 1000000 * dStats.m_iNumChunks
+			+ 10 * iOvermapped
+			+ dStats.m_iRamUse;
 }
 
 static uint64_t GetIndexMass ( const CSphString & sName )
@@ -13868,6 +13873,10 @@ static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex,
 		dStatus.Add().SetSprintf ( INT64_FMT, tStatus.m_iRamUse );
 	if ( dStatus.MatchAdd ( "disk_bytes" ) )
 		dStatus.Add().SetSprintf ( INT64_FMT, tStatus.m_iDiskUse );
+	if ( dStatus.MatchAdd ( "disk_mapped" ) )
+		dStatus.Add ().SetSprintf ( INT64_FMT, tStatus.m_iMapped );
+	if ( dStatus.MatchAdd ( "disk_mapped_cached" ) )
+		dStatus.Add ().SetSprintf ( INT64_FMT, tStatus.m_iMappedResident );
 	if ( bMutable )
 	{
 		if ( dStatus.MatchAdd ( "ram_chunk" ) )
@@ -16457,10 +16466,6 @@ static ESphAddIndex AddRTPercolate ( GuardedHash_c & dPost, const char * szIndex
 	tIdx.m_pIndex->Setup ( tSettings );
 	tIdx.m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
 
-	CSphIndexStatus tStatus;
-	tIdx.m_pIndex->GetStatus ( &tStatus );
-	tIdx.m_iMass = CalculateMass ( tStatus );
-
 	// hash it
 	if ( AddLocallyServedIndex ( dPost, szIndexName, tIdx, bReplace, sError ) )
 		return ADD_DSBLED;
@@ -16557,9 +16562,6 @@ static ESphAddIndex AddPlainIndex ( const char * szIndexName, const CSphConfigSe
 	tIdx.m_pIndex->SetGlobalIDFPath ( tIdx.m_sGlobalIDFPath );
 	tIdx.m_pIndex->SetMemorySettings ( tIdx.m_tFileAccessSettings );
 	tIdx.m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
-	CSphIndexStatus tStatus;
-	tIdx.m_pIndex->GetStatus ( &tStatus );
-	tIdx.m_iMass = CalculateMass ( tStatus );
 
 	// done
 	if ( AddLocallyServedIndex ( g_dPostIndexes, szIndexName, tIdx, bReplace, sError ) )
@@ -16614,9 +16616,6 @@ static ESphAddIndex AddTemplateIndex ( const char * szIndexName, const CSphConfi
 	for ( const auto & i : dWarnings )
 		sphWarning ( "index '%s': %s", szIndexName, i.cstr() );
 
-	CSphIndexStatus tStatus;
-	tIdx.m_pIndex->GetStatus ( &tStatus );
-	tIdx.m_iMass = CalculateMass ( tStatus );
 	tIdx.m_eType = IndexType_e::TEMPLATE;
 
 	// templates we either add, either replace depending on requiested action

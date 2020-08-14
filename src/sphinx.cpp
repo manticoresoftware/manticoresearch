@@ -1083,7 +1083,7 @@ public:
 	void				Unlock () final {}
 	bool				EarlyReject ( CSphQueryContext * , CSphMatch & ) const final { return false; }
 	const CSphSourceStats &	GetStats () const final { return g_tTmpDummyStat; }
-	void			GetStatus ( CSphIndexStatus* pRes ) const final { assert (pRes); if ( pRes ) { pRes->m_iDiskUse = 0; pRes->m_iRamUse = 0;}}
+	void			GetStatus ( CSphIndexStatus* ) const final {}
 	bool				MultiQuery ( const CSphQuery * , CSphQueryResult * , int , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const final { return false; }
 	bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult ** , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const final { return false; }
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const final ;
@@ -16283,15 +16283,19 @@ void CSphIndex_VLN::GetStatus ( CSphIndexStatus* pRes ) const
 	if ( !pRes )
 		return;
 
-	pRes->m_iRamUse = sizeof(CSphIndex_VLN)
-		+ m_dFieldLens.GetLengthBytes()
+	pRes->m_iMapped = m_tAttr.GetLengthBytes ()
+			+m_tBlobAttrs.GetLengthBytes ()
+			+m_tWordlist.m_tBuf.GetLengthBytes ()
+			+m_tDeadRowMap.GetLengthBytes ()
+			+m_tSkiplists.GetLengthBytes ();
 
-		+ m_tAttr.GetLengthBytes()
-		+ m_tBlobAttrs.GetLengthBytes()
-		+ m_tWordlist.m_tBuf.GetLengthBytes()
-		+ m_tDeadRowMap.GetLengthBytes()
-		+ m_tSkiplists.GetLengthBytes();
+	pRes->m_iMappedResident = m_tAttr.GetCoreSize ()
+			+m_tBlobAttrs.GetCoreSize ()
+			+m_tWordlist.m_tBuf.GetCoreSize ()
+			+m_tDeadRowMap.GetCoreSize ()
+			+m_tSkiplists.GetCoreSize ();
 
+	pRes->m_iRamUse = sizeof(CSphIndex_VLN) + m_dFieldLens.GetLengthBytes() + pRes->m_iMappedResident;
 	pRes->m_iDiskUse = 0;
 
 	CSphVector<IndexFileExt_t> dExts = sphGetExts();

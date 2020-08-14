@@ -121,7 +121,7 @@ public:
 //	virtual bool				Mlock () { return false; }
 	bool				EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const override;
 	const CSphSourceStats &	GetStats () const override { return m_tStat; }
-	void				GetStatus ( CSphIndexStatus* pRes ) const override { assert (pRes); if ( pRes ) { pRes->m_iDiskUse = 0; pRes->m_iRamUse = 0; pRes->m_iTID = m_iTID; pRes->m_iSavedTID = m_iSavedTID; }}
+	void				GetStatus ( CSphIndexStatus* pRes ) const override;
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & , CSphString * pError ) const override { return NotImplementedError(pError); }
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const override { return false; }
 	int					UpdateAttributes ( const CSphAttrUpdate & /*tUpd*/, int /*iIndex*/, bool & /*bCritical*/, CSphString & sError, CSphString & /*sWarning*/ ) override { NotImplementedError ( &sError ); return -1; }
@@ -1572,6 +1572,55 @@ bool PercolateIndex_c::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch
 	tMatch.m_pStatic = pSegment->GetDocinfoByRowID ( tMatch.m_tRowID );
 
 	return !pCtx->m_pFilter->Eval ( tMatch );
+}
+
+void PercolateIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
+{
+	assert ( pRes );
+	if (!pRes)
+		return;
+
+	CSphString sError;
+	char sFile[SPH_MAX_FILENAME_LEN];
+	const char * sFiles[] = { ".meta", ".ram" };
+	for ( const char * sName : sFiles )
+	{
+		snprintf ( sFile, sizeof ( sFile ), "%s%s", m_sFilename.cstr (), sName );
+		CSphAutofile fdRT ( sFile, SPH_O_READ, sError );
+		int64_t iFileSize = fdRT.GetSize ();
+		if ( iFileSize>0 )
+			pRes->m_iDiskUse += iFileSize; // that uses disk, but not occupies
+	}
+	pRes->m_iTID = m_iTID;
+	pRes->m_iSavedTID = m_iSavedTID;
+
+	int64_t iRamUse = 0;
+	{
+		ScopedMutex_t tLockHash { m_tLockHash };
+		iRamUse = m_hQueries.GetLengthBytes();
+	}
+	iRamUse += m_dHitlessWords.GetLengthBytes64() + m_dLoadedQueries.GetLengthBytes64();
+
+	{
+		ScRL_t rLock ( m_tLock );
+		iRamUse = m_pQueries->GetLengthBytes64 ();
+		for ( auto & pItem : *m_pQueries )
+		{
+			iRamUse += sizeof ( StoredQuery_t ) + sizeof ( XQQuery_t )
+					+ pItem->m_dRejectTerms.GetLengthBytes64()
+					+ pItem->m_dRejectWilds.GetLengthBytes64()
+					+ pItem->m_dTags.GetLengthBytes64 ()
+					+ pItem->m_dTags.GetLengthBytes64 ()
+					+ pItem->m_dFilterTree.GetLengthBytes64 ()
+					+ pItem->m_dFilters.GetLengthBytes64()
+					+ pItem->m_dSuffixes.GetLengthBytes()
+					+ pItem->m_sTags.Length()
+					+ pItem->m_sQuery.Length();
+			for ( const auto & sSuffix : pItem->m_dSuffixes )
+				iRamUse += sSuffix.Length();
+		}
+	}
+	pRes->m_iRamUse = iRamUse;
 }
 
 

@@ -3046,7 +3046,9 @@ struct CSphIndexStatus
 {
 	int64_t			m_iRamUse = 0;
 	int64_t			m_iRamRetired = 0;
-	int64_t			m_iDiskUse = 0;
+	int64_t			m_iMapped = 0; // total size of mmapped files
+	int64_t			m_iMappedResident = 0; // size of mmaped which are in core
+	int64_t			m_iDiskUse = 0; // place occupied by index on disk (despite if it fetched into mem or not)
 	int64_t			m_iRamChunkSize = 0; // not used for plain
 	int				m_iNumRamChunks = 0; // not used for plain
 	int				m_iNumChunks = 0; // not used for plain

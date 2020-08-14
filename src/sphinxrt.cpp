@@ -7757,7 +7757,6 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	pRes->m_iRamRetired = m_iRamChunksAllocatedRAM - iUsedRam;
 
 	pRes->m_iMemLimit = m_iSoftRamLimit;
-	pRes->m_iDiskUse = 0;
 
 	CSphString sError;
 	char sFile [ SPH_MAX_FILENAME_LEN ];
@@ -7768,7 +7767,7 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 		CSphAutofile fdRT ( sFile, SPH_O_READ, sError );
 		int64_t iFileSize = fdRT.GetSize();
 		if ( iFileSize>0 )
-			pRes->m_iDiskUse += iFileSize;
+			pRes->m_iDiskUse += iFileSize; // that uses disk, but not occupies
 	}
 	CSphIndexStatus tDisk;
 	ARRAY_FOREACH ( i, tGuard.m_dDiskChunks )
@@ -7776,6 +7775,8 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 		tGuard.m_dDiskChunks[i]->GetStatus ( &tDisk );
 		pRes->m_iRamUse += tDisk.m_iRamUse;
 		pRes->m_iDiskUse += tDisk.m_iDiskUse;
+		pRes->m_iMapped += tDisk.m_iMapped;
+		pRes->m_iMappedResident += tDisk.m_iMappedResident;
 	}
 
 	pRes->m_iNumRamChunks = tGuard.m_dRamChunks.GetLength();

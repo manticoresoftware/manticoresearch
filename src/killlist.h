@@ -26,6 +26,7 @@ public:
 
 	bool			HasDead() const;
 	virtual	int64_t	GetLengthBytes() const = 0;
+	virtual uint64_t GetCoreSize () const = 0;
 
 protected:
 	bool			m_bHaveDead {false};
@@ -64,6 +65,7 @@ public:
 	}
 
 	int64_t		GetLengthBytes() const override;
+	uint64_t	GetCoreSize () const override;
 	bool		Flush ( bool bWaitComplete, CSphString & sError ) const;
 	bool		Prealloc ( DWORD uRows, const CSphString & sFilename, CSphString & sError );
 	void		Dealloc();
@@ -84,6 +86,7 @@ public:
 	void		Reset ( DWORD uRows );
 
 	int64_t		GetLengthBytes() const override;
+	uint64_t	GetCoreSize () const override;
 	DWORD		GetNumAlive() const;
 
 	void		Load ( DWORD uRows, CSphReader & tReader, CSphString & sError );

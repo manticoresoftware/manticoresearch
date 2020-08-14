@@ -367,6 +367,32 @@ public:
 		return true;
 	}
 
+	uint64_t GetCoreSize () const
+	{
+				using PAGETYPE =
+#if HAVE_UNSIGNED_MINCORE
+							BYTE
+#else
+							char
+#endif
+								;
+
+#if !USE_WINDOWS
+		auto uPageSize = getpagesize ();
+		auto uSize = this->GetLengthBytes();
+		auto uPages = ( uSize+uPageSize-1 ) / uPageSize;
+		CSphFixedVector<PAGETYPE> dMap ( uPages );
+		if ( mincore ( (void *) this->GetWritePtr (), uSize, dMap.begin () )==0 )
+		{
+			for ( auto uData : dMap )
+				if ( !( ((BYTE) uData) & 1U ) )
+					--uPages;
+		}
+		return uPages * uPageSize;
+#else
+		return 0; // fixme! implement...
+#endif
+	};
 
 	bool Flush ( bool bWaitComplete, CSphString & sError ) const
 	{

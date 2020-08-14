@@ -84,6 +84,10 @@ int64_t DeadRowMap_Ram_c::GetLengthBytes() const
 	return m_dData.GetLengthBytes64();
 }
 
+uint64_t DeadRowMap_Ram_c::GetCoreSize () const
+{
+	return m_dData.GetLengthBytes64 ();
+}
 
 void DeadRowMap_Ram_c::Reset ( DWORD uRows )
 {
@@ -169,6 +173,10 @@ int64_t DeadRowMap_Disk_c::GetLengthBytes() const
 	return m_tData.GetLengthBytes64();
 }
 
+uint64_t DeadRowMap_Disk_c::GetCoreSize () const
+{
+	return m_tData.GetCoreSize();
+}
 
 //////////////////////////////////////////////////////////////////////////
 

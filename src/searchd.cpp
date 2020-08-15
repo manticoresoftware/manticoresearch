@@ -4002,6 +4002,7 @@ static void ProcessPostlimit ( const PostLimitArgs_t & tArgs, AggrResult_t & tRe
 
 	// generates docstore session id
 	DocstoreSession_c tSession;
+	auto iSessionUID = tSession.GetUID();
 
 	// collect all unique docstores from matches
 	CSphVector<const DocstoreReader_i*> dDocstores = GetUniqueDocstores ( tRes, tArgs.m_iFrom, tArgs.m_iTo );
@@ -4010,11 +4011,11 @@ static void ProcessPostlimit ( const PostLimitArgs_t & tArgs, AggrResult_t & tRe
 		// spawn buffered readers for the current session
 		// put them to a global hash
 		for ( auto & i : dDocstores )
-			i->CreateReader ( tSession.GetUID() );
+			i->CreateReader ( iSessionUID );
 	}
 
 	int iLastTag = -1;
-	for ( int i=tArgs.m_iFrom; i<tArgs.m_iTo; i++ )
+	for ( int i=tArgs.m_iFrom; i<tArgs.m_iTo; ++i )
 	{
 		CSphMatch & tMatch = tRes.m_dMatches[i];
 		// remote match (tag highest bit 1) == everything is already computed
@@ -4024,7 +4025,7 @@ static void ProcessPostlimit ( const PostLimitArgs_t & tArgs, AggrResult_t & tRe
 		if ( tMatch.m_iTag!=iLastTag )
 		{
 			for ( const auto & pCol : tArgs.m_dPostlimit )
-				SetupPostlimitExprs ( tRes, tMatch, pCol, tArgs.m_sQuery, tSession.GetUID() );
+				SetupPostlimitExprs ( tRes, tMatch, pCol, tArgs.m_sQuery, iSessionUID );
 
 			iLastTag = tMatch.m_iTag;
 		}

@@ -105,7 +105,7 @@ public:
 	int64_t		GetUID() const { return m_iUID; }
 
 private:
-	static CSphAtomicL m_tUIDGenerator;
+	static std::atomic<int64_t> m_tUIDGenerator;
 
 	int64_t		m_iUID = 0;
 };

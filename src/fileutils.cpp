@@ -126,7 +126,7 @@ void CSphSavedFile::Read ( CSphReader & tReader, const char * szFilename, bool b
 		if ( !sphIsReadable ( sName ) && bSharedStopwords )
 		{
 			StripPath ( sName );
-			sName.SetSprintf ( "%s/stopwords/%s", FULL_SHARE_DIR, sName.cstr() );
+			sName.SetSprintf ( "%s/stopwords/%s", GET_FULL_SHARE_DIR (), sName.cstr() );
 		}
 
 		struct_stat tFileInfo;

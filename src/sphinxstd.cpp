@@ -692,6 +692,94 @@ void operator delete [] ( void * pPtr ) throw ()
 
 static SphDieCallback_t g_pfDieCallback = nullptr;
 
+#ifndef FULL_SHARE_DIR
+#define FULL_SHARE_DIR "."
+#endif
+
+const char * GET_FULL_SHARE_DIR()
+{
+	const char * szEnv = getenv ( "FULL_SHARE_DIR" );
+	return szEnv ? szEnv : FULL_SHARE_DIR;
+}
+
+const char * GET_GALERA_SONAME ()
+{
+	const char * szEnv = getenv ( "GALERA_SONAME" );
+	if ( szEnv )
+		return szEnv;
+	return
+#ifdef GALERA_SONAME
+			GALERA_SONAME;
+#else
+			nullptr;
+#endif
+}
+
+const char * GET_MYSQL_LIB()
+{
+	const char * szEnv = getenv ( "MYSQL_LIB" );
+	if ( szEnv )
+		return szEnv;
+	return
+#ifdef MYSQL_LIB
+			MYSQL_LIB;
+#else
+			nullptr;
+#endif
+}
+
+const char * GET_PGSQL_LIB ()
+{
+	const char * szEnv = getenv ( "PGSQL_LIB" );
+	if ( szEnv )
+		return szEnv;
+	return
+#ifdef PGSQL_LIB
+			PGSQL_LIB;
+#else
+			nullptr;
+#endif
+}
+
+const char * GET_UNIXODBC_LIB ()
+{
+	const char * szEnv = getenv ( "UNIXODBC_LIB" );
+	if ( szEnv )
+		return szEnv;
+	return
+#ifdef UNIXODBC_LIB
+			UNIXODBC_LIB;
+#else
+			nullptr;
+#endif
+}
+
+const char * GET_EXPAT_LIB ()
+{
+	const char * szEnv = getenv ( "EXPAT_LIB" );
+	if ( szEnv )
+		return szEnv;
+	return
+#ifdef EXPAT_LIB
+			EXPAT_LIB;
+#else
+			nullptr;
+#endif
+}
+
+const char * GET_ICU_DATA_DIR ()
+{
+	const char * szEnv = getenv ( "ICU_DATA_DIR" );
+	if ( szEnv )
+		return szEnv;
+	return
+#ifdef ICU_DATA_DIR
+			ICU_DATA_DIR;
+#else
+			nullptr;
+#endif
+}
+
 void sphSetDieCallback ( SphDieCallback_t pfDieCallback )
 {
 	g_pfDieCallback = pfDieCallback;

@@ -30,11 +30,10 @@
 
 const char * GetReplicationDL()
 {
-#ifdef GALERA_SONAME
-	return GALERA_SONAME;
-#else
+	auto szDl = GET_GALERA_SONAME();
+	if ( szDl )
+		return szDl;
 	return "libgalera_smm.so";
-#endif
 }
 
 // global application context for wsrep callbacks

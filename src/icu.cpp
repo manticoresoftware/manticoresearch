@@ -43,7 +43,7 @@
 
 extern CSphVector<CharsetAlias_t> g_dCharsetAliases;
 
-static CSphString g_sICUDir = ICU_DATA_DIR;
+static CSphString g_sICUDir = GET_ICU_DATA_DIR();
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -55,14 +55,14 @@ static void ConfigureICU()
 		return;
 
 #if USE_WINDOWS
-	if ( PathIsRelative(ICU_DATA_DIR) )
+	if ( PathIsRelative(GET_ICU_DATA_DIR()) )
 	{
 		HMODULE hModule = GetModuleHandle(NULL);
 		CHAR szPath[MAX_PATH];
 		GetModuleFileName ( hModule, szPath, MAX_PATH );
 		PathRemoveFileSpec(szPath);
 
-		g_sICUDir.SetSprintf ( "%s\\%s", szPath, ICU_DATA_DIR );
+		g_sICUDir.SetSprintf ( "%s\\%s", szPath, GET_ICU_DATA_DIR() );
 	}
 #endif
 

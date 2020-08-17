@@ -460,6 +460,21 @@ inline int sphBitCount ( DWORD n )
 
 using SphDieCallback_t = bool (*) ( bool bDie, const char *, va_list );
 
+/// use env variables, if available, instead of hard-coded macro
+const char * GET_FULL_SHARE_DIR();
+
+const char * GET_GALERA_SONAME ();
+
+const char * GET_MYSQL_LIB();
+
+const char * GET_PGSQL_LIB ();
+
+const char * GET_UNIXODBC_LIB ();
+
+const char * GET_EXPAT_LIB ();
+
+const char * GET_ICU_DATA_DIR ();
+
 /// crash with an error message, and do not have searchd watchdog attempt to resurrect
 void			sphDie ( const char * sFmt, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) ) NO_RETURN;
 

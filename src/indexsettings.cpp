@@ -926,7 +926,7 @@ bool IndexSettingsContainer_c::AddOption ( const CSphString & sName, const CSphS
 			if ( !sphIsReadable(i) )
 			{
 				CSphString sFilename = i;
-				sFilename.SetSprintf ( "%s/stopwords/%s", FULL_SHARE_DIR, StripPath(sFilename).cstr() );
+				sFilename.SetSprintf ( "%s/stopwords/%s", GET_FULL_SHARE_DIR (), StripPath(sFilename).cstr() );
 				if ( sphIsReadable ( sFilename.cstr() ) )
 					i = sFilename;
 			}

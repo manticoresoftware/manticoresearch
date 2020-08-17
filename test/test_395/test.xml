@@ -10,10 +10,10 @@ searchd
 	<searchd_settings/>
 	<dynamic>
 	  <variant>
-		dist_threads = 0
+		  max_threads_per_query = 1
 	  </variant>
 	  <variant>
-		dist_threads = 4
+		  max_threads_per_query = 4
 	  </variant>
 	</dynamic>	
 }

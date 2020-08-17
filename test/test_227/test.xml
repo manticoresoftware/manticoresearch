@@ -14,7 +14,7 @@ searchd
 	<searchd_settings/>
 	max_filter_values 	= 500000
 	max_packet_size 	= 18M
-	dist_threads			= 4
+	max_threads_per_query	= 4
 	read_timeout			= 1
 }
 

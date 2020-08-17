@@ -16,7 +16,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
-	dist_threads = 4
+	max_threads_per_query = 4
 
 	# needed for "do not fetch too much" test below
 	max_packet_size = 128K

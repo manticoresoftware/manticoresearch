@@ -19,7 +19,7 @@ searchd
 	<searchd_settings/>
 <dynamic>
 <variant>
-	dist_threads = 2
+	max_threads_per_query = 2
 </variant>
 <variant />
 </dynamic>

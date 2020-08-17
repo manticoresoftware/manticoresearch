@@ -440,7 +440,9 @@ max_batch_queries = 256
 ### threads
 
 <!-- example threads -->
-Maximum number of threads Manticore will use for parallelization of different operations:
+Number of working threads (or, size of thread pool) of Manticore daemon. Manticore creates this numbe of OS threads on start,
+and they performs all the jobs inside the daemon, as executing queries, creating snippets, etc. Some operations may be
+splitted to sub-task and executed in parallel, as:
 * Search in a real-time index 
 * Search in a distributed index consisting of local indexes
 * Percolate query call
@@ -456,6 +458,17 @@ threads = 10
 ```
 
 <!-- end -->
+
+### max_threads_per_query
+
+Instance-wide limit of threads one operation may use. By default appropriate operations may occupy whole CPU, leaving no
+room for another operations. Say, `call pq` over considerable big pq index may utilize all threads for tens of seconds.
+Setting `max_threads_per_query` to, say, half of `threads` will ensure that you can run couple of such `call pq` in parallel.
+That setting is very similar to obsolete `dist_threads` by final effect, namely: query will run in designed number of threads.
+The difference, however, that `dist_threads` exploded up to given number of additional threads, but `max_threads_per_query`,
+in turn, limit from existing `threads` to some less value.
+
+Apart persistently stored in config setting, you may also set session or global variable with the same name.
 
 ### max_filters
 

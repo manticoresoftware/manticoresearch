@@ -12858,7 +12858,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 			break;
 		}
 
-		if ( tStmt.m_sSetName=="dist_threads" )
+		if ( tStmt.m_sSetName=="max_threads_per_query" )
 		{
 			tVars.m_iDistThreads = tStmt.m_iSetValue;
 			break;
@@ -13030,7 +13030,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 				tOut.Error ( tStmt.m_sStmt, "Only VIP connections can change global throttling_period value" );
 				return;
 			}
-		} else if ( tStmt.m_sSetName=="dist_threads" )
+		} else if ( tStmt.m_sSetName=="max_threads_per_query" )
 		{
 			g_iDistThreads = tStmt.m_iSetValue; // that is not dangerous to allow everybody change the value
 		} else
@@ -17997,7 +17997,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_iMaxFilters = hSearchd.GetInt ( "max_filters", g_iMaxFilters );
 	g_iMaxFilterValues = hSearchd.GetInt ( "max_filter_values", g_iMaxFilterValues );
 	g_iMaxBatchQueries = hSearchd.GetInt ( "max_batch_queries", g_iMaxBatchQueries );
-	g_iDistThreads = hSearchd.GetInt ( "dist_threads", g_iDistThreads );
+	g_iDistThreads = hSearchd.GetInt ( "max_threads_per_query", g_iDistThreads );
 	sphSetThrottling ( hSearchd.GetInt ( "rt_merge_iops", 0 ), hSearchd.GetSize ( "rt_merge_maxiosize", 0 ) );
 	g_iPingIntervalUs = hSearchd.GetUsTime64Ms ( "ha_ping_interval", 1000000 );
 	g_uHAPeriodKarmaS = hSearchd.GetSTimeS ( "ha_period_karma", 60 );

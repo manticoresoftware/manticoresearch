@@ -46,6 +46,7 @@ Per-session and global server variables affect certain server settings in the re
 *   `SQL_MODE = value` Does nothing; a placeholder to support frameworks, clients, and connectors that attempt to automatically enforce a charset when connecting to a Manticore server.
 *   `WAIT_TIMEOUT = value` Set connection timeout, either per session or global. Global can only be set on a VIP connection.
 *   `PROFILING = {0 | 1}` Enables query profiling in the current session. Defaults to 0. See also [show profile](Profiling_and_monitoring/Profiling/Query_profile.md)
+* `MAX_THREADS_PER_QUERY = <int value>` Redefines [max_threads_per_query](Server_settings/Searchd.md#max_threads_per_query) in runtime. Per-session variable influents only to the queries run in the same session (connection), i.e. up to disconnect. Value 0 means 'no limit'. If both per-session and global variables set, per-session has more priority.
 
 Known global server variables are:
 
@@ -61,6 +62,8 @@ Known global server variables are:
 * `CPUSTAT = {0 | 1}` Enable or disable CPU time reporting in query log and status reports.
 * `IOSTAT = {0 | 1}` Enable or disable I/O operations reporting in query log.
 * `COREDUMP = {0 | 1}` Enable or disable saving the core file or minidump on case of a crash.
+* `MAX_THREADS_PER_QUERY = <int value>` Redefines [max_threads_per_query](Server_settings/Searchd.md#max_threads_per_query) in runtime. As global, setting
+  changes behaviour for all sessions. Value 0 means 'no limit'.
 
 
 > Warning

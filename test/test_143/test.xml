@@ -8,7 +8,7 @@
 searchd
 {
 	<searchd_settings/>
-	dist_threads = 2
+	max_threads_per_query = 2
 }
 
 source test

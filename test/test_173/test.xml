@@ -12,7 +12,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
-	dist_threads = 3
+	max_threads_per_query = 3
 }
 
 source src

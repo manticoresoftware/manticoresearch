@@ -449,6 +449,13 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 	{
 		m_pStmt->m_sThreadFormat = sVal;
 
+	} else if ( sOpt=="threads" )
+	{
+		if ( !CheckInteger ( sOpt, sVal ) )
+			return false;
+
+		m_pQuery->m_iCouncurrency = (int) tValue.m_iValue;
+
 	} else if ( sOpt=="morphology" )
 	{
 		if ( sVal=="none" )
@@ -459,7 +466,6 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 			m_pParseError->SetSprintf ( "morphology could be only disabled with option none, got %s", sVal.cstr() );
 			return false;
 		}
-
 	} else
 	{
 		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", sOpt.cstr() );

@@ -5518,7 +5518,11 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 
 	// the context
 	ClonableCtx_T<LocalSearchRef_t, LocalSearchClone_t> dCtx { m_tHook, m_dExtraSchemas };
-	dCtx.LimitConcurrency ( GetEffectiveDistThreads () );
+
+	auto iConcurrency = m_dQueries[m_iStart].m_iCouncurrency;
+	if ( !iConcurrency )
+		iConcurrency = GetEffectiveDistThreads ();
+	dCtx.LimitConcurrency ( iConcurrency );
 
 	const auto iJobs = iNumLocals;
 	std::atomic<int32_t> iCurJob { 0 };

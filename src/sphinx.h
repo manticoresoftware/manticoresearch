@@ -2647,6 +2647,8 @@ struct CSphQuery
 	StrVec_t m_dIncludeItems;
 	StrVec_t m_dExcludeItems;
 	const void*		m_pCookie = nullptr;	///< opaque mark, used to manage lifetime of the vec of queries
+
+	int				m_iCouncurrency = 0;    ///< limit N of threads to run query with. 0 means 'no limit'
 };
 
 /// parse select list string into items

@@ -286,6 +286,13 @@ function PublishLocals ( &$locals, $benchmark )
 	}
 
 	$g_locals = $locals;
+
+
+	if ( isset($g_locals["icu_data_dir"]))
+		putenv("ICU_DATA_DIR=$g_locals[icu_data_dir]");
+
+	if ( isset($g_locals["full_share_dir"]))
+		putenv("FULL_SHARE_DIR=$g_locals[full_share_dir]");
 }
 
 ?>

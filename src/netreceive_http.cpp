@@ -85,6 +85,8 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf )
 	// non-vip connections in maintainance should be already rejected on accept
 	assert  ( !g_bMaintenance || myinfo::IsVIP() );
 
+	bool bINeedSSL = myinfo::GetProto ()==Proto_e::HTTPS; // if proto in 'listen' was exactly https, i.e. NEED ssl
+
 	myinfo::SetProto ( Proto_e::HTTP );
 
 	// set off query guard
@@ -98,11 +100,25 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf )
 
 	bool bKeepAlive = false;
 
-	if ( myinfo::IsSSL() )
+	bool bClientNeedSSL = myinfo::IsSSL();
+	if ( bClientNeedSSL )
 		myinfo::SetSSL ( MakeSecureLayer ( pBuf ) );
 
 	auto& tOut = *(NetGenericOutputBuffer_c *) pBuf;
 	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf;
+
+	if ( bINeedSSL && !myinfo::IsSSL () ) // reject non-secured connect to explicit listen=https
+	{
+		CSphVector<BYTE> dResult;
+		if ( bClientNeedSSL ) // i.e. right client on right port, but something bad (like ssl keys not valid in config)
+			sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_526, "Error in ssl key/cert configuration on server" );
+		else // client just wrong, i.e. came with http to https port
+			sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_403, "Only https connections allowed to this port" );
+		tOut.SwapData ( dResult );
+		tOut.Flush (); // no need to check return code since we break anyway
+		return;
+	}
+
 	do
 	{
 		tIn.DiscardProcessed ( -1 ); // -1 means 'force flush'

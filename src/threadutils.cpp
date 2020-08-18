@@ -65,8 +65,8 @@ const char * RelaxedProtoName ( Proto_e eProto )
 		case Proto_e::MYSQL41: return "mysql";
 		case Proto_e::REPLICATION: return "replication";
 		case Proto_e::SPHINX:
-		case Proto_e::HTTP:
-		case Proto_e::HTTPS: return "sphinx and http(s)";
+		case Proto_e::HTTP: return "sphinx and http(s)";
+		case Proto_e::HTTPS: return "https";
 		case Proto_e::SPHINXSE: return "sphinx (to connect from SphinxSE)";
 		default: break;
 	}

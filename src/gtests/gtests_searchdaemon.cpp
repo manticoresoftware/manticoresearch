@@ -991,10 +991,10 @@ TEST ( ParseListener, simple_ip_no_port )
 		{"/linux/host",			{ Proto_e::SPHINX, "/linux/host", 0, 9312, 0, false }},
 		{"8.8.8.8:1000-10000",	{ Proto_e::SPHINX, "", 134744072, 1000, 9000, false }},
 
-		{"8.8.8.8:1000:sphinx",		{ Proto_e::SPHINX, "", 134744072, 1000, 0, false }},
-		{"1000:sphinx",				{ Proto_e::SPHINX, "", 0, 1000, 0, false }},
-		{"/linux/host:sphinx",		{ Proto_e::SPHINX, "/linux/host", 0, 9312, 0, false }},
-		{"8.8.8.8:1000-10000:sphinx",	{ Proto_e::SPHINX, "", 134744072, 1000, 9000, false }},
+		{"8.8.8.8:1000:sphinx",		{ Proto_e::SPHINXSE, "", 134744072, 1000, 0, false }},
+		{"1000:sphinx",				{ Proto_e::SPHINXSE, "", 0, 1000, 0, false }},
+		{"/linux/host:sphinx",		{ Proto_e::SPHINXSE, "/linux/host", 0, 9312, 0, false }},
+		{"8.8.8.8:1000-10000:sphinx",	{ Proto_e::SPHINXSE, "", 134744072, 1000, 9000, false }},
 
 		{"8.8.8.8:1000:mysql41",	{ Proto_e::MYSQL41, "", 134744072, 1000, 0, false }},
 		{"1000:mysql41",			{ Proto_e::MYSQL41, "", 0, 1000, 0, false }},
@@ -1011,10 +1011,10 @@ TEST ( ParseListener, simple_ip_no_port )
 		{"/linux/host:replication",		{ Proto_e::REPLICATION, "/linux/host", 0, 9312, 0, false }},
 		{"8.8.8.8:1000-10000:replication",	{ Proto_e::REPLICATION, "", 134744072, 1000, 9000, false }},
 
-		{"8.8.8.8:1000:sphinx_vip",		{ Proto_e::SPHINX, "", 134744072, 1000, 0, true }},
-		{"1000:sphinx_vip",				{ Proto_e::SPHINX, "", 0, 1000, 0, true }},
-		{"/linux/host:sphinx_vip",		{ Proto_e::SPHINX, "/linux/host", 0, 9312, 0, true }},
-		{"8.8.8.8:1000-10000:sphinx_vip",	{ Proto_e::SPHINX, "", 134744072, 1000, 9000, true }},
+		{"8.8.8.8:1000:sphinx_vip",		{ Proto_e::SPHINXSE, "", 134744072, 1000, 0, true }},
+		{"1000:sphinx_vip",				{ Proto_e::SPHINXSE, "", 0, 1000, 0, true }},
+		{"/linux/host:sphinx_vip",		{ Proto_e::SPHINXSE, "/linux/host", 0, 9312, 0, true }},
+		{"8.8.8.8:1000-10000:sphinx_vip",	{ Proto_e::SPHINXSE, "", 134744072, 1000, 9000, true }},
 
 		{"8.8.8.8:1000:mysql41_vip",	{ Proto_e::MYSQL41, "", 134744072, 1000, 0, true }},
 		{"1000:mysql41_vip",			{ Proto_e::MYSQL41, "", 0, 1000, 0, true }},

@@ -178,7 +178,7 @@ void CheckPort( int iPort )
 // check only proto name in lowcase, no '_vip'
 static Proto_e SimpleProtoByName ( const CSphString& sProto )
 {
-	if ( sProto=="sphinx" || sProto=="" )
+	if ( sProto=="" )
 		return Proto_e::SPHINX;
 	if ( sProto=="mysql41" || sProto=="mysql" )
 		return Proto_e::MYSQL41;
@@ -188,10 +188,9 @@ static Proto_e SimpleProtoByName ( const CSphString& sProto )
 		return Proto_e::HTTPS;
 	if ( sProto=="replication" )
 		return Proto_e::REPLICATION;
-	if ( sProto=="sphinxse" )
+	if ( sProto=="sphinx" )
 		return Proto_e::SPHINXSE;
 	sphFatal( "unknown listen protocol type '%s'", sProto.scstr());
-	return Proto_e::SPHINX;
 }
 
 static void ProtoByName( CSphString sFullProto, ListenerDesc_t& tDesc )

@@ -23,8 +23,8 @@
 #include "searchdreplication.h"
 #include "accumulator.h"
 
-const char * g_dHttpStatus[] = { "200 OK", "206 Partial Content", "400 Bad Request", "500 Internal Server Error",
-								 "501 Not Implemented", "503 Service Unavailable" };
+const char * g_dHttpStatus[] = { "200 OK", "206 Partial Content", "400 Bad Request", "403 Forbidden", "500 Internal Server Error",
+								 "501 Not Implemented", "503 Service Unavailable", "526 Invalid SSL Certificate" };
 STATIC_ASSERT ( sizeof(g_dHttpStatus)/sizeof(g_dHttpStatus[0])==SPH_HTTP_STATUS_TOTAL, SPH_HTTP_STATUS_SHOULD_BE_SAME_AS_SPH_HTTP_STATUS_TOTAL );
 
 

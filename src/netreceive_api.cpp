@@ -17,11 +17,12 @@ extern volatile bool g_bMaintenance;
 static auto & g_bGotSighup = sphGetGotSighup ();    // we just received SIGHUP; need to log
 
 // mostly repeats HandleClientSphinx
-void ApiServe ( AsyncNetBufferPtr_c pBuf, bool bClientWaitsHandshake )
+void ApiServe ( AsyncNetBufferPtr_c pBuf )
 {
 	// non-vip connections in maintainance should be already rejected on accept
 	assert  ( !g_bMaintenance || myinfo::IsVIP () );
 
+	bool bClientWaitsHandshake = myinfo::GetProto()==Proto_e::SPHINXSE;
 	myinfo::SetProto ( Proto_e::SPHINX );
 	int iCID = myinfo::ConnID();
 	const char * sClientIP = myinfo::szClientName();

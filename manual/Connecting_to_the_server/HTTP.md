@@ -3,19 +3,21 @@
 You can connect to Manticore Search using the HTTP protocol.
 
 ## Configuration
-**The HTTP protocol is by default available on port 9308**. 
+**The HTTP protocol is by default available on ports 9308 and 9312**. It shares same port as api using multiprotocol feature.
 
 In the searchd section of the configuration file the HTTP port can be defined with directive `listen` like this:
 
 ```ini
 searchd {
 ...
-   listen = 127.0.0.1:9308:http
+   listen = 127.0.0.1:9308
+   listen = 127.0.0.1:9312:http
 ...
 }
 ```
 
-There are no special requirements and any HTTP client can be used to connect to Manticore. 
+Both lines are valid and equal by meaning (except port num). `http` is just left for back-compatibility, and both lines in example above
+ defines listeners which will serve all api/http/https protocols. There are no special requirements and any HTTP client can be used to connect to Manticore. 
 
 All endpoints respond with `application/json` content type. Most endpoints use JSON payload for requests, however there are some exceptions that use NDJSON or simple URL encoded payload.
 
@@ -29,21 +31,31 @@ A separate HTTP interface can be used to perform 'VIP' connections. A connection
 ```ini
 searchd {
 ...
-   listen = 127.0.0.1:9308:http
-   listen = 127.0.0.1:9318:http_vip
+   listen = 127.0.0.1:9308
+   listen = 127.0.0.1:9318:_vip
 ...
 }
 ``` 
-The HTTP protocol also supports [SSL encryption](Security/SSL.md). In this case the connection type used will be `https`:
+The HTTP protocol also supports [SSL encryption](Security/SSL.md). It may be used on the same port as http. Daemon just determines protocol by first
+few bytes came from client and behaves according to it. However, https is about security, so you can strength listener by using special connection type `https`.
 
 ```ini
 searchd {
 ...
-   listen = 127.0.0.1:9308:http
+   listen = 127.0.0.1:9308
    listen = 127.0.0.1:9443:https
 ...
 }
 ``` 
+
+Here you can connect using https to both ports. However to 9308 you may also connect using http, or provide that point as remote agent in distr indexes.
+When trying to connect with http, it will just work. For https, if valid key/cert provided in config, it also will just work.
+If no valid key/cert provided, but client tries to connect via https - it will silently fallback to unsecured http.
+In the same time 9443 is strictly glued to https only. When trying to connect using http, it will answer with code 403.
+If clients tries to connect with https, but daemon can't serve it by any reason (most probably - because it has no valid key/cert ) - it will answer
+with 526 error code. No silent fall-back to unencrypted http will happen anyway.
+
+Apart ssl encryption there is no difference between http and https.
 
 ## Connecting with cURL
 Performing a quick search is as easy as:

@@ -70,3 +70,25 @@ When done you can verify the key and certificate files were generated correctly:
 ```bash
 openssl verify -CAfile ca-cert.pem server-cert.pem
 ```
+
+## Secured behavior
+
+When SSL config is present and valid, so that used SSL lib can recognize it and establish secured layer of connection,
+following achievements are available and may be used:
+
+ - you can connect to multiprotocol port with https and run queries. Both query and answer will be send with ssl encryption.
+ - you can connect to dedicated `https` port with http and run queries. Connection will be secured. (attempt to connect to this port via plain http will be rejected with 403 error code).
+ - you can connect to mysql port with mysql client using secured connection. Session will be secured. Note, that cli `mysql` program tries to use ssl by
+   default, so usual connect to the daemon in case it has valid SSL config most probably will be secured. You may check it running 'status' command in cli.
+   
+When SSL config is NOT valid by any reason, which daemon detects by the fact that secured connection can't be established (apart non-valid config it might be other reasons, like just unability to load appropriate SSL lib at all, because of any reason - non-compatible, absent, etc.) followihg things will not work or work non-secured way:
+
+- you can connect to multiprotocol port with https. But conection will be silently fall-back to unencrypted http.
+- you can't connect to dedicated `https` port at all. Connection will be rejected with 526 error code.
+- connect to mysql port via mysql client will not propagate possibility of ssl securing. So, if client demands it, it will fail. If not - it will use plain mysql41 or compressed connection.
+
+NOTE!
+
+- binary API connections (as connections from old clients, or inter-daemons master-agent connections) are never secured.
+- replication is managed by third-party provider, which has to be set up separately. However SST stage of replication in current realization is done by binary API connection, and so, never secured.
+- with this 'never secured' statement, however, you still can use any external proxies (like legacy tunneling with ssh) which will provide encryption.

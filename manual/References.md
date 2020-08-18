@@ -386,7 +386,7 @@ To be put to section `searchd {}` in configuration file:
   * [listen_tfo](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#listen_tfo) - Allows TCP_FASTOPEN flag for all listeners
   * [log](Server_settings/Searchd.md#log) - Path to Manticore server log file
   * [max_batch_queries](Server_settings/Searchd.md#max_batch_queries) - Limits the amount of queries per batch
-  * [max_connections](Server_settings/Searchd.md#max_connections) - Maximum amount of worker threads
+  * [max_connections](Server_settings/Searchd.md#max_connections) - Maximum amount of active connections
   * [max_filters](Server_settings/Searchd.md#max_filters) - Maximum allowed per-query filter count
   * [max_filter_values](Server_settings/Searchd.md#max_filter_values) - Maximum allowed per-filter values count
   * [max_open_files](Server_settings/Searchd.md#max_open_files) - Maximum num of files which allowed to be opened by server

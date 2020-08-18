@@ -353,7 +353,8 @@ index products
 
 <!-- end -->
 
-<!-- more -->
+<details>
+<summary>More</summary>
 
 <!-- example string field -->
 
@@ -407,7 +408,7 @@ index products
 
 <!-- end -->
 
-<!-- \more -->
+</details>
 
 ## Integer
 

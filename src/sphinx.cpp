@@ -9298,6 +9298,15 @@ void CSphHitBuilder::DoclistEndList ()
 	m_dSkiplist.Resize ( 0 );
 }
 
+static int strcmpp (const char* l, const char* r)
+{
+	const char* szEmpty = "";
+	if ( !l )
+		l = szEmpty;
+	if ( !r )
+		r = szEmpty;
+	return strcmp ( l, r );
+}
 
 void CSphHitBuilder::cidxHit ( CSphAggregateHit * pHit )
 {
@@ -9309,7 +9318,7 @@ void CSphHitBuilder::cidxHit ( CSphAggregateHit * pHit )
 	// next word
 	/////////////
 
-	const bool bNextWord = ( m_tLastHit.m_uWordID!=pHit->m_uWordID ||	( m_pDict->GetSettings().m_bWordDict && strcmp ( (char*)m_tLastHit.m_sKeyword, (char*)pHit->m_sKeyword ) ) ); // OPTIMIZE?
+	const bool bNextWord = ( m_tLastHit.m_uWordID!=pHit->m_uWordID ||	( m_pDict->GetSettings().m_bWordDict && strcmpp ( (char*)m_tLastHit.m_sKeyword, (char*)pHit->m_sKeyword ) ) ); // OPTIMIZE?
 	const bool bNextDoc = bNextWord || ( m_tLastHit.m_tRowID!=pHit->m_tRowID );
 
 	if ( m_bGotFieldEnd && ( bNextWord || bNextDoc ) )

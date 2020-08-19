@@ -491,12 +491,13 @@ const char * sphGetRankerName ( ESphRankMode eRanker )
 class DiskIndexQwordSetup_c : public ISphQwordSetup
 {
 public:
-	DiskIndexQwordSetup_c ( DataReaderFactory_c * pDoclist, DataReaderFactory_c * pHitlist, const BYTE * pSkips, int iSkiplistBlockSize, bool bSetupReaders )
+	DiskIndexQwordSetup_c ( DataReaderFactory_c * pDoclist, DataReaderFactory_c * pHitlist, const BYTE * pSkips, int iSkiplistBlockSize, bool bSetupReaders, RowID_t iRowsCount )
 		: m_pDoclist ( pDoclist )
 		, m_pHitlist ( pHitlist )
 		, m_pSkips ( pSkips )
 		, m_iSkiplistBlockSize ( iSkiplistBlockSize )
 		, m_bSetupReaders ( bSetupReaders )
+		, m_iRowsCount ( iRowsCount )
 	{
 		SafeAddRef(pDoclist);
 		SafeAddRef(pHitlist);
@@ -505,6 +506,7 @@ public:
 	ISphQword *			QwordSpawn ( const XQKeyword_t & tWord ) const final;
 	bool				QwordSetup ( ISphQword * ) const final;
 	bool				Setup ( ISphQword * ) const;
+	ISphQword *			ScanSpawn() const override;
 
 private:
 	DataReaderFactoryPtr_c		m_pDoclist;
@@ -512,6 +514,7 @@ private:
 	const BYTE *				m_pSkips;
 	int							m_iSkiplistBlockSize = 0;
 	bool						m_bSetupReaders = false;
+	RowID_t						m_iRowsCount = INVALID_ROWID;
 
 };
 
@@ -13504,6 +13507,45 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 	return true;
 }
 
+QwordScan_c::QwordScan_c ( int iRowsCount )
+	: m_iRowsCount ( iRowsCount )
+{
+	m_bDone = ( m_iRowsCount==0 );
+
+	m_iDocs = m_iRowsCount;
+	m_sWord = "";
+	m_sDictWord = "";
+	m_bExcluded = true;
+	m_dQwordFields.SetAll();
+}
+
+const CSphMatch & QwordScan_c::GetNextDoc()
+{
+	if ( m_bDone )
+	{
+		m_tDoc.m_tRowID = INVALID_ROWID;
+		return m_tDoc;
+	}
+
+	if ( m_tDoc.m_tRowID==INVALID_ROWID )
+		m_tDoc.m_tRowID = 0;
+	else
+		m_tDoc.m_tRowID++;
+
+	if ( m_tDoc.m_tRowID>=m_iRowsCount )
+	{
+		m_bDone = true;
+		m_tDoc.m_tRowID = INVALID_ROWID;
+	}
+
+	return m_tDoc;
+}
+
+ISphQword * DiskIndexQwordSetup_c::ScanSpawn() const
+{
+	return new QwordScan_c ( m_iRowsCount );
+}
+
 //////////////////////////////////////////////////////////////////////////////
 
 bool RawFileLock ( const CSphString sFile, int &iLockFD, CSphString &sError )
@@ -13943,7 +13985,7 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 
 
 	// aim
-	DiskIndexQwordSetup_c tTermSetup ( pDoclist, pHitlist, m_tSkiplists.GetWritePtr(), m_tSettings.m_iSkiplistBlockSize, true );
+	DiskIndexQwordSetup_c tTermSetup ( pDoclist, pHitlist, m_tSkiplists.GetWritePtr(), m_tSettings.m_iSkiplistBlockSize, true, m_iDocinfo );
 	tTermSetup.SetDict ( m_pDict );
 	tTermSetup.m_pIndex = this;
 
@@ -14732,7 +14774,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	DataReaderFactory_c * tDummy1 = nullptr;
 	DataReaderFactory_c * tDummy2 = nullptr;
 
-	DiskIndexQwordSetup_c tTermSetup ( tDummy1, tDummy2, m_tSkiplists.GetWritePtr(), m_tSettings.m_iSkiplistBlockSize, false );
+	DiskIndexQwordSetup_c tTermSetup ( tDummy1, tDummy2, m_tSkiplists.GetWritePtr(), m_tSettings.m_iSkiplistBlockSize, false, m_iDocinfo );
 	tTermSetup.SetDict ( pDict );
 	tTermSetup.m_pIndex = this;
 
@@ -16008,7 +16050,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		pProfile->Switch ( SPH_QSTATE_INIT );
 
 	// setup search terms
-	DiskIndexQwordSetup_c tTermSetup ( pDoclist, pHitlist, m_tSkiplists.GetWritePtr(), m_tSettings.m_iSkiplistBlockSize, true );
+	DiskIndexQwordSetup_c tTermSetup ( pDoclist, pHitlist, m_tSkiplists.GetWritePtr(), m_tSettings.m_iSkiplistBlockSize, true, m_iDocinfo );
 
 	tTermSetup.SetDict ( pDict );
 	tTermSetup.m_pIndex = this;

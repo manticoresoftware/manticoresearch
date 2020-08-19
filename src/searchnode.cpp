@@ -1602,8 +1602,13 @@ static ExtNode_i * CreatePayloadNode ( const XQNode_t * pNode, const ISphQwordSe
 ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & tSetup, bool bUseBM25 )
 {
 	// empty node?
-	if ( pNode->IsEmpty() )
+	if ( pNode->IsEmpty() && pNode->GetOp()!=SPH_QUERY_SCAN )
 		return NULL;
+
+	if ( pNode->GetOp()==SPH_QUERY_SCAN )
+	{
+		return CreateHitlessNode ( tSetup.ScanSpawn(), pNode->m_dSpec.m_dFieldMask, tSetup, true, bUseBM25 );
+	}
 
 	if ( pNode->m_dWords.GetLength() || pNode->m_bVirtuallyPlain )
 	{

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>ful-text NOT operator</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+}
+
+index test1
+{
+	source			= test
+	path			= <data_path/>/test
+}
+
+index rt1
+{
+    type = rt
+    path = <data_path/>/rt1
+    rt_field = title
+    rt_attr_uint = gid
+}
+
+index pq1
+{
+	type			= percolate
+	path			= <data_path/>/pq1
+	rt_field 		= title
+	rt_attr_uint	= gid
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	subject VARCHAR(50) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+
+<db_insert>INSERT INTO test_table VALUES ( 1, 'hello world' );</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 2, 'hello hallo world' );</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 3, 'a b world' );</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 4, 'a b c world' );</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 5, 'hello war' );</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 6, 'hello hallo war' );</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 7, 'a b war' );</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 8, 'a b c war' );</db_insert>
+
+<metaindex name='META:all'>
+<index>test1</index>
+<index>rt1</index>
+</metaindex>
+
+<sphqueries>
+<sphinxql>INSERT INTO rt1 (id, title) VALUES ( 1, 'hello world' ),( 2, 'hello hallo world' ),( 3, 'a b world' ),( 4, 'a b c world' )</sphinxql>
+<sphinxql>INSERT INTO rt1 (id, title) VALUES ( 5, 'hello war' ),( 6, 'hello hallo war' ),( 7, 'a b war' ),( 8, 'a b c war' )</sphinxql>
+<sphinxql>select id from META:all where match ('-world') order by id asc</sphinxql>
+<sphinxql>select id from META:all where match ('-hello') order by id asc</sphinxql>
+<sphinxql>select id from META:all where match ('-war') order by id asc</sphinxql>
+
+<sphinxql>INSERT INTO pq1 (query) VALUES ('-world')</sphinxql>
+<sphinxql>INSERT INTO pq1 (query) VALUES ('-hello')</sphinxql>
+<sphinxql>INSERT INTO pq1 (query) VALUES ('-war')</sphinxql>
+<sphinxql>CALL PQ ('pq1', ('hello world', 'hello hallo world', 'a b world', 'a b c world' ), 1 as docs, 0 as docs_json, 1 as query )</sphinxql>
+<sphinxql>CALL PQ ('pq1', ('hello war', 'hello hallo war', 'a b war', 'a b c war' ), 1 as docs, 0 as docs_json, 1 as query )</sphinxql>
+
+</sphqueries>
+</test>

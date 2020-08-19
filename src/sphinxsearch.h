@@ -43,6 +43,9 @@ bool operator < ( const SkiplistEntry_t & a, RowID_t b );
 bool operator == ( const SkiplistEntry_t & a, RowID_t b );
 bool operator < ( RowID_t a, const SkiplistEntry_t & b );
 
+class RtIndex_c;
+struct SphChunkGuard_t;
+
 /// term, searcher view
 class ISphQword
 {
@@ -87,6 +90,8 @@ public:
 	virtual void				Reset();
 
 	int							GetAtomPos() const;
+
+	virtual bool Setup ( const RtIndex_c * pIndex, int iSegment, const SphChunkGuard_t & tGuard ) { return false; };
 };
 
 
@@ -118,6 +123,8 @@ public:
 		m_pDict = pDict;
 	}
 	inline CSphDict * Dict() const { return m_pDict; };
+
+	virtual ISphQword *					ScanSpawn() const = 0;
 };
 
 /// generic ranker interface
@@ -134,6 +141,23 @@ public:
 
 /// factory
 ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, CSphQueryResult * pResult, const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx, const ISphSchema & tSorterSchema );
+
+class QwordScan_c : public ISphQword
+{
+public:
+	QwordScan_c ( int iRowsCount );
+
+	const CSphMatch & GetNextDoc() final;
+
+	void SeekHitlist ( SphOffset_t uOff ) override {}
+	Hitpos_t GetNextHit () override { return EMPTY_HIT; }
+
+protected:
+	RowID_t m_iRowsCount = INVALID_ROWID;
+	bool m_bDone = false;
+	CSphMatch m_tDoc;
+};
+
 
 //////////////////////////////////////////////////////////////////////////
 

@@ -319,6 +319,20 @@ static void FixupDegenerates ( XQNode_t * pNode, CSphString & sWarning )
 		FixupDegenerates ( pNode->m_dChildren[i], sWarning );
 }
 
+static XQNode_t * FixupNot ( XQNode_t * pNode, CSphVector<XQNode_t *> & dSpawned )
+{
+	pNode->SetOp ( SPH_QUERY_AND );
+
+	XQNode_t * pScan = new XQNode_t ( pNode->m_dSpec );
+	pScan->SetOp ( SPH_QUERY_SCAN );
+	dSpawned.Add ( pScan );
+
+	XQNode_t * pAnd = new XQNode_t ( pNode->m_dSpec );
+	pAnd->SetOp ( SPH_QUERY_ANDNOT, pScan, pNode );
+	dSpawned.Add ( pScan );
+
+	return pAnd;
+}
 
 XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec )
 {
@@ -340,12 +354,8 @@ XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & 
 		return NULL;
 	}
 
-	if ( pRoot && pRoot->GetOp()==SPH_QUERY_NOT && !pRoot->m_iOpArg )
-	{
-		Cleanup ();
-		Error ( "query is non-computable (single NOT operator)" );
-		return NULL;
-	}
+	if ( pRoot && pRoot->GetOp()==SPH_QUERY_NOT )
+		pRoot = FixupNot ( pRoot, m_dSpawned );
 
 	// all ok; might want to create a dummy node to indicate that
 	m_dSpawned.Reset();

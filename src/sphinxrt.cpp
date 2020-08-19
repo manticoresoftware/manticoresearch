@@ -4929,16 +4929,7 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 //////////////////////////////////////////////////////////////////////////
 
 
-struct RtQwordTraits_t : public ISphQword
-{
-public:
-	virtual bool Setup ( const RtIndex_c * pIndex, int iSegment, const SphChunkGuard_t & tGuard ) = 0;
-};
-
-
-//////////////////////////////////////////////////////////////////////////
-
-struct RtQword_t : public RtQwordTraits_t
+struct RtQword_t : public ISphQword
 {
 public:
 	RtQword_t ()
@@ -5004,7 +4995,7 @@ public:
 		}
 	}
 
-	virtual bool Setup ( const RtIndex_c * pIndex, int iSegment, const SphChunkGuard_t & tGuard )
+	bool Setup ( const RtIndex_c * pIndex, int iSegment, const SphChunkGuard_t & tGuard ) override
 	{
 		return pIndex->RtQwordSetup ( this, iSegment, tGuard );
 	}
@@ -5041,7 +5032,7 @@ struct RtSubstringPayload_t : public ISphSubstringPayload
 };
 
 
-struct RtQwordPayload_t : public RtQwordTraits_t
+struct RtQwordPayload_t : public ISphQword
 {
 public:
 	explicit RtQwordPayload_t ( const RtSubstringPayload_t * pPayload )
@@ -5112,7 +5103,7 @@ public:
 		}
 	}
 
-	virtual bool Setup ( const RtIndex_c *, int iSegment, const SphChunkGuard_t & tGuard )
+	bool Setup ( const RtIndex_c *, int iSegment, const SphChunkGuard_t & tGuard ) override
 	{
 		m_uDoclist = 0;
 		m_uDoclistLeft = 0;
@@ -5156,6 +5147,32 @@ private:
 	DWORD						m_uHitEmbeded;
 };
 
+struct RtScanQword_t : public QwordScan_c
+{
+public:
+	RtScanQword_t ( int iRowsTotal )
+		: QwordScan_c ( iRowsTotal )
+	{
+	}
+
+	bool Setup ( const RtIndex_c * pIndex, int iSegment, const SphChunkGuard_t & tGuard ) final
+	{
+		m_tDoc.Reset ( 0 );
+
+		if ( iSegment<0 )
+			return false;
+
+		RtSegment_t * pSegment = tGuard.m_dRamChunks[iSegment];
+
+		m_iRowsCount = pSegment->m_uRows;
+		m_iDocs = m_iRowsCount;
+		m_bDone = ( m_iRowsCount==0 );
+		m_dQwordFields.SetAll();
+
+		return ( pSegment->m_tAliveRows>0 );
+	}
+};
+
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -5166,6 +5183,7 @@ public:
 	virtual ISphQword *	QwordSpawn ( const XQKeyword_t & ) const final;
 	virtual bool		QwordSetup ( ISphQword * pQword ) const final;
 	void				SetSegment ( int iSegment ) { m_iSeg = iSegment; }
+	ISphQword *			ScanSpawn() const final;
 
 private:
 	const SphChunkGuard_t & m_tGuard;
@@ -5192,9 +5210,8 @@ bool RtQwordSetup_t::QwordSetup ( ISphQword * pQword ) const
 {
 	// there was two dynamic_casts here once but they're not necessary
 	// maybe it's worth to rewrite class hierarchy to avoid c-casts here?
-	RtQwordTraits_t * pMyWord = (RtQwordTraits_t*)pQword;
 	const RtIndex_c * pIndex = (const RtIndex_c *)m_pIndex;
-	return pMyWord->Setup ( pIndex, m_iSeg, m_tGuard );
+	return pQword->Setup ( pIndex, m_iSeg, m_tGuard );
 }
 
 
@@ -5213,6 +5230,11 @@ bool RtIndex_c::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) cons
 		return true;
 	}
 	return false;
+}
+
+ISphQword * RtQwordSetup_t::ScanSpawn () const
+{
+	return new RtScanQword_t ( m_pIndex->GetStats().m_iTotalDocuments );
 }
 
 

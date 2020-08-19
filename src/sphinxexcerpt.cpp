@@ -298,6 +298,12 @@ public:
 		return true;
 	}
 
+	ISphQword * ScanSpawn() const override
+	{
+		int iDocs = ( m_tIndex.GetDocHits().GetLength() ? 1 : 0 );
+		return new QwordScan_c ( iDocs );
+	}
+
 private:
 	const SnippetsDocIndex_c & m_tIndex;
 };

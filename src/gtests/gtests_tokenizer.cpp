@@ -733,7 +733,7 @@ TEST_F ( QueryParser, test_many )
 		, { "-hello world"                                    , "( world AND NOT hello )" }
 		, { "\"phrase (query)/3 ~on steroids\""               , "\"phrase query on steroids\"" }
 		, { "hello a world"                                   , "( hello   world )" }
-		, { "-one"                                            , "" }
+		, { "-one"                                            , "(  AND NOT one )" }
 		, { "-one -two"                                       , "" }
 		, { "\"\""                                            , "" }
 		, { "\"()\""                                          , "" }

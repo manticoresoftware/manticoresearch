@@ -11,11 +11,13 @@ start:
 pages:
   stage: routines
   rules:
-    - if: $TEST==null && $CI_COMMIT_BRANCH == "master" && $DOCS_COMMIT_ONLY == null
+    - when: manual
+      allow_failure: true
   tags:
     - docker
   dependencies: []
   variables:
+    GIT_STRATEGY: none
     REDIR_URL: "https://manual.manticoresearch.com/dev/"
   script:
     - mkdir .public

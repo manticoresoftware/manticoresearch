@@ -6,7 +6,7 @@
     <force-rt/>
     <heavy/>
 </requires>
-<skip-indexer/>
+<skip_indexer/>
 
 <config>
 searchd

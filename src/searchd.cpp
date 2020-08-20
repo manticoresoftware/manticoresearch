@@ -17901,7 +17901,7 @@ static void CheckSystemTFO ()
 	FILE * fp = fopen ( "/proc/sys/net/ipv4/tcp_fastopen", "rb" );
 	if ( !fp )
 	{
-		sphWarning ( "TCP fast open unavailable (can't read /proc/sys/net/ipv4/tcp_fastopen, unsupported kernel?)" );
+		sphInfo ( "TCP fast open unavailable (can't read /proc/sys/net/ipv4/tcp_fastopen, unsupported kernel?)" );
 		return;
 	}
 

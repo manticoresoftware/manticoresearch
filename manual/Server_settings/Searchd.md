@@ -347,22 +347,28 @@ The general syntax for `listen` is:
 listen = ( address ":" port | port | path | address ":" port start - port end ) [ ":" protocol [ "_vip" ]]
 ```
 
-You can specify either an IP address (or hostname) and port number, or just a port number or Unix socket path or an IP address and ports range. If you specify port number but not the address, `searchd` will listen on all network interfaces. Unix path is identified by a leading slash. Ports range could be set only for replication protocol.
+You can specify:
+* either an IP address (or hostname) and a port number
+* or just a port number
+* or Unix socket path 
+* or an IP address and ports range
 
-You can also specify a protocol handler (listener) to be used for connections on this socket. The protocols are :
+If you specify a port number, but not an address, `searchd` will listen on all network interfaces. Unix path is identified by a leading slash. Ports range could be set only for the replication protocol.
 
-* **Not specified** - Manticore will accept connections at this port from
+You can also specify a protocol handler (listener) to be used for connections on this socket. The listeners are:
+
+* **Not specified** - Manticore will accept connections at this port from:
   - other Manticore agents (i.e. a remote distributed index)
   - clients via HTTP and HTTPS
-  This is a default setting and mostly you need to specify another `listen` only for connecting via MySQL protocol and for replication.
-* `mysql` - MySQL protocol for connections from MySQL clients. More details on MySQL protocol support can be found in [mysql_protocol_support_and_sphinxql](Connecting_to_the_server/HTTP.md#SQL-over-HTTP) section. Shortly: you may connect with mysql41 and compressed proto. If ssl is available (i.e. lib is present, config is valid), then you may connect with mysql41 and compressed via ssl.
-* `replication` - replication protocol, used for nodes communication. More details can be found in [replication](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) section.
+* `mysql` - MySQL protocol for connections from MySQL clients. Note:
+  - Compression control is supported.
+  - If [SSL](Security/SSL.md#SSL) is enabled you can make an encrypted connection.
+* `replication` - replication protocol, used for nodes communication. More details can be found in the [replication](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) section.
 * `http` - same as **Not specified**. Manticore will accept connections at this port from remote agents and clients via HTTP and HTTPS.
-* `https` - HTTPS protocol. It uses OpenSSL library to encrypt HTTP traffic. More details can be found in [SSL](Security/SSL.md) section. Use it to allow only http connections.
-* `sphinx` - legacy binary protocol. Use it to serve connections from remote sphinxSE clients.
+* `https` - HTTPS protocol. Manticore will accept **only** HTTPS connections at this port. Note it's different from `http` and when the listener is not specified in that it doesn't fall back to `http` in case there's an issue with the encrypted connection. More details can be found in section [SSL](Security/SSL.md).
+* `sphinx` - legacy binary protocol. Used to serve connections from remote SphinxSE clients. It will also work with any other Sphinx API clients, but it's recommended to just omit listener instead and use `sphinx` only for connections from [SphinxSE](Extensions/SphinxSE.md)
 
-Adding a `_vip` suffix to a protocol (for instance `mysql_vip` or `http_vip`) makes all connections to that port bypass the thread pool and always forcibly create a new dedicated thread. That's useful for managing in case of a severe overload when the server would either stall or not let you connect via a regular port.
-
+Adding suffix `_vip` to any protocol (for instance `mysql_vip` or `http_vip` or just `_vip`) forces creating a dedicated thread for the connection to bypass different limitations. That's useful for node maintenance in case of a severe overload when the server would either stall or not let you connect via a regular port otherwise.
 
 <!-- intro -->
 ##### Example:
@@ -383,25 +389,24 @@ listen = 127.0.0.1:9312:sphinx
 ```
 <!-- end -->
 
-There can be multiple listen directives, `searchd` will listen for client connections on all specified ports and sockets.  Default config provided in package defines listening on ports **9308** and **9312** for connections from remote agents and non-mysql based clients and on port **9306** for MySQL connections. If no `listen` directives are found then the server will listen on port **9312** for connections from remote agents and non-mysql based clients and on port **9306** for MySQL connections.
+There can be multiple `listen` directives, `searchd` will listen for client connections on all specified ports and sockets.  Default config provided in Manticore packages defines listening on ports **9308** and **9312** for connections from remote agents and non-mysql based clients and on port **9306** for MySQL connections. If no `listen` directives are found then the server will listen on port **9312** for connections from remote agents and non-mysql based clients and on port **9306** for MySQL connections.
 
 Unix-domain sockets are not supported on Windows.
 
-`sphinx` listener is runaround for sphinxSE clients, as last can't work with common multiprotocol listeners. Such listener will also work with any other sphinx API clients, but since we made compatible improvement to sphinx API, consider multiprotocol as better choise for them (see below).
+#### Technical details about Sphinx API protocol and TFO
+<details>
+Legacy Sphinx protocol has 2 phases: handshake exchanging and data flow. The handshake consists of a packet of 4 bytes from the client, and a packet of 4 bytes from the daemon with only one purpose - the client determines that the remote is a real Sphinx daemon, the daemon determines that the remote is a real Sphinx client. The main dataflow is quite simple: let's both sides declare their handshakes, and the opposite check them. That exchange with short packets implies using special `TCP_NODELAY` flag, which switches off Nagle's TCP algorithm and declares, that the TCP connection will be performed as a dialogue of small packages. 
+However it is not strictly defined who speaks first in this negotiation. Historically all clients that use the binary API speak first: send handshake, then read 4 bytes from a daemon, then send a request and read an answer from the daemon.
+When we improved Sphinx protocol compatibility we considered these things:
+1. Usually master-agent communication is established from a known client to a known host on a known port. So, it is quite not possible, that the endpoint will provide wrong handshake. So, we may implicitly assume, that both sides are valid and really speak in Sphinx proto. 
+2. Given this assumption we can 'glue' a handshake to the real request and send it in one packet. If backend is a legacy Sphinx daemon - it will just read this glued packet as 4 bytes of a hadshake, then request body. Since they both came in one packet, the backend socket has -1 RTT, and the frontend buffer still works despite that fact usual way.
+3. Continuing the assumption: since the 'query' packet is quite small, and the hadshake is even smaller, let's send both in initial 'SYN' TCP package using modern TFO (tcp-fast-open) technique. That is: we connect to a remote node with the glued handshake + body package. The daemon accept the connection and immediately has both the handshake and the body in a socket buffer, as they came in the very first TCP 'SYN' packet. That eliminates another one RTT.
+4. Finally teach daemon to accept this improvement. Actually, from application it implies NOT to use `TCP_NODELAY`. And, from system side it implies to ensure that on the daemon side accepting TFO is activated, and on the client side sending TFO is also activated. By default in modern systems client TFO is already activated by default, so you have only tune server TFO for all things to work.
 
-#### Couple words about sphinx API proto
+All these improvements without actual changing of the protocol itself allowed to eliminate 1.5 RTT of TCP protocol from the connection. Which is, if query and answer are capable to be placed in a single TCP package, decreases whole binary API session from 3.5 RTT to 2 RTT - which makes network negotination about 2 times faster.
 
-Legacy sphinx protocol has 2 phases: handshake exchanging and data flow. Handshake consists of packet of 4 bytes from client, and packet of 4 bytes from daemon, with only one purpose - client determines that remote is real sphinx daemon, daemon determines that remote is real sphinx client. Main dataflow is quite simple: let's both sides declare their handshakes, and opposite check them. That exchanging with short packets implies using special TCP_NODELAY flag, which switches off nagle tcp algorithm and declares, that tcp connection will be performed as dialogue of small packages. 
-However it is not strictly define, who speaks first in this negotiation. Historically all clients over API, which is still available in 'api' folder in the sources, speak first their handshake. Also, all clients by implementation send handshake, then read 4 bytes from daemon, then send request and read answer from daemon.
-When we improved sphinx protocol compatible way, we considered these things:
-1. Usually master-agent communication is established from known client to known host on known port. So, it is quite not possible, that endpoint will provide wrong handshake. So, we may implicitly assume, that both sides are valid and really speak in sphinx proto. 
-2. From this assumption we may 'glue' handshake to the real request and send it in the one packet. If backend is legacy sphinx daemon - it will just read this glued packed as 4 bytes of hadshake, then request body. Since they both came in one packet, backend socket has -1 RTT, and frontend buffer still works despite that fact usual way.
-3. Continuing assumption: since 'query' packet is quite small, and hadshake even smaller, let's send both in initial 'syn' package using modern TFO (tcp-fast-open) technique. That is: we connect to remote node with glued handshake + body package. Daemon accept connection and immediately has both handshake and body in the socket buffer, as they came in very first tcp 'SYN' packet. That eliminates another one RTT.
-4. Finally teach daemon to accept this improvement. Actually, from application it implies NOT to use TCP_NODELAY. And, from system side it implies to ensure that on daemon side accepting TFO is activated, and on client side sendint TFO is also activated. By default in modern systems client TFO is already activated by default, so you have only tune server TFO for all things to work.
-
-All these improvements without actual changing of protocol itself allowed to eliminate 1.5 RTT of tcp protocol from the connection. Which is, if query and answer capable to be placed in single tcp package, decreases whole binary API session from 3.5 RTT to 2 RTT - which makes network negotination about 2 times faster.
-
-So, all our improvements is stated around initially undefined statement: 'who speaks first'. If client speaks first - we may apply all these optimizations and effectively process connect + handshake + query in single TFO package. Moreover, we can look to the beginning of received package and determine real protocol. That is why you can connect to one and same port with all API/http/https. If daemon has to speak first - all this optimizations are impossible. And multiprotocol is also impossible. That is why we have dedicated port for mysql41, and not unified it with all other protocols into same port. Suddenly, among all clients one was written implying that daemon should send handshake first. That is - no possibility to all described improvements, pure legacy. That is sphinxSE pluging for mysql/mariadb. So, specially for this single client we dedicated `sphinx` proto definition to work most legacy way. Namely: both sides activate TCP_NODELAY and exchange with small packages. Daemon sends it's handshake on connect, then client sends it's, and then everything works usual way. That is not very optimal, but just works. If you use sphinxSE to connect to daemon - you have to dedicate a listener with explicitly stated `sphinx` proto. For another clients - avoid to use this proto flavour; it is slower. If you have another legacy sphinx API clients - check first, if they able to work with non-dedicated multiprotocol port. For master-agent linkage using non-dedicated (multiprotocol) port, and enabling client and server TFO is work well, and will definitely make working of network backend faster. 
+So, all our improvements are stated around initially undefined statement: 'who speaks first'. If a client speaks first - we may apply all these optimizations and effectively process connect + handshake + query in a single TFO package. Moreover, we can look at the beginning of the received package and determine a real protocol. That is why you can connect to one and the same port via API/http/https. If the daemon has to speak first - all this optimizations are impossible. And the multiprotocol is also impossible. That is why we have a dedicated port for mysql, and did not unify it with all the other protocols into a same port. Suddenly, among all clients one was written implying that daemon should send a handshake first. That is - no possibility to all the described improvements. That is SphinxSE plugin for mysql/mariadb. So, specially for this single client we dedicated `sphinx` proto definition to work most legacy way. Namely: both sides activate `TCP_NODELAY` and exchange with small packages. The daemon sends its handshake on connect, then the client sends its, and then everything works usual way. That is not very optimal, but just works. If you use SphinxSE to connect to Manticore - you have to dedicate a listener with explicitly stated `sphinx` proto. For another clients - avoid to use this listener as it is slower. If you use another legacy Sphinx API clients - check first, if they are able to work with non-dedicated multiprotocol port. For master-agent linkage using the non-dedicated (multiprotocol) port and enabling client and server TFO works well and will definitely make working of network backend faster, especially if you have very light and fast queries.
+</details>
 
 ### listen_tfo
 

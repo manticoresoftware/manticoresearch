@@ -91,7 +91,7 @@ public:
 
 	int							GetAtomPos() const;
 
-	virtual bool Setup ( const RtIndex_c * pIndex, int iSegment, const SphChunkGuard_t & tGuard ) { return false; };
+	virtual bool SetupScan ( const RtIndex_c * pIndex, int iSegment, const SphChunkGuard_t & tGuard ) { return false; };
 };
 
 

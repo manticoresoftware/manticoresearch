@@ -4929,7 +4929,7 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 //////////////////////////////////////////////////////////////////////////
 
 
-struct RtQword_t : public ISphQword
+struct RtQword_t final : public ISphQword
 {
 public:
 	RtQword_t ()
@@ -4941,7 +4941,7 @@ public:
 	{
 	}
 
-	virtual const CSphMatch & GetNextDoc()
+	const CSphMatch & GetNextDoc() final
 	{
 		while (true)
 		{
@@ -4964,7 +4964,7 @@ public:
 		}
 	}
 
-	virtual void SeekHitlist ( SphOffset_t uOff )
+	void SeekHitlist ( SphOffset_t uOff ) final
 	{
 		int iHits = (int)(uOff>>32);
 		if ( iHits==1 )
@@ -4977,7 +4977,7 @@ public:
 		}
 	}
 
-	virtual Hitpos_t GetNextHit ()
+	Hitpos_t GetNextHit () final
 	{
 		if ( m_uNextHit==0 )
 		{
@@ -4995,7 +4995,7 @@ public:
 		}
 	}
 
-	bool Setup ( const RtIndex_c * pIndex, int iSegment, const SphChunkGuard_t & tGuard ) override
+	bool SetupScan ( const RtIndex_c * pIndex, int iSegment, const SphChunkGuard_t & tGuard ) final
 	{
 		return pIndex->RtQwordSetup ( this, iSegment, tGuard );
 	}
@@ -5032,7 +5032,7 @@ struct RtSubstringPayload_t : public ISphSubstringPayload
 };
 
 
-struct RtQwordPayload_t : public ISphQword
+struct RtQwordPayload_t final : public ISphQword
 {
 public:
 	explicit RtQwordPayload_t ( const RtSubstringPayload_t * pPayload )
@@ -5048,10 +5048,10 @@ public:
 		m_uHitEmbeded = EMPTY_HIT;
 	}
 
-	virtual ~RtQwordPayload_t ()
+	~RtQwordPayload_t () final
 	{}
 
-	virtual const CSphMatch & GetNextDoc()
+	const CSphMatch & GetNextDoc() final
 	{
 		m_iHits = 0;
 		while (true)
@@ -5085,10 +5085,10 @@ public:
 		}
 	}
 
-	virtual void SeekHitlist ( SphOffset_t )
+	void SeekHitlist ( SphOffset_t ) final
 	{}
 
-	virtual Hitpos_t GetNextHit ()
+	Hitpos_t GetNextHit () final
 	{
 		if ( m_iHits>1 )
 			return Hitpos_t ( m_tHitReader.UnzipHit() );
@@ -5103,7 +5103,7 @@ public:
 		}
 	}
 
-	bool Setup ( const RtIndex_c *, int iSegment, const SphChunkGuard_t & tGuard ) override
+	bool SetupScan ( const RtIndex_c *, int iSegment, const SphChunkGuard_t & tGuard ) final
 	{
 		m_uDoclist = 0;
 		m_uDoclistLeft = 0;
@@ -5147,15 +5147,15 @@ private:
 	DWORD						m_uHitEmbeded;
 };
 
-struct RtScanQword_t : public QwordScan_c
+struct RtScanQword_t final : public QwordScan_c
 {
 public:
-	RtScanQword_t ( int iRowsTotal )
+	explicit RtScanQword_t ( int iRowsTotal )
 		: QwordScan_c ( iRowsTotal )
 	{
 	}
 
-	bool Setup ( const RtIndex_c * pIndex, int iSegment, const SphChunkGuard_t & tGuard ) final
+	bool SetupScan ( const RtIndex_c * pIndex, int iSegment, const SphChunkGuard_t & tGuard ) final
 	{
 		m_tDoc.Reset ( 0 );
 
@@ -5176,12 +5176,12 @@ public:
 
 //////////////////////////////////////////////////////////////////////////
 
-class RtQwordSetup_t : public ISphQwordSetup
+class RtQwordSetup_t final : public ISphQwordSetup
 {
 public:
 	explicit RtQwordSetup_t ( const SphChunkGuard_t & tGuard );
-	virtual ISphQword *	QwordSpawn ( const XQKeyword_t & ) const final;
-	virtual bool		QwordSetup ( ISphQword * pQword ) const final;
+	ISphQword *	QwordSpawn ( const XQKeyword_t & ) const final;
+	bool		QwordSetup ( ISphQword * pQword ) const final;
 	void				SetSegment ( int iSegment ) { m_iSeg = iSegment; }
 	ISphQword *			ScanSpawn() const final;
 
@@ -5211,7 +5211,7 @@ bool RtQwordSetup_t::QwordSetup ( ISphQword * pQword ) const
 	// there was two dynamic_casts here once but they're not necessary
 	// maybe it's worth to rewrite class hierarchy to avoid c-casts here?
 	const RtIndex_c * pIndex = (const RtIndex_c *)m_pIndex;
-	return pQword->Setup ( pIndex, m_iSeg, m_tGuard );
+	return pQword->SetupScan ( pIndex, m_iSeg, m_tGuard );
 }
 
 

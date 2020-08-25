@@ -300,7 +300,7 @@ To be put to section `common {}` in configuration file:
 * [on_json_attr_error](Server_settings/Common.md#on_json_attr_error) - What to do if JSON format errors are found
 * [plugin_dir](Server_settings/Common.md#plugin_dir) - Location for the dynamic libraries and UDFs
 
-## [Indexer]
+## [Indexer](Adding_data_from_external_storages/Plain_indexes_creation.md#indexer-command-line-arguments)
 `indexer` is a tool to create [plain indexes](Adding_data_from_external_storages/Plain_indexes_creation.md)
 
 ##### Indexer settings in configuration file

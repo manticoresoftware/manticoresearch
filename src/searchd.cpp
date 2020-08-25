@@ -8807,12 +8807,24 @@ public:
 	}
 };
 
+void StmtErrorReporter_i::Error ( const char * sTemplate, ... )
+{
+	StringBuilder_c sBuf;
 
-class StmtErrorReporter_c : public StmtErrorReporter_i
+	va_list ap;
+	va_start ( ap, sTemplate );
+	sBuf.vAppendf ( sTemplate, ap );
+	va_end ( ap );
+
+	ErrorEx ( MYSQL_ERR_PARSE_ERROR, sBuf.cstr () );
+}
+
+class StmtErrorReporter_c final : public StmtErrorReporter_i
 {
 public:
-	explicit StmtErrorReporter_c ( RowBuffer_i & tBuffer )
+	explicit StmtErrorReporter_c ( RowBuffer_i & tBuffer, const char* szStmt = nullptr )
 		: m_tRowBuffer ( tBuffer )
+		, m_szStmt ( szStmt )
 	{}
 
 	void Ok ( int iAffectedRows, const CSphString & sWarning, int64_t iLastInsertId ) final
@@ -8825,15 +8837,16 @@ public:
 		m_tRowBuffer.Ok ( iAffectedRows, nWarnings );
 	}
 
-	void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr ) final
+	void ErrorEx ( MysqlErrors_e iErr, const char * sError ) final
 	{
-		m_tRowBuffer.Error ( sStmt, sError, iErr );
+		m_tRowBuffer.Error ( m_szStmt, sError, iErr );
 	}
 
 	RowBuffer_i * GetBuffer() final { return &m_tRowBuffer; }
 
 private:
 	RowBuffer_i & m_tRowBuffer;
+	const char * m_szStmt;
 };
 
 
@@ -10015,15 +10028,13 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
 	if ( !pServed )
 	{
-		sError.SetSprintf ( "no such local index '%s'", tStmt.m_sIndex.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( "no such local index '%s'", tStmt.m_sIndex.cstr() );
 		return;
 	}
 
 	if ( !ServedDesc_t::IsMutable ( pServed ) )
 	{
-		sError.SetSprintf ( "index '%s' does not support INSERT", tStmt.m_sIndex.cstr ());
-		tOut.Error ( tStmt.m_sStmt, sError.cstr ());
+		tOut.Error ( "index '%s' does not support INSERT", tStmt.m_sIndex.cstr ());
 		return;
 	}
 
@@ -10046,27 +10057,25 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 	if ( !tStmt.m_dInsertSchema.GetLength()
 		&& iSchemaSz!=tStmt.m_iSchemaSz )
 	{
-		sError.SetSprintf ( "column count does not match schema (expected %d, got %d)", iSchemaSz, iGot );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( "column count does not match schema (expected %d, got %d)", iSchemaSz, iGot );
 		return;
 	}
 
 	if ( ( iGot % iExp )!=0 )
 	{
-		sError.SetSprintf ( "column count does not match value count (expected %d, got %d)", iExp, iGot );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( "column count does not match value count (expected %d, got %d)", iExp, iGot );
 		return;
 	}
 
 	if ( !CheckIndexCluster ( tStmt.m_sIndex, *pServed, tStmt.m_sCluster, IsHttpStmt ( tStmt ), sError ) )
 	{
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( "%s", sError.cstr() );
 		return;
 	}
 
 	if ( !sError.IsEmpty() )
 	{
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( "%s", sError.cstr() );
 		return;
 	}
 
@@ -10102,8 +10111,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 			// OPTIMIZE! GetAttrIndex and GetFieldIndex use the linear searching. M.b. hash instead?
 			if ( tSchema.GetAttrIndex ( dCheck[i].cstr() )==-1 && tSchema.GetFieldIndex ( dCheck[i].cstr() )==-1 )
 			{
-				sError.SetSprintf ( "unknown column: '%s'", dCheck[i].cstr() );
-				tOut.Error ( tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_PARSE_ERROR );
+				tOut.Error ( "unknown column: '%s'", dCheck[i].cstr() );
 				return;
 			}
 
@@ -10112,7 +10120,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 			if ( dCheck[i-1]==dCheck[i] )
 			{
 				sError.SetSprintf ( "column '%s' specified twice", dCheck[i].cstr() );
-				tOut.Error ( tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_FIELD_SPECIFIED_TWICE );
+				tOut.ErrorEx ( MYSQL_ERR_FIELD_SPECIFIED_TWICE, sError.cstr() );
 				return;
 			}
 
@@ -10160,7 +10168,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 	RtAccum_t * pAccum = tAcc.GetAcc ( pIndex, sError );
 	if ( !pAccum )
 	{
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( "%s", sError.cstr() );
 		return;
 	}
 
@@ -10382,7 +10390,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 	if ( !sError.IsEmpty() )
 	{
 		pIndex->RollBack ( pAccum ); // clean up collected data
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( "%s", sError.cstr() );
 		return;
 	}
 
@@ -11924,15 +11932,12 @@ void HandleMySqlExtendedUpdate ( AttrUpdateArgs & tArgs )
 
 void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning )
 {
-	CSphString sError;
-
 	// extract index names
 	StrVec_t dIndexNames;
 	ParseIndexList ( tStmt.m_sIndex, dIndexNames );
 	if ( dIndexNames.IsEmpty() )
 	{
-		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( "no such index '%s'", tStmt.m_sIndex.cstr() );
 		return;
 	}
 
@@ -11941,8 +11946,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	CSphString sMissed;
 	if ( !ExtractDistributedIndexes ( dIndexNames, dDistributed, sMissed ) )
 	{
-		sError.SetSprintf ( "unknown index '%s' in update request", sMissed.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( "unknown index '%s' in update request", sMissed.cstr() );
 		return;
 	}
 
@@ -11957,7 +11961,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	{
 		if ( i.m_sName==sphGetDocidName() )
 		{
-			tOut.Error ( tStmt.m_sStmt, "'id' attribute cannot be updated" );
+			tOut.Error ( "'id' attribute cannot be updated" );
 			return;
 		}
 
@@ -12005,7 +12009,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 
 	if ( !iSuccesses )
 	{
-		tOut.Error ( tStmt.m_sStmt, sReport.cstr() );
+		tOut.Error ( "%s", sReport.cstr() );
 		return;
 	}
 
@@ -12556,14 +12560,11 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 {
 	MEMORY ( MEM_SQL_DELETE );
 
-	CSphString sError;
-
 	StrVec_t dNames;
 	ParseIndexList ( tStmt.m_sIndex, dNames );
 	if ( dNames.IsEmpty() )
 	{
-		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( "no such index '%s'", tStmt.m_sIndex.cstr () );
 		return;
 	}
 
@@ -12571,8 +12572,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	CSphString sMissed;
 	if ( !ExtractDistributedIndexes ( dNames, dDistributed, sMissed ) )
 	{
-		sError.SetSprintf ( "unknown index '%s' in delete request", sMissed.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( "unknown index '%s' in delete request", sMissed.cstr () );
 		return;
 	}
 
@@ -12584,8 +12584,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			if ( !pDist || pDist->m_dAgents.IsEmpty() )
 				continue;
 
-			sError.SetSprintf ( "index '%s': DELETE is not supported on agents when autocommit=0", tStmt.m_sIndex.cstr() );
-			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+			tOut.Error ( "index '%s': DELETE is not supported on agents when autocommit=0", tStmt.m_sIndex.cstr() );
 			return;
 		}
 	}
@@ -12662,7 +12661,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	{
 		StringBuilder_c sReport;
 		dErrors.BuildReport ( sReport );
-		tOut.Error ( tStmt.m_sStmt, sReport.cstr() );
+		tOut.Error ( "%s", sReport.cstr () );
 		return;
 	}
 
@@ -14909,7 +14908,7 @@ public:
 				m_tLastMeta.m_sError = m_sError;
 				m_tLastMeta.m_sWarning = "";
 				StatCountCommand ( eStmt==STMT_INSERT ? SEARCHD_COMMAND_INSERT : SEARCHD_COMMAND_REPLACE );
-				StmtErrorReporter_c tErrorReporter ( tOut );
+				StmtErrorReporter_c tErrorReporter ( tOut, pStmt->m_sStmt );
 				sphHandleMysqlInsert ( tErrorReporter, *pStmt, eStmt==STMT_REPLACE,
 					m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tLastMeta.m_sWarning, m_tAcc,
 					m_tVars.m_eCollation, m_tVars.m_dLastIds );
@@ -14922,7 +14921,7 @@ public:
 				m_tLastMeta.m_sError = m_sError;
 				m_tLastMeta.m_sWarning = "";
 				StatCountCommand ( SEARCHD_COMMAND_DELETE );
-				StmtErrorReporter_c tErrorReporter ( tOut );
+				StmtErrorReporter_c tErrorReporter ( tOut, pStmt->m_sStmt );
 				sphHandleMysqlDelete ( tErrorReporter, *pStmt, sQuery, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tAcc );
 				return true;
 			}

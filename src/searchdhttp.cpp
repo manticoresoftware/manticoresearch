@@ -401,13 +401,13 @@ ReplyParser_i * CreateReplyParser ( bool bJson, int & iUpdated, int & iWarnings 
 }
 
 //////////////////////////////////////////////////////////////////////////
-class HttpErrorReporter_c : public StmtErrorReporter_i
+class HttpErrorReporter_c final : public StmtErrorReporter_i
 {
 public:
-	virtual void	Ok ( int iAffectedRows, const CSphString & /*sWarning*/, int64_t /*iLastInsertId*/ ) { m_iAffected = iAffectedRows; }
-	virtual void	Ok ( int iAffectedRows, int /*nWarnings*/ ) { m_iAffected = iAffectedRows; }
-	virtual void	Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr );
-	virtual RowBuffer_i * GetBuffer() { return NULL; }
+	void			Ok ( int iAffectedRows, const CSphString & /*sWarning*/, int64_t /*iLastInsertId*/ ) final { m_iAffected = iAffectedRows; }
+	void			Ok ( int iAffectedRows, int /*nWarnings*/ ) final { m_iAffected = iAffectedRows; }
+	void			ErrorEx ( MysqlErrors_e iErr, const char * sError ) final;
+	RowBuffer_i * 	GetBuffer() final { return nullptr; }
 
 	bool			IsError() const { return m_bError; }
 	const char *	GetError() const { return m_sError.cstr(); }
@@ -420,7 +420,7 @@ private:
 };
 
 
-void HttpErrorReporter_c::Error ( const char * /*sStmt*/, const char * sError, MysqlErrors_e /*iErr*/ )
+void HttpErrorReporter_c::ErrorEx ( MysqlErrors_e /*iErr*/, const char * sError )
 {
 	m_bError = true;
 	m_sError = sError;

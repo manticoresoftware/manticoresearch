@@ -1083,7 +1083,9 @@ class StmtErrorReporter_i
 public:
 	virtual void Ok ( int iAffectedRows, const CSphString & sWarning, int64_t iLastInsertId ) = 0;
 	virtual void Ok ( int iAffectedRows, int nWarnings=0 ) = 0;
-	virtual void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr = MYSQL_ERR_PARSE_ERROR ) = 0;
+	virtual void ErrorEx ( MysqlErrors_e iErr, const char * sError ) = 0;
+
+	void Error ( const char * sTemplate, ... );
 
 	virtual RowBuffer_i * GetBuffer() = 0;
 };

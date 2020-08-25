@@ -1536,6 +1536,9 @@ public:
 	int					AddField ( const CSphString & sName, DocstoreDataType_e eType ) final;
 	void				Finalize() final {};
 
+	void				SwapRows (RowID_t tDstID, RowID_t tSrcID ) final;
+	void				DropTail ( RowID_t tTailID ) final;
+
 	DocstoreDoc_t		GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const final;
 	int					GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
 	DocstoreSettings_t	GetDocstoreSettings() const final;
@@ -1597,6 +1600,27 @@ void DocstoreRT_c::AddDoc ( RowID_t tRowID, const DocstoreBuilder_i::Doc_t & tDo
 	m_iAllocated += iPackedLen;
 
 	assert ( pPtr-pPacked==iPackedLen );
+}
+
+
+void DocstoreRT_c::SwapRows ( RowID_t tDstID, RowID_t tSrcID )
+{
+	assert ( tDstID!=INVALID_ROWID );
+	assert ( tSrcID!=INVALID_ROWID );
+	::Swap ( m_dDocs[tDstID], m_dDocs[tSrcID]);
+}
+
+
+void DocstoreRT_c::DropTail ( RowID_t tTailID )
+{
+	int iFieldsCount = m_tFields.GetNumFields ();
+	for ( auto i = tTailID, iLen = (RowID_t) m_dDocs.GetLength (); i<iLen; ++i )
+		if ( m_dDocs[i])
+		{
+			m_iAllocated -= GetDocSize ( m_dDocs[i], iFieldsCount );
+			SafeDeleteArray( m_dDocs[i] );
+		}
+	m_dDocs.Resize ( tTailID );
 }
 
 

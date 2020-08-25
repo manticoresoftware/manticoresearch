@@ -84,6 +84,8 @@ public:
 	virtual int64_t	AllocatedBytes() const = 0;
 
 	virtual bool	CheckFieldsLoaded ( CSphString & sError ) const = 0;
+	virtual void	SwapRows ( RowID_t tDstID, RowID_t tSrcID ) = 0;
+	virtual void	DropTail ( RowID_t tTailID ) = 0;
 };
 
 

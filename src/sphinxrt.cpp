@@ -2135,7 +2135,6 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 
 	dDocHits.Sort ( CmpDocHitIndex_t() );
 
-
 	DocID_t uPrev = 0;
 	if ( !dDocHits.FindFirst ( [&] ( const AccumDocHits_t &dDoc ) {
 			bool bRes = dDoc.m_tDocID==uPrev;
@@ -2152,13 +2151,13 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 	if ( m_bReplace )
 	{
 		// replace mode, last value wins, precending values are duplicate
-		for ( DWORD i=0; i<m_uAccumDocs-1; i++ )
+		for ( DWORD i=0; i<m_uAccumDocs-1; ++i )
 			if ( dDocHits[i].m_tDocID==dDocHits[i+1].m_tDocID )
 				dRowMap[dDocHits[i].m_iDocIndex] = INVALID_ROWID;
 	} else
 	{
 		// insert mode, first value wins, subsequent values are duplicates
-		for ( DWORD i=1; i<m_uAccumDocs; i++ )
+		for ( DWORD i=1; i<m_uAccumDocs; ++i )
 			if ( dDocHits[i].m_tDocID==dDocHits[i-1].m_tDocID )
 				dRowMap[dDocHits[i].m_iDocIndex] = INVALID_ROWID;
 	}
@@ -2169,32 +2168,46 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 			i = tNextRowID++;
 
 	// remove duplicate hits
-	int iResultRow = 0;
-	ARRAY_FOREACH ( i, m_dAccum )
+	int iDstRow = 0;
+	for ( int i=0, iLen=m_dAccum.GetLength(); i<iLen; ++i )
 	{
-		RowID_t tNewRowID = dRowMap[m_dAccum[i].m_tRowID];
-		if ( tNewRowID!=INVALID_ROWID )
+		const auto & dSrcHit = m_dAccum[i];
+		RowID_t tSrcRowID = dRowMap[dSrcHit.m_tRowID];
+		if ( tSrcRowID!=INVALID_ROWID )
 		{
-			CSphWordHit & tResultHit = m_dAccum[iResultRow];
-			tResultHit = m_dAccum[i];
-			tResultHit.m_tRowID = tNewRowID;
-			iResultRow++;
+			CSphWordHit & tDstHit = m_dAccum[iDstRow];
+			if ( i!=iDstRow )
+			{
+				tDstHit = dSrcHit;
+				tDstHit.m_tRowID = tSrcRowID;
+			}
+			++iDstRow;
 		}
 	}
 
-	m_dAccum.Resize(iResultRow);
+	m_dAccum.Resize( iDstRow);
 
-	// remove duplicate docinfos
-	iResultRow = 0;
+	// remove duplicates
+	iDstRow = 0;
 	ARRAY_FOREACH ( i, dRowMap )
 		if ( dRowMap[i]!=INVALID_ROWID )
 		{
-			memcpy ( &m_dAccumRows[iResultRow*iRowSize], &m_dAccumRows[i*iRowSize], iRowSize*sizeof(CSphRowitem) );
-			iResultRow++;
+			if ( i!=iDstRow )
+			{
+				// remove duplicate docinfo
+				memcpy ( &m_dAccumRows[iDstRow * iRowSize], &m_dAccumRows[i * iRowSize], iRowSize * sizeof ( CSphRowitem ) );
+
+				// remove duplicate docstore
+				if ( m_pDocstore )
+					m_pDocstore->SwapRows ( iDstRow, i );
+			}
+			++iDstRow;
 		}
 
-	m_dAccumRows.Resize ( iResultRow*iRowSize );
-	m_uAccumDocs = iResultRow;
+	m_dAccumRows.Resize ( iDstRow * iRowSize );
+	m_uAccumDocs = iDstRow;
+	if ( m_pDocstore )
+		m_pDocstore->DropTail ( iDstRow );
 }
 
 

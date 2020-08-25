@@ -26,47 +26,68 @@ index rt
 	
 	rt_mem_limit	= 8M 
 }
+
+index batchtest
+{
+	type			= rt
+	path			= <data_path/>/rts
+
+	rt_field 		= names
+	rt_field		= namea
+	rt_attr_string  = namea
+	stored_fields   = names
+}
 </config>
 
-<sphqueries>
-<sphinxql>replace into rt (id, gid, body) values ( 1, 10, 'the' ), (2, 20, 'good'), (1, 11, 'a'), (3, 30, 'dog')</sphinxql>
-<sphinxql>select * from rt</sphinxql>
-<sphinxql>select * from rt where match ('a')</sphinxql>
-<sphinxql>select * from rt where match ('the')</sphinxql>
+<queries>
+<sphinxql>
+	replace into rt (id, gid, body) values ( 1, 10, 'the' ), (2, 20, 'good'), (1, 11, 'a'), (3, 30, 'dog');
+	select * from rt;
+	select * from rt where match ('a');
+	select * from rt where match ('the');
 
-<sphinxql>replace into rt (id, gid, body) values ( 1, 10, 'the' ), (1, 11, 'a'), (2, 20, 'good'), (3, 30, 'dog')</sphinxql>
-<sphinxql>select * from rt</sphinxql>
-<sphinxql>select * from rt where match ('a')</sphinxql>
-<sphinxql>select * from rt where match ('the')</sphinxql>
+	replace into rt (id, gid, body) values ( 1, 10, 'the' ), (1, 11, 'a'), (2, 20, 'good'), (3, 30, 'dog');
+	select * from rt;
+	select * from rt where match ('a');
+	select * from rt where match ('the');
 
-<sphinxql>replace into rt (id, gid, body) values (2, 20, 'good'), (3, 30, 'dog'), ( 1, 10, 'the' ), (1, 11, 'a')</sphinxql>
-<sphinxql>select * from rt</sphinxql>
-<sphinxql>select * from rt where match ('a')</sphinxql>
-<sphinxql>select * from rt where match ('the')</sphinxql>
+	replace into rt (id, gid, body) values (2, 20, 'good'), (3, 30, 'dog'), ( 1, 10, 'the' ), (1, 11, 'a');
+	select * from rt;
+	select * from rt where match ('a');
+	select * from rt where match ('the');
 
-<sphinxql>replace into rt (id, gid, body) values ( 1, 10, 'the' ), (2, 20, 'good'), (1, 11, 'b'), (3, 30, 'dog'), (1, 12, 'a')</sphinxql>
-<sphinxql>select * from rt</sphinxql>
-<sphinxql>select * from rt where match ('a')</sphinxql>
-<sphinxql>select * from rt where match ('the | b')</sphinxql>
+	replace into rt (id, gid, body) values ( 1, 10, 'the' ), (2, 20, 'good'), (1, 11, 'b'), (3, 30, 'dog'), (1, 12, 'a');
+	select * from rt;
+	select * from rt where match ('a');
+	select * from rt where match ('the | b');
 
-<sphinxql>replace into rt (id, gid, body) values ( 1, 10, 'the' ), (1, 11, 'b') , (1, 12, 'a'), (2, 20, 'good'), (3, 30, 'dog')</sphinxql>
-<sphinxql>select * from rt</sphinxql>
-<sphinxql>select * from rt where match ('a')</sphinxql>
-<sphinxql>select * from rt where match ('the | b')</sphinxql>
+	replace into rt (id, gid, body) values ( 1, 10, 'the' ), (1, 11, 'b') , (1, 12, 'a'), (2, 20, 'good'), (3, 30, 'dog');
+	select * from rt;
+	select * from rt where match ('a');
+	select * from rt where match ('the | b');
 
-<sphinxql>replace into rt (id, gid, body) values (2, 20, 'good'), (3, 30, 'dog'), ( 1, 10, 'the' ), (1, 11, 'b'), (1, 12, 'a')</sphinxql>
-<sphinxql>select * from rt</sphinxql>
-<sphinxql>select * from rt where match ('a')</sphinxql>
-<sphinxql>select * from rt where match ('the | b')</sphinxql>
+	replace into rt (id, gid, body) values (2, 20, 'good'), (3, 30, 'dog'), ( 1, 10, 'the' ), (1, 11, 'b'), (1, 12, 'a');
+	select * from rt;
+	select * from rt where match ('a');
+	select * from rt where match ('the | b');
 
-<sphinxql>replace into rt (id, gid, body) values ( 1, 10, 'the' ), (1, 11, 'a'), (2, 20, 'good'), (3, 30, 'dog'), (2, 21, 'nice'), (2, 22, 'well'), (4, 40, 'as'), (3, 31, 'cat'), (3, 32, 'bird')</sphinxql>
-<sphinxql>select * from rt</sphinxql>
-<sphinxql>select * from rt where match ('a')</sphinxql>
-<sphinxql>select * from rt where match ('the')</sphinxql>
-<sphinxql>select * from rt where match ('well')</sphinxql>
-<sphinxql>select * from rt where match ('good | nice')</sphinxql>
-<sphinxql>select * from rt where match ('bird')</sphinxql>
-<sphinxql>select * from rt where match ('dog | cat')</sphinxql>
-</sphqueries>
+	replace into rt (id, gid, body) values ( 1, 10, 'the' ), (1, 11, 'a'), (2, 20, 'good'), (3, 30, 'dog'), (2, 21, 'nice'), (2, 22, 'well'), (4, 40, 'as'), (3, 31, 'cat'), (3, 32, 'bird');
+	select * from rt;
+	select * from rt where match ('a');
+	select * from rt where match ('the');
+	select * from rt where match ('well');
+	select * from rt where match ('good | nice');
+	select * from rt where match ('bird');
+	select * from rt where match ('dog | cat');
 
+	<!-- regression with stored -->
+	REPLACE INTO batchtest (id, names, namea) VALUES (1, 'name1', 'name1'), (2, 'name2', 'name2'), (1, 'name3', 'name3');
+	describe batchtest;
+	REPLACE INTO batchtest (id, names, namea) VALUES (1, 'name1', 'name1'), (2, 'name2', 'name2'), (1, 'name3', 'name3');
+	SELECT * FROM batchtest;
+	SELECT * FROM batchtest WHERE MATCH('name1');
+	SELECT * FROM batchtest WHERE MATCH('name2');
+	SELECT * FROM batchtest WHERE MATCH('name3');
+</sphinxql>
+</queries>
 </test>

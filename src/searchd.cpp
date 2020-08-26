@@ -18111,6 +18111,8 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 		}
 	}
 	g_sMySQLVersion = hSearchd.GetStr ( "mysql_version_string", szMANTICORE_VERSION );
+
+	AllowOnlyNot ( hSearchd.GetInt ( "not_terms_only_allowed", 0 )!=0 );
 }
 
 // ServiceMain -> ConfigureAndPreload -> ConfigureAndPreloadIndex

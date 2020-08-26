@@ -911,6 +911,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "max_connections",		0, nullptr },
 	{ "threads",				0, nullptr },
 	{ "jobs_queue_size",		0, nullptr },
+	{ "not_terms_only_allowed",	0, nullptr },
 	{ NULL,						0, NULL }
 };
 

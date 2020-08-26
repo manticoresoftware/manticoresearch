@@ -30,6 +30,13 @@ class XQParser_t;
 // #define XQ_DUMP_TRANSFORMED_TREE 1
 // #define XQ_DUMP_NODE_ADDR 1
 
+static bool g_bOnlyNotAllowed = false;
+
+void AllowOnlyNot ( bool bAllowed )
+{
+	g_bOnlyNotAllowed = bAllowed;
+}
+
 //////////////////////////////////////////////////////////////////////////
 void XQParseHelper_c::SetString ( const char * szString )
 {
@@ -355,7 +362,17 @@ XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & 
 	}
 
 	if ( pRoot && pRoot->GetOp()==SPH_QUERY_NOT )
-		pRoot = FixupNot ( pRoot, m_dSpawned );
+	{
+		if ( g_bOnlyNotAllowed )
+		{
+			pRoot = FixupNot ( pRoot, m_dSpawned );
+		} else if ( !pRoot->m_iOpArg )
+		{
+			Cleanup();
+			Error ( "query is non-computable (single NOT operator)" );
+			return NULL;
+		}
+	}
 
 	// all ok; might want to create a dummy node to indicate that
 	m_dSpawned.Reset();

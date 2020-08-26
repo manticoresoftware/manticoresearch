@@ -733,7 +733,7 @@ TEST_F ( QueryParser, test_many )
 		, { "-hello world"                                    , "( world AND NOT hello )" }
 		, { "\"phrase (query)/3 ~on steroids\""               , "\"phrase query on steroids\"" }
 		, { "hello a world"                                   , "( hello   world )" }
-		, { "-one"                                            , "(  AND NOT one )" }
+		, { "-one"                                            , "" }
 		, { "-one -two"                                       , "" }
 		, { "\"\""                                            , "" }
 		, { "\"()\""                                          , "" }
@@ -1201,5 +1201,30 @@ TEST_F ( QueryParser, query_transforms )
 		ASSERT_STREQ ( sReconst.cstr(), pTest->m_sReconst );
 		ASSERT_STREQ ( sReconstTransformed.cstr(), pTest->m_sReconstTransformed );
 		pTest++;
+	}
+}
+
+TEST_F ( QueryParser, test_NOT )
+{
+	struct QueryTest_t
+	{
+		const char * m_sQuery;
+		const char * m_sReconst;
+		const bool m_bNotAllowed;
+	};
+	const QueryTest_t dCases[] =
+	{
+		{ "-one", "", false }
+		, { "-one", "(  AND NOT one )", true }
+	};
+
+	for ( const auto & tCase : dCases )
+	{
+		AllowOnlyNot ( tCase.m_bNotAllowed );
+
+		XQQuery_t tQuery;
+		sphParseExtendedQuery ( tQuery, tCase.m_sQuery, NULL, pTokenizer, &tSchema, pDict, tTmpSettings );
+		CSphString sReconst = sphReconstructNode ( tQuery.m_pRoot, &tSchema );
+		ASSERT_STREQ ( sReconst.cstr(), tCase.m_sReconst );
 	}
 }

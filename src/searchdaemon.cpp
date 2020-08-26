@@ -194,6 +194,7 @@ static Proto_e SimpleProtoByName ( const CSphString& sProto )
 	if ( sProto=="sphinx" )
 		return Proto_e::SPHINXSE;
 	sphFatal( "unknown listen protocol type '%s'", sProto.scstr());
+	return Proto_e::SPHINX;
 }
 
 static void ProtoByName( CSphString sFullProto, ListenerDesc_t& tDesc )
@@ -308,12 +309,13 @@ ListenerDesc_t ParseListener( const char* sSpec )
 	{
 		int iPortsEnd = atoi( dPorts[1].scstr() );
 		CheckPort( iPortsEnd );
+		int iPortsCount = iPortsEnd - tRes.m_iPort + 1;
 		if ( iPortsEnd<=tRes.m_iPort )
-			sphFatal( "ports range invalid %d-%d", iPort, iPortsEnd );
-		if (( iPortsEnd - tRes.m_iPort )<2 )
-			sphFatal( "ports range %d-%d count should be at least 2, got %d", iPort, iPortsEnd,
-					  iPortsEnd - iPort );
-		tRes.m_iPortsCount = iPortsEnd - tRes.m_iPort;
+			sphFatal( "ports range invalid %d-%d", tRes.m_iPort, iPortsEnd );
+		if ( iPortsCount<2 )
+			sphFatal( "ports range %d-%d count should be at least 2, got %d", tRes.m_iPort, iPortsEnd,
+					  iPortsCount );
+		tRes.m_iPortsCount = iPortsCount;
 	}
 	return tRes;
 }

@@ -85,9 +85,33 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf )
 	// non-vip connections in maintainance should be already rejected on accept
 	assert  ( !g_bMaintenance || myinfo::IsVIP() );
 
-	bool bINeedSSL = myinfo::GetProto ()==Proto_e::HTTPS; // if proto in 'listen' was exactly https, i.e. NEED ssl
+	bool bINeedSSL = myinfo::GetProto ()==Proto_e::HTTPS;
+	bool bHeNeedSSL = myinfo::IsSSL ();
+	bool bICanSSL = bHeNeedSSL ? CheckWeCanUseSSL () : false;
 
 	myinfo::SetProto ( Proto_e::HTTP );
+
+	// he needs, but I can't
+	if ( bHeNeedSSL && !bICanSSL )
+	{
+		if ( bINeedSSL )
+			sphWarning ( "Client tries to connect with https to secure port, but we can't serve" );
+
+		// that will drop the connection (we can't say anything as can't encrypt our message)
+		return;
+	}
+
+	// he connects to secured port with plain http
+	if ( bINeedSSL && !bHeNeedSSL )
+	{
+		CSphVector<BYTE> dResult;
+		sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_400, "The plain HTTP request was sent to HTTPS port" );
+		auto & tOut = *(NetGenericOutputBuffer_c *) pBuf;
+		tOut.SwapData ( dResult );
+		tOut.Flush (); // no need to check return code since we break anyway
+		return;
+	}
+
 
 	// set off query guard
 	auto & tCrashQuery = GlobalCrashQueryGetRef();
@@ -98,26 +122,13 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf )
 
 	// needed to check permission to turn maintenance mode on/off
 
-	bool bKeepAlive = false;
-
-	bool bClientNeedSSL = myinfo::IsSSL();
-	if ( bClientNeedSSL )
+	if ( bHeNeedSSL )
 		myinfo::SetSSL ( MakeSecureLayer ( pBuf ) );
 
 	auto& tOut = *(NetGenericOutputBuffer_c *) pBuf;
 	auto& tIn = *(AsyncNetInputBuffer_c *) pBuf;
 
-	if ( bINeedSSL && !myinfo::IsSSL () ) // reject non-secured connect to explicit listen=https
-	{
-		CSphVector<BYTE> dResult;
-		if ( bClientNeedSSL ) // i.e. right client on right port, but something bad (like ssl keys not valid in config)
-			sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_526, "Error in ssl key/cert configuration on server" );
-		else // client just wrong, i.e. came with http to https port
-			sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_403, "Only https connections allowed to this port" );
-		tOut.SwapData ( dResult );
-		tOut.Flush (); // no need to check return code since we break anyway
-		return;
-	}
+	bool bKeepAlive = false;
 
 	do
 	{

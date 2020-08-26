@@ -69,7 +69,6 @@ void MultiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t tConn, Proto_e eProt
 	switch ( eProto )
 	{
 		case Proto_e::SPHINXSE: eMultiProto = Proto_e::SPHINXSE; break; // force sphinx SE
-		case Proto_e::HTTPS: eMultiProto = Proto_e::HTTPS; break;
 		default:
 			eMultiProto = pBuf->Probe ( g_iMaxPacketSize, false );
 	}
@@ -85,9 +84,9 @@ void MultiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t tConn, Proto_e eProt
 		ApiServe ( std::move ( pBuf ));
 		break;
 	case Proto_e::HTTPS:
-		SetTcpNodelay ( tConn );
 		myinfo::SetSSL();
 	case Proto_e::HTTP:
+		SetTcpNodelay ( tConn );
 		HttpServe ( std::move ( pBuf ) );
 		break;
 	default:

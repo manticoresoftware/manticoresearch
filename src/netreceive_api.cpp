@@ -22,7 +22,9 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf )
 	// non-vip connections in maintainance should be already rejected on accept
 	assert  ( !g_bMaintenance || myinfo::IsVIP () );
 
-	bool bClientWaitsHandshake = myinfo::GetProto()==Proto_e::SPHINXSE;
+	auto eExpectedProto = myinfo::GetProto ();
+
+	bool bClientWaitsHandshake = eExpectedProto==Proto_e::SPHINXSE;
 	myinfo::SetProto ( Proto_e::SPHINX );
 	int iCID = myinfo::ConnID();
 	const char * sClientIP = myinfo::szClientName();
@@ -58,6 +60,13 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf )
 	if ( !bClientWaitsHandshake && !tIn.HasBytes () && !tOut.Flush ())
 	{
 		sphLogDebugv ( "conn %s(%d): legacy client timeout when exchanging handshake", sClientIP, iCID );
+		return;
+	}
+
+	if ( eExpectedProto==Proto_e::HTTPS )
+	{
+		SendErrorReply ( tOut, "Binary API request was sent to HTTPS port" );
+		tOut.Flush (); // no need to check return code since we anyway break
 		return;
 	}
 

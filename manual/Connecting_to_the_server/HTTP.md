@@ -50,10 +50,9 @@ searchd {
 
 Here you can connect using https to both ports. However to 9308 you may also connect using http, or provide that point as remote agent in distr indexes.
 When trying to connect with http, it will just work. For https, if valid key/cert provided in config, it also will just work.
-If no valid key/cert provided, but client tries to connect via https - it will silently fallback to unsecured http.
-In the same time 9443 is strictly glued to https only. When trying to connect using http, it will answer with code 403.
-If clients tries to connect with https, but daemon can't serve it by any reason (most probably - because it has no valid key/cert ) - it will answer
-with 526 error code. No silent fall-back to unencrypted http will happen anyway.
+If no valid key/cert provided, but client tries to connect via https - connection will be dropped.
+In the same time 9443 is strictly glued to https only. When trying to connect using http, it will answer with code 400.
+If clients tries to connect with https, but daemon can't serve it by any reason (most probably - because it has no valid key/cert ) - connection will be dropped.
 
 Apart ssl encryption there is no difference between http and https.
 
@@ -80,7 +79,7 @@ The response is in JSON format and contains hits information and time of executi
 
 ```json
 {
-  "took":10
+  "took":10,
   "timed_out": false,
   "hits":
   {

@@ -361,11 +361,11 @@ You can also specify a protocol handler (listener) to be used for connections on
   - other Manticore agents (i.e. a remote distributed index)
   - clients via HTTP and HTTPS
 * `mysql` - MySQL protocol for connections from MySQL clients. Note:
-  - Compression control is supported.
+  - Compressed protocol is also supported.
   - If [SSL](Security/SSL.md#SSL) is enabled you can make an encrypted connection.
 * `replication` - replication protocol, used for nodes communication. More details can be found in the [replication](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) section.
 * `http` - same as **Not specified**. Manticore will accept connections at this port from remote agents and clients via HTTP and HTTPS.
-* `https` - HTTPS protocol. Manticore will accept **only** HTTPS connections at this port. Note it's different from `http` and when the listener is not specified in that it doesn't fall back to `http` in case there's an issue with the encrypted connection. More details can be found in section [SSL](Security/SSL.md).
+* `https` - HTTPS protocol. Manticore will accept **only** HTTPS connections at this port. More details can be found in section [SSL](Security/SSL.md).
 * `sphinx` - legacy binary protocol. Used to serve connections from remote SphinxSE clients. It will also work with any other Sphinx API clients, but it's recommended to just omit listener instead and use `sphinx` only for connections from [SphinxSE](Extensions/SphinxSE.md)
 
 Adding suffix `_vip` to any protocol (for instance `mysql_vip` or `http_vip` or just `_vip`) forces creating a dedicated thread for the connection to bypass different limitations. That's useful for node maintenance in case of a severe overload when the server would either stall or not let you connect via a regular port otherwise.

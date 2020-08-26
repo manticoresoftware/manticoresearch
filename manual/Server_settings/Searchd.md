@@ -644,6 +644,21 @@ node_address = 10.101.0.10
 ```
 <!-- end -->
 
+### not_terms_only_allowed
+
+<!-- example conf not_terms_only_allowed -->
+Whether to allow queries with only [negation](Searching/Full_text_matching/Operators.md#Negation-operator) full-text operator. Optional, default is 0 (fail queries with only NOT operator).
+
+
+<!-- intro -->
+##### Example:
+
+<!-- request Example -->
+
+```ini
+not_terms_only_allowed = 1
+```
+<!-- end -->
 
 ### ondisk_attrs_default
 

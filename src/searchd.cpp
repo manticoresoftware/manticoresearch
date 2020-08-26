@@ -17528,6 +17528,8 @@ void ShowHelp ()
 		"--replay-flags=<OPTIONS>\n"
 		"\t\t\textra binary log replay options (current options \n"
 		"\t\t\tare 'accept-desc-timestamp' and 'ignore-open-errors')\n"
+		"--new-cluster\t\tbootstraps a replication cluster with cluster restart protection\n"
+		"--new-cluster-force\t\tbootstraps a replication cluster without cluster restart protection\n"
 		"\n"
 		"Debugging options are:\n"
 		"--console\t\trun in console mode (do not fork, do not log to files)\n"

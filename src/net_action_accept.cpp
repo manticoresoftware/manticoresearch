@@ -55,6 +55,12 @@ void FormatClientAddress ( char szClientName[SPH_ADDRPORT_SIZE], const sockaddr_
 
 using NetConnection_t = std::pair<int, sph_sa_family_t>;
 
+void SetTcpNodelay ( NetConnection_t tConn )
+{
+	if ( tConn.second==AF_INET )
+		sphSetSockNodelay ( tConn.first );
+}
+
 void MultiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t tConn, Proto_e eProto )
 {
 	myinfo::SetProto ( eProto ); // set initially provided proto, then m.b. switch to another by multi, if possible
@@ -71,20 +77,15 @@ void MultiServe ( AsyncNetBufferPtr_c pBuf, NetConnection_t tConn, Proto_e eProt
 	switch ( eMultiProto )
 	{
 	case Proto_e::SPHINXSE:
-#ifdef    TCP_NODELAY
 	// case of legacy 'crasy squirell' client, which talks using short packages.
-		if ( pBuf->HasBytes ()==4 && tConn.second==AF_INET )
-		{
-			int iOn = 1;
-			if ( setsockopt ( tConn.first, IPPROTO_TCP, TCP_NODELAY, (char *) &iOn, sizeof ( iOn ) ) )
-				sphWarning ( "setsockopt() from MultiServe failed: %s", sphSockError ());
-		}
-#endif
+		if ( pBuf->HasBytes ()==4 )
+			SetTcpNodelay ( tConn );
 		// no break;
 	case Proto_e::SPHINX:
 		ApiServe ( std::move ( pBuf ));
 		break;
 	case Proto_e::HTTPS:
+		SetTcpNodelay ( tConn );
 		myinfo::SetSSL();
 	case Proto_e::HTTP:
 		HttpServe ( std::move ( pBuf ) );

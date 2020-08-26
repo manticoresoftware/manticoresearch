@@ -81,7 +81,7 @@ extern "C"
 	// UNIX-specific headers and calls
 	#include <sys/wait.h>
 	#include <netdb.h>
-	#include<netinet/in.h>
+	#include <netinet/in.h>
 	#include <netinet/tcp.h>
 #endif
 
@@ -1254,17 +1254,9 @@ int sphCreateInetSocket ( const ListenerDesc_t & tDesc ) REQUIRES ( MainThread )
 	if ( iSock==-1 )
 		sphFatal ( "failed to create TCP socket: %s", sphSockError() );
 
-	int iOn = 1;
-	if ( setsockopt ( iSock, SOL_SOCKET, SO_REUSEADDR, (char*)&iOn, sizeof(iOn) ) )
-		sphWarning ( "setsockopt(SO_REUSEADDR) failed: %s", sphSockError() );
-#if HAVE_SO_REUSEPORT
-	if ( setsockopt ( iSock, SOL_SOCKET, SO_REUSEPORT, (char*)&iOn, sizeof(iOn) ) )
-		sphWarning ( "setsockopt(SO_REUSEPORT) failed: %s", sphSockError() );
-#endif
-#ifdef TCP_NODELAY
-	if ( setsockopt ( iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
-		sphWarning ( "setsockopt(TCP_NODELAY) failed: %s", sphSockError() );
-#endif
+	sphSetSockReuseAddr ( iSock );
+	sphSetSockReusePort ( iSock );
+	sphSetSockNodelay ( iSock );
 
 	int iTries = 12;
 	int iRes;
@@ -17902,7 +17894,7 @@ static void CheckSystemTFO ()
 	FILE * fp = fopen ( "/proc/sys/net/ipv4/tcp_fastopen", "rb" );
 	if ( !fp )
 	{
-		sphInfo ( "TCP fast open unavailable (can't read /proc/sys/net/ipv4/tcp_fastopen, unsupported kernel?)" );
+		sphInfo ( "TCP fast open unavailable (can't read /proc/sys/net/ipv4/tcp_fastopen, look Server_settings/Searchd#Technical-details-about-Sphinx-API-protocol-and-TFO in manual)" );
 		return;
 	}
 
@@ -19084,14 +19076,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 			sphSockClose ( dListener.m_iSock );
 		}
 
-#if defined (TCP_FASTOPEN)
 		if ( ( g_iTFO!=TFO_ABSENT ) && ( g_iTFO & TFO_LISTEN ) )
-		{
-			int iOn = 1;
-			if ( setsockopt ( dListener.m_iSock, IPPROTO_TCP, TCP_FASTOPEN, ( char * ) &iOn, sizeof ( iOn ) ) )
-				sphLogDebug ( "setsockopt(TCP_FASTOPEN) failed: %s", sphSockError () );
-		}
-#endif
+			sphSetSockTFO ( dListener.m_iSock );
 	}
 
 	g_pTickPoolThread = Threads::MakeThreadPool ( g_iNetWorkers, "TickPool" );

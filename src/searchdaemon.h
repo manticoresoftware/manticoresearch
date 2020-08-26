@@ -281,6 +281,10 @@ int sphSockGetErrno();
 void sphSockSetErrno( int );
 int sphSockPeekErrno();
 int sphSetSockNB( int );
+void sphSetSockNodelay ( int );
+void sphSetSockReuseAddr ( int );
+void sphSetSockReusePort ( int );
+void sphSetSockTFO ( int );
 int sphPoll( int iSock, int64_t tmTimeout, bool bWrite = false );
 
 /** \brief wrapper over getaddrinfo

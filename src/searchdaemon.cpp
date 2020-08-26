@@ -29,6 +29,9 @@
 	#include <net/if.h>
 	#include <sys/ioctl.h>
 	#include <net/ethernet.h>
+
+	// TCP_NODELAY, TCP_FASTOPEN, etc.
+	#include <netinet/tcp.h>
 #endif
 
 // for FreeBSD
@@ -374,6 +377,40 @@ int sphSetSockNB( int iSock )
 		return ioctlsocket ( iSock, FIONBIO, &uMode );
 #else
 	return fcntl( iSock, F_SETFL, O_NONBLOCK );
+#endif
+}
+
+void sphSetSockNodelay ( int iSock )
+{
+#ifdef TCP_NODELAY
+	int iOn = 1;
+	if ( setsockopt ( iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof ( iOn ) )<0 )
+		sphWarning ( "failed to set nodelay option: %s", sphSockError() );
+#endif
+}
+
+void sphSetSockReuseAddr ( int iSock )
+{
+	int iOn = 1;
+	if ( setsockopt ( iSock, SOL_SOCKET, SO_REUSEADDR, (char *) &iOn, sizeof ( iOn ) ) )
+		sphWarning ( "setsockopt(SO_REUSEADDR) failed: %s", sphSockError () );
+}
+
+void sphSetSockReusePort ( int iSock )
+{
+#if HAVE_SO_REUSEPORT
+	int iOn = 1;
+	if ( setsockopt ( iSock, SOL_SOCKET, SO_REUSEPORT, (char *) &iOn, sizeof ( iOn ) ) )
+		sphWarning ( "setsockopt(SO_REUSEPORT) failed: %s", sphSockError () );
+#endif
+}
+
+void sphSetSockTFO ( int iSock)
+{
+#if defined (TCP_FASTOPEN)
+	int iOn = 1;
+	if ( setsockopt ( iSock, IPPROTO_TCP, TCP_FASTOPEN, (char *) &iOn, sizeof ( iOn ) ) )
+		sphLogDebug ( "setsockopt(TCP_FASTOPEN) failed: %s", sphSockError () );
 #endif
 }
 

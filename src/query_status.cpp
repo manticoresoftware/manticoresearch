@@ -21,7 +21,6 @@
 #include <sys/wait.h>
 #include <netdb.h> // not need on Mac
 #include <netinet/in.h>
-#include <netinet/tcp.h>
 
 #endif
 
@@ -363,12 +362,7 @@ void QueryStatus ( CSphVariant * v ) REQUIRES ( MainThread )
 			if ( iSock<0 )
 				sphFatal ( "failed to create TCP socket: %s", sphSockError() );
 
-#ifdef TCP_NODELAY
-			int iOn = 1;
-			if ( setsockopt ( iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
-				sphWarning ( "setsockopt() failed: %s", sphSockError() );
-#endif
-
+			sphSetSockNodelay ( iSock );
 			if ( connect ( iSock, (struct sockaddr*)&sin, sizeof(sin) )<0 )
 			{
 				sphWarning ( "failed to connect to %s:%d: %s\n", sphFormatIP ( sBuf, sizeof(sBuf), tDesc.m_uIP ), tDesc.m_iPort, sphSockError() );

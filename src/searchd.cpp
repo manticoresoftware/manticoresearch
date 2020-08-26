@@ -11334,11 +11334,7 @@ static const CSphSchema & GetSchemaForCreateTable ( CSphIndex * pIndex )
 	assert ( pIndex );
 	assert ( pIndex->IsRT() || pIndex->IsPQ() );
 
-	if ( pIndex->IsRT() )
-		return ((RtIndex_i*)pIndex)->GetInternalSchema();
-
-	// for pq
-	return pIndex->GetMatchSchema();
+	return ((RtIndex_i*)pIndex)->GetInternalSchema();
 }
 
 

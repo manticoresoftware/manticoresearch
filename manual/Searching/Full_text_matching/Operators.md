@@ -36,9 +36,9 @@ hello -world
 hello !world
 ```
 
-The negation operator enforce a rule for a word to not exist. 
+The negation operator enforces a rule for a word to not exist. 
 
-Queries having **only** negations are **not** supported by default in Manticore Search. But with server option [not_terms_only_allowed](Server_settings/Searchd.md#not_terms_only_allowed) enabled such queries will work.
+Queries having **only** negations are **not** supported by default in Manticore Search. There's the server option [not_terms_only_allowed](Server_settings/Searchd.md#not_terms_only_allowed) to enable it.
 
 ### Field search operator
 

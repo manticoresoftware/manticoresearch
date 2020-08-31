@@ -9,63 +9,278 @@ workflow:
 # to skip ci add [ci skip] or [skip ci] in commit message in any capitalization
 
 stages:
-  - docs
-  - init
-  - main
+  - mirroring
+  - routines
+  - publish
   - hooks
 
-docs_deploy_check:
-  stage: docs
+
+job_mirror:
+  stage: mirroring
+  rules:
+    - if: $TEST==null && $CI_COMMIT_BRANCH == "master"
+  tags:
+    - dev-host
+  dependencies: []
+  script:
+    - ~/gitsync.sh
+  cache: {}
+  
+  
+simple_tests:
+  stage: routines
+  rules:
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT=='$WHAT'
+    - if: $TEST =~ /simple/ && $WHAT=='$WHAT'
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT==null
+    - if: $TEST =~ /simple/ && $WHAT==null
+  tags:
+    - specdocker
+  dependencies: []
+  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:latest
+  variables:
+    CTEST_BUILD_CONFIGURATION: "Debug"
+    CACHEB: "../cache"
+    DIAGNOSTIC: 1 # let's set it by default forever
+  script:
+    - mc config host add dev $MINIO_HOST
+    - mc mirror --overwrite dev/uploads/aot/ /work/aot/
+    - ctest -V -S misc/ctest/gltest.cmake
+  after_script:
+    - cd build && mkdir xml_simple_tests
+    - cp -r Testing/2*/*.xml xml_simple_tests
+  artifacts:
+    paths:
+    - build/xml_simple_tests
+    - build/test/test_*/report.txt
+    - build/test/error*.txt
+    - build/test/searchd.log
+    expire_in: 12 hrs
+    when: always
+  cache:
+    key: ubuntu_bionic
+    paths:
+      - cache/*-src
+      - cache/galera*64/libgalera*
+      - cache/galera*64/galera-targets.cmake
+      - cache/icu*64/*icu*
+      - cache/re2*64/*re2*
+      - cache/stemmer*64/*stemmer*
+  retry: 1
+
+
+release_tests:
+  stage: routines
+  rules:
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT=='$WHAT'
+    - if: $TEST =~ /release/ && $WHAT=='$WHAT'
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocilinux .*$/i && $WHAT==null
+    - if: $TEST =~ /release/ && $WHAT==null
+  tags:
+    - specdocker # once test 58 fixed, m.b. change to 'docker' and gitlab then cloud will help us testing.
+  dependencies: []
+  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:latest
+  variables:
+    CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
+    CACHEB: "../cache"
+    DIAGNOSTIC: 1 # let's set it by default forever
+  script:
+    - mc config host add dev $MINIO_HOST
+    - mc mirror --overwrite dev/uploads/aot/ /work/aot/
+    - ctest -V -S misc/ctest/gltest.cmake
+  after_script:
+    - cd build && mkdir xml_release_tests
+    - cp -r Testing/2*/*.xml xml_release_tests
+  artifacts:
+    paths:
+    - build/xml_release_tests
+    - build/test/test_*/report.txt
+    - build/test/error*.txt
+    - build/test/searchd.log
+    - build/test/examples.txt
+    expire_in: 12 hrs
+    when: always
+  cache:
+    key: ubuntu_bionic
+    paths:
+      - cache/*-src
+      - cache/galera*64/libgalera*
+      - cache/galera*64/galera-targets.cmake
+      - cache/icu*64/*icu*
+      - cache/re2*64/*re2*
+      - cache/stemmer*64/*stemmer*
+  retry: 1
+
+
+win_tests:
+  stage: routines
+  rules:
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nociwindows .*$/i && $WHAT=='$WHAT'
+    - if: $TEST =~ /windows/ && $WHAT=='$WHAT'
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nociwindows .*$/i && $WHAT==null
+    - if: $TEST =~ /windows/ && $WHAT==null
+  tags:
+    - windev19
+    - build
+  dependencies: []
+  variables:
+    LIBS_BUNDLE: "x:/bundle"
+    CACHEB: "x:/cache"
+    OPENSSL_ROOT_DIR: "x:/bundle/openssl-x64"
+    BOOST_ROOT: "x:/boost_1_72_0"
+    WIN_TEST_CI: "1"
+    CTEST_CMAKE_GENERATOR: "Visual Studio 16 2019"
+    DIAGNOSTIC: 1 # let's set it by default forever
+  script:
+    - 'net use x: \\\\VBOXSRV\\shared'
+    - ctest -V -S misc/ctest/gltest.cmake -C Debug
+  after_script:
+    - cd build && mkdir xml_win_tests
+    - cp -r Testing/2*/*.xml xml_win_tests
+  artifacts:
+    paths:
+      - build/xml_win_tests
+      - build/test/test_*/report.txt
+      - build/test/error*.txt
+      - build/test/searchd.log
+    expire_in: 12 hrs
+    when: always
+  cache: {}
+  retry: 1
+
+
+
+build_mac:
+  stage: routines
+  rules:
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocimacos .*$/i && $WHAT=='$WHAT'
+    - if: $TEST =~ /macos/ && $WHAT=='$WHAT'
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocimacos .*$/i && $WHAT==null
+    - if: $TEST =~ /macos/ && $WHAT==null
+  tags:
+    - mac
+    - build
+  dependencies: []
+  variables:
+    CTEST_BUILD_CONFIGURATION: "Debug"
+    CACHEB: "../cache"
+    OPENSSL_ROOT_DIR: "/usr/local/opt/openssl"
+    WITH_ICU: 1
+    USE_GALERA: 1
+    DIAGNOSTIC: 1 # let's set it by default forever
+  script:
+    - mkdir build && cd build
+    - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
+  after_script:
+    - cd build && mkdir xml_build_mac
+    - cp -r Testing/2*/*.xml xml_build_mac
+  artifacts:
+    paths:
+      - build/xml_build_mac
+      - build/CMakeFiles/CMake*.log
+    expire_in: 12 hrs
+    when: always
+  cache:
+    key: darwin
+    paths:
+      - cache/*-src
+      - cache/galera*64/libgalera*
+      - cache/galera*64/galera-targets.cmake
+      - cache/icu*64/*icu*
+      - cache/re2*64/*re2*
+      - cache/stemmer*64/*stemmer*
+      - cache/boost*64
+
+
+build_bsd:
+  stage: routines
+  rules:
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocifreebsd .*$/i && $WHAT=='$WHAT'
+    - if: $TEST =~ /freebsd/ && $WHAT=='$WHAT'
+    - if: $TEST==null && $CI_COMMIT_TITLE !~ /^nocifreebsd .*$/i && $WHAT==null
+    - if: $TEST =~ /freebsd/ && $WHAT==null
+  tags:
+    - freebsd
+    - build
+  dependencies: []
+  variables:
+    CTEST_BUILD_CONFIGURATION: "Debug"
+    CACHEB: "../cache"
+    DIAGNOSTIC: 1 # let's set it by default forever
+    USE_GALERA: 1
+  script:
+    - mkdir build && cd build
+    - ctest -VV -S ../misc/ctest/justbuild.cmake -DCTEST_SOURCE_DIRECTORY=..
+  after_script:
+    - cd build && mkdir xml_build_bsd
+    - cp -r Testing/2*/*.xml xml_build_bsd
+  artifacts:
+    paths:
+      - build/xml_build_bsd
+      - build/CMakeFiles/CMake*.log
+    expire_in: 12 hrs
+    when: always
+  cache:
+    key: freebsd
+    paths:
+      - cache/*-src
+      - cache/galera*64/libgalera*
+      - cache/galera*64/galera-targets.cmake
+      - cache/icu*64/*icu*
+      - cache/re2*64/*re2*
+      - cache/stemmer*64/*stemmer*  
+
+
+docs_deploy:
+  stage: routines
   rules:
     - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^manticore-.*$/
   image: registry.gitlab.com/manticoresearch/doc/autodeploy:latest
   cache: {}
   services:
     - docker:18.09.7-dind
+  before_script:
+    - export COMMIT_DIR="manual"
+    - export DEPLOY_TARGET="k8s"
   script:
-    - cp "$CI_PROJECT_DIR/gitlab-ci-main.yml" main-conf.yml
-    - cp "$CI_PROJECT_DIR/dist/gitlab-release.yml" release-conf.yml
-    - DOC_DIR="manual/"
-    - VAR_SET=" 1"
-    - res=$(echo $(git diff-tree --no-commit-id --name-only -r -m "$CI_COMMIT_SHA" | grep -v "^$DOC_DIR"))
-    - if [ "$res" == "" ]; then echo "  DOCS_COMMIT_ONLY:$VAR_SET" >> main-conf.yml; fi  
-    - if [ "$res" == "" ] && [ -z "$FORCE_BUILDS" ]; then echo "  DOCS_COMMIT_ONLY:$VAR_SET" >> release-conf.yml; fi
-    - res=$(echo $(git diff-tree --no-commit-id --name-only -r -m "$CI_COMMIT_SHA" | grep "^$DOC_DIR"))
-    - if ! [ "$res" == "" ]; then sh /Deploy/autoupdate.sh k8s; fi
-  artifacts:
-    paths:
-      - main-conf.yml
-      - release-conf.yml
+    - sh /Deploy/autoupdate.sh $DEPLOY_TARGET $COMMIT_DIR
   variables:
     DOCKER_HOST: tcp://docker:2375/
     DOCKER_DRIVER: overlay2   
-    COMMIT_DIR: manual
     RELEASE_FILENAME: latest_release_version
 
-
-init:
-  stage: init
-  when: always
+# build and upload on regular commits
+push_results:
+  stage: publish
+  rules:
+    - if: $WHAT=='$WHAT' 
+      when: always
+    - if: $WHAT==null 
+      when: always      
+  tags:
+    - docker
+  image: registry.gitlab.com/manticoresearch/dev/ubertests_public:latest
+  dependencies:
+    - simple_tests
+    - release_tests
+    - win_tests
+    - build_mac
+    - build_bsd
+  variables:
+    GIT_STRATEGY: fetch
   script:
-    - if [ ! -f "main-conf.yml" ]; then cp  "$CI_PROJECT_DIR/gitlab-ci-main.yml" main-conf.yml; fi
-    - if [ ! -f "release-conf.yml" ]; then cp "$CI_PROJECT_DIR/dist/gitlab-release.yml" release-conf.yml; fi
+    - ctest -S misc/ctest/upload.cmake
   artifacts:
     paths:
-      - main-conf.yml
-      - release-conf.yml
-    
-main:
-  stage: main
-  variables:
-    WHAT: $WHAT
-    REPO_NAME: $REPO_NAME
-    DOCKER_HUB_BUILD_URL: $DOCKER_HUB_BUILD_URL
-  when: always
-  trigger:
-    include:
-      - artifact: main-conf.yml
-        job: init
-    strategy: depend
+      - build/junit_*.xml
+    reports:
+      junit: build/junit_*.xml
+  cache: {}
+  environment:
+    name: ${CI_COMMIT_REF_NAME}
+    url: http://$CDASH_URL/CDash/public/index.php?project=Manticoresearch&filtercount=1&field1=revision&compare1=63&value1=$CI_COMMIT_SHA
+  retry: 1
+  allow_failure: true
 
 
 deploy_hook:
@@ -74,9 +289,9 @@ deploy_hook:
     WHAT: $WHAT
     REPO_NAME: $REPO_NAME
     DOCKER_HUB_BUILD_URL: $DOCKER_HUB_BUILD_URL
-  when: always
+  rules:
+    - if: $CI_COMMIT_TITLE !~ /^noci .*$/i
+      when: always
   trigger:
-    include:
-      - artifact: release-conf.yml
-        job: init
-    strategy: depend
+    include: '/dist/gitlab-release.yml'
+    

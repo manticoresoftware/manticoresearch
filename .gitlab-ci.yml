@@ -25,7 +25,30 @@ job_mirror:
   script:
     - ~/gitsync.sh
   cache: {}
-  
+
+
+pages:
+  stage: routines
+  rules:
+    - when: manual
+      allow_failure: true
+  tags:
+    - docker
+  dependencies: []
+  variables:
+    GIT_STRATEGY: none
+    REDIR_URL: "https://manual.manticoresearch.com/dev/"
+  script:
+    - mkdir .public
+    - cd .public
+    - echo "<!DOCTYPE html><html><head><meta http-equiv='refresh' content = '0; url = $REDIR_URL' /></head></html>" >> index.html
+    - cd -
+    - mv .public public
+  artifacts:
+    paths:
+    - public
+  cache: {}
+    
   
 simple_tests:
   stage: routines

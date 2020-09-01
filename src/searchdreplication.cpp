@@ -268,6 +268,30 @@ static void SaveUpdate ( const CSphQuery & tQuery, CSphVector<BYTE> & dOut );
 static int LoadUpdate ( const BYTE * pBuf, int iLen, CSphQuery & tQuery );
 
 
+static bool IsInetAddrFree ( DWORD uAddr, int iPort )
+{
+	static struct sockaddr_in iaddr;
+	memset ( &iaddr, 0, sizeof(iaddr) );
+	iaddr.sin_family = AF_INET;
+	iaddr.sin_addr.s_addr = uAddr;
+	iaddr.sin_port = htons ( (short)iPort );
+
+	int iSock = socket ( AF_INET, SOCK_STREAM, 0 );
+	if ( iSock==-1 )
+	{
+		sphWarning ( "failed to create TCP socket: %s", sphSockError() );
+		return false;
+	}
+
+	int iRes = bind ( iSock, (struct sockaddr *)&iaddr, sizeof(iaddr) );
+	SafeClose ( iSock );
+
+	return ( iRes==0 );
+}
+
+static const int g_iDefaultPortBias = 10;
+static const int g_iDefaultPortRange = 200;
+
 struct PortsRange_t
 {
 	int m_iPort = 0;
@@ -281,6 +305,7 @@ private:
 	CSphVector<int>	m_dFree;
 	CSphTightVector<PortsRange_t> m_dPorts;
 	CSphMutex m_tLock;
+	DWORD m_uAddr = 0;
 
 public:
 	// set range of ports there is could generate ports pairs
@@ -291,27 +316,41 @@ public:
 		m_dPorts.Add ( tPorts );
 	}
 
+	void AddAddr ( const CSphString & sAddr )
+	{
+		m_uAddr = sphGetAddress ( sAddr.cstr (), false, false );
+	}
+
 	// get next available range of ports for Galera listener
 	// first reuse ports pair that was recently released
 	// or pair from range set
 	int Get ()
 	{
-		int iRes = -1;
+		int iPortMin = -1;
 		ScopedMutex_t tLock ( m_tLock );
-		if ( m_dFree.GetLength () )
+		while ( iPortMin==-1 && ( m_dPorts.GetLength() || m_dFree.GetLength () ) )
 		{
-			iRes = m_dFree.Pop();
-		} else if ( m_dPorts.GetLength() )
-		{
-			assert ( m_dPorts.Last().m_iCount>=2 );
-			PortsRange_t & tPorts = m_dPorts.Last();
-			iRes = tPorts.m_iPort;
-			tPorts.m_iPort += 2;
-			tPorts.m_iCount -= 2;
-			if ( !tPorts.m_iCount )
-				m_dPorts.Pop();
+			if ( m_dFree.GetLength() )
+			{
+				iPortMin = m_dFree.Pop();
+			} else if ( m_dPorts.GetLength() )
+			{
+				assert ( m_dPorts.Last().m_iCount>=2 );
+				PortsRange_t & tPorts = m_dPorts.Last();
+				iPortMin = tPorts.m_iPort;
+
+				tPorts.m_iPort += 2;
+				tPorts.m_iCount -= 2;
+				if ( !tPorts.m_iCount )
+					m_dPorts.Pop();
+			}
+
+			if ( IsInetAddrFree ( m_uAddr, iPortMin ) && IsInetAddrFree ( m_uAddr, iPortMin+1 ) )
+				break;
+
+			iPortMin = -1;
 		}
-		return iRes;
+		return iPortMin;
 	}
 
 	// free ports pair and add it to free list
@@ -2331,11 +2370,18 @@ static void SetListener ( const CSphVector<ListenerDesc_t> & dListeners )
 		tPorts.m_iCount = tListen.m_iPortsCount;
 		if ( ( tPorts.m_iCount%2 )!=0 )
 			tPorts.m_iCount--;
-		if ( g_sListenReplicationIP.IsEmpty() && tListen.m_uIP!=0 )
+		if ( tListen.m_uIP!=0 )
 		{
 			char sListenBuf [ SPH_ADDRESS_SIZE ];
 			sphFormatIP ( sListenBuf, sizeof(sListenBuf), tListen.m_uIP );
-			g_sListenReplicationIP = sListenBuf;
+			if ( g_sListenReplicationIP.IsEmpty() )
+			{
+				g_sListenReplicationIP = sListenBuf;
+				g_tPorts.AddAddr ( g_sListenReplicationIP );
+			} else if ( g_sListenReplicationIP!=sListenBuf )
+			{
+				sphWarning ( "multiple replication IP ('%s') found but only 1st IP '%s' used", sListenBuf, g_sListenReplicationIP.cstr() );
+			}
 		}
 
 		bGotReplicationPorts = true;
@@ -2343,11 +2389,32 @@ static void SetListener ( const CSphVector<ListenerDesc_t> & dListeners )
 	}
 
 	int iPort = dListeners.GetFirst ( [&] ( const ListenerDesc_t & tListen ) { return tListen.m_eProto==Proto_e::SPHINX; } );
-	if ( iPort==-1 || !bGotReplicationPorts )
+	if ( iPort==-1 )
 	{
 		if ( GetClustersInt().GetLength() )
 			sphWarning ( "no 'listen' is found, cannot set incoming addresses, replication is disabled" );
 		return;
+	}
+
+	if ( !bGotReplicationPorts )
+	{
+		const ListenerDesc_t & tListen = dListeners[iPort];
+
+		if ( tListen.m_uIP!=0 )
+		{
+			char sListenBuf [ SPH_ADDRESS_SIZE ];
+			sphFormatIP ( sListenBuf, sizeof(sListenBuf), tListen.m_uIP );
+			g_sListenReplicationIP = sListenBuf;
+		} else
+		{
+			g_sListenReplicationIP.SetSprintf ( "127.0.0.1" );
+		}
+
+		PortsRange_t tPorts;
+		tPorts.m_iPort = tListen.m_iPort + g_iDefaultPortBias;
+		tPorts.m_iCount = g_iDefaultPortRange;
+		g_tPorts.AddRange ( tPorts );
+		g_tPorts.AddAddr ( g_sListenReplicationIP );
 	}
 
 	if ( !g_bHasIncoming )
@@ -2355,7 +2422,8 @@ static void SetListener ( const CSphVector<ListenerDesc_t> & dListeners )
 
 	g_sIncomingProto.SetSprintf ( "%s:%d", g_sIncomingIP.cstr(), dListeners[iPort].m_iPort );
 
-	g_bReplicationEnabled = IsConfigless() && bGotReplicationPorts;
+	CSphString sReplicationDL = GetReplicationDL();
+	g_bReplicationEnabled = ( IsConfigless() && !sReplicationDL.IsEmpty() );
 }
 
 // start clusters on daemon start
@@ -2491,7 +2559,7 @@ static bool CheckClusterStatement ( const CSphString & sCluster, bool bCheckClus
 {
 	if ( !g_bReplicationEnabled )
 	{
-		sError = "data_dir option is missing or no replication listeners configured";
+		sError = "data_dir option is missing or no replication provider configured";
 		return false;
 	}
 

@@ -27,6 +27,10 @@
 #include "replication/wsrep_api.h"
 #include "coroutine.h"
 
+#if !USE_WINDOWS
+// MAC-specific header
+#include <netinet/in.h>
+#endif
 
 const char * GetReplicationDL()
 {

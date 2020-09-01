@@ -17,9 +17,11 @@ To use replication in Manticore search:
 
 * the server should be built with replication support (enabled in the official [packages](https://manticoresearch.com/downloads/))
 * [data_dir](Server_settings/Searchd.md#data_dir) option should be set in searchd section of config
-* there should be a [listen](Server_settings/Searchd.md#listen) for the replication protocol directive containing an external IP address that should not be equal to 0.0.0.0 along with a ports range defined and these "address - port range" pairs should be different for all the servers on the same box. As a rule of thumb, port range should specify no less than two ports per cluster.
-* there should be at least one value of [listen](Server_settings/Searchd.md#listen) for the SphinxAPI protocol directive
+* there should be either a [listen](Server_settings/Searchd.md#listen) for the SphinxAPI protocol directive containing an external IP address that should not be equal to 0.0.0.0 or a [node_address](Server_settings/Searchd.md#node_address) option with external IP address 
 * set unique values on [server_id](Server_settings/Searchd.md#server_id) for each node. If no value set, the node will try to use the MAC address (or a random number if this fails) to generate a server_id.
+
+If there is no replication protocol [listen](Server_settings/Searchd.md#listen) directive set the daemon will use first couple of free ports in a range of 200 ports after [listen](Server_settings/Searchd.md#listen) of the SphinxAPI protocol for each cluster created. For the manual declaration of replication protocol [listen](Server_settings/Searchd.md#listen) directive
+port range should be defined and these "address - port range" pairs should be different for all the servers on the same box. As a rule of thumb, port range should specify no less than two ports per cluster.
 
 ## Replication cluster 
 

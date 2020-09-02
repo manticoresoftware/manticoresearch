@@ -2,6 +2,18 @@
 
 Manticore supports basic transactions when performing deleting and insertion into real-time and percolate indexes. That is: each change to the index first saved into internal changeset, and then actually committed to the index. By default each command is wrapped into individual automatic transaction, making it transparent: you just 'insert' something, and can see inserted result after it completes, having no care about transactions. However that behaviour can be explicitly managed by starting and committing transactions manually.
 
+Transactions are supported for the following commands:
+* [INSERT](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md)
+* [REPLACE](Updating_documents/REPLACE.md)
+* [DELETE](Deleting_documents.md)
+
+Transactions are not supported for:
+* UPDATE (which is [different](Updating_documents/REPLACE_vs_UPDATE.md) from the REPLACE in that it does in-place attribute update).
+* ALTER - for [updating index schema](Updating_index_schema.md)
+* TRUNCATE - for [emptying a real-time index](Emptying_an_index.md)
+* ATTACH - for [attaching a plain index to a real-time index](Adding_data_from_external_storages/Adding_data_from_indexes/Attaching_a_plain_index_to_RT_index.md)
+* CREATE - [for creating an index](Creating_an_index/Local_indexes.md)
+
 ## Automatic and manual mode
 
 ```sql

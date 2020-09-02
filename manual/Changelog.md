@@ -1,5 +1,44 @@
 # Changelog
 
+## Version 3.5.2, dev
+
+### New features
+
+* NOT operator can be now used standalone. By default is disabled since accidental single NOT queries can be slow. It can be enabled by setting 
+new searchd directive [not_terms_only_allowed](Server_settings/Searchd.md#not_terms_only_allowed) to `0`.
+
+* directive [max_threads_per_query](Server_settings/Searchd.md#max_threads_per_query) sets how many threads a query can use. If the directive is not set, a query can use threads up to the value of [threads](Server_settings/Searchd.md#threads).
+Per select query the number of threads can be limit with [OPTION threads=N](Searching/Options.ms#threads) overriding the global `max_threads_per_query`. 
+
+* Percolate indexes can be now be imported with [IMPORT TABLE](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_index)
+
+### Minor changes
+
+* If no replication listen directive is declared, the engine will try to use ports after the defined SphinxApi port, up to 200. 
+
+### Docker
+
+The official Docker image is now based on Ubuntu 20.04 LTS
+
+
+### Bugifixes
+
+[16b9390f](https://github.com/manticoresoftware/manticoresearch/commit/16b9390fd4cdb07a77ac4497adb935573a1710e5) Replication listen ports range
+[5fa671af](https://github.com/manticoresoftware/manticoresearch/commit/5fa671affeacb6441a59c8a88479bfd423df7c81) Show create table on pq
+[54d133b6 ](https://github.com/manticoresoftware/manticoresearch/commit/54d133b6449105a9fb0168db3f1fbb05fb5aa1f6)HTTPS port behavior
+[fdbbe524](https://github.com/manticoresoftware/manticoresearch/commit/fdbbe5245cc296cc5c1ae3ae2fb9cb08fb66a248) Mixing docstore rows when replacing
+[afb53f64](https://github.com/manticoresoftware/manticoresearch/commit/afb53f648ef4e64fa1776c58e66f6e716ac730ad) Switch TFO unavailable message level to 'info'
+[59d94cef](https://github.com/manticoresoftware/manticoresearch/commit/59d94cefc6e88af360b8046726a16b7eaa9f0b71) Crash on strcmp invalid use
+[04af0349](https://github.com/manticoresoftware/manticoresearch/commit/04af0349c1e784c2230d204592d6272b440bb375) Adding index to cluster with system (stopwords) files
+[50148b4e](https://github.com/manticoresoftware/manticoresearch/commit/50148b4eae9f3a924082005cf5d2f9c8339af7f5) Merge indexes with large dictionaries; RT optimize of large disk chunks
+[a2adf158](https://github.com/manticoresoftware/manticoresearch/commit/a2adf1582843f63d4dcc1dab8f7598e0917094a2) Indextool can dump meta from current version
+[69f6d5f7](https://github.com/manticoresoftware/manticoresearch/commit/69f6d5f77c64b97e3f395aea8c555b11c77fb732) Issue in group order in GROUP N
+[24d5d80f](https://github.com/manticoresoftware/manticoresearch/commit/24d5d80f508576794b751d70f9f9b524564e3c14) Explicit flush for SphinxSE after handshake
+[31c4d78a](https://github.com/manticoresoftware/manticoresearch/commit/31c4d78ac03ee85d9a02b86075448a04ac80f9e2) Avoid copy of huge descriptions when not necessary
+[2959e2ca](https://github.com/manticoresoftware/manticoresearch/commit/2959e2caa8610f98fcdf2e5a82160f58687f4a27) Negative time in show threads
+[f0b35710](https://github.com/manticoresoftware/manticoresearch/commit/f0b357102c70f3ac1d7da260c60b67322940e647) Token filter plugin vs zero position deltas
+[a49e5bc1](https://github.com/manticoresoftware/manticoresearch/commit/a49e5bc13ea763e6f01dd5993e891858a84d1846) Change 'FAIL' to 'WARNING' on multiple hits
+
 ## Version 3.5.0, 22 Jul 2020
 
 ### Major new features:
@@ -35,7 +74,7 @@
   | 2810845392541843463 | abc  |
   +---------------------+------+
   1 row in set (0.00 sec)
-  ```
+  ```supp
   <!-- \more -->
 
 ### Minor changes

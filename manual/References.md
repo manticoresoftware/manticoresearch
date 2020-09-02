@@ -44,7 +44,7 @@
 
 ##### Importing to a real-time index
 * [ATTACH INDEX](Adding_data_from_external_storages/Adding_data_from_indexes/Attaching_a_plain_index_to_RT_index.md) - Moves data from a plain index to a real-time index
-* [IMPORT TABLE](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_RT_index.md) - Imports previously created RT index into a server running in RT mode
+* [IMPORT TABLE](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_index.md) - Imports previously created RT or PQ index into a server running in RT mode
 
 ##### Replication
 * [JOIN CLUSTER](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) - Joins a replication cluster

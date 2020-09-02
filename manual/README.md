@@ -75,7 +75,7 @@
         * [Merging indexes](Adding_data_from_external_storages/Adding_data_from_indexes/Merging_indexes.md)
         * [Killlists in plain indexes](Adding_data_from_external_storages/Adding_data_from_indexes/Killlist_in_plain_indexes.md)
         * [Attaching a plain index to RT index](Adding_data_from_external_storages/Adding_data_from_indexes/Attaching_a_plain_index_to_RT_index.md)
-        * [Importing RT index](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_RT_index.md)        
+        * [Importing RT index](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_index.md)        
     * [Rotating an index](Adding_data_from_external_storages/Rotating_an_index.md)
 * [✔ ️Updating documents] 
     * [REPLACE vs UPDATE](Updating_documents/REPLACE_vs_UPDATE.md)

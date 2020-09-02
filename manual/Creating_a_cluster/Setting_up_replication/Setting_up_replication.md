@@ -13,15 +13,14 @@ Manticore's replication is based on [Galera library](https://github.com/codershi
 * detection and automatic eviction of unreliable nodes
 * certification based replication
 
-To use replication in Manticore search:
+To use replication in Manticore Search:
 
-* the server should be built with replication support (enabled in the official [packages](https://manticoresearch.com/downloads/))
-* [data_dir](Server_settings/Searchd.md#data_dir) option should be set in searchd section of config
-* there should be either a [listen](Server_settings/Searchd.md#listen) for the SphinxAPI protocol directive containing an external IP address that should not be equal to 0.0.0.0 or a [node_address](Server_settings/Searchd.md#node_address) option with external IP address 
-* set unique values on [server_id](Server_settings/Searchd.md#server_id) for each node. If no value set, the node will try to use the MAC address (or a random number if this fails) to generate a server_id.
+* [data_dir](Server_settings/Searchd.md#data_dir) option should be set in searchd section of the configuration file
+* there should be either a [listen](Server_settings/Searchd.md#listen) directive specified (without specifying a protocol) containing an external IP address that should not be equal to 0.0.0.0 or [node_address](Server_settings/Searchd.md#node_address) with external IP address 
+* set unique values for [server_id](Server_settings/Searchd.md#server_id) on each cluster node. If no value set, the node will try to use the MAC address (or a random number if this fails) to generate the server_id.
 
-If there is no replication protocol [listen](Server_settings/Searchd.md#listen) directive set the daemon will use first couple of free ports in a range of 200 ports after [listen](Server_settings/Searchd.md#listen) of the SphinxAPI protocol for each cluster created. For the manual declaration of replication protocol [listen](Server_settings/Searchd.md#listen) directive
-port range should be defined and these "address - port range" pairs should be different for all the servers on the same box. As a rule of thumb, port range should specify no less than two ports per cluster.
+If there is no replication protocol [listen](Server_settings/Searchd.md#listen) directive set Manticore will use first couple of free ports in a range of 200 ports after the port at which the daemon is listening (default protocol) for each cluster created. For the manual declaration of replication communication ports the [listen](Server_settings/Searchd.md#listen) directive
+port range should be defined and these "address - port range" pairs should be different for all the servers on the same host. As a rule of thumb, the port range should specify no less than two ports per cluster.
 
 ## Replication cluster 
 

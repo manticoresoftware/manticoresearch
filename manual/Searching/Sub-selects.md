@@ -16,7 +16,7 @@ The outer select allows only `ORDER BY` and `LIMIT` clauses. Sub-selects current
         OPTION max_matches=1000;
     ```
 
-With sub-selects the query can be rewritten as:
+    With sub-selects the query can be rewritten as:
 
     ```sql
     SELECT * FROM
@@ -26,7 +26,8 @@ With sub-selects the query can be rewritten as:
     ORDER BY slow DESC LIMIT 20;
     ```
 
-In the initial query the `slow_rank()` UDF is computed for the entire match result set. With sub-selects, only `fast_rank()` is computed for the entire match result set, while `slow_rank()` is only computed for a limited set.
+    In the initial query the `slow_rank()` UDF is computed for the entire match result set. With sub-selects, only `fast_rank()` is computed for the entire match result set, while `slow_rank()` is only computed for a limited set.
+
 2. The second case comes handy for large result set coming from a distributed index.
 
     For this query:
@@ -35,7 +36,7 @@ In the initial query the `slow_rank()` UDF is computed for the entire match resu
     SELECT * FROM my_dist_index WHERE some_conditions LIMIT 50000;
     ```
 
-If we have 20 nodes, each node can send back to master a number of 50K records, resulting in **20 x 50K = 1M records**, however as the master sends back only 50K (out of 1M), it might be good enough for us for the nodes to send only the top 10K records. With sub-select we can rewrite the query as:
+    If we have 20 nodes, each node can send back to master a number of 50K records, resulting in **20 x 50K = 1M records**, however as the master sends back only 50K (out of 1M), it might be good enough for us for the nodes to send only the top 10K records. With sub-select we can rewrite the query as:
 
     ```sql
     SELECT * FROM 
@@ -43,4 +44,4 @@ If we have 20 nodes, each node can send back to master a number of 50K records, 
      ORDER by some_attr LIMIT 50000;
     ```
 
-In this case, the nodes receive only the inner query and execute. This means the master will receive only *20x10K=200K records*. The master will take all the records received, reorder them by the `OUTER` clause and return the best 50K records. The sub-select help reducing the traffic between the master and the nodes and also reduce the master's computation time (as it process only 200K instead of 1M).
+    In this case, the nodes receive only the inner query and execute. This means the master will receive only *20x10K=200K records*. The master will take all the records received, reorder them by the `OUTER` clause and return the best 50K records. The sub-select help reducing the traffic between the master and the nodes and also reduce the master's computation time (as it process only 200K instead of 1M).

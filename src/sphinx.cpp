@@ -16062,6 +16062,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	tTermSetup.m_pWarning = &pResult->m_sWarning;
 	tTermSetup.m_pCtx = &tCtx;
 	tTermSetup.m_pNodeCache = pNodeCache;
+	tTermSetup.m_bHasWideFields = ( m_tSchema.GetFieldsCount()>32 );
 
 	// setup prediction constrain
 	CSphQueryStats tQueryStats;

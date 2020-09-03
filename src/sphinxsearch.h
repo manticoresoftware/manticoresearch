@@ -111,7 +111,8 @@ public:
 	mutable ISphZoneCheck *	m_pZoneChecker	{nullptr};
 	CSphQueryStats *		m_pStats		{nullptr};
 	mutable bool			m_bSetQposMask	{false};
-	DictRefPtr_c		m_pDict;
+	DictRefPtr_c			m_pDict;
+	bool					m_bHasWideFields { false };
 
 	virtual ~ISphQwordSetup () {}
 

@@ -262,11 +262,11 @@ public:
 	template <typename FNPROCESSOR>
 	void ForAll(FNPROCESSOR fnProcess, bool bIncludeRoot=true )
 	{
+		if ( bIncludeRoot )
+			fnProcess ( m_dParentContext );
+
 		if ( m_bDisabled ) // nothing to do; sorters and results are already original
 			return;
-
-		if (bIncludeRoot)
-			fnProcess ( m_dParentContext );
 
 		for ( int i = 0, iWorkThreads = m_iTasks-1; i<iWorkThreads; ++i )
 		{

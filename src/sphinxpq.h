@@ -245,7 +245,7 @@ struct PercolateMatchContext_t : public PQMatchContextResult_t
 
 	PercolateMatchContext_t ( const RtSegment_t * pSeg, int iMaxCodepointLength, bool bHasMorph,
 			CSphDict * pDictMorph, const PercolateIndex_i * pIndex, const ISphSchema & tSchema,
-			const SegmentReject_t & tReject, ESphHitless eHitless )
+			const SegmentReject_t & tReject, ESphHitless eHitless, bool bHasWideFields )
 		: m_tDictMap ( bHasMorph, pDictMorph )
 		, m_tSchema ( tSchema )
 		, m_tReject ( tReject )
@@ -262,6 +262,7 @@ struct PercolateMatchContext_t : public PQMatchContextResult_t
 		m_pTermSetup->SetDict ( &m_tDictMap );
 		m_pTermSetup->m_pIndex = pIndex;
 		m_pTermSetup->m_pCtx = m_pCtx.Ptr ();
+		m_pTermSetup->m_bHasWideFields = bHasWideFields;
 	};
 };
 

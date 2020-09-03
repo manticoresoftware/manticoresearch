@@ -1838,7 +1838,7 @@ inline void ExtTerm_T<USE_BM25>::Init ( ISphQword * pQword, const FieldMask_t & 
 	m_iAtomPos = pQword->m_iAtomPos;
 	m_dQueriedFields = tFields;
 	m_bHasWideFields = false;
-	if ( tSetup.m_pIndex && tSetup.m_pIndex->GetMatchSchema().GetFieldsCount()>32 )
+	if ( tSetup.m_bHasWideFields )
 		for ( int i=1; i<FieldMask_t::SIZE && !m_bHasWideFields; i++ )
 			if ( m_dQueriedFields[i] )
 				m_bHasWideFields = true;
@@ -1854,7 +1854,7 @@ ExtTerm_T<USE_BM25>::ExtTerm_T ( ISphQword * pQword, const ISphQwordSetup & tSet
 {
 	m_iAtomPos = pQword->m_iAtomPos;
 	m_dQueriedFields.SetAll();
-	m_bHasWideFields = tSetup.m_pIndex && ( tSetup.m_pIndex->GetMatchSchema().GetFieldsCount()>32 );
+	m_bHasWideFields = tSetup.m_bHasWideFields;
 	m_iMaxTimer = tSetup.m_iMaxTimer;
 	m_pStats = tSetup.m_pStats;
 	m_pNanoBudget = m_pStats ? m_pStats->m_pNanoBudget : nullptr;
@@ -2720,7 +2720,7 @@ template <bool USE_BM25,bool TEST_FIELDS>
 void ExtMultiAnd_T<USE_BM25,TEST_FIELDS>::NodeInfo_t::UpdateWideFieldFlag ( const ISphQwordSetup & tSetup )
 {
 	m_bHasWideFields = false;
-	if ( tSetup.m_pIndex && tSetup.m_pIndex->GetMatchSchema().GetFieldsCount()>32 )
+	if ( tSetup.m_bHasWideFields )
 		for ( int i=1; i<FieldMask_t::SIZE && !m_bHasWideFields; i++ )
 			if ( m_dQueriedFields[i] )
 				m_bHasWideFields = true;

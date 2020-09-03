@@ -1048,7 +1048,7 @@ SphWordID_t DictMap_t::GetTerm ( BYTE * sWord ) const
 PercolateMatchContext_t * PercolateIndex_c::CreateMatchContext ( const RtSegment_t * pSeg, const SegmentReject_t & tReject )
 {
 	return new PercolateMatchContext_t ( pSeg, m_iMaxCodepointLength, m_pDict->HasMorphology(), GetStatelessDict ( m_pDict ), this
-												   , m_tSchema, tReject, m_tSettings.m_eHitless );
+												   , m_tSchema, tReject, m_tSettings.m_eHitless, ( m_tSchema.GetFieldsCount()>32 ) );
 }
 
 namespace {
@@ -1502,7 +1502,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 
 	// collect and merge result set
 	CSphVector<PercolateMatchContext_t *> dResults;
-	dCtx.ForAll ( [&dResults] ( const PqMatchContextRef_t& tCtx ) { dResults.Add ( tCtx.m_pMatchCtx ); } );
+	dCtx.ForAll ( [&dResults] ( const PqMatchContextRef_t& tCtx ) { dResults.Add ( tCtx.m_pMatchCtx ); }, true );
 
 	// merge result set
 	PercolateMergeResults ( dResults, tRes );

@@ -6709,6 +6709,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	tTermSetup.m_pWarning = &pResult->m_sWarning;
 	tTermSetup.SetSegment ( -1 );
 	tTermSetup.m_pCtx = &tCtx;
+	tTermSetup.m_bHasWideFields = ( m_tSchema.GetFieldsCount()>32 );
 
 	// setup prediction constrain
 	CSphQueryStats tQueryStats;

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>support for 256 fields in disk/RT indexes</name>
+<name>support for 256 fields in disk/RT/percolate indexes</name>
 
 <config>
 indexer
@@ -138,6 +138,53 @@ index many_attr
 	path = <data_path/>/src_many_attr
 }
 
+index pq40
+{
+    type = percolate
+    path = <data_path/>/pq40
+
+    rt_field = field1
+    rt_field = field2
+    rt_field = field3
+    rt_field = field4
+    rt_field = field5
+    rt_field = field6
+    rt_field = field7
+    rt_field = field8
+    rt_field = field9
+    rt_field = field10
+    rt_field = field11
+    rt_field = field12
+    rt_field = field13
+    rt_field = field14
+    rt_field = field15
+    rt_field = field16
+    rt_field = field17
+    rt_field = field18
+    rt_field = field19
+    rt_field = field20
+    rt_field = field21
+    rt_field = field22
+    rt_field = field23
+    rt_field = field24
+    rt_field = field25
+    rt_field = field26
+    rt_field = field27
+    rt_field = field28
+    rt_field = field29
+    rt_field = field30
+    rt_field = field31
+    rt_field = field32
+    rt_field = field33
+    rt_field = field34
+    rt_field = field35
+    rt_field = field36
+    rt_field = field37
+    rt_field = field38
+    rt_field = field39
+    rt_field = field40
+    rt_attr_uint = attr1
+}
 
 </config>
 
@@ -256,6 +303,13 @@ values (124,222,
 <sphinxql>select id, idd265 as i from many_attr group by i</sphinxql>
 <sphinxql>select id, ( ( idd265 - 1000 ) mod  3 ) as i from many_attr group by i</sphinxql>
 <sphinxql>select id, ( ( idd265 - 1000 ) mod  3 ) as i, i as i1, i1 as i2 from many_attr group by i2</sphinxql>
+
+<!--regression pq for column over 32 -->
+<sphinxql>insert into pq40 ( query ) values ( '@field35 4d236d9a2d102c5fe6ad1c50da4bec50 14dd5266c70789bdc806364df4586335 ab3201c6103205c14f6e56b11b2fcd46' )</sphinxql>
+<sphinxql>call pq ('pq40', ('{"field35":"4d236d9a2d102c5fe6ad1c50da4bec50 14dd5266c70789bdc806364df4586335 ab3201c6103205c14f6e56b11b2fcd46"}'), 1 as docs, 1 as query)</sphinxql>
+<!--regression pq match failed for single doc \ thread -->
+<sphinxql>SET GLOBAL max_threads_per_query=1</sphinxql>
+<sphinxql>call pq ('pq40', ('{"field35":"4d236d9a2d102c5fe6ad1c50da4bec50 14dd5266c70789bdc806364df4586335 ab3201c6103205c14f6e56b11b2fcd46"}'), 1 as docs, 1 as query)</sphinxql>
 
 </sphqueries>
 

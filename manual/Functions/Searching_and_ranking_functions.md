@@ -128,7 +128,9 @@ If used in SQL, but not called from any UDFs, the result of `PACKEDFACTORS()` is
 ### REMOVE_REPEATS()
 `REMOVE_REPEATS ( result_set, column, offset, limit )` - removes repeated adjusted rows with the same 'column' value.
 
-`SELECT REMOVE_REPEATS((SELECT * FROM dist1), gid, 0, 10)`
+```sql
+SELECT REMOVE_REPEATS((SELECT * FROM dist1), gid, 0, 10)
+```
 
 ### WEIGHT()
 `WEIGHT()` function returns the calculated matching score. If no ordering specified, the result is sorted descending by the score provided by `WEIGHT()`. In this example we order first by weight and then by an integer attribute.

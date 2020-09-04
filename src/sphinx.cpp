@@ -12888,7 +12888,6 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 struct SphFinalMatchCalc_t final : ISphMatchProcessor, ISphNoncopyable
 {
 	const CSphQueryContext &	m_tCtx;
-//	int64_t						m_iBadRows {0};
 	int							m_iTag;
 
 	SphFinalMatchCalc_t ( int iTag, const CSphQueryContext & tCtx )
@@ -13317,7 +13316,6 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 			ISphMatchSorter * pTop = ppSorters[iSorter];
 			pTop->Finalize ( tFinal, false );
 		}
-//		tCtx.m_iBadRows += tFinal.m_iBadRows;
 	}
 
 	if ( tArgs.m_bModifySorterSchemas )
@@ -13331,7 +13329,6 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	pResult->m_pDocstore = m_pDocstore.Ptr() ? this : nullptr;
 	pResult->m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
 	pResult->m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
-	pResult->m_iBadRows += tCtx.m_iBadRows;
 
 	return true;
 }
@@ -16211,7 +16208,6 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 			ISphMatchSorter * pTop = ppSorters[iSorter];
 			pTop->Finalize ( tProcessor, bGotUDF );
 		}
-//		pResult->m_iBadRows += tProcessor.m_iBadRows;
 	}
 
 	pRanker->FinalizeCache ( tMaxSorterSchema );

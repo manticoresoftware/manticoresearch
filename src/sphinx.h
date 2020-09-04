@@ -2696,7 +2696,6 @@ public:
 
 	CSphString				m_sError;				///< error message
 	CSphString				m_sWarning;				///< warning message
-	int64_t					m_iBadRows = 0;
 
 	virtual					~CSphQueryResultMeta () {}					///< dtor
 	void					AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits );

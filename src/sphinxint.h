@@ -675,7 +675,6 @@ public:
 	QueryProfile_t *						m_pProfile = nullptr;
 	const SmallStringHash_T<int64_t> *		m_pLocalDocs = nullptr;
 	int64_t									m_iTotalDocs = 0;
-	int64_t									m_iBadRows = 0;
 
 	const IndexSegment_c *					m_pIndexSegment {nullptr};	// intended for docid -> rowid lookups
 

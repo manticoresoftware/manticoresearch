@@ -2069,7 +2069,6 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 	}
 
 	pResult->m_iQueryTime += ( int ) ( ( sphMicroTimer () - tmQueryStart ) / 1000 );
-	pResult->m_iBadRows += tCtx.m_iBadRows;
 
 	return true; // fixme! */
 }

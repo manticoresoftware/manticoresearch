@@ -6012,9 +6012,6 @@ struct DiskChunkSearcherCtx_t
 		// profiling
 		if ( dChildRes.m_pProfile )
 			m_pResult->m_pProfile->AddMetric ( *dChildRes.m_pProfile );
-
-		// bad rows
-		m_pResult->m_iBadRows += dChildRes.m_iBadRows;
 	}
 
 	inline bool IsClonable () const
@@ -6139,7 +6136,6 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 				hResWordStats = hChunkStats;
 
 			dDiskBlobPools[iChunk] = tChunkResult.m_pBlobPool;
-			pThResult->m_iBadRows += tChunkResult.m_iBadRows;
 
 			if ( pThResult->m_bHasPrediction )
 				pThResult->m_tStats.Add ( tChunkResult.m_tStats );

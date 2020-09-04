@@ -5160,35 +5160,6 @@ static void FlattenToRes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, int i
 }
 
 
-static void RemoveMissedRows ( AggrResult_t & tRes )
-{
-	if ( !tRes.m_dMatchCounts.Last() )
-		return;
-
-	CSphMatch * pStart = tRes.m_dMatches.Begin() + tRes.m_dMatches.GetLength() - tRes.m_dMatchCounts.Last();
-	CSphMatch * pSrc = pStart;
-	CSphMatch * pDst = pStart;
-	const CSphMatch * pEnd = tRes.m_dMatches.Begin() + tRes.m_dMatches.GetLength();
-
-	while ( pSrc<pEnd )
-	{
-		if ( !pSrc->m_pStatic )
-		{
-			tRes.m_tSchema.FreeDataPtrs ( *pSrc );
-			++pSrc;
-			continue;
-		}
-
-		Swap ( *pSrc, *pDst );
-		++pSrc;
-		++pDst;
-	}
-
-	tRes.m_dMatchCounts.Last() = pDst - pStart;
-	tRes.m_dMatches.Resize ( pDst - tRes.m_dMatches.Begin() );
-}
-
-
 const CSphString & SearchHandler_c::GetLocalIndexName ( int iLocal ) const
 {
 	return m_dLocal[iLocal].m_sName;
@@ -5413,10 +5384,6 @@ void SearchHandler_c::RunLocalSearches()
 				// this one seems OK
 				AggrResult_t & tRes = m_dResults[iQuery];
 
-				int64_t iBadRows = m_bMultiQueue ? tStats.m_iBadRows : tRes.m_iBadRows;
-				if ( iBadRows )
-					tRes.m_sWarning.SetSprintf ( "query result is inaccurate because of " INT64_FMT " missed documents", iBadRows );
-
 				int iQTimeForStats = tRes.m_iQueryTime;
 
 				// multi-queue only returned one result set meta, so we need to replicate it
@@ -5450,9 +5417,6 @@ void SearchHandler_c::RunLocalSearches()
 
 				// extract matches from sorter
 				FlattenToRes ( pSorter, tRes, iOrderTag+iQuery-m_iStart );
-
-				if ( iBadRows )
-					RemoveMissedRows ( tRes );
 			}
 		}
 
@@ -5721,8 +5685,6 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 				tRes.m_tStats.Add ( tRaw.m_tStats );
 				tRes.m_iPredictedTime = CalcPredictedTimeMsec ( tRes );
 			}
-			if ( tRaw.m_iBadRows )
-				tRes.m_sWarning.SetSprintf ( "query result is inaccurate because of " INT64_FMT " missed documents", tRaw.m_iBadRows );
 
 			++tRes.m_iSuccesses;
 			// take over the schema from sorter, it doesn't need it anymore
@@ -5735,8 +5697,6 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 			// extract matches from sorter
 			FlattenToRes ( pSorter, tRes, iOrderTag+iQuery-m_iStart );
 
-			if ( tRaw.m_iBadRows )
-				RemoveMissedRows ( tRes );
 
 			if ( !tRaw.m_sWarning.IsEmpty() )
 				m_dFailuresSet[iQuery].Submit ( sLocal, sParentIndex, tRaw.m_sWarning.cstr() );

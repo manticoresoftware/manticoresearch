@@ -12,46 +12,45 @@
 #include "sphinxstd.h"
 #include "searchdha.h"
 
-struct GetFieldArgs_t
+struct FieldRequest_t
 {
 	CSphString m_sIndexes;
 	CSphFixedVector<const char *> m_dFieldNames { 0 };
 	CSphFixedVector<DocID_t> m_dDocs { 0 };
 };
 
-struct FieldTrait_t
+struct FieldLoc_t
 {
 	int	m_iOff;
 	int	m_iSize;
 };
 
-struct GetFieldRes_t
+struct FieldBlob_t
 {
-	CSphString m_sError;
-
+	CSphString				m_sError;
 	CSphVector<DocID_t> m_dDocs;
-	CSphVector<FieldTrait_t> m_dOff;
+	CSphVector<FieldLoc_t>	m_dLocs;
 	CSphVector<BYTE> m_dFields;
 };
 
-struct GotDocs_t
+struct DocHash_t
 {
 	OpenHash_T<int, DocID_t> m_hDocs { 0 };
-	GotDocs_t ( const VecTraits_T<DocID_t> & dIds ) { Init ( dIds ); }
+	DocHash_t ( const VecTraits_T<DocID_t> & dIds ) { Init ( dIds ); }
 	void Init ( const VecTraits_T<DocID_t> & dIds );
 	int Count (  const VecTraits_T<DocID_t> & dIds ) const;
 	bool Exists ( DocID_t tId ) const;
 	void Set ( DocID_t tId, int iOff );
 };
 
-struct RemoteAgentDoc_t
+struct ResLoc_t
 {
 	DocID_t m_iDocid;
-	int m_iAgent;
+	int m_iTag;
 	int m_iIndex;
 };
 
-struct AgentFieldPaiload_t : public iQueryResult, public GetFieldRes_t
+struct RemoteFieldsAnswer_t : public iQueryResult, public FieldBlob_t
 {
 	virtual void Reset() override {}
 	virtual bool HasWarnings() const override { return false; }
@@ -67,12 +66,12 @@ struct AgentFieldPaiload_t : public iQueryResult, public GetFieldRes_t
 struct GetFieldRequestBuilder_t : public RequestBuilder_i
 {
 	VecTraits_T<const CSphColumnInfo *> m_dFieldCols;
-	VecTraits_T<RemoteAgentDoc_t> m_dDocs;
+	VecTraits_T<ResLoc_t> m_dDocs;
 
 	GetFieldRequestBuilder_t() {};
 	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
 	{
-		AgentFieldPaiload_t * pRes = (AgentFieldPaiload_t *)tAgent.m_pResult.Ptr();
+		RemoteFieldsAnswer_t * pRes = (RemoteFieldsAnswer_t *)tAgent.m_pResult.Ptr();
 		assert ( pRes );
 
 		auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_GETFIELD, VER_COMMAND_GETFIELD );
@@ -91,13 +90,13 @@ struct GetFieldReplyParser_t : public ReplyParser_i
 {
 	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final
 	{
-		AgentFieldPaiload_t * pReply = (AgentFieldPaiload_t *)tAgent.m_pResult.Ptr();
+		RemoteFieldsAnswer_t * pReply = (RemoteFieldsAnswer_t *)tAgent.m_pResult.Ptr();
 		assert ( pReply );
 		pReply->m_dDocs.Resize ( tReq.GetDword() );
 		ARRAY_FOREACH ( i, pReply->m_dDocs )
 			pReply->m_dDocs[i] = tReq.GetUint64();
-		pReply->m_dOff.Resize ( tReq.GetDword() );
-		for ( FieldTrait_t & tField : pReply->m_dOff )
+		pReply->m_dLocs.Resize ( tReq.GetDword() );
+		for ( FieldLoc_t & tField : pReply->m_dLocs )
 		{
 			tField.m_iOff = tReq.GetDword();
 			tField.m_iSize = tReq.GetDword();
@@ -112,9 +111,9 @@ struct GetFieldReplyParser_t : public ReplyParser_i
 
 struct ProxyFieldRequestBuilder_t : public RequestBuilder_i
 {
-	const GetFieldArgs_t & m_tArgs;
+	const FieldRequest_t & m_tArgs;
 
-	ProxyFieldRequestBuilder_t ( const GetFieldArgs_t & tArgs )
+	ProxyFieldRequestBuilder_t ( const FieldRequest_t & tArgs )
 		: m_tArgs ( tArgs )
 	{};
 	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
@@ -130,14 +129,14 @@ struct ProxyFieldRequestBuilder_t : public RequestBuilder_i
 	}
 };
 
-void GotDocs_t::Init ( const VecTraits_T<DocID_t> & dIds )
+void DocHash_t::Init ( const VecTraits_T<DocID_t> & dIds )
 {
 	m_hDocs.Reset ( dIds.GetLength() );
 	for ( DocID_t tDoc : dIds )
 		m_hDocs.Acquire ( tDoc ) = -1;
 }
 
-int GotDocs_t::Count ( const VecTraits_T<DocID_t> & dIds ) const
+int DocHash_t::Count ( const VecTraits_T<DocID_t> & dIds ) const
 {
 	int iCount = 0;
 	for ( DocID_t tDoc : dIds )
@@ -149,12 +148,12 @@ int GotDocs_t::Count ( const VecTraits_T<DocID_t> & dIds ) const
 	return iCount;
 }
 
-bool GotDocs_t::Exists ( DocID_t tId ) const
+bool DocHash_t::Exists ( DocID_t tId ) const
 {
 	return ( *m_hDocs.Find ( tId )!=-1 );
 }
 
-void GotDocs_t::Set ( DocID_t tId, int iOff )
+void DocHash_t::Set ( DocID_t tId, int iOff )
 {
 	m_hDocs.Acquire ( tId ) = iOff;
 }
@@ -186,7 +185,7 @@ static bool GetIndexes ( const CSphString & sIndexes, CSphString & sError, StrVe
 				pConn->SetMultiAgent ( pAgent );
 				pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
 				pConn->m_iMyQueryTimeoutMs = pDist->m_iAgentQueryTimeoutMs;
-				pConn->m_pResult = new AgentFieldPaiload_t();
+				pConn->m_pResult = new RemoteFieldsAnswer_t();
 				dRemotes.Add ( pConn );
 			}
 
@@ -201,7 +200,7 @@ static bool GetIndexes ( const CSphString & sIndexes, CSphString & sError, StrVe
 	return true;
 }
 
-static bool GetFieldFromLocal ( const CSphString & sIndexName, const GetFieldArgs_t & tArgs, int64_t iSessionID, GotDocs_t & tGotDocs, GetFieldRes_t & tRes )
+static bool GetFieldFromLocal ( const CSphString & sIndexName, const FieldRequest_t & tArgs, int64_t iSessionID, DocHash_t & hFetchedDocs, FieldBlob_t & tRes )
 {
 	auto pServed = GetServed ( sIndexName );
 	if ( !pServed )
@@ -243,19 +242,19 @@ static bool GetFieldFromLocal ( const CSphString & sIndexName, const GetFieldArg
 	ARRAY_FOREACH ( i, tArgs.m_dDocs )
 	{
 		DocID_t tDocid = tArgs.m_dDocs[i];
-		if ( tGotDocs.Exists ( tDocid ) )
+		if ( hFetchedDocs.Exists ( tDocid ) )
 			continue;
 
 		if ( !pIndex->GetDoc ( tDoc, tDocid, &dFieldIds, iSessionID, false ) )
 			continue;
 
 		assert ( tDoc.m_dFields.GetLength()==dFieldIds.GetLength() );
-		tGotDocs.Set ( tDocid, tRes.m_dOff.GetLength() );
+		hFetchedDocs.Set ( tDocid, tRes.m_dLocs.GetLength() );
 		for ( int iField : dFieldRemap )
 		{
 			if ( iField==-1 )
 			{
-				FieldTrait_t & tFieldDesc = tRes.m_dOff.Add();
+				FieldLoc_t & tFieldDesc = tRes.m_dLocs.Add();
 				tFieldDesc.m_iOff = tRes.m_dFields.GetLength();
 				tFieldDesc.m_iSize = 0;
 				continue;
@@ -264,7 +263,7 @@ static bool GetFieldFromLocal ( const CSphString & sIndexName, const GetFieldArg
 			assert ( iField<tDoc.m_dFields.GetLength() );
 			const CSphVector<BYTE> & tFieldData = tDoc.m_dFields[iField];
 			
-			FieldTrait_t & tFieldDesc = tRes.m_dOff.Add();
+			FieldLoc_t & tFieldDesc = tRes.m_dLocs.Add();
 			tFieldDesc.m_iOff = tRes.m_dFields.GetLength();
 			tFieldDesc.m_iSize = (int) tFieldData.GetLengthBytes();
 
@@ -276,7 +275,7 @@ static bool GetFieldFromLocal ( const CSphString & sIndexName, const GetFieldArg
 	return true;
 }
 
-static bool GetFieldFromDist ( const VecRefPtrsAgentConn_t & dRemotes, const GetFieldArgs_t & tArgs, GotDocs_t & tGotDocs, GetFieldRes_t & tRes )
+static bool GetFieldFromDist ( const VecRefPtrsAgentConn_t & dRemotes, const FieldRequest_t & tArgs, DocHash_t & hFetchedDocs, FieldBlob_t & tRes )
 {
 	const int iFieldsCount = tArgs.m_dFieldNames.GetLength();
 	for ( const AgentConn_t * pAgent : dRemotes )
@@ -289,22 +288,22 @@ static bool GetFieldFromDist ( const VecRefPtrsAgentConn_t & dRemotes, const Get
 		}
 
 
-		const AgentFieldPaiload_t * pReply = (AgentFieldPaiload_t *)pAgent->m_pResult.Ptr();
+		const RemoteFieldsAnswer_t * pReply = (RemoteFieldsAnswer_t *)pAgent->m_pResult.Ptr();
 
 		ARRAY_FOREACH ( iDoc, pReply->m_dDocs )
 		{
 			DocID_t tDocid = pReply->m_dDocs[iDoc];
-			int & iFieldOff = tGotDocs.m_hDocs.Acquire ( tDocid );
+			int & iFieldOff = hFetchedDocs.m_hDocs.Acquire ( tDocid );
 			// already got fields for the document
 			if ( iFieldOff!=-1 )
 				continue;
 
-			iFieldOff = tRes.m_dOff.GetLength();
+			iFieldOff = tRes.m_dLocs.GetLength();
 			for ( int iField=0; iField<iFieldsCount; iField++ )
 			{
-				const FieldTrait_t & tSrcField = pReply->m_dOff[iDoc * iFieldsCount + iField];
+				const FieldLoc_t & tSrcField = pReply->m_dLocs[iDoc * iFieldsCount + iField];
 					
-				FieldTrait_t & tDstField = tRes.m_dOff.Add();
+				FieldLoc_t & tDstField = tRes.m_dLocs.Add();
 				tDstField.m_iOff = tRes.m_dFields.GetLength();
 				tDstField.m_iSize = tSrcField.m_iSize;
 
@@ -318,14 +317,14 @@ static bool GetFieldFromDist ( const VecRefPtrsAgentConn_t & dRemotes, const Get
 	return true;
 }
 
-static bool GetField ( const GetFieldArgs_t & tArgs, GetFieldRes_t & tRes, GotDocs_t & tGotDocs )
+static bool GetFields ( const FieldRequest_t & tReq, FieldBlob_t & tRes, DocHash_t & hFetchedDocs )
 {
-	if ( !tArgs.m_dDocs.GetLength() )
+	if ( !tReq.m_dDocs.GetLength() )
 		return true;
 
 	StrVec_t dLocals;
 	VecRefPtrsAgentConn_t dRemotes;
-	if ( !GetIndexes ( tArgs.m_sIndexes, tRes.m_sError, dLocals, dRemotes ) )
+	if ( !GetIndexes ( tReq.m_sIndexes, tRes.m_sError, dLocals, dRemotes ) )
 		return false;
 
 	if ( !dLocals.GetLength() && !dRemotes.GetLength() )
@@ -339,7 +338,7 @@ static bool GetField ( const GetFieldArgs_t & tArgs, GetFieldRes_t & tRes, GotDo
 
 	if ( dRemotes.GetLength() )
 	{
-		pDistReq = new ProxyFieldRequestBuilder_t ( tArgs );
+		pDistReq = new ProxyFieldRequestBuilder_t ( tReq );
 		pDistReply = new GetFieldReplyParser_t();
 
 		pDistReporter = GetObserver();
@@ -352,14 +351,14 @@ static bool GetField ( const GetFieldArgs_t & tArgs, GetFieldRes_t & tRes, GotDo
 		ARRAY_FOREACH ( i, dLocals )
 		{
 			const CSphString & sLocal = dLocals[i];
-			if ( !GetFieldFromLocal ( sLocal, tArgs, tSession.GetUID(), tGotDocs, tRes ) )
+			if ( !GetFieldFromLocal ( sLocal, tReq, tSession.GetUID(), hFetchedDocs, tRes ) )
 			{
 				bOkLocal = false;
 				break;
 			}
 
 			// early out on fields fetched for all docs
-			if ( i!=dLocals.GetLength() && tGotDocs.Count ( tArgs.m_dDocs )==tArgs.m_dDocs.GetLength() )
+			if ( i!=dLocals.GetLength() && hFetchedDocs.Count ( tReq.m_dDocs )==tReq.m_dDocs.GetLength() )
 				break;
 		}
 	}
@@ -367,7 +366,7 @@ static bool GetField ( const GetFieldArgs_t & tArgs, GetFieldRes_t & tRes, GotDo
 	if ( dRemotes.GetLength() )
 	{
 		pDistReporter->Finish();
-		bOkRemote = GetFieldFromDist ( dRemotes, tArgs, tGotDocs, tRes );
+		bOkRemote = GetFieldFromDist ( dRemotes, tReq, hFetchedDocs, tRes );
 	}
 
 	return ( bOkLocal && bOkRemote );
@@ -378,7 +377,7 @@ void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 	if ( !CheckCommandVersion ( uVer, VER_COMMAND_GETFIELD, tOut ) )
 		return;
 
-	GetFieldArgs_t tArgs;
+	FieldRequest_t tArgs;
 	// parse remote request
 	tArgs.m_sIndexes = tReq.GetString();
 
@@ -401,15 +400,15 @@ void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 	}
 
 	// fetch stored fields
-	GotDocs_t tGotDocs ( tArgs.m_dDocs );
-	GetFieldRes_t tRes;
-	if ( !GetField ( tArgs, tRes, tGotDocs ) )
+	DocHash_t tFetchedDocs ( tArgs.m_dDocs );
+	FieldBlob_t tRes;
+	if ( !GetFields ( tArgs, tRes, tFetchedDocs ) )
 	{
 		SendErrorReply ( tOut, "%s", tRes.m_sError.cstr() );
 		return;
 	}
 
-	const int iDocsCount = tGotDocs.Count ( tArgs.m_dDocs );
+	const int iDocsCount = tFetchedDocs.Count ( tArgs.m_dDocs );
 
 	// send reply
 	auto tReply = APIAnswer ( tOut, VER_COMMAND_GETFIELD );
@@ -418,7 +417,7 @@ void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 	{
 		for ( DocID_t tDoc : tArgs.m_dDocs )
 		{
-			if ( tGotDocs.Exists ( tDoc ) )
+			if ( tFetchedDocs.Exists ( tDoc ) )
 				tOut.SendUint64 ( tDoc );
 		}
 	}
@@ -427,14 +426,14 @@ void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 	{
 		for ( DocID_t tDoc : tArgs.m_dDocs )
 		{
-			int iOff = tGotDocs.m_hDocs.Acquire ( tDoc );
+			int iOff = tFetchedDocs.m_hDocs.Acquire ( tDoc );
 			if ( iOff==-1 )
 				continue;
 
 			ARRAY_FOREACH ( iField, tArgs.m_dFieldNames )
 			{
-				tOut.SendDword ( tRes.m_dOff[iOff+iField].m_iOff );
-				tOut.SendDword ( tRes.m_dOff[iOff+iField].m_iSize );
+				tOut.SendDword ( tRes.m_dLocs[iOff+iField].m_iOff );
+				tOut.SendDword ( tRes.m_dLocs[iOff+iField].m_iSize );
 			}
 		}
 	}
@@ -446,7 +445,7 @@ struct DistFieldRes_t
 	StringBuilder_c m_sError { "," };
 
 	CSphVector<const CSphColumnInfo *> m_dFieldCols;
-	CSphVector<RemoteAgentDoc_t> m_dIds;
+	CSphVector<ResLoc_t> m_dIds;
 
 	AggrResult_t * m_pRes = nullptr;
 	const CSphQuery * m_pQuery = nullptr;
@@ -460,12 +459,12 @@ struct DistFieldRes_t
 
 struct RemoteAgentDoc_tSort_fn
 {
-	bool IsLess ( const RemoteAgentDoc_t & a, const RemoteAgentDoc_t & b ) const
+	bool IsLess ( const ResLoc_t & a, const ResLoc_t & b ) const
 	{
-		if ( a.m_iAgent==b.m_iAgent )
+		if ( a.m_iTag==b.m_iTag )
 			return a.m_iDocid<b.m_iDocid;
 		else
-			return a.m_iAgent<b.m_iAgent;
+			return a.m_iTag<b.m_iTag;
 	}
 };
 
@@ -500,9 +499,9 @@ static void DistGetFieldStart ( DistFieldRes_t & tRes )
 		if ( ( tMatch.m_iTag & 0x80000000 )==0 )
 			continue;
 
-		RemoteAgentDoc_t & tDoc = tRes.m_dIds.Add();
+		ResLoc_t & tDoc = tRes.m_dIds.Add();
 		tDoc.m_iDocid = sphGetDocID ( tMatch.m_pDynamic );
-		tDoc.m_iAgent = tMatch.m_iTag & 0x7FFFFFFF;
+		tDoc.m_iTag = tMatch.m_iTag & 0x7FFFFFFF;
 		tDoc.m_iIndex = i;
 	}
 	// early reject in case no documents from agents found
@@ -514,13 +513,13 @@ static void DistGetFieldStart ( DistFieldRes_t & tRes )
 	// create agents
 	tRes.m_dAgents.Reserve ( tRes.m_pDesc->GetLength() );
 	int iAgentMatch = -1;
-	AgentFieldPaiload_t * pAgentData = nullptr;
+	RemoteFieldsAnswer_t * pAgentData = nullptr;
 	ARRAY_FOREACH ( i, tRes.m_dIds )
 	{
-		if ( iAgentMatch==tRes.m_dIds[i].m_iAgent )
+		if ( iAgentMatch==tRes.m_dIds[i].m_iTag )
 			continue;
 
-		iAgentMatch = tRes.m_dIds[i].m_iAgent;
+		iAgentMatch = tRes.m_dIds[i].m_iTag;
 		const AgentConn_t * pDesc = (*tRes.m_pDesc)[iAgentMatch];
 		assert ( pDesc );
 
@@ -535,7 +534,7 @@ static void DistGetFieldStart ( DistFieldRes_t & tRes )
 		if ( pAgentData )
 			pAgentData->m_iDocCount = i - pAgentData->m_iDocOff;
 
-		pAgentData = new AgentFieldPaiload_t();
+		pAgentData = new RemoteFieldsAnswer_t();
 		pAgentData->m_iDocOff = i;
 		pAgent->m_pResult = pAgentData;
 
@@ -572,11 +571,11 @@ static void DistGetFieldFinish ( DistFieldRes_t & tRes )
 			continue;
 		}
 
-		const AgentFieldPaiload_t * pReply = (AgentFieldPaiload_t *)pAgent->m_pResult.Ptr();
+		const RemoteFieldsAnswer_t * pReply = (RemoteFieldsAnswer_t *)pAgent->m_pResult.Ptr();
 		int iDocFieldsOff = 0;
 
-		const RemoteAgentDoc_t * pSrcDocs = tRes.m_dIds.Begin() + pReply->m_iDocOff;
-		const RemoteAgentDoc_t * pSrcDocsEnd = pSrcDocs + pReply->m_iDocCount;
+		const ResLoc_t * pSrcDocs = tRes.m_dIds.Begin() + pReply->m_iDocOff;
+		const ResLoc_t * pSrcDocsEnd = pSrcDocs + pReply->m_iDocCount;
 		const DocID_t * pRecvDocs = pReply->m_dDocs.Begin();
 		const DocID_t * pRecvDocsEnd = pRecvDocs + pReply->m_dDocs.GetLength();
 
@@ -602,8 +601,8 @@ static void DistGetFieldFinish ( DistFieldRes_t & tRes )
 			CSphMatch & tMatch = tRes.m_pRes->m_dMatches[pSrcDocs->m_iIndex];
 
 			// found matched docs
-			assert ( iDocFieldsOff<pReply->m_dOff.GetLength() );
-			FieldTrait_t * pFieldDesc = pReply->m_dOff.Begin() + iDocFieldsOff;
+			assert ( iDocFieldsOff<pReply->m_dLocs.GetLength() );
+			FieldLoc_t * pFieldDesc = pReply->m_dLocs.Begin() + iDocFieldsOff;
 			for ( const auto& dCol : tRes.m_dFieldCols )
 			{
 				BYTE * pPacked = sphPackPtrAttr ( {pReply->m_pFieldsRaw+pFieldDesc->m_iOff, pFieldDesc->m_iSize} );
@@ -618,7 +617,7 @@ static void DistGetFieldFinish ( DistFieldRes_t & tRes )
 	}
 }
 
-void RemotesGetField ( const VecRefPtrsAgentConn_t & dRemotes,	const CSphQuery & tQuery, AggrResult_t & tRes )
+void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery, const VecRefPtrsAgentConn_t & dRemotes )
 {
 	DistFieldRes_t tFieldRes;
 	tFieldRes.m_pDesc = &dRemotes;

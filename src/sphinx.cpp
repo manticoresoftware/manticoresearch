@@ -6204,7 +6204,7 @@ void CSphSchemaHelper::Swap ( CSphSchemaHelper & rhs ) noexcept
 	rhs.m_dDynamicUsed.SwapData ( m_dDynamicUsed );
 }
 
-void CSphSchemaHelper::Reset()
+void CSphSchemaHelper::ResetSchemaHelper()
 {
 	m_dDataPtrAttrs.Reset();
 	m_dDynamicUsed.Reset ();
@@ -6504,7 +6504,7 @@ const CSphColumnInfo * CSphSchema::GetAttr ( const char * sName ) const
 
 void CSphSchema::Reset ()
 {
-	CSphSchemaHelper::Reset();
+	CSphSchemaHelper::ResetSchemaHelper();
 
 	m_dFields.Reset();
 	m_dAttrs.Reset();
@@ -6556,7 +6556,7 @@ void CSphSchema::RemoveAttr ( const char * szAttr, bool bDynamic )
 	else
 		m_dStaticUsed.Reset();
 
-	CSphSchemaHelper::Reset();
+	CSphSchemaHelper::ResetSchemaHelper();
 	m_dAttrs.Reset();
 	m_iFirstFieldLenAttr = -1;
 	m_iLastFieldLenAttr = -1;
@@ -6739,9 +6739,9 @@ bool CSphSchema::IsFieldStored ( int iField ) const
 
 //////////////////////////////////////////////////////////////////////////
 
-void CSphRsetSchema::Reset ()
+void CSphRsetSchema::ResetRsetSchema ()
 {
-	CSphSchemaHelper::Reset();
+	CSphSchemaHelper::ResetSchemaHelper();
 
 	m_pIndexSchema = nullptr;
 	m_dExtraAttrs.Reset();
@@ -6888,7 +6888,7 @@ CSphRsetSchema & CSphRsetSchema::operator = ( const ISphSchema & rhs )
 
 CSphRsetSchema & CSphRsetSchema::operator = ( const CSphSchema & rhs )
 {
-	Reset();
+	ResetRsetSchema();
 	m_pIndexSchema = &rhs;
 
 	// copy over dynamic rowitems map
@@ -14293,7 +14293,7 @@ void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema 
 
 	// defaults
 	m_iWeights = Min ( tSchema.GetFieldsCount(), HEAVY_FIELDS );
-	for ( int i=0; i<m_iWeights; i++ )
+	for ( int i=0; i<m_iWeights; ++i )
 		m_dWeights[i] = 1;
 
 	// name-bound weights
@@ -14331,9 +14331,8 @@ void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema 
 
 static ESphEvalStage GetEarliestStage ( ESphEvalStage eStage, const CSphColumnInfo & tIn, const CSphVector<const ISphSchema *> & dSchemas )
 {
-	ARRAY_FOREACH ( iSchema, dSchemas )
+	for ( const auto * pSchema : dSchemas )
 	{
-		const ISphSchema * pSchema = dSchemas[iSchema];
 		const CSphColumnInfo * pCol = pSchema->GetAttr ( tIn.m_sName.cstr() );
 		if ( !pCol )
 			continue;
@@ -15920,7 +15919,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 
 		CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
 		bResult = false;
-		for ( int j=0; j<iQueries; j++ )
+		for ( int j=0; j<iQueries; ++j )
 		{
 			// fullscan case
 			if ( pQueries[j].m_sQuery.IsEmpty() )
@@ -22238,7 +22237,7 @@ bool CSphSource_Document::IterateDocument ( bool & bEOF, CSphString & sError )
 		break;
 	}
 
-	m_tStats.m_iTotalDocuments++;
+	++m_tStats.m_iTotalDocuments;
 	return true;
 }
 
@@ -23271,7 +23270,7 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 	// some post-query setup
 	m_tSchema.Reset();
 
-	for ( int i=0; i<SPH_MAX_FIELDS; i++ )
+	for ( int i=0; i<SPH_MAX_FIELDS; ++i )
 		m_dUnpack[i] = SPH_UNPACK_NONE;
 
 	m_iSqlFields = SqlNumFields(); // for rowdump

@@ -57,10 +57,12 @@
 /////////////////////////////////////////////////////////////////////////////
 
 using RowID_t = DWORD;
-using DocID_t = int64_t;
-
 const RowID_t INVALID_ROWID = 0xFFFFFFFF;
-#define WORDID_MAX		U64C(0xffffffffffffffff)
+
+using DocID_t = int64_t;
+#define DOCID_MIN        (INT64_MIN)
+
+#define WORDID_MAX        U64C(0xffffffffffffffff)
 
 STATIC_SIZE_ASSERT ( DocID_t, 8 );
 STATIC_SIZE_ASSERT ( RowID_t, 4 );
@@ -1099,7 +1101,7 @@ inline void sphAddCounterScalar ( CSphRowitem * pRow, const CSphAttrLocator & tL
 
 
 /// search query match (document info plus weight/tag)
-class CSphMatch
+class CSphMatch : public ISphNoncopyable
 {
 	friend class ISphSchema;
 	friend class CSphSchema;
@@ -1243,15 +1245,14 @@ public:
 	/// fetches blobs from both data ptr attrs and pooled blob attrs
 	const BYTE * FetchAttrData ( const CSphAttrLocator & tLoc, const BYTE * pPool, int & iLengthBytes ) const;
 	ByteBlob_t FetchAttrData ( const CSphAttrLocator & tLoc, const BYTE * pPool ) const;
-
-	/// "manually" prevent copying
-	CSphMatch & operator = ( const CSphMatch & ) = delete;
-	CSphMatch ( const CSphMatch &) = delete;
 };
 
 /// specialized swapper
 inline void Swap ( CSphMatch & a, CSphMatch & b )
 {
+	if ( &a==&b )
+		return;
+
 	Swap ( a.m_tRowID, b.m_tRowID );
 	Swap ( a.m_pStatic, b.m_pStatic );
 	Swap ( a.m_pDynamic, b.m_pDynamic );
@@ -1443,7 +1444,7 @@ protected:
 
 	/// generic InsertAttr() implementation that tracks data ptr attributes
 	void			InsertAttr ( CSphVector<CSphColumnInfo> & dAttrs, CSphVector<int> & dUsed, int iPos, const CSphColumnInfo & tCol, bool bDynamic );
-	void			Reset();
+	void			ResetSchemaHelper();
 
 	void CopyPtrs ( CSphMatch & tDst, const CSphMatch & rhs ) const;
 
@@ -1628,7 +1629,7 @@ public:
 
 public:
 	void				RemoveStaticAttr ( int iAttr );
-	void				Reset();
+	void				ResetRsetSchema();
 
 public:
 	/// swap in a subset of current attributes, with not necessarily (!) unique names
@@ -2981,7 +2982,6 @@ public:
 
 	/// store all entries into specified location and remove them from the queue
 	/// entries are stored in properly sorted order,
-	/// if iTag is non-negative, entries are also tagged; otherwise, their tag's unchanged
 	/// return sorted entries count, might be less than length due of aggregate filtering phase
 	virtual int			Flatten ( CSphMatch * pTo, int iTag ) = 0;
 
@@ -3485,7 +3485,7 @@ ESortClauseParseResult	sphParseSortClause ( const CSphQuery * pQuery, const char
 /// if the pUpdate is given, creates the updater's queue and perform the index update
 /// instead of searching
 ISphMatchSorter *	sphCreateQueue ( const SphQueueSettings_t & tQueue, const CSphQuery & tQuery,
-		CSphString & sError, SphQueueRes_t & tRes, StrVec_t * pExtra );
+		CSphString & sError, SphQueueRes_t & tRes, StrVec_t * pExtra = nullptr );
 
 void sphCreateMultiQueue ( const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries,
 		VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes,

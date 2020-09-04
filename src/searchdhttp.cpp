@@ -524,7 +524,7 @@ public:
 		, HttpOptionsTraits_c ( tOptions )
 	{}
 
-	virtual bool Process () override
+	bool Process () final
 	{
 		CSphQuery tQuery;
 		CSphString sWarning;

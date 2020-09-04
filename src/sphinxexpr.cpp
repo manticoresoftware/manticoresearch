@@ -392,8 +392,8 @@ private:
 class Expr_GetField_c : public Expr_NoLocator_c
 {
 public:
-	explicit Expr_GetField_c ( const CSphString & sField )
-		: m_sField ( sField )
+	explicit Expr_GetField_c ( CSphString sField )
+		: m_sField ( std::move (sField ) )
 	{}
 
 	float	Eval ( const CSphMatch & ) const final { assert(0); return 0; }

@@ -1162,7 +1162,7 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes
 	case SPH_ATTR_INT64SET_PTR:
 	{
 		tOut.ArrayBlock ();
-		const BYTE * pMVA = ( const BYTE * ) tMatch.GetAttr ( tLoc );
+		const auto * pMVA = ( const BYTE * ) tMatch.GetAttr ( tLoc );
 		if ( eAttrType==SPH_ATTR_UINT32SET_PTR )
 			PackedShortMVA2Json ( tOut, pMVA );
 		else
@@ -1204,7 +1204,7 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes
 
 	case SPH_ATTR_JSON_PTR:
 	{
-		const BYTE * pJSON = ( const BYTE * ) tMatch.GetAttr ( tLoc );
+		const auto * pJSON = ( const BYTE * ) tMatch.GetAttr ( tLoc );
 		sphUnpackPtrAttr ( pJSON, &pJSON );
 
 		// no object at all? return NULL
@@ -1220,7 +1220,7 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes
 	case SPH_ATTR_FACTORS:
 	case SPH_ATTR_FACTORS_JSON:
 	{
-		const BYTE * pFactors = ( const BYTE * ) tMatch.GetAttr ( tLoc );
+		const auto * pFactors = ( const BYTE * ) tMatch.GetAttr ( tLoc );
 		sphUnpackPtrAttr ( pFactors, &pFactors );
 		if ( pFactors )
 			sphFormatFactors ( tOut, ( const unsigned int * ) pFactors, true );
@@ -1231,7 +1231,7 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes
 
 	case SPH_ATTR_JSON_FIELD_PTR:
 	{
-		const BYTE * pField = ( const BYTE * ) tMatch.GetAttr ( tLoc );
+		const auto * pField = ( const BYTE * ) tMatch.GetAttr ( tLoc );
 		sphUnpackPtrAttr ( pField, &pField );
 		if ( !pField )
 		{
@@ -1304,7 +1304,7 @@ void EncodeHighlight ( const CSphMatch & tMatch, int iAttr, const ISphSchema & t
 	const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
 
 	ScopedComma_c tHighlightComma ( tOut, ",", R"("highlight":{)", "}", false );
-	auto pData = (const BYTE *)tMatch.GetAttr ( tCol.m_tLocator );
+	const auto * pData = (const BYTE *)tMatch.GetAttr ( tCol.m_tLocator );
 	int iLength = sphUnpackPtrAttr ( pData, &pData );
 
 	SnippetResult_t tRes;

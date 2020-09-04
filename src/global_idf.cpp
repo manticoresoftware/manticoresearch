@@ -255,12 +255,9 @@ static StrVec_t CollectUnlistedIn ( const StrVec_t& dFiles ) REQUIRES ( !g_tGlob
 {
 	StrVec_t dCollection;
 	ScRL_t rLock ( g_tGlobalIDFLock );
-	for ( g_hGlobalIDFs.IterateStart (); g_hGlobalIDFs.IterateNext (); )
-	{
-		const CSphString& sKey = g_hGlobalIDFs.IterateGetKey ();
-		if ( !dFiles.Contains ( sKey ))
-			dCollection.Add ( sKey );
-	}
+	for ( auto& dIdf : g_hGlobalIDFs )
+		if ( !dFiles.Contains ( dIdf.first ) )
+			dCollection.Add ( dIdf.first );
 	return dCollection;
 }
 

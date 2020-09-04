@@ -244,7 +244,7 @@ void DocstoreFields_c::Load ( CSphReader & tReader )
 	DWORD uNumFields = tReader.GetDword();
 	for ( int i = 0; i < (int)uNumFields; i++ )
 	{	
-		DocstoreDataType_e eType = (DocstoreDataType_e)tReader.GetByte();
+		auto eType = (DocstoreDataType_e)tReader.GetByte();
 		CSphString sName = tReader.GetString();
 		AddField ( sName, eType );
 	}
@@ -254,7 +254,7 @@ void DocstoreFields_c::Load ( CSphReader & tReader )
 void DocstoreFields_c::Save ( CSphWriter & tWriter )
 {
 	tWriter.PutDword ( GetNumFields() );
-	for ( int i = 0; i < GetNumFields(); i++ )
+	for ( int i = 0, iNumFields = GetNumFields(); i < iNumFields; ++i )
 	{
 		tWriter.PutByte ( GetField(i).m_eType );
 		tWriter.PutString ( GetField(i).m_sName );
@@ -599,8 +599,8 @@ DWORD DocstoreReaders_c::HashKey_t::Hash ( const HashKey_t & tKey )
 
 DocstoreReaders_c::~DocstoreReaders_c()
 {
-	for ( m_tHash.IterateStart(); m_tHash.IterateNext(); )
-		SafeDelete ( m_tHash.IterateGet() );
+	for ( auto & tDocstore : m_tHash )
+		SafeDelete ( tDocstore.second );
 }
 
 
@@ -653,9 +653,9 @@ void DocstoreReaders_c::DeleteBySessionId ( int64_t iSessionId )
 
 	// fixme: create a separate (faster) lookup?
 	CSphVector<std::pair<CSphReader*,HashKey_t>> dToDelete;
-	for ( m_tHash.IterateStart(); m_tHash.IterateNext(); )
-		if ( m_tHash.IterateGetKey().m_iSessionId==iSessionId )
-			dToDelete.Add ( {m_tHash.IterateGet(), m_tHash.IterateGetKey()} );
+	for ( auto & tDocstore : m_tHash )
+		if ( tDocstore.first.m_iSessionId==iSessionId )
+			dToDelete.Add ( { tDocstore.second, tDocstore.first } );
 
 	for ( const auto & i : dToDelete )
 		Delete ( i.first, i.second );
@@ -668,9 +668,9 @@ void DocstoreReaders_c::DeleteByDocstoreId ( DWORD uDocstoreId )
 
 	// fixme: create a separate (faster) lookup?
 	CSphVector<std::pair<CSphReader*,HashKey_t>> dToDelete;
-	for ( m_tHash.IterateStart(); m_tHash.IterateNext(); )
-		if ( m_tHash.IterateGetKey().m_uDocstoreId==uDocstoreId )
-			dToDelete.Add ( {m_tHash.IterateGet(), m_tHash.IterateGetKey()} );
+	for ( auto& tDocstore : m_tHash )
+		if ( tDocstore.first.m_uDocstoreId==uDocstoreId )
+			dToDelete.Add ( { tDocstore.second, tDocstore.first } );
 
 	for ( const auto & i : dToDelete )
 		Delete ( i.first, i.second );
@@ -699,16 +699,15 @@ DocstoreReaders_c * DocstoreReaders_c::Get()
 
 static void CreateFieldRemap ( VecTraits_T<int> & dFieldInRset, const VecTraits_T<int> * pFieldIds )
 {
-	ARRAY_FOREACH ( i, dFieldInRset )
-	{
-		if ( !pFieldIds )
-			dFieldInRset[i] = i;
-		else
+	if ( pFieldIds )
+		ARRAY_CONSTFOREACH ( i, dFieldInRset )
 		{
 			int * pFound = pFieldIds->BinarySearch(i);
-			dFieldInRset[i] = pFound ? (pFound-pFieldIds->Begin()) : -1;
+			dFieldInRset[i] = pFound ? pFieldIds->Idx ( pFound ) : -1;
 		}
-	}
+	else
+		ARRAY_CONSTFOREACH ( i, dFieldInRset )
+			dFieldInRset[i] = i;
 }
 
 
@@ -888,7 +887,7 @@ DocstoreDoc_t Docstore_c::GetDoc ( RowID_t tRowID, const VecTraits_T<int> * pFie
 {
 #ifndef NDEBUG
 	// assume that field ids are sorted
-	for ( int i = 1; pFieldIds && i < pFieldIds->GetLength(); i++ )
+	for ( int i = 1; pFieldIds && i < pFieldIds->GetLength(); ++i )
 		assert ( (*pFieldIds)[i-1] < (*pFieldIds)[i] );
 #endif
 

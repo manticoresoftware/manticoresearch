@@ -1460,6 +1460,8 @@ static bool CreateSocketPair ( int &iSock1, int &iSock2, CSphString &sError )
 	iSock2 = iWrite;
 	iWrite = -1; // protect from tCloseWrite
 
+	sphSetSockNodelay ( iSock2 );
+
 #else
 	int dSockets[2] = { -1, -1 };
 	if ( socketpair ( AF_LOCAL, SOCK_STREAM, 0, dSockets )!=0 )
@@ -1480,8 +1482,6 @@ static bool CreateSocketPair ( int &iSock1, int &iSock2, CSphString &sError )
 		SafeCloseSocket ( iSock2 );
 		return false;
 	}
-
-	sphSetSockNodelay ( iSock2 );
 	return true;
 }
 #endif

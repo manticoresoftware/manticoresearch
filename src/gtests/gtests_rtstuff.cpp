@@ -67,7 +67,7 @@ public:
 	BYTE ** NextDocument ( bool & bEOF, CSphString & ) override
 	{
 		bEOF = false;
-		int iDoc = (int)++m_tDocInfo.m_tRowID;
+		int iDoc = (int)++m_iDocsCounter;
 		if ( iDoc>=m_iDocCount )
 		{
 			bEOF = true;
@@ -87,7 +87,7 @@ public:
 		return m_ppDocs + iDoc * m_iFields;
 	}
 
-	const int * GetFieldLengths() const override { return m_dFieldLengths.Begin(); }
+	MOCK_CONST_METHOD0( GetFieldLengths, const int *() ); // return m_dFieldLengths.Begin();
 	MOCK_METHOD1 ( Connect, bool ( CSphString & ) ); // return true;
 	MOCK_METHOD0 ( Disconnect, void() );
 
@@ -95,6 +95,7 @@ public:
 	{
 		m_tDocInfo.Reset ( m_tSchema.GetRowSize () );
 		m_iPlainFieldsLength = m_tSchema.GetFieldsCount();
+		m_iDocsCounter = -1;
 		return true;
 	}
 
@@ -109,12 +110,13 @@ public:
 		m_dFields.Resize(0);
 		for ( int i=0; i<m_iFields; ++i)
 		{
-			auto pStr = (const char*) m_ppDocs[m_tDocInfo.m_tRowID*m_iFields + i];
+			auto pStr = (const char*) m_ppDocs[m_iDocsCounter*m_iFields + i];
 			m_dFields.Add ( VecTraits_T<const char> (pStr,strlen(pStr)));
 		}
 		return m_dFields;
 	}
 
+	int m_iDocsCounter;
 	int m_iDocCount;
 	int m_iFields;
 	BYTE ** m_ppDocs;
@@ -132,6 +134,7 @@ public:
 	char * m_ppFields[m_iMaxFields];
 	CSphVector<VecTraits_T<const char> > m_dMeasuredFields;
 	int m_dFieldLengths[m_iMaxFields];
+	int	m_iDocsCounter;
 
 	explicit MockDocRandomizer_c ( const CSphSchema & tSchema ) : CSphSource_Document ( "test_doc" )
 	{
@@ -144,13 +147,14 @@ public:
 	BYTE ** NextDocument ( bool & bEOF, CSphString & ) override
 	{
 		bEOF = false;
-		if ( m_tDocInfo.m_tRowID>800 )
+		if ( m_iDocsCounter>800 )
 		{
 			bEOF = true;
 			return nullptr;
 		}
 
-		m_tDocInfo.m_tRowID++;
+		++m_tDocInfo.m_tRowID;
+		++m_iDocsCounter;
 
 		m_tDocInfo.SetAttr ( m_tSchema.GetAttr(0).m_tLocator, m_tDocInfo.m_tRowID+1000 );
 		m_tDocInfo.SetAttr ( m_tSchema.GetAttr(1).m_tLocator, 1313 );
@@ -175,6 +179,7 @@ public:
 	bool IterateStart ( CSphString & ) final
 	{
 		m_tDocInfo.Reset ( m_tSchema.GetRowSize () );
+		m_iDocsCounter = 0;
 		m_iPlainFieldsLength = m_tSchema.GetFieldsCount();
 		return true;
 	}
@@ -205,6 +210,7 @@ class RT : public ::testing::Test
 protected:
 	virtual void SetUp ()
 	{
+		StartGlobalWorkPool ();
 		DeleteIndexFiles ( RT_INDEX_FILE_NAME );
 		TestRTInit();
 		tDictSettings.m_bWordDict = false;
@@ -248,11 +254,10 @@ TEST_P ( RTN, WeightBoundary )
 	tSrcSchema.AddAttr ( tCol, true );
 
 	const char * dFields[] = { "If I were a cat...", "We are the greatest cat" };
-	//SphTestDoc_c * pSrc = new SphTestDoc_c ( tSrcSchema, ( BYTE ** ) dFields, 1, 2 );
-	MockTestDoc_c * pSrc = new MockTestDoc_c ( tSrcSchema, ( BYTE ** ) dFields, 1, 2 );
+	auto * pSrc = new MockTestDoc_c ( tSrcSchema, ( BYTE ** ) dFields, 1, 2 );
 
 	EXPECT_CALL ( *pSrc, Connect ( _ ) ).WillOnce ( Return ( true ) );
-//	EXPECT_CALL ( *pSrc, GetFieldLengths () ).WillOnce ( Return ( pSrc->m_dFieldLengths.Begin () ) );
+	EXPECT_CALL ( *pSrc, GetFieldLengths () ).WillOnce ( Return ( pSrc->m_dFieldLengths.Begin () ) );
 	EXPECT_CALL ( *pSrc, Disconnect () );
 
 	pSrc->SetTokenizer ( pTok );
@@ -355,7 +360,7 @@ TEST_F ( RT, RankerFactors )
 									, 2 );
 
 	EXPECT_CALL ( *pSrc, Connect ( _ ) ).WillOnce ( Return ( true ) );
-//	EXPECT_CALL ( *pSrc, GetFieldLengths () ).Times ( 7 ).WillRepeatedly ( Return ( pSrc->m_dFieldLengths.Begin () ) );
+	EXPECT_CALL ( *pSrc, GetFieldLengths () ).Times ( 7 ).WillRepeatedly ( Return ( pSrc->m_dFieldLengths.Begin () ) );
 	EXPECT_CALL ( *pSrc, Disconnect () );
 
 	pSrc->SetTokenizer ( pTok );
@@ -426,7 +431,7 @@ TEST_F ( RT, RankerFactors )
 		tResult.m_tSchema = *pSorter->GetSchema ();
 		const CSphAttrLocator &tLoc = tResult.m_tSchema.GetAttr ( "pf" )->m_tLocator;
 
-		for ( int iMatch = 0; iMatch<tResult.m_dMatches.GetLength (); iMatch++ )
+		for ( int iMatch = 0; iMatch<tResult.m_dMatches.GetLength (); ++iMatch )
 		{
 			const BYTE * pAttr = (const BYTE *)tResult.m_dMatches[iMatch].GetAttr ( tLoc );
 			ASSERT_TRUE ( pAttr );
@@ -448,7 +453,7 @@ TEST_F ( RT, RankerFactors )
 			ASSERT_EQ ( tUnpacked.max_uniq_qpos, sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_MAX_UNIQ_QPOS ) );
 
 			// field level factors
-			for ( int iField = 0; iField<tUnpacked.num_fields; iField++ )
+			for ( int iField = 0; iField<tUnpacked.num_fields; ++iField )
 			{
 				if ( !tUnpacked.field[iField].hit_count )
 					continue;
@@ -533,7 +538,7 @@ TEST_F ( RT, SendVsMerge )
 	auto pSrc = new MockDocRandomizer_c ( tSrcSchema );
 
 	EXPECT_CALL ( *pSrc, Connect ( _ ) ).WillOnce ( Return ( true ) );
-//	EXPECT_CALL ( *pSrc, GetFieldLengths () ).Times ( 801 ).WillRepeatedly ( Return ( pSrc->m_dFieldLengths ) );
+	EXPECT_CALL ( *pSrc, GetFieldLengths () ).Times ( 801 ).WillRepeatedly ( Return ( pSrc->m_dFieldLengths ) );
 	EXPECT_CALL ( *pSrc, Disconnect () );
 
 	pSrc->SetTokenizer ( pTok );
@@ -565,7 +570,13 @@ TEST_F ( RT, SendVsMerge )
 	tQuery.m_sQuery = "@title cat";
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
 
+	CSphQueryItem & tItem = tQuery.m_dItems.Add ();
+	tItem.m_sExpr = "*";
+	tItem.m_sAlias = "*";
+	tQuery.m_sSelect = "*";
+
 	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema () );
+	tQueueSettings.m_bComputeItems = true;
 	SphQueueRes_t tRes;
 	auto pSorter = sphCreateQueue ( tQueueSettings, tQuery, tResult.m_sError, tRes, nullptr );
 	ASSERT_TRUE ( pSorter );
@@ -580,7 +591,7 @@ TEST_F ( RT, SendVsMerge )
 			break;
 
 		pIndex->AddDocument ( pSrc->GetFields (), pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
-		if ( pSrc->m_tDocInfo.m_tRowID==350 )
+		if ( pSrc->m_iDocsCounter==350 )
 		{
 			pIndex->Commit ( NULL, NULL );
 			EXPECT_TRUE ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, tArgs ) );
@@ -593,6 +604,7 @@ TEST_F ( RT, SendVsMerge )
 
 	tResult.m_tSchema = *pSorter->GetSchema ();
 
+	ASSERT_EQ ( tResult.m_dMatches.GetLength (), 350 );
 	for ( int i = 0; i<tResult.m_dMatches.GetLength (); i++ )
 	{
 		const RowID_t uID = tResult.m_dMatches[i].m_tRowID;

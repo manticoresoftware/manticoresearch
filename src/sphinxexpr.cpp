@@ -5641,7 +5641,7 @@ ISphExpr * ExprParser_t::CreateContainsNode ( const ExprNode_t & tNode )
 		return new Expr_ContainsStrattr_c ( pLat, pLon, dPolyArgs0, bGeoTesselate );
 	}
 
-	if ( dPolyArgs.TestAll ( [&] ( int iArg ) { return IsConst ( &m_dNodes[iArg] ); } ) )
+	if ( dPolyArgs.all_of ( [&] ( int iArg ) { return IsConst ( &m_dNodes[iArg] ); } ) )
 	{
 		// POLY2D(numeric-consts)
 		return new Expr_ContainsConstvec_c ( pLat, pLon, dPolyArgs, m_dNodes.Begin(), bGeoTesselate );

@@ -303,7 +303,7 @@ bool XQParseHelper_c::CheckQuorumProximity ( XQNode_t * pNode )
 	if ( pNode->GetOp()==SPH_QUERY_PROXIMITY && pNode->m_iOpArg<1 )
 		return Error ( "proximity threshold too low (%d)", pNode->m_iOpArg );
 
-	return pNode->m_dChildren.TestAll ( [&] ( XQNode_t * pNode ) { return CheckQuorumProximity ( pNode ); } );
+	return pNode->m_dChildren.all_of ( [&] ( XQNode_t * pNode ) { return CheckQuorumProximity ( pNode ); } );
 }
 
 
@@ -481,7 +481,7 @@ void XQParseHelper_c::FixupNulls ( XQNode_t * pNode )
 		// smth AND null = null.
 	} else if ( pNode->GetOp()==SPH_QUERY_AND )
 	{
-		if ( pNode->m_dChildren.FindFirst (
+		if ( pNode->m_dChildren.any_of (
 			[] ( XQNode_t * pChild ) { return pChild->GetOp ()==SPH_QUERY_NULL; } ) )
 		{
 			pNode->SetOp ( SPH_QUERY_NULL );
@@ -586,7 +586,7 @@ void XQParseHelper_c::DeleteNodesWOFields ( XQNode_t * pNode )
 			CSphVector<XQNode_t *> dChildren;
 			CollectChildren ( pChild, dChildren );
 #ifndef NDEBUG
-			bool bAllEmpty = dChildren.TestAll (
+			bool bAllEmpty = dChildren.all_of (
 				[] ( XQNode_t * pNode ) { return pNode->m_dSpec.m_dFieldMask.TestAll ( false ); } );
 			assert ( pChild->m_dChildren.GetLength()==0 || ( dChildren.GetLength() && bAllEmpty ) );
 #endif

@@ -2136,7 +2136,7 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 	dDocHits.Sort ( CmpDocHitIndex_t() );
 
 	DocID_t uPrev = 0;
-	if ( !dDocHits.FindFirst ( [&] ( const AccumDocHits_t &dDoc ) {
+	if ( !dDocHits.any_of ( [&] ( const AccumDocHits_t &dDoc ) {
 			bool bRes = dDoc.m_tDocID==uPrev;
 			uPrev = dDoc.m_tDocID;
 			return bRes;

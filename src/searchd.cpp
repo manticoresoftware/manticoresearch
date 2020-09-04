@@ -1744,7 +1744,7 @@ struct cSearchResult : public iQueryResult
 
 	bool HasWarnings () const final
 	{
-		return m_dResults.FindFirst ( [] ( const AggrResult_t &dRes ) { return !dRes.m_sWarning.IsEmpty (); } );
+		return m_dResults.any_of ( [] ( const AggrResult_t &dRes ) { return !dRes.m_sWarning.IsEmpty (); } );
 	}
 };
 
@@ -7816,7 +7816,7 @@ protected:
 void UpdateRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const
 {
 	const char * sIndexes = tAgent.m_tDesc.m_sIndexes.cstr();
-	assert ( m_tUpd.m_dAttributes.TestAll ( [&] ( const TypedAttribute_t & tAttr ) { return ( tAttr.m_eType!=SPH_ATTR_INT64SET ); } ) );
+	assert ( m_tUpd.m_dAttributes.all_of ( [&] ( const TypedAttribute_t & tAttr ) { return ( tAttr.m_eType!=SPH_ATTR_INT64SET ); } ) );
 
 	// API header
 	auto tHdr = APIHeader ( tOut, SEARCHD_COMMAND_UPDATE, VER_COMMAND_UPDATE );
@@ -10537,7 +10537,7 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 		return;
 	}
 
-	if ( !dQueries.FindFirst ( [] ( const ExcerptQuery_t & tQuery ) { return tQuery.m_sError.IsEmpty(); } ) )
+	if ( !dQueries.any_of ( [] ( const ExcerptQuery_t & tQuery ) { return tQuery.m_sError.IsEmpty(); } ) )
 	{
 		// just one last error instead of all errors is hopefully ok
 		sError.SetSprintf ( "highlighting failed: %s", sError.cstr() );
@@ -16313,7 +16313,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 			tIdx.m_iAgentQueryTimeoutMs = hIndex.GetMsTimeMs ( "agent_query_timeout");
 	}
 
-	bool bHaveHA = tIdx.m_dAgents.FindFirst ( [] ( MultiAgentDesc_c * ag ) { return ag->IsHA (); } );
+	bool bHaveHA = tIdx.m_dAgents.any_of ( [] ( MultiAgentDesc_c * ag ) { return ag->IsHA (); } );
 
 	// configure ha_strategy
 	if ( bSetHA && !bHaveHA )
@@ -18166,7 +18166,7 @@ static void ConfigureAndPreload ( const CSphConfig & hConf, const StrVec_t & dOp
 			const CSphConfigSection & hIndex = hConf["index"].IterateGet();
 			const char * sIndexName = hConf["index"].IterateGetKey().cstr();
 
-			if ( !dOptIndexes.IsEmpty() && !dOptIndexes.FindFirst ( [&] ( const CSphString &rhs )	{ return rhs.EqN ( sIndexName ); } ) )
+			if ( !dOptIndexes.IsEmpty() && !dOptIndexes.any_of ( [&] ( const CSphString &rhs )	{ return rhs.EqN ( sIndexName ); } ) )
 				continue;
 
 			StrVec_t dWarnings;

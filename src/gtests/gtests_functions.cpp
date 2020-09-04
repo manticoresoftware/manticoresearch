@@ -3002,9 +3002,6 @@ struct NonDefaultCtr_t
 	}
 };
 
-template<typename T>
-using RawVector_T = sph::Vector_T<T, sph::SwapCopy_T<T>, sph::DefaultRelimit, sph::RawStorage_T<T>>;
-
 TEST ( functions, RawVector )
 {
 	iCountCtr = iCountDtr = 0;

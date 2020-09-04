@@ -1067,7 +1067,7 @@ RowidIterator_i * CreateFilteredIterator ( const CSphVector<CSphFilterSettings> 
 	dEnabledIndexes.Sort ( bind ( &SecondaryIndexInfo_t::m_iFilterId ) );
 	ARRAY_FOREACH ( i, dFilters )
 	{
-		if ( !dEnabledIndexes.FindFirst ( [i] ( const SecondaryIndexInfo_t & tInfo ) { return tInfo.m_iFilterId==i; } ) )
+		if ( !dEnabledIndexes.any_of ( [i] ( const SecondaryIndexInfo_t & tInfo ) { return tInfo.m_iFilterId==i; } ) )
 			dModifiedFilters.Add ( dFilters[i] );
 	}
 

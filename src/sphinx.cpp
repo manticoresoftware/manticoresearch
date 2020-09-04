@@ -6948,8 +6948,8 @@ void CSphRsetSchema::SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs )
 			return dInfo.m_tLocator==dAttr.m_tLocator
 				&& dInfo.m_eAttrType==dAttr.m_eAttrType;
 		};
-		bool bFound1 = m_pIndexSchema ? m_pIndexSchema->m_dAttrs.FindFirst ( fComparer ) : false;
-		bool bFound2 = m_dExtraAttrs.FindFirst ( fComparer );
+		bool bFound1 = m_pIndexSchema ? m_pIndexSchema->m_dAttrs.any_of ( fComparer ) : false;
+		bool bFound2 = m_dExtraAttrs.any_of ( fComparer );
 		assert ( bFound1 || bFound2 );
 	}
 #endif

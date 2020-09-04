@@ -1138,7 +1138,7 @@ public:
 	}
 
 	/// return idx of the item pointed by pBuf, or -1
-	inline int Idx ( const T* pBuf )
+	inline int Idx ( const T* pBuf ) const
 	{
 		if ( !pBuf )
 			return -1;
@@ -1240,17 +1240,6 @@ public:
 		return sphBinarySearch ( m_pData, m_pData + m_iCount - 1, tRef );
 	}
 
-	/// generic linear search - 'ARRAY_ANY' replace
-	/// see 'Contains()' below for examlpe of usage.
-	template < typename FILTER >
-	inline bool FindFirst( FILTER&& cond ) const NO_THREAD_SAFETY_ANALYSIS
-	{
-		for ( int i = 0; i<m_iCount; ++i )
-			if ( cond ( m_pData[i] ) )
-				return true;
-		return false;
-	}
-
 	template <typename FILTER >
 	inline int GetFirst( FILTER&& cond ) const NO_THREAD_SAFETY_ANALYSIS
 	{
@@ -1262,7 +1251,7 @@ public:
 
 	/// generic 'ARRAY_ALL'
 	template <typename FILTER>
-	inline bool TestAll( FILTER&& cond ) const NO_THREAD_SAFETY_ANALYSIS
+	inline bool all_of ( FILTER && cond ) const NO_THREAD_SAFETY_ANALYSIS
 	{
 		for ( int i = 0; i<m_iCount; ++i )
 			if ( !cond ( m_pData[i] ) )
@@ -1270,13 +1259,8 @@ public:
 		return true;
 	}
 
-	template <typename FILTER>
-	inline bool all_of ( FILTER && cond ) const NO_THREAD_SAFETY_ANALYSIS
-	{
-		return TestAll(cond);
-	}
-
-
+	/// generic linear search - 'ARRAY_ANY' replace
+	/// see 'Contains()' below for examlpe of usage.
 	template <typename FILTER>
 	inline bool any_of ( FILTER && cond ) const NO_THREAD_SAFETY_ANALYSIS
 	{
@@ -1290,11 +1274,7 @@ public:
 	template <typename FILTER>
 	inline bool none_of ( FILTER && cond ) const NO_THREAD_SAFETY_ANALYSIS
 	{
-		for ( int i = 0; i<m_iCount; ++i )
-			if ( cond ( m_pData[i] ) )
-				return false;
-
-		return true;
+		return !any_of ( cond );
 	}
 
 	/// Apply an action to every member
@@ -1309,14 +1289,14 @@ public:
 	/// generic linear search
 	bool Contains ( T tRef ) const NO_THREAD_SAFETY_ANALYSIS
 	{
-		return FindFirst ( [&] ( const T &v ) { return tRef==v; } );
+		return any_of ( [&] ( const T &v ) { return tRef==v; } );
 	}
 
 	/// generic linear search
 	template < typename FUNCTOR, typename U >
 	bool Contains ( FUNCTOR&& COMP, U tValue ) NO_THREAD_SAFETY_ANALYSIS
 	{
-		return FindFirst ( [&] ( const T &v ) { return COMP.IsEq ( v, tValue ); } );
+		return any_of ( [&] ( const T &v ) { return COMP.IsEq ( v, tValue ); } );
 	}
 
 	/// fill with given value
@@ -2049,6 +2029,12 @@ protected:
 #define ARRAY_FOREACH_COND(_index,_array,_cond) \
 	for ( int _index=0; _index<_array.GetLength() && (_cond); ++_index )
 
+#define ARRAY_CONSTFOREACH(_index,_array) \
+	for ( int _index=0, _bound=_array.GetLength(); _index<_bound; ++_index )
+
+#define ARRAY_CONSTFOREACH_COND(_index,_array,_cond) \
+	for ( int _index=0, _bound=_array.GetLength(); _index<_bound && (_cond); ++_index )
+
 //////////////////////////////////////////////////////////////////////////
 
 /// old well-known vector
@@ -2065,6 +2051,10 @@ using CSphSwapVector = sph::Vector_T < T, sph::SwapCopy_T<T> >;
 /// tight-vector
 template < typename T >
 using CSphTightVector =  CSphVector < T, sph::TightRelimit >;
+
+/// raw vector for non-default-constructibles
+template<typename T>
+using RawVector_T = sph::Vector_T<T, sph::SwapCopy_T<T>, sph::DefaultRelimit, sph::RawStorage_T<T>>;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -5134,7 +5124,7 @@ public:
 		if ( !pIndex || *pIndex<0 )
 			return nullptr;
 
-		for ( int64_t i = *pIndex; i < m_iSize; i++ )
+		for ( int64_t i = *pIndex; i < m_iSize; ++i )
 			if ( m_pHash[i].m_uState==Entry_e::USED )
 			{
 				*pIndex = i+1;

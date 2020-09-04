@@ -1275,9 +1275,6 @@ struct PQMergeIterator_t
 	}
 };
 
-template<typename T>
-using RawVector_T = sph::Vector_T<T, sph::SwapCopy_T<T>, sph::DefaultRelimit, sph::RawStorage_T<T>>;
-
 // merge matches from one or many contexts into one result
 void PercolateMergeResults ( const VecTraits_T<PQMatchContextResult_t *> & dMatches, PercolateMatchResult_t & tRes )
 {
@@ -1790,7 +1787,7 @@ int PercolateIndex_c::ReplayDeleteQueries ( const VecTraits_T<int64_t>& dQueries
 	ScopedMutex_t tLockHash {m_tLockHash};
 
 	// fast reject if nothing to delete
-	if ( !dQueries.FindFirst ( [this] (int64_t iQuery) REQUIRES(m_tLockHash) { return m_hQueries.Find ( iQuery ); }))
+	if ( !dQueries.any_of ( [this] (int64_t iQuery) REQUIRES(m_tLockHash) { return m_hQueries.Find ( iQuery ); }))
 		return 0;
 
 	auto pNewVec = MakeClone ();

@@ -6448,8 +6448,7 @@ bool QueueCreator_c::MaybeAddExpressionsFromSelectList ()
 	// expressions from select items
 	if ( m_tSettings.m_bComputeItems )
 	{
-		if ( !m_tQuery.m_dItems.TestAll (
-				[&] ( const CSphQueryItem & v ) { return ParseQueryItem ( v ); } ))
+		if ( !m_tQuery.m_dItems.all_of ( [&] ( const CSphQueryItem & v ) { return ParseQueryItem ( v ); } ))
 			return false;
 
 		// add expressions for stored fields
@@ -6846,11 +6845,11 @@ bool QueueCreator_c::AddGroupbyStuff ()
 	};
 
 	bool bHasImplicitGrouping = m_tQuery.m_sGroupBy.IsEmpty ()
-			? m_tQuery.m_dItems.FindFirst ( fnIsImplicit ) : false;
+			? m_tQuery.m_dItems.any_of ( fnIsImplicit ) : false;
 
 	// count(*) and distinct wo group by at main query should keep implicit flag
 	if ( bHasImplicitGrouping && m_bHeadWOGroup )
-		m_bHeadWOGroup = !m_tQuery.m_dRefItems.FindFirst ( fnIsImplicit );
+		m_bHeadWOGroup = !m_tQuery.m_dRefItems.any_of ( fnIsImplicit );
 
 	if ( !SetupGroupbySettings ( bHasImplicitGrouping ))
 		return false;
@@ -7037,9 +7036,6 @@ ISphMatchSorter * sphCreateQueue ( const SphQueueSettings_t & tQueue, const CSph
 
 	return CreateQueue ( tCreator, tRes );
 }
-
-template<typename T>
-using RawVector_T = sph::Vector_T<T, sph::SwapCopy_T<T>, sph::DefaultRelimit, sph::RawStorage_T<T>>;
 
 void CreateMultiQueue ( RawVector_T<QueueCreator_c>& dCreators, const SphQueueSettings_t & tQueue,
 		const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter*> & dSorters,

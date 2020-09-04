@@ -264,7 +264,7 @@ void SnippetsDocIndex_c::ParseQuery ( ISphTokenizer * pTokenizer, CSphDict * pDi
 		m_dQposToWeight[m_dStars[i].m_iQueryPos] = m_dStars[i].m_iWeight;
 
 #ifndef NDEBUG
-	bool bFilled = m_dQposToWeight.FindFirst ( [] ( int iWeight ) { return -1==iWeight; } );
+	bool bFilled = m_dQposToWeight.any_of ( [] ( int iWeight ) { return -1==iWeight; } );
 	assert ( !bFilled );
 #endif
 

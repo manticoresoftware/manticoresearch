@@ -1084,8 +1084,8 @@ public:
 	bool				EarlyReject ( CSphQueryContext * , CSphMatch & ) const final { return false; }
 	const CSphSourceStats &	GetStats () const final { return g_tTmpDummyStat; }
 	void				GetStatus ( CSphIndexStatus* ) const final {}
-	bool				MultiQuery ( const CSphQuery * , CSphQueryResult * , const VecTraits_T<ISphMatchSorter *> & , const CSphMultiQueryArgs & ) const final { return false; }
-	bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult ** , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const final { return false; }
+	bool				MultiQuery ( CSphQueryResult & , const CSphQuery & , const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const final { return false; }
+	bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult** , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const final { return false; }
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const final ;
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const final { return true; }
 	int					UpdateAttributes ( const CSphAttrUpdate & , int , bool &, CSphString & , CSphString & ) final { return -1; }
@@ -1921,8 +1921,8 @@ public:
 	void				Unlock () final;
 	void				PostSetup() final {}
 
-	bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const final;
-	bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const final;
+	bool				MultiQuery ( CSphQueryResult & pResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const final;
+	bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const final;
 	 bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const final;
 	template <class Qword> bool		DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError ) const;
 	bool 				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const final;
@@ -2023,18 +2023,18 @@ private:
 	CSphString					GetIndexFileName ( const char * szExt ) const;
 	void						GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * pFilenameBuilder ) const override;
 
-	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult,
+	bool						ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult& tResult,
 									const VecTraits_T<ISphMatchSorter*>& dSorters, const XQQuery_t& tXQ, CSphDict* pDict,
 									const CSphMultiQueryArgs& tArgs, CSphQueryNodeCache* pNodeCache ) const;
 
-	void						ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResult * pResult,
+	void						ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResult & tResult,
 									const VecTraits_T<ISphMatchSorter *> & dSorters, CSphMatch & tMatch, int iCutoff,
 									bool bReverse, bool bRandomize, int iIndexWeight, int64_t tmMaxTimer ) const;
-	bool						MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult,
+	bool						MultiScan ( CSphQueryResult & tResult, const CSphQuery& dQuery,
 									const VecTraits_T<ISphMatchSorter *>& dSorters, const CSphMultiQueryArgs& tArgs ) const;
 
 	template<bool USE_KLIST, bool RANDOMIZE, bool USE_FACTORS>
-	void						MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, const VecTraits_T<ISphMatchSorter *>& dSorters, ISphRanker * pRanker, int iTag, int iIndexWeight ) const;
+	void						MatchExtended ( CSphQueryContext & tCtx, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *>& dSorters, ISphRanker * pRanker, int iTag, int iIndexWeight ) const;
 
 	const CSphRowitem *			FindDocinfo ( DocID_t tDocID ) const;
 
@@ -2056,7 +2056,7 @@ private:
 	mutable HashCollection_c	m_dHashes;
 
 	bool						JuggleFile ( ESphExt eExt, CSphString & sError, bool bNeedOrigin=true ) const;
-	XQNode_t *					ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta * pResult, CSphScopedPayload * pPayloads, DWORD uQueryDebugFlags ) const;
+	XQNode_t *					ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta & tMeta, CSphScopedPayload * pPayloads, DWORD uQueryDebugFlags ) const;
 	void						PopulateHistograms();
 
 	static void					CreateRowMaps ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, CSphVector<RowID_t> & dSrcRowMap, CSphVector<RowID_t> & dDstRowMap, bool bSupressDstDocids );
@@ -12799,13 +12799,13 @@ void CSphQueryContext::SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * 
 
 
 template<bool USE_KLIST, bool RANDOMIZE, bool USE_FACTORS>
-void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery,
+void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQuery,
 		const VecTraits_T<ISphMatchSorter *> & dSorters, ISphRanker * pRanker, int iTag, int iIndexWeight ) const
 {
-	QueryProfile_t * pProfile = pCtx->m_pProfile;
+	QueryProfile_t * pProfile = tCtx.m_pProfile;
 	CSphScopedProfile tProf (pProfile, SPH_QSTATE_UNKNOWN);
 
-	int iCutoff = pQuery->m_iCutoff;
+	int iCutoff = tQuery.m_iCutoff;
 	if ( iCutoff<=0 )
 		iCutoff = -1;
 
@@ -12832,11 +12832,11 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 			}
 
 			tMatch.m_iWeight *= iIndexWeight;
-			pCtx->CalcSort ( tMatch );
+			tCtx.CalcSort ( tMatch );
 
-			if ( pCtx->m_pWeightFilter && !pCtx->m_pWeightFilter->Eval ( tMatch ) )
+			if ( tCtx.m_pWeightFilter && !tCtx.m_pWeightFilter->Eval ( tMatch ) )
 			{
-				pCtx->FreeDataSort ( tMatch );
+				tCtx.FreeDataSort ( tMatch );
 				continue;
 			}
 
@@ -12855,7 +12855,7 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 						bRand = true;
 						tMatch.m_iWeight = ( sphRand() & 0xffff ) * iIndexWeight;
 
-						if ( pCtx->m_pWeightFilter && !pCtx->m_pWeightFilter->Eval ( tMatch ) )
+						if ( tCtx.m_pWeightFilter && !tCtx.m_pWeightFilter->Eval ( tMatch ) )
 							break;
 					}
 				}
@@ -12869,8 +12869,8 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 				}
 			}
 
-			pCtx->FreeDataFilter ( tMatch );
-			pCtx->FreeDataSort ( tMatch );
+			tCtx.FreeDataFilter ( tMatch );
+			tCtx.FreeDataSort ( tMatch );
 
 			if ( bNewMatch )
 				if ( --iCutoff==0 )
@@ -13066,10 +13066,11 @@ private:
 
 
 template <typename T>
-void Fullscan ( T & tIterator, const CSphQueryContext & tCtx, CSphQueryResult * pResult,
+void Fullscan ( T & tIterator, const CSphQueryContext & tCtx, CSphQueryResult & tResult,
 		const VecTraits_T<ISphMatchSorter *> & dSorters, CSphMatch & tMatch, int iCutoff, bool bRandomize,
 		int iIndexWeight, int64_t tmMaxTimer, bool & bStop )
 {
+	auto& tMeta = tResult;
 	const CSphRowitem * pRow;
 	while ( !!(pRow=tIterator.GetNextRow()) )
 	{
@@ -13107,20 +13108,21 @@ void Fullscan ( T & tIterator, const CSphQueryContext & tCtx, CSphQueryResult * 
 		// handle timer
 		if ( tmMaxTimer && sph::TimeExceeded ( tmMaxTimer ) )
 		{
-			pResult->m_sWarning = "query time exceeded max_query_time";
+			tMeta.m_sWarning = "query time exceeded max_query_time";
 			bStop = true;
 			break;
 		}
 	}
 
-	pResult->m_tStats.m_iFetchedDocs = tIterator.GetNumProcessed();
+	tMeta.m_tStats.m_iFetchedDocs = tIterator.GetNumProcessed();
 }
 
 
-void CSphIndex_VLN::ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResult * pResult,
+void CSphIndex_VLN::ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResult & tResult,
 		const VecTraits_T<ISphMatchSorter *>& dSorters, CSphMatch & tMatch, int iCutoff, bool bReverse, bool bRandomize,
 		int iIndexWeight, int64_t tmMaxTimer ) const
 {
+	auto& tMeta = tResult;
 	int iStride = m_tSchema.GetRowSize();
 	int64_t iStart = bReverse ? m_iDocinfoIndex-1 : 0;
 	int64_t iEnd = bReverse ? -1 : m_iDocinfoIndex;
@@ -13152,7 +13154,7 @@ void CSphIndex_VLN::ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResul
 			// kinda fastpath
 			for ( const DWORD * pDocinfo=pBlockStart; pDocinfo!=pBlockEnd; pDocinfo+=iDocinfoStep, tMatch.m_tRowID+=iRowIDStep )
 			{
-				pResult->m_tStats.m_iFetchedDocs++;
+				++tMeta.m_tStats.m_iFetchedDocs;
 
 				if ( m_tDeadRowMap.IsSet ( tMatch.m_tRowID ) )
 					continue;
@@ -13174,7 +13176,7 @@ void CSphIndex_VLN::ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResul
 			RowIterator_c tIt ( pBlockStart, pBlockEnd, tMatch.m_tRowID, iStride, bReverse, m_tDeadRowMap );
 
 			bool bStop = false;
-			Fullscan ( tIt, tCtx, pResult, dSorters, tMatch, iCutoff, bRandomize, iIndexWeight, tmMaxTimer, bStop );
+			Fullscan ( tIt, tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, iIndexWeight, tmMaxTimer, bStop );
 
 			if ( bStop || !iCutoff )
 				break;
@@ -13183,31 +13185,32 @@ void CSphIndex_VLN::ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResul
 }
 
 
-bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult,
+bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & dQuery,
 		const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const
 {
 	assert ( tArgs.m_iTag>=0 );
+	auto& tMeta = tResult;
 
 	// check if index is ready
 	if ( !m_bPassedAlloc )
 	{
-		pResult->m_sError = "index not preread";
+		tMeta.m_sError = "index not preread";
 		return false;
 	}
 
 	// check if index supports scans
 	if ( !m_tSchema.GetAttrsCount() )
 	{
-		pResult->m_sError = "need attributes to run fullscan";
+		tMeta.m_sError = "need attributes to run fullscan";
 		return false;
 	}
 
 	// we count documents only (before filters)
-	if ( pQuery->m_iMaxPredictedMsec )
-		pResult->m_bHasPrediction = true;
+	if ( dQuery.m_iMaxPredictedMsec )
+		tMeta.m_bHasPrediction = true;
 
 	if ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
-		pResult->m_sWarning.SetSprintf ( "packedfactors() will not work with a fullscan; you need to specify a query" );
+		tMeta.m_sWarning.SetSprintf ( "packedfactors() will not work with a fullscan; you need to specify a query" );
 
 	// check if index has data
 	if ( m_bIsEmpty || m_iDocinfo<=0 || m_tAttr.IsEmpty() )
@@ -13218,10 +13221,10 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	int64_t tmCpuQueryStart = sphTaskCpuTimer();
 	int64_t tmMaxTimer = 0;
 	sph::MiniTimer_c dTimerGuard;
-	if ( pQuery->m_uMaxQueryMsec>0 )
-		tmMaxTimer = dTimerGuard.MiniTimerEngage ( pQuery->m_uMaxQueryMsec ); // max_query_time
+	if ( dQuery.m_uMaxQueryMsec>0 )
+		tmMaxTimer = dTimerGuard.MiniTimerEngage ( dQuery.m_uMaxQueryMsec ); // max_query_time
 
-	ScopedThreadPriority_c tPrio ( pQuery->m_bLowPriority );
+	ScopedThreadPriority_c tPrio ( dQuery.m_bLowPriority );
 
 	// select the sorter with max schema
 	int iMaxSchemaIndex = GetMaxSchemaIndexAndMatchCapacity ( dSorters ).first;
@@ -13229,8 +13232,8 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	auto dSorterSchemas = SorterSchemas ( dSorters, iMaxSchemaIndex);
 
 	// setup calculations and result schema
-	CSphQueryContext tCtx ( *pQuery );
-	if ( !tCtx.SetupCalc ( pResult, tMaxSorterSchema, m_tSchema, m_tBlobAttrs.GetWritePtr(), dSorterSchemas ) )
+	CSphQueryContext tCtx ( dQuery );
+	if ( !tCtx.SetupCalc ( tMeta, tMaxSorterSchema, m_tSchema, m_tBlobAttrs.GetWritePtr(), dSorterSchemas ) )
 		return false;
 
 	// set blob pool for string on_sort expression fix up
@@ -13238,15 +13241,15 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 	// setup filters
 	CreateFilterContext_t tFlx;
-	tFlx.m_pFilters = &pQuery->m_dFilters;
-	tFlx.m_pFilterTree = &pQuery->m_dFilterTree;
+	tFlx.m_pFilters = &dQuery.m_dFilters;
+	tFlx.m_pFilterTree = &dQuery.m_dFilterTree;
 	tFlx.m_pSchema = &tMaxSorterSchema;
 	tFlx.m_pBlobPool = m_tBlobAttrs.GetWritePtr ();
-	tFlx.m_eCollation = pQuery->m_eCollation;
+	tFlx.m_eCollation = dQuery.m_eCollation;
 	tFlx.m_bScan = true;
 	tFlx.m_pHistograms = m_pHistograms;
 
-	if ( !tCtx.CreateFilters ( tFlx, pResult->m_sError, pResult->m_sWarning ) )
+	if ( !tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning ) )
 			return false;
 
 	int iStride = m_tSchema.GetRowSize();
@@ -13254,13 +13257,13 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	// check if we can early reject the whole index
 	if ( tCtx.m_pFilter && m_iDocinfoIndex )
 	{
-		DWORD * pMinEntry = const_cast<DWORD*> ( &m_pDocinfoIndex [ m_iDocinfoIndex*iStride*2 ] );
-		DWORD * pMaxEntry = pMinEntry + iStride;
+		auto * pMinEntry = const_cast<DWORD*> ( &m_pDocinfoIndex [ m_iDocinfoIndex*iStride*2 ] );
+		auto * pMaxEntry = pMinEntry + iStride;
 
 		if ( !tCtx.m_pFilter->EvalBlock ( pMinEntry, pMaxEntry ) )
 		{
-			pResult->m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
-			pResult->m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
+			tMeta.m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
+			tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 			return true;
 		}
 	}
@@ -13280,33 +13283,33 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	// Does it intended?
 	tMatch.m_iTag = tCtx.m_dCalcFinal.GetLength() ? -1 : tArgs.m_iTag;
 
-	SwitchProfile ( pResult->m_pProfile, SPH_QSTATE_FULLSCAN );
+	SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_FULLSCAN );
 
 	// run full scan with block and row filtering for everything else
-	bool bReverse = pQuery->m_bReverseScan; // shortcut
-	int iCutoff = ( pQuery->m_iCutoff<=0 ) ? -1 : pQuery->m_iCutoff;
+	bool bReverse = dQuery.m_bReverseScan; // shortcut
+	int iCutoff = ( dQuery.m_iCutoff<=0 ) ? -1 : dQuery.m_iCutoff;
 
 	// we don't modify the original filters because iterators may use some data from them (to avoid copying)
 	CSphVector<CSphFilterSettings> dModifiedFilters;
 	RowidIterator_i * pIterator = nullptr;
 	if ( m_pHistograms )
-		pIterator = CreateFilteredIterator ( pQuery->m_dFilters, dModifiedFilters, pQuery->m_dFilterTree, pQuery->m_dIndexHints, *m_pHistograms, m_tDocidLookup.GetWritePtr() );
+		pIterator = CreateFilteredIterator ( dQuery.m_dFilters, dModifiedFilters, dQuery.m_dFilterTree, dQuery.m_dIndexHints, *m_pHistograms, m_tDocidLookup.GetWritePtr() );
 
 	if ( pIterator )
 	{
 		// one or several filters got replaced by an iterator, need to re-create the remaining filters
 		SafeDelete ( tCtx.m_pFilter );
 		tFlx.m_pFilters = &dModifiedFilters;
-		tCtx.CreateFilters ( tFlx, pResult->m_sError, pResult->m_sWarning );
+		tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning );
 
 		bool bStop;
 		RowIteratorAlive_c tIt ( pIterator, m_tAttr.GetWritePtr(), iStride, m_tDeadRowMap );
-		Fullscan ( tIt, tCtx, pResult, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer, bStop );
+		Fullscan ( tIt, tCtx, tMeta, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer, bStop );
 	}
 	else
-		ScanByBlocks ( tCtx, pResult, dSorters, tMatch, iCutoff, bReverse, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer );
+		ScanByBlocks ( tCtx, tMeta, dSorters, tMatch, iCutoff, bReverse, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer );
 
-	SwitchProfile ( pResult->m_pProfile, SPH_QSTATE_FINALIZE );
+	SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_FINALIZE );
 
 	// do final expression calculations
 	if ( tCtx.m_dCalcFinal.GetLength() )
@@ -13317,15 +13320,15 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 	if ( tArgs.m_bModifySorterSchemas )
 	{
-		SwitchProfile ( pResult->m_pProfile, SPH_QSTATE_DYNAMIC );
+		SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_DYNAMIC );
 		PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetWritePtr() );
 	}
 
 	// done
-	pResult->m_pBlobPool = m_tBlobAttrs.GetWritePtr();
-	pResult->m_pDocstore = m_pDocstore.Ptr() ? this : nullptr;
-	pResult->m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
-	pResult->m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
+	tResult.m_pBlobPool = m_tBlobAttrs.GetWritePtr();
+	tResult.m_pDocstore = m_pDocstore.Ptr() ? this : nullptr;
+	tMeta.m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
+	tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 
 	return true;
 }
@@ -14284,7 +14287,7 @@ void CSphQueryContext::ResetFilters()
 	m_dUserVals.Reset();
 }
 
-void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sWarning )
+void CSphQueryContext::BindWeights ( const CSphQuery & tQuery, const CSphSchema & tSchema, CSphString & sWarning )
 {
 	const int HEAVY_FIELDS = SPH_MAX_FIELDS;
 
@@ -14295,21 +14298,21 @@ void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema 
 
 	// name-bound weights
 	CSphString sFieldsNotFound;
-	if ( pQuery->m_dFieldWeights.GetLength() )
+	if ( !tQuery.m_dFieldWeights.IsEmpty() )
 	{
-		ARRAY_FOREACH ( i, pQuery->m_dFieldWeights )
+		for ( auto& tWeight : tQuery.m_dFieldWeights )
 		{
-			int j = tSchema.GetFieldIndex ( pQuery->m_dFieldWeights[i].first.cstr() );
+			int j = tSchema.GetFieldIndex ( tWeight.first.cstr() );
 			if ( j<0 )
 			{
 				if ( sFieldsNotFound.IsEmpty() )
-					sFieldsNotFound = pQuery->m_dFieldWeights[i].first;
+					sFieldsNotFound = tWeight.first;
 				else
-					sFieldsNotFound.SetSprintf ( "%s %s", sFieldsNotFound.cstr(), pQuery->m_dFieldWeights[i].first.cstr() );
+					sFieldsNotFound.SetSprintf ( "%s %s", sFieldsNotFound.cstr(), tWeight.first.cstr() );
 			}
 
 			if ( j>=0 && j<HEAVY_FIELDS )
-				m_dWeights[j] = pQuery->m_dFieldWeights[i].second;
+				m_dWeights[j] = tWeight.second;
 		}
 
 		if ( !sFieldsNotFound.IsEmpty() )
@@ -14319,10 +14322,10 @@ void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema 
 	}
 
 	// order-bound weights
-	if ( pQuery->m_dWeights.GetLength() )
+	if ( !tQuery.m_dWeights.IsEmpty() )
 	{
-		for ( int i=0; i<Min ( m_iWeights, pQuery->m_dWeights.GetLength() ); i++ )
-			m_dWeights[i] = (int)pQuery->m_dWeights[i];
+		for ( int i=0, iLim=Min ( m_iWeights, tQuery.m_dWeights.GetLength() ); i<iLim; ++i )
+			m_dWeights[i] = (int) tQuery.m_dWeights[i];
 	}
 }
 
@@ -14340,16 +14343,17 @@ static ESphEvalStage GetEarliestStage ( ESphEvalStage eStage, const CSphColumnIn
 	return eStage;
 }
 
-bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema & tInSchema,	const CSphSchema & tSchema, const BYTE * pBlobPool, const CSphVector<const ISphSchema *> & dInSchemas )
+bool CSphQueryContext::SetupCalc ( CSphQueryResult & tResult, const ISphSchema & tInSchema,	const CSphSchema & tSchema, const BYTE * pBlobPool, const CSphVector<const ISphSchema *> & dInSchemas )
 {
 	m_dCalcFilter.Resize ( 0 );
 	m_dCalcSort.Resize ( 0 );
 	m_dCalcFinal.Resize ( 0 );
+	auto& tMeta = tResult;
 
 	// quickly verify that all my real attributes can be stashed there
 	if ( tInSchema.GetAttrsCount() < tSchema.GetAttrsCount() )
 	{
-		pResult->m_sError.SetSprintf ( "INTERNAL ERROR: incoming-schema mismatch (incount=%d, mycount=%d)",
+		tMeta.m_sError.SetSprintf ( "INTERNAL ERROR: incoming-schema mismatch (incount=%d, mycount=%d)",
 			tInSchema.GetAttrsCount(), tSchema.GetAttrsCount() );
 		return false;
 	}
@@ -14372,7 +14376,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 				const CSphColumnInfo * pMy = tSchema.GetAttr ( tIn.m_sName.cstr() );
 				if ( !pMy )
 				{
-					pResult->m_sError.SetSprintf ( "INTERNAL ERROR: incoming-schema attr missing from index-schema (in=%s)",
+					tMeta.m_sError.SetSprintf ( "INTERNAL ERROR: incoming-schema attr missing from index-schema (in=%s)",
 						sphDumpAttr(tIn).cstr() );
 					return false;
 				}
@@ -14381,7 +14385,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 				if (!( tIn==*pMy ))
 				{
 					assert ( 0 );
-					pResult->m_sError.SetSprintf ( "INTERNAL ERROR: incoming-schema mismatch (in=%s, my=%s)",
+					tMeta.m_sError.SetSprintf ( "INTERNAL ERROR: incoming-schema mismatch (in=%s, my=%s)",
 						sphDumpAttr(tIn).cstr(), sphDumpAttr(*pMy).cstr() );
 					return false;
 				}
@@ -14396,7 +14400,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 				ISphExprRefPtr_c pExpr { tIn.m_pExpr };
 				if ( !pExpr )
 				{
-					pResult->m_sError.SetSprintf ( "INTERNAL ERROR: incoming-schema expression missing evaluator (stage=%d, in=%s)",
+					tMeta.m_sError.SetSprintf ( "INTERNAL ERROR: incoming-schema expression missing evaluator (stage=%d, in=%s)",
 						(int)eStage, sphDumpAttr(tIn).cstr() );
 					return false;
 				}
@@ -14425,7 +14429,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 				break;
 
 			default:
-				pResult->m_sError.SetSprintf ( "INTERNAL ERROR: unhandled eval stage=%d", (int)eStage );
+				tMeta.m_sError.SetSprintf ( "INTERNAL ERROR: unhandled eval stage=%d", (int)eStage );
 				return false;
 		}
 	}
@@ -15364,7 +15368,7 @@ bool sphExpandGetWords ( const char * sWord, const ExpansionContext_t & tCtx, IS
 	return true;
 }
 
-XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta * pResult, CSphScopedPayload * pPayloads, DWORD uQueryDebugFlags ) const
+XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta & tMeta, CSphScopedPayload * pPayloads, DWORD uQueryDebugFlags ) const
 {
 	if ( !pNode || !m_pDict->GetSettings().m_bWordDict
 			|| ( m_tSettings.GetMinPrefixLen ( m_pDict->GetSettings().m_bWordDict )<=0 && m_tSettings.m_iMinInfixLen<=0 ) )
@@ -15375,7 +15379,7 @@ XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta *
 
 	ExpansionContext_t tCtx;
 	tCtx.m_pWordlist = &m_tWordlist;
-	tCtx.m_pResult = pResult;
+	tCtx.m_pResult = &tMeta;
 	tCtx.m_iMinPrefixLen = m_tSettings.GetMinPrefixLen ( m_pDict->GetSettings().m_bWordDict );
 	tCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
 	tCtx.m_iExpansionLimit = m_iExpansionLimit;
@@ -15694,10 +15698,11 @@ void sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & t
 }
 
 /// one regular query vs many sorters (like facets, or similar for common-tree optimization)
-bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult,
-	const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs ) const
+bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery,
+		const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs ) const
 {
-	QueryProfile_t * pProfile = pResult->m_pProfile;
+	auto& tMeta = tResult;
+	QueryProfile_t * pProfile = tMeta.m_pProfile;
 //	sphSleepMsec(50); // test delay
 
 	MEMORY ( MEM_DISK_QUERY );
@@ -15714,12 +15719,12 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	// non-random at the start, random at the end
 	dSorters.Sort ( CmpPSortersByRandom_fn() );
 
-	const QueryParser_i * pQueryParser = pQuery->m_pQueryParser;
+	const QueryParser_i * pQueryParser = tQuery.m_pQueryParser;
 	assert ( pQueryParser );
 
 	// fast path for scans
-	if ( pQueryParser->IsFullscan ( *pQuery ) )
-		return MultiScan ( pQuery, pResult, dSorters, tArgs );
+	if ( pQueryParser->IsFullscan ( tQuery ) )
+		return MultiScan ( tResult, tQuery, dSorters, tArgs );
 
 	SwitchProfile ( pProfile, SPH_QSTATE_DICT_SETUP );
 
@@ -15728,7 +15733,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	SetupExactDict ( pDict );
 
 	CSphVector<BYTE> dFiltered;
-	const BYTE * sModifiedQuery = (BYTE *)pQuery->m_sQuery.cstr();
+	const BYTE * sModifiedQuery = (BYTE *) tQuery.m_sQuery.cstr();
 
 	FieldFilterRefPtr_c pFieldFilter;
 	if ( m_pFieldFilter && sModifiedQuery )
@@ -15742,26 +15747,27 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	SwitchProfile ( pProfile, SPH_QSTATE_PARSE );
 
 	XQQuery_t tParsed;
-	if ( !pQueryParser->ParseQuery ( tParsed, (const char*)sModifiedQuery, pQuery, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings ) )
+	if ( !pQueryParser->ParseQuery ( tParsed, (const char*)sModifiedQuery, &tQuery, m_pQueryTokenizer,
+								  m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings ) )
 	{
 		// FIXME? might wanna reset profile to unknown state
-		pResult->m_sError = tParsed.m_sParseError;
+		tMeta.m_sError = tParsed.m_sParseError;
 		return false;
 	}
 
 	// check again for fullscan
 	if ( pQueryParser->IsFullscan ( tParsed ) )
-		return MultiScan ( pQuery, pResult, dSorters, tArgs );
+		return MultiScan ( tResult, tQuery, dSorters, tArgs );
 
 	if ( !tParsed.m_sParseWarning.IsEmpty() )
-		pResult->m_sWarning = tParsed.m_sParseWarning;
+		tMeta.m_sWarning = tParsed.m_sParseWarning;
 
 	// transform query if needed (quorum transform, etc.)
 	SwitchProfile ( pProfile, SPH_QSTATE_TRANSFORMS );
-	sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, pQuery->m_bSimplify, this );
+	sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, tQuery.m_bSimplify, this );
 
 	bool bWordDict = pDict->GetSettings().m_bWordDict;
-	int iExpandKeywords = ExpandKeywords ( m_iExpandKeywords, pQuery->m_eExpandKeywords, m_tSettings, bWordDict );
+	int iExpandKeywords = ExpandKeywords ( m_iExpandKeywords, tQuery.m_eExpandKeywords, m_tSettings, bWordDict );
 	if ( iExpandKeywords!=KWE_DISABLED )
 	{
 		sphQueryExpandKeywords ( &tParsed.m_pRoot, m_tSettings, iExpandKeywords, bWordDict );
@@ -15774,12 +15780,12 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 
 	// expanding prefix in word dictionary case
 	CSphScopedPayload tPayloads;
-	XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, pResult, &tPayloads, pQuery->m_uDebugFlags );
+	XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, tMeta, &tPayloads, tQuery.m_uDebugFlags );
 	if ( !pPrefixed )
 		return false;
 	tParsed.m_pRoot = pPrefixed;
 
-	auto iStackNeed = ConsiderStack ( tParsed.m_pRoot, pResult->m_sError );
+	auto iStackNeed = ConsiderStack ( tParsed.m_pRoot, tMeta.m_sError );
 	if ( !iStackNeed  )
 		return false;
 
@@ -15790,10 +15796,10 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	if ( m_iMaxCachedDocs && m_iMaxCachedHits )
 		iCommonSubtrees = sphMarkCommonSubtrees ( 1, &tParsed );
 
-	tParsed.m_bNeedSZlist = pQuery->m_bZSlist;
+	tParsed.m_bNeedSZlist = tQuery.m_bZSlist;
 
 	CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
-	bool bResult = ParsedMultiQuery ( pQuery, pResult, dSorters, tParsed, pDict, tArgs, &tNodeCache );
+	bool bResult = ParsedMultiQuery ( tQuery, tResult, dSorters, tParsed, pDict, tArgs, &tNodeCache );
 
 	if ( tArgs.m_bModifySorterSchemas )
 	{
@@ -15808,17 +15814,15 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 
 /// many regular queries with one sorter attached to each query.
 /// returns true if at least one query succeeded. The failed queries indicated with pResult->m_iMultiplier==-1
-bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
-	CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
+bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult** ppResults,
+		ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
 {
 	// ensure we have multiple queries
-	assert ( ppResults );
 	if ( iQueries==1 )
-		return MultiQuery ( pQueries, ppResults[0], { ppSorters, 1}, tArgs );
+		return MultiQuery ( *ppResults[0], pQueries[0], { ppSorters, 1}, tArgs );
 
 	MEMORY ( MEM_DISK_QUERYEX );
 
-	assert ( pQueries );
 	assert ( ppSorters );
 
 	DictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
@@ -15833,30 +15837,31 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 	bool bWordDict = pDict->GetSettings().m_bWordDict;
 	for ( int i=0; i<iQueries; ++i )
 	{
+		auto& tMeta = *ppResults[i];
 		// nothing to do without a sorter
 		if ( !ppSorters[i] )
 		{
-			ppResults[i]->m_iMultiplier = -1; ///< show that this particular query failed
+			tMeta.m_iMultiplier = -1; ///< show that this particular query failed
 			continue;
 		}
 
 		// fast path for scans
 		if ( pQueries[i].m_sQuery.IsEmpty() )
 		{
-			if ( MultiScan ( pQueries + i, ppResults[i], { ppSorters+i, 1}, tArgs ) )
+			if ( MultiScan ( *ppResults[i], pQueries[i], { ppSorters+i, 1 }, tArgs ) )
 				bResultScan = true;
 			else
-				ppResults[i]->m_iMultiplier = -1; ///< show that this particular query failed
+				tMeta.m_iMultiplier = -1; ///< show that this particular query failed
 			continue;
 		}
 
-		ppResults[i]->m_tIOStats.Start();
+		tMeta.m_tIOStats.Start();
 
 		// parse query
 		const QueryParser_i * pQueryParser = pQueries[i].m_pQueryParser;
 		assert ( pQueryParser );
 
-		if ( pQueryParser->ParseQuery ( dXQ[i], pQueries[i].m_sQuery.cstr(), &(pQueries[i]), m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings ) )
+		if ( pQueryParser->ParseQuery ( dXQ[i], pQueries[i].m_sQuery.cstr(), &pQueries[i], m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings ) )
 		{
 			// transform query if needed (quorum transform, keyword expansion, etc.)
 			sphTransformExtendedQuery ( &dXQ[i].m_pRoot, m_tSettings, pQueries[i].m_bSimplify, this );
@@ -15873,33 +15878,33 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 				TransformAotFilter ( dXQ[i].m_pRoot, pDict->GetWordforms(), m_tSettings );
 
 			// expanding prefix in word dictionary case
-			XQNode_t * pPrefixed = ExpandPrefix ( dXQ[i].m_pRoot, ppResults[i], &tPayloads, pQueries[i].m_uDebugFlags );
+			XQNode_t * pPrefixed = ExpandPrefix ( dXQ[i].m_pRoot, tMeta, &tPayloads, pQueries[i].m_uDebugFlags );
 			if ( pPrefixed )
 			{
 				dXQ[i].m_pRoot = pPrefixed;
-				iStackNeed = ConsiderStack ( dXQ[i].m_pRoot, ppResults[i]->m_sError );
+				iStackNeed = ConsiderStack ( dXQ[i].m_pRoot, tMeta.m_sError );
 				if ( iStackNeed!=0 )
 				{
 					bResult = true;
 				} else
 				{
-					ppResults[i]->m_iMultiplier = -1;
+					tMeta.m_iMultiplier = -1;
 					SafeDelete ( dXQ[i].m_pRoot );
 				}
 			} else
 			{
-				ppResults[i]->m_iMultiplier = -1;
+				tMeta.m_iMultiplier = -1;
 				SafeDelete ( dXQ[i].m_pRoot );
 			}
 		} else
 		{
-			ppResults[i]->m_sError = dXQ[i].m_sParseError;
-			ppResults[i]->m_iMultiplier = -1;
+			tMeta.m_sError = dXQ[i].m_sParseError;
+			tMeta.m_iMultiplier = -1;
 		}
 		if ( !dXQ[i].m_sParseWarning.IsEmpty() )
-			ppResults[i]->m_sWarning = dXQ[i].m_sParseWarning;
+			tMeta.m_sWarning = dXQ[i].m_sParseWarning;
 
-		ppResults[i]->m_tIOStats.Stop();
+		tMeta.m_tIOStats.Stop();
 	}
 
 	// continue only if we have at least one non-failed
@@ -15914,55 +15919,55 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 		bResult = false;
 		for ( int j=0; j<iQueries; ++j )
 		{
+			auto & tMeta = *ppResults[j];
 			// fullscan case
 			if ( pQueries[j].m_sQuery.IsEmpty() )
 				continue;
 
-			ppResults[j]->m_tIOStats.Start();
+			tMeta.m_tIOStats.Start();
 
 			if ( dXQ[j].m_pRoot && ppSorters[j]
-					&& ParsedMultiQuery ( &pQueries[j], ppResults[j], { ppSorters+j, 1 }, dXQ[j], pDict, tArgs, &tNodeCache ) )
+					&& ParsedMultiQuery ( pQueries[j], *ppResults[j], { ppSorters+j, 1 }, dXQ[j], pDict, tArgs, &tNodeCache ) )
 			{
 				bResult = true;
-				ppResults[j]->m_iMultiplier = iCommonSubtrees ? iQueries : 1;
+				tMeta.m_iMultiplier = iCommonSubtrees ? iQueries : 1;
 			} else
 			{
-				ppResults[j]->m_iMultiplier = -1;
+				tMeta.m_iMultiplier = -1;
 			}
 
-			ppResults[j]->m_tIOStats.Stop();
+			tMeta.m_tIOStats.Stop();
 		}
 	});
 
 	if ( tArgs.m_bModifySorterSchemas )
 	{
-		if ( ppResults[0] )
-			SwitchProfile ( ppResults[0]->m_pProfile, SPH_QSTATE_DYNAMIC );
+		SwitchProfile ( ppResults[0]->m_pProfile, SPH_QSTATE_DYNAMIC );
 		PooledAttrsToPtrAttrs ( { ppSorters, iQueries }, m_tBlobAttrs.GetWritePtr() );
 	}
 
 	return bResult | bResultScan;
 }
 
-bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult,
+bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult& tResult,
 		const VecTraits_T<ISphMatchSorter *> & dSorters, const XQQuery_t & tXQ, CSphDict * pDict,
 		const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache ) const
 {
-	assert ( pQuery );
-	assert ( pResult );
-	assert ( !pQuery->m_sQuery.IsEmpty() && pQuery->m_eMode!=SPH_MATCH_FULLSCAN ); // scans must go through MultiScan()
+	assert ( !tQuery.m_sQuery.IsEmpty() && tQuery.m_eMode!=SPH_MATCH_FULLSCAN ); // scans must go through MultiScan()
 	assert ( tArgs.m_iTag>=0 );
+
+	auto& tMeta = tResult;
 
 	// start counting
 	int64_t tmQueryStart = sphMicroTimer();
 	auto tmCpuQueryStart = sphTaskCpuTimer ();
 
-	QueryProfile_t * pProfile = pResult->m_pProfile;
+	QueryProfile_t * pProfile = tMeta.m_pProfile;
 	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
 	if ( pProfile )
 		eOldState = pProfile->Switch ( SPH_QSTATE_INIT );
 
-	ScopedThreadPriority_c tPrio ( pQuery->m_bLowPriority );
+	ScopedThreadPriority_c tPrio ( tQuery.m_bLowPriority );
 
 	///////////////////
 	// setup searching
@@ -15971,7 +15976,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	// non-ready index, empty response!
 	if ( !m_bPassedAlloc )
 	{
-		pResult->m_sError = "index not preread";
+		tMeta.m_sError = "index not preread";
 		return false;
 	}
 
@@ -15981,13 +15986,13 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	auto dSorterSchemas = SorterSchemas ( dSorters, iMaxSchemaIndex);
 
 	// setup calculations and result schema
-	CSphQueryContext tCtx ( *pQuery );
+	CSphQueryContext tCtx ( tQuery );
 	tCtx.m_pProfile = pProfile;
 	tCtx.m_pLocalDocs = tArgs.m_pLocalDocs;
 	tCtx.m_iTotalDocs = ( tArgs.m_iTotalDocs ? tArgs.m_iTotalDocs : m_tStats.m_iTotalDocuments );
 	tCtx.m_pIndexSegment = this;
 
-	if ( !tCtx.SetupCalc ( pResult, tMaxSorterSchema, m_tSchema, m_tBlobAttrs.GetWritePtr(), dSorterSchemas ) )
+	if ( !tCtx.SetupCalc ( tMeta, tMaxSorterSchema, m_tSchema, m_tBlobAttrs.GetWritePtr(), dSorterSchemas ) )
 		return false;
 
 	// set blob pool for string on_sort expression fix up
@@ -16003,7 +16008,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	if ( !pDoclist )
 	{
-		pDoclist = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), pResult->m_sError,
+		pDoclist = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), tMeta.m_sError,
 			DataReaderFactory_c::DOCS, m_tFiles.m_iReadBufferDocList, FileAccess_e::FILE );
 		if ( !pDoclist )
 			return false;
@@ -16011,7 +16016,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	if ( !pHitlist )
 	{
-		pHitlist = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), pResult->m_sError,
+		pHitlist = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), tMeta.m_sError,
 			DataReaderFactory_c::HITS, m_tFiles.m_iReadBufferHitList, FileAccess_e::FILE );
 		if ( !pHitlist )
 			return false;
@@ -16030,32 +16035,32 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	tTermSetup.m_iDynamicRowitems = tMaxSorterSchema.GetDynamicSize();
 
 	sph::MiniTimer_c dTimerGuard;
-	if ( pQuery->m_uMaxQueryMsec>0 )
-		tTermSetup.m_iMaxTimer = dTimerGuard.MiniTimerEngage ( pQuery->m_uMaxQueryMsec ); // max_query_time
-	tTermSetup.m_pWarning = &pResult->m_sWarning;
+	if ( tQuery.m_uMaxQueryMsec>0 )
+		tTermSetup.m_iMaxTimer = dTimerGuard.MiniTimerEngage ( tQuery.m_uMaxQueryMsec ); // max_query_time
+	tTermSetup.m_pWarning = &tMeta.m_sWarning;
 	tTermSetup.m_pCtx = &tCtx;
 	tTermSetup.m_pNodeCache = pNodeCache;
 	tTermSetup.m_bHasWideFields = ( m_tSchema.GetFieldsCount()>32 );
 
 	// setup prediction constrain
 	CSphQueryStats tQueryStats;
-	bool bCollectPredictionCounters = ( pQuery->m_iMaxPredictedMsec>0 );
-	int64_t iNanoBudget = (int64_t)(pQuery->m_iMaxPredictedMsec) * 1000000; // from milliseconds to nanoseconds
+	bool bCollectPredictionCounters = ( tQuery.m_iMaxPredictedMsec>0 );
+	int64_t iNanoBudget = (int64_t)( tQuery.m_iMaxPredictedMsec) * 1000000; // from milliseconds to nanoseconds
 	tQueryStats.m_pNanoBudget = &iNanoBudget;
 	if ( bCollectPredictionCounters )
 		tTermSetup.m_pStats = &tQueryStats;
 
 	// bind weights
-	tCtx.BindWeights ( pQuery, m_tSchema, pResult->m_sWarning );
+	tCtx.BindWeights ( tQuery, m_tSchema, tMeta.m_sWarning );
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tXQ, pQuery, pResult, tTermSetup, tCtx, tMaxSorterSchema )  );
+	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tXQ, tQuery, tMeta, tTermSetup, tCtx, tMaxSorterSchema )  );
 	if ( !pRanker.Ptr() )
 		return false;
 
-	if ( ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE ) && pQuery->m_eRanker!=SPH_RANK_EXPR )
-		pResult->m_sWarning.SetSprintf ( "packedfactors() and bm25f() requires using an expression ranker" );
+	if ( ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE ) && tQuery.m_eRanker!=SPH_RANK_EXPR )
+		tMeta.m_sWarning.SetSprintf ( "packedfactors() and bm25f() requires using an expression ranker" );
 
 	tCtx.SetupExtraData ( pRanker.Ptr(), dSorters.GetLength()==1 ? dSorters[0] : nullptr );
 
@@ -16071,7 +16076,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	int64_t iPoolSize = 0;
 	if ( pRanker->ExtraData ( EXTRA_GET_POOL_SIZE, (void**)&iPoolSize ) && iPoolSize>INT_MAX )
 	{
-		pResult->m_sError.SetSprintf ( "ranking factors pool too big (%d Mb), reduce max_matches", (int)( iPoolSize/1024/1024 ) );
+		tMeta.m_sError.SetSprintf ( "ranking factors pool too big (%d Mb), reduce max_matches", (int)( iPoolSize/1024/1024 ) );
 		return false;
 	}
 
@@ -16083,15 +16088,15 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	// setup filters
  	CreateFilterContext_t tFlx;
-	tFlx.m_pFilters = &pQuery->m_dFilters;
-	tFlx.m_pFilterTree = &pQuery->m_dFilterTree;
+	tFlx.m_pFilters = &tQuery.m_dFilters;
+	tFlx.m_pFilterTree = &tQuery.m_dFilterTree;
 	tFlx.m_pSchema = &tMaxSorterSchema;
 	tFlx.m_pBlobPool = m_tBlobAttrs.GetWritePtr ();
-	tFlx.m_eCollation = pQuery->m_eCollation;
-	tFlx.m_bScan = pQuery->m_sQuery.IsEmpty ();
+	tFlx.m_eCollation = tQuery.m_eCollation;
+	tFlx.m_bScan = tQuery.m_sQuery.IsEmpty ();
 	tFlx.m_pHistograms = m_pHistograms;
 
-	if ( !tCtx.CreateFilters ( tFlx, pResult->m_sError, pResult->m_sWarning ) )
+	if ( !tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning ) )
 		return false;
 
 	// check if we can early reject the whole index
@@ -16122,9 +16127,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	int iMyTag = bFinalPass ? -1 : tArgs.m_iTag;
 
 	// a shortcut to avoid listing all args every time
-	void (CSphIndex_VLN::*pFunc)(CSphQueryContext *, const CSphQuery *, const VecTraits_T<ISphMatchSorter*>&, ISphRanker *, int, int) const = nullptr;
+	void (CSphIndex_VLN::*pFunc)(CSphQueryContext &, const CSphQuery &, const VecTraits_T<ISphMatchSorter*>&, ISphRanker *, int, int) const = nullptr;
 
-	switch ( pQuery->m_eMode )
+	switch ( tQuery.m_eMode )
 	{
 		case SPH_MATCH_ALL:
 		case SPH_MATCH_PHRASE:
@@ -16167,11 +16172,11 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 				}
 			}
 
-			(*this.*pFunc)( &tCtx, pQuery, dSorters, pRanker.Ptr(), iMyTag, tArgs.m_iIndexWeight );
+			(*this.*pFunc)( tCtx, tQuery, dSorters, pRanker.Ptr(), iMyTag, tArgs.m_iIndexWeight );
 			break;
 
 		default:
-			sphDie ( "INTERNAL ERROR: unknown matching mode (mode=%d)", pQuery->m_eMode );
+			sphDie ( "INTERNAL ERROR: unknown matching mode (mode=%d)", tQuery.m_eMode );
 	}
 
 	////////////////////
@@ -16196,25 +16201,25 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	pRanker->FinalizeCache ( tMaxSorterSchema );
 
-	pResult->m_pBlobPool = m_tBlobAttrs.GetWritePtr();
-	pResult->m_pDocstore = m_pDocstore.Ptr() ? this : nullptr;
+	tResult.m_pBlobPool = m_tBlobAttrs.GetWritePtr();
+	tResult.m_pDocstore = m_pDocstore.Ptr() ? this : nullptr;
 
 	// query timer
 	int64_t tmWall = sphMicroTimer() - tmQueryStart;
-	pResult->m_iQueryTime += (int)( tmWall/1000 );
-	pResult->m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
+	tMeta.m_iQueryTime += (int)( tmWall/1000 );
+	tMeta.m_iCpuTime += sphTaskCpuTimer ()-tmCpuQueryStart;
 
 #if 0
 	printf ( "qtm %d, %d, %d, %d, %d\n", int(tmWall), tQueryStats.m_iFetchedDocs,
-		tQueryStats.m_iFetchedHits, tQueryStats.m_iSkips, ppSorters[0]->GetTotalCount() );
+		tQueryStats.m_iFetchedHits, tQueryStats.m_iSkips, dSorters[0]->GetTotalCount() );
 #endif
 
 	SwitchProfile ( pProfile, eOldState );
 
 	if ( bCollectPredictionCounters )
 	{
-		pResult->m_tStats.Add ( tQueryStats );
-		pResult->m_bHasPrediction = true;
+		tMeta.m_tStats.Add ( tQueryStats );
+		tMeta.m_bHasPrediction = true;
 	}
 
 	return true;

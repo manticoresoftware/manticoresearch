@@ -4086,7 +4086,7 @@ static bool HasQwordDupes ( XQNode_t * pNode )
 }
 
 
-ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, CSphQueryResult * pResult,
+ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery & tQuery, CSphQueryResult & tMeta,
 	const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx, const ISphSchema & tSorterSchema )
 {
 	// shortcut
@@ -4103,13 +4103,13 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 	// can we serve this from cache?
 	QcacheEntryRefPtr_t pCached;
 	if ( !bSkipQCache )
-		pCached = QcacheFind ( pIndex->GetIndexId(), *pQuery, tSorterSchema );
+		pCached = QcacheFind ( pIndex->GetIndexId(), tQuery, tSorterSchema );
 	if ( pCached )
 		return QcacheRanker ( pCached, tTermSetup );
 
 	// setup eval-tree
 	ExtRanker_c * pRanker = nullptr;
-	switch ( pQuery->m_eRanker )
+	switch ( tQuery.m_eRanker )
 	{
 		case SPH_RANK_PROXIMITY_BM25:
 			if ( uPayloadMask )
@@ -4164,24 +4164,24 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 				tTermSetup.m_bSetQposMask = true;
 				bool bNeedFactors = !!(tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE);
 				if ( bNeedFactors && bGotDupes )
-					pRanker = new ExtRanker_Expr_T <true, true> ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), bSkipQCache );
+					pRanker = new ExtRanker_Expr_T <true, true> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), bSkipQCache );
 				else if ( bNeedFactors && !bGotDupes )
-					pRanker = new ExtRanker_Expr_T <true, false> ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), bSkipQCache );
+					pRanker = new ExtRanker_Expr_T <true, false> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), bSkipQCache );
 				else if ( !bNeedFactors && bGotDupes )
-					pRanker = new ExtRanker_Expr_T <false, true> ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), bSkipQCache );
+					pRanker = new ExtRanker_Expr_T <false, true> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), bSkipQCache );
 				else if ( !bNeedFactors && !bGotDupes )
-					pRanker = new ExtRanker_Expr_T <false, false> ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), bSkipQCache );
+					pRanker = new ExtRanker_Expr_T <false, false> ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), bSkipQCache );
 			}
 			break;
 
 		case SPH_RANK_EXPORT:
 			// TODO: replace Export ranker to Expression ranker to remove duplicated code
 			tTermSetup.m_bSetQposMask = true;
-			pRanker = new ExtRanker_Export_c ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), bSkipQCache );
+			pRanker = new ExtRanker_Export_c ( tXQ, tTermSetup, tQuery.m_sRankerExpr.cstr(), pIndex->GetMatchSchema(), bSkipQCache );
 			break;
 
 		default:
-			pResult->m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int)pQuery->m_eRanker );
+			tMeta.m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int) tQuery.m_eRanker );
 			if ( bGotDupes )
 				pRanker = new ExtRanker_State_T < RankerState_Proximity_fn<true,true>, true > ( tXQ, tTermSetup, bSkipQCache );
 			else
@@ -4190,17 +4190,17 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 
 		case SPH_RANK_PLUGIN:
 			{
-				const auto * p = (const PluginRanker_c *) sphPluginGet ( PLUGIN_RANKER, pQuery->m_sUDRanker.cstr() );
+				const auto * p = (const PluginRanker_c *) sphPluginGet ( PLUGIN_RANKER, tQuery.m_sUDRanker.cstr() );
 				// might be a case for query to distributed index
 				if ( p )
 				{
 					pRanker = new ExtRanker_State_T < RankerState_Plugin_fn, true > ( tXQ, tTermSetup, bSkipQCache );
 					pRanker->ExtraData ( EXTRA_SET_RANKER_PLUGIN, (void**)p );
-					pRanker->ExtraData ( EXTRA_SET_RANKER_PLUGIN_OPTS, (void**)pQuery->m_sUDRankerOpts.cstr() );
+					pRanker->ExtraData ( EXTRA_SET_RANKER_PLUGIN_OPTS, (void**) tQuery.m_sUDRankerOpts.cstr() );
 				} else
 				{
 					// create default ranker in case of missed plugin
-					pResult->m_sWarning.SetSprintf ( "unknown ranker plugin '%s'; using default", pQuery->m_sUDRanker.cstr() );
+					tMeta.m_sWarning.SetSprintf ( "unknown ranker plugin '%s'; using default", tQuery.m_sUDRanker.cstr() );
 					if ( bGotDupes )
 						pRanker = new ExtRanker_State_T < RankerState_Proximity_fn<true,true>, true > ( tXQ, tTermSetup, bSkipQCache );
 					else
@@ -4238,8 +4238,8 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 
 		// build IDF
 		float fIDF = 0.0f;
-		if ( pQuery->m_bGlobalIDF )
-			fIDF = pIndex->GetGlobalIDF ( tWord.m_sWord, iTermDocs, pQuery->m_bPlainIDF );
+		if ( tQuery.m_bGlobalIDF )
+			fIDF = pIndex->GetGlobalIDF ( tWord.m_sWord, iTermDocs, tQuery.m_bPlainIDF );
 		else if ( iTermDocs )
 		{
 			// (word_docs > total_docs) case *is* occasionally possible
@@ -4247,7 +4247,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 			// FIXME? we don't expect over 4G docs per just 1 local index
 			const int64_t iTotalClamped = Max ( iTotalDocuments, iTermDocs );
 
-			if ( !pQuery->m_bPlainIDF )
+			if ( !tQuery.m_bPlainIDF )
 			{
 				// bm25 variant, idf = log((N-n+1)/n), as per Robertson et al
 				//
@@ -4277,7 +4277,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 		}
 
 		// optionally normalize IDFs so that sum(TF*IDF) fits into [0, 1]
-		if ( pQuery->m_bNormalizedTFIDF )
+		if ( tQuery.m_bNormalizedTFIDF )
 			fIDF /= iQwords;
 
 		tWord.m_fIDF = fIDF * tWord.m_fBoost;
@@ -4289,14 +4289,14 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 	{
 		const ExtQword_t * pWord = dWords[i];
 		if ( !pWord->m_bExpanded )
-			pResult->AddStat ( pWord->m_sDictWord, pWord->m_iDocs, pWord->m_iHits );
+			tMeta.AddStat ( pWord->m_sDictWord, pWord->m_iDocs, pWord->m_iHits );
 	}
 
 	pRanker->m_iMaxQpos = iMaxQpos;
 	pRanker->SetQwordsIDF ( hQwords );
 	if ( bGotDupes )
 		pRanker->SetTermDupes ( hQwords, iMaxQpos );
-	if ( !pRanker->InitState ( tCtx, pResult->m_sError ) )
+	if ( !pRanker->InitState ( tCtx, tMeta.m_sError ) )
 		SafeDelete ( pRanker );
 	return pRanker;
 }

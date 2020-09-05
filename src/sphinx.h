@@ -3310,11 +3310,11 @@ public:
 	void						SetCacheSize ( int iMaxCachedDocs, int iMaxCachedHits );
 
 	/// one regular query vs many sorters (like facets, or similar for common-tree optimization)
-	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const = 0;
+	virtual bool				MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const = 0;
 
 	/// many regular queries with one sorter attached to each query.
 	/// returns true if at least one query succeeded. The failed queries indicated with pResult->m_iMultiplier==-1
-	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const = 0;
+	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const = 0;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const = 0;
 	virtual void				GetSuggest ( const SuggestArgs_t & , SuggestResult_t & ) const {}
 	virtual bool				ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const { return true; }

@@ -93,8 +93,8 @@ public:
 	bool Truncate ( CSphString & ) override EXCLUDES ( m_tLockHash, m_tLock );
 
 	// RT index stub
-	bool MultiQuery ( const CSphQuery *, CSphQueryResult *, const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const override;
-	bool MultiQueryEx ( int, const CSphQuery *, CSphQueryResult **, ISphMatchSorter **, const CSphMultiQueryArgs & ) const override;
+	bool MultiQuery ( CSphQueryResult &, const CSphQuery &, const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const override;
+	bool MultiQueryEx ( int, const CSphQuery *, CSphQueryResult**, ISphMatchSorter **, const CSphMultiQueryArgs & ) const override;
 	virtual bool AddDocument ( ISphHits * , const CSphMatch & , const char ** , const CSphVector<DWORD> & , CSphString & , CSphString & ) { return true; }
 	bool DeleteDocument ( const DocID_t * , int , CSphString & , RtAccum_t * pAccExt ) override { RollBack ( pAccExt ); return true; }
 	void ForceRamFlush ( bool bPeriodic ) override;
@@ -172,7 +172,7 @@ private:
 	CSphVector<SphWordID_t>			m_dHitlessWords;
 
 	void DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMatchResult_t & tRes );
-	bool MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, const VecTraits_T<ISphMatchSorter*>& dSorters,
+	bool MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter*>& dSorters,
 			const CSphMultiQueryArgs &tArgs ) const;
 	bool CanBeAdded ( PercolateQueryArgs_t& tArgs, CSphString& sError ) REQUIRES ( m_tLockHash );
 	StoredQuery_i* CreateQuery ( PercolateQueryArgs_t& tArgs, const ISphTokenizer* pTokenizer, CSphDict* pDict,
@@ -1106,8 +1106,8 @@ int FtMatchingWithoutDocs ( const StoredQuery_t * pStored, PercolateMatchContext
 {
 	tMatchCtx.m_tDictMap.SetMap ( pStored->m_hDict ); // set terms dictionary
 	CSphQueryResult tTmpResult;
-	CSphScopedPtr<ISphRanker> pRanker { sphCreateRanker ( *pStored->m_pXQ.Ptr(), &tMatchCtx.m_tDummyQuery,
-			&tTmpResult, *tMatchCtx.m_pTermSetup.Ptr(), *tMatchCtx.m_pCtx.Ptr(), tMatchCtx.m_tSchema ) };
+	CSphScopedPtr<ISphRanker> pRanker { sphCreateRanker ( *pStored->m_pXQ.Ptr(), tMatchCtx.m_tDummyQuery,
+			tTmpResult, *tMatchCtx.m_pTermSetup.Ptr(), *tMatchCtx.m_pCtx.Ptr(), tMatchCtx.m_tSchema ) };
 
 	if ( !pRanker )
 		return 0;
@@ -1123,8 +1123,8 @@ int FtMatchingCollectingDocs ( const StoredQuery_t * pStored, PercolateMatchCont
 {
 	tMatchCtx.m_tDictMap.SetMap ( pStored->m_hDict ); // set terms dictionary
 	CSphQueryResult tTmpResult;
-	CSphScopedPtr<ISphRanker> pRanker { sphCreateRanker ( *pStored->m_pXQ.Ptr(), &tMatchCtx.m_tDummyQuery,
-			&tTmpResult, *tMatchCtx.m_pTermSetup.Ptr(), *tMatchCtx.m_pCtx.Ptr(), tMatchCtx.m_tSchema ) };
+	CSphScopedPtr<ISphRanker> pRanker { sphCreateRanker ( *pStored->m_pXQ.Ptr(), tMatchCtx.m_tDummyQuery,
+			tTmpResult, *tMatchCtx.m_pTermSetup.Ptr(), *tMatchCtx.m_pCtx.Ptr(), tMatchCtx.m_tSchema ) };
 
 	if ( !pRanker )
 		return 0;
@@ -1917,26 +1917,27 @@ struct PqMatchProcessor_t : ISphMatchProcessor, ISphNoncopyable
 	}
 };
 
-bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult,
+bool PercolateIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQuery,
 		const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs &tArgs ) const
 {
 	assert ( tArgs.m_iTag>=0 );
+	auto & tMeta = tResult;
 
-	QueryProfile_t * pProfiler = pResult->m_pProfile;
+	QueryProfile_t * pProfiler = tMeta.m_pProfile;
 
 	// we count documents only (before filters)
-	if ( pQuery->m_iMaxPredictedMsec )
-		pResult->m_bHasPrediction = true;
+	if ( tQuery.m_iMaxPredictedMsec )
+		tMeta.m_bHasPrediction = true;
 
 	if ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
-		pResult->m_sWarning.SetSprintf ( "packedfactors() will not work with a fullscan; you need to specify a query" );
+		tMeta.m_sWarning.SetSprintf ( "packedfactors() will not work with a fullscan; you need to specify a query" );
 
 	// start counting
 	int64_t tmQueryStart = sphMicroTimer ();
 	int64_t tmMaxTimer = 0;
 	sph::MiniTimer_c dTimerGuard;
-	if ( pQuery->m_uMaxQueryMsec>0 )
-		tmMaxTimer = dTimerGuard.MiniTimerEngage ( pQuery->m_uMaxQueryMsec ); // max_query_time
+	if ( tQuery.m_uMaxQueryMsec>0 )
+		tmMaxTimer = dTimerGuard.MiniTimerEngage ( tQuery.m_uMaxQueryMsec ); // max_query_time
 
 	// select the sorter with max schema
 	// uses GetAttrsCount to get working facets (was GetRowSize)
@@ -1945,19 +1946,19 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 	auto dSorterSchemas = SorterSchemas ( dSorters, iMaxSchemaIndex );
 
 	// setup calculations and result schema
-	CSphQueryContext tCtx ( *pQuery );
-	if ( !tCtx.SetupCalc ( pResult, tMaxSorterSchema, m_tMatchSchema, nullptr, dSorterSchemas ) )
+	CSphQueryContext tCtx ( tQuery );
+	if ( !tCtx.SetupCalc ( tMeta, tMaxSorterSchema, m_tMatchSchema, nullptr, dSorterSchemas ) )
 		return false;
 
 	// setup filters
 	CreateFilterContext_t tFlx;
-	tFlx.m_pFilters = &pQuery->m_dFilters;
-	tFlx.m_pFilterTree = &pQuery->m_dFilterTree;
+	tFlx.m_pFilters = &tQuery.m_dFilters;
+	tFlx.m_pFilterTree = &tQuery.m_dFilterTree;
 	tFlx.m_pSchema = &tMaxSorterSchema;
-	tFlx.m_eCollation = pQuery->m_eCollation;
+	tFlx.m_eCollation = tQuery.m_eCollation;
 	tFlx.m_bScan = true;
 
-	if ( !tCtx.CreateFilters ( tFlx, pResult->m_sError, pResult->m_sWarning ) )
+	if ( !tCtx.CreateFilters ( tFlx, tMeta.m_sError, tMeta.m_sWarning ) )
 		return false;
 
 	// get all locators
@@ -1987,7 +1988,7 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 
 	CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_FULLSCAN );
 
-	int iCutoff = ( pQuery->m_iCutoff<=0 ) ? -1 : pQuery->m_iCutoff;
+	int iCutoff = ( tQuery.m_iCutoff<=0 ) ? -1 : tQuery.m_iCutoff;
 	BYTE * pData = nullptr;
 
 	CSphVector<PercolateQueryDesc> dQueries;
@@ -2017,7 +2018,7 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 		memcpy ( pData, sFilters.cstr (), iLen );
 
 
-		++pResult->m_tStats.m_iFetchedDocs;
+		++tMeta.m_tStats.m_iFetchedDocs;
 
 		tCtx.CalcFilter ( tMatch );
 		if ( tCtx.m_pFilter && !tCtx.m_pFilter->Eval ( tMatch ) )
@@ -2048,7 +2049,7 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 		// handle timer
 		if ( tmMaxTimer && sph::TimeExceeded ( tmMaxTimer ) )
 		{
-			pResult->m_sWarning = "query time exceeded max_query_time";
+			tMeta.m_sWarning = "query time exceeded max_query_time";
 			break;
 		}
 	}
@@ -2062,16 +2063,14 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 		dSorters.Apply ( [&tFinal] ( ISphMatchSorter * p ) { p->Finalize ( tFinal, false ); } );
 	}
 
-	pResult->m_iQueryTime += ( int ) ( ( sphMicroTimer () - tmQueryStart ) / 1000 );
+	tMeta.m_iQueryTime += ( int ) ( ( sphMicroTimer () - tmQueryStart ) / 1000 );
 
 	return true; // fixme! */
 }
 
-bool PercolateIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult,
+bool PercolateIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery,
 		const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs &tArgs ) const
 {
-	assert ( pQuery );
-
 	MEMORY ( MEM_DISK_QUERY );
 
 	// to avoid the checking of a ppSorters's element for NULL on every next step, just filter out all nulls right here
@@ -2086,22 +2085,22 @@ bool PercolateIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * 
 	// non-random at the start, random at the end
 	dSorters.Sort ( CmpPSortersByRandom_fn () );
 
-	const QueryParser_i * pQueryParser = pQuery->m_pQueryParser;
+	const QueryParser_i * pQueryParser = tQuery.m_pQueryParser;
 	assert ( pQueryParser );
 
 	// fast path for scans
-	if ( pQueryParser->IsFullscan ( *pQuery ) )
-		return MultiScan ( pQuery, pResult, dSorters, tArgs );
+	if ( pQueryParser->IsFullscan ( tQuery ) )
+		return MultiScan ( tResult, tQuery, dSorters, tArgs );
 
 	return false;
 }
 
-bool PercolateIndex_c::MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults,
+bool PercolateIndex_c::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult** ppResults,
 										ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs &tArgs) const
 {
 	bool bResult = false;
 	for ( int i = 0; i<iQueries; ++i )
-		if ( MultiQuery ( &ppQueries[i], ppResults[i], { ppSorters+i, 1}, tArgs ) )
+		if ( MultiQuery ( *ppResults[i], pQueries[i], { ppSorters+i, 1 }, tArgs ) )
 			bResult = true;
 		else
 			ppResults[i]->m_iMultiplier = -1;

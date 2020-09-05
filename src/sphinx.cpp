@@ -2023,13 +2023,18 @@ private:
 	CSphString					GetIndexFileName ( const char * szExt ) const;
 	void						GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * pFilenameBuilder ) const override;
 
-	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict, const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache ) const;
+	bool						ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult,
+									const VecTraits_T<ISphMatchSorter*>& dSorters, const XQQuery_t& tXQ, CSphDict* pDict,
+									const CSphMultiQueryArgs& tArgs, CSphQueryNodeCache* pNodeCache ) const;
 
-	void						ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, CSphMatch & tMatch, int iCutoff, bool bReverse, bool bRandomize, int iIndexWeight, int64_t tmMaxTimer ) const;
-	bool						MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
+	void						ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResult * pResult,
+									const VecTraits_T<ISphMatchSorter *> & dSorters, CSphMatch & tMatch, int iCutoff,
+									bool bReverse, bool bRandomize, int iIndexWeight, int64_t tmMaxTimer ) const;
+	bool						MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult,
+									const VecTraits_T<ISphMatchSorter *>& dSorters, const CSphMultiQueryArgs& tArgs ) const;
 
 	template<bool USE_KLIST, bool RANDOMIZE, bool USE_FACTORS>
-	void						MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters, ISphRanker * pRanker, int iTag, int iIndexWeight ) const;
+	void						MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, const VecTraits_T<ISphMatchSorter *>& dSorters, ISphRanker * pRanker, int iTag, int iIndexWeight ) const;
 
 	const CSphRowitem *			FindDocinfo ( DocID_t tDocID ) const;
 
@@ -8190,18 +8195,13 @@ void CSphIndex::GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings ) c
 
 //////////////////////////////////////////////////////////////////////////
 
-static void PooledAttrsToPtrAttrs ( ISphMatchSorter ** ppSorters, int nSorters, const BYTE * pBlobPool )
+static void PooledAttrsToPtrAttrs ( const VecTraits_T<ISphMatchSorter *> & dSorters, const BYTE * pBlobPool )
 {
-	assert ( ppSorters );
-
-	for ( int i=0; i<nSorters; ++i )
+	dSorters.Apply ( [&] ( ISphMatchSorter * p )
 	{
-		ISphMatchSorter * pSorter = ppSorters[i];
-		if ( !pSorter )
-			continue;
-
-		pSorter->TransformPooled2StandalonePtrs( [pBlobPool] ( const CSphMatch * ) { return pBlobPool; } );
-	}
+		if ( p )
+			p->TransformPooled2StandalonePtrs ( [pBlobPool] ( const CSphMatch * ) { return pBlobPool; } );
+	});
 }
 
 
@@ -12799,8 +12799,8 @@ void CSphQueryContext::SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * 
 
 
 template<bool USE_KLIST, bool RANDOMIZE, bool USE_FACTORS>
-void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery, int iSorters, ISphMatchSorter ** ppSorters,
-									ISphRanker * pRanker, int iTag, int iIndexWeight ) const
+void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * pQuery,
+		const VecTraits_T<ISphMatchSorter *> & dSorters, ISphRanker * pRanker, int iTag, int iIndexWeight ) const
 {
 	QueryProfile_t * pProfile = pCtx->m_pProfile;
 	CSphScopedProfile tProf (pProfile, SPH_QSTATE_UNKNOWN);
@@ -12844,13 +12844,13 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 
 			bool bRand = false;
 			bool bNewMatch = false;
-			for ( int iSorter=0; iSorter<iSorters; iSorter++ )
+			for ( ISphMatchSorter * pSorter: dSorters )
 			{
 				// all non-random sorters are in the beginning,
 				// so we can avoid the simple 'first-element' assertion
 				if_const ( RANDOMIZE )
 				{
-					if ( !bRand && ppSorters[iSorter]->m_bRandomize )
+					if ( !bRand && pSorter->m_bRandomize )
 					{
 						bRand = true;
 						tMatch.m_iWeight = ( sphRand() & 0xffff ) * iIndexWeight;
@@ -12860,12 +12860,12 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 					}
 				}
 
-				bNewMatch |= ppSorters[iSorter]->Push ( tMatch );
+				bNewMatch |= pSorter->Push ( tMatch );
 
 				if_const ( USE_FACTORS )
 				{
-					pRanker->ExtraData ( EXTRA_SET_MATCHPUSHED, (void**)&(ppSorters[iSorter]->m_iJustPushed) );
-					pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&(ppSorters[iSorter]->m_dJustPopped) );
+					pRanker->ExtraData ( EXTRA_SET_MATCHPUSHED, (void**)&( pSorter->m_iJustPushed) );
+					pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&( pSorter->m_dJustPopped) );
 				}
 			}
 
@@ -13066,8 +13066,9 @@ private:
 
 
 template <typename T>
-void Fullscan ( T & tIterator, const CSphQueryContext & tCtx, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, CSphMatch & tMatch, int iCutoff,
-	bool bRandomize, int iIndexWeight, int64_t tmMaxTimer, bool & bStop )
+void Fullscan ( T & tIterator, const CSphQueryContext & tCtx, CSphQueryResult * pResult,
+		const VecTraits_T<ISphMatchSorter *> & dSorters, CSphMatch & tMatch, int iCutoff, bool bRandomize,
+		int iIndexWeight, int64_t tmMaxTimer, bool & bStop )
 {
 	const CSphRowitem * pRow;
 	while ( !!(pRow=tIterator.GetNextRow()) )
@@ -13090,8 +13091,7 @@ void Fullscan ( T & tIterator, const CSphQueryContext & tCtx, CSphQueryResult * 
 		tCtx.CalcSort ( tMatch );
 
 		bool bNewMatch = false;
-		for ( int iSorter=0; iSorter<iSorters; iSorter++ )
-			bNewMatch |= ppSorters[iSorter]->Push ( tMatch );
+		dSorters.Apply ( [&tMatch, &bNewMatch] ( ISphMatchSorter * p ) { bNewMatch |= p->Push ( tMatch ); } );
 
 		// stringptr expressions should be duplicated (or taken over) at this point
 		tCtx.FreeDataFilter ( tMatch );
@@ -13117,7 +13117,9 @@ void Fullscan ( T & tIterator, const CSphQueryContext & tCtx, CSphQueryResult * 
 }
 
 
-void CSphIndex_VLN::ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, CSphMatch & tMatch, int iCutoff, bool bReverse, bool bRandomize, int iIndexWeight, int64_t tmMaxTimer ) const
+void CSphIndex_VLN::ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResult * pResult,
+		const VecTraits_T<ISphMatchSorter *>& dSorters, CSphMatch & tMatch, int iCutoff, bool bReverse, bool bRandomize,
+		int iIndexWeight, int64_t tmMaxTimer ) const
 {
 	int iStride = m_tSchema.GetRowSize();
 	int64_t iStart = bReverse ? m_iDocinfoIndex-1 : 0;
@@ -13161,8 +13163,7 @@ void CSphIndex_VLN::ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResul
 				{
 					if ( bRandomize )
 						tMatch.m_iWeight = ( sphRand() & 0xffff ) * iIndexWeight;
-					for ( int iSorter=0; iSorter<iSorters; iSorter++ )
-						ppSorters[iSorter]->Push ( tMatch );
+					dSorters.Apply ( [&tMatch] ( ISphMatchSorter * p ) { p->Push ( tMatch ); } );
 				}
 				// stringptr expressions should be duplicated (or taken over) at this point
 				tCtx.FreeDataFilter ( tMatch );
@@ -13173,7 +13174,7 @@ void CSphIndex_VLN::ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResul
 			RowIterator_c tIt ( pBlockStart, pBlockEnd, tMatch.m_tRowID, iStride, bReverse, m_tDeadRowMap );
 
 			bool bStop = false;
-			Fullscan ( tIt, tCtx, pResult, iSorters, ppSorters, tMatch, iCutoff, bRandomize, iIndexWeight, tmMaxTimer, bStop );
+			Fullscan ( tIt, tCtx, pResult, dSorters, tMatch, iCutoff, bRandomize, iIndexWeight, tmMaxTimer, bStop );
 
 			if ( bStop || !iCutoff )
 				break;
@@ -13182,7 +13183,8 @@ void CSphIndex_VLN::ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResul
 }
 
 
-bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
+bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult,
+		const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const
 {
 	assert ( tArgs.m_iTag>=0 );
 
@@ -13222,9 +13224,9 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	ScopedThreadPriority_c tPrio ( pQuery->m_bLowPriority );
 
 	// select the sorter with max schema
-	int iMaxSchemaIndex = GetMaxSchemaIndexAndMatchCapacity ( {ppSorters,iSorters} ).first;
-	const ISphSchema & tMaxSorterSchema = *(ppSorters[iMaxSchemaIndex]->GetSchema());
-	auto dSorterSchemas = SorterSchemas ( {ppSorters, iSorters}, iMaxSchemaIndex);
+	int iMaxSchemaIndex = GetMaxSchemaIndexAndMatchCapacity ( dSorters ).first;
+	const ISphSchema & tMaxSorterSchema = *(dSorters[iMaxSchemaIndex]->GetSchema());
+	auto dSorterSchemas = SorterSchemas ( dSorters, iMaxSchemaIndex);
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );
@@ -13264,11 +13266,10 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	}
 
 	// setup sorters vs. MVA
-	for ( int i=0; i<iSorters; i++ )
-		(ppSorters[i])->SetBlobPool ( m_tBlobAttrs.GetWritePtr() );
+	dSorters.Apply ( [this] ( ISphMatchSorter * p ) { p->SetBlobPool ( m_tBlobAttrs.GetWritePtr () ); } );
 
 	// prepare to work them rows
-	bool bRandomize = ppSorters[0]->m_bRandomize;
+	bool bRandomize = dSorters[0]->m_bRandomize;
 
 	CSphMatch tMatch;
 	tMatch.Reset ( tMaxSorterSchema.GetDynamicSize() );
@@ -13300,10 +13301,10 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 		bool bStop;
 		RowIteratorAlive_c tIt ( pIterator, m_tAttr.GetWritePtr(), iStride, m_tDeadRowMap );
-		Fullscan ( tIt, tCtx, pResult, iSorters, ppSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer, bStop );
+		Fullscan ( tIt, tCtx, pResult, dSorters, tMatch, iCutoff, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer, bStop );
 	}
 	else
-		ScanByBlocks ( tCtx, pResult, iSorters, ppSorters, tMatch, iCutoff, bReverse, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer );
+		ScanByBlocks ( tCtx, pResult, dSorters, tMatch, iCutoff, bReverse, bRandomize, tArgs.m_iIndexWeight, tmMaxTimer );
 
 	SwitchProfile ( pResult->m_pProfile, SPH_QSTATE_FINALIZE );
 
@@ -13311,17 +13312,13 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	if ( tCtx.m_dCalcFinal.GetLength() )
 	{
 		SphFinalMatchCalc_t tFinal ( tArgs.m_iTag, tCtx );
-		for ( int iSorter=0; iSorter<iSorters; iSorter++ )
-		{
-			ISphMatchSorter * pTop = ppSorters[iSorter];
-			pTop->Finalize ( tFinal, false );
-		}
+		dSorters.Apply ( [&tFinal] ( ISphMatchSorter * p ) { p->Finalize ( tFinal, false ); } );
 	}
 
 	if ( tArgs.m_bModifySorterSchemas )
 	{
 		SwitchProfile ( pResult->m_pProfile, SPH_QSTATE_DYNAMIC );
-		PooledAttrsToPtrAttrs ( ppSorters, iSorters, m_tBlobAttrs.GetWritePtr() );
+		PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetWritePtr() );
 	}
 
 	// done
@@ -15708,14 +15705,12 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	// to avoid the checking of a ppSorters's element for NULL on every next step, just filter out all nulls right here
 	CSphVector<ISphMatchSorter*> dSorters;
 	dSorters.Reserve ( iSorters );
-	for ( int i=0; i<iSorters; i++ )
+	for ( int i=0; i<iSorters; ++i )
 		if ( ppSorters[i] )
 			dSorters.Add ( ppSorters[i] );
 
-	iSorters = dSorters.GetLength();
-
 	// if we have anything to work with
-	if ( iSorters==0 )
+	if ( dSorters.IsEmpty () )
 		return false;
 
 	// non-random at the start, random at the end
@@ -15726,7 +15721,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 
 	// fast path for scans
 	if ( pQueryParser->IsFullscan ( *pQuery ) )
-		return MultiScan ( pQuery, pResult, iSorters, &dSorters[0], tArgs );
+		return MultiScan ( pQuery, pResult, dSorters, tArgs );
 
 	SwitchProfile ( pProfile, SPH_QSTATE_DICT_SETUP );
 
@@ -15758,7 +15753,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 
 	// check again for fullscan
 	if ( pQueryParser->IsFullscan ( tParsed ) )
-		return MultiScan ( pQuery, pResult, iSorters, &dSorters[0], tArgs );
+		return MultiScan ( pQuery, pResult, dSorters, tArgs );
 
 	if ( !tParsed.m_sParseWarning.IsEmpty() )
 		pResult->m_sWarning = tParsed.m_sParseWarning;
@@ -15800,12 +15795,12 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	tParsed.m_bNeedSZlist = pQuery->m_bZSlist;
 
 	CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
-	bool bResult = ParsedMultiQuery ( pQuery, pResult, iSorters, &dSorters[0], tParsed, pDict, tArgs, &tNodeCache );
+	bool bResult = ParsedMultiQuery ( pQuery, pResult, dSorters, tParsed, pDict, tArgs, &tNodeCache );
 
 	if ( tArgs.m_bModifySorterSchemas )
 	{
 		SwitchProfile ( pProfile, SPH_QSTATE_DYNAMIC );
-		PooledAttrsToPtrAttrs ( &dSorters[0], iSorters, m_tBlobAttrs.GetWritePtr() );
+		PooledAttrsToPtrAttrs ( dSorters, m_tBlobAttrs.GetWritePtr() );
 	}
 
 	return bResult;
@@ -15850,7 +15845,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 		// fast path for scans
 		if ( pQueries[i].m_sQuery.IsEmpty() )
 		{
-			if ( MultiScan ( pQueries + i, ppResults[i], 1, &ppSorters[i], tArgs ) )
+			if ( MultiScan ( pQueries + i, ppResults[i], { ppSorters+i, 1}, tArgs ) )
 				bResultScan = true;
 			else
 				ppResults[i]->m_iMultiplier = -1; ///< show that this particular query failed
@@ -15928,7 +15923,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			ppResults[j]->m_tIOStats.Start();
 
 			if ( dXQ[j].m_pRoot && ppSorters[j]
-					&& ParsedMultiQuery ( &pQueries[j], ppResults[j], 1, &ppSorters[j], dXQ[j], pDict, tArgs, &tNodeCache ) )
+					&& ParsedMultiQuery ( &pQueries[j], ppResults[j], { ppSorters+j, 1 }, dXQ[j], pDict, tArgs, &tNodeCache ) )
 			{
 				bResult = true;
 				ppResults[j]->m_iMultiplier = iCommonSubtrees ? iQueries : 1;
@@ -15945,19 +15940,18 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 	{
 		if ( ppResults[0] )
 			SwitchProfile ( ppResults[0]->m_pProfile, SPH_QSTATE_DYNAMIC );
-		PooledAttrsToPtrAttrs ( ppSorters, iQueries, m_tBlobAttrs.GetWritePtr() );
+		PooledAttrsToPtrAttrs ( { ppSorters, iQueries }, m_tBlobAttrs.GetWritePtr() );
 	}
 
 	return bResult | bResultScan;
 }
 
 bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult,
-	int iSorters, ISphMatchSorter ** ppSorters, const XQQuery_t & tXQ, CSphDict * pDict,
-	const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache ) const
+		const VecTraits_T<ISphMatchSorter *> & dSorters, const XQQuery_t & tXQ, CSphDict * pDict,
+		const CSphMultiQueryArgs & tArgs, CSphQueryNodeCache * pNodeCache ) const
 {
 	assert ( pQuery );
 	assert ( pResult );
-	assert ( ppSorters );
 	assert ( !pQuery->m_sQuery.IsEmpty() && pQuery->m_eMode!=SPH_MATCH_FULLSCAN ); // scans must go through MultiScan()
 	assert ( tArgs.m_iTag>=0 );
 
@@ -15984,9 +15978,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	}
 
 	// select the sorter with max schema
-	int iMaxSchemaIndex = GetMaxSchemaIndexAndMatchCapacity ( {ppSorters,iSorters} ).first;
-	const ISphSchema & tMaxSorterSchema = *(ppSorters[iMaxSchemaIndex]->GetSchema());
-	auto dSorterSchemas = SorterSchemas ( {ppSorters, iSorters}, iMaxSchemaIndex);
+	int iMaxSchemaIndex = GetMaxSchemaIndexAndMatchCapacity ( dSorters ).first;
+	const ISphSchema & tMaxSorterSchema = *(dSorters[iMaxSchemaIndex]->GetSchema());
+	auto dSorterSchemas = SorterSchemas ( dSorters, iMaxSchemaIndex);
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );
@@ -16065,14 +16059,13 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	if ( ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE ) && pQuery->m_eRanker!=SPH_RANK_EXPR )
 		pResult->m_sWarning.SetSprintf ( "packedfactors() and bm25f() requires using an expression ranker" );
 
-	tCtx.SetupExtraData ( pRanker.Ptr(), iSorters==1 ? ppSorters[0] : NULL );
+	tCtx.SetupExtraData ( pRanker.Ptr(), dSorters.GetLength()==1 ? dSorters[0] : nullptr );
 
 	const BYTE * pBlobPool = m_tBlobAttrs.GetWritePtr();
 	pRanker->ExtraData ( EXTRA_SET_BLOBPOOL, (void**)&pBlobPool );
 
 	int iMatchPoolSize = 0;
-	for ( int i=0; i<iSorters; i++ )
-		iMatchPoolSize += ppSorters[i]->m_iMatchCapacity;
+	dSorters.Apply ( [&iMatchPoolSize] ( const ISphMatchSorter * p ) { iMatchPoolSize += p->m_iMatchCapacity; } );
 
 	pRanker->ExtraData ( EXTRA_SET_POOL_CAPACITY, (void**)&iMatchPoolSize );
 
@@ -16115,12 +16108,10 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	}
 
 	// setup sorters vs. MVA
-	for ( int i=0; i<iSorters; i++ )
-		(ppSorters[i])->SetBlobPool ( m_tBlobAttrs.GetWritePtr() );
+	dSorters.Apply ( [this] ( ISphMatchSorter * p ) { p->SetBlobPool ( m_tBlobAttrs.GetWritePtr () ); } );
 
 	bool bHaveRandom = false;
-	for ( int i=0; i<iSorters; i++ )
-		bHaveRandom |= ppSorters[i]->m_bRandomize;
+	dSorters.Apply ( [&bHaveRandom] ( const ISphMatchSorter * p ) { bHaveRandom |= p->m_bRandomize; } );
 
 	bool bUseFactors = !!( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE );
 	bool bHaveDead = m_tDeadRowMap.HasDead();
@@ -16133,7 +16124,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	int iMyTag = bFinalPass ? -1 : tArgs.m_iTag;
 
 	// a shortcut to avoid listing all args every time
-	void (CSphIndex_VLN::*pFunc)(CSphQueryContext *, const CSphQuery *, int, ISphMatchSorter **, ISphRanker *, int, int) const = nullptr;
+	void (CSphIndex_VLN::*pFunc)(CSphQueryContext *, const CSphQuery *, const VecTraits_T<ISphMatchSorter*>&, ISphRanker *, int, int) const = nullptr;
 
 	switch ( pQuery->m_eMode )
 	{
@@ -16178,7 +16169,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 				}
 			}
 
-			(*this.*pFunc)( &tCtx, pQuery, iSorters, ppSorters, pRanker.Ptr(), iMyTag, tArgs.m_iIndexWeight );
+			(*this.*pFunc)( &tCtx, pQuery, dSorters, pRanker.Ptr(), iMyTag, tArgs.m_iIndexWeight );
 			break;
 
 		default:
@@ -16201,12 +16192,8 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		ARRAY_FOREACH_COND ( i, tCtx.m_dCalcFinal, !bGotUDF )
 			tCtx.m_dCalcFinal[i].m_pExpr->Command ( SPH_EXPR_GET_UDF, &bGotUDF );
 
-		SphFinalMatchCalc_t tProcessor ( tArgs.m_iTag, tCtx );
-		for ( int iSorter=0; iSorter<iSorters; iSorter++ )
-		{
-			ISphMatchSorter * pTop = ppSorters[iSorter];
-			pTop->Finalize ( tProcessor, bGotUDF );
-		}
+		SphFinalMatchCalc_t tFinal ( tArgs.m_iTag, tCtx );
+		dSorters.Apply ( [&] ( ISphMatchSorter * p ) { p->Finalize ( tFinal, bGotUDF ); } );
 	}
 
 	pRanker->FinalizeCache ( tMaxSorterSchema );

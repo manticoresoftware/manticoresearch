@@ -3489,7 +3489,7 @@ ISphMatchSorter *	sphCreateQueue ( const SphQueueSettings_t & tQueue, const CSph
 
 void sphCreateMultiQueue ( const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries,
 		VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes,
-		VecTraits_T<StrVec_t> & dExtras );
+		StrVec_t * pExtra );
 
 /// setup per-keyword read buffer sizes
 void SetUnhintedBuffer ( int iReadUnhinted );

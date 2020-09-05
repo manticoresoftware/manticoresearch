@@ -7039,15 +7039,14 @@ ISphMatchSorter * sphCreateQueue ( const SphQueueSettings_t & tQueue, const CSph
 
 void CreateMultiQueue ( RawVector_T<QueueCreator_c>& dCreators, const SphQueueSettings_t & tQueue,
 		const VecTraits_T<CSphQuery> & dQueries, VecTraits_T<ISphMatchSorter*> & dSorters,
-		VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes, VecTraits_T<StrVec_t> & dExtras )
+		VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes, StrVec_t * pExtra )
 {
 	assert ( dSorters.GetLength()>1 );
 	assert ( dSorters.GetLength()==dQueries.GetLength() );
-	assert ( dExtras.IsEmpty() || dSorters.GetLength()==dExtras.GetLength() );
 	assert ( dSorters.GetLength()==dErrors.GetLength() );
 
 	dCreators.Reserve_static ( dSorters.GetLength () );
-	dCreators.Emplace_back( tQueue, dQueries[0], dErrors[0], dExtras.IsEmpty () ? nullptr : dExtras.begin () );
+	dCreators.Emplace_back( tQueue, dQueries[0], dErrors[0], pExtra );
 	dCreators[0].m_bMulti = true;
 
 	// same as SetupQueue
@@ -7063,7 +7062,7 @@ void CreateMultiQueue ( RawVector_T<QueueCreator_c>& dCreators, const SphQueueSe
 	for ( int i=1; i<dSorters.GetLength(); ++i )
 	{
 		// fill extra only for initial pass
-		dCreators.Emplace_back ( tQueue, dQueries[i], dErrors[i], dExtras.IsEmpty () ? nullptr : &dExtras[i] );
+		dCreators.Emplace_back ( tQueue, dQueries[i], dErrors[i], pExtra );
 		dCreators[i].m_bMulti = true;
 		if ( !dCreators[i].SetupQueue () )
 		{
@@ -7164,9 +7163,9 @@ void CreateMultiQueue ( RawVector_T<QueueCreator_c>& dCreators, const SphQueueSe
 
 void sphCreateMultiQueue ( const SphQueueSettings_t & tQueue, const VecTraits_T<CSphQuery> & dQueries
 		, VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes
-		, VecTraits_T<StrVec_t> & dExtras )
+		, StrVec_t * pExtra )
 {
 	RawVector_T<QueueCreator_c> dCreators;
-	CreateMultiQueue ( dCreators, tQueue, dQueries, dSorters, dErrors, tRes, dExtras );
+	CreateMultiQueue ( dCreators, tQueue, dQueries, dSorters, dErrors, tRes, pExtra );
 	CreateSorters ( dQueries, dSorters, dCreators, dErrors, tRes );
 }

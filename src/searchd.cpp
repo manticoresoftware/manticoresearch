@@ -4786,7 +4786,7 @@ protected:
 	bool							m_bMultiQueue = false;	///< whether current subset is subject to multi-queue optimization
 	bool							m_bFacetQueue = false;	///< whether current subset is subject to facet-queue optimization
 	CSphVector<LocalIndex_t>		m_dLocal;				///< local indexes for the current subset
-	CSphFixedVector<StrVec_t> 		m_dExtraSchemas { 0 }; 	///< the extra attrs for agents. One vec per thread
+	StrVec_t 						m_dExtraSchema;		 	///< the extra attrs for agents. One vec per index*threads
 	CSphAttrUpdateEx *				m_pUpdates = nullptr;	///< holder for updates
 	CSphVector<DocID_t> *			m_pDelDocs = nullptr;	///< this query is for deleting
 
@@ -4817,11 +4817,11 @@ private:
 	void							CalcGlobalStats ( int64_t tmCpu, int64_t tmSubset, int64_t tmLocal, int iStart, int iEnd, const CSphIOStats & tIO,
 			const VecRefPtrsAgentConn_t & dRemotes ) const;
 	int								CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters,
-			VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const;
+			VecTraits_T<CSphString> & dErrors, StrVec_t* pExtra, SphQueueRes_t & tQueueRes ) const;
 	int								CreateSingleSorters( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters,
-			VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const;
+			VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes ) const;
 	int								CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter*> & dSorters,
-			VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const;
+			VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes ) const;
 
 	SphQueueSettings_t				MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches ) const;
 };
@@ -5190,13 +5190,13 @@ SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex
 
 
 int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter *> & dSorters
-		, VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const
+		, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes ) const
 {
 	int iValidSorters = 0;
 
 	auto tQueueSettings = MakeQueueSettings ( pIndex, m_dQueries[m_iStart].m_iMaxMatches );
 	const VecTraits_T<CSphQuery> & dQueries = m_dQueries.Slice ( m_iStart );
-	sphCreateMultiQueue ( tQueueSettings, dQueries, dSorters, dErrors, tQueueRes, dExtraSchemas );
+	sphCreateMultiQueue ( tQueueSettings, dQueries, dSorters, dErrors, tQueueRes, pExtra );
 
 	m_dQueries[m_iStart].m_bZSlist = tQueueRes.m_bZonespanlist;
 	dSorters.Apply ( [&iValidSorters] ( const ISphMatchSorter * pSorter ) {
@@ -5212,7 +5212,7 @@ int SearchHandler_c::CreateMultiQueryOrFacetSorters ( const CSphIndex * pIndex, 
 }
 
 int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter *> & dSorters
-		, VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const
+		, VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes ) const
 {
 	int iValidSorters = 0;
 	tQueueRes.m_bAlowMulti = false;
@@ -5222,8 +5222,6 @@ int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, VecTraits_T
 
 		// create queue
 		auto tQueueSettings = MakeQueueSettings ( pIndex, tQuery.m_iMaxMatches );
-		StrVec_t * pExtra = ( dExtraSchemas.IsEmpty () ? nullptr : &dExtraSchemas[iQuery-m_iStart] );
-
 		ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, dErrors[iQuery-m_iStart], tQueueRes, pExtra );
 		if ( !pSorter )
 			continue;
@@ -5236,11 +5234,11 @@ int SearchHandler_c::CreateSingleSorters ( const CSphIndex * pIndex, VecTraits_T
 }
 
 int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphMatchSorter *> & dSorters
-		, VecTraits_T<CSphString> & dErrors, VecTraits_T<StrVec_t> & dExtraSchemas, SphQueueRes_t & tQueueRes ) const
+		, VecTraits_T<CSphString> & dErrors, StrVec_t* pExtra, SphQueueRes_t & tQueueRes ) const
 {
 	if ( m_bMultiQueue || m_bFacetQueue )
-		return CreateMultiQueryOrFacetSorters ( pIndex, dSorters, dErrors, dExtraSchemas, tQueueRes );
-	return CreateSingleSorters ( pIndex, dSorters, dErrors, dExtraSchemas, tQueueRes );
+		return CreateMultiQueryOrFacetSorters ( pIndex, dSorters, dErrors, pExtra, tQueueRes );
+	return CreateSingleSorters ( pIndex, dSorters, dErrors, pExtra, tQueueRes );
 }
 
 void SearchHandler_c::RunLocalSearches()
@@ -5258,9 +5256,9 @@ void SearchHandler_c::RunLocalSearches()
 	}
 
 	/// todo! remove this, remove local searches parallel, keep only coro version.
-
-	if ( m_dQueries[0].m_bAgent )
-		m_dExtraSchemas.Reset ( m_iEnd-m_iStart+1 );
+	bool bNeedExtra = m_dQueries[m_iStart].m_bAgent;
+	if ( bNeedExtra )
+		m_dExtraSchema.Reset (); // cleanup from any possible previous using
 
 	ARRAY_FOREACH ( iLocal, m_dLocal )
 	{
@@ -5304,9 +5302,10 @@ void SearchHandler_c::RunLocalSearches()
 		m_tHook.SetIndex ( pServed->m_pIndex );
 		m_tHook.SetQueryType ( m_eQueryType );
 
+		StrVec_t * pExtra = bNeedExtra ? &m_dExtraSchema : nullptr;
 		CSphFixedVector<CSphString> dErrors ( dSorters.GetLength() );
 		SphQueueRes_t tQueueRes;
-		int iValidSorters = CreateSorters ( pServed->m_pIndex, dSorters, dErrors, m_dExtraSchemas, tQueueRes );
+		int iValidSorters = CreateSorters ( pServed->m_pIndex, dSorters, dErrors, pExtra, tQueueRes );
 		if ( iValidSorters<dSorters.GetLength() )
 		{
 			ARRAY_FOREACH ( i, dErrors )
@@ -5431,20 +5430,16 @@ struct LocalSearchRef_t
 	using VecExtras_t = VecTraits_T<StrVec_t>;
 
 	ExprHook_c&	m_tHook;
-	VecExtras_t& m_dExtras;
+	StrVec_t& m_dExtra;
 
-	LocalSearchRef_t ( ExprHook_c & tHook, VecExtras_t & dExtras )
+	LocalSearchRef_t ( ExprHook_c & tHook, StrVec_t& dExtra )
 		: m_tHook ( tHook )
-		, m_dExtras ( dExtras )
+		, m_dExtra ( dExtra )
 	{}
 
 	void MergeChild ( LocalSearchRef_t dChild )
 	{
-		if ( m_dExtras.IsEmpty ())
-			return;
-
-		ARRAY_FOREACH (i, m_dExtras)
-			m_dExtras[i].Append ( dChild.m_dExtras[i] );
+		m_dExtra.Append ( dChild.m_dExtra );
 	}
 
 	inline static bool IsClonable()
@@ -5456,16 +5451,12 @@ struct LocalSearchRef_t
 struct LocalSearchClone_t
 {
 	ExprHook_c m_tHook;
-	CSphFixedVector<StrVec_t> m_dExtras {0};
+	StrVec_t m_dExtra;
 
-	explicit LocalSearchClone_t ( const LocalSearchRef_t & dParent )
-	{
-		m_dExtras.Reset ( dParent.m_dExtras.GetLength() );
-	}
-
+	explicit LocalSearchClone_t ( const LocalSearchRef_t & ) {}
 	explicit operator LocalSearchRef_t ()
 	{
-		return { m_tHook, m_dExtras };
+		return { m_tHook, m_dExtra };
 	}
 };
 
@@ -5481,8 +5472,10 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 	CSphFixedVector<ISphMatchSorter *> dAllSorters ( iQueries*iNumLocals );
 	dAllSorters.Fill ( nullptr );
 
-	if ( m_dQueries[m_iStart].m_bAgent)
-		m_dExtraSchemas.Reset ( iQueries );
+	bool bNeedExtra = m_dQueries[m_iStart].m_bAgent;
+	if ( bNeedExtra )
+		m_dExtraSchema.Reset (); // cleanup from any possible previous using
+
 	CSphFixedVector<bool> bResults ( iNumLocals );
 
 	// start in mass order
@@ -5494,7 +5487,7 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 	dOrder.Sort ( Lesser ( [this] ( int a, int b ) { return m_dLocal[a].m_iMass>m_dLocal[b].m_iMass; } ));
 
 	// the context
-	ClonableCtx_T<LocalSearchRef_t, LocalSearchClone_t> dCtx { m_tHook, m_dExtraSchemas };
+	ClonableCtx_T<LocalSearchRef_t, LocalSearchClone_t> dCtx { m_tHook, m_dExtraSchema };
 
 	auto iConcurrency = m_dQueries[m_iStart].m_iCouncurrency;
 	if ( !iConcurrency )
@@ -5542,11 +5535,9 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 			SphQueueRes_t tQueueRes;
 			auto dSorters = dAllSorters.Slice ( iIdx * iQueries, iQueries );
 			auto dResults = dAllResults.Slice ( iIdx * iQueries, iQueries );
-			VecTraits_T<StrVec_t> dExtraSchemas;
-			if ( !m_dExtraSchemas.IsEmpty ())
-				dExtraSchemas = m_dExtraSchemas.Slice ( iIdx * iQueries, iQueries );
+			StrVec_t * pExtra = bNeedExtra ? &tCtx.m_dExtra : nullptr;
 			CSphFixedVector<CSphString> dErrors ( dSorters.GetLength ());
-			int iValidSorters = CreateSorters ( pServed->m_pIndex, dSorters, dErrors, dExtraSchemas, tQueueRes );
+			int iValidSorters = CreateSorters ( pServed->m_pIndex, dSorters, dErrors, pExtra, tQueueRes );
 			if ( iValidSorters<dSorters.GetLength ())
 			{
 				ARRAY_FOREACH ( i, dErrors )
@@ -6571,10 +6562,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		AggrResult_t & tRes = m_dResults[iRes];
 		const CSphQuery & tQuery = m_dQueries[iRes];
 		sph::StringSet hExtra;
-		if ( !m_dExtraSchemas.IsEmpty () )
-			for ( const StrVec_t & dExtraSet : m_dExtraSchemas )
-				for ( const CSphString & sExtra : dExtraSet )
-					hExtra.Add ( sExtra );
+		for ( const CSphString & sExtra : m_dExtraSchema )
+			hExtra.Add ( sExtra );
 
 
 		// minimize sorters needs these pointers

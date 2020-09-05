@@ -315,7 +315,7 @@ TEST_P ( RTN, WeightBoundary )
 	SphQueueRes_t tRes;
 	ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, tResult.m_sError, tRes, nullptr );
 	ASSERT_TRUE ( pSorter );
-	ASSERT_TRUE ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, tArgs ) );
+	ASSERT_TRUE ( pIndex->MultiQuery ( &tQuery, &tResult, { &pSorter, 1 }, tArgs ) );
 	tResult.FillFromQueue ( pSorter, 0 );
 	ASSERT_EQ ( tResult.m_dMatches.GetLength (), 1 ) << "results found";
 	ASSERT_EQ ( tResult.m_dMatches[0].m_tRowID, 0 ) << "rowID" ;
@@ -425,7 +425,7 @@ TEST_F ( RT, RankerFactors )
 
 		auto pSorter = sphCreateQueue ( tQueueSettings, tQuery, tResult.m_sError, tRes, nullptr );
 		ASSERT_TRUE ( pSorter );
-		ASSERT_TRUE ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, tArgs ) );
+		ASSERT_TRUE ( pIndex->MultiQuery ( &tQuery, &tResult, { &pSorter, 1 }, tArgs ) );
 		tResult.FillFromQueue ( pSorter, 0 );
 
 		tResult.m_tSchema = *pSorter->GetSchema ();
@@ -594,7 +594,7 @@ TEST_F ( RT, SendVsMerge )
 		if ( pSrc->m_iDocsCounter==350 )
 		{
 			pIndex->Commit ( NULL, NULL );
-			EXPECT_TRUE ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, tArgs ) );
+			EXPECT_TRUE ( pIndex->MultiQuery ( &tQuery, &tResult, { &pSorter, 1 }, tArgs ) );
 			tResult.FillFromQueue ( pSorter, 0 );
 		}
 	}

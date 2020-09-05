@@ -1084,7 +1084,7 @@ public:
 	bool				EarlyReject ( CSphQueryContext * , CSphMatch & ) const final { return false; }
 	const CSphSourceStats &	GetStats () const final { return g_tTmpDummyStat; }
 	void				GetStatus ( CSphIndexStatus* ) const final {}
-	bool				MultiQuery ( const CSphQuery * , CSphQueryResult * , int , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const final { return false; }
+	bool				MultiQuery ( const CSphQuery * , CSphQueryResult * , const VecTraits_T<ISphMatchSorter *> & , const CSphMultiQueryArgs & ) const final { return false; }
 	bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult ** , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const final { return false; }
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const final ;
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const final { return true; }
@@ -1921,7 +1921,7 @@ public:
 	void				Unlock () final;
 	void				PostSetup() final {}
 
-	bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const final;
+	bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const final;
 	bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const final;
 	 bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const final;
 	template <class Qword> bool		DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError ) const;
@@ -15695,7 +15695,7 @@ void sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & t
 
 /// one regular query vs many sorters (like facets, or similar for common-tree optimization)
 bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult,
-	int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
+	const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs ) const
 {
 	QueryProfile_t * pProfile = pResult->m_pProfile;
 //	sphSleepMsec(50); // test delay
@@ -15704,10 +15704,8 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 
 	// to avoid the checking of a ppSorters's element for NULL on every next step, just filter out all nulls right here
 	CSphVector<ISphMatchSorter*> dSorters;
-	dSorters.Reserve ( iSorters );
-	for ( int i=0; i<iSorters; ++i )
-		if ( ppSorters[i] )
-			dSorters.Add ( ppSorters[i] );
+	dSorters.Reserve ( dAllSorters.GetLength() );
+	dAllSorters.Apply ([&dSorters] ( ISphMatchSorter* p) { if ( p ) dSorters.Add(p); });
 
 	// if we have anything to work with
 	if ( dSorters.IsEmpty () )
@@ -15816,7 +15814,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 	// ensure we have multiple queries
 	assert ( ppResults );
 	if ( iQueries==1 )
-		return MultiQuery ( pQueries, ppResults[0], 1, ppSorters, tArgs );
+		return MultiQuery ( pQueries, ppResults[0], { ppSorters, 1}, tArgs );
 
 	MEMORY ( MEM_DISK_QUERYEX );
 

@@ -93,7 +93,7 @@ public:
 	bool Truncate ( CSphString & ) override EXCLUDES ( m_tLockHash, m_tLock );
 
 	// RT index stub
-	bool MultiQuery ( const CSphQuery *, CSphQueryResult *, int, ISphMatchSorter **, const CSphMultiQueryArgs & ) const override;
+	bool MultiQuery ( const CSphQuery *, CSphQueryResult *, const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const override;
 	bool MultiQueryEx ( int, const CSphQuery *, CSphQueryResult **, ISphMatchSorter **, const CSphMultiQueryArgs & ) const override;
 	virtual bool AddDocument ( ISphHits * , const CSphMatch & , const char ** , const CSphVector<DWORD> & , CSphString & , CSphString & ) { return true; }
 	bool DeleteDocument ( const DocID_t * , int , CSphString & , RtAccum_t * pAccExt ) override { RollBack ( pAccExt ); return true; }
@@ -172,8 +172,8 @@ private:
 	CSphVector<SphWordID_t>			m_dHitlessWords;
 
 	void DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMatchResult_t & tRes );
-	bool MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters,
-		ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs &tArgs ) const;
+	bool MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, const VecTraits_T<ISphMatchSorter*>& dSorters,
+			const CSphMultiQueryArgs &tArgs ) const;
 	bool CanBeAdded ( PercolateQueryArgs_t& tArgs, CSphString& sError ) REQUIRES ( m_tLockHash );
 	StoredQuery_i* CreateQuery ( PercolateQueryArgs_t& tArgs, const ISphTokenizer* pTokenizer, CSphDict* pDict,
 		  CSphString& sError );
@@ -1917,8 +1917,8 @@ struct PqMatchProcessor_t : ISphMatchProcessor, ISphNoncopyable
 	}
 };
 
-bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters,
-	ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs &tArgs ) const
+bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult,
+		const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs &tArgs ) const
 {
 	assert ( tArgs.m_iTag>=0 );
 
@@ -1940,9 +1940,9 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 
 	// select the sorter with max schema
 	// uses GetAttrsCount to get working facets (was GetRowSize)
-	int iMaxSchemaIndex = GetMaxSchemaIndexAndMatchCapacity ( {ppSorters, iSorters} ).first;
-	const ISphSchema & tMaxSorterSchema = *( ppSorters[iMaxSchemaIndex]->GetSchema ());
-	auto dSorterSchemas = SorterSchemas ( {ppSorters, iSorters}, iMaxSchemaIndex );
+	int iMaxSchemaIndex = GetMaxSchemaIndexAndMatchCapacity ( dSorters ).first;
+	const ISphSchema & tMaxSorterSchema = *( dSorters[iMaxSchemaIndex]->GetSchema ());
+	auto dSorterSchemas = SorterSchemas ( dSorters, iMaxSchemaIndex );
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );
@@ -1974,7 +1974,7 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 	StringBuilder_c sFilters;
 
 	// prepare to work them rows
-	bool bRandomize = ppSorters[0]->m_bRandomize;
+	bool bRandomize = dSorters[0]->m_bRandomize;
 
 	CSphMatch tMatch;
 	tMatch.Reset ( tMaxSorterSchema.GetDynamicSize () );
@@ -2034,8 +2034,7 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 		tCtx.CalcSort ( tMatch );
 
 		bool bNewMatch = false;
-		for ( int iSorter = 0; iSorter<iSorters; ++iSorter )
-			bNewMatch |= ppSorters[iSorter]->Push ( tMatch );
+		dSorters.Apply ( [&tMatch, &bNewMatch] ( ISphMatchSorter * p ) { bNewMatch |= p->Push ( tMatch ); } );
 
 		// stringptr expressions should be duplicated (or taken over) at this point
 		tCtx.FreeDataFilter ( tMatch );
@@ -2060,12 +2059,7 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 	if ( tCtx.m_dCalcFinal.GetLength () )
 	{
 		PqMatchProcessor_t tFinal ( tArgs.m_iTag, tCtx );
-		for ( int iSorter = 0; iSorter<iSorters; iSorter++ )
-		{
-			ISphMatchSorter * pTop = ppSorters[iSorter];
-			if ( pTop )
-				pTop->Finalize ( tFinal, false );
-		}
+		dSorters.Apply ( [&tFinal] ( ISphMatchSorter * p ) { p->Finalize ( tFinal, false ); } );
 	}
 
 	pResult->m_iQueryTime += ( int ) ( ( sphMicroTimer () - tmQueryStart ) / 1000 );
@@ -2073,8 +2067,8 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 	return true; // fixme! */
 }
 
-bool PercolateIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters,
-									ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs &tArgs ) const
+bool PercolateIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult,
+		const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs &tArgs ) const
 {
 	assert ( pQuery );
 
@@ -2082,15 +2076,11 @@ bool PercolateIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * 
 
 	// to avoid the checking of a ppSorters's element for NULL on every next step, just filter out all nulls right here
 	CSphVector<ISphMatchSorter *> dSorters;
-	dSorters.Reserve ( iSorters );
-	for ( int i = 0; i<iSorters; ++i )
-		if ( ppSorters[i] )
-			dSorters.Add ( ppSorters[i] );
-
-	iSorters = dSorters.GetLength ();
+	dSorters.Reserve ( dAllSorters.GetLength() );
+	dAllSorters.Apply ([&dSorters] ( ISphMatchSorter* p) { if ( p ) dSorters.Add(p); });
 
 	// if we have anything to work with
-	if ( iSorters==0 )
+	if ( dSorters.IsEmpty() )
 		return false;
 
 	// non-random at the start, random at the end
@@ -2101,7 +2091,7 @@ bool PercolateIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * 
 
 	// fast path for scans
 	if ( pQueryParser->IsFullscan ( *pQuery ) )
-		return MultiScan ( pQuery, pResult, iSorters, &dSorters[0], tArgs );
+		return MultiScan ( pQuery, pResult, dSorters, tArgs );
 
 	return false;
 }
@@ -2111,7 +2101,7 @@ bool PercolateIndex_c::MultiQueryEx ( int iQueries, const CSphQuery * ppQueries,
 {
 	bool bResult = false;
 	for ( int i = 0; i<iQueries; ++i )
-		if ( MultiQuery ( &ppQueries[i], ppResults[i], 1, &ppSorters[i], tArgs ) )
+		if ( MultiQuery ( &ppQueries[i], ppResults[i], { ppSorters+i, 1}, tArgs ) )
 			bResult = true;
 		else
 			ppResults[i]->m_iMultiplier = -1;

@@ -1133,7 +1133,7 @@ public:
 	int64_t *			GetFieldLens() const final { return m_tSettings.m_bIndexFieldLens ? m_dFieldLens.Begin() : nullptr; }
 	void				GetStatus ( CSphIndexStatus* ) const final;
 
-	bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const final;
+	bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const final;
 	bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const final;
 	void				DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError, const SphChunkGuard_t & tGuard ) const;
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const final;
@@ -6099,7 +6099,6 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 		{
 			myinfo::SetThreadInfo ( "%d ch %d:", iTick, iChunk );
 			auto & dLocalSorters = tCtx.m_dSorters;
-			auto iSorters = dLocalSorters.GetLength ();
 			CSphQueryResult tChunkResult;
 			CSphQueryResult* pThResult = tCtx.m_pResult;
 			tChunkResult.m_pProfile = pThResult->m_pProfile;
@@ -6117,7 +6116,7 @@ void QueryDiskChunks ( const CSphQuery * pQuery,
 			tMultiArgs.m_bModifySorterSchemas = false;
 
 			bInterrupt = !tGuard.m_dDiskChunks[iChunk]->MultiQuery ( pQuery,
-					&tChunkResult, iSorters, dLocalSorters.begin(), tMultiArgs );
+					&tChunkResult, dLocalSorters, tMultiArgs );
 
 			// check terms inconsistency among disk chunks
 			const auto & hChunkStats = tChunkResult.m_hWordStats;
@@ -6554,19 +6553,16 @@ bool DoFullTextSearch ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 // FIXME! missing MVA, index_exact_words support
 // FIXME? any chance to factor out common backend agnostic code?
 // FIXME? do we need to support pExtraFilters?
-bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters,
-	ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
+bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult,
+		const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs ) const
 {
-	assert ( ppSorters );
 	assert ( pResult );
 
 	// to avoid the checking of a ppSorters's element for NULL on every next step,
 	// just filter out all nulls right here
 	CSphVector<ISphMatchSorter*> dSorters;
-	dSorters.Reserve ( iSorters );
-	for ( int i=0; i<iSorters; ++i )
-		if ( ppSorters[i] )
-			dSorters.Add ( ppSorters[i] );
+	dSorters.Reserve ( dAllSorters.GetLength() );
+	dAllSorters.Apply ([&dSorters] ( ISphMatchSorter* p) { if ( p ) dSorters.Add(p); });
 
 	// if we have anything to work with
 	if ( dSorters.IsEmpty() )
@@ -6757,7 +6753,7 @@ bool RtIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	else
 		bResult = DoFullTextSearch ( tGuard.m_dRamChunks, tMaxSorterSchema, pQuery, m_sIndexName.cstr (),
 				tArgs.m_iIndexWeight, iMatchPoolSize, iStackNeed, tTermSetup, pProfiler, tCtx, dSorters,
-				tParsed, pResult, iSorters==1 ? ppSorters[0] : nullptr );
+				tParsed, pResult, dSorters.GetLength()==1 ? dSorters[0] : nullptr );
 
 	if (!bResult)
 		return false;
@@ -6785,7 +6781,7 @@ bool RtIndex_c::MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQu
 	// FIXME! OPTIMIZE! implement common subtree cache here
 	bool bResult = false;
 	for ( int i=0; i<iQueries; ++i )
-		if ( MultiQuery ( &ppQueries[i], ppResults[i], 1, &ppSorters[i], tArgs ) )
+		if ( MultiQuery ( &ppQueries[i], ppResults[i], { ppSorters+i, 1}, tArgs ) )
 			bResult = true;
 		else
 			ppResults[i]->m_iMultiplier = -1; // -1 means 'error'

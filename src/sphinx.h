@@ -3307,7 +3307,7 @@ public:
 	void						SetCacheSize ( int iMaxCachedDocs, int iMaxCachedHits );
 
 	/// one regular query vs many sorters (like facets, or similar for common-tree optimization)
-	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const = 0;
+	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const = 0;
 
 	/// many regular queries with one sorter attached to each query.
 	/// returns true if at least one query succeeded. The failed queries indicated with pResult->m_iMultiplier==-1

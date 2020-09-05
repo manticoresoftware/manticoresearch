@@ -5336,7 +5336,7 @@ void SearchHandler_c::RunLocalSearches()
 		if ( m_bMultiQueue )
 		{
 			tStats.m_tIOStats.Start();
-			bResult = pServed->m_pIndex->MultiQuery ( &m_dQueries[m_iStart], &tStats, dSorters.GetLength(), dSorters.Begin(), tMultiArgs );
+			bResult = pServed->m_pIndex->MultiQuery ( &m_dQueries[m_iStart], &tStats, dSorters, tMultiArgs );
 			tStats.m_tIOStats.Stop();
 
 			for ( auto & i : m_dResults )
@@ -5566,8 +5566,8 @@ void SearchHandler_c::RunLocalSearchesCoro ()
 
 			dResults[0].m_tIOStats.Start ();
 			if ( m_bMultiQueue )
-				bResults[iIdx] = pServed->m_pIndex->MultiQuery ( &m_dQueries[m_iStart], &dResults[0], iQueries,
-																  &dSorters[0], tMultiArgs );
+				bResults[iIdx] = pServed->m_pIndex->MultiQuery ( &m_dQueries[m_iStart], &dResults[0],
+																  dSorters, tMultiArgs );
 			else
 			{
 				CSphVector<CSphQueryResult *> dpResults ( dResults.GetLength ());

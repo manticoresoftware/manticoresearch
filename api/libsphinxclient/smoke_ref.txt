@@ -35,8 +35,8 @@ Matches:
 
 Query 'test number' retrieved 3 of 3 matches.
 Query stats:
-	'test' found 5 times in 3 documents
 	'number' found 3 times in 3 documents
+	'test' found 5 times in 3 documents
 
 Matches:
 1. doc_id=4, weight=101442, idd=4, group_id=2, tag=(7,40), tag2=(7,40), tag64=(7,40)

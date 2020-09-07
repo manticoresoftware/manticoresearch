@@ -3480,15 +3480,14 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t * pRes, 
 			tOut.SendDword ( pRes->m_tStats.m_iSkips + pRes->m_iAgentFetchedSkips );
 	}
 
-	tOut.SendInt ( pRes->m_hWordStats.GetLength() );
-
-	pRes->m_hWordStats.IterateStart();
-	while ( pRes->m_hWordStats.IterateNext() )
+	auto dWords = pRes->MakeSortedWordStat ();
+	tOut.SendInt ( dWords.GetLength() );
+	for( auto * pWord : dWords )
 	{
-		const CSphQueryResultMeta::WordStat_t & tStat = pRes->m_hWordStats.IterateGet();
-		tOut.SendString ( pRes->m_hWordStats.IterateGetKey().cstr() );
-		tOut.SendAsDword ( tStat.first );
-		tOut.SendAsDword ( tStat.second );
+		assert ( pWord );
+		tOut.SendString ( pWord->first.cstr () );
+		tOut.SendAsDword ( pWord->second.first );
+		tOut.SendAsDword ( pWord->second.second );
 		if ( bAgentMode )
 			tOut.SendByte ( 0 ); // statistics have no expanded terms for now
 	}
@@ -8551,19 +8550,19 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 	}
 
 
-	int iWord = 0;
-	for ( const auto& dWord : tMeta.m_hWordStats )
+	auto dWords = tMeta.MakeSortedWordStat();
+	ARRAY_CONSTFOREACH( iWord, dWords )
 	{
+		auto * pWord = dWords[iWord];
+		assert ( pWord );
 		if ( dStatus.MatchAddVa ( "keyword[%d]", iWord ) )
-			dStatus.Add ( dWord.first );
+			dStatus.Add ( pWord->first );
 
 		if ( dStatus.MatchAddVa ( "docs[%d]", iWord ) )
-			dStatus.Add().SetSprintf ( INT64_FMT, dWord.second.first );
+			dStatus.Add().SetSprintf ( INT64_FMT, pWord->second.first );
 
 		if ( dStatus.MatchAddVa ( "hits[%d]", iWord ) )
-			dStatus.Add().SetSprintf ( INT64_FMT, dWord.second.second );
-
-		++iWord;
+			dStatus.Add().SetSprintf ( INT64_FMT, pWord->second.second );
 	}
 }
 
@@ -12292,7 +12291,7 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 						dRows.PutNULL();
 						break;
 					}
-			
+
 					// send string to client
 					JsonEscapedBuilder sTmp;
 					sphJsonFieldFormat ( sTmp, pField, eJson, false );

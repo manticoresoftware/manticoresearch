@@ -28063,6 +28063,19 @@ void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int64_t iDocs, int
 	AddOtherStat ( m_hWordStats, sWord, iDocs, iHits );
 }
 
+///< sort wordstat to achieve reproducable result over different runs
+CSphFixedVector<SmallStringHash_T<CSphQueryResultMeta::WordStat_t>::KeyValue_t *> CSphQueryResultMeta::MakeSortedWordStat () const
+{
+	using kv_t = SmallStringHash_T<WordStat_t>::KeyValue_t;
+	CSphFixedVector<kv_t*> dWords { m_hWordStats.GetLength() };
+
+	int i = 0;
+	for ( auto & tStat : m_hWordStats )
+		dWords[i++] = &tStat;
+
+	dWords.Sort ( Lesser ( [] ( kv_t * l, kv_t * r ) { return l->first<r->first; } ) );
+	return dWords;
+}
 
 //////////////////////////////////////////////////////////////////////////
 

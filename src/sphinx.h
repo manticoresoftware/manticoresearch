@@ -2700,8 +2700,11 @@ public:
 
 	virtual					~CSphQueryResultMeta () {}					///< dtor
 	void					AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits );
-	static void				AddOtherStat ( SmallStringHash_T<WordStat_t>& hTrg,
-			const CSphString & sWord, int64_t iDocs, int64_t iHits);
+
+	static void AddOtherStat ( SmallStringHash_T<WordStat_t> & hTrg, const CSphString & sWord, int64_t iDocs
+			, int64_t iHits );
+	// sort wordstat to achieve reproducable result over different runs
+	CSphFixedVector<SmallStringHash_T<CSphQueryResultMeta::WordStat_t>::KeyValue_t *>	MakeSortedWordStat () const;
 };
 
 

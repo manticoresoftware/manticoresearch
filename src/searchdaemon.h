@@ -1047,23 +1047,61 @@ void HandleMySqlExtendedUpdate( AttrUpdateArgs& tArgs );
 // SERVED INDEX DESCRIPTORS STUFF
 /////////////////////////////////////////////////////////////////////////////
 
+struct DocstoreAndTag_t
+{
+	const DocstoreReader_i *	m_pDocstore = nullptr;
+	int							m_iTag = 0;		// real tag, but high bit is never set.
+	bool						m_bTag = false;	// boolean tag for remotes
+
+	inline void Assign ( const DocstoreAndTag_t& rhs )
+	{
+		m_pDocstore = rhs.m_pDocstore;
+		m_iTag = rhs.m_iTag;
+		m_bTag = rhs.m_bTag;
+	}
+};
+
+/// result from one backend (sorter). With own schema and m.b. docstore. Avoid copying of the data.
+struct OneResultset_t final : public DocstoreAndTag_t
+{
+	CSphSchema					m_tSchema;
+	CSphSwapVector<CSphMatch>	m_dMatches;
+
+	int FillFromSorter ( ISphMatchSorter * pQueue );
+	void ClampMatches ( int iLimit );
+	void ClampAllMatches ();
+	~OneResultset_t();
+};
+
+/// specialized swapper
+inline void Swap ( OneResultset_t & a, OneResultset_t & b )
+{
+	a.m_tSchema.Swap( b.m_tSchema );
+	a.m_dMatches.SwapData ( b.m_dMatches );
+	Swap ( a.m_pDocstore, b.m_pDocstore );
+	Swap ( a.m_iTag, b.m_iTag );
+	Swap ( a.m_bTag, b.m_bTag );
+}
+
 /// result set aggregated across indexes
 struct AggrResult_t final: CSphQueryResultMeta
 {
 	CSphSchema				m_tSchema;			///< result schema
-	CSphVector<CSphSchema>	m_dSchemas;			///< aggregated result sets schemas (for schema minimization)
-	CSphVector<int>			m_dMatchCounts;		///< aggregated result sets lengths (for schema minimization)
+	CSphSwapVector<OneResultset_t> m_dResults;	///< everything from backends (local or remote)
 	StrVec_t				m_dZeroCount;
-	TaggedVector_c			m_dTag2Docstore;	///< tag to docstore mapping
-	CSphSwapVector<CSphMatch> m_dMatches;       ///< top matching documents, no more than MAX_MATCHES
 	int						m_iOffset = 0;		///< requested offset into matches array
 	int						m_iCount = 0;		///< count which will be actually served (computed from total, offset and limit)
 	int						m_iSuccesses = 0;
+	bool					m_bTagsAssigned = false; // if matches in chunk(s) have assigned tags
+	Debug (bool 			m_bSingle = false;) // single = only one chunk. False = many chunks
+	Debug (bool				m_bOneSchema = false;) // either chunk's schemas are valid, or single result's schema in game.
+	Debug (bool				m_bTagsCompacted = false;) // whether tags range is compact or has gaps
 
-	void ClampMatches ( int iLimit, bool bCommonSchema );
-	void FreeMatchesPtrs ( int iLimit, bool bCommonSchema );
-	int FillFromQueue ( ISphMatchSorter * pQueue, int iTag );
-	~AggrResult_t () final;
+	int GetLength() const;
+	inline bool IsEmpty() const { return GetLength()==0; }
+	bool AddResultset ( ISphMatchSorter * pQueue, const DocstoreReader_i * pDocstore, int iTag );
+	void ClampMatches ( int iLimit );
+	void ClampAllMatches ();
 };
 
 class SearchHandler_c;

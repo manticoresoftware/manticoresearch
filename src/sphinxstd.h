@@ -580,6 +580,12 @@ void sphAssert ( const char * sExpr, const char * sFile, int iLine );
 #define Verify(_expr) _expr
 #endif
 
+#ifndef NDEBUG
+#define Debug( _expr ) _expr
+#else
+#define Debug(_expr)
+#endif
+
 /////////////////////////////////////////////////////////////////////////////
 // GENERICS
 /////////////////////////////////////////////////////////////////////////////

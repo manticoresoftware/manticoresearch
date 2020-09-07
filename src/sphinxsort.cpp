@@ -528,7 +528,7 @@ public:
 	}
 
 	/// store all entries into specified location in sorted order, and remove them from queue
-	int Flatten ( CSphMatch * pTo, int iTag ) final
+	int Flatten ( CSphMatch * pTo ) final
 	{
 		KMQ << "flatten";
 		assert ( !IsEmpty() );
@@ -539,8 +539,6 @@ public:
 			--pTo;
 //			m_pSchema->FreeDataPtrs ( *pTo );
 			PopAndProcess_T ( [pTo] ( CSphMatch & tRoot ) { Swap ( *pTo, tRoot ); return true; } );
-			if ( iTag>=0 )
-				pTo->m_iTag = iTag;
 		}
 		m_iTotal = 0;
 		return iReadyMatches;
@@ -760,7 +758,7 @@ public:
 	}
 
 	/// store all entries into specified location in sorted order, and remove them from queue
-	int Flatten ( CSphMatch * pTo, int iTag ) final
+	int Flatten ( CSphMatch * pTo ) final
 	{
 		KBF << "Flatten";
 		FinalizeMatches ();
@@ -770,8 +768,6 @@ public:
 		{
 			KBF << "fltn " << m_dData[iMatch].m_iTag << ":" << m_dData[iMatch].m_tRowID;
 			Swap ( *pTo, m_dData[iMatch] );
-			if ( iTag>=0 )
-				pTo->m_iTag = iTag;
 			++pTo;
 		}
 
@@ -1038,7 +1034,7 @@ public:
 	}
 
 	/// final update pass
-	int Flatten ( CSphMatch *, int ) final
+	int Flatten ( CSphMatch * ) final
 	{
 		DoUpdate();
 		m_iTotal = 0;
@@ -1142,7 +1138,7 @@ public:
 	}
 
 	/// stub
-	int Flatten ( CSphMatch *, int ) final
+	int Flatten ( CSphMatch * ) final
 	{
 		m_iTotal = 0;
 		return 0;
@@ -2880,7 +2876,7 @@ public:
 	}
 
 	/// store all entries into specified location in sorted order, and remove them from queue
-	int Flatten ( CSphMatch * pTo, int iTag ) override
+	int Flatten ( CSphMatch * pTo ) override
 	{
 		FinalizeMatches();
 
@@ -2898,8 +2894,6 @@ public:
 			}
 
 			Swap ( *pTo, tMatch );
-			if ( iTag>=0 )
-				pTo->m_iTag = iTag;
 			++pTo;
 		}
 
@@ -3357,7 +3351,7 @@ public:
 	}
 
 	/// store all entries into specified location in sorted order, and remove them from queue
-	int Flatten ( CSphMatch * pTo, int iTag ) override
+	int Flatten ( CSphMatch * pTo ) override
 	{
 		if ( !GetLength() )
 			return 0;
@@ -3369,10 +3363,8 @@ public:
 			CountDistinct ();
 		}
 
-		auto fnSwap = [&pTo,iTag] ( CSphMatch & tSrc ) 	{ // the writer
+		auto fnSwap = [&pTo] ( CSphMatch & tSrc ) 	{ // the writer
 			Swap ( *pTo, tSrc );
-			if ( iTag>=0 )
-				pTo->m_iTag = iTag;
 			++pTo;
 		};
 
@@ -4163,7 +4155,7 @@ public:
 	}
 
 	/// store all entries into specified location in sorted order, and remove them from queue
-	int Flatten ( CSphMatch * pTo, int iTag ) final
+	int Flatten ( CSphMatch * pTo ) final
 	{
 		assert ( m_bDataInitialized );
 
@@ -4177,8 +4169,6 @@ public:
 		{
 			iCopied = 1;
 			Swap ( *pTo, m_tData );
-			if ( iTag>=0 )
-				pTo->m_iTag = iTag;
 		} else
 		{
 			m_pSchema->FreeDataPtrs ( m_tData );

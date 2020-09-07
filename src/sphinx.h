@@ -1146,6 +1146,12 @@ public:
 		}
 	}
 
+	// if mem region reinterpreted as match - ensure d-tr will not do sad things as delete garbaged m_pDynamic
+	void CleanGarbage()
+	{
+		m_pDynamic = nullptr;
+	}
+
 	void ResetDynamic()
 	{
 #ifndef NDEBUG
@@ -2985,7 +2991,7 @@ public:
 	/// store all entries into specified location and remove them from the queue
 	/// entries are stored in properly sorted order,
 	/// return sorted entries count, might be less than length due of aggregate filtering phase
-	virtual int			Flatten ( CSphMatch * pTo, int iTag ) = 0;
+	virtual int			Flatten ( CSphMatch * pTo ) = 0;
 
 	/// get a pointer to the worst element, NULL if there is no fixed location
 	virtual const CSphMatch *	GetWorst() const { return nullptr; }

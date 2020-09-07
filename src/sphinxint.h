@@ -874,31 +874,6 @@ private:
 };
 
 
-class Docstore_c;
-struct PoolPtrs_t
-{
-	const DocstoreReader_i * m_pDocstore = nullptr;
-};
-
-
-class TaggedVector_c
-{
-public:
-	PoolPtrs_t & operator [] ( int iTag ) const
-	{
-		return m_dPool [ iTag & 0x7FFFFFF ];
-	}
-
-	void Resize ( int iSize )
-	{
-		m_dPool.Resize ( iSize );
-	}
-
-private:
-	CSphVector<PoolPtrs_t> m_dPool;
-};
-
-
 class CSphFreeList
 {
 private:

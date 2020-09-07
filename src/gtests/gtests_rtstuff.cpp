@@ -318,10 +318,11 @@ TEST_P ( RTN, WeightBoundary )
 	ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, tResult.m_sError, tRes );
 	ASSERT_TRUE ( pSorter );
 	ASSERT_TRUE ( pIndex->MultiQuery ( tQueryResult, tQuery, { &pSorter, 1 }, tArgs ) );
-	tResult.FillFromQueue ( pSorter, 0 );
-	ASSERT_EQ ( tResult.m_dMatches.GetLength (), 1 ) << "results found";
-	ASSERT_EQ ( tResult.m_dMatches[0].m_tRowID, 0 ) << "rowID" ;
-	ASSERT_EQ ( tResult.m_dMatches[0].m_iWeight, GetParam ()) << "weight" ;
+	auto & tOneRes = tResult.m_dResults.Add ();
+	tOneRes.FillFromSorter ( pSorter );
+	ASSERT_EQ ( tResult.GetLength (), 1 ) << "results found";
+	ASSERT_EQ ( tOneRes.m_dMatches[0].m_tRowID, 0 ) << "rowID" ;
+	ASSERT_EQ ( tOneRes.m_dMatches[0].m_iWeight, GetParam ()) << "weight" ;
 
 	SafeDelete ( pSorter );
 	SafeDelete ( tQuery.m_pQueryParser );
@@ -430,14 +431,15 @@ TEST_F ( RT, RankerFactors )
 		auto pSorter = sphCreateQueue ( tQueueSettings, tQuery, tResult.m_sError, tRes );
 		ASSERT_TRUE ( pSorter );
 		ASSERT_TRUE ( pIndex->MultiQuery ( tQueryResult, tQuery, { &pSorter, 1 }, tArgs ) );
-		tResult.FillFromQueue ( pSorter, 0 );
+		auto & tOneRes = tResult.m_dResults.Add ();
+		tOneRes.FillFromSorter ( pSorter );
 
 		tResult.m_tSchema = *pSorter->GetSchema ();
 		const CSphAttrLocator &tLoc = tResult.m_tSchema.GetAttr ( "pf" )->m_tLocator;
 
-		for ( int iMatch = 0; iMatch<tResult.m_dMatches.GetLength (); ++iMatch )
+		for ( int iMatch = 0; iMatch<tOneRes.m_dMatches.GetLength (); ++iMatch )
 		{
-			const BYTE * pAttr = (const BYTE *)tResult.m_dMatches[iMatch].GetAttr ( tLoc );
+			const BYTE * pAttr = (const BYTE *) tOneRes.m_dMatches[iMatch].GetAttr ( tLoc );
 			ASSERT_TRUE ( pAttr );
 
 			sphUnpackPtrAttr ( pAttr, &pAttr );
@@ -601,7 +603,8 @@ TEST_F ( RT, SendVsMerge )
 		{
 			pIndex->Commit ( NULL, NULL );
 			EXPECT_TRUE ( pIndex->MultiQuery ( tQueryResult, tQuery, { &pSorter, 1 }, tArgs ) );
-			tResult.FillFromQueue ( pSorter, 0 );
+			auto & tOneRes = tResult.m_dResults.Add ();
+			tOneRes.FillFromSorter ( pSorter );
 		}
 	}
 	pIndex->Commit ( NULL, NULL );
@@ -610,12 +613,13 @@ TEST_F ( RT, SendVsMerge )
 
 	tResult.m_tSchema = *pSorter->GetSchema ();
 
-	ASSERT_EQ ( tResult.m_dMatches.GetLength (), 350 );
-	for ( int i = 0; i<tResult.m_dMatches.GetLength (); ++i )
+	auto & tOneRes = tResult.m_dResults.First ();
+	ASSERT_EQ ( tResult.GetLength (), 350 );
+	for ( int i = 0; i<tResult.GetLength (); ++i )
 	{
-		const RowID_t uID = tResult.m_dMatches[i].m_tRowID;
-		const SphAttr_t tTag1 = tResult.m_dMatches[i].GetAttr ( tResult.m_tSchema.GetAttr ( 0 ).m_tLocator );
-		const SphAttr_t tTag2 = tResult.m_dMatches[i].GetAttr ( tResult.m_tSchema.GetAttr ( 1 ).m_tLocator );
+		const RowID_t uID = tOneRes.m_dMatches[i].m_tRowID;
+		const SphAttr_t tTag1 = tOneRes.m_dMatches[i].GetAttr ( tResult.m_tSchema.GetAttr ( 0 ).m_tLocator );
+		const SphAttr_t tTag2 = tOneRes.m_dMatches[i].GetAttr ( tResult.m_tSchema.GetAttr ( 1 ).m_tLocator );
 		ASSERT_TRUE ( ( RowID_t ) tTag1==uID + 1000 );
 		ASSERT_TRUE ( tTag2==1313 );
 	}

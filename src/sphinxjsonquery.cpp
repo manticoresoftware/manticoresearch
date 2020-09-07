@@ -1467,10 +1467,9 @@ CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQ
 
 	const CSphColumnInfo * pId = tSchema.GetAttr ( sphGetDocidName() );
 
-	for ( int iMatch=tRes.m_iOffset; iMatch<tRes.m_iOffset+tRes.m_iCount; ++iMatch )
+	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
+	for ( const auto& tMatch : dMatches )
 	{
-		const CSphMatch & tMatch = tRes.m_dMatches[iMatch];
-
 		ScopedComma_c sQueryComma ( tOut, ",", "{", "}" );
 
 		// note, that originally there is string UID, so we just output number in quotes for docid here

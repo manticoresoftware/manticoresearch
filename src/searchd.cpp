@@ -1479,7 +1479,7 @@ public:
 private:
 	int		m_iResults;
 
-	static void	ParseSchema ( AggrResult_t & tRes, MemInputBuffer_c & tReq );
+	static void	ParseSchema ( OneResultset_t & tRes, MemInputBuffer_c & tReq );
 	static void	ParseMatch ( CSphMatch & tMatch, MemInputBuffer_c & tReq, const CSphSchema & tSchema, bool bAgent64 );
 };
 
@@ -1798,9 +1798,12 @@ void SearchReplyParser_c::ParseMatch ( CSphMatch & tMatch, MemInputBuffer_c & tR
 			{
 				int iLen = tReq.GetDword();
 				BYTE * pData = nullptr;
-				tMatch.SetAttr ( tAttr.m_tLocator, (SphAttr_t)sphPackPtrAttr ( iLen, &pData ) );
-				if ( iLen )
+				if (iLen)
+				{
+					tMatch.SetAttr ( tAttr.m_tLocator, (SphAttr_t)sphPackPtrAttr ( iLen, &pData ) );
 					tReq.GetBytes ( pData, iLen );
+				} else
+					tMatch.SetAttr ( tAttr.m_tLocator, (SphAttr_t) 0 );
 			}
 			break;
 
@@ -1837,7 +1840,7 @@ void SearchReplyParser_c::ParseMatch ( CSphMatch & tMatch, MemInputBuffer_c & tR
 }
 
 
-void SearchReplyParser_c::ParseSchema ( AggrResult_t & tRes, MemInputBuffer_c & tReq )
+void SearchReplyParser_c::ParseSchema ( OneResultset_t & tRes, MemInputBuffer_c & tReq )
 {
 	CSphSchema & tSchema = tRes.m_tSchema;
 	tSchema.Reset ();
@@ -1881,10 +1884,11 @@ bool SearchReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 
 	dResults.Resize ( iResults );
 	for ( auto & tRes : dResults )
-		tRes.m_iSuccesses = 0;
-
-	for ( auto & tRes : dResults )
 	{
+		tRes.m_iSuccesses = 0;
+		OneResultset_t tChunk;
+		tChunk.m_iTag = tAgent.m_iStoreTag;
+		tChunk.m_bTag = true;
 		tRes.m_sError = "";
 		tRes.m_sWarning = "";
 
@@ -1899,7 +1903,7 @@ bool SearchReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 			case SEARCHD_OK: break;
 		}
 
-		ParseSchema ( tRes, tReq );
+		ParseSchema ( tChunk, tReq );
 
 		// get matches
 		int iMatches = tReq.GetInt ();
@@ -1916,13 +1920,9 @@ bool SearchReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 			return false;
 		}
 
-		assert ( !tRes.m_dMatches.GetLength() );
-		if ( iMatches )
-		{
-			tRes.m_dMatches.Resize ( iMatches );
-			for ( auto & tMatch : tRes.m_dMatches )
-				ParseMatch ( tMatch, tReq, tRes.m_tSchema, bAgent64 );
-		}
+		tChunk.m_dMatches.Resize ( iMatches );
+		for ( auto & tMatch : tChunk.m_dMatches )
+			ParseMatch ( tMatch, tReq, tChunk.m_tSchema, bAgent64 );
 
 		// read totals (retrieved count, total count, query time, word count)
 		int iRetrieved = tReq.GetInt ();
@@ -1970,6 +1970,8 @@ bool SearchReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 		}
 
 		// mark this result as ok
+		auto& tNewChunk = tRes.m_dResults.Add ();
+		::Swap ( tNewChunk, tChunk );
 		tRes.m_iSuccesses = 1;
 	}
 
@@ -3386,6 +3388,9 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t& tRes, b
 	bool bError = !tRes.m_sError.IsEmpty();
 	bool bWarning = !bError && !tRes.m_sWarning.IsEmpty();
 
+	assert ( bError || tRes.m_bSingle );
+	assert ( bError || tRes.m_bOneSchema );
+
 	if ( bError )
 	{
 		tOut.SendInt ( SEARCHD_ERROR ); // fixme! m.b. use APICommand_t and refactor to common API way
@@ -3415,10 +3420,11 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t& tRes, b
 
 	CSphVector<BYTE> dJson ( 512 );
 
-	for ( int i=0; i<tRes.m_iCount; ++i )
-	{
-		const CSphMatch & tMatch = tRes.m_dMatches [ tRes.m_iOffset+i ];
+	auto& dResult = tRes.m_dResults.First();
+	auto dMatches = dResult.m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
 
+	for ( const CSphMatch & tMatch : dMatches )
+	{
 		Verify ( tRes.m_tSchema.GetAttr(sphGetDocidName()) );
 		tOut.SendUint64 ( sphGetDocID(tMatch.m_pDynamic) );
 		tOut.SendInt ( tMatch.m_iWeight );
@@ -3437,7 +3443,7 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t& tRes, b
 	if ( tQuery.m_bAgent && tQuery.m_iLimit )
 		tOut.SendInt ( tRes.m_iCount );
 	else
-		tOut.SendInt ( tRes.m_dMatches.GetLength() );
+		tOut.SendInt ( dResult.m_dMatches.GetLength() );
 
 	tOut.SendAsDword ( tRes.m_iTotalMatches );
 	tOut.SendInt ( Max ( tRes.m_iQueryTime, 0 ) );
@@ -3493,126 +3499,131 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t& tRes, b
 
 /////////////////////////////////////////////////////////////////////////////
 
-void AggrResult_t::FreeMatchesPtrs ( int iLimit, bool bCommonSchema )
+int AggrResult_t::GetLength () const
 {
-	if ( m_dMatches.GetLength ()<=iLimit )
-		return;
+	int iCount = 0;
+	m_dResults.Apply ( [&iCount] ( const OneResultset_t & a ) { iCount += a.m_dMatches.GetLength (); } );
+	return iCount;
+}
 
-	if ( bCommonSchema )
-	{
-		for ( int i = iLimit; i<m_dMatches.GetLength (); ++i )
-			m_tSchema.FreeDataPtrs ( m_dMatches[i] );
-	} else
-	{
-		int nMatches = 0;
-		ARRAY_FOREACH ( i, m_dMatchCounts )
-		{
-			nMatches += m_dMatchCounts[i];
+bool AggrResult_t::AddResultset ( ISphMatchSorter * pQueue, const DocstoreReader_i * pDocstore, int iTag )
+{
+	assert ( pQueue );
 
-			if ( iLimit<nMatches )
-			{
-				int iFrom = Max ( iLimit, nMatches - m_dMatchCounts[i] );
-				for ( int j = iFrom; j<nMatches; ++j )
-					m_dSchemas[i].FreeDataPtrs ( m_dMatches[j] );
-			}
-		}
+	if ( !pQueue->GetLength () )
+	{
+		m_tSchema = *pQueue->GetSchema ();
+		return false;
 	}
+
+	// extract matches from sorter
+	auto & tOneRes = m_dResults.Add ();
+	tOneRes.m_pDocstore = pDocstore;
+	tOneRes.m_iTag = iTag;
+	tOneRes.FillFromSorter ( pQueue );
+	return true;
 }
 
-void AggrResult_t::ClampMatches ( int iLimit, bool bCommonSchema )
+void AggrResult_t::ClampMatches ( int iLimit )
 {
-	FreeMatchesPtrs ( iLimit, bCommonSchema );
-	if ( m_dMatches.GetLength()<=iLimit )
-		return;
-	m_dMatches.Resize ( iLimit );
+	assert ( m_bSingle );
+	m_dResults.First ().ClampMatches ( iLimit );
 }
 
-int AggrResult_t::FillFromQueue ( ISphMatchSorter * pQueue, int iTag )
+void AggrResult_t::ClampAllMatches ()
 {
-	if ( !pQueue || !pQueue->GetLength() )
+	for ( auto& dResult : m_dResults )
+		dResult.ClampAllMatches();
+}
+
+int OneResultset_t::FillFromSorter ( ISphMatchSorter * pQueue )
+{
+	if ( !pQueue )
 		return 0;
 
-	int iOffset = m_dMatches.GetLength ();
-	int iCopied = pQueue->Flatten ( m_dMatches.AddN ( pQueue->GetLength () ), iTag );
-	m_dMatches.Resize ( iOffset + iCopied );
+	assert ( m_dMatches.IsEmpty () );
+	m_tSchema = *pQueue->GetSchema ();
+	if ( !pQueue->GetLength () )
+		return 0;
+
+	int iCopied = pQueue->Flatten ( m_dMatches.AddN ( pQueue->GetLength () ) );
+	m_dMatches.Resize ( iCopied );
 	return iCopied;
 }
 
-AggrResult_t::~AggrResult_t ()
+void OneResultset_t::ClampAllMatches ()
 {
 	for ( auto& dMatch : m_dMatches )
 		m_tSchema.FreeDataPtrs ( dMatch );
+	m_dMatches.Reset();
 }
 
-
-struct TaggedMatchSorter_fn : public MatchSortAccessor_t
+void OneResultset_t::ClampMatches ( int iLimit )
 {
-	bool IsLess ( const CSphMatch * a, const CSphMatch * b ) const
-	{
-		bool bDistA = ( ( a->m_iTag & 0x80000000 )==0x80000000 );
-		bool bDistB = ( ( b->m_iTag & 0x80000000 )==0x80000000 );
+	assert ( iLimit>0 );
 
-		DocID_t tDocidA = sphGetDocID ( a->m_pDynamic );
-		DocID_t tDocidB = sphGetDocID ( b->m_pDynamic );
+	int iMatches = m_dMatches.GetLength ();
+	for ( int i = iLimit; i<iMatches; ++i )
+		m_tSchema.FreeDataPtrs ( m_dMatches[i] );
+	m_dMatches.Resize ( Min (iMatches, iLimit ) );
+}
 
-		// sort by doc_id, dist_tag, tag
-		return ( tDocidA < tDocidB ) ||
-			( tDocidA==tDocidB && ( ( !bDistA && bDistB ) || ( ( a->m_iTag & 0x7FFFFFFF )>( b->m_iTag & 0x7FFFFFFF ) ) ) );
-	}
-};
-
-
-void RemapResult ( const ISphSchema * pTarget, AggrResult_t & dResult )
+OneResultset_t::~OneResultset_t()
 {
-	int iCur = 0;
-	CSphVector<int> dMapFrom ( pTarget->GetAttrsCount() );
-	CSphVector<int> dRowItems ( pTarget->GetAttrsCount () );
+	for ( auto & dMatch : m_dMatches )
+		m_tSchema.FreeDataPtrs ( dMatch );
+}
+
+namespace { // static
+
+void RemapResult ( AggrResult_t & dResult )
+{
+	const ISphSchema& tSchema = dResult.m_tSchema;
+	int iAttrsCount = tSchema.GetAttrsCount ();
+	CSphVector<int> dMapFrom ( iAttrsCount );
+	CSphVector<int> dRowItems ( iAttrsCount );
 	static const int SIZE_OF_ROW = 8 * sizeof ( CSphRowitem );
 
-	ARRAY_FOREACH ( iSchema, dResult.m_dSchemas )
+	for ( auto & tRes : dResult.m_dResults )
 	{
 		dMapFrom.Resize ( 0 );
 		dRowItems.Resize ( 0 );
-		CSphSchema & dSchema = dResult.m_dSchemas[iSchema];
-		for ( int i = 0, iAttrsCount = pTarget->GetAttrsCount(); i<iAttrsCount; ++i )
+		CSphSchema & dSchema = tRes.m_tSchema;
+		for ( int i = 0, iAttrsCount = tSchema.GetAttrsCount(); i<iAttrsCount; ++i )
 		{
-			auto iSrcCol = dSchema.GetAttrIndex ( pTarget->GetAttr ( i ).m_sName.cstr () );
-			const CSphColumnInfo &tSrcCol = dSchema.GetAttr ( iSrcCol );
+			auto iSrcCol = dSchema.GetAttrIndex ( tSchema.GetAttr ( i ).m_sName.cstr () );
 			dMapFrom.Add ( iSrcCol );
-			dRowItems.Add ( tSrcCol.m_tLocator.m_iBitOffset / SIZE_OF_ROW );
+			dRowItems.Add ( dSchema.GetAttr ( iSrcCol ).m_tLocator.m_iBitOffset / SIZE_OF_ROW );
 			assert ( dMapFrom[i]>=0
-				|| IsSortStringInternal ( pTarget->GetAttr(i).m_sName )
-				|| IsSortJsonInternal ( pTarget->GetAttr(i).m_sName )
+				|| IsSortStringInternal ( tSchema.GetAttr(i).m_sName )
+				|| IsSortJsonInternal ( tSchema.GetAttr(i).m_sName )
 				);
 		}
-		int iLimit = Min ( iCur + dResult.m_dMatchCounts[iSchema], dResult.m_dMatches.GetLength() );
 
 		// inverse dRowItems - we'll free only those NOT enumerated yet
 		dRowItems = dSchema.SubsetPtrs ( dRowItems );
-		for ( int i=iCur; i<iLimit; i++ )
+		for ( auto& tMatch : tRes.m_dMatches )
 		{
-			CSphMatch & tMatch = dResult.m_dMatches[i];
-
 			// create new and shiny (and properly sized) match
 			CSphMatch tNewMatch;
-			tNewMatch.Reset ( pTarget->GetDynamicSize() );
+			tNewMatch.Reset ( tSchema.GetDynamicSize () );
 			tNewMatch.m_tRowID = tMatch.m_tRowID;
 			tNewMatch.m_iWeight = tMatch.m_iWeight;
-			tNewMatch.m_iTag = tMatch.m_iTag;
 
 			// remap attrs
-			for ( int j=0; j<pTarget->GetAttrsCount(); j++ )
+			for ( int j = 0; j<iAttrsCount; ++j )
 			{
-				const CSphColumnInfo & tDst = pTarget->GetAttr(j);
+				const CSphColumnInfo & tDst = tSchema.GetAttr ( j );
 				// we could keep some of the rows static
 				// and so, avoid the duplication of the data.
+				int iMapFrom = dMapFrom[j];
+				const CSphColumnInfo & tSrc = dSchema.GetAttr ( iMapFrom );
 				if ( !tDst.m_tLocator.m_bDynamic )
 				{
-					assert ( dMapFrom[j]<0 || !dSchema.GetAttr ( dMapFrom[j] ).m_tLocator.m_bDynamic );
+					assert ( iMapFrom<0 || !dSchema.GetAttr ( iMapFrom ).m_tLocator.m_bDynamic );
 					tNewMatch.m_pStatic = tMatch.m_pStatic;
-				} else if ( dMapFrom[j]>=0 )
+				} else if ( iMapFrom>=0 )
 				{
-					const CSphColumnInfo & tSrc = dSchema.GetAttr ( dMapFrom[j] );
 					if ( tDst.m_eAttrType==SPH_ATTR_FLOAT && tSrc.m_eAttrType==SPH_ATTR_BOOL )
 					{
 						tNewMatch.SetAttrFloat ( tDst.m_tLocator, ( tMatch.GetAttr ( tSrc.m_tLocator )>0 ? 1.0f : 0.0f ) );
@@ -3626,10 +3637,7 @@ void RemapResult ( const ISphSchema * pTarget, AggrResult_t & dResult )
 			Swap ( tMatch, tNewMatch );
 			CSphSchemaHelper::FreeDataSpecial ( tNewMatch, dRowItems );
 		}
-
-		iCur = iLimit;
 	}
-	assert ( iCur==dResult.m_dMatches.GetLength() );
 }
 
 
@@ -3729,57 +3737,281 @@ const CSphVector<CSphQueryItem> & ExpandAsterisk ( const ISphSchema & tSchema, c
 	return tExpanded;
 }
 
+// in MatchIterator_c we need matches sorted assending by DocID.
+// also we don't want to sort matches themselves; sorted vec of indexes quite enough
+// also we wont to avoid allocating vec for the matches as it may be huge.
+// There are several possible solutions to have vec of indexes:
+// 1. Use matches tags, as they're not used in this part of code. With intensive working it is however not a good in
+// terms of cache misses (i.e. 'min' match is match[N] where N is match[0].tag, then match[M] where M is match[1] tag.
+// So each time we make about random jumps.
+// 2. Use space between last match and end of the vector (assuming reserved space > used space). If it is enough space,
+// we can use it either as vec or WORDS, or as vec or DWORDS, depending from N of matches. First case need at most 128K
+// of RAM, second needs more, but that RAM is compact.
+// So, let's try with tail space first, but if it is not available (no, or not enough space), use tags.
 
-int KillAllDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes )
+
+// That is to sort tags in matches without moving rest of them.
+class MatchTagSortAccessor_c
 {
-	assert ( pSorter );
-	int iDupes = 0;
+	const VecTraits_T<CSphMatch> & m_dTagOrder;
+public:
+	explicit MatchTagSortAccessor_c ( const VecTraits_T<CSphMatch> & dTagOrder) : m_dTagOrder ( dTagOrder ) {}
+	using T = CSphMatch;
+	using MEDIAN_TYPE = int;
+	static MEDIAN_TYPE Key ( T * a ) { return a->m_iTag; }
+	static void Swap ( T * a, T * b ) { ::Swap ( a->m_iTag, b->m_iTag ); }
+	static T * Add ( T * p, int i ) { return p+i; }
+	static int Sub ( T * b, T * a ) { return (int)(b-a); }
+	static void CopyKey ( MEDIAN_TYPE * pMed, CSphMatch * pVal ) { *pMed = Key ( pVal ); }
 
-	if ( pSorter->IsGroupby () )
+	bool IsLess ( int a, int b ) const
 	{
-		// groupby sorter does that automagically
-		pSorter->SetBlobPool ( nullptr );
-		int iMC = 0;
-		int iBound = 0;
+		return sphGetDocID ( m_dTagOrder[a].m_pDynamic )<sphGetDocID ( m_dTagOrder[b].m_pDynamic );
+	}
+};
 
-		ARRAY_FOREACH ( i, tRes.m_dMatches )
-		{
-			CSphMatch & tMatch = tRes.m_dMatches[i];
-			if ( !pSorter->PushGrouped ( tMatch, i==iBound ) )
-				iDupes++;
 
-			if ( i==iBound )
-				iBound += tRes.m_dMatchCounts[iMC++];
-		}
-	} else
+class MatchIterator_c
+{
+	int m_iRawIdx;    // raw iteration index (internal)
+	int m_iLimit;
+	std::function<int(int)> m_fnOrder;	// use to access matches by accending docid order
+	bool m_bTailClean = false;
+
+	// use space after end of matches to store indexes, WORD per match
+	bool MaybeUseWordOrder ( const CSphSwapVector<CSphMatch>& dMatches ) const
 	{
-		Verify ( tRes.m_tSchema.GetAttr(0).m_sName==sphGetDocidName() );
+		if ( dMatches.GetLength()>0x10000 )
+			return false;
 
-		// normal sorter needs massage
-		// sort by docid and then by tag to guarantee the replacement order
-		TaggedMatchSorter_fn fnSort;
-		sphSort ( tRes.m_dMatches.Begin(), tRes.m_dMatches.GetLength(), fnSort, fnSort );
+		int64_t iTail = dMatches.AllocatedBytes ()-dMatches.GetLengthBytes64 ();
+		if ( iTail<(int64_t) ( dMatches.GetLength () * sizeof ( WORD ) ) )
+			return false;
 
-		// by default, simply remove dupes (select first by tag)
-		DocID_t tPrevDocID = 0;
-		for ( const auto& dMatch : tRes.m_dMatches )
-		{
-			DocID_t tDocID = sphGetDocID ( dMatch.m_pDynamic );
-			if ( tDocID!=tPrevDocID )
-				pSorter->Push ( dMatch );
-			else
-				++iDupes;
-
-			tPrevDocID = tDocID;
-		}
+		// will use tail of the vec as blob of WORDs
+		VecTraits_T<WORD> dOrder = { (WORD *) dMatches.end (), m_iLimit };
+		ARRAY_CONSTFOREACH( i, dOrder )
+			dOrder[i] = i;
+		dOrder.Sort ( Lesser ( [&dMatches] ( WORD a, WORD b ) {
+			return sphGetDocID ( dMatches[a].m_pDynamic )<sphGetDocID ( dMatches[b].m_pDynamic );
+		} ) );
+		return true;
 	}
 
-	for ( auto& dMatch : tRes.m_dMatches )
-		tRes.m_tSchema.FreeDataPtrs ( dMatch );
+	// use space after end of matches to store indexes, DWORD per match
+	bool MaybeUseDwordOrder ( const CSphSwapVector<CSphMatch>& dMatches ) const
+	{
+		if ( dMatches.GetLength64()>0x100000000 )
+			return false;
 
-	tRes.m_dMatches.Reset ();
-	tRes.FillFromQueue ( pSorter, -1 );
+		int64_t iTail = dMatches.AllocatedBytes ()-dMatches.GetLengthBytes64 ();
+		if ( iTail<(int64_t) ( dMatches.GetLength () * sizeof ( DWORD ) ) )
+			return false;
+
+		// will use tail of the vec as blob of WORDs
+		VecTraits_T<DWORD> dOrder = { (DWORD *) dMatches.end (), m_iLimit };
+		for( DWORD i=0, uLen=dOrder.GetLength(); i<uLen; ++i )
+			dOrder[i] = i;
+		dOrder.Sort ( Lesser ( [&dMatches] ( DWORD a, DWORD b ) {
+			return sphGetDocID ( dMatches[a].m_pDynamic )<sphGetDocID ( dMatches[b].m_pDynamic );
+		} ) );
+		return true;
+	}
+
+	// use tags to store indexes. No extra space, but random access order, many cash misses expected
+	void UseTags ( VecTraits_T<CSphMatch> & dOrder )
+	{
+		ARRAY_CONSTFOREACH( i, dOrder )
+			dOrder[i].m_iTag = i;
+
+		MatchTagSortAccessor_c tOrder ( dOrder );
+		sphSort ( dOrder.Begin (), dOrder.GetLength (), tOrder, tOrder );
+		m_bTailClean = true;
+	}
+
+public:
+	OneResultset_t&			m_dResult;
+	DocID_t					m_tDocID;
+	int						m_iIdx;		// ordering index (each step gives matches in sorted by Docid order)
+
+	explicit MatchIterator_c ( OneResultset_t& dResult )
+		: m_dResult ( dResult )
+	{
+		auto& dMatches = dResult.m_dMatches;
+		m_iLimit = dMatches.GetLength();
+
+		if ( MaybeUseWordOrder ( dMatches ) )
+			m_fnOrder = [pData = (WORD *) m_dResult.m_dMatches.end ()] ( int i ) { return pData[i]; };
+		else if ( MaybeUseDwordOrder ( dMatches ) )
+			m_fnOrder = [pData = (DWORD *) m_dResult.m_dMatches.end ()] ( int i ) { return pData[i]; };
+		else
+		{
+			UseTags ( dMatches );
+			m_fnOrder = [this] ( int i ) { return m_dResult.m_dMatches[m_iRawIdx].m_iTag; };
+		};
+
+
+		m_iRawIdx = 0;
+		m_iIdx = m_fnOrder(0);
+		m_tDocID = sphGetDocID ( m_dResult.m_dMatches[m_iIdx].m_pDynamic );
+	}
+
+	~MatchIterator_c()
+	{
+		if ( m_bTailClean )
+			return;
+
+		// need to reset state of some tail matches in order to avoid issues when deleting the vec of them
+		// (since we used that memory region for own purposes)
+		int iDirtyMatches = m_iLimit>0x10000 ? m_iLimit * sizeof ( DWORD ) : m_iLimit * sizeof ( WORD );
+		iDirtyMatches = ( iDirtyMatches+sizeof ( CSphMatch )-1 ) / sizeof ( CSphMatch );
+		for ( int i = 0; i<iDirtyMatches; ++i )
+			( m_dResult.m_dMatches.end ()+i )->CleanGarbage();
+	}
+
+	inline bool Step()
+	{
+		++m_iRawIdx;
+		if ( m_iRawIdx>=m_iLimit )
+			return false;
+		m_iIdx = m_fnOrder ( m_iRawIdx );
+		m_tDocID = sphGetDocID ( m_dResult.m_dMatches[m_iIdx].m_pDynamic );
+		return true;
+	}
+
+	static inline bool IsLess ( MatchIterator_c *a, MatchIterator_c *b )
+	{
+		if ( a->m_tDocID!=b->m_tDocID )
+			return a->m_tDocID<b->m_tDocID;
+
+		// that mean local matches always preffered over remote, but it seems that is not necessary
+//		if ( !a->m_dResult.m_bTag && b->m_dResult.m_bTag )
+//			return true;
+
+		return a->m_dResult.m_iTag>b->m_dResult.m_iTag;
+	}
+};
+
+int KillPlainDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, const VecTraits_T<int>& dOrd )
+{
+	assert ( tRes.m_tSchema.GetAttr ( 0 ).m_sName==sphGetDocidName () );
+	int iDupes = 0;
+
+	auto& dResults = tRes.m_dResults;
+
+	// normal sorter needs massage
+	// queue by docid and then ascending by tag to guarantee the replacement order
+	RawVector_T <MatchIterator_c> dIterators;
+	dIterators.Reserve_static ( dResults.GetLength () );
+	CSphQueue<MatchIterator_c *, MatchIterator_c> qMatches ( dResults.GetLength () );
+
+	for ( auto& dResult : dResults )
+		if ( !dResult.m_dMatches.IsEmpty() )
+		{
+			dIterators.Emplace_back ( dResult );
+			qMatches.Push ( &dIterators.Last () );
+		}
+
+	DocID_t tPrevDocID = DOCID_MIN;
+	while ( qMatches.GetLength() )
+	{
+		auto * pMin = qMatches.Root();
+		DocID_t tDocID = pMin->m_tDocID;
+		if ( tDocID!=tPrevDocID ) // by default, simply remove dupes (select first by tag)
+		{
+			CSphMatch & tMatch = pMin->m_dResult.m_dMatches[pMin->m_iIdx];
+			auto iTag = tMatch.m_iTag;	// as we may use tag for ordering
+			tMatch.m_iTag = pMin->m_dResult.m_iTag; // that will link us back to docstore
+			pSorter->Push ( tMatch );
+			tMatch.m_iTag = iTag;	// restore tag
+			tPrevDocID = tDocID;
+		}
+		else
+			++iDupes;
+
+		qMatches.Pop ();
+		if ( pMin->Step() )
+			qMatches.Push ( pMin );
+	}
+	tRes.m_bTagsAssigned = true;
 	return iDupes;
+}
+
+int KillGroupbyDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, const VecTraits_T<int>& dOrd )
+{
+	int iDupes = 0;
+	pSorter->SetBlobPool ( nullptr );
+	for ( int iOrd : dOrd )
+	{
+		auto& dResult = tRes.m_dResults[iOrd];
+		ARRAY_CONSTFOREACH( i, dResult.m_dMatches )
+		{
+			CSphMatch & tMatch = dResult.m_dMatches[i];
+			tMatch.m_iTag = dResult.m_iTag; // that will link us back to docstore
+			if ( !pSorter->PushGrouped ( tMatch, i==0 ) )  // groupby sorter does that automagically
+				++iDupes;
+		}
+	}
+	tRes.m_bTagsAssigned = true;
+	return iDupes;
+}
+
+// rearrange results so thet the're placed by accending tags order
+// dOrd contains indexes to access results in descending tag order
+void SortTagsAndDocstores ( AggrResult_t & tRes, const VecTraits_T<int>& dOrd )
+{
+	auto iTags = dOrd.GetLength ();
+	CSphFixedVector<DocstoreAndTag_t> dTmp { iTags };
+	auto & dResults = tRes.m_dResults;
+
+	for ( int i=0; i<iTags; ++i )
+		dTmp[iTags-i-1].Assign ( dResults[dOrd[i]] );
+
+	for ( int i = 0; i<iTags; ++i )
+		dResults[i].Assign ( dTmp[i] );
+}
+
+int KillDupesAndFlatten ( ISphMatchSorter * pSorter, AggrResult_t & tRes )
+{
+	assert ( pSorter );
+
+	int iTags = tRes.m_dResults.GetLength();
+	CSphFixedVector<int> dOrd ( iTags );
+	ARRAY_CONSTFOREACH( i, dOrd )
+		dOrd[i] = i;
+
+	// sort resultsets in descending tag order
+	dOrd.Sort ( Lesser ( [&tRes] ( int l, int r ) { return tRes.m_dResults[r].m_iTag<tRes.m_dResults[l].m_iTag; } ) );
+
+	// remap to compact (non-fragmented) range of tags
+	for ( int iRes : dOrd )
+		tRes.m_dResults[iRes].m_iTag = --iTags;
+	Debug ( tRes.m_bTagsCompacted = true );
+
+	// do actual deduplication
+	int iDup = pSorter->IsGroupby() ? KillGroupbyDupes ( pSorter, tRes, dOrd ) : KillPlainDupes ( pSorter, tRes, dOrd );
+
+	// ALL matches have same schema, as KillAllDupes called after RemapResults(), or already having identical schemas.
+	for ( auto& dResult : tRes.m_dResults )
+	{
+		for ( auto& dMatch : dResult.m_dMatches )
+			tRes.m_tSchema.FreeDataPtrs ( dMatch );
+		dResult.m_dMatches.Reset();
+	}
+
+	// don't issue tRes.m_dResults.reset since each result still has a docstore by tag
+
+	// flatten all results into single chunk
+	auto & tFinalMatches = tRes.m_dResults.First ();
+	tFinalMatches.FillFromSorter ( pSorter );
+	Debug ( tRes.m_bSingle = true; )
+	Debug ( tRes.m_bOneSchema = true; )
+
+	// now all matches properly tagged located in tRes.m_dResults.First()
+	// each tRes.m_dResults has proper tag and corresponding docstore pointer in random order
+	// and we have dOrd wich enumerates them in descending tag order
+	SortTagsAndDocstores ( tRes, dOrd );
+	return iDup;
 }
 
 
@@ -3915,36 +4147,37 @@ void ExtractPostlimit ( const ISphSchema & tSchema, bool bMaster, CSphVector<con
 	}
 }
 
-
-CSphVector<const DocstoreReader_i*> GetUniqueDocstores ( const AggrResult_t & tRes, int iFrom, int iTo )
+// for single chunk of matches return list of tags with docstores
+CSphVector<int> GetUniqueTagsWithDocstores ( const AggrResult_t & tRes, int iOff, int iLim )
 {
-	CSphVector<const DocstoreReader_i*> dDocstores;
-	const DocstoreReader_i * pPrev = nullptr;
-	for ( int i=iFrom; i<iTo; i++ )
-	{
-		CSphMatch & tMatch = tRes.m_dMatches[i];
-		// remote match (tag highest bit 1) == everything is already computed
-		if ( tMatch.m_iTag & 0x80000000 )
-			continue;
+	assert ( tRes.m_bTagsCompacted );
+	assert ( tRes.m_bSingle );
 
-		const DocstoreReader_i * pDocstore = tRes.m_dTag2Docstore [ tMatch.m_iTag ].m_pDocstore;
-		if ( pDocstore && pDocstore!=pPrev )
-		{
-			dDocstores.Add(pDocstore);
-			pPrev = pDocstore;
-		}
+	CSphVector<bool> dBoolTags;
+	dBoolTags.Resize ( tRes.m_dResults.GetLength() );
+	dBoolTags.ZeroVec();
+
+	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( iOff, iLim );
+	for ( const auto& dMatch : dMatches )
+	{
+		assert ( dMatch.m_iTag < tRes.m_dResults.GetLength() );
+		if ( tRes.m_dResults[dMatch.m_iTag].m_pDocstore )
+			dBoolTags[dMatch.m_iTag] = true;
 	}
 
-	dDocstores.Uniq();
+	CSphVector<int> dTags;
+	ARRAY_CONSTFOREACH( i, dBoolTags )
+		if ( dBoolTags[i] )
+			dTags.Add(i);
 
-	return dDocstores;
+	return dTags;
 }
 
 
-void SetupPostlimitExprs ( AggrResult_t & tRes, CSphMatch & tMatch, const CSphColumnInfo * pCol, const char * sQuery, int64_t iDocstoreSessionId )
+void SetupPostlimitExprs ( const DocstoreReader_i * pDocstore, const CSphColumnInfo * pCol, const char * sQuery, int64_t iDocstoreSessionId )
 {
 	DocstoreSession_c::Info_t tSessionInfo;
-	tSessionInfo.m_pDocstore = tRes.m_dTag2Docstore [ tMatch.m_iTag ].m_pDocstore;
+	tSessionInfo.m_pDocstore = pDocstore;
 	tSessionInfo.m_iSessionId = iDocstoreSessionId;
 
 	assert ( pCol && pCol->m_pExpr );
@@ -3953,7 +4186,7 @@ void SetupPostlimitExprs ( AggrResult_t & tRes, CSphMatch & tMatch, const CSphCo
 }
 
 
-void EvalPostlimitExprs ( AggrResult_t & tRes, CSphMatch & tMatch, const CSphColumnInfo * pCol )
+void EvalPostlimitExprs ( CSphMatch & tMatch, const CSphColumnInfo * pCol )
 {
 	assert ( pCol && pCol->m_pExpr );
 	switch ( pCol->m_eAttrType )
@@ -3967,144 +4200,105 @@ void EvalPostlimitExprs ( AggrResult_t & tRes, CSphMatch & tMatch, const CSphCol
 	}
 }
 
-struct PostLimitArgs_t
+// single resultset cunk, but has many tags
+void ProcessMultiPostlimit ( AggrResult_t & tRes, VecTraits_T<const CSphColumnInfo *> & dPostlimit, const char * sQuery,
+		int iOff, int iLim )
 {
-	const CSphVector<const CSphColumnInfo *> & m_dPostlimit;
-	const char * m_sQuery = nullptr;
-	int m_iFrom = 0;
-	int m_iTo = 0;
-	bool m_bMaster = false;
+	if ( dPostlimit.IsEmpty() )
+		return;
 
-	PostLimitArgs_t ( const CSphVector<const CSphColumnInfo *> & dPostlimit, const char * sQuery )
-		: m_dPostlimit ( dPostlimit )
-		, m_sQuery ( sQuery )
-	{}
-};
+	assert ( tRes.m_bSingle );
+	assert ( tRes.m_bOneSchema );
+	assert ( tRes.m_bTagsAssigned );
+	assert ( tRes.m_bTagsCompacted );
 
-void ProcessPostlimit ( const PostLimitArgs_t & tArgs, AggrResult_t & tRes )
+	// collect unique tags from matches
+	CSphVector<int> dDocstoreTags = GetUniqueTagsWithDocstores ( tRes, iOff, iLim );
+
+	// generates docstore session id
+	DocstoreSession_c tSession;
+	auto iSessionUID = tSession.GetUID();
+
+	// spawn buffered readers for the current session
+	// put them to a global hash
+	for ( int iTag : dDocstoreTags )
+		tRes.m_dResults[iTag].m_pDocstore->CreateReader ( iSessionUID );
+
+	int iLastTag = -1;
+	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( iOff, iLim );
+	for ( auto & dMatch : dMatches )
+	{
+		int iTag = dMatch.m_iTag;
+		auto * pDocstore = tRes.m_dResults[iTag].m_pDocstore;
+		assert ( iTag<tRes.m_dResults.GetLength () );
+
+		if ( iTag!=iLastTag )
+		{
+			for ( const auto & pCol : dPostlimit )
+				SetupPostlimitExprs ( pDocstore, pCol, sQuery, iSessionUID );
+			iLastTag = iTag;
+		}
+
+		for ( const auto & pCol : dPostlimit )
+			EvalPostlimitExprs ( dMatch, pCol );
+	}
+}
+
+void ProcessSinglePostlimit ( OneResultset_t & tRes, VecTraits_T<const CSphColumnInfo *> & dPostlimit, const char * sQuery, int iOff, int iLim )
 {
-	if ( !tArgs.m_dPostlimit.GetLength() )
+	auto dMatches = tRes.m_dMatches.Slice ( iOff, iLim );
+	if ( dMatches.IsEmpty() )
 		return;
 
 	// generates docstore session id
 	DocstoreSession_c tSession;
 	auto iSessionUID = tSession.GetUID();
 
-	// collect all unique docstores from matches
-	CSphVector<const DocstoreReader_i*> dDocstores = GetUniqueDocstores ( tRes, tArgs.m_iFrom, tArgs.m_iTo );
-	if ( dDocstores.GetLength() )
-	{
-		// spawn buffered readers for the current session
-		// put them to a global hash
-		for ( auto & i : dDocstores )
-			i->CreateReader ( iSessionUID );
-	}
+	// spawn buffered reader for the current session
+	// put it to a global hash
+	if ( tRes.m_pDocstore )
+		tRes.m_pDocstore->CreateReader ( iSessionUID );
 
-	int iLastTag = -1;
-	for ( int i=tArgs.m_iFrom; i<tArgs.m_iTo; ++i )
-	{
-		CSphMatch & tMatch = tRes.m_dMatches[i];
-		// remote match (tag highest bit 1) == everything is already computed
-		if ( tMatch.m_iTag & 0x80000000 )
-			continue;
+	for ( const auto & pCol : dPostlimit )
+		SetupPostlimitExprs ( tRes.m_pDocstore, pCol, sQuery, iSessionUID );
 
-		if ( tMatch.m_iTag!=iLastTag )
-		{
-			for ( const auto & pCol : tArgs.m_dPostlimit )
-				SetupPostlimitExprs ( tRes, tMatch, pCol, tArgs.m_sQuery, iSessionUID );
-			iLastTag = tMatch.m_iTag;
-		}
-
-		for ( const auto & pCol : tArgs.m_dPostlimit )
-			EvalPostlimitExprs ( tRes, tMatch, pCol );
-	}
+	for ( auto & dMatch : dMatches )
+		for ( const auto & pCol : dPostlimit )
+			EvalPostlimitExprs ( dMatch, pCol );
 }
 
-struct ProcessPostlimitArgs_t
+void ProcessLocalPostlimit ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bMaster )
 {
-	int		m_iOffset = 0;
-	int		m_iLimit = 0;
-	int		m_iOuterOffset = 0;
-	int		m_iOuterLimit = 0;
-	bool	m_bMaster = false;
+	assert ( !tRes.m_bOneSchema );
+	assert ( !tRes.m_bSingle );
 
-	const char * m_sQuery = nullptr;
-
-	ProcessPostlimitArgs_t ( const CSphQuery & tQuery, bool bMaster )
-	{
-		m_iOffset = tQuery.m_iOffset;
-		m_iLimit = tQuery.m_iLimit;
-		m_iOuterOffset = tQuery.m_iOuterOffset;
-		m_iOuterLimit = tQuery.m_iOuterLimit;
-		m_sQuery = tQuery.m_sQuery.cstr();
-
-		m_bMaster = bMaster;
-	}
-};
-
-void ProcessLocalPostlimit ( const ProcessPostlimitArgs_t & tArgs, AggrResult_t & tRes )
-{
 	bool bGotPostlimit = false;
 	for ( int i = 0, iAttrsCount = tRes.m_tSchema.GetAttrsCount (); i<iAttrsCount && !bGotPostlimit; ++i )
 	{
 		const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
-		bGotPostlimit = ( tCol.m_eStage==SPH_EVAL_POSTLIMIT && ( tArgs.m_bMaster || tCol.m_uFieldFlags==CSphColumnInfo::FIELD_NONE ) );
+		bGotPostlimit = ( tCol.m_eStage==SPH_EVAL_POSTLIMIT && ( bMaster || tCol.m_uFieldFlags==CSphColumnInfo::FIELD_NONE ) );
 	}
 
 	if ( !bGotPostlimit )
 		return;
 
-	int iSetNext = 0;
+	int iLimit = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
+	iLimit += Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
 	CSphVector<const CSphColumnInfo *> dPostlimit;
-	ARRAY_FOREACH ( iSchema, tRes.m_dSchemas )
+	for ( auto& dRes : tRes.m_dResults )
 	{
-		int iSetStart = iSetNext;
-		int iSetCount = tRes.m_dMatchCounts[iSchema];
-		iSetNext += iSetCount;
-		assert ( iSetNext<=tRes.m_dMatches.GetLength() );
-
 		dPostlimit.Resize ( 0 );
-		ExtractPostlimit ( tRes.m_dSchemas[iSchema], tArgs.m_bMaster, dPostlimit );
-		if ( dPostlimit.IsEmpty() )
+		ExtractPostlimit ( dRes.m_tSchema, bMaster, dPostlimit );
+		if ( dPostlimit.IsEmpty () )
 			continue;
 
-		int iTo = iSetCount;
-		int iOff = Max ( tArgs.m_iOffset, tArgs.m_iOuterOffset );
-		int iCount = ( tArgs.m_iOuterLimit ? tArgs.m_iOuterLimit : tArgs.m_iLimit );
-		iTo = Max ( Min ( iOff + iCount, iTo ), 0 );
+		int iLimit = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
+
 		// we can't estimate limit.offset per result set
 		// as matches got merged and sort next step
-		int iFrom = 0;
-
-		iFrom += iSetStart;
-		iTo += iSetStart;
-
-		PostLimitArgs_t tProcessArgs ( dPostlimit, tArgs.m_sQuery );
-		tProcessArgs.m_iFrom = iFrom;
-		tProcessArgs.m_iTo = iTo;
-		tProcessArgs.m_bMaster = tArgs.m_bMaster;
-
-		ProcessPostlimit ( tProcessArgs, tRes );
+		if ( !dRes.m_bTag )
+			ProcessSinglePostlimit ( dRes, dPostlimit, tQuery.m_sQuery.cstr (), 0, iLimit );
 	}
-}
-
-
-static bool VerifyMatchCounts ( AggrResult_t & tRes )
-{
-	// sanity check
-	// verify that the match counts are consistent
-	int iExpected = 0;
-	ARRAY_FOREACH ( i, tRes.m_dMatchCounts )
-		iExpected += tRes.m_dMatchCounts[i];
-
-	if ( iExpected!=tRes.m_dMatches.GetLength() )
-	{
-		tRes.m_sError.SetSprintf ( "internal error: expected %d matches in combined result set, got %d",
-			iExpected, tRes.m_dMatches.GetLength() );
-		return false;
-	}
-
-	return true;
 }
 
 
@@ -4112,9 +4306,12 @@ bool MinimizeSchemas ( AggrResult_t & tRes )
 {
 	bool bAllEqual = true;
 
-	auto iResults = tRes.m_dSchemas.GetLength ();
+	auto iResults = tRes.m_dResults.GetLength ();
+	if ( iResults>0 )
+		tRes.m_tSchema = tRes.m_dResults[0].m_tSchema;
+
 	for ( int i=1; i<iResults; ++i )
-		if ( !MinimizeSchema ( tRes.m_tSchema, tRes.m_dSchemas[i] ) )
+		if ( !MinimizeSchema ( tRes.m_tSchema, tRes.m_dResults[i].m_tSchema ) )
 			bAllEqual = false;
 
 	return bAllEqual;
@@ -4451,18 +4648,8 @@ bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHave
 		Swap ( eQuerySort, tQueryCopy.m_eSort );
 
 		// second, apply inner limit now, before (!) reordering
-		int iOut = 0;
-		int iSetStart = 0;
-		for ( int & iCurMatches : tRes.m_dMatchCounts )
-		{
-			assert ( tQueryCopy.m_iLimit>=0 );
-			int iLimitedMatches = Min ( tQueryCopy.m_iLimit, iCurMatches );
-			for ( int i=0; i<iLimitedMatches; ++i )
-				Swap ( tRes.m_dMatches[iOut++], tRes.m_dMatches[iSetStart+i] );
-			iSetStart += iCurMatches;
-			iCurMatches = iLimitedMatches;
-		}
-		tRes.ClampMatches ( iOut, bAllEqual ); // false means no common schema; true == use common schema
+		for ( auto& dResult : tRes.m_dResults )
+			dResult.ClampMatches ( tQueryCopy.m_iLimit );
 	}
 
 	// so we need to bring matches to the schema that the *sorter* wants
@@ -4476,9 +4663,9 @@ bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHave
 	// FIXME? probably not right; 20 shards with by 300 matches might be too much
 	// but propagating too small inner max_matches to the outer is not right either
 	if ( tQueryCopy.m_bHasOuter )
-		tQueueSettings.m_iMaxMatches = Min ( tQuery.m_iMaxMatches * tRes.m_dMatchCounts.GetLength(), tRes.m_dMatches.GetLength() );
+		tQueueSettings.m_iMaxMatches = Min ( tQuery.m_iMaxMatches * tRes.m_dResults.GetLength(), tRes.GetLength() );
 	else
-		tQueueSettings.m_iMaxMatches = Min ( tQuery.m_iMaxMatches, tRes.m_dMatches.GetLength() );
+		tQueueSettings.m_iMaxMatches = Min ( tQuery.m_iMaxMatches, tRes.GetLength() );
 	tQueueSettings.m_iMaxMatches = Max ( tQueueSettings.m_iMaxMatches, 1 );
 
 	SphQueueRes_t tQueueRes;
@@ -4510,9 +4697,11 @@ bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHave
 	// just doing tRes.m_tSchema = *pSorter->GetSchema() won't work here
 	// because pSorter->GetSchema() may already contain a pointer to tRes.m_tSchema as m_pIndexSchema
 	// that's why we explicitly copy a CSphRsetSchema to a plain CSphSchema and move it to tRes.m_tSchema
-	CSphSchema tSchemaCopy;
-	tSchemaCopy = *pSorter->GetSchema();
-	tRes.m_tSchema = std::move ( tSchemaCopy );
+	{
+		CSphSchema tSchemaCopy;
+		tSchemaCopy = *pSorter->GetSchema();
+		tRes.m_tSchema.Swap ( tSchemaCopy );
+	}
 
 	// convert all matches to sorter schema - at least to manage all static to dynamic
 	if ( !bAllEqual )
@@ -4521,22 +4710,21 @@ bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHave
 		if ( bHaveLocals )
 		{
 			CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_EVAL_POST );
-			ProcessPostlimitArgs_t tProcessArgs ( tQueryCopy, bMaster );
-			ProcessLocalPostlimit ( tProcessArgs, tRes );
+			ProcessLocalPostlimit ( tRes, tQueryCopy, bMaster );
 		}
 
-		RemapResult ( &tRes.m_tSchema, tRes );
+		RemapResult ( tRes );
 	}
 
 	// do the sort work!
-	tRes.m_iTotalMatches -= KillAllDupes ( pSorter.Ptr(), tRes );
-
+	tRes.m_iTotalMatches -= KillDupesAndFlatten ( pSorter.Ptr(), tRes );
 	return true;
 }
 
 
 bool ApplyOuterOrder ( AggrResult_t & tRes, const CSphQuery & tQuery )
 {
+	assert ( !tRes.m_dResults.IsEmpty() );
 	// reorder (aka outer order)
 	ESphSortFunc eFunc;
 	GenericMatchSort_fn tReorder;
@@ -4549,62 +4737,94 @@ bool ApplyOuterOrder ( AggrResult_t & tRes, const CSphQuery & tQuery )
 		return false;
 
 	assert ( eFunc==FUNC_GENERIC1 ||eFunc==FUNC_GENERIC2 || eFunc==FUNC_GENERIC3 || eFunc==FUNC_GENERIC4 || eFunc==FUNC_GENERIC5 );
-	sphSort ( tRes.m_dMatches.Begin(), tRes.m_dMatches.GetLength(), tReorder, MatchSortAccessor_t() );
-
+	auto& dMatches = tRes.m_dResults.First().m_dMatches;
+	sphSort ( dMatches.Begin(), dMatches.GetLength(), tReorder, MatchSortAccessor_t() );
 	return true;
 }
 
 
-void ComputePostlimit ( const ProcessPostlimitArgs_t & tArgs, AggrResult_t & tRes )
+void ComputePostlimit ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bMaster )
 {
-	CSphVector<const CSphColumnInfo *> dPostlimit;
-	ExtractPostlimit ( tRes.m_tSchema, tArgs.m_bMaster, dPostlimit );
+	assert ( tRes.m_bSingle );
+	assert ( tRes.m_bOneSchema );
+	assert ( !tRes.m_dResults.IsEmpty () );
 
-	// post compute matches only between offset - limit
+	CSphVector<const CSphColumnInfo *> dPostlimit;
+	ExtractPostlimit ( tRes.m_tSchema, bMaster, dPostlimit );
+
+	// post compute matches only between offset..limit
 	// however at agent we can't estimate limit.offset at master merged result set
 	// but master don't provide offset to agents only offset+limit as limit
-	// so computing all matches up to iiner.limit \ outer.limit
-	int iTo = tRes.m_dMatches.GetLength();
-	int iOff = Max ( tArgs.m_iOffset, tArgs.m_iOuterOffset );
-	int iCount = ( tArgs.m_iOuterLimit ? tArgs.m_iOuterLimit : tArgs.m_iLimit );
-	iTo = Max ( Min ( iOff + iCount, iTo ), 0 );
-	int iFrom = Min ( iOff, iTo );
+	// so computing all matches from 0 up to inner.limit/outer.limit
+	assert ( tRes.GetLength ()==tRes.m_dResults.First().m_dMatches.GetLength() );
+	int iOff = Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
+	int iLimit = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
 
-	PostLimitArgs_t tProcessArgs ( dPostlimit, tArgs.m_sQuery );
-	tProcessArgs.m_iFrom = iFrom;
-	tProcessArgs.m_iTo = iTo;
-	tProcessArgs.m_bMaster = tArgs.m_bMaster;
-
-	ProcessPostlimit ( tProcessArgs, tRes );
+	if ( tRes.m_bTagsAssigned )
+		ProcessMultiPostlimit ( tRes, dPostlimit, tQuery.m_sQuery.cstr (), iOff, iLimit );
+	else
+		ProcessSinglePostlimit ( tRes.m_dResults.First(), dPostlimit, tQuery.m_sQuery.cstr(), iOff, iLimit );
 }
+
+int64_t CalcPredictedTimeMsec ( const CSphQueryResultMeta & tMeta )
+{
+	assert ( tMeta.m_bHasPrediction );
+
+	int64_t iNanoResult = int64_t(g_iPredictorCostSkip)* tMeta.m_tStats.m_iSkips
+		+ g_iPredictorCostDoc * tMeta.m_tStats.m_iFetchedDocs
+		+ g_iPredictorCostHit * tMeta.m_tStats.m_iFetchedHits
+		+ g_iPredictorCostMatch * tMeta.m_iTotalMatches;
+
+	return iNanoResult/1000000;
+}
+
+
+int GetMaxMatches ( int iQueryMaxMatches, const CSphIndex * pIndex )
+{
+	if ( iQueryMaxMatches>DEFAULT_MAX_MATCHES )
+	{
+		int64_t iDocs = Min ( (int)INT_MAX, pIndex->GetStats().m_iTotalDocuments ); // clamp to int max
+		return Min ( iQueryMaxMatches, Max ( iDocs, DEFAULT_MAX_MATCHES ) ); // do not want 0 sorter and sorter longer than query.max_matches
+	} else
+	{
+		return iQueryMaxMatches;
+	}
+}
+
+
+} // namespace static
 
 
 /// merges multiple result sets, remaps columns, does reorder for outer selects
 bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, const sph::StringSet & hExtraColumns,
 	QueryProfile_t * pProfiler, const CSphFilterSettings * pAggrFilter, bool bForceRefItems, bool bMaster, VecRefPtrsAgentConn_t & dRemotes )
 {
-	if ( !VerifyMatchCounts(tRes) )
-		return false;
-
 	bool bReturnZeroCount = !tRes.m_dZeroCount.IsEmpty();
 	bool bQueryFromAPI = tQuery.m_eQueryType==QUERY_API;
 
 	// 0 matches via SphinxAPI? no fiddling with schemes is necessary
 	// (and via SphinxQL, we still need to return the right schema)
-	if ( bQueryFromAPI && tRes.m_dMatches.IsEmpty() )
-		return true;
-
 	// 0 result set schemes via SphinxQL? just bail
-	if ( !bQueryFromAPI && tRes.m_dSchemas.IsEmpty() && !bReturnZeroCount )
+	if ( tRes.IsEmpty() && ( bQueryFromAPI || !bReturnZeroCount ) )
+	{
+		Debug ( tRes.m_bSingle = true; )
+		if ( !tRes.m_dResults.IsEmpty () )
+		{
+			tRes.m_tSchema = tRes.m_dResults.First ().m_tSchema;
+			Debug( tRes.m_bOneSchema = true; )
+		}
 		return true;
+	}
+
+	Debug ( tRes.m_bSingle = tRes.m_dResults.GetLength ()==1; )
 
 	// build a minimal schema over all the (potentially different) schemes
 	// that we have in our aggregated result set
-	assert ( tRes.m_dSchemas.GetLength() || bReturnZeroCount );
-	if ( tRes.m_dSchemas.GetLength() )
-		tRes.m_tSchema = tRes.m_dSchemas[0];
+	assert ( tRes.m_dResults.GetLength() || bReturnZeroCount );
 
 	bool bAllEqual = MinimizeSchemas(tRes);
+
+	Debug ( tRes.m_bOneSchema = tRes.m_bSingle; )
 
 	const CSphVector<CSphQueryItem> & dQueryItems = ( tQuery.m_bFacet || tQuery.m_bFacetHead || bForceRefItems ) ? tQuery.m_dRefItems : tQuery.m_dItems;
 
@@ -4617,7 +4837,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	// can not skip aggregate filtering
 	if ( bQueryFromAPI && dItems.IsEmpty() && !pAggrFilter && !bHaveExprs )
 	{
-		tRes.FreeMatchesPtrs ( 0, bAllEqual );
+		tRes.ClampAllMatches();
 		return true;
 	}
 
@@ -4645,25 +4865,31 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	{
 		if ( !MergeAllMatches ( tRes, tQuery, bHaveLocals, bAllEqual, bMaster, pAggrFilter, pProfiler ) )
 			return false;
+	} else
+	{
+		tRes.m_dResults.First().m_iTag = 0;
+		Debug ( tRes.m_bTagsCompacted = true );
 	}
 
 	// apply outer order clause to single result set
 	// (multiple combined sets just got reordered above)
 	// apply inner limit first
 	if ( tRes.m_iSuccesses==1 && tQuery.m_bHasOuter )
-		tRes.ClampMatches ( tQuery.m_iLimit, bAllEqual );
-
-	if ( tRes.m_iSuccesses==1 && tQuery.m_bHasOuter && !tQuery.m_sOuterOrderBy.IsEmpty() )
 	{
-		if ( !ApplyOuterOrder ( tRes, tQuery ) )
-			return false;
+		tRes.ClampMatches ( tQuery.m_iLimit );
+		if ( !tQuery.m_sOuterOrderBy.IsEmpty() )
+		{
+			if ( !ApplyOuterOrder ( tRes, tQuery ) )
+				return false;
+		}
+		Debug ( tRes.m_bSingle = true; )
+		Debug ( tRes.m_bTagsCompacted = true );
 	}
 
 	if ( bAllEqual && bHaveLocals )
 	{
 		CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_EVAL_POST );
-		ProcessPostlimitArgs_t tArgs ( tQuery, bMaster );
-		ComputePostlimit ( tArgs, tRes );
+		ComputePostlimit ( tRes, tQuery, bMaster );
 	}
 
 	if ( bMaster && !dRemotes.IsEmpty() )
@@ -4804,9 +5030,9 @@ private:
 private:
 	bool							CheckMultiQuery() const;
 	bool							RLockInvokedIndexes();
-	void							UniqLocals ();
+	void							UniqLocals ( VecTraits_T<LocalIndex_t>& dLocals );
 	void							RunActionQuery ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors ); ///< run delete/update
-	void							BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent );
+	void							BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ); // fixme!
 	void							CalcTimeStats ( int64_t tmCpu, int64_t tmSubset, const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent );
 	void							CalcPerIndexStats ( const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ) const;
 	void							CalcGlobalStats ( int64_t tmCpu, int64_t tmSubset, int64_t tmLocal, const CSphIOStats & tIO,
@@ -5013,7 +5239,6 @@ void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphStrin
 {
 	SetQuery ( 0, tQuery, nullptr );
 	m_dQueries[0].m_sIndexes = sIndex;
-	m_dAggrResults[0].m_dTag2Docstore.Resize(1);
 	m_dLocal.Add ().m_sName = sIndex;
 
 	CheckQuery ( tQuery, *pErrors );
@@ -5032,7 +5257,8 @@ void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphStrin
 	auto & tRes = m_dAggrResults[0];
 
 	tRes.m_iOffset = tQuery.m_iOffset;
-	tRes.m_iCount = Max ( Min ( tQuery.m_iLimit, tRes.m_dMatches.GetLength()-tQuery.m_iOffset ), 0 );
+	tRes.m_iCount = Max ( Min ( tQuery.m_iLimit, tRes.GetLength()-tQuery.m_iOffset ), 0 );
+	// actualy tRes.m_iCount=0 since delete/update produces no matches
 
 	tRes.m_iQueryTime += (int)(tmLocal/1000);
 	tRes.m_iCpuTime += tmCPU;
@@ -5107,47 +5333,7 @@ void SearchHandler_c::RunQueries()
 void SearchHandler_c::OnRunFinished()
 {
 	for ( auto & dResult : m_dAggrResults )
-		dResult.m_iMatches = dResult.m_dMatches.GetLength();
-}
-
-
-int64_t CalcPredictedTimeMsec ( const CSphQueryResultMeta & tMeta )
-{
-	assert ( tMeta.m_bHasPrediction );
-
-	int64_t iNanoResult = int64_t(g_iPredictorCostSkip)* tMeta.m_tStats.m_iSkips
-		+ g_iPredictorCostDoc * tMeta.m_tStats.m_iFetchedDocs
-		+ g_iPredictorCostHit * tMeta.m_tStats.m_iFetchedHits
-		+ g_iPredictorCostMatch * tMeta.m_iTotalMatches;
-
-	return iNanoResult/1000000;
-}
-
-
-static void FlattenToRes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, int iTag )
-{
-	assert ( pSorter );
-
-	if ( pSorter->GetLength() )
-	{
-		CSphSchema & tNewSchema = tRes.m_dSchemas.Add();
-		tNewSchema = *pSorter->GetSchema();
-
-		int iCopied = tRes.FillFromQueue ( pSorter, iTag );
-		tRes.m_dMatchCounts.Add ( iCopied );
-	}
-}
-
-static int GetMaxMatches ( int iQueryMaxMatches, const CSphIndex * pIndex )
-{
-	if ( iQueryMaxMatches>DEFAULT_MAX_MATCHES )
-	{
-		int64_t iDocs = Min ( (int)INT_MAX, pIndex->GetStats().m_iTotalDocuments ); // clamp to int max
-		return Min ( iQueryMaxMatches, Max ( iDocs, DEFAULT_MAX_MATCHES ) ); // do not want 0 sorter and sorter longer than query.max_matches
-	} else
-	{
-		return iQueryMaxMatches;
-	}
+		dResult.m_iMatches = dResult.GetLength();
 }
 
 SphQueueSettings_t SearchHandler_c::MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches ) const
@@ -5370,8 +5556,7 @@ void SearchHandler_c::RunLocalSearches()
 				m_dQueryIndexStats[iLocal].m_dStats[i].m_uFoundRows = pSorter->GetTotalCount();
 
 				// extract matches from sorter
-				tNRes.m_dTag2Docstore[iOrderTag].m_pDocstore = pDocstore;
-				FlattenToRes ( pSorter, tNRes, iOrderTag );
+				tNRes.AddResultset ( pSorter, pDocstore, iOrderTag );
 
 				if ( !tNRes.m_sWarning.IsEmpty () )
 					m_dFailuresSet[i].Submit ( sLocal, sParentIndex, tNRes.m_sWarning.cstr () );
@@ -5590,14 +5775,6 @@ static uint64_t GetIndexMass ( const CSphString & sName )
 	return ServedDesc_t::GetIndexMass ( ServedDescRPtr_c ( GetServed ( sName ) ) );
 }
 
-struct TaggedLocalSorter_fn
-{
-	bool IsLess ( const LocalIndex_t & a, const LocalIndex_t & b ) const
-	{
-		return ( a.m_sName < b.m_sName ) || ( a.m_sName==b.m_sName && ( a.m_iOrderTag & 0x7FFFFFFF )>( b.m_iOrderTag & 0x7FFFFFFF ) );
-	}
-};
-
 ////////////////////////////////////////////////////////////////
 // check for single-query, multi-queue optimization possibility
 ////////////////////////////////////////////////////////////////
@@ -5679,19 +5856,37 @@ bool SearchHandler_c::RLockInvokedIndexes()
 	return false;
 }
 
-void SearchHandler_c::UniqLocals()
+// uniq dLocals and copy into m_dLocal only uniq part. Compact tags, if unique worked
+void SearchHandler_c::UniqLocals ( VecTraits_T<LocalIndex_t> & dLocals )
 {
-	m_dLocal.Sort ( TaggedLocalSorter_fn () );
-	int iSrc = 1, iDst = 1;
-	while ( iSrc<m_dLocal.GetLength () )
+	int iLen = dLocals.GetLength ();
+	if ( !iLen )
+		return;
+
+	CSphVector<int> dOrder;
+	dOrder.Resize ( dLocals.GetLength() );
+	ARRAY_CONSTFOREACH(i, dOrder)
+		dOrder[i] = i;
+
+	dOrder.Sort ( Lesser ( [&dLocals] ( int a, int b )
 	{
-		if ( m_dLocal[iDst - 1].m_sName==m_dLocal[iSrc].m_sName )
+		return ( dLocals[a].m_sName<dLocals[b].m_sName )
+			|| ( dLocals[a].m_sName==dLocals[b].m_sName && dLocals[a].m_iOrderTag>dLocals[b].m_iOrderTag );
+	}));
+
+	int iSrc = 1, iDst = 1;
+	while ( iSrc<iLen )
+	{
+		if ( dLocals[dOrder[iDst-1]].m_sName==dLocals[dOrder[iSrc]].m_sName )
 			++iSrc;
 		else
-			m_dLocal[iDst++] = m_dLocal[iSrc++];
+			dOrder[iDst++] = dOrder[iSrc++];
 	}
+
+	dOrder.Resize ( iDst );
 	m_dLocal.Resize ( iDst );
-	m_dLocal.Sort ( bind ( &LocalIndex_t::m_iOrderTag ) ); // keep initial order of locals
+	ARRAY_FOREACH ( i, dOrder )
+		m_dLocal[i] = std::move ( dLocals[dOrder[i]] );
 }
 
 
@@ -5876,6 +6071,7 @@ void SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 		}
 	} else
 	{
+		CSphVector<LocalIndex_t> dLocals;
 		StrVec_t dIdxNames;
 		// search through specified local indexes
 		ParseIndexList ( tFirst.m_sIndexes, dIdxNames );
@@ -5888,7 +6084,7 @@ void SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 			auto pDist = GetDistr ( sIndex );
 			if ( !pDist )
 			{
-				auto &dLocal = m_dLocal.Add ();
+				auto &dLocal = dLocals.Add ();
 				dLocal.m_sName = sIndex;
 				dLocal.m_iOrderTag = iOrderTag;
 				dLocal.m_iWeight = GetIndexWeight ( sIndex, tFirst.m_dIndexWeights, 1 );
@@ -5920,7 +6116,7 @@ void SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 				{
 					const CSphString& sLocalAgent = pDist->m_dLocal[j];
 					tDistrStat.m_dLocalNames.Add ( sLocalAgent );
-					auto &dLocal = m_dLocal.Add ();
+					auto &dLocal = dLocals.Add ();
 					dLocal.m_sName = sLocalAgent;
 					dLocal.m_iOrderTag = iOrderTag;
 					if ( iWeight!=-1 )
@@ -5947,12 +6143,11 @@ void SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 		}
 
 		// eliminate local dupes that come from distributed indexes
-		if ( !dRemotes.IsEmpty () && !m_dLocal.IsEmpty() )
-			UniqLocals();
+		if ( !dRemotes.IsEmpty () )
+			UniqLocals ( dLocals );
+		else
+			m_dLocal.SwapData ( dLocals );
 	}
-
-	for ( auto & dResult : m_dNAggrResults )
-		dResult.m_dTag2Docstore.Resize ( iOrderTag );
 }
 
 // query info - render query into the view
@@ -6117,7 +6312,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					}
 				assert ( pDistr );
 
-				int iOrderTag = pAgent->m_iStoreTag;
 				// merge this agent's results
 				for ( int iRes = 0; iRes<iQueries; ++iRes )
 				{
@@ -6142,21 +6336,11 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 					AggrResult_t & tRes = m_dNAggrResults[iRes];
 					++tRes.m_iSuccesses;
-					tRes.m_tSchema = tRemoteResult.m_tSchema;
 
-					assert ( !tRes.m_dTag2Docstore[iOrderTag].m_pDocstore );
+					assert ( tRemoteResult.m_dResults.GetLength() == 1 ); // by design remotes return one chunk
+					auto & dRemoteChunk = tRes.m_dResults.Add ();
+					::Swap ( dRemoteChunk, *tRemoteResult.m_dResults.begin () );
 
-					tRes.m_dMatches.Reserve ( tRes.m_dMatches.GetLength() + tRemoteResult.m_dMatches.GetLength() );
-					ARRAY_FOREACH ( i, tRemoteResult.m_dMatches )
-					{
-						tRes.m_dMatches.Add();
-						tRemoteResult.m_tSchema.CloneWholeMatch ( tRes.m_dMatches.Last(), tRemoteResult.m_dMatches[i] );
-						tRes.m_dMatches.Last().m_iTag = ( iOrderTag ) | 0x80000000;
-					}
-
-					tRes.m_dTag2Docstore[iOrderTag].m_pDocstore = nullptr;
-					tRes.m_dMatchCounts.Add ( tRemoteResult.m_dMatches.GetLength() );
-					tRes.m_dSchemas.Add ( tRemoteResult.m_tSchema );
 					// note how we do NOT add per-index weight here
 
 					// merge this agent's stats
@@ -6240,6 +6424,12 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			continue;
 		}
 
+		if ( tRes.m_dResults.IsEmpty () ) // fixup. It is easier to have single empty result, then check each time.
+		{
+			auto& tEmptyRes = tRes.m_dResults.Add ();
+			tEmptyRes.m_tSchema = tRes.m_tSchema;
+		}
+
 		// minimize schema and remove dupes
 		// assuming here ( tRes.m_tSchema==tRes.m_dSchemas[0] )
 		const CSphFilterSettings * pAggrFilter = nullptr;
@@ -6250,7 +6440,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 		if ( tRes.m_iSuccesses>1 || dItems.GetLength() || pAggrFilter )
 		{
-			if ( m_bMaster && tRes.m_iSuccesses && dItems.GetLength() && tQuery.m_sGroupBy.IsEmpty() && tRes.m_dMatches.GetLength()==0 )
+			if ( m_bMaster && tRes.m_iSuccesses && dItems.GetLength() && tQuery.m_sGroupBy.IsEmpty() && tRes.GetLength()==0 )
 			{
 				for ( auto& dItem : dItems )
 				{
@@ -6264,8 +6454,12 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			if ( !bOk )
 			{
 				tRes.m_iSuccesses = 0;
-				return; // FIXME? really return, not just continue?
+				continue;
 			}
+		} else if ( !tRes.m_dResults.IsEmpty() )
+		{
+			tRes.m_tSchema = tRes.m_dResults.First ().m_tSchema;
+			Debug ( tRes.m_bOneSchema = true; )
 		}
 
 		if ( !m_dNFailuresSet[iRes].IsEmpty() )
@@ -6280,8 +6474,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		////////////
 
 		tRes.m_iOffset = Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
-		tRes.m_iCount = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
-		tRes.m_iCount = Max ( Min ( tRes.m_iCount, tRes.m_dMatches.GetLength()-tRes.m_iOffset ), 0 );
+		auto iLimit = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
+		tRes.m_iCount = Max ( Min ( iLimit, tRes.GetLength()-tRes.m_iOffset ), 0 );
 	}
 
 	/////////////////////////////////
@@ -6479,8 +6673,22 @@ public:
 	{
 		assert ( pResult );
 
-		CSphSwapVector<CSphMatch> & dMatches = pResult->m_dMatches;
-		if ( !dMatches.GetLength() )
+		assert ( pResult->m_bOneSchema );
+		assert ( pResult->m_bSingle );
+		assert ( !pResult->m_dResults.IsEmpty () );
+
+		auto& dMatches = pResult->m_dResults.First().m_dMatches;
+		if ( dMatches.IsEmpty() )
+			return true;
+
+		// get subset expressing 'LIMIT N,M'
+		// LIMIT N,M clause must be applied before (!) table function
+		// so we scan source matches N to N+M-1
+		//
+		// within those matches, we filter out repeats in a given column,
+		// skip first m_iOffset eligible ones, and emit m_iLimit more
+		auto dSubMatches = dMatches.Slice ( pResult->m_iOffset, pResult->m_iCount );
+		if ( dSubMatches.IsEmpty() )
 			return true;
 
 		const CSphColumnInfo * pCol = pResult->m_tSchema.GetAttr ( m_sCol.cstr() );
@@ -6496,18 +6704,13 @@ public:
 		// hence (val-1) for scalars, and NULL for strings
 		SphAttr_t iLastValue = ( t==SPH_ATTR_STRING || t==SPH_ATTR_STRINGPTR )
 			? 0
-			: ( dMatches [ pResult->m_iOffset ].GetAttr ( pCol->m_tLocator ) - 1 );
+			: ( dSubMatches.First().GetAttr ( pCol->m_tLocator ) - 1 );
 
-		// LIMIT N,M clause must be applied before (!) table function
-		// so we scan source matches N to N+M-1
-		//
-		// within those matches, we filter out repeats in a given column,
-		// skip first m_iOffset eligible ones, and emit m_iLimit more
 		int iOutPos = 0;
-		for ( int i=pResult->m_iOffset; i<Min ( dMatches.GetLength(), pResult->m_iOffset+pResult->m_iCount ); i++ )
+		for ( auto& dMatch : dSubMatches )
 		{
 			// get value, skip repeats
-			SphAttr_t iCur = dMatches[i].GetAttr ( pCol->m_tLocator );
+			SphAttr_t iCur = dMatch.GetAttr ( pCol->m_tLocator );
 			if ( iCur==iLastValue )
 				continue;
 
@@ -6531,8 +6734,7 @@ public:
 			}
 
 			// emit!
-			if ( iOutPos!=i )
-				Swap ( dMatches[iOutPos], dMatches[i] );
+			Swap ( dMatches[iOutPos], dMatch );
 
 			// break if we reached the tablefunc limit
 			if ( ++iOutPos==m_iLimit )
@@ -6540,7 +6742,7 @@ public:
 		}
 
 		// adjust the result set limits
-		pResult->ClampMatches ( iOutPos, true );
+		pResult->ClampMatches ( iOutPos );
 		pResult->m_iOffset = 0;
 		pResult->m_iCount = dMatches.GetLength();
 		return true;
@@ -11807,11 +12009,11 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 	// bummer! lets protect ourselves against that
 	CSphBitvec tAttrsToSend;
 	bool bReturnZeroCount = !tRes.m_dZeroCount.IsEmpty();
-	if ( tRes.m_dMatches.GetLength() || bReturnZeroCount )
+	if ( tRes.GetLength() || bReturnZeroCount )
 		sphGetAttrsToSend ( tRes.m_tSchema, false, true, tAttrsToSend );
 
 	// field packets
-	if ( tRes.m_dMatches.IsEmpty() && !bReturnZeroCount )
+	if ( tRes.GetLength()==0 && !bReturnZeroCount )
 	{
 		// in case there are no matches, send a dummy schema
 		// result set header packet. We will attach EOF manually at the end.
@@ -11859,9 +12061,10 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 
 	// rows
 	const CSphSchema &tSchema = tRes.m_tSchema;
-	for ( int iMatch = tRes.m_iOffset; iMatch < tRes.m_iOffset + tRes.m_iCount; ++iMatch )
+	assert ( tRes.m_bSingle );
+	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
+	for ( const auto& tMatch : dMatches  )
 	{
-		const CSphMatch & tMatch = tRes.m_dMatches [ iMatch ];
 		for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); ++i )
 		{
 			if ( !tAttrsToSend.BitGet(i) )
@@ -12338,16 +12541,18 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		bSearchOK = HandleMysqlSelect ( dRows, tHandler );
 
 		// save meta for SHOW *
-		tLastMeta = bUseFirstMeta ? tHandler.m_dAggrResults[0] : tHandler.m_dAggrResults.Last();
-
-		// fix up overall query time
 		if ( bUseFirstMeta )
-			for ( int i=1; i<tHandler.m_dAggrResults.GetLength(); i++ )
+		{
+			tLastMeta = tHandler.m_dAggrResults.First();
+			// fix up overall query time
+			for ( auto& tResult : tHandler.m_dAggrResults )
 			{
-				tLastMeta.m_iQueryTime += tHandler.m_dAggrResults[i].m_iQueryTime;
-				tLastMeta.m_iCpuTime += tHandler.m_dAggrResults[i].m_iCpuTime;
-				tLastMeta.m_iAgentCpuTime += tHandler.m_dAggrResults[i].m_iAgentCpuTime;
+				tLastMeta.m_iQueryTime += tResult.m_iQueryTime;
+				tLastMeta.m_iCpuTime += tResult.m_iCpuTime;
+				tLastMeta.m_iAgentCpuTime += tResult.m_iAgentCpuTime;
 			}
+		} else
+			tLastMeta = tHandler.m_dAggrResults.Last();
 	}
 
 	if ( !bSearchOK )

@@ -72,10 +72,11 @@ void DoSearch ( CSphIndex * pIndex )
 
 	} else
 	{
-		tResult.FillFromQueue ( pSorter, 0 );
-		printf ( "%d results found in %d.%03d sec!\n", tResult.m_dMatches.GetLength(), tResult.m_iQueryTime/1000, tResult.m_iQueryTime%1000 );
-		ARRAY_FOREACH ( i, tResult.m_dMatches )
-			printf ( "%d. rowid=%u, weight=%d\n", 1+i, tResult.m_dMatches[i].m_tRowID, tResult.m_dMatches[i].m_iWeight );
+		auto & tOneRes = tResult.m_dResults.Add ();
+		tOneRes.FillFromSorter ( pSorter );
+		printf ( "%d results found in %d.%03d sec!\n", tOneRes.m_dMatches.GetLength(), tResult.m_iQueryTime/1000, tResult.m_iQueryTime%1000 );
+		ARRAY_FOREACH ( i, tOneRes.m_dMatches )
+			printf ( "%d. rowid=%u, weight=%d\n", 1+i, tOneRes.m_dMatches[i].m_tRowID, tOneRes.m_dMatches[i].m_iWeight );
 	}
 
 	SafeDelete ( pSorter );
@@ -687,49 +688,59 @@ int main ( int argc, char ** argv )
 // BLOODY DIRTY HACK!!!
 // definitions of AggrResult_t members just copy-pasted 'as is' from searchdaemon.cpp
 
-void AggrResult_t::FreeMatchesPtrs ( int iLimit, bool bCommonSchema )
+int AggrResult_t::GetLength () const
 {
-	if ( m_dMatches.GetLength ()<=iLimit )
-		return;
-
-	if ( bCommonSchema ) {
-		for ( int i = iLimit; i<m_dMatches.GetLength (); ++i )
-			m_tSchema.FreeDataPtrs ( m_dMatches[i] );
-	} else {
-		int nMatches = 0;
-		ARRAY_FOREACH ( i, m_dMatchCounts ) {
-			nMatches += m_dMatchCounts[i];
-
-			if ( iLimit<nMatches ) {
-				int iFrom = Max ( iLimit, nMatches-m_dMatchCounts[i] );
-				for ( int j = iFrom; j<nMatches; ++j )
-					m_dSchemas[i].FreeDataPtrs ( m_dMatches[j] );
-			}
-		}
-	}
+	int iCount = 0;
+	m_dResults.Apply ( [&iCount] ( const OneResultset_t & a ) { iCount += a.m_dMatches.GetLength (); } );
+	return iCount;
 }
 
-void AggrResult_t::ClampMatches ( int iLimit, bool bCommonSchema )
+void AggrResult_t::ClampMatches ( int iLimit )
 {
-	FreeMatchesPtrs ( iLimit, bCommonSchema );
-	if ( m_dMatches.GetLength ()<=iLimit )
-		return;
-	m_dMatches.Resize ( iLimit );
+	assert ( m_bSingle );
+	if ( !m_dResults.IsEmpty () )
+		m_dResults.First ().ClampMatches ( iLimit );
 }
 
-
-int AggrResult_t::FillFromQueue ( ISphMatchSorter * pQueue, int iTag )
+void AggrResult_t::ClampAllMatches ()
 {
-	if ( !pQueue || !pQueue->GetLength ())
+	for ( auto& dResult : m_dResults )
+		dResult.ClampAllMatches();
+}
+
+int OneResultset_t::FillFromSorter ( ISphMatchSorter * pQueue )
+{
+	if ( !pQueue )
 		return 0;
 
-	int iOffset = m_dMatches.GetLength ();
-	int iCopied = pQueue->Flatten ( m_dMatches.AddN ( pQueue->GetLength ()), iTag );
-	m_dMatches.Resize ( iOffset+iCopied );
+	assert ( m_dMatches.IsEmpty () );
+	m_tSchema = *pQueue->GetSchema ();
+	if ( !pQueue->GetLength () )
+		return 0;
+
+	int iCopied = pQueue->Flatten ( m_dMatches.AddN ( pQueue->GetLength () ) );
+	m_dMatches.Resize ( iCopied );
 	return iCopied;
 }
 
-AggrResult_t::~AggrResult_t ()
+void OneResultset_t::ClampAllMatches ()
+{
+	for ( auto& dMatch : m_dMatches )
+		m_tSchema.FreeDataPtrs ( dMatch );
+	m_dMatches.Reset();
+}
+
+void OneResultset_t::ClampMatches ( int iLimit )
+{
+	assert ( iLimit>0 );
+
+	int iMatches = m_dMatches.GetLength ();
+	for ( int i = iLimit; i<iMatches; ++i )
+		m_tSchema.FreeDataPtrs ( m_dMatches[i] );
+	m_dMatches.Resize ( iLimit );
+}
+
+OneResultset_t::~OneResultset_t()
 {
 	for ( auto & dMatch : m_dMatches )
 		m_tSchema.FreeDataPtrs ( dMatch );

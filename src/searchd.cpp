@@ -637,7 +637,7 @@ public:
 				if ( m_dLog[i].m_sError==m_dLog[i-1].m_sError )
 					continue;
 
-			sReport << sColon << "index ";
+			sReport << sColon;
 
 			ReportIndexesName ( iSpanStart, i, m_dLog, sReport );
 			sReport << m_dLog[iSpanStart].m_sError;
@@ -3078,14 +3078,14 @@ void ReportIndexesName ( int iSpanStart, int iSpandEnd, const CSphVector<SearchF
 		auto pDist = GetDistr ( dLog[iSpanStart].m_sParentIndex );
 		if ( pDist && pDist->m_dLocal.GetLength ()==iSpanLen )
 		{
-			sOut << dLog[iSpanStart].m_sParentIndex << ": ";
+			sOut << "index " << dLog[iSpanStart].m_sParentIndex << ": ";
 			return;
 		}
 	}
 
 	// report only first indexes up to 4
 	int iEndReport = ( iSpanLen>4 ) ? iSpanStart+3 : iSpandEnd;
-	sOut.StartBlock (",");
+	sOut.StartBlock ( ",", "index " );
 	for ( int j = iSpanStart; j<iEndReport; ++j )
 		sOut << dLog[j].m_sIndex;
 	sOut.FinishBlock ();

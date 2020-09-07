@@ -1134,7 +1134,7 @@ public:
 	void				GetStatus ( CSphIndexStatus* ) const final;
 
 	bool				MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery, const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const final;
-	bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const final;
+	bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult* pResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const final;
 	void				DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError, const SphChunkGuard_t & tGuard ) const;
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const final;
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const final;
@@ -5964,9 +5964,9 @@ struct DiskChunkSearcherCtx_t
 	using Sorters_t = VecTraits_T<ISphMatchSorter *>;
 
 	Sorters_t&			m_dSorters;
-	CSphQueryResult&	m_tMeta;
+	CSphQueryResultMeta&	m_tMeta;
 
-	DiskChunkSearcherCtx_t ( Sorters_t & dSorters, CSphQueryResult & tMeta )
+	DiskChunkSearcherCtx_t ( Sorters_t & dSorters, CSphQueryResultMeta & tMeta )
 		: m_dSorters ( dSorters )
 		, m_tMeta ( tMeta )
 	{}
@@ -6019,7 +6019,7 @@ struct DiskChunkSearcherCtx_t
 struct DiskChunkSearcherCloneCtx_t
 {
 	CSphVector<ISphMatchSorter *>	m_dSorters;
-	CSphQueryResult					m_tMeta;
+	CSphQueryResultMeta				m_tMeta;
 
 	explicit DiskChunkSearcherCloneCtx_t ( const DiskChunkSearcherCtx_t& dParent )
 	{
@@ -6045,7 +6045,7 @@ struct DiskChunkSearcherCloneCtx_t
 };
 
 void QueryDiskChunks ( const CSphQuery & tQuery,
-		CSphQueryResult& tResult,
+		CSphQueryResultMeta& tResult,
 		const CSphMultiQueryArgs & tArgs,
 		SphChunkGuard_t& tGuard,
 		VecTraits_T<ISphMatchSorter *>& dSorters,
@@ -6095,8 +6095,10 @@ void QueryDiskChunks ( const CSphQuery & tQuery,
 		{
 			myinfo::SetThreadInfo ( "%d ch %d:", iTick, iChunk );
 			auto & dLocalSorters = tCtx.m_dSorters;
-			CSphQueryResult tChunkMeta;
-			CSphQueryResult& tThMeta = tCtx.m_tMeta;
+			CSphQueryResultMeta tChunkMeta;
+			CSphQueryResult tChunkResult;
+			tChunkResult.m_pMeta = &tChunkMeta;
+			CSphQueryResultMeta& tThMeta = tCtx.m_tMeta;
 			tChunkMeta.m_pProfile = tThMeta.m_pProfile;
 
 			CSphMultiQueryArgs tMultiArgs ( tArgs.m_iIndexWeight );
@@ -6111,25 +6113,12 @@ void QueryDiskChunks ( const CSphQuery & tQuery,
 			// that's why we don't want to move to a new schema before we searched ram chunks
 			tMultiArgs.m_bModifySorterSchemas = false;
 
-			bInterrupt = !tGuard.m_dDiskChunks[iChunk]->MultiQuery ( tChunkMeta, tQuery, dLocalSorters, tMultiArgs );
+			bInterrupt = !tGuard.m_dDiskChunks[iChunk]->MultiQuery ( tChunkResult, tQuery, dLocalSorters, tMultiArgs );
 
 			// check terms inconsistency among disk chunks
-			const auto & hChunkStats = tChunkMeta.m_hWordStats;
-			auto & hResWordStats = tCtx.m_tMeta.m_hWordStats;
+			tCtx.m_tMeta.MergeWordStats ( tChunkMeta );
 
-			if ( hResWordStats.GetLength() )
-			{
-				for ( auto & tStat : hResWordStats )
-				{
-					const auto * pDstStat = hChunkStats ( tStat.first );
-					if ( pDstStat )
-						CSphQueryResult::AddOtherStat ( hResWordStats,
-								tStat.first, pDstStat->first, pDstStat->second );
-				}
-			} else
-				hResWordStats = hChunkStats;
-
-			dDiskBlobPools[iChunk] = tChunkMeta.m_pBlobPool;
+			dDiskBlobPools[iChunk] = tChunkResult.m_pBlobPool;
 
 			if ( tThMeta.m_bHasPrediction )
 				tThMeta.m_tStats.Add ( tChunkMeta.m_tStats );
@@ -6196,7 +6185,7 @@ int PrepareFTSearch ( const RtIndex_c * pThis,
 		ISphTokenizer * pTokenizer,
 		ISphTokenizer * pQueryTokenizer,
 		CSphDict* pDict,
-		CSphQueryResult& tMeta,
+		CSphQueryResultMeta& tMeta,
 		QueryProfile_t* pProfiler,
 		CSphScopedPayload* pPayloads,
 		XQQuery_t & tParsed )
@@ -6358,7 +6347,7 @@ bool DoFullScanQuery ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 		QueryProfile_t* pProfiler,
 		CSphQueryContext& tCtx,
 		VecTraits_T<ISphMatchSorter*>& dSorters,
-		CSphQueryResult& tMeta )
+		CSphQueryResultMeta& tMeta )
 {
 	// probably redundant, but just in case
 	SwitchProfile ( pProfiler, SPH_QSTATE_INIT );
@@ -6485,7 +6474,7 @@ bool DoFullTextSearch ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 		CSphQueryContext& tCtx,
 		VecTraits_T<ISphMatchSorter*>& dSorters,
 		XQQuery_t& tParsed,
-		CSphQueryResult& tMeta,
+		CSphQueryResultMeta& tMeta,
 		ISphMatchSorter* pSorter )
 {
 	// set zonespanlist settings
@@ -6556,7 +6545,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	CSphVector<ISphMatchSorter*> dSorters;
 	dSorters.Reserve ( dAllSorters.GetLength() );
 	dAllSorters.Apply ([&dSorters] ( ISphMatchSorter* p) { if ( p ) dSorters.Add(p); });
-	auto& tMeta = tResult;
+	auto& tMeta = *tResult.m_pMeta;
 
 	// if we have anything to work with
 	if ( dSorters.IsEmpty() )
@@ -6769,15 +6758,15 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	return true;
 }
 
-bool RtIndex_c::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
+bool RtIndex_c::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult* pResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
 {
 	// FIXME! OPTIMIZE! implement common subtree cache here
 	bool bResult = false;
 	for ( int i=0; i<iQueries; ++i )
-		if ( MultiQuery ( *ppResults[i], pQueries[i], { ppSorters+i, 1}, tArgs ) )
+		if ( MultiQuery ( pResults[i], pQueries[i], { ppSorters+i, 1}, tArgs ) )
 			bResult = true;
 		else
-			ppResults[i]->m_iMultiplier = -1; // -1 means 'error'
+			pResults[i].m_pMeta->m_iMultiplier = -1; // -1 means 'error'
 
 	return bResult;
 }

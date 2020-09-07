@@ -141,7 +141,7 @@ public:
 };
 
 /// factory
-ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery & tQuery, CSphQueryResult & tMeta,
+ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery & tQuery, CSphQueryResultMeta & tMeta,
 		const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx, const ISphSchema & tSorterSchema );
 
 class QwordScan_c : public ISphQword

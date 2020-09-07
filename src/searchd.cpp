@@ -2577,7 +2577,7 @@ struct EscapeQuotation_t : public BaseQuotation_t
 using QuotationEscapedBuilder = EscapedStringBuilder_T<EscapeQuotation_t>;
 
 
-void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tMeta )
+void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResultMeta & tMeta )
 {
 	assert ( g_eLogFormat==LOG_FORMAT_PLAIN );
 	if ( ( !g_bQuerySyslog && g_iQueryLogFile<0 ) || !tMeta.m_sError.IsEmpty() )
@@ -2887,7 +2887,7 @@ static void FormatIndexHints ( const CSphQuery & tQuery, StringBuilder_c & tBuf 
 }
 
 
-static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tMeta, const CSphVector<int64_t> & dAgentTimes )
+static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
 {
 	assert ( g_eLogFormat==LOG_FORMAT_SPHINXQL );
 	if ( g_iQueryLogFile<0 )
@@ -3038,7 +3038,7 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 	tBuf += ";";
 }
 
-static void LogQuery ( const CSphQuery & q, const CSphQueryResult & tMeta, const CSphVector<int64_t> & dAgentTimes )
+static void LogQuery ( const CSphQuery & q, const CSphQueryResultMeta & tMeta, const CSphVector<int64_t> & dAgentTimes )
 {
 	if ( g_iQueryLogMinMs>0 && tMeta.m_iQueryTime<g_iQueryLogMinMs )
 		return;
@@ -4755,7 +4755,6 @@ public:
 	void							SetProfile ( QueryProfile_t * pProfile );
 	AggrResult_t *					GetResult ( int iResult ) { return m_dAggrResults.Begin() + iResult; }
 	void							SetFederatedUser () { m_bFederatedUser = true; }
-	const CSphString &				GetLocalIndexName ( int iLocal ) const;
 
 public:
 	CSphVector<CSphQuery>			m_dQueries;						///< queries which i need to search
@@ -4796,10 +4795,10 @@ protected:
 	void							OnRunFinished ();
 
 private:
-	CSphVector<CSphQueryResult*>		m_dResultPtrs;	// used to pass wide AggrResult_t agnostic to size
+	CSphVector<CSphQueryResult>			m_dResults;
 	VecTraits_T<CSphQuery>				m_dNQueries;		///< working subset of queries
 	VecTraits_T<AggrResult_t>			m_dNAggrResults;	///< working subset of results
-	VecTraits_T<CSphQueryResult*>		m_dNResultPtrs;		///< working subset of result pointers
+	VecTraits_T<CSphQueryResult>		m_dNResults;		///< working subset of result pointers
 	VecTraits_T<SearchFailuresLog_c>	m_dNFailuresSet;	///< working subset of failures
 
 private:
@@ -4870,14 +4869,14 @@ SearchHandler_c::SearchHandler_c ( int iQueries, const QueryParser_i * pQueryPar
 		m_dTables[i] = nullptr;
 
 	SetQueryParser ( pQueryParser, eQueryType );
-	m_dResultPtrs.Reserve ( iQueries );
-	for ( auto & dResult : m_dAggrResults )
-		m_dResultPtrs.Add ( &dResult );
+	m_dResults.Resize ( iQueries );
+	for ( int i=0; i<iQueries; ++i )
+		m_dResults[i].m_pMeta = &m_dAggrResults[i];
 
 	// initial slices (when nothing explicitly asked)
 	m_dNQueries = m_dQueries;
 	m_dNAggrResults = m_dAggrResults;
-	m_dNResultPtrs = m_dResultPtrs;
+	m_dNResults = m_dResults;
 	m_dNFailuresSet = m_dFailuresSet;
 }
 
@@ -5112,33 +5111,14 @@ void SearchHandler_c::OnRunFinished()
 }
 
 
-static void MergeWordStats ( CSphQueryResultMeta & tDstResult,
-	const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrc )
+int64_t CalcPredictedTimeMsec ( const CSphQueryResultMeta & tMeta )
 {
-	if ( !tDstResult.m_hWordStats.GetLength() )
-	{
-		// nothing has been set yet; just copy
-		tDstResult.m_hWordStats = hSrc;
-		return;
-	}
+	assert ( tMeta.m_bHasPrediction );
 
-	hSrc.IterateStart();
-	while ( hSrc.IterateNext() )
-	{
-		const CSphQueryResultMeta::WordStat_t & tSrcStat = hSrc.IterateGet();
-		tDstResult.AddStat ( hSrc.IterateGetKey(), tSrcStat.first, tSrcStat.second );
-	}
-}
-
-
-static int64_t CalcPredictedTimeMsec ( const CSphQueryResult & tRes )
-{
-	assert ( tRes.m_bHasPrediction );
-
-	int64_t iNanoResult = int64_t(g_iPredictorCostSkip)*tRes.m_tStats.m_iSkips+
-		g_iPredictorCostDoc*tRes.m_tStats.m_iFetchedDocs+
-		g_iPredictorCostHit*tRes.m_tStats.m_iFetchedHits+
-		g_iPredictorCostMatch*tRes.m_iTotalMatches;
+	int64_t iNanoResult = int64_t(g_iPredictorCostSkip)* tMeta.m_tStats.m_iSkips
+		+ g_iPredictorCostDoc * tMeta.m_tStats.m_iFetchedDocs
+		+ g_iPredictorCostHit * tMeta.m_tStats.m_iFetchedHits
+		+ g_iPredictorCostMatch * tMeta.m_iTotalMatches;
 
 	return iNanoResult/1000000;
 }
@@ -5153,20 +5133,9 @@ static void FlattenToRes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, int i
 		CSphSchema & tNewSchema = tRes.m_dSchemas.Add();
 		tNewSchema = *pSorter->GetSchema();
 
-		tRes.m_dTag2Docstore[iTag].m_pDocstore = tRes.m_pDocstore;
-
 		int iCopied = tRes.FillFromQueue ( pSorter, iTag );
 		tRes.m_dMatchCounts.Add ( iCopied );
-
-		// clean up for next index search
-		tRes.m_pDocstore = nullptr;
 	}
-}
-
-
-const CSphString & SearchHandler_c::GetLocalIndexName ( int iLocal ) const
-{
-	return m_dLocal[iLocal].m_sName;
 }
 
 static int GetMaxMatches ( int iQueryMaxMatches, const CSphIndex * pIndex )
@@ -5317,7 +5286,9 @@ void SearchHandler_c::RunLocalSearches()
 		m_bMultiQueue = tQueueRes.m_bAlowMulti;
 
 		// me shortcuts
+		CSphQueryResultMeta tMqMeta;
 		CSphQueryResult tStats;
+		tStats.m_pMeta = &tMqMeta;
 
 		// do the query
 		CSphMultiQueryArgs tMultiArgs ( iIndexWeight );
@@ -5332,16 +5303,13 @@ void SearchHandler_c::RunLocalSearches()
 		bool bResult = false;
 		if ( m_bMultiQueue )
 		{
-			tStats.m_tIOStats.Start();
+			tMqMeta.m_tIOStats.Start();
 			bResult = pServed->m_pIndex->MultiQuery ( tStats, m_dNQueries.First(), dSorters, tMultiArgs );
-			tStats.m_tIOStats.Stop();
-
-			for ( auto & i : m_dNAggrResults )
-				i.m_pDocstore = tStats.m_pDocstore;
+			tMqMeta.m_tIOStats.Stop();
 		} else
 		{
 			m_dNAggrResults.First().m_tIOStats.Start();
-			bResult = pServed->m_pIndex->MultiQueryEx ( iQueries, &m_dNQueries[0], &m_dNResultPtrs[0], &dSorters[0], tMultiArgs );
+			bResult = pServed->m_pIndex->MultiQueryEx ( iQueries, &m_dNQueries[0], &m_dNResults[0], &dSorters[0], tMultiArgs );
 			m_dNAggrResults.First ().m_tIOStats.Stop();
 		}
 
@@ -5352,9 +5320,9 @@ void SearchHandler_c::RunLocalSearches()
 		{
 			// failed, submit local (if not empty) or global error string
 			for ( int iQuery=0; iQuery<iQueries; ++iQuery )
-				m_dNFailuresSet[iQuery].Submit ( sLocal, sParentIndex, tStats.m_sError.IsEmpty()
+				m_dNFailuresSet[iQuery].Submit ( sLocal, sParentIndex, tMqMeta.m_sError.IsEmpty()
 					? m_dNAggrResults [ m_bMultiQueue ? 0 : iQuery ].m_sError.cstr()
-					: tStats.m_sError.cstr() );
+					: tMqMeta.m_sError.cstr() );
 		} else
 		{
 			// multi-query succeeded
@@ -5373,19 +5341,18 @@ void SearchHandler_c::RunLocalSearches()
 				AggrResult_t & tNRes = m_dNAggrResults[i];
 
 				int iQTimeForStats = tNRes.m_iQueryTime;
-
+				auto pDocstore = m_bMultiQueue ? tStats.m_pDocstore : m_dNResults[i].m_pDocstore;
 				// multi-queue only returned one result set meta, so we need to replicate it
 				if ( m_bMultiQueue )
 				{
 					// these times will be overridden below, but let's be clean
-					iQTimeForStats = tStats.m_iQueryTime / iQueries;
+					iQTimeForStats = tMqMeta.m_iQueryTime / iQueries;
 					tNRes.m_iQueryTime += iQTimeForStats;
 
-					tNRes.m_pBlobPool = tStats.m_pBlobPool;
-					MergeWordStats ( tNRes, tStats.m_hWordStats );
+					tNRes.MergeWordStats ( tMqMeta );
 					tNRes.m_iMultiplier = iQueries;
-					tNRes.m_iCpuTime += tStats.m_iCpuTime / iQueries;
-					tNRes.m_tIOStats.Add ( tStats.m_tIOStats );
+					tNRes.m_iCpuTime += tMqMeta.m_iCpuTime / iQueries;
+					tNRes.m_tIOStats.Add ( tMqMeta.m_tIOStats );
 				} else if ( tNRes.m_iMultiplier==-1 )
 				{
 					m_dFailuresSet[i].Submit ( sLocal, sParentIndex, tNRes.m_sError.cstr() );
@@ -5403,6 +5370,7 @@ void SearchHandler_c::RunLocalSearches()
 				m_dQueryIndexStats[iLocal].m_dStats[i].m_uFoundRows = pSorter->GetTotalCount();
 
 				// extract matches from sorter
+				tNRes.m_dTag2Docstore[iOrderTag].m_pDocstore = pDocstore;
 				FlattenToRes ( pSorter, tNRes, iOrderTag );
 
 				if ( !tNRes.m_sWarning.IsEmpty () )
@@ -6013,7 +5981,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	int iQueries = iEnd - iStart;
 	m_dNQueries = m_dQueries.Slice ( iStart, iQueries );
 	m_dNAggrResults = m_dAggrResults.Slice ( iStart, iQueries );
-	m_dNResultPtrs = m_dResultPtrs.Slice ( iStart, iQueries );
+	m_dNResults = m_dResults.Slice ( iStart, iQueries );
 	m_dNFailuresSet = m_dFailuresSet.Slice ( iStart, iQueries );
 
 	// we've own scoped context here
@@ -6186,7 +6154,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 						tRes.m_dMatches.Last().m_iTag = ( iOrderTag ) | 0x80000000;
 					}
 
-					tRes.m_pBlobPool = nullptr;
 					tRes.m_dTag2Docstore[iOrderTag].m_pDocstore = nullptr;
 					tRes.m_dMatchCounts.Add ( tRemoteResult.m_dMatches.GetLength() );
 					tRes.m_dSchemas.Add ( tRemoteResult.m_tSchema );
@@ -6211,7 +6178,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					}
 
 					// merge this agent's words
-					MergeWordStats ( tRes, tRemoteResult.m_hWordStats );
+					tRes.MergeWordStats ( tRemoteResult );
 				}
 
 				// dismissed

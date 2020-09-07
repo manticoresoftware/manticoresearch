@@ -52,6 +52,8 @@ void DoSearch ( CSphIndex * pIndex )
 
 	CSphQuery tQuery;
 	AggrResult_t tResult;
+	CSphQueryResult tQueryResult;
+	tQueryResult.m_pMeta = &tResult;
 	CSphMultiQueryArgs tArgs ( 1 );
 	tQuery.m_sQuery = "@title cat";
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser ();
@@ -64,7 +66,7 @@ void DoSearch ( CSphIndex * pIndex )
 	{
 		printf ( "failed to create sorter; error=%s", tResult.m_sError.cstr() );
 
-	} else if ( !pIndex->MultiQuery ( tResult, tQuery, { &pSorter, 1 }, tArgs ) )
+	} else if ( !pIndex->MultiQuery ( tQueryResult, tQuery, { &pSorter, 1 }, tArgs ) )
 	{
 		printf ( "query failed; error=%s", pIndex->GetLastError().cstr() );
 

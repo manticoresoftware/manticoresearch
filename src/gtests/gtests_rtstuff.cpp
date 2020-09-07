@@ -307,6 +307,8 @@ TEST_P ( RTN, WeightBoundary )
 
 	CSphQuery tQuery;
 	AggrResult_t tResult;
+	CSphQueryResult tQueryResult;
+	tQueryResult.m_pMeta = &tResult;
 	CSphMultiQueryArgs tArgs ( 1 );
 	tQuery.m_sQuery = "@title cat";
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
@@ -315,7 +317,7 @@ TEST_P ( RTN, WeightBoundary )
 	SphQueueRes_t tRes;
 	ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, tResult.m_sError, tRes );
 	ASSERT_TRUE ( pSorter );
-	ASSERT_TRUE ( pIndex->MultiQuery ( tResult, tQuery, { &pSorter, 1 }, tArgs ) );
+	ASSERT_TRUE ( pIndex->MultiQuery ( tQueryResult, tQuery, { &pSorter, 1 }, tArgs ) );
 	tResult.FillFromQueue ( pSorter, 0 );
 	ASSERT_EQ ( tResult.m_dMatches.GetLength (), 1 ) << "results found";
 	ASSERT_EQ ( tResult.m_dMatches[0].m_tRowID, 0 ) << "rowID" ;
@@ -412,6 +414,8 @@ TEST_F ( RT, RankerFactors )
 	tQuery.m_sOrderBy = "@weight desc";
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
 	AggrResult_t tResult;
+	CSphQueryResult tQueryResult;
+	tQueryResult.m_pMeta = &tResult;
 	CSphMultiQueryArgs tArgs ( 1 );
 	tArgs.m_uPackedFactorFlags = SPH_FACTOR_ENABLE | SPH_FACTOR_CALC_ATC;
 
@@ -425,7 +429,7 @@ TEST_F ( RT, RankerFactors )
 
 		auto pSorter = sphCreateQueue ( tQueueSettings, tQuery, tResult.m_sError, tRes );
 		ASSERT_TRUE ( pSorter );
-		ASSERT_TRUE ( pIndex->MultiQuery ( tResult, tQuery, { &pSorter, 1 }, tArgs ) );
+		ASSERT_TRUE ( pIndex->MultiQuery ( tQueryResult, tQuery, { &pSorter, 1 }, tArgs ) );
 		tResult.FillFromQueue ( pSorter, 0 );
 
 		tResult.m_tSchema = *pSorter->GetSchema ();
@@ -566,6 +570,8 @@ TEST_F ( RT, SendVsMerge )
 
 	CSphQuery tQuery;
 	AggrResult_t tResult;
+	CSphQueryResult tQueryResult;
+	tQueryResult.m_pMeta = &tResult;
 	CSphMultiQueryArgs tArgs ( 1 );
 	tQuery.m_sQuery = "@title cat";
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
@@ -594,7 +600,7 @@ TEST_F ( RT, SendVsMerge )
 		if ( pSrc->m_iDocsCounter==350 )
 		{
 			pIndex->Commit ( NULL, NULL );
-			EXPECT_TRUE ( pIndex->MultiQuery ( tResult, tQuery, { &pSorter, 1 }, tArgs ) );
+			EXPECT_TRUE ( pIndex->MultiQuery ( tQueryResult, tQuery, { &pSorter, 1 }, tArgs ) );
 			tResult.FillFromQueue ( pSorter, 0 );
 		}
 	}
@@ -605,7 +611,7 @@ TEST_F ( RT, SendVsMerge )
 	tResult.m_tSchema = *pSorter->GetSchema ();
 
 	ASSERT_EQ ( tResult.m_dMatches.GetLength (), 350 );
-	for ( int i = 0; i<tResult.m_dMatches.GetLength (); i++ )
+	for ( int i = 0; i<tResult.m_dMatches.GetLength (); ++i )
 	{
 		const RowID_t uID = tResult.m_dMatches[i].m_tRowID;
 		const SphAttr_t tTag1 = tResult.m_dMatches[i].GetAttr ( tResult.m_tSchema.GetAttr ( 0 ).m_tLocator );

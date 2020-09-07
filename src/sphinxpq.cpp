@@ -94,7 +94,7 @@ public:
 
 	// RT index stub
 	bool MultiQuery ( CSphQueryResult &, const CSphQuery &, const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const override;
-	bool MultiQueryEx ( int, const CSphQuery *, CSphQueryResult**, ISphMatchSorter **, const CSphMultiQueryArgs & ) const override;
+	bool MultiQueryEx ( int, const CSphQuery *, CSphQueryResult*, ISphMatchSorter **, const CSphMultiQueryArgs & ) const override;
 	virtual bool AddDocument ( ISphHits * , const CSphMatch & , const char ** , const CSphVector<DWORD> & , CSphString & , CSphString & ) { return true; }
 	bool DeleteDocument ( const VecTraits_T<DocID_t> &, CSphString & , RtAccum_t * pAccExt ) override { RollBack ( pAccExt ); return true; }
 	void ForceRamFlush ( bool bPeriodic ) override;
@@ -1105,7 +1105,7 @@ int FullScanCollectingDocs ( PercolateMatchContext_t & tMatchCtx )
 int FtMatchingWithoutDocs ( const StoredQuery_t * pStored, PercolateMatchContext_t & tMatchCtx )
 {
 	tMatchCtx.m_tDictMap.SetMap ( pStored->m_hDict ); // set terms dictionary
-	CSphQueryResult tTmpMeta;
+	CSphQueryResultMeta tTmpMeta;
 	CSphScopedPtr<ISphRanker> pRanker { sphCreateRanker ( *pStored->m_pXQ.Ptr(), tMatchCtx.m_tDummyQuery,
 			tTmpMeta, *tMatchCtx.m_pTermSetup.Ptr(), *tMatchCtx.m_pCtx.Ptr(), tMatchCtx.m_tSchema ) };
 
@@ -1122,7 +1122,7 @@ int FtMatchingWithoutDocs ( const StoredQuery_t * pStored, PercolateMatchContext
 int FtMatchingCollectingDocs ( const StoredQuery_t * pStored, PercolateMatchContext_t & tMatchCtx )
 {
 	tMatchCtx.m_tDictMap.SetMap ( pStored->m_hDict ); // set terms dictionary
-	CSphQueryResult tTmpMeta;
+	CSphQueryResultMeta tTmpMeta;
 	CSphScopedPtr<ISphRanker> pRanker { sphCreateRanker ( *pStored->m_pXQ.Ptr(), tMatchCtx.m_tDummyQuery,
 			tTmpMeta, *tMatchCtx.m_pTermSetup.Ptr(), *tMatchCtx.m_pCtx.Ptr(), tMatchCtx.m_tSchema ) };
 
@@ -1921,7 +1921,7 @@ bool PercolateIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery & 
 		const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs &tArgs ) const
 {
 	assert ( tArgs.m_iTag>=0 );
-	auto & tMeta = tResult;
+	auto & tMeta = *tResult.m_pMeta;
 
 	QueryProfile_t * pProfiler = tMeta.m_pProfile;
 
@@ -2095,15 +2095,15 @@ bool PercolateIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery &
 	return false;
 }
 
-bool PercolateIndex_c::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult** ppResults,
+bool PercolateIndex_c::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult* pResults,
 										ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs &tArgs) const
 {
 	bool bResult = false;
 	for ( int i = 0; i<iQueries; ++i )
-		if ( MultiQuery ( *ppResults[i], pQueries[i], { ppSorters+i, 1 }, tArgs ) )
+		if ( MultiQuery ( pResults[i], pQueries[i], { ppSorters+i, 1 }, tArgs ) )
 			bResult = true;
 		else
-			ppResults[i]->m_iMultiplier = -1;
+			pResults[i].m_pMeta->m_iMultiplier = -1;
 
 	return bResult;
 }

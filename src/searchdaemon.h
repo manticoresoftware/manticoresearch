@@ -1048,7 +1048,7 @@ void HandleMySqlExtendedUpdate( AttrUpdateArgs& tArgs );
 /////////////////////////////////////////////////////////////////////////////
 
 /// result set aggregated across indexes
-struct AggrResult_t final: CSphQueryResult
+struct AggrResult_t final: CSphQueryResultMeta
 {
 	CSphSchema				m_tSchema;			///< result schema
 	CSphVector<CSphSchema>	m_dSchemas;			///< aggregated result sets schemas (for schema minimization)

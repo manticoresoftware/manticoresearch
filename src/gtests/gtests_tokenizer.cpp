@@ -826,7 +826,7 @@ public:
 	const CSphSourceStats &	GetStats () const override { return g_tTmpDummyStat; }
 	void				GetStatus ( CSphIndexStatus* ) const override {}
 	bool				MultiQuery ( CSphQueryResult &, const CSphQuery & , const VecTraits_T<ISphMatchSorter *>&, const CSphMultiQueryArgs & ) const override { return false; }
-	bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult ** , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const override { return false; }
+	bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult* , ISphMatchSorter** , const CSphMultiQueryArgs & ) const override { return false; }
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & , CSphString * ) const override { return false; }
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const override;
 	int					UpdateAttributes ( const CSphAttrUpdate & , int, bool &, CSphString &, CSphString & ) override { return -1; }

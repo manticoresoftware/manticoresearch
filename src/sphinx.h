@@ -2697,13 +2697,12 @@ public:
 
 	CSphString				m_sError;				///< error message
 	CSphString				m_sWarning;				///< warning message
+	QueryProfile_t *		m_pProfile		= nullptr;	///< filled when query profiling is enabled; NULL otherwise
 
 	virtual					~CSphQueryResultMeta () {}					///< dtor
 	void					AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits );
 
-	static void AddOtherStat ( SmallStringHash_T<WordStat_t> & hTrg, const CSphString & sWord, int64_t iDocs
-			, int64_t iHits );
-	// sort wordstat to achieve reproducable result over different runs
+	void					MergeWordStats ( const CSphQueryResultMeta& tOther );// sort wordstat to achieve reproducable result over different runs
 	CSphFixedVector<SmallStringHash_T<CSphQueryResultMeta::WordStat_t>::KeyValue_t *>	MakeSortedWordStat () const;
 };
 
@@ -2711,12 +2710,12 @@ public:
 /// search query result (meta-info)
 struct QueryProfile_t;
 class DocstoreReader_i;
-class CSphQueryResult : public CSphQueryResultMeta
+class CSphQueryResult
 {
 public:
-	const BYTE *			m_pBlobPool = nullptr;	///< pointer to blob attr storage
-	const DocstoreReader_i* m_pDocstore = nullptr;	///< pointer to docstore reader
-	QueryProfile_t *		m_pProfile = nullptr;	///< filled when query profiling is enabled; NULL otherwise
+	CSphQueryResultMeta *	m_pMeta = nullptr; 		///< not owned
+	const BYTE *			m_pBlobPool = nullptr;	///< pointer to blob attr storage. Used only during calculations.
+	const DocstoreReader_i* m_pDocstore = nullptr;	///< pointer to docstore reader fixme! not need in aggr
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -3314,7 +3313,7 @@ public:
 
 	/// many regular queries with one sorter attached to each query.
 	/// returns true if at least one query succeeded. The failed queries indicated with pResult->m_iMultiplier==-1
-	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const = 0;
+	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult* pResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const = 0;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const = 0;
 	virtual void				GetSuggest ( const SuggestArgs_t & , SuggestResult_t & ) const {}
 	virtual bool				ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const { return true; }

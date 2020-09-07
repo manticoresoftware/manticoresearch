@@ -3378,79 +3378,79 @@ static void SendAttribute ( ISphOutputBuffer & tOut, const CSphMatch & tMatch, c
 }
 
 
-void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t * pRes, bool bAgentMode, const CSphQuery & tQuery, WORD uMasterVer )
+void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t& tRes, bool bAgentMode, const CSphQuery & tQuery, WORD uMasterVer )
 {
 	// multi-query status
-	bool bError = !pRes->m_sError.IsEmpty();
-	bool bWarning = !bError && !pRes->m_sWarning.IsEmpty();
+	bool bError = !tRes.m_sError.IsEmpty();
+	bool bWarning = !bError && !tRes.m_sWarning.IsEmpty();
 
 	if ( bError )
 	{
 		tOut.SendInt ( SEARCHD_ERROR ); // fixme! m.b. use APICommand_t and refactor to common API way
-		tOut.SendString ( pRes->m_sError.cstr() );
+		tOut.SendString ( tRes.m_sError.cstr() );
 		if ( g_bOptNoDetach && g_eLogFormat!=LOG_FORMAT_SPHINXQL )
-			sphInfo ( "query error: %s", pRes->m_sError.cstr() );
+			sphInfo ( "query error: %s", tRes.m_sError.cstr() );
 		return;
 
 	} else if ( bWarning )
 	{
 		tOut.SendDword ( SEARCHD_WARNING );
-		tOut.SendString ( pRes->m_sWarning.cstr() );
+		tOut.SendString ( tRes.m_sWarning.cstr() );
 		if ( g_bOptNoDetach && g_eLogFormat!=LOG_FORMAT_SPHINXQL )
-			sphInfo ( "query warning: %s", pRes->m_sWarning.cstr() );
+			sphInfo ( "query warning: %s", tRes.m_sWarning.cstr() );
 	} else
 		tOut.SendDword ( SEARCHD_OK );
 
 	CSphBitvec tAttrsToSend;
-	sphGetAttrsToSend ( pRes->m_tSchema, bAgentMode, false, tAttrsToSend );
+	sphGetAttrsToSend ( tRes.m_tSchema, bAgentMode, false, tAttrsToSend );
 
 	// send schema
-	SendSchema ( tOut, *pRes, tAttrsToSend, uMasterVer, bAgentMode );
+	SendSchema ( tOut, tRes, tAttrsToSend, uMasterVer, bAgentMode );
 
 	// send matches
-	tOut.SendInt ( pRes->m_iCount );
+	tOut.SendInt ( tRes.m_iCount );
 	tOut.SendInt ( 1 ); // was USE_64BIT
 
 	CSphVector<BYTE> dJson ( 512 );
 
-	for ( int i=0; i<pRes->m_iCount; ++i )
+	for ( int i=0; i<tRes.m_iCount; ++i )
 	{
-		const CSphMatch & tMatch = pRes->m_dMatches [ pRes->m_iOffset+i ];
+		const CSphMatch & tMatch = tRes.m_dMatches [ tRes.m_iOffset+i ];
 
-		Verify ( pRes->m_tSchema.GetAttr(sphGetDocidName()) );
+		Verify ( tRes.m_tSchema.GetAttr(sphGetDocidName()) );
 		tOut.SendUint64 ( sphGetDocID(tMatch.m_pDynamic) );
 		tOut.SendInt ( tMatch.m_iWeight );
 
-		assert ( tMatch.m_pStatic || !pRes->m_tSchema.GetStaticSize() );
+		assert ( tMatch.m_pStatic || !tRes.m_tSchema.GetStaticSize() );
 #if 0
 		// not correct any more because of internal attrs (such as string sorting ptrs)
 		assert ( tMatch.m_pDynamic || !pRes->m_tSchema.GetDynamicSize() );
 		assert ( !tMatch.m_pDynamic || (int)tMatch.m_pDynamic[-1]==pRes->m_tSchema.GetDynamicSize() );
 #endif
-		for ( int j=0; j<pRes->m_tSchema.GetAttrsCount(); ++j )
+		for ( int j=0; j<tRes.m_tSchema.GetAttrsCount(); ++j )
 			if ( tAttrsToSend.BitGet(j) )
-				SendAttribute ( tOut, tMatch, pRes->m_tSchema.GetAttr(j), iVer, uMasterVer, bAgentMode );
+				SendAttribute ( tOut, tMatch, tRes.m_tSchema.GetAttr(j), iVer, uMasterVer, bAgentMode );
 	}
 
 	if ( tQuery.m_bAgent && tQuery.m_iLimit )
-		tOut.SendInt ( pRes->m_iCount );
+		tOut.SendInt ( tRes.m_iCount );
 	else
-		tOut.SendInt ( pRes->m_dMatches.GetLength() );
+		tOut.SendInt ( tRes.m_dMatches.GetLength() );
 
-	tOut.SendAsDword ( pRes->m_iTotalMatches );
-	tOut.SendInt ( Max ( pRes->m_iQueryTime, 0 ) );
+	tOut.SendAsDword ( tRes.m_iTotalMatches );
+	tOut.SendInt ( Max ( tRes.m_iQueryTime, 0 ) );
 
 	if ( iVer>=0x11A && bAgentMode )
 	{
 		bool bNeedPredictedTime = tQuery.m_iMaxPredictedMsec > 0;
 
-		BYTE uStatMask = ( bNeedPredictedTime ? 4 : 0 ) | ( g_bCpuStats ? 2 : 0 ) | ( g_bIOStats ? 1 : 0 );
+		BYTE uStatMask = ( bNeedPredictedTime ? 4U : 0U ) | ( g_bCpuStats ? 2U : 0U ) | ( g_bIOStats ? 1U : 0U );
 		tOut.SendByte ( uStatMask );
 
 		if ( g_bIOStats )
 		{
-			CSphIOStats tStats = pRes->m_tIOStats;
-			tStats.Add ( pRes->m_tAgentIOStats );
+			CSphIOStats tStats = tRes.m_tIOStats;
+			tStats.Add ( tRes.m_tAgentIOStats );
 			tOut.SendUint64 ( tStats.m_iReadTime );
 			tOut.SendDword ( tStats.m_iReadOps );
 			tOut.SendUint64 ( tStats.m_iReadBytes );
@@ -3461,22 +3461,22 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const AggrResult_t * pRes, 
 
 		if ( g_bCpuStats )
 		{
-			int64_t iCpuTime = pRes->m_iCpuTime + pRes->m_iAgentCpuTime;
+			int64_t iCpuTime = tRes.m_iCpuTime + tRes.m_iAgentCpuTime;
 			tOut.SendUint64 ( iCpuTime );
 		}
 
 		if ( bNeedPredictedTime )
-			tOut.SendUint64 ( pRes->m_iPredictedTime+pRes->m_iAgentPredictedTime );
+			tOut.SendUint64 ( tRes.m_iPredictedTime + tRes.m_iAgentPredictedTime );
 	}
 	if ( bAgentMode && uMasterVer>=7 )
 	{
-		tOut.SendDword ( pRes->m_tStats.m_iFetchedDocs + pRes->m_iAgentFetchedDocs );
-		tOut.SendDword ( pRes->m_tStats.m_iFetchedHits + pRes->m_iAgentFetchedHits );
+		tOut.SendDword ( tRes.m_tStats.m_iFetchedDocs + tRes.m_iAgentFetchedDocs );
+		tOut.SendDword ( tRes.m_tStats.m_iFetchedHits + tRes.m_iAgentFetchedHits );
 		if ( uMasterVer>=8 )
-			tOut.SendDword ( pRes->m_tStats.m_iSkips + pRes->m_iAgentFetchedSkips );
+			tOut.SendDword ( tRes.m_tStats.m_iSkips + tRes.m_iAgentFetchedSkips );
 	}
 
-	auto dWords = pRes->MakeSortedWordStat ();
+	auto dWords = tRes.MakeSortedWordStat ();
 	tOut.SendInt ( dWords.GetLength() );
 	for( auto * pWord : dWords )
 	{
@@ -6449,7 +6449,7 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 
 	auto tReply = APIAnswer ( tOut, VER_COMMAND_SEARCH );
 	ARRAY_FOREACH ( i, tHandler.m_dQueries )
-		SendResult ( uVer, tOut, &tHandler.m_dAggrResults[i], bAgentMode, tHandler.m_dQueries[i], uMasterVer );
+		SendResult ( uVer, tOut, tHandler.m_dAggrResults[i], bAgentMode, tHandler.m_dQueries[i], uMasterVer );
 
 
 	int64_t iTotalPredictedTime = 0;

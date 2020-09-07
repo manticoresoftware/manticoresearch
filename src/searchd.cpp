@@ -3562,18 +3562,18 @@ struct TaggedMatchSorter_fn : public MatchSortAccessor_t
 };
 
 
-void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes )
+void RemapResult ( const ISphSchema * pTarget, AggrResult_t & dResult )
 {
 	int iCur = 0;
 	CSphVector<int> dMapFrom ( pTarget->GetAttrsCount() );
 	CSphVector<int> dRowItems ( pTarget->GetAttrsCount () );
 	static const int SIZE_OF_ROW = 8 * sizeof ( CSphRowitem );
 
-	ARRAY_FOREACH ( iSchema, pRes->m_dSchemas )
+	ARRAY_FOREACH ( iSchema, dResult.m_dSchemas )
 	{
 		dMapFrom.Resize ( 0 );
 		dRowItems.Resize ( 0 );
-		CSphSchema & dSchema = pRes->m_dSchemas[iSchema];
+		CSphSchema & dSchema = dResult.m_dSchemas[iSchema];
 		for ( int i = 0, iAttrsCount = pTarget->GetAttrsCount(); i<iAttrsCount; ++i )
 		{
 			auto iSrcCol = dSchema.GetAttrIndex ( pTarget->GetAttr ( i ).m_sName.cstr () );
@@ -3585,13 +3585,13 @@ void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes )
 				|| IsSortJsonInternal ( pTarget->GetAttr(i).m_sName )
 				);
 		}
-		int iLimit = Min ( iCur + pRes->m_dMatchCounts[iSchema], pRes->m_dMatches.GetLength() );
+		int iLimit = Min ( iCur + dResult.m_dMatchCounts[iSchema], dResult.m_dMatches.GetLength() );
 
 		// inverse dRowItems - we'll free only those NOT enumerated yet
 		dRowItems = dSchema.SubsetPtrs ( dRowItems );
 		for ( int i=iCur; i<iLimit; i++ )
 		{
-			CSphMatch & tMatch = pRes->m_dMatches[i];
+			CSphMatch & tMatch = dResult.m_dMatches[i];
 
 			// create new and shiny (and properly sized) match
 			CSphMatch tNewMatch;
@@ -3624,12 +3624,12 @@ void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes )
 			}
 			// swap out old (most likely wrong sized) match
 			Swap ( tMatch, tNewMatch );
-			dSchema.FreeDataSpecial ( tNewMatch, dRowItems );
+			CSphSchemaHelper::FreeDataSpecial ( tNewMatch, dRowItems );
 		}
 
 		iCur = iLimit;
 	}
-	assert ( iCur==pRes->m_dMatches.GetLength() );
+	assert ( iCur==dResult.m_dMatches.GetLength() );
 }
 
 
@@ -4533,7 +4533,7 @@ bool MergeAllMatches ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHave
 			ProcessLocalPostlimit ( tProcessArgs, tRes );
 		}
 
-		RemapResult ( &tRes.m_tSchema, &tRes );
+		RemapResult ( &tRes.m_tSchema, tRes );
 	}
 
 	// do the sort work!

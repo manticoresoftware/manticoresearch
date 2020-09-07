@@ -3633,7 +3633,7 @@ void RemapResult ( const ISphSchema * pTarget, AggrResult_t & dResult )
 }
 
 
-bool GetIndexSchemaItems ( const ISphSchema & tSchema, const CSphVector<CSphQueryItem> & dItems, CSphVector<int> & dAttrs, CSphVector<int> & dFields )
+bool GetIndexSchemaItems ( const ISphSchema & tSchema, const CSphVector<CSphQueryItem> & dItems, CSphVector<int> & dAttrs )
 {
 	bool bHaveAsterisk = false;
 	for ( const auto & i : dItems )
@@ -3643,26 +3643,18 @@ bool GetIndexSchemaItems ( const ISphSchema & tSchema, const CSphVector<CSphQuer
 			int iAttr = tSchema.GetAttrIndex ( i.m_sAlias.cstr() );
 			if ( iAttr>=0 )
 				dAttrs.Add(iAttr);
-			else
-			{
-				int iField = tSchema.GetFieldIndex ( i.m_sAlias.cstr() );
-				if ( iField>=0 )
-					dFields.Add(iField);
-			}
 		}
 
 		bHaveAsterisk |= i.m_sExpr=="*";
 	}
 
 	dAttrs.Sort();
-	dFields.Sort();
-
 	return bHaveAsterisk;
 }
 
 
 bool GetItemsLeftInSchema ( const ISphSchema & tSchema, bool bOnlyPlain, const CSphVector<int> & dAttrs,
-		const CSphVector<int> & dFields, CSphVector<int> & dAttrsInSchema )
+		CSphVector<int> & dAttrsInSchema )
 {	
 	bool bHaveExprs = false;
 
@@ -3720,8 +3712,8 @@ const CSphVector<CSphQueryItem> & ExpandAsterisk ( const ISphSchema & tSchema, c
 {
 	// the result schema usually is the index schema + calculated items + @-items
 	// we need to extract the index schema only
-	CSphVector<int> dIndexSchemaAttrs, dIndexSchemaFields;
-	bool bHaveAsterisk = GetIndexSchemaItems ( tSchema, dItems, dIndexSchemaAttrs, dIndexSchemaFields );
+	CSphVector<int> dIndexSchemaAttrs;
+	bool bHaveAsterisk = GetIndexSchemaItems ( tSchema, dItems, dIndexSchemaAttrs );
 
 	// no stars? Nothing to do.
 	if ( !bHaveAsterisk )
@@ -3730,7 +3722,7 @@ const CSphVector<CSphQueryItem> & ExpandAsterisk ( const ISphSchema & tSchema, c
 	// find items that are in index schema but not in our requested item list
 	// not do not include @-items
 	CSphVector<int> dAttrsLeftInSchema;
-	bHaveExprs = GetItemsLeftInSchema ( tSchema, bOnlyPlain, dIndexSchemaAttrs, dIndexSchemaFields, dAttrsLeftInSchema );
+	bHaveExprs = GetItemsLeftInSchema ( tSchema, bOnlyPlain, dIndexSchemaAttrs, dAttrsLeftInSchema );
 
 	DoExpansion ( tSchema, dAttrsLeftInSchema, dItems, tExpanded );
 

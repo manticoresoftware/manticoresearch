@@ -313,7 +313,7 @@ TEST_P ( RTN, WeightBoundary )
 
 	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema () );
 	SphQueueRes_t tRes;
-	ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, tResult.m_sError, tRes, nullptr );
+	ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, tResult.m_sError, tRes );
 	ASSERT_TRUE ( pSorter );
 	ASSERT_TRUE ( pIndex->MultiQuery ( tResult, tQuery, { &pSorter, 1 }, tArgs ) );
 	tResult.FillFromQueue ( pSorter, 0 );
@@ -423,7 +423,7 @@ TEST_F ( RT, RankerFactors )
 	{
 		tQuery.m_sQuery = szQuery;
 
-		auto pSorter = sphCreateQueue ( tQueueSettings, tQuery, tResult.m_sError, tRes, nullptr );
+		auto pSorter = sphCreateQueue ( tQueueSettings, tQuery, tResult.m_sError, tRes );
 		ASSERT_TRUE ( pSorter );
 		ASSERT_TRUE ( pIndex->MultiQuery ( tResult, tQuery, { &pSorter, 1 }, tArgs ) );
 		tResult.FillFromQueue ( pSorter, 0 );
@@ -438,7 +438,7 @@ TEST_F ( RT, RankerFactors )
 
 			sphUnpackPtrAttr ( pAttr, &pAttr );
 
-			const unsigned int * pFactors = (const unsigned int *)pAttr;
+			auto * pFactors = (const unsigned int *)pAttr;
 
 			SPH_UDF_FACTORS tUnpacked;
 			sphinx_factors_init ( &tUnpacked );
@@ -578,7 +578,7 @@ TEST_F ( RT, SendVsMerge )
 	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema () );
 	tQueueSettings.m_bComputeItems = true;
 	SphQueueRes_t tRes;
-	auto pSorter = sphCreateQueue ( tQueueSettings, tQuery, tResult.m_sError, tRes, nullptr );
+	auto pSorter = sphCreateQueue ( tQueueSettings, tQuery, tResult.m_sError, tRes );
 	ASSERT_TRUE ( pSorter );
 
 	CSphString sFilter;

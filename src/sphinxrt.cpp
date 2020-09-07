@@ -5966,9 +5966,9 @@ struct DiskChunkSearcherCtx_t
 	Sorters_t&			m_dSorters;
 	CSphQueryResult&	m_tMeta;
 
-	DiskChunkSearcherCtx_t ( Sorters_t & dSorters, CSphQueryResult & tResult )
+	DiskChunkSearcherCtx_t ( Sorters_t & dSorters, CSphQueryResult & tMeta )
 		: m_dSorters ( dSorters )
-		, m_tMeta ( tResult )
+		, m_tMeta ( tMeta )
 	{}
 
 	// called from finalize.
@@ -6095,9 +6095,9 @@ void QueryDiskChunks ( const CSphQuery & tQuery,
 		{
 			myinfo::SetThreadInfo ( "%d ch %d:", iTick, iChunk );
 			auto & dLocalSorters = tCtx.m_dSorters;
-			CSphQueryResult tChunkResult;
-			CSphQueryResult& tThResult = tCtx.m_tMeta;
-			tChunkResult.m_pProfile = tThResult.m_pProfile;
+			CSphQueryResult tChunkMeta;
+			CSphQueryResult& tThMeta = tCtx.m_tMeta;
+			tChunkMeta.m_pProfile = tThMeta.m_pProfile;
 
 			CSphMultiQueryArgs tMultiArgs ( tArgs.m_iIndexWeight );
 			// storing index in matches tag for finding strings attrs offset later, biased against default zero and segments
@@ -6111,10 +6111,10 @@ void QueryDiskChunks ( const CSphQuery & tQuery,
 			// that's why we don't want to move to a new schema before we searched ram chunks
 			tMultiArgs.m_bModifySorterSchemas = false;
 
-			bInterrupt = !tGuard.m_dDiskChunks[iChunk]->MultiQuery ( tChunkResult, tQuery, dLocalSorters, tMultiArgs );
+			bInterrupt = !tGuard.m_dDiskChunks[iChunk]->MultiQuery ( tChunkMeta, tQuery, dLocalSorters, tMultiArgs );
 
 			// check terms inconsistency among disk chunks
-			const auto & hChunkStats = tChunkResult.m_hWordStats;
+			const auto & hChunkStats = tChunkMeta.m_hWordStats;
 			auto & hResWordStats = tCtx.m_tMeta.m_hWordStats;
 
 			if ( hResWordStats.GetLength() )
@@ -6129,20 +6129,20 @@ void QueryDiskChunks ( const CSphQuery & tQuery,
 			} else
 				hResWordStats = hChunkStats;
 
-			dDiskBlobPools[iChunk] = tChunkResult.m_pBlobPool;
+			dDiskBlobPools[iChunk] = tChunkMeta.m_pBlobPool;
 
-			if ( tThResult.m_bHasPrediction )
-				tThResult.m_tStats.Add ( tChunkResult.m_tStats );
+			if ( tThMeta.m_bHasPrediction )
+				tThMeta.m_tStats.Add ( tChunkMeta.m_tStats );
 
 			if ( iChunk && tmMaxTimer>0 && sph::TimeExceeded ( tmMaxTimer ) )
 			{
-				tThResult.m_sWarning = "query time exceeded max_query_time";
+				tThMeta.m_sWarning = "query time exceeded max_query_time";
 				bInterrupt = true;
 			}
 
-			if ( bInterrupt && !tChunkResult.m_sError.IsEmpty ())
+			if ( bInterrupt && !tChunkMeta.m_sError.IsEmpty ())
 				// FIXME? maybe handle this more gracefully (convert to a warning)?
-				tThResult.m_sError = tChunkResult.m_sError;
+				tThMeta.m_sError = tChunkMeta.m_sError;
 
 			iChunk = iCurChunk.fetch_sub ( 1, std::memory_order_acq_rel );
 			if ( iChunk<0 || bInterrupt )

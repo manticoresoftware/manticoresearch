@@ -14343,7 +14343,8 @@ static ESphEvalStage GetEarliestStage ( ESphEvalStage eStage, const CSphColumnIn
 	return eStage;
 }
 
-bool CSphQueryContext::SetupCalc ( CSphQueryResult & tResult, const ISphSchema & tInSchema,	const CSphSchema & tSchema, const BYTE * pBlobPool, const CSphVector<const ISphSchema *> & dInSchemas )
+bool CSphQueryContext::SetupCalc ( CSphQueryResult & tResult, const ISphSchema & tInSchema,
+		const CSphSchema & tSchema, const BYTE * pBlobPool, const CSphVector<const ISphSchema *> & dInSchemas )
 {
 	m_dCalcFilter.Resize ( 0 );
 	m_dCalcSort.Resize ( 0 );
@@ -15943,7 +15944,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 	if ( tArgs.m_bModifySorterSchemas )
 	{
 		SwitchProfile ( ppResults[0]->m_pProfile, SPH_QSTATE_DYNAMIC );
-		PooledAttrsToPtrAttrs ( { ppSorters, iQueries }, m_tBlobAttrs.GetWritePtr() );
+		PooledAttrsToPtrAttrs (  { ppSorters, iQueries }, m_tBlobAttrs.GetWritePtr() );
 	}
 
 	return bResult | bResultScan;

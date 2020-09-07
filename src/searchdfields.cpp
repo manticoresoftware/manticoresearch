@@ -188,7 +188,6 @@ static bool GetIndexes ( const CSphString & sIndexes, CSphString & sError, StrVe
 				pConn->m_pResult = new RemoteFieldsAnswer_t();
 				dRemotes.Add ( pConn );
 			}
-
 			dLocal.Append ( pDist->m_dLocal );
 		}
 	}
@@ -200,7 +199,8 @@ static bool GetIndexes ( const CSphString & sIndexes, CSphString & sError, StrVe
 	return true;
 }
 
-static bool GetFieldFromLocal ( const CSphString & sIndexName, const FieldRequest_t & tArgs, int64_t iSessionID, DocHash_t & hFetchedDocs, FieldBlob_t & tRes )
+bool GetFieldFromLocal ( const CSphString & sIndexName, const FieldRequest_t & tArgs, int64_t iSessionID,
+		DocHash_t & hFetchedDocs, FieldBlob_t & tRes )
 {
 	auto pServed = GetServed ( sIndexName );
 	if ( !pServed )
@@ -239,9 +239,8 @@ static bool GetFieldFromLocal ( const CSphString & sIndexName, const FieldReques
 	dFieldIds.Sort();
 
 	DocstoreDoc_t tDoc;
-	ARRAY_FOREACH ( i, tArgs.m_dDocs )
+	for ( DocID_t tDocid : tArgs.m_dDocs )
 	{
-		DocID_t tDocid = tArgs.m_dDocs[i];
 		if ( hFetchedDocs.Exists ( tDocid ) )
 			continue;
 
@@ -275,7 +274,7 @@ static bool GetFieldFromLocal ( const CSphString & sIndexName, const FieldReques
 	return true;
 }
 
-static bool GetFieldFromDist ( const VecRefPtrsAgentConn_t & dRemotes, const FieldRequest_t & tArgs, DocHash_t & hFetchedDocs, FieldBlob_t & tRes )
+bool GetFieldFromDist ( const VecRefPtrsAgentConn_t & dRemotes, const FieldRequest_t & tArgs, DocHash_t & hFetchedDocs, FieldBlob_t & tRes )
 {
 	const int iFieldsCount = tArgs.m_dFieldNames.GetLength();
 	for ( const AgentConn_t * pAgent : dRemotes )
@@ -317,9 +316,9 @@ static bool GetFieldFromDist ( const VecRefPtrsAgentConn_t & dRemotes, const Fie
 	return true;
 }
 
-static bool GetFields ( const FieldRequest_t & tReq, FieldBlob_t & tRes, DocHash_t & hFetchedDocs )
+bool GetFields ( const FieldRequest_t & tReq, FieldBlob_t & tRes, DocHash_t & hFetchedDocs )
 {
-	if ( !tReq.m_dDocs.GetLength() )
+	if ( tReq.m_dDocs.IsEmpty() )
 		return true;
 
 	StrVec_t dLocals;
@@ -327,7 +326,7 @@ static bool GetFields ( const FieldRequest_t & tReq, FieldBlob_t & tRes, DocHash
 	if ( !GetIndexes ( tReq.m_sIndexes, tRes.m_sError, dLocals, dRemotes ) )
 		return false;
 
-	if ( !dLocals.GetLength() && !dRemotes.GetLength() )
+	if ( dLocals.IsEmpty() && dRemotes.IsEmpty() )
 		return true;
 
 	bool bOkLocal = true;
@@ -336,7 +335,7 @@ static bool GetFields ( const FieldRequest_t & tReq, FieldBlob_t & tRes, DocHash
 	CSphScopedPtr<RequestBuilder_i> pDistReq { nullptr };
 	CSphScopedPtr<ReplyParser_i> pDistReply { nullptr };
 
-	if ( dRemotes.GetLength() )
+	if ( !dRemotes.IsEmpty () )
 	{
 		pDistReq = new ProxyFieldRequestBuilder_t ( tReq );
 		pDistReply = new GetFieldReplyParser_t();
@@ -344,7 +343,6 @@ static bool GetFields ( const FieldRequest_t & tReq, FieldBlob_t & tRes, DocHash
 		pDistReporter = GetObserver();
 		ScheduleDistrJobs ( dRemotes, pDistReq.Ptr(), pDistReply.Ptr(), pDistReporter.Ptr() );
 	}
-
 
 	{
 		DocstoreSession_c tSession;
@@ -363,7 +361,7 @@ static bool GetFields ( const FieldRequest_t & tReq, FieldBlob_t & tRes, DocHash
 		}
 	}
 
-	if ( dRemotes.GetLength() )
+	if ( !dRemotes.IsEmpty() )
 	{
 		pDistReporter->Finish();
 		bOkRemote = GetFieldFromDist ( dRemotes, tReq, hFetchedDocs, tRes );
@@ -468,7 +466,7 @@ struct RemoteAgentDoc_tSort_fn
 	}
 };
 
-static void DistGetFieldStart ( DistFieldRes_t & tRes )
+void DistGetFieldStart ( DistFieldRes_t & tRes )
 {
 	assert ( tRes.m_pDesc && tRes.m_pRes && tRes.m_pQuery );
 	// remote agents requests send off thread
@@ -554,7 +552,7 @@ static void DistGetFieldStart ( DistFieldRes_t & tRes )
 	ScheduleDistrJobs ( tRes.m_dAgents, tRes.m_pReq.Ptr(), tRes.m_pReply.Ptr(), tRes.m_pReporter.Ptr() );
 }
 
-static void DistGetFieldFinish ( DistFieldRes_t & tRes )
+void DistGetFieldFinish ( DistFieldRes_t & tRes )
 {
 	if ( !tRes.m_pReporter.Ptr() )
 		return;

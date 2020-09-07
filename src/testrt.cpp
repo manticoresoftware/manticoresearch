@@ -59,7 +59,7 @@ void DoSearch ( CSphIndex * pIndex )
 	SphQueueSettings_t tQueueSettings ( pIndex->GetMatchSchema() );
 	CSphString sError;
 	SphQueueRes_t tRes;
-	ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, sError, tRes, nullptr );
+	ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings, tQuery, sError, tRes );
 	if ( !pSorter )
 	{
 		printf ( "failed to create sorter; error=%s", tResult.m_sError.cstr() );

@@ -1105,9 +1105,9 @@ int FullScanCollectingDocs ( PercolateMatchContext_t & tMatchCtx )
 int FtMatchingWithoutDocs ( const StoredQuery_t * pStored, PercolateMatchContext_t & tMatchCtx )
 {
 	tMatchCtx.m_tDictMap.SetMap ( pStored->m_hDict ); // set terms dictionary
-	CSphQueryResult tTmpResult;
+	CSphQueryResult tTmpMeta;
 	CSphScopedPtr<ISphRanker> pRanker { sphCreateRanker ( *pStored->m_pXQ.Ptr(), tMatchCtx.m_tDummyQuery,
-			tTmpResult, *tMatchCtx.m_pTermSetup.Ptr(), *tMatchCtx.m_pCtx.Ptr(), tMatchCtx.m_tSchema ) };
+			tTmpMeta, *tMatchCtx.m_pTermSetup.Ptr(), *tMatchCtx.m_pCtx.Ptr(), tMatchCtx.m_tSchema ) };
 
 	if ( !pRanker )
 		return 0;
@@ -1122,9 +1122,9 @@ int FtMatchingWithoutDocs ( const StoredQuery_t * pStored, PercolateMatchContext
 int FtMatchingCollectingDocs ( const StoredQuery_t * pStored, PercolateMatchContext_t & tMatchCtx )
 {
 	tMatchCtx.m_tDictMap.SetMap ( pStored->m_hDict ); // set terms dictionary
-	CSphQueryResult tTmpResult;
+	CSphQueryResult tTmpMeta;
 	CSphScopedPtr<ISphRanker> pRanker { sphCreateRanker ( *pStored->m_pXQ.Ptr(), tMatchCtx.m_tDummyQuery,
-			tTmpResult, *tMatchCtx.m_pTermSetup.Ptr(), *tMatchCtx.m_pCtx.Ptr(), tMatchCtx.m_tSchema ) };
+			tTmpMeta, *tMatchCtx.m_pTermSetup.Ptr(), *tMatchCtx.m_pCtx.Ptr(), tMatchCtx.m_tSchema ) };
 
 	if ( !pRanker )
 		return 0;

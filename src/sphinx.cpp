@@ -16291,6 +16291,7 @@ void CSphIndex_VLN::GetStatus ( CSphIndexStatus* pRes ) const
 			if ( stat ( sFile.cstr(), &st )==0 )
 				pRes->m_iDiskUse += st.st_size;
 		}
+//	sphWarning ( "Chunks: %d, RAM: %d, DISK: %d", pRes->m_iNumChunks, (int) pRes->m_iRamUse, (int) pRes->m_iMapped );
 }
 
 //////////////////////////////////////////////////////////////////////////

@@ -594,6 +594,11 @@ public:
 		Submit ( sIndex.cstr(), sParentIndex, sError );
 	}
 
+	inline void Append ( const SearchFailuresLog_c& rhs )
+	{
+		m_dLog.Append ( rhs.m_dLog );
+	}
+
 	void SubmitEx ( const char * sIndex, const char * sParentIndex, const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 4, 5 ) ) )
 	{
 		va_list ap;
@@ -5045,6 +5050,14 @@ private:
 			VecTraits_T<CSphString> & dErrors, StrVec_t * pExtra, SphQueueRes_t & tQueueRes ) const;
 
 	SphQueueSettings_t				MakeQueueSettings ( const CSphIndex * pIndex, int iMaxMatches ) const;
+
+	const ServedDesc_t * CheckIndexSuitable ( const char* szLocal, const char* szParent,
+		VecTraits_T<SearchFailuresLog_c> & dNFailuresSet ) const;
+
+	bool CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t* pQueueRes,
+		VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const ServedDesc_t * pServed,
+		const char * szLocal, const char * szParent);
+
 };
 
 PubSearchHandler_c::PubSearchHandler_c ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster )
@@ -5400,173 +5413,359 @@ int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphM
 	return CreateSingleSorters ( pIndex, dSorters, dErrors, pExtra, tQueueRes );
 }
 
-void SearchHandler_c::RunLocalSearches()
+struct LocalSearchRef_t
 {
-	const int iQueries = m_dNQueries.GetLength();
-	m_dQueryIndexStats.Resize ( m_dLocal.GetLength () );
+	ExprHook_c&	m_tHook;
+	StrVec_t& m_dExtra;
+	VecTraits_T<SearchFailuresLog_c>& m_dFailuresSet;
+	VecTraits_T<AggrResult_t>& m_dAggrResults;
+	VecTraits_T<CSphQueryResult>& m_dResults;
+
+	LocalSearchRef_t ( ExprHook_c & tHook, StrVec_t& dExtra, VecTraits_T<SearchFailuresLog_c> & dFailures,
+			VecTraits_T<AggrResult_t>& dAggrResults, VecTraits_T<CSphQueryResult>& dResults )
+		: m_tHook ( tHook )
+		, m_dExtra ( dExtra )
+		, m_dFailuresSet ( dFailures )
+		, m_dAggrResults ( dAggrResults )
+		, m_dResults ( dResults )
+	{}
+
+	void MergeChild ( LocalSearchRef_t dChild ) const
+	{
+		m_dExtra.Append ( dChild.m_dExtra );
+
+		auto & dChildAggrResults = dChild.m_dAggrResults;
+		for ( int i = 0, iQueries = m_dAggrResults.GetLength (); i<iQueries; ++i )
+		{
+			auto & tResult = m_dAggrResults[i];
+			auto & tChild = dChildAggrResults[i];
+
+			tResult.m_dResults.Append ( tChild.m_dResults );
+
+			// word statistics
+			tResult.MergeWordStats ( tChild );
+
+			// other data (warnings, errors, etc.)
+			// errors
+			if ( !tChild.m_sError.IsEmpty ())
+				tResult.m_sError = tChild.m_sError;
+
+			// warnings
+			if ( !tChild.m_sWarning.IsEmpty ())
+				tResult.m_sWarning = tChild.m_sWarning;
+
+			// prediction counters
+			tResult.m_bHasPrediction |= tChild.m_bHasPrediction;
+			if ( tChild.m_bHasPrediction )
+			{
+				tResult.m_tStats.Add ( tChild.m_tStats );
+				tResult.m_iPredictedTime = CalcPredictedTimeMsec ( tResult );
+			}
+
+			// profiling
+			if ( tChild.m_pProfile )
+				tResult.m_pProfile->AddMetric ( *tChild.m_pProfile );
+
+			tResult.m_iCpuTime += tChild.m_iCpuTime;
+			tResult.m_iTotalMatches += tChild.m_iTotalMatches;
+			tResult.m_iSuccesses += tChild.m_iSuccesses;
+			tResult.m_tIOStats.Add ( tChild.m_tIOStats );
+
+			// failures
+			m_dFailuresSet[i].Append ( dChild.m_dFailuresSet[i] );
+		}
+	}
+
+	inline static bool IsClonable()
+	{
+		return true;
+	}
+};
+
+struct LocalSearchClone_t
+{
+	ExprHook_c m_tHook;
+	StrVec_t m_dExtra;
+	CSphVector<SearchFailuresLog_c> m_dFailuresSet;
+	CSphVector<AggrResult_t>	m_dAggrResults;
+	CSphVector<CSphQueryResult> m_dResults;
+
+	explicit LocalSearchClone_t ( const LocalSearchRef_t & dParent)
+	{
+		int iQueries = dParent.m_dFailuresSet.GetLength ();
+		m_dFailuresSet.Resize ( iQueries );
+		m_dAggrResults.Resize ( iQueries );
+		m_dResults.Resize ( iQueries );
+		for ( int i=0; i<iQueries; ++i )
+			m_dResults[i].m_pMeta = &m_dAggrResults[i];
+	}
+	explicit operator LocalSearchRef_t ()
+	{
+		return { m_tHook, m_dExtra, m_dFailuresSet, m_dAggrResults, m_dResults };
+	}
+};
+
+const ServedDesc_t * SearchHandler_c::CheckIndexSuitable ( const char* szLocal, const char* szParent,
+		VecTraits_T<SearchFailuresLog_c> & dNFailuresSet ) const
+{
+	const auto * pServed = m_dLocked.Get ( szLocal );
+	if ( !pServed )
+	{
+		if ( szParent )
+			for ( auto & dFailureSet : dNFailuresSet )
+				dFailureSet.SubmitEx ( szParent, nullptr, "local index %s missing", szLocal );
+
+		return nullptr;
+	}
+
+	if ( !ServedDesc_t::IsSelectable ( pServed ) )
+	{
+		for ( auto & dFailureSet : dNFailuresSet )
+			dFailureSet.SubmitEx ( szLocal, nullptr, "%s", "index is not suitable for select" );
+
+		return nullptr;
+	}
+	return pServed;
+}
+
+bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt, SphQueueRes_t* pQueueRes,
+		VecTraits_T<SearchFailuresLog_c> & dFlr, StrVec_t * pExtra, const ServedDesc_t * pServed,
+		const char * szLocal, const char * szParent)
+{
+	auto iQueries = dSrt.GetLength();
+	#if PARANOID
+	for ( const auto* pSorter : dSrt)
+		assert ( !pSorter );
+	#endif
+
+	CSphFixedVector<CSphString> dErrors ( iQueries );
+
+	int iValidSorters = CreateSorters ( pServed->m_pIndex, dSrt, dErrors, pExtra, *pQueueRes );
+	if ( iValidSorters<dSrt.GetLength () )
+	{
+		ARRAY_FOREACH ( i, dErrors )
+		{
+			if ( !dErrors[i].IsEmpty () )
+				dFlr[i].Submit ( szLocal, szParent, dErrors[i].cstr () );
+		}
+	}
+
+	m_bMultiQueue = pQueueRes->m_bAlowMulti;
+	return !!iValidSorters;
+}
+
+void SearchHandler_c::RunLocalSearches ()
+{
+	int64_t tmLocal = sphMicroTimer ();
+
+	// setup local searches
+	const int iQueries = m_dNQueries.GetLength ();
+	const int iNumLocals = m_dLocal.GetLength();
+
+//	sphWarning ( "%s:%d", __FUNCTION__, __LINE__ );
+//	sphWarning ("Locals: %d, queries %d", iNumLocals, iQueries );
+
+	m_dQueryIndexStats.Resize ( iNumLocals );
 	for ( auto & dQueryIndexStats : m_dQueryIndexStats )
 		dQueryIndexStats.m_dStats.Resize ( iQueries );
 
-	/// todo! remove this, remove local searches parallel, keep only coro version.
-	bool bNeedExtra = m_dNQueries.First ().m_bAgent;
-	if ( bNeedExtra )
-		m_dExtraSchema.Reset (); // cleanup from any possible previous using
-
-	ARRAY_FOREACH ( iLocal, m_dLocal )
+	StrVec_t * pExtra = nullptr;
+	if ( m_dNQueries.First ().m_bAgent )
 	{
-		const LocalIndex_t &dLocal = m_dLocal [iLocal];
-		const char * sLocal = dLocal.m_sName.cstr(); // mt
-		const char * sParentIndex = dLocal.m_sParentIndex.cstr(); // mt
-		int iOrderTag = dLocal.m_iOrderTag; // mt
-		int iIndexWeight = dLocal.m_iWeight;
+		m_dExtraSchema.Reset (); // cleanup from any possible previous usages
+		pExtra = &m_dExtraSchema;
+	}
 
-		CrashQuery_t& tCrashQuery = GlobalCrashQueryGetRef(); //mt
-		tCrashQuery.m_dIndex = FromStr ( dLocal.m_sName ); // mt
+	CSphFixedVector<int> dOrder { iNumLocals };
+	for ( int i = 0; i<iNumLocals; ++i )
+		dOrder[i] = i;
 
-		// this part is like RunLocalSearchMT
-		const auto * pServed = m_dLocked.Get ( sLocal );
-		if ( !pServed )
-		{
-			if ( sParentIndex )
-				for ( auto & dFailureSet : m_dNFailuresSet )
-					dFailureSet.SubmitEx ( sParentIndex, nullptr, "local index %s missing", sLocal );
+	// the context
+	ClonableCtx_T<LocalSearchRef_t, LocalSearchClone_t> dCtx { m_tHook, m_dExtraSchema, m_dNFailuresSet, m_dNAggrResults, m_dNResults };
 
-			continue;
-		}
+	auto iConcurrency = m_dNQueries.First().m_iCouncurrency;
+	if ( !iConcurrency )
+		iConcurrency = GetEffectiveDistThreads ();
+	dCtx.LimitConcurrency ( iConcurrency );
 
-		if ( !ServedDesc_t::IsSelectable ( pServed ) )
-		{
-			for ( auto & dFailureSet : m_dNFailuresSet )
-				dFailureSet.SubmitEx ( sLocal, nullptr, "%s", "index is not suitable for select" );
+	bool bSingle = iConcurrency==1;
 
-			continue;
-		}
+//	sphWarning ( "iConcurrency: %d", iConcurrency );
 
-		assert ( pServed->m_pIndex );
+	// if run parallel - start in mass order, if single - in natural order
+	if ( !bSingle )
+	{
+//		sphWarning ( "Reordering..." );
+		// set order by decreasing index mass (heaviest comes first). That is why 'less' implemented by '>'
+		dOrder.Sort ( Lesser ( [this] ( int a, int b ) {
+			return m_dLocal[a].m_iMass>m_dLocal[b].m_iMass;
+		} ) );
+	}
 
-		// create sorters
-		CSphVector<ISphMatchSorter*> dSorters ( iQueries );
+//	for ( int iOrder : dOrder )
+//		sphWarning ( "Sorted: %d, Order %d, mass %d", !!bSingle, iOrder, (int) m_dLocal[iOrder].m_iMass );
+
+	std::atomic<int32_t> iTotalSuccesses { 0 };
+	const auto iJobs = iNumLocals;
+	std::atomic<int32_t> iCurJob { 0 };
+	CoExecuteN ( dCtx.Concurrency ( iJobs ), [&]
+	{
+		auto iJob = iCurJob.load ( std::memory_order_relaxed );
+		if ( iJob>=iJobs )
+			return; // already nothing to do, early finish.
+
+		// these two moved from inside of the loop to avoid construction on every turn
+		CSphVector<ISphMatchSorter *> dSorters ( iQueries );
 		dSorters.ZeroVec ();
 
-		if ( m_bFacetQueue )
-			m_bMultiQueue = true;
-
-		m_tHook.SetIndex ( pServed->m_pIndex );
-		m_tHook.SetQueryType ( m_eQueryType );
-
-		StrVec_t * pExtra = bNeedExtra ? &m_dExtraSchema : nullptr;
-		CSphFixedVector<CSphString> dErrors ( iQueries );
-		SphQueueRes_t tQueueRes;
-		int iValidSorters = CreateSorters ( pServed->m_pIndex, dSorters, dErrors, pExtra, tQueueRes );
-		if ( iValidSorters<dSorters.GetLength() )
+		auto tCtx = dCtx.CloneNewContext();
+		Threads::CoThrottler_c tThrottler ( myinfo::ThrottlingPeriodMS () );
+		while ( iJob<iJobs )
 		{
-			ARRAY_FOREACH ( i, dErrors )
+			iJob = iCurJob.fetch_add ( 1, std::memory_order_acq_rel );
+			if ( iJob>=iJobs )
+				return; // all is done
+
+			auto iLocal = dOrder[iJob];
+//			sphWarning ( "iJob: %d, iLocal: %d, mass %d", iJob, iLocal, (int) m_dLocal[iLocal].m_iMass );
+
+			sphLogDebugv ("Tick coro search");
+			int64_t iCpuTime = -sphTaskCpuTimer ();
+
+			// FIXME!!! handle different proto
+			myinfo::SetThreadInfo( R"(api-search query="%s" comment="%s" index="%s")",
+									 m_dNQueries.First().m_sQuery.scstr (),
+									 m_dNQueries.First().m_sComment.scstr (),
+									 m_dLocal[iLocal].m_sName.scstr ());
+
+			const LocalIndex_t & dLocal = m_dLocal[iLocal];
+			const char * szLocal = dLocal.m_sName.cstr ();
+			const char * szParent = dLocal.m_sParentIndex.cstr ();
+			int iOrderTag = dLocal.m_iOrderTag;
+			int iIndexWeight = dLocal.m_iWeight;
+			auto& dNFailuresSet = tCtx.m_dFailuresSet;
+			auto& dNAggrResults = tCtx.m_dAggrResults;
+			auto& dNResults = tCtx.m_dResults;
+
+			// publish crash query index
+			GlobalCrashQueryGetRef().m_dIndex = FromSz ( szLocal );
+
+			// prepare and check the index
+			const auto * pServed = CheckIndexSuitable ( szLocal, szParent, dNFailuresSet );
+			if ( !pServed )
+				continue;
+
+			assert ( pServed->m_pIndex );
+			tCtx.m_tHook.SetIndex ( pServed->m_pIndex );
+			tCtx.m_tHook.SetQueryType ( m_eQueryType );
+
+			// create sorters
+			SphQueueRes_t tQueueRes;
+			if ( !CreateValidSorters ( dSorters, &tQueueRes, dNFailuresSet, pExtra, pServed, szLocal, szParent ) )
+				continue;
+
+			// do the query
+			CSphMultiQueryArgs tMultiArgs ( iIndexWeight );
+			tMultiArgs.m_uPackedFactorFlags = tQueueRes.m_uPackedFactorFlags;
+			if ( m_bGotLocalDF )
 			{
-				if ( !dErrors[i].IsEmpty() )
-					m_dNFailuresSet[i].Submit ( sLocal, sParentIndex, dErrors[i].cstr() );
+				tMultiArgs.m_bLocalDF = true;
+				tMultiArgs.m_pLocalDocs = &m_hLocalDocs;
+				tMultiArgs.m_iTotalDocs = m_iTotalDocs;
 			}
-		}
-		if ( !iValidSorters )
-			continue;
 
-		m_bMultiQueue = tQueueRes.m_bAlowMulti;
+			bool bResult = false;
+			CSphQueryResultMeta tMqMeta;
+			CSphQueryResult tMqRes;
+			tMqRes.m_pMeta = &tMqMeta;
+			dNAggrResults.First().m_tIOStats.Start ();
+			if ( m_bMultiQueue )
+				bResult = pServed->m_pIndex->MultiQuery ( tMqRes, m_dNQueries.First(), dSorters, tMultiArgs );
+			else
+				bResult = pServed->m_pIndex->MultiQueryEx ( iQueries, &m_dNQueries[0], &dNResults[0], &dSorters[0], tMultiArgs );
+			dNAggrResults.First ().m_tIOStats.Stop ();
 
-		// me shortcuts
-		CSphQueryResultMeta tMqMeta;
-		CSphQueryResult tStats;
-		tStats.m_pMeta = &tMqMeta;
+			iCpuTime += sphTaskCpuTimer ();
 
-		// do the query
-		CSphMultiQueryArgs tMultiArgs ( iIndexWeight );
-		tMultiArgs.m_uPackedFactorFlags = tQueueRes.m_uPackedFactorFlags;
-		if ( m_bGotLocalDF )
-		{
-			tMultiArgs.m_bLocalDF = true;
-			tMultiArgs.m_pLocalDocs = &m_hLocalDocs;
-			tMultiArgs.m_iTotalDocs = m_iTotalDocs;
-		}
-
-		bool bResult = false;
-		if ( m_bMultiQueue )
-		{
-			tMqMeta.m_tIOStats.Start();
-			bResult = pServed->m_pIndex->MultiQuery ( tStats, m_dNQueries.First(), dSorters, tMultiArgs );
-			tMqMeta.m_tIOStats.Stop();
-		} else
-		{
-			m_dNAggrResults.First().m_tIOStats.Start();
-			bResult = pServed->m_pIndex->MultiQueryEx ( iQueries, &m_dNQueries[0], &m_dNResults[0], &dSorters[0], tMultiArgs );
-			m_dNAggrResults.First ().m_tIOStats.Stop();
-		}
-
-		// this part cames post-mt, after join of all searching threads.
-
-		// handle results
-		if ( !bResult )
-		{
-			// failed, submit local (if not empty) or global error string
-			for ( int iQuery=0; iQuery<iQueries; ++iQuery )
-				m_dNFailuresSet[iQuery].Submit ( sLocal, sParentIndex, tMqMeta.m_sError.IsEmpty()
-					? m_dNAggrResults [ m_bMultiQueue ? 0 : iQuery ].m_sError.cstr()
-					: tMqMeta.m_sError.cstr() );
-		} else
-		{
-			// multi-query succeeded
-			for ( int i=0; i<iQueries; ++i )
+			// handle results
+			if ( bResult )
 			{
-
-				// in mt here kind of tricky index calculation, up to the next lines with sorter
-
-
-				// but some of the sorters could had failed at "create sorter" stage
-				ISphMatchSorter * pSorter = dSorters[i];
-				if ( !pSorter )
-					continue;
-
-				// this one seems OK
-				AggrResult_t & tNRes = m_dNAggrResults[i];
-
-				int iQTimeForStats = tNRes.m_iQueryTime;
-				auto pDocstore = m_bMultiQueue ? tStats.m_pDocstore : m_dNResults[i].m_pDocstore;
-				// multi-queue only returned one result set meta, so we need to replicate it
-				if ( m_bMultiQueue )
+				// multi-query succeeded
+				for ( int i=0; i<iQueries; ++i )
 				{
-					// these times will be overridden below, but let's be clean
-					iQTimeForStats = tMqMeta.m_iQueryTime / iQueries;
-					tNRes.m_iQueryTime += iQTimeForStats;
+					// in mt here kind of tricky index calculation, up to the next lines with sorter
+					// but some of the sorters could had failed at "create sorter" stage
+					ISphMatchSorter * pSorter = dSorters[i];
+					if ( !pSorter )
+						continue;
 
-					tNRes.MergeWordStats ( tMqMeta );
-					tNRes.m_iMultiplier = iQueries;
-					tNRes.m_iCpuTime += tMqMeta.m_iCpuTime / iQueries;
-					tNRes.m_tIOStats.Add ( tMqMeta.m_tIOStats );
-				} else if ( tNRes.m_iMultiplier==-1 )
-				{
-					m_dFailuresSet[i].Submit ( sLocal, sParentIndex, tNRes.m_sError.cstr() );
-					continue;
+					// this one seems OK
+					AggrResult_t & tNRes = dNAggrResults[i];
+					int iQTimeForStats = tNRes.m_iQueryTime;
+					auto pDocstore = m_bMultiQueue ? tMqRes.m_pDocstore : dNResults[i].m_pDocstore;
+					// multi-queue only returned one result set meta, so we need to replicate it
+					if ( m_bMultiQueue )
+					{
+						// these times will be overridden below, but let's be clean
+						iQTimeForStats = tMqMeta.m_iQueryTime / iQueries;
+						tNRes.m_iQueryTime += iQTimeForStats;
+						iCpuTime /= iQueries;
+						tNRes.MergeWordStats ( tMqMeta );
+						tNRes.m_iMultiplier = iQueries;
+						tNRes.m_iCpuTime += tMqMeta.m_iCpuTime / iQueries;
+					} else if ( tNRes.m_iMultiplier==-1 ) // multiplier -1 means 'error'
+					{
+						dNFailuresSet[i].Submit ( szLocal, szParent, tNRes.m_sError.cstr() );
+						continue;
+					}
+					++tNRes.m_iSuccesses;
+					tNRes.m_iCpuTime = iCpuTime;
+					tNRes.m_iTotalMatches += pSorter->GetTotalCount();
+					tNRes.m_iPredictedTime = tNRes.m_bHasPrediction ? CalcPredictedTimeMsec ( tNRes ) : 0;
+
+					m_dQueryIndexStats[iLocal].m_dStats[i].m_iSuccesses = 1;
+					m_dQueryIndexStats[iLocal].m_dStats[i].m_uQueryTime = iQTimeForStats;
+					m_dQueryIndexStats[iLocal].m_dStats[i].m_uFoundRows = pSorter->GetTotalCount();
+
+					iTotalSuccesses.fetch_add ( 1, std::memory_order_relaxed );
+
+					// extract matches from sorter
+					tNRes.AddResultset( pSorter, pDocstore, iOrderTag );
+
+					if ( !tNRes.m_sWarning.IsEmpty () )
+						dNFailuresSet[i].Submit ( szLocal, szParent, tNRes.m_sWarning.cstr () );
 				}
+			} else
+				// failed, submit local (if not empty) or global error string
+				for ( int i = 0; i<iQueries; ++i )
+					dNFailuresSet[i].Submit ( szLocal, szParent, tMqMeta.m_sError.IsEmpty ()
+							? dNAggrResults[m_bMultiQueue ? 0 : i].m_sError.cstr ()
+							: tMqMeta.m_sError.cstr () );
 
-				++tNRes.m_iSuccesses;
-				// lets do this schema copy just once
-				tNRes.m_tSchema = *pSorter->GetSchema();
-				tNRes.m_iTotalMatches += pSorter->GetTotalCount();
-				tNRes.m_iPredictedTime = tNRes.m_bHasPrediction ? CalcPredictedTimeMsec ( tNRes ) : 0;
+			// cleanup sorters
+			for ( auto &pSorter : dSorters )
+				SafeDelete ( pSorter );
 
-				m_dQueryIndexStats[iLocal].m_dStats[i].m_iSuccesses = 1;
-				m_dQueryIndexStats[iLocal].m_dStats[i].m_uQueryTime = iQTimeForStats;
-				m_dQueryIndexStats[iLocal].m_dStats[i].m_uFoundRows = pSorter->GetTotalCount();
-
-				// extract matches from sorter
-				tNRes.AddResultset ( pSorter, pDocstore, iOrderTag );
-
-				if ( !tNRes.m_sWarning.IsEmpty () )
-					m_dFailuresSet[i].Submit ( sLocal, sParentIndex, tNRes.m_sWarning.cstr () );
-			}
+			if ( iJob+1<iJobs ) // no need to throttle here if we're done
+				tThrottler.ThrottleAndKeepCrashQuery (); // we set CrashQuery anyway at the start of the loop
 		}
+	});
+	dCtx.Finalize (); // merge mt results (if any)
 
-		// cleanup sorters
-		for ( auto &pSorter : dSorters )
-			SafeDelete ( pSorter );
-	}
+	// update our wall time for every result set
+	tmLocal = sphMicroTimer ()-tmLocal;
+	for ( int iQuery = 0; iQuery<iQueries; ++iQuery )
+		m_dNAggrResults[iQuery].m_iQueryTime += (int) ( tmLocal / 1000 );
+
+	auto iTotalSuccessesInt = iTotalSuccesses.load ( std::memory_order_relaxed );
+
+	for ( auto iLocal = 0; iLocal<iNumLocals; ++iLocal )
+		for ( int iQuery = 0; iQuery<iQueries; ++iQuery )
+		{
+			QueryStat_t & tStat = m_dQueryIndexStats[iLocal].m_dStats[iQuery];
+			if ( tStat.m_iSuccesses )
+				tStat.m_uQueryTime = (int) ( tmLocal / 1000 / iTotalSuccessesInt );
+		}
 }
 
 // check expressions into a query to make sure that it's ready for multi query optimization

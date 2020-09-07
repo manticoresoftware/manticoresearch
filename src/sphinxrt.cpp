@@ -7757,6 +7757,7 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 
 	pRes->m_iTID = m_iTID;
 	pRes->m_iSavedTID = m_iSavedTID;
+//	sphWarning ( "Chunks: %d, RAM: %d, DISK: %d", pRes->m_iNumChunks, (int) pRes->m_iRamUse, (int) pRes->m_iDiskUse );
 }
 
 //////////////////////////////////////////////////////////////////////////

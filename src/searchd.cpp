@@ -12130,7 +12130,7 @@ static void PercolateDeleteDocuments ( const CSphString & sIndex, const CSphStri
 
 
 static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const CSphString & sCluster, const char * sDistributed,
-	const SqlStmt_t & tStmt, const DocID_t * pDocs, int iCount, SearchFailuresLog_c & dErrors, bool bCommit, CSphSessionAccum & tAcc )
+	const SqlStmt_t & tStmt, VecTraits_T<DocID_t> dDocs, SearchFailuresLog_c & dErrors, bool bCommit, CSphSessionAccum & tAcc )
 {
 	CSphString sError;
 
@@ -12177,16 +12177,15 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const CSphStr
 	{
 		CSphScopedPtr<SearchHandler_c> pHandler ( nullptr );
 		CSphVector<DocID_t> dValues;
-		if ( !pDocs ) // needs to be deleted via query
+		if ( dDocs.IsEmpty() ) // needs to be deleted via query
 		{
 			pHandler = new SearchHandler_c ( 1, CreateQueryParser ( tStmt.m_bJson ), tStmt.m_tQuery.m_eQueryType, false );
 			pHandler->m_dLocked.AddUnmanaged ( sName, pLocked );
 			pHandler->RunDeletes ( tStmt.m_tQuery, sName, &sError, &dValues );
-			pDocs = dValues.Begin();
-			iCount = dValues.GetLength();
+			dDocs = dValues;
 		}
 
-		if ( !pIndex->DeleteDocument ( pDocs, iCount, sError, pAccum ) )
+		if ( !pIndex->DeleteDocument ( dDocs, sError, pAccum ) )
 		{
 			dErrors.Submit ( sName, sDistributed, sError.cstr() );
 			return 0;
@@ -12236,9 +12235,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		}
 	}
 
-	const DocID_t * pDocs = nullptr;
-	int iDocsCount = 0;
-	CSphVector<DocID_t> dDeleteIds;
+	VecTraits_T<DocID_t> dDelDocs;
 
 	// now check the short path - if we have clauses 'id=smth' or 'id in (xx,yy)' or 'id in @uservar' - we know
 	// all the values list immediatelly and don't have to run the heavy query here.
@@ -12248,11 +12245,8 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	{
 		const CSphFilterSettings* pFilter = tQuery.m_dFilters.Begin();
 		if ( ( pFilter->m_bHasEqualMin || pFilter->m_bHasEqualMax ) && pFilter->m_eType==SPH_FILTER_VALUES
-			&& ( pFilter->m_sAttrName=="@id" || pFilter->m_sAttrName=="id" ) && !pFilter->m_bExclude )
-		{
-			pDocs = (DocID_t *)pFilter->GetValueArray();
-			iDocsCount = pFilter->GetNumValues();
-		}
+				&& ( pFilter->m_sAttrName=="@id" || pFilter->m_sAttrName=="id" ) && !pFilter->m_bExclude )
+			dDelDocs = { (DocID_t *) pFilter->GetValueArray (), pFilter->GetNumValues () };
 	}
 
 	// do delete
@@ -12267,7 +12261,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		if ( bLocal )
 		{
 			iAffected += LocalIndexDoDeleteDocuments ( sName, tStmt.m_sCluster, nullptr,
-				tStmt, pDocs, iDocsCount, dErrors, bCommit, tAcc );
+				tStmt, dDelDocs, dErrors, bCommit, tAcc );
 		}
 		else if ( dDistributed[iIdx] )
 		{
@@ -12278,7 +12272,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 				if ( bDistLocal )
 				{
 					iAffected += LocalIndexDoDeleteDocuments ( sLocal, tStmt.m_sCluster, sName.cstr(),
-						tStmt, pDocs, iDocsCount, dErrors, bCommit, tAcc );
+						tStmt, dDelDocs, dErrors, bCommit, tAcc );
 				}
 			}
 		}

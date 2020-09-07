@@ -45,7 +45,7 @@ public:
 
 	/// delete document in current txn
 	/// fails in case of two open txns to different indexes
-	virtual bool DeleteDocument ( const DocID_t * pDocs, int iDocs, CSphString & sError, RtAccum_t * pAccExt ) = 0;
+	virtual bool DeleteDocument ( const VecTraits_T<DocID_t> & dDocs, CSphString & sError, RtAccum_t * pAccExt ) = 0;
 
 	/// commit pending changes
 	virtual bool Commit ( int * pDeleted, RtAccum_t * pAccExt ) = 0;

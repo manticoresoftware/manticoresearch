@@ -96,7 +96,7 @@ public:
 	bool MultiQuery ( CSphQueryResult &, const CSphQuery &, const VecTraits_T<ISphMatchSorter *> &, const CSphMultiQueryArgs & ) const override;
 	bool MultiQueryEx ( int, const CSphQuery *, CSphQueryResult**, ISphMatchSorter **, const CSphMultiQueryArgs & ) const override;
 	virtual bool AddDocument ( ISphHits * , const CSphMatch & , const char ** , const CSphVector<DWORD> & , CSphString & , CSphString & ) { return true; }
-	bool DeleteDocument ( const DocID_t * , int , CSphString & , RtAccum_t * pAccExt ) override { RollBack ( pAccExt ); return true; }
+	bool DeleteDocument ( const VecTraits_T<DocID_t> &, CSphString & , RtAccum_t * pAccExt ) override { RollBack ( pAccExt ); return true; }
 	void ForceRamFlush ( bool bPeriodic ) override;
 	bool IsFlushNeed() const override;
 	bool ForceDiskChunk () override;

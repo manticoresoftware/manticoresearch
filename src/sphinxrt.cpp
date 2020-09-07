@@ -1075,7 +1075,7 @@ public:
 		const VecTraits_T<int64_t> & dMvas, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt ) override;
 	virtual bool		AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, const char ** ppStr, const VecTraits_T<int64_t> & dMvas,
 		const DocstoreBuilder_i::Doc_t * pStoredDoc, CSphString & sError, CSphString & sWarning, RtAccum_t * pAccExt );
-	bool				DeleteDocument ( const DocID_t * pDocs, int iDocs, CSphString & sError, RtAccum_t * pAccExt ) final;
+	bool				DeleteDocument ( const VecTraits_T<DocID_t> & dDocs, CSphString & sError, RtAccum_t * pAccExt ) final;
 	bool				Commit ( int * pDeleted, RtAccum_t * pAccExt ) final;
 	void				RollBack ( RtAccum_t * pAccExt ) final;
 	bool				CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_t> & dAccKlist, int * pTotalKilled, bool bForceDump ) EXCLUDES (m_tChunkLock ); // FIXME? protect?
@@ -3005,7 +3005,7 @@ void RtIndex_c::RollBack ( RtAccum_t * pAccExt )
 	pAcc->Cleanup ();
 }
 
-bool RtIndex_c::DeleteDocument ( const DocID_t * pDocs, int iDocs, CSphString & sError, RtAccum_t * pAccExt )
+bool RtIndex_c::DeleteDocument ( const VecTraits_T<DocID_t> & dDocs, CSphString & sError, RtAccum_t * pAccExt )
 {
 	assert ( g_bRTChangesAllowed );
 	MEMORY ( MEM_RT_ACCUM );
@@ -3014,14 +3014,11 @@ bool RtIndex_c::DeleteDocument ( const DocID_t * pDocs, int iDocs, CSphString & 
 	if ( !pAcc )
 		return false;
 
-	if ( !iDocs )
+	if ( dDocs.IsEmpty() )
 		return true;
 
-	assert ( pDocs && iDocs );
-
 	// !COMMIT should handle case when uDoc what inserted in current txn here
-	while ( iDocs-- )
-		pAcc->m_dAccumKlist.Add ( *pDocs++ );
+	pAcc->m_dAccumKlist.Append ( dDocs );
 
 	return true;
 }

@@ -976,7 +976,7 @@ private:
 //////////////////////////////////////////////////////////////////////////
 
 /// collector for UPDATE statement
-class CSphUpdateQueue final : public CSphMatchQueueTraits
+class CSphUpdateQueue final : public ISphMatchSorter, ISphNoncopyable
 {
 	CSphAttrUpdate		m_tWorkSet;
 	CSphIndex *			m_pIndex;
@@ -984,14 +984,17 @@ class CSphUpdateQueue final : public CSphMatchQueueTraits
 	CSphString *		m_pWarning;
 	int *				m_pAffected;
 
+	const int			m_iCount = 0;
+	DocID_t				m_iLastID = 0;
+	CSphVector<BYTE>	m_dDocid;
+	MemoryWriter_c		m_tWriter;
+
 public:
 	/// ctor
 	CSphUpdateQueue ( int iSize, CSphAttrUpdateEx * pUpdate, bool bIgnoreNonexistent, bool bStrict )
-		: CSphMatchQueueTraits ( iSize )
+		: m_iCount ( iSize )
+		, m_tWriter ( m_dDocid )
 	{
-		m_tWorkSet.m_dRowOffset.Reserve ( m_iSize );
-		m_tWorkSet.m_dDocids.Reserve ( m_iSize );
-
 		m_tWorkSet.m_bIgnoreNonexistent = bIgnoreNonexistent;
 		m_tWorkSet.m_bStrict = bStrict;
 		m_tWorkSet.m_dAttributes = pUpdate->m_pUpdate->m_dAttributes;
@@ -1009,16 +1012,22 @@ public:
 		return false;
 	}
 
+	int GetLength () const final
+	{
+		return ( m_iTotal ? m_iCount : 0 );
+	}
+
 	/// add entry to the queue
 	bool Push ( const CSphMatch & tEntry ) final
 	{
 		++m_iTotal;
 
-		if ( Used()==m_iSize )
-			DoUpdate();
+		DocID_t iCurId = sphGetDocID ( tEntry.m_pStatic ? tEntry.m_pStatic : tEntry.m_pDynamic );
+		DocID_t iDelta = iCurId - m_iLastID;
+		m_iLastID = iCurId;
 
 		// do add
-		m_pSchema->CloneMatch ( Add(), tEntry );
+		m_tWriter.ZipOffset ( iDelta );
 		return true;
 	}
 
@@ -1034,17 +1043,13 @@ public:
 	{
 		DoUpdate();
 		m_iTotal = 0;
+		m_iLastID = 0;
+		m_dDocid.Resize ( 0 );
 		return 0;
 	}
 
-	void Finalize ( ISphMatchProcessor & tProcessor, bool ) final
+	void Finalize ( ISphMatchProcessor & , bool ) final
 	{
-		if ( IsEmpty() )
-			return;
-
-		// just evaluate in heap order
-		for ( auto iMatch : m_dIData )
-			tProcessor.Process ( &m_dData[iMatch] );
 	}
 
 	bool CanBeCloned () const final { return false; }
@@ -1061,25 +1066,43 @@ public:
 private:
 	void DoUpdate()
 	{
-		if ( IsEmpty() )
+		if ( !m_iTotal )
 			return;
 
-		m_tWorkSet.m_dRowOffset.Resize ( Used() );
-		m_tWorkSet.m_dDocids.Resize ( Used() );
+		int iMemoryNeed = Min ( m_iCount, m_iTotal );
+		m_tWorkSet.m_dDocids.Reserve ( iMemoryNeed );
+		m_tWorkSet.m_dRowOffset.Resize ( iMemoryNeed );
+		m_tWorkSet.m_dRowOffset.Fill ( 0 );
 
-		ARRAY_FOREACH ( i, m_tWorkSet.m_dDocids )
+		int iLastId = 0;
+		MemoryReader_c tReader ( m_dDocid.Begin(), m_dDocid.GetLength() );
+
+		for ( int i=0; i<m_iTotal; i++ )
 		{
-			auto& tMatch = Get(i);
-			m_tWorkSet.m_dRowOffset[i] = 0;
-			m_tWorkSet.m_dDocids[i] = sphGetDocID ( tMatch.m_pStatic ? tMatch.m_pStatic : tMatch.m_pDynamic );
+			DocID_t iCur = iLastId + tReader.UnzipOffset();
+			iLastId = iCur;
+			m_tWorkSet.m_dDocids.Add ( iCur );
+
+			if ( ( ( i+1 )%m_iCount )!=0 )
+				continue;
+
+			Update();
 		}
+
+		if ( m_tWorkSet.m_dDocids.GetLength() )
+			Update();
+	}
+
+	void Update ()
+	{
+		m_tWorkSet.m_dRowOffset.Resize ( m_tWorkSet.m_dDocids.GetLength() );
 
 		bool bCritical = false;
 		*m_pAffected += m_pIndex->UpdateAttributes ( m_tWorkSet, -1, bCritical, *m_pError, *m_pWarning );
 		assert ( !bCritical ); // fixme! handle this
 
-		// fixme! Do we need release/delete cloned matches anyway here? Check with valgrind!
-		m_dIData.Resize(0);
+		m_tWorkSet.m_dDocids.Resize ( 0 );
+		m_tWorkSet.m_dRowOffset.Resize ( 0 );
 	}
 };
 

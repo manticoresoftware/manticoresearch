@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>update of blob attrs with filter by blob attrs</name>
+
+<config>
+indexer
+{
+	mem_limit			= 28M
+}
+
+searchd
+{
+	<searchd_settings/>
+    attr_update_reserve = 1024
+}
+
+source src_xml1
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data.xml
+}
+
+index idx
+{
+	source			= src_xml1
+	path			= <data_path/>/idx
+}
+
+</config>
+
+<sphqueries>
+<sphinxql>update idx set t='When blob attributes (MVAs, strings, JSON), are updated, their length may change. If the updated string (or MVA, or JSON) is shorter than the old one, it overwrites the old one in the .SPB file. But if the updated string is longer, updates are written to the end of the .SPB file. This file is memory mapped, thats why resizing it may be a rather slow process, depending on the OS implementation of memory mapped files.' where t='this is'</sphinxql>
+<sphinxql>select id, gid, t from idx order by id desc</sphinxql>
+</sphqueries>
+
+</test>

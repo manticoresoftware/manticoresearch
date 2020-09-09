@@ -1497,7 +1497,7 @@ public:
 		m_dRetTypes.SwapData ( dRetTypes );
 	}
 
-	void Command ( ESphExprCommand eCmd, void * pArg ) final
+	void Command ( ESphExprCommand eCmd, void * pArg ) override
 	{
 		Expr_WithLocator_c::Command ( eCmd, pArg );
 
@@ -2504,9 +2504,17 @@ public:
 		return DoEval ( eType, pVal, tMatch );
 	}
 
+	void Command ( ESphExprCommand eCmd, void * pArg ) final
+	{
+		Expr_JsonField_c::Command ( eCmd, pArg );
+		if ( eCmd==SPH_EXPR_SET_ITERATOR )
+			m_pData = (SphAttr_t *) pArg;
+	}
+
 	ISphExpr* Clone() const final
 	{
 		return new Expr_Iterator_c ( *this );
+		// note that m_pData most probably wrong and need to be set with SPH_EXPR_SET_ITERATOR
 	}
 
 private:
@@ -2603,7 +2611,7 @@ public:
 			{
 				sphJsonUnpackInt ( &p );
 				int iLen = sphJsonUnpackInt ( &p );
-				for ( int i=0; i<iLen; i++ )
+				for ( int i=0; i<iLen; ++i )
 				{
 					auto eType = (ESphJsonType)*p++;
 					if ( !ExprEval ( &iResult, tMatch, i, eType, p ) )
@@ -2644,9 +2652,13 @@ private:
 
 	Expr_ForIn_c ( const Expr_ForIn_c& rhs )
 		: Expr_JsonFieldConv_c ( rhs )
+		, m_pExpr ( SafeClone ( rhs.m_pExpr ) )
 		, m_bStrict ( rhs.m_bStrict )
 		, m_bIndex ( rhs.m_bIndex )
-	{}
+	{
+		if ( m_pExpr )
+			m_pExpr->Command ( SPH_EXPR_SET_ITERATOR, &m_uData );
+	}
 };
 
 

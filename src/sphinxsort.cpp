@@ -103,7 +103,6 @@ void ISphMatchSorter::CopyState ( const CSphMatchComparatorState & tState )
 	m_tState = tState;
 	for ( ISphExpr *& pExpr :  m_tState.m_tSubExpr )
 		pExpr = SafeClone (pExpr);
-	m_tState.m_iNow = (DWORD) time ( nullptr );
 }
 
 void ISphMatchSorter::CloneTo ( ISphMatchSorter * pTrg ) const

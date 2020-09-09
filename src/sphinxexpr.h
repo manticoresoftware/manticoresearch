@@ -79,7 +79,8 @@ enum ESphExprCommand
 	SPH_EXPR_SET_QUERY,
 	SPH_EXPR_SET_EXTRA_DATA,
 	SPH_EXPR_GET_DEPENDENT_COLS, ///< used to determine proper evaluating stage
-	SPH_EXPR_GET_UDF
+	SPH_EXPR_GET_UDF,
+	SPH_EXPR_SET_ITERATOR,		///< set link between JsonIn expr and iterator
 };
 
 /// expression evaluator

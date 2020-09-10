@@ -3009,6 +3009,8 @@ protected:
 		}
 		auto & tLocCount = m_tLocCount;
 
+		m_bMatchesFinalized = false;
+
 		// if this group is already hashed, we only need to update the corresponding match
 		CSphMatch ** ppMatch = m_hGroup2Match.Find ( uGroupKey );
 		if ( ppMatch )

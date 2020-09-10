@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>distinct count in rt index</name>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+<sphinxql>
+    create table rt (t1 text indexed stored, gid int) type='rt';
+    insert into rt (id,t1,gid) values (1,'test',10),(2,'test',10);
+    flush ramchunk rt;
+    insert into rt (id,t1,gid) values (3,'test',10);
+    select * from rt;
+    SELECT gid g, COUNT(distinct id) b FROM rt group by gid;
+    SELECT gid g, COUNT(distinct id) b FROM rt group by g;
+    flush ramchunk rt;
+    SELECT gid g, COUNT(distinct id) b FROM rt group by gid;
+    SELECT gid g, COUNT(distinct id) b FROM rt group by g;
+    optimize index rt;
+    SELECT gid g, COUNT(distinct id) b FROM rt group by gid;
+    SELECT gid g, COUNT(distinct id) b FROM rt group by g;
+    drop table rt;
+</sphinxql>
+</queries>
+
+</test>

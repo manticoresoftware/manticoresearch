@@ -5,13 +5,13 @@ Merging two existing **plain** indexes can be more efficient than indexing the d
 The basic command syntax is as follows:
 
 ```bash
-indexer --merge DSTINDEX SRCINDEX [--rotate]
+sudo -u manticore indexer --merge DSTINDEX SRCINDEX [--rotate]
 ```
 
 Only the DSTINDEX index will be affected: the contents of SRCINDEX will be merged into it. `--rotate` switch will be required if DSTINDEX is already being served by `searchd`. The initially devised usage pattern is to merge a smaller update from SRCINDEX into DSTINDEX. Thus, when merging attributes the values from SRCINDEX will win if duplicate document IDs are encountered. Note, however, that the "old" keywords will **not** be automatically removed in such cases. For example, if there's a keyword "old" associated with document 123 in DSTINDEX, and a keyword "new" associated with it in SRCINDEX, document 123 will be found by *both* keywords after the merge. You can supply an explicit condition to remove documents from DSTINDEX to mitigate that; the relevant switch is `--merge-dst-range`:
 
 ```bash
-indexer --merge main delta --merge-dst-range deleted 0 0
+sudo -u manticore indexer --merge main delta --merge-dst-range deleted 0 0
 ```
 
 This switch lets you apply filters to the destination index along with merging. There can be several filters; all of their conditions must be met in order to include the document in the resulting merged index. In the example above, the filter passes only those records where 'deleted' is 0, eliminating all records that were flagged as deleted.

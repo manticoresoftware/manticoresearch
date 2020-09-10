@@ -44,7 +44,7 @@ You can also download individual .deb files from [our site](https://manticoresea
 Manticore package depends on zlib and ssl libraries, nothing else is strictly required. However if you plan to use [indexer](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool) to create indexes from external storages you'll need to install appropriate client libraries. To know what exactly libraries `indexer` requires run it and look at the top of it's output:
 
 ```bash
-$ indexer
+$ sudo -u manticore indexer
 Manticore 3.5.0 6903305@200722 release
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)

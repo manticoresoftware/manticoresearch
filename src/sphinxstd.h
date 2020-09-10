@@ -3920,6 +3920,48 @@ protected:
 void sphWarn ( const char *, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );
 void SafeClose ( int & iFD );
 
+//////////////////////////////////////////////////////////////////////////
+/// system-agnostic wrappers for mmap
+namespace sph {
+#if SPH_ALLOCS_PROFILER
+inline void MemStatMMapAdd ( int64_t iSize ) { sphMemStatMMapAdd(iSize); }
+inline void MemStatMMapDel ( int64_t iSize ) { sphMemStatMMapDel(iSize); }
+#else
+inline void MemStatMMapAdd ( int64_t ) {}
+inline void MemStatMMapDel ( int64_t ) {}
+#endif
+};
+
+enum class Mode_e
+{
+	NONE,
+	READ,
+	WRITE,
+	RW,
+};
+
+enum class Share_e
+{
+	ANON_PRIVATE,
+	ANON_SHARED,
+	SHARED,
+};
+
+enum class Advise_e
+{
+	NOFORK,
+	NODUMP,
+};
+
+void * mmalloc ( size_t uSize, Mode_e = Mode_e::RW, Share_e = Share_e::ANON_PRIVATE );
+bool mmapvalid ( const void* pMem );
+int mmfree ( void* pMem, size_t uSize );
+void mmadvise ( void* pMem, size_t uSize, Advise_e = Advise_e::NODUMP );
+bool mmlock( void * pMem, size_t uSize );
+bool mmunlock( void * pMem, size_t uSize );
+
+//////////////////////////////////////////////////////////////////////////
+
 /// buffer trait that neither own buffer nor clean-up it on destroy
 template < typename T >
 class CSphBufferTrait : public ISphNoncopyable, public VecTraits_T<T>
@@ -3955,16 +3997,9 @@ public:
 
 	bool MemLock ( CSphString & sWarning )
 	{
-#if USE_WINDOWS
-		m_bMemLocked = ( VirtualLock ( m_pData, GetLengthBytes() )!=0 );
-		if ( !m_bMemLocked )
-			sWarning.SetSprintf ( "mlock() failed: errno %d", GetLastError() );
-
-#else
-		m_bMemLocked = ( mlock ( m_pData, GetLengthBytes() )==0 );
+		m_bMemLocked = mmlock ( m_pData, GetLengthBytes() );
 		if ( !m_bMemLocked )
 			sWarning.SetSprintf ( "mlock() failed: %s", strerrorm(errno) );
-#endif
 
 		return m_bMemLocked;
 	}
@@ -3979,27 +4014,14 @@ protected:
 			return;
 
 		m_bMemLocked = false;
-#if USE_WINDOWS
-		bool bOk = ( VirtualUnlock ( m_pData, GetLengthBytes() )!=0 );
-		if ( !bOk )
-			sphWarn ( "munlock() failed: errno %d", GetLastError() );
-
-#else
-		bool bOk = ( munlock ( m_pData, GetLengthBytes() )==0 );
+		bool bOk = mmunlock ( m_pData, GetLengthBytes() );
 		if ( !bOk )
 			sphWarn ( "munlock() failed: %s", strerrorm(errno) );
-#endif
 	}
 };
 
 
 //////////////////////////////////////////////////////////////////////////
-
-#if !USE_WINDOWS
-#ifndef MADV_DONTFORK
-#define MADV_DONTFORK MADV_NORMAL
-#endif
-#endif
 
 /// in-memory buffer shared between processes
 template < typename T, bool SHARED=false >
@@ -4017,11 +4039,7 @@ public:
 
 public:
 	/// allocate storage
-#if USE_WINDOWS
 	bool Alloc ( int64_t iEntries, CSphString & sError )
-#else
-	bool Alloc ( int64_t iEntries, CSphString & sError )
-#endif
 	{
 		assert ( !this->GetWritePtr() );
 
@@ -4035,15 +4053,8 @@ public:
 			return false;
 		}
 
-#if USE_WINDOWS
-		T * pData = new T [ (size_t)iEntries ];
-#else
-		int iFlags = MAP_ANON | MAP_PRIVATE;
-		if ( SHARED )
-			iFlags = MAP_ANON | MAP_SHARED;
-
-		T * pData = (T *) mmap ( NULL, iLength, PROT_READ | PROT_WRITE, iFlags, -1, 0 );
-		if ( pData==MAP_FAILED )
+		auto * pData = (T *) mmalloc ( iLength, Mode_e::RW, SHARED ? Share_e::ANON_SHARED : Share_e::ANON_PRIVATE );
+		if ( !mmapvalid ( pData ) )
 		{
 			if ( iLength>(int64_t)0x7fffffffUL )
 				sError.SetSprintf ( "mmap() failed: %s (length=" INT64_FMT " is over 2GB, impossible on some 32-bit systems)",
@@ -4052,18 +4063,11 @@ public:
 				sError.SetSprintf ( "mmap() failed: %s (length=" INT64_FMT ")", strerrorm(errno), iLength );
 			return false;
 		}
-
+		mmadvise ( pData, iLength, Advise_e::NODUMP );
 		if ( !SHARED )
-			madvise ( pData, iLength, MADV_DONTFORK );
-#ifdef MADV_DONTDUMP
-		madvise ( pData, iLength, MADV_DONTDUMP );
-#endif
+			mmadvise ( pData, iLength, Advise_e::NOFORK );
 
-#if SPH_ALLOCS_PROFILER
-		sphMemStatMMapAdd ( iLength );
-#endif
-
-#endif // USE_WINDOWS
+		sph::MemStatMMapAdd ( iLength );
 
 		assert ( pData );
 		this->Set ( pData, iEntries );
@@ -4079,19 +4083,11 @@ public:
 		if ( !this->GetWritePtr() )
 			return;
 
-#if USE_WINDOWS
-		delete [] this->GetWritePtr();
-#else
-		int iRes = munmap ( this->GetWritePtr(), this->GetLengthBytes() );
+		int iRes = mmfree ( this->GetWritePtr(), this->GetLengthBytes() );
 		if ( iRes )
 			sphWarn ( "munmap() failed: %s", strerrorm(errno) );
 
-#if SPH_ALLOCS_PROFILER
-		sphMemStatMMapDel ( this->GetLengthBytes() );
-#endif
-
-#endif // USE_WINDOWS
-
+		sph::MemStatMMapDel ( this->GetLengthBytes() );
 		this->Set ( NULL, 0 );
 	}
 };

@@ -254,10 +254,8 @@ public:
 				return false;
 			}
 
-			madvise ( pData, iFileSize, MADV_DONTFORK );
-#ifdef MADV_DONTDUMP
-			madvise ( pData, iFileSize, MADV_DONTDUMP );
-#endif
+			mmadvise ( pData, iFileSize, Advise_e::NOFORK );
+			mmadvise ( pData, iFileSize, Advise_e::NODUMP );
 		}
 #endif
 

@@ -5416,15 +5416,15 @@ int SearchHandler_c::CreateSorters ( const CSphIndex * pIndex, VecTraits_T<ISphM
 struct LocalSearchRef_t
 {
 	ExprHook_c&	m_tHook;
-	StrVec_t& m_dExtra;
+	StrVec_t* m_pExtra;
 	VecTraits_T<SearchFailuresLog_c>& m_dFailuresSet;
 	VecTraits_T<AggrResult_t>& m_dAggrResults;
 	VecTraits_T<CSphQueryResult>& m_dResults;
 
-	LocalSearchRef_t ( ExprHook_c & tHook, StrVec_t& dExtra, VecTraits_T<SearchFailuresLog_c> & dFailures,
+	LocalSearchRef_t ( ExprHook_c & tHook, StrVec_t* pExtra, VecTraits_T<SearchFailuresLog_c> & dFailures,
 			VecTraits_T<AggrResult_t>& dAggrResults, VecTraits_T<CSphQueryResult>& dResults )
 		: m_tHook ( tHook )
-		, m_dExtra ( dExtra )
+		, m_pExtra ( pExtra )
 		, m_dFailuresSet ( dFailures )
 		, m_dAggrResults ( dAggrResults )
 		, m_dResults ( dResults )
@@ -5432,7 +5432,11 @@ struct LocalSearchRef_t
 
 	void MergeChild ( LocalSearchRef_t dChild ) const
 	{
-		m_dExtra.Append ( dChild.m_dExtra );
+		if ( m_pExtra )
+		{
+			assert ( dChild.m_pExtra );
+			m_pExtra->Append ( *dChild.m_pExtra );
+		}
 
 		auto & dChildAggrResults = dChild.m_dAggrResults;
 		for ( int i = 0, iQueries = m_dAggrResults.GetLength (); i<iQueries; ++i )
@@ -5486,6 +5490,7 @@ struct LocalSearchClone_t
 {
 	ExprHook_c m_tHook;
 	StrVec_t m_dExtra;
+	StrVec_t* m_pExtra;
 	CSphVector<SearchFailuresLog_c> m_dFailuresSet;
 	CSphVector<AggrResult_t>	m_dAggrResults;
 	CSphVector<CSphQueryResult> m_dResults;
@@ -5498,10 +5503,11 @@ struct LocalSearchClone_t
 		m_dResults.Resize ( iQueries );
 		for ( int i=0; i<iQueries; ++i )
 			m_dResults[i].m_pMeta = &m_dAggrResults[i];
+		m_pExtra = dParent.m_pExtra ? &m_dExtra : nullptr;
 	}
 	explicit operator LocalSearchRef_t ()
 	{
-		return { m_tHook, m_dExtra, m_dFailuresSet, m_dAggrResults, m_dResults };
+		return { m_tHook, m_pExtra, m_dFailuresSet, m_dAggrResults, m_dResults };
 	}
 };
 
@@ -5569,11 +5575,11 @@ void SearchHandler_c::RunLocalSearches ()
 	for ( auto & dQueryIndexStats : m_dQueryIndexStats )
 		dQueryIndexStats.m_dStats.Resize ( iQueries );
 
-	StrVec_t * pExtra = nullptr;
+	StrVec_t * pMainExtra = nullptr;
 	if ( m_dNQueries.First ().m_bAgent )
 	{
 		m_dExtraSchema.Reset (); // cleanup from any possible previous usages
-		pExtra = &m_dExtraSchema;
+		pMainExtra = &m_dExtraSchema;
 	}
 
 	CSphFixedVector<int> dOrder { iNumLocals };
@@ -5581,7 +5587,7 @@ void SearchHandler_c::RunLocalSearches ()
 		dOrder[i] = i;
 
 	// the context
-	ClonableCtx_T<LocalSearchRef_t, LocalSearchClone_t> dCtx { m_tHook, m_dExtraSchema, m_dNFailuresSet, m_dNAggrResults, m_dNResults };
+	ClonableCtx_T<LocalSearchRef_t, LocalSearchClone_t> dCtx { m_tHook, pMainExtra, m_dNFailuresSet, m_dNAggrResults, m_dNResults };
 
 	auto iConcurrency = m_dNQueries.First().m_iCouncurrency;
 	if ( !iConcurrency )
@@ -5646,6 +5652,7 @@ void SearchHandler_c::RunLocalSearches ()
 			auto& dNFailuresSet = tCtx.m_dFailuresSet;
 			auto& dNAggrResults = tCtx.m_dAggrResults;
 			auto& dNResults = tCtx.m_dResults;
+			auto* pExtra = tCtx.m_pExtra;
 
 			// publish crash query index
 			GlobalCrashQueryGetRef().m_dIndex = FromSz ( szLocal );

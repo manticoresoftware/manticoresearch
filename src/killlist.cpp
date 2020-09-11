@@ -19,6 +19,14 @@ bool DeadRowMap_c::HasDead() const
 	return m_bHaveDead;
 }
 
+DWORD DeadRowMap_c::GetNumDeads () const
+{
+	if ( m_iNumDeads<0 )
+		m_iNumDeads = HasDead () ? CountDeads () : 0;
+
+	return m_iNumDeads;
+}
+
 
 bool DeadRowMap_c::Set ( RowID_t tRowID, DWORD * pData )
 {
@@ -44,16 +52,29 @@ bool DeadRowMap_c::Set ( RowID_t tRowID, DWORD * pData )
 
 	bool bSet = !( uPrev & uMask );
 	m_bHaveDead |= bSet;
+	if ( bSet && m_iNumDeads>=0 )
+		++m_iNumDeads;
 
 	return bSet;
 }
 
+DWORD CountBits ( const VecTraits_T<DWORD>& dData )
+{
+	DWORD U = 0;
+	dData.Apply ( [&U] ( DWORD uData ) { U += sphBitCount ( uData ); } );
+	return U;
+}
 
 void DeadRowMap_c::CheckForDead ( const DWORD * pData, const DWORD * pDataEnd )
 {
 	m_bHaveDead = false;
 	while ( pData<pDataEnd && !m_bHaveDead )
 		m_bHaveDead |= !!*pData++;
+
+	if ( !m_bHaveDead )
+		m_iNumDeads = 0;
+	else if ( pData==pDataEnd )
+		m_iNumDeads = sphBitCount ( *( pData-1 ) );
 }
 
 
@@ -61,7 +82,6 @@ void DeadRowMap_c::CheckForDead ( const DWORD * pData, const DWORD * pDataEnd )
 
 
 DeadRowMap_Ram_c::DeadRowMap_Ram_c ( DWORD uRows )
-	: m_dData(0)
 {
 	Reset ( uRows );
 }
@@ -94,6 +114,8 @@ void DeadRowMap_Ram_c::Reset ( DWORD uRows )
 	m_uRows = uRows;
 	m_dData.Reset ( (uRows+31)/32 );
 	m_dData.Fill(0);
+	m_bHaveDead = false;
+	m_iNumDeads = 0;
 }
 
 
@@ -101,7 +123,10 @@ void DeadRowMap_Ram_c::Load ( DWORD uRows, CSphReader & tReader, CSphString & sE
 {
 	m_uRows = uRows;
 	m_dData.Reset ( (m_uRows+31)/32 );
+	if ( uRows & 0x1F )
+		m_dData[m_dData.GetLength()-1] = 0; // ensure tail bits after the end are zeroed
 	tReader.GetBytes ( m_dData.Begin(), m_dData.GetLength()*sizeof(m_dData[0]) );
+	m_iNumDeads = -1;
 	CheckForDead ( m_dData.Begin(), m_dData.Begin()+m_dData.GetLength() );
 }
 
@@ -111,15 +136,14 @@ void DeadRowMap_Ram_c::Save ( CSphWriter & tWriter ) const
 	tWriter.PutBytes ( m_dData.Begin(), m_dData.GetLength()*sizeof(m_dData[0]) );
 }
 
+DWORD DeadRowMap_Ram_c::CountDeads () const
+{
+	return CountBits ( m_dData );
+}
 
 DWORD DeadRowMap_Ram_c::GetNumAlive() const
 {
-	DWORD uElems = ( m_uRows+31 ) >> 5U;
-	DWORD nAlive = 0;
-	for ( DWORD i = 0; i <uElems; ++i )
-		nAlive += sphBitCount (m_dData[i]);
-
-	return nAlive;
+	return m_uRows-GetNumDeads ();
 }
 
 
@@ -157,8 +181,8 @@ bool DeadRowMap_Disk_c::Prealloc ( DWORD uRows, const CSphString & sFilename, CS
 
 void DeadRowMap_Disk_c::Preread ( const char * sIndexName, const char * sFor, bool bMlock )
 {
-	PrereadMapping ( sIndexName, sFor, bMlock, false, m_tData );
-	CheckForDead ( m_tData.GetWritePtr(), m_tData.GetWritePtr()+m_tData.GetLength() );
+	m_iNumDeads = PrereadMappingCountingBits ( sIndexName, sFor, bMlock, false, m_tData );
+	m_bHaveDead = m_iNumDeads>0;
 }
 
 
@@ -178,6 +202,11 @@ uint64_t DeadRowMap_Disk_c::GetCoreSize () const
 	return m_tData.GetCoreSize();
 }
 
+DWORD DeadRowMap_Disk_c::CountDeads () const
+{
+	return CountBits ( m_tData );
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 bool WriteDeadRowMap ( const CSphString & sFilename, DWORD uTotalDocs, CSphString & sError )
@@ -188,7 +217,7 @@ bool WriteDeadRowMap ( const CSphString & sFilename, DWORD uTotalDocs, CSphStrin
 		return false;
 
 	int nEntries = int(( uTotalDocs+31 ) / 32);
-	for ( int i=0; i < nEntries; i++ )
+	for ( int i=0; i < nEntries; ++i )
 		tRowMapWriter.PutDword(0);
 
 	tRowMapWriter.CloseFile();

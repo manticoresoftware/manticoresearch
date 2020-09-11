@@ -362,22 +362,25 @@ public:
 	CSphReader &	operator = ( const CSphReader & rhs );
 
 protected:
-
 	int			m_iFD = -1;
-	SphOffset_t	m_iPos = 0;
+	CSphString m_sFilename;
+	int			m_iBuffUsed = 0;	///< how many bytes in buffer are valid
 
-	int			m_iBuffPos = 0;
-	int			m_iBuffUsed = 0;
-	BYTE *		m_pBuff;
-	int			m_iSizeHint = 0;	///< how much do we expect to read
+	SphOffset_t	m_iPos = 0;			///< position in the file from witch m_pBuff starts
+	BYTE *		m_pBuff;            ///< the buffer
+	int			m_iBuffPos = 0;		///< position in the buffer. (so pos in file is m_iPos + m_iBuffPos)
+
+
+private:
+	int			m_iSizeHint = 0;	///< how much do we expect to read (>=m_iReadUnhinted)
 
 	int			m_iBufSize;
 	bool		m_bBufOwned = false;
-	int			m_iReadUnhinted;
+	int			m_iReadUnhinted;	///< how much to read if no hint provided.
 
 	bool		m_bError = false;
 	CSphString	m_sError;
-	CSphString	m_sFilename;
+
 
 protected:
 	virtual void		UpdateCache ();
@@ -2401,6 +2404,20 @@ BYTE PrereadMapping ( const char * sIndexName, const char * sFor, bool bMlock, b
 	if ( bMlock && !tBuf.MemLock ( sWarning ) )
 		sphWarning ( "index '%s': %s for %s", sIndexName, sWarning.cstr(), sFor );
 	return g_uHash;
+}
+
+// generally it should not work significantly slower than just PrereadMapping, since once page raised to mem
+// we iterate it much faster then raising itself, so the bottleneck should be in disk IO, not in mem iterations
+inline DWORD PrereadMappingCountingBits ( const char * sIndexName, const char * sFor, bool bMlock, bool bOnDisk,
+	CSphBufferTrait<DWORD> & tBuf )
+{
+	DWORD uBits = 0;
+	tBuf.Apply ( [&uBits] ( DWORD uData ) { uBits += sphBitCount ( uData ); } );
+
+	CSphString sWarning;
+	if ( bMlock && !tBuf.MemLock ( sWarning ) )
+		sphWarning ( "index '%s': %s for %s", sIndexName, sWarning.cstr(), sFor );
+	return uBits;
 }
 
 #if PARANOID

@@ -3065,6 +3065,7 @@ struct CSphIndexStatus
 	int64_t			m_iMemLimit = 0; // not used for plain
 	int64_t			m_iTID = 0;
 	int64_t			m_iSavedTID = 0;
+	int64_t 		m_iDead = 0;
 };
 
 

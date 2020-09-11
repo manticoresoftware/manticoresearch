@@ -13897,6 +13897,17 @@ static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex,
 		dStatus.Add ().SetSprintf ( INT64_FMT, tStatus.m_iMappedHits );
 	if ( dStatus.MatchAdd ( "disk_mapped_cached_hitlists" ) )
 		dStatus.Add ().SetSprintf ( INT64_FMT, tStatus.m_iMappedResidentHits );
+	if ( dStatus.MatchAdd ( "killed_documents" ) )
+		dStatus.Add ().SetSprintf ( INT64_FMT, tStatus.m_iDead );
+	dStatus.MatchAddFn( "killed_rate", [&tStatus, pIndex] {
+		auto iDocs = pIndex->GetStats ().m_iTotalDocuments;
+		StringBuilder_c sPercent;
+		if ( iDocs )
+			sPercent.Sprintf ( "%0.2F%%", tStatus.m_iDead * 10000 / iDocs );
+		else
+			sPercent << "100%";
+		return CSphString ( sPercent.cstr () );
+	});
 	if ( bMutable )
 	{
 		if ( dStatus.MatchAdd ( "ram_chunk" ) )

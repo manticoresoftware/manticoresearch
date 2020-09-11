@@ -25,11 +25,13 @@ public:
 	virtual			~DeadRowMap_c(){}
 
 	bool			HasDead() const;
+	DWORD			GetNumDeads() const;
 	virtual	int64_t	GetLengthBytes() const = 0;
 	virtual uint64_t GetCoreSize () const = 0;
 
 protected:
 	bool			m_bHaveDead {false};
+	mutable int64_t	m_iNumDeads = -1;		// means 'not initialized'
 	DWORD			m_uRows {0};
 
 	void			CheckForDead ( const DWORD * pData, const DWORD * pDataEnd );
@@ -40,10 +42,11 @@ protected:
 			return false;
 
 		assert ( tRowID < m_uRows );
-		return ( pData [ tRowID>>5 ] & ( 1UL<<( tRowID&31 ) ) )!=0;
+		return ( pData [ tRowID>>5U ] & ( 1UL<<( tRowID&31U ) ) )!=0;
 	}
 
 private:
+	virtual DWORD CountDeads () const = 0;	// heavy doc-by-doc counting
 #if NO_ATOMIC
 	CSphMutex		m_tLock;
 #endif
@@ -72,6 +75,7 @@ public:
 	void		Preread ( const char * sIndexName, const char * sFor, bool bMlock );
 
 private:
+	DWORD CountDeads () const final;
 	CSphMappedBuffer<DWORD> m_tData;
 };
 
@@ -79,7 +83,7 @@ private:
 class DeadRowMap_Ram_c : public DeadRowMap_c
 {
 public:
-				DeadRowMap_Ram_c ( DWORD uRows );
+				explicit DeadRowMap_Ram_c ( DWORD uRows );
 
 	bool		Set ( RowID_t tRowID );
 	bool		IsSet ( RowID_t tRowID ) const;
@@ -93,7 +97,8 @@ public:
 	void		Save ( CSphWriter & tWriter ) const;
 
 private:
-	CSphFixedVector<DWORD> m_dData;
+	DWORD CountDeads () const final;
+	CSphFixedVector<DWORD> m_dData {0};
 };
 
 
@@ -106,7 +111,7 @@ public:
 	{}
 
 
-	DocidListReader_c ( const VecTraits_T<DocID_t> & dKlist )
+	explicit DocidListReader_c ( const VecTraits_T<DocID_t> & dKlist )
 		: m_pIterator ( dKlist.Begin() )
 		, m_pMaxIterator ( dKlist.Begin() + dKlist.GetLength() ) // should be this way till VecTraits.End got fixed
 	{}

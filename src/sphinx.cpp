@@ -7484,7 +7484,7 @@ void CSphReader::GetBytes ( void * pData, int iSize )
 		}
 	}
 
-	if ( m_iBuffPos+iSize>m_iBuffUsed )
+	if ( iSize>m_iBuffUsed-m_iBuffPos )
 	{
 		// move old buffer tail to buffer head to avoid losing the data
 		const int iLen = m_iBuffUsed - m_iBuffPos;
@@ -7498,7 +7498,7 @@ void CSphReader::GetBytes ( void * pData, int iSize )
 
 		m_iSizeHint = Max ( m_iReadUnhinted, iSize );
 		UpdateCache ();
-		if ( m_iBuffPos+iSize>m_iBuffUsed )
+		if ( iSize>m_iBuffUsed-m_iBuffPos )
 		{
 			memset ( pData, 0, iSize ); // unexpected io failure
 			return;
@@ -16277,6 +16277,8 @@ void CSphIndex_VLN::GetStatus ( CSphIndexStatus* pRes ) const
 			+m_tWordlist.m_tBuf.GetCoreSize ()
 			+m_tDeadRowMap.GetCoreSize ()
 			+m_tSkiplists.GetCoreSize ();
+
+	pRes->m_iDead = m_tDeadRowMap.GetNumDeads();
 
 	if ( m_pDoclistFile )
 	{

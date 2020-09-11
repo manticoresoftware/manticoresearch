@@ -21,6 +21,7 @@ Displayed statistics include:
 * `disk_mapped_cached`: total size of file mappings, cached in RAM.
 * `disk_mapped_doclists` and `disk_mapped_cached_doclists`: part of total and cached mappings belonging to document lists.
 * `disk_mapped_hitlists` and `disk_mapped_cached_hitlists`: part of total and cached mappings belonging to hit lists. Values for doclists and hitlists are shown in dedicated lines since they're usually huge (say, about 90% size of the whole index).
+* `killed_documents` and `killed_rate`: first indicates number of of deleted documents and rate of deleted to indexed. Technically deletion just means that documents are suppressed in search output, but physically they still persist in the index and will be purged only after merging/optimizing.
 * `ram_chunk`: size of RAM chunk of realtime or percolate index.
 * `ram_chunk_segments_count`: RAM chunk internally consists from segments, usually there are no more than 32 of them.
 * `disk_chunks`: number of disk chunks of realtime index.
@@ -47,7 +48,7 @@ mysql> SHOW INDEX statistic STATUS;
 | index_type                  | rt                                                                       |
 | indexed_documents           | 923981                                                                   |
 | indexed_bytes               | 1181846688                                                               |
-| ram_bytes                   | 90450472                                                                 |
+| ram_bytes                   | 90453512                                                                 |
 | disk_bytes                  | 855544335                                                                |
 | disk_mapped                 | 848274223                                                                |
 | disk_mapped_cached          | 89686016                                                                 |
@@ -55,6 +56,8 @@ mysql> SHOW INDEX statistic STATUS;
 | disk_mapped_cached_doclists | 0                                                                        |
 | disk_mapped_hitlists        | 207362625                                                                |
 | disk_mapped_cached_hitlists | 0                                                                        |
+| killed_documents            | 107                                                                      |
+| killed_rate                 | 0.01%                                                                    |
 | ram_chunk                   | 0                                                                        |
 | ram_chunk_segments_count    | 0                                                                        |
 | disk_chunks                 | 190                                                                      |
@@ -75,7 +78,7 @@ mysql> SHOW INDEX statistic STATUS;
 | found_rows_15min            | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
 | found_rows_total            | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
 +-----------------------------+--------------------------------------------------------------------------+
-22 rows in set (0,35 sec)
+32 rows in set (0,03 sec)
 ```
 
 <!-- intro -->

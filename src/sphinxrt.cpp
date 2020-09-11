@@ -896,7 +896,7 @@ public:
 private:
 	DWORD			m_uCRC;
 	int				m_iLastCrcPos;
-	virtual void	UpdateCache ();
+	void			UpdateCache () override;
 	void			HashCollected ();
 };
 
@@ -1390,6 +1390,15 @@ static int64_t SegmentsGetRamLeft ( const VecTraits_T<RtSegmentRefPtf_t> & dSegm
 	if ( iMemLimit<0 )
 		iMemLimit = 0;
 	return iMemLimit;
+}
+
+static int64_t SegmentsGetDeadRows ( const VecTraits_T<RtSegmentRefPtf_t> & dSegments )
+{
+	int64_t iTotal = 0;
+	for ( RtSegment_t * pSeg : dSegments )
+		iTotal += pSeg->m_tDeadRowMap.GetNumDeads();
+
+	return iTotal;
 }
 
 void RtIndex_c::ForceRamFlush ( bool bPeriodic ) REQUIRES (!this->m_tFlushLock)
@@ -7724,6 +7733,7 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	SphChunkGuard_t tGuard = GetReaderChunks();
 
 	int64_t iUsedRam = SegmentsGetUsedRam ( tGuard.m_dRamChunks );
+	pRes->m_iDead = SegmentsGetDeadRows ( tGuard.m_dRamChunks );
 
 	pRes->m_iRamChunkSize = iUsedRam + tGuard.m_dRamChunks.GetLength()*int(sizeof(RtSegment_t));
 	pRes->m_iRamUse = sizeof( RtIndex_c ) + pRes->m_iRamChunkSize;
@@ -7754,6 +7764,7 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 		pRes->m_iMappedResidentDocs += tDisk.m_iMappedResidentDocs;
 		pRes->m_iMappedHits += tDisk.m_iMappedHits;
 		pRes->m_iMappedResidentHits += tDisk.m_iMappedResidentHits;
+		pRes->m_iDead += tDisk.m_iDead;
 	}
 
 	pRes->m_iNumRamChunks = tGuard.m_dRamChunks.GetLength();

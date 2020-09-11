@@ -43,6 +43,8 @@ public:
 
 	bool						IsValid () const { return m_bValid; }
 
+	virtual uint64_t			GetMappedsize () const = 0;
+	virtual uint64_t 			GetCoresize () const = 0;
 	virtual SphOffset_t			GetFilesize () const = 0;
 	virtual SphOffset_t			GetPos () const = 0;
 	virtual void				SeekTo ( SphOffset_t ) = 0;

@@ -13889,6 +13889,14 @@ static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex,
 		dStatus.Add ().SetSprintf ( INT64_FMT, tStatus.m_iMapped );
 	if ( dStatus.MatchAdd ( "disk_mapped_cached" ) )
 		dStatus.Add ().SetSprintf ( INT64_FMT, tStatus.m_iMappedResident );
+	if ( dStatus.MatchAdd ( "disk_mapped_doclists" ))
+		dStatus.Add ().SetSprintf ( INT64_FMT, tStatus.m_iMappedDocs );
+	if ( dStatus.MatchAdd ( "disk_mapped_cached_doclists" ) )
+		dStatus.Add ().SetSprintf ( INT64_FMT, tStatus.m_iMappedResidentDocs );
+	if ( dStatus.MatchAdd ( "disk_mapped_hitlists" ) )
+		dStatus.Add ().SetSprintf ( INT64_FMT, tStatus.m_iMappedHits );
+	if ( dStatus.MatchAdd ( "disk_mapped_cached_hitlists" ) )
+		dStatus.Add ().SetSprintf ( INT64_FMT, tStatus.m_iMappedResidentHits );
 	if ( bMutable )
 	{
 		if ( dStatus.MatchAdd ( "ram_chunk" ) )

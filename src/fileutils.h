@@ -235,7 +235,7 @@ public:
 		if ( iFileSize<0 )
 			return false;
 
-		// FIXME!!! report abount tail, ie m_iLen*sizeof(T)!=st.st_size
+		// FIXME!!! report about tail, ie m_iLen*sizeof(T)!=st.st_size
 		iCount = iFileSize / sizeof(T);
 
 		// mmap fails to map zero-size file

@@ -16278,6 +16278,22 @@ void CSphIndex_VLN::GetStatus ( CSphIndexStatus* pRes ) const
 			+m_tDeadRowMap.GetCoreSize ()
 			+m_tSkiplists.GetCoreSize ();
 
+	if ( m_pDoclistFile )
+	{
+		pRes->m_iMappedDocs = m_pDoclistFile->GetMappedsize ();
+		pRes->m_iMappedResidentDocs = m_pDoclistFile->GetCoresize ();
+		pRes->m_iMapped += pRes->m_iMappedDocs;
+		pRes->m_iMappedResident += pRes->m_iMappedResidentDocs;
+	}
+
+	if ( m_pHitlistFile )
+	{
+		pRes->m_iMappedHits = m_pHitlistFile->GetMappedsize ();
+		pRes->m_iMappedResidentHits = m_pHitlistFile->GetCoresize ();
+		pRes->m_iMapped += pRes->m_iMappedHits;
+		pRes->m_iMappedResident += pRes->m_iMappedResidentHits;
+	}
+
 	pRes->m_iRamUse = sizeof(CSphIndex_VLN) + m_dFieldLens.GetLengthBytes() + pRes->m_iMappedResident;
 	pRes->m_iDiskUse = 0;
 

@@ -166,6 +166,16 @@ public:
 		SetValid ( m_dReader.Open ( sFile, sError ) );
 	}
 
+	uint64_t GetMappedsize () const final
+	{
+		return 0;
+	}
+
+	uint64_t GetCoresize () const final
+	{
+		return 0;
+	}
+
 	SphOffset_t GetFilesize () const final
 	{
 		return m_dReader.GetFilesize();
@@ -222,6 +232,16 @@ public:
 		SetValid ( m_tBackendFile.Setup ( sFile, sError ) );
 		if ( eAccess==FileAccess_e::MLOCK )
 			m_tBackendFile.MemLock( sError );
+	}
+
+	uint64_t GetMappedsize () const final
+	{
+		return m_tBackendFile.GetLengthBytes();
+	}
+
+	uint64_t GetCoresize () const final
+	{
+		return m_tBackendFile.GetCoreSize();
 	}
 
 	SphOffset_t GetFilesize () const final

@@ -17,8 +17,10 @@ Displayed statistics include:
 * `field_tokens_XXX`: sums of per-field lengths (in tokens) over the entire index (that is used internally in `BM25A` and `BM25F` functions for ranking purposes). Only available for indexes built with `index_field_lengths=1`.
 * `ram_bytes`: total size (in bytes) of the RAM-resident index portion.
 * `disk_bytes`: total size (in bytes) of all index files.
-* `disk_mapped`: total size of file mappings, except doclists and hitlists files.
+* `disk_mapped`: total size of file mappings.
 * `disk_mapped_cached`: total size of file mappings, cached in RAM.
+* `disk_mapped_doclists` and `disk_mapped_cached_doclists`: part of total and cached mappings belonging to document lists.
+* `disk_mapped_hitlists` and `disk_mapped_cached_hitlists`: part of total and cached mappings belonging to hit lists. Values for doclists and hitlists are shown in dedicated lines since they're usually huge (say, about 90% size of the whole index).
 * `ram_chunk`: size of RAM chunk of realtime or percolate index.
 * `ram_chunk_segments_count`: RAM chunk internally consists from segments, usually there are no more than 32 of them.
 * `disk_chunks`: number of disk chunks of realtime index.
@@ -39,32 +41,40 @@ mysql> SHOW INDEX statistic STATUS;
 <!-- response SQL -->
 
 ```sql
-+--------------------------+---------------------------------------------------------------------------------------------------------+
-| Variable_name            | Value                                                                                                   |
-+--------------------------+---------------------------------------------------------------------------------------------------------+
-| index_type               | rt                                                                                                      |
-| indexed_documents        | 999999                                                                                                  |
-| indexed_bytes            | 55130037                                                                                                |
-| ram_bytes                | 3802088499                                                                                              |
-| disk_bytes               | 7658644242                                                                                              |
-| disk_mapped              | 7314814402                                                                                              |
-| disk_mapped_cached       | 3491561472                                                                                              |
-| ram_chunk                | 310461171                                                                                               |
-| ram_chunk_segments_count | 28                                                                                                      |
-| disk_chunks              | 15                                                                                                      |
-| mem_limit                | 536870912                                                                                               |
-| ram_bytes_retired        | 0                                                                                                       |
-| tid                      | 0                                                                                                       |
-| tid_saved                | 0                                                                                                       |
-| query_time_1min          | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}                                |
-| query_time_5min          | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}                                |
-| query_time_15min         | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}                                |
-| query_time_total         | {"queries":27, "avg_sec":0.002, "min_sec":0.001, "max_sec":0.013, "pct95_sec":0.003, "pct99_sec":0.013} |
-| found_rows_1min          | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}                                |
-| found_rows_5min          | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}                                |
-| found_rows_15min         | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"}                                |
-| found_rows_total         | {"queries":27, "avg":1, "min":1, "max":1, "pct95":1, "pct99":1}                                         |
-+--------------------------+---------------------------------------------------------------------------------------------------------+
++-----------------------------+--------------------------------------------------------------------------+
+| Variable_name               | Value                                                                    |
++-----------------------------+--------------------------------------------------------------------------+
+| index_type                  | rt                                                                       |
+| indexed_documents           | 923981                                                                   |
+| indexed_bytes               | 1181846688                                                               |
+| ram_bytes                   | 90450472                                                                 |
+| disk_bytes                  | 855544335                                                                |
+| disk_mapped                 | 848274223                                                                |
+| disk_mapped_cached          | 89686016                                                                 |
+| disk_mapped_doclists        | 490350852                                                                |
+| disk_mapped_cached_doclists | 0                                                                        |
+| disk_mapped_hitlists        | 207362625                                                                |
+| disk_mapped_cached_hitlists | 0                                                                        |
+| ram_chunk                   | 0                                                                        |
+| ram_chunk_segments_count    | 0                                                                        |
+| disk_chunks                 | 190                                                                      |
+| mem_limit                   | 524288                                                                   |
+| ram_bytes_retired           | 0                                                                        |
+| tid                         | 0                                                                        |
+| tid_saved                   | 0                                                                        |
+| query_time_1min             | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| query_time_5min             | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| query_time_15min            | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| query_time_total            | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| exact_query_time_1min       | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| exact_query_time_5min       | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| exact_query_time_15min      | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| exact_query_time_total      | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| found_rows_1min             | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| found_rows_5min             | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| found_rows_15min            | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
+| found_rows_total            | {"queries":0, "avg":"-", "min":"-", "max":"-", "pct95":"-", "pct99":"-"} |
++-----------------------------+--------------------------------------------------------------------------+
 22 rows in set (0,35 sec)
 ```
 

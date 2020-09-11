@@ -7750,6 +7750,10 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 		pRes->m_iDiskUse += tDisk.m_iDiskUse;
 		pRes->m_iMapped += tDisk.m_iMapped;
 		pRes->m_iMappedResident += tDisk.m_iMappedResident;
+		pRes->m_iMappedDocs += tDisk.m_iMappedDocs;
+		pRes->m_iMappedResidentDocs += tDisk.m_iMappedResidentDocs;
+		pRes->m_iMappedHits += tDisk.m_iMappedHits;
+		pRes->m_iMappedResidentHits += tDisk.m_iMappedResidentHits;
 	}
 
 	pRes->m_iNumRamChunks = tGuard.m_dRamChunks.GetLength();

@@ -793,7 +793,7 @@ const char * GET_ICU_DATA_DIR ()
 
 	int mmfree ( void* pMem, size_t )
 	{
-		assert ( mmapvalid ( pMem ) )
+		assert ( mmapvalid ( pMem ) );
 		::free ( pMem );
 		return 0;
 	}

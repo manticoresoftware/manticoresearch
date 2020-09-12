@@ -7456,13 +7456,26 @@ bool RtIndex_c::Truncate ( CSphString & )
 // OPTIMIZE
 //////////////////////////////////////////////////////////////////////////
 
+static int64_t GetEffectiveSize (const CSphIndexStatus& tStatus, int64_t iTotalDocs )
+{
+	if ( !tStatus.m_iDead ) // no docs killed
+		return tStatus.m_iDiskUse;
+
+	if ( tStatus.m_iDead==iTotalDocs ) // all docs killed
+		return 0;
+
+	// has killed docs: use naive formulae, sumple part of used disk proportional to partial of alive docs
+	auto fPart = double ( tStatus.m_iDead ) / double ( iTotalDocs );
+	return int64_t ( tStatus.m_iDiskUse * ( 1.0f-fPart ) );
+}
+
 static int64_t GetChunkSize ( const CSphVector<CSphIndex*> & dDiskChunks, int iIndex )
 {
 	if (iIndex<0)
 		return 0;
 	CSphIndexStatus tDisk;
 	dDiskChunks[iIndex]->GetStatus(&tDisk);
-	return tDisk.m_iDiskUse;
+	return GetEffectiveSize ( tDisk, dDiskChunks[iIndex]->GetStats ().m_iTotalDocuments );
 }
 
 

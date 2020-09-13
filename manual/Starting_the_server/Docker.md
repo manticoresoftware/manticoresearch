@@ -217,7 +217,7 @@ For best performance, index components can be mlocked into memory. When Manticor
   --cap-add=IPC_LOCK --ulimit memlock=-1:-1 
 ```
 
-## Custom config
+## Configuring Manticore Search with Docker
 
 If you want to run Manticore with your custom config containing indexes definition you will need to mount the configuration to the instance:
 
@@ -225,8 +225,34 @@ If you want to run Manticore with your custom config containing indexes definiti
 docker run --name manticore -v $(pwd)/manticore.conf:/etc/manticoresearch/manticore.conf -v $(pwd)/data/:/var/lib/manticore -p 127.0.0.1:9306:9306 -d manticoresearch/manticore
 ```
 
-Take into account that Manticore search inside the container is run under user `manticore`. Performing operations with index files (like creating or rotating plain indexes) should be also done under `manticore`. Otherwise the files will be created under `root` and the search server won't have rights to open them. For example here is how you can rotate all indexes:
+Take into account that Manticore search inside the container is run under user `manticore`. Performing operations with index files (like creating or rotating plain indexes) should be also done under `manticore`. Otherwise the files will be created under `root` and the search daemon won't have rights to open them. For example here is how you can rotate all indexes:
 
 ```bash
 docker exec -it manticore gosu manticore indexer --all --rotate
+```
+ 
+You can also set individual `searchd` and `common` configuration settings using Docker environment variables.  
+
+The settings must be prefixed with their section name, example for in case of `mysql_version_string` the variable must be named `searchd_mysql_version_string`:
+
+
+```bash
+docker run --name manticore  -p 127.0.0.1:9306:9306  -e searchd_mysql_version_string='5.5.0' -d manticoresearch/manticore
+```
+
+In case of `listen` directive, you can pass using Docker variable `searchd_listen`  new listening interfaces in addition to the default ones. Multiple interfaces can be declared separated by semi-colon ("|").
+For listening only on  network address, the `$ip` (retrieved internally from `hostname -i`) can be used as address alias.
+
+For example `-e searchd_listen='9316:http|9307:mysql'` will add an additional SQL interface on port 9307, a SQL VIP on 5443 running only on the instance IP  and HTTP on port 93126, beside the defaults on 9306 and 9308, respectively.
+
+```bash
+$ docker run --rm -p 1188:9307  -e searchd_mysql_version_string='5.5.0' -e searchd_listen='9316:http|9307:mysql|$ip:5443:mysql_vip'  manticore
+[Mon Aug 17 07:31:58.719 2020] [1] using config file '/etc/manticoresearch/manticore.conf' (9130 chars)...
+listening on all interfaces for http, port=9316
+listening on all interfaces for mysql, port=9307
+listening on all interfaces for mysql, port=9306
+listening on UNIX socket /var/run/mysqld/mysqld.sock
+listening on 172.17.0.19:9312 for sphinx
+listening on all interfaces for http, port=9308
+accepting connections
 ```

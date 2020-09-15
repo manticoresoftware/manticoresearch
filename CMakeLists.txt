@@ -675,6 +675,7 @@ configure_file ( "COPYING" "${MANTICORE_BINARY_DIR}/COPYING.txt" COPYONLY )
 set ( CPACK_SOURCE_IGNORE_FILES "/\\\\.idea/" "/\\\\.git/"
 		"/\\\\.svn/" "/autom4te\\\\.cache/" "/bin/" "/junk/" "/win/"
 		".swp$" ".orig$" ".log$" ".deps/" )
+
 set ( CPACK_SOURCE_GENERATOR TGZ )
 
 set ( CPACK_PACKAGE_CONTACT "${PACKAGE_NAME} package builds <build@manticoresearch.com>" )
@@ -684,22 +685,20 @@ set ( CPACK_PACKAGE_VENDOR "${COMPANY_NAME}" )
 set ( CPACK_RESOURCE_FILE_LICENSE "${MANTICORE_BINARY_DIR}/COPYING.txt" )
 set ( CPACK_PACKAGE_DESCRIPTION_SUMMARY "Manticore full-text search server")
 
-set ( CPACK_COMPONENT_GROUP_BIN_DISPLAY_NAME "Runtime" )
+# meta
+set ( CPACK_COMPONENT_META_GROUP "meta" )
+set ( CPACK_COMPONENT_GROUP_META_DISPLAY_NAME "Virtual" )
+set ( CPACK_COMPONENT_META_DISPLAY_NAME "${PACKAGE_NAME} meta-package" )
+
 
 # applications (indexes,indextool etc.)
-if ( SPLIT_APPS )
-	set ( CPACK_COMPONENT_TOOLS_GROUP "tools" )
-	set ( CPACK_COMPONENT_GROUP_TOOLS_DISPLAY_NAME "Runtime" )
-	set ( CPACK_COMPONENT_TOOLS_DISPLAY_NAME "${PACKAGE_NAME} applications" )
-else()
-	set ( CPACK_COMPONENT_TOOLS_GROUP "bin" )
-	set ( CPACK_COMPONENT_TOOLS_DISPLAY_NAME "${PACKAGE_NAME} applications" )
-endif()
-
+set ( CPACK_COMPONENT_TOOLS_GROUP "tools" )
+set ( CPACK_COMPONENT_GROUP_TOOLS_DISPLAY_NAME "Runtime" )
+set ( CPACK_COMPONENT_TOOLS_DISPLAY_NAME "${PACKAGE_NAME} t" )
 
 # searchd daemon
 set ( CPACK_COMPONENT_APPLICATIONS_GROUP "bin" )
-set ( CPACK_COMPONENT_GROUP_APPLICATIONS_DISPLAY_NAME "Runtime" )
+set ( CPACK_COMPONENT_GROUP_APLLICATIONS_DISPLAY_NAME "Runtime" )
 set ( CPACK_COMPONENT_APPLICATIONS_DISPLAY_NAME "${PACKAGE_NAME} service" )
 
 # configurations

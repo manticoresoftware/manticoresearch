@@ -2,32 +2,64 @@
 cmake_minimum_required ( VERSION 3.12 )
 
 set ( CPACK_GENERATOR "RPM" )
-
+SET(CPACK_RPM_FILE_NAME "RPM-DEFAULT")
+  
 set ( CPACK_PACKAGING_INSTALL_PREFIX "/" )
 set ( BINPREFIX "usr/" )
 
 set ( CPACK_RPM_PACKAGE_RELEASE 1 )
 set ( CPACK_RPM_PACKAGE_RELEASE_DIST ON )
+set ( CPACK_RPM_PACKAGE_URL "https://manticoresearch.com/" )
+set ( CPACK_RPM_PACKAGE_GROUP "Applications/Internet" )
 
-if ( SPLIT_APPS )
-	set ( CPACK_RPM_BIN_PACKAGE_NAME "manticore-server" )
-	set ( CPACK_RPM_BIN_FILE_NAME "RPM-DEFAULT" )
-	set ( CPACK_RPM_TOOLS_PACKAGE_NAME "manticore-tools" )
-	set ( CPACK_RPM_TOOLS_FILE_NAME "RPM-DEFAULT" )
-	set ( CPACK_RPM_DEVEL_PACKAGE_NAME "manticore-devel" )
-	set ( CPACK_RPM_DEVEL_FILE_NAME "RPM-DEFAULT" )
-	set ( CPACK_RPM_BIN_DEBUGINFO_PACKAGE ON )
-	set ( CPACK_RPM_TOOLS_DEBUGINFO_PACKAGE ON )
-	set ( CPACK_RPM_CONVERTER_DEBUGINFO_PACKAGE ON )
-	set ( CPACK_RPM_DEVEL_DEBUGINFO_PACKAGE OFF )
-else ()	
-	set ( CPACK_RPM_MAIN_COMPONENT bin )
-	set ( CPACK_RPM_DEBUGINFO_PACKAGE ON )
-	set ( CPACK_RPM_DEBUGINFO_SINGLE_PACKAGE ON )
-endif()
+
+set ( CPACK_RPM_META_PACKAGE_NAME "manticore" )
+set ( CPACK_COMPONENT_META_DESCRIPTION "Meta Package for Manticore Search")
+
+
+set ( CPACK_RPM_META_PACKAGE_REQUIRES "manticore-server, manticore-tools" )
+set ( CPACK_RPM_META_PACKAGE_OBSOLETES "manticore , sphinx")
+set ( CPACK_RPM_MAIN_COMPONENT meta)
+set ( CPACK_COMPONENT_META_DESCRIPTION "Manticore Search is a powerful free open source search engine
+with a focus on low latency and high throughput full-text search
+and high volume stream filtering. This package is a group package that guarantee you have all is needed 
+to run Manticore Search.")
+set (CPACK_RPM_META_BUILD_SOURCE_DIRS_PREFIX  OFF)
+
+set ( CPACK_RPM_BIN_PACKAGE_NAME "manticore-server" )
+set ( CPACK_RPM_BIN_FILE_NAME "RPM-DEFAULT" )
+set ( CPACK_RPM_BIN_INSTALL_WITH_EXEC ON)
+
+set ( CPACK_COMPONENT_BIN_SUMMARY "Manticore Search server files")
+set ( CPACK_RPM_BIN_PACKAGE_OBSOLETES "sphinx, manticore <= 3.5.0_200722.1d34c49" )
+set ( CPACK_RPM_BIN_PACKAGE_CONFLICTS "sphinx, manticore <= 3.5.0_200722.1d34c49" )
+set ( CPACK_COMPONENT_BIN_DESCRIPTION "Manticore Search is a powerful free open source search engine
+with a focus on low latency and high throughput full-text search
+and high volume stream filtering.  This package contains the service daemon.")
+
+set ( CPACK_RPM_TOOLS_PACKAGE_NAME "manticore-tools" )
+set ( CPACK_RPM_TOOLS_FILE_NAME "RPM-DEFAULT" )
+set ( CPACK_COMPONENT_TOOLS_SUMMARY "Manticore Search utilities")
+set ( CPACK_COMPONENT_TOOLS_DESCRIPTION "Manticore Search is a powerful free open source search engine
+with a focus on low latency and high throughput full-text search
+and high volume stream filtering.  This package contains auxiliary tools.")
+
+set ( CPACK_RPM_DEVEL_PACKAGE_NAME "manticore-devel" )
+set ( CPACK_RPM_DEVEL_FILE_NAME "RPM-DEFAULT" )
+
+
+
+set  ( CPACK_COMPONENT_CONVERTER_DESCRIPTION "This package provides the index_converter tool 
+for Manticore Search which converts indexes created with Manticore Search 2.x or Sphinx 2.x to 
+Manticore Search 3.x format" )
+
+set ( CPACK_RPM_BIN_DEBUGINFO_PACKAGE ON )
+set ( CPACK_RPM_TOOLS_DEBUGINFO_PACKAGE ON )
+set ( CPACK_RPM_CONVERTER_DEBUGINFO_PACKAGE ON )
+set ( CPACK_RPM_DEVEL_DEBUGINFO_PACKAGE OFF )
+set ( CPACK_RPM_META_DEBUGINFO_PACKAGE OFF )
 
 #set ( CPACK_BUILD_SOURCE_DIRS OFF )
-
 string ( LENGTH "${CMAKE_SOURCE_DIR}" source_dir_len_ )
 if ( source_dir_len_ LESS 75 )
 	message ( STATUS "set src prefix to /tmp/m due to too long path")
@@ -35,22 +67,14 @@ if ( source_dir_len_ LESS 75 )
 endif ()
 
 
-set ( CPACK_RPM_PACKAGE_URL "https://manticoresearch.com/" )
-set ( CPACK_RPM_PACKAGE_GROUP "Applications/Text" )
-set ( CPACK_RPM_BIN_PACKAGE_OBSOLETES "sphinx" )
-set ( CPACK_COMPONENT_BIN_DESCRIPTION "Manticore Search is a powerful free open source search engine
-with a focus on low latency and high throughput full-text search
-and high volume stream filtering")
-
- 
-set  ( CPACK_COMPONENT_CONVERTER_DESCRIPTION "This package provides the index_converter tool for Manticore Search which converts indexes created with Manticore Search 2.x or Sphinx 2.x to Manticore Search 3.x format" )
-
 #set ( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST "/usr/include" )
+ 
 set ( CPACK_RPM_BIN_USER_FILELIST
 		"%config(noreplace) %{_sysconfdir}/logrotate.d/manticore"
-		"%config(noreplace) %{_sysconfdir}/manticoresearch/manticore.conf" )
+		"%config(noreplace) %{_sysconfdir}/manticoresearch/manticore.conf"
+   )
 
-set ( CPACK_RPM_SPEC_MORE_DEFINE
+set ( CPACK_RPM_BIN_SPEC_MORE_DEFINE
 		"%define _scripts ${MANTICORE_BINARY_DIR}
 %define manticore_user manticore
 %define manticore_group manticore" )
@@ -112,8 +136,11 @@ install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf.dist
 install ( FILES COPYING example.sql DESTINATION usr/${CMAKE_INSTALL_DOCDIR} COMPONENT doc )
 
 
-install ( FILES doc/indexer.1 doc/indextool.1 doc/searchd.1 doc/spelldump.1
-		DESTINATION usr/${CMAKE_INSTALL_MANDIR}/man1 COMPONENT doc )
+install ( FILES doc/indexer.1 doc/spelldump.1
+		DESTINATION usr/${CMAKE_INSTALL_MANDIR}/man1 COMPONENT tools )
+
+install ( FILES doc/searchd.1 DESTINATION usr/${CMAKE_INSTALL_MANDIR}/man1 COMPONENT applications )
+
 
 install ( DIRECTORY misc/stopwords DESTINATION usr/${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME} COMPONENT doc )
 if (USE_ICU)
@@ -134,6 +161,8 @@ install ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf.dist
 install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore COMPONENT adm )
 install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/run/manticore COMPONENT adm )
 install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COMPONENT adm )
+
+install ( FILES INSTALL   DESTINATION usr/${CMAKE_INSTALL_DATADIR}/manticore  COMPONENT meta )
 
 set ( CONFFILEDIR "${SYSCONFDIR}/manticoresearch" )
 

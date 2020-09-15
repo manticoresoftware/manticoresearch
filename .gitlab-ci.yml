@@ -1,9 +1,29 @@
+.docs_main: &docs
+  image: registry.gitlab.com/manticoresearch/doc/autodeploy:latest
+  cache: {}
+  services:
+    - docker:18.09.7-dind
+  before_script:
+    - export COMMIT_DIR="manual"
+    - export DEPLOY_TARGET="k8s"
+  script:
+    - sh /Deploy/autoupdate.sh $DEPLOY_TARGET $COMMIT_DIR $DOCS_ERRORS_DIR
+  artifacts:
+    paths:
+    - $DOCS_ERRORS_DIR
+  variables:
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2   
+    RELEASE_FILENAME: latest_release_version
+    DOCS_ERRORS_DIR: build/docs/
+
+
 workflow:
   rules:
     - if: $CI_MERGE_REQUEST_ID
     - if: $CI_COMMIT_TAG
-    - if: $CI_COMMIT_BRANCH == "master"
-    - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/
+    - if: $CI_COMMIT_BRANCH == "master" && $CI_COMMIT_TITLE != $DOCS_AUTOCOMMIT_TITLE
+    - if: $CI_COMMIT_BRANCH =~ /^manticore-.*$/ && $CI_COMMIT_TITLE != $DOCS_AUTOCOMMIT_TITLE
     - if: $TEST || $WHAT
 
 # to skip ci add [ci skip] or [skip ci] in commit message in any capitalization
@@ -25,6 +45,13 @@ job_mirror:
   script:
     - ~/gitsync.sh
   cache: {}
+
+
+docs_deploy:
+  stage: routines
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^manticore-.*$/
+  <<: *docs
 
 
 pages:
@@ -120,7 +147,7 @@ release_tests:
     - build/test/test_*/report.txt
     - build/test/error*.txt
     - build/test/searchd.log
-    - build/test/examples.txt
+    - $DOCS_EXAMPLES_FILEPATH
     expire_in: 12 hrs
     when: always
   cache:
@@ -254,24 +281,6 @@ build_bsd:
       - cache/stemmer*64/*stemmer*  
 
 
-docs_deploy:
-  stage: routines
-  rules:
-    - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^manticore-.*$/
-  image: registry.gitlab.com/manticoresearch/doc/autodeploy:latest
-  cache: {}
-  services:
-    - docker:18.09.7-dind
-  before_script:
-    - export COMMIT_DIR="manual"
-    - export DEPLOY_TARGET="k8s"
-  script:
-    - sh /Deploy/autoupdate.sh $DEPLOY_TARGET $COMMIT_DIR
-  variables:
-    DOCKER_HOST: tcp://docker:2375/
-    DOCKER_DRIVER: overlay2   
-    RELEASE_FILENAME: latest_release_version
-
 # build and upload on regular commits
 push_results:
   stage: publish
@@ -306,6 +315,19 @@ push_results:
   allow_failure: true
 
 
+check_docs_examples:
+  stage: publish
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^manticore-.*$/
+    - changes:
+      - "test/**/*.xml"
+      - "manual/**/*.md"
+      when: always
+  dependencies:
+    - release_tests
+  <<: *docs
+
+
 deploy_hook:
   stage: hooks
   variables:
@@ -317,4 +339,8 @@ deploy_hook:
       when: always
   trigger:
     include: '/dist/gitlab-release.yml'
-    
+
+
+variables:
+  DOCS_AUTOCOMMIT_TITLE: 'Docs_examples_update'
+  DOCS_EXAMPLES_FILEPATH: 'build/test/examples.txt'      

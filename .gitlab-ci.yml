@@ -320,7 +320,7 @@ check_docs_examples:
   rules:
     - if: $CI_COMMIT_BRANCH == "master" || $CI_COMMIT_BRANCH =~ /^manticore-.*$/
     - changes:
-      - "test/**/*.xml"
+      - "test/**/*"
       - "manual/**/*.md"
       when: always
   dependencies:

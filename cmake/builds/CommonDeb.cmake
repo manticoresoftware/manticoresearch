@@ -4,9 +4,10 @@ cmake_minimum_required ( VERSION 3.13 )
 
 # Common debian-specific build variables
 set ( CPACK_GENERATOR "DEB" )
-
+set ( CPACK_DEB_COMPONENT_INSTALL ON )
 set ( CPACK_PACKAGING_INSTALL_PREFIX "/" )
 set ( BINPREFIX "usr/" )
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 
 set ( CPACK_DEBIAN_DEBUGINFO_PACKAGE ON )
 
@@ -64,8 +65,11 @@ set ( CPACK_COMPONENT_ADM_DISPLAY_NAME "Helper scripts" )
 INSTALL ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf.dist
 		DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT doc RENAME manticore.conf )
 
-install ( FILES doc/indexer.1 doc/indextool.1 doc/searchd.1 doc/spelldump.1 doc/wordbreaker.1
+install ( FILES doc/searchd.1
 		DESTINATION usr/${CMAKE_INSTALL_MANDIR}/man1 COMPONENT doc )
+
+install ( FILES doc/indexer.1 doc/indextool.1  doc/spelldump.1 doc/wordbreaker.1
+		DESTINATION usr/${CMAKE_INSTALL_MANDIR}/man1 COMPONENT tools )
 
 if (NOT NOAPI)
      install ( DIRECTORY api DESTINATION usr/${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME} COMPONENT doc )
@@ -82,6 +86,9 @@ install ( FILES "${MANTICORE_BINARY_DIR}/manticore.init"
 		DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/init.d PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
         GROUP_EXECUTE GROUP_READ COMPONENT adm RENAME manticore )
 
+
+install ( FILES INSTALL   DESTINATION usr/${CMAKE_INSTALL_DATADIR}/manticore  COMPONENT meta )
+
 install ( DIRECTORY misc/stopwords DESTINATION usr/${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME} COMPONENT doc)
 if (USE_ICU)
 	install ( FILES ${ICU_DATA} DESTINATION usr/${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME}/icu COMPONENT doc)
@@ -93,11 +100,10 @@ install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/log/manticore COM
 # tickets per components
 set ( CPACK_COMPONENT_BIN_DESCRIPTION "Manticore Search is a powerful free open source search engine
  with a focus on low latency and high throughput full-text search
- and high volume stream filtering" )
+ and high volume stream filtering. This package contains the search server." )
 
 set  ( CPACK_COMPONENT_CONVERTER_DESCRIPTION "This package provides the index_converter tool for Manticore Search which converts indexes created with Manticore Search 2.x or Sphinx 2.x to Manticore Search 3.x format" )
 
-set ( CPACK_DEBIAN_PACKAGE_NAME "manticore" )
 # version
 # arch
 
@@ -110,11 +116,21 @@ set ( CPACK_DEBIAN_PACKAGE_PRIORITY "optional" )
 set ( CPACK_DEBIAN_BIN_PACKAGE_CONTROL_EXTRA "${MANTICORE_BINARY_DIR}/conffiles;${MANTICORE_BINARY_DIR}/postinst;${MANTICORE_BINARY_DIR}/prerm;${EXTRA_SCRIPTS}" )
 set ( CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION "ON" )
 
-set ( CPACK_DEBIAN_BIN_PACKAGE_REPLACES "manticore-bin" )
+set ( CPACK_DEBIAN_BIN_PACKAGE_REPLACES "manticore-bin, manticore (<< 3.5.0-200722-1d34c49)" )
 set ( CPACK_DEBIAN_BIN_PACKAGE_CONFLICTS "sphinxsearch" )
+set ( CPACK_DEBIAN_BIN_PACKAGE_NAME "manticore-server" )
+set ( CPACK_DEBIAN_BIN_FILE_NAME "DEB-DEFAULT" )
 
-# set applications package name to 'manticore'
-set(CPACK_DEBIAN_BIN_PACKAGE_NAME ${CPACK_PACKAGE_NAME})
+set ( CPACK_DEBIAN_META_PACKAGE_NAME ${CPACK_PACKAGE_NAME})
+set ( CPACK_DEBIAN_META_PACKAGE_DEPENDS "manticore-server, manticore-tools" )
+set ( CPACK_DEBIAN_META_FILE_NAME "DEB-DEFAULT" )
+set ( CPACK_DEBIAN_META_PACKAGE_DEBUG "OFF" )
+
+
+set ( CPACK_DEBIAN_TOOLS_PACKAGE_NAME "manticore-tools" )
+set ( CPACK_COMPONENT_TOOLS_DESCRIPTION "Manticore Search is a powerful free open source search engine
+ with a focus on low latency and high throughput full-text search
+ and high volume stream filtering. This package contains the search server." )
 
 set ( CONFFILEDIR "${SYSCONFDIR}/manticoresearch" )
 

@@ -43,6 +43,8 @@ inline static size_t AlignUpTo (size_t iSize)
 	return ( iSize+STACK_ALIGN-1 ) & ~( STACK_ALIGN-1 );
 }
 
+bool g_bCoroStackFill = false;
+
 //////////////////////////////////////////////////////////////
 /// Coroutine - uses boost::context to switch between jobs
 using namespace boost::context::detail;
@@ -87,6 +89,9 @@ public:
 		: m_fnHandler ( std::move ( fnHandler ) )
 		  , m_dStack ( iStack ? (int)AlignUpTo ( iStack ) : g_iStackSize )
 	{
+		if ( g_bCoroStackFill )
+			m_dStack.Fill ( 0 );
+
 #if BOOST_USE_VALGRIND
 		m_uValgrindStackID = VALGRIND_STACK_REGISTER( m_dStack.begin(), &m_dStack.Last () );
 #endif
@@ -588,27 +593,7 @@ void SetStackSizeHook ( int * pStorage )
 {
 	auto pWorker = Threads::CoroWorker_c::CurrentWorker ();
 	if ( pWorker )
-	{
-		BYTE iStack = 0xff;
-
-		// get raw current used stack length
-		const BYTE * pStackCur = &iStack;
-		BYTE * pStackStart = pWorker->GetTopOfStack() - pWorker->GetStackSize();
-		
-		// can not clean up to exact iStack as will damage data placed prior to it and will corrupt stack frame
-		const int iPageSize = 4096;
-		int iLen = pStackCur - pStackStart;
-		if ( iLen<=iPageSize )
-			return;
-
-		// keep space prior to used stack for vars at stack frame
-		iLen -= iPageSize;
-
-		// fill with 0 stack to get max used stack size
-		memset ( pStackStart, 0, iLen );
-
 		pWorker->SetStackSizeHook ( pStorage );
-	}
 }
 
 Threads::Scheduler_i * Threads::CoCurrentScheduler ()

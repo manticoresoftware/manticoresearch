@@ -330,4 +330,6 @@ using SccRL_t = CSphScopedRLock_T<CoroRWLock_c>;
 using SccWL_t = CSphScopedWLock_T<CoroRWLock_c>;
 using ScopedCoroMutex_t = CSphScopedLock<CoroMutex_c>;
 
+extern bool g_bCoroStackFill;
+
 } // namespace Threads

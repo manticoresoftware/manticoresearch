@@ -49,8 +49,6 @@
 #include "taskpreread.h"
 #include "coroutine.h"
 
-using namespace Threads;
-
 extern "C"
 {
 #include "sphinxudf.h"
@@ -18355,12 +18353,16 @@ static void ParseExpr ( const char * sExpr, int * pSize )
 
 static void SetNodeItemStackSize()
 {
-	// calculate item size for exression parser
+	Threads::g_bCoroStackFill = true;
+
+	// calculate item size for expression parser
 	int iStackMaxUsed1 = 0;
 	Threads::CallCoroutine ( [&iStackMaxUsed1] { ParseExpr ( "(4*attr_a+2*(attr_b-1)+3)", &iStackMaxUsed1 ); } );
 	
 	int iStackMaxUsed2 = 0;
 	Threads::CallCoroutine ( [&iStackMaxUsed2] { ParseExpr ( "(4*attr_a+2*(attr_b-1)+3)*1000", &iStackMaxUsed2 ); } );
+
+	Threads::g_bCoroStackFill = false;
 
 	int iDelta = iStackMaxUsed2 - iStackMaxUsed1;
 	sphLogDebug ( "expression stack delta %d", iDelta );

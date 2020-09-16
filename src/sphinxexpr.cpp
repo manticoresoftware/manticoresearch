@@ -9242,7 +9242,7 @@ static int SPH_EXPRNODE_STACK_SIZE = 160;
 
 void SetExprNodeStackItemSize ( int iSize )
 {
-	if ( iSize>0 )
+	if ( iSize>SPH_EXPRNODE_STACK_SIZE )
 		SPH_EXPRNODE_STACK_SIZE = iSize;
 }
 

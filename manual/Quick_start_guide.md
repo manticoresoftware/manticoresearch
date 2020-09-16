@@ -13,7 +13,7 @@ You can install and start Manticore easily in Ubuntu, Centos, Debian, Windows an
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update
-sudo apt install manticore-bin
+sudo apt install manticore
 sudo systemctl start manticore
 ```
 
@@ -25,7 +25,7 @@ sudo systemctl start manticore
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 sudo dpkg -i manticore-repo.noarch.deb
 sudo apt update
-sudo apt install manticore-bin
+sudo apt install manticore
 sudo systemctl start manticore
 ```
 

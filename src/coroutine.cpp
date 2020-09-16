@@ -134,6 +134,17 @@ public:
 	{
 		return m_dStack.GetLength();
 	}
+
+	int GetUsedStackSize() const
+	{
+		ARRAY_FOREACH ( i, m_dStack )
+		{
+			if ( m_dStack[i] )
+				return m_dStack.GetLength()-i;
+		}
+
+		return m_dStack.GetLength();
+	}
 };
 
 StringBuilder_c & operator<< ( StringBuilder_c & dOut, CoRoutine_c::State_e eData )
@@ -198,6 +209,7 @@ class CoroWorker_c
 	// operative stuff to be as near as possible
 	void * m_pCurrentTaskInfo = nullptr;
 	int64_t m_tmCpuTimeBase = 0; // add sphCpuTime() to this value to get truly cpu time ticks
+	int * m_pLastStackSize = nullptr;
 
 	// RAII worker's keeper
 	struct CoroGuard_t
@@ -251,6 +263,8 @@ private:
 		}
 		if ( m_tCoroutine.IsFinished () )
 		{
+			if ( m_pLastStackSize )
+				*m_pLastStackSize = m_tCoroutine.GetUsedStackSize();
 			delete this;
 			return;
 		}
@@ -414,6 +428,11 @@ public:
 	{
 		return m_pTlsThis;
 	}
+
+	void SetStackSizeHook ( int * pStorage )
+	{
+		m_pLastStackSize = pStorage;
+	}
 };
 thread_local CoroWorker_c * CoroWorker_c::m_pTlsThis = nullptr;
 
@@ -563,6 +582,33 @@ int64_t sphTaskCpuTimer ()
 		return pWorker->GetCurrentCpuTimeBase ()+sphCpuTimer ();
 
 	return sphCpuTimer();
+}
+
+void SetStackSizeHook ( int * pStorage )
+{
+	auto pWorker = Threads::CoroWorker_c::CurrentWorker ();
+	if ( pWorker )
+	{
+		BYTE iStack = 0xff;
+
+		// get raw current used stack length
+		const BYTE * pStackCur = &iStack;
+		BYTE * pStackStart = pWorker->GetTopOfStack() - pWorker->GetStackSize();
+		
+		// can not clean up to exact iStack as will damage data placed prior to it and will corrupt stack frame
+		const int iPageSize = 4096;
+		int iLen = pStackCur - pStackStart;
+		if ( iLen<=iPageSize )
+			return;
+
+		// keep space prior to used stack for vars at stack frame
+		iLen -= iPageSize;
+
+		// fill with 0 stack to get max used stack size
+		memset ( pStackStart, 0, iLen );
+
+		pWorker->SetStackSizeHook ( pStorage );
+	}
 }
 
 Threads::Scheduler_i * Threads::CoCurrentScheduler ()

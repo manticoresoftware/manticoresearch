@@ -311,6 +311,8 @@ ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, CSphSt
 
 ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr );
 
+void SetExprNodeStackItemSize ( int iSize );
+
 //////////////////////////////////////////////////////////////////////////
 
 /// init tables used by our geodistance functions

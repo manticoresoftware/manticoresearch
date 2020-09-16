@@ -19,6 +19,7 @@
 #include "sphinxint.h"
 #include "sphinxjson.h"
 #include "docstore.h"
+#include "coroutine.h"
 #include <time.h>
 #include <math.h>
 
@@ -3840,6 +3841,8 @@ private:
 	void					FixupIterators ( int iNode, const char * sKey, SphAttr_t * pAttr );
 
 	bool					GetError () const { return !( m_sLexerError.IsEmpty() && m_sParserError.IsEmpty() && m_sCreateError.IsEmpty() ); }
+
+	ISphExpr *				Create ( bool * pUsesWeight, CSphString & sError );
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -9235,6 +9238,28 @@ struct HookCheck_fn
 };
 
 
+static int SPH_EXPRNODE_STACK_SIZE = 160;
+
+void SetExprNodeStackItemSize ( int iSize )
+{
+	if ( iSize>0 )
+		SPH_EXPRNODE_STACK_SIZE = iSize;
+}
+
+struct ExprNodeHeight_t
+{
+	int m_iNode = 0;
+	int m_iHeght = 0;
+
+	ExprNodeHeight_t ( int iNode, int iHeght )
+		: m_iNode ( iNode )
+		, m_iHeght ( iHeght )
+	{}
+
+	ExprNodeHeight_t() = default;
+};
+
+
 ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError )
 {
@@ -9272,35 +9297,54 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	// Check expression stack to fit for mutual recursive function calls.
 	// This check is an approximation, because different compilers with
 	// different settings produce code which requires different stack size.
-	if ( m_dNodes.GetLength()>100 )
+	int iStackNeeded = -1;
+	int64_t iExprStack = sphGetStackUsed() + m_dNodes.GetLength() * SPH_EXPRNODE_STACK_SIZE;
+	int64_t iCurStackSize = sphMyStackSize();
+	if ( m_dNodes.GetLength()>100 || iExprStack>iCurStackSize )
 	{
-		CSphVector<int> dNodes;
+		CSphVector<ExprNodeHeight_t> dNodes;
 		dNodes.Reserve ( m_dNodes.GetLength()/2 );
 		int iMaxHeight = 1;
-		int iHeight = 1;
-		dNodes.Add ( m_iParsed );
+		dNodes.Add ( ExprNodeHeight_t ( m_iParsed, 1 ) );
 		while ( dNodes.GetLength() )
 		{
-			const ExprNode_t & tExpr = m_dNodes[dNodes.Pop()];
-			iHeight += ( tExpr.m_iLeft>=0 || tExpr.m_iRight>=0 ? 1 : -1 );
-			iMaxHeight = Max ( iMaxHeight, iHeight );
+			const ExprNodeHeight_t & tParent = dNodes.Pop();
+			const ExprNode_t & tExpr = m_dNodes[tParent.m_iNode];
+			iMaxHeight = Max ( iMaxHeight, tParent.m_iHeght );
 			if ( tExpr.m_iRight>=0 )
-				dNodes.Add ( tExpr.m_iRight );
+				dNodes.Add ( ExprNodeHeight_t ( tExpr.m_iRight, tParent.m_iHeght+1 ) );
 			if ( tExpr.m_iLeft>=0 )
-				dNodes.Add ( tExpr.m_iLeft );
+				dNodes.Add ( ExprNodeHeight_t ( tExpr.m_iLeft, tParent.m_iHeght+1 ) );
 		}
 
-// fixme! make runtime stack frame detection
-#define SPH_EXPRNODE_STACK_SIZE 160
-		int64_t iExprStack = sphGetStackUsed() + iMaxHeight*SPH_EXPRNODE_STACK_SIZE;
-		if ( sphMyStackSize ()<=iExprStack )
+		iExprStack = sphGetStackUsed() + iMaxHeight*SPH_EXPRNODE_STACK_SIZE;
+
+		if ( iExprStack>g_iMaxCoroStackSize )
 		{
 			sError.SetSprintf ( "query too complex, not enough stack (thread_stack=%dK or higher required)",
 				(int)( ( iExprStack + 1024 - ( iExprStack%1024 ) ) / 1024 ) );
 			return nullptr;
 		}
+
+		if ( iCurStackSize<=iExprStack )
+			iStackNeeded = iExprStack + 32*1024;
 	}
 
+	ISphExpr * pExpr = nullptr;
+
+	Threads::CoContinue ( iStackNeeded, [&] {
+
+	pExpr = Create ( pUsesWeight, sError );
+
+	if ( pAttrType )
+		*pAttrType = eAttrType;
+	} );
+
+	return pExpr;
+}
+
+ISphExpr * ExprParser_t::Create ( bool * pUsesWeight, CSphString & sError )
+{
 	// perform optimizations (tree transformations)
 	Optimize ( m_iParsed );
 #if 0
@@ -9328,9 +9372,6 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	{
 		sError.SetSprintf ( "empty expression" );
 	}
-
-	if ( pAttrType )
-		*pAttrType = eAttrType;
 
 	if ( pUsesWeight )
 	{

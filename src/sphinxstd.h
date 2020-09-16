@@ -4123,6 +4123,9 @@ int sphMyStackSize();
 /// get size of used stack (threads or coro - depends from context)
 int64_t sphGetStackUsed();
 
+/// set value where max used stack will be stored on coro exit
+void SetStackSizeHook ( int * pStorage );
+
 /// a singleton. Since C++11 it is thread-safe, and so, looks really simple
 template<typename T, typename T_tag = T>
 T & Single_T ()

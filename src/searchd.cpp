@@ -18332,6 +18332,41 @@ static void SetUidShort ( bool bTestMode )
 	UidShortSetup ( iServerId, (int)uStartedSec );
 }
 
+static void ParseExpr ( const char * sExpr, int * pSize )
+{
+	SetStackSizeHook ( pSize );
+
+	CSphString sError;
+	ExprParseArgs_t tArgs;
+
+	CSphSchema tSchema;
+
+	CSphColumnInfo tAttr;
+	tAttr.m_eAttrType = SPH_ATTR_INTEGER;
+	tAttr.m_sName = "attr_a";
+	tSchema.AddAttr ( tAttr, false );
+	tAttr.m_sName = "attr_b";
+	tSchema.AddAttr ( tAttr, false );
+
+	CSphRefcountedPtr<ISphExpr>	pExprBase { sphExprParse ( sExpr, tSchema, sError, tArgs ) };
+	if ( !pExprBase || !sError.IsEmpty() )
+		sphWarning ( "stack check expression error: %s", sError.cstr() );
+}
+
+static void SetNodeItemStackSize()
+{
+	// calculate item size for exression parser
+	int iStackMaxUsed1 = 0;
+	Threads::CallCoroutine ( [&iStackMaxUsed1] { ParseExpr ( "(4*attr_a+2*(attr_b-1)+3)", &iStackMaxUsed1 ); } );
+	
+	int iStackMaxUsed2 = 0;
+	Threads::CallCoroutine ( [&iStackMaxUsed2] { ParseExpr ( "(4*attr_a+2*(attr_b-1)+3)*1000", &iStackMaxUsed2 ); } );
+
+	int iDelta = iStackMaxUsed2 - iStackMaxUsed1;
+	sphLogDebug ( "expression stack delta %d", iDelta );
+	SetExprNodeStackItemSize ( iDelta );
+}
+
 namespace { // static
 
 // implement '--stop' and '--stopwait' (connect and stop another instance by pid file from config)
@@ -18897,6 +18932,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	// startup
 	///////////
 
+	SetNodeItemStackSize();
 	ModifyDaemonPaths ( hSearchd );
 	sphRTInit ( hSearchd, bTestMode, hConf("common") ? hConf["common"]("common") : nullptr );
 

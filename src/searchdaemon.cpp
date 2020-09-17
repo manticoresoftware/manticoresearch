@@ -88,26 +88,53 @@ bool CheckLike::Match( const char* sValue )
 
 // string vector with 'like' matcher
 /////////////////////////////////////////////////////////////////////////////
-VectorLike::VectorLike()
+VectorLike::VectorLike( int iCols )
 	: CheckLike( nullptr )
-{}
-
-VectorLike::VectorLike( const CSphString& sPattern )
-	: CheckLike( sPattern.cstr()), m_sColKey( "Variable_name" ), m_sColValue( "Value" )
-{}
-
-const char* VectorLike::szColKey() const
 {
-	return m_sColKey.cstr();
+	m_dHeadNames.Resize ( iCols );
 }
 
-const char* VectorLike::szColValue() const
+VectorLike::VectorLike ( const CSphString & sPattern )
+		: CheckLike ( sPattern.cstr () )
 {
-	return m_sColValue.cstr();
+	m_dHeadNames.Resize ( 2 );
+	SetColName ( "Variable_name" );
+	SetColName ( "Value", 1 );
+}
+
+VectorLike::VectorLike( const CSphString& sPattern, int iCols )
+	: CheckLike ( sPattern.cstr () )
+{
+	m_dHeadNames.Resize ( iCols );
+}
+
+VectorLike::VectorLike ( const CSphString & sPattern, std::initializer_list<const char *> sCols )
+	: CheckLike ( sPattern.cstr () )
+{
+	for ( const char * szCol : sCols )
+		m_dHeadNames.Add ( szCol );
+}
+
+void VectorLike::SetColNames ( std::initializer_list<const char *> sCols )
+{
+	for ( const char * szCol : sCols )
+		m_dHeadNames.Add ( szCol );
+}
+
+void VectorLike::SetColName ( CSphString sValue, int iIdx )
+{
+	assert ( iIdx>=0 && iIdx<m_dHeadNames.GetLength () );
+	m_dHeadNames[iIdx] = std::move(sValue);
+}
+
+const VecTraits_T<CSphString> & VectorLike::Header () const
+{
+	return m_dHeadNames;
 }
 
 bool VectorLike::MatchAdd( const char* sValue )
 {
+	assert ( m_dHeadNames.GetLength ()>=1 );
 	if ( Match( sValue ))
 	{
 		Add( sValue );
@@ -116,18 +143,9 @@ bool VectorLike::MatchAdd( const char* sValue )
 	return false;
 }
 
-void VectorLike::MatchAddFn ( const char * sValue, Generator_fn && fnPrinter )
-{
-	if ( !Match ( sValue ))
-		return;
-
-	Add ( sValue );
-	Add ( fnPrinter() );
-}
-
-
 bool VectorLike::MatchAddVa( const char* sTemplate, ... )
 {
+	assert ( m_dHeadNames.GetLength ()>=1 );
 	va_list ap;
 	CSphString sValue;
 
@@ -137,6 +155,75 @@ bool VectorLike::MatchAddVa( const char* sTemplate, ... )
 
 	return MatchAdd( sValue.cstr());
 }
+
+void VectorLike::MatchTuplet ( const char * sKey, const char * sValue )
+{
+	assert ( m_dHeadNames.GetLength ()>=2 );
+	if ( !Match ( sKey ) )
+		return;
+
+	Add ( sKey );
+	Add ( sValue );
+	FillTail ( 2 );
+}
+
+void VectorLike::MatchTupletf ( const char * sKey, const char * sValueTmpl, ... )
+{
+	assert ( m_dHeadNames.GetLength ()>=2 );
+	if ( !Match ( sKey ) )
+		return;
+
+	va_list ap;
+	StringBuilder_c sValue;
+	va_start ( ap, sValueTmpl );
+	sValue.vSprintf( sValueTmpl, ap );
+	va_end ( ap );
+
+	Add ( sKey );
+	Add ( sValue.cstr() );
+	FillTail ( 2 );
+}
+
+void VectorLike::MatchTupletFn ( const char * sKey, Generator_fn && fnValuePrinter )
+{
+	assert ( m_dHeadNames.GetLength ()>=2 );
+	if ( !Match ( sKey ) )
+		return;
+
+	Add ( sKey );
+	Add ( fnValuePrinter () );
+	FillTail ( 2 );
+}
+
+void VectorLike::MatchTupletFn ( const char * sKey, GeneratorS_fn && fnValuePrinter )
+{
+	assert ( m_dHeadNames.GetLength ()>=2 );
+	if ( !Match ( sKey ) )
+		return;
+
+	Add ( sKey );
+	Add ( CSphString ( fnValuePrinter () ) );
+	FillTail ( 2 );
+}
+
+void VectorLike::MatchTriplet ( const char * sKey, const char * sValue, const char * sValue2 )
+{
+	assert ( m_dHeadNames.GetLength ()>=3 );
+	if ( !Match ( sKey ) )
+		return;
+
+	Add ( sKey );
+	Add ( sValue );
+	Add ( sValue2 );
+	FillTail ( 3 );
+}
+
+void VectorLike::FillTail ( int iHas )
+{
+	for ( auto iLen = m_dHeadNames.GetLength (); iHas<iLen; ++iHas )
+		Add("");
+}
+
 
 const char* g_dIndexTypeName[1 + ( int ) IndexType_e::ERROR_] = {
 	"plain",

@@ -24,6 +24,7 @@ enum class IndexType_e
 	ERROR_, // simple "ERROR" doesn't work on win due to '#define ERROR 0' somewhere.
 };
 
+const char * szIndexType ( IndexType_e eType );
 
 struct ClusterOptions_t
 {

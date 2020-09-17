@@ -235,24 +235,37 @@ public:
 };
 
 using Generator_fn = std::function<CSphString ( void )>;
+using GeneratorS_fn = std::function<StringBuilder_c ( void )>;
 
 // string vector with 'like' matcher
 class VectorLike: public StrVec_t, public CheckLike
 {
-public:
-	CSphString m_sColKey;
-	CSphString m_sColValue;
+	StrVec_t	m_dHeadNames;
+
+	void FillTail (int iHas);
 
 public:
+	explicit VectorLike ( int iCols = 2 );
+	explicit VectorLike ( const CSphString & sPattern ); // default 2 columns, { "Variable_name", "Value" }
+	explicit VectorLike ( const CSphString & sPattern, int iCols );
+	explicit VectorLike ( const CSphString & sPattern, std::initializer_list<const char*> sCols);
 
-	VectorLike();
-	explicit VectorLike( const CSphString& sPattern );
+	void SetColNames ( std::initializer_list<const char *> sCols );
+	void SetColName ( CSphString sValue, int iIdx = 0 );
+	const VecTraits_T<CSphString> & Header () const;
 
-	const char* szColKey() const;
-	const char* szColValue() const;
+	// returns true, if single value matches
 	bool MatchAdd( const char* sValue );
-	void MatchAddFn ( const char * sValue, Generator_fn&& fnPrinter );
 	bool MatchAddVa( const char* sTemplate, ... ) __attribute__ (( format ( printf, 2, 3 )));
+
+	// add pair
+	void MatchTuplet ( const char * sKey, const char * sValue );
+	void MatchTupletf ( const char * sKey, const char* sValueTmpl, ... ); 	// __attribute__ ((format ( printf,3, 4 )));
+	void MatchTupletFn ( const char * sKey, Generator_fn && fnValuePrinter );
+	void MatchTupletFn ( const char * sKey, GeneratorS_fn && fnValuePrinter );
+
+	// add triplet
+	void MatchTriplet ( const char * sKey, const char * sValue, const char * sValue2 );
 };
 
 CSphString GetTypeName ( IndexType_e eType );
@@ -1479,6 +1492,14 @@ public:
 		HeadEnd ();
 	}
 
+	void HeadOfStrings ( const VecTraits_T<CSphString>& sNames )
+	{
+		HeadBegin ( (int) sNames.GetLength() );
+		for ( const auto& sName : sNames )
+			HeadColumn ( sName.cstr() );
+		HeadEnd ();
+	}
+
 	// table of 2 columns (we really often use them!)
 	void HeadTuplet ( const char * pLeft, const char * pRight )
 	{
@@ -1486,6 +1507,22 @@ public:
 		HeadColumn ( pLeft );
 		HeadColumn ( pRight );
 		HeadEnd();
+	}
+
+	void DataRow ( const VecTraits_T<CSphString>& dRow )
+	{
+		for ( const auto& dValue : dRow )
+			PutString ( dValue );
+		Commit();
+	}
+
+	void DataTable ( const VectorLike& dData )
+	{
+		HeadOfStrings ( dData.Header() );
+		auto iStride = dData.Header().GetLength();
+		for ( int i=0, iLen = dData.GetLength(); i<iLen; i+=iStride )
+			DataRow ( dData.Slice ( i, iStride) );
+		Eof();
 	}
 };
 

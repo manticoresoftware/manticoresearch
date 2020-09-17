@@ -8188,7 +8188,7 @@ void BuildStatus ( VectorLike & dStatus )
 	const int64_t iQueriesDiv = Max ( g_tStats.m_iQueries.load ( std::memory_order_relaxed ), 1 );
 	const int64_t iDistQueriesDiv = Max ( g_tStats.m_iDistQueries.load ( std::memory_order_relaxed ), 1 );
 
-	dStatus.m_sColKey = "Counter";
+	dStatus.SetColName ( "Counter" );
 
 	// FIXME? non-transactional!!!
 	if ( dStatus.MatchAdd ( "uptime" ) )
@@ -8548,7 +8548,7 @@ void BuildAgentStatus ( VectorLike &dStatus, const CSphString& sIndexOrAgent )
 		return;
 	}
 
-	dStatus.m_sColKey = "Key";
+	dStatus.SetColName ( "Key" );
 
 	if ( dStatus.MatchAdd ( "status_period_seconds" ) )
 		dStatus.Add().SetSprintf ( "%d", g_uHAPeriodKarmaS );
@@ -8787,74 +8787,6 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 	return bPersist;
 }
 
-class TableLike : public CheckLike
-				, public ISphNoncopyable
-{
-	RowBuffer_i & m_tOut;
-public:
-
-	explicit TableLike ( RowBuffer_i & tOut, const char * sPattern = nullptr )
-		: CheckLike ( sPattern )
-		, m_tOut ( tOut )
-	{}
-
-	bool MatchAdd ( const char* sValue )
-	{
-		if ( Match ( sValue ) )
-		{
-			m_tOut.PutString ( sValue );
-			return true;
-		}
-		return false;
-	}
-
-	bool MatchAddVa ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) )
-	{
-		va_list ap;
-		CSphString sValue;
-
-		va_start ( ap, sTemplate );
-		sValue.SetSprintfVa ( sTemplate, ap );
-		va_end ( ap );
-
-		return MatchAdd ( sValue.cstr() );
-	}
-
-	// popular pattern of 2 columns of data
-	inline void MatchData2 ( const char * pLeft, const char * pRight )
-	{
-		if ( Match ( pLeft ) )
-			m_tOut.DataTuplet ( pLeft, pRight );
-	}
-
-	inline void MatchData2 ( const char * pLeft, int64_t iRight )
-	{
-		if ( Match ( pLeft ) )
-			m_tOut.DataTuplet ( pLeft, iRight );
-	}
-
-	inline void MatchData3 ( const char * pStr1, const char * pStr2, const char * pStr3 )
-	{
-		if ( Match ( pStr1 ) )
-		{
-			m_tOut.PutString ( pStr1 );
-			m_tOut.PutString ( pStr2 );
-			m_tOut.PutString ( pStr3 );
-			m_tOut.Commit();
-		}
-	}
-
-	// popular pattern of 2 columns of data
-	void DataTuplet ( const char * pLeft, const char * pRight )
-	{
-		MatchData2 ( pLeft, pRight );
-	}
-
-	void DataTuplet ( const char * pLeft, int64_t iRight )
-	{
-		MatchData2 ( pLeft, iRight );
-	}
-};
 
 void StmtErrorReporter_i::Error ( const char * sTemplate, ... )
 {
@@ -11114,17 +11046,87 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 	tOut.Eof();
 }
 
+void DescribeLocalSchema ( VectorLike& dOut, const CSphSchema& tSchema, bool bIsTemplate )
+{
+	// result set header packet
+	dOut.SetColNames ( { "Field", "Type", "Properties" } );
+
+	// id comes before fields
+	if ( !bIsTemplate )
+		dOut.MatchTuplet ( "id", "bigint" );
+
+	for ( int i = 0; i<tSchema.GetFieldsCount (); ++i )
+		if ( dOut.MatchAdd ( tSchema.GetFieldName ( i ) ) )
+		{
+			dOut.Add ( "text" );
+			StringBuilder_c sProperties ( " " );
+			DWORD uFlags = tSchema.GetField ( i ).m_uFieldFlags;
+			if ( uFlags & CSphColumnInfo::FIELD_INDEXED )
+				sProperties << "indexed";
+
+			if ( uFlags & CSphColumnInfo::FIELD_STORED )
+				sProperties << "stored";
+			dOut.Add ( sProperties.cstr () );
+		}
+
+	for ( int i = 1; i<tSchema.GetAttrsCount (); ++i )
+	{
+		const CSphColumnInfo & tCol = tSchema.GetAttr ( i );
+		if ( sphIsInternalAttr ( tCol ) )
+			continue;
+
+		dOut.MatchTupletFn ( tCol.m_sName.cstr (), [&tCol] {
+			if ( tCol.m_eAttrType==SPH_ATTR_INTEGER && tCol.m_tLocator.m_iBitCount!=ROWITEM_BITS )
+			{
+				StringBuilder_c sName;
+				sName.Sprintf ( "%s:%d", sphTypeName ( tCol.m_eAttrType ), tCol.m_tLocator.m_iBitCount );
+				return CSphString ( sName );
+			} else
+				return CSphString ( sphTypeName ( tCol.m_eAttrType ) );
+		} );
+	}
+}
+
+
+void DescribeDistributedSchema ( VectorLike& dOut, DistributedIndex_t* pDistr )
+{
+	// result set header packet
+	dOut.SetColNames ( { "Agent", "Type" } );
+
+	for ( const auto & sIdx : pDistr->m_dLocal )
+		dOut.MatchTuplet( sIdx.cstr (), "local" );
+
+	ARRAY_CONSTFOREACH ( i, pDistr->m_dAgents )
+	{
+		const MultiAgentDesc_c & tMultiAgent = *pDistr->m_dAgents[i];
+		if ( tMultiAgent.IsHA () )
+		{
+			ARRAY_CONSTFOREACH ( j, tMultiAgent )
+			{
+				const AgentDesc_t & tDesc = tMultiAgent[j];
+				StringBuilder_c sValue;
+				sValue << tDesc.GetMyUrl().cstr() << ":" << tDesc.m_sIndexes.cstr();
+				dOut.MatchTupletf ( sValue.cstr (), "%s_%d_mirror_%d",
+						tDesc.m_bBlackhole ? "blackhole" : "remote", i+1, j+1 );
+			}
+		} else
+		{
+			const AgentDesc_t & tDesc = tMultiAgent[0];
+			StringBuilder_c sValue;
+			sValue << tDesc.GetMyUrl ().cstr () << ":" << tDesc.m_sIndexes.cstr ();
+			dOut.MatchTupletf ( sValue.cstr (), "%s_%d", tDesc.m_bBlackhole ? "blackhole" : "remote", i+1 );
+		}
+	}
+}
+
 
 void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 {
-	TableLike dCondOut ( tOut, tStmt.m_sStringParam.cstr () );
+	VectorLike dOut ( tStmt.m_sStringParam, 0 );
 
 	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
 	if ( pServed && pServed->m_pIndex )
 	{
-		// result set header packet
-		tOut.HeadOfStrings ( { "Field", "Type", "Properties" } );
-
 		// data
 		const CSphSchema *pSchema = &pServed->m_pIndex->GetMatchSchema ();
 		if ( tStmt.m_iIntParam==TOK_TABLE ) // user wants internal schema instead
@@ -11138,85 +11140,21 @@ void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 
 		const CSphSchema &tSchema = *pSchema;
 		assert ( pServed->m_eType==IndexType_e::TEMPLATE || tSchema.GetAttr(0).m_sName==sphGetDocidName() );
-
-		// id comes before fields
-		if ( pServed->m_eType!=IndexType_e::TEMPLATE )
-			dCondOut.MatchData3 ( "id", "bigint", "" );
-
-		for ( int i = 0; i<tSchema.GetFieldsCount (); i++ )
-		{
-			StringBuilder_c sProperties(" ");
-			DWORD uFlags = tSchema.GetField(i).m_uFieldFlags;
-			if ( uFlags & CSphColumnInfo::FIELD_INDEXED )
-				sProperties << "indexed";
-
-			if ( uFlags & CSphColumnInfo::FIELD_STORED )
-				sProperties << "stored";
-
-			dCondOut.MatchData3 ( tSchema.GetFieldName(i), "text", sProperties.cstr() );
-		}
-
-		char sTmp[SPH_MAX_WORD_LEN];
-		for ( int i=1; i<tSchema.GetAttrsCount(); i++ )
-		{
-			const CSphColumnInfo & tCol = tSchema.GetAttr(i);
-			if ( sphIsInternalAttr ( tCol ) )
-				continue;
-
-			if ( tCol.m_eAttrType==SPH_ATTR_INTEGER && tCol.m_tLocator.m_iBitCount!=ROWITEM_BITS )
-			{
-				snprintf ( sTmp, sizeof(sTmp), "%s:%d", sphTypeName ( tCol.m_eAttrType ), tCol.m_tLocator.m_iBitCount );
-				dCondOut.MatchData3 ( tCol.m_sName.cstr(), sTmp, "" );
-			} else
-				dCondOut.MatchData3 ( tCol.m_sName.cstr(), sphTypeName ( tCol.m_eAttrType ), "" );
-		}
-
-		tOut.Eof();
-		return;
-	}
-
-	auto pDistr = GetDistr ( tStmt.m_sIndex );
-
-	if ( !pDistr )
+		DescribeLocalSchema ( dOut, tSchema, pServed->m_eType==IndexType_e::TEMPLATE );
+	} else
 	{
-		CSphString sError;
-		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_NO_SUCH_TABLE );
-		return;
-	}
-
-	tOut.HeadTuplet ( "Agent", "Type" );
-	for ( const auto& sIdx : pDistr->m_dLocal )
-		dCondOut.MatchData2 ( sIdx.cstr(), "local" );
-
-	ARRAY_FOREACH ( i, pDistr->m_dAgents )
-	{
-		const MultiAgentDesc_c & tMultiAgent = *pDistr->m_dAgents[i];
-		if ( tMultiAgent.IsHA() )
+		auto pDistr = GetDistr ( tStmt.m_sIndex );
+		if ( !pDistr )
 		{
-			ARRAY_FOREACH ( j, tMultiAgent )
-			{
-				const AgentDesc_t &tDesc = tMultiAgent[j];
-				StringBuilder_c sKey;
-				sKey += tDesc.m_bBlackhole ? "blackhole_" : "remote_";
-				sKey.Appendf ( "%d_mirror_%d", i+1, j+1 );
-				CSphString sValue;
-				sValue.SetSprintf ( "%s:%s", tDesc.GetMyUrl().cstr(), tDesc.m_sIndexes.cstr() );
-				dCondOut.MatchData2 ( sValue.cstr(), sKey.cstr() );
-			}
-		} else
-		{
-			const AgentDesc_t &tDesc = tMultiAgent[0];
-			StringBuilder_c sKey;
-			sKey+= tDesc.m_bBlackhole?"blackhole_":"remote_";
-			sKey.Appendf ( "%d", i+1 );
-			CSphString sValue;
-			sValue.SetSprintf ( "%s:%s", tDesc.GetMyUrl().cstr(), tDesc.m_sIndexes.cstr() );
-			dCondOut.MatchData2 ( sValue.cstr(), sKey.cstr() );
+			tOut.ErrorAbsent ( tStmt.m_sStmt, "no such index '%s'", tStmt.m_sIndex.cstr () );
+			return;
 		}
+		DescribeDistributedSchema ( dOut, pDistr );
 	}
-	tOut.Eof();
+
+	tOut.DataTable ( dOut );
 }
+
 
 void HandleMysqlShowTables ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 {
@@ -11257,11 +11195,10 @@ void HandleMysqlShowTables ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 			{ return strcasecmp ( a.first.cstr (), b.first.cstr () )<0; }));
 
 	// output the results
-	tOut.HeadTuplet ( "Index", "Type" );
-	TableLike dCondOut ( tOut, tStmt.m_sStringParam.cstr() );
+	VectorLike dTable ( tStmt.m_sStringParam, { "Index", "Type" } );
 	for ( auto& dPair : dIndexes )
-		dCondOut.MatchData2 ( dPair.first.cstr (), sTypes[dPair.second] );
-	tOut.Eof();
+		dTable.MatchTuplet( dPair.first.cstr (), sTypes[dPair.second] );
+	tOut.DataTable ( dTable );
 }
 
 
@@ -12454,7 +12391,7 @@ void HandleMysqlMeta ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, const CSphQ
 	}
 
 	// result set header packet
-	dRows.HeadTuplet ( dStatus.szColKey(), dStatus.szColValue() );
+	dRows.HeadOfStrings ( dStatus.Header() );
 
 	// send rows
 	for ( int iRow=0; iRow<dStatus.GetLength(); iRow+=2 )
@@ -13724,27 +13661,24 @@ static const char * LogLevelName ( ESphLogLevel eLevel )
 
 void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, SessionVars_t & tVars )
 {
-	dRows.HeadTuplet ( "Variable_name", "Value" );
-
-	TableLike dMatchRows ( dRows, tStmt.m_sStringParam.cstr () );
-	dMatchRows.DataTuplet ("autocommit", tVars.m_bAutoCommit ? "1" : "0" );
-	dMatchRows.DataTuplet ( "collation_connection", sphCollationToName ( tVars.m_eCollation ) );
-	dMatchRows.DataTuplet ( "query_log_format", g_eLogFormat==LOG_FORMAT_PLAIN ? "plain" : "sphinxql" );
-	dMatchRows.DataTuplet ( "log_level", LogLevelName ( g_eLogLevel ) );
-	dMatchRows.DataTuplet ( "max_allowed_packet", g_iMaxPacketSize );
-	dMatchRows.DataTuplet ( "character_set_client", "utf8" );
-	dMatchRows.DataTuplet ( "character_set_connection", "utf8" );
-	dMatchRows.DataTuplet ( "grouping_in_utc", g_bGroupingInUtc ? "1" : "0" );
-	if ( dMatchRows.Match ( "last_insert_id" ) )
+	VectorLike dTable ( tStmt.m_sStringParam );
+	dTable.MatchTuplet ( "autocommit", tVars.m_bAutoCommit ? "1" : "0" );
+	dTable.MatchTuplet ( "collation_connection", sphCollationToName ( tVars.m_eCollation ) );
+	dTable.MatchTuplet ( "query_log_format", g_eLogFormat==LOG_FORMAT_PLAIN ? "plain" : "sphinxql" );
+	dTable.MatchTuplet ( "log_level", LogLevelName ( g_eLogLevel ) );
+	dTable.MatchTupletf ( "max_allowed_packet", "%d", g_iMaxPacketSize );
+	dTable.MatchTuplet ( "character_set_client", "utf8" );
+	dTable.MatchTuplet ( "character_set_connection", "utf8" );
+	dTable.MatchTuplet ( "grouping_in_utc", g_bGroupingInUtc ? "1" : "0" );
+	dTable.MatchTupletFn ( "last_insert_id" , [&tVars]
 	{
 		StringBuilder_c tBuf ( "," );
-		for ( int64_t iID : tVars.m_dLastIds )
-			tBuf.Appendf ( INT64_FMT, iID );
-		dRows .DataTuplet ( "last_insert_id", tBuf.cstr() );
-	}
+		tVars.m_dLastIds.Apply ( [&tBuf] ( int64_t iID ) { tBuf << iID; } );
+		return tBuf;
+	});
 
 	// fine
-	dRows.Eof();
+	dRows.DataTable ( dTable );
 }
 
 template <typename FORMATFN>
@@ -13861,13 +13795,6 @@ static void AddFederatedIndexStatus ( const CSphSourceStats & tStats, const CSph
 	tOut.Eof ();
 }
 
-static void AddMatchedColumns ( const VectorLike & dStatus, RowBuffer_i & tOut )
-{
-	// send rows
-	for ( int iRow=0; iRow<dStatus.GetLength(); iRow+=2 )
-		tOut.DataTuplet ( dStatus[iRow+0].cstr(), dStatus[iRow+1].cstr() );
-}
-
 static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex, bool bMutable )
 {
 	if ( dStatus.MatchAdd ( "indexed_documents" ) )
@@ -13909,7 +13836,7 @@ static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex,
 		dStatus.Add ().SetSprintf ( INT64_FMT, tStatus.m_iMappedResidentHits );
 	if ( dStatus.MatchAdd ( "killed_documents" ) )
 		dStatus.Add ().SetSprintf ( INT64_FMT, tStatus.m_iDead );
-	dStatus.MatchAddFn( "killed_rate", [&tStatus, pIndex] {
+	dStatus.MatchTupletFn ( "killed_rate", [&tStatus, pIndex] {
 		auto iDocs = pIndex->GetStats ().m_iTotalDocuments;
 		StringBuilder_c sPercent;
 		if ( iDocs )
@@ -13937,6 +13864,19 @@ static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex,
 	}
 }
 
+const char * szIndexType ( IndexType_e eType )
+{
+	switch ( eType )
+	{
+	case IndexType_e::PLAIN: return "disk";
+	case IndexType_e::TEMPLATE: return "template";
+	case IndexType_e::RT: return "rt";
+	case IndexType_e::PERCOLATE: return "percolate";
+	case IndexType_e::DISTR: return "distributed";
+	default: return "unknown";
+	}
+}
+
 static void AddPlainIndexStatus ( RowBuffer_i & tOut, const ServedDesc_t * pLocked, const ServedStats_c * pStats,
 		bool bModeFederated, const CSphString & sName, const CSphString & sPattern )
 {
@@ -13951,26 +13891,10 @@ static void AddPlainIndexStatus ( RowBuffer_i & tOut, const ServedDesc_t * pLock
 	}
 
 	VectorLike dStatus ( sPattern );
-
-	if ( dStatus.MatchAdd ( "index_type" ) )
-	{
-		switch ( pLocked->m_eType )
-		{
-		case IndexType_e::PLAIN: dStatus.Add ( "disk" ); break;
-		case IndexType_e::RT: dStatus.Add ( "rt" ); break;
-		case IndexType_e::PERCOLATE: dStatus.Add ( "percolate" ); break;
-		case IndexType_e::TEMPLATE: dStatus.Add ( "template" ); break;
-		case IndexType_e::DISTR: dStatus.Add ( "distributed" ); break;
-		default:
-			break;
-		}
-	}
-
+	dStatus.MatchTuplet ( "index_type", szIndexType ( pLocked->m_eType ) );
 	AddDiskIndexStatus ( dStatus, pIndex, ServedDesc_t::IsMutable ( pLocked ) );
 	AddIndexQueryStats ( dStatus, pStats );
-	tOut.HeadTuplet ( "Variable_name", "Value" );
-	AddMatchedColumns ( dStatus, tOut );
-	tOut.Eof();
+	tOut.DataTable ( dStatus );
 }
 
 
@@ -13987,12 +13911,9 @@ static void AddDistibutedIndexStatus ( RowBuffer_i & tOut, DistributedIndex_t * 
 	}
 
 	VectorLike dStatus ( sPattern );
-	if ( dStatus.MatchAdd ( "index_type" ) )
-		dStatus.Add ( "distributed" );
+	dStatus.MatchTuplet( "index_type", "distributed" );
 	AddIndexQueryStats ( dStatus, pIndex );
-	tOut.HeadTuplet ( "Variable_name", "Value" );
-	AddMatchedColumns ( dStatus, tOut );
-	tOut.Eof();
+	tOut.DataTable ( dStatus );
 }
 
 
@@ -14018,9 +13939,7 @@ void HandleMysqlShowIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, b
 		if ( iChunk>=0 ) {
 			VectorLike dStatus ( tStmt.m_sStringParam );
 			AddDiskIndexStatus ( dStatus, pIndex, false );
-			tOut.HeadTuplet ( "Variable_name", "Value" );
-			AddMatchedColumns ( dStatus, tOut );
-			tOut.Eof ();
+			tOut.DataTable ( dStatus );
 		} else
 			AddPlainIndexStatus ( tOut, pServed, (const ServedStats_c *) pServed, bFederatedUser, tStmt.m_sIndex, tStmt.m_sStringParam );
 		return;

@@ -190,7 +190,6 @@ struct CmpHitKeywords_fn
 RtSegment_t::RtSegment_t ( DWORD uDocs )
 	: m_tDeadRowMap ( uDocs )
 {
-	m_iTag = m_iSegments.Inc();
 }
 
 RtSegment_t::~RtSegment_t ()
@@ -245,7 +244,6 @@ int RtSegment_t::GetStride () const
 	return ( m_dRows.GetLength() / m_uRows );
 }
 
-CSphAtomic RtSegment_t::m_iSegments { 0 };
 
 
 const CSphRowitem * RtSegment_t::FindAliveRow ( DocID_t tDocid ) const
@@ -2558,8 +2556,6 @@ void RtIndex_c::MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, c
 
 RtSegment_t * RtIndex_c::MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, bool bHasMorphology ) const
 {
-	if ( pSeg1->m_iTag > pSeg2->m_iTag )
-		Swap ( pSeg1, pSeg2 );
 
 	auto * pSeg = new RtSegment_t(0);
 
@@ -4149,7 +4145,7 @@ bool RtIndex_c::SaveRamChunk ( const VecTraits_T<const RtSegmentRefPtf_t> &dSegm
 	if ( !wrChunk.OpenFile ( sNewChunk, m_sLastError ) )
 		return false;
 
-	wrChunk.PutDword ( RtSegment_t::m_iSegments );
+	wrChunk.PutDword ( 0 );
 	wrChunk.PutDword ( dSegments.GetLength() );
 
 	// no locks here, because it's only intended to be called from dtor
@@ -4157,7 +4153,7 @@ bool RtIndex_c::SaveRamChunk ( const VecTraits_T<const RtSegmentRefPtf_t> &dSegm
 	{
 		wrChunk.PutDword ( pSeg->m_uRows );
 		wrChunk.PutDword ( pSeg->m_tAliveRows );
-		wrChunk.PutDword ( pSeg->m_iTag );
+		wrChunk.PutDword ( 0 );
 		SaveVector ( wrChunk, pSeg->m_dWords );
 		if ( m_bKeywordDict )
 			SaveVector ( wrChunk, pSeg->m_dKeywordCheckpoints );
@@ -4226,7 +4222,7 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 	int64_t iSaneTightVecSize = Min ( iFileSize, int ( INT_MAX / 1.2f ) );
 
 	bool bHasMorphology = ( m_pDict && m_pDict->HasMorphology() ); // fresh and old-format index still has no dictionary at this point
-	int iSegmentSeq = rdChunk.GetDword();
+	rdChunk.GetDword ();
 
 	int iSegmentCount = rdChunk.GetDword();
 	if ( !CheckVectorLength ( iSegmentCount, iSaneVecSize, "ram-chunks", m_sLastError ) )
@@ -4243,7 +4239,7 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 		pSeg->m_uRows = uRows;
 		pSeg->m_tAliveRows = rdChunk.GetDword();
 
-		pSeg->m_iTag = rdChunk.GetDword ();
+		rdChunk.GetDword ();
 		if ( !LoadVector ( rdChunk, pSeg->m_dWords, iSaneTightVecSize, "ram-words", m_sLastError ) )
 			return false;
 
@@ -4309,7 +4305,6 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 		m_dFieldLensRam[i] = rdChunk.GetOffset();
 
 	// all done
-	RtSegment_t::m_iSegments = iSegmentSeq;
 	if ( rdChunk.GetErrorFlag() )
 		return false;
 

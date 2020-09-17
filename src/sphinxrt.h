@@ -180,8 +180,6 @@ struct RtWordCheckpoint_t
 struct RtSegment_t final : IndexSegment_c, ISphRefcountedMT
 {
 public:
-	static CSphAtomic	m_iSegments;		///< age tag sequence generator
-	int					m_iTag;            ///< segment age tag
 
 	CSphTightVector<BYTE>			m_dWords;
 	CSphVector<RtWordCheckpoint_t>	m_dWordCheckpoints;

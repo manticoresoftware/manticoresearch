@@ -20,6 +20,7 @@
 #include "sphinxjson.h"
 #include "docstore.h"
 #include "coroutine.h"
+#include "task_info.h"
 #include <time.h>
 #include <math.h>
 
@@ -59,6 +60,17 @@ UservarIntSet_c Uservars ( const CSphString & sUservar )
 	return refUservars () ( sUservar );
 }
 
+inline Str_t CurrentUser()
+{
+	if ( myinfo::IsVIP() )
+		return { "VIP", 3 };
+	return { "Usual", 5 };
+}
+
+inline int ConnID ()
+{
+	return myinfo::ConnID ();
+}
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -3440,7 +3452,7 @@ static FuncDesc_t g_dFuncs[] =
 	{ "utc_time",		0,	FUNC_UTC_TIME,		SPH_ATTR_STRINGPTR },
 	{ "utc_timestamp",	0,	FUNC_UTC_TIMESTAMP,	SPH_ATTR_STRINGPTR },
 	{ "timediff",		2,	FUNC_TIMEDIFF,		SPH_ATTR_STRINGPTR },
-	{ "current_user",	0,	FUNC_CURRENT_USER,	SPH_ATTR_INTEGER },
+	{ "current_user",	0,	FUNC_CURRENT_USER,	SPH_ATTR_STRINGPTR },
 	{ "connection_id",	0,	FUNC_CONNECTION_ID,	SPH_ATTR_INTEGER },
 	{ "all",			-1,	FUNC_ALL,			SPH_ATTR_INTEGER },
 	{ "any",			-1,	FUNC_ANY,			SPH_ATTR_INTEGER },
@@ -4403,14 +4415,6 @@ void ExprParser_t::CanonizePass ( int iNode )
 
 		pRoot->m_iRight = pRoot->m_iLeft;
 		pRoot->m_iLeft = iConst;
-	}
-
-	// MySQL Workbench fixup
-	if ( pRoot->m_iToken==TOK_FUNC && ( pRoot->m_iFunc==FUNC_CURRENT_USER || pRoot->m_iFunc==FUNC_CONNECTION_ID ) )
-	{
-		pRoot->m_iToken = TOK_CONST_INT;
-		pRoot->m_iConst = 0;
-		return;
 	}
 }
 
@@ -5940,6 +5944,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case FUNC_REMAP:
 		case FUNC_LAST_INSERT_ID:
 		case FUNC_QUERY:
+		case FUNC_CURRENT_USER:
+		case FUNC_CONNECTION_ID:
 			bSkipLeft = true;
 			bSkipRight = true;
 			break;
@@ -6074,7 +6080,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 
 				switch ( eFunc )
 				{
-					case FUNC_NOW:		return new Expr_Now_c(m_iConstNow); break;
+					case FUNC_NOW:		return new Expr_Now_c(m_iConstNow);
 
 					case FUNC_ABS:		return new Expr_Abs_c ( dArgs[0] );
 					case FUNC_CEIL:		return new Expr_Ceil_c ( dArgs[0] );
@@ -6181,10 +6187,10 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_LEAST:	return CreateAggregateNode ( tNode, SPH_AGGR_MIN, dArgs[0] );
 					case FUNC_GREATEST:	return CreateAggregateNode ( tNode, SPH_AGGR_MAX, dArgs[0] );
 
-					case FUNC_CURTIME:	return new Expr_Time_c ( false, false ); break;
-					case FUNC_UTC_TIME: return new Expr_Time_c ( true, false ); break;
-					case FUNC_UTC_TIMESTAMP: return new Expr_Time_c ( true, true ); break;
-					case FUNC_TIMEDIFF: return new Expr_TimeDiff_c ( dArgs[0], dArgs[1] ); break;
+					case FUNC_CURTIME:	return new Expr_Time_c ( false, false );
+					case FUNC_UTC_TIME: return new Expr_Time_c ( true, false );
+					case FUNC_UTC_TIMESTAMP: return new Expr_Time_c ( true, true );
+					case FUNC_TIMEDIFF: return new Expr_TimeDiff_c ( dArgs[0], dArgs[1] );
 
 					case FUNC_ALL:
 					case FUNC_ANY:
@@ -6194,20 +6200,23 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_MIN_TOP_WEIGHT:
 						m_eEvalStage = SPH_EVAL_PRESORT;
 						return new Expr_MinTopWeight_c();
-						break;
+
 					case FUNC_MIN_TOP_SORTVAL:
 						m_eEvalStage = SPH_EVAL_PRESORT;
 						return new Expr_MinTopSortval_c();
-						break;
+
 					case FUNC_REGEX:
 						return CreateRegexNode ( dArgs[0], dArgs[1] );
-						break;
 
 					case FUNC_SUBSTRING_INDEX:
 						return new Expr_SubstringIndex_c ( dArgs[0], dArgs[1], dArgs[2] );
-						break;
 
-					case FUNC_LAST_INSERT_ID: return new Expr_LastInsertID_c(); break;
+					case FUNC_LAST_INSERT_ID: return new Expr_LastInsertID_c();
+					case FUNC_CURRENT_USER: {
+						auto sUser = CurrentUser();
+						return new Expr_GetStrConst_c ( sUser.first, sUser.second, false );
+					}
+					case FUNC_CONNECTION_ID: return new Expr_GetIntConst_c ( ConnID() );
 
 					default: // just make gcc happy
 						break;

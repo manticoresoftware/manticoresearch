@@ -388,7 +388,7 @@ INSERT INTO name_table VALUES
 <!-- MySQL Workbench 6.0 and above -->
 <sphinxql>SHOW SESSION VARIABLES LIKE 'lower_case_table_names'</sphinxql>
 <sphinxql>SELECT current_user()</sphinxql>
-<sphinxql>SELECT connection_id()</sphinxql>
+<sphinxql>SELECT connection_id()-connection_id()</sphinxql>
 <sphinxql>SET CHARACTER SET utf8</sphinxql>
 <sphinxql>SET SQL_SAFE_UPDATES=1</sphinxql>
 <sphinxql>SHOW SESSION VARIABLES LIKE 'sql_mode'</sphinxql>

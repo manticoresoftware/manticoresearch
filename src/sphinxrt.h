@@ -207,7 +207,6 @@ public:
 	DWORD					GetMergeFactor() const;
 	int						GetStride() const;
 
-	const CSphRowitem *		FindRow ( DocID_t tDocid ) const;
 	const CSphRowitem *		FindAliveRow ( DocID_t tDocid ) const;
 	const CSphRowitem *		GetDocinfoByRowID ( RowID_t tRowID ) const;
 	RowID_t					GetRowidByDocid ( DocID_t tDocID ) const;
@@ -267,6 +266,7 @@ struct RtHitReader_t
 	RtHitReader_t () = default;
 	explicit RtHitReader_t ( const RtSegment_t * pSeg, const RtDoc_t * pDoc );
 	DWORD UnzipHit ();
+	ByteBlob_t GetHitsBlob() const;
 };
 
 struct RtHitReader2_t : public RtHitReader_t

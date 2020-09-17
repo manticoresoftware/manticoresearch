@@ -127,18 +127,26 @@ template < typename T >
 static inline const BYTE * UnzipT ( T * pValue, const BYTE * pIn )
 {
 	T uValue = 0;
-	BYTE bIn;
+	BYTE uIn;
 	int iOff = 0;
 
 	do
 	{
-		bIn = *pIn++;
-		uValue += ( T ( bIn & 0x7f ) ) << iOff;
+		uIn = *pIn++;
+		uValue += ( T ( uIn & 0x7FU ) ) << iOff;
 		iOff += 7;
-	} while ( bIn & 0x80 );
+	} while ( uIn & 0x80U );
 
 	*pValue = uValue;
 	return pIn;
+}
+
+// Variable Length Byte (VLB) skipping
+static inline void SkipZipped ( const BYTE *& pIn )
+{
+	while ( *pIn & 0x80U )
+		++pIn;
+	++pIn; // jump over last one
 }
 
 #define ZipDword ZipT<DWORD>
@@ -238,11 +246,6 @@ int RtSegment_t::GetStride () const
 }
 
 CSphAtomic RtSegment_t::m_iSegments { 0 };
-const CSphRowitem * RtSegment_t::FindRow ( DocID_t tDocID ) const
-{
-	RowID_t * pRowID = m_tDocIDtoRowID.Find(tDocID);
-	return pRowID ? GetDocinfoByRowID ( *pRowID ) : nullptr;
-}
 
 
 const CSphRowitem * RtSegment_t::FindAliveRow ( DocID_t tDocid ) const
@@ -588,8 +591,16 @@ DWORD RtHitReader_t::UnzipHit ()
 	DWORD uValue;
 	m_pCur = UnzipDword ( &uValue, m_pCur );
 	m_uLast += uValue;
-	m_iLeft--;
+	--m_iLeft;
 	return m_uLast;
+}
+
+ByteBlob_t RtHitReader_t::GetHitsBlob () const
+{
+	const BYTE * pEnd = m_pCur;
+	for ( auto i = 0U; i<m_iLeft; ++i )
+		SkipZipped (pEnd);
+	return { m_pCur, pEnd-m_pCur };
 }
 
 void RtHitReader2_t::Seek ( SphOffset_t uOff, int iHits )
@@ -1235,7 +1246,7 @@ private:
 	void						MergeAttributes ( RtRowIterator_c & tIt, RtSegment_t * pDestSeg, const RtSegment_t * pSrcSeg, int nBlobs, CSphVector<RowID_t> & dRowMap, RowID_t & tNextRowID ) const;
 	void						MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2, const CSphVector<RowID_t> & dRowMap1, const CSphVector<RowID_t> & dRowMap2 ) const;
 	RtSegment_t *				MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, bool bHasMorphology ) const;
-	void						CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWriter_t & tOutDoc, RtDocReader_t & tInDoc, RtWord_t & tWord, const CSphVector<RowID_t> & tRowMap ) const;
+	static void					CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWriter_t & tOutDoc, RtDocReader_t & tInDoc, RtWord_t & tWord, const CSphVector<RowID_t> & tRowMap );
 
 	bool						LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath, DWORD & uVersion, bool & bRebuildInfixes );
 	bool						PreallocDiskChunks ( FilenameBuilder_i * pFilenameBuilder );
@@ -2271,7 +2282,8 @@ ReplicationCommand_t * RtAccum_t::AddCommand ( ReplicationCommand_e eCmd, const 
 	return pCmd;
 }
 
-void RtIndex_c::CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWriter_t & tOutDoc, RtDocReader_t & tInDoc, RtWord_t & tWord, const CSphVector<RowID_t> & dRowMap ) const
+void RtIndex_c::CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWriter_t & tOutDoc, RtDocReader_t & tInDoc,
+		RtWord_t & tWord, const CSphVector<RowID_t> & dRowMap )
 {
 	// copy docs
 	while (true)
@@ -2292,14 +2304,16 @@ void RtIndex_c::CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWr
 
 		if ( pDoc->m_uHits!=1 )
 		{
-			RtHitWriter_t tOutHit ( &tDst );
 			RtHitReader_t tInHit ( &tSrc, pDoc );
 
-			tDoc.m_uHit = tOutHit.ZipHitPtr();
+			tDoc.m_uHit = tDst.m_dHits.GetLength ();
+			tDst.m_dHits.Append ( tInHit.GetHitsBlob () );
 
-			// OPTIMIZE? decode+memcpy?
-			for ( DWORD uValue=tInHit.UnzipHit(); uValue; uValue=tInHit.UnzipHit() )
-				tOutHit.ZipHit ( uValue );
+			// this is reference of what append (hitsblob) above does.
+//			RtHitWriter_t tOutHit ( &tDst );
+//			tDoc.m_uHit = tOutHit.ZipHitPtr();
+//			for ( DWORD uValue=tInHit.UnzipHit(); uValue; uValue=tInHit.UnzipHit() )
+//				tOutHit.ZipHit ( uValue );
 		}
 
 		// copy doc
@@ -2445,7 +2459,8 @@ void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, bool bKeywor
 }
 
 
-void RtIndex_c::MergeAttributes ( RtRowIterator_c & tIt, RtSegment_t * pDestSeg, const RtSegment_t * pSrcSeg, int nBlobs, CSphVector<RowID_t> & dRowMap, RowID_t & tNextRowID ) const
+void RtIndex_c::MergeAttributes ( RtRowIterator_c & tIt, RtSegment_t * pDestSeg, const RtSegment_t * pSrcSeg, int nBlobs,
+		CSphVector<RowID_t> & dRowMap, RowID_t & tNextRowID ) const
 {
 	const CSphRowitem * pRow;
 	while ( !!(pRow=tIt.GetNextAliveRow()) )
@@ -2489,7 +2504,8 @@ int RtIndex_c::CompareWords ( const RtWord_t * pWord1, const RtWord_t * pWord2 )
 }
 
 
-void RtIndex_c::MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2, const CSphVector<RowID_t> & dRowMap1, const CSphVector<RowID_t> & dRowMap2 ) const
+void RtIndex_c::MergeKeywords ( RtSegment_t & tSeg, const RtSegment_t & tSeg1, const RtSegment_t & tSeg2,
+		const CSphVector<RowID_t> & dRowMap1, const CSphVector<RowID_t> & dRowMap2 ) const
 {
 	tSeg.m_dWords.Reserve ( Max ( tSeg1.m_dWords.GetLength(), tSeg2.m_dWords.GetLength() ) );
 	tSeg.m_dDocs.Reserve ( Max ( tSeg1.m_dDocs.GetLength(), tSeg2.m_dDocs.GetLength() ) );
@@ -2568,7 +2584,7 @@ RtSegment_t * RtIndex_c::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 	int nBlobAttrs = 0;
 	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
 		if ( sphIsBlobAttr ( m_tSchema.GetAttr(i).m_eAttrType ) )
-			nBlobAttrs++;
+			++nBlobAttrs;
 
 	RowID_t tNextRowID = 0;
 
@@ -2617,15 +2633,6 @@ RtSegment_t * RtIndex_c::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 
 	return pSeg;
 }
-
-
-struct CmpSegments_fn
-{
-	inline bool IsLess ( const RtSegment_t * a, const RtSegment_t * b ) const
-	{
-			return a->GetMergeFactor() > b->GetMergeFactor();
-	}
-};
 
 
 bool RtIndex_c::Commit ( int * pDeleted, RtAccum_t * pAccExt )
@@ -2730,6 +2737,7 @@ static void RemoveEmptySegments ( CSphVector<RtSegmentRefPtf_t> & dSegments )
 	}
 }
 
+// returns bool meaning 'can't merge, need to flush ramchunk'.
 bool RtIndex_c::MergeSegments ( CSphVector<RtSegmentRefPtf_t> & dSegments, bool bForceDump, int64_t iMemLimit, bool bHasNewSegment )
 {
 	// enforce RAM usage limit
@@ -2758,7 +2766,8 @@ bool RtIndex_c::MergeSegments ( CSphVector<RtSegmentRefPtf_t> & dSegments, bool 
 	{
 		// segments sort order: large first, smallest last
 		// merge last smallest segments
-		dSegments.Sort ( CmpSegments_fn() );
+		dSegments.Sort ( Lesser (
+				[] ( RtSegment_t * a, RtSegment_t * b ) { return a->GetMergeFactor ()>b->GetMergeFactor (); } ) );
 
 		// unconditionally merge if there's too much segments now
 		// conditionally merge if smallest segment has grown too large
@@ -2772,14 +2781,9 @@ bool RtIndex_c::MergeSegments ( CSphVector<RtSegmentRefPtf_t> & dSegments, bool 
 			break;
 
 		// check whether we have enough RAM
-#define LOC_ESTIMATE1(_seg,_vec) \
-	(int)( ( (int64_t)_seg->_vec.GetLength() ) * _seg->m_tAliveRows / _seg->m_uRows )
-
-#define LOC_ESTIMATE0(_vec) \
-	( LOC_ESTIMATE1 ( dSegments[iLen-1], _vec ) + LOC_ESTIMATE1 ( dSegments[iLen-2], _vec ) )
-
-#define LOC_ESTIMATE( _vec ) \
-    ( dSegments[iLen-1]->_vec.Relimit( 0, LOC_ESTIMATE0 ( _vec ) ) )
+#define LOC_ESTIMATE1(_seg,_vec) (int64_t)( ( (int64_t)(_seg)->_vec.GetLength() ) * (_seg)->m_tAliveRows / (_seg)->m_uRows )
+#define LOC_ESTIMATE0(_vec) ( LOC_ESTIMATE1 ( dSegments[iLen-1], _vec ) + LOC_ESTIMATE1 ( dSegments[iLen-2], _vec ) )
+#define LOC_ESTIMATE(_vec) ( dSegments[iLen-1]->_vec.Relimit( 0, LOC_ESTIMATE0 ( _vec ) ) )
 
 		using namespace sph;
 		int64_t iWordsRelimit =	LOC_ESTIMATE ( m_dWords );
@@ -4913,7 +4917,8 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 
 		DWORD uCalcAliveRows = tSegment.m_tDeadRowMap.GetNumAlive();
 		if ( tSegment.m_tAliveRows!=uCalcAliveRows )
-			tReporter.Fail ( "alive row count mismatch (segment=%d, expected=%u, current=%u)", iSegment, uCalcAliveRows, tSegment.m_tAliveRows.GetValue() );
+			tReporter.Fail ( "alive row count mismatch (segment=%d, expected=%u, current=%u)", iSegment, uCalcAliveRows,
+					tSegment.m_tAliveRows.GetValue() );
 	}
 
 	int iFailsPlain = 0;

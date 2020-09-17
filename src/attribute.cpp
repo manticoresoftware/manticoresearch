@@ -651,9 +651,7 @@ int64_t sphCopyBlobRow ( CSphTightVector<BYTE> & dDstPool, const CSphTightVector
 
 	int iBlobLen = sphGetBlobTotalLen ( pSrcBlob, nBlobs );
 	int64_t iNewOffset = dDstPool.GetLength();
-	dDstPool.Resize ( iNewOffset+iBlobLen );
-	BYTE * pDstBlob = dDstPool.Begin()+iNewOffset;
-	memcpy ( pDstBlob, pSrcBlob, iBlobLen );
+	dDstPool.Append ( pSrcBlob, iBlobLen );
 
 	return iNewOffset;
 }

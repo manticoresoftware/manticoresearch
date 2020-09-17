@@ -8292,8 +8292,10 @@ void BuildStatus ( VectorLike & dStatus )
 
 	if ( dStatus.MatchAdd ( "dist_wall" ) )
 		FormatMsec ( dStatus.Add(), g_tStats.m_iDistWallTime.load ( std::memory_order_relaxed ) );
+
 	if ( dStatus.MatchAdd ( "dist_local" ) )
 		FormatMsec ( dStatus.Add(), g_tStats.m_iDistLocalTime.load ( std::memory_order_relaxed ) );
+
 	if ( dStatus.MatchAdd ( "dist_wait" ) )
 		FormatMsec ( dStatus.Add(), g_tStats.m_iDistWaitTime.load ( std::memory_order_relaxed ) );
 
@@ -8301,30 +8303,37 @@ void BuildStatus ( VectorLike & dStatus )
 	{
 		if ( dStatus.MatchAdd ( "query_reads" ) )
 			dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iDiskReads.load ( std::memory_order_relaxed ) );
+
 		if ( dStatus.MatchAdd ( "query_readkb" ) )
 			dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iDiskReadBytes.load ( std::memory_order_relaxed )/1024 );
+
 		if ( dStatus.MatchAdd ( "query_readtime" ) )
 			FormatMsec ( dStatus.Add(), g_tStats.m_iDiskReadTime.load ( std::memory_order_relaxed ) );
 	} else
 	{
 		if ( dStatus.MatchAdd ( "query_reads" ) )
 			dStatus.Add() = OFF;
+
 		if ( dStatus.MatchAdd ( "query_readkb" ) )
 			dStatus.Add() = OFF;
+
 		if ( dStatus.MatchAdd ( "query_readtime" ) )
 			dStatus.Add() = OFF;
 	}
 
-	if ( g_tStats.m_iPredictedTime.load ( std::memory_order_relaxed ) || g_tStats.m_iAgentPredictedTime.load ( std::memory_order_relaxed ) )
+	if ( g_tStats.m_iPredictedTime.load ( std::memory_order_relaxed )
+		|| g_tStats.m_iAgentPredictedTime.load ( std::memory_order_relaxed ) )
 	{
 		if ( dStatus.MatchAdd ( "predicted_time" ) )
 			dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iPredictedTime.load ( std::memory_order_relaxed ) );
+
 		if ( dStatus.MatchAdd ( "dist_predicted_time" ) )
 			dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iAgentPredictedTime.load ( std::memory_order_relaxed ) );
 	}
 
 	if ( dStatus.MatchAdd ( "avg_query_wall" ) )
 		FormatMsec ( dStatus.Add(), g_tStats.m_iQueryTime.load ( std::memory_order_relaxed ) / iQueriesDiv );
+
 	if ( dStatus.MatchAdd ( "avg_query_cpu" ) )
 	{
 		if ( g_bCpuStats )
@@ -8335,24 +8344,32 @@ void BuildStatus ( VectorLike & dStatus )
 
 	if ( dStatus.MatchAdd ( "avg_dist_wall" ) )
 		FormatMsec ( dStatus.Add(), g_tStats.m_iDistWallTime.load ( std::memory_order_relaxed ) / iDistQueriesDiv );
+
 	if ( dStatus.MatchAdd ( "avg_dist_local" ) )
 		FormatMsec ( dStatus.Add(), g_tStats.m_iDistLocalTime.load ( std::memory_order_relaxed ) / iDistQueriesDiv );
+
 	if ( dStatus.MatchAdd ( "avg_dist_wait" ) )
 		FormatMsec ( dStatus.Add(), g_tStats.m_iDistWaitTime.load ( std::memory_order_relaxed ) / iDistQueriesDiv );
+
 	if ( g_bIOStats )
 	{
 		if ( dStatus.MatchAdd ( "avg_query_reads" ) )
 			dStatus.Add().SetSprintf ( "%.1f", (float)( g_tStats.m_iDiskReads.load ( std::memory_order_relaxed )*10/iQueriesDiv )/10.0f );
+
 		if ( dStatus.MatchAdd ( "avg_query_readkb" ) )
 			dStatus.Add().SetSprintf ( "%.1f", (float)( g_tStats.m_iDiskReadBytes.load ( std::memory_order_relaxed )/iQueriesDiv )/1024.0f );
+
 		if ( dStatus.MatchAdd ( "avg_query_readtime" ) )
 			FormatMsec ( dStatus.Add(), g_tStats.m_iDiskReadTime.load ( std::memory_order_relaxed )/iQueriesDiv );
+
 	} else
 	{
 		if ( dStatus.MatchAdd ( "avg_query_reads" ) )
 			dStatus.Add() = OFF;
+
 		if ( dStatus.MatchAdd ( "avg_query_readkb" ) )
 			dStatus.Add() = OFF;
+
 		if ( dStatus.MatchAdd ( "avg_query_readtime" ) )
 			dStatus.Add() = OFF;
 	}
@@ -8360,15 +8377,19 @@ void BuildStatus ( VectorLike & dStatus )
 	const QcacheStatus_t & s = QcacheGetStatus();
 	if ( dStatus.MatchAdd ( "qcache_max_bytes" ) )
 		dStatus.Add().SetSprintf ( INT64_FMT, s.m_iMaxBytes );
+
 	if ( dStatus.MatchAdd ( "qcache_thresh_msec" ) )
 		dStatus.Add().SetSprintf ( "%d", s.m_iThreshMs );
+
 	if ( dStatus.MatchAdd ( "qcache_ttl_sec" ) )
 		dStatus.Add().SetSprintf ( "%d", s.m_iTtlS );
 
 	if ( dStatus.MatchAdd ( "qcache_cached_queries" ) )
 		dStatus.Add().SetSprintf ( "%d", s.m_iCachedQueries );
+
 	if ( dStatus.MatchAdd ( "qcache_used_bytes" ) )
 		dStatus.Add().SetSprintf ( INT64_FMT, s.m_iUsedBytes );
+
 	if ( dStatus.MatchAdd ( "qcache_hits" ) )
 		dStatus.Add().SetSprintf ( INT64_FMT, s.m_iHits );
 
@@ -11198,16 +11219,6 @@ void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 	tOut.Eof();
 }
 
-
-struct IndexNameLess_fn
-{
-	inline bool IsLess ( const CSphNamedInt & a, const CSphNamedInt & b ) const
-	{
-		return strcasecmp ( a.first.cstr(), b.first.cstr() )<0;
-	}
-};
-
-
 void HandleMysqlShowTables ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 {
 	// 0 local, 1 distributed, 2 rt, 3 template, 4 percolate, 5 unknown
@@ -11243,7 +11254,8 @@ void HandleMysqlShowTables ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 		// no need to check distr's it, iterating guarantees index existance.
 		dIndexes.Add ( CSphNamedInt ( it.GetName (), 1 ) );
 
-	dIndexes.Sort ( IndexNameLess_fn() );
+	dIndexes.Sort ( Lesser ([] ( const CSphNamedInt & a, const CSphNamedInt & b)
+			{ return strcasecmp ( a.first.cstr (), b.first.cstr () )<0; }));
 
 	// output the results
 	tOut.HeadTuplet ( "Index", "Type" );
@@ -13530,14 +13542,14 @@ void HandleMysqlSelectSysvar ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, cons
 		{ MYSQL_COL_LONG,	"@@session.auto_increment_increment",	[] {return "1";}},
 		{ MYSQL_COL_STRING,	"@@character_set_client", [] {return "utf8";}},
 		{ MYSQL_COL_STRING,	"@@character_set_connection", [] {return "utf8";}},
-		{ MYSQL_COL_LONG,	"@@max_allowed_packet", [] { StringBuilder_c s; s << g_iMaxPacketSize; return s; }},
+		{ MYSQL_COL_LONG,	"@@max_allowed_packet", [] { StringBuilder_c s; s << g_iMaxPacketSize; return CSphString(s); }},
 		{ MYSQL_COL_STRING,	"@@version_comment", [] { return szGIT_BRANCH_ID;}},
 		{ MYSQL_COL_LONG,	"@@lower_case_table_names", [] { return "1"; }},
 		{ MYSQL_COL_STRING,	"@@session.last_insert_id", [&tVars]
 			{
 				StringBuilder_c s ( "," );
 				tVars.m_dLastIds.Apply ( [&s] ( int64_t iID ) { s << iID; } );
-				return s;
+				return CSphString(s);
 			}},
 	};
 
@@ -13775,20 +13787,21 @@ static void AddQueryStats ( VectorLike & dStatus, const char * szPrefix, const Q
 	StringBuilder_c sName;
 	for ( int i = 0; i < INTERVAL_TOTAL; ++i )
 	{
-		sBuf.Clear();
-		{
-			ScopedComma_c VARIABLE_IS_NOT_USED tRootBlock( sBuf, ", ", R"({"queries":)", "}" );
-			sBuf << tStats.m_dStats[i].m_uTotalQueries;
-			for ( int j = 0; j < TYPE_TOTAL; ++j )
-				FormatFn ( sBuf, tStats.m_dStats[i].m_uTotalQueries,
-						tStats.m_dStats[i].m_dData[j], dStatTypeNames[j] );
-		}
-
-		sName.Clear();
+		sName.Clear ();
 		sName << szPrefix << "_" << dStatIntervalNames[i];
 
-		if ( dStatus.MatchAdd ( sName.cstr() ) )
+		if ( dStatus.MatchAdd ( sName.cstr () ) )
+		{
+			sBuf.Clear();
+			{
+				ScopedComma_c VARIABLE_IS_NOT_USED tRootBlock( sBuf, ", ", R"({"queries":)", "}" );
+				sBuf << tStats.m_dStats[i].m_uTotalQueries;
+				for ( int j = 0; j < TYPE_TOTAL; ++j )
+					FormatFn ( sBuf, tStats.m_dStats[i].m_uTotalQueries,
+							tStats.m_dStats[i].m_dData[j], dStatTypeNames[j] );
+			}
 			dStatus.Add ( sBuf.cstr() );
+		}
 	}
 }
 
@@ -13857,6 +13870,7 @@ static void AddFederatedIndexStatus ( const CSphSourceStats & tStats, const CSph
 	tOut.PutString ( "" );				// Comment
 
 	tOut.Commit();
+	tOut.Eof ();
 }
 
 static void AddMatchedColumns ( const VectorLike & dStatus, RowBuffer_i & tOut )
@@ -13915,7 +13929,7 @@ static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex,
 		else
 			sPercent << "100%";
 		return CSphString ( sPercent.cstr () );
-	});
+	} );
 	if ( bMutable )
 	{
 		if ( dStatus.MatchAdd ( "ram_chunk" ) )
@@ -13935,43 +13949,39 @@ static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex,
 	}
 }
 
-static void AddPlainIndexStatus ( RowBuffer_i & tOut, const ServedDesc_t * pLocked, const ServedStats_c * pStats, bool bModeFederated, const CSphString & sName, const CSphString & sPattern )
-
+static void AddPlainIndexStatus ( RowBuffer_i & tOut, const ServedDesc_t * pLocked, const ServedStats_c * pStats,
+		bool bModeFederated, const CSphString & sName, const CSphString & sPattern )
 {
 	assert ( pLocked );
 	CSphIndex * pIndex = pLocked->m_pIndex;
 	assert ( pIndex );
 
-	if ( !bModeFederated )
+	if ( bModeFederated )
 	{
-		VectorLike dStatus ( sPattern );
-
-		if ( dStatus.MatchAdd ( "index_type" ) )
-		{
-			switch ( pLocked->m_eType )
-			{
-			case IndexType_e::PLAIN: dStatus.Add ( "disk" ); break;
-			case IndexType_e::RT: dStatus.Add ( "rt" ); break;
-			case IndexType_e::PERCOLATE: dStatus.Add ( "percolate" ); break;
-			case IndexType_e::TEMPLATE: dStatus.Add ( "template" ); break;
-			case IndexType_e::DISTR: dStatus.Add ( "distributed" ); break;
-			default:
-				break;
-			}
-		}
-
-		AddDiskIndexStatus ( dStatus, pIndex, ServedDesc_t::IsMutable ( pLocked ) );
-		AddIndexQueryStats ( dStatus, pStats );
-
-		tOut.HeadTuplet ( "Variable_name", "Value" );
-		AddMatchedColumns ( dStatus, tOut );
-
-	} else
-	{
-		const CSphSourceStats & tStats = pIndex->GetStats();
-		AddFederatedIndexStatus ( tStats, sName, tOut );
+		AddFederatedIndexStatus ( pIndex->GetStats (), sName, tOut );
+		return;
 	}
 
+	VectorLike dStatus ( sPattern );
+
+	if ( dStatus.MatchAdd ( "index_type" ) )
+	{
+		switch ( pLocked->m_eType )
+		{
+		case IndexType_e::PLAIN: dStatus.Add ( "disk" ); break;
+		case IndexType_e::RT: dStatus.Add ( "rt" ); break;
+		case IndexType_e::PERCOLATE: dStatus.Add ( "percolate" ); break;
+		case IndexType_e::TEMPLATE: dStatus.Add ( "template" ); break;
+		case IndexType_e::DISTR: dStatus.Add ( "distributed" ); break;
+		default:
+			break;
+		}
+	}
+
+	AddDiskIndexStatus ( dStatus, pIndex, ServedDesc_t::IsMutable ( pLocked ) );
+	AddIndexQueryStats ( dStatus, pStats );
+	tOut.HeadTuplet ( "Variable_name", "Value" );
+	AddMatchedColumns ( dStatus, tOut );
 	tOut.Eof();
 }
 
@@ -13980,24 +13990,20 @@ static void AddDistibutedIndexStatus ( RowBuffer_i & tOut, DistributedIndex_t * 
 {
 	assert ( pIndex );
 
-	if ( !bFederatedUser )
-	{
-		VectorLike dStatus ( sPattern );
-
-		if ( dStatus.MatchAdd ( "index_type" ) )
-			dStatus.Add ( "distributed" );
-
-		AddIndexQueryStats ( dStatus, pIndex );
-
-		tOut.HeadTuplet ( "Variable_name", "Value" );
-		AddMatchedColumns ( dStatus, tOut );
-	} else
+	if ( bFederatedUser )
 	{
 		CSphSourceStats tStats;
 		tStats.m_iTotalDocuments = 1000; // TODO: check is it worth to query that number from agents
 		AddFederatedIndexStatus ( tStats, sName, tOut );
+		return;
 	}
 
+	VectorLike dStatus ( sPattern );
+	if ( dStatus.MatchAdd ( "index_type" ) )
+		dStatus.Add ( "distributed" );
+	AddIndexQueryStats ( dStatus, pIndex );
+	tOut.HeadTuplet ( "Variable_name", "Value" );
+	AddMatchedColumns ( dStatus, tOut );
 	tOut.Eof();
 }
 
@@ -14065,7 +14071,6 @@ void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt 
 	DumpSettings ( tBuf, *pIndex, pFilenameBuilder.Ptr() );
 
 	tOut.DataTuplet ( "settings", tBuf.cstr() );
-
 	tOut.Eof();
 }
 

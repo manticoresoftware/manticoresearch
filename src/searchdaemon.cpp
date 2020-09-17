@@ -60,7 +60,7 @@ CheckLike::CheckLike( const char* sPattern )
 	// remap from SQL LIKE syntax to Sphinx wildcards syntax
 	// '_' maps to '?', match any single char
 	// '%' maps to '*', match zero or mor chars
-	for ( const char* s = sPattern; *s; s++ )
+	for ( const char* s = sPattern; *s; ++s )
 	{
 		switch ( *s )
 		{

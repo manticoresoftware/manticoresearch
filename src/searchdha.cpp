@@ -710,10 +710,9 @@ const AgentDesc_t &MultiAgentDesc_c::StDiscardDead ()
 	ChooseWeightedRandAgent ( &iBestAgent, dCandidates );
 	if ( g_eLogLevel>=SPH_LOG_VERBOSE_DEBUG )
 	{
-		float fAge = 0.0;
 		const HostDashboard_t & dDash = *m_pData[iBestAgent].m_pDash;
 		CSphScopedRLock tRguard ( dDash.m_dMetricsLock );
-		fAge = ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
+		auto fAge = float ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
 		sphLogDebugv ("client=%s, HA selected %d node by weighted random, with best EaR ("
 						  INT64_FMT "), last answered in %.3f milliseconds, among %d candidates"
 					  , m_pData[iBestAgent].GetMyUrl ().cstr(), iBestAgent, iErrARow, fAge, dCandidates.GetLength()+1 );
@@ -840,10 +839,9 @@ const AgentDesc_t &MultiAgentDesc_c::StLowErrors ()
 	ChooseWeightedRandAgent ( &iBestAgent, dCandidates );
 	if ( g_eLogLevel>=SPH_LOG_VERBOSE_DEBUG )
 	{
-		float fAge = 0.0f;
 		const HostDashboard_t & dDash = *m_pData[iBestAgent].m_pDash;
 		CSphScopedRLock tRguard ( dDash.m_dMetricsLock );
-		fAge = ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
+		auto fAge = float ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
 		sphLogDebugv (
 			"client=%s, HA selected %d node by weighted random, "
 				"with best error rating (%.2f), answered %f seconds ago"

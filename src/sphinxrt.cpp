@@ -1094,7 +1094,7 @@ public:
 	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) 			final  EXCLUDES (m_tReading );
 	bool				Truncate ( CSphString & sError ) final;
 	void				Optimize ( int iFrom, int iTo ) final;
-	void				CommonMerge ( Selector_t fnSelector );
+	void				CommonMerge ( Selector_t&& fnSelector );
 	CSphIndex *			GetDiskChunk ( int iChunk ) final { return m_dDiskChunks.GetLength()>iChunk ? m_dDiskChunks[iChunk] : nullptr; }
 	ISphTokenizer *		CloneIndexingTokenizer() const final { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 
@@ -2297,7 +2297,7 @@ void RtIndex_c::CopyWord ( RtSegment_t & tDst, const RtSegment_t & tSrc, RtDocWr
 		RtDoc_t tDoc = *pDoc;
 		tDoc.m_tRowID = tNewRowID;
 
-		tWord.m_uDocs++;
+		++tWord.m_uDocs;
 		tWord.m_uHits += pDoc->m_uHits;
 
 		if ( pDoc->m_uHits!=1 )
@@ -7496,7 +7496,7 @@ static int GetNextSmallestChunk ( const CSphVector<CSphIndex*> & dDiskChunks, in
 	return iRes;
 }
 
-void RtIndex_c::CommonMerge( Selector_t fnSelector )
+void RtIndex_c::CommonMerge( Selector_t&& fnSelector )
 {
 	int64_t tmStart = sphMicroTimer();
 	sphLogDebug( "rt optimize: index %s: optimization started",  m_sIndexName.cstr() );
@@ -7508,7 +7508,6 @@ void RtIndex_c::CommonMerge( Selector_t fnSelector )
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
 
 	int iChunks = 0;
-	CSphSchema tSchema = m_tSchema;
 	CSphString sError;
 
 	int iA = -1;
@@ -7620,7 +7619,7 @@ void RtIndex_c::CommonMerge( Selector_t fnSelector )
 		SaveMeta ( m_iTID, dChunkNames );
 		Verify ( m_tWriting.Unlock() );
 
-		iChunks++;
+		++iChunks;
 
 		if ( m_bOptimizeStop || sphInterrupted () )
 		{
@@ -9699,7 +9698,7 @@ void sphRTInit ( const CSphConfigSection & hSearchd, bool bTestMode, const CSphC
 	g_pRtBinlog->CheckPath ( hSearchd, bTestMode );
 
 	if ( pCommon )
-		g_bProgressiveMerge = ( pCommon->GetInt ( "progressive_merge", 1 )!=0 );
+		g_bProgressiveMerge = pCommon->GetBool ( "progressive_merge", true );
 }
 
 void sphRTConfigure ( const CSphConfigSection & hSearchd, bool bTestMode )

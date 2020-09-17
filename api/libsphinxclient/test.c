@@ -50,9 +50,14 @@ void net_init ()
 #endif
 }
 
+void print_name (const char* szname )
+{
+	printf ( "\n***************************\n* %s\n***************************\n", szname );
+}
 
 void test_query ( sphinx_client * client, const char * query, const char * index )
 {
+	print_name ( __FUNCTION__);
 	sphinx_result * res;
 	int i, j, k, mva_len;
 	unsigned int * mva;
@@ -123,6 +128,7 @@ void test_query ( sphinx_client * client, const char * query, const char * index
 
 void test_excerpt ( sphinx_client * client )
 {
+	print_name ( __FUNCTION__ );
 	const char * docs[] =
 	{
 		"this is my test text to be highlighted, and for the sake of the testing we need to pump its length somewhat",
@@ -158,6 +164,7 @@ void test_excerpt ( sphinx_client * client )
 
 void test_excerpt_spz ( sphinx_client * client )
 {
+	print_name ( __FUNCTION__ );
 	const char * docs[] =
 	{
 		"<efx_unidentified_table>"
@@ -209,6 +216,7 @@ void test_excerpt_spz ( sphinx_client * client )
 
 void test_persist_work ( sphinx_client * client )
 {
+	print_name ( __FUNCTION__ );
 	char * docs[] = { NULL };
 	const char words[] = "that is";
 	const char * index = "test1";
@@ -277,6 +285,7 @@ void test_persist_work ( sphinx_client * client )
 
 void test_update ( sphinx_client * client, sphinx_uint64_t id )
 {
+	print_name ( __FUNCTION__ );
 	const char * attr = "group_id";
 	const sphinx_int64_t val = 123;
 	int res;
@@ -293,6 +302,7 @@ void test_update ( sphinx_client * client, sphinx_uint64_t id )
 
 void test_update_mva ( sphinx_client * client )
 {
+	print_name ( __FUNCTION__ );
 	const char * attr = "tag";
 	const sphinx_uint64_t id = 3;
 	const unsigned int vals[] = { 7, 77, 177 };
@@ -311,6 +321,7 @@ void test_update_mva ( sphinx_client * client )
 
 void test_keywords ( sphinx_client * client )
 {
+	print_name ( __FUNCTION__ );
 	int i, nwords;
 	sphinx_keyword_info * words;
 
@@ -335,6 +346,7 @@ void test_keywords ( sphinx_client * client )
 
 void test_status ( sphinx_client * client )
 {
+	print_name ( __FUNCTION__ );
 	int num_rows, num_cols, i, j, k;
 	char ** status;
 
@@ -360,7 +372,8 @@ void test_status ( sphinx_client * client )
 		&& strstr( status[k], "mysql_version" )==NULL
 		&& strstr ( status[k], "workers_total" )==NULL
 		&& strstr ( status[k], "workers_active" )==NULL
-		&& strstr ( status[k], "connect_count")==NULL ) )
+		&& strstr ( status[k], "agent_tfo")==NULL
+		&& strstr ( status[k], "connect_count" )==NULL ))
 		{
 			for ( j=0; j<num_cols; j++, k++ )
 				printf ( ( j==0 ) ? "%s:" : " %s", status[k] );
@@ -375,6 +388,7 @@ void test_status ( sphinx_client * client )
 
 void test_group_by ( sphinx_client * client, const char * attr )
 {
+	print_name ( __FUNCTION__ );
 	sphinx_set_groupby ( client, attr, SPH_GROUPBY_ATTR, "@group asc" );
 	test_query ( client, "is", "test1" );
 
@@ -383,6 +397,7 @@ void test_group_by ( sphinx_client * client, const char * attr )
 
 void test_filter ( sphinx_client * client )
 {
+	print_name ( __FUNCTION__ );
 	const char * attr_group = "group_id";
 	const char * attr_mva = "tag";
 	sphinx_int64_t filter_group = { 1 };

@@ -1394,6 +1394,11 @@ public:
 		PutString ( sMsg.cstr() );
 	}
 
+	void PutString ( const StringBuilder_c & sMsg )
+	{
+		PutString ( sMsg.cstr (), sMsg.GetLength() );
+	}
+
 	void PutTimeAsString ( int64_t tmVal )
 	{
 		if ( tmVal==-1 )

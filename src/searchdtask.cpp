@@ -196,11 +196,11 @@ struct TaskFlavour_t
 
 struct TaskProperties_t
 {
-	CSphAtomic m_iCurrentRunners; // current number of jobs for this task.
-	CSphAtomicL m_iTotalSpent;
-	CSphAtomicL m_iTotalRun;
-	CSphAtomicL m_iTotalDropped;
-	CSphAtomicL m_iLastFinished;
+	std::atomic<int>	m_iCurrentRunners {0}; // current number of jobs for this task.
+	std::atomic<int64_t> m_iTotalSpent {0};
+	std::atomic<int64_t> m_iTotalRun {0};
+	std::atomic<int64_t> m_iTotalDropped {0};
+	std::atomic<int64_t> m_iLastFinished {0};
 	CSphMutex m_dQueueLock;
 	List_t m_dQueue GUARDED_BY ( m_dQueueLock ); // queue of jobs of my type
 };
@@ -216,7 +216,7 @@ CSphFixedVector<TaskFlavour_t> g_Tasks { NUM_TASKS };
 CSphFixedVector<TaskProperties_t> g_TaskProps { NUM_TASKS };
 #endif
 
-static CSphAtomic g_iTasks;
+static std::atomic<int> g_iTasks {0};
 
 // task of determined flavour with stored payload
 class Task_t: public ISphRefcountedMT
@@ -229,7 +229,7 @@ public:
 		: m_ID ( iTask )
 		, m_pPayload ( pPayload )
 	{
-		assert ( iTask<=g_iTasks && iTask>=0 );
+		assert ( iTask<=g_iTasks.load(std::memory_order_relaxed) && iTask>=0 );
 		DebugT ( "Task_t(id=%d - %s) ctr", iTask, g_Tasks[iTask].m_sName.cstr ());
 	}
 
@@ -241,15 +241,15 @@ public:
 	{
 		Threads::JobTimer_t dTrack;
 		DebugT ( "Task_t %s Action (%p)", GetName (), m_pPayload );
-		++Prop ().m_iCurrentRunners;
+		Prop ().m_iCurrentRunners.fetch_add ( 1, std::memory_order_release );
 		auto itmStart = sphMicroTimer ();
 		Threads::CallCoroutine ( [this] { Descr ().m_fnWorker ( m_pPayload ); } );
 		m_pPayload = nullptr;
 		auto itmEnd = sphMicroTimer ();
-		Prop ().m_iLastFinished = itmEnd;
-		Prop ().m_iTotalSpent += ( itmEnd - itmStart );
-		++Prop ().m_iTotalRun;
-		--Prop ().m_iCurrentRunners;
+		Prop ().m_iLastFinished.store ( itmEnd, std::memory_order_relaxed );
+		Prop ().m_iTotalSpent.fetch_add ( itmEnd - itmStart, std::memory_order_relaxed );
+		Prop ().m_iTotalRun.fetch_add (1, std::memory_order_relaxed);
+		Prop ().m_iCurrentRunners.fetch_sub ( 1, std::memory_order_release );
 	}
 
 	const char* GetName () const
@@ -260,7 +260,7 @@ public:
 	void Abort ( bool bCount = true )
 	{
 		if ( bCount )
-			++Prop ().m_iTotalDropped;
+			Prop ().m_iTotalDropped.fetch_add ( 1, std::memory_order_relaxed );
 		if ( m_pPayload && Descr ().m_fnReleasePayload )
 			Threads::CallCoroutine ( [this] { Descr ().m_fnReleasePayload ( m_pPayload ); } );
 		m_pPayload = nullptr;
@@ -293,13 +293,13 @@ struct TaskWorker_t: public ListNode_t
 		Task_t* pTask = nullptr;
 		auto iFlavour = m_iMyTaskFlavour - 1;
 		ListedData_t* pLeaf = nullptr;
-		for ( int i = 0; i<g_iTasks; ++i )
+		for ( int i = 0, gTasks = g_iTasks.load ( std::memory_order_relaxed ); i<gTasks; ++i )
 		{
 			++iFlavour;
-			iFlavour %= g_iTasks;
+			iFlavour %= gTasks;
 
 			// skip queues full of runners (and also non-mt, since they have 0 runners)
-			if ( g_TaskProps[iFlavour].m_iCurrentRunners>=g_Tasks[iFlavour].m_iMaxRunners )
+			if ( g_TaskProps[iFlavour].m_iCurrentRunners.load ( std::memory_order_acquire )>=g_Tasks[iFlavour].m_iMaxRunners )
 				continue;
 
 			// look into the queue
@@ -664,7 +664,7 @@ private:
 
 	static void RemoveAllJobs ()
 	{
-		for ( int i = 0; i<g_iTasks; ++i )
+		for ( int i = 0, gTasks = g_iTasks.load ( std::memory_order_relaxed ); i<gTasks; ++i )
 		{
 			// skip single-threaded tasks
 			if ( !g_Tasks[i].m_iMaxRunners )
@@ -714,7 +714,8 @@ private:
 			DebugX ( "AddNewMTJob %s(%p) success (%d in queue)", pJob->GetName (), pJob, iQueueLen );
 		}
 
-		if ( !m_iIdleWorkers.load(std::memory_order_relaxed) && dProp.m_iCurrentRunners<pJob->Descr ().m_iMaxRunners )
+		if ( !m_iIdleWorkers.load(std::memory_order_relaxed)
+				&& dProp.m_iCurrentRunners.load (std::memory_order_acquire )<pJob->Descr ().m_iMaxRunners )
 			AddWorker ();
 		KickJobPool ();
 	}
@@ -796,17 +797,17 @@ public:
 	CSphVector<TaskManager::TaskInfo_t> GetTaskInfo () const NO_THREAD_SAFETY_ANALYSIS
 	{
 		CSphVector<TaskManager::TaskInfo_t> dRes;
-		for ( auto i = 0; i<g_iTasks; ++i )
+		for ( int i = 0, gTasks = g_iTasks.load ( std::memory_order_relaxed ); i<gTasks; ++i )
 		{
 			auto& dInfo = dRes.Add();
 			dInfo.m_sName = g_Tasks[i].m_sName;
 			dInfo.m_iMaxRunners = g_Tasks[i].m_iMaxRunners;
 			dInfo.m_iMaxQueueSize = g_Tasks[i].m_iMaxQueueSize;
-			dInfo.m_iCurrentRunners = g_TaskProps[i].m_iCurrentRunners;
-			dInfo.m_iTotalSpent = g_TaskProps[i].m_iTotalSpent;
-			dInfo.m_iLastFinished = g_TaskProps[i].m_iLastFinished;
-			dInfo.m_iTotalRun = g_TaskProps[i].m_iTotalRun;
-			dInfo.m_iTotalDropped = g_TaskProps[i].m_iTotalDropped;
+			dInfo.m_iCurrentRunners = g_TaskProps[i].m_iCurrentRunners.load ( std::memory_order_relaxed );
+			dInfo.m_iTotalSpent = g_TaskProps[i].m_iTotalSpent.load ( std::memory_order_relaxed );
+			dInfo.m_iLastFinished = g_TaskProps[i].m_iLastFinished.load ( std::memory_order_relaxed );
+			dInfo.m_iTotalRun = g_TaskProps[i].m_iTotalRun.load ( std::memory_order_relaxed );
+			dInfo.m_iTotalDropped = g_TaskProps[i].m_iTotalDropped.load ( std::memory_order_relaxed );
 			dInfo.m_inQueue = g_TaskProps[i].m_dQueue.GetLength (); // non th-safe, ok.
 		}
 		return dRes;
@@ -875,7 +876,7 @@ void IterateLazyThreads ( Threads::ThreadFN & fnHandler )
 
 TaskID TaskManager::RegisterGlobal( CSphString sName, fnThread_t fnThread, fnThread_t fnFree, int iThreads, int iJobs )
 {
-	auto iTaskID = TaskID( g_iTasks++ );
+	auto iTaskID = TaskID ( g_iTasks.fetch_add ( 1, std::memory_order_relaxed ) );
 	if ( !iTaskID ) // this is first class; start log timering
 		TimePrefixed::TimeStart();
 

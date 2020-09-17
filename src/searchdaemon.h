@@ -258,16 +258,16 @@ public:
 
 	// returns true, if single value matches
 	bool MatchAdd( const char* sValue );
-	bool MatchAddVa( const char* sTemplate, ... ) __attribute__ (( format ( printf, 2, 3 )));
+	bool MatchAddf ( const char* sTemplate, ... ) __attribute__ (( format ( printf, 2, 3 )));
+
+	// unconditionally add formatted
+	void Addf ( const char * sValueTmpl, ... );
 
 	// add pair
 	void MatchTuplet ( const char * sKey, const char * sValue );
 	void MatchTupletf ( const char * sKey, const char* sValueTmpl, ... ); 	// __attribute__ ((format ( printf,3, 4 )));
 	void MatchTupletFn ( const char * sKey, Generator_fn && fnValuePrinter );
 	void MatchTupletFn ( const char * sKey, GeneratorS_fn && fnValuePrinter );
-
-	// add triplet
-	void MatchTriplet ( const char * sKey, const char * sValue, const char * sValue2 );
 };
 
 CSphString GetTypeName ( IndexType_e eType );

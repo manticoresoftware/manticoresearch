@@ -154,7 +154,7 @@ bool VectorLike::MatchAdd( const char* sValue )
 	return false;
 }
 
-bool VectorLike::MatchAddVa( const char* sTemplate, ... )
+bool VectorLike::MatchAddf ( const char* sTemplate, ... )
 {
 	assert ( m_dHeadNames.GetLength ()>=1 );
 	va_list ap;
@@ -165,6 +165,17 @@ bool VectorLike::MatchAddVa( const char* sTemplate, ... )
 	va_end ( ap );
 
 	return MatchAdd( sValue.cstr());
+}
+
+void VectorLike::Addf ( const char * sValueTmpl, ... )
+{
+	va_list ap;
+	StringBuilder_c sValue;
+	va_start ( ap, sValueTmpl );
+	sValue.vSprintf ( sValueTmpl, ap );
+	va_end ( ap );
+
+	Add ( sValue.cstr () );
 }
 
 void VectorLike::MatchTuplet ( const char * sKey, const char * sValue )
@@ -217,17 +228,6 @@ void VectorLike::MatchTupletFn ( const char * sKey, GeneratorS_fn && fnValuePrin
 	FillTail ( 2 );
 }
 
-void VectorLike::MatchTriplet ( const char * sKey, const char * sValue, const char * sValue2 )
-{
-	assert ( m_dHeadNames.GetLength ()>=3 );
-	if ( !Match ( sKey ) )
-		return;
-
-	Add ( sKey );
-	Add ( sValue );
-	Add ( sValue2 );
-	FillTail ( 3 );
-}
 
 void VectorLike::FillTail ( int iHas )
 {

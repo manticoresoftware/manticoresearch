@@ -1200,39 +1200,38 @@ static void ReplicateClusterStats ( ReplicationCluster_t * pCluster, VectorLike 
 	const char * sName = pCluster->m_sName.cstr();
 
 	// cluster vars
-	if ( dOut.MatchAdd ( "cluster_name" ) )
-		dOut.Add( pCluster->m_sName );
-	if ( dOut.MatchAddVa ( "cluster_%s_state_uuid", sName ) )
+	dOut.MatchTuplet ( "cluster_name", sName );
+	if ( dOut.MatchAddf ( "cluster_%s_state_uuid", sName ) )
 	{
 		wsrep_uuid_t tUUID;
 		memcpy ( tUUID.data, pCluster->m_dUUID.Begin(), pCluster->m_dUUID.GetLengthBytes() );
 		char sUUID[WSREP_UUID_STR_LEN+1] = { '\0' };
 		wsrep_uuid_print ( &tUUID, sUUID, sizeof(sUUID) );
-		dOut.Add() = sUUID;
+		dOut.Add ( sUUID );
 	}
-	if ( dOut.MatchAddVa ( "cluster_%s_conf_id", sName ) )
-		dOut.Add().SetSprintf ( "%d", pCluster->m_iConfID );
-	if ( dOut.MatchAddVa ( "cluster_%s_status", sName ) )
-		dOut.Add() = g_sClusterStatus[pCluster->m_iStatus];
-	if ( dOut.MatchAddVa ( "cluster_%s_size", sName ) )
-		dOut.Add().SetSprintf ( "%d", pCluster->m_iSize );
-	if ( dOut.MatchAddVa ( "cluster_%s_local_index", sName ) )
-		dOut.Add().SetSprintf ( "%d", pCluster->m_iIdx );
-	if ( dOut.MatchAddVa ( "cluster_%s_node_state", sName ) )
-		dOut.Add() = GetNodeState ( pCluster->GetNodeState() );
+	if ( dOut.MatchAddf ( "cluster_%s_conf_id", sName ) )
+		dOut.Addf( "%d", pCluster->m_iConfID );
+	if ( dOut.MatchAddf ( "cluster_%s_status", sName ) )
+		dOut.Add ( g_sClusterStatus[pCluster->m_iStatus] );
+	if ( dOut.MatchAddf ( "cluster_%s_size", sName ) )
+		dOut.Addf ( "%d", pCluster->m_iSize );
+	if ( dOut.MatchAddf ( "cluster_%s_local_index", sName ) )
+		dOut.Addf ( "%d", pCluster->m_iIdx );
+	if ( dOut.MatchAddf ( "cluster_%s_node_state", sName ) )
+		dOut.Add ( GetNodeState ( pCluster->GetNodeState () ) );
 	// nodes of cluster defined and view
 	{
 		ScopedMutex_t tLock ( pCluster->m_tViewNodesLock );
-		if ( dOut.MatchAddVa ( "cluster_%s_nodes_set", sName ) )
-			dOut.Add().SetSprintf ( "%s", pCluster->m_sClusterNodes.scstr() );
-		if ( dOut.MatchAddVa ( "cluster_%s_nodes_view", sName ) )
-			dOut.Add().SetSprintf ( "%s", pCluster->m_sViewNodes.scstr() );
+		if ( dOut.MatchAddf ( "cluster_%s_nodes_set", sName ) )
+			dOut.Add ( pCluster->m_sClusterNodes.scstr () );
+		if ( dOut.MatchAddf ( "cluster_%s_nodes_view", sName ) )
+			dOut.Add ( pCluster->m_sViewNodes.scstr () );
 	}
 
 	// cluster indexes
-	if ( dOut.MatchAddVa ( "cluster_%s_indexes_count", sName ) )
-		dOut.Add().SetSprintf ( "%d", pCluster->m_dIndexes.GetLength() );
-	if ( dOut.MatchAddVa ( "cluster_%s_indexes", sName ) )
+	if ( dOut.MatchAddf ( "cluster_%s_indexes_count", sName ) )
+		dOut.Addf( "%d", pCluster->m_dIndexes.GetLength() );
+	if ( dOut.MatchAddf ( "cluster_%s_indexes", sName ) )
 	{
 		StringBuilder_c tBuf ( "," );
 		for ( const CSphString & sIndex : pCluster->m_dIndexes )
@@ -1252,7 +1251,7 @@ static void ReplicateClusterStats ( ReplicationCluster_t * pCluster, VectorLike 
 	wsrep_stats_var * pVars = pVarsStart;
 	while ( pVars->name )
 	{
-		if ( dOut.MatchAddVa ( "cluster_%s_%s", sName, pVars->name ) )
+		if ( dOut.MatchAddf ( "cluster_%s_%s", sName, pVars->name ) )
 		{
 			switch ( pVars->type )
 			{
@@ -1261,12 +1260,12 @@ static void ReplicateClusterStats ( ReplicationCluster_t * pCluster, VectorLike 
 				break;
 
 			case WSREP_VAR_DOUBLE:
-				dOut.Add().SetSprintf ( "%f", pVars->value._double );
+				dOut.Addf ( "%f", pVars->value._double );
 				break;
 
 			default:
 			case WSREP_VAR_INT64:
-				dOut.Add().SetSprintf ( INT64_FMT, pVars->value._int64 );
+				dOut.Addf ( "%l", pVars->value._int64 );
 				break;
 			}
 		}

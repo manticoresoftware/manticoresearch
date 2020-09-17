@@ -8173,199 +8173,131 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 // STATUS HANDLER
 //////////////////////////////////////////////////////////////////////////
 
-static inline void FormatMsec ( CSphString & sOut, int64_t tmTime )
-{
-	sOut.SetSprintf ( "%d.%03d", (int)( tmTime/1000000 ), (int)( (tmTime%1000000)/1000 ) );
-}
-
 void BuildStatus ( VectorLike & dStatus )
 {
 	auto & g_tStats = gStats ();
-	const char * FMT64 = INT64_FMT;
-	const char * FLOAT = "%.2f";
 	const char * OFF = "OFF";
 
 	const int64_t iQueriesDiv = Max ( g_tStats.m_iQueries.load ( std::memory_order_relaxed ), 1 );
 	const int64_t iDistQueriesDiv = Max ( g_tStats.m_iDistQueries.load ( std::memory_order_relaxed ), 1 );
+	const int64_t iDiv1000 = iQueriesDiv * 1000;
+	const int64_t iDDiv1000 = iDistQueriesDiv * 1000;
 
 	dStatus.SetColName ( "Counter" );
 
 	// FIXME? non-transactional!!!
-	if ( dStatus.MatchAdd ( "uptime" ) )
-		dStatus.Add().SetSprintf ( "%u", (DWORD)time(NULL)-g_tStats.m_uStarted );
-	if ( dStatus.MatchAdd ( "connections" ) )
-		dStatus.Add ().SetSprintf ( FMT64, (int64_t) g_tStats.m_iConnections.load ( std::memory_order_relaxed ) );
-	if ( dStatus.MatchAdd ( "maxed_out" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iMaxedOut );
-	if ( dStatus.MatchAdd ( "version" ) )
-		dStatus.Add().SetSprintf ( "%s", szMANTICORE_VERSION );
-	if ( dStatus.MatchAdd ( "mysql_version" ) )
-		dStatus.Add().SetSprintf ( "%s", g_sMySQLVersion.cstr() );
+	dStatus.MatchTupletf ( "uptime", "%u", (DWORD) time ( nullptr )-g_tStats.m_uStarted );
+	dStatus.MatchTupletf ( "connections", "%l", g_tStats.m_iConnections.load ( std::memory_order_relaxed ) );
+	dStatus.MatchTupletf ( "maxed_out", "%l", g_tStats.m_iMaxedOut.load ( std::memory_order_relaxed ) );
+	dStatus.MatchTuplet ( "version" , szMANTICORE_VERSION );
+	dStatus.MatchTuplet ( "mysql_version", g_sMySQLVersion.cstr () );
 
 	for ( auto i=0; i<SEARCHD_COMMAND_TOTAL; ++i)
 		dStatus.MatchTupletf ( szCommand ( i ), "%l", g_tStats.m_iCommandCount[i].load ( std::memory_order_relaxed ) );
 
-	if ( dStatus.MatchAdd ( "agent_connect" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iAgentConnect + g_tStats.m_iAgentConnectTFO);
-	if ( dStatus.MatchAdd ( "agent_tfo" ) )
-		dStatus.Add ().SetSprintf ( FMT64, (int64_t) g_tStats.m_iAgentConnectTFO );
-	if ( dStatus.MatchAdd ( "agent_retry" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iAgentRetry );
-	if ( dStatus.MatchAdd ( "queries" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iQueries );
-	if ( dStatus.MatchAdd ( "dist_queries" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iDistQueries );
+	auto iConnects = g_tStats.m_iAgentConnectTFO.load ( std::memory_order_relaxed )
+			+g_tStats.m_iAgentConnect.load ( std::memory_order_relaxed );
+	dStatus.MatchTupletf ( "agent_connect", "%l", iConnects );
+	dStatus.MatchTupletf ( "agent_tfo", "%l", g_tStats.m_iAgentConnectTFO.load ( std::memory_order_relaxed ) );
+	dStatus.MatchTupletf ( "agent_retry", "%l", g_tStats.m_iAgentRetry.load ( std::memory_order_relaxed ) );
+	dStatus.MatchTupletf ( "queries", "%l", g_tStats.m_iQueries.load ( std::memory_order_relaxed ) );
+	dStatus.MatchTupletf ( "dist_queries", "%l", g_tStats.m_iDistQueries.load ( std::memory_order_relaxed ) );
 
 	// status of thread pool
-	if ( dStatus.MatchAdd ( "workers_total" ) )
-		dStatus.Add().SetSprintf ( "%d", GlobalWorkPool()->WorkingThreads() );
-	if ( dStatus.MatchAdd ( "workers_active" ) )
-		dStatus.Add().SetSprintf( "%d", myinfo::CountAll());
-	if ( dStatus.MatchAdd ( "workers_clients" ) )
-		dStatus.Add ().SetSprintf ( "%d", myinfo::CountClients());
-	if ( dStatus.MatchAdd ( "work_queue_length" ) )
-		dStatus.Add ().SetSprintf ( "%d", GlobalWorkPool()->Works());
+	dStatus.MatchTupletf ( "workers_total", "%d", GlobalWorkPool ()->WorkingThreads () );
+	dStatus.MatchTupletf ( "workers_active", "%d", myinfo::CountAll () );
+	dStatus.MatchTupletf ( "workers_clients", "%d", myinfo::CountClients () );
+	dStatus.MatchTupletf ( "work_queue_length", "%d", GlobalWorkPool ()->Works () );
 
 	for ( RLockedDistrIt_c it ( g_pDistIndexes ); it.Next (); )
 	{
 		const char * sIdx = it.GetName().cstr();
 		const auto &dAgents = it.Get ()->m_dAgents;
+		StringBuilder_c sKey;
 		ARRAY_FOREACH ( i, dAgents )
 		{
 			MultiAgentDesc_c &dMultiAgent = *dAgents[i];
 			ARRAY_FOREACH ( j, dMultiAgent )
 			{
 				const auto pMetrics = dMultiAgent[j].m_pMetrics;
-				for ( int k=0; k<eMaxAgentStat; ++k )
-					if ( dStatus.MatchAddVa ( "ag_%s_%d_%d_%s", sIdx, i+1, j+1, sAgentStatsNames[k] ) )
-						dStatus.Add().SetSprintf ( FMT64, (int64_t) pMetrics->m_dCounters[k].load(std::memory_order_relaxed) );
+				for ( int k = 0; k<eMaxAgentStat; ++k )
+				{
+					sKey.Clear();
+					sKey.Sprintf ( "ag_%s_%d_%d_%s", sIdx, i+1, j+1, sAgentStatsNames[k] );
+					dStatus.MatchTupletf ( sKey.cstr (), "%l", pMetrics->m_dCounters[k].load (std::memory_order_relaxed ) );
+				}
 
 				for ( int k = 0; k<ehMaxStat; ++k )
-					if ( dStatus.MatchAddVa ( "ag_%s_%d_%d_%s", sIdx, i + 1, j + 1, sAgentStatsNames[eMaxAgentStat+k] ) )
-					{
-						if ( k==ehTotalMsecs || k==ehAverageMsecs || k==ehMaxMsecs )
-							dStatus.Add ().SetSprintf ( FLOAT, (float) pMetrics->m_dMetrics[k] / 1000.0 );
-						else
-							dStatus.Add ().SetSprintf ( FMT64, (int64_t) pMetrics->m_dMetrics[k] );
-					}
-
+				{
+					sKey.Clear ();
+					sKey.Sprintf ( "ag_%s_%d_%d_%s", sIdx, i+1, j+1, sAgentStatsNames[eMaxAgentStat+k] );
+					const char * sFmt = ( k==ehTotalMsecs || k==ehAverageMsecs || k==ehMaxMsecs ) ? "%0.3F" : "%l";
+					dStatus.MatchTupletf ( sKey.cstr (), sFmt, pMetrics->m_dMetrics[k] );
+				}
 			}
 		}
 	}
 
-	if ( dStatus.MatchAdd ( "query_wall" ) )
-		FormatMsec ( dStatus.Add(), g_tStats.m_iQueryTime.load ( std::memory_order_relaxed ) );
+	dStatus.MatchTupletf ( "query_wall", "%0.3F", g_tStats.m_iQueryTime.load ( std::memory_order_relaxed ) / 1000 );
 
-	if ( dStatus.MatchAdd ( "query_cpu" ) )
-	{
-		if ( g_bCpuStats )
-			FormatMsec ( dStatus.Add(), g_tStats.m_iQueryCpuTime.load ( std::memory_order_relaxed ) );
-		else
-			dStatus.Add() = OFF;
-	}
+	if ( g_bCpuStats )
+		dStatus.MatchTupletf ( "query_cpu", "%0.3F", g_tStats.m_iQueryCpuTime.load ( std::memory_order_relaxed ) / 1000 );
+	else
+		dStatus.MatchTuplet ( "query_cpu", OFF);
 
-	if ( dStatus.MatchAdd ( "dist_wall" ) )
-		FormatMsec ( dStatus.Add(), g_tStats.m_iDistWallTime.load ( std::memory_order_relaxed ) );
-
-	if ( dStatus.MatchAdd ( "dist_local" ) )
-		FormatMsec ( dStatus.Add(), g_tStats.m_iDistLocalTime.load ( std::memory_order_relaxed ) );
-
-	if ( dStatus.MatchAdd ( "dist_wait" ) )
-		FormatMsec ( dStatus.Add(), g_tStats.m_iDistWaitTime.load ( std::memory_order_relaxed ) );
+	dStatus.MatchTupletf ( "dist_wall", "%0.3F", g_tStats.m_iDistWallTime.load ( std::memory_order_relaxed ) / 1000 );
+	dStatus.MatchTupletf ( "dist_local", "%0.3F", g_tStats.m_iDistLocalTime.load ( std::memory_order_relaxed ) / 1000 );
+	dStatus.MatchTupletf ( "dist_wait", "%0.3F", g_tStats.m_iDistWaitTime.load ( std::memory_order_relaxed ) / 1000 );
 
 	if ( g_bIOStats )
 	{
-		if ( dStatus.MatchAdd ( "query_reads" ) )
-			dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iDiskReads.load ( std::memory_order_relaxed ) );
-
-		if ( dStatus.MatchAdd ( "query_readkb" ) )
-			dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iDiskReadBytes.load ( std::memory_order_relaxed )/1024 );
-
-		if ( dStatus.MatchAdd ( "query_readtime" ) )
-			FormatMsec ( dStatus.Add(), g_tStats.m_iDiskReadTime.load ( std::memory_order_relaxed ) );
+		dStatus.MatchTupletf ( "query_reads", "%l", g_tStats.m_iDiskReads.load ( std::memory_order_relaxed ) );
+		dStatus.MatchTupletf ( "query_readkb", "%l", g_tStats.m_iDiskReadBytes.load ( std::memory_order_relaxed )/ 1024 );
+		dStatus.MatchTupletf ( "query_readtime", "%l", g_tStats.m_iDiskReadTime.load ( std::memory_order_relaxed ) );
 	} else
 	{
-		if ( dStatus.MatchAdd ( "query_reads" ) )
-			dStatus.Add() = OFF;
-
-		if ( dStatus.MatchAdd ( "query_readkb" ) )
-			dStatus.Add() = OFF;
-
-		if ( dStatus.MatchAdd ( "query_readtime" ) )
-			dStatus.Add() = OFF;
+		dStatus.MatchTuplet ( "query_reads", OFF );
+		dStatus.MatchTuplet ( "query_readkb", OFF );
+		dStatus.MatchTuplet ( "query_readtime", OFF );
 	}
 
 	if ( g_tStats.m_iPredictedTime.load ( std::memory_order_relaxed )
 		|| g_tStats.m_iAgentPredictedTime.load ( std::memory_order_relaxed ) )
 	{
-		if ( dStatus.MatchAdd ( "predicted_time" ) )
-			dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iPredictedTime.load ( std::memory_order_relaxed ) );
-
-		if ( dStatus.MatchAdd ( "dist_predicted_time" ) )
-			dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iAgentPredictedTime.load ( std::memory_order_relaxed ) );
+		dStatus.MatchTupletf ( "predicted_time", "%l", g_tStats.m_iPredictedTime.load ( std::memory_order_relaxed ) );
+		dStatus.MatchTupletf ( "dist_predicted_time", "%l", g_tStats.m_iAgentPredictedTime.load ( std::memory_order_relaxed ) );
 	}
 
-	if ( dStatus.MatchAdd ( "avg_query_wall" ) )
-		FormatMsec ( dStatus.Add(), g_tStats.m_iQueryTime.load ( std::memory_order_relaxed ) / iQueriesDiv );
+	dStatus.MatchTupletf ( "avg_query_wall", "%0.3F", g_tStats.m_iQueryTime.load ( std::memory_order_relaxed ) / iDiv1000 );
 
-	if ( dStatus.MatchAdd ( "avg_query_cpu" ) )
-	{
-		if ( g_bCpuStats )
-			FormatMsec ( dStatus.Add(), g_tStats.m_iQueryCpuTime.load ( std::memory_order_relaxed ) / iQueriesDiv );
-		else
-			dStatus.Add ( OFF );
-	}
+	if ( g_bCpuStats )
+		dStatus.MatchTupletf ( "avg_query_cpu", "%0.3F", g_tStats.m_iQueryCpuTime.load ( std::memory_order_relaxed ) / iDiv1000 );
+	else
+		dStatus.MatchTuplet ( "avg_query_cpu", OFF );
 
-	if ( dStatus.MatchAdd ( "avg_dist_wall" ) )
-		FormatMsec ( dStatus.Add(), g_tStats.m_iDistWallTime.load ( std::memory_order_relaxed ) / iDistQueriesDiv );
-
-	if ( dStatus.MatchAdd ( "avg_dist_local" ) )
-		FormatMsec ( dStatus.Add(), g_tStats.m_iDistLocalTime.load ( std::memory_order_relaxed ) / iDistQueriesDiv );
-
-	if ( dStatus.MatchAdd ( "avg_dist_wait" ) )
-		FormatMsec ( dStatus.Add(), g_tStats.m_iDistWaitTime.load ( std::memory_order_relaxed ) / iDistQueriesDiv );
+	dStatus.MatchTupletf ( "avg_dist_wall", "%0.3F", g_tStats.m_iDistWallTime.load ( std::memory_order_relaxed ) / iDDiv1000 );
+	dStatus.MatchTupletf ( "avg_dist_local", "%0.3F", g_tStats.m_iDistLocalTime.load ( std::memory_order_relaxed ) / iDDiv1000 );
+	dStatus.MatchTupletf ( "avg_dist_wait", "%0.3F", g_tStats.m_iDistWaitTime.load ( std::memory_order_relaxed ) / iDDiv1000 );
 
 	if ( g_bIOStats )
 	{
-		if ( dStatus.MatchAdd ( "avg_query_reads" ) )
-			dStatus.Add().SetSprintf ( "%.1f", (float)( g_tStats.m_iDiskReads.load ( std::memory_order_relaxed )*10/iQueriesDiv )/10.0f );
-
-		if ( dStatus.MatchAdd ( "avg_query_readkb" ) )
-			dStatus.Add().SetSprintf ( "%.1f", (float)( g_tStats.m_iDiskReadBytes.load ( std::memory_order_relaxed )/iQueriesDiv )/1024.0f );
-
-		if ( dStatus.MatchAdd ( "avg_query_readtime" ) )
-			FormatMsec ( dStatus.Add(), g_tStats.m_iDiskReadTime.load ( std::memory_order_relaxed )/iQueriesDiv );
-
+		dStatus.MatchTupletf ( "avg_query_reads", "%0.1F", g_tStats.m_iDiskReads.load ( std::memory_order_relaxed ) * 10 / iQueriesDiv );
+		dStatus.MatchTupletf ( "avg_query_readkb", "%0.1F", g_tStats.m_iDiskReadBytes.load ( std::memory_order_relaxed ) * 10 / (iQueriesDiv*1024) );
+		dStatus.MatchTupletf ( "avg_query_readtime", "%0.3F", g_tStats.m_iDiskReadTime.load ( std::memory_order_relaxed ) / iDiv1000 );
 	} else
 	{
-		if ( dStatus.MatchAdd ( "avg_query_reads" ) )
-			dStatus.Add() = OFF;
-
-		if ( dStatus.MatchAdd ( "avg_query_readkb" ) )
-			dStatus.Add() = OFF;
-
-		if ( dStatus.MatchAdd ( "avg_query_readtime" ) )
-			dStatus.Add() = OFF;
+		dStatus.MatchTuplet ( "avg_query_reads", OFF );
+		dStatus.MatchTuplet ( "avg_query_readkb", OFF );
+		dStatus.MatchTuplet ( "avg_query_readtime", OFF );
 	}
 
 	const QcacheStatus_t & s = QcacheGetStatus();
-	if ( dStatus.MatchAdd ( "qcache_max_bytes" ) )
-		dStatus.Add().SetSprintf ( INT64_FMT, s.m_iMaxBytes );
-
-	if ( dStatus.MatchAdd ( "qcache_thresh_msec" ) )
-		dStatus.Add().SetSprintf ( "%d", s.m_iThreshMs );
-
-	if ( dStatus.MatchAdd ( "qcache_ttl_sec" ) )
-		dStatus.Add().SetSprintf ( "%d", s.m_iTtlS );
-
-	if ( dStatus.MatchAdd ( "qcache_cached_queries" ) )
-		dStatus.Add().SetSprintf ( "%d", s.m_iCachedQueries );
-
-	if ( dStatus.MatchAdd ( "qcache_used_bytes" ) )
-		dStatus.Add().SetSprintf ( INT64_FMT, s.m_iUsedBytes );
-
-	if ( dStatus.MatchAdd ( "qcache_hits" ) )
-		dStatus.Add().SetSprintf ( INT64_FMT, s.m_iHits );
+	dStatus.MatchTupletf ( "qcache_max_bytes", "%l", s.m_iMaxBytes );
+	dStatus.MatchTupletf ( "qcache_thresh_msec", "%d", s.m_iThreshMs );
+	dStatus.MatchTupletf ( "qcache_ttl_sec", "%d", s.m_iTtlS );
+	dStatus.MatchTupletf ( "qcache_cached_queries", "%d", s.m_iCachedQueries );
+	dStatus.MatchTupletf ( "qcache_used_bytes", "%l", s.m_iUsedBytes );
+	dStatus.MatchTupletf ( "qcache_hits", "%l", s.m_iHits );
 
 	// clusters
 	ReplicateClustersStatus ( dStatus );
@@ -8395,37 +8327,31 @@ void BuildStatusOneline ( StringBuilder_c & sOut )
 void BuildOneAgentStatus ( VectorLike & dStatus, HostDashboard_t* pDash, const char * sPrefix="agent" )
 {
 	assert ( pDash );
-
-	const char * FMT64 = UINT64_FMT;
-	const char * FLOAT = "%.2f";
-
 	{
 		CSphScopedRLock tGuard ( pDash->m_dMetricsLock );
-		if ( dStatus.MatchAddVa ( "%s_hostname", sPrefix ) )
-			dStatus.Add().SetSprintf ( "%s", pDash->m_tHost.GetMyUrl().cstr() );
+		if ( dStatus.MatchAddf ( "%s_hostname", sPrefix ) )
+			dStatus.Add ( pDash->m_tHost.GetMyUrl ().cstr () );
 
-		if ( dStatus.MatchAddVa ( "%s_references", sPrefix ) )
-			dStatus.Add().SetSprintf ( "%d", (int) pDash->GetRefcount()-1 ); // -1 since we currently also 'use' the agent, reading it's stats
-		if ( dStatus.MatchAddVa ( "%s_ping", sPrefix ) )
-			dStatus.Add ().SetSprintf ( "%s", pDash->m_iNeedPing ? "yes" : "no" );
-		if ( dStatus.MatchAddVa ( "%s_has_perspool", sPrefix ) )
-			dStatus.Add ().SetSprintf ( "%s", pDash->m_pPersPool ? "yes" : "no" );
-		if ( dStatus.MatchAddVa ( "%s_need_resolve", sPrefix ) )
-			dStatus.Add ().SetSprintf ( "%s", pDash->m_tHost.m_bNeedResolve ? "yes" : "no" );
+		if ( dStatus.MatchAddf ( "%s_references", sPrefix ) )
+			dStatus.Addf( "%d", (int) pDash->GetRefcount()-1 ); // -1 since we currently also 'use' the agent, reading it's stats
+		if ( dStatus.MatchAddf ( "%s_ping", sPrefix ) )
+			dStatus.Add ( pDash->m_iNeedPing ? "yes" : "no" );
+		if ( dStatus.MatchAddf ( "%s_has_perspool", sPrefix ) )
+			dStatus.Add ( pDash->m_pPersPool ? "yes" : "no" );
+		if ( dStatus.MatchAddf ( "%s_need_resolve", sPrefix ) )
+			dStatus.Add ( pDash->m_tHost.m_bNeedResolve ? "yes" : "no" );
 		uint64_t iCur = sphMicroTimer();
 		uint64_t iLastAccess = iCur - pDash->m_iLastQueryTime;
-		float fPeriod = (float)iLastAccess/1000000.0f;
-		if ( dStatus.MatchAddVa ( "%s_lastquery", sPrefix ) )
-			dStatus.Add().SetSprintf ( FLOAT, fPeriod );
+		if ( dStatus.MatchAddf ( "%s_lastquery", sPrefix ) )
+			dStatus.Addf ( "%.2F", iLastAccess / 10000 );
 		iLastAccess = iCur - pDash->m_iLastAnswerTime;
-		fPeriod = (float)iLastAccess/1000000.0f;
-		if ( dStatus.MatchAddVa ( "%s_lastanswer", sPrefix ) )
-			dStatus.Add().SetSprintf ( FLOAT, fPeriod );
+		if ( dStatus.MatchAddf ( "%s_lastanswer", sPrefix ) )
+			dStatus.Addf ( "%.2F", iLastAccess / 10000 );
 		uint64_t iLastTimer = pDash->m_iLastAnswerTime-pDash->m_iLastQueryTime;
-		if ( dStatus.MatchAddVa ( "%s_lastperiodmsec", sPrefix ) )
-			dStatus.Add().SetSprintf ( FMT64, iLastTimer/1000 );
-		if ( dStatus.MatchAddVa ( "%s_errorsarow", sPrefix ) )
-			dStatus.Add().SetSprintf ( FMT64, pDash->m_iErrorsARow );
+		if ( dStatus.MatchAddf ( "%s_lastperiodmsec", sPrefix ) )
+			dStatus.Addf ( "%l", iLastTimer / 1000 );
+		if ( dStatus.MatchAddf ( "%s_errorsarow", sPrefix ) )
+			dStatus.Addf ( "%l", pDash->m_iErrorsARow );
 	}
 	int iPeriods = 1;
 
@@ -8436,19 +8362,18 @@ void BuildOneAgentStatus ( VectorLike & dStatus, HostDashboard_t* pDash, const c
 		{
 			for ( int j = 0; j<ehMaxStat+eMaxAgentStat; ++j )
 				// hack. Avoid microseconds in human-readable statistic
-				if ( j==ehTotalMsecs && dStatus.MatchAddVa ( "%s_%dperiods_msecsperqueryy", sPrefix, iPeriods ) )
+				if ( j==ehTotalMsecs && dStatus.MatchAddf ( "%s_%dperiods_msecsperqueryy", sPrefix, iPeriods ) )
 				{
 					if ( dMetricsSnapshot[ehConnTries]>0 )
-						dStatus.Add ().SetSprintf ( FLOAT, (float) ((dMetricsSnapshot[ehTotalMsecs] / 1000.0)
-																	/ dMetricsSnapshot[ehConnTries]));
+						dStatus.Addf ( "%.2F", dMetricsSnapshot[ehTotalMsecs] / dMetricsSnapshot[ehConnTries] / 10 );
 					else
 						dStatus.Add ( "n/a" );
-				} else if ( dStatus.MatchAddVa ( "%s_%dperiods_%s", sPrefix, iPeriods, sAgentStatsNames[j] ) )
+				} else if ( dStatus.MatchAddf ( "%s_%dperiods_%s", sPrefix, iPeriods, sAgentStatsNames[j] ) )
 				{
 					if ( j==ehMaxMsecs || j==ehAverageMsecs )
-						dStatus.Add ().SetSprintf ( FLOAT, (float) dMetricsSnapshot[j] / 1000.0 );
+						dStatus.Addf ( "%.2F", dMetricsSnapshot[j] / 10 );
 					else
-						dStatus.Add ().SetSprintf ( FMT64, dMetricsSnapshot[j] );
+						dStatus.Addf ( "%l", dMetricsSnapshot[j] );
 				}
 		}
 
@@ -8469,7 +8394,7 @@ static bool BuildDistIndexStatus ( VectorLike & dStatus, const CSphString& sInde
 
 	ARRAY_FOREACH ( i, pDistr->m_dLocal )
 	{
-		if ( dStatus.MatchAddVa ( "dstindex_local_%d", i+1 ) )
+		if ( dStatus.MatchAddf ( "dstindex_local_%d", i+1 ) )
 			dStatus.Add ( pDistr->m_dLocal[i].cstr() );
 	}
 
@@ -8477,7 +8402,7 @@ static bool BuildDistIndexStatus ( VectorLike & dStatus, const CSphString& sInde
 	ARRAY_FOREACH ( i, pDistr->m_dAgents )
 	{
 		MultiAgentDesc_c & tAgents = *pDistr->m_dAgents[i];
-		if ( dStatus.MatchAddVa ( "dstindex_%d_is_ha", i+1 ) )
+		if ( dStatus.MatchAddf ( "dstindex_%d_is_ha", i+1 ) )
 			dStatus.Add ( tAgents.IsHA()? "1": "0" );
 
 		auto dWeights = tAgents.GetWeights ();
@@ -8491,16 +8416,16 @@ static bool BuildDistIndexStatus ( VectorLike & dStatus, const CSphString& sInde
 
 			const AgentDesc_t & dDesc = tAgents[j];
 
-			if ( dStatus.MatchAddVa ( "%s_id", sKey.cstr() ) )
-				dStatus.Add().SetSprintf ( "%s:%s", dDesc.GetMyUrl().cstr(), dDesc.m_sIndexes.cstr() );
+			if ( dStatus.MatchAddf ( "%s_id", sKey.cstr () ) )
+				dStatus.Addf ( "%s:%s", dDesc.GetMyUrl ().cstr (), dDesc.m_sIndexes.cstr () );
 
-			if ( tAgents.IsHA() && dStatus.MatchAddVa ( "%s_probability_weight", sKey.cstr() ) )
-				dStatus.Add ().SetSprintf ( "%0.2f%%", dWeights[j] );
+			if ( tAgents.IsHA() && dStatus.MatchAddf ( "%s_probability_weight", sKey.cstr () ) )
+				dStatus.Addf ( "%0.2f%%", dWeights[j] );
 
-			if ( dStatus.MatchAddVa ( "%s_is_blackhole", sKey.cstr() ) )
+			if ( dStatus.MatchAddf ( "%s_is_blackhole", sKey.cstr () ) )
 				dStatus.Add ( dDesc.m_bBlackhole ? "1" : "0" );
 
-			if ( dStatus.MatchAddVa ( "%s_is_persistent", sKey.cstr() ) )
+			if ( dStatus.MatchAddf ( "%s_is_persistent", sKey.cstr () ) )
 				dStatus.Add ( dDesc.m_bPersistent ? "1" : "0" );
 		}
 	}
@@ -8516,18 +8441,16 @@ void BuildAgentStatus ( VectorLike &dStatus, const CSphString& sIndexOrAgent )
 			auto pAgent = Dashboard::FindAgent ( sIndexOrAgent );
 			if ( pAgent )
 				BuildOneAgentStatus ( dStatus, pAgent );
-			else if ( dStatus.MatchAdd ( "status_error" ) )
-				dStatus.Add ().SetSprintf ( "No such distributed index or agent: %s", sIndexOrAgent.cstr () );
+			else
+				dStatus.MatchTupletf ( "status_error", "No such distributed index or agent: %s", sIndexOrAgent.cstr () );
 		}
 		return;
 	}
 
 	dStatus.SetColName ( "Key" );
 
-	if ( dStatus.MatchAdd ( "status_period_seconds" ) )
-		dStatus.Add().SetSprintf ( "%d", g_uHAPeriodKarmaS );
-	if ( dStatus.MatchAdd ( "status_stored_periods" ) )
-		dStatus.Add().SetSprintf ( "%d", STATS_DASH_PERIODS );
+	dStatus.MatchTupletf( "status_period_seconds", "%d", g_uHAPeriodKarmaS );
+	dStatus.MatchTupletf ( "status_stored_periods", "%d", STATS_DASH_PERIODS );
 
 	auto dDashes = Dashboard::GetActiveHosts();
 
@@ -8541,52 +8464,44 @@ void BuildAgentStatus ( VectorLike &dStatus, const CSphString& sIndexOrAgent )
 
 static void AddIOStatsToMeta ( VectorLike & dStatus, const CSphIOStats & tStats, const char * sPrefix )
 {
-	if ( dStatus.MatchAddVa ( "%s%s", sPrefix, "io_read_time" ) )
-		dStatus.Add().SetSprintf ( "%d.%03d", (int)( tStats.m_iReadTime/1000 ), (int)( tStats.m_iReadTime%1000 ) );
+	if ( dStatus.MatchAddf ( "%s%s", sPrefix, "io_read_time" ) )
+		dStatus.Addf( "%.3F", tStats.m_iReadTime);
 
-	if ( dStatus.MatchAddVa ( "%s%s", sPrefix, "io_read_ops" ) )
-		dStatus.Add().SetSprintf ( "%u", tStats.m_iReadOps );
+	if ( dStatus.MatchAddf ( "%s%s", sPrefix, "io_read_ops" ) )
+		dStatus.Addf ( "%u", tStats.m_iReadOps );
 
-	if ( dStatus.MatchAddVa ( "%s%s", sPrefix, "io_read_kbytes" ) )
-		dStatus.Add().SetSprintf ( "%d.%d", (int)( tStats.m_iReadBytes/1024 ), (int)( tStats.m_iReadBytes%1024 )/100 );
+	if ( dStatus.MatchAddf ( "%s%s", sPrefix, "io_read_kbytes" ) )
+		dStatus.Addf ( "%d.%d", (int) ( tStats.m_iReadBytes / 1024 ), (int) ( tStats.m_iReadBytes % 1024 ) / 100 );
 
-	if ( dStatus.MatchAddVa ( "%s%s", sPrefix, "io_write_time" ) )
-		dStatus.Add().SetSprintf ( "%d.%03d", (int)( tStats.m_iWriteTime/1000 ), (int)( tStats.m_iWriteTime%1000 ) );
+	if ( dStatus.MatchAddf ( "%s%s", sPrefix, "io_write_time" ) )
+		dStatus.Addf ( "%.3F", tStats.m_iWriteTime );
 
-	if ( dStatus.MatchAddVa ( "%s%s", sPrefix, "io_write_ops" ) )
-		dStatus.Add().SetSprintf ( "%u", tStats.m_iWriteOps );
+	if ( dStatus.MatchAddf ( "%s%s", sPrefix, "io_write_ops" ) )
+		dStatus.Addf ( "%u", tStats.m_iWriteOps );
 
-	if ( dStatus.MatchAddVa ( "%s%s", sPrefix, "io_write_kbytes" ) )
-		dStatus.Add().SetSprintf ( "%d.%d", (int)( tStats.m_iWriteBytes/1024 ), (int)( tStats.m_iWriteBytes%1024 )/100 );
+	if ( dStatus.MatchAddf ( "%s%s", sPrefix, "io_write_kbytes" ) )
+		dStatus.Addf ( "%d.%d", (int)( tStats.m_iWriteBytes/1024 ), (int)( tStats.m_iWriteBytes%1024 )/100 );
 }
 
 void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 {
-	if ( !tMeta.m_sError.IsEmpty() && dStatus.MatchAdd ( "error" ) )
-		dStatus.Add ( tMeta.m_sError );
+	if ( !tMeta.m_sError.IsEmpty() )
+		dStatus.MatchTuplet ( "error", tMeta.m_sError.cstr () );
 
-	if ( !tMeta.m_sWarning.IsEmpty() && dStatus.MatchAdd ( "warning" ) )
-		dStatus.Add ( tMeta.m_sWarning );
+	if ( !tMeta.m_sWarning.IsEmpty() )
+		dStatus.MatchTuplet ( "warning", tMeta.m_sWarning.cstr () );
 
-	if ( dStatus.MatchAdd ( "total" ) )
-		dStatus.Add().SetSprintf ( "%d", tMeta.m_iMatches );
+	dStatus.MatchTupletf ( "total", "%d", tMeta.m_iMatches );
+	dStatus.MatchTupletf ( "total_found", "%l", tMeta.m_iTotalMatches );
+	dStatus.MatchTupletf ( "time", "%.3F", tMeta.m_iQueryTime );
 
-	if ( dStatus.MatchAdd ( "total_found" ) )
-		dStatus.Add().SetSprintf ( INT64_FMT, tMeta.m_iTotalMatches );
-
-	if ( dStatus.MatchAdd ( "time" ) )
-		dStatus.Add().SetSprintf ( "%d.%03d", tMeta.m_iQueryTime/1000, tMeta.m_iQueryTime%1000 );
-
-	if ( tMeta.m_iMultiplier>1 && dStatus.MatchAdd ( "multiplier" ) )
-		dStatus.Add().SetSprintf ( "%d", tMeta.m_iMultiplier );
+	if ( tMeta.m_iMultiplier>1 )
+		dStatus.MatchTupletf ( "multiplier", "%d", tMeta.m_iMultiplier );
 
 	if ( g_bCpuStats )
 	{
-		if ( dStatus.MatchAdd ( "cpu_time" ) )
-			dStatus.Add().SetSprintf ( "%d.%03d", (int)( tMeta.m_iCpuTime/1000 ), (int)( tMeta.m_iCpuTime%1000 ) );
-
-		if ( dStatus.MatchAdd ( "agents_cpu_time" ) )
-			dStatus.Add().SetSprintf ( "%d.%03d", (int)( tMeta.m_iAgentCpuTime/1000 ), (int)( tMeta.m_iAgentCpuTime%1000 ) );
+		dStatus.MatchTupletf ( "cpu_time", "%.3F", tMeta.m_iCpuTime );
+		dStatus.MatchTupletf ( "agents_cpu_time", "%.3F", tMeta.m_iAgentCpuTime );
 	}
 
 	if ( g_bIOStats )
@@ -8597,25 +8512,18 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 
 	if ( tMeta.m_bHasPrediction )
 	{
-		if ( dStatus.MatchAdd ( "local_fetched_docs" ) )
-			dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iFetchedDocs );
-		if ( dStatus.MatchAdd ( "local_fetched_hits" ) )
-			dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iFetchedHits );
-		if ( dStatus.MatchAdd ( "local_fetched_skips" ) )
-			dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iSkips );
+		dStatus.MatchTupletf ( "local_fetched_docs", "%d", tMeta.m_tStats.m_iFetchedDocs );
+		dStatus.MatchTupletf ( "local_fetched_hits", "%d", tMeta.m_tStats.m_iFetchedHits );
+		dStatus.MatchTupletf ( "local_fetched_skips", "%d", tMeta.m_tStats.m_iSkips );
 
-		if ( dStatus.MatchAdd ( "predicted_time" ) )
-			dStatus.Add().SetSprintf ( "%lld", INT64 ( tMeta.m_iPredictedTime ) );
-		if ( tMeta.m_iAgentPredictedTime && dStatus.MatchAdd ( "dist_predicted_time" ) )
-			dStatus.Add().SetSprintf ( "%lld", INT64 ( tMeta.m_iAgentPredictedTime ) );
+		dStatus.MatchTupletf ( "predicted_time", "%l", tMeta.m_iPredictedTime );
+		if ( tMeta.m_iAgentPredictedTime )
+			dStatus.MatchTupletf ( "dist_predicted_time", "%l", tMeta.m_iAgentPredictedTime );
 		if ( tMeta.m_iAgentFetchedDocs || tMeta.m_iAgentFetchedHits || tMeta.m_iAgentFetchedSkips )
 		{
-			if ( dStatus.MatchAdd ( "dist_fetched_docs" ) )
-				dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iFetchedDocs + tMeta.m_iAgentFetchedDocs );
-			if ( dStatus.MatchAdd ( "dist_fetched_hits" ) )
-				dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iFetchedHits + tMeta.m_iAgentFetchedHits );
-			if ( dStatus.MatchAdd ( "dist_fetched_skips" ) )
-				dStatus.Add().SetSprintf ( "%d", tMeta.m_tStats.m_iSkips + tMeta.m_iAgentFetchedSkips );
+			dStatus.MatchTupletf ( "dist_fetched_docs", "%d", tMeta.m_tStats.m_iFetchedDocs+tMeta.m_iAgentFetchedDocs );
+			dStatus.MatchTupletf ( "dist_fetched_hits", "%d", tMeta.m_tStats.m_iFetchedHits+tMeta.m_iAgentFetchedHits );
+			dStatus.MatchTupletf ( "dist_fetched_skips", "%d", tMeta.m_tStats.m_iSkips+tMeta.m_iAgentFetchedSkips );
 		}
 	}
 
@@ -8625,14 +8533,14 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 	{
 		auto * pWord = dWords[iWord];
 		assert ( pWord );
-		if ( dStatus.MatchAddVa ( "keyword[%d]", iWord ) )
+		if ( dStatus.MatchAddf ( "keyword[%d]", iWord ) )
 			dStatus.Add ( pWord->first );
 
-		if ( dStatus.MatchAddVa ( "docs[%d]", iWord ) )
-			dStatus.Add().SetSprintf ( INT64_FMT, pWord->second.first );
+		if ( dStatus.MatchAddf ( "docs[%d]", iWord ) )
+			dStatus.Addf ( "%l", pWord->second.first );
 
-		if ( dStatus.MatchAddVa ( "hits[%d]", iWord ) )
-			dStatus.Add().SetSprintf ( INT64_FMT, pWord->second.second );
+		if ( dStatus.MatchAddf ( "hits[%d]", iWord ) )
+			dStatus.Addf ( "%l", pWord->second.second );
 	}
 }
 
@@ -8656,16 +8564,14 @@ void HandleCommandStatus ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 		if ( g_tStats.m_iPredictedTime.load ( std::memory_order_relaxed )
 			|| g_tStats.m_iAgentPredictedTime.load ( std::memory_order_relaxed ) )
 		{
-			if ( dStatus.MatchAdd ( "predicted_time" ) )
-				dStatus.Add().SetSprintf ( INT64_FMT, (int64_t) g_tStats.m_iPredictedTime.load ( std::memory_order_relaxed ) );
-			if ( dStatus.MatchAdd ( "dist_predicted_time" ) )
-				dStatus.Add().SetSprintf ( INT64_FMT, (int64_t) g_tStats.m_iAgentPredictedTime.load ( std::memory_order_relaxed ));
+			dStatus.MatchTupletf ( "predicted_time", "%l", g_tStats.m_iPredictedTime.load ( std::memory_order_relaxed ) );
+			dStatus.MatchTupletf ( "dist_predicted_time", "%l", g_tStats.m_iAgentPredictedTime.load ( std::memory_order_relaxed ) );
 		}
 	}
 
 	auto tReply = APIAnswer ( tOut, VER_COMMAND_STATUS );
-	tOut.SendInt ( dStatus.GetLength()/2 ); // rows
-	tOut.SendInt ( 2 ); // cols
+	tOut.SendInt ( dStatus.GetLength () / dStatus.Header ().GetLength () ); // rows
+	tOut.SendInt ( dStatus.Header ().GetLength () ); // cols
 	for ( const auto & dLines : dStatus )
 		tOut.SendString ( dLines.cstr() );
 }
@@ -13680,13 +13586,9 @@ static void AddQueryStats ( VectorLike & dStatus, const char * szPrefix, const Q
 	};
 
 	StringBuilder_c sBuf;
-	StringBuilder_c sName;
 	for ( int i = 0; i < INTERVAL_TOTAL; ++i )
 	{
-		sName.Clear ();
-		sName << szPrefix << "_" << dStatIntervalNames[i];
-
-		if ( dStatus.MatchAdd ( sName.cstr () ) )
+		if ( dStatus.MatchAddf ( "%s_%s", szPrefix, dStatIntervalNames[i] ) )
 		{
 			sBuf.Clear();
 			{
@@ -13771,47 +13673,35 @@ static void AddFederatedIndexStatus ( const CSphSourceStats & tStats, const CSph
 
 static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex, bool bMutable )
 {
-	if ( dStatus.MatchAdd ( "indexed_documents" ) )
-		dStatus.Add().SetSprintf ( INT64_FMT, pIndex->GetStats().m_iTotalDocuments );
-	if ( dStatus.MatchAdd ( "indexed_bytes" ) )
-		dStatus.Add().SetSprintf ( INT64_FMT, pIndex->GetStats().m_iTotalBytes );
+	auto iDocs = pIndex->GetStats ().m_iTotalDocuments;
+	dStatus.MatchTupletf ( "indexed_documents", "%l", iDocs );
+	dStatus.MatchTupletf ( "indexed_bytes", "%l", pIndex->GetStats ().m_iTotalBytes );
 
 	const int64_t * pFieldLens = pIndex->GetFieldLens();
 	if ( pFieldLens )
 	{
 		int64_t iTotalTokens = 0;
-		for ( int i=0; i < pIndex->GetMatchSchema().GetFieldsCount(); i++ )
+		for ( int i=0; i < pIndex->GetMatchSchema().GetFieldsCount(); ++i )
 		{
-			if ( dStatus.MatchAddVa ( "field_tokens_%s", pIndex->GetMatchSchema().GetFieldName(i) ) )
-				dStatus.Add().SetSprintf ( INT64_FMT, pFieldLens[i] );
+			if ( dStatus.MatchAddf ( "field_tokens_%s", pIndex->GetMatchSchema ().GetFieldName ( i ) ) )
+				dStatus.Addf( "%l", pFieldLens[i] );
 			iTotalTokens += pFieldLens[i];
 		}
-		if ( dStatus.MatchAdd ( "total_tokens" ) )
-			dStatus.Add().SetSprintf ( INT64_FMT, iTotalTokens );
+		dStatus.MatchTupletf ( "total_tokens", "%l", iTotalTokens );
 	}
 
 	CSphIndexStatus tStatus;
 	pIndex->GetStatus ( &tStatus );
-	if ( dStatus.MatchAdd ( "ram_bytes" ) )
-		dStatus.Add().SetSprintf ( INT64_FMT, tStatus.m_iRamUse );
-	if ( dStatus.MatchAdd ( "disk_bytes" ) )
-		dStatus.Add().SetSprintf ( INT64_FMT, tStatus.m_iDiskUse );
-	if ( dStatus.MatchAdd ( "disk_mapped" ) )
-		dStatus.Add ().SetSprintf ( INT64_FMT, tStatus.m_iMapped );
-	if ( dStatus.MatchAdd ( "disk_mapped_cached" ) )
-		dStatus.Add ().SetSprintf ( INT64_FMT, tStatus.m_iMappedResident );
-	if ( dStatus.MatchAdd ( "disk_mapped_doclists" ))
-		dStatus.Add ().SetSprintf ( INT64_FMT, tStatus.m_iMappedDocs );
-	if ( dStatus.MatchAdd ( "disk_mapped_cached_doclists" ) )
-		dStatus.Add ().SetSprintf ( INT64_FMT, tStatus.m_iMappedResidentDocs );
-	if ( dStatus.MatchAdd ( "disk_mapped_hitlists" ) )
-		dStatus.Add ().SetSprintf ( INT64_FMT, tStatus.m_iMappedHits );
-	if ( dStatus.MatchAdd ( "disk_mapped_cached_hitlists" ) )
-		dStatus.Add ().SetSprintf ( INT64_FMT, tStatus.m_iMappedResidentHits );
-	if ( dStatus.MatchAdd ( "killed_documents" ) )
-		dStatus.Add ().SetSprintf ( INT64_FMT, tStatus.m_iDead );
-	dStatus.MatchTupletFn ( "killed_rate", [&tStatus, pIndex] {
-		auto iDocs = pIndex->GetStats ().m_iTotalDocuments;
+	dStatus.MatchTupletf ( "ram_bytes", "%l", tStatus.m_iRamUse );
+	dStatus.MatchTupletf ( "disk_bytes", "%l", tStatus.m_iDiskUse );
+	dStatus.MatchTupletf ( "disk_mapped", "%l", tStatus.m_iMapped );
+	dStatus.MatchTupletf ( "disk_mapped_cached", "%l", tStatus.m_iMappedResident );
+	dStatus.MatchTupletf ( "disk_mapped_doclists", "%l", tStatus.m_iMappedDocs );
+	dStatus.MatchTupletf ( "disk_mapped_cached_doclists", "%l", tStatus.m_iMappedResidentDocs );
+	dStatus.MatchTupletf ( "disk_mapped_hitlists", "%l", tStatus.m_iMappedHits );
+	dStatus.MatchTupletf ( "disk_mapped_cached_hitlists", "%l", tStatus.m_iMappedResidentHits );
+	dStatus.MatchTupletf ( "killed_documents", "%l", tStatus.m_iDead );
+	dStatus.MatchTupletFn ( "killed_rate", [&tStatus, iDocs] {
 		StringBuilder_c sPercent;
 		if ( iDocs )
 			sPercent.Sprintf ( "%0.2F%%", tStatus.m_iDead * 10000 / iDocs );
@@ -13821,20 +13711,13 @@ static void AddDiskIndexStatus ( VectorLike & dStatus, const CSphIndex * pIndex,
 	} );
 	if ( bMutable )
 	{
-		if ( dStatus.MatchAdd ( "ram_chunk" ) )
-			dStatus.Add().SetSprintf ( INT64_FMT, tStatus.m_iRamChunkSize );
-		if ( dStatus.MatchAdd ( "ram_chunk_segments_count" ) )
-			dStatus.Add().SetSprintf ( "%d", tStatus.m_iNumRamChunks );
-		if ( dStatus.MatchAdd ( "disk_chunks" ) )
-			dStatus.Add().SetSprintf ( "%d", tStatus.m_iNumChunks );
-		if ( dStatus.MatchAdd ( "mem_limit" ) )
-			dStatus.Add().SetSprintf ( INT64_FMT, tStatus.m_iMemLimit );
-		if ( dStatus.MatchAdd ( "ram_bytes_retired" ) )
-			dStatus.Add().SetSprintf ( INT64_FMT, tStatus.m_iRamRetired );
-		if ( dStatus.MatchAdd ( "tid" ) )
-			dStatus.Add().SetSprintf ( INT64_FMT, tStatus.m_iTID );
-		if ( dStatus.MatchAdd ( "tid_saved" ) )
-			dStatus.Add().SetSprintf ( INT64_FMT, tStatus.m_iSavedTID );
+		dStatus.MatchTupletf ( "ram_chunk", "%l", tStatus.m_iRamChunkSize );
+		dStatus.MatchTupletf ( "ram_chunk_segments_count", "%d", tStatus.m_iNumRamChunks );
+		dStatus.MatchTupletf ( "disk_chunks", "%d", tStatus.m_iNumChunks );
+		dStatus.MatchTupletf ( "mem_limit", "%l", tStatus.m_iMemLimit );
+		dStatus.MatchTupletf ( "ram_bytes_retired", "%l", tStatus.m_iRamRetired );
+		dStatus.MatchTupletf ( "tid", "%l", tStatus.m_iTID );
+		dStatus.MatchTupletf ( "tid_saved", "%l", tStatus.m_iSavedTID );
 	}
 }
 

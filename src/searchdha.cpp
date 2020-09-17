@@ -897,6 +897,7 @@ SearchdStats_t::SearchdStats_t()
 	m_iConnections = 0;
 	m_iMaxedOut = 0;
 	m_iAgentConnect = 0;
+	m_iAgentConnectTFO = 0;
 
 	m_iQueries = 0;
 	m_iQueryTime = 0;
@@ -1582,6 +1583,8 @@ void AgentConn_t::State ( Agent_e eState )
 	sphLogDebugv ( "state %s > %s, sock %d, order %d, %p",
 		Agent_e_Name ( m_eConnState ), Agent_e_Name ( eState ), m_iSock, m_iStoreTag, this );
 	m_eConnState = eState;
+	if ( eState==Agent_e::RETRY )
+		gStats().m_iAgentRetry.fetch_add ( 1, std::memory_order_relaxed );
 }
 
 
@@ -1993,6 +1996,7 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 	if ( iRes )
 	{
 		State ( Agent_e::CONNECTING );
+		gStats().m_iAgentConnectTFO.fetch_add ( 1, std::memory_order_relaxed );
 		return 1;
 	}
 
@@ -2003,6 +2007,7 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 		return -1;
 	}
 	State ( Agent_e::CONNECTING );
+	gStats().m_iAgentConnect.fetch_add ( 1, std::memory_order_relaxed );
 	return 1;
 #else // USE_WINDOWS
 #if defined (MSG_FASTOPEN)
@@ -2043,6 +2048,7 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 		sphLogDebugv ( "TFO send succeeded, %zu bytes sent", ( size_t ) iRes );
 		// now 'connect' and 'query' merged, so timeout became common.
 		m_iPoolerTimeoutUS += 1000*m_iMyQueryTimeoutMs;
+		gStats().m_iAgentConnectTFO.fetch_add ( 1, std::memory_order_relaxed );
 		return SendQuery ( iRes ) ? 1 : -1;
 	}
 
@@ -2061,6 +2067,7 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 	}
 	sphLogDebugA ( "%d TFO returned EINPROGRESS (usuall connect in game; scheduling callbacks)", m_iStoreTag );
 	ScheduleCallbacks ();
+	gStats().m_iAgentConnect.fetch_add ( 1, std::memory_order_relaxed );
 	return 1;
 #endif
 }
@@ -2402,6 +2409,7 @@ bool AgentConn_t::EstablishConnection ()
 		if ( iErr==EINTR || !IS_PENDING_PROGRESS ( iErr ) ) // check for EWOULDBLOCK is for winsock only
 			return Fatal ( eConnectFailures, "connect() failed: errno=%d, %s", iErr, sphSockError ( iErr ) );
 	}
+	gStats().m_iAgentConnect.fetch_add ( 1, std::memory_order_relaxed );
 	return SendQuery ();
 }
 

@@ -735,6 +735,7 @@ struct SearchdStats_t
 	std::atomic<int64_t>	m_iMaxedOut;
 	std::atomic<int64_t>	m_iCommandCount[SEARCHD_COMMAND_TOTAL];
 	std::atomic<int64_t>	m_iAgentConnect;
+	std::atomic<int64_t>	m_iAgentConnectTFO;
 	std::atomic<int64_t>	m_iAgentRetry;
 
 	std::atomic<int64_t>	m_iQueries;			///< search queries count (differs from search commands count because of multi-queries)

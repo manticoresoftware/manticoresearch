@@ -165,6 +165,7 @@ void HttpServe ( AsyncNetBufferPtr_c pBuf )
 			sphHttpErrorReply ( dResult, SPH_HTTP_STATUS_503, g_sMaxedOutMessage );
 			tOut.SwapData ( dResult );
 			tOut.Flush (); // no need to check return code since we break anyway
+			gStats().m_iMaxedOut.fetch_add ( 1, std::memory_order_relaxed );
 			break;
 		}
 

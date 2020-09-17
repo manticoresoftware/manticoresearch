@@ -8232,7 +8232,9 @@ void BuildStatus ( VectorLike & dStatus )
 	if ( dStatus.MatchAdd ( "command_callpq" ) )
 		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_CALLPQ] );
 	if ( dStatus.MatchAdd ( "agent_connect" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iAgentConnect );
+		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iAgentConnect + g_tStats.m_iAgentConnectTFO);
+	if ( dStatus.MatchAdd ( "agent_tfo" ) )
+		dStatus.Add ().SetSprintf ( FMT64, (int64_t) g_tStats.m_iAgentConnectTFO );
 	if ( dStatus.MatchAdd ( "agent_retry" ) )
 		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iAgentRetry );
 	if ( dStatus.MatchAdd ( "queries" ) )

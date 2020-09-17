@@ -178,6 +178,7 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf )
 				tOut.SendString ( g_sMaxedOutMessage );
 			}
 			tOut.Flush(); // no need to check return code since we anyway break
+			gStats().m_iMaxedOut.fetch_add ( 1, std::memory_order_relaxed );
 			break;
 		}
 

@@ -815,6 +815,7 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 				sphWarning ( "%s", g_sMaxedOutMessage );
 				SendMysqlErrorPacket ( tOut, uPacketID, nullptr, g_sMaxedOutMessage, MYSQL_ERR_UNKNOWN_COM_ERROR );
 				tOut.Flush ();
+				gStats().m_iMaxedOut.fetch_add ( 1, std::memory_order_relaxed );
 				break;
 			}
 

@@ -231,7 +231,7 @@ void RtSegment_t::FixupRAMCounter ( int64_t iDelta ) const
 	if ( !m_pRAMCounter )
 		return;
 
-	( *m_pRAMCounter ) += iDelta;
+	m_pRAMCounter->fetch_add ( iDelta, std::memory_order_relaxed );
 }
 
 DWORD RtSegment_t::GetMergeFactor() const
@@ -274,7 +274,7 @@ int RtSegment_t::Kill ( DocID_t tDocID )
 	if ( m_tDeadRowMap.Set ( GetRowidByDocid ( tDocID ) ) )
 	{
 		assert ( m_tAliveRows>0 );
-		m_tAliveRows.Dec();
+		m_tAliveRows.fetch_sub ( 1, std::memory_order_relaxed );
 		return 1;
 	}
 
@@ -1187,7 +1187,7 @@ private:
 
 	int							m_iStride;
 	LazyVector_T<RtSegmentRefPtf_t>	m_dRamChunks GUARDED_BY ( m_tChunkLock );
-	CSphAtomicL					m_iRamChunksAllocatedRAM;
+	std::atomic<int64_t>		m_iRamChunksAllocatedRAM;
 
 	CSphMutex					m_tWriting;
 	mutable CSphRwlock			m_tChunkLock;
@@ -2098,7 +2098,7 @@ RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize, int iWordsCheckpoint, ESp
 		FixupSegmentCheckpoints ( pSeg );
 
 	pSeg->m_uRows = m_uAccumDocs;
-	pSeg->m_tAliveRows = m_uAccumDocs;
+	pSeg->m_tAliveRows.store ( m_uAccumDocs, std::memory_order_relaxed );
 
 	pSeg->m_dRows.SwapData(m_dAccumRows);
 	pSeg->m_dBlobs.SwapData(m_dBlobs);
@@ -2602,7 +2602,7 @@ RtSegment_t * RtIndex_c::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 
 	assert ( tNextRowID<=INT_MAX );
 	pSeg->m_uRows = tNextRowID;
-	pSeg->m_tAliveRows = pSeg->m_uRows;
+	pSeg->m_tAliveRows.store ( pSeg->m_uRows, std::memory_order_relaxed );
 	pSeg->m_tDeadRowMap.Reset ( pSeg->m_uRows );
 
 	assert ( pSeg->m_uRows*m_iStride==(DWORD)pSeg->m_dRows.GetLength() );
@@ -2724,7 +2724,7 @@ static void RemoveEmptySegments ( CSphVector<RtSegmentRefPtf_t> & dSegments )
 	ARRAY_FOREACH ( i, dSegments )
 	{
 		auto & pSeg = dSegments[i];
-		if ( !pSeg->m_tAliveRows )
+		if ( !pSeg->m_tAliveRows.load ( std::memory_order_relaxed ) )
 		{
 			pSeg = nullptr; // release it
 			dSegments.RemoveFast ( i );
@@ -3131,7 +3131,7 @@ bool RtIndex_c::WriteAttributes ( SaveDiskDataContext_t & tCtx, CSphString & sEr
 
 	tCtx.m_iTotalDocs = 0;
 	for ( const auto & i : tCtx.m_tGuard.m_dRamChunks )
-		tCtx.m_iTotalDocs += i->m_tAliveRows.GetValue();
+		tCtx.m_iTotalDocs += i->m_tAliveRows.load ( std::memory_order_relaxed );
 
 	CSphFixedVector<DocidRowidPair_t> dLookup ( tCtx.m_iTotalDocs );
 
@@ -4152,7 +4152,7 @@ bool RtIndex_c::SaveRamChunk ( const VecTraits_T<const RtSegmentRefPtf_t> &dSegm
 	for ( const RtSegment_t * pSeg : dSegments )
 	{
 		wrChunk.PutDword ( pSeg->m_uRows );
-		wrChunk.PutDword ( pSeg->m_tAliveRows );
+		wrChunk.PutDword ( pSeg->m_tAliveRows.load ( std::memory_order_relaxed ) );
 		wrChunk.PutDword ( 0 );
 		SaveVector ( wrChunk, pSeg->m_dWords );
 		if ( m_bKeywordDict )
@@ -4237,7 +4237,7 @@ bool RtIndex_c::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 
 		RtSegmentRefPtf_t pSeg {new RtSegment_t ( uRows )};
 		pSeg->m_uRows = uRows;
-		pSeg->m_tAliveRows = rdChunk.GetDword();
+		pSeg->m_tAliveRows.store ( rdChunk.GetDword (), std::memory_order_relaxed );
 
 		rdChunk.GetDword ();
 		if ( !LoadVector ( rdChunk, pSeg->m_dWords, iSaneTightVecSize, "ram-words", m_sLastError ) )
@@ -4911,9 +4911,9 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 		DebugCheck_DeadRowMap ( tSegment.m_tDeadRowMap.GetLengthBytes(), tSegment.m_uRows, tReporter );
 
 		DWORD uCalcAliveRows = tSegment.m_tDeadRowMap.GetNumAlive();
-		if ( tSegment.m_tAliveRows!=uCalcAliveRows )
+		if ( tSegment.m_tAliveRows.load(std::memory_order_relaxed)!=uCalcAliveRows )
 			tReporter.Fail ( "alive row count mismatch (segment=%d, expected=%u, current=%u)", iSegment, uCalcAliveRows,
-					tSegment.m_tAliveRows.GetValue() );
+					tSegment.m_tAliveRows.load ( std::memory_order_relaxed ) );
 	}
 
 	int iFailsPlain = 0;
@@ -5187,7 +5187,7 @@ public:
 		m_bDone = ( m_iRowsCount==0 );
 		m_dQwordFields.SetAll();
 
-		return ( pSegment->m_tAliveRows>0 );
+		return ( pSegment->m_tAliveRows.load(std::memory_order_relaxed)>0 );
 	}
 };
 
@@ -7750,7 +7750,7 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 
 	pRes->m_iRamChunkSize = iUsedRam + tGuard.m_dRamChunks.GetLength()*int(sizeof(RtSegment_t));
 	pRes->m_iRamUse = sizeof( RtIndex_c ) + pRes->m_iRamChunkSize;
-	pRes->m_iRamRetired = m_iRamChunksAllocatedRAM - iUsedRam;
+	pRes->m_iRamRetired = m_iRamChunksAllocatedRAM.load(std::memory_order_relaxed) - iUsedRam;
 
 	pRes->m_iMemLimit = m_iSoftRamLimit;
 
@@ -9133,7 +9133,8 @@ bool RtBinlog_c::ReplayCommit ( int iBinlog, DWORD uReplayFlags, BinlogReader_c 
 	if ( uRows )
 	{
 		pSeg = new RtSegment_t(uRows);
-		pSeg->m_uRows = pSeg->m_tAliveRows = uRows;
+		pSeg->m_uRows = uRows;
+		pSeg->m_tAliveRows.store ( uRows, std::memory_order_relaxed );
 		m_iReplayedRows += (int)uRows;
 
 		LoadVector ( tReader, pSeg->m_dWords );

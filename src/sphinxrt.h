@@ -188,11 +188,11 @@ public:
 	CSphTightVector<BYTE>			m_dHits;
 
 	DWORD							m_uRows { 0 };        ///< number of actually allocated rows
-	CSphAtomic_T<int64_t>			m_tAliveRows { 0 };    ///< number of alive (non-killed) rows
+	std::atomic<int64_t>			m_tAliveRows { 0 };    ///< number of alive (non-killed) rows
 	CSphTightVector<CSphRowitem>	m_dRows;            ///< row data storage
 	CSphTightVector<BYTE>			m_dBlobs;            ///< storage for blob attrs
 	CSphVector<BYTE>				m_dKeywordCheckpoints;
-	CSphAtomicL *					m_pRAMCounter = nullptr; ///< external RAM counter
+	std::atomic<int64_t> *			m_pRAMCounter = nullptr; ///< external RAM counter
 	OpenHash_T<RowID_t, DocID_t>	m_tDocIDtoRowID; ///< speeds up docid-rowid lookups
 	DeadRowMap_Ram_c				m_tDeadRowMap;
 	CSphScopedPtr<DocstoreRT_i>		m_pDocstore{nullptr};

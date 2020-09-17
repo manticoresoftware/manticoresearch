@@ -1781,7 +1781,7 @@ int64_t DocstoreRT_c::AllocatedBytes() const
 std::atomic<int64_t> DocstoreSession_c::m_tUIDGenerator { 0 };
 
 DocstoreSession_c::DocstoreSession_c()
-	: m_iUID ( m_tUIDGenerator.fetch_add ( std::memory_order_relaxed ) )
+	: m_iUID ( m_tUIDGenerator.fetch_add ( 1, std::memory_order_relaxed ) )
 {}
 
 

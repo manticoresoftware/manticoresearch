@@ -2093,7 +2093,7 @@ void sphWarn ( const char * sTemplate, ... )
 
 static int 		g_iIOpsDelay = 0;
 static int 		g_iMaxIOSize = 0;
-static CSphAtomicL g_tmNextIOTime;
+static std::atomic<int64_t> g_tmNextIOTime {0};
 
 void sphSetThrottling ( int iMaxIOps, int iMaxIOSize )
 {
@@ -2108,12 +2108,12 @@ static inline void ThrottleSleep ()
 		return;
 
 	auto tmTimer = sphMicroTimer ();
-	while ( tmTimer < g_tmNextIOTime ) // m.b. >1 sleeps if another thread more lucky
+	while ( tmTimer < g_tmNextIOTime.load(std::memory_order_relaxed) ) // m.b. >1 sleeps if another thread more lucky
 	{
-		sphSleepMsec ( ( int ) ( g_tmNextIOTime - tmTimer ) / 1000 );
+		sphSleepMsec ( ( int ) ( g_tmNextIOTime.load(std::memory_order_relaxed) - tmTimer ) / 1000 );
 		tmTimer = sphMicroTimer();
 	}
-	g_tmNextIOTime = tmTimer + g_iIOpsDelay;
+	g_tmNextIOTime.store ( tmTimer+g_iIOpsDelay, std::memory_order_relaxed );
 }
 
 

@@ -19,7 +19,7 @@
 struct FlushState_t
 {
 	CSphAutoEvent m_tFlushFinished;
-	CSphAtomic m_iDemandEvents; // if worker need to set the event
+	std::atomic<int> m_iDemandEvents {0}; // if worker need to set the event
 	int64_t m_iLastCheckFinishedTime = 0;
 	int m_iFlushTag = 0;        ///< last flushed tag
 };
@@ -65,7 +65,7 @@ static Saved_e CheckSaveIndexes ()
  * First needs nothing - it just do the things and re-schedule itself.
  * Second needs event to trace end of operation.
  * So, there are 2 slightly different operations: 'just flush' and 'flush and signal'.
- * For this kind of task we may have at most 1 job in queue, (1 one currently running - already out of queue).
+ * For this kind of task we may have at most 1 job in queue, (one which is currently running - already out of queue).
  * If saving job is in progress, you may schedule at most 1 more; others will be dropped.
  * If you issued 'flush attributes' and it is in progress, and then usual timeouted task happened and enqueued
  * the next saving right after one in work, any other try to call 'flush attributes' would be just dropped and then
@@ -76,8 +76,8 @@ static Saved_e CheckSaveIndexes ()
  */
 static void SaveIndexesMT ( void* = nullptr )
 {
-	int iFireOnExit = g_tFlush.m_iDemandEvents;
-	g_tFlush.m_iDemandEvents -= iFireOnExit;
+	int iFireOnExit = g_tFlush.m_iDemandEvents.load ( std::memory_order_acquire );
+	g_tFlush.m_iDemandEvents.fetch_sub ( iFireOnExit, std::memory_order_release );
 
 	if ( iFireOnExit )
 		sphLogDebug ( "attrflush: doing forced check for %d waiters", iFireOnExit );
@@ -106,7 +106,7 @@ int CommandFlush () EXCLUDES ( MainThread )
 {
 	// force a check, and wait it until completes
 	sphLogDebug ( "attrflush: forcing check, tag=%d", g_tFlush.m_iFlushTag );
-	++g_tFlush.m_iDemandEvents;
+	g_tFlush.m_iDemandEvents.fetch_add(1,std::memory_order_release);
 	EngageSaveIndexes ();
 
 	g_tFlush.m_tFlushFinished.WaitEvent ();

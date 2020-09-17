@@ -3324,12 +3324,12 @@ const char * GetBaseName ( const CSphString & sFullPath )
 	return pCur;
 }
 
-static CSphAtomic_T<int64_t> g_iUID { 1 };
+static std::atomic<int64_t> g_iUID { 1 };
 static int64_t g_iUidBase = 0;
 
 int64_t UidShort()
 {
-	int64_t iVal = g_iUID.Inc();
+	int64_t iVal = g_iUID.fetch_add (1, std::memory_order_relaxed);
 	int64_t iUID = g_iUidBase + iVal;
 	return iUID;
 }

@@ -9249,11 +9249,11 @@ void SetExprNodeStackItemSize ( int iSize )
 struct ExprNodeHeight_t
 {
 	int m_iNode = 0;
-	int m_iHeght = 0;
+	int m_iHeight = 0;
 
 	ExprNodeHeight_t ( int iNode, int iHeght )
 		: m_iNode ( iNode )
-		, m_iHeght ( iHeght )
+		, m_iHeight ( iHeght )
 	{}
 
 	ExprNodeHeight_t() = default;
@@ -9310,11 +9310,11 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 		{
 			const ExprNodeHeight_t & tParent = dNodes.Pop();
 			const ExprNode_t & tExpr = m_dNodes[tParent.m_iNode];
-			iMaxHeight = Max ( iMaxHeight, tParent.m_iHeght );
+			iMaxHeight = Max ( iMaxHeight, tParent.m_iHeight );
 			if ( tExpr.m_iRight>=0 )
-				dNodes.Add ( ExprNodeHeight_t ( tExpr.m_iRight, tParent.m_iHeght+1 ) );
+				dNodes.Add ( ExprNodeHeight_t ( tExpr.m_iRight, tParent.m_iHeight+1 ) );
 			if ( tExpr.m_iLeft>=0 )
-				dNodes.Add ( ExprNodeHeight_t ( tExpr.m_iLeft, tParent.m_iHeght+1 ) );
+				dNodes.Add ( ExprNodeHeight_t ( tExpr.m_iLeft, tParent.m_iHeight+1 ) );
 		}
 
 		iExprStack = sphGetStackUsed() + iMaxHeight*SPH_EXPRNODE_STACK_SIZE;

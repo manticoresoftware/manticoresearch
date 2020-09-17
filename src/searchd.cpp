@@ -18353,7 +18353,7 @@ static void ParseExpr ( const char * sExpr, int * pSize )
 
 static void SetNodeItemStackSize()
 {
-	Threads::g_bCoroStackFill = true;
+	Threads::g_bInitCoroStackWithZeros = true;
 
 	// calculate item size for expression parser
 	int iStackMaxUsed1 = 0;
@@ -18362,7 +18362,7 @@ static void SetNodeItemStackSize()
 	int iStackMaxUsed2 = 0;
 	Threads::CallCoroutine ( [&iStackMaxUsed2] { ParseExpr ( "(4*attr_a+2*(attr_b-1)+3)*1000", &iStackMaxUsed2 ); } );
 
-	Threads::g_bCoroStackFill = false;
+	Threads::g_bInitCoroStackWithZeros = false;
 
 	int iDelta = iStackMaxUsed2 - iStackMaxUsed1;
 	sphLogDebug ( "expression stack delta %d", iDelta );

@@ -43,7 +43,7 @@ inline static size_t AlignUpTo (size_t iSize)
 	return ( iSize+STACK_ALIGN-1 ) & ~( STACK_ALIGN-1 );
 }
 
-bool g_bCoroStackFill = false;
+bool g_bInitCoroStackWithZeros = false;
 
 //////////////////////////////////////////////////////////////
 /// Coroutine - uses boost::context to switch between jobs
@@ -89,7 +89,7 @@ public:
 		: m_fnHandler ( std::move ( fnHandler ) )
 		  , m_dStack ( iStack ? (int)AlignUpTo ( iStack ) : g_iStackSize )
 	{
-		if ( g_bCoroStackFill )
+		if ( g_bInitCoroStackWithZeros )
 			m_dStack.Fill ( 0 );
 
 #if BOOST_USE_VALGRIND

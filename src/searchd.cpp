@@ -8201,36 +8201,10 @@ void BuildStatus ( VectorLike & dStatus )
 		dStatus.Add().SetSprintf ( "%s", szMANTICORE_VERSION );
 	if ( dStatus.MatchAdd ( "mysql_version" ) )
 		dStatus.Add().SetSprintf ( "%s", g_sMySQLVersion.cstr() );
-	if ( dStatus.MatchAdd ( "command_search" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_SEARCH] );
-	if ( dStatus.MatchAdd ( "command_excerpt" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_EXCERPT] );
-	if ( dStatus.MatchAdd ( "command_update" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_UPDATE] );
-	if ( dStatus.MatchAdd ( "command_delete" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_DELETE] );
-	if ( dStatus.MatchAdd ( "command_keywords" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_KEYWORDS] );
-	if ( dStatus.MatchAdd ( "command_persist" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_PERSIST] );
-	if ( dStatus.MatchAdd ( "command_status" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_STATUS] );
-	if ( dStatus.MatchAdd ( "command_flushattrs" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_FLUSHATTRS] );
-	if ( dStatus.MatchAdd ( "command_set" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_UVAR] );
-	if ( dStatus.MatchAdd ( "command_insert" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_INSERT] );
-	if ( dStatus.MatchAdd ( "command_replace" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_REPLACE] );
-	if ( dStatus.MatchAdd ( "command_commit" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_COMMIT] );
-	if ( dStatus.MatchAdd ( "command_suggest" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_SUGGEST] );
-	if ( dStatus.MatchAdd ( "command_json" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_JSON] );
-	if ( dStatus.MatchAdd ( "command_callpq" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_CALLPQ] );
+
+	for ( auto i=0; i<SEARCHD_COMMAND_TOTAL; ++i)
+		dStatus.MatchTupletf ( szCommand ( i ), "%l", g_tStats.m_iCommandCount[i].load ( std::memory_order_relaxed ) );
+
 	if ( dStatus.MatchAdd ( "agent_connect" ) )
 		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iAgentConnect + g_tStats.m_iAgentConnectTFO);
 	if ( dStatus.MatchAdd ( "agent_tfo" ) )

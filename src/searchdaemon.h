@@ -168,6 +168,8 @@ enum SearchdCommand_e : WORD
 	SEARCHD_COMMAND_WRONG = SEARCHD_COMMAND_TOTAL,
 };
 
+const char* szCommand ( int );
+
 /// master-agent API SEARCH command protocol extensions version
 enum
 {

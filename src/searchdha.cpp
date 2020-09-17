@@ -891,7 +891,38 @@ const char * Agent_e_Name ( Agent_e eState )
 	return "UNKNOWN_STATE";
 }
 
-SearchdStats_t g_tStats;
+SearchdStats_t::SearchdStats_t()
+{
+	m_uStarted = 0;
+	m_iConnections = 0;
+	m_iMaxedOut = 0;
+	m_iAgentConnect = 0;
+
+	m_iQueries = 0;
+	m_iQueryTime = 0;
+	m_iQueryCpuTime = 0;
+
+	m_iDistQueries = 0;
+	m_iDistWallTime = 0;
+	m_iDistLocalTime = 0;
+	m_iDistWaitTime = 0;
+
+	m_iDiskReads = 0;
+	m_iDiskReadBytes = 0;
+	m_iDiskReadTime = 0;
+
+	m_iPredictedTime = 0;
+	m_iAgentPredictedTime = 0;
+
+	for ( auto & i : m_iCommandCount )
+		i = 0;
+}
+
+SearchdStats_t & gStats ()
+{
+	static SearchdStats_t tSt;
+	return tSt;
+}
 
 // generic stats track - always to agent stats, separately to dashboard.
 void agent_stats_inc ( AgentConn_t &tAgent, AgentStats_e iCountID )

@@ -753,9 +753,11 @@ struct SearchdStats_t
 
 	CSphAtomicL		m_iPredictedTime;	///< total agent predicted query time
 	CSphAtomicL		m_iAgentPredictedTime;	///< total agent predicted query time
+
+	SearchdStats_t ();
 };
 
-extern SearchdStats_t			g_tStats;
+SearchdStats_t&	gStats();
 
 namespace Dashboard
 {

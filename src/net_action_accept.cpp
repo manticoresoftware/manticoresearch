@@ -117,7 +117,7 @@ void NetActionAccept_c::Impl_c::ProcessAccept ( DWORD uGotEvents, CSphNetLoop * 
 
 	// handle all incoming requests at once but not too much
 	int iAccepted = 0;
-	auto _ = AtScopeExit([&iAccepted] {	g_tStats.m_iConnections.fetch_add ( iAccepted, std::memory_order_relaxed ); });
+	auto _ = AtScopeExit([&iAccepted] {	gStats().m_iConnections.fetch_add ( iAccepted, std::memory_order_relaxed ); });
 	sockaddr_storage saStorage = {0};
 	socklen_t uLength = sizeof(saStorage);
 

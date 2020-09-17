@@ -5289,6 +5289,7 @@ void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphStrin
 
 	const CSphIOStats & tIO = tRes.m_tIOStats;
 
+	auto & g_tStats = gStats ();
 	++g_tStats.m_iQueries;
 	g_tStats.m_iQueryTime += tmLocal;
 	g_tStats.m_iQueryCpuTime += tmLocal;
@@ -6229,6 +6230,7 @@ void SearchHandler_c::CalcPerIndexStats ( const CSphVector<DistrServedByAgent_t>
 
 void SearchHandler_c::CalcGlobalStats ( int64_t tmCpu, int64_t tmSubset, int64_t tmLocal, const CSphIOStats & tIO, const VecRefPtrsAgentConn_t & dRemotes ) const
 {
+	auto & g_tStats = gStats ();
 	g_tStats.m_iQueries += m_dNQueries.GetLength();
 	g_tStats.m_iQueryTime += tmSubset;
 	g_tStats.m_iQueryCpuTime += tmCpu;
@@ -6821,6 +6823,7 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 		iTotalAgentPredictedTime += dResult.m_iAgentPredictedTime;
 	}
 
+	auto & g_tStats = gStats ();
 	g_tStats.m_iPredictedTime += iTotalPredictedTime;
 	g_tStats.m_iAgentPredictedTime += iTotalAgentPredictedTime;
 
@@ -8177,6 +8180,7 @@ static inline void FormatMsec ( CSphString & sOut, int64_t tmTime )
 
 void BuildStatus ( VectorLike & dStatus )
 {
+	auto & g_tStats = gStats ();
 	const char * FMT64 = INT64_FMT;
 	const char * FLOAT = "%.2f";
 	const char * OFF = "OFF";
@@ -8375,6 +8379,7 @@ void BuildStatusOneline ( StringBuilder_c & sOut )
 	auto iThreads = GlobalWorkPool ()->WorkingThreads ();
 	auto iQueue = GlobalWorkPool ()->Works ();
 	auto iTasks = myinfo::CountAll ();
+	auto & g_tStats = gStats ();
 	sOut.StartBlock ( " " );
 	sOut
 	<< "Uptime:" << (DWORD) time ( NULL )-g_tStats.m_uStarted
@@ -8648,6 +8653,7 @@ void HandleCommandStatus ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 	else
 	{
 		ScRL_t dMetaRlock ( g_tLastMetaLock );
+		auto & g_tStats = gStats ();
 		BuildMeta ( dStatus, g_tLastMeta );
 		if ( g_tStats.m_iPredictedTime || g_tStats.m_iAgentPredictedTime )
 		{
@@ -15404,7 +15410,7 @@ void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 void StatCountCommand ( SearchdCommand_e eCmd )
 {
 	if ( eCmd<SEARCHD_COMMAND_TOTAL )
-		++g_tStats.m_iCommandCount[eCmd];
+		++gStats().m_iCommandCount[eCmd];
 }
 
 bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, CSphString & sFederatedQuery )
@@ -19092,7 +19098,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	ScheduleFlushAttrs();
 
-	g_tStats.m_uStarted = (DWORD)time(NULL);
+	gStats().m_uStarted = (DWORD)time(NULL);
 
 	// threads mode
 	if ( !InitSphinxqlState ( hSearchd.GetStr ( "sphinxql_state" ), sError ))

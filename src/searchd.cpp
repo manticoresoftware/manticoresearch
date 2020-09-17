@@ -11435,9 +11435,7 @@ static void HandleMysqlCreateTableLike ( RowBuffer_i & tOut, const SqlStmt_t & t
 
 	if ( pServed && !pServed->m_pIndex->IsRT() && !pServed->m_pIndex->IsPQ() )
 	{
-		CSphString sError;
-		sError.SetSprintf ( "index '%s' is not real-time or percolate", tStmt.m_sIndex.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_NO_SUCH_TABLE );
+		tOut.ErrorAbsent ( tStmt.m_sStmt, "index '%s' is not real-time or percolate", sError.cstr () );
 		return;
 	}
 
@@ -11491,17 +11489,13 @@ void HandleMysqlShowCreateTable ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	auto pDist = GetDistr ( tStmt.m_sIndex );
 	if ( ( !pServed || !pServed->m_pIndex ) && !pDist )
 	{
-		CSphString sError;
-		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_NO_SUCH_TABLE );
+		tOut.ErrorAbsent ( tStmt.m_sStmt, "no such index '%s'", tStmt.m_sIndex.cstr () );
 		return;
 	}
 
 	if ( pServed && !pServed->m_pIndex->IsRT() && !pServed->m_pIndex->IsPQ() )
 	{
-		CSphString sError;
-		sError.SetSprintf ( "index '%s' is not real-time or percolate", tStmt.m_sIndex.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_NO_SUCH_TABLE );
+		tOut.ErrorAbsent ( tStmt.m_sStmt, "index '%s' is not real-time or percolate", tStmt.m_sIndex.cstr () );
 		return;
 	}
 

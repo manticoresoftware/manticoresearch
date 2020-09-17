@@ -1430,6 +1430,18 @@ public:
 		Error ( sStmt, sBuf, MYSQL_ERR_PARSE_ERROR );
 	}
 
+	void ErrorAbsent ( const char * sStmt, const char * sTemplate, ... )
+	{
+		char sBuf[1024];
+		va_list ap;
+
+		va_start ( ap, sTemplate );
+		vsnprintf ( sBuf, sizeof ( sBuf ), sTemplate, ap );
+		va_end ( ap );
+
+		Error ( sStmt, sBuf, MYSQL_ERR_NO_SUCH_TABLE );
+	}
+
 	// popular pattern of 2 columns of data
 	void DataTuplet ( const char * pLeft, const char * pRight )
 	{

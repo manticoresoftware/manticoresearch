@@ -42,9 +42,7 @@ bool DeadRowMap_c::Set ( RowID_t tRowID, DWORD * pData )
 	DWORD uPrev = __sync_fetch_and_or ( pDword, uMask );
 #elif USE_WINDOWS
 	DWORD uPrev = _InterlockedOr ( (long*)pDword, (long)uMask );
-#endif
-
-#if NO_ATOMIC
+#else
 	ScopedMutex_t tLock ( m_tLock );
 	DWORD uPrev = *pDword;
 	*pDword |= uMask;

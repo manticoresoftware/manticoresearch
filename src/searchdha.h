@@ -730,28 +730,28 @@ inline DistributedIndexRefPtr_t GetDistr ( const CSphString &sName )
 
 struct SearchdStats_t
 {
-	DWORD			m_uStarted = 0;
-	std::atomic<int>		m_iConnections {0};
-	CSphAtomicL		m_iMaxedOut;
-	CSphAtomicL		m_iCommandCount[SEARCHD_COMMAND_TOTAL];
-	CSphAtomicL		m_iAgentConnect;
-	CSphAtomicL		m_iAgentRetry;
+	DWORD					m_uStarted;
+	std::atomic<int64_t>	m_iConnections;
+	std::atomic<int64_t>	m_iMaxedOut;
+	std::atomic<int64_t>	m_iCommandCount[SEARCHD_COMMAND_TOTAL];
+	std::atomic<int64_t>	m_iAgentConnect;
+	std::atomic<int64_t>	m_iAgentRetry;
 
-	CSphAtomicL		m_iQueries;			///< search queries count (differs from search commands count because of multi-queries)
-	CSphAtomicL		m_iQueryTime;		///< wall time spent (including network wait time)
-	CSphAtomicL		m_iQueryCpuTime;	///< CPU time spent
+	std::atomic<int64_t>	m_iQueries;			///< search queries count (differs from search commands count because of multi-queries)
+	std::atomic<int64_t>	m_iQueryTime;		///< wall time spent (including network wait time)
+	std::atomic<int64_t>	m_iQueryCpuTime;	///< CPU time spent
 
-	CSphAtomicL		m_iDistQueries;		///< distributed queries count
-	CSphAtomicL		m_iDistWallTime;	///< wall time spent on distributed queries
-	CSphAtomicL		m_iDistLocalTime;	///< wall time spent searching local indexes in distributed queries
-	CSphAtomicL		m_iDistWaitTime;	///< time spent waiting for remote agents in distributed queries
+	std::atomic<int64_t>	m_iDistQueries;		///< distributed queries count
+	std::atomic<int64_t>	m_iDistWallTime;	///< wall time spent on distributed queries
+	std::atomic<int64_t>	m_iDistLocalTime;	///< wall time spent searching local indexes in distributed queries
+	std::atomic<int64_t>	m_iDistWaitTime;	///< time spent waiting for remote agents in distributed queries
 
-	CSphAtomicL		m_iDiskReads;		///< total read IO calls (fired by search queries)
-	CSphAtomicL		m_iDiskReadBytes;	///< total read IO traffic
-	CSphAtomicL		m_iDiskReadTime;	///< total read IO time
+	std::atomic<int64_t>	m_iDiskReads;		///< total read IO calls (fired by search queries)
+	std::atomic<int64_t>	m_iDiskReadBytes;	///< total read IO traffic
+	std::atomic<int64_t>	m_iDiskReadTime;	///< total read IO time
 
-	CSphAtomicL		m_iPredictedTime;	///< total agent predicted query time
-	CSphAtomicL		m_iAgentPredictedTime;	///< total agent predicted query time
+	std::atomic<int64_t>	m_iPredictedTime;	///< total agent predicted query time
+	std::atomic<int64_t>	m_iAgentPredictedTime;	///< total agent predicted query time
 
 	SearchdStats_t ();
 };

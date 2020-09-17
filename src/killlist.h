@@ -47,7 +47,7 @@ protected:
 
 private:
 	virtual DWORD CountDeads () const = 0;	// heavy doc-by-doc counting
-#if NO_ATOMIC
+#if !(USE_WINDOWS) && !(HAVE_SYNC_FETCH)
 	CSphMutex		m_tLock;
 #endif
 };

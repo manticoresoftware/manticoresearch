@@ -5290,12 +5290,12 @@ void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphStrin
 	const CSphIOStats & tIO = tRes.m_tIOStats;
 
 	auto & g_tStats = gStats ();
-	++g_tStats.m_iQueries;
-	g_tStats.m_iQueryTime += tmLocal;
-	g_tStats.m_iQueryCpuTime += tmLocal;
-	g_tStats.m_iDiskReads += tIO.m_iReadOps;
-	g_tStats.m_iDiskReadTime += tIO.m_iReadTime;
-	g_tStats.m_iDiskReadBytes += tIO.m_iReadBytes;
+	g_tStats.m_iQueries.fetch_add ( 1, std::memory_order_relaxed );
+	g_tStats.m_iQueryTime.fetch_add ( tmLocal, std::memory_order_relaxed );
+	g_tStats.m_iQueryCpuTime.fetch_add ( tmLocal, std::memory_order_relaxed );
+	g_tStats.m_iDiskReads.fetch_add ( tIO.m_iReadOps, std::memory_order_relaxed );
+	g_tStats.m_iDiskReadTime.fetch_add ( tIO.m_iReadTime, std::memory_order_relaxed );
+	g_tStats.m_iDiskReadBytes.fetch_add ( tIO.m_iReadBytes, std::memory_order_relaxed );
 
 	if ( m_bQueryLog )
 		LogQuery ( m_dQueries[0], m_dAggrResults[0], m_dAgentTimes[0] );
@@ -6231,9 +6231,9 @@ void SearchHandler_c::CalcPerIndexStats ( const CSphVector<DistrServedByAgent_t>
 void SearchHandler_c::CalcGlobalStats ( int64_t tmCpu, int64_t tmSubset, int64_t tmLocal, const CSphIOStats & tIO, const VecRefPtrsAgentConn_t & dRemotes ) const
 {
 	auto & g_tStats = gStats ();
-	g_tStats.m_iQueries += m_dNQueries.GetLength();
-	g_tStats.m_iQueryTime += tmSubset;
-	g_tStats.m_iQueryCpuTime += tmCpu;
+	g_tStats.m_iQueries.fetch_add ( m_dNQueries.GetLength (), std::memory_order_relaxed );
+	g_tStats.m_iQueryTime.fetch_add ( tmSubset, std::memory_order_relaxed );
+	g_tStats.m_iQueryCpuTime.fetch_add ( tmCpu, std::memory_order_relaxed );
 	if ( dRemotes.GetLength() )
 	{
 		int64_t tmWait = 0;
@@ -6241,14 +6241,14 @@ void SearchHandler_c::CalcGlobalStats ( int64_t tmCpu, int64_t tmSubset, int64_t
 			tmWait += pAgent->m_iWaited;
 
 		// do *not* count queries to dist indexes w/o actual remote agents
-		++g_tStats.m_iDistQueries;
-		g_tStats.m_iDistWallTime += tmSubset;
-		g_tStats.m_iDistLocalTime += tmLocal;
-		g_tStats.m_iDistWaitTime += tmWait;
+		g_tStats.m_iDistQueries.fetch_add ( 1, std::memory_order_relaxed );
+		g_tStats.m_iDistWallTime.fetch_add ( tmSubset, std::memory_order_relaxed );
+		g_tStats.m_iDistLocalTime.fetch_add ( tmLocal, std::memory_order_relaxed );
+		g_tStats.m_iDistWaitTime.fetch_add ( tmWait, std::memory_order_relaxed );
 	}
-	g_tStats.m_iDiskReads += tIO.m_iReadOps;
-	g_tStats.m_iDiskReadTime += tIO.m_iReadTime;
-	g_tStats.m_iDiskReadBytes += tIO.m_iReadBytes;
+	g_tStats.m_iDiskReads.fetch_add ( tIO.m_iReadOps, std::memory_order_relaxed );
+	g_tStats.m_iDiskReadTime.fetch_add ( tIO.m_iReadTime, std::memory_order_relaxed );
+	g_tStats.m_iDiskReadBytes.fetch_add ( tIO.m_iReadBytes, std::memory_order_relaxed );
 }
 
 
@@ -6824,8 +6824,8 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 	}
 
 	auto & g_tStats = gStats ();
-	g_tStats.m_iPredictedTime += iTotalPredictedTime;
-	g_tStats.m_iAgentPredictedTime += iTotalAgentPredictedTime;
+	g_tStats.m_iPredictedTime.fetch_add ( iTotalPredictedTime, std::memory_order_relaxed );
+	g_tStats.m_iAgentPredictedTime.fetch_add ( iTotalAgentPredictedTime, std::memory_order_relaxed );
 
 	ScWL_t dLastMetaLock ( g_tLastMetaLock );
 	g_tLastMeta = tHandler.m_dAggrResults.Last();
@@ -8185,8 +8185,8 @@ void BuildStatus ( VectorLike & dStatus )
 	const char * FLOAT = "%.2f";
 	const char * OFF = "OFF";
 
-	const int64_t iQueriesDiv = Max ( g_tStats.m_iQueries.GetValue(), 1 );
-	const int64_t iDistQueriesDiv = Max ( g_tStats.m_iDistQueries.GetValue(), 1 );
+	const int64_t iQueriesDiv = Max ( g_tStats.m_iQueries.load ( std::memory_order_relaxed ), 1 );
+	const int64_t iDistQueriesDiv = Max ( g_tStats.m_iDistQueries.load ( std::memory_order_relaxed ), 1 );
 
 	dStatus.m_sColKey = "Counter";
 
@@ -8194,7 +8194,7 @@ void BuildStatus ( VectorLike & dStatus )
 	if ( dStatus.MatchAdd ( "uptime" ) )
 		dStatus.Add().SetSprintf ( "%u", (DWORD)time(NULL)-g_tStats.m_uStarted );
 	if ( dStatus.MatchAdd ( "connections" ) )
-		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iConnections.load(std::memory_order_relaxed) );
+		dStatus.Add ().SetSprintf ( FMT64, (int64_t) g_tStats.m_iConnections.load ( std::memory_order_relaxed ) );
 	if ( dStatus.MatchAdd ( "maxed_out" ) )
 		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iMaxedOut );
 	if ( dStatus.MatchAdd ( "version" ) )
@@ -8263,6 +8263,7 @@ void BuildStatus ( VectorLike & dStatus )
 				for ( int k=0; k<eMaxAgentStat; ++k )
 					if ( dStatus.MatchAddVa ( "ag_%s_%d_%d_%s", sIdx, i+1, j+1, sAgentStatsNames[k] ) )
 						dStatus.Add().SetSprintf ( FMT64, (int64_t) pMetrics->m_dCounters[k].load(std::memory_order_relaxed) );
+
 				for ( int k = 0; k<ehMaxStat; ++k )
 					if ( dStatus.MatchAddVa ( "ag_%s_%d_%d_%s", sIdx, i + 1, j + 1, sAgentStatsNames[eMaxAgentStat+k] ) )
 					{
@@ -8277,31 +8278,31 @@ void BuildStatus ( VectorLike & dStatus )
 	}
 
 	if ( dStatus.MatchAdd ( "query_wall" ) )
-		FormatMsec ( dStatus.Add(), g_tStats.m_iQueryTime );
+		FormatMsec ( dStatus.Add(), g_tStats.m_iQueryTime.load ( std::memory_order_relaxed ) );
 
 	if ( dStatus.MatchAdd ( "query_cpu" ) )
 	{
 		if ( g_bCpuStats )
-			FormatMsec ( dStatus.Add(), g_tStats.m_iQueryCpuTime );
+			FormatMsec ( dStatus.Add(), g_tStats.m_iQueryCpuTime.load ( std::memory_order_relaxed ) );
 		else
 			dStatus.Add() = OFF;
 	}
 
 	if ( dStatus.MatchAdd ( "dist_wall" ) )
-		FormatMsec ( dStatus.Add(), g_tStats.m_iDistWallTime );
+		FormatMsec ( dStatus.Add(), g_tStats.m_iDistWallTime.load ( std::memory_order_relaxed ) );
 	if ( dStatus.MatchAdd ( "dist_local" ) )
-		FormatMsec ( dStatus.Add(), g_tStats.m_iDistLocalTime );
+		FormatMsec ( dStatus.Add(), g_tStats.m_iDistLocalTime.load ( std::memory_order_relaxed ) );
 	if ( dStatus.MatchAdd ( "dist_wait" ) )
-		FormatMsec ( dStatus.Add(), g_tStats.m_iDistWaitTime );
+		FormatMsec ( dStatus.Add(), g_tStats.m_iDistWaitTime.load ( std::memory_order_relaxed ) );
 
 	if ( g_bIOStats )
 	{
 		if ( dStatus.MatchAdd ( "query_reads" ) )
-			dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iDiskReads );
+			dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iDiskReads.load ( std::memory_order_relaxed ) );
 		if ( dStatus.MatchAdd ( "query_readkb" ) )
-			dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iDiskReadBytes/1024 );
+			dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iDiskReadBytes.load ( std::memory_order_relaxed )/1024 );
 		if ( dStatus.MatchAdd ( "query_readtime" ) )
-			FormatMsec ( dStatus.Add(), g_tStats.m_iDiskReadTime );
+			FormatMsec ( dStatus.Add(), g_tStats.m_iDiskReadTime.load ( std::memory_order_relaxed ) );
 	} else
 	{
 		if ( dStatus.MatchAdd ( "query_reads" ) )
@@ -8312,38 +8313,38 @@ void BuildStatus ( VectorLike & dStatus )
 			dStatus.Add() = OFF;
 	}
 
-	if ( g_tStats.m_iPredictedTime || g_tStats.m_iAgentPredictedTime )
+	if ( g_tStats.m_iPredictedTime.load ( std::memory_order_relaxed ) || g_tStats.m_iAgentPredictedTime.load ( std::memory_order_relaxed ) )
 	{
 		if ( dStatus.MatchAdd ( "predicted_time" ) )
-			dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iPredictedTime );
+			dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iPredictedTime.load ( std::memory_order_relaxed ) );
 		if ( dStatus.MatchAdd ( "dist_predicted_time" ) )
-			dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iAgentPredictedTime );
+			dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iAgentPredictedTime.load ( std::memory_order_relaxed ) );
 	}
 
 	if ( dStatus.MatchAdd ( "avg_query_wall" ) )
-		FormatMsec ( dStatus.Add(), g_tStats.m_iQueryTime / iQueriesDiv );
+		FormatMsec ( dStatus.Add(), g_tStats.m_iQueryTime.load ( std::memory_order_relaxed ) / iQueriesDiv );
 	if ( dStatus.MatchAdd ( "avg_query_cpu" ) )
 	{
 		if ( g_bCpuStats )
-			FormatMsec ( dStatus.Add(), g_tStats.m_iQueryCpuTime / iQueriesDiv );
+			FormatMsec ( dStatus.Add(), g_tStats.m_iQueryCpuTime.load ( std::memory_order_relaxed ) / iQueriesDiv );
 		else
 			dStatus.Add ( OFF );
 	}
 
 	if ( dStatus.MatchAdd ( "avg_dist_wall" ) )
-		FormatMsec ( dStatus.Add(), g_tStats.m_iDistWallTime / iDistQueriesDiv );
+		FormatMsec ( dStatus.Add(), g_tStats.m_iDistWallTime.load ( std::memory_order_relaxed ) / iDistQueriesDiv );
 	if ( dStatus.MatchAdd ( "avg_dist_local" ) )
-		FormatMsec ( dStatus.Add(), g_tStats.m_iDistLocalTime / iDistQueriesDiv );
+		FormatMsec ( dStatus.Add(), g_tStats.m_iDistLocalTime.load ( std::memory_order_relaxed ) / iDistQueriesDiv );
 	if ( dStatus.MatchAdd ( "avg_dist_wait" ) )
-		FormatMsec ( dStatus.Add(), g_tStats.m_iDistWaitTime / iDistQueriesDiv );
+		FormatMsec ( dStatus.Add(), g_tStats.m_iDistWaitTime.load ( std::memory_order_relaxed ) / iDistQueriesDiv );
 	if ( g_bIOStats )
 	{
 		if ( dStatus.MatchAdd ( "avg_query_reads" ) )
-			dStatus.Add().SetSprintf ( "%.1f", (float)( g_tStats.m_iDiskReads*10/iQueriesDiv )/10.0f );
+			dStatus.Add().SetSprintf ( "%.1f", (float)( g_tStats.m_iDiskReads.load ( std::memory_order_relaxed )*10/iQueriesDiv )/10.0f );
 		if ( dStatus.MatchAdd ( "avg_query_readkb" ) )
-			dStatus.Add().SetSprintf ( "%.1f", (float)( g_tStats.m_iDiskReadBytes/iQueriesDiv )/1024.0f );
+			dStatus.Add().SetSprintf ( "%.1f", (float)( g_tStats.m_iDiskReadBytes.load ( std::memory_order_relaxed )/iQueriesDiv )/1024.0f );
 		if ( dStatus.MatchAdd ( "avg_query_readtime" ) )
-			FormatMsec ( dStatus.Add(), g_tStats.m_iDiskReadTime/iQueriesDiv );
+			FormatMsec ( dStatus.Add(), g_tStats.m_iDiskReadTime.load ( std::memory_order_relaxed )/iQueriesDiv );
 	} else
 	{
 		if ( dStatus.MatchAdd ( "avg_query_reads" ) )
@@ -8387,9 +8388,9 @@ void BuildStatusOneline ( StringBuilder_c & sOut )
 	<< " Queue:" << iQueue
 	<< " Clients:" << myinfo::CountClients()
 	<< " Tasks:" << iTasks
-	<< " Queries:" << g_tStats.m_iQueries;
-	sOut.Sprintf ( " Wall: %t", (int64_t)g_tStats.m_iQueryTime );
-	sOut.Sprintf ( " CPU: %t", (int64_t)g_tStats.m_iQueryCpuTime );
+	<< " Queries:" << g_tStats.m_iQueries.load ( std::memory_order_relaxed );
+	sOut.Sprintf ( " Wall: %t", (int64_t)g_tStats.m_iQueryTime.load ( std::memory_order_relaxed ) );
+	sOut.Sprintf ( " CPU: %t", (int64_t)g_tStats.m_iQueryCpuTime.load ( std::memory_order_relaxed ) );
 	sOut.Sprintf ( "\nQueue/Th: %0.1F%", iQueue * 10 / iThreads );
 	sOut.Sprintf ( " Tasks/Th: %0.1F%", iTasks * 10 / iThreads );
 }
@@ -8655,12 +8656,13 @@ void HandleCommandStatus ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 		ScRL_t dMetaRlock ( g_tLastMetaLock );
 		auto & g_tStats = gStats ();
 		BuildMeta ( dStatus, g_tLastMeta );
-		if ( g_tStats.m_iPredictedTime || g_tStats.m_iAgentPredictedTime )
+		if ( g_tStats.m_iPredictedTime.load ( std::memory_order_relaxed )
+			|| g_tStats.m_iAgentPredictedTime.load ( std::memory_order_relaxed ) )
 		{
 			if ( dStatus.MatchAdd ( "predicted_time" ) )
-				dStatus.Add().SetSprintf ( INT64_FMT, (int64_t) g_tStats.m_iPredictedTime );
+				dStatus.Add().SetSprintf ( INT64_FMT, (int64_t) g_tStats.m_iPredictedTime.load ( std::memory_order_relaxed ) );
 			if ( dStatus.MatchAdd ( "dist_predicted_time" ) )
-				dStatus.Add().SetSprintf ( INT64_FMT, (int64_t) g_tStats.m_iAgentPredictedTime );
+				dStatus.Add().SetSprintf ( INT64_FMT, (int64_t) g_tStats.m_iAgentPredictedTime.load ( std::memory_order_relaxed ));
 		}
 	}
 
@@ -15410,7 +15412,7 @@ void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 void StatCountCommand ( SearchdCommand_e eCmd )
 {
 	if ( eCmd<SEARCHD_COMMAND_TOTAL )
-		++gStats().m_iCommandCount[eCmd];
+		gStats ().m_iCommandCount[eCmd].fetch_add ( 1, std::memory_order_relaxed );
 }
 
 bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, CSphString & sFederatedQuery )

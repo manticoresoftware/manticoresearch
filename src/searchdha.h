@@ -140,13 +140,12 @@ void ClosePersistentSockets();
 struct MetricsAndCounters_t final : ISphRefcountedMT
 {
 	// was uint64_t, but for atomic it creates extra tmpl instantiation without practical difference
-	CSphAtomicL m_dCounters[eMaxAgentStat];	// event counters
+	std::atomic<int64_t> m_dCounters[eMaxAgentStat];	// event counters
 	uint64_t m_dMetrics[ehMaxStat];			// calculated metrics
 
 	MetricsAndCounters_t ()
 	{
-		for ( auto& dMetric : m_dMetrics )
-			dMetric = 0;
+		Reset();
 	}
 
 	void Reset ()
@@ -160,7 +159,7 @@ struct MetricsAndCounters_t final : ISphRefcountedMT
 	void Add ( const MetricsAndCounters_t &rhs )
 	{
 		for ( int i = 0; i<eMaxAgentStat; ++i )
-			m_dCounters[i] += rhs.m_dCounters[i];
+			m_dCounters[i].fetch_add ( rhs.m_dCounters[i].load ( std::memory_order_relaxed ), std::memory_order_relaxed );
 
 		if ( m_dMetrics[ehConnTries] )
 			m_dMetrics[ehAverageMsecs] =
@@ -231,7 +230,7 @@ struct HostDashboard_t : public ISphRefcountedMT
 	PersistentConnectionsPool_c * m_pPersPool = nullptr;    // persistence pool also lives here, one per dashboard
 
 	mutable RwLock_t m_dMetricsLock;        // guards everything essential (see thread annotations)
-	CSphAtomicL m_iLastAnswerTime GUARDED_BY ( m_dMetricsLock );    // updated when we get an answer from the host
+	int64_t m_iLastAnswerTime GUARDED_BY ( m_dMetricsLock );    // updated when we get an answer from the host
 	int64_t m_iLastQueryTime GUARDED_BY ( m_dMetricsLock ) = 0;    // updated when we send a query to a host
 	int64_t m_iErrorsARow GUARDED_BY (
 		m_dMetricsLock ) = 0;        // num of errors a row, updated when we update the general statistic.
@@ -330,7 +329,7 @@ private:
 /// descriptor for set of agents (mirrors) (stored in a global hash)
 class MultiAgentDesc_c final : public ISphRefcountedMT, public CSphFixedVector<AgentDesc_t>
 {
-	CSphAtomic			m_iRRCounter;    /// round-robin counter
+	std::atomic<int>	m_iRRCounter {0};    /// round-robin counter
 	mutable RwLock_t	m_dWeightLock;   /// manages access to m_pWeights
 	CSphFixedVector<float> m_dWeights    /// the weights of the hosts
 		GUARDED_BY ( m_dWeightLock ) { 0 };
@@ -529,7 +528,7 @@ public:
 
 	CSphRefcountedPtr<Reporter_i>	m_pReporter { nullptr };	///< used to report back when we're finished
 	LPKEY			m_pPollerTask = nullptr; ///< internal for poller. fixme! privatize?
-	CSphAtomic		m_bSuccess;		///< agent got processed, no need to retry
+	volatile bool	m_bSuccess {false};	///< agent got processed, no need to retry
 
 public:
 	AgentConn_t () = default;

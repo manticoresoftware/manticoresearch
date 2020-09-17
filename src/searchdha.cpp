@@ -154,7 +154,7 @@ void HostDashboard_t::GetCollectedMetrics ( HostMetricsSnapshot_t& dResult, int 
 			tAccum.Add ( m_dPeriodicMetrics[uCurrentPeriod % STATS_DASH_PERIODS].m_dMetrics );
 
 	for ( int i = 0; i<eMaxAgentStat; ++i )
-		dResult[i] = tAccum.m_dCounters[i];
+		dResult[i] = tAccum.m_dCounters[i].load(std::memory_order_relaxed);
 	for ( int i = 0; i<ehMaxStat; ++i )
 		dResult[i+eMaxAgentStat] = tAccum.m_dMetrics[i];
 }
@@ -592,14 +592,14 @@ const AgentDesc_t &MultiAgentDesc_c::RRAgent ()
 	if ( !IsHA() )
 		return *m_pData;
 
-	auto iRRCounter = (int) m_iRRCounter++;
-	while ( iRRCounter<0 || iRRCounter> ( GetLength ()-1 ) )
+	auto iRRCounter = m_iRRCounter.load ( std::memory_order_relaxed );
+	int iNewCounter;
+	do
 	{
-		if ( iRRCounter+1 == (int) m_iRRCounter.CAS ( iRRCounter+1, 1 ) )
-			iRRCounter = 0;
-		else
-			iRRCounter = (int) m_iRRCounter++;
-	}
+		iNewCounter = iRRCounter+1;
+		if ( iNewCounter>=GetLength())
+			iNewCounter = 0;
+	} while ( !m_iRRCounter.compare_exchange_weak ( iRRCounter, iNewCounter, std::memory_order_acq_rel ) );
 
 	return m_pData[iRRCounter];
 }
@@ -931,12 +931,12 @@ void agent_stats_inc ( AgentConn_t &tAgent, AgentStats_e iCountID )
 	assert ( tAgent.m_tDesc.m_pDash );
 
 	if ( tAgent.m_tDesc.m_pMetrics )
-		++tAgent.m_tDesc.m_pMetrics->m_dCounters[iCountID];
+		tAgent.m_tDesc.m_pMetrics->m_dCounters[iCountID].fetch_add(1,std::memory_order_relaxed);
 
 	HostDashboard_t &tIndexDash = *tAgent.m_tDesc.m_pDash;
 	CSphScopedWLock tWguard ( tIndexDash.m_dMetricsLock );
 	MetricsAndCounters_t &tAgentMetrics = tIndexDash.GetCurrentMetrics ();
-	tAgentMetrics.m_dCounters[iCountID]++;
+	tAgentMetrics.m_dCounters[iCountID].fetch_add ( 1, std::memory_order_relaxed );;
 	if ( iCountID>=eNetworkNonCritical && iCountID<eMaxAgentStat )
 		tIndexDash.m_iErrorsARow = 0;
 	else
@@ -2255,7 +2255,7 @@ void AgentConn_t::StartRemoteLoopTry ()
 		m_tOutput.Reset ();
 		InitReplyBuf ();
 		m_bConnectHandshake = true;
-		m_bSuccess = 0;
+		m_bSuccess = false;
 		m_iStartQuery = 0;
 		m_pPollerTask = nullptr;
 
@@ -2576,7 +2576,7 @@ bool AgentConn_t::CommitResult ()
 		bWarnings = m_pResult->HasWarnings ();
 
 	agent_stats_inc ( *this, bWarnings ? eNetworkCritical : eNetworkNonCritical );
-	m_bSuccess = 1;
+	m_bSuccess = true;
 	return true;
 }
 

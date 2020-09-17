@@ -8086,14 +8086,14 @@ CSphMultiQueryArgs::CSphMultiQueryArgs ( int iIndexWeight )
 // INDEX
 /////////////////////////////////////////////////////////////////////////////
 
-CSphAtomic CSphIndex::m_tIdGenerator;
+std::atomic<long> CSphIndex::m_tIdGenerator {0};
 
 CSphIndex::CSphIndex ( const char * sIndexName, const char * sFilename )
 	: m_tSchema ( sFilename )
 	, m_sIndexName ( sIndexName )
 	, m_sFilename ( sFilename )
 {
-	m_iIndexId = m_tIdGenerator.Inc();
+	m_iIndexId = m_tIdGenerator.fetch_add ( 1, std::memory_order_relaxed );
 }
 
 
@@ -13610,7 +13610,7 @@ void CSphIndex_VLN::Dealloc ()
 	m_uAttrsStatus = 0;
 
 	QcacheDeleteIndex ( m_iIndexId );
-	m_iIndexId = m_tIdGenerator.Inc();
+	m_iIndexId = m_tIdGenerator.fetch_add ( 1, std::memory_order_relaxed );
 }
 
 

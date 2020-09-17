@@ -7122,7 +7122,7 @@ public:
 private:
 	VecTraits_T<ExcerptQuery_t> &			m_dQueries;
 	const SnippetQuerySettings_t &			m_tSettings;
-	mutable CSphAtomic 						m_iWorker;
+	mutable std::atomic<int>				m_iWorker {0};
 
 	bool ParseReplyScattered ( MemInputBuffer_c & tReq, const VecTraits_T<int>& dDocs ) const;
 	bool ParseReplyNonScattered ( MemInputBuffer_c & tReq, const VecTraits_T<int> & dDocs ) const;
@@ -7138,7 +7138,7 @@ void SnippetRemote_c::BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffe
 	auto iWorker = tAgent.m_iStoreTag;
 	if ( iWorker<0 )
 	{
-		iWorker = ( int ) m_iWorker++;
+		iWorker = m_iWorker.fetch_add ( 1, std::memory_order_relaxed );
 		tAgent.m_iStoreTag = iWorker;
 	}
 
@@ -8262,7 +8262,7 @@ void BuildStatus ( VectorLike & dStatus )
 				const auto pMetrics = dMultiAgent[j].m_pMetrics;
 				for ( int k=0; k<eMaxAgentStat; ++k )
 					if ( dStatus.MatchAddVa ( "ag_%s_%d_%d_%s", sIdx, i+1, j+1, sAgentStatsNames[k] ) )
-						dStatus.Add().SetSprintf ( FMT64, (int64_t) pMetrics->m_dCounters[k] );
+						dStatus.Add().SetSprintf ( FMT64, (int64_t) pMetrics->m_dCounters[k].load(std::memory_order_relaxed) );
 				for ( int k = 0; k<ehMaxStat; ++k )
 					if ( dStatus.MatchAddVa ( "ag_%s_%d_%d_%s", sIdx, i + 1, j + 1, sAgentStatsNames[eMaxAgentStat+k] ) )
 					{
@@ -9149,7 +9149,7 @@ class PqRequestBuilder_c : public RequestBuilder_i
 {
 	const BlobVec_t &m_dDocs;
 	const PercolateOptions_t &m_tOpts;
-	mutable CSphAtomic m_iWorker;
+	mutable std::atomic<int> m_iWorker {0};
 	int m_iStart;
 	int m_iStep;
 
@@ -9168,7 +9168,7 @@ public:
 		auto iWorker = tAgent.m_iStoreTag;
 		if ( iWorker<0 )
 		{
-			iWorker = ( int ) m_iWorker++;
+			iWorker = m_iWorker.fetch_add ( 1, std::memory_order_relaxed );
 			tAgent.m_iStoreTag = iWorker;
 		}
 

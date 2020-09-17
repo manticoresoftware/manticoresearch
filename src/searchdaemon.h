@@ -1459,12 +1459,12 @@ public:
 	}
 
 	// Fire he header for table with iSize string columns
-	void HeadOfStrings ( const char ** ppNames, size_t iSize )
+	void HeadOfStrings ( std::initializer_list<const char*> dNames )
 	{
-		HeadBegin ( (int) iSize );
-		for ( ; iSize>0 ; --iSize )
-			HeadColumn ( *ppNames++ );
-		HeadEnd();
+		HeadBegin ( (int) dNames.size() );
+		for ( const char* szCol : dNames )
+			HeadColumn ( szCol );
+		HeadEnd ();
 	}
 
 	// table of 2 columns (we really often use them!)

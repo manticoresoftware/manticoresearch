@@ -11122,9 +11122,8 @@ void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
 	if ( pServed && pServed->m_pIndex )
 	{
-		const char * dNames[] = { "Field", "Type", "Properties" };
 		// result set header packet
-		tOut.HeadOfStrings ( dNames, sizeof(dNames)/sizeof(dNames[0]) );
+		tOut.HeadOfStrings ( { "Field", "Type", "Properties" } );
 
 		// data
 		const CSphSchema *pSchema = &pServed->m_pIndex->GetMatchSchema ();
@@ -13352,9 +13351,8 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, const SqlStmt_t &tStmt )
 	}
 	else if ( sCommand=="tasks" )
 	{
-		const char* dHeader[] = { "Name", "MaxRunners", "MaxQueue", "CurrentRunners", "TotalSpent",
-			"LastFinished", "Executed", "Dropped", "In Queue" };
-		tOut.HeadOfStrings ( &dHeader[0], sizeof ( dHeader ) / sizeof ( dHeader[0] ));
+		tOut.HeadOfStrings ( { "Name", "MaxRunners", "MaxQueue", "CurrentRunners", "TotalSpent", "LastFinished",
+				"Executed", "Dropped", "In Queue" });
 
 		auto dTasks = TaskManager::GetTaskInfo ();
 		for ( const auto& dTask : dTasks )
@@ -13381,9 +13379,8 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, const SqlStmt_t &tStmt )
 	}
 	else if ( sCommand=="systhreads" )
 	{
-		const char* dHeader[] = {
-			"ID", "ThID", "Run time", "Load time", "Total ticks", "Jobs done", "Last job take", "Idle for" };
-		tOut.HeadOfStrings ( &dHeader[0], sizeof ( dHeader ) / sizeof ( dHeader[0] ));
+		tOut.HeadOfStrings (
+			{"ID", "ThID", "Run time", "Load time", "Total ticks", "Jobs done", "Last job take", "Idle for" });
 		auto dTasks = TaskManager::GetThreadsInfo ();
 		for ( auto& dTask : dTasks )
 		{
@@ -13412,10 +13409,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, const SqlStmt_t &tStmt )
 	}
 	else if ( sCommand=="sched" )
 	{
-		const char* dHeader[] = {
-			"Time rest", "Task"
-		};
-		tOut.HeadOfStrings ( &dHeader[0], sizeof ( dHeader ) / sizeof ( dHeader[0] ));
+		tOut.HeadOfStrings ( { "Time rest", "Task" } );
 		auto dTasks = TaskManager::GetSchedInfo ();
 		for ( auto& dTask : dTasks )
 		{
@@ -13846,9 +13840,9 @@ static void AddIndexQueryStats ( VectorLike & dStatus, const ServedStats_c * pSt
 
 static void AddFederatedIndexStatus ( const CSphSourceStats & tStats, const CSphString & sName, RowBuffer_i & tOut )
 {
-	const char * dHeader[] = { "Name", "Engine", "Version", "Row_format", "Rows", "Avg_row_length", "Data_length", "Max_data_length", "Index_length", "Data_free",
-		"Auto_increment", "Create_time", "Update_time", "Check_time", "Collation", "Checksum", "Create_options", "Comment" };
-	tOut.HeadOfStrings ( &dHeader[0], sizeof(dHeader)/sizeof(dHeader[0]) );
+	tOut.HeadOfStrings ( { "Name", "Engine", "Version", "Row_format", "Rows", "Avg_row_length", "Data_length",
+		"Max_data_length", "Index_length", "Data_free",	"Auto_increment", "Create_time", "Update_time", "Check_time",
+		"Collation", "Checksum", "Create_options", "Comment" } );
 
 	tOut.PutString ( sName );	// Name
 	tOut.PutString ( "InnoDB" );		// Engine
@@ -14064,7 +14058,7 @@ void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt 
 		return;
 	}
 
-	tOut.HeadTuplet ( "Variable_name", "Value" );
+	tOut.HeadOfStrings ( { "Variable_name", "Value" } );
 
 	StringBuilder_c tBuf;
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder ( pIndex->GetName() ) );

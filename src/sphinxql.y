@@ -1809,16 +1809,16 @@ debug_clause:
 
 opt_par:
 	// empty
-	| ident
+	| ident opt_option_clause
 		{
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $1 );
 		}
-	| ident set_string_value
+	| ident set_string_value opt_option_clause
 		{
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $1 );
 			pParser->ToString ( pParser->m_pStmt->m_sStringParam, $2 );
 		}
-	| ident TOK_CONST_INT
+	| ident TOK_CONST_INT opt_option_clause
 		{
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $1 );
 			pParser->m_pStmt->m_iIntParam = $2.m_iValue;

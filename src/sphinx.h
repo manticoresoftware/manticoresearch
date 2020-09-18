@@ -3391,6 +3391,7 @@ public:
 	// put external files (if any) into index folder
 	// copy the rest of the external files to index folder
 	virtual bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) { return true; }
+	virtual void				CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const {}
 
 public:
 	int64_t						m_iTID = 0;				///< last committed transaction id

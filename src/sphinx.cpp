@@ -1967,6 +1967,7 @@ public:
 	bool				ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const override;
 
 	bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) final;
+	void				CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const final;
 
 private:
 	static const int			MIN_WRITE_BUFFER		= 262144;	///< min write buffer size
@@ -16924,6 +16925,45 @@ bool CSphIndex_VLN::CopyExternalFiles ( int iPostfix, StrVec_t & dCopied )
 		return false;
 
 	return true;
+}
+
+void CSphIndex_VLN::CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const
+{
+	if ( m_pTokenizer && !m_pTokenizer->GetSettings().m_sSynonymsFile.IsEmpty() )
+		dExt.Add ( m_pTokenizer->GetSettings ().m_sSynonymsFile );
+
+	if ( !m_pDict )
+		return;
+
+	const CSphString & sStopwords = m_pDict->GetSettings().m_sStopwords;
+	if ( !sStopwords.IsEmpty() )
+		sphSplit ( dExt, sStopwords.cstr(), sStopwords.Length(), " \t," );
+
+	m_pDict->GetSettings ().m_dWordforms.Apply ( [&dExt] ( const CSphString & a ) { dExt.Add ( a ); } );
+
+	dFiles.Add ( GetIndexFileName ( SPH_EXT_SPH ) );
+	dFiles.Add ( GetIndexFileName ( SPH_EXT_SPD ) );
+	dFiles.Add ( GetIndexFileName ( SPH_EXT_SPP ) );
+	dFiles.Add ( GetIndexFileName ( SPH_EXT_SPE ) );
+	dFiles.Add ( GetIndexFileName ( SPH_EXT_SPI ) );
+	dFiles.Add ( GetIndexFileName ( SPH_EXT_SPM ) );
+	if ( !m_bIsEmpty )
+	{
+		dFiles.Add ( GetIndexFileName ( SPH_EXT_SPA ) );
+		dFiles.Add ( GetIndexFileName ( SPH_EXT_SPT ) );
+		if ( m_tSchema.GetAttr ( sphGetBlobLocatorName () ) )
+			dFiles.Add ( GetIndexFileName ( SPH_EXT_SPB ) );
+	}
+
+	if ( m_uVersion>=55 )
+		dFiles.Add ( GetIndexFileName ( SPH_EXT_SPHI ) );
+
+	if ( m_uVersion>=57 && m_tSchema.HasStoredFields() )
+		dFiles.Add ( GetIndexFileName ( SPH_EXT_SPDS ) );
+
+	CSphString sPath = GetIndexFileName ( SPH_EXT_SPK );
+	if ( sphIsReadable ( sPath ) )
+		dFiles.Add ( sPath );
 }
 
 //////////////////////////////////////////////////////////////////////////

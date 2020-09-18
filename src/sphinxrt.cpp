@@ -1156,6 +1156,7 @@ public:
 	int64_t				GetLastFlushTimestamp() const final;
 	void				IndexDeleted() final { m_bIndexDeleted = true; }
 	bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) final;
+	void				CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const final;
 	void				ProhibitSave() final;
 	void				EnableSave() final;
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
@@ -8076,6 +8077,29 @@ bool RtIndex_c::CopyExternalFiles ( int /*iPostfix*/, StrVec_t & dCopied )
 	return true;
 }
 
+void RtIndex_c::CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const
+{
+	if ( m_pTokenizer && !m_pTokenizer->GetSettings().m_sSynonymsFile.IsEmpty() )
+		dExt.Add ( m_pTokenizer->GetSettings ().m_sSynonymsFile );
+
+	if ( m_pDict )
+	{
+		const CSphString & sStopwords = m_pDict->GetSettings().m_sStopwords;
+		if ( !sStopwords.IsEmpty() )
+			sphSplit ( dExt, sStopwords.cstr(), sStopwords.Length(), " \t," );
+
+		m_pDict->GetSettings ().m_dWordforms.Apply ( [&dExt] ( const CSphString & a ) { dExt.Add ( a ); } );
+	}
+	GetReaderChunks ().m_dDiskChunks.Apply ( [&] ( const CSphIndex * a ) { a->CollectFiles ( dFiles, dExt ); } );
+
+	CSphString sPath;
+	sPath.SetSprintf ( "%s.meta", m_sPath.cstr () );
+	if ( sphIsReadable ( sPath ) )
+		dFiles.Add ( sPath );
+	sPath.SetSprintf ( "%s.ram", m_sPath.cstr () );
+	if ( sphIsReadable ( sPath ) )
+		dFiles.Add ( sPath );
+}
 
 void RtIndex_c::ProhibitSave()
 {

@@ -140,6 +140,7 @@ public:
 	const FileAccessSettings_t & GetMemorySettings() const override { return g_tDummyFASettings; }
 
 	void				IndexDeleted() override { m_bIndexDeleted = true; }
+	void				CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const final;
 	void				ProhibitSave() override { m_bSaveDisabled = true; }
 	void				EnableSave() override { m_bSaveDisabled = false; }
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
@@ -1620,6 +1621,24 @@ void PercolateIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	pRes->m_iRamUse = iRamUse;
 }
 
+void PercolateIndex_c::CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const
+{
+	if ( m_pTokenizer && !m_pTokenizer->GetSettings ().m_sSynonymsFile.IsEmpty () )
+		dExt.Add ( m_pTokenizer->GetSettings ().m_sSynonymsFile );
+
+	if ( m_pDict )
+	{
+		const CSphString & sStopwords = m_pDict->GetSettings ().m_sStopwords;
+		if ( !sStopwords.IsEmpty () )
+			sphSplit ( dExt, sStopwords.cstr (), sStopwords.Length (), " \t," );
+
+		m_pDict->GetSettings ().m_dWordforms.Apply ( [&dExt] ( const CSphString & a ) { dExt.Add ( a ); } );
+	}
+	CSphString sPath;
+	sPath.SetSprintf ( "%s.meta", m_sFilename.cstr () );
+	if ( sphIsReadable ( sPath ) )
+		dFiles.Add ( sPath );
+}
 
 StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, CSphString & sError )
 {

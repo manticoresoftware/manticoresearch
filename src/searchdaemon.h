@@ -691,6 +691,14 @@ struct ServedDesc_t
 		return pServed->m_eType==IndexType_e::RT || pServed->m_eType==IndexType_e::PERCOLATE;
 	}
 
+	// local is one stored locally on disk
+	static bool IsLocal ( const ServedDesc_t* pServed )
+	{
+		if ( !pServed )
+			return false;
+		return IsMutable ( pServed ) || pServed->m_eType==IndexType_e::PLAIN;
+	}
+
 	// cluster is one which can deals with replication
 	static bool IsCluster ( const ServedDesc_t* pServed )
 	{

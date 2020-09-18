@@ -13036,6 +13036,35 @@ void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	EnqueueForOptimize ( sIndex, iFrom, iTo );
 }
 
+void HandleMysqlfiles ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+{
+	auto sIndex = tStmt.m_sStringParam;
+	ServedDescRPtr_c pIndex ( GetServed ( sIndex ) );
+	if ( !ServedDesc_t::IsLocal ( pIndex ) )
+	{
+		tOut.Error ( tStmt.m_sStmt, "FILES requires an existing local index" );
+		return;
+	}
+
+	StrVec_t dFiles;
+	StrVec_t dExt;
+	pIndex->m_pIndex->CollectFiles( dFiles, dExt );
+
+	VectorLike dOut ( 0 );
+	dOut.SetColNames ( { "file" } );
+
+	if ( tStmt.m_sThreadFormat!="external" )
+		dFiles.Apply ( [&dOut] ( const CSphString & a ) { dOut.Add ( a ); } );
+
+	if ( tStmt.m_sThreadFormat=="all" || tStmt.m_sThreadFormat=="external" )
+	{
+		dExt.Uniq ();
+		dExt.Apply ( [&dOut] ( const CSphString & a ) { dOut.Add ( a ); } );
+	}
+
+	tOut.DataTable ( dOut );
+}
+
 void HandleMysqlDebug ( RowBuffer_i &tOut, const SqlStmt_t &tStmt )
 {
 	CSphString sCommand = tStmt.m_sIndex;
@@ -13216,6 +13245,11 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, const SqlStmt_t &tStmt )
 	else if ( sCommand=="merge" )
 	{
 		HandleMysqlOptimizeManual ( tOut, tStmt );
+		return;
+	}
+	else if ( sCommand=="files" )
+	{
+		HandleMysqlfiles ( tOut, tStmt );
 		return;
 	}
 	else if ( sCommand=="sched" )

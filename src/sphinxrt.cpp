@@ -1047,21 +1047,13 @@ struct ChunkStats_t
 template<typename VEC>
 CSphFixedVector<int> GetIndexNames ( const VEC & dIndexes, bool bAddNext )
 {
-	CSphFixedVector<int> dNames ( dIndexes.GetLength() + ( bAddNext ? 1 : 0 ) );
-
-	if ( !dIndexes.GetLength() )
-	{
-		if ( bAddNext )
-			dNames[0] = 0;
-
-		return dNames;
-	}
-
-	ARRAY_FOREACH ( iChunk, dIndexes )
-		dNames[iChunk] = dIndexes[iChunk]->m_iChunk;
+	int iChunks = dIndexes.GetLength();
+	CSphFixedVector<int> dNames ( iChunks + ( bAddNext ? 1 : 0 ) );
+	for ( int i=0; i<iChunks; ++i)
+		dNames[i] = dIndexes[i]->m_iChunk;
 
 	if ( bAddNext )
-		dNames[dIndexes.GetLength()] = dIndexes.Last()->m_iChunk + 1;
+		dNames[iChunks] = iChunks ? dNames[iChunks-1]+1 : 0;
 
 	return dNames;
 }

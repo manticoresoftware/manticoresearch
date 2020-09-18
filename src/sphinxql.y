@@ -1494,18 +1494,14 @@ update_item:
 //////////////////////////////////////////////////////////////////////////
 
 show_variables:
-	TOK_SHOW opt_scope TOK_VARIABLES opt_show_variables_where
+	TOK_SHOW opt_scope TOK_VARIABLES opt_show_variables_where_or_like
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_VARIABLES;
-		}
-	| TOK_SHOW opt_scope TOK_VARIABLES TOK_LIKE TOK_QUOTED_STRING
-		{
-			pParser->m_pStmt->m_eStmt = STMT_SHOW_VARIABLES;
-			pParser->m_pStmt->m_sStringParam = pParser->ToStringUnescape ( $5 );
 		}
 	;
 
-opt_show_variables_where:
+opt_show_variables_where_or_like:
+	like_filter
 	| show_variables_where
 	;
 

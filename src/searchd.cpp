@@ -12659,7 +12659,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 	tStmt.m_sSetName.ToLower();
 	switch ( tStmt.m_eSet )
 	{
-	case SET_LOCAL:
+	case SET_LOCAL: // SET foo = value|'svalue'|null
 
 		if ( tStmt.m_sSetName=="wait_timeout" )
 		{
@@ -12741,7 +12741,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 		}
 		break;
 
-	case SET_GLOBAL_UVAR:
+	case SET_GLOBAL_UVAR: // SET GLOBAL @foo = (i1,i2,...)'
 	{
 		// global user variable
 		// INT_SET type must be sorted
@@ -12750,7 +12750,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 		break;
 	}
 
-	case SET_GLOBAL_SVAR:
+	case SET_GLOBAL_SVAR: // SET GLOBAL foo = iValue|'string'
 		// global server variable
 		if ( tStmt.m_sSetName=="query_log_format" )
 		{
@@ -12855,7 +12855,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 		}
 		break;
 
-	case SET_INDEX_UVAR:
+	case SET_INDEX_UVAR: //  SET INDEX bar GLOBAL @foo = (values)
 		if ( !SendUserVar ( tStmt.m_sIndex.cstr(), tStmt.m_sSetName.cstr(), tStmt.m_dSetValues, sError ) )
 		{
 			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -12863,7 +12863,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 		}
 		break;
 
-	case SET_CLUSTER_UVAR:
+	case SET_CLUSTER_UVAR: // SET CLUSTER ident GLOBAL 'variable' = string|int
 	{
 		if ( !ReplicateSetOption ( tStmt.m_sIndex, tStmt.m_sSetName, tStmt.m_sSetValue, sError ) )
 		{
@@ -13335,6 +13335,7 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	EnqueueForOptimize ( tStmt.m_sIndex );
 }
 
+// STMT_SELECT_SYSVAR: SELECT @@sysvar1 [ as alias] [@@sysvarN [ as alias]] [limit M]
 void HandleMysqlSelectSysvar ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, const SessionVars_t & tVars )
 {
 	const struct SysVar_t
@@ -13538,7 +13539,8 @@ static const char * LogLevelName ( ESphLogLevel eLevel )
 	}
 }
 
-
+// SHOW [GLOBAL|SESSION] VARIABLES WHERE variable_name='xxx' [OR variable_name='xxx']
+// SHOW [GLOBAL|SESSION] VARIABLES WHERE variable_name='xxx' [OR variable_name='xxx']
 void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, SessionVars_t & tVars )
 {
 	VectorLike dTable ( tStmt.m_sStringParam );
@@ -14128,6 +14130,8 @@ static void HandleMysqlReconfigure ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 
 static bool ApplyIndexKillList ( CSphIndex * pIndex, CSphString & sWarning, CSphString & sError, bool bShowMessage = false );
 
+
+// STMT_ALTER_KLIST_TARGET: ALTER TABLE index KILLLIST_TARGET = 'string'
 static void HandleMysqlAlterKlist ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	MEMORY ( MEM_SQL_ALTER );
@@ -14225,7 +14229,7 @@ static bool SubstituteExternalIndexFiles ( const StrVec_t & dOldExternalFiles, c
 	return true;
 }
 
-
+// STMT_ALTER_INDEX_SETTINGS: ALTER TABLE index [ident = 'string']*
 static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	MEMORY ( MEM_SQL_ALTER );
@@ -14343,7 +14347,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 }
 
-
+// STMT_SHOW_PLAN: SHOW PLAN
 static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_t & p, bool bMoreResultsFollow )
 {
 	tOut.HeadBegin ( 2 );

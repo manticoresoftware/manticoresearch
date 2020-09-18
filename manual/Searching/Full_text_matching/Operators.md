@@ -164,7 +164,7 @@ The inline operators require `dict=keywords` and infixing enabled.
 ^hello world$
 ```
 
-Field-start and field-end keyword modifiers will make the keyword match only if it occurred at the very start or the very end of a fulltext field, respectively. For instance, the query `^hello world$` (with quotes and thus combining phrase operator and start/end modifiers) will only match documents that contain at least one field that has exactly these two keywords.
+Field-start and field-end keyword modifiers will make the keyword match only if it occurred at the very start or the very end of a fulltext field, respectively. For instance, the query `"^hello world$"` (with quotes and thus combining phrase operator and start/end modifiers) will only match documents that contain at least one field that has exactly these two keywords.
 
 ### IDF boost modifier
 

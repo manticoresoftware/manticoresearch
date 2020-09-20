@@ -50,9 +50,50 @@ index dist2
   agent	= <my_address/>:test2
 }
 
+source src_gr1
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT * FROM test_group1
+  sql_attr_uint   = tag
+  sql_attr_uint   = gid
+}
+
+
+index test_gr1
+{
+  source      = src_gr1
+  path      = <data_path/>/test_gr1
+}
+
+source src_gr2
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT * FROM test_group2
+  sql_attr_uint   = tag
+  sql_attr_uint   = gid
+}
+
+
+index test_gr2
+{
+  source      = src_gr2
+  path      = <data_path/>/test_gr2
+}
+
+index dist_gr1
+{
+  type	= distributed
+  agent	= <my_address/>:test_gr1
+  agent	= <my_address/>:test_gr2
+}
+
 </config>
 
 <db_drop>drop table if exists test_table</db_drop>
+<db_drop>drop table if exists test_group1</db_drop>
+<db_drop>drop table if exists test_group2</db_drop>
 
 <db_create>
 create table test_table
@@ -62,6 +103,24 @@ create table test_table
 	content varchar(255) not null,
 	gid int
 );
+</db_create>
+
+<db_create>
+CREATE TABLE `test_group1` (
+  `id` int(11),
+  `tag` int(11),
+  `gid` int(11),
+  `text` varchar(255) NOT NULL
+)
+</db_create>
+
+<db_create>
+CREATE TABLE `test_group2` (
+  `id` int(11),
+  `tag` int(11),
+  `gid` int(11),
+  `text` varchar(255) NOT NULL
+)
 </db_create>
 
 <db_insert>
@@ -77,6 +136,34 @@ insert into test_table values
 (13, '13th', 'There was no way it could speak to robots on a basis of intellectual equality, and certainly not to animals.', 13 ),
 (14, '14th', 'To speak to its fellow-Solarians would be, to it, unpleasant, and what communication there must be would be forced, and never spontaneous.', 14 ),
 (15, '15th', 'No wonder, Trevize thought, it was indulging itself in this way.', 15 )
+</db_insert>
+
+<db_insert>
+INSERT INTO `test_group1` VALUES
+( 1, 2, 3, 'test'),
+( 2, 2, 2, 'test'),
+( 3, 2, 3, 'test'),
+( 4, 2, 10, 'test'),
+( 5, 2, 9, 'test'),
+( 6, 3, 8, 'test'),
+( 7, 3, 7, 'test'),
+( 8, 3, 6, 'test'),
+( 9, 3, 5, 'test'),
+( 10, 3, 4, 'test')
+</db_insert>
+
+<db_insert>
+INSERT INTO `test_group2` VALUES
+( 21, 2, 3, 'test'),
+( 22, 2, 2, 'test'),
+( 23, 2, 3, 'test'),
+( 24, 2, 10, 'test'),
+( 25, 2, 9, 'test'),
+( 26, 3, 8, 'test'),
+( 27, 3, 7, 'test'),
+( 28, 3, 6, 'test'),
+( 29, 3, 5, 'test'),
+( 30, 3, 4, 'test')
 </db_insert>
 
 <httpqueries>
@@ -220,6 +307,10 @@ insert into test_table values
 }
 </query>
 
+<query endpoint="json/search">{ "index": "test_gr1", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }} }</query>
+<query endpoint="json/search">{ "index": "dist_gr1", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }} }</query>
+<query endpoint="json/search">{ "index": "test_gr1", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }, "gr_dup": { "terms": { "field": "tag" } }} }</query>
+<query endpoint="json/search">{ "index": "dist_gr1", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }, "gr_dup": { "terms": { "field": "tag" } }} }</query>
 
 </httpqueries>
 

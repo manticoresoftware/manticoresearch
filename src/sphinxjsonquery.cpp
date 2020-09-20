@@ -646,6 +646,7 @@ static bool ParseSelect ( const JsonObj_c & tSelect, CSphQuery & tQuery, CSphStr
 static bool ParseScriptFields ( const JsonObj_c & tExpr, CSphQuery & tQuery, CSphString & sError );
 static bool ParseExpressions ( const JsonObj_c & tExpr, CSphQuery & tQuery, CSphString & sError );
 
+static bool ParseAggregates ( const JsonObj_c & tAggs, JsonQuery_c & tQuery, CSphString & sError );
 
 static bool ParseIndex ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, CSphString & sError )
 {
@@ -740,7 +741,7 @@ static bool ParseLimits ( const JsonObj_c & tRoot, CSphQuery & tQuery, CSphStrin
 }
 
 
-bool sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfile, CSphString & sError, CSphString & sWarning )
+bool sphParseJsonQuery ( const char * szQuery, JsonQuery_c & tQuery, bool & bProfile, CSphString & sError, CSphString & sWarning )
 {
 	JsonObj_c tRoot ( szQuery );
 	if ( !tRoot )
@@ -817,7 +818,15 @@ bool sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfi
 
 	// source \ select filter
 	JsonObj_c tSelect = tRoot.GetItem("_source");
-	return !tSelect || ParseSelect ( tSelect, tQuery, sError );
+	bool bParsedSelect = ( !tSelect || ParseSelect ( tSelect, tQuery, sError ) );
+	if ( !bParsedSelect )
+		return false;
+	// aggs
+	JsonObj_c tAggs = tRoot.GetItem ( "aggs" );
+	if ( tAggs && !ParseAggregates ( tAggs, tQuery, sError ) )
+		return false;
+
+	return true;
 }
 
 
@@ -1135,12 +1144,9 @@ static void PackedWideMVA2Json ( StringBuilder_c &tOut, const BYTE * pMVA )
 		tOut.NtoA(pValues[i]);
 }
 
-static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes, ESphAttr eAttrType, const char * szCol,
+static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes, ESphAttr eAttrType,
 	const CSphMatch &tMatch, const CSphAttrLocator &tLoc )
 {
-	assert ( sphPlainAttrToPtrAttr ( eAttrType )==eAttrType );
-	tOut.AppendName(szCol);
-
 	switch ( eAttrType )
 	{
 	case SPH_ATTR_INTEGER:
@@ -1254,6 +1260,15 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes
 }
 
 
+static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t & tRes, ESphAttr eAttrType, const char * szCol,
+	const CSphMatch & tMatch, const CSphAttrLocator & tLoc )
+{
+	assert ( sphPlainAttrToPtrAttr ( eAttrType )==eAttrType );
+	tOut.AppendName ( szCol );
+	JsonObjAddAttr ( tOut, tRes, eAttrType, tMatch, tLoc );
+}
+
+
 static bool IsHighlightAttr ( const CSphString & sName )
 {
 	return sName.Begins ( g_szHighlight );
@@ -1319,6 +1334,31 @@ void EncodeHighlight ( const CSphMatch & tMatch, int iAttr, const ISphSchema & t
 		for ( const auto & tPassage : tField.m_dPassages )
 			tOut.AppendEscapedWithComma ( (const char *)tPassage.m_dText.Begin(), tPassage.m_dText.GetLength() );
 	}
+}
+
+static void EncodeAggr ( const JsonAggr_t & tAggr, const AggrResult_t & tRes, JsonEscapedBuilder & tOut )
+{
+	const CSphColumnInfo * pKey = tRes.m_tSchema.GetAttr ( tAggr.m_sCol.cstr() );
+	const CSphColumnInfo * pCount = tRes.m_tSchema.GetAttr ( "count(*)" );
+
+	CSphString sBlockName;
+	sBlockName.SetSprintf ( R"("%s":{"buckets":[)", tAggr.m_sBucketName.cstr() );
+	tOut.StartBlock ( ",", sBlockName.cstr(), "]}");
+
+	// might be null for empty result set
+	if ( pKey && pCount )
+	{
+		auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( tRes.m_iOffset, tRes.m_iCount );
+		for ( const CSphMatch & tMatch : dMatches )
+		{
+			ScopedComma_c sQueryComma ( tOut, ",", "{", "}" );
+
+			JsonObjAddAttr ( tOut, tRes, pKey->m_eAttrType, "key", tMatch, pKey->m_tLocator );
+			JsonObjAddAttr ( tOut, tRes, pCount->m_eAttrType, "doc_count", tMatch, pCount->m_tLocator );
+		}
+	}
+
+	tOut.FinishBlock ( false ); // named bucket obj
 }
 
 void JsonRenderAccessSpecs ( JsonEscapedBuilder & tRes, const bson::Bson_c & tBson, bool bWithZones )
@@ -1411,8 +1451,12 @@ void FormatJsonPlanFromBson ( JsonEscapedBuilder& tOut, bson::NodeHandle_t dBson
 
 } // static
 
-CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQuery, QueryProfile_t * pProfile )
+CSphString sphEncodeResultJson ( const VecTraits_T<const AggrResult_t *> & dRes, const JsonQuery_c & tQuery, QueryProfile_t * pProfile )
 {
+	assert ( dRes.GetLength()>=1 );
+	assert ( dRes[0]!=nullptr );
+	const AggrResult_t & tRes = *dRes[0];
+
 	JsonEscapedBuilder tOut;
 	CSphString sResult;
 
@@ -1504,6 +1548,15 @@ CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQ
 	}
 
 	tOut.FinishBlocks ( sHitMeta, false ); // hits array, hits meta
+
+	if ( dRes.GetLength()>1 )
+	{
+		assert ( dRes.GetLength()==tQuery.m_dAggs.GetLength()+1 );
+		tOut.StartBlock ( ",", R"("aggregations":{)", "}");
+		ARRAY_FOREACH ( i, tQuery.m_dAggs )
+			EncodeAggr ( tQuery.m_dAggs[i], *dRes[i+1], tOut );
+		tOut.FinishBlock ( false ); // aggregations obj
+	}
 
 	if ( pProfile )
 	{
@@ -2271,5 +2324,43 @@ static bool ParseExpressions ( const JsonObj_c & tExpr, CSphQuery & tQuery, CSph
 	}
 
 	sSelect.MoveTo ( tQuery.m_sSelect );
+	return true;
+}
+
+
+bool ParseAggregates ( const JsonObj_c & tAggs, JsonQuery_c & tQuery, CSphString & sError )
+{
+	if ( !tAggs || !tAggs.IsObj() )
+	{
+		sError = R"("aggs" property should be an object")";
+		return false;
+	}
+
+	for ( const auto & tJsonItem : tAggs )
+	{
+		if ( !tJsonItem.IsObj() )
+		{
+			sError = R"("aggs" property item should be an object)";
+			return false;
+		}
+
+		JsonAggr_t tItem;
+		tItem.m_sBucketName = tJsonItem.Name();
+
+		const JsonObj_c tBucket = tJsonItem.begin();
+		if ( !tBucket.IsObj() )
+		{
+			sError.SetSprintf ( R"("aggs" bucket '%s' should be an object)", tItem.m_sBucketName.cstr() );
+			return false;
+		}
+
+		if ( !tBucket.FetchStrItem ( tItem.m_sCol, "field", sError, false ) )
+			return false;
+
+		tBucket.FetchIntItem ( tItem.m_iSize, "size", sError, true );
+
+		tQuery.m_dAggs.Add ( tItem );
+	}
+
 	return true;
 }

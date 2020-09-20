@@ -515,6 +515,79 @@ protected:
 	{}
 };
 
+static PubSearchHandler_c * CreateMsearchHandler ( const QueryParser_i * pQueryParser, QueryType_e eQueryType, JsonQuery_c & tQuery )
+{
+	tQuery.m_pQueryParser = pQueryParser;
+
+	int iQueries = ( 1 + tQuery.m_dAggs.GetLength() );
+	PubSearchHandler_c * pHandler = { new PubSearchHandler_c ( iQueries, pQueryParser, eQueryType, true ) };
+
+	if ( !tQuery.m_dAggs.GetLength() )
+	{
+		pHandler->SetQuery ( 0, tQuery, nullptr );
+		return pHandler;
+	}
+
+	tQuery.m_dRefItems = tQuery.m_dItems;
+	CSphQueryItem & tCountItem = tQuery.m_dItems.Add();
+	tCountItem.m_sExpr = "count(*)";
+	tCountItem.m_sAlias = "count(*)";
+
+	sph::StringSet hAttrs;
+	for ( const auto & tItem : tQuery.m_dItems )
+		hAttrs.Add ( tItem.m_sAlias );
+
+	for ( const JsonAggr_t & tBucket : tQuery.m_dAggs )
+	{
+		// add only new items
+		if ( hAttrs[tBucket.m_sCol] )
+			continue;
+
+		CSphQueryItem & tItem = tQuery.m_dItems.Add();
+		tItem.m_sExpr = tBucket.m_sCol;
+		tItem.m_sAlias = tBucket.m_sCol;
+	}
+
+	tQuery.m_bFacetHead = true;
+	pHandler->SetQuery ( 0, tQuery, nullptr );
+	int iRefLimit = tQuery.m_iLimit;
+
+	ARRAY_FOREACH ( i, tQuery.m_dAggs )
+	{
+		const JsonAggr_t & tBucket = tQuery.m_dAggs[i];
+
+		// common to main query but flags, select list and ref items should uniq
+
+		// facet flags
+		tQuery.m_bFacetHead = false;
+		tQuery.m_bFacet = true;
+
+		// select list to facet query
+		tQuery.m_sSelect.SetSprintf ( "%s", tBucket.m_sCol.cstr() );
+
+		// ref items to facet query
+		tQuery.m_dRefItems.Resize ( 0 );
+		CSphQueryItem & tItem = tQuery.m_dRefItems.Add();
+		tItem.m_sExpr = tBucket.m_sCol;
+		tItem.m_sAlias = tBucket.m_sCol;
+		CSphQueryItem & tCountItem = tQuery.m_dRefItems.Add();
+		tCountItem.m_sExpr = "count(*)";
+		tCountItem.m_sAlias = "count(*)";
+
+		tQuery.m_sGroupBy = tBucket.m_sCol;
+		tQuery.m_sFacetBy = tBucket.m_sCol;
+		tQuery.m_sGroupSortBy = "@groupby desc";
+		tQuery.m_sOrderBy = "@weight desc";
+
+		// aggregate and main query could have different sizes
+		tQuery.m_iLimit = ( tBucket.m_iSize ? tBucket.m_iSize : iRefLimit );
+
+		pHandler->SetQuery ( i+1, tQuery, nullptr );
+	}
+
+	return pHandler;
+}
+
 
 class HttpSearchHandler_c : public HttpHandler_c, public HttpOptionsTraits_c
 {
@@ -526,20 +599,18 @@ public:
 
 	bool Process () final
 	{
-		CSphQuery tQuery;
 		CSphString sWarning;
 		QueryParser_i * pQueryParser = PreParseQuery();
 		if ( !pQueryParser )
 			return false;
 
-		m_tQuery.m_pQueryParser = pQueryParser;
-		CSphScopedPtr<PubSearchHandler_c> tHandler { new PubSearchHandler_c ( 1, pQueryParser, m_eQueryType, true ) };
+		int iQueries = ( 1 + m_tQuery.m_dAggs.GetLength() );
+
+		CSphScopedPtr<PubSearchHandler_c> tHandler { CreateMsearchHandler ( pQueryParser, m_eQueryType, m_tQuery )};
 
 		QueryProfile_t tProfile;
 		if ( m_bProfile )
 			tHandler->SetProfile ( &tProfile );
-
-		tHandler->SetQuery ( 0, m_tQuery, nullptr );
 
 		// search
 		tHandler->RunQueries();
@@ -558,7 +629,12 @@ public:
 		if ( pRes->m_sWarning.IsEmpty() )
 			pRes->m_sWarning = m_sWarning;
 
-		CSphString sResult = EncodeResult ( *pRes, m_bProfile ? &tProfile : NULL );
+		CSphFixedVector<AggrResult_t *> dAggsRes ( iQueries );
+		dAggsRes[0] = tHandler->GetResult ( 0 );
+		ARRAY_FOREACH ( i, m_tQuery.m_dAggs )
+			dAggsRes[i+1] = tHandler->GetResult ( i+1 );
+
+		CSphString sResult = EncodeResult ( dAggsRes, m_bProfile ? &tProfile : NULL );
 		BuildReply ( sResult, SPH_HTTP_STATUS_200 );
 
 		return true;
@@ -567,11 +643,11 @@ public:
 protected:
 	bool					m_bProfile {false};
 	QueryType_e				m_eQueryType {QUERY_SQL};
-	CSphQuery				m_tQuery;
+	JsonQuery_c				m_tQuery;
 	CSphString				m_sWarning;
 
 	virtual QueryParser_i * PreParseQuery() = 0;
-	virtual CSphString		EncodeResult ( const AggrResult_t & tRes, QueryProfile_t * pProfile ) = 0;
+	virtual CSphString		EncodeResult ( const VecTraits_T<AggrResult_t *> & dRes, QueryProfile_t * pProfile ) = 0;
 };
 
 
@@ -600,7 +676,7 @@ protected:
 			return nullptr;
 		}
 
-		m_tQuery = dStmt[0].m_tQuery;
+		( (CSphQuery &) m_tQuery ) = dStmt[0].m_tQuery;
 		if ( dStmt.GetLength()>1 )
 		{
 			ReportError ( "multiple queries not supported", SPH_HTTP_STATUS_501 );
@@ -616,9 +692,9 @@ protected:
 		return sphCreatePlainQueryParser();
 	}
 
-	CSphString EncodeResult ( const AggrResult_t & tRes, QueryProfile_t * pProfile ) override
+	CSphString EncodeResult ( const VecTraits_T<AggrResult_t *> & dRes, QueryProfile_t * pProfile ) override
 	{
-		return sphEncodeResultJson ( tRes, m_tQuery, pProfile );
+		return sphEncodeResultJson ( dRes, m_tQuery, pProfile );
 	}
 };
 
@@ -849,9 +925,9 @@ public:
 	}
 
 protected:
-	CSphString EncodeResult ( const AggrResult_t & tRes, QueryProfile_t * pProfile ) override
+	CSphString EncodeResult ( const VecTraits_T<AggrResult_t *> & dRes, QueryProfile_t * pProfile ) override
 	{
-		return sphEncodeResultJson ( tRes, m_tQuery, pProfile );
+		return sphEncodeResultJson ( dRes, m_tQuery, pProfile );
 	}
 };
 

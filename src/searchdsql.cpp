@@ -205,25 +205,6 @@ void SqlParser_c::PushQuery ()
 }
 
 
-bool SqlParser_c::AddOption ( const SqlNode_t & tIdent )
-{
-	CSphString sOpt, sVal;
-	ToString ( sOpt, tIdent ).ToLower();
-
-	if ( sOpt=="low_priority" )
-		m_pQuery->m_bLowPriority = true;
-	else if ( sOpt=="debug_no_payload" )
-		m_pStmt->m_tQuery.m_uDebugFlags |= QUERY_DEBUG_NO_PAYLOAD;
-	else
-	{
-		m_pParseError->SetSprintf ( "unknown option '%s'", sOpt.cstr() );
-		return false;
-	}
-
-	return true;
-}
-
-
 bool SqlParser_c::CheckInteger ( const CSphString & sOpt, const CSphString & sVal ) const
 {
 	const char * p = sVal.cstr();
@@ -240,6 +221,77 @@ bool SqlParser_c::CheckInteger ( const CSphString & sOpt, const CSphString & sVa
 }
 
 
+/// hashes for all options
+enum class Option_e : BYTE
+{
+	AGENT_QUERY_TIMEOUT = 0,
+	BOOLEAN_SIMPLIFY,
+	COLUMNS,
+	COMMENT,
+	CUTOFF,
+	DEBUG_NO_PAYLOAD,
+	EXPAND_KEYWORDS,
+	FIELD_WEIGHTS,
+	FORMAT,
+	GLOBAL_IDF,
+	IDF,
+	IGNORE_NONEXISTENT_COLUMNS,
+	IGNORE_NONEXISTENT_INDEXES,
+	INDEX_WEIGHTS,
+	LOCAL_DF,
+	LOW_PRIORITY,
+	MAX_MATCHES,
+	MAX_PREDICTED_TIME,
+	MAX_QUERY_TIME,
+	MORPHOLOGY,
+	RAND_SEED,
+	RANKER,
+	RETRY_COUNT,
+	RETRY_DELAY,
+	REVERSE_SCAN,
+	SORT_METHOD,
+	STRICT,
+	SYNC,
+	THREADS,
+	TOKEN_FILTER,
+	TOKEN_FILTER_OPTIONS,
+
+	INVALID_OPTION
+};
+
+Option_e ParseOption ( const CSphString& sOpt )
+{
+	static const char * szOptions[(BYTE) Option_e::INVALID_OPTION] = { "agent_query_timeout", "boolean_simplify",
+		"columns", "comment", "cutoff", "debug_no_payload", "expand_keywords", "field_weights", "format", "global_idf",
+		"idf", "ignore_nonexistent_columns", "ignore_nonexistent_indexes", "index_weights", "local_df", "low_priority",
+		"max_matches", "max_predicted_time", "max_query_time", "morphology", "rand_seed", "ranker", "retry_count",
+		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options" };
+
+	static SmallStringHash_T<Option_e, (BYTE) Option_e::INVALID_OPTION * 2> hValues;
+	if ( !hValues.GetLength () )
+		for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
+			hValues.Add ( (Option_e) i, szOptions[i] );
+
+	auto * pCol = hValues ( sOpt );
+	return pCol ? *pCol : Option_e::INVALID_OPTION;
+}
+
+
+bool SqlParser_c::AddOption ( const SqlNode_t & tIdent )
+{
+	CSphString sOpt;
+	ToString ( sOpt, tIdent ).ToLower ();
+
+	switch ( ParseOption ( sOpt ) )
+	{
+		case Option_e::LOW_PRIORITY:		m_pQuery->m_bLowPriority = true; break;
+		case Option_e::DEBUG_NO_PAYLOAD:	m_pStmt->m_tQuery.m_uDebugFlags |= QUERY_DEBUG_NO_PAYLOAD; break;
+		default: m_pParseError->SetSprintf ( "unknown option '%s'", sOpt.cstr () );
+			return false;
+	}
+	return true;
+}
+
 bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue )
 {
 	CSphString sOpt, sVal;
@@ -247,8 +299,9 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 	ToString ( sVal, tValue ).ToLower().Unquote();
 
 	// OPTIMIZE? hash possible sOpt choices?
-	if ( sOpt=="ranker" )
+	switch ( ParseOption ( sOpt ) )
 	{
+	case Option_e::RANKER:
 		m_pQuery->m_eRanker = SPH_RANK_TOTAL;
 		for ( int iRanker = SPH_RANK_PROXIMITY_BM25; iRanker<=SPH_RANK_SPH04; iRanker++ )
 			if ( sVal==sphGetRankerName ( ESphRankMode ( iRanker ) ) )
@@ -271,76 +324,81 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 			m_pParseError->SetSprintf ( "unknown ranker '%s'", sVal.cstr() );
 			return false;
 		}
-	} else if ( sOpt=="token_filter" )	// tokfilter = hello.dll:hello:some_opts
-	{
-		StrVec_t dParams;
-		if ( !sphPluginParseSpec ( sVal, dParams, *m_pParseError ) )
-			return false;
+		break;
 
-		if ( !dParams.GetLength() )
+	case Option_e::TOKEN_FILTER:    // tokfilter = hello.dll:hello:some_opts
 		{
-			m_pParseError->SetSprintf ( "missing token filter spec string" );
-			return false;
-		}
+			StrVec_t dParams;
+			if ( !sphPluginParseSpec ( sVal, dParams, *m_pParseError ) )
+				return false;
 
-		m_pQuery->m_sQueryTokenFilterLib = dParams[0];
-		m_pQuery->m_sQueryTokenFilterName = dParams[1];
-		m_pQuery->m_sQueryTokenFilterOpts = dParams[2];
-	} else if ( sOpt=="max_matches" )
-	{
+			if ( !dParams.GetLength() )
+			{
+				m_pParseError->SetSprintf ( "missing token filter spec string" );
+				return false;
+			}
+
+			m_pQuery->m_sQueryTokenFilterLib = dParams[0];
+			m_pQuery->m_sQueryTokenFilterName = dParams[1];
+			m_pQuery->m_sQueryTokenFilterOpts = dParams[2];
+		}
+		break;
+
+	case Option_e::MAX_MATCHES: // else if ( sOpt=="max_matches" )
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;
 
 		m_pQuery->m_iMaxMatches = (int)tValue.m_iValue;
+		break;
 
-	} else if ( sOpt=="cutoff" )
-	{
+	case Option_e::CUTOFF: // else if ( sOpt=="cutoff" )
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;
 
 		m_pQuery->m_iCutoff = (int)tValue.m_iValue;
+		break;
 
-	} else if ( sOpt=="max_query_time" )
-	{
+	case Option_e::MAX_QUERY_TIME: // else if ( sOpt=="max_query_time" )
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;
 
 		m_pQuery->m_uMaxQueryMsec = (int)tValue.m_iValue;
+		break;
 
-	} else if ( sOpt=="retry_count" )
-	{
+	case Option_e::RETRY_COUNT: // else if ( sOpt=="retry_count" )
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;
 
 		m_pQuery->m_iRetryCount = (int)tValue.m_iValue;
+		break;
 
-	} else if ( sOpt=="retry_delay" )
-	{
+	case Option_e::RETRY_DELAY: // else if ( sOpt=="retry_delay" )
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;
 
 		m_pQuery->m_iRetryDelay = (int)tValue.m_iValue;
+		break;
 
-	} else if ( sOpt=="reverse_scan" )
-	{
+	case Option_e::REVERSE_SCAN: //} else if ( sOpt=="reverse_scan" )
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;
 
 		m_pQuery->m_bReverseScan = ( tValue.m_iValue!=0 );
+		break;
 
-	} else if ( sOpt=="ignore_nonexistent_columns" )
-	{
+	case Option_e::IGNORE_NONEXISTENT_COLUMNS: //} else if ( sOpt=="ignore_nonexistent_columns" )
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;
 
 		m_pQuery->m_bIgnoreNonexistent = ( tValue.m_iValue!=0 );
+		break;
 
-	} else if ( sOpt=="comment" )
-	{
+	case Option_e::COMMENT: //} else if ( sOpt=="comment" )
 		m_pQuery->m_sComment = ToStringUnescape ( tValue );
 
-	} else if ( sOpt=="sort_method" )
-	{
+	break;
+
+	case Option_e::SORT_METHOD: //} else if ( sOpt=="sort_method" )
 		if ( sVal=="pq" )			m_pQuery->m_bSortKbuffer = false;
 		else if ( sVal=="kbuffer" )	m_pQuery->m_bSortKbuffer = true;
 		else
@@ -348,130 +406,132 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 			m_pParseError->SetSprintf ( "unknown sort_method=%s (known values are pq, kbuffer)", sVal.cstr() );
 			return false;
 		}
+		break;
 
-	} else if ( sOpt=="agent_query_timeout" )
-	{
+	case Option_e::AGENT_QUERY_TIMEOUT: //} else if ( sOpt=="agent_query_timeout" )
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;
 
 		m_pQuery->m_iAgentQueryTimeoutMs = (int)tValue.m_iValue;
+		break;
 
-	} else if ( sOpt=="max_predicted_time" )
-	{
+	case Option_e::MAX_PREDICTED_TIME: //} else if ( sOpt=="max_predicted_time" )
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;
 
 		m_pQuery->m_iMaxPredictedMsec = int ( tValue.m_iValue > INT_MAX ? INT_MAX : tValue.m_iValue );
+		break;
 
-	} else if ( sOpt=="boolean_simplify" )
-	{
+	case Option_e::BOOLEAN_SIMPLIFY: //} else if ( sOpt=="boolean_simplify" )
 		m_pQuery->m_bSimplify = true;
+		break;
 
-	} else if ( sOpt=="idf" )
-	{
-		StrVec_t dOpts;
-		sphSplit ( dOpts, sVal.cstr() );
-
-		ARRAY_FOREACH ( i, dOpts )
+	case Option_e::IDF: //} else if ( sOpt=="idf" )
 		{
-			if ( dOpts[i]=="normalized" )
-				m_pQuery->m_bPlainIDF = false;
-			else if ( dOpts[i]=="plain" )
-				m_pQuery->m_bPlainIDF = true;
-			else if ( dOpts[i]=="tfidf_normalized" )
-				m_pQuery->m_bNormalizedTFIDF = true;
-			else if ( dOpts[i]=="tfidf_unnormalized" )
-				m_pQuery->m_bNormalizedTFIDF = false;
-			else
+			StrVec_t dOpts;
+			sphSplit ( dOpts, sVal.cstr() );
+
+			ARRAY_FOREACH ( i, dOpts )
 			{
-				m_pParseError->SetSprintf ( "unknown flag %s in idf=%s (known values are plain, normalized, tfidf_normalized, tfidf_unnormalized)",
-					dOpts[i].cstr(), sVal.cstr() );
-				return false;
+				if ( dOpts[i]=="normalized" )
+					m_pQuery->m_bPlainIDF = false;
+				else if ( dOpts[i]=="plain" )
+					m_pQuery->m_bPlainIDF = true;
+				else if ( dOpts[i]=="tfidf_normalized" )
+					m_pQuery->m_bNormalizedTFIDF = true;
+				else if ( dOpts[i]=="tfidf_unnormalized" )
+					m_pQuery->m_bNormalizedTFIDF = false;
+				else
+				{
+					m_pParseError->SetSprintf ( "unknown flag %s in idf=%s (known values are plain, normalized, tfidf_normalized, tfidf_unnormalized)",
+						dOpts[i].cstr(), sVal.cstr() );
+					return false;
+				}
 			}
 		}
-	} else if ( sOpt=="global_idf" )
-	{
+		break;
+
+	case Option_e::GLOBAL_IDF: //} else if ( sOpt=="global_idf" )
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;
 
 		m_pQuery->m_bGlobalIDF = ( tValue.m_iValue!=0 );
+		break;
 
-	} else if ( sOpt=="local_df" )
-	{
+	case Option_e::LOCAL_DF: //} else if ( sOpt=="local_df" )
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;
 
 		m_pQuery->m_bLocalDF = ( tValue.m_iValue!=0 );
+		break;
 
-	} else if ( sOpt=="ignore_nonexistent_indexes" )
-	{
+	case Option_e::IGNORE_NONEXISTENT_INDEXES: //} else if ( sOpt=="ignore_nonexistent_indexes" )
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;
 
 		m_pQuery->m_bIgnoreNonexistentIndexes = ( tValue.m_iValue!=0 );
+		break;
 
-	} else if ( sOpt=="strict" )
-	{
+	case Option_e::STRICT: //} else if ( sOpt=="strict" )
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;
 
 		m_pQuery->m_bStrict = ( tValue.m_iValue!=0 );
+		break;
 
-	} else if ( sOpt=="columns" ) // for SHOW THREADS
-	{
+	case Option_e::COLUMNS: //} else if ( sOpt=="columns" ) // for SHOW THREADS
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;
 
 		m_pStmt->m_iThreadsCols = Max ( (int)tValue.m_iValue, 0 );
+		break;
 
-	} else if ( sOpt=="rand_seed" )
-	{
+	case Option_e::RAND_SEED: //} else if ( sOpt=="rand_seed" )
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;
 
 		m_pStmt->m_tQuery.m_iRandSeed = int64_t(DWORD(tValue.m_iValue));
+		break;
 
-	} else if ( sOpt=="sync" )
-	{
+	case Option_e::SYNC: //} else if ( sOpt=="sync" )
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;
 
 		m_pQuery->m_bSync = ( tValue.m_iValue!=0 );
+		break;
 
-	} else if ( sOpt=="expand_keywords" )
-	{
+	case Option_e::EXPAND_KEYWORDS: //} else if ( sOpt=="expand_keywords" )
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;
 
 		m_pQuery->m_eExpandKeywords = ( tValue.m_iValue!=0 ? QUERY_OPT_ENABLED : QUERY_OPT_DISABLED );
+		break;
 
-	} else if ( sOpt=="format" ) // for SHOW THREADS
-	{
+	case Option_e::FORMAT: //} else if ( sOpt=="format" ) // for SHOW THREADS
 		m_pStmt->m_sThreadFormat = sVal;
+		break;
 
-	} else if ( sOpt=="threads" )
-	{
+	case Option_e::THREADS: //} else if ( sOpt=="threads" )
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;
 
 		m_pQuery->m_iCouncurrency = (int) tValue.m_iValue;
+		break;
 
-	} else if ( sOpt=="morphology" )
-	{
+	case Option_e::MORPHOLOGY: //} else if ( sOpt=="morphology" )
 		if ( sVal=="none" )
-		{
 			m_pQuery->m_eExpandKeywords = QUERY_OPT_MORPH_NONE;
-		} else
+		else
 		{
 			m_pParseError->SetSprintf ( "morphology could be only disabled with option none, got %s", sVal.cstr() );
 			return false;
 		}
-	} else
-	{
+		break;
+
+	default: //} else
 		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", sOpt.cstr() );
 		return false;
 	}
-
 	return true;
 }
 
@@ -482,7 +542,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 	ToString ( sOpt, tIdent ).ToLower();
 	ToString ( sVal, tValue ).ToLower().Unquote();
 
-	if ( sOpt=="ranker" )
+	if ( ParseOption ( sOpt )==Option_e::RANKER )
 	{
 		if ( sVal=="expr" || sVal=="export" )
 		{
@@ -508,20 +568,13 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt>
 	CSphString sOpt;
 	ToString ( sOpt, tIdent ).ToLower ();
 
-	if ( sOpt=="field_weights" )
+	switch ( ParseOption ( sOpt ) )
 	{
-		m_pQuery->m_dFieldWeights.SwapData ( dNamed );
-
-	} else if ( sOpt=="index_weights" )
-	{
-		m_pQuery->m_dIndexWeights.SwapData ( dNamed );
-
-	} else
-	{
-		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", sOpt.cstr() );
-		return false;
+		case Option_e::FIELD_WEIGHTS:	m_pQuery->m_dFieldWeights.SwapData ( dNamed ); break;
+		case Option_e::INDEX_WEIGHTS:	m_pQuery->m_dIndexWeights.SwapData ( dNamed ); break;
+		default: m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", sOpt.cstr() );
+			return false;
 	}
-
 	return true;
 }
 
@@ -532,15 +585,14 @@ bool SqlParser_c::AddInsertOption ( const SqlNode_t & tIdent, const SqlNode_t & 
 	ToString ( sOpt, tIdent ).ToLower();
 	ToString ( sVal, tValue ).Unquote();
 
-	if ( sOpt=="token_filter_options" )
+	if ( ParseOption ( sOpt )==Option_e::TOKEN_FILTER_OPTIONS )
 	{
 		m_pStmt->m_sStringParam = sVal;
-	} else
-	{
-		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", sOpt.cstr() );
-		return false;
+		return true;
 	}
-	return true;
+
+	m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", sOpt.cstr() );
+	return false;
 }
 
 

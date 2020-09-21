@@ -70,7 +70,7 @@ public:
 	/// truncate index (that is, kill all data)
 	virtual bool Truncate ( CSphString & sError ) = 0;
 
-	virtual void Optimize ( int iFrom, int iTo ) = 0;
+	virtual void Optimize ( int iCutoff, int iFrom, int iTo ) = 0;
 
 	/// check settings vs current and return back tokenizer and dictionary in case of difference
 	virtual bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const = 0;

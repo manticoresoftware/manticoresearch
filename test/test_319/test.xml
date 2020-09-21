@@ -61,7 +61,7 @@ $results[] = "\n" . $ql->Query ( "SELECT id FROM rt WHERE id > 700 and id < 800 
 $ql->Disconnect();
 $results[] = RestartDaemon();
 $ql->Connect();
-$results[] = "\n" . $ql->Query ( "OPTIMIZE INDEX rt option sync=1" );
+$results[] = "\n" . $ql->Query ( "OPTIMIZE INDEX rt option sync=1, cutoff=2" );
 
 $ql->Disconnect();
 $results[] = RestartDaemon();

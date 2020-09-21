@@ -60,7 +60,7 @@ $results[] = 'query tes*';
 $results[] = "\n" . $ql->Query ( "SELECT * FROM rt WHERE MATCH ( 'tes*' )" );
 
 $results[] = "\n" . $ql->Query ( "FLUSH RAMCHUNK rt" );
-$results[] = "\n" . $ql->Query ( "OPTIMIZE INDEX rt option sync=1" );
+$results[] = "\n" . $ql->Query ( "OPTIMIZE INDEX rt option sync=1, cutoff=1" );
 
 $results[] = 'query test';
 $results[] = "\n" . $ql->Query ( "SELECT * FROM rt WHERE MATCH ( 'test' ) ORDER BY id ASC" );

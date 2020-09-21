@@ -54,7 +54,7 @@ index rt_mem
 <sphinxql>select id, weight() as w from rt where match ('best')</sphinxql>
 
 <!-- only disk chunk -->
-<sphinxql>optimize index rt option sync=1</sphinxql>
+<sphinxql>optimize index rt option sync=1, cutoff=1</sphinxql>
 <sphinxql>select id, weight() as w from rt where match ('test')</sphinxql>
 <sphinxql>select id, weight() as w from rt where match ('best')</sphinxql>
 

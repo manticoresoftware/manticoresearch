@@ -1085,7 +1085,7 @@ public:
 	bool				ForceDiskChunk() final;
 	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) 			final  EXCLUDES (m_tReading );
 	bool				Truncate ( CSphString & sError ) final;
-	void				Optimize ( int iFrom, int iTo ) final;
+	void				Optimize ( int iCutoff, int iFrom, int iTo ) final;
 	void				CommonMerge ( Selector_t&& fnSelector );
 	CSphIndex *			GetDiskChunk ( int iChunk ) final { return m_dDiskChunks.GetLength()>iChunk ? m_dDiskChunks[iChunk] : nullptr; }
 	ISphTokenizer *		CloneIndexingTokenizer() const final { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
@@ -7474,7 +7474,6 @@ static int64_t GetChunkSize ( const CSphVector<CSphIndex*> & dDiskChunks, int iI
 
 static int GetNextSmallestChunk ( const CSphVector<CSphIndex*> & dDiskChunks, int iIndex )
 {
-	assert (dDiskChunks.GetLength ()>1);
 	int iRes = -1;
 	int64_t iLastSize = INT64_MAX;
 	ARRAY_FOREACH ( i, dDiskChunks )
@@ -7652,9 +7651,11 @@ void RtIndex_c::CommonMerge( Selector_t&& fnSelector )
 	}
 }
 
-void RtIndex_c::Optimize( int iFrom, int iTo )
+void RtIndex_c::Optimize( int iCutoff, int iFrom, int iTo )
 {
 	int iChunks = m_dDiskChunks.GetLength ();
+
+	// manual case: iFrom and iTo provided from outside, iCutoff is not in game
 	if ( iFrom>=0 && iTo>=0 )
 	{
 		CommonMerge( [&iFrom,&iTo,iChunks] (int* piA, int* piB) -> bool
@@ -7679,15 +7680,18 @@ void RtIndex_c::Optimize( int iFrom, int iTo )
 		// In order to minimize IO operations we merge chunks in order from the smallest to the largest to build a progression
 		// the timeline is: [older chunks], ..., A, A+1, ..., B, ..., [younger chunks]
 		// this also needs meta v.12 (chunk list with possible skips, instead of a base chunk + length as in meta v.11)
-		CommonMerge ( [this] (int* piA, int* piB) -> bool
+		if ( !iCutoff )
+			iCutoff = sphCpuThreadsCount () * 2;
+
+		CommonMerge ( [this, iCutoff] (int* piA, int* piB) -> bool
 		{
-			if ( m_dDiskChunks.GetLength ()<2 )
+			if ( m_dDiskChunks.GetLength ()<=iCutoff )
 				return false;
 
 			// merge 'smallest' to 'smaller' and get 'merged' that names like 'A'+.tmp
 			// however 'merged' got placed at 'B' position and 'merged' renamed to 'B' name
 
-			int iA = GetNextSmallestChunk ( m_dDiskChunks, 0 );
+			int iA = GetNextSmallestChunk ( m_dDiskChunks, -1 );
 			int iB = GetNextSmallestChunk ( m_dDiskChunks, iA );
 
 			if ( iA<0 || iB<0 )

@@ -13028,12 +13028,12 @@ void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	if ( tStmt.m_tQuery.m_bSync )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( iFrom, iTo );
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( tStmt.m_tQuery.m_iCutoff, iFrom, iTo );
 
 		return;
 	}
 
-	EnqueueForOptimize ( sIndex, iFrom, iTo );
+	EnqueueForOptimize ( sIndex, tStmt.m_tQuery.m_iCutoff, iFrom, iTo );
 }
 
 void HandleMysqlfiles ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
@@ -13361,12 +13361,12 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	if ( tStmt.m_tQuery.m_bSync )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize(-1,-1);
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize(tStmt.m_tQuery.m_iCutoff,-1,-1);
 
 		return;
 	}
 
-	EnqueueForOptimize ( tStmt.m_sIndex );
+	EnqueueForOptimize ( tStmt.m_sIndex, tStmt.m_tQuery.m_iCutoff );
 }
 
 // STMT_SELECT_SYSVAR: SELECT @@sysvar1 [ as alias] [@@sysvarN [ as alias]] [limit M]

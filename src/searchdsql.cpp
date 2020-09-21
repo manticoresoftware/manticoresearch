@@ -250,7 +250,7 @@ enum class Option_e : BYTE
 	RETRY_DELAY,
 	REVERSE_SCAN,
 	SORT_METHOD,
-	STRICT,
+	STRICT_, 		// dash added because of windows
 	SYNC,
 	THREADS,
 	TOKEN_FILTER,
@@ -472,7 +472,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 		m_pQuery->m_bIgnoreNonexistentIndexes = ( tValue.m_iValue!=0 );
 		break;
 
-	case Option_e::STRICT: //} else if ( sOpt=="strict" )
+	case Option_e::STRICT_: //} else if ( sOpt=="strict" )
 		if ( !CheckInteger ( sOpt, sVal ) )
 			return false;
 

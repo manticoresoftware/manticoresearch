@@ -1113,6 +1113,7 @@ public:
 	bool				Truncate ( CSphString & sError ) final;
 	void				Optimize ( int iCutoff, int iFrom, int iTo ) final;
 	void				CommonMerge ( Selector_t&& fnSelector );
+	void				DropDiskChunk ( int iChunk ) REQUIRES ( m_tOptimizingLock );
 	CSphIndex *			GetDiskChunk ( int iChunk ) final { return m_dDiskChunks.GetLength()>iChunk ? m_dDiskChunks[iChunk] : nullptr; }
 	ISphTokenizer *		CloneIndexingTokenizer() const final { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 
@@ -7498,7 +7499,7 @@ static int64_t GetChunkSize ( const CSphVector<CSphIndex*> & dDiskChunks, int iI
 }
 
 
-static int GetNextSmallestChunk ( const CSphVector<CSphIndex*> & dDiskChunks, int iIndex )
+static std::pair<int, int64_t> GetNextSmallestChunk ( const CSphVector<CSphIndex*> & dDiskChunks, int iIndex )
 {
 	int iRes = -1;
 	int64_t iLastSize = INT64_MAX;
@@ -7511,7 +7512,32 @@ static int GetNextSmallestChunk ( const CSphVector<CSphIndex*> & dDiskChunks, in
 			iRes = i;
 		}
 	}
-	return iRes;
+	return { iRes, iLastSize };
+}
+
+void RtIndex_c::DropDiskChunk( int iChunk )
+{
+	sphLogDebug( "rt optimize: index %s: drop disk chunk %d",  m_sIndexName.cstr(), iChunk );
+
+	CSphString sEmpty, sMerged;
+
+	{	ScopedMutex_t _ ( m_tWriting );
+
+		Verify ( m_tChunkLock.WriteLock () );
+			auto pEmpty = m_dDiskChunks[iChunk];
+			sEmpty.SetSprintf ( "%s", pEmpty->GetFilename () );
+			m_dDiskChunks.Remove ( iChunk );
+			CSphFixedVector<int> dChunkNames = GetIndexNames ( m_dDiskChunks, false );
+		Verify ( m_tChunkLock.Unlock() );
+
+		SaveMeta ( m_iTID, dChunkNames );
+
+		ScWL_t ReaderWlock ( m_tReading );
+		SafeDelete ( pEmpty );
+	}
+
+	// we might remove index files
+	sphUnlinkIndex ( sEmpty.cstr(), true );
 }
 
 void RtIndex_c::CommonMerge( Selector_t&& fnSelector )
@@ -7535,6 +7561,14 @@ void RtIndex_c::CommonMerge( Selector_t&& fnSelector )
 	{
 		const CSphIndex * pOldest = nullptr;
 		const CSphIndex * pOlder = nullptr;
+
+		// got zero chunk (iA), just remove it quickly
+		if ( iB<0 )
+		{
+			DropDiskChunk ( iA );
+			continue;
+		}
+
 		{ // m_tChunkLock scoped Readlock
 			CSphScopedRLock RChunkLock { m_tChunkLock };
 			// merge 'older'(pSrc) to 'oldest'(pDst) and get 'merged' that names like 'oldest'+.tmp
@@ -7711,16 +7745,29 @@ void RtIndex_c::Optimize( int iCutoff, int iFrom, int iTo )
 
 		CommonMerge ( [this, iCutoff] (int* piA, int* piB) -> bool
 		{
-			if ( m_dDiskChunks.GetLength ()<=iCutoff )
+			if ( m_dDiskChunks.IsEmpty() )
 				return false;
 
 			// merge 'smallest' to 'smaller' and get 'merged' that names like 'A'+.tmp
 			// however 'merged' got placed at 'B' position and 'merged' renamed to 'B' name
 
-			int iA = GetNextSmallestChunk ( m_dDiskChunks, -1 );
-			int iB = GetNextSmallestChunk ( m_dDiskChunks, iA );
+			auto chA = GetNextSmallestChunk ( m_dDiskChunks, -1 );
+			if ( !chA.second ) // empty chunk - just remove
+			{
+				assert ( piA );
+				assert ( piB );
+				*piA = chA.first;
+				*piB = -1;
+				return true;
+			}
 
-			if ( iA<0 || iB<0 )
+			// stop on cutoff for non-empty chunks
+			if ( m_dDiskChunks.GetLength ()<=iCutoff )
+				return false;
+
+			auto chB = GetNextSmallestChunk ( m_dDiskChunks, chA.first );
+
+			if ( chA.first<0 || chB.first<0 )
 			{
 				sphWarning ( "Couldn't find smallest chunk" );
 				return false;
@@ -7729,13 +7776,13 @@ void RtIndex_c::Optimize( int iCutoff, int iFrom, int iTo )
 			// we need to make sure that A is the oldest one
 			// indexes go from oldest to newest so A must go before B (A is always older than B)
 			// this is not required by bitmap killlists, but by some other stuff (like ALTER RECONFIGURE)
-			if ( iA>iB )
-				Swap ( iB, iA );
+			if ( chA.first>chB.first )
+				Swap ( chB, chA );
 
 			assert ( piA );
 			assert ( piB );
-			*piA = iA;
-			*piB = iB;
+			*piA = chA.first;
+			*piB = chB.first;
 			return true;
 		});
 		return;

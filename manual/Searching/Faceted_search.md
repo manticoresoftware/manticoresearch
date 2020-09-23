@@ -11,7 +11,7 @@ In Manticore Search there is an optimization that retains the result set of the 
 ## Aggregations
 
 <!-- example Example_1 -->
-
+### SQL
 The facet values can come from an attribute, JSON property from a JSON attribute or expression. Facet values can be also aliased, however the **alias must be unique** across all result sets (main query results set and other facets results sets). The facet value is taken from the aggregated attribute/expression, but it can also come from another attribute/expression.
 
 ```sql
@@ -19,6 +19,57 @@ FACET {expr_list} [BY {expr_list}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIM
 ```
 
 Multiple facet declarations need to be separated by an whitespace.
+
+
+### HTTP
+
+Facets can be defined in the `aggs` node:
+
+``` json
+     "aggs" : 
+     {
+        "group name" :
+         {
+            "terms" :
+             {
+              "field":"attribute name"
+             }
+         }
+     }
+```
+
+`group name` is an alias given to the aggregation, the `field` value must contain the name of the attribute or expression we are faceting.
+
+The result set will contain an `aggregations` node with the returned facets, where `key` is the aggregated value and `doc_count` the aggregation count.
+
+``` json
+    "aggregations": {
+        "group name": {
+        "buckets": [
+            {
+                "key": 10,
+                "doc_count": 1019
+            },
+            {
+                "key": 9,
+                "doc_count": 954
+            },
+            {
+                "key": 8,
+                "doc_count": 1021
+            },
+            {
+                "key": 7,
+                "doc_count": 1011
+            },
+            {
+                "key": 6,
+                "doc_count": 997
+            }
+            ]
+        }
+    }   
+```
 
 <!-- intro -->
 ##### SQL:
@@ -63,8 +114,123 @@ SELECT *, price AS aprice FROM facetdemo LIMIT 10 FACET price LIMIT 10 FACET bra
 +----------+----------+
 5 rows in set (0.00 sec)
 ```
+<!-- request HTTP -->
+
+``` json
+POST /search -d '
+    {
+     "index" : "facetdemo",
+     "query" : {"match_all" : {} },
+     "limit": 5,
+     "aggs" : 
+     {
+        "group_property" :
+         {
+            "terms" :
+             {
+              "field":"price",
+              "size": 10
+             }
+         },
+        "group_brand_id" :
+         {
+            "terms" :
+             {
+              "field":"brand_id",
+              "size": 5
+             }
+         }
+     }
+    }
+'
+```
+
+<!-- response HTTP -->
+
+``` json
+{
+  "took": 3,
+  "timed_out": false,
+  "hits": {
+    "total": 10000,
+    "hits": [
+      {
+        "_id": "1",
+        "_score": 1,
+        "_source": {
+          "price": 197,
+          "brand_id": 10,
+          "brand_name": "Brand Ten",
+          "categories": [
+            10
+          ]
+        }
+      },
+ ...
+      {
+        "_id": "5",
+        "_score": 1,
+        "_source": {
+          "price": 805,
+          "brand_id": 7,
+          "brand_name": "Brand Seven",
+          "categories": [
+            11,
+            12,
+            13
+          ]
+        }
+      }
+    ]
+  },
+  "aggregations": {
+    "group_property": {
+      "buckets": [
+        {
+          "key": 1000,
+          "doc_count": 11
+        },
+        {
+          "key": 999,
+          "doc_count": 12
+        },
+...
+        {
+          "key": 991,
+          "doc_count": 7
+        }
+      ]
+    },
+    "group_brand_id": {
+      "buckets": [
+        {
+          "key": 10,
+          "doc_count": 1019
+        },
+        {
+          "key": 9,
+          "doc_count": 954
+        },
+        {
+          "key": 8,
+          "doc_count": 1021
+        },
+        {
+          "key": 7,
+          "doc_count": 1011
+        },
+        {
+          "key": 6,
+          "doc_count": 997
+        }
+      ]
+    }
+  }
+}
+```
 
 <!-- end -->
+
 
 
 <!-- example Example_2 -->
@@ -115,7 +281,139 @@ SELECT * FROM facetdemo FACET brand_name by brand_id;
 
 <!-- end -->
 
+### Facet over expressions
+
 <!-- example Example_3 -->
+
+Facets can aggregate over expressions. A classic example is segmentation of price by certain ranges:
+
+<!-- request SQL -->
+
+``` sql
+SELECT * FROM facetdemo FACET INTERVAL(price,200,400,600,800) AS price_range ;
+```
+
+<!-- response SQL -->
+
+``` sql
++------+-------+----------+---------------------+-------------+-------------+---------------------------------------+------------+-------------+
+| id   | price | brand_id | title               | brand_name  | property    | j                                     | categories | price_range |
++------+-------+----------+---------------------+-------------+-------------+---------------------------------------+------------+-------------+
+|    1 |   306 |        1 | Product Ten Three   | Brand One   | Six_Ten     | {"prop1":66,"prop2":91,"prop3":"One"} | 10,11      |           1 |
+...
++------+-------+----------+---------------------+-------------+-------------+---------------------------------------+------------+-------------+
+20 rows in set (0.00 sec)
+
++-------------+----------+
+| price_range | count(*) |
++-------------+----------+
+|           0 |     1885 |
+|           3 |     1973 |
+|           4 |     2100 |
+|           2 |     1999 |
+|           1 |     2043 |
++-------------+----------+
+5 rows in set (0.01 sec)
+```
+
+<!-- request HTTP -->
+
+``` json
+POST /search -d '
+    {
+     "index": "facetdemo2",
+     "query": 
+     {
+        "match_all": {}
+     },
+     "expressions": 
+     {
+        "price_range": "INTERVAL(price,200,400,600,800)"
+     },
+    "aggs": 
+    {
+      "group_property": 
+      {
+        "terms": 
+        {
+            "field": "price_range"
+        }
+      }
+    }
+}
+```
+
+<!-- response HTTP -->
+
+``` json
+{
+  "took": 3,
+  "timed_out": false,
+  "hits": {
+    "total": 10000,
+    "hits": [
+      {
+        "_id": "1",
+        "_score": 1,
+        "_source": {
+          "price": 197,
+          "brand_id": 10,
+          "brand_name": "Brand Ten",
+          "categories": [
+            10
+          ],
+          "price_range": 0
+        }
+      },
+ ...
+      {
+        "_id": "20",
+        "_score": 1,
+        "_source": {
+          "price": 227,
+          "brand_id": 3,
+          "brand_name": "Brand Three",
+          "categories": [
+            12,
+            13
+          ],
+          "price_range": 1
+        }
+      }
+    ]
+  },
+  "aggregations": {
+    "group_property": {
+      "buckets": [
+        {
+          "key": 4,
+          "doc_count": 2100
+        },
+        {
+          "key": 3,
+          "doc_count": 1973
+        },
+        {
+          "key": 2,
+          "doc_count": 1999
+        },
+        {
+          "key": 1,
+          "doc_count": 2043
+        },
+        {
+          "key": 0,
+          "doc_count": 1885
+        }
+      ]
+    }
+  }
+}
+```
+
+<!-- end -->
+
+<!-- example Example_4 -->
 
 ### Facet over multi-level grouping
 
@@ -159,7 +457,7 @@ FACET price_range AS price_range,brand_name ORDER BY brand_name asc;
 
 ### Ordering in facet result
 
-<!-- example Example_4 -->⛔
+<!-- example Example_5 -->⛔
 
 Facets support `ORDER BY` clause as same as a standard query. Each facet can have it's or own ordering and the facet ordering doesn't affect in any way the ordering of the main result set, which is ordered by the main query's `ORDER BY`. Sorting can be made on attribute name, count (using `COUNT(*)`) or special `FACET()` function can be used, which provides the aggregated data values.
 
@@ -241,7 +539,7 @@ FACET brand_name BY brand_id order BY COUNT(*) DESC;
 
 ### Size of facet result
 
-<!-- example Example_4 -->⛔
+<!-- example Example_6 -->⛔
 
 By default each facet result set is limited to 20 values. The number of facet values can be controlled with `LIMIT` clause individually for each facet  by providing either a number of values to return in format `LIMIT count` or with an offset as `LIMIT offset, count`. 
 

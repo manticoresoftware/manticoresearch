@@ -3,7 +3,7 @@
 import re
 
 def die(m):
-	print m
+	print (m)
 	exit(1)
 
 def load(n):
@@ -53,37 +53,37 @@ src = [k for k in re.findall('"(\w+)"', r.group(1))]
 # now report
 not_in_docs = sorted(diff(res, doc))
 if not_in_docs:
-	print '=== reserved but not in docs: ' + ', '.join(not_in_docs) + '\n'
-	print '.. code-block:: mysql'
+	print ('=== reserved but not in docs: ' + ', '.join(not_in_docs) + '\n')
+	print ('.. code-block:: mysql')
 	s = ''
 	for k in res:
 		if len(s) + len(k) >= 60:
-			print s.strip()
+			print (s.strip())
 			s = ''
 		s += k + ', '
 	if s:
-		print s.strip()[:-1]
-	print '\n'
+		print (s.strip()[:-1])
+	print ('\n')
 
 not_in_src = sorted(diff(res, src))
 if not_in_src:
-	print '=== reserved but not in sources: ' + ', '.join(not_in_src) + '\n'
-	print '\tstatic const char * dReserved[] =\n\t{'
+	print ('=== reserved but not in sources: ' + ', '.join(not_in_src) + '\n')
+	print ('\tstatic const char * dReserved[] =\n\t{')
 	s = ''
 	for k in res:
 		if len(s) + len(k) >= 80:
-			print '\t\t' + s.strip()
+			print ('\t\t' + s.strip())
 			s = ''
 		s += '"%s", ' % k
-	print '\t\t' + s + 'NULL\n\t};\n'
+	print ('\t\t' + s + 'NULL\n\t};\n')
 
 docs_not_res = sorted(diff(doc, res))
 if docs_not_res:
-	print '=== in docs but not reserved: ' + ', '.join(docs_not_res) + '\n'
+	print ('=== in docs but not reserved: ' + ', '.join(docs_not_res) + '\n')
 
 src_not_res = sorted(diff(src, res))
 if src_not_res:
-	print '=== in sources but not reserved: ' + ', '.join(src_not_res) + '\n'
+	print ('=== in sources but not reserved: ' + ', '.join(src_not_res) + '\n')
 
 if not_in_docs or not_in_src or docs_not_res or src_not_res:
 	die('got errors')

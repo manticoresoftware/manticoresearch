@@ -9,7 +9,7 @@
 </requires>
 
 <config>#!/usr/bin/python
-print """
+print ("""
 indexer
 {
 	mem_limit = 32M
@@ -50,7 +50,7 @@ index plain2
 	path = <data_path/>/plain2
 	docinfo = none
 }
-"""
+""")
 
 file_exists = False
 try:
@@ -61,7 +61,7 @@ except IOError:
 
 if file_exists==True:
 	with open('<data_path/>/part.conf') as f:
-		print f.read()
+		print (f.read())
 </config>
 
 <db_drop>drop table if exists test_table</db_drop>

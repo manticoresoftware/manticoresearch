@@ -127,7 +127,7 @@ set ( CPACK_DEBIAN_META_FILE_NAME "DEB-DEFAULT" )
 set ( CPACK_DEBIAN_META_PACKAGE_DEBUG "OFF" )
 
 set ( CPACK_DEBIAN_CONVERTER_PACKAGE_NAME "manticore-converter" )
-set ( CPACK_DEBIAN_DEVEL_PACKAGE_NAME "manticore-devel" )
+set ( CPACK_DEBIAN_DEVEL_PACKAGE_NAME "manticore-dev" )
 
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_NAME "manticore-tools" )
 set ( CPACK_COMPONENT_TOOLS_DESCRIPTION "Manticore Search is a powerful free open source search engine

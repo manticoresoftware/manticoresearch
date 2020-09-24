@@ -507,6 +507,9 @@ void FillDocs ( VecTraits_T<CSphMatch> & dMatches, RemoteFieldsAnswer_t& dReply,
 	int iStride = dFieldCols.GetLength ();
 	int iDocFieldsOff = 0;
 
+	if ( dDocs.IsEmpty () )
+		return;
+
 	const DocID_t * pRecvDocs = dDocs.Begin ();
 	for ( auto & dResDoc : dResDocs )
 	{

@@ -379,7 +379,6 @@ protected:
 	int							m_iSize;	// size of internal struct we can operate
 	CSphFixedVector<CSphMatch>	m_dData;
 	CSphTightVector<int>		m_dIData;	// indexes into m_pData, to avoid extra moving of matches themselves
-	bool						m_bStorageFilled = false; // false on initial run; true once free chain is not solid
 
 public:
 	/// ctor
@@ -389,8 +388,12 @@ public:
 	{
 		assert ( iSize>0 );
 		m_iMatchCapacity = iSize;
-		m_dIData.Reserve ( iSize );
+		m_dIData.Resize ( iSize );
 		m_tState.m_iNow = (DWORD) time ( nullptr );
+
+		ARRAY_FOREACH ( i, m_dIData )
+			m_dIData[i] = i;
+		m_dIData.Resize ( 0 );
 	}
 
 	/// dtor make FreeDataPtrs here, then ResetDynamic also get called on m_dData d-tr.
@@ -413,7 +416,6 @@ public:
 		// CSphMatchQueueTraits
 		m_dData.SwapData ( rhs.m_dData );
 		m_dIData.SwapData ( rhs.m_dIData );
-		::Swap ( m_bStorageFilled, rhs.m_bStorageFilled );
 		assert ( m_iSize==rhs.m_iSize );
 	}
 
@@ -432,11 +434,10 @@ protected:
 
 	CSphMatch & Add ()
 	{
-		auto iLast = m_dIData.GetLength ();
-		m_dIData.Add ();
-		if ( !m_bStorageFilled )
-			m_dIData[iLast] = iLast;
-		return m_dData[m_dIData.Last ()];
+		// proper ids at m_dIData already set at constructor
+		// they will be same during life-span - that is why Add used like anti Pop
+		int iLast = m_dIData.Add();
+		return m_dData[iLast];
 	}
 
 	int Used() const
@@ -452,7 +453,6 @@ protected:
 	void ResetAfterFlatten()
 	{
 		m_dIData.Resize(0);
-		m_bStorageFilled = false;
 	}
 };
 
@@ -651,7 +651,6 @@ private:
 	template<typename POPPER>
 	void PopAndProcess_T ( POPPER && fnProcess )
 	{
-		m_bStorageFilled = true;
 		assert ( !IsEmpty() );
 
 		auto& iJustRemoved = m_dIData.Pop();
@@ -780,7 +779,6 @@ public:
 		m_iTotal = 0;
 		m_bFinalized = false;
 		m_dIData.Resize(0);
-		m_bStorageFilled = false;
 
 		return iReadyMatches;
 	}
@@ -953,9 +951,6 @@ private:
 
 		if ( Used ()<m_iSize*COEFF )
 			return true;
-
-		// that will switch Add() to reuse the indexes
-		m_bStorageFilled = true;
 
 		// do the sort/cut when the K-buffer is full
 		assert ( Used ()==m_iSize*COEFF );
@@ -2848,7 +2843,6 @@ protected:
 
 	using CSphMatchQueueTraits::m_iSize;
 	using CSphMatchQueueTraits::m_dData;
-	using CSphMatchQueueTraits::m_bStorageFilled;
 	using CSphMatchQueueTraits::Get;
 	using CSphMatchQueueTraits::Add;
 	using CSphMatchQueueTraits::Used;
@@ -3144,7 +3138,6 @@ private:
 			CalcAvg ( Avg_e::UNGROUP );
 			RebuildHash();
 		}
-		m_bStorageFilled = true;
 	}
 
 	/// sort groups buffer

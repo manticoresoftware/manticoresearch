@@ -57,6 +57,32 @@ index rt1
 <sphinxql>SELECT id, groupby() g, count(*) c, gid FROM rt1 GROUP BY gid ORDER BY id ASC</sphinxql>
 <sphinxql>SELECT id, COUNT(*) FROM rt1</sphinxql>
 
+<!-- regression crash at grouper at different disk chunks -->
+<sphinxql>truncate rtindex rt1</sphinxql>
+<sphinxql>insert into rt1 (id, title, gid) values
+	(51, 'test 1', 501 ), (52, 'test 2', 502 ), (53, 'test 3', 503 ),
+	(54, 'test 4', 504 ), (55, 'test 5', 505 ), (56, 'test 7', 506 ),
+	(57, 'test 4', 507 ), (58, 'test 5', 508 ), (59, 'test 7', 509 ),
+	(60, 'test 4', 510 ), (61, 'test 5', 511 ), (62, 'test 7', 512 ),
+	(71, 'test 1', 521 ), (72, 'test 2', 522 ), (73, 'test 3', 523 ),
+	(74, 'test 4', 524 ), (75, 'test 5', 525 ), (76, 'test 7', 526 ),
+    (77, 'test 4', 527 ), (78, 'test 5', 528 ), (79, 'test 7', 529 )
+</sphinxql>
+<sphinxql>FLUSH RAMCHUNK rt1</sphinxql>
+<sphinxql>insert into rt1 (id, title, gid) values
+	(31, 'test 1', 401 ), (32, 'test 2', 402 ), (33, 'test 3', 403 ),
+	(34, 'test 4', 404 ), (35, 'test 5', 405 ), (36, 'test 7', 406 ),
+	(37, 'test 4', 407 ), (38, 'test 5', 408 ), (39, 'test 7', 409 ),
+	(40, 'test 4', 410 ), (41, 'test 5', 411 ), (42, 'test 7', 412 )
+</sphinxql>
+<sphinxql>FLUSH RAMCHUNK rt1</sphinxql>
+<sphinxql>insert into rt1 (id, title, gid) values
+	(21, 'test 1', 309 ), (22, 'test 2', 310 ), (23, 'test 3', 311 ),
+	(24, 'test 4', 312 ), (25, 'test 5', 313 ), (26, 'test 7', 314 )
+</sphinxql>
+<sphinxql>FLUSH RAMCHUNK rt1</sphinxql>
+<sphinxql>SELECT id, CONCAT('title') as gr1, groupby() g, count(*) c, gid FROM rt1 GROUP BY gid ORDER BY id desc OPTION threads=1, max_matches=4</sphinxql>
+
 </sphqueries>
 
 </test>

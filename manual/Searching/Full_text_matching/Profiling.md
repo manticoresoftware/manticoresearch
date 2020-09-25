@@ -617,12 +617,29 @@ Variable: transformed_tree
 
 ## Viewing the match factors values
 
-When expression ranker is used, it is possible to expose the values of the calculated factors using [PACKEDFACTORS()](Functions/Searching_and_ranking_functions#PACKEDFACTORS()).
+When expression ranker is used, it is possible to expose the values of the calculated factors using [PACKEDFACTORS()](Functions/Searching_and_ranking_functions.md#PACKEDFACTORS%28%29).
 
 The function returns: 
 
-* the values of document level factors
-* list with each field that returned a hit 
+* the values of document level factors (like bm25, field_mask, doc_word_count)
+* list with each field that returned a hit (like lcs, hit_count, word_count sum_idf, min_hit_pos etc.)
 * list with each keyword from the query and their tf and idf values
+
+Example:
+
+```sql
+mysql> SELECT id, PACKEDFACTORS() FROM test1
+    -> WHERE MATCH('test one') OPTION ranker=expr('1') \G
+*************************** 1\. row ***************************
+             id: 1
+packedfactors(): bm25=569, bm25a=0.617197, field_mask=2, doc_word_count=2,
+    field1=(lcs=1, hit_count=2, word_count=2, tf_idf=0.152356,
+        min_idf=-0.062982, max_idf=0.215338, sum_idf=0.152356, min_hit_pos=4,
+        min_best_span_pos=4, exact_hit=0, max_window_hits=1, min_gaps=2,
+        exact_order=1, lccs=1, wlccs=0.215338, atc=-0.003974),
+    word0=(tf=1, idf=-0.062982),
+    word1=(tf=1, idf=0.215338)
+1 row in set (0.00 sec)
+```
 
 The values can be used to understand why certain documents get scored lower or higher in a search or to improve the existing ranking expression.

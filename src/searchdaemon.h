@@ -1070,17 +1070,35 @@ void HandleMySqlExtendedUpdate( AttrUpdateArgs& tArgs );
 // SERVED INDEX DESCRIPTORS STUFF
 /////////////////////////////////////////////////////////////////////////////
 
+struct AgentConn_t;
 struct DocstoreAndTag_t
 {
-	const DocstoreReader_i *	m_pDocstore = nullptr;
+	union
+	{
+		const DocstoreReader_i *	m_pDocstore = nullptr;
+		const AgentConn_t *			m_pAgent;
+	};
 	int							m_iTag = 0;		// real tag, but high bit is never set.
 	bool						m_bTag = false;	// boolean tag for remotes
 
 	inline void Assign ( const DocstoreAndTag_t& rhs )
 	{
-		m_pDocstore = rhs.m_pDocstore;
 		m_iTag = rhs.m_iTag;
 		m_bTag = rhs.m_bTag;
+		if ( m_bTag )
+			m_pAgent = rhs.m_pAgent;
+		else
+			m_pDocstore = rhs.m_pDocstore;
+	}
+
+	inline const DocstoreReader_i * Docstore() const
+	{
+		return m_bTag ? nullptr : m_pDocstore;
+	}
+
+	inline const AgentConn_t * Agent () const
+	{
+		return m_bTag ? m_pAgent : nullptr;
 	}
 };
 
@@ -1119,6 +1137,7 @@ struct AggrResult_t final: CSphQueryResultMeta
 	Debug (bool 			m_bSingle = false;) // single = only one chunk. False = many chunks
 	Debug (bool				m_bOneSchema = false;) // either chunk's schemas are valid, or single result's schema in game.
 	Debug (bool				m_bTagsCompacted = false;) // whether tags range is compact or has gaps
+	Debug (bool				m_bIdxByTag = false;) // if m_dResults[iTag].m_iTag==iTag is true for all results
 
 	int GetLength() const;
 	inline bool IsEmpty() const { return GetLength()==0; }

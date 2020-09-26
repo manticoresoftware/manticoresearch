@@ -929,7 +929,7 @@ public:
 // smart compare (just naive tmLeft>tmNow doesn't work with timeouts <1ms)
 bool TimeoutReached ( int64_t tmLeft, int64_t tmNow = -1 );
 
-void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery, const VecRefPtrsAgentConn_t & dRemotes );
+void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery );
 void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
 
 // determine which branch will be used

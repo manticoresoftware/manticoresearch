@@ -1892,6 +1892,7 @@ bool SearchReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 		OneResultset_t tChunk;
 		tChunk.m_iTag = tAgent.m_iStoreTag;
 		tChunk.m_bTag = true;
+		tChunk.m_pAgent = &tAgent;
 		tRes.m_sError = "";
 		tRes.m_sWarning = "";
 
@@ -3972,6 +3973,8 @@ void SortTagsAndDocstores ( AggrResult_t & tRes, const VecTraits_T<int>& dOrd )
 
 	for ( int i = 0; i<iTags; ++i )
 		dResults[i].Assign ( dTmp[i] );
+
+	Debug ( tRes.m_bIdxByTag = true; )
 }
 
 int KillDupesAndFlatten ( ISphMatchSorter * pSorter, AggrResult_t & tRes )
@@ -4164,7 +4167,7 @@ CSphVector<int> GetUniqueTagsWithDocstores ( const AggrResult_t & tRes, int iOff
 	for ( const auto& dMatch : dMatches )
 	{
 		assert ( dMatch.m_iTag < tRes.m_dResults.GetLength() );
-		if ( tRes.m_dResults[dMatch.m_iTag].m_pDocstore )
+		if ( tRes.m_dResults[dMatch.m_iTag].Docstore() )
 			dBoolTags[dMatch.m_iTag] = true;
 	}
 
@@ -4214,6 +4217,7 @@ void ProcessMultiPostlimit ( AggrResult_t & tRes, VecTraits_T<const CSphColumnIn
 	assert ( tRes.m_bOneSchema );
 	assert ( tRes.m_bTagsAssigned );
 	assert ( tRes.m_bTagsCompacted );
+	assert ( tRes.m_bIdxByTag );
 
 	// collect unique tags from matches
 	CSphVector<int> dDocstoreTags = GetUniqueTagsWithDocstores ( tRes, iOff, iLim );
@@ -4232,7 +4236,7 @@ void ProcessMultiPostlimit ( AggrResult_t & tRes, VecTraits_T<const CSphColumnIn
 	for ( auto & dMatch : dMatches )
 	{
 		int iTag = dMatch.m_iTag;
-		auto * pDocstore = tRes.m_dResults[iTag].m_pDocstore;
+		auto * pDocstore = tRes.m_dResults[iTag].Docstore ();
 		assert ( iTag<tRes.m_dResults.GetLength () );
 
 		if ( iTag!=iLastTag )
@@ -4259,11 +4263,11 @@ void ProcessSinglePostlimit ( OneResultset_t & tRes, VecTraits_T<const CSphColum
 
 	// spawn buffered reader for the current session
 	// put it to a global hash
-	if ( tRes.m_pDocstore )
+	if ( tRes.Docstore () )
 		tRes.m_pDocstore->CreateReader ( iSessionUID );
 
 	for ( const auto & pCol : dPostlimit )
-		SetupPostlimitExprs ( tRes.m_pDocstore, pCol, sQuery, iSessionUID );
+		SetupPostlimitExprs ( tRes.Docstore (), pCol, sQuery, iSessionUID );
 
 	for ( auto & dMatch : dMatches )
 		for ( const auto & pCol : dPostlimit )
@@ -4800,7 +4804,7 @@ int GetMaxMatches ( int iQueryMaxMatches, const CSphIndex * pIndex )
 
 /// merges multiple result sets, remaps columns, does reorder for outer selects
 bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals, const sph::StringSet & hExtraColumns,
-	QueryProfile_t * pProfiler, const CSphFilterSettings * pAggrFilter, bool bForceRefItems, bool bMaster, VecRefPtrsAgentConn_t & dRemotes )
+	QueryProfile_t * pProfiler, const CSphFilterSettings * pAggrFilter, bool bForceRefItems, bool bMaster )
 {
 	bool bReturnZeroCount = !tRes.m_dZeroCount.IsEmpty();
 	bool bQueryFromAPI = tQuery.m_eQueryType==QUERY_API;
@@ -4872,6 +4876,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 	{
 		tRes.m_dResults.First().m_iTag = 0;
 		Debug ( tRes.m_bTagsCompacted = true );
+		Debug ( tRes.m_bIdxByTag = true; )
 	}
 
 	// apply outer order clause to single result set
@@ -4887,6 +4892,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 		}
 		Debug ( tRes.m_bSingle = true; )
 		Debug ( tRes.m_bTagsCompacted = true );
+		Debug ( tRes.m_bIdxByTag = true; )
 	}
 
 	if ( bAllEqual && bHaveLocals )
@@ -4895,10 +4901,10 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 		ComputePostlimit ( tRes, tQuery, bMaster );
 	}
 
-	if ( bMaster && !dRemotes.IsEmpty() )
+	if ( bMaster )
 	{
 		CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_EVAL_GETFIELD );
-		RemotesGetField ( tRes, tQuery, dRemotes );
+		RemotesGetField ( tRes, tQuery );
 	}
 
 	tFrontendBuilder.RemapGroupBy();
@@ -6061,7 +6067,7 @@ bool SearchHandler_c::RLockInvokedIndexes()
 	return false;
 }
 
-// uniq dLocals and copy into m_dLocal only uniq part. Compact tags, if unique worked
+// uniq dLocals and copy into m_dLocal only uniq part.
 void SearchHandler_c::UniqLocals ( VecTraits_T<LocalIndex_t> & dLocals )
 {
 	int iLen = dLocals.GetLength ();
@@ -6254,14 +6260,12 @@ void SearchHandler_c::CalcGlobalStats ( int64_t tmCpu, int64_t tmSubset, int64_t
 
 void SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent )
 {
-	const int iQueries = m_dNQueries.GetLength();
-	const CSphQuery & tFirst = m_dNQueries.First();
-
+	m_dLocal.Reset ();
+	const CSphQuery & tQuery = m_dNQueries.First();
 	int iOrderTag = 0;
-	m_dLocal.Reset();
 
 	// they're all local, build the list
-	if ( tFirst.m_sIndexes=="*" )
+	if ( tQuery.m_sIndexes=="*" )
 	{
 		// search through all local indexes
 		for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); )
@@ -6270,90 +6274,90 @@ void SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 				continue;
 			auto &dLocal = m_dLocal.Add ();
 			dLocal.m_sName = it.GetName ();
-			dLocal.m_iOrderTag = iOrderTag;
-			dLocal.m_iWeight = GetIndexWeight ( it.GetName (), tFirst.m_dIndexWeights, 1 );
+			dLocal.m_iOrderTag = iOrderTag++;
+			dLocal.m_iWeight = GetIndexWeight ( it.GetName (), tQuery.m_dIndexWeights, 1 );
 			dLocal.m_iMass = ServedDescRPtr_c ( it.Get() )->m_iMass;
-			++iOrderTag;
 		}
-	} else
-	{
-		CSphVector<LocalIndex_t> dLocals;
-		StrVec_t dIdxNames;
-		// search through specified local indexes
-		ParseIndexList ( tFirst.m_sIndexes, dIdxNames );
-
-		int iDistCount = 0;
-		bool bDivideRemote = false;
-
-		for ( const auto& sIndex : dIdxNames )
-		{
-			auto pDist = GetDistr ( sIndex );
-			if ( !pDist )
-			{
-				auto &dLocal = dLocals.Add ();
-				dLocal.m_sName = sIndex;
-				dLocal.m_iOrderTag = iOrderTag;
-				dLocal.m_iWeight = GetIndexWeight ( sIndex, tFirst.m_dIndexWeights, 1 );
-				dLocal.m_iMass = GetIndexMass ( sIndex );
-				++iOrderTag;
-			} else
-			{
-				++iDistCount;
-				int iWeight = GetIndexWeight ( sIndex, tFirst.m_dIndexWeights, -1 );
-				auto & tDistrStat = dDistrServedByAgent.Add();
-				tDistrStat.m_sIndex = sIndex;
-				tDistrStat.m_dStats.Resize ( iQueries );
-				tDistrStat.m_dStats.ZeroVec();
-
-				for ( auto * pAgent : pDist->m_dAgents )
-				{
-					tDistrStat.m_dAgentIds.Add ( dRemotes.GetLength() );
-					auto * pConn = new AgentConn_t;
-					pConn->SetMultiAgent ( pAgent );
-					pConn->m_iStoreTag = iOrderTag;
-					pConn->m_iWeight = iWeight;
-					pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
-					pConn->m_iMyQueryTimeoutMs = pDist->m_iAgentQueryTimeoutMs;
-					dRemotes.Add ( pConn );
-					++iOrderTag;
-				}
-
-				ARRAY_FOREACH ( j, pDist->m_dLocal )
-				{
-					const CSphString& sLocalAgent = pDist->m_dLocal[j];
-					tDistrStat.m_dLocalNames.Add ( sLocalAgent );
-					auto &dLocal = dLocals.Add ();
-					dLocal.m_sName = sLocalAgent;
-					dLocal.m_iOrderTag = iOrderTag;
-					if ( iWeight!=-1 )
-						dLocal.m_iWeight = iWeight;
-					dLocal.m_iMass = GetIndexMass ( sLocalAgent );
-					dLocal.m_sParentIndex = sIndex;
-					++iOrderTag;
-				}
-
-				bDivideRemote |= pDist->m_bDivideRemoteRanges;
-			}
-		}
-
-		// set remote divider
-		if ( bDivideRemote )
-		{
-			if ( iDistCount==1 )
-				iDivideLimits = dRemotes.GetLength();
-			else
-			{
-				for ( auto& dResult : m_dNAggrResults )
-					dResult.m_sWarning.SetSprintf ( "distributed multi-index query '%s' doesn't support divide_remote_ranges", tFirst.m_sIndexes.cstr() );
-			}
-		}
-
-		// eliminate local dupes that come from distributed indexes
-		if ( !dRemotes.IsEmpty () )
-			UniqLocals ( dLocals );
-		else
-			m_dLocal.SwapData ( dLocals );
+		return;
 	}
+
+	// search through specified local indexes
+	StrVec_t dIdxNames;
+	ParseIndexList ( tQuery.m_sIndexes, dIdxNames );
+
+	const int iQueries = m_dNQueries.GetLength ();
+	CSphVector<LocalIndex_t> dLocals;
+
+	int iDistCount = 0;
+	bool bDivideRemote = false;
+	bool bHasLocalsAgents = false;
+
+	for ( const auto& sIndex : dIdxNames )
+	{
+		auto pDist = GetDistr ( sIndex );
+		if ( !pDist )
+		{
+			auto &dLocal = dLocals.Add ();
+			dLocal.m_sName = sIndex;
+			dLocal.m_iOrderTag = iOrderTag++;
+			dLocal.m_iWeight = GetIndexWeight ( sIndex, tQuery.m_dIndexWeights, 1 );
+			dLocal.m_iMass = GetIndexMass ( sIndex );
+		} else
+		{
+			++iDistCount;
+			int iWeight = GetIndexWeight ( sIndex, tQuery.m_dIndexWeights, -1 );
+			auto & tDistrStat = dDistrServedByAgent.Add();
+			tDistrStat.m_sIndex = sIndex;
+			tDistrStat.m_dStats.Resize ( iQueries );
+			tDistrStat.m_dStats.ZeroVec();
+
+			for ( auto * pAgent : pDist->m_dAgents )
+			{
+				tDistrStat.m_dAgentIds.Add ( dRemotes.GetLength() );
+				auto * pConn = new AgentConn_t;
+				pConn->SetMultiAgent ( pAgent );
+				pConn->m_iStoreTag = iOrderTag++;
+				pConn->m_iWeight = iWeight;
+				pConn->m_iMyConnectTimeoutMs = pDist->m_iAgentConnectTimeoutMs;
+				pConn->m_iMyQueryTimeoutMs = pDist->m_iAgentQueryTimeoutMs;
+				dRemotes.Add ( pConn );
+			}
+
+			ARRAY_CONSTFOREACH ( j, pDist->m_dLocal )
+			{
+				const CSphString& sLocalAgent = pDist->m_dLocal[j];
+				tDistrStat.m_dLocalNames.Add ( sLocalAgent );
+				auto &dLocal = dLocals.Add ();
+				dLocal.m_sName = sLocalAgent;
+				dLocal.m_iOrderTag = iOrderTag++;
+				if ( iWeight!=-1 )
+					dLocal.m_iWeight = iWeight;
+				dLocal.m_iMass = GetIndexMass ( sLocalAgent );
+				dLocal.m_sParentIndex = sIndex;
+				bHasLocalsAgents = true;
+			}
+
+			bDivideRemote |= pDist->m_bDivideRemoteRanges;
+		}
+	}
+
+	// set remote divider
+	if ( bDivideRemote )
+	{
+		if ( iDistCount==1 )
+			iDivideLimits = dRemotes.GetLength();
+		else
+		{
+			for ( auto& dResult : m_dNAggrResults )
+				dResult.m_sWarning.SetSprintf ( "distributed multi-index query '%s' doesn't support divide_remote_ranges", tQuery.m_sIndexes.cstr() );
+		}
+	}
+
+	// eliminate local dupes that come from distributed indexes
+	if ( bHasLocalsAgents )
+		UniqLocals ( dLocals );
+	else
+		m_dLocal.SwapData ( dLocals );
 }
 
 // query info - render query into the view
@@ -6497,7 +6501,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			// don't forget to check incoming replies after send was over
 			bDistDone = tReporter->IsDone();
 			if ( !bDistDone )
-				tReporter->WaitChanges (); /// wait one or more remote queries to complete
+				tReporter->WaitChanges (); /// wait one or more remote queries to complete. Note! M.b. context switch!
 
 			ARRAY_FOREACH ( iAgent, dRemotes )
 			{
@@ -6578,12 +6582,10 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				pAgent->m_sFailure = "";
 			}
 		} // while ( !bDistDone )
-	} // if ( bDist && dRemotes.GetLength() )
 
-	// submit failures from failed agents
-	// copy timings from all agents
-	if ( !dRemotes.IsEmpty() )
-	{
+		// submit failures from failed agents
+		// copy timings from all agents
+
 		for ( const AgentConn_t * pAgent : dRemotes )
 		{
 			assert ( !pAgent->IsBlackhole () ); // must not be any blacknole here.
@@ -6655,7 +6657,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				}
 			}
 
-			bool bOk = MinimizeAggrResult ( tRes, tQuery, !m_dLocal.IsEmpty(), hExtra, m_pProfile, pAggrFilter, m_bFederatedUser, m_bMaster, dRemotes );
+			bool bOk = MinimizeAggrResult ( tRes, tQuery, !m_dLocal.IsEmpty(), hExtra, m_pProfile, pAggrFilter, m_bFederatedUser, m_bMaster );
 
 			if ( !bOk )
 			{

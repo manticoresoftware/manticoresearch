@@ -45,7 +45,6 @@ struct DocHash_t : private OpenHash_T<int, DocID_t>
 struct ResLoc_t
 {
 	DocID_t m_iDocid;
-	int m_iTag;
 	int m_iIndex;
 };
 
@@ -53,23 +52,22 @@ struct RemoteFieldsAnswer_t : public iQueryResult, public FieldBlob_t
 {
 	void Reset() final {}
 	bool HasWarnings() const final { return false; }
-	CSphVector<DocID_t> m_dDocs;
 
-	// reply data, not owned
-	const BYTE * m_pFieldsRaw = nullptr;
-
-	// request data
+	// request data, not owned
 	VecTraits_T<ResLoc_t> m_dResDocs;
+	int					  m_iTag=0;
+
+	// reply data
+	CSphVector<DocID_t> m_dDocs;
+	const BYTE * m_pFieldsRaw = nullptr; // not owned
 };
 
 struct GetFieldRequestBuilder_t : public RequestBuilder_i
 {
-	VecTraits_T<const CSphColumnInfo *> m_dFieldCols;
-	VecTraits_T<ResLoc_t> m_dDocs;
+	const VecTraits_T<const CSphColumnInfo *>& m_dFieldCols;
 
-	GetFieldRequestBuilder_t ( VecTraits_T<const CSphColumnInfo *> & dFieldCols, VecTraits_T<ResLoc_t> & dDocs )
-		: m_dFieldCols(dFieldCols)
-		, m_dDocs ( dDocs )
+	explicit GetFieldRequestBuilder_t ( const VecTraits_T<const CSphColumnInfo *>& dFieldCols )
+		: m_dFieldCols ( dFieldCols )
 		{};
 
 	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const final
@@ -194,22 +192,32 @@ bool GetFieldFromLocal ( const CSphString & sIndexName, const FieldRequest_t & t
 
 	const CSphIndex * pIndex = pDesc->m_pIndex;
 	pIndex->CreateReader ( iSessionID );
-	
-	CSphVector<int> dFieldIds;
-	CSphFixedVector<int> dFieldRemap ( tArgs.m_dFieldNames.GetLength() );
-	ARRAY_FOREACH ( i, tArgs.m_dFieldNames )
-	{
-		int iField = pIndex->GetFieldId ( tArgs.m_dFieldNames[i], DOCSTORE_TEXT );
-		if ( iField==-1 )
-		{
-			dFieldRemap[i] = -1;
-			continue;
-		}
 
-		dFieldRemap[i] = dFieldIds.GetLength();
-		dFieldIds.Add ( iField );
+	// collect fieldids and remap as:
+	// for fieldnames: [fake four third five]
+	// fieldids is: [3,4,5]
+	// remap is: [-1,1,0,2] -> as field[-1] absent, field[1] is four, field[0] is third, field[2] is five
+	CSphFixedVector<int> dFieldRemap ( tArgs.m_dFieldNames.GetLength() );
+	CSphVector<int> dFieldIds;
+	{
+		using fld_t = std::pair<int,int>;
+		CSphVector<fld_t> dFields;
+		ARRAY_CONSTFOREACH ( i, tArgs.m_dFieldNames )
+		{
+			int iField = pIndex->GetFieldId ( tArgs.m_dFieldNames[i], DOCSTORE_TEXT );
+			if ( iField==-1 )
+				dFieldRemap[i] = -1;
+			else
+				dFields.Add ( { iField, i } );
+		}
+		dFields.Sort ( Lesser ( [] ( fld_t & l, fld_t & r ) { return l.first<r.first; } ) );
+		dFieldIds.Resize ( dFields.GetLength () );
+		ARRAY_CONSTFOREACH ( i, dFields )
+		{
+			dFieldIds[i] = dFields[i].first;
+			dFieldRemap[dFields[i].second] = i;
+		}
 	}
-	dFieldIds.Sort();
 
 	DocstoreDoc_t tDoc;
 	for ( DocID_t tDocid : tArgs.m_dDocs )
@@ -226,7 +234,7 @@ bool GetFieldFromLocal ( const CSphString & sIndexName, const FieldRequest_t & t
 		{
 			if ( iField==-1 )
 			{
-				tRes.m_dLocs.Add ( { 0, 0 } );
+				tRes.m_dLocs.Add ( { tRes.m_dBlob.GetLength (), 0 } );
 				continue;
 			}
 
@@ -389,14 +397,13 @@ void SendAPICommandGetfieldAnswer ( ISphOutputBuffer & tOut, FieldRequest_t& tRe
 }
 
 // fill vec of ResLoc_t with remote matches from tRes, sorted by DocID
-void CollectUntaggedDocs ( CSphVector<ResLoc_t>& dIds, const AggrResult_t & tRes, int iOffset, int iCount )
+int CollectUntaggedDocs ( CSphVector<ResLoc_t>& dIds, const AggrResult_t & tRes, const VecTraits_T<CSphMatch> & dMatches )
 {
 	assert ( !tRes.m_bTagsAssigned );
 	assert ( tRes.m_bSingle );
 	if ( !tRes.m_dResults.First ().m_bTag ) // process only remote resultsets
-		return;
+		return -1;
 
-	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( iOffset, iCount );
 	DocID_t iLastDocID = DOCID_MIN;
 	bool bNeedSort = false;
 	ARRAY_CONSTFOREACH( i, dMatches )
@@ -405,22 +412,27 @@ void CollectUntaggedDocs ( CSphVector<ResLoc_t>& dIds, const AggrResult_t & tRes
 		ResLoc_t & tDoc = dIds.Add ();
 		tDoc.m_iDocid = sphGetDocID ( tMatch.m_pDynamic );
 		tDoc.m_iIndex = i;
-		if (!bNeedSort)
-			bNeedSort = tDoc.m_iDocid<iLastDocID;
+		if ( bNeedSort )
+			continue;
+		bNeedSort = tDoc.m_iDocid<iLastDocID;
 		iLastDocID = tDoc.m_iDocid;
 	}
 	if ( bNeedSort )
 		dIds.Sort ( Lesser ( [] ( const ResLoc_t & a, const ResLoc_t & b ) { return a.m_iDocid<b.m_iDocid; } ) );
-	if ( !dIds.IsEmpty () )
-		dIds[0].m_iTag = tRes.m_dResults.First ().m_iTag;
+	return tRes.m_dResults.First ().m_iTag;
+}
+
+int TagOf ( const ResLoc_t& tLoc, const VecTraits_T<CSphMatch> & dMatches )
+{
+	assert ( tLoc.m_iIndex>=0 && tLoc.m_iIndex<dMatches.GetLength () );
+	return dMatches[tLoc.m_iIndex].m_iTag;
 }
 
 // fill vec of ResLoc_t with remote matches from tRes, sorted by tags, inside groups sorted by DocID
-void CollectTaggedDocs ( CSphVector<ResLoc_t> & dIds, const AggrResult_t & tRes, int iOffset, int iCount )
+void CollectTaggedDocs ( CSphVector<ResLoc_t> & dIds, const AggrResult_t & tRes, const VecTraits_T<CSphMatch> & dMatches )
 {
 	assert ( tRes.m_bTagsAssigned );
 	assert ( tRes.m_bSingle );
-	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( iOffset, iCount );
 	ARRAY_CONSTFOREACH( i, dMatches )
 	{
 		const CSphMatch & tMatch = dMatches[i];
@@ -428,66 +440,75 @@ void CollectTaggedDocs ( CSphVector<ResLoc_t> & dIds, const AggrResult_t & tRes,
 			continue;
 		ResLoc_t & tDoc = dIds.Add ();
 		tDoc.m_iDocid = sphGetDocID ( tMatch.m_pDynamic );
-		tDoc.m_iTag = tMatch.m_iTag;
 		tDoc.m_iIndex = i;
 	}
-	dIds.Sort ( Lesser ( [] ( const ResLoc_t & a, const ResLoc_t & b )
+	dIds.Sort ( Lesser ( [&dMatches] ( const ResLoc_t & a, const ResLoc_t & b )
 	{
-		if ( a.m_iTag==b.m_iTag )
+		auto iTagA = TagOf ( a, dMatches );
+		auto iTagB = TagOf ( b, dMatches );
+		if ( iTagA==iTagB )
 			return a.m_iDocid<b.m_iDocid;
-		return a.m_iTag<b.m_iTag;
+		return iTagA<iTagB;
 	}));
 }
 
-void AddRange ( CSphVector<RemoteFieldsAnswer_t> & dRanges, const VecTraits_T<ResLoc_t> & dIds )
+void AddRange ( CSphVector<RemoteFieldsAnswer_t> & dRanges, const VecTraits_T<ResLoc_t> & dIds, int iTag )
 {
+	if ( dIds.IsEmpty() )
+		return;
+
 	auto & dRange = dRanges.Add();
 	dRange.m_dResDocs = dIds;
+	dRange.m_iTag = iTag;
 }
 
 // fill dRanges with chunks of dIds, grouped by same tag
-void CollectTaggedRanges ( CSphVector<RemoteFieldsAnswer_t> & dRanges, const VecTraits_T<ResLoc_t> & dIds )
+void CollectTaggedRanges ( CSphVector<RemoteFieldsAnswer_t> & dRanges, const VecTraits_T<ResLoc_t> & dIds, const VecTraits_T<CSphMatch> & dMatches )
 {
 	int iStart = 0;
-	ARRAY_FOREACH ( i, dIds )
+	if ( dIds.IsEmpty () )
+		return;
+
+	auto iStartTag = TagOf ( dIds[iStart], dMatches );
+	ARRAY_CONSTFOREACH ( i, dIds )
 	{
-		if ( dIds[i].m_iTag!=dIds[iStart].m_iTag )
+		if ( TagOf ( dIds[i], dMatches )!=iStartTag )
 		{
-			AddRange (dRanges, dIds.Slice ( iStart, i-iStart ) );
+			AddRange ( dRanges, dIds.Slice ( iStart, i-iStart ), iStartTag );
 			iStart = i;
+			iStartTag = TagOf ( dIds[iStart], dMatches );
 		}
 	}
-	AddRange ( dRanges, dIds.Slice ( iStart, dIds.GetLength()-iStart ) );
+	AddRange ( dRanges, dIds.Slice ( iStart, dIds.GetLength()-iStart ), iStartTag );
 }
 
 // fill dIds with remote matches and return ranges of them, grouped by tag. First match of every chunk has valid tag
-CSphVector<RemoteFieldsAnswer_t> ExtractRanges ( CSphVector<ResLoc_t>& dIds, const AggrResult_t & tRes, int iOffset, int iCount )
+CSphVector<RemoteFieldsAnswer_t> ExtractRanges ( CSphVector<ResLoc_t>& dIds, const AggrResult_t & tRes, const VecTraits_T<CSphMatch>& dMatches )
 {
 	CSphVector<RemoteFieldsAnswer_t> dRanges;
 
-	if (tRes.m_bTagsAssigned )
+	if ( tRes.m_bTagsAssigned )
 	{
-		CollectTaggedDocs ( dIds, tRes, iOffset, iCount );
-		CollectTaggedRanges ( dRanges, dIds );
+		CollectTaggedDocs ( dIds, tRes, dMatches );
+		CollectTaggedRanges ( dRanges, dIds, dMatches );
 	}
 	else
 	{
-		CollectUntaggedDocs( dIds, tRes, iOffset, iCount );
-		if ( !dIds.IsEmpty () )
-			AddRange ( dRanges, dIds ); // only one range
+		int iOnlyTag = CollectUntaggedDocs( dIds, tRes, dMatches );
+		AddRange ( dRanges, dIds, iOnlyTag ); // only one range
 	}
 	return dRanges;
 }
 
 // create agents
-VecRefPtrsAgentConn_t GetAgents( const VecTraits_T<RemoteFieldsAnswer_t>& dRangesIds,
-		const VecTraits_T<AgentConn_t *> & dRemotes )
+VecRefPtrsAgentConn_t GetAgents( const VecTraits_T<RemoteFieldsAnswer_t>& dRangesIds, AggrResult_t & tRes )
 {
+	assert ( tRes.m_bIdxByTag );
 	VecRefPtrsAgentConn_t dAgents;
 	dAgents.Reserve ( dRangesIds.GetLength () );
 	for ( auto & dRange : dRangesIds )
 	{
-		const AgentConn_t * pDesc = dRemotes[dRange.m_dResDocs.First ().m_iTag];
+		const AgentConn_t * pDesc = tRes.m_dResults[dRange.m_iTag].Agent ();
 		assert ( pDesc );
 		auto * pAgent = new AgentConn_t;
 		pAgent->m_tDesc.CloneFrom ( pDesc->m_tDesc );
@@ -500,36 +521,58 @@ VecRefPtrsAgentConn_t GetAgents( const VecTraits_T<RemoteFieldsAnswer_t>& dRange
 }
 
 void FillDocs ( VecTraits_T<CSphMatch> & dMatches, RemoteFieldsAnswer_t& dReply,
-		const VecTraits_T<const CSphColumnInfo *> dFieldCols )
+		const VecTraits_T<const CSphColumnInfo *>& dFieldCols )
 {
-	auto & dResDocs = dReply.m_dResDocs; // directly passed from source
-	auto & dDocs = dReply.m_dDocs; // received, m.b. different (shrinked)
+	auto & dResDocs = dReply.m_dResDocs; // directly passed from source, sorted by DocID
+	auto & dDocs = dReply.m_dDocs; // received, m.b. different (shrinked and unordered)
 	int iStride = dFieldCols.GetLength ();
-	int iDocFieldsOff = 0;
 
 	if ( dDocs.IsEmpty () )
 		return;
 
-	const DocID_t * pRecvDocs = dDocs.Begin ();
+	// docs and locators placed in unknown order, but for merging we need them ordered.
+	CSphFixedVector<int> dOrd { dDocs.GetLength () };
+	ARRAY_CONSTFOREACH( i, dOrd )
+		dOrd[i] = i;
+	dOrd.Sort ( Lesser ( [&dDocs] ( int l, int r ) { return dDocs[l]<dDocs[r]; } ) );
+
+	int iDocs = dDocs.GetLength();
+	int iDoc = 0;
+	int iRecvDoc = dOrd[iDoc];
 	for ( auto & dResDoc : dResDocs )
 	{
-		if ( dResDoc.m_iDocid<*pRecvDocs )
+		if ( dResDoc.m_iDocid<dDocs[iRecvDoc] )
 			continue;
 
-		assert ( dResDoc.m_iDocid==*pRecvDocs );
+		assert ( dResDoc.m_iDocid==dDocs[iRecvDoc] );
 
 		// found matched docs
 		CSphMatch & tMatch = dMatches[dResDoc.m_iIndex];
-		auto dLocators = dReply.m_dLocs.Slice ( iDocFieldsOff, iStride );
+		auto dLocators = dReply.m_dLocs.Slice ( iStride * iDoc, iStride );
 		ARRAY_CONSTFOREACH( i, dFieldCols )
 		{
 			BYTE * pPacked = sphPackPtrAttr ( { dReply.m_pFieldsRaw+dLocators[i].m_iOff, dLocators[i].m_iSize } );
 			tMatch.SetAttr ( dFieldCols[i]->m_tLocator, (SphAttr_t) pPacked );
 		}
 
-		++pRecvDocs;
-		iDocFieldsOff += iStride;
+		++iDoc;
+		if ( iDoc>=iDocs )
+			break;
+
+		iRecvDoc = dOrd[iDoc];
 	}
+}
+
+CSphVector<const CSphColumnInfo *> GetStoredColumnList ( const CSphSchema & tSchema )
+{
+	CSphVector<const CSphColumnInfo *> dFieldCols;
+	for ( int i = 0, iAttrsCount = tSchema.GetAttrsCount (); i<iAttrsCount; ++i )
+	{
+		const CSphColumnInfo & tCol = tSchema.GetAttr ( i );
+		if ( tCol.m_uFieldFlags & CSphColumnInfo::FIELD_STORED )
+			dFieldCols.Add ( &tCol );
+	}
+	return dFieldCols;
 }
 
 } // static namespace
@@ -560,27 +603,20 @@ void HandleCommandGetField ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 	SendAPICommandGetfieldAnswer ( tOut, tRequest, tRes, tFetched );
 }
 
-void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery, const VecRefPtrsAgentConn_t & dRemotes )
+void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery )
 {
 	assert ( tRes.m_bSingle );
 	assert ( tRes.m_bOneSchema );
 
 	// TODO!!! try to start fetch prior to sorting
-	// remote agents requests send off thread
-	if ( dRemotes.IsEmpty() )
-		return;
 
 	assert ( tRes.m_bOneSchema );
 	assert ( tRes.m_bTagsCompacted );
+	assert ( tRes.m_bIdxByTag );
 	assert ( tRes.m_bSingle );
 
-	CSphVector<const CSphColumnInfo *> dFieldCols;
-	for ( int i = 0, iAttrsCount = tRes.m_tSchema.GetAttrsCount (); i<iAttrsCount; ++i )
-	{
-		const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr ( i );
-		if ( tCol.m_uFieldFlags & CSphColumnInfo::FIELD_STORED )
-			dFieldCols.Add ( &tCol );
-	}
+	auto dFieldCols = GetStoredColumnList ( tRes.m_tSchema );
+
 	// early reject in case no stored fields found
 	if ( dFieldCols.IsEmpty() )
 		return;
@@ -589,18 +625,17 @@ void RemotesGetField ( AggrResult_t & tRes, const CSphQuery & tQuery, const VecR
 	int iCount = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
 	auto dMatches = tRes.m_dResults.First ().m_dMatches.Slice ( iOffset, iCount );
 
+	// extract ranges and early return in case no remote matches
 	CSphVector<ResLoc_t> dIds;
-	auto dRangesIds = ExtractRanges ( dIds, tRes, iOffset, iCount );
-
-	// early reject in case no documents from agents found
-	if ( dIds.IsEmpty() )
+	auto dRangesIds = ExtractRanges ( dIds, tRes, dMatches );
+	if ( dRangesIds.IsEmpty() )
 		return;
 
-	// connect to remote agents and query them
-	auto dAgents = GetAgents ( dRangesIds, dRemotes );
+	auto dAgents = GetAgents ( dRangesIds, tRes );
 	assert ( dAgents.GetLength ()==dRangesIds.GetLength () );
 
-	GetFieldRequestBuilder_t tBuilder ( dFieldCols, dIds );
+	// connect to remote agents and query them
+	GetFieldRequestBuilder_t tBuilder ( dFieldCols );
 	GetFieldReplyParser_t tParser;
 	PerformRemoteTasks ( dAgents, &tBuilder, &tParser );
 

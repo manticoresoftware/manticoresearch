@@ -129,7 +129,6 @@ POST /search -d '
             "terms" :
              {
               "field":"price",
-              "size": 10
              }
          },
         "group_brand_id" :
@@ -137,7 +136,6 @@ POST /search -d '
             "terms" :
              {
               "field":"brand_id",
-              "size": 5
              }
          }
      }
@@ -593,7 +591,103 @@ FACET brand_name BY brand_id order BY COUNT(*) DESC LIMIT 4;
 +-------------+----------+
 3 rows in set (0.01 sec)
 ```
+<!-- request HTTP -->
 
+``` json
+POST /search -d '
+    {
+     "index" : "facetdemo",
+     "query" : {"match_all" : {} },
+     "limit": 5,
+     "aggs" :
+     {
+        "group_property" :
+         {
+            "terms" :
+             {
+              "field":"price",
+              "size":1,
+             }
+         },
+        "group_brand_id" :
+         {
+            "terms" :
+             {
+              "field":"brand_id",
+              "size":3
+             }
+         }
+     }
+    }
+'
+```
+
+<!-- response HTTP -->
+
+``` json
+{
+  "took": 3,
+  "timed_out": false,
+  "hits": {
+    "total": 10000,
+    "hits": [
+      {
+        "_id": "1",
+        "_score": 1,
+        "_source": {
+          "price": 197,
+          "brand_id": 10,
+          "brand_name": "Brand Ten",
+          "categories": [
+            10
+          ]
+        }
+      },
+ ...
+      {
+        "_id": "5",
+        "_score": 1,
+        "_source": {
+          "price": 805,
+          "brand_id": 7,
+          "brand_name": "Brand Seven",
+          "categories": [
+            11,
+            12,
+            13
+          ]
+        }
+      }
+    ]
+  },
+  "aggregations": {
+    "group_property": {
+      "buckets": [
+        {
+          "key": 1000,
+          "doc_count": 11
+        }
+      ]
+    },
+    "group_brand_id": {
+      "buckets": [
+        {
+          "key": 10,
+          "doc_count": 1019
+        },
+        {
+          "key": 9,
+          "doc_count": 954
+        },
+        {
+          "key": 8,
+          "doc_count": 1021
+        }
+      ]
+    }
+  }
+}
+```
 <!-- end -->
 ### Returned result set
 

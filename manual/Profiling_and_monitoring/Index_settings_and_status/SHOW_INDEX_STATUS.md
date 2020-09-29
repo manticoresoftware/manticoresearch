@@ -1,4 +1,4 @@
-# SHOW INDEX STATUS 
+# SHOW INDEX STATUS
 
 <!-- example SHOW INDEX STATUS -->
 
@@ -12,24 +12,24 @@ SHOW INDEX index_name STATUS
 
 Displayed statistics include:
 
-* `index_type` show type, for now that is one of `disk`, `rt`, `percolate`, `template`, and `distributed`.
-* `indexed_documents` and `indexed_bytes`: number of the documents indexed and their text size in bytes, respectively.
+* `index_type`: for now that is one of `disk`, `rt`, `percolate`, `template`, and `distributed`.
+* `indexed_documents` and `indexed_bytes`: number of indexed documents and their text size in bytes, respectively.
 * `field_tokens_XXX`: sums of per-field lengths (in tokens) over the entire index (that is used internally in `BM25A` and `BM25F` functions for ranking purposes). Only available for indexes built with `index_field_lengths=1`.
-* `ram_bytes`: total size (in bytes) of the RAM-resident index portion.
+* `ram_bytes`: total size (in bytes) of RAM-resident index portion.
 * `disk_bytes`: total size (in bytes) of all index files.
 * `disk_mapped`: total size of file mappings.
-* `disk_mapped_cached`: total size of file mappings, cached in RAM.
-* `disk_mapped_doclists` and `disk_mapped_cached_doclists`: part of total and cached mappings belonging to document lists.
-* `disk_mapped_hitlists` and `disk_mapped_cached_hitlists`: part of total and cached mappings belonging to hit lists. Values for doclists and hitlists are shown in dedicated lines since they're usually huge (say, about 90% size of the whole index).
-* `killed_documents` and `killed_rate`: first indicates number of of deleted documents and rate of deleted to indexed. Technically deletion just means that documents are suppressed in search output, but physically they still persist in the index and will be purged only after merging/optimizing.
-* `ram_chunk`: size of RAM chunk of realtime or percolate index.
-* `ram_chunk_segments_count`: RAM chunk internally consists from segments, usually there are no more than 32 of them.
-* `disk_chunks`: number of disk chunks of realtime index.
+* `disk_mapped_cached`: total size of file mappings actually cached in RAM.
+* `disk_mapped_doclists` and `disk_mapped_cached_doclists`: part of the total and cached mappings belonging to document lists.
+* `disk_mapped_hitlists` and `disk_mapped_cached_hitlists`: part of the total and cached mappings belonging to hit lists. Values for doclists and hitlists are shown separately since they're usually huge (say, about 90% size of the whole index).
+* `killed_documents` and `killed_rate`: the first one indicates the number of deleted documents and the rate of deleted/indexed. Technically deletion of a document just means that the document gets suppressed in search output, but physically it still persists in an index and will be purged only after merging/optimizing the index.
+* `ram_chunk`: size of RAM chunk of real-time or percolate index.
+* `ram_chunk_segments_count`: RAM chunk internally consists of segments, usually there are no more than 32 of them. This line shows the current count.
+* `disk_chunks`: number of disk chunks of the real-time index.
 * `mem_limit`: actual value of `rt_mem_limit` for the index.
-* `ram_bytes_retired`: represents size of garbage in RAM chunk (say, deleted or replaced documents not yet finally wiped away).
-* `tid` and `tid_saved`: represent save state or rt or percolate index. `tid` increased with each change (transaction). `tid_saved` represents max `tid` of the state saved in RAM chunk in '<index>.ram' file. When numbers are different, some changes are exist only in RAM, and also backed by binlog (if enabled). Performing 'flush rtindex', or scheduled periodical flush causes these changes to be saved. After flush binlog is cleared, and `tid_saved` represents actual new state.
-* `query_time_*`: query execution time statistics of last 1 minute, 5 minutes, 15 minutes and total since server start; data is encapsulated as a JSON object which includes the number of queries and min, max, avg, 95 and 99 percentile values.
-* `found_rows_*`: statistics of rows found by queries; provided for last 1 minute, 5 minutes, 15 minutes and total since server start; data is encapsulated as a JSON object which includes the number of queries and min, max, avg, 95 and 99 percentile values.
+* `ram_bytes_retired`: represents size of garbage in RAM chunks (for example, deleted or replaced documents not yet finally wiped away).
+* `tid` and `tid_saved`: represent the state of saving the index (real-time or percolate only). `tid` gets increased with each change (transaction). `tid_saved` shows max `tid` of the state saved in a RAM chunk in '<index>.ram' file. When the numbers are different, some changes exist only in RAM and also backed by binlog (if enabled). Performing 'flush rtindex' or scheduling periodical flushing causes these changes to be saved. After flushing the binlog gets cleared, and the `tid_saved` represents the actual new state.
+* `query_time_*`: query execution time statistics of last 1 minute, 5 minutes, 15 minutes and total since server start; the data is encapsulated as a JSON object which includes the number of queries and min, max, avg, 95 and 99 percentile values.
+* `found_rows_*`: statistics of rows found by queries; provided for last 1 minute, 5 minutes, 15 minutes and total since server start; the data is encapsulated as a JSON object which includes the number of queries and min, max, avg, 95 and 99 percentile values.
 
 <!-- intro -->
 ##### SQL:
@@ -108,7 +108,7 @@ Array(
     [query_time_15min] => {"queries":1, "avg_sec":0.001, "min_sec":0.001, "max_sec":0.001, "pct95_sec":0.001, "pct99_sec":0.001}
     [query_time_total] => {"queries":1, "avg_sec":0.001, "min_sec":0.001, "max_sec":0.001, "pct95_sec":0.001, "pct99_sec":0.001}
     [found_rows_1min] => {"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}
-    [found_rows_5min] => {"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3} 
+    [found_rows_5min] => {"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}
     [found_rows_15min] => {"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}
     [found_rows_total] => {"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}
 

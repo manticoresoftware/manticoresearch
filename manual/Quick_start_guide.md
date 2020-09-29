@@ -133,12 +133,12 @@ Query OK, 0 rows affected (0.02 sec)
 
 <!-- request HTTP -->
 
-```http
+```bash
 POST /sql -d "mode=raw&query=create table products(title text, price float) morphology='stem_en'"
 ```
 
 <!-- response HTTP -->
-```http
+```json
 {
 "total":0,
 "error":"",

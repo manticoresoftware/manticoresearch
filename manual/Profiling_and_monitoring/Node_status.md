@@ -13,7 +13,7 @@ The easiest way to see high-level information about your Manticore node is by ru
 * number of connections (`clients`)
 * number of tasks being processed now
 * number of queries made since start
-* number or jobs in queue and number of tasks normalized with number of threads
+* number or jobs in queue and number of tasks normalized by number of threads
 
 <!-- request SQL -->
 ```sql
@@ -251,8 +251,8 @@ Array(
 	[status_stored_periods] => 15
 	[ag_0_hostname] => 192.168.0.202:6713
 	[ag_0_references] => 2
-	[ag_0_lastquery] => 0.41 
-	[ag_0_lastanswer] => 0.19 
+	[ag_0_lastquery] => 0.41
+	[ag_0_lastanswer] => 0.19
 	[ag_0_lastperiodmsec] => 222  
 	[ag_0_errorsarow] => 0
 	[ag_0_1periods_query_timeouts] => 0
@@ -275,8 +275,8 @@ Array(
 	[ag_0_5periods_msecsperquery] => 231.83
 	[ag_1_hostname 192.168.0.202:6714
 	[ag_1_references] => 2
-	[ag_1_lastquery] => 0.41 
-	[ag_1_lastanswer] => 0.19 
+	[ag_1_lastquery] => 0.41
+	[ag_1_lastanswer] => 0.19
 	[ag_1_lastperiodmsec] => 220  
 	[ag_1_errorsarow] => 0
 	[ag_1_1periods_query_timeouts] => 0

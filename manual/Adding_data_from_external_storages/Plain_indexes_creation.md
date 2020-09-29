@@ -7,7 +7,7 @@ Plain indexes are available only in [Plain mode](Creating_an_index/Local_indexes
 **Indexer** is a command line tool that can be called directly from the command line or from shell scripts.
 
 It can accept a number of arguments when called, but there are also several settings of it's own in the Manticore configuration file.
- 
+
 In the typical scenario, indexer does the following:
 * fetches the data from the source
 * builds the plain index
@@ -26,6 +26,8 @@ An important thing to keep in mind when creating indexes with `indexer` is that 
 ```shell
 sudo -u manticore indexer ...
 ```
+
+If you are running `searchd` (Manticore Search server) differently you might need to omit `sudo -u manticore`, just make sure that the user under which your `searchd` instance is running has read/write permissions to your indexes that you generate using `indexer`.
 
 Essentially you would list the different possible indexes (that you would later make available to search) in `manticore.conf`, so when calling `indexer`, as a minimum you need to be telling it what index (or indexes) you want to index. If `manticore.conf` contained details on 2 indexes, `mybigindex` and `mysmallindex`, you could do the following:
 
@@ -84,7 +86,7 @@ sudo -u manticore indexer --rotate --all --noprogress
 sudo -u manticore indexer myindex --buildstops word_freq.txt 1000
 ```
 
-This would produce a document in the current directory, `word_freq.txt` with the 1,000 most common words in 'myindex', ordered by most common first. Note that the file will pertain to the last index indexed when specified with multiple indexes or `--all` (i.e. the last one listed in the configuration file) 
+This would produce a document in the current directory, `word_freq.txt` with the 1,000 most common words in 'myindex', ordered by most common first. Note that the file will pertain to the last index indexed when specified with multiple indexes or `--all` (i.e. the last one listed in the configuration file)
 * `--buildfreqs` works with `--buildstops` (and is ignored if `--buildstops` is not specified). As `--buildstops` provides the list of words used within the index, `--buildfreqs` adds the quantity present in the index, which would be useful in establishing whether certain words should be considered stopwords if they are too prevalent. It will also help with developing "Did you mean…" features where you need to know how much more common a given word compared to another, similar one. Example:
 
 ```shell
@@ -112,7 +114,7 @@ Any documents marked as deleted (value 1) would be removed from the newly-merged
 ```shell
 sudo -u manticore indexer myindex --keep-attrs=/path/to/index/files
 ```
-  
+
 * `--keep-attrs-names=<attributes list>` allows to specify attributes to reuse from existing index on reindexing. By default all attributes from existed index reused at new "index":
 
 ```shell
@@ -125,9 +127,9 @@ sudo -u manticore indexer myindex --keep-attrs=/path/to/index/files --keep-attrs
 * `--sighup-each` is useful when you are rebuilding many big indexes, and want each one rotated into `searchd` as soon as possible. With `--sighup-each`, `indexer` will send the SIGHUP signal to searchd after successfully completing work on each index. (The default behavior is to send a single SIGHUP after all the indexes are built).
 * `--nohup` is useful when you want to check your index with indextool before actually rotating it. indexer won't send the SIGHUP if this option is on.
 * `--print-queries` prints out SQL queries that `indexer` sends to the database, along with SQL connection and disconnection events. That is useful to diagnose and fix problems with SQL sources.
-* `--help` (`-h` for short) lists all of the parameters that can be called in `indexer`. 
+* `--help` (`-h` for short) lists all of the parameters that can be called in `indexer`.
 * `-v` shows `indexer` version.
-   
+
 ### Indexer configuration settings
 You can also configure indexer behaviour in Manticore configuration file in section `indexer`:
 
@@ -180,7 +182,7 @@ Maximum I/O operations per second, for I/O throttling. Optional, default is 0 (u
 
 I/O throttling related option. It limits maximum count of I/O operations (reads or writes) per any given second. A value of 0 means that no limit is imposed.
 
-`indexer` can cause bursts of intensive disk I/O during indexing, and it might desired to limit its disk activity (and keep something for other programs running on the same machine, such as `searchd`). I/O throttling helps to do that. It works by enforcing a minimum guaranteed delay between subsequent disk I/O operations performed by `indexer`. Modern SATA HDDs are able to perform up to 70-100+ I/O operations per second (that's mostly limited by disk heads seek time). Limiting indexing I/O to a fraction of that can help reduce search performance degradation caused by indexing. 
+`indexer` can cause bursts of intensive disk I/O during indexing, and it might be desired to limit its disk activity (and keep something for other programs running on the same machine, such as `searchd`). I/O throttling helps to do that. It works by enforcing a minimum guaranteed delay between subsequent disk I/O operations performed by `indexer`. Limiting indexing I/O can help reduce search performance degradation caused by indexing.
 
 #### max_iosize
 
@@ -190,7 +192,7 @@ max_iosize = 1048576
 
 Maximum allowed I/O operation size, in bytes, for I/O throttling. Optional, default is 0 (unlimited).
 
-I/O throttling related option. It limits maximum file I/O operation (read or write) size for all operations performed by `indexer`. A value of 0 means that no limit is imposed. Reads or writes that are bigger than the limit will be split in several smaller operations, and counted as several operation by [max_iops](Adding_data_from_external_storages/Plain_indexes_creation.md#max_iops) setting. At the time of this writing, all I/O calls should be under 256 KB (default internal buffer size) anyway, so `max_iosize` values higher than 256 KB must not affect anything. 
+I/O throttling related option. It limits maximum file I/O operation (read or write) size for all operations performed by `indexer`. A value of 0 means that no limit is imposed. Reads or writes that are bigger than the limit will be split in several smaller operations, and counted as several operation by [max_iops](Adding_data_from_external_storages/Plain_indexes_creation.md#max_iops) setting. At the time of this writing, all I/O calls should be under 256 KB (default internal buffer size) anyway, so `max_iosize` values higher than 256 KB must not affect anything.
 
 #### max_xmlpipe2_field
 
@@ -199,7 +201,7 @@ max_xmlpipe2_field = 8M
 ```
 
 Maximum allowed field size for XMLpipe2 source type, bytes. Optional, default is 2 MB.
-    
+
 #### mem_limit
 
 ```ini
@@ -234,4 +236,4 @@ Note that with `on_file_field_error = skip_document` documents will only be igno
 write_buffer = 4M
 ```    
 
-Write buffer size, bytes. Optional, default is 1MB. Write buffers are used to write both temporary and final index files when indexing. Larger buffers reduce the number of required disk writes. Memory for the buffers is allocated in addition to [mem_limit](Adding_data_from_external_storages/Plain_indexes_creation.md#mem_limit). Note that several (currently up to 4) buffers for different files will be allocated, proportionally increasing the RAM usage. 
+Write buffer size, bytes. Optional, default is 1MB. Write buffers are used to write both temporary and final index files when indexing. Larger buffers reduce the number of required disk writes. Memory for the buffers is allocated in addition to [mem_limit](Adding_data_from_external_storages/Plain_indexes_creation.md#mem_limit). Note that several (currently up to 4) buffers for different files will be allocated, proportionally increasing the RAM usage.

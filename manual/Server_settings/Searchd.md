@@ -350,7 +350,7 @@ listen = ( address ":" port | port | path | address ":" port start - port end ) 
 You can specify:
 * either an IP address (or hostname) and a port number
 * or just a port number
-* or Unix socket path 
+* or Unix socket path
 * or an IP address and ports range
 
 If you specify a port number, but not an address, `searchd` will listen on all network interfaces. Unix path is identified by a leading slash. Ports range could be set only for the replication protocol.
@@ -395,11 +395,11 @@ Unix-domain sockets are not supported on Windows.
 
 #### Technical details about Sphinx API protocol and TFO
 <details>
-Legacy Sphinx protocol has 2 phases: handshake exchanging and data flow. The handshake consists of a packet of 4 bytes from the client, and a packet of 4 bytes from the daemon with only one purpose - the client determines that the remote is a real Sphinx daemon, the daemon determines that the remote is a real Sphinx client. The main dataflow is quite simple: let's both sides declare their handshakes, and the opposite check them. That exchange with short packets implies using special `TCP_NODELAY` flag, which switches off Nagle's TCP algorithm and declares, that the TCP connection will be performed as a dialogue of small packages. 
+Legacy Sphinx protocol has 2 phases: handshake exchanging and data flow. The handshake consists of a packet of 4 bytes from the client, and a packet of 4 bytes from the daemon with only one purpose - the client determines that the remote is a real Sphinx daemon, the daemon determines that the remote is a real Sphinx client. The main dataflow is quite simple: let's both sides declare their handshakes, and the opposite check them. That exchange with short packets implies using special `TCP_NODELAY` flag, which switches off Nagle's TCP algorithm and declares, that the TCP connection will be performed as a dialogue of small packages.
 However it is not strictly defined who speaks first in this negotiation. Historically all clients that use the binary API speak first: send handshake, then read 4 bytes from a daemon, then send a request and read an answer from the daemon.
 When we improved Sphinx protocol compatibility we considered these things:
 
-1. Usually master-agent communication is established from a known client to a known host on a known port. So, it is quite not possible, that the endpoint will provide wrong handshake. So, we may implicitly assume, that both sides are valid and really speak in Sphinx proto. 
+1. Usually master-agent communication is established from a known client to a known host on a known port. So, it is quite not possible, that the endpoint will provide wrong handshake. So, we may implicitly assume, that both sides are valid and really speak in Sphinx proto.
 2. Given this assumption we can 'glue' a handshake to the real request and send it in one packet. If backend is a legacy Sphinx daemon - it will just read this glued packet as 4 bytes of a hadshake, then request body. Since they both came in one packet, the backend socket has -1 RTT, and the frontend buffer still works despite that fact usual way.
 3. Continuing the assumption: since the 'query' packet is quite small, and the hadshake is even smaller, let's send both in initial 'SYN' TCP package using modern TFO (tcp-fast-open) technique. That is: we connect to a remote node with the glued handshake + body package. The daemon accept the connection and immediately has both the handshake and the body in a socket buffer, as they came in the very first TCP 'SYN' packet. That eliminates another one RTT.
 4. Finally teach daemon to accept this improvement. Actually, from application it implies NOT to use `TCP_NODELAY`. And, from system side it implies to ensure that on the daemon side accepting TFO is activated, and on the client side sending TFO is also activated. By default in modern systems client TFO is already activated by default, so you have only tune server TFO for all things to work.
@@ -466,7 +466,7 @@ max_batch_queries = 256
 Number of working threads (or, size of thread pool) of Manticore daemon. Manticore creates this numbe of OS threads on start,
 and they performs all the jobs inside the daemon, as executing queries, creating snippets, etc. Some operations may be
 splitted to sub-task and executed in parallel, as:
-* Search in a real-time index 
+* Search in a real-time index
 * Search in a distributed index consisting of local indexes
 * Percolate query call
 * and others
@@ -609,7 +609,7 @@ Useful for extremely high query rates, when just 1 thread is not enough to manag
 Controls busy loop interval of a network thread, default is -1, might be set to -1, 0, positive integer.
 
 In case server configured as pure master and routes requests to agents it is important to handle requests without delays and do not allow net-thread to sleep or cut out from CPU. Here is busy loop to do that. After incoming request, network thread use CPU poll for `10 * net_wait_tm` milliseconds in case `net_wait_tm` is positive number or polls only with CPU in case `net_wait_tm` is `0`. Also busy loop might be disabled with `net_wait_tm = -1` - this way poller set timeout to actual agent's timeouts on system polling call.
- 
+
 > **WARNING:** CPU busy loop actually loads CPU core, so setting this value to any non-default will cause noticeable CPU usage even with idle server.
 
 
@@ -762,7 +762,7 @@ Whether to forcibly preopen all indexes on startup. Optional, default is 1 (preo
 
 When set to 1, this directive overrides and enforces [preopen](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Other-performance-related-settings) on all indexes. They will be preopened, no matter what is the per-index `preopen` setting. When set to 0, per-index settings can take effect. (And they default to 0.)
 
-Pre-opened indexes avoid races between search queries and rotations that can cause queries to fail occasionally. They also make `searchd` use more file handles. In most scenarios it's therefore preferred and recommended to preopen indexes. 
+Pre-opened indexes avoid races between search queries and rotations that can cause queries to fail occasionally. They also make `searchd` use more file handles. In most scenarios it's therefore preferred and recommended to preopen indexes.
 
 <!-- intro -->
 ##### Example:
@@ -889,7 +889,7 @@ read_timeout = 1
 <!-- example conf read_buffer -->
 Per-keyword read buffer size. Optional, default is 256K
 
-For every keyword occurrence in every search query, there are two associated read buffers (one for document list and one for hit list). This setting lets you control their sizes, increasing per-query RAM use, but possibly decreasing IO time. Minimal value is 8K. Apart general size, you may also tune buffers for document lists and hit lists individually, using [read_buffer_docs](Server_settings/Searchd.md#read_buffer_docs) 
+For every keyword occurrence in every search query, there are two associated read buffers (one for document list and one for hit list). This setting lets you control their sizes, increasing per-query RAM use, but possibly decreasing IO time. Minimal value is 8K. Apart general size, you may also tune buffers for document lists and hit lists individually, using [read_buffer_docs](Server_settings/Searchd.md#read_buffer_docs)
 and [read_buffer_hits](Server_settings/Searchd.md#read_buffer_hits) params.
 
 
@@ -965,7 +965,7 @@ read_unhinted = 32K
 <!-- example conf rt_flush_period -->
 RT indexes RAM chunk flush check period, in seconds (or [special_suffixes](Server_settings/Special_suffixes.md)). Optional, default is 10 hours.
 
-Actively updated RT indexes that however fully fit in RAM chunks can result in ever-growing binlogs, impacting disk use and crash recovery time. With this directive the search server performs periodic flush checks, and eligible RAM chunks can get saved, enabling consequential binlog cleanup. See [Binary logging](Logging/Binary_logging.md) for more details. 
+Actively updated RT indexes that however fully fit in RAM chunks can result in ever-growing binlogs, impacting disk use and crash recovery time. With this directive the search server performs periodic flush checks, and eligible RAM chunks can get saved, enabling consequential binlog cleanup. See [Binary logging](Logging/Binary_logging.md) for more details.
 
 <!-- intro -->
 ##### Example:
@@ -983,7 +983,7 @@ rt_flush_period = 3600 # 1 hour
 <!-- example conf rt_merge_iops -->
 A maximum number of I/O operations (per second) that the RT chunks merge thread is allowed to start. Optional, default is 0 (no limit).
 
-This directive lets you throttle down the I/O impact arising from the `OPTIMIZE` statements. It is guaranteed that all the RT optimization activity will not generate more disk iops (I/Os per second) than the configured limit. Modern SATA drives can perform up to around 100 I/O operations per second, and limiting rt_merge_iops can reduce search performance degradation caused by merging.
+This directive lets you throttle down the I/O impact arising from the `OPTIMIZE` statements. It is guaranteed that all the RT optimization activity will not generate more disk iops (I/Os per second) than the configured limit. Limiting rt_merge_iops can reduce search performance degradation caused by merging.
 
 
 <!-- intro -->
@@ -1307,7 +1307,7 @@ unlink_old = 0
 <!-- example conf watchdog -->
 Threaded server watchdog. Optional, default is 1 (watchdog enabled).
 
-When Manticore query crashes it can take down the entire server. With the watchdog feature enabled, `searchd` additionally keeps a separate lightweight process that monitors the main server process, and automatically restarts the latter in case of abnormal termination. Watchdog is enabled by default. 
+When Manticore query crashes it can take down the entire server. With the watchdog feature enabled, `searchd` additionally keeps a separate lightweight process that monitors the main server process, and automatically restarts the latter in case of abnormal termination. Watchdog is enabled by default.
 
 <!-- request Example -->
 

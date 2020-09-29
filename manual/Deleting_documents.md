@@ -1,15 +1,20 @@
-# Deleting documents 
+# Deleting documents
 
-Deleting is only supported for [Real-Time](Creating_an_index/Local_indexes/Real-time_index.md) and [percolate](Creating_an_index/Local_indexes/Percolate_index.md) indexes and for distributed that contain only RT indexes as agents. You can delete existing rows (documents) from an existing index based on ID or conditions.
+Deleting is only supported for:
+* [real-time](Creating_an_index/Local_indexes/Real-time_index.md) indexes,
+* [percolate](Creating_an_index/Local_indexes/Percolate_index.md) indexes
+* distributed indexes that contain only RT indexes as agents
+
+You can delete existing rows (documents) from an existing index based on ID or conditions.
 
 <!-- example delete 1 -->
-Deleting works for SQL and HTTP interfaces. 
+Deleting documents is supported via SQL and HTTP interfaces.
 
 SQL response for successful operation will show the number of rows deleted.
 
-json/delete is an HTTP endpoint for for deleting. The server will respond with a JSON object stating if the operation was successful or not and the number of rows deleted.
+`json/delete` is an HTTP endpoint for deleting. The server will respond with a JSON object stating if the operation was successful or not and the number of rows deleted.
 
-To delete all documents from an index it's recommended to use instead the [index truncation](Emptying_an_index.md) as it's a much faste operation.
+To delete all documents from an index it's recommended to use instead the [index truncation](Emptying_an_index.md) as it's a much faster operation.
 
 <!-- intro -->
 ##### SQL:
@@ -120,7 +125,7 @@ POST /delete -d '
 ##### PHP:
 
 <!-- request PHP -->
- 
+
 ```php
 $index->deleteDocuments(new Match('dummy','*'));
 ```

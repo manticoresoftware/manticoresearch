@@ -1,4 +1,4 @@
-# Faceted search 
+# Faceted search
 
 Faceted search is as essential function of a modern search application as [autocomplete](Searching/Autocomplete.md), [spell correction](Searching/Spell_correction.md) and search keywords [highlighting](Searching/Highlighting.md). Especially in E-commerce products.
 
@@ -10,7 +10,7 @@ In Manticore Search there is an optimization that retains the result set of the 
 
 ## Aggregations
 
-<!-- example Example_1 -->
+<!-- example Aggregations -->
 ### SQL
 The facet values can come from an attribute, JSON property from a JSON attribute or expression. Facet values can be also aliased, however the **alias must be unique** across all result sets (main query results set and other facets results sets). The facet value is taken from the aggregated attribute/expression, but it can also come from another attribute/expression.
 
@@ -26,7 +26,7 @@ Multiple facet declarations need to be separated by an whitespace.
 Facets can be defined in the `aggs` node:
 
 ``` json
-     "aggs" : 
+     "aggs" :
      {
         "group name" :
          {
@@ -40,7 +40,7 @@ Facets can be defined in the `aggs` node:
 
 `group name` is an alias given to the aggregation, the `field` value must contain the name of the attribute or expression we are faceting.
 
-The result set will contain an `aggregations` node with the returned facets, where `key` is the aggregated value and `doc_count` the aggregation count.
+The result set will contain an `aggregations` node with the returned facets, where `key` is the aggregated value and `doc_count` is the aggregation count.
 
 ``` json
     "aggregations": {
@@ -122,7 +122,7 @@ POST /search -d '
      "index" : "facetdemo",
      "query" : {"match_all" : {} },
      "limit": 5,
-     "aggs" : 
+     "aggs" :
      {
         "group_property" :
          {
@@ -233,7 +233,7 @@ POST /search -d '
 
 
 
-<!-- example Example_2 -->
+<!-- example Another_attribute -->
 
 ### Faceting by aggregation over another attribute
 
@@ -281,9 +281,8 @@ SELECT * FROM facetdemo FACET brand_name by brand_id;
 
 <!-- end -->
 
+<!-- example Expressions -->
 ### Facet over expressions
-
-<!-- example Example_3 -->
 
 Facets can aggregate over expressions. A classic example is segmentation of price by certain ranges:
 
@@ -322,19 +321,19 @@ SELECT * FROM facetdemo FACET INTERVAL(price,200,400,600,800) AS price_range ;
 POST /search -d '
     {
      "index": "facetdemo2",
-     "query": 
+     "query":
      {
         "match_all": {}
      },
-     "expressions": 
+     "expressions":
      {
         "price_range": "INTERVAL(price,200,400,600,800)"
      },
-    "aggs": 
+    "aggs":
     {
-      "group_property": 
+      "group_property":
       {
-        "terms": 
+        "terms":
         {
             "field": "price_range"
         }
@@ -413,20 +412,20 @@ POST /search -d '
 
 <!-- end -->
 
-<!-- example Example_4 -->
+<!-- example Multi-level -->
 
 ### Facet over multi-level grouping
 
 Facets can aggregate over multi-level grouping, the result set being the same as the query would perform a multi-level grouping:
 
-<!-- request -->
+<!-- request SQL -->
 
 ```sql
-SELECT *,INTERVAL(price,200,400,600,800) AS price_range FROM facetdemo 
+SELECT *,INTERVAL(price,200,400,600,800) AS price_range FROM facetdemo
 FACET price_range AS price_range,brand_name ORDER BY brand_name asc;
 ```
 
-<!-- response -->
+<!-- response SQL -->
 
 ```sql
 +------+-------+----------+---------------------+-------------+-------------+---------------------------------------+------------+-------------+
@@ -455,9 +454,8 @@ FACET price_range AS price_range,brand_name ORDER BY brand_name asc;
 ```
 <!-- end -->
 
+<!-- example Ordering -->
 ### Ordering in facet result
-
-<!-- example Example_5 -->⛔
 
 Facets support `ORDER BY` clause as same as a standard query. Each facet can have it's or own ordering and the facet ordering doesn't affect in any way the ordering of the main result set, which is ordered by the main query's `ORDER BY`. Sorting can be made on attribute name, count (using `COUNT(*)`) or special `FACET()` function can be used, which provides the aggregated data values.
 
@@ -468,13 +466,13 @@ Facets support `ORDER BY` clause as same as a standard query. Each facet can hav
 <!-- request SQL -->
 
 ```sql
-SELECT * FROM facetdemo 
-FACET brand_name BY brand_id ORDER BY FACET() ASC 
+SELECT * FROM facetdemo
+FACET brand_name BY brand_id ORDER BY FACET() ASC
 FACET brand_name BY brand_id ORDER BY brand_name ASC
 FACET brand_name BY brand_id order BY COUNT(*) DESC;
 ```
 
-<!-- response -->
+<!-- response SQL -->
 
 ```sql
 +------+-------+----------+---------------------+-------------+-------------+---------------------------------------+------------+
@@ -537,11 +535,11 @@ FACET brand_name BY brand_id order BY COUNT(*) DESC;
 
 <!-- end -->
 
+
+<!-- example Size -->
 ### Size of facet result
 
-<!-- example Example_6 -->⛔
-
-By default each facet result set is limited to 20 values. The number of facet values can be controlled with `LIMIT` clause individually for each facet  by providing either a number of values to return in format `LIMIT count` or with an offset as `LIMIT offset, count`. 
+By default each facet result set is limited to 20 values. The number of facet values can be controlled with `LIMIT` clause individually for each facet  by providing either a number of values to return in format `LIMIT count` or with an offset as `LIMIT offset, count`.
 
 The maximum facet values that can be returned is limited by the query's `max_matches` setting. In case dynamic max_matches (limiting max_matches to offset+per page for better performance) is wanted to be implemented, it must be taken in account that a too low max_matches value can hurt the number of facet values. In this case, a minimum max_matches value should be used good enough to cover the number of facet values.
 
@@ -551,13 +549,13 @@ The maximum facet values that can be returned is limited by the query's `max_mat
 <!-- request SQL -->
 
 ```sql
-SELECT * FROM facetdemo 
+SELECT * FROM facetdemo
 FACET brand_name BY brand_id ORDER BY FACET() ASC  LIMIT 0,1
 FACET brand_name BY brand_id ORDER BY brand_name ASC LIMIT 2,4
-FACET brand_name BY brand_id order BY COUNT(*) DESC LIMIT 4; 
+FACET brand_name BY brand_id order BY COUNT(*) DESC LIMIT 4;
 ```
 
-<!-- response -->
+<!-- response SQL -->
 
 ```sql
 +------+-------+----------+---------------------+-------------+-------------+---------------------------------------+------------+
@@ -599,30 +597,24 @@ FACET brand_name BY brand_id order BY COUNT(*) DESC LIMIT 4;
 <!-- end -->
 ### Returned result set
 
-
 When using SQL, a search with facets returns a multiple result sets response. The MySQL client/library/connector used **must** have support (most do) for multiple result sets in order to be able to access the facet result sets.
 
-
-
-## Performance
-
-
-
-<!-- example  Example_5 -->
+<!-- example Performance -->
+### Size of facet result
 
 Internally, the `FACET` is a shorthand for executing a multi-query where the first query contains the main search query and the rest of the queries in the batch have each a clustering. As in the case of multi-query, the common query optimization can kick-in for a faceted search, meaning the search query is executed only once and the facets operates on the search query result, each facet adding only a fraction of time to the total query time.
 
 
 To check if the faceted search ran in an optimized mode can be seen in [query log](Logging/Query_logging.md), where all the logged queries will contain a `xN` string, where `N` is the number of queries that ran in the optimized group or checking the output of [SHOW META](Profiling_and_monitoring/SHOW_META.md) statement which will exhibit a `multiplier` metric:
 
-<!-- request -->
+<!-- request SQL -->
 
 ```sql
 SELECT * FROM facetdemo FACET brand_id FACET price FACET categories;
 SHOW META LIKE 'multiplier';
 ```
 
-<!-- response -->
+<!-- response SQL -->
 
 ```sql
 +------+-------+----------+---------------------+-------------+-------------+---------------------------------------+------------+

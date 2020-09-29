@@ -1,12 +1,16 @@
 # HTTP
 
-You can connect to Manticore Search using the HTTP protocol.
+You can connect to Manticore Search over HTTP/HTTPS.
 
 ## Configuration
-**The HTTP protocol is by default available on ports 9308 and 9312**. It shares same port as api using multiprotocol feature.
+<!-- example HTTP -->
+By default Manticore listens for HTTP, HTTPS and binary requests on ports 9308 and 9312.
 
-In the searchd section of the configuration file the HTTP port can be defined with directive `listen` like this:
+In section "searchd" of your configuration file the HTTP port can be defined with directive `listen` like this:
 
+Both lines are valid and equal by meaning (except for the port number), they both define listeners that will serve all api/http/https protocols. There are no special requirements and any HTTP client can be used to connect to Manticore.
+
+<!-- request HTTP -->
 ```ini
 searchd {
 ...
@@ -15,30 +19,17 @@ searchd {
 ...
 }
 ```
+<!-- end -->
 
-Both lines are valid and equal by meaning (except port num). `http` is just left for back-compatibility, and both lines in example above
- defines listeners which will serve all api/http/https protocols. There are no special requirements and any HTTP client can be used to connect to Manticore. 
+All HTTP endpoints respond with `application/json` content type. Most endpoints use JSON payload for requests, however there are some exceptions that use NDJSON or simple URL encoded payload.
 
-All endpoints respond with `application/json` content type. Most endpoints use JSON payload for requests, however there are some exceptions that use NDJSON or simple URL encoded payload.
+There is no user authentication implemented at the moment, so make sure the HTTP interface is not reachable by anyone outside your network. Since Manticore acts like any other web server, you can use a reverse proxy like Nginx to add HTTP  authentication or caching.
 
-There is no user authentication implemented at the moment, so make sure the HTTP interface is not reachable by anyone outside your network. Since Manticore acts like any other web server, you can use a reverse proxy like Nginx to add HTTP  auth or caching.
+<!-- example HTTPS -->
+The HTTP protocol also supports [SSL encryption](Security/SSL.md):
+If you specify `:https` instead of `:http` **only** secured connections will be accepted. Otherwise if no valid key/cert provided, but client tries to connect via https - the connection will be dropped. If you send not HTTPS, but an HTTP request to 9443 it will answer with HTTP code 400.
 
-The HTTP protocol also supports [SSL encryption](Security/SSL.md).
-
-### VIP connection
-A separate HTTP interface can be used to perform 'VIP' connections. A connection to this port bypasses the thread pool and always forcibly creates a new dedicated thread. That's useful for managing in case of a severe overload when the server would either stall or not let you connect via a regular port.
-
-```ini
-searchd {
-...
-   listen = 127.0.0.1:9308
-   listen = 127.0.0.1:9318:_vip
-...
-}
-``` 
-The HTTP protocol also supports [SSL encryption](Security/SSL.md). It may be used on the same port as http. Daemon just determines protocol by first
-few bytes came from client and behaves according to it. However, https is about security, so you can strength listener by using special connection type `https`.
-
+<!-- request HTTPS -->
 ```ini
 searchd {
 ...
@@ -46,37 +37,50 @@ searchd {
    listen = 127.0.0.1:9443:https
 ...
 }
-``` 
+```
+<!-- end -->
 
-Here you can connect using https to both ports. However to 9308 you may also connect using http, or provide that point as remote agent in distr indexes.
-When trying to connect with http, it will just work. For https, if valid key/cert provided in config, it also will just work.
-If no valid key/cert provided, but client tries to connect via https - connection will be dropped.
-In the same time 9443 is strictly glued to https only. When trying to connect using http, it will answer with code 400.
-If clients tries to connect with https, but daemon can't serve it by any reason (most probably - because it has no valid key/cert ) - connection will be dropped.
+### VIP connection
+<!-- example VIP -->
+Separate HTTP interface can be used to perform 'VIP' connections. A connection in this case bypasses a thread pool and always forcibly creates a new dedicated thread. That's useful for managing Manticore Search in case of a severe overload when the server would either stall or not let you connect via a regular port otherwise.
 
-Apart ssl encryption there is no difference between http and https.
+<!-- request VIP -->
+```ini
+searchd {
+...
+   listen = 127.0.0.1:9308
+   listen = 127.0.0.1:9318:_vip
+...
+}
+```
+<!-- end -->
 
 ## Connecting with cURL
+<!-- example CURL -->
 Performing a quick search is as easy as:
 
+<!-- request CURL -->
 ```bash
-POST /search 
-    -d '{"index":"test","query":{"match":{"title":"keyword"}}}'
+curl -sX POST http://localhost:9308/search -d ' {"index":"test","query":{"match":{"title":"keyword"}}}'
 ```
+<!-- end -->
 
 ## SQL over HTTP
+<!-- example SQL_over_HTTP -->
 Endpoint `/sql` allows running an SQL [SELECT](Searching/Full_text_matching/Basic_usage.md#SQL) query via HTTP JSON interface.
 
 The query payload **must** be URL encoded, otherwise query statements with `=` (filtering or setting options) will result in an error.
 
+The response is in JSON format and contains hits information and time of execution. The response shares the same format as [json/search](Searching/Full_text_matching/Basic_usage.md#HTTP) endpoint.
+
+<!-- request HTTP -->
 ```bash
-POST /sql 
+POST /sql
 --data-urlencode "query=select id,subject,author_id  from forum where match('@subject php manticore') group by
 author_id order by id desc limit 0,5"
 ```
 
-The response is in JSON format and contains hits information and time of execution. The response shares the same format as [json/search](Searching/Full_text_matching/Basic_usage.md#HTTP) endpoint.
-
+<!-- response HTTP -->
 ```json
 {
   "took":10,
@@ -101,20 +105,30 @@ The response is in JSON format and contains hits information and time of executi
 }
 ```
 
-For comfortable debugging in your browser you can set HTTP parameter `mode` to `raw`, and then the rest of the query after 'query=' will be passed inside without any substitutions/url decoding.
+<!-- end -->
 
+<!-- example SQL_over_HTTP_2 -->
+For comfortable debugging in your browser you can set HTTP parameter `mode` to `raw`, and then the rest of the query after 'query=' will be passed inside without any substitutions/url decoding. Here's an example of how it can fail w/o the `mode=raw`:
+
+<!-- request HTTP -->
 ```bash
 POST /sql -d "query=select id,packedfactors() from movies where match('star') option ranker=expr('1')"
 ```
-
+<!-- response HTTP -->
 ```json
 {"error":"query missing"}
 ```
+<!-- end -->
 
+<!-- example SQL_over_HTTP_3 -->
+Adding `mode=raw` fixes that:
+
+<!-- request HTTP -->
 ```bash
-POST /sql -d "mode=raw&query=query=select id,packedfactors() from movies where match('star') option ranker=expr('1')"
+POST /sql -d "mode=raw&query=select id,packedfactors() from movies where match('star') option ranker=expr('1')"
 ```
 
+<!-- response HTTP -->
 ```json
 {
   "took":0,
@@ -166,3 +180,4 @@ POST /sql -d "mode=raw&query=query=select id,packedfactors() from movies where m
   }
 }
 ```
+<!-- end -->

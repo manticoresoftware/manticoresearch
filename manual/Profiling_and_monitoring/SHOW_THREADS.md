@@ -1,4 +1,4 @@
-# SHOW THREADS 
+# SHOW THREADS
 
 ```sql
 SHOW THREADS [ OPTION columns=width[,format=sphinxql][,format=all] ]

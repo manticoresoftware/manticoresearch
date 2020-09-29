@@ -4,22 +4,21 @@
 
 ### New features
 
-* NOT operator can be now used standalone. By default is disabled since accidental single NOT queries can be slow. It can be enabled by setting 
-new searchd directive [not_terms_only_allowed](Server_settings/Searchd.md#not_terms_only_allowed) to `0`.
-
-* directive [max_threads_per_query](Server_settings/Searchd.md#max_threads_per_query) sets how many threads a query can use. If the directive is not set, a query can use threads up to the value of [threads](Server_settings/Searchd.md#threads).
-Per select query the number of threads can be limit with [OPTION threads=N](Searching/Options.ms#threads) overriding the global `max_threads_per_query`. 
-
+* NOT operator can be now used standalone. By default it is disabled since accidental single NOT queries can be slow. It can be enabled by setting new searchd directive [not_terms_only_allowed](Server_settings/Searchd.md#not_terms_only_allowed) to `0`.
+* new setting [max_threads_per_query](Server_settings/Searchd.md#max_threads_per_query) sets how many threads a query can use. If the directive is not set, a query can use threads up to the value of [threads](Server_settings/Searchd.md#threads).
+Per `SELECT` query the number of threads can be limited with [OPTION threads=N](Searching/Options.ms#threads) overriding the global `max_threads_per_query`.
 * Percolate indexes can be now be imported with [IMPORT TABLE](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_index)
+* TODO - https://gitlab.com/manticoresearch/dev/-/issues/1224 - about OPTIMIZE leaving N chunks rather than 1.
 
 ### Minor changes
 
-* If no replication listen directive is declared, the engine will try to use ports after the defined SphinxApi port, up to 200. 
+* If no replication listen directive is declared, the engine will try to use ports after the defined 'sphinx' port, up to 200.
+* TODO - https://gitlab.com/manticoresearch/dev/-/issues/1521
+* TODO - that SphinxSE is to be used with `listen=...:sphinx`
 
 ### Docker
 
 The official Docker image is now based on Ubuntu 20.04 LTS
-
 
 ### Bugifixes
 
@@ -51,11 +50,11 @@ The official Docker image is now based on Ubuntu 20.04 LTS
 
 * The same port [can now be used](Server_settings/Searchd.md#listen) for http, https and binary API (to accept connections from a remote Manticore instance). `listen = *:mysql` is still required for connections via mysql protocol. Manticore now detects automatically the type of client trying to connect to it except for MySQL (due to restrictions of the protocol).
 
-* In RT mode a field can now be [text and string attribute](Creating_an_index/Data_types.md#String) at the same time - [GitHub issue #331](https://github.com/manticoresoftware/manticoresearch/issues/331). 
-  
+* In RT mode a field can now be [text and string attribute](Creating_an_index/Data_types.md#String) at the same time - [GitHub issue #331](https://github.com/manticoresoftware/manticoresearch/issues/331).
+
   In [plain mode](Read_this_first.md#Real-time-mode-vs-plain-mode) it's called `sql_field_string`. Now it's available in [RT mode](Read_this_first.md#Real-time-mode-vs-plain-mode) for real-time indexes too. You can use it as shown in the example:
 
-  <!-- more --> 
+  <!-- more -->
   ```sql
   create table t(f string attribute indexed);
   insert into t values(0,'abc','abc');
@@ -74,7 +73,7 @@ The official Docker image is now based on Ubuntu 20.04 LTS
   | 2810845392541843463 | abc  |
   +---------------------+------+
   1 row in set (0.00 sec)
-  ```supp
+  ```
   <!-- \more -->
 
 ### Minor changes
@@ -85,7 +84,7 @@ The official Docker image is now based on Ubuntu 20.04 LTS
 * Filter operator [`in`](Searching/Filters.md#Set-filters) is now available via HTTP JSON interface.
 * [`expressions`](Searching/Expressions.md#expressions) in HTTP JSON.
 * [You can now change `rt_mem_limit` on the fly](https://github.com/manticoresoftware/manticoresearch/issues/344) in RT mode, i.e. can do `ALTER ... rt_mem_limit=<new value>`.
-* You can now use [separate CJK charset tables](Creating_an_index/NLP_and_tokenization/CJK.md): `chinese`, `japanese` and `korean`. 
+* You can now use [separate CJK charset tables](Creating_an_index/NLP_and_tokenization/CJK.md): `chinese`, `japanese` and `korean`.
 * [thread_stack](Server_settings/Searchd.md#thread_stack) now limits maximum thread stack, not initial.
 * Improved `SHOW THREADS` output.
 * Display progress of long `CALL PQ` in `SHOW THREADS`.
@@ -129,7 +128,7 @@ The official Docker image is now based on Ubuntu 20.04 LTS
   ```
   <!-- \more -->
 * Cyrillic `и` doesn't map to `i` in `non_cjk` charset_table (which is a default) as it affected Russian stemmers and lemmatizers too much.
-* `read_timeout`. Use [network_timeout](Server_settings/Searchd.md#network_timeout) instead which controls both reading and writing. 
+* `read_timeout`. Use [network_timeout](Server_settings/Searchd.md#network_timeout) instead which controls both reading and writing.
 
 
 ### Packages
@@ -258,7 +257,7 @@ The official Docker image is now based on Ubuntu 20.04 LTS
 ### Bugfixes
 * [9c33aab8](https://github.com/manticoresoftware/manticoresearch/commit/9c33aab8c1fd9059c8644d23d5f58f03010043c6) added check of index schema for duplicate attributes #293
 * [a0085f94](https://github.com/manticoresoftware/manticoresearch/commit/a0085f9477e191da9e0e835b91583fb9cfde698e) fix crash in hitless terms
-* [68953740](https://github.com/manticoresoftware/manticoresearch/commit/68953740af8dca1833026d0f448c71416ed3044a) fix loose docstore after ATTACH 
+* [68953740](https://github.com/manticoresoftware/manticoresearch/commit/68953740af8dca1833026d0f448c71416ed3044a) fix loose docstore after ATTACH
 * [d6f696ed](https://github.com/manticoresoftware/manticoresearch/commit/d6f696edea53ea2b9a68251e4054e4816082c285) fix docstore issue in distributed setup
 * [bce2b7ec](https://github.com/manticoresoftware/manticoresearch/commit/bce2b7ec883d208f31094ee42a5b6f01d18a998f) replace FixedHash with OpenHash in sorter
 * [e0baf739](https://github.com/manticoresoftware/manticoresearch/commit/e0baf7392937969e640fb5d10e8ccb312fe36446) fix attributes with duplicated names at index definition
@@ -270,7 +269,7 @@ The official Docker image is now based on Ubuntu 20.04 LTS
 * [8707f039](https://github.com/manticoresoftware/manticoresearch/commit/8707f0395b7ace52dc0cba9c8ed92a2bc4392932) fix float overflow on indexing
 * [a56434ce](https://github.com/manticoresoftware/manticoresearch/commit/a56434ce71bb7714b4d8e75278aaa075b27ece80) fix insert document with negative ID into RT index fails with error now
 * [bbebfd75](https://github.com/manticoresoftware/manticoresearch/commit/bbebfd7551a68641154761cac962053b54806759) fix crash of server on ranker fieldmask
-* [3809cc1b](https://github.com/manticoresoftware/manticoresearch/commit/3809cc1b0863e3a5a200dc423be3f7c38be56113) fix crash on using query cache 
+* [3809cc1b](https://github.com/manticoresoftware/manticoresearch/commit/3809cc1b0863e3a5a200dc423be3f7c38be56113) fix crash on using query cache
 * [dc2a585b](https://github.com/manticoresoftware/manticoresearch/commit/dc2a585bc724678679e4297362200bbd49ce32bb) fix crash on using RT index RAM segments with parallel inserts
 
 ## Version 3.2.2, 19 December 2019
@@ -284,7 +283,7 @@ The official Docker image is now based on Ubuntu 20.04 LTS
 * lazy fetch of stored fields for remote nodes (can significantly increase performance)
 * strings and expressions don't break anymore multi-query and FACET optimizations
 * RHEL/CentOS 8 build now uses mysql libclient from mariadb-connector-c-devel
-* ICU data file is now shipped with the packages, icu_data_dir removed 
+* ICU data file is now shipped with the packages, icu_data_dir removed
 * systemd service files include 'Restart=on-failure' policy
 * indextool can now check real-time indexes online
 * default conf is now /etc/manticoresearch/manticore.conf
@@ -294,7 +293,7 @@ The official Docker image is now based on Ubuntu 20.04 LTS
 ### Bugfixes
 * [6ae474c7](https://github.com/manticoresoftware/manticoresearch/commit/6ae474c7894a6bee222d5b18e59a44fdbf57843a) fix crash on SELECT query over HTTP interface
 * [59577513](https://github.com/manticoresoftware/manticoresearch/commit/59577513a49eac5a4a3c5e2cb38394d3246b5d35) fix RT index saves disk chunks but does not mark some documents deleted
-* [e861f0fc](https://github.com/manticoresoftware/manticoresearch/commit/e861f0fca0e88924450695d4e9d6acff7a36558a) fix crash on search of multi index or multi queries with dist_threads 
+* [e861f0fc](https://github.com/manticoresoftware/manticoresearch/commit/e861f0fca0e88924450695d4e9d6acff7a36558a) fix crash on search of multi index or multi queries with dist_threads
 * [440991fc](https://github.com/manticoresoftware/manticoresearch/commit/440991fc977b8479800b45cdbc862eeb1ba5d965) fix crash on infix generation for long terms with wide utf8 codepoints
 * [5fd599b4](https://github.com/manticoresoftware/manticoresearch/commit/5fd599b48bba527c023e6aa0b262dca51ffb8a1c) fix race at adding socket to IOCP
 * [cf10d7d3](https://github.com/manticoresoftware/manticoresearch/commit/cf10d7d3589f77adfaefbe52a51777bc9c67cf99) fix issue of bool queries vs json select list
@@ -762,7 +761,7 @@ development libraries.
 * other minor bugfixes
 
 ### Upgrade
-In this release we've changed internal protocol used by masters and agents to speak with each other. In case you run Manticoresearch in a distributed environment with multiple instances make sure your first upgrade agents, then the masters. 
+In this release we've changed internal protocol used by masters and agents to speak with each other. In case you run Manticoresearch in a distributed environment with multiple instances make sure your first upgrade agents, then the masters.
 
 ## Version 2.5.1, 23 November 2017
 ### Features and improvements
@@ -828,5 +827,5 @@ Manticore Search is built using cmake and the minimum gcc version required for c
 * [3754785](https://github.com/manticoresoftware/manticore/commit/3754785) fixed server crash for query without indexes
 * [29f360e](https://github.com/manticoresoftware/manticore/commit/29f360e) fixed dead lock of server
 
-## Version 2.3.3, 06 July 2017 
+## Version 2.3.3, 06 July 2017
 * Manticore branding

@@ -516,3 +516,11 @@ spelldump [options] <dictionary> <affix> [result] [locale-name]
 * [affix](Miscellaneous_tools.md#spelldump) - Dictionary's affix file
 * [result](Miscellaneous_tools.md#spelldump) - Specifies where the dictionary data should be output to
 * [locale-name](Miscellaneous_tools.md#spelldump) - Specifies the locale details to use
+
+## List of reserved keywords
+
+A complete alphabetical list of keywords that are currently reserved in Manticore SQL syntax (and therefore can not be used as identifiers).
+
+```
+AND, AS, BY, DEBUG, DIV, EXPLAIN, FACET, FALSE, FORCE, FROM, IGNORE, IN, INDEXES, IS, LIMIT, LOGS, MOD, NOT, NULL, OFFSET, OR, ORDER, REGEX, RELOAD, SELECT, SYSFILTERS, TRUE, USE
+```

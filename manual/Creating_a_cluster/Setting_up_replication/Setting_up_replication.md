@@ -15,36 +15,38 @@ Manticore's replication is based on [Galera library](https://github.com/codershi
 
 To use replication in Manticore Search:
 
-* [data_dir](Server_settings/Searchd.md#data_dir) option should be set in searchd section of the configuration file
-* there should be either a [listen](Server_settings/Searchd.md#listen) directive specified (without specifying a protocol) containing an external IP address that should not be equal to 0.0.0.0 or [node_address](Server_settings/Searchd.md#node_address) with external IP address 
-* set unique values for [server_id](Server_settings/Searchd.md#server_id) on each cluster node. If no value set, the node will try to use the MAC address (or a random number if this fails) to generate the server_id.
+* [data_dir](Server_settings/Searchd.md#data_dir) option should be set in section "searchd" of the configuration file. Replication is not supported in the plain mode
+* there should be either:
+  - a [listen](Server_settings/Searchd.md#listen) directive specified (without specifying a protocol) containing an IP address accessible by other nodes
+  -  or [node_address](Server_settings/Searchd.md#node_address) with an accessible IP address
+* optionally set unique values for [server_id](Server_settings/Searchd.md#server_id) on each cluster node. If no value set, the node will try to use the MAC address (or a random number if that fails) to generate the server_id.
 
-If there is no replication protocol [listen](Server_settings/Searchd.md#listen) directive set Manticore will use first couple of free ports in a range of 200 ports after the port at which the daemon is listening (default protocol) for each cluster created. For the manual declaration of replication communication ports the [listen](Server_settings/Searchd.md#listen) directive
-port range should be defined and these "address - port range" pairs should be different for all the servers on the same host. As a rule of thumb, the port range should specify no less than two ports per cluster.
+If there is no replication [listen](Server_settings/Searchd.md#listen) directive set Manticore will use first couple of free ports in a range of 200 ports after the port at which the daemon is listening (default protocol) for each cluster created. For manual declaration of replication ports the [listen](Server_settings/Searchd.md#listen) directive
+port range should be defined and these "address - port range" pairs should be different for all Manticore instances on the same host. As a rule of thumb, the port range should specify no less than two ports per cluster.
 
-## Replication cluster 
+## Replication cluster
 
 Replication cluster is a set of nodes among which a write transaction gets replicated. Replication is configured on the per-index basis. One index can be assigned to only one cluster. There is no restriction on how many indexes a cluster may have. All transactions such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE` in any percolate index belonging to a cluster are replicated to all the other nodes in the cluster. Replication is multi-master, so writes to any particular node or to multiple nodes simultaneously work equally well.
 
 Replication cluster configuration options are:
 
-### name 
+### name
 
 Specifies a name for the cluster. Should be unique.
 
-### path 
+### path
 
 Data directory for a [write-set cache replication](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache) and incoming indexes from other nodes. Should be unique among the other clusters in the node. Default is [data_dir](Server_settings/Searchd.md#data_dir).
 
-### nodes 
+### nodes
 
 A list of address:port pairs for all the nodes in the cluster (comma separated). A node's API interface should be used for this option. It  can contain the current node's address too. This list is used to join a node to the cluster and rejoin it after restart.
 
-### options 
+### options
 
 Options passed directly to Galera replication plugin as described here [Galera Documentation Parameters](https://galeracluster.com/library/documentation/galera-parameters.html)
 
-## Write statements 
+## Write statements
 
 <!-- example write statements 1 -->
 For SQL interface all write statements such as `INSERT`, `REPLACE`, `DELETE`, `TRUNCATE`, `UPDATE` that change the content of a cluster's index should use `cluster_name:index_name` expression in place of an index name to make sure the change is propagated to all replicas in the cluster. An error will be triggered otherwise.
@@ -134,7 +136,7 @@ ID auto generation uses UUID_SHORT similar to MySQL function. It is valid cluste
 
 > **Note:** `UpdateAttributes` statement from API interface to specific index always set proper cluster at server and there is no way to know is update to index got propagated into cluster properly or node diverged and statement updated only local index.
 
-## Cluster parameters 
+## Cluster parameters
 
 <!-- example cluster parameters 1 -->
 Replication plugin options can be changed using `SET` statement (see the example).
@@ -159,7 +161,7 @@ SET CLUSTER click_query GLOBAL 'pc.bootstrap' = 1
 ```
 <!-- end -->
 
-## Cluster with diverged nodes 
+## Cluster with diverged nodes
 
 <!-- example cluster with diverged nodes  1 -->
 Sometimes replicated nodes can diverge from each other. The state of all the nodes might turn into `non-primary` due to a network split between nodes, a cluster crash, or if the replication plugin hits an exception when determining the `primary component`. Then it's necessary to select a node and promote it to the `primary component`.
@@ -272,16 +274,16 @@ $params = [
   'body' => [
      'operation' => 'add',
      'index' => 'pq_title'
-      
+
   ]
 ];
-$response = $client->cluster()->alter($params); 
+$response = $client->cluster()->alter($params);
 $params = [
   'cluster' => 'posts',
   'body' => [
      'operation' => 'add',
      'index' => 'pq_clicks'
-      
+
   ]
 ];
 $response = $client->cluster()->alter($params);   

@@ -3678,7 +3678,8 @@ bool GetItemsLeftInSchema ( const ISphSchema & tSchema, bool bOnlyPlain, const C
 		{
 			bHaveExprs = true;
 
-			if ( bOnlyPlain )
+			// need to keep post-limit expressino (stored field) for multi-query \ facet
+			if ( bOnlyPlain && tAttr.m_eStage!=SPH_EVAL_POSTLIMIT )
 				continue;
 		}
 

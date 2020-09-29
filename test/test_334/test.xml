@@ -64,6 +64,7 @@ index test_gr1
 {
   source      = src_gr1
   path      = <data_path/>/test_gr1
+  stored_fields   = text
 }
 
 source src_gr2
@@ -80,6 +81,7 @@ index test_gr2
 {
   source      = src_gr2
   path      = <data_path/>/test_gr2
+  stored_fields   = text
 }
 
 index dist_gr1
@@ -87,6 +89,13 @@ index dist_gr1
   type	= distributed
   agent	= <my_address/>:test_gr1
   agent	= <my_address/>:test_gr2
+}
+
+index dist_gr2
+{
+  type	= distributed
+  local	= test_gr1
+  local	= test_gr2
 }
 
 </config>
@@ -312,6 +321,15 @@ INSERT INTO `test_group2` VALUES
 <query endpoint="json/search">{ "index": "test_gr1", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }, "gr_dup": { "terms": { "field": "tag" } }} }</query>
 <query endpoint="json/search">{ "index": "dist_gr1", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }, "gr_dup": { "terms": { "field": "tag" } }} }</query>
 
+<!-- regression stored field missed at facet -->
+<query endpoint="json/search">{ "index": "dist_gr2", "aggs":{ "gr_small": { "terms": { "field": "gid" } }, "gr_tag": { "terms": { "field": "tag" } }} }</query>
+
 </httpqueries>
 
+<sphqueries>
+<!-- regression stored field missed at facet -->
+<sphinxql>select * from test_gr1 facet gid facet tag;</sphinxql>
+<sphinxql>select * from dist_gr1 facet gid facet tag;</sphinxql>
+<sphinxql>select * from dist_gr2 facet gid facet tag;</sphinxql>
+</sphqueries>
 </test>

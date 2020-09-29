@@ -16,6 +16,10 @@ Per `SELECT` query the number of threads can be limited with [OPTION threads=N](
 * TODO - https://gitlab.com/manticoresearch/dev/-/issues/1521
 * TODO - that SphinxSE is to be used with `listen=...:sphinx`
 
+### Deprecations:
+
+* TODO - that `dist_threads` is completely deprecated now (while in 3.5.0 dist_threads = ... + threads disabled parallelization), see "dev call of Aug 27 2020"
+
 ### Docker
 
 The official Docker image is now based on Ubuntu 20.04 LTS

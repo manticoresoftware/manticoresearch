@@ -463,15 +463,14 @@ max_batch_queries = 256
 ### threads
 
 <!-- example threads -->
-Number of working threads (or, size of thread pool) of Manticore daemon. Manticore creates this numbe of OS threads on start,
-and they performs all the jobs inside the daemon, as executing queries, creating snippets, etc. Some operations may be
-splitted to sub-task and executed in parallel, as:
+Number of working threads (or, size of thread pool) of Manticore daemon. Manticore creates this number of OS threads on start, and they perform all jobs inside the daemon such as executing queries, creating snippets, etc. Some operations may be split into sub-tasks and executed in parallel, for example:
+
 * Search in a real-time index
 * Search in a distributed index consisting of local indexes
 * Percolate query call
 * and others
 
-By default it equals to the number of CPU core on the server. Manticore creates the threads on start and keep them until it's stopped. Each sub-task can use one of the threads when it needs it, when the sub-task finishes it releases the thread so another sub-task can use it.
+By default it's set to the number of CPU cores on the server. Manticore creates the threads on start and keep them until it's stopped. Each sub-task can use one of the threads when it needs it, when the sub-task finishes it releases the thread so another sub-task can use it.
 
 In case of intensive I/O type of load it might make sense to set the value higher than the # of CPU cores.
 
@@ -484,14 +483,22 @@ threads = 10
 
 ### max_threads_per_query
 
-Instance-wide limit of threads one operation may use. By default appropriate operations may occupy whole CPU, leaving no
-room for another operations. Say, `call pq` over considerable big pq index may utilize all threads for tens of seconds.
-Setting `max_threads_per_query` to, say, half of `threads` will ensure that you can run couple of such `call pq` in parallel.
-That setting is very similar to obsolete `dist_threads` by final effect, namely: query will run in designed number of threads.
-The difference, however, that `dist_threads` exploded up to given number of additional threads, but `max_threads_per_query`,
-in turn, limit from existing `threads` to some less value.
+<!-- example max_threads_per_query -->
+Instance-wide limit of threads one operation can use. By default appropriate operations can occupy all CPU cores, leaving no room for other operations. Let's say, `call pq` against considerably big percolate index can utilize all threads for tens of seconds. Setting `max_threads_per_query` to, say, half of [threads](Server_settings/Searchd.md#threads) will ensure that you can run couple of such `call pq` in parallel.
 
-Apart persistently stored in config setting, you may also set session or global variable with the same name.
+You can also set this setting as a session or a global variable during the runtime.
+
+You can also control the behaviour on per-query with help of [threads OPTION](Searching/Options.md#threads).
+
+<!-- intro -->
+##### Example:
+<!-- request Example -->
+
+```ini
+max_threads_per_query = 4
+```
+
+<!-- end -->
 
 ### max_filters
 
@@ -861,9 +868,7 @@ query_log_mode  = 666
 ### max_connections
 
 <!-- example max_connections -->
-Maximum number of simultaneous client connections. Unlimited by default. That is usually noticeable only when using any
-kind of persistent connections, like cli mysql sessions, or persistent remote connections from remote distr indexes.
-When the limit is exceeded you can still connect to the server using [the VIP connection](Connecting_to_the_server/MySQL_protocol.md#VIP-connection)
+Maximum number of simultaneous client connections. Unlimited by default. That is usually noticeable only when using any kind of persistent connections, like cli mysql sessions or persistent remote connections from remote distributed indexes. When the limit is exceeded you can still connect to the server using the [VIP connection](Connecting_to_the_server/MySQL_protocol.md#VIP-connection)
 
 <!-- request Example -->
 ```ini
@@ -985,7 +990,6 @@ A maximum number of I/O operations (per second) that the RT chunks merge thread 
 
 This directive lets you throttle down the I/O impact arising from the `OPTIMIZE` statements. It is guaranteed that all the RT optimization activity will not generate more disk iops (I/Os per second) than the configured limit. Limiting rt_merge_iops can reduce search performance degradation caused by merging.
 
-
 <!-- intro -->
 ##### Example:
 
@@ -1091,9 +1095,7 @@ shutdown_timeout = 1m # wait for up to 60 seconds
 
 ### shutdown_token
 
-SHA1 hash of the password which is necessary to invoke 'shutdown' command from VIP Manticore SQL connection. Without it [debug](Reporting_bugs.md#DEBUG) 'shutdown' subcommand will never cause server's stop. Notice, that such simple hashing should not be considered as strong protection, as we don't use
-salted hash or any kind of modern hash function. That is just fool-proof for housekeeping daemons in local network.
-
+SHA1 hash of the password which is necessary to invoke 'shutdown' command from VIP Manticore SQL connection. Without it [debug](Reporting_bugs.md#DEBUG) 'shutdown' subcommand will never cause server's stop. Note, that such simple hashing should not be considered as a strong protection, as we don't use salted hash or any kind of modern hash function. That is just fool-proof for housekeeping daemons in a local network.
 
 ### snippets_file_prefix
 

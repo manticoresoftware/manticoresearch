@@ -34,7 +34,7 @@ To view the query tree, we must run `SHOW PLAN` right after the execution of the
 SHOW PLAN;
 ```
 
-The command will return the structure of the executed query. Please note that the 3 statements - SET profiling, the query and SHOW - must run on the same session. 
+The command will return the structure of the executed query. Please note that the 3 statements - SET profiling, the query and SHOW - must run on the same session.
 
 
 ## Profiling the query in HTTP
@@ -54,14 +54,14 @@ In HTTP, we can just enable `"profile":true` to get in response the full-text qu
 The response will contain a `profile` object in which we can find a member `query`.
 
 `query` property contains the transformed full-text query tree. Each node contains:
- 
+
  * `type`: node type. Can be AND, OR, PHRASE, KEYWORD etc.
  * `description`: query subtree for this node shown as a string (in `SHOW PLAN` format)
  * `children`: child nodes, if any
  * `max_field_pos`: maximum position within a field
- 
+
  A keyword node will also provide:
- 
+
  * `word`: transformed keyword.
  * `querypos`: position of this keyword in a query.
  * `excluded`: keyword excluded from query.
@@ -69,7 +69,7 @@ The response will contain a `profile` object in which we can find a member `quer
  * `field_start`: keyword must occur at the very start of the field.
  * `field_end`: keyword must occur at the very end of the field.
  * `boost`: keyword IDF will be multiplied by this.
- 
+
 
 <!-- intro -->
 ##### SQL:
@@ -421,7 +421,7 @@ POST /search
 ```php
 $result = $index->search('@title way* @content hey')->setSource(['excludes'=>['*']])->setLimit(1)->profile()->get();
 print_r($result->getProfile());
- 
+
 ```
 
 <!-- response PHP -->
@@ -616,21 +616,28 @@ Variable: transformed_tree
 <!-- end -->
 
 ## Viewing the match factors values
-
+<!-- example factors -->
 When expression ranker is used, it is possible to expose the values of the calculated factors using [PACKEDFACTORS()](Functions/Searching_and_ranking_functions.md#PACKEDFACTORS%28%29).
 
-The function returns: 
+The function returns:
 
 * the values of document level factors (like bm25, field_mask, doc_word_count)
 * list with each field that returned a hit (like lcs, hit_count, word_count sum_idf, min_hit_pos etc.)
 * list with each keyword from the query and their tf and idf values
 
+
+The values can be used to understand why certain documents get scored lower or higher in a search or to improve the existing ranking expression.
+
+<!-- intro -->
 Example:
 
+<!-- request SQL -->
 ```sql
-mysql> SELECT id, PACKEDFACTORS() FROM test1
-    -> WHERE MATCH('test one') OPTION ranker=expr('1') \G
-*************************** 1\. row ***************************
+SELECT id, PACKEDFACTORS() FROM test1 WHERE MATCH('test one') OPTION ranker=expr('1')\G
+```
+
+<!-- response SQL -->
+```sql
              id: 1
 packedfactors(): bm25=569, bm25a=0.617197, field_mask=2, doc_word_count=2,
     field1=(lcs=1, hit_count=2, word_count=2, tf_idf=0.152356,
@@ -641,5 +648,4 @@ packedfactors(): bm25=569, bm25a=0.617197, field_mask=2, doc_word_count=2,
     word1=(tf=1, idf=0.215338)
 1 row in set (0.00 sec)
 ```
-
-The values can be used to understand why certain documents get scored lower or higher in a search or to improve the existing ranking expression.
+<!-- end -->

@@ -16,7 +16,7 @@ The image comes with libraries for easy indexing data from MySQL, PostgreSQL XML
 ## Quick usage
 
 The below is the simplest way to start Manticore in a container and log in to it via mysql client:
-  
+
 
 ```bash
 docker run --name manticore --rm -d manticoresearch/manticore && docker exec -it manticore mysql && docker stop manticore
@@ -32,12 +32,12 @@ mysql> source /sandbox.sql
 
 Also the mysql client has in history several sample queries that you can run on the above index, just use Up/Down keys in the client to see and run them.
 
-## Production use 
+## Production use
 
 
 ### Ports and mounting points
 
-For data persistence the  folder `/var/lib/manticore/` should be mounted to local storage or other desired storage engine. 
+For data persistence the  folder `/var/lib/manticore/` should be mounted to local storage or other desired storage engine.
 
 Configuration file inside the instance is located at  `/etc/manticoresearch/manticore.conf`. For custom settings, this file should be mounted to own configuration file.
 
@@ -99,7 +99,7 @@ POST /sql -d 'mode=raw&query=CREATE TABLE testrt ( title text, content text, gid
 Insert a document:
 
 ```json
-POST /insert 
+POST /insert
 -d'{"index":"testrt","id":1,"doc":{"title":"Hello","content":"world","gid":1}}'
 ```
 
@@ -161,7 +161,7 @@ networks:
     driver: bridge
 ```
 * Start it: `docker-compose up`
-* Create a cluster: 
+* Create a cluster:
   ```sql
   $ docker-compose exec manticore-1 mysql
 
@@ -172,7 +172,7 @@ networks:
 
   mysql> ALTER CLUSTER posts ADD testrt;
   Query OK, 0 rows affected (0.07 sec)
-  
+
   MySQL [(none)]> exit
   Bye
   ```
@@ -183,7 +183,7 @@ networks:
   mysql> JOIN CLUSTER posts AT 'manticore-1:9312';
   mysql> INSERT INTO posts:testrt(title,content,gid)  VALUES('hello','world',1);
   Query OK, 1 row affected (0.00 sec)
-  
+
   MySQL [(none)]> exit
   Bye
   ```
@@ -198,7 +198,7 @@ networks:
   | 3891565839006040065 |    1 | hello | world   |
   +---------------------+------+-------+---------+
   1 row in set (0.00 sec)
-  
+
   MySQL [(none)]> exit
   Bye
   ```
@@ -214,7 +214,7 @@ It's recommended to overwrite the default ulimits of docker for the Manticore in
 For best performance, index components can be mlocked into memory. When Manticore is run under Docker, the instance requires additional privileges to allow memory locking. The following options must be added when running the instance:
 
 ```bash
-  --cap-add=IPC_LOCK --ulimit memlock=-1:-1 
+  --cap-add=IPC_LOCK --ulimit memlock=-1:-1
 ```
 
 ## Configuring Manticore Search with Docker
@@ -230,7 +230,7 @@ Take into account that Manticore search inside the container is run under user `
 ```bash
 docker exec -it manticore gosu manticore indexer --all --rotate
 ```
- 
+
 You can also set individual `searchd` and `common` configuration settings using Docker environment variables.  
 
 The settings must be prefixed with their section name, example for in case of `mysql_version_string` the variable must be named `searchd_mysql_version_string`:
@@ -243,7 +243,7 @@ docker run --name manticore  -p 127.0.0.1:9306:9306  -e searchd_mysql_version_st
 In case of `listen` directive, you can pass using Docker variable `searchd_listen`  new listening interfaces in addition to the default ones. Multiple interfaces can be declared separated by semi-colon ("|").
 For listening only on  network address, the `$ip` (retrieved internally from `hostname -i`) can be used as address alias.
 
-For example `-e searchd_listen='9316:http|9307:mysql|$ip:5443:mysql_vip'` will add an additional SQL interface on port 9307, a SQL VIP on 5443 running only on the instance IP  and HTTP on port 9316, beside the defaults on 9306 and 9308, respectively.
+For example `-e searchd_listen='9316:http|9307:mysql|$ip:5443:mysql_vip'` will add an additional SQL interface on port 9307, an SQL VIP listener on port 5443 running only on the instance's IP and an HTTP listener on port 9316, beside the defaults on 9306 and 9308, respectively.
 
 ```bash
 $ docker run --rm -p 1188:9307  -e searchd_mysql_version_string='5.5.0' -e searchd_listen='9316:http|9307:mysql|$ip:5443:mysql_vip'  manticore

@@ -87,7 +87,7 @@ foreach($results as $doc)
     foreach($doc->getHighlight() as $field=>$snippets)
     {
         echo "Highlight for ".$field.":\n";
-        foreach($snippets as $snippet) 
+        foreach($snippets as $snippet)
         {
             echo "- ".$snippet."\n";
         }
@@ -126,13 +126,13 @@ Highlighting is performed on a so-called `post limit` stage, meaning that snippe
 
 There are several additional optional highlighting options that can be used to fine-tune snippet generation. Most of them are common to SQL, HTTP and PHP client.
 
-#### before_match 
+#### before_match
 A string to insert before a keyword match. A `%SNIPPET_ID%` macro can be used in this string. The first match of the macro is replaced with an incrementing snippet number within a current snippet. Numbering starts at 1 by default but can be overridden with `start_snippet_id` option. %SNIPPET_ID% restarts at the start of every new document. Default is `<b>`.
-#### after_match 
+#### after_match
 A string to insert after a keyword match. Default is `</b>`.
-#### limit 
+#### limit
 Maximum snippet size, in symbols (codepoints). Default is 256. Per-field by default, see `limits_per_field`.
-#### limit_words 
+#### limit_words
 Limits the maximum number of words that can be included in the result. Note the limit applies to any words, and not just the matched keywords to highlight. For example, if we are highlighting `Mary` and a snippet `Mary had a little lamb` is selected, then it contributes 5 words to this limit, not just 1. Default is 0 (no limit). Per-field by default, see `limits_per_field`.
 #### limit_snippets
 Limits the maximum number of snippets that can be included in the result. Default is 0 (no limit). Per-field by default, see `limits_per_field`.
@@ -287,7 +287,7 @@ foreach($results as $doc)
     foreach($doc->getHighlight() as $field=>$snippets)
     {
         echo "Highlight for ".$field.":\n";
-        foreach($snippets as $snippet) 
+        foreach($snippets as $snippet)
         {
             echo  $snippet."\n";
         }
@@ -303,7 +303,7 @@ content: Trevize whispered, "It gets infantile pleasure out of display. I`d love
 Highlight for title:
 - Book four
 Highlight for content:
-, "It <b>gets</b> infantile pleasure 
+, "It <b>gets</b> infantile pleasure
 to knock it <b>down</b>."
 
 Document: 4
@@ -881,9 +881,9 @@ CALL SNIPPETS(('this is my document text','this is my another text'), 'forum', '
 Most options are the same as in the [HIGHLIGHT() function](Searching/Highlighting.md). There are, however, several options that can only be used with `CALL SNIPPETS`. The following options can be used to highlight text stored in separate files:
 
 #### load_files
-Whether to handle the first argument as data to extract snippets from (default behavior), or to treat it as file names, and load data from specified files on the server side. Up to [max_threads_per_query](Server_settings/Searchd.md#max_threads_per_query) worker threads per request will be used to parallelize the work when this flag is enabled. Default is 0. To parallelize snippet generation between remote agents, set the [max_threads_per_query](Server_settings/Searchd.md#max_threads_per_query) parameter in the config to the value greater than 1, and then invoke snippets generation in a distributed index, that contains only one(!) local agent and several remotes. The [snippets_file_prefix](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#snippets_file_prefix) option is used to generate the final file name. E.g. when searchd is configured with `snippets_file_prefix = /var/data_` and `text.txt` is provided as a file name, snippets will be generated from the content of `/var/data_text.txt`.
+Whether to handle the first argument as data to extract snippets from (default behavior), or to treat it as file names, and load data from specified files on the server side. Up to [max_threads_per_query](Server_settings/Searchd.md#max_threads_per_query) worker threads per request will be used to parallelize the work when this flag is enabled. Default is 0 (no limit). To distribute snippet generation between remote agents invoke snippets generation in a distributed index, that contains only one(!) local agent and several remotes. The [snippets_file_prefix](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#snippets_file_prefix) option is used to generate the final file name. E.g. when searchd is configured with `snippets_file_prefix = /var/data_` and `text.txt` is provided as a file name, snippets will be generated from the content of `/var/data_text.txt`.
 #### load_files_scattered
-Works only with distributed snippets generation with remote agents. Source files for snippet generation can be distributed among different agents and the main server will merge all non-erroneous results. E.g. if one agent of the distributed index has `file1.txt`, another agent has `file2.txt` and you use `CALL SNIPPETS` with both of these files, searchd will merge agent results, so you will get results from both `file1.txt` and `file2.txt`. Default is 0. 
+Works only with distributed snippets generation with remote agents. Source files for snippet generation can be distributed among different agents and the main server will merge all non-erroneous results. E.g. if one agent of the distributed index has `file1.txt`, another agent has `file2.txt` and you use `CALL SNIPPETS` with both of these files, searchd will merge agent results, so you will get results from both `file1.txt` and `file2.txt`. Default is 0.
 
 If `load_files` options is also enabled, request will return an error if any of the files is not available anywhere. Otherwise (if `load_files` is not enabled) it will just return empty strings for all absent files. Searchd does not pass this flag to agents, so agents do not generate a critical error if the file does not exist. If you want to be sure that all source files are loaded, set both `load_files_scattered` and `load_files` to 1. If the absence of some source files on some agent is not critical, set only `load_files_scattered` to 1.
 

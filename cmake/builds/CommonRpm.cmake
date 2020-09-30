@@ -31,7 +31,9 @@ set ( CPACK_RPM_BIN_FILE_NAME "RPM-DEFAULT" )
 set ( CPACK_RPM_BIN_INSTALL_WITH_EXEC ON)
 set ( CPACK_RPM_BIN_PACKAGE_OBSOLETES "sphinx, manticore <= 3.5.0_200722.1d34c49" )
 set ( CPACK_RPM_BIN_PACKAGE_CONFLICTS "sphinx, manticore <= 3.5.0_200722.1d34c49" )
-set ( CPACK_RPM_BIN_PACKAGE_SUGGESTS "manticore-icu" )
+if ( "${DISTR_BUILD}" STREQUAL "rhel8" )
+    set ( CPACK_RPM_BIN_PACKAGE_SUGGESTS "manticore-icu" )
+endif()
 set ( CPACK_COMPONENT_BIN_SUMMARY "Manticore Search server files")
 set ( CPACK_COMPONENT_BIN_DESCRIPTION "Manticore Search is a powerful free open source search engine
 with a focus on low latency and high throughput full-text search

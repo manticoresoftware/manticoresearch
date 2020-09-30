@@ -22708,7 +22708,7 @@ void CSphSource_Document::BuildRegularHits ( RowID_t tRowID, bool bPayload, bool
 
 		if ( !bPayload )
 		{
-			HITMAN::AddPos ( &m_tState.m_iHitPos, m_tState.m_iBuildLastStep + m_pTokenizer->GetOvershortCount()*m_iOvershortStep );
+			HITMAN::AddPos ( &m_tState.m_iHitPos, Max ( m_tState.m_iBuildLastStep + m_pTokenizer->GetOvershortCount()*m_iOvershortStep, 0 ) );
 			if ( m_pTokenizer->GetBoundary() )
 				HITMAN::AddPos ( &m_tState.m_iHitPos, m_iBoundaryStep );
 		}

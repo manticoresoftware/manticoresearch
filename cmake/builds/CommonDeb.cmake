@@ -116,8 +116,7 @@ set ( CPACK_DEBIAN_PACKAGE_PRIORITY "optional" )
 set ( CPACK_DEBIAN_BIN_PACKAGE_CONTROL_EXTRA "${MANTICORE_BINARY_DIR}/conffiles;${MANTICORE_BINARY_DIR}/postinst;${MANTICORE_BINARY_DIR}/prerm;${EXTRA_SCRIPTS}" )
 set ( CPACK_DEBIAN_PACKAGE_CONTROL_STRICT_PERMISSION "ON" )
 
-set ( CPACK_DEBIAN_BIN_PACKAGE_REPLACES "manticore-bin, manticore (<< 3.5.0-200722-1d34c49)" )
-set ( CPACK_DEBIAN_BIN_PACKAGE_CONFLICTS "sphinxsearch" )
+set ( CPACK_DEBIAN_BIN_PACKAGE_REPLACES "manticore-bin, manticore (<< 3.5.0-200722-1d34c491)" )
 set ( CPACK_DEBIAN_BIN_PACKAGE_NAME "manticore-server" )
 set ( CPACK_DEBIAN_BIN_FILE_NAME "DEB-DEFAULT" )
 
@@ -130,6 +129,7 @@ set ( CPACK_DEBIAN_CONVERTER_PACKAGE_NAME "manticore-converter" )
 set ( CPACK_DEBIAN_DEVEL_PACKAGE_NAME "manticore-dev" )
 
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_NAME "manticore-tools" )
+set ( CPACK_DEBIAN_TOOLS_PACKAGE_CONFLICTS "sphinxsearch, manticore (<< 3.5.0-200722-1d34c491)" )
 set ( CPACK_COMPONENT_TOOLS_DESCRIPTION "Manticore Search is a powerful free open source search engine
  with a focus on low latency and high throughput full-text search
  and high volume stream filtering. This package contains the search server." )

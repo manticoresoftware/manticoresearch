@@ -4,21 +4,23 @@
 
 ### New features
 
+* OPTIMIZE reduce disk chunks to a number of chunks ( default is 2* No. of cores) instead of a single one. The optimal number of chunks can be controlled by [cutoff](Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks) option.
 * NOT operator can be now used standalone. By default it is disabled since accidental single NOT queries can be slow. It can be enabled by setting new searchd directive [not_terms_only_allowed](Server_settings/Searchd.md#not_terms_only_allowed) to `0`.
 * new setting [max_threads_per_query](Server_settings/Searchd.md#max_threads_per_query) sets how many threads a query can use. If the directive is not set, a query can use threads up to the value of [threads](Server_settings/Searchd.md#threads).
 Per `SELECT` query the number of threads can be limited with [OPTION threads=N](Searching/Options.ms#threads) overriding the global `max_threads_per_query`.
 * Percolate indexes can be now be imported with [IMPORT TABLE](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_index)
-* TODO - https://gitlab.com/manticoresearch/dev/-/issues/1224 - about OPTIMIZE leaving N chunks rather than 1.
+* HTTP API `/search` receive basic support for [faceting](Searching/Faceted_search.md#HTTP)/[grouping](Searching/Grouping/md) by new query node `aggs`
 
 ### Minor changes
 
 * If no replication listen directive is declared, the engine will try to use ports after the defined 'sphinx' port, up to 200.
-* TODO - https://gitlab.com/manticoresearch/dev/-/issues/1521
-* TODO - that SphinxSE is to be used with `listen=...:sphinx`
+* `listen=...:sphinx` needs to be explicit set for SphinxSE connections or SphinxAPI clients
+* [SHOW INDEX STATUS](Profiling_and_monitoring/Index_settings_and_status/SHOW_INDEX_STATUS.md) outputs new metrics: `killed_documents`, `killed_rate`, `disk_mapped_doclists`, `disk_mapped_cached_doclists`, `disk_mapped_hitlists` and `disk_mapped_cached_hitlists`
+* SQL `\status` now outputs `Queue\Threads` and `Tasks\Threads`
 
 ### Deprecations:
 
-* TODO - that `dist_threads` is completely deprecated now (while in 3.5.0 dist_threads = ... + threads disabled parallelization), see "dev call of Aug 27 2020"
+* `dist_threads` is completely deprecated now, searchd will log a warning if the directive is still used
 
 ### Docker
 
@@ -26,9 +28,13 @@ The official Docker image is now based on Ubuntu 20.04 LTS
 
 ### Bugifixes
 
+[2a474dc1](https://github.com/manticoresoftware/manticoresearch/commit/2a474dc1a26e8b0f8aaaae95669caf2f1d4b7746) Crash of daemon at grouper at RT index with different chunks
+[57a19e5a](https://github.com/manticoresoftware/manticoresearch/commit/57a19e5ad5663ef0ca7436595218fb1221d28c8e) Fastpath for empty remote docs
+[07dd3f31](https://github.com/manticoresoftware/manticoresearch/commit/07dd3f313c63fb82c22092f9907ef24e3475250e) Expression stack frame detection runtime
+[08ae357c](https://github.com/manticoresoftware/manticoresearch/commit/08ae357cf1012bc8e2da54c20b205b592efda3d4) Matching above 32 fields at percolate indexes
 [16b9390f](https://github.com/manticoresoftware/manticoresearch/commit/16b9390fd4cdb07a77ac4497adb935573a1710e5) Replication listen ports range
 [5fa671af](https://github.com/manticoresoftware/manticoresearch/commit/5fa671affeacb6441a59c8a88479bfd423df7c81) Show create table on pq
-[54d133b6 ](https://github.com/manticoresoftware/manticoresearch/commit/54d133b6449105a9fb0168db3f1fbb05fb5aa1f6)HTTPS port behavior
+[54d133b6](https://github.com/manticoresoftware/manticoresearch/commit/54d133b6449105a9fb0168db3f1fbb05fb5aa1f6) HTTPS port behavior
 [fdbbe524](https://github.com/manticoresoftware/manticoresearch/commit/fdbbe5245cc296cc5c1ae3ae2fb9cb08fb66a248) Mixing docstore rows when replacing
 [afb53f64](https://github.com/manticoresoftware/manticoresearch/commit/afb53f648ef4e64fa1776c58e66f6e716ac730ad) Switch TFO unavailable message level to 'info'
 [59d94cef](https://github.com/manticoresoftware/manticoresearch/commit/59d94cefc6e88af360b8046726a16b7eaa9f0b71) Crash on strcmp invalid use

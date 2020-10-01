@@ -49,7 +49,9 @@ and high volume stream filtering.  This package contains the ICU DAT file. You n
 
 set ( CPACK_RPM_TOOLS_PACKAGE_NAME "manticore-tools" )
 set ( CPACK_RPM_TOOLS_PACKAGE_CONFLICTS "sphinx, manticore <= 3.5.0_200722.1d34c49" )
-set ( CPACK_RPM_TOOLS_PACKAGE_SUGGESTS "manticore-icu" )
+if ( "${DISTR_BUILD}" STREQUAL "rhel8" )
+ set ( CPACK_RPM_TOOLS_PACKAGE_SUGGESTS "manticore-icu" )
+endif()
 set ( CPACK_RPM_TOOLS_FILE_NAME "RPM-DEFAULT" )
 set ( CPACK_COMPONENT_TOOLS_SUMMARY "Manticore Search utilities")
 set ( CPACK_COMPONENT_TOOLS_DESCRIPTION "Manticore Search is a powerful free open source search engine

@@ -1,26 +1,26 @@
 # Changelog
 
-## Version 3.5.2, dev
+## Version 3.5.2, Oct 1 2020
 
 ### New features
 
-* OPTIMIZE reduce disk chunks to a number of chunks ( default is 2* No. of cores) instead of a single one. The optimal number of chunks can be controlled by [cutoff](Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks) option.
+* OPTIMIZE reduces disk chunks to a number of chunks ( default is `2* No. of cores`) instead of a single one. The optimal number of chunks can be controlled by [cutoff](Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks) option.
 * NOT operator can be now used standalone. By default it is disabled since accidental single NOT queries can be slow. It can be enabled by setting new searchd directive [not_terms_only_allowed](Server_settings/Searchd.md#not_terms_only_allowed) to `0`.
-* new setting [max_threads_per_query](Server_settings/Searchd.md#max_threads_per_query) sets how many threads a query can use. If the directive is not set, a query can use threads up to the value of [threads](Server_settings/Searchd.md#threads).
+* New setting [max_threads_per_query](Server_settings/Searchd.md#max_threads_per_query) sets how many threads a query can use. If the directive is not set, a query can use threads up to the value of [threads](Server_settings/Searchd.md#threads).
 Per `SELECT` query the number of threads can be limited with [OPTION threads=N](Searching/Options.ms#threads) overriding the global `max_threads_per_query`.
-* Percolate indexes can be now be imported with [IMPORT TABLE](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_index)
-* HTTP API `/search` receive basic support for [faceting](Searching/Faceted_search.md#HTTP)/[grouping](Searching/Grouping/md) by new query node `aggs`
+* Percolate indexes can be now be imported with [IMPORT TABLE](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_index).
+* HTTP API `/search` receives basic support for [faceting](Searching/Faceted_search.md#HTTP)/[grouping](Searching/Grouping/md) by new query node `aggs`.
 
 ### Minor changes
 
 * If no replication listen directive is declared, the engine will try to use ports after the defined 'sphinx' port, up to 200.
-* `listen=...:sphinx` needs to be explicit set for SphinxSE connections or SphinxAPI clients
-* [SHOW INDEX STATUS](Profiling_and_monitoring/Index_settings_and_status/SHOW_INDEX_STATUS.md) outputs new metrics: `killed_documents`, `killed_rate`, `disk_mapped_doclists`, `disk_mapped_cached_doclists`, `disk_mapped_hitlists` and `disk_mapped_cached_hitlists`
-* SQL `\status` now outputs `Queue\Threads` and `Tasks\Threads`
+* `listen=...:sphinx` needs to be explicit set for SphinxSE connections or SphinxAPI clients.
+* [SHOW INDEX STATUS](Profiling_and_monitoring/Index_settings_and_status/SHOW_INDEX_STATUS.md) outputs new metrics: `killed_documents`, `killed_rate`, `disk_mapped_doclists`, `disk_mapped_cached_doclists`, `disk_mapped_hitlists` and `disk_mapped_cached_hitlists`.
+* SQL command `status` now outputs `Queue\Threads` and `Tasks\Threads`.
 
 ### Deprecations:
 
-* `dist_threads` is completely deprecated now, searchd will log a warning if the directive is still used
+* `dist_threads` is completely deprecated now, searchd will log a warning if the directive is still used.
 
 ### Docker
 
@@ -28,25 +28,25 @@ The official Docker image is now based on Ubuntu 20.04 LTS
 
 ### Bugifixes
 
-[2a474dc1](https://github.com/manticoresoftware/manticoresearch/commit/2a474dc1a26e8b0f8aaaae95669caf2f1d4b7746) Crash of daemon at grouper at RT index with different chunks
-[57a19e5a](https://github.com/manticoresoftware/manticoresearch/commit/57a19e5ad5663ef0ca7436595218fb1221d28c8e) Fastpath for empty remote docs
-[07dd3f31](https://github.com/manticoresoftware/manticoresearch/commit/07dd3f313c63fb82c22092f9907ef24e3475250e) Expression stack frame detection runtime
-[08ae357c](https://github.com/manticoresoftware/manticoresearch/commit/08ae357cf1012bc8e2da54c20b205b592efda3d4) Matching above 32 fields at percolate indexes
-[16b9390f](https://github.com/manticoresoftware/manticoresearch/commit/16b9390fd4cdb07a77ac4497adb935573a1710e5) Replication listen ports range
-[5fa671af](https://github.com/manticoresoftware/manticoresearch/commit/5fa671affeacb6441a59c8a88479bfd423df7c81) Show create table on pq
-[54d133b6](https://github.com/manticoresoftware/manticoresearch/commit/54d133b6449105a9fb0168db3f1fbb05fb5aa1f6) HTTPS port behavior
-[fdbbe524](https://github.com/manticoresoftware/manticoresearch/commit/fdbbe5245cc296cc5c1ae3ae2fb9cb08fb66a248) Mixing docstore rows when replacing
-[afb53f64](https://github.com/manticoresoftware/manticoresearch/commit/afb53f648ef4e64fa1776c58e66f6e716ac730ad) Switch TFO unavailable message level to 'info'
-[59d94cef](https://github.com/manticoresoftware/manticoresearch/commit/59d94cefc6e88af360b8046726a16b7eaa9f0b71) Crash on strcmp invalid use
-[04af0349](https://github.com/manticoresoftware/manticoresearch/commit/04af0349c1e784c2230d204592d6272b440bb375) Adding index to cluster with system (stopwords) files
-[50148b4e](https://github.com/manticoresoftware/manticoresearch/commit/50148b4eae9f3a924082005cf5d2f9c8339af7f5) Merge indexes with large dictionaries; RT optimize of large disk chunks
-[a2adf158](https://github.com/manticoresoftware/manticoresearch/commit/a2adf1582843f63d4dcc1dab8f7598e0917094a2) Indextool can dump meta from current version
-[69f6d5f7](https://github.com/manticoresoftware/manticoresearch/commit/69f6d5f77c64b97e3f395aea8c555b11c77fb732) Issue in group order in GROUP N
-[24d5d80f](https://github.com/manticoresoftware/manticoresearch/commit/24d5d80f508576794b751d70f9f9b524564e3c14) Explicit flush for SphinxSE after handshake
-[31c4d78a](https://github.com/manticoresoftware/manticoresearch/commit/31c4d78ac03ee85d9a02b86075448a04ac80f9e2) Avoid copy of huge descriptions when not necessary
-[2959e2ca](https://github.com/manticoresoftware/manticoresearch/commit/2959e2caa8610f98fcdf2e5a82160f58687f4a27) Negative time in show threads
-[f0b35710](https://github.com/manticoresoftware/manticoresearch/commit/f0b357102c70f3ac1d7da260c60b67322940e647) Token filter plugin vs zero position deltas
-[a49e5bc1](https://github.com/manticoresoftware/manticoresearch/commit/a49e5bc13ea763e6f01dd5993e891858a84d1846) Change 'FAIL' to 'WARNING' on multiple hits
+1. [2a474dc1](https://github.com/manticoresoftware/manticoresearch/commit/2a474dc1a26e8b0f8aaaae95669caf2f1d4b7746) Crash of daemon at grouper at RT index with different chunks
+2. [57a19e5a](https://github.com/manticoresoftware/manticoresearch/commit/57a19e5ad5663ef0ca7436595218fb1221d28c8e) Fastpath for empty remote docs
+3. [07dd3f31](https://github.com/manticoresoftware/manticoresearch/commit/07dd3f313c63fb82c22092f9907ef24e3475250e) Expression stack frame detection runtime
+4. [08ae357c](https://github.com/manticoresoftware/manticoresearch/commit/08ae357cf1012bc8e2da54c20b205b592efda3d4) Matching above 32 fields at percolate indexes
+5. [16b9390f](https://github.com/manticoresoftware/manticoresearch/commit/16b9390fd4cdb07a77ac4497adb935573a1710e5) Replication listen ports range
+6. [5fa671af](https://github.com/manticoresoftware/manticoresearch/commit/5fa671affeacb6441a59c8a88479bfd423df7c81) Show create table on pq
+7. [54d133b6](https://github.com/manticoresoftware/manticoresearch/commit/54d133b6449105a9fb0168db3f1fbb05fb5aa1f6) HTTPS port behavior
+8. [fdbbe524](https://github.com/manticoresoftware/manticoresearch/commit/fdbbe5245cc296cc5c1ae3ae2fb9cb08fb66a248) Mixing docstore rows when replacing
+9. [afb53f64](https://github.com/manticoresoftware/manticoresearch/commit/afb53f648ef4e64fa1776c58e66f6e716ac730ad) Switch TFO unavailable message level to 'info'
+10. [59d94cef](https://github.com/manticoresoftware/manticoresearch/commit/59d94cefc6e88af360b8046726a16b7eaa9f0b71) Crash on strcmp invalid use
+11. [04af0349](https://github.com/manticoresoftware/manticoresearch/commit/04af0349c1e784c2230d204592d6272b440bb375) Adding index to cluster with system (stopwords) files
+12. [50148b4e](https://github.com/manticoresoftware/manticoresearch/commit/50148b4eae9f3a924082005cf5d2f9c8339af7f5) Merge indexes with large dictionaries; RT optimize of large disk chunks
+13. [a2adf158](https://github.com/manticoresoftware/manticoresearch/commit/a2adf1582843f63d4dcc1dab8f7598e0917094a2) Indextool can dump meta from current version
+14. [69f6d5f7](https://github.com/manticoresoftware/manticoresearch/commit/69f6d5f77c64b97e3f395aea8c555b11c77fb732) Issue in group order in GROUP N
+15. [24d5d80f](https://github.com/manticoresoftware/manticoresearch/commit/24d5d80f508576794b751d70f9f9b524564e3c14) Explicit flush for SphinxSE after handshake
+16. [31c4d78a](https://github.com/manticoresoftware/manticoresearch/commit/31c4d78ac03ee85d9a02b86075448a04ac80f9e2) Avoid copy of huge descriptions when not necessary
+17. [2959e2ca](https://github.com/manticoresoftware/manticoresearch/commit/2959e2caa8610f98fcdf2e5a82160f58687f4a27) Negative time in show threads
+18. [f0b35710](https://github.com/manticoresoftware/manticoresearch/commit/f0b357102c70f3ac1d7da260c60b67322940e647) Token filter plugin vs zero position deltas
+19. [a49e5bc1](https://github.com/manticoresoftware/manticoresearch/commit/a49e5bc13ea763e6f01dd5993e891858a84d1846) Change 'FAIL' to 'WARNING' on multiple hits
 
 ## Version 3.5.0, 22 Jul 2020
 

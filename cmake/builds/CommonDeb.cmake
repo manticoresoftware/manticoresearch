@@ -91,7 +91,7 @@ install ( FILES INSTALL   DESTINATION usr/${CMAKE_INSTALL_DATADIR}/manticore  CO
 
 install ( DIRECTORY misc/stopwords DESTINATION usr/${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME} COMPONENT doc)
 if (USE_ICU)
-	install ( FILES ${ICU_DATA} DESTINATION usr/${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME}/icu COMPONENT icu)
+	install ( FILES ${ICU_DATA} DESTINATION usr/${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME}/icu COMPONENT icudata)
 endif()
 
 install ( DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/lib/manticore/data COMPONENT adm)
@@ -125,8 +125,8 @@ set ( CPACK_DEBIAN_META_PACKAGE_DEPENDS "manticore-server, manticore-tools" )
 set ( CPACK_DEBIAN_META_FILE_NAME "DEB-DEFAULT" )
 set ( CPACK_DEBIAN_META_PACKAGE_DEBUG "OFF" )
 
-set ( CPACK_DEBIAN_ICU_PACKAGE_NAME "manticore-icu" )
-set ( CPACK_COMPONENT_ICU_DESCRIPTION "Manticore Search is a powerful free open source search engine
+set ( CPACK_DEBIAN_ICUDATA_PACKAGE_NAME "manticore-icudata" )
+set ( CPACK_COMPONENT_ICUDATA_DESCRIPTION "Manticore Search is a powerful free open source search engine
  with a focus on low latency and high throughput full-text search
  and high volume stream filtering. This package contains the ICU DAT file. You need this package only if you use the ICU morphology" )
 

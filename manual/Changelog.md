@@ -26,6 +26,16 @@ Per `SELECT` query the number of threads can be limited with [OPTION threads=N](
 
 The official Docker image is now based on Ubuntu 20.04 LTS
 
+### Packaging
+
+`manticore` DEB and RPM packages are now split in several components:
+
+- `manticore-server` - provides `searchd`, config and service files
+- `manticore-tools` - provides auxiliary tools ( `indexer`, `indextool` etc.)
+- `manticore` - meta-package, installs `manticore-server` and `manticore-tools`
+- `manticore-icudata` - provides ICU data file for icu morphology usage
+- `manticore-dev` (DEB) or `manticore-devel` (RPM) - provides dev headers for UDFs
+
 ### Bugifixes
 
 1. [2a474dc1](https://github.com/manticoresoftware/manticoresearch/commit/2a474dc1a26e8b0f8aaaae95669caf2f1d4b7746) Crash of daemon at grouper at RT index with different chunks

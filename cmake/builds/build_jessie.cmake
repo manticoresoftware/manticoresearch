@@ -38,5 +38,5 @@ install ( FILES "${MANTICORE_BINARY_DIR}/manticore-generator"
 set ( DISTR_SUFFIX "~jessie_${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}" )
 
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_SUGGESTS "libmysqlclient18, libpq5, libexpat1, libodbc1" )
-set ( CPACK_DEBIAN_TOOLS_PACKAGE_RECOMMENDS "manticore-icu" )
-set ( CPACK_DEBIAN_BIN_PACKAGE_RECOMMENDS "manticore-icu" )
+set ( CPACK_DEBIAN_TOOLS_PACKAGE_RECOMMENDS "manticore-icudata" )
+set ( CPACK_DEBIAN_BIN_PACKAGE_RECOMMENDS "manticore-icudata" )

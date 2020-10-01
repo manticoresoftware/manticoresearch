@@ -32,7 +32,7 @@ set ( CPACK_RPM_BIN_INSTALL_WITH_EXEC ON)
 set ( CPACK_RPM_BIN_PACKAGE_OBSOLETES "sphinx, manticore <= 3.5.0_200722.1d34c49" )
 set ( CPACK_RPM_BIN_PACKAGE_CONFLICTS "sphinx, manticore <= 3.5.0_200722.1d34c49" )
 if ( "${DISTR_BUILD}" STREQUAL "rhel8" )
-    set ( CPACK_RPM_BIN_PACKAGE_SUGGESTS "manticore-icu" )
+    set ( CPACK_RPM_BIN_PACKAGE_SUGGESTS "manticore-icudata" )
 endif()
 set ( CPACK_COMPONENT_BIN_SUMMARY "Manticore Search server files")
 set ( CPACK_COMPONENT_BIN_DESCRIPTION "Manticore Search is a powerful free open source search engine
@@ -40,17 +40,17 @@ with a focus on low latency and high throughput full-text search
 and high volume stream filtering.  This package contains the service daemon.")
 
 
-set ( CPACK_RPM_ICU_PACKAGE_NAME "manticore-icu" )
-set ( CPACK_RPM_ICU_FILE_NAME "RPM-DEFAULT" )
-set ( CPACK_COMPONENT_ICU_SUMMARY "Manticore Search ICU files")
-set ( CPACK_COMPONENT_ICU_DESCRIPTION "Manticore Search is a powerful free open source search engine
+set ( CPACK_RPM_ICUDATA_PACKAGE_NAME "manticore-icudata" )
+set ( CPACK_RPM_ICUDATA_FILE_NAME "RPM-DEFAULT" )
+set ( CPACK_COMPONENT_ICUDATA_SUMMARY "Manticore Search ICU files")
+set ( CPACK_COMPONENT_ICUDATA_DESCRIPTION "Manticore Search is a powerful free open source search engine
 with a focus on low latency and high throughput full-text search
 and high volume stream filtering.  This package contains the ICU DAT file. You need this package only if you use the ICU morphology.")
 
 set ( CPACK_RPM_TOOLS_PACKAGE_NAME "manticore-tools" )
 set ( CPACK_RPM_TOOLS_PACKAGE_CONFLICTS "sphinx, manticore <= 3.5.0_200722.1d34c49" )
 if ( "${DISTR_BUILD}" STREQUAL "rhel8" )
- set ( CPACK_RPM_TOOLS_PACKAGE_SUGGESTS "manticore-icu" )
+ set ( CPACK_RPM_TOOLS_PACKAGE_SUGGESTS "manticore-icudata" )
 endif()
 set ( CPACK_RPM_TOOLS_FILE_NAME "RPM-DEFAULT" )
 set ( CPACK_COMPONENT_TOOLS_SUMMARY "Manticore Search utilities")
@@ -73,7 +73,7 @@ Manticore Search 3.x format." )
 set ( CPACK_RPM_BIN_DEBUGINFO_PACKAGE ON )
 set ( CPACK_RPM_TOOLS_DEBUGINFO_PACKAGE ON )
 set ( CPACK_RPM_CONVERTER_DEBUGINFO_PACKAGE ON )
-set ( CPACK_RPM_ICU_DEBUGINFO_PACKAGE OFF )
+set ( CPACK_RPM_ICUDATA_DEBUGINFO_PACKAGE OFF )
 set ( CPACK_RPM_DEVEL_DEBUGINFO_PACKAGE OFF )
 set ( CPACK_RPM_META_DEBUGINFO_PACKAGE OFF )
 
@@ -162,7 +162,7 @@ install ( FILES doc/searchd.1 DESTINATION usr/${CMAKE_INSTALL_MANDIR}/man1 COMPO
 
 install ( DIRECTORY misc/stopwords DESTINATION usr/${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME} COMPONENT doc )
 if (USE_ICU)
-	install ( FILES ${ICU_DATA} DESTINATION usr/${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME}/icu COMPONENT icu)
+	install ( FILES ${ICU_DATA} DESTINATION usr/${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME}/icu COMPONENT icudata)
 endif()
 
 if (NOT NOAPI)

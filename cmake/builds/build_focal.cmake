@@ -24,14 +24,14 @@ configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/manticore.service.in"
                "${MANTICORE_BINARY_DIR}/manticore.service" @ONLY )
 
 install ( FILES "${MANTICORE_BINARY_DIR}/manticore.service"
-               DESTINATION /lib/systemd/system COMPONENT adm )
+               DESTINATION /lib/systemd/system COMPONENT applications )
 
 configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/manticore.generator.in"
                 "${MANTICORE_BINARY_DIR}/manticore-generator" @ONLY )
 
 install ( FILES "${MANTICORE_BINARY_DIR}/manticore-generator"
                 DESTINATION  /lib/systemd/system-generators  PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
-        GROUP_EXECUTE GROUP_READ COMPONENT adm )
+        GROUP_EXECUTE GROUP_READ COMPONENT applications )
 
 # some focal-specific variables and files
 set ( DISTR_SUFFIX "~focal_${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}" )

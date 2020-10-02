@@ -23,9 +23,9 @@ configure_file ( "manticore.conf.in" "${MANTICORE_BINARY_DIR}/manticore.conf" @O
 configure_file ( "${MANTICORE_BINARY_DIR}/manticore.conf.in" "${MANTICORE_BINARY_DIR}/manticore.conf.dist" @ONLY )
 INSTALL ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf.dist
                 DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticore COMPONENT doc RENAME manticore.conf )
-install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME} COMPONENT doc)
+install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME} COMPONENT applications)
 if (USE_ICU)
-	install ( FILES ${ICU_DATA} DESTINATION ${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME}/icu COMPONENT doc)
+	install ( FILES ${ICU_DATA} DESTINATION ${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME}/icu COMPONENT applications)
 endif()
 
 # data and log dirs are created by brew formula

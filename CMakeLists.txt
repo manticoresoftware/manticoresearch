@@ -634,17 +634,17 @@ endif ()
 
 # a bit of installation stuff
 if ( WIN32 )
-	install ( DIRECTORY api doc contrib DESTINATION ${SHAREDIR}/doc COMPONENT doc )
-	install ( FILES example.sql DESTINATION ${SHAREDIR}/doc COMPONENT doc )
-	install ( DIRECTORY misc/stopwords DESTINATION ${SHAREDIR} COMPONENT doc )
+	install ( DIRECTORY api doc contrib DESTINATION ${SHAREDIR}/doc COMPONENT applications )
+	install ( FILES example.sql DESTINATION ${SHAREDIR}/doc COMPONENT applications )
+	install ( DIRECTORY misc/stopwords DESTINATION ${SHAREDIR} COMPONENT applications )
 	if (USE_ICU)
 		install ( FILES ${ICU_DATA} DESTINATION  ${SHAREDIR}/icu COMPONENT icudata)
 	endif()
 
 	install ( FILES COPYING INSTALL manticore.conf.in
-			DESTINATION . COMPONENT config )
-	install ( DIRECTORY DESTINATION log COMPONENT config )
-	install ( DIRECTORY DESTINATION data COMPONENT config )
+			DESTINATION . COMPONENT applications )
+	install ( DIRECTORY DESTINATION log COMPONENT applications )
+	install ( DIRECTORY DESTINATION data COMPONENT applications )
 endif ()
 
 IF (NOT DISTR_BUILD AND NOT WIN32 )
@@ -660,8 +660,8 @@ IF (NOT DISTR_BUILD AND NOT WIN32 )
 
 	configure_file ( "${MANTICORE_BINARY_DIR}/manticore.conf.in" "${MANTICORE_BINARY_DIR}/manticore.conf.dist" @ONLY )
 	INSTALL ( FILES ${MANTICORE_BINARY_DIR}/manticore.conf.dist
-                DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT doc RENAME manticore.conf )
-	install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME} COMPONENT doc)
+                DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/manticoresearch COMPONENT applications RENAME manticore.conf )
+	install ( DIRECTORY misc/stopwords DESTINATION ${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME} COMPONENT applications)
 	if (USE_ICU)
 		install(FILES ${ICU_DATA} DESTINATION ${CMAKE_INSTALL_DATADIR}/${PACKAGE_NAME}/icu COMPONENT icudata)
 	endif ()
@@ -686,49 +686,50 @@ set ( CPACK_RESOURCE_FILE_LICENSE "${MANTICORE_BINARY_DIR}/COPYING.txt" )
 set ( CPACK_PACKAGE_DESCRIPTION_SUMMARY "Manticore full-text search server")
 
 # meta
-set ( CPACK_COMPONENT_META_GROUP "meta" )
+set ( CPACK_COMPONENT_META_GROUP "main" )
 set ( CPACK_COMPONENT_GROUP_META_DISPLAY_NAME "Virtual" )
 set ( CPACK_COMPONENT_META_DISPLAY_NAME "${PACKAGE_NAME} meta-package" )
 
 
 # applications (indexes,indextool etc.)
-set ( CPACK_COMPONENT_TOOLS_GROUP "tools" )
-set ( CPACK_COMPONENT_GROUP_TOOLS_DISPLAY_NAME "Runtime" )
+set ( CPACK_COMPONENT_TOOLS_GROUP "main" )
+set ( CPACK_COMPONENT_GROUP_TOOLS_DISPLAY_NAME "Tools" )
 set ( CPACK_COMPONENT_TOOLS_DISPLAY_NAME "${PACKAGE_NAME} t" )
 
 # searchd daemon
-set ( CPACK_COMPONENT_APPLICATIONS_GROUP "bin" )
-set ( CPACK_COMPONENT_GROUP_APLLICATIONS_DISPLAY_NAME "Runtime" )
+set ( CPACK_COMPONENT_APPLICATIONS_GROUP "main" )
+set ( CPACK_COMPONENT_GROUP_APLLICATIONS_DISPLAY_NAME "Server" )
 set ( CPACK_COMPONENT_APPLICATIONS_DISPLAY_NAME "${PACKAGE_NAME} service" )
 
 # configurations
-set ( CPACK_COMPONENT_CONFIG_GROUP "bin" )
+set ( CPACK_COMPONENT_CONFIG_GROUP "main" )
 set ( CPACK_COMPONENT_CONFIG_DISPLAY_NAME "Configuration examples" )
 
 # documentation files
-set ( CPACK_COMPONENT_DOC_GROUP "bin" )
+set ( CPACK_COMPONENT_DOC_GROUP "main" )
 set ( CPACK_COMPONENT_DOC_DISPLAY_NAME "Documentation" )
 
 # converter tool
 set ( CPACK_COMPONENT_CONVERTER_GROUP "converter" )
-set ( CPACK_COMPONENT_GROUP_CONVERTER_DISPLAY_NAME "Runtime" )
+set ( CPACK_COMPONENT_GROUP_CONVERTER_DISPLAY_NAME "Converter" )
 set ( CPACK_COMPONENT_CONVERTER_DISPLAY_NAME "CONVERTER application" )
 
 # icu data library
-set ( CPACK_COMPONENT_ICUDATA_GROUP "icudata" )
+set ( CPACK_COMPONENT_ICUDATA_GROUP "main" )
 set ( CPACK_COMPONENT_ICUDATA_DISPLAY_NAME "ICU DAT file" )
 
 # development files
-set ( CPACK_COMPONENT_DEVEL_GROUP "devel" )
+set ( CPACK_COMPONENT_DEVEL_GROUP "main" )
 set ( CPACK_COMPONENT_DEVEL_DISPLAY_NAME "Development" )
 set ( CPACK_COMPONENT_GROUP_DEVEL_DISPLAY_NAME "Development files" )
 
+set ( CPACK_RPM_COMPONENT_INSTALL 1 )
+set ( CPACK_DEB_COMPONENT_INSTALL 1 )
+set ( CPACK_ARCHIVE_COMPONENT_INSTALL 1 )
 
 if ( SPLIT )
-	set ( CPACK_RPM_COMPONENT_INSTALL 1 )
-	set ( CPACK_DEB_COMPONENT_INSTALL 1 )
-endif()
-set ( CPACK_ARCHIVE_COMPONENT_INSTALL 0 )
+ set (CPACK_COMPONENTS_GROUPING IGNORE )
+ endif()
 
 include ( SetBuildType )
 
@@ -767,3 +768,11 @@ if ( NOT DISABLE_TESTING )
 endif ()
 
 include ( CPack )
+cpack_add_component( applications GROUP main)
+cpack_add_component( tools GROUP main)
+cpack_add_component( meta GROUP main)
+cpack_add_component( devel GROUP main)
+cpack_add_component( converter GROUP converter)
+cpack_add_component_group(main EXTENDED)
+cpack_add_component_group(converter)
+

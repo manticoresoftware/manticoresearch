@@ -28,8 +28,8 @@ set (CPACK_RPM_META_BUILD_SOURCE_DIRS_PREFIX  OFF)
 set ( CPACK_RPM_APPLICATIONS_PACKAGE_NAME "manticore-server" )
 set ( CPACK_RPM_APPLICATIONS_FILE_NAME "RPM-DEFAULT" )
 set ( CPACK_RPM_APPLICATIONS_INSTALL_WITH_EXEC ON)
-set ( CPACK_RPM_APPLICATIONS_PACKAGE_OBSOLETES "sphinx, manticore <= 3.5.0_200722.1d34c49" )
-set ( CPACK_RPM_APPLICATIONS_PACKAGE_CONFLICTS "sphinx, manticore <= 3.5.0_200722.1d34c49" )
+set ( CPACK_RPM_APPLICATIONS_PACKAGE_OBSOLETES "sphinx" )
+set ( CPACK_RPM_APPLICATIONS_PACKAGE_CONFLICTS "sphinx" )
 if ( "${DISTR_BUILD}" STREQUAL "rhel8" )
     set ( CPACK_RPM_APPLICATIONS_PACKAGE_SUGGESTS "manticore-icudata" )
 endif()
@@ -90,8 +90,7 @@ set ( CPACK_RPM_APPLICATIONS_USER_FILELIST
 		"%config(noreplace) %{_sysconfdir}/logrotate.d/manticore"
 		"%config(noreplace) %{_sysconfdir}/manticoresearch/manticore.conf"
    )
-
-set ( CPACK_RPM_APPLICATIONS_SPEC_MORE_DEFINE
+set ( CPACK_RPM_SPEC_MORE_DEFINE
 		"%define _scripts ${MANTICORE_BINARY_DIR}
 %define manticore_user manticore
 %define manticore_group manticore" )
@@ -121,10 +120,17 @@ configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/rpm/manticore.post.in"
 
 set ( SCR "${CMAKE_CURRENT_SOURCE_DIR}/dist/rpm" ) # a shortcut
 if ( WITH_SYSTEMD )
-	set ( CPACK_RPM_APPLICATIONS_BUILDREQUIRES "systemd-units" )
-	set ( CPACK_RPM_APPLICATIONS_POST_INSTALL_SCRIPT_FILE "${MANTICORE_BINARY_DIR}/manticore_s.post")
-	set ( CPACK_RPM_APPLICATIONS_POST_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.postun" )
-	set ( CPACK_RPM_APPLICATIONS_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.preun" )
+    if (SPLIT)
+        set ( CPACK_RPM_APPLICATIONS_BUILDREQUIRES "systemd-units" )
+        set ( CPACK_RPM_APPLICATIONS_POST_INSTALL_SCRIPT_FILE "${MANTICORE_BINARY_DIR}/manticore_s.post")
+        set ( CPACK_RPM_APPLICATIONS_POST_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.postun" )
+        set ( CPACK_RPM_APPLICATIONS_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.preun" )
+    else(SPLIT)
+        set ( CPACK_RPM_BUILDREQUIRES "systemd-units" )
+        set ( CPACK_RPM_POST_INSTALL_SCRIPT_FILE "${MANTICORE_BINARY_DIR}/manticore_s.post")
+        set ( CPACK_RPM_POST_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.postun" )
+        set ( CPACK_RPM_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore_s.preun" )
+    endif(SPLIT)
 
 	configure_file ( "dist/rpm/manticore.tmpfiles.in" "${MANTICORE_BINARY_DIR}/manticore.conf" @ONLY )
 	configure_file ( "dist/rpm/manticore.generator.in" "${MANTICORE_BINARY_DIR}/manticore-search-generator" @ONLY )
@@ -132,11 +138,18 @@ if ( WITH_SYSTEMD )
 	install ( PROGRAMS ${MANTICORE_BINARY_DIR}/manticore-search-generator
 			DESTINATION usr/lib/systemd/system-generators COMPONENT applications )
 
-else ()
-	set ( CPACK_RPM_APPLICATIONS_PACKAGE_REQUIRES_POST chkconfig )
-	set ( CPACK_RPM_APPLICATIONS_PACKAGE_REQUIRES_PREUN "chkconfig, initscripts" )
-	set ( CPACK_RPM_APPLICATIONS_POST_INSTALL_SCRIPT_FILE "${MANTICORE_BINARY_DIR}/manticore.post")
-	set ( CPACK_RPM_APPLICATIONS_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore.preun" )
+else (WITH_SYSTEMD)
+    if (SPLIT)
+        set ( CPACK_RPM_APPLICATIONS_PACKAGE_REQUIRES_POST chkconfig )
+        set ( CPACK_RPM_APPLICATIONS_PACKAGE_REQUIRES_PREUN "chkconfig, initscripts" )
+        set ( CPACK_RPM_APPLICATIONS_POST_INSTALL_SCRIPT_FILE "${MANTICORE_BINARY_DIR}/manticore.post")
+        set ( CPACK_RPM_APPLICATIONS_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore.preun" )
+    else (SPLIT)
+        set ( CPACK_RPM_PACKAGE_REQUIRES_POST chkconfig )
+        set ( CPACK_RPM_PACKAGE_REQUIRES_PREUN "chkconfig, initscripts" )
+        set ( CPACK_RPM_POST_INSTALL_SCRIPT_FILE "${MANTICORE_BINARY_DIR}/manticore.post")
+        set ( CPACK_RPM_PRE_UNINSTALL_SCRIPT_FILE "${SCR}/manticore.preun" )
+    endif (SPLIT)
 	configure_file ( "dist/rpm/manticore.init.in" "${MANTICORE_BINARY_DIR}/manticore" @ONLY )
 	install ( PROGRAMS ${MANTICORE_BINARY_DIR}/manticore
 			DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/rc.d/init.d COMPONENT applications )

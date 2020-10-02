@@ -36,6 +36,7 @@ install ( FILES "${MANTICORE_BINARY_DIR}/manticore-generator"
 # some focal-specific variables and files
 set ( DISTR_SUFFIX "~focal_${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}" )
 
+set ( CPACK_DEBIAN_PACKAGE_SUGGESTS "libmysqlclient21, libpq5, libexpat1, libodbc1" )
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_SUGGESTS "libmysqlclient21, libpq5, libexpat1, libodbc1" )
 set ( CPACK_DEBIAN_TOOLS_PACKAGE_RECOMMENDS "manticore-icudata" )
 set ( CPACK_DEBIAN_BIN_PACKAGE_RECOMMENDS "manticore-icudata" )

@@ -117,6 +117,8 @@ windows:
     - mkdir build && cd build
     - cmake -DPACK=1 -DSPHINX_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - make -j4 package
+    - cmake -DPACK=1 -DSPLIT=1 -DSPHINX_TAG=$RELEASE_TAG $XTRAFLAGS ..
+    - make -j4 package    
     - cp manticore*.rpm ..
     - cd ..
     - tar -zcf cache/cache-src.tar.gz cache/*-src
@@ -144,6 +146,8 @@ windows:
     - mkdir build && cd build
     - cmake -DPACK=1 -DSPHINX_TAG=$RELEASE_TAG $XTRAFLAGS ..
     - make -j4 package
+    - cmake -DPACK=1 -DSPLIT=1 -DSPHINX_TAG=$RELEASE_TAG $XTRAFLAGS ..
+    - make -j4 package    
     - cp manticore*deb ..
     - cd ..
     - tar -zcf cache/cache-src.tar.gz cache/*-src

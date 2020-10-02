@@ -9,7 +9,7 @@
 * New setting [max_threads_per_query](Server_settings/Searchd.md#max_threads_per_query) sets how many threads a query can use. If the directive is not set, a query can use threads up to the value of [threads](Server_settings/Searchd.md#threads).
 Per `SELECT` query the number of threads can be limited with [OPTION threads=N](Searching/Options.ms#threads) overriding the global `max_threads_per_query`.
 * Percolate indexes can be now be imported with [IMPORT TABLE](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_index).
-* HTTP API `/search` receives basic support for [faceting](Searching/Faceted_search.md#HTTP)/[grouping](Searching/Grouping/md) by new query node `aggs`.
+* HTTP API `/search` receives basic support for [faceting](Searching/Faceted_search.md#HTTP)/[grouping](Searching/Grouping.md) by new query node `aggs`.
 
 ### Minor changes
 

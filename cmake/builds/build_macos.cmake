@@ -14,18 +14,18 @@ set ( CONFDIR "." )
 configure_file ( "manticore.conf.in" "${MANTICORE_BINARY_DIR}/manticore.conf" @ONLY )
 
 # install specific stuff
-install ( DIRECTORY api doc manual contrib DESTINATION . COMPONENT doc )
+install ( DIRECTORY api doc manual contrib DESTINATION . COMPONENT applications )
 
 install ( FILES COPYING INSTALL example.sql
 			"${MANTICORE_BINARY_DIR}/manticore.conf"
 		DESTINATION . COMPONENT doc )
 
-install ( DIRECTORY DESTINATION bin COMPONENT doc )
-install ( DIRECTORY DESTINATION data COMPONENT doc )
-install ( DIRECTORY DESTINATION log COMPONENT doc )
-install ( DIRECTORY misc/stopwords DESTINATION . COMPONENT doc )
+install ( DIRECTORY DESTINATION bin COMPONENT applications )
+install ( DIRECTORY DESTINATION data COMPONENT applications )
+install ( DIRECTORY DESTINATION log COMPONENT applications )
+install ( DIRECTORY misc/stopwords DESTINATION . COMPONENT applications )
 if (USE_ICU)
-	install ( FILES ${ICU_DATA} DESTINATION icu COMPONENT doc)
+	install ( FILES ${ICU_DATA} DESTINATION icu COMPONENT applications)
 endif()
 
 # package specific

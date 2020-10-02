@@ -28,11 +28,10 @@ The official Docker image is now based on Ubuntu 20.04 LTS
 
 ### Packaging
 
-`manticore` DEB and RPM packages are now split in several components:
+Beside the usual `manticore` package, you can also install Manticore Search by components:
 
 - `manticore-server` - provides `searchd`, config and service files
 - `manticore-tools` - provides auxiliary tools ( `indexer`, `indextool` etc.)
-- `manticore` - meta-package, installs `manticore-server` and `manticore-tools`
 - `manticore-icudata` - provides ICU data file for icu morphology usage
 - `manticore-dev` (DEB) or `manticore-devel` (RPM) - provides dev headers for UDFs
 

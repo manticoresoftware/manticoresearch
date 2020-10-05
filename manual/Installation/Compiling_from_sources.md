@@ -71,7 +71,7 @@ When using sources from GitHub you'll need `flex` and `bison` tools, since all i
 Tarballs are available [here](https://manticoresearch.com/downloads/). Look for "Source tar.gz". Those provided by github 'Source code' archives are not what you want, so avoid using them (mainly they lack the git version which we use to make version string). The tarball sources have pre-built lexers and parsers, so flex and bison tools are not required for a build.
 
 ```bash
-wget -c https://repo.manticoresearch.com/repository/manticoresearch_source/release/manticore-3.5.2-200722-6903305-release.tar.gz
+wget -c https://repo.manticoresearch.com/repository/manticoresearch_source/release/manticore-3.5.2-201002-8b2c175-release-source.tar.gz
 tar -zxf manticore-3.5.2-*.tar.gz
 cd manticore-3.5.2-*
 ```

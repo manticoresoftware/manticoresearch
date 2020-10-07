@@ -13,7 +13,7 @@ Manticore supports grouping of search results by one or multiple columns and com
 
 <!-- intro -->
 The general syntax is:
-##### SQL
+
 <!-- request SQL -->
 General syntax
 ```sql
@@ -28,7 +28,6 @@ select_expr: { field_name | function_name(...) }
 where_condition: {aggregation expression alias | COUNT(*)}
 ```
 
-##### HTTP
 <!-- request HTTP -->
 HTTP supports currently a simple grouping that can retrieve the aggregate values and their count(*).
 

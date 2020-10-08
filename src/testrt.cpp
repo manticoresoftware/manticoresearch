@@ -586,7 +586,7 @@ int main ( int argc, char ** argv )
 	// threads should be initialized before memory allocations
 	char cTopOfMainStack;
 	Threads::Init();
-	Threads::MemorizeStack ( &cTopOfMainStack );
+	Threads::PrepareMainThread ( &cTopOfMainStack );
 
 	CSphConfigParser cp;
 	CSphConfig &hConf = cp.m_tConf;

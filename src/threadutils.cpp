@@ -1322,12 +1322,17 @@ const void * Threads::TopOfStack ()
 	return MyThreadContext().m_pMyThreadStack;
 }
 
+void Threads::SetTopStack ( const void * pNewStack )
+{
+	MyThreadContext ().m_pMyThreadStack = pNewStack;
+}
+
 void Threads::SetMaxCoroStackSize ( int iStackSize )
 {
 	g_iMaxCoroStackSize = iStackSize;
 }
 
-void Threads::MemorizeStack ( const void * PStack )
+void Threads::PrepareMainThread ( const void * PStack )
 {
 	MyThreadContext ().Prepare ( PStack );
 }

@@ -13,6 +13,7 @@
 #include "task_info.h"
 #include <atomic>
 
+#define BOOST_USE_VALGRIND 1
 #ifndef NDEBUG
 #define BOOST_USE_VALGRIND 1
 #endif
@@ -34,16 +35,13 @@
 
 namespace Threads {
 
-static const size_t g_iStackSize = 1024 * 128; // stack size - 128K
 static const size_t STACK_ALIGN = 16; // stack align - let it be 16 bytes for convenience
 #define LOG_COMPONENT_CORO "Stack: " << m_dStack.GetLength() << " (" << m_eState << ") "
 
-inline static size_t AlignUpTo (size_t iSize)
+size_t AlignStackSize ( size_t iSize )
 {
 	return ( iSize+STACK_ALIGN-1 ) & ~( STACK_ALIGN-1 );
 }
-
-bool g_bInitCoroStackWithZeros = false;
 
 //////////////////////////////////////////////////////////////
 /// Coroutine - uses boost::context to switch between jobs
@@ -57,7 +55,8 @@ class CoRoutine_c
 
 	State_e m_eState = State_e::Paused;
 	Handler m_fnHandler;
-	CSphFixedVector<BYTE> m_dStack;
+	VecTraits_T<BYTE> m_dStack;
+	CSphFixedVector<BYTE> m_dStackStorage {0};
 
 #if BOOST_USE_VALGRIND
 	unsigned m_uValgrindStackID = 0;
@@ -84,27 +83,48 @@ private:
 		m_tExternalContext = jump_fcontext ( m_tExternalContext, nullptr ).fctx;
 	}
 
-public:
-	explicit CoRoutine_c ( Handler fnHandler, size_t iStack=0 )
-		: m_fnHandler ( std::move ( fnHandler ) )
-		  , m_dStack ( iStack ? (int)AlignUpTo ( iStack ) : g_iStackSize )
+	inline void ValgrindRegisterStack()
 	{
-		if ( g_bInitCoroStackWithZeros )
-			m_dStack.Fill ( 0 );
-
 #if BOOST_USE_VALGRIND
-		m_uValgrindStackID = VALGRIND_STACK_REGISTER( m_dStack.begin(), &m_dStack.Last () );
+		if ( !m_dStackStorage.IsEmpty ())
+			m_uValgrindStackID = VALGRIND_STACK_REGISTER( m_dStackStorage.begin (), &m_dStackStorage.Last ());
 #endif
-		m_tCoroutineContext = make_fcontext ( &m_dStack.Last (), m_dStack.GetLength (), [] ( transfer_t pT )
-		{
+	}
+
+	inline void ValgrindDeregisterStack ()
+	{
+#if BOOST_USE_VALGRIND
+		if ( !m_dStackStorage.IsEmpty ())
+			VALGRIND_STACK_DEREGISTER( m_uValgrindStackID );
+#endif
+	}
+
+	void CreateContext ( Handler fnHandler, VecTraits_T<BYTE> dStack )
+	{
+		m_fnHandler = std::move ( fnHandler );
+		m_dStack = dStack;
+		ValgrindRegisterStack ();
+		m_tCoroutineContext = make_fcontext ( &m_dStack.Last (), m_dStack.GetLength (), [] ( transfer_t pT ) {
 			static_cast<CoRoutine_c *>(pT.data)->WorkerLowest ( pT.fctx );
 		} );
+	}
+
+public:
+	explicit CoRoutine_c ( Handler fnHandler, size_t iStack=0 )
+		: m_dStackStorage ( iStack ? (int) AlignStackSize ( iStack ) : DEFAULT_CORO_STACK_SIZE )
+	{
+		CreateContext ( std::move ( fnHandler ), m_dStackStorage );
+	}
+
+	CoRoutine_c ( Handler fnHandler, VecTraits_T<BYTE> dStack )
+	{
+		CreateContext ( std::move ( fnHandler ), dStack );
 	}
 
 #if BOOST_USE_VALGRIND
 	~CoRoutine_c()
 	{
-		VALGRIND_STACK_DEREGISTER( m_uValgrindStackID );
+		ValgrindDeregisterStack ();
 	}
 #endif
 
@@ -137,17 +157,6 @@ public:
 
 	int GetStackSize() const
 	{
-		return m_dStack.GetLength();
-	}
-
-	int GetUsedStackSize() const
-	{
-		ARRAY_FOREACH ( i, m_dStack )
-		{
-			if ( m_dStack[i] )
-				return m_dStack.GetLength()-i;
-		}
-
 		return m_dStack.GetLength();
 	}
 };
@@ -214,12 +223,11 @@ class CoroWorker_c
 	// operative stuff to be as near as possible
 	void * m_pCurrentTaskInfo = nullptr;
 	int64_t m_tmCpuTimeBase = 0; // add sphCpuTime() to this value to get truly cpu time ticks
-	int * m_pLastStackSize = nullptr;
 
 	// RAII worker's keeper
 	struct CoroGuard_t
 	{
-		CoroGuard_t ( CoroWorker_c * pWorker )
+		explicit CoroGuard_t ( CoroWorker_c * pWorker )
 		{
 			pWorker->m_pPreviousWorker = CoroWorker_c::m_pTlsThis;
 			CoroWorker_c::m_pTlsThis = pWorker;
@@ -268,8 +276,6 @@ private:
 		}
 		if ( m_tCoroutine.IsFinished () )
 		{
-			if ( m_pLastStackSize )
-				*m_pLastStackSize = m_tCoroutine.GetUsedStackSize();
 			delete this;
 			return;
 		}
@@ -341,6 +347,15 @@ public:
 	static void StartContinuation ( Handler fnHandler, Scheduler_i * pScheduler, size_t iStack, Waiter_t tWait )
 	{
 		( new CoroWorker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), pScheduler, std::move ( tWait ), iStack ) )->ScheduleContinuation ();
+	}
+
+	static void MockRun ( Handler fnHandler, VecTraits_T<BYTE> dStack )
+	{
+		CoRoutine_c tAction ( std::move ( fnHandler ), dStack );
+		auto pOldStack = Threads::TopOfStack ();
+		Threads::SetTopStack ( &dStack.Last() );
+		tAction.Run();
+		Threads::SetTopStack ( pOldStack );
 	}
 
 	void Restart ()
@@ -433,11 +448,6 @@ public:
 	{
 		return m_pTlsThis;
 	}
-
-	void SetStackSizeHook ( int * pStorage )
-	{
-		m_pLastStackSize = pStorage;
-	}
 };
 thread_local CoroWorker_c * CoroWorker_c::m_pTlsThis = nullptr;
 
@@ -490,6 +500,11 @@ void CallPlainCoroutine ( Handler fnHandler )
 	auto dWaiter = Waiter_t ( nullptr, [&tEvent] ( void * ) { tEvent.SetEvent (); } );
 	CoroWorker_c::StartCall ( std::move ( fnHandler ), pScheduler, std::move(dWaiter) );
 	tEvent.WaitEvent ();
+}
+
+void MockCallCoroutine ( VecTraits_T<BYTE> dStack, Handler fnHandler )
+{
+	CoroWorker_c::MockRun ( std::move ( fnHandler ), dStack );
 }
 
 // if called from coroutine - just makes continuation.
@@ -587,13 +602,6 @@ int64_t sphTaskCpuTimer ()
 		return pWorker->GetCurrentCpuTimeBase ()+sphCpuTimer ();
 
 	return sphCpuTimer();
-}
-
-void SetStackSizeHook ( int * pStorage )
-{
-	auto pWorker = Threads::CoroWorker_c::CurrentWorker ();
-	if ( pWorker )
-		pWorker->SetStackSizeHook ( pStorage );
 }
 
 Threads::Scheduler_i * Threads::CoCurrentScheduler ()

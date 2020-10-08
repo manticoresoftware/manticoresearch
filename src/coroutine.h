@@ -17,6 +17,11 @@
 
 namespace Threads {
 
+static const size_t DEFAULT_CORO_STACK_SIZE = 1024 * 128; // stack size - 128K
+
+// helper to align stack suze
+size_t AlignStackSize ( size_t iSize );
+
 // used as signaller - invokes custom deleter in d-tr.
 using Waiter_t = SharedPtrCustom_t<void *>;
 
@@ -33,6 +38,11 @@ void CoContinue ( Handler fnHandler, int iStack=0 );
 // perform handler in plain coro (as continuation), or in dedicated (if called from plain thread)
 void CallCoroutine ( Handler fnHandler );
 bool CallCoroutineRes ( Predicate fnHandler );
+
+// perform handler in custom stack
+// note: handler is called as linear routine, without scheduler.
+// It should NOT switch context (i.e. no yield/resume)
+void MockCallCoroutine ( VecTraits_T<BYTE> dStack, Handler fnHandler );
 
 // if iStack<0, just immediately invoke the handler (that is bypass)
 template<typename HANDLER>
@@ -329,7 +339,5 @@ public:
 using SccRL_t = CSphScopedRLock_T<CoroRWLock_c>;
 using SccWL_t = CSphScopedWLock_T<CoroRWLock_c>;
 using ScopedCoroMutex_t = CSphScopedLock<CoroMutex_c>;
-
-extern bool g_bInitCoroStackWithZeros;
 
 } // namespace Threads

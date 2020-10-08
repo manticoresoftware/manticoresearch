@@ -18168,41 +18168,104 @@ static void SetUidShort ( bool bTestMode )
 	UidShortSetup ( iServerId, (int)uStartedSec );
 }
 
-static void ParseExpr ( const char * sExpr, int * pSize )
+int CalcUsedStackEdge ( VecTraits_T<BYTE> dStack, BYTE uFiller )
 {
-	SetStackSizeHook ( pSize );
+	ARRAY_CONSTFOREACH ( i, dStack ) {
+		if ( dStack[i]!=uFiller )
+			return dStack.GetLength ()-i;
+	}
 
-	CSphString sError;
-	ExprParseArgs_t tArgs;
+	return dStack.GetLength ();
+}
 
-	CSphSchema tSchema;
+int CalcUsedStackBytes ( VecTraits_T<BYTE> dStack, BYTE uFiller )
+{
+	int iRes=0;
+	dStack.Apply ( [&] ( BYTE uData ) { iRes += ( uData!=uFiller ) ? 1 : 0; } );
+	return iRes;
+}
+
+void MockInitMem ( VecTraits_T<BYTE> dStack, BYTE uFiller )
+{
+	::memset ( dStack.begin (), uFiller, dStack.GetLengthBytes () );
+}
+
+void MockParseExpr ( VecTraits_T<BYTE> dStack, const char * sExpr )
+{
+	struct
+	{
+		ExprParseArgs_t m_tArgs;
+		CSphString m_sError;
+		CSphSchema m_tSchema;
+		const char * m_sExpr;
+		bool m_bSuccess;
+	} tParams;
 
 	CSphColumnInfo tAttr;
 	tAttr.m_eAttrType = SPH_ATTR_INTEGER;
 	tAttr.m_sName = "attr_a";
-	tSchema.AddAttr ( tAttr, false );
+	tParams.m_tSchema.AddAttr ( tAttr, false );
 	tAttr.m_sName = "attr_b";
-	tSchema.AddAttr ( tAttr, false );
+	tParams.m_tSchema.AddAttr ( tAttr, false );
+	tParams.m_sExpr = sExpr;
 
-	CSphRefcountedPtr<ISphExpr>	pExprBase { sphExprParse ( sExpr, tSchema, sError, tArgs ) };
-	if ( !pExprBase || !sError.IsEmpty() )
-		sphWarning ( "stack check expression error: %s", sError.cstr() );
+	Threads::MockCallCoroutine ( dStack, [&tParams]
+	{
+		ISphExpr * pExprBase = sphExprParse ( tParams.m_sExpr, tParams.m_tSchema, tParams.m_sError, tParams.m_tArgs );
+		tParams.m_bSuccess = !!pExprBase;
+		SafeRelease ( pExprBase );
+	});
+
+	if ( !tParams.m_bSuccess || !tParams.m_sError.IsEmpty () )
+		sphWarning ( "stack check expression error: %s", tParams.m_sError.cstr () );
 }
 
-static void SetNodeItemStackSize()
+int MockMeasureStack ( VecTraits_T<BYTE> dStack, const char * sExpr, BYTE uPattern )
 {
-	Threads::g_bInitCoroStackWithZeros = true;
+	MockInitMem ( dStack, uPattern );
+	MockParseExpr ( dStack, sExpr );
+	auto iUsedStack = CalcUsedStackBytes ( dStack, uPattern );
+	auto iUsedStackEdge = CalcUsedStackEdge ( dStack, uPattern );
+	return ( Max ( iUsedStack, iUsedStackEdge )+3 ) & ~3;
+}
 
-	// calculate item size for expression parser
-	int iStackMaxUsed1 = 0;
-	Threads::CallCoroutine ( [&iStackMaxUsed1] { ParseExpr ( "(4*attr_a+2*(attr_b-1)+3)", &iStackMaxUsed1 ); } );
-	
-	int iStackMaxUsed2 = 0;
-	Threads::CallCoroutine ( [&iStackMaxUsed2] { ParseExpr ( "(4*attr_a+2*(attr_b-1)+3)*1000", &iStackMaxUsed2 ); } );
+int MockStackExpr ( VecTraits_T<BYTE> dStack, const char * sExpr )
+{
+	auto iStartStack55 = MockMeasureStack ( dStack, sExpr, 0xDE );
+	auto iStartStackAA = MockMeasureStack ( dStack, sExpr, 0xAD );
+	return  Max ( iStartStack55, iStartStackAA );
+}
 
-	Threads::g_bInitCoroStackWithZeros = false;
+void DetermineNodeItemStackSize ()
+{
+	CSphFixedVector<BYTE> dMockStack {DEFAULT_CORO_STACK_SIZE};
+	StringBuilder_c sExpr;
+	sExpr << "(4*attr_a+2*(attr_b-1)+3)*10";
 
-	int iDelta = iStackMaxUsed2 - iStackMaxUsed1;
+	auto iStartStack = MockStackExpr ( dMockStack, sExpr.cstr () );
+	int iDelta = 0;
+
+	// Find edge of stack where expr length became visible
+	// (we need quite big expr in order to touch deepest of the stack)
+	while ( !iDelta )
+	{
+		sExpr << "*10";
+		auto iCurStack = MockStackExpr ( dMockStack, sExpr.cstr () );
+		iDelta = iCurStack - iStartStack;
+	}
+
+	iStartStack += iDelta;
+	iDelta = 0;
+
+	// add +50 frames and average stack from them (1-st already added, so add 49)
+	for (int i=0; i<49; ++i)
+		sExpr << "*10";
+
+	auto iCurStack = MockStackExpr ( dMockStack, sExpr.cstr () );
+	iDelta = iCurStack-iStartStack;
+	iDelta /=50;
+	iDelta = (iDelta+15)&~15;
+
 	sphLogDebug ( "expression stack delta %d", iDelta );
 	SetExprNodeStackItemSize ( iDelta );
 }
@@ -18772,7 +18835,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	// startup
 	///////////
 
-	SetNodeItemStackSize();
+	DetermineNodeItemStackSize ();
 	ModifyDaemonPaths ( hSearchd );
 	sphRTInit ( hSearchd, bTestMode, hConf("common") ? hConf["common"]("common") : nullptr );
 
@@ -19004,7 +19067,7 @@ inline int mainimpl ( int argc, char **argv )
 	// threads should be initialized before memory allocations
 	char cTopOfMainStack;
 	Threads::Init();
-	MemorizeStack ( &cTopOfMainStack );
+	PrepareMainThread ( &cTopOfMainStack );
 	sphSetDieCallback ( DieOrFatalCb );
 	g_pLogger() = sphLog;
 	sphCollationInit ();

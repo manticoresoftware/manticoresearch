@@ -146,8 +146,11 @@ const void * TopOfStack ();
 /// limit size for my coro stacks
 void SetMaxCoroStackSize ( int iStackSize );
 
-/// store the address in the TLS
-void MemorizeStack ( const void * PStack );
+/// store the address in the TLS and prepare whole thread (name, hazards, etc.)
+void PrepareMainThread ( const void * PStack );
+
+/// owerwrite top ot stack pointer (m.b. need for mocking)
+void SetTopStack ( const void * pNewStack );
 
 /// my threading initialize routine
 void * Init ( bool bDetached = false );

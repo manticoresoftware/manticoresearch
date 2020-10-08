@@ -947,7 +947,7 @@ int main ()
 	// threads should be initialized before memory allocations
 	char cTopOfMainStack;
 	Threads::Init();
-	Threads::MemorizeStack ( &cTopOfMainStack );
+	Threads::PrepareMainThread ( &cTopOfMainStack );
 	setvbuf ( stdout, NULL, _IONBF, 0 );
 
 #if USE_WINDOWS

@@ -58,7 +58,7 @@ public:
 	{
 		char cTopOfMainStack;
 		Threads::Init ();
-		Threads::MemorizeStack ( &cTopOfMainStack );
+		Threads::PrepareMainThread ( &cTopOfMainStack );
 		CreateSynonymsFile ();
 		CreateSynonymsFile ( g_sMagic );
 

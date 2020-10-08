@@ -12,3 +12,10 @@
    fun:has_index
    fun:_ZN3re23NFA12AddToThreadqEPNS_11SparseArrayIPNS0_6ThreadEEEiiPKcPS7_
 }
+
+# that is intentional, as we look inside area which was stack, i.e. alien local variables
+{
+   CalcUsedStack(VecTraits_T<unsigned char>)
+   Memcheck:Addr1
+   fun:_Z13CalcUsedStack11VecTraits_TIhE
+}

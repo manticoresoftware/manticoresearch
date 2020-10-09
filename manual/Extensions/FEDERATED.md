@@ -23,7 +23,7 @@ CREATE TABLE t1
     id          INTEGER UNSIGNED NOT NULL,
     year        INTEGER NOT NULL,
     rating    	FLOAT,
-    query       VARCHAR(3072) NOT NULL,
+    query       VARCHAR(1024) NOT NULL,
     INDEX(query)
 ) ENGINE=FEDERATED
 DEFAULT CHARSET=utf8

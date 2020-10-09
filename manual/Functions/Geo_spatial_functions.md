@@ -10,7 +10,7 @@ GEODIST(lat1, lon1, lat2, lon2, { option=value, ... })
 
 GEODIST(40.7643929, -73.9997683, 40.7642578, -73.9994565, {in=degrees, out=feet})
 
-GEODIST(51.50, -0.12, 29.98, 31.13, {in=deg, out=mi}}
+GEODIST(51.50, -0.12, 29.98, 31.13, {in=deg, out=mi})
 ```
 
 The known options and their values are:

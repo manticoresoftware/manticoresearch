@@ -22,10 +22,10 @@
 ##### SELECT
 * [SELECT](Searching/Full_text_matching/Basic_usage.md#SQL) - Searches
   * [GROUP BY](Searching/Grouping.md) - Groups search results
-  * [GROUP BY](Searching/Grouping.md) - Orders groups
-  * [GROUP BY](Searching/Grouping.md) - Filters groups
+  * [GROUP BY ORDER](Searching/Grouping.md) - Orders groups
+  * [GROUP BY HAVING](Searching/Grouping.md) - Filters groups
   * [FACET](Searching/Faceted_search.md) - Faceted search
-  * [SUB-SELECTS](Searching/Sub-selects.md) - About using sub-queries
+  * [SUB-SELECTS](Searching/Sub-selects.md) - About using SELECT sub-queries
 * [EXPLAIN QUERY](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) - Shows query execution plan without running the query itself
 * [SHOW META](Profiling_and_monitoring/SHOW_META.md) - Shows extended information about executed query
 * [SHOW PROFILE](Profiling_and_monitoring/Profiling/Query_profile.md) - Shows profiling information about executed query

@@ -28,13 +28,10 @@ if not res:
 	die('failed to extract resreved keywords from src/sphinxql.l')
 
 # remove those that are handled by parser
-r = re.search('ident_set:(.*?);', load('sphinxql.y'), re.MULTILINE + re.DOTALL)
+r = re.search('ALL_IDENT_LIST(.*?)ALL_IDENT_LIST_END', load('sphinxql.y'), re.MULTILINE + re.DOTALL)
 if not r:
-	die('failed to extract ident_set from src/sphinxql.y')
+	die('failed to extract ident_set_no_option from src/sphinxql.y')
 handled = [k[4:] for k in re.findall('\w+', r.group(1)) if k!='TOK_IDENT' and k[0:4]=='TOK_']
-handled.append('NAMES') # manually append a couple tweaks
-handled.append('TRANSACTION')
-handled.append('COLLATE')
 res = sorted(diff(res, handled))
 
 # load reserved keywords list from docs

@@ -229,7 +229,15 @@ statement:
 // AND, AS, BY, DIV, FACET, FALSE, ID, IN, IS, LIMIT, MOD, NOT, NULL,
 // OR, ORDER, SELECT, TRUE
 
-ident_set:
+/// All used keywords looking as TOK_XXX should be located here. That is mandatory
+/// and used in regexp in 'reserved.py' script to check reserved words consistency between
+/// grammar and documentation.
+///
+/// Line below starts the list, that is MANDATORY, don't remove/change it!
+/// *** ALL_IDENT_LIST ***
+
+
+ident_set_no_option:
 	TOK_IDENT
 	| TOK_AGENT | TOK_ALL | TOK_ANY | TOK_ASC | TOK_ATTACH | TOK_ATTRIBUTES
 	| TOK_AVG | TOK_BEGIN | TOK_BETWEEN | TOK_BIGINT | TOK_CALL
@@ -240,7 +248,7 @@ ident_set:
 	| TOK_GROUP_CONCAT | TOK_GROUPBY | TOK_HAVING | TOK_HOSTNAMES | TOK_INDEX | TOK_INDEXOF | TOK_INSERT
 	| TOK_INT | TOK_INTEGER | TOK_INTO | TOK_ISOLATION | TOK_LEVEL
 	| TOK_LIKE | TOK_MATCH | TOK_MAX | TOK_META | TOK_MIN | TOK_MULTI
-	| TOK_MULTI64 | TOK_OPTIMIZE | TOK_OPTION | TOK_PLAN
+	| TOK_MULTI64 | TOK_OPTIMIZE | TOK_PLAN
 	| TOK_PLUGINS | TOK_PROFILE | TOK_RAMCHUNK | TOK_RAND | TOK_READ
 	| TOK_RECONFIGURE | TOK_REMAP | TOK_REPEATABLE | TOK_REPLACE
 	| TOK_ROLLBACK | TOK_RTINDEX | TOK_SERIALIZABLE | TOK_SESSION | TOK_SET
@@ -250,10 +258,20 @@ ident_set:
 	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITH | TOK_WITHIN
 	;
 
+ident_set:
+	ident_set_no_option | TOK_OPTION
+	;
+
 ident:
 	ident_set | TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE
 	;
 
+ident_no_option:
+	ident_set_no_option | TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE
+	;
+
+/// *** ALL_IDENT_LIST_END ***
+// WARNING! line above is MANDATORY for consistency checking!
 //////////////////////////////////////////////////////////////////////////
 
 multi_stmt_list:
@@ -892,33 +910,33 @@ option_list:
 	;
 
 option_item:
-	ident
+	ident_no_option
 		{
 			if ( !pParser->AddOption ( $1 ) )
 				YYERROR;
 		}
-	| ident '=' ident
+	| ident_no_option '=' ident
 		{
 			if ( !pParser->AddOption ( $1, $3 ) )
 				YYERROR;
 		}
-	| ident '=' TOK_CONST_INT
+	| ident_no_option '=' TOK_CONST_INT
 		{
 			if ( !pParser->AddOption ( $1, $3 ) )
 				YYERROR;
 		}
-	| ident '=' '(' named_const_list ')'
+	| ident_no_option '=' '(' named_const_list ')'
 		{
 			if ( !pParser->AddOption ( $1, pParser->GetNamedVec ( $4.m_iValue ) ) )
 				YYERROR;
 			pParser->FreeNamedVec ( $4.m_iValue );
 		}
-	| ident '=' ident '(' TOK_QUOTED_STRING ')'
+	| ident_no_option '=' ident '(' TOK_QUOTED_STRING ')'
 		{
 			if ( !pParser->AddOption ( $1, $3, $5 ) )
 				YYERROR;
 		}
-	| ident '=' TOK_QUOTED_STRING
+	| ident_no_option '=' TOK_QUOTED_STRING
 		{
 			if ( !pParser->AddOption ( $1, $3 ) )
 				YYERROR;

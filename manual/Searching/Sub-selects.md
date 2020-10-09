@@ -1,12 +1,12 @@
 # Sub-selects
 
-Manticore supports sub-selects via SQL in the following format:
+Manticore supports SELECT subqueries via SQL in the following format:
 
 ```sql
 SELECT * FROM (SELECT ... ORDER BY cond1 LIMIT X) ORDER BY cond2 LIMIT Y
 ```
 
-The outer select allows only `ORDER BY` and `LIMIT` clauses. Sub-selects currently have 2 usage cases:
+The outer select allows only `ORDER BY` and `LIMIT` clauses. Sub-selects queries currently have 2 usage cases:
 
 1. We have a query with 2 ranking UDFs, one very fast and the other slow and we perform a full-text search with a big match result set. Without subselect the query would look like
 
@@ -26,7 +26,7 @@ The outer select allows only `ORDER BY` and `LIMIT` clauses. Sub-selects current
     ORDER BY slow DESC LIMIT 20;
     ```
 
-    In the initial query the `slow_rank()` UDF is computed for the entire match result set. With sub-selects, only `fast_rank()` is computed for the entire match result set, while `slow_rank()` is only computed for a limited set.
+    In the initial query the `slow_rank()` UDF is computed for the entire match result set. With SELECT sub-queries only `fast_rank()` is computed for the entire match result set, while `slow_rank()` is only computed for a limited set.
 
 2. The second case comes handy for large result set coming from a distributed index.
 

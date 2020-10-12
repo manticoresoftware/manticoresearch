@@ -1083,7 +1083,7 @@ hash_val:
 //////////////////////////////////////////////////////////////////////////
 
 show_stmt:
-	TOK_SHOW show_what
+	TOK_SHOW show_what opt_option_clause
 	;
 
 like_filter:
@@ -1092,14 +1092,14 @@ like_filter:
 	;
 
 show_what:
-	TOK_WARNINGS						{ pParser->m_pStmt->m_eStmt = STMT_SHOW_WARNINGS; }
-	| TOK_STATUS like_filter			{ pParser->m_pStmt->m_eStmt = STMT_SHOW_STATUS; }
-	| TOK_META like_filter				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_META; }
+	TOK_WARNINGS				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_WARNINGS; }
+	| TOK_STATUS like_filter		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_STATUS; }
+	| TOK_META like_filter			{ pParser->m_pStmt->m_eStmt = STMT_SHOW_META; }
 	| TOK_AGENT TOK_STATUS like_filter	{ pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS; }
-	| TOK_PROFILE						{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PROFILE; }
-	| TOK_PLAN							{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLAN; }
-	| TOK_PLUGINS						{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLUGINS; }
-	| TOK_THREADS opt_option_clause		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_THREADS; }
+	| TOK_PROFILE				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PROFILE; }
+	| TOK_PLAN				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLAN; }
+	| TOK_PLUGINS				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLUGINS; }
+	| TOK_THREADS				{ pParser->m_pStmt->m_eStmt = STMT_SHOW_THREADS; }
 	| TOK_CREATE TOK_TABLE ident
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_CREATE_TABLE;
@@ -1859,7 +1859,7 @@ delete_cluster:
 	;
 
 explain_query:
-	TOK_EXPLAIN ident ident TOK_QUOTED_STRING
+	TOK_EXPLAIN ident ident TOK_QUOTED_STRING opt_option_clause
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_EXPLAIN;

@@ -1100,7 +1100,7 @@ public:
 	int					DebugCheck ( FILE * ) final { return 0; } // NOLINT
 	void				DebugDumpDict ( FILE * ) final {}
 	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) final {}
-	bool				ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const override;
+	Bson_t				ExplainQuery ( const CSphString & sQuery ) const final;
 };
 
 
@@ -1185,12 +1185,12 @@ CSphIndex * sphCreateIndexTemplate ( const char * szIndexName )
 	return new CSphTokenizerIndex(szIndexName);
 }
 
-bool CSphTokenizerIndex::ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const
+Bson_t CSphTokenizerIndex::ExplainQuery ( const CSphString & sQuery ) const
 {
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 
 	WordlistStub_c tWordlist;
-	ExplainQueryArgs_t tArgs ( sQuery, sRes, sError );
+	ExplainQueryArgs_t tArgs ( sQuery );
 	tArgs.m_pDict = GetStatelessDict ( m_pDict );
 	if ( IsStarDict ( bWordDict ) )
 		tArgs.m_pDict = new CSphDictStarV8 ( tArgs.m_pDict, m_tSettings.m_iMinInfixLen>0 );
@@ -1966,7 +1966,7 @@ public:
 	void				CreateReader ( int64_t iSessionId ) const final;
 	bool				GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const final;
 	int					GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
-	bool				ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const override;
+	Bson_t				ExplainQuery ( const CSphString & sQuery ) const final;
 
 	bool				CopyExternalFiles ( int iPostfix, StrVec_t & dCopied ) final;
 	void				CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const final;
@@ -16764,10 +16764,16 @@ static void AddFields ( const char * sQuery, CSphSchema & tSchema )
 	}
 }
 
-bool Explain ( ExplainQueryArgs_t & tArgs )
+Bson_t EmptyBson ()
+{
+	Bson_t dEmpty;
+	return dEmpty;
+}
+
+Bson_t Explain ( ExplainQueryArgs_t & tArgs )
 {
 	if ( tArgs.m_sQuery.IsEmpty() )
-		return true;
+		return EmptyBson ();
 
 	CSphScopedPtr<QueryParser_i> pQueryParser ( sphCreatePlainQueryParser() );
 
@@ -16792,8 +16798,8 @@ bool Explain ( ExplainQueryArgs_t & tArgs )
 	XQQuery_t tParsed;
 	if ( !pQueryParser->ParseQuery ( tParsed, (const char*)sModifiedQuery, nullptr, tArgs.m_pQueryTokenizer, nullptr, pSchema, tArgs.m_pDict, *tArgs.m_pSettings ) )
 	{
-		tArgs.m_sError = tParsed.m_sParseError;
-		return false;
+		TlsMsg::Err ( tParsed.m_sParseError );
+		return EmptyBson ();
 	}
 
 	sphTransformExtendedQuery ( &tParsed.m_pRoot, *tArgs.m_pSettings, false, nullptr );
@@ -16830,14 +16836,12 @@ bool Explain ( ExplainQueryArgs_t & tArgs )
 		tParsed.m_pRoot = sphExpandXQNode ( tParsed.m_pRoot, tExpCtx );
 	}
 
-
-	tArgs.m_sRes = sphExplainQuery ( tParsed.m_pRoot, *pSchema, tParsed.m_dZones );
-	return true;
+	return sphExplainQuery ( tParsed.m_pRoot, *pSchema, tParsed.m_dZones );
 }
 
-bool CSphIndex_VLN::ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const
+Bson_t CSphIndex_VLN::ExplainQuery ( const CSphString & sQuery ) const
 {
-	ExplainQueryArgs_t tArgs ( sQuery, sRes, sError );
+	ExplainQueryArgs_t tArgs ( sQuery );
 	tArgs.m_pSchema = &GetMatchSchema();
 	tArgs.m_pDict = GetStatelessDict ( m_pDict );
 	SetupStarDict ( tArgs.m_pDict );

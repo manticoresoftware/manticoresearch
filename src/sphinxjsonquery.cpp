@@ -1434,7 +1434,7 @@ void FormatJsonPlanFromBson ( JsonEscapedBuilder& tOut, bson::NodeHandle_t dBson
 	tOut.AppendEscapedSkippingComma ( String ( tBson.ChildByName ( SZ_TYPE ) ).cstr() );
 
 	tOut << "\"description\":";
-	tOut.AppendEscapedSkippingComma ( sph::RenderBsonQueryBrief ( dBson ).cstr () );
+	tOut.AppendEscapedSkippingComma ( sph::RenderBsonPlanBrief ( dBson ).cstr () );
 
 	Bson_c ( tBson.ChildByName ( SZ_OPTIONS ) ).ForEach ( [&tOut] ( CSphString&& sName, const NodeHandle_t & tNode ) {
 		tOut.Sprintf ( R"("options":"%s=%d")", sName.cstr (), (int) Int ( tNode ) );

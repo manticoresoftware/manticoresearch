@@ -245,6 +245,7 @@ private:
 namespace { // static
 
 // dump spec for keyword nodes
+// fixme! consider make specific implementation if dot/plain need to be different
 void RenderAccessSpecs ( StringBuilder_c & tRes, const bson::Bson_c& tBson, bool bWithZones )
 {
 	using namespace bson;
@@ -298,7 +299,7 @@ bool RenderKeywordNode ( StringBuilder_c & tRes, const bson::Bson_c& tBson )
 	return true;
 }
 
-void RenderBsonPlan ( bson::NodeHandle_t dBson, StringBuilder_c & tRes, bool bWithZones,
+void RenderPlainBsonPlan ( bson::NodeHandle_t dBson, StringBuilder_c & tRes, bool bWithZones,
 		int iIndent, const char * szIndent, const char * szLinebreak )
 {
 	using namespace bson;
@@ -331,10 +332,89 @@ void RenderBsonPlan ( bson::NodeHandle_t dBson, StringBuilder_c & tRes, bool bWi
 	RenderAccessSpecs ( tRes, dBson, bWithZones );
 
 	Bson_c ( tBson.ChildByName ( SZ_CHILDREN ) ).ForEach ( [&] ( const NodeHandle_t & tNode ) {
-		RenderBsonPlan ( tNode, tRes, bWithZones, iIndent+1, szIndent, szLinebreak );
+		RenderPlainBsonPlan ( tNode, tRes, bWithZones, iIndent+1, szIndent, szLinebreak );
 	} );
 }
 
+
+bool RenderKeywordNodeDot ( StringBuilder_c & tRes, const bson::Bson_c& tBson )
+{
+	using namespace bson;
+	auto tWord = tBson.ChildByName ( SZ_WORD );
+	if ( IsNullNode ( tWord ) )
+		return false;
+
+	//[shape=record label="wayyy | {expanded | pos=1}"]
+	ScopedComma_c ExplainComma ( tRes, " | ", "[shape=record label=\"", "\"]\n" );
+	tRes << String ( tWord );
+	ScopedComma_c ParamComma ( tRes, " | ", "{ ", " }" );
+	tRes.Sprintf ( "querypos=%d", Int ( tBson.ChildByName ( SZ_QUERYPOS ) ) );
+	if ( Bool ( tBson.ChildByName ( SZ_EXCLUDED ) ) )
+		tRes += "excluded";
+	if ( Bool ( tBson.ChildByName ( SZ_EXPANDED ) ) )
+		tRes += "expanded";
+	if ( Bool ( tBson.ChildByName ( SZ_FIELD_START ) ) )
+		tRes += "field_start";
+	if ( Bool ( tBson.ChildByName ( SZ_FIELD_END ) ) )
+		tRes += "field_end";
+	if ( Bool ( tBson.ChildByName ( SZ_MORPHED ) ) )
+		tRes += "morphed";
+	auto tBoost = tBson.ChildByName ( SZ_BOOST );
+	if ( !IsNullNode ( tBoost ) )
+	{
+		auto fBoost = Double ( tBoost );
+		if ( fBoost!=1.0f ) // really comparing floats?
+			tRes.Appendf ( "boost=%f", fBoost );
+	}
+	return true;
+}
+
+void RenderDotBsonNodePlan ( bson::NodeHandle_t dBson, StringBuilder_c & tRes, int& iId )
+{
+	using namespace bson;
+	if ( dBson==nullnode )
+		return;
+
+	tRes << "\n" << iId << " "; // node num
+
+	Bson_c tBson ( dBson );
+	if ( RenderKeywordNodeDot ( tRes, tBson ) )
+		return;
+
+	{
+		ScopedComma_c ExplainComma ( tRes, " | ", R"([shape=record,style=filled,bgcolor="lightgrey" label=")", "\"]\n" );
+		tRes << String ( tBson.ChildByName ( SZ_TYPE ) );
+		ScopedComma_c ParamComma ( tRes, " \\n| ", "{ ", " }" );
+
+		// enclose the rest in brackets, comma-separated
+		Bson_c ( tBson.ChildByName ( SZ_OPTIONS ) ).ForEach (
+				[&tRes] ( CSphString && sName, const NodeHandle_t & tNode ) {
+					tRes.Sprintf ( "%s=%d", sName.cstr (), (int) Int ( tNode ) );
+				} );
+		if ( Bool ( tBson.ChildByName ( SZ_VIRTUALLY_PLAIN ) ) )
+			tRes << "virtually-plain";
+
+		// dump spec for keyword nodes
+		RenderAccessSpecs ( tRes, dBson, true );
+	}
+	int iRoot = iId;
+
+	Bson_c ( tBson.ChildByName ( SZ_CHILDREN ) ).ForEach ( [&] ( const NodeHandle_t & tNode ) {
+		++iId;
+		tRes << iRoot << " -> " << iId;
+		RenderDotBsonNodePlan ( tNode, tRes, iId );
+	} );
+}
+
+void RenderDotBsonPlan ( bson::NodeHandle_t dBson, StringBuilder_c & tRes )
+{
+	int iId=0;
+	tRes << "digraph \"transformed_tree\"\n{\n";
+	RenderDotBsonNodePlan ( dBson, tRes, iId );
+	tRes << "}";
+}
+
+// parse node to bson
 void XQNodeGetExtraBson ( bson::Assoc_c & tNode, const XQNode_t * pNode )
 {
 	switch ( pNode->GetOp() )
@@ -419,38 +499,37 @@ void BuildProfileBson ( bson::Assoc_c& tPlan, const XQNode_t * pNode, const CSph
 
 } // namespace static
 
-CSphString sph::RenderBsonQuery ( const bson::NodeHandle_t & dBson )
+void sph::RenderBsonPlan ( StringBuilder_c& tRes, const bson::NodeHandle_t & dBson, bool bDot )
 {
-	StringBuilder_c tRes;
-	RenderBsonPlan ( dBson, tRes, true, 0, "  ", "\n" );
+	if ( bDot )
+		RenderDotBsonPlan ( dBson, tRes );
+	else
+		RenderPlainBsonPlan ( dBson, tRes, true, 0, "  ", "\n" );
 #if 0
 	CSphString sResult1;
 	bson::Bson_c ( dBson ).BsonToJson ( sResult1 );
 	tRes << "raw: " << sResult1;
 #endif
-	CSphString sResult;
-	tRes.MoveTo ( sResult );
-	return sResult;
 }
 
-CSphString sph::RenderBsonQueryBrief ( const bson::NodeHandle_t& dBson )
+CSphString sph::RenderBsonPlanBrief ( const bson::NodeHandle_t& dBson )
 {
 	StringBuilder_c tRes;
-	RenderBsonPlan ( dBson, tRes, false, 0, "", " " );
+	RenderPlainBsonPlan ( dBson, tRes, false, 0, "", " " );
 	CSphString sResult;
 	tRes.MoveTo ( sResult );
 	return sResult;
 }
 
-CSphString sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones )
+
+Bson_t sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones )
 {
 	CSphVector<BYTE> dPlan;
-	{
-		bson::Root_c tPlan ( dPlan );
-		::BuildProfileBson ( tPlan, pNode, tSchema, dZones );
-	}
-	return sph::RenderBsonQuery ( bson::MakeHandle ( dPlan ) );
+	bson::Root_c tPlan ( dPlan );
+	::BuildProfileBson ( tPlan, pNode, tSchema, dZones );
+	return dPlan;
 }
+
 
 void QueryProfile_c::BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t & dZones )
 {

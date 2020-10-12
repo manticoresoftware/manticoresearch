@@ -192,20 +192,17 @@ public:
 //////////////////////////////////////////////////////////////////////////
 
 CSphString sphXQNodeToStr ( const XQNode_t * pNode );
-CSphString sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones );
+Bson_t sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones );
 
 namespace sph
 {
-	CSphString RenderBsonQuery ( const bson::NodeHandle_t & dBson );
-	CSphString RenderBsonQueryBrief ( const bson::NodeHandle_t & dBson );
+	void RenderBsonPlan ( StringBuilder_c& tRes, const bson::NodeHandle_t & dBson, bool bDot );
+	CSphString RenderBsonPlanBrief ( const bson::NodeHandle_t & dBson );
 }
 
 struct ExplainQueryArgs_t
 {
 	const CSphString & m_sQuery;
-	CSphString & m_sRes;
-	CSphString & m_sError;
-
 	const CSphSchema *	m_pSchema = nullptr;
 	DictRefPtr_c		m_pDict;
 	FieldFilterRefPtr_c m_pFieldFilter;
@@ -217,15 +214,12 @@ struct ExplainQueryArgs_t
 	bool m_bExpandPrefix = false;
 	const void * m_pIndexData = nullptr;
 
-	ExplainQueryArgs_t ( const CSphString & sQuery, CSphString & sRes, CSphString & sError )
+	explicit ExplainQueryArgs_t ( const CSphString & sQuery )
 		: m_sQuery ( sQuery )
-		, m_sRes ( sRes )
-		, m_sError ( sError )
-	{
-	}
+	{}
 };
 
-bool Explain ( ExplainQueryArgs_t & tArgs );
+Bson_t Explain ( ExplainQueryArgs_t & tArgs );
 
 class WordlistStub_c : public ISphWordlist
 {

@@ -4321,7 +4321,7 @@ bool MinimizeSchemas ( AggrResult_t & tRes )
 
 	for ( int i=0; i<iResults; ++i )
 	{
-		// skip empty result set 
+		// skip empty result set
 		if ( !tRes.m_dResults[i].m_dMatches.GetLength() )
 			continue;
 
@@ -12531,23 +12531,47 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	tOut.Ok ( iAffected );
 }
 
+enum Profile_e {
+	NONE,
+	PLAIN,
+	DOT
+};
 
 struct SessionVars_t
 {
 	bool			m_bAutoCommit = true;
 	bool			m_bInTransaction = false;
 	ESphCollation	m_eCollation { g_eCollation };
-	bool			m_bProfile = false;
+	Profile_e		m_eProfile { Profile_e::NONE };
 	int				m_iTimeoutS = -1;
 	int				m_iThrottlingMS = -1;
 	int				m_iDistThreads = 0;
 	CSphVector<int64_t> m_dLastIds;
+
+	bool bProfile () const { return m_eProfile!=Profile_e::NONE; };
 };
 
 // fwd
 void HandleMysqlShowProfile ( RowBuffer_i & tOut, const QueryProfile_c & p, bool bMoreResultsFollow );
-static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_c & p, bool bMoreResultsFollow );
+static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_c & p, bool bMoreResultsFollow, bool bDot );
 
+bool bDot ( const SqlStmt_t & tStmt, const SessionVars_t & tVars )
+{
+	if ( tStmt.m_sThreadFormat=="dot" )
+		return true;
+	else if ( tStmt.m_sThreadFormat=="plain" )
+		return false;
+	return tVars.m_eProfile==Profile_e::DOT;
+}
+
+Profile_e ParseProfileFormat ( const SqlStmt_t & tStmt )
+{
+	if ( tStmt.m_sSetValue=="dot" )
+		return Profile_e::DOT;
+	else if ( tStmt.m_iSetValue!=0 )
+		return Profile_e::PLAIN;
+	return Profile_e::NONE;
+}
 
 void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResultMeta & tLastMeta, RowBuffer_i & dRows,
 		const CSphString & sWarning )
@@ -12582,13 +12606,14 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		{
 			CSphString sSetName ( dStmt[i].m_sSetName );
 			sSetName.ToLower();
-			tVars.m_bProfile = ( sSetName=="profiling" && dStmt[i].m_iSetValue!=0 );
+			if ( sSetName=="profiling" )
+				tVars.m_eProfile = ParseProfileFormat ( dStmt[i] );
 		}
 	}
 
 	// use first meta for faceted search
 	bool bUseFirstMeta = ( tHandler.m_dQueries.GetLength()>1 && !tHandler.m_dQueries[0].m_bFacet && tHandler.m_dQueries[1].m_bFacet );
-	if ( tVars.m_bProfile )
+	if ( tVars.bProfile() )
 		tHandler.SetProfile ( &tProfile );
 
 	// do search
@@ -12630,7 +12655,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			AggrResult_t & tRes = tHandler.m_dAggrResults[iSelect++];
 			if ( !sWarning.IsEmpty() )
 				tRes.m_sWarning = sWarning;
-			SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tVars.m_bProfile ? &tProfile : nullptr ) );
+			SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tVars.bProfile() ? &tProfile : nullptr ) );
 			// mysql server breaks send on error
 			if ( !tRes.m_iSuccesses )
 				break;
@@ -12643,7 +12668,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		else if ( eStmt==STMT_SHOW_PROFILE )
 			HandleMysqlShowProfile ( dRows, tProfile, bMoreResultsFollow );
 		else if ( eStmt==STMT_SHOW_PLAN )
-			HandleMysqlShowPlan ( dRows, tProfile, bMoreResultsFollow );
+			HandleMysqlShowPlan ( dRows, tProfile, bMoreResultsFollow, ::bDot ( dStmt[i], tVars ) );
 
 		if ( sphInterrupted() )
 		{
@@ -12752,7 +12777,7 @@ void HandleMysqlSet ( RowBuffer_i & tOut, SqlStmt_t & tStmt, SessionVars_t & tVa
 		} else if ( tStmt.m_sSetName=="profiling" )
 		{
 			// per-session PROFILING
-			tVars.m_bProfile = ( tStmt.m_iSetValue!=0 );
+			tVars.m_eProfile = ParseProfileFormat ( tStmt );
 
 		} else
 		{
@@ -14403,7 +14428,7 @@ static void HandleMysqlAlterIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t 
 }
 
 // STMT_SHOW_PLAN: SHOW PLAN
-static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_c & p, bool bMoreResultsFollow )
+static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_c & p, bool bMoreResultsFollow, bool bDot )
 {
 	tOut.HeadBegin ( 2 );
 	tOut.HeadColumn ( "Variable" );
@@ -14411,8 +14436,9 @@ static void HandleMysqlShowPlan ( RowBuffer_i & tOut, const QueryProfile_c & p, 
 	tOut.HeadEnd ( bMoreResultsFollow );
 
 	tOut.PutString ( "transformed_tree" );
-	auto sPlan = sph::RenderBsonQuery ( bson::MakeHandle ( p.m_dPlan ) );
-	tOut.PutString ( sPlan.cstr() );
+	StringBuilder_c sPlan;
+	sph::RenderBsonPlan ( sPlan, bson::MakeHandle ( p.m_dPlan ), bDot );
+	tOut.PutString ( sPlan.cstr (), sPlan.GetLength() );
 	tOut.Commit();
 
 	tOut.Eof ( bMoreResultsFollow );
@@ -14488,33 +14514,34 @@ static void HandleMysqlReloadIndex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt
 	tOut.Ok();
 }
 
-void HandleMysqlExplain ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+void HandleMysqlExplain ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, bool bDot )
 {
 	CSphString sProc ( tStmt.m_sCallProc );
-	CSphString sError;
 	if ( sProc.ToLower()!="query" )
 	{
-		sError.SetSprintf ( "no such explain procedure %s", tStmt.m_sCallProc.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.ErrorEx ( tStmt.m_sStmt, "no such explain procedure %s", tStmt.m_sCallProc.cstr () );
 		return;
 	}
 
 	auto pIndex = GetServed ( tStmt.m_sIndex );
 	if ( !pIndex )
 	{
-		sError.SetSprintf ( "unknown local index '%s'", tStmt.m_sIndex.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.ErrorEx ( tStmt.m_sStmt, "unknown local index '%s'", tStmt.m_sIndex.cstr ());
 		return;
 	}
 
-	CSphString sRes;
 	ServedDescRPtr_c pServed ( pIndex );
 
-	if ( !pServed->m_pIndex->ExplainQuery ( tStmt.m_tQuery.m_sQuery, sRes, sError ) )
+	TlsMsg::Err (); // reset error
+	auto dPlan = pServed->m_pIndex->ExplainQuery ( tStmt.m_tQuery.m_sQuery );
+	if ( TlsMsg::HasErr ())
 	{
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, TlsMsg::szError ());
 		return;
 	}
+
+	StringBuilder_c sRes;
+	sph::RenderBsonPlan ( sRes, bson::MakeHandle ( dPlan ), bDot );
 
 	tOut.HeadBegin ( 2 );
 	tOut.HeadColumn ( "Variable" );
@@ -14522,7 +14549,7 @@ void HandleMysqlExplain ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	tOut.HeadEnd ();
 
 	tOut.PutString ( "transformed_tree" );
-	tOut.PutString ( sRes );
+	tOut.PutString ( sRes.cstr(), sRes.GetLength() );
 	tOut.Commit();
 	tOut.Eof ();
 }
@@ -14617,6 +14644,11 @@ private:
 	bool				m_bFederatedUser = false;
 	CSphString			m_sFederatedQuery;
 
+	bool bDot ( const SqlStmt_t & tStmt ) const
+	{
+		return ::bDot ( tStmt, m_tVars );
+	}
+
 public:
 	SessionVars_t			m_tVars;
 	QueryProfile_c			m_tProfile;
@@ -14649,13 +14681,13 @@ public:
 		}
 
 		// parse SQL query
-		if ( m_tVars.m_bProfile )
+		if ( m_tVars.bProfile() )
 			m_tProfile.Switch ( SPH_QSTATE_SQL_PARSE );
 
 		CSphVector<SqlStmt_t> dStmt;
 		bool bParsedOK = sphParseSqlQuery ( sQuery.first, sQuery.second, dStmt, m_sError, m_tVars.m_eCollation );
 
-		if ( m_tVars.m_bProfile )
+		if ( m_tVars.bProfile() )
 			m_tProfile.Switch ( SPH_QSTATE_UNKNOWN );
 
 		SqlStmt_e eStmt = STMT_PARSE_ERROR;
@@ -14712,7 +14744,7 @@ public:
 				tHandler.SetQuery ( 0, dStmt.Begin()->m_tQuery, dStmt.Begin()->m_pTableFunc );
 				dStmt.Begin()->m_pTableFunc = nullptr;
 
-				if ( m_tVars.m_bProfile )
+				if ( m_tVars.bProfile() )
 					tHandler.SetProfile ( &m_tProfile );
 				if ( m_bFederatedUser )
 					tHandler.SetFederatedUser();
@@ -14722,7 +14754,7 @@ public:
 					// query just completed ok; reset out error message
 					m_sError = "";
 					AggrResult_t & tLast = tHandler.m_dAggrResults.Last();
-					SendMysqlSelectResult ( tOut, tLast, false, m_bFederatedUser, &m_sFederatedQuery, ( m_tVars.m_bProfile ? &m_tProfile : nullptr ) );
+					SendMysqlSelectResult ( tOut, tLast, false, m_bFederatedUser, &m_sFederatedQuery, ( m_tVars.bProfile() ? &m_tProfile : nullptr ) );
 				}
 
 				// save meta for SHOW META (profile is saved elsewhere)
@@ -15004,7 +15036,7 @@ public:
 			return true;
 
 		case STMT_SHOW_PLAN:
-			HandleMysqlShowPlan ( tOut, m_tLastProfile, false );
+			HandleMysqlShowPlan ( tOut, m_tLastProfile, false, bDot ( *pStmt ));
 			return false; // do not profile this call, keep last query profile
 
 		case STMT_SELECT_DUAL:
@@ -15114,7 +15146,7 @@ public:
 			return true;
 
 		case STMT_EXPLAIN:
-			HandleMysqlExplain ( tOut, *pStmt );
+			HandleMysqlExplain ( tOut, *pStmt, bDot ( *pStmt ) );
 			return true;
 
 		case STMT_IMPORT_TABLE:
@@ -15171,7 +15203,7 @@ QueryProfile_c * SphinxqlSessionPublic::StartProfiling ( ESphQueryState eState )
 {
 	assert ( m_pImpl );
 	QueryProfile_c * pProfile = nullptr;
-	if ( m_pImpl->m_tVars.m_bProfile ) // the current statement might change it
+	if ( m_pImpl->m_tVars.bProfile() ) // the current statement might change it
 	{
 		pProfile = &m_pImpl->m_tProfile;
 		pProfile->Start ( eState );

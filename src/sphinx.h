@@ -3225,6 +3225,9 @@ public:
 bool IsMlock ( FileAccess_e eType );
 bool IsOndisk ( FileAccess_e eType );
 
+using Bson_t = CSphVector<BYTE>;
+Bson_t EmptyBson();
+
 // returns correct size even if iBuf is 0
 int GetReadBuffer ( int iBuf );
 
@@ -3314,7 +3317,7 @@ public:
 	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult* pResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const = 0;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const = 0;
 	virtual void				GetSuggest ( const SuggestArgs_t & , SuggestResult_t & ) const {}
-	virtual bool				ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const { return true; }
+	virtual Bson_t				ExplainQuery ( const CSphString & sQuery ) const { return EmptyBson(); }
 
 public:
 	/// returns non-negative amount of actually found and updated records on success

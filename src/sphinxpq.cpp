@@ -190,7 +190,7 @@ private:
 	void ReplayCommit ( StoredQuery_i * pQuery ) EXCLUDES ( m_tLockHash, m_tLock ) final;
 
 	void GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * ) const override;
-	bool ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const override;
+	Bson_t ExplainQuery ( const CSphString & sQuery ) const final;
 
 	StoredQuerySharedPtrVecSharedPtr_t MakeClone () const EXCLUDES ( m_tLock );
 	StoredQuerySharedPtrVecSharedPtr_t MakeCloneUnl () const REQUIRES_SHARED ( m_tLock );
@@ -2799,7 +2799,7 @@ void PercolateIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles, const Fi
 	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pParentBuilder, dFiles );
 }
 
-bool PercolateIndex_c::ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const
+Bson_t PercolateIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 {
 	WordlistStub_c tWordlist;
 
@@ -2808,7 +2808,7 @@ bool PercolateIndex_c::ExplainQuery ( const CSphString & sQuery, CSphString & sR
 	TokenizerRefPtr_c pQueryTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
 	sphSetupQueryTokenizer ( pQueryTokenizer, IsStarDict ( bWordDict ), m_tSettings.m_bIndexExactWords, false );
 
-	ExplainQueryArgs_t tArgs ( sQuery, sRes, sError );
+	ExplainQueryArgs_t tArgs ( sQuery );
 	tArgs.m_pSchema = &GetInternalSchema();
 	tArgs.m_pDict = GetStatelessDict ( m_pDict );
 	SetupStarDict ( tArgs.m_pDict, pQueryTokenizer );

@@ -1166,7 +1166,7 @@ public:
 	void				CreateReader ( int64_t iSessionId ) const final;
 	bool				GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const final;
 	int					GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
-	bool				ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const override;
+	Bson_t				ExplainQuery ( const CSphString & sQuery ) const final;
 
 protected:
 	CSphSourceStats		m_tStats;
@@ -8179,9 +8179,9 @@ int RtIndex_c::GetFieldId ( const CSphString & sName, DocstoreDataType_e eType )
 	return m_pDocstoreFields.Ptr() ? m_pDocstoreFields->GetFieldId ( sName, eType ) : -1;
 }
 
-bool RtIndex_c::ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSphString & sError ) const
+Bson_t RtIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 {
-	ExplainQueryArgs_t tArgs ( sQuery, sRes, sError );
+	ExplainQueryArgs_t tArgs ( sQuery );
 	tArgs.m_pSchema = &GetMatchSchema();
 
 	TokenizerRefPtr_c pQueryTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
@@ -8203,7 +8203,6 @@ bool RtIndex_c::ExplainQuery ( const CSphString & sQuery, CSphString & sRes, CSp
 	tArgs.m_pIndexData = &tGuard.m_dRamChunks;
 
 	return Explain ( tArgs );
-
 }
 
 bool RtIndex_c::NeedStoreWordID () const

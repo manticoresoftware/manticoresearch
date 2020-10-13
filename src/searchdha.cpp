@@ -4087,11 +4087,12 @@ public:
 
 		m_dTimeouts.AddOrChangeTimeout ( pEvent );
 
+		bool bIsNew = !pEvent->m_tBack.pPtr;
 		int iRes = set_polling_for ( pEvent->m_iSock, m_dEvents.MakeLinked ( pEvent ),
-				uEvents & NetPollEvent_t::READ,	uEvents & NetPollEvent_t::ONCE, !pEvent->m_tBack.pPtr);
+				uEvents & NetPollEvent_t::READ,	uEvents & NetPollEvent_t::ONCE, bIsNew );
 
 		if ( iRes==-1 )
-			sphWarning ( "failed to setup kqueue event for sock %d, errno=%d, %s", pEvent->m_iSock, errno, strerrorm ( errno ) );
+			sphWarning ( "failed to setup queue event for sock %d, errno=%d, %s", pEvent->m_iSock, errno, strerrorm ( errno ) );
 	}
 
 	void Wait ( int timeoutMs ) REQUIRES ( NetPoollingThread )

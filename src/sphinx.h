@@ -3495,6 +3495,9 @@ void sphCreateMultiQueue ( const SphQueueSettings_t & tQueue, const VecTraits_T<
 		VecTraits_T<ISphMatchSorter *> & dSorters, VecTraits_T<CSphString> & dErrors, SphQueueRes_t & tRes,
 		StrVec_t * pExtra );
 
+/// check if tColumn is actually stored field (so, can't be used in filters/expressions)
+bool IsNotRealAttribute ( const CSphColumnInfo & tColumn );
+
 /// setup per-keyword read buffer sizes
 void SetUnhintedBuffer ( int iReadUnhinted );
 

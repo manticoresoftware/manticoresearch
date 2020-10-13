@@ -1336,6 +1336,12 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 				return nullptr;
 			}
 
+			if ( IsNotRealAttribute ( *pAttr ) )
+			{
+				sError.SetSprintf ( "unsupported column '%s' (stored field, NOT attribute)", sAttrName.cstr ());
+				return nullptr;
+			}
+
 			if ( pAttr->m_eAttrType==SPH_ATTR_JSON || pAttr->m_eAttrType==SPH_ATTR_JSON_FIELD )
 			{
 				pExpr = pAttr->m_pExpr;

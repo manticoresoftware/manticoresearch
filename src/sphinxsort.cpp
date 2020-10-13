@@ -5280,6 +5280,11 @@ public:
 
 };
 
+bool IsNotRealAttribute ( const CSphColumnInfo & tColumn )
+{
+	return tColumn.m_uFieldFlags & CSphColumnInfo::FIELD_STORED;
+}
+
 bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 {
 	if ( m_tQuery.m_sGroupBy.IsEmpty() && !bHasImplicitGrouping )
@@ -5302,6 +5307,9 @@ bool QueueCreator_c::SetupGroupbySettings ( bool bHasImplicitGrouping )
 			return Err ( "group-count-distinct attribute '%s' not found", m_tQuery.m_sGroupDistinct.cstr () );
 
 		const auto & tDistinctAttr = tSchema.GetAttr ( iDistinct );
+		if ( IsNotRealAttribute ( tDistinctAttr ))
+			return Err ( "group-count-distinct attribute '%s' not found", m_tQuery.m_sGroupDistinct.cstr ());
+
 		m_tGroupSorterSettings.m_tDistinctAttr = tDistinctAttr.m_tLocator;
 		m_tGroupSorterSettings.m_eDistinctAttr = tDistinctAttr.m_eAttrType;
 	}
@@ -6012,7 +6020,6 @@ bool QueueCreator_c::ParseQueryItem ( const CSphQueryItem & tItem )
 // Test for @geodist and setup, if any
 bool QueueCreator_c::MaybeAddGeodistColumn ()
 {
-
 	if ( m_tQuery.m_bGeoAnchor && m_pSorterSchema->GetAttrIndex ( "@geodist" )<0 )
 	{
 		auto pExpr = new ExprGeodist_t ();
@@ -6525,7 +6532,8 @@ bool QueueCreator_c::SetupGroupQueue ()
 
 bool QueueCreator_c::SetupQueue ()
 {
-	return SetupComputeQueue () && SetupGroupQueue ();
+	return SetupComputeQueue ()
+		&& SetupGroupQueue ();
 }
 
 ISphMatchSorter * QueueCreator_c::CreateQueue ()

@@ -179,7 +179,7 @@ index products {
 <!-- end -->
 
 <!-- example stopwords 2 -->
-If you need to use stop words for multiple languages you should list all their aliases, separated with commas:
+If you need to use stop words for multiple languages you should list all their aliases, separated with commas (in RT mode) or spaces (plain mode):
 
 
 <!-- intro -->
@@ -221,7 +221,7 @@ $index->create($params);
 
 ```ini
 index products {
-  stopwords = en, it, ru
+  stopwords = en it ru
   
   type = rt
   path = idx

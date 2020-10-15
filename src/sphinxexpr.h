@@ -161,6 +161,18 @@ inline ISphExpr* SafeClone ( ISphExpr * pRhs )
 	return nullptr;
 }
 
+inline void FreeDataPtr ( const ISphExpr & tExpr, const void * pData )
+{
+	if ( tExpr.IsDataPtrAttr () && pData )
+		delete[] ( (const BYTE *) pData );
+}
+
+inline void FreeDataPtr ( const ISphExpr * pExpr, const void * pData )
+{
+	if ( pExpr )
+		FreeDataPtr ( *pExpr, pData );
+}
+
 /// set global behavior of grouping by day/week/month/year functions:
 /// if invoked true, params treated as UTC timestamps,
 /// and as local timestamps otherwise (default)

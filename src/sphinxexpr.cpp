@@ -148,7 +148,7 @@ const BYTE * ISphExpr::StringEvalPacked ( const CSphMatch & tMatch ) const
 	const BYTE * pStr = nullptr;
 	int iStrLen = StringEval ( tMatch, &pStr );
 	auto pRes = sphPackPtrAttr ( { pStr, iStrLen } );
-	if ( IsDataPtrAttr () ) SafeDeleteArray ( pStr );
+	FreeDataPtr ( *this, pStr );
 	return pRes;
 }
 
@@ -1152,7 +1152,7 @@ public:
 	{
 		const BYTE * pStr = nullptr;
 		int iLen = m_pFirst->StringEval ( tMatch, &pStr );
-		if ( m_pFirst->IsDataPtrAttr () ) SafeDeleteArray ( pStr );
+		FreeDataPtr ( *m_pFirst, pStr );
 		return iLen;
 	}
 
@@ -1181,8 +1181,7 @@ public:
 		const BYTE * pStr;
 		int iLen = m_pFirst->StringEval ( tMatch, &pStr );
 		DWORD uCrc = sphCRC32 ( pStr, iLen );
-		if ( m_pFirst->IsDataPtrAttr() )
-			SafeDeleteArray ( pStr );
+		FreeDataPtr ( *m_pFirst, pStr );
 		return uCrc;
 	}
 
@@ -1349,8 +1348,7 @@ protected:
 			if ( pStr )
 				dResult.Append ( pStr, iLen );
 
-			if ( i.m_pExpr && i.m_pExpr->IsDataPtrAttr() )
-				SafeDeleteArray(pStr);
+			FreeDataPtr ( i.m_pExpr, pStr );
 		}
 
 		dResult.Add('\0');
@@ -2250,8 +2248,7 @@ public:
 		
 		m_iLenDelim = pDelim->StringEval ( tTmp, &pBuf );
 		m_sDelim.SetBinary ( (const char *)pBuf, m_iLenDelim );
-		if ( pDelim->IsDataPtrAttr() )
-			SafeDeleteArray ( pBuf );
+		FreeDataPtr ( *pDelim, pBuf );
 
 		m_iCount = pCount->IntEval ( tTmp );
 	}
@@ -2283,8 +2280,7 @@ public:
 				RightSearch ( pDoc, iDocLen, m_iCount, ppStr, &iLength );
 		}
 
-		if ( m_pArg->IsDataPtrAttr() )
-			SafeDeleteArray ( pDoc );
+		FreeDataPtr ( *m_pArg, pDoc );
 
 		return iLength;
 	}
@@ -2316,8 +2312,7 @@ public:
 			}
 		}
 
-		if ( IsDataPtrAttr() )
-			SafeDeleteArray ( pBuf );
+		FreeDataPtr ( *this, pBuf );
 		return fVal;
 	}
 
@@ -2343,8 +2338,7 @@ public:
 			}
 		}
 
-		if ( IsDataPtrAttr() )
-			SafeDeleteArray ( pBuf );
+		FreeDataPtr ( *this, pBuf );
 		return iVal;
 	}
 
@@ -2370,8 +2364,7 @@ public:
 			}
 		}
 
-		if ( IsDataPtrAttr() )
-			SafeDeleteArray ( pBuf );
+		FreeDataPtr ( *this, pBuf );
 		return iVal;
 	}
 
@@ -2693,8 +2686,8 @@ public:
 
 		bool bEq = m_fnStrCmp ( pLeft, pRight, false, iLeft, iRight )==0;
 
-		if ( m_pFirst->IsDataPtrAttr() ) SafeDeleteArray ( pLeft );
-		if ( m_pSecond->IsDataPtrAttr() ) SafeDeleteArray ( pRight );
+		FreeDataPtr ( *m_pFirst, pLeft );
+		FreeDataPtr ( *m_pSecond, pRight );
 
 		return (int)bEq;
 	}

@@ -241,7 +241,6 @@ public:
 	CSphString		m_sZones;
 	ESphHitless		m_eHitless = SPH_HITLESS_NONE;
 	CSphString		m_sHitlessFiles;
-	bool			m_bVerbose = false;
 	int				m_iEmbeddedLimit = 0;
 	SphOffset_t		m_tBlobUpdateSpace {0};
 	int				m_iSkiplistBlockSize {32};

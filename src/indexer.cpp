@@ -892,7 +892,7 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 //////////////////////////////////////////////////////////////////////////
 
 bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
-	const CSphConfigType & hSources, bool bVerbose, FILE * fpDumpRows )
+	const CSphConfigType & hSources, FILE * fpDumpRows )
 {
 	// check index type
 	bool bPlain = true;
@@ -1208,8 +1208,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 			fprintf ( stdout, "FATAL: %s, will not index. Try --rotate option.\n", pIndex->GetLastError().cstr() );
 			exit ( 1 );
 		}
-
-		tSettings.m_bVerbose = bVerbose;
 
 		if ( pDict->GetSettings().m_bWordDict && ( tSettings.m_dPrefixFields.GetLength() || tSettings.m_dInfixFields.GetLength() ) )
 		{
@@ -1644,8 +1642,6 @@ static void ShowHelp ()
 		"\t\t\t(default is manticore.conf)\n"
 		"--all\t\t\treindex all configured indexes\n"
 		"--quiet\t\t\tbe quiet, only print errors\n"
-		"--verbose [debug|debugv|debugvv]\n"
-		"\t\t\tverbose indexing issues report\n"
 		"--noprogress\t\tdo not display progress\n"
 		"\t\t\t(automatically on if output is not to a tty)\n"
 		"--rotate\t\tsend SIGHUP to searchd when indexing is over\n"
@@ -1683,7 +1679,6 @@ int main ( int argc, char ** argv )
 	CSphVector<const char *> dIndexes;
 	CSphVector<const char *> dWildIndexes;
 	bool bIndexAll = false;
-	bool bVerbose = false;
 	CSphString sDumpRows;
 
 	if ( argc==2 && ( !strcmp ( argv[1], "--help" ) || !strcmp ( argv[1], "-h" )))
@@ -1752,25 +1747,6 @@ int main ( int argc, char ** argv )
 		{
 			bIndexAll = true;
 
-		} else if ( strcasecmp ( argv[i], "--verbose" )==0 )
-		{
-			bVerbose = true;
-			if ( (i+2) < argc )
-			{
-				if ( strcmp (argv[i+1], "debug" )==0 )
-				{
-					g_eLogLevel = SPH_LOG_DEBUG;
-					++i;
-				} else if ( strcmp ( argv[i+1], "debugv" )==0 )
-				{
-					g_eLogLevel = SPH_LOG_VERBOSE_DEBUG;
-					++i;
-				} else if ( strcmp ( argv[i+1], "debugvv" )==0 )
-				{
-					g_eLogLevel = SPH_LOG_VERY_VERBOSE_DEBUG;
-					++i;
-				}
-			}
 		} else if ( isalnum ( argv[i][0] ) || argv[i][0]=='_' || sphIsWild ( argv[i][0] ) )
 		{
 			bool bHasWilds = false;
@@ -1991,7 +1967,7 @@ int main ( int argc, char ** argv )
 		hConf["index"].IterateStart ();
 		while ( hConf["index"].IterateNext() )
 		{
-			bool bLastOk = DoIndex ( hConf["index"].IterateGet (), hConf["index"].IterateGetKey().cstr(), hConf["source"], bVerbose, fpDumpRows );
+			bool bLastOk = DoIndex ( hConf["index"].IterateGet (), hConf["index"].IterateGetKey().cstr(), hConf["source"], fpDumpRows );
 			if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && g_bSendHUP && SendRotate ( hConf, false ) )
 				tmRotated = sphMicroTimer();
 			if ( bLastOk )
@@ -2006,7 +1982,7 @@ int main ( int argc, char ** argv )
 				fprintf ( stdout, "WARNING: no such index '%s', skipping.\n", dIndexes[j] );
 			else
 			{
-				bool bLastOk = DoIndex ( hConf["index"][dIndexes[j]], dIndexes[j], hConf["source"], bVerbose, fpDumpRows );
+				bool bLastOk = DoIndex ( hConf["index"][dIndexes[j]], dIndexes[j], hConf["source"], fpDumpRows );
 				if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && g_bSendHUP && SendRotate ( hConf, false ) )
 					tmRotated = sphMicroTimer();
 				if ( bLastOk )

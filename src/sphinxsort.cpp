@@ -3130,7 +3130,10 @@ private:
 		if ( bFinalize ) {
 			SortGroups ();
 			if_const ( DISTINCT && !m_bSortByDistinct ) // since they wasn't counted at the top
-				CountDistinct ();
+			{
+				RebuildHash(); // distinct uses m_hGroup2Match
+				CountDistinct();
+			}
 		} else {
 			// we've called CalcAvg ( Avg_e::FINALIZE ) before partitioning groups
 			// now we can undo this calculation for the rest apart of thrown away

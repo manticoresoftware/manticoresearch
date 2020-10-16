@@ -270,6 +270,23 @@ index dist_j
 	local					= dist_j1
 	local					= dist_j2
 }
+
+
+source src_dist_mm
+{
+	type = tsvpipe
+	tsvpipe_command = cat <this_test/>/data_mm.tsv
+	tsvpipe_field = body
+	tsvpipe_attr_uint = i1
+    tsvpipe_attr_uint = i2
+}
+
+index dist_mm
+{
+	source = src_dist_mm
+	path = <data_path/>/dist_mm
+}
+
 </config>
 
 
@@ -476,6 +493,12 @@ index dist_j
 <sphinxql>SELECT id, tag FROM idx_keys limit 3 offset 3</sphinxql>
 <sphinxql>SELECT id, tag FROM idx_keys limit 2 offset 6</sphinxql>
 <sphinxql>SELECT id, tag FROM idx_keys limit 10 offset 5</sphinxql>
+
+<!-- count distinct vs mat_matches -->
+<sphinxql>select count(distinct i1), count(*), i2, i1 from dist_mm group by i2 limit 5</sphinxql>
+<sphinxql>select count(distinct i1), count(*), i2, i1 from dist_mm group by i2 limit 5 option max_matches=30</sphinxql>
+<sphinxql>select count(distinct i1), count(*), i2, i1 from dist_mm group by i2 limit 5 option max_matches=29</sphinxql>
+
 
 </sphqueries>
 

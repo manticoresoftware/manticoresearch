@@ -341,7 +341,7 @@ static XQNode_t * FixupNot ( XQNode_t * pNode, CSphVector<XQNode_t *> & dSpawned
 	return pAnd;
 }
 
-XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec )
+XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec, bool bOnlyNotAllowed )
 {
 	FixupDestForms ();
 	DeleteNodesWOFields ( pRoot );
@@ -363,7 +363,7 @@ XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & 
 
 	if ( pRoot && pRoot->GetOp()==SPH_QUERY_NOT )
 	{
-		if ( g_bOnlyNotAllowed )
+		if ( bOnlyNotAllowed  )
 		{
 			pRoot = FixupNot ( pRoot, m_dSpawned );
 		} else if ( !pRoot->m_iOpArg )
@@ -1810,7 +1810,11 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 		return false;
 	}
 
-	XQNode_t * pNewRoot = FixupTree ( m_pRoot, *m_dStateSpec.Last());
+	bool bNotOnlyAllowed = g_bOnlyNotAllowed;
+	if ( pQuery )
+		bNotOnlyAllowed |= pQuery->m_bNotOnlyAllowed;
+
+	XQNode_t * pNewRoot = FixupTree ( m_pRoot, *m_dStateSpec.Last(), bNotOnlyAllowed );
 	if ( !pNewRoot )
 	{
 		Cleanup();

@@ -311,7 +311,7 @@ public:
 	void			Setup ( const CSphSchema * pSchema, ISphTokenizer * pTokenizer, CSphDict * pDict, XQQuery_t * pXQQuery, const CSphIndexSettings & tSettings );
 	bool			Error ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 	void			Warning ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
-	XQNode_t *		FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec );
+	XQNode_t *		FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec, bool bOnlyNotAllowed );
 
 	const CSphSchema * GetSchema() const { return m_pSchema; }
 	CSphDict *		GetDict() { return m_pDict; }

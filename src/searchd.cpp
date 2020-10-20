@@ -1504,7 +1504,8 @@ enum
 	QFLAG_LOW_PRIORITY			= 1UL << 8,
 	QFLAG_FACET					= 1UL << 9,
 	QFLAG_FACET_HEAD			= 1UL << 10,
-	QFLAG_JSON_QUERY			= 1UL << 11
+	QFLAG_JSON_QUERY			= 1UL << 11,
+	QFLAG_NOT_ONLY_ALLOWED		= 1UL << 12
 };
 
 void operator<< ( ISphOutputBuffer & tOut, const CSphNamedInt & tValue )
@@ -1536,6 +1537,7 @@ void SearchRequestBuilder_c::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	uFlags |= QFLAG_LOW_PRIORITY * q.m_bLowPriority;
 	uFlags |= QFLAG_FACET * q.m_bFacet;
 	uFlags |= QFLAG_FACET_HEAD * q.m_bFacetHead;
+	uFlags |= QFLAG_NOT_ONLY_ALLOWED * q.m_bNotOnlyAllowed;
 
 	if ( q.m_eQueryType==QUERY_JSON )
 		uFlags |= QFLAG_JSON_QUERY;
@@ -2434,6 +2436,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		tQuery.m_bFacet = !!( uFlags & QFLAG_FACET );
 		tQuery.m_bFacetHead = !!( uFlags & QFLAG_FACET_HEAD );
 		tQuery.m_eQueryType = (uFlags & QFLAG_JSON_QUERY) ? QUERY_JSON : QUERY_API;
+		tQuery.m_bNotOnlyAllowed = !!( uFlags & QFLAG_NOT_ONLY_ALLOWED );
 
 		if ( uMasterVer>0 || uVer==0x11E )
 			tQuery.m_bNormalizedTFIDF = !!( uFlags & QFLAG_NORMALIZED_TF );

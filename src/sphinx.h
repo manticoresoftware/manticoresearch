@@ -2627,6 +2627,7 @@ struct CSphQuery
 	bool			m_bIgnoreNonexistentIndexes = false; ///< whether to error or not about non-existent indexes in index list
 	bool			m_bStrict = false;			///< whether to warning or not about incompatible types
 	bool			m_bSync = false;			///< whether or not use synchronous operations (optimize, etc.)
+	bool			m_bNotOnlyAllowed = false;	///< whether allow single full-text not operator
 
 	ISphTableFunc *	m_pTableFunc = nullptr;		///< post-query NOT OWNED, WILL NOT BE FREED in dtor.
 	CSphFilterSettings	m_tHaving;				///< post aggregate filtering (got applied only on master)

@@ -255,6 +255,7 @@ enum class Option_e : BYTE
 	THREADS,
 	TOKEN_FILTER,
 	TOKEN_FILTER_OPTIONS,
+	NOT_ONLY_ALLOWED,
 
 	INVALID_OPTION
 };
@@ -265,7 +266,8 @@ Option_e ParseOption ( const CSphString& sOpt )
 		"columns", "comment", "cutoff", "debug_no_payload", "expand_keywords", "field_weights", "format", "global_idf",
 		"idf", "ignore_nonexistent_columns", "ignore_nonexistent_indexes", "index_weights", "local_df", "low_priority",
 		"max_matches", "max_predicted_time", "max_query_time", "morphology", "rand_seed", "ranker", "retry_count",
-		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options" };
+		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
+		"not_terms_only_allowed" };
 
 	static SmallStringHash_T<Option_e, (BYTE) Option_e::INVALID_OPTION * 2> hValues;
 	if ( !hValues.GetLength () )
@@ -526,6 +528,10 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 			m_pParseError->SetSprintf ( "morphology could be only disabled with option none, got %s", sVal.cstr() );
 			return false;
 		}
+		break;
+
+	case Option_e::NOT_ONLY_ALLOWED: //} else if ( sOpt=="not_terms_only_allowed" )
+		m_pQuery->m_bNotOnlyAllowed = ( tValue.m_iValue!=0 );
 		break;
 
 	default: //} else

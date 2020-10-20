@@ -245,7 +245,7 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 	}
 
 	XQLimitSpec_t tLimitSpec;
-	tParsed.m_pRoot = tBuilder.FixupTree ( tParsed.m_pRoot, tLimitSpec );
+	tParsed.m_pRoot = tBuilder.FixupTree ( tParsed.m_pRoot, tLimitSpec, false );
 	if ( tBuilder.IsError() )
 	{
 		tBuilder.Cleanup();

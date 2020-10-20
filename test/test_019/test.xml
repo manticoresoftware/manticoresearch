@@ -47,6 +47,42 @@ index fld
 	path			= <data_path/>/fld
 }
 
+source src_i1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT *, 11 as idd FROM test_table1 where document_id &lt; 5
+	sql_attr_uint = idd
+    sql_field_string = body
+}
+
+index i1
+{
+	source			= src_i1
+	path			= <data_path/>/i1
+}
+
+source src_i2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT *, 11 as idd FROM test_table1 where document_id &gt; 4
+	sql_attr_uint = idd
+    sql_field_string = body
+}
+
+index i2
+{
+	source			= src_i2
+	path			= <data_path/>/i2
+}
+
+index dist1
+{
+	type = distributed
+	agent = <my_address/>:i1
+	agent = <my_address/>:i2
+}
 </config>
 
 <queries>
@@ -110,6 +146,14 @@ index fld
 <sphinxql>select * from test where match ( '@@relaxed ((@ttitle sample) | (@ttitle sample) (@body program -in )) ' )</sphinxql>
 <!-- regression for ranker fieldmask -->
 <sphinxql>select id, weight() from fld where match ( 'spec1 | dummy1' ) order by id asc option ranker='fieldmask'</sphinxql>
+
+<!-- query option not_terms_only_allowed -->
+<sphinxql>select * from i1 where match ( '-hello' ) order by id asc</sphinxql>
+<sphinxql>select * from dist1 where match ( '-hello' ) order by id asc</sphinxql>
+<sphinxql>select * from i1 where match ( '-hello' ) order by id asc option not_terms_only_allowed=1</sphinxql>
+<sphinxql>select * from i2 where match ( '-hello' ) order by id asc option not_terms_only_allowed=1</sphinxql>
+<sphinxql>select * from dist1 where match ( '-hello' ) order by id asc option not_terms_only_allowed=1</sphinxql>
+
 </sphqueries>
 <db_create>
 CREATE TABLE `test_table`
@@ -151,6 +195,26 @@ INSERT INTO `test_table` VALUES
 (1008, 'spec4', 'dummy4 text4' ),
 (1009, 'spec5 of my', 'dummy5' ),
 (1010, 'spec5', 'of my text5' )
+</db_insert>
+
+<db_create>
+CREATE TABLE `test_table1`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+) CHARACTER SET utf8
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `test_table1`</db_drop>
+<db_insert>
+INSERT INTO `test_table1` VALUES
+( 1, 'hello world' ),
+( 2, 'hello hallo world' ),
+( 3, 'a b world' ),
+( 4, 'a b c world' ),
+( 5, 'hello war' ),
+( 6, 'hello hallo war' ),
+( 7, 'a b war' ),
+( 8, 'a b c war' )
 </db_insert>
 
 </test>

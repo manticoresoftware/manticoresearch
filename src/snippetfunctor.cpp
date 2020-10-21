@@ -1282,7 +1282,8 @@ bool QueryHighlighter_c::OnToken ( const TokenInfo_t & tTok, const CSphVector<Sp
 	CheckClose ( tTok.m_uPosition );
 
 	// marker folding, emit "before" marker at span start only
-	if ( m_pHit<m_pHitEnd && IsTokenHit ( tTok, m_pHit->m_uPosition, 0, m_iField ) && !m_iOpenUntilTokenPos )
+	// tmg note: stopwords with step 0 resets m_iOpenUntilTokenPos and breaks highligh of spans of tokens
+	if ( m_pHit<m_pHitEnd && IsTokenHit ( tTok, m_pHit->m_uPosition, m_pHit->m_uSpan, m_iField ) && !m_iOpenUntilTokenPos )
 	{
 		ResultEmit ( m_dResult, m_tQuery.m_sBeforeMatch.cstr(), m_iBeforeLen, m_tQuery.m_bHasBeforePassageMacro, m_iPassageId, m_tQuery.m_sBeforeMatchPassage.cstr(), m_iBeforePostLen );
 		m_iMatches++;

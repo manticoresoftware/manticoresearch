@@ -41,7 +41,7 @@ STATIC_SIZE_ASSERT ( SphDocID_t, 8 );
 const DWORD SPH_SKIPLIST_BLOCK=128;
 
 static const DWORD META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
-static const DWORD META_VERSION		= 14;			///< current version
+static const DWORD META_VERSION		= 17;			///< current version
 
 static const DWORD PQ_META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
 static const DWORD PQ_META_VERSION = 7;					///< current version
@@ -149,7 +149,6 @@ struct IndexSettings_t : public CSphSourceSettings
 	CSphString		m_sHtmlRemoveElements;
 	CSphString		m_sZones;
 	ESphHitless		m_eHitless = SPH_HITLESS_NONE;
-	CSphString		m_sHitlessFiles;
 	int				m_iEmbeddedLimit = 0;
 	int64_t			m_tBlobUpdateSpace = 0;
 	int				m_iSkiplistBlockSize = 0;
@@ -1539,6 +1538,7 @@ void ConverterPlain_t::SaveHeader ( const Index_t & tIndex, DWORD uKillListSize 
 	tWriter.PutString ( tIndex.m_tSettings.m_sIndexTokenFilter );
 	tWriter.PutOffset ( tIndex.m_tSettings.m_tBlobUpdateSpace );
 	tWriter.PutDword ( tIndex.m_tSettings.m_iSkiplistBlockSize );
+	tWriter.PutString ( "" ); // tSettings.m_sHitlessFiles
 
 	// tokenizer
 	SaveTokenizerSettings ( tWriter, tIndex.m_pTokenizer, tIndex.m_tSettings.m_iEmbeddedLimit );
@@ -2051,6 +2051,7 @@ static bool SaveRtIndex ( Index_t & tIndex, CSphString & sWarning, CSphString & 
 	wrMeta.PutString ( tIndex.m_tSettings.m_sIndexTokenFilter );
 	wrMeta.PutOffset ( tDefaultSettings.m_tBlobUpdateSpace );
 	wrMeta.PutDword ( tDefaultSettings.m_iSkiplistBlockSize );
+	wrMeta.PutString ( "" ); // tSettings.m_sHitlessFiles
 
 	// tokenizer
 	SaveTokenizerSettings ( wrMeta, tIndex.m_pTokenizer, tIndex.m_tSettings.m_iEmbeddedLimit );
@@ -2073,6 +2074,9 @@ static bool SaveRtIndex ( Index_t & tIndex, CSphString & sWarning, CSphString & 
 	// meta v.12
 	wrMeta.PutDword ( tIndex.m_dRtChunkNames.GetLength () );
 	wrMeta.PutBytes ( tIndex.m_dRtChunkNames.Begin(), tIndex.m_dRtChunkNames.GetLengthBytes64 () );
+	
+	// meta v.17
+	wrMeta.PutOffset ( DEFAULT_RT_MEM_LIMIT );
 
 	wrMeta.CloseFile();
 

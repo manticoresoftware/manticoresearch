@@ -278,7 +278,21 @@ RT index keeps some data in memory (so-called RAM chunk) and also maintains a nu
 
 The limit is pretty strict; RT index should never allocate more memory than it’s limited to. The memory is not preallocated either, hence, specifying 512 MB limit and only inserting 3 MB of data should result in allocating 3 MB, not 512 MB.
 
-Value: size
+The RAM chunk should be sized depending on the size of the data, rate of inserts/updates and hardware. A small rt_mem_limit and frequent insert/updates can lead to creation of many disk chunks, requiring more frequent optimizations of the index.
+
+A large RAM chunk will put more pressure on the storage on two events:
+
+* when flushing the RAM chunk to disk into the `ram` file 
+* when it's full and is dumped as disk chunk
+
+A large RAM chunk will also generate bigger binlogs. If the storage is slow this can translate into longer startup times in case of a recovery. 
+
+In RT mode the RAM chunk size limit can be changed using `ALTER TABLE`.
+
+In plain mode rt_mem_limit can be changed using the following steps:
+
+* edit rt_mem_limit value in configuration
+* run `ALTER TABLE <index_name> RECONFIGURE`
 
 ### Plain index settings:
 

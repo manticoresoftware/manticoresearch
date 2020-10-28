@@ -60,6 +60,19 @@ Array
 )
 
 ```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```php
+utilsApi.sql('mode=raw&query=DROP TABLE products')
+```
+
+<!-- response Python -->
+```python
+{u'error': u'', u'total': 0, u'warning': u''}
+```
 
 <!-- end -->
 
@@ -80,7 +93,7 @@ When deleting an index via PHP, you can add an optional `silent` parameter which
 <!-- request SQL -->
 
 ```sql
-drop table if exists products;
+DROP TABLE IF EXISTS products;
 ```
 
 <!-- intro -->
@@ -89,7 +102,7 @@ drop table if exists products;
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=drop table if exists products"
+POST /sql -d "mode=raw&query=DROP TABLE IF EXISTS products"
 ```
 
 <!-- intro -->
@@ -106,5 +119,17 @@ $params =
 
 $client->indices()->drop($params);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```php
+utilsApi.sql('mode=raw&query=DROP TABLE IF EXISTS products')
+```
+
+<!-- response Python -->
+```python
+{u'error': u'', u'total': 0, u'warning': u''}
+```
 <!-- end -->

@@ -88,6 +88,14 @@ $newstoredquery = [
 ];
 $client->pq()->doc($newstoredquery);
 ```
+<!-- intro -->
+##### Python
+<!-- request Python -->
+```python
+indexApi = api = manticoresearch.IndexApi(client)
+newstoredquery ={"index" : "test_pq", "id" : 2, "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}}
+indexApi.insert(store_query)
+```
 
 <!-- end -->
 
@@ -191,7 +199,22 @@ Array(
        [result] => created
 )
 ```
-
+<!-- intro -->
+##### Python
+<!-- request Python -->
+```python
+indexApi = api = manticoresearch.IndexApi(client)
+newstoredquery ={"index" : "test_pq", "id" : 2, "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}}
+indexApi.insert(store_query)
+```
+<!-- response Python -->
+```python
+{'created': True,
+ 'found': None,
+ 'id': 1657843905795719198,
+ 'index': 'test_pq',
+ 'result': 'created'}
+```
 <!-- end -->
 
 <!-- example noschema -->

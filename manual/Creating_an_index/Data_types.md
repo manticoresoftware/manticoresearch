@@ -51,6 +51,15 @@ $index->create([
 ]);
 ```
 <!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```php
+utilsApi.sql('mode=raw&query=create table forum(title text, content text, author_id int, forum_id int, post_date timestamp)')
+```
+
+<!-- intro -->
 ##### config:
 
 <!-- request config -->
@@ -140,6 +149,16 @@ $client->search([
 ]);
 ```
 
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+searchApi.search({"index":"forum","query":{"match_all":{},"bool":{"must":[{"equals":{"author_id":123}},{"in":{"forum_id":[1,3,7]}}]}},"sort":[{"post_date":"desc"}]})
+```
+
 <!-- end -->
 
 Below is the list of data types supported by Manticore Search:
@@ -186,6 +205,16 @@ $index->create([
     'title'=>['type'=>'text']
 ]);
 ```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text)')
+```
+
 <!-- intro -->
 ##### config:
 
@@ -239,7 +268,14 @@ $index->create([
     'title'=>['type'=>'text','options'=>['indexed']]
 ]);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text indexed)')
+```
 <!-- intro -->
 ##### config:
 
@@ -285,6 +321,8 @@ POST /search
 }
 ```
 
+
+
 <!-- intro -->
 ##### PHP:
 
@@ -294,6 +332,16 @@ POST /search
 $index->setName('products')->search('@title')->get();
 
 ```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+searchApi.search({"index":"products","query":{"match":{"title":"first"}}})
+```
+
 
 <!-- end -->
 
@@ -332,7 +380,14 @@ $index->create([
 	'keys'=>['type'=>'string']
 ]);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```php
+utilsApi.sql('mode=raw&query=create table products(title text, keys string)')
+```
 <!-- intro -->
 ##### config:
 
@@ -388,6 +443,14 @@ $index->setName('products');
 $index->create([
     'title'=>['type'=>'string','options'=>['indexed','attribute']]
 ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products ( title string attribute indexed )')
 ```
 
 <!-- intro -->
@@ -447,6 +510,15 @@ $index->create([
 ```
 
 <!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price int)')
+```
+
+<!-- intro -->
 ##### config:
 
 <!-- request config -->
@@ -499,6 +571,14 @@ $index->create([
 	'flags'=>['type'=>'bit(3)'],
 	'tags'=>['type'=>'bit(2)']
 ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, flags bit(3), tags bit(2) ')
 ```
 
 <!-- intro -->
@@ -557,6 +637,14 @@ $index->create([
 	'price'=>['type'=>'bigint']
 ]);
 ```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price bigint )')
+```
 
 <!-- intro -->
 ##### config:
@@ -613,6 +701,15 @@ $index->create([
 	'date'=>['type'=>'timestamp']
 ]);
 ```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, date timestamp)')
+```
+
 
 <!-- intro -->
 ##### config:
@@ -670,6 +767,16 @@ $index->create([
 ```
 
 <!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, coeff float)')
+```
+
+
+<!-- intro -->
 ##### config:
 
 <!-- request config -->
@@ -721,6 +828,14 @@ POST /search
 ```php
 $index->setName('products')->search('')->expression('eps','abs(a-b)')->get();
 ```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"eps":"abs(a-b)"}})
+```
 
 <!-- end -->
 
@@ -756,7 +871,14 @@ POST /search
 ```php
 $index->setName('products')->search('')->expression('inc','in(ceil(attr*100),200,250,350)')->get();
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"inc":"in(ceil(attr*100),200,250,350)"}})
+```
 <!-- end -->
 
 ## JSON
@@ -793,6 +915,15 @@ $index->create([
     'title'=>['type'=>'text'],
 	'data'=>['type'=>'json']
 ]);
+```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, data json)')
 ```
 
 <!-- intro -->
@@ -849,6 +980,14 @@ POST /search
 ```php
 $index->setName('products')->search('')->expression('idx','indexof(x>2 for x in data.intarray)')->get();
 ```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"idx":"indexof(x>2 for x in data.intarray)"}})
+```
 
 <!-- end -->
 
@@ -889,7 +1028,14 @@ POST /search
 ```php
 $index->setName('products')->search('')->expression('idx',"regex(data.name, 'est')")->filter('c','gt',0)->get();
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+searchApi.search({"index":"products","query":{"match_all":{},"range":{"c":{"gt":0}}}},"expressions":{"c":"regex(data.name, 'est')"}})
+```
 <!-- end -->
 
 <!-- example for DOUBLE() -->
@@ -925,7 +1071,14 @@ POST /search
 ```php
 $index->setName('products')->search('')->sort('double(data.myfloat)','desc')->get();
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+searchApi.search({"index":"products","query":{"match_all":{}}},"sort":[{"double(data.myfloat)":{"order":"desc"}}]})
+```
 <!-- end -->
 
 ## Multi-value integer (MVA)
@@ -964,6 +1117,16 @@ $index->create([
 	'product_codes'=>['type'=>'multi']
 ]);
 ```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, product_codes multi)')
+```
+
 
 <!-- intro -->
 ##### config:
@@ -1021,7 +1184,14 @@ POST /search
 ```php
 $index->setName('products')->search('')->filter('any(product_codes)','equals',3)->get();
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+searchApi.search({"index":"products","query":{"match_all":{},"equals":{"any(product_codes)":3}}}})
+```
 <!-- end -->
 
 <!-- example for least/greatest MVA -->
@@ -1060,7 +1230,14 @@ POST /search
 ```php
 $index->setName('products')->search('')->sort('product_codes','asc','min')->get();
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+searchApi.search({"index":"products","query":{"match_all":{},"sort":[{"product_codes":{"order":"asc","mode":"min"}}]}})
+```
 <!-- end -->
 
 <!-- example for grouping by MVA -->
@@ -1230,7 +1407,32 @@ Array
         )
 )
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+indexApi.insert({"index":"products","id":1,"doc":{"title":"first","product_codes":[4,2,1,3]}})
+searchApi.search({"index":"products","query":{"match_all":{}}})
+```
+<!-- response Python -->
+
+```python
+{'created': True,
+ 'found': None,
+ 'id': 1,
+ 'index': 'products',
+ 'result': 'created'}
+{'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 1,
+                    u'_source': {u'product_codes': [1, 2, 3, 4],
+                                 u'title': u'first'}}],
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 29}
+```
 
 <!-- end -->
 
@@ -1270,6 +1472,15 @@ $index->create([
     'title'=>['type'=>'text'],
 	'values'=>['type'=>'multi64']
 ]);
+```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, values multi64))')
 ```
 
 <!-- intro -->

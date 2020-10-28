@@ -30,14 +30,13 @@ SHOW TABLES;
 <!-- response SQL -->
 
 ```sql
-+-------+-------------+
-| Index | Type        |
-+-------+-------------+
-| dist1 | distributed |
-| rt    | rt          |
-| test1 | local       |
-| test2 | local       |
-+-------+-------------+
++----------+-------------+
+| Index    | Type        |
++----------+-------------+
+| dist1    | distributed |
+| rt       | rt          |
+| products | rt       |
++----------+-------------+
 4 rows in set (0.00 sec)
 ```
 
@@ -54,10 +53,29 @@ Array
 (
     [dist1] => distributed
     [rt] => rt
-    [test1] => local
-    [test2] => local
+    [products] => rt
 )
 
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```php
+utilsApi.sql('mode=raw&query=SHOW TABLES')
+```
+
+<!-- response Python -->
+```python
+{u'columns': [{u'Index': {u'type': u'string'}},
+              {u'Type': {u'type': u'string'}}],
+ u'data': [{u'Index': u'dist1', u'Type': u'distributed'},
+           {u'Index': u'rt', u'Type': u'rt'},
+           {u'Index': u'products', u'Type': u'rt'}],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
 ```
 
 <!-- end -->
@@ -72,24 +90,24 @@ Optional LIKE clause is supported for filtering indexes by name.
 <!-- request SQL -->
 
 ```sql
-SHOW TABLES LIKE '%4';
+SHOW TABLES LIKE 'pro%';
 ```
 
 <!-- response SQL -->
 
 ```sql
-+-------+-------------+
-| Index | Type        |
-+-------+-------------+
-| dist4 | distributed |
-+-------+-------------+
++----------+-------------+
+| Index    | Type        |
++----------+-------------+
+| products | distributed |
++----------+-------------+
 1 row in set (0.00 sec)
 ```
 
 <!-- request PHP -->
 
 ```php
-$client->nodes()->table(['body'=>['pattern'=>'%4']]);
+$client->nodes()->table(['body'=>['pattern'=>'pro%']]);
 ```
 
 <!-- response PHP -->
@@ -97,12 +115,30 @@ $client->nodes()->table(['body'=>['pattern'=>'%4']]);
 ```php
 Array
 (
-    [dist4] => distributed
+    [products] => distributed
 )
 
 ```
 <!-- end -->
 
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```php
+utilsApi.sql('mode=raw&query=SHOW TABLES LIKE \'pro%\'')
+```
+
+<!-- response Python -->
+```python
+{u'columns': [{u'Index': {u'type': u'string'}},
+              {u'Type': {u'type': u'string'}}],
+ u'data': [{u'Index': u'products', u'Type': u'rt'}],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
 
 ## DESCRIBE
 

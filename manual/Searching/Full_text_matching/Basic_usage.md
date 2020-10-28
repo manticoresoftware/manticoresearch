@@ -263,4 +263,25 @@ title: second find me fast
 gid: 12
 
 ```
+
+<!-- intro -->
+Python
+<!-- request Python -->
+
+```python
+searchApi.search({"index":"myindex","query":{"query_string":"@title \"find me fast \"/2"}})
+```
+<!-- response Python -->
+``` python
+{'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 1,
+                    u'_source': {u'title': u'first find me fast', u'gid':11}},
+                    {u'_id': u'2',
+                    u'_score': 1,
+                    u'_source': {u'title': u'second find me fast', u'gid':12}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
 <!-- end -->

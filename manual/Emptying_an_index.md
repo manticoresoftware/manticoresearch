@@ -63,6 +63,19 @@ Array(
     [warning] => 
 )
 ```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```php
+utilsApi.sql('mode=raw&query=TRUNCATE TABLE products')
+```
+
+<!-- response Python -->
+```python
+{u'error': u'', u'total': 0, u'warning': u''}
+```
 
 <!-- end -->
 

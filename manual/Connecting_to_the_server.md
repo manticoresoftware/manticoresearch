@@ -34,6 +34,19 @@ require_once __DIR__ . '/vendor/autoload.php';
 $config = ['host'=>'127.0.0.1','port'=>9308];
 $client = new \Manticoresearch\Client($config);
 ```
+<!-- intro -->
+##### Python
+<!-- request Python -->
+```python
+import manticoresearch
+config = manticoresearch.Configuration(
+    host = "http://127.0.0.1:9308"
+)
+client =  manticoresearch.ApiClient(config)
+indexApi = manticoresearch.IndexApi(client)
+searchApi = manticoresearch.searchApi(client)
+utilsApi = manticoresearch.UtilsApi(client)
+```
 
 <!-- intro -->
 ##### Connect via Docker

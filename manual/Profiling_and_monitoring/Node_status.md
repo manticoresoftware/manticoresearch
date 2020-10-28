@@ -299,6 +299,73 @@ Array(
 	[ag_1_5periods_msecsperquery] => 230.85
 )
 ```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=SHOW AGENT STATUS')
+```
+<!-- response Python -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'status_period_seconds', u'Value': u'60'},
+	{u'Key': u'status_stored_periods', u'Value': u'15'},
+	{u'Key': u'ag_0_hostname', u'Value': u'192.168.0.202:6713'},
+	{u'Key': u'ag_0_references', u'Value': u'2'},
+	{u'Key': u'ag_0_lastquery', u'Value': u'0.41'},
+	{u'Key': u'ag_0_lastanswer', u'Value': u'0.19'},
+	{u'Key': u'ag_0_lastperiodmsec', u'Value': u'222'},
+	{u'Key': u'ag_0_errorsarow', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_connect_failures', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_network_errors', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_wrong_replies', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_unexpected_closings', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_warnings', u'Value': u'0'},
+	{u'Key': u'ag_0_1periods_succeeded_queries', u'Value': u'27'},
+	{u'Key': u'ag_0_1periods_msecsperquery', u'Value': u'232.31'},
+	{u'Key': u'ag_0_5periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_connect_failures', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_network_errors', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_wrong_replies', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_unexpected_closings', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_warnings', u'Value': u'0'},
+	{u'Key': u'ag_0_5periods_succeeded_queries', u'Value': u'146'},
+	{u'Key': u'ag_0_5periods_msecsperquery', u'Value': u'231.83'},
+	{u'Key': u'ag_1_hostname 192.168.0.202:6714'},
+	{u'Key': u'ag_1_references', u'Value': u'2'},
+	{u'Key': u'ag_1_lastquery', u'Value': u'0.41'},
+	{u'Key': u'ag_1_lastanswer', u'Value': u'0.19'},
+	{u'Key': u'ag_1_lastperiodmsec', u'Value': u'220'},
+	{u'Key': u'ag_1_errorsarow', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_connect_failures', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_network_errors', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_wrong_replies', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_unexpected_closings', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_warnings', u'Value': u'0'},
+	{u'Key': u'ag_1_1periods_succeeded_queries', u'Value': u'27'},
+	{u'Key': u'ag_1_1periods_msecsperquery', u'Value': u'231.24'},
+	{u'Key': u'ag_1_5periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_connect_failures', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_network_errors', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_wrong_replies', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_warnings', u'Value': u'0'},
+	{u'Key': u'ag_1_5periods_succeeded_queries', u'Value': u'146'},
+	{u'Key': u'ag_1_5periods_msecsperquery', u'Value': u'230.85'}],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
 <!-- end -->
 
 
@@ -348,7 +415,27 @@ Array(
     [ag_2_5periods_msecsperquery] => 343.81
 )
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=SHOW AGENT STATUS LIKE \'%5period%msec%\'')
+```
+<!-- response Python -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'ag_0_5periods_msecsperquery', u'Value': u'234.72'},
+	{u'Key': u'ag_1_5periods_msecsperquery', u'Value': u'233.73'},
+	{u'Key': u'ag_2_5periods_msecsperquery', u'Value': u'343.81'}],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
 <!-- end -->
 
 
@@ -414,7 +501,35 @@ Array(
 ```
 <!-- end -->
 
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
+```
+<!-- response Python -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'agent_15periods_query_timeouts', u'Value': u'0'},
+	{u'Key': u'agent_15periods_connect_timeouts', u'Value': u'0'},
+	{u'Key': u'agent_15periods_connect_failures', u'Value': u'0'},
+    {u'Key': u'agent_15periods_network_errors', u'Value': u'0'},
+    {u'Key': u'agent_15periods_connect_failures', u'Value': u'0'},
+    {u'Key': u'agent_15periods_wrong_replies', u'Value': u'0'},
+    {u'Key': u'agent_15periods_unexpected_closings', u'Value': u'0'},
+    {u'Key': u'agent_15periods_warnings', u'Value': u'0'},
+    {u'Key': u'agent_15periods_succeeded_queries', u'Value': u'439'},
+    {u'Key': u'agent_15periods_msecsperquery', u'Value': u'233.73'},
+    ],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
 <!-- example show agent index status -->
 
 Finally, you can check the status of the agents in a specific distributed index. It can be done with a `SHOW AGENT index_name STATUS` statement. That statement shows the index HA status (i.e. whether or not it uses agent mirrors at all), and then the mirror information (specifically: address, blackhole and persistent flags, and the mirror selection probability used when one of the [weighted probability strategies](Creating_a_cluster/Remote_nodes/Load_balancing.md) is in effect).
@@ -441,7 +556,7 @@ SHOW AGENT dist_index STATUS;
 | dstindex_1mirror2_probability_weight | 0.374635                       |
 | dstindex_1mirror2_is_blackhole       | 0                              |
 | dstindex_1mirror2_is_persistent      | 0                              |
-| dstindex_1mirror3_id                 | dev1.sphinxsearch.com:6714:loc |
+| dstindex_1mirror3_id                 | dev1.manticoresearch.com:6714:loc |
 | dstindex_1mirror3_probability_weight | 0.252501                       |
 | dstindex_1mirror3_is_blackhole       | 0                              |
 | dstindex_1mirror3_is_persistent      | 0                              |
@@ -475,11 +590,43 @@ Array(
     [dstindex_1mirror2_probability_weight] => 0.374635
     [dstindex_1mirror2_is_blackhole] => 0
     [dstindex_1mirror2_is_persistent] => 0
-    [dstindex_1mirror3_id] => dev1.sphinxsearch.com:6714:loc
+    [dstindex_1mirror3_id] => dev1.manticoresearch.com:6714:loc
     [dstindex_1mirror3_probability_weight] => 0.252501
     [dstindex_1mirror3_is_blackhole] => 0
     [dstindex_1mirror3_is_persistent] => 0
 )
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15periods%\'')
+```
+<!-- response Python -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'dstindex_1_is_ha', u'Value': u'1'},
+	{u'Key': u'dstindex_1mirror1_id', u'Value': u'192.168.0.202:6713:loc'},
+	{u'Key': u'dstindex_1mirror1_probability_weight', u'Value': u'0.372864'},
+    {u'Key': u'dstindex_1mirror1_is_blackhole', u'Value': u'0'},
+    {u'Key': u'dstindex_1mirror1_is_persistent', u'Value': u'0'},
+    {u'Key': u'dstindex_1mirror2_id', u'Value': u'192.168.0.202:6714:loc'},
+    {u'Key': u'dstindex_1mirror2_probability_weight', u'Value': u'0.374635'},
+    {u'Key': u'dstindex_1mirror2_is_blackhole', u'Value': u'0'},
+    {u'Key': u'dstindex_1mirror2_is_persistent', u'Value': u'439'},
+    {u'Key': u'dstindex_1mirror3_id', u'Value': u'dev1.manticoresearch.com:6714:loc'},
+    {u'Key': u'dstindex_1mirror3_probability_weight', u'Value': u' 0.252501'},
+    {u'Key': u'dstindex_1mirror3_is_blackhole', u'Value': u'0'},
+    {u'Key': u'dstindex_1mirror3_is_persistent', u'Value': u'439'}    
+    ],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
 ```
 
 <!-- end -->

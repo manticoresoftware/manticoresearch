@@ -71,6 +71,20 @@ Array(
 )
 ```
 
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+``` python
+indexApi = api = manticoresearch.IndexApi(client)
+indexApi.update({"index" : "products", "id" : 1, "doc" : {"price":10}})
+```
+
+<!-- response Python -->
+```python
+{'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
+```
+
 <!-- end -->
 
 <!-- example update multiple attributes -->
@@ -154,6 +168,25 @@ Array(
     [updated] => 148
 )
 ```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+``` python
+indexApi = api = manticoresearch.IndexApi(client)
+indexApi.update({"index" : "products", "id" : 1, "doc" : {
+    "price": 100000000000,
+    "coeff": 3465.23,
+    "tags1": [3,6,4],
+    "tags2": []}})
+```
+
+<!-- response Python -->
+```python
+{'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
+```
+
 <!-- end -->
 
 When assigning out-of-range values to 32-bit attributes, they will be trimmed to their lower 32 bits without a prompt. For example, if you try to update the 32-bit unsigned int with a value of 4294967297, the value of 1 will actually be stored, because the lower 32 bits of 4294967297 (0x100000001 in hex) amount to 1 (0x00000001 in hex).
@@ -167,9 +200,9 @@ When assigning out-of-range values to 32-bit attributes, they will be trimmed to
 <!-- request SQL -->
 
 ```sql
-insert into products values (1,'title','{"tags":[1,2,3]}');
+insert into products (id, title, meta) values (1,'title','{"tags":[1,2,3]}');
 
-update products set data.tags[0]=100 where id=1;
+update products set meta.tags[0]=100 where id=1;
 ```
 
 <!-- response -->
@@ -189,21 +222,23 @@ Query OK, 1 row affected (0.00 sec)
 POST /insert
 {
 	"index":"products",
-	"id":1,
+	"id":100,
 	"doc":
 	{
 		"title":"title",
-		"tags":[1,2,3]
+		"meta": {
+            "tags":[1,2,3]
+        }
 	}
 }
 
 POST /update
 {
 	"index":"products",
-	"id":1,
+	"id":100,
 	"doc":
 	{
-		"data.tags[0]":100
+		"meta.tags[0]":100
 	}
 }
 ```
@@ -212,7 +247,7 @@ POST /update
 ```http
 {
    "_index":"products",
-   "_id":1,
+   "_id":100,
    "created":true,
    "result":"created",
    "status":201
@@ -232,10 +267,10 @@ POST /update
 ```php
 $index->insertDocument([
     'title' => 'title',
-    'tags' => [1,2,3]
+    'meta' => ['tags' => [1,2,3]]
 ],1);
 $index->updateDocument([
-    'data.tags[0]' => 100
+    'meta.tags[0]' => 100
 ],1);
 ```
 
@@ -254,6 +289,23 @@ Array(
 )
 ```
 
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+``` python
+indexApi = api = manticoresearch.IndexApi(client)
+indexApi.update({"index" : "products", "id" : 1, "doc" : {
+    "price": 100000000000,
+    "coeff": 3465.23,
+    "tags1": [3,6,4],
+    "tags2": []}})
+```
+
+<!-- response Python -->
+```python
+{'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
+```
 <!-- end -->
 
 <!-- example full JSON update -->
@@ -348,6 +400,25 @@ Array(
     [updated] => 1
 )
 ```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+``` python
+indexApi.insert({"index" : "products", "id" : 100, "doc" : {"title" : "title", "meta" : {"tags":[1,2,3]}}})
+indexApi.update({"index" : "products", "id" : 100, "doc" : {"meta.tags[0]": 100}})
+```
+
+<!-- response Python -->
+```python
+
+{'created': True,
+ 'found': None,
+ 'id': 100,
+ 'index': 'products',
+ 'result': 'created'}
+{'id': 100, 'index': 'products', 'result': 'updated', 'updated': None}
+```
 
 <!-- end -->
 
@@ -403,6 +474,14 @@ POST /update
 $index->setName('products')->setCluster('weekly');
 $index->updateDocument(['enabled'=>0],1);
 ```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+``` python
+indexApi.update({"cluster":"weekly", "index" : "products", "id" : 1, "doc" : {"enabled" : 0}})
+
+```
 
 <!-- end -->
 
@@ -432,17 +511,7 @@ UPDATE products SET tags1=(3,6,4) WHERE id=1;
 UPDATE products SET tags1=() WHERE id=1;
 ```
 
-<!-- intro -->
-##### SQL:
-<!-- request SQL -->
-
-```sql
-insert into products values (1,'title','{"tags":[1,2,3]}');
-
-update products set data.tags[0]=100 where id=1;
-```
-
-<!-- response -->
+<!-- response SQL -->
 
 ```sql
 Query OK, 1 row affected (0.00 sec)
@@ -463,7 +532,7 @@ POST /update
 	"_id":1,
 	"doc":
 	{
-		"data.tags[0]":100
+		"tags1": []
 	}
 }
 ```
@@ -482,7 +551,7 @@ POST /update
 <!-- request PHP -->
 
 ```php
-$index->updateDocument(['data.tags[0]'=>100],1);
+$index->updateDocument(['tags1'=>[]],1);
 ```
 
 <!-- response PHP -->
@@ -491,6 +560,20 @@ Array(
     [_index] => products
     [updated] => 1
 )
+```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+``` python
+
+indexApi.update({"index" : "products", "id" : 1, "doc" : {"tags1": []}})
+```
+
+<!-- response Python -->
+```python
+{'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
 ```
 
 <!-- end -->
@@ -674,8 +757,8 @@ Updates by query and deletes by query are also supported.
 ```json
 POST /bulk
 
-{ "update" : { "index" : "products", "doc": { "tag" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } }
-{ "update" : { "index" : "products", "doc": { "tag" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } }
+{ "update" : { "index" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } }
+{ "update" : { "index" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } }
 ```
 
 <!-- response HTTP -->
@@ -713,7 +796,7 @@ $client->bulk([
     ['update'=>[
             'index' => 'products',
              'doc' => [
-                'tag' => 100
+                'coeff' => 100
             ],
             'query' => [
                 'range' => ['price'=>['gte'=>1000]]
@@ -723,7 +806,7 @@ $client->bulk([
     ['update'=>[
             'index' => 'products',
              'doc' => [
-                'tag' => 0
+                'coeff' => 0
             ],
             'query' => [
                 'range' => ['price'=>['lt'=>1000]]
@@ -753,6 +836,27 @@ Array(
 )
  
 ```
+
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+``` python
+docs = [ \
+            { "update" : { "index" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } }, \
+            { "update" : { "index" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } } ]
+indexApi.bulk('\n'.join(map(json.dumps,docs)))
+```
+
+<!-- response Python -->
+```python
+{'error': None,
+ 'items': [{u'update': {u'_index': u'products', u'updated': 1}},
+           {u'update': {u'_index': u'products', u'updated': 3}}]}
+
+```
+
 <!-- end -->
 
 

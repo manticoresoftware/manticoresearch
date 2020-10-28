@@ -31,7 +31,7 @@ POST /replace
   "doc":
   {
 	"title":"document one",
-    "tag":10
+    "price":10
   }
 }
 ```
@@ -55,7 +55,7 @@ POST /replace
 ```php
 $index->replaceDocument([
    'title' => 'document one',
-    'tag' => 10 
+    'price' => 10 
 ],1);
 ```
 
@@ -68,6 +68,23 @@ Array(
     [result] => updated
     [status] => 200
 )
+```
+<!-- intro -->
+
+##### Python:
+
+<!-- request Python -->
+``` python
+indexApi.replace({"index" : "products", "id" : 1, "doc" : {"title" : "document one","price":10}})
+```
+
+<!-- response Python -->
+```python
+{'created': False,
+ 'found': None,
+ 'id': 1,
+ 'index': 'products',
+ 'result': 'updated'}
 ```
 
 <!-- end -->
@@ -86,7 +103,7 @@ REPLACE INTO index [(column1, column2, ...)]
 
 `REPLACE` using HTTP protocol is performed via the `/replace` endpoint. There's also a synonym endpoint, `/index`.
 
-<!-- example bulk replace -->
+<!-- example bulk_replace -->
 
 Multiple documents can be replaced at once. See [bulk adding documents](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Bulk-adding-documents) for more details.
 
@@ -186,5 +203,30 @@ Array(
     )
     [errors => false
 )
+```
+<!-- request Python -->
+
+``` python
+indexApi = api = manticoresearch.IndexApi(client)
+docs = [ \
+    {"replace": {"index" : "products", "id" : 1, "doc" : {"title" : "document one"}}}, \
+    {"replace": {"index" : "products", "id" : 2, "doc" : {"title" : "document two"}}} ]
+api_resp = indexApi.bulk('\n'.join(map(json.dumps,docs)))
+```
+
+<!-- response Python -->
+```python
+{'error': None,
+ 'items': [{u'replace': {u'_id': 1,
+                         u'_index': u'products',
+                         u'created': False,
+                         u'result': u'updated',
+                         u'status': 200}},
+           {u'replace': {u'_id': 2,
+                         u'_index': u'products',
+                         u'created': False,
+                         u'result': u'updated',
+                         u'status': 200}}]}
+
 ```
 <!-- end -->

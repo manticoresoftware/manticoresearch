@@ -115,6 +115,19 @@ $index->addDocuments([
         ['id' => 0, 'title' => 'Yellow bag']
 ]);
 ```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+``` python
+indexApi = api = manticoresearch.IndexApi(client)
+indexApi.insert({"index" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}})
+indexApi.insert({"index" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}})
+indexApi.insert({"index" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}})
+```
+
 <!-- end -->
 
 ## Auto ID
@@ -206,9 +219,21 @@ $index->addDocuments([
         ['id' => 0, 'title' => 'Yellow bag']
 ]);
 ```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+``` python
+indexApi = api = manticoresearch.IndexApi(client)
+indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"}})
+```
+
+
 <!-- end -->
 
-<!-- example bulk -->
+<!-- example bulk_insert -->
 ## Bulk adding documents
 You can insert into a real-time index not just a single document, but as many as you want. It's ok to insert into a real-time index in batches of tens of thousands of documents. What's important to know in this case:
 * the larger the batch the higher is the latency of each insert operation
@@ -294,8 +319,23 @@ $index->addDocuments([
         ['id' => 3, 'title' => 'Pet Hair Remover Glove', 'price' => 7.99]
 ]);
 ```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+``` python
+indexApi = api = manticoresearch.IndexApi(client)
+docs = [ \
+    {"insert": {"index" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
+    {"insert": {"index" : "products", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
+    {"insert": {"index" : "products", "id" : 3, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
+]
+api_resp = indexApi.bulk('\n'.join(map(json.dumps,docs)))
+```
 <!-- end -->
-<!-- example MVA -->
+<!-- example MVA_insert -->
 ## Inserting multi-value attributes (MVA) values
 
 Multi-value attributes (MVA) are inserted as arrays of numbers.
@@ -333,10 +373,21 @@ $index->addDocument(
   1
 );
 ```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+``` python
+indexApi = api = manticoresearch.IndexApi(client)
+indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","sizes":[40,41,42,43]}})
+```
+
 <!-- end -->
 
 
-<!-- example JSON -->
+<!-- example JSON_insert -->
 ## Inserting JSON
 JSON value can be inserted as as an [escaped](Searching/Full_text_matching/Escaping.md) string (via SQL, HTTP, PHP) or as a JSON object (via HTTP).
 
@@ -392,4 +443,13 @@ $index->addDocument(
   1
 );
 ```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+``` python
+indexApi = api = manticoresearch.IndexApi(client)
+indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","meta":'{"size": 41, "color": "red"}'}})
+```
+
 <!-- end -->

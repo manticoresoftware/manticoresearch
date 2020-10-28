@@ -35,7 +35,7 @@ You can perform a percolate query via SQL or JSON interfaces as well as using pr
 | Extended info in [SHOW META](Profiling_and_monitoring/SHOW_META.md) | 1 as verbose (0 by default)  | Not available  | Not available |
 | Define the number which will be added to document ids if no docs_id fields provided (makes sense mostly in [distributed PQ modes](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#Distributed-percolate-indexes-%28DPQ-indexes%29)) | 1 as shift (0 by default)  | Not available  | Not available |
 
-<!-- example create -->
+<!-- example create percolate -->
 To demonstrate how it works here are few examples. Let's create a PQ index with 2 fields:
 
 * title (text)
@@ -189,6 +189,34 @@ Array(
   [result] => created
 )
 ```
+<!-- intro -->
+Python
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, color string) type=\'pq\'')
+indexApi.insert({"index" : "products", "doc" : {"query" : "@title bag" }})
+indexApi.insert({"index" : "products",  "doc" : {"query" : "@title shoes", "filters": "color='red'" }})
+indexApi.insert({"index" : "products",  "doc" : {"query" : "@title shoes","filters": "color='red'" }})
+```
+<!-- response Python -->
+``` python
+{'created': True,
+ 'found': None,
+ 'id': 0,
+ 'index': 'products',
+ 'result': 'created'}
+{'created': True,
+ 'found': None,
+ 'id': 0,
+ 'index': 'products',
+ 'result': 'created'}
+{'created': True,
+ 'found': None,
+ 'id': 0,
+ 'index': 'products',
+ 'result': 'created'}
+```
 <!-- end -->
 
 <!-- example single -->
@@ -330,6 +358,26 @@ Array
         )
 )
 ```
+<!-- intro -->
+Python
+<!-- request Python -->
+
+```python
+searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"What a nice bag"}}}})
+```
+<!-- response Python -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381480',
+                    u'_index': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title bag'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
 <!-- end -->
 
 <!-- example pq_rules -->
@@ -457,6 +505,28 @@ Array
         )
 )
 ```
+
+<!-- intro -->
+Python
+<!-- request Python -->
+
+```python
+searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"What a nice bag"}}}})
+```
+<!-- response Python -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381480',
+                    u'_index': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title bag'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
 <!-- end -->
 
 <!-- example multiple -->
@@ -652,6 +722,34 @@ Array
         )
 )
 ```
+<!-- intro -->
+Python
+<!-- request Python -->
+
+```python
+searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"nice pair of shoes","color":"blue"},{"title":"beautiful bag"}]}}})
+```
+<!-- response Python -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381494',
+                    u'_index': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title bag'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [2]}},
+                   {u'_id': u'2811025403043381496',
+                    u'_index': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title shoes'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
 <!-- end -->
 
 <!-- example docs_1 -->
@@ -823,6 +921,33 @@ Array
                 )
         )
 )
+```
+<!-- intro -->
+Python
+<!-- request Python -->
+
+```python
+searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"nice pair of shoes","color":"blue"},{"title":"beautiful bag"}]}}})
+```
+<!-- response Python -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381494',
+                    u'_index': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title bag'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [2]}},
+                   {u'_id': u'2811025403043381496',
+                    u'_index': u'products',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'@title shoes'}},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+
 ```
 <!-- end -->
 
@@ -1027,7 +1152,30 @@ $response = $client->pq()->search($params);
         )
 )
 ```
+<!-- intro -->
+Python
+<!-- request Python -->
 
+```python
+searchApi.search({"index":"pq","query":{"match_all":{}}})
+```
+<!-- response Python -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381501',
+                    u'_score': 1,
+                    u'_source': {u'filters': u"gid>=10",
+                                 u'query': u'filter test',
+                                 u'tags': u''}},
+                   {u'_id': u'2811025403043381502',
+                    u'_score': 1,
+                    u'_source': {u'filters': u"gid>=10 OR gid<=3",
+                                 u'query': u'angry',
+                                 u'tags': u''}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
 <!-- end -->
 
 
@@ -1191,7 +1339,32 @@ $response = $client->pq()->search($params);
         )
 )
 ```
+<!-- intro -->
+Python
+<!-- request Python -->
 
+```python
+searchApi.percolate('pq',{"percolate":{"documents":[{"title":"angry test","gid":3},{"title":"filter test doc2","gid":13}]}})
+```
+<!-- response Python -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381480',
+                    u'_index': u'pq',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'angry'},u'tags':u'',u'filters':u"gid>=10 OR gid<=3"},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}},
+                    {u'_id': u'2811025403043381501',
+                    u'_index': u'pq',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'filter test'},u'tags':u'',u'filters':u"gid>=10"},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
 <!-- end -->
 
 That was an example of the default **sparsed** mode. To demonstrate the **sharded** mode let's create a distributed PQ index consisting of 2 local PQ indexes and add 2 documents to "products1" and 1 document to "products2":

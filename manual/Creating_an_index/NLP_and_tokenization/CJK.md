@@ -42,6 +42,15 @@ $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
 
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'cjk\' morphology = \'icu_chinese\'')
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -99,6 +108,14 @@ $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
 
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'')
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -134,7 +151,14 @@ create table products(title text, price float) charset_table = 'chinese' morphol
 POST /sql -d "mode=raw&query=
 create table products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'"
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'chinese\' morphology = \'icu_chinese\' stopwords = \'zh\'')
+```
 <!-- request PHP -->
 
 ```php

@@ -138,6 +138,20 @@ Array(
     [deleted] => 2
 )
 ```
+<!-- intro -->
+
+##### Python:
+
+<!-- request Python -->
+``` python
+indexApi.delete({"index" : "products", "query": { "match": { "*": "dummy" }}})
+```
+
+<!-- response Python -->
+```python
+{'deleted': 2, 'id': None, 'index': 'products', 'result': None}
+
+```
 <!-- end -->
 
 <!-- example delete 3 -->
@@ -210,6 +224,19 @@ Array(
     [found] => true
     [result] => deleted
 )
+```
+<!-- intro -->
+
+##### Python:
+
+<!-- request Python -->
+``` python
+indexApi.delete({"index" : "products", "id" : 1})
+```
+
+<!-- response Python -->
+```python
+{'deleted': None, 'id': 1, 'index': 'products', 'result': 'deleted'}
 ```
 <!-- end -->
 
@@ -288,5 +315,18 @@ Array(
     [found] => true
     [result] => deleted
 )
+```
+<!-- intro -->
+
+##### Python:
+
+<!-- request Python -->
+``` python
+indexApi.delete({"cluster":"nodes4","index" : "products", "id" : 1})
+```
+
+<!-- response Python -->
+```python
+{'deleted': None, 'id': 100, 'index': 'products', 'result': 'deleted'}
 ```
 <!-- end -->

@@ -208,6 +208,34 @@ Array
 )
 ```
 
+<!-- intro -->
+Python
+<!-- request Python -->
+
+```python
+searchApi.search({"index":"forum","query":{"query_string":"i me"},"_source":{"excludes":["*"]},"limit":1,"profile":True})
+```
+<!-- response Python -->
+``` python
+{'hits': {'hits': [{u'_id': u'100', u'_score': 2500, u'_source': {}}],
+          'total': 1},
+ 'profile': {u'query': {u'children': [{u'children': [{u'querypos': 1,
+                                                      u'type': u'KEYWORD',
+                                                      u'word': u'i'}],
+                                       u'description': u'AND(KEYWORD(i, querypos=1))',
+                                       u'type': u'AND'},
+                                      {u'children': [{u'querypos': 2,
+                                                      u'type': u'KEYWORD',
+                                                      u'word': u'me'}],
+                                       u'description': u'AND(KEYWORD(me, querypos=2))',
+                                       u'type': u'AND'}],
+                        u'description': u'AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2)))',
+                        u'type': u'AND'}},
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
 <!-- end -->
 
 
@@ -581,6 +609,40 @@ Array
                 )
         )
 )
+
+```
+
+
+<!-- intro -->
+Python
+<!-- request Python -->
+
+```python
+searchApi.search({"index":"forum","query":{"query_string":"@title way* @content hey"},"_source":{"excludes":["*"]},"limit":1,"profile":true})
+```
+<!-- response Python -->
+``` python
+{'hits': {'hits': [{u'_id': u'2811025403043381551',
+                    u'_score': 2643,
+                    u'_source': {}}],
+          'total': 1},
+ 'profile': {u'query': {u'children': [{u'children': [{u'expanded': True,
+                                                      u'querypos': 1,
+                                                      u'type': u'KEYWORD',
+                                                      u'word': u'way*'}],
+                                       u'description': u'AND(fields=(title), KEYWORD(way*, querypos=1, expanded))',
+                                       u'fields': [u'title'],
+                                       u'type': u'AND'},
+                                      {u'children': [{u'querypos': 2,
+                                                      u'type': u'KEYWORD',
+                                                      u'word': u'hey'}],
+                                       u'description': u'AND(fields=(content), KEYWORD(hey, querypos=2))',
+                                       u'fields': [u'content'],
+                                       u'type': u'AND'}],
+                        u'description': u'AND( AND(fields=(title), KEYWORD(way*, querypos=1, expanded)),  AND(fields=(content), KEYWORD(hey, querypos=2)))',
+                        u'type': u'AND'}},
+ 'timed_out': False,
+ 'took': 0}
 
 ```
 <!-- end -->

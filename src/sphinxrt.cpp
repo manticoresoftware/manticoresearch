@@ -118,6 +118,18 @@ static inline void ZipT ( BYTE * & pOut, T uValue )
 	} while ( uValue );
 }
 
+/* // note difference: sphZipValue packs in BE order (most significant bits cames first)
+ template<typename T, typename WRITER>
+inline int sphZipValue ( WRITER fnPut, T tValue )
+{
+	int nBytes = sphCalcZippedLen ( tValue );
+	for ( int i = nBytes-1; i>=0; --i )
+		fnPut ( ( 0x7f & ( tValue >> ( 7 * i ) ) ) | ( i ? 0x80 : 0 ) );
+
+	return nBytes;
+}
+ */
+
 #define SPH_MAX_KEYWORD_LEN (3*SPH_MAX_WORD_LEN+4)
 STATIC_ASSERT ( SPH_MAX_KEYWORD_LEN<255, MAX_KEYWORD_LEN_SHOULD_FITS_BYTE );
 
@@ -141,7 +153,21 @@ static inline const BYTE * UnzipT ( T * pValue, const BYTE * pIn )
 	return pIn;
 }
 
-// Variable Length Byte (VLB) skipping
+/* // Note difference: in code below zipped bytes came in BE order (most significant first)
+ * #define SPH_VARINT_DECODE(_type,_getexpr) \
+	register DWORD b = _getexpr; \
+	register _type res = 0; \
+	while ( b & 0x80 ) \
+	{ \
+		res = ( res<<7 ) + ( b & 0x7f ); \
+		b = _getexpr; \
+	} \
+	res = ( res<<7 ) + b; \
+	return res;
+
+ */
+
+// Variable Length Byte (VLB) skipping (BE/LE agnostic)
 static inline void SkipZipped ( const BYTE *& pIn )
 {
 	while ( *pIn & 0x80U )

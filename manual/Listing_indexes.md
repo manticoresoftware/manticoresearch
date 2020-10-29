@@ -62,7 +62,7 @@ Array
 
 <!-- request Python -->
 
-```php
+```python
 utilsApi.sql('mode=raw&query=SHOW TABLES')
 ```
 
@@ -119,14 +119,14 @@ Array
 )
 
 ```
-<!-- end -->
+
 
 <!-- intro -->
 ##### Python:
 
 <!-- request Python -->
 
-```php
+```python
 utilsApi.sql('mode=raw&query=SHOW TABLES LIKE \'pro%\'')
 ```
 
@@ -139,6 +139,8 @@ utilsApi.sql('mode=raw&query=SHOW TABLES LIKE \'pro%\'')
  u'total': 0,
  u'warning': u''}
 ```
+
+<!-- end -->
 
 ## DESCRIBE
 

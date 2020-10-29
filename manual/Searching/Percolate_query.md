@@ -48,7 +48,7 @@ and 3 rules in it:
 * Full-text and more complex filtering. Query: `@title shoes`. Filters: `color IN('blue', 'green')`
 
 <!-- intro -->
-SQL
+#### SQL
 <!-- request SQL -->
 
 ```sql
@@ -106,7 +106,7 @@ PUT /pq/products/doc/
 ```
 
 <!-- intro -->
-JSON
+#### JSON
 <!-- response HTTP -->
 
 ```json
@@ -131,7 +131,7 @@ JSON
 ```
 
 <!-- intro -->
-PHP
+#### PHP
 <!-- request PHP -->
 
 ```php

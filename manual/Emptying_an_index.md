@@ -68,7 +68,7 @@ Array(
 
 <!-- request Python -->
 
-```php
+```python
 utilsApi.sql('mode=raw&query=TRUNCATE TABLE products')
 ```
 

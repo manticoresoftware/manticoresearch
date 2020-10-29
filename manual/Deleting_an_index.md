@@ -65,7 +65,7 @@ Array
 
 <!-- request Python -->
 
-```php
+```python
 utilsApi.sql('mode=raw&query=DROP TABLE products')
 ```
 
@@ -124,7 +124,7 @@ $client->indices()->drop($params);
 
 <!-- request Python -->
 
-```php
+```python
 utilsApi.sql('mode=raw&query=DROP TABLE IF EXISTS products')
 ```
 

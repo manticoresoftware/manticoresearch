@@ -385,7 +385,7 @@ $index->create([
 
 <!-- request Python -->
 
-```php
+```python
 utilsApi.sql('mode=raw&query=create table products(title text, keys string)')
 ```
 <!-- intro -->

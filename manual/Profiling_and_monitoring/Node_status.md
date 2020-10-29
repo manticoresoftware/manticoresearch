@@ -499,7 +499,7 @@ Array(
     [agent_15periods_msecsperquery] => 231.73
 )
 ```
-<!-- end -->
+
 
 <!-- intro -->
 ##### Python:
@@ -530,6 +530,7 @@ utilsApi.sql('mode=raw&query=SHOW AGENT \'192.168.0.202:6714\' STATUS LIKE \'%15
  u'total': 0,
  u'warning': u''}
 ```
+<!-- end -->
 <!-- example show agent index status -->
 
 Finally, you can check the status of the agents in a specific distributed index. It can be done with a `SHOW AGENT index_name STATUS` statement. That statement shows the index HA status (i.e. whether or not it uses agent mirrors at all), and then the mirror information (specifically: address, blackhole and persistent flags, and the mirror selection probability used when one of the [weighted probability strategies](Creating_a_cluster/Remote_nodes/Load_balancing.md) is in effect).

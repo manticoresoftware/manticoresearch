@@ -2,7 +2,7 @@
 
 Faceted search is as essential function of a modern search application as [autocomplete](Searching/Autocomplete.md), [spell correction](Searching/Spell_correction.md) and search keywords [highlighting](Searching/Highlighting.md). Especially in E-commerce products.
 
-![Faceted search](faceted.png)⛔
+![Faceted search](faceted.png)
 
 It comes to the rescue when we deal with large amounts of data and various properties related to each other, whether it is size, color, manufacturer or something else. When querying large amounts of data search results often include large swaths of entries which does not fit user’s expectations. Faceted search allows an end-user to explicitly specify the dimensions that they want their search results to meet.
 

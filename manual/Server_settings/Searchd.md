@@ -366,7 +366,7 @@ You can also specify a protocol handler (listener) to be used for connections on
 * `replication` - replication protocol, used for nodes communication. More details can be found in the [replication](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) section.
 * `http` - same as **Not specified**. Manticore will accept connections at this port from remote agents and clients via HTTP and HTTPS.
 * `https` - HTTPS protocol. Manticore will accept **only** HTTPS connections at this port. More details can be found in section [SSL](Security/SSL.md).
-* `sphinx` - legacy binary protocol. Used to serve connections from remote SphinxSE](Extensions/SphinxSE.md) clients. Some Sphinx API clients implementations (an example is the Java one) require the explicit declaration of the listener.
+* `sphinx` - legacy binary protocol. Used to serve connections from remote [SphinxSE](Extensions/SphinxSE.md) clients. Some Sphinx API clients implementations (an example is the Java one) require the explicit declaration of the listener.
 
 Adding suffix `_vip` to any protocol (for instance `mysql_vip` or `http_vip` or just `_vip`) forces creating a dedicated thread for the connection to bypass different limitations. That's useful for node maintenance in case of a severe overload when the server would either stall or not let you connect via a regular port otherwise.
 

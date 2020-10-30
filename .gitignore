@@ -26,6 +26,7 @@
 /build
 /buildx64
 /build_temp
+/build_*
 /rlp
 /.vs
 

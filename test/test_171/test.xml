@@ -287,6 +287,48 @@ index dist_mm
 	path = <data_path/>/dist_mm
 }
 
+
+source facet1
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = select * from facet1
+	sql_attr_uint = gr
+	sql_attr_multi = uint mva1 from field
+}
+
+index facet1
+{
+	source	= facet1
+	path	= <data_path/>/facet1
+}
+
+source facet2
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = select * from facet1 where id=12345
+	sql_attr_uint = gr
+	sql_attr_multi = uint mva1 from field
+}
+
+index facet2
+{
+	source	= facet2
+	path	= <data_path/>/facet2
+}
+
+index dist_facet1
+{
+	type					= distributed
+	agent					= <my_address/>:facet1
+	agent					= <my_address/>:facet2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
 </config>
 
 
@@ -494,12 +536,13 @@ index dist_mm
 <sphinxql>SELECT id, tag FROM idx_keys limit 2 offset 6</sphinxql>
 <sphinxql>SELECT id, tag FROM idx_keys limit 10 offset 5</sphinxql>
 
-<!-- count distinct vs mat_matches -->
+<!-- count distinct vs max_matches -->
 <sphinxql>select count(distinct i1), count(*), i2, i1 from dist_mm group by i2 limit 5</sphinxql>
 <sphinxql>select count(distinct i1), count(*), i2, i1 from dist_mm group by i2 limit 5 option max_matches=30</sphinxql>
 <sphinxql>select count(distinct i1), count(*), i2, i1 from dist_mm group by i2 limit 5 option max_matches=29</sphinxql>
 
-
+<!-- master fails to merge FACET result sets with agent empty result -->
+<sphinxql>SELECT mva1 FROM dist_facet1 ORDER BY id desc FACET mva1;</sphinxql>
 </sphqueries>
 
 <db_create>
@@ -598,6 +641,20 @@ INSERT INTO `json_table1` VALUES
 ( 1, 'test', 1, '{"j0":"test string","j1":[1,2,3],"j2":3}' ),
 ( 2, 'test', 2, '{"j1":[10,20,30],"j2":3}' ),
 ( 100, 'test', 100, '{"j1":[1,200,300],"j2":3}' )
+</db_insert>
+
+<db_create>
+CREATE TABLE `facet1` (
+  `id` int(11),
+  `body` varchar(255) NOT NULL,
+  `gr` int(11),
+  `mva1` varchar(255) NOT NULL default ''
+)
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `facet1`</db_drop>
+<db_insert>INSERT INTO `facet1` VALUES
+(11,'Product Five Two',111,'13,14'),
+(12,'Product Five Seven',112,'13')
 </db_insert>
 
 </test>

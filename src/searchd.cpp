@@ -3902,7 +3902,6 @@ public:
 
 int KillPlainDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, const VecTraits_T<int>& dOrd )
 {
-	assert ( tRes.m_tSchema.GetAttr ( 0 ).m_sName==sphGetDocidName () );
 	int iDupes = 0;
 
 	auto& dResults = tRes.m_dResults;
@@ -4316,14 +4315,30 @@ void ProcessLocalPostlimit ( AggrResult_t & tRes, const CSphQuery & tQuery, bool
 bool MinimizeSchemas ( AggrResult_t & tRes )
 {
 	bool bAllEqual = true;
+	bool bSchemaBaseSet = false;
 
-	auto iResults = tRes.m_dResults.GetLength ();
-	if ( iResults>0 )
-		tRes.m_tSchema = tRes.m_dResults[0].m_tSchema;
+	auto iResults = tRes.m_dResults.GetLength();
 
-	for ( int i=1; i<iResults; ++i )
+	for ( int i=0; i<iResults; ++i )
+	{
+		// skip empty result set 
+		if ( !tRes.m_dResults[i].m_dMatches.GetLength() )
+			continue;
+
+		// set base schema only from non-empty result set
+		if ( !bSchemaBaseSet )
+		{
+			bSchemaBaseSet = true;
+			tRes.m_tSchema = tRes.m_dResults[i].m_tSchema;
+			continue;
+		}
+
 		if ( !MinimizeSchema ( tRes.m_tSchema, tRes.m_dResults[i].m_tSchema ) )
 			bAllEqual = false;
+	}
+
+	if ( !bSchemaBaseSet && iResults>0 )
+		tRes.m_tSchema = tRes.m_dResults[0].m_tSchema;
 
 	return bAllEqual;
 }

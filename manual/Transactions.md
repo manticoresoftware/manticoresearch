@@ -1,6 +1,6 @@
 # Transactions
 
-Manticore supports basic transactions when performing deleting and insertion into real-time and percolate indexes. That is: each change to the index first saved into internal changeset, and then actually committed to the index. By default each command is wrapped into individual automatic transaction, making it transparent: you just 'insert' something, and can see inserted result after it completes, having no care about transactions. However that behaviour can be explicitly managed by starting and committing transactions manually.
+Manticore supports basic transactions when performing deleting and insertion into real-time and percolate indexes. That is: each change to an index is first saved into an internal changeset, and then is actually committed to the index. By default each command is wrapped into an individual automatic transaction, making it transparent: you just 'insert' something, and can see the inserted result after it completes, having no care about transactions. However that behaviour can be explicitly managed by starting and committing transactions manually.
 
 Transactions are supported for the following commands:
 * [INSERT](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md)

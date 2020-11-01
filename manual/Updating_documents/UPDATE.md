@@ -2,12 +2,12 @@
 
 <!-- example update -->
 
-Attribute updates replace attribute values of existing documents in the specified index with new values. Note that you can't update the contents of a fulltext field. If there's a need to change the contents of a fields, use [REPLACE](Updating_documents/REPLACE.md).
+UPDATE changes attribute values of existing documents in a specified index with new values. Note that you can't update contents of a fulltext field. If there's a need to change contents of a full-text field, use [REPLACE](Updating_documents/REPLACE.md).
 
-Attribute updates are supported for RT, PQ and disk indexes. All attributes types can be updated.
+Attribute updates are supported for RT, PQ and plain indexes. All attribute types can be updated.
 
 
-Note that document `id` attribute cannot be updated.
+Note that document id cannot be updated.
 :::
 
 

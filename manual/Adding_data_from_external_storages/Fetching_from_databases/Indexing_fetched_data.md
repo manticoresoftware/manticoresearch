@@ -1,6 +1,6 @@
 # Indexing fetched data 
 
-By default the first columns from the result set of `sql_query` is indexed as the document id.
+By default the first column from the result set of `sql_query` is indexed as the document id.
 
 Document ID *MUST* be the very first field, and it *MUST BE UNIQUE UNSIGNED POSITIVE (NON-ZERO, NON-NEGATIVE) INTEGER NUMBER*.
 

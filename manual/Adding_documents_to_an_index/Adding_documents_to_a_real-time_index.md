@@ -122,12 +122,20 @@ $index->addDocuments([
 <!-- request Python -->
 
 ``` python
-indexApi = api = manticoresearch.IndexApi(client)
 indexApi.insert({"index" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}})
 indexApi.insert({"index" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}})
 indexApi.insert({"index" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}})
 ```
+<!-- intro -->
+##### Javascript:
 
+<!-- request Javascript -->
+
+``` javascript
+res = await indexApi.insert({"index" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}});
+res = await indexApi.insert({"index" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}});
+res = await indexApi.insert({"index" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}});
+```
 <!-- end -->
 
 ## Auto ID
@@ -225,11 +233,18 @@ $index->addDocuments([
 
 <!-- request Python -->
 
-``` python
-indexApi = api = manticoresearch.IndexApi(client)
+```python
 indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"}})
 ```
+<!-- intro -->
 
+##### Javascript:
+
+<!-- request Javascript -->
+
+```javascript
+res = await indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"}});
+```
 
 <!-- end -->
 
@@ -325,15 +340,29 @@ $index->addDocuments([
 
 <!-- request Python -->
 
-``` python
-indexApi = api = manticoresearch.IndexApi(client)
+```python
 docs = [ \
     {"insert": {"index" : "products", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, \
     {"insert": {"index" : "products", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, \
     {"insert": {"index" : "products", "id" : 3, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
 ]
-api_resp = indexApi.bulk('\n'.join(map(json.dumps,docs)))
+res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+```javascript
+let docs = [ 
+    {"insert": {"index" : "products", "id" : 3, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}}}, 
+    {"insert": {"index" : "products", "id" : 4, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}}}, 
+    {"insert": {"index" : "products", "id" : 5, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
+];
+res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
+```
+
 <!-- end -->
 <!-- example MVA_insert -->
 ## Inserting multi-value attributes (MVA) values
@@ -379,9 +408,17 @@ $index->addDocument(
 
 <!-- request Python -->
 
-``` python
-indexApi = api = manticoresearch.IndexApi(client)
+```python
 indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","sizes":[40,41,42,43]}})
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+```javascript
+res = await indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","sizes":[40,41,42,43]}});
 ```
 
 <!-- end -->
@@ -450,6 +487,14 @@ $index->addDocument(
 ``` python
 indexApi = api = manticoresearch.IndexApi(client)
 indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","meta":'{"size": 41, "color": "red"}'}})
+```
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+```javascript
+
+res = await indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","meta":'{"size": 41, "color": "red"}'}});
 ```
 
 <!-- end -->

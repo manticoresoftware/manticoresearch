@@ -97,6 +97,14 @@ $index->create($params);
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451\'')
 ```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451\'');
+```
 
 <!-- request CONFIG -->
 
@@ -158,6 +166,14 @@ $index->create($params);
 
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'0..9, english, _\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'0..9, english, _\'');
 ```
 <!-- request CONFIG -->
 
@@ -243,6 +259,14 @@ $index->create($params);
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'')
 ```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'');
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -320,6 +344,15 @@ $index->create($params);
 
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price float) blend_chars = \'+, &, U+23, @->_\'')
+```
+
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) blend_chars = \'+, &, U+23, @->_\'');
 ```
 <!-- request CONFIG -->
 
@@ -401,6 +434,14 @@ $index->create($params);
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price float) blend_mode = \'trim_tail, skip_pure\' blend_chars = \'+, &\'')
 ```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) blend_mode = \'trim_tail, skip_pure\' blend_chars = \'+, &\'');
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -465,6 +506,14 @@ $index->create($params);
 
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price float) min_word_len = \'4\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) min_word_len = \'4\'');
 ```
 
 <!-- request CONFIG -->
@@ -538,7 +587,14 @@ $index->create($params);
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'')
 ```
+<!-- intro -->
+##### javascript:
 
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'');
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -607,7 +663,14 @@ $index->create($params);
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price float) ngram_chars = \'U+3000..U+2FA1F\' ngram_len = \'1\'')
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) ngram_chars = \'U+3000..U+2FA1F\' ngram_len = \'1\'');
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -666,7 +729,14 @@ $index->create($params);
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'')
 ```
+<!-- intro -->
+##### javascript:
 
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'');
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -733,6 +803,14 @@ $index->create($params);
 
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price float) ignore_chars = \'U+AD\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) ignore_chars = \'U+AD\'');
 ```
 <!-- request CONFIG -->
 
@@ -807,6 +885,14 @@ $index->create($params);
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'both_freq\'')
 ```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'both_freq\'');
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -874,6 +960,14 @@ $index->create($params);
 
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'first_freq\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'first_freq\'');
 ```
 <!-- request CONFIG -->
 
@@ -951,6 +1045,14 @@ $index->create($params);
 
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price float) dict = \'keywords\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) dict = \'keywords\'');
 ```
 <!-- request CONFIG -->
 
@@ -1049,6 +1151,14 @@ $index->create($params);
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price float) global_idf = \'/usr/local/sphinx/var/global.idf\'')
 ```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) global_idf = \'/usr/local/sphinx/var/global.idf\'');
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -1116,6 +1226,14 @@ $index->create($params);
 
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price float) hitless_words = \'all\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) hitless_words = \'all\'');
 ```
 <!-- request CONFIG -->
 
@@ -1186,6 +1304,14 @@ $index->create($params);
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price float) index_field_lengths = \'1\'')
 ```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) index_field_lengths = \'1\'');
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -1250,7 +1376,14 @@ $index->create($params);
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price float) index_token_filter = \'my_lib.so:custom_blend:chars=@#&\'')
 ```
+<!-- intro -->
+##### javascript:
 
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) index_token_filter = \'my_lib.so:custom_blend:chars=@#&\'');
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -1313,7 +1446,14 @@ $index->create($params);
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price float) overshort_step = \'1\'')
 ```
+<!-- intro -->
+##### javascript:
 
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) overshort_step = \'1\'');
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -1383,6 +1523,14 @@ $index->create($params);
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price float) phrase_boundary = \'., ?, !, U+2026\' phrase_boundary_step = \'10\'')
 ```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) phrase_boundary = \'., ?, !, U+2026\' phrase_boundary_step = \'10\'');
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -1448,6 +1596,14 @@ $index->create($params);
 
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price float) phrase_boundary_step = \'100\' phrase_boundary = \'., ?, !, U+2026\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) phrase_boundary_step = \'100\' phrase_boundary = \'., ?, !, U+2026\'');
 ```
 <!-- request CONFIG -->
 
@@ -1521,6 +1677,14 @@ $index->create($params);
 
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price float) regexp_filter = \'(blue|red) => color\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) regexp_filter = \'(blue|red) => color\'');
 ```
 
 <!-- request CONFIG -->

@@ -88,13 +88,21 @@ $newstoredquery = [
 ];
 $client->pq()->doc($newstoredquery);
 ```
+
 <!-- intro -->
 ##### Python
 <!-- request Python -->
 ```python
-indexApi = api = manticoresearch.IndexApi(client)
 newstoredquery ={"index" : "test_pq", "id" : 2, "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}}
-indexApi.insert(store_query)
+indexApi.insert(newstoredquery)
+```
+
+<!-- intro -->
+##### Javascript
+<!-- request Javascript -->
+```javascript
+newstoredquery ={"index" : "test_pq", "id" : 2, "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}};
+indexApi.insert(newstoredquery);
 ```
 
 <!-- end -->
@@ -199,6 +207,7 @@ Array(
        [result] => created
 )
 ```
+
 <!-- intro -->
 ##### Python
 <!-- request Python -->
@@ -215,6 +224,19 @@ indexApi.insert(store_query)
  'index': 'test_pq',
  'result': 'created'}
 ```
+<!-- intro -->
+##### Javascript
+<!-- request Javascript -->
+```javascript
+newstoredquery ={"index" : "test_pq", "id" : 2, "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}};
+res =  await indexApi.insert(store_query);
+```
+<!-- response Javascript -->
+```javascript
+{"_index":"test_pq","_id":1657843905795719198,"created":true,"result":"created"}
+
+```
+
 <!-- end -->
 
 <!-- example noschema -->

@@ -235,7 +235,33 @@ searchApi.search({"index":"forum","query":{"query_string":"i me"},"_source":{"ex
  'took': 0}
 
 ```
+<!-- intro -->
+javascript
+<!-- request javascript -->
 
+```javascript
+res = await searchApi.search({"index":"forum","query":{"query_string":"i me"},"_source":{"excludes":["*"]},"limit":1,"profile":true});
+```
+<!-- response javascript -->
+``` javascript
+{"hits": {"hits": [{"_id": "100", "_score": 2500, "_source": {}}],
+          "total": 1},
+ "profile": {"query": {"children": [{"children": [{"querypos": 1,
+                                                      "type": "KEYWORD",
+                                                      "word": "i"}],
+                                       "description": "AND(KEYWORD(i, querypos=1))",
+                                       "type": "AND"},
+                                      {"children": [{"querypos": 2,
+                                                      "type": "KEYWORD",
+                                                      "word": "me"}],
+                                       "description": "AND(KEYWORD(me, querypos=2))",
+                                       "type": "AND"}],
+                        "description": "AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2)))",
+                        "type": "AND"}},
+ "timed_out": False,
+ "took": 0}
+
+```
 <!-- end -->
 
 
@@ -644,6 +670,37 @@ searchApi.search({"index":"forum","query":{"query_string":"@title way* @content 
  'timed_out': False,
  'took': 0}
 
+```
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.search({"index":"forum","query":{"query_string":"@title way* @content hey"},"_source":{"excludes":["*"]},"limit":1,"profile":true});
+```
+<!-- response javascript -->
+``` javascript
+{"hits": {"hits": [{"_id": "2811025403043381551",
+                    "_score": 2643,
+                    "_source": {}}],
+          "total": 1},
+ "profile": {"query": {"children": [{"children": [{"expanded": True,
+                                                      "querypos": 1,
+                                                      "type": "KEYWORD",
+                                                      "word": "way*"}],
+                                       "description": "AND(fields=(title), KEYWORD(way*, querypos=1, expanded))",
+                                       "fields": ["title"],
+                                       "type": "AND"},
+                                      {"children": [{"querypos": 2,
+                                                      "type": "KEYWORD",
+                                                      "word": "hey"}],
+                                       "description": "AND(fields=(content), KEYWORD(hey, querypos=2))",
+                                       "fields": ["content"],
+                                       "type": "AND"}],
+                        "description": "AND( AND(fields=(title), KEYWORD(way*, querypos=1, expanded)),  AND(fields=(content), KEYWORD(hey, querypos=2)))",
+                        "type": "AND"}},
+ "timed_out": False,
+ "took": 0}
 ```
 <!-- end -->
 

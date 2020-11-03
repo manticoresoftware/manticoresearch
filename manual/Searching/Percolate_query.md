@@ -217,6 +217,23 @@ indexApi.insert({"index" : "products",  "doc" : {"query" : "@title shoes","filte
  'index': 'products',
  'result': 'created'}
 ```
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, color string) type=\'pq\'');
+res = indexApi.insert({"index" : "products", "doc" : {"query" : "@title bag" }});
+res = indexApi.insert({"index" : "products",  "doc" : {"query" : "@title shoes", "filters": "color='red'" }});
+res = indexApi.insert({"index" : "products",  "doc" : {"query" : "@title shoes","filters": "color='red'" }});
+```
+<!-- response javascript -->
+``` javascript
+"_index":"products","_id":0,"created":true,"result":"created"}
+{"_index":"products","_id":0,"created":true,"result":"created"}
+{"_index":"products","_id":0,"created":true,"result":"created"}
+
+```
 <!-- end -->
 
 <!-- example single -->
@@ -378,6 +395,41 @@ searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"What 
  'timed_out': False,
  'took': 0}
 ```
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"What a nice bag"}}}});
+```
+<!-- response javascript -->
+``` javascript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "hits": [
+      {
+        "_index": "products",
+        "_type": "doc",
+        "_id": "2811045522851233808",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+```
 <!-- end -->
 
 <!-- example pq_rules -->
@@ -525,6 +577,41 @@ searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"What 
  'profile': None,
  'timed_out': False,
  'took': 0}
+```
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.percolate('products',{"query":{"percolate":{"document":{"title":"What a nice bag"}}}});
+```
+<!-- response javascript -->
+``` javascript
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "hits": [
+      {
+        "_index": "products",
+        "_type": "doc",
+        "_id": "2811045522851233808",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
 ```
 
 <!-- end -->
@@ -749,7 +836,58 @@ searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"nic
  'took': 0}
 
 ```
+<!-- intro -->
+javascript
+<!-- request javascript -->
 
+```javascript
+res = await searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"nice pair of shoes","color":"blue"},{"title":"beautiful bag"}]}}});
+```
+<!-- response javascript -->
+``` javascript
+{
+  "took": 6,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "_index": "products",
+        "_type": "doc",
+        "_id": "2811045522851233808",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            2
+          ]
+        }
+      },
+      {
+        "_index": "products",
+        "_type": "doc",
+        "_id": "2811045522851233810",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
+
+```
 <!-- end -->
 
 <!-- example docs_1 -->
@@ -948,6 +1086,57 @@ searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"nic
  'timed_out': False,
  'took': 0}
 
+```
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.percolate('products',{"query":{"percolate":{"documents":[{"title":"nice pair of shoes","color":"blue"},{"title":"beautiful bag"}]}}});
+```
+<!-- response javascript -->
+``` javascript
+{
+  "took": 6,
+  "timed_out": false,
+  "hits": {
+    "total": 2,
+    "hits": [
+      {
+        "_index": "products",
+        "_type": "doc",
+        "_id": "2811045522851233808",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title bag"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            2
+          ]
+        }
+      },
+      {
+        "_index": "products",
+        "_type": "doc",
+        "_id": "2811045522851233810",
+        "_score": "1",
+        "_source": {
+          "query": {
+            "ql": "@title shoes"
+          }
+        },
+        "fields": {
+          "_percolator_document_slot": [
+            1
+          ]
+        }
+      }
+    ]
+  }
+}
 ```
 <!-- end -->
 
@@ -1176,6 +1365,53 @@ searchApi.search({"index":"pq","query":{"match_all":{}}})
  'timed_out': False,
  'took': 0}
 ```
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.search({"index":"pq","query":{"match_all":{}}});
+```
+<!-- response javascript -->
+``` javascript
+{'hits': {'hits': [{u'_id': u'2811025403043381501',
+                    u'_score': 1,
+                    u'_source': {u'filters': u"gid>=10",
+                                 u'query': u'filter test',
+                                 u'tags': u''}},
+                   {u'_id': u'2811025403043381502',
+                    u'_score': 1,
+                    u'_source': {u'filters': u"gid>=10 OR gid<=3",
+                                 u'query': u'angry',
+                                 u'tags': u''}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.search({"index":"pq","query":{"match_all":{}}});
+```
+<!-- response javascript -->
+``` javascript
+{"hits": {"hits": [{"_id": "2811025403043381501",
+                    "_score": 1,
+                    "_source": {"filters": u"gid>=10",
+                                 "query": "filter test",
+                                 "tags": ""}},
+                   {"_id": "2811025403043381502",
+                    "_score": 1,
+                    "_source": {"filters": u"gid>=10 OR gid<=3",
+                                 "query": "angry",
+                                 "tags": ""}}],
+          "total": 2},
+  "timed_out": false,
+ "took": 0}
+```
 <!-- end -->
 
 
@@ -1364,6 +1600,57 @@ searchApi.percolate('pq',{"percolate":{"documents":[{"title":"angry test","gid":
  'profile': None,
  'timed_out': False,
  'took': 0}
+```
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.percolate('pq',{"percolate":{"documents":[{"title":"angry test","gid":3},{"title":"filter test doc2","gid":13}]}});
+```
+<!-- response javascript -->
+``` javascript
+{'hits': {'hits': [{u'_id': u'2811025403043381480',
+                    u'_index': u'pq',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'angry'},u'tags':u'',u'filters':u"gid>=10 OR gid<=3"},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}},
+                    {u'_id': u'2811025403043381501',
+                    u'_index': u'pq',
+                    u'_score': u'1',
+                    u'_source': {u'query': {u'ql': u'filter test'},u'tags':u'',u'filters':u"gid>=10"},
+                    u'_type': u'doc',
+                    u'fields': {u'_percolator_document_slot': [1]}}],
+          'total': 2},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.percolate("pq",{"percolate":{"documents":[{"title":"angry test","gid":3},{"title":"filter test doc2","gid":13}]}});
+```
+<!-- response javascript -->
+``` javascript
+{"hits": {"hits": [{"_id": "2811025403043381480",
+                    "_index": "pq",
+                    "_score": "1",
+                    "_source": {"query": {"ql": "angry"},"tags":"","filters":u"gid>=10 OR gid<=3"},
+                    "_type": "doc",
+                    "fields": {"_percolator_document_slot": [1]}},
+                    {"_id": "2811025403043381501",
+                    "_index": "pq",
+                    "_score": "1",
+                    "_source": {"query": {"ql": "filter test"},"tags":"","filters":u"gid>=10"},
+                    "_type": "doc",
+                    "fields": {"_percolator_document_slot": [1]}}],
+          "total": 2},
+ "timed_out": false,
+ "took": 0}
 ```
 <!-- end -->
 

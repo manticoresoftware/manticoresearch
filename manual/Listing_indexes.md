@@ -77,6 +77,20 @@ utilsApi.sql('mode=raw&query=SHOW TABLES')
  u'total': 0,
  u'warning': u''}
 ```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=SHOW TABLES');
+```
+
+<!-- response javascript -->
+```javascript
+{"columns":[{"Index":{"type":"string"}},{"Type":{"type":"string"}}],"data":[{"Index":"products","Type":"rt"}],"total":0,"error":"","warning":""}
+```
+
 
 <!-- end -->
 
@@ -127,7 +141,7 @@ Array
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=SHOW TABLES LIKE \'pro%\'')
+res = await utilsApi.sql('mode=raw&query=SHOW TABLES LIKE \'pro%\'');
 ```
 
 <!-- response Python -->
@@ -138,6 +152,19 @@ utilsApi.sql('mode=raw&query=SHOW TABLES LIKE \'pro%\'')
  u'error': u'',
  u'total': 0,
  u'warning': u''}
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+utilsApi.sql('mode=raw&query=SHOW TABLES LIKE \'pro%\'')
+```
+
+<!-- response javascript -->
+```javascript
+{"columns":[{"Index":{"type":"string"}},{"Type":{"type":"string"}}],"data":[{"Index":"products","Type":"rt"}],"total":0,"error":"","warning":""}
 ```
 
 <!-- end -->

@@ -284,4 +284,25 @@ searchApi.search({"index":"myindex","query":{"query_string":"@title \"find me fa
  'timed_out': False,
  'took': 0}
 ```
+
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.search({"index":"myindex","query":{"query_string":"@title \"find me fast \"/2"}});
+```
+<!-- response javascript -->
+```javascript
+{"hits": {"hits": [{"_id": "1",
+                    "_score": 1,
+                    "_source": {"title": "first find me fast", "gid":11}},
+                    {"_id": "2",
+                    "_score": 1,
+                    "_source": {"title": "second find me fast", "gid":12}}],
+          "total": 2},
+ "profile": None,
+ "timed_out": False,
+ "took": 0}
+```
 <!-- end -->

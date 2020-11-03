@@ -76,7 +76,19 @@ utilsApi.sql('mode=raw&query=TRUNCATE TABLE products')
 ```python
 {u'error': u'', u'total': 0, u'warning': u''}
 ```
+<!-- intro -->
+##### javascript:
 
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=TRUNCATE TABLE products');
+```
+
+<!-- response javascript -->
+```javascript
+{"total":0,"error":"","warning":""}
+```
 <!-- end -->
 
 One of the possible uses of this command is before [attaching an index](Adding_data_from_external_storages/Adding_data_from_indexes/Attaching_a_plain_index_to_RT_index.md).

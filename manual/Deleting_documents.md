@@ -150,7 +150,19 @@ indexApi.delete({"index" : "products", "query": { "match": { "*": "dummy" }}})
 <!-- response Python -->
 ```python
 {'deleted': 2, 'id': None, 'index': 'products', 'result': None}
+```
+<!-- intro -->
 
+##### javascript:
+
+<!-- request javascript -->
+``` javascript
+res = await indexApi.delete({"index" : "products", "query": { "match": { "*": "dummy" }}});
+```
+
+<!-- response javascript -->
+```javascript
+{"_index":"products","deleted":2}
 ```
 <!-- end -->
 
@@ -237,6 +249,19 @@ indexApi.delete({"index" : "products", "id" : 1})
 <!-- response Python -->
 ```python
 {'deleted': None, 'id': 1, 'index': 'products', 'result': 'deleted'}
+```
+<!-- intro -->
+
+##### javascript:
+
+<!-- request javascript -->
+``` javascript
+res = await indexApi.delete({"index" : "products", "id" : 1});
+```
+
+<!-- response javascript -->
+```javascript
+{"_index":"products","_id":1,"result":"deleted"}
 ```
 <!-- end -->
 
@@ -328,5 +353,18 @@ indexApi.delete({"cluster":"nodes4","index" : "products", "id" : 1})
 <!-- response Python -->
 ```python
 {'deleted': None, 'id': 100, 'index': 'products', 'result': 'deleted'}
+```
+<!-- intro -->
+
+##### javascript:
+
+<!-- request javascript -->
+``` javascript
+indexApi.delete({"cluster":"nodes4","index" : "products", "id" : 1})
+```
+
+<!-- response javascript -->
+```javascript
+{"_index":"products","_id":100,"result":"deleted"}
 ```
 <!-- end -->

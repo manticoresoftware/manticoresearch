@@ -86,7 +86,19 @@ indexApi.replace({"index" : "products", "id" : 1, "doc" : {"title" : "document o
  'index': 'products',
  'result': 'updated'}
 ```
+<!-- intro -->
 
+##### javascript:
+
+<!-- request javascript -->
+``` javascript
+res = await indexApi.replace({"index" : "products", "id" : 1, "doc" : {"title" : "document one","price":10}});
+```
+
+<!-- response javascript -->
+```javascript
+{"_index":"products","_id":1,"result":"updated"}
+```
 <!-- end -->
 
 `REPLACE` is supported for RT and PQ indexes.
@@ -207,7 +219,7 @@ Array(
 <!-- request Python -->
 
 ``` python
-indexApi = api = manticoresearch.IndexApi(client)
+indexApi = manticoresearch.IndexApi(client)
 docs = [ \
     {"replace": {"index" : "products", "id" : 1, "doc" : {"title" : "document one"}}}, \
     {"replace": {"index" : "products", "id" : 2, "doc" : {"title" : "document two"}}} ]
@@ -227,6 +239,20 @@ api_resp = indexApi.bulk('\n'.join(map(json.dumps,docs)))
                          u'created': False,
                          u'result': u'updated',
                          u'status': 200}}]}
+
+```
+<!-- request javascript -->
+
+``` javascript
+docs = [ 
+    {"replace": {"index" : "products", "id" : 1, "doc" : {"title" : "document one"}}}, 
+    {"replace": {"index" : "products", "id" : 2, "doc" : {"title" : "document two"}}} ];
+res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
+```
+
+<!-- response javascript -->
+```javascript
+{"items":[{"replace":{"_index":"products","_id":1,"created":false,"result":"updated","status":200}},{"replace":{"_index":"products","_id":2,"created":false,"result":"updated","status":200}}],"errors":false}
 
 ```
 <!-- end -->

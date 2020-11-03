@@ -84,6 +84,18 @@ indexApi.update({"index" : "products", "id" : 1, "doc" : {"price":10}})
 ```python
 {'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
 ```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+``` javascript
+res = await indexApi.update({"index" : "products", "id" : 1, "doc" : {"price":10}});
+```
+
+<!-- response javascript -->
+```javascript
+{"_index":"products","_id":1,"result":"updated"}
+```
 
 <!-- end -->
 
@@ -186,7 +198,22 @@ indexApi.update({"index" : "products", "id" : 1, "doc" : {
 ```python
 {'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
 ```
+<!-- intro -->
+##### javascript:
 
+<!-- request javascript -->
+``` javascript
+res = await indexApi.update({"index" : "products", "id" : 1, "doc" : {
+    "price": 100000000000,
+    "coeff": 3465.23,
+    "tags1": [3,6,4],
+    "tags2": []}});
+```
+
+<!-- response javascript -->
+```javascript
+{"_index":"products","_id":1,"result":"updated"}
+```
 <!-- end -->
 
 When assigning out-of-range values to 32-bit attributes, they will be trimmed to their lower 32 bits without a prompt. For example, if you try to update the 32-bit unsigned int with a value of 4294967297, the value of 1 will actually be stored, because the lower 32 bits of 4294967297 (0x100000001 in hex) amount to 1 (0x00000001 in hex).
@@ -306,6 +333,23 @@ indexApi.update({"index" : "products", "id" : 1, "doc" : {
 ```python
 {'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
 ```
+
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+``` javascript
+res = await indexApi.update({"index" : "products", "id" : 1, "doc" : {
+    "price": 100000000000,
+    "coeff": 3465.23,
+    "tags1": [3,6,4],
+    "tags2": []}});
+```
+
+<!-- response javascript -->
+```javascript
+{"_index":"products","_id":1,"result":"updated"}
+```
 <!-- end -->
 
 <!-- example full JSON update -->
@@ -419,7 +463,21 @@ indexApi.update({"index" : "products", "id" : 100, "doc" : {"meta.tags[0]": 100}
  'result': 'created'}
 {'id': 100, 'index': 'products', 'result': 'updated', 'updated': None}
 ```
+<!-- intro -->
+##### javascript:
 
+<!-- request javascript -->
+``` javascript
+res = await indexApi.insert({"index" : "products", "id" : 100, "doc" : {"title" : "title", "meta" : {"tags":[1,2,3]}}});
+res = await indexApi.update({"index" : "products", "id" : 100, "doc" : {"meta.tags[0]": 100}});
+```
+
+<!-- response javascript -->
+```javascript
+{"_index":"products","_id":100,"created":true,"result":"created"}
+{"_index":"products","_id":100,"result":"updated"}
+
+```
 <!-- end -->
 
 <!-- example cluster update -->
@@ -482,7 +540,14 @@ $index->updateDocument(['enabled'=>0],1);
 indexApi.update({"cluster":"weekly", "index" : "products", "id" : 1, "doc" : {"enabled" : 0}})
 
 ```
+<!-- intro -->
+##### javascript:
 
+<!-- request javascript -->
+``` javascript
+res = wait indexApi.update({"cluster":"weekly", "index" : "products", "id" : 1, "doc" : {"enabled" : 0}});
+
+```
 <!-- end -->
 
 
@@ -576,6 +641,19 @@ indexApi.update({"index" : "products", "id" : 1, "doc" : {"tags1": []}})
 {'id': 1, 'index': 'products', 'result': 'updated', 'updated': None}
 ```
 
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+``` javascript
+
+indexApi.update({"index" : "products", "id" : 1, "doc" : {"tags1": []}})
+```
+
+<!-- response javascript -->
+```javascript
+{"_index":"products","_id":1,"result":"updated"}
+```
 <!-- end -->
 
 
@@ -854,6 +932,22 @@ indexApi.bulk('\n'.join(map(json.dumps,docs)))
 {'error': None,
  'items': [{u'update': {u'_index': u'products', u'updated': 1}},
            {u'update': {u'_index': u'products', u'updated': 3}}]}
+
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+``` javascript
+docs = [ 
+            { "update" : { "index" : "products", "doc": { "coeff" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } }, 
+            { "update" : { "index" : "products", "doc": { "coeff" : 0 }, "query": { "range": { "price": { "lt": 1000 } } } } } ];
+res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
+```
+
+<!-- response javascript -->
+```javascript
+{"items":[{"update":{"_index":"products","updated":1}},{"update":{"_index":"products","updated":5}}],"errors":false}
 
 ```
 

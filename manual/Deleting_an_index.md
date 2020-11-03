@@ -73,6 +73,19 @@ utilsApi.sql('mode=raw&query=DROP TABLE products')
 ```python
 {u'error': u'', u'total': 0, u'warning': u''}
 ```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=DROP TABLE products');
+```
+
+<!-- response javascript -->
+```javascript
+{"total":0,"error":"","warning":""}
+```
 
 <!-- end -->
 
@@ -131,5 +144,18 @@ utilsApi.sql('mode=raw&query=DROP TABLE IF EXISTS products')
 <!-- response Python -->
 ```python
 {u'error': u'', u'total': 0, u'warning': u''}
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=DROP TABLE IF EXISTS products');
+```
+
+<!-- response javascript -->
+```javascript
+{"total":0,"error":"","warning":""}
 ```
 <!-- end -->

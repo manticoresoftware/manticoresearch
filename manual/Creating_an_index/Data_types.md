@@ -58,6 +58,14 @@ $index->create([
 ```php
 utilsApi.sql('mode=raw&query=create table forum(title text, content text, author_id int, forum_id int, post_date timestamp)')
 ```
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table forum(title text, content text, author_id int, forum_id int, post_date timestamp)');
+```
 
 <!-- intro -->
 ##### config:
@@ -158,6 +166,14 @@ $client->search([
 ```python
 searchApi.search({"index":"forum","query":{"match_all":{},"bool":{"must":[{"equals":{"author_id":123}},{"in":{"forum_id":[1,3,7]}}]}},"sort":[{"post_date":"desc"}]})
 ```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.search({"index":"forum","query":{"match_all":{},"bool":{"must":[{"equals":{"author_id":123}},{"in":{"forum_id":[1,3,7]}}]}},"sort":[{"post_date":"desc"}]});
+```
 
 <!-- end -->
 
@@ -213,6 +229,14 @@ $index->create([
 
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text)')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text)');
 ```
 
 <!-- intro -->
@@ -275,6 +299,14 @@ $index->create([
 
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text indexed)')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text indexed)');
 ```
 <!-- intro -->
 ##### config:
@@ -341,6 +373,14 @@ $index->setName('products')->search('@title')->get();
 ```python
 searchApi.search({"index":"products","query":{"match":{"title":"first"}}})
 ```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.search({"index":"products","query":{"match":{"title":"first"}}});
+```
 
 
 <!-- end -->
@@ -387,6 +427,14 @@ $index->create([
 
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, keys string)')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, keys string)');
 ```
 <!-- intro -->
 ##### config:
@@ -451,6 +499,14 @@ $index->create([
 
 ```python
 utilsApi.sql('mode=raw&query=create table products ( title string attribute indexed )')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products ( title string attribute indexed )');
 ```
 
 <!-- intro -->
@@ -517,6 +573,14 @@ $index->create([
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price int)')
 ```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price int)');
+```
 
 <!-- intro -->
 ##### config:
@@ -580,7 +644,14 @@ $index->create([
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, flags bit(3), tags bit(2) ')
 ```
+<!-- intro -->
+##### javascript:
 
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, flags bit(3), tags bit(2) ');
+```
 <!-- intro -->
 ##### config:
 
@@ -645,7 +716,14 @@ $index->create([
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, price bigint )')
 ```
+<!-- intro -->
+##### javascript:
 
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price bigint )');
+```
 <!-- intro -->
 ##### config:
 
@@ -709,7 +787,14 @@ $index->create([
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, date timestamp)')
 ```
+<!-- intro -->
+##### javascript:
 
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, date timestamp)');
+```
 
 <!-- intro -->
 ##### config:
@@ -775,6 +860,15 @@ $index->create([
 utilsApi.sql('mode=raw&query=create table products(title text, coeff float)')
 ```
 
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, coeff float)');
+```
+
 
 <!-- intro -->
 ##### config:
@@ -836,6 +930,14 @@ $index->setName('products')->search('')->expression('eps','abs(a-b)')->get();
 ```python
 searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"eps":"abs(a-b)"}})
 ```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"eps":"abs(a-b)"}});
+```
 
 <!-- end -->
 
@@ -878,6 +980,14 @@ $index->setName('products')->search('')->expression('inc','in(ceil(attr*100),200
 
 ```python
 searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"inc":"in(ceil(attr*100),200,250,350)"}})
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"inc":"in(ceil(attr*100),200,250,350)"}});
 ```
 <!-- end -->
 
@@ -924,6 +1034,14 @@ $index->create([
 
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, data json)')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, data json)');
 ```
 
 <!-- intro -->
@@ -988,7 +1106,14 @@ $index->setName('products')->search('')->expression('idx','indexof(x>2 for x in 
 ```python
 searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"idx":"indexof(x>2 for x in data.intarray)"}})
 ```
+<!-- intro -->
+##### javascript:
 
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"idx":"indexof(x>2 for x in data.intarray)"}});
+```
 <!-- end -->
 
 <!-- example for REGEX() json -->
@@ -1036,6 +1161,14 @@ $index->setName('products')->search('')->expression('idx',"regex(data.name, 'est
 ```python
 searchApi.search({"index":"products","query":{"match_all":{},"range":{"c":{"gt":0}}}},"expressions":{"c":"regex(data.name, 'est')"}})
 ```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.search({"index":"products","query":{"match_all":{},"range":{"c":{"gt":0}}}},"expressions":{"c":"regex(data.name, 'est')"}});
+```
 <!-- end -->
 
 <!-- example for DOUBLE() -->
@@ -1078,6 +1211,14 @@ $index->setName('products')->search('')->sort('double(data.myfloat)','desc')->ge
 
 ```python
 searchApi.search({"index":"products","query":{"match_all":{}}},"sort":[{"double(data.myfloat)":{"order":"desc"}}]})
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.search({"index":"products","query":{"match_all":{}}},"sort":[{"double(data.myfloat)":{"order":"desc"}}]});
 ```
 <!-- end -->
 
@@ -1125,6 +1266,14 @@ $index->create([
 
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, product_codes multi)')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, product_codes multi)');
 ```
 
 
@@ -1192,6 +1341,14 @@ $index->setName('products')->search('')->filter('any(product_codes)','equals',3)
 ```python
 searchApi.search({"index":"products","query":{"match_all":{},"equals":{"any(product_codes)":3}}}})
 ```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.search({"index":"products","query":{"match_all":{},"equals":{"any(product_codes)":3}}}})'
+```
 <!-- end -->
 
 <!-- example for least/greatest MVA -->
@@ -1237,6 +1394,14 @@ $index->setName('products')->search('')->sort('product_codes','asc','min')->get(
 
 ```python
 searchApi.search({"index":"products","query":{"match_all":{},"sort":[{"product_codes":{"order":"asc","mode":"min"}}]}})
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.search({"index":"products","query":{"match_all":{},"sort":[{"product_codes":{"order":"asc","mode":"min"}}]}});
 ```
 <!-- end -->
 
@@ -1433,6 +1598,21 @@ searchApi.search({"index":"products","query":{"match_all":{}}})
  'timed_out': False,
  'took': 29}
 ```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+await indexApi.insert({"index":"products","id":1,"doc":{"title":"first","product_codes":[4,2,1,3]}});
+res = await searchApi.search({"index":"products","query":{"match_all":{}}});
+```
+<!-- response javascript -->
+
+```javascript
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"product_codes":[1,2,3,4],"title":"first"}}]}}
+
+```
 
 <!-- end -->
 
@@ -1482,7 +1662,14 @@ $index->create([
 ```python
 utilsApi.sql('mode=raw&query=create table products(title text, values multi64))')
 ```
+<!-- intro -->
+##### javascript:
 
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, values multi64))');
+```
 <!-- intro -->
 ##### config:
 

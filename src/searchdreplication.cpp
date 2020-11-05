@@ -42,8 +42,7 @@ const char * GetReplicationDL()
 
 // global application context for wsrep callbacks
 
-// FIXME!!! take these timeout from config
-static int			g_iRemoteTimeout = 120 * 1000; // 2 minutes in msec
+static int GetQueryTimeout ( int64_t iTimeout=0 ); // 2 minutes in msec
 // 200 msec is ok as we do not need to any missed nodes in cluster node list
 static int			g_iAnyNodesTimeout = 200;
 
@@ -88,7 +87,8 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	wsrep_t *	m_pProvider = nullptr;
 
 	// receiver thread
-	CSphAutoEvent m_tWorkerFinished;
+	CSphAutoEvent	m_tWorkerFinished;
+	bool			m_bHasWorker = false;
 
 	// nodes at cluster
 	CSphString	m_sViewNodes; // raw nodes addresses (API and replication) from whole cluster
@@ -109,6 +109,10 @@ struct ReplicationCluster_t : public ClusterDesc_t
 	int						m_iStatus = WSREP_VIEW_DISCONNECTED;
 	int						m_iSize = 0;
 	int						m_iIdx = 0;
+
+	// error that got reported to main thread
+	CSphMutex				m_tErrorLock;
+	CSphString				m_sError;
 
 	void					UpdateIndexHashes();
 
@@ -559,10 +563,6 @@ static void UpdateGroupView ( const wsrep_view_info_t * pView, ReplicationCluste
 	{
 		ScopedMutex_t tLock ( pCluster->m_tViewNodesLock );
 		pCluster->m_sViewNodes = sBuf.cstr();
-
-		// lets also update cluster nodes set at config for just created cluster with new member
-		if ( pCluster->m_sClusterNodes.IsEmpty() && pView->memb_num>1 )
-			ClusterFilterNodes ( pCluster->m_sViewNodes, Proto_e::SPHINX, pCluster->m_sClusterNodes );
 	}
 }
 
@@ -737,6 +737,7 @@ static wsrep_cb_status_t Unordered_fn ( void * pCtx, const void * pData, size_t 
 static void ReplicationRecv_fn ( SharedPtr_t<ReceiverCtx_t *> pCtx )
 {
 	g_pTlsCluster = pCtx->m_pCluster;
+	pCtx->m_pCluster->m_bHasWorker = true;
 	pCtx->m_pCluster->SetNodeState ( ClusterState_e::JOINING );
 
 	sphLogDebugRpl ( "receiver thread started" );
@@ -2681,6 +2682,18 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	if ( bOk && bUpdateNodes )
 		bOk &= ClusterAlterUpdate ( sCluster, "nodes", sError );
 
+	if ( !bOk )
+	{
+		{
+			ScopedMutex_t tLock ( tArgs.m_pCluster->m_tErrorLock );
+			sError = tArgs.m_pCluster->m_sError;
+		}
+		// need to wait recv thread to complete in case of error after worker started
+		if ( tArgs.m_pCluster->m_bHasWorker )
+			tArgs.m_pCluster->m_tWorkerFinished.WaitEvent ();
+		DeleteClusterByName ( sCluster );
+	}
+
 	return bOk;
 }
 
@@ -2766,6 +2779,7 @@ struct SyncSrc_t
 	CSphFixedVector<FileChunks_t> m_dChunks { 0 };
 	CSphFixedVector<BYTE> m_dHashes { 0 }; // hashes of all index files
 	int m_iMaxChunkBytes = 0; // max length bytes of file chunk hashed
+	int64_t m_tmTook = 0; // millli-second it took to read and hash all files, used for calc agent query timeout later
 
 	BYTE * GetFileHash ( int iFile ) const
 	{
@@ -2926,7 +2940,7 @@ static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, const PQRemoteData
 	HostDesc_t tHost;
 	pAgent->m_tDesc.m_pDash = new HostDashboard_t ( tHost );
 
-	pAgent->m_iMyConnectTimeoutMs = iTimeoutMs;
+	pAgent->m_iMyConnectTimeoutMs = g_iAgentConnectTimeoutMs;
 	pAgent->m_iMyQueryTimeoutMs = iTimeoutMs;
 
 	pAgent->m_pResult = new PQRemoteAgentData_t ( tReq );
@@ -2941,14 +2955,14 @@ static void GetNodes ( const CSphString & sNodes, VecRefPtrs_t<AgentConn_t *> & 
 
 	dNodes.Resize ( dDesc.GetLength() );
 	ARRAY_FOREACH ( i, dDesc )
-		dNodes[i] = CreateAgent ( *dDesc[i], tReq, g_iRemoteTimeout );
+		dNodes[i] = CreateAgent ( *dDesc[i], tReq, GetQueryTimeout() );
 }
 
-static void GetNodes ( const VecAgentDesc_t & dDesc, VecRefPtrs_t<AgentConn_t *> & dNodes, const PQRemoteData_t & tReq )
+static void GetNodes ( const VecAgentDesc_t & dDesc, VecRefPtrs_t<AgentConn_t *> & dNodes, const PQRemoteData_t & tReq, int iTimeout )
 {
 	dNodes.Resize ( dDesc.GetLength() );
 	ARRAY_FOREACH ( i, dDesc )
-		dNodes[i] = CreateAgent ( *dDesc[i], tReq, g_iRemoteTimeout );
+		dNodes[i] = CreateAgent ( *dDesc[i], tReq, iTimeout );
 }
 
 // get nodes functor to collect listener with specific protocol
@@ -3324,6 +3338,20 @@ public:
 	}
 };
 
+static void ReportClusterError ( const CSphString & sCluster, const CSphString & sError )
+{
+	ScRL_t tLock ( g_tClustersLock );
+	ReplicationCluster_t ** ppCluster = g_hClusters ( sCluster );
+	if ( !ppCluster )
+		return;
+
+	ReplicationCluster_t * pCluster = *ppCluster;
+	if ( !pCluster->m_sError.IsEmpty() )
+		return;
+
+	ScopedMutex_t tErrorLock ( pCluster->m_tErrorLock );
+	pCluster->m_sError = sError;
+}
 
 // handler of all remote commands via API parsed at daemon as SEARCHD_COMMAND_CLUSTERPQ
 void HandleCommandClusterPq ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBuffer_c & tBuf, const char * sClient )
@@ -3419,6 +3447,7 @@ void HandleCommandClusterPq ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBu
 		auto tReply = APIHeader ( tOut, SEARCHD_ERROR );
 		tOut.SendString ( sError.cstr() );
 		sphLogFatal ( "%s", sError.cstr() );
+		ReportClusterError ( tCmd.m_sCluster, sError );
 	}
 }
 
@@ -3539,8 +3568,8 @@ static bool SyncSigCompare ( int iFile, const CSphString & sName, const SyncSrc_
 	int64_t iReadTotal = 0;
 	while ( iReadTotal<tChunk.m_iFileSize )
 	{
-		int iLeft = tChunk.m_iFileSize - iReadTotal;
-		iLeft = Min ( iLeft, tChunk.m_iChunkBytes );
+		int64_t iLeftTotal = tChunk.m_iFileSize - iReadTotal;
+		int iLeft = Min ( iLeftTotal, tChunk.m_iChunkBytes );
 		iReadTotal += iLeft;
 
 		if ( !tIndexFile.Read ( pReadData, iLeft, sError ) )
@@ -3583,8 +3612,9 @@ static bool SyncSigVerify ( const SyncSrc_t & tSrc, CSphString & sError )
 		int64_t iReadTotal = 0;
 		while ( iReadTotal<iFileSize )
 		{
-			const int iLeft = iFileSize - iReadTotal;
+			const int64_t iLeft = iFileSize - iReadTotal;
 
+			// iGot is always less INT_MAX as CSphReader allocates buffer of int size max
 			const BYTE * pData = nullptr;
 			const int iGot = tIndexFile.GetBytesZerocopy ( &pData, iLeft );
 			iReadTotal += iGot;
@@ -3996,7 +4026,7 @@ static bool SendFile ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileSta
 	VecRefPtrs_t<AgentConn_t *> dNodes;
 	dNodes.Resize ( dReaders.GetLength() );
 	ARRAY_FOREACH ( i, dReaders )
-		dNodes[i] = CreateAgent ( *dReaders[i].m_pAgentDesc, dReaders[i].m_tArgs, g_iRemoteTimeout );
+		dNodes[i] = CreateAgent ( *dReaders[i].m_pAgentDesc, dReaders[i].m_tArgs, GetQueryTimeout() );
 
 	// submit initial jobs
 	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter ( GetObserver() );
@@ -4046,7 +4076,7 @@ static bool SendFile ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileSta
 			// remove agent from main vector
 			pAgent->Release();
 
-			AgentConn_t * pNextJob = CreateAgent ( *tReader.m_pAgentDesc, tReader.m_tArgs, g_iRemoteTimeout );
+			AgentConn_t * pNextJob = CreateAgent ( *tReader.m_pAgentDesc, tReader.m_tArgs, GetQueryTimeout() );
 			dNodes[iAgent] = pNextJob;
 
 			dNewNode[0] = pNextJob;
@@ -4070,6 +4100,8 @@ static bool SendFile ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileSta
 
 static bool SyncSigBegin ( SyncSrc_t & tSync, CSphString & sError )
 {
+	int64_t tmStart = sphMicroTimer();
+
 	const int iFiles =  tSync.m_dIndexFiles.GetLength();
 	tSync.m_dBaseNames.Reset ( iFiles );
 	tSync.m_dChunks.Reset ( iFiles );
@@ -4124,8 +4156,8 @@ static bool SyncSigBegin ( SyncSrc_t & tSync, CSphString & sError )
 		int64_t iReadTotal = 0;
 		while ( iReadTotal<tChunk.m_iFileSize )
 		{
-			int iLeft = tChunk.m_iFileSize - iReadTotal;
-			iLeft = Min ( iLeft, tChunk.m_iChunkBytes );
+			int64_t iLeftTotal = tChunk.m_iFileSize - iReadTotal;
+			int iLeft = Min ( iLeftTotal, tChunk.m_iChunkBytes );
 			iReadTotal += iLeft;
 
 			if ( !tIndexFile.Read ( dReadBuf.Begin(), iLeft, sError ) )
@@ -4144,6 +4176,8 @@ static bool SyncSigBegin ( SyncSrc_t & tSync, CSphString & sError )
 		tIndexFile.Close();
 		tHashFile.Final ( tSync.GetFileHash ( iFile ) );
 	}
+
+	tSync.m_tmTook = ( sphMicroTimer() - tmStart ) / 1000;
 
 	return true;
 }
@@ -4209,6 +4243,8 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 	if ( !SyncSigBegin ( tSigSrc, sError ) )
 		return false;
 
+	int64_t tmLongOpTimeout = GetQueryTimeout ( tSigSrc.m_tmTook * 3 ); // timeout = sha verify (of all index files) + preload (of all index files) +1 (for slow io)
+
 	SendStatesGuard_t tStatesGuard;
 	CSphVector<RemoteFileState_t> & dSendStates = tStatesGuard.m_dSendFiles;
 	CSphVector<RemoteFileState_t> & dActivateIndexes = tStatesGuard.m_dActivateIndexes;
@@ -4220,9 +4256,11 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 		tAgentData.m_sIndexFileName = GetBaseName ( sIndexPath );
 
 		VecRefPtrs_t<AgentConn_t *> dNodes;
-		GetNodes ( dDesc, dNodes, tAgentData );
+		GetNodes ( dDesc, dNodes, tAgentData, tmLongOpTimeout );
 		for ( AgentConn_t * pAgent : dNodes )
 			PQRemoteBase_c::GetRes ( *pAgent ).m_pDst = new SyncDst_t();
+
+		sphLogDebugRpl ( "reserve index '%s' at %d nodes with timeout %d.%03d sec", sIndex.cstr(), dNodes.GetLength(), (int)( tmLongOpTimeout/1000 ), (int)( tmLongOpTimeout%1000 ) );
 
 		PQRemoteFileReserve_c tReq;
 		if ( !PerformRemoteTasks ( dNodes, tReq, tReq, sError ) )
@@ -4281,6 +4319,8 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 	if ( !dSendStates.GetLength() && !dActivateIndexes.GetLength() )
 		return true;
 
+	sphLogDebugRpl ( "sending index '%s'", sIndex.cstr() );
+
 	if ( dSendStates.GetLength() && !SendFile ( tSigSrc, dSendStates, sCluster, sIndex, sError ) )
 		return false;
 
@@ -4302,9 +4342,11 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 			tAgentData.m_pChunks = &tSigSrc;
 			tAgentData.m_eIndex = eType;
 
-			dNodes[i] = CreateAgent ( *tState.m_pAgentDesc, tAgentData, g_iRemoteTimeout );
+			dNodes[i] = CreateAgent ( *tState.m_pAgentDesc, tAgentData, tmLongOpTimeout );
 			PQRemoteBase_c::GetRes ( *dNodes[i] ).m_pSharedDst = tState.m_pSyncDst;
 		}
+
+		sphLogDebugRpl ( "sent index '%s' loading to %d nodes with timeout %d.%03d sec", sIndex.cstr(), dNodes.GetLength(), (int)( tmLongOpTimeout/1000 ), (int)( tmLongOpTimeout%1000 ) );
 
 		PQRemoteIndexAdd_c tReq;
 		if ( !PerformRemoteTasks ( dNodes, tReq, tReq, sError ) )
@@ -4465,7 +4507,7 @@ static bool SendClusterSynced ( const CSphString & sCluster, const CSphVector<CS
 		tAgentData.m_dIndexes[i] = dIndexes[i];
 
 	VecRefPtrs_t<AgentConn_t *> dNodes;
-	GetNodes ( dDesc, dNodes, tAgentData );
+	GetNodes ( dDesc, dNodes, tAgentData, GetQueryTimeout()  );
 	PQRemoteSynced_c tReq;
 	if ( !PerformRemoteTasks ( dNodes, tReq, tReq, sError ) )
 		return false;
@@ -4953,4 +4995,11 @@ int LoadUpdate ( const BYTE * pBuf, int iLen, CSphQuery & tQuery )
 	GetArray ( tQuery.m_dFilterTree, tReader );
 
 	return tReader.GetPos();
+}
+
+int GetQueryTimeout ( int64_t iTimeout )
+{
+	// need default of 2 minutes in msec for replication requests as they are mostly long running
+	int iTm = Max ( g_iAgentQueryTimeoutMs, 120 * 1000 );
+	return Max ( iTm, Min ( iTimeout, INT_MAX ) );
 }

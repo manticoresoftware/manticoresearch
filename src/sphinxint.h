@@ -338,7 +338,7 @@ public:
 	SphOffset_t	GetPos () const { return m_iPos+m_iBuffPos; }
 
 	void		GetBytes ( void * pData, int iSize );
-	int			GetBytesZerocopy ( const BYTE ** ppData, int iMax ); ///< zerocopy method; returns actual length present in buffer (upto iMax)
+	int			GetBytesZerocopy ( const BYTE ** ppData, int64_t iMax ); ///< zerocopy method; returns actual length present in buffer (upto iMax)
 
 	int			GetByte ();
 	DWORD		GetDword ();

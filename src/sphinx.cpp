@@ -306,6 +306,8 @@ SphOffset_t CSphAutofile::GetSize ()
 
 bool CSphAutofile::Read ( void * pBuf, int64_t iCount, CSphString & sError )
 {
+	assert ( iCount>=0 );
+
 	int64_t iToRead = iCount;
 	BYTE * pCur = (BYTE *)pBuf;
 	while ( iToRead>0 )
@@ -7512,7 +7514,7 @@ void CSphReader::GetBytes ( void * pData, int iSize )
 }
 
 
-int CSphReader::GetBytesZerocopy ( const BYTE ** ppData, int iMax )
+int CSphReader::GetBytesZerocopy ( const BYTE ** ppData, int64_t iMax )
 {
 	if ( m_iBuffPos>=m_iBuffUsed )
 	{

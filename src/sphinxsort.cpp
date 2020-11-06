@@ -7107,7 +7107,10 @@ void CreateMultiQueue ( RawVector_T<QueueCreator_c>& dCreators, const SphQueueSe
 				bool bDisable2 = false;
 				// no need to add attributes that already exists
 				if ( pMultiCol->m_eAttrType==tCol.m_eAttrType &&
-					pMultiCol->m_pExpr->GetHash ( tMultiSchema, SPH_FNV64_SEED, bDisable1 )==tCol.m_pExpr->GetHash ( tSchema, SPH_FNV64_SEED, bDisable2 ) )
+					( ( !pMultiCol->m_pExpr && !tCol.m_pExpr ) ||
+					( pMultiCol->m_pExpr && tCol.m_pExpr
+						&& pMultiCol->m_pExpr->GetHash ( tMultiSchema, SPH_FNV64_SEED, bDisable1 )==tCol.m_pExpr->GetHash ( tSchema, SPH_FNV64_SEED, bDisable2 ) )
+					) )
 					continue;
 
 				// if attr or expr differs need to create regular sorters and issue search WO multi-query

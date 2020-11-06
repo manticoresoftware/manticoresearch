@@ -228,6 +228,9 @@ insert into facetdemo (id,price,brand_id,title,brand_name,property,categories,j)
 <sphinxql>select id, property, count(*) c, groupby() gr from facetdemo2 group by property order by gr desc</sphinxql>
 <sphinxql>select id, property from facetdemo2 facet property order by facet() desc;</sphinxql>
 
+<!-- regression crash on multiple same facet to JSON field -->
+<sphinxql>select id, j from facetdemo facet categories facet j.x facet j.a facet j.x;</sphinxql>
+<sphinxql>select id, j from facetdemo facet categories facet j.x facet j.a;</sphinxql>
 
 </sphqueries>
 

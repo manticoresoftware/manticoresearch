@@ -205,7 +205,7 @@ public:
 		return pFileReader;
 	}
 
-	void SetProfile ( QueryProfile_t* pProfile ) final
+	void SetProfile ( QueryProfile_c* pProfile ) final
 	{
 		m_dReader.m_pProfile = pProfile;
 	}

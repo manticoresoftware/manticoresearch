@@ -2694,7 +2694,7 @@ public:
 
 	CSphString				m_sError;				///< error message
 	CSphString				m_sWarning;				///< warning message
-	QueryProfile_t *		m_pProfile		= nullptr;	///< filled when query profiling is enabled; NULL otherwise
+	QueryProfile_c *		m_pProfile		= nullptr;	///< filled when query profiling is enabled; NULL otherwise
 
 	virtual					~CSphQueryResultMeta () {}					///< dtor
 	void					AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits );
@@ -2705,7 +2705,7 @@ public:
 
 
 /// search query result (meta-info)
-struct QueryProfile_t;
+class QueryProfile_c;
 class DocstoreReader_i;
 class CSphQueryResult
 {
@@ -3441,7 +3441,7 @@ struct CSphAttrUpdateEx
 struct SphQueueSettings_t
 {
 	const ISphSchema &			m_tSchema;
-	QueryProfile_t *			m_pProfiler;
+	QueryProfile_c *			m_pProfiler;
 	bool						m_bComputeItems = false;
 	CSphAttrUpdateEx *			m_pUpdate = nullptr;
 	CSphVector<DocID_t> *		m_pCollection = nullptr;
@@ -3449,7 +3449,7 @@ struct SphQueueSettings_t
 	const CSphFilterSettings *	m_pAggrFilter = nullptr;
 	int							m_iMaxMatches = DEFAULT_MAX_MATCHES;
 
-	explicit SphQueueSettings_t ( const ISphSchema & tSchema, QueryProfile_t * pProfiler = nullptr )
+	explicit SphQueueSettings_t ( const ISphSchema & tSchema, QueryProfile_c * pProfiler = nullptr )
 		: m_tSchema ( tSchema )
 		, m_pProfiler ( pProfiler )
 	{}

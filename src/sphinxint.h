@@ -130,7 +130,7 @@ enum ESphQueryState
 STATIC_ASSERT ( SPH_QSTATE_UNKNOWN==0, BAD_QUERY_STATE_ENUM_BASE );
 
 /// search query profile
-struct QueryProfile_t
+class QueryProfile_c
 {
 public:
 	ESphQueryState	m_eState;							///< current state
@@ -141,7 +141,7 @@ public:
 	CSphVector<BYTE>	m_dPlan; 						///< bson with plan
 
 	/// create empty and stopped profile
-	QueryProfile_t ()
+	QueryProfile_c ()
 	{
 		Start ( SPH_QSTATE_TOTAL );
 	}
@@ -168,7 +168,7 @@ public:
 		m_tmStamp = sphMicroTimer();
 	}
 
-	void AddMetric ( const QueryProfile_t& tData )
+	void AddMetric ( const QueryProfile_c& tData )
 	{
 		// fixme! m.b. invent a way to display data from different profilers with kind of multiplier?
 		for ( int i = 0; i<SPH_QSTATE_TOTAL; ++i )
@@ -205,7 +205,7 @@ public:
 #define SZ_ZONESPANS        "p"
 
 // acquire common pattern 'check, then switch if not null'
-inline void SwitchProfile ( QueryProfile_t* pProfile, ESphQueryState eState )
+inline void SwitchProfile ( QueryProfile_c* pProfile, ESphQueryState eState )
 {
 	if ( pProfile )
 		pProfile->Switch ( eState );
@@ -215,11 +215,11 @@ inline void SwitchProfile ( QueryProfile_t* pProfile, ESphQueryState eState )
 class CSphScopedProfile
 {
 private:
-	QueryProfile_t *	m_pProfile;
+	QueryProfile_c *	m_pProfile;
 	ESphQueryState		m_eOldState;
 
 public:
-	explicit CSphScopedProfile ( QueryProfile_t * pProfile, ESphQueryState eNewState )
+	explicit CSphScopedProfile ( QueryProfile_c * pProfile, ESphQueryState eNewState )
 	{
 		m_pProfile = pProfile;
 		m_eOldState = SPH_QSTATE_UNKNOWN;
@@ -321,7 +321,7 @@ public:
 class CSphReader
 {
 public:
-	QueryProfile_t *	m_pProfile = nullptr;
+	QueryProfile_c *	m_pProfile = nullptr;
 	ESphQueryState		m_eProfileState { SPH_QSTATE_IO };
 
 public:
@@ -675,7 +675,7 @@ public:
 	CSphVector<CalcItem_t>		m_dCalcFinal;			///< items to compute when finalizing result set
 
 	const void *							m_pIndexData = nullptr;	///< backend specific data
-	QueryProfile_t *						m_pProfile = nullptr;
+	QueryProfile_c *						m_pProfile = nullptr;
 	const SmallStringHash_T<int64_t> *		m_pLocalDocs = nullptr;
 	int64_t									m_iTotalDocs = 0;
 

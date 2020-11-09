@@ -1942,7 +1942,7 @@ bool PercolateIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery & 
 	assert ( tArgs.m_iTag>=0 );
 	auto & tMeta = *tResult.m_pMeta;
 
-	QueryProfile_t * pProfiler = tMeta.m_pProfile;
+	QueryProfile_c * pProfiler = tMeta.m_pProfile;
 
 	// we count documents only (before filters)
 	if ( tQuery.m_iMaxPredictedMsec )

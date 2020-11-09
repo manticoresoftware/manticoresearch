@@ -12805,7 +12805,7 @@ template<bool USE_KLIST, bool RANDOMIZE, bool USE_FACTORS>
 void CSphIndex_VLN::MatchExtended ( CSphQueryContext& tCtx, const CSphQuery & tQuery,
 		const VecTraits_T<ISphMatchSorter *> & dSorters, ISphRanker * pRanker, int iTag, int iIndexWeight ) const
 {
-	QueryProfile_t * pProfile = tCtx.m_pProfile;
+	QueryProfile_c * pProfile = tCtx.m_pProfile;
 	CSphScopedProfile tProf (pProfile, SPH_QSTATE_UNKNOWN);
 
 	int iCutoff = tQuery.m_iCutoff;
@@ -15703,7 +15703,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 		const VecTraits_T<ISphMatchSorter *> & dAllSorters, const CSphMultiQueryArgs & tArgs ) const
 {
 	auto& tMeta = *tResult.m_pMeta;
-	QueryProfile_t * pProfile = tMeta.m_pProfile;
+	QueryProfile_c * pProfile = tMeta.m_pProfile;
 //	sphSleepMsec(50); // test delay
 
 	MEMORY ( MEM_DISK_QUERY );
@@ -15963,7 +15963,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	int64_t tmQueryStart = sphMicroTimer();
 	auto tmCpuQueryStart = sphTaskCpuTimer ();
 
-	QueryProfile_t * pProfile = tMeta.m_pProfile;
+	QueryProfile_c * pProfile = tMeta.m_pProfile;
 	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
 	if ( pProfile )
 		eOldState = pProfile->Switch ( SPH_QSTATE_INIT );

@@ -452,7 +452,7 @@ CSphString sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema,
 	return sph::RenderBsonQuery ( bson::MakeHandle ( dPlan ) );
 }
 
-void QueryProfile_t::BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t & dZones )
+void QueryProfile_c::BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t & dZones )
 {
 	m_dPlan.Reset();
 	bson::Root_c tPlan ( m_dPlan );
@@ -1103,7 +1103,7 @@ ExtRanker_State_T<STATE,USE_BM25>::ExtRanker_State_T ( const XQQuery_t & tXQ, co
 }
 
 
-static inline const ExtHit_t * RankerGetHits ( QueryProfile_t * pProfile, ExtNode_i * pRoot, const ExtDoc_t * pDocs )
+static inline const ExtHit_t * RankerGetHits ( QueryProfile_c * pProfile, ExtNode_i * pRoot, const ExtDoc_t * pDocs )
 {
 	if ( !pProfile )
 		return pRoot->GetHits ( pDocs );
@@ -1122,7 +1122,7 @@ int ExtRanker_State_T<STATE,USE_BM25>::GetMatches ()
 		return 0;
 
 	SwitchProfile ( this->m_pCtx->m_pProfile, SPH_QSTATE_RANK );
-	QueryProfile_t * pProfile = this->m_pCtx->m_pProfile;
+	QueryProfile_c * pProfile = this->m_pCtx->m_pProfile;
 	int iMatches = 0;
 	const ExtHit_t * pHlist = this->m_pHitlist;
 	const ExtHit_t * pHitBase = m_pHitBase;

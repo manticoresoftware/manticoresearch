@@ -608,7 +608,7 @@ public:
 
 		CSphScopedPtr<PubSearchHandler_c> tHandler { CreateMsearchHandler ( pQueryParser, m_eQueryType, m_tQuery )};
 
-		QueryProfile_t tProfile;
+		QueryProfile_c tProfile;
 		if ( m_bProfile )
 			tHandler->SetProfile ( &tProfile );
 
@@ -647,7 +647,7 @@ protected:
 	CSphString				m_sWarning;
 
 	virtual QueryParser_i * PreParseQuery() = 0;
-	virtual CSphString		EncodeResult ( const VecTraits_T<AggrResult_t *> & dRes, QueryProfile_t * pProfile ) = 0;
+	virtual CSphString		EncodeResult ( const VecTraits_T<AggrResult_t *> & dRes, QueryProfile_c * pProfile ) = 0;
 };
 
 
@@ -692,7 +692,7 @@ protected:
 		return sphCreatePlainQueryParser();
 	}
 
-	CSphString EncodeResult ( const VecTraits_T<AggrResult_t *> & dRes, QueryProfile_t * pProfile ) override
+	CSphString EncodeResult ( const VecTraits_T<AggrResult_t *> & dRes, QueryProfile_c * pProfile ) override
 	{
 		return sphEncodeResultJson ( dRes, m_tQuery, pProfile );
 	}
@@ -925,7 +925,7 @@ public:
 	}
 
 protected:
-	CSphString EncodeResult ( const VecTraits_T<AggrResult_t *> & dRes, QueryProfile_t * pProfile ) override
+	CSphString EncodeResult ( const VecTraits_T<AggrResult_t *> & dRes, QueryProfile_c * pProfile ) override
 	{
 		return sphEncodeResultJson ( dRes, m_tQuery, pProfile );
 	}

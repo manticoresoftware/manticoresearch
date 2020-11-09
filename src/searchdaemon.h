@@ -470,7 +470,7 @@ class NetGenericOutputBuffer_c : public ISphOutputBuffer
 {
 public:
 	bool	GetError () const { return m_bError; }
-	void	SetProfiler ( QueryProfile_t * pProfiler ) { m_pProfile = pProfiler; }
+	void	SetProfiler ( QueryProfile_c * pProfiler ) { m_pProfile = pProfiler; }
 
 	bool Flush ()
 	{
@@ -486,7 +486,7 @@ public:
 	virtual int64_t GetWTimeoutUS () const = 0;
 
 protected:
-	QueryProfile_t *	m_pProfile = nullptr;
+	QueryProfile_c *	m_pProfile = nullptr;
 	bool		m_bError = false;
 };
 
@@ -1157,7 +1157,7 @@ public:
 
 	void				RunQueries ();					///< run all queries, get all results
 	void				SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc );
-	void				SetProfile ( QueryProfile_t * pProfile );
+	void				SetProfile ( QueryProfile_c * pProfile );
 	AggrResult_t *		GetResult ( int iResult );
 };
 
@@ -1272,7 +1272,7 @@ public:
 	void SetFederatedUser ();
 	bool IsAutoCommit () const;
 
-	QueryProfile_t* StartProfiling ( ESphQueryState );
+	QueryProfile_c* StartProfiling ( ESphQueryState );
 	void SaveLastProfile();
 
 	// manage backend's timeout and variables

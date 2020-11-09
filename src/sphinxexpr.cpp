@@ -3728,7 +3728,7 @@ class ExprParser_t
 	friend void				yyerror ( ExprParser_t * pParser, const char * sMessage );
 
 public:
-	ExprParser_t ( ISphExprHook * pHook, QueryProfile_t * pProfiler, ESphCollation eCollation )
+	ExprParser_t ( ISphExprHook * pHook, QueryProfile_c * pProfiler, ESphCollation eCollation )
 		: m_pHook ( pHook )
 		, m_pProfiler ( pProfiler )
 		, m_eCollation ( eCollation )
@@ -3745,7 +3745,7 @@ protected:
 	CSphString				m_sParserError;
 	CSphString				m_sCreateError;
 	ISphExprHook *			m_pHook;
-	QueryProfile_t *		m_pProfiler;
+	QueryProfile_c *		m_pProfiler;
 
 protected:
 	ESphAttr				GetWidestRet ( int iLeft, int iRight );
@@ -4689,7 +4689,7 @@ using UdfCharptr_fn = char * ( * ) ( SPH_UDF_INIT *, SPH_UDF_ARGS *, char * );
 class Expr_Udf_c : public ISphExpr
 {
 public:
-	explicit Expr_Udf_c ( UdfCall_t * pCall, QueryProfile_t * pProfiler )
+	explicit Expr_Udf_c ( UdfCall_t * pCall, QueryProfile_c * pProfiler )
 		: m_pCall ( pCall )
 		, m_pProfiler ( pProfiler )
 	{
@@ -4813,7 +4813,7 @@ protected:
 	UdfCall_t *						m_pCall {nullptr};
 	mutable CSphVector<int64_t>		m_dArgvals;
 	mutable char					m_bError  {0};
-	QueryProfile_t *				m_pProfiler {nullptr};
+	QueryProfile_c *				m_pProfiler {nullptr};
 	const BYTE *					m_pBlobPool {nullptr};
 
 	Expr_Udf_c ( const Expr_Udf_c& rhs )
@@ -4838,7 +4838,7 @@ protected:
 class Expr_UdfInt_c : public Expr_Udf_c
 {
 public:
-	explicit Expr_UdfInt_c ( UdfCall_t * pCall, QueryProfile_t * pProfiler )
+	explicit Expr_UdfInt_c ( UdfCall_t * pCall, QueryProfile_c * pProfiler )
 		: Expr_Udf_c ( pCall, pProfiler )
 	{
 		assert ( IsInt ( pCall->m_pUdf->m_eRetType ) );
@@ -4873,7 +4873,7 @@ private:
 class Expr_UdfFloat_c : public Expr_Udf_c
 {
 public:
-	explicit Expr_UdfFloat_c ( UdfCall_t * pCall, QueryProfile_t * pProfiler )
+	explicit Expr_UdfFloat_c ( UdfCall_t * pCall, QueryProfile_c * pProfiler )
 		: Expr_Udf_c ( pCall, pProfiler )
 	{
 		assert ( pCall->m_pUdf->m_eRetType==SPH_ATTR_FLOAT );
@@ -4908,7 +4908,7 @@ private:
 class Expr_UdfStringptr_c : public Expr_Udf_c
 {
 public:
-	explicit Expr_UdfStringptr_c ( UdfCall_t * pCall, QueryProfile_t * pProfiler )
+	explicit Expr_UdfStringptr_c ( UdfCall_t * pCall, QueryProfile_c * pProfiler )
 		: Expr_Udf_c ( pCall, pProfiler )
 	{
 		assert ( pCall->m_pUdf->m_eRetType==SPH_ATTR_STRINGPTR );

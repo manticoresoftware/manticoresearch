@@ -6031,7 +6031,7 @@ struct DiskChunkSearcherCloneCtx_t
 
 		m_tMeta.m_bHasPrediction = dParent.m_tMeta.m_bHasPrediction;
 		if ( dParent.m_tMeta.m_pProfile )
-			m_tMeta.m_pProfile = new QueryProfile_t;
+			m_tMeta.m_pProfile = new QueryProfile_c;
 	}
 
 	~DiskChunkSearcherCloneCtx_t()
@@ -6051,7 +6051,7 @@ void QueryDiskChunks ( const CSphQuery & tQuery,
 		const CSphMultiQueryArgs & tArgs,
 		SphChunkGuard_t& tGuard,
 		VecTraits_T<ISphMatchSorter *>& dSorters,
-		QueryProfile_t * pProfiler,
+		QueryProfile_c * pProfiler,
 		bool bGotLocalDF,
 		const SmallStringHash_T<int64_t> * pLocalDocs,
 		int64_t iTotalDocs,
@@ -6188,7 +6188,7 @@ int PrepareFTSearch ( const RtIndex_c * pThis,
 		ISphTokenizer * pQueryTokenizer,
 		CSphDict* pDict,
 		CSphQueryResultMeta& tMeta,
-		QueryProfile_t* pProfiler,
+		QueryProfile_c* pProfiler,
 		CSphScopedPayload* pPayloads,
 		XQQuery_t & tParsed )
 {
@@ -6266,7 +6266,7 @@ void PerformFullScan ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 		int iStride,
 		int iCutoff,
 		int64_t tmMaxTimer,
-		QueryProfile_t* pProfiler,
+		QueryProfile_c* pProfiler,
 		CSphQueryContext& tCtx,
 		VecTraits_T<ISphMatchSorter*>& dSorters,
 		CSphString& sWarning )
@@ -6346,7 +6346,7 @@ bool DoFullScanQuery ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 		int iIndexWeight,
 		int iStride,
 		int64_t tmMaxTimer,
-		QueryProfile_t* pProfiler,
+		QueryProfile_c* pProfiler,
 		CSphQueryContext& tCtx,
 		VecTraits_T<ISphMatchSorter*>& dSorters,
 		CSphQueryResultMeta& tMeta )
@@ -6379,7 +6379,7 @@ void PerformFullTextSearch ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 		ISphRanker* pRanker,
 		int iIndexWeight,
 		int iCutoff,
-		QueryProfile_t* pProfiler,
+		QueryProfile_c* pProfiler,
 		CSphQueryContext& tCtx,
 		VecTraits_T<ISphMatchSorter*>& dSorters )
 {
@@ -6472,7 +6472,7 @@ bool DoFullTextSearch ( const VecTraits_T<RtSegmentRefPtf_t> & dRamChunks,
 		int iMatchPoolSize,
 		int iStackNeed,
 		RtQwordSetup_t& tTermSetup,
-		QueryProfile_t* pProfiler,
+		QueryProfile_c* pProfiler,
 		CSphQueryContext& tCtx,
 		VecTraits_T<ISphMatchSorter*>& dSorters,
 		XQQuery_t& tParsed,
@@ -6564,7 +6564,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	tMeta.m_iQueryTime = 0;
 	int64_t tmQueryStart = sphMicroTimer();
 	auto tmCpuQueryStart = sphTaskCpuTimer();
-	QueryProfile_t * pProfiler = tMeta.m_pProfile;
+	QueryProfile_c * pProfiler = tMeta.m_pProfile;
 	CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_DICT_SETUP );
 
 	// force ext2 mode for them

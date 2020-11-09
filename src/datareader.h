@@ -49,7 +49,7 @@ public:
 	virtual SphOffset_t			GetPos () const = 0;
 	virtual void				SeekTo ( SphOffset_t ) = 0;
 	virtual FileBlockReader_i *	MakeReader ( BYTE * pBuf, int iSize ) = 0;
-	virtual void				SetProfile ( QueryProfile_t * ) {};
+	virtual void				SetProfile ( QueryProfile_c * ) {};
 
 protected:
 								~DataReaderFactory_c () override {}

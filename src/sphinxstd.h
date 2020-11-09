@@ -1292,6 +1292,12 @@ public:
 			Verb ( m_pData[i] );
 	}
 
+	template < typename ACTION >
+	void for_each ( ACTION && tAction ) const
+	{
+		Apply(tAction);
+	}
+
 	/// generic linear search
 	bool Contains ( T tRef ) const NO_THREAD_SAFETY_ANALYSIS
 	{

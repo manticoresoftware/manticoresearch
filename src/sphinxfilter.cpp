@@ -157,8 +157,9 @@ struct IFilter_Range: virtual ISphFilter
 
 // attr
 
-struct Filter_Values: public IFilter_Attr, IFilter_Values
+class Filter_Values : public IFilter_Attr, public IFilter_Values
 {
+public:
 	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		return EvalValues ( tMatch.GetAttr ( m_tLocator ) );
@@ -177,10 +178,9 @@ struct Filter_Values: public IFilter_Attr, IFilter_Values
 };
 
 
-struct Filter_SingleValue : public IFilter_Attr
+class Filter_SingleValue : public IFilter_Attr
 {
-	SphAttr_t m_RefValue;
-
+public:
 #ifndef NDEBUG
 	void SetValues ( const SphAttr_t * pStorage, int iCount ) final
 #else
@@ -206,12 +206,16 @@ struct Filter_SingleValue : public IFilter_Attr
 		SphAttr_t uBlockMax = sphGetRowAttr ( pMaxDocinfo, m_tLocator );
 		return ( uBlockMin<=m_RefValue && m_RefValue<=uBlockMax );
 	}
+
+protected:
+	SphAttr_t m_RefValue;
 };
 
 
-struct Filter_SingleValueStatic32 : public Filter_SingleValue
+class Filter_SingleValueStatic32 : public Filter_SingleValue
 {
-	int m_iIndex;
+public:
+	Filter_SingleValueStatic32() = default;
 
 	void SetLocator ( const CSphAttrLocator & tLoc ) final
 	{
@@ -226,11 +230,14 @@ struct Filter_SingleValueStatic32 : public Filter_SingleValue
 	{
 		return tMatch.m_pStatic [ m_iIndex ]==m_RefValue;
 	}
+
+private:
+	int m_iIndex;
 };
 
 
 template < bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT >
-struct Filter_Range: public IFilter_Attr, IFilter_Range
+struct Filter_Range : public IFilter_Attr, public IFilter_Range
 {
 	bool Eval ( const CSphMatch & tMatch ) const final
 	{
@@ -1017,11 +1024,11 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, ESphFil
 			if ( tSettings.GetNumValues()==1 && ( eAttrType==SPH_ATTR_INTEGER || eAttrType==SPH_ATTR_BIGINT || eAttrType==SPH_ATTR_TOKENCOUNT ) )
 			{
 				if ( ( eAttrType==SPH_ATTR_INTEGER || eAttrType==SPH_ATTR_TOKENCOUNT ) && !tLoc.m_bDynamic && tLoc.m_iBitCount==32 && ( tLoc.m_iBitOffset % 32 )==0 )
-					return new Filter_SingleValueStatic32();
+					return new Filter_SingleValueStatic32;
 				else
-					return new Filter_SingleValue();
+					return new Filter_SingleValue;
 			} else
-				return new Filter_Values();
+				return new Filter_Values;
 
 		case SPH_FILTER_RANGE:	CREATE_RANGE_FILTER_WITH_OPEN ( Filter_Range, tSettings );
 		default:				return ReportError ( sError, "unsupported filter type '%s' on int column", eFilterType );

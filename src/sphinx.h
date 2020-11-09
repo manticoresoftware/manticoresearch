@@ -2922,7 +2922,7 @@ public:
 protected:
 	SharedPtr_t<ISphSchema*>	m_pSchema;	///< sorter schema (adds dynamic attributes on top of index schema)
 	CSphMatchComparatorState	m_tState;		///< protected to set m_iNow automatically on SetState() calls
-	StrVec_t			m_dTransormed;
+	StrVec_t					m_dTransformed;
 
 public:
 	/// ctor

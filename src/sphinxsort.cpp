@@ -119,18 +119,18 @@ void ISphMatchSorter::SetFilteredAttrs ( const sph::StringSet & hAttrs )
 {
 	assert ( m_pSchema );
 
-	m_dTransormed.Reserve ( hAttrs.GetLength() );
+	m_dTransformed.Reserve ( hAttrs.GetLength() );
 
 	// DocID attribute always MUST to be the first
 	// FIXME!!! DocID used at sorter to merge multiple result sets at KillDupes, for cases: for non group, for group but with ranker=none
 	// this auto add DocID should be removed when implicit order by DocID is removed too (WAND ranking maybe?)
-	m_dTransormed.Add ( sphGetDocidName() );
+	m_dTransformed.Add ( sphGetDocidName() );
 
 	for ( auto& tName : hAttrs )
 	{
 		const CSphColumnInfo * pCol = m_pSchema->GetAttr ( tName.first.cstr() );
 		if ( pCol && pCol->m_sName!=sphGetDocidName() )
-			m_dTransormed.Add ( pCol->m_sName );
+			m_dTransformed.Add ( pCol->m_sName );
 	}
 }
 
@@ -302,7 +302,7 @@ void ISphMatchSorter::TransformPooled2StandalonePtrs ( fnGetBlobPoolFromMatch fn
 	for ( int i = 0; i<pOldSchema->GetFieldsCount (); ++i )
 		pNewSchema->AddField ( pOldSchema->GetField(i) );
 
-	if ( m_dTransormed.IsEmpty() )
+	if ( m_dTransformed.IsEmpty() )
 	{
 		// no need to filter schema attributes for query with star \ select all items
 		for ( int i = 0; i<pOldSchema->GetAttrsCount (); ++i )
@@ -317,7 +317,7 @@ void ISphMatchSorter::TransformPooled2StandalonePtrs ( fnGetBlobPoolFromMatch fn
 		}
 	} else
 	{
-		for ( const CSphString & sName : m_dTransormed )
+		for ( const CSphString & sName : m_dTransformed )
 		{
 			const CSphColumnInfo * pAttr = pOldSchema->GetAttr ( sName.cstr() );
 			if ( !pAttr )

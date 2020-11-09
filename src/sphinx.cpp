@@ -2033,7 +2033,7 @@ private:
 	void						ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResultMeta & tMeta,
 									const VecTraits_T<ISphMatchSorter *> & dSorters, CSphMatch & tMatch, int iCutoff,
 									bool bReverse, bool bRandomize, int iIndexWeight, int64_t tmMaxTimer ) const;
-	bool						MultiScan ( CSphQueryResult & tResult, const CSphQuery& dQuery,
+	bool						MultiScan ( CSphQueryResult & tResult, const CSphQuery& tQuery,
 									const VecTraits_T<ISphMatchSorter *>& dSorters, const CSphMultiQueryArgs& tArgs ) const;
 
 	template<bool USE_KLIST, bool RANDOMIZE, bool USE_FACTORS>
@@ -12896,7 +12896,7 @@ struct SphFinalMatchCalc_t final : ISphMatchProcessor, ISphNoncopyable
 	SphFinalMatchCalc_t ( int iTag, const CSphQueryContext & tCtx )
 		: m_tCtx ( tCtx )
 		, m_iTag ( iTag )
-	{ }
+	{}
 
 	void Process ( CSphMatch * pMatch ) final
 	{
@@ -13186,7 +13186,7 @@ void CSphIndex_VLN::ScanByBlocks ( const CSphQueryContext & tCtx, CSphQueryResul
 }
 
 
-bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & dQuery,
+bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & tQuery,
 		const VecTraits_T<ISphMatchSorter *> & dSorters, const CSphMultiQueryArgs & tArgs ) const
 {
 	assert ( tArgs.m_iTag>=0 );
@@ -13207,7 +13207,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & dQu
 	}
 
 	// we count documents only (before filters)
-	if ( dQuery.m_iMaxPredictedMsec )
+	if ( tQuery.m_iMaxPredictedMsec )
 		tMeta.m_bHasPrediction = true;
 
 	if ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
@@ -13222,10 +13222,10 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & dQu
 	int64_t tmCpuQueryStart = sphTaskCpuTimer();
 	int64_t tmMaxTimer = 0;
 	sph::MiniTimer_c dTimerGuard;
-	if ( dQuery.m_uMaxQueryMsec>0 )
-		tmMaxTimer = dTimerGuard.MiniTimerEngage ( dQuery.m_uMaxQueryMsec ); // max_query_time
+	if ( tQuery.m_uMaxQueryMsec>0 )
+		tmMaxTimer = dTimerGuard.MiniTimerEngage ( tQuery.m_uMaxQueryMsec ); // max_query_time
 
-	ScopedThreadPriority_c tPrio ( dQuery.m_bLowPriority );
+	ScopedThreadPriority_c tPrio ( tQuery.m_bLowPriority );
 
 	// select the sorter with max schema
 	int iMaxSchemaIndex = GetMaxSchemaIndexAndMatchCapacity ( dSorters ).first;
@@ -13233,7 +13233,7 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & dQu
 	auto dSorterSchemas = SorterSchemas ( dSorters, iMaxSchemaIndex);
 
 	// setup calculations and result schema
-	CSphQueryContext tCtx ( dQuery );
+	CSphQueryContext tCtx ( tQuery );
 	if ( !tCtx.SetupCalc ( tMeta, tMaxSorterSchema, m_tSchema, m_tBlobAttrs.GetWritePtr(), dSorterSchemas ) )
 		return false;
 
@@ -13242,11 +13242,11 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & dQu
 
 	// setup filters
 	CreateFilterContext_t tFlx;
-	tFlx.m_pFilters = &dQuery.m_dFilters;
-	tFlx.m_pFilterTree = &dQuery.m_dFilterTree;
+	tFlx.m_pFilters = &tQuery.m_dFilters;
+	tFlx.m_pFilterTree = &tQuery.m_dFilterTree;
 	tFlx.m_pSchema = &tMaxSorterSchema;
 	tFlx.m_pBlobPool = m_tBlobAttrs.GetWritePtr ();
-	tFlx.m_eCollation = dQuery.m_eCollation;
+	tFlx.m_eCollation = tQuery.m_eCollation;
 	tFlx.m_bScan = true;
 	tFlx.m_pHistograms = m_pHistograms;
 
@@ -13287,14 +13287,14 @@ bool CSphIndex_VLN::MultiScan ( CSphQueryResult & tResult, const CSphQuery & dQu
 	SwitchProfile ( tMeta.m_pProfile, SPH_QSTATE_FULLSCAN );
 
 	// run full scan with block and row filtering for everything else
-	bool bReverse = dQuery.m_bReverseScan; // shortcut
-	int iCutoff = ( dQuery.m_iCutoff<=0 ) ? -1 : dQuery.m_iCutoff;
+	bool bReverse = tQuery.m_bReverseScan; // shortcut
+	int iCutoff = ( tQuery.m_iCutoff<=0 ) ? -1 : tQuery.m_iCutoff;
 
 	// we don't modify the original filters because iterators may use some data from them (to avoid copying)
 	CSphVector<CSphFilterSettings> dModifiedFilters;
 	RowidIterator_i * pIterator = nullptr;
 	if ( m_pHistograms )
-		pIterator = CreateFilteredIterator ( dQuery.m_dFilters, dModifiedFilters, dQuery.m_dFilterTree, dQuery.m_dIndexHints, *m_pHistograms, m_tDocidLookup.GetWritePtr() );
+		pIterator = CreateFilteredIterator ( tQuery.m_dFilters, dModifiedFilters, tQuery.m_dFilterTree, tQuery.m_dIndexHints, *m_pHistograms, m_tDocidLookup.GetWritePtr() );
 
 	if ( pIterator )
 	{

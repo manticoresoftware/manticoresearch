@@ -371,11 +371,13 @@ public:
 	void		SendBytes ( const CSphString& sStr );    // used strlen() to get length
 	void		SendBytes ( const VecTraits_T<BYTE>& dBuf );
 	void		SendBytes ( const StringBuilder_c& dBuf );
+	void		SendBytes ( ByteBlob_t dData );
 
 	// send array: first length(int), then byte blob
 	void		SendString ( const char * sStr );
 	void		SendArray ( const ISphOutputBuffer &tOut );
 	void		SendArray ( const VecTraits_T<BYTE> &dBuf, int iElems=-1 );
+	void		SendArray ( ByteBlob_t dData );
 	void		SendArray ( const void * pBuf, int iLen );
 	void		SendArray ( const StringBuilder_c &dBuf );
 
@@ -1424,6 +1426,11 @@ public:
 	void PutArray ( const VecTraits_T<BYTE> & dData )
 	{
 		PutArray ( ( const char * )dData.begin(), dData.GetLength() );
+	}
+
+	void PutArray ( ByteBlob_t dData )
+	{
+		PutArray ( ( const char * )dData.first, dData.second );
 	}
 
 	void PutArray ( const StringBuilder_c & dData, bool bSendEmpty=true )

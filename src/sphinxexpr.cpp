@@ -299,9 +299,9 @@ public:
 		if ( m_tLocator.IsBlobAttr() && !m_pBlobPool )
 			return 0;
 
-		int iLengthBytes = 0;
-		*ppStr = tMatch.FetchAttrData( m_tLocator, m_pBlobPool, iLengthBytes );
-		return iLengthBytes;
+		auto dStr = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
+		*ppStr = dStr.first; /// FIXME! m.b. all StringEval return BytesBlob_t?
+		return dStr.second;
 	}
 
 	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
@@ -343,9 +343,9 @@ public:
 		return (int64_t)sphPackPtrAttr ( tMatch.FetchAttrData ( m_tLocator, m_pBlobPool ) );
 	}
 
-	const BYTE * MvaEval ( const CSphMatch & tMatch, int & iLengthBytes ) const final
+	ByteBlob_t MvaEval ( const CSphMatch & tMatch ) const final
 	{
-		return tMatch.FetchAttrData ( m_tLocator, m_pBlobPool, iLengthBytes );
+		return tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
 	}
 
 	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
@@ -377,8 +377,7 @@ public:
 	const BYTE * FactorEval ( const CSphMatch & tMatch ) const final
 	{
 		auto * pPacked = (const BYTE *)tMatch.GetAttr ( m_tLocator );
-		sphUnpackPtrAttr ( pPacked, &pPacked );
-		return pPacked;
+		return sphUnpackPtrAttr ( pPacked ).first;
 	}
 
 	const BYTE * FactorEvalPacked ( const CSphMatch & tMatch ) const final
@@ -1400,8 +1399,8 @@ public:
 			case SPH_ATTR_UINT32SET_PTR:
 			case SPH_ATTR_INT64SET_PTR:
 				{
-					const BYTE * pValues = m_pFirst->MvaEval ( tMatch, iLen );
-					sphMVA2Str ( pValues, iLen, m_eArg==SPH_ATTR_INT64SET || m_eArg==SPH_ATTR_INT64SET_PTR, m_sBuilder );
+					auto dMva = m_pFirst->MvaEval ( tMatch );
+					sphMVA2Str ( dMva, m_eArg==SPH_ATTR_INT64SET || m_eArg==SPH_ATTR_INT64SET_PTR, m_sBuilder );
 				}
 				break;
 
@@ -2684,7 +2683,7 @@ public:
 		int iLeft = m_pFirst->StringEval ( tMatch, &pLeft );
 		int iRight = m_pSecond->StringEval ( tMatch, &pRight );
 
-		bool bEq = m_fnStrCmp ( pLeft, pRight, false, iLeft, iRight )==0;
+		bool bEq = m_fnStrCmp ( {pLeft, iLeft}, {pRight, iRight}, false )==0;
 
 		FreeDataPtr ( *m_pFirst, pLeft );
 		FreeDataPtr ( *m_pSecond, pRight );
@@ -4724,9 +4723,12 @@ public:
 			case SPH_UDF_TYPE_STRING:		tArgs.str_lengths[i] = m_dArgs[i]->StringEval ( tMatch, (const BYTE**)&tArgs.arg_values[i] ); break;
 			case SPH_UDF_TYPE_UINT32SET:
 			case SPH_UDF_TYPE_INT64SET:
-				tArgs.arg_values[i] = (char*) m_dArgs[i]->MvaEval ( tMatch, tArgs.str_lengths[i] );
-				tArgs.str_lengths[i] /= ( tArgs.arg_types[i]==SPH_UDF_TYPE_UINT32SET ) ? sizeof(DWORD) : sizeof(int64_t);
+			{
+				auto dMva = m_dArgs[i]->MvaEval ( tMatch );
+				tArgs.arg_values[i] = (char*) dMva.first;
+				tArgs.str_lengths[i] = dMva.second / (( tArgs.arg_types[i]==SPH_UDF_TYPE_UINT32SET ) ? sizeof(DWORD) : sizeof(int64_t));
 				break;
+			}
 
 			case SPH_UDF_TYPE_FACTORS:
 				tArgs.arg_values[i] = (char *)m_dArgs[i]->FactorEval ( tMatch );
@@ -6596,12 +6598,12 @@ public:
 		this->m_dValues.Sort();
 	}
 
-	const BYTE * MvaEval ( const CSphMatch &, int & ) const final { assert ( 0 && "not implemented" ); return nullptr; }
+	ByteBlob_t MvaEval ( const CSphMatch & ) const final { assert ( 0 && "not implemented" ); return {nullptr,0}; }
 
 	/// evaluate arg, check if any values are within set
 	int IntEval ( const CSphMatch & tMatch ) const final
 	{
-		ByteBlob_t dMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
+		auto dMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
 		return MvaEval_Any<T> ( dMva, m_dValues );
 	}
 
@@ -6649,12 +6651,12 @@ public:
 		this->m_dValues.Sort();
 	}
 
-	const BYTE * MvaEval ( const CSphMatch &, int & ) const final { assert ( 0 && "not implemented" ); return nullptr; }
+	ByteBlob_t MvaEval ( const CSphMatch & ) const final { assert ( 0 && "not implemented" ); return { nullptr, 0}; }
 
 	/// evaluate arg, check if any values are within set
 	int IntEval ( const CSphMatch & tMatch ) const final
 	{
-		ByteBlob_t dMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
+		auto dMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
 		return MvaEval_Any<T> ( dMva, m_dValues );
 	}
 
@@ -6700,9 +6702,8 @@ public:
 
 	int IntEval ( const CSphMatch & tMatch ) const final
 	{
-		int iLengthBytes = 0;
-		tMatch.FetchAttrData ( m_tLocator, m_pBlobPool, iLengthBytes );
-		return (int)( m_b64 ? iLengthBytes/sizeof(int64_t) : iLengthBytes/sizeof(DWORD) );
+		auto dMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
+		return (int)( m_b64 ? dMva.second/sizeof(int64_t) : dMva.second/sizeof(DWORD) );
 	}
 
 	void Command ( ESphExprCommand eCmd, void * pArg ) final
@@ -6751,11 +6752,10 @@ public:
 
 	int64_t Int64Eval ( const CSphMatch & tMatch ) const final
 	{
-		int iLengthBytes = 0;
-		const BYTE * pMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool, iLengthBytes );
-		int nValues = iLengthBytes / sizeof(T);
+		auto dMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
+		int nValues = dMva.second / sizeof(T);
 
-		const T * L = (const T *)pMva;
+		const T * L = (const T *)dMva.first;
 		const T * R = L+nValues-1;
 
 		switch ( m_eFunc )
@@ -7055,11 +7055,9 @@ public:
 
 	int IntEval ( const CSphMatch & tMatch ) const final
 	{
-		int iLen = 0;
-		const BYTE * pVal = sphGetBlobAttr ( tMatch, m_tLocator, m_pBlobPool, iLen );
-
+		auto dVal = sphGetBlobAttr ( tMatch, m_tLocator, m_pBlobPool );
 		for ( const auto& dString : m_dStringValues )
-			if ( m_fnStrCmp ( pVal, (const BYTE*) dString.cstr(), false, iLen, dString.Length() )==0 )
+			if ( m_fnStrCmp ( dVal, ByteBlob_t ( dString ), false )==0 )
 				return 1;
 
 		return 0;

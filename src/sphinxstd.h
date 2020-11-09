@@ -1058,6 +1058,13 @@ T_COUNTER sphUniq ( T * pData, T_COUNTER iCount )
 	return sphUniq ( pData, iCount, SphEqualityFunctor_T<T>() );
 }
 
+/// generic bytes of chars array
+using ByteBlob_t = std::pair<const BYTE *, int>;
+
+inline bool IsNull ( const ByteBlob_t & dBlob ) { return !dBlob.second; };
+inline bool IsFilled ( const ByteBlob_t & dBlob ) { return dBlob.first && dBlob.second>0; }
+inline bool IsValid ( const ByteBlob_t & dBlob ) { return IsNull ( dBlob ) || IsFilled ( dBlob ); };
+
 /// buffer traits - provides generic ops over a typed blob (vector).
 /// just provide common operators; doesn't manage buffer anyway
 template < typename T > class VecTraits_T
@@ -2901,6 +2908,11 @@ public:
 	}
 
 	static int GetGap () { return SAFETY_GAP; }
+
+	explicit operator ByteBlob_t () const
+	{
+		return { (const BYTE*) m_sValue, Length() };
+	}
 };
 
 /// string swapper
@@ -5668,7 +5680,5 @@ public:
 #define LOC( Level, Component ) \
     if_const (LOG_LEVEL_##Level) \
         LOC_MSG << LOG_COMPONENT_##Component
-
-using ByteBlob_t = std::pair<const BYTE *, int>;
 
 #endif // _sphinxstd_

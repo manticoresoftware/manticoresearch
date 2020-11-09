@@ -103,7 +103,6 @@ void				sphPackPtrAttrInPlace ( TightPackedVec_T<BYTE>& dAttr, int iSize=-1 );
 BYTE *				sphPackPtrAttr ( int iLengthBytes, BYTE ** pData );
 
 // unpack data pointer attr, return length
-int					sphUnpackPtrAttr ( const BYTE * pData, const BYTE ** ppUnpacked );
 ByteBlob_t			sphUnpackPtrAttr ( const BYTE * pData );
 
 // calculate packed data attr length
@@ -117,13 +116,18 @@ ESphAttr			sphPlainAttrToPtrAttr ( ESphAttr eAttrType );
 // is this a data ptr attribute?
 bool				sphIsDataPtrAttr ( ESphAttr eAttrType );
 
+namespace sph {
+	// just repack (matter of optimizing)
+	BYTE * CopyPackedAttr ( const BYTE * pData );
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 // misc attribute-related
 
 bool	sphIsInternalAttr ( const CSphString & sAttrName );
 bool	sphIsInternalAttr ( const CSphColumnInfo & tCol );
-void	sphMVA2Str ( const BYTE * pMVA, int iLengthBytes, bool b64bit, StringBuilder_c & dStr );
+void	sphMVA2Str ( ByteBlob_t dMVA, bool b64bit, StringBuilder_c & dStr );
 void	sphPackedMVA2Str ( const BYTE * pMVA, bool b64bit, StringBuilder_c & dStr );
 
 inline DocID_t sphGetDocID ( const CSphRowitem * pData )

@@ -1362,6 +1362,11 @@ void ISphOutputBuffer::SendBytes ( const StringBuilder_c &dBuf )
 	SendBytes ( dBuf.begin(), dBuf.GetLength () );
 }
 
+void ISphOutputBuffer::SendBytes ( ByteBlob_t dData )
+{
+	SendBytes ( dData.first, dData.second );
+}
+
 void ISphOutputBuffer::SendArray ( const ISphOutputBuffer &tOut )
 {
 	int iLen = tOut.m_dBuf.GetLength();
@@ -1395,6 +1400,11 @@ void ISphOutputBuffer::SendArray ( const void * pBuf, int iLen )
 void ISphOutputBuffer::SendArray ( const StringBuilder_c &dBuf )
 {
 	SendArray ( dBuf.begin(), dBuf.GetLength () );
+}
+
+void ISphOutputBuffer::SendArray ( ByteBlob_t dData )
+{
+	SendArray ( dData.first, dData.second );
 }
 
 void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... )
@@ -3127,154 +3137,105 @@ void sphGetAttrsToSend ( const ISphSchema & tSchema, bool bAgentMode, bool bNeed
 		tAttrs.BitClear(iId);
 }
 
-static int SendDataPtrAttr ( ISphOutputBuffer * pOut, const BYTE * pData )
+static void SendDataPtrAttr ( ISphOutputBuffer& tOut, const BYTE * pData )
 {
-	int iLen = pData ? sphUnpackPtrAttr ( pData, &pData ) : 0;
-	if ( pOut )
-		pOut->SendArray ( pData, iLen );
-	return iLen;
+	auto dData = sphUnpackPtrAttr ( pData );
+	tOut.SendArray ( dData );
 }
 
 static char g_sJsonNull[] = "{}";
 
-static int SendJsonAsString ( ISphOutputBuffer * pOut, const BYTE * pJSON )
+static void SendJsonAsString ( ISphOutputBuffer& tOut, const BYTE * pJSON )
 {
 	if ( pJSON )
 	{
-		int iLengthBytes = sphUnpackPtrAttr ( pJSON, &pJSON );
+		auto dData = sphUnpackPtrAttr ( pJSON );
 		JsonEscapedBuilder dJson;
-		dJson.GrowEnough ( iLengthBytes*2 );
-		sphJsonFormat ( dJson, pJSON );
-
-		if ( pOut )
-			pOut->SendArray ( dJson );
-
-		return dJson.GetLength();
+		dJson.GrowEnough ( dData.second * 2 );
+		sphJsonFormat ( dJson, dData.first );
+		tOut.SendArray ( dJson );
 	} else
-	{
 		// magic zero - "{}"
-		int iLengthBytes = sizeof(g_sJsonNull)-1;
-		if ( pOut )
-		{
-			pOut->SendDword ( iLengthBytes );
-			pOut->SendBytes ( g_sJsonNull, iLengthBytes );
-		} 
-		
-		return iLengthBytes;
-	}
+		tOut.SendArray ( g_sJsonNull, sizeof ( g_sJsonNull )-1 );
 }
 
 
-static int SendJson ( ISphOutputBuffer * pOut, const BYTE * pJSON, bool bSendJson )
+static void SendJson ( ISphOutputBuffer& tOut, const BYTE * pJSON, bool bSendJson )
 {
 	if ( bSendJson )
-		return SendDataPtrAttr ( pOut, pJSON ); // send BSON
+		SendDataPtrAttr ( tOut, pJSON ); // send BSON
 	else
-		return SendJsonAsString ( pOut, pJSON ); // send string
+		SendJsonAsString ( tOut, pJSON ); // send string
 }
 
 
-static int SendJsonFieldAsString ( ISphOutputBuffer * pOut, const BYTE * pJSON )
+static void SendJsonFieldAsString ( ISphOutputBuffer& tOut, const BYTE * pJSON )
 {
-	if ( pJSON )
+	if ( !pJSON )
 	{
-		int iLengthBytes = sphUnpackPtrAttr ( pJSON, &pJSON );
-		JsonEscapedBuilder dJson;
-		dJson.GrowEnough ( iLengthBytes * 2 );
+		tOut.SendDword(0);
+		return;
+	}
 
-		auto eJson = (ESphJsonType)*pJSON++;
-		sphJsonFieldFormat ( dJson, pJSON, eJson, false );
+	auto dData = sphUnpackPtrAttr ( pJSON );
+	auto eJson = (ESphJsonType) *dData.first++;
 
-		if ( pOut )
-			pOut->SendArray ( dJson );
-		else
-			return dJson.GetLength();
+	JsonEscapedBuilder dJson;
+	dJson.GrowEnough ( dData.second * 2 );
+	sphJsonFieldFormat ( dJson, dData.first, eJson, false );
+	tOut.SendArray ( dJson );
+}
+
+
+static void SendJsonField ( ISphOutputBuffer& tOut, const BYTE * pJSON, bool bSendJsonField )
+{
+	if ( !bSendJsonField )
+	{
+		SendJsonFieldAsString ( tOut, pJSON );
+		return;
+	}
+
+	auto dData = sphUnpackPtrAttr ( pJSON );
+	if ( IsNull ( dData ) || *dData.first==JSON_EOF )
+		tOut.SendByte ( JSON_EOF );
+	else
+	{
+		tOut.SendByte ( *dData.first );
+		tOut.SendArray ( dData.first+1, dData.second-1 );
+	}
+}
+
+
+static void SendMVA ( ISphOutputBuffer& tOut, const BYTE * pMVA, bool b64bit )
+{
+	if ( !pMVA )
+	{
+		tOut.SendDword ( 0 );
+		return;
+	}
+
+	auto dMVA = sphUnpackPtrAttr ( pMVA );
+	auto iValues = dMVA.second / sizeof(DWORD);
+	tOut.SendDword ( iValues );
+
+	const auto * pValues = (const DWORD *) dMVA.first;
+
+	if ( b64bit )
+	{
+		assert ( ( iValues%2 )==0 );
+		while ( iValues )
+		{
+			auto uMVA = MVA_BE ( pValues );
+			tOut.SendDword ( uMVA.first );
+			tOut.SendDword ( uMVA.second );
+			pValues += 2;
+			iValues -= 2;
+		}
 	} else
 	{
-		if ( pOut )
-			pOut->SendDword ( 0 );
+		while ( iValues-- )
+			tOut.SendDword ( *pValues++ );
 	}
-
-	return 0;
-}
-
-
-static int SendJsonField ( ISphOutputBuffer * pOut, const BYTE * pJSON, bool bSendJsonField )
-{
-	if ( bSendJsonField )
-	{
-		int iLen = sphUnpackPtrAttr ( pJSON, &pJSON );
-		if ( !iLen )
-		{
-			if ( pOut )
-				pOut->SendByte ( JSON_EOF );
-
-			return -3; // 4 bytes by default, and we send only 1. this useless magic should be fixed
-		}
-
-		ESphJsonType eJson = (ESphJsonType)*pJSON++;
-		if ( eJson==JSON_EOF )
-		{
-			if ( pOut )
-				pOut->SendByte ( (BYTE)eJson );
-
-			return -3;
-		}
-
-		iLen--;
-
-		if ( pOut )
-		{
-			pOut->SendByte ( (BYTE)eJson );
-			pOut->SendArray ( pJSON, iLen );
-		}
-
-		return iLen+1;
-	}
-	else
-		return SendJsonFieldAsString ( pOut, pJSON );
-}
-
-
-static int SendMVA ( ISphOutputBuffer * pOut, const BYTE * pMVA, bool b64bit )
-{
-	if ( pMVA )
-	{
-		int iLengthBytes = sphUnpackPtrAttr( pMVA, &pMVA );
-		int iValues = iLengthBytes / sizeof(DWORD);
-		if ( pOut )
-			pOut->SendDword ( iValues );
-
-		const DWORD * pValues = (const DWORD *)pMVA;
-
-		if ( b64bit )
-		{
-			assert ( ( iValues%2 )==0 );
-			while ( iValues )
-			{
-				uint64_t uVal = (uint64_t)MVA_UPSIZE ( pValues );
-				if ( pOut )
-					pOut->SendUint64 ( uVal );
-				pValues += 2;
-				iValues -= 2;
-			}
-		} else
-		{
-			while ( iValues-- )
-			{
-				if ( pOut )
-					pOut->SendDword ( *pValues++ );
-			}
-		}
-
-		return iLengthBytes;
-	} else
-	{
-		if ( pOut )
-			pOut->SendDword ( 0 );
-	}
-
-	return 0;
 }
 
 
@@ -3350,19 +3311,19 @@ static void SendAttribute ( ISphOutputBuffer & tOut, const CSphMatch & tMatch, c
 	{
 	case SPH_ATTR_UINT32SET_PTR:
 	case SPH_ATTR_INT64SET_PTR:
-		SendMVA ( &tOut, (const BYTE*)tMatch.GetAttr(tLoc), tAttr.m_eAttrType==SPH_ATTR_INT64SET_PTR );
+		SendMVA ( tOut, (const BYTE*)tMatch.GetAttr(tLoc), tAttr.m_eAttrType==SPH_ATTR_INT64SET_PTR );
 		break;
 
 	case SPH_ATTR_JSON_PTR:
-		SendJson ( &tOut, (const BYTE*)tMatch.GetAttr(tLoc), bSendJson );
+		SendJson ( tOut, (const BYTE*)tMatch.GetAttr(tLoc), bSendJson );
 		break;
 
 	case SPH_ATTR_STRINGPTR:
-		SendDataPtrAttr ( &tOut, (const BYTE*)tMatch.GetAttr(tLoc) );
+		SendDataPtrAttr ( tOut, (const BYTE*)tMatch.GetAttr(tLoc) );
 		break;
 
 	case SPH_ATTR_JSON_FIELD_PTR:
-		SendJsonField ( &tOut, (const BYTE*)tMatch.GetAttr(tLoc), bSendJsonField );
+		SendJsonField ( tOut, (const BYTE*)tMatch.GetAttr(tLoc), bSendJsonField );
 		break;
 
 	case SPH_ATTR_FACTORS:
@@ -3373,7 +3334,7 @@ static void SendAttribute ( ISphOutputBuffer & tOut, const CSphMatch & tMatch, c
 			break;
 		}
 
-		SendDataPtrAttr ( &tOut, (const BYTE*)tMatch.GetAttr(tLoc) );
+		SendDataPtrAttr ( tOut, (const BYTE*)tMatch.GetAttr(tLoc) );
 		break;
 
 	case SPH_ATTR_FLOAT:
@@ -6944,11 +6905,9 @@ public:
 
 			if ( iCur && iLastValue && t==SPH_ATTR_STRINGPTR )
 			{
-				const BYTE * a = (const BYTE*) iCur;
-				const BYTE * b = (const BYTE*) iLastValue;
-				int iLen1 = sphUnpackPtrAttr ( a, &a );
-				int iLen2 = sphUnpackPtrAttr ( b, &b );
-				if ( iLen1==iLen2 && memcmp ( a, b, iLen1 )==0 )
+				auto a = sphUnpackPtrAttr ((const BYTE *) iCur );
+				auto b = sphUnpackPtrAttr ((const BYTE *) iLastValue );
+				if ( a.second==b.second && memcmp ( a.first, b.first, a.second )==0 )
 					continue;
 			}
 
@@ -12162,12 +12121,10 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 			case SPH_ATTR_STRINGPTR:
 				{
 					auto * pString = ( const BYTE * ) tMatch.GetAttr ( tLoc );
-					int iLen=0;
-					if ( pString )
-						iLen = sphUnpackPtrAttr ( pString, &pString );
-					if ( pString && iLen>1 && pString[iLen - 2]=='\0' )
-						iLen -= 2;
-					dRows.PutArray ( pString, iLen );
+					auto dString = sphUnpackPtrAttr ( pString );
+					if ( dString.second>1 && dString.first[dString.second-2]=='\0' )
+						dString.second -= 2;
+					dRows.PutArray ( dString );
 				}
 				break;
 			case SPH_ATTR_JSON_PTR:
@@ -12176,8 +12133,8 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 					JsonEscapedBuilder sTmp;
 					if ( pString )
 					{
-						sphUnpackPtrAttr ( pString, &pString );
-						sphJsonFormat ( sTmp, pString );
+						auto dJson = sphUnpackPtrAttr ( pString );
+						sphJsonFormat ( sTmp, dJson.first );
 					}
 					dRows.PutArray ( sTmp );
 				}
@@ -12186,11 +12143,10 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 			case SPH_ATTR_FACTORS:
 			case SPH_ATTR_FACTORS_JSON:
 				{
-					const BYTE * pFactors = nullptr;
-					sphUnpackPtrAttr ( (const BYTE*)tMatch.GetAttr ( tLoc ), &pFactors );
+					auto dFactors = sphUnpackPtrAttr ((const BYTE *) tMatch.GetAttr ( tLoc ));
 					StringBuilder_c sTmp;
-					if ( pFactors )
-						sphFormatFactors ( sTmp, (const unsigned int *)pFactors, eAttrType==SPH_ATTR_FACTORS_JSON );
+					if ( !IsNull ( dFactors ))
+						sphFormatFactors ( sTmp, (const unsigned int *)dFactors.first, eAttrType==SPH_ATTR_FACTORS_JSON );
 					dRows.PutArray ( sTmp, false );
 					break;
 				}
@@ -12204,8 +12160,8 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 						break;
 					}
 
-					sphUnpackPtrAttr ( pField, &pField );
-					auto eJson = ESphJsonType ( *pField++ );
+					auto dField = sphUnpackPtrAttr ( pField );
+					auto eJson = ESphJsonType ( *dField.first++ );
 
 					if ( eJson==JSON_NULL )
 					{
@@ -12215,7 +12171,7 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 
 					// send string to client
 					JsonEscapedBuilder sTmp;
-					sphJsonFieldFormat ( sTmp, pField, eJson, false );
+					sphJsonFieldFormat ( sTmp, dField.first, eJson, false );
 					dRows.PutArray ( sTmp, false );
 					break;
 				}

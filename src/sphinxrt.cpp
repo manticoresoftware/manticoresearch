@@ -1884,15 +1884,15 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bRe
 
 		if ( tColumn.m_eAttrType==SPH_ATTR_STRING || tColumn.m_eAttrType==SPH_ATTR_JSON )
 		{
-			const char * pStr = ppStr ? ppStr[iStrAttr++] : nullptr;
-			int iLen = 0;
+			const BYTE * pStr = ppStr ? (const BYTE *) ppStr[iStrAttr++] : nullptr;
+			ByteBlob_t dStr;
 			if ( tColumn.m_eAttrType==SPH_ATTR_STRING )
-				iLen = ( pStr ? (int) strlen ( pStr ) : 0 );
+				dStr = {pStr, pStr ? (int) strlen ((const char *) pStr ) : 0};
 			else // SPH_ATTR_JSON - packed len + data
-				iLen = sphUnpackPtrAttr ( (const BYTE*)pStr, (const BYTE**)&pStr );
+				dStr = sphUnpackPtrAttr ( pStr );
 
 			assert ( m_pBlobWriter );
-			m_pBlobWriter->SetAttr( iBlobAttr++, (const BYTE*)pStr, iLen, sError );
+			m_pBlobWriter->SetAttr ( iBlobAttr++, dStr.first, dStr.second, sError );
 		} else if ( tColumn.m_eAttrType==SPH_ATTR_UINT32SET || tColumn.m_eAttrType==SPH_ATTR_INT64SET )
 		{
 			assert ( m_pBlobWriter );

@@ -442,9 +442,7 @@ TEST_F ( RT, RankerFactors )
 			const BYTE * pAttr = (const BYTE *) tOneRes.m_dMatches[iMatch].GetAttr ( tLoc );
 			ASSERT_TRUE ( pAttr );
 
-			sphUnpackPtrAttr ( pAttr, &pAttr );
-
-			auto * pFactors = (const unsigned int *)pAttr;
+			auto * pFactors = (const unsigned int *) sphUnpackPtrAttr ( pAttr ).first;
 
 			SPH_UDF_FACTORS tUnpacked;
 			sphinx_factors_init ( &tUnpacked );

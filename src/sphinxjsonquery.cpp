@@ -1128,19 +1128,19 @@ bool sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString 
 //////////////////////////////////////////////////////////////////////////
 static void PackedShortMVA2Json ( StringBuilder_c& tOut, const BYTE * pMVA )
 {
-	int iLengthBytes = sphUnpackPtrAttr ( pMVA, &pMVA );
-	int nValues = iLengthBytes / sizeof ( DWORD );
-	auto pValues = ( const DWORD * ) pMVA;
-	for ( int i = 0; i<nValues; ++i )
+	auto dMVA = sphUnpackPtrAttr ( pMVA );
+	auto nValues = dMVA.second / sizeof ( DWORD );
+	auto pValues = ( const DWORD * ) dMVA.first;
+	for ( int i = 0; i<(int) nValues; ++i )
 		tOut.NtoA(pValues[i]);
 }
 
 static void PackedWideMVA2Json ( StringBuilder_c &tOut, const BYTE * pMVA )
 {
-	int iLengthBytes = sphUnpackPtrAttr ( pMVA, &pMVA );
-	int nValues = iLengthBytes / sizeof ( int64_t );
-	auto pValues = ( const int64_t * ) pMVA;
-	for ( int i = 0; i<nValues; ++i )
+	auto dMVA = sphUnpackPtrAttr ( pMVA );
+	auto nValues = dMVA.second / sizeof ( int64_t );
+	auto pValues = ( const int64_t * ) dMVA.first;
+	for ( int i = 0; i<(int) nValues; ++i )
 		tOut.NtoA(pValues[i]);
 }
 
@@ -1180,23 +1180,23 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes
 	case SPH_ATTR_STRINGPTR:
 	{
 		const auto * pString = ( const BYTE * ) tMatch.GetAttr ( tLoc );
-		int iLen = sphUnpackPtrAttr ( pString, &pString );
+		auto dString = sphUnpackPtrAttr ( pString );
 
 		// special process for legacy typed strings
-		if ( pString && iLen>1 && pString[iLen-2]=='\0')
+		if ( dString.second>1 && dString.first[dString.second-2]=='\0')
 		{
-			auto uSubtype = pString[iLen-1];
-			iLen -= 2;
+			auto uSubtype = dString.first[dString.second-1];
+			dString.second -= 2;
 			switch ( uSubtype)
 			{
 				case 1: // ql
 				{
 					ScopedComma_c sBrackets ( tOut, nullptr, R"({"ql":)", "}" );
-					tOut.AppendEscapedWithComma (( const char* ) pString, iLen );
+					tOut.AppendEscapedWithComma (( const char* ) dString.first, dString.second);
 					break;
 				}
 				case 0: // json
-					tOut << ( const char* ) pString;
+					tOut << ( const char* ) dString.first;
 					break;
 
 				default:
@@ -1204,22 +1204,20 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes
 			}
 			break;
 		}
-		tOut.AppendEscapedWithComma ( ( const char * ) pString, iLen );
+		tOut.AppendEscapedWithComma ( ( const char * ) dString.first, dString.second );
 	}
 	break;
 
 	case SPH_ATTR_JSON_PTR:
 	{
 		const auto * pJSON = ( const BYTE * ) tMatch.GetAttr ( tLoc );
-		sphUnpackPtrAttr ( pJSON, &pJSON );
+		auto dJson = sphUnpackPtrAttr ( pJSON );
 
 		// no object at all? return NULL
-		if ( !pJSON )
-		{
+		if ( IsNull ( dJson ) )
 			tOut << "null";
-			break;
-		}
-		sphJsonFormat ( tOut, pJSON );
+		else
+			sphJsonFormat ( tOut, dJson.first );
 	}
 	break;
 
@@ -1227,29 +1225,29 @@ static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes
 	case SPH_ATTR_FACTORS_JSON:
 	{
 		const auto * pFactors = ( const BYTE * ) tMatch.GetAttr ( tLoc );
-		sphUnpackPtrAttr ( pFactors, &pFactors );
-		if ( pFactors )
-			sphFormatFactors ( tOut, ( const unsigned int * ) pFactors, true );
-		else
+		auto dFactors = sphUnpackPtrAttr ( pFactors );
+		if ( IsNull ( dFactors ))
 			tOut << "null";
+		else
+			sphFormatFactors ( tOut, (const unsigned int *) dFactors.first, true );
 	}
 	break;
 
 	case SPH_ATTR_JSON_FIELD_PTR:
 	{
 		const auto * pField = ( const BYTE * ) tMatch.GetAttr ( tLoc );
-		sphUnpackPtrAttr ( pField, &pField );
-		if ( !pField )
+		auto dField = sphUnpackPtrAttr ( pField );
+		if ( IsNull ( dField ))
 		{
 			tOut << "null";
 			break;
 		}
 
-		auto eJson = ESphJsonType ( *pField++ );
+		auto eJson = ESphJsonType ( *dField.first++ );
 		if ( eJson==JSON_NULL )
 			tOut << "null";
 		else
-			sphJsonFieldFormat ( tOut, pField, eJson, true );
+			sphJsonFieldFormat ( tOut, dField.first, eJson, true );
 	}
 	break;
 
@@ -1319,11 +1317,9 @@ void EncodeHighlight ( const CSphMatch & tMatch, int iAttr, const ISphSchema & t
 	const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
 
 	ScopedComma_c tHighlightComma ( tOut, ",", R"("highlight":{)", "}", false );
-	const auto * pData = (const BYTE *)tMatch.GetAttr ( tCol.m_tLocator );
-	int iLength = sphUnpackPtrAttr ( pData, &pData );
+	auto dSnippet = sphUnpackPtrAttr ((const BYTE *) tMatch.GetAttr ( tCol.m_tLocator ));
 
-	SnippetResult_t tRes;
-	UnpackSnippetData ( pData, iLength, tRes );
+	SnippetResult_t tRes = UnpackSnippetData ( dSnippet );
 
 	for ( const auto & tField : tRes.m_dFields )
 	{

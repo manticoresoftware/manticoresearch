@@ -119,10 +119,6 @@ extern int64_t g_iIndexerPoolStartHit;
 
 /////////////////////////////////////////////////////////////////////////////
 
-inline bool IsNull ( const ByteBlob_t & dBlob ) { return !dBlob.second; };
-inline bool IsFilled ( const ByteBlob_t & dBlob ) { return dBlob.first && dBlob.second>0; }
-inline bool IsValid ( const ByteBlob_t & dBlob ) { return IsNull ( dBlob ) || IsFilled ( dBlob ); };
-
 /// Sphinx CRC32 implementation
 extern DWORD	g_dSphinxCRC32 [ 256 ];
 DWORD			sphCRC32 ( const void * pString );
@@ -1239,7 +1235,6 @@ public:
 	}
 
 	/// fetches blobs from both data ptr attrs and pooled blob attrs
-	const BYTE * FetchAttrData ( const CSphAttrLocator & tLoc, const BYTE * pPool, int & iLengthBytes ) const;
 	ByteBlob_t FetchAttrData ( const CSphAttrLocator & tLoc, const BYTE * pPool ) const;
 };
 
@@ -2883,16 +2878,16 @@ struct CSphMatchComparatorState
 
 		const BYTE * aa = (const BYTE*) a.GetAttr ( m_tLocator[iAttr] );
 		const BYTE * bb = (const BYTE*) b.GetAttr ( m_tLocator[iAttr] );
-		if ( aa==NULL || bb==NULL )
+		if ( aa==nullptr || bb==nullptr )
 		{
 			if ( aa==bb )
 				return 0;
-			if ( aa==NULL )
+			if ( aa==nullptr )
 				return -1;
 			return 1;
 		}
 
-		return m_fnStrCmp ( aa, bb, m_eKeypart[iAttr]==SPH_KEYPART_STRINGPTR, 0, 0 );
+		return m_fnStrCmp ( {aa, 0}, {bb, 0}, m_eKeypart[iAttr]==SPH_KEYPART_STRINGPTR );
 	}
 
 	void FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema, bool bRemapKeyparts );

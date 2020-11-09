@@ -2432,18 +2432,6 @@ bool FileAccessSettings_t::operator!= ( const FileAccessSettings_t & tOther ) co
 // DOCINFO
 //////////////////////////////////////////////////////////////////////////
 
-const BYTE * CSphMatch::FetchAttrData ( const CSphAttrLocator & tLoc, const BYTE * pPool, int & iLengthBytes ) const
-{
-	if ( tLoc.IsBlobAttr() )
-		return sphGetBlobAttr ( *this, tLoc, pPool, iLengthBytes );
-	else
-	{
-		const BYTE * pResult {nullptr};
-		iLengthBytes = sphUnpackPtrAttr ( (const BYTE*)GetAttr(tLoc), &pResult );
-		return pResult;
-	}
-}
-
 ByteBlob_t CSphMatch::FetchAttrData ( const CSphAttrLocator & tLoc, const BYTE * pPool ) const
 {
 	if ( tLoc.IsBlobAttr ())
@@ -6302,7 +6290,7 @@ void CSphSchemaHelper::CopyPtrsSpecial ( CSphMatch & tDst, const CSphMatch& tSrc
 	{
 		const BYTE * pData = *( BYTE ** ) ( pSrc + i );
 		if ( pData )
-			*( BYTE ** ) ( tDst.m_pDynamic + i ) = sphPackPtrAttr ( sphUnpackPtrAttr ( pData ) );
+			*( BYTE ** ) ( tDst.m_pDynamic + i ) = sph::CopyPackedAttr ( pData );
 	}
 }
 

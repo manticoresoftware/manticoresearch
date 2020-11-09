@@ -108,7 +108,7 @@ public:
 	virtual const BYTE * StringEvalPacked ( const CSphMatch & tMatch ) const;
 
 	/// evaluate MVA attr
-	virtual const BYTE * MvaEval ( const CSphMatch &, int & iLengthBytes ) const { assert(0); return nullptr; }
+	virtual ByteBlob_t MvaEval ( const CSphMatch & ) const { assert( 0 ); return {nullptr, 0}; }
 
 	/// evaluate PACKEDFACTORS
 	virtual const BYTE * FactorEval ( const CSphMatch & ) const { assert ( 0 ); return nullptr; }

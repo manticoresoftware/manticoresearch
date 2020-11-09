@@ -978,20 +978,6 @@ BYTE * sphPackPtrAttr ( int iLengthBytes, BYTE ** ppData )
 }
 
 
-int sphUnpackPtrAttr ( const BYTE * pData, const BYTE ** ppUnpacked )
-{
-	assert ( ppUnpacked );
-	if ( !pData )
-	{
-		*ppUnpacked = nullptr;
-		return 0;
-	}
-
-	int iLen = (int)sphUnzipInt ( pData );
-	*ppUnpacked = pData;
-	return iLen;
-}
-
 ByteBlob_t sphUnpackPtrAttr ( const BYTE * pData )
 {
 	if ( !pData )
@@ -1001,6 +987,10 @@ ByteBlob_t sphUnpackPtrAttr ( const BYTE * pData )
 	return { pData, iLen };
 }
 
+BYTE * sph::CopyPackedAttr ( const BYTE* pData )
+{
+	return sphPackPtrAttr ( sphUnpackPtrAttr ( pData ));
+}
 
 ESphAttr sphPlainAttrToPtrAttr ( ESphAttr eAttrType )
 {
@@ -1029,8 +1019,8 @@ bool sphIsDataPtrAttr ( ESphAttr eAttr )
 template < typename T >
 static void MVA2Str ( const T * pMVA, int iLengthBytes, StringBuilder_c &dStr )
 {
-	dStr.GrowEnough ( ( SPH_MAX_NUMERIC_STR + 1 ) * iLengthBytes / sizeof ( DWORD ) );
 	int nValues = iLengthBytes / sizeof ( T );
+	dStr.GrowEnough (( SPH_MAX_NUMERIC_STR+1 ) * nValues );
 	Comma_c sComma ( "," );
 	for ( int i = 0; i<nValues; ++i )
 	{
@@ -1053,17 +1043,17 @@ bool sphIsInternalAttr ( const CSphColumnInfo & tCol )
 }
 
 
-void sphMVA2Str ( const BYTE * pMVA, int iLengthBytes, bool b64bit, StringBuilder_c &dStr )
+void sphMVA2Str ( ByteBlob_t dMVA, bool b64bit, StringBuilder_c & dStr )
 {
 	if ( b64bit )
-		MVA2Str ( ( const int64_t * ) pMVA, iLengthBytes, dStr );
+		MVA2Str ( ( const int64_t * ) dMVA.first, dMVA.second, dStr );
 	else
-		MVA2Str ( ( const DWORD * ) pMVA, iLengthBytes, dStr );
+		MVA2Str ( ( const DWORD * ) dMVA.first, dMVA.second, dStr );
 }
 
 
 void sphPackedMVA2Str ( const BYTE * pMVA, bool b64bit, StringBuilder_c & dStr )
 {
-	int iLengthBytes = sphUnpackPtrAttr ( pMVA, &pMVA );
-	sphMVA2Str( pMVA, iLengthBytes, b64bit, dStr );
+	auto dMVA = sphUnpackPtrAttr ( pMVA );
+	sphMVA2Str( dMVA, b64bit, dStr );
 }

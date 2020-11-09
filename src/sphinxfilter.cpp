@@ -374,7 +374,7 @@ template < typename T >
 class Filter_MVAValues_Any_c : public Filter_MVA_c, public IFilter_Values
 {
 public:
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		auto dMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
 		return MvaEval_Any<T> ( dMva, {m_pValues, m_iValueCount} );
@@ -386,7 +386,7 @@ template < typename T >
 class Filter_MVAValues_All_c : public Filter_MVA_c, IFilter_Values
 {
 public:
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		auto dMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
 		return MvaEval_All<T> ( dMva, {m_pValues, m_iValueCount} );
@@ -398,11 +398,11 @@ template < typename T, bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX >
 class Filter_MVARange_Any_c : public Filter_MVA_c, IFilter_Range
 {
 public:
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
-		int iLengthBytes = 0;
-		const BYTE * pMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool, iLengthBytes );
-		return MvaEval_RangeAny<T, HAS_EQUAL_MIN, HAS_EQUAL_MAX> ( (const T*)pMva, iLengthBytes/sizeof(T), m_iMinValue, m_iMaxValue );
+		auto dMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
+		return MvaEval_RangeAny<T, HAS_EQUAL_MIN, HAS_EQUAL_MAX> ( (const T*)dMva.first, dMva.second/sizeof(T),
+			m_iMinValue, m_iMaxValue );
 	}
 };
 
@@ -411,11 +411,11 @@ template < typename T, bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX >
 class Filter_MVARange_All_c : public Filter_MVA_c, IFilter_Range
 {
 public:
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
-		int iLengthBytes = 0;
-		const BYTE * pMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool, iLengthBytes );
-		return MvaEval_RangeAll<T, HAS_EQUAL_MIN, HAS_EQUAL_MAX> ( (const T*)pMva, iLengthBytes/sizeof(T), m_iMinValue, m_iMaxValue );
+		auto dMva = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
+		return MvaEval_RangeAll<T, HAS_EQUAL_MIN, HAS_EQUAL_MAX> ( (const T*)dMva.first, dMva.second/sizeof(T),
+			m_iMinValue, m_iMaxValue );
 	}
 };
 
@@ -454,9 +454,8 @@ public:
 
 	bool Eval ( const CSphMatch & tMatch ) const override
 	{
-		int iLen = 0;
-		const BYTE * pStr = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool, iLen );
-		bool bEq = m_fnStrCmp ( pStr, m_dVal.Begin(), false, iLen, m_dVal.GetLength() )==0;
+		auto dStr = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
+		bool bEq = m_fnStrCmp ( dStr, m_dVal, false )==0;
 		return ( m_bEq==bEq );
 	}
 
@@ -494,14 +493,11 @@ public:
 
 	bool Eval ( const CSphMatch & tMatch ) const final
 	{
-		int iLen = 0;
-		const BYTE * pStr = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool, iLen );
-
-		for ( const auto & i : m_dValues )
-			if ( m_fnStrCmp ( pStr, i.Begin(), false, iLen, i.GetLength() )==0 )
-				return true;
-
-		return false;
+		auto dStr = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
+		return m_dValues.any_of( [this, &dStr] ( const VecTraits_T<BYTE>& i )
+		{
+			return m_fnStrCmp ( dStr, i, false )==0;
+		});
 	}
 
 private:
@@ -531,11 +527,10 @@ public:
 protected:
 	inline void GetMatchTags ( const CSphMatch &tMatch ) const
 	{
-		int iStrLen = 0;
-		const BYTE * pStr = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool, iStrLen );
+		auto dStr = tMatch.FetchAttrData ( m_tLocator, m_pBlobPool );
 
 		m_dMatchTags.Resize ( 0 );
-		sphSplitApply ( ( const char * ) pStr, iStrLen, [this] ( const char * pTag, int iLen ) {
+		sphSplitApply ( ( const char * ) dStr.first, dStr.second, [this] ( const char * pTag, int iLen ) {
 			m_dMatchTags.Add ( sphFNV64 ( pTag, iLen, SPH_FNV64_SEED ) );
 		} );
 		m_dMatchTags.Uniq ();
@@ -1145,7 +1140,7 @@ public:
 	{
 		const BYTE * pVal = nullptr;
 		int iLen = m_pExpr->StringEval ( tMatch, &pVal );
-		bool bEq = m_fnStrCmp ( pVal, (const BYTE*)m_sVal.cstr(), false, iLen, m_iValLength )==0;
+		bool bEq = m_fnStrCmp ( {pVal, iLen}, {(const BYTE *) m_sVal.cstr (), m_iValLength}, false )==0;
 		return ( m_bEq==bEq );
 	}
 };

@@ -130,7 +130,7 @@ bool			TestEscaping( const CSphString& sPrefix, const CSphString& sPath );
 ESphSpz			GetPassageBoundary ( const CSphString & sPassageBoundaryMode );
 const char *	PassageBoundarySz ( ESphSpz eBoundary );
 bool			sphCheckOptionsSPZ ( const SnippetQuerySettings_t & q, ESphSpz eMode, CSphString & sError );
-void			UnpackSnippetData ( const BYTE * pData, int iLength, SnippetResult_t & tRes );
+SnippetResult_t			UnpackSnippetData ( ByteBlob_t dData );
 
 struct FieldSource_t
 {

@@ -55,7 +55,7 @@ enum ESphCollation
 };
 
 // iLen1 and iLen2 don't need to be specified for STRINGPTR attrs
-typedef int ( *SphStringCmp_fn )( const BYTE * pStr1, const BYTE * pStr2, bool bDataPtr, int iLen1, int iLen2 );
+using SphStringCmp_fn = int ( * ) ( ByteBlob_t dStr1, ByteBlob_t dStr2, bool bDataPtr );
 
 SphStringCmp_fn GetStringCmpFunc ( ESphCollation eCollation );
 

@@ -16,56 +16,59 @@
 
 static const char * EMPTY_STR = "";
 
-inline static void UnpackStrings ( const BYTE * & pStr1, const BYTE * & pStr2, bool bDataPtr, int & iLen1, int & iLen2 )
+inline static void UnpackStrings ( ByteBlob_t& dStr1, ByteBlob_t& dStr2, bool bDataPtr )
 {
 	// strings that are stored in index don't need to be unpacked
 	if ( bDataPtr )
 	{
-		iLen1 = sphUnpackPtrAttr ( pStr1, &pStr1 );
-		iLen2 = sphUnpackPtrAttr ( pStr2, &pStr2 );
+		dStr1 = sphUnpackPtrAttr ( dStr1.first );
+		dStr2 = sphUnpackPtrAttr ( dStr2.first );
 	}
 
-	if ( !pStr1 ) pStr1 = (const BYTE*)EMPTY_STR;
-	if ( !pStr2 ) pStr2 = (const BYTE*)EMPTY_STR;
+	if ( !dStr1.first )
+		dStr1 = {(const BYTE *) EMPTY_STR, 0};
+
+	if ( !dStr2.first )
+		dStr2 = {(const BYTE *) EMPTY_STR, 0};
 }
 
 
-static int CollateBinary ( const BYTE * pStr1, const BYTE * pStr2, bool bDataPtr, int iLen1, int iLen2 )
+static int CollateBinary ( ByteBlob_t dStr1, ByteBlob_t dStr2, bool bDataPtr )
 {
-	UnpackStrings ( pStr1, pStr2, bDataPtr, iLen1, iLen2 );
+	UnpackStrings ( dStr1, dStr2, bDataPtr );
 
-	int iRes = memcmp ( (const char *)pStr1, (const char *)pStr2, Min ( iLen1, iLen2 ) );
-	return iRes ? iRes : ( iLen1-iLen2 );
+	int iRes = memcmp ( (const char *) dStr1.first, (const char *)dStr2.first, Min ( dStr1.second, dStr2.second ) );
+	return iRes ? iRes : ( dStr1.second-dStr2.second );
 }
 
 /// libc_ci, wrapper for strcasecmp
-static int CollateLibcCI ( const BYTE * pStr1, const BYTE * pStr2, bool bDataPtr, int iLen1, int iLen2 )
+static int CollateLibcCI ( ByteBlob_t dStr1, ByteBlob_t dStr2, bool bDataPtr )
 {
-	UnpackStrings ( pStr1, pStr2, bDataPtr, iLen1, iLen2 );
+	UnpackStrings ( dStr1, dStr2, bDataPtr );
 
-	int iRes = strncasecmp ( (const char *)pStr1, (const char *)pStr2, Min ( iLen1, iLen2 ) );
-	return iRes ? iRes : ( iLen1-iLen2 );
+	int iRes = strncasecmp ( (const char *) dStr1.first, (const char *) dStr2.first, Min ( dStr1.second, dStr2.second ) );
+	return iRes ? iRes : ( dStr1.second-dStr2.second );
 }
 
 /// libc_cs, wrapper for strcoll
-static int CollateLibcCS ( const BYTE * pStr1, const BYTE * pStr2, bool bDataPtr, int iLen1, int iLen2 )
+static int CollateLibcCS ( ByteBlob_t dStr1, ByteBlob_t dStr2, bool bDataPtr )
 {
 	#define COLLATE_STACK_BUFFER 1024
 
-	UnpackStrings ( pStr1, pStr2, bDataPtr, iLen1, iLen2 );
-	
+	UnpackStrings ( dStr1, dStr2, bDataPtr );
+
 	// strcoll wants asciiz strings, so we would have to copy them over
 	// lets use stack buffer for smaller ones, and allocate from heap for bigger ones
 	int iRes = 0;
-	int iLen = Min ( iLen1, iLen2 );
+	int iLen = Min ( dStr1.second, dStr2.second );
 	if ( iLen<COLLATE_STACK_BUFFER )
 	{
 		// small strings on stack
 		BYTE sBuf1[COLLATE_STACK_BUFFER];
 		BYTE sBuf2[COLLATE_STACK_BUFFER];
 
-		memcpy ( sBuf1, pStr1, iLen );
-		memcpy ( sBuf2, pStr2, iLen );
+		memcpy ( sBuf1, dStr1.first, iLen );
+		memcpy ( sBuf2, dStr2.first, iLen );
 		sBuf1[iLen] = sBuf2[iLen] = '\0';
 		iRes = strcoll ( (const char*)sBuf1, (const char*)sBuf2 );
 	} else
@@ -74,8 +77,8 @@ static int CollateLibcCS ( const BYTE * pStr1, const BYTE * pStr2, bool bDataPtr
 		char * pBuf1 = new char[iLen + 1];
 		char * pBuf2 = new char[iLen + 1];
 
-		memcpy ( pBuf1, pStr1, iLen );
-		memcpy ( pBuf2, pStr2, iLen );
+		memcpy ( pBuf1, dStr1.first, iLen );
+		memcpy ( pBuf2, dStr2.first, iLen );
 		pBuf1[iLen] = pBuf2[iLen] = '\0';
 		iRes = strcoll ( (const char*)pBuf1, (const char*)pBuf2 );
 
@@ -83,7 +86,7 @@ static int CollateLibcCS ( const BYTE * pStr1, const BYTE * pStr2, bool bDataPtr
 		SafeDeleteArray ( pBuf1 );
 	}
 
-	return iRes ? iRes : ( iLen1-iLen2 );
+	return iRes ? iRes : ( dStr1.second-dStr2.second );
 }
 
 /////////////////////////////
@@ -264,18 +267,18 @@ static inline int CollateUTF8CI ( int iCode )
 
 
 /// utf8_general_ci
-static int CollateUtf8GeneralCI ( const BYTE * pStr1, const BYTE * pStr2, bool bDataPtr, int iLen1, int iLen2 )
+static int CollateUtf8GeneralCI ( ByteBlob_t dStr1, ByteBlob_t dStr2, bool bDataPtr)
 {
-	UnpackStrings ( pStr1, pStr2, bDataPtr, iLen1, iLen2 );
+	UnpackStrings ( dStr1, dStr2, bDataPtr );
 
-	const BYTE * pMax1 = pStr1 + iLen1;
-	const BYTE * pMax2 = pStr2 + iLen2;
+	const BYTE * pMax1 = dStr1.first + dStr1.second;
+	const BYTE * pMax2 = dStr2.first + dStr2.second;
 
-	while ( pStr1<pMax1 && pStr2<pMax2 )
+	while (dStr1.first<pMax1 && dStr2.first<pMax2 )
 	{
 		// FIXME! on broken data, decode might go beyond buffer bounds
-		int iCode1 = sphUTF8Decode ( pStr1 );
-		int iCode2 = sphUTF8Decode ( pStr2 );
+		int iCode1 = sphUTF8Decode ( dStr1.first );
+		int iCode2 = sphUTF8Decode ( dStr2.first );
 		if ( !iCode1 && !iCode2 )
 			return 0;
 		if ( !iCode1 || !iCode2 )
@@ -289,10 +292,10 @@ static int CollateUtf8GeneralCI ( const BYTE * pStr1, const BYTE * pStr2, bool b
 			return iCode1-iCode2;
 	}
 
-	if ( pStr1>=pMax1 && pStr2>=pMax2 )
+	if ( dStr1.first>=pMax1 && dStr2.first>=pMax2 )
 		return 0;
 
-	return ( pStr1<pMax1 ) ? 1 : -1;
+	return ( dStr1.first<pMax1 ) ? 1 : -1;
 }
 
 

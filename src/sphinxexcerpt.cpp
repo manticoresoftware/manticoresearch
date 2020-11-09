@@ -1527,12 +1527,13 @@ bool sphCheckOptionsSPZ ( const SnippetQuerySettings_t & q, ESphSpz eMode, CSphS
 }
 
 
-void UnpackSnippetData ( const BYTE * pData, int iLength, SnippetResult_t & tRes )
+SnippetResult_t UnpackSnippetData ( ByteBlob_t dData )
 {
-	if ( !iLength )
-		return;
+	SnippetResult_t tRes;
+	if ( IsNull ( dData ) )
+		return tRes;
 
-	MemoryReader_c tReader ( pData, iLength );
+	MemoryReader_c tReader ( dData );
 
 	tRes.m_dFields.Resize ( tReader.UnzipInt() );
 	for ( auto & tField : tRes.m_dFields )
@@ -1548,6 +1549,7 @@ void UnpackSnippetData ( const BYTE * pData, int iLength, SnippetResult_t & tRes
 			tReader.GetBytes ( tPassage.m_dText.Begin(), tPassage.m_dText.GetLength() );
 		}
 	}
+	return tRes;
 }
 
 SnippetBuilder_c::Impl_c::Impl_c ()

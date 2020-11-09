@@ -420,6 +420,11 @@ public:
 		, m_pCur ( pData )
 	{}
 
+	explicit MemoryReader_c ( ByteBlob_t dData )
+		: m_pData ( dData.first )
+		, m_iLen ( dData.second )
+		, m_pCur ( dData.first ) {}
+
 	int GetPos()
 	{
 		return ( m_pCur - m_pData );
@@ -794,6 +799,15 @@ inline int64_t MVA_UPSIZE ( const DWORD * pMva )
 #else
 	int64_t iMva = (int64_t)( (uint64_t)pMva[0] | ( ( (uint64_t)pMva[1] )<<32 ) );
 	return iMva;
+#endif
+}
+
+inline std::pair<DWORD,DWORD> MVA_BE ( const DWORD * pMva )
+{
+#if USE_LITTLE_ENDIAN
+	return {pMva[1], pMva[0]};
+#else
+	return {pMva[0], pMva[1]};
 #endif
 }
 

@@ -2675,25 +2675,13 @@ private:
 };
 
 
-SphStringCmp_fn GetCollationFn ( ESphCollation eCollation )
-{
-	switch ( eCollation )
-	{
-		case SPH_COLLATION_LIBC_CS:			return sphCollateLibcCS;
-		case SPH_COLLATION_UTF8_GENERAL_CI:	return sphCollateUtf8GeneralCI;
-		case SPH_COLLATION_BINARY:			return sphCollateBinary;
-		default:							return sphCollateLibcCI;
-	}
-}
-
-
 class Expr_StrEq_c : public Expr_Binary_c
 {
 public:
 	Expr_StrEq_c ( ISphExpr * pLeft, ISphExpr * pRight, ESphCollation eCollation )
 		: Expr_Binary_c ( "Expr_StrEq_c", pLeft, pRight )
 	{
-		m_fnStrCmp = GetCollationFn ( eCollation );
+		m_fnStrCmp = GetStringCmpFunc ( eCollation );
 	}
 
 	int IntEval ( const CSphMatch & tMatch ) const final
@@ -7055,7 +7043,7 @@ public:
 	{
 		assert ( pConsts );
 
-		m_fnStrCmp = GetCollationFn ( eCollation );
+		m_fnStrCmp = GetStringCmpFunc ( eCollation );
 
 		const char * sExpr = pConsts->m_sExpr.cstr ();
 		int iExprLen = pConsts->m_sExpr.Length ();
@@ -7126,7 +7114,7 @@ public:
 	Expr_StrInU_c ( const CSphAttrLocator & tLoc, int iLocator, const UservarIntSet_c& pUservar, ESphCollation eCollation )
 		: Expr_ArgVsConstSet_c<int64_t> ( nullptr, pUservar )
 		, ExprLocatorTraits_t ( tLoc, iLocator )
-		, m_fnStrCmp ( GetCollationFn ( eCollation ))
+		, m_fnStrCmp ( GetStringCmpFunc ( eCollation ))
 	{
 		assert ( pUservar );
 	}

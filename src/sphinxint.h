@@ -1866,11 +1866,6 @@ const CP * sphSearchCheckpoint ( const char * sWord, int iWordLen, SphWordID_t i
 }
 
 
-int sphCollateLibcCI ( const BYTE * pStr1, const BYTE * pStr2, bool bDataPtr, int iLen1, int iLen2 );
-int sphCollateLibcCS ( const BYTE * pStr1, const BYTE * pStr2, bool bDataPtr, int iLen1, int iLen2 );
-int sphCollateUtf8GeneralCI ( const BYTE * pArg1, const BYTE * pArg2, bool bDataPtr, int iLen1, int iLen2 );
-int sphCollateBinary ( const BYTE * pStr1, const BYTE * pStr2, bool bDataPtr, int iLen1, int iLen2 );
-
 class ISphRtDictWraper : public CSphDict
 {
 protected:

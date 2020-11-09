@@ -16,9 +16,9 @@
 /////////////////////////////////////////////////////////////////////////////
 
 #include "sphinxstd.h"
-#include "sphinxexpr.h" // to remove?
 #include "indexsettings.h"
 #include "fileutils.h"
+#include "collation.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -119,8 +119,6 @@ extern int64_t g_iIndexerPoolStartHit;
 
 /////////////////////////////////////////////////////////////////////////////
 
-using ByteBlob_t = std::pair<const BYTE *, int>;
-
 inline bool IsNull ( const ByteBlob_t & dBlob ) { return !dBlob.second; };
 inline bool IsFilled ( const ByteBlob_t & dBlob ) { return dBlob.first && dBlob.second>0; }
 inline bool IsValid ( const ByteBlob_t & dBlob ) { return IsNull ( dBlob ) || IsFilled ( dBlob ); };
@@ -133,14 +131,6 @@ DWORD			sphCRC32 ( const void * pString, int iLen, DWORD uPrevCRC );
 
 /// Fast check if our endianess is correct
 const char*		sphCheckEndian();
-
-/// Sphinx FNV64 implementation
-const uint64_t	SPH_FNV64_SEED = 0xcbf29ce484222325ULL;
-uint64_t		sphFNV64 ( const void * pString );
-uint64_t		sphFNV64 ( const void * s, int iLen, uint64_t uPrev = SPH_FNV64_SEED );
-uint64_t		sphFNV64cont ( const void * pString, uint64_t uPrev );
-inline uint64_t		sphFNV64 ( const ByteBlob_t& dBlob ) { return sphFNV64 ( dBlob.first, dBlob.second ); }
-inline uint64_t		sphFNV64cont ( const ByteBlob_t& dBlob, uint64_t uPrev ) { return sphFNV64 ( dBlob.first, dBlob.second, uPrev ); }
 
 /// try to obtain an exclusive lock on specified file
 /// bWait specifies whether to wait
@@ -2842,10 +2832,6 @@ struct JsonKey_t
 };
 
 
-// iLen1 and iLen2 don't need to be specified for STRINGPTR attrs
-typedef int ( *SphStringCmp_fn )( const BYTE * pStr1, const BYTE * pStr2, bool bDataPtr, int iLen1, int iLen2 );
-
-
 /// match comparator state
 struct CSphMatchComparatorState
 {
@@ -3511,9 +3497,6 @@ void SetUnhintedBuffer ( int iReadUnhinted );
 
 /// check query for expressions
 bool				sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema );
-
-/// initialize collation tables
-void				sphCollationInit ();
 
 //////////////////////////////////////////////////////////////////////////
 

@@ -5666,4 +5666,6 @@ public:
     if_const (LOG_LEVEL_##Level) \
         LOC_MSG << LOG_COMPONENT_##Component
 
+using ByteBlob_t = std::pair<const BYTE *, int>;
+
 #endif // _sphinxstd_

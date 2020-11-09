@@ -13,7 +13,7 @@
 #ifndef _sphinxexpr_
 #define _sphinxexpr_
 
-#include "sphinxstd.h"
+#include "collation.h"
 
 /// forward decls
 class CSphMatch;
@@ -274,17 +274,6 @@ enum
 	SPH_FACTOR_JSON_OUT		= 1 << 2
 };
 
-
-/// known collations
-enum ESphCollation
-{
-	SPH_COLLATION_LIBC_CI,
-	SPH_COLLATION_LIBC_CS,
-	SPH_COLLATION_UTF8_GENERAL_CI,
-	SPH_COLLATION_BINARY,
-
-	SPH_COLLATION_DEFAULT = SPH_COLLATION_LIBC_CI
-};
 
 /// parses given expression, builds evaluator
 /// returns NULL and fills sError on failure

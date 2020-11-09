@@ -413,17 +413,6 @@ public:
 };
 
 
-SphStringCmp_fn CmpFn ( ESphCollation eCollation )
-{
-	switch ( eCollation )
-	{
-		case SPH_COLLATION_LIBC_CI:			return sphCollateLibcCI;
-		case SPH_COLLATION_LIBC_CS:			return sphCollateLibcCS;
-		case SPH_COLLATION_UTF8_GENERAL_CI: return sphCollateUtf8GeneralCI;
-		default:							return sphCollateBinary;
-	}
-}
-
 class IFilter_Str : public IFilter_Attr
 {
 
@@ -442,7 +431,7 @@ class FilterString_c : public IFilter_Str
 {
 public:
 	FilterString_c ( ESphCollation eCollation, bool bEq )
-		: m_fnStrCmp ( CmpFn ( eCollation ) )
+		: m_fnStrCmp ( GetStringCmpFunc ( eCollation ) )
 		, m_dVal ( 0 )
 		, m_bEq ( bEq )
 	{}
@@ -1131,7 +1120,7 @@ protected:
 public:
 	explicit ExprFilterString_c ( ISphExpr * pExpr, ESphCollation eCollation, bool bEq )
 		: ExprFilter_c<ISphFilter> ( pExpr )
-		, m_fnStrCmp ( CmpFn ( eCollation ) )
+		, m_fnStrCmp ( GetStringCmpFunc ( eCollation ) )
 		, m_bEq ( bEq )
 	{}
 

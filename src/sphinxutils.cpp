@@ -2777,8 +2777,8 @@ void sphBacktrace ( int iFD, bool bSafe )
 		sphSafeInfo ( iFD, "Please, create a bug report in our bug tracker (https://github.com/manticoresoftware/manticore/issues)\n"
 			"and attach there:\n"
 			"a) searchd log, b) searchd binary, c) searchd symbols.\n"
-			"Look into the chapter 'Reporting bugs' in the documentation\n"
-			"(http://docs.manticoresearch.com/latest/html/reporting_bugs.html)" );
+			"Look into the chapter 'Reporting bugs' in the manual\n"
+			"(https://manual.manticoresearch.com/Reporting_bugs)" );
 
 	if ( DumpGdb ( iFD ) )
 		return;

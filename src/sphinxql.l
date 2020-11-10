@@ -29,14 +29,20 @@ ALPHA				[a-zA-Z_]+
 %option noyywrap
 %option nounput
 %option reentrant
+%option case-insensitive
+%option batch
+%option align
 
 %x ccomment
 
 %%
 
 "/*"         		{ BEGIN(ccomment); }
-<ccomment>.			{ }
 <ccomment>"*/"		{ BEGIN(INITIAL); }
+<ccomment>[^*\n]+
+<ccomment>"*"[^/]
+<ccomment>"\n"
+
 
 "AGENT"				{ YYSTOREBOUNDS; return TOK_AGENT; }
 "ALL"				{ YYSTOREBOUNDS; return TOK_ALL; }

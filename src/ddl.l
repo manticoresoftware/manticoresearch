@@ -26,9 +26,13 @@ SPACE				[ \t\n\r]
 EXPONENT			[eE](\+|-)?{DIGIT}+
 ALPHA				[a-zA-Z_]+
 
+%option prefix="yy3"
 %option noyywrap
 %option nounput
 %option reentrant
+%option case-insensitive
+%option batch
+%option align
 
 %x ccomment
 

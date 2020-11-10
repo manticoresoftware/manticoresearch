@@ -6969,13 +6969,6 @@ STATIC_ASSERT ( sizeof(g_dSqlStmts)/sizeof(g_dSqlStmts[0])==STMT_TOTAL, STMT_DES
 
 //////////////////////////////////////////////////////////////////////////
 
-#ifdef CMAKE_GENERATED_GRAMMAR
-	#include "bissphinxql.h"
-#else
-	#include "yysphinxql.h"
-#endif
-
-
 class CSphMatchVariant : public CSphMatch
 {
 public:
@@ -6983,9 +6976,9 @@ public:
 	{
 		switch ( tVal.m_iType )
 		{
-			case TOK_QUOTED_STRING :	return strtoul ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
-			case TOK_CONST_INT:			return int(tVal.m_iVal);
-			case TOK_CONST_FLOAT:		return int(tVal.m_fVal); // FIXME? report conversion error
+			case SqlInsert_t::QUOTED_STRING :	return strtoul ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
+			case SqlInsert_t::CONST_INT:			return int(tVal.m_iVal);
+			case SqlInsert_t::CONST_FLOAT:		return int(tVal.m_fVal); // FIXME? report conversion error
 		}
 		return 0;
 	}
@@ -6994,9 +6987,9 @@ public:
 	{
 		switch ( tVal.m_iType )
 		{
-			case TOK_QUOTED_STRING :	return strtoll ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
-			case TOK_CONST_INT:			return tVal.m_iVal;
-			case TOK_CONST_FLOAT:		return int64_t(tVal.m_fVal); // FIXME? report conversion error?
+			case SqlInsert_t::QUOTED_STRING :	return strtoll ( tVal.m_sVal.cstr(), NULL, 10 ); // FIXME? report conversion error?
+			case SqlInsert_t::CONST_INT:			return tVal.m_iVal;
+			case SqlInsert_t::CONST_FLOAT:		return int64_t(tVal.m_fVal); // FIXME? report conversion error?
 		}
 		return 0;
 	}
@@ -7015,11 +7008,11 @@ public:
 				CSphMatch::SetAttr ( tLoc, ToBigInt(tVal) );
 				break;
 			case SPH_ATTR_FLOAT:
-				if ( tVal.m_iType==TOK_QUOTED_STRING )
+				if ( tVal.m_iType==SqlInsert_t::QUOTED_STRING )
 					SetAttrFloat ( tLoc, (float)strtod ( tVal.m_sVal.cstr(), NULL ) ); // FIXME? report conversion error?
-				else if ( tVal.m_iType==TOK_CONST_INT )
+				else if ( tVal.m_iType==SqlInsert_t::CONST_INT )
 					SetAttrFloat ( tLoc, float(tVal.m_iVal) ); // FIXME? report conversion error?
-				else if ( tVal.m_iType==TOK_CONST_FLOAT )
+				else if ( tVal.m_iType==SqlInsert_t::CONST_FLOAT )
 					SetAttrFloat ( tLoc, tVal.m_fVal );
 				break;
 			case SPH_ATTR_STRING:
@@ -7038,7 +7031,7 @@ public:
 	inline bool SetDefaultAttr ( const CSphAttrLocator & tLoc, ESphAttr eTargetType )
 	{
 		SqlInsert_t tVal;
-		tVal.m_iType = TOK_CONST_INT;
+		tVal.m_iType = SqlInsert_t::CONST_INT;
 		tVal.m_iVal = 0;
 		return SetAttr ( tLoc, tVal, eTargetType );
 	}
@@ -8763,13 +8756,13 @@ static void BsonToSqlInsert ( const bson::Bson_c& dBson, SqlInsert_t& tAttr )
 	switch ( dBson.GetType () )
 	{
 	case JSON_INT32:
-	case JSON_INT64: tAttr.m_iType = TOK_CONST_INT;
+	case JSON_INT64: tAttr.m_iType = SqlInsert_t::CONST_INT;
 		tAttr.m_iVal = dBson.Int ();
 		break;
-	case JSON_DOUBLE: tAttr.m_iType = TOK_CONST_FLOAT;
+	case JSON_DOUBLE: tAttr.m_iType = SqlInsert_t::CONST_FLOAT;
 		tAttr.m_fVal = float ( dBson.Double () );
 		break;
-	case JSON_STRING: tAttr.m_iType = TOK_QUOTED_STRING;
+	case JSON_STRING: tAttr.m_iType = SqlInsert_t::QUOTED_STRING;
 		tAttr.m_sVal = dBson.String ();
 	default: break;
 	}
@@ -9663,12 +9656,12 @@ static void HandleMysqlCallPQ ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessi
 	auto &dStmtIndex = tStmt.m_dInsertValues[0];
 	auto &dStmtDocs = tStmt.m_dInsertValues[1];
 
-	if ( dStmtIndex.m_iType!=TOK_QUOTED_STRING )
+	if ( dStmtIndex.m_iType!=SqlInsert_t::QUOTED_STRING )
 	{
 		tOut.Error ( tStmt.m_sStmt, "PQ() argument 1 must be a string" );
 		return;
 	}
-	if ( dStmtDocs.m_iType!=TOK_QUOTED_STRING && dStmtDocs.m_iType!=TOK_CONST_STRINGS )
+	if ( dStmtDocs.m_iType!=SqlInsert_t::QUOTED_STRING && dStmtDocs.m_iType!=SqlInsert_t::CONST_STRINGS )
 	{
 		tOut.Error ( tStmt.m_sStmt, "PQ() argument 2 must be a string or a string list" );
 		return;
@@ -9676,7 +9669,7 @@ static void HandleMysqlCallPQ ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessi
 
 	// document(s)
 	StrVec_t dDocs;
-	if ( dStmtDocs.m_iType==TOK_QUOTED_STRING )
+	if ( dStmtDocs.m_iType==SqlInsert_t::QUOTED_STRING )
 		dDocs.Add ( dStmtDocs.m_sVal );
 	else
 		dDocs.SwapData ( tStmt.m_dCallStrings );
@@ -9685,7 +9678,7 @@ static void HandleMysqlCallPQ ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessi
 	CSphString sError;
 	PercolateOptions_t tOpts;
 	tOpts.m_sIndex = dStmtIndex.m_sVal;
-	SqlParser_c::SplitClusterIndex ( tOpts.m_sIndex, nullptr );
+	SqlParser_SplitClusterIndex ( tOpts.m_sIndex, nullptr );
 	bool bSkipEmpty = false;
 	ARRAY_FOREACH ( i, tStmt.m_dCallOptNames )
 	{
@@ -9693,12 +9686,12 @@ static void HandleMysqlCallPQ ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessi
 		const SqlInsert_t & v = tStmt.m_dCallOptValues[i];
 
 		sOpt.ToLower();
-		int iExpType = TOK_CONST_INT;
+		int iExpType = SqlInsert_t::CONST_INT;
 
 		if ( sOpt=="docs_id" )
 		{
 			tOpts.m_sIdAlias = v.m_sVal;
-			iExpType = TOK_QUOTED_STRING;
+			iExpType = SqlInsert_t::QUOTED_STRING;
 			sphColumnToLowercase ( const_cast<char *>( tOpts.m_sIdAlias.cstr() ) );
 
 		} else if ( sOpt=="docs" )		tOpts.m_bGetDocs = ( v.m_iVal!=0 );
@@ -9711,7 +9704,7 @@ static void HandleMysqlCallPQ ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphSessi
 		else if ( sOpt=="mode" )
 		{
 			auto sMode = v.m_sVal;
-			iExpType = TOK_QUOTED_STRING;
+			iExpType = SqlInsert_t::QUOTED_STRING;
 			sMode.ToLower();
 			if ( sMode=="sparsed" )
 				tOpts.m_eMode = PercolateOptions_t::sparsed;
@@ -10067,22 +10060,22 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 				const SqlInsert_t & tVal = tStmt.m_dInsertValues[iQuerySchemaIdx + c * iExp];
 
 				// sanity checks
-				if ( tVal.m_iType!=TOK_QUOTED_STRING
-					&& tVal.m_iType!=TOK_CONST_INT
-					&& tVal.m_iType!=TOK_CONST_FLOAT
-					&& tVal.m_iType!=TOK_CONST_MVA )
+				if ( tVal.m_iType!=SqlInsert_t::QUOTED_STRING
+					&& tVal.m_iType!=SqlInsert_t::CONST_INT
+					&& tVal.m_iType!=SqlInsert_t::CONST_FLOAT
+					&& tVal.m_iType!=SqlInsert_t::CONST_MVA )
 				{
 					sError.SetSprintf ( "row %d, column %d: internal error: unknown insval type %d", 1+c, 1+iQuerySchemaIdx, tVal.m_iType ); // 1 for human base
 					break;
 				}
-				if ( tVal.m_iType==TOK_CONST_MVA
+				if ( tVal.m_iType==SqlInsert_t::CONST_MVA
 					&& !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET ) )
 				{
 					sError.SetSprintf ( "row %d, column %d: MVA value specified for a non-MVA column", 1+c, 1+iQuerySchemaIdx ); // 1 for human base
 					break;
 				}
 				if ( ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET )
-				&& tVal.m_iType!=TOK_CONST_MVA )
+				&& tVal.m_iType!=SqlInsert_t::CONST_MVA )
 				{
 					sError.SetSprintf ( "row %d, column %d: non-MVA value specified for a MVA column", 1+c, 1+iQuerySchemaIdx ); // 1 for human base
 					break;
@@ -10166,7 +10159,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 				dFields.Add (); // default value
 			else
 			{
-				if ( tStmt.m_dInsertValues [ iQuerySchemaIdx + c * iExp ].m_iType!=TOK_QUOTED_STRING )
+				if ( tStmt.m_dInsertValues [ iQuerySchemaIdx + c * iExp ].m_iType!=SqlInsert_t::QUOTED_STRING )
 				{
 					sError.SetSprintf ( "row %d, column %d: string expected", 1+c, 1+iQuerySchemaIdx ); // 1 for human base
 					break;
@@ -10261,17 +10254,17 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 		tOut.Error ( tStmt.m_sStmt, "SNIPPETS() expects exactly 3 arguments (data, index, query)" );
 		return;
 	}
-	if ( tStmt.m_dInsertValues[0].m_iType!=TOK_QUOTED_STRING && tStmt.m_dInsertValues[0].m_iType!=TOK_CONST_STRINGS )
+	if ( tStmt.m_dInsertValues[0].m_iType!=SqlInsert_t::QUOTED_STRING && tStmt.m_dInsertValues[0].m_iType!=SqlInsert_t::CONST_STRINGS )
 	{
 		tOut.Error ( tStmt.m_sStmt, "SNIPPETS() argument 1 must be a string or a string list" );
 		return;
 	}
-	if ( tStmt.m_dInsertValues[1].m_iType!=TOK_QUOTED_STRING )
+	if ( tStmt.m_dInsertValues[1].m_iType!=SqlInsert_t::QUOTED_STRING )
 	{
 		tOut.Error ( tStmt.m_sStmt, "SNIPPETS() argument 2 must be a string" );
 		return;
 	}
-	if ( tStmt.m_dInsertValues[2].m_iType!=TOK_QUOTED_STRING )
+	if ( tStmt.m_dInsertValues[2].m_iType!=SqlInsert_t::QUOTED_STRING )
 	{
 		tOut.Error ( tStmt.m_sStmt, "SNIPPETS() argument 3 must be a string" );
 		return;
@@ -10291,40 +10284,40 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 		sOpt.ToLower();
 		int iExpType = -1;
 
-		if ( sOpt=="before_match" )				{ q.m_sBeforeMatch = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
-		else if ( sOpt=="after_match" )			{ q.m_sAfterMatch = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
-		else if ( sOpt=="chunk_separator" || sOpt=="snippet_separator" ) { q.m_sChunkSeparator = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
-		else if ( sOpt=="html_strip_mode" )		{ q.m_sStripMode = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
-		else if ( sOpt=="passage_boundary" || sOpt=="snippet_boundary" ) { q.m_ePassageSPZ = GetPassageBoundary(v.m_sVal); iExpType = TOK_QUOTED_STRING; }
+		if ( sOpt=="before_match" )				{ q.m_sBeforeMatch = v.m_sVal; iExpType = SqlInsert_t::QUOTED_STRING; }
+		else if ( sOpt=="after_match" )			{ q.m_sAfterMatch = v.m_sVal; iExpType = SqlInsert_t::QUOTED_STRING; }
+		else if ( sOpt=="chunk_separator" || sOpt=="snippet_separator" ) { q.m_sChunkSeparator = v.m_sVal; iExpType = SqlInsert_t::QUOTED_STRING; }
+		else if ( sOpt=="html_strip_mode" )		{ q.m_sStripMode = v.m_sVal; iExpType = SqlInsert_t::QUOTED_STRING; }
+		else if ( sOpt=="passage_boundary" || sOpt=="snippet_boundary" ) { q.m_ePassageSPZ = GetPassageBoundary(v.m_sVal); iExpType = SqlInsert_t::QUOTED_STRING; }
 
-		else if ( sOpt=="limit" )				{ q.m_iLimit = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
-		else if ( sOpt=="limit_words" )			{ q.m_iLimitWords = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
-		else if ( sOpt=="limit_passages" || sOpt=="limit_snippets" ) { q.m_iLimitPassages = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
-		else if ( sOpt=="around" )				{ q.m_iAround = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
-		else if ( sOpt=="start_passage_id" || sOpt=="start_snippet_id" ) { q.m_iPassageId = (int)v.m_iVal; iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="limit" )				{ q.m_iLimit = (int)v.m_iVal; iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="limit_words" )			{ q.m_iLimitWords = (int)v.m_iVal; iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="limit_passages" || sOpt=="limit_snippets" ) { q.m_iLimitPassages = (int)v.m_iVal; iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="around" )				{ q.m_iAround = (int)v.m_iVal; iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="start_passage_id" || sOpt=="start_snippet_id" ) { q.m_iPassageId = (int)v.m_iVal; iExpType = SqlInsert_t::CONST_INT; }
 		else if ( sOpt=="exact_phrase" )
 		{
 			sError.SetSprintf ( "exact_phrase is deprecated" );
 			break;
 		}
-		else if ( sOpt=="use_boundaries" )		{ q.m_bUseBoundaries = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
-		else if ( sOpt=="weight_order" )		{ q.m_bWeightOrder = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="use_boundaries" )		{ q.m_bUseBoundaries = ( v.m_iVal!=0 ); iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="weight_order" )		{ q.m_bWeightOrder = ( v.m_iVal!=0 ); iExpType = SqlInsert_t::CONST_INT; }
 		else if ( sOpt=="query_mode" )
 		{
 			bool bQueryMode = ( v.m_iVal!=0 );
-			iExpType = TOK_CONST_INT;
+			iExpType = SqlInsert_t::CONST_INT;
 			if ( !bQueryMode )
 			{
 				sError.SetSprintf ( "query_mode=0 is deprecated" );
 				break;
 			}
 		}
-		else if ( sOpt=="force_all_words" )		{ q.m_bForceAllWords = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
-		else if ( sOpt=="load_files" )			{ q.m_uFilesMode = ( v.m_iVal!=0 )?1:0; iExpType = TOK_CONST_INT; }
-		else if ( sOpt=="load_files_scattered" ) { q.m_uFilesMode |= ( v.m_iVal!=0 )?2:0; iExpType = TOK_CONST_INT; }
-		else if ( sOpt=="allow_empty" )			{ q.m_bAllowEmpty = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
-		else if ( sOpt=="emit_zones" )			{ q.m_bEmitZones = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
-		else if ( sOpt=="force_passages" || sOpt=="force_snippets" ) { q.m_bForcePassages = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="force_all_words" )		{ q.m_bForceAllWords = ( v.m_iVal!=0 ); iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="load_files" )			{ q.m_uFilesMode = ( v.m_iVal!=0 )?1:0; iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="load_files_scattered" ) { q.m_uFilesMode |= ( v.m_iVal!=0 )?2:0; iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="allow_empty" )			{ q.m_bAllowEmpty = ( v.m_iVal!=0 ); iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="emit_zones" )			{ q.m_bEmitZones = ( v.m_iVal!=0 ); iExpType = SqlInsert_t::CONST_INT; }
+		else if ( sOpt=="force_passages" || sOpt=="force_snippets" ) { q.m_bForcePassages = ( v.m_iVal!=0 ); iExpType = SqlInsert_t::CONST_INT; }
 		else
 		{
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr() );
@@ -10353,7 +10346,7 @@ void HandleMysqlCallSnippets ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 	q.Setup();
 
 	CSphVector<ExcerptQuery_t> dQueries;
-	if ( tStmt.m_dInsertValues[0].m_iType==TOK_QUOTED_STRING )
+	if ( tStmt.m_dInsertValues[0].m_iType==SqlInsert_t::QUOTED_STRING )
 	{
 		auto& dQuery = dQueries.Add ();
 		dQuery.m_sSource = tStmt.m_dInsertValues[0].m_sVal; // OPTIMIZE?
@@ -10508,9 +10501,9 @@ void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString
 	int iArgs = tStmt.m_dInsertValues.GetLength();
 	if ( iArgs<2
 		|| iArgs>3
-		|| tStmt.m_dInsertValues[0].m_iType!=TOK_QUOTED_STRING
-		|| tStmt.m_dInsertValues[1].m_iType!=TOK_QUOTED_STRING
-		|| ( iArgs==3 && tStmt.m_dInsertValues[2].m_iType!=TOK_CONST_INT ) )
+		|| tStmt.m_dInsertValues[0].m_iType!=SqlInsert_t::QUOTED_STRING
+		|| tStmt.m_dInsertValues[1].m_iType!=SqlInsert_t::QUOTED_STRING
+		|| ( iArgs==3 && tStmt.m_dInsertValues[2].m_iType!=SqlInsert_t::CONST_INT ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, "bad argument count or types in KEYWORDS() call" );
 		return;
@@ -10556,7 +10549,7 @@ void HandleMysqlCallKeywords ( RowBuffer_i & tOut, SqlStmt_t & tStmt, CSphString
 		}
 
 		// post-conf type check
-		if ( bOptInt && tStmt.m_dCallOptValues[i].m_iType!=TOK_CONST_INT )
+		if ( bOptInt && tStmt.m_dCallOptValues[i].m_iType!=SqlInsert_t::CONST_INT )
 		{
 			sError.SetSprintf ( "unexpected option %s type", sOpt.cstr () );
 			tOut.Error ( tStmt.m_sStmt, sError.cstr () );
@@ -10757,9 +10750,9 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 	int iArgs = tStmt.m_dInsertValues.GetLength ();
 	if ( iArgs<2
 			|| iArgs>3
-			|| tStmt.m_dInsertValues[0].m_iType!=TOK_QUOTED_STRING
-			|| tStmt.m_dInsertValues[1].m_iType!=TOK_QUOTED_STRING
-			|| ( iArgs==3 && tStmt.m_dInsertValues[2].m_iType!=TOK_CONST_INT ) )
+			|| tStmt.m_dInsertValues[0].m_iType!=SqlInsert_t::QUOTED_STRING
+			|| tStmt.m_dInsertValues[1].m_iType!=SqlInsert_t::QUOTED_STRING
+			|| ( iArgs==3 && tStmt.m_dInsertValues[2].m_iType!=SqlInsert_t::CONST_INT ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, "bad argument count or types in KEYWORDS() call" );
 		return;
@@ -10774,7 +10767,7 @@ void HandleMysqlCallSuggest ( RowBuffer_i & tOut, SqlStmt_t & tStmt, bool bQuery
 	{
 		CSphString & sOpt = tStmt.m_dCallOptNames[i];
 		sOpt.ToLower ();
-		int iTokType = TOK_CONST_INT;
+		int iTokType = SqlInsert_t::CONST_INT;
 
 		if ( sOpt=="limit" )
 		{
@@ -10989,7 +10982,7 @@ void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 	{
 		// data
 		const CSphSchema *pSchema = &pServed->m_pIndex->GetMatchSchema ();
-		if ( tStmt.m_iIntParam==TOK_TABLE ) // user wants internal schema instead
+		if ( tStmt.m_iIntParam==SqlInsert_t::TABLE ) // user wants internal schema instead
 		{
 			if ( ServedDesc_t::IsMutable ( pServed ) )
 			{

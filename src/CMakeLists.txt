@@ -120,13 +120,12 @@ if ( USE_BISON )
 			OBJECT_DEPENDS ${BISON_SelectParser_OUTPUT_SOURCE} )
 	set_property ( SOURCE sphinxquery.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${BISON_QueryParser_OUTPUT_SOURCE} )
-	set_property ( SOURCE searchd.cpp searchdsql.cpp searchdddl.cpp  gtests_searchd.cpp APPEND PROPERTY
-			OBJECT_DEPENDS ${BISON_SQLParser_OUTPUT_SOURCE} )
-	set_property ( SOURCE searchd.cpp searchdsql.cpp searchdddl.cpp gtests_searchd.cpp APPEND PROPERTY
-			OBJECT_DEPENDS ${BISON_DDLParser_OUTPUT_SOURCE} )
 	set_property ( SOURCE sphinxjson.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${BISON_JsonParser_OUTPUT_SOURCE} )
-
+	set_property ( SOURCE searchdddl.cpp APPEND PROPERTY
+			OBJECT_DEPENDS ${BISON_DDLParser_OUTPUT_SOURCE} )
+	set_property ( SOURCE searchdsql.cpp APPEND PROPERTY
+			OBJECT_DEPENDS ${BISON_SQLParser_OUTPUT_SOURCE} )
 
 	# also add dependencies for tarball (to always have fresh grammar inside)
 	list (APPEND TARBALLDEPENDS ${BISON_ExprParser_OUTPUTS})

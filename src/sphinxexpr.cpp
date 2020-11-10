@@ -3804,7 +3804,7 @@ private:
 
 	bool					CheckForConstSet ( int iArgsNode, int iSkip );
 	int						ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp );
-	int						ParseField ( int iField, const char* sTok, YYSTYPE * lvalp );
+	static int				ParseField ( int iField, const char* sTok, YYSTYPE * lvalp );
 
 	template < typename T >
 	void					WalkTree ( int iRoot, T & FUNCTOR );

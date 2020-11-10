@@ -157,6 +157,22 @@ struct SqlInsert_t
 	int64_t					m_iVal = 0;
 	float					m_fVal = 0.0;
 	AttrValues_p			m_pVals;
+
+	// some internal tokens for bison grammar parser.
+	// originaly we fetched values from parser itself, but it is more convenient to push own values instead.
+	// in order to make it most seamless way, let's follow this manual:
+	// To add new value XXX (if necessary) look into generated bissphinxql.h for TOK_XXX value,
+	// then add the number BOTH into sphinxql.y (to fix this value forever), and into this enum (without TOK_ prefix),
+	// as: for TOK_SYSVAR which is now 268 - change '%token TOK_SYSVAR' to '%token TOK_SYSVAR 268' in bison file,
+	// then add SYSVAR = 268 here.
+	enum Tokens_e {
+		CONST_INT = 260,
+		CONST_FLOAT = 261,
+		CONST_MVA = 262,
+		QUOTED_STRING = 263,
+		CONST_STRINGS = 269,
+		TABLE = 378,
+	};
 };
 
 
@@ -269,102 +285,8 @@ protected:
 };
 
 
-class SqlParser_c : public SqlParserTraits_c
-{
-public:
-	ESphCollation	m_eCollation;
-
-	CSphVector<FilterTreeItem_t> m_dFilterTree;
-	CSphVector<int>	m_dFiltersPerStmt;
-	bool			m_bGotFilterOr = false;
-
-public:
-					SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation );
-
-	void			PushQuery ();
-
-	bool			AddOption ( const SqlNode_t & tIdent );
-	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue );
-	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const SqlNode_t & sArg );
-	bool			AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt> & dNamed );
-	bool			AddInsertOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue );
-	void			AddIndexHint ( IndexHint_e eHint, const SqlNode_t & tValue );
-	void			AddItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc=SPH_AGGR_NONE, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
-	bool			AddItem ( const char * pToken, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
-	bool			AddCount ();
-	void			AliasLastItem ( SqlNode_t * pAlias );
-	void			AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode );
-
-	/// called on transition from an outer select to inner select
-	void			ResetSelect();
-
-	/// called every time we capture a select list item
-	/// (i think there should be a simpler way to track these though)
-	void			SetSelect ( SqlNode_t * pStart, SqlNode_t * pEnd=NULL );
-	bool			AddSchemaItem ( SqlNode_t * pNode );
-	bool			SetMatch ( const SqlNode_t & tValue );
-	void			AddConst ( int iList, const SqlNode_t& tValue );
-	void			SetStatement ( const SqlNode_t & tName, SqlSet_e eSet );
-	bool			AddFloatRangeFilter ( const SqlNode_t & tAttr, float fMin, float fMax, bool bHasEqual, bool bExclude=false );
-	bool			AddIntRangeFilter ( const SqlNode_t & tAttr, int64_t iMin, int64_t iMax, bool bExclude );
-	bool			AddIntFilterGreater ( const SqlNode_t & tAttr, int64_t iVal, bool bHasEqual );
-	bool			AddIntFilterLesser ( const SqlNode_t & tAttr, int64_t iVal, bool bHasEqual );
-	bool			AddUservarFilter ( const SqlNode_t & tCol, const SqlNode_t & tVar, bool bExclude );
-	void			AddGroupBy ( const SqlNode_t & tGroupBy );
-	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd );
-	CSphFilterSettings * AddFilter ( const SqlNode_t & tCol, ESphFilter eType );
-	bool			AddStringFilter ( const SqlNode_t & tCol, const SqlNode_t & tVal, bool bExclude );
-	CSphFilterSettings * AddValuesFilter ( const SqlNode_t & tCol ) { return AddFilter ( tCol, SPH_FILTER_VALUES ); }
-	bool			AddStringListFilter ( const SqlNode_t & tCol, SqlNode_t & tVal, StrList_e eType, bool bInverse=false );
-	bool			AddNullFilter ( const SqlNode_t & tCol, bool bEqualsNull );
-	void			AddHaving ();
-
-	void			FilterGroup ( SqlNode_t & tNode, SqlNode_t & tExpr );
-	void			FilterOr ( SqlNode_t & tNode, const SqlNode_t & tLeft, const SqlNode_t & tRight );
-	void			FilterAnd ( SqlNode_t & tNode, const SqlNode_t & tLeft, const SqlNode_t & tRight );
-	void			SetOp ( SqlNode_t & tNode );
-
-	bool			SetOldSyntax();
-	bool			SetNewSyntax();
-	bool			IsGoodSyntax();
-	bool			IsDeprecatedSyntax() const;
-
-	int				AllocNamedVec ();
-	CSphVector<CSphNamedInt> & GetNamedVec ( int iIndex );
-	void			FreeNamedVec ( int iIndex );
-	bool			UpdateStatement ( SqlNode_t * pNode );
-	bool			DeleteStatement ( SqlNode_t * pNode );
-
-	void			AddUpdatedAttr ( const SqlNode_t & tName, ESphAttr eType ) const;
-	void			UpdateMVAAttr ( const SqlNode_t & tName, const SqlNode_t& dValues );
-	void			UpdateStringAttr ( const SqlNode_t & tCol, const SqlNode_t & tStr );
-	void			SetGroupbyLimit ( int iLimit );
-	void			SetLimit ( int iOffset, int iLimit );
-	void			SetIndex ( const SqlNode_t & tIndex );
-	void			SetIndex ( const SqlNode_t & tIndex, CSphString & sIndex ) const;
-	// split ident ( cluster:index ) to parts
-	static void		SplitClusterIndex ( CSphString & sIndex, CSphString * pCluster );
-
-private:
-	bool						m_bGotQuery = false;
-	BYTE						m_uSyntaxFlags = 0;
-	bool						m_bNamedVecBusy = false;
-	CSphVector<CSphNamedInt>	m_dNamedVec;
-
-	void			AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
-	void			GenericStatement ( SqlNode_t * pNode, SqlStmt_e iStmt );
-
-	bool			CheckInteger ( const CSphString & sOpt, const CSphString & sVal ) const;
-};
-
-
 bool	sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation );
 bool	PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, const CSphSchema & tSchema, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError );
-
-// get tokens from sphinxql
-int		sphGetTokTypeInt();
-int		sphGetTokTypeFloat();
-int		sphGetTokTypeStr();
-int		sphGetTokTypeConstMVA();
+void	SqlParser_SplitClusterIndex ( CSphString & sIndex, CSphString * pCluster );
 
 #endif // _searchdsql_

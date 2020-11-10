@@ -842,7 +842,7 @@ bool ParseJsonInsert ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDo
 
 	tStmt.m_dInsertSchema.Add ( sphGetDocidName() );
 	SqlInsert_t & tId = tStmt.m_dInsertValues.Add();
-	tId.m_iType = sphGetTokTypeInt();
+	tId.m_iType = SqlInsert_t::CONST_INT;
 	tId.m_iVal = tDocId;
 
 	// "doc" is optional
@@ -857,19 +857,19 @@ bool ParseJsonInsert ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDo
 			SqlInsert_t & tNewValue = tStmt.m_dInsertValues.Add();
 			if ( tItem.IsStr() )
 			{
-				tNewValue.m_iType = sphGetTokTypeStr();
+				tNewValue.m_iType = SqlInsert_t::QUOTED_STRING;
 				tNewValue.m_sVal = tItem.StrVal();
 			} else if ( tItem.IsDbl() )
 			{
-				tNewValue.m_iType = sphGetTokTypeFloat();
+				tNewValue.m_iType = SqlInsert_t::CONST_FLOAT;
 				tNewValue.m_fVal = tItem.FltVal();
 			} else if ( tItem.IsInt() || tItem.IsBool() )
 			{
-				tNewValue.m_iType = sphGetTokTypeInt();
+				tNewValue.m_iType = SqlInsert_t::CONST_INT;
 				tNewValue.m_iVal = tItem.IntVal();
 			} else if ( tItem.IsArray() )
 			{
-				tNewValue.m_iType = sphGetTokTypeConstMVA();
+				tNewValue.m_iType = SqlInsert_t::CONST_MVA;
 				tNewValue.m_pVals = new RefcountedVector_c<SphAttr_t>;
 
 				for ( const auto & tArrayItem : tItem )
@@ -884,7 +884,7 @@ bool ParseJsonInsert ( const JsonObj_c & tRoot, SqlStmt_t & tStmt, DocID_t & tDo
 				}
 			} else if ( tItem.IsObj() )
 			{
-				tNewValue.m_iType = sphGetTokTypeStr();
+				tNewValue.m_iType = SqlInsert_t::QUOTED_STRING;
 				tNewValue.m_sVal = tItem.AsString();
 			} else
 			{

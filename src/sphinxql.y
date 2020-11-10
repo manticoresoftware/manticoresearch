@@ -10,18 +10,18 @@
 %pure-parser
 %error-verbose
 
-%token	TOK_IDENT
+%token	TOK_IDENT "identifier"
 %token	TOK_ATIDENT
-%token	TOK_CONST_INT
-%token	TOK_CONST_FLOAT
-%token	TOK_CONST_MVA
-%token	TOK_QUOTED_STRING
-%token	TOK_USERVAR
-%token	TOK_SYSVAR
-%token	TOK_CONST_STRINGS
+%token	TOK_CONST_INT 260 "integer"
+%token	TOK_CONST_FLOAT 261 "float"
+%token	TOK_CONST_MVA 262 "multivalues"
+%token	TOK_QUOTED_STRING 263 "string"
+%token	TOK_USERVAR "@uservar"
+%token	TOK_SYSVAR "@@sysvar"
+%token	TOK_CONST_STRINGS 269 "constant string list"
 %token	TOK_BAD_NUMERIC
 %token	TOK_SUBKEY
-%token	TOK_DOT_NUMBER
+%token	TOK_DOT_NUMBER ".float"
 
 %token	TOK_AGENT
 %token	TOK_ALL
@@ -123,7 +123,7 @@
 %token	TOK_STRING
 %token	TOK_SYSFILTERS
 %token	TOK_SUM
-%token	TOK_TABLE
+%token	TOK_TABLE 378
 %token	TOK_TABLES
 %token	TOK_THREADS
 %token	TOK_TO
@@ -141,6 +141,10 @@
 %token	TOK_WHERE
 %token	TOK_WITH
 %token	TOK_WITHIN
+
+%token	TOK_LTE "<="
+%token	TOK_GTE ">="
+%token	TOK_NE "!="
 
 %left TOK_OR
 %left TOK_AND

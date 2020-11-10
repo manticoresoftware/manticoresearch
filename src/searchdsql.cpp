@@ -18,78 +18,6 @@
 
 extern int g_iAgentQueryTimeoutMs;	// global (default). May be override by index-scope values, if one specified
 
-#define YYSTYPE SqlNode_t
-
-									// unused parameter, simply to avoid type clash between all my yylex() functions
-#define YY_DECL static int my_lex ( YYSTYPE * lvalp, void * yyscanner, SqlParser_c * pParser )
-
-#if USE_WINDOWS
-#define YY_NO_UNISTD_H 1
-#endif
-
-#ifdef CMAKE_GENERATED_LEXER
-	#ifdef __GNUC__
-		#pragma GCC diagnostic push 
-		#pragma GCC diagnostic ignored "-Wsign-compare"
-		#pragma GCC diagnostic ignored "-Wpragmas"
-		#pragma GCC diagnostic ignored "-Wunneeded-internal-declaration"
-	#endif
-
-	#include "flexsphinxql.c"
-
-	#ifdef __GNUC__
-		#pragma GCC diagnostic pop
-	#endif
-
-#else
-	#include "llsphinxql.c"
-#endif
-
-void yyerror ( SqlParser_c * pParser, const char * sMessage )
-{
-	// flex put a zero at last token boundary; make it undo that
-	yylex_unhold ( pParser->m_pScanner );
-
-	// create our error message
-	pParser->m_pParseError->SetSprintf ( "%s %s near '%s'", pParser->m_sErrorHeader.cstr(), sMessage,
-		pParser->m_pLastTokenStart ? pParser->m_pLastTokenStart : "(null)" );
-
-	// fixup TOK_xxx thingies
-	char * s = const_cast<char*> ( pParser->m_pParseError->cstr() );
-	char * d = s;
-	while ( *s )
-	{
-		if ( strncmp ( s, "TOK_", 4 )==0 )
-			s += 4;
-		else
-			*d++ = *s++;
-	}
-	*d = '\0';
-}
-
-
-#ifndef NDEBUG
-// using a proxy to be possible to debug inside yylex
-static int yylex ( YYSTYPE * lvalp, SqlParser_c * pParser )
-{
-	int res = my_lex ( lvalp, pParser->m_pScanner, pParser );
-	return res;
-}
-#else
-static int yylex ( YYSTYPE * lvalp, SqlParser_c * pParser )
-{
-	return my_lex ( lvalp, pParser->m_pScanner, pParser );
-}
-#endif
-
-#ifdef CMAKE_GENERATED_GRAMMAR
-	#include "bissphinxql.c"
-#else
-	#include "yysphinxql.c"
-#endif
-
-//////////////////////////////////////////////////////////////////////////
-
 SqlStmt_t::SqlStmt_t()
 {
 	m_tQuery.m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
@@ -170,6 +98,169 @@ CSphString SqlParserTraits_c::ToStringUnescape ( const SqlNode_t & tNode ) const
 	assert ( tNode.m_iType>=0 );
 	return SqlUnescape ( m_pBuf + tNode.m_iStart, tNode.m_iEnd - tNode.m_iStart );
 }
+
+//////////////////////////////////////////////////////////////////////////
+
+
+class SqlParser_c : public SqlParserTraits_c
+{
+public:
+	ESphCollation	m_eCollation;
+
+	CSphVector<FilterTreeItem_t> m_dFilterTree;
+	CSphVector<int>	m_dFiltersPerStmt;
+	bool			m_bGotFilterOr = false;
+
+public:
+					SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation );
+
+	void			PushQuery ();
+
+	void			DebugStmt ();
+	bool			AddOption ( const SqlNode_t & tIdent );
+	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue );
+	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const SqlNode_t & sArg );
+	bool			AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt> & dNamed );
+	bool			AddInsertOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue );
+	void			AddIndexHint ( IndexHint_e eHint, const SqlNode_t & tValue );
+	void			AddItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc=SPH_AGGR_NONE, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
+	bool			AddItem ( const char * pToken, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
+	bool			AddCount ();
+	void			AliasLastItem ( SqlNode_t * pAlias );
+	void			AddInsval ( CSphVector<SqlInsert_t> & dVec, const SqlNode_t & tNode );
+
+	/// called on transition from an outer select to inner select
+	void			ResetSelect();
+
+	/// called every time we capture a select list item
+	/// (i think there should be a simpler way to track these though)
+	void			SetSelect ( SqlNode_t * pStart, SqlNode_t * pEnd=NULL );
+	bool			AddSchemaItem ( SqlNode_t * pNode );
+	bool			SetMatch ( const SqlNode_t & tValue );
+	void			AddConst ( int iList, const SqlNode_t& tValue );
+	void			SetStatement ( const SqlNode_t & tName, SqlSet_e eSet );
+	bool			AddFloatRangeFilter ( const SqlNode_t & tAttr, float fMin, float fMax, bool bHasEqual, bool bExclude=false );
+	bool			AddIntRangeFilter ( const SqlNode_t & tAttr, int64_t iMin, int64_t iMax, bool bExclude );
+	bool			AddIntFilterGreater ( const SqlNode_t & tAttr, int64_t iVal, bool bHasEqual );
+	bool			AddIntFilterLesser ( const SqlNode_t & tAttr, int64_t iVal, bool bHasEqual );
+	bool			AddUservarFilter ( const SqlNode_t & tCol, const SqlNode_t & tVar, bool bExclude );
+	void			AddGroupBy ( const SqlNode_t & tGroupBy );
+	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd );
+	CSphFilterSettings * AddFilter ( const SqlNode_t & tCol, ESphFilter eType );
+	bool			AddStringFilter ( const SqlNode_t & tCol, const SqlNode_t & tVal, bool bExclude );
+	CSphFilterSettings * AddValuesFilter ( const SqlNode_t & tCol ) { return AddFilter ( tCol, SPH_FILTER_VALUES ); }
+	bool			AddStringListFilter ( const SqlNode_t & tCol, SqlNode_t & tVal, StrList_e eType, bool bInverse=false );
+	bool			AddNullFilter ( const SqlNode_t & tCol, bool bEqualsNull );
+	void			AddHaving ();
+
+	void			FilterGroup ( SqlNode_t & tNode, SqlNode_t & tExpr );
+	void			FilterOr ( SqlNode_t & tNode, const SqlNode_t & tLeft, const SqlNode_t & tRight );
+	void			FilterAnd ( SqlNode_t & tNode, const SqlNode_t & tLeft, const SqlNode_t & tRight );
+	void			SetOp ( SqlNode_t & tNode );
+
+	bool			SetOldSyntax();
+	bool			SetNewSyntax();
+	bool			IsGoodSyntax();
+	bool			IsDeprecatedSyntax() const;
+
+	int				AllocNamedVec ();
+	CSphVector<CSphNamedInt> & GetNamedVec ( int iIndex );
+	void			FreeNamedVec ( int iIndex );
+	bool			UpdateStatement ( SqlNode_t * pNode );
+	bool			DeleteStatement ( SqlNode_t * pNode );
+
+	void			AddUpdatedAttr ( const SqlNode_t & tName, ESphAttr eType ) const;
+	void			UpdateMVAAttr ( const SqlNode_t & tName, const SqlNode_t& dValues );
+	void			UpdateStringAttr ( const SqlNode_t & tCol, const SqlNode_t & tStr );
+	void			SetGroupbyLimit ( int iLimit );
+	void			SetLimit ( int iOffset, int iLimit );
+	void			SetIndex ( const SqlNode_t & tIndex );
+	void			SetIndex ( const SqlNode_t & tIndex, CSphString & sIndex ) const;
+	// split ident ( cluster:index ) to parts
+
+private:
+	bool						m_bGotQuery = false;
+	BYTE						m_uSyntaxFlags = 0;
+	bool						m_bNamedVecBusy = false;
+	CSphVector<CSphNamedInt>	m_dNamedVec;
+
+	void			AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
+	void			GenericStatement ( SqlNode_t * pNode, SqlStmt_e iStmt );
+
+	bool			CheckInteger ( const CSphString & sOpt, const CSphString & sVal ) const;
+};
+
+
+
+#define YYSTYPE SqlNode_t
+
+									// unused parameter, simply to avoid type clash between all my yylex() functions
+#define YY_DECL static int my_lex ( YYSTYPE * lvalp, void * yyscanner, SqlParser_c * pParser )
+
+#if USE_WINDOWS
+#define YY_NO_UNISTD_H 1
+#endif
+
+#ifdef CMAKE_GENERATED_LEXER
+	#ifdef __GNUC__
+		#pragma GCC diagnostic push
+		#pragma GCC diagnostic ignored "-Wsign-compare"
+		#pragma GCC diagnostic ignored "-Wpragmas"
+		#pragma GCC diagnostic ignored "-Wunneeded-internal-declaration"
+	#endif
+
+	#include "flexsphinxql.c"
+
+	#ifdef __GNUC__
+		#pragma GCC diagnostic pop
+	#endif
+
+#else
+	#include "llsphinxql.c"
+#endif
+
+void yyerror ( SqlParser_c * pParser, const char * sMessage )
+{
+	// flex put a zero at last token boundary; make it undo that
+	yylex_unhold ( pParser->m_pScanner );
+
+	// create our error message
+	pParser->m_pParseError->SetSprintf ( "%s %s near '%s'", pParser->m_sErrorHeader.cstr(), sMessage,
+		pParser->m_pLastTokenStart ? pParser->m_pLastTokenStart : "(null)" );
+
+	// fixup TOK_xxx thingies
+	char * s = const_cast<char*> ( pParser->m_pParseError->cstr() );
+	char * d = s;
+	while ( *s )
+	{
+		if ( strncmp ( s, "TOK_", 4 )==0 )
+			s += 4;
+		else
+			*d++ = *s++;
+	}
+	*d = '\0';
+}
+
+
+#ifndef NDEBUG
+// using a proxy to be possible to debug inside yylex
+static int yylex ( YYSTYPE * lvalp, SqlParser_c * pParser )
+{
+	int res = my_lex ( lvalp, pParser->m_pScanner, pParser );
+	return res;
+}
+#else
+static int yylex ( YYSTYPE * lvalp, SqlParser_c * pParser )
+{
+	return my_lex ( lvalp, pParser->m_pScanner, pParser );
+}
+#endif
+
+#ifdef CMAKE_GENERATED_GRAMMAR
+	#include "bissphinxql.c"
+#else
+	#include "yysphinxql.c"
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1369,17 +1460,17 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 void SqlParser_c::SetIndex ( const SqlNode_t & tIndex, CSphString & sIndex ) const
 {
 	ToString ( sIndex, tIndex );
-	SplitClusterIndex ( sIndex, nullptr );
+	SqlParser_SplitClusterIndex ( sIndex, nullptr );
 }
 
 void SqlParser_c::SetIndex ( const SqlNode_t & tIndex )
 {
 	assert ( m_pStmt );
 	ToString ( m_pStmt->m_sIndex, tIndex );
-	SplitClusterIndex ( m_pStmt->m_sIndex, &m_pStmt->m_sCluster );
+	SqlParser_SplitClusterIndex ( m_pStmt->m_sIndex, &m_pStmt->m_sCluster );
 }
 
-void SqlParser_c::SplitClusterIndex ( CSphString & sIndex, CSphString * pCluster )
+void SqlParser_SplitClusterIndex ( CSphString & sIndex, CSphString * pCluster )
 {
 	if ( sIndex.IsEmpty() )
 		return;
@@ -1520,27 +1611,4 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 	}
 
 	return ( iRes==0 );
-}
-
-
-int sphGetTokTypeInt()
-{
-	return TOK_CONST_INT;
-}
-
-
-int sphGetTokTypeFloat()
-{
-	return TOK_CONST_FLOAT;
-}
-
-
-int sphGetTokTypeStr()
-{
-	return TOK_QUOTED_STRING;
-}
-
-int sphGetTokTypeConstMVA()
-{
-	return TOK_CONST_MVA;
 }

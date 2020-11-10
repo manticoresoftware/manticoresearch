@@ -417,7 +417,19 @@ TEST_F ( TJson, bson_Double )
 	ASSERT_EQ ( tst[6].Double (), 1.13 );
 	ASSERT_EQ ( tst[7].Double (), 0.0 );
 	ASSERT_EQ ( tst[8].Double (), 0.0 );
-	ASSERT_EQ ( tst[8].Double (), 0.0 );
+	ASSERT_EQ ( tst[9].Double (), 0.0 );
+}
+
+TEST_F ( TJson, bson_ScientificDouble )
+{
+	auto tst = Bsons ( R"([1e-5, 1e5, -1e-5, -1e5, 6.022e+3, 1.4738223E-1])" );
+
+	ASSERT_FLOAT_EQ ( tst[0].Double (), 0.00001 );
+	ASSERT_FLOAT_EQ ( tst[1].Double (), 100000.0 );
+	ASSERT_FLOAT_EQ ( tst[2].Double (), -0.00001 );
+	ASSERT_FLOAT_EQ ( tst[3].Double (), -100000.0 );
+	ASSERT_FLOAT_EQ ( tst[4].Double (), 6022.0 );
+	ASSERT_FLOAT_EQ ( tst[5].Double (), 0.14738223 );
 }
 
 // test bson::String
@@ -434,7 +446,23 @@ TEST_F ( TJson, bson_String )
 	ASSERT_STREQ ( tst[6].String ().cstr (), "1.13" );
 	ASSERT_STREQ ( tst[7].String ().cstr (), "123abc" );
 	ASSERT_STREQ ( tst[8].String ().cstr (), "" );
-	ASSERT_STREQ ( tst[8].String ().cstr (), "" );
+	ASSERT_STREQ ( tst[9].String ().cstr (), "" );
+}
+
+TEST_F ( TJson, bson_Stringvec )
+{
+	auto szJson = R"({sv:["one","two","three" , "четыре"],gid:315})";
+	Bson_c tst = Bson ( szJson );
+
+	ESphJsonType dTypes[] = {JSON_STRING_VECTOR, JSON_INT32};
+	int iIdx = 0;
+	tst.ForEach ( [&] ( const NodeHandle_t & dNode ) {
+		ASSERT_EQ ( dNode.second, dTypes[iIdx++] );
+	} );
+
+	CSphString sBack;
+	ASSERT_TRUE (tst.BsonToJson ( sBack ));
+	ASSERT_STREQ ( sBack.cstr(), R"({"sv":["one","two","three","четыре"],"gid":315})");
 }
 
 // "foreach" over the vec
@@ -1220,7 +1248,7 @@ TEST ( bench, DISABLED_bson_vs_cjson )
 	for ( auto i = 0; i<uLoops; ++i )
 	{
 		sBuf.SetBinary ( sLiteral, iLen );
-		auto buf = ( char * ) sBuf.cstr ();
+		auto buf = (char *) sBuf.cstr ();
 		auto pBson = cJSON_Parse ( buf );
 		CSphString sError;
 
@@ -1230,7 +1258,26 @@ TEST ( bench, DISABLED_bson_vs_cjson )
 
 	}
 	iTimeSpan += sphMicroTimer ();
-	std::cout << "\n" << uLoops << " of cJson parse took " << iTimeSpan << " uSec, payload " << ( int64_t ) pRes;
+	std::cout << "\n" << uLoops << " of cJson parse took " << iTimeSpan << " uSec, payload " << (int64_t) pRes;
+
+	iTimeSpan = -sphMicroTimer ();
+	for ( auto i = 0; i<uLoops; ++i )
+	{
+		sBuf.SetBinary ( sLiteral, iLen );
+		auto buf = ( char * ) sBuf.cstr ();
+		auto pCjson = cJSON_Parse ( buf );
+		CSphString sError;
+
+		pRes = cJSON_GetObjectItem ( pCjson, "query" );
+		CSphVector<BYTE> m_Bson ( iLen );
+		bson::cJsonToBson ( pCjson, m_Bson, false, false );
+
+		if ( pCjson )
+			cJSON_Delete ( pCjson );
+
+	}
+	iTimeSpan += sphMicroTimer ();
+	std::cout << "\n" << uLoops << " of cJson and to Bson parse took " << iTimeSpan << " uSec, payload " << ( int64_t ) pRes;
 
 	StringBuilder_c sError;
 	auto pCjson = cJSON_Parse ( sLiteral );

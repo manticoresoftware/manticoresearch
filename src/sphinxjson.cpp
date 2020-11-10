@@ -778,7 +778,7 @@ public:
 
 // unused parameter, simply to avoid type clash between all my yylex() functions
 #define YY_NO_UNISTD_H 1
-#define YY_DECL static int my_lex ( YYSTYPE * lvalp, void * yyscanner, JsonParser_c * pParser )
+#define YY_DECL inline static int my_lex ( YYSTYPE * lvalp, void * yyscanner, JsonParser_c * pParser )
 
 #ifdef CMAKE_GENERATED_LEXER
 
@@ -805,10 +805,21 @@ void yyerror ( JsonParser_c * pParser, const char * sMessage )
 	pParser->m_sError.Sprintf ( "%s near '%s'", sMessage, pParser->m_pLastToken );
 }
 
+#ifndef NDEBUG
+
+// using a proxy to be possible to debug inside yylex
 static int yylex ( YYSTYPE * lvalp, JsonParser_c * pParser )
+{
+	int res = my_lex ( lvalp, pParser->m_pScanner, pParser );
+	return res;
+}
+
+#else
+inline static int yylex ( YYSTYPE * lvalp, JsonParser_c * pParser )
 {
 	return my_lex ( lvalp, pParser->m_pScanner, pParser );
 }
+#endif
 
 #ifdef CMAKE_GENERATED_GRAMMAR
 	#include "bissphinxjson.c"
@@ -932,6 +943,29 @@ int sphJsonNodeSize ( ESphJsonType eType, const BYTE *pData )
 }
 
 
+int sphJsonSingleNodeSize ( ESphJsonType eType )
+{
+	switch ( eType )
+	{
+	case JSON_INT32_VECTOR:
+	case JSON_INT64_VECTOR:
+	case JSON_DOUBLE_VECTOR:
+	case JSON_STRING:
+	case JSON_STRING_VECTOR:
+	case JSON_MIXED_VECTOR:
+	case JSON_OBJECT:
+	case JSON_ROOT:
+		return -1;
+	case JSON_INT32:
+		return 4;
+	case JSON_INT64:
+	case JSON_DOUBLE:
+		return 8;
+	default:
+		return 0;
+	}
+}
+
 void sphJsonSkipNode ( ESphJsonType eType, const BYTE ** ppData )
 {
 	int iSize = sphJsonNodeSize ( eType, *ppData );
@@ -975,6 +1009,20 @@ int sphJsonFieldLength ( ESphJsonType eType, const BYTE * pData )
 		return iCount;
 	default:
 		return 0;
+	}
+}
+
+
+ESphJsonType sphJsonGetCoreType ( ESphJsonType eType )
+{
+	switch ( eType )
+	{
+	case JSON_INT32_VECTOR: return JSON_INT32;
+	case JSON_INT64_VECTOR: return JSON_INT64;
+	case JSON_DOUBLE_VECTOR: return JSON_DOUBLE;
+	case JSON_STRING_VECTOR: return JSON_STRING;
+	default:
+		return JSON_EOF;
 	}
 }
 
@@ -2120,6 +2168,20 @@ void bson::ForEach ( const NodeHandle_t &tLocator, Action_f&& fAction )
 			sphJsonSkipNode ( eType, &p );
 		}
 	}
+	case JSON_INT32_VECTOR:
+	case JSON_INT64_VECTOR:
+	case JSON_DOUBLE_VECTOR:
+	{
+		auto eType = sphJsonGetCoreType ( tLocator.second );
+		auto iSize = sphJsonSingleNodeSize ( eType );
+		int iLen = sphJsonUnpackInt ( &p );
+		for ( int i = 0; i<iLen; ++i )
+		{
+			fAction ( { p, eType } );
+			p += iSize;
+		}
+		break;
+	}
 	default: break;
 	}
 }
@@ -2169,6 +2231,20 @@ void bson::ForEach ( const NodeHandle_t &tLocator, NamedAction_f&& fAction )
 			fAction ( std::move (sName), { p, eType } );
 			sphJsonSkipNode ( eType, &p );
 		}
+	}
+	case JSON_INT32_VECTOR:
+	case JSON_INT64_VECTOR:
+	case JSON_DOUBLE_VECTOR:
+	{
+		auto eType = sphJsonGetCoreType ( tLocator.second );
+		auto iSize = sphJsonSingleNodeSize ( eType );
+		int iLen = sphJsonUnpackInt ( &p );
+		for ( int i = 0; i<iLen; ++i )
+		{
+			fAction ( "", { p, eType } );
+			p += iSize;
+		}
+		break;
 	}
 	default: break;
 	}
@@ -2220,6 +2296,21 @@ void bson::ForSome ( const NodeHandle_t &tLocator, CondAction_f&& fAction )
 				return;
 			sphJsonSkipNode ( eType, &p );
 		}
+	}
+	case JSON_INT32_VECTOR:
+	case JSON_INT64_VECTOR:
+	case JSON_DOUBLE_VECTOR:
+	{
+		auto eType = sphJsonGetCoreType ( tLocator.second );
+		auto iSize = sphJsonSingleNodeSize ( eType );
+		int iLen = sphJsonUnpackInt ( &p );
+		for ( int i = 0; i<iLen; ++i )
+		{
+			if ( !fAction ( { p, eType } ) )
+				return;
+			p += iSize;
+		}
+		break;
 	}
 	default: break;
 	}

@@ -5,7 +5,7 @@
 #endif
 %}
 
-%lex-param		{ JsonParser_c * pParser }
+%lex-param	{ JsonParser_c * pParser }
 %parse-param	{ JsonParser_c * pParser }
 %pure-parser
 %error-verbose
@@ -103,8 +103,8 @@ value_list:
 			}
 			$$ = JsonNode_t();
 			$$.m_eType = JSON_MIXED_VECTOR;
-            $$.m_dChildren.m_iStart = $1.m_dChildren.m_iStart;
-            $$.m_dChildren.m_iLen = $1.m_dChildren.m_iLen+1;
+			$$.m_dChildren.m_iStart = $1.m_dChildren.m_iStart;
+			$$.m_dChildren.m_iLen = $1.m_dChildren.m_iLen+1;
 			$$.m_iNext = pParser->m_dNodes[$1.m_iNext].m_iNext = pParser->m_dNodes.GetLength();
 			pParser->AddNode($3);
 		}

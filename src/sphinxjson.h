@@ -271,6 +271,9 @@ const BYTE * sphJsonFieldFormat ( JsonEscapedBuilder & sOut, const BYTE * pData,
 /// compute key mask (for Bloom filtering) from the key name
 DWORD sphJsonKeyMask ( const char * sKey, int iLen );
 
+/// returns core type for collections (like JSON_INT32 for JSON_INT32_VECTOR), or JSON_EOF if not suitable
+ESphJsonType sphJsonGetCoreType ( ESphJsonType eType );
+
 /// find first value in SphinxBSON blob, return associated type
 ESphJsonType sphJsonFindFirst ( const BYTE ** ppData );
 
@@ -286,6 +289,9 @@ bool sphJsonNameSplit ( const char * sName, CSphString * sColumn=nullptr, CSphSt
 /// compute node size, in bytes
 /// returns -1 when data itself is required to compute the size, but pData is NULL
 int sphJsonNodeSize ( ESphJsonType eType, const BYTE * pData );
+
+/// size of note type eType (-1 for arrays)
+int sphJsonSingleNodeSize ( ESphJsonType eType );
 
 /// skip the current node, and update the pointer
 void sphJsonSkipNode ( ESphJsonType eType, const BYTE ** ppData );
@@ -424,19 +430,19 @@ double Double ( const NodeHandle_t & tLocator );
 CSphString String ( const NodeHandle_t & tLocator );
 inline bool IsNullNode ( const NodeHandle_t & dNode ) { return dNode==nullnode; }
 
-// iterate over mixed vec/ string vec/ object (without names).
+// iterate over collection (without names).
 using Action_f = std::function<void ( const NodeHandle_t &tNode )>;
 void ForEach ( const NodeHandle_t &tLocator, Action_f&& fAction );
 
-// iterate over mixed vec/ string vec/ object (incl. names).
+// iterate over collection (incl. names).
 using NamedAction_f = std::function<void ( CSphString&& sName, const NodeHandle_t &tNode )>;
 void ForEach ( const NodeHandle_t &tLocator, NamedAction_f&& fAction );
 
-// iterate over mixed vec/ string vec/ object (without names). Return false from action means 'stop iteration'
+// iterate over collection (without names). Return false from action means 'stop iteration'
 using CondAction_f = std::function<bool ( const NodeHandle_t &tNode )>;
 void ForSome ( const NodeHandle_t &tLocator, CondAction_f&& fAction );
 
-// iterate over mixed vec/ string vec/ object (incl. names).  Return false from action means 'stop iteration'
+// iterate over collection (incl. names). Return false from action means 'stop iteration'
 using CondNamedAction_f = std::function<bool ( CSphString&& sName, const NodeHandle_t &tNode )>;
 void ForSome ( const NodeHandle_t &tLocator, CondNamedAction_f&& fAction );
 

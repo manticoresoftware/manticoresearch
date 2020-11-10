@@ -146,7 +146,7 @@ if ( USE_FLEX )
 	set ( FLEX_DIR "${MANTICORE_BINARY_DIR}/config" )
 
 	FLEX_TARGET ( SQLlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql.l" ${FLEX_DIR}/flexsphinxql.c COMPILE_FLAGS "-i" )
-	FLEX_TARGET ( Jsonlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxjson.l" ${FLEX_DIR}/flexsphinxjson.c COMPILE_FLAGS "-i -Pyy2" )
+	FLEX_TARGET ( Jsonlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxjson.l" ${FLEX_DIR}/flexsphinxjson.c )
 	FLEX_TARGET ( DDLlex "${CMAKE_CURRENT_SOURCE_DIR}/ddl.l" ${FLEX_DIR}/flexddl.c COMPILE_FLAGS "-i -Pyy3" )
 
 	set_property ( SOURCE searchdsql.cpp gtests_searchd.cpp APPEND PROPERTY

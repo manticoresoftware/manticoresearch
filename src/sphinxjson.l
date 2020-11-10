@@ -18,14 +18,24 @@
 
 %}
 
-DIGIT				[0-9]
 ID					[a-zA-Z_][a-zA-Z_0-9]*
-EXPONENT			[eE](\+|-)?{DIGIT}+
 SPACE				[ \t\n\r]
+DIGIT				[0-9]
+SIGN                [+-]?
+EXPONENT			[eE]{SIGN}{DIGIT}+
+I                   {DIGIT}+
+FLOAT_CONSTANT      ({I}\.{I}?|{I}?\.{I}){EXPONENT}?
+EXP_CONSTANT        {I}{EXPONENT}
 
+%option prefix="yy2"
 %option noyywrap
 %option nounput
 %option reentrant
+%option case-insensitive
+%option batch
+%option align
+%option fast
+%option 8bit
 
 %x ccomment
 
@@ -33,25 +43,24 @@ SPACE				[ \t\n\r]
 
 "//"         		{ BEGIN(ccomment); }
 "#"         		{ BEGIN(ccomment); }
-<ccomment>.			{ }
+<ccomment>[^\n]+    { }
 <ccomment>"\n"		{ BEGIN(INITIAL); }
-
-"true"					{ STORE_BOUNDS; lvalp->m_eType = JSON_TRUE; return TOK_TRUE; }
-"false"					{ STORE_BOUNDS; lvalp->m_eType = JSON_FALSE; return TOK_FALSE; }
-"null"					{ STORE_BOUNDS; lvalp->m_eType = JSON_NULL; return TOK_NULL; }
 
 '([^'\\]|\\.|\\\\)*'	{ STORE_BOUNDS; lvalp->m_eType = JSON_STRING; return TOK_STRING; }
 \"([^"\\]|\\.|\\\\)*\"	{ STORE_BOUNDS; lvalp->m_eType = JSON_STRING; return TOK_STRING; }
 
--*{DIGIT}+\.{DIGIT}*{EXPONENT}?	{ STORE_BOUNDS; lvalp->m_eType = JSON_DOUBLE; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_FLOAT; }
--*\.{DIGIT}+{EXPONENT}?	{ STORE_BOUNDS; lvalp->m_eType = JSON_DOUBLE; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_FLOAT; }
--*{DIGIT}*\.{DIGIT}*	{ STORE_BOUNDS; lvalp->m_eType = JSON_DOUBLE; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_FLOAT; }
--*{DIGIT}+{EXPONENT}	{ STORE_BOUNDS; lvalp->m_eType = JSON_DOUBLE; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_FLOAT; }
--*{DIGIT}+				{ STORE_BOUNDS; lvalp->m_eType = JSON_INT64; lvalp->m_iValue = strtoll ( yytext, NULL, 10 ); return TOK_INT; }
+"true"					{ lvalp->m_eType = JSON_TRUE; return TOK_TRUE; }
+"false"					{ lvalp->m_eType = JSON_FALSE; return TOK_FALSE; }
+"null"					{ lvalp->m_eType = JSON_NULL; return TOK_NULL; }
+
+
+{SIGN}{FLOAT_CONSTANT}	|
+{SIGN}{EXP_CONSTANT}	{ lvalp->m_eType = JSON_DOUBLE; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_FLOAT; }
+{SIGN}{DIGIT}+			{ lvalp->m_eType = JSON_INT64; lvalp->m_iValue = strtoll ( yytext, NULL, 10 ); return TOK_INT; }
 {ID}					{ STORE_BOUNDS; lvalp->m_eType = JSON_STRING; return TOK_IDENT; }
 
 {SPACE}+				{ ; }
-.						{ STORE_BOUNDS; return yytext[0]; }
+.			            { return yytext[0]; }
 
 %%
 

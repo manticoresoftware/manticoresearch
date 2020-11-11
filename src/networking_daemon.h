@@ -101,6 +101,9 @@ public:
 
 	int64_t GetWTimeoutUS () const;
 	void SetWTimeoutUS ( int64_t iTimeoutUS );
+
+	int64_t GetTotalSent () const;
+	int64_t GetTotalReceived () const;
 };
 
 using SockWrapperPtr_c = SharedPtr_t<SockWrapper_c *>;

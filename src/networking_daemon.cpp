@@ -374,6 +374,9 @@ class SockWrapper_c::Impl_c final : public ISphNetAction
 	int64_t	m_iWriteTimeoutUS;
 	int64_t m_iReadTimeoutUS;
 
+	int64_t m_iTotalSent = 0;
+	int64_t m_iTotalReceived = 0;
+
 	Impl_c ( int iSocket, CSphNetLoop * pNetLoop );
 	~Impl_c () final;
 
@@ -391,6 +394,9 @@ class SockWrapper_c::Impl_c final : public ISphNetAction
 	int SockPoll ( int64_t tmTimeUntilUs, bool bWrite );
 	int SockPollClassic ( int64_t tmTimeUntilUs, bool bWrite );
 	int SockPollNetloop ( int64_t tmTimeUntilUs, bool bWrite );
+
+	int64_t GetTotalSent () const;
+	int64_t GetTotalReceived () const;
 
 public:
 	void Process ( DWORD uGotEvents, CSphNetLoop * ) REQUIRES ( NetPoollingThread ) final;
@@ -510,13 +516,19 @@ int SockWrapper_c::Impl_c::SockPoll ( int64_t tmTimeUntilUs, bool bWrite )
 
 int64_t SockWrapper_c::Impl_c::SockSend ( const char * pBuf, int64_t iLeftBytes )
 {
-	return sphSockSend ( m_iSock, pBuf, iLeftBytes );
+	auto iRes = sphSockSend ( m_iSock, pBuf, iLeftBytes );
+	if ( iRes>0 )
+		m_iTotalSent += iRes;
+	return iRes;
 }
 
 int64_t SockWrapper_c::Impl_c::SockRecv ( char * pBuf, int64_t iLeftBytes )
 {
 	sphLogDebugvv ( "SockRecv %d, for " INT64_FMT " bytes", m_iSock, iLeftBytes );
-	return sphSockRecv ( m_iSock, pBuf, iLeftBytes );
+	auto iRes = sphSockRecv ( m_iSock, pBuf, iLeftBytes );
+	if ( iRes>0 )
+		m_iTotalReceived += iRes;
+	return iRes;
 }
 
 int64_t SockWrapper_c::Impl_c::GetTimeoutUS () const
@@ -537,6 +549,16 @@ int64_t SockWrapper_c::Impl_c::GetWTimeoutUS () const
 void SockWrapper_c::Impl_c::SetWTimeoutUS ( int64_t iTimeoutUS )
 {
 	m_iWriteTimeoutUS = iTimeoutUS;
+}
+
+int64_t SockWrapper_c::Impl_c::GetTotalSent() const
+{
+	return m_iTotalSent;
+}
+
+int64_t SockWrapper_c::Impl_c::GetTotalReceived () const
+{
+	return m_iTotalReceived;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -592,6 +614,18 @@ void SockWrapper_c::SetWTimeoutUS ( int64_t iTimeoutUS )
 {
 	assert ( m_pImpl );
 	m_pImpl->SetWTimeoutUS ( iTimeoutUS );
+}
+
+int64_t SockWrapper_c::GetTotalSent() const
+{
+	assert ( m_pImpl );
+	return m_pImpl->GetTotalSent();
+}
+
+int64_t SockWrapper_c::GetTotalReceived () const
+{
+	assert ( m_pImpl );
+	return m_pImpl->GetTotalReceived ();
 }
 
 /////////////////////////////////////////////////////////////////////////////

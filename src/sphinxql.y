@@ -47,7 +47,7 @@
 %token	TOK_COUNT
 %token	TOK_CREATE
 %token	TOK_DATABASES
-%token	TOK_DEBUG
+%token	TOK_DEBUGCLAUSE
 %token	TOK_DELETE
 %token	TOK_DESC
 %token	TOK_DESCRIBE
@@ -217,7 +217,7 @@ statement:
 	| flush_hostnames
 	| flush_logs
 	| sysfilters
-	| debug_clause
+	| TOK_DEBUGCLAUSE	{ pParser->m_pStmt->m_eStmt = STMT_DEBUG; }
 	| delete_cluster
 	| explain_query
 	;
@@ -1822,36 +1822,6 @@ sysfilters:
 			tStmt.m_eStmt = STMT_SYSFILTERS;
 		}
 	;
-
-debug_clause:
-	TOK_DEBUG opt_par
-		{
-            pParser->m_pStmt->m_eStmt = STMT_DEBUG;
-        }
-
-opt_par:
-	// empty
-	| ident opt_option_clause
-		{
-			pParser->ToString ( pParser->m_pStmt->m_sIndex, $1 );
-		}
-	| ident set_string_value opt_option_clause
-		{
-			pParser->ToString ( pParser->m_pStmt->m_sIndex, $1 );
-			pParser->ToString ( pParser->m_pStmt->m_sStringParam, $2 );
-		}
-	| ident TOK_CONST_INT opt_option_clause
-		{
-			pParser->ToString ( pParser->m_pStmt->m_sIndex, $1 );
-			pParser->m_pStmt->m_iIntParam = $2.m_iValue;
-		}
-	| ident ident TOK_CONST_INT TOK_CONST_INT opt_option_clause
-		{
-			pParser->ToString ( pParser->m_pStmt->m_sIndex, $1 );
-			pParser->ToString ( pParser->m_pStmt->m_sStringParam, $2 );
-			pParser->m_pStmt->m_iListStart = $3.m_iValue;
-			pParser->m_pStmt->m_iListEnd = $4.m_iValue;
-		}
 
 delete_cluster:
 	TOK_DELETE TOK_CLUSTER ident

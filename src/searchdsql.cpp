@@ -116,7 +116,6 @@ public:
 
 	void			PushQuery ();
 
-	void			DebugStmt ();
 	bool			AddOption ( const SqlNode_t & tIdent );
 	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue );
 	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const SqlNode_t & sArg );

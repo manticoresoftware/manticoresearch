@@ -30,7 +30,7 @@ set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp
 		searchdaemon.cpp searchdssl.cpp searchdfields.cpp searchdconfig.cpp
 		searchdsql.cpp searchdddl.cpp networking_daemon.cpp
 		netstate_api.cpp net_action_accept.cpp netreceive_api.cpp
-		netreceive_http.cpp netreceive_ql.cpp query_status.cpp compressed_mysql.cpp )
+		netreceive_http.cpp netreceive_ql.cpp query_status.cpp compressed_mysql.cpp sphinxql_debug.cpp)
 set ( SEARCHD_SRCS searchd.cpp ${SEARCHD_SRCS_TESTABLE} )
 set ( SPELLDUMP_SRCS spelldump.cpp )
 set ( TESTS_SRCS tests.cpp )
@@ -38,8 +38,8 @@ set ( WORDBREAKER_SRCS sphinxstd.cpp wordbreaker.cpp)
 set ( INDEX_CONVERTER_SRCS sphinxstd.cpp index_converter.cpp)
 set ( LIBSPHINX_BISON sphinxexpr.y sphinxselect.y sphinxquery.y sphinxjson.y )
 set ( LIBSPHINX_FLEX sphinxjson.l )
-set ( SEARCHD_BISON sphinxql.y ddl.y )
-set ( SEARCHD_FLEX sphinxql.l ddl.l )
+set ( SEARCHD_BISON sphinxql.y sphinxql_debug.y ddl.y )
+set ( SEARCHD_FLEX sphinxql.l sphinxql_debug.l ddl.l )
 set ( INDEX_CONV_SRCS index_converter.cpp )
 set ( UDFEXAMPLE_SRC udfexample.c )
 
@@ -53,7 +53,7 @@ list ( APPEND HEADERS secondaryindex.h searchnode.h killlist.h attribute.h accum
 		event.h coroutine.h threadutils.h hazard_pointer.h task_info.h mini_timer.h collation.h fnv64.h)
 file ( GLOB SEARCHD_H "searchd*.h" "task*.h" )
 list ( APPEND SEARCHD_H net_action_accept.h netreceive_api.h netreceive_http.h
-		netreceive_ql.h netstate_api.h networking_daemon.h optional.h query_status.h compressed_mysql.h )
+		netreceive_ql.h netstate_api.h networking_daemon.h optional.h query_status.h compressed_mysql.h sphinxql_debug.h)
 
 if ( USE_GALERA )
 	add_subdirectory ( replication )
@@ -113,6 +113,7 @@ if ( USE_BISON )
 	BISON_TARGET ( SQLParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql.y" ${BISON_DIR}/bissphinxql.c )
 	BISON_TARGET ( DDLParser "${CMAKE_CURRENT_SOURCE_DIR}/ddl.y" ${BISON_DIR}/bisddl.c )
 	BISON_TARGET ( JsonParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxjson.y" ${BISON_DIR}/bissphinxjson.c )
+	BISON_TARGET ( SQLDebugParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql_debug.y" ${BISON_DIR}/bissphinxql_debug.c )
 
 	set_property ( SOURCE sphinxexpr.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${BISON_ExprParser_OUTPUT_SOURCE} )
@@ -126,14 +127,17 @@ if ( USE_BISON )
 			OBJECT_DEPENDS ${BISON_DDLParser_OUTPUT_SOURCE} )
 	set_property ( SOURCE searchdsql.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${BISON_SQLParser_OUTPUT_SOURCE} )
+	set_property ( SOURCE sphinxql_debug.cpp APPEND PROPERTY
+			OBJECT_DEPENDS ${BISON_SQLDebugParser_OUTPUT_SOURCE} )
 
 	# also add dependencies for tarball (to always have fresh grammar inside)
-	list (APPEND TARBALLDEPENDS ${BISON_ExprParser_OUTPUTS})
+	list ( APPEND TARBALLDEPENDS ${BISON_ExprParser_OUTPUTS} )
 	list ( APPEND TARBALLDEPENDS ${BISON_SelectParser_OUTPUTS} )
 	list ( APPEND TARBALLDEPENDS ${BISON_QueryParser_OUTPUTS} )
 	list ( APPEND TARBALLDEPENDS ${BISON_SQLParser_OUTPUTS} )
 	list ( APPEND TARBALLDEPENDS ${BISON_DDLParser_OUTPUTS} )
 	list ( APPEND TARBALLDEPENDS ${BISON_JsonParser_OUTPUTS} )
+	list ( APPEND TARBALLDEPENDS ${BISON_SQLDebugParser_OUTPUTS} )
 else()
 	if ( NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/yysphinxselect.h" )
 		message ( SEND_ERROR "BISON is not active, and pre-generated parsers not found. Either install/activate bison, or build from 'tarball' generated on machine with bison installed")
@@ -147,6 +151,7 @@ if ( USE_FLEX )
 	FLEX_TARGET ( SQLlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql.l" ${FLEX_DIR}/flexsphinxql.c )
 	FLEX_TARGET ( Jsonlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxjson.l" ${FLEX_DIR}/flexsphinxjson.c )
 	FLEX_TARGET ( DDLlex "${CMAKE_CURRENT_SOURCE_DIR}/ddl.l" ${FLEX_DIR}/flexddl.c )
+	FLEX_TARGET ( SQLDebuglex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql_debug.l" ${FLEX_DIR}/flexsphinxqldebug.c )
 
 	set_property ( SOURCE searchdsql.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${FLEX_SQLlex_OUTPUTS} )
@@ -154,8 +159,11 @@ if ( USE_FLEX )
 			OBJECT_DEPENDS ${FLEX_DDLlex_OUTPUTS} )
 	set_property ( SOURCE sphinxjson.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${FLEX_Jsonlex_OUTPUTS} )
+	set_property(SOURCE sphinxql_debug.cpp APPEND PROPERTY
+			OBJECT_DEPENDS ${FLEX_SQLDebuglex_OUTPUTS})
 
 	# also add dependencies for tarball (to always have fresh parsers inside)
+	list ( APPEND TARBALLDEPENDS ${FLEX_SQLDebugLex_OUTPUTS} )
 	list ( APPEND TARBALLDEPENDS ${FLEX_SQLlex_OUTPUTS} )
 	list ( APPEND TARBALLDEPENDS ${FLEX_DDLlex_OUTPUTS} )
 	list ( APPEND TARBALLDEPENDS ${FLEX_Jsonlex_OUTPUTS} )

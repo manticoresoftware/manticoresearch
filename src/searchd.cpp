@@ -36,6 +36,7 @@
 #include "searchdddl.h"
 #include "networking_daemon.h"
 #include "query_status.h"
+#include "sphinxql_debug.h"
 
 // services
 #include "taskping.h"
@@ -12994,6 +12995,7 @@ void HandleMysqlFlush ( RowBuffer_i & tOut, const SqlStmt_t & )
 	tOut.Eof();
 }
 
+// stuff for command 'debug', isolated
 inline static CSphString strSHA1 ( const CSphString& sLine )
 {
 	return CalcSHA1 ( sLine.cstr(), sLine.Length() );
@@ -13006,38 +13008,62 @@ int GetLogFD ()
 	return g_iLogFile;
 }
 
-void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
 {
-	auto sIndex = tStmt.m_sStringParam;
+	auto sIndex = tCmd.m_sParam;
 	ServedDescRPtr_c pIndex ( GetServed ( sIndex ) );
 	if ( !ServedDesc_t::IsMutable ( pIndex ) )
 	{
-		tOut.Error ( tStmt.m_sStmt, "MERGE requires an existing RT index" );
+		tOut.Error ( tCmd.m_szStmt, "MERGE requires an existing RT index" );
 		return;
 	}
 
 	tOut.Ok ();
-	auto iFrom = tStmt.m_iListStart;
-	auto iTo = tStmt.m_iListEnd;
+	auto iFrom = tCmd.m_iPar1;
+	auto iTo = tCmd.m_iPar2;
 
-	if ( tStmt.m_tQuery.m_bSync )
+	if ( tCmd.bOpt("sync") )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( tStmt.m_tQuery.m_iCutoff, iFrom, iTo );
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( tCmd.iOpt("cutoff"), iFrom, iTo );
 
 		return;
 	}
 
-	EnqueueForOptimize ( sIndex, tStmt.m_tQuery.m_iCutoff, iFrom, iTo );
+	EnqueueForOptimize ( sIndex, tCmd.iOpt ( "cutoff" ), iFrom, iTo );
 }
 
-void HandleMysqlfiles ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+void HandleMysqlDropManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
 {
-	auto sIndex = tStmt.m_sStringParam;
+	auto sIndex = tCmd.m_sParam;
+	ServedDescRPtr_c pIndex ( GetServed ( sIndex ) );
+	if ( !ServedDesc_t::IsMutable ( pIndex ) )
+	{
+		tOut.Error ( tCmd.m_szStmt, "DROP requires an existing RT index" );
+		return;
+	}
+
+	tOut.Ok ();
+	auto iFrom = tCmd.m_iPar1;
+
+	if ( tCmd.bOpt("sync") )
+	{
+		if ( pIndex->m_pIndex )
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( 0, iFrom, -1 );
+
+		return;
+	}
+
+	EnqueueForOptimize ( sIndex, 0, iFrom, -1 );
+}
+
+void HandleMysqlfiles ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
+{
+	auto sIndex = tCmd.m_sParam;
 	ServedDescRPtr_c pIndex ( GetServed ( sIndex ) );
 	if ( !ServedDesc_t::IsLocal ( pIndex ) )
 	{
-		tOut.Error ( tStmt.m_sStmt, "FILES requires an existing local index" );
+		tOut.Error ( tCmd.m_szStmt, "FILES requires an existing local index" );
 		return;
 	}
 
@@ -13048,10 +13074,11 @@ void HandleMysqlfiles ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	VectorLike dOut ( 0 );
 	dOut.SetColNames ( { "file" } );
 
-	if ( tStmt.m_sThreadFormat!="external" )
+	auto sFormat = tCmd.sOpt ( "format" );
+	if ( sFormat!="external" )
 		dFiles.Apply ( [&dOut] ( const CSphString & a ) { dOut.Add ( a ); } );
 
-	if ( tStmt.m_sThreadFormat=="all" || tStmt.m_sThreadFormat=="external" )
+	if ( sFormat=="all" || sFormat=="external" )
 	{
 		dExt.Uniq ();
 		dExt.Apply ( [&dOut] ( const CSphString & a ) { dOut.Add ( a ); } );
@@ -13060,232 +13087,274 @@ void HandleMysqlfiles ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	tOut.DataTable ( dOut );
 }
 
-void HandleMysqlDebug ( RowBuffer_i &tOut, const SqlStmt_t &tStmt )
+void HandleShurdownCrash ( RowBuffer_i & tOut, const CSphString & sPasswd, DebugCmd::Cmd_e eCmd )
 {
-	CSphString sCommand = tStmt.m_sIndex;
-	CSphString sParam = tStmt.m_sStringParam;
-	sCommand.ToLower ();
-	sCommand.Trim ();
-	sParam.Trim ();
-	bool bVipConn = myinfo::IsVIP();
-
-	if ( bVipConn && ( sCommand=="shutdown" || sCommand=="crash" ) )
+	const char * szCmd = DebugCmd::dCommands[(BYTE) eCmd].m_szExample;
+	if ( g_sShutdownToken.IsEmpty () )
 	{
-		if ( g_sShutdownToken.IsEmpty () )
-		{
+		tOut.Error ( szCmd, "shutdown_token is empty. Provide it in searchd config section." );
+		return;
+	}
 
-			tOut.HeadTuplet ("command","error");
-			tOut.DataTuplet ("debug shutdown", "shutdown_token is empty. Provide it in searchd config section.");
-		}
-		else {
-			if ( strSHA1(sParam) == g_sShutdownToken )
-			{
-				tOut.HeadTuplet ( "command", "result" );
-				if ( sCommand=="shutdown" )
-				{
-					tOut.DataTuplet ( "debug shutdown <password>", "SUCCESS" );
+	if ( strSHA1 ( sPasswd )!=g_sShutdownToken )
+	{
+		tOut.Error ( szCmd, "FAIL" );
+		return;
+	}
+
+	tOut.HeadTuplet ( "command", "result" );
+	tOut.DataTuplet ( szCmd, "SUCCESS" );
+	tOut.Eof ();
+	if ( eCmd==DebugCmd::Cmd_e::SHUTDOWN )
+	{
 #if USE_WINDOWS
-					sigterm(1);
+		sigterm(1);
 #else
-					kill(0, SIGTERM);
+		kill ( 0, SIGTERM );
 #endif
-				} else if ( sCommand=="crash")
-				{
-					tOut.DataTuplet ( "debug crash <password>", "SUCCESS" );
-					BYTE * pSegv = ( BYTE * ) ( 0 );
-					*pSegv = 'a';
-				}
-			} else
-				{
-					tOut.HeadTuplet ( "command", "result" );
-					tOut.DataTuplet ( "debug shutdown <password>", "FAIL" );
-			}
-			// perform challenge here...
-		}
-	} else if ( bVipConn && sCommand=="token" )
+	} else // crash
 	{
-		auto sSha = strSHA1(sParam);
-		tOut.HeadTuplet ( "command", "result" );
-		tOut.DataTuplet ( "debug token", sSha.cstr() );
+		BYTE * pSegv = (BYTE *) ( 0 );
+		*pSegv = 'a';
 	}
-#if HAVE_MALLOC_STATS
-	else if ( sCommand=="malloc_stats" )
-	{
-		tOut.HeadTuplet ( "command", "result" );
-		// check where is stderr...
-		int iOldErr = ::dup ( STDERR_FILENO );
-		::dup2 ( GetLogFD (), STDERR_FILENO );
-		malloc_stats();
-		::dup2 ( iOldErr, STDERR_FILENO );
-		::close ( iOldErr );
-		tOut.DataTuplet ( "malloc_stats", g_sLogFile.cstr());
-	}
-#endif
-#if HAVE_MALLOC_TRIM
-	else if ( sCommand=="malloc_trim" )
-	{
-		tOut.HeadTuplet ( "command", "result" );
-		CSphString sResult;
-		sResult.SetSprintf ( "%d", PerformMallocTrim (0));
-		tOut.DataTuplet ( "malloc_trim", sResult.cstr () );
-	}
-#endif
+}
+
 #if !USE_WINDOWS
-	else if ( bVipConn && sCommand=="procdump" )
+void HandleProcDump ( RowBuffer_i & tOut )
+{
+	tOut.HeadTuplet ( "command", "result" );
+	if ( g_iParentPID<=0 )
+		tOut.DataTuplet ( "procdump", "Unavailable (no watchdog)" );
+	else
 	{
-		tOut.HeadTuplet ( "command", "result" );
-		if ( g_iParentPID<=0 )
-			tOut.DataTuplet ( "procdump", "Unavailable (no watchdog)" );
+		kill ( g_iParentPID, SIGUSR1 );
+		tOut.DataTupletf ( "procdump", "Sent USR1 to wathcdog (%d)", g_iParentPID );
+	}
+	tOut.Eof ();
+}
+
+void HandleGdbStatus ( RowBuffer_i & tOut )
+{
+	tOut.HeadTuplet ( "command", "result" );
+	const auto & g_bSafeGDB = getSafeGDB ();
+	if ( g_iParentPID>0 )
+		tOut.DataTupletf ( "setgdb", "Enabled, managed by watchdog (pid=%d)", g_iParentPID );
+	else if ( g_bSafeGDB )
+		tOut.DataTupletf ( "setgdb", "Enabled, managed locally because of jemalloc", g_iParentPID );
+	else if ( g_iParentPID==-1 )
+		tOut.DataTuplet ( "setgdb", "Enabled locally, MAY HANG!" );
+	else
+		tOut.DataTuplet ( "setgdb", "Disabled" );
+	tOut.Eof ();
+}
+
+void HandleSetGdb ( RowBuffer_i & tOut, bool bParam )
+{
+	tOut.HeadTuplet ( "command", "result" );
+	const auto & g_bSafeGDB = getSafeGDB ();
+
+	if ( g_iParentPID>0 )
+		tOut.DataTupletf ( "setgdb", "Enabled by watchdog (pid=%d)", g_iParentPID );
+	else if ( g_bSafeGDB )
+		tOut.DataTuplet ( "setgdb", "Enabled locally because of jemalloc" );
+	else if ( bParam )
+	{
+		g_iParentPID = -1;
+		tOut.DataTuplet ( "setgdb", "Ok, enabled locally, MAY HANG!" );
+	} else if ( !bParam )
+	{
+		g_iParentPID = 0;
+		tOut.DataTuplet ( "setgdb", "Ok, disabled" );
+	}
+	tOut.Eof ();
+}
+#endif
+
+void HandleToken ( RowBuffer_i & tOut, const CSphString & sParam )
+{
+	auto sSha = strSHA1 ( sParam );
+	tOut.HeadTuplet ( "command", "result" );
+	tOut.DataTuplet ( "debug token", sSha.cstr () );
+	tOut.Eof ();
+}
+
+#if HAVE_MALLOC_STATS
+void HandleMallocStats ( RowBuffer_i & tOut )
+{
+	tOut.HeadTuplet ( "command", "result" );
+	// check where is stderr...
+	int iOldErr = ::dup ( STDERR_FILENO );
+	::dup2 ( GetLogFD (), STDERR_FILENO );
+	malloc_stats ();
+	::dup2 ( iOldErr, STDERR_FILENO );
+	::close ( iOldErr );
+	tOut.DataTuplet ( "malloc_stats", g_sLogFile.cstr () );
+	tOut.Eof ();
+}
+#endif
+
+#if HAVE_MALLOC_TRIM
+void HandleMallocTrim ( RowBuffer_i & tOut )
+{
+	tOut.HeadTuplet ( "command", "result" );
+	CSphString sResult;
+	sResult.SetSprintf ( "%d", PerformMallocTrim ( 0 ) );
+	tOut.DataTuplet ( "malloc_trim", sResult.cstr () );
+	tOut.Eof ();
+}
+#endif
+
+void HandleSleep ( RowBuffer_i & tOut, int64_t iParam )
+{
+	int64_t tmStart = sphMicroTimer ();
+	sphSleepMsec ( Max ( iParam/1000, 1 ) );
+	int64_t tmDelta = sphMicroTimer ()-tmStart;
+
+	tOut.HeadTuplet ( "command", "result" );
+	CSphString sResult;
+	sResult.SetSprintf ( "%.3f", (float) tmDelta / 1000000.0f );
+	tOut.DataTuplet ( "sleep", sResult.cstr () );
+	tOut.Eof ();
+}
+
+void HandleTasks ( RowBuffer_i & tOut )
+{
+	tOut.HeadOfStrings ( { "Name", "MaxRunners", "MaxQueue", "CurrentRunners", "TotalSpent", "LastFinished", "Executed",
+			"Dropped", "In Queue" } );
+
+	auto dTasks = TaskManager::GetTaskInfo ();
+	for ( const auto & dTask : dTasks )
+	{
+		tOut.PutString ( dTask.m_sName );
+		if ( dTask.m_iMaxRunners>0 )
+			tOut.PutNumAsString ( dTask.m_iMaxRunners );
 		else
+			tOut.PutString ( "Scheduling" );
+		switch ( dTask.m_iMaxQueueSize )
 		{
-			kill ( g_iParentPID, SIGUSR1 );
-			tOut.DataTupletf ( "procdump", "Sent USR1 to wathcdog (%d)", g_iParentPID );
+		case -1 :
+			tOut.PutString ( "Unlimited" );
+			break;
+		case 0 :
+			tOut.PutString ( "Disabled" );
+			break;
+		default :
+			tOut.PutNumAsString ( dTask.m_iMaxQueueSize );
 		}
-	} else if ( bVipConn && sCommand=="setgdb" )
-	{
-		tOut.HeadTuplet ( "command", "result" );
-		const auto& g_bSafeGDB = getSafeGDB ();
-		if ( sParam=="status" )
-		{
-			if ( g_iParentPID>0 )
-				tOut.DataTupletf ( "setgdb", "Enabled, managed by watchdog (pid=%d)", g_iParentPID );
-			else if ( g_bSafeGDB )
-				tOut.DataTupletf ( "setgdb", "Enabled, managed locally because of jemalloc", g_iParentPID );
-			else if ( g_iParentPID==-1 )
-				tOut.DataTuplet ( "setgdb", "Enabled locally, MAY HANG!" );
-			else
-				tOut.DataTuplet ( "setgdb", "Disabled" );
-		} else
-		{
-			if ( g_iParentPID>0 )
-				tOut.DataTupletf ( "setgdb", "Enabled by watchdog (pid=%d)", g_iParentPID );
-			else if ( g_bSafeGDB )
-				tOut.DataTuplet ( "setgdb", "Enabled locally because of jemalloc" );
-			else if ( sParam=="on" )
-			{
-				g_iParentPID = -1;
-				tOut.DataTuplet ( "setgdb", "Ok, enabled locally, MAY HANG!" );
-			} else if ( sParam=="off" )
-			{
-				g_iParentPID = 0;
-				tOut.DataTuplet ( "setgdb", "Ok, disabled" );
-			}
-		}
+		tOut.PutNumAsString ( dTask.m_iCurrentRunners );
+		tOut.PutTimeAsString ( dTask.m_iTotalSpent );
+		tOut.PutTimestampAsString ( dTask.m_iLastFinished );
+		tOut.PutNumAsString ( dTask.m_iTotalRun );
+		tOut.PutNumAsString ( dTask.m_iTotalDropped );
+		tOut.PutNumAsString ( dTask.m_inQueue );
+		tOut.Commit ();
 	}
-#endif
-	else if ( sCommand == "sleep" )
-	{
-		int64_t tmStart = sphMicroTimer();
-		sphSleepMsec ( Max ( tStmt.m_iIntParam, 1 )*1000 );
-		int64_t tmDelta = sphMicroTimer() - tmStart;
+	tOut.Eof ();
+}
 
-		tOut.HeadTuplet ( "command", "result" );
-		CSphString sResult;
-		sResult.SetSprintf ( "%.3f", (float)tmDelta/1000000.0f );
-		tOut.DataTuplet ( "sleep", sResult.cstr () );
-	}
-	else if ( sCommand=="tasks" )
+void HandleSysthreads ( RowBuffer_i & tOut )
+{
+	tOut.HeadOfStrings (
+		{"ID", "ThID", "Run time", "Load time", "Total ticks", "Jobs done", "Last job take", "Idle for" });
+	auto dTasks = TaskManager::GetThreadsInfo ();
+	for ( auto& dTask : dTasks )
 	{
-		tOut.HeadOfStrings ( { "Name", "MaxRunners", "MaxQueue", "CurrentRunners", "TotalSpent", "LastFinished",
-				"Executed", "Dropped", "In Queue" });
+		tOut.PutNumAsString ( dTask.m_iMyThreadID );
+		tOut.PutNumAsString ( dTask.m_iMyOSThreadID );
+		tOut.PutTimestampAsString ( dTask.m_iMyStartTimestamp );
+		tOut.PutTimeAsString ( dTask.m_iTotalWorkedTime );
+		tOut.PutNumAsString ( dTask.m_iTotalTicked );
+		tOut.PutNumAsString ( dTask.m_iTotalJobsDone );
+		if ( dTask.m_iLastJobDoneTime<0 )
+			tOut.PutString ( "In work" );
+		else
+			tOut.PutTimeAsString ( dTask.m_iLastJobDoneTime - dTask.m_iLastJobStartTime );
+		if ( dTask.m_iLastJobDoneTime<0 )
+			tOut.PutString ( "0 (working)" );
+		else
+			tOut.PutTimestampAsString ( dTask.m_iLastJobDoneTime );
+		tOut.Commit ();
+	}
+	tOut.Eof ();
+}
 
-		auto dTasks = TaskManager::GetTaskInfo ();
-		for ( const auto& dTask : dTasks )
-		{
-			tOut.PutString ( dTask.m_sName );
-			if ( dTask.m_iMaxRunners>0 )
-				tOut.PutNumAsString ( dTask.m_iMaxRunners );
-			else
-				tOut.PutString ( "Scheduling" );
-			switch ( dTask.m_iMaxQueueSize )
-			{
-				case -1 : tOut.PutString ( "Unlimited" ); break;
-				case 0 : tOut.PutString ( "Disabled" ); break;
-				default : tOut.PutNumAsString ( dTask.m_iMaxQueueSize );
-			}
-			tOut.PutNumAsString ( dTask.m_iCurrentRunners );
-			tOut.PutTimeAsString ( dTask.m_iTotalSpent );
-			tOut.PutTimestampAsString ( dTask.m_iLastFinished );
-			tOut.PutNumAsString ( dTask.m_iTotalRun );
-			tOut.PutNumAsString ( dTask.m_iTotalDropped );
-			tOut.PutNumAsString ( dTask.m_inQueue );
-			tOut.Commit ();
-		}
-	}
-	else if ( sCommand=="systhreads" )
+void HandleSched ( RowBuffer_i & tOut )
+{
+	tOut.HeadOfStrings ( { "Time rest", "Task" } );
+	auto dTasks = TaskManager::GetSchedInfo ();
+	for ( auto& dTask : dTasks )
 	{
-		tOut.HeadOfStrings (
-			{"ID", "ThID", "Run time", "Load time", "Total ticks", "Jobs done", "Last job take", "Idle for" });
-		auto dTasks = TaskManager::GetThreadsInfo ();
-		for ( auto& dTask : dTasks )
-		{
-			tOut.PutNumAsString ( dTask.m_iMyThreadID );
-			tOut.PutNumAsString ( dTask.m_iMyOSThreadID );
-			tOut.PutTimestampAsString ( dTask.m_iMyStartTimestamp );
-			tOut.PutTimeAsString ( dTask.m_iTotalWorkedTime );
-			tOut.PutNumAsString ( dTask.m_iTotalTicked );
-			tOut.PutNumAsString ( dTask.m_iTotalJobsDone );
-			if ( dTask.m_iLastJobDoneTime<0 )
-				tOut.PutString ( "In work" );
-			else
-				tOut.PutTimeAsString ( dTask.m_iLastJobDoneTime - dTask.m_iLastJobStartTime );
-			if ( dTask.m_iLastJobDoneTime<0 )
-				tOut.PutString ( "0 (working)" );
-			else
-				tOut.PutTimestampAsString ( dTask.m_iLastJobDoneTime );
-			tOut.Commit ();
-		}
+		tOut.PutTimestampAsString ( dTask.m_iTimeoutStamp );
+		tOut.PutString ( dTask.m_sTask );
+		tOut.Commit ();
+	}
+	tOut.Eof ();
+}
 
-	}
-	else if ( sCommand=="merge" )
+void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand )
+{
+	using namespace DebugCmd;
+	CSphString sError;
+	bool bVipConn = myinfo::IsVIP();
+	auto tCmd = DebugCmd::ParseDebugCmd ( sCommand, sError );
+
+	if ( bVipConn )
 	{
-		HandleMysqlOptimizeManual ( tOut, tStmt );
-		return;
-	}
-	else if ( sCommand=="files" )
-	{
-		HandleMysqlfiles ( tOut, tStmt );
-		return;
-	}
-	else if ( sCommand=="sched" )
-	{
-		tOut.HeadOfStrings ( { "Time rest", "Task" } );
-		auto dTasks = TaskManager::GetSchedInfo ();
-		for ( auto& dTask : dTasks )
+		switch ( tCmd.m_eCommand )
 		{
-			tOut.PutTimestampAsString ( dTask.m_iTimeoutStamp );
-			tOut.PutString ( dTask.m_sTask );
-			tOut.Commit ();
-		}
-	} else
-	{
-		// no known command; provide short help.
-		tOut.HeadTuplet ( "command", "meaning" );
-		if ( bVipConn )
-		{
-			tOut.DataTuplet ( "debug shutdown <password>", "emulate TERM signal");
-			tOut.DataTuplet ( "debug crash <password>", "crash daemon (make SIGSEGV action)" );
-			tOut.DataTuplet ( "debug token <password>", "calculate token for password" );
+		case Cmd_e::SHUTDOWN:
+		case Cmd_e::CRASH: HandleShurdownCrash ( tOut, tCmd.m_sParam, tCmd.m_eCommand ); return;
 #if !USE_WINDOWS
-			tOut.DataTuplet ( "debug procdump", "ask watchdog to dump us" );
-			tOut.DataTuplet ( "debug setgdb on|off|status", "enable or disable potentially dangerous crash dumping with gdb" );
+		case Cmd_e::PROCDUMP: HandleProcDump ( tOut ); return;
+		case Cmd_e::SETGDB: HandleSetGdb ( tOut, tCmd.m_iPar1!=0 ); return;
+		case Cmd_e::GDBSTATUS: HandleGdbStatus ( tOut ); return;
 #endif
+		default: break;
 		}
-		tOut.DataTuplet ( "flush logs", "emulate USR1 signal" );
-		tOut.DataTuplet ( "reload indexes", "emulate HUP signal" );
-#if HAVE_MALLOC_STATS
-		tOut.DataTuplet ( "malloc_stats", "perform 'malloc_stats', result in searchd.log" );
-#endif
-#if HAVE_MALLOC_TRIM
-		tOut.DataTuplet ( "malloc_trim", "pefrorm 'malloc_trim' call" );
-#endif
-		tOut.DataTuplet ( "sleep Nsec", "sleep for N seconds" );
-		tOut.DataTuplet ( "tasks", "display global tasks stat" );
-		tOut.DataTuplet ( "systhreads", "display task manager threads" );
-		tOut.DataTuplet ( "sched", "display task manager schedule" );
-		tOut.DataTuplet ( "merge <IDX> N1 N2", "For RT index IDX merge disk chunk N1 into disk chunk N2" );
 	}
-	// done
+
+
+	switch ( tCmd.m_eCommand )
+	{
+#if HAVE_MALLOC_STATS
+	case Cmd_e::MALLOC_STATS: HandleMallocStats ( tOut ); return;
+#endif
+
+#if HAVE_MALLOC_TRIM
+	case Cmd_e::MALLOC_TRIM: HandleMallocTrim ( tOut ); return;
+#endif
+	case Cmd_e::TOKEN: HandleToken ( tOut, tCmd.m_sParam ); return;
+	case Cmd_e::SLEEP: HandleSleep ( tOut, tCmd.m_iPar1 ); return;
+	case Cmd_e::TASKS: HandleTasks ( tOut ); return;
+	case Cmd_e::SYSTHREADS: HandleSysthreads ( tOut ); return;
+	case Cmd_e::SCHED: HandleSched ( tOut ); return;
+	case Cmd_e::MERGE: HandleMysqlOptimizeManual ( tOut, tCmd ); return;
+	case Cmd_e::DROP: HandleMysqlDropManual ( tOut, tCmd ); return;
+	case Cmd_e::FILES: HandleMysqlfiles ( tOut, tCmd ); return;
+	default: break;
+	}
+
+	// no known command; provide short help.
+	BYTE uMask = bVipConn ? DebugCmd::NEED_VIP : DebugCmd::NONE;
+#if !USE_WINDOWS
+	uMask |= DebugCmd::NO_WIN;
+#endif
+
+#if HAVE_MALLOC_STATS
+	uMask |= DebugCmd::MALLOC_STATS;
+#endif
+
+#if HAVE_MALLOC_TRIM
+	uMask |= DebugCmd::MALLOC_TRIM;
+#endif
+
+	// display a short help
+	tOut.HeadTuplet ( "command", "meaning" );
+	tOut.DataTuplet ( "flush logs", "emulate USR1 signal" );
+	tOut.DataTuplet ( "reload indexes", "emulate HUP signal" );
+	for ( const auto& dCommand : DebugCmd::dCommands )
+		if ( ( dCommand.m_uTraits & uMask )==dCommand.m_uTraits )
+			tOut.DataTuplet ( dCommand.m_szExample, dCommand.m_szExplanation );
 	tOut.Eof ();
 }
 
@@ -15052,7 +15121,7 @@ public:
 			return true;
 
 		case STMT_DEBUG:
-			HandleMysqlDebug ( tOut, *pStmt );
+			HandleMysqlDebug ( tOut, sQuery );
 			return true;
 
 		case STMT_JOIN_CLUSTER:

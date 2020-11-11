@@ -69,7 +69,6 @@ ALPHA				[a-zA-Z_]+
 "COUNT"				{ YYSTOREBOUNDS; return TOK_COUNT; }
 "CREATE"			{ YYSTOREBOUNDS; return TOK_CREATE; }
 "DATABASES"			{ YYSTOREBOUNDS; return TOK_DATABASES; }
-"DEBUG"				{ YYSTOREBOUNDS; return TOK_DEBUG; }
 "DELETE"			{ YYSTOREBOUNDS; return TOK_DELETE; }
 "DESC"				{ YYSTOREBOUNDS; return TOK_DESC; }
 "DESCRIBE"			{ YYSTOREBOUNDS; return TOK_DESCRIBE; }
@@ -163,6 +162,7 @@ ALPHA				[a-zA-Z_]+
 "WHERE"				{ YYSTOREBOUNDS; return TOK_WHERE; }
 "WITH"				{ YYSTOREBOUNDS; return TOK_WITH; }
 "WITHIN"			{ YYSTOREBOUNDS; return TOK_WITHIN; }
+^"DEBUG"(?s:\ .*)?	{ return TOK_DEBUGCLAUSE; } // that is not reserved
 
 "!="				{ YYSTOREBOUNDS; return TOK_NE; }
 "<>"				{ YYSTOREBOUNDS; return TOK_NE; }

@@ -21,10 +21,15 @@
 %}
 
 DIGIT				[0-9]
-ID					[a-zA-Z_][a-zA-Z_0-9]*
+ALPHA				[a-zA-Z_]
+ALNUM				[a-zA-Z_0-9]
+ID					{ALPHA}{ALNUM}*
 SPACE				[ \t\n\r]
-EXPONENT			[eE](\+|-)?{DIGIT}+
-ALPHA				[a-zA-Z_]+
+SIGN                [+-]?
+INT                 {DIGIT}+
+EXP     			[eE]{SIGN}{INT}
+
+FLOAT_CONSTANT      {INT}\.{INT}?{EXP}?|{INT}?\.{INT}{EXP}|{INT}{EXP}
 
 %option noyywrap
 %option nounput
@@ -172,17 +177,16 @@ ALPHA				[a-zA-Z_]+
 
 '([^'\\]|\\.|\\\\)*'			{ YYSTOREBOUNDS; pParser->m_pLastTokenStart = yytext; lvalp->m_iValue = ( (SphAttr_t)lvalp->m_iStart<<32 ) | ( lvalp->m_iEnd-lvalp->m_iStart ); return TOK_QUOTED_STRING; }
 
-{DIGIT}+\.{DIGIT}*{EXPONENT}?	{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
-\.{DIGIT}+{EXPONENT}?			{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_DOT_NUMBER; }
-\.{DIGIT}+{ID}					{ YYSTOREBOUNDS; return TOK_SUBKEY; }
-{DIGIT}+{EXPONENT}				{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
-{DIGIT}+			{ YYSTOREBOUNDS; lvalp->m_iValue = (int64_t)strtoull ( yytext, NULL, 10 ); return TOK_CONST_INT; }
+{FLOAT_CONSTANT}	{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
+\.{INT}{ID}			{ YYSTOREBOUNDS; return TOK_SUBKEY; }
+\.{INT}			    { YYSTOREBOUNDS; return TOK_DOT_NUMBER; }
+{INT}               { YYSTOREBOUNDS; lvalp->m_iValue = (int64_t)strtoull ( yytext, NULL, 10 ); return TOK_CONST_INT; }
 
 "@id"				{ YYSTOREBOUNDS; return TOK_ATIDENT; }
 "@weight"			{ YYSTOREBOUNDS; return TOK_ATIDENT; }
 "@count"			{ YYSTOREBOUNDS; return TOK_ATIDENT; }
 {ID}				{ YYSTOREBOUNDS; return TOK_IDENT; }
-[a-zA-Z_0-9]+		{ YYSTOREBOUNDS; return TOK_BAD_NUMERIC; }
+{ALNUM}+    		{ YYSTOREBOUNDS; return TOK_BAD_NUMERIC; }
 @{ID}				{ YYSTOREBOUNDS; return TOK_USERVAR; }
 @@{ID}				{ YYSTOREBOUNDS; return TOK_SYSVAR; }
 @@{ID}\.{ID}		{ YYSTOREBOUNDS; return TOK_SYSVAR; }

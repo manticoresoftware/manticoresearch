@@ -276,6 +276,8 @@ public:
 
 	void			PushQuery();
 	CSphString &	ToString ( CSphString & sRes, const SqlNode_t & tNode ) const;
+	float 			ToFloat ( const SqlNode_t & tNode ) const;
+	int64_t			DotGetInt ( const SqlNode_t & tNode ) const;
 	CSphString		ToStringUnescape ( const SqlNode_t & tNode ) const;
 
 protected:

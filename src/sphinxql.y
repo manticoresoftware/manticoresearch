@@ -21,7 +21,7 @@
 %token	TOK_CONST_STRINGS 269 "constant string list"
 %token	TOK_BAD_NUMERIC
 %token	TOK_SUBKEY
-%token	TOK_DOT_NUMBER ".float"
+%token	TOK_DOT_NUMBER ".number"
 
 %token	TOK_AGENT
 %token	TOK_ALL
@@ -772,9 +772,16 @@ const_int:
 	;
 
 const_float:
-	TOK_CONST_FLOAT			{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fValue = $1.m_fValue; }
-	| '-' TOK_CONST_FLOAT	{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fValue = -$2.m_fValue; }
-	| TOK_DOT_NUMBER		{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fValue = $1.m_fValue; }
+	const_float_unsigned		{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fValue = $1.m_fValue; }
+	| '-' const_float_unsigned	{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fValue = -$2.m_fValue; }
+	;
+
+// fixme! That is non-consequetive behaviour.
+// in `select id*.1 a from indexrt where a>.4` - first .1 is part of expression and is passed
+// to expr parser. Second .4 is part of the filter - and is parsed immediately here.
+const_float_unsigned:
+	TOK_CONST_FLOAT			{ $$.m_fValue = $1.m_fValue; }
+	| TOK_DOT_NUMBER		{ $$.m_fValue = pParser->ToFloat ($1); }
 	;
 
 const_list:
@@ -1027,7 +1034,7 @@ expr:
 	| function
 	| json_expr
 	| streq
-	| json_field TOK_IS TOK_NULL			{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| json_field TOK_IS TOK_NULL		{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| json_field TOK_IS TOK_NOT TOK_NULL	{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	;
 
@@ -1133,7 +1140,7 @@ show_what:
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_SETTINGS;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $2 );
-			pParser->m_pStmt->m_iIntParam = int($3.m_fValue*10);
+			pParser->m_pStmt->m_iIntParam = int (pParser->DotGetInt ($3));
 		}
 	| index_or_table TOK_STATUS like_filter
 		{
@@ -1293,20 +1300,20 @@ insert_rows_list:
 	;
 
 insert_row:
-	'(' insert_vals_list ')'			{ if ( !pParser->m_pStmt->CheckInsertIntegrity() ) { yyerror ( pParser, "wrong number of values here" ); YYERROR; } }
+	'(' insert_vals_list ')'	{ if ( !pParser->m_pStmt->CheckInsertIntegrity() ) { yyerror ( pParser, "wrong number of values here" ); YYERROR; } }
 	;
 
 insert_vals_list:
-	insert_val							{ pParser->AddInsval ( pParser->m_pStmt->m_dInsertValues, $1 ); }
+	insert_val				{ pParser->AddInsval ( pParser->m_pStmt->m_dInsertValues, $1 ); }
 	| insert_vals_list ',' insert_val	{ pParser->AddInsval ( pParser->m_pStmt->m_dInsertValues, $3 ); }
 	;
 
 insert_val:
-	const_int				{ $$.m_iType = TOK_CONST_INT; $$.m_iValue = $1.m_iValue; }
+	const_int			{ $$.m_iType = TOK_CONST_INT; $$.m_iValue = $1.m_iValue; }
 	| const_float			{ $$.m_iType = TOK_CONST_FLOAT; $$.m_fValue = $1.m_fValue; }
 	| TOK_QUOTED_STRING		{ $$.m_iType = TOK_QUOTED_STRING; $$.m_iStart = $1.m_iStart; $$.m_iEnd = $1.m_iEnd; }
-	| '(' const_list ')'	{ $$.m_iType = TOK_CONST_MVA; $$.m_pValues = $2.m_pValues; }
-	| '(' ')'				{ $$.m_iType = TOK_CONST_MVA; }
+	| '(' const_list ')'		{ $$.m_iType = TOK_CONST_MVA; $$.m_pValues = $2.m_pValues; }
+	| '(' ')'			{ $$.m_iType = TOK_CONST_MVA; }
 	;
 
 opt_insert_options:
@@ -1731,10 +1738,10 @@ subscript:
 	;
 
 subkey:
-	TOK_SUBKEY					{ $$ = $1; $$.m_iEnd = $1.m_iEnd; }
-	| TOK_DOT_NUMBER			{ $$ = $1; $$.m_iEnd = $1.m_iEnd; }
+	TOK_SUBKEY
+	| TOK_DOT_NUMBER
 	| '[' expr ']'				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
-	| '[' TOK_QUOTED_STRING ']'	{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	| '[' TOK_QUOTED_STRING ']'		{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	;
 
 streq:

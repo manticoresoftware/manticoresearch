@@ -92,6 +92,16 @@ CSphString & SqlParserTraits_c::ToString ( CSphString & sRes, const SqlNode_t & 
 	return sRes;
 }
 
+float SqlParserTraits_c::ToFloat ( const SqlNode_t & tNode ) const
+{
+	return (float) strtod ( m_pBuf+tNode.m_iStart, nullptr );
+}
+
+int64_t SqlParserTraits_c::DotGetInt ( const SqlNode_t & tNode ) const
+{
+	return (int64_t) strtoull ( m_pBuf+tNode.m_iStart+1, nullptr, 10 );
+}
+
 
 CSphString SqlParserTraits_c::ToStringUnescape ( const SqlNode_t & tNode ) const
 {

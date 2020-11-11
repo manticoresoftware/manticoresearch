@@ -208,6 +208,7 @@ static bool				g_bCoreDump		= false;
 
 static auto& g_bGotSighup		= sphGetGotSighup();	// we just received SIGHUP; need to log
 static auto& g_bGotSigusr1		= sphGetGotSigusr1();	// we just received SIGUSR1; need to reopen logs
+static auto& g_bGotSigusr2		= sphGetGotSigusr2();   // we just received SIGUSR2; need to dump daemon's bt
 
 // pipe to watchdog to inform that daemon is going to close, so no need to restart it in case of crash
 struct SharedData_t
@@ -802,6 +803,11 @@ void sigusr1 ( int )
 	g_bGotSigusr1 = true;
 }
 
+void sigusr2 ( int )
+{
+	g_bGotSigusr2 = true;
+}
+
 struct QueryCopyState_t
 {
 	BYTE * m_pDst;
@@ -1165,6 +1171,7 @@ void SetSignalHandlers ( bool bAllowCtrlC=false ) REQUIRES ( MainThread )
 	}
 	sa.sa_handler = sighup;		if ( sigaction ( SIGHUP, &sa, NULL )!=0 ) 		return;
 	sa.sa_handler = sigusr1;	if ( sigaction ( SIGUSR1, &sa, NULL )!=0 )		return;
+	sa.sa_handler = sigusr2;	if ( sigaction ( SIGUSR2, &sa, NULL )!=0 )		return;
 	sa.sa_handler = SIG_IGN;	if ( sigaction ( SIGPIPE, &sa, NULL )!=0 ) return;
 
 	sa.sa_flags |= SA_RESETHAND;
@@ -17618,9 +17625,9 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 
 		if ( iPid==-1 )
 		{
-			if ( g_bGotSigusr1 )
+			if ( g_bGotSigusr2 )
 			{
-				g_bGotSigusr1 = 0;
+				g_bGotSigusr2 = 0;
 				sphInfo ( "watchdog: got USR1, performing dump of child's stack" );
 				sphDumpGdb ( g_iLogFile, g_sNameBuf, g_sPid );
 			} else
@@ -19177,4 +19184,10 @@ volatile bool& sphGetGotSigusr1()
 {
 	static bool bGotSigusr1 = false;
 	return bGotSigusr1;
+}
+
+volatile bool & sphGetGotSigusr2 ()
+{
+	static bool bGotSigusr2 = false;
+	return bGotSigusr2;
 }

@@ -122,6 +122,7 @@ void sphFatalLog( const char* sFmt, ... ) __attribute__ (( format ( printf, 1, 2
 
 volatile bool& sphGetGotSighup();
 volatile bool& sphGetGotSigusr1();
+volatile bool& sphGetGotSigusr2();
 
 /////////////////////////////////////////////////////////////////////////////
 // SOME SHARED GLOBAL VARIABLES

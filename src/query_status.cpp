@@ -406,7 +406,7 @@ void QueryStatus ( CSphVariant * v ) REQUIRES ( MainThread )
 		{
 			for ( int j=0; j<iCols && !tIn.GetError(); j++ )
 			{
-				fprintf ( stdout, "%s", tIn.GetString().cstr() );
+				fprintf ( stdout, "%s", tIn.GetString().scstr() );
 				fprintf ( stdout, ( j==0 ) ? ": " : " " );
 			}
 			fprintf ( stdout, "\n" );

@@ -19,6 +19,7 @@ If HTTP is used, the nodes `offset` and `limit` can control the offset of the re
 
 ```sql
 SELECT  ... FROM ...  [LIMIT [offset,] row_count]
+SELECT  ... FROM ...  [LIMIT row_count][ OFFSET offset]
 ```
 
 

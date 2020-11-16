@@ -766,6 +766,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 		::unlink ( g_sPidFile.cstr() );
 
 	hazard::Shutdown ();
+	sphInfo ( "shutdown daemon version '%s' ...", szMANTICORE_VERSION );
 	sphInfo ( "shutdown complete" );
 
 	Threads::Done ( g_iLogFile );
@@ -18821,6 +18822,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	// since that moment any 'fatal' will assume calling 'shutdown' function.
 	sphSetDieCallback ( DieOrFatalWithShutdownCb );
+
+	sphInfo( "starting daemon version '%s' ...", szMANTICORE_VERSION );
 
 	////////////////////
 	// network startup

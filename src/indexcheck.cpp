@@ -607,7 +607,7 @@ void DiskIndexChecker_c::CheckDictionary()
 		{
 			int iSkipsOffset = tDictReader.UnzipInt();
 			if ( !bWordDict && iSkipsOffset<iLastSkipsOffset )
-				m_tReporter.Fail ( "descending skiplist pos (last=%d, cur=%d, wordid=%llu)", iLastSkipsOffset, iSkipsOffset, UINT64 ( uNewWordid ) );
+				m_tReporter.Fail ( "descending skiplist pos (last=%d, cur=%d, wordid=" UINT64_FMT ")", iLastSkipsOffset, iSkipsOffset, UINT64 ( uNewWordid ) );
 
 			iLastSkipsOffset = iSkipsOffset;
 		}
@@ -924,7 +924,7 @@ void DiskIndexChecker_c::CheckDocs()
 		{
 			if ( iSkipsOffset<=0 || iSkipsOffset>iSkiplistLen )
 			{
-				m_tReporter.Fail ( "invalid skiplist offset (wordid=%llu(%s), off=" INT64_FMT ", max=" INT64_FMT ")", UINT64 ( uWordid ), sWord, iSkipsOffset, iSkiplistLen );
+				m_tReporter.Fail ( "invalid skiplist offset (wordid=" UINT64_FMT "(%s), off=" INT64_FMT ", max=" INT64_FMT ")", UINT64 ( uWordid ), sWord, iSkipsOffset, iSkiplistLen );
 				break;
 			}
 
@@ -950,7 +950,7 @@ void DiskIndexChecker_c::CheckDocs()
 
 				if ( m_tSkipsReader.GetErrorFlag () )
 				{
-					m_tReporter.Fail ( "skiplist reading error (wordid=%llu(%s), exp=%d, got=%d, error='%s')", UINT64 ( uWordid ), sWord, i, dDoclistSkips.GetLength (), m_tSkipsReader.GetErrorMessage ().cstr () );
+					m_tReporter.Fail ( "skiplist reading error (wordid=" UINT64_FMT "(%s), exp=%d, got=%d, error='%s')", UINT64 ( uWordid ), sWord, i, dDoclistSkips.GetLength (), m_tSkipsReader.GetErrorMessage ().cstr () );
 					m_tSkipsReader.ResetError();
 					break;
 				}
@@ -960,7 +960,7 @@ void DiskIndexChecker_c::CheckDocs()
 				t.m_iBaseHitlistPos += uPosDelta;
 				if ( t.m_tBaseRowIDPlus1!=r.m_tBaseRowIDPlus1 || t.m_iOffset!=r.m_iOffset || t.m_iBaseHitlistPos!=r.m_iBaseHitlistPos )
 				{
-					m_tReporter.Fail ( "skiplist entry %d mismatch (wordid=%llu(%s), exp={%u, %llu, %llu}, got={%u, %llu, %llu})",
+					m_tReporter.Fail ( "skiplist entry %d mismatch (wordid=" UINT64_FMT "(%s), exp={%u, " UINT64_FMT ", " UINT64_FMT "}, got={%u, " UINT64_FMT ", " UINT64_FMT "})",
 						i, UINT64 ( uWordid ), sWord,
 						r.m_tBaseRowIDPlus1, UINT64 ( r.m_iOffset ), UINT64 ( r.m_iBaseHitlistPos ),
 						t.m_tBaseRowIDPlus1, UINT64 ( t.m_iOffset ), UINT64 ( t.m_iBaseHitlistPos ) );

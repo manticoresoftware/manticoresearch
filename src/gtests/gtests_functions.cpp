@@ -2544,6 +2544,12 @@ TEST ( functions, sph_Sprintf )
 
 	sph::Sprintf ( sBuf, "Hello %l, %d world!", -100000000000000, -2000000000 );
 	ASSERT_STREQ ( sBuf, "Hello -100000000000000, -2000000000 world!" );
+
+	// std 64 fmt modifiers
+	iNum = 10000;
+	test_mysprintf ( "test " INT64_FMT , iNum, "test 10000" );
+	test_mysprintf ( "test " UINT64_FMT , iNum, "test 10000" );
+
 }
 
 // sph::Sprintf into StringBuilder_c

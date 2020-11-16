@@ -2071,6 +2071,19 @@ namespace sph {
 		return int ( pBegin - pOutput );
 	}
 
+static int SkipFmt64 ( const char * sFmt )
+{
+	// %lld %lli %llu
+	if ( sFmt[0]!='\0' && sFmt[1]!='\0' && sFmt[0]=='l' && ( sFmt[1]=='d' || sFmt[1]=='i' || sFmt[1]=='u' ) )
+		return 2;
+
+	// %li %ld %lu
+	if ( sFmt[0]!='\0' && ( sFmt[0]=='d' || sFmt[0]=='i' || sFmt[0]=='u' ) )
+		return 1;
+
+	return 0;
+}
+
 template <typename PCHAR>
 void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 {
@@ -2234,6 +2247,7 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 				int64_t iValue = va_arg ( ap, int64_t );
 				::NtoA_T ( &pOutput, iValue, 10, (int) iWidth, (int) iPrec, cFill );
 				state = SNORMAL;
+				sFmt += SkipFmt64 ( sFmt );
 				break;
 			}
 

@@ -3483,6 +3483,8 @@ protected:
 			this->m_dJustPopped.Resize ( 0 );
 		}
 
+		this->m_bFinalized = false;
+
 		// place elem into the set
 		auto iNew = AllocateMatch ();
 		CSphMatch & tNew = m_dData[iNew];
@@ -3753,10 +3755,16 @@ private:
 
 		// also free matches in the chain were cleared with FreeDataPtrs, but *now* we also need to free their dynamics
 		// otherwize in d-tr FreDataPtr on non-zero dynamics will be called again with propably another schema and crash
+		// FXIME!!! need to keep and restore all members changed by TryAllocateMatch - it'd be better to rewrite code to pass state into TryAllocateMatch or use common code
 		auto iFree = m_iFree;
+		auto iUsed = m_iUsed;
+		auto iSSFrom = m_iStorageSolidFrom;
 		for ( auto iElem = TryAllocateMatch (); iElem>=0; iElem = TryAllocateMatch () )
 			m_dData[iElem].ResetDynamic ();
 		m_iFree = iFree;
+		m_iUsed = iUsed;
+		m_iStorageSolidFrom = iSSFrom;
+
 	}
 
 	/*

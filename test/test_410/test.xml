@@ -83,6 +83,21 @@ index rt1
 <sphinxql>FLUSH RAMCHUNK rt1</sphinxql>
 <sphinxql>SELECT id, CONCAT('title') as gr1, groupby() g, count(*) c, gid FROM rt1 GROUP BY gid ORDER BY id desc OPTION threads=1, max_matches=4</sphinxql>
 
+<!-- regression crash at group N by with expression at RT with disk chunks -->
+<sphinxql>truncate rtindex rt1</sphinxql>
+<sphinxql>insert into rt1 (id, title, gid) values
+	(1, 'test 1', 101 ),
+	(2, 'test 2', 100 ),
+    (3, 'test 3', 103 ),
+	(4, 'test 4', 100 )
+</sphinxql>
+<sphinxql>FLUSH RAMCHUNK rt1</sphinxql>
+<sphinxql>insert into rt1 (id, title, gid) values (10, 'test 10', 110 )</sphinxql>
+<sphinxql>SELECT id, gid, count(*), groupby() FROM rt1 WHERE MATCH('test') GROUP BY gid ORDER BY id ASC</sphinxql>
+<sphinxql>SELECT id, gid, count(*), groupby() FROM rt1 WHERE MATCH('test') GROUP 2 BY gid ORDER BY id ASC</sphinxql>
+<sphinxql>SELECT id, gid, count(*), groupby(), (1+2) as t FROM rt1 WHERE MATCH('test') GROUP BY gid ORDER BY id ASC</sphinxql>
+<sphinxql>SELECT id, gid, count(*), groupby(), (1+2) as t FROM rt1 WHERE MATCH('test') GROUP 2 BY gid ORDER BY id ASC</sphinxql>
+
 </sphqueries>
 
 </test>

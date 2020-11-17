@@ -5,7 +5,7 @@ Manticore Search code comes with a test suite which must be run prior to submitt
 
 ## Requirements
 
-* Make sure you follow all the requirements needed for compiling Manticore Search, see https://docs.manticoresearch.com/latest/html/installation.html#compiling-manticore-from-source.
+* Make sure you follow all the requirements needed for compiling Manticore Search, see https://manual.manticoresearch.com/Installation/Compiling_from_sources
 
 * PHP (with mysql,curl,xml,dompdf) and Python
 

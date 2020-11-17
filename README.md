@@ -11,7 +11,7 @@
 <h3 align="center">
   <a href="https://manticoresearch.com">Website</a> • 
   <a href="http://bit.ly/2Q9uGj4">Downloads</a> • 
-  <a href="https://docs.manticoresearch.com">Docs</a> • 
+  <a href="https://manual.manticoresearch.com">Docs</a> • 
   <a href="https://play.manticoresearch.com">Courses</a> • 
   <a href="https://forum.manticoresearch.com">Forum</a> • 
   <a href="https://slack.manticoresearch.com">Chat</a> • 
@@ -41,19 +41,19 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - Over 20 [full-text operators](https://play.manticoresearch.com/fulltextintro/) and over 20 ranking factors
   - Custom ranking
 * Other search capabilities:
-  - [Rich filtering functionality](https://docs.manticoresearch.com/latest/html/searching/expressions,_functions,_and_operators.html)
+  - [Rich filtering functionality](https://manual.manticoresearch.com/Searching/Full_text_matching/Operators)
   - [Faceted search](https://play.manticoresearch.com/faceting/)
   - [Geo-spatial search](https://play.manticoresearch.com/geosearch/)
   - [Spell correction](https://play.manticoresearch.com/didyoumean/)
   - [Autocomplete](https://play.manticoresearch.com/simpleautocomplete/)
   - Wide range of functions for filtering and data manipulation
 * NLP:
-  - [Stemming](https://docs.manticoresearch.com/latest/html/conf_options_reference/index_configuration_options.html#morphology)
-  - [Lemmatization](https://docs.manticoresearch.com/latest/html/conf_options_reference/index_configuration_options.html#morphology)
-  - [Stopwords](https://docs.manticoresearch.com/latest/html/conf_options_reference/index_configuration_options.html#stopwords)
-  - [Synonyms](https://docs.manticoresearch.com/latest/html/conf_options_reference/index_configuration_options.html#exceptions)
-  - [Wordforms](https://docs.manticoresearch.com/latest/html/conf_options_reference/index_configuration_options.html#wordforms)
-  - [Advanced tokenization at character and word level](https://docs.manticoresearch.com/latest/html/conf_options_reference/index_configuration_options.html#charset-table)
+  - [Stemming](https://manual.manticoresearch.com/Creating_an_index/NLP_and_tokenization/Morphology)
+  - [Lemmatization](https://manual.manticoresearch.com/Creating_an_index/NLP_and_tokenization/Morphology)
+  - [Stopwords](https://manual.manticoresearch.com/Creating_an_index/NLP_and_tokenization/Ignoring_stop-words#stopwords)
+  - [Synonyms](https://manual.manticoresearch.com/Creating_an_index/NLP_and_tokenization/Exceptions)
+  - [Wordforms](https://manual.manticoresearch.com/Creating_an_index/NLP_and_tokenization/Wordforms#wordforms)
+  - [Advanced tokenization at character and word level](https://manual.manticoresearch.com/Creating_an_index/NLP_and_tokenization/Low-level_tokenization#charset_table)
   - [Proper Chinese segmentation](https://play.manticoresearch.com/icu-chinese/)
   - [Text highlighting](https://play.manticoresearch.com/highlighting/)
 * Stream filtering [using a "percolate" index](https://play.manticoresearch.com/pq/)
@@ -71,11 +71,11 @@ Manticore Search was forked from [Sphinx 2.3.2](https://github.com/sphinxsearch/
   - JSON
   - multi-value attributes
 * Integrations:
-  - [Sync from MySQL and PostgreSQL](https://docs.manticoresearch.com/latest/html/indexing/sql_data_sources_mysql,_postgresql.html)
-  - [Sync from XML](https://docs.manticoresearch.com/latest/html/indexing/xmlpipe2_data_source.html)
-  - [Sync from CSV](https://docs.manticoresearch.com/latest/html/indexing/tsvcsv_data_source.html)
-  - [With MySQL as a storage engine](https://docs.manticoresearch.com/latest/html/mysql_storage_engine_sphinxse.html)
-  - [With MySQL via FEDERATED engine](https://docs.manticoresearch.com/latest/html/federated_storage_engine.html)
+  - [Sync from MySQL and PostgreSQL](https://manual.manticoresearch.com/Creating_an_index/Local_indexes/Plain_index)
+  - [Sync from XML](https://manual.manticoresearch.com/Adding_data_from_external_storages/Fetching_from_XML_streams#XML-file-format)
+  - [Sync from CSV](https://manual.manticoresearch.com/Adding_data_from_external_storages/Fetching_from_CSV,TSV#Fetching-from-TSV,CSV)
+  - [With MySQL as a storage engine](https://manual.manticoresearch.com/Extensions/SphinxSE#Using-SphinxSE)
+  - [With MySQL via FEDERATED engine](https://manual.manticoresearch.com/Extensions/FEDERATED)
   - [ProxySQL](https://manticoresearch.com/2018/06/18/using-proxysql-to-route-inserts-in-a-distributed-realtime-index/)
   
 # Installation
@@ -131,16 +131,16 @@ brew install manticoresearch
 ```
 
 ### Windows
-See [instruction here](https://docs.manticoresearch.com/latest/html/installation.html#installing-manticore-on-windows).
+See [instruction here](https://manual.manticoresearch.com/Installation/Windows).
 
 ### MacOS .dmg
-See [instruction here](https://docs.manticoresearch.com/latest/html/installation.html#installing-manticore-on-macos).
+See [instruction here](https://manual.manticoresearch.com/Installation/MacOS).
 
 
 # Documentation and community channels
 
   * [Interactive courses](https://play.manticoresearch.com)
-  * [Documentation](https://docs.manticoresearch.com)
+  * [Documentation](https://manual.manticoresearch.com)
   * [Manticore Community Forum](https://forum.manticoresearch.com/)
   * [Public Slack chat](http://slack.manticoresearch.com/)
   * [Bug tracker](https://github.com/manticoresoftware/manticore/issues)

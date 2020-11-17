@@ -1,7 +1,7 @@
 --- 
 Bug-Database: https://github.com/manticoresoftware/manticoresearch/issues
 Bug-Submit: https://github.com/manticoresoftware/manticoresearch/issues/new 
-Documentation: https://docs.manticoresearch.com/latest/html/index.html
+Documentation: https://manual.manticoresearch.com/
 Name: Manticore Search
 Repository: https://github.com/manticoresoftware/manticoresearch.git
 Repository-Browse: https://github.com/manticoresoftware/manticoresearch

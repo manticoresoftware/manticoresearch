@@ -1186,7 +1186,12 @@ By default, Manticore full-text index stores not only a list of matching documen
 
 `hitless_words` lets you create indexes that either do not have positional information (hitlists) at all, or skip it for specific keywords.
 
-Hitless index will generally use less space than the respective regular index (about 1.5x can be expected). Both indexing and searching should be faster, at a cost of missing positional query and ranking support. When searching, positional queries (eg. phrase queries) will be automatically converted to respective non-positional (document-level) or combined queries. For instance, if keywords "hello" and "world" are hitless, "hello world" phrase query will be converted to (hello & world) bag-of-words query, matching all documents that mention either of the keywords but not necessarily the exact phrase. And if, in addition, keywords "simon" and "says" are not hitless, "simon says hello world" will be converted to ("simon says" & hello & world) query, matching all documents that contain "hello" and "world" anywhere in the document, and also "simon says" as an exact phrase.
+Hitless index will generally use less space than the respective regular index (about 1.5x can be expected). Both indexing and searching should be faster, at a cost of missing positional query and ranking support.
+
+If used in positional queries (e.g. phrase queries) the hitless words are taken out from them and used as operand without a position.  For example if "hello" and "world" are hitless and "simon" and "says" are not hitless, the phrase query  `"simon says hello world"` will be converted to `("simon says" & hello & world)`, matching "hello" and "world" anywhere in the document and "simon says" as an exact phrase.
+
+A positional query than contains only hitless words will result in an empty phrase node, therefore the entire query will return an empty result and a warning. If the whole dictionary is hitless (using `all`) only boolean matching can be used on the respective index.
+
 
 <!-- request SQL -->
 

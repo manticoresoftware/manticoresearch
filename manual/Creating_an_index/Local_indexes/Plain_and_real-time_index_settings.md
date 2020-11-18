@@ -344,6 +344,7 @@ Read [more about data types here](Creating_an_index/Data_types.md).
 | - | - | - | - |
 | text | rt_field  | Options: indexed, stored. Default - **both**. To keep text stored, but indexed specify "stored" only. To keep text indexed only specify only "indexed". At least one "text" field should be specified in an index | | 
 | integer | rt_attr_uint	| integer	 | int, uint |
+| bigint | rt_attr_bigint	| big integer	 |   |
 | float | rt_attr_float   | float  |   |
 | multi | rt_attr_multi   | multi-integer |   |
 | multi64 | rt_attr_multi_64 | multi-bigint  |   |

@@ -136,6 +136,37 @@ res = await indexApi.insert({"index" : "test", "id" : 1, "doc" : {"title" : "Cro
 res = await indexApi.insert({"index" : "test", "id" : 2, "doc" : {"title" : "Crossbody Bag with Tassel"}});
 res = await indexApi.insert({"index" : "test", "id" : 0, "doc" : {{"title" : "Yellow bag"}});
 ```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+``` java
+InsertDocumentRequest newdoc = new InsertDocumentRequest();
+HashMap<String,Object> doc = new HashMap<String,Object>(){{
+    put("title","Crossbody Bag with Tassel");
+    put("price",19.85);
+}};
+newdoc.index("products").id(1L).setDoc(doc); 
+sqlresult = indexApi.insert(newdoc);
+
+newdoc = new InsertDocumentRequest();
+HashMap<String,Object> doc = new HashMap<String,Object>(){{
+    put("title","Crossbody Bag with Tassel");
+}};
+newdoc.index("products").id(2L).setDoc(doc); 
+sqlresult = indexApi.insert(newdoc);
+
+newdoc = new InsertDocumentRequest();
+HashMap<String,Object> doc = new HashMap<String,Object>(){{
+    put("title","Yellow bag");
+ }};
+newdoc.index("products").id(0L).setDoc(doc); 
+sqlresult = indexApi.insert(newdoc);
+
+```
+
 <!-- end -->
 
 ## Auto ID
@@ -246,6 +277,20 @@ indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"
 res = await indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"}});
 ```
 
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+``` java
+newdoc = new InsertDocumentRequest();
+HashMap<String,Object> doc = new HashMap<String,Object>(){{
+    put("title","Yellow bag");
+ }};
+newdoc.index("products").id(0L).setDoc(doc); 
+sqlresult = indexApi.insert(newdoc);
+```
+
 <!-- end -->
 
 <!-- example bulk_insert -->
@@ -349,6 +394,7 @@ docs = [ \
 res = indexApi.bulk('\n'.join(map(json.dumps,docs)))
 ```
 
+
 <!-- intro -->
 ##### Javascript:
 
@@ -361,6 +407,17 @@ let docs = [
     {"insert": {"index" : "products", "id" : 5, "doc" : {"title" : "CPet Hair Remover Glove", "price" : 7.99}}}
 ];
 res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
+```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+``` java
+String body = "{\"insert\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"Crossbody Bag with Tassel\", \"price\" : 19.85}}}"+"\n"+
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 4, \"doc\" : {\"title\" : \"microfiber sheet set\", \"price\" : 19.99}}}"+"\n"+
+    "{\"insert\": {\"index\" : \"products\", \"id\" : 5, \"doc\" : {\"title\" : \"CPet Hair Remover Glove\", \"price\" : 7.99}}}"+"\n";         
+BulkResponse bulkresult = indexApi.bulk(body);
 ```
 
 <!-- end -->
@@ -421,6 +478,21 @@ indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"
 res = await indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","sizes":[40,41,42,43]}});
 ```
 
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+``` java
+newdoc = new InsertDocumentRequest();
+HashMap<String,Object> doc = new HashMap<String,Object>(){{
+    put("title","Yellow bag");
+    put("sizes",new int[]{40,41,42,43});
+ }};
+newdoc.index("products").id(0L).setDoc(doc); 
+sqlresult = indexApi.insert(newdoc);
+```
 <!-- end -->
 
 
@@ -495,6 +567,24 @@ indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag"
 ```javascript
 
 res = await indexApi.insert({"index" : "products", "id" : 0, "doc" : {"title" : "Yellow bag","meta":'{"size": 41, "color": "red"}'}});
+```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+``` java
+newdoc = new InsertDocumentRequest();
+HashMap<String,Object> doc = new HashMap<String,Object>(){{
+    put("title","Yellow bag");
+    put("meta", 
+        new HashMap<String,Object>(){{
+            put("size",41);
+            put("color","red");
+        }});
+ }};
+newdoc.index("products").id(0L).setDoc(doc); 
+sqlresult = indexApi.insert(newdoc);
 ```
 
 <!-- end -->

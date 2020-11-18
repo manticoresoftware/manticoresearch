@@ -433,6 +433,74 @@ res = await utilsApi.sql("mode=raw&query=SHOW AGENT STATUS");
  "total": 0,
  "warning": ""}
 ```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=SHOW AGENT STATUS");
+```
+<!-- response Java -->
+
+```java
+{columns=[{ Key : { type=string }},
+              { Value : { type=string }}],
+  data : [
+	{ Key=status_period_seconds ,  Value=60 },
+	{ Key=status_stored_periods ,  Value=15 },
+	{ Key=ag_0_hostname ,  Value=192.168.0.202:6713 },
+	{ Key=ag_0_references ,  Value=2 },
+	{ Key=ag_0_lastquery ,  Value=0.41 },
+	{ Key=ag_0_lastanswer ,  Value=0.19 },
+	{ Key=ag_0_lastperiodmsec ,  Value=222 },
+	{ Key=ag_0_errorsarow ,  Value=0 },
+	{ Key=ag_0_1periods_query_timeouts ,  Value=0 },
+	{ Key=ag_0_1periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_0_1periods_connect_failures ,  Value=0 },
+	{ Key=ag_0_1periods_network_errors ,  Value=0 },
+	{ Key=ag_0_1periods_wrong_replies ,  Value=0 },
+	{ Key=ag_0_1periods_unexpected_closings ,  Value=0 },
+	{ Key=ag_0_1periods_warnings ,  Value=0 },
+	{ Key=ag_0_1periods_succeeded_queries ,  Value=27 },
+	{ Key=ag_0_1periods_msecsperquery ,  Value=232.31 },
+	{ Key=ag_0_5periods_query_timeouts ,  Value=0 },
+	{ Key=ag_0_5periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_0_5periods_connect_failures ,  Value=0 },
+	{ Key=ag_0_5periods_network_errors ,  Value=0 },
+	{ Key=ag_0_5periods_wrong_replies ,  Value=0 },
+	{ Key=ag_0_5periods_unexpected_closings ,  Value=0 },
+	{ Key=ag_0_5periods_warnings ,  Value=0 },
+	{ Key=ag_0_5periods_succeeded_queries ,  Value=146 },
+	{ Key=ag_0_5periods_msecsperquery ,  Value=231.83 },
+	{ Key=ag_1_hostname 192.168.0.202:6714 },
+	{ Key=ag_1_references ,  Value=2 },
+	{ Key=ag_1_lastquery ,  Value=0.41 },
+	{ Key=ag_1_lastanswer ,  Value=0.19 },
+	{ Key=ag_1_lastperiodmsec ,  Value=220 },
+	{ Key=ag_1_errorsarow ,  Value=0 },
+	{ Key=ag_1_1periods_query_timeouts ,  Value=0 },
+	{ Key=ag_1_1periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_1_1periods_connect_failures ,  Value=0 },
+	{ Key=ag_1_1periods_network_errors ,  Value=0 },
+	{ Key=ag_1_1periods_wrong_replies ,  Value=0 },
+	{ Key=ag_1_1periods_unexpected_closings ,  Value=0 },
+	{ Key=ag_1_1periods_warnings ,  Value=0 },
+	{ Key=ag_1_1periods_succeeded_queries ,  Value=27 },
+	{ Key=ag_1_1periods_msecsperquery ,  Value=231.24 },
+	{ Key=ag_1_5periods_query_timeouts ,  Value=0 },
+	{ Key=ag_1_5periods_connect_timeouts ,  Value=0 },
+	{ Key=ag_1_5periods_connect_failures ,  Value=0 },
+	{ Key=ag_1_5periods_network_errors ,  Value=0 },
+	{ Key=ag_1_5periods_wrong_replies ,  Value=0 },
+	{ Key=ag_1_5periods_warnings ,  Value=0 },
+	{ Key=ag_1_5periods_succeeded_queries ,  Value=146 },
+	{ Key=ag_1_5periods_msecsperquery ,  Value=230.85 }],
+  error= ,
+  total=0,
+  warning= }
+```
 <!-- end -->
 
 
@@ -523,6 +591,29 @@ res = await utilsApi.sql("mode=raw&query=SHOW AGENT STATUS LIKE \"%5period%msec%
  "error": "",
  "total": 0,
  "warning": ""}
+```
+
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=SHOW AGENT STATUS LIKE \"%5period%msec%\"");
+```
+<!-- response Java -->
+
+```java
+{columns: [{Key={type=string}},
+              {Value={type=string}}],
+ data: [
+	{Key=ag_0_5periods_msecsperquery, Value=234.72},
+	{Key=ag_1_5periods_msecsperquery, Value=233.73},
+	{Key=ag_2_5periods_msecsperquery, Value=343.81}],
+ error: ,
+ total: 0,
+ warning: }
 ```
 <!-- end -->
 
@@ -646,6 +737,36 @@ res = await utilsApi.sql("mode=raw&query=SHOW AGENT \"192.168.0.202:6714\" STATU
  "error": "",
  "total": 0,
  "warning": ""}
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
+```
+<!-- response Java -->
+
+```java
+{columns=[{Key={type=string}},
+              {Value={type=string}}],
+ data=[
+	{Key=agent_15periods_query_timeouts, Value=0},
+	{Key=agent_15periods_connect_timeouts, Value=0},
+	{Key=agent_15periods_connect_failures, Value=0},
+    {Key=agent_15periods_network_errors, Value=0},
+    {Key=agent_15periods_connect_failures, Value=0},
+    {Key=agent_15periods_wrong_replies, Value=0},
+    {Key=agent_15periods_unexpected_closings, Value=0},
+    {Key=agent_15periods_warnings, Value=0},
+    {Key=agent_15periods_succeeded_queries, Value=439},
+    {Key=agent_15periods_msecsperquery, Value=233.73},
+    ],
+ error=,
+ total=0,
+ warning=}
 ```
 <!-- end -->
 <!-- example show agent index status -->
@@ -777,6 +898,39 @@ res = await utilsApi.sql("mode=raw&query=SHOW AGENT \"192.168.0.202:6714\" STATU
  "error": "",
  "total": 0,
  "warning": ""}
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=SHOW AGENT \"192.168.0.202:6714\" STATUS LIKE \"%15periods%\"");
+```
+<!-- response Java -->
+
+```java
+{columns=[{Key={type=string}},
+              {Value={type=string}}],
+ data=[
+	{Key=dstindex_1_is_ha, Value=1},
+	{Key=dstindex_1mirror1_id, Value=192.168.0.202:6713:loc},
+	{Key=dstindex_1mirror1_probability_weight, Value=0.372864},
+    {Key=dstindex_1mirror1_is_blackhole, Value=0},
+    {Key=dstindex_1mirror1_is_persistent, Value=0},
+    {Key=dstindex_1mirror2_id, Value=192.168.0.202:6714:loc},
+    {Key=dstindex_1mirror2_probability_weight, Value=0.374635},
+    {Key=dstindex_1mirror2_is_blackhole, Value=0},
+    {Key=dstindex_1mirror2_is_persistent, Value=439},
+    {Key=dstindex_1mirror3_id, Value=dev1.manticoresearch.com:6714:loc},
+    {Key=dstindex_1mirror3_probability_weight, Value= 0.252501},
+    {Key=dstindex_1mirror3_is_blackhole, Value=0},
+    {Key=dstindex_1mirror3_is_persistent, Value=439}    
+    ],
+ error=,
+ total=0,
+ warning=}
 ```
 
 <!-- end -->

@@ -197,7 +197,7 @@ Python
 utilsApi.sql('mode=raw&query=create table products(title text, color string) type=\'pq\'')
 indexApi.insert({"index" : "products", "doc" : {"query" : "@title bag" }})
 indexApi.insert({"index" : "products",  "doc" : {"query" : "@title shoes", "filters": "color='red'" }})
-indexApi.insert({"index" : "products",  "doc" : {"query" : "@title shoes","filters": "color='red'" }})
+indexApi.insert({"index" : "products",  "doc" : {"query" : "@title shoes","filters": "color IN ('blue', 'green')" }})
 ```
 <!-- response Python -->
 ``` python
@@ -225,13 +225,67 @@ javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, color string) type=\'pq\'');
 res = indexApi.insert({"index" : "products", "doc" : {"query" : "@title bag" }});
 res = indexApi.insert({"index" : "products",  "doc" : {"query" : "@title shoes", "filters": "color='red'" }});
-res = indexApi.insert({"index" : "products",  "doc" : {"query" : "@title shoes","filters": "color='red'" }});
+res = indexApi.insert({"index" : "products",  "doc" : {"query" : "@title shoes","filters": "color IN ('blue', 'green')" }});
 ```
 <!-- response javascript -->
 ``` javascript
 "_index":"products","_id":0,"created":true,"result":"created"}
 {"_index":"products","_id":0,"created":true,"result":"created"}
 {"_index":"products","_id":0,"created":true,"result":"created"}
+```
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, color string) type='pq'");
+doc = new HashMap<String,Object>(){{
+    put("query", "@title bag");
+}};
+newdoc = new InsertDocumentRequest();
+newdoc.index("products").setDoc(doc); 
+indexApi.insert(newdoc);
+
+doc = new HashMap<String,Object>(){{
+    put("query", "@title shoes");
+    put("filters", "color='red'");
+}};
+newdoc = new InsertDocumentRequest();
+newdoc.index("products").setDoc(doc); 
+indexApi.insert(newdoc);
+
+doc = new HashMap<String,Object>(){{
+    put("query", "@title shoes");
+    put("filters", "color IN ('blue', 'green')");
+}};
+newdoc = new InsertDocumentRequest();
+newdoc.index("products").setDoc(doc); 
+indexApi.insert(newdoc);
+```
+<!-- response Java -->
+``` java
+{total=0, error=, warning=}
+class SuccessResponse {
+    index: products
+    id: 0
+    created: true
+    result: created
+    found: null
+}
+class SuccessResponse {
+    index: products
+    id: 0
+    created: true
+    result: created
+    found: null
+}
+class SuccessResponse {
+    index: products
+    id: 0
+    created: true
+    result: created
+    found: null
+}
 
 ```
 <!-- end -->
@@ -430,6 +484,37 @@ res = await searchApi.percolate('products',{"query":{"percolate":{"document":{"t
   }
 }
 ```
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+PercolateRequest percolateRequest = new PercolateRequest();
+query = new HashMap<String,Object>(){{
+    put("percolate",new HashMap<String,Object >(){{
+        put("document", new HashMap<String,Object >(){{ 
+            put("title","what a nice bag");
+        }});
+    }});
+}};
+percolateRequest.query(query);
+searchApi.percolate("test_pq",percolateRequest);
+```
+<!-- response Javs -->
+``` java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234109, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
 <!-- end -->
 
 <!-- example pq_rules -->
@@ -614,6 +699,37 @@ res = await searchApi.percolate('products',{"query":{"percolate":{"document":{"t
 }
 ```
 
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+PercolateRequest percolateRequest = new PercolateRequest();
+query = new HashMap<String,Object>(){{
+    put("percolate",new HashMap<String,Object >(){{
+        put("document", new HashMap<String,Object >(){{ 
+            put("title","what a nice bag");
+        }});
+    }});
+}};
+percolateRequest.query(query);
+searchApi.percolate("test_pq",percolateRequest);
+```
+<!-- response Java -->
+``` java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234109, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
 <!-- end -->
 
 <!-- example multiple -->
@@ -888,6 +1004,47 @@ res = await searchApi.percolate('products',{"query":{"percolate":{"documents":[{
 }
 
 ```
+
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+percolateRequest = new PercolateRequest();
+query = new HashMap<String,Object>(){{
+        put("percolate",new HashMap<String,Object >(){{
+            put("documents", new ArrayList<Object>(){{
+                    add(new HashMap<String,Object >(){{ 
+                        put("title","nice pair of shoes");
+                        put("color","blue");
+                    }});
+                    add(new HashMap<String,Object >(){{ 
+                        put("title","beautiful bag");
+
+                    }});
+                    
+                     }});
+        }});
+    }};
+percolateRequest.query(query);
+searchApi.percolate("products",percolateRequest);
+
+```
+<!-- response Java -->
+``` java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234133, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[2]}}, {_index=products, _type=doc, _id=2811045522851234135, _score=1, _source={query={ql=@title shoes}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
 <!-- end -->
 
 <!-- example docs_1 -->
@@ -1138,6 +1295,46 @@ res = await searchApi.percolate('products',{"query":{"percolate":{"documents":[{
   }
 }
 ```
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+percolateRequest = new PercolateRequest();
+query = new HashMap<String,Object>(){{
+        put("percolate",new HashMap<String,Object >(){{
+            put("documents", new ArrayList<Object>(){{
+                    add(new HashMap<String,Object >(){{ 
+                        put("title","nice pair of shoes");
+                        put("color","blue");
+                    }});
+                    add(new HashMap<String,Object >(){{ 
+                        put("title","beautiful bag");
+
+                    }});
+                    
+                     }});
+        }});
+    }};
+percolateRequest.query(query);
+searchApi.percolate("products",percolateRequest);
+
+```
+<!-- response Java -->
+``` java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=products, _type=doc, _id=2811045522851234133, _score=1, _source={query={ql=@title bag}}, fields={_percolator_document_slot=[2]}}, {_index=products, _type=doc, _id=2811045522851234135, _score=1, _source={query={ql=@title shoes}}, fields={_percolator_document_slot=[1]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
 <!-- end -->
 
 <!-- example docs_id -->
@@ -1220,12 +1417,12 @@ index pq_d2
 {
     type = distributed
     agent = 127.0.0.1:6712:pq
-    agent = 127.0.0.1:6712:pq1
+    agent = 127.0.0.1:6712:ptitle
 }
 ```
 
 <!-- example distributed pq modes 1 -->
-Each of 'pq' and 'pq1' contains:
+Each of 'pq' and 'ptitle' contains:
 
 
 <!-- intro -->
@@ -1412,6 +1609,35 @@ res = await searchApi.search({"index":"pq","query":{"match_all":{}}});
   "timed_out": false,
  "took": 0}
 ```
+
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+Map<String,Object> query = new HashMap<String,Object>();
+query.put("match_all",null);
+SearchRequest searchRequest = new SearchRequest();
+searchRequest.setIndex("pq");
+searchRequest.setQuery(query);
+SearchResponse searchResponse = searchApi.search(searchRequest);
+```
+<!-- response Java -->
+``` java
+
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: null
+        hits: [{_id=2811045522851233962, _score=1, _source={filters=gid>=10, query=filter test, tags=}}, {_id=2811045522851233951, _score=1, _source={filters=gid>=10 OR gid<=3, query=angry,tags=}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
 <!-- end -->
 
 
@@ -1469,7 +1695,7 @@ POST /pq/pq/_search -d '
             "_id":"2",
             "_score":1,
             "_source":{
-                "query":{"ql":"angry"},
+                "query":{"title":"angry"},
                 "tags":"",
                 "filters":"gid>=10 OR gid<=3"
             }
@@ -1628,29 +1854,42 @@ res = await searchApi.percolate('pq',{"percolate":{"documents":[{"title":"angry 
  'took': 0}
 ```
 <!-- intro -->
-javascript
-<!-- request javascript -->
+java
+<!-- request Java -->
 
-```javascript
-res = await searchApi.percolate("pq",{"percolate":{"documents":[{"title":"angry test","gid":3},{"title":"filter test doc2","gid":13}]}});
+```java
+percolateRequest = new PercolateRequest();
+query = new HashMap<String,Object>(){{
+    put("percolate",new HashMap<String,Object >(){{
+        put("documents", new ArrayList<Object>(){{
+            add(new HashMap<String,Object >(){{ 
+                put("title","angry test");
+                put("gid",3);
+            }});
+            add(new HashMap<String,Object >(){{ 
+                put("title","filter test doc2");
+                put("gid",13);
+            }});
+        }});
+    }});
+}};
+percolateRequest.query(query);
+searchApi.percolate("pq",percolateRequest);
 ```
-<!-- response javascript -->
-``` javascript
-{"hits": {"hits": [{"_id": "2811025403043381480",
-                    "_index": "pq",
-                    "_score": "1",
-                    "_source": {"query": {"ql": "angry"},"tags":"","filters":u"gid>=10 OR gid<=3"},
-                    "_type": "doc",
-                    "fields": {"_percolator_document_slot": [1]}},
-                    {"_id": "2811025403043381501",
-                    "_index": "pq",
-                    "_score": "1",
-                    "_source": {"query": {"ql": "filter test"},"tags":"","filters":u"gid>=10"},
-                    "_type": "doc",
-                    "fields": {"_percolator_document_slot": [1]}}],
-          "total": 2},
- "timed_out": false,
- "took": 0}
+<!-- response java -->
+``` java
+class SearchResponse {
+    took: 10
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        maxScore: 1
+        hits: [{_index=pq, _type=doc, _id=2811045522851234165, _score=1, _source={query={ql=@title angry}}, fields={_percolator_document_slot=[1]}}, {_index=pq, _type=doc, _id=2811045522851234166, _score=1, _source={query={ql=@title filter test doc2}}, fields={_percolator_document_slot=[2]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
 ```
 <!-- end -->
 

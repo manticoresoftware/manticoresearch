@@ -53,10 +53,30 @@ utilsApi = manticoresearch.UtilsApi(client)
 ```javascript
 var Manticoresearch = require('manticoresearch');
     var client= new Manticoresearch.ApiClient()
-    client.basePath="http://127.0.0.1:6368";
+    client.basePath="http://127.0.0.1:9308";
     indexApi = new Manticoresearch.IndexApi(client);
     searchApi = new Manticoresearch.SearchApi(client);
     utilsApi = new Manticoresearch.UtilsApi(client);
+```
+
+<!-- intro -->
+##### Java
+<!-- request Java -->
+```java
+import com.manticoresearch.client.ApiClient;
+import com.manticoresearch.client.ApiException;
+import com.manticoresearch.client.Configuration;
+import com.manticoresearch.client.model.*;
+import com.manticoresearch.client.api.IndexApi;
+import com.manticoresearch.client.api.UtilsApi;
+import com.manticoresearch.client.api.SearchApi;
+
+ApiClient client = Configuration.getDefaultApiClient();
+client.setBasePath("http://127.0.0.1:9308");
+
+    IndexApi indexApi = new IndexApi(client);
+    SearchApi searchApi = new UtilsApi(client);
+    UtilsApi utilsApi = new UtilsApi(client);
 ```
 <!-- intro -->
 ##### Connect via Docker

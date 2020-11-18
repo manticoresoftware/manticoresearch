@@ -60,6 +60,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) char
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'cjk\' morphology = \'icu_chinese\'');
 ```
 
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) charset_table = 'cjk' morphology = 'icu_chinese'");
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -133,6 +141,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) char
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'');
 ```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'");
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -169,21 +185,7 @@ POST /sql -d "mode=raw&query=
 create table products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'"
 ```
 <!-- intro -->
-##### Python:
-
-<!-- request Python -->
-
-```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'chinese\' morphology = \'icu_chinese\' stopwords = \'zh\'')
-```
-<!-- intro -->
-##### javascript:
-
-<!-- request javascript -->
-
-```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'chinese\' morphology = \'icu_chinese\' stopwords = \'zh\'');
-```
+##### PHP:
 <!-- request PHP -->
 
 ```php
@@ -204,6 +206,32 @@ $params = [
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'chinese\' morphology = \'icu_chinese\' stopwords = \'zh\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'chinese\' morphology = \'icu_chinese\' stopwords = \'zh\'');
+```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'");
+```
+
 
 <!-- request CONFIG -->
 

@@ -99,6 +99,33 @@ res = await indexApi.replace({"index" : "products", "id" : 1, "doc" : {"title" :
 ```javascript
 {"_index":"products","_id":1,"result":"updated"}
 ```
+
+<!-- intro -->
+
+##### java:
+
+<!-- request Java -->
+``` java
+docRequest = new InsertDocumentRequest();
+HashMap<String,Object> doc = new HashMap<String,Object>(){{
+            put("title","document one");
+            put("price",10);
+}};
+docRequest.index("products").id(1L).setDoc(doc); 
+sqlresult = indexApi.replace(docRequest);
+```
+
+<!-- response Java -->
+```java
+class SuccessResponse {
+    index: products
+    id: 1
+    created: false
+    result: updated
+    found: null
+}
+
+```
 <!-- end -->
 
 `REPLACE` is supported for RT and PQ indexes.
@@ -254,5 +281,22 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ```javascript
 {"items":[{"replace":{"_index":"products","_id":1,"created":false,"result":"updated","status":200}},{"replace":{"_index":"products","_id":2,"created":false,"result":"updated","status":200}}],"errors":false}
 
+```
+
+<!-- request Java -->
+
+``` java
+body = "{\"replace\": {\"index\" : \"products\", \"id\" : 1, \"doc\" : {\"title\" : \"document one\"}}}" +"\n"+ 
+    "{\"replace\": {\"index\" : \"products\", \"id\" : 2, \"doc\" : {\"title\" : \"document two\"}}}"+"\n" ;         
+indexApi.bulk(body);
+```
+
+<!-- response Java -->
+```java
+class BulkResponse {
+    items: [{replace={_index=products, _id=1, created=false, result=updated, status=200}}, {replace={_index=products, _id=2, created=false, result=updated, status=200}}]
+    error: null
+    additionalProperties: {errors=false}
+}
 ```
 <!-- end -->

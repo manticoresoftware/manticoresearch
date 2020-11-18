@@ -86,7 +86,19 @@ res = await utilsApi.sql('mode=raw&query=DROP TABLE products');
 ```javascript
 {"total":0,"error":"","warning":""}
 ```
+<!-- intro -->
+##### java:
 
+<!-- request Java -->
+
+```java
+sqlresult = utilsApi.sql("mode=raw&query=DROP TABLE products");
+```
+
+<!-- response Java -->
+```java
+{total=0, error=, warning=}
+```
 <!-- end -->
 
 Here is the syntax of the `DROP TABLE` statement in SQL:
@@ -158,4 +170,18 @@ res = await utilsApi.sql('mode=raw&query=DROP TABLE IF EXISTS products');
 ```javascript
 {"total":0,"error":"","warning":""}
 ```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+sqlresult = utilsApi.sql("mode=raw&query=DROP TABLE IF EXISTS products");
+```
+
+<!-- response Java -->
+```java
+{total=0, error=, warning=}
+```
+
 <!-- end -->

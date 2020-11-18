@@ -104,6 +104,20 @@ indexApi.insert(newstoredquery)
 newstoredquery ={"index" : "test_pq", "id" : 2, "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}};
 indexApi.insert(newstoredquery);
 ```
+<!-- intro -->
+##### java
+<!-- request Java -->
+```java
+newstoredquery = new HashMap<String,Object>(){{
+    put("query",new HashMap<String,Object >(){{
+        put("q1","@title shoes");
+        put("filters","price>5");
+        put("tags",new String[] {"Loius Vuitton"});
+    }});
+}};
+newdoc.index("test_pq").id(2L).setDoc(doc); 
+indexApi.insert(newdoc);
+```
 
 <!-- end -->
 
@@ -213,7 +227,7 @@ Array(
 <!-- request Python -->
 ```python
 indexApi = api = manticoresearch.IndexApi(client)
-newstoredquery ={"index" : "test_pq", "id" : 2, "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}}
+newstoredquery ={"index" : "test_pq",   "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}}
 indexApi.insert(store_query)
 ```
 <!-- response Python -->
@@ -228,13 +242,28 @@ indexApi.insert(store_query)
 ##### Javascript
 <!-- request Javascript -->
 ```javascript
-newstoredquery ={"index" : "test_pq", "id" : 2, "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}};
+newstoredquery ={"index" : "test_pq",  "doc" : {"query": {"ql": "@title shoes"},"filters": "price > 5","tags": ["Loius Vuitton"]}};
 res =  await indexApi.insert(store_query);
 ```
 <!-- response Javascript -->
 ```javascript
 {"_index":"test_pq","_id":1657843905795719198,"created":true,"result":"created"}
 
+```
+
+<!-- intro -->
+##### java
+<!-- request Java -->
+```java
+newstoredquery = new HashMap<String,Object>(){{
+    put("query",new HashMap<String,Object >(){{
+        put("q1","@title shoes");
+        put("filters","price>5");
+        put("tags",new String[] {"Loius Vuitton"});
+    }});
+}};
+newdoc.index("test_pq").setDoc(doc); 
+indexApi.insert(newdoc);
 ```
 
 <!-- end -->

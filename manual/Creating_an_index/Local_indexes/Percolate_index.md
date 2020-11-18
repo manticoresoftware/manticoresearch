@@ -78,6 +78,31 @@ Array(
     [warning] =>
 )
 ```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, meta json) type=\'pq\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text, meta json) type=\'pq\'');
+```
+<!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, meta json) type='pq'");
+```
 <!-- request CONFIG -->
 ##### Creating a percolate index via config:
 

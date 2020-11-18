@@ -91,6 +91,19 @@ res = await utilsApi.sql('mode=raw&query=SHOW TABLES');
 {"columns":[{"Index":{"type":"string"}},{"Type":{"type":"string"}}],"data":[{"Index":"products","Type":"rt"}],"total":0,"error":"","warning":""}
 ```
 
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=SHOW TABLES")
+```
+
+<!-- response Java -->
+```java
+{columns=[{Index={type=string}}, {Type={type=string}}], data=[{Index=products, Type=rt}], total=0, error=, warning=}
+```
 
 <!-- end -->
 
@@ -166,6 +179,22 @@ utilsApi.sql('mode=raw&query=SHOW TABLES LIKE \'pro%\'')
 ```javascript
 {"columns":[{"Index":{"type":"string"}},{"Type":{"type":"string"}}],"data":[{"Index":"products","Type":"rt"}],"total":0,"error":"","warning":""}
 ```
+
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=SHOW TABLES LIKE 'pro%'")
+```
+
+<!-- response Java -->
+```java
+{columns=[{Index={type=string}}, {Type={type=string}}], data=[{Index=products, Type=rt}], total=0, error=, warning=}
+```
+
 
 <!-- end -->
 

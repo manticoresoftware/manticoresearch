@@ -164,6 +164,32 @@ res = await indexApi.delete({"index" : "products", "query": { "match": { "*": "d
 ```javascript
 {"_index":"products","deleted":2}
 ```
+
+<!-- intro -->
+
+##### java:
+
+<!-- request Java -->
+``` java
+DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest();
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","dummy");
+}});
+deleteRequest.index("products").setQuery(query); 
+indexApi.delete(deleteRequest);
+      
+```
+
+<!-- response Java -->
+```java
+class DeleteResponse {
+    index: products
+    deleted: 2
+    id: null
+    result: null
+}
+```
 <!-- end -->
 
 <!-- example delete 3 -->
@@ -263,6 +289,27 @@ res = await indexApi.delete({"index" : "products", "id" : 1});
 ```javascript
 {"_index":"products","_id":1,"result":"deleted"}
 ```
+
+<!-- intro -->
+
+##### java:
+
+<!-- request Java -->
+``` java
+DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest();
+deleteRequest.index("products").setId(1L); 
+indexApi.delete(deleteRequest);
+      
+```
+
+<!-- response Java -->
+```java
+class DeleteResponse {
+    index: products
+    _id: 1
+    result: deleted
+}
+```
 <!-- end -->
 
 <!-- example delete 4 -->
@@ -347,7 +394,7 @@ Array(
 
 <!-- request Python -->
 ``` python
-indexApi.delete({"cluster":"nodes4","index" : "products", "id" : 1})
+indexApi.delete({"cluster":"nodes4","index" : "products", "id" : 100})
 ```
 
 <!-- response Python -->
@@ -360,11 +407,32 @@ indexApi.delete({"cluster":"nodes4","index" : "products", "id" : 1})
 
 <!-- request javascript -->
 ``` javascript
-indexApi.delete({"cluster":"nodes4","index" : "products", "id" : 1})
+indexApi.delete({"cluster":"nodes4","index" : "products", "id" : 100})
 ```
 
 <!-- response javascript -->
 ```javascript
 {"_index":"products","_id":100,"result":"deleted"}
+```
+
+<!-- intro -->
+
+##### java:
+
+<!-- request Java -->
+``` java
+DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest();
+deleteRequest.cluster("nodes4").index("products").setId(100L); 
+indexApi.delete(deleteRequest);
+      
+```
+
+<!-- response Java -->
+```java
+class DeleteResponse {
+    index: products
+    _id: 100
+    result: deleted
+}
 ```
 <!-- end -->

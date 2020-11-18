@@ -96,6 +96,28 @@ res = await indexApi.update({"index" : "products", "id" : 1, "doc" : {"price":10
 ```javascript
 {"_index":"products","_id":1,"result":"updated"}
 ```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+``` java
+UpdateDocumentRequest updateRequest = new UpdateDocumentRequest();
+doc = new HashMap<String,Object >(){{
+    put("price",10);
+}};
+updateRequest.index("products").id(1L).setDoc(doc); 
+indexApi.update(updateRequest);
+```
+
+<!-- response Java -->
+```java
+class UpdateResponse {
+    index: products
+    updated: null
+    id: 1
+    result: updated
+}
+```
 
 <!-- end -->
 
@@ -214,6 +236,32 @@ res = await indexApi.update({"index" : "products", "id" : 1, "doc" : {
 ```javascript
 {"_index":"products","_id":1,"result":"updated"}
 ```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+``` java
+UpdateDocumentRequest updateRequest = new UpdateDocumentRequest();
+doc = new HashMap<String,Object >(){{
+    put("price",10);
+    put("coeff",3465.23);
+    put("tags1",new int[]{3,6,4});
+    put("tags2",new int[]{});
+}};
+updateRequest.index("products").id(1L).setDoc(doc); 
+indexApi.update(updateRequest);
+```
+
+<!-- response Java -->
+```java
+class UpdateResponse {
+    index: products
+    updated: null
+    id: 1
+    result: updated
+}
+```
+
 <!-- end -->
 
 When assigning out-of-range values to 32-bit attributes, they will be trimmed to their lower 32 bits without a prompt. For example, if you try to update the 32-bit unsigned int with a value of 4294967297, the value of 1 will actually be stored, because the lower 32 bits of 4294967297 (0x100000001 in hex) amount to 1 (0x00000001 in hex).
@@ -323,10 +371,7 @@ Array(
 ``` python
 indexApi = api = manticoresearch.IndexApi(client)
 indexApi.update({"index" : "products", "id" : 1, "doc" : {
-    "price": 100000000000,
-    "coeff": 3465.23,
-    "tags1": [3,6,4],
-    "tags2": []}})
+    "meta.tags[0]": 100}})
 ```
 
 <!-- response Python -->
@@ -340,16 +385,37 @@ indexApi.update({"index" : "products", "id" : 1, "doc" : {
 <!-- request javascript -->
 ``` javascript
 res = await indexApi.update({"index" : "products", "id" : 1, "doc" : {
-    "price": 100000000000,
-    "coeff": 3465.23,
-    "tags1": [3,6,4],
-    "tags2": []}});
+   "meta.tags[0]": 100}});
 ```
 
 <!-- response javascript -->
 ```javascript
 {"_index":"products","_id":1,"result":"updated"}
 ```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+``` java
+UpdateDocumentRequest updateRequest = new UpdateDocumentRequest();
+doc = new HashMap<String,Object >(){{
+    put("meta.tags[0]",100);
+}};
+updateRequest.index("products").id(1L).setDoc(doc); 
+indexApi.update(updateRequest);
+```
+
+<!-- response Java -->
+```java
+class UpdateResponse {
+    index: products
+    updated: null
+    id: 1
+    result: updated
+}
+```
+
 <!-- end -->
 
 <!-- example full JSON update -->
@@ -450,7 +516,7 @@ Array(
 <!-- request Python -->
 ``` python
 indexApi.insert({"index" : "products", "id" : 100, "doc" : {"title" : "title", "meta" : {"tags":[1,2,3]}}})
-indexApi.update({"index" : "products", "id" : 100, "doc" : {"meta.tags[0]": 100}})
+indexApi.update({"index" : "products", "id" : 100, "doc" : {"meta" : {"tags":['one','two','three']}}})
 ```
 
 <!-- response Python -->
@@ -469,7 +535,7 @@ indexApi.update({"index" : "products", "id" : 100, "doc" : {"meta.tags[0]": 100}
 <!-- request javascript -->
 ``` javascript
 res = await indexApi.insert({"index" : "products", "id" : 100, "doc" : {"title" : "title", "meta" : {"tags":[1,2,3]}}});
-res = await indexApi.update({"index" : "products", "id" : 100, "doc" : {"meta.tags[0]": 100}});
+res = await indexApi.update({"index" : "products", "id" : 100, "doc" : {"meta" : {"tags":['one','two','three']}}});
 ```
 
 <!-- response javascript -->
@@ -478,6 +544,55 @@ res = await indexApi.update({"index" : "products", "id" : 100, "doc" : {"meta.ta
 {"_index":"products","_id":100,"result":"updated"}
 
 ```
+
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+``` java
+InsertDocumentRequest newdoc = new InsertDocumentRequest();
+doc = new HashMap<String,Object>(){{
+    put("title","title");
+    put("meta", 
+        new HashMap<String,Object>(){{
+            put("tags",new int[]{1,2,3});
+        }});
+ 
+}};
+newdoc.index("products").id(100L).setDoc(doc);        
+indexApi.insert(newdoc);
+
+updatedoc = new UpdateDocumentRequest();
+doc = new HashMap<String,Object >(){{
+    put("meta", 
+        new HashMap<String,Object>(){{
+            put("tags",new String[]{"one","two","three"});
+        }});
+}};
+updatedoc.index("products").id(100L).setDoc(doc); 
+indexApi.update(updatedoc);
+
+```
+
+<!-- response Java -->
+```java
+class SuccessResponse {
+    index: products
+    id: 100
+    created: true
+    result: created
+    found: null
+}
+
+class UpdateResponse {
+    index: products
+    updated: null
+    id: 100
+    result: updated
+}
+```
+
 <!-- end -->
 
 <!-- example cluster update -->
@@ -548,6 +663,30 @@ indexApi.update({"cluster":"weekly", "index" : "products", "id" : 1, "doc" : {"e
 res = wait indexApi.update({"cluster":"weekly", "index" : "products", "id" : 1, "doc" : {"enabled" : 0}});
 
 ```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+``` java
+updatedoc = new UpdateDocumentRequest();
+doc = new HashMap<String,Object >(){{
+    put("enabled",0);
+}};
+updatedoc.index("products").cluster("weekly").id(1L).setDoc(doc); 
+indexApi.update(updatedoc);
+
+```
+
+<!-- response Java -->
+```java
+class UpdateResponse {
+    index: products
+    updated: null
+    id: 1
+    result: updated
+}
+```
+
 <!-- end -->
 
 
@@ -653,6 +792,29 @@ indexApi.update({"index" : "products", "id" : 1, "doc" : {"tags1": []}})
 <!-- response javascript -->
 ```javascript
 {"_index":"products","_id":1,"result":"updated"}
+```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+``` java
+updatedoc = new UpdateDocumentRequest();
+doc = new HashMap<String,Object >(){{
+    put("tags1",new int[]{});
+}};
+updatedoc.index("products").id(1L).setDoc(doc); 
+indexApi.update(updatedoc);
+
+```
+
+<!-- response Java -->
+```java
+class UpdateResponse {
+    index: products
+    updated: null
+    id: 1
+    result: updated
+}
 ```
 <!-- end -->
 
@@ -949,6 +1111,25 @@ res =  await indexApi.bulk(docs.map(e=>JSON.stringify(e)).join('\n'));
 ```javascript
 {"items":[{"update":{"_index":"products","updated":1}},{"update":{"_index":"products","updated":5}}],"errors":false}
 
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+``` java
+String   body = "{ \"update\" : { \"index\" : \"products\", \"doc\": { \"coeff\" : 1000 }, \"query\": { \"range\": { \"price\": { \"gte\": 1000 } } } }} "+"\n"+
+    "{ \"update\" : { \"index\" : \"products\", \"doc\": { \"coeff\" : 0 }, \"query\": { \"range\": { \"price\": { \"lt\": 1000 } } } } }"+"\n";         
+indexApi.bulk(body);
+```
+
+<!-- response Java -->
+```java
+class BulkResponse {
+    items: [{replace={_index=products, _id=1, created=false, result=updated, status=200}}, {replace={_index=products, _id=2, created=false, result=updated, status=200}}]
+    error: null
+    additionalProperties: {errors=false}
+}
 ```
 
 <!-- end -->

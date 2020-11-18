@@ -305,4 +305,32 @@ res = await searchApi.search({"index":"myindex","query":{"query_string":"@title 
  "timed_out": False,
  "took": 0}
 ```
+
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+
+query = new HashMap<String,Object>();
+query.put("query_string","@title \"find me fast \"/2");
+searchRequest = new SearchRequest();
+searchRequest.setIndex("forum");
+searchRequest.setQuery(query);
+searchResponse = searchApi.search(searchRequest);
+```
+<!-- response Java -->
+```java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 2
+        hits: [{_id=1, _score=1, _source={title=first find me fast, gid=11}}, {_id=2, _score=1, _source={title=first find me fast, gid=12}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+```
 <!-- end -->

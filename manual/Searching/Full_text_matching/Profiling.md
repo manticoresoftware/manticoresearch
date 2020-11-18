@@ -262,6 +262,39 @@ res = await searchApi.search({"index":"forum","query":{"query_string":"i me"},"_
  "took": 0}
 
 ```
+
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+
+query = new HashMap<String,Object>();
+query.put("query_string","i me");
+searchRequest = new SearchRequest();
+searchRequest.setIndex("forum");
+searchRequest.setQuery(query);
+searchRequest.setProfile(true);
+searchRequest.setLimit(1);
+searchRequest.setSort(new ArrayList<String>(){{
+    add("*");
+}});
+searchResponse = searchApi.search(searchRequest);
+```
+<!-- response Java -->
+```java
+class SearchResponse {
+    took: 18
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        hits: [{_id=100, _score=2500, _source={}}]
+        aggregations: null
+    }
+    profile: {query={type=AND, description=AND( AND(KEYWORD(i, querypos=1)),  AND(KEYWORD(me, querypos=2))), children=[{type=AND, description=AND(KEYWORD(i, querypos=1)), children=[{type=KEYWORD, word=i, querypos=1}]}, {type=AND, description=AND(KEYWORD(me, querypos=2)), children=[{type=KEYWORD, word=me, querypos=2}]}]}}
+}
+```
+
 <!-- end -->
 
 
@@ -701,6 +734,38 @@ res = await searchApi.search({"index":"forum","query":{"query_string":"@title wa
                         "type": "AND"}},
  "timed_out": False,
  "took": 0}
+```
+
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+
+query = new HashMap<String,Object>();
+query.put("query_string","@title way* @content hey");
+searchRequest = new SearchRequest();
+searchRequest.setIndex("forum");
+searchRequest.setQuery(query);
+searchRequest.setProfile(true);
+searchRequest.setLimit(1);
+searchRequest.setSort(new ArrayList<String>(){{
+    add("*");
+}});
+searchResponse = searchApi.search(searchRequest);
+```
+<!-- response Java -->
+```java
+class SearchResponse {
+    took: 18
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        hits: [{_id=2811025403043381551, _score=2643, _source={}}]
+        aggregations: null
+    }
+    profile: {query={type=AND, description=AND( AND(fields=(title), KEYWORD(way*, querypos=1, expanded)),  AND(fields=(content), KEYWORD(hey, querypos=2))), children=[{type=AND, description=AND(fields=(title), KEYWORD(way*, querypos=1, expanded)), fields=[title], children=[{type=KEYWORD, word=way*, querypos=1, expanded=true}]}, {type=AND, description=AND(fields=(content), KEYWORD(hey, querypos=2)), fields=[content], children=[{type=KEYWORD, word=hey, querypos=2}]}]}}
+}
 ```
 <!-- end -->
 

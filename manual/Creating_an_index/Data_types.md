@@ -68,6 +68,17 @@ res = await utilsApi.sql('mode=raw&query=create table forum(title text, content 
 ```
 
 <!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table forum(title text, content text, author_id int, forum_id int, post_date timestamp)");
+
+```
+
+
+<!-- intro -->
 ##### config:
 
 <!-- request config -->
@@ -174,7 +185,34 @@ searchApi.search({"index":"forum","query":{"match_all":{},"bool":{"must":[{"equa
 ```javascript
 res = await searchApi.search({"index":"forum","query":{"match_all":{},"bool":{"must":[{"equals":{"author_id":123}},{"in":{"forum_id":[1,3,7]}}]}},"sort":[{"post_date":"desc"}]});
 ```
+<!-- intro -->
+##### java:
 
+<!-- request java -->
+
+```java
+HashMap<String,Object> filters = new HashMap<String,Object>(){{
+    put("must", new HashMap<String,Object>(){{
+        put("equals",new HashMap<String,Integer>(){{
+            put("author_id",123);
+        }});
+        put("in",
+            new HashMap<String,Object>(){{
+                put("forum_id",new int[] {1,3,7});
+        }});
+    }});
+}};
+Map<String,Object> query = new HashMap<String,Object>();
+query.put("match_all",null);
+query.put("bool",filters);
+SearchRequest searchRequest = new SearchRequest();
+searchRequest.setIndex("forum");
+searchRequest.setQuery(query);
+searchRequest.setSort(new ArrayList<Object>(){{
+    add(new HashMap<String,String>(){{ put("post_date","desc");}});
+}});
+SearchResponse searchResponse = searchApi.search(searchRequest);
+```
 <!-- end -->
 
 Below is the list of data types supported by Manticore Search:
@@ -238,7 +276,14 @@ utilsApi.sql('mode=raw&query=create table products(title text)')
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text)');
 ```
+<!-- intro -->
+##### java:
 
+<!-- request java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text)");
+```
 <!-- intro -->
 ##### config:
 
@@ -308,6 +353,16 @@ utilsApi.sql('mode=raw&query=create table products(title text indexed)')
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text indexed)');
 ```
+
+<!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text indexed)");
+```
+
 <!-- intro -->
 ##### config:
 
@@ -381,7 +436,14 @@ searchApi.search({"index":"products","query":{"match":{"title":"first"}}})
 ```javascript
 res = await searchApi.search({"index":"products","query":{"match":{"title":"first"}}});
 ```
+<!-- intro -->
+##### java:
 
+<!-- request java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text indexed)");
+```
 
 <!-- end -->
 
@@ -436,6 +498,15 @@ utilsApi.sql('mode=raw&query=create table products(title text, keys string)')
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, keys string)');
 ```
+<!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, keys string)");
+```
+
 <!-- intro -->
 ##### config:
 
@@ -510,6 +581,14 @@ res = await utilsApi.sql('mode=raw&query=create table products ( title string at
 ```
 
 <!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products ( title string attribute indexed )");
+```
+<!-- intro -->
 ##### config:
 
 <!-- request config -->
@@ -581,7 +660,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price int)')
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price int)');
 ```
+<!-- intro -->
+##### java:
 
+<!-- request java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price int)");
+```
 <!-- intro -->
 ##### config:
 
@@ -652,6 +738,15 @@ utilsApi.sql('mode=raw&query=create table products(title text, flags bit(3), tag
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, flags bit(3), tags bit(2) ');
 ```
+<!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, flags bit(3), tags bit(2)");
+```
+
 <!-- intro -->
 ##### config:
 
@@ -724,6 +819,16 @@ utilsApi.sql('mode=raw&query=create table products(title text, price bigint )')
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price bigint )');
 ```
+
+<!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price bigint )");
+```
+
 <!-- intro -->
 ##### config:
 
@@ -797,6 +902,15 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, date 
 ```
 
 <!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, date timestamp)");
+```
+
+<!-- intro -->
 ##### config:
 
 <!-- request config -->
@@ -860,6 +974,14 @@ $index->create([
 utilsApi.sql('mode=raw&query=create table products(title text, coeff float)')
 ```
 
+<!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, coeff float)");
+```
 <!-- intro -->
 ##### javascript:
 
@@ -928,8 +1050,9 @@ $index->setName('products')->search('')->expression('eps','abs(a-b)')->get();
 <!-- request Python -->
 
 ```python
-searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"eps":"abs(a-b)"}})
+searchApi.search({"index":"products","query":{"match_all":{}},"expressions":{"eps":"abs(a-b)"}})
 ```
+
 <!-- intro -->
 ##### javascript:
 
@@ -938,7 +1061,23 @@ searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"e
 ```javascript
 res = await searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"eps":"abs(a-b)"}});
 ```
+<!-- intro -->
+##### java:
 
+<!-- request java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("forum");
+query = new HashMap<String,Object>();
+query.put("match_all",null);
+searchRequest.setQuery(query);
+Object expressions = new HashMap<String,Object>(){{
+    put("ebs","abs(a-b)");
+}};
+searchRequest.setExpressions(expressions);
+searchResponse = searchApi.search(searchRequest);
+```
 <!-- end -->
 
 <!-- example for float mul -->
@@ -988,6 +1127,24 @@ searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"i
 
 ```javascript
 res = await searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"inc":"in(ceil(attr*100),200,250,350)"}});
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("forum");
+query = new HashMap<String,Object>();
+query.put("match_all",null);
+searchRequest.setQuery(query);
+Object expressions = new HashMap<String,Object>(){{
+    put("inc","in(ceil(attr*100),200,250,350)");
+}};
+searchRequest.setExpressions(expressions);
+searchResponse = searchApi.search(searchRequest);
 ```
 <!-- end -->
 
@@ -1043,7 +1200,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, data json)')
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, data json)');
 ```
+<!-- intro -->
+##### java:
 
+<!-- request java -->
+
+```java
+utilsApi.sql'mode=raw&query=create table products(title text, data json)');
+```
 <!-- intro -->
 ##### config:
 
@@ -1114,6 +1278,24 @@ searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"i
 ```javascript
 res = await searchApi.search({"index":"products","query":{"match_all":{}}},"expressions":{"idx":"indexof(x>2 for x in data.intarray)"}});
 ```
+
+<!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("forum");
+query = new HashMap<String,Object>();
+query.put("match_all",null);
+searchRequest.setQuery(query);
+Object expressions = new HashMap<String,Object>(){{
+    put("idx","indexof(x>2 for x in data.intarray)");
+}};
+searchRequest.setExpressions(expressions);
+searchResponse = searchApi.search(searchRequest);
+```
 <!-- end -->
 
 <!-- example for REGEX() json -->
@@ -1169,6 +1351,29 @@ searchApi.search({"index":"products","query":{"match_all":{},"range":{"c":{"gt":
 ```javascript
 res = await searchApi.search({"index":"products","query":{"match_all":{},"range":{"c":{"gt":0}}}},"expressions":{"c":"regex(data.name, 'est')"}});
 ```
+
+<!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("forum");
+query = new HashMap<String,Object>();
+query.put("match_all",null);
+query.put("range", new HashMap<String,Object>(){{
+    put("c", new HashMap<String,Object>(){{
+        put("gt",0);
+    }});
+}});
+searchRequest.setQuery(query);
+Object expressions = new HashMap<String,Object>(){{
+    put("idx","indexof(x>2 for x in data.intarray)");
+}};
+searchRequest.setExpressions(expressions);
+searchResponse = searchApi.search(searchRequest);
+```
 <!-- end -->
 
 <!-- example for DOUBLE() -->
@@ -1219,6 +1424,22 @@ searchApi.search({"index":"products","query":{"match_all":{}}},"sort":[{"double(
 
 ```javascript
 res = await searchApi.search({"index":"products","query":{"match_all":{}}},"sort":[{"double(data.myfloat)":{"order":"desc"}}]});
+```
+<!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("forum");
+query = new HashMap<String,Object>();
+query.put("match_all",null);
+searchRequest.setQuery(query);
+searchRequest.setSort(new ArrayList<Object>(){{
+    add(new HashMap<String,String>(){{ put("double(data.myfloat)",new HashMap<String,String>(){{ put("order","desc");}});}});
+}});
+searchResponse = searchApi.search(searchRequest);
 ```
 <!-- end -->
 
@@ -1274,6 +1495,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, product_codes mul
 
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, product_codes multi)');
+```
+<!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, product_codes multi)");
 ```
 
 
@@ -1349,6 +1578,23 @@ searchApi.search({"index":"products","query":{"match_all":{},"equals":{"any(prod
 ```javascript
 res = await searchApi.search({"index":"products","query":{"match_all":{},"equals":{"any(product_codes)":3}}}})'
 ```
+<!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("forum");
+query = new HashMap<String,Object>();
+query.put("match_all",null);
+query.put("equals",new HashMap<String,Integer>(){{
+     put("any(product_codes)",3);
+}});
+searchRequest.setQuery(query);
+searchRequest.setExpressions(expressions);
+searchResponse = searchApi.search(searchRequest);
+```
 <!-- end -->
 
 <!-- example for least/greatest MVA -->
@@ -1403,6 +1649,24 @@ searchApi.search({"index":"products","query":{"match_all":{},"sort":[{"product_c
 ```javascript
 res = await searchApi.search({"index":"products","query":{"match_all":{},"sort":[{"product_codes":{"order":"asc","mode":"min"}}]}});
 ```
+
+<!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("forum");
+query = new HashMap<String,Object>();
+query.put("match_all",null);
+searchRequest.setQuery(query);
+searchRequest.setSort(new ArrayList<Object>(){{
+    add(new HashMap<String,String>(){{ put("product_codes",new HashMap<String,String>(){{ put("order","asc");put("mode","min");}});}});
+}});
+searchResponse = searchApi.search(searchRequest);
+```
+
 <!-- end -->
 
 <!-- example for grouping by MVA -->
@@ -1611,6 +1875,41 @@ res = await searchApi.search({"index":"products","query":{"match_all":{}}});
 
 ```javascript
 {"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"product_codes":[1,2,3,4],"title":"first"}}]}}
+```
+<!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+InsertDocumentRequest newdoc = new InsertDocumentRequest();
+HashMap<String,Object> doc = new HashMap<String,Object>(){{
+    put("title","first");
+    put("product_codes",new int[] {4,2,1,3});
+}};
+newdoc.index("products").id(1L).setDoc(doc); 
+sqlresult = indexApi.insert(newdoc);
+Map<String,Object> query = new HashMap<String,Object>();
+query.put("match_all",null);
+SearchRequest searchRequest = new SearchRequest();
+searchRequest.setIndex("products");
+searchRequest.setQuery(query);
+SearchResponse searchResponse = searchApi.search(searchRequest);
+System.out.println(searchResponse.toString() );
+```
+<!-- response java -->
+
+```java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        hits: [{_id=1, _score=1, _source={product_codes=[1, 2, 3, 4], title=first}}]
+        aggregations: null
+    }
+    profile: null
+}
 
 ```
 
@@ -1669,6 +1968,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, values multi64))'
 
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, values multi64))');
+```
+<!-- intro -->
+##### java:
+
+<!-- request java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, values multi64))");
 ```
 <!-- intro -->
 ##### config:

@@ -105,7 +105,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) char
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451\'');
 ```
+<!-- intro -->
+##### java:
 
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'");
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -174,6 +181,15 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) char
 
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'0..9, english, _\'');
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) charset_table = '0..9, english, _'");
 ```
 <!-- request CONFIG -->
 
@@ -267,6 +283,15 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) char
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'');
 ```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'");
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -354,6 +379,16 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) blen
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) blend_chars = \'+, &, U+23, @->_\'');
 ```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) blend_chars = '+, &, U+23, @->_'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -442,6 +477,15 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) blen
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) blend_mode = \'trim_tail, skip_pure\' blend_chars = \'+, &\'');
 ```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -514,6 +558,15 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) min_
 
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) min_word_len = \'4\'');
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) min_word_len = '4'");
 ```
 
 <!-- request CONFIG -->
@@ -595,6 +648,16 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) ngra
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'');
 ```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -684,6 +747,24 @@ index products {
   rt_attr_uint = price
 }
 ```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+res = async utilsApi.sql('mode=raw&query=create table products(title text, price float) ngram_chars = \'U+3000..U+2FA1F\' ngram_len = \'1\'');
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'");
+```
+
 <!-- end -->
 
 <!-- example ngram_chars 2 -->
@@ -812,6 +893,16 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) igno
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) ignore_chars = \'U+AD\'');
 ```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) ignore_chars = 'U+AD'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -893,6 +984,16 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) bigr
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'both_freq\'');
 ```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -969,6 +1070,16 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) bigr
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'first_freq\'');
 ```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -1054,6 +1165,16 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) dict
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) dict = \'keywords\'');
 ```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) dict = 'keywords'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -1159,6 +1280,16 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) glob
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) global_idf = \'/usr/local/sphinx/var/global.idf\'');
 ```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) global_idf = '/usr/local/sphinx/var/global.idf'");
+```
+
+
 <!-- request CONFIG -->
 
 ```ini
@@ -1186,12 +1317,13 @@ By default, Manticore full-text index stores not only a list of matching documen
 
 `hitless_words` lets you create indexes that either do not have positional information (hitlists) at all, or skip it for specific keywords.
 
-Hitless index will generally use less space than the respective regular index (about 1.5x can be expected). Both indexing and searching should be faster, at a cost of missing positional query and ranking support.
+Hitless index will generally use less space than the respective regular index (about 1.5x can be expected). Both indexing and searching should be faster, at a cost of missing positional query and ranking support.  
 
-If used in positional queries (e.g. phrase queries) the hitless words are taken out from them and used as operand without a position.  For example if "hello" and "world" are hitless and "simon" and "says" are not hitless, the phrase query  `"simon says hello world"` will be converted to `("simon says" & hello & world)`, matching "hello" and "world" anywhere in the document and "simon says" as an exact phrase.
+If used in positional queries (e.g. phrase queries) the hitless words are taken out from them and used as operand without a position.  For example if "hello" and "world" are hitless and "simon" and "says" are not hitless, the phrase query  `"simon says hello world"` will be converted to `("simon says" & hello & world)`, matching "hello" and "world" anywhere in the document and "simon says" as an exact phrase. 
 
 A positional query than contains only hitless words will result in an empty phrase node, therefore the entire query will return an empty result and a warning. If the whole dictionary is hitless (using `all`) only boolean matching can be used on the respective index.
 
+ 
 
 <!-- request SQL -->
 
@@ -1240,6 +1372,16 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) hitl
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) hitless_words = \'all\'');
 ```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) hitless_words = 'all'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -1317,6 +1459,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) inde
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) index_field_lengths = \'1\'');
 ```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) index_field_lengths = '1'");
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -1389,6 +1539,15 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) inde
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) index_token_filter = \'my_lib.so:custom_blend:chars=@#&\'');
 ```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -1459,6 +1618,16 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) over
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) overshort_step = \'1\'');
 ```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) overshort_step = '1'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -1536,6 +1705,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) phra
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) phrase_boundary = \'., ?, !, U+2026\' phrase_boundary_step = \'10\'');
 ```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'");
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -1610,6 +1787,15 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) phra
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) phrase_boundary_step = \'100\' phrase_boundary = \'., ?, !, U+2026\'');
 ```
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'");
+```
+
 <!-- request CONFIG -->
 
 ```ini
@@ -1690,6 +1876,15 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) rege
 
 ```javascript
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) regexp_filter = \'(blue|red) => color\'');
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) regexp_filter = '(blue|red) => color'");
 ```
 
 <!-- request CONFIG -->

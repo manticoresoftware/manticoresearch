@@ -360,7 +360,9 @@ enum class Option_e : BYTE
 	INVALID_OPTION
 };
 
-Option_e ParseOption ( const CSphString& sOpt )
+static SmallStringHash_T<Option_e, (BYTE) Option_e::INVALID_OPTION * 2> g_hParseOption;
+
+void InitParserOption()
 {
 	static const char * szOptions[(BYTE) Option_e::INVALID_OPTION] = { "agent_query_timeout", "boolean_simplify",
 		"columns", "comment", "cutoff", "debug_no_payload", "expand_keywords", "field_weights", "format", "global_idf",
@@ -368,14 +370,15 @@ Option_e ParseOption ( const CSphString& sOpt )
 		"max_matches", "max_predicted_time", "max_query_time", "morphology", "rand_seed", "ranker", "retry_count",
 		"retry_delay", "reverse_scan", "sort_method", "strict", "sync", "threads", "token_filter", "token_filter_options",
 		"not_terms_only_allowed" };
+	
+	for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
+		g_hParseOption.Add ( (Option_e) i, szOptions[i] );
+}
 
-	static SmallStringHash_T<Option_e, (BYTE) Option_e::INVALID_OPTION * 2> hValues;
-	if ( !hValues.GetLength () )
-		for ( BYTE i = 0u; i<(BYTE) Option_e::INVALID_OPTION; ++i )
-			hValues.Add ( (Option_e) i, szOptions[i] );
-
-	auto * pCol = hValues ( sOpt );
-	return pCol ? *pCol : Option_e::INVALID_OPTION;
+static Option_e ParseOption ( const CSphString& sOpt )
+{
+	auto * pCol = g_hParseOption ( sOpt );
+	return ( pCol ? *pCol : Option_e::INVALID_OPTION );
 }
 
 

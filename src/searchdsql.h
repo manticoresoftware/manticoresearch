@@ -290,5 +290,6 @@ protected:
 bool	sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation );
 bool	PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, const CSphSchema & tSchema, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError );
 void	SqlParser_SplitClusterIndex ( CSphString & sIndex, CSphString * pCluster );
+void	InitParserOption();
 
 #endif // _searchdsql_

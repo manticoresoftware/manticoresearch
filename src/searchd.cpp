@@ -18947,6 +18947,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	sphRTConfigure ( hSearchd, bTestMode );
 	SetUidShort ( bTestMode );
 	InitDocstore ( g_iDocstoreCache );
+	InitParserOption();
 
 	if ( bOptPIDFile )
 	{

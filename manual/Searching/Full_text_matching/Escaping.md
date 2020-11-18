@@ -45,3 +45,26 @@ $results = $statement->execute();
 ```
 
 The  query received will be `SELECT * FROM index WHERE MATCH('\\$manticore');`
+
+## In HTTP JSON API
+
+The same rules for SQL protocol apply with the exception that for JSON the double quote must be escaped with a single backslash, while the rest of the characters must be double escaped. 
+
+
+If using  JSON libraries/functions that convert data structures to JSON strings the double quote and single backslash are escaped automatically by these functions and must not be explicit escaped. 
+
+
+## In clients
+
+The new official clients (which use HTTP as protocol) are using under the hood common JSON libraries/functions available on the respective programming language. Same rules of escaping as above are applied.
+
+
+
+## Escaping asterisk
+
+Asterisk (`*`) is a special character that can have two functionality: as wildcarding prefix/suffix expander and as any term modifier inside a phrase search.
+Unlike other special characters that are operators, asterisk cannot be escaped when it's in a position to offer one of it's functionalities.
+
+In non-wildcard queries, the asterisk doesn't require escaping, regardless if it's in the charset_table or not.
+
+In wildcard  queries, asterisk in the middle of a word doesn't require escaping. As a wildcard operator (either at start or end of the word), the asterisk will always be interpreted as the wildcard operator even if escaping is applied.

@@ -4695,7 +4695,8 @@ int CSphTokenizerBase::CodepointArbitrationI ( int iCode )
 	if ( iSymbol=='.' )
 	{
 		// inline dot ("in the U.K and"), not a boundary
-		bool bInwordDot = ( sphIsAlpha ( m_pCur[0] ) || m_pCur[0]==',' );
+		bool bInwordDot = ( sphIsAlpha ( m_pCur[0] ) || ( m_pCur[0] & 0x80 )==0x80 // IsAlpha to consider UTF8 chars
+			|| m_pCur[0]==',' );
 
 		// followed by a small letter or an opening paren, not a boundary
 		// FIXME? might want to scan for more than one space

@@ -912,7 +912,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	{
 		if ( !g_bQuiet )
 		{
-			fprintf ( stdout, "skipping non-plain index '%s'...\n", sIndexName );
+			fprintf ( stdout, "WARNING: skipping non-plain index '%s'...\n", sIndexName );
 			fflush ( stdout );
 		}
 		return false;

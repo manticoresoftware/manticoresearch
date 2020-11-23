@@ -46,7 +46,7 @@ sudo -u manticore indexer indexpart*main --rotate
 
 The exit codes are as follows:
 * 0 - everything went ok
-* 1 - there was a problem while indexing (and if –-rotate was specified, it was skipped)
+* 1 - there was a problem while indexing (and if –-rotate was specified, it was skipped) or an operation emitted a warning
 * 2 - indexing went ok, but –-rotate attempt failed
 
 ### Indexer command line arguments
@@ -56,7 +56,7 @@ The exit codes are as follows:
 sudo -u manticore indexer --config /home/myuser/manticore.conf myindex
 ```
 
-* `--all` tells `indexer` to update every index listed in `manticore.conf` instead of listing individual indexes. This would be useful in small configurations or cron-kind or maintenance jobs where the entire index set will get rebuilt each day or week or whatever period is best. Example usage:
+* `--all` tells `indexer` to update every index listed in `manticore.conf` instead of listing individual indexes. This would be useful in small configurations or cron-kind or maintenance jobs where the entire index set will get rebuilt each day or week or whatever period is best. Please note that since `--all` tries to update all found indexes in the configuration, it will issue a warning if encounter RealTime indexes and the exit code of the command will be `1` not `0` even if the plain indexes finished without issue. Example usage:
 
 ```shell
 sudo -u manticore indexer --config /home/myuser/manticore.conf --all

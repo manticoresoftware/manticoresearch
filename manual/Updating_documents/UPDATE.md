@@ -1188,7 +1188,29 @@ $params = [
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price float) attr_update_reserve = \'1M\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```java
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) attr_update_reserve = \'1M\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) attr_update_reserve = '1M'");
+```
 <!-- request CONFIG -->
 
 ```ini

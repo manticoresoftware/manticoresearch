@@ -34,6 +34,44 @@ $params = [
 ];
 $response = $client->cluster()->alter($params);        
 ```
+
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=ALTER CLUSTER click_query ADD clicks_daily_index')
+```
+
+<!-- response Python -->
+```python
+{u'error': u'', u'total': 0, u'warning': u''}
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=ALTER CLUSTER click_query ADD clicks_daily_index');
+```
+
+<!-- response javascript -->
+```javascript
+{"total":0,"error":"","warning":""}
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=ALTER CLUSTER click_query ADD clicks_daily_index");
+```
+
 <!-- end -->
 
 <!-- example adding and removing an index from a replication cluster 2 -->
@@ -69,6 +107,41 @@ $params = [
   ]
 ];
 $response = $client->cluster->alter($params);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=ALTER CLUSTER posts DROP weekly_index')
+```
+
+<!-- response Python -->
+```python
+{u'error': u'', u'total': 0, u'warning': u''}
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=ALTER CLUSTER posts DROP weekly_index');
+```
+
+<!-- response javascript -->
+```javascript
+{"total":0,"error":"","warning":""}
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=ALTER CLUSTER posts DROP weekly_index");
 ```
 
 <!-- end -->

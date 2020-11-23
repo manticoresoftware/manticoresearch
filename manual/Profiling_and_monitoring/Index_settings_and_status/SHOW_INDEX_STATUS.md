@@ -114,4 +114,112 @@ Array(
 
 )
 ```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=SHOW INDEX statistic STATUS')
+```
+<!-- response Python -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+   {u'Key': u'index_type', u'Value': u'rt'}
+    {u'Key': u'indexed_documents', u'Value': u'3'}
+    {u'Key': u'indexed_bytes', u'Value': u'0'}
+    {u'Key': u'ram_bytes', u'Value': u'6678'}
+    {u'Key': u'disk_bytes', u'Value': u'611'}
+    {u'Key': u'ram_chunk', u'Value': u'990'}
+    {u'Key': u'ram_chunk_segments_count', u'Value': u'2'}
+    {u'Key': u'mem_limit', u'Value': u'134217728'}
+    {u'Key': u'ram_bytes_retired', u'Value': u'0'}
+    {u'Key': u'tid', u'Value': u'15'}
+    {u'Key': u'query_time_1min', u'Value': u'{"queries":1, "avg_sec":0.001, "min_sec":0.001, "max_sec":0.001, "pct95_sec":0.001, "pct99_sec":0.001}'}
+    {u'Key': u'query_time_5min', u'Value': u'{"queries":1, "avg_sec":0.001, "min_sec":0.001, "max_sec":0.001, "pct95_sec":0.001, "pct99_sec":0.001}'}
+    {u'Key': u'query_time_15min', u'Value': u'{"queries":1, "avg_sec":0.001, "min_sec":0.001, "max_sec":0.001, "pct95_sec":0.001, "pct99_sec":0.001}'}
+    {u'Key': u'query_time_total', u'Value': u'{"queries":1, "avg_sec":0.001, "min_sec":0.001, "max_sec":0.001, "pct95_sec":0.001, "pct99_sec":0.001}'}
+    {u'Key': u'found_rows_1min', u'Value': u'{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}'}
+    {u'Key': u'found_rows_5min', u'Value': u'{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}'}
+    {u'Key': u'found_rows_15min', u'Value': u'{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}'}
+    {u'Key': u'found_rows_total', u'Value': u'{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}'}],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=SHOW INDEX statistic STATUS');
+```
+<!-- response Javascript -->
+
+```javascript
+{"columns": [{"Key": {"type": "string"}},
+              {"Value": {"type": "string"}}],
+ "data": [
+   {"Key": "index_type", "Value": "rt"}
+    {"Key": "indexed_documents", "Value": "3"}
+    {"Key": "indexed_bytes", "Value": "0"}
+    {"Key": "ram_bytes", "Value": "6678"}
+    {"Key": "disk_bytes", "Value": "611"}
+    {"Key": "ram_chunk", "Value": "990"}
+    {"Key": "ram_chunk_segments_count", "Value": "2"}
+    {"Key": "mem_limit", "Value": "134217728"}
+    {"Key": "ram_bytes_retired", "Value": "0"}
+    {"Key": "tid", "Value": "15"}
+    {"Key": "query_time_1min", "Value": "{"queries":1, "avg_sec":0.001, "min_sec":0.001, "max_sec":0.001, "pct95_sec":0.001, "pct99_sec":0.001}"}
+    {"Key": "query_time_5min", "Value": "{"queries":1, "avg_sec":0.001, "min_sec":0.001, "max_sec":0.001, "pct95_sec":0.001, "pct99_sec":0.001}"}
+    {"Key": "query_time_15min", "Value": "{"queries":1, "avg_sec":0.001, "min_sec":0.001, "max_sec":0.001, "pct95_sec":0.001, "pct99_sec":0.001}"}
+    {"Key": "query_time_total", "Value": "{"queries":1, "avg_sec":0.001, "min_sec":0.001, "max_sec":0.001, "pct95_sec":0.001, "pct99_sec":0.001}"}
+    {"Key": "found_rows_1min", "Value": "{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}"}
+    {"Key": "found_rows_5min", "Value": "{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}"}
+    {"Key": "found_rows_15min", "Value": "{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}"}
+    {"Key": "found_rows_total", "Value": "{"queries":1, "avg":3, "min":3, "max":3, "pct95":3, "pct99":3}"}],
+ "error": "",
+ "total": 0,
+ "warning": ""}
+```
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=SHOW INDEX statistic STATUS");
+
+```
+<!-- response Java -->
+```java
+{columns=[{ Key : { type=string }},
+              { Value : { type=string }}],
+  data : [
+   { Key=index_type, Value=rt}
+    { Key=indexed_documents, Value=3}
+    { Key=indexed_bytes, Value=0}
+    { Key=ram_bytes, Value=6678}
+    { Key=disk_bytes, Value=611}
+    { Key=ram_chunk, Value=990}
+    { Key=ram_chunk_segments_count, Value=2}
+    { Key=mem_limit, Value=134217728}
+    { Key=ram_bytes_retired, Value=0}
+    { Key=tid, Value=15}
+    { Key=query_time_1min, Value={queries:1, avg_sec:0.001, min_sec:0.001, max_sec:0.001, pct95_sec:0.001, pct99_sec:0.001}}
+    { Key=query_time_5min, Value={queries:1, avg_sec:0.001, min_sec:0.001, max_sec:0.001, pct95_sec:0.001, pct99_sec:0.001}}
+    { Key=query_time_15min, Value={queries:1, avg_sec:0.001, min_sec:0.001, max_sec:0.001, pct95_sec:0.001, pct99_sec:0.001}}
+    { Key=query_time_total, Value={queries:1, avg_sec:0.001, min_sec:0.001, max_sec:0.001, pct95_sec:0.001, pct99_sec:0.001}}
+    { Key=found_rows_1min, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}
+    { Key=found_rows_5min, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}
+    { Key=found_rows_15min, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}
+    { Key=found_rows_total, Value={queries:1, avg:3, min:3, max:3, pct95:3, pct99:3}}],
+  error= ,
+  total=0,
+  warning= }
+```
 <!-- end -->

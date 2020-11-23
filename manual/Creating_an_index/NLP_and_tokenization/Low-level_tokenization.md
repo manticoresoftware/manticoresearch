@@ -727,12 +727,19 @@ $index->create($params);
 utilsApi.sql('mode=raw&query=create table products(title text, price float) ngram_chars = \'U+3000..U+2FA1F\' ngram_len = \'1\'')
 ```
 <!-- intro -->
-##### Python:
+##### javascript:
 
-<!-- request Python -->
+<!-- request javascript -->
 
-```python
+```java
 res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) ngram_chars = \'U+3000..U+2FA1F\' ngram_len = \'1\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'");
 ```
 <!-- request CONFIG -->
 

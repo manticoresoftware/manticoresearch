@@ -57,7 +57,48 @@ $params = [
 ];
 $response = $client->cluster()->create($params);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=CREATE CLUSTER posts')
+utilsApi.sql('mode=raw&query=CREATE CLUSTER click_query \'/var/data/click_query/\' as path')
+utilsApi.sql('mode=raw&query=CREATE CLUSTER click_query \'/var/data/click_query/\' as path, \'clicks_mirror1:9312,clicks_mirror2:9312,clicks_mirror3:9312\' as nodes')
+
+```
+
+<!-- response Python -->
+```python
+{u'error': u'', u'total': 0, u'warning': u''}
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=CREATE CLUSTER posts');
+res = await utilsApi.sql('mode=raw&query=CREATE CLUSTER click_query \'/var/data/click_query/\' as path');
+res = await utilsApi.sql('mode=raw&query=CREATE CLUSTER click_query \'/var/data/click_query/\' as path, \'clicks_mirror1:9312,clicks_mirror2:9312,clicks_mirror3:9312\' as nodes');
+```
+
+<!-- response javascript -->
+```javascript
+{"total":0,"error":"","warning":""}
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=CREATE CLUSTER posts");
+utilsApi.sql("mode=raw&query=CREATE CLUSTER click_query '/var/data/click_query/' as path");
+utilsApi.sql("mode=raw&query=CREATE CLUSTER click_query '/var/data/click_query/' as path, 'clicks_mirror1:9312,clicks_mirror2:9312,clicks_mirror3:9312' as nodes");
+```
 <!-- end -->
 
 If a cluster is created without the [nodes](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes) option, the first node that gets joined to the cluster will be saved as [nodes](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#nodes).

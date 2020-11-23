@@ -57,7 +57,29 @@ $params = [
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price float) html_strip = \'1\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```java
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) html_strip = \'1\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) html_strip = '1'");
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -120,7 +142,29 @@ $params = [
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price float) html_index_attrs = \'img=alt,title; a=title;\' html_strip = \'1\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```java
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) html_index_attrs = \'img=alt,title; a=title;\' html_strip = \'1\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) html_index_attrs = \'img=alt,title; a=title;\' html_strip = '1'");
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -186,7 +230,29 @@ $params = [
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price float) html_remove_elements = \'style, script\' html_strip = \'1\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```java
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) html_remove_elements = \'style, script\' html_strip = \'1\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) html_remove_elements = \'style, script\' html_strip = '1'");
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -265,7 +331,29 @@ $params = [
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price float) index_sp = \'1\' html_strip = \'1\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```java
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) index_sp = \'1\' html_strip = \'1\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) index_sp = \'1\' html_strip = '1'");
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -334,7 +422,29 @@ $params = [
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price float) index_zones = \'h, th, title\' html_strip = \'1\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```java
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) index_zones = \'h, th, title\' html_strip = \'1\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) index_zones = 'h, th, title' html_strip = '1'");
+```
 <!-- request CONFIG -->
 
 ```ini

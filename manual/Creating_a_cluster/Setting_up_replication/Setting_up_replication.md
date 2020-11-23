@@ -96,6 +96,44 @@ $index->addDocuments([
 $index->deleteDocument(1);
 ```
 
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+``` python
+indexApi.insert({"cluster":"posts","index":"weekly_index","doc":{"title":"iphone case","price":19.85}})
+indexApi.delete({"cluster":"posts","index":"weekly_index","id":1})
+```
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+``` javascript
+res = await indexApi.insert({"cluster":"posts","index":"weekly_index","doc":{"title":"iphone case","price":19.85}});
+ res = await indexApi.delete({"cluster":"posts","index":"weekly_index","id":1});
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+``` java
+InsertDocumentRequest newdoc = new InsertDocumentRequest();
+HashMap<String,Object> doc = new HashMap<String,Object>(){{
+    put("title","Crossbody Bag with Tassel");
+    put("price",19.85);
+}};
+newdoc.index("weekly_index").cluster("posts").id(1L).setDoc(doc); 
+sqlresult = indexApi.insert(newdoc);
+
+DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest();
+deleteRequest.index("weekly_index").cluster("posts").setId(1L); 
+indexApi.delete(deleteRequest);
+
+```
 <!-- end -->
 
 <!-- example write statements 2 -->
@@ -238,7 +276,32 @@ $params = [
 ];
 $response = $client->cluster()->create($params);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=CREATE CLUSTER posts')
+```
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=CREATE CLUSTER posts');
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=CREATE CLUSTER posts");
+
+```
 <!-- end -->
 
 <!-- example replication and cluster 3 -->
@@ -288,7 +351,34 @@ $params = [
 ];
 $response = $client->cluster()->alter($params);   
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=ALTER CLUSTER posts ADD pq_title')
+utilsApi.sql('mode=raw&query=ALTER CLUSTER posts ADD pq_clicks')
+```
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=ALTER CLUSTER posts ADD pq_title');
+res = await utilsApi.sql('mode=raw&query=ALTER CLUSTER posts ADD pq_clicks');
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=ALTER CLUSTER posts ADD pq_title");
+utilsApi.sql("mode=raw&query=ALTER CLUSTER posts ADD pq_clicks");
+```
 <!-- end -->
 
 <!-- example replication and cluster 4 -->
@@ -323,7 +413,32 @@ $params = [
 ];
 $response = $client->cluster->join($params);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=JOIN CLUSTER posts AT \'192.168.1.101:9312\'')
+```
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=JOIN CLUSTER posts AT \'192.168.1.101:9312\'');
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=JOIN CLUSTER posts AT '192.168.1.101:9312'");
+
+```
 <!-- end -->
 
 <!-- example replication and cluster 5 -->
@@ -362,7 +477,40 @@ $index->addDocuments([
 ]);
 
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+``` python
+indexApi.insert({"cluster":"posts","index":"pq_title","id":3"doc":{"title":"test me"}})
+
+```
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+``` javascript
+res = await indexApi.insert({"cluster":"posts","index":"pq_title","id":3"doc":{"title":"test me"}});
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+``` java
+InsertDocumentRequest newdoc = new InsertDocumentRequest();
+HashMap<String,Object> doc = new HashMap<String,Object>(){{
+    put("title","test me");
+}};
+newdoc.index("pq_title").cluster("posts").id(3L).setDoc(doc); 
+sqlresult = indexApi.insert(newdoc);
+
+ 
+
+```
 <!-- end -->
 
 Now all such queries that modify indexes in the cluster are replicated to all nodes in the cluster.

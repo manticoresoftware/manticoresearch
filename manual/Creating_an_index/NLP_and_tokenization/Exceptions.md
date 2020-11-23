@@ -85,7 +85,29 @@ $params = [
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price float) exceptions = \'/usr/local/sphinx/data/exceptions.txt\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```java
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) exceptions = \'/usr/local/sphinx/data/exceptions.txt\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) exceptions = '/usr/local/sphinx/data/exceptions.txt'");
+```
 <!-- request CONFIG -->
 
 ```ini

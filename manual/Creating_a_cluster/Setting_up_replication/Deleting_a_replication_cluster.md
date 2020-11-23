@@ -16,9 +16,7 @@ DELETE CLUSTER click_query
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=
-DELETE CLUSTER click_query
-"
+POST /sql -d "mode=raw&query=DELETE CLUSTER click_query"
 ```
 
 <!-- request PHP -->
@@ -30,5 +28,39 @@ $params = [
 ];
 $response = $client->cluster()->delete($params);                
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=DELETE CLUSTER click_query')
+```
+
+<!-- response Python -->
+```python
+{u'error': u'', u'total': 0, u'warning': u''}
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=DELETE CLUSTER click_query');
+```
+
+<!-- response javascript -->
+```javascript
+{"total":0,"error":"","warning":""}
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=DELETE CLUSTER click_query");
+```
 <!-- end -->

@@ -136,6 +136,27 @@ $params = [
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
+<!-- intro -->
+##### Python:
+<!-- request Python -->
+```python
+utilsApi.sql('mode=raw&query=create table products(title text stored indexed, content text stored indexed, name text indexed, price float)')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table products(title text stored indexed, content text stored indexed, name text indexed, price float)');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("mode=raw&query=create table products(title text stored indexed, content text stored indexed, name text indexed, price float)");
+```
 
 <!-- request CONFIG -->
 

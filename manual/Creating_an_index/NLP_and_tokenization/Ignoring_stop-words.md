@@ -56,7 +56,29 @@ $params = [
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price float) stopwords = \'/usr/local/sphinx/data/stopwords.txt /usr/local/sphinx/data/stopwords-ru.txt /usr/local/sphinx/data/stopwords-en.txt\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```java
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) stopwords = \'/usr/local/sphinx/data/stopwords.txt /usr/local/sphinx/data/stopwords-ru.txt /usr/local/sphinx/data/stopwords-en.txt\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) stopwords = '/usr/local/sphinx/data/stopwords.txt /usr/local/sphinx/data/stopwords-ru.txt /usr/local/sphinx/data/stopwords-en.txt'");
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -163,7 +185,29 @@ $params = [
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price float) stopwords = \'it\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```java
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) stopwords = \'it\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) stopwords = 'it'");
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -216,7 +260,29 @@ $params = [
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price float) stopwords = \'en, it, ru\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```java
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) stopwords = \'en, it, ru\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) stopwords = 'en, it, ru'");
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -277,7 +343,29 @@ $params = [
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price float) stopwords = \'en\' stopword_step = \'1\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```java
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) stopwords = \'en\' stopword_step = \'1\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) stopwords = \'en\' stopword_step = \'1\'");
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -343,7 +431,29 @@ $params = [
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```java
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'");
+```
 <!-- request CONFIG -->
 
 ```ini

@@ -101,9 +101,61 @@ curl -s "http://localhost:9308/search"
 
 <!-- request PHP -->
 ```php
+// https://github.com/manticoresoftware/manticoresearch-php
 require_once __DIR__ . '/vendor/autoload.php';
 $config = ['host'=>'127.0.0.1','port'=>9308];
 $client = new \Manticoresearch\Client($config);
+```
+
+<!-- intro -->
+##### Connect via [Python client](https://github.com/manticoresoftware/manticoresearch-php):
+
+<!-- request Python -->
+```python
+// https://github.com/manticoresoftware/manticoresearch-python
+import manticoresearch
+config = manticoresearch.Configuration(
+    host = "http://127.0.0.1:9308"
+)
+client =  manticoresearch.ApiClient(config)
+indexApi = manticoresearch.IndexApi(client)
+searchApi = manticoresearch.searchApi(client)
+utilsApi = manticoresearch.UtilsApi(client)
+```
+
+<!-- intro -->
+##### Connect via [Javascript client](https://github.com/manticoresoftware/manticoresearch-javascript):
+
+<!-- request Javascript -->
+```javascript
+// https://github.com/manticoresoftware/manticoresearch-javascript
+var Manticoresearch = require('manticoresearch');
+var client= new Manticoresearch.ApiClient()
+client.basePath="http://127.0.0.1:9308";
+indexApi = new Manticoresearch.IndexApi(client);
+searchApi = new Manticoresearch.SearchApi(client);
+utilsApi = new Manticoresearch.UtilsApi(client);
+```
+<!-- intro -->
+##### Connect via [Java client](https://github.com/manticoresoftware/manticoresearch-java):
+
+<!-- request Java -->
+```java
+// https://github.com/manticoresoftware/manticoresearch-java
+import com.manticoresearch.client.ApiClient;
+import com.manticoresearch.client.ApiException;
+import com.manticoresearch.client.Configuration;
+import com.manticoresearch.client.model.*;
+import com.manticoresearch.client.api.IndexApi;
+import com.manticoresearch.client.api.UtilsApi;
+import com.manticoresearch.client.api.SearchApi;
+...
+ApiClient client = Configuration.getDefaultApiClient();
+client.setBasePath("http://127.0.0.1:9308");
+...
+IndexApi indexApi = new IndexApi(client);
+SearchApi searchApi = new UtilsApi(client);
+UtilsApi utilsApi = new UtilsApi(client);
 ```
 
 <!-- end -->
@@ -158,6 +210,32 @@ $index->create([
     'title'=>['type'=>'text'],
     'price'=>['type'=>'float'],
 ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table forum(title text, price float)')
+```
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table forum(title text, price float)');
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=create table forum(title text, price float)");
+
 ```
 <!-- end -->
 
@@ -261,6 +339,57 @@ $index->addDocuments([
         ['id' => 0, 'title' => 'microfiber sheet set', 'price' => 19.99],
         ['id' => 0, 'title' => 'Pet Hair Remover Glove', 'price' => 7.99]
 ]);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+``` python
+indexApi.insert({"index" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}})
+indexApi.insert({"index" : "test", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}})
+indexApi.insert({"index" : "test", "id" : 0, "doc" : {{"title" : "Pet Hair Remover Glove", "price" : 7.99}})
+```
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+
+``` javascript
+res = await indexApi.insert({"index" : "test", "id" : 1, "doc" : {"title" : "Crossbody Bag with Tassel", "price" : 19.85}});
+res = await indexApi.insert({"index" : "test", "id" : 2, "doc" : {"title" : "microfiber sheet set", "price" : 19.99}});
+res = await indexApi.insert({"index" : "test", "id" : 0, "doc" : {{"title" : "Pet Hair Remover Glove", "price" : 7.99}});
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+``` java
+InsertDocumentRequest newdoc = new InsertDocumentRequest();
+HashMap<String,Object> doc = new HashMap<String,Object>(){{
+    put("title","Crossbody Bag with Tassel");
+    put("price",19.85);
+}};
+newdoc.index("products").id(1L).setDoc(doc); 
+sqlresult = indexApi.insert(newdoc);
+
+newdoc = new InsertDocumentRequest();
+doc = new HashMap<String,Object>(){{
+    put("title","microfiber sheet set");
+    put("price",19.99);
+}};
+newdoc.index("products").id(2L).setDoc(doc); 
+sqlresult = indexApi.insert(newdoc);
+
+newdoc = new InsertDocumentRequest();
+doc = new HashMap<String,Object>(){{
+    put("title","Pet Hair Remover Glove");
+    put("price",7.99);
+ }};
+newdoc.index("products").id(0L).setDoc(doc); 
+indexApi.insert(newdoc);
 ```
 <!-- end -->
 
@@ -370,6 +499,80 @@ Array
 )
 
 ```
+`
+
+<!-- intro -->
+Python
+<!-- request Python -->
+
+```python
+searchApi.search({"index":"myindex","query":{"query_string":"@title remove hair"},"highlight":{"fields":["title"]}})
+```
+<!-- response Python -->
+``` python
+{'hits': {'hits': [{u'_id': u'1513686608316989452',
+                    u'_score': 1680,
+                    u'_source': {u'title': u'Pet Hair Remover Glove', u'price':7.99},
+                    u'highlight':{u'title':[u'Pet <b>Hair Remover</b> Glove']}}}],
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- intro -->
+javascript
+<!-- request javascript -->
+
+```javascript
+res = await searchApi.search({"index":"myindex","query":{"query_string":"@title remove hair"}"highlight":{"fields":["title"]}});
+```
+<!-- response javascript -->
+```javascript
+{"hits": {"hits": [{"_id": "1513686608316989452",
+                    "_score": 1680,
+                    "_source": {"title": "Pet Hair Remover Glove", "price":7.99},
+                    "highlight":{"title":["Pet <b>Hair Remover</b> Glove"]}}],
+          "total": 1},
+ "profile": None,
+ "timed_out": False,
+ "took": 0}
+```
+
+<!-- intro -->
+java
+<!-- request Java -->
+
+```java
+
+query = new HashMap<String,Object>();
+query.put("query_string","@title remove hair");
+searchRequest = new SearchRequest();
+searchRequest.setIndex("forum");
+searchRequest.setQuery(query);
+HashMap<String,Object> highlight = new HashMap<String,Object>(){{
+    put("fields",new String[] {"title"});
+            
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
+```
+<!-- response Java -->
+```java
+class SearchResponse {
+    took: 84
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: null
+        hits: [{_id=1, _score=1, _source={price=7.99, title=Pet Hair Remover Glove}, highlight={title=[Pet <b>Hair Remover</b> Glove]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
+
+```
 <!-- end -->
 
 <!-- example update -->
@@ -435,6 +638,35 @@ $doc = [
 ];
 
 $response = $client->update($doc);
+```
+
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+``` python
+indexApi = api = manticoresearch.IndexApi(client)
+indexApi.update({"index" : "products", "id" : 2, "doc" : {"price":18.5}})
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+``` javascript
+res = await indexApi.update({"index" : "products", "id" : 2, "doc" : {"price":18.5}});
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+``` java
+UpdateDocumentRequest updateRequest = new UpdateDocumentRequest();
+doc = new HashMap<String,Object >(){{
+    put("price",18.5);
+}};
+updateRequest.index("products").id(2L).setDoc(doc); 
+indexApi.update(updateRequest);
 ```
 <!-- end -->
 
@@ -506,5 +738,40 @@ Array
     [deleted] => 1
 )
 
+```
+<!-- intro -->
+
+##### Python:
+
+<!-- request Python -->
+``` python
+indexApi.delete({"index" : "products", "query": {"range":{"price":{"lte":10}}}})
+```
+
+<!-- intro -->
+
+##### javascript:
+
+<!-- request javascript -->
+``` javascript
+res = await indexApi.delete({"index" : "products", "query": {"range":{"price":{"lte":10}}}});
+```
+
+<!-- intro -->
+
+##### java:
+
+<!-- request Java -->
+``` java
+DeleteDocumentRequest deleteRequest = new DeleteDocumentRequest();
+query = new HashMap<String,Object>();
+query.put("range",new HashMap<String,Object>(){{
+    put("range",new HashMap<String,Object>(){{
+        put("lte",10);
+    }});
+}});
+deleteRequest.index("products").setQuery(query); 
+indexApi.delete(deleteRequest);
+      
 ```
 <!-- end -->

@@ -55,6 +55,28 @@ $index->create([
 ```
 
 <!-- intro -->
+##### Python:
+<!-- request Python -->
+```python
+utilsApi.sql('mode=raw&query=create table forum(title text, price float)')
+```
+
+<!-- intro -->
+##### Javascript:
+
+<!-- request Javascript -->
+```javascript
+res = await utilsApi.sql('mode=raw&query=create table forum(title text, price float)');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("mode=raw&query=create table forum(title text, price float)");
+```
+
+<!-- intro -->
 ##### Creating a real-time index via a configuration file:
 <!-- request CONFIG -->
 

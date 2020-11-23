@@ -23,4 +23,47 @@ index index_dist {
 CREATE TABLE local_dist type='distributed' local='index1' local='index2';
 ```
 
+
+<!-- request PHP -->
+
+```php
+$params = [
+    'body' => [
+        'settings' => [
+            'type' => 'distributed',
+            'local' => [
+                'index1',
+                'index2'
+            ]
+        ]
+    ],
+    'index' => 'products'
+];
+$index = new \Manticoresearch\Index($client);
+$index->create($params);
+```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=CREATE TABLE local_dist type=\'distributed\' local=\'index1\' local=\'index2\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```java
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE local_dist type=\'distributed\' local=\'index1\' local=\'index2\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("mode=raw&query=CREATE TABLE local_dist type='distributed' local='index1' local='index2'");
+```
+
 <!-- end -->

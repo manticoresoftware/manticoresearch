@@ -161,5 +161,44 @@ Array(
     [warning] => 
 )
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=TRUNCATE TABLE products WITH RECONFIGURE')
+```
+
+<!-- response Python -->
+```python
+{u'error': u'', u'total': 0, u'warning': u''}
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=TRUNCATE TABLE products WITH RECONFIGURE');
+```
+
+<!-- response javascript -->
+```javascript
+{"total":0,"error":"","warning":""}
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=TRUNCATE TABLE products WITH RECONFIGURE");
+```
+
+<!-- response Java -->
+```java
+{total=0, error=, warning=}
+```
 <!-- end -->

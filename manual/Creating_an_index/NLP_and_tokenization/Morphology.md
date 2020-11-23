@@ -85,7 +85,29 @@ $params = [
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price float) morphology = \'stem_en, libstemmer_sv\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```java
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) morphology = \'stem_en, libstemmer_sv\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) morphology = 'stem_en, libstemmer_sv'");
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -143,7 +165,29 @@ $params = [
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price float) morphology_skip_fields = \'name\' morphology = \'stem_en\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```java
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) morphology_skip_fields = \'name\' morphology = \'stem_en\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'");
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -204,7 +248,29 @@ $params = [
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price float) min_stemming_len = \'4\' morphology = \'stem_en\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```java
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) min_stemming_len = \'4\' morphology = \'stem_en\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'");
+```
 <!-- request CONFIG -->
 
 ```ini
@@ -264,7 +330,29 @@ $params = [
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price float) index_exact_words = \'1\' morphology = \'stem_en\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```java
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) index_exact_words = \'1\' morphology = \'stem_en\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) index_exact_words = '1' morphology = 'stem_en'");
+```
 <!-- request CONFIG -->
 
 ```ini

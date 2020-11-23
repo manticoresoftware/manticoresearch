@@ -55,7 +55,7 @@ $index->create([
 
 <!-- request Python -->
 
-```php
+```python
 utilsApi.sql('mode=raw&query=create table forum(title text, content text, author_id int, forum_id int, post_date timestamp)')
 ```
 <!-- intro -->

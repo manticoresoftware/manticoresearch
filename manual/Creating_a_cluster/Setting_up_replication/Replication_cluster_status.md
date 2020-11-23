@@ -100,5 +100,93 @@ $response = $client->nodes()->status($params);
 "cluster_post_nodes_view" => "10.10.0.1:9312,10.10.0.1:9320:replication,10.10.1.1:9312,10.10.1.1:9320:replication"
 )
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=SHOW STATUS')
+```
+<!-- response Python -->
+
+```python
+{u'columns': [{u'Key': {u'type': u'string'}},
+              {u'Value': {u'type': u'string'}}],
+ u'data': [
+	{u'Key': u'cluster_name', u'Value': u'post'},
+	{u'Key': u'cluster_post_state_uuid', u'Value': u'fba97c45-36df-11e9-a84e-eb09d14b8ea7'},
+	{u'Key': u'cluster_post_conf_id', u'Value': u'1'},
+	{u'Key': u'cluster_post_status', u'Value': u'primary'},
+	{u'Key': u'cluster_post_size', u'Value': u'5'},
+	{u'Key': u'cluster_post_local_index', u'Value': u'0'},
+	{u'Key': u'cluster_post_node_state', u'Value': u'synced'},
+	{u'Key': u'cluster_post_indexes_count', u'Value': u'2'},
+	{u'Key': u'cluster_post_indexes', u'Value': u'pq1,pq_posts'},
+	{u'Key': u'cluster_post_nodes_set', u'Value': u'10.10.0.1:9312'},
+	{u'Key': u'cluster_post_nodes_view', u'Value': u'10.10.0.1:9312,10.10.0.1:9320:replication,10.10.1.1:9312,10.10.1.1:9320:replication'}],
+ u'error': u'',
+ u'total': 0,
+ u'warning': u''}
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=SHOW STATUS');
+```
+
+<!-- response Javascript -->
+
+```javascript
+{"columns": [{"Key": {"type": "string"}},
+              {"Value": {"type": "string"}}],
+ "data": [
+	{"Key": "cluster_name", "Value": "post"},
+	{"Key": "cluster_post_state_uuid", "Value": "fba97c45-36df-11e9-a84e-eb09d14b8ea7"},
+	{"Key": "cluster_post_conf_id", "Value": "1"},
+	{"Key": "cluster_post_status", "Value": "primary"},
+	{"Key": "cluster_post_size", "Value": "5"},
+	{"Key": "cluster_post_local_index", "Value": "0"},
+	{"Key": "cluster_post_node_state", "Value": "synced"},
+	{"Key": "cluster_post_indexes_count", "Value": "2"},
+	{"Key": "cluster_post_indexes", "Value": "pq1,pq_posts"},
+	{"Key": "cluster_post_nodes_set", "Value": "10.10.0.1:9312"},
+	{"Key": "cluster_post_nodes_view", "Value": "10.10.0.1:9312,10.10.0.1:9320:replication,10.10.1.1:9312,10.10.1.1:9320:replication"}],
+ "error": "",
+ "total": 0,
+ "warning": ""}
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=SHOW STATUS");
+```
+<!-- response Java -->
+
+```java
+{columns=[{ Key : { type=string }},
+              { Value : { type=string }}],
+  data : [
+	{ Key=cluster_name, Value=post},
+	{ Key=cluster_post_state_uuid, Value=fba97c45-36df-11e9-a84e-eb09d14b8ea7},
+	{ Key=cluster_post_conf_id, Value=1},
+	{ Key=cluster_post_status, Value=primary},
+	{ Key=cluster_post_size, Value=5},
+	{ Key=cluster_post_local_index, Value=0},
+	{ Key=cluster_post_node_state, Value=synced},
+	{ Key=cluster_post_indexes_count, Value=2},
+	{ Key=cluster_post_indexes, Value=pq1,pq_posts},
+	{ Key=cluster_post_nodes_set, Value=10.10.0.1:9312},
+	{ Key=cluster_post_nodes_view, Value=10.10.0.1:9312,10.10.0.1:9320:replication,10.10.1.1:9312,10.10.1.1:9320:replication}],
+  error= ,
+  total=0,
+  warning= }
+```
 <!-- end -->

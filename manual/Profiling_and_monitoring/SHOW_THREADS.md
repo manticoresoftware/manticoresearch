@@ -66,7 +66,112 @@ Thd efficiency: 0.00%
        In idle: No (working)
           Info: show threads
 ```
+<!-- intro -->
+##### HTTP:
 
+<!-- request HTTP -->
+
+```http
+POST /sql -d "mode=raw&query=SHOW THREADS"
+```
+<!-- response HTTP -->
+```json
+{
+  "columns": [
+    {
+      "Tid": {
+        "type": "string"
+      }
+    },
+    {
+      "Name": {
+        "type": "string"
+      }
+    },
+    {
+      "Proto": {
+        "type": "string"
+      }
+    },
+    {
+      "State": {
+        "type": "string"
+      }
+    },
+    {
+      "Host": {
+        "type": "string"
+      }
+    },
+    {
+      "ConnID": {
+        "type": "string"
+      }
+    },
+    {
+      "Time": {
+        "type": "string"
+      }
+    },
+    {
+      "Work time": {
+        "type": "string"
+      }
+    },
+    {
+      "Work time CPU": {
+        "type": "string"
+      }
+    },
+    {
+      "Thd efficiency": {
+        "type": "string"
+      }
+    },
+    {
+      "Jobs done": {
+        "type": "string"
+      }
+    },
+    {
+      "Last job took": {
+        "type": "string"
+      }
+    },
+    {
+      "In idle": {
+        "type": "string"
+      }
+    },
+    {
+      "Info": {
+        "type": "string"
+      }
+    }
+  ],
+  "data": [
+    {
+      "Tid": 6844,
+      "Name": "work_3",
+      "Proto": "http",
+      "State": "query",
+      "Host": "127.0.0.1:51752",
+      "ConnID": 91,
+      "Time": 3245,
+      "Work time": "2h",
+      "Work time CPU": "0us",
+      "Thd efficiency": "0.00%",
+      "Jobs done": 1073587960,
+      "Last job took": "16ms",
+      "In idle": "No (working)",
+      "Info": "show_threads"
+    }
+  ],
+  "total": 0,
+  "error": "",
+  "warning": ""
+}
+```
 <!-- intro -->
 ##### PHP:
 
@@ -116,6 +221,331 @@ Array
 
 )
 ```
+<!-- intro -->
+##### Python:
+
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=SHOW THREADS')
+```
+<!-- response Python -->
+
+```python
+{
+  u'columns': [
+    {
+      u'Tid': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'Name': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'Proto': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'State': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'Host': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'ConnID': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'Time': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'Work time': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'Work time CPU': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'Thd efficiency': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'Jobs done': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'Last job took': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'In idle': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'Info': {
+        u'type': u'string'
+      }
+    }
+  ],
+  u'data': [
+    {
+      u'Tid': 6844,
+      u'Name': u'work_3',
+      u'Proto': u'http',
+      u'State': u'query',
+      u'Host': u'127.0.0.1:51752',
+      u'ConnID': 91,
+      u'Time': 3245,
+      u'Work time': u'2h',
+      u'Work time CPU': u'0us',
+      u'Thd efficiency': u'0.00%',
+      u'Jobs done': 1073587960,
+      u'Last job took': u'16ms',
+      u'In idle': u'No (working)',
+      u'Info': u'show_threads'
+    }
+  ],
+  u'total': 0,
+  u'error': u'',
+  u'warning': u''
+}
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=SHOW THREADS');
+```
+
+<!-- response Javascript -->
+
+```javascript
+{
+  "columns": [
+    {
+      "Tid": {
+        "type": "string"
+      }
+    },
+    {
+      "Name": {
+        "type": "string"
+      }
+    },
+    {
+      "Proto": {
+        "type": "string"
+      }
+    },
+    {
+      "State": {
+        "type": "string"
+      }
+    },
+    {
+      "Host": {
+        "type": "string"
+      }
+    },
+    {
+      "ConnID": {
+        "type": "string"
+      }
+    },
+    {
+      "Time": {
+        "type": "string"
+      }
+    },
+    {
+      "Work time": {
+        "type": "string"
+      }
+    },
+    {
+      "Work time CPU": {
+        "type": "string"
+      }
+    },
+    {
+      "Thd efficiency": {
+        "type": "string"
+      }
+    },
+    {
+      "Jobs done": {
+        "type": "string"
+      }
+    },
+    {
+      "Last job took": {
+        "type": "string"
+      }
+    },
+    {
+      "In idle": {
+        "type": "string"
+      }
+    },
+    {
+      "Info": {
+        "type": "string"
+      }
+    }
+  ],
+  "data": [
+    {
+      "Tid": 6844,
+      "Name": "work_3",
+      "Proto": "http",
+      "State": "query",
+      "Host": "127.0.0.1:51752",
+      "ConnID": 91,
+      "Time": 3245,
+      "Work time": "2h",
+      "Work time CPU": "0us",
+      "Thd efficiency": "0.00%",
+      "Jobs done": 1073587960,
+      "Last job took": "16ms",
+      "In idle": "No (working)",
+      "Info": "show_threads"
+    }
+  ],
+  "total": 0,
+  "error": "",
+  "warning": ""
+}
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=SHOW THREADS");
+```
+<!-- response Java -->
+
+```java
+
+{
+  columns=[
+    {
+      Tid={
+        type=string
+      }
+    },
+    {
+      Name={
+        type=string
+      }
+    },
+    {
+      Proto={
+        type=string
+      }
+    },
+    {
+      State={
+        type=string
+      }
+    },
+    {
+      Host={
+        type=string
+      }
+    },
+    {
+      ConnID={
+        type=string
+      }
+    },
+    {
+      Time={
+        type=string
+      }
+    },
+    {
+      Work time={
+        type=string
+      }
+    },
+    {
+      Work time CPU={
+        type=string
+      }
+    },
+    {
+      Thd efficiency={
+        type=string
+      }
+    },
+    {
+      Jobs done={
+        type=string
+      }
+    },
+    {
+      Last job took={
+        type=string
+      }
+    },
+    {
+      In idle={
+        type=string
+      }
+    },
+    {
+      Info={
+        type=string
+      }
+    }
+  ],
+  data=[
+    {
+      Tid=6844,
+      Name=work_3,
+      Proto=http,
+      State=query,
+      Host=127.0.0.1:51752,
+      ConnID=91,
+      Time=3245,
+      Work time=2h,
+      Work time CPU=0us,
+      Thd efficiency=0.00%,
+      Jobs done=1073587960,
+      Last job took=16ms,
+      In idle=No (working),
+      Info=show_threads
+    }
+  ],
+  total=0,
+  error=,
+  warning=
+}
+```
+
 
 <!-- end -->
 
@@ -176,7 +606,112 @@ Thd efficiency: 0.00%
           Info: show threads option columns=30
 2 rows in set (0.00 sec)
 ```
+<!-- intro -->
+##### HTTP:
 
+<!-- request HTTP -->
+
+```http
+POST /sql -d "mode=raw&query=SHOW THREADS OPTION columns=30"
+```
+<!-- response HTTP -->
+```json
+{
+  "columns": [
+    {
+      "Tid": {
+        "type": "string"
+      }
+    },
+    {
+      "Name": {
+        "type": "string"
+      }
+    },
+    {
+      "Proto": {
+        "type": "string"
+      }
+    },
+    {
+      "State": {
+        "type": "string"
+      }
+    },
+    {
+      "Host": {
+        "type": "string"
+      }
+    },
+    {
+      "ConnID": {
+        "type": "string"
+      }
+    },
+    {
+      "Time": {
+        "type": "string"
+      }
+    },
+    {
+      "Work time": {
+        "type": "string"
+      }
+    },
+    {
+      "Work time CPU": {
+        "type": "string"
+      }
+    },
+    {
+      "Thd efficiency": {
+        "type": "string"
+      }
+    },
+    {
+      "Jobs done": {
+        "type": "string"
+      }
+    },
+    {
+      "Last job took": {
+        "type": "string"
+      }
+    },
+    {
+      "In idle": {
+        "type": "string"
+      }
+    },
+    {
+      "Info": {
+        "type": "string"
+      }
+    }
+  ],
+  "data": [
+    {
+      "Tid": 6844,
+      "Name": "work_3",
+      "Proto": "http",
+      "State": "query",
+      "Host": "127.0.0.1:51752",
+      "ConnID": 91,
+      "Time": 3245,
+      "Work time": "2h",
+      "Work time CPU": "0us",
+      "Thd efficiency": "0.00%",
+      "Jobs done": 1073587960,
+      "Last job took": "16ms",
+      "In idle": "No (working)",
+      "Info": "show_threads"
+    }
+  ],
+  "total": 0,
+  "error": "",
+  "warning": ""
+}
+```
 <!-- intro -->
 ##### PHP:
 
@@ -226,5 +761,328 @@ Array
 
 )
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=SHOW THREADS OPTION columns=30')
+```
+<!-- response Python -->
+
+```python
+{
+  u'columns': [
+    {
+      u'Tid': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'Name': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'Proto': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'State': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'Host': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'ConnID': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'Time': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'Work time': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'Work time CPU': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'Thd efficiency': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'Jobs done': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'Last job took': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'In idle': {
+        u'type': u'string'
+      }
+    },
+    {
+      u'Info': {
+        u'type': u'string'
+      }
+    }
+  ],
+  u'data': [
+    {
+      u'Tid': 6844,
+      u'Name': u'work_3',
+      u'Proto': u'http',
+      u'State': u'query',
+      u'Host': u'127.0.0.1:51752',
+      u'ConnID': 91,
+      u'Time': 3245,
+      u'Work time': u'2h',
+      u'Work time CPU': u'0us',
+      u'Thd efficiency': u'0.00%',
+      u'Jobs done': 1073587960,
+      u'Last job took': u'16ms',
+      u'In idle': u'No (working)',
+      u'Info': u'show_threads'
+    }
+  ],
+  u'total': 0,
+  u'error': u'',
+  u'warning': u''
+}
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```javascript
+res = await utilsApi.sql('mode=raw&query=SHOW THREADS OPTION columns=30');
+```
+
+<!-- response Javascript -->
+
+```javascript
+{
+  "columns": [
+    {
+      "Tid": {
+        "type": "string"
+      }
+    },
+    {
+      "Name": {
+        "type": "string"
+      }
+    },
+    {
+      "Proto": {
+        "type": "string"
+      }
+    },
+    {
+      "State": {
+        "type": "string"
+      }
+    },
+    {
+      "Host": {
+        "type": "string"
+      }
+    },
+    {
+      "ConnID": {
+        "type": "string"
+      }
+    },
+    {
+      "Time": {
+        "type": "string"
+      }
+    },
+    {
+      "Work time": {
+        "type": "string"
+      }
+    },
+    {
+      "Work time CPU": {
+        "type": "string"
+      }
+    },
+    {
+      "Thd efficiency": {
+        "type": "string"
+      }
+    },
+    {
+      "Jobs done": {
+        "type": "string"
+      }
+    },
+    {
+      "Last job took": {
+        "type": "string"
+      }
+    },
+    {
+      "In idle": {
+        "type": "string"
+      }
+    },
+    {
+      "Info": {
+        "type": "string"
+      }
+    }
+  ],
+  "data": [
+    {
+      "Tid": 6844,
+      "Name": "work_3",
+      "Proto": "http",
+      "State": "query",
+      "Host": "127.0.0.1:51752",
+      "ConnID": 91,
+      "Time": 3245,
+      "Work time": "2h",
+      "Work time CPU": "0us",
+      "Thd efficiency": "0.00%",
+      "Jobs done": 1073587960,
+      "Last job took": "16ms",
+      "In idle": "No (working)",
+      "Info": "show_threads"
+    }
+  ],
+  "total": 0,
+  "error": "",
+  "warning": ""
+}
+```
+
+<!-- intro -->
+##### java:
+
+<!-- request Java -->
+
+```java
+utilsApi.sql("mode=raw&query=SHOW THREADS OPTION columns=30");
+```
+<!-- response Java -->
+
+```java
+
+{
+  columns=[
+    {
+      Tid={
+        type=string
+      }
+    },
+    {
+      Name={
+        type=string
+      }
+    },
+    {
+      Proto={
+        type=string
+      }
+    },
+    {
+      State={
+        type=string
+      }
+    },
+    {
+      Host={
+        type=string
+      }
+    },
+    {
+      ConnID={
+        type=string
+      }
+    },
+    {
+      Time={
+        type=string
+      }
+    },
+    {
+      Work time={
+        type=string
+      }
+    },
+    {
+      Work time CPU={
+        type=string
+      }
+    },
+    {
+      Thd efficiency={
+        type=string
+      }
+    },
+    {
+      Jobs done={
+        type=string
+      }
+    },
+    {
+      Last job took={
+        type=string
+      }
+    },
+    {
+      In idle={
+        type=string
+      }
+    },
+    {
+      Info={
+        type=string
+      }
+    }
+  ],
+  data=[
+    {
+      Tid=6844,
+      Name=work_3,
+      Proto=http,
+      State=query,
+      Host=127.0.0.1:51752,
+      ConnID=91,
+      Time=3245,
+      Work time=2h,
+      Work time CPU=0us,
+      Thd efficiency=0.00%,
+      Jobs done=1073587960,
+      Last job took=16ms,
+      In idle=No (working),
+      Info=show_threads
+    }
+  ],
+  total=0,
+  error=,
+  warning=
+}
+```
 <!-- end -->

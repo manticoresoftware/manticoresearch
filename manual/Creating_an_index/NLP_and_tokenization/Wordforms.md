@@ -74,7 +74,11 @@ create table products(title text, price float) wordforms = '/usr/local/sphinx/da
 $params = [
     'body' => [
         'settings' => [
-            'wordforms' => '/usr/local/sphinx/data/wordforms.txt'
+            'wordforms' => [
+                '/usr/local/sphinx/data/wordforms.txt',
+                '/usr/local/sphinx/data/alternateforms.txt',
+                '/usr/local/sphinx/private/dict*.txt'
+            ]
         ],
         'columns' => [
             'title'=>['type'=>'text'],
@@ -86,7 +90,29 @@ $params = [
 $index = new \Manticoresearch\Index($client);
 $index->create($params);
 ```
+<!-- intro -->
+##### Python:
 
+<!-- request Python -->
+
+```python
+utilsApi.sql('mode=raw&query=create table products(title text, price float) wordforms = \'/usr/local/sphinx/data/wordforms.txt\' wordforms = \'/usr/local/sphinx/data/alternateforms.txt\' wordforms = \'/usr/local/sphinx/private/dict*.txt\'')
+```
+<!-- intro -->
+##### javascript:
+
+<!-- request javascript -->
+
+```java
+res = await utilsApi.sql('mode=raw&query=create table products(title text, price float)wordforms = \'/usr/local/sphinx/data/wordforms.txt\' wordforms = \'/usr/local/sphinx/data/alternateforms.txt\' wordforms = \'/usr/local/sphinx/private/dict*.txt\'');
+```
+
+<!-- intro -->
+##### Java:
+<!-- request Java -->
+```java
+utilsApi.sql("mode=raw&query=create table products(title text, price float) wordforms = '/usr/local/sphinx/data/wordforms.txt' wordforms = '/usr/local/sphinx/data/alternateforms.txt' wordforms = '/usr/local/sphinx/private/dict*.txt'");
+```
 <!-- request CONFIG -->
 
 ```ini

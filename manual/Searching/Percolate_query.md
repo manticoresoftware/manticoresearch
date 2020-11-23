@@ -52,10 +52,10 @@ and 3 rules in it:
 <!-- request SQL -->
 
 ```sql
-create table products(title text, color string) type='pq';
-insert into products(query) values('@title bag');
-insert into products(query,filters) values('@title shoes', 'color=\'red\'');
-insert into products(query,filters) values('@title shoes', 'color in (\'blue\', \'green\')');
+CREATE TABLE products(title text, color string) type='pq';
+INSERT INTO products(query) values('@title bag');
+INSERT INTO products(query,filters) values('@title shoes', 'color=\'red\'');
+INSERT INTO products(query,filters) values('@title shoes', 'color in (\'blue\', \'green\')');
 select * from products;
 ```
 
@@ -302,10 +302,10 @@ SQL:
 <!-- request SQL -->
 
 ```sql
-call pq('products', 'Beautiful shoes', 0 as docs_json);
+CALL PQ('products', 'Beautiful shoes', 0 as docs_json);
 
-call pq('products', 'What a nice bag', 0 as docs_json);
-call pq('products', '{"title": "What a nice bag"}');
+CALL PQ('products', 'What a nice bag', 0 as docs_json);
+CALL PQ('products', '{"title": "What a nice bag"}');
 ```
 <!-- response SQL -->
 
@@ -524,7 +524,7 @@ SQL:
 <!-- request SQL -->
 
 ```sql
-call pq('products', '{"title": "What a nice bag"}', 1 as query);
+CALL PQ('products', '{"title": "What a nice bag"}', 1 as query);
 ```
 <!-- response SQL -->
 
@@ -747,11 +747,11 @@ SQL:
 <!-- request SQL -->
 
 ```sql
-call pq('products', ('nice pair of shoes', 'beautiful bag'), 1 as query, 0 as docs_json);
+CALL PQ('products', ('nice pair of shoes', 'beautiful bag'), 1 as query, 0 as docs_json);
 
-call pq('products', ('{"title": "nice pair of shoes", "color": "red"}', '{"title": "beautiful bag"}'), 1 as query);
+CALL PQ('products', ('{"title": "nice pair of shoes", "color": "red"}', '{"title": "beautiful bag"}'), 1 as query);
 
-call pq('products', '[{"title": "nice pair of shoes", "color": "blue"}, {"title": "beautiful bag"}]', 1 as query);
+CALL PQ('products', '[{"title": "nice pair of shoes", "color": "blue"}, {"title": "beautiful bag"}]', 1 as query);
 ```
 <!-- response SQL -->
 
@@ -1056,7 +1056,7 @@ SQL:
 <!-- request SQL -->
 
 ```sql
-call pq('products', '[{"title": "nice pair of shoes", "color": "blue"}, {"title": "beautiful bag"}]', 1 as query, 1 as docs);
+CALL PQ('products', '[{"title": "nice pair of shoes", "color": "blue"}, {"title": "beautiful bag"}]', 1 as query, 1 as docs);
 ```
 <!-- response SQL -->
 
@@ -1351,7 +1351,7 @@ This option is only available for `CALL PQ` via SQL.
 <!-- request SQL -->
 
 ```sql
-call pq('products', '[{"id": 123, "title": "nice pair of shoes", "color": "blue"}, {"id": 456, "title": "beautiful bag"}]', 1 as query, 'id' as docs_id, 1 as docs);
+CALL PQ('products', '[{"id": 123, "title": "nice pair of shoes", "color": "blue"}, {"id": 456, "title": "beautiful bag"}]', 1 as query, 'id' as docs_id, 1 as docs);
 ```
 <!-- response SQL -->
 
@@ -1375,11 +1375,11 @@ SQL:
 <!-- request SQL -->
 
 ```sql
-call pq('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag"}'));
+CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag"}'));
 
-call pq('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag}'));
+CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag}'));
 
-call pq('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag}'), 1 as skip_bad_json);
+CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag}'), 1 as skip_bad_json);
 ```
 <!-- response SQL -->
 
@@ -1899,9 +1899,9 @@ create table products1(title text, color string) type='pq';
 create table products2(title text, color string) type='pq';
 create table products_distributed type='distributed' local='products1' local='products2';
 
-insert into products1(query) values('@title bag');
-insert into products1(query,filters) values('@title shoes', 'color=\'red\'');
-insert into products2(query,filters) values('@title shoes', 'color in (\'blue\', \'green\')');
+INSERT INTO products1(query) values('@title bag');
+INSERT INTO products1(query,filters) values('@title shoes', 'color=\'red\'');
+INSERT INTO products2(query,filters) values('@title shoes', 'color in (\'blue\', \'green\')');
 ```
 
 <!-- example sharded -->
@@ -1912,7 +1912,7 @@ SQL:
 <!-- request SQL -->
 
 ```sql
-call pq('products_distributed', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag"}'), 'sharded' as mode, 1 as query);
+CALL PQ('products_distributed', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag"}'), 'sharded' as mode, 1 as query);
 ```
 <!-- response SQL -->
 
@@ -1938,7 +1938,7 @@ In some case you might want to get more details about performance a percolate qu
 <!-- request 1 as verbose -->
 
 ```sql
-call pq('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag"}'), 1 as verbose); show meta;
+CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag"}'), 1 as verbose); show meta;
 ```
 <!-- response 1 as verbose -->
 
@@ -1969,7 +1969,7 @@ call pq('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"titl
 <!-- request 0 as verbose -->
 
 ```sql
-call pq('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag"}'), 0 as verbose); show meta;
+CALL PQ('products', ('{"title": "nice pair of shoes", "color": "blue"}', '{"title": "beautiful bag"}'), 0 as verbose); show meta;
 ```
 <!-- response 0 as verbose -->
 

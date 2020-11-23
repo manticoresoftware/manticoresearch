@@ -53,7 +53,7 @@ The examples show how it works if assuming the user is trying to get an autocomp
 <!-- request Examples -->
 
 ```sql
-MySQL [(none)]> call keywords('m*', 't', 1 as stats);
+MySQL [(none)]> CALL KEYWORDS('m*', 't', 1 as stats);
 +------+-----------+------------+------+------+
 | qpos | tokenized | normalized | docs | hits |
 +------+-----------+------------+------+------+
@@ -61,14 +61,14 @@ MySQL [(none)]> call keywords('m*', 't', 1 as stats);
 | 1    | m*        | mammal     | 1    | 1    |
 +------+-----------+------------+------+------+
 
-MySQL [(none)]> call keywords('my*', 't', 1 as stats);
+MySQL [(none)]> CALL KEYWORDS('my*', 't', 1 as stats);
 +------+-----------+------------+------+------+
 | qpos | tokenized | normalized | docs | hits |
 +------+-----------+------------+------+------+
 | 1    | my*       | my         | 1    | 2    |
 +------+-----------+------------+------+------+
 
-MySQL [(none)]> call keywords('c*', 't', 1 as stats, 'hits' as sort_mode);
+MySQL [(none)]> CALL KEYWORDS('c*', 't', 1 as stats, 'hits' as sort_mode);
 +------+-----------+-------------+------+------+
 | qpos | tokenized | normalized  | docs | hits |
 +------+-----------+-------------+------+------+
@@ -77,7 +77,7 @@ MySQL [(none)]> call keywords('c*', 't', 1 as stats, 'hits' as sort_mode);
 | 1    | c*        | catus       | 1    | 1    |
 +------+-----------+-------------+------+------+
 
-MySQL [(none)]> call keywords('ca*', 't', 1 as stats, 'hits' as sort_mode);
+MySQL [(none)]> CALL KEYWORDS('ca*', 't', 1 as stats, 'hits' as sort_mode);
 +------+-----------+-------------+------+------+
 | qpos | tokenized | normalized  | docs | hits |
 +------+-----------+-------------+------+------+
@@ -86,7 +86,7 @@ MySQL [(none)]> call keywords('ca*', 't', 1 as stats, 'hits' as sort_mode);
 | 1    | ca*       | catus       | 1    | 1    |
 +------+-----------+-------------+------+------+
 
-MySQL [(none)]> call keywords('cat*', 't', 1 as stats, 'hits' as sort_mode);
+MySQL [(none)]> CALL KEYWORDS('cat*', 't', 1 as stats, 'hits' as sort_mode);
 +------+-----------+------------+------+------+
 | qpos | tokenized | normalized | docs | hits |
 +------+-----------+------------+------+------+
@@ -106,7 +106,7 @@ This allows to predict not just the current word's ending, but the next word too
 <!-- request Examples -->
 
 ```sql
-MySQL [(none)]> call keywords('m*', 't', 1 as stats, 'hits' as sort_mode);
+MySQL [(none)]> CALL KEYWORDS('m*', 't', 1 as stats, 'hits' as sort_mode);
 +------+-----------+------------+------+------+
 | qpos | tokenized | normalized | docs | hits |
 +------+-----------+------------+------+------+
@@ -116,7 +116,7 @@ MySQL [(none)]> call keywords('m*', 't', 1 as stats, 'hits' as sort_mode);
 | 1    | m*        | my dog     | 1    | 1    |
 +------+-----------+------------+------+------+
 
-MySQL [(none)]> call keywords('my*', 't', 1 as stats, 'hits' as sort_mode);
+MySQL [(none)]> CALL KEYWORDS('my*', 't', 1 as stats, 'hits' as sort_mode);
 +------+-----------+------------+------+------+
 | qpos | tokenized | normalized | docs | hits |
 +------+-----------+------------+------+------+
@@ -125,7 +125,7 @@ MySQL [(none)]> call keywords('my*', 't', 1 as stats, 'hits' as sort_mode);
 | 1    | my*       | my dog     | 1    | 1    |
 +------+-----------+------------+------+------+
 
-MySQL [(none)]> call keywords('c*', 't', 1 as stats, 'hits' as sort_mode);
+MySQL [(none)]> CALL KEYWORDS('c*', 't', 1 as stats, 'hits' as sort_mode);
 +------+-----------+--------------------+------+------+
 | qpos | tokenized | normalized         | docs | hits |
 +------+-----------+--------------------+------+------+
@@ -138,7 +138,7 @@ MySQL [(none)]> call keywords('c*', 't', 1 as stats, 'hits' as sort_mode);
 | 1    | c*        | catus is           | 1    | 1    |
 +------+-----------+--------------------+------+------+
 
-MySQL [(none)]> call keywords('ca*', 't', 1 as stats, 'hits' as sort_mode);
+MySQL [(none)]> CALL KEYWORDS('ca*', 't', 1 as stats, 'hits' as sort_mode);
 +------+-----------+--------------------+------+------+
 | qpos | tokenized | normalized         | docs | hits |
 +------+-----------+--------------------+------+------+
@@ -151,7 +151,7 @@ MySQL [(none)]> call keywords('ca*', 't', 1 as stats, 'hits' as sort_mode);
 | 1    | ca*       | catus is           | 1    | 1    |
 +------+-----------+--------------------+------+------+
 
-MySQL [(none)]> call keywords('cat*', 't', 1 as stats, 'hits' as sort_mode);
+MySQL [(none)]> CALL KEYWORDS('cat*', 't', 1 as stats, 'hits' as sort_mode);
 +------+-----------+------------+------+------+
 | qpos | tokenized | normalized | docs | hits |
 +------+-----------+------------+------+------+

@@ -58,13 +58,13 @@ Several stemmers can be specified at once comma-separated. They will be applied 
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) morphology = 'stem_en, libstemmer_sv'
+CREATE TABLE products(title text, price float) morphology = 'stem_en, libstemmer_sv'
 ```
 
 <!-- request HTTP -->
 
 ```json
-POST /sql -d "mode=raw&query=create table products(title text, price float)  morphology = 'stem_en, libstemmer_sv'"
+POST /sql -d "mode=raw&query=CREATE TABLE products(title text, price float)  morphology = 'stem_en, libstemmer_sv'"
 ```
 
 <!-- request PHP -->
@@ -91,7 +91,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) morphology = \'stem_en, libstemmer_sv\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) morphology = \'stem_en, libstemmer_sv\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -99,14 +99,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) morp
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) morphology = \'stem_en, libstemmer_sv\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) morphology = \'stem_en, libstemmer_sv\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) morphology = 'stem_en, libstemmer_sv'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) morphology = 'stem_en, libstemmer_sv'");
 ```
 <!-- request CONFIG -->
 
@@ -135,14 +135,14 @@ A list of fields to skip morphology preprocessing. Optional, default is empty (a
 <!-- request SQL -->
 
 ```sql
-create table products(title text, name text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'
+CREATE TABLE products(title text, name text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'
 ```
 
 <!-- request HTTP -->
 
 ```json
 POST /sql -d "mode=raw&query=
-create table products(title text, name text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'"
+CREATE TABLE products(title text, name text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'"
 ```
 
 <!-- request PHP -->
@@ -171,7 +171,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) morphology_skip_fields = \'name\' morphology = \'stem_en\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) morphology_skip_fields = \'name\' morphology = \'stem_en\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -179,14 +179,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) morp
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) morphology_skip_fields = \'name\' morphology = \'stem_en\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) morphology_skip_fields = \'name\' morphology = \'stem_en\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) morphology_skip_fields = 'name' morphology = 'stem_en'");
 ```
 <!-- request CONFIG -->
 
@@ -219,14 +219,14 @@ Stemmers are not perfect, and might sometimes produce undesired results. For ins
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'
+CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'"
+CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'"
 ```
 
 <!-- request PHP -->
@@ -254,7 +254,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) min_stemming_len = \'4\' morphology = \'stem_en\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) min_stemming_len = \'4\' morphology = \'stem_en\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -262,14 +262,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) min_
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) min_stemming_len = \'4\' morphology = \'stem_en\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) min_stemming_len = \'4\' morphology = \'stem_en\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology = 'stem_en'");
 ```
 <!-- request CONFIG -->
 
@@ -301,14 +301,14 @@ When enabled, `index_exact_words` forces indexation to put the raw keywords in t
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) index_exact_words = '1' morphology = 'stem_en'
+CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) index_exact_words = '1' morphology = 'stem_en'"
+CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'"
 ```
 
 <!-- request PHP -->
@@ -336,7 +336,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) index_exact_words = \'1\' morphology = \'stem_en\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) index_exact_words = \'1\' morphology = \'stem_en\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -344,14 +344,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) inde
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) index_exact_words = \'1\' morphology = \'stem_en\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) index_exact_words = \'1\' morphology = \'stem_en\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) index_exact_words = '1' morphology = 'stem_en'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) index_exact_words = '1' morphology = 'stem_en'");
 ```
 <!-- request CONFIG -->
 

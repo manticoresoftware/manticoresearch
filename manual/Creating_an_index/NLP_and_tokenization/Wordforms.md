@@ -58,14 +58,14 @@ If multi-byte codepages are used, and file names can include foreign characters,
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) wordforms = '/usr/local/sphinx/data/wordforms.txt' wordforms = '/usr/local/sphinx/data/alternateforms.txt /usr/local/sphinx/private/dict*.txt'
+CREATE TABLE products(title text, price float) wordforms = '/usr/local/sphinx/data/wordforms.txt' wordforms = '/usr/local/sphinx/data/alternateforms.txt /usr/local/sphinx/private/dict*.txt'
 ```
 
 <!-- request HTTP -->
 
 ```json
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) wordforms = '/usr/local/sphinx/data/wordforms.txt' wordforms = '/usr/local/sphinx/data/alternateforms.txt' wordforms = '/usr/local/sphinx/private/dict*.txt'"
+CREATE TABLE products(title text, price float) wordforms = '/usr/local/sphinx/data/wordforms.txt' wordforms = '/usr/local/sphinx/data/alternateforms.txt' wordforms = '/usr/local/sphinx/private/dict*.txt'"
 ```
 
 <!-- request PHP -->
@@ -96,7 +96,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) wordforms = \'/usr/local/sphinx/data/wordforms.txt\' wordforms = \'/usr/local/sphinx/data/alternateforms.txt\' wordforms = \'/usr/local/sphinx/private/dict*.txt\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) wordforms = \'/usr/local/sphinx/data/wordforms.txt\' wordforms = \'/usr/local/sphinx/data/alternateforms.txt\' wordforms = \'/usr/local/sphinx/private/dict*.txt\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -104,14 +104,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) word
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float)wordforms = \'/usr/local/sphinx/data/wordforms.txt\' wordforms = \'/usr/local/sphinx/data/alternateforms.txt\' wordforms = \'/usr/local/sphinx/private/dict*.txt\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float)wordforms = \'/usr/local/sphinx/data/wordforms.txt\' wordforms = \'/usr/local/sphinx/data/alternateforms.txt\' wordforms = \'/usr/local/sphinx/private/dict*.txt\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) wordforms = '/usr/local/sphinx/data/wordforms.txt' wordforms = '/usr/local/sphinx/data/alternateforms.txt' wordforms = '/usr/local/sphinx/private/dict*.txt'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) wordforms = '/usr/local/sphinx/data/wordforms.txt' wordforms = '/usr/local/sphinx/data/alternateforms.txt' wordforms = '/usr/local/sphinx/private/dict*.txt'");
 ```
 <!-- request CONFIG -->
 

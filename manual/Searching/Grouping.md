@@ -17,14 +17,14 @@ The general syntax is:
 <!-- request SQL -->
 General syntax
 ```sql
-SELECT {* | select_expr [, select_expr ...]}
+SELECT {* | SELECT_expr [, SELECT_expr ...]}
 ...
 GROUP BY {field_name | alias } [, ...]
 [HAVING where_condition]
 [WITHIN GROUP ORDER BY field_name {ASC | DESC} [, ...]]
 ...
 
-select_expr: { field_name | function_name(...) }
+SELECT_expr: { field_name | function_name(...) }
 where_condition: {aggregation expression alias | COUNT(*)}
 ```
 
@@ -56,7 +56,7 @@ The aggregation requires to set a `size` for the size of the result set group.
 Grouping is very simple - just add "GROUP BY smth" to the end of your `SELECT` query. The something can be:
 
 * any non-full-text field from the index: integer, float, string, MVA (multi-value attribute)
-* or if you used an alias in the `SELECT` list - you can group by it too
+* or if you used an alias in the `SELECT` list - you can GROUP BY it too
 
 You can omit any [aggregation functions](Searching/Grouping.md#Aggregation-functions) in the `SELECT` list and it will work too:
 
@@ -65,7 +65,7 @@ You can omit any [aggregation functions](Searching/Grouping.md#Aggregation-funct
 
 <!-- request SQL -->
 ```sql
-select release_year from films group by release_year limit 5;
+SELECT release_year FROM films GROUP BY release_year LIMIT 5;
 ```
 <!-- response SQL -->
 ```sql
@@ -92,7 +92,7 @@ But in most cases you want to get something aggregated for each group, for examp
 
 <!-- request SQL1 -->
 ```sql
-select release_year, count(*) from films group by release_year limit 5;
+SELECT release_year, count(*) FROM films GROUP BY release_year LIMIT 5;
 ```
 <!-- response SQL1 -->
 ```sql
@@ -108,7 +108,7 @@ select release_year, count(*) from films group by release_year limit 5;
 ```
 <!-- request SQL2 -->
 ```sql
-select release_year, avg(rental_rate) from films group by release_year limit 5;
+SELECT release_year, AVG(rental_rate) FROM films GROUP BY release_year LIMIT 5;
 ```
 <!-- response SQL2 -->
 ```sql
@@ -194,7 +194,7 @@ By default the groups are not sorted and the next thing you normally want to do 
 
 <!-- request SQL -->
 ```sql
-select release_year, count(*) from films group by release_year order by release_year asc limit 5;
+SELECT release_year, count(*) from films GROUP BY release_year ORDER BY release_year asc limit 5;
 ```
 <!-- response SQL -->
 ```sql
@@ -213,7 +213,7 @@ select release_year, count(*) from films group by release_year order by release_
 Or vice-versa - by the aggregation:
 
 * by `count(*)` to see those groups that have most elements first
-* by `avg(rental_rate)` to see most rated movies first. Note that in the example it's done via an alias: `avg(rental_rate)` is first mapped to `avg` in the `SELECT` list and then we just do `order by avg`
+* by `avg(rental_rate)` to see most rated movies first. Note that in the example it's done via an alias: `avg(rental_rate)` is first mapped to `avg` in the `SELECT` list and then we just do `ORDER BY avg`
 
 
 <!-- intro -->
@@ -221,7 +221,7 @@ Or vice-versa - by the aggregation:
 
 <!-- request SQL1 -->
 ```sql
-select release_year, count(*) from films group by release_year order by count(*) desc limit 5;
+SELECT release_year, count(*) FROM films GROUP BY release_year ORDER BY count(*) desc LIMIT 5;
 ```
 <!-- response SQL1 -->
 ```sql
@@ -238,7 +238,7 @@ select release_year, count(*) from films group by release_year order by count(*)
 
 <!-- request SQL2 -->
 ```sql
-select release_year, avg(rental_rate) avg from films group by release_year order by avg desc limit 5;
+SELECT release_year, AVG(rental_rate) avg FROM films GROUP BY release_year ORDER BY avg desc LIMIT 5;
 ```
 <!-- response SQL2 -->
 ```sql
@@ -255,7 +255,7 @@ select release_year, avg(rental_rate) avg from films group by release_year order
 <!-- end -->
 
 <!-- example group3 -->
-##### Group by multiple fields at once
+##### GROUP BY multiple fields at once
 In some cases you might want to group not by a single, but by multiple fields at once, for example movie's category and year:
 
 <!-- intro -->
@@ -263,7 +263,7 @@ In some cases you might want to group not by a single, but by multiple fields at
 
 <!-- request SQL -->
 ```sql
-select category_id, release_year, count(*) from films group by category_id, release_year order by category_id ASC, release_year ASC;
+SELECT category_id, release_year, count(*) FROM films GROUP BY category_id, release_year ORDER BY category_id ASC, release_year ASC;
 ```
 <!-- response SQL -->
 ```sql
@@ -303,7 +303,7 @@ Sometimes it's useful to see not a single element per group, but multiple. This 
 
 <!-- request SQL -->
 ```sql
-select release_year, title from films group 2 by release_year order by release_year desc limit 6;
+SELECT release_year, title FROM films GROUP 2 BY release_year ORDER BY release_year DESC LIMIT 6;
 ```
 <!-- response SQL -->
 ```sql
@@ -335,7 +335,7 @@ The work absolutely independently.
 
 <!-- request SQL -->
 ```sql
-select release_year, title, rental_rate from films group by release_year within group order by rental_rate desc order by release_year desc limit 5;
+SELECT release_year, title, rental_rate FROM films GROUP BY release_year WITHIN GROUP ORDER BY rental_rate DESC ORDER BY release_year DESC LIMIT 5;
 ```
 <!-- response SQL -->
 ```sql
@@ -360,7 +360,7 @@ select release_year, title, rental_rate from films group by release_year within 
 
 <!-- request SQL -->
 ```sql
-select release_year, avg(rental_rate) avg from films group by release_year having avg > 3;
+SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVING avg > 3;
 ```
 <!-- response SQL -->
 ```sql
@@ -377,18 +377,18 @@ select release_year, avg(rental_rate) avg from films group by release_year havin
 
 <!-- example group7 -->
 ##### GROUPBY()
-There is a function `GROUPBY()` which returns the key of the current group. It's useful in many cases especially when you [group by an MVA](Searching/Grouping.md#Grouping-by-MVA-%28multi-value-attributes%29) or a [JSON value](Searching/Grouping.md#Grouping-by-a-JSON-node).
+There is a function `GROUPBY()` which returns the key of the current group. It's useful in many cases especially when you [GROUP BY an MVA](Searching/Grouping.md#Grouping-by-MVA-%28multi-value-attributes%29) or a [JSON value](Searching/Grouping.md#Grouping-by-a-JSON-node).
 
 It can be also used in `HAVING` to for example leave only years 2000 and 2002.
 
-Note that `GROUPBY()`is not recommended for use when you group by multiple fields at once. It will still work, but since the group key in this case is compound of field values it may look not the way you expect.
+Note that `GROUPBY()`is not recommended for use when you GROUP BY multiple fields at once. It will still work, but since the group key in this case is compound of field values it may look not the way you expect.
 
 <!-- intro -->
 ##### Example:
 
 <!-- request SQL -->
 ```sql
-select release_year, count(*) from films group by release_year having groupby() IN (2000, 2002);
+SELECT release_year, count(*) FROM films GROUP BY release_year HAVING GROUPBY() IN (2000, 2002);
 ```
 <!-- response SQL -->
 ```sql
@@ -409,7 +409,7 @@ insert into shoes values(0,'nike',(40,41,42)),(0,'adidas',(41,43)),(0,'reebook',
 ```
 so we have:
 ```sql
-select * from shoes;
+SELECT * FROM shoes;
 +---------------------+----------+---------+
 | id                  | sizes    | title   |
 +---------------------+----------+---------+
@@ -418,14 +418,14 @@ select * from shoes;
 | 1657851069130080267 | 42,43    | reebook |
 +---------------------+----------+---------+
 ```
-If we now group by "sizes" it will process all our multi-value attributes and will return aggregation for each, in this case just count:
+If we now GROUP BY "sizes" it will process all our multi-value attributes and will return aggregation for each, in this case just count:
 
 <!-- intro -->
 ##### Example:
 
 <!-- request SQL -->
 ```sql
-select groupby() gb, count(*) from shoes group by sizes order by gb asc;
+SELECT groupby() gb, count(*) FROM shoes GROUP BY sizes ORDER BY gb asc;
 ```
 <!-- response SQL -->
 ```sql
@@ -442,14 +442,14 @@ select groupby() gb, count(*) from shoes group by sizes order by gb asc;
 
 <!-- example json -->
 ##### Grouping by a JSON node
-If you have a field of type [JSON](Creating_an_index/Data_types.md#JSON) you can group by any node from it. To demonstrate it let's create a table "products" with few documents each having color in the "meta" JSON field:
+If you have a field of type [JSON](Creating_an_index/Data_types.md#JSON) you can GROUP BY any node from it. To demonstrate it let's create a table "products" with few documents each having color in the "meta" JSON field:
 ```sql
 create table products(title text, meta json);
 insert into products values(0,'nike','{"color":"red"}'),(0,'adidas','{"color":"red"}'),(0,'puma','{"color":"green"}');
 ```
 This gives us:
 ```sql
-select * from products;
+SELECT * FROM products;
 +---------------------+-------------------+--------+
 | id                  | meta              | title  |
 +---------------------+-------------------+--------+
@@ -465,7 +465,7 @@ To group the products by color we can just `GROUP BY meta.color` and to show the
 
 <!-- request SQL -->
 ```sql
-select groupby() color, count(*) from products group by meta.color;
+SELECT groupby() color, count(*) from products GROUP BY meta.color;
 ```
 <!-- response SQL -->
 ```sql
@@ -484,14 +484,14 @@ Besides `COUNT(*)` which returns number of elements in each group you can use di
 ##### COUNT(DISTINCT field)
 While `COUNT(*)` returns number of all elements in the group `COUNT( DISTINCT field)` returns number of different values of the field in the group which may be absolutely different from the total count: you can have 100 elements in the group, but all with the same value of some field. `COUNT(DISTINCT field)` helps to figure that out. To demonstrate it let's create table "students" with student's name, age and major:
 ```sql
-create table students(name text, age int, major string);
-insert into students values(0,'John',21,'arts'),(0,'William',22,'business'),(0,'Richard',21,'cs'),(0,'Rebecca',22,'cs'),(0,'Monica',21,'arts');
+CREATE TABLE students(name text, age int, major string);
+INSERT INTO students values(0,'John',21,'arts'),(0,'William',22,'business'),(0,'Richard',21,'cs'),(0,'Rebecca',22,'cs'),(0,'Monica',21,'arts');
 ```
 
 so we have:
 
 ```sql
-MySQL [(none)]> select * from students;
+MySQL [(none)]> SELECT * from students;
 +---------------------+------+----------+---------+
 | id                  | age  | major    | name    |
 +---------------------+------+----------+---------+
@@ -503,7 +503,7 @@ MySQL [(none)]> select * from students;
 +---------------------+------+----------+---------+
 ```
 
-In the example you can see that if we group by major and show both `COUNT(*)` and `COUNT(DISTINCT age)` it gets clear that there are 2 students that chose major "cs" and 2 unique ages, but for the major "arts" there are also 2 students, but only one unique age.
+In the example you can see that if we GROUP BY major and show both `COUNT(*)` and `COUNT(DISTINCT age)` it gets clear that there are 2 students that chose major "cs" and 2 unique ages, but for the major "arts" there are also 2 students, but only one unique age.
 
 There can be at most one `COUNT(DISTINCT)` per query.
 
@@ -515,7 +515,7 @@ There can be at most one `COUNT(DISTINCT)` per query.
 
 <!-- request SQL -->
 ```sql
-select major, count(*), count(distinct age) from students group by major;
+SELECT major, count(*), count(distinct age) FROM students GROUP BY major;
 ```
 <!-- response SQL -->
 ```sql
@@ -541,7 +541,7 @@ Often you want to understand better the contents of each group. You can use [GRO
 
 <!-- request SQL -->
 ```sql
-select major, count(*), count(distinct age), group_concat(age) from students group by major
+SELECT major, count(*), count(distinct age), group_concat(age) FROM students GROUP BY major
 ```
 <!-- response SQL -->
 ```sql
@@ -563,7 +563,7 @@ And of course you can get sum, average, minimal and maximum values in the group.
 
 <!-- request SQL -->
 ```sql
-select release_year year, sum(rental_rate) sum, min(rental_rate) min, max(rental_rate) max, avg(rental_rate) avg from films group by release_year order by year asc limit 5;
+SELECT release_year year, sum(rental_rate) sum, min(rental_rate) min, max(rental_rate) max, avg(rental_rate) avg FROM films GROUP BY release_year ORDER BY year asc LIMIT 5;
 ```
 <!-- response SQL -->
 ```sql
@@ -588,7 +588,7 @@ Grouping is done in fixed memory which depends on the [max_matches](Searching/Op
 
 <!-- request SQL -->
 ```sql
-MySQL [(none)]> select release_year year, count(*) from films group by year limit 5;
+MySQL [(none)]> SELECT release_year year, count(*) FROM films GROUP BY year limit 5;
 +------+----------+
 | year | count(*) |
 +------+----------+
@@ -599,14 +599,14 @@ MySQL [(none)]> select release_year year, count(*) from films group by year limi
 | 2000 |       97 |
 +------+----------+
 
-MySQL [(none)]> select release_year year, count(*) from films group by year limit 5 option max_matches=1;
+MySQL [(none)]> SELECT release_year year, count(*) FROM films GROUP BY year limit 5 option max_matches=1;
 +------+----------+
 | year | count(*) |
 +------+----------+
 | 2004 |       76 |
 +------+----------+
 
-MySQL [(none)]> select release_year year, count(*) from films group by year limit 5 option max_matches=2;
+MySQL [(none)]> SELECT release_year year, count(*) FROM films GROUP BY year limit 5 option max_matches=2;
 +------+----------+
 | year | count(*) |
 +------+----------+
@@ -614,7 +614,7 @@ MySQL [(none)]> select release_year year, count(*) from films group by year limi
 | 2002 |       74 |
 +------+----------+
 
-MySQL [(none)]> select release_year year, count(*) from films group by year limit 5 option max_matches=3;
+MySQL [(none)]> SELECT release_year year, count(*) FROM films GROUP BY year limit 5 option max_matches=3;
 +------+----------+
 | year | count(*) |
 +------+----------+

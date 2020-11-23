@@ -121,7 +121,7 @@ If the first parameter is not a single word, but multiple, then `CALL SUGGEST` w
 <!-- request Example -->
 
 ```sql
-call qsuggest('bagg with tasel', 'products');
+CALL QSUGGEST('bagg with tasel', 'products');
 ```
 <!-- response Example -->
 
@@ -143,7 +143,7 @@ Using `1 as result_line` in the options turns on alternate mode to display the d
 <!-- request Example -->
 
 ```sql
-call qsuggest('bagg with tasel', 'products', 1 as result_line);
+CALL QSUGGEST('bagg with tasel', 'products', 1 as result_line);
 ```
 <!-- response Example -->
 

@@ -34,14 +34,14 @@ When [minimum infix length](Creating_an_index/NLP_and_tokenization/Wildcard_sear
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) min_prefix_len = '3'
+CREATE TABLE products(title text, price float) min_prefix_len = '3'
 ```
 
 <!-- request HTTP -->
 
 ```json
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) min_prefix_len = '3'"
+CREATE TABLE products(title text, price float) min_prefix_len = '3'"
 ```
 
 <!-- request PHP -->
@@ -68,7 +68,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) min_prefix_len = \'3\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) min_prefix_len = \'3\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -76,14 +76,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) min_
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) min_prefix_len = \'3\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) min_prefix_len = \'3\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) min_prefix_len = '3'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) min_prefix_len = '3'");
 ```
 <!-- request CONFIG -->
 
@@ -136,14 +136,14 @@ In case of dict=keywords, beside the wildcard `*` two other wildcard characters 
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) min_infix_len = '3'
+CREATE TABLE products(title text, price float) min_infix_len = '3'
 ```
 
 <!-- request HTTP -->
 
 ```json
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) min_infix_len = '3'"
+CREATE TABLE products(title text, price float) min_infix_len = '3'"
 ```
 
 <!-- request PHP -->
@@ -170,7 +170,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) min_infix_len = \'3\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) min_infix_len = \'3\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -178,14 +178,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) min_
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) min_infix_len = \'3\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) min_infix_len = \'3\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) min_infix_len = '3'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) min_infix_len = '3'");
 ```
 <!-- request CONFIG -->
 
@@ -329,14 +329,14 @@ This directive does not affect [indexer](Adding_data_from_external_storages/Plai
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) expand_keywords = '1'
+CREATE TABLE products(title text, price float) expand_keywords = '1'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) expand_keywords = '1'"
+CREATE TABLE products(title text, price float) expand_keywords = '1'"
 ```
 
 <!-- request PHP -->
@@ -363,7 +363,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) expand_keywords = \'1\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) expand_keywords = \'1\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -371,14 +371,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) expa
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) expand_keywords = \'1\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) expand_keywords = \'1\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) expand_keywords = '1'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) expand_keywords = '1'");
 ```
 <!-- request CONFIG -->
 

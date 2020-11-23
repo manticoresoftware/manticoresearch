@@ -12,14 +12,14 @@ Manticore has built-in support for indexing CJK texts. There are two ways how CJ
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) charset_table = 'cjk' morphology = 'icu_chinese'
+CREATE TABLE products(title text, price float) charset_table = 'cjk' morphology = 'icu_chinese'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) charset_table = 'cjk' morphology = 'icu_chinese'"
+CREATE TABLE products(title text, price float) charset_table = 'cjk' morphology = 'icu_chinese'"
 ```
 
 <!-- request PHP -->
@@ -48,7 +48,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'cjk\' morphology = \'icu_chinese\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) charset_table = \'cjk\' morphology = \'icu_chinese\'')
 ```
 
 <!-- intro -->
@@ -57,7 +57,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) char
 <!-- request Javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'cjk\' morphology = \'icu_chinese\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) charset_table = \'cjk\' morphology = \'icu_chinese\'');
 ```
 
 <!-- intro -->
@@ -66,7 +66,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) charset_table = 'cjk' morphology = 'icu_chinese'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) charset_table = 'cjk' morphology = 'icu_chinese'");
 ```
 <!-- request CONFIG -->
 
@@ -94,14 +94,14 @@ There are separate charset tables(`chinese`, `korean`, `japanese`) that can be u
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'
+CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'"
+CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'"
 ```
 
 <!-- request PHP -->
@@ -131,7 +131,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -139,7 +139,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) char
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'');
 ```
 <!-- intro -->
 ##### java:
@@ -147,7 +147,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'");
 ```
 <!-- request CONFIG -->
 
@@ -175,14 +175,14 @@ There's also built-in [stopwords](Creating_an_index/NLP_and_tokenization/Ignorin
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'
+CREATE TABLE products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'"
+CREATE TABLE products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'"
 ```
 <!-- intro -->
 ##### PHP:
@@ -213,7 +213,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'chinese\' morphology = \'icu_chinese\' stopwords = \'zh\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) charset_table = \'chinese\' morphology = \'icu_chinese\' stopwords = \'zh\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -221,7 +221,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) char
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'chinese\' morphology = \'icu_chinese\' stopwords = \'zh\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) charset_table = \'chinese\' morphology = \'icu_chinese\' stopwords = \'zh\'');
 ```
 <!-- intro -->
 ##### java:
@@ -229,7 +229,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) charset_table = 'chinese' morphology = 'icu_chinese' stopwords = 'zh'");
 ```
 
 

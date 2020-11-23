@@ -28,14 +28,14 @@ Stop word files can either be created manually, or semi-automatically. [indexer]
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) stopwords = '/usr/local/sphinx/data/stopwords.txt /usr/local/sphinx/data/stopwords-ru.txt /usr/local/sphinx/data/stopwords-en.txt'
+CREATE TABLE products(title text, price float) stopwords = '/usr/local/sphinx/data/stopwords.txt /usr/local/sphinx/data/stopwords-ru.txt /usr/local/sphinx/data/stopwords-en.txt'
 ```
 
 <!-- request HTTP -->
 
 ```json
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) stopwords = '/usr/local/sphinx/data/stopwords.txt stopwords-ru.txt stopwords-en.txt'"
+CREATE TABLE products(title text, price float) stopwords = '/usr/local/sphinx/data/stopwords.txt stopwords-ru.txt stopwords-en.txt'"
 ```
 
 <!-- request PHP -->
@@ -62,7 +62,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) stopwords = \'/usr/local/sphinx/data/stopwords.txt /usr/local/sphinx/data/stopwords-ru.txt /usr/local/sphinx/data/stopwords-en.txt\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'/usr/local/sphinx/data/stopwords.txt /usr/local/sphinx/data/stopwords-ru.txt /usr/local/sphinx/data/stopwords-en.txt\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -70,14 +70,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) stop
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) stopwords = \'/usr/local/sphinx/data/stopwords.txt /usr/local/sphinx/data/stopwords-ru.txt /usr/local/sphinx/data/stopwords-en.txt\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'/usr/local/sphinx/data/stopwords.txt /usr/local/sphinx/data/stopwords-ru.txt /usr/local/sphinx/data/stopwords-en.txt\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) stopwords = '/usr/local/sphinx/data/stopwords.txt /usr/local/sphinx/data/stopwords-ru.txt /usr/local/sphinx/data/stopwords-en.txt'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) stopwords = '/usr/local/sphinx/data/stopwords.txt /usr/local/sphinx/data/stopwords-ru.txt /usr/local/sphinx/data/stopwords-en.txt'");
 ```
 <!-- request CONFIG -->
 
@@ -157,14 +157,14 @@ For example, to use stop words for Italian language just put the following line 
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) stopwords = 'it'
+CREATE TABLE products(title text, price float) stopwords = 'it'
 ```
 
 <!-- request HTTP -->
 
 ```json
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) stopwords = 'it'"
+CREATE TABLE products(title text, price float) stopwords = 'it'"
 ```
 
 <!-- request PHP -->
@@ -191,7 +191,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) stopwords = \'it\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'it\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -199,14 +199,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) stop
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) stopwords = \'it\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'it\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) stopwords = 'it'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) stopwords = 'it'");
 ```
 <!-- request CONFIG -->
 
@@ -232,14 +232,14 @@ If you need to use stop words for multiple languages you should list all their a
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) stopwords = 'en, it, ru'
+CREATE TABLE products(title text, price float) stopwords = 'en, it, ru'
 ```
 
 <!-- request HTTP -->
 
 ```json
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) stopwords = 'en, it, ru'"
+CREATE TABLE products(title text, price float) stopwords = 'en, it, ru'"
 ```
 
 <!-- request PHP -->
@@ -266,7 +266,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) stopwords = \'en, it, ru\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'en, it, ru\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -274,14 +274,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) stop
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) stopwords = \'en, it, ru\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'en, it, ru\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) stopwords = 'en, it, ru'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) stopwords = 'en, it, ru'");
 ```
 <!-- request CONFIG -->
 
@@ -313,14 +313,14 @@ Position increment on [stopwords](Creating_an_index/NLP_and_tokenization/Ignorin
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) stopwords = 'en' stopword_step = '1'
+CREATE TABLE products(title text, price float) stopwords = 'en' stopword_step = '1'
 ```
 
 <!-- request HTTP -->
 
 ```json
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) stopwords = 'en' stopword_step = '1'"
+CREATE TABLE products(title text, price float) stopwords = 'en' stopword_step = '1'"
 ```
 
 <!-- request PHP -->
@@ -349,7 +349,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) stopwords = \'en\' stopword_step = \'1\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -357,14 +357,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) stop
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) stopwords = \'en\' stopword_step = \'1\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) stopwords = \'en\' stopword_step = \'1\'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'en\' stopword_step = \'1\'");
 ```
 <!-- request CONFIG -->
 
@@ -401,14 +401,14 @@ stopwords_unstemmed directive changed this behaviour. When it's enabled, stop wo
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) stopwords = 'en' stopwords_unstemmed = '1'
+CREATE TABLE products(title text, price float) stopwords = 'en' stopwords_unstemmed = '1'
 ```
 
 <!-- request HTTP -->
 
 ```json
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) stopwords = 'en' stopwords_unstemmed = '1'"
+CREATE TABLE products(title text, price float) stopwords = 'en' stopwords_unstemmed = '1'"
 ```
 
 <!-- request PHP -->
@@ -437,7 +437,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -445,14 +445,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) stop
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) stopwords = \'en\' stopwords_unstemmed = \'1\'");
 ```
 <!-- request CONFIG -->
 

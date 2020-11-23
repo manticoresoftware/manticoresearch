@@ -61,11 +61,11 @@ In this example we are deleting all documents that match full-text query `dummy`
 <!-- request SQL -->
 
 ```sql
-select * from test;
+SELECT * FROM TEST;
 
-delete from test where match ('dummy');
+DELETE FROM TEST WHERE MATCH ('dummy');
 
-select * from test;
+SELECT * FROM TEST;
 ```
 
 <!-- response SQL -->
@@ -202,9 +202,9 @@ Here - deleting a document with `id` 100 from index named `test`:
 <!-- request SQL -->
 
 ```sql
-delete from test where id=100;
+DELETE FROM TEST WHERE id=100;
 
-select * from test;
+SELECT * FROM TEST;
 ```
 
 <!-- response SQL -->
@@ -324,9 +324,9 @@ For example here we are deleting documents that match full-text query `dummy` an
 <!-- request SQL -->
 
 ```sql
-delete from test where match ('dummy') and ( mva1>206 or mva1 in (100, 103) );
+DELETE FROM TEST WHERE MATCH ('dummy') AND ( mva1>206 or mva1 in (100, 103) );
 
-select * from test;
+SELECT * FROM TEST;
 ```
 
 <!-- response SQL -->

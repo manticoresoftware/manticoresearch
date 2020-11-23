@@ -29,14 +29,14 @@ Only the tags themselves, and also HTML comments, are stripped. To strip  the co
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) html_strip = '1'
+CREATE TABLE products(title text, price float) html_strip = '1'
 ```
 
 <!-- request HTTP -->
 
 ```json
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) html_strip = '1'"
+CREATE TABLE products(title text, price float) html_strip = '1'"
 ```
 
 <!-- request PHP -->
@@ -63,7 +63,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) html_strip = \'1\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) html_strip = \'1\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -71,14 +71,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) html
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) html_strip = \'1\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) html_strip = \'1\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) html_strip = '1'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) html_strip = '1'");
 ```
 <!-- request CONFIG -->
 
@@ -113,14 +113,14 @@ Specifies HTML markup attributes whose contents should be retained and indexed e
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) html_index_attrs = 'img=alt,title; a=title;' html_strip = '1'
+CREATE TABLE products(title text, price float) html_index_attrs = 'img=alt,title; a=title;' html_strip = '1'
 ```
 
 <!-- request HTTP -->
 
 ```json
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) html_index_attrs = 'img=alt,title; a=title;' html_strip = '1'"
+CREATE TABLE products(title text, price float) html_index_attrs = 'img=alt,title; a=title;' html_strip = '1'"
 ```
 
 <!-- request PHP -->
@@ -148,7 +148,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) html_index_attrs = \'img=alt,title; a=title;\' html_strip = \'1\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) html_index_attrs = \'img=alt,title; a=title;\' html_strip = \'1\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -156,14 +156,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) html
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) html_index_attrs = \'img=alt,title; a=title;\' html_strip = \'1\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) html_index_attrs = \'img=alt,title; a=title;\' html_strip = \'1\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) html_index_attrs = \'img=alt,title; a=title;\' html_strip = '1'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) html_index_attrs = \'img=alt,title; a=title;\' html_strip = '1'");
 ```
 <!-- request CONFIG -->
 
@@ -201,14 +201,14 @@ The value is a comma-separated list of element (tag) names whose contents should
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) html_remove_elements = 'style, script' html_strip = '1'
+CREATE TABLE products(title text, price float) html_remove_elements = 'style, script' html_strip = '1'
 ```
 
 <!-- request HTTP -->
 
 ```json
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) html_remove_elements = 'style, script' html_strip = '1'"
+CREATE TABLE products(title text, price float) html_remove_elements = 'style, script' html_strip = '1'"
 ```
 
 <!-- request PHP -->
@@ -236,7 +236,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) html_remove_elements = \'style, script\' html_strip = \'1\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) html_remove_elements = \'style, script\' html_strip = \'1\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -244,14 +244,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) html
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) html_remove_elements = \'style, script\' html_strip = \'1\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) html_remove_elements = \'style, script\' html_strip = \'1\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) html_remove_elements = \'style, script\' html_strip = '1'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) html_remove_elements = \'style, script\' html_strip = '1'");
 ```
 <!-- request CONFIG -->
 
@@ -302,14 +302,14 @@ Both sentences and paragraphs increment the keyword position counter by 1.
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) index_sp = '1' html_strip = '1'
+CREATE TABLE products(title text, price float) index_sp = '1' html_strip = '1'
 ```
 
 <!-- request HTTP -->
 
 ```json
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) index_sp = '1' html_strip = '1'"
+CREATE TABLE products(title text, price float) index_sp = '1' html_strip = '1'"
 ```
 
 <!-- request PHP -->
@@ -337,7 +337,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) index_sp = \'1\' html_strip = \'1\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) index_sp = \'1\' html_strip = \'1\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -345,14 +345,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) inde
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) index_sp = \'1\' html_strip = \'1\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) index_sp = \'1\' html_strip = \'1\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) index_sp = \'1\' html_strip = '1'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) index_sp = \'1\' html_strip = '1'");
 ```
 <!-- request CONFIG -->
 
@@ -393,14 +393,14 @@ Zones can nest and overlap arbitrarily. The only requirement is that every openi
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) index_zones = 'h, th, title' html_strip = '1'
+CREATE TABLE products(title text, price float) index_zones = 'h, th, title' html_strip = '1'
 ```
 
 <!-- request HTTP -->
 
 ```json
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) index_zones = 'h, th, title' html_strip = '1'"
+CREATE TABLE products(title text, price float) index_zones = 'h, th, title' html_strip = '1'"
 ```
 
 <!-- request PHP -->
@@ -428,7 +428,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) index_zones = \'h, th, title\' html_strip = \'1\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) index_zones = \'h, th, title\' html_strip = \'1\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -436,14 +436,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) inde
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) index_zones = \'h, th, title\' html_strip = \'1\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) index_zones = \'h, th, title\' html_strip = \'1\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) index_zones = 'h, th, title' html_strip = '1'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) index_zones = 'h, th, title' html_strip = '1'");
 ```
 <!-- request CONFIG -->
 

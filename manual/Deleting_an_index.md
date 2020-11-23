@@ -13,7 +13,7 @@ Deleting an index is possible only when the server is running in RT mode. It is 
 <!-- request SQL -->
 
 ```sql
-drop table products;
+DROP TABLE products;
 ```
 <!-- response -->
 
@@ -27,7 +27,7 @@ Query OK, 0 rows affected (0.02 sec)
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=drop table products"
+POST /sql -d "mode=raw&query=DROP TABLE products"
 ```
 
 <!-- response HTTP -->

@@ -61,14 +61,14 @@ Control characters with codes from 0 to 32 are always treated as separators. Cha
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'
+CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'"
+CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'"
 ```
 
 <!-- request PHP -->
@@ -95,7 +95,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) charset_table = \'0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -103,7 +103,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) char
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) charset_table = \'0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451\'');
 ```
 <!-- intro -->
 ##### java:
@@ -111,7 +111,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'");
 ```
 <!-- request CONFIG -->
 
@@ -138,14 +138,14 @@ Besides definitions of characters and mappings, there are several built-in alias
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) charset_table = '0..9, english, _'
+CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) charset_table = '0..9, english, _'"
+CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'"
 ```
 
 <!-- request PHP -->
@@ -172,7 +172,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'0..9, english, _\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) charset_table = \'0..9, english, _\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -180,7 +180,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) char
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'0..9, english, _\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) charset_table = \'0..9, english, _\'');
 ```
 
 <!-- intro -->
@@ -189,7 +189,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) charset_table = '0..9, english, _'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) charset_table = '0..9, english, _'");
 ```
 <!-- request CONFIG -->
 
@@ -237,14 +237,14 @@ To be able to work with both cjk and non-cjk languages you should set the option
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'
+CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'"
+CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'"
 ```
 
 <!-- request PHP -->
@@ -273,7 +273,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -281,7 +281,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) char
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) charset_table = \'non_cjk\' ngram_len = \'1\' ngram_chars = \'cjk\'');
 ```
 
 <!-- intro -->
@@ -290,7 +290,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_len = '1' ngram_chars = 'cjk'");
 ```
 <!-- request CONFIG -->
 
@@ -334,14 +334,14 @@ Blended characters can be remapped, so that multiple different blended character
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) blend_chars = '+, &, U+23, @->_'
+CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) blend_chars = '+, &, U+23, @->_'"
+CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'"
 ```
 
 <!-- request PHP -->
@@ -368,7 +368,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) blend_chars = \'+, &, U+23, @->_\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) blend_chars = \'+, &, U+23, @->_\'')
 ```
 
 <!-- intro -->
@@ -377,7 +377,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) blen
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) blend_chars = \'+, &, U+23, @->_\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) blend_chars = \'+, &, U+23, @->_\'');
 ```
 
 <!-- intro -->
@@ -386,7 +386,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) blend_chars = '+, &, U+23, @->_'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'");
 ```
 
 <!-- request CONFIG -->
@@ -432,14 +432,14 @@ Default behavior is to index the entire token, equivalent to `blend_mode = trim_
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'
+CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'"
+CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'"
 ```
 
 <!-- request PHP -->
@@ -467,7 +467,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) blend_mode = \'trim_tail, skip_pure\' blend_chars = \'+, &\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) blend_mode = \'trim_tail, skip_pure\' blend_chars = \'+, &\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -475,7 +475,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) blen
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) blend_mode = \'trim_tail, skip_pure\' blend_chars = \'+, &\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) blend_mode = \'trim_tail, skip_pure\' blend_chars = \'+, &\'');
 ```
 <!-- intro -->
 ##### java:
@@ -483,7 +483,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pure' blend_chars = '+, &'");
 ```
 
 <!-- request CONFIG -->
@@ -515,14 +515,14 @@ Only those words that are not shorter than this minimum will be indexed. For ins
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) min_word_len = '4'
+CREATE TABLE products(title text, price float) min_word_len = '4'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) min_word_len = '4'"
+CREATE TABLE products(title text, price float) min_word_len = '4'"
 ```
 
 <!-- request PHP -->
@@ -549,7 +549,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) min_word_len = \'4\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) min_word_len = \'4\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -557,7 +557,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) min_
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) min_word_len = \'4\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) min_word_len = \'4\'');
 ```
 
 <!-- intro -->
@@ -566,7 +566,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) min_word_len = '4'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) min_word_len = '4'");
 ```
 
 <!-- request CONFIG -->
@@ -603,14 +603,14 @@ Even if the search query is not segmented, Manticore should still produce good r
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'
+CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'"
+CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'"
 ```
 
 <!-- request PHP -->
@@ -638,7 +638,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -646,7 +646,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) ngra
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'');
 ```
 
 <!-- intro -->
@@ -655,7 +655,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'");
 ```
 
 <!-- request CONFIG -->
@@ -689,14 +689,14 @@ To be used in conjunction with in [ngram_len](Creating_an_index/NLP_and_tokeniza
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'
+CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'"
+CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'"
 ```
 
 <!-- request PHP -->
@@ -724,7 +724,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) ngram_chars = \'U+3000..U+2FA1F\' ngram_len = \'1\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) ngram_chars = \'U+3000..U+2FA1F\' ngram_len = \'1\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -732,14 +732,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) ngra
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) ngram_chars = \'U+3000..U+2FA1F\' ngram_len = \'1\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) ngram_chars = \'U+3000..U+2FA1F\' ngram_len = \'1\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'");
 ```
 <!-- request CONFIG -->
 
@@ -760,7 +760,7 @@ index products {
 <!-- request Java -->
 
 ```java
-res = async utilsApi.sql('mode=raw&query=create table products(title text, price float) ngram_chars = \'U+3000..U+2FA1F\' ngram_len = \'1\'');
+res = async utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) ngram_chars = \'U+3000..U+2FA1F\' ngram_len = \'1\'');
 ```
 
 <!-- intro -->
@@ -769,7 +769,7 @@ res = async utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' ngram_len = '1'");
 ```
 
 <!-- end -->
@@ -780,14 +780,14 @@ Also you can use an alias for our default N-gram table as in the example. It sho
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'
+CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'"
+CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '1'"
 ```
 
 <!-- request PHP -->
@@ -815,7 +815,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -823,7 +823,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) ngra
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) ngram_chars = \'cjk\' ngram_len = \'1\'');
 ```
 <!-- request CONFIG -->
 
@@ -856,14 +856,14 @@ The syntax is the same as for [charset_table](Creating_an_index/NLP_and_tokeniza
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) ignore_chars = 'U+AD'
+CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) ignore_chars = 'U+AD'"
+CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'"
 ```
 
 <!-- request PHP -->
@@ -890,7 +890,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) ignore_chars = \'U+AD\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) ignore_chars = \'U+AD\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -898,7 +898,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) igno
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) ignore_chars = \'U+AD\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) ignore_chars = \'U+AD\'');
 ```
 
 <!-- intro -->
@@ -907,7 +907,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) ignore_chars = 'U+AD'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'");
 ```
 
 <!-- request CONFIG -->
@@ -946,14 +946,14 @@ For most use cases, `both_freq` would be the best mode, but your mileage may var
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'
+CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'"
+CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'"
 ```
 
 <!-- request PHP -->
@@ -981,7 +981,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'both_freq\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'both_freq\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -989,7 +989,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) bigr
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'both_freq\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'both_freq\'');
 ```
 
 <!-- intro -->
@@ -998,7 +998,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'both_freq'");
 ```
 
 <!-- request CONFIG -->
@@ -1032,14 +1032,14 @@ Some of the bigram indexing modes (see [bigram_index](Creating_an_index/NLP_and_
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'
+CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'"
+CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'"
 ```
 
 <!-- request PHP -->
@@ -1067,7 +1067,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'first_freq\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'first_freq\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -1075,7 +1075,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) bigr
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'first_freq\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) bigram_freq_words = \'the, a, you, i\' bigram_index = \'first_freq\'');
 ```
 
 <!-- intro -->
@@ -1084,7 +1084,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you, i' bigram_index = 'first_freq'");
 ```
 
 <!-- request CONFIG -->
@@ -1128,14 +1128,14 @@ Essentially, keywords and CRC dictionaries represent the two different trade-off
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) dict = 'keywords'
+CREATE TABLE products(title text, price float) dict = 'keywords'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) dict = 'keywords'"
+CREATE TABLE products(title text, price float) dict = 'keywords'"
 ```
 
 <!-- request PHP -->
@@ -1162,7 +1162,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) dict = \'keywords\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) dict = \'keywords\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -1170,7 +1170,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) dict
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) dict = \'keywords\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) dict = \'keywords\'');
 ```
 
 <!-- intro -->
@@ -1179,7 +1179,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) dict = 'keywords'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) dict = 'keywords'");
 ```
 
 <!-- request CONFIG -->
@@ -1243,14 +1243,14 @@ You can build an .idf file using [indextool](Miscellaneous_tools.md#indextool) u
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) global_idf = '/usr/local/sphinx/var/global.idf'
+CREATE TABLE products(title text, price float) global_idf = '/usr/local/sphinx/var/global.idf'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) global_idf = '/usr/local/sphinx/var/global.idf'"
+CREATE TABLE products(title text, price float) global_idf = '/usr/local/sphinx/var/global.idf'"
 ```
 
 <!-- request PHP -->
@@ -1277,7 +1277,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) global_idf = \'/usr/local/sphinx/var/global.idf\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) global_idf = \'/usr/local/sphinx/var/global.idf\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -1285,7 +1285,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) glob
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) global_idf = \'/usr/local/sphinx/var/global.idf\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) global_idf = \'/usr/local/sphinx/var/global.idf\'');
 ```
 <!-- intro -->
 ##### java:
@@ -1293,7 +1293,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) global_idf = '/usr/local/sphinx/var/global.idf'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) global_idf = '/usr/local/sphinx/var/global.idf'");
 ```
 
 
@@ -1335,14 +1335,14 @@ A positional query than contains only hitless words will result in an empty phra
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) hitless_words = 'all'
+CREATE TABLE products(title text, price float) hitless_words = 'all'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) hitless_words = 'all'"
+CREATE TABLE products(title text, price float) hitless_words = 'all'"
 ```
 
 <!-- request PHP -->
@@ -1369,7 +1369,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) hitless_words = \'all\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) hitless_words = \'all\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -1377,7 +1377,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) hitl
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) hitless_words = \'all\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) hitless_words = \'all\'');
 ```
 
 <!-- intro -->
@@ -1386,7 +1386,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) hitless_words = 'all'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) hitless_words = 'all'");
 ```
 
 <!-- request CONFIG -->
@@ -1422,14 +1422,14 @@ When `index_field_lengths` is set to 1 Manticore will:
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) index_field_lengths = '1'
+CREATE TABLE products(title text, price float) index_field_lengths = '1'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) index_field_lengths = '1'"
+CREATE TABLE products(title text, price float) index_field_lengths = '1'"
 ```
 
 <!-- request PHP -->
@@ -1456,7 +1456,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) index_field_lengths = \'1\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) index_field_lengths = \'1\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -1464,7 +1464,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) inde
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) index_field_lengths = \'1\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) index_field_lengths = \'1\'');
 ```
 <!-- intro -->
 ##### java:
@@ -1472,7 +1472,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) index_field_lengths = '1'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) index_field_lengths = '1'");
 ```
 <!-- request CONFIG -->
 
@@ -1502,14 +1502,14 @@ Index-time token filter gets created by indexer on indexing source data into a p
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'
+CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'"
+CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'"
 ```
 
 <!-- request PHP -->
@@ -1536,7 +1536,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) index_token_filter = \'my_lib.so:custom_blend:chars=@#&\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) index_token_filter = \'my_lib.so:custom_blend:chars=@#&\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -1544,7 +1544,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) inde
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) index_token_filter = \'my_lib.so:custom_blend:chars=@#&\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) index_token_filter = \'my_lib.so:custom_blend:chars=@#&\'');
 ```
 <!-- intro -->
 ##### java:
@@ -1552,7 +1552,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:custom_blend:chars=@#&'");
 ```
 
 <!-- request CONFIG -->
@@ -1581,14 +1581,14 @@ Position increment on overshort (less than [min_word_len](Creating_an_index/NLP_
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) overshort_step = '1'
+CREATE TABLE products(title text, price float) overshort_step = '1'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) overshort_step = '1'"
+CREATE TABLE products(title text, price float) overshort_step = '1'"
 ```
 
 <!-- request PHP -->
@@ -1615,7 +1615,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) overshort_step = \'1\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) overshort_step = \'1\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -1623,7 +1623,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) over
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) overshort_step = \'1\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) overshort_step = \'1\'');
 ```
 
 <!-- intro -->
@@ -1632,7 +1632,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) overshort_step = '1'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) overshort_step = '1'");
 ```
 
 <!-- request CONFIG -->
@@ -1667,14 +1667,14 @@ Phrase boundary condition will be raised if and only if such character is follow
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'
+CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'"
+CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'"
 ```
 
 <!-- request PHP -->
@@ -1702,7 +1702,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) phrase_boundary = \'., ?, !, U+2026\' phrase_boundary_step = \'10\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) phrase_boundary = \'., ?, !, U+2026\' phrase_boundary_step = \'10\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -1710,7 +1710,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) phra
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) phrase_boundary = \'., ?, !, U+2026\' phrase_boundary_step = \'10\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) phrase_boundary = \'., ?, !, U+2026\' phrase_boundary_step = \'10\'');
 ```
 <!-- intro -->
 ##### java:
@@ -1718,7 +1718,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+2026' phrase_boundary_step = '10'");
 ```
 <!-- request CONFIG -->
 
@@ -1749,14 +1749,14 @@ On phrase boundary, current word position will be additionally incremented by th
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'
+CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'"
+CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'"
 ```
 
 <!-- request PHP -->
@@ -1784,7 +1784,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) phrase_boundary_step = \'100\' phrase_boundary = \'., ?, !, U+2026\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) phrase_boundary_step = \'100\' phrase_boundary = \'., ?, !, U+2026\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -1792,7 +1792,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) phra
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) phrase_boundary_step = \'100\' phrase_boundary = \'., ?, !, U+2026\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) phrase_boundary_step = \'100\' phrase_boundary = \'., ?, !, U+2026\'');
 ```
 <!-- intro -->
 ##### java:
@@ -1800,7 +1800,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phrase_boundary = '., ?, !, U+2026'");
 ```
 
 <!-- request CONFIG -->
@@ -1840,14 +1840,14 @@ Regular expressions listed in `regexp_filter` are applied in the order they are 
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) regexp_filter = '(blue|red) => color'
+CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'
 ```
 
 <!-- request HTTP -->
 
 ```http
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) regexp_filter = '(blue|red) => color'"
+CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'"
 ```
 
 <!-- request PHP -->
@@ -1874,7 +1874,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) regexp_filter = \'(blue|red) => color\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) regexp_filter = \'(blue|red) => color\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -1882,7 +1882,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) rege
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) regexp_filter = \'(blue|red) => color\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) regexp_filter = \'(blue|red) => color\'');
 ```
 
 <!-- intro -->
@@ -1891,7 +1891,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) regexp_filter = '(blue|red) => color'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => color'");
 ```
 
 <!-- request CONFIG -->

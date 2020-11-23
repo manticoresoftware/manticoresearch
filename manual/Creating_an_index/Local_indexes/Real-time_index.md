@@ -15,7 +15,7 @@ RAM chunk size is controlled by [rt_mem_limit](Creating_an_index/Local_indexes/P
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) morphology='stem_en';
+CREATE TABLE products(title text, price float) morphology='stem_en';
 ```
 <!-- response SQL -->
 
@@ -28,7 +28,7 @@ Query OK, 0 rows affected (0.00 sec)
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=create table products(title text, price float)  morphology='stem_en'"
+POST /sql -d "mode=raw&query=CREATE TABLE products(title text, price float)  morphology='stem_en'"
 ```
 
 <!-- response HTTP -->
@@ -58,7 +58,7 @@ $index->create([
 ##### Python:
 <!-- request Python -->
 ```python
-utilsApi.sql('mode=raw&query=create table forum(title text, price float)')
+utilsApi.sql('mode=raw&query=CREATE TABLE forum(title text, price float)')
 ```
 
 <!-- intro -->
@@ -66,14 +66,14 @@ utilsApi.sql('mode=raw&query=create table forum(title text, price float)')
 
 <!-- request Javascript -->
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table forum(title text, price float)');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE forum(title text, price float)');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table forum(title text, price float)");
+utilsApi.sql("mode=raw&query=CREATE TABLE forum(title text, price float)");
 ```
 
 <!-- intro -->

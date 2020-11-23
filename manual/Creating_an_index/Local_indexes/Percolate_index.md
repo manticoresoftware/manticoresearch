@@ -27,7 +27,7 @@ What you need to take care of when you add a new index is to **specify the expec
 ##### Creating a percolate index via MySQL protocol:
 
 ```sql
-create table products(title text, meta json) type='pq';
+CREATE TABLE products(title text, meta json) type='pq';
 ```
 <!-- response SQL -->
 
@@ -39,7 +39,7 @@ Query OK, 0 rows affected (0.00 sec)
 ##### Creating a percolate index via JSON over HTTP:
 
 ```json
-POST /sql -d "mode=raw&query=create table products(title text, meta json) type='pq'"
+POST /sql -d "mode=raw&query=CREATE TABLE products(title text, meta json) type='pq'"
 ```
 
 <!-- response HTTP -->
@@ -85,7 +85,7 @@ Array(
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, meta json) type=\'pq\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, meta json) type=\'pq\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -93,7 +93,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, meta json) type=\
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, meta json) type=\'pq\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, meta json) type=\'pq\'');
 ```
 <!-- intro -->
 ##### java:
@@ -101,7 +101,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, meta 
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, meta json) type='pq'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, meta json) type='pq'");
 ```
 <!-- request CONFIG -->
 ##### Creating a percolate index via config:

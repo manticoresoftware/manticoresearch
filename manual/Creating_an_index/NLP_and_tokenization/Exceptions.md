@@ -57,14 +57,14 @@ Exceptions are applied to raw incoming document and query data during indexing a
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price float) exceptions = '/usr/local/sphinx/data/exceptions.txt'
+CREATE TABLE products(title text, price float) exceptions = '/usr/local/sphinx/data/exceptions.txt'
 ```
 
 <!-- request HTTP -->
 
 ```json
 POST /sql -d "mode=raw&query=
-create table products(title text, price float) exceptions = '/usr/local/sphinx/data/exceptions.txt'"
+CREATE TABLE products(title text, price float) exceptions = '/usr/local/sphinx/data/exceptions.txt'"
 ```
 
 <!-- request PHP -->
@@ -91,7 +91,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price float) exceptions = \'/usr/local/sphinx/data/exceptions.txt\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) exceptions = \'/usr/local/sphinx/data/exceptions.txt\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -99,14 +99,14 @@ utilsApi.sql('mode=raw&query=create table products(title text, price float) exce
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price float) exceptions = \'/usr/local/sphinx/data/exceptions.txt\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) exceptions = \'/usr/local/sphinx/data/exceptions.txt\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price float) exceptions = '/usr/local/sphinx/data/exceptions.txt'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) exceptions = '/usr/local/sphinx/data/exceptions.txt'");
 ```
 <!-- request CONFIG -->
 

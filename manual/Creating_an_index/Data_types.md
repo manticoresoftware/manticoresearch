@@ -23,7 +23,7 @@ A good example for attributes would be a forum posts index. Assume that only tit
 <!-- request SQL -->
 
 ```sql
-create table forum(title text, content text, author_id int, forum_id int, post_date timestamp);
+CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_date timestamp);
 ```
 <!-- intro -->
 ##### HTTP:
@@ -31,7 +31,7 @@ create table forum(title text, content text, author_id int, forum_id int, post_d
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=create table forum(title text, content text, author_id int, forum_id int, post_date timestamp)"
+POST /sql -d "mode=raw&query=CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_date timestamp)"
 ```
 
 <!-- intro -->
@@ -56,7 +56,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table forum(title text, content text, author_id int, forum_id int, post_date timestamp)')
+utilsApi.sql('mode=raw&query=CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_date timestamp)')
 ```
 <!-- intro -->
 ##### Javascript:
@@ -64,7 +64,7 @@ utilsApi.sql('mode=raw&query=create table forum(title text, content text, author
 <!-- request Javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table forum(title text, content text, author_id int, forum_id int, post_date timestamp)');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_date timestamp)');
 ```
 
 <!-- intro -->
@@ -73,7 +73,7 @@ res = await utilsApi.sql('mode=raw&query=create table forum(title text, content 
 <!-- request Java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table forum(title text, content text, author_id int, forum_id int, post_date timestamp)");
+utilsApi.sql("mode=raw&query=CREATE TABLE forum(title text, content text, author_id int, forum_id int, post_date timestamp)");
 
 ```
 
@@ -236,7 +236,7 @@ Full-text fields can only be used in `MATCH()` clause and cannot be used for sor
 <!-- request SQL -->
 
 ```sql
-create table products(title text);
+CREATE TABLE products(title text);
 ```
 <!-- intro -->
 ##### HTTP:
@@ -244,7 +244,7 @@ create table products(title text);
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=create table products(title text)"
+POST /sql -d "mode=raw&query=CREATE TABLE products(title text)"
 ```
 
 <!-- intro -->
@@ -266,7 +266,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text)')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text)')
 ```
 <!-- intro -->
 ##### javascript:
@@ -274,7 +274,7 @@ utilsApi.sql('mode=raw&query=create table products(title text)')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text)');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text)');
 ```
 <!-- intro -->
 ##### java:
@@ -282,7 +282,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text)');
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text)");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text)");
 ```
 <!-- intro -->
 ##### config:
@@ -314,7 +314,7 @@ This behavior can overridden by explicitly specifying that the text is only inde
 <!-- request SQL -->
 
 ```sql
-create table products(title text indexed);
+CREATE TABLE products(title text indexed);
 ```
 <!-- intro -->
 ##### HTTP:
@@ -322,7 +322,7 @@ create table products(title text indexed);
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=create table products(title text indexed)"
+POST /sql -d "mode=raw&query=CREATE TABLE products(title text indexed)"
 ```
 
 <!-- intro -->
@@ -343,7 +343,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text indexed)')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text indexed)')
 ```
 <!-- intro -->
 ##### javascript:
@@ -351,7 +351,7 @@ utilsApi.sql('mode=raw&query=create table products(title text indexed)')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text indexed)');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text indexed)');
 ```
 
 <!-- intro -->
@@ -360,7 +360,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text indexe
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text indexed)");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text indexed)");
 ```
 
 <!-- intro -->
@@ -442,7 +442,7 @@ res = await searchApi.search({"index":"products","query":{"match":{"title":"firs
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text indexed)");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text indexed)");
 ```
 
 <!-- end -->
@@ -458,7 +458,7 @@ Unlike full-text fields, string attributes are stored as they are received and c
 <!-- request SQL -->
 
 ```sql
-create table products(title text, keys string);
+CREATE TABLE products(title text, keys string);
 ```
 <!-- intro -->
 ##### HTTP:
@@ -466,7 +466,7 @@ create table products(title text, keys string);
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=create table products(title text, keys string)"
+POST /sql -d "mode=raw&query=CREATE TABLE products(title text, keys string)"
 ```
 
 <!-- intro -->
@@ -488,7 +488,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, keys string)')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, keys string)')
 ```
 <!-- intro -->
 ##### javascript:
@@ -496,7 +496,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, keys string)')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, keys string)');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, keys string)');
 ```
 <!-- intro -->
 ##### java:
@@ -504,7 +504,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, keys 
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, keys string)");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, keys string)");
 ```
 
 <!-- intro -->
@@ -540,7 +540,7 @@ You can create a fulltext field that is also stored as a string attribute. This 
 `string attribute indexed` means that we're working with a string data type that is stored as an attribute and indexed as a full-text field.
 
 ```sql
-create table products ( title string attribute indexed );
+CREATE TABLE products ( title string attribute indexed );
 ```
 <!-- intro -->
 ##### HTTP:
@@ -548,7 +548,7 @@ create table products ( title string attribute indexed );
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=create table products ( title string attribute indexed )"
+POST /sql -d "mode=raw&query=CREATE TABLE products ( title string attribute indexed )"
 ```
 
 <!-- intro -->
@@ -569,7 +569,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products ( title string attribute indexed )')
+utilsApi.sql('mode=raw&query=CREATE TABLE products ( title string attribute indexed )')
 ```
 <!-- intro -->
 ##### javascript:
@@ -577,7 +577,7 @@ utilsApi.sql('mode=raw&query=create table products ( title string attribute inde
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products ( title string attribute indexed )');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products ( title string attribute indexed )');
 ```
 
 <!-- intro -->
@@ -586,7 +586,7 @@ res = await utilsApi.sql('mode=raw&query=create table products ( title string at
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products ( title string attribute indexed )");
+utilsApi.sql("mode=raw&query=CREATE TABLE products ( title string attribute indexed )");
 ```
 <!-- intro -->
 ##### config:
@@ -619,7 +619,7 @@ Integer type allows storing 32 bit **unsigned** integer values.
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price int);
+CREATE TABLE products(title text, price int);
 ```
 <!-- intro -->
 ##### HTTP:
@@ -627,7 +627,7 @@ create table products(title text, price int);
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=create table products(title text, price int)"
+POST /sql -d "mode=raw&query=CREATE TABLE products(title text, price int)"
 ```
 
 <!-- intro -->
@@ -650,7 +650,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price int)')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price int)')
 ```
 <!-- intro -->
 ##### javascript:
@@ -658,7 +658,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price int)')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price int)');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price int)');
 ```
 <!-- intro -->
 ##### java:
@@ -666,7 +666,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price int)");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price int)");
 ```
 <!-- intro -->
 ##### config:
@@ -697,7 +697,7 @@ Integers can be stored in shorter sizes than 32 bit by specifying a bit count. F
 <!-- request SQL -->
 
 ```sql
-create table products(title text, flags bit(3), tags bit(2) );
+CREATE TABLE products(title text, flags bit(3), tags bit(2) );
 ```
 <!-- intro -->
 ##### HTTP:
@@ -705,7 +705,7 @@ create table products(title text, flags bit(3), tags bit(2) );
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=create table products(title text, flags bit(3), tags bit(2))"
+POST /sql -d "mode=raw&query=CREATE TABLE products(title text, flags bit(3), tags bit(2))"
 ```
 
 <!-- intro -->
@@ -728,7 +728,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, flags bit(3), tags bit(2) ')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, flags bit(3), tags bit(2) ')
 ```
 <!-- intro -->
 ##### javascript:
@@ -736,7 +736,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, flags bit(3), tag
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, flags bit(3), tags bit(2) ');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, flags bit(3), tags bit(2) ');
 ```
 <!-- intro -->
 ##### java:
@@ -744,7 +744,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, flags
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, flags bit(3), tags bit(2)");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, flags bit(3), tags bit(2)");
 ```
 
 <!-- intro -->
@@ -779,7 +779,7 @@ Big integers are 64-bit wide **signed** integers.
 <!-- request SQL -->
 
 ```sql
-create table products(title text, price bigint );
+CREATE TABLE products(title text, price bigint );
 ```
 <!-- intro -->
 ##### HTTP:
@@ -787,7 +787,7 @@ create table products(title text, price bigint );
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=create table products(title text, price bigint)"
+POST /sql -d "mode=raw&query=CREATE TABLE products(title text, price bigint)"
 ```
 
 <!-- intro -->
@@ -809,7 +809,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, price bigint )')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price bigint )')
 ```
 <!-- intro -->
 ##### javascript:
@@ -817,7 +817,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, price bigint )')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, price bigint )');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price bigint )');
 ```
 
 <!-- intro -->
@@ -826,7 +826,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, price
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, price bigint )");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price bigint )");
 ```
 
 <!-- intro -->
@@ -860,7 +860,7 @@ Timestamp type represents unix timestamps which is stored as a 32-bit integer. T
 <!-- request SQL -->
 
 ```sql
-create table products(title text, date timestamp);
+CREATE TABLE products(title text, date timestamp);
 ```
 <!-- intro -->
 ##### HTTP:
@@ -868,7 +868,7 @@ create table products(title text, date timestamp);
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=create table products(title text, date timestamp)"
+POST /sql -d "mode=raw&query=CREATE TABLE products(title text, date timestamp)"
 ```
 
 <!-- intro -->
@@ -890,7 +890,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, date timestamp)')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, date timestamp)')
 ```
 <!-- intro -->
 ##### javascript:
@@ -898,7 +898,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, date timestamp)')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, date timestamp)');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, date timestamp)');
 ```
 
 <!-- intro -->
@@ -907,7 +907,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, date 
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, date timestamp)");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, date timestamp)");
 ```
 
 <!-- intro -->
@@ -940,7 +940,7 @@ Real numbers are stored as 32-bit IEEE 754 single precision floats.
 <!-- request SQL -->
 
 ```sql
-create table products(title text, coeff float);
+CREATE TABLE products(title text, coeff float);
 ```
 <!-- intro -->
 ##### HTTP:
@@ -948,7 +948,7 @@ create table products(title text, coeff float);
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=create table products(title text, coeff float)"
+POST /sql -d "mode=raw&query=CREATE TABLE products(title text, coeff float)"
 ```
 
 <!-- intro -->
@@ -971,7 +971,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, coeff float)')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, coeff float)')
 ```
 
 <!-- intro -->
@@ -980,7 +980,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, coeff float)')
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, coeff float)");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, coeff float)");
 ```
 <!-- intro -->
 ##### javascript:
@@ -988,7 +988,7 @@ utilsApi.sql("mode=raw&query=create table products(title text, coeff float)");
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, coeff float)');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, coeff float)');
 ```
 
 
@@ -1159,7 +1159,7 @@ This data type allows storing JSON objects for schema-less data.
 <!-- request SQL -->
 
 ```sql
-create table products(title text, data json);
+CREATE TABLE products(title text, data json);
 ```
 <!-- intro -->
 ##### HTTP:
@@ -1167,7 +1167,7 @@ create table products(title text, data json);
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=create table products(title text, data json)"
+POST /sql -d "mode=raw&query=CREATE TABLE products(title text, data json)"
 ```
 
 <!-- intro -->
@@ -1190,7 +1190,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, data json)')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, data json)')
 ```
 <!-- intro -->
 ##### javascript:
@@ -1198,7 +1198,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, data json)')
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, data json)');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, data json)');
 ```
 <!-- intro -->
 ##### java:
@@ -1206,7 +1206,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, data 
 <!-- request java -->
 
 ```java
-utilsApi.sql'mode=raw&query=create table products(title text, data json)');
+utilsApi.sql'mode=raw&query=CREATE TABLE products(title text, data json)');
 ```
 <!-- intro -->
 ##### config:
@@ -1454,7 +1454,7 @@ Multi-value attributes allow storing variable-length lists of 32-bit unsigned in
 <!-- request SQL -->
 
 ```sql
-create table products(title text, product_codes multi);
+CREATE TABLE products(title text, product_codes multi);
 ```
 
 <!-- intro -->
@@ -1463,7 +1463,7 @@ create table products(title text, product_codes multi);
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=create table products(title text, product_codes multi)"
+POST /sql -d "mode=raw&query=CREATE TABLE products(title text, product_codes multi)"
 ```
 
 <!-- intro -->
@@ -1486,7 +1486,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, product_codes multi)')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, product_codes multi)')
 ```
 <!-- intro -->
 ##### javascript:
@@ -1494,7 +1494,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, product_codes mul
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, product_codes multi)');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, product_codes multi)');
 ```
 <!-- intro -->
 ##### java:
@@ -1502,7 +1502,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, produ
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, product_codes multi)");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, product_codes multi)");
 ```
 
 
@@ -1927,7 +1927,7 @@ A data type type that allows storing variable-length lists of 64-bit signed inte
 <!-- request SQL -->
 
 ```sql
-create table products(title text, values multi64);
+CREATE TABLE products(title text, values multi64);
 ```
 
 <!-- intro -->
@@ -1936,7 +1936,7 @@ create table products(title text, values multi64);
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=create table products(title text, values multi64)"
+POST /sql -d "mode=raw&query=CREATE TABLE products(title text, values multi64)"
 ```
 
 <!-- intro -->
@@ -1959,7 +1959,7 @@ $index->create([
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=create table products(title text, values multi64))')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, values multi64))')
 ```
 <!-- intro -->
 ##### javascript:
@@ -1967,7 +1967,7 @@ utilsApi.sql('mode=raw&query=create table products(title text, values multi64))'
 <!-- request javascript -->
 
 ```javascript
-res = await utilsApi.sql('mode=raw&query=create table products(title text, values multi64))');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, values multi64))');
 ```
 <!-- intro -->
 ##### java:
@@ -1975,7 +1975,7 @@ res = await utilsApi.sql('mode=raw&query=create table products(title text, value
 <!-- request java -->
 
 ```java
-utilsApi.sql("mode=raw&query=create table products(title text, values multi64))");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, values multi64))");
 ```
 <!-- intro -->
 ##### config:

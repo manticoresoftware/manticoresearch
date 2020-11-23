@@ -19,7 +19,7 @@ An index can also be emptied with `DELETE FROM index WHERE id>0`, but it's not r
 <!-- request SQL -->
 
 ```sql
-truncate table products;
+TRUNCATE TABLE products;
 ```
 <!-- response SQL -->
 
@@ -33,7 +33,7 @@ Query OK, 0 rows affected (0.02 sec)
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=truncate table products"
+POST /sql -d "mode=raw&query=TRUNCATE TABLE products"
 ```
 
 <!-- response HTTP -->
@@ -117,7 +117,7 @@ When `RECONFIGURE` option is used new tokenization, morphology, and other text p
 <!-- request SQL -->
 
 ```sql
-truncate table products with reconfigure;
+TRUNCATE TABLE products with reconfigure;
 ```
 <!-- response SQL -->
 
@@ -131,7 +131,7 @@ Query OK, 0 rows affected (0.02 sec)
 <!-- request HTTP -->
 
 ```http
-POST /sql -d "mode=raw&query=truncate table products with reconfigure"
+POST /sql -d "mode=raw&query=TRUNCATE TABLE products with reconfigure"
 ```
 
 <!-- response HTTP -->

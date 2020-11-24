@@ -2102,45 +2102,38 @@ bool MinimizeSchema ( CSphSchema & tDst, const ISphSchema & tSrc )
 
 static void CheckQuery ( const CSphQuery & tQuery, CSphString & sError )
 {
-	#define LOC_ERROR(_msg) { sError.SetSprintf ( _msg ); return; }
-	#define LOC_ERROR1(_msg,_arg1) { sError.SetSprintf ( _msg, _arg1 ); return; }
-	#define LOC_ERROR2(_msg,_arg1,_arg2) { sError.SetSprintf ( _msg, _arg1, _arg2 ); return; }
+	#define LOC_ERROR( ... ) do { sError.SetSprintf (__VA_ARGS__); return; } while(0)
 
-	sError = NULL;
+	sError = nullptr;
 
 	if ( (int)tQuery.m_eMode<0 || tQuery.m_eMode>SPH_MATCH_TOTAL )
-		LOC_ERROR1 ( "invalid match mode %d", tQuery.m_eMode );
+		LOC_ERROR ( "invalid match mode %d", tQuery.m_eMode );
 
 	if ( (int)tQuery.m_eRanker<0 || tQuery.m_eRanker>SPH_RANK_TOTAL )
-		LOC_ERROR1 ( "invalid ranking mode %d", tQuery.m_eRanker );
+		LOC_ERROR ( "invalid ranking mode %d", tQuery.m_eRanker );
 
 	if ( tQuery.m_iMaxMatches<1 )
 		LOC_ERROR ( "max_matches can not be less than one" );
 
 	if ( tQuery.m_iOffset<0 || tQuery.m_iOffset>=tQuery.m_iMaxMatches )
-		LOC_ERROR2 ( "offset out of bounds (offset=%d, max_matches=%d)",
-			tQuery.m_iOffset, tQuery.m_iMaxMatches );
+		LOC_ERROR ( "offset out of bounds (offset=%d, max_matches=%d)", tQuery.m_iOffset, tQuery.m_iMaxMatches );
 
 	if ( tQuery.m_iLimit<0 )
-		LOC_ERROR1 ( "limit out of bounds (limit=%d)", tQuery.m_iLimit );
+		LOC_ERROR ( "limit out of bounds (limit=%d)", tQuery.m_iLimit );
 
 	if ( tQuery.m_iCutoff<0 )
-		LOC_ERROR1 ( "cutoff out of bounds (cutoff=%d)", tQuery.m_iCutoff );
+		LOC_ERROR ( "cutoff out of bounds (cutoff=%d)", tQuery.m_iCutoff );
 
-	if ( ( tQuery.m_iRetryCount!=-1 )
-		&& ( tQuery.m_iRetryCount>MAX_RETRY_COUNT ) )
-		LOC_ERROR1 ( "retry count out of bounds (count=%d)", tQuery.m_iRetryCount );
+	if ( ( tQuery.m_iRetryCount!=-1 ) && ( tQuery.m_iRetryCount>MAX_RETRY_COUNT ) )
+		LOC_ERROR ( "retry count out of bounds (count=%d)", tQuery.m_iRetryCount );
 
-	if ( ( tQuery.m_iRetryDelay!=-1 )
-		&& ( tQuery.m_iRetryDelay>MAX_RETRY_DELAY ) )
-			LOC_ERROR1 ( "retry delay out of bounds (delay=%d)", tQuery.m_iRetryDelay );
+	if ( ( tQuery.m_iRetryDelay!=-1 ) && ( tQuery.m_iRetryDelay>MAX_RETRY_DELAY ) )
+		LOC_ERROR ( "retry delay out of bounds (delay=%d)", tQuery.m_iRetryDelay );
 
 	if ( tQuery.m_iOffset>0 && tQuery.m_bHasOuter )
-		LOC_ERROR1 ( "inner offset must be 0 when using outer order by (offset=%d)", tQuery.m_iOffset );
+		LOC_ERROR ( "inner offset must be 0 when using outer order by (offset=%d)", tQuery.m_iOffset );
 
 	#undef LOC_ERROR
-	#undef LOC_ERROR1
-	#undef LOC_ERROR2
 }
 
 

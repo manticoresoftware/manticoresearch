@@ -810,10 +810,10 @@ static KeyDesc_t g_dKeysIndexer[] =
 	{ "write_buffer",			0, NULL },
 	{ "on_file_field_error",	0, NULL },
 	{ "on_json_attr_error",		KEY_DEPRECATED, "on_json_attr_error in common{..} section" },
-	{ "json_autoconv_numbers",  KEY_DEPRECATED, "json_autoconv_numbers in common{..} section" },
+	{ "json_autoconv_numbers",	KEY_DEPRECATED, "json_autoconv_numbers in common{..} section" },
 	{ "json_autoconv_keynames",	KEY_DEPRECATED, "json_autoconv_keynames in common{..} section" },
 	{ "lemmatizer_cache",		0, NULL },
-	{ "skip_non_plain_warning", 0, NULL },
+	{ "skip_non_plain_warning",	0, NULL },
 	{ NULL,						0, NULL }
 };
 

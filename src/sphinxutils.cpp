@@ -802,19 +802,19 @@ static KeyDesc_t g_dKeysIndex[] =
 /// allowed keys for indexer section
 static KeyDesc_t g_dKeysIndexer[] =
 {
-	{ "mem_limit",				             0, NULL },
-	{ "max_iops",				             0, NULL },
-	{ "max_iosize",				             0, NULL },
-	{ "max_xmlpipe2_field",		             0, NULL },
-	{ "max_file_field_buffer",	             0, NULL },
-	{ "write_buffer",			             0, NULL },
-	{ "on_file_field_error",	             0, NULL },
-	{ "on_json_attr_error",		             KEY_DEPRECATED, "on_json_attr_error in common{..} section" },
-	{ "json_autoconv_numbers",	             KEY_DEPRECATED, "json_autoconv_numbers in common{..} section" },
-	{ "json_autoconv_keynames",	             KEY_DEPRECATED, "json_autoconv_keynames in common{..} section" },
-	{ "lemmatizer_cache",		             0, NULL },
-	{ "skip_distributed_indexes_as_warning", 0, NULL },
-	{ NULL,						             0, NULL }
+	{ "mem_limit",				0, NULL },
+	{ "max_iops",				0, NULL },
+	{ "max_iosize",				0, NULL },
+	{ "max_xmlpipe2_field",		0, NULL },
+	{ "max_file_field_buffer",	0, NULL },
+	{ "write_buffer",			0, NULL },
+	{ "on_file_field_error",	0, NULL },
+	{ "on_json_attr_error",		KEY_DEPRECATED, "on_json_attr_error in common{..} section" },
+	{ "json_autoconv_numbers",  KEY_DEPRECATED, "json_autoconv_numbers in common{..} section" },
+	{ "json_autoconv_keynames",	KEY_DEPRECATED, "json_autoconv_keynames in common{..} section" },
+	{ "lemmatizer_cache",		0, NULL },
+	{ "skip_non_plain_warning", 0, NULL },
+	{ NULL,						0, NULL }
 };
 
 /// allowed keys for searchd section

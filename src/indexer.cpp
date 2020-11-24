@@ -892,7 +892,7 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 //////////////////////////////////////////////////////////////////////////
 
 bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
-	const CSphConfigType & hSources, FILE * fpDumpRows, const bool bSkipNonPlainIndexWarning)
+	const CSphConfigType & hSources, FILE * fpDumpRows, const bool bIgnoreNonPlain)
 {
 	// check index type
 	bool bPlain = true;
@@ -910,12 +910,12 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	}
 	if ( !bPlain )
 	{
-		if ( !g_bQuiet )
+		if ( !g_bQuiet && !bIgnoreNonPlain )
 		{
 			fprintf ( stdout, "skipping non-plain index '%s'...\n", sIndexName );
 			fflush ( stdout );
 		}
-		return bSkipNonPlainIndexWarning;
+		return bIgnoreNonPlain;
 	}
 
 	// progress bar
@@ -1943,7 +1943,7 @@ int main ( int argc, char ** argv )
 
 	int iIndexed = 0;
 	int iFailed = 0;
-	bool bSkipNonPlainIndexWarning = hConf["indexer"]["indexer"].GetBool ( "skip_non_plain_warning", false );
+	bool bIgnoreNonPlain = hConf["indexer"]["indexer"].GetBool ( "ignore_non_plain", false );
 	if ( bMerge )
 	{
 		if ( dIndexes.GetLength()!=2 )
@@ -1968,7 +1968,7 @@ int main ( int argc, char ** argv )
 		hConf["index"].IterateStart ();
 		while ( hConf["index"].IterateNext() )
 		{
-			bool bLastOk = DoIndex ( hConf["index"].IterateGet (), hConf["index"].IterateGetKey().cstr(), hConf["source"], fpDumpRows, bSkipNonPlainIndexWarning);
+			bool bLastOk = DoIndex ( hConf["index"].IterateGet (), hConf["index"].IterateGetKey().cstr(), hConf["source"], fpDumpRows, bIgnoreNonPlain);
 			if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && g_bSendHUP && SendRotate ( hConf, false ) )
 				tmRotated = sphMicroTimer();
 			if ( bLastOk )
@@ -1983,7 +1983,7 @@ int main ( int argc, char ** argv )
 				fprintf ( stdout, "WARNING: no such index '%s', skipping.\n", dIndexes[j] );
 			else
 			{
-				bool bLastOk = DoIndex ( hConf["index"][dIndexes[j]], dIndexes[j], hConf["source"], fpDumpRows, bSkipNonPlainIndexWarning);
+				bool bLastOk = DoIndex ( hConf["index"][dIndexes[j]], dIndexes[j], hConf["source"], fpDumpRows, bIgnoreNonPlain);
 				if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && g_bSendHUP && SendRotate ( hConf, false ) )
 					tmRotated = sphMicroTimer();
 				if ( bLastOk )

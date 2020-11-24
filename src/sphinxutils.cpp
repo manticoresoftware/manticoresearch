@@ -813,7 +813,7 @@ static KeyDesc_t g_dKeysIndexer[] =
 	{ "json_autoconv_numbers",	KEY_DEPRECATED, "json_autoconv_numbers in common{..} section" },
 	{ "json_autoconv_keynames",	KEY_DEPRECATED, "json_autoconv_keynames in common{..} section" },
 	{ "lemmatizer_cache",		0, NULL },
-	{ "skip_non_plain_warning",	0, NULL },
+	{ "ignore_non_plain",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

@@ -1420,7 +1420,7 @@ public:
 	virtual void HeadEnd ( bool bMoreResults=false, int iWarns=0 ) = 0;
 
 	// add the next column. The EOF after the full set will be fired automatically
-	virtual void HeadColumn ( const char * sName, MysqlColumnType_e uType=MYSQL_COL_STRING, WORD uFlags=0 ) = 0;
+	virtual void HeadColumn ( const char * sName, MysqlColumnType_e uType=MYSQL_COL_STRING ) = 0;
 
 	virtual void Add ( BYTE uVal ) = 0;
 

@@ -9218,9 +9218,9 @@ static void SendMysqlPercolateReply ( RowBuffer_i & tOut, const CPqResult & tRes
 		iColumns += 3;
 	tOut.HeadBegin ( iColumns );
 
-	tOut.HeadColumn ( "id", MYSQL_COL_LONGLONG, 0 );
+	tOut.HeadColumn ( "id", MYSQL_COL_LONGLONG );
 	if ( bDumpDocs )
-		tOut.HeadColumn ( "documents", MYSQL_COL_STRING );
+		tOut.HeadColumn ( "documents" );
 	if ( bQuery )
 	{
 		tOut.HeadColumn ( "query" );
@@ -12029,7 +12029,7 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 		// in case there are no matches, send a dummy schema
 		// result set header packet. We will attach EOF manually at the end.
 		dRows.HeadBegin ( bAddQueryColumn ? 2 : 1 );
-		dRows.HeadColumn ( "id", MYSQL_COL_LONGLONG, 0 );
+		dRows.HeadColumn ( "id", MYSQL_COL_LONGLONG );
 	} else
 	{
 		int iAttrsToSend = tAttrsToSend.BitCount();
@@ -12057,12 +12057,12 @@ void SendMysqlSelectResult ( RowBuffer_i & dRows, const AggrResult_t & tRes, boo
 			default:
 				break;
 			}
-			dRows.HeadColumn ( tCol.m_sName.cstr(), eType, 0 );
+			dRows.HeadColumn ( tCol.m_sName.cstr(), eType );
 		}
 	}
 
 	if ( bAddQueryColumn )
-		dRows.HeadColumn ( "query", MYSQL_COL_STRING );
+		dRows.HeadColumn ( "query" );
 
 	// EOF packet is sent explicitly due to non-default params.
 	auto iWarns = tRes.m_sWarning.IsEmpty() ? 0 : 1;
@@ -13564,7 +13564,7 @@ void HandleMysqlSelectDual ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, const 
 	}
 
 	tOut.HeadBegin(1);
-	tOut.HeadColumn ( sVar.cstr(), MYSQL_COL_STRING );
+	tOut.HeadColumn ( sVar.cstr() );
 	tOut.HeadEnd();
 
 	ExtraLastInsertID_t tIds ( tVars.m_dLastIds );

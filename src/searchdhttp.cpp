@@ -823,7 +823,7 @@ public:
 		m_dBuf += "[\n";
 	}
 
-	void HeadColumn ( const char * sName, MysqlColumnType_e eType, WORD ) override
+	void HeadColumn ( const char * sName, MysqlColumnType_e eType ) override
 	{
 		m_dColumns.Add ( ColumnNameType_t { sName, eType } );
 	}

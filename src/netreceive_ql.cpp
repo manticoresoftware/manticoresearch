@@ -296,7 +296,7 @@ class SqlRowBuffer_c : public RowBuffer_i, private LazyVector_T<BYTE>
 		m_tOut.SendBytes ( sStr, iLen );
 	}
 
-	void SendSqlFieldPacket ( const char * sCol, MysqlColumnType_e eType, WORD uFlags )
+	void SendSqlFieldPacket ( const char * sCol, MysqlColumnType_e eType, WORD uFlags=0 )
 	{
 		const char * sDB = "";
 		const char * sTable = "";
@@ -498,10 +498,10 @@ public:
 	}
 
 	// add the next column. The EOF after the tull set will be fired automatically
-	void HeadColumn ( const char * sName, MysqlColumnType_e uType, WORD uFlags ) override
+	void HeadColumn ( const char * sName, MysqlColumnType_e uType ) override
 	{
 		assert ( m_iColumns-->0 && "you try to send more mysql columns than declared in InitHead" );
-		SendSqlFieldPacket ( sName, uType, uFlags );
+		SendSqlFieldPacket ( sName, uType );
 	}
 
 	void Add ( BYTE uVal ) override

@@ -896,14 +896,12 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 {
 	// check index type
 	bool bPlain = true;
-	bool bDistributed = false;
 
 	if ( hIndex("type") )
 	{
 		const CSphString & sType = hIndex["type"].strval();
 		
 		bPlain = ( sType=="plain" );
-		bDistributed = ( sType=="distributed" );
 
 		if ( sType!="plain" && sType!="distributed" && sType!="rt" && sType!="template" && sType!="percolate" )
 		{
@@ -920,7 +918,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 			fflush ( stdout );
 		}
 
-		return (bDistributed && iSkipNonPlainIndexWarning == 1);
+		return (iSkipNonPlainIndexWarning == 1);
 	}
 
 	// progress bar

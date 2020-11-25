@@ -1945,8 +1945,7 @@ int main ( int argc, char ** argv )
 
 	int iIndexed = 0;
 	int iFailed = 0;
-//	bool bIgnoreNonPlain = hIndexer.GetBool ( "ignore_non_plain", false );
-//	bool bIgnoreNonPlain = hConf["indexer"]("indexer").GetBool ( "ignore_non_plain", false );
+
 	if ( bMerge )
 	{
 		if ( dIndexes.GetLength()!=2 )

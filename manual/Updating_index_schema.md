@@ -8,7 +8,7 @@
 ALTER TABLE index {ADD|DROP} COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING|TIMESTAMP}]
 ```
 
-It supports adding one attribute at a time for both plain and RT indexes. The supported attribute types are:
+It supports adding one attribute at a time for RT indexes. The supported attribute types are:
 * int
 * bigint
 * float

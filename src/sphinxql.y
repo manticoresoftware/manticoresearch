@@ -333,6 +333,25 @@ chunk_number:
 		}
 	;
 
+one_complex_or_list_of_simple:		// used in select
+	only_one_index metakeys
+		{
+			pParser->m_pQuery->m_sIndexes = pParser->m_pStmt->m_sIndex;
+		}
+	| list_of_indexes
+		{
+			pParser->ToString (pParser->m_pQuery->m_sIndexes, $1);
+		}
+	;
+
+list_of_indexes:
+	one_index
+	| list_of_indexes ',' one_index
+		{
+			TRACK_BOUNDS ( $$, $1, $3 );
+		}
+	;
+
 multi_stmt_list:
 	multi_stmt							{ pParser->PushQuery(); }
 	| multi_stmt_list ';' multi_stmt	{ pParser->PushQuery(); }
@@ -428,7 +447,7 @@ opt_outer_limit:
 
 select_from:
 	TOK_SELECT select_items_list
-	TOK_FROM ident_list
+	TOK_FROM one_complex_or_list_of_simple
 	opt_where_clause
 	opt_group_clause
 	opt_group_order_clause
@@ -439,7 +458,6 @@ select_from:
 	opt_hint_clause
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SELECT;
-			pParser->SetIndex ( $4, pParser->m_pQuery->m_sIndexes );
 		}
 	;
 
@@ -1176,7 +1194,7 @@ show_what:
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS;
 			pParser->m_pStmt->m_sIndex = pParser->ToStringUnescape ( $2 );
 		}
-	| TOK_AGENT ident TOK_STATUS like_filter
+	| TOK_AGENT only_one_index TOK_STATUS like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $2 );
@@ -1310,11 +1328,7 @@ start_transaction:
 //////////////////////////////////////////////////////////////////////////
 
 insert_into:
-	insert_or_replace TOK_INTO ident opt_column_list TOK_VALUES insert_rows_list opt_insert_options
-		{
-			// everything else is pushed directly into parser within the rules
-			pParser->SetIndex ( $3 );
-		}
+	insert_or_replace TOK_INTO only_one_index opt_column_list TOK_VALUES insert_rows_list opt_insert_options
 	;
 
 insert_or_replace:
@@ -1374,7 +1388,7 @@ insert_option:
 //////////////////////////////////////////////////////////////////////////
 
 delete_from:
-	TOK_DELETE TOK_FROM ident_list where_clause opt_option_clause
+	TOK_DELETE TOK_FROM one_index_opt_chunk where_clause opt_option_clause
 		{
 			if ( !pParser->DeleteStatement ( &$3 ) )
 				YYERROR;
@@ -1493,7 +1507,7 @@ show_databases:
 //////////////////////////////////////////////////////////////////////////
 
 update:
-	TOK_UPDATE ident_list TOK_SET update_items_list where_clause opt_option_clause
+	TOK_UPDATE one_index_opt_chunk TOK_SET update_items_list where_clause opt_option_clause
 		{
 			if ( !pParser->UpdateStatement ( &$2 ) )
 				YYERROR;
@@ -1726,11 +1740,10 @@ select_dual:
 //////////////////////////////////////////////////////////////////////////
 
 truncate:
-	TOK_TRUNCATE rtindex ident opt_with_reconfigure
+	TOK_TRUNCATE rtindex only_one_index opt_with_reconfigure
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_TRUNCATE_RTINDEX;
-			pParser->SetIndex ( $3 );
 		}
 	;
 

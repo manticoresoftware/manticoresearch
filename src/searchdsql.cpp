@@ -173,9 +173,6 @@ public:
 	void			UpdateStringAttr ( const SqlNode_t & tCol, const SqlNode_t & tStr );
 	void			SetGroupbyLimit ( int iLimit );
 	void			SetLimit ( int iOffset, int iLimit );
-	void			SetIndex ( const SqlNode_t & tIndex );
-	void			SetIndex ( const SqlNode_t & tIndex, CSphString & sIndex ) const;
-	// split ident ( cluster:index ) to parts
 
 	float			ToFloat ( const SqlNode_t & tNode ) const;
 	int64_t			DotGetInt ( const SqlNode_t & tNode ) const;
@@ -914,7 +911,6 @@ void SqlParser_c::GenericStatement ( SqlNode_t * pNode, SqlStmt_e iStmt )
 bool SqlParser_c::UpdateStatement ( SqlNode_t * pNode )
 {
 	GenericStatement ( pNode, STMT_UPDATE );
-	SetIndex ( *pNode );
 	m_pStmt->m_tUpdate.m_dRowOffset.Add ( 0 );
 	return true;
 }
@@ -922,7 +918,6 @@ bool SqlParser_c::UpdateStatement ( SqlNode_t * pNode )
 bool SqlParser_c::DeleteStatement ( SqlNode_t * pNode )
 {
 	GenericStatement ( pNode, STMT_DELETE );
-	SetIndex ( *pNode );
 	return true;
 }
 
@@ -1497,18 +1492,6 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 	return true;
 }
 
-void SqlParser_c::SetIndex ( const SqlNode_t & tIndex, CSphString & sIndex ) const
-{
-	ToString ( sIndex, tIndex );
-	SqlParser_SplitClusterIndex ( sIndex, nullptr );
-}
-
-void SqlParser_c::SetIndex ( const SqlNode_t & tIndex )
-{
-	assert ( m_pStmt );
-	ToString ( m_pStmt->m_sIndex, tIndex );
-	SqlParser_SplitClusterIndex ( m_pStmt->m_sIndex, &m_pStmt->m_sCluster );
-}
 
 void SqlParser_SplitClusterIndex ( CSphString & sIndex, CSphString * pCluster )
 {

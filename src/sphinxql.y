@@ -183,8 +183,8 @@ static CSphFilterSettings * AddMvaRange ( SqlParser_c * pParser, const SqlNode_t
 %%
 
 request:
-	statement							{ pParser->PushQuery(); }
-	| statement ';'						{ pParser->PushQuery(); }
+	statement					{ pParser->PushQuery(); }
+	| statement ';'				{ pParser->PushQuery(); }
 	| multi_stmt_list
 	| multi_stmt_list ';'
 	;
@@ -431,7 +431,7 @@ where_clause:
 	;
 
 where_expr:
-	where_item							
+	where_item
 	| filter_expr
 	| where_item TOK_AND filter_expr
     | filter_expr TOK_AND where_item
@@ -446,8 +446,8 @@ where_item:
 		}
 	| '(' TOK_MATCH '(' TOK_QUOTED_STRING ')' ')'
 		{
-                        if ( !pParser->SetMatch($4) )
-                                YYERROR;
+			if ( !pParser->SetMatch($4) )
+				YYERROR;
 		}
 	;
 
@@ -508,10 +508,10 @@ filter_item:
 				YYERROR;
 		}
 	| expr_ident TOK_NOT TOK_ANY '(' string_list ')'
-    	{
-    		if ( !pParser->AddStringListFilter ( $1, $5, StrList_e::STR_ANY, true ) )
-    			YYERROR;
-    	}
+		{
+			if ( !pParser->AddStringListFilter ( $1, $5, StrList_e::STR_ANY, true ) )
+				YYERROR;
+		}
 	| expr_ident TOK_ALL '(' string_list ')'
 		{
 			if ( !pParser->AddStringListFilter ( $1, $4, StrList_e::STR_ALL ) )
@@ -841,7 +841,7 @@ opt_having_clause:
 			pParser->AddHaving();
 		}
 	;
-	
+
 opt_group_order_clause:
 	// empty
 	| group_order_clause
@@ -1034,7 +1034,7 @@ expr:
 	| function
 	| json_expr
 	| streq
-	| json_field TOK_IS TOK_NULL		{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| json_field TOK_IS TOK_NULL			{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| json_field TOK_IS TOK_NOT TOK_NULL	{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	;
 
@@ -1056,12 +1056,12 @@ function:
 	| TOK_RAND '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	| TOK_REGEX '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	;
-	
+
 arglist:
 	arg
 	| arglist ',' arg
 	;
-	
+
 arg:
 	expr
 	| TOK_QUOTED_STRING
@@ -1333,10 +1333,10 @@ insert_option:
 
 delete_from:
 	TOK_DELETE TOK_FROM ident_list where_clause
-	{
-		if ( !pParser->DeleteStatement ( &$3 ) )
-			YYERROR;
-	}
+		{
+			if ( !pParser->DeleteStatement ( &$3 ) )
+				YYERROR;
+		}
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -1591,7 +1591,7 @@ attach_index:
 			pParser->ToString ( tStmt.m_sStringParam, $6 );
 		}
 	;
-	
+
 opt_with_truncate:
 	// empty
 	| TOK_WITH TOK_TRUNCATE
@@ -1627,7 +1627,7 @@ flush_index:
 			tStmt.m_eStmt = STMT_FLUSH_INDEX;
 		}
 	;
-	
+
 flush_hostnames:
 	TOK_FLUSH TOK_HOSTNAMES
 		{
@@ -1643,7 +1643,7 @@ flush_logs:
 			tStmt.m_eStmt = STMT_FLUSH_LOGS;
 		}
 	;
-	
+
 //////////////////////////////////////////////////////////////////////////
 
 select_sysvar:
@@ -1821,7 +1821,7 @@ reload_indexes:
 			tStmt.m_eStmt = STMT_RELOAD_INDEXES;
 		}
 	;
-	
+
 sysfilters:
 	TOK_SYSFILTERS filter_expr
 		{
@@ -1855,4 +1855,3 @@ explain_query:
 #if USE_WINDOWS
 #pragma warning(pop)
 #endif
-

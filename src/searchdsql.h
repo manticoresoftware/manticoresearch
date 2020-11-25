@@ -254,6 +254,9 @@ struct SqlStmt_t
 	bool					m_bJson = false;
 	CSphString				m_sEndpoint;
 
+	CSphVector<CSphString>	m_dStringSubkeys;
+	CSphVector<int64_t>		m_dIntSubkeys;
+
 	SqlStmt_t ();
 	~SqlStmt_t();
 
@@ -276,8 +279,6 @@ public:
 
 	void			PushQuery();
 	CSphString &	ToString ( CSphString & sRes, const SqlNode_t & tNode ) const;
-	float 			ToFloat ( const SqlNode_t & tNode ) const;
-	int64_t			DotGetInt ( const SqlNode_t & tNode ) const;
 	CSphString		ToStringUnescape ( const SqlNode_t & tNode ) const;
 
 protected:

@@ -92,16 +92,6 @@ CSphString & SqlParserTraits_c::ToString ( CSphString & sRes, const SqlNode_t & 
 	return sRes;
 }
 
-float SqlParserTraits_c::ToFloat ( const SqlNode_t & tNode ) const
-{
-	return (float) strtod ( m_pBuf+tNode.m_iStart, nullptr );
-}
-
-int64_t SqlParserTraits_c::DotGetInt ( const SqlNode_t & tNode ) const
-{
-	return (int64_t) strtoull ( m_pBuf+tNode.m_iStart+1, nullptr, 10 );
-}
-
 
 CSphString SqlParserTraits_c::ToStringUnescape ( const SqlNode_t & tNode ) const
 {
@@ -186,6 +176,13 @@ public:
 	void			SetIndex ( const SqlNode_t & tIndex );
 	void			SetIndex ( const SqlNode_t & tIndex, CSphString & sIndex ) const;
 	// split ident ( cluster:index ) to parts
+
+	float			ToFloat ( const SqlNode_t & tNode ) const;
+	int64_t			DotGetInt ( const SqlNode_t & tNode ) const;
+
+	void 			AddStringSubkey ( const SqlNode_t & tNode ) const;
+	void 			AddIntSubkey ( const SqlNode_t & tNode ) const;
+	void			AddDotIntSubkey ( const SqlNode_t & tNode ) const;
 
 private:
 	bool						m_bGotQuery = false;
@@ -318,6 +315,32 @@ bool SqlParser_c::CheckInteger ( const CSphString & sOpt, const CSphString & sVa
 	}
 
 	return true;
+}
+
+float SqlParser_c::ToFloat ( const SqlNode_t & tNode ) const
+{
+	return (float) strtod ( m_pBuf+tNode.m_iStart, nullptr );
+}
+
+int64_t SqlParser_c::DotGetInt ( const SqlNode_t & tNode ) const
+{
+	return (int64_t) strtoull ( m_pBuf+tNode.m_iStart+1, nullptr, 10 );
+}
+
+void SqlParser_c::AddStringSubkey ( const SqlNode_t & tNode ) const
+{
+	auto& sKey = m_pStmt->m_dStringSubkeys.Add();
+	ToString ( sKey, tNode );
+}
+
+void SqlParser_c::AddIntSubkey ( const SqlNode_t & tNode ) const
+{
+	m_pStmt->m_dIntSubkeys.Add ( tNode.m_iValue );
+}
+
+void SqlParser_c::AddDotIntSubkey ( const SqlNode_t & tNode ) const
+{
+	m_pStmt->m_dIntSubkeys.Add ( DotGetInt ( tNode ) );
 }
 
 

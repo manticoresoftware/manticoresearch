@@ -10984,13 +10984,18 @@ void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 	{
 		// data
 		const CSphSchema *pSchema = &pServed->m_pIndex->GetMatchSchema ();
+		bool bNeedInternal = false;
+
 		if ( tStmt.m_iIntParam==SqlInsert_t::TABLE ) // user wants internal schema instead
+			bNeedInternal = true;
+
+		if ( tStmt.m_dStringSubkeys.GetLength()==1 && tStmt.m_dStringSubkeys[0].EqN(".table") )
+			bNeedInternal = true;
+
+		if ( bNeedInternal && ServedDesc_t::IsMutable ( pServed ) )
 		{
-			if ( ServedDesc_t::IsMutable ( pServed ) )
-			{
-				auto pRtIndex = (RtIndex_i*)pServed->m_pIndex;
-				pSchema = &pRtIndex->GetInternalSchema ();
-			}
+			auto pRtIndex = (RtIndex_i*)pServed->m_pIndex;
+			pSchema = &pRtIndex->GetInternalSchema ();
 		}
 
 		const CSphSchema &tSchema = *pSchema;

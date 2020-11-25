@@ -278,6 +278,43 @@ ident_no_option:
 // WARNING! line above is MANDATORY for consistency checking!
 //////////////////////////////////////////////////////////////////////////
 
+one_index:
+	ident
+	| ident ':' ident
+		{
+			pParser->ToString (pParser->m_pStmt->m_sCluster, $1);
+			$$ = $3;
+		}
+	;
+
+only_one_index:
+	one_index
+		{
+			pParser->ToString (pParser->m_pStmt->m_sIndex, $1);
+		}
+	;
+
+metakey:
+	TOK_SUBKEY
+		{
+			pParser->AddStringSubkey ($1);
+		}
+	| TOK_DOT_NUMBER
+		{
+			pParser->AddDotIntSubkey ($1);
+		}
+	;
+
+metakeys:
+	metakey
+	| metakeys metakey
+	;
+
+one_index_opt_subindex:				// used in describe (meta m.b. num or name)
+	only_one_index
+	| only_one_index metakeys
+	;
+
 multi_stmt_list:
 	multi_stmt							{ pParser->PushQuery(); }
 	| multi_stmt_list ';' multi_stmt	{ pParser->PushQuery(); }
@@ -1420,10 +1457,9 @@ call_opt_name:
 //////////////////////////////////////////////////////////////////////////
 
 describe:
-	describe_tok ident describe_opt like_filter
+	describe_tok one_index_opt_subindex describe_opt like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_DESCRIBE;
-			pParser->SetIndex ( $2 );
 		}
 	;
 

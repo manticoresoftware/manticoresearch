@@ -13959,6 +13959,8 @@ void HandleMysqlShowIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, b
 	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ));
 
 	int iChunk = tStmt.m_iIntParam;
+	if ( tStmt.m_dIntSubkeys.GetLength ()>=1 )
+		iChunk = tStmt.m_dIntSubkeys[0];
 
 	if ( pServed )
 	{
@@ -13996,6 +13998,9 @@ void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt 
 	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
 
 	int iChunk = tStmt.m_iIntParam;
+	if ( tStmt.m_dIntSubkeys.GetLength ()>=1 )
+		iChunk = tStmt.m_dIntSubkeys[0];
+
 	CSphIndex * pIndex = pServed ? pServed->m_pIndex : nullptr;
 
 	if ( iChunk>=0 && pServed && pIndex && pIndex->IsRT() )

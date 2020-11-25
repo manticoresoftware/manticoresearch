@@ -315,6 +315,24 @@ one_index_opt_subindex:				// used in describe (meta m.b. num or name)
 	| only_one_index metakeys
 	;
 
+one_index_opt_chunk:				// used in show settings, show status, update, delete
+	only_one_index
+	| only_one_index chunk_number
+	;
+
+chunk_number:
+	TOK_DOT_NUMBER
+		{
+			pParser->AddDotIntSubkey ($1);
+			pParser->m_pStmt->m_iIntParam = $1.m_iValue;
+		}
+	| TOK_CHUNK TOK_CONST_INT
+		{
+			pParser->AddIntSubkey ($2);
+			pParser->m_pStmt->m_iIntParam = $2.m_iValue;
+		}
+	;
+
 multi_stmt_list:
 	multi_stmt							{ pParser->PushQuery(); }
 	| multi_stmt_list ';' multi_stmt	{ pParser->PushQuery(); }
@@ -1163,21 +1181,15 @@ show_what:
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $2 );
 		}
-	| index_or_table ident opt_chunk TOK_STATUS like_filter
+	| index_or_table one_index_opt_chunk TOK_STATUS like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_STATUS;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $2 );
 		}
-	| index_or_table ident opt_chunk TOK_SETTINGS
+	| index_or_table one_index_opt_chunk TOK_SETTINGS
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_SETTINGS;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $2 );
-		}
-	| index_or_table ident TOK_DOT_NUMBER TOK_SETTINGS
-		{
-			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_SETTINGS;
-			pParser->ToString ( pParser->m_pStmt->m_sIndex, $2 );
-			pParser->m_pStmt->m_iIntParam = int (pParser->DotGetInt ($3));
 		}
 	| index_or_table TOK_STATUS like_filter
 		{
@@ -1190,13 +1202,6 @@ index_or_table:
 	TOK_INDEX
 	| TOK_TABLE
 	;
-
-opt_chunk:
-	// empty
-	| TOK_CHUNK TOK_CONST_INT
-		{
-			pParser->m_pStmt->m_iIntParam = $2.m_iValue;
-		};
 
 //////////////////////////////////////////////////////////////////////////
 

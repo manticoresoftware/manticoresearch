@@ -1721,18 +1721,17 @@ select_dual:
 //////////////////////////////////////////////////////////////////////////
 
 truncate:
-	TOK_TRUNCATE TOK_RTINDEX ident opt_with_reconfigure
+	TOK_TRUNCATE rtindex ident opt_with_reconfigure
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_TRUNCATE_RTINDEX;
 			pParser->SetIndex ( $3 );
 		}
-	| TOK_TRUNCATE TOK_TABLE ident opt_with_reconfigure
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_TRUNCATE_RTINDEX;
-			pParser->SetIndex ( $3 );
-		}
+	;
+
+rtindex:
+	TOK_RTINDEX
+	| TOK_TABLE
 	;
 
 opt_with_reconfigure:

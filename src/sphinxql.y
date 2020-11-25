@@ -337,6 +337,8 @@ one_complex_or_list_of_simple:		// used in select
 	only_one_index metakeys
 		{
 			pParser->m_pQuery->m_sIndexes = pParser->m_pStmt->m_sIndex;
+			pParser->m_pQuery->m_dIntSubkeys.SwapData ( pParser->m_pStmt->m_dIntSubkeys);
+			pParser->m_pQuery->m_dStringSubkeys.SwapData ( pParser->m_pStmt->m_dStringSubkeys);
 		}
 	| list_of_indexes
 		{
@@ -345,6 +347,8 @@ one_complex_or_list_of_simple:		// used in select
 	| sysvar_ext
 		{
     		pParser->ToString (pParser->m_pQuery->m_sIndexes, $1);
+    		pParser->m_pQuery->m_dIntSubkeys.SwapData ( pParser->m_pStmt->m_dIntSubkeys);
+            pParser->m_pQuery->m_dStringSubkeys.SwapData ( pParser->m_pStmt->m_dStringSubkeys);
     	}
 	;
 
@@ -1423,6 +1427,8 @@ insert_option:
 delete_from:
 	TOK_DELETE TOK_FROM one_index_opt_chunk where_clause opt_option_clause
 		{
+			pParser->m_pQuery->m_dIntSubkeys.SwapData ( pParser->m_pStmt->m_dIntSubkeys);
+			pParser->m_pQuery->m_dStringSubkeys.SwapData ( pParser->m_pStmt->m_dStringSubkeys);
 			if ( !pParser->DeleteStatement ( &$3 ) )
 				YYERROR;
 		}
@@ -1542,6 +1548,8 @@ show_databases:
 update:
 	TOK_UPDATE one_index_opt_chunk TOK_SET update_items_list where_clause opt_option_clause
 		{
+			pParser->m_pQuery->m_dIntSubkeys.SwapData ( pParser->m_pStmt->m_dIntSubkeys);
+			pParser->m_pQuery->m_dStringSubkeys.SwapData ( pParser->m_pStmt->m_dStringSubkeys);
 			if ( !pParser->UpdateStatement ( &$2 ) )
 				YYERROR;
 		}

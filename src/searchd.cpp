@@ -5980,6 +5980,10 @@ bool SearchHandler_c::CheckMultiQuery() const
 	const CSphQuery & qFirst = m_dNQueries.First();
 	auto dQueries = m_dNQueries.Slice ( 1 );
 
+	// queries over special indexes as status/meta are not capable for multiquery
+	if ( !qFirst.m_dStringSubkeys.IsEmpty() )
+		return false;
+
 	for ( const CSphQuery & qCheck : dQueries )
 	{
 		// these parameters must be the same

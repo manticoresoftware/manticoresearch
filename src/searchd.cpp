@@ -5023,7 +5023,7 @@ private:
 	bool							RLockInvokedIndexes();
 	void							UniqLocals ( VecTraits_T<LocalIndex_t>& dLocals );
 	void							RunActionQuery ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors ); ///< run delete/update
-	void							BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ); // fixme!
+	bool							BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ); // fixme!
 	void							CalcTimeStats ( int64_t tmCpu, int64_t tmSubset, const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent );
 	void							CalcPerIndexStats ( const CSphVector<DistrServedByAgent_t> & dDistrServedByAgent ) const;
 	void							CalcGlobalStats ( int64_t tmCpu, int64_t tmSubset, int64_t tmLocal, const CSphIOStats & tIO,
@@ -6243,29 +6243,39 @@ void SearchHandler_c::CalcGlobalStats ( int64_t tmCpu, int64_t tmSubset, int64_t
 	g_tStats.m_iDiskReadBytes.fetch_add ( tIO.m_iReadBytes, std::memory_order_relaxed );
 }
 
-
-void SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent )
+static CSphVector<LocalIndex_t> CollectAllLocalIndexes ( const CSphVector<CSphNamedInt> & dIndexWeights )
 {
-	m_dLocal.Reset ();
-	const CSphQuery & tQuery = m_dNQueries.First();
+	CSphVector<LocalIndex_t> dIndexes;
 	int iOrderTag = 0;
+	// search through all local indexes
+	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next (); )
+	{
+		if ( !it.Get () )
+			continue;
+		auto & dLocal = dIndexes.Add ();
+		dLocal.m_sName = it.GetName ();
+		dLocal.m_iOrderTag = iOrderTag++;
+		dLocal.m_iWeight = GetIndexWeight ( it.GetName (), dIndexWeights, 1 );
+		dLocal.m_iMass = ServedDescRPtr_c ( it.Get () )->m_iMass;
+	}
+	return dIndexes;
+}
 
-	// they're all local, build the list
+// returns true = real indexes, false = sysvar (i.e. only one 'index' named from @@)
+bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_t & dRemotes, CSphVector<DistrServedByAgent_t> & dDistrServedByAgent )
+{
+	const CSphQuery & tQuery = m_dNQueries.First ();
+
 	if ( tQuery.m_sIndexes=="*" )
 	{
-		// search through all local indexes
-		for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); )
-		{
-			if ( !it.Get() )
-				continue;
-			auto &dLocal = m_dLocal.Add ();
-			dLocal.m_sName = it.GetName ();
-			dLocal.m_iOrderTag = iOrderTag++;
-			dLocal.m_iWeight = GetIndexWeight ( it.GetName (), tQuery.m_dIndexWeights, 1 );
-			dLocal.m_iMass = ServedDescRPtr_c ( it.Get() )->m_iMass;
-		}
-		return;
+		// they're all local, build the list
+		m_dLocal = CollectAllLocalIndexes ( tQuery.m_dIndexWeights );
+		return true;
 	}
+
+	m_dLocal.Reset ();
+	int iOrderTag = 0;
+	bool bSysVar = tQuery.m_sIndexes.Begins ( "@@" );
 
 	// search through specified local indexes
 	StrVec_t dIdxNames;
@@ -6344,6 +6354,7 @@ void SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 		UniqLocals ( dLocals );
 	else
 		m_dLocal.SwapData ( dLocals );
+	return bSysVar;
 }
 
 // query info - render query into the view

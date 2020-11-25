@@ -1369,7 +1369,7 @@ insert_option:
 //////////////////////////////////////////////////////////////////////////
 
 delete_from:
-	TOK_DELETE TOK_FROM ident_list where_clause
+	TOK_DELETE TOK_FROM ident_list where_clause opt_option_clause
 		{
 			if ( !pParser->DeleteStatement ( &$3 ) )
 				YYERROR;

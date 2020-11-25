@@ -12322,9 +12322,17 @@ static void PercolateDeleteDocuments ( const CSphString & sIndex, const CSphStri
 }
 
 
-static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const CSphString & sCluster, const char * sDistributed,
-	const SqlStmt_t & tStmt, VecTraits_T<DocID_t> dDocs, SearchFailuresLog_c & dErrors, bool bCommit, CSphSessionAccum & tAcc )
+static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const char * sDistributed, const SqlStmt_t & tStmt,
+		VecTraits_T<DocID_t> dDocs, SearchFailuresLog_c & dErrors, bool bCommit, CSphSessionAccum & tAcc )
 {
+
+	const CSphString & sCluster = tStmt.m_sCluster;
+	const CSphString & sStore = tStmt.m_tQuery.m_sStore;
+	bool bNeedStore = !sStore.IsEmpty();
+
+	if ( bNeedStore )
+		bCommit = false;
+
 	CSphString sError;
 
 	ServedDescRPtr_c pLocked ( GetServed ( sName ) );
@@ -12360,6 +12368,11 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const CSphStr
 	// goto to percolate path with unlocked index
 	if ( pLocked->m_eType==IndexType_e::PERCOLATE )
 	{
+		if ( bNeedStore )
+		{
+			dErrors.Submit ( sName, sDistributed, "Storing del subset not implemented for PQ indexes" );
+			return 0;
+		}
 		PercolateDeleteDocuments ( sName, sCluster, tStmt, *pAccum, sError );
 		if ( !sError.IsEmpty() )
 		{
@@ -12378,13 +12391,21 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const CSphStr
 			dDocs = dValues;
 		}
 
-		if ( !pIndex->DeleteDocument ( dDocs, sError, pAccum ) )
+		if ( !bNeedStore )
 		{
-			dErrors.Submit ( sName, sDistributed, sError.cstr() );
-			return 0;
-		}
+			if ( !pIndex->DeleteDocument ( dDocs, sError, pAccum ) )
+			{
+				dErrors.Submit ( sName, sDistributed, sError.cstr() );
+				return 0;
+			}
 
-		pAccum->AddCommand ( ReplicationCommand_e::RT_TRX, sCluster, sName );
+			pAccum->AddCommand ( ReplicationCommand_e::RT_TRX, sCluster, sName );
+		} else
+		{
+			// no delete; just store collected dDocs to provided uservar
+			assert ( sStore.Begins ("@"));
+			SetLocalTemporaryUserVar ( sStore, dDocs );
+		}
 	}
 
 	if ( bCommit )
@@ -12398,6 +12419,17 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		CSphSessionAccum & tAcc )
 {
 	MEMORY ( MEM_SQL_DELETE );
+
+	// shortcut
+	const CSphQuery & tQuery = tStmt.m_tQuery;
+	const CSphString & sStorevar = tQuery.m_sStore;
+	bool bStoreVar = !sStorevar.IsEmpty();
+
+	if ( bStoreVar && !sStorevar.Begins("@") )
+	{
+		tOut.Error ( "store var name must start with @, '%s' given", sStorevar.cstr() );
+		return;
+	}
 
 	StrVec_t dNames;
 	ParseIndexList ( tStmt.m_sIndex, dNames );
@@ -12432,7 +12464,6 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 
 	// now check the short path - if we have clauses 'id=smth' or 'id in (xx,yy)' or 'id in @uservar' - we know
 	// all the values list immediatelly and don't have to run the heavy query here.
-	const CSphQuery & tQuery = tStmt.m_tQuery; // shortcut
 
 	if ( tQuery.m_sQuery.IsEmpty() && tQuery.m_dFilters.GetLength()==1 && !tQuery.m_dFilterTree.GetLength() )
 	{
@@ -12453,8 +12484,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		bool bLocal = g_pLocalIndexes->Contains ( sName );
 		if ( bLocal )
 		{
-			iAffected += LocalIndexDoDeleteDocuments ( sName, tStmt.m_sCluster, nullptr,
-				tStmt, dDelDocs, dErrors, bCommit, tAcc );
+			iAffected += LocalIndexDoDeleteDocuments ( sName, nullptr, tStmt, dDelDocs, dErrors, bCommit, tAcc );
 		}
 		else if ( dDistributed[iIdx] )
 		{
@@ -12464,14 +12494,13 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 				bool bDistLocal = g_pLocalIndexes->Contains ( sLocal );
 				if ( bDistLocal )
 				{
-					iAffected += LocalIndexDoDeleteDocuments ( sLocal, tStmt.m_sCluster, sName.cstr(),
-						tStmt, dDelDocs, dErrors, bCommit, tAcc );
+					iAffected += LocalIndexDoDeleteDocuments ( sLocal, sName.cstr(), tStmt, dDelDocs, dErrors, bCommit, tAcc );
 				}
 			}
 		}
 
 		// delete for remote agents
-		if ( dDistributed[iIdx] && dDistributed[iIdx]->m_dAgents.GetLength() )
+		if ( !bStoreVar && dDistributed[iIdx] && dDistributed[iIdx]->m_dAgents.GetLength() )
 		{
 			const DistributedIndex_t * pDist = dDistributed[iIdx];
 			VecRefPtrsAgentConn_t dAgents;

@@ -249,6 +249,7 @@ struct SqlStmt_t
 	CSphString				m_sStringParam;
 
 	// generic integer parameter, used in SHOW SETTINGS, default value -1
+	// for opt_scope TOK_GLOBAL = 0, TOK_SESSION = 1.
 	int						m_iIntParam = -1;
 
 	bool					m_bJson = false;

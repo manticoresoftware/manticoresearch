@@ -21,7 +21,8 @@
 /// available uservar types
 enum Uservar_e
 {
-	USERVAR_INT_SET
+	USERVAR_INT_SET,
+	USERVAR_INT_SET_TMP,	// this one is not stored in state
 };
 
 /// uservar name to value binding
@@ -33,6 +34,8 @@ struct Uservar_t
 
 // create or update the variable
 void SetLocalUserVar ( const CSphString& sName, CSphVector<SphAttr_t>& dSetValues );
+
+void SetLocalTemporaryUserVar ( const CSphString & sName, VecTraits_T<DocID_t> & dSetValues );
 
 // provide variable to outside
 void ServeUserVars();

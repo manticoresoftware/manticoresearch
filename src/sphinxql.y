@@ -1605,8 +1605,15 @@ set_transaction:
 	;
 
 opt_scope:
+	// empty
 	| TOK_GLOBAL
+		{
+			pParser->m_pStmt->m_iIntParam = 0;
+		}
 	| TOK_SESSION
+		{
+    		pParser->m_pStmt->m_iIntParam = 1;
+    	}
 	;
 
 isolation_level:

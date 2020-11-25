@@ -13725,6 +13725,16 @@ void HandleMysqlShowVariables ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, Se
 		tVars.m_dLastIds.Apply ( [&tBuf] ( int64_t iID ) { tBuf << iID; } );
 		return tBuf;
 	});
+	if ( tStmt.m_iIntParam>=0 ) // that is SHOW GLOBAL VARIABLES
+	{
+		Uservar_e eType = tStmt.m_iIntParam==0 ? USERVAR_INT_SET : USERVAR_INT_SET_TMP;
+		IterateUservars ( [&dTable, eType] ( const NamedRefVectorPair_t &dVar ) {
+			if ( dVar.second.m_eType!=eType )
+				return;
+
+			dTable.MatchTupletf ( dVar.first.cstr(), "%d", dVar.second.m_pVal ? dVar.second.m_pVal->GetLength() : 0 );
+		});
+	}
 
 	// fine
 	dRows.DataTable ( dTable );

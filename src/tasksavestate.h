@@ -43,4 +43,8 @@ void ServeUserVars();
 void SphinxqlStateFlush ();
 bool InitSphinxqlState ( CSphString dStateFilePath, CSphString& sError);
 
+using NamedRefVectorPair_t = std::pair<CSphString, Uservar_t>;
+using UservarFn = std::function<void ( const NamedRefVectorPair_t & )>;
+void IterateUservars ( UservarFn fnSample );
+
 #endif //MANTICORE_TASKSAVESTATE_H

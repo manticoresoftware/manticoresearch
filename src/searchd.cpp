@@ -14709,6 +14709,8 @@ public:
 		if ( m_tVars.bProfile() )
 			m_tProfile.Switch ( SPH_QSTATE_SQL_PARSE );
 
+		m_sError = "";
+
 		CSphVector<SqlStmt_t> dStmt;
 		bool bParsedOK = sphParseSqlQuery ( sQuery.first, sQuery.second, dStmt, m_sError, m_tVars.m_eCollation );
 

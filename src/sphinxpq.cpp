@@ -1988,7 +1988,7 @@ bool PercolateIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery & 
 		return false;
 
 	// get all locators
-	auto iIDidx = m_tMatchSchema.GetAttrIndex ( "id" );
+	auto iIDidx = m_tMatchSchema.GetAttrIndex ( sphGetDocidName () );
 	const CSphColumnInfo & dID = m_tMatchSchema.GetAttr ( iIDidx );
 	const CSphColumnInfo & dColQuery = m_tMatchSchema.GetAttr ( iIDidx+1 );
 	const CSphColumnInfo & dColTags = m_tMatchSchema.GetAttr ( iIDidx+2 );

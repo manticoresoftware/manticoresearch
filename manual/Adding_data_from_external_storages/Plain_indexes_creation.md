@@ -236,3 +236,11 @@ write_buffer = 4M
 ```    
 
 Write buffer size, bytes. Optional, default is 1MB. Write buffers are used to write both temporary and final index files when indexing. Larger buffers reduce the number of required disk writes. Memory for the buffers is allocated in addition to [mem_limit](Adding_data_from_external_storages/Plain_indexes_creation.md#mem_limit). Note that several (currently up to 4) buffers for different files will be allocated, proportionally increasing the RAM usage.
+
+#### ignore_non_plain
+
+```ini
+ignore_non_plain = 1
+```
+
+`ignore_non_plain` lets you completely ignore warnings about skipping non-plain indexes. 0 (not ignoring) by default.

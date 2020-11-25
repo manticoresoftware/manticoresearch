@@ -342,6 +342,10 @@ one_complex_or_list_of_simple:		// used in select
 		{
 			pParser->ToString (pParser->m_pQuery->m_sIndexes, $1);
 		}
+	| sysvar_ext
+		{
+    		pParser->ToString (pParser->m_pQuery->m_sIndexes, $1);
+    	}
 	;
 
 list_of_indexes:
@@ -351,6 +355,35 @@ list_of_indexes:
 			TRACK_BOUNDS ( $$, $1, $3 );
 		}
 	;
+
+// enhanced sysvars
+//////////////////////////////////////////////////////////////////////////
+
+metanokey:
+	TOK_SUBKEY
+	| TOK_DOT_NUMBER
+	;
+
+metanokeys:
+	metanokey
+	| metanokeys metanokey
+	;
+
+sysvar:					// full name in token, like var '@@session.last_insert_id', no subkeys parsed
+	TOK_SYSVAR
+	| TOK_SYSVAR metanokeys
+		{
+    		TRACK_BOUNDS ( $$, $1, $2 );
+    	}
+    ;
+
+sysvar_ext:				// name in token + subkeys, like var '@@session' and 1 subkey '.last_insert_id'
+	TOK_SYSVAR
+	| TOK_SYSVAR metakeys
+	;
+
+// statements
+//////////////////////////////////////////////////////////////////////////
 
 multi_stmt_list:
 	multi_stmt							{ pParser->PushQuery(); }
@@ -1240,7 +1273,7 @@ set_stmt:
 //			pParser->m_pStmt->m_bSetNull = true;
 		}
 	| TOK_SET TOK_NAMES set_value opt_collate { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
-	| TOK_SET TOK_SYSVAR '=' set_value	{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
+	| TOK_SET sysvar '=' set_value	{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	| TOK_SET TOK_CHARACTER TOK_SET set_value { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	;
 
@@ -1726,7 +1759,7 @@ sysvar_item:
 	;
 
 sysvar_name:
-	TOK_SYSVAR { pParser->AddItem ( &$1 ); }
+	sysvar { pParser->AddItem ( &$1 ); }
 	;
 
 select_dual:

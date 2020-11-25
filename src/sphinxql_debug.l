@@ -89,7 +89,6 @@ FLOAT_CONSTANT      ({I}\.{I}?|{I}?\.{I}){EXPONENT}?
 {ID}				{ STORE_BOUNDS; return TOK_IDENT; }
 @{ID}				{ STORE_BOUNDS; return TOK_USERVAR; }
 @@{ID}				{ STORE_BOUNDS; return TOK_SYSVAR; }
-@@{ID}\.{ID}		{ STORE_BOUNDS; return TOK_SYSVAR; }
 `{ID}`				{  lvalp->sValue.m_iStart = yytext - pParser->m_pBuf + 1;
                        		lvalp->sValue.m_iLen = yyleng-2; return TOK_IDENT; }
 {ID}:{ID}			{ STORE_BOUNDS; return TOK_IDENT; }

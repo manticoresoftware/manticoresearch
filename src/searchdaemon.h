@@ -1274,6 +1274,7 @@ public:
 	bool Execute ( Str_t sQuery, RowBuffer_i & tOut );
 	void SetFederatedUser ();
 	bool IsAutoCommit () const;
+	bool IsInTrans() const;
 
 	QueryProfile_c* StartProfiling ( ESphQueryState );
 	void SaveLastProfile();

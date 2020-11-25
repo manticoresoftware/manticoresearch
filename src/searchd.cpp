@@ -15226,6 +15226,12 @@ bool SphinxqlSessionPublic::IsAutoCommit () const
 	return m_pImpl->m_tVars.m_bAutoCommit;
 }
 
+bool SphinxqlSessionPublic::IsInTrans () const
+{
+	assert ( m_pImpl );
+	return m_pImpl->m_tVars.m_bInTransaction;
+}
+
 QueryProfile_c * SphinxqlSessionPublic::StartProfiling ( ESphQueryState eState )
 {
 	assert ( m_pImpl );

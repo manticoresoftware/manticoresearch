@@ -67,6 +67,7 @@ BYTE * MysqlPackInt ( BYTE * pOutput, int64_t iValue )
 // MYSQLD PRETENDER
 //////////////////////////////////////////////////////////////////////////
 
+#define SPH_MYSQL_FLAG_STATUS_IN_TRANS 1	// mysql.h: SERVER_STATUS_IN_TRANS
 #define SPH_MYSQL_FLAG_STATUS_AUTOCOMMIT 2	// mysql.h: SERVER_STATUS_AUTOCOMMIT
 #define SPH_MYSQL_FLAG_MORE_RESULTS 8		// mysql.h: SERVER_MORE_RESULTS_EXISTS
 
@@ -194,7 +195,7 @@ void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char 
 	tOut.SendBytes ( sError, iErrorLen );
 }
 
-void SendMysqlEofPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iWarns, bool bMoreResults, bool bAutoCommit )
+void SendMysqlEofPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iWarns, bool bMoreResults, bool bAutoCommit, bool bIsInTrans )
 {
 	if ( iWarns<0 ) iWarns = 0;
 	if ( iWarns>65535 ) iWarns = 65535;
@@ -202,6 +203,8 @@ void SendMysqlEofPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iWarns, b
 		iWarns |= ( SPH_MYSQL_FLAG_MORE_RESULTS<<16 );
 	if ( bAutoCommit )
 		iWarns |= ( SPH_MYSQL_FLAG_STATUS_AUTOCOMMIT<<16 );
+	if ( bIsInTrans )
+		iWarns |= ( SPH_MYSQL_FLAG_STATUS_IN_TRANS<<16 );
 
 	tOut.SendLSBDword ( (uPacketID<<24) + 5 );
 	tOut.SendByte ( 0xfe );
@@ -210,7 +213,8 @@ void SendMysqlEofPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iWarns, b
 
 
 // was defaults ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedRows=0, int iWarns=0, const char * sMessage=nullptr, bool bMoreResults=false, bool bAutoCommit )
-void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedRows, int iWarns, const char * sMessage, bool bMoreResults, bool bAutoCommit, int64_t iLastID )
+void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedRows, int iWarns, const char * sMessage,
+		bool bMoreResults, bool bAutoCommit, bool bIsInTrans, int64_t iLastID )
 {
 	BYTE sVarLen[20] = {0}; // max 18 for packed number, +1 more just for fun
 	BYTE * pBuf = sVarLen;
@@ -233,6 +237,8 @@ void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedR
 		uWarnStatus |= SPH_MYSQL_FLAG_MORE_RESULTS;
 	if ( bAutoCommit )
 		uWarnStatus |= SPH_MYSQL_FLAG_STATUS_AUTOCOMMIT;
+	if ( bIsInTrans )
+		uWarnStatus |= SPH_MYSQL_FLAG_STATUS_IN_TRANS;
 
 	tOut.SendLSBDword ( uWarnStatus );		// 0 status, N warnings
 	if ( sMessage )
@@ -240,9 +246,9 @@ void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedR
 }
 
 
-void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, bool bAutoCommit )
+void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, bool bAutoCommit, bool bIsInTrans )
 {
-	SendMysqlOkPacket ( tOut, uPacketID, 0, 0, nullptr, false, bAutoCommit, 0 );
+	SendMysqlOkPacket ( tOut, uPacketID, 0, 0, nullptr, false, bAutoCommit, bIsInTrans, 0 );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -252,7 +258,7 @@ class SqlRowBuffer_c : public RowBuffer_i, private LazyVector_T<BYTE>
 {
 	BYTE & m_uPacketID;
 	ISphOutputBuffer & m_tOut;
-	bool m_bAutoCommit = false;
+	SphinxqlSessionPublic* m_pSession = nullptr;
 #ifndef NDEBUG
 	size_t m_iColumns = 0; // used for head/data columns num sanitize check
 #endif
@@ -329,12 +335,26 @@ class SqlRowBuffer_c : public RowBuffer_i, private LazyVector_T<BYTE>
 		m_tOut.SendWord ( 0 ); // filler
 	}
 
+	bool IsAutoCommit() const
+	{
+		if ( !m_pSession )
+			return true;
+		return m_pSession->IsAutoCommit();
+	}
+
+	bool IsInTrans () const
+	{
+		if ( !m_pSession )
+			return false;
+		return m_pSession->IsInTrans();
+	}
+
 public:
 
-	SqlRowBuffer_c ( BYTE * pPacketID, ISphOutputBuffer * pOut, bool bAutoCommit )
+	SqlRowBuffer_c ( BYTE * pPacketID, ISphOutputBuffer * pOut, SphinxqlSessionPublic * pSession )
 		: m_uPacketID ( *pPacketID )
 		, m_tOut ( *pOut )
-		, m_bAutoCommit ( bAutoCommit )
+		, m_pSession ( pSession )
 	{}
 
 	void PutFloatAsString ( float fVal, const char * sFormat ) override
@@ -446,7 +466,7 @@ public:
 	// wrappers for popular packets
 	void Eof ( bool bMoreResults, int iWarns ) override
 	{
-		SendMysqlEofPacket ( m_tOut, m_uPacketID++, iWarns, bMoreResults, m_bAutoCommit );
+		SendMysqlEofPacket ( m_tOut, m_uPacketID++, iWarns, bMoreResults, IsAutoCommit(), IsInTrans() );
 	}
 
 	void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr ) override
@@ -456,7 +476,7 @@ public:
 
 	void Ok ( int iAffectedRows, int iWarns, const char * sMessage, bool bMoreResults, int64_t iLastInsertId ) override
 	{
-		SendMysqlOkPacket ( m_tOut, m_uPacketID, iAffectedRows, iWarns, sMessage, bMoreResults, m_bAutoCommit, iLastInsertId );
+		SendMysqlOkPacket ( m_tOut, m_uPacketID, iAffectedRows, iWarns, sMessage, bMoreResults, IsAutoCommit(), IsInTrans(), iLastInsertId );
 		if ( bMoreResults )
 			m_uPacketID++;
 	}
@@ -584,13 +604,13 @@ bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, int i
 		case MYSQL_COM_PING:
 		case MYSQL_COM_INIT_DB:
 			// client wants a pong
-			SendMysqlOkPacket ( tOut, uPacketID, tSession.IsAutoCommit() );
+			SendMysqlOkPacket ( tOut, uPacketID, tSession.IsAutoCommit(), tSession.IsInTrans() );
 			break;
 
 		case MYSQL_COM_SET_OPTION:
 			// bMulti = ( tIn.GetWord()==MYSQL_OPTION_MULTI_STATEMENTS_ON ); // that's how we could double check and validate multi query
 			// server reporting success in response to COM_SET_OPTION and COM_DEBUG
-			SendMysqlEofPacket ( tOut, uPacketID, 0, false, tSession.IsAutoCommit () );
+			SendMysqlEofPacket ( tOut, uPacketID, 0, false, tSession.IsAutoCommit (), tSession.IsInTrans() );
 			break;
 
 		case MYSQL_COM_STATISTICS:
@@ -610,7 +630,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, SphinxqlSessionPublic & tSession, int i
 			assert ( !tIn.GetError() );
 			sphLogDebugv ( "LoopClientMySQL command %d, '%s'", uMysqlCmd, myinfo::UnsafeDescription().first );
 			myinfo::TaskState ( TaskState_e::QUERY );
-			SqlRowBuffer_c tRows ( &uPacketID, &tOut, tSession.IsAutoCommit () );
+			SqlRowBuffer_c tRows ( &uPacketID, &tOut, &tSession );
 			bKeepProfile = tSession.Execute ( myinfo::UnsafeDescription(), tRows );
 		}
 		break;
@@ -655,7 +675,7 @@ void RunSingleSphinxqlCommand ( Str_t sCommand, ISphOutputBuffer & tOut )
 	// todo: move upper, if the session variables are also necessary in API access mode.
 	SphinxqlSessionPublic tSession; // FIXME!!! check that no accum related command used via API
 
-	SqlRowBuffer_c tRows ( &uDummy, &tOut, true );
+	SqlRowBuffer_c tRows ( &uDummy, &tOut, &tSession );
 	tSession.Execute ( sCommand, tRows );
 }
 
@@ -821,7 +841,7 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 
 			if ( UsernameIsFEDERATED ( tAnswer ))
 				tSession.SetFederatedUser();
-			SendMysqlOkPacket ( tOut, uPacketID, tSession.IsAutoCommit());
+			SendMysqlOkPacket ( tOut, uPacketID, tSession.IsAutoCommit(), tSession.IsInTrans ());
 			bKeepAlive = tOut.Flush ();
 			bAuthed = true;
 

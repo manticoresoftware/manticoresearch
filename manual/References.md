@@ -313,6 +313,7 @@ To be put to section `indexer {}` in configuration file:
 * [mem_limit](Adding_data_from_external_storages/Plain_indexes_creation.md#mem_limit) - Indexing RAM usage limit
 * [on_file_field_error](Adding_data_from_external_storages/Plain_indexes_creation.md#on_file_field_error) - How to handle IO errors in file fields
 * [write_buffer](Adding_data_from_external_storages/Plain_indexes_creation.md#write_buffer) - Write buffer size
+* [ignore_non_plain](Adding_data_from_external_storages/Plain_indexes_creation.md#ignore_non_plain) - To ignore warnings about non-plain indexes
 
 ##### Indexer start parameters
 ```bash

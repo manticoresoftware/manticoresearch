@@ -58,6 +58,7 @@ static int				g_iMemLimit				= 128*1024*1024;
 static int				g_iMaxXmlpipe2Field		= 2*1024*1024;
 static int				g_iWriteBuffer			= 1024*1024;
 static int				g_iMaxFileFieldBuffer	= 8*1024*1024;
+static bool				g_bIgnoreNonPlain	= false;
 
 static ESphOnFileFieldError	g_eOnFileFieldError = FFE_IGNORE_FIELD;
 
@@ -892,7 +893,7 @@ CSphSource * SpawnSource ( const CSphConfigSection & hSource, const char * sSour
 //////////////////////////////////////////////////////////////////////////
 
 bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
-	const CSphConfigType & hSources, FILE * fpDumpRows, const bool bIgnoreNonPlain)
+	const CSphConfigType & hSources, FILE * fpDumpRows)
 {
 	// check index type
 	bool bPlain = true;
@@ -910,12 +911,12 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	}
 	if ( !bPlain )
 	{
-		if ( !g_bQuiet && !bIgnoreNonPlain )
+		if ( !g_bQuiet && !g_bIgnoreNonPlain )
 		{
 			fprintf ( stdout, "WARNING: skipping non-plain index '%s'...\n", sIndexName );
 			fflush ( stdout );
 		}
-		return bIgnoreNonPlain;
+		return g_bIgnoreNonPlain;
 	}
 
 	// progress bar
@@ -1865,6 +1866,7 @@ int main ( int argc, char ** argv )
 		g_iMaxXmlpipe2Field = hIndexer.GetSize ( "max_xmlpipe2_field", g_iMaxXmlpipe2Field );
 		g_iWriteBuffer = hIndexer.GetSize ( "write_buffer", g_iWriteBuffer );
 		g_iMaxFileFieldBuffer = Max ( 1024*1024, hIndexer.GetSize ( "max_file_field_buffer", g_iMaxFileFieldBuffer ) );
+		g_bIgnoreNonPlain = hIndexer.GetBool( "ignore_non_plain", g_bIgnoreNonPlain);
 
 		if ( hIndexer("on_file_field_error") )
 		{
@@ -1943,7 +1945,8 @@ int main ( int argc, char ** argv )
 
 	int iIndexed = 0;
 	int iFailed = 0;
-	bool bIgnoreNonPlain = hConf["indexer"]["indexer"].GetBool ( "ignore_non_plain", false );
+//	bool bIgnoreNonPlain = hIndexer.GetBool ( "ignore_non_plain", false );
+//	bool bIgnoreNonPlain = hConf["indexer"]("indexer").GetBool ( "ignore_non_plain", false );
 	if ( bMerge )
 	{
 		if ( dIndexes.GetLength()!=2 )
@@ -1968,7 +1971,7 @@ int main ( int argc, char ** argv )
 		hConf["index"].IterateStart ();
 		while ( hConf["index"].IterateNext() )
 		{
-			bool bLastOk = DoIndex ( hConf["index"].IterateGet (), hConf["index"].IterateGetKey().cstr(), hConf["source"], fpDumpRows, bIgnoreNonPlain);
+			bool bLastOk = DoIndex ( hConf["index"].IterateGet (), hConf["index"].IterateGetKey().cstr(), hConf["source"], fpDumpRows);
 			if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && g_bSendHUP && SendRotate ( hConf, false ) )
 				tmRotated = sphMicroTimer();
 			if ( bLastOk )
@@ -1983,7 +1986,7 @@ int main ( int argc, char ** argv )
 				fprintf ( stdout, "WARNING: no such index '%s', skipping.\n", dIndexes[j] );
 			else
 			{
-				bool bLastOk = DoIndex ( hConf["index"][dIndexes[j]], dIndexes[j], hConf["source"], fpDumpRows, bIgnoreNonPlain);
+				bool bLastOk = DoIndex ( hConf["index"][dIndexes[j]], dIndexes[j], hConf["source"], fpDumpRows);
 				if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && g_bSendHUP && SendRotate ( hConf, false ) )
 					tmRotated = sphMicroTimer();
 				if ( bLastOk )

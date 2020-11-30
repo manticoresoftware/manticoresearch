@@ -3,6 +3,11 @@
 
 <name>id vs duplicate column name</name>
 
+<requires>
+<non-rt/>
+</requires>
+
+
 <config>
 indexer
 {

@@ -14,11 +14,11 @@
 %token	TOK_ATIDENT
 %token	TOK_CONST_INT 260 "integer"
 %token	TOK_CONST_FLOAT 261 "float"
-%token	TOK_CONST_MVA 262 "multivalues"
+%token	TOK_CONST_MVA 262	// not a real token, only placeholder
 %token	TOK_QUOTED_STRING 263 "string"
 %token	TOK_USERVAR "@uservar"
 %token	TOK_SYSVAR "@@sysvar"
-%token	TOK_CONST_STRINGS 269 "constant string list"
+%token	TOK_CONST_STRINGS 269	// not a real token, only placeholder
 %token	TOK_BAD_NUMERIC
 %token	TOK_SUBKEY
 %token	TOK_DOT_NUMBER ".number"
@@ -135,7 +135,6 @@
 %token	TOK_USE
 %token	TOK_VALUES
 %token	TOK_VARIABLES
-%token  TOK_WAITTIMEOUT
 %token	TOK_WARNINGS
 %token	TOK_WEIGHT
 %token	TOK_WHERE

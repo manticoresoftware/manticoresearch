@@ -23305,7 +23305,7 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 				break;
 			}
 
-		if ( !i && tCol.m_eAttrType==SPH_ATTR_NONE )
+		if ( !i )
 		{
 			// id column coming from sql may have another name
 			tCol.m_sName = sphGetDocidName();

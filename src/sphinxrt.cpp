@@ -1296,6 +1296,7 @@ private:
 	bool						ReadNextWord ( SuggestResult_t & tRes, DictWord_t & tWord ) const final;
 
 	SphChunkGuard_t				GetReaderChunks() const ACQUIRE_SHARED (m_tReading );
+	SphChunkGuard_t				GetReaderChunks ( const VecTraits_T<int64_t> & dChunks ) const ACQUIRE_SHARED ( m_tReading );
 
 	RtSegmentRefPtf_t			AdoptSegment ( RtSegment_t * pNewSeg );
 
@@ -5989,6 +5990,51 @@ SphChunkGuard_t RtIndex_c::GetReaderChunks () const
 	return tGuard;
 }
 
+SphChunkGuard_t RtIndex_c::GetReaderChunks ( const VecTraits_T<int64_t>& dChunks ) const
+{
+	if ( dChunks.IsEmpty() )
+		return GetReaderChunks();
+
+	SphChunkGuard_t tGuard ( &m_tReading );
+
+	ScRL_t tChunkRLock ( m_tChunkLock );
+	if ( m_dRamChunks.IsEmpty() && m_dDiskChunks.IsEmpty() )
+		return tGuard;
+
+	CSphVector<int> dOrderedChunks;
+	dChunks.for_each ( [&dOrderedChunks] ( int64_t iVal ) { dOrderedChunks.Add ( (int) iVal ); } );
+	dOrderedChunks.Uniq(); // implies also Sort()
+
+	auto iDiskBound = m_dDiskChunks.GetLength();
+	auto iAllBound = iDiskBound + m_dRamChunks.GetLength();
+	int iDiskSelected = 0;
+	int iRamSelected = 0;
+	dOrderedChunks.any_of ( [&] ( int iVal )
+	{
+		if ( iVal<iDiskBound )
+		{
+			++iDiskSelected;
+			return false;
+		}
+		if ( iVal<iAllBound )
+		{
+			++iRamSelected;
+			return false;
+		}
+		return true;
+	});
+
+	tGuard.m_dDiskChunks.Reset ( iDiskSelected );
+	for ( int i = 0; i<iDiskSelected; ++i )
+		tGuard.m_dDiskChunks[i] = m_dDiskChunks[dOrderedChunks[i]];
+
+	tGuard.m_dRamChunks.Reset ( iRamSelected );
+	for ( int i = 0; i<iRamSelected; ++i )
+		tGuard.m_dRamChunks[i] = m_dRamChunks[dOrderedChunks[iDiskSelected+i]-iDiskBound];
+
+	return tGuard;
+}
+
 SphChunkGuard_t::SphChunkGuard_t ( CSphRwlock * pReading ) : m_pReading ( pReading )
 {
 	if ( pReading )
@@ -6632,7 +6678,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	// FIXME! eliminate this const breakage
 	const_cast<CSphQuery*> ( &tQuery )->m_eMode = SPH_MATCH_EXTENDED2;
 
-	SphChunkGuard_t tGuard = GetReaderChunks ();
+	SphChunkGuard_t tGuard = GetReaderChunks ( tQuery.m_dIntSubkeys );
 
 	// debug hack (don't use ram chunk in debug modeling mode)
 	if_const( MODELING )

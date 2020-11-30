@@ -293,33 +293,7 @@ only_one_index:
 		}
 	;
 
-metakey:
-	TOK_SUBKEY
-		{
-			pParser->AddStringSubkey ($1);
-		}
-	| TOK_DOT_NUMBER
-		{
-			pParser->AddDotIntSubkey ($1);
-		}
-	;
-
-metakeys:
-	metakey
-	| metakeys metakey
-	;
-
-one_index_opt_subindex:				// used in describe (meta m.b. num or name)
-	only_one_index
-	| only_one_index metakeys
-	;
-
-one_index_opt_chunk:				// used in show settings, show status, update, delete
-	only_one_index
-	| only_one_index chunk_number
-	;
-
-chunk_number:
+chunk_key:
 	TOK_DOT_NUMBER
 		{
 			pParser->AddDotIntSubkey ($1);
@@ -332,8 +306,56 @@ chunk_number:
 		}
 	;
 
-one_complex_or_list_of_simple:		// used in select
-	only_one_index metakeys
+chunk_keys:
+	chunk_key
+	| chunk_keys chunk_key
+	;
+
+string_key:
+	TOK_SUBKEY
+		{
+    		pParser->AddStringSubkey ($1);
+    	}
+    ;
+
+string_keys:
+	string_key
+	| string_keys string_key
+	;
+
+multi_strings_and_maybe_chunk_key:
+	string_keys
+	| chunk_key string_keys
+	;
+
+multi_chunks_and_maybe_string_key:
+	chunk_keys
+	| string_key chunk_keys
+	;
+
+fromkeys:
+	// empty
+	| multi_strings_and_maybe_chunk_key
+	| multi_chunks_and_maybe_string_key
+	;
+
+
+one_index_opt_subindex:				// used in describe (meta m.b. num or name)
+	only_one_index
+	| only_one_index multi_strings_and_maybe_chunk_key
+	;
+
+one_index_opt_chunk:				// used in show settings, show status, update, delete
+	only_one_index
+	| only_one_index chunk_keys
+	| list_of_indexes
+    	{
+    		pParser->ToString (pParser->m_pQuery->m_sIndexes, $1);
+    	}
+	;
+
+from_target:		// used in select ... from
+	only_one_index fromkeys
 		{
 			pParser->m_pQuery->m_sIndexes = pParser->m_pStmt->m_sIndex;
 			pParser->m_pQuery->m_dIntSubkeys.SwapData ( pParser->m_pStmt->m_dIntSubkeys);
@@ -352,7 +374,10 @@ one_complex_or_list_of_simple:		// used in select
 	;
 
 list_of_indexes:
-	one_index
+	one_index ',' one_index
+		{
+    		TRACK_BOUNDS ( $$, $1, $3 );
+    	}
 	| list_of_indexes ',' one_index
 		{
 			TRACK_BOUNDS ( $$, $1, $3 );
@@ -362,27 +387,43 @@ list_of_indexes:
 // enhanced sysvars
 //////////////////////////////////////////////////////////////////////////
 
-metanokey:
+string_nokeys:
 	TOK_SUBKEY
-	| TOK_DOT_NUMBER
+	| string_keys TOK_SUBKEY
+		{
+			$$ = $2;
+		}
 	;
 
-metanokeys:
-	metanokey
-	| metanokeys metanokey
+multi_strings_and_maybe_chunk_nokey:
+	string_nokeys
+	| TOK_DOT_NUMBER
+	| TOK_DOT_NUMBER string_nokeys
+		{
+    		$$ = $2;
+    	}
+    | string_nokeys TOK_DOT_NUMBER
+    	{
+    		$$ = $2;
+    	}
+    | string_nokeys TOK_DOT_NUMBER string_nokeys
+    	{
+    		$$ = $3;
+    	}
 	;
 
 sysvar:					// full name in token, like var '@@session.last_insert_id', no subkeys parsed
 	TOK_SYSVAR
-	| TOK_SYSVAR metanokeys
+	| TOK_SYSVAR multi_strings_and_maybe_chunk_nokey
 		{
-    		TRACK_BOUNDS ( $$, $1, $2 );
-    	}
+			TRACK_BOUNDS ( $$, $1, $2 );
+		}
     ;
 
 sysvar_ext:				// name in token + subkeys, like var '@@session' and 1 subkey '.last_insert_id'
 	TOK_SYSVAR
-	| TOK_SYSVAR metakeys
+	| TOK_SYSVAR multi_strings_and_maybe_chunk_key
+	| TOK_SYSVAR chunk_key
 	;
 
 // statements
@@ -483,7 +524,7 @@ opt_outer_limit:
 
 select_from:
 	TOK_SELECT select_items_list
-	TOK_FROM one_complex_or_list_of_simple
+	TOK_FROM from_target
 	opt_where_clause
 	opt_group_clause
 	opt_group_order_clause

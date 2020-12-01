@@ -195,12 +195,7 @@ statement:
 	| transact_op
 	| call_proc
 	| describe
-	| show_tables
-	| show_databases
 	| update
-	| show_variables
-	| show_collation
-	| show_character_set
 	| attach_index
 	| flush_rtindex
 	| flush_ramchunk
@@ -358,8 +353,7 @@ from_target:		// used in select ... from
 	only_one_index fromkeys
 		{
 			pParser->m_pQuery->m_sIndexes = pParser->m_pStmt->m_sIndex;
-			pParser->m_pQuery->m_dIntSubkeys.SwapData ( pParser->m_pStmt->m_dIntSubkeys);
-			pParser->m_pQuery->m_dStringSubkeys.SwapData ( pParser->m_pStmt->m_dStringSubkeys);
+			pParser->SwapSubkeys();
 		}
 	| list_of_indexes
 		{
@@ -368,8 +362,7 @@ from_target:		// used in select ... from
 	| sysvar_ext
 		{
     		pParser->ToString (pParser->m_pQuery->m_sIndexes, $1);
-    		pParser->m_pQuery->m_dIntSubkeys.SwapData ( pParser->m_pStmt->m_dIntSubkeys);
-            pParser->m_pQuery->m_dStringSubkeys.SwapData ( pParser->m_pStmt->m_dStringSubkeys);
+    		pParser->SwapSubkeys();
     	}
 	;
 
@@ -524,7 +517,7 @@ opt_outer_limit:
 
 select_from:
 	TOK_SELECT select_items_list
-	TOK_FROM from_target
+	TOK_FROM from_target { pParser->m_pStmt->m_eStmt = STMT_SELECT; } // set stmt here to check the option below
 	opt_where_clause
 	opt_group_clause
 	opt_group_order_clause
@@ -533,9 +526,6 @@ select_from:
 	opt_limit_clause
 	opt_option_clause
 	opt_hint_clause
-		{
-			pParser->m_pStmt->m_eStmt = STMT_SELECT;
-		}
 	;
 
 select_items_list:
@@ -1291,6 +1281,26 @@ show_what:
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_STATUS;
 			pParser->m_pStmt->m_sIndex = pParser->m_pStmt->m_sStringParam;
 		}
+	| TOK_COLLATION
+		{
+       		pParser->m_pStmt->m_eStmt = STMT_SHOW_COLLATION;
+		}
+	| TOK_CHARACTER TOK_SET
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_CHARACTER_SET;
+		}
+	| TOK_TABLES like_filter
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_TABLES;
+		}
+	| TOK_DATABASES like_filter
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_DATABASES;
+		}
+	| opt_scope TOK_VARIABLES opt_show_variables_where_or_like
+		{
+      		pParser->m_pStmt->m_eStmt = STMT_SHOW_VARIABLES;
+		}
 	;
 
 index_or_table:
@@ -1405,7 +1415,7 @@ start_transaction:
 //////////////////////////////////////////////////////////////////////////
 
 insert_into:
-	insert_or_replace TOK_INTO only_one_index opt_column_list TOK_VALUES insert_rows_list opt_insert_options
+	insert_or_replace TOK_INTO only_one_index opt_column_list TOK_VALUES insert_rows_list opt_option_clause
 	;
 
 insert_or_replace:
@@ -1449,29 +1459,14 @@ insert_val:
 	| '(' ')'			{ $$.m_iType = TOK_CONST_MVA; }
 	;
 
-opt_insert_options:
-	| TOK_OPTION insert_options_list
-	;
-
-insert_options_list:
-	insert_option
-	| insert_options_list ',' insert_option
-	;
-
-insert_option:
-	TOK_IDENT '=' TOK_QUOTED_STRING		{ if ( !pParser->AddInsertOption ( $1, $3 ) ) YYERROR; }
-	;
-
 //////////////////////////////////////////////////////////////////////////
 
 delete_from:
-	TOK_DELETE TOK_FROM one_index_opt_chunk where_clause opt_option_clause
-		{
-			pParser->m_pQuery->m_dIntSubkeys.SwapData ( pParser->m_pStmt->m_dIntSubkeys);
-			pParser->m_pQuery->m_dStringSubkeys.SwapData ( pParser->m_pStmt->m_dStringSubkeys);
-			if ( !pParser->DeleteStatement ( &$3 ) )
-				YYERROR;
-		}
+	TOK_DELETE { pParser->m_pStmt->m_eStmt = STMT_DELETE; }
+		TOK_FROM one_index_opt_chunk where_clause opt_option_clause
+			{
+				pParser->GenericStatement ( &$4 );
+			}
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -1567,32 +1562,23 @@ describe_opt:
 		{
 			pParser->m_pStmt->m_iIntParam = TOK_TABLE; // just a flag that 'TOK_TABLE' is in use
 		}
+	;
 
 describe_tok:
 	TOK_DESCRIBE
 	| TOK_DESC
 	;
 
-//////////////////////////////////////////////////////////////////////////
-
-show_tables:
-	TOK_SHOW TOK_TABLES like_filter		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_TABLES; }
-	;
-
-show_databases:
-	TOK_SHOW TOK_DATABASES like_filter { pParser->m_pStmt->m_eStmt = STMT_SHOW_DATABASES; }
-	;
 
 //////////////////////////////////////////////////////////////////////////
 
 update:
-	TOK_UPDATE one_index_opt_chunk TOK_SET update_items_list where_clause opt_option_clause
-		{
-			pParser->m_pQuery->m_dIntSubkeys.SwapData ( pParser->m_pStmt->m_dIntSubkeys);
-			pParser->m_pQuery->m_dStringSubkeys.SwapData ( pParser->m_pStmt->m_dStringSubkeys);
-			if ( !pParser->UpdateStatement ( &$2 ) )
-				YYERROR;
-		}
+	TOK_UPDATE { pParser->m_pStmt->m_eStmt = STMT_UPDATE; }
+		one_index_opt_chunk TOK_SET update_items_list where_clause opt_option_clause
+			{
+				pParser->GenericStatement ( &$3 );
+				pParser->m_pStmt->m_tUpdate.m_dRowOffset.Add ( 0 );
+			}
 	;
 
 update_items_list:
@@ -1658,13 +1644,6 @@ update_item:
 
 //////////////////////////////////////////////////////////////////////////
 
-show_variables:
-	TOK_SHOW opt_scope TOK_VARIABLES opt_show_variables_where_or_like
-		{
-			pParser->m_pStmt->m_eStmt = STMT_SHOW_VARIABLES;
-		}
-	;
-
 opt_show_variables_where_or_like:
 	like_filter
 	| show_variables_where
@@ -1683,20 +1662,6 @@ show_variables_where_entry:
 	ident '=' TOK_QUOTED_STRING // for example, Variable_name = 'character_set'
 	;
 
-show_collation:
-	TOK_SHOW TOK_COLLATION
-		{
-			pParser->m_pStmt->m_eStmt = STMT_SHOW_COLLATION;
-		}
-	;
-
-show_character_set:
-	TOK_SHOW TOK_CHARACTER TOK_SET
-		{
-			pParser->m_pStmt->m_eStmt = STMT_SHOW_CHARACTER_SET;
-		}
-	;
-	
 set_transaction:
 	TOK_SET opt_scope TOK_TRANSACTION TOK_ISOLATION TOK_LEVEL isolation_level
 		{
@@ -1844,12 +1809,11 @@ opt_with_reconfigure:
 //////////////////////////////////////////////////////////////////////////
 
 optimize_index:
-	TOK_OPTIMIZE TOK_INDEX ident opt_option_clause
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_OPTIMIZE_INDEX;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
-		}
+	TOK_OPTIMIZE  { pParser->m_pStmt->m_eStmt = STMT_OPTIMIZE_INDEX; }
+		TOK_INDEX ident opt_option_clause
+			{
+				pParser->ToString ( pParser->m_pStmt->m_sIndex, $4 );
+			}
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -1981,14 +1945,14 @@ delete_cluster:
 	;
 
 explain_query:
-	TOK_EXPLAIN ident ident TOK_QUOTED_STRING opt_option_clause
-		{
-			SqlStmt_t & tStmt = *pParser->m_pStmt;
-			tStmt.m_eStmt = STMT_EXPLAIN;
-			pParser->ToString ( tStmt.m_sCallProc, $2 );
-			pParser->ToString ( tStmt.m_sIndex, $3 );
-			pParser->m_pQuery->m_sQuery = pParser->ToStringUnescape ( $4 );
-		}
+	TOK_EXPLAIN   { pParser->m_pStmt->m_eStmt = STMT_EXPLAIN; }
+		ident ident TOK_QUOTED_STRING opt_option_clause
+			{
+				SqlStmt_t & tStmt = *pParser->m_pStmt;
+				pParser->ToString ( tStmt.m_sCallProc, $3 );
+				pParser->ToString ( tStmt.m_sIndex, $4 );
+				pParser->m_pQuery->m_sQuery = pParser->ToStringUnescape ( $5 );
+			}
 	;
 
 %%

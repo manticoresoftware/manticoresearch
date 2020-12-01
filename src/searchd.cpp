@@ -13669,7 +13669,6 @@ void HandleMysqlShowCollations ( RowBuffer_i & tOut )
 
 	// done
 	tOut.Eof();
-	return;
 }
 
 void HandleMysqlShowCharacterSet ( RowBuffer_i & tOut )

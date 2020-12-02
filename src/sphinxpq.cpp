@@ -947,6 +947,12 @@ bool PercolateQwordSetup_c::QwordSetup ( ISphQword * pQword ) const
 	if ( eCmp==PERCOLATE::PREFIX || eCmp==PERCOLATE::INFIX )
 		iSkipMagic = ( BYTE ( *tSubInfo.m_sSubstring )<0x20 );
 
+	// utf8 conversion for sphWildcardMatch
+	int dWildcard [ SPH_MAX_WORD_LEN + 1 ];
+	int * pWildcard = nullptr;
+	if ( ( eCmp==PERCOLATE::PREFIX || eCmp==PERCOLATE::INFIX ) && sphIsUTF8 ( tSubInfo.m_sWildcard ) && sphUTF8ToWideChar ( tSubInfo.m_sWildcard, dWildcard, SPH_MAX_WORD_LEN ) )
+		pWildcard = dWildcard;
+
 	// cases:
 	// empty - check all words
 	// no matches - check only words prior to 1st checkpoint
@@ -980,13 +986,13 @@ bool PercolateQwordSetup_c::QwordSetup ( ISphQword * pQword ) const
 				iCmp = sphDictCmp ( (const char *)pWord->m_sWord + 1, pWord->m_sWord[0], tSubInfo.m_sSubstring, tSubInfo.m_iSubLen );
 				if ( iCmp==0 )
 				{
-					if ( !( tSubInfo.m_iSubLen<=pWord->m_sWord[0] && sphWildcardMatch ( (const char *)pWord->m_sWord + 1 + iSkipMagic, tSubInfo.m_sWildcard ) ) )
+					if ( !( tSubInfo.m_iSubLen<=pWord->m_sWord[0] && sphWildcardMatch ( (const char *)pWord->m_sWord + 1 + iSkipMagic, tSubInfo.m_sWildcard, pWildcard ) ) )
 						iCmp = -1;
 				}
 				break;
 
 			case PERCOLATE::INFIX:
-				if ( sphWildcardMatch ( (const char *)pWord->m_sWord + 1 + iSkipMagic, tSubInfo.m_sWildcard ) )
+				if ( sphWildcardMatch ( (const char *)pWord->m_sWord + 1 + iSkipMagic, tSubInfo.m_sWildcard, pWildcard ) )
 					iCmp = 0;
 				break;
 

@@ -69,6 +69,17 @@ index pq_stem
     morphology      = stem_ru    	
 }
 
+
+index pq_utf
+{
+	type = percolate
+	path = <data_path/>/pq_utf
+	rt_field = title
+	rt_attr_uint = gid
+
+	min_infix_len = 2
+}
+
 </config>
 
 
@@ -229,6 +240,12 @@ index pq_stem
 <sphinxql>INSERT INTO pq_stem (query) VALUES ( 'проверки' )</sphinxql>
 <sphinxql>CALL PQ ('pq_stem', 'была проверка', 1 as docs, 0 as docs_json )</sphinxql>
 <sphinxql>CALL PQ ('pq_stem', 'проверки делом', 1 as docs, 0 as docs_json )</sphinxql>
+
+<!-- regression wildcard match of utf8 chars at docs and queries -->
+<sphinxql>INSERT INTO pq_utf (query) VALUES ( 'про*' )</sphinxql>
+<sphinxql>INSERT INTO pq_utf (query) VALUES ( 'проверка' )</sphinxql>
+<sphinxql>CALL PQ ('pq_utf', 'была проверка', 1 as docs, 0 as docs_json )</sphinxql>
+<sphinxql>CALL PQ ('pq_utf', 'проверка делом', 1 as docs, 0 as docs_json )</sphinxql>
 </sphqueries>
 
 </test>

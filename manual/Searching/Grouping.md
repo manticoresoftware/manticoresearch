@@ -182,7 +182,151 @@ POST /search -d '
   }
 }
 ```
+<!-- request PHP -->
+``` php
+$index->setName('films');
+$search = $index->search('');
+$search->limit(0);
+$search->facet('release_year','release_year',100);
+$results = $search->get();
+print_r($results->getFacets());
+```
+<!-- response PHP -->
+``` php
+Array
+(
+    [release_year] => Array
+        (
+            [buckets] => Array
+                (
+                    [0] => Array
+                        (
+                            [key] => 2009
+                            [doc_count] => 99
+                        )
+                    [1] => Array
+                        (
+                            [key] => 2008
+                            [doc_count] => 102
+                        )
+                    [2] => Array
+                        (
+                            [key] => 2007
+                            [doc_count] => 93
+                        )
+                    [3] => Array
+                        (
+                            [key] => 2006
+                            [doc_count] => 103
+                        )
+                    [4] => Array
+                        (
+                            [key] => 2005
+                            [doc_count] => 93
+                        )
+                    [5] => Array
+                        (
+                            [key] => 2004
+                            [doc_count] => 108
+                        )
+                    [6] => Array
+                        (
+                            [key] => 2003
+                            [doc_count] => 106
+                        )
+                    [7] => Array
+                        (
+                            [key] => 2002
+                            [doc_count] => 108
+                        )
+                    [8] => Array
+                        (
+                            [key] => 2001
+                            [doc_count] => 91
+                        )
+                    [9] => Array
+                        (
+                            [key] => 2000
+                            [doc_count] => 97
+                        )
+                )
+        )
+)
+```
+<!-- request Python -->
+``` python
+res =searchApi.search({"index":"films","limit":0,"aggs":{"release_year":{"terms":{"field":"release_year","size":100}}}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': {u'release_year': {u'buckets': [{u'doc_count': 99,
+                                                  u'key': 2009},
+                                                 {u'doc_count': 102,
+                                                  u'key': 2008},
+                                                 {u'doc_count': 93,
+                                                  u'key': 2007},
+                                                 {u'doc_count': 103,
+                                                  u'key': 2006},
+                                                 {u'doc_count': 93,
+                                                  u'key': 2005},
+                                                 {u'doc_count': 108,
+                                                  u'key': 2004},
+                                                 {u'doc_count': 106,
+                                                  u'key': 2003},
+                                                 {u'doc_count': 108,
+                                                  u'key': 2002},
+                                                 {u'doc_count': 91,
+                                                  u'key': 2001},
+                                                 {u'doc_count': 97,
+                                                  u'key': 2000}]}},
+ 'hits': {'hits': [], 'max_score': None, 'total': 1000},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
 
+```
+<!-- request Javascript -->
+``` javascript
+res = await searchApi.search({"index":"films","limit":0,"aggs":{"release_year":{"terms":{"field":"release_year","size":100}}}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"aggregations":{"release_year":{"buckets":[{"key":2009,"doc_count":99},{"key":2008,"doc_count":102},{"key":2007,"doc_count":93},{"key":2006,"doc_count":103},{"key":2005,"doc_count":93},{"key":2004,"doc_count":108},{"key":2003,"doc_count":106},{"key":2002,"doc_count":108},{"key":2001,"doc_count":91},{"key":2000,"doc_count":97}]}},"hits":{"total":1000,"hits":[]}}
+```
+<!-- request Java -->
+``` java
+HashMap<String,Object> aggs = new HashMap<String,Object>(){{
+    put("release_year", new HashMap<String,Object>(){{ 
+        put("terms", new HashMap<String,Object>(){{ 
+            put("field","release_year");
+            put("size",100);
+        }});
+    }});
+}};
+       
+searchRequest = new SearchRequest();
+searchRequest.setIndex("films");        
+searchRequest.setLimit(0);
+query = new HashMap<String,Object>();
+query.put("match_all",null);
+searchRequest.setQuery(query);
+searchRequest.setAggs(aggs);
+searchResponse = searchApi.search(searchRequest);
+```
+<!-- response Java -->
+``` java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {release_year={buckets=[{key=2009, doc_count=99}, {key=2008, doc_count=102}, {key=2007, doc_count=93}, {key=2006, doc_count=103}, {key=2005, doc_count=93}, {key=2004, doc_count=108}, {key=2003, doc_count=106}, {key=2002, doc_count=108}, {key=2001, doc_count=91}, {key=2000, doc_count=97}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 1000
+        hits: []
+    }
+    profile: null
+}
+```
 <!-- end -->
 
 <!-- example sort1 -->
@@ -438,6 +582,161 @@ SELECT groupby() gb, count(*) FROM shoes GROUP BY sizes ORDER BY gb asc;
 |   43 |        2 |
 +------+----------+
 ```
+
+<!-- request HTTP -->
+``` json
+POST /search -d '
+    {
+     "index" : "shoes",
+     "limit": 0,
+     "aggs" :
+     {
+        "sizes" :
+         {
+            "terms" :
+             {
+              "field":"sizes",
+              "size":100
+             }
+         }
+     }
+    }
+'
+```
+<!-- response HTTP -->
+``` json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 3,
+    "hits": [
+      
+    ]
+  },
+  "aggregations": {
+    "sizes": {
+      "buckets": [
+        {
+          "key": 43,
+          "doc_count": 2
+        },
+        {
+          "key": 42,
+          "doc_count": 2
+        },
+        {
+          "key": 41,
+          "doc_count": 2
+        },
+        {
+          "key": 40,
+          "doc_count": 1
+        }
+      ]
+    }
+  }
+}
+```
+<!-- request PHP -->
+``` php
+$index->setName('shoes');
+$search = $index->search('');
+$search->limit(0);
+$search->facet('sizes','sizes',100);
+$results = $search->get();
+print_r($results->getFacets());
+```
+<!-- response PHP -->
+``` php
+Array
+(
+    [sizes] => Array
+        (
+            [buckets] => Array
+                (
+                    [0] => Array
+                        (
+                            [key] => 43
+                            [doc_count] => 2
+                        )
+                    [1] => Array
+                        (
+                            [key] => 42
+                            [doc_count] => 2
+                        )
+                    [2] => Array
+                        (
+                            [key] => 41
+                            [doc_count] => 2
+                        )
+                    [3] => Array
+                        (
+                            [key] => 40
+                            [doc_count] => 1
+                        )
+                )
+        )
+)
+```
+<!-- request Python -->
+``` python
+res =searchApi.search({"index":"shoes","limit":0,"aggs":{"sizes":{"terms":{"field":"sizes","size":100}}}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': {u'sizes': {u'buckets': [{u'doc_count': 2, u'key': 43},
+                                          {u'doc_count': 2, u'key': 42},
+                                          {u'doc_count': 2, u'key': 41},
+                                          {u'doc_count': 1, u'key': 40}]}},
+ 'hits': {'hits': [], 'max_score': None, 'total': 3},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+<!-- request Javascript -->
+``` javascript
+res = await searchApi.search({"index":"shoes","limit":0,"aggs":{"sizes":{"terms":{"field":"sizes","size":100}}}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"aggregations":{"sizes":{"buckets":[{"key":43,"doc_count":2},{"key":42,"doc_count":2},{"key":41,"doc_count":2},{"key":40,"doc_count":1}]}},"hits":{"total":3,"hits":[]}}
+```
+<!-- request Java -->
+``` java
+HashMap<String,Object> aggs = new HashMap<String,Object>(){{
+    put("release_year", new HashMap<String,Object>(){{ 
+        put("terms", new HashMap<String,Object>(){{ 
+            put("field","release_year");
+            put("size",100);
+        }});
+    }});
+}};
+       
+searchRequest = new SearchRequest();
+searchRequest.setIndex("films");        
+searchRequest.setLimit(0);
+query = new HashMap<String,Object>();
+query.put("match_all",null);
+searchRequest.setQuery(query);
+searchRequest.setAggs(aggs);
+searchResponse = searchApi.search(searchRequest);
+```
+<!-- response Java -->
+``` java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {release_year={buckets=[{key=43, doc_count=2}, {key=42, doc_count=2}, {key=41, doc_count=2}, {key=40, doc_count=1}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 3
+        hits: []
+    }
+    profile: null
+}
+
+```
 <!-- end -->
 
 <!-- example json -->
@@ -475,6 +774,142 @@ SELECT groupby() color, count(*) from products GROUP BY meta.color;
 | red   |        2 |
 | green |        1 |
 +-------+----------+
+```
+<!-- request HTTP -->
+``` json
+POST /search -d '
+    {
+     "index" : "products",
+     "limit": 0,
+     "aggs" :
+     {
+        "color" :
+         {
+            "terms" :
+             {
+              "field":"meta.color",
+              "size":100
+             }
+         }
+     }
+    }
+'
+```
+<!-- response HTTP -->
+``` json
+{
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 3,
+    "hits": [
+      
+    ]
+  },
+  "aggregations": {
+    "color": {
+      "buckets": [
+        {
+          "key": "green",
+          "doc_count": 1
+        },
+        {
+          "key": "red",
+          "doc_count": 2
+        }
+      ]
+    }
+  }
+}
+```
+<!-- request PHP -->
+``` php
+$index->setName('products');
+$search = $index->search('');
+$search->limit(0);
+$search->facet('meta.color','color',100);
+$results = $search->get();
+print_r($results->getFacets());
+```
+<!-- response PHP -->
+``` php
+Array
+(
+    [color] => Array
+        (
+            [buckets] => Array
+                (
+                    [0] => Array
+                        (
+                            [key] => green
+                            [doc_count] => 1
+                        )
+                    [1] => Array
+                        (
+                            [key] => red
+                            [doc_count] => 2
+                        )
+                )
+        )
+)
+
+```
+<!-- request Python -->
+``` python
+res =searchApi.search({"index":"products","limit":0,"aggs":{"color":{"terms":{"field":"meta.color","size":100}}}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': {u'color': {u'buckets': [{u'doc_count': 1,
+                                           u'key': u'green'},
+                                          {u'doc_count': 2, u'key': u'red'}]}},
+ 'hits': {'hits': [], 'max_score': None, 'total': 3},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+<!-- request Javascript -->
+``` javascript
+res = await searchApi.search({"index":"products","limit":0,"aggs":{"color":{"terms":{"field":"meta.color","size":100}}}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"aggregations":{"color":{"buckets":[{"key":"green","doc_count":1},{"key":"red","doc_count":2}]}},"hits":{"total":3,"hits":[]}}
+```
+<!-- request Java -->
+``` java
+HashMap<String,Object> aggs = new HashMap<String,Object>(){{
+    put("color", new HashMap<String,Object>(){{ 
+        put("terms", new HashMap<String,Object>(){{ 
+            put("field","meta.color");
+            put("size",100);
+        }});
+    }});
+}};
+       
+searchRequest = new SearchRequest();
+searchRequest.setIndex("products");        
+searchRequest.setLimit(0);
+query = new HashMap<String,Object>();
+query.put("match_all",null);
+searchRequest.setQuery(query);
+searchRequest.setAggs(aggs);
+searchResponse = searchApi.search(searchRequest);
+```
+<!-- response Java -->
+``` java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    aggregations: {color={buckets=[{key=green, doc_count=1}, {key=red, doc_count=2}]}}
+    hits: class SearchResponseHits {
+        maxScore: null
+        total: 3
+        hits: []
+    }
+    profile: null
+}
+
 ```
 <!-- end -->
 

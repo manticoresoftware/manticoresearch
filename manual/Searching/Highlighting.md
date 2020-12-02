@@ -108,6 +108,69 @@ Highlight for content:
 
 ```
 
+<!-- request Python -->
+``` python
+res = searchApi.search({"index":"books","query":{"match":{"*":"try"}},"highlight":{}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'4',
+                    u'_score': 1695,
+                    u'_source': {u'content': u'Don`t try to compete in childishness, said Bliss.',
+                                 u'title': u'Book four'},
+                    u'highlight': {u'content': [u'Don`t <b>try</b> to compete in childishness, said Bliss.'],
+                                   u'title': [u'Book four']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Javascript -->
+``` javascript
+res =  await searchApi.search({"index":"books","query":{"match":{"*":"try"}},"highlight":{}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"4","_score":1695,"_source":{"title":"Book four","content":"Don`t try to compete in childishness, said Bliss."},"highlight":{"title":["Book four"],"content":["Don`t <b>try</b> to compete in childishness, said Bliss."]}}]}}
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","try|gets|down|said");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
+```
+
+<!-- response Java -->
+```java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 3
+        maxScore: null
+        hits: [{_id=3, _score=1597, _source={title=Book three, content=Trevize whispered, "It gets infantile pleasure out of display. I`d love to knock it down."}, highlight={title=[Book three], content=[, "It <b>gets</b> infantile pleasure ,  to knock it <b>down</b>."]}}, {_id=4, _score=1563, _source={title=Book four, content=Don`t try to compete in childishness, said Bliss.}, highlight={title=[Book four], content=[Don`t <b>try</b> to compete in childishness, <b>said</b> Bliss.]}}, {_id=5, _score=1514, _source={title=Books two, content=A door opened before them, revealing a small room. Bander said, "Come, half-humans, I want to show you how we live."}, highlight={title=[Books two], content=[ a small room. Bander <b>said</b>, "Come, half-humans, I]}}]
+        aggregations: null
+    }
+    profile: null
+}
+```
 <!-- end -->
 
 When using SQL to highlight search results, you get different snippets from different fields concatenated as a single string. It is a limitation of mysql protocol. You can fine-tune concatenation separators with `field_separator` and `snippet_separator` options, see below.
@@ -321,8 +384,70 @@ Highlight for title:
 - Book two
 Highlight for content:
  a small room. Bander <b>said</b>, \"Come, half-humans, I
+```
 
+<!-- request Python -->
+``` python
+res = searchApi.search({"index":"books","query":{"match":{"*":"try"}},"highlight":{"limit":50}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'4',
+                    u'_score': 1695,
+                    u'_source': {u'content': u'Don`t try to compete in childishness, said Bliss.',
+                                 u'title': u'Book four'},
+                    u'highlight': {u'content': [u'Don`t <b>try</b> to compete in childishness, said Bliss.'],
+                                   u'title': [u'Book four']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
 
+<!-- request Javascript -->
+``` javascript
+res =  await searchApi.search({"index":"books","query":{"query_string":"try|gets|down|said"},"highlight":{"limit":50}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":3,"hits":[{"_id":"3","_score":1597,"_source":{"title":"Book three","content":"Trevize whispered, \"It gets infantile pleasure out of display. I`d love to knock it down.\""},"highlight":{"title":["Book three"],"content":[", \"It <b>gets</b> infantile pleasure "," to knock it <b>down</b>.\""]}},{"_id":"4","_score":1563,"_source":{"title":"Book four","content":"Don`t try to compete in childishness, said Bliss."},"highlight":{"title":["Book four"],"content":["Don`t <b>try</b> to compete in childishness, <b>said</b> Bliss."]}},{"_id":"5","_score":1514,"_source":{"title":"Books two","content":"A door opened before them, revealing a small room. Bander said, \"Come, half-humans, I want to show you how we live.\""},"highlight":{"title":["Books two"],"content":[" a small room. Bander <b>said</b>, \"Come, half-humans, I"]}}]}}
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","try|gets|down|said");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+    put("limit",50);
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
+```
+
+<!-- response Java -->
+```java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 3
+        maxScore: null
+        hits: [{_id=3, _score=1597, _source={title=Book three, content=Trevize whispered, "It gets infantile pleasure out of display. I`d love to knock it down."}, highlight={title=[Book three], content=[, "It <b>gets</b> infantile pleasure ,  to knock it <b>down</b>."]}}, {_id=4, _score=1563, _source={title=Book four, content=Don`t try to compete in childishness, said Bliss.}, highlight={title=[Book four], content=[Don`t <b>try</b> to compete in childishness, <b>said</b> Bliss.]}}, {_id=5, _score=1514, _source={title=Books two, content=A door opened before them, revealing a small room. Bander said, "Come, half-humans, I want to show you how we live."}, highlight={title=[Books two], content=[ a small room. Bander <b>said</b>, "Come, half-humans, I]}}]
+        aggregations: null
+    }
+    profile: null
+}
 ```
 
 <!-- end -->
@@ -540,7 +665,7 @@ Highlighted snippets are returned in the `highlight` property of the `hits` arra
 POST /search
 {
   "index": "books",
-  "query": { "match": { "content": "and first" } },
+  "query": { "match": { "*": "one|robots" } },
   "highlight":
   {
     "fields": ["content"]
@@ -552,32 +677,131 @@ POST /search
 
 ```json
 {
-  "took":1,
-  "timed_out":false,
-  "hits":
-  {
-    "total":1,
-    "hits":
-    [
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "hits": [
       {
-        "_id":"5",
-        "_score":1602,
-        "_source":
-        {
-          "title":"Book five",
-          "content":"Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it."
+        "_id": "1",
+        "_score": 2788,
+        "_source": {
+          "title": "Books one",
+          "content": "They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "
         },
-        "highlight":
-        {
-          "content":
-          [
-            "Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away <b>and</b> entered itself. The door closed behind it."
+        "highlight": {
+          "content": [
+            "They followed Bander. The <b>robots</b> remained at a polite distance, ",
+            " three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander",
+            " gestured the other <b>robots</b> away and entered itself. The"
           ]
         }
       }
     ]
   }
 }
+```
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$index->setName('books');
+$results = $index->search('one|robots')->highlight(['content'])->get();
+foreach($results as $doc)
+{
+    echo 'Document: '.$doc->getId()."\n";
+    foreach($doc->getData() as $field=>$value)
+    {
+        echo $field.' : '.$value."\n";
+    }
+    foreach($doc->getHighlight() as $field=>$snippets)
+    {
+        echo "Highlight for ".$field.":\n";
+        foreach($snippets as $snippet)
+        {
+            echo "- ".$snippet."\n";
+        }
+    }
+}
+
+```
+
+<!-- response PHP -->
+```php
+Document: 1
+title : Books one
+content : They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.
+Highlight for content:
+- They followed Bander. The <b>robots</b> remained at a polite distance,
+-  three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander
+-  gestured the other <b>robots</b> away and entered itself. The
+
+```
+<!-- request Python -->
+``` python
+res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content"]}}))
+```
+<!-- response Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u'They followed Bander. The <b>robots</b> remained at a polite distance, ',
+                                                u' three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander',
+                                                u' gestured the other <b>robots</b> away and entered itself. The']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+<!-- request Javascript -->
+``` javascript
+res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content"]}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"]}}]}}
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","one|robots");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+    put("fields",new String[] {"content"});
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
+```
+
+<!-- response Java -->
+```java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: null
+        hits: [{_id=1, _score=2788, _source={title=Books one, content=They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. }, highlight={title=[Books <b>one</b>], content=[They followed Bander. The <b>robots</b> remained at a polite distance, ,  three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander,  gestured the other <b>robots</b> away and entered itself. The]}}]
+        aggregations: null
+    }
+    profile: null
+}
+
 ```
 
 <!-- end -->
@@ -594,7 +818,7 @@ To highlight all possible fields, pass an empty object as `highlight` propery.
 POST /search
 {
   "index": "books",
-  "query": { "match": { "content": "and first" } },
+  "query": { "match": { "*": "one|robots" } },
   "highlight": {}
 }
 ```
@@ -603,35 +827,135 @@ POST /search
 
 ```json
 {
-  "took":1,
-  "timed_out":false,
-  "hits":
-  {
-    "total":1,
-    "hits":
-    [
+  "took": 0,
+  "timed_out": false,
+  "hits": {
+    "total": 1,
+    "hits": [
       {
-        "_id":"5",
-        "_score":1602,
-        "_source":
-        {
-          "title":"Book five",
-          "content":"Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it."
+        "_id": "1",
+        "_score": 2788,
+        "_source": {
+          "title": "Books one",
+          "content": "They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "
         },
-        "highlight":
-        {
-          "title":
-          [
-            "Book five"
+        "highlight": {
+          "title": [
+            "Books <b>one</b>"
           ],
-          "content":
-          [
-            "Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away <b>and</b> entered itself. The door closed behind it."
+          "content": [
+            "They followed Bander. The <b>robots</b> remained at a polite distance, ",
+            " three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander",
+            " gestured the other <b>robots</b> away and entered itself. The"
           ]
         }
       }
     ]
   }
+}
+```
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$index->setName('books');
+$results = $index->search('one|robots')->highlight()->get();
+foreach($results as $doc)
+{
+    echo 'Document: '.$doc->getId()."\n";
+    foreach($doc->getData() as $field=>$value)
+    {
+        echo $field.' : '.$value."\n";
+    }
+    foreach($doc->getHighlight() as $field=>$snippets)
+    {
+        echo "Highlight for ".$field.":\n";
+        foreach($snippets as $snippet)
+        {
+            echo "- ".$snippet."\n";
+        }
+    }
+}
+
+```
+
+<!-- response PHP -->
+```php
+Document: 1
+title : Books one
+content : They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.
+Highlight for title:
+- Books <b>one</b>
+Highlight for content:
+- They followed Bander. The <b>robots</b> remained at a polite distance,
+-  three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander
+-  gestured the other <b>robots</b> away and entered itself. The
+
+```
+<!-- request Python -->
+``` python
+res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u'They followed Bander. The <b>robots</b> remained at a polite distance, ',
+                                                u' three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander',
+                                                u' gestured the other <b>robots</b> away and entered itself. The'],
+                                   u'title': [u'Books <b>one</b>']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+<!-- request Javascript -->
+``` javascript
+res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"title":["Books <b>one</b>"],"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"]}}]}}
+
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","one|robots");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
+```
+
+<!-- response Java -->
+```java
+class SearchResponse {
+    took: 0
+    timedOut: false
+    hits: class SearchResponseHits {
+        total: 1
+        maxScore: null
+        hits: [{_id=1, _score=2788, _source={title=Books one, content=They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. }, highlight={title=[Books <b>one</b>], content=[They followed Bander. The <b>robots</b> remained at a polite distance, ,  three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander,  gestured the other <b>robots</b> away and entered itself. The]}}]
+        aggregations: null
+    }
+    profile: null
 }
 ```
 
@@ -656,13 +980,96 @@ In addition to common highlighting options, several synonyms are available for J
 POST /search
 {
   "index": "books",
-  "query": { "match": { "content": "and first" } },
+  "query": { "match": { "content": "one|robots" } },
   "highlight":
   {
-    "fields": [ "content", "title" ],
-    "highlight_query": { "match": { "*":"into three five" } }
+    "fields": [ "content"],
+    "highlight_query": { "match": { "*":"polite distance" } }
    }
 }
+```
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$index->setName('books');
+$bool = new \Manticoresearch\Query\BoolQuery();
+$bool->must(new \Manticoresearch\Query\Match(['query' => 'one|robots'], 'content'));
+ 
+$results = $index->search($bool)->highlight(['content'],['highlight_query'=>['match'=>['*'=>'polite distance']]])->get();
+foreach($results as $doc)
+{
+    echo 'Document: '.$doc->getId()."\n";
+    foreach($doc->getData() as $field=>$value)
+    {
+        echo $field.' : '.$value."\n";
+    }
+    foreach($doc->getHighlight() as $field=>$snippets)
+    {
+        echo "Highlight for ".$field.":\n";
+        foreach($snippets as $snippet)
+        {
+            echo "- ".$snippet."\n";
+        }
+    }
+}
+```
+ 
+<!-- request Python -->
+``` python
+res = searchApi.search({"index":"books","query":{"match":{"content":"one|robots"}},"highlight":{"fields":["content"],"highlight_query":{"match":{"*":"polite distance"}}}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 1788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u'. The robots remained at a <b>polite distance</b>, but their presence was a']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Javascript -->
+``` javascript
+res =  await searchApi.search({"index":"books","query":{"match":{"content":"one|robots"}},"highlight":{"fields":["content"],"highlight_query":{"match":{"*":"polite distance"}}}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[". The robots remained at a <b>polite distance</b>, but their presence was a"]}}]}}
+```
+
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","one|robots");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+put("fields",new String[] {"content","title"});
+put("highlight_query", 
+    new HashMap<String,Object>(){{
+        put("match", new HashMap<String,Object>(){{
+            put("*","polite distance");
+        }});
+    }});
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
 ```
 <!-- end -->
 
@@ -679,7 +1086,7 @@ POST /search
 POST /search
 {
   "index": "books",
-  "query": { "match": { "content": "and first" } },
+  "query": { "match": { "*": "one|robots" } },
   "highlight":
   {
     "fields": [ "content", "title" ],
@@ -687,6 +1094,100 @@ POST /search
     "post_tags": "_after"
    }
 }
+```
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$index->setName('books');
+$bool = new \Manticoresearch\Query\BoolQuery();
+$bool->must(new \Manticoresearch\Query\Match(['query' => 'one|robots'], '*'));
+ 
+$results = $index->search($bool)->highlight(['content','title'],['pre_tags'=>'before_','post_tags'=>'_after'])->get();
+foreach($results as $doc)
+{
+    echo 'Document: '.$doc->getId()."\n";
+    foreach($doc->getData() as $field=>$value)
+    {
+        echo $field.' : '.$value."\n";
+    }
+    foreach($doc->getHighlight() as $field=>$snippets)
+    {
+        echo "Highlight for ".$field.":\n";
+        foreach($snippets as $snippet)
+        {
+            echo "- ".$snippet."\n";
+        }
+    }
+}
+```
+<!-- response PHP -->
+```php
+Document: 1
+title : Books one
+content : They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.
+Highlight for content:
+- They followed Bander. The before_robots_after remained at a polite distance,
+-  three into the room. before_One_after of the before_robots_after followed as well. Bander
+-  gestured the other before_robots_after away and entered itself. The
+Highlight for title:
+- Books before_one_after
+
+```
+<!-- request Python -->
+``` python
+res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"pre_tags":"before_","post_tags":"_after"}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u'They followed Bander. The before_robots_after remained at a polite distance, ',
+                                                u' three into the room. before_One_after of the before_robots_after followed as well. Bander',
+                                                u' gestured the other before_robots_after away and entered itself. The'],
+                                   u'title': [u'Books before_one_after']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Javascript -->
+``` javascript
+res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"pre_tags":"before_","post_tags":"_after"}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The before_robots_after remained at a polite distance, "," three into the room. before_One_after of the before_robots_after followed as well. Bander"," gestured the other before_robots_after away and entered itself. The"],"title":["Books before_one_after"]}}]}}
+```
+
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","one|robots");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+    put("fields",new String[] {"content","title"});
+    put("pre_tags","before_");
+    put("post_tags","_after");
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
 ```
 <!-- end -->
 
@@ -702,13 +1203,105 @@ POST /search
 POST /search
 {
   "index": "books",
-  "query": { "match": { "content": "and first" } },
+  "query": { "match": { "*": "one|robots" } },
   "highlight":
   {
     "fields": [ "content", "title" ],
     "no_match_size": 0
   }
 }
+```
+<!-- intro -->
+##### PHP:
+
+<!-- request PHP -->
+
+```php
+$index->setName('books');
+$bool = new \Manticoresearch\Query\BoolQuery();
+$bool->must(new \Manticoresearch\Query\Match(['query' => 'one|robots'], '*'));
+ 
+$results = $index->search($bool)->highlight(['content','title'],['no_match_size'=>0])->get();
+foreach($results as $doc)
+{
+    echo 'Document: '.$doc->getId()."\n";
+    foreach($doc->getData() as $field=>$value)
+    {
+        echo $field.' : '.$value."\n";
+    }
+    foreach($doc->getHighlight() as $field=>$snippets)
+    {
+        echo "Highlight for ".$field.":\n";
+        foreach($snippets as $snippet)
+        {
+            echo "- ".$snippet."\n";
+        }
+    }
+}
+```
+<!-- response PHP -->
+```php
+Document: 1
+title : Books one
+content : They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.
+Highlight for content:
+- They followed Bander. The <b>robots</b> remained at a polite distance,
+-  three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander
+-  gestured the other <b>robots</b> away and entered itself. The
+Highlight for title:
+- Books <b>one</b>
+```
+<!-- request Python -->
+``` python
+res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"no_match_size":0}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u'They followed Bander. The <b>robots</b> remained at a polite distance, ',
+                                                u' three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander',
+                                                u' gestured the other <b>robots</b> away and entered itself. The'],
+                                   u'title': [u'Books <b>one</b>']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Javascript -->
+``` javascript
+res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"no_match_size":0}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"],"title":["Books <b>one</b>"]}}]}}
+
+```
+
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","one|robots");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+    put("fields",new String[] {"content","title"});
+    put("no_match_size",0);
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
 ```
 <!-- end -->
 
@@ -724,7 +1317,7 @@ POST /search
 POST /search
 {
   "index": "books",
-  "query": { "match": { "content": "and first" } },
+  "query": { "match": { "*": "one|robots" } },
   "highlight":
   {
     "fields": [ "content", "title" ],
@@ -733,6 +1326,95 @@ POST /search
 }
 ```
 
+<!-- request PHP -->
+
+```php
+$index->setName('books');
+$bool = new \Manticoresearch\Query\BoolQuery();
+$bool->must(new \Manticoresearch\Query\Match(['query' => 'one|robots'], '*'));
+ 
+$results = $index->search($bool)->highlight(['content','title'],['order'=>"score"])->get();
+foreach($results as $doc)
+{
+    echo 'Document: '.$doc->getId()."\n";
+    foreach($doc->getData() as $field=>$value)
+    {
+        echo $field.' : '.$value."\n";
+    }
+    foreach($doc->getHighlight() as $field=>$snippets)
+    {
+        echo "Highlight for ".$field.":\n";
+        foreach($snippets as $snippet)
+        {
+            echo "- ".$snippet."\n";
+        }
+    }
+}
+```
+<!-- response PHP -->
+```php
+Document: 1
+title : Books one
+content : They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.
+Highlight for content:
+-  three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander
+-  gestured the other <b>robots</b> away and entered itself. The
+- They followed Bander. The <b>robots</b> remained at a polite distance,
+Highlight for title:
+- Books <b>one</b>
+```
+<!-- request Python -->
+``` python
+res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"order":"score"}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u' three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander',
+                                                u' gestured the other <b>robots</b> away and entered itself. The',
+                                                u'They followed Bander. The <b>robots</b> remained at a polite distance, '],
+                                   u'title': [u'Books <b>one</b>']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Javascript -->
+``` javascript
+res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"order":"score"}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The","They followed Bander. The <b>robots</b> remained at a polite distance, "],"title":["Books <b>one</b>"]}}]}}
+
+
+```
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","one|robots");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+    put("fields",new String[] {"content","title"});
+    put("order","score");
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
+```
 <!-- end -->
 
 <!-- example fragment_size -->
@@ -747,7 +1429,7 @@ POST /search
 POST /search
 {
   "index": "books",
-  "query": { "match": { "content": "and first" } },
+  "query": { "match": { "*": "one|robots" } },
   "highlight":
   {
     "fields": [ "content", "title" ],
@@ -755,7 +1437,91 @@ POST /search
   }
 }
 ```
+<!-- request PHP -->
 
+```php
+$index->setName('books');
+$bool = new \Manticoresearch\Query\BoolQuery();
+$bool->must(new \Manticoresearch\Query\Match(['query' => 'one|robots'], '*'));
+ 
+$results = $index->search($bool)->highlight(['content','title'],['fragment_size'=>100])->get();
+foreach($results as $doc)
+{
+    echo 'Document: '.$doc->getId()."\n";
+    foreach($doc->getData() as $field=>$value)
+    {
+        echo $field.' : '.$value."\n";
+    }
+    foreach($doc->getHighlight() as $field=>$snippets)
+    {
+        echo "Highlight for ".$field.":\n";
+        foreach($snippets as $snippet)
+        {
+            echo "- ".$snippet."\n";
+        }
+    }
+}
+```
+<!-- response PHP -->
+```php
+Document: 1
+title : Books one
+content : They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.
+Highlight for content:
+-  the room. <b>One</b> of the <b>robots</b> followed as well
+- Bander gestured the other <b>robots</b> away and entered
+Highlight for title:
+- Books <b>one</b>
+```
+<!-- request Python -->
+``` python
+res = searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"fragment_size":100}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u' the room. <b>One</b> of the <b>robots</b> followed as well',
+                                                u'Bander gestured the other <b>robots</b> away and entered '],
+                                   u'title': [u'Books <b>one</b>']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Javascript -->
+``` javascript
+res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"fragment_size":100}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" the room. <b>One</b> of the <b>robots</b> followed as well","Bander gestured the other <b>robots</b> away and entered "],"title":["Books <b>one</b>"]}}]}}
+```
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","one|robots");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+    put("fields",new String[] {"content","title"});
+    put("fragment_size",100);
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
+```
 <!-- end -->
 
 <!-- example number_of_fragments -->
@@ -770,7 +1536,7 @@ POST /search
 POST /search
 {
   "index": "books",
-  "query": { "match": { "content": "and first" } },
+  "query": { "match": { "*": "one|robots"  } },
   "highlight":
   {
     "fields": [ "content", "title" ],
@@ -778,7 +1544,96 @@ POST /search
   }
 }
 ```
+<!-- request PHP -->
 
+```php
+$index->setName('books');
+$bool = new \Manticoresearch\Query\BoolQuery();
+$bool->must(new \Manticoresearch\Query\Match(['query' => 'one|robots'], '*'));
+ 
+$results = $index->search($bool)->highlight(['content','title'],['number_of_fragments'=>10])->get();
+foreach($results as $doc)
+{
+    echo 'Document: '.$doc->getId()."\n";
+    foreach($doc->getData() as $field=>$value)
+    {
+        echo $field.' : '.$value."\n";
+    }
+    foreach($doc->getHighlight() as $field=>$snippets)
+    {
+        echo "Highlight for ".$field.":\n";
+        foreach($snippets as $snippet)
+        {
+            echo "- ".$snippet."\n";
+        }
+    }
+}
+```
+<!-- response PHP -->
+```php
+Document: 1
+title : Books one
+content : They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.
+Highlight for content:
+- They followed Bander. The <b>robots</b> remained at a polite distance,
+-  three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander
+-  gestured the other <b>robots</b> away and entered itself. The
+Highlight for title:
+- Books <b>one</b>
+
+```
+
+<!-- request Python -->
+``` python
+res =searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"number_of_fragments":10}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u'They followed Bander. The <b>robots</b> remained at a polite distance, ',
+                                                u' three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander',
+                                                u' gestured the other <b>robots</b> away and entered itself. The'],
+                                   u'title': [u'Books <b>one</b>']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Javascript -->
+``` javascript
+res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":["content","title"],"number_of_fragments":10}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":["They followed Bander. The <b>robots</b> remained at a polite distance, "," three into the room. <b>One</b> of the <b>robots</b> followed as well. Bander"," gestured the other <b>robots</b> away and entered itself. The"],"title":["Books <b>one</b>"]}}]}}
+
+```
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","one|robots");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+    put("fields",new String[] {"content","title"});
+    put("fragment_size",10);
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
+```
 <!-- end -->
 
 <!-- example highlight json per-field limits -->
@@ -794,7 +1649,7 @@ Options such as `limit`, `limit_words`, and `limit_snippets` can be set as globa
 POST /search
 {
   "index": "books",
-  "query": { "match": { "content": "and first" } },
+  "query": { "match": { "*": "one|robots"  } },
       "highlight":
       {
 		"fields":
@@ -805,7 +1660,94 @@ POST /search
       }
 }
 ```
+<!-- request PHP -->
 
+```php
+$index->setName('books');
+$bool = new \Manticoresearch\Query\BoolQuery();
+$bool->must(new \Manticoresearch\Query\Match(['query' => 'one|robots'], '*'));
+ 
+$results = $index->search($bool)->highlight(['content'=>['limit'=>50],'title'=>new \stdClass])->get();
+foreach($results as $doc)
+{
+    echo 'Document: '.$doc->getId()."\n";
+    foreach($doc->getData() as $field=>$value)
+    {
+        echo $field.' : '.$value."\n";
+    }
+    foreach($doc->getHighlight() as $field=>$snippets)
+    {
+        echo "Highlight for ".$field.":\n";
+        foreach($snippets as $snippet)
+        {
+            echo "- ".$snippet."\n";
+        }
+    }
+}
+```
+<!-- response PHP -->
+```php
+Document: 1
+title : Books one
+content : They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.
+Highlight for content:
+-  into the room. <b>One</b> of the <b>robots</b> followed as well
+Highlight for title:
+- Books <b>one</b>
+```
+<!-- request Python -->
+``` python
+res =searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":{"title":{},"content":{"limit":50}}}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 2788,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u' into the room. <b>One</b> of the <b>robots</b> followed as well'],
+                                   u'title': [u'Books <b>one</b>']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+```
+
+<!-- request Javascript -->
+``` javascript
+res =  await searchApi.search({"index":"books","query":{"match":{"*":"one|robots"}},"highlight":{"fields":{"title":{},"content":{"limit":50}}}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":2788,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"title":["Books <b>one</b>"],"content":[" into the room. <b>One</b> of the <b>robots</b> followed as well"]}}]}}
+```
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","one|robots");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+    put("fields",new HashMap<String,Object>(){{
+            put("title",new HashMap<String,Object>(){{}});
+            put("content",new HashMap<String,Object>(){{
+                put("limit",50);
+            }});
+        }}
+    );
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
+```
 <!-- end -->
 
 <!-- example highlight json global limits -->
@@ -824,15 +1766,101 @@ POST /search
   "query": { "match": { "content": "and first" } },
       "highlight":
       {
+        "limits_per_field": false,
 		"fields":
 		{
-			"limits_per_field": 0,
 			"content" : { "limit": 50 }
 		}
       }
 }
 ```
+<!-- request PHP -->
 
+```php
+$index->setName('books');
+$bool = new \Manticoresearch\Query\BoolQuery();
+$bool->must(new \Manticoresearch\Query\Match(['query' => 'and first'], 'content'));
+ 
+$results = $index->search($bool)->highlight(['content'=>['limit'=>50]],['limits_per_field'=>false])->get();
+foreach($results as $doc)
+{
+    echo 'Document: '.$doc->getId()."\n";
+    foreach($doc->getData() as $field=>$value)
+    {
+        echo $field.' : '.$value."\n";
+    }
+    foreach($doc->getHighlight() as $field=>$snippets)
+    {
+        echo "Highlight for ".$field.":\n";
+        foreach($snippets as $snippet)
+        {
+            echo "- ".$snippet."\n";
+        }
+    }
+}
+```
+<!-- response PHP -->
+```php
+Document: 1
+title : Books one
+content : They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it.
+Highlight for content:
+-  gestured the other robots away <b>and</b> entered itself. The door closed
+```
+<!-- request Python -->
+``` python
+res =searchApi.search({"index":"books","query":{"match":{"content":"and first"}},"highlight":{"fields":{"content":{"limit":50}},"limits_per_field":False}})
+```
+<!-- response Python -->
+``` python
+{'aggregations': None,
+ 'hits': {'hits': [{u'_id': u'1',
+                    u'_score': 1597,
+                    u'_source': {u'content': u'They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. ',
+                                 u'title': u'Books one'},
+                    u'highlight': {u'content': [u' gestured the other robots away <b>and</b> entered itself. The door closed']}}],
+          'max_score': None,
+          'total': 1},
+ 'profile': None,
+ 'timed_out': False,
+ 'took': 0}
+
+```
+
+<!-- request Javascript -->
+``` javascript
+res =  await searchApi.search({"index":"books","query":{"match":{"content":"and first"}},"highlight":{"fields":{"content":{"limit":50}},"limits_per_field":false}});
+```
+<!-- response Javascript -->
+``` javascript
+{"took":0,"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1597,"_source":{"title":"Books one","content":"They followed Bander. The robots remained at a polite distance, but their presence was a constantly felt threat. Bander ushered all three into the room. One of the robots followed as well. Bander gestured the other robots away and entered itself. The door closed behind it. "},"highlight":{"content":[" gestured the other robots away <b>and</b> entered itself. The door closed"]}}]}}
+
+```
+<!-- intro -->
+##### Java:
+
+<!-- request Java -->
+
+```java
+searchRequest = new SearchRequest();
+searchRequest.setIndex("books");
+query = new HashMap<String,Object>();
+query.put("match",new HashMap<String,Object>(){{
+    put("*","one|robots");
+}});        
+searchRequest.setQuery(query);
+highlight = new HashMap<String,Object>(){{
+    put("limits_per_field",0);
+    put("fields",new HashMap<String,Object>(){{
+            put("content",new HashMap<String,Object>(){{
+                put("limit",50);
+            }});
+        }}
+    );
+}};
+searchRequest.setHighlight(highlight);
+searchResponse = searchApi.search(searchRequest);
+```
 <!-- end -->
 
 # CALL SNIPPETS

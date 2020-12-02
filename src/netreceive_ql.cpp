@@ -456,11 +456,12 @@ public:
 public:
 	/// more high level. Processing the whole tables.
 	// sends collected data, then reset
-	void Commit() override
+	bool Commit() override
 	{
 		m_tOut.SendLSBDword ( ((m_uPacketID++)<<24) + ( GetLength() ) );
 		m_tOut.SendBytes ( *this );
 		Resize(0);
+		return true;
 	}
 
 	// wrappers for popular packets
@@ -491,10 +492,11 @@ public:
 #endif
 	}
 
-	void HeadEnd ( bool bMoreResults, int iWarns ) override
+	bool HeadEnd ( bool bMoreResults, int iWarns ) override
 	{
 		Eof ( bMoreResults, iWarns );
 		Resize(0);
+		return true;
 	}
 
 	// add the next column. The EOF after the tull set will be fired automatically

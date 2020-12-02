@@ -11409,7 +11409,8 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	tOut.HeadColumn ( "In idle" );
 //	tOut.HeadColumn ( "Chain" );
 	tOut.HeadColumn ( "Info" );
-	tOut.HeadEnd();
+	if (!tOut.HeadEnd())
+		return;
 
 	QuotationEscapedBuilder tBuf;
 	ThreadInfoFormat_e eFmt = THD_FORMAT_NATIVE;
@@ -11460,7 +11461,8 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 //		tOut.PutString ( dThd.m_sChain.cstr () ); // Chain
 		auto tInfo = FormatInfo ( dThd, eFmt, tBuf );
 		tOut.PutString ( tInfo.first, Min ( tInfo.second, tStmt.m_iThreadsCols ) ); // Info m_pTaskInfo
-		tOut.Commit();
+		if ( !tOut.Commit () )
+			break;
 	}
 
 	tOut.Eof();

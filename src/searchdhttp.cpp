@@ -776,11 +776,12 @@ public:
 		m_dBuf += "null";
 	}
 
-	void Commit() override
+	bool Commit() override
 	{
 		m_dBuf += "}";
 		m_iCol = 0;
 		m_iRow++;
+		return true;
 	}
 
 	void Eof ( bool bMoreResults , int iWarns ) override
@@ -805,7 +806,7 @@ public:
 		m_dBuf += "{";
 	}
 
-	void HeadEnd ( bool , int ) override
+	bool HeadEnd ( bool , int ) override
 	{
 		{
 			ScopedComma_c tComma ( m_dBuf, ",", R"("columns":[)", "],\n", false );
@@ -821,6 +822,7 @@ public:
 		
 		m_dBuf.AppendName ( "data" );
 		m_dBuf += "[\n";
+		return true;
 	}
 
 	void HeadColumn ( const char * sName, MysqlColumnType_e eType ) override

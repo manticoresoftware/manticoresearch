@@ -1405,7 +1405,7 @@ public:
 
 	/// more high level. Processing the whole tables.
 	// sends collected data, then reset
-	virtual void Commit() = 0;
+	virtual bool Commit() = 0;
 
 	// wrappers for popular packets
 	virtual void Eof ( bool bMoreResults=false, int iWarns=0 ) = 0;
@@ -1417,7 +1417,7 @@ public:
 	// Header of the table with defined num of columns
 	virtual void HeadBegin ( int iColumns ) = 0;
 
-	virtual void HeadEnd ( bool bMoreResults=false, int iWarns=0 ) = 0;
+	virtual bool HeadEnd ( bool bMoreResults=false, int iWarns=0 ) = 0;
 
 	// add the next column. The EOF after the full set will be fired automatically
 	virtual void HeadColumn ( const char * sName, MysqlColumnType_e uType=MYSQL_COL_STRING ) = 0;

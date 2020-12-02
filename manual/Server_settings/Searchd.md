@@ -897,6 +897,7 @@ Per-keyword read buffer size. Optional, default is 256K
 For every keyword occurrence in every search query, there are two associated read buffers (one for document list and one for hit list). This setting lets you control their sizes, increasing per-query RAM use, but possibly decreasing IO time. Minimal value is 8K. Apart general size, you may also tune buffers for document lists and hit lists individually, using [read_buffer_docs](Server_settings/Searchd.md#read_buffer_docs)
 and [read_buffer_hits](Server_settings/Searchd.md#read_buffer_hits) params.
 
+Large values make sense in general for slow storage. For storage capable of high IOPS, experimenting should be done in the low values area.
 
 <!-- intro -->
 ##### Example:
@@ -942,7 +943,7 @@ This is same as [read_buffer](Server_settings/Searchd.md#read_buffer), but manag
 <!-- request Example -->
 
 ```ini
-read_buffer_hits = 100M
+read_buffer_hits = 128K
 ```
 <!-- end -->
 

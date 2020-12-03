@@ -1065,7 +1065,7 @@ private:
 		m_tWorkSet.m_dRowOffset.Resize ( iMemoryNeed );
 		m_tWorkSet.m_dRowOffset.Fill ( 0 );
 
-		int iLastId = 0;
+		DocID_t iLastId = 0;
 		MemoryReader_c tReader ( m_dDocid.Begin(), m_dDocid.GetLength() );
 
 		for ( int i=0; i<m_iTotal; i++ )

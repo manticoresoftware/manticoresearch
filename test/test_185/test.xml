@@ -143,6 +143,11 @@ index rt
 <sphinxql>select * from rt</sphinxql>
 <sphinxql>update rt set mva1=() where id=3</sphinxql>
 <sphinxql>select * from rt</sphinxql>
+
+<!-- regression update of documents with large doc-id  -->
+<sphinxql>insert into rt (id, gid, body) values (1332324836583669761, 100, 'v1'),(1332324836613029890, 200, 'v200')</sphinxql>
+<sphinxql>update rt set gid=0 where id in(1332324836583669761,1332324836613029890);</sphinxql>
+<sphinxql>select * from rt</sphinxql>
 </sphqueries>
 
   <DB_Create>

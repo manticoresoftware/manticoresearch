@@ -5989,6 +5989,7 @@ void HandleSysthreads ( RowBuffer_i & tOut );
 void HandleSched ( RowBuffer_i & tOut );
 void HandleMysqlDescribe ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
+void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 
 bool SearchHandler_c::ParseSysVar ()
 {
@@ -6062,6 +6063,8 @@ bool SearchHandler_c::ParseIdxSubkeys ()
 			fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleMysqlDescribe ( *pBuf, m_pStmt ); };
 		else if ( dSubkeys[0]==".status" ) // select .. idx.status
 			fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleSelectIndexStatus ( *pBuf, m_pStmt ); };
+		else if ( dSubkeys[0]==".files" ) // select .. from idx.files
+			fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleSelectFiles ( *pBuf, m_pStmt ); };
 		else
 			bValid = false;
 
@@ -13304,6 +13307,51 @@ void HandleMysqlfiles ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 	}
 
 	tOut.DataTable ( dOut );
+}
+
+// same for select ... from index.files
+void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
+{
+	const auto & tStmt = *pStmt;
+	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ));
+	if ( !ServedDesc_t::IsLocal ( pServed ) )
+	{
+		tOut.Error ( tStmt.m_sStmt, "FILES requires an existing local index" );
+		return;
+	}
+
+	tOut.HeadBegin ( 2 );
+	tOut.HeadColumn ( "file" );
+	tOut.HeadColumn ( "size", MYSQL_COL_LONGLONG );
+	if ( !tOut.HeadEnd () )
+		return;
+
+	StrVec_t dFiles;
+	StrVec_t dExt;
+	pServed->m_pIndex->CollectFiles ( dFiles, dExt );
+
+	auto sFormat = pStmt->m_sThreadFormat;
+	if ( sFormat!="external" )
+		ARRAY_CONSTFOREACH( i, dFiles )
+		{
+			tOut.PutString ( dFiles[i].cstr () );
+			tOut.PutNumAsString ( sphGetFileSize ( dFiles[i], nullptr ) );
+			if ( !tOut.Commit () )
+				return;
+		}
+
+	if ( sFormat=="all" || sFormat=="external" )
+	{
+		dExt.Uniq ();
+		ARRAY_CONSTFOREACH( i, dExt )
+		{
+			tOut.PutString ( dExt[i].cstr () );
+			tOut.PutNumAsString ( sphGetFileSize ( dExt[i], nullptr ) );
+			if ( !tOut.Commit () )
+				return;
+		}
+	}
+	tOut.Eof();
 }
 
 void HandleShutdownCrash ( RowBuffer_i & tOut, const CSphString & sPasswd, DebugCmd::Cmd_e eCmd )

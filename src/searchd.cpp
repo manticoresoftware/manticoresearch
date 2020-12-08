@@ -5023,6 +5023,7 @@ private:
 
 private:
 	bool							ParseSysVar();
+	bool							ParseIdxSubkeys();
 	bool							CheckMultiQuery() const;
 	bool							RLockInvokedIndexes();
 	void							UniqLocals ( VecTraits_T<LocalIndex_t>& dLocals );
@@ -5986,6 +5987,7 @@ void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleTasks ( RowBuffer_i & tOut );
 void HandleSysthreads ( RowBuffer_i & tOut );
 void HandleSched ( RowBuffer_i & tOut );
+void HandleMysqlDescribe ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 
 bool SearchHandler_c::ParseSysVar ()
 {
@@ -6044,6 +6046,35 @@ bool SearchHandler_c::ParseSysVar ()
 			[&sN] ( AggrResult_t & r ) { r.m_sError.SetSprintf ( "no such variable %s", sN.cstr () ); } );
 	return false;
 }
+
+bool SearchHandler_c::ParseIdxSubkeys ()
+{
+	const auto & sVar = m_dLocal.First ().m_sName;
+	const auto & dSubkeys = m_dNQueries.First ().m_dStringSubkeys;
+
+	if ( !dSubkeys.IsEmpty () )
+	{
+		ServedIndex_c * pIndex = nullptr;
+		bool bValid = true;
+		TableFeeder_fn fnFeed;
+		if ( dSubkeys[0]==".table" ) // select .. idx.table
+			fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleMysqlDescribe ( *pBuf, m_pStmt ); };
+		else
+			bValid = false;
+
+		if ( bValid )
+		{
+			m_dLocal.First ().m_sName.SetSprintf ( "%s%s", sVar.cstr (), dSubkeys[0].cstr () );
+			pIndex = MakeDynamicIndex ( std::move ( fnFeed ) );
+
+			m_dLocked.AddRLocked ( m_dLocal.First ().m_sName, pIndex );
+			SafeRelease ( pIndex );
+			return true;
+		}
+	}
+	return false;
+}
+
 ////////////////////////////////////////////////////////////////
 // check for single-query, multi-queue optimization possibility
 ////////////////////////////////////////////////////////////////
@@ -6508,7 +6539,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		if ( !tFirst.m_dStringSubkeys.IsEmpty () )
 		{
 			// if apply subkeys ... else return
-			return;
+			if ( !ParseIdxSubkeys () )
+				return;
 		} else if ( !RLockInvokedIndexes () ) // usual query processing
 			return;
 	} else
@@ -11082,8 +11114,9 @@ void DescribeDistributedSchema ( VectorLike& dOut, DistributedIndex_t* pDistr )
 }
 
 
-void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
+void HandleMysqlDescribe ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
+	auto & tStmt = *pStmt;
 	VectorLike dOut ( tStmt.m_sStringParam, 0 );
 
 	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
@@ -15122,7 +15155,7 @@ public:
 			return true;
 
 		case STMT_DESCRIBE:
-			HandleMysqlDescribe ( tOut, *pStmt );
+			HandleMysqlDescribe ( tOut, pStmt );
 			return true;
 
 		case STMT_SHOW_TABLES:

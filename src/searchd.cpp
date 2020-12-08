@@ -5982,6 +5982,7 @@ static uint64_t GetIndexMass ( const CSphString & sName )
 
 // declared to be used in ParseSysVar
 void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
+void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 
 bool SearchHandler_c::ParseSysVar ()
 {
@@ -6001,6 +6002,10 @@ bool SearchHandler_c::ParseSysVar ()
 					m_pStmt->m_sThreadFormat="all";
 
 				fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleMysqlShowThreads ( *pBuf, m_pStmt ); };
+			}
+			else if ( dSubkeys[0]==".tables" ) // select .. from @@system.tables
+			{
+				fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleMysqlShowTables ( *pBuf, m_pStmt ); };
 			}
 			else
 				bValid = false;
@@ -11103,7 +11108,7 @@ void HandleMysqlDescribe ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 }
 
 
-void HandleMysqlShowTables ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
+void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
 	// 0 local, 1 distributed, 2 rt, 3 template, 4 percolate, 5 unknown
 	static const char* sTypes[] = {"local", "distributed", "rt", "template", "percolate", "unknown"};
@@ -11142,7 +11147,7 @@ void HandleMysqlShowTables ( RowBuffer_i & tOut, SqlStmt_t & tStmt )
 			{ return strcasecmp ( a.first.cstr (), b.first.cstr () )<0; }));
 
 	// output the results
-	VectorLike dTable ( tStmt.m_sStringParam, { "Index", "Type" } );
+	VectorLike dTable ( pStmt->m_sStringParam, { "Index", "Type" } );
 	for ( auto& dPair : dIndexes )
 		dTable.MatchTuplet( dPair.first.cstr (), sTypes[dPair.second] );
 	tOut.DataTable ( dTable );
@@ -15099,7 +15104,7 @@ public:
 			return true;
 
 		case STMT_SHOW_TABLES:
-			HandleMysqlShowTables ( tOut, *pStmt );
+			HandleMysqlShowTables ( tOut, pStmt );
 			return true;
 
 		case STMT_CREATE_TABLE:

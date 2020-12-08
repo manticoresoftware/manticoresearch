@@ -136,9 +136,22 @@ if ( NOT SPH_GIT_COMMIT_ID )
 	guess_from_dir_name ("${SOURCE_DIR}")
 endif ()
 
+if (NOT SPH_GIT_COMMIT_ID)
+	set(DEVMODE "$ENV{DEVMODE}")
+	if ( DEVMODE )
+		message(STATUS "Dev mode, no guess, using predefined version")
+		set(VERNUMBERS "0.0.1")
+		set(GIT_TIMESTAMP_ID "202020")
+		set(SPH_GIT_COMMIT_ID "DEADBEEF")
+		set(SPHINX_TAG "devmode")
+		set(GIT_BRANCH_ID "fake head from devmode")
+		set(SOURCE_DATE_EPOCH "1607089638")
+	endif ()
+endif ()
+
 # nothing found, bail with error
 if ( NOT SPH_GIT_COMMIT_ID )
-	message(FATAL_ERROR "Git not found, or the sources are not git clone, or not located in the folder originally unpacked from tarball, or not contain pre-created sphinxversion.h header. Please, put this file to your src/ folder manually.")
+	message(FATAL_ERROR "Git not found, or the sources are not git clone, or not located in the folder originally unpacked from tarball, or not contain pre-created sphinxversion.h header. Please, put this file to your src/ folder manually. Devmode=${DEVMODE}")
 endif ()
 
 # extract version number string from sphinxversion.h.in
@@ -172,5 +185,3 @@ if ( NEED_NEWFILE )
 else()
 	message ( STATUS "Version not changed: ${VERNUMBERS} ${SPH_GIT_COMMIT_ID}@${GIT_TIMESTAMP_ID}, ${GIT_BRANCH_ID}" )
 endif()
-
-

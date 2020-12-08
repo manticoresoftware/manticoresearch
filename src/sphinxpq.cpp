@@ -2004,6 +2004,9 @@ bool PercolateIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery & 
 	bool bRandomize = dSorters[0]->m_bRandomize;
 
 	CSphMatch tMatch;
+	// note: we reserve dynamic area in match using max sorter schema, but then fill it by locators from index schema.
+	// that works relying that sorter always includes all attrs from index, leaving final selection of cols
+	// to result minimizer. Once we try to pre-optimize sorter schema by select list, it will cause crashes here.
 	tMatch.Reset ( tMaxSorterSchema.GetDynamicSize () );
 	tMatch.m_iWeight = tArgs.m_iIndexWeight;
 	// fixme! tag also used over bitmask | 0x80000000,

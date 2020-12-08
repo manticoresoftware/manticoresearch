@@ -13172,7 +13172,7 @@ void HandleMysqlfiles ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 	tOut.DataTable ( dOut );
 }
 
-void HandleShurdownCrash ( RowBuffer_i & tOut, const CSphString & sPasswd, DebugCmd::Cmd_e eCmd )
+void HandleShutdownCrash ( RowBuffer_i & tOut, const CSphString & sPasswd, DebugCmd::Cmd_e eCmd )
 {
 	const char * szCmd = DebugCmd::dCommands[(BYTE) eCmd].m_szExample;
 	if ( g_sShutdownToken.IsEmpty () )
@@ -13388,7 +13388,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand )
 		switch ( tCmd.m_eCommand )
 		{
 		case Cmd_e::SHUTDOWN:
-		case Cmd_e::CRASH: HandleShurdownCrash ( tOut, tCmd.m_sParam, tCmd.m_eCommand ); return;
+		case Cmd_e::CRASH: HandleShutdownCrash ( tOut, tCmd.m_sParam, tCmd.m_eCommand ); return;
 #if !USE_WINDOWS
 		case Cmd_e::PROCDUMP: HandleProcDump ( tOut ); return;
 		case Cmd_e::SETGDB: HandleSetGdb ( tOut, tCmd.m_iPar1!=0 ); return;

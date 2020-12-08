@@ -322,6 +322,145 @@ public:
 	void Add ( BYTE ) override {}
 };
 
+// feed schema only and skip all the data
+class FeederSchema_c : public RowBuffer_i
+{
+	CSphSchema* 	m_pSchema = nullptr;
+	CSphMatch*		m_pMatch = nullptr;
+	Resumer_fn		m_fnCoro;
+	bool 			m_bCoroFinished = false;
+	bool			m_bHaveMoreMatches = true;
+
+	int				m_iCurMatch = 1;
+
+	bool CallCoro()
+	{
+		if ( !m_bCoroFinished )
+			m_bCoroFinished = m_fnCoro ();
+		return m_bCoroFinished;
+	}
+
+	void PutString ( int iCol, const char * sMsg )
+	{
+		if ( !m_pMatch )
+			return;
+		int iLen = ( sMsg && *sMsg ) ? (int) strlen ( sMsg ) : 0;
+
+		if ( !sMsg )
+			sMsg = "";
+
+		BYTE * pData = nullptr;
+		m_pMatch->SetAttr ( m_pSchema->GetAttr ( iCol ).m_tLocator, (SphAttr_t) sphPackPtrAttr ( iLen, &pData ) );
+		memcpy ( pData, sMsg, iLen );
+	}
+
+public:
+	explicit FeederSchema_c ( TableFeeder_fn fnFeed )
+	{
+		m_fnCoro = MakeCoroExecutor ( [this, fnFeed = std::move ( fnFeed )] () { fnFeed ( this ); } );
+	}
+
+	~FeederSchema_c() override
+	{
+		while ( !m_bCoroFinished )
+			CallCoro ();
+	}
+
+	// collecting schema
+	void SetSchema ( CSphSchema * pSchema )
+	{
+		m_pSchema = pSchema;
+		m_pSchema->AddAttr ( CSphColumnInfo ( sphGetDocidName (), SPH_ATTR_BIGINT ), true );
+		m_pSchema->AddAttr ( CSphColumnInfo ( "Field", SPH_ATTR_STRINGPTR ), true );
+		m_pSchema->AddAttr ( CSphColumnInfo ( "Type", SPH_ATTR_STRINGPTR ), true );
+		m_pSchema->AddAttr ( CSphColumnInfo ( "Properties", SPH_ATTR_STRINGPTR ), true );
+	}
+
+	// set upstream match
+	void SetSorterStuff ( CSphMatch * pMatch )
+	{
+		m_pMatch = pMatch;
+	}
+
+	bool FillNextMatch()
+	{
+		if ( m_bHaveMoreMatches )
+			CallCoro ();
+
+		return m_bHaveMoreMatches;
+	}
+
+public:
+	void HeadBegin ( int ) override {}
+
+	// add the next column.
+	void HeadColumn ( const char * sName, MysqlColumnType_e uType ) override
+	{
+		if ( !m_pSchema )
+			return;
+
+		if ( !m_pMatch )
+			return;
+
+		// docid
+		m_pMatch->SetAttr ( m_pSchema->GetAttr ( 0 ).m_tLocator, m_iCurMatch );
+		++m_iCurMatch;
+
+		PutString ( 1, sName );
+		switch ( uType )
+		{
+			case MYSQL_COL_LONGLONG :
+				PutString ( 2, "bigint" );
+				break;
+			case MYSQL_COL_LONG :
+				PutString ( 2, "uint" );
+				break;
+			case MYSQL_COL_FLOAT :
+				PutString ( 2, "float" );
+				break;
+			default:
+				PutString ( 2, "string" );
+				break;
+		}
+		PutString ( 3, "" );
+
+		CoYield ();
+	}
+
+	bool HeadEnd ( bool bMoreResults, int iWarns ) override
+	{
+		if ( !m_pSchema )
+		{
+			assert (false && "dynamic table invoked without parent schema");
+			return false;
+		}
+
+		// fixme!
+		m_bHaveMoreMatches = false;
+		m_pMatch = nullptr; // that should stop any further feeding
+		CoYield();
+		return false;
+	}
+
+	// match constructing routines (empty for schema only)
+	void PutFloatAsString ( float fVal, const char * sFormat ) override {}
+	void PutPercentAsString ( int64_t iVal, int64_t iBase ) override {}
+	void PutNumAsString ( int64_t iVal ) override {}
+	void PutNumAsString ( uint64_t uVal ) override {}
+	void PutNumAsString ( int iVal ) override {}
+	void PutNumAsString ( DWORD uVal ) override {}
+	void PutArray ( const void * pBlob, int iLen, bool bSendEmpty ) override {}
+	void PutString ( const char * sMsg, int iMaxLen ) override {}
+	void PutMicrosec ( int64_t iUsec ) override {}
+	void PutNULL () override {}
+	bool Commit() override { return false;}
+	void Eof ( bool bMoreResults, int iWarns ) override {}
+	void Error ( const char *, const char *, MysqlErrors_e ) override {}
+	void Ok ( int, int, const char *, bool, int64_t ) override {}
+	void Add ( BYTE ) override {}
+};
+
+
 inline const ServedDesc_t& StaticDesc()
 {
 	static ServedDesc_t tValue;
@@ -612,8 +751,54 @@ bool DynamicIndex_c::FillNextMatch () const
 	return m_tFeeder.FillNextMatch();
 }
 
+///////////////
+/// Index for schema data flow
+class DynamicIndexSchema_c : public GenericTableIndex_c
+{
+	mutable FeederSchema_c		m_tFeeder;
+	mutable bool m_bSchemaCreated = false;
+
+public:
+	explicit DynamicIndexSchema_c ( TableFeeder_fn fnFeed)
+		: m_tFeeder ( std::move ( fnFeed ) )
+	{}
+
+	const CSphSchema & GetMatchSchema () const final;
+
+private:
+	void SetSorterStuff ( CSphMatch * pMatch ) const final;
+	bool FillNextMatch () const final;
+};
+
+
+const CSphSchema & DynamicIndexSchema_c::GetMatchSchema () const
+{
+	if ( !m_bSchemaCreated )
+	{
+		m_tFeeder.SetSchema ( const_cast<CSphSchema *> (&m_tSchema) );
+		m_bSchemaCreated = true;
+	}
+	return m_tSchema;
+}
+
+void DynamicIndexSchema_c::SetSorterStuff ( CSphMatch * pMatch ) const
+{
+	assert ( m_bSchemaCreated );
+	m_tFeeder.SetSorterStuff(pMatch);
+}
+
+bool DynamicIndexSchema_c::FillNextMatch () const
+{
+	return m_tFeeder.FillNextMatch();
+}
+
 /// external functions
 ServedIndex_c * MakeDynamicIndex ( TableFeeder_fn fnFeed )
 {
 	return new DynamicIndex_c ( std::move ( fnFeed ) );
+}
+
+ServedIndex_c * MakeDynamicIndexSchema ( TableFeeder_fn fnFeed )
+{
+	return new DynamicIndexSchema_c ( std::move ( fnFeed ) );
 }

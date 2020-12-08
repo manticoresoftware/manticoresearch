@@ -12414,11 +12414,13 @@ void HandleMysqlStatus ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, bool bMor
 	}
 
 	// result set header packet
-	dRows.HeadOfStrings ( dStatus.Header() );
+	if (!dRows.HeadOfStrings ( dStatus.Header() ))
+		return;
 
 	// send rows
 	for ( int iRow=0; iRow<dStatus.GetLength(); iRow+=2 )
-		dRows.DataTuplet ( dStatus[iRow+0].cstr(), dStatus[iRow+1].cstr() );
+		if ( !dRows.DataTuplet ( dStatus[iRow+0].cstr (), dStatus[iRow+1].cstr () ) )
+			return;
 
 	// cleanup
 	dRows.Eof ( bMoreResultsFollow );
@@ -12432,11 +12434,13 @@ void HandleMysqlMeta ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, const CSphQ
 	BuildMeta ( dMeta, tLastMeta );
 
 	// result set header packet
-	dRows.HeadOfStrings ( dMeta.Header() );
+	if ( !dRows.HeadOfStrings ( dMeta.Header () ) )
+		return;
 
 	// send rows
 	for ( int iRow=0; iRow<dMeta.GetLength(); iRow+=2 )
-		dRows.DataTuplet ( dMeta[iRow+0].cstr (), dMeta[iRow+1].cstr() );
+		if ( !dRows.DataTuplet ( dMeta[iRow+0].cstr (), dMeta[iRow+1].cstr () ) )
+			return;
 
 	// cleanup
 	dRows.Eof ( bMoreResultsFollow );
@@ -14043,9 +14047,10 @@ static void AddIndexQueryStats ( VectorLike & dStatus, const ServedStats_c * pSt
 
 static void AddFederatedIndexStatus ( const CSphSourceStats & tStats, const CSphString & sName, RowBuffer_i & tOut )
 {
-	tOut.HeadOfStrings ( { "Name", "Engine", "Version", "Row_format", "Rows", "Avg_row_length", "Data_length",
+	if (!tOut.HeadOfStrings ( { "Name", "Engine", "Version", "Row_format", "Rows", "Avg_row_length", "Data_length",
 		"Max_data_length", "Index_length", "Data_free",	"Auto_increment", "Create_time", "Update_time", "Check_time",
-		"Collation", "Checksum", "Create_options", "Comment" } );
+		"Collation", "Checksum", "Create_options", "Comment" } ))
+		return;
 
 	tOut.PutString ( sName );	// Name
 	tOut.PutString ( "InnoDB" );		// Engine
@@ -14300,7 +14305,8 @@ void HandleMysqlShowIndexSettings ( RowBuffer_i & tOut, const SqlStmt_t & tStmt 
 		return;
 	}
 
-	tOut.HeadOfStrings ( { "Variable_name", "Value" } );
+	if (!tOut.HeadOfStrings ( { "Variable_name", "Value" } ))
+		return;
 
 	StringBuilder_c tBuf;
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder ( pIndex->GetName() ) );

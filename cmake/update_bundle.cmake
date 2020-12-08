@@ -263,13 +263,23 @@ function(PROVIDE LIB LIB_GITHUB LIB_TARBALL)
 
 	# get source tarball, if WRITEB is in action
 	populate (LIB_PLACE ${LIB} "${LIBS_BUNDLE}/${LIB_TARBALL}" "${LIB_GITHUB}")
-	get_buildd(LIB_BUILD ${SLIB})
 	get_srcpath(LIB_SRC ${SLIB})
 
-	# check for cached lib
-	if (HAVE_BBUILD)
-		find_lib_build (${LIB} ${LIB_SRC} ${LIB_BUILD})
-		return_if_found(${LIB} "found in cache")
+	# check if user wants to try cached sources, but build them in-tree (to use custom config keys, etc)
+	if (WITH_${LIB}_FORCE_BUILD)
+		# force get_buildd to find no cache for building
+		unset (__OLD_BBUILD)
+		set(__OLD_BBUILD ${HAVE_BBUILD})
+		set(HAVE_BBUILD FALSE)
+		get_buildd(LIB_BUILD ${SLIB})
+		set(HAVE_BBUILD ${__OLD_BBUILD})
+	else()
+		# check for cached lib
+		get_buildd(LIB_BUILD ${SLIB})
+		if (HAVE_BBUILD )
+			find_lib_build (${LIB} ${LIB_SRC} ${LIB_BUILD})
+			return_if_found(${LIB} "found in cache")
+		endif()
 	endif()
 
 	# check in-tree sources

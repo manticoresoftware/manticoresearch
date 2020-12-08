@@ -190,6 +190,7 @@ private:
 	void			AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
 	bool			CheckInteger ( const CSphString & sOpt, const CSphString & sVal ) const;
 	bool			CheckOption ( Option_e eOption ) const;
+	SqlStmt_e		GetSecondaryStmt () const;
 };
 
 
@@ -401,9 +402,9 @@ static Option_e ParseOption ( const CSphString& sOpt )
 	return ( pCol ? *pCol : Option_e::INVALID_OPTION );
 }
 
-
-bool SqlParser_c::CheckOption ( Option_e eOption ) const
+bool CheckOption ( SqlStmt_e eStmt, Option_e eOption )
 {
+	// trick! following vectors must be sorted, as BinarySearch used to determine presence of a value.
 	static Option_e dDeleteOptions[] = { Option_e::STORE };
 
 	static Option_e dUpdateOptions[] = { Option_e::AGENT_QUERY_TIMEOUT, Option_e::BOOLEAN_SIMPLIFY, Option_e::COMMENT,
@@ -431,8 +432,7 @@ bool SqlParser_c::CheckOption ( Option_e eOption ) const
 
 #define CHKOPT( _set, _val ) VecTraits_T<Option_e> (_set, sizeof(_set)).BinarySearch (_val)!=nullptr
 
-	assert ( m_pStmt );
-	switch ( m_pStmt->m_eStmt )
+	switch ( eStmt )
 	{
 	case STMT_DELETE:
 		return CHKOPT( dDeleteOptions, eOption );
@@ -453,6 +453,30 @@ bool SqlParser_c::CheckOption ( Option_e eOption ) const
 		return false;
 	}
 #undef CHKOPT
+}
+
+// if query is special, like 'select .. from @@system.threads', it can adopt options for 'show threads' also,
+// so, provide stmt for extended validation of the option in this case.
+SqlStmt_e SqlParser_c::GetSecondaryStmt () const
+{
+	if ( m_pQuery->m_dStringSubkeys.any_of ([] (const CSphString& s) { return s==".threads"; }))
+		return STMT_SHOW_THREADS;
+
+	return STMT_PARSE_ERROR;
+}
+
+bool SqlParser_c::CheckOption ( Option_e eOption ) const
+{
+	assert ( m_pStmt );
+	auto bRes = ::CheckOption ( m_pStmt->m_eStmt, eOption );
+
+	if ( bRes )
+		return true;
+
+	if ( m_pStmt->m_eStmt!=STMT_SELECT )
+		return false;
+
+	return ::CheckOption ( GetSecondaryStmt(), eOption );
 }
 
 

@@ -49,6 +49,7 @@
 #include "taskflushmutable.h"
 #include "taskpreread.h"
 #include "coroutine.h"
+#include "dynamic_idx.h"
 
 extern "C"
 {
@@ -4943,6 +4944,7 @@ class LockedCollection_c : public ISphNoncopyable
 public:
 	~LockedCollection_c();
 	bool AddRLocked ( const CSphString &sName );
+	void AddRLocked ( const CSphString & sName, const ServedIndex_c * pIdx ) ;
 	void AddUnmanaged ( const CSphString &sName, const ServedDesc_t * pIdx );
 
 	const ServedDesc_t * Get ( const CSphString &sName ) const;
@@ -4981,6 +4983,7 @@ public:
 	CSphVector<CSphVector<int64_t>>	m_dAgentTimes;					///< per-agent time stats
 	LockedCollection_c				m_dLocked;						/// locked indexes
 	CSphFixedVector<ISphTableFunc *>	m_dTables;
+	SqlStmt_t *						m_pStmt = nullptr;				///< original (one) statement to take extra options
 
 protected:
 	void							RunSubset ( int iStart, int iEnd );	///< run queries against index(es) from first query in the subset
@@ -5019,6 +5022,7 @@ private:
 	VecTraits_T<SearchFailuresLog_c>	m_dNFailuresSet;	///< working subset of failures
 
 private:
+	bool							ParseSysVar();
 	bool							CheckMultiQuery() const;
 	bool							RLockInvokedIndexes();
 	void							UniqLocals ( VecTraits_T<LocalIndex_t>& dLocals );
@@ -5195,6 +5199,14 @@ bool LockedCollection_c::AddRLocked ( const CSphString & sName )
 
 	m_hUsed.Add ( new ServedDescRPtr_c ( pServed ), sName );
 	return true;
+}
+
+void LockedCollection_c::AddRLocked ( const CSphString & sName, const ServedIndex_c * pIdx )
+{
+	if ( m_hUsed.Exists ( sName ) || m_hUnmanaged.Exists ( sName ))
+		return;
+
+	m_hUsed.Add ( new ServedDescRPtr_c ( pIdx ), sName );
 }
 
 void LockedCollection_c::AddUnmanaged ( const CSphString &sName, const ServedDesc_t * pIdx )
@@ -5968,6 +5980,50 @@ static uint64_t GetIndexMass ( const CSphString & sName )
 	return ServedDesc_t::GetIndexMass ( ServedDescRPtr_c ( GetServed ( sName ) ) );
 }
 
+// declared to be used in ParseSysVar
+void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
+
+bool SearchHandler_c::ParseSysVar ()
+{
+	const auto& sVar = m_dLocal.First().m_sName;
+	const auto & dSubkeys = m_dNQueries.First ().m_dStringSubkeys;
+
+	if ( sVar=="@@system" )
+	{
+		if ( !dSubkeys.IsEmpty () )
+		{
+			ServedIndex_c * pIndex = nullptr;
+			bool bValid = true;
+			TableFeeder_fn fnFeed;
+			if ( dSubkeys[0]==".threads" ) // select .. from @@system.threads
+			{
+				if ( m_pStmt->m_sThreadFormat.IsEmpty() ) // override format to show all columns by default
+					m_pStmt->m_sThreadFormat="all";
+
+				fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleMysqlShowThreads ( *pBuf, m_pStmt ); };
+			}
+			else
+				bValid = false;
+
+			if ( bValid )
+			{
+				m_dLocal.First ().m_sName.SetSprintf ( "@@system.%s", dSubkeys[0].cstr () );
+				pIndex = MakeDynamicIndex ( std::move ( fnFeed ) );
+
+				m_dLocked.AddRLocked ( m_dLocal.First ().m_sName, pIndex );
+				SafeRelease ( pIndex );
+				return true;
+			}
+		}
+	}
+
+	StringBuilder_c sN;
+	sN << sVar;
+	dSubkeys.for_each ( [&sN] ( CSphString & sVal ) { sN << sVal; } );
+	m_dNAggrResults.for_each (
+			[&sN] ( AggrResult_t & r ) { r.m_sError.SetSprintf ( "no such variable %s", sN.cstr () ); } );
+	return false;
+}
 ////////////////////////////////////////////////////////////////
 // check for single-query, multi-queue optimization possibility
 ////////////////////////////////////////////////////////////////
@@ -6279,7 +6335,10 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 
 	// search through specified local indexes
 	StrVec_t dIdxNames;
-	ParseIndexList ( tQuery.m_sIndexes, dIdxNames );
+	if ( bSysVar )
+		dIdxNames.Add ( tQuery.m_sIndexes );
+	else
+		ParseIndexList ( tQuery.m_sIndexes, dIdxNames );
 
 	const int iQueries = m_dNQueries.GetLength ();
 	CSphVector<LocalIndex_t> dLocals;
@@ -6354,7 +6413,7 @@ bool SearchHandler_c::BuildIndexList ( int & iDivideLimits, VecRefPtrsAgentConn_
 		UniqLocals ( dLocals );
 	else
 		m_dLocal.SwapData ( dLocals );
-	return bSysVar;
+	return !bSysVar;
 }
 
 // query info - render query into the view
@@ -6422,10 +6481,23 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	VecRefPtrsAgentConn_t dRemotes;
 	CSphVector<DistrServedByAgent_t> dDistrServedByAgent;
 	int iDivideLimits = 1;
-	BuildIndexList ( iDivideLimits, dRemotes, dDistrServedByAgent );
 
-	if ( !RLockInvokedIndexes () )
-		return;
+	if ( BuildIndexList ( iDivideLimits, dRemotes, dDistrServedByAgent ) )
+	{
+		// process query to meta, as myindex.status, etc.
+		if ( !tFirst.m_dStringSubkeys.IsEmpty () )
+		{
+			// if apply subkeys ... else return
+			return;
+		} else if ( !RLockInvokedIndexes () ) // usual query processing
+			return;
+	} else
+	{
+		// process query to @@*, as @@system.threads, etc.
+		if ( !ParseSysVar () )
+			return;
+		// here we deal
+	}
 
 	// at this point m_dLocal contains list of valid local indexes (i.e., existing ones),
 	// and these indexes are also rlocked and available by calling m_dLocked.Get()
@@ -11391,20 +11463,20 @@ static std::pair<const char *, int> FormatInfo ( const PublicThreadDesc_t & tThd
 		return { tThd.m_sDescription.cstr (), tThd.m_sDescription.GetLength () };
 }
 
-void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
+void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
 	tOut.HeadBegin ( 14 ); // 15 with chain
-	tOut.HeadColumn ( "Tid" );
+	tOut.HeadColumn ( "Tid", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "Name" );
 	tOut.HeadColumn ( "Proto" );
 	tOut.HeadColumn ( "State" );
 	tOut.HeadColumn ( "Host" );
-	tOut.HeadColumn ( "ConnID" );
-	tOut.HeadColumn ( "Time" );
+	tOut.HeadColumn ( "ConnID", MYSQL_COL_LONGLONG );
+	tOut.HeadColumn ( "Time", MYSQL_COL_FLOAT );
 	tOut.HeadColumn ( "Work time" );
 	tOut.HeadColumn ( "Work time CPU" );
-	tOut.HeadColumn ( "Thd efficiency");
-	tOut.HeadColumn ( "Jobs done" );
+	tOut.HeadColumn ( "Thd efficiency", MYSQL_COL_FLOAT);
+	tOut.HeadColumn ( "Jobs done", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "Last job took" );
 	tOut.HeadColumn ( "In idle" );
 //	tOut.HeadColumn ( "Chain" );
@@ -11415,15 +11487,21 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	QuotationEscapedBuilder tBuf;
 	ThreadInfoFormat_e eFmt = THD_FORMAT_NATIVE;
 	bool bAll = false;
-	if ( tStmt.m_sThreadFormat=="sphinxql" )
-		eFmt = THD_FORMAT_SPHINXQL;
-	else if ( tStmt.m_sThreadFormat=="all" )
-		bAll = true;
+	int iCols = -1;
+
+	if ( pStmt )
+	{
+		if ( pStmt->m_sThreadFormat=="sphinxql" )
+			eFmt = THD_FORMAT_SPHINXQL;
+		else if ( pStmt->m_sThreadFormat=="all" )
+			bAll = true;
+		iCols = pStmt->m_iThreadsCols;
+	}
 
 //	sphLogDebug ( "^^ Show threads. Current info is %p", GetTaskInfo () );
 
 	CSphSwapVector<PublicThreadDesc_t> dFinal;
-	Threads::IterateActive([&dFinal, iCols=tStmt.m_iThreadsCols] ( Threads::LowThreadDesc_t * pThread ){
+	Threads::IterateActive([&dFinal, iCols] ( Threads::LowThreadDesc_t * pThread ){
 		if ( pThread )
 			dFinal.Add ( GatherPublicTaskInfo ( pThread, iCols ) );
 	});
@@ -11460,7 +11538,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 
 //		tOut.PutString ( dThd.m_sChain.cstr () ); // Chain
 		auto tInfo = FormatInfo ( dThd, eFmt, tBuf );
-		tOut.PutString ( tInfo.first, Min ( tInfo.second, tStmt.m_iThreadsCols ) ); // Info m_pTaskInfo
+		tOut.PutString ( tInfo.first, Min ( tInfo.second, iCols ) ); // Info m_pTaskInfo
 		if ( !tOut.Commit () )
 			break;
 	}
@@ -14867,6 +14945,7 @@ public:
 				SearchHandler_c tHandler ( 1, sphCreatePlainQueryParser(), QUERY_SQL, true );
 				tHandler.SetQuery ( 0, dStmt.Begin()->m_tQuery, dStmt.Begin()->m_pTableFunc );
 				dStmt.Begin()->m_pTableFunc = nullptr;
+				tHandler.m_pStmt = pStmt;
 
 				if ( m_tVars.bProfile() )
 					tHandler.SetProfile ( &m_tProfile );
@@ -15179,7 +15258,7 @@ public:
 			return true;
 
 		case STMT_SHOW_THREADS:
-			HandleMysqlShowThreads ( tOut, *pStmt );
+			HandleMysqlShowThreads ( tOut, pStmt );
 			return true;
 
 		case STMT_ALTER_RECONFIGURE:

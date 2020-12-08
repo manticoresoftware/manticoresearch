@@ -5985,6 +5985,7 @@ void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleTasks ( RowBuffer_i & tOut );
 void HandleSysthreads ( RowBuffer_i & tOut );
+void HandleSched ( RowBuffer_i & tOut );
 
 bool SearchHandler_c::ParseSysVar ()
 {
@@ -6016,6 +6017,10 @@ bool SearchHandler_c::ParseSysVar ()
 			else if ( dSubkeys[0]==".systhreads" ) // select .. from @@system.systhreads
 			{
 				fnFeed = [] ( RowBuffer_i * pBuf ) { HandleSysthreads ( *pBuf ); };
+			}
+			else if ( dSubkeys[0]==".sched" ) // select .. from @@system.sched
+			{
+				fnFeed = [] ( RowBuffer_i * pBuf ) { HandleSched ( *pBuf ); };
 			}
 			else
 				bValid = false;
@@ -13463,13 +13468,15 @@ void HandleSysthreads ( RowBuffer_i & tOut )
 
 void HandleSched ( RowBuffer_i & tOut )
 {
-	tOut.HeadOfStrings ( { "Time rest", "Task" } );
+	if (!tOut.HeadOfStrings ( { "Time rest", "Task" } ))
+		return;
 	auto dTasks = TaskManager::GetSchedInfo ();
 	for ( auto& dTask : dTasks )
 	{
 		tOut.PutTimestampAsString ( dTask.m_iTimeoutStamp );
 		tOut.PutString ( dTask.m_sTask );
-		tOut.Commit ();
+		if (!tOut.Commit ())
+			return;
 	}
 	tOut.Eof ();
 }

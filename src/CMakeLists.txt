@@ -20,7 +20,7 @@ set ( LIBSPHINX_SRCS sphinx.cpp sphinxexcerpt.cpp
 		searchdexpr.cpp snippetfunctor.cpp snippetindex.cpp snippetstream.cpp
 		snippetpassage.cpp threadutils.cpp sphinxversion.cpp indexcheck.cpp
 		datareader.cpp indexformat.cpp indexsettings.cpp fileutils.cpp coroutine.cpp
-		threads_detached.cpp hazard_pointer.cpp task_info.cpp mini_timer.cpp collation.cpp fnv64.cpp)
+		threads_detached.cpp hazard_pointer.cpp task_info.cpp mini_timer.cpp collation.cpp fnv64.cpp dynamic_idx.cpp )
 set ( INDEXER_SRCS indexer.cpp )
 set ( INDEXTOOL_SRCS indextool.cpp )
 set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp
@@ -50,7 +50,7 @@ file ( GLOB HEADERS "sphinx*.h" )
 list ( APPEND HEADERS lz4/lz4.h lz4/lz4hc.h )
 list ( APPEND HEADERS http/http_parser.h )
 list ( APPEND HEADERS secondaryindex.h searchnode.h killlist.h attribute.h accumulator.h global_idf.h optional.h
-		event.h coroutine.h threadutils.h hazard_pointer.h task_info.h mini_timer.h collation.h fnv64.h)
+		event.h coroutine.h threadutils.h hazard_pointer.h task_info.h mini_timer.h collation.h fnv64.h dynamic_idx.h)
 file ( GLOB SEARCHD_H "searchd*.h" "task*.h" )
 list ( APPEND SEARCHD_H net_action_accept.h netreceive_api.h netreceive_http.h
 		netreceive_ql.h netstate_api.h networking_daemon.h optional.h query_status.h compressed_mysql.h sphinxql_debug.h)

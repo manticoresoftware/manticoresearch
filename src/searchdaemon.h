@@ -1378,7 +1378,7 @@ public:
 
 	virtual void PutFloatAsString ( float fVal, const char * sFormat=nullptr ) = 0;
 
-	void PutPercentAsString ( int64_t iVal, int64_t iBase )
+	virtual void PutPercentAsString ( int64_t iVal, int64_t iBase )
 	{
 		StringBuilder_c sTime;
 		if ( iBase )
@@ -1494,22 +1494,22 @@ public:
 	}
 
 	// popular pattern of 2 columns of data
-	void DataTuplet ( const char * pLeft, const char * pRight )
+	bool DataTuplet ( const char * pLeft, const char * pRight )
 	{
 		PutString ( pLeft );
 		PutString ( pRight );
-		Commit ();
+		return Commit ();
 	}
 
 	template <typename NUM>
-	void DataTuplet ( const char * pLeft, NUM tRight )
+	bool DataTuplet ( const char * pLeft, NUM tRight )
 	{
 		PutString ( pLeft );
 		PutNumAsString ( tRight );
-		Commit();
+		return Commit();
 	}
 
-	void DataTupletf ( const char * pLeft, const char * sFmt, ... )
+	bool DataTupletf ( const char * pLeft, const char * sFmt, ... )
 	{
 		StringBuilder_c sRight;
 		PutString ( pLeft );
@@ -1518,48 +1518,50 @@ public:
 		sRight.vSprintf ( sFmt, ap );
 		va_end ( ap );
 		PutString ( sRight.cstr() );
-		Commit();
+		return Commit();
 	}
 
 	// Fire he header for table with iSize string columns
-	void HeadOfStrings ( std::initializer_list<const char*> dNames )
+	bool HeadOfStrings ( std::initializer_list<const char*> dNames )
 	{
 		HeadBegin ( (int) dNames.size() );
 		for ( const char* szCol : dNames )
 			HeadColumn ( szCol );
-		HeadEnd ();
+		return HeadEnd ();
 	}
 
-	void HeadOfStrings ( const VecTraits_T<CSphString>& sNames )
+	bool HeadOfStrings ( const VecTraits_T<CSphString>& sNames )
 	{
 		HeadBegin ( (int) sNames.GetLength() );
 		for ( const auto& sName : sNames )
 			HeadColumn ( sName.cstr() );
-		HeadEnd ();
+		return HeadEnd ();
 	}
 
 	// table of 2 columns (we really often use them!)
-	void HeadTuplet ( const char * pLeft, const char * pRight )
+	bool HeadTuplet ( const char * pLeft, const char * pRight )
 	{
 		HeadBegin ( 2 );
 		HeadColumn ( pLeft );
 		HeadColumn ( pRight );
-		HeadEnd();
+		return HeadEnd();
 	}
 
-	void DataRow ( const VecTraits_T<CSphString>& dRow )
+	bool DataRow ( const VecTraits_T<CSphString>& dRow )
 	{
 		for ( const auto& dValue : dRow )
 			PutString ( dValue );
-		Commit();
+		return Commit();
 	}
 
 	void DataTable ( const VectorLike& dData )
 	{
-		HeadOfStrings ( dData.Header() );
+		if ( !HeadOfStrings ( dData.Header () ) )
+			return;
 		auto iStride = dData.Header().GetLength();
 		for ( int i=0, iLen = dData.GetLength(); i<iLen; i+=iStride )
-			DataRow ( dData.Slice ( i, iStride) );
+			if ( !DataRow ( dData.Slice ( i, iStride ) ) )
+				break;
 		Eof();
 	}
 };

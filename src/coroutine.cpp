@@ -358,6 +358,12 @@ public:
 		Threads::SetTopStack ( pOldStack );
 	}
 
+	// secondary context worker.
+	CoroWorker_c* MakeWorker ( Handler fnHandler ) const
+	{
+		return new CoroWorker_c ( myinfo::StickParent ( std::move ( fnHandler ) ), CurrentScheduler () );
+	}
+
 	void Restart ()
 	{
 		if (( m_tState.SetFlags ( CoroState_t::Entered_e ) & CoroState_t::Entered_e )==0 )
@@ -407,6 +413,20 @@ public:
 
 		m_pScheduler = pScheduler;
 		Reschedule();
+	}
+
+	bool Resume ()
+	{
+		{
+			CoroGuard_t pThis (this);
+			m_tCoroutine.Run();
+		}
+		if ( m_tCoroutine.IsFinished () )
+		{
+			delete this;
+			return true;
+		}
+		return false;
 	}
 
 	Handler SecondaryRestarter()
@@ -543,6 +563,17 @@ void CoYieldWith ( Handler fnHandler )
 void CoMoveTo ( Scheduler_i * pScheduler )
 {
 	CoWorker ()->MoveTo ( pScheduler );
+}
+
+void CoYield ()
+{
+	CoWorker ()->Yield_();
+}
+
+Resumer_fn MakeCoroExecutor ( Handler fnHandler )
+{
+	auto* pWorker = CoWorker ()->MakeWorker ( std::move ( fnHandler ) );
+	return [pWorker] () -> bool { return pWorker->Resume(); };
 }
 
 

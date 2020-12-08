@@ -82,6 +82,15 @@ void CoYieldWith ( Handler handler );
 // move coroutine to another scheduler
 void CoMoveTo ( Scheduler_i * pScheduler );
 
+// yield to external context
+void CoYield ();
+
+// create context and return resuming functor.
+// calling resumer will run handler until it finishes or yields.
+// returns flag of how coroutine interrupted: finished(true) or yielded(false)
+using Resumer_fn = std::function<bool()>;
+Resumer_fn MakeCoroExecutor (	Handler fnHandler );
+
 static const int tmDefaultThrotleTimeQuantumMs = 100; // default value, if nothing specified
 class CoThrottler_c
 {

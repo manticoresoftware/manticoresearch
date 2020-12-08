@@ -5988,6 +5988,7 @@ void HandleTasks ( RowBuffer_i & tOut );
 void HandleSysthreads ( RowBuffer_i & tOut );
 void HandleSched ( RowBuffer_i & tOut );
 void HandleMysqlDescribe ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
+void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 
 bool SearchHandler_c::ParseSysVar ()
 {
@@ -6059,6 +6060,8 @@ bool SearchHandler_c::ParseIdxSubkeys ()
 		TableFeeder_fn fnFeed;
 		if ( dSubkeys[0]==".table" ) // select .. idx.table
 			fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleMysqlDescribe ( *pBuf, m_pStmt ); };
+		else if ( dSubkeys[0]==".status" ) // select .. idx.status
+			fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleSelectIndexStatus ( *pBuf, m_pStmt ); };
 		else
 			bValid = false;
 
@@ -14143,6 +14146,74 @@ void HandleMysqlShowIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, b
 		AddDistibutedIndexStatus ( tOut, pIndex, bFederatedUser, tStmt.m_sIndex, tStmt.m_sStringParam );
 	else
 		tOut.Error ( tStmt.m_sStmt, "SHOW INDEX STATUS requires an existing index" );
+}
+
+void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
+{
+	const auto & tStmt = *pStmt;
+	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ));
+
+	if ( !pServed )
+	{
+		tOut.Error ( tStmt.m_sStmt, "select INDEX.status requires an existing index" );
+		return;
+	}
+
+	CSphIndex * pIndex = pServed->m_pIndex;
+	if ( !pIndex || !pIndex->IsRT ())
+	{
+		tOut.Error ( tStmt.m_sStmt, "select INDEX.status requires an existing index" );
+		return;
+	}
+
+	tOut.HeadBegin ( 13 );
+	tOut.HeadColumn ( "chunk", MYSQL_COL_LONG );
+	tOut.HeadColumn ( "base_name" );
+	tOut.HeadColumn ( "indexed_documents", MYSQL_COL_LONG );
+	tOut.HeadColumn ( "indexed_bytes", MYSQL_COL_LONGLONG );
+	tOut.HeadColumn ( "ram_bytes", MYSQL_COL_LONGLONG );
+	tOut.HeadColumn ( "disk_bytes", MYSQL_COL_LONGLONG );
+	tOut.HeadColumn ( "disk_mapped", MYSQL_COL_LONGLONG );
+	tOut.HeadColumn ( "disk_mapped_cached", MYSQL_COL_LONGLONG );
+	tOut.HeadColumn ( "disk_mapped_doclists", MYSQL_COL_LONGLONG );
+	tOut.HeadColumn ( "disk_mapped_cached_doclists", MYSQL_COL_LONGLONG );
+	tOut.HeadColumn ( "disk_mapped_hitlists", MYSQL_COL_LONGLONG );
+	tOut.HeadColumn ( "disk_mapped_cached_hitlists", MYSQL_COL_LONGLONG );
+	tOut.HeadColumn ( "killed_documents", MYSQL_COL_LONGLONG );
+	if ( !tOut.HeadEnd () )
+		return;
+
+	auto * pRtIndex = static_cast<RtIndex_i *>( pIndex );
+	int iChunk = 0;
+	while ( true )
+	{
+		auto * pChunk = pRtIndex->GetDiskChunk ( iChunk );
+		if ( !pChunk )
+			break;
+
+		tOut.PutNumAsString ( iChunk );
+		tOut.PutString ( pChunk->GetFilename() );
+
+		auto& tStats = pChunk->GetStats();
+		tOut.PutNumAsString ( tStats.m_iTotalDocuments );
+		tOut.PutNumAsString ( tStats.m_iTotalBytes );
+
+		CSphIndexStatus tStatus;
+		pChunk->GetStatus ( &tStatus );
+		tOut.PutNumAsString ( tStatus.m_iRamUse );
+		tOut.PutNumAsString ( tStatus.m_iDiskUse );
+		tOut.PutNumAsString ( tStatus.m_iMapped );
+		tOut.PutNumAsString ( tStatus.m_iMappedResident );
+		tOut.PutNumAsString ( tStatus.m_iMappedDocs );
+		tOut.PutNumAsString ( tStatus.m_iMappedResidentDocs );
+		tOut.PutNumAsString ( tStatus.m_iMappedHits );
+		tOut.PutNumAsString ( tStatus.m_iMappedResidentHits );
+		tOut.PutNumAsString ( tStatus.m_iDead );
+		if ( !tOut.Commit () )
+			break;
+		++iChunk;
+	}
+	tOut.Eof();
 }
 
 

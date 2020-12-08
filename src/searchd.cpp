@@ -5983,6 +5983,7 @@ static uint64_t GetIndexMass ( const CSphString & sName )
 // declared to be used in ParseSysVar
 void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
+void HandleTasks ( RowBuffer_i & tOut );
 
 bool SearchHandler_c::ParseSysVar ()
 {
@@ -6006,6 +6007,10 @@ bool SearchHandler_c::ParseSysVar ()
 			else if ( dSubkeys[0]==".tables" ) // select .. from @@system.tables
 			{
 				fnFeed = [this] ( RowBuffer_i * pBuf ) { HandleMysqlShowTables ( *pBuf, m_pStmt ); };
+			}
+			else if ( dSubkeys[0]==".tasks" ) // select .. from @@system.tasks
+			{
+				fnFeed = [] ( RowBuffer_i * pBuf ) { HandleTasks ( *pBuf ); };
 			}
 			else
 				bValid = false;
@@ -13387,8 +13392,9 @@ void HandleSleep ( RowBuffer_i & tOut, int64_t iParam )
 
 void HandleTasks ( RowBuffer_i & tOut )
 {
-	tOut.HeadOfStrings ( { "Name", "MaxRunners", "MaxQueue", "CurrentRunners", "TotalSpent", "LastFinished", "Executed",
-			"Dropped", "In Queue" } );
+	if (!tOut.HeadOfStrings ( { "Name", "MaxRunners", "MaxQueue", "CurrentRunners", "TotalSpent", "LastFinished", "Executed",
+			"Dropped", "In Queue" } ))
+		return;
 
 	auto dTasks = TaskManager::GetTaskInfo ();
 	for ( const auto & dTask : dTasks )
@@ -13415,7 +13421,8 @@ void HandleTasks ( RowBuffer_i & tOut )
 		tOut.PutNumAsString ( dTask.m_iTotalRun );
 		tOut.PutNumAsString ( dTask.m_iTotalDropped );
 		tOut.PutNumAsString ( dTask.m_inQueue );
-		tOut.Commit ();
+		if ( !tOut.Commit () )
+			return;
 	}
 	tOut.Eof ();
 }

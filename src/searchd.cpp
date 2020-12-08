@@ -6000,6 +6000,7 @@ bool SearchHandler_c::ParseSysVar ()
 	{
 		if ( !dSubkeys.IsEmpty () )
 		{
+			bool bSchema = ( dSubkeys.Last ()==".table" );
 			ServedIndex_c * pIndex = nullptr;
 			bool bValid = true;
 			TableFeeder_fn fnFeed;
@@ -6031,9 +6032,15 @@ bool SearchHandler_c::ParseSysVar ()
 
 			if ( bValid )
 			{
-				m_dLocal.First ().m_sName.SetSprintf ( "@@system.%s", dSubkeys[0].cstr () );
-				pIndex = MakeDynamicIndex ( std::move ( fnFeed ) );
+				if ( bSchema )
+				{
+					m_dLocal.First ().m_sName.SetSprintf( "@@system.%s.table", dSubkeys[0].cstr() );
+					pIndex = MakeDynamicIndexSchema ( std::move ( fnFeed ) );
 
+				} else {
+					m_dLocal.First ().m_sName.SetSprintf ( "@@system.%s", dSubkeys[0].cstr () );
+					pIndex = MakeDynamicIndex ( std::move ( fnFeed ) );
+				}
 				m_dLocked.AddRLocked ( m_dLocal.First ().m_sName, pIndex );
 				SafeRelease ( pIndex );
 				return true;
@@ -6056,6 +6063,7 @@ bool SearchHandler_c::ParseIdxSubkeys ()
 
 	if ( !dSubkeys.IsEmpty () )
 	{
+		bool bSchema = ( dSubkeys.GetLength()>1 && dSubkeys.Last ()==".table" );
 		ServedIndex_c * pIndex = nullptr;
 		bool bValid = true;
 		TableFeeder_fn fnFeed;
@@ -6070,8 +6078,15 @@ bool SearchHandler_c::ParseIdxSubkeys ()
 
 		if ( bValid )
 		{
-			m_dLocal.First ().m_sName.SetSprintf ( "%s%s", sVar.cstr (), dSubkeys[0].cstr () );
-			pIndex = MakeDynamicIndex ( std::move ( fnFeed ) );
+			if ( bSchema )
+			{
+				m_dLocal.First ().m_sName.SetSprintf ( "%s%s.table", sVar.cstr (), dSubkeys[0].cstr () );
+				pIndex = MakeDynamicIndexSchema ( std::move ( fnFeed ) );
+			} else
+			{
+				m_dLocal.First ().m_sName.SetSprintf ( "%s%s", sVar.cstr (), dSubkeys[0].cstr () );
+				pIndex = MakeDynamicIndex ( std::move ( fnFeed ) );
+			}
 
 			m_dLocked.AddRLocked ( m_dLocal.First ().m_sName, pIndex );
 			SafeRelease ( pIndex );

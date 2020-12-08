@@ -5984,6 +5984,7 @@ static uint64_t GetIndexMass ( const CSphString & sName )
 void HandleMysqlShowThreads ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleMysqlShowTables ( RowBuffer_i & tOut, const SqlStmt_t * pStmt );
 void HandleTasks ( RowBuffer_i & tOut );
+void HandleSysthreads ( RowBuffer_i & tOut );
 
 bool SearchHandler_c::ParseSysVar ()
 {
@@ -6011,6 +6012,10 @@ bool SearchHandler_c::ParseSysVar ()
 			else if ( dSubkeys[0]==".tasks" ) // select .. from @@system.tasks
 			{
 				fnFeed = [] ( RowBuffer_i * pBuf ) { HandleTasks ( *pBuf ); };
+			}
+			else if ( dSubkeys[0]==".systhreads" ) // select .. from @@system.systhreads
+			{
+				fnFeed = [] ( RowBuffer_i * pBuf ) { HandleSysthreads ( *pBuf ); };
 			}
 			else
 				bValid = false;
@@ -13429,8 +13434,10 @@ void HandleTasks ( RowBuffer_i & tOut )
 
 void HandleSysthreads ( RowBuffer_i & tOut )
 {
-	tOut.HeadOfStrings (
-		{"ID", "ThID", "Run time", "Load time", "Total ticks", "Jobs done", "Last job take", "Idle for" });
+	if (!tOut.HeadOfStrings (
+		{"ThID", "OSThID", "Run time", "Load time", "Total ticks", "Jobs done", "Last job take", "Idle for" }))
+		return;
+
 	auto dTasks = TaskManager::GetThreadsInfo ();
 	for ( auto& dTask : dTasks )
 	{
@@ -13448,7 +13455,8 @@ void HandleSysthreads ( RowBuffer_i & tOut )
 			tOut.PutString ( "0 (working)" );
 		else
 			tOut.PutTimestampAsString ( dTask.m_iLastJobDoneTime );
-		tOut.Commit ();
+		if (!tOut.Commit ())
+			return;
 	}
 	tOut.Eof ();
 }

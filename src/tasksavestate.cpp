@@ -285,7 +285,8 @@ static void SphinxqlStateThreadFunc ( void* )
 	// save uservars
 	/////////////////
 
-	IterateUservars ( [&dBuf,&tWriter] ( const NamedRefVectorPair_t &dVar )
+	// clang doesn't need iMaxString to capture, but win/gcc fails, if not.
+	IterateUservars ( [&dBuf,&tWriter,iMaxString] ( const NamedRefVectorPair_t &dVar )
 	{
 		if ( dVar.second.m_eType==USERVAR_INT_SET_TMP )
 			return;

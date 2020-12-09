@@ -36,6 +36,7 @@ SET ( CMAKE_MODULE_PATH "${MANTICORE_SOURCE_DIR}/cmake" )
 SET ( MANTICORE_MODULE_PATH "${CMAKE_MODULE_PATH}")
 SET ( EXTRA_LIBRARIES )
 SET ( EXTRA_SEARCHD_LIBRARIES )
+SET ( CMAKE_CXX_STANDARD 14 )
 
 option ( DISABLE_TESTING "Disable all testing (if you just build a distr)" OFF )
 
@@ -320,7 +321,6 @@ else ( WIN32 )
 		endif()
 
 		set ( MY_C_FLAGS "${CFLAGS}" )
-		set ( CMAKE_CXX_STANDARD 14 )
 		set ( MY_CXX_FLAGS "${CFLAGS} -fno-rtti" )
 
 		# eliminate also some too noisy warnings from CLang

@@ -1746,7 +1746,8 @@ int main ( int argc, char ** argv )
 		} else if ( strcasecmp ( argv[i], "--all" )==0 )
 		{
 			bIndexAll = true;
-
+		} else if ( strcasecmp ( argv[i], "--verbose" )==0 ) // just to prevent warning about unknow option
+		{
 		} else if ( isalnum ( argv[i][0] ) || argv[i][0]=='_' || sphIsWild ( argv[i][0] ) )
 		{
 			bool bHasWilds = false;
@@ -1786,7 +1787,7 @@ int main ( int argc, char ** argv )
 			}else{
 				break;
 			}
-		} else if ( strcasecmp ( argv[i], "--keep-attrs" )>=0 )
+		} else if ( strncasecmp ( argv[i], "--keep-attrs", 12 )==0 )
 		{
 			CSphString sArg ( argv[i] );
 			if ( sArg.Begins ( "--keep-attrs=" ) )

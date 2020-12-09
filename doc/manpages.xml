@@ -400,20 +400,6 @@ $ indexer mysmallindex mybigindex</programlisting>
             built.)</para>
           </listitem>
         </varlistentry>
-
-        <varlistentry>
-          <term><option>--verbose [debug|debugv|debugvv]</option></term>
-
-          <listitem>
-            <para>Guarantees that every row that caused problems indexing
-            (duplicate, zero, or missing document ID; or file field IO issues;
-            etc) will be reported. By default, this option is off, and problem
-            summaries may be reported instead.</para>
-
-          <para>Extra optional params (debug, debugv, debugvv) also switches debug
-          output from different parts of indexing process.</para>
-          </listitem>
-        </varlistentry>
       </variablelist>
       
     <varlistentry>

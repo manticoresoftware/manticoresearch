@@ -71,21 +71,21 @@ Please note that searchd core files can use a lot of space as they include data 
 
 ### Hanging
 
-In case Manticore is hanging for some reason and 
+In case Manticore is hanging for some reason and
 1) the instance is under watchdog (which is on by default)
 2) gdb is installed
-  
-Then: 
+
+Then:
 
 * either connect to the instance via mysql (vip or regular port) and issue `debug procdump`  
-* or manually send USR1 signal to **watchdog** of the hanging instance (not to the instance process itself)
+* or manually send USR2 signal to **watchdog** of the hanging instance (not to the instance process itself)
 * or manually run `gdb attach <PID_of_hanged>` and then these commands one by one:
   1. `info threads`
   2. `thread apply all bt`
   3. `bt`
   4. `info locals`
   5. `detach`
-  
+
 In the first 2 cases trace will be in the server's log. In the last (manual gdb) case it has to be copied from console output. These traces need to be attached, it will be very helpful for investigation.
 
 ### Uploading your data
@@ -152,7 +152,7 @@ mysql> debug token hello;
 ```
 
 Another debug subcommand `shutdown` will send a TERM signal to the server and so will make it shut down. Since it is quite dangerous (nobody wants accidentally stop a production service), it:
-1. needs a VIP connection, and 
+1. needs a VIP connection, and
 2. needs the password
 
 For the chosen password you need to generate a token with `debug token` subcommand, and put it into [shutdown_token](Server_settings/Searchd.md#shutdown_token) param of searchd section of the config file. If no such section exists, or if a hash of the provided password  does not match with the token stored in the config, the subcommand will do nothing. Otherwise it will cause 'clean' shutdown of the server.

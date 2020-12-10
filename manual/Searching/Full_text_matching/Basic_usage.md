@@ -1,5 +1,5 @@
 # MATCH
- 
+
 The `MATCH` clause allows to perform  full-text searches in text fields. The query string at input is [tokenized](Creating_an_index/NLP_and_tokenization/Data_tokenization.md) using same settings applied to the text during indexing. In addition to tokenization of input text, the query string supports a number of [full-text operators](Searching/Full_text_matching/Operators.md) that allow enforcing different rules on how keywords should provide a valid match.
 
 The full-text match clauses can be combined with attribute [filters](Searching/Filters.md) as an AND boolean. **OR relation between full-text matches and attribute filters are not supported**.
@@ -48,7 +48,7 @@ SELECT * FROM myindex WHERE MATCH('"find me fast"/2');
 
 <!-- example Example_11 -->
 
-Full-text matching is available in the `/search` endpoint. The following clauses can be used for performing full-text matches:
+Full-text matching is available in the `/search` endpoint and in HTTP-based clients. The following clauses can be used for performing full-text matches:
 
 ### match
 
@@ -109,7 +109,7 @@ By default keywords are combined using the OR operator. However, you can change 
 ```
 
 ### query_string
-"query_string" accepts an input string as a full-text query in `MATCH()` syntax 
+"query_string" accepts an input string as a full-text query in `MATCH()` syntax
 
 ```json
 "query":
@@ -129,7 +129,7 @@ Examples:
 <!-- request match -->
 
 ```json
-POST /search 
+POST /search
 -d
 '{   "index" : "myindex",
     "query":
@@ -168,7 +168,7 @@ POST /search
 ```
 <!-- request match_phrase -->
 ```json
-POST /search 
+POST /search
 -d
 '{   "index" : "myindex",
     "query":
@@ -207,7 +207,7 @@ POST /search
 
 <!-- request query_string -->
 ```json
-POST /search 
+POST /search
 -d
 '{   "index" : "myindex",
     "query":

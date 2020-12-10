@@ -1,5 +1,33 @@
 # Changelog
 
+## Version 3.5.4, Dec 10 2020
+
+### New Features
+- New Python, Javascript and Java clients are generally available now and are well documented in this manual.
+- automatic drop of a disk chunk of a real-time index. This optimization enables dropping a disk chunk automatically when [OPTIMIZing](Securing_and_compacting_an_index/Compacting_an_index.md#OPTIMIZE-INDEX) a real-time index when the chunk is obviously not needed any more (all the documents are suppressed). Previously it still required merging, now the chunk can be just dropped instantly. The [cutoff](Securing_and_compacting_an_index/Compacting_an_index.md#Number-of-optimized-disk-chunks) option is ignored, i.e. even if nothing is actually merged an obsoleted disk chunk gets removed. This is useful in case you maintain retention in your index and delete older documents. Now compacting such indexes will be faster.
+- [standalone NOT](Searching/Options.md#not_terms_only_allowed) as an option for SELECT
+
+### Minor Changes
+- [#453](https://github.com/manticoresoftware/manticoresearch/issues/453) New option [indexer --ignore-non-plain](Adding_data_from_external_storages/Plain_indexes_creation.md#ignore_non_plain) is useful in case you run `indexer --all` and have not only plain indexes in the configuration file. Without `--ignore-non-plain` you'll get a warning and a respective exit code.
+- [SHOW PLAN ... OPTION format=dot](Profiling_and_monitoring/Profiling/Query_plan.md#Dot-format-for-SHOW-PLAN) and [EXPLAIN QUERY ... OPTION format=dot](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) enable visualization of full-text query plan execution. Useful for understanding complex queries.
+
+### Deprecations
+- `indexer --verbose` is deprecated as it never added anything to the indexer output
+- For dumping watchdog's backtrace signal `USR2` is now to be used instead of `USR1`
+
+### Bugfixes
+- [#449](https://github.com/manticoresoftware/manticoresearch/issues/449) Transactions Bug while using MariaDB Node.js Connector
+- [#423](https://github.com/manticoresoftware/manticoresearch/issues/423) cyrillic char period call snippets retain mode don't highlight
+- [#435](https://github.com/manticoresoftware/manticoresearch/issues/435) RTINDEX - GROUP N BY expression select = fatal crash
+- [2b3b62bd](https://github.com/manticoresoftware/manticoresearch/commit/2b3b62bd0ce2b54544733d524a169e81f71b5388) searchd status shows Segmentation fault when in cluster
+- [9dd25c19](https://github.com/manticoresoftware/manticoresearch/commit/9dd25c193ed2a53750a0e0e68566fd2b833fcb0c) 'SHOW INDEX index.N SETTINGS' doesn't address chunks >9
+- [#389](https://github.com/manticoresoftware/manticoresearch/issues/389) Bug that crashes Manticore
+- [fba16617](https://github.com/manticoresoftware/manticoresearch/commit/fba166178ff35c73a0c70d131cf3aca4a635e961) Converter creates broken indexes
+- [eecd61d8](https://github.com/manticoresoftware/manticoresearch/commit/eecd61d861c742471175be19a5e5455034b5db5f) stopword_step=0 vs CALL SNIPPETS()
+- [ea6850e4](https://github.com/manticoresoftware/manticoresearch/commit/ea6850e449601199190f38a387c04b8a7b7e90f6) count distinct returns 0 at low max_matches on a local index
+- [362f27db](https://github.com/manticoresoftware/manticoresearch/commit/362f27db3421f09a41c6cce04b5baace00fa4c4d) When using aggregation stored texts are not returned in hits
+
+
 ## Version 3.5.2, Oct 1 2020
 
 ### New features

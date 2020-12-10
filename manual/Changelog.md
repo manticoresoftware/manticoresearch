@@ -28,7 +28,7 @@ The official Docker image is now based on Ubuntu 20.04 LTS
 
 ### Packaging
 
-Beside the usual `manticore` package, you can also install Manticore Search by components:
+Besides the usual `manticore` package, you can also install Manticore Search by components:
 
 - `manticore-server` - provides `searchd`, config and service files
 - `manticore-tools` - provides auxiliary tools ( `indexer`, `indextool` etc.)

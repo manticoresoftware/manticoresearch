@@ -13,7 +13,7 @@ wordforms = path/to/dict*.txt
 <!-- example wordforms -->
 Word forms dictionary. Optional, default is empty.
 
-The dictionaries are used to normalize incoming words both during indexing and searching. Therefore, when it comes to a [plain index](Creating_an_index/Local_indexes/Plain_index.md) to pick up changes in wordforms file it's required to rotate the index. 
+The dictionaries are used to normalize incoming words both during indexing and searching. Therefore, when it comes to a [plain index](Creating_an_index/Local_indexes/Plain_index.md) to pick up changes in wordforms file it's required to rotate the index.
 
 Word forms support in Manticore is designed to support big dictionaries well. They moderately affect indexing speed: for instance, a dictionary with 1 million entries slows down indexing about 1.5 times. Searching speed is not affected at all. Additional RAM impact is roughly equal to the dictionary file size, and dictionaries are shared across indexes: i.e. if the very same 50 MB wordforms file is specified for 10 different indexes, additional `searchd` RAM usage will be about 50 MB.
 
@@ -27,7 +27,7 @@ walking > walk
 
 There is a bundled [Spelldump](Miscellaneous_tools.md#spelldump) utility that helps you create a dictionary file in the format Manticore can read from source `.dict` and `.aff` dictionary files in `ispell` or `MySpell` format (as bundled with OpenOffice).
 
-You can map several source words to a single destination word. Because the work happens on tokens, not the source text, differences in whitespace and markup are ignored. 
+You can map several source words to a single destination word. Because the work happens on tokens, not the source text, differences in whitespace and markup are ignored.
 
 You can use `=>` instead of `>`. Comments (starting with `#` are also allowed. Finally, if a line starts with a tilde (`~`) the wordform will be applied after morphology, instead of before.
 
@@ -45,7 +45,7 @@ s02e02 > season 2 episode 2
 s3 e3 > season 3 episode 3
 ```
 
-You can specify several files and not only just one. Masks can be used as a pattern, and all matching files will be processed in simple ascending order. 
+You can specify several files and not only just one. Masks can be used as a pattern, and all matching files will be processed in simple ascending order.
 
 In RT mode only absolute paths are allowed.
 
@@ -58,14 +58,14 @@ If multi-byte codepages are used, and file names can include foreign characters,
 <!-- request SQL -->
 
 ```sql
-CREATE TABLE products(title text, price float) wordforms = '/usr/local/sphinx/data/wordforms.txt' wordforms = '/usr/local/sphinx/data/alternateforms.txt /usr/local/sphinx/private/dict*.txt'
+CREATE TABLE products(title text, price float) wordforms = '/var/lib/manticore/wordforms.txt' wordforms = '/var/lib/manticore/alternateforms.txt /var/lib/manticore/dict*.txt'
 ```
 
 <!-- request HTTP -->
 
 ```json
 POST /sql -d "mode=raw&query=
-CREATE TABLE products(title text, price float) wordforms = '/usr/local/sphinx/data/wordforms.txt' wordforms = '/usr/local/sphinx/data/alternateforms.txt' wordforms = '/usr/local/sphinx/private/dict*.txt'"
+CREATE TABLE products(title text, price float) wordforms = '/var/lib/manticore/wordforms.txt' wordforms = '/var/lib/manticore/alternateforms.txt' wordforms = '/var/lib/manticore/dict*.txt'"
 ```
 
 <!-- request PHP -->
@@ -75,9 +75,9 @@ $params = [
     'body' => [
         'settings' => [
             'wordforms' => [
-                '/usr/local/sphinx/data/wordforms.txt',
-                '/usr/local/sphinx/data/alternateforms.txt',
-                '/usr/local/sphinx/private/dict*.txt'
+                '/var/lib/manticore/wordforms.txt',
+                '/var/lib/manticore/alternateforms.txt',
+                '/var/lib/manticore/dict*.txt'
             ]
         ],
         'columns' => [
@@ -96,7 +96,7 @@ $index->create($params);
 <!-- request Python -->
 
 ```python
-utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) wordforms = \'/usr/local/sphinx/data/wordforms.txt\' wordforms = \'/usr/local/sphinx/data/alternateforms.txt\' wordforms = \'/usr/local/sphinx/private/dict*.txt\'')
+utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) wordforms = \'/var/lib/manticore/wordforms.txt\' wordforms = \'/var/lib/manticore/alternateforms.txt\' wordforms = \'/var/lib/manticore/dict*.txt\'')
 ```
 <!-- intro -->
 ##### javascript:
@@ -104,23 +104,23 @@ utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float) word
 <!-- request javascript -->
 
 ```java
-res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float)wordforms = \'/usr/local/sphinx/data/wordforms.txt\' wordforms = \'/usr/local/sphinx/data/alternateforms.txt\' wordforms = \'/usr/local/sphinx/private/dict*.txt\'');
+res = await utilsApi.sql('mode=raw&query=CREATE TABLE products(title text, price float)wordforms = \'/var/lib/manticore/wordforms.txt\' wordforms = \'/var/lib/manticore/alternateforms.txt\' wordforms = \'/var/lib/manticore/dict*.txt\'');
 ```
 
 <!-- intro -->
 ##### Java:
 <!-- request Java -->
 ```java
-utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) wordforms = '/usr/local/sphinx/data/wordforms.txt' wordforms = '/usr/local/sphinx/data/alternateforms.txt' wordforms = '/usr/local/sphinx/private/dict*.txt'");
+utilsApi.sql("mode=raw&query=CREATE TABLE products(title text, price float) wordforms = '/var/lib/manticore/wordforms.txt' wordforms = '/var/lib/manticore/alternateforms.txt' wordforms = '/var/lib/manticore/dict*.txt'");
 ```
 <!-- request CONFIG -->
 
 ```ini
 index products {
-  wordforms = /usr/local/sphinx/data/wordforms.txt
-  wordforms = /usr/local/sphinx/data/alternateforms.txt
-  wordforms = /usr/local/sphinx/private/dict*.txt
-  
+  wordforms = /var/lib/manticore/wordforms.txt
+  wordforms = /var/lib/manticore/alternateforms.txt
+  wordforms = /var/lib/manticore/dict*.txt
+
   type = rt
   path = idx
   rt_field = title

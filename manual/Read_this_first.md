@@ -45,7 +45,7 @@ Manticore Search works in two modes:
 
 You cannot combine the 2 modes and need to decide which one you want to follow. If you are unsure **our recommendation is to follow the RT mode** as if even you need a plain index you can build it with a separate plain index config and import to your main Manticore instance.
 
-The Real-time index can be used in both RT and plain modes. In RT mode a RT index is defined with a `CREATE TABLE` command, while in plain mode it is defined in the configuration file. Plain (offline) indexes are supported only in plain mode. Plain indexes cannot be created in RT mode, but existing plain indexes made in plain mode can converted as Real-time indexes and imported in RT mode.
+Real-time indexes can be used in both RT and plain modes. In RT mode an RT index is defined with a `CREATE TABLE` command, while in plain mode it is defined in the configuration file. Plain (offline) indexes are supported only in the plain mode. Plain indexes cannot be created in the RT mode, but existing plain indexes made in the plain mode can be [converted](Adding_data_from_external_storages/Adding_data_from_indexes/Attaching_a_plain_index_to_RT_index) to real-time indexes and [imported](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_index) in the RT mode.
 
 #### SQL vs JSON
 Manticore provides multiple ways and interfaces to manage your schemas and data, but the two main are:

@@ -1,4 +1,4 @@
-# Query plan 
+# Query plan
 
 <!-- example SHOW PLAN -->
 
@@ -170,7 +170,7 @@ POST /search
   "query": {"query_string": "@title way* @content hey"},
   "_source": { "excludes":["*"] },
   "limit": 1,
-  "profile":true
+  "profile": true
 }
 ```
 
@@ -318,6 +318,30 @@ POST /search
 <!-- end -->
 
 See also [EXPLAIN QUERY](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query). It displays the execution tree of a full-text query without actually executing the query.
+
+## Dot format for SHOW PLAN
+`SHOW PLAN format=dot` allows to return the full-text query execution tree in hierarchical format suitable for visualization by existing tools, for example https://dreampuf.github.io/GraphvizOnline :
+
+```sql
+MySQL [(none)]> show plan option format=dot\G
+*************************** 1. row ***************************
+Variable: transformed_tree
+   Value: digraph "transformed_tree"
+{
+
+0 [shape=record,style=filled,bgcolor="lightgrey" label="AND"]
+0 -> 1
+1 [shape=record,style=filled,bgcolor="lightgrey" label="AND"]
+1 -> 2
+2 [shape=record label="i | { querypos=1 }"]
+0 -> 3
+3 [shape=record,style=filled,bgcolor="lightgrey" label="AND"]
+3 -> 4
+4 [shape=record label="me | { querypos=2 }"]
+}
+```
+
+![SHOW PLAN graphviz example](graphviz.png)
 
 ## JSON result set notes
 

@@ -278,6 +278,8 @@ static SymbolDesc_t g_dSymbolsTokenFilter[] =
 	{ static_cast<int>( offsetof(PluginTokenFilter_c, m_fnGetExtraToken)),	"get_extra_token",	false },
 	{ static_cast<int>( offsetof(PluginTokenFilter_c, m_fnEndField)),		"end_field",		false },
 	{ static_cast<int>( offsetof(PluginTokenFilter_c, m_fnDeinit)),		"deinit",			false },
+	{ static_cast<int>( offsetof(PluginTokenFilter_c, m_fnTokenIsBlended)),		"is_blended", false },
+	{ static_cast<int>( offsetof(PluginTokenFilter_c, m_fnTokenIsBlendedPart)),	"is_blended_part", false },
 	{ -1, nullptr, false }
 };
 

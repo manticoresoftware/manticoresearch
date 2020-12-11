@@ -1264,7 +1264,9 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			return 0;
 
 		m_iPendingNulls = m_pTokenizer->GetOvershortCount() * m_iOvershortStep;
-		m_iAtomPos += 1 + m_iPendingNulls + iPrevDeltaPos;
+		m_iAtomPos += 1 + m_iPendingNulls;
+		if ( iPrevDeltaPos>1 ) // to match with condifion of m_bWasBlended above
+			m_iAtomPos += ( iPrevDeltaPos - 1);
 
 		bool bMultiDestHead = false;
 		bool bMultiDest = false;

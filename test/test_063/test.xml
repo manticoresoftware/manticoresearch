@@ -120,6 +120,24 @@ index test4
 	blend_chars = U+2E
 }
 
+
+
+source blend_stop
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT 1 as document_id, ' Children@s Hospital Colorado ' as text UNION SELECT 2 as document_id, ' got@s@but@not@t ok to go with a flow ' as text
+}
+
+index blend_stop
+{
+	source	= blend_stop
+	path	= <data_path/>/blend_stop
+	blend_chars = U+0023, U+0024, U+0026, U+0027, U+002D, U+0040
+    stopword_step = 0
+    stopwords     = <this_test/>/stop_blend.txt 
+}
+
 </config>
 
 <db_create>
@@ -255,6 +273,14 @@ INSERT INTO test_table VALUES
 	<sphinxql>CALL KEYWORDS ( 'thatsgoingverylongwordthathasblendedpartattheand', 'rt', 1 )</sphinxql>
 	<!-- regression blended vs quorum argument -->
 	<sphinxql>select * from test4 where match ( ' "dog of friend"/0.5 ' )</sphinxql>
+    
+    <!-- regression blended part that is stopword and stepword step is 0 -->
+    <sphinxql>set profiling=1</sphinxql>
+    <sphinxql>select * from blend_stop where match('("Children@s Hospital Colorado")')</sphinxql>
+    <sphinxql>show plan</sphinxql>
+    <sphinxql>select * from blend_stop where match('("got@s@but@not@t ok")')</sphinxql>
+    <sphinxql>show plan</sphinxql>
+    
 </sphqueries>
 
 </test>

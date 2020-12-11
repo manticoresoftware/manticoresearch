@@ -4102,6 +4102,7 @@ public:
 		{
 			m_iPosDelta = 1; // default delta is 1
 			BYTE * pTok = (BYTE*) m_pFilter->m_fnGetExtraToken ( m_pUserdata, &m_iPosDelta );
+			GetBlended();
 			if ( pTok )
 				return pTok;
 			m_bGotExtra = false;
@@ -4119,11 +4120,17 @@ public:
 				m_bGotExtra = 0;
 				if ( m_pFilter->m_fnEndField )
 					if ( !m_pFilter->m_fnEndField ( m_pUserdata ) )
+					{
+						m_bBlended = false;
+						m_bBlendedPart = false;
 						return NULL;
+					}
 
 				// got them, start fetching
 				m_bGotExtra = true;
-				return (BYTE*)m_pFilter->m_fnGetExtraToken ( m_pUserdata, &m_iPosDelta );
+				BYTE * pTok = (BYTE*)m_pFilter->m_fnGetExtraToken ( m_pUserdata, &m_iPosDelta );
+				GetBlended();
+				return pTok;
 			}
 
 			// compute proper position delta
@@ -4134,6 +4141,7 @@ public:
 			int iExtra = 0;
 			BYTE * pTok = (BYTE*)m_pFilter->m_fnPushToken ( m_pUserdata, (char*)pRaw, &iExtra, &m_iPosDelta );
 			m_bGotExtra = ( iExtra!=0 );
+			GetBlended();
 			if ( pTok )
 				return pTok;
 		}
@@ -4144,9 +4152,13 @@ public:
 		return m_iPosDelta-1;
 	}
 
-	bool TokenIsBlended() const final
+private:
+	void GetBlended()
 	{
-		return false;
+		if ( m_pFilter->m_fnTokenIsBlended )
+			m_bBlended = ( !!m_pFilter->m_fnTokenIsBlended ( m_pUserdata ) );
+		if ( m_pFilter->m_fnTokenIsBlendedPart )
+			m_bBlendedPart = ( !!m_pFilter->m_fnTokenIsBlendedPart ( m_pUserdata ) );
 	}
 };
 
@@ -22717,7 +22729,10 @@ void CSphSource_Document::BuildRegularHits ( RowID_t tRowID, bool bPayload, bool
 			if ( m_bIndexExactWords && eMorph!=SPH_TOKEN_MORPH_GUESS )
 				m_tHits.Add ( { tRowID, m_pDict->GetWordIDNonStemmed ( sBuf ), m_tState.m_iHitPos } );
 		} else
-			m_tState.m_iBuildLastStep = m_iStopwordStep;
+		{
+			// need to count all blended part tokens to match query
+			m_tState.m_iBuildLastStep = ( m_pTokenizer->TokenIsBlendedPart() ? 1 : m_iStopwordStep );
+		}
 	}
 
 	m_tState.m_bProcessingHits = ( sWord!=NULL );

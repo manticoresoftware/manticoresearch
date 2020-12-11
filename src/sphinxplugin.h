@@ -41,6 +41,9 @@ typedef char *			(*TokenFilterPushToken_fn)		( void * userdata, char * token, in
 typedef char *			(*TokenFilterGetExtraToken_fn)	( void * userdata, int * delta );
 typedef int				(*TokenFilterEndField_fn)		( void * userdata );
 typedef void			(*TokenFilterDeinit_fn)			( void * userdata );
+typedef	int				(*TokenFilterIsBlended_fn)		( void * userdata );
+typedef	int				(*TokenFilterIsBlendedPart_fn)	( void * userdata );
+
 
 typedef int				(*QueryTokenFilterInit_fn)		( void ** userdata, int max_len, const char * options, char * error );
 typedef void			(*QueryTokenFilterPreMorph_fn)	( void * userdata, char * token, int * stopword );
@@ -123,6 +126,9 @@ public:
 	TokenFilterGetExtraToken_fn	m_fnGetExtraToken = nullptr;
 	TokenFilterEndField_fn		m_fnEndField = nullptr;
 	TokenFilterDeinit_fn		m_fnDeinit = nullptr;
+
+	TokenFilterIsBlended_fn		m_fnTokenIsBlended = nullptr;
+	TokenFilterIsBlendedPart_fn m_fnTokenIsBlendedPart = nullptr;
 
 	explicit					PluginTokenFilter_c ( PluginLib_c * pLib ) : PluginDesc_c ( pLib ) {}
 };

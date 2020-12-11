@@ -17,7 +17,7 @@ set ( CPACK_RPM_MAIN_PACKAGE_NAME "manticore")
 set ( CPACK_RPM_META_PACKAGE_NAME "manticore-all" )
 set ( CPACK_COMPONENT_META_DESCRIPTION "Meta Package for Manticore Search")
 set ( CPACK_RPM_META_PACKAGE_REQUIRES "manticore-server, manticore-tools" )
-set ( CPACK_RPM_META_PACKAGE_OBSOLETES "manticore, sphinx")
+set ( CPACK_RPM_META_PACKAGE_CONFLICTS "manticore, sphinx")
 
 set ( CPACK_COMPONENT_META_DESCRIPTION "Manticore Search is a powerful free open source search engine
 with a focus on low latency and high throughput full-text search

@@ -32,7 +32,7 @@ Download it [from the website](https://manticoresearch.com/downloads/) and unpac
 
 ```bash
 mkdir manticore
-tar -zxvf manticore-3.5.2-201002-8b2c1758-release-osx10.13.6-x86_64-main.tar.gz -C manticore
+tar -zxvf 3.5.4-201211-13f8d08d-release-osx10.13.6-x86_64-main.tar.gz -C manticore
 cd manticore
 bin/searchd  -c manticore.conf
 ```

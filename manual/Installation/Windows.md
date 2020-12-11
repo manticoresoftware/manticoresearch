@@ -6,7 +6,7 @@ In the following example we'll assume we unpack the zip contents to folder `C:\M
 
 ```bat
 cd C:\Manticore
-unzip manticore-3.5.2-201002-8b2c1758-release-x64-main.zip
+unzip manticore-3.5.4-201211-13f8d08d-release-x64-main.zip
 ```
 
 The zip comes with a sample configuration file in `sphinx.conf.in`.

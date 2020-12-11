@@ -47,7 +47,7 @@ Manticore package depends on zlib and ssl libraries, nothing else is strictly re
 
 ```bash
 $ sudo -u manticore indexer
-Manticore 3.5.2 8b2c175@201002 release
+Manticore 3.5.4 13f8d08d@201211 release
 Copyright (c) 2001-2016, Andrew Aksyonoff
 Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 Copyright (c) 2017-2020, Manticore Software LTD (http://manticoresearch.com)

@@ -1286,6 +1286,13 @@ function ParseIndexWeights ( $weights )
     return $result;
 }
 
+function close_and_null_conn (&$connection)
+{
+    if ($connection)
+        mysqli_close($connection);
+    $connection = NULL;
+}
+
 
 class SphinxConfig
 {
@@ -2125,7 +2132,6 @@ class SphinxConfig
 		}
 	}
 
-
 	function RunQueryQL ( $query, &$error, &$examples, $bench, &$connection, &$old_agent, &$old_vip )
 	{
 		global $agents, $index_data_path;
@@ -2175,7 +2181,7 @@ class SphinxConfig
         if ($old_agent!=$use_agent && $system_cmd!='start-agent')
 		{
 			if ($old_agent!=-1)
-				mysqli_close($connection);
+                close_and_null_conn($connection);
 			if ($sleep_agent>0)
 				usleep($sleep_agent);
             if (!($connection = ConnectSpecificQL($use_agent)))
@@ -2186,7 +2192,7 @@ class SphinxConfig
 		if ($this->Requires('vip') && ( $old_vip!=$vip_connection || $connection===NULL ))
 		{
 			if ( $connection )
-				mysqli_close($connection);
+                close_and_null_conn($connection);
 
 			// this is needed to test non-vip connections in maintenance mode
 			if (!($connection = ConnectSpecificQL($use_agent,$vip_connection)))
@@ -2207,15 +2213,13 @@ class SphinxConfig
 			$status = '';
             switch ( $system_cmd ) {
                 case 'restart-daemon':
-                    if ($connection)
-                        mysqli_close($connection);
+                    close_and_null_conn($connection);
                     $status = RestartDaemon();
                     $connection = ConnectSpecificQL($use_agent);
                     break;
                 case 'kill-daemon':
-                    if ($connection)
-                        mysqli_close($connection);
-                    KillSearchd('config.conf', 'searchd.pid', 'KILL', false);
+                    close_and_null_conn($connection);
+                    KillSearchd($daemon["config"], $daemon["pid"], 'KILL', false);
                     break;
                 case 'start-agent':
                     $start = StartSearchd($daemon["config"], $daemon["error"], $daemon["pid"], $error,
@@ -2225,15 +2229,13 @@ class SphinxConfig
                     else
                         $status .= "; start=failed, return code=" . $start . ", error=" . $error;
 
-                    if ( $connection )
-                        mysqli_close($connection);
+                    close_and_null_conn($connection);
                     $old_agent = -1;
                     break;
                 case 'stop-agent':
                     $stop = StopWaitSearchd($daemon["config"], $daemon["pid"]);
                     $status = 'stop=' . ($stop == 0 ? 'ok' : 'error') . ', return code=' . $stop;
-                    if ( $connection )
-                        mysqli_close($connection);
+                    close_and_null_conn($connection);
                     $old_agent = -1;
                     break;
                 case 'wait-ready':
@@ -4097,6 +4099,10 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 
 		if ( $config->NumAgents () == 1 )
 		{
+
+            $agents[0]["daemon"] = array ( "config"=>"config.conf", "error"=>"error.txt", "pid"=>$ss_pid_file,
+                "watchdog"=>$config->Requires ( "watchdog" ), "address"=>false, "port"=>false );
+
 			if ( $sd_managed_searchd )
 				$searchd_ret = 0;
 			else

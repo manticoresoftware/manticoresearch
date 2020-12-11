@@ -23,7 +23,7 @@ searchd
 index crc
 {
 	type	= rt
-	path	= data/crc
+	path	=<data_path/>/crc
 	
 	rt_field = content
 	rt_attr_uint = idd
@@ -34,7 +34,7 @@ index crc
 index kw
 {
 	type	= rt
-	path	= data/kw
+	path	=<data_path/>/kw
 	
 	rt_field = content
 	rt_attr_uint = idd

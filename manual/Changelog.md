@@ -16,7 +16,6 @@
 - For dumping watchdog's backtrace signal `USR2` is now to be used instead of `USR1`
 
 ### Bugfixes
-- [#449](https://github.com/manticoresoftware/manticoresearch/issues/449) Transactions Bug while using MariaDB Node.js Connector
 - [#423](https://github.com/manticoresoftware/manticoresearch/issues/423) cyrillic char period call snippets retain mode don't highlight
 - [#435](https://github.com/manticoresoftware/manticoresearch/issues/435) RTINDEX - GROUP N BY expression select = fatal crash
 - [2b3b62bd](https://github.com/manticoresoftware/manticoresearch/commit/2b3b62bd0ce2b54544733d524a169e81f71b5388) searchd status shows Segmentation fault when in cluster

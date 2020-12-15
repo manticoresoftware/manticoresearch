@@ -3442,6 +3442,8 @@ void HandleCommandClusterPq ( ISphOutputBuffer & tOut, WORD uCommandVer, InputBu
 			break;
 	}
 
+	sphLogDebugRpl ( "remote cluster command %d, client %s - %s", (int)eClusterCmd, sClient, ( bOk ? "ok" : "error" ) );
+
 	if ( !bOk )
 	{
 		auto tReply = APIHeader ( tOut, SEARCHD_ERROR );
@@ -3643,6 +3645,8 @@ static bool SyncSigVerify ( const SyncSrc_t & tSrc, CSphString & sError )
 // - or make sure that index has exact same index file, ie sha1 matched
 bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError )
 {
+	sphLogDebugRpl ( "reserve index '%s'", tCmd.m_sIndex.cstr() );
+
 	assert ( tCmd.m_pChunks );
 	assert ( tRes.m_pDst.Ptr() );
 	// use index path first
@@ -3781,6 +3785,8 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 		sError.SetSprintf ( "unsupported type '%s' in index '%s'", sType.cstr(), tCmd.m_sIndex.cstr() );
 		return false;
 	}
+
+	sphLogDebugRpl ( "verify index '%s' from %s", tCmd.m_sIndex.cstr(), tCmd.m_sRemoteIndexPath.cstr() );
 
 	// check that size matched and sha1 matched prior to loading index
 	if ( !SyncSigVerify ( *tCmd.m_pChunks, sError ) )
@@ -4263,7 +4269,9 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 		sphLogDebugRpl ( "reserve index '%s' at %d nodes with timeout %d.%03d sec", sIndex.cstr(), dNodes.GetLength(), (int)( tmLongOpTimeout/1000 ), (int)( tmLongOpTimeout%1000 ) );
 
 		PQRemoteFileReserve_c tReq;
-		if ( !PerformRemoteTasks ( dNodes, tReq, tReq, sError ) )
+		bool bOk = PerformRemoteTasks ( dNodes, tReq, tReq, sError );
+		sphLogDebugRpl ( "reserved index '%s' - %s", sIndex.cstr(), ( bOk ? "ok" : "failed" ) );
+		if ( !bOk )
 			return false;
 
 		// collect remote file states and make list nodes and files to send

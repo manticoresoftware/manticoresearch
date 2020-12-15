@@ -151,8 +151,8 @@ void ApiServe ( AsyncNetBufferPtr_c pBuf )
 
 		if ( iReplySize && !tIn.ReadFrom ( iReplySize, true ))
 		{
-			sphWarning ( "failed to receive API body (client=%s(%d), exp=%d, error='%s')",
-					sClientIP, iCID, iReplySize, sphSockError ());
+			sphWarning ( "failed to receive API body (client=%s(%d), exp=%d(%d), error='%s')",
+					sClientIP, iCID, iReplySize, tIn.HasBytes(), sphSockError ());
 			break;
 		}
 

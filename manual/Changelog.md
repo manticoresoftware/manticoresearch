@@ -778,7 +778,7 @@ development libraries.
 * [agent_retry_count](Server_settings/Searchd.md#agent_retry_count) in case of agents with mirrors gives the value of retries per mirror instead of per agent, the total retries per agent being agent_retry_count\*mirrors.
 * [agent_retry_count](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_retry_count) can now be specified per index, overriding global value. An alias [mirror_retry_count](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#mirror_retry_count) is added.
 * a retry_count can be specified in agent definition and the value represents retries per agent
-* Percolate Queries are now in HTTP JSON API at [/json/pq](Searching/Percolate_query.md#Performing-a-percolate-query).
+* Percolate Queries are now in HTTP JSON API at [/json/pq](Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ).
 * Added -h and -v options (help and version) to executables
 * [morphology_skip_fields](Creating_an_index/NLP_and_tokenization/Morphology.md#morphology_skip_fields) support for Real-Time indexes
 

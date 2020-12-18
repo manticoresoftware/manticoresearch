@@ -296,7 +296,7 @@ SHOW META LIKE 'multiplier';
 
 <!-- example show meta PQ -->
 
-`SHOW META` can be used after executing a [CALL PQ](Searching/Percolate_query.md#Performing-a-percolate-query)  statement. In this case, it provides a different output.
+`SHOW META` can be used after executing a [CALL PQ](Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ)  statement. In this case, it provides a different output.
 
 `SHOW META` after a `CALL PQ` statement contains: 
  

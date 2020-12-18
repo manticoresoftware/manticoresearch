@@ -189,8 +189,8 @@ Head about [CALL SNIPPETS](Searching/Highlighting.md) to learn more about distri
 
 You can construct a distributed index from several [percolate](Creating_an_index/Local_indexes/Percolate_index.md) indexes. The syntax is absolutely the same as for other distributed indexes. It can include several `local` indexes as well as several `agents`.
 
-For DPQ the operations of listing stored queries and searching through them ([CALL PQ](Searching/Percolate_query.md#Performing-a-percolate-query)) are transparent and works as if all the indexes were one solid local index. However data manipulation statements such as `insert`, `replace`, `truncate` are not available.
+For DPQ the operations of listing stored queries and searching through them ([CALL PQ](Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ)) are transparent and works as if all the indexes were one solid local index. However data manipulation statements such as `insert`, `replace`, `truncate` are not available.
 
 If you mention a non-percolate index among the agents, the behaviour will be undefined. Most likely in case if the erroneous agent has the same schema as the outer schema of the pq index (id, query, tags, filters) - it will not trigger an error when listing stored PQ rules hence may pollute the list of actual PQ rules stored in PQ indexes with it's own non-pq strings, so be aware of the confusion! `CALL PQ` to such wrong agent will definitely trigger an error.
 
-Read more about [making queries to a distribute percolate index](Searching/Percolate_query.md#Performing-a-percolate-query).
+Read more about [making queries to a distribute percolate index](Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ).

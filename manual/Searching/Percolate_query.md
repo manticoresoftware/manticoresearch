@@ -11,7 +11,7 @@ Google Alerts, AlertHN, Bloomberg Terminal and other systems that let their user
 > * See [percolate](Creating_an_index/Local_indexes/Percolate_index.md) about how to create a PQ index.
 > * See [Adding rules to a percolate index](Adding_documents_to_an_index/Adding_rules_to_a_percolate_index.md) to learn how to add percolate rules (as known as PQ rules). Here let's just give a quick example.
 
-### Performing a percolate query
+### Performing a percolate query with CALL PQ
 
 The key thing you need to remember about percolate queries is that you already have your search queries in the index. What you need to provide is documents **to check if any of them match any of the stored rules**.
 

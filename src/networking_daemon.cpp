@@ -110,7 +110,6 @@ class CSphNetLoop::Impl_c
 
 	CSphVector<ISphNetAction *> 	m_dWorkInternal GUARDED_BY ( NetPoollingThread );
 	CSphVector<ISphNetAction *>		m_dWorkExternal GUARDED_BY ( m_tExtLock );
-	volatile bool					m_bGotExternal = false;
 	CSphWakeupEvent *				m_pWakeup = nullptr;
 	CSphMutex						m_tExtLock;
 	LoopProfiler_t					m_tPrf;
@@ -173,10 +172,14 @@ class CSphNetLoop::Impl_c
 	{
 		m_tPrf.StartExt ();
 		ScopedMutex_t tExtLock ( m_tExtLock );
-		m_tPrf.m_iPerfExt = m_dWorkExternal.GetLength ();
-		assert ( m_dWorkInternal.IsEmpty ());
-		m_dWorkInternal.SwapData ( m_dWorkExternal );
-		m_bGotExternal = false;
+		auto iExtLen = m_dWorkExternal.GetLength();
+		m_tPrf.m_iPerfExt = iExtLen;
+		pMyInfo ()->m_uWorks = iExtLen;
+		if ( iExtLen )
+		{
+			assert ( m_dWorkInternal.IsEmpty ());
+			m_dWorkInternal.SwapData ( m_dWorkExternal );
+		}
 		m_tPrf.EndTask ();
 	}
 
@@ -234,9 +237,7 @@ class CSphNetLoop::Impl_c
 			++pMyInfo ()->m_uTick;
 
 			// add actions planned by jobs
-			if ( m_bGotExternal )
-				PickNewActions ();
-			pMyInfo ()->m_uWorks = m_dWorkInternal.GetLength ();
+			PickNewActions ();
 
 			// handle events and collect stats
 			m_tPrf.StartTick();
@@ -313,9 +314,10 @@ class CSphNetLoop::Impl_c
 	{
 		sphLogDebugvv ( "AddAction action as %d, events %d, timeout %d",
 				pElem->m_iSock, pElem->m_uNetEvents, (int) pElem->m_iTimeoutTimeUS );
-		ScopedMutex_t tExtLock ( m_tExtLock );
-		m_dWorkExternal.Add ( pElem );
-		m_bGotExternal = true;
+		{
+			ScopedMutex_t tExtLock ( m_tExtLock );
+			m_dWorkExternal.Add ( pElem );
+		}
 		Kick();
 	}
 

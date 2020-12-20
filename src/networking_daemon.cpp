@@ -52,6 +52,9 @@ CSphWakeupEvent::~CSphWakeupEvent ()
 
 void CSphWakeupEvent::Wakeup ()
 {
+	if ( !IsPollable() )
+		return;
+
 	if ( FireEvent () )
 		return;
 	int iErrno = PollableErrno ();
@@ -110,7 +113,7 @@ class CSphNetLoop::Impl_c
 
 	CSphVector<ISphNetAction *> 	m_dWorkInternal GUARDED_BY ( NetPoollingThread );
 	CSphVector<ISphNetAction *>		m_dWorkExternal GUARDED_BY ( m_tExtLock );
-	CSphWakeupEvent *				m_pWakeup = nullptr;
+	WakeupEventRefPtr_c				m_pWakeup;
 	CSphMutex						m_tExtLock;
 	LoopProfiler_t					m_tPrf;
 	CSphScopedPtr<NetPooller_c>		m_pPoll;
@@ -120,18 +123,17 @@ class CSphNetLoop::Impl_c
 		: m_pParent ( pParent )
 		, m_pPoll { new NetPooller_c ( 1000 )}
 	{
-		CSphScopedPtr<CSphWakeupEvent> pWakeup ( new CSphWakeupEvent );
-		if ( pWakeup->IsPollable() )
+		m_pWakeup = new CSphWakeupEvent;
+		if ( m_pWakeup->IsPollable() )
 		{
-			m_pWakeup = pWakeup.LeakPtr ();
 			sphLogDebugvv ( "Setup wakeup as %d, %d", m_pWakeup->m_iSock, (int) m_pWakeup->m_iTimeoutTimeUS );
 			m_pPoll->SetupEvent ( m_pWakeup );
 		} else
-			sphWarning ( "net-loop use timeout due to %s", pWakeup->m_sError.cstr () );
+			sphWarning ( "net-loop use timeout due to %s", m_pWakeup->m_sError.cstr () );
 
 		for ( const auto & dListener : dListeners )
 		{
-			auto * pCur = new NetActionAccept_c ( dListener );
+			NetPoolEventRefPtr_c pCur { new NetActionAccept_c ( dListener ) };
 			sphLogDebugvv ( "setup listener as %d, %d", pCur->m_iSock, (int) pCur->m_iTimeoutTimeUS );
 			m_pPoll->SetupEvent ( pCur );
 		}
@@ -251,8 +253,13 @@ class CSphNetLoop::Impl_c
 			m_tPrf.StartNext();
 			m_dWorkInternal.Apply ( [&] ( ISphNetAction * pWork ) REQUIRES ( NetPoollingThread )
 			{
-				assert ( pWork && pWork->m_iSock>=0 );
-				m_pPoll->SetupEvent ( pWork );
+				assert ( pWork );
+				if ( pWork->m_uNetEvents==NetPollEvent_t::CLOSED )
+					m_pPoll->RemoveEvent ( pWork );
+				else {
+					assert ( pWork->m_iSock>=0 );
+					m_pPoll->SetupEvent ( pWork );
+				}
 			});
 			m_dWorkInternal.Resize ( 0 );
 			m_tPrf.EndTask();
@@ -294,8 +301,7 @@ class CSphNetLoop::Impl_c
 	void Kick ()
 	{
 		sphLogDebugvv ( "Kick" );
-		if ( m_pWakeup )
-			m_pWakeup->Wakeup ();
+		m_pWakeup->Wakeup ();
 	}
 
 	void StopNetLoop ()
@@ -403,6 +409,8 @@ class SockWrapper_c::Impl_c final : public ISphNetAction
 	int64_t GetTotalSent () const;
 	int64_t GetTotalReceived () const;
 
+	void ParentDestroying();
+
 public:
 	void Process ( DWORD uGotEvents, CSphNetLoop * ) REQUIRES ( NetPoollingThread ) final;
 	void NetLoopDestroying () REQUIRES ( NetPoollingThread ) final;
@@ -417,16 +425,24 @@ SockWrapper_c::Impl_c::Impl_c ( int iSocket, CSphNetLoop * pNetLoop )
 	SafeAddRef ( pNetLoop );
 }
 
-SockWrapper_c::Impl_c::~Impl_c ()
+void SockWrapper_c::Impl_c::ParentDestroying ()
 {
-	// unlink _before_ closing the sock - since closing may cause event which we don't want to deal with.
-	NetPooller_c::Unlink ( this );
-
 	if ( m_iSock>=0 )
 	{
-		sphLogDebugv ( "closing sock=%d", m_iSock );
+		sphLogDebugv ( "Destroying and closing sock=%d", m_iSock );
 		sphSockClose ( m_iSock );
+
+		if ( IsLinked () && m_pNetLoop )
+		{
+			m_uNetEvents = NetPollEvent_t::CLOSED;
+			m_pNetLoop->AddAction ( this );
+		}
 	}
+}
+
+SockWrapper_c::Impl_c::~Impl_c ()
+{
+	sphLogDebugv ( "SockWrapper_c::Impl_c::~Impl_c (); sent " INT64_FMT ", received " INT64_FMT, m_iTotalSent, m_iTotalReceived);
 }
 
 // Netpool is already stopped, so it is th-safe here.
@@ -435,7 +451,9 @@ void SockWrapper_c::Impl_c::NetLoopDestroying () REQUIRES ( NetPoollingThread )
 	sphLogDebug ( "SockWrapper_c::Impl_c::NetLoopDestroying ()" );
 
 	// unlink here ensures we're not refer anyway to netpool (if any), and so, will not check it again in d-tr
-	NetPooller_c::Unlink ( this );
+	// however initial placement of the socket implies it is not linked at all, and so, need to check first.
+	if ( IsLinked() )
+		NetPooller_c::Unlink ( this );
 
 	// if we're not finished - setting m_pNetLoop to null will just switch us to classic blocking polling.
 	m_pNetLoop = nullptr;
@@ -461,8 +479,10 @@ void SockWrapper_c::Impl_c::EngageWaiterAndYield ( int64_t tmTimeUntilUs )
 
 
 	// switch context (go to poll)
-	m_bEngaged.store ( true, std::memory_order_release );
-	Threads::CoYieldWith ( [this] { m_pNetLoop->AddAction ( this ); } );
+	Threads::CoYieldWith ( [this] {
+		m_bEngaged.store ( true, std::memory_order_release );
+		m_pNetLoop->AddAction ( this );
+	});
 	m_bEngaged.store ( false, std::memory_order_release );
 
 	// here we switched back by call m_fnWakeFromPoll.
@@ -582,7 +602,9 @@ SockWrapper_c::SockWrapper_c ( int iSocket, CSphNetLoop * pNetLoop )
 
 SockWrapper_c::~SockWrapper_c ()
 {
-	SafeDelete ( m_pImpl );
+	assert ( m_pImpl );
+	m_pImpl->ParentDestroying();
+	SafeRelease ( m_pImpl );
 }
 
 int64_t SockWrapper_c::SockSend ( const char * pData, int64_t iLen )

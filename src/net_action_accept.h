@@ -28,9 +28,10 @@ class NetActionAccept_c final : public ISphNetAction
 	class Impl_c;
 	Impl_c * m_pImpl = nullptr;
 
+protected:
+	~NetActionAccept_c () final;
+
 public:
 	explicit NetActionAccept_c ( const Listener_t & tListener );
-	~NetActionAccept_c() final;
-
 	void Process ( DWORD uGotEvents, CSphNetLoop * pLoop ) final;
 };

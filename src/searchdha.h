@@ -858,7 +858,7 @@ protected:
 
 extern ThreadRole NetPoollingThread;
 
-struct NetPollEvent_t : public EnqueuedTimeout_t
+struct NetPollEvent_t : public EnqueuedTimeout_t, public ISphRefcountedMT
 {
 	struct {
 		mutable void *		pPtr = nullptr; // opaque pointer to internals of poller
@@ -870,8 +870,6 @@ struct NetPollEvent_t : public EnqueuedTimeout_t
 	explicit NetPollEvent_t ( int iSock )
 		: m_iSock ( iSock ) {}
 
-	virtual ~NetPollEvent_t() {}
-
 	enum Events_e : DWORD
 	{
 		READ = 1UL << 0, // 1
@@ -881,8 +879,20 @@ struct NetPollEvent_t : public EnqueuedTimeout_t
 //		PRI = 1UL << 4, // 16
 		ONCE = 1UL << 4, // effective when set up // 32
 		TIMEOUT = ONCE, // effective when return back // 32
+		CLOSED = 1UL << 8,
 	};
+
+	bool IsLinked() const
+	{
+		return m_tBack.pPtr!=nullptr || m_tBack.iIdx!=-1;
+	}
+
+protected:
+	virtual ~NetPollEvent_t ()
+	{}
 };
+
+using NetPoolEventRefPtr_c = CSphRefcountedPtr<NetPollEvent_t>;
 
 const int WAIT_UNTIL_TIMEOUT = -1;
 

@@ -278,7 +278,7 @@ protected:
 	void TearDown () NO_THREAD_SAFETY_ANALYSIS override
 	{
 		m_pPoll->ProcessAll( [] ( NetPollEvent_t * pWork ) {
-			SafeDelete ( pWork );
+			SafeRelease ( pWork );
 		} );
 	}
 

@@ -3982,6 +3982,7 @@ public:
 			return pIntData;
 
 		pIntData = new ListedData_t ( pEvent );
+		pEvent->AddRef();
 		pEvent->m_tBack.pPtr = pIntData;
 		m_tWorkList.Add ( pIntData );
 		return pIntData;
@@ -3993,6 +3994,7 @@ public:
 		auto* pList = (ListedData_t* ) pEvent->m_tBack.pPtr;
 		pEvent->m_tBack.pPtr = nullptr;
 		RemoveAndDelete ( pList );
+		pEvent->Release();
 	}
 
 	// apply fnAction for all non-empty nodes;
@@ -4149,12 +4151,15 @@ public:
 		sphLogDebugv ( "%p polling remove, ev=%u, sock=%d",
 				pEvent->m_tBack.pPtr, pEvent->m_uNetEvents, pEvent->m_iSock );
 
-		int iRes = remove_polling_for ( pEvent->m_iSock, pEvent->m_uNetEvents & NetPollEvent_t::READ );
+		if ( pEvent->m_uNetEvents!=NetPollEvent_t::CLOSED )
+		{
+			int iRes = remove_polling_for ( pEvent->m_iSock, pEvent->m_uNetEvents & NetPollEvent_t::READ );
 
-		// might be already closed by worker from thread pool
-		if ( iRes==-1 )
-			sphLogDebugv ( "failed to remove polling event for sock %d(%p), errno=%d, %s",
-					pEvent->m_iSock, pEvent->m_tBack.pPtr, errno, strerrorm (errno));
+			// might be already closed by worker from thread pool
+			if ( iRes==-1 )
+				sphLogDebugv ( "failed to remove polling event for sock %d(%p), errno=%d, %s",
+						pEvent->m_iSock, pEvent->m_tBack.pPtr, errno, strerrorm (errno));
+		}
 
 		// since event already removed from kqueue - it is safe to remove it from the list of events also,
 		// and totally unlink
@@ -4303,6 +4308,7 @@ public:
 		} else
 		{
 			iBackIdx = m_dWork.GetLength ();
+			pEvent->AddRef();
 			m_dWork.Add ( pEvent );
 			pEv = &m_dEvents.Add ();
 			sphLogDebugvv ( "SetupEvent [%d] new %d events %d", pEvent->m_tBack.iIdx, pEvent->m_iSock, uNetEvents );
@@ -4392,6 +4398,7 @@ public:
 		m_dEvents[pEvent->m_tBack.iIdx].fd = -1;
 		m_dWork[pEvent->m_tBack.iIdx] = nullptr;
 		pEvent->m_tBack.iIdx = -1;
+		pEvent->Release();
 	}
 };
 
@@ -4422,6 +4429,7 @@ NetPollEvent_t & NetPollReadyIterator_c::operator* ()
 		pOwner->m_dWork[m_iIterEv] = nullptr;
 		pNode->m_tBack.iIdx = -1;
 		pNode->m_uNetEvents &= ~( NetPollEvent_t::ONCE );
+		pNode->Release();
 	}
 
 	if ( tEv.revents & POLLIN )

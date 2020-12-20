@@ -30,7 +30,7 @@ struct Listener_t
 };
 
 class CSphNetLoop;
-struct ISphNetAction : ISphNoncopyable, NetPollEvent_t
+struct ISphNetAction :  NetPollEvent_t
 {
 	explicit ISphNetAction ( int iSock ) : NetPollEvent_t ( iSock ) {}
 
@@ -47,7 +47,7 @@ struct ISphNetAction : ISphNoncopyable, NetPollEvent_t
 
 	/// invoked when CSphNetLoop with this action destroying
 	/// usually action is owned by netloop (signaller, acceptor), so it just destroys itself here.
-	virtual void NetLoopDestroying ()  REQUIRES ( NetPoollingThread ) { delete this; };
+	virtual void NetLoopDestroying ()  REQUIRES ( NetPoollingThread ) { Release (); };
 };
 
 // event that wakes-up poll net loop from finished thread pool job
@@ -56,10 +56,14 @@ class CSphWakeupEvent final : public PollableEvent_t, public ISphNetAction
 {
 public:
 	CSphWakeupEvent ();
-	~CSphWakeupEvent () final;
 	void Process ( DWORD uGotEvents, CSphNetLoop * ) final;
 	void Wakeup ();
+
+protected:
+	~CSphWakeupEvent () final;
 };
+
+using WakeupEventRefPtr_c = CSphRefcountedPtr<CSphWakeupEvent>;
 
 /////////////////////////////////////////////////////////////////////////////
 /// NETWORK THREAD

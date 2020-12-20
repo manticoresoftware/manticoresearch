@@ -45,9 +45,9 @@ struct ISphNetAction : ISphNoncopyable, NetPollEvent_t
 	/// timer is always removed when processing. If it is timeout - the event is also already removed from the poller.
 	virtual void		Process ( DWORD uGotEvents, CSphNetLoop * pLoop ) = 0;
 
-	/// invoked when CSphNetLoop with this action destroyed
+	/// invoked when CSphNetLoop with this action destroying
 	/// usually action is owned by netloop (signaller, acceptor), so it just destroys itself here.
-	virtual void NetLoopDestroying () { delete this; };
+	virtual void NetLoopDestroying ()  REQUIRES ( NetPoollingThread ) { delete this; };
 };
 
 // event that wakes-up poll net loop from finished thread pool job
@@ -71,15 +71,15 @@ class CSphNetLoop : public ISphRefcountedMT
 	Impl_c * m_pImpl = nullptr;
 
 protected:
-	~CSphNetLoop ();
+	~CSphNetLoop () override;
 
 public:
 	explicit CSphNetLoop ( const VecTraits_T<Listener_t> & dListeners );
 	void LoopNetPoll ();
 	void StopNetLoop ();
 
-	void AddAction ( ISphNetAction * pElem );
-	void RemoveEvent ( NetPollEvent_t * pEvent );
+	void AddAction ( ISphNetAction * pElem ) EXCLUDES ( NetPoollingThread );
+	void RemoveEvent ( NetPollEvent_t * pEvent ) REQUIRES ( NetPoollingThread );
 };
 
 // redirect async socket io to netloop

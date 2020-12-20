@@ -108,7 +108,7 @@ class CSphNetLoop::Impl_c
 
 	CSphNetLoop *					m_pParent; // that is weak ref
 
-	CSphVector<ISphNetAction *> 	m_dWorkInternal;
+	CSphVector<ISphNetAction *> 	m_dWorkInternal GUARDED_BY ( NetPoollingThread );
 	CSphVector<ISphNetAction *>		m_dWorkExternal GUARDED_BY ( m_tExtLock );
 	volatile bool					m_bGotExternal = false;
 	CSphWakeupEvent *				m_pWakeup = nullptr;
@@ -141,7 +141,7 @@ class CSphNetLoop::Impl_c
 		m_dWorkInternal.Reserve ( 1000 );
 	}
 
-	inline ListenTaskInfo_t* pMyInfo()
+	static inline ListenTaskInfo_t* pMyInfo()
 	{
 #ifndef NDEBUG
 		auto pRes = myinfo::ref<ListenTaskInfo_t>();
@@ -162,7 +162,10 @@ class CSphNetLoop::Impl_c
 				pWork->NetLoopDestroying ();
 		}
 
-		m_pPoll->ProcessAll( [] ( NetPollEvent_t * pWork ) { ((ISphNetAction *) pWork)->NetLoopDestroying (); } );
+		m_pPoll->ProcessAll( [] ( NetPollEvent_t * pWork ) REQUIRES ( NetPoollingThread )
+		{
+			((ISphNetAction *) pWork)->NetLoopDestroying ();
+		});
 	}
 
 	// add actions planned by jobs
@@ -306,7 +309,7 @@ class CSphNetLoop::Impl_c
 		sphLogDebug ( "StopNetLoop() succeeded" );
 	}
 
-	void AddAction ( ISphNetAction * pElem )
+	void AddAction ( ISphNetAction * pElem ) EXCLUDES ( NetPoollingThread )
 	{
 		sphLogDebugvv ( "AddAction action as %d, events %d, timeout %d",
 				pElem->m_iSock, pElem->m_uNetEvents, (int) pElem->m_iTimeoutTimeUS );
@@ -349,7 +352,7 @@ void CSphNetLoop::StopNetLoop()
 	m_pImpl->StopNetLoop ();
 };
 
-void CSphNetLoop::AddAction ( ISphNetAction * pElem )
+void CSphNetLoop::AddAction ( ISphNetAction * pElem ) EXCLUDES ( NetPoollingThread )
 {
 	assert ( m_pImpl );
 	m_pImpl->AddAction ( pElem );
@@ -400,7 +403,7 @@ class SockWrapper_c::Impl_c final : public ISphNetAction
 
 public:
 	void Process ( DWORD uGotEvents, CSphNetLoop * ) REQUIRES ( NetPoollingThread ) final;
-	void NetLoopDestroying () final;
+	void NetLoopDestroying () REQUIRES ( NetPoollingThread ) final;
 };
 
 SockWrapper_c::Impl_c::Impl_c ( int iSocket, CSphNetLoop * pNetLoop )
@@ -425,7 +428,7 @@ SockWrapper_c::Impl_c::~Impl_c ()
 }
 
 // Netpool is already stopped, so it is th-safe here.
-void SockWrapper_c::Impl_c::NetLoopDestroying ()
+void SockWrapper_c::Impl_c::NetLoopDestroying () REQUIRES ( NetPoollingThread )
 {
 	sphLogDebug ( "SockWrapper_c::Impl_c::NetLoopDestroying ()" );
 
@@ -492,6 +495,12 @@ int SockWrapper_c::Impl_c::SockPollClassic ( int64_t tmTimeUntilUs, bool bWrite 
 }
 
 // netloop version - yield rescheduling and yield
+// Command flow:
+// EngageWaiterAndYield stores curent context into continuation, then suspend it and call AddAction to setup polling.
+// Net polling thread then register our socket in the poll/epoll/kqueue and poll it.
+// when an event fired, or timeout happened, it calls 'process', which, in turn,
+// schedules our continuation. So, we returned back from EngageWaiter (most probably already in another thread), and
+// process events.
 int SockWrapper_c::Impl_c::SockPollNetloop ( int64_t tmTimeUntilUs, bool bWrite )
 {
 	m_uNetEvents = NetPollEvent_t::ONCE | ( bWrite ? NetPollEvent_t::WRITE : NetPollEvent_t::READ );
@@ -566,7 +575,7 @@ int64_t SockWrapper_c::Impl_c::GetTotalReceived () const
 /////////////////////////////////////////////////////////////////////////////
 
 SockWrapper_c::SockWrapper_c ( int iSocket, CSphNetLoop * pNetLoop )
-		: m_pImpl ( new Impl_c ( iSocket, pNetLoop ) )
+		: m_pImpl { new Impl_c ( iSocket, pNetLoop ) }
 {}
 
 SockWrapper_c::~SockWrapper_c ()
@@ -716,9 +725,7 @@ static int SyncSockRead ( SockWrapper_c * pSock, BYTE* pBuf, int iLen, int iSpac
 
 	int64_t tmMaxTimer = sphMicroTimer ()+Max ( S2US, pSock->GetTimeoutUS () ); // in microseconds
 
-	int iErr = 0;
-	int iRes = -1;
-
+	int iErr, iRes;
 	while ( iLen>0 )
 	{
 		int64_t tmNextStopUs = tmMaxTimer;

@@ -3989,6 +3989,7 @@ public:
 
 	void RemoveLink ( NetPollEvent_t * pEvent )
 	{
+		assert (pEvent);
 		auto* pList = (ListedData_t* ) pEvent->m_tBack.pPtr;
 		pEvent->m_tBack.pPtr = nullptr;
 		RemoveAndDelete ( pList );
@@ -4322,7 +4323,7 @@ public:
 		if ( timeoutMs==WAIT_UNTIL_TIMEOUT )
 			timeoutMs = m_dTimeouts.GetNextTimeoutMs ();
 
-		m_dEvents.Apply ( [] ( pollfd & dEvent ) { dEvent.revents = 0; } );
+		m_dEvents.for_each ( [] ( pollfd& dEv ) { dEv.revents = 0; } );
 		m_iReady = ::poll ( m_dEvents.Begin (), m_dEvents.GetLength (), timeoutMs );
 
 		if ( m_iReady>=0 )
@@ -4415,14 +4416,14 @@ NetPollEvent_t & NetPollReadyIterator_c::operator* ()
 
 	sphLogDebugvv ( "[%d] tEv.revents = %d for %d(%d)", m_iIterEv, tEv.revents, pNode->m_iSock, tEv.fd );
 
-	if (pNode->m_uNetEvents & NetPollEvent_t::ONCE)
+	if ( pNode->m_uNetEvents & NetPollEvent_t::ONCE )
 	{
 		tEv.fd = -tEv.fd;
 		pOwner->m_dWork[m_iIterEv] = nullptr;
 		pNode->m_tBack.iIdx = -1;
+		pNode->m_uNetEvents &= ~( NetPollEvent_t::ONCE );
 	}
 
-	pNode->m_uNetEvents &= ~(NetPollEvent_t::ONCE);
 	if ( tEv.revents & POLLIN )
 		pNode->m_uNetEvents |= NetPollEvent_t::READ;
 	if ( tEv.revents & POLLOUT )
@@ -4445,23 +4446,24 @@ NetPollReadyIterator_c & NetPollReadyIterator_c::operator++ ()
 	while (true)
 	{
 		++m_iIterEv;
-		if ( m_iIterEv>=pOwner->m_dEvents.GetLength ())
-			return *this;
+		if ( m_iIterEv>=pOwner->m_dEvents.GetLength() )
+			break;
 
 		pollfd& tEv = pOwner->m_dEvents[m_iIterEv];
 
 		if ( tEv.fd>=0 && tEv.revents!=0 && tEv.revents!=POLLNVAL )
 		{
 			sphLogDebugvv ( "operator++ on m_iIterEv as matched %d and %d", tEv.fd, tEv.revents );
-			return *this;
+			break;
 		}
 	}
+	return *this;
 }
 
 bool NetPollReadyIterator_c::operator!= ( const NetPollReadyIterator_c & rhs ) const
 {
 	auto * pOwner = m_pOwner->m_pImpl;
-	return rhs.m_pOwner || m_iIterEv<pOwner->m_dEvents.GetLength ();
+	return rhs.m_pOwner || m_iIterEv<pOwner->m_dEvents.GetLength();
 }
 #endif
 

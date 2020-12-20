@@ -696,9 +696,29 @@ DEFINE_RENDER( QlCompressedInfo_t )
 	dDst.m_sChain << (int) tInfo.m_eType << ":QlCompressed ";
 }
 
+
+// hack to interrupt session
+// fixme! If more session-wide access expected, m.b. place hare more general things, like session pointer?
+struct DebugClose_t : public TaskInfo_t
+{
+	DECLARE_RENDER( DebugClose_t );
+	bool m_bClose = false;
+};
+
+// no specific render, just storage
+DEFINE_RENDER( DebugClose_t ) {}
+
+void DebugClose ()
+{
+	myinfo::ref<DebugClose_t> ()->m_bClose = true;
+}
+
 // main sphinxql server
 void SqlServe ( AsyncNetBufferPtr_c pBuf )
 {
+	// to close current connection from inside
+	auto pCloseFlag = PublishTaskInfo ( new DebugClose_t );
+
 	// to display 'compressed' flag, if any.
 	auto pCompressedFlag = PublishTaskInfo ( new QlCompressedInfo_t );
 
@@ -855,6 +875,7 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 			continue;
 		}
 
-		bKeepAlive = LoopClientMySQL ( uPacketID, tSession, iPacketLen, pProfile, pBuf );
+		bKeepAlive = LoopClientMySQL ( uPacketID, tSession, iPacketLen, pProfile, pBuf )
+				&& !pCloseFlag->m_bClose;
 	} while ( bKeepAlive );
 }

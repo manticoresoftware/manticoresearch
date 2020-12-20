@@ -15,3 +15,5 @@
 #include "networking_daemon.h"
 
 void SqlServe ( AsyncNetBufferPtr_c pBuf );
+
+void DebugClose();

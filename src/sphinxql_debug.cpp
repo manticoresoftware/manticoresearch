@@ -204,4 +204,5 @@ CmdNotice_t DebugCmd::dCommands[(BYTE) Cmd_e::INVALID_CMD] = {
 	{ NONE, "debug drop <IDX> X", "For RT index <IDX> drop disk chunk X" },
 	{ NONE, "debug files <IDX> [option format=all|external]",
 			"list files belonging to <IDX>. 'all' - including external (wordforms, stopwords, etc.)" },
+	{ NONE, "debug close", "ask server to close connection from it's side" },
 };

@@ -70,6 +70,7 @@ FLOAT_CONSTANT      ({I}\.{I}?|{I}?\.{I}){EXPONENT}?
 "CHUNK"			    { STORE_BOUNDS; return TOK_CHUNK; }
 "INTO"			    { STORE_BOUNDS; return TOK_INTO; }
 "FROM"			    { STORE_BOUNDS; return TOK_FROM; }
+"CLOSE"				{ STORE_BOUNDS; return TOK_CLOSE; }
 
 
 '	                { STORE_START; BEGIN (QSTR); }

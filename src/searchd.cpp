@@ -50,6 +50,7 @@
 #include "taskpreread.h"
 #include "coroutine.h"
 #include "dynamic_idx.h"
+#include "netreceive_ql.h"
 
 extern "C"
 {
@@ -13328,6 +13329,15 @@ void HandleMysqlfiles ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCm
 	tOut.DataTable ( dOut );
 }
 
+void HandleMysqlclose ( RowBuffer_i & tOut )
+{
+	tOut.HeadTuplet ( "command", "result" );
+	tOut.DataTuplet ( "Close", "SUCCESS" );
+	tOut.Eof ();
+
+	DebugClose();
+}
+
 // same for select ... from index.files
 void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
@@ -13624,6 +13634,8 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand )
 	case Cmd_e::MERGE: HandleMysqlOptimizeManual ( tOut, tCmd ); return;
 	case Cmd_e::DROP: HandleMysqlDropManual ( tOut, tCmd ); return;
 	case Cmd_e::FILES: HandleMysqlfiles ( tOut, tCmd ); return;
+	case Cmd_e::CLOSE: HandleMysqlclose ( tOut );
+		return;
 	default: break;
 	}
 

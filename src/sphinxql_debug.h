@@ -41,6 +41,7 @@ enum class Cmd_e : BYTE
 	MERGE,
 	DROP,
 	FILES,
+	CLOSE,
 
 	INVALID_CMD
 };

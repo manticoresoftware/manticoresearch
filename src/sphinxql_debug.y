@@ -47,6 +47,7 @@
 %token <sValue>	TOK_DROP
 %token <sValue>	TOK_FILES
 %token <sValue>	TOK_OPTION
+%token <sValue>	TOK_CLOSE
 
 %type <iValue> boolpar timeint
 %type <sValue> ident szparam ident_special szparam_special
@@ -63,9 +64,10 @@ optsemicolon:
 
 debugcommand:
 	shutdown_crash_token
-	| TOK_MALSTATS		{ pParser->m_tCmd.m_eCommand = Cmd_e::MALLOC_STATS; }
-	| TOK_MALTRIM		{ pParser->m_tCmd.m_eCommand = Cmd_e::MALLOC_TRIM; }
-	| TOK_PROCDUMP  	{ pParser->m_tCmd.m_eCommand = Cmd_e::PROCDUMP; }
+	| TOK_MALSTATS	{ pParser->m_tCmd.m_eCommand = Cmd_e::MALLOC_STATS; }
+	| TOK_MALTRIM	{ pParser->m_tCmd.m_eCommand = Cmd_e::MALLOC_TRIM; }
+	| TOK_PROCDUMP  { pParser->m_tCmd.m_eCommand = Cmd_e::PROCDUMP; }
+	| TOK_CLOSE		{ pParser->m_tCmd.m_eCommand = Cmd_e::CLOSE; }
 	| setgdb
 	| sleep			{ pParser->m_tCmd.m_eCommand = Cmd_e::SLEEP; }
 	| TOK_TASKS		{ pParser->m_tCmd.m_eCommand = Cmd_e::TASKS; }
@@ -80,7 +82,7 @@ debugcommand:
 
 ident_special:
 	TOK_IDENT | TOK_DEBUG | TOK_SHUTDOWN | TOK_CRASH | TOK_TOKEN | TOK_MALSTATS | TOK_MALTRIM
-	| TOK_PROCDUMP | TOK_SETGDB | TOK_SLEEP | TOK_SYSTHREADS | TOK_SCHED | TOK_MERGE | TOK_FILES
+	| TOK_PROCDUMP | TOK_CLOSE | TOK_SETGDB | TOK_SLEEP | TOK_SYSTHREADS | TOK_SCHED | TOK_MERGE | TOK_FILES
 	| TOK_STATUS
 	;
 

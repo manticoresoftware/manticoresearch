@@ -154,7 +154,7 @@ sql_joined_field = \
         tagstext from query; \
         SELECT docid, CONCAT('tag',tagid) FROM tags ORDER BY docid ASC
 
-    sql_joined_field = tag from ranged-query; \
+sql_joined_field = tag from ranged-query; \
         SELECT id, tag FROM tags WHERE id>=$start AND id<=$end ORDER BY id ASC; \
         SELECT MIN(id), MAX(id) FROM tags
 ```

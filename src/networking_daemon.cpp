@@ -236,9 +236,6 @@ class CSphNetLoop::Impl_c
 			pMyInfo ()->m_eThdState = NetloopState_e::PROCESS_READY;
 			++pMyInfo ()->m_uTick;
 
-			// add actions planned by jobs
-			PickNewActions ();
-
 			// handle events and collect stats
 			m_tPrf.StartTick();
 			sphLogDebugv ( "got events=%d, tick=%u, interrupted=%d", m_pPoll->GetNumOfReady (), pMyInfo ()->m_uTick, !!sphInterrupted () );
@@ -246,6 +243,9 @@ class CSphNetLoop::Impl_c
 			m_tPrf.EndTask();
 
 			pMyInfo ()->m_eThdState = NetloopState_e::PROCESS_NEW;
+
+			// add actions planned by jobs
+			PickNewActions ();
 
 			// setup or refresh handlers
 			m_tPrf.StartNext();

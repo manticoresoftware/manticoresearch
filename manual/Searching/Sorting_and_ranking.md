@@ -103,7 +103,7 @@ Manticore ships with a number of built-in rankers suited for different purposes.
 Currently implemented rankers are:
 
 * `proximity_bm25`, the default ranking mode that uses and combines both phrase proximity and BM25 ranking.
-* `rank_bm25`, statistical ranking mode which uses BM25 ranking only (similar to most other full-text engines). This mode is faster but may result in worse quality on queries which contain more than 1 keyword.
+* `bm25`, statistical ranking mode which uses BM25 ranking only (similar to most other full-text engines). This mode is faster but may result in worse quality on queries which contain more than 1 keyword.
 * `none`, no ranking mode. This mode is obviously the fastest. A weight of 1 is assigned to all matches. This is sometimes called boolean searching that just matches the documents but does not rank them.
 * `wordcount`, ranking by the keyword occurrences count. This ranker computes the per-field keyword occurrence counts, then  multiplies them by field weights, and sums the resulting values.
 * `proximity` returns raw phrase proximity value as a result. This mode is internally used to emulate `SPH_MATCH_ALL` queries.

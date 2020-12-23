@@ -34,6 +34,11 @@ Integer. Max found matches threshold.
 ### field_weights
 Named integer list (per-field user weights for ranking)
 
+Example:
+```sql
+SELECT ... OPTION field_weights=(title=10, body=3)
+```
+
 ### global_idf
 Use global statistics (frequencies) from the [global_idf](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#global_idf) file for IDF computations.
 

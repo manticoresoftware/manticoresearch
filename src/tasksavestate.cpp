@@ -229,7 +229,7 @@ bool InitSphinxqlState ( CSphString dStateFilePath, CSphString& sError )
 	return true;
 }
 
-void IterateUservars ( UservarFn fnSample )
+void IterateUservars ( UservarFn&& fnSample )
 {
 	CSphVector<NamedRefVectorPair_t> dUservars;
 	{

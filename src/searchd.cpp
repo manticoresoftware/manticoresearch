@@ -13260,7 +13260,6 @@ void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugComman
 		return;
 	}
 
-	tOut.Ok ();
 	auto iFrom = tCmd.m_iPar1;
 	auto iTo = tCmd.m_iPar2;
 
@@ -13268,13 +13267,12 @@ void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugComman
 	{
 		if ( pIndex->m_pIndex )
 			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( tCmd.iOpt("cutoff"), iFrom, iTo );
-
-		return;
-	}
-
-	EnqueueForOptimize ( sIndex, tCmd.iOpt ( "cutoff" ), iFrom, iTo );
+	} else
+		EnqueueForOptimize ( sIndex, tCmd.iOpt ( "cutoff" ), iFrom, iTo );
+	tOut.Ok ();
 }
 
+// command 'drop [chunk] X [from] <IDX> [option...]'
 void HandleMysqlDropManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
 {
 	auto sIndex = tCmd.m_sParam;
@@ -13285,18 +13283,15 @@ void HandleMysqlDropManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t 
 		return;
 	}
 
-	tOut.Ok ();
-	auto iFrom = tCmd.m_iPar1;
+	auto iChunk = tCmd.m_iPar1;
 
 	if ( tCmd.bOpt("sync") )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( 0, iFrom, -1 );
-
-		return;
-	}
-
-	EnqueueForOptimize ( sIndex, 0, iFrom, -1 );
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( 0, iChunk, -1 );
+	} else
+		EnqueueForOptimize ( sIndex, 0, iChunk, -1 );
+	tOut.Ok ();
 }
 
 void HandleMysqlfiles ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )

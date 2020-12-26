@@ -167,7 +167,7 @@ into:
 	| TOK_INTO
 	;
 
-// command 'drop chunk X [from] <IDX> [option...]'
+// command 'drop [chunk] X [from] <IDX> [option...]'
 drop:
 	TOK_DROP chunk TOK_CONST_INT from ident opt_option_clause
 	{

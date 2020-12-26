@@ -3863,11 +3863,11 @@ CSphIndex * RtIndex_c::PreallocDiskChunk ( const char * sChunk, int iChunk, File
 	MEMORY ( MEM_INDEX_DISK );
 
 	// !COMMIT handle errors gracefully instead of dying
-	CSphIndex * pDiskChunk = sphCreateIndexPhrase ( ( sName ? sName : sChunk ), sChunk );
+	CSphScopedPtr<CSphIndex> pDiskChunk { sphCreateIndexPhrase ( ( sName ? sName : sChunk ), sChunk ) };
 	if ( !pDiskChunk )
 	{
 		sError.SetSprintf ( "disk chunk %s: alloc failed", sChunk );
-		return NULL;
+		return nullptr;
 	}
 
 	pDiskChunk->m_iExpansionLimit = m_iExpansionLimit;
@@ -3882,11 +3882,10 @@ CSphIndex * RtIndex_c::PreallocDiskChunk ( const char * sChunk, int iChunk, File
 	if ( !pDiskChunk->Prealloc ( m_bPathStripped, pFilenameBuilder ) )
 	{
 		sError.SetSprintf ( "disk chunk %s: prealloc failed: %s", sChunk, pDiskChunk->GetLastError().cstr() );
-		SafeDelete ( pDiskChunk );
-		return NULL;
+		pDiskChunk = nullptr;
 	}
 
-	return pDiskChunk;
+	return pDiskChunk.LeakPtr();
 }
 
 
@@ -7665,8 +7664,8 @@ void RtIndex_c::CommonMerge( Selector_t&& fnSelector )
 		const CSphIndex * pOldest = nullptr;
 		const CSphIndex * pOlder = nullptr;
 
-		// got zero chunk (iA), just remove it quickly
-		if ( iB<0 )
+		// merge iA to '-1' -> remove chunk iA
+		if ( iB==-1 )
 		{
 			DropDiskChunk ( iA );
 			continue;
@@ -7818,11 +7817,17 @@ void RtIndex_c::Optimize( int iCutoff, int iFrom, int iTo ) REQUIRES ( m_tChunkL
 	int iChunks = m_dDiskChunks.GetLength ();
 
 	// manual case: iFrom and iTo provided from outside, iCutoff is not in game
-	if ( iFrom>=0 && iTo>=0 )
+	if ( iFrom!=-1 || iTo!=-1 )
 	{
-		CommonMerge( [&iFrom,&iTo,iChunks] (int* piA, int* piB) -> bool
+		if ( iFrom>=iChunks || iTo>=iChunks )
+			return;
+
+		// 2 cases are in game:
+		// merge N into -1 = drop chunk N
+		// merge N into M = classical merge. N will be removed, M will be replaced by merged chunk.
+		CommonMerge( [&iFrom,&iTo] (int* piA, int* piB) -> bool
 		{
-			if (iFrom<0||iFrom>=iChunks||iTo<0||iTo>=iChunks)
+			if ( iFrom<0 && iTo<0 )
 				return false;
 			if (iFrom==iTo) // fool protect
 				return false;
@@ -7830,7 +7835,7 @@ void RtIndex_c::Optimize( int iCutoff, int iFrom, int iTo ) REQUIRES ( m_tChunkL
 			assert ( piB );
 			*piA = iFrom;
 			*piB = iTo;
-			iFrom=iTo=-1;
+			iFrom = iTo = -1; // that will stop us on the next iteration
 			return true;
 		});
 		return;

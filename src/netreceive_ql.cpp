@@ -776,7 +776,7 @@ void SqlServe ( AsyncNetBufferPtr_c pBuf )
 		sphLogDebugv ( "Receiving command... %d bytes in buf", tIn.HasBytes() );
 
 		// setup per-query profiling
-		auto pProfile = tSession.StartProfiling ( SPH_QSTATE_NET_READ ); // fixme! there is SPH_QSTATE_TOTAL there
+		auto pProfile = tSession.StartProfiling ( SPH_QSTATE_TOTAL );
 		if ( pProfile )
 			tOut.SetProfiler ( pProfile );
 

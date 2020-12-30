@@ -727,14 +727,12 @@ DiskIndexQwordTraits_c * sphCreateDiskIndexQword ( bool bInlineHits )
 
 /////////////////////////////////////////////////////////////////////////////
 
-#define WITH_QWORD(INDEX, NO_SEEK, NAME, ACTION)							\
-{																			\
-	CSphIndex_VLN * INDEX##pIndex = (CSphIndex_VLN *)INDEX;					\
-	if ( INDEX##pIndex->m_tSettings.m_eHitFormat==SPH_HIT_FORMAT_INLINE )	\
-		{ typedef DiskIndexQword_c < true, NO_SEEK > NAME; ACTION; }		\
-	else																	\
-		{ typedef DiskIndexQword_c < false, NO_SEEK > NAME; ACTION; }		\
-}
+#define WITH_QWORD(INDEX, NO_SEEK, NAME, ACTION)										\
+do if ( (( CSphIndex_VLN *)INDEX)->m_tSettings.m_eHitFormat==SPH_HIT_FORMAT_INLINE )	\
+		{ using NAME = DiskIndexQword_c < true, NO_SEEK >; ACTION; }					\
+	else																				\
+		{ using NAME = DiskIndexQword_c < false, NO_SEEK >; ACTION; }					\
+while(0)
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -11858,9 +11856,12 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 	bool bWordDict = pHitBuilder->IsWordDict();
 
+	/// compress means: I don't want true merge, I just want to apply deadrows and filter
+	bool bCompress = pDstIndex==pSrcIndex;
+
 	if ( !tDstReader.Setup ( pDstIndex->GetIndexFileName(SPH_EXT_SPI), pDstIndex->m_tWordlist.GetWordsEnd(), pDstIndex->m_tSettings.m_eHitless, sError, bWordDict ) )
 		return false;
-	if ( !tSrcReader.Setup ( pSrcIndex->GetIndexFileName(SPH_EXT_SPI), pSrcIndex->m_tWordlist.GetWordsEnd(), pSrcIndex->m_tSettings.m_eHitless, sError, bWordDict ) )
+	if ( !bCompress && !tSrcReader.Setup ( pSrcIndex->GetIndexFileName(SPH_EXT_SPI), pSrcIndex->m_tWordlist.GetWordsEnd(), pSrcIndex->m_tSettings.m_eHitless, sError, bWordDict ) )
 		return false;
 
 	/// prepare for indexing
@@ -11914,7 +11915,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 	/// merge
 
 	bool bDstWord = tDstReader.Read();
-	bool bSrcWord = tSrcReader.Read();
+	bool bSrcWord = !bCompress && tSrcReader.Read();
 
 	tProgress.m_ePhase = CSphIndexProgress::PHASE_MERGE;
 	tProgress.Show ( false );
@@ -11933,7 +11934,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 		if ( sphInterrupted () || *pLocalStop )
 			return false;
 
-		const int iCmp = tDstReader.CmpWord ( tSrcReader );
+		const int iCmp = bCompress ? -1 : tDstReader.CmpWord ( tSrcReader );
 
 		if ( !bSrcWord || ( bDstWord && iCmp<0 ) )
 		{
@@ -12013,8 +12014,11 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 		}
 	}
 
-	tStat.m_iTotalDocuments += pSrcIndex->m_tStats.m_iTotalDocuments;
-	tStat.m_iTotalBytes += pSrcIndex->m_tStats.m_iTotalBytes;
+	if ( !bCompress )
+	{
+		tStat.m_iTotalDocuments += pSrcIndex->m_tStats.m_iTotalDocuments;
+		tStat.m_iTotalBytes += pSrcIndex->m_tStats.m_iTotalBytes;
+	}
 
 	tProgress.m_iWords += iWords;
 	tProgress.Show ( false );
@@ -12148,18 +12152,23 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 {
 	assert ( pDstIndex && pSrcIndex );
 
+	/// 'merge with self' - only apply filters/kill-lists, no real merge
+	bool bCompress = pSrcIndex==pDstIndex;
+
+	assert ( !( bCompress && bSupressDstDocids ) && "compression of index with suppression it's docids looks strange" );
+
 	const CSphSchema & tDstSchema = pDstIndex->m_tSchema;
 	const CSphSchema & tSrcSchema = pSrcIndex->m_tSchema;
 	if ( !tDstSchema.CompareTo ( tSrcSchema, sError ) )
 		return false;
 
-	if ( pDstIndex->m_tSettings.m_eHitless!=pSrcIndex->m_tSettings.m_eHitless )
+	if ( !bCompress && pDstIndex->m_tSettings.m_eHitless!=pSrcIndex->m_tSettings.m_eHitless )
 	{
 		sError = "hitless settings must be the same on merged indices";
 		return false;
 	}
 
-	if ( pDstIndex->m_pDict->GetSettings().m_bWordDict!=pSrcIndex->m_pDict->GetSettings().m_bWordDict )
+	if ( !bCompress && pDstIndex->m_pDict->GetSettings().m_bWordDict!=pSrcIndex->m_pDict->GetSettings().m_bWordDict )
 	{
 		sError.SetSprintf ( "dictionary types must be the same (dst dict=%s, src dict=%s )",
 			pDstIndex->m_pDict->GetSettings().m_bWordDict ? "keywords" : "crc",
@@ -12202,7 +12211,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 	AttrIndexBuilder_c tMinMax ( pDstIndex->m_tSchema );
 
-	CSphVector<RowID_t> dSrcRows(pSrcIndex->m_iDocinfo);
+	CSphVector<RowID_t> dSrcRows ( bCompress ? 0LL : pSrcIndex->m_iDocinfo );
 	CSphVector<RowID_t> dDstRows(pDstIndex->m_iDocinfo);
 
 	CreateRowMaps ( pDstIndex, pSrcIndex, pFilter, dSrcRows, dDstRows, bSupressDstDocids );
@@ -12211,7 +12220,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	if ( !MergeAttributes ( pLocalStop, pDstIndex, dDstRows, tMinMax, tWriterSPA, pBlobRowBuilder.Ptr(), pDocstoreBuilder.Ptr(), tResultRowID ) )
 		return false;
 
-	if ( !MergeAttributes ( pLocalStop, pSrcIndex, dSrcRows, tMinMax, tWriterSPA, pBlobRowBuilder.Ptr(), pDocstoreBuilder.Ptr(), tResultRowID ) )
+	if ( !bCompress && !MergeAttributes ( pLocalStop, pSrcIndex, dSrcRows, tMinMax, tWriterSPA, pBlobRowBuilder.Ptr(), pDocstoreBuilder.Ptr(), tResultRowID ) )
 		return false;
 
 	if ( tResultRowID )
@@ -12256,18 +12265,18 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	{
 		WITH_QWORD ( pDstIndex, false, QwordDst,
 			WITH_QWORD ( pSrcIndex, false, QwordSrc,
-		{
-			if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dDstRows, dSrcRows, &tHitBuilder, sError, tBuildHeader, tProgress, pLocalStop ) )
-				return false;
-		} ) );
+				if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dDstRows,
+					dSrcRows, &tHitBuilder, sError, tBuildHeader, tProgress, pLocalStop ) )
+					return false;
+		));
 	} else
 	{
 		WITH_QWORD ( pDstIndex, true, QwordDst,
 			WITH_QWORD ( pSrcIndex, true, QwordSrc,
-		{
-			if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dDstRows, dSrcRows, &tHitBuilder, sError, tBuildHeader, tProgress, pLocalStop ) )
-				return false;
-		} ) );
+				if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dDstRows,
+					dSrcRows, &tHitBuilder, sError, tBuildHeader, tProgress, pLocalStop ) )
+					return false;
+		));
 	}
 
 	tBuildHeader.m_iTotalDocuments = tResultRowID;

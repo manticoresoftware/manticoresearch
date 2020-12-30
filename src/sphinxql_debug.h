@@ -42,6 +42,7 @@ enum class Cmd_e : BYTE
 	DROP,
 	FILES,
 	CLOSE,
+	COMPRESS,
 
 	INVALID_CMD
 };

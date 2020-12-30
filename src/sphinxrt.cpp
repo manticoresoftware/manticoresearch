@@ -1123,8 +1123,16 @@ public:
 	void				Optimize ( int iCutoff, int iFrom, int iTo ) final;
 	void				CommonMerge ( Selector_t&& fnSelector );
 	void				DropDiskChunk ( int iChunk ) REQUIRES ( m_tOptimizingLock );
+	bool				CompressOneChunk ( int iChunk ) REQUIRES ( m_tOptimizingLock );
+	bool				MergeTwoChunks ( int iA, int iB ) REQUIRES ( m_tOptimizingLock );
+
+	// helpers
+	CSphIndex *			CompressDiskChunk ( const CSphIndex * pChunk ) REQUIRES ( m_tOptimizingLock );
+	bool				SkipOrDrop ( int iChunk, const CSphIndex * pChunk, int64_t * pAlives=nullptr ) REQUIRES ( m_tOptimizingLock );
 	CSphIndex *			GetDiskChunk ( int iChunk ) final { return m_dDiskChunks.GetLength()>iChunk ? m_dDiskChunks[iChunk] : nullptr; }
 	ISphTokenizer *		CloneIndexingTokenizer() const final { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
+
+	static int64_t		NumAliveDocs ( const CSphIndex * pChunk ) ;
 
 public:
 #if USE_WINDOWS
@@ -7594,15 +7602,19 @@ static int64_t GetEffectiveSize (const CSphIndexStatus& tStatus, int64_t iTotalD
 	return int64_t ( tStatus.m_iDiskUse * ( 1.0f-fPart ) );
 }
 
-static int64_t GetChunkSize ( const CSphVector<CSphIndex*> & dDiskChunks, int iIndex )
+static int64_t GetChunkSize ( const CSphIndex * pIndex )
 {
-	if (iIndex<0)
-		return 0;
 	CSphIndexStatus tDisk;
-	dDiskChunks[iIndex]->GetStatus(&tDisk);
-	return GetEffectiveSize ( tDisk, dDiskChunks[iIndex]->GetStats ().m_iTotalDocuments );
+	pIndex->GetStatus ( &tDisk );
+	return GetEffectiveSize ( tDisk, pIndex->GetStats ().m_iTotalDocuments );
 }
 
+static int64_t GetChunkSize ( const CSphVector<CSphIndex*> & dDiskChunks, int iIndex )
+{
+	if ( iIndex>=0 )
+		return GetChunkSize ( dDiskChunks[iIndex] );
+	return 0;
+}
 
 static std::pair<int, int64_t> GetNextSmallestChunk ( const CSphVector<CSphIndex*> & dDiskChunks, int iIndex )
 {
@@ -7642,6 +7654,299 @@ void RtIndex_c::DropDiskChunk ( int iChunk )
 	sphUnlinkIndex ( sDeleted.cstr(), true );
 }
 
+// perform compression merge and return pointer to resulting preallocated chunk (it is NOT inserted into list of chunks)
+CSphIndex * RtIndex_c::CompressDiskChunk ( const CSphIndex * pChunk )
+{
+	CSphString sError;
+
+	// in case of compress - check fast paths: if none killed, if all killed.
+	CSphIndexStatus tStatus;
+	pChunk->GetStatus ( &tStatus );
+
+	CSphString sOld = pChunk->GetFilename();
+
+	// fixme! implicit dependency (merging creates file suffixed .tmp, that is implicit here.
+	CSphString sCompressed;
+	sCompressed.SetSprintf ( "%s.tmp", pChunk->GetFilename() );
+
+	// check forced exit after long operation
+	if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted () )
+		return nullptr;
+
+	// need klist for merged chunk only after we got disk chunks and going to merge them
+	Verify ( m_tWriting.Lock() );
+	m_dKillsWhileOptimizing.Reset();
+	Verify ( m_tWriting.Unlock() );
+
+	// merge data to disk ( data is constant during that phase )
+	CSphIndexProgress tProgress;
+	if ( !sphMerge ( pChunk, pChunk, sError, tProgress, &m_bOptimizeStop, true ) )
+	{
+		sphWarning ( "rt compress: index %s: failed to compress %s (error %s)",
+			m_sIndexName.cstr(), sOld.cstr(), sError.cstr() );
+		return nullptr;
+	}
+
+	// check forced exit after long operation
+	if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted () )
+		return nullptr;
+
+	auto fnFnameBuilder = GetIndexFilenameBuilder ();
+	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder { fnFnameBuilder ? fnFnameBuilder ( m_sIndexName.cstr () ) : nullptr };
+
+	return PreallocDiskChunk ( sCompressed.cstr(), pChunk->m_iChunk, pFilenameBuilder.Ptr(), sError, pChunk->GetName() );
+}
+
+int64_t RtIndex_c::NumAliveDocs ( const CSphIndex * pChunk )
+{
+	CSphIndexStatus tStatus;
+	pChunk->GetStatus ( &tStatus );
+	return pChunk->GetStats ().m_iTotalDocuments - tStatus.m_iDead;
+}
+
+bool RtIndex_c::SkipOrDrop ( int iChunk, const CSphIndex * pChunk, int64_t * pAlives ) REQUIRES ( m_tOptimizingLock )
+{
+	auto iTotalDocs = pChunk->GetStats ().m_iTotalDocuments;
+	auto iAliveDocs = NumAliveDocs ( pChunk );
+	if ( pAlives )
+		*pAlives = iAliveDocs;
+
+	// all docs killed
+	if ( !iAliveDocs )
+	{
+		sphLogDebug ( "common merge - drop %d, all (" INT64_FMT ") killed", iChunk, iTotalDocs );
+		DropDiskChunk ( iChunk );
+		return true;
+	}
+
+	// no docs killed
+	if ( iTotalDocs==iAliveDocs )
+	{
+		sphLogDebug ( "common merge - skip compressing %d, no killed", iChunk );
+		return true;
+	}
+
+	return false;
+}
+
+
+bool RtIndex_c::CompressOneChunk ( int iChunk )
+{
+	const CSphIndex * pChunk = nullptr;
+
+	{ // m_tChunkLock scoped Readlock
+		CSphScopedRLock RChunkLock { m_tChunkLock };
+		pChunk = m_dDiskChunks[iChunk];
+		sphLogDebug ( "compress %d (%d kb)", iChunk, (int) ( GetChunkSize ( pChunk ) / 1024 ) );
+	}
+
+	if ( SkipOrDrop ( iChunk, pChunk ) )
+		return true;
+
+	CSphScopedPtr<CSphIndex> pCompressed { CompressDiskChunk ( pChunk ) };
+	if ( !pCompressed )
+		return false;
+
+	// lets rotate indexes
+	CSphString sName = pChunk->GetFilename ();
+
+	// rename merged disk chunk to 0
+	if ( !pCompressed->Rename ( sName.cstr () ) )
+	{
+		sphWarning ( "rt optimize: index %s: compressed to cur rename failed (error %s)", m_sIndexName.cstr (),
+			pCompressed->GetLastError ().cstr () );
+
+		if ( !const_cast<CSphIndex *>( pChunk )->Rename ( sName.cstr () ) )
+			sphWarning ( "rt optimize: index %s: old to cur rename failed (error %s)", m_sIndexName.cstr (),
+				pChunk->GetLastError ().cstr () );
+		return false;
+	}
+
+	if ( m_bOptimizeStop || sphInterrupted () ) // protection
+		return false;
+
+	// compressed replaces recent chunk
+
+	// Writing lock - to wipe out writers
+	// Chunk wlock - to lock chunks as we are going to modify the chunk vector
+	// order same as GetReaderChunks and SaveDiskChunk to prevent deadlock
+
+	Verify ( m_tWriting.Lock () );
+	Verify ( m_tChunkLock.WriteLock () );
+
+	// apply killlists that were collected while we were merging segments
+	m_dKillsWhileOptimizing.Uniq ();
+	int iKilled = pCompressed->KillMulti ( m_dKillsWhileOptimizing );
+	m_dKillsWhileOptimizing.Reset ();
+
+	sphLogDebug ( "compressed a=%s, new=%s, killed=%d", pChunk->GetFilename (), pCompressed->GetFilename (), iKilled );
+
+	m_dDiskChunks[iChunk] = pCompressed.LeakPtr ();
+	SaveMeta ( m_iTID );
+
+	Verify ( m_tChunkLock.Unlock () );
+	Verify ( m_tWriting.Unlock () );
+
+	if ( m_bOptimizeStop || sphInterrupted () )
+	{
+		sphWarning ( "rt optimize: index %s: forced to shutdown, remove old index files manually '%s.tmp', '%s'"
+					 , m_sIndexName.cstr (), sName.cstr (), sName.cstr () );
+		SafeDelete ( pChunk );
+		return false;
+	}
+
+	// exclusive reader (to make sure that disk chunks not used any more) and writer lock here
+	// write lock goes first as with commit
+	Verify ( m_tWriting.Lock () );
+	Verify ( m_tReading.WriteLock () );
+
+	SafeDelete ( pChunk );
+
+	Verify ( m_tReading.Unlock () );
+	Verify ( m_tWriting.Unlock () );
+	return true;
+}
+
+bool RtIndex_c::MergeTwoChunks ( int iA, int iB )
+{
+	const CSphIndex * pOldest = nullptr;
+	const CSphIndex * pOlder = nullptr;
+	CSphString sError;
+
+	{ // m_tChunkLock scoped Readlock
+		CSphScopedRLock RChunkLock { m_tChunkLock };
+		// merge 'older'(pSrc) to 'oldest'(pDst) and get 'merged' that names like 'oldest'+.tmp
+		// however 'merged' got placed at 'older' position and 'merged' renamed to 'older' name
+		pOldest = m_dDiskChunks[iA];
+		pOlder =  m_dDiskChunks[iB];
+
+		sphLogDebug ( "common merge - merging %d (%d kb) with %d (%d kb)",
+			iA, (int)(GetChunkSize ( pOldest )/1024),
+			iB, (int)(GetChunkSize ( pOlder )/1024) );
+	} // m_tChunkLock scoped Readlock
+
+	CSphString sOlder, sOldest, sRename, sMerged;
+	sOlder.SetSprintf ( "%s", pOlder->GetFilename() );
+	sOldest.SetSprintf ( "%s", pOldest->GetFilename() );
+	sRename.SetSprintf ( "%s.old", pOlder->GetFilename() );
+	sMerged.SetSprintf ( "%s.tmp", pOldest->GetFilename() ); // fixme! implicit dependency (merging creates file suffixed .tmp, that is implicit here.
+
+	// check forced exit after long operation
+	if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted ())
+		return false;
+
+	// need klist for merged chunk only after we got disk chunks and going to merge them
+	Verify ( m_tWriting.Lock() );
+	m_dKillsWhileOptimizing.Reset();
+	Verify ( m_tWriting.Unlock() );
+
+	// merge data to disk ( data is constant during that phase )
+	CSphIndexProgress tProgress;
+	bool bMerged = sphMerge ( pOldest, pOlder, sError, tProgress, &m_bOptimizeStop, true );
+	if ( !bMerged )
+	{
+		sphWarning ( "rt optimize: index %s: failed to merge %s to %s (error %s)",
+			m_sIndexName.cstr(), sOlder.cstr(), sOldest.cstr(), sError.cstr() );
+		return false;
+	}
+
+	// check forced exit after long operation
+	if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted ())
+		return false;
+
+	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder ();
+	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder (	fnCreateFilenameBuilder
+		? fnCreateFilenameBuilder ( m_sIndexName.cstr () )
+		: nullptr );
+	CSphScopedPtr<CSphIndex> pMerged ( PreallocDiskChunk ( sMerged.cstr(), pOlder->m_iChunk, pFilenameBuilder.Ptr(), sError, pOlder->GetName() ) );
+	if ( !pMerged )
+	{
+		sphWarning ( "rt optimize: index %s: failed to load merged chunk (error %s)",
+			m_sIndexName.cstr(), sError.cstr() );
+		return false;
+	}
+	// check forced exit after long operation
+	if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted ())
+		return false;
+
+	// lets rotate indexes
+
+	// rename older disk chunk to 'old'
+	if ( !const_cast<CSphIndex *>( pOlder )->Rename ( sRename.cstr() ) )
+	{
+		sphWarning ( "rt optimize: index %s: cur to old rename failed (error %s)",
+			m_sIndexName.cstr(), pOlder->GetLastError().cstr() );
+		return false;
+	}
+	// rename merged disk chunk to 0
+	if ( !pMerged->Rename ( sOlder.cstr() ) )
+	{
+		sphWarning ( "rt optimize: index %s: merged to cur rename failed (error %s)",
+			m_sIndexName.cstr(), pMerged->GetLastError().cstr() );
+
+		if ( !const_cast<CSphIndex *>( pOlder )->Rename ( sOlder.cstr() ) )
+			sphWarning ( "rt optimize: index %s: old to cur rename failed (error %s)",
+				m_sIndexName.cstr(), pOlder->GetLastError().cstr() );
+		return false;
+	}
+
+	if ( m_bOptimizeStop || sphInterrupted ()) // protection
+		return false;
+
+	// merged replaces recent chunk
+	// oldest chunk got deleted
+
+	// Writing lock - to wipe out writers
+	// Chunk wlock - to lock chunks as we are going to modify the chunk vector
+	// order same as GetReaderChunks and SaveDiskChunk to prevent deadlock
+
+	Verify ( m_tWriting.Lock() );
+	Verify ( m_tChunkLock.WriteLock() );
+
+	// apply killlists that were collected while we were merging segments
+	m_dKillsWhileOptimizing.Uniq();
+	int iKilled = pMerged->KillMulti ( m_dKillsWhileOptimizing );
+	m_dKillsWhileOptimizing.Reset();
+
+	sphLogDebug ( "optimized a=%s, b=%s, new=%s, killed=%d",
+			pOldest->GetFilename(), pOlder->GetFilename(), pMerged->GetFilename(), iKilled );
+
+	m_dDiskChunks[iB] = pMerged.LeakPtr();
+	m_dDiskChunks.Remove ( iA );
+	SaveMeta ( m_iTID );
+
+	Verify ( m_tChunkLock.Unlock() );
+	Verify ( m_tWriting.Unlock() );
+
+	if ( m_bOptimizeStop || sphInterrupted () )
+	{
+		sphWarning ( "rt optimize: index %s: forced to shutdown, remove old index files manually '%s', '%s'",
+			m_sIndexName.cstr(), sRename.cstr(), sOldest.cstr() );
+		SafeDelete ( pOldest );
+		SafeDelete ( pOlder );
+		return false;
+	}
+
+	// exclusive reader (to make sure that disk chunks not used any more) and writer lock here
+	// write lock goes first as with commit
+	Verify ( m_tWriting.Lock() );
+	Verify ( m_tReading.WriteLock() );
+
+	SafeDelete ( pOldest );
+	SafeDelete ( pOlder );
+
+	Verify ( m_tReading.Unlock() );
+	Verify ( m_tWriting.Unlock() );
+
+	// we might remove old index files
+	sphUnlinkIndex ( sRename.cstr(), true );
+	sphUnlinkIndex ( sOldest.cstr(), true );
+
+	// FIXME: wipe out 'merged' index files in case of error
+	return true;
+}
+
+
 void RtIndex_c::CommonMerge( Selector_t&& fnSelector )
 {
 	int64_t tmStart = sphMicroTimer();
@@ -7650,152 +7955,28 @@ void RtIndex_c::CommonMerge( Selector_t&& fnSelector )
 	ScopedMutex_t tOptimizing ( m_tOptimizingLock );
 	m_bOptimizing = true;
 
-	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
-
 	int iChunks = 0;
-	CSphString sError;
 
 	int iA = -1;
 	int iB = -1;
 
 	while ( fnSelector ( &iA, &iB ) && !sphInterrupted () && !m_bOptimizeStop && !m_bSaveDisabled )
 	{
-		const CSphIndex * pOldest = nullptr;
-		const CSphIndex * pOlder = nullptr;
+		assert ( iA!=-1 || iB!=-1 );
 
-		// merge iA to '-1' -> remove chunk iA
-		if ( iB==-1 )
-		{
+		if ( iB==-1 ) // merge iA to '-1' -> remove chunk iA
 			DropDiskChunk ( iA );
-			continue;
-		}
 
-		{ // m_tChunkLock scoped Readlock
-			CSphScopedRLock RChunkLock { m_tChunkLock };
-			// merge 'older'(pSrc) to 'oldest'(pDst) and get 'merged' that names like 'oldest'+.tmp
-			// however 'merged' got placed at 'older' position and 'merged' renamed to 'older' name
-			pOldest = m_dDiskChunks[iA];
-			pOlder = m_dDiskChunks[iB];
-		} // m_tChunkLock scoped Readlock
-
-		sphLogDebug ( "common merge - merging %d (%d kb) with %d (%d kb)",
-				iA, (int)(GetChunkSize ( m_dDiskChunks, iA )/1024),
-				iB, (int)(GetChunkSize ( m_dDiskChunks, iB )/1024) );
-
-		CSphString sOlder, sOldest, sRename, sMerged;
-		sOlder.SetSprintf ( "%s", pOlder->GetFilename() );
-		sOldest.SetSprintf ( "%s", pOldest->GetFilename() );
-		sRename.SetSprintf ( "%s.old", pOlder->GetFilename() );
-		sMerged.SetSprintf ( "%s.tmp", pOldest->GetFilename() );
-
-		// check forced exit after long operation
-		if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted ())
-			break;
-
-		// need klist for merged chunk only after we got disk chunks and going to merge them
-		Verify ( m_tWriting.Lock() );
-		m_dKillsWhileOptimizing.Reset();
-		Verify ( m_tWriting.Unlock() );
-
-		// merge data to disk ( data is constant during that phase )
-		CSphIndexProgress tProgress;
-		bool bMerged = sphMerge ( pOldest, pOlder, sError, tProgress, &m_bOptimizeStop, true );
-		if ( !bMerged )
+		else if ( iA==-1 ) // merge -1 to iB -> simple compress (remove deads)
 		{
-			sphWarning ( "rt optimize: index %s: failed to merge %s to %s (error %s)",
-				m_sIndexName.cstr(), sOlder.cstr(), sOldest.cstr(), sError.cstr() );
-			break;
+			if ( !CompressOneChunk ( iB ) ) // note, compress also may drop
+				break;
 		}
 
-		// check forced exit after long operation
-		if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted ())
+		else if ( !MergeTwoChunks ( iA, iB ) )
 			break;
-
-		CSphScopedPtr<CSphIndex> pMerged ( PreallocDiskChunk ( sMerged.cstr(), pOlder->m_iChunk, pFilenameBuilder.Ptr(), sError, pOlder->GetName() ) );
-		if ( !pMerged.Ptr() )
-		{
-			sphWarning ( "rt optimize: index %s: failed to load merged chunk (error %s)",
-				m_sIndexName.cstr(), sError.cstr() );
-			break;
-		}
-		// check forced exit after long operation
-		if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted ())
-			break;
-
-		// lets rotate indexes
-
-		// rename older disk chunk to 'old'
-		if ( !const_cast<CSphIndex *>( pOlder )->Rename ( sRename.cstr() ) )
-		{
-			sphWarning ( "rt optimize: index %s: cur to old rename failed (error %s)",
-				m_sIndexName.cstr(), pOlder->GetLastError().cstr() );
-			break;
-		}
-		// rename merged disk chunk to 0
-		if ( !pMerged->Rename ( sOlder.cstr() ) )
-		{
-			sphWarning ( "rt optimize: index %s: merged to cur rename failed (error %s)",
-				m_sIndexName.cstr(), pMerged->GetLastError().cstr() );
-
-			if ( !const_cast<CSphIndex *>( pOlder )->Rename ( sOlder.cstr() ) )
-				sphWarning ( "rt optimize: index %s: old to cur rename failed (error %s)",
-					m_sIndexName.cstr(), pOlder->GetLastError().cstr() );
-			break;
-		}
-
-		if ( m_bOptimizeStop || sphInterrupted ()) // protection
-			break;
-
-		// merged replaces recent chunk
-		// oldest chunk got deleted
-
-		// Writing lock - to wipe out writers
-		// Chunk wlock - to lock chunks as we are going to modify the chunk vector
-		// order same as GetReaderChunks and SaveDiskChunk to prevent deadlock
-
-		Verify ( m_tWriting.Lock() );
-		Verify ( m_tChunkLock.WriteLock() );
-
-		// apply killlists that were collected while we were merging segments
-		m_dKillsWhileOptimizing.Uniq();
-		int iKilled = pMerged->KillMulti ( m_dKillsWhileOptimizing );
-		m_dKillsWhileOptimizing.Reset();
-
-		sphLogDebug ( "optimized a=%s, b=%s, new=%s, killed=%d",
-				pOldest->GetFilename(), pOlder->GetFilename(), pMerged->GetFilename(), iKilled );
-
-		m_dDiskChunks[iB] = pMerged.LeakPtr();
-		m_dDiskChunks.Remove ( iA );
-		SaveMeta ( m_iTID );
-
-		Verify ( m_tChunkLock.Unlock() );
-		Verify ( m_tWriting.Unlock() );
 
 		++iChunks;
-
-		if ( m_bOptimizeStop || sphInterrupted () )
-		{
-			sphWarning ( "rt optimize: index %s: forced to shutdown, remove old index files manually '%s', '%s'",
-				m_sIndexName.cstr(), sRename.cstr(), sOldest.cstr() );
-			break;
-		}
-
-		// exclusive reader (to make sure that disk chunks not used any more) and writer lock here
-		// write lock goes first as with commit
-		Verify ( m_tWriting.Lock() );
-		Verify ( m_tReading.WriteLock() );
-
-		SafeDelete ( pOlder );
-		SafeDelete ( pOldest );
-
-		Verify ( m_tReading.Unlock() );
-		Verify ( m_tWriting.Unlock() );
-
-		// we might remove old index files
-		sphUnlinkIndex ( sRename.cstr(), true );
-		sphUnlinkIndex ( sOldest.cstr(), true );
-		// FIXEME: wipe out 'merged' index files in case of error
 	}
 
 	m_bOptimizing = false;
@@ -7822,8 +8003,9 @@ void RtIndex_c::Optimize( int iCutoff, int iFrom, int iTo ) REQUIRES ( m_tChunkL
 		if ( iFrom>=iChunks || iTo>=iChunks )
 			return;
 
-		// 2 cases are in game:
+		// 3 cases are in game:
 		// merge N into -1 = drop chunk N
+		// merge -1 into N = complress chunk N (i.e. wipe deads). If everything dead - will drop chunk.
 		// merge N into M = classical merge. N will be removed, M will be replaced by merged chunk.
 		CommonMerge( [&iFrom,&iTo] (int* piA, int* piB) -> bool
 		{

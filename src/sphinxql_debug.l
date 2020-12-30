@@ -63,6 +63,7 @@ FLOAT_CONSTANT      ({I}\.{I}?|{I}?\.{I}){EXPONENT}?
 "DROP"				{ STORE_BOUNDS; return TOK_DROP; }
 "FILES"				{ STORE_BOUNDS; return TOK_FILES; }
 "OPTION"			{ STORE_BOUNDS; return TOK_OPTION; }
+"COMPRESS"			{ STORE_BOUNDS; return TOK_COMPRESS; }
 
 "ON"				{ STORE_BOUNDS; return TOK_ON; }
 "OFF"				{ STORE_BOUNDS; return TOK_OFF; }

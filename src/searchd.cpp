@@ -13294,6 +13294,28 @@ void HandleMysqlDropManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t 
 	tOut.Ok ();
 }
 
+void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
+{
+	auto sIndex = tCmd.m_sParam;
+	ServedDescRPtr_c pIndex ( GetServed ( sIndex ) );
+	if ( !ServedDesc_t::IsMutable ( pIndex ) )
+	{
+		tOut.Error ( tCmd.m_szStmt, "COMPRESS requires an existing RT index" );
+		return;
+	}
+
+
+	auto iChunk = tCmd.m_iPar1;
+
+	if ( tCmd.bOpt("sync") )
+	{
+		if ( pIndex->m_pIndex )
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( 0, -1, iChunk );
+	} else
+		EnqueueForOptimize ( sIndex, 0, -1, iChunk );
+	tOut.Ok ();
+}
+
 void HandleMysqlfiles ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
 {
 	auto sIndex = tCmd.m_sParam;
@@ -13630,6 +13652,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand )
 	case Cmd_e::DROP: HandleMysqlDropManual ( tOut, tCmd ); return;
 	case Cmd_e::FILES: HandleMysqlfiles ( tOut, tCmd ); return;
 	case Cmd_e::CLOSE: HandleMysqlclose ( tOut ); return;
+	case Cmd_e::COMPRESS: HandleMysqlCompress ( tOut, tCmd ); return;
 	default: break;
 	}
 

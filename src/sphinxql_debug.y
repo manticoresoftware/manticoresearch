@@ -49,6 +49,7 @@
 %token <sValue>	TOK_OPTION
 %token <sValue>	TOK_CLOSE
 %token <sValue>	TOK_COMPRESS
+%token <sValue>	TOK_SPLIT
 
 %type <iValue> boolpar timeint
 %type <sValue> ident szparam ident_special szparam_special
@@ -78,6 +79,7 @@ debugcommand:
 	| drop			{ pParser->m_tCmd.m_eCommand = Cmd_e::DROP; }
 	| files			{ pParser->m_tCmd.m_eCommand = Cmd_e::FILES; }
 	| compress		{ pParser->m_tCmd.m_eCommand = Cmd_e::COMPRESS; }
+	| split			{ pParser->m_tCmd.m_eCommand = Cmd_e::SPLIT; }
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -85,7 +87,7 @@ debugcommand:
 ident_special:
 	TOK_IDENT | TOK_DEBUG | TOK_SHUTDOWN | TOK_CRASH | TOK_TOKEN | TOK_MALSTATS | TOK_MALTRIM
 	| TOK_PROCDUMP | TOK_CLOSE | TOK_SETGDB | TOK_SLEEP | TOK_SYSTHREADS | TOK_SCHED | TOK_MERGE | TOK_FILES
-	| TOK_STATUS | TOK_COMPRESS
+	| TOK_STATUS | TOK_COMPRESS | TOK_SPLIT
 	;
 
 ident:
@@ -201,6 +203,18 @@ compress:
 		tCmd.m_iPar1 = $4;
 	}
 	;
+
+// command 'split <IDX> [chunk] N on @uservar [option...]'
+split:
+	TOK_SPLIT ident chunk TOK_CONST_INT TOK_ON TOK_USERVAR opt_option_clause
+	{
+		auto& tCmd = pParser->m_tCmd;
+		tCmd.m_sParam = pParser->StrFromBlob ($2);
+		tCmd.m_sParam2 = pParser->StrFromBlob ($6);
+		tCmd.m_iPar1 = $4;
+	}
+	;
+
 
 opt_option_clause:
 	// empty

@@ -209,4 +209,6 @@ CmdNotice_t DebugCmd::dCommands[(BYTE) Cmd_e::INVALID_CMD] = {
 	{ NONE, "debug close", "ask server to close connection from it's side" },
 	{ NONE, "debug compress <IDX> [chunk] X [option sync=1]",
 			"Compress disk chunk X of RT index <IDX> (wipe out deleted documents)" },
+	{ NONE, "debug split <IDX> [chunk] X on @uservar [option sync=1]",
+			"Split disk chunk X of RT index <IDX> using set of DocIDs from @uservar" },
 };

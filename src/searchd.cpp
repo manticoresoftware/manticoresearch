@@ -13266,7 +13266,7 @@ void HandleMysqlOptimizeManual ( RowBuffer_i & tOut, const DebugCmd::DebugComman
 	if ( tCmd.bOpt("sync") )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( tCmd.iOpt("cutoff"), iFrom, iTo );
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( tCmd.iOpt("cutoff"), iFrom, iTo, nullptr );
 	} else
 		EnqueueForOptimize ( sIndex, tCmd.iOpt ( "cutoff" ), iFrom, iTo );
 	tOut.Ok ();
@@ -13288,7 +13288,7 @@ void HandleMysqlDropManual ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t 
 	if ( tCmd.bOpt("sync") )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( 0, iChunk, -1 );
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( 0, iChunk, -1, nullptr );
 	} else
 		EnqueueForOptimize ( sIndex, 0, iChunk, -1 );
 	tOut.Ok ();
@@ -13310,9 +13310,54 @@ void HandleMysqlCompress ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & 
 	if ( tCmd.bOpt("sync") )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( 0, -1, iChunk );
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize ( 0, -1, iChunk, nullptr );
 	} else
-		EnqueueForOptimize ( sIndex, 0, -1, iChunk );
+		EnqueueForOptimize ( sIndex, 1, iChunk, iChunk );
+	tOut.Ok ();
+}
+
+// command 'split <IDX> [chunk] N on @uservar [option...]'
+// IDX is tCmd.m_sParam
+// chunk is tCmd.m_iPar1
+// uservar is tCmd.m_sParam2
+void HandleMysqlSplit ( RowBuffer_i & tOut, const DebugCmd::DebugCommand_t & tCmd )
+{
+	// check index existance
+	auto sIndex = tCmd.m_sParam;
+	ServedDescRPtr_c pIndex ( GetServed ( sIndex ) );
+	if ( !ServedDesc_t::IsMutable ( pIndex ) )
+	{
+		tOut.Error ( tCmd.m_szStmt, "SPLIT requires an existing RT index" );
+		return;
+	}
+
+	auto* pRTIndex = static_cast<RtIndex_i *>( pIndex->m_pIndex );
+	if ( !pRTIndex )
+	{
+		tOut.Error ( tCmd.m_szStmt, "SPLIT requires an existing RT index" );
+		return;
+	}
+
+	auto iChunk = tCmd.m_iPar1;
+
+	bool bVarFound = false;
+	IterateUservars ( [&tCmd, &bVarFound] ( const NamedRefVectorPair_t & dVar ) {
+		if ( dVar.first == tCmd.m_sParam2
+//			&& dVar.second.m_eType==USERVAR_INT_SET_TMP // uncomment this to split only by session (result of delete .. store) variables
+		)
+			bVarFound = true;
+	} );
+
+	if ( !bVarFound )
+	{
+		tOut.Error ( tCmd.m_szStmt, "SPLIT requires an existing session @uservar" );
+		return;
+	}
+
+	if ( tCmd.bOpt ( "sync" ) )
+		pRTIndex->Optimize ( -1, iChunk, iChunk, tCmd.m_sParam2.cstr() );
+	else
+		EnqueueForOptimize ( sIndex, -1, iChunk, iChunk, tCmd.m_sParam2.cstr() );
 	tOut.Ok ();
 }
 
@@ -13653,6 +13698,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand )
 	case Cmd_e::FILES: HandleMysqlfiles ( tOut, tCmd ); return;
 	case Cmd_e::CLOSE: HandleMysqlclose ( tOut ); return;
 	case Cmd_e::COMPRESS: HandleMysqlCompress ( tOut, tCmd ); return;
+	case Cmd_e::SPLIT: HandleMysqlSplit ( tOut, tCmd ); return;
 	default: break;
 	}
 
@@ -13749,7 +13795,7 @@ void HandleMysqlOptimize ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	if ( tStmt.m_tQuery.m_bSync )
 	{
 		if ( pIndex->m_pIndex )
-			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize(tStmt.m_tQuery.m_iCutoff,-1,-1);
+			static_cast<RtIndex_i *>( pIndex->m_pIndex )->Optimize(tStmt.m_tQuery.m_iCutoff,-1,-1,nullptr);
 
 		return;
 	}

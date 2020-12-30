@@ -1120,11 +1120,12 @@ public:
 	bool				ForceDiskChunk() final;
 	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) 			final  EXCLUDES (m_tReading );
 	bool				Truncate ( CSphString & sError ) final;
-	void				Optimize ( int iCutoff, int iFrom, int iTo ) final;
-	void				CommonMerge ( Selector_t&& fnSelector );
+	void				Optimize ( int iCutoff, int iFrom, int iTo, const char * szUvarFilter ) final;
+	void				CommonMerge ( Selector_t&& fnSelector, const char* szUvarFilter=nullptr );
 	void				DropDiskChunk ( int iChunk ) REQUIRES ( m_tOptimizingLock );
 	bool				CompressOneChunk ( int iChunk ) REQUIRES ( m_tOptimizingLock );
 	bool				MergeTwoChunks ( int iA, int iB ) REQUIRES ( m_tOptimizingLock );
+	bool				SplitOneChunk ( int iChunk, const char* szUvarFilter ) REQUIRES ( m_tOptimizingLock );
 
 	// helpers
 	CSphIndex *			CompressDiskChunk ( const CSphIndex * pChunk ) REQUIRES ( m_tOptimizingLock );
@@ -7807,6 +7808,171 @@ bool RtIndex_c::CompressOneChunk ( int iChunk )
 	return true;
 }
 
+// compress iChunk with filter id by uservar include and exclude,
+// then replace original chunk with one of pieces, and insert second piece just after the first.
+bool RtIndex_c::SplitOneChunk ( int iChunk, const char* szUvarFilter )
+{
+	if ( !szUvarFilter )
+	{
+		sphLogDebug ("zero filter provided to split chunk %d, perform simple compress", iChunk);
+		return CompressOneChunk ( iChunk );
+	}
+
+	CSphIndex * pOldChunk = nullptr;
+
+	{ // m_tChunkLock scoped Readlock
+		CSphScopedRLock RChunkLock { m_tChunkLock };
+		pOldChunk = m_dDiskChunks[iChunk];
+		sphLogDebug ( "split %d (%d kb) with %s", iChunk, (int) ( GetChunkSize ( pOldChunk ) / 1024 ), szUvarFilter );
+	}
+
+	auto iOldAlives = NumAliveDocs ( pOldChunk );
+	if ( !iOldAlives )
+	{
+		sphLogDebug ( "chunk empty, nothing to split" );
+		return false;
+	}
+
+	// create filter by @uservar - break if it is not available.
+	if ( !UservarsAvailable() )
+	{
+		sphLogDebug ( "no global variables found" );
+		return false;
+	}
+
+	const UservarIntSet_c pUservar = Uservars ( szUvarFilter );
+	if ( !pUservar )
+	{
+		sphLogDebug ( "undefined global variable '%s'", szUvarFilter );
+		return false;
+	}
+
+	// create negative (exclusion) filter
+	CSphVector<CSphFilterSettings> dFilters;
+	auto & dFilter = dFilters.Add ();
+
+	dFilter.m_sAttrName = "id";
+	dFilter.m_eType = SPH_FILTER_VALUES;
+	dFilter.SetExternalValues ( pUservar->Begin(), pUservar->GetLength() );
+	dFilter.m_bExclude = true;
+
+	// prepare for real split (merge)
+	// need klist for merged chunk only after we got disk chunks and going to merge them
+	Verify ( m_tWriting.Lock () );
+	m_dKillsWhileOptimizing.Reset ();
+	Verify ( m_tWriting.Unlock () );
+
+	// get 1-st chunk - one which doesn't match filter the filter
+	if ( !pOldChunk->Merge ( nullptr, dFilters, false ) )
+		return false;
+
+	// check forced exit after long operation
+	if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted () )
+		return false;
+
+	// prealloc new (optimized) chunk
+	CSphString sChunkI, sMerged, sError;
+	sChunkI = pOldChunk->GetFilename ();
+	sMerged.SetSprintf ( "%s.tmp", pOldChunk->GetFilename () );
+
+	auto fnFnameBuilder = GetIndexFilenameBuilder ();
+	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder {
+			fnFnameBuilder ? fnFnameBuilder ( m_sIndexName.cstr () ) : nullptr };
+
+	CSphScopedPtr<CSphIndex> pChunkE { PreallocDiskChunk ( sMerged.cstr (), pOldChunk->m_iChunk,
+		pFilenameBuilder.Ptr(), sError, pOldChunk->GetName () ) };
+
+	// if everything or nothing is alive after filter applied - fast break, nothing to do.
+	auto iNewAlives = NumAliveDocs ( pChunkE.Ptr() );
+	if ( !iNewAlives || iNewAlives==iOldAlives )
+	{
+		// fool protect - either nothing, either all is filtered. No need to continue.
+		pChunkE = nullptr;
+		sphUnlinkIndex ( sMerged.cstr (), true );
+		sphLogDebug ( "filter selected everything or nothing, no point to split" );
+		return false;
+	}
+
+	// splitting goes well, we can continue.
+	// move excluded part to the new chunk (<E>xcluded)
+	CSphString sChunkE;
+	int iChunkE;
+	{ // m_tChunkLock scoped Readlock
+		CSphScopedRLock RChunkLock { m_tChunkLock };
+		iChunkE = GetNextChunkName ();
+	}
+	sChunkE.SetSprintf ( "%s.%d", m_sPath.cstr (), iChunkE );
+	pChunkE->m_iChunk = iChunkE;
+
+	if ( !pChunkE->Rename ( sChunkE.cstr () ) )
+	{
+		sphWarning ( "rt optimize: index %s: compressed to excluded rename failed (error %s)", m_sIndexName.cstr (),
+			pChunkE->GetLastError ().cstr () );
+		return false;
+	}
+
+	// check forced exit after long operation
+	if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted () )
+		return false;
+
+	// prepare <I>ncluded chunk - one with included docs, it will be placed instead of original one
+	dFilter.m_bExclude = false;
+	pOldChunk->Merge ( nullptr, dFilters, false );
+
+	// check forced exit after long operation
+	if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted () )
+		return false;
+
+	CSphScopedPtr<CSphIndex> pChunkI { PreallocDiskChunk ( sMerged.cstr (), pOldChunk->m_iChunk,
+		pFilenameBuilder.Ptr (), sError, pOldChunk->GetName () ) };
+
+	// rename second splitted chunk to new
+	if ( !pChunkI->Rename ( sChunkI.cstr () ) )
+	{
+		sphWarning ( "rt optimize: index %s: compressed to included rename failed (error %s)", m_sIndexName.cstr (),
+			pChunkI->GetLastError ().cstr () );
+		return false;
+	}
+
+	// check forced exit after long operation
+	if ( m_bOptimizeStop || m_bSaveDisabled || sphInterrupted () )
+		return false;
+
+	// Writing lock - to wipe out writers
+	// Chunk wlock - to lock chunks as we are going to modify the chunk vector
+	// order same as GetReaderChunks and SaveDiskChunk to prevent deadlock
+
+	Verify ( m_tWriting.Lock () );
+	Verify ( m_tChunkLock.WriteLock () );
+
+	// apply killlists that were collected while we were merging segments
+	m_dKillsWhileOptimizing.Uniq ();
+	int iKilled = pChunkI->KillMulti ( m_dKillsWhileOptimizing );
+	iKilled += pChunkE->KillMulti ( m_dKillsWhileOptimizing );
+	m_dKillsWhileOptimizing.Reset ();
+
+	sphLogDebug ( "split a=%s, b=%s, killed=%d", pChunkE->GetFilename (), pChunkI->GetFilename (), iKilled );
+
+	// finalize. Add new, replace old with included
+	m_dDiskChunks[iChunk] = pChunkE.LeakPtr ();
+	m_dDiskChunks.Insert ( iChunk, pChunkI.LeakPtr ());
+	SaveMeta ( m_iTID );
+
+	Verify ( m_tChunkLock.Unlock () );
+	Verify ( m_tWriting.Unlock () );
+
+	// exclusive reader (to make sure that disk chunks not used any more) and writer lock here
+	// write lock goes first as with commit
+	Verify ( m_tWriting.Lock () );
+	Verify ( m_tReading.WriteLock () );
+
+	SafeDelete ( pOldChunk );
+
+	Verify ( m_tReading.Unlock () );
+	Verify ( m_tWriting.Unlock () );
+	return true;
+}
+
 bool RtIndex_c::MergeTwoChunks ( int iA, int iB )
 {
 	const CSphIndex * pOldest = nullptr;
@@ -7947,7 +8113,7 @@ bool RtIndex_c::MergeTwoChunks ( int iA, int iB )
 }
 
 
-void RtIndex_c::CommonMerge( Selector_t&& fnSelector )
+void RtIndex_c::CommonMerge( Selector_t&& fnSelector, const char* szUvarFilter )
 {
 	int64_t tmStart = sphMicroTimer();
 	sphLogDebug( "rt optimize: index %s: optimization started",  m_sIndexName.cstr() );
@@ -7973,6 +8139,12 @@ void RtIndex_c::CommonMerge( Selector_t&& fnSelector )
 				break;
 		}
 
+		else if ( iA==iB ) // merge into self -> split by uservar filter
+		{
+			if ( !SplitOneChunk ( iB, szUvarFilter ) )
+				break;
+		}
+
 		else if ( !MergeTwoChunks ( iA, iB ) )
 			break;
 
@@ -7993,7 +8165,7 @@ void RtIndex_c::CommonMerge( Selector_t&& fnSelector )
 	}
 }
 
-void RtIndex_c::Optimize( int iCutoff, int iFrom, int iTo ) REQUIRES ( m_tChunkLock )
+void RtIndex_c::Optimize( int iCutoff, int iFrom, int iTo, const char * szUvarFilter ) REQUIRES ( m_tChunkLock )
 {
 	int iChunks = m_dDiskChunks.GetLength ();
 
@@ -8003,15 +8175,14 @@ void RtIndex_c::Optimize( int iCutoff, int iFrom, int iTo ) REQUIRES ( m_tChunkL
 		if ( iFrom>=iChunks || iTo>=iChunks )
 			return;
 
-		// 3 cases are in game:
+		// 4 cases are in game:
 		// merge N into -1 = drop chunk N
 		// merge -1 into N = complress chunk N (i.e. wipe deads). If everything dead - will drop chunk.
+		// merge N into self = split chunk N (also filter must be provided)
 		// merge N into M = classical merge. N will be removed, M will be replaced by merged chunk.
 		CommonMerge( [&iFrom,&iTo] (int* piA, int* piB) -> bool
 		{
 			if ( iFrom<0 && iTo<0 )
-				return false;
-			if (iFrom==iTo) // fool protect
 				return false;
 			assert ( piA );
 			assert ( piB );
@@ -8019,7 +8190,7 @@ void RtIndex_c::Optimize( int iCutoff, int iFrom, int iTo ) REQUIRES ( m_tChunkL
 			*piB = iTo;
 			iFrom = iTo = -1; // that will stop us on the next iteration
 			return true;
-		});
+		}, szUvarFilter );
 		return;
 	}
 

@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Test>
+  <Name>SphinxQL: split and merge chunks of rt index</Name>
+	<requires>
+		<force-rt/>
+	</requires>
+	<skip_indexer/>
+<Config>
+searchd
+{
+<Searchd_Settings/>
+	binlog_path		=
+}
+
+index test
+{
+	type			= rt
+	path			= data/test
+	rt_attr_uint	= gid
+	rt_field		= text
+	stored_fields = text
+}
+
+</Config>
+
+<SPHQueries>
+<SPHinxQL>
+	insert into test values (1,'text one',2),(2,'text two',3),(3,'text three',4),(4,'text four',4);
+	flush ramchunk test;
+	insert into test values (5,'text five',2),(6,'text six',3);
+	flush ramchunk test;
+	insert into test values (7,'text seven',3),(8,'text eight',3);
+	select id,chunk,base_name,indexed_documents,killed_documents from test.status;
+
+	delete from test where id in (1,2,3) option store='@foo';
+	select * from test where id in @foo;
+	select * from test where id not in @foo;
+
+	select * from test.0;
+	select * from test.1;
+	select * from test.2;
+	select * from test.3;
+
+	debug split test 0 on @foo option sync=1;
+	select id,chunk,base_name,indexed_documents,killed_documents from test.status;
+	select * from test where id in @foo;
+	select * from test where id not in @foo;
+
+	select * from test.0;
+	select * from test.1;
+	select * from test.2;
+	select * from test.3;
+
+	debug merge test 1 2 option sync=1;
+
+	select id,chunk,base_name,indexed_documents,killed_documents from test.status;
+	select * from test.0;
+	select * from test.1;
+	select * from test.2;
+	select * from test.3;
+
+	set global @foo=(5,6);
+	debug split test 0 on @foo option sync=1;
+	select id,chunk,base_name,indexed_documents,killed_documents from test.status;
+
+	debug split test 1 on @foo option sync=1;
+	select id,chunk,base_name,indexed_documents,killed_documents from test.status;
+
+	select * from test.0;
+	select * from test.1;
+	select * from test.2;
+	select * from test.3;
+
+	select * from test
+
+</SPHinxQL>
+</SPHQueries>
+
+</Test>

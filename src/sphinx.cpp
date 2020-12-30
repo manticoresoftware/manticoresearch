@@ -12032,17 +12032,31 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids )
 {
-	SetMemorySettings ( FileAccessSettings_t() );
-	if ( !Prealloc ( false, nullptr ) )
-		return false;
-	Preread ();
-	pSource->SetMemorySettings ( FileAccessSettings_t() );
-	if ( !pSource->Prealloc ( false, nullptr ) )
+	// if no source provided - special pass. No preload/preread, just merge with filters
+	if ( pSource )
 	{
-		m_sLastError.SetSprintf ( "source index preload failed: %s", pSource->GetLastError().cstr() );
-		return false;
+		SetMemorySettings ( FileAccessSettings_t() );
+		if ( !Prealloc ( false, nullptr ) )
+			return false;
+		Preread ();
+		pSource->SetMemorySettings ( FileAccessSettings_t() );
+		if ( !pSource->Prealloc ( false, nullptr ) )
+		{
+			m_sLastError.SetSprintf ( "source index preload failed: %s", pSource->GetLastError().cstr() );
+			return false;
+		}
+		pSource->Preread();
+	} else
+	{
+		if ( dFilters.IsEmpty() )
+		{
+			m_sLastError.SetSprintf ( "no source, no filters - nothing to merge" );
+			return false;
+		}
+		// prepare for self merging - no supress dst, source same as destination. Will apply klists/filters only.
+		bSupressDstDocids = false;
+		pSource = this;
 	}
-	pSource->Preread();
 
 	// create filters
 	CSphScopedPtr<ISphFilter> pFilter ( CreateMergeFilters ( dFilters, m_tSchema, m_tBlobAttrs.GetWritePtr() ) );

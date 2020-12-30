@@ -70,6 +70,9 @@ class Feeder_c : public RowBuffer_i
 	}
 
 public:
+	StringBuilder_c m_sErrors { "; " };
+
+public:
 	explicit Feeder_c ( TableFeeder_fn fnFeed )
 	{
 		m_fnCoro = MakeCoroExecutor ( [this, fnFeed = std::move ( fnFeed )] () { fnFeed ( this ); } );
@@ -317,7 +320,11 @@ public:
 		CoYield (); // generally not need as eof is usually the last stmt, but if not it is safe
 	}
 
-	void Error ( const char *, const char *, MysqlErrors_e ) override {}
+	void Error ( const char * sStmt, const char * sError, MysqlErrors_e ) override
+	{
+		m_sErrors.Sprintf("%s:%s", sStmt, sError);
+		Eof (false,0);
+	}
 	void Ok ( int, int, const char *, bool, int64_t ) override {}
 	void Add ( BYTE ) override {}
 };
@@ -353,6 +360,9 @@ class FeederSchema_c : public RowBuffer_i
 		m_pMatch->SetAttr ( m_pSchema->GetAttr ( iCol ).m_tLocator, (SphAttr_t) sphPackPtrAttr ( iLen, &pData ) );
 		memcpy ( pData, sMsg, iLen );
 	}
+
+public:
+	StringBuilder_c m_sErrors { "; " };
 
 public:
 	explicit FeederSchema_c ( TableFeeder_fn fnFeed )
@@ -455,7 +465,11 @@ public:
 	void PutNULL () override {}
 	bool Commit() override { return false;}
 	void Eof ( bool bMoreResults, int iWarns ) override {}
-	void Error ( const char *, const char *, MysqlErrors_e ) override {}
+	void Error ( const char * sStmt, const char * sError, MysqlErrors_e ) override
+	{
+		m_sErrors.Sprintf ( "%s:%s", sStmt, sError );
+		Eof ( false, 0 );
+	}
 	void Ok ( int, int, const char *, bool, int64_t ) override {}
 	void Add ( BYTE ) override {}
 };
@@ -535,6 +549,7 @@ private:
 
 	virtual void SetSorterStuff ( CSphMatch * pMatch ) const = 0;
 	virtual bool FillNextMatch () const = 0;
+	virtual const StringBuilder_c& GetErrors() const = 0;
 };
 
 bool GenericTableIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery,
@@ -696,6 +711,10 @@ bool GenericTableIndex_c::MultiScan ( CSphQueryResult & tResult, const CSphQuery
 		}
 	}
 
+	auto& sErrors = GetErrors();
+	if ( !sErrors.IsEmpty() )
+		tMeta.m_sError = (CSphString) sErrors;
+
 	SwitchProfile ( pProfiler, SPH_QSTATE_FINALIZE );
 
 	// do final expression calculations
@@ -727,6 +746,7 @@ public:
 private:
 	void SetSorterStuff ( CSphMatch * pMatch ) const final;
 	bool FillNextMatch () const final;
+	const StringBuilder_c & GetErrors () const final;
 };
 
 
@@ -751,6 +771,11 @@ bool DynamicIndex_c::FillNextMatch () const
 	return m_tFeeder.FillNextMatch();
 }
 
+const StringBuilder_c & DynamicIndex_c::GetErrors () const
+{
+	return m_tFeeder.m_sErrors;
+}
+
 ///////////////
 /// Index for schema data flow
 class DynamicIndexSchema_c : public GenericTableIndex_c
@@ -768,6 +793,7 @@ public:
 private:
 	void SetSorterStuff ( CSphMatch * pMatch ) const final;
 	bool FillNextMatch () const final;
+	const StringBuilder_c & GetErrors () const final;
 };
 
 
@@ -790,6 +816,11 @@ void DynamicIndexSchema_c::SetSorterStuff ( CSphMatch * pMatch ) const
 bool DynamicIndexSchema_c::FillNextMatch () const
 {
 	return m_tFeeder.FillNextMatch();
+}
+
+const StringBuilder_c & DynamicIndexSchema_c::GetErrors () const
+{
+	return m_tFeeder.m_sErrors;
 }
 
 /// external functions

@@ -13336,19 +13336,19 @@ void HandleMysqlclose ( RowBuffer_i & tOut )
 // same for select ... from index.files
 void HandleSelectFiles ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
-	const auto & tStmt = *pStmt;
-	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ));
-	if ( !ServedDesc_t::IsLocal ( pServed ) )
-	{
-		tOut.Error ( tStmt.m_sStmt, "FILES requires an existing local index" );
-		return;
-	}
-
 	tOut.HeadBegin ( 2 );
 	tOut.HeadColumn ( "file" );
 	tOut.HeadColumn ( "size", MYSQL_COL_LONGLONG );
 	if ( !tOut.HeadEnd () )
 		return;
+
+	const auto & tStmt = *pStmt;
+	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
+	if ( !ServedDesc_t::IsLocal ( pServed ) )
+	{
+		tOut.Error ( tStmt.m_sStmt, "FILES requires an existing local index" );
+		return;
+	}
 
 	StrVec_t dFiles;
 	StrVec_t dExt;
@@ -14222,24 +14222,29 @@ void HandleMysqlShowIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t & tStmt, b
 		tOut.Error ( tStmt.m_sStmt, "SHOW INDEX STATUS requires an existing index" );
 }
 
+void PutIndexStatus ( RowBuffer_i & tOut, const CSphIndex * pIndex )
+{
+	tOut.PutString ( pIndex->GetFilename () );
+
+	auto & tStats = pIndex->GetStats ();
+	tOut.PutNumAsString ( tStats.m_iTotalDocuments );
+	tOut.PutNumAsString ( tStats.m_iTotalBytes );
+
+	CSphIndexStatus tStatus;
+	pIndex->GetStatus ( &tStatus );
+	tOut.PutNumAsString ( tStatus.m_iRamUse );
+	tOut.PutNumAsString ( tStatus.m_iDiskUse );
+	tOut.PutNumAsString ( tStatus.m_iMapped );
+	tOut.PutNumAsString ( tStatus.m_iMappedResident );
+	tOut.PutNumAsString ( tStatus.m_iMappedDocs );
+	tOut.PutNumAsString ( tStatus.m_iMappedResidentDocs );
+	tOut.PutNumAsString ( tStatus.m_iMappedHits );
+	tOut.PutNumAsString ( tStatus.m_iMappedResidentHits );
+	tOut.PutNumAsString ( tStatus.m_iDead );
+}
+
 void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
-	const auto & tStmt = *pStmt;
-	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ));
-
-	if ( !pServed )
-	{
-		tOut.Error ( tStmt.m_sStmt, "select INDEX.status requires an existing index" );
-		return;
-	}
-
-	CSphIndex * pIndex = pServed->m_pIndex;
-	if ( !pIndex || !pIndex->IsRT ())
-	{
-		tOut.Error ( tStmt.m_sStmt, "select INDEX.status requires an existing index" );
-		return;
-	}
-
 	tOut.HeadBegin ( 13 );
 	tOut.HeadColumn ( "chunk", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "base_name" );
@@ -14257,35 +14262,42 @@ void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 	if ( !tOut.HeadEnd () )
 		return;
 
-	auto * pRtIndex = static_cast<RtIndex_i *>( pIndex );
-	int iChunk = 0;
-	while ( true )
+	const auto & tStmt = *pStmt;
+	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
+
+	if ( !ServedDesc_t::IsLocal ( pServed ) )
 	{
-		auto * pChunk = pRtIndex->GetDiskChunk ( iChunk );
-		if ( !pChunk )
-			break;
+		tOut.Error ( tStmt.m_sStmt, "select INDEX.status requires an existing index" );
+		return;
+	}
 
-		tOut.PutNumAsString ( iChunk );
-		tOut.PutString ( pChunk->GetFilename() );
+	CSphIndex * pIndex = pServed->m_pIndex;
+	if ( !pIndex )
+	{
+		tOut.Error ( tStmt.m_sStmt, "select INDEX.status requires an existing index" );
+		return;
+	}
 
-		auto& tStats = pChunk->GetStats();
-		tOut.PutNumAsString ( tStats.m_iTotalDocuments );
-		tOut.PutNumAsString ( tStats.m_iTotalBytes );
+	if ( pIndex->IsRT () )
+	{
+		auto * pRtIndex = static_cast<RtIndex_i *>( pIndex );
+		int iChunk = 0;
+		while ( true )
+		{
+			auto * pChunk = pRtIndex->GetDiskChunk ( iChunk );
+			if ( !pChunk )
+				break;
 
-		CSphIndexStatus tStatus;
-		pChunk->GetStatus ( &tStatus );
-		tOut.PutNumAsString ( tStatus.m_iRamUse );
-		tOut.PutNumAsString ( tStatus.m_iDiskUse );
-		tOut.PutNumAsString ( tStatus.m_iMapped );
-		tOut.PutNumAsString ( tStatus.m_iMappedResident );
-		tOut.PutNumAsString ( tStatus.m_iMappedDocs );
-		tOut.PutNumAsString ( tStatus.m_iMappedResidentDocs );
-		tOut.PutNumAsString ( tStatus.m_iMappedHits );
-		tOut.PutNumAsString ( tStatus.m_iMappedResidentHits );
-		tOut.PutNumAsString ( tStatus.m_iDead );
-		if ( !tOut.Commit () )
-			break;
-		++iChunk;
+			tOut.PutNumAsString ( iChunk );
+			PutIndexStatus ( tOut, pChunk );
+			if ( !tOut.Commit () )
+				break;
+			++iChunk;
+		}
+	} else {
+		tOut.PutNumAsString ( 0 ); // dummy 'chunk' of non-rt
+		PutIndexStatus ( tOut, pIndex );
+		tOut.Commit ();
 	}
 	tOut.Eof();
 }

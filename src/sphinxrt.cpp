@@ -8032,7 +8032,9 @@ void RtIndex_c::Optimize( int iCutoff, int iFrom, int iTo ) REQUIRES ( m_tChunkL
 		if ( !iCutoff )
 			iCutoff = sphCpuThreadsCount () * 2;
 
-		CommonMerge ( [this, iCutoff] (int* piA, int* piB) REQUIRES ( m_tChunkLock ) -> bool
+		int iCompress = 0;
+
+		CommonMerge ( [this, iCutoff, &iCompress] (int* piA, int* piB) REQUIRES ( m_tChunkLock ) -> bool
 		{
 			if ( m_dDiskChunks.IsEmpty() )
 				return false;
@@ -8052,7 +8054,16 @@ void RtIndex_c::Optimize( int iCutoff, int iFrom, int iTo ) REQUIRES ( m_tChunkL
 
 			// stop on cutoff for non-empty chunks
 			if ( m_dDiskChunks.GetLength ()<=iCutoff )
-				return false;
+			{
+				if ( iCompress>=m_dDiskChunks.GetLength () )
+					return false;
+
+				// optimize (wipe deletes) in the rest of the chunks
+				*piA = -1;
+				*piB = iCompress;
+				++iCompress;
+				return true;
+			}
 
 			auto chB = GetNextSmallestChunk ( m_dDiskChunks, chA.first );
 

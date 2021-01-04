@@ -5554,6 +5554,7 @@ bool SearchHandler_c::CreateValidSorters ( VecTraits_T<ISphMatchSorter *> & dSrt
 	return !!iValidSorters;
 }
 
+static RwLock_t g_tSnippetCtxLock;
 void SearchHandler_c::RunLocalSearches ()
 {
 	int64_t tmLocal = sphMicroTimer ();
@@ -5662,8 +5663,17 @@ void SearchHandler_c::RunLocalSearches ()
 
 			// create sorters
 			SphQueueRes_t tQueueRes;
-			if ( !CreateValidSorters ( dSorters, &tQueueRes, dNFailuresSet, pExtra, pServed, szLocal, szParent ) )
-				continue;
+			{
+				ScWL_t wLock ( g_tSnippetCtxLock );
+
+				assert ( pServed->m_pIndex );
+
+				tCtx.m_tHook.SetIndex ( pServed->m_pIndex );
+				tCtx.m_tHook.SetQueryType ( m_eQueryType );
+				m_tHook.SetIndex ( pServed->m_pIndex );
+				if ( !CreateValidSorters ( dSorters, &tQueueRes, dNFailuresSet, pExtra, pServed, szLocal, szParent ) )
+					continue;
+			}
 
 			// do the query
 			CSphMultiQueryArgs tMultiArgs ( iIndexWeight );

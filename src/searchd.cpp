@@ -3224,25 +3224,25 @@ static void SendMVA ( ISphOutputBuffer& tOut, const BYTE * pMVA, bool b64bit )
 	}
 
 	auto dMVA = sphUnpackPtrAttr ( pMVA );
-	auto iValues = dMVA.second / sizeof(DWORD);
-	tOut.SendDword ( iValues );
+	DWORD uValues = dMVA.second / sizeof(DWORD);
+	tOut.SendDword(uValues);
 
 	const auto * pValues = (const DWORD *) dMVA.first;
 
 	if ( b64bit )
 	{
-		assert ( ( iValues%2 )==0 );
-		while ( iValues )
+		assert ( ( uValues%2 )==0 );
+		while ( uValues )
 		{
 			auto uMVA = MVA_BE ( pValues );
 			tOut.SendDword ( uMVA.first );
 			tOut.SendDword ( uMVA.second );
 			pValues += 2;
-			iValues -= 2;
+			uValues -= 2;
 		}
 	} else
 	{
-		while ( iValues-- )
+		while ( uValues-- )
 			tOut.SendDword ( *pValues++ );
 	}
 }
@@ -12265,13 +12265,11 @@ void HandleMysqlMeta ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, const CSphQ
 	BuildMeta ( dMeta, tLastMeta );
 
 	// result set header packet
-	if (!dRows.HeadOfStrings ( dMeta.Header() ))
-		return;
+	dRows.HeadOfStrings ( dMeta.Header() );
 
 	// send rows
 	for ( int iRow=0; iRow<dMeta.GetLength(); iRow+=2 )
-		if ( !dRows.DataTuplet ( dMeta[iRow+0].cstr (), dMeta[iRow+1].cstr () ) )
-			return;
+		dRows.DataTuplet ( dMeta[iRow+0].cstr (), dMeta[iRow+1].cstr() );
 
 	// cleanup
 	dRows.Eof ( bMoreResultsFollow );

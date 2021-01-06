@@ -12229,7 +12229,7 @@ void HandleMysqlWarning ( const CSphQueryResultMeta & tLastMeta, RowBuffer_i & d
 	dRows.Eof ( bMoreResultsFollow );
 }
 
-void HandleMysqlMeta ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, const CSphQueryResultMeta & tLastMeta, bool bMoreResultsFollow )
+void HandleMysqlStatus ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, bool bMoreResultsFollow )
 {
 	VectorLike dStatus ( tStmt.m_sStringParam );
 
@@ -12237,9 +12237,6 @@ void HandleMysqlMeta ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, const CSphQ
 	{
 	case STMT_SHOW_STATUS:
 		BuildStatus ( dStatus );
-		break;
-	case STMT_SHOW_META:
-		BuildMeta ( dStatus, tLastMeta );
 		break;
 	case STMT_SHOW_AGENT_STATUS:
 		BuildAgentStatus ( dStatus, tStmt.m_sIndex );
@@ -12255,6 +12252,26 @@ void HandleMysqlMeta ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, const CSphQ
 	// send rows
 	for ( int iRow=0; iRow<dStatus.GetLength(); iRow+=2 )
 		dRows.DataTuplet ( dStatus[iRow+0].cstr(), dStatus[iRow+1].cstr() );
+
+	// cleanup
+	dRows.Eof ( bMoreResultsFollow );
+}
+
+void HandleMysqlMeta ( RowBuffer_i & dRows, const SqlStmt_t & tStmt, const CSphQueryResultMeta & tLastMeta, bool bMoreResultsFollow )
+{
+	VectorLike dMeta ( tStmt.m_sStringParam );
+
+	assert ( tStmt.m_eStmt==STMT_SHOW_META );
+	BuildMeta ( dMeta, tLastMeta );
+
+	// result set header packet
+	if (!dRows.HeadOfStrings ( dMeta.Header() ))
+		return;
+
+	// send rows
+	for ( int iRow=0; iRow<dMeta.GetLength(); iRow+=2 )
+		if ( !dRows.DataTuplet ( dMeta[iRow+0].cstr (), dMeta[iRow+1].cstr () ) )
+			return;
 
 	// cleanup
 	dRows.Eof ( bMoreResultsFollow );
@@ -12607,26 +12624,41 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 
 		const CSphQueryResultMeta & tMeta = bUseFirstMeta ? tHandler.m_dAggrResults[0] : ( iSelect-1>=0 ? tHandler.m_dAggrResults[iSelect-1] : tPrevMeta );
 		bool bMoreResultsFollow = (i+1)<dStmt.GetLength();
+		bool bBreak = false;
 
-		if ( eStmt==STMT_SELECT )
+		switch ( eStmt )
+		{
+		case STMT_SELECT:
 		{
 			AggrResult_t & tRes = tHandler.m_dAggrResults[iSelect++];
 			if ( !sWarning.IsEmpty() )
 				tRes.m_sWarning = sWarning;
 			SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tVars.bProfile() ? &tProfile : nullptr ) );
 			// mysql server breaks send on error
-			if ( !tRes.m_iSuccesses )
-				break;
-		} else if ( eStmt==STMT_SHOW_WARNINGS )
+			bBreak = !tRes.m_iSuccesses;
+			break;
+		}
+		case STMT_SHOW_WARNINGS:
 			HandleMysqlWarning ( tMeta, dRows, bMoreResultsFollow );
-		else if ( eStmt==STMT_SHOW_STATUS || eStmt==STMT_SHOW_META || eStmt==STMT_SHOW_AGENT_STATUS )
+			break;
+		case STMT_SHOW_STATUS:
+		case STMT_SHOW_AGENT_STATUS:
+			HandleMysqlStatus ( dRows, dStmt[i], bMoreResultsFollow ); // FIXME!!! add prediction counters
+			break;
+		case STMT_SHOW_META:
 			HandleMysqlMeta ( dRows, dStmt[i], tMeta, bMoreResultsFollow ); // FIXME!!! add prediction counters
-		else if ( eStmt==STMT_SET ) // TODO implement all set statements and make them handle bMoreResultsFollow flag
+			break;
+		case STMT_SET: // TODO implement all set statements and make them handle bMoreResultsFollow flag
 			dRows.Ok ( 0, 0, NULL, bMoreResultsFollow );
-		else if ( eStmt==STMT_SHOW_PROFILE )
+			break;
+		case STMT_SHOW_PROFILE:
 			HandleMysqlShowProfile ( dRows, tProfile, bMoreResultsFollow );
-		else if ( eStmt==STMT_SHOW_PLAN )
+			break;
+		case STMT_SHOW_PLAN:
 			HandleMysqlShowPlan ( dRows, tProfile, bMoreResultsFollow, ::bDot ( dStmt[i], tVars ) );
+		default:
+			break;
+		}
 
 		if ( sphInterrupted() )
 		{
@@ -14793,12 +14825,15 @@ public:
 			return true;
 
 		case STMT_SHOW_STATUS:
-		case STMT_SHOW_META:
 		case STMT_SHOW_AGENT_STATUS:
 			if ( eStmt==STMT_SHOW_STATUS )
 			{
 				StatCountCommand ( SEARCHD_COMMAND_STATUS );
 			}
+			HandleMysqlStatus ( tOut, *pStmt, false );
+			return true;
+
+		case STMT_SHOW_META:
 			if ( ePrevStmt!=STMT_CALL )
 				HandleMysqlMeta ( tOut, *pStmt, m_tLastMeta, false );
 			else

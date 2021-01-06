@@ -4,7 +4,6 @@
 <name>RT index optimize with cutoff and compression</name>
 <skip_indexer/>
 <requires>
-	<non-windows/>
 	<force-rt/>
 </requires>
 

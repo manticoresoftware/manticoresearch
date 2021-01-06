@@ -7749,17 +7749,20 @@ bool RtIndex_c::CompressOneChunk ( int iChunk )
 		return false;
 
 	// lets rotate indexes
-	CSphString sName = pChunk->GetFilename ();
+	int iChunkID;
+	CSphString sName;
+	{ // m_tChunkLock scoped Readlock
+		CSphScopedRLock RChunkLock { m_tChunkLock };
+		iChunkID = GetNextChunkName ();
+	}
+	sName.SetSprintf ( "%s.%d", m_sPath.cstr (), iChunkID );
+	pCompressed->m_iChunk = iChunkID;
 
 	// rename merged disk chunk to 0
 	if ( !pCompressed->Rename ( sName.cstr () ) )
 	{
 		sphWarning ( "rt optimize: index %s: compressed to cur rename failed (error %s)", m_sIndexName.cstr (),
 			pCompressed->GetLastError ().cstr () );
-
-		if ( !const_cast<CSphIndex *>( pChunk )->Rename ( sName.cstr () ) )
-			sphWarning ( "rt optimize: index %s: old to cur rename failed (error %s)", m_sIndexName.cstr (),
-				pChunk->GetLastError ().cstr () );
 		return false;
 	}
 
@@ -7780,7 +7783,8 @@ bool RtIndex_c::CompressOneChunk ( int iChunk )
 	int iKilled = pCompressed->KillMulti ( m_dKillsWhileOptimizing );
 	m_dKillsWhileOptimizing.Reset ();
 
-	sphLogDebug ( "compressed a=%s, new=%s, killed=%d", pChunk->GetFilename (), pCompressed->GetFilename (), iKilled );
+	CSphString sOld = pChunk->GetFilename ();
+	sphLogDebug ( "compressed a=%s, new=%s, killed=%d", sOld.cstr(), pCompressed->GetFilename (), iKilled );
 
 	m_dDiskChunks[iChunk] = pCompressed.LeakPtr ();
 	SaveMeta ( m_iTID );
@@ -7805,6 +7809,9 @@ bool RtIndex_c::CompressOneChunk ( int iChunk )
 
 	Verify ( m_tReading.Unlock () );
 	Verify ( m_tWriting.Unlock () );
+
+	// we might remove old index files
+	sphUnlinkIndex ( sOld.cstr (), true );
 	return true;
 }
 
@@ -7871,9 +7878,9 @@ bool RtIndex_c::SplitOneChunk ( int iChunk, const char* szUvarFilter )
 		return false;
 
 	// prealloc new (optimized) chunk
-	CSphString sChunkI, sMerged, sError;
-	sChunkI = pOldChunk->GetFilename ();
-	sMerged.SetSprintf ( "%s.tmp", pOldChunk->GetFilename () );
+	CSphString sOld, sMerged, sError;
+	sOld = pOldChunk->GetFilename ();
+	sMerged.SetSprintf ( "%s.tmp", sOld.cstr () );
 
 	auto fnFnameBuilder = GetIndexFilenameBuilder ();
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder {
@@ -7926,6 +7933,15 @@ bool RtIndex_c::SplitOneChunk ( int iChunk, const char* szUvarFilter )
 	CSphScopedPtr<CSphIndex> pChunkI { PreallocDiskChunk ( sMerged.cstr (), pOldChunk->m_iChunk,
 		pFilenameBuilder.Ptr (), sError, pOldChunk->GetName () ) };
 
+	CSphString sChunkI;
+	int iChunkI;
+	{ // m_tChunkLock scoped Readlock
+		CSphScopedRLock RChunkLock { m_tChunkLock };
+		iChunkI = GetNextChunkName ();
+	}
+	sChunkI.SetSprintf ( "%s.%d", m_sPath.cstr (), iChunkI );
+	pChunkI->m_iChunk = iChunkI;
+
 	// rename second splitted chunk to new
 	if ( !pChunkI->Rename ( sChunkI.cstr () ) )
 	{
@@ -7970,6 +7986,9 @@ bool RtIndex_c::SplitOneChunk ( int iChunk, const char* szUvarFilter )
 
 	Verify ( m_tReading.Unlock () );
 	Verify ( m_tWriting.Unlock () );
+
+	// we might remove old index files
+	sphUnlinkIndex ( sOld.cstr (), true );
 	return true;
 }
 

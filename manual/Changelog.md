@@ -8,7 +8,7 @@
 - [standalone NOT](Searching/Options.md#not_terms_only_allowed) as an option for SELECT
 
 ### Minor Changes
-- [#453](https://github.com/manticoresoftware/manticoresearch/issues/453) New option [indexer --ignore-non-plain](Adding_data_from_external_storages/Plain_indexes_creation.md#ignore_non_plain) is useful in case you run `indexer --all` and have not only plain indexes in the configuration file. Without `--ignore-non-plain` you'll get a warning and a respective exit code.
+- [#453](https://github.com/manticoresoftware/manticoresearch/issues/453) New option [indexer.ignore_non_plain=1](Adding_data_from_external_storages/Plain_indexes_creation.md#ignore_non_plain) is useful in case you run `indexer --all` and have not only plain indexes in the configuration file. Without `ignore_non_plain=1` you'll get a warning and a respective exit code.
 - [SHOW PLAN ... OPTION format=dot](Profiling_and_monitoring/Profiling/Query_plan.md#Dot-format-for-SHOW-PLAN) and [EXPLAIN QUERY ... OPTION format=dot](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query) enable visualization of full-text query plan execution. Useful for understanding complex queries.
 
 ### Deprecations

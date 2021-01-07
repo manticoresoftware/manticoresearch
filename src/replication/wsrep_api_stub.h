@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2019-2020, Manticore Software LTD (http://manticoresearch.com)
+// Copyright (c) 2019-2021, Manticore Software LTD (https://manticoresearch.com)
 //
 // This is pure stub header, it does nothing and just make it possible to make build
 // under windows. All other files in this folder also useless on win.

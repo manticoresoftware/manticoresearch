@@ -13,7 +13,7 @@
 #   VALGRIND_PROGRAM      - executable (valgrind is not library, nothing to link)
 
 #=============================================================================
-# Copyright 2020, Manticore Software LTD (http://manticoresearch.com)
+# Copyright 2021, Manticore Software LTD (https://manticoresearch.com)
 #
 # Distributed under the OSI-approved BSD License (the "License");
 # see accompanying file Copyright.txt for details.

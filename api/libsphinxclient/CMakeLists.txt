@@ -12,7 +12,7 @@ PROJECT ( SPHINXCLIENT
 		LANGUAGES C
 		VERSION 0.0.1
 		DESCRIPTION "Pure C searchd client API library"
-		HOMEPAGE_URL "http://manticoresearch.com"  )
+		HOMEPAGE_URL "https://manticoresearch.com"  )
 
 # our mega-lib
 add_library ( sphinxclient STATIC sphinxclient.c )

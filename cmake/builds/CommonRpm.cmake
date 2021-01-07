@@ -85,11 +85,17 @@ endif ()
 
 
 #set ( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST "/usr/include" )
- 
+if (SPLIT)
 set ( CPACK_RPM_APPLICATIONS_USER_FILELIST
 		"%config(noreplace) %{_sysconfdir}/logrotate.d/manticore"
 		"%config(noreplace) %{_sysconfdir}/manticoresearch/manticore.conf"
    )
+else(SPLIT)
+set ( CPACK_RPM_MAIN_USER_FILELIST
+		"%config(noreplace) %{_sysconfdir}/logrotate.d/manticore"
+		"%config(noreplace) %{_sysconfdir}/manticoresearch/manticore.conf"
+   )
+endif(SPLIT)
 set ( CPACK_RPM_SPEC_MORE_DEFINE
 		"%define _scripts ${MANTICORE_BINARY_DIR}
 %define manticore_user manticore

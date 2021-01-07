@@ -10590,7 +10590,7 @@ void WarnAboutKillList ( const CSphVector<DocID_t> & dKillList, const KillListTa
 		for ( const auto & tTarget : tTargets.m_dTargets )
 			if ( tTarget.m_uFlags==KillListTarget_t::USE_KLIST )
 			{
-				sphWarn ( "killlist_target is specified but kill-list is empty" );
+				sphWarn ( "killlist_target is specified, but kill-list is empty" );
 				break;
 			}
 	}

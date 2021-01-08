@@ -2071,13 +2071,13 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 }
 
 //! Simplified wrapper for ScheduleDistrJobs, wait for finish and return succeeded
-int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser )
+int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser, int iQueryRetry, int iQueryDelay )
 {
 	if ( dRemotes.IsEmpty() )
 		return 0;
 
 	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter { GetObserver () };
-	ScheduleDistrJobs ( dRemotes, pQuery, pParser, tReporter );
+	ScheduleDistrJobs ( dRemotes, pQuery, pParser, tReporter, iQueryRetry, iQueryDelay );
 	tReporter->Finish ();
 	return (int)tReporter->GetSucceeded ();
 }

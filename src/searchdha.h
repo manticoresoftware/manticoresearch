@@ -669,7 +669,7 @@ bool RunRemoteTask ( AgentConn_t* pConnection, RequestBuilder_i* pQuery, ReplyPa
 
 // simplified full task - schedule jobs, wait for complete, report num of succeeded
 // uses cooperated wait - i.e. yield instead of pause
-int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser );
+int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, RequestBuilder_i * pQuery, ReplyParser_i * pParser, int iQueryRetry = -1, int iQueryDelay = -1 );
 
 /////////////////////////////////////////////////////////////////////////////
 // DISTRIBUTED QUERIES

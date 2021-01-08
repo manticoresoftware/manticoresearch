@@ -45,6 +45,9 @@ const char * GetReplicationDL()
 static int GetQueryTimeout ( int64_t iTimeout=0 ); // 2 minutes in msec
 // 200 msec is ok as we do not need to any missed nodes in cluster node list
 static int			g_iAnyNodesTimeout = 200;
+static int			g_iNodeRetry = 3;
+static int			g_iNodeRetryWait = 500;
+
 
 // debug options passed into Galera for our logreplication command line key
 static const char * g_sDebugOptions = "debug=on;cert.log_conflicts=yes";
@@ -2810,6 +2813,7 @@ struct PQRemoteReply_t
 	CSphString m_sRemoteIndexPath;
 	bool m_bIndexActive = false;
 	CSphString m_sNodes;
+	int64_t m_iReplyPayload = -1;
 };
 
 // query to remote node
@@ -3171,12 +3175,13 @@ public:
 	static void BuildReply ( const PQRemoteReply_t & tRes, ISphOutputBuffer & tOut )
 	{
 		auto tReply = APIAnswer ( tOut );
-		tOut.SendByte ( 1 );
+		tOut.SendDword ( (int)tRes.m_iReplyPayload );
 	}
 
-	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final
+	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final
 	{
-		tReq.GetByte();
+		PQRemoteReply_t & tRes = GetRes ( tAgent );
+		tRes.m_iReplyPayload = tReq.GetDword();
 		return !tReq.GetError();
 	}
 };
@@ -3247,7 +3252,7 @@ public:
 static bool PerformRemoteTasks ( VectorAgentConn_t & dNodes, RequestBuilder_i & tReq, ReplyParser_i & tReply, CSphString & sError )
 {
 	int iNodes = dNodes.GetLength();
-	int iFinished = PerformRemoteTasks ( dNodes, &tReq, &tReply );
+	int iFinished = PerformRemoteTasks ( dNodes, &tReq, &tReply, g_iNodeRetry, g_iNodeRetryWait );
 
 	if ( iFinished!=iNodes )
 		sphLogDebugRpl ( "%d(%d) nodes finished well", iFinished, iNodes );
@@ -3749,6 +3754,7 @@ bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CS
 // command at remote node for CLUSTER_FILE_SEND to store data into file, data size and file offset defined by sender
 bool RemoteFileStore ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError )
 {
+	tRes.m_iReplyPayload = -1;
 	CSphAutofile tOut ( tCmd.m_sRemoteFileName, O_RDWR, sError, false );
 	if ( tOut.GetFD()<0 )
 		return false;
@@ -3771,6 +3777,8 @@ bool RemoteFileStore ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 		sError.SetSprintf ( "write error: %s", strerrorm(errno) );
 		return false;
 	}
+
+	tRes.m_iReplyPayload = tCmd.m_iSendSize;
 
 	return true;
 }
@@ -4037,7 +4045,7 @@ static bool SendFile ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileSta
 	// submit initial jobs
 	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter ( GetObserver() );
 	PQRemoteFileSend_c tReq;
-	ScheduleDistrJobs ( dNodes, &tReq, &tReq, tReporter );
+	ScheduleDistrJobs ( dNodes, &tReq, &tReq, tReporter, g_iNodeRetry, g_iNodeRetryWait );
 
 	StringBuilder_c tErrors ( ";" );
 
@@ -4056,17 +4064,27 @@ static bool SendFile ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileSta
 		ARRAY_FOREACH ( iAgent, dNodes )
 		{
 			AgentConn_t * pAgent = dNodes[iAgent];
-			FileReader_t & tReader = dReaders[iAgent];
-			if ( !pAgent->m_bSuccess || tReader.m_bDone )
+			if ( !pAgent->m_bSuccess )
 				continue;
 
+			FileReader_t & tReader = dReaders[iAgent];
+			if ( tReader.m_bDone )
+				continue;
+
+			bool bSendOk = ( PQRemoteBase_c::GetRes ( *pAgent ).m_iReplyPayload==tReader.m_tArgs.m_iSendSize );
+
 			// report errors first
-			if ( !pAgent->m_sFailure.IsEmpty() )
+			if ( !pAgent->m_sFailure.IsEmpty() && !bSendOk )
 			{
 				tErrors.Appendf ( "'%s:%d' %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pAgent->m_sFailure.cstr() );
-				pAgent->m_bSuccess = false;
 				tReader.m_bDone = true;
+				pAgent->m_sFailure = "";
 				continue;
+			}
+			if ( !pAgent->m_sFailure.IsEmpty() && bSendOk )
+			{
+				sphWarning ( "'%s:%d' %s", pAgent->m_tDesc.m_sAddr.cstr(), pAgent->m_tDesc.m_iPort, pAgent->m_sFailure.cstr() );
+				pAgent->m_sFailure = "";
 			}
 
 			if ( !Next ( tReader, tErrors ) )
@@ -4086,7 +4104,7 @@ static bool SendFile ( const SyncSrc_t & tSigSrc, const CSphVector<RemoteFileSta
 			dNodes[iAgent] = pNextJob;
 
 			dNewNode[0] = pNextJob;
-			ScheduleDistrJobs ( dNewNode, &tReq, &tReq, tReporter );
+			ScheduleDistrJobs ( dNewNode, &tReq, &tReq, tReporter, g_iNodeRetry, g_iNodeRetryWait );
 			// agent managed at main vector
 			dNewNode[0] = nullptr;
 
@@ -4686,7 +4704,7 @@ bool ClusterGetNodes ( const CSphString & sClusterNodes, const CSphString & sClu
 	// submit initial jobs
 	CSphRefcountedPtr<RemoteAgentsObserver_i> tReporter ( GetObserver() );
 	PQRemoteClusterGetNodes_c tReq;
-	ScheduleDistrJobs ( dAgents, &tReq, &tReq, tReporter );
+	ScheduleDistrJobs ( dAgents, &tReq, &tReq, tReporter, g_iNodeRetry, g_iNodeRetryWait );
 
 	bool bDone = false;
 	while ( !bDone )

@@ -110,6 +110,10 @@ insert into test_table values
 <!-- assert at daemon with missed query field at highlight -->
 <query endpoint="json/search">{ "index": "test1", "source": { "includes":"" }, "highlight": {} }</query>
 
+<!-- wrong error message for bool option -->
+<query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "and first" } }, "highlight": { "fields": [ "content", "title" ], "limits_per_field":0 } }</query>
+<query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "and first" } }, "highlight": { "fields": [ "content", "title" ], "limits_per_field":false } }</query>
+
 </httpqueries>
 
 </test>

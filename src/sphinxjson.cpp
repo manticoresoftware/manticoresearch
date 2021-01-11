@@ -1697,7 +1697,7 @@ JsonObj_c JsonObj_c::GetBoolItem ( const char * szName, CSphString & sError, boo
 
 	if ( !tChild.IsBool() )
 	{
-		sError.SetSprintf ( R"("%s" property value should be an integer)", szName );
+		sError.SetSprintf ( R"("%s" property value should be a boolean)", szName );
 		return JsonNull;
 	}
 

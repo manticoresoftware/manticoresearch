@@ -3352,7 +3352,7 @@ public:
 
 	/// internal debugging hook, DO NOT USE
 	virtual int					DebugCheck ( FILE * fp ) = 0;
-	virtual void				SetDebugCheck ( bool bCheckIdDups ) {}
+	virtual void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) {}
 
 	/// getter for name
 	const char *				GetName () const { return m_sIndexName.cstr(); }

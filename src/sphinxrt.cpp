@@ -1188,7 +1188,7 @@ public:
 	void				EnableSave() final;
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
 
-	void				SetDebugCheck ( bool bCheckIdDups ) final { m_bDebugCheck = true; m_bCheckIdDups = bCheckIdDups; ProhibitSave(); }
+	void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) final;
 
 	void				CreateReader ( int64_t iSessionId ) const final;
 	bool				GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const final;
@@ -1199,6 +1199,7 @@ protected:
 	CSphSourceStats		m_tStats;
 	bool				m_bDebugCheck = false;
 	bool				m_bCheckIdDups = false;
+	int					m_iCheckChunk = -1;
 	CSphFixedVector<int>	m_dChunkNames { 0 };
 
 private:
@@ -1308,6 +1309,9 @@ private:
 	RtSegmentRefPtf_t			MergeDoubleBufSegments ( CSphVector<RtSegmentRefPtf_t> & dSegments ) const;
 	bool						NeedStoreWordID () const override;
 	int64_t						GetMemLimit() const final { return m_iSoftRamLimit; }
+
+	void						DebugCheckRam ( DebugCheckError_c & tReporter );
+	int							DebugCheckDisk ( DebugCheckError_c & tReporter, FILE * fp );
 };
 
 
@@ -3845,7 +3849,7 @@ CSphIndex * RtIndex_c::PreallocDiskChunk ( const char * sChunk, int iChunk, File
 	pDiskChunk->m_iChunk = iChunk;
 
 	if ( m_bDebugCheck )
-		pDiskChunk->SetDebugCheck ( m_bCheckIdDups );
+		pDiskChunk->SetDebugCheck ( m_bCheckIdDups, -1 );
 
 	if ( !pDiskChunk->Prealloc ( m_bPathStripped, pFilenameBuilder ) )
 	{
@@ -4437,10 +4441,8 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 	// FIXME! remove copypasted code from CSphIndex_VLN::DebugCheck
 
 	DebugCheckError_c tReporter(fp);
-	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
-	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
 
-	if ( m_iLockFD<0 )
+	if ( m_iLockFD<0 && m_iCheckChunk!=-1 )
 		sphWarning ( "failed to load RAM chunks, checking only %d disk chunks", m_dChunkNames.GetLength() );
 
 	if ( m_iStride!=m_tSchema.GetRowSize() )
@@ -4464,6 +4466,18 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 	tReporter.Msg ( "checking schema..." );
 	DebugCheckSchema ( m_tSchema, tReporter );
 
+	if ( m_iCheckChunk!=-1 )
+		DebugCheckRam ( tReporter );
+
+	int iFailsPlain = DebugCheckDisk ( tReporter, fp );
+
+	tReporter.Done();
+
+	return tReporter.GetNumFails() + iFailsPlain;
+}
+
+void RtIndex_c::DebugCheckRam ( DebugCheckError_c & tReporter )
+{
 	ARRAY_FOREACH ( iSegment, m_dRamChunks )
 	{
 		tReporter.Msg ( "checking RT segment %d(%d)...", iSegment, m_dRamChunks.GetLength() );
@@ -4936,13 +4950,33 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 					tSegment.m_tAliveRows.load ( std::memory_order_relaxed ) );
 	}
 
-	int iFailsPlain = 0;
-	ARRAY_FOREACH ( i, m_dChunkNames )
+} // NOLINT function length
+
+int RtIndex_c::DebugCheckDisk ( DebugCheckError_c & tReporter, FILE * fp )
+{
+	CreateFilenameBuilder_fn fnCreateFilenameBuilder = GetIndexFilenameBuilder();
+	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( fnCreateFilenameBuilder ? fnCreateFilenameBuilder ( m_sIndexName.cstr() ) : nullptr );
+
+	VecTraits_T<int> dChunks = m_dChunkNames.Slice();
+	if ( m_iCheckChunk!=-1 )
 	{
-		int iChunk = m_dChunkNames[i];
+		int iChunk = dChunks.GetFirst (  [&] ( int & v ) { return m_iCheckChunk==v; }  );
+		if ( iChunk==-1 )
+		{
+			tReporter.Fail ( "failed to find disk chunk %s.%d, disk chunks total %d", m_sPath.cstr(), m_iCheckChunk, m_dChunkNames.GetLength() );
+			return 1;
+		}
+		
+		dChunks = m_dChunkNames.Slice ( iChunk, 1 );
+	}
+
+	int iFailsPlain = 0;
+	ARRAY_FOREACH ( i, dChunks )
+	{
+		int iChunk = dChunks[i];
 		CSphString sChunk;
 		sChunk.SetSprintf ( "%s.%d", m_sPath.cstr(), iChunk );
-		tReporter.Msg ( "checking disk chunk, extension %d, %d(%d)...", m_dChunkNames[i], i, m_dChunkNames.GetLength() );
+		tReporter.Msg ( "checking disk chunk, extension %d, %d(%d)...", dChunks[i], i, m_dChunkNames.GetLength() );
 
 		CSphScopedPtr<CSphIndex> pIndex ( PreallocDiskChunk ( sChunk.cstr(), iChunk, pFilenameBuilder.Ptr(), m_sLastError ) );
 		if ( pIndex.Ptr() )
@@ -4956,11 +4990,16 @@ int RtIndex_c::DebugCheck ( FILE * fp )
 		}
 	}
 
+	return iFailsPlain;
+}
 
-	tReporter.Done();
-
-	return tReporter.GetNumFails() + iFailsPlain;
-} // NOLINT function length
+void RtIndex_c::SetDebugCheck ( bool bCheckIdDups, int iCheckChunk )
+{
+	m_bDebugCheck = true;
+	m_bCheckIdDups = bCheckIdDups;
+	m_iCheckChunk = iCheckChunk;
+	ProhibitSave();
+}
 
 //////////////////////////////////////////////////////////////////////////
 // SEARCHING

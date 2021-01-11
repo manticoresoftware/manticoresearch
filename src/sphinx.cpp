@@ -1906,7 +1906,7 @@ public:
 	void				DebugDumpDocids ( FILE * fp ) final;
 	void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID ) final;
 	void				DebugDumpDict ( FILE * fp ) final;
-	void				SetDebugCheck ( bool bCheckIdDups ) final;
+	void				SetDebugCheck ( bool bCheckIdDups, int iCheckChunk ) final;
 	int					DebugCheck ( FILE * fp ) final;
 	template <class Qword> void		DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
 
@@ -16612,7 +16612,7 @@ void HashCollection_c::AppendNewHash ( const char * sExt, const BYTE * pHash )
 // INDEX CHECKING
 //////////////////////////////////////////////////////////////////////////
 
-void CSphIndex_VLN::SetDebugCheck ( bool bCheckIdDups )
+void CSphIndex_VLN::SetDebugCheck ( bool bCheckIdDups, int )
 {
 	m_bDebugCheck = true;
 	m_bCheckIdDups = bCheckIdDups;

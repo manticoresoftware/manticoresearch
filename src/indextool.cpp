@@ -1108,6 +1108,7 @@ int main ( int argc, char ** argv )
 	bool bQuiet = false;
 	bool bRotate = false;
 	bool bCheckIdDups = false;
+	int iCheckChunk = -1;
 
 	int i;
 	for ( i=1; i<argc; i++ )
@@ -1148,6 +1149,10 @@ int main ( int argc, char ** argv )
 			sIndex = argv[++i];
 			if ( (i+1)<argc && argv[i+1][0]!='-' )
 				sFoldFile = argv[++i];
+		}
+		OPT1 ( "--check-disk-chunk" )
+		{
+			iCheckChunk = strtoll ( argv[++i], NULL, 10 ); continue;
 		}
 
 		// options with 2 args
@@ -1349,7 +1354,7 @@ int main ( int argc, char ** argv )
 			sphDie ( "index '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
 
 		if ( g_eCommand==IndextoolCmd_e::CHECK )
-			pIndex->SetDebugCheck ( bCheckIdDups );
+			pIndex->SetDebugCheck ( bCheckIdDups, iCheckChunk );
 
 		CSphString sWarn;
 		if ( !pIndex->Prealloc ( bStripPath, nullptr ) )

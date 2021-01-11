@@ -496,9 +496,16 @@ static void LoggerWrapper ( wsrep_log_level_t eLevel, const char * sFmt, ... )
 	va_end ( ap );
 }
 
+static bool CheckNoWarning ( const char * sMsg );
+
 // callback for Galera logger_cb to log messages and errors
 static void Logger_fn ( wsrep_log_level_t eLevel, const char * sMsg )
 {
+	// in normal flow need to skip certain messages from Galera but keep messagea in debug replication verbosity level
+	// dont want to patch Galera source code
+	if ( g_eLogLevel<SPH_LOG_RPL_DEBUG && eLevel==WSREP_LOG_WARN && CheckNoWarning ( sMsg ) )
+		return;
+
 	LoggerWrapper ( eLevel, sMsg );
 }
 
@@ -5028,4 +5035,23 @@ int GetQueryTimeout ( int64_t iTimeout )
 	// need default of 2 minutes in msec for replication requests as they are mostly long running
 	int iTm = Max ( g_iAgentQueryTimeoutMs, 120 * 1000 );
 	return Max ( iTm, Min ( iTimeout, INT_MAX ) );
+}
+
+static const char * g_dReplicatorPatterns[] = {
+	"Could not open state file for reading:",
+	"No persistent state found. Bootstraping with default state",
+	"Fail to access the file ("
+};
+
+bool CheckNoWarning ( const char * sMsg )
+{
+	if ( !sMsg || !sMsg[0] )
+		return false;
+
+	for ( const char * sPattern : g_dReplicatorPatterns )
+	{
+		if ( strncmp ( sMsg, sPattern, strlen(sPattern) )==0 )
+			return true;
+	}
+	return false;
 }

@@ -205,10 +205,8 @@ collation_server = utf8_ci
 ### data_dir
 
 <!-- example conf data_dir -->
-For now - just path to the dir for replication internal files, optional.
-
-In this directory server stores replication meta info and state such as cluster descriptions and list of indexes replicated to the current node in `manticore.json` file in this directory and uses it as a default directory for cluster contents.
-
+When specified, enables the [real-time mode](Creating_an_index/Local_indexes.md#Online-schema-management-(RT-mode)) (imperative way of managing data schema). The value should be a path to the directory where you want to store all your indexes, binary log and everything else needed for the proper functioning of Manticore Search in this mode. 
+Indexation of [plain indexes](Creating_an_index/Local_indexes/Plain_index.md) is not allowed when the `data_dir` is specified. Read more about the difference between the RT mode and the plain mode in [this section](Read_this_first.md#Real-time-index-vs-plain-index).
 
 <!-- intro -->
 ##### Example:
@@ -216,7 +214,7 @@ In this directory server stores replication meta info and state such as cluster 
 <!-- request Example -->
 
 ```ini
-data_dir = /var/manticore
+data_dir = /var/lib/manticore
 ```
 <!-- end -->
 

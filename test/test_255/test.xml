@@ -20,6 +20,8 @@ index rt1
     path = <data_path/>/rt1
     charset_table = a..z, _, A..Z->a..z	
     rt_field = name
+    #rt_field = title
+    #rt_attr_uint = count
     rt_attr_uint = idd
     morphology = stem_en
     wordforms = <this_test/>/wf1.txt
@@ -67,6 +69,31 @@ $results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'SOY' )" );
 $results[] = 'query TOFU';
 $results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'TOFU' ) ORDER BY id ASC" );
 
+// regresison RECONFIGURE recreates index schema
+$results[] = 'DESC rt1';
+$results[] = "\n" . $ql->Query ( "DESC rt1" );
+
+$orig_conf = file(testdir('config.conf'));
+$n1_conf = '';
+foreach ( $orig_conf as $line )
+{
+	$pos = strpos ( $line, '#' );
+    if ( $pos !== false )
+	{
+		$line = substr ( $line, $pos+1 );
+	}
+	$n1_conf .= $line;
+}
+file_put_contents(testdir('config.conf'), $n1_conf);
+
+$results[] = 'TRUNCATE RTINDEX rt1 WITH RECONFIGURE';
+$results[] = "\n" . $ql->Query ( "TRUNCATE RTINDEX rt1 WITH RECONFIGURE" );
+$results[] = 'DESC rt1';
+$results[] = "\n" . $ql->Query ( "DESC rt1" );
+$results[] = "REPLACE INTO rt1 (id, name, title, idd, count) VALUES (1, 'TOFU', 'food', 1, 11)";
+$results[] = "\n" . $ql->Query ( "REPLACE INTO rt1 (id, name, title, idd, count) VALUES (1, 'TOFU', 'food', 1, 11)" );
+$results[] = 'SELECT * FROM rt1';
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt1" );
 
 ]]></custom_test>
 

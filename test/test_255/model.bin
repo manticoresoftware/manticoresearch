@@ -1,4 +1,4 @@
-a:1:{i:0;a:1:{i:0;a:19:{i:0;s:14:"initial commit";i:1;s:3:"
+a:1:{i:0;a:1:{i:0;a:29:{i:0;s:14:"initial commit";i:1;s:3:"
 OK";i:2;s:9:"query SOY";i:3;s:13:"
 1 | 1
 1 rows";i:4;s:10:"query TOFU";i:5;s:13:"
@@ -15,4 +15,18 @@ OK";i:15;s:9:"query SOY";i:16;s:7:"
 0 rows";i:17;s:10:"query TOFU";i:18;s:19:"
 1 | 1
 2 | 1
-2 rows";}}}
+2 rows";i:19;s:8:"DESC rt1";i:20;s:58:"
+id | bigint | 
+name | text | indexed
+idd | uint | 
+3 rows";i:21;s:37:"TRUNCATE RTINDEX rt1 WITH RECONFIGURE";i:22;s:3:"
+OK";i:23;s:8:"DESC rt1";i:24;s:97:"
+id | bigint | 
+name | text | indexed
+title | text | indexed
+count | uint | 
+idd | uint | 
+5 rows";i:25;s:80:"REPLACE INTO rt1 (id, name, title, idd, count) VALUES (1, 'TOFU', 'food', 1, 11)";i:26;s:3:"
+OK";i:27;s:17:"SELECT * FROM rt1";i:28;s:18:"
+1 | 11 | 1
+1 rows";}}}

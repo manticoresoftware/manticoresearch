@@ -36,6 +36,7 @@ public:
 
 	/// get internal schema (to use for Add calls)
 	virtual const CSphSchema & GetInternalSchema () const { return m_tSchema; }
+	virtual uint64_t GetSchemaHash () const = 0;
 
 	/// insert/update document in current txn
 	/// fails in case of two open txns to different indexes

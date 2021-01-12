@@ -1727,7 +1727,7 @@ static bool HandleCmdReplicate ( RtAccum_t & tAcc, CSphString & sError, int * pD
 	if ( !CheckClasterState ( eClusterState, bPrimary, tCmdCluster.m_sCluster, sError ) )
 		return false;
 
-	if ( tCmdCluster.m_eCommand==ReplicationCommand_e::TRUNCATE && tCmdCluster.m_bReconfigure )
+	if ( tCmdCluster.m_eCommand==ReplicationCommand_e::TRUNCATE && tCmdCluster.m_tReconfigure.Ptr() )
 	{
 		sError.SetSprintf ( "RECONFIGURE is not supported for a cluster index" );
 		return false;
@@ -1956,10 +1956,9 @@ bool CommitMonitor_c::CommitNonEmptyCmds ( RtIndex_i* pIndex, const ReplicationC
 	if ( !pIndex->Truncate ( sError ))
 		return false;
 
-	if ( !tCmd.m_bReconfigure )
+	if ( !tCmd.m_tReconfigure.Ptr() )
 		return true;
 
-	assert ( tCmd.m_tReconfigure.Ptr ());
 	CSphReconfigureSetup tSetup;
 	StrVec_t dWarnings;
 	bool bSame = pIndex->IsSameSettings ( *tCmd.m_tReconfigure.Ptr (), tSetup, dWarnings, sError );

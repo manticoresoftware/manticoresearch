@@ -110,7 +110,9 @@ One of the possible uses of this command is before [attaching an index](Adding_d
 
 <!-- example truncate with RECONFIGURE -->
 
-When `RECONFIGURE` option is used new tokenization, morphology, and other text processing settings specified in the config take effect after the index gets cleared. With this option clearing and reconfiguring an index becomes one atomic operation.
+When `RECONFIGURE` option is used new tokenization, morphology, and other text processing settings specified in the config take effect after the index gets cleared. In case the [schema declaration](Creating_an_index/Data_types.md) in config is different from the index schema the new schema from config got applied after index get cleared.
+
+With this option clearing and reconfiguring an index becomes one atomic operation.
 
 <!-- intro -->
 ##### SQL:

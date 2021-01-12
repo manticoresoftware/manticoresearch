@@ -1601,6 +1601,8 @@ struct CSphReconfigureSettings
 	CSphFieldFilterSettings m_tFieldFilter;
 	CSphSchema				m_tSchema;
 	int64_t					m_iMemLimit = 0;
+
+	bool					m_bChangeSchema = false;
 };
 
 struct CSphReconfigureSetup
@@ -1611,9 +1613,12 @@ struct CSphReconfigureSetup
 	FieldFilterRefPtr_c	m_pFieldFilter;
 	CSphSchema			m_tSchema;
 	int64_t				m_iMemLimit = 0;
+
+	bool				m_bChangeSchema = false;
 };
 
 uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings );
+uint64_t SchemaFNV ( const ISphSchema & tSchema );
 
 //////////////////////////////////////////////////////////////////////////
 // USER VARIABLES

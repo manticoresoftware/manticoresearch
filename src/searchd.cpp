@@ -13411,7 +13411,10 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	const CSphString & sIndex = tStmt.m_sIndex;
 
 	if ( bReconfigure )
+	{
 		pCmd->m_tReconfigure = new CSphReconfigureSettings();
+		pCmd->m_tReconfigure->m_bChangeSchema = true;
+	}
 
 	if ( bReconfigure && !PrepareReconfigure ( sIndex, *pCmd->m_tReconfigure.Ptr(), sError ) )
 	{
@@ -13439,7 +13442,6 @@ void HandleMysqlTruncate ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	pCmd->m_eCommand = ReplicationCommand_e::TRUNCATE;
 	pCmd->m_sIndex = sIndex;
 	pCmd->m_sCluster = tStmt.m_sCluster;
-	pCmd->m_bReconfigure = bReconfigure;
 
 	RtAccum_t tAcc ( false );
 	tAcc.m_dCmd.Add ( pCmd.LeakPtr() );
@@ -14158,11 +14160,15 @@ static bool PrepareReconfigure ( const CSphString & sIndex, const CSphConfigSect
 	tSettings.m_tFieldFilter.Setup ( hIndex, sWarning );
 	tSettings.m_iMemLimit = hIndex.GetSize64 ( "rt_mem_limit", DEFAULT_RT_MEM_LIMIT );
 
-	sphRTSchemaConfigure ( hIndex, tSettings.m_tSchema, sError, true );
+	if ( !sphRTSchemaConfigure ( hIndex, tSettings.m_tSchema, sError, !tSettings.m_bChangeSchema ) )
+	{
+		sError.SetSprintf ( "failed to parse index '%s' schema, error: '%s'", sIndex.cstr(), sError.cstr() );
+		return false;
+	}
 
 	if ( !tSettings.m_tIndex.Setup ( hIndex, sIndex.cstr(), sWarning, sError ) )
 	{
-		sError.SetSprintf ( "'%s' failed to parse index settings, error '%s'", sIndex.cstr(), sError.cstr() );
+		sError.SetSprintf ( "failed to parse index '%s' settings, error: '%s'", sIndex.cstr(), sError.cstr() );
 		return false;
 	}
 

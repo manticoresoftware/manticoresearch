@@ -1194,6 +1194,7 @@ public:
 	bool				GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const final;
 	int					GetFieldId ( const CSphString & sName, DocstoreDataType_e eType ) const final;
 	Bson_t				ExplainQuery ( const CSphString & sQuery ) const final;
+	virtual				uint64_t GetSchemaHash () const final { return m_uSchemaHash; }
 
 protected:
 	CSphSourceStats		m_tStats;
@@ -1207,6 +1208,8 @@ private:
 	static const DWORD			META_VERSION		= 17;			///< current version fixme! Also change version in indextool.cpp, and support the changes!
 
 	int							m_iStride;
+	uint64_t					m_uSchemaHash = 0;
+
 	LazyVector_T<RtSegmentRefPtf_t>	m_dRamChunks GUARDED_BY ( m_tChunkLock );
 	std::atomic<int64_t>		m_iRamChunksAllocatedRAM;
 
@@ -1312,6 +1315,8 @@ private:
 
 	void						DebugCheckRam ( DebugCheckError_c & tReporter );
 	int							DebugCheckDisk ( DebugCheckError_c & tReporter, FILE * fp );
+
+	void						SetSchema ( const CSphSchema & tSchema );
 };
 
 
@@ -1325,32 +1330,12 @@ RtIndex_c::RtIndex_c ( const CSphSchema & tSchema, const char * sIndexName, int6
 {
 	MEMORY ( MEM_INDEX_RT );
 
-	m_tSchema = tSchema;
-	m_iStride = m_tSchema.GetRowSize();
+	SetSchema ( tSchema );
 
 	m_iDoubleBufferLimit = ( m_iSoftRamLimit * SPH_RT_DOUBLE_BUFFER_PERCENT ) / 100;
 
-#ifndef NDEBUG
-	// check that index cols are static
-	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
-		assert ( !m_tSchema.GetAttr(i).m_tLocator.m_bDynamic );
-#endif
-
 	Verify ( m_tChunkLock.Init() );
 	Verify ( m_tReading.Init() );
-
-	ARRAY_FOREACH ( i, m_dFieldLens )
-	{
-		m_dFieldLens[i] = 0;
-		m_dFieldLensRam[i] = 0;
-		m_dFieldLensDisk[i] = 0;
-	}
-
-	if ( m_tSchema.HasStoredFields() )
-	{
-		m_pDocstoreFields = CreateDocstoreFields();
-		SetupDocstoreFields ( *m_pDocstoreFields.Ptr(), m_tSchema );
-	}
 }
 
 
@@ -1698,6 +1683,14 @@ RtAccum_t * RtIndex_i::AcquireAccum ( CSphDict * pDict, RtAccum_t * pAcc,
 			sError->SetSprintf ( "current txn is working with another index ('%s')", pAcc->GetIndex()->GetName() );
 		return nullptr;
 	}
+
+	if ( pAcc && pAcc->GetIndex() && pAcc->GetSchemaHash()!=GetSchemaHash() )
+	{
+		if ( sError )
+			sError->SetSprintf ( "current txn is working with index's another schema ('%s'), restart session", pAcc->GetIndex()->GetName() );
+		return nullptr;
+	}
+
 
 	if ( !pAcc )
 	{
@@ -2270,6 +2263,9 @@ void RtAccum_t::SetIndex ( RtIndex_i * pIndex )
 	SafeDelete ( m_pBlobWriter );
 	if ( pIndex && pIndex->GetInternalSchema().HasBlobAttrs() )
 		m_pBlobWriter = sphCreateBlobRowBuilder ( pIndex->GetInternalSchema(), m_dBlobs );
+
+	if ( pIndex )
+		m_uSchemaHash = pIndex->GetSchemaHash();
 }
 
 
@@ -3913,7 +3909,9 @@ bool RtIndex_c::LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath
 
 	// load them settings
 	DWORD uSettingsVer = rdMeta.GetDword();
-	ReadSchema ( rdMeta, m_tSchema, uSettingsVer );
+	CSphSchema tSchema;
+	ReadSchema ( rdMeta, tSchema, uSettingsVer );
+	SetSchema ( tSchema );
 	LoadIndexSettings ( m_tSettings, rdMeta, uSettingsVer );
 	if ( !tTokenizerSettings.Load ( pFilenameBuilder, rdMeta, tEmbeddedFiles, m_sLastError ) )
 		return false;
@@ -3953,9 +3951,6 @@ bool RtIndex_c::LoadMeta ( FilenameBuilder_i * pFilenameBuilder, bool bStripPath
 		sphWarning ( "%s", m_sLastError.cstr() );
 
 	m_pTokenizer = ISphTokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms () );
-
-	// update schema
-	m_iStride = m_tSchema.GetRowSize();
 
 	m_iWordsCheckpoint = rdMeta.GetDword();
 
@@ -7429,8 +7424,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 	}
 
 	// copy schema from new index
-	m_tSchema = pIndex->GetMatchSchema();
-	m_iStride = m_tSchema.GetRowSize();
+	SetSchema ( pIndex->GetMatchSchema() );
 	m_tStats.m_iTotalBytes += pIndex->GetStats().m_iTotalBytes;
 	m_tStats.m_iTotalDocuments += pIndex->GetStats().m_iTotalDocuments-iTotalKilled;
 
@@ -8013,14 +8007,25 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 
 bool RtIndex_c::IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, StrVec_t & dWarnings, CSphString & sError ) const
 {
+	bool bSame = true;
+	if ( tSettings.m_bChangeSchema && m_uSchemaHash!=SchemaFNV ( tSettings.m_tSchema ) )
+	{
+		tSetup.m_tSchema = tSettings.m_tSchema;
+		tSetup.m_bChangeSchema = true;
+		bSame = false;
+	}
+
 	return CreateReconfigure ( m_sIndexName, IsStarDict ( m_bKeywordDict ), m_pFieldFilter, m_tSettings, m_pTokenizer->GetSettingsFNV(), m_pDict->GetSettingsFNV(), m_pTokenizer->GetMaxCodepointLength(),
-		GetMemLimit(), true, tSettings, tSetup, dWarnings, sError );
+		GetMemLimit(), bSame, tSettings, tSetup, dWarnings, sError );
 }
 
 bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 {
 	if ( !ForceDiskChunk() )
 		return false;
+
+	if ( tSetup.m_bChangeSchema )
+		SetSchema ( tSetup.m_tSchema );
 
 	m_iSoftRamLimit = tSetup.m_iMemLimit;
 
@@ -9948,7 +9953,8 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 		tSchema.RemoveAttr ( szTmpColName, false );
 	}
 
-	if ( !tSchema.GetAttrsCount() && !g_bTestMode && !bSkipValidation )
+	// should be id and at least one attribute
+	if ( tSchema.GetAttrsCount()<2 && !g_bTestMode && !bSkipValidation )
 	{
 		sError.SetSprintf ( "no attribute configured (use rt_attr directive)" );
 		return false;
@@ -10026,4 +10032,56 @@ void RtAccum_t::SaveRtTrx ( MemoryWriter_c & tWriter ) const
 	// delete
 	tWriter.PutDword ( m_dAccumKlist.GetLength() );
 	tWriter.PutBytes ( m_dAccumKlist.Begin(), (int) m_dAccumKlist.GetLengthBytes() );
+}
+
+void RtIndex_c::SetSchema ( const CSphSchema & tSchema )
+{
+	m_tSchema = tSchema;
+	m_iStride = m_tSchema.GetRowSize();
+	m_uSchemaHash = SchemaFNV ( m_tSchema );
+
+#ifndef NDEBUG
+	// check that index cols are static
+	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
+		assert ( !m_tSchema.GetAttr(i).m_tLocator.m_bDynamic );
+#endif
+
+	if ( m_tSchema.HasStoredFields() )
+	{
+		m_pDocstoreFields = CreateDocstoreFields();
+		SetupDocstoreFields ( *m_pDocstoreFields.Ptr(), m_tSchema );
+	}
+
+	ARRAY_FOREACH ( i, m_dFieldLens )
+	{
+		m_dFieldLens[i] = 0;
+		m_dFieldLensRam[i] = 0;
+		m_dFieldLensDisk[i] = 0;
+	}
+}
+
+uint64_t SchemaFNV ( const ISphSchema & tSchema )
+{
+	uint64_t uHash = SPH_FNV64_SEED;
+
+	// attrs
+	int iAttrsCount = tSchema.GetAttrsCount();
+	for ( int i=0; i<iAttrsCount; i++ )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr ( i );
+		uHash = sphFNV64cont ( tAttr.m_sName.cstr(), uHash );
+		uHash = sphFNV64 ( &tAttr.m_eAttrType, sizeof( tAttr.m_eAttrType ), uHash );
+		uHash = sphFNV64 ( &tAttr.m_tLocator, sizeof( tAttr.m_tLocator ), uHash );
+	}
+
+	// fulltext fields
+	int iFieldsCount = tSchema.GetFieldsCount();
+	for ( int i=0; i<iFieldsCount; i++ )
+	{
+		const CSphColumnInfo & tField = tSchema.GetField ( i );
+		uHash = sphFNV64cont ( tField.m_sName.cstr(), uHash );
+		uHash = sphFNV64 ( &tField.m_uFieldFlags, sizeof( tField.m_uFieldFlags ), uHash );
+	}
+
+	return uHash;
 }

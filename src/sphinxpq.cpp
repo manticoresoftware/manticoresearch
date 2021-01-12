@@ -146,6 +146,7 @@ public:
 	void				LockFileState ( CSphVector<CSphString> & dFiles ) final;
 
 	const CSphSchema &GetMatchSchema () const override { return m_tMatchSchema; }
+	virtual uint64_t GetSchemaHash () const final { return 0; }
 
 	int64_t				GetMemLimit() const final { return 0; }
 

@@ -67,7 +67,6 @@ struct ReplicationCommand_t
 	CSphString				m_sDeleteTags;
 
 	// truncate
-	bool					m_bReconfigure = false;
 	CSphScopedPtr<CSphReconfigureSettings> m_tReconfigure { nullptr };
 
 	// commit related
@@ -116,6 +115,7 @@ public:
 
 	RowID_t			GenerateRowID();
 	void			ResetRowID();
+	uint64_t		GetSchemaHash() const { return m_uSchemaHash; }
 
 	RtIndex_i *		GetIndex() const { return m_pIndex; }
 	ReplicationCommand_t * AddCommand ( ReplicationCommand_e eCmd );
@@ -136,6 +136,7 @@ private:
 	CSphScopedPtr<DocstoreRT_i>	m_pDocstore {nullptr};
 	RowID_t						m_tNextRowID {0};
 	CSphFixedVector<BYTE>		m_dPackedKeywords { 0 };
+	uint64_t					m_uSchemaHash { 0 };
 	void						ResetDict ();
 
 	// FIXME!!! index is unlocked between add data and commit or at begin and end

@@ -121,7 +121,7 @@ void Detached::RemoveThread ( LowThreadDesc_t* pVictim )
 	ARRAY_FOREACH ( i, g_dDetachedThreads() )
 	{
 		auto pThread = g_dDetachedThreads ()[i];
-		if ( Threads::Same ( pThread->m_tThread, pVictim->m_tThread ) )
+		if ( Threads::Same ( pThread, pVictim ) )
 		{
 			sphLogDebug ( "Terminated thread %d, '%s'", pThread->m_iThreadID, pThread->m_sThreadName.cstr () );
 			g_dDetachedThreads().RemoveFast ( i );

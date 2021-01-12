@@ -168,7 +168,7 @@ bool Join ( SphThread_t * pThread );
 SphThread_t Self ();
 
 /// compares two thread ids
-bool Same ( SphThread_t first, SphThread_t second );
+bool Same ( const LowThreadDesc_t * pFirst, const LowThreadDesc_t * pSecond );
 
 /// my create thread wrapper
 /// for threads serving clients use CreateQ instead

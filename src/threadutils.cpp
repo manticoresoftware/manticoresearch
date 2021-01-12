@@ -1228,12 +1228,18 @@ SphThread_t Threads::Self ()
 }
 
 /// compares two thread ids
-bool Threads::Same ( SphThread_t first, SphThread_t second )
+bool Threads::Same ( const LowThreadDesc_t * pFirst, const LowThreadDesc_t * pSecond )
 {
+	if ( !pFirst && !pSecond )
+		return true;
+	if ( !pFirst || !pSecond )
+		return false;
+
 #if USE_WINDOWS
-	return first==second;
+	// can not use m_tThread on Windows as GetCurrentThread returns -2 and that handle valid only inside thread itself
+	return ( pFirst->m_iThreadID==pSecond->m_iThreadID );
 #else
-	return pthread_equal ( first, second )!=0;
+	return pthread_equal ( pFirst->m_tThread, pSecond->m_tThread )!=0;
 #endif
 }
 

@@ -36,16 +36,17 @@ There are few things you need to understand about Manticore Search that can help
 
 #### Real-time mode vs plain mode
 Manticore Search works in two modes:
-* **Real-time mode** (RT mode). This is a default one and:
+* **Real-time mode** (RT mode). This is a default one and allows to manage your data schema **imperatively**:
   * allows managing your data schema online using SQL commands `CREATE`/`ALTER`/`DROP TABLE` and their equivalents in non-SQL clients
-  * in the configuration file you need to define only server-related settings
-* **Plain mode** allows to define your data schemas in a configuration file. It makes sense in two cases:
+  * in the configuration file you need to define only server-related settings including [data_dir](Server_settings/Searchd.md#data_dir)
+* **Plain mode** allows to define your data schemas in a configuration file, i.e. provides **declarative** kind of schema management. It makes sense in three cases:
   * when you only deal with plain indexes
   * or when your data schema is very stable and you don't need replication (as it's available only in the RT mode)
+  * when you have to make your data schema portable (e.g. for easier deployment of it on a new server)
 
-You cannot combine the 2 modes and need to decide which one you want to follow. If you are unsure **our recommendation is to follow the RT mode** as if even you need a plain index you can build it with a separate plain index config and import to your main Manticore instance.
+You cannot combine the 2 modes and need to decide which one you want to follow by specifying [data_dir](Server_settings/Searchd.md#data_dir) in your configuration file (which is the default behaviour). If you are unsure **our recommendation is to follow the RT mode** as if even you need a plain index you can [build](Adding_data_from_external_storages/Plain_indexes_creation.md) it with a separate plain index config and [import](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_index.md) to your main Manticore instance.
 
-Real-time indexes can be used in both RT and plain modes. In RT mode an RT index is defined with a `CREATE TABLE` command, while in plain mode it is defined in the configuration file. Plain (offline) indexes are supported only in the plain mode. Plain indexes cannot be created in the RT mode, but existing plain indexes made in the plain mode can be [converted](Adding_data_from_external_storages/Adding_data_from_indexes/Attaching_a_plain_index_to_RT_index.md) to real-time indexes and [imported](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_index.md) in the RT mode.
+Real-time indexes can be used in both RT and plain modes. In the RT mode a real-time index is defined with a `CREATE TABLE` command, while in the plain mode it is defined in the configuration file. Plain (offline) indexes are supported only in the plain mode. Plain indexes cannot be created in the RT mode, but existing plain indexes made in the plain mode can be [converted](Adding_data_from_external_storages/Adding_data_from_indexes/Attaching_a_plain_index_to_RT_index.md) to real-time indexes and [imported](Adding_data_from_external_storages/Adding_data_from_indexes/Importing_index.md) in the RT mode.
 
 #### SQL vs JSON
 Manticore provides multiple ways and interfaces to manage your schemas and data, but the two main are:

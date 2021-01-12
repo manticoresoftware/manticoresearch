@@ -70,20 +70,14 @@ POST /sql -d "mode=raw&query=CREATE TABLE products(title text, price float)  mor
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-            'morphology' => 'stem_en, libstemmer_sv'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'morphology' => 'stem_en, libstemmer_sv'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -148,22 +142,15 @@ CREATE TABLE products(title text, name text, price float) morphology_skip_fields
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
             'morphology_skip_fields' => 'name',
             'morphology' => 'stem_en'
-        ],
-        'columns' => [
-            'title'=>['type'=>'text'],
-            'name'=>['type'=>'text'],
-            'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -232,21 +219,16 @@ CREATE TABLE products(title text, price float) min_stemming_len = '4' morphology
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-             'min_stemming_len' => '4',
-             'morphology' => 'stem_en'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+             'min_stemming_len' => '4',
+             'morphology' => 'stem_en'
+        ]);
+
 ```
 <!-- intro -->
 ##### Python:
@@ -314,21 +296,16 @@ CREATE TABLE products(title text, price float) index_exact_words = '1' morpholog
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-             'index_exact_words' => '1',
-             'morphology' => 'stem_en'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+             'index_exact_words' => '1',
+             'morphology' => 'stem_en'
+        ]);
+
 ```
 <!-- intro -->
 ##### Python:

@@ -70,20 +70,14 @@ CREATE TABLE products(title text, price float) exceptions = '/usr/local/sphinx/d
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-            'exceptions' = '/usr/local/sphinx/data/exceptions.txt'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'exceptions' => '/usr/local/sphinx/data/exceptions.txt'
+        ]);
 ```
 <!-- intro -->
 ##### Python:

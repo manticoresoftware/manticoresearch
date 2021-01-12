@@ -71,24 +71,18 @@ CREATE TABLE products(title text, price float) wordforms = '/var/lib/manticore/w
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
             'wordforms' => [
                 '/var/lib/manticore/wordforms.txt',
                 '/var/lib/manticore/alternateforms.txt',
                 '/var/lib/manticore/dict*.txt'
             ]
-        ],
-        'columns' => [
-            'title'=>['type'=>'text'],
-            'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ]);
 ```
 <!-- intro -->
 ##### Python:

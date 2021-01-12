@@ -41,20 +41,14 @@ CREATE TABLE products(title text, price float) stopwords = '/usr/local/sphinx/da
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-            'stopwords' => '/usr/local/sphinx/data/stopwords.txt stopwords-ru.txt stopwords-en.txt'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'stopwords' => '/usr/local/sphinx/data/stopwords.txt stopwords-ru.txt stopwords-en.txt'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -170,20 +164,14 @@ CREATE TABLE products(title text, price float) stopwords = 'it'"
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-            'stopwords' => 'it'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'stopwords' => 'it'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -245,20 +233,14 @@ CREATE TABLE products(title text, price float) stopwords = 'en, it, ru'"
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-            'stopwords' => 'en, it, ru'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'stopwords' => 'en, it, ru'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -326,22 +308,15 @@ CREATE TABLE products(title text, price float) stopwords = 'en' stopword_step = 
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-            'stopwords' => 'en, it, ru',
-            'stopword_step' => '1'
-            
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'stopwords' => 'en, it, ru',
+            'stopword_step' => '1'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -414,22 +389,15 @@ CREATE TABLE products(title text, price float) stopwords = 'en' stopwords_unstem
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-            'stopwords' => 'en, it, ru',
-            'stopwords_unstemmed' => '1'
-            
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'stopwords' => 'en, it, ru',
+            'stopwords_unstemmed' => '1'
+        ]);
 ```
 <!-- intro -->
 ##### Python:

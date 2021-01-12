@@ -25,21 +25,15 @@ CREATE TABLE products(title text, price float) charset_table = 'cjk' morphology 
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-            'charset_table' => 'cjk',
-            'morphology' => 'icu_chinese'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'charset_table' => 'cjk',
+            'morphology' => 'icu_chinese'
+        ]);
 ```
 
 <!-- intro -->
@@ -107,22 +101,16 @@ CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_l
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
              'charset_table' => 'non_cjk',
              'ngram_len' => '1',
              'ngram_chars' => 'cjk'
-        ],
-        'columns' => [
-            'title'=>['type'=>'text'],
-            'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ]);
 ```
 
 <!-- intro -->
@@ -189,22 +177,16 @@ CREATE TABLE products(title text, price float) charset_table = 'chinese' morphol
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
             'charset_table' => 'chinese',
             'morphology' => 'icu_chinese',
             'stopwords' => 'zh'
-        ],
-        'columns' => [
-            'title'=>['type'=>'text'],
-            'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ]);
 ```
 
 <!-- intro -->

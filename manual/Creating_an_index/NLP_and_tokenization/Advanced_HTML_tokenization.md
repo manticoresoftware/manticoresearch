@@ -42,20 +42,14 @@ CREATE TABLE products(title text, price float) html_strip = '1'"
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-            'html_strip' => '1'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'html_strip' => '1'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -126,21 +120,15 @@ CREATE TABLE products(title text, price float) html_index_attrs = 'img=alt,title
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-            'html_index_attrs' => 'img=alt,title; a=title;',
-            'html_strip' => '1'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'html_index_attrs' => 'img=alt,title; a=title;',
+            'html_strip' => '1'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -214,21 +202,15 @@ CREATE TABLE products(title text, price float) html_remove_elements = 'style, sc
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-            'html_remove_elements' => 'style, script',
-            'html_strip' => '1'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'html_remove_elements' => 'style, script',
+            'html_strip' => '1'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -315,21 +297,15 @@ CREATE TABLE products(title text, price float) index_sp = '1' html_strip = '1'"
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-            'index_sp' => '1',
-            'html_strip' => '1'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'index_sp' => '1',
+            'html_strip' => '1'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -406,21 +382,15 @@ CREATE TABLE products(title text, price float) index_zones = 'h, th, title' html
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-            'index_zones' => 'h*,th,title',
-            'html_strip' => '1'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'index_zones' => 'h*,th,title',
+            'html_strip' => '1'
+        ]);
 ```
 <!-- intro -->
 ##### Python:

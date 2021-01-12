@@ -74,20 +74,14 @@ CREATE TABLE products(title text, price float) charset_table = '0..9, A..Z->a..z
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-             'charset_table' => '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'charset_table' => '0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -151,20 +145,14 @@ CREATE TABLE products(title text, price float) charset_table = '0..9, english, _
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-             'charset_table' => '0..9, english, _'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'charset_table' => '0..9, english, _'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -250,22 +238,16 @@ CREATE TABLE products(title text, price float) charset_table = 'non_cjk' ngram_l
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
+            'title'=>['type'=>'text'],
+            'price'=>['type'=>'float']
+        ],[
              'charset_table' => 'non_cjk',
              'ngram_len' => '1',
              'ngram_chars' => 'cjk'
-        ],
-        'columns' => [
-            'title'=>['type'=>'text'],
-            'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -347,20 +329,14 @@ CREATE TABLE products(title text, price float) blend_chars = '+, &, U+23, @->_'"
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-            'blend_chars' => '+, &, U+23, @->_'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'blend_chars' => '+, &, U+23, @->_'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -445,21 +421,15 @@ CREATE TABLE products(title text, price float) blend_mode = 'trim_tail, skip_pur
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-            'blend_mode' => 'trim_tail, skip_pure',
-            'blend_chars' => '+, &'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'blend_mode' => 'trim_tail, skip_pure',
+            'blend_chars' => '+, &'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -528,20 +498,14 @@ CREATE TABLE products(title text, price float) min_word_len = '4'"
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-             'min_word_len' => '4'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'min_word_len' => '4'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -616,21 +580,15 @@ CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-             'ngram_chars' => 'cjk',
-             'ngram_len' => '1'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+             'ngram_chars' => 'cjk',
+             'ngram_len' => '1'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -702,21 +660,15 @@ CREATE TABLE products(title text, price float) ngram_chars = 'U+3000..U+2FA1F' n
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-             'ngram_chars' => 'U+3000..U+2FA1F',
-             'ngram_len' => '1'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+             'ngram_chars' => 'U+3000..U+2FA1F',
+             'ngram_len' => '1'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -793,21 +745,15 @@ CREATE TABLE products(title text, price float) ngram_chars = 'cjk' ngram_len = '
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-             'ngram_chars' => 'cjk',
-             'ngram_len' => '1'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+             'ngram_chars' => 'cjk',
+             'ngram_len' => '1'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -869,20 +815,14 @@ CREATE TABLE products(title text, price float) ignore_chars = 'U+AD'"
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-             'ignore_chars' => 'U+AD'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'ignore_chars' => 'U+AD'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -959,21 +899,15 @@ CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you,
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-            'bigram_freq_words' => 'the, a, you, i',
-            'bigram_index' => 'both_freq'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'bigram_freq_words' => 'the, a, you, i',
+            'bigram_index' => 'both_freq'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -1045,21 +979,15 @@ CREATE TABLE products(title text, price float) bigram_freq_words = 'the, a, you,
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-            'bigram_freq_words' => 'the, a, you, i',
-            'bigram_index' => 'first_freq'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'bigram_freq_words' => 'the, a, you, i',
+            'bigram_index' => 'first_freq'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -1141,20 +1069,14 @@ CREATE TABLE products(title text, price float) dict = 'keywords'"
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-             'dict' => 'keywords'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+             'dict' => 'keywords'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -1256,20 +1178,14 @@ CREATE TABLE products(title text, price float) global_idf = '/usr/local/sphinx/v
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-             'global_idf' => '/usr/local/sphinx/var/global.idf'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+             'global_idf' => '/usr/local/sphinx/var/global.idf'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -1348,20 +1264,14 @@ CREATE TABLE products(title text, price float) hitless_words = 'all'"
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-             'hitless_words' => 'all'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'hitless_words' => 'all'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -1435,20 +1345,14 @@ CREATE TABLE products(title text, price float) index_field_lengths = '1'"
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-             'index_field_lengths' => '1'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'index_field_lengths' => '1'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -1515,20 +1419,14 @@ CREATE TABLE products(title text, price float) index_token_filter = 'my_lib.so:c
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-             'index_token_filter' => 'my_lib.so:custom_blend:chars=@#&'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'index_token_filter' => 'my_lib.so:custom_blend:chars=@#&'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -1594,20 +1492,14 @@ CREATE TABLE products(title text, price float) overshort_step = '1'"
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-             'overshort_step' => '1'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'overshort_step' => '1'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -1680,21 +1572,16 @@ CREATE TABLE products(title text, price float) phrase_boundary = '., ?, !, U+202
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-             'phrase_boundary' => '., ?, !, U+2026',
-             'phrase_boundary_step' => '10'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+             'phrase_boundary' => '., ?, !, U+2026',
+             'phrase_boundary_step' => '10'
+        ]);
+
 ```
 <!-- intro -->
 ##### Python:
@@ -1762,21 +1649,16 @@ CREATE TABLE products(title text, price float) phrase_boundary_step = '100' phra
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-             'phrase_boundary_step' => '100',
-             'phrase_boundary' => '., ?, !, U+2026'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+             'phrase_boundary_step' => '100',
+             'phrase_boundary' => '., ?, !, U+2026'
+        ]);
+
 ```
 <!-- intro -->
 ##### Python:
@@ -1853,20 +1735,15 @@ CREATE TABLE products(title text, price float) regexp_filter = '(blue|red) => co
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-             'regexp_filter' => '(blue|red) => color',
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'regexp_filter' => '(blue|red) => color'
+        ]);
+
 ```
 <!-- intro -->
 ##### Python:

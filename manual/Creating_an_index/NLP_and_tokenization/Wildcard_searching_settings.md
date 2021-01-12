@@ -47,20 +47,14 @@ CREATE TABLE products(title text, price float) min_prefix_len = '3'"
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-            'min_prefix_len' => '3'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'min_prefix_len' => '3'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -149,20 +143,14 @@ CREATE TABLE products(title text, price float) min_infix_len = '3'"
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-            'min_infix_len' => '3'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'min_infix_len' => '3'
+        ]);
 ```
 <!-- intro -->
 ##### Python:
@@ -342,20 +330,14 @@ CREATE TABLE products(title text, price float) expand_keywords = '1'"
 <!-- request PHP -->
 
 ```php
-$params = [
-    'body' => [
-        'settings' => [
-             'expand_keywords' => '1'
-        ],
-        'columns' => [
+$index = new \Manticoresearch\Index($client);
+$index->setName('products');
+$index->create([
             'title'=>['type'=>'text'],
             'price'=>['type'=>'float']
-        ]
-    ],
-    'index' => 'products'
-];
-$index = new \Manticoresearch\Index($client);
-$index->create($params);
+        ],[
+            'expand_keywords' => '1'
+        ]);
 ```
 <!-- intro -->
 ##### Python:

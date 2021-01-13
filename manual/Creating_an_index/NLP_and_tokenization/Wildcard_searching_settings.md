@@ -288,28 +288,13 @@ index products {
 expand_keywords = {0|1|exact|star}
 ```
 
-Expand keywords with exact forms and/or stars when possible. The value can additionally enumerate options such us `exact` and `star`. Optional, default is 0 (do not expand keywords).
+Expands keywords with their exact forms (i.e. the forms of the keywords before applying any morphological modifications) and/or stars when possible. The supported values are:
+* 1 - expand to both the exact form and the form with the stars. `running` will become `(running | *running* | =running)`
+* `exact` - augment the keyword with only its exact form. `running` will beome `(running | =running)`
+* `star` - augment the keyword by adding `*` around it.  `running` will become `(running | *running*)`
+Optional, default is 0 (do not expand keywords).
 
-Queries against indexes with `expand_keywords` feature enabled are internally expanded as follows. If the index was built with prefix or infix indexing enabled, every keyword gets internally replaced with a disjunction of keyword itself and a respective prefix or infix (keyword  with stars). If the index was built with both stemming and [index_exact_words](Creating_an_index/NLP_and_tokenization/Morphology.md#index_exact_words)  enabled, exact form is also added. Here's an example that shows how internal expansion works when all of the above (infixes, stemming, and exact words) are combined:
-
-```ini
-running -> ( running | *running* | =running )
-```
-
-(as `expand_keywords =  1` or `expand_keywords = star,exact`) or expansion limited by exact option even infixes enabled for index
-
-```ini
-running -> ( running | =running )
-```
-
-(as `expand_keywords = exact`)
-
-Expanded queries take naturally longer to complete, but can possibly improve the search quality, as the documents with exact form matches should be ranked generally higher than documents with stemmed or infix matches.
-
-Note that the existing query syntax does not allow to emulate this kind of expansion, because internal expansion works on keyword level and expands keywords within phrase or quorum operators too (which is not possible through the query syntax).
-
-This directive does not affect [indexer](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool) in any way, it only affects [searchd](Starting_the_server/Manually.md).
-
+Queries against indexes with `expand_keywords` feature enabled are internally expanded as follows. If the index was built with prefix or infix indexing enabled, every keyword gets internally replaced with a disjunction of keyword itself and a respective prefix or infix (keyword  with stars). If the index was built with both stemming and [index_exact_words](Creating_an_index/NLP_and_tokenization/Morphology.md#index_exact_words)  enabled, exact form is also added. 
 
 <!-- intro -->
 ##### SQL:
@@ -375,6 +360,95 @@ index products {
 }
 ```
 <!-- end -->
+
+<!-- example expand_keywords2 -->
+
+Expanded queries take naturally longer to complete, but can possibly improve the search quality, as the documents with exact form matches should be ranked generally higher than documents with stemmed or infix matches.
+
+**Note that the existing query syntax does not allow to emulate this kind of expansion**, because internal expansion works on keyword level and expands keywords within phrase or quorum operators too (which is not possible through the query syntax). Take a look at the examples and how expand_keywords affects the search result weights and how "runsy" is found by "runs" w/o the need to add a star:
+
+<!-- intro -->
+##### expand_keywords is enabled
+<!-- request expand_keywords_enabled -->
+```sql
+mysql> create table t(f text) min_infix_len='1' expand_keywords='1' morphology='stem_en';
+Query OK, 0 rows affected, 1 warning (0.00 sec)
+
+mysql> insert into t values(1,'running'),(2,'runs'),(3,'runsy');
+Query OK, 3 rows affected (0.00 sec)
+
+mysql> select *, weight() from t where match('runs');
++------+---------+----------+
+| id   | f       | weight() |
++------+---------+----------+
+|    2 | runs    |     1560 |
+|    1 | running |     1500 |
+|    3 | runsy   |     1500 |
++------+---------+----------+
+3 rows in set (0.01 sec)
+
+mysql> drop table t;
+Query OK, 0 rows affected (0.01 sec)
+
+mysql> create table t(f text) min_infix_len='1' expand_keywords='exact' morphology='stem_en';
+Query OK, 0 rows affected, 1 warning (0.00 sec)
+
+mysql> insert into t values(1,'running'),(2,'runs'),(3,'runsy');
+Query OK, 3 rows affected (0.00 sec)
+
+mysql> select *, weight() from t where match('running');
++------+---------+----------+
+| id   | f       | weight() |
++------+---------+----------+
+|    1 | running |     1590 |
+|    2 | runs    |     1500 |
++------+---------+----------+
+2 rows in set (0.00 sec)
+```
+
+<!-- intro -->
+##### expand_keywords is disabled
+
+<!-- request expand_keywords_disabled -->
+
+```sql
+mysql> create table t(f text) min_infix_len='1' morphology='stem_en';
+Query OK, 0 rows affected, 1 warning (0.00 sec)
+
+mysql> insert into t values(1,'running'),(2,'runs'),(3,'runsy');
+Query OK, 3 rows affected (0.00 sec)
+
+mysql> select *, weight() from t where match('runs');
++------+---------+----------+
+| id   | f       | weight() |
++------+---------+----------+
+|    1 | running |     1500 |
+|    2 | runs    |     1500 |
++------+---------+----------+
+2 rows in set (0.00 sec)
+
+mysql> drop table t;
+Query OK, 0 rows affected (0.01 sec)
+
+mysql> create table t(f text) min_infix_len='1' morphology='stem_en';
+Query OK, 0 rows affected, 1 warning (0.00 sec)
+
+mysql> insert into t values(1,'running'),(2,'runs'),(3,'runsy');
+Query OK, 3 rows affected (0.00 sec)
+
+mysql> select *, weight() from t where match('running');
++------+---------+----------+
+| id   | f       | weight() |
++------+---------+----------+
+|    1 | running |     1500 |
+|    2 | runs    |     1500 |
++------+---------+----------+
+2 rows in set (0.00 sec)
+```
+<!-- end -->
+
+This directive does not affect [indexer](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool) in any way, it only affects [searchd](Starting_the_server/Manually.md).
+
 
 ## expansion_limit
 

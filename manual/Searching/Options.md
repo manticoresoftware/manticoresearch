@@ -20,7 +20,7 @@ Supported options and respectively allowed values are:
 Integer. Max time in milliseconds to wait for remote queries to complete, see [this section](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_query_timeout).
 
 ### boolean_simplify
-0 or 1, enables [simplifying the query](Searching/Full_text_matching/Boolean_optimization.md) to speed it up
+`0` or `1`, enables [simplifying the query](Searching/Full_text_matching/Boolean_optimization.md) to speed it up
 
 ### comment
 String, user comment that gets copied to a query log file
@@ -29,7 +29,7 @@ String, user comment that gets copied to a query log file
 Integer. Max found matches threshold.
 
 ### expand_keywords
-0 or 1, expand keywords with exact forms and/or stars when possible. Refer to [expand_keywords](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#expand_keywords) for more details.
+`0`, `1`, `exact` or `star`. Expands keywords with exact forms and/or stars when possible. Refer to [expand_keywords](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#expand_keywords) for more details.
 
 ### field_weights
 Named integer list (per-field user weights for ranking)
@@ -45,16 +45,16 @@ Use global statistics (frequencies) from the [global_idf](Creating_an_index/NLP_
 ### idf
 Quoted, comma-separated list of IDF computation flags. Known flags are:
 
-* normalized: BM25 variant, idf = log((N-n+1)/n), as per Robertson et al
-* plain: plain variant, idf = log(N/n), as per Sparck-Jones
-* tfidf_normalized: additionally divide IDF by query word count, so that `TF*IDF` fits into [0, 1] range
-* tfidf_unnormalized: do not additionally divide IDF by query word count where N is the collection size and n is the number of matched documents
+* `normalized`: BM25 variant, idf = log((N-n+1)/n), as per Robertson et al
+* `plain`: plain variant, idf = log(N/n), as per Sparck-Jones
+* `tfidf_normalized`: additionally divide IDF by query word count, so that `TF*IDF` fits into [0, 1] range
+* `tfidf_unnormalized`: do not additionally divide IDF by query word count where N is the collection size and n is the number of matched documents
 
 The historically default IDF (Inverse Document Frequency) in Manticore is equivalent to `OPTION idf='normalized,tfidf_normalized'`, and those normalizations may cause several undesired effects.
 
-First, idf=normalized causes keyword penalization. For instance, if you search for `the | something` and `the` occurs in more than 50% of the documents, then documents with both keywords `the` and `something` will get less weight than documents with just one keyword `something`. Using `OPTION idf=plain` avoids this. Plain IDF varies in `[0, log(N)]` range, and keywords are never penalized; while the normalized IDF varies in [-log(N), log(N)] range, and too frequent keywords are penalized.
+First, `idf=normalized` causes keyword penalization. For instance, if you search for `the | something` and `the` occurs in more than 50% of the documents, then documents with both keywords `the` and `something` will get less weight than documents with just one keyword `something`. Using `OPTION idf=plain` avoids this. Plain IDF varies in `[0, log(N)]` range, and keywords are never penalized; while the normalized IDF varies in `[-log(N), log(N)]` range, and too frequent keywords are penalized.
 
-Second, idf=tfidf_normalized causes IDF drift over queries. Historically, we additionally divided IDF by query keyword count, so that the entire `sum(tf*idf)` over all keywords would still fit into [0,1] range. However, that means that queries `word1` and `word1 | nonmatchingword2` would assign different weights to the exactly same result set, because the IDFs for both `word1` and `nonmatchingword2` would be divided by 2. `OPTION idf='tfidf_unnormalized'` fixes that. Note that BM25, BM25A, BM25F() ranking factors will be scale accordingly once you disable this normalization.
+Second, `idf=tfidf_normalized` causes IDF drift over queries. Historically, we additionally divided IDF by query keyword count, so that the entire `sum(tf*idf)` over all keywords would still fit into [0,1] range. However, that means that queries `word1` and `word1 | nonmatchingword2` would assign different weights to the exactly same result set, because the IDFs for both `word1` and `nonmatchingword2` would be divided by 2. `OPTION idf='tfidf_unnormalized'` fixes that. Note that BM25, BM25A, BM25F() ranking factors will be scale accordingly once you disable this normalization.
 
 IDF flags can be mixed; `plain` and `normalized` are mutually exclusive; `tfidf_unnormalized` and `tfidf_normalized` are mutually exclusive; and unspecified flags in such a mutually exclusive group take their defaults. That means that `OPTION idf=plain` is equivalent to a complete `OPTION idf='plain,tfidf_normalized'` specification.
 
@@ -62,7 +62,7 @@ IDF flags can be mixed; `plain` and `normalized` are mutually exclusive; `tfidf_
 Named integer list. Per-index user weights for ranking.
 
 ### local_df
-0 or 1,automatically sum DFs over all the local parts of a distributed index, so that the IDF is consistent (and precise) over a locally sharded index.
+`0` or `1`,automatically sum DFs over all the local parts of a distributed index, so that the IDF is consistent (and precise) over a locally sharded index.
 
 ### low_priority
 Runs the query with low priority in terms of Linux CPU scheduling. Consider also `OPTION threads=1` instead, or use that together with `low_priority`, as it might be better in some use cases.
@@ -87,7 +87,7 @@ Integer. Max predicted search time, see [predicted_time_costs](Server_settings/S
 
 ### not_terms_only_allowed
 <!-- example not_terms_only_allowed -->
-0 or 1, allows standalone [negation](Searching/Full_text_matching/Operators.md#Negation-operator) for the query. Default is 0. See also corresponding [global setting](Server_settings/Searchd#not_terms_only_allowed).
+`0` or `1`, allows standalone [negation](Searching/Full_text_matching/Operators.md#Negation-operator) for the query. Default is 0. See also corresponding [global setting](Server_settings/Searchd#not_terms_only_allowed).
 
 <!-- request SQL -->
 ```sql
@@ -127,7 +127,7 @@ Integer. Distributed retries count.
 Integer. Distributed retry delay, msec.
 
 ### reverse_scan
-0 or 1, lets you control the order in which full-scan query processes the rows.
+`0` or `1`, lets you control the order in which full-scan query processes the rows.
 
 ### sort_method
 * `pq` - priority queue, set by default

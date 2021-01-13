@@ -1023,7 +1023,7 @@ private:
 	bool					ReplayPqAdd ( int iBinlog, DWORD uReplayFlags, BinlogReader_c & tReader ) const;
 	bool					ReplayPqDelete ( int iBinlog, DWORD uReplayFlags, BinlogReader_c & tReader ) const;
 
-	bool	PreOp ( Blop_e eOp, int64_t * pTID, const char * sIndexName ) ACQUIRE (m_tWriteLock);
+	bool	PreOp ( Blop_e eOp, int64_t * pTID, const char * sIndexName ) TRY_ACQUIRE (true, m_tWriteLock);
 	void	PostOp () RELEASE (m_tWriteLock);
 	bool	CheckCrc ( const char * sOp, const CSphString & sIndex, int64_t iTID, int64_t iTxnPos, BinlogReader_c & tReader ) const;
 	void	CheckTid ( const char * sOp, const BinlogIndexInfo_t & tIndex, int64_t iTID, int64_t iTxnPos ) const;
@@ -1040,33 +1040,39 @@ private:
 ISphBinlog * GetBinlog() { return g_pRtBinlog; }
 
 // RAII locks ram segments and kill lists
-struct SCOPED_CAPABILITY SphChunkGuard_t : public ISphNoncopyable
+struct SphChunkGuard_t : public ISphNoncopyable
 {
 	CSphFixedVector<RtSegmentRefPtf_t>		m_dRamChunks { 0 };
 	CSphFixedVector<const CSphIndex *>		m_dDiskChunks { 0 };
-	CSphRwlock *							m_pReading = nullptr;
+};
 
-	~SphChunkGuard_t() RELEASE();
+struct SCOPED_CAPABILITY RlChunkGuard_t : public SphChunkGuard_t
+{
+	CSphRwlock &							m_tReading;
 
-	// moving makes possible return by value
-	explicit SphChunkGuard_t ( CSphRwlock * pReading ) ACQUIRE_SHARED ( *pReading );
-	SphChunkGuard_t ( SphChunkGuard_t && rhs ) noexcept ACQUIRE ( *rhs.m_pReading );
-	SphChunkGuard_t & operator= ( SphChunkGuard_t && rhs ) noexcept RELEASE() ACQUIRE ( *rhs.m_pReading );
-	void Swap ( SphChunkGuard_t& rhs) noexcept;
+	explicit RlChunkGuard_t ( CSphRwlock& tReading ) ACQUIRE_SHARED ( tReading );
+	~RlChunkGuard_t () RELEASE();
 };
 
 
 struct ChunkStats_t
 {
 	CSphSourceStats				m_Stats;
-	CSphFixedVector<int64_t>	m_dFieldLens;
+	CSphFixedVector<int64_t>	m_dFieldLens {0};
 
-	explicit ChunkStats_t ( const CSphSourceStats & s, const CSphFixedVector<int64_t> & dLens )
-		: m_dFieldLens ( dLens.GetLength() )
+	void Init ( const CSphSourceStats & s, const CSphFixedVector<int64_t> & dLens )
 	{
+		assert ( m_dFieldLens.IsEmpty () );
+		m_dFieldLens.Reset ( dLens.GetLength() );
 		m_Stats = s;
 		ARRAY_FOREACH ( i, dLens )
 			m_dFieldLens[i] = dLens[i];
+	}
+
+	ChunkStats_t () = default;
+	ChunkStats_t ( const CSphSourceStats & s, const CSphFixedVector<int64_t> & dLens )
+	{
+		Init ( s, dLens );
 	}
 };
 
@@ -1315,8 +1321,8 @@ private:
 	void						SetCheckpoint ( SuggestResult_t & tRes, DWORD iCP ) const final;
 	bool						ReadNextWord ( SuggestResult_t & tRes, DictWord_t & tWord ) const final;
 
-	SphChunkGuard_t				GetReaderChunks() const ACQUIRE_SHARED (m_tReading );
-	SphChunkGuard_t				GetReaderChunks ( const VecTraits_T<int64_t> & dChunks ) const ACQUIRE_SHARED ( m_tReading );
+	void						GetReaderChunks ( SphChunkGuard_t& tGuard ) const REQUIRES_SHARED ( m_tReading );
+	void						GetReaderChunks ( SphChunkGuard_t& tGuard, const VecTraits_T<int64_t> & dChunks ) const REQUIRES_SHARED ( m_tReading );
 
 	RtSegmentRefPtf_t			AdoptSegment ( RtSegment_t * pNewSeg );
 
@@ -1454,7 +1460,8 @@ void RtIndex_c::ForceRamFlush ( const char* szReason )
 	int64_t iUsedRam = 0;
 	int64_t iSavedTID = m_iTID;
 	{
-		SphChunkGuard_t tGuard = GetReaderChunks ();
+		RlChunkGuard_t tGuard ( m_tReading );
+		GetReaderChunks ( tGuard );
 		iUsedRam = SegmentsGetUsedRam ( tGuard.m_dRamChunks );
 
 		if ( !SaveRamChunk ( tGuard.m_dRamChunks ) )
@@ -1571,7 +1578,8 @@ bool RtIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFiel
 	const bool bAutoID = ( tDocID==0 );
 	if ( bAutoID )
 	{
-		SphChunkGuard_t tGuard = GetReaderChunks();
+		RlChunkGuard_t tGuard ( m_tReading );
+		GetReaderChunks ( tGuard );
 		// get uuid_short and check it will not collide with already provided document
 		bool bDuplicate = true;
 		while ( bDuplicate )
@@ -1601,7 +1609,8 @@ bool RtIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFiel
 
 	if ( !bReplace && !bAutoID )
 	{
-		SphChunkGuard_t tGuard = GetReaderChunks();
+		RlChunkGuard_t tGuard ( m_tReading );
+		GetReaderChunks ( tGuard );
 		for ( const auto & pSegment : tGuard.m_dRamChunks )
 		{
 			if ( pSegment->FindAliveRow ( tDocID ) )
@@ -2981,16 +2990,19 @@ bool RtIndex_c::CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID
 	while ( true )
 	{
 		// copy stats for disk chunk
-		SphChunkGuard_t tGuard = GetReaderChunks ();
+		SphChunkGuard_t tGuard;
+		ChunkStats_t tStat2Dump;
 
-		ChunkStats_t tStat2Dump ( m_tStats, m_dFieldLensRam );
-		m_iDoubleBuffer = m_dRamChunks.GetLength();
-		// can not use tGuard.m_dDiskChunks in SaveDiskChunk after tGuard.m_pReading unlocked below
-		// due to race with Optimize that modified disk chunks
-		// need release m_tReading lock to prevent deadlock - commit vs SaveDiskChunk
-		// chunks will keep till this scope end
-		tGuard.m_pReading->Unlock();
-		tGuard.m_pReading = nullptr;
+		{
+			ScRL_t tReading ( m_tReading );
+			GetReaderChunks ( tGuard );
+			tStat2Dump.Init ( m_tStats, m_dFieldLensRam );
+			m_iDoubleBuffer = m_dRamChunks.GetLength ();
+			// can not use tGuard.m_dDiskChunks in SaveDiskChunk after tGuard.m_pReading unlocked below
+			// due to race with Optimize that modified disk chunks
+			// need release m_tReading lock to prevent deadlock - commit vs SaveDiskChunk
+			// chunks will keep till this scope end
+		}
 
 		Verify ( m_tWriting.Unlock() );
 
@@ -5796,7 +5808,8 @@ void RtIndex_c::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 
 void RtIndex_c::GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & tRes ) const
 {
-	SphChunkGuard_t tGuard = GetReaderChunks ();
+	RlChunkGuard_t tGuard ( m_tReading );
+	GetReaderChunks ( tGuard );
 
 	const CSphFixedVector<RtSegmentRefPtf_t> & dSegments = tGuard.m_dRamChunks;
 
@@ -6014,29 +6027,26 @@ static void TransformSorterSchema ( ISphMatchSorter * pSorter, const SphChunkGua
 	});
 }
 
-SphChunkGuard_t RtIndex_c::GetReaderChunks () const
+void RtIndex_c::GetReaderChunks ( SphChunkGuard_t & tGuard ) const
 {
-	SphChunkGuard_t tGuard ( &m_tReading );
-
 	ScRL_t tChunkRLock ( m_tChunkLock );
-	if ( m_dRamChunks.IsEmpty() && m_dDiskChunks.IsEmpty() )
-		return tGuard;
-
-	tGuard.m_dRamChunks.CopyFrom ( m_dRamChunks );
-	tGuard.m_dDiskChunks.CopyFrom ( m_dDiskChunks );
-	return tGuard;
+	if ( !m_dRamChunks.IsEmpty() )
+		tGuard.m_dRamChunks.CopyFrom ( m_dRamChunks );
+	if (! m_dDiskChunks.IsEmpty() )
+		tGuard.m_dDiskChunks.CopyFrom ( m_dDiskChunks );
 }
 
-SphChunkGuard_t RtIndex_c::GetReaderChunks ( const VecTraits_T<int64_t>& dChunks ) const
+void RtIndex_c::GetReaderChunks ( SphChunkGuard_t & tGuard, const VecTraits_T<int64_t>& dChunks ) const
 {
 	if ( dChunks.IsEmpty() )
-		return GetReaderChunks();
-
-	SphChunkGuard_t tGuard ( &m_tReading );
+	{
+		GetReaderChunks ( tGuard );
+		return;
+	}
 
 	ScRL_t tChunkRLock ( m_tChunkLock );
 	if ( m_dRamChunks.IsEmpty() && m_dDiskChunks.IsEmpty() )
-		return tGuard;
+		return;
 
 	CSphVector<int> dOrderedChunks;
 	dChunks.for_each ( [&dOrderedChunks] ( int64_t iVal ) { dOrderedChunks.Add ( (int) iVal ); } );
@@ -6068,39 +6078,17 @@ SphChunkGuard_t RtIndex_c::GetReaderChunks ( const VecTraits_T<int64_t>& dChunks
 	tGuard.m_dRamChunks.Reset ( iRamSelected );
 	for ( int i = 0; i<iRamSelected; ++i )
 		tGuard.m_dRamChunks[i] = m_dRamChunks[dOrderedChunks[iDiskSelected+i]-iDiskBound];
-
-	return tGuard;
 }
 
-SphChunkGuard_t::SphChunkGuard_t ( CSphRwlock * pReading ) : m_pReading ( pReading )
+RlChunkGuard_t::RlChunkGuard_t ( CSphRwlock& tReading )
+	: m_tReading ( tReading )
 {
-	if ( pReading )
-		pReading->ReadLock ();
+	tReading.ReadLock ();
 }
 
-void SphChunkGuard_t::Swap ( SphChunkGuard_t & rhs ) noexcept
+RlChunkGuard_t::~RlChunkGuard_t ()
 {
-	m_dRamChunks.SwapData (rhs.m_dRamChunks);
-	m_dDiskChunks.SwapData (rhs.m_dDiskChunks);
-	::Swap ( m_pReading, rhs.m_pReading);
-}
-
-SphChunkGuard_t::SphChunkGuard_t ( SphChunkGuard_t && rhs ) noexcept
-{
-	Swap(rhs);
-}
-
-SphChunkGuard_t & SphChunkGuard_t::operator= ( SphChunkGuard_t && rhs ) noexcept
-{
-	Swap(rhs);
-	return *this;
-}
-
-
-SphChunkGuard_t::~SphChunkGuard_t () RELEASE()
-{
-	if ( m_pReading )
-		m_pReading->Unlock ();
+	m_tReading.Unlock ();
 }
 
 namespace { // nameless namespace instead of 'static' modifier
@@ -6715,7 +6703,8 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	// FIXME! eliminate this const breakage
 	const_cast<CSphQuery*> ( &tQuery )->m_eMode = SPH_MATCH_EXTENDED2;
 
-	SphChunkGuard_t tGuard = GetReaderChunks ( tQuery.m_dIntSubkeys );
+	RlChunkGuard_t tGuard ( m_tReading );
+	GetReaderChunks ( tGuard, tQuery.m_dIntSubkeys );
 
 	// debug hack (don't use ram chunk in debug modeling mode)
 	if_const( MODELING )
@@ -7112,14 +7101,18 @@ void RtIndex_c::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 bool RtIndex_c::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const
 {
-	DoGetKeywords ( dKeywords, sQuery, tSettings, false, pError, GetReaderChunks () );
+	RlChunkGuard_t tGuard ( m_tReading );
+	GetReaderChunks ( tGuard );
+	DoGetKeywords ( dKeywords, sQuery, tSettings, false, pError, tGuard );
 	return true;
 }
 
 
 bool RtIndex_c::FillKeywords ( CSphVector<CSphKeywordInfo> & dKeywords ) const
 {
-	DoGetKeywords ( dKeywords, nullptr, GetKeywordsSettings_t(), true, nullptr, GetReaderChunks () );
+	RlChunkGuard_t tGuard ( m_tReading );
+	GetReaderChunks ( tGuard );
+	DoGetKeywords ( dKeywords, nullptr, GetKeywordsSettings_t(), true, nullptr, tGuard );
 	return true;
 }
 
@@ -7239,7 +7232,9 @@ int RtIndex_c::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool 
 	UpdateContext_t tCtx ( tUpd, m_tSchema, nullptr, ( iIndex<0 ) ? 0 : iIndex, ( iIndex<0 ) ? uRows : iIndex+1 );
 
 	// FIXME!!! grab Writer lock to prevent segments retirement during commit(merge)
-	SphChunkGuard_t tGuard = GetReaderChunks ();
+
+	RlChunkGuard_t tGuard ( m_tReading );
+	GetReaderChunks ( tGuard );
 
 	Update_CollectRowPtrs ( tCtx, tGuard );
 	if ( !Update_FixupData ( tCtx, sError ) )
@@ -7286,7 +7281,8 @@ bool RtIndex_c::SaveAttributes ( CSphString & sError ) const
 	DWORD uStatus = m_uDiskAttrStatus;
 	bool bAllSaved = true;
 
-	SphChunkGuard_t tGuard = GetReaderChunks ();
+	RlChunkGuard_t tGuard ( m_tReading );
+	GetReaderChunks ( tGuard );
 
 	ARRAY_FOREACH ( i, tGuard.m_dDiskChunks )
 		bAllSaved &= tGuard.m_dDiskChunks[i]->SaveAttributes ( sError );
@@ -7470,7 +7466,8 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 
 		ChunkStats_t tStats ( m_tStats, m_dFieldLensRam );
 		{	// scope for SphChunkGuard_t. Fixme! Check if it is necessary in current context
-			SphChunkGuard_t tGuard = GetReaderChunks ();
+			RlChunkGuard_t tGuard ( m_tReading );
+			GetReaderChunks ( tGuard );
 			if ( !SaveDiskChunk ( m_iTID, tGuard, tStats, true, nullptr ) )
 			{
 				bFatal = true;
@@ -8301,7 +8298,8 @@ void RtIndex_c::GetStatus ( CSphIndexStatus * pRes ) const
 	if ( !pRes )
 		return;
 
-	SphChunkGuard_t tGuard = GetReaderChunks();
+	RlChunkGuard_t tGuard ( m_tReading );
+	GetReaderChunks ( tGuard );
 
 	int64_t iUsedRam = SegmentsGetUsedRam ( tGuard.m_dRamChunks );
 	pRes->m_iDead = SegmentsGetDeadRows ( tGuard.m_dRamChunks );
@@ -8581,7 +8579,8 @@ void RtIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameB
 
 	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pParentBuilder, dFiles );
 
-	auto tGuard = GetReaderChunks ();
+	RlChunkGuard_t tGuard ( m_tReading );
+	GetReaderChunks ( tGuard );
 	for ( const CSphIndex * pIndex : tGuard.m_dDiskChunks )
 		pIndex->GetIndexFiles ( dFiles, pParentBuilder );
 
@@ -8666,7 +8665,12 @@ void RtIndex_c::CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const
 
 		m_pDict->GetSettings ().m_dWordforms.Apply ( [&dExt] ( const CSphString & a ) { dExt.Add ( a ); } );
 	}
-	GetReaderChunks ().m_dDiskChunks.Apply ( [&] ( const CSphIndex * a ) { a->CollectFiles ( dFiles, dExt ); } );
+
+	{
+		RlChunkGuard_t tGuard ( m_tReading );
+		GetReaderChunks ( tGuard );
+		tGuard.m_dDiskChunks.Apply ( [&] ( const CSphIndex * a ) { a->CollectFiles ( dFiles, dExt ); } );
+	}
 
 	CSphString sPath;
 	sPath.SetSprintf ( "%s.meta", m_sPath.cstr () );
@@ -8692,7 +8696,7 @@ void RtIndex_c::EnableSave()
 	m_bOptimizeStop = false;
 }
 
-void RtIndex_c::LockFileState ( CSphVector<CSphString> & dFiles )
+void RtIndex_c::LockFileState ( CSphVector<CSphString> & dFiles ) REQUIRES ( !this->m_tFlushLock )
 {
 	m_bOptimizeStop = true;
 	// just wait optimize finished
@@ -8710,7 +8714,8 @@ void RtIndex_c::CreateReader ( int64_t iSessionId ) const
 {
 	// rt docstore doesn't need buffered readers
 	// but disk chunks need them
-	SphChunkGuard_t tGuard = GetReaderChunks();
+	RlChunkGuard_t tGuard ( m_tReading );
+	GetReaderChunks ( tGuard );
 
 	for ( const auto & i : tGuard.m_dDiskChunks )
 	{
@@ -8722,7 +8727,8 @@ void RtIndex_c::CreateReader ( int64_t iSessionId ) const
 
 bool RtIndex_c::GetDoc ( DocstoreDoc_t & tDoc, DocID_t tDocID, const VecTraits_T<int> * pFieldIds, int64_t iSessionId, bool bPack ) const
 {
-	SphChunkGuard_t tGuard = GetReaderChunks();
+	RlChunkGuard_t tGuard ( m_tReading );
+	GetReaderChunks ( tGuard );
 
 	for ( const auto & i : tGuard.m_dRamChunks )
 	{
@@ -8771,7 +8777,8 @@ Bson_t RtIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 	tArgs.m_iExpansionLimit = m_iExpansionLimit;
 	tArgs.m_bExpandPrefix = ( m_pDict->GetSettings().m_bWordDict && IsStarDict ( m_bKeywordDict ) );
 
-	SphChunkGuard_t tGuard = GetReaderChunks ();
+	RlChunkGuard_t tGuard ( m_tReading );
+	GetReaderChunks ( tGuard );
 	tArgs.m_pIndexData = &tGuard.m_dRamChunks;
 
 	return Explain ( tArgs );

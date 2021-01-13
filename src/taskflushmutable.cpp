@@ -111,7 +111,7 @@ static void ScheduleFlushTask ( void* pName, int64_t iNextTimestamp=-1 )
 				bool bNeedFlush = pRT->IsFlushNeed();
 				if ( bNeedFlush && ( iPlannedTimestamp-1000 )<=sphMicroTimer() )
 				{
-					pRT->ForceRamFlush ( true );
+					pRT->ForceRamFlush ( "periodic" );
 					iPlannedTimestamp = pRT->GetLastFlushTimestamp()+g_iRtFlushPeriodUs;
 				}
 

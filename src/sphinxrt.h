@@ -55,7 +55,7 @@ public:
 	virtual void RollBack ( RtAccum_t * pAccExt ) = 0;
 
 	/// forcibly flush RAM chunk to disk
-	virtual void ForceRamFlush ( bool bPeriodic=false ) = 0;
+	virtual void ForceRamFlush ( const char* szReason ) = 0;
 
 	virtual bool IsFlushNeed() const = 0;
 

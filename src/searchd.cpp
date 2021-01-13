@@ -13194,7 +13194,7 @@ void HandleMysqlFlushRtindex ( RowBuffer_i & tOut, const SqlStmt_t & tStmt )
 	}
 
 	auto * pRt = ( RtIndex_i * ) pIndex->m_pIndex;
-	pRt->ForceRamFlush();
+	pRt->ForceRamFlush("forced");
 	tOut.Ok();
 }
 

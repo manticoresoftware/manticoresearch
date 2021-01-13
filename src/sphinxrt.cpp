@@ -1093,7 +1093,7 @@ using Selector_t = std::function<bool (int*,int*)>;
 	mutable CSphRwlock			m_tChunkLock;		// protect both RAM segments and disk chunks
 	mutable CSphRwlock			m_tReading;			// reading op over disk chunk. w-lock on drop and merge chunks
  	CSphMutex					m_tWriting;			// commit, drop, save disk chunk, merge uses it
- 	CSphMutex					m_tFlushLock;		// when saving ram chunk to .ram
+ 	CSphMutex					m_tFlushLock;		// when saving ram chunk to .ram - serialize forced vs timered flush, no other usage at all
 	CSphMutex					m_tOptimizingLock;	// when optimizing is in game
  	CSphMutex					m_tSaveFinished;	// fixed #1137, tricky ping-pong with m_tWritting and double buffer
  *
@@ -1115,7 +1115,7 @@ public:
 	bool				Commit ( int * pDeleted, RtAccum_t * pAccExt ) final;
 	void				RollBack ( RtAccum_t * pAccExt ) final;
 	bool				CommitReplayable ( RtSegment_t * pNewSeg, const CSphVector<DocID_t> & dAccKlist, int * pTotalKilled, bool bForceDump ) EXCLUDES (m_tChunkLock ); // FIXME? protect?
-	void				ForceRamFlush ( bool bPeriodic=false ) final;
+	void				ForceRamFlush ( const char* szReason ) EXCLUDES ( m_tFlushLock ) final;
 	bool				IsFlushNeed() const final;
 	bool				ForceDiskChunk() final;
 	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) 			final  EXCLUDES (m_tReading );
@@ -1440,7 +1440,7 @@ static int64_t SegmentsGetDeadRows ( const VecTraits_T<RtSegmentRefPtf_t> & dSeg
 	return iTotal;
 }
 
-void RtIndex_c::ForceRamFlush ( bool bPeriodic ) REQUIRES (!this->m_tFlushLock)
+void RtIndex_c::ForceRamFlush ( const char* szReason )
 {
 	if ( !IsFlushNeed() )
 		return;
@@ -1476,8 +1476,7 @@ void RtIndex_c::ForceRamFlush ( bool bPeriodic ) REQUIRES (!this->m_tFlushLock)
 	tmSave = sphMicroTimer() - tmSave;
 	sphInfo ( "rt: index %s: ramchunk saved ok (mode=%s, last TID=" INT64_FMT ", current TID=" INT64_FMT ", "
 		"ram=%d.%03d Mb, time delta=%d sec, took=%d.%03d sec)"
-		, m_sIndexName.cstr(), bPeriodic ? "periodic" : "forced"
-		, iWasTID, m_iTID, (int)(iUsedRam/1024/1024), (int)((iUsedRam/1024)%1000)
+		, m_sIndexName.cstr(), szReason, iWasTID, m_iTID, (int)(iUsedRam/1024/1024), (int)((iUsedRam/1024)%1000)
 		, (int) (tmDelta/1000000), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
 }
 
@@ -8700,7 +8699,7 @@ void RtIndex_c::LockFileState ( CSphVector<CSphString> & dFiles )
 	m_tOptimizingLock.Lock();
 	m_tOptimizingLock.Unlock();
 
-	ForceRamFlush ( false );
+	ForceRamFlush ( "forced" );
 	m_bSaveDisabled = true;
 
 	GetIndexFiles ( dFiles, nullptr );

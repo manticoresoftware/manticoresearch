@@ -97,7 +97,7 @@ public:
 	bool MultiQueryEx ( int, const CSphQuery *, CSphQueryResult*, ISphMatchSorter **, const CSphMultiQueryArgs & ) const override;
 	virtual bool AddDocument ( ISphHits * , const CSphMatch & , const char ** , const CSphVector<DWORD> & , CSphString & , CSphString & ) { return true; }
 	bool DeleteDocument ( const VecTraits_T<DocID_t> &, CSphString & , RtAccum_t * pAccExt ) override { RollBack ( pAccExt ); return true; }
-	void ForceRamFlush ( bool bPeriodic ) override;
+	void ForceRamFlush ( const char* szReason ) EXCLUDES ( m_tLock ) final;
 	bool IsFlushNeed() const override;
 	bool ForceDiskChunk () override;
 	bool AttachDiskIndex ( CSphIndex * , bool, bool &, CSphString & ) override { return true; }
@@ -184,8 +184,6 @@ public:
 	PercolateMatchContext_t * CreateMatchContext ( const RtSegment_t * pSeg, const SegmentReject_t &tReject );
 
 private:
-	void RamFlush ( bool bPeriodic ) EXCLUDES ( m_tLock );
-
 	int ReplayDeleteQueries ( const VecTraits_T<int64_t>& dQueries ) EXCLUDES ( m_tLockHash ) final;
 	int ReplayDeleteQueries ( const char * sTags ) EXCLUDES ( m_tLockHash ) final;
 	void ReplayCommit ( StoredQuery_i * pQuery ) EXCLUDES ( m_tLockHash, m_tLock ) final;
@@ -2570,16 +2568,11 @@ bool PercolateIndex_c::IsFlushNeed() const
 
 }
 
-void PercolateIndex_c::ForceRamFlush ( bool bPeriodic )
+void PercolateIndex_c::ForceRamFlush ( const char * szReason )
 {
 	if ( !IsFlushNeed() )
 		return;
 
-	RamFlush ( bPeriodic );
-}
-
-void PercolateIndex_c::RamFlush ( bool bPeriodic )
-{
 	int64_t tmStart = sphMicroTimer();
 	int64_t iWasTID = m_iSavedTID;
 	int64_t tmWas = m_tmSaved;
@@ -2591,20 +2584,19 @@ void PercolateIndex_c::RamFlush ( bool bPeriodic )
 
 	sphInfo ( "percolate: index %s: saved ok (mode=%s, last TID=" INT64_FMT ", current TID=" INT64_FMT ", "
 		"time delta=%d sec, took=%d.%03d sec)"
-		, m_sIndexName.cstr(), bPeriodic ? "periodic" : "forced"
-		, iWasTID, m_iTID
+		, m_sIndexName.cstr(), szReason, iWasTID, m_iTID
 		, (int) (tmAge/1000000), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
 }
 
 bool PercolateIndex_c::ForceDiskChunk()
 {
-	ForceRamFlush ( false );
+	ForceRamFlush ( "forced" );
 	return true;
 }
 
 void PercolateIndex_c::LockFileState ( CSphVector<CSphString> & dFiles )
 {
-	ForceRamFlush ( false );
+	ForceRamFlush ( "forced" );
 	m_bSaveDisabled = true;
 
 	GetIndexFiles ( dFiles, nullptr );

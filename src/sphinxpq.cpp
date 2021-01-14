@@ -1789,6 +1789,9 @@ void PercolateIndex_c::ReplayCommit ( StoredQuery_i * pQuery )
 	auto *pStoredQuery = (StoredQuery_t *) pQuery;
 
 	ScopedMutex_t tLockHash {m_tLockHash};
+
+	// fixme! m.b. better acquire w-lock immediately before change and not leave potentially long MakeClone
+	//  under exclusive lock here? However it affects only full replace, but anyway, might be optimized.
 	ScWL_t wLock ( m_tLock );
 
 	auto *pIdx = m_hQueries.Find ( pStoredQuery->m_iQUID );

@@ -2768,13 +2768,12 @@ struct CSphIndexProgress
 
 	int				m_iDone = 0;		///< generic percent, 0..1000 range
 
-	typedef void ( *IndexingProgress_fn ) ( const CSphIndexProgress * pStat, bool bPhaseEnd );
+	using IndexingProgress_fn = void (*) ( const CSphIndexProgress * pStat, bool bPhaseEnd );
 	IndexingProgress_fn m_fnProgress {nullptr};
 
 	/// builds a message to print
 	/// WARNING, STATIC BUFFER, NON-REENTRANT
 	const char * BuildMessage() const;
-
 	void Show ( bool bPhaseEnd ) const;
 };
 

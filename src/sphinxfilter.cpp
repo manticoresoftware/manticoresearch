@@ -1489,12 +1489,7 @@ static ISphFilter * CreateFilterNode ( CreateFilterContext_t & tCtx, int iNode, 
 			pFilterSettings = &tUservar;
 		}
 
-		// fixme! What's the mess? It is exactly 'return sphCreateFilter(...)', isn't it?
-		ISphFilter * pFilter = sphCreateFilter ( *pFilterSettings, tCtx, sError, sWarning );
-		if ( !pFilter )
-			return nullptr;
-
-		return pFilter;
+		return sphCreateFilter ( *pFilterSettings, tCtx, sError, sWarning );
 	}
 
 	assert ( pCur->m_iLeft!=-1 && pCur->m_iRight!=-1 );

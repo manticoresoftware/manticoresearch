@@ -13634,8 +13634,7 @@ void HandleMysqlDebug ( RowBuffer_i &tOut, Str_t sCommand )
 	case Cmd_e::MERGE: HandleMysqlOptimizeManual ( tOut, tCmd ); return;
 	case Cmd_e::DROP: HandleMysqlDropManual ( tOut, tCmd ); return;
 	case Cmd_e::FILES: HandleMysqlfiles ( tOut, tCmd ); return;
-	case Cmd_e::CLOSE: HandleMysqlclose ( tOut );
-		return;
+	case Cmd_e::CLOSE: HandleMysqlclose ( tOut ); return;
 	default: break;
 	}
 
@@ -18097,20 +18096,6 @@ void CheckSignals () REQUIRES ( MainThread )
 		ConnectNamedPipe ( g_hPipe, NULL );
 	}
 #endif
-}
-
-
-void ShowProgress ( const CSphIndexProgress * pProgress, bool bPhaseEnd )
-{
-	assert ( pProgress );
-	if ( bPhaseEnd )
-	{
-		fprintf ( stdout, "\r                                                            \r" );
-	} else
-	{
-		fprintf ( stdout, "%s\r", pProgress->BuildMessage() );
-	}
-	fflush ( stdout );
 }
 
 void TickHead () REQUIRES ( MainThread )

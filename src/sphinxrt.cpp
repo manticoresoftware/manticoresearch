@@ -7621,7 +7621,7 @@ static std::pair<int, int64_t> GetNextSmallestChunk ( const CSphVector<CSphIndex
 	return { iRes, iLastSize };
 }
 
-void RtIndex_c::DropDiskChunk( int iChunk )
+void RtIndex_c::DropDiskChunk ( int iChunk )
 {
 	sphLogDebug( "rt optimize: index %s: drop disk chunk %d",  m_sIndexName.cstr(), iChunk );
 

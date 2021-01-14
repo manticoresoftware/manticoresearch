@@ -5505,10 +5505,24 @@ struct LocalSearchClone_t
 		for ( int i=0; i<iQueries; ++i )
 			m_dResults[i].m_pMeta = &m_dAggrResults[i];
 		m_pExtra = dParent.m_pExtra ? &m_dExtra : nullptr;
+
+		// set profiler complementary to one in RunSubset (search by `if ( iQueries==1 && m_pProfile )` clause)
+		if ( iQueries==1 && dParent.m_dAggrResults.First ().m_pProfile )
+		{
+			auto pProfile = new QueryProfile_c;
+			m_dAggrResults.First().m_pProfile = pProfile;
+			m_tHook.SetProfiler ( pProfile );
+		}
 	}
 	explicit operator LocalSearchRef_t ()
 	{
 		return { m_tHook, m_pExtra, m_dFailuresSet, m_dAggrResults, m_dResults };
+	}
+
+	~LocalSearchClone_t()
+	{
+		if ( !m_dAggrResults.IsEmpty () )
+			SafeDelete ( m_dAggrResults.First().m_pProfile );
 	}
 };
 

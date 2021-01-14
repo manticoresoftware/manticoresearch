@@ -1137,7 +1137,7 @@ public:
 	bool				IsAlive ( DocID_t tDocID ) const final;
 
 	int					Build ( const CSphVector<CSphSource*> & , int , int ) final { return 0; }
-	bool				Merge ( CSphIndex * , const CSphVector<CSphFilterSettings> &, bool ) final { return false; }
+	bool				Merge ( CSphIndex * , const VecTraits_T<CSphFilterSettings> &, bool ) final { return false; }
 
 	bool				Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder ) final;
 	void				Dealloc () final {}

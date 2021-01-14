@@ -1073,7 +1073,7 @@ public:
 
 	int					Kill ( DocID_t tDocID ) override { return 0; }
 	int					Build ( const CSphVector<CSphSource*> & , int , int ) override { return 0; }
-	bool				Merge ( CSphIndex * , const CSphVector<CSphFilterSettings> &, bool ) override {return false; }
+	bool				Merge ( CSphIndex * , const VecTraits_T<CSphFilterSettings> &, bool ) override {return false; }
 	bool				Prealloc ( bool, FilenameBuilder_i * ) final { return false; }
 	void				Dealloc () final {}
 	void				Preread () final {}
@@ -1930,7 +1930,7 @@ public:
 	bool 				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const final;
 	void				GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & tRes ) const final;
 
-	bool				Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSettings> & dFilters, bool bSupressDstDocids ) final;
+	bool				Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids ) final;
 
 	template <class QWORDDST, class QWORDSRC>
 	static bool					MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, const CSphVector<RowID_t> & dDstRows, const CSphVector<RowID_t> & dSrcRows, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, CSphIndexProgress & tProgress, volatile bool * pLocalStop );
@@ -11708,7 +11708,7 @@ public:
 	int GetCheckpoint() const { return m_iCheckpoint; }
 };
 
-static ISphFilter * CreateMergeFilters ( const CSphVector<CSphFilterSettings> & dSettings, const CSphSchema & tSchema, const BYTE * pBlobPool )
+static ISphFilter * CreateMergeFilters ( const VecTraits_T<CSphFilterSettings> & dSettings, const CSphSchema & tSchema, const BYTE * pBlobPool )
 {
 	CSphString sError, sWarning;
 	ISphFilter * pResult = nullptr;
@@ -12026,7 +12026,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 }
 
 
-bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSettings> & dFilters, bool bSupressDstDocids )
+bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSettings> & dFilters, bool bSupressDstDocids )
 {
 	SetMemorySettings ( FileAccessSettings_t() );
 	if ( !Prealloc ( false, nullptr ) )

@@ -3848,6 +3848,7 @@ public:
 					~CSphScopedPtr ()			{ SafeDelete ( m_pPtr ); }
 	T *				operator -> () const		{ return m_pPtr; }
 	T *				Ptr () const				{ return m_pPtr; }
+	T&				operator* () const			{ return *m_pPtr; }
 	bool 			operator! () const noexcept 	{ return m_pPtr==nullptr; }
 	explicit 		operator bool () const noexcept	{ return !this->operator!(); }
 

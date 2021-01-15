@@ -70,16 +70,16 @@ ISphBinlog *			g_pBinlog				= NULL;
 class RtBinlog_c;
 static RtBinlog_c *		g_pRtBinlog				= NULL;
 
-/// protection from concurrent changes during binlog replay
+/// check for concurrent changes during binlog replay (used only in asserts)
 static auto&	g_bRTChangesAllowed		= RTChangesAllowed ();
 
-// optimize mode for disk chunks merge
+// optimize mode for disk chunks merge fixme! retire?
 static bool g_bProgressiveMerge = true;
 
 //////////////////////////////////////////////////////////////////////////
 volatile bool &RTChangesAllowed ()
 {
-	static bool bRTChangesAllowed = false;
+	static volatile bool bRTChangesAllowed = false;
 	return bRTChangesAllowed;
 }
 
@@ -188,7 +188,7 @@ static inline void SkipZipped ( const BYTE *& pIn )
 
 struct CmpHitPlain_fn
 {
-	inline bool IsLess ( const CSphWordHit & a, const CSphWordHit & b ) const
+	inline static bool IsLess ( const CSphWordHit & a, const CSphWordHit & b )
 	{
 		return 	( a.m_uWordID<b.m_uWordID ) ||
 			( a.m_uWordID==b.m_uWordID && a.m_tRowID<b.m_tRowID ) ||
@@ -267,7 +267,7 @@ DWORD RtSegment_t::GetMergeFactor() const
 
 int RtSegment_t::GetStride () const
 {
-	return ( m_dRows.GetLength() / m_uRows );
+	return int ( m_dRows.GetLength() / m_uRows );
 }
 
 
@@ -322,12 +322,12 @@ int	RtSegment_t::KillMulti ( const VecTraits_T<DocID_t> & dKlist )
 
 void RtSegment_t::SetupDocstore ( const CSphSchema * pSchema )
 {
-	assert ( !m_pDocstore.Ptr() );
+	assert ( !m_pDocstore );
 	m_pDocstore = CreateDocstoreRT();
-	assert ( m_pDocstore.Ptr() );
+	assert ( m_pDocstore );
 
 	if ( pSchema )
-		SetupDocstoreFields ( *m_pDocstore.Ptr(), *pSchema );
+		SetupDocstoreFields ( *m_pDocstore, *pSchema );
 }
 
 

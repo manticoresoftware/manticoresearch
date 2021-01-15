@@ -2882,3 +2882,190 @@ SharedPQSlice_t PercolateIndex_c::GetStored () const
 	ScRL_t rLock ( m_tLock );
 	return SharedPQSlice_t { m_pQueries };
 }
+
+//////////////////////////////////////////////////////////////////////////
+
+void LoadStoredQueryV6 ( DWORD uVersion, StoredQueryDesc_t & tQuery, CSphReader & tReader )
+{
+	if ( uVersion>=3 )
+		tQuery.m_iQUID = tReader.GetOffset();
+	if ( uVersion>=4 )
+		tQuery.m_bQL = ( tReader.GetDword()!=0 );
+
+	tQuery.m_sQuery = tReader.GetString();
+	if ( uVersion==1 )
+		return;
+
+	tQuery.m_sTags = tReader.GetString();
+
+	tQuery.m_dFilters.Resize ( tReader.GetDword() );
+	tQuery.m_dFilterTree.Resize ( tReader.GetDword() );
+	for ( auto& tFilter : tQuery.m_dFilters )
+	{
+		tFilter.m_sAttrName = tReader.GetString();
+		tFilter.m_bExclude = ( tReader.GetDword()!=0 );
+		tFilter.m_bHasEqualMin = ( tReader.GetDword()!=0 );
+		tFilter.m_bHasEqualMax = ( tReader.GetDword()!=0 );
+		tFilter.m_eType = (ESphFilter)tReader.GetDword();
+		tFilter.m_eMvaFunc = (ESphMvaFunc)tReader.GetDword ();
+		tReader.GetBytes ( &tFilter.m_iMinValue, sizeof(tFilter.m_iMinValue) );
+		tReader.GetBytes ( &tFilter.m_iMaxValue, sizeof(tFilter.m_iMaxValue) );
+		tFilter.m_dValues.Resize ( tReader.GetDword() );
+		tFilter.m_dStrings.Resize ( tReader.GetDword() );
+		for ( auto& dValue : tFilter.m_dValues )
+			tReader.GetBytes ( &dValue, sizeof ( dValue ) );
+		for ( auto& dString : tFilter.m_dStrings )
+			dString = tReader.GetString ();
+	}
+	for ( auto & tItem : tQuery.m_dFilterTree )
+	{
+		tItem.m_iLeft = tReader.GetDword();
+		tItem.m_iRight = tReader.GetDword();
+		tItem.m_iFilterItem = tReader.GetDword();
+		tItem.m_bOr = ( tReader.GetDword()!=0 );
+	}
+}
+
+template<typename READER>
+void LoadStoredQuery ( DWORD uVersion, StoredQueryDesc_t & tQuery, READER & tReader )
+{
+	assert ( uVersion>=7 );
+	tQuery.m_iQUID = tReader.UnzipOffset();
+	tQuery.m_bQL = ( tReader.UnzipInt()!=0 );
+	tQuery.m_sQuery = tReader.GetString();
+	tQuery.m_sTags = tReader.GetString();
+
+	tQuery.m_dFilters.Resize ( tReader.UnzipInt() );
+	tQuery.m_dFilterTree.Resize ( tReader.UnzipInt() );
+	for ( auto& tFilter : tQuery.m_dFilters )
+	{
+		tFilter.m_sAttrName = tReader.GetString();
+		tFilter.m_bExclude = ( tReader.UnzipInt()!=0 );
+		tFilter.m_bHasEqualMin = ( tReader.UnzipInt()!=0 );
+		tFilter.m_bHasEqualMax = ( tReader.UnzipInt()!=0 );
+		tFilter.m_bOpenLeft = ( tReader.UnzipInt()!=0 );
+		tFilter.m_bOpenRight = ( tReader.UnzipInt()!=0 );
+		tFilter.m_bIsNull = ( tReader.UnzipInt()!=0 );
+		tFilter.m_eType = (ESphFilter)tReader.UnzipInt();
+		tFilter.m_eMvaFunc = (ESphMvaFunc)tReader.UnzipInt ();
+		tFilter.m_iMinValue = tReader.UnzipOffset();
+		tFilter.m_iMaxValue = tReader.UnzipOffset();
+		tFilter.m_dValues.Resize ( tReader.UnzipInt() );
+		tFilter.m_dStrings.Resize ( tReader.UnzipInt() );
+		for ( auto& dValue : tFilter.m_dValues )
+			dValue = tReader.UnzipOffset ();
+		for ( auto& dString : tFilter.m_dStrings )
+			dString = tReader.GetString ();
+	}
+	for ( auto& tItem : tQuery.m_dFilterTree )
+	{
+		tItem.m_iLeft = tReader.UnzipInt();
+		tItem.m_iRight = tReader.UnzipInt();
+		tItem.m_iFilterItem = tReader.UnzipInt();
+		tItem.m_bOr = ( tReader.UnzipInt()!=0 );
+	}
+}
+
+template<typename WRITER>
+void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, WRITER & tWriter )
+{
+	tWriter.ZipOffset ( tQuery.m_iQUID );
+	tWriter.ZipInt ( tQuery.m_bQL );
+	tWriter.PutString ( tQuery.m_sQuery );
+	tWriter.PutString ( tQuery.m_sTags );
+	tWriter.ZipInt ( tQuery.m_dFilters.GetLength() );
+	tWriter.ZipInt ( tQuery.m_dFilterTree.GetLength() );
+	ARRAY_FOREACH ( iFilter, tQuery.m_dFilters )
+	{
+		const CSphFilterSettings & tFilter = tQuery.m_dFilters[iFilter];
+		tWriter.PutString ( tFilter.m_sAttrName );
+		tWriter.ZipInt ( tFilter.m_bExclude );
+		tWriter.ZipInt ( tFilter.m_bHasEqualMin );
+		tWriter.ZipInt ( tFilter.m_bHasEqualMax );
+		tWriter.ZipInt ( tFilter.m_bOpenLeft );
+		tWriter.ZipInt ( tFilter.m_bOpenRight );
+		tWriter.ZipInt ( tFilter.m_bIsNull );
+		tWriter.ZipInt ( tFilter.m_eType );
+		tWriter.ZipInt ( tFilter.m_eMvaFunc );
+		tWriter.ZipOffset ( tFilter.m_iMinValue );
+		tWriter.ZipOffset ( tFilter.m_iMaxValue );
+		tWriter.ZipInt ( tFilter.m_dValues.GetLength() );
+		tWriter.ZipInt ( tFilter.m_dStrings.GetLength() );
+		ARRAY_FOREACH ( j, tFilter.m_dValues )
+			tWriter.ZipOffset ( tFilter.m_dValues[j] );
+		ARRAY_FOREACH ( j, tFilter.m_dStrings )
+			tWriter.PutString ( tFilter.m_dStrings[j] );
+	}
+	ARRAY_FOREACH ( iTree, tQuery.m_dFilterTree )
+	{
+		const FilterTreeItem_t & tItem = tQuery.m_dFilterTree[iTree];
+		tWriter.ZipInt ( tItem.m_iLeft );
+		tWriter.ZipInt ( tItem.m_iRight );
+		tWriter.ZipInt ( tItem.m_iFilterItem );
+		tWriter.ZipInt ( tItem.m_bOr );
+	}
+}
+
+void LoadStoredQuery ( const BYTE * pData, int iLen, StoredQueryDesc_t & tQuery )
+{
+	MemoryReader_c tReader ( pData, iLen );
+	LoadStoredQuery ( PQ_META_VERSION_MAX, tQuery, tReader );
+}
+
+void LoadStoredQuery ( DWORD uVersion, StoredQueryDesc_t & tQuery, CSphReader & tReader )
+{
+	LoadStoredQuery<CSphReader> ( uVersion, tQuery, tReader );
+}
+
+void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, CSphVector<BYTE> & dOut )
+{
+	MemoryWriter_c tWriter ( dOut );
+	SaveStoredQuery ( tQuery, tWriter );
+}
+
+void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, CSphWriter & tWriter )
+{
+	SaveStoredQuery<CSphWriter> ( tQuery, tWriter );
+}
+
+template<typename READER>
+void LoadDeleteQuery_T ( CSphVector<int64_t> & dQueries, CSphString & sTags, READER & tReader )
+{
+	dQueries.Resize ( tReader.UnzipInt() );
+	ARRAY_FOREACH ( i, dQueries )
+		dQueries[i] = tReader.UnzipOffset();
+
+	sTags = tReader.GetString();
+}
+
+void LoadDeleteQuery ( const BYTE * pData, int iLen, CSphVector<int64_t> & dQueries, CSphString & sTags )
+{
+	MemoryReader_c tReader ( pData, iLen );
+	LoadDeleteQuery_T ( dQueries, sTags, tReader );
+}
+
+void LoadDeleteQuery ( CSphVector<int64_t> & dQueries, CSphString & sTags, CSphReader & tReader )
+{
+	LoadDeleteQuery_T ( dQueries, sTags, tReader );
+}
+
+template<typename WRITER>
+void SaveDeleteQuery_T ( const VecTraits_T<int64_t>& dQueries, const char* sTags, WRITER& tWriter )
+{
+	tWriter.ZipInt ( dQueries.GetLength () );
+	for ( int64_t iQuery : dQueries )
+		tWriter.ZipOffset ( iQuery );
+
+	tWriter.PutString ( sTags );
+}
+
+void SaveDeleteQuery ( const VecTraits_T<int64_t>& dQueries, const char* sTags, CSphVector<BYTE>& dOut )
+{
+	MemoryWriter_c tWriter ( dOut );
+	SaveDeleteQuery_T ( dQueries, sTags, tWriter );
+}
+
+void SaveDeleteQuery ( const VecTraits_T<int64_t> & dQueries, const char * sTags, CSphWriter & tWriter )
+{
+	SaveDeleteQuery_T ( dQueries, sTags, tWriter );
+}

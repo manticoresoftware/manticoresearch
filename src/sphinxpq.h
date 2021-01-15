@@ -105,13 +105,17 @@ void FixPercolateSchema ( CSphSchema & tSchema );
 typedef const QueryParser_i * CreateQueryParser_fn ( bool bJson );
 void SetPercolateQueryParserFactory ( CreateQueryParser_fn * pCall );
 
+static const int PQ_META_VERSION_MAX = 255;
+
 void LoadStoredQuery ( const BYTE * pData, int iLen, StoredQueryDesc_t & tQuery );
 void LoadStoredQuery ( DWORD uVersion, StoredQueryDesc_t & tQuery, CSphReader & tReader );
 void LoadStoredQueryV6 ( DWORD uVersion, StoredQueryDesc_t & tQuery, CSphReader & tReader );
 void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, CSphVector<BYTE> & dOut );
 void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, CSphWriter & tWriter );
 void LoadDeleteQuery ( const BYTE * pData, int iLen, CSphVector<int64_t> & dQueries, CSphString & sTags );
+void LoadDeleteQuery ( CSphVector<int64_t> & dQueries, CSphString & sTags, CSphReader & tReader );
 void SaveDeleteQuery ( const VecTraits_T<int64_t>& dQueries, const char * sTags, CSphVector<BYTE> & dOut );
+void SaveDeleteQuery ( const VecTraits_T<int64_t>& dQueries, const char * sTags, CSphWriter & tWriter );
 
 //////////////////////////////////////////////////////////////////////////
 

@@ -10415,8 +10415,7 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema & tSche
 		tSchema.RemoveAttr ( szTmpColName, false );
 	}
 
-	// should be id and at least one attribute
-	if ( tSchema.GetAttrsCount()<2 && !g_bTestMode && !bSkipValidation )
+	if ( !tSchema.GetAttrsCount() && !g_bTestMode && !bSkipValidation )
 	{
 		sError.SetSprintf ( "no attribute configured (use rt_attr directive)" );
 		return false;

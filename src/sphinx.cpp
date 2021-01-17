@@ -1034,7 +1034,8 @@ static IndexFileExt_t g_dIndexFilesExts[SPH_EXT_TOTAL] =
 	{ SPH_EXT_SPT,	".spt",		53,	true,	true,	"docid lookup table" },
 	{ SPH_EXT_SPHI,	".sphi",	53,	true,	true,	"secondary index histograms" },
 	{ SPH_EXT_SPDS, ".spds",	57, true,	true,	"document storage" },
-	{ SPH_EXT_SPL,	".spl",		1,	true,	false,	"file lock for the index" }
+	{ SPH_EXT_SPL,	".spl",		1,	true,	false,	"file lock for the index" },
+	{ SPH_EXT_SETTINGS,	".settings", 1,	true,	false,	"index runtime settings" }
 };
 
 
@@ -1062,7 +1063,6 @@ CSphVector<IndexFileExt_t> sphGetExts()
 /// without any footprint in real files
 //////////////////////////////////////////////////////////////////////////
 static CSphSourceStats g_tTmpDummyStat;
-static FileAccessSettings_t g_tTmpDummySettings;
 
 class CSphTokenizerIndex : public CSphIndex
 {
@@ -1075,8 +1075,6 @@ public:
 	bool				Prealloc ( bool, FilenameBuilder_i * ) final { return false; }
 	void				Dealloc () final {}
 	void				Preread () final {}
-	void				SetMemorySettings ( const FileAccessSettings_t & ) final {}
-	const FileAccessSettings_t & GetMemorySettings() const final { return g_tTmpDummySettings; }
 	void				SetBase ( const char * ) final {}
 	bool				Rename ( const char * ) final { return false; }
 	bool				Lock () final { return true; }
@@ -1199,7 +1197,7 @@ Bson_t CSphTokenizerIndex::ExplainQuery ( const CSphString & sQuery ) const
 	tArgs.m_pSettings = &m_tSettings;
 	tArgs.m_pWordlist = &tWordlist;
 	tArgs.m_pQueryTokenizer = m_pQueryTokenizer;
-	tArgs.m_iExpandKeywords = m_iExpandKeywords;
+	tArgs.m_iExpandKeywords = m_tMutableSettings.m_iExpandKeywords;
 	tArgs.m_iExpansionLimit = m_iExpansionLimit;
 	tArgs.m_bExpandPrefix = ( bWordDict && IsStarDict ( bWordDict ) );
 
@@ -1911,8 +1909,6 @@ public:
 	bool				Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder ) final;
 	void				Dealloc () final;
 	void				Preread () final;
-	void				SetMemorySettings ( const FileAccessSettings_t & tFileAccessSettings ) final;
-	const FileAccessSettings_t & GetMemorySettings() const final { return m_tFiles; }
 
 	void				SetBase ( const char * sNewBase ) final;
 	bool				Rename ( const char * sNewBase ) final;
@@ -2002,8 +1998,6 @@ private:
 	LookupReader_c				m_tLookupReader;	///< used by getrowidbydocid
 
 	CSphScopedPtr<Docstore_i> 	m_pDocstore {nullptr};
-
-	FileAccessSettings_t		m_tFiles;
 
 	DWORD						m_uVersion;				///< data files version
 	volatile bool				m_bPassedRead;
@@ -8096,6 +8090,7 @@ CSphIndex::CSphIndex ( const char * sIndexName, const char * sFilename )
 	, m_sFilename ( sFilename )
 {
 	m_iIndexId = m_tIdGenerator.fetch_add ( 1, std::memory_order_relaxed );
+	m_tMutableSettings = MutableIndexSettings_c::GetDefaults();
 }
 
 
@@ -8193,6 +8188,12 @@ void CSphIndex::GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings ) c
 {
 	if ( m_pFieldFilter )
 		m_pFieldFilter->GetSettings ( tSettings );
+}
+
+
+void CSphIndex::SetMutableSettings ( const MutableIndexSettings_c & tSettings )
+{
+	m_tMutableSettings = tSettings;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -8840,10 +8841,10 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttr
 	m_iMinMaxIndex = iNewMinMaxIndex;
 	m_pDocinfoIndex = m_tAttr.GetWritePtr() + m_iMinMaxIndex;
 
-	PrereadMapping ( m_sIndexName.cstr(), "attributes", IsMlock ( m_tFiles.m_eAttr ), IsOndisk ( m_tFiles.m_eAttr ), m_tAttr );
+	PrereadMapping ( m_sIndexName.cstr(), "attributes", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eAttr ), IsOndisk ( m_tMutableSettings.m_tFileAccess.m_eAttr ), m_tAttr );
 
 	if ( bBlobsModified )
-		PrereadMapping ( m_sIndexName.cstr(), "blob attributes", IsMlock ( m_tFiles.m_eBlob ), IsOndisk ( m_tFiles.m_eBlob ), m_tBlobAttrs );
+		PrereadMapping ( m_sIndexName.cstr(), "blob attributes", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eBlob ), IsOndisk ( m_tMutableSettings.m_tFileAccess.m_eBlob ), m_tBlobAttrs );
 
 	return true;
 }
@@ -10336,6 +10337,13 @@ void SourceCopyMva ( const BYTE * pData, int iLenBytes, CSphVector<int64_t> & dD
 	}
 }
 
+static void ResetFileAccess ( CSphIndex * pIndex )
+{
+	MutableIndexSettings_c tMutable = pIndex->GetMutableSettings();
+	tMutable.m_tFileAccess = FileAccessSettings_t();
+	pIndex->SetMutableSettings ( tMutable );
+}
+
 class KeepAttrs_c : public BlobSource_i
 {
 public:
@@ -10364,7 +10372,7 @@ public:
 		CSphString sWarning;
 
 		m_pIndex = (CSphIndex_VLN *)sphCreateIndexPhrase ( "keep-attrs", sKeepAttrs.cstr() );
-		m_pIndex->SetMemorySettings ( FileAccessSettings_t() );
+		ResetFileAccess ( m_pIndex.Ptr() );
 
 		if ( !m_pIndex->Prealloc ( false, nullptr ) )
 		{
@@ -11875,14 +11883,14 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 	DataReaderFactoryPtr_c tSrcDocs {
 		NewProxyReader ( pSrcIndex->GetIndexFileName ( SPH_EXT_SPD ), sError,
-			DataReaderFactory_c::DOCS, pSrcIndex->m_tFiles.m_iReadBufferDocList, FileAccess_e::FILE )
+			DataReaderFactory_c::DOCS, pSrcIndex->m_tMutableSettings.m_tFileAccess.m_iReadBufferDocList, FileAccess_e::FILE )
 	};
 	if ( !tSrcDocs )
 		return false;
 
 	DataReaderFactoryPtr_c tSrcHits {
 		NewProxyReader ( pSrcIndex->GetIndexFileName ( SPH_EXT_SPP ), sError,
-			DataReaderFactory_c::HITS, pSrcIndex->m_tFiles.m_iReadBufferHitList, FileAccess_e::FILE  )
+			DataReaderFactory_c::HITS, pSrcIndex->m_tMutableSettings.m_tFileAccess.m_iReadBufferHitList, FileAccess_e::FILE  )
 	};
 	if ( !tSrcHits )
 		return false;
@@ -11892,14 +11900,14 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 	DataReaderFactoryPtr_c tDstDocs {
 		NewProxyReader ( pDstIndex->GetIndexFileName ( SPH_EXT_SPD ), sError,
-			DataReaderFactory_c::DOCS, pDstIndex->m_tFiles.m_iReadBufferDocList, FileAccess_e::FILE )
+			DataReaderFactory_c::DOCS, pDstIndex->m_tMutableSettings.m_tFileAccess.m_iReadBufferDocList, FileAccess_e::FILE )
 	};
 	if ( !tDstDocs )
 		return false;
 
 	DataReaderFactoryPtr_c tDstHits {
 		NewProxyReader ( pDstIndex->GetIndexFileName ( SPH_EXT_SPP ), sError,
-			DataReaderFactory_c::HITS, pDstIndex->m_tFiles.m_iReadBufferHitList, FileAccess_e::FILE )
+			DataReaderFactory_c::HITS, pDstIndex->m_tMutableSettings.m_tFileAccess.m_iReadBufferHitList, FileAccess_e::FILE )
 	};
 	if ( !tDstHits )
 		return false;
@@ -12035,11 +12043,11 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const VecTraits_T<CSphFilterSet
 	// if no source provided - special pass. No preload/preread, just merge with filters
 	if ( pSource )
 	{
-		SetMemorySettings ( FileAccessSettings_t() );
+		ResetFileAccess ( this );
 		if ( !Prealloc ( false, nullptr ) )
 			return false;
 		Preread ();
-		pSource->SetMemorySettings ( FileAccessSettings_t() );
+		ResetFileAccess ( pSource );
 		if ( !pSource->Prealloc ( false, nullptr ) )
 		{
 			m_sLastError.SetSprintf ( "source index preload failed: %s", pSource->GetLastError().cstr() );
@@ -13984,14 +13992,14 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 	// open files
 	DataReaderFactoryPtr_c pDoclist {
 		NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), m_sLastError, DataReaderFactory_c::DOCS,
-			m_tFiles.m_iReadBufferDocList, FileAccess_e::FILE )
+			m_tMutableSettings.m_tFileAccess.m_iReadBufferDocList, FileAccess_e::FILE )
 	};
 	if ( !pDoclist )
 		sphDie ( "failed to open doclist: %s", m_sLastError.cstr() );
 
 	DataReaderFactoryPtr_c pHitlist {
 		NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), m_sLastError, DataReaderFactory_c::HITS,
-			m_tFiles.m_iReadBufferHitList, FileAccess_e::FILE )
+			m_tMutableSettings.m_tFileAccess.m_iReadBufferHitList, FileAccess_e::FILE )
 	};
 	if ( !pHitlist )
 		sphDie ( "failed to open hitlist: %s", m_sLastError.cstr ());
@@ -14124,21 +14132,21 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBui
 		return false;
 
 	// preopen doclist for mmap or keep files open (mmap also force open files)
-	if ( m_bKeepFilesOpen || m_tFiles.m_eDoclist!=FileAccess_e::FILE )
+	if ( m_tMutableSettings.m_bPreopen || m_tMutableSettings.m_tFileAccess.m_eDoclist!=FileAccess_e::FILE )
 	{
 		m_pDoclistFile = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), m_sLastError,
-										  DataReaderFactory_c::DOCS, m_tFiles.m_iReadBufferDocList,
-										  m_tFiles.m_eDoclist );
+										  DataReaderFactory_c::DOCS, m_tMutableSettings.m_tFileAccess.m_iReadBufferDocList,
+										  m_tMutableSettings.m_tFileAccess.m_eDoclist );
 		if ( !m_pDoclistFile )
 			return false;
 	}
 
 	// preopen hitlist for mmap or keep files open (mmap also force open files)
-	if ( m_bKeepFilesOpen || m_tFiles.m_eHitlist!=FileAccess_e::FILE )
+	if ( m_tMutableSettings.m_bPreopen || m_tMutableSettings.m_tFileAccess.m_eHitlist!=FileAccess_e::FILE )
 	{
 		m_pHitlistFile = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), m_sLastError,
-										  DataReaderFactory_c::HITS, m_tFiles.m_iReadBufferHitList,
-										  m_tFiles.m_eHitlist );
+										  DataReaderFactory_c::HITS, m_tMutableSettings.m_tFileAccess.m_iReadBufferHitList,
+										  m_tMutableSettings.m_tFileAccess.m_eHitlist );
 		if ( !m_pHitlistFile )
 			return false;
 	}
@@ -14246,23 +14254,17 @@ void CSphIndex_VLN::Preread()
 	// read everything
 	///////////////////
 
-	PrereadMapping ( m_sIndexName.cstr(), "attributes", IsMlock ( m_tFiles.m_eAttr ), IsOndisk ( m_tFiles.m_eAttr ), m_tAttr );
-	PrereadMapping ( m_sIndexName.cstr(), "blobs", IsMlock ( m_tFiles.m_eBlob ), IsOndisk ( m_tFiles.m_eBlob ), m_tBlobAttrs );
-	PrereadMapping ( m_sIndexName.cstr(), "skip-list", IsMlock ( m_tFiles.m_eAttr ), false, m_tSkiplists );
-	PrereadMapping ( m_sIndexName.cstr(), "dictionary", IsMlock ( m_tFiles.m_eAttr ), false, m_tWordlist.m_tBuf );
-	PrereadMapping ( m_sIndexName.cstr(), "docid-lookup", IsMlock ( m_tFiles.m_eAttr ), false, m_tDocidLookup );
-	m_tDeadRowMap.Preread ( m_sIndexName.cstr(), "kill-list", IsMlock ( m_tFiles.m_eAttr ) );
+	PrereadMapping ( m_sIndexName.cstr(), "attributes", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eAttr ), IsOndisk ( m_tMutableSettings.m_tFileAccess.m_eAttr ), m_tAttr );
+	PrereadMapping ( m_sIndexName.cstr(), "blobs", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eBlob ), IsOndisk ( m_tMutableSettings.m_tFileAccess.m_eBlob ), m_tBlobAttrs );
+	PrereadMapping ( m_sIndexName.cstr(), "skip-list", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eAttr ), false, m_tSkiplists );
+	PrereadMapping ( m_sIndexName.cstr(), "dictionary", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eAttr ), false, m_tWordlist.m_tBuf );
+	PrereadMapping ( m_sIndexName.cstr(), "docid-lookup", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eAttr ), false, m_tDocidLookup );
+	m_tDeadRowMap.Preread ( m_sIndexName.cstr(), "kill-list", IsMlock ( m_tMutableSettings.m_tFileAccess.m_eAttr ) );
 
 	PopulateHistograms();
 
 	m_bPassedRead = true;
 	sphLogDebug ( "Preread successfully finished" );
-}
-
-
-void CSphIndex_VLN::SetMemorySettings ( const FileAccessSettings_t & tFileAccessSettings )
-{
-	m_tFiles = tFileAccessSettings;
 }
 
 void CSphIndex_VLN::SetBase ( const char * sNewBase )
@@ -15792,7 +15794,7 @@ bool CSphIndex_VLN::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQ
 	sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, tQuery.m_bSimplify, this );
 
 	bool bWordDict = pDict->GetSettings().m_bWordDict;
-	int iExpandKeywords = ExpandKeywords ( m_iExpandKeywords, tQuery.m_eExpandKeywords, m_tSettings, bWordDict );
+	int iExpandKeywords = ExpandKeywords ( m_tMutableSettings.m_iExpandKeywords, tQuery.m_eExpandKeywords, m_tSettings, bWordDict );
 	if ( iExpandKeywords!=KWE_DISABLED )
 	{
 		sphQueryExpandKeywords ( &tParsed.m_pRoot, m_tSettings, iExpandKeywords, bWordDict );
@@ -15891,7 +15893,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSp
 			// transform query if needed (quorum transform, keyword expansion, etc.)
 			sphTransformExtendedQuery ( &dXQ[i].m_pRoot, m_tSettings, pQueries[i].m_bSimplify, this );
 
-			int iExpandKeywords = ExpandKeywords ( m_iExpandKeywords, pQueries[i].m_eExpandKeywords, m_tSettings, bWordDict );
+			int iExpandKeywords = ExpandKeywords ( m_tMutableSettings.m_iExpandKeywords, pQueries[i].m_eExpandKeywords, m_tSettings, bWordDict );
 			if ( iExpandKeywords!=KWE_DISABLED )
 			{
 				sphQueryExpandKeywords ( &dXQ[i].m_pRoot, m_tSettings, iExpandKeywords, bWordDict );
@@ -16034,7 +16036,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	if ( !pDoclist )
 	{
 		pDoclist = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPD ), tMeta.m_sError,
-			DataReaderFactory_c::DOCS, m_tFiles.m_iReadBufferDocList, FileAccess_e::FILE );
+			DataReaderFactory_c::DOCS, m_tMutableSettings.m_tFileAccess.m_iReadBufferDocList, FileAccess_e::FILE );
 		if ( !pDoclist )
 			return false;
 	}
@@ -16042,7 +16044,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery & tQuery, CSphQueryResult
 	if ( !pHitlist )
 	{
 		pHitlist = NewProxyReader ( GetIndexFileName ( SPH_EXT_SPP ), tMeta.m_sError,
-			DataReaderFactory_c::HITS, m_tFiles.m_iReadBufferHitList, FileAccess_e::FILE );
+			DataReaderFactory_c::HITS, m_tMutableSettings.m_tFileAccess.m_iReadBufferHitList, FileAccess_e::FILE );
 		if ( !pHitlist )
 			return false;
 	}
@@ -16875,7 +16877,7 @@ Bson_t CSphIndex_VLN::ExplainQuery ( const CSphString & sQuery ) const
 	tArgs.m_pSettings = &m_tSettings;
 	tArgs.m_pWordlist = &m_tWordlist;
 	tArgs.m_pQueryTokenizer = m_pQueryTokenizer;
-	tArgs.m_iExpandKeywords = m_iExpandKeywords;
+	tArgs.m_iExpandKeywords = m_tMutableSettings.m_iExpandKeywords;
 	tArgs.m_iExpansionLimit = m_iExpansionLimit;
 	tArgs.m_bExpandPrefix = ( m_pDict->GetSettings().m_bWordDict && IsStarDict ( m_pDict->GetSettings().m_bWordDict ) );
 

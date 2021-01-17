@@ -387,12 +387,12 @@ bool DiskIndexChecker_c::OpenFiles ( CSphString & sError )
 		return m_tReporter.Fail ( "unable to open dictionary: %s", sError.cstr() );
 
 	// use file reader during debug check to lower memory pressure
-	m_pDocsReader = NewProxyReader ( GetFilename(SPH_EXT_SPD), sError, DataReaderFactory_c::DOCS, m_tIndex.GetMemorySettings().m_iReadBufferDocList, FileAccess_e::FILE );
+	m_pDocsReader = NewProxyReader ( GetFilename(SPH_EXT_SPD), sError, DataReaderFactory_c::DOCS, m_tIndex.GetMutableSettings().m_tFileAccess.m_iReadBufferDocList, FileAccess_e::FILE );
 	if ( !m_pDocsReader )
 		return m_tReporter.Fail ( "unable to open doclist: %s", sError.cstr() );
 
 	// use file reader during debug check to lower memory pressure
-	m_pHitsReader = NewProxyReader ( GetFilename(SPH_EXT_SPP), sError, DataReaderFactory_c::HITS, m_tIndex.GetMemorySettings().m_iReadBufferHitList, FileAccess_e::FILE );
+	m_pHitsReader = NewProxyReader ( GetFilename(SPH_EXT_SPP), sError, DataReaderFactory_c::HITS, m_tIndex.GetMutableSettings().m_tFileAccess.m_iReadBufferHitList, FileAccess_e::FILE );
 	if ( !m_pHitsReader )
 		return m_tReporter.Fail ( "unable to open hitlist: %s", sError.cstr() );
 

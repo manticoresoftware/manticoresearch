@@ -136,8 +136,6 @@ public:
 	int					DebugCheck ( FILE * ) override { return 0; } // NOLINT
 	void				DebugDumpDict ( FILE * ) override {}
 	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) override {}
-	void				SetMemorySettings ( const FileAccessSettings_t & ) override {}
-	const FileAccessSettings_t & GetMemorySettings() const override { return g_tDummyFASettings; }
 
 	void				IndexDeleted() override { m_bIndexDeleted = true; }
 	void				CollectFiles ( StrVec_t & dFiles, StrVec_t & dExt ) const final;
@@ -742,6 +740,8 @@ PercolateIndex_c::~PercolateIndex_c ()
 	{
 		CSphString sFile;
 		sFile.SetSprintf ( "%s.meta", m_sFilename.cstr() );
+		::unlink ( sFile.cstr() );
+		sFile.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
 		::unlink ( sFile.cstr() );
 	}
 }
@@ -1753,9 +1753,9 @@ StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, co
 	sphTransformExtendedQuery ( &tParsed->m_pRoot, m_tSettings, false, nullptr );
 
 	bool bWordDict = m_pDict->GetSettings().m_bWordDict;
-	if ( m_iExpandKeywords!=KWE_DISABLED )
+	if ( m_tMutableSettings.m_iExpandKeywords!=KWE_DISABLED )
 	{
-		sphQueryExpandKeywords ( &tParsed->m_pRoot, m_tSettings, m_iExpandKeywords, bWordDict );
+		sphQueryExpandKeywords ( &tParsed->m_pRoot, m_tSettings, m_tMutableSettings.m_iExpandKeywords, bWordDict );
 		tParsed->m_pRoot->Check ( true );
 	}
 
@@ -2362,6 +2362,11 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilename
 		m_iTID = rdMeta.GetOffset ();
 	}
 
+	CSphString sMutableFile;
+	sMutableFile.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
+	if ( !m_tMutableSettings.Load ( sMutableFile.cstr(), m_sIndexName.cstr() ) )
+		return false;
+
 	m_iSavedTID = m_iTID;
 	m_tmSaved = sphMicroTimer();
 
@@ -2419,6 +2424,8 @@ void PercolateIndex_c::SaveMeta ( const SharedPQSlice_t& dStored, bool bShutdown
 	// rename
 	if ( sph::rename ( sMetaNew.cstr(), sMeta.cstr() ) )
 		sphWarning ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)", sMetaNew.cstr(), sMeta.cstr(), errno, strerrorm( errno ) );
+
+	SaveMutableSettings ( m_tMutableSettings, m_sFilename );
 }
 
 
@@ -2802,6 +2809,12 @@ void PercolateIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles, const Fi
 	}
 
 	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pParentBuilder, dFiles );
+
+	if ( m_tMutableSettings.NeedSave() ) // should be file already after post-setup
+	{
+		CSphString & sMutableSettings = dFiles.Add();
+		sMutableSettings.SetSprintf ( "%s%s", m_sFilename.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
+	}
 }
 
 Bson_t PercolateIndex_c::ExplainQuery ( const CSphString & sQuery ) const
@@ -2823,7 +2836,7 @@ Bson_t PercolateIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 	tArgs.m_pSettings = &m_tSettings;
 	tArgs.m_pWordlist = &tWordlist;
 	tArgs.m_pQueryTokenizer = pQueryTokenizer;
-	tArgs.m_iExpandKeywords = m_iExpandKeywords;
+	tArgs.m_iExpandKeywords = m_tMutableSettings.m_iExpandKeywords;
 	tArgs.m_iExpansionLimit = m_iExpansionLimit;
 	tArgs.m_bExpandPrefix = ( bWordDict && IsStarDict ( bWordDict ) );
 

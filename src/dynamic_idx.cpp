@@ -506,12 +506,6 @@ public:
 	bool				Prealloc ( bool, FilenameBuilder_i * ) final { return false; }
 	void				Dealloc () final {}
 	void				Preread () final {}
-	void				SetMemorySettings ( const FileAccessSettings_t & ) final {}
-	const FileAccessSettings_t & GetMemorySettings() const final
-	{
-		static FileAccessSettings_t tTmpDummySettings;
-		return tTmpDummySettings;
-	}
 	void				SetBase ( const char * ) final {}
 	bool				Rename ( const char * ) final { return false; }
 	bool				Lock () final { return true; }

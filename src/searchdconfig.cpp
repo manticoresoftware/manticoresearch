@@ -985,7 +985,7 @@ bool CopyIndexFiles ( const CSphString & sIndex, const CSphString & sPathToIndex
 
 static bool CheckCreateTableSettings ( const CreateTableSettings_t & tCreateTable, CSphString & sError )
 {
-	static const char * dForbidden[] = { "path", "stored_fields", "stored_only_fields", "rt_field", "embedded_limit", "preopen" };
+	static const char * dForbidden[] = { "path", "stored_fields", "stored_only_fields", "rt_field", "embedded_limit" };
 	static const char * dTypes[] = { "rt", "pq", "percolate", "distributed" };
 
 	for ( const auto & i : tCreateTable.m_dOpts )
@@ -1160,7 +1160,7 @@ bool CreateNewIndexInt ( const CSphString & sIndex, const CreateTableSettings_t 
 	const CSphConfigSection & hCfg = tSettingsContainer.AsCfg();
 
 	GuardedHash_c dNotLoadedIndexes;
-	ESphAddIndex eAdd = AddIndexMT ( dNotLoadedIndexes, sIndex.cstr(), hCfg, false, sError, &dWarnings );
+	ESphAddIndex eAdd = AddIndexMT ( dNotLoadedIndexes, sIndex.cstr(), hCfg, false, true, &dWarnings, sError );
 	assert ( eAdd==ADD_DSBLED || eAdd==ADD_DISTR || eAdd==ADD_ERROR );
 	if ( eAdd==ADD_ERROR )
 		return false;

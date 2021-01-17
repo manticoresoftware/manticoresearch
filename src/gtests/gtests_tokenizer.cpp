@@ -815,8 +815,6 @@ public:
 	bool				Prealloc ( bool, FilenameBuilder_i * ) override { return false; }
 	void				Dealloc () override {}
 	void				Preread () override {}
-	void				SetMemorySettings ( const FileAccessSettings_t & ) override {}
-	const FileAccessSettings_t & GetMemorySettings() const override { return g_tDummyFASettings; }
 	void				SetBase ( const char * ) override {}
 	bool				Rename ( const char * ) override { return false; }
 	bool				Lock () override { return true; }

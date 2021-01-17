@@ -25,9 +25,6 @@ struct CSphReconfigureSettings;
 struct CSphReconfigureSetup;
 class RtAccum_t;
 
-const int64_t DEFAULT_RT_MEM_LIMIT = 128 * 1024 * 1024;
-
-
 /// RAM based updateable backend interface
 class RtIndex_i : public CSphIndex
 {

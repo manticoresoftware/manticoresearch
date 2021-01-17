@@ -57,6 +57,8 @@ const char		MAGIC_WORD_BIGRAM			= 3;				// used as a bigram (keyword pair) separ
 extern const char *		MAGIC_WORD_SENTENCE;	///< value is "\3sentence"
 extern const char *		MAGIC_WORD_PARAGRAPH;	///< value is "\3paragraph"
 
+const int64_t DEFAULT_RT_MEM_LIMIT = 128 * 1024 * 1024;
+
 //////////////////////////////////////////////////////////////////////////
 // INTERNAL GLOBALS
 //////////////////////////////////////////////////////////////////////////
@@ -1600,7 +1602,7 @@ struct CSphReconfigureSettings
 	CSphIndexSettings		m_tIndex;
 	CSphFieldFilterSettings m_tFieldFilter;
 	CSphSchema				m_tSchema;
-	int64_t					m_iMemLimit = 0;
+	MutableIndexSettings_c	m_tMutableSettings;
 
 	bool					m_bChangeSchema = false;
 };
@@ -1612,7 +1614,7 @@ struct CSphReconfigureSetup
 	CSphIndexSettings	m_tIndex;
 	FieldFilterRefPtr_c	m_pFieldFilter;
 	CSphSchema			m_tSchema;
-	int64_t				m_iMemLimit = 0;
+	MutableIndexSettings_c	m_tMutableSettings;
 
 	bool				m_bChangeSchema = false;
 };
@@ -1727,6 +1729,7 @@ enum ESphExt
 	SPH_EXT_SPHI,
 	SPH_EXT_SPDS,
 	SPH_EXT_SPL,
+	SPH_EXT_SETTINGS,
 
 	SPH_EXT_TOTAL
 };

@@ -293,6 +293,33 @@ struct FileAccessSettings_t : public SettingsWriter_c
 	void			Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
 };
 
+class MutableIndexSettings_c : public SettingsWriter_c
+{
+public:
+	int			m_iExpandKeywords;
+	int64_t		m_iMemLimit;
+	bool		m_bPreopen = false;
+	FileAccessSettings_t m_tFileAccess;
+	
+	MutableIndexSettings_c();
+
+	static MutableIndexSettings_c & GetDefaults();
+
+	bool Load ( const char * sFileName, const char * sIndexName );
+	void Load ( const CSphConfigSection & hIndex, bool bNeedSave, StrVec_t * pWarnings );
+	bool Save ( CSphString & sBuf ) const;
+
+	bool NeedSave() const { return m_bNeedSave; }
+	bool HasSettings() const { return ( m_dLoaded.BitCount()>0 ); }
+
+	void Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const override;
+
+	void Combine ( const MutableIndexSettings_c & tOther );
+
+private:
+	CSphBitvec	m_dLoaded;
+	bool		m_bNeedSave = false;
+};
 
 struct RtTypedAttr_t
 {
@@ -367,5 +394,9 @@ CreateFilenameBuilder_fn GetIndexFilenameBuilder();
 
 const char * FileAccessName ( FileAccess_e eValue );
 FileAccess_e ParseFileAccess ( CSphString sVal );
+
+int ParseKeywordExpansion ( const char * sValue );
+void SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphString & sPath );
+FileAccess_e GetFileAccess (  const CSphConfigSection & hIndex, const char * sKey, bool bList, FileAccess_e eDefault );
 
 #endif // _indexsettings_

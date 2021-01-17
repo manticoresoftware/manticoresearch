@@ -671,8 +671,6 @@ struct ServedDesc_t
 	CSphIndex *	m_pIndex		= nullptr; ///< owned index; will be deleted in d-tr
 	CSphString	m_sIndexPath;	///< current index path; independent but related to one in m_pIndex
 	CSphString	m_sNewPath;		///< when reloading because of config changed, it contains path to new index.
-	bool		m_bPreopen		= false;
-	int			m_iExpandKeywords { KWE_DISABLED };
 	bool		m_bOnlyNew		= false; ///< load new clean index - no previous valid files, no .old backups possible, no way to serve if loading failed.
 	CSphString	m_sGlobalIDFPath;
 	int64_t		m_iMass			= 0; // relative weight (by access speed) of the index
@@ -681,8 +679,7 @@ struct ServedDesc_t
 	mutable CSphString	m_sUnlink;
 	IndexType_e	m_eType			= IndexType_e::PLAIN;
 	CSphString	m_sCluster;
-	FileAccessSettings_t m_tFileAccessSettings;
-	int			m_iMemLimit = 0;
+	MutableIndexSettings_c m_tSettings = MutableIndexSettings_c::GetDefaults();
 
 	// statics instead of members below used to simultaneously check pointer for null also.
 
@@ -1056,7 +1053,7 @@ inline ServedIndexRefPtr_c GetServed ( const CSphString &sName, GuardedHash_c * 
 void ReleaseAndClearDisabled();
 
 ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName, StrVec_t & dWarnings, CSphString & sError );
-ESphAddIndex AddIndexMT ( GuardedHash_c & dPost, const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, CSphString & sError, StrVec_t * pWarnings=nullptr );
+ESphAddIndex AddIndexMT ( GuardedHash_c & dPost, const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError );
 bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, const char * szIndexName, StrVec_t & dWarnings, CSphString & sError );
 
 struct AttrUpdateArgs: public CSphAttrUpdateEx

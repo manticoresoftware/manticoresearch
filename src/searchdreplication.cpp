@@ -903,7 +903,7 @@ static int GetClusterMemLimit ( const StrVec_t & dIndexes )
 			continue;
 
 		ServedDescRPtr_c pDesc ( pServed );
-		iMemLimit = Max ( iMemLimit, pDesc->m_iMemLimit );
+		iMemLimit = Max ( iMemLimit, pDesc->m_tSettings.m_iMemLimit );
 		iIndexes++;
 	}
 
@@ -2124,7 +2124,7 @@ static bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIn
 	}
 
 	GuardedHash_c dNotLoadedIndexes;
-	ESphAddIndex eAdd = AddIndexMT ( dNotLoadedIndexes, sIndexName.cstr(), hIndex, false, sError );
+	ESphAddIndex eAdd = AddIndexMT ( dNotLoadedIndexes, sIndexName.cstr(), hIndex, false, true, nullptr, sError );
 	assert ( eAdd==ADD_DSBLED || eAdd==ADD_ERROR );
 
 	if ( eAdd!=ADD_DSBLED )

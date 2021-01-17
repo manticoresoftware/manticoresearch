@@ -3241,7 +3241,6 @@ public:
 
 	virtual	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn pfnProgress ) = 0;
 	virtual void				SetInplaceSettings ( int iHitGap, float fRelocFactor, float fWriteFactor );
-	virtual void				SetPreopen ( bool bValue ) { m_bKeepFilesOpen = bValue; }
 	void						SetFieldFilter ( ISphFieldFilter * pFilter );
 	const ISphFieldFilter *		GetFieldFilter() const { return m_pFieldFilter; }
 	void						SetTokenizer ( ISphTokenizer * pTokenizer );
@@ -3262,6 +3261,8 @@ public:
 	virtual int64_t *			GetFieldLens() const { return NULL; }
 	virtual bool				IsStarDict ( bool bWordDict ) const;
 	int64_t						GetIndexId() const { return m_iIndexId; }
+	void						SetMutableSettings ( const MutableIndexSettings_c & tSettings );
+	const MutableIndexSettings_c & GetMutableSettings () const { return m_tMutableSettings; }
 
 public:
 	/// build index by indexing given sources
@@ -3370,9 +3371,6 @@ public:
 	/// internal make document id list from external docinfo, DO NOT USE
 	virtual CSphFixedVector<SphAttr_t> BuildDocList () const;
 
-	virtual void				SetMemorySettings ( const FileAccessSettings_t & tFileAccessSettings ) = 0;
-	virtual const FileAccessSettings_t & GetMemorySettings() const = 0;
-
 	virtual void				GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings ) const;
 
 	// put external files (if any) into index folder
@@ -3384,7 +3382,6 @@ public:
 	int64_t						m_iTID = 0;				///< last committed transaction id
 	int							m_iChunk = 0;
 
-	int							m_iExpandKeywords = KWE_DISABLED;	///< enable automatic query-time keyword expansion (to "( word | =word | *word* )")
 	int							m_iExpansionLimit = 0;
 
 protected:
@@ -3401,13 +3398,13 @@ protected:
 	float						m_fRelocFactor { 0.0f };
 	float						m_fWriteFactor { 0.0f };
 
-	bool						m_bKeepFilesOpen = false;	///< keep files open to avoid race on seamless rotation
 	bool						m_bBinlog = true;
 
 	bool						m_bStripperInited = true;	///< was stripper initialized (old index version (<9) handling)
 
 protected:
 	CSphIndexSettings			m_tSettings;
+	MutableIndexSettings_c		m_tMutableSettings;
 
 	FieldFilterRefPtr_c		m_pFieldFilter;
 	TokenizerRefPtr_c		m_pTokenizer;

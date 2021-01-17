@@ -1259,7 +1259,7 @@ static void FormatAllSettings ( const CSphIndex & tIndex, SettingsFormatter_c & 
 	if ( tIndex.GetDictionary() )
 		tIndex.GetDictionary()->GetSettings().Format ( tFormatter, pFilenameBuilder );
 
-	tIndex.GetMemorySettings().Format ( tFormatter, pFilenameBuilder );
+	tIndex.GetMutableSettings().Format ( tFormatter, pFilenameBuilder );
 }
 
 
@@ -1286,7 +1286,7 @@ void DumpReadable ( FILE * fp, const CSphIndex & tIndex, const CSphEmbeddedFiles
 	if ( tIndex.GetDictionary() )
 		tIndex.GetDictionary()->GetSettings().DumpReadable ( tState, tEmbeddedFiles, pFilenameBuilder );
 
-	tIndex.GetMemorySettings().DumpReadable ( tState, tEmbeddedFiles, pFilenameBuilder );
+	tIndex.GetMutableSettings().m_tFileAccess.DumpReadable ( tState, tEmbeddedFiles, pFilenameBuilder );
 }
 
 
@@ -1565,4 +1565,503 @@ FileAccess_e ParseFileAccess ( CSphString sVal )
 	if ( sVal=="mmap_preread" ) return FileAccess_e::MMAP_PREREAD;
 	if ( sVal=="mlock" ) return FileAccess_e::MLOCK;
 	return FileAccess_e::UNKNOWN;
+}
+
+int ParseKeywordExpansion ( const char * sValue )
+{
+	if ( !sValue || *sValue=='\0' )
+		return KWE_DISABLED;
+
+	int iOpt = KWE_DISABLED;
+	while ( sValue && *sValue )
+	{
+		if ( !sphIsAlpha ( *sValue ) )
+		{
+			sValue++;
+			continue;
+		}
+
+		if ( *sValue>='0' && *sValue<='9' )
+		{
+			int iVal = atoi ( sValue );
+			if ( iVal!=0 )
+				iOpt = KWE_ENABLED;
+			break;
+		}
+
+		if ( sphStrMatchStatic ( "exact", sValue ) )
+		{
+			iOpt |= KWE_EXACT;
+			sValue += 5;
+		} else if ( sphStrMatchStatic ( "star", sValue ) )
+		{
+			iOpt |= KWE_STAR;
+			sValue += 4;
+		} else
+		{
+			sValue++;
+		}
+	}
+
+	return iOpt;
+}
+
+enum class MutableName_e
+{
+	EXPAND_KEYWORDS,
+	RT_MEM_LIMIT,
+	PREOPEN,
+	ACCESS_PLAIN_ATTRS,
+	ACCESS_BLOB_ATTRS,
+	ACCESS_DOCLISTS,
+	ACCESS_HITLISTS,
+	READ_BUFFER_DOCS,
+	READ_BUFFER_HITS,
+
+	TOTAL
+};
+
+const char * GetMutableName ( MutableName_e eName )
+{
+	switch ( eName ) 
+	{
+		case MutableName_e::EXPAND_KEYWORDS: return "expand_keywords";
+		case MutableName_e::RT_MEM_LIMIT: return "rt_mem_limit";
+		case MutableName_e::PREOPEN: return "preopen";
+		case MutableName_e::ACCESS_PLAIN_ATTRS: return "access_plain_attrs";
+		case MutableName_e::ACCESS_BLOB_ATTRS: return "access_blob_attrs";
+		case MutableName_e::ACCESS_DOCLISTS: return "access_doclists";
+		case MutableName_e::ACCESS_HITLISTS: return "access_hitlists";
+		case MutableName_e::READ_BUFFER_DOCS: return "read_buffer_docs";
+		case MutableName_e::READ_BUFFER_HITS: return "read_buffer_hits";
+		default: assert ( 0 && "Invalid mutable option" ); return "";
+	}
+}
+
+static bool GetFileAccess ( const CSphString & sVal, const char * sKey, bool bList, FileAccess_e & eRes )
+{
+	// should use original value as default due to deprecated options
+	if ( sVal.IsEmpty() )
+		return false;
+
+	FileAccess_e eParsed = ParseFileAccess ( sVal.cstr() );
+	if ( eParsed==FileAccess_e::UNKNOWN )
+	{
+		sphWarning( "%s unknown value %s, use default %s", sKey, sVal.cstr(), FileAccessName( eRes ) );
+		return false;
+	}
+
+	// but then check might reset invalid value to real default
+	if ( ( bList && eParsed==FileAccess_e::MMAP_PREREAD) ||
+		( !bList && eParsed==FileAccess_e::FILE) )
+	{
+		sphWarning( "%s invalid value %s, use default %s", sKey, FileAccessName ( eParsed ), FileAccessName ( eRes ));
+		return false;
+	}
+
+	eRes = eParsed;
+	return true;
+}
+
+FileAccess_e GetFileAccess (  const CSphConfigSection & hIndex, const char * sKey, bool bList, FileAccess_e eDefault )
+{
+	FileAccess_e eRes = eDefault;
+	if ( !GetFileAccess ( hIndex.GetStr ( sKey ), sKey, bList, eRes ) )
+		return eDefault;
+
+	return eRes;
+}
+
+static void GetFileAccess ( const JsonObj_c & tSetting, MutableName_e eName, bool bList, FileAccess_e & eRes, CSphBitvec & dLoaded )
+{
+	const char * sName = GetMutableName ( eName );
+
+	CSphString sError;
+	JsonObj_c tVal = tSetting.GetStrItem ( sName, sError, true );
+	if ( !tVal )
+	{
+		if ( !sError.IsEmpty() )
+			sphWarning ( "%s", sError.cstr() );
+		return;
+	}
+
+	if ( !GetFileAccess ( tVal.StrVal(), sName, bList, eRes ) )
+		return;
+
+	dLoaded.BitSet ( (int)eName );
+}
+
+static void GetFileAccess (  const CSphConfigSection & hIndex, MutableName_e eName, bool bList, FileAccess_e & eRes, CSphBitvec & dLoaded )
+{
+	const char * sName = GetMutableName ( eName );
+	if ( !GetFileAccess ( hIndex.GetStr ( sName ), sName, bList, eRes ) )
+		return;
+
+	dLoaded.BitSet ( (int)eName );
+}
+
+MutableIndexSettings_c::MutableIndexSettings_c()
+	: m_iExpandKeywords { KWE_DISABLED }
+	, m_iMemLimit { DEFAULT_RT_MEM_LIMIT }
+	, m_dLoaded ( (int)MutableName_e::TOTAL )
+{
+#if !USE_WINDOWS
+	m_bPreopen	= true;
+#else
+	m_bPreopen	= false;
+#endif
+}
+
+static int64_t GetMemLimit ( int64_t iMemLimit, StrVec_t * pWarnings )
+{
+	if ( iMemLimit<128 * 1024 )
+	{
+		if ( pWarnings )
+			pWarnings->Add ( "rt_mem_limit extremely low, using 128K instead" );
+		else
+			sphWarning ( "rt_mem_limit extremely low, using 128K instead" );
+		iMemLimit = 128 * 1024;
+	} else if ( iMemLimit<8 * 1024 * 1024 )
+	{
+		if ( pWarnings )
+			pWarnings->Add ( "rt_mem_limit very low (under 8 MB)" );
+		else
+			sphWarning ( "rt_mem_limit very low (under 8 MB)" );
+	}
+
+	return iMemLimit;
+}
+
+bool MutableIndexSettings_c::Load ( const char * sFileName, const char * sIndexName )
+{
+	CSphString sError;
+	CSphAutofile tReader;
+	int iFD = tReader.Open ( sFileName, SPH_O_READ, sError );
+	if ( iFD<0 ) // mutable settings is optional file - no need to fail
+		return true;
+
+	int64_t iSize = tReader.GetSize();
+	if ( !iSize )
+		return true;
+
+	CSphFixedVector<BYTE> dBuf ( iSize+1 );
+	if ( !tReader.Read ( dBuf.Begin(), iSize, sError ) )
+	{
+		sphWarning ( "index %s, error: %s", sIndexName, sError.cstr() );
+		return false;
+	}
+	dBuf[iSize] = '\0';
+
+	JsonObj_c tParser ( (const char *)dBuf.Begin() );
+	if ( !tParser )
+		return false;
+
+	// read values
+
+	JsonObj_c tExpand = tParser.GetStrItem ( "expand_keywords", sError, true );
+	if ( tExpand )
+	{
+		m_iExpandKeywords = ParseKeywordExpansion ( tExpand.StrVal().cstr() );
+		m_dLoaded.BitSet ( (int)MutableName_e::EXPAND_KEYWORDS );
+	} else if ( !sError.IsEmpty() )
+	{
+		sphWarning ( "index %s: %s", sIndexName, sError.cstr() );
+		sError = "";
+	}
+
+	JsonObj_c tMemLimit = tParser.GetIntItem ( "rt_mem_limit", sError, true );
+	if ( tMemLimit )
+	{
+		m_iMemLimit = GetMemLimit ( tMemLimit.IntVal(), nullptr );
+		m_dLoaded.BitSet ( (int)MutableName_e::RT_MEM_LIMIT );
+	} else if ( !sError.IsEmpty() )
+	{
+		sphWarning ( "index %s: %s", sIndexName, sError.cstr() );
+		sError = "";
+	}
+
+	JsonObj_c tPreopen = tParser.GetBoolItem ( "preopen", sError, true );
+	if ( tPreopen )
+	{
+		m_bPreopen = tPreopen.BoolVal();
+		m_dLoaded.BitSet ( (int)MutableName_e::PREOPEN );
+	} else if ( !sError.IsEmpty() )
+	{
+		sphWarning ( "index %s: %s", sIndexName, sError.cstr() );
+		sError = "";
+	}
+
+	GetFileAccess( tParser, MutableName_e::ACCESS_PLAIN_ATTRS, false, m_tFileAccess.m_eAttr, m_dLoaded );
+	GetFileAccess( tParser, MutableName_e::ACCESS_BLOB_ATTRS, false, m_tFileAccess.m_eBlob, m_dLoaded );
+	GetFileAccess( tParser, MutableName_e::ACCESS_DOCLISTS, true, m_tFileAccess.m_eDoclist, m_dLoaded );
+	GetFileAccess( tParser, MutableName_e::ACCESS_HITLISTS, true, m_tFileAccess.m_eHitlist, m_dLoaded );
+
+	JsonObj_c tReadBuffer = tParser.GetIntItem ( "read_buffer_docs", sError, true );
+	if ( tReadBuffer )
+	{
+		m_tFileAccess.m_iReadBufferDocList = GetReadBuffer ( tReadBuffer.IntVal() );
+		m_dLoaded.BitSet ( (int)MutableName_e::READ_BUFFER_DOCS );
+	} else if ( !sError.IsEmpty() )
+	{
+		sphWarning ( "index %s: %s", sIndexName, sError.cstr() );
+		sError = "";
+	}
+
+	tReadBuffer = tParser.GetIntItem ( "read_buffer_hits", sError, true );
+	if ( tReadBuffer )
+	{
+		m_tFileAccess.m_iReadBufferHitList = GetReadBuffer ( tReadBuffer.IntVal() );
+		m_dLoaded.BitSet ( (int)MutableName_e::READ_BUFFER_HITS );
+	} else if ( !sError.IsEmpty() )
+	{
+		sphWarning ( "index %s: %s", sIndexName, sError.cstr() );
+		sError = "";
+	}
+
+	m_bNeedSave = true;
+
+	return true;
+}
+
+void MutableIndexSettings_c::Load ( const CSphConfigSection & hIndex, bool bNeedSave, StrVec_t * pWarnings )
+{
+	m_bNeedSave |= bNeedSave;
+
+	if ( hIndex.Exists ( "expand_keywords" ) )
+	{
+		m_iExpandKeywords = ParseKeywordExpansion ( hIndex.GetStr( "expand_keywords" ).cstr() );
+		m_dLoaded.BitSet ( (int)MutableName_e::EXPAND_KEYWORDS );
+	}
+
+	// RAM chunk size
+	if ( hIndex.Exists ( "rt_mem_limit" ) )
+	{
+		m_iMemLimit = GetMemLimit ( hIndex.GetSize64 ( "rt_mem_limit", DEFAULT_RT_MEM_LIMIT ), pWarnings );
+		m_dLoaded.BitSet ( (int)MutableName_e::RT_MEM_LIMIT );
+	}
+
+	if (  hIndex.Exists ( "preopen" )  )
+	{
+		m_bPreopen = ( hIndex.GetInt ( "preopen", 0 )!=0 );
+		m_dLoaded.BitSet ( (int)MutableName_e::PREOPEN );
+	}
+
+	// DEPRICATED - remove these 2 options
+	if ( hIndex.GetBool ( "mlock", false ) )
+	{
+		m_tFileAccess.m_eAttr = FileAccess_e::MLOCK;
+		m_tFileAccess.m_eBlob = FileAccess_e::MLOCK;
+		m_dLoaded.BitSet ( (int)MutableName_e::ACCESS_PLAIN_ATTRS );
+		m_dLoaded.BitSet ( (int)MutableName_e::ACCESS_BLOB_ATTRS );
+	}
+	if ( hIndex.Exists ( "ondisk_attrs" ) )
+	{
+		bool bOnDiskAttrs = hIndex.GetBool ( "ondisk_attrs", false );
+		bool bOnDiskPools = ( hIndex.GetStr ( "ondisk_attrs" )=="pool" );
+
+		if ( bOnDiskAttrs || bOnDiskPools )
+		{
+			m_tFileAccess.m_eAttr = FileAccess_e::MMAP;
+			m_dLoaded.BitSet ( (int)MutableName_e::ACCESS_PLAIN_ATTRS );
+		}
+		if ( bOnDiskPools )
+		{
+			m_tFileAccess.m_eBlob = FileAccess_e::MMAP;
+			m_dLoaded.BitSet ( (int)MutableName_e::ACCESS_BLOB_ATTRS );
+		}
+	}
+
+	// need to keep value from deprecated options for some time - use it as defaults on parse for now
+	GetFileAccess( hIndex, MutableName_e::ACCESS_PLAIN_ATTRS, false, m_tFileAccess.m_eAttr, m_dLoaded );
+	GetFileAccess( hIndex, MutableName_e::ACCESS_BLOB_ATTRS, false, m_tFileAccess.m_eBlob, m_dLoaded );
+	GetFileAccess( hIndex, MutableName_e::ACCESS_DOCLISTS, true, m_tFileAccess.m_eDoclist, m_dLoaded );
+	GetFileAccess( hIndex, MutableName_e::ACCESS_HITLISTS, true, m_tFileAccess.m_eHitlist, m_dLoaded );
+
+	if ( hIndex.Exists ( "read_buffer_docs" ) )
+	{
+		m_tFileAccess.m_iReadBufferDocList = GetReadBuffer ( hIndex.GetInt ( "read_buffer_docs", m_tFileAccess.m_iReadBufferDocList ) );
+		m_dLoaded.BitSet ( (int)MutableName_e::READ_BUFFER_DOCS );
+	}
+
+	if ( hIndex.Exists ( "read_buffer_hits" ) )
+	{
+		m_tFileAccess.m_iReadBufferHitList = GetReadBuffer ( hIndex.GetInt ( "read_buffer_hits", m_tFileAccess.m_iReadBufferHitList ) );
+		m_dLoaded.BitSet ( (int)MutableName_e::READ_BUFFER_HITS );
+	}
+}
+
+static void AddStr ( const CSphBitvec & dLoaded, MutableName_e eName, JsonObj_c & tRoot, const char * sVal )
+{
+	if ( !dLoaded.BitGet ( (int)eName ) )
+		return;
+
+	tRoot.AddStr ( GetMutableName ( eName ), sVal );
+}
+
+static void AddInt ( const CSphBitvec & dLoaded, MutableName_e eName, JsonObj_c & tRoot, int64_t iVal )
+{
+	if ( !dLoaded.BitGet ( (int)eName ) )
+		return;
+
+	tRoot.AddInt ( GetMutableName ( eName ), iVal );
+}
+
+static const char * GetExpandKwName ( int iExpandKeywords )
+{
+	if ( ( iExpandKeywords & KWE_ENABLED )==KWE_ENABLED )
+		return "1";
+	else if ( ( iExpandKeywords & KWE_EXACT )==KWE_EXACT )
+		return "exact";
+	else if ( ( iExpandKeywords & KWE_STAR )==KWE_STAR )
+		return "star";
+	else
+		return "0";
+
+}
+
+bool MutableIndexSettings_c::Save ( CSphString & sBuf ) const
+{
+	if ( !m_bNeedSave )
+		return false;
+
+	JsonObj_c tRoot;
+	
+	if ( m_dLoaded.BitGet ( (int)MutableName_e::EXPAND_KEYWORDS ) )
+		tRoot.AddStr ( "expand_keywords", GetExpandKwName ( m_iExpandKeywords ) );
+
+	AddInt ( m_dLoaded, MutableName_e::RT_MEM_LIMIT, tRoot, m_iMemLimit );
+	if ( m_dLoaded.BitGet ( (int)MutableName_e::PREOPEN ) )
+		tRoot.AddBool ( "preopen", m_bPreopen );
+	
+	AddStr ( m_dLoaded, MutableName_e::ACCESS_PLAIN_ATTRS, tRoot, FileAccessName ( m_tFileAccess.m_eAttr ) );
+	AddStr ( m_dLoaded, MutableName_e::ACCESS_BLOB_ATTRS, tRoot, FileAccessName ( m_tFileAccess.m_eBlob ) );
+	AddStr ( m_dLoaded, MutableName_e::ACCESS_DOCLISTS, tRoot, FileAccessName ( m_tFileAccess.m_eDoclist ) );
+	AddStr ( m_dLoaded, MutableName_e::ACCESS_HITLISTS, tRoot, FileAccessName ( m_tFileAccess.m_eHitlist ) );
+
+	AddInt ( m_dLoaded, MutableName_e::READ_BUFFER_DOCS, tRoot, m_tFileAccess.m_iReadBufferDocList );
+	AddInt ( m_dLoaded, MutableName_e::READ_BUFFER_HITS, tRoot, m_tFileAccess.m_iReadBufferHitList );
+
+	sBuf = tRoot.AsString ( true );
+
+	return true;
+}
+
+void MutableIndexSettings_c::Combine ( const MutableIndexSettings_c & tOther )
+{
+	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::EXPAND_KEYWORDS ) )
+	{
+		m_iExpandKeywords = tOther.m_iExpandKeywords;
+		m_dLoaded.BitSet ( (int)MutableName_e::EXPAND_KEYWORDS );
+	}
+
+	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::RT_MEM_LIMIT ) )
+	{
+		m_iMemLimit = tOther.m_iMemLimit;
+		m_dLoaded.BitSet ( (int)MutableName_e::RT_MEM_LIMIT );
+	}
+
+	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::PREOPEN ) )
+	{
+		m_bPreopen = tOther.m_bPreopen;
+		m_dLoaded.BitSet ( (int)MutableName_e::PREOPEN );
+	}
+
+	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::ACCESS_PLAIN_ATTRS ) )
+	{
+		m_tFileAccess.m_eAttr = tOther.m_tFileAccess.m_eAttr;
+		m_dLoaded.BitSet ( (int)MutableName_e::ACCESS_PLAIN_ATTRS );
+	}
+	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::ACCESS_BLOB_ATTRS ) )
+	{
+		m_tFileAccess.m_eBlob = tOther.m_tFileAccess.m_eBlob;
+		m_dLoaded.BitSet ( (int)MutableName_e::ACCESS_BLOB_ATTRS );
+	}
+	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::ACCESS_DOCLISTS ) )
+	{
+		m_tFileAccess.m_eDoclist = tOther.m_tFileAccess.m_eDoclist;
+		m_dLoaded.BitSet ( (int)MutableName_e::ACCESS_DOCLISTS );
+	}
+	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::ACCESS_HITLISTS ) )
+	{
+		m_tFileAccess.m_eHitlist = tOther.m_tFileAccess.m_eHitlist;
+		m_dLoaded.BitSet ( (int)MutableName_e::ACCESS_HITLISTS );
+	}
+
+	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::READ_BUFFER_DOCS ) )
+	{
+		m_tFileAccess.m_iReadBufferDocList = tOther.m_tFileAccess.m_iReadBufferDocList;
+		m_dLoaded.BitSet ( (int)MutableName_e::READ_BUFFER_DOCS );
+	}
+	if ( tOther.m_dLoaded.BitGet ( (int)MutableName_e::READ_BUFFER_HITS ) )
+	{
+		m_tFileAccess.m_iReadBufferHitList = tOther.m_tFileAccess.m_iReadBufferHitList;
+		m_dLoaded.BitSet ( (int)MutableName_e::READ_BUFFER_HITS );
+	}
+}
+
+static MutableIndexSettings_c g_tMutableDefaults;
+MutableIndexSettings_c & MutableIndexSettings_c::GetDefaults ()
+{
+	return g_tMutableDefaults;
+}
+
+static bool FormatCond ( bool bNeedSave, const CSphBitvec & dLoaded, MutableName_e eName, bool bNotEq )
+{
+	return ( ( bNeedSave && dLoaded.BitGet ( (int)eName ) ) || ( !bNeedSave && bNotEq ) );
+}
+
+void MutableIndexSettings_c::Format ( SettingsFormatter_c & tOut, FilenameBuilder_i * pFilenameBuilder ) const
+{
+	const MutableIndexSettings_c & tDefaults = GetDefaults ();
+
+	tOut.Add ( GetMutableName ( MutableName_e::EXPAND_KEYWORDS ), GetExpandKwName ( m_iExpandKeywords ),
+		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::EXPAND_KEYWORDS, m_iExpandKeywords!=tDefaults.m_iExpandKeywords ) );
+	tOut.Add ( GetMutableName ( MutableName_e::RT_MEM_LIMIT ), m_iMemLimit,
+		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::RT_MEM_LIMIT, m_iMemLimit!=tDefaults.m_iMemLimit ) );
+	tOut.Add ( GetMutableName ( MutableName_e::PREOPEN ), m_bPreopen,
+		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::PREOPEN, m_bPreopen!=tDefaults.m_bPreopen ) );
+
+	tOut.Add ( GetMutableName ( MutableName_e::ACCESS_PLAIN_ATTRS ), FileAccessName ( m_tFileAccess.m_eAttr ),
+		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::ACCESS_PLAIN_ATTRS, m_tFileAccess.m_eAttr!=tDefaults.m_tFileAccess.m_eAttr ) );
+	tOut.Add ( GetMutableName ( MutableName_e::ACCESS_BLOB_ATTRS ), FileAccessName ( m_tFileAccess.m_eBlob ),
+		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::ACCESS_BLOB_ATTRS, m_tFileAccess.m_eBlob!=tDefaults.m_tFileAccess.m_eBlob ) );
+	tOut.Add ( GetMutableName ( MutableName_e::ACCESS_DOCLISTS ), FileAccessName ( m_tFileAccess.m_eDoclist ),
+		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::ACCESS_DOCLISTS, m_tFileAccess.m_eDoclist!=tDefaults.m_tFileAccess.m_eDoclist ) );
+	tOut.Add ( GetMutableName ( MutableName_e::ACCESS_HITLISTS ), FileAccessName ( m_tFileAccess.m_eHitlist ),
+		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::ACCESS_HITLISTS, m_tFileAccess.m_eHitlist!=tDefaults.m_tFileAccess.m_eHitlist ) );
+
+	tOut.Add ( GetMutableName ( MutableName_e::READ_BUFFER_DOCS ), m_tFileAccess.m_iReadBufferDocList,
+		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::READ_BUFFER_DOCS, m_tFileAccess.m_iReadBufferDocList!=tDefaults.m_tFileAccess.m_iReadBufferDocList ) );
+	tOut.Add ( GetMutableName ( MutableName_e::READ_BUFFER_HITS ), m_tFileAccess.m_iReadBufferHitList,
+		FormatCond ( m_bNeedSave, m_dLoaded, MutableName_e::READ_BUFFER_HITS, m_tFileAccess.m_iReadBufferHitList!=tDefaults.m_tFileAccess.m_iReadBufferHitList ) );
+}
+
+void SaveMutableSettings ( const MutableIndexSettings_c & tSettings, const CSphString & sPath )
+{
+	CSphString sBuf;
+	if ( !tSettings.Save ( sBuf ) ) // no need to save in case settings were set from config
+		return;
+
+	CSphString sError;
+	CSphString sMutableNew, sMutable;
+	sMutableNew.SetSprintf ( "%s%s.new", sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
+	sMutable.SetSprintf ( "%s%s", sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
+
+	CSphWriter tWriter;
+	if ( !tWriter.OpenFile ( sMutableNew, sError ) )
+		sphDie ( "failed to serialize mutable settings: %s", sError.cstr() ); // !COMMIT handle this gracefully
+
+	tWriter.PutBytes ( sBuf.cstr(), sBuf.Length() );
+	tWriter.CloseFile();
+
+	if ( tWriter.IsError() )
+	{
+		sphWarning ( "%s", sError.cstr() );
+		return;
+	}
+
+	// rename
+	if ( sph::rename ( sMutableNew.cstr(), sMutable.cstr() ) )
+		sphDie ( "failed to rename mutable settings(src=%s, dst=%s, errno=%d, error=%s)",
+			sMutableNew.cstr(), sMutable.cstr(), errno, strerrorm(errno) ); // !COMMIT handle this gracefully
 }

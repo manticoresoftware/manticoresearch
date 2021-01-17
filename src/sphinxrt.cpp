@@ -1157,8 +1157,6 @@ public:
 	bool				Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder ) final;
 	void				Dealloc () final {}
 	void				Preread () final;
-	void				SetMemorySettings ( const FileAccessSettings_t & tFileAccessSettings ) final;
-	const FileAccessSettings_t & GetMemorySettings() const final { return m_tFiles; }
 	void				SetBase ( const char * ) final {}
 	bool				Rename ( const char * ) final { return true; }
 	bool				Lock () final { return true; }
@@ -1277,8 +1275,6 @@ private:
 	bool						m_bSaveDisabled = false;
 	bool						m_bHasFiles = false;
 
-	FileAccessSettings_t		m_tFiles;
-
 	CSphFixedVector<int64_t>	m_dFieldLens { SPH_MAX_FIELDS };	///< total field lengths over entire index
 	CSphFixedVector<int64_t>	m_dFieldLensRam { SPH_MAX_FIELDS };	///< field lengths summed over current RAM chunk
 	CSphFixedVector<int64_t>	m_dFieldLensDisk { SPH_MAX_FIELDS };	///< field lengths summed over all disk chunks
@@ -1345,12 +1341,13 @@ private:
 	int							DebugCheckDisk ( DebugCheckError_c & tReporter, FILE * fp );
 
 	void						SetSchema ( const CSphSchema & tSchema );
+
+	void						SetMemLimit ( int64_t iMemLimit );
 };
 
 
 RtIndex_c::RtIndex_c ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict )
 	: RtIndex_i ( sIndexName, sPath )
-	, m_iSoftRamLimit ( iRamSize )
 	, m_sPath ( sPath )
 	, m_iSavedTID ( m_iTID )
 	, m_tmSaved ( sphMicroTimer() )
@@ -1359,8 +1356,7 @@ RtIndex_c::RtIndex_c ( const CSphSchema & tSchema, const char * sIndexName, int6
 	MEMORY ( MEM_INDEX_RT );
 
 	SetSchema ( tSchema );
-
-	m_iDoubleBufferLimit = ( m_iSoftRamLimit * SPH_RT_DOUBLE_BUFFER_PERCENT ) / 100;
+	SetMemLimit ( iRamSize );
 
 	Verify ( m_tChunkLock.Init() );
 	Verify ( m_tReading.Init() );
@@ -1397,6 +1393,8 @@ RtIndex_c::~RtIndex_c ()
 		sFile.SetSprintf ( "%s.meta", m_sPath.cstr() );
 		::unlink ( sFile.cstr() );
 		sFile.SetSprintf ( "%s.ram", m_sPath.cstr() );
+		::unlink ( sFile.cstr() );
+		sFile.SetSprintf ( "%s%s", m_sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
 		::unlink ( sFile.cstr() );
 	}
 
@@ -3733,6 +3731,8 @@ void RtIndex_c::SaveMetaSpecial ( int64_t iTID, const VecTraits_T<int> & dChunkN
 	if ( sph::rename ( sMetaNew.cstr(), sMeta.cstr() ) )
 		sphDie ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)",
 			sMetaNew.cstr(), sMeta.cstr(), errno, strerrorm(errno) ); // !COMMIT handle this gracefully
+
+	SaveMutableSettings ( m_tMutableSettings, m_sPath );
 }
 
 void RtIndex_c::SaveMeta ( int64_t iTID, bool bSaveChunks )
@@ -3891,9 +3891,8 @@ CSphIndex * RtIndex_c::PreallocDiskChunk ( const char * sChunk, int iChunk, File
 	}
 
 	pDiskChunk->m_iExpansionLimit = m_iExpansionLimit;
-	pDiskChunk->m_iExpandKeywords = m_iExpandKeywords;
+	pDiskChunk->SetMutableSettings ( m_tMutableSettings );
 	pDiskChunk->SetBinlog ( false );
-	pDiskChunk->SetMemorySettings ( m_tFiles );
 	pDiskChunk->m_iChunk = iChunk;
 
 	if ( m_bDebugCheck )
@@ -4110,6 +4109,12 @@ bool RtIndex_c::Prealloc ( bool bStripPath, FilenameBuilder_i * pFilenameBuilder
 	if ( m_bDebugCheck )
 		return true;
 
+	CSphString sMutableFile;
+	sMutableFile.SetSprintf ( "%s%s", m_sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
+	if ( !m_tMutableSettings.Load ( sMutableFile.cstr(), m_sIndexName.cstr() ) )
+		return false;
+	SetMemLimit ( m_tMutableSettings.m_iMemLimit );
+
 	m_bPathStripped = bStripPath;
 
 	if ( !PreallocDiskChunks ( pFilenameBuilder ) )
@@ -4135,12 +4140,6 @@ void RtIndex_c::Preread ()
 	ScRL_t tChunkRLock ( m_tChunkLock );
 	for ( auto & dDiskChunk : m_dDiskChunks )
 		dDiskChunk->Preread();
-}
-
-
-void RtIndex_c::SetMemorySettings ( const FileAccessSettings_t & tFileAccessSettings )
-{
-	m_tFiles = tFileAccessSettings;
 }
 
 static bool CheckVectorLength ( int iLen, int64_t iSaneLen, const char * sAt, CSphString & sError )
@@ -6845,7 +6844,7 @@ bool RtIndex_c::MultiQuery ( CSphQueryResult & tResult, const CSphQuery & tQuery
 	bool bFullscan = pQueryParser->IsFullscan ( tQuery ); // use this
 	// no need to create ranker, etc if there's no query
 	if ( !bFullscan )
-		iStackNeed = PrepareFTSearch (this, IsStarDict ( m_bKeywordDict ), m_bKeywordDict, m_iExpandKeywords, m_iExpansionLimit,
+		iStackNeed = PrepareFTSearch (this, IsStarDict ( m_bKeywordDict ), m_bKeywordDict, m_tMutableSettings.m_iExpandKeywords, m_iExpansionLimit,
 			(const char *) sModifiedQuery, m_tSettings, pQueryParser, tQuery, m_tSchema, &tGuard.m_dRamChunks,
 			m_pTokenizer->Clone ( SPH_CLONE_QUERY ), pQueryTokenizer, pDict, tMeta, pProfiler,  &tPayloads, tParsed );
 
@@ -8445,13 +8444,13 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	// compare options
 	if ( !bSame || uTokHash!=pTokenizer->GetSettingsFNV() || uDictHash!=tDict->GetSettingsFNV() ||
 		iMaxCodepointLength!=pTokenizer->GetMaxCodepointLength() || sphGetSettingsFNV ( tIndexSettings )!=sphGetSettingsFNV ( tSettings.m_tIndex ) ||
-		!bReFilterSame || !bIcuSame || iMemLimit!=tSettings.m_iMemLimit )
+		!bReFilterSame || !bIcuSame || tSettings.m_tMutableSettings.HasSettings() )
 	{
 		tSetup.m_pTokenizer = pTokenizer.Leak();
 		tSetup.m_pDict = tDict.Leak();
 		tSetup.m_tIndex = tSettings.m_tIndex;
 		tSetup.m_pFieldFilter = tFieldFilter.Leak();
-		tSetup.m_iMemLimit = tSettings.m_iMemLimit;
+		tSetup.m_tMutableSettings = tSettings.m_tMutableSettings;
 		return false;
 	}
 
@@ -8481,7 +8480,11 @@ bool RtIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 	if ( tSetup.m_bChangeSchema )
 		SetSchema ( tSetup.m_tSchema );
 
-	m_iSoftRamLimit = tSetup.m_iMemLimit;
+	if ( tSetup.m_tMutableSettings.HasSettings() )
+	{
+		m_tMutableSettings.Combine ( tSetup.m_tMutableSettings );
+		SetMemLimit ( m_tMutableSettings.m_iMemLimit );
+	}
 
 	Setup ( tSetup.m_tIndex );
 	SetTokenizer ( tSetup.m_pTokenizer );
@@ -8578,6 +8581,12 @@ void RtIndex_c::GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameB
 	}
 
 	GetSettingsFiles ( m_pTokenizer, m_pDict, GetSettings(), pParentBuilder, dFiles );
+
+	if ( m_tMutableSettings.NeedSave() ) // should be file already after post-setup
+	{
+		CSphString & sMutableSettings = dFiles.Add();
+		sMutableSettings.SetSprintf ( "%s%s", m_sPath.cstr(), sphGetExt ( SPH_EXT_SETTINGS ).cstr() );
+	}
 
 	RlChunkGuard_t tGuard ( m_tReading );
 	GetReaderChunks ( tGuard );
@@ -8773,7 +8782,7 @@ Bson_t RtIndex_c::ExplainQuery ( const CSphString & sQuery ) const
 	tArgs.m_pSettings = &m_tSettings;
 	tArgs.m_pWordlist = this;
 	tArgs.m_pQueryTokenizer = pQueryTokenizer;
-	tArgs.m_iExpandKeywords = m_iExpandKeywords;
+	tArgs.m_iExpandKeywords = m_tMutableSettings.m_iExpandKeywords;
 	tArgs.m_iExpansionLimit = m_iExpansionLimit;
 	tArgs.m_bExpandPrefix = ( m_pDict->GetSettings().m_bWordDict && IsStarDict ( m_bKeywordDict ) );
 
@@ -10545,4 +10554,10 @@ uint64_t SchemaFNV ( const ISphSchema & tSchema )
 	}
 
 	return uHash;
+}
+
+void RtIndex_c::SetMemLimit ( int64_t iMemLimit )
+{
+	m_iSoftRamLimit = iMemLimit;
+	m_iDoubleBufferLimit = ( m_iSoftRamLimit * SPH_RT_DOUBLE_BUFFER_PERCENT ) / 100;
 }

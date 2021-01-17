@@ -57,10 +57,19 @@ searchd
 
 <sphinxql d="0">SELECT * FROM test:rt1</sphinxql>
 
+<sphinxql d="0">create table rt2 (title text indexed, gid int) rt_mem_limit='256k' expand_keywords='1' min_infix_len='3'</sphinxql>
+<sphinxql d="0">ALTER CLUSTER test ADD rt2</sphinxql>
+<sphinxql d="0">replace into test:rt2 (id,title) values (20, 'testik'),  (30, 'restestik'),  (40, 'restok')</sphinxql>
+<sphinxql d="1">SHOW INDEX rt2 SETTINGS</sphinxql>
+<sphinxql d="1">SELECT * FROM test:rt2 where match ( 'tes' )</sphinxql>
+
 <!-- cleanup -->
 <sphinxql d="0">ALTER CLUSTER test DROP rt1</sphinxql>
+<sphinxql d="0">ALTER CLUSTER test DROP rt2</sphinxql>
 <sphinxql d="0">DROP TABLE rt1</sphinxql>
 <sphinxql d="1">DROP TABLE rt1</sphinxql>
+<sphinxql d="0">DROP TABLE rt2</sphinxql>
+<sphinxql d="1">DROP TABLE rt2</sphinxql>
 
 </sphqueries>
 

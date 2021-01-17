@@ -134,11 +134,6 @@ int						g_iClientTimeoutS	= 300;
 int						g_iClientQlTimeoutS	= 900;	// sec
 static int				g_iMaxConnection	= 0; // unlimited
 static int				g_iThreads;				// defined in config, or =cpu cores
-#if !USE_WINDOWS
-static bool				g_bPreopenIndexes	= true;
-#else
-static bool				g_bPreopenIndexes	= false;
-#endif
 static bool				g_bWatchdog			= true;
 static int				g_iExpansionLimit	= 0;
 static int				g_iShutdownTimeoutUs	= 3000000; // default timeout on daemon shutdown and stopwait is 3 seconds
@@ -169,8 +164,6 @@ static int				g_iMaxBatchQueries	= 32;
 static ESphCollation	g_eCollation = SPH_COLLATION_DEFAULT;
 
 static int				g_iDocstoreCache = 0;
-
-static FileAccessSettings_t g_tDefaultFA;
 
 auto &			g_iDistThreads		= getDistThreads();
 int				g_iAgentConnectTimeoutMs = 1000;
@@ -11364,16 +11357,6 @@ static CSphString BuildCreateTableRt ( const CSphString & sName, const CSphIndex
 	assert(pIndex);
 
 	CSphString sCreateTable = BuildCreateTable ( sName, pIndex, tSchema );
-
-	// FIXME: create a separate struct (and move it to indexsettings.cpp) when there are more RT-specific settings
-	if ( pIndex->IsRT() )
-	{
-		auto * pRt = (RtIndex_i*)pIndex;
-		int64_t iMemLimit = pRt->GetMemLimit();
-		if ( iMemLimit!=DEFAULT_RT_MEM_LIMIT )
-			sCreateTable.SetSprintf ( "%s rt_mem_limit='" INT64_FMT "'", sCreateTable.cstr(), iMemLimit );
-	}
-
 	return sCreateTable;
 }
 
@@ -14596,7 +14579,7 @@ static bool PrepareReconfigure ( const CSphString & sIndex, const CSphConfigSect
 	tSettings.m_tTokenizer.Setup ( hIndex, sWarning );
 	tSettings.m_tDict.Setup ( hIndex, pFilenameBuilder.Ptr(), sWarning );
 	tSettings.m_tFieldFilter.Setup ( hIndex, sWarning );
-	tSettings.m_iMemLimit = hIndex.GetSize64 ( "rt_mem_limit", DEFAULT_RT_MEM_LIMIT );
+	tSettings.m_tMutableSettings.Load ( hIndex, false, nullptr );
 
 	if ( !sphRTSchemaConfigure ( hIndex, tSettings.m_tSchema, sError, !tSettings.m_bChangeSchema ) )
 	{
@@ -16278,17 +16261,14 @@ static bool RotateIndexMT ( ServedIndex_c* pIndex, const CSphString & sIndex, St
 			return false;
 		}
 		// keep settings from current index description
-		tNewIndex.m_tFileAccessSettings = pCurrentlyServed->m_tFileAccessSettings;
-		tNewIndex.m_iExpandKeywords = pCurrentlyServed->m_iExpandKeywords;
-		tNewIndex.m_bPreopen = pCurrentlyServed->m_bPreopen;
+		tNewIndex.m_tSettings = pCurrentlyServed->m_tSettings;
+		tNewIndex.m_tSettings.m_bPreopen = ( pCurrentlyServed->m_tSettings.m_bPreopen || MutableIndexSettings_c::GetDefaults().m_bPreopen );
 		tNewIndex.m_sGlobalIDFPath = pCurrentlyServed->m_sGlobalIDFPath;
 
 		// set settings into index
-		tNewIndex.m_pIndex->m_iExpandKeywords = pCurrentlyServed->m_iExpandKeywords;
 		tNewIndex.m_bOnlyNew = pCurrentlyServed->m_bOnlyNew;
-		tNewIndex.m_pIndex->SetPreopen ( pCurrentlyServed->m_bPreopen || g_bPreopenIndexes );
 		tNewIndex.m_pIndex->SetGlobalIDFPath ( pCurrentlyServed->m_sGlobalIDFPath );
-		tNewIndex.m_pIndex->SetMemorySettings ( tNewIndex.m_tFileAccessSettings );
+		tNewIndex.m_pIndex->SetMutableSettings ( tNewIndex.m_tSettings );
 		dActivePath.SetBase ( pCurrentlyServed->m_sIndexPath );
 		dNewPath.SetBase ( pCurrentlyServed->m_sNewPath );
 		eRot = CheckIndexHeaderRotate ( *pCurrentlyServed );
@@ -16519,112 +16499,10 @@ static void InvokeRotation() REQUIRES (MainThread)
 	TaskManager::StartJob ( iRotationTask, pIndexesForRotation );
 }
 
-
-static int ParseKeywordExpansion ( const char * sValue )
+static void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex, bool bMutableOpt, StrVec_t * pWarnings )
 {
-	if ( !sValue || *sValue=='\0' )
-		return KWE_DISABLED;
-
-	int iOpt = KWE_DISABLED;
-	while ( sValue && *sValue )
-	{
-		if ( !sphIsAlpha ( *sValue ) )
-		{
-			sValue++;
-			continue;
-		}
-
-		if ( *sValue>='0' && *sValue<='9' )
-		{
-			int iVal = atoi ( sValue );
-			if ( iVal!=0 )
-				iOpt = KWE_ENABLED;
-			break;
-		}
-
-		if ( sphStrMatchStatic ( "exact", sValue ) )
-		{
-			iOpt |= KWE_EXACT;
-			sValue += 5;
-		} else if ( sphStrMatchStatic ( "star", sValue ) )
-		{
-			iOpt |= KWE_STAR;
-			sValue += 4;
-		} else
-		{
-			sValue++;
-		}
-	}
-
-	return iOpt;
-}
-
-
-void ConfigureTemplateIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex )
-{
-	pIdx->m_iExpandKeywords = ParseKeywordExpansion ( hIndex.GetStr( "expand_keywords" ).cstr() );
-}
-
-
-static FileAccess_e GetFileAccess (  const CSphConfigSection & hIndex, const char * sKey, bool bList, FileAccess_e eDefault )
-{
-	// should use original value as default due to deprecated options
-	auto eValue = eDefault;
-	auto sVal = hIndex.GetStr(sKey);
-	if ( !sVal.IsEmpty() )
-		eValue = ParseFileAccess ( sVal.cstr() );
-	if ( eValue==FileAccess_e::UNKNOWN )
-	{
-		sphWarning( "%s unknown value %s, use default %s", sKey, sVal.cstr(), FileAccessName( eDefault ));
-		eValue = eDefault;
-	}
-
-	// but then check might reset invalid value to real default
-	if ( ( bList && eValue==FileAccess_e::MMAP_PREREAD) ||
-		( !bList && eValue==FileAccess_e::FILE) )
-	{
-		sphWarning( "%s invalid value %s, use default %s", sKey, FileAccessName(eValue), FileAccessName(eDefault));
-		return eDefault;
-	}
-	return eValue;
-}
-
-
-void ConfigureLocalIndex ( ServedDesc_t * pIdx, const CSphConfigSection & hIndex )
-{
-	ConfigureTemplateIndex ( pIdx, hIndex);
-	pIdx->m_bPreopen = ( hIndex.GetInt ( "preopen", 0 )!=0 );
+	pIdx->m_tSettings.Load ( hIndex, bMutableOpt, pWarnings );
 	pIdx->m_sGlobalIDFPath = hIndex.GetStr ( "global_idf" );
-	auto& tFileSettings = pIdx->m_tFileAccessSettings;
-
-	tFileSettings = g_tDefaultFA;
-	// DEPRICATED - remove these 2 options
-	if ( hIndex.GetBool ( "mlock", false ) )
-	{
-		tFileSettings.m_eAttr = FileAccess_e::MLOCK;
-		tFileSettings.m_eBlob = FileAccess_e::MLOCK;
-	}
-	if ( hIndex.Exists ( "ondisk_attrs" ) )
-	{
-		bool bOnDiskAttrs = hIndex.GetBool ( "ondisk_attrs", false );
-		bool bOnDiskPools = ( hIndex.GetStr ( "ondisk_attrs" )=="pool" );
-
-		if ( bOnDiskAttrs || bOnDiskPools )
-			tFileSettings.m_eAttr = FileAccess_e::MMAP;
-		if ( bOnDiskPools )
-			tFileSettings.m_eBlob = FileAccess_e::MMAP;
-	}
-
-	// need to keep value from deprecated options for some time - use it as defaults on parse for now
-	tFileSettings.m_eAttr = GetFileAccess( hIndex, "access_plain_attrs", false, tFileSettings.m_eAttr );
-	tFileSettings.m_eBlob = GetFileAccess( hIndex, "access_blob_attrs", false, tFileSettings.m_eBlob );
-	tFileSettings.m_eDoclist = GetFileAccess( hIndex, "access_doclists", true, tFileSettings.m_eDoclist );
-	tFileSettings.m_eHitlist = GetFileAccess( hIndex, "access_hitlists", true, tFileSettings.m_eHitlist );
-
-	// inherit global value, might be absent - 0
-	// set correct value via GetReadBuffer
-	pIdx->m_tFileAccessSettings.m_iReadBufferDocList = GetReadBuffer ( hIndex.GetInt ( "read_buffer_docs", g_tDefaultFA.m_iReadBufferDocList ) );
-	pIdx->m_tFileAccessSettings.m_iReadBufferHitList = GetReadBuffer ( hIndex.GetInt ( "read_buffer_hits", g_tDefaultFA.m_iReadBufferHitList ) );
 }
 
 
@@ -16863,17 +16741,48 @@ static bool ConfigureRTPercolate ( CSphSchema & tSchema, CSphIndexSettings & tSe
 	return true;
 }
 
-// common configuration and add percolate or rt index
-static ESphAddIndex AddRTPercolate ( GuardedHash_c & dPost, const char * szIndexName, ServedDesc_t & tIdx, const CSphConfigSection & hIndex, const CSphIndexSettings & tSettings,
-	bool bReplace, CSphString & sError )
+///////////////////////////////////////////////
+/// configure realtime index and add it to hash
+///////////////////////////////////////////////
+ESphAddIndex AddRTPercolate ( bool bRT, GuardedHash_c & dPost, const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError )
 {
+	bool bWordDict = true;
+	if ( bRT )
+	{
+		auto sIndexType = hIndex.GetStr ( "dict", "keywords" );
+		bWordDict = true;
+		if ( sIndexType=="crc" )
+			bWordDict = false;
+		else if ( sIndexType!="keywords" )
+		{
+			sError.SetSprintf ( "index '%s': unknown dict=%s; only 'keywords' or 'crc' values allowed", szIndexName, sIndexType.cstr() );
+			return ADD_ERROR;
+		}
+	}
+
+	CSphSchema tSchema ( szIndexName );
+	CSphIndexSettings tSettings;
+	if ( !ConfigureRTPercolate ( tSchema, tSettings, szIndexName, hIndex, bReplace, bWordDict, !bRT, sError ))
+		return ADD_ERROR;
+
+	// index
+	ServedDesc_t tIdx;
+	ConfigureLocalIndex ( &tIdx, hIndex, bMutableOpt, pWarnings );
+
+	if ( bRT )
+	{
+		tIdx.m_pIndex = sphCreateIndexRT ( tSchema, szIndexName, tIdx.m_tSettings.m_iMemLimit, hIndex["path"].cstr(), bWordDict );
+		tIdx.m_eType = IndexType_e::RT;
+	} else
+	{
+		tIdx.m_pIndex = CreateIndexPercolate ( tSchema, szIndexName, hIndex["path"].cstr () );
+		tIdx.m_eType = IndexType_e::PERCOLATE;
+	}
+
 	tIdx.m_sIndexPath = hIndex["path"].strval ();
-	ConfigureLocalIndex ( &tIdx, hIndex );
-	tIdx.m_pIndex->m_iExpandKeywords = tIdx.m_iExpandKeywords;
+	tIdx.m_pIndex->SetMutableSettings ( tIdx.m_tSettings );
 	tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
-	tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );
 	tIdx.m_pIndex->SetGlobalIDFPath ( tIdx.m_sGlobalIDFPath );
-	tIdx.m_pIndex->SetMemorySettings ( tIdx.m_tFileAccessSettings );
 
 	tIdx.m_pIndex->Setup ( tSettings );
 	tIdx.m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
@@ -16883,68 +16792,11 @@ static ESphAddIndex AddRTPercolate ( GuardedHash_c & dPost, const char * szIndex
 		return ADD_DSBLED;
 	return ADD_ERROR;
 }
-///////////////////////////////////////////////
-/// configure realtime index and add it to hash
-///////////////////////////////////////////////
-ESphAddIndex AddRTIndex ( GuardedHash_c & dPost, const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, CSphString & sError, StrVec_t * pWarnings )
-{
-	auto sIndexType = hIndex.GetStr ( "dict", "keywords" );
-	bool bWordDict = true;
-	if ( sIndexType=="crc" )
-		bWordDict = false;
-	else if ( sIndexType!="keywords" )
-	{
-		sError.SetSprintf ( "index '%s': unknown dict=%s; only 'keywords' or 'crc' values allowed", szIndexName, sIndexType.cstr() );
-		return ADD_ERROR;
-	}
-
-	// RAM chunk size
-	int64_t iRamSize = hIndex.GetSize64 ( "rt_mem_limit", DEFAULT_RT_MEM_LIMIT );
-	if ( iRamSize<128 * 1024 )
-	{
-		if ( pWarnings )
-			pWarnings->Add ( "rt_mem_limit extremely low, using 128K instead" );
-		iRamSize = 128 * 1024;
-	} else if ( iRamSize<8 * 1024 * 1024 )
-	{
-		if ( pWarnings )
-			pWarnings->Add ( "rt_mem_limit very low (under 8 MB)" );
-	}
-
-	CSphSchema tSchema ( szIndexName );
-	CSphIndexSettings tSettings;
-	if ( !ConfigureRTPercolate ( tSchema, tSettings, szIndexName, hIndex, bReplace, bWordDict, false, sError ))
-		return ADD_ERROR;
-
-	// index
-	ServedDesc_t tIdx;
-	tIdx.m_pIndex = sphCreateIndexRT ( tSchema, szIndexName, iRamSize, hIndex["path"].cstr (), bWordDict );
-	tIdx.m_eType = IndexType_e::RT;
-	tIdx.m_iMemLimit = iRamSize;
-	return AddRTPercolate ( dPost, szIndexName, tIdx, hIndex, tSettings, bReplace, sError );
-}
-
-////////////////////////////////////////////////
-/// configure percolate index and add it to hash
-////////////////////////////////////////////////
-ESphAddIndex AddPercolateIndex ( GuardedHash_c & dPost, const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, CSphString & sError )
-{
-	CSphSchema tSchema ( szIndexName );
-	CSphIndexSettings tSettings;
-	if ( !ConfigureRTPercolate ( tSchema, tSettings, szIndexName, hIndex, bReplace, true, true, sError ) )
-		return ADD_ERROR;
-
-	// index
-	ServedDesc_t tIdx;
-	tIdx.m_pIndex = CreateIndexPercolate ( tSchema, szIndexName, hIndex["path"].cstr () );
-	tIdx.m_eType = IndexType_e::PERCOLATE;
-	return AddRTPercolate ( dPost, szIndexName, tIdx, hIndex, tSettings, bReplace, sError );
-}
 
 ////////////////////////////////////////////
 /// configure local index and add it to hash
 ////////////////////////////////////////////
-static ESphAddIndex AddPlainIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, CSphString & sError ) REQUIRES ( MainThread )
+static ESphAddIndex AddPlainIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError ) REQUIRES ( MainThread )
 {
 	ServedDesc_t tIdx;
 
@@ -16963,16 +16815,14 @@ static ESphAddIndex AddPlainIndex ( const char * szIndexName, const CSphConfigSe
 	}
 
 	// configure memlocking, star
-	ConfigureLocalIndex ( &tIdx, hIndex );
+	ConfigureLocalIndex ( &tIdx, hIndex, bMutableOpt, pWarnings );
 
 	// try to create index
 	tIdx.m_sIndexPath = hIndex["path"].strval ();
 	tIdx.m_pIndex = sphCreateIndexPhrase ( szIndexName, tIdx.m_sIndexPath.cstr () );
-	tIdx.m_pIndex->m_iExpandKeywords = tIdx.m_iExpandKeywords;
 	tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
-	tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );
+	tIdx.m_pIndex->SetMutableSettings ( tIdx.m_tSettings );
 	tIdx.m_pIndex->SetGlobalIDFPath ( tIdx.m_sGlobalIDFPath );
-	tIdx.m_pIndex->SetMemorySettings ( tIdx.m_tFileAccessSettings );
 	tIdx.m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
 
 	// done
@@ -16984,7 +16834,7 @@ static ESphAddIndex AddPlainIndex ( const char * szIndexName, const CSphConfigSe
 ///////////////////////////////////////////////
 /// configure template index and add it to hash
 ///////////////////////////////////////////////
-static ESphAddIndex AddTemplateIndex ( const char * szIndexName, const CSphConfigSection &hIndex, bool bReplace )
+static ESphAddIndex AddTemplateIndex ( const char * szIndexName, const CSphConfigSection &hIndex, bool bReplace, bool bMutableOpt, StrVec_t * pWarnings )
 	REQUIRES ( MainThread )
 {
 	ServedDesc_t tIdx;
@@ -16997,11 +16847,11 @@ static ESphAddIndex AddTemplateIndex ( const char * szIndexName, const CSphConfi
 	}
 
 	// configure memlocking, star
-	ConfigureTemplateIndex ( &tIdx, hIndex );
+	ConfigureLocalIndex ( &tIdx, hIndex, bMutableOpt, pWarnings );
 
 	// try to create index
 	tIdx.m_pIndex = sphCreateIndexTemplate ( szIndexName );
-	tIdx.m_pIndex->m_iExpandKeywords = tIdx.m_iExpandKeywords;
+	tIdx.m_pIndex->SetMutableSettings ( tIdx.m_tSettings );
 	tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 
 	CSphIndexSettings s;
@@ -17046,12 +16896,12 @@ static ESphAddIndex AddTemplateIndex ( const char * szIndexName, const CSphConfi
 
 // AddIndex() -> AddIndexMT() // from main thread
 // RemoteLoadIndex() -> LoadIndex() -> AddIndexMT() // only Percolate! From other threads
-ESphAddIndex AddIndexMT ( GuardedHash_c & dPost, const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, CSphString & sError, StrVec_t * pWarnings )
+ESphAddIndex AddIndexMT ( GuardedHash_c & dPost, const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError )
 {
 	switch ( TypeOfIndexConfig ( hIndex.GetStr ( "type", nullptr ) ) )
 	{
-		case IndexType_e::RT:		return AddRTIndex ( dPost, szIndexName, hIndex, bReplace, sError, pWarnings );
-		case IndexType_e::PERCOLATE:return AddPercolateIndex ( dPost, szIndexName, hIndex, bReplace, sError );
+		case IndexType_e::RT:		return AddRTPercolate ( true, dPost, szIndexName, hIndex, bReplace, bMutableOpt, pWarnings, sError );
+		case IndexType_e::PERCOLATE:return AddRTPercolate ( false, dPost, szIndexName, hIndex, bReplace, bMutableOpt, pWarnings, sError );
 		case IndexType_e::DISTR:	return AddDistributedIndex ( szIndexName, hIndex, sError, pWarnings );
 
 		default:; // shut up warnings
@@ -17062,7 +16912,7 @@ ESphAddIndex AddIndexMT ( GuardedHash_c & dPost, const char * szIndexName, const
 
 // ServiceMain() -> ConfigureAndPreload() -> AddIndex()
 // ServiceMain() -> TickHead() -> CheckRotate() -> ReloadIndexSettings() -> AddIndex()
-static ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, CSphString & sError ) REQUIRES (	MainThread )
+static ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace, bool bMutableOpt, StrVec_t * pWarnings, CSphString & sError ) REQUIRES ( MainThread )
 {
 	switch ( TypeOfIndexConfig ( hIndex.GetStr ( "type", nullptr )))
 	{
@@ -17070,11 +16920,11 @@ static ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection
 			return AddDistributedIndex ( szIndexName, hIndex, sError );
 		case IndexType_e::RT:
 		case IndexType_e::PERCOLATE:
-			return AddIndexMT ( g_dPostIndexes, szIndexName, hIndex, bReplace, sError );
+			return AddIndexMT ( g_dPostIndexes, szIndexName, hIndex, bReplace, bMutableOpt, pWarnings, sError );
 		case IndexType_e::TEMPLATE:
-			return AddTemplateIndex ( szIndexName, hIndex, bReplace );
+			return AddTemplateIndex ( szIndexName, hIndex, bReplace, bMutableOpt, pWarnings );
 		case IndexType_e::PLAIN:
-			return AddPlainIndex ( szIndexName, hIndex, bReplace, sError );
+			return AddPlainIndex ( szIndexName, hIndex, bReplace, bMutableOpt, pWarnings, sError );
 		case IndexType_e::ERROR_:
 		default:
 			break;
@@ -17237,10 +17087,10 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 					if ( !bReplaceLocal )
 					{
 						ServedDesc_t tDesc;
-						ConfigureLocalIndex ( &tDesc, hIndex );
-						bReconfigure = ( tDesc.m_iExpandKeywords!=pServedRLocked->m_iExpandKeywords ||
-							tDesc.m_tFileAccessSettings!=pServedRLocked->m_tFileAccessSettings ||
-							tDesc.m_bPreopen!=pServedRLocked->m_bPreopen ||
+						ConfigureLocalIndex ( &tDesc, hIndex, false, nullptr );
+						bReconfigure = ( tDesc.m_tSettings.m_iExpandKeywords!=pServedRLocked->m_tSettings.m_iExpandKeywords ||
+							tDesc.m_tSettings.m_tFileAccess!=pServedRLocked->m_tSettings.m_tFileAccess ||
+							tDesc.m_tSettings.m_bPreopen!=pServedRLocked->m_tSettings.m_bPreopen ||
 							tDesc.m_sGlobalIDFPath!=pServedRLocked->m_sGlobalIDFPath );
 						bReconfigure |= ( pServedRLocked->m_eType!=IndexType_e::TEMPLATE
 								&& hIndex.Exists ( "path" )
@@ -17253,7 +17103,7 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 			if ( bReconfigure )
 			{
 				ServedDescWPtr_c pServedWLocked ( pServedIndex );
-				ConfigureLocalIndex ( pServedWLocked, hIndex );
+				ConfigureLocalIndex ( pServedWLocked, hIndex, false, nullptr );
 				if ( pServedWLocked->m_eType!=IndexType_e::TEMPLATE
 					&& hIndex.Exists ( "path" )
 					&& hIndex["path"].strval ()!=pServedWLocked->m_sIndexPath )
@@ -17303,7 +17153,7 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 
 		// fixme: report errors
 		CSphString sError;
-		ESphAddIndex eType = AddIndex ( sIndexName.cstr(), hIndex, bReplaceLocal, sError );
+		ESphAddIndex eType = AddIndex ( sIndexName.cstr(), hIndex, bReplaceLocal, false, nullptr, sError );
 
 		// If we've added disabled index (i.e. one which need to be prealloced first)
 		// instead of existing distributed - we don't have to delete last right now,
@@ -18315,31 +18165,32 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_iThdQueueMax = hSearchd.GetInt ( "jobs_queue_size", g_iThdQueueMax );
 
 	g_iPersistentPoolSize = hSearchd.GetInt ("persistent_connections_limit");
-	g_bPreopenIndexes = hSearchd.GetBool ( "preopen_indexes" );
+	MutableIndexSettings_c::GetDefaults().m_bPreopen = hSearchd.GetBool ( "preopen_indexes" );
 	sphSetUnlinkOld ( hSearchd.GetBool ( "unlink_old" ) );
 	g_iExpansionLimit = hSearchd.GetInt ( "expansion_limit" );
 
 	// initialize buffering settings
 	SetUnhintedBuffer ( hSearchd.GetSize( "read_unhinted", DEFAULT_READ_UNHINTED ) );
 	int iReadBuffer = hSearchd.GetSize ( "read_buffer", DEFAULT_READ_BUFFER );
-	g_tDefaultFA.m_iReadBufferDocList = hSearchd.GetSize ( "read_buffer_docs", iReadBuffer );
-	g_tDefaultFA.m_iReadBufferHitList = hSearchd.GetSize ( "read_buffer_hits", iReadBuffer );
-	g_tDefaultFA.m_eDoclist = GetFileAccess( hSearchd, "access_doclists", true, FileAccess_e::FILE );
-	g_tDefaultFA.m_eHitlist = GetFileAccess( hSearchd, "access_hitlists", true, FileAccess_e::FILE );
+	FileAccessSettings_t & tDefaultFA = MutableIndexSettings_c::GetDefaults().m_tFileAccess;
+	tDefaultFA.m_iReadBufferDocList = hSearchd.GetSize ( "read_buffer_docs", iReadBuffer );
+	tDefaultFA.m_iReadBufferHitList = hSearchd.GetSize ( "read_buffer_hits", iReadBuffer );
+	tDefaultFA.m_eDoclist = GetFileAccess( hSearchd, "access_doclists", true, FileAccess_e::FILE );
+	tDefaultFA.m_eHitlist = GetFileAccess( hSearchd, "access_hitlists", true, FileAccess_e::FILE );
 
-	g_tDefaultFA.m_eAttr = FileAccess_e::MMAP_PREREAD;
-	g_tDefaultFA.m_eBlob = FileAccess_e::MMAP_PREREAD;
+	tDefaultFA.m_eAttr = FileAccess_e::MMAP_PREREAD;
+	tDefaultFA.m_eBlob = FileAccess_e::MMAP_PREREAD;
 
 	bool bOnDiskAttrs = hSearchd.GetBool ( "ondisk_attrs_default", false );
 	bool bOnDiskPools = hSearchd.GetStr ( "ondisk_attrs_default" )=="pool";
 	if ( bOnDiskAttrs || bOnDiskPools )
-		g_tDefaultFA.m_eAttr = FileAccess_e::MMAP;
+		tDefaultFA.m_eAttr = FileAccess_e::MMAP;
 
 	if ( bOnDiskPools )
-		g_tDefaultFA.m_eBlob = FileAccess_e::MMAP;
+		tDefaultFA.m_eBlob = FileAccess_e::MMAP;
 
-	g_tDefaultFA.m_eAttr = GetFileAccess( hSearchd, "access_plain_attrs", false, g_tDefaultFA.m_eAttr );
-	g_tDefaultFA.m_eBlob = GetFileAccess( hSearchd, "access_blob_attrs", false, g_tDefaultFA.m_eBlob );
+	tDefaultFA.m_eAttr = GetFileAccess( hSearchd, "access_plain_attrs", false, tDefaultFA.m_eAttr );
+	tDefaultFA.m_eBlob = GetFileAccess( hSearchd, "access_blob_attrs", false, tDefaultFA.m_eBlob );
 
 	if ( hSearchd("subtree_docs_cache") )
 		g_iMaxCachedDocs = hSearchd.GetSize ( "subtree_docs_cache", g_iMaxCachedDocs );
@@ -18359,7 +18210,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	// sha1 password hash for shutdown action
 	g_sShutdownToken = hSearchd.GetStr ("shutdown_token");
 
-	if ( !g_bSeamlessRotate && g_bPreopenIndexes && !bTestMode )
+	if ( !g_bSeamlessRotate && MutableIndexSettings_c::GetDefaults().m_bPreopen && !bTestMode )
 		sphWarning ( "preopen_indexes=1 has no effect with seamless_rotate=0" );
 
 	SetAttrFlushPeriod ( hSearchd.GetUsTime64S ( "attr_flush_period", 0 ));
@@ -18503,7 +18354,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 ESphAddIndex ConfigureAndPreloadIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		StrVec_t & dWarnings, CSphString & sError )
 {
-	ESphAddIndex eAdd = AddIndex ( sIndexName, hIndex, false, sError );
+	ESphAddIndex eAdd = AddIndex ( sIndexName, hIndex, false, false, nullptr, sError );
 
 	// local plain, rt, percolate added, but need to be at least prealloced before they could work.
 	if ( eAdd!=ADD_DSBLED )

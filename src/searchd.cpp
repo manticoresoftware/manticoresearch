@@ -14313,7 +14313,7 @@ void PutIndexStatus ( RowBuffer_i & tOut, const CSphIndex * pIndex )
 void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 {
 	tOut.HeadBegin ( 13 );
-	tOut.HeadColumn ( "chunk", MYSQL_COL_LONG );
+	tOut.HeadColumn ( "chunk_id", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "base_name" );
 	tOut.HeadColumn ( "indexed_documents", MYSQL_COL_LONG );
 	tOut.HeadColumn ( "indexed_bytes", MYSQL_COL_LONGLONG );
@@ -14355,7 +14355,7 @@ void HandleSelectIndexStatus ( RowBuffer_i & tOut, const SqlStmt_t * pStmt )
 			if ( !pChunk )
 				break;
 
-			tOut.PutNumAsString ( iChunk );
+			tOut.PutNumAsString ( pChunk->m_iChunk );
 			PutIndexStatus ( tOut, pChunk );
 			if ( !tOut.Commit () )
 				break;

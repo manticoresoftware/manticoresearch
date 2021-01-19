@@ -946,12 +946,13 @@ public:
 	bool				ForceDiskChunk() final;
 	bool				AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFatal, CSphString & sError ) 			final  EXCLUDES (m_tReading );
 	bool				Truncate ( CSphString & sError ) final;
-	void				Optimize ( int iCutoff, int iFrom, int iTo, const char * szUvarFilter ) final;
+	void				Optimize ( int iCutoff, int iFromID, int iToID, const char * szUvarFilter ) final;
 	void				CommonMerge ( Selector_t&& fnSelector, const char* szUvarFilter=nullptr );
 	void				DropDiskChunk ( int iChunk ) REQUIRES ( m_tOptimizingLock );
 	bool				CompressOneChunk ( int iChunk ) REQUIRES ( m_tOptimizingLock );
 	bool				MergeTwoChunks ( int iA, int iB ) REQUIRES ( m_tOptimizingLock );
 	bool				SplitOneChunk ( int iChunk, const char* szUvarFilter ) REQUIRES ( m_tOptimizingLock );
+	int					ChunkIdxByChunkID (int iChunkID) const REQUIRES_SHARED ( m_tChunkLock );
 
 	// helpers
 	CSphIndex *			CompressDiskChunk ( const CSphIndex * pChunk ) REQUIRES ( m_tOptimizingLock );
@@ -7448,6 +7449,11 @@ static std::pair<int, int64_t> GetNextSmallestChunk ( const CSphVector<CSphIndex
 	return { iRes, iLastSize };
 }
 
+int RtIndex_c::ChunkIdxByChunkID ( int iChunkID ) const
+{
+	return m_dDiskChunks.GetFirst ( [iChunkID] ( const CSphIndex * pIdx ) { return iChunkID==pIdx->m_iChunk; } );
+}
+
 void RtIndex_c::DropDiskChunk ( int iChunk )
 {
 	sphLogDebug( "rt optimize: index %s: drop disk chunk %d",  m_sIndexName.cstr(), iChunk );
@@ -7996,19 +8002,22 @@ void RtIndex_c::CommonMerge( Selector_t&& fnSelector, const char* szUvarFilter )
 	}
 }
 
-void RtIndex_c::Optimize( int iCutoff, int iFrom, int iTo, const char * szUvarFilter ) REQUIRES ( m_tChunkLock )
+void RtIndex_c::Optimize( int iCutoff, int iFromID, int iToID, const char * szUvarFilter ) REQUIRES ( m_tChunkLock )
 {
 	int iChunks = m_dDiskChunks.GetLength ();
 
 	// manual case: iFrom and iTo provided from outside, iCutoff is not in game
-	if ( iFrom!=-1 || iTo!=-1 )
+	// both iFrom and iTo are ChunkIDs, NOT order chunk numbers!
+	if ( iFromID!=-1 || iToID!=-1 )
 	{
+		auto iFrom = ChunkIdxByChunkID ( iFromID );
+		auto iTo = ChunkIdxByChunkID ( iToID );
 		if ( iFrom>=iChunks || iTo>=iChunks )
 			return;
 
 		// 4 cases are in game:
 		// merge N into -1 = drop chunk N
-		// merge -1 into N = complress chunk N (i.e. wipe deads). If everything dead - will drop chunk.
+		// merge -1 into N = compress chunk N (i.e. wipe deads). If everything dead - will drop chunk.
 		// merge N into self = split chunk N (also filter must be provided)
 		// merge N into M = classical merge. N will be removed, M will be replaced by merged chunk.
 		CommonMerge( [&iFrom,&iTo] (int* piA, int* piB) -> bool

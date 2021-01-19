@@ -66,6 +66,9 @@ index test
 	debug split test 1 on @foo option sync=1;
 	select id,chunk_id,base_name,indexed_documents,killed_documents from test.status;
 
+	debug split test 4 on @foo option sync=1;
+	select id,chunk_id,base_name,indexed_documents,killed_documents from test.status;
+
 	select * from test.0;
 	select * from test.1;
 	select * from test.2;

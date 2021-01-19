@@ -7825,10 +7825,9 @@ bool RtIndex_c::MergeTwoChunks ( int iA, int iB )
 			iB, (int)(GetChunkSize ( pOlder )/1024) );
 	} // m_tChunkLock scoped Readlock
 
-	CSphString sOlder, sOldest, sRename, sMerged;
+	CSphString sOlder, sOldest, sMerged;
 	sOlder.SetSprintf ( "%s", pOlder->GetFilename() );
 	sOldest.SetSprintf ( "%s", pOldest->GetFilename() );
-	sRename.SetSprintf ( "%s.old", pOlder->GetFilename() );
 	sMerged.SetSprintf ( "%s.tmp", pOldest->GetFilename() ); // fixme! implicit dependency (merging creates file suffixed .tmp, that is implicit here.
 
 	// check forced exit after long operation
@@ -7858,7 +7857,16 @@ bool RtIndex_c::MergeTwoChunks ( int iA, int iB )
 	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder (	fnCreateFilenameBuilder
 		? fnCreateFilenameBuilder ( m_sIndexName.cstr () )
 		: nullptr );
-	CSphScopedPtr<CSphIndex> pMerged ( PreallocDiskChunk ( sMerged.cstr(), pOlder->m_iChunk, pFilenameBuilder.Ptr(), sError, pOlder->GetName() ) );
+
+	CSphString sMergedID;
+	int iMergedID;
+	{ // m_tChunkLock scoped Readlock
+		CSphScopedRLock RChunkLock { m_tChunkLock };
+		iMergedID = GetNextChunkName ();
+	}
+	sMergedID.SetSprintf ( "%s.%d", m_sPath.cstr (), iMergedID );
+
+	CSphScopedPtr<CSphIndex> pMerged ( PreallocDiskChunk ( sMerged.cstr(), iMergedID, pFilenameBuilder.Ptr(), sError, pOlder->GetName() ) );
 	if ( !pMerged )
 	{
 		sphWarning ( "rt optimize: index %s: failed to load merged chunk (error %s)",
@@ -7870,23 +7878,11 @@ bool RtIndex_c::MergeTwoChunks ( int iA, int iB )
 		return false;
 
 	// lets rotate indexes
-
-	// rename older disk chunk to 'old'
-	if ( !const_cast<CSphIndex *>( pOlder )->Rename ( sRename.cstr() ) )
-	{
-		sphWarning ( "rt optimize: index %s: cur to old rename failed (error %s)",
-			m_sIndexName.cstr(), pOlder->GetLastError().cstr() );
-		return false;
-	}
 	// rename merged disk chunk to 0
-	if ( !pMerged->Rename ( sOlder.cstr() ) )
+	if ( !pMerged->Rename ( sMergedID.cstr() ) )
 	{
 		sphWarning ( "rt optimize: index %s: merged to cur rename failed (error %s)",
 			m_sIndexName.cstr(), pMerged->GetLastError().cstr() );
-
-		if ( !const_cast<CSphIndex *>( pOlder )->Rename ( sOlder.cstr() ) )
-			sphWarning ( "rt optimize: index %s: old to cur rename failed (error %s)",
-				m_sIndexName.cstr(), pOlder->GetLastError().cstr() );
 		return false;
 	}
 
@@ -7921,7 +7917,7 @@ bool RtIndex_c::MergeTwoChunks ( int iA, int iB )
 	if ( m_bOptimizeStop || sphInterrupted () )
 	{
 		sphWarning ( "rt optimize: index %s: forced to shutdown, remove old index files manually '%s', '%s'",
-			m_sIndexName.cstr(), sRename.cstr(), sOldest.cstr() );
+			m_sIndexName.cstr(), sOlder.cstr(), sOldest.cstr() );
 		SafeDelete ( pOldest );
 		SafeDelete ( pOlder );
 		return false;
@@ -7939,7 +7935,8 @@ bool RtIndex_c::MergeTwoChunks ( int iA, int iB )
 	Verify ( m_tWriting.Unlock() );
 
 	// we might remove old index files
-	sphUnlinkIndex ( sRename.cstr(), true );
+	// todo: with immutable all we have not to unlink here, but schedule unlinking instead.
+	sphUnlinkIndex ( sOlder.cstr(), true );
 	sphUnlinkIndex ( sOldest.cstr(), true );
 
 	// FIXME: wipe out 'merged' index files in case of error

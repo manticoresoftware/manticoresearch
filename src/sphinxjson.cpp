@@ -197,6 +197,14 @@ struct JsonNode_t
 
 	inline int GetLength() const { return m_dChildren.m_iLen; }
 
+	JsonNode_t() = default;
+	explicit JsonNode_t ( ESphJsonType eType )
+	{
+		m_eType = eType;
+		m_sName.m_iLen = 0;
+		m_sValue.m_iLen = 0;
+	}
+
 };
 #define YYSTYPE JsonNode_t
 
@@ -666,7 +674,7 @@ public:
 		JSON_FOREACH ( j, tNode )
 		{
 			auto &dNode = m_dNodes[j];
-			WriteNode ( dNode );
+			WriteNode ( dNode, true );
 			uMask |= JsonKeyMask ( dNode.m_sName );
 		}
 		m_dBsonBuffer.Add ( JSON_EOF );
@@ -675,7 +683,7 @@ public:
 	}
 
 	// main proc which do whole magic over the topmost obj/array
-	bool WriteNode ( JsonNode_t &tNode )
+	bool WriteNode ( JsonNode_t &tNode, bool bNamed=false )
 	{
 		// convert int64 to int32, strings to numbers if needed
 		NumericFixup ( tNode );
@@ -690,7 +698,7 @@ public:
 		m_dBsonBuffer.Add ( eType );
 
 		// write key name if exists
-		if ( tNode.m_sName.m_iLen )
+		if ( bNamed && tNode.m_sName.m_iLen )
 			WriteKeyUnescaped ( tNode.m_sName );
 
 		// write nodes
@@ -722,7 +730,7 @@ public:
 			JSON_FOREACH ( j, tNode )
 			{
 				auto &dNode = m_dNodes[j];
-				WriteNode ( dNode );
+				WriteNode ( dNode, true );
 				uMask |= JsonKeyMask ( dNode.m_sName );
 			}
 			m_dBsonBuffer.Add ( JSON_EOF );

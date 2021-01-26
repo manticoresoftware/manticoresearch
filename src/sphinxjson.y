@@ -42,54 +42,48 @@ value:
 	| '[' value_list ']' 		{ $$=$2; }
 	;
 
+key_value_pair:
+	key ':' value
+	{
+		$$ = $3;
+		$$.m_sName = $1.m_sValue;
+	}
+
 key_value_list:
 	// empty
 		{
-			$$ = JsonNode_t();
-			$$.m_eType = JSON_OBJECT;
-			$$.m_dChildren.m_iStart = -1;
-			$$.m_dChildren.m_iLen = 0;
-
+			$$ = JsonNode_t(JSON_OBJECT);
 		}
-	| key ':' value
+	| key_value_pair
 		{
-			$$ = JsonNode_t();
-			$$.m_eType = JSON_OBJECT;
+			$$ = JsonNode_t(JSON_OBJECT);
 			$$.m_dChildren.m_iStart = $$.m_iNext = pParser->m_dNodes.GetLength();
 			$$.m_dChildren.m_iLen = 1;
-			$3.m_sName = $1.m_sValue;
-			pParser->AddNode($3);
+			pParser->AddNode($1);
 
 		}
-	| key_value_list ',' key ':' value
+	| key_value_list ',' key_value_pair
 		{
 			if ( !$1.m_dChildren.m_iLen )
 			{
 				yyerror ( pParser, "unexpected ','" );
 				YYERROR;
 			}
-			$$ = JsonNode_t();
-			$$.m_eType = JSON_OBJECT;
-			$$.m_dChildren.m_iStart = $1.m_dChildren.m_iStart;
-			$$.m_dChildren.m_iLen = $1.m_dChildren.m_iLen+1;
-			$$.m_iNext = pParser->m_dNodes[$1.m_iNext].m_iNext = pParser->m_dNodes.GetLength();
-			$5.m_sName = $3.m_sValue;
-			pParser->AddNode($5);
+			$$ = $1;
+			++$$.m_dChildren.m_iLen;
+			$$.m_iNext = pParser->m_dNodes[$$.m_iNext].m_iNext = pParser->m_dNodes.GetLength();
+			pParser->AddNode($3);
 		}
 	;
 
 value_list:
 	// empty
 		{
-			$$ = JsonNode_t();
-			$$.m_eType = JSON_MIXED_VECTOR;
-			$$.m_dChildren.m_iStart = -1;
-			$$.m_dChildren.m_iLen = 0;
+			$$ = JsonNode_t(JSON_MIXED_VECTOR);
 		}
 	| value
 		{
-			$$ = JsonNode_t();
-			$$.m_eType = JSON_MIXED_VECTOR;
+			$$ = JsonNode_t(JSON_MIXED_VECTOR);
 			$$.m_dChildren.m_iStart = $$.m_iNext = pParser->m_dNodes.GetLength();
 			$$.m_dChildren.m_iLen = 1;
 			pParser->AddNode($1);
@@ -101,11 +95,9 @@ value_list:
 				yyerror ( pParser, "unexpected ','" );
 				YYERROR;
 			}
-			$$ = JsonNode_t();
-			$$.m_eType = JSON_MIXED_VECTOR;
-			$$.m_dChildren.m_iStart = $1.m_dChildren.m_iStart;
-			$$.m_dChildren.m_iLen = $1.m_dChildren.m_iLen+1;
-			$$.m_iNext = pParser->m_dNodes[$1.m_iNext].m_iNext = pParser->m_dNodes.GetLength();
+			$$ = $1;
+			++$$.m_dChildren.m_iLen;
+			$$.m_iNext = pParser->m_dNodes[$$.m_iNext].m_iNext = pParser->m_dNodes.GetLength();
 			pParser->AddNode($3);
 		}
 	;

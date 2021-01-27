@@ -600,14 +600,15 @@ filter_expr:
 	
 	
 filter_item:	
-	expr_ident '=' const_int
+	expr_ident '=' bool_or_integer_value
+
 		{
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
 			pFilter->m_dValues.Add ( $3.m_iValue );
 		}
-	| expr_ident TOK_NE const_int
+	| expr_ident TOK_NE bool_or_integer_value
 		{
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )

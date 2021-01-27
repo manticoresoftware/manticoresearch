@@ -246,6 +246,13 @@ index pq_utf
 <sphinxql>INSERT INTO pq_utf (query) VALUES ( 'проверка' )</sphinxql>
 <sphinxql>CALL PQ ('pq_utf', 'была проверка', 1 as docs, 0 as docs_json )</sphinxql>
 <sphinxql>CALL PQ ('pq_utf', 'проверка делом', 1 as docs, 0 as docs_json )</sphinxql>
+
+<!-- query filter on JSON with boolean conditions -->
+<sphinxql>INSERT INTO pq_filter1 (query, filters) VALUES ( 'test', 'j.state.on = TRUE' )</sphinxql>
+<sphinxql>INSERT INTO pq_filter1 (query, filters) VALUES ( 'test', 'j.state.on = FALSE' )</sphinxql>
+<sphinxql>INSERT INTO pq_filter1 (query, filters) VALUES ( 'test', 'j.state.on != TRUE and j.state.alive = TRUE' )</sphinxql>
+<sphinxql>CALL PQ ('pq_filter1', ('{"title":"test", "j":{"state":{"on": TRUE, "alive":1}, "viw":3}, "id":1}', '{"title":"test", "j":{"state":{"on": 0, "alive":0}, "viw":3}, "id":2}', '{"title":"test", "j":{"state":{"on": FALSE, "alive":TRUE}, "viw":3}, "id":3}'), 1 as docs, 1 as docs_json, 1 as query, 'id' as docs_id )</sphinxql>
+
 </sphqueries>
 
 </test>

@@ -45,9 +45,9 @@ searchd
 
 <!-- request to node 0 -->
 <sphinxql d="0">
-create table rt1 (title text indexed, mva1 multi, gid int, j1 json) rt_mem_limit='128k';
-create table rt2 (title text indexed, mva1 multi, gid int, j1 json) rt_mem_limit='128k';
-create table rtc (title text indexed, mva1 multi, gid int, j1 json) rt_mem_limit='128k' dict='crc';
+create table rt1 (title text indexed, mva1 multi, gid int, j1 json) rt_mem_limit='12M';
+create table rt2 (title text indexed, mva1 multi, gid int, j1 json) rt_mem_limit='12M';
+create table rtc (title text indexed, mva1 multi, gid int, j1 json) rt_mem_limit='12M' dict='crc';
 
 insert into rt1 (id,title,mva1,gid,j1) values (1, 'test 1', (11,12,13), 11, '{"data":"test 1", fd:11}'), (2, 'test 2', (21,22,23), 21, ''), (3, 'test 3', (), 31, '{"data":"test 3", fd:31}');
 SELECT * FROM test:rt1;

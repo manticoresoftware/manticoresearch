@@ -3113,6 +3113,30 @@ void ReportIndexesName ( int iSpanStart, int iSpandEnd, const CSphVector<SearchF
 		sOut += ": ";
 }
 
+
+static void LogStatementSphinxql ( Str_t sQuery, int iRealTime )
+{
+	if ( g_iQueryLogFile<0 || g_eLogFormat!=LOG_FORMAT_SPHINXQL || !IsFilled ( sQuery ) )
+		return;
+
+	QuotationEscapedBuilder tBuf;
+
+	char sTimeBuf[SPH_TIME_PID_MAX_SIZE];
+	sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
+
+	tBuf += R"(/* )";
+	tBuf += sTimeBuf;
+
+	tBuf.Sprintf ( " conn %d real %0.3F *""/ ", myinfo::ConnID(), iRealTime );
+	tBuf += sQuery;
+
+	// finish statement and add line feed
+	tBuf += ";\n";
+
+	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
+	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 void sphGetAttrsToSend ( const ISphSchema & tSchema, bool bAgentMode, bool bNeedId, CSphBitvec & tAttrs )
@@ -11926,6 +11950,8 @@ void HandleMySqlExtendedUpdate ( AttrUpdateArgs & tArgs )
 
 void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, Str_t sQuery, CSphString & sWarning )
 {
+	int64_t tmStart = sphMicroTimer();
+
 	// extract index names
 	StrVec_t dIndexNames;
 	ParseIndexList ( tStmt.m_sIndex, dIndexNames );
@@ -12005,6 +12031,10 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	{
 		tOut.Error ( "%s", sReport.cstr() );
 		return;
+	} else
+	{
+		int64_t tmRealTime = sphMicroTimer() - tmStart;
+		LogStatementSphinxql ( sQuery, (int)( tmRealTime / 1000 ) );
 	}
 
 	tOut.Ok ( iUpdated, iWarns );
@@ -15411,7 +15441,7 @@ public:
 				m_tLastMeta.m_sError = m_sError;
 				m_tLastMeta.m_sWarning = "";
 				StatCountCommand ( SEARCHD_COMMAND_UPDATE );
-				StmtErrorReporter_c tErrorReporter ( tOut );
+				StmtErrorReporter_c tErrorReporter ( tOut, pStmt->m_sStmt );
 				sphHandleMysqlUpdate ( tErrorReporter, *pStmt, sQuery, m_tLastMeta.m_sWarning );
 				return true;
 			}

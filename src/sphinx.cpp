@@ -12785,12 +12785,17 @@ void CSphQueryContext::SetBlobPool ( const BYTE * pBlobPool )
 /// alternatively, we probably want to refactor this and introduce Bind(), to parse
 /// expressions once, then bind them to actual searching contexts (aka index or segment,
 /// and ranker, and sorter, and whatever else might be referenced by the expressions)
-struct ContextExtra : public ISphExtra
+struct ContextExtra final : public ISphExtra
 {
 	ISphRanker * m_pRanker;
 	ISphMatchSorter * m_pSorter;
 
-	virtual bool ExtraDataImpl ( ExtraData_e eData, void ** ppArg )
+	ContextExtra ( ISphRanker* pRanker, ISphMatchSorter* pSorter)
+		: m_pRanker ( pRanker )
+		, m_pSorter ( pSorter )
+		{}
+
+	bool ExtraDataImpl ( ExtraData_e eData, void ** ppArg ) final
 	{
 		if ( eData!=EXTRA_GET_QUEUE_WORST && eData!=EXTRA_GET_QUEUE_SORTVAL )
 			return m_pRanker->ExtraData ( eData, ppArg );
@@ -12826,9 +12831,7 @@ struct ContextExtra : public ISphExtra
 
 void CSphQueryContext::SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * pSorter )
 {
-	ContextExtra tExtra;
-	tExtra.m_pRanker = pRanker;
-	tExtra.m_pSorter = pSorter;
+	ContextExtra tExtra ( pRanker, pSorter );
 	ExprCommand ( SPH_EXPR_SET_EXTRA_DATA, &tExtra );
 }
 

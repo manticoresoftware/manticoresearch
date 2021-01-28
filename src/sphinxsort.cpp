@@ -370,6 +370,7 @@ public:
 	virtual SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const = 0;
 	virtual void			GetLocator ( CSphAttrLocator & tOut ) const = 0;
 	virtual ESphAttr		GetResultType () const = 0;
+	virtual CSphGrouper*	Clone () const = 0;
 };
 
 
@@ -1192,6 +1193,7 @@ static bool IsGroupbyMagic ( const CSphString & s )
 		virtual void GetLocator ( CSphAttrLocator & tOut ) const { tOut = m_tLocator; } \
 		virtual ESphAttr GetResultType () const { return m_tLocator.m_iBitCount>8*(int)sizeof(DWORD) ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER; } \
 		virtual SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const { return KeyFromValue ( tMatch.GetAttr ( m_tLocator ) ); } \
+        virtual CSphGrouper* Clone() const { return new _name (m_tLocator); }                     \
 		virtual SphGroupKey_t KeyFromValue ( SphAttr_t uValue ) const \
 		{
 // NOLINT
@@ -1324,6 +1326,11 @@ public:
 
 		return PRED::Hash ( dBlobAttr.first,dBlobAttr.second );
 	}
+
+	CSphGrouper * Clone () const final
+	{
+		return new CSphGrouperString<PRED> ( m_tLocator );
+	}
 };
 
 template < typename T >
@@ -1388,6 +1395,11 @@ public:
 
 	SphGroupKey_t KeyFromValue ( SphAttr_t ) const final { assert(0); return SphGroupKey_t(); }
 
+	CSphGrouper* Clone() const final
+	{
+		return new CSphGrouperJsonField ( m_tLocator, SafeClone (m_pExpr) );
+	}
+
 protected:
 	CSphAttrLocator				m_tLocator;
 	CSphRefcountedPtr<ISphExpr>	m_pExpr;
@@ -1397,6 +1409,8 @@ protected:
 template <class PRED>
 class CSphGrouperMulti final: public CSphGrouper, public PRED
 {
+	using MYTYPE = CSphGrouperMulti<PRED>;
+
 public:
 	CSphGrouperMulti ( CSphVector<CSphAttrLocator> dLocators, CSphVector<ESphAttr> dAttrTypes, VecRefPtrs_t<ISphExpr *> dJsonKeys)
 		: m_dLocators ( std::move(dLocators) )
@@ -1477,6 +1491,13 @@ public:
 			if ( m_dJsonKeys[i] )
 				m_dJsonKeys[i]->Command ( SPH_EXPR_SET_BLOB_POOL, (void*)pBlobPool );
 		}
+	}
+
+	CSphGrouper* Clone() const final
+	{
+		VecRefPtrs_t<ISphExpr *> dJsonKeys;
+		m_dJsonKeys.for_each ( [&dJsonKeys] ( ISphExpr * p ) { dJsonKeys.Add ( SafeClone ( p ) ); } );
+		return new MYTYPE ( m_dLocators, m_dAttrTypes, std::move(dJsonKeys) );
 	}
 
 	SphGroupKey_t KeyFromValue ( SphAttr_t ) const final { assert(0); return SphGroupKey_t(); }
@@ -2745,6 +2766,10 @@ protected:
 		pClone->m_dAvgs.Resize ( 0 );
 		pClone->SetupBaseGrouperWrp ( m_pSchema, pClone->m_tGroupSorter.m_eKeypart,
 				pClone->m_tGroupSorter.m_tLocator, &pClone->m_dAvgs );
+
+		// m_pGrouper also need to be cloned (otherwise SetBlobPool will cause races)
+		if ( m_pGrouper )
+			pClone->m_pGrouper = m_pGrouper->Clone ();
 	}
 
 	CSphVector<IAggrFunc *> GetAggregatesWithoutAvgs() const

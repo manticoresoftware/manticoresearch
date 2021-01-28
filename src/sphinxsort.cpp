@@ -2772,6 +2772,16 @@ protected:
 			pClone->m_pGrouper = m_pGrouper->Clone ();
 	}
 
+	template<typename SORTER> SORTER * CloneSorterT () const
+	{
+		CSphQuery dFoo;
+		dFoo.m_iMaxMatches = m_iLimit;
+		dFoo.m_eGroupFunc = m_eGroupBy;
+		auto pClone = new SORTER ( m_tSubSorter.GetComparator (), &dFoo, *this );
+		CloneKBufferGroupSorter ( pClone );
+		return pClone;
+	}
+
 	CSphVector<IAggrFunc *> GetAggregatesWithoutAvgs() const
 	{
 		CSphVector<IAggrFunc *> dAggrs;
@@ -2836,7 +2846,6 @@ protected:
 	using KBufferGroupSorter::m_tSubSorter;
 	using KBufferGroupSorter::m_dAvgs;
 	using KBufferGroupSorter::GROUPBY_FACTOR;
-	using KBufferGroupSorter::CloneKBufferGroupSorter;
 	using KBufferGroupSorter::GetAggregatesWithoutAvgs;
 	using KBufferGroupSorter::Distinct;
 	using KBufferGroupSorter::UpdateDistinct;
@@ -2923,12 +2932,7 @@ public:
 	// TODO! TEST!
 	ISphMatchSorter * Clone () const override
 	{
-		CSphQuery dFoo;
-		dFoo.m_iMaxMatches = m_iLimit;
-		dFoo.m_eGroupFunc = m_eGroupBy;
-		auto pClone = new MYTYPE ( m_tSubSorter.GetComparator (), &dFoo, *this );
-		CloneKBufferGroupSorter ( pClone );
-		return pClone;
+		return this->template CloneSorterT<MYTYPE>();
 	}
 
 	// FIXME! test CSphKBufferGroupSorter
@@ -3286,7 +3290,6 @@ protected:
 	using KBufferGroupSorter::m_tSubSorter;
 	using KBufferGroupSorter::m_dAvgs;
 	using KBufferGroupSorter::GROUPBY_FACTOR;
-	using KBufferGroupSorter::CloneKBufferGroupSorter;
 	using KBufferGroupSorter::GetAggregatesWithoutAvgs;
 	using KBufferGroupSorter::Distinct;
 	using KBufferGroupSorter::FreeMatchPtrs;
@@ -3313,7 +3316,7 @@ protected:
 	OpenHash_T<int, SphGroupKey_t> m_hGroup2Index; // used to quickly locate group for incoming match
 
 protected:
-	const int		m_iGLimit;		///< limit per one group
+	int				m_iGLimit;		///< limit per one group
 	SphGroupKey_t	m_uLastGroupKey = -1;	///< helps to determine in pushEx whether the new subgroup started
 	int				m_iFree = 0;			///< current insertion point
 	int				m_iUsed = 0;
@@ -3342,6 +3345,11 @@ public:
 		DBG << "Created iruns = " << m_iruns << " ipushed = " << m_ipushed;
 #endif
 		this->m_dIData.Resize ( m_iSize ); // m_iLimit * GROUPBY_FACTOR
+	}
+
+	inline void SetGLimit ( int iGLimit )
+	{
+		m_iGLimit = Min ( iGLimit, m_iLimit );
 	}
 
 	int GetLength () const override
@@ -3433,12 +3441,8 @@ public:
 	// TODO! TEST!
 	ISphMatchSorter * Clone () const override
 	{
-		CSphQuery dFoo;
-		dFoo.m_iGroupbyLimit = m_iGLimit;
-		dFoo.m_iMaxMatches = m_iLimit;
-		dFoo.m_eGroupFunc = m_eGroupBy;
-		auto pClone = new MYTYPE ( this->m_tSubSorter.GetComparator (), &dFoo, *this );
-		CloneKBufferGroupSorter ( pClone );
+		auto* pClone = this->template CloneSorterT<MYTYPE>();
+		pClone->SetGLimit (m_iGLimit);
 		return pClone;
 	}
 
@@ -4019,11 +4023,7 @@ struct MvaGroupSorter_c : public MVAGroupSorter_T < CSphKBufferGroupSorter < COM
 
 	ISphMatchSorter * Clone () const final
 	{
-		CSphQuery dFoo;
-		dFoo.m_iMaxMatches = this->m_iLimit;
-		dFoo.m_eGroupFunc = this->m_eGroupBy;
-		auto pClone = new MYTYPE ( this->m_tSubSorter.GetComparator (), &dFoo, *this );
-		this->CloneKBufferGroupSorter ( pClone );
+		auto* pClone = this->template CloneSorterT<MYTYPE>();
 		pClone->m_tMvaLocator = this->m_tMvaLocator;
 		return pClone;
 	}
@@ -4041,12 +4041,8 @@ struct MvaNGroupSorter_c : public MVAGroupSorter_T < CSphKBufferNGroupSorter < C
 
 	ISphMatchSorter * Clone () const final
 	{
-		CSphQuery dFoo;
-		dFoo.m_iGroupbyLimit = this->m_iGLimit;
-		dFoo.m_iMaxMatches = this->m_iLimit;
-		dFoo.m_eGroupFunc = this->m_eGroupBy;
-		auto pClone = new MYTYPE ( this->m_tSubSorter.GetComparator (), &dFoo, *this );
-		this->CloneKBufferGroupSorter ( pClone );
+		auto* pClone = this->template CloneSorterT<MYTYPE>();
+		pClone->SetGLimit (this->m_iGLimit);
 		pClone->m_tMvaLocator = this->m_tMvaLocator;
 		return pClone;
 	}
@@ -4066,7 +4062,6 @@ public:
 	using KBufferGroupSorter::m_eGroupBy;
 	using KBufferGroupSorter::m_iLimit;
 	using KBufferGroupSorter::m_tSubSorter;
-	using KBufferGroupSorter::CloneKBufferGroupSorter;
 
 	/// ctor
 	FWD_BASECTOR( CSphKBufferJsonGroupSorter );
@@ -4097,12 +4092,7 @@ public:
 
 	ISphMatchSorter * Clone () const final
 	{
-		CSphQuery dFoo;
-		dFoo.m_iMaxMatches = m_iLimit;
-		dFoo.m_eGroupFunc = m_eGroupBy;
-		auto pClone = new MYTYPE ( m_tSubSorter.GetComparator (), &dFoo, *this );
-		CloneKBufferGroupSorter ( pClone );
-		return pClone;
+		return this->template CloneSorterT<MYTYPE>();
 	}
 };
 

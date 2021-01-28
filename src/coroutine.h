@@ -257,14 +257,20 @@ public:
 	}
 
 	// called once per coroutine, when it really has to process something
-	REFCONTEXT CloneNewContext()
+	REFCONTEXT CloneNewContext(int *pCtx = nullptr)
 	{
+		if ( pCtx )
+			*pCtx = 0;
+
 		if ( m_bDisabled )
 			return m_dParentContext;
 
 		auto iMyIdx = m_iTasks.fetch_add ( 1, std::memory_order_acq_rel );
 		if ( !iMyIdx )
 			return m_dParentContext;
+
+		if ( pCtx )
+			*pCtx = iMyIdx;
 
 		--iMyIdx; // make it back 0-based
 		auto & dCtx = m_dChildrenContexts[iMyIdx];

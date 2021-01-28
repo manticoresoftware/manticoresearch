@@ -2942,7 +2942,7 @@ public:
 			return;
 
 		auto& dRhs = *(MYTYPE *) pRhs;
-		if ( !dRhs.Used () )
+		if ( dRhs.IsEmpty () )
 		{
 			CSphMatchQueueTraits::SwapMatchQueueTraits ( dRhs );
 			m_hGroup2Match.Swap ( dRhs.m_hGroup2Match );
@@ -2957,8 +2957,10 @@ public:
 		// just push in heap order
 		// since we have grouped matches, it is not always possible to move them,
 		// so use plain push instead
+		auto iTotal = dRhs.m_iTotal;
 		for ( auto iMatch : this->m_dIData )
 			dRhs.PushGrouped ( m_dData[iMatch], false );
+		dRhs.m_iTotal = m_iTotal + iTotal;
 	}
 
 	void Finalize ( ISphMatchProcessor & tProcessor, bool ) override
@@ -3446,7 +3448,6 @@ public:
 		return pClone;
 	}
 
-	// FIXME! todo CSphKBufferNGroupSorter
 	void MoveTo ( ISphMatchSorter * pRhs) final
 	{
 #ifndef NDEBUG
@@ -3478,6 +3479,7 @@ public:
 			CountDistinct ();
 		}
 
+		auto iTotal = dRhs.m_iTotal;
 		for ( auto iHead : m_dFinalizedHeads )
 		{
 			auto uGroupKey = m_dData[iHead].GetAttr ( m_tLocGroupby );
@@ -3486,6 +3488,7 @@ public:
 				dRhs.PushEx ( m_dData[i], uGroupKey, false, false, true );
 			DeleteChain ( iHead, false );
 		}
+		dRhs.m_iTotal = m_iTotal+iTotal;
 	}
 
 
@@ -4248,6 +4251,7 @@ public:
 		dRhs.CheckReplaceEntry ( m_tData );
 		if_const ( DISTINCT )
 			dRhs.UpdateDistinct ( m_tData );
+		dRhs.m_iTotal += m_iTotal;
 	}
 
 private:

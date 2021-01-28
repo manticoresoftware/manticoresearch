@@ -5929,7 +5929,7 @@ struct DiskChunkSearcherCtx_t
 	void MergeChild ( DiskChunkSearcherCtx_t dChild ) const
 	{
 		// sorting results
-		ARRAY_FOREACH ( i, m_dSorters )
+		ARRAY_CONSTFOREACH ( i, m_dSorters )
 			if ( dChild.m_dSorters[i] )
 				dChild.m_dSorters[i]->MoveTo ( m_dSorters[i] );
 

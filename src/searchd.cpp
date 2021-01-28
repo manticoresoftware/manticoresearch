@@ -19240,7 +19240,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		sphSplit ( dExactIndexes, dOptIndex.cstr (), "," );
 
 	SetPercolateQueryParserFactory ( PercolateQueryParserFactory );
-	Threads::CallCoroutine ( [&hConf, &dExactIndexes] // clang doesn't need hConf to capture, but win/gcc fails, if not.
+	Threads::CallCoroutine ( [&hConf, &dExactIndexes]
 	{
 		ScopedRole_c thMain ( MainThread );
 		ConfigureAndPreload ( hConf, dExactIndexes );

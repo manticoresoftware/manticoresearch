@@ -161,6 +161,11 @@ typedef unsigned char		BYTE;
 
 #endif // _WIN32
 
+// switch off clang-specific warning about non-necessary capturing of constants
+#ifdef __clang__
+	_Pragma("clang diagnostic ignored \"-Wunused-lambda-capture\"")
+#endif
+
 /////////////////////////////////////////////////////////////////////////////
 // 64-BIT INTEGER TYPES AND MACROS
 /////////////////////////////////////////////////////////////////////////////

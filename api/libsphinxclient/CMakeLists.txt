@@ -1,5 +1,10 @@
 cmake_minimum_required ( VERSION 3.12 )
-CMAKE_POLICY ( SET CMP0048 NEW )
+
+FOREACH ( policy CMP0048 CMP0110 )
+	IF (POLICY ${policy})
+		CMAKE_POLICY(SET ${policy} NEW)
+	ENDIF ()
+ENDFOREACH ()
 
 # set default build type to Release (if nothing else provided from outside yet)
 IF ( NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES )

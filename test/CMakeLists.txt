@@ -1,5 +1,11 @@
 cmake_minimum_required ( VERSION 3.3 )
 
+FOREACH (policy CMP0110)
+	IF (POLICY ${policy})
+		CMAKE_POLICY(SET ${policy} NEW)
+	ENDIF ()
+ENDFOREACH ()
+
 # will add the tests from test suite
 # each test will be added as separate one
 

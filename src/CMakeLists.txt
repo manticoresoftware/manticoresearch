@@ -1,6 +1,6 @@
-cmake_minimum_required ( VERSION 2.8 )
+cmake_minimum_required ( VERSION 2.8.12 )
 
-FOREACH ( policy CMP0054 CMP0057 CMP0042 CMP0074 )
+FOREACH ( policy CMP0054 CMP0057 CMP0042 CMP0074 CMP0110 )
 	IF ( POLICY ${policy} )
 		CMAKE_POLICY ( SET ${policy} NEW )
 	ENDIF ()

@@ -1,5 +1,5 @@
 # this cmake file fully replaces all old things like svnxrev, hgxrev, etc scripts.
-cmake_minimum_required ( VERSION 2.8 )
+cmake_minimum_required ( VERSION 2.8.12 )
 
 # guess version strings from current git repo
 function(guess_from_git)

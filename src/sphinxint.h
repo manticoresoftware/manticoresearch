@@ -2078,6 +2078,8 @@ struct ExpansionContext_t
 	CSphScopedPayload * m_pPayloads		= nullptr;
 	ESphHitless m_eHitless				{SPH_HITLESS_NONE};
 	const void * m_pIndexData			= nullptr;
+
+	bool m_bOnlyTreeFix					= false;
 };
 
 struct GetKeywordsSettings_t

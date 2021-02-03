@@ -5602,7 +5602,7 @@ void RtIndex_c::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 			int iNext = (int)dPoints[i];
 			int iCur = iNext-1;
 			RtWordReader_t tReader ( pSeg, true, m_iWordsCheckpoint, m_tSettings.m_eHitless );
-			if ( iCur>0 )
+			if ( iCur>=0 )
 				tReader.m_pCur = pSeg->m_dWords.Begin() + pSeg->m_dWordCheckpoints[iCur].m_iOffset;
 			if ( iNext<pSeg->m_dWordCheckpoints.GetLength() )
 				tReader.m_pMax = pSeg->m_dWords.Begin() + pSeg->m_dWordCheckpoints[iNext].m_iOffset;

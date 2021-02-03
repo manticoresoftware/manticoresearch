@@ -666,9 +666,9 @@ static void GetSuffixLocators ( const char * sWord, int iMaxCodepointLength, con
 		tChPoint.m_uOff = 0;
 		tChPoint.m_uLen = pSeg->m_dWords.GetLength();
 
-		if ( iCur > 0 )
+		if ( iCur>=0 )
 			tChPoint.m_uOff = pSeg->m_dWordCheckpoints[iCur].m_iOffset;
-		if ( iNext < pSeg->m_dWordCheckpoints.GetLength() )
+		if ( iNext<pSeg->m_dWordCheckpoints.GetLength() )
 			tChPoint.m_uLen = pSeg->m_dWordCheckpoints[iNext].m_iOffset;
 	}
 }
@@ -1688,7 +1688,7 @@ void SetPercolateQueryParserFactory ( CreateQueryParser_fn * pCall )
 	g_pCreateQueryParser = pCall;
 }
 
-static void FixExpanded ( XQNode_t * pNode )
+static void FixExpandedNode ( XQNode_t * pNode )
 {
 	assert ( pNode );
 	ARRAY_FOREACH ( i, pNode->m_dWords )
@@ -1704,7 +1704,21 @@ static void FixExpanded ( XQNode_t * pNode )
 	}
 
 	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		FixExpanded ( pNode->m_dChildren[i] );
+		FixExpandedNode ( pNode->m_dChildren[i] );
+}
+
+static XQNode_t * FixExpanded ( XQNode_t * pNode, int iMinPrefix, int iMinInfix, bool bExactForm )
+{
+	ExpansionContext_t tExpCtx;
+	tExpCtx.m_iMinPrefixLen = iMinPrefix;
+	tExpCtx.m_iMinInfixLen = iMinInfix;
+	tExpCtx.m_bHasExactForms = bExactForm;
+	tExpCtx.m_bOnlyTreeFix = true;
+
+	pNode = sphExpandXQNode ( pNode, tExpCtx );
+	FixExpandedNode ( pNode );
+
+	return pNode;
 }
 
 bool PercolateIndex_c::CanBeAdded ( PercolateQueryArgs_t& tArgs, CSphString& sError )
@@ -1764,7 +1778,7 @@ StoredQuery_i * PercolateIndex_c::CreateQuery ( PercolateQueryArgs_t & tArgs, co
 		TransformAotFilter ( tParsed->m_pRoot, pDict->GetWordforms(), m_tSettings );
 
 	if ( m_tSettings.GetMinPrefixLen ( bWordDict )>0 || m_tSettings.m_iMinInfixLen>0 )
-		FixExpanded ( tParsed->m_pRoot );
+		tParsed->m_pRoot = FixExpanded ( tParsed->m_pRoot, m_tSettings.GetMinPrefixLen ( bWordDict ), m_tSettings.m_iMinInfixLen, ( pDict->HasMorphology () || m_tSettings.m_bIndexExactWords ) );
 
 	auto *pStored = new StoredQuery_t;
 	pStored->m_pXQ = tParsed.LeakPtr();

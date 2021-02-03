@@ -15183,7 +15183,6 @@ static void BuildExpandedTree ( const XQKeyword_t & tRootWord, ISphWordlist::Arg
 XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 {
 	assert ( pNode );
-	assert ( tCtx.m_pResult );
 
 	// process children for composite nodes
 	if ( pNode->m_dChildren.GetLength() )
@@ -15226,6 +15225,12 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	// process keywords for plain nodes
 	assert ( pNode->m_dChildren.GetLength()==0 );
 	assert ( pNode->m_dWords.GetLength()==1 );
+
+	// might be a pass to only fixup of the tree
+	if ( tCtx.m_bOnlyTreeFix )
+		return pNode;
+
+	assert ( tCtx.m_pResult );
 
 	// check the wildcards
 	const char * sFull = pNode->m_dWords[0].m_sWord.cstr();

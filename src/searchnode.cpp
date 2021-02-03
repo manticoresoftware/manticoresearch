@@ -23,9 +23,6 @@
 
 //////////////////////////////////////////////////////////////////////////
 
-/// query debugging printouts
-#define QDEBUG 0
-
 #if QDEBUG
 #define QDEBUGARG(_arg) _arg
 #else
@@ -50,15 +47,15 @@ int g_iPredictorCostMatch	= 64;
 static volatile bool g_bInterruptNow = false;
 
 
-static void PrintDocsChunk ( int QDEBUGARG(iCount), int QDEBUGARG(iAtomPos), const ExtDoc_t * QDEBUGARG(pDocs), const char * QDEBUGARG(sNode), void * QDEBUGARG(pNode) )
+static void PrintDocsChunk ( int QDEBUGARG(iCount), int QDEBUGARG(iAtomPos), const ExtDoc_t * QDEBUGARG(pDocs), const char * QDEBUGARG(sNode), void * QDEBUGARG(pNode), const char * sTerm=nullptr )
 {
 #if QDEBUG
 	StringBuilder_c tRes;
-	tRes.Appendf ( "node %s 0x%x:%p getdocs (%d) = ", sNode ? sNode : "???", iAtomPos, pNode, iCount );
+	tRes.Appendf ( "node %s 0x%x:%p getdocs (%d)(%s) = ", sNode ? sNode : "???", iAtomPos, pNode, iCount, ( sTerm ? sTerm : "" ) );
 	tRes.StartBlock (", ","[","]\n");
 	for ( int i=0; i<iCount; ++i )
 		tRes.Appendf ( "0x%x", DWORD ( pDocs[i].m_tRowID ) );
-	tRes.FinishBlock ();
+	tRes.FinishBlock ( false );
 	printf ( "%s", tRes.cstr() );
 #endif
 
@@ -72,7 +69,7 @@ static void PrintHitsChunk ( int QDEBUGARG(iCount), int QDEBUGARG(iAtomPos), con
 	tRes.StartBlock ( ", ", "[", "]\n" );
 	for ( int i=0; i<iCount; ++i )
 		tRes.Appendf ( "0x%x:0x%x", DWORD ( pHits[i].m_tRowID ), DWORD ( pHits[i].m_uHitpos ) );
-	tRes.FinishBlock ();
+	tRes.FinishBlock ( false );
 	printf ( "%s\n", tRes.cstr() );
 #endif
 
@@ -168,7 +165,7 @@ protected:
 
 	virtual void				CollectHits ( const ExtDoc_t * pDocs ) = 0;
 
-	inline const ExtDoc_t *		ReturnDocsChunk ( int iCount, const char * sNode );
+	inline const ExtDoc_t *		ReturnDocsChunk ( int iCount, const char * sNode, const char * sTerm=nullptr );
 	inline const ExtHit_t *		ReturnHitsChunk ( int iCount, const char * sNode, bool bReverse );
 	inline const ExtHit_t *		ReturnHits ( bool bReverse );
 };
@@ -1218,12 +1215,12 @@ const ExtHit_t * ExtNode_c::GetHits ( const ExtDoc_t * pDocs )
 }
 
 
-inline const ExtDoc_t * ExtNode_c::ReturnDocsChunk ( int iCount, const char * sNode )
+inline const ExtDoc_t * ExtNode_c::ReturnDocsChunk ( int iCount, const char * sNode, const char * sTerm )
 {
 	assert ( iCount>=0 && iCount<MAX_BLOCK_DOCS );
 	m_dDocs[iCount].m_tRowID = INVALID_ROWID;
 
-	PrintDocsChunk ( iCount, m_iAtomPos, m_dDocs, sNode, this );
+	PrintDocsChunk ( iCount, m_iAtomPos, m_dDocs, sNode, this, sTerm );
 	return iCount ? m_dDocs : nullptr;
 }
 
@@ -1584,7 +1581,7 @@ const ExtDoc_t * ExtPayload_T<USE_BM25>::GetDocsChunk()
 	}
 	m_iCurDocsEnd = iEnd;
 
-	return ReturnDocsChunk ( iDoc, "payload" );
+	return ReturnDocsChunk ( iDoc, "payload", m_tWord.m_sDictWord.cstr() );
 }
 
 
@@ -1966,7 +1963,7 @@ const ExtDoc_t * ExtTerm_T<USE_BM25>::GetDocsChunk()
 	if ( m_pNanoBudget )
 		*m_pNanoBudget -= g_iPredictorCostDoc*iDoc;
 
-	return ReturnDocsChunk ( iDoc, "term" );
+	return ReturnDocsChunk ( iDoc, "term", m_pQword->m_sDictWord.cstr() );
 }
 
 

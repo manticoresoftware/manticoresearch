@@ -1034,7 +1034,7 @@ template<bool USE_BM25>
 const ExtDoc_t * ExtRanker_T<USE_BM25>::GetFilteredDocs ()
 {
 #if QDEBUG
-	printf ( "ranker getfiltereddocs\n" );
+	printf ( "ranker getfiltereddocs %p\n", this );
 #endif
 
 	while (true)

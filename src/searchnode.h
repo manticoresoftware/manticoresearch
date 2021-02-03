@@ -21,6 +21,8 @@ enum
 	MAX_BLOCK_DOCS = 32
 };
 
+/// query debugging printouts
+#define QDEBUG 0
 
 struct TermPos_t
 {

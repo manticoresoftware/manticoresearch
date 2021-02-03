@@ -1346,7 +1346,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		// count [ * ] at phrase node for qpos shift
 		if ( m_pTokenizer->m_bPhrase && pLastTokenEnd )
 		{
-			if ( strncmp ( sToken, "*", 1 )==0 )
+			if ( sToken[0]=='*' && sToken[1]=='\0' ) // phrase star should be separate token
 			{
 				m_dPhraseStar.Add ( m_iAtomPos );
 			} else

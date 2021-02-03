@@ -233,6 +233,22 @@ index dist
 	local = rt_nostar1
 }
 
+source phrase_shift_star_1 : srctest
+{
+	sql_query		= SELECT 1 id, 11 idd, 'эта оранжевая коробка может быть и не только желтой' title UNION SELECT 2 id, 11 idd, 'эта оранжевая тест коробка может быть и не только желтой' title UNION SELECT 3 id, 11 idd, 'эта оранжевая тест тест коробка может быть и не только желтой' title
+	sql_attr_uint		= idd
+}
+
+index phrase_shift_star_1
+{
+	source			= phrase_shift_star_1
+	path			= <data_path/>/phrase_shift_star_1
+	charset_table = russian
+	dict = keywords
+	min_infix_len = 3
+}
+
+
 </config>
 
 <queries>
@@ -389,6 +405,9 @@ REPLACE INTO rt (id, id1, title) VALUES ( 1, 1, 'work worked working workings wo
 <sphinxql>SHOW META</sphinxql>
 <sphinxql>CALL KEYWORDS ( 'test*', 'plain_nostar1')</sphinxql>
 <sphinxql>CALL KEYWORDS ( 'test*', 'rt_nostar1')</sphinxql>
+
+<!-- regression wildcard with utf8 counts as phrase shift -->
+<sphinxql>SELECT id, weight() FROM phrase_shift_star_1 WHERE MATCH(' оранжевая "*коробка может быть" ') ORDER BY weight() desc</sphinxql>
 
 </sphqueries>
 

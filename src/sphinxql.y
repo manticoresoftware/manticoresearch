@@ -1575,7 +1575,7 @@ describe_tok:
 
 update:
 	TOK_UPDATE { pParser->m_pStmt->m_eStmt = STMT_UPDATE; }
-		one_index_opt_chunk TOK_SET update_items_list where_clause opt_option_clause
+		one_index_opt_chunk TOK_SET update_items_list where_clause opt_option_clause opt_hint_clause
 			{
 				pParser->GenericStatement ( &$3 );
 				pParser->m_pStmt->m_tUpdate.m_dRowOffset.Add ( 0 );

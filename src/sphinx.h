@@ -2890,7 +2890,7 @@ public:
 	virtual void				GetIndexFiles ( CSphVector<CSphString> & dFiles, const FilenameBuilder_i * pFilenameBuilder ) const {}
 
 	/// internal make document id list from external docinfo, DO NOT USE
-	virtual CSphFixedVector<SphAttr_t> BuildDocList () const;
+	virtual CSphVector<SphAttr_t> BuildDocList () const;
 
 	virtual void				GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings ) const;
 

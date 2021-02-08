@@ -7635,7 +7635,7 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 	int iTotalKilled = 0;
 	if ( !bEmptyRT )
 	{
-		CSphFixedVector<SphAttr_t> dIndexDocList = pIndex->BuildDocList();
+		auto dIndexDocs = pIndex->BuildDocList();
 		if ( TlsMsg::HasErr () )
 		{
 			sError.SetSprintf ( "ATTACH failed, %s", TlsMsg::szError () );
@@ -7655,14 +7655,13 @@ bool RtIndex_c::AttachDiskIndex ( CSphIndex * pIndex, bool bTruncate, bool & bFa
 
 		// docs ids could be not asc
 		// should sort and remove duplicates
-		int iDocsCount = sphUniq ( dIndexDocList.Begin(), dIndexDocList.GetLength() );
-		VecTraits_T<SphAttr_t> dDocsSorted ( dIndexDocList.Begin(), iDocsCount );
+		dIndexDocs.Uniq();
 
 		if ( m_bOptimizing )
-			m_dKillsWhileOptimizing.Append ( dDocsSorted );
+			m_dKillsWhileOptimizing.Append ( dIndexDocs );
 
 		for ( const auto & pChunk : m_dDiskChunks )
-			iTotalKilled += pChunk->KillMulti ( dDocsSorted );
+			iTotalKilled += pChunk->KillMulti ( dIndexDocs );
 
 	}
 

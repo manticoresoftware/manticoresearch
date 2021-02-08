@@ -1539,7 +1539,7 @@ public:
 	bool				PreallocColumnar();
 	bool				PreallocSkiplist();
 
-	CSphFixedVector<SphAttr_t> 	BuildDocList () const final;
+	CSphVector<SphAttr_t> 	BuildDocList () const final;
 
 	// docstore-related section
 	void				CreateReader ( int64_t iSessionId ) const final;
@@ -7117,10 +7117,10 @@ float CSphIndex::GetGlobalIDF ( const CSphString & sWord, int64_t iDocsLocal, bo
 }
 
 
-CSphFixedVector<SphAttr_t> CSphIndex::BuildDocList () const
+CSphVector<SphAttr_t> CSphIndex::BuildDocList () const
 {
 	TlsMsg::Err(); // reset error
-	return CSphFixedVector<SphAttr_t>(0);
+	return CSphVector<SphAttr_t>();
 }
 
 void CSphIndex::GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings ) const
@@ -11299,7 +11299,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		tCtx.m_pBlobRowBuilder = pBlobRowBuilder.Ptr();
 		tCtx.m_pDocstoreBuilder = pDocstoreBuilder.Ptr();
 		tCtx.m_pColumnarBuilder = pColumnarBuilder.Ptr();
-	
+
 		if ( !MergeAttributes(tCtx) )
 			return false;
 	}
@@ -11961,10 +11961,10 @@ bool CSphIndex_VLN::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) 
 }
 
 
-CSphFixedVector<SphAttr_t> CSphIndex_VLN::BuildDocList () const
+CSphVector<SphAttr_t> CSphIndex_VLN::BuildDocList () const
 {
 	TlsMsg::Err(); // clean err
-	CSphFixedVector<SphAttr_t> dResult {0};
+	CSphVector<SphAttr_t> dResult;
 	if ( !m_iDocinfo )
 		return dResult;
 
@@ -11977,7 +11977,7 @@ CSphFixedVector<SphAttr_t> CSphIndex_VLN::BuildDocList () const
 	}
 
 	int iStride = m_tSchema.GetRowSize();
-	dResult.Reset ( m_iDocinfo );
+	dResult.Resize ( m_iDocinfo );
 
 	const CSphRowitem * pRow = m_tAttr.GetWritePtr();
 	for ( SphAttr_t & tDst : dResult )

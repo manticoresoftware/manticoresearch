@@ -695,7 +695,7 @@ class UpdateResponse {
 Here is the syntax for the SQL `UPDATE` statement:
 
 ```sql
-UPDATE index SET col1 = newval1 [, ...] WHERE where_condition [OPTION opt_name = opt_value [, ...]]
+UPDATE index SET col1 = newval1 [, ...] WHERE where_condition [OPTION opt_name = opt_value [, ...]] [FORCE|IGNORE INDEX(id)]
 ```
 
 
@@ -830,6 +830,8 @@ The options are the same as for [SELECT](Searching/Full_text_matching/Basic_usag
 *   'ignore_nonexistent_columns' - If set to **1** points that the update will silently ignore any warnings about trying to update a column which is not exists in current index schema. Default value is  **0**.
 *   'strict' - this option is used in partial JSON attribute updates. By default (strict=1), `UPDATE` will end in an error if the `UPDATE` query tries to perform an update on non-numeric properties. With strict=0 if multiple properties are updated and some are not allowed, the `UPDATE` will not end in error and will perform the changes only on allowed properties (with the rest being ignored). If none of the `SET` changes of the `UPDATE` are not permitted, the command will end in an error even with strict=0.
 
+### FORCE/IGNORE INDEX(id)
+In rare cases Manticore's built-in query analyzer can be wrong in understanding a query and whether an index by id should be used or not. It can cause poor performance of queries like `UPDATE ... WHERE id = 123`. Adding `FORCE INDEX(id)` will force Manticore use the index. `IGNORE INDEX(id)` will force ignore it. 
 
 ## Updates via HTTP
 

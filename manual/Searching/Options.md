@@ -4,7 +4,7 @@ SQL [SELECT](Searching/Full_text_matching/Basic_usage.md#SQL) clause supports a 
 
 ## OPTION
 ```ini
-SELECT ... OPTION <optionname>=<value> [ , ... ]
+SELECT ... [OPTION <optionname>=<value> [ , ... ]] [FORCE|IGNORE INDEX(id)]
 ```
 
 Example:
@@ -143,3 +143,6 @@ Quoted, colon-separated of `library name:plugin name:optional string of settings
 ```sql
 SELECT * FROM index WHERE MATCH ('yes@no') OPTION token_filter='mylib.so:blend:@'
 ```
+
+## FORCE/IGNORE INDEX(id)
+In rare cases Manticore's built-in query analyzer can be wrong in understanding a query and whether an index by id should be used or not. It can cause poor performance of queries like `SELECT ... WHERE id = 123`. Adding `FORCE INDEX(id)` will force Manticore use the index. `IGNORE INDEX(id)` will force ignore it. 

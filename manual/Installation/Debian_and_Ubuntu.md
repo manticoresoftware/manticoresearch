@@ -43,7 +43,7 @@ apt install manticore
 
 You can also download individual .deb files from [our site](https://manticoresearch.com/downloads/).
 
-Manticore package depends on zlib and ssl libraries, nothing else is strictly required. However if you plan to use [indexer](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool) to create indexes from external storages you'll need to install appropriate client libraries. To know what exactly libraries `indexer` requires run it and look at the top of it's output:
+Manticore package depends on zlib and ssl libraries, nothing else is strictly required. However if you plan to use [indexer](../Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool) to create indexes from external storages you'll need to install appropriate client libraries. To know what exactly libraries `indexer` requires run it and look at the top of it's output:
 
 ```bash
 $ sudo -u manticore indexer
@@ -94,7 +94,7 @@ If you aren't going to use `indexer` tool at all, you don't need to find and ins
 
 To enable CJK tokenization support the official packages contain binaries with embedded ICU library and include ICU data file. They are independent from any ICU runtime library which might be available on your system, and can't be upgraded.
 
-After preparing a configuration file (see [Quick start guide](Quick_start_guide.md)), you can start searchd server:
+After preparing a configuration file (see [Quick start guide](../Quick_start_guide.md)), you can start searchd server:
 
 ```bash
 systemctl start manticore

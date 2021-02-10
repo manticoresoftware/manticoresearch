@@ -9,6 +9,7 @@
   script:
     - sh /Deploy/autoupdate.sh $DEPLOY_TARGET $COMMIT_DIR $DOCS_ERRORS_DIR
   artifacts:
+    when: always
     paths:
     - $DOCS_ERRORS_DIR
   variables:

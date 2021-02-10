@@ -1,6 +1,6 @@
 # Word forms
 
-Word forms are applied after tokenizing incoming text by [charset_table](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table) rules. They essentially let you replace one word with another. Normally, that would be used to bring different word forms to a single normal form (e.g. to normalize all the variants such as "walks", "walked", "walking" to the normal form "walk"). It can also be used to implement [stemming](Creating_an_index/NLP_and_tokenization/Morphology.md) exceptions, because stemming is not applied to words found in the forms list.
+Word forms are applied after tokenizing incoming text by [charset_table](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table) rules. They essentially let you replace one word with another. Normally, that would be used to bring different word forms to a single normal form (e.g. to normalize all the variants such as "walks", "walked", "walking" to the normal form "walk"). It can also be used to implement [stemming](../../Creating_an_index/NLP_and_tokenization/Morphology.md) exceptions, because stemming is not applied to words found in the forms list.
 
 ## wordforms
 
@@ -13,11 +13,11 @@ wordforms = path/to/dict*.txt
 <!-- example wordforms -->
 Word forms dictionary. Optional, default is empty.
 
-The dictionaries are used to normalize incoming words both during indexing and searching. Therefore, when it comes to a [plain index](Creating_an_index/Local_indexes/Plain_index.md) to pick up changes in wordforms file it's required to rotate the index.
+The dictionaries are used to normalize incoming words both during indexing and searching. Therefore, when it comes to a [plain index](../../Creating_an_index/Local_indexes/Plain_index.md) to pick up changes in wordforms file it's required to rotate the index.
 
 Word forms support in Manticore is designed to support big dictionaries well. They moderately affect indexing speed: for instance, a dictionary with 1 million entries slows down indexing about 1.5 times. Searching speed is not affected at all. Additional RAM impact is roughly equal to the dictionary file size, and dictionaries are shared across indexes: i.e. if the very same 50 MB wordforms file is specified for 10 different indexes, additional `searchd` RAM usage will be about 50 MB.
 
-Dictionary file should be in a simple plain text format. Each line should contain source and destination word forms, in UTF-8 encoding, separated by "greater" sign. Rules from the [charset_table](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table) will be applied when the file is loaded. So basically it's as case sensitive as your other full-text indexed data, ie. typically case insensitive. Here's the file contents sample:
+Dictionary file should be in a simple plain text format. Each line should contain source and destination word forms, in UTF-8 encoding, separated by "greater" sign. Rules from the [charset_table](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table) will be applied when the file is loaded. So basically it's as case sensitive as your other full-text indexed data, ie. typically case insensitive. Here's the file contents sample:
 
 ```ini
 walks > walk
@@ -25,7 +25,7 @@ walked > walk
 walking > walk
 ```
 
-There is a bundled [Spelldump](Miscellaneous_tools.md#spelldump) utility that helps you create a dictionary file in the format Manticore can read from source `.dict` and `.aff` dictionary files in `ispell` or `MySpell` format (as bundled with OpenOffice).
+There is a bundled [Spelldump](../../Miscellaneous_tools.md#spelldump) utility that helps you create a dictionary file in the format Manticore can read from source `.dict` and `.aff` dictionary files in `ispell` or `MySpell` format (as bundled with OpenOffice).
 
 You can map several source words to a single destination word. Because the work happens on tokens, not the source text, differences in whitespace and markup are ignored.
 

@@ -20,7 +20,7 @@ HTML entities get decoded and replaced with corresponding UTF-8 characters. Stri
 
 Stripping should work with properly formed HTML and XHTML, but, just as  most browsers, may produce unexpected results on malformed input (such as HTML with stray `<'s` or unclosed `>'s`).
 
-Only the tags themselves, and also HTML comments, are stripped. To strip  the contents of the tags too (eg. to strip embedded scripts), see [html_remove_elements](Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_remove_elements) option. There are no restrictions on tag names; ie. everything that looks like a valid tag start, or end, or a comment will be stripped.
+Only the tags themselves, and also HTML comments, are stripped. To strip  the contents of the tags too (eg. to strip embedded scripts), see [html_remove_elements](../../Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_remove_elements) option. There are no restrictions on tag names; ie. everything that looks like a valid tag start, or end, or a comment will be stripped.
 
 
 <!-- intro -->
@@ -262,7 +262,7 @@ index_sp = {0|1}
 
 Whether to detect and index sentence and paragraph boundaries. Optional, default is 0 (do not detect and index).
 
-This directive enables sentence and paragraph boundary indexing. It's  required for the [SENTENCE](Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators) and [PARAGRAPH](Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators) operators to work. Sentence boundary detection is based on plain text analysis, so you only need to set `index_sp = 1` to enable it. Paragraph detection is however based on HTML markup, and happens in the [HTML stripper](Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_strip). So to index paragraph locations you also need to enable the stripper by specifying `html_strip = 1`. Both types of boundaries are detected based on a few built-in rules enumerated just below.
+This directive enables sentence and paragraph boundary indexing. It's  required for the [SENTENCE](../../Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators) and [PARAGRAPH](../../Searching/Full_text_matching/Operators.md#SENTENCE-and-PARAGRAPH-operators) operators to work. Sentence boundary detection is based on plain text analysis, so you only need to set `index_sp = 1` to enable it. Paragraph detection is however based on HTML markup, and happens in the [HTML stripper](../../Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_strip). So to index paragraph locations you also need to enable the stripper by specifying `html_strip = 1`. Both types of boundaries are detected based on a few built-in rules enumerated just below.
 
 Sentence boundary detection rules are as follows.
 
@@ -358,9 +358,9 @@ A list of in-field HTML/XML zones to index. Optional, default is empty (do not i
 
 Zones can be formally defined as follows. Everything between an opening and a matching closing tag is called a span, and the aggregate of all spans corresponding sharing the same tag name is called a zone. For instance, everything between the occurrences of `<H1>` and `</H1>` in the document field belongs to H1 zone.
 
-Zone indexing, enabled by `index_zones` directive, is an optional extension of the HTML stripper. So it will also require that the [stripper](Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_strip) is enabled (with `html_strip = 1`). The value of the `index_zones` should be a comma-separated list of those tag names and wildcards (ending with a star) that should be indexed as zones.
+Zone indexing, enabled by `index_zones` directive, is an optional extension of the HTML stripper. So it will also require that the [stripper](../../Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_strip) is enabled (with `html_strip = 1`). The value of the `index_zones` should be a comma-separated list of those tag names and wildcards (ending with a star) that should be indexed as zones.
 
-Zones can nest and overlap arbitrarily. The only requirement is that every opening tag has a matching tag. You can also have an arbitrary number of both zones (as in unique zone names, such as H1) and spans (all the occurrences of those H1 tags) in a document. Once indexed, zones can then be used for matching with the ZONE operator, see [extended_query_syntax](Searching/Full_text_matching/Operators.md#ZONE-limit-operator).
+Zones can nest and overlap arbitrarily. The only requirement is that every opening tag has a matching tag. You can also have an arbitrary number of both zones (as in unique zone names, such as H1) and spans (all the occurrences of those H1 tags) in a document. Once indexed, zones can then be used for matching with the ZONE operator, see [extended_query_syntax](../../Searching/Full_text_matching/Operators.md#ZONE-limit-operator).
 
 
 <!-- intro -->

@@ -78,7 +78,7 @@ index products {
 <!-- end -->
 
 <!-- example cjk 2 -->
-* Basic support with N-grams options [ngram_len](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) and [ngram_chars](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
+* Basic support with N-grams options [ngram_len](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) and [ngram_chars](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
 There are separate charset tables(`chinese`, `korean`, `japanese`) that can be used for each CJK-language or, alternatively, common `cjk` charset table can be applied. 
 
 
@@ -154,7 +154,7 @@ index products {
 <!-- end -->
 
 <!-- example cjk 3 -->
-There's also built-in [stopwords](Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopwords) for Chinese with alias `zh`.
+There's also built-in [stopwords](../../Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopwords) for Chinese with alias `zh`.
 
 
 <!-- intro -->

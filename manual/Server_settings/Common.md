@@ -5,7 +5,7 @@ lemmatizer_base
 
 Lemmatizer dictionaries base path. Optional, default is /usr/local/share (as in --datadir switch to ./configure script).
 
-Our lemmatizer implementation (see [Morphology](Creating_an_index/NLP_and_tokenization/Morphology.md) for a discussion of what lemmatizers are) is dictionary driven. lemmatizer\_base directive configures the base dictionary path. File names are hardcoded and specific to a given lemmatizer; the Russian lemmatizer uses ru.pak dictionary file. The dictionaries can be obtained from the Manticore website (<https://manticoresearch.com/downloads/>).
+Our lemmatizer implementation (see [Morphology](../Creating_an_index/NLP_and_tokenization/Morphology.md) for a discussion of what lemmatizers are) is dictionary driven. lemmatizer\_base directive configures the base dictionary path. File names are hardcoded and specific to a given lemmatizer; the Russian lemmatizer uses ru.pak dictionary file. The dictionaries can be obtained from the Manticore website (<https://manticoresearch.com/downloads/>).
 
 Example:
 
@@ -62,7 +62,7 @@ plugin_dir
 
 Trusted location for the dynamic libraries (UDFs). Optional, default is empty (no location).
 
-Specifies the trusted directory from which the [UDF libraries](Extensions/UDFs_and_Plugins/UDF.md) can be loaded.
+Specifies the trusted directory from which the [UDF libraries](../Extensions/UDFs_and_Plugins/UDF.md) can be loaded.
 
 Example:
 

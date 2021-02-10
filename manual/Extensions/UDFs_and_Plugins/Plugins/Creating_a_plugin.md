@@ -10,7 +10,7 @@ Loads the given library (if it is not loaded yet) and loads the specified plugin
 *   index\_token\_filter
 *   query\_token\_filter
 
-Refer to [plugins](Extensions/UDFs_and_Plugins/UDFs_and_Plugins.md#Plugins) for more information regarding writing the plugins.
+Refer to [plugins](../../../Extensions/UDFs_and_Plugins/UDFs_and_Plugins.md#Plugins) for more information regarding writing the plugins.
 
 ```sql
 mysql> CREATE PLUGIN myranker TYPE 'ranker' SONAME 'myplugins.so';

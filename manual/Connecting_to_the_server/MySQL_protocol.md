@@ -45,7 +45,7 @@ mysql -P9306 -h0
 
 ## Secured MySQL connection
 
-The MySQL protocol supports [SSL encryption](Security/SSL.md). The secured connections can be made on the same `mysql` listening port.
+The MySQL protocol supports [SSL encryption](../Security/SSL.md). The secured connections can be made on the same `mysql` listening port.
 
 ## Compressed MySQL connection
 

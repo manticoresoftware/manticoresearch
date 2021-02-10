@@ -2,11 +2,11 @@
 
 <!-- example Example -->
 
-[Node status](Profiling_and_monitoring/Node_status.md) outputs, among other information, cluster status variables.
+[Node status](../../Profiling_and_monitoring/Node_status.md) outputs, among other information, cluster status variables.
 
 The output format is `cluster_name_variable_name` `variable_value`. Most of them are described in [Galera Documentation Status Variables](https://galeracluster.com/library/documentation/galera-status-variables.html). Additionally we display:
 
-* cluster_name - [name](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster) of the cluster
+* cluster_name - [name](../../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#Replication-cluster) of the cluster
 * node_state - current state of the node: `closed`, `destroyed`, `joining`, `donor`, `synced`
 * indexes_count - number of indexes managed by the cluster
 * indexes - list of index names managed by the cluster

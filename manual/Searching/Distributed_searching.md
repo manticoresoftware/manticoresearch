@@ -8,7 +8,7 @@ Partitioning is done manually. You should:
 
 * setup several instances of Manticore on different servers
 * make the instances index (and search) different parts of data
-* configure a special [distributed index](Creating_an_index/Creating_a_distributed_index/Creating_a_distributed_index.md) on some of the `searchd` instances
+* configure a special [distributed index](../Creating_an_index/Creating_a_distributed_index/Creating_a_distributed_index.md) on some of the `searchd` instances
 * and query this index
 
 This kind of index only contains references to other local and remote indexes - so it could not be directly reindexed, and you should reindex those indexes which it references instead.
@@ -24,4 +24,4 @@ When Manticore receives a query against distributed index, it does the following
 
 From the application's point of view, there are no differences between searching through a regular index, or a distributed index at all. That is, distributed indexes are fully transparent to the application, and actually there's no way to tell whether the index you queried was distributed or local.
 
-Read more about [remote nodes](Creating_a_cluster/Remote_nodes.md).
+Read more about [remote nodes](../Creating_a_cluster/Remote_nodes.md).

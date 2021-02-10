@@ -8,4 +8,4 @@ To fetch Manticore image execute:
 docker pull manticoresearch/manticore
 ```
 
-See [Using Manticore in Docker](Starting_the_server/Docker.md) for more details about using Manticore in Docker.
+See [Using Manticore in Docker](../Starting_the_server/Docker.md) for more details about using Manticore in Docker.

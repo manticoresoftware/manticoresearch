@@ -1,21 +1,21 @@
 <!-- example plain -->
 # Plain index
 
-**Plain index** is a basic element for non-[percolate](Creating_an_index/Local_indexes/Percolate_index.md) searching. It can be specified only in a configuration file in [Plain mode](Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain mode%29). It is not supported in [RT mode](Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29). It's normally used together with a [source](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#source) to index data [from an external storage](Adding_data_from_external_storages/Plain_indexes_creation.md) and afterwards can be [attached](Adding_data_from_external_storages/Adding_data_from_indexes/Attaching_a_plain_index_to_RT_index.md) to a **real-time index**.
+**Plain index** is a basic element for non-[percolate](../../Creating_an_index/Local_indexes/Percolate_index.md) searching. It can be specified only in a configuration file in [Plain mode](../../Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain mode%29). It is not supported in [RT mode](../../Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29). It's normally used together with a [source](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#source) to index data [from an external storage](../../Adding_data_from_external_storages/Plain_indexes_creation.md) and afterwards can be [attached](../../Adding_data_from_external_storages/Adding_data_from_indexes/Attaching_a_plain_index_to_RT_index.md) to a **real-time index**.
 
 ### 👍 What you can do with a plain index:
-  * build it with help of [source](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#source) and [indexer](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool) tool which is the fastest possible way to index data
-  * do an in-place update of an [integer, float, string and MVA attribute](Creating_an_index/Data_types.md)
-  * [update](Quick_start_guide.md#Update) it's killlist_target
+  * build it with help of [source](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#source) and [indexer](../../Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool) tool which is the fastest possible way to index data
+  * do an in-place update of an [integer, float, string and MVA attribute](../../Creating_an_index/Data_types.md)
+  * [update](../../Quick_start_guide.md#Update) it's killlist_target
 
 ### ⛔ What you cannot do with a plain index:
   * insert more data into an index after it's built
   * update it
   * delete from it
   * create/delete/alter a plain index online (you need to define it in a configuration file)
-  * use [UUID](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Auto-ID) for automatic ID generation. When you fetch data from an external storage it must include a unique identifier for each document
+  * use [UUID](../../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Auto-ID) for automatic ID generation. When you fetch data from an external storage it must include a unique identifier for each document
 
-Except numeric attributes (including [MVA](Creating_an_index/Data_types.md#Multi-value-integer-%28MVA%29)), the rest of the data in a plain index is immutable. If you need to update/add new records you need to rebuild the index. While index is being rebuilt, existing index is still available for serving requests. When a new version of the index is ready, a process called [rotation](Adding_data_from_external_storages/Rotating_an_index.md) is performed which puts the new version online and discards the old one.
+Except numeric attributes (including [MVA](../../Creating_an_index/Data_types.md#Multi-value-integer-%28MVA%29)), the rest of the data in a plain index is immutable. If you need to update/add new records you need to rebuild the index. While index is being rebuilt, existing index is still available for serving requests. When a new version of the index is ready, a process called [rotation](../../Adding_data_from_external_storages/Rotating_an_index.md) is performed which puts the new version online and discards the old one.
 
 <!-- intro -->
 #### How to create a plain index
@@ -46,7 +46,7 @@ index idx {
 #### Plain indexing performance
 Speed of plain indexing depends on several factors:
 * how fast the source can be providing the data
-* [tokenization settings](Creating_an_index/NLP_and_tokenization/Data_tokenization.md)
+* [tokenization settings](../../Creating_an_index/NLP_and_tokenization/Data_tokenization.md)
 * your hardware (CPU, amount of RAM, disk performance)
 
 #### Plain indexing scenarios
@@ -57,9 +57,9 @@ which we just fully rebuild from time to time. It works fine for smaller data se
 * indexing duration grows with the data, the more data you have in the source the longer it will take to build the index
 
 ##### Main+delta
-If you have a bigger data set and still want to use a plain index rather than [Real-Time](Creating_an_index/Local_indexes/Real-time_index.md) what you can do is:
+If you have a bigger data set and still want to use a plain index rather than [Real-Time](../../Creating_an_index/Local_indexes/Real-time_index.md) what you can do is:
 * make another smaller index for incremental indexing
-* combine the both using a [distributed index](Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md)
+* combine the both using a [distributed index](../../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md)
 
 What it can give is you can rebuild the bigger index seldom (say once per week), save the position of the freshest indexed document and after that use the smaller index to index anything new or updated from your source. Since you will only need to fetch the updates from your storage you can do it much more frequently (say once per minute or even each few seconds).
 
@@ -67,9 +67,9 @@ But after a while the smaller indexing duration will become too high and that wi
 
 This is called **main+delta schema** and you can learn more about it in [this interactive course](https://play.manticoresearch.com/maindelta/).
 
-When you build a smaller "delta" index it can get documents that are already in the "main" index. To let Manticore know that documents from the current index should take precedence there's a mechanism called **kill list** and corresponding directive [killlist_target](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#killlist_target).
+When you build a smaller "delta" index it can get documents that are already in the "main" index. To let Manticore know that documents from the current index should take precedence there's a mechanism called **kill list** and corresponding directive [killlist_target](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#killlist_target).
 
-More information on this topic can be found [here](Adding_data_from_external_storages/Main_delta.md).
+More information on this topic can be found [here](../../Adding_data_from_external_storages/Main_delta.md).
 
 #### Plain index files structure
 | Extension | Description |

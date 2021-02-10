@@ -8,4 +8,4 @@ Manticore search recognizes and parses special suffixes which makes easier to us
 
 ## Warning
 
-`Giga-`, and especially `tera-` size suffixes are not very usable right now, since most of the sizes inside are limited by 2Gb (or, being precise, 2Gb - 1 byte), and for the moment only [rt_mem_limit](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_mem_limit), [attr_update_reserve](Updating_documents/UPDATE.md#attr_update_reserve) from index config, and [qcache_max_bytes](Server_settings/Searchd.md#qcache_max_bytes) from searchd config accepts 64-bit values which may exceed 2Gb.
+`Giga-`, and especially `tera-` size suffixes are not very usable right now, since most of the sizes inside are limited by 2Gb (or, being precise, 2Gb - 1 byte), and for the moment only [rt_mem_limit](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#rt_mem_limit), [attr_update_reserve](../Updating_documents/UPDATE.md#attr_update_reserve) from index config, and [qcache_max_bytes](../Server_settings/Searchd.md#qcache_max_bytes) from searchd config accepts 64-bit values which may exceed 2Gb.

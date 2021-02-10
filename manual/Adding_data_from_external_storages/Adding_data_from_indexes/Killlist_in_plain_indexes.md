@@ -20,16 +20,16 @@ In many cases the query is a union between a query that gets a list of updated d
 ```
 
 ## Removing documents in a plain index
-A plain index can contain a directive called [killlist_target](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#killlist_target) that will tell the server it can provide a list of document ids that should be removed from certain existing indexes. The index can use either it's document ids as the source for this list or provide a separate [list](Adding_data_from_external_storages/Adding_data_from_indexes/Killlist_in_plain_indexes.md#Index-kill-list).
+A plain index can contain a directive called [killlist_target](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#killlist_target) that will tell the server it can provide a list of document ids that should be removed from certain existing indexes. The index can use either it's document ids as the source for this list or provide a separate [list](../../Adding_data_from_external_storages/Adding_data_from_indexes/Killlist_in_plain_indexes.md#Index-kill-list).
 
 ### killlist_target
 
 <!-- example killlist_target 1 -->
 Sets the index(es) that the kill-list will be applied to. Optional, default value is empty.
 
-When you use [plain_indexes](Creating_an_index/Local_indexes/Plain_index.md) you often need to maintain not a single index, but a set of them to be able to add/update/delete new documents sooner (read [delta_index_updates](Adding_data_from_external_storages/Main_delta.md)). In order to suppress matches in the previous (**main**) index that were updated or deleted in the next (**delta**) index you need to:
+When you use [plain_indexes](../../Creating_an_index/Local_indexes/Plain_index.md) you often need to maintain not a single index, but a set of them to be able to add/update/delete new documents sooner (read [delta_index_updates](../../Adding_data_from_external_storages/Main_delta.md)). In order to suppress matches in the previous (**main**) index that were updated or deleted in the next (**delta**) index you need to:
 
-1.  Create a kill-list in the **delta** index using [sql_query_killlist](Adding_data_from_external_storages/Adding_data_from_indexes/Killlist_in_plain_indexes.md#Index-kill-list)
+1.  Create a kill-list in the **delta** index using [sql_query_killlist](../../Adding_data_from_external_storages/Adding_data_from_indexes/Killlist_in_plain_indexes.md#Index-kill-list)
 2.  Specify **main** index as `killlist_target` in **delta** index settings:
 
 

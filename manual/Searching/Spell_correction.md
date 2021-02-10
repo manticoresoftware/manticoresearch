@@ -19,7 +19,7 @@ There are few ways how spell correction can be done, but the important thing is 
   * Based on your real data. The idea here is that mostly in the dictionary made up from your data the spelling is correct and then for each typed word the system just tries to find a word which is most similar to that (we'll speak about how exactly it can be done with Manticore shortly)
   * Or can be based on an external dictionary which has nothing to do with your data. The problem which may arise here is that your data and the external dictionary can be too different: some words may be missing in the dictionary, some words may be missing in your data.
 * Not just dictionary-based, but context-aware, e.g. "white ber" would be corrected to "white bear" while "dark ber" - to "dark beer". The context may be not just a neighbour word in your query, but your location, date of time, current sentence's grammar (to let's say change "there" to "their" or not), your search history and virtually any other things that can affect your intent.
-* Another classical approach is to use previous search queries as the data set for spell correction. It's even more utilized in [autocomplete](Searching/Autocomplete.md) functionality, but makes sense for autocorrect too. The idea here is that mostly users are right with spelling, therefore we can use words from their search history as a source of truth even if we don't have the words in our documents nor we use an external dictionary. Context-awareness is also possible here.
+* Another classical approach is to use previous search queries as the data set for spell correction. It's even more utilized in [autocomplete](../Searching/Autocomplete.md) functionality, but makes sense for autocorrect too. The idea here is that mostly users are right with spelling, therefore we can use words from their search history as a source of truth even if we don't have the words in our documents nor we use an external dictionary. Context-awareness is also possible here.
 
 
 Manticore provides commands `CALL QSUGGEST` and `CALL SUGGEST` that can be used for the purpose of automatic spell correction.
@@ -34,7 +34,7 @@ CALL SUGGEST(word, index [,options])
 options: N as option_name[, M as another_option, ...]
 ```
 
-These commands provide for a given word all suggestions from the dictionary. They work only on indexes with [infixing](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) enabled and [dict=keywords](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict). They return the suggested keywords, Levenshtein distance between the suggested and original keywords and the docs statistics of the suggested keyword.
+These commands provide for a given word all suggestions from the dictionary. They work only on indexes with [infixing](../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) enabled and [dict=keywords](../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict). They return the suggested keywords, Levenshtein distance between the suggested and original keywords and the docs statistics of the suggested keyword.
 
 If the first parameter is not a single word, but multiple, then:
 * `CALL QSUGGEST` will return suggestions only for the **last** word, ignoring the rest
@@ -162,4 +162,4 @@ CALL QSUGGEST('bagg with tasel', 'products', 1 as result_line);
 
 [This interactive course](https://play.manticoresearch.com/didyoumean/) demonstrates online how it works on a web page and provides different examples.
 
-![Typical flow with Manticore and a database](didyoumean.png){.scale-0.5}
+![Typical flow with Manticore and a database](../didyoumean.png){.scale-0.5}

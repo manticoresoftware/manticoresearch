@@ -35,7 +35,7 @@ Possible exit codes are as follows:
   * 2 if server reported an error during shutdown
   * 3 if server crashed during shutdown
 
-* `--status` command is used to query running `searchd` instance status using the connection details from the (optionally) provided configuration file. It will try to connect to running instance using the first found UNIX socket or TCP port from the configuration file. On success it will query for a number of status and performance counter values and print them. You can also use [SHOW STATUS](Profiling_and_monitoring/Node_status.md#SHOW-STATUS) command to access the very same counters via SQL protocol. Examples:
+* `--status` command is used to query running `searchd` instance status using the connection details from the (optionally) provided configuration file. It will try to connect to running instance using the first found UNIX socket or TCP port from the configuration file. On success it will query for a number of status and performance counter values and print them. You can also use [SHOW STATUS](../Profiling_and_monitoring/Node_status.md#SHOW-STATUS) command to access the very same counters via SQL protocol. Examples:
 ```bash
 $ searchd --status
 $ searchd --config /etc/manticoresearch/manticore.conf --status
@@ -77,8 +77,8 @@ $ searchd --config /etc/manticoresearch/manticore.conf --cpustats
 ```bash
 $ searchd --config /etc/manticoresearch/manticore.conf --coredump
 ```
-* `--new-cluster` bootstraps a replication cluster and makes the server a reference node with [cluster restart](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) protection
-* `--new-cluster-force` bootstraps a replication cluster and makes the server a reference node bypassing [cluster restart](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) protection
+* `--new-cluster` bootstraps a replication cluster and makes the server a reference node with [cluster restart](../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) protection
+* `--new-cluster-force` bootstraps a replication cluster and makes the server a reference node bypassing [cluster restart](../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) protection
 
 There are some options for `searchd` that are specific to Windows platforms, concerning handling as a service, and are only available in Windows binaries.
 
@@ -113,5 +113,5 @@ C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --install
 `searchd` supports a number of signals:
 
 * SIGTERM - Initiates a clean shutdown. New queries will not be handled, but queries that are already started will not be forcibly interrupted.
-* SIGHUP - Initiates indexes rotation. Depending on the value of [seamless_rotate](Server_settings/Searchd.md#seamless_rotate) setting, new queries might be shortly stalled; clients will receive temporary errors.
+* SIGHUP - Initiates indexes rotation. Depending on the value of [seamless_rotate](../Server_settings/Searchd.md#seamless_rotate) setting, new queries might be shortly stalled; clients will receive temporary errors.
 * SIGUSR1 - Forces reopen of searchd log and query log files, letting you implement log file rotation.

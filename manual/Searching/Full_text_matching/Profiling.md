@@ -802,7 +802,7 @@ Variable: transformed_tree
 <!-- Example Explain_query_dot -->
 `EXPLAIN QUERY ... option format=dot` allows displaying the execution tree of a provided full-text query in hierarchical format suitable for visualization by existing tools, for example https://dreampuf.github.io/GraphvizOnline :
 
-![EXPLAIN QUERY graphviz example](graphviz.png)
+![EXPLAIN QUERY graphviz example](../../graphviz.png)
 
 <!-- intro -->
 ##### SQL:
@@ -836,7 +836,7 @@ Variable: transformed_tree
 
 ## Viewing the match factors values
 <!-- example factors -->
-When expression ranker is used, it is possible to expose the values of the calculated factors using [PACKEDFACTORS()](Functions/Searching_and_ranking_functions.md#PACKEDFACTORS%28%29).
+When expression ranker is used, it is possible to expose the values of the calculated factors using [PACKEDFACTORS()](../../Functions/Searching_and_ranking_functions.md#PACKEDFACTORS%28%29).
 
 The function returns:
 

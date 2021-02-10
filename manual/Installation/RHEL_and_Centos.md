@@ -31,7 +31,7 @@ yum --enablerepo manticore-dev install manticore
 
 You can also download individual rpm files [from our site](https://manticoresearch.com/downloads/) and install them using tools `rpm` or `yum`.
 
-Apart the package, if you plan to use [indexer](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool) to create indexes from external sources, you'll need to install corresponding client libraries in order to make available of indexing sources you want. The line below will install all of them at once; feel free to use it as is, or to reduce it to install only libraries you need (for only mysql sources - just `mysql-libs` should be enough, and unixODBC is not necessary).
+Apart the package, if you plan to use [indexer](../Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool) to create indexes from external sources, you'll need to install corresponding client libraries in order to make available of indexing sources you want. The line below will install all of them at once; feel free to use it as is, or to reduce it to install only libraries you need (for only mysql sources - just `mysql-libs` should be enough, and unixODBC is not necessary).
 
 ```bash
 yum install mysql-libs postgresql-libs expat unixODBC

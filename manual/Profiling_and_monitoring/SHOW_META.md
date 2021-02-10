@@ -115,7 +115,7 @@ SHOW META;
 <!-- end -->
 
 <!-- example show meta predicted_time -->
-Additional `predicted_time`, `dist_predicted_time`, `local_fetched_docs`, `local_fetched_hits`, `local_fetched_skips` and their respective `dist_fetched_*` counterparts will only be available if searchd was configured with [predicted time costs](Server_settings/Searchd.md#predicted_time_costs) and query had `predicted_time` in the `OPTION` clause.
+Additional `predicted_time`, `dist_predicted_time`, `local_fetched_docs`, `local_fetched_hits`, `local_fetched_skips` and their respective `dist_fetched_*` counterparts will only be available if searchd was configured with [predicted time costs](../Server_settings/Searchd.md#predicted_time_costs) and query had `predicted_time` in the `OPTION` clause.
 
 <!-- intro -->
 ##### SQL:
@@ -243,7 +243,7 @@ SHOW META LIKE 'total%';
 
 <!-- example show meta facets -->
 
-When using [faceted search](Searching/Faceted_search.md), you can check `multiplier` field in `SHOW META` output to see how many queries were run in an optimized group.
+When using [faceted search](../Searching/Faceted_search.md), you can check `multiplier` field in `SHOW META` output to see how many queries were run in an optimized group.
 
 <!-- intro -->
 ##### SQL:
@@ -296,7 +296,7 @@ SHOW META LIKE 'multiplier';
 
 <!-- example show meta PQ -->
 
-`SHOW META` can be used after executing a [CALL PQ](Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ)  statement. In this case, it provides a different output.
+`SHOW META` can be used after executing a [CALL PQ](../Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ)  statement. In this case, it provides a different output.
 
 `SHOW META` after a `CALL PQ` statement contains: 
  

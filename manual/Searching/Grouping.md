@@ -9,7 +9,7 @@ Manticore supports grouping of search results by one or multiple columns and com
 * have more than one row returned per group
 * have groups filtered
 * have groups sorted
-* be aggregated with help of [](Searching/Grouping.md#Aggregation-functions)
+* be aggregated with help of [](../Searching/Grouping.md#Aggregation-functions)
 
 <!-- intro -->
 The general syntax is:
@@ -58,7 +58,7 @@ Grouping is very simple - just add "GROUP BY smth" to the end of your `SELECT` q
 * any non-full-text field from the index: integer, float, string, MVA (multi-value attribute)
 * or if you used an alias in the `SELECT` list - you can GROUP BY it too
 
-You can omit any [aggregation functions](Searching/Grouping.md#Aggregation-functions) in the `SELECT` list and it will work too:
+You can omit any [aggregation functions](../Searching/Grouping.md#Aggregation-functions) in the `SELECT` list and it will work too:
 
 <!-- intro -->
 ##### Example:
@@ -521,7 +521,7 @@ SELECT release_year, avg(rental_rate) avg FROM films GROUP BY release_year HAVIN
 
 <!-- example group7 -->
 ##### GROUPBY()
-There is a function `GROUPBY()` which returns the key of the current group. It's useful in many cases especially when you [GROUP BY an MVA](Searching/Grouping.md#Grouping-by-MVA-%28multi-value-attributes%29) or a [JSON value](Searching/Grouping.md#Grouping-by-a-JSON-node).
+There is a function `GROUPBY()` which returns the key of the current group. It's useful in many cases especially when you [GROUP BY an MVA](../Searching/Grouping.md#Grouping-by-MVA-%28multi-value-attributes%29) or a [JSON value](../Searching/Grouping.md#Grouping-by-a-JSON-node).
 
 It can be also used in `HAVING` to for example leave only years 2000 and 2002.
 
@@ -546,7 +546,7 @@ SELECT release_year, count(*) FROM films GROUP BY release_year HAVING GROUPBY() 
 <!-- end -->
 <!-- example mva -->
 ##### Grouping by MVA (multi-value attributes)
-Manticore supports grouping by [MVA](Creating_an_index/Data_types.md#Multi-value-integer-%28MVA%29). To show how it works let's create a table "shoes" with MVA "sizes" and insert few documents into it:
+Manticore supports grouping by [MVA](../Creating_an_index/Data_types.md#Multi-value-integer-%28MVA%29). To show how it works let's create a table "shoes" with MVA "sizes" and insert few documents into it:
 ```sql
 create table shoes(title text, sizes multi);
 insert into shoes values(0,'nike',(40,41,42)),(0,'adidas',(41,43)),(0,'reebook',(42,43));
@@ -741,7 +741,7 @@ class SearchResponse {
 
 <!-- example json -->
 ##### Grouping by a JSON node
-If you have a field of type [JSON](Creating_an_index/Data_types.md#JSON) you can GROUP BY any node from it. To demonstrate it let's create a table "products" with few documents each having color in the "meta" JSON field:
+If you have a field of type [JSON](../Creating_an_index/Data_types.md#JSON) you can GROUP BY any node from it. To demonstrate it let's create a table "products" with few documents each having color in the "meta" JSON field:
 ```sql
 create table products(title text, meta json);
 insert into products values(0,'nike','{"color":"red"}'),(0,'adidas','{"color":"red"}'),(0,'puma','{"color":"green"}');
@@ -967,7 +967,7 @@ SELECT major, count(*), count(distinct age) FROM students GROUP BY major;
 <!-- example concat -->
 ##### GROUP_CONCAT(field)
 
-Often you want to understand better the contents of each group. You can use [GROUP N BY](Searching/Grouping.md#Give-me-N-rows) for that, but it would return additional rows you might not want in the output. `GROUP_CONCAT()` enriches your grouping by concatenating values of some field in the group. Let's take the previous example and improve it by getting all the ages in each group.
+Often you want to understand better the contents of each group. You can use [GROUP N BY](../Searching/Grouping.md#Give-me-N-rows) for that, but it would return additional rows you might not want in the output. `GROUP_CONCAT()` enriches your grouping by concatenating values of some field in the group. Let's take the previous example and improve it by getting all the ages in each group.
 
 `GROUP_CONCAT(field)` returns the list comma-separated.
 
@@ -1016,7 +1016,7 @@ SELECT release_year year, sum(rental_rate) sum, min(rental_rate) min, max(rental
 
 <!-- example accuracy -->
 ## Grouping accuracy
-Grouping is done in fixed memory which depends on the [max_matches](Searching/Options.md#max_matches) setting. If the max_matches allows to store all found groups, the results will be 100% correct. The less the value the less accurate will be the results.
+Grouping is done in fixed memory which depends on the [max_matches](../Searching/Options.md#max_matches) setting. If the max_matches allows to store all found groups, the results will be 100% correct. The less the value the less accurate will be the results.
 
 <!-- intro -->
 ##### Example:

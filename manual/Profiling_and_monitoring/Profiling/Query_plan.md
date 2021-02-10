@@ -317,7 +317,7 @@ POST /search
 
 <!-- end -->
 
-See also [EXPLAIN QUERY](Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query). It displays the execution tree of a full-text query without actually executing the query.
+See also [EXPLAIN QUERY](../../Searching/Full_text_matching/Profiling.md#Profiling-without-running-a-query). It displays the execution tree of a full-text query without actually executing the query.
 
 ## Dot format for SHOW PLAN
 `SHOW PLAN format=dot` allows to return the full-text query execution tree in hierarchical format suitable for visualization by existing tools, for example https://dreampuf.github.io/GraphvizOnline :
@@ -341,7 +341,7 @@ Variable: transformed_tree
 }
 ```
 
-![SHOW PLAN graphviz example](graphviz.png)
+![SHOW PLAN graphviz example](../../graphviz.png)
 
 ## JSON result set notes
 

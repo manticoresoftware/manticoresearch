@@ -2,7 +2,7 @@
 
 Manticore supports many languages. Basic support for most is enabled by default via `charset_table = non_cjk` (which is a default value). 
 
-For many languages we provide [stopwords](Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopwords) file (you can also use your own one) which you can use to improve search relevance.
+For many languages we provide [stopwords](../../Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopwords) file (you can also use your own one) which you can use to improve search relevance.
 
 For few languages advanced morphology is available that allows to improve search relevance significantly by better segmentation and normalization using dictionary based lemmatization or stemming algorithms.
 

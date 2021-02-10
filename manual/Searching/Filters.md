@@ -4,12 +4,12 @@
 
 `WHERE` is an SQL clause which works for both fulltext matching and additional filtering. The following operators are available:
 
-* [Comparison operators](Searching/Expressions.md#Comparison-operators) `<, > <=, >=, =, <>, BETWEEN, IN, IS NULL`
-* [Boolean operators](Searching/Full_text_matching/Operators.md#Boolean-operators) `AND, OR, NOT`
+* [Comparison operators](../Searching/Expressions.md#Comparison-operators) `<, > <=, >=, =, <>, BETWEEN, IN, IS NULL`
+* [Boolean operators](../Searching/Full_text_matching/Operators.md#Boolean-operators) `AND, OR, NOT`
 
-`MATCH('query')` is supported and maps to [fulltext query](Searching/Full_text_matching/Operators.md). 
+`MATCH('query')` is supported and maps to [fulltext query](../Searching/Full_text_matching/Operators.md). 
 
-`{col_name | expr_alias} [NOT] IN @uservar` condition syntax is supported. Refer to [SET](Server_settings/Setting_variables_online.md#SET) syntax for a description of global user variables.
+`{col_name | expr_alias} [NOT] IN @uservar` condition syntax is supported. Refer to [SET](../Server_settings/Setting_variables_online.md#SET) syntax for a description of global user variables.
 
 ## HTTP
 

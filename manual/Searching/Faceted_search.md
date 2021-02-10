@@ -1,8 +1,8 @@
 # Faceted search
 
-Faceted search is as essential function of a modern search application as [autocomplete](Searching/Autocomplete.md), [spell correction](Searching/Spell_correction.md) and search keywords [highlighting](Searching/Highlighting.md). Especially in E-commerce products.
+Faceted search is as essential function of a modern search application as [autocomplete](../Searching/Autocomplete.md), [spell correction](../Searching/Spell_correction.md) and search keywords [highlighting](../Searching/Highlighting.md). Especially in E-commerce products.
 
-![Faceted search](faceted.png)⛔
+![Faceted search](../faceted.png)⛔
 
 It comes to the rescue when we deal with large amounts of data and various properties related to each other, whether it is size, color, manufacturer or something else. When querying large amounts of data search results often include large swaths of entries which does not fit user’s expectations. Faceted search allows an end-user to explicitly specify the dimensions that they want their search results to meet.
 
@@ -1231,7 +1231,7 @@ When using SQL, a search with facets returns a multiple result sets response. Th
 Internally, the `FACET` is a shorthand for executing a multi-query where the first query contains the main search query and the rest of the queries in the batch have each a clustering. As in the case of multi-query, the common query optimization can kick-in for a faceted search, meaning the search query is executed only once and the facets operates on the search query result, each facet adding only a fraction of time to the total query time.
 
 
-To check if the faceted search ran in an optimized mode can be seen in [query log](Logging/Query_logging.md), where all the logged queries will contain a `xN` string, where `N` is the number of queries that ran in the optimized group or checking the output of [SHOW META](Profiling_and_monitoring/SHOW_META.md) statement which will exhibit a `multiplier` metric:
+To check if the faceted search ran in an optimized mode can be seen in [query log](../Logging/Query_logging.md), where all the logged queries will contain a `xN` string, where `N` is the number of queries that ran in the optimized group or checking the output of [SHOW META](../Profiling_and_monitoring/SHOW_META.md) statement which will exhibit a `multiplier` metric:
 
 <!-- request SQL -->
 

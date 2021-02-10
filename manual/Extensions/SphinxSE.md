@@ -167,19 +167,19 @@ As seen in example, both query text and search options should be put into `WHERE
 # pick all results within 1000 meter from geoanchor
 ... WHERE query='test;floatrange=@geodist,0,1000;';
 ```
-* maxmatches - per-query max matches value, as in [max_matches search option](Searching/Options.md#max_matches):
+* maxmatches - per-query max matches value, as in [max_matches search option](../Searching/Options.md#max_matches):
 ```sql
 ... WHERE query='test;maxmatches=2000;';
 ```
-* cutoff - maximum allowed matches, as in [cutoff search option](Searching/Options.md#cutoff):
+* cutoff - maximum allowed matches, as in [cutoff search option](../Searching/Options.md#cutoff):
 ```sql
 ... WHERE query='test;cutoff=10000;';
 ```
-* maxquerytime - maximum allowed query time (in milliseconds), as in [max_query_time search option](Searching/Options.md#max_query_time):
+* maxquerytime - maximum allowed query time (in milliseconds), as in [max_query_time search option](../Searching/Options.md#max_query_time):
 ```sql
 ... WHERE query='test;maxquerytime=1000;';
 ```
-* groupby - group-by function and attribute. Read [this](Searching/Grouping.md#Just-Grouping) about grouping search results:
+* groupby - group-by function and attribute. Read [this](../Searching/Grouping.md#Just-Grouping) about grouping search results:
 ```sql
 ... WHERE query='test;groupby=day:published_ts;';
 ... WHERE query='test;groupby=attr:group_id;';
@@ -188,7 +188,7 @@ As seen in example, both query text and search options should be put into `WHERE
 ```sql
 ... WHERE query='test;groupsort=@count desc;';
 ```
-* distinct - an attribute to compute [COUNT(DISTINCT)](Searching/Grouping.md#COUNT%28DISTINCT-field%29) for when doing group-by:
+* distinct - an attribute to compute [COUNT(DISTINCT)](../Searching/Grouping.md#COUNT%28DISTINCT-field%29) for when doing group-by:
 ```sql
 ... WHERE query='test;groupby=attr:country_id;distinct=site_id';
 ```
@@ -200,7 +200,7 @@ As seen in example, both query text and search options should be put into `WHERE
 ```sql
 ... WHERE query='test;fieldweights=title,10,abstract,3,content,1;';
 ```
-* comment - a string to mark this query in query log, as in [comment search option](Searching/Options.md#comment):
+* comment - a string to mark this query in query log, as in [comment search option](../Searching/Options.md#comment):
 ```sql
 ... WHERE query='test;comment=marker001;';
 ```
@@ -212,7 +212,7 @@ As seen in example, both query text and search options should be put into `WHERE
 ```sql
 ... WHERE query='test;host=sphinx-test.loc;port=7312;';
 ```
-* ranker - a ranking function to use with "extended" matching mode, as in [ranker](Searching/Options.md#ranker). Known values are "proximity_bm25", "bm25", "none", "wordcount", "proximity", "matchany", "fieldmask", "sph04", "expr:EXPRESSION" syntax to support expression-based ranker (where EXPRESSION should be replaced with your specific ranking formula), and "export:EXPRESSION":
+* ranker - a ranking function to use with "extended" matching mode, as in [ranker](../Searching/Options.md#ranker). Known values are "proximity_bm25", "bm25", "none", "wordcount", "proximity", "matchany", "fieldmask", "sph04", "expr:EXPRESSION" syntax to support expression-based ranker (where EXPRESSION should be replaced with your specific ranking formula), and "export:EXPRESSION":
 ```sql
 ... WHERE query='test;mode=extended;ranker=bm25;';
 ... WHERE query='test;mode=extended;ranker=expr:sum(lcs);';
@@ -263,7 +263,7 @@ idf=0.259532)
 
 <!-- end -->
 
-* geoanchor - geodistance anchor. Read more about Geo-search [in this section](Searching/Geo_search.md). Takes 4 parameters which are latitude and longitude attribute names, and anchor point coordinates respectively:
+* geoanchor - geodistance anchor. Read more about Geo-search [in this section](../Searching/Geo_search.md). Takes 4 parameters which are latitude and longitude attribute names, and anchor point coordinates respectively:
 ```sql
 ... WHERE query='test;geoanchor=latattr,lonattr,0.123,0.456';
 ```
@@ -362,7 +362,7 @@ mysql> SHOW ENGINE SPHINX STATUS;
 ## Building snippets via MySQL
 
 
-SphinxSE also includes a UDF function that lets you create snippets through MySQL. The functionality is similar to [HIGHLIGHT()](Functions/Searching_and_ranking_functions.md#HIGHLIGHT%28%29), but accessible through MySQL+SphinxSE.
+SphinxSE also includes a UDF function that lets you create snippets through MySQL. The functionality is similar to [HIGHLIGHT()](../Functions/Searching_and_ranking_functions.md#HIGHLIGHT%28%29), but accessible through MySQL+SphinxSE.
 
 The binary that provides the UDF is named `sphinx.so` and should be automatically built and installed to proper location along with SphinxSE itself. If it does not get installed automatically for some reason, look for `sphinx.so` in the build directory and copy it to the plugins directory of your MySQL instance. After that, register the UDF using the following statement:
 
@@ -374,7 +374,7 @@ Function name *must* be sphinx_snippets, you can not use an arbitrary name. Func
 
 **Prototype:** function sphinx_snippets ( document, index, words, \[options\] );
 
-Document and words arguments can be either strings or table columns. Options must be specified like this: `'value' AS option_name`. For a list of supported options, refer to [Highlighting section](Searching/Highlighting.md). The only UDF-specific additional option is named `sphinx` and lets you specify searchd location (host and port).
+Document and words arguments can be either strings or table columns. Options must be specified like this: `'value' AS option_name`. For a list of supported options, refer to [Highlighting section](../Searching/Highlighting.md). The only UDF-specific additional option is named `sphinx` and lets you specify searchd location (host and port).
 
 Usage examples:
 

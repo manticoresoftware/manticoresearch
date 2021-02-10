@@ -15,13 +15,13 @@ Manticore's replication is based on [Galera library](https://github.com/codershi
 
 To use replication in Manticore Search:
 
-* [data_dir](Server_settings/Searchd.md#data_dir) option should be set in section "searchd" of the configuration file. Replication is not supported in the plain mode
+* [data_dir](../../Server_settings/Searchd.md#data_dir) option should be set in section "searchd" of the configuration file. Replication is not supported in the plain mode
 * there should be either:
-  - a [listen](Server_settings/Searchd.md#listen) directive specified (without specifying a protocol) containing an IP address accessible by other nodes
-  -  or [node_address](Server_settings/Searchd.md#node_address) with an accessible IP address
-* optionally set unique values for [server_id](Server_settings/Searchd.md#server_id) on each cluster node. If no value set, the node will try to use the MAC address (or a random number if that fails) to generate the server_id.
+  - a [listen](../../Server_settings/Searchd.md#listen) directive specified (without specifying a protocol) containing an IP address accessible by other nodes
+  -  or [node_address](../../Server_settings/Searchd.md#node_address) with an accessible IP address
+* optionally set unique values for [server_id](../../Server_settings/Searchd.md#server_id) on each cluster node. If no value set, the node will try to use the MAC address (or a random number if that fails) to generate the server_id.
 
-If there is no replication [listen](Server_settings/Searchd.md#listen) directive set Manticore will use first couple of free ports in a range of 200 ports after the port at which the daemon is listening (default protocol) for each cluster created. For manual declaration of replication ports the [listen](Server_settings/Searchd.md#listen) directive
+If there is no replication [listen](../../Server_settings/Searchd.md#listen) directive set Manticore will use first couple of free ports in a range of 200 ports after the port at which the daemon is listening (default protocol) for each cluster created. For manual declaration of replication ports the [listen](../../Server_settings/Searchd.md#listen) directive
 port range should be defined and these "address - port range" pairs should be different for all Manticore instances on the same host. As a rule of thumb, the port range should specify no less than two ports per cluster.
 
 ## Replication cluster
@@ -36,7 +36,7 @@ Specifies a name for the cluster. Should be unique.
 
 ### path
 
-Data directory for a [write-set cache replication](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache) and incoming indexes from other nodes. Should be unique among the other clusters in the node. Default is [data_dir](Server_settings/Searchd.md#data_dir).
+Data directory for a [write-set cache replication](https://galeracluster.com/library/documentation/state-transfer.html#state-transfer-gcache) and incoming indexes from other nodes. Should be unique among the other clusters in the node. Default is [data_dir](../../Server_settings/Searchd.md#data_dir).
 
 ### nodes
 
@@ -170,7 +170,7 @@ POST /search -d '
 
 <!-- end -->
 
-ID auto generation uses UUID_SHORT similar to MySQL function. It is valid cluster wide UUID when [server_id](Server_settings/Searchd.md#server_id) properly configured.
+ID auto generation uses UUID_SHORT similar to MySQL function. It is valid cluster wide UUID when [server_id](../../Server_settings/Searchd.md#server_id) properly configured.
 
 > **Note:** `UpdateAttributes` statement from API interface to specific index always set proper cluster at server and there is no way to know is update to index got propagated into cluster properly or node diverged and statement updated only local index.
 
@@ -229,7 +229,7 @@ SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 ## Replication and cluster
 
 <!-- example replication and cluster 1 -->
-To use replication define one [listen](Server_settings/Searchd.md#listen) port for SphinxAPI protocol and one [listen](Server_settings/Searchd.md#listen) for replication address and port range in the config. Define [data_dir](Server_settings/Searchd.md#data_dir) folder for incoming indexes.
+To use replication define one [listen](../../Server_settings/Searchd.md#listen) port for SphinxAPI protocol and one [listen](../../Server_settings/Searchd.md#listen) for replication address and port range in the config. Define [data_dir](../../Server_settings/Searchd.md#data_dir) folder for incoming indexes.
 
 
 <!-- intro -->

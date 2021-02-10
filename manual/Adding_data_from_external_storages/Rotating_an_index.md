@@ -7,9 +7,9 @@ There can be two cases:
 * for plain indexes that are already loaded
 * indexes added in configuration, but not loaded yet
 
-In the first case, indexer cannot put the new version of the index online as the running copy is locked and loaded by `searchd`. In this case `indexer` needs to be called with [--rotate](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) parameter. If rotate is used, indexes creates  new index files with `.new.` in their name and sends a *HUP* signal to `searchd` informing it about the new version. The `searchd` will perform a lookup and will put in place the new version of the index and discard the old one. In some cases it might be desired to create the new version of the index but not perform the rotate as soon as possible. For example it might be desired to check first the health of the new index versions. In this case, `indexer` can accept ``--nohup`` parameter which will forbid sending the HUP signal to the server.
+In the first case, indexer cannot put the new version of the index online as the running copy is locked and loaded by `searchd`. In this case `indexer` needs to be called with [--rotate](../Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) parameter. If rotate is used, indexes creates  new index files with `.new.` in their name and sends a *HUP* signal to `searchd` informing it about the new version. The `searchd` will perform a lookup and will put in place the new version of the index and discard the old one. In some cases it might be desired to create the new version of the index but not perform the rotate as soon as possible. For example it might be desired to check first the health of the new index versions. In this case, `indexer` can accept ``--nohup`` parameter which will forbid sending the HUP signal to the server.
 
-New indexes can be loaded by rotation, however the regular handling of HUP signal is to check for new indexes only if configuration has changed since server startup. If the index was already defined in the configuration, the index should be first created by running `indexer` without rotation and perform [RELOAD INDEXES](Adding_data_from_external_storages/Rotating_an_index.md#RELOAD-INDEXES) statement instead.
+New indexes can be loaded by rotation, however the regular handling of HUP signal is to check for new indexes only if configuration has changed since server startup. If the index was already defined in the configuration, the index should be first created by running `indexer` without rotation and perform [RELOAD INDEXES](../Adding_data_from_external_storages/Rotating_an_index.md#RELOAD-INDEXES) statement instead.
 
 
 There are also two specialized statements can be used to perform rotations on indexes:
@@ -22,9 +22,9 @@ RELOAD INDEX idx [ FROM '/path/to/index_files' ];
 
 `RELOAD INDEX` allows you to rotate indexes using SQL.
 
-It has two modes of operation. First one (without specifying a path) makes Manticore server check for new index files in directory specified in [path](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#path). New index files must have a idx.new.sp? names.
+It has two modes of operation. First one (without specifying a path) makes Manticore server check for new index files in directory specified in [path](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#path). New index files must have a idx.new.sp? names.
 
-And if you additionally specify a path, server will look for index files in specified directory, move them to index [path](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#path), rename from index\_files.sp? to idx.new.sp? and rotate them.
+And if you additionally specify a path, server will look for index files in specified directory, move them to index [path](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#path), rename from index\_files.sp? to idx.new.sp? and rotate them.
 
 ```sql
 mysql> RELOAD INDEX plain_index;
@@ -39,7 +39,7 @@ RELOAD INDEXES;
 
 Works same as system HUP signal. Initiates index rotation. Unlike regular HUP signalling (which can come from `kill` or indexer ), the statement forces lookup on possible indexes to rotate even if the configuration has no changes since the startup of the server.
 
-Depending on the value of [seamless_rotate](Server_settings/Searchd.md#seamless_rotate) setting, new queries might be shortly stalled; clients will receive temporary errors. Command is non-blocking (i.e., returns immediately).
+Depending on the value of [seamless_rotate](../Server_settings/Searchd.md#seamless_rotate) setting, new queries might be shortly stalled; clients will receive temporary errors. Command is non-blocking (i.e., returns immediately).
 
 ```sql
 mysql> RELOAD INDEXES;

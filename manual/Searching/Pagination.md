@@ -50,7 +50,7 @@ SELECT  ... FROM ...  [LIMIT row_count][ OFFSET offset]
 
 By default, Manticore Search uses a result set window of 1000 best ranked documents that can be returned back in the result set. If the result set is paginated beyond this value, the query will end in error.
 
-This limitation can be adjusted with the query option [max_matches](Searching/Options.md#max_matches).
+This limitation can be adjusted with the query option [max_matches](../Searching/Options.md#max_matches).
 
 Increasing the `max_matches` to very high values should be made only if it's required for the navigation to reach such points. High `max_matches` value requires more memory used and can increase the query response time. One way to work with deep result sets is to set `max_matches` as a sum of offset and limit.
 

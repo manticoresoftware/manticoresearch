@@ -1,6 +1,6 @@
 # Wildcard searching settings
 
-Wildcard searching is a common text search type. In Manticore it is performed at dictionary level. By default, both plain and RT indexes use a dictionary type called [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict). In this mode words are stored as they are, so the size of the index is not affected by enabling wildcarding. When a wildcard search is performed, in the dictionary a lookup is made to find all possible expansions of the wildcarded word. This expansion can be problematic in terms of computation at query time in cases where the expanded word can provide lots of expansions or expansions that have huge hitlists. The penalties are higher in case of infixes, where wildcard is added at the start and end of the words. [expansion_limit](Server_settings/Searchd.md#expansion_limit) is to be used to avoid such problems. 
+Wildcard searching is a common text search type. In Manticore it is performed at dictionary level. By default, both plain and RT indexes use a dictionary type called [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict). In this mode words are stored as they are, so the size of the index is not affected by enabling wildcarding. When a wildcard search is performed, in the dictionary a lookup is made to find all possible expansions of the wildcarded word. This expansion can be problematic in terms of computation at query time in cases where the expanded word can provide lots of expansions or expansions that have huge hitlists. The penalties are higher in case of infixes, where wildcard is added at the start and end of the words. [expansion_limit](../../Server_settings/Searchd.md#expansion_limit) is to be used to avoid such problems. 
 
 ## min_prefix_len
 
@@ -16,16 +16,16 @@ Prefixes allow to implement wildcard searching by `wordstart*` wildcards.
 
 For instance, if you index word "example" with min_prefix_len=3 you will be able to find it by "exa", "exam", "examp", "exampl" prefixes along with the word itself. 
 
-Be aware that in case of [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict)=crc min_prefix_len will also affect index size as each word expansion will be stored additionally.
+Be aware that in case of [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict)=crc min_prefix_len will also affect index size as each word expansion will be stored additionally.
 
 Manticore can differentiate perfect word matches from prefix matches and rank the former higher if you conform the following conditions:
-* [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict)=keywords (on by default)
-* [index_exact_words](Creating_an_index/NLP_and_tokenization/Morphology.md#index_exact_words)=1 (off by default),
-* [expand_keywords](Searching/Options.md#expand_keywords)=1 (also off by default)
+* [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict)=keywords (on by default)
+* [index_exact_words](../../Creating_an_index/NLP_and_tokenization/Morphology.md#index_exact_words)=1 (off by default),
+* [expand_keywords](../../Searching/Options.md#expand_keywords)=1 (also off by default)
 
-Note that either with the [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict)=crc mode or with any of the above options disabled, there is no way to differentiate between the prefixes and full words, and thus perfect word matches can't be ranked higher.
+Note that either with the [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict)=crc mode or with any of the above options disabled, there is no way to differentiate between the prefixes and full words, and thus perfect word matches can't be ranked higher.
 
-When [minimum infix length](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) is set to a positive number, minimum prefix length is always considered 1.
+When [minimum infix length](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) is set to a positive number, minimum prefix length is always considered 1.
 
 
 <!-- intro -->
@@ -107,17 +107,17 @@ Minimum infix prefix length to index and search. Optional, default is 0 (do not 
 Infix length setting enables wildcard searches with term patterns like `start*`, `*end`, `*middle*`, and so on. It also lets you disable too short wildcards if those are too expensive to search for.
 
 Manticore can differentiate perfect word matches from infix matches and rank the former higher if you conform the following conditions:
-* [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict)=keywords (on by default)
-* [index_exact_words](Creating_an_index/NLP_and_tokenization/Morphology.md#index_exact_words)=1 (off by default),
-* [expand_keywords](Searching/Options.md#expand_keywords)=1 (also off by default)
+* [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict)=keywords (on by default)
+* [index_exact_words](../../Creating_an_index/NLP_and_tokenization/Morphology.md#index_exact_words)=1 (off by default),
+* [expand_keywords](../../Searching/Options.md#expand_keywords)=1 (also off by default)
 
-Note that either with the [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict)=crc mode or with any of the above options disabled, there is no way to differentiate between the infixes and full words, and thus perfect word matches can't be ranked higher.
+Note that either with the [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict)=crc mode or with any of the above options disabled, there is no way to differentiate between the infixes and full words, and thus perfect word matches can't be ranked higher.
 
 Infix wildcard search query time can vary greatly, depending on how many keywords the substring will actually expand to. Short and frequent syllables like `*in*` or `*ti*` just might expand to way too many keywords, all of which would need to be matched and processed. Therefore, to generally enable substring searches you would set min_infix_len to 2; and to limit the impact from wildcard searches with too short wildcards, you might set it higher.
 
 Infixes must be at least 2 characters long, wildcards like `*a*` are not allowed for performance reasons.
 
-When minimum infix length is set to a positive number, [minimum prefix length](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len) is considered 1. For [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict) word infixing and prefixing cannot be both enabled at the same. For [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict) it is possible to specify only some fields to have infixes declared with [infix_fields](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#infix_fields) and other fields to have prefixes declared with [prefix_fields](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#prefix_fields), but it's forbidden to declare same field in the both lists.
+When minimum infix length is set to a positive number, [minimum prefix length](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len) is considered 1. For [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict) word infixing and prefixing cannot be both enabled at the same. For [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict) it is possible to specify only some fields to have infixes declared with [infix_fields](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#infix_fields) and other fields to have prefixes declared with [prefix_fields](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#prefix_fields), but it's forbidden to declare same field in the both lists.
 
 In case of dict=keywords, beside the wildcard `*` two other wildcard characters can be used:
 * `?` can match any(one) character: `t?st` will match `test`, but not `teast`
@@ -197,7 +197,7 @@ index products {
 prefix_fields = field1[, field2, ...]
 ```
 
-List of full-text fields to limit prefix indexing to. Applies to [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict) only. Optional, default is empty (index all fields in prefix mode).
+List of full-text fields to limit prefix indexing to. Applies to [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict) only. Optional, default is empty (index all fields in prefix mode).
 
 Because prefix indexing impacts both indexing and searching performance, it might be desired to limit it to specific full-text fields only: for  instance, to provide prefix searching through URLs, but not through page contents. prefix_fields specifies what fields will be prefix-indexed; all other fields will be indexed in normal mode. The value format is a comma-separated list of field names.
 
@@ -223,9 +223,9 @@ index products {
 infix_fields = field1[, field2, ...]
 ```
 
-The list of full-text fields to limit infix indexing to. Applies to [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict) only. Optional, default is empty (index all fields in infix mode).
+The list of full-text fields to limit infix indexing to. Applies to [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict) only. Optional, default is empty (index all fields in infix mode).
 
-Similar to [prefix_fields](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#prefix_fields), but lets you limit infix-indexing to given fields.
+Similar to [prefix_fields](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#prefix_fields), but lets you limit infix-indexing to given fields.
 
 
 <!-- intro -->
@@ -249,9 +249,9 @@ index products {
 max_substring_len = length
 ```
 
-Maximum substring (either prefix or infix) length to index. Optional, default is 0 (do not limit indexed substrings). Applies to [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict) only.
+Maximum substring (either prefix or infix) length to index. Optional, default is 0 (do not limit indexed substrings). Applies to [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict) only.
 
-By default, substring (either prefix or infix) indexing in the [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict) will index **all** possible substrings as separate keywords. That might result in an overly large index. So this directive lets you limit the impact of substring indexing by skipping too-long substrings (which, chances are, will never get searched for anyway).
+By default, substring (either prefix or infix) indexing in the [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict) will index **all** possible substrings as separate keywords. That might result in an overly large index. So this directive lets you limit the impact of substring indexing by skipping too-long substrings (which, chances are, will never get searched for anyway).
 
 For example, a test index of 10,000 blog posts takes this much disk space depending on the settings:
 * 6.4 MB baseline (no substrings)
@@ -294,7 +294,7 @@ Expands keywords with their exact forms (i.e. the forms of the keywords before a
 * `star` - augment the keyword by adding `*` around it.  `running` will become `(running | *running*)`
 Optional, default is 0 (do not expand keywords).
 
-Queries against indexes with `expand_keywords` feature enabled are internally expanded as follows. If the index was built with prefix or infix indexing enabled, every keyword gets internally replaced with a disjunction of keyword itself and a respective prefix or infix (keyword  with stars). If the index was built with both stemming and [index_exact_words](Creating_an_index/NLP_and_tokenization/Morphology.md#index_exact_words)  enabled, exact form is also added. 
+Queries against indexes with `expand_keywords` feature enabled are internally expanded as follows. If the index was built with prefix or infix indexing enabled, every keyword gets internally replaced with a disjunction of keyword itself and a respective prefix or infix (keyword  with stars). If the index was built with both stemming and [index_exact_words](../../Creating_an_index/NLP_and_tokenization/Morphology.md#index_exact_words)  enabled, exact form is also added. 
 
 <!-- intro -->
 ##### SQL:
@@ -447,7 +447,7 @@ mysql> select *, weight() from t where match('running');
 ```
 <!-- end -->
 
-This directive does not affect [indexer](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool) in any way, it only affects [searchd](Starting_the_server/Manually.md).
+This directive does not affect [indexer](../../Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool) in any way, it only affects [searchd](../../Starting_the_server/Manually.md).
 
 
 ## expansion_limit
@@ -456,4 +456,4 @@ This directive does not affect [indexer](Adding_data_from_external_storages/Plai
 expansion_limit = number
 ```
 
-Maximum number of expanded keywords for a single wildcard. Details are [here](Server_settings/Searchd.md#expansion_limit).
+Maximum number of expanded keywords for a single wildcard. Details are [here](../../Server_settings/Searchd.md#expansion_limit).

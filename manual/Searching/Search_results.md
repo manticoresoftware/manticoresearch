@@ -24,7 +24,7 @@ SELECT * FROM idx;
 <!-- end -->
 
 <!-- example sql2 -->
-In addition to that you can use [SHOW META](Profiling_and_monitoring/SHOW_META.md) call to see additional meta-information about the latest query. 
+In addition to that you can use [SHOW META](../Profiling_and_monitoring/SHOW_META.md) call to see additional meta-information about the latest query. 
 
 <!-- request SQL -->
 ```sql
@@ -55,7 +55,7 @@ SELECT * FROM idx WHERE MATCH('joe'); SHOW META;
 <!-- end -->
 
 <!-- example sql3 -->
-In some cases, e.g. when you do [faceted search](Searching/Faceted_search.md) you can get multiple result sets as a response to your SQL query. 
+In some cases, e.g. when you do [faceted search](../Searching/Faceted_search.md) you can get multiple result sets as a response to your SQL query. 
 
 <!-- request SQL -->
 ```sql
@@ -81,7 +81,7 @@ SELECT * FROM idx WHERE MATCH('joe') FACET age;
 <!-- end -->
 
 <!-- example sql4 -->
-In case of a warning the result set will include a warning flag and you can see the warning using [SHOW WARNINGS](Profiling_and_monitoring/SHOW_WARNINGS.md).
+In case of a warning the result set will include a warning flag and you can see the warning using [SHOW WARNINGS](../Profiling_and_monitoring/SHOW_WARNINGS.md).
 <!-- request SQL -->
 ```sql
 SELECT * from idx where match('"joe"/3'); show warnings;
@@ -155,7 +155,7 @@ Via HTTP JSON iterface query result is sent as a JSON document. Example:
 * `total`: total number of matching documents
 * `hits`: an array containing matches
 
-Query result can also include query profile information, see [Query profile](Profiling_and_monitoring/Profiling/Query_profile.md).
+Query result can also include query profile information, see [Query profile](../Profiling_and_monitoring/Profiling/Query_profile.md).
 
 Each match in the `hits` array has the following properties:
 

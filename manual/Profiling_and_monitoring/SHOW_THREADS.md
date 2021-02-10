@@ -18,7 +18,7 @@ It returns a table with following columns:
 * `ConnID`: connection id (starting from 0)
 * `Time`: current job's duration (in seconds, with microsecond precision) or uptime of the thread in case of `format=all` when the thread is idling
 * `Work time`: uptime of the thread
-* `Work time CPU`: effective CPU time (requires [`--cpustats`](Starting_the_server/Manually.md#searchd-command-line-options))
+* `Work time CPU`: effective CPU time (requires [`--cpustats`](../Starting_the_server/Manually.md#searchd-command-line-options))
 * `Jobs done`: how many jobs this thread has completed
 * `Last job took`: last job's duration
 * `In idle`: whether the thread is idling now or when it was last idling
@@ -560,7 +560,7 @@ Maximum width of the `Info` column can be limited by specifying the `columns=N` 
 
 By default, queries are shown in their original format. When the `format=sphinxql` option is specified, the queries will be shown in SQL format regardless of protocol through which they were executed.
 
-`format=all` displays all threads, otherwise idling and system threads are hidden (e.g. those busy with [OPTIMIZE](Securing_and_compacting_an_index/Compacting_an_index.md#OPTIMIZE-INDEX))
+`format=all` displays all threads, otherwise idling and system threads are hidden (e.g. those busy with [OPTIMIZE](../Securing_and_compacting_an_index/Compacting_an_index.md#OPTIMIZE-INDEX))
 
 <!-- intro -->
 ##### SQL:

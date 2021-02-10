@@ -9,10 +9,10 @@ From the client's standpoint it looks transparent, as if you just queried any si
 
 Distributed indexes can be composed from any other indexes fitting your requirements
 
-* local storage indexes ([plain index](Creating_an_index/Local_indexes/Plain_index.md), [Real-Time](Creating_an_index/Local_indexes/Real-time_index.md))
-* [remote indexes](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md)
+* local storage indexes ([plain index](../../Creating_an_index/Local_indexes/Plain_index.md), [Real-Time](../../Creating_an_index/Local_indexes/Real-time_index.md))
+* [remote indexes](../../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md)
 * combined local storage and remote indexes
-* [percolate indexes](Creating_an_index/Local_indexes/Percolate_index.md) (local, remote and combinations)
+* [percolate indexes](../../Creating_an_index/Local_indexes/Percolate_index.md) (local, remote and combinations)
 * single local and several remotes or any other combinations
 
 Nesting distributed indexes is supported by declaring them with `agent` (even if they are on the same machine). Distributed indexes cannot be declared with `local` and they will be ignored.

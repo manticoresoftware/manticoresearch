@@ -18,7 +18,7 @@ The coordinates can be stored as degrees or radians.
 
 ## Performing distance calculation
 
-To find out the distance between two points the [GEODIST()](Functions/Geo_spatial_functions.md#GEODIST%28%29) function can be used. `GEODIST` requires two pairs of coordinates as first four parameters.
+To find out the distance between two points the [GEODIST()](../Functions/Geo_spatial_functions.md#GEODIST%28%29) function can be used. `GEODIST` requires two pairs of coordinates as first four parameters.
 
 A 5th parameter in a simplified JSON format can configure certain aspects of the function. By default, `GEODIST` expects coordinates to be in radians, but `in=degrees` can be added to allow using degrees at input. The coordinates for which we perform the geo distance must have same time (degrees or radians) as the ones stored in the index, otherwise results will be misleading.
 
@@ -42,12 +42,12 @@ Another geo search functionality is the ability to check if a location belongs t
 
 For creating the polygon two functions are available:
 
-*   [GEOPOLY2D()](Functions/Geo_spatial_functions.md#GEOPOLY2D%28%29) - creates a polygon that takes in account the Earth's curvature
-*   [POLY2D()](Functions/Geo_spatial_functions.md#POLY2D%28%29) - creates a simple polygon in plain space
+*   [GEOPOLY2D()](../Functions/Geo_spatial_functions.md#GEOPOLY2D%28%29) - creates a polygon that takes in account the Earth's curvature
+*   [POLY2D()](../Functions/Geo_spatial_functions.md#POLY2D%28%29) - creates a simple polygon in plain space
 
 `POLY2D` can be used for geo searches if the area has sides shorter than 500km (for 3-4 sides, for polygons with more sides lower values should be considered). For areas with longer sides usage of `GEOPOLY2D` is mandatory for keeping results accurate. `GEOPOLY2D` also expects coordinates as latitude/longitude pairs in degrees, using radians will provide results in plain space (like `POLY2D`).
 
-[CONTAINS()](Functions/Arrays_and_conditions_functions.md#CONTAINS%28%29) expects at input a polygon and a set of coordinates and output `1` if the point is inside the polygon or `0` otherwise.
+[CONTAINS()](../Functions/Arrays_and_conditions_functions.md#CONTAINS%28%29) expects at input a polygon and a set of coordinates and output `1` if the point is inside the polygon or `0` otherwise.
 
 ```sql
 SELECT *,CONTAINS(GEOPOLY2D(40.76439, -73.9997, 42.21211, -73.999,  42.21211, -76.123, 40.76439, -76.123), 41.5445, -74.973) AS inside FROM myindex WHERE MATCH('...') AND inside=1;

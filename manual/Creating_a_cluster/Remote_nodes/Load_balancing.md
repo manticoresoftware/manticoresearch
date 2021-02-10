@@ -1,6 +1,6 @@
 # Load balancing
 
-Load balancing is turned on by default for any [distributed index](Creating_an_index/Creating_a_distributed_index/Creating_a_distributed_index.md) using [mirroring](Creating_a_cluster/Remote_nodes/Mirroring.md). By default queries are distributed randomly among the mirrors. To change this behaviour you can use [ha_strategy](Creating_a_cluster/Remote_nodes/Load_balancing.md).
+Load balancing is turned on by default for any [distributed index](../../Creating_an_index/Creating_a_distributed_index/Creating_a_distributed_index.md) using [mirroring](../../Creating_a_cluster/Remote_nodes/Mirroring.md). By default queries are distributed randomly among the mirrors. To change this behaviour you can use [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md).
 
 ## ha_strategy
 
@@ -10,7 +10,7 @@ ha_strategy = {random|nodeads|noerrors|roundrobin}
 
 Agent mirror selection strategy for load balancing. Optional, default is random.
 
-The strategy used for mirror selection, or in other words, choosing a specific [agent mirror](Creating_a_cluster/Remote_nodes/Mirroring.md#Agent-mirrors) in a distributed index. Essentially, this directive controls how exactly master does the load balancing between the configured mirror agent nodes. The following strategies are implemented:
+The strategy used for mirror selection, or in other words, choosing a specific [agent mirror](../../Creating_a_cluster/Remote_nodes/Mirroring.md#Agent-mirrors) in a distributed index. Essentially, this directive controls how exactly master does the load balancing between the configured mirror agent nodes. The following strategies are implemented:
 
 ### Simple random balancing
 

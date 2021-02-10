@@ -16,7 +16,7 @@ On older versions of MacOS it will attempt to compile from sources automatically
 brew install manticoresearch
 ```
 
-For [indexing](Creating_an_index/Local_indexes/Plain_index.md) the additional dependencies that can be installed using brew are `mysql@5.7`, `libpq`, `unixodbc`.
+For [indexing](../Creating_an_index/Local_indexes/Plain_index.md) the additional dependencies that can be installed using brew are `mysql@5.7`, `libpq`, `unixodbc`.
 
 Afterwards you can start Manticore as a brew service:
 

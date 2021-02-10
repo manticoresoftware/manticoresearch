@@ -4,64 +4,64 @@ The below settings are to be used in section `searchd` in the configuration file
 
 ### access_plain_attrs
 
-Instance-wide defaults for [access_plain_attrs](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files). Optional, default value is `mmap_preread`.
+Instance-wide defaults for [access_plain_attrs](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files). Optional, default value is `mmap_preread`.
 
-This directive lets you specify the default value of [access_plain_attrs](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files) for all indexes served by this copy of searchd. Per-index directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
+This directive lets you specify the default value of [access_plain_attrs](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files) for all indexes served by this copy of searchd. Per-index directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
 
 
 ### access_blob_attrs
 
-Instance-wide defaults for [access_blob_attrs](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files). Optional, default value is `mmap_preread`.
+Instance-wide defaults for [access_blob_attrs](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files). Optional, default value is `mmap_preread`.
 
-This directive lets you specify the default value of [access_blob_attrs](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files) for all indexes served by this copy of searchd. Per-index directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
+This directive lets you specify the default value of [access_blob_attrs](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files) for all indexes served by this copy of searchd. Per-index directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
 
 
 ### access_doclists
 
-Instance-wide defaults for [access_doclists](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files). Optional, default value is `file`.
+Instance-wide defaults for [access_doclists](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files). Optional, default value is `file`.
 
-This directive lets you specify the default value of [access_doclists](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files) for all indexes served by this copy of searchd. Per-index directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
+This directive lets you specify the default value of [access_doclists](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files) for all indexes served by this copy of searchd. Per-index directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
 
 
 ### access_hitlists
 
-Instance-wide defaults for [access_hitlists](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files). Optional, default value is `file`.
+Instance-wide defaults for [access_hitlists](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files). Optional, default value is `file`.
 
-This directive lets you specify the default value of [access_hitlists](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files) for all indexes served by this copy of searchd. Per-index directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
+This directive lets you specify the default value of [access_hitlists](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files) for all indexes served by this copy of searchd. Per-index directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
 
 
 ### agent_connect_timeout
 
-Instance-wide defaults for [agent_connect_timeout](Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) parameter. The last defined in distributed (network) indexes.
+Instance-wide defaults for [agent_connect_timeout](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) parameter. The last defined in distributed (network) indexes.
 
 
 ### agent_query_timeout
 
-Instance-wide defaults for [agent_query_timeout](Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) parameter. The last defined in distributed (network) indexes, or also may be overrided per-query using `OPTION` clause.
+Instance-wide defaults for [agent_query_timeout](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) parameter. The last defined in distributed (network) indexes, or also may be overrided per-query using `OPTION` clause.
 
 
 ### agent_retry_count
 
 Integer, specifies how many times manticore will try to connect and query remote agents in distributed index before reporting fatal query error. Default is 0 (i.e. no retries). This value may be also specified on per-query basis using `OPTION retry_count=XXX` clause. If per-query option exists, it will override the one specified in config.
 
-Note, that if you use [agent_mirrors](Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) in definition of your distributed index, then before every attempt of connect server will select different mirror, according to specified [ha_strategy](Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) specified. In this case `agent_retry_count` will be aggregated for all mirrors in a set.
+Note, that if you use [agent_mirrors](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) in definition of your distributed index, then before every attempt of connect server will select different mirror, according to specified [ha_strategy](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) specified. In this case `agent_retry_count` will be aggregated for all mirrors in a set.
 
 For example, if you have 10 mirrors, and set `agent_retry_count=5`, then server will retry up to 50 times, assuming average 5 tries per every of 10 mirrors. (in case of option `ha_strategy = roundrobin` it will be actually so).
 
-In the same time value provided as `retry_count` option of [agent](Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) definition serves as absolute limit. Other words, `[retry_count=2]` option in agent definition means always at most 2 tries, no mean if you have 1 or 10 mirrors in a line.
+In the same time value provided as `retry_count` option of [agent](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) definition serves as absolute limit. Other words, `[retry_count=2]` option in agent definition means always at most 2 tries, no mean if you have 1 or 10 mirrors in a line.
 
 
 ### agent_retry_delay
 
-Integer, in milliseconds (or [special_suffixes](Server_settings/Special_suffixes.md)). Specifies the delay sphinx rest before retrying to query a remote agent in case it fails. The value has sense only if non-zero [agent_retry_count](Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) or non-zero per-query `retry_count` specified. Default is 500. This value may be also specified on per-query basis using `OPTION retry_delay=XXX` clause. If per-query option exists, it will override the one specified in config.
+Integer, in milliseconds (or [special_suffixes](../Server_settings/Special_suffixes.md)). Specifies the delay sphinx rest before retrying to query a remote agent in case it fails. The value has sense only if non-zero [agent_retry_count](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) or non-zero per-query `retry_count` specified. Default is 500. This value may be also specified on per-query basis using `OPTION retry_delay=XXX` clause. If per-query option exists, it will override the one specified in config.
 
 
 ### attr_flush_period
 
 <!-- example conf attr_flush_period -->
-When calling [Update](Updating_documents/UPDATE.md) to update document attributes in real-time, the changes are first written to in-memory copy of attributes.  The updates are done in a memory mapped file, which means that the OS decides when to write these changes to disk. Once `searchd` shuts down normally (via `SIGTERM` being sent) it forces writing all the changes to disk.
+When calling [Update](../Updating_documents/UPDATE.md) to update document attributes in real-time, the changes are first written to in-memory copy of attributes.  The updates are done in a memory mapped file, which means that the OS decides when to write these changes to disk. Once `searchd` shuts down normally (via `SIGTERM` being sent) it forces writing all the changes to disk.
 
-It is also possible to tell `searchd` to periodically write these changes  back to disk to avoid them being lost. The time between those intervals is set with `attr_flush_period`, in seconds (or [special_suffixes](Server_settings/Special_suffixes.md)).
+It is also possible to tell `searchd` to periodically write these changes  back to disk to avoid them being lost. The time between those intervals is set with `attr_flush_period`, in seconds (or [special_suffixes](../Server_settings/Special_suffixes.md)).
 
 It defaults to 0, which disables the periodic flushing, but flushing will still occur at normal shut-down.
 
@@ -150,7 +150,7 @@ binlog_path = /var/data # /var/data/binlog.001 etc will be created
 ### client_timeout
 
 <!-- example conf client_timeout -->
-Maximum time to wait between requests (in seconds or [special_suffixes](Server_settings/Special_suffixes.md)) when using persistent connections. Optional, default is five minutes.
+Maximum time to wait between requests (in seconds or [special_suffixes](../Server_settings/Special_suffixes.md)) when using persistent connections. Optional, default is five minutes.
 
 
 <!-- intro -->
@@ -169,7 +169,7 @@ client_timeout = 1h
 <!-- example conf collation_libc_locale -->
 Server libc locale. Optional, default is C.
 
-Specifies the libc locale, affecting the libc-based collations. Refer to [collations](Searching/Collations.md) section for the details.
+Specifies the libc locale, affecting the libc-based collations. Refer to [collations](../Searching/Collations.md) section for the details.
 
 
 <!-- intro -->
@@ -188,7 +188,7 @@ collation_libc_locale = fr_FR
 <!-- example conf collation_server -->
 Default server collation. Optional, default is libc_ci.
 
-Specifies the default collation used for incoming requests. The collation can be overridden on a per-query basis. Refer to [collations](Searching/Collations.md) section for the list of available collations and other details.
+Specifies the default collation used for incoming requests. The collation can be overridden on a per-query basis. Refer to [collations](../Searching/Collations.md) section for the list of available collations and other details.
 
 
 <!-- intro -->
@@ -205,8 +205,8 @@ collation_server = utf8_ci
 ### data_dir
 
 <!-- example conf data_dir -->
-When specified, enables the [real-time mode](Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29) (imperative way of managing data schema). The value should be a path to the directory where you want to store all your indexes, binary log and everything else needed for the proper functioning of Manticore Search in this mode. 
-Indexation of [plain indexes](Creating_an_index/Local_indexes/Plain_index.md) is not allowed when the `data_dir` is specified. Read more about the difference between the RT mode and the plain mode in [this section](Read_this_first.md#Real-time-index-vs-plain-index).
+When specified, enables the [real-time mode](../Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29) (imperative way of managing data schema). The value should be a path to the directory where you want to store all your indexes, binary log and everything else needed for the proper functioning of Manticore Search in this mode. 
+Indexation of [plain indexes](../Creating_an_index/Local_indexes/Plain_index.md) is not allowed when the `data_dir` is specified. Read more about the difference between the RT mode and the plain mode in [this section](../Read_this_first.md#Real-time-index-vs-plain-index).
 
 <!-- intro -->
 ##### Example:
@@ -260,19 +260,19 @@ expansion_limit = 16
 
 Specifies whether timed grouping in API and SQL will be calculated in local timezone, or in UTC. Optional, default is 0 (means 'local tz').
 
-By default all 'group by time' expressions (like group by day, week,  month and year in API, also group by day, month, year, yearmonth, yearmonthday in SQL) is done using local time. I.e. when you have docs with attributes timed `13:00 utc` and `15:00 utc` - in case of grouping they both will fall into facility group according to your local tz setting. Say, if you live in `utc`, it will be one day, but if you live in `utc+10`, then these docs will be matched into different `group by day` facility groups (since 13:00 utc in UTC+10 tz 23:00 local time, but 15:00 is 01:00 of the next day). Sometimes such behavior is unacceptable, and it is desirable to make time grouping not dependent from timezone. Of course, you can run the server with defined global TZ env variable, but it will affect not only grouping, but also timestamping in the logs, which may be also undesirable. Switching 'on' this option (either in config, either using [SET global](Server_settings/Setting_variables_online.md#SET) statement in SQL) will cause all time grouping expressions to be calculated in UTC, leaving the rest of time-depentend functions (i.e. logging of the server) in local TZ.
+By default all 'group by time' expressions (like group by day, week,  month and year in API, also group by day, month, year, yearmonth, yearmonthday in SQL) is done using local time. I.e. when you have docs with attributes timed `13:00 utc` and `15:00 utc` - in case of grouping they both will fall into facility group according to your local tz setting. Say, if you live in `utc`, it will be one day, but if you live in `utc+10`, then these docs will be matched into different `group by day` facility groups (since 13:00 utc in UTC+10 tz 23:00 local time, but 15:00 is 01:00 of the next day). Sometimes such behavior is unacceptable, and it is desirable to make time grouping not dependent from timezone. Of course, you can run the server with defined global TZ env variable, but it will affect not only grouping, but also timestamping in the logs, which may be also undesirable. Switching 'on' this option (either in config, either using [SET global](../Server_settings/Setting_variables_online.md#SET) statement in SQL) will cause all time grouping expressions to be calculated in UTC, leaving the rest of time-depentend functions (i.e. logging of the server) in local TZ.
 
 
 ### ha_period_karma
 
 <!-- example conf ha_period_karma -->
-Agent mirror statistics window size, in seconds (or [special_suffixes](Server_settings/Special_suffixes.md)). Optional, default is 60.
+Agent mirror statistics window size, in seconds (or [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, default is 60.
 
-For a distributed index with agent mirrors in it (see more in [agent](Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md),  master tracks several different per-mirror counters. These counters are then used for failover and balancing. (Master picks the best mirror to use based on the counters.) Counters are accumulated in blocks of `ha_period_karma` seconds.
+For a distributed index with agent mirrors in it (see more in [agent](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md),  master tracks several different per-mirror counters. These counters are then used for failover and balancing. (Master picks the best mirror to use based on the counters.) Counters are accumulated in blocks of `ha_period_karma` seconds.
 
 After beginning a new block, master may still use the accumulated values from the previous one, until the new one is half full. Thus, any previous history stops affecting the mirror choice after 1.5 times ha_period_karma seconds at most.
 
-Despite that at most 2 blocks are used for mirror selection, upto 15 last blocks are actually stored, for instrumentation purposes. They can be inspected using [SHOW AGENT STATUS](Profiling_and_monitoring/Node_status.md#SHOW-AGENT-STATUS) statement.
+Despite that at most 2 blocks are used for mirror selection, upto 15 last blocks are actually stored, for instrumentation purposes. They can be inspected using [SHOW AGENT STATUS](../Profiling_and_monitoring/Node_status.md#SHOW-AGENT-STATUS) statement.
 
 
 <!-- intro -->
@@ -289,9 +289,9 @@ ha_period_karma = 2m
 ### ha_ping_interval
 
 <!-- example conf ha_ping_interval -->
-Interval between agent mirror pings, in milliseconds (or [special_suffixes](Server_settings/Special_suffixes.md)). Optional, default is 1000.
+Interval between agent mirror pings, in milliseconds (or [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, default is 1000.
 
-For a distributed index with agent mirrors in it (see more in [agent](Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md)), master sends all mirrors a ping command during the idle periods. This is to track the current agent status (alive or dead, network roundtrip, etc). The interval between such pings is defined by this directive. To disable pings, set ha_ping_interval to 0.
+For a distributed index with agent mirrors in it (see more in [agent](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md)), master sends all mirrors a ping command during the idle periods. This is to track the current agent status (alive or dead, network roundtrip, etc). The interval between such pings is defined by this directive. To disable pings, set ha_ping_interval to 0.
 
 
 <!-- intro -->
@@ -313,7 +313,7 @@ Hostnames renew strategy. By default, IP addresses of agent host names are cache
 
 Defines how many "jobs" can be in the queue at the same time. Unlimited by default.
 
-In most cases "job" means one query to a single local index (plain index or a disk chunk of a real-time index), i.e. if you have a distributed index consisting of 2 local indexes or a real-time index which has 2 disk chunks a search query to either of them will mostly put 2 jobs to the queue and then the thread pool whose size is defined by [threads](Server_settings/Searchd.md#threads) will process them, but in some cases if the query is too complex more jobs can be created. Changing this setting recommended when [max_connections](Server_settings/Searchd.md#max_connections) and [thread](Server_settings/Searchd.md#threads) are not enough to find a balance between the desired performance and load on the server.
+In most cases "job" means one query to a single local index (plain index or a disk chunk of a real-time index), i.e. if you have a distributed index consisting of 2 local indexes or a real-time index which has 2 disk chunks a search query to either of them will mostly put 2 jobs to the queue and then the thread pool whose size is defined by [threads](../Server_settings/Searchd.md#threads) will process them, but in some cases if the query is too complex more jobs can be created. Changing this setting recommended when [max_connections](../Server_settings/Searchd.md#max_connections) and [thread](../Server_settings/Searchd.md#threads) are not enough to find a balance between the desired performance and load on the server.
 
 ### listen_backlog
 
@@ -360,11 +360,11 @@ You can also specify a protocol handler (listener) to be used for connections on
   - clients via HTTP and HTTPS
 * `mysql` - MySQL protocol for connections from MySQL clients. Note:
   - Compressed protocol is also supported.
-  - If [SSL](Security/SSL.md#SSL) is enabled you can make an encrypted connection.
-* `replication` - replication protocol, used for nodes communication. More details can be found in the [replication](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) section.
+  - If [SSL](../Security/SSL.md#SSL) is enabled you can make an encrypted connection.
+* `replication` - replication protocol, used for nodes communication. More details can be found in the [replication](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) section.
 * `http` - same as **Not specified**. Manticore will accept connections at this port from remote agents and clients via HTTP and HTTPS.
-* `https` - HTTPS protocol. Manticore will accept **only** HTTPS connections at this port. More details can be found in section [SSL](Security/SSL.md).
-* `sphinx` - legacy binary protocol. Used to serve connections from remote [SphinxSE](Extensions/SphinxSE.md) clients. Some Sphinx API clients implementations (an example is the Java one) require the explicit declaration of the listener.
+* `https` - HTTPS protocol. Manticore will accept **only** HTTPS connections at this port. More details can be found in section [SSL](../Security/SSL.md).
+* `sphinx` - legacy binary protocol. Used to serve connections from remote [SphinxSE](../Extensions/SphinxSE.md) clients. Some Sphinx API clients implementations (an example is the Java one) require the explicit declaration of the listener.
 
 Adding suffix `_vip` to any protocol (for instance `mysql_vip` or `http_vip` or just `_vip`) forces creating a dedicated thread for the connection to bypass different limitations. That's useful for node maintenance in case of a severe overload when the server would either stall or not let you connect via a regular port otherwise.
 
@@ -413,7 +413,7 @@ This setting allows TCP_FASTOPEN flag for all listeners. By default it is manage
 
 For general knowledge about TCP Fast Open extension you can visit Wikipedia. Shortly speaking, it allows to eliminate one TCP round-trip when establishing connection.
 
-In practice using TFO in many situation may optimize client-agent network efficiency as if [persistent agents](Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) are in play, but without holding active connections, and also without limitation for the maximum num of connections.
+In practice using TFO in many situation may optimize client-agent network efficiency as if [persistent agents](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md) are in play, but without holding active connections, and also without limitation for the maximum num of connections.
 
 On modern OS TFO support usually switched 'on' on the system level, but this is just 'capability', not the rule. Linux (as most progressive) supports it since 2011, on kernels starting from 3.7 (for server side). Windows supports it from some build of Windows 10. Another (FreeBSD, MacOS) also in game.
 
@@ -444,7 +444,7 @@ log = /var/log/searchd.log
 <!-- example conf max_batch_queries -->
 Limits the amount of queries per batch. Optional, default is 32.
 
-Makes searchd perform a sanity check of the amount of the queries submitted in a single batch when using [multi-queries](Searching/Multi-queries.md). Set it to 0 to skip the check.
+Makes searchd perform a sanity check of the amount of the queries submitted in a single batch when using [multi-queries](../Searching/Multi-queries.md). Set it to 0 to skip the check.
 
 
 <!-- intro -->
@@ -482,11 +482,11 @@ threads = 10
 ### max_threads_per_query
 
 <!-- example max_threads_per_query -->
-Instance-wide limit of threads one operation can use. By default appropriate operations can occupy all CPU cores, leaving no room for other operations. Let's say, `call pq` against considerably big percolate index can utilize all threads for tens of seconds. Setting `max_threads_per_query` to, say, half of [threads](Server_settings/Searchd.md#threads) will ensure that you can run couple of such `call pq` in parallel.
+Instance-wide limit of threads one operation can use. By default appropriate operations can occupy all CPU cores, leaving no room for other operations. Let's say, `call pq` against considerably big percolate index can utilize all threads for tens of seconds. Setting `max_threads_per_query` to, say, half of [threads](../Server_settings/Searchd.md#threads) will ensure that you can run couple of such `call pq` in parallel.
 
 You can also set this setting as a session or a global variable during the runtime.
 
-You can also control the behaviour on per-query with help of [threads OPTION](Searching/Options.md#threads).
+You can also control the behaviour on per-query with help of [threads OPTION](../Searching/Options.md#threads).
 
 <!-- intro -->
 ##### Example:
@@ -631,7 +631,7 @@ Defines how many requests are processed on each iteration of the network loop. D
 ### node_address
 
 <!-- example conf node_address -->
-This setting lets you specify the network address of the node. By default it set to replication [listen](Server_settings/Searchd.md#listen) address. That is correct in most cases, however there are situations where you have to specify it manually:
+This setting lets you specify the network address of the node. By default it set to replication [listen](../Server_settings/Searchd.md#listen) address. That is correct in most cases, however there are situations where you have to specify it manually:
 
 * node behind a firewall
 * network address translation enabled (NAT)
@@ -652,7 +652,7 @@ node_address = 10.101.0.10
 ### not_terms_only_allowed
 
 <!-- example conf not_terms_only_allowed -->
-Whether to allow queries with only [negation](Searching/Full_text_matching/Operators.md#Negation-operator) full-text operator. Optional, default is 0 (fail queries with only NOT operator).
+Whether to allow queries with only [negation](../Searching/Full_text_matching/Operators.md#Negation-operator) full-text operator. Optional, default is 0 (fail queries with only NOT operator).
 
 
 <!-- intro -->
@@ -667,17 +667,17 @@ not_terms_only_allowed = 1
 
 ### ondisk_attrs_default
 
-Instance-wide defaults for [ondisk_attrs](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files) directive. Optional, default is 0 (all attributes are loaded in memory). This directive lets you specify the default value of ondisk_attrs for all indexes served by this copy of searchd. Per-index directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
+Instance-wide defaults for [ondisk_attrs](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Accessing-index-files) directive. Optional, default is 0 (all attributes are loaded in memory). This directive lets you specify the default value of ondisk_attrs for all indexes served by this copy of searchd. Per-index directives take precedence, and will overwrite this instance-wide default value, allowing for fine-grain control.
 
-> **WARNING:** The functionality of this directive is taken over by [access_plain_attrs](Server_settings/Searchd.md#access_plain_attrs) and [access_blob_attrs](Server_settings/Searchd.md#access_blob_attrs) directives as of 3.0.2. The option is marked as deprecated and will be removed in future versions.
+> **WARNING:** The functionality of this directive is taken over by [access_plain_attrs](../Server_settings/Searchd.md#access_plain_attrs) and [access_blob_attrs](../Server_settings/Searchd.md#access_blob_attrs) directives as of 3.0.2. The option is marked as deprecated and will be removed in future versions.
 
 
 ### persistent_connections_limit
 
 <!-- example conf persistent_connections_limit -->
-The maximum # of simultaneous persistent connections to remote [persistent agents](Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md). Each time connecting agent defined under 'agent_persistent' we try to reuse xisting connection (if any), or connect and save the connection for the future. However we can't hold unlimited # of such persistent connections, since each one holds a worker on agent size (and finally we'll receive the 'maxed out' error, when all of them are busy). This very directive limits the number. It affects the num of connections to each agent's host, across all distributed indexes.
+The maximum # of simultaneous persistent connections to remote [persistent agents](../Creating_an_index/Creating_a_distributed_index/Creating_a_local_distributed_index.md). Each time connecting agent defined under 'agent_persistent' we try to reuse xisting connection (if any), or connect and save the connection for the future. However we can't hold unlimited # of such persistent connections, since each one holds a worker on agent size (and finally we'll receive the 'maxed out' error, when all of them are busy). This very directive limits the number. It affects the num of connections to each agent's host, across all distributed indexes.
 
-It is reasonable to set the value equal or less than [max_connections](Server_settings/Searchd.md#max_connections) option of the agents.
+It is reasonable to set the value equal or less than [max_connections](../Server_settings/Searchd.md#max_connections) option of the agents.
 
 
 <!-- intro -->
@@ -743,7 +743,7 @@ SetMaxQueryTime()
 ```
 <!-- end -->
 
-There is a new option, [SELECT … OPTION max_predicted_time](Searching/Options.md#max_predicted_time), that lets you limit the query time *and* get stable, repeatable results. Instead of regularly checking the actual current time while evaluating the query, which is indeterministic, it predicts the current running time using a simple linear model instead:
+There is a new option, [SELECT … OPTION max_predicted_time](../Searching/Options.md#max_predicted_time), that lets you limit the query time *and* get stable, repeatable results. Instead of regularly checking the actual current time while evaluating the query, which is indeterministic, it predicts the current running time using a simple linear model instead:
 
 ```ini
 predicted_time =
@@ -765,7 +765,7 @@ No two server makes and models are identical, so `predicted_time_costs` directiv
 <!-- example conf preopen_indexes -->
 Whether to forcibly preopen all indexes on startup. Optional, default is 1 (preopen everything).
 
-When set to 1, this directive overrides and enforces [preopen](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Other-performance-related-settings) on all indexes. They will be preopened, no matter what is the per-index `preopen` setting. When set to 0, per-index settings can take effect. (And they default to 0.)
+When set to 1, this directive overrides and enforces [preopen](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Other-performance-related-settings) on all indexes. They will be preopened, no matter what is the per-index `preopen` setting. When set to 0, per-index settings can take effect. (And they default to 0.)
 
 Pre-opened indexes avoid races between search queries and rotations that can cause queries to fail occasionally. They also make `searchd` use more file handles. In most scenarios it's therefore preferred and recommended to preopen indexes.
 
@@ -783,7 +783,7 @@ preopen_indexes = 1
 ### qcache_max_bytes
 
 <!-- example conf qcache_max_bytes -->
-Integer, in bytes. The maximum RAM allocated for cached result sets. Default is 16777216, or 16Mb. 0 means disabled. Refer to [query cache](Searching/Query_cache.md) for details.
+Integer, in bytes. The maximum RAM allocated for cached result sets. Default is 16777216, or 16Mb. 0 means disabled. Refer to [query cache](../Searching/Query_cache.md) for details.
 
 
 <!-- intro -->
@@ -799,12 +799,12 @@ qcache_max_bytes = 16777216
 
 ### qcache_thresh_msec
 
-Integer, in milliseconds. The minimum wall time threshold for a query result to be cached. Defaults to 3000, or 3 seconds. 0 means cache everything. Refer to [query cache](Searching/Query_cache.md) for details. This value also may be expressed with time [special_suffixes](Server_settings/Special_suffixes.md), but use it with care and don't confuse yourself with name of the value itself, containing '_msec'.
+Integer, in milliseconds. The minimum wall time threshold for a query result to be cached. Defaults to 3000, or 3 seconds. 0 means cache everything. Refer to [query cache](../Searching/Query_cache.md) for details. This value also may be expressed with time [special_suffixes](../Server_settings/Special_suffixes.md), but use it with care and don't confuse yourself with name of the value itself, containing '_msec'.
 
 
 ### qcache_ttl_sec
 
-Integer, in seconds. The expiration period for a cached result set. Defaults to 60, or 1 minute. The minimum possible value is 1 second. Refer to [query cache](Searching/Query_cache.md) for details. This value also may be expressed with time [special_suffixes](Server_settings/Special_suffixes.md), but use it with care and don't confuse yourself with name of the value itself, containing '_sec'.
+Integer, in seconds. The expiration period for a cached result set. Defaults to 60, or 1 minute. The minimum possible value is 1 second. Refer to [query cache](../Searching/Query_cache.md) for details. This value also may be expressed with time [special_suffixes](../Server_settings/Special_suffixes.md), but use it with care and don't confuse yourself with name of the value itself, containing '_sec'.
 
 
 ### query_log_format
@@ -812,7 +812,7 @@ Integer, in seconds. The expiration period for a cached result set. Defaults to 
 <!-- example conf query_log_format -->
 Query log format. Optional, allowed values are 'plain' and 'sphinxql', default is 'plain'.
 
-The default one logs queries in a custom text format. The 'sphinxql' logs valid SQL statements. This directive allows to switch between the two formats on search server startup. The log format can also be altered on the fly, using `SET GLOBAL query_log_format=sphinxql` syntax. Refer to [Query logging](Logging/Query_logging.md) for more discussion and format details.
+The default one logs queries in a custom text format. The 'sphinxql' logs valid SQL statements. This directive allows to switch between the two formats on search server startup. The log format can also be altered on the fly, using `SET GLOBAL query_log_format=sphinxql` syntax. Refer to [Query logging](../Logging/Query_logging.md) for more discussion and format details.
 
 
 <!-- intro -->
@@ -828,12 +828,12 @@ query_log_format = sphinxql
 
 ### query_log_min_msec
 
-Limit (in milliseconds) that prevents the query from being written to the query log. Optional, default is 0 (all queries are written to the query log). This directive specifies that only queries with execution times that exceed the specified limit will be logged (this value also may be expressed with time [special_suffixes](Server_settings/Special_suffixes.md), but use it with care and don't confuse yourself with name of the value itself, containing `_msec`).
+Limit (in milliseconds) that prevents the query from being written to the query log. Optional, default is 0 (all queries are written to the query log). This directive specifies that only queries with execution times that exceed the specified limit will be logged (this value also may be expressed with time [special_suffixes](../Server_settings/Special_suffixes.md), but use it with care and don't confuse yourself with name of the value itself, containing `_msec`).
 
 ### query_log
 
 <!-- example conf query_log -->
-Query log file name. Optional, default is empty (do not log queries). All search queries will be logged in this file. The format is described in [Query logging](Logging/Query_logging.md). In case of 'plain' format, you can use the 'syslog' as the path to the log file. In this case all search queries will be sent to syslog daemon with `LOG_INFO` priority, prefixed with '[query]' instead of timestamp. To use the syslog option the sphinx must be configured `-–with-syslog` on building.
+Query log file name. Optional, default is empty (do not log queries). All search queries will be logged in this file. The format is described in [Query logging](../Logging/Query_logging.md). In case of 'plain' format, you can use the 'syslog' as the path to the log file. In this case all search queries will be sent to syslog daemon with `LOG_INFO` priority, prefixed with '[query]' instead of timestamp. To use the syslog option the sphinx must be configured `-–with-syslog` on building.
 
 
 <!-- intro -->
@@ -866,7 +866,7 @@ query_log_mode  = 666
 ### max_connections
 
 <!-- example max_connections -->
-Maximum number of simultaneous client connections. Unlimited by default. That is usually noticeable only when using any kind of persistent connections, like cli mysql sessions or persistent remote connections from remote distributed indexes. When the limit is exceeded you can still connect to the server using the [VIP connection](Connecting_to_the_server/MySQL_protocol.md#VIP-connection)
+Maximum number of simultaneous client connections. Unlimited by default. That is usually noticeable only when using any kind of persistent connections, like cli mysql sessions or persistent remote connections from remote distributed indexes. When the limit is exceeded you can still connect to the server using the [VIP connection](../Connecting_to_the_server/MySQL_protocol.md#VIP-connection)
 
 <!-- request Example -->
 ```ini
@@ -878,7 +878,7 @@ max_connections = 10
 ### network_timeout
 
 <!-- example conf network_timeout -->
-Network client request read/write timeout, in seconds (or [special_suffixes](Server_settings/Special_suffixes.md)). Optional, default is 5 seconds. `searchd` will forcibly close a client connection which fails to send a query or read a result within this timeout.
+Network client request read/write timeout, in seconds (or [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, default is 5 seconds. `searchd` will forcibly close a client connection which fails to send a query or read a result within this timeout.
 
 <!-- request Example -->
 
@@ -892,8 +892,8 @@ read_timeout = 1
 <!-- example conf read_buffer -->
 Per-keyword read buffer size. Optional, default is 256K
 
-For every keyword occurrence in every search query, there are two associated read buffers (one for document list and one for hit list). This setting lets you control their sizes, increasing per-query RAM use, but possibly decreasing IO time. Minimal value is 8K. Apart general size, you may also tune buffers for document lists and hit lists individually, using [read_buffer_docs](Server_settings/Searchd.md#read_buffer_docs)
-and [read_buffer_hits](Server_settings/Searchd.md#read_buffer_hits) params.
+For every keyword occurrence in every search query, there are two associated read buffers (one for document list and one for hit list). This setting lets you control their sizes, increasing per-query RAM use, but possibly decreasing IO time. Minimal value is 8K. Apart general size, you may also tune buffers for document lists and hit lists individually, using [read_buffer_docs](../Server_settings/Searchd.md#read_buffer_docs)
+and [read_buffer_hits](../Server_settings/Searchd.md#read_buffer_hits) params.
 
 Large values make sense in general for slow storage. For storage capable of high IOPS, experimenting should be done in the low values area.
 
@@ -913,7 +913,7 @@ read_buffer = 1M
 <!-- example conf read_buffer_docs -->
 Per-keyword read buffer size for document lists. Optional, default is 256K, minimal is 8K
 
-This is same as [read_buffer](Server_settings/Searchd.md#read_buffer), but manages size for document lists only. If both params exist; `read_buffer_docs` overrides more general `read_buffer`. Also you may set [read_buffer_docs](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Other-performance-related-settings) on per-index basis; that value will override anything set on server's config level.
+This is same as [read_buffer](../Server_settings/Searchd.md#read_buffer), but manages size for document lists only. If both params exist; `read_buffer_docs` overrides more general `read_buffer`. Also you may set [read_buffer_docs](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Other-performance-related-settings) on per-index basis; that value will override anything set on server's config level.
 
 
 <!-- intro -->
@@ -932,7 +932,7 @@ read_buffer_docs = 128K
 <!-- example conf read_buffer_hits -->
 Per-keyword read buffer size for hit lists. Optional, default is 256K, minimal is 8K
 
-This is same as [read_buffer](Server_settings/Searchd.md#read_buffer), but manages size for hit lists only. If both params exist; `read_buffer_hits`  overrides more general `read_buffer`. Also you may set [read_buffer_hits](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Other-performance-related-settings) on per-index basis; that valuewill override anything set on server's config level.
+This is same as [read_buffer](../Server_settings/Searchd.md#read_buffer), but manages size for hit lists only. If both params exist; `read_buffer_hits`  overrides more general `read_buffer`. Also you may set [read_buffer_hits](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#Other-performance-related-settings) on per-index basis; that valuewill override anything set on server's config level.
 
 
 <!-- intro -->
@@ -967,9 +967,9 @@ read_unhinted = 32K
 ### rt_flush_period
 
 <!-- example conf rt_flush_period -->
-RT indexes RAM chunk flush check period, in seconds (or [special_suffixes](Server_settings/Special_suffixes.md)). Optional, default is 10 hours.
+RT indexes RAM chunk flush check period, in seconds (or [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, default is 10 hours.
 
-Actively updated RT indexes that however fully fit in RAM chunks can result in ever-growing binlogs, impacting disk use and crash recovery time. With this directive the search server performs periodic flush checks, and eligible RAM chunks can get saved, enabling consequential binlog cleanup. See [Binary logging](Logging/Binary_logging.md) for more details.
+Actively updated RT indexes that however fully fit in RAM chunks can result in ever-growing binlogs, impacting disk use and crash recovery time. With this directive the search server performs periodic flush checks, and eligible RAM chunks can get saved, enabling consequential binlog cleanup. See [Binary logging](../Logging/Binary_logging.md) for more details.
 
 <!-- intro -->
 ##### Example:
@@ -1004,7 +1004,7 @@ rt_merge_iops = 40
 <!-- example conf rt_merge_maxiosize -->
 A maximum size of an I/O operation that the RT chunks merge thread is allowed to start. Optional, default is 0 (no limit).
 
-This directive lets you throttle down the I/O impact arising from the `OPTIMIZE` statements. I/Os bigger than this limit will be broken down into 2 or more I/Os, which will then be accounted as separate I/Os with regards to the [rt_merge_iops](Server_settings/Searchd.md#rt_merge_iops) limit. Thus, it is guaranteed that all the optimization activity will not generate more than (rt_merge_iops \* rt_merge_maxiosize) bytes of disk I/O per second.
+This directive lets you throttle down the I/O impact arising from the `OPTIMIZE` statements. I/Os bigger than this limit will be broken down into 2 or more I/Os, which will then be accounted as separate I/Os with regards to the [rt_merge_iops](../Server_settings/Searchd.md#rt_merge_iops) limit. Thus, it is guaranteed that all the optimization activity will not generate more than (rt_merge_iops \* rt_merge_maxiosize) bytes of disk I/O per second.
 
 
 <!-- intro -->
@@ -1076,7 +1076,7 @@ server_id = 1
 ### shutdown_timeout
 
 <!-- example conf shutdown_timeout -->
-`searchd -–stopwait` waiting time, in seconds (or [special_suffixes](Server_settings/Special_suffixes.md)). Optional, default is 3 seconds.
+`searchd -–stopwait` waiting time, in seconds (or [special_suffixes](../Server_settings/Special_suffixes.md)). Optional, default is 3 seconds.
 
 When you run searchd –stopwait your server needs to perform some activities before stopping like finishing queries, flushing RT RAM chunk, flushing attributes and updating binlog. And it requires some time. searchd –stopwait will wait up to shutdown_time seconds for server to finish its jobs. Suitable time depends on your index size and load.
 
@@ -1094,7 +1094,7 @@ shutdown_timeout = 1m # wait for up to 60 seconds
 
 ### shutdown_token
 
-SHA1 hash of the password which is necessary to invoke 'shutdown' command from VIP Manticore SQL connection. Without it [debug](Reporting_bugs.md#DEBUG) 'shutdown' subcommand will never cause server's stop. Note, that such simple hashing should not be considered as a strong protection, as we don't use salted hash or any kind of modern hash function. That is just fool-proof for housekeeping daemons in a local network.
+SHA1 hash of the password which is necessary to invoke 'shutdown' command from VIP Manticore SQL connection. Without it [debug](../Reporting_bugs.md#DEBUG) 'shutdown' subcommand will never cause server's stop. Note, that such simple hashing should not be considered as a strong protection, as we don't use salted hash or any kind of modern hash function. That is just fool-proof for housekeeping daemons in a local network.
 
 ### snippets_file_prefix
 
@@ -1155,7 +1155,7 @@ sphinxql_state = uservars.sql
 ### sphinxql_timeout
 
 <!-- example conf sphinxql_timeout -->
-Maximum time to wait between requests (in seconds, or [special_suffixes](Server_settings/Special_suffixes.md)) when using SQL interface. Optional, default is 15 minutes.
+Maximum time to wait between requests (in seconds, or [special_suffixes](../Server_settings/Special_suffixes.md)) when using SQL interface. Optional, default is 15 minutes.
 
 
 <!-- intro -->
@@ -1230,7 +1230,7 @@ ssl_key = keys/server-key.pem
 <!-- example conf subtree_docs_cache -->
 Max common subtree document cache size, per-query. Optional, default is 0 (disabled).
 
-Limits RAM usage of a common subtree optimizer (see [multi-queries](Searching/Multi-queries.md)). At most this much RAM will be spent to cache document entries per each query. Setting the limit to 0 disables the optimizer.
+Limits RAM usage of a common subtree optimizer (see [multi-queries](../Searching/Multi-queries.md)). At most this much RAM will be spent to cache document entries per each query. Setting the limit to 0 disables the optimizer.
 
 
 <!-- intro -->
@@ -1249,7 +1249,7 @@ subtree_docs_cache = 8M
 <!-- example conf subtree_hits_cache -->
 Max common subtree hit cache size, per-query. Optional, default is 0 (disabled).
 
-Limits RAM usage of a common subtree optimizer (see [multi-queries](Searching/Multi-queries.md)). At most this much RAM will be spent to cache keyword occurrences (hits) per each query. Setting the limit to 0 disables the optimizer.
+Limits RAM usage of a common subtree optimizer (see [multi-queries](../Searching/Multi-queries.md)). At most this much RAM will be spent to cache keyword occurrences (hits) per each query. Setting the limit to 0 disables the optimizer.
 
 
 <!-- intro -->

@@ -36,11 +36,11 @@ This section discusses writing and managing plugins in general; things specific 
 So, how do you write and use a plugin? Four-line crash course goes as follows:
 
 * create a dynamic library (either .so or.dll), most likely in C or C++;
-* load that plugin into searchd using [CREATE PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md);
+* load that plugin into searchd using [CREATE PLUGIN](../../Extensions/UDFs_and_Plugins/Plugins/Creating_a_plugin.md);
 * invoke it using the plugin specific calls (typically using this or that OPTION).
-* to unload or reload a plugin use [DROP PLUGIN](Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md) and [RELOAD PLUGINS](Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md) respectively.
+* to unload or reload a plugin use [DROP PLUGIN](../../Extensions/UDFs_and_Plugins/Plugins/Deleting_a_plugin.md) and [RELOAD PLUGINS](../../Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md) respectively.
 
-Note that while UDFs are first-class plugins they are nevertheless installed using a separate [CREATE FUNCTION](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md) statement. It lets you specify the return type neatly so there was especially little reason to ruin backwards compatibility *and* change the syntax.
+Note that while UDFs are first-class plugins they are nevertheless installed using a separate [CREATE FUNCTION](../../Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md) statement. It lets you specify the return type neatly so there was especially little reason to ruin backwards compatibility *and* change the syntax.
 
 Dynamic plugins are supported in threads and thread_pool workers. Multiple plugins (and/or UDFs) may reside in a single library file. So you might choose to either put all your project-specific plugins in a single common big library; or you might choose to have a separate library for every UDF and plugin; that is up to you.
 

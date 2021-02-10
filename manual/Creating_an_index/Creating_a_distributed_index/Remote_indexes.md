@@ -1,6 +1,6 @@
 # Remote indexes
 
-Remote indexes are represented by [agent](Creating_an_index/Creating_a_distributed_index/Creating_a_distributed_index.md) in the definition of a distributed index.
+Remote indexes are represented by [agent](../../Creating_an_index/Creating_a_distributed_index/Creating_a_distributed_index.md) in the definition of a distributed index.
 Any number of locals and agents may be combined in a distributed index. If no locals provided, it will be purely remote index, which serves just as a proxy. For example, you may have a frontend Manticore instance which listens on a number of ports and serves different protocols, and then just redirects queries to backends that accept connections only via Manticore's internal binary protocol with, perhaps, persistent connections to avoid a connection establishing overhead.
 Despite the fact, that such distributed index doesn't serve local indexes itself, it still consumes machine resources, since it still needs to make final calculations such as merging results and calculating final aggregated values. 
 
@@ -31,13 +31,13 @@ In other words, you can point every single agent to one or more remote indexes, 
 * sharding over multiple agent servers, mirrored for HA/LB (High Availability and Load Balancing) purposes
 * sharding within localhost, to utilize multiple cores (however, it is simpler just to use multiple local indexes)
 
-All agents are searched in parallel. An index list is passed verbatim to the remote agent. How exactly that list is searched within the agent (ie. sequentially or in parallel too) depends solely on the agent configuration (ie. [threads](Server_settings/Searchd.md#threads) setting). Master has no remote control over that.
+All agents are searched in parallel. An index list is passed verbatim to the remote agent. How exactly that list is searched within the agent (ie. sequentially or in parallel too) depends solely on the agent configuration (ie. [threads](../../Server_settings/Searchd.md#threads) setting). Master has no remote control over that.
 
 The value can additionally enumerate per agent options such as:
-* [ha_strategy](Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) - random, roundrobin, nodeads, noerrors (replaces index-wide `ha_strategy` for particular agent)
+* [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) - random, roundrobin, nodeads, noerrors (replaces index-wide `ha_strategy` for particular agent)
 * `conn` - pconn, persistent (same as `agent_persistent` on index-wide declaration)
-* `blackhole` 0,1 (same as [agent_blackhole](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_blackhole) agent declaration)
-* `retry_count` - integer (same as [agent_retry_count](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_retry_count) , but the provided value will not be multiplied to the number of mirrors)
+* `blackhole` 0,1 (same as [agent_blackhole](../../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_blackhole) agent declaration)
+* `retry_count` - integer (same as [agent_retry_count](../../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_retry_count) , but the provided value will not be multiplied to the number of mirrors)
 
 ```ini
 agent = address1:index-list[[ha_strategy=value] | [conn=value] | [blackhole=value]]
@@ -74,9 +74,9 @@ agent = test:9312|box2:9312|box3:9312:any2[retry_count=2]
 agent_persistent = remotebox:9312:index2
 ```
 
-`agent_persistent` asks to persistently connect to agent (i.e. don't drop connection after query). This directive syntax matches that of the `agent` directive. The only difference is that the master will **not** open a new connection to the agent for every query and then close it. Rather, it will keep a connection open and attempt to reuse for the subsequent queries. The maximal number of such persistent connections per one agent host is limited by [persistent_connections_limit](Server_settings/Searchd.md#persistent_connections_limit) option of searchd section.
+`agent_persistent` asks to persistently connect to agent (i.e. don't drop connection after query). This directive syntax matches that of the `agent` directive. The only difference is that the master will **not** open a new connection to the agent for every query and then close it. Rather, it will keep a connection open and attempt to reuse for the subsequent queries. The maximal number of such persistent connections per one agent host is limited by [persistent_connections_limit](../../Server_settings/Searchd.md#persistent_connections_limit) option of searchd section.
 
-Note, that you **have** to set the last one in something greater than 0 if you want to use persistent agent connections. Otherwise - when [persistent_connections_limit](Server_settings/Searchd.md#persistent_connections_limit) is not defined, it assumes the zero num of persistent connections, and `agent_persistent` acts exactly as simple `agent`.
+Note, that you **have** to set the last one in something greater than 0 if you want to use persistent agent connections. Otherwise - when [persistent_connections_limit](../../Server_settings/Searchd.md#persistent_connections_limit) is not defined, it assumes the zero num of persistent connections, and `agent_persistent` acts exactly as simple `agent`.
 
 Persistent master-agent connections reduce TCP port pressure, and save on connection handshakes.
 
@@ -95,7 +95,7 @@ agent_blackhole = testbox:9312:testindex1,testindex2
 agent_connect_timeout = 300
 ````
 
-`agent_connect_timeout` defines remote agent connection timeout. By default the value is assumed to be in milliseconds, but can have [another suffix](Server_settings/Special_suffixes.md)). Optional, default is 1000 (ie. 1 second).
+`agent_connect_timeout` defines remote agent connection timeout. By default the value is assumed to be in milliseconds, but can have [another suffix](../../Server_settings/Special_suffixes.md)). Optional, default is 1000 (ie. 1 second).
 
 When connecting to remote agents, `searchd` will wait at most this much time for connect() call to complete successfully. If the timeout is reached but connect() does not complete, and `retries` are enabled, retry will be initiated.
 
@@ -125,11 +125,11 @@ These options manage overall behaviour regarding remote agents. They are to be s
 * `agent_query_timeout` - instance-wide defaults for `agent_query_timeout` parameter. The last defined in distributed (network) indexes, or also may be overridden per-query using a setting of the same name.
 * `agent_retry_count` integer, specifies how many times manticore will try to connect and query remote agents in distributed index before reporting fatal query error. Default is 0 (i.e. no retries). This value may be also specified on per-query basis using 'OPTION retry_count=XXX' clause. If per-query option exists, it will override the one specified in config.
 
-  Note, that if you use **agent mirrors** in definition of your distributed index, then before every attempt of connect server will select different mirror, according to specified [ha_strategy](Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) specified. In this case [agent_retry_count](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_retry_count) will be aggregated for all mirrors in a set.
+  Note, that if you use **agent mirrors** in definition of your distributed index, then before every attempt of connect server will select different mirror, according to specified [ha_strategy](../../Creating_a_cluster/Remote_nodes/Load_balancing.md#ha_strategy) specified. In this case [agent_retry_count](../../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#agent_retry_count) will be aggregated for all mirrors in a set.
 
   For example, if you have 10 mirrors, and set `agent_retry_count=5`, then server will retry up to 50 times, assuming average 5 tries per every of 10 mirrors (in case of option `ha_strategy = roundrobin` it will be actually exactly 5 times per mirror).
 
-  At the same time value provided as [retry_count](Searching/Options.md#retry_count) option of `agent` definition serves as absolute limit. Other words, `[retry_count=2]` option in agent definition means always at most 2 tries, no mean if you have 1 or 10 mirrors in a line.
+  At the same time value provided as [retry_count](../../Searching/Options.md#retry_count) option of `agent` definition serves as absolute limit. Other words, `[retry_count=2]` option in agent definition means always at most 2 tries, no mean if you have 1 or 10 mirrors in a line.
 
 ### agent_retry_delay
 
@@ -169,11 +169,11 @@ persistent_connections_limit = 29 # assume that each host of agents has max_conn
 
 `persistent_connections_limit` defines maximum # of simultaneous persistent connections to remote persistent agents. This is instance-wide option and has to be defined in searchd config section. Each time connecting agent defined under `agent_persistent` we try to reuse existing connection (if any), or connect and save the connection for the future. However we can't hold unlimited # of such persistent connections, since each one holds a worker on agent's side (and finally we'll receive the 'maxed out' error, when all of them are busy). This very directive limits the number. It affects the num of connections to each agent's host, across all distributed indexes.
 
-It is reasonable to set the value equal or less than [max_connections](Server_settings/Searchd.md#max_connections) option of the agent's config.
+It is reasonable to set the value equal or less than [max_connections](../../Server_settings/Searchd.md#max_connections) option of the agent's config.
 
 ## Distributed snippets creation
 
-One special case of a distributed index is a single local + multiple remotes. It is solely used for [distributed snippets creation](Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#Distributed-snippets-creation), when snippets are sourced from files. In this case the local may be a 'template' index, since it is used just to provide settings for tokenization when building snippets.
+One special case of a distributed index is a single local + multiple remotes. It is solely used for [distributed snippets creation](../../Creating_an_index/Creating_a_distributed_index/Remote_indexes.md#Distributed-snippets-creation), when snippets are sourced from files. In this case the local may be a 'template' index, since it is used just to provide settings for tokenization when building snippets.
 
 ### snippets_file_prefix
 
@@ -183,14 +183,14 @@ snippets_file_prefix = /mnt/common/server1/
 
 `snippets_file_prefix` is a prefix to prepend to the local file names when generating snippets. Optional, default is current working folder.
 
-Head about [CALL SNIPPETS](Searching/Highlighting.md) to learn more about distributed snippets creation.
+Head about [CALL SNIPPETS](../../Searching/Highlighting.md) to learn more about distributed snippets creation.
 
 ## Distributed percolate indexes (DPQ indexes)
 
-You can construct a distributed index from several [percolate](Creating_an_index/Local_indexes/Percolate_index.md) indexes. The syntax is absolutely the same as for other distributed indexes. It can include several `local` indexes as well as several `agents`.
+You can construct a distributed index from several [percolate](../../Creating_an_index/Local_indexes/Percolate_index.md) indexes. The syntax is absolutely the same as for other distributed indexes. It can include several `local` indexes as well as several `agents`.
 
-For DPQ the operations of listing stored queries and searching through them ([CALL PQ](Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ)) are transparent and works as if all the indexes were one solid local index. However data manipulation statements such as `insert`, `replace`, `truncate` are not available.
+For DPQ the operations of listing stored queries and searching through them ([CALL PQ](../../Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ)) are transparent and works as if all the indexes were one solid local index. However data manipulation statements such as `insert`, `replace`, `truncate` are not available.
 
 If you mention a non-percolate index among the agents, the behaviour will be undefined. Most likely in case if the erroneous agent has the same schema as the outer schema of the pq index (id, query, tags, filters) - it will not trigger an error when listing stored PQ rules hence may pollute the list of actual PQ rules stored in PQ indexes with it's own non-pq strings, so be aware of the confusion! `CALL PQ` to such wrong agent will definitely trigger an error.
 
-Read more about [making queries to a distribute percolate index](Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ).
+Read more about [making queries to a distribute percolate index](../../Searching/Percolate_query.md#Performing-a-percolate-query-with-CALL-PQ).

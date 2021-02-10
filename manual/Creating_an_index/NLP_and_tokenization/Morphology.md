@@ -25,11 +25,11 @@ The morphology processors that come with our own built-in Manticore implementati
 * SoundEx and MetaPhone phonetic algorithms
 * Chinese word breaking algorithm
 
-You can also link with **libstemmer** library for even more stemmers (see details below). With libstemmer, Manticore also supports morphological processing for more than [15 other languages](Creating_an_index/NLP_and_tokenization/Supported_languages.md). Binary packages should come prebuilt with libstemmer support, too.
+You can also link with **libstemmer** library for even more stemmers (see details below). With libstemmer, Manticore also supports morphological processing for more than [15 other languages](../../Creating_an_index/NLP_and_tokenization/Supported_languages.md). Binary packages should come prebuilt with libstemmer support, too.
 
-Lemmatizers require a dictionary that needs to be additionally downloaded from the Manticore website. That dictionary needs to be installed in a directory specified by [lemmatizer_base](Server_settings/Common.md#lemmatizer_base) directive. Also, there is a [lemmatizer_cache](Adding_data_from_external_storages/Plain_indexes_creation.md#lemmatizer_cache) directive that lets you speed up lemmatizing (and therefore indexing) by spending more RAM for, basically, an uncompressed cache of a dictionary.
+Lemmatizers require a dictionary that needs to be additionally downloaded from the Manticore website. That dictionary needs to be installed in a directory specified by [lemmatizer_base](../../Server_settings/Common.md#lemmatizer_base) directive. Also, there is a [lemmatizer_cache](../../Adding_data_from_external_storages/Plain_indexes_creation.md#lemmatizer_cache) directive that lets you speed up lemmatizing (and therefore indexing) by spending more RAM for, basically, an uncompressed cache of a dictionary.
 
-Chinese segmentation using [ICU](http://site.icu-project.org/) is also available. It is a much more precise, but a little bit slower way (compared to n-grams) to segment Chinese documents. [charset_table](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table) must contain all Chinese characters (you can use alias "cjk"). In case of "morphology=icu_chinese" documents are first pre-processed by ICU, then the result is processed by the tokenizer (according to your charset_table) and then other morphology processors specified in the  "morphology" option are applied. When the documents are processed by ICU, only those parts of texts that contain Chinese are passed to ICU for segmentation, others can be modified by other means (different morphologies, charset_table etc.)
+Chinese segmentation using [ICU](http://site.icu-project.org/) is also available. It is a much more precise, but a little bit slower way (compared to n-grams) to segment Chinese documents. [charset_table](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table) must contain all Chinese characters (you can use alias "cjk"). In case of "morphology=icu_chinese" documents are first pre-processed by ICU, then the result is processed by the tokenizer (according to your charset_table) and then other morphology processors specified in the  "morphology" option are applied. When the documents are processed by ICU, only those parts of texts that contain Chinese are passed to ICU for segmentation, others can be modified by other means (different morphologies, charset_table etc.)
 
 Built-in English and Russian stemmers should be faster than their libstemmer counterparts, but can produce slightly different results, because they are based on an older version.
 
@@ -51,9 +51,9 @@ Built-in values that are available for use in the `morphology` option are as fol
 * soundex - replace keywords with their SOUNDEX code
 * metaphone - replace keywords with their METAPHONE code
 * icu_chinese - apply Chinese text segmentation using ICU
-* libstemmer_* . Refer to the [list of supported languages](Creating_an_index/NLP_and_tokenization/Supported_languages.md) for details
+* libstemmer_* . Refer to the [list of supported languages](../../Creating_an_index/NLP_and_tokenization/Supported_languages.md) for details
 
-Several stemmers can be specified at once comma-separated. They will be applied to incoming words in the order they are listed, and the processing will stop once one of the stemmers actually modifies the word. Also when [wordforms](Creating_an_index/NLP_and_tokenization/Wordforms.md#wordforms) feature is enabled the word will be looked up in word forms dictionary first, and if there is a matching entry in the dictionary, stemmers will not be applied at all. Or in other words, [wordforms](Creating_an_index/NLP_and_tokenization/Wordforms.md#wordforms) can be used to implement stemming exceptions.
+Several stemmers can be specified at once comma-separated. They will be applied to incoming words in the order they are listed, and the processing will stop once one of the stemmers actually modifies the word. Also when [wordforms](../../Creating_an_index/NLP_and_tokenization/Wordforms.md#wordforms) feature is enabled the word will be looked up in word forms dictionary first, and if there is a matching entry in the dictionary, stemmers will not be applied at all. Or in other words, [wordforms](../../Creating_an_index/NLP_and_tokenization/Wordforms.md#wordforms) can be used to implement stemming exceptions.
 
 <!-- request SQL -->
 
@@ -201,7 +201,7 @@ min_stemming_len = length
 
 Minimum word length at which to enable stemming. Optional, default is 1 (stem everything).
 
-Stemmers are not perfect, and might sometimes produce undesired results. For instance, running "gps" keyword through Porter stemmer for English results in "gp", which is not really the intent. `min_stemming_len` feature lets you suppress stemming based on the source word length, ie. to avoid stemming too short words. Keywords that are shorter than the given threshold will not be stemmed. Note that keywords that are exactly as long as specified **will** be stemmed. So in order to avoid stemming 3-character keywords, you should specify 4 for the value. For more finely grained control, refer to [wordforms](Creating_an_index/NLP_and_tokenization/Wordforms.md#wordforms) feature.
+Stemmers are not perfect, and might sometimes produce undesired results. For instance, running "gps" keyword through Porter stemmer for English results in "gp", which is not really the intent. `min_stemming_len` feature lets you suppress stemming based on the source word length, ie. to avoid stemming too short words. Keywords that are shorter than the given threshold will not be stemmed. Note that keywords that are exactly as long as specified **will** be stemmed. So in order to avoid stemming 3-character keywords, you should specify 4 for the value. For more finely grained control, refer to [wordforms](../../Creating_an_index/NLP_and_tokenization/Wordforms.md#wordforms) feature.
 
 <!-- request SQL -->
 
@@ -278,7 +278,7 @@ index_exact_words = {0|1}
 
 Whether to index the original keywords along with the stemmed/remapped versions. Optional, default is 0 (do not index).
 
-When enabled, `index_exact_words` forces indexation to put the raw keywords in the index along with the stemmed versions. That, in turn, enables [exact form operator](Searching/Full_text_matching/Operators.md#Exact-form-modifier) in the query language to work. This impacts the index size and the indexing time. However, searching performance is not impacted at all.
+When enabled, `index_exact_words` forces indexation to put the raw keywords in the index along with the stemmed versions. That, in turn, enables [exact form operator](../../Searching/Full_text_matching/Operators.md#Exact-form-modifier) in the query language to work. This impacts the index size and the indexing time. However, searching performance is not impacted at all.
 
 <!-- request SQL -->
 

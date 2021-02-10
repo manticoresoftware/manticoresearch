@@ -43,7 +43,7 @@ index myindex {
 ## sql_query
 
 This is the query which is used to retrieve documents from SQL server. There can be only one sql_query declared and it's mandatory to have one. 
-See also [Indexing fetched data](Adding_data_from_external_storages/Fetching_from_databases/Indexing_fetched_data.md#Indexing-fetched-data)
+See also [Indexing fetched data](../../Adding_data_from_external_storages/Fetching_from_databases/Indexing_fetched_data.md#Indexing-fetched-data)
 
 ## sql_query_pre
 

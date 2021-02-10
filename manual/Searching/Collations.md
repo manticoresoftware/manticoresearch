@@ -17,7 +17,7 @@ Collations combine all of the above: the character set, the language rules, and 
 3.  `utf8_general_ci`
 4.  `binary`
 
-The first two collations rely on several standard C library (libc) calls and can thus support any locale that is installed on your system. They provide case-insensitive (`_ci`) and case-sensitive (`_cs`) comparisons respectively. By default they will use C locale, effectively resorting to bytewise comparisons. To change that, you need to specify a different available locale using [collation_libc_locale](Server_settings/Searchd.md#collation_libc_locale) directive. The list of locales available on your system can usually be obtained with the `locale` command:
+The first two collations rely on several standard C library (libc) calls and can thus support any locale that is installed on your system. They provide case-insensitive (`_ci`) and case-sensitive (`_cs`) comparisons respectively. By default they will use C locale, effectively resorting to bytewise comparisons. To change that, you need to specify a different available locale using [collation_libc_locale](../Server_settings/Searchd.md#collation_libc_locale) directive. The list of locales available on your system can usually be obtained with the `locale` command:
 
 ```bash
 $ locale -a
@@ -49,6 +49,6 @@ The specific list of the system locales may vary. Consult your OS documentation 
 
 `utf8_general_ci` and `binary` locales are built-in into Manticore. The first one is a generic collation for UTF-8 data (without any so-called language tailoring); it should behave similar to `utf8_general_ci` collation in MySQL. The second one is a simple bytewise comparison.
 
-Collation can be overridden via SQL on a per-session basis using `SET collation_connection` statement. All subsequent SQL queries will use this collation. Otherwise all queries will use the server default collation or as specified in [collation_server](Server_settings/Searchd.md#collation_server) configuration directive. Manticore currently defaults to `libc_ci` collation.
+Collation can be overridden via SQL on a per-session basis using `SET collation_connection` statement. All subsequent SQL queries will use this collation. Otherwise all queries will use the server default collation or as specified in [collation_server](../Server_settings/Searchd.md#collation_server) configuration directive. Manticore currently defaults to `libc_ci` collation.
 
-Collations affect all string attribute comparisons, including those within `ORDER BY` and `GROUP BY`, so differently ordered or grouped results can be returned depending on the collation chosen. Note that collations don't affect full-text searching, for that use [charset_table](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table)
+Collations affect all string attribute comparisons, including those within `ORDER BY` and `GROUP BY`, so differently ordered or grouped results can be returned depending on the collation chosen. Note that collations don't affect full-text searching, for that use [charset_table](../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table)

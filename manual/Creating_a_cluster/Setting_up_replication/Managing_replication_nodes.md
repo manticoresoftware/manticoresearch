@@ -1,7 +1,7 @@
 # Managing replication nodes 
 
 <!-- example managing replication nodes 1 -->
-`ALTER CLUSTER <cluster_name> UPDATE <nodes>` statement updates node lists on each node of the cluster to include every active node in the cluster. See [Joining a cluster](Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) for more info on node lists.
+`ALTER CLUSTER <cluster_name> UPDATE <nodes>` statement updates node lists on each node of the cluster to include every active node in the cluster. See [Joining a cluster](../../Creating_a_cluster/Setting_up_replication/Joining_a_replication_cluster.md) for more info on node lists.
 
 
 <!-- intro -->
@@ -75,4 +75,4 @@ For example, when the cluster was initially created, the list of nodes used for 
 
 But the list of nodes used for rejoining the cluster is still the same. Running the `ALTER CLUSTER ... UPDATE nodes` copies the list of active nodes to the list of nodes used to rejoin on restart. After this, the list of nodes used on restart includes all the active nodes in the cluster.
 
-Both lists of nodes can be viewed using [Cluster status](Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md) statement (`cluster_post_nodes_set` and `cluster_post_nodes_view`).
+Both lists of nodes can be viewed using [Cluster status](../../Creating_a_cluster/Setting_up_replication/Replication_cluster_status.md) statement (`cluster_post_nodes_set` and `cluster_post_nodes_view`).

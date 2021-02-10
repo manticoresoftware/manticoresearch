@@ -7,9 +7,9 @@ To do that properly Manticore needs to know:
 * what characters are letters and what are not
 * what letters should be folded to other letters
 
-This can be configured on a per-index basis using [charset_table](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table) option. charset_table specifies the array that maps letter characters to their case folded versions (or any other characters if you like). The characters that are not in the array are considered to be non-letters and will be treated as word separators when indexing or searching through this index.
+This can be configured on a per-index basis using [charset_table](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table) option. charset_table specifies the array that maps letter characters to their case folded versions (or any other characters if you like). The characters that are not in the array are considered to be non-letters and will be treated as word separators when indexing or searching through this index.
 
-The default character set is `non_cjk` and includes [most languages](Creating_an_index/NLP_and_tokenization/Supported_languages.md).
+The default character set is `non_cjk` and includes [most languages](../../Creating_an_index/NLP_and_tokenization/Supported_languages.md).
 
 You can also specify text pattern replacement rules. For example, given the rules:
 
@@ -20,7 +20,7 @@ regexp_filter = (BLUE|RED) => COLOR
 
 text `RED TUBE 5" LONG` would be indexed as `COLOR TUBE 5 INCH LONG`, and `PLANK 2" x 4"` - as `PLANK 2 INCH x 4 INCH`. The rules are applied in the given order. Text in queries is also replaced; search for `BLUE TUBE` would actually become a search for `COLOR TUBE`.
 
-Read more about [regexp_filter here](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter).
+Read more about [regexp_filter here](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter).
 
 ## Index configuration options 
 
@@ -290,10 +290,10 @@ index products {
 ```
 <!-- end -->
 
-In case you don't need support for cjk-languages you can just omit [ngram_len](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) and [ngram_chars](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
+In case you don't need support for cjk-languages you can just omit [ngram_len](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_len) and [ngram_chars](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
 options. For more information on those see the appropriate documentation sections.
 
-If you're looking for mapping one character to multiple or vice-versa [regexp_filter](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter) can be helpful.
+If you're looking for mapping one character to multiple or vice-versa [regexp_filter](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter) can be helpful.
 
 ### blend_chars
 
@@ -556,9 +556,9 @@ ngram_len = 1
 <!-- example ngram_len -->
 N-gram lengths for N-gram indexing. Optional, default is 0 (disable n-gram indexing). Known values are 0 and 1.
 
-N-grams provide basic CJK (Chinese, Japanese, Korean) support for unsegmented texts. The issue with CJK searching is that there could be no clear separators between the words. In some cases you might not want to use dictionary-based segmentation as [the one available for Chinese](Creating_an_index/NLP_and_tokenization/CJK.md). In those cases n-gram segmentation might work well too.
+N-grams provide basic CJK (Chinese, Japanese, Korean) support for unsegmented texts. The issue with CJK searching is that there could be no clear separators between the words. In some cases you might not want to use dictionary-based segmentation as [the one available for Chinese](../../Creating_an_index/NLP_and_tokenization/CJK.md). In those cases n-gram segmentation might work well too.
 
-When this feature is enabled, streams of CJK (or any other defined in [ngram_chars](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)) characters are indexed as N-grams. For example, if incoming text is "ABCDEF" (where A to F represent some CJK characters) and ngram_len is 1, in will be indexed as if it was "A B C D E F". Only ngram_len=1 is supported at the moment. Only those characters that are listed in [ngram_chars](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars) table will be split this way; other ones will not be affected.
+When this feature is enabled, streams of CJK (or any other defined in [ngram_chars](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)) characters are indexed as N-grams. For example, if incoming text is "ABCDEF" (where A to F represent some CJK characters) and ngram_len is 1, in will be indexed as if it was "A B C D E F". Only ngram_len=1 is supported at the moment. Only those characters that are listed in [ngram_chars](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars) table will be split this way; other ones will not be affected.
 
 Note that if search query is segmented, i.e. there are separators between individual words, then wrapping the words in quotes and using extended mode will result in proper matches being found even if the text was **not** segmented. For instance, assume that the original query is `BC DEF`. After wrapping in quotes on the application side, it should look like `"BC" "DEF"` (*with* quotes). This query will be passed to Manticore and internally split into 1-grams too, resulting in `"B C" "D E F"` query, still with quotes that are the phrase matching operator. And it will match the text even though there were no separators in the text.
 
@@ -642,7 +642,7 @@ ngram_chars = cjk, U+3000..U+2FA1F
 <!-- example ngram_chars -->
 N-gram characters list. Optional, default is empty.
 
-To be used in conjunction with in [ngram_len](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_len), this list defines characters, sequences of which are subject to N-gram extraction. Words comprised of other characters will not be affected by N-gram indexing feature. The value format is identical to [charset_table](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table). N-gram characters cannot appear in the [charset_table](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table).
+To be used in conjunction with in [ngram_len](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_len), this list defines characters, sequences of which are subject to N-gram extraction. Words comprised of other characters will not be affected by N-gram indexing feature. The value format is identical to [charset_table](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table). N-gram characters cannot appear in the [charset_table](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table).
 
 <!-- request SQL -->
 
@@ -797,7 +797,7 @@ Ignored characters list. Optional, default is empty.
 
 Useful in cases when some characters, such as soft hyphenation mark (U+00AD), should be not just treated as separators but rather fully ignored. For example, if '-' is simply not in the charset_table, "abc-def" text will be indexed as "abc" and "def" keywords. On the contrary, if '-' is added to ignore_chars list, the same text will be indexed as a single "abcdef" keyword.
 
-The syntax is the same as for [charset_table](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table), but it's only allowed to declare characters, and not allowed to map them. Also, the ignored characters must not be present in charset_table.
+The syntax is the same as for [charset_table](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table), but it's only allowed to declare characters, and not allowed to map them. Also, the ignored characters must not be present in charset_table.
 
 <!-- request SQL -->
 
@@ -878,7 +878,7 @@ Bigram indexing is a feature to accelerate phrase searches. When indexing, it st
 `bigram_index` controls the selection of specific word pairs. The known modes are:
 
 * `all`, index every single word pair
-* `first_freq`, only index word pairs where the *first* word is in a list of frequent words (see [bigram_freq_words](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)). For example, with `bigram_freq_words = the, in, i, a`, indexing "alone in the dark" text will result in "in the" and "the dark" pairs being stored as bigrams, because they begin with a frequent keyword (either "in" or "the" respectively), but "alone in" would **not** be indexed, because "in" is a *second* word in that pair.
+* `first_freq`, only index word pairs where the *first* word is in a list of frequent words (see [bigram_freq_words](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)). For example, with `bigram_freq_words = the, in, i, a`, indexing "alone in the dark" text will result in "in the" and "the dark" pairs being stored as bigrams, because they begin with a frequent keyword (either "in" or "the" respectively), but "alone in" would **not** be indexed, because "in" is a *second* word in that pair.
 * `both_freq`, only index word pairs where both words are frequent. Continuing with the same example, in this mode indexing "alone in the dark" would only store "in the" (the very worst of them all from searching perspective) as a bigram, but none of the other word pairs.
 
 For most use cases, `both_freq` would be the best mode, but your mileage may vary.
@@ -959,7 +959,7 @@ bigram_freq_words = the, a, you, i
 <!-- example bigram_freq_words -->
 A list of keywords considered "frequent" when indexing bigrams. Optional, default is empty.
 
-Some of the bigram indexing modes (see [bigram_index](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)) require to define a list of frequent keywords. These are **not** to be confused with stop words. Stop words are completely eliminated when both indexing and searching. Frequent keywords are only used by bigrams to determine whether to index a current word pair or not.
+Some of the bigram indexing modes (see [bigram_index](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)) require to define a list of frequent keywords. These are **not** to be confused with stop words. Stop words are completely eliminated when both indexing and searching. Frequent keywords are only used by bigrams to determine whether to index a current word pair or not.
 
 `bigram_freq_words` lets you define a list of such keywords.
 
@@ -1043,13 +1043,13 @@ Keywords dictionary mode (dict=keywords), (greatly) reduces indexing impact and 
 
 CRC dictionaries never store the original keyword text in the index. Instead, keywords are replaced with their control sum value (calculated using FNV64) both when searching and indexing, and that value is used internally in the index.
 
-That approach has two drawbacks. First, there is a chance of control sum collision between several pairs of different keywords, growing quadratically with the number of unique keywords in the index. However, it is not a big concern as a chance of a single FNV64 collision in a dictionary of 1 billion entries is approximately 1:16, or 6.25 percent. And most dictionaries will be much more compact that a billion keywords, as a typical spoken human language has in the region of 1 to 10 million word forms.) Second, and more importantly, substring searches are not directly possible with control sums. Manticore alleviated that by pre-indexing all the possible substrings as separate keywords (see [min_prefix_len](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len), [min_infix_len](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) directives). That actually has an added benefit of matching substrings in the quickest way possible. But at the same time pre-indexing all substrings grows the index size a lot (factors of 3-10x and even more would not be unusual) and impacts the indexing time respectively, rendering substring searches on big indexes rather impractical.
+That approach has two drawbacks. First, there is a chance of control sum collision between several pairs of different keywords, growing quadratically with the number of unique keywords in the index. However, it is not a big concern as a chance of a single FNV64 collision in a dictionary of 1 billion entries is approximately 1:16, or 6.25 percent. And most dictionaries will be much more compact that a billion keywords, as a typical spoken human language has in the region of 1 to 10 million word forms.) Second, and more importantly, substring searches are not directly possible with control sums. Manticore alleviated that by pre-indexing all the possible substrings as separate keywords (see [min_prefix_len](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len), [min_infix_len](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len) directives). That actually has an added benefit of matching substrings in the quickest way possible. But at the same time pre-indexing all substrings grows the index size a lot (factors of 3-10x and even more would not be unusual) and impacts the indexing time respectively, rendering substring searches on big indexes rather impractical.
 
 Keywords dictionary fixes both these drawbacks. It stores the keywords in the index and performs search-time wildcard expansion. For example, a search for a 'test\*'prefix could internally expand to 'test|tests|testing' query based on the dictionary contents. That expansion is fully transparent to the application, except that the separate per-keyword statistics for all the actually matched keywords would now also be reported. 
 
 For substring (infix) search extended wildcards may be used. Special symbols like '?' and '%' are supported along with substring (infix) search (e.g. "t?st\*","run%","\*abc\*"). Note, however, these wildcards work only with dict=keywords, and not elsewhere.
 
-Indexing with keywords dictionary should be 1.1x to 1.3x slower compared to regular, non-substring indexing - but times faster compared to substring indexing (either prefix or infix). Index size should only be slightly bigger that than of the regular non-substring index, with a 1..10% percent total difference. Regular keyword searching time must be very close or identical across all three discussed index kinds (CRC non-substring, CRC substring, keywords). Substring searching time can vary greatly depending on how many actual keywords match the given substring (in other words, into how many keywords does the search term expand). The maximum number of keywords matched is restricted by the [expansion_limit](Server_settings/Searchd.md#expansion_limit) directive.
+Indexing with keywords dictionary should be 1.1x to 1.3x slower compared to regular, non-substring indexing - but times faster compared to substring indexing (either prefix or infix). Index size should only be slightly bigger that than of the regular non-substring index, with a 1..10% percent total difference. Regular keyword searching time must be very close or identical across all three discussed index kinds (CRC non-substring, CRC substring, keywords). Substring searching time can vary greatly depending on how many actual keywords match the given substring (in other words, into how many keywords does the search term expand). The maximum number of keywords matched is restricted by the [expansion_limit](../../Server_settings/Searchd.md#expansion_limit) directive.
 
 Essentially, keywords and CRC dictionaries represent the two different trade-off substring searching decisions. You can choose to either sacrifice indexing time and index size in favor of top-speed worst-case searches (CRC dictionary), or only slightly impact indexing time but sacrifice worst-case searching time when the prefix expands into very many keywords (keywords dictionary).
 
@@ -1156,11 +1156,11 @@ The path to a file with global (cluster-wide) keyword IDFs. Optional, default is
 
 On a multi-index cluster, per-keyword frequencies are quite likely to differ across different indexes. That means that when the ranking function uses TF-IDF based values, such as BM25 family of factors, the results might be ranked slightly differently depending on what cluster node they reside.
 
-The easiest way to fix that issue is to create and utilize a global frequency dictionary, or a global IDF file for short. This directive lets you specify the location of that file. It is suggested (but not required) to use an .idf extension. When the IDF file is specified for a given index *and* [OPTION global_idf](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#global_idf) is set to 1, the engine will use the keyword frequencies and collection documents counts from the global_idf file, rather than just the local index. That way, IDFs and the values that depend on them will stay consistent across the cluster.
+The easiest way to fix that issue is to create and utilize a global frequency dictionary, or a global IDF file for short. This directive lets you specify the location of that file. It is suggested (but not required) to use an .idf extension. When the IDF file is specified for a given index *and* [OPTION global_idf](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#global_idf) is set to 1, the engine will use the keyword frequencies and collection documents counts from the global_idf file, rather than just the local index. That way, IDFs and the values that depend on them will stay consistent across the cluster.
 
 IDF files can be shared across multiple indexes. Only a single copy of an IDF file will be loaded by `searchd`, even when many indexes refer to that file. Should the contents of an IDF file change, the new contents can be loaded with a SIGHUP.
 
-You can build an .idf file using [indextool](Miscellaneous_tools.md#indextool) utility, by dumping dictionaries using `--dumpdict dict.txt --stats` switch first, then converting those to .idf format using `--buildidf`, then merging all the .idf files across cluster using `--mergeidf`.
+You can build an .idf file using [indextool](../../Miscellaneous_tools.md#indextool) utility, by dumping dictionaries using `--dumpdict dict.txt --stats` switch first, then converting those to .idf format using `--buildidf`, then merging all the .idf files across cluster using `--mergeidf`.
 
 <!-- request SQL -->
 
@@ -1327,7 +1327,7 @@ When `index_field_lengths` is set to 1 Manticore will:
 * compute a field length (counted in keywords) for every document and store in to a respective attribute
 * compute the per-index averages. The lengths attributes will have a special TOKENCOUNT type, but their values are in fact regular 32-bit integers, and their values are generally accessible.
 
-[BM25A()](Functions/Searching_and_ranking_functions.md#BM25A%28%29) and [BM25F()](Functions/Searching_and_ranking_functions.md#BM25F%28%29) functions in the expression ranker are based on these lengths and require `index_field_lengths` to be enabled. Historically, Manticore used a simplified, stripped-down variant of BM25 that, unlike the complete function, did **not** account for document length. There's also support for both a complete variant of BM25, and its extension towards multiple fields, called BM25F. They require per-document length and per-field lengths, respectively. Hence the additional directive.
+[BM25A()](../../Functions/Searching_and_ranking_functions.md#BM25A%28%29) and [BM25F()](../../Functions/Searching_and_ranking_functions.md#BM25F%28%29) functions in the expression ranker are based on these lengths and require `index_field_lengths` to be enabled. Historically, Manticore used a simplified, stripped-down variant of BM25 that, unlike the complete function, did **not** account for document length. There's also support for both a complete variant of BM25, and its extension towards multiple fields, called BM25F. They require per-document length and per-field lengths, respectively. Hence the additional directive.
 
 <!-- request SQL -->
 
@@ -1474,7 +1474,7 @@ overshort_step = {0|1}
 ```
 
 <!-- example overshort_step -->
-Position increment on overshort (less than [min_word_len](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#min_word_len)) keywords. Optional, allowed values are 0 and 1, default is 1.
+Position increment on overshort (less than [min_word_len](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#min_word_len)) keywords. Optional, allowed values are 0 and 1, default is 1.
 
 <!-- request SQL -->
 
@@ -1550,9 +1550,9 @@ phrase_boundary = ., ?, !, U+2026 # horizontal ellipsis
 <!-- example phrase_boundary -->
 Phrase boundary characters list. Optional, default is empty.
 
-This list controls what characters will be treated as phrase boundaries, in order to adjust word positions and enable phrase-level search emulation through proximity search. The syntax is similar to [charset_table](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table), but mappings are not allowed and the boundary characters must not overlap with anything else.
+This list controls what characters will be treated as phrase boundaries, in order to adjust word positions and enable phrase-level search emulation through proximity search. The syntax is similar to [charset_table](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table), but mappings are not allowed and the boundary characters must not overlap with anything else.
 
-On phrase boundary, additional word position increment (specified by [phrase_boundary_step](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary_step)) will be added to current word position. This enables phrase-level searching through proximity queries: words in different phrases will be guaranteed to be more than phrase_boundary_step distance away from each other; so proximity search within that distance will be equivalent to phrase-level search.
+On phrase boundary, additional word position increment (specified by [phrase_boundary_step](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary_step)) will be added to current word position. This enables phrase-level searching through proximity queries: words in different phrases will be guaranteed to be more than phrase_boundary_step distance away from each other; so proximity search within that distance will be equivalent to phrase-level search.
 
 Phrase boundary condition will be raised if and only if such character is followed by a separator; this is to avoid abbreviations such as S.T.A.L.K.E.R or URLs being treated as several phrases. 
 

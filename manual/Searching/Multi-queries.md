@@ -13,7 +13,7 @@ Multi-queries require all the search queries in a batch to be independent, and s
 <!-- example multi-query 1 -->
 You can run multiple search queries with SQL by just separating them with a semicolon. When Manticore receives a query formatted like that from a client all the inter-statement optimizations will be applied.
 
-There are no restrictions on the queries at all, except just a sanity check on a number of queries in a single batch (see [max_batch_queries](Server_settings/Searchd.md#max_batch_queries)).
+There are no restrictions on the queries at all, except just a sanity check on a number of queries in a single batch (see [max_batch_queries](../Server_settings/Searchd.md#max_batch_queries)).
 
 
 <!-- intro -->
@@ -32,7 +32,7 @@ There are two major optimizations to be aware of: common query optimization and 
 
 **Common query optimization** means that `searchd` will identify all those queries in a batch where only the sorting and group-by settings differ, and *only perform searching once*. For instance, if a batch consists of 3 queries, all of them are for "ipod nano", but 1st query requests top-10 results sorted by price, 2nd query groups by vendor ID and requests top-5 vendors sorted by rating, and 3rd query requests max price, full-text search for "ipod nano" will only be performed once, and its results will be reused to build 3 different result sets.
 
-[Faceted search](Searching/Faceted_search.md) is a particularly important case that benefits from this optimization. Indeed, faceted searching can be implemented by running a number of queries, one to retrieve search results themselves, and a few other ones with same full-text query but different group-by settings to retrieve all the required groups of results (top-3 authors, top-5 vendors, etc). And as long as full-text query and filtering settings stay the same, common query optimization will trigger, and greatly improve performance.
+[Faceted search](../Searching/Faceted_search.md) is a particularly important case that benefits from this optimization. Indeed, faceted searching can be implemented by running a number of queries, one to retrieve search results themselves, and a few other ones with same full-text query but different group-by settings to retrieve all the required groups of results (top-3 authors, top-5 vendors, etc). And as long as full-text query and filtering settings stay the same, common query optimization will trigger, and greatly improve performance.
 
 **Common subtree optimization** is even more interesting. It lets `searchd` exploit similarities between batched full-text queries. It identifies common full-text query parts (subtrees) in all queries, and caches them between queries. For instance, look at the following query batch:
 
@@ -42,7 +42,7 @@ donald trump barack obama john mccain
 donald trump speech
 ```
 
-There's a common two-word part `donald trump` that can be computed only once, then cached and shared across the queries. And common subtree optimization does just that. Per-query cache size is strictly controlled by [subtree_docs_cache](Server_settings/Searchd.md#subtree_docs_cache) and [subtree_hits_cache](Server_settings/Searchd.md#subtree_hits_cache) directives (so that caching *all* sixteen gazillions of documents that match "i am" does not exhaust the RAM and instantly kill your server).
+There's a common two-word part `donald trump` that can be computed only once, then cached and shared across the queries. And common subtree optimization does just that. Per-query cache size is strictly controlled by [subtree_docs_cache](../Server_settings/Searchd.md#subtree_docs_cache) and [subtree_hits_cache](../Server_settings/Searchd.md#subtree_hits_cache) directives (so that caching *all* sixteen gazillions of documents that match "i am" does not exhaust the RAM and instantly kill your server).
 
 <!-- example multi-query 2 -->
 How to tell whether the queries in the batch were actually optimized? If they were, respective query log will have a "multiplier" field that specifies how many queries were processed together:

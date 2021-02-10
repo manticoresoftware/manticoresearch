@@ -1,13 +1,13 @@
 # Adding rules to a percolate index
 
 <!-- example -->
-In a [percolate index](Creating_an_index/Local_indexes/Percolate_index.md) are stored documents that are percolate query rules and have to follow the exact schema of 4 fields:
+In a [percolate index](../Creating_an_index/Local_indexes/Percolate_index.md) are stored documents that are percolate query rules and have to follow the exact schema of 4 fields:
 
 | field | type | description |
 | - | - | - |
 | id | bigint | PQ rule identifier (if omitted, will be assigned automatically) |
-| query | string | full-text query (can be empty) compatible with the [percolate index](Creating_an_index/Local_indexes/Percolate_index.md) |
-| filters | string | additional filters by non-full-text fields (can be empty) compatible with the [percolate index](Creating_an_index/Local_indexes/Percolate_index.md) |
+| query | string | full-text query (can be empty) compatible with the [percolate index](../Creating_an_index/Local_indexes/Percolate_index.md) |
+| filters | string | additional filters by non-full-text fields (can be empty) compatible with the [percolate index](../Creating_an_index/Local_indexes/Percolate_index.md) |
 | tags   | string | string with one or many comma-separated tags, which may be used to selectively show/delete saved queries |
 
 Any other field names are not supported and will trigger an error.
@@ -37,7 +37,7 @@ SELECT * FROM pq;
 ##### HTTP
 <!-- request HTTP -->
 There are two way you can add a percolate query into a percolate index:
-* query in JSON /search compatible format, described at [json/search](Connecting_to_the_server/HTTP.md#Connecting-with-cURL)
+* query in JSON /search compatible format, described at [json/search](../Connecting_to_the_server/HTTP.md#Connecting-with-cURL)
 ```json
 PUT /pq/pq_index/doc/1
 {
@@ -55,7 +55,7 @@ PUT /pq/pq_index/doc/1
 }
 ```
 
-* query in SQL format, described at [search query syntax](Searching/Filters.md#Queries-in-SQL-format)
+* query in SQL format, described at [search query syntax](../Searching/Filters.md#Queries-in-SQL-format)
 ```json
 PUT /pq/pq_index/doc/2
 {
@@ -124,7 +124,7 @@ indexApi.insert(newdoc);
 <!-- example noid -->
 ## Auto ID provisioning
 
-In case of omitted ID it's assigned automatically. [auto-id](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Auto-ID) you can read more about Auto ID.
+In case of omitted ID it's assigned automatically. [auto-id](../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md#Auto-ID) you can read more about Auto ID.
 
 <!-- intro -->
 ##### SQL:
@@ -298,7 +298,7 @@ SELECT * FROM pq;
 <!-- example replace -->
 ## Replacing rules in a PQ index
 
-To replace an existing PQ rule with a new one in SQL just use a regular [REPLACE](Updating_documents/REPLACE.md) command. There's a special syntax `?refresh=1` to replace a PQ rule **defined in JSON mode** via HTTP JSON interface.
+To replace an existing PQ rule with a new one in SQL just use a regular [REPLACE](../Updating_documents/REPLACE.md) command. There's a special syntax `?refresh=1` to replace a PQ rule **defined in JSON mode** via HTTP JSON interface.
 
 
 <!-- intro -->

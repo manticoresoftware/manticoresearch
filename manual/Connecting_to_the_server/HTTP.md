@@ -26,7 +26,7 @@ All HTTP endpoints respond with `application/json` content type. Most endpoints 
 There is no user authentication implemented at the moment, so make sure the HTTP interface is not reachable by anyone outside your network. Since Manticore acts like any other web server, you can use a reverse proxy like Nginx to add HTTP  authentication or caching.
 
 <!-- example HTTPS -->
-The HTTP protocol also supports [SSL encryption](Security/SSL.md):
+The HTTP protocol also supports [SSL encryption](../Security/SSL.md):
 If you specify `:https` instead of `:http` **only** secured connections will be accepted. Otherwise if no valid key/cert provided, but client tries to connect via https - the connection will be dropped. If you send not HTTPS, but an HTTP request to 9443 it will answer with HTTP code 400.
 
 <!-- request HTTPS -->
@@ -67,11 +67,11 @@ curl -sX POST http://localhost:9308/search -d ' {"index":"test","query":{"match"
 
 ## SQL over HTTP
 <!-- example SQL_over_HTTP -->
-Endpoint `/sql` allows running an SQL [SELECT](Searching/Full_text_matching/Basic_usage.md#SQL) query via HTTP JSON interface.
+Endpoint `/sql` allows running an SQL [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) query via HTTP JSON interface.
 
 The query payload **must** be URL encoded, otherwise query statements with `=` (filtering or setting options) will result in an error.
 
-The response is in JSON format and contains hits information and time of execution. The response shares the same format as [json/search](Searching/Full_text_matching/Basic_usage.md#HTTP) endpoint.
+The response is in JSON format and contains hits information and time of execution. The response shares the same format as [json/search](../Searching/Full_text_matching/Basic_usage.md#HTTP) endpoint.
 
 <!-- request HTTP -->
 ```bash

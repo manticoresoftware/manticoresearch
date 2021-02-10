@@ -96,11 +96,11 @@ Value: comma separated list of **full-text** fields that should be stored. Defau
 
 <!-- example stored_fields -->
 
-A list of fields to be stored in the index. Optional, default is empty (do not store original field text) for [Plain mode](Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain mode%29), but enabled for every field for [RT mode](Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29).
+A list of fields to be stored in the index. Optional, default is empty (do not store original field text) for [Plain mode](../../Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain mode%29), but enabled for every field for [RT mode](../../Creating_an_index/Local_indexes.md#Online-schema-management-%28RT-mode%29).
 
-By default, original document text is not stored in the index in the [Plain mode](Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain mode%29). If stored_fields option is set (or RT mode is used), the field's full text is stored in the index. It can be returned with search results.
+By default, original document text is not stored in the index in the [Plain mode](../../Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain mode%29). If stored_fields option is set (or RT mode is used), the field's full text is stored in the index. It can be returned with search results.
 
-See also [docstore_block_size](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#docstore_block_size), [docstore_compression](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#docstore_compression) for document storage compression options.
+See also [docstore_block_size](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#docstore_block_size), [docstore_compression](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#docstore_compression) for document storage compression options.
 
 
 <!-- intro -->
@@ -180,7 +180,7 @@ index products {
 stored_only_fields = title,content
 ```
 
-A list of fields that will be stored in the index but will be not indexed. Similar to [stored_fields](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields) except when a field is specified in stored_only_fields it is only stored, not indexed and can’t be searched with fulltext queries. It can only be returned with search results.
+A list of fields that will be stored in the index but will be not indexed. Similar to [stored_fields](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields) except when a field is specified in stored_only_fields it is only stored, not indexed and can’t be searched with fulltext queries. It can only be returned with search results.
 
 Value: comma separated list of fields that should be stored only, not indexed. Default is empty.
 
@@ -325,7 +325,7 @@ source = srcpart2
 source = srcpart3
 ```
 
-Specifies document source to get documents from when the current index is indexed. There must be at least one source. The sources can be of different types (e.g. one - mysql, another - postgresql). Read more about [indexing from external storages here](Adding_data_from_external_storages/Plain_indexes_creation.md)
+Specifies document source to get documents from when the current index is indexed. There must be at least one source. The sources can be of different types (e.g. one - mysql, another - postgresql). Read more about [indexing from external storages here](../../Adding_data_from_external_storages/Plain_indexes_creation.md)
 
 Value: name of the source to build the index from, **mandatory**. Can be multiple records.
 
@@ -335,7 +335,7 @@ Value: name of the source to build the index from, **mandatory**. Can be multipl
 killlist_target = main:kl
 ```
 
-Sets the index(es) that the kill-list will be applied to. Suppresses matches in the targeted index that are updated or deleted in the current index. In **:kl mode** the documents to suppress are taken from the [kill-list](Adding_data_from_external_storages/Adding_data_from_indexes/Killlist_in_plain_indexes.md). In **:id mode** - all document ids from the current index are suppressed in the targeted one. If neither is specified the both modes take effect. [Read more about kill-lists here](Adding_data_from_external_storages/Adding_data_from_indexes/Killlist_in_plain_indexes.md)
+Sets the index(es) that the kill-list will be applied to. Suppresses matches in the targeted index that are updated or deleted in the current index. In **:kl mode** the documents to suppress are taken from the [kill-list](../../Adding_data_from_external_storages/Adding_data_from_indexes/Killlist_in_plain_indexes.md). In **:id mode** - all document ids from the current index are suppressed in the targeted one. If neither is specified the both modes take effect. [Read more about kill-lists here](../../Adding_data_from_external_storages/Adding_data_from_indexes/Killlist_in_plain_indexes.md)
 
 Value: **not specified** (default), target_index_name:kl, target_index_name:id, target_index_name. Multiple values are allowed
 
@@ -359,7 +359,7 @@ POST: mode=raw&query=CREATE TABLE [IF NOT EXISTS] name ( <field name> <field dat
 
 ##### Data types:
 
-Read [more about data types here](Creating_an_index/Data_types.md).
+Read [more about data types here](../../Creating_an_index/Data_types.md).
 
 | Type | Equivalent in a configuration file | Notes | Aliases |
 | - | - | - | - |
@@ -403,9 +403,9 @@ The following settings are similar for both real-time and plain index in either 
 ### Accessing index files
 Manticore uses two access modes to read index data - seek+read and mmap.
 
-In seek+read mode the server performs system call pread(2) to read document lists and keyword positions, i.e. `*.spd` and `*.spp` files. Internal read buffers are used to optimize reading. The size of these buffers can be tuned with options [read_buffer_docs](Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](Server_settings/Searchd.md#read_buffer_hits). There is also option [preopen](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#preopen) that allows to control how Manticore opens files at start.
+In seek+read mode the server performs system call pread(2) to read document lists and keyword positions, i.e. `*.spd` and `*.spp` files. Internal read buffers are used to optimize reading. The size of these buffers can be tuned with options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits). There is also option [preopen](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#preopen) that allows to control how Manticore opens files at start.
 
-In the mmap access mode the search server just maps index's file into memory with mmap(2) system call and OS caches file contents by itself. Options [read_buffer_docs](Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](Server_settings/Searchd.md#read_buffer_hits) have no effect for corresponding files in this mode. The mmap reader can also lock index's data in memory via mlock(2) privileged call which prevents swapping out the cached data to disk by OS.
+In the mmap access mode the search server just maps index's file into memory with mmap(2) system call and OS caches file contents by itself. Options [read_buffer_docs](../../Server_settings/Searchd.md#read_buffer_docs) and [read_buffer_hits](../../Server_settings/Searchd.md#read_buffer_hits) have no effect for corresponding files in this mode. The mmap reader can also lock index's data in memory via mlock(2) privileged call which prevents swapping out the cached data to disk by OS.
 
 To control what access mode will be used **access_plain_attrs**, **access_blob_attrs**, **access_doclists** and **access_hitlists** options are available with the following values:
 
@@ -530,7 +530,7 @@ Whether to enable in-place index inversion. Optional, default is 0 (use separate
 
 Indexing involves two major phases. The first phase collects, processes, and partially sorts documents by keyword, and writes the intermediate result to temporary files (.tmp\*). The second phase fully sorts the documents, and creates the final index files. Thus, rebuilding a production index on the fly involves around 3x peak disk footprint: 1st copy for the intermediate temporary files, 2nd copy for newly constructed copy, and 3rd copy for the old index that will be serving production queries in the meantime. (Intermediate data is comparable in size to the final index.) That might be too much disk footprint for big data collections, and `inplace_enable` allows to reduce it. When enabled, it reuses the temporary files, outputs the final data back to them, and renames them on completion. However, this might require additional temporary data chunk relocation, which is where the performance impact comes from.
 
-This directive does not affect [searchd](Starting_the_server/Manually.md) in any way, it only affects [indexer](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool).
+This directive does not affect [searchd](../../Starting_the_server/Manually.md) in any way, it only affects [indexer](../../Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool).
 
 
 <!-- intro -->
@@ -556,9 +556,9 @@ index products {
 inplace_hit_gap = size
 ```
 
-[In-place inversion](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#inplace_enable) fine-tuning option. Controls preallocated hitlist gap size. Optional, default is 0.
+[In-place inversion](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#inplace_enable) fine-tuning option. Controls preallocated hitlist gap size. Optional, default is 0.
 
-This directive does not affect [searchd](Starting_the_server/Manually.md) in any way, it only affects [indexer](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool).
+This directive does not affect [searchd](../../Starting_the_server/Manually.md) in any way, it only affects [indexer](../../Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool).
 
 
 <!-- intro -->
@@ -587,7 +587,7 @@ inplace_reloc_factor = 0.1
 
 Controls relocation buffer size within indexing memory arena. Optional, default is 0.1.
 
-This directive does not affect [searchd](Starting_the_server/Manually.md) in any way, it only affects [indexer](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool).
+This directive does not affect [searchd](../../Starting_the_server/Manually.md) in any way, it only affects [indexer](../../Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool).
 
 
 <!-- intro -->
@@ -616,7 +616,7 @@ inplace_write_factor = 0.1
 
 Controls in-place write buffer size within indexing memory arena. Optional, default is 0.1.
 
-This directive does not affect [searchd](Starting_the_server/Manually.md) in any way, it only affects [indexer](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool).
+This directive does not affect [searchd](../../Starting_the_server/Manually.md) in any way, it only affects [indexer](../../Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool).
 
 
 <!-- intro -->
@@ -636,46 +636,46 @@ index products {
 <!-- end -->
 
 ### Natural language processing specific settings
-The following settings are supported. They are all described in section [NLP and tokenization](Creating_an_index/NLP_and_tokenization/Data_tokenization.md).
-* [bigram_freq_words](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
-* [bigram_index](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
-* [blend_chars](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)
-* [blend_mode](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)
-* [charset_table](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table)
-* [dict](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict)
-* [embedded_limit](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)
-* [exceptions](Creating_an_index/NLP_and_tokenization/Exceptions.md)
-* [expand_keywords](Searching/Options.md#expand_keywords)
-* [global_idf](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#global_idf)
-* [hitless_words](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#hitless_words)
-* [html_index_attrs](Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_index_attrs)
-* [html_remove_elements](Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_remove_elements)
-* [html_strip](Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_strip)
-* [ignore_chars](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ignore_chars)
-* [index_exact_words](Creating_an_index/NLP_and_tokenization/Morphology.md#index_exact_words)
-* [index_field_lengths](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths)
-* [index_sp](Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_sp)
-* [index_token_filter](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#index_token_filter)
-* [index_zones](Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_zones)
-* [infix_fields](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#infix_fields)
-* [killlist_target](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#killlist_target)
-* [max_substring_len](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#max_substring_len)
-* [min_infix_len](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)
-* [min_prefix_len](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len)
-* [min_stemming_len](Creating_an_index/NLP_and_tokenization/Morphology.md#min_stemming_len)
-* [min_word_len](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#min_word_len)
-* [morphology](Creating_an_index/NLP_and_tokenization/Morphology.md#morphology)
-* [morphology_skip_fields](Creating_an_index/NLP_and_tokenization/Morphology.md#morphology_skip_fields)
-* [ngram_chars](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
-* [ngram_len](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_len)
-* [overshort_step](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#overshort_step)
-* [phrase_boundary](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary)
-* [phrase_boundary_step](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary_step)
-* [prefix_fields](Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#prefix_fields)
-* [regexp_filter](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)
-* [stopwords](Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopwords)
-* [stopword_step](Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step)
-* [stopwords_unstemmed](Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed)
-* [stored_fields](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields)
-* [stored_only_fields](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md)
-* [wordforms](Creating_an_index/NLP_and_tokenization/Wordforms.md#wordforms)
+The following settings are supported. They are all described in section [NLP and tokenization](../../Creating_an_index/NLP_and_tokenization/Data_tokenization.md).
+* [bigram_freq_words](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#bigram_freq_words)
+* [bigram_index](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#bigram_index)
+* [blend_chars](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#blend_chars)
+* [blend_mode](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)
+* [charset_table](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table)
+* [dict](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#dict)
+* [embedded_limit](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit)
+* [exceptions](../../Creating_an_index/NLP_and_tokenization/Exceptions.md)
+* [expand_keywords](../../Searching/Options.md#expand_keywords)
+* [global_idf](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#global_idf)
+* [hitless_words](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#hitless_words)
+* [html_index_attrs](../../Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_index_attrs)
+* [html_remove_elements](../../Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_remove_elements)
+* [html_strip](../../Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#html_strip)
+* [ignore_chars](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ignore_chars)
+* [index_exact_words](../../Creating_an_index/NLP_and_tokenization/Morphology.md#index_exact_words)
+* [index_field_lengths](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#index_field_lengths)
+* [index_sp](../../Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_sp)
+* [index_token_filter](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#index_token_filter)
+* [index_zones](../../Creating_an_index/NLP_and_tokenization/Advanced_HTML_tokenization.md#index_zones)
+* [infix_fields](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#infix_fields)
+* [killlist_target](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#killlist_target)
+* [max_substring_len](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#max_substring_len)
+* [min_infix_len](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_infix_len)
+* [min_prefix_len](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#min_prefix_len)
+* [min_stemming_len](../../Creating_an_index/NLP_and_tokenization/Morphology.md#min_stemming_len)
+* [min_word_len](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#min_word_len)
+* [morphology](../../Creating_an_index/NLP_and_tokenization/Morphology.md#morphology)
+* [morphology_skip_fields](../../Creating_an_index/NLP_and_tokenization/Morphology.md#morphology_skip_fields)
+* [ngram_chars](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_chars)
+* [ngram_len](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#ngram_len)
+* [overshort_step](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#overshort_step)
+* [phrase_boundary](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary)
+* [phrase_boundary_step](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#phrase_boundary_step)
+* [prefix_fields](../../Creating_an_index/NLP_and_tokenization/Wildcard_searching_settings.md#prefix_fields)
+* [regexp_filter](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#regexp_filter)
+* [stopwords](../../Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopwords)
+* [stopword_step](../../Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step)
+* [stopwords_unstemmed](../../Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed)
+* [stored_fields](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#stored_fields)
+* [stored_only_fields](../../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md)
+* [wordforms](../../Creating_an_index/NLP_and_tokenization/Wordforms.md#wordforms)

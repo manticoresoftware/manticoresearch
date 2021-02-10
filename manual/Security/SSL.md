@@ -1,17 +1,17 @@
 # SSL
 
-In many cases you might want to encrypt traffic between your client and the server. To do that you can specify that the server should use [HTTPS protocol](Server_settings/Searchd.md#listen) rather than HTTP.
+In many cases you might want to encrypt traffic between your client and the server. To do that you can specify that the server should use [HTTPS protocol](../Server_settings/Searchd.md#listen) rather than HTTP.
 
 <!-- example CA 1 -->
 
-To enable HTTPS at least the following two directives should be set in [searchd](Server_settings/Searchd.md) section of the config and there should be at least one [listener](Server_settings/Searchd.md#listen) set to `https`
+To enable HTTPS at least the following two directives should be set in [searchd](../Server_settings/Searchd.md) section of the config and there should be at least one [listener](../Server_settings/Searchd.md#listen) set to `https`
 
-* [ssl_cert](Server_settings/Searchd.md#ssl_cert) certificate file
-* [ssl_key](Server_settings/Searchd.md#ssl_key) key file
+* [ssl_cert](../Server_settings/Searchd.md#ssl_cert) certificate file
+* [ssl_key](../Server_settings/Searchd.md#ssl_key) key file
 
 In addition to that you can specify certificate authority's certificate (aka root certificate) in
 
-* [ssl_ca](Server_settings/Searchd.md#ssl_ca) certificate authority's certificate file
+* [ssl_ca](../Server_settings/Searchd.md#ssl_ca) certificate authority's certificate file
 
 
 <!-- intro -->
@@ -75,7 +75,7 @@ openssl verify -CAfile ca-cert.pem server-cert.pem
 
 When your SSL config is valid the following things are available:
 
- * you can connect to multiprotocol port (when no [listener type](Server_settings/Searchd.md#listen) is specified) over HTTPS and run queries. Both request and response will be ssl encrypted.
+ * you can connect to multiprotocol port (when no [listener type](../Server_settings/Searchd.md#listen) is specified) over HTTPS and run queries. Both request and response will be ssl encrypted.
  * you can connect to dedicated `https` port with http and run queries. Connection will be secured. (attempt to connect to this port via plain http will be rejected with 400 error code).
  * you can connect to mysql port with a mysql client using secured connection. The session will be secured. Note, that Linux `mysql` client tries to use ssl by default, so usual connect to Manticore in case it has a valid SSL config most probably will be secured. You can check it by running SQL 'status' command after you connect.
 

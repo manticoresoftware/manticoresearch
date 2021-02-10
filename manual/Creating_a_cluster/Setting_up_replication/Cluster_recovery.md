@@ -20,11 +20,11 @@ Nodes A and B may be started as usual and will join the cluster after the start.
 
 All nodes are stopped as usual and the cluster is off.
 
-The problem now is how to initialize cluster and it is important that on a clean shutdown of searchd nodes write the number of the last executed transaction into the cluster directory [grastate.dat](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) file along with the `safe_to_bootstrap` key. The node stopped last will have the `safe_to_bootstrap: 1` option and the most advanced `seqno` number.
+The problem now is how to initialize cluster and it is important that on a clean shutdown of searchd nodes write the number of the last executed transaction into the cluster directory [grastate.dat](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) file along with the `safe_to_bootstrap` key. The node stopped last will have the `safe_to_bootstrap: 1` option and the most advanced `seqno` number.
 
-It is important that this node should start first to form a cluster. To bootstrap, a cluster server should be started on this node with the [--new-cluster](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) command line key.
+It is important that this node should start first to form a cluster. To bootstrap, a cluster server should be started on this node with the [--new-cluster](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) command line key.
 
-If another node starts first and bootstraps the cluster, then the most advanced node joins that cluster, performs full SST and receives an index file where some transactions are missed in comparison with index files it got before. That is why it is important to start the node that shut down last or to look at the cluster directory [grastate.dat](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) file to find the node with the `safe_to_bootstrap: 1` option.
+If another node starts first and bootstraps the cluster, then the most advanced node joins that cluster, performs full SST and receives an index file where some transactions are missed in comparison with index files it got before. That is why it is important to start the node that shut down last or to look at the cluster directory [grastate.dat](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) file to find the node with the `safe_to_bootstrap: 1` option.
 
 ### Case 4 
 
@@ -32,7 +32,7 @@ Node A disappears from the cluster due to crash or network failure.
 
 Nodes B and C try to reconnect to missed node A and after failure remove node A from the cluster. The cluster quorum is valid as 2 out of 3 nodes are running and the cluster works as usual.
 
-After node A restarts it will join the cluster automatically the same way as in [Case 1](Creating_a_cluster/Setting_up_replication/Cluster_recovery.md#Case-1).
+After node A restarts it will join the cluster automatically the same way as in [Case 1](../../Creating_a_cluster/Setting_up_replication/Cluster_recovery.md#Case-1).
 
 ### Case 5 
 
@@ -65,16 +65,16 @@ SET CLUSTER posts GLOBAL 'pc.bootstrap' = 1
 
 ### Case 6 
 
-All nodes crashed. In this case the [grastate.dat](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) file at cluster directory is not updated and does not contain a valid sequence number `seqno`.
+All nodes crashed. In this case the [grastate.dat](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) file at cluster directory is not updated and does not contain a valid sequence number `seqno`.
 
-If this happened, someone should find the most advanced node and start the server on it with the [--new-cluster-force](Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) command line key. All other nodes will start as usual as in [Case 3](Creating_a_cluster/Setting_up_replication/Cluster_recovery.md#Case-3)).
+If this happened, someone should find the most advanced node and start the server on it with the [--new-cluster-force](../../Creating_a_cluster/Setting_up_replication/Restarting_a_cluster.md) command line key. All other nodes will start as usual as in [Case 3](../../Creating_a_cluster/Setting_up_replication/Cluster_recovery.md#Case-3)).
 
 ### Case 7 
 
 Split-brain causes a cluster to get into non-primary state. For example, the cluster consists of even number of nodes (four), two couple of nodes being located in separate datacenters, and network failure interrupts the connection these datacenters. Split-brain happens as each group of nodes has exactly half of quorum. Both groups stop to handle write transactions as Galera replication model cares about data consistency and the cluster can not accept write transactions without quorum. But nodes in both groups try to re-connect to the nodes nodes from the other group to restore the cluster.
 
 <!-- example case 7 -->
-If someone wants to restore the cluster without network got restored the same steps as in [Case 5](Creating_a_cluster/Setting_up_replication/Cluster_recovery.md#Case-5) can be done but only at one group of nodes
+If someone wants to restore the cluster without network got restored the same steps as in [Case 5](../../Creating_a_cluster/Setting_up_replication/Cluster_recovery.md#Case-5) can be done but only at one group of nodes
 
 After that, the group with the node we run this statement at can successfully handle write transactions again.
 

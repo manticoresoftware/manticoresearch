@@ -1,6 +1,6 @@
 # UDF 
 
-UDFs reside in the external dynamic libraries (.so files on UNIX and .dll on Windows systems). Library files need to reside in a trusted folder specified by [plugin_dir](Server_settings/Common.md#plugin_dir) directive, for obvious security reasons: securing a single folder is easy; letting anyone install arbitrary code into `searchd` is a risk. You can load and unload them dynamically into searchd with [CREATE FUNCTION](Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md) and [DROP FUNCTION](Extensions/UDFs_and_Plugins/UDF/Deleting_a_function.md) SQL statements respectively. Also, you can seamlessly reload UDFs (and other plugins) with [RELOAD PLUGINS](Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md) statement. Manticore keeps track of the currently loaded functions, that is, every time you create or drop an UDF, `searchd` writes its state to the [sphinxql_state](Server_settings/Searchd.md#sphinxql_state) file as a plain good old SQL script.
+UDFs reside in the external dynamic libraries (.so files on UNIX and .dll on Windows systems). Library files need to reside in a trusted folder specified by [plugin_dir](../../Server_settings/Common.md#plugin_dir) directive, for obvious security reasons: securing a single folder is easy; letting anyone install arbitrary code into `searchd` is a risk. You can load and unload them dynamically into searchd with [CREATE FUNCTION](../../Extensions/UDFs_and_Plugins/UDF/Creating_a_function.md) and [DROP FUNCTION](../../Extensions/UDFs_and_Plugins/UDF/Deleting_a_function.md) SQL statements respectively. Also, you can seamlessly reload UDFs (and other plugins) with [RELOAD PLUGINS](../../Extensions/UDFs_and_Plugins/Plugins/Reloading_plugins.md) statement. Manticore keeps track of the currently loaded functions, that is, every time you create or drop an UDF, `searchd` writes its state to the [sphinxql_state](../../Server_settings/Searchd.md#sphinxql_state) file as a plain good old SQL script.
 
 UDFs are local. In order to use them on a cluster, you have to put the same library on all its nodes and run CREATEs on all the nodes too. This might change in the future versions.
 
@@ -80,7 +80,7 @@ Note how `testfunc_init()` also receives the call arguments structure. By the ti
 
 UDFs can receive arguments of pretty much any valid internal Manticore type. Refer to `sphinx_udf_argtype` enumeration in `sphinxudf.h` for a full list. Most of the types map straightforwardly to the respective C types.
 
-The most notable type is the `SPH_UDF_TYPE_FACTORS` argument type. You get that type by calling your UDF with a [PACKEDFACTOR()](searching-and-ranking-functions#PACKEDFACTORS()) argument. It's data is a binary blob in a certain internal format, and to extract individual ranking signals from that blob, you need to use either of the two `sphinx_factors_XXX()` or `sphinx_get_YYY_factor()` families of functions.
+The most notable type is the `SPH_UDF_TYPE_FACTORS` argument type. You get that type by calling your UDF with a [PACKEDFACTOR()](../../searching-and-ranking-functions#PACKEDFACTORS()) argument. It's data is a binary blob in a certain internal format, and to extract individual ranking signals from that blob, you need to use either of the two `sphinx_factors_XXX()` or `sphinx_get_YYY_factor()` families of functions.
 
 ### sphinx_factors_XXX() functions
 

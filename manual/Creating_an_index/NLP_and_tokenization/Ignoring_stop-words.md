@@ -2,11 +2,11 @@
 
 Stop words are the words that are skipped during indexing and searching. Typically you'd put most frequent words to the stop words list, because they do not add much value to search results but consume a lot of resources to process.
 
-[Stemming](Creating_an_index/NLP_and_tokenization/Morphology.md) is by default applied when parsing stop words file. That might however lead to undesired results. You can turn that off with [stopwords_unstemmed](Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed).
+[Stemming](../../Creating_an_index/NLP_and_tokenization/Morphology.md) is by default applied when parsing stop words file. That might however lead to undesired results. You can turn that off with [stopwords_unstemmed](../../Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopwords_unstemmed).
 
-Small enough files are stored in the index header, see [embedded_limit](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit) for details.
+Small enough files are stored in the index header, see [embedded_limit](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#embedded_limit) for details.
 
-While stop words are not indexed, they still do affect the keyword positions. For instance, assume that "the" is a stop word, that document 1 contains the line "in office", and that document 2 contains "in the office". Searching for "in office" as for an exact phrase will only return the first document, as expected, even though "the" in the second one is skipped as a stop word. That behavior can be tweaked through the [stopword_step](Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step) directive.
+While stop words are not indexed, they still do affect the keyword positions. For instance, assume that "the" is a stop word, that document 1 contains the line "in office", and that document 2 contains "in the office". Searching for "in office" as for an exact phrase will only return the first document, as expected, even though "the" in the second one is skipped as a stop word. That behavior can be tweaked through the [stopword_step](../../Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopword_step) directive.
 
 ## stopwords
 
@@ -17,9 +17,9 @@ stopwords=path/to/stopwords/file[ path/to/another/file ...]
 <!-- example stopwords -->
 Stop word files list (space separated). Optional, default is empty. You can specify several file names, separated by spaces. All the files will be loaded. In RT mode only absolute paths are allowed.
 
-Stop words file format is simple plain text. The encoding must be UTF-8. File data will be tokenized with respect to [charset_table](Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table) settings, so you can use the same separators as in the indexed data.
+Stop words file format is simple plain text. The encoding must be UTF-8. File data will be tokenized with respect to [charset_table](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#charset_table) settings, so you can use the same separators as in the indexed data.
 
-Stop word files can either be created manually, or semi-automatically. [indexer](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool) provides a mode that creates a frequency dictionary of the index, sorted by the keyword frequency, see [--buildstops](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) and [--buildfreqs](Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) switch for details. Top keywords from that dictionary can usually be used as stop words.
+Stop word files can either be created manually, or semi-automatically. [indexer](../../Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-tool) provides a mode that creates a frequency dictionary of the index, sorted by the keyword frequency, see [--buildstops](../../Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) and [--buildfreqs](../../Adding_data_from_external_storages/Plain_indexes_creation.md#Indexer-command-line-arguments) switch for details. Top keywords from that dictionary can usually be used as stop words.
 
 
 <!-- intro -->
@@ -286,7 +286,7 @@ stopword_step={0|1}
 ```
 
 <!-- example stopword_step -->
-Position increment on [stopwords](Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopwords). Optional, allowed values are 0 and 1, default is 1.
+Position increment on [stopwords](../../Creating_an_index/NLP_and_tokenization/Ignoring_stop-words.md#stopwords). Optional, allowed values are 0 and 1, default is 1.
 
 
 <!-- intro -->

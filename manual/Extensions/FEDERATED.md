@@ -4,7 +4,7 @@ Using MySQL FEDERATED engine you can connect to a local or remote Manticore inst
 
 ## Using FEDERATED
 
-An actual Manticore query cannot be used directly with FEDERATED engine and must be "proxied" (sent as a string in a column) due to limitations of the FEDERATED engine and the fact that Manticore implements custom syntax like the [MATCH](Searching/Full_text_matching/Basic_usage.md) clause.
+An actual Manticore query cannot be used directly with FEDERATED engine and must be "proxied" (sent as a string in a column) due to limitations of the FEDERATED engine and the fact that Manticore implements custom syntax like the [MATCH](../Searching/Full_text_matching/Basic_usage.md) clause.
 
 To search via `FEDERATED`, you would need to create first a FEDERATED engine table. The Manticore query will be included in a `query` column in the `SELECT` performed over the FEDERATED table.
 

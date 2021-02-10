@@ -2,9 +2,9 @@
 
 Query cache stores a compressed result set in memory, and then reuses it for subsequent queries where possible. You can configure it using the following directives:
 
-*   [qcache_max_bytes](Server_settings/Searchd.md#qcache_max_bytes), a limit on the RAM use for cached queries storage. Defaults to 16 MB. Setting `qcache_max_bytes` to 0 completely disables the query  cache.
-*   [qcache_thresh_msec](Server_settings/Searchd.md#qcache_thresh_msec), the minimum wall query time to cache. Queries that completed faster than this will *not* be cached. Defaults to 3000 msec, or 3 seconds.
-*   [qcache_ttl_sec](Server_settings/Searchd.md#qcache_ttl_sec), cached entry TTL, or time to live. Queries will stay cached for this much. Defaults to 60 seconds, or 1 minute.
+*   [qcache_max_bytes](../Server_settings/Searchd.md#qcache_max_bytes), a limit on the RAM use for cached queries storage. Defaults to 16 MB. Setting `qcache_max_bytes` to 0 completely disables the query  cache.
+*   [qcache_thresh_msec](../Server_settings/Searchd.md#qcache_thresh_msec), the minimum wall query time to cache. Queries that completed faster than this will *not* be cached. Defaults to 3000 msec, or 3 seconds.
+*   [qcache_ttl_sec](../Server_settings/Searchd.md#qcache_ttl_sec), cached entry TTL, or time to live. Queries will stay cached for this much. Defaults to 60 seconds, or 1 minute.
 
 These settings can be changed on the fly using the `SET GLOBAL` statement:
 
@@ -26,7 +26,7 @@ Queries can then use cache when the index, the full-text query (ie.`MATCH()` con
 
 Cache entries expire with TTL, and also get invalidated on index rotation, or on `TRUNCATE`, or on `ATTACH`. Note that at the moment entries are **not** invalidated on arbitrary RT index writes! So a cached query might be returning older results for the duration of its TTL.
 
-Current cache status can be inspected with in [SHOW STATUS](Profiling_and_monitoring/Node_status.md#SHOW-STATUS) through the `qcache_XXX` variables:
+Current cache status can be inspected with in [SHOW STATUS](../Profiling_and_monitoring/Node_status.md#SHOW-STATUS) through the `qcache_XXX` variables:
 
 ```sql
 mysql> SHOW STATUS LIKE 'qcache%';

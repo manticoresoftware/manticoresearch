@@ -2,7 +2,7 @@
 
 Plain indexes are indexes that are created one-time by fetching data at creation from one or several sources. A plain index is immutable as documents cannot be added or deleted during it's lifespan. It is only possible to update values of numeric attributes (including MVA). Refreshing the data is only possible by recreating the whole index.
 
-Plain indexes are available only in [Plain mode](Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain mode%29) and their definition is made of an index declaration and one or several source declarations. The data gathering and index creation is not made by the `searchd` server, but by the auxiliary tool `indexer`.
+Plain indexes are available only in [Plain mode](../Creating_an_index/Local_indexes.md#Defining-index-schema-in-config-%28Plain mode%29) and their definition is made of an index declaration and one or several source declarations. The data gathering and index creation is not made by the `searchd` server, but by the auxiliary tool `indexer`.
 
 **Indexer** is a command line tool that can be called directly from the command line or from shell scripts.
 
@@ -62,7 +62,7 @@ sudo -u manticore indexer --config /home/myuser/manticore.conf myindex
 sudo -u manticore indexer --config /home/myuser/manticore.conf --all
 ```
 
-* `--rotate` is used for rotating indexes. Unless you have the situation where you can take the search function offline without troubling users you will almost certainly need to keep search running whilst indexing new documents. `--rotate` creates a second index, parallel to the first (in the same place, simply including `.new` in the filenames). Once complete, `indexer` notifies `searchd` via sending the `SIGHUP` signal, and the `searchd` will attempt to rename the indexes (renaming the existing ones to include `.old` and renaming the `.new` to replace them), and then will start serving from the newer files. Depending on the setting of [seamless_rotate](Server_settings/Searchd.md#seamless_rotate) there may be a slight delay in being able to search the newer indexes. In case multiple indexes are rotated at once which are chained by [killlist_target](Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#killlist_target) relations rotation will start with the indexes that are not targets and finish with the ones at the end of target chain. Example usage:
+* `--rotate` is used for rotating indexes. Unless you have the situation where you can take the search function offline without troubling users you will almost certainly need to keep search running whilst indexing new documents. `--rotate` creates a second index, parallel to the first (in the same place, simply including `.new` in the filenames). Once complete, `indexer` notifies `searchd` via sending the `SIGHUP` signal, and the `searchd` will attempt to rename the indexes (renaming the existing ones to include `.old` and renaming the `.new` to replace them), and then will start serving from the newer files. Depending on the setting of [seamless_rotate](../Server_settings/Searchd.md#seamless_rotate) there may be a slight delay in being able to search the newer indexes. In case multiple indexes are rotated at once which are chained by [killlist_target](../Creating_an_index/Local_indexes/Plain_and_real-time_index_settings.md#killlist_target) relations rotation will start with the indexes that are not targets and finish with the ones at the end of target chain. Example usage:
 
 ```shell
 sudo -u manticore indexer --rotate --all
@@ -80,7 +80,7 @@ sudo -u manticore indexer --rotate --all --quiet
 sudo -u manticore indexer --rotate --all --noprogress
 ```
 
-* `--buildstops <outputfile.text> <N>` reviews the index source, as if it were indexing the data, and produces a list of the terms that are being indexed. In other words, it produces a list of all the searchable terms that are becoming part of the index. Note, it does not update the index in question, it simply processes the data **as if** it were indexing, including running queries defined with [sql_query_pre](Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md#sql_query_pre) or [sql_query_post](Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md#sql_query_post). `outputfile.txt` will contain the list of words, one per line, sorted by frequency with most frequent first, and `N` specifies the maximum number of words that will be listed. If it's sufficiently large to encompass every word in the index, only that many words will be returned. Such a dictionary list could be used for client application features around "Did you mean…" functionality, usually in conjunction with `--buildfreqs`, below. Example:
+* `--buildstops <outputfile.text> <N>` reviews the index source, as if it were indexing the data, and produces a list of the terms that are being indexed. In other words, it produces a list of all the searchable terms that are becoming part of the index. Note, it does not update the index in question, it simply processes the data **as if** it were indexing, including running queries defined with [sql_query_pre](../Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md#sql_query_pre) or [sql_query_post](../Adding_data_from_external_storages/Fetching_from_databases/Execution_of_fetch_queries.md#sql_query_post). `outputfile.txt` will contain the list of words, one per line, sorted by frequency with most frequent first, and `N` specifies the maximum number of words that will be listed. If it's sufficiently large to encompass every word in the index, only that many words will be returned. Such a dictionary list could be used for client application features around "Did you mean…" functionality, usually in conjunction with `--buildfreqs`, below. Example:
 
 ```shell
 sudo -u manticore indexer myindex --buildstops word_freq.txt 1000
@@ -94,7 +94,7 @@ sudo -u manticore indexer myindex --buildstops word_freq.txt 1000 --buildfreqs
 ```
 
 This would produce the `word_freq.txt` as above, however after each word would be the number of times it occurred in the index in question.
-* `--merge <dst-index> <src-index>` is used for physically merging indexes together, for example if you have a [main+delta scheme](Creating_an_index/Local_indexes/Plain_index.md#Main+delta), where the main index rarely changes, but the delta index is rebuilt frequently, and `--merge` would be used to combine the two. The operation moves from right to left - the contents of `src-index` get examined and physically combined with the contents of `dst-index` and the result is left in `dst-index`. In pseudo-code, it might be expressed as: `dst-index += src-index` An example:
+* `--merge <dst-index> <src-index>` is used for physically merging indexes together, for example if you have a [main+delta scheme](../Creating_an_index/Local_indexes/Plain_index.md#Main+delta), where the main index rarely changes, but the delta index is rebuilt frequently, and `--merge` would be used to combine the two. The operation moves from right to left - the contents of `src-index` get examined and physically combined with the contents of `dst-index` and the result is left in `dst-index`. In pseudo-code, it might be expressed as: `dst-index += src-index` An example:
 
 ```shell
 sudo -u manticore indexer --merge main delta --rotate
@@ -146,7 +146,7 @@ lemmatizer_cache = 256M
 
 Lemmatizer cache size. Optional, default is 256K.
 
-Our [lemmatizer](Server_settings/Common.md#lemmatizer_base) implementation uses a compressed dictionary format that enables a space/speed tradeoff. It can either perform lemmatization off the compressed data, using more CPU but less RAM, or it can decompress and precache the dictionary either partially or fully, thus using less CPU but more RAM. And the lemmatizer_cache directive lets you control how much RAM exactly can be spent for that uncompressed dictionary cache.
+Our [lemmatizer](../Server_settings/Common.md#lemmatizer_base) implementation uses a compressed dictionary format that enables a space/speed tradeoff. It can either perform lemmatization off the compressed data, using more CPU but less RAM, or it can decompress and precache the dictionary either partially or fully, thus using less CPU but more RAM. And the lemmatizer_cache directive lets you control how much RAM exactly can be spent for that uncompressed dictionary cache.
 
 Currently, the only available dictionaries are [ru.pak, en.pak, and de.pak](https://manticoresearch.com/downloads/). These are the Russian, English and German dictionaries. The compressed dictionary is approximately 2 to 10 MB in size. Note that the dictionary stays in memory at all times, too. The default cache size is 256 KB. The accepted cache sizes are 0 to 2047 MB. It's safe to raise the cache size too high; the lemmatizer will only use the needed memory. For instance, the entire Russian dictionary decompresses to approximately 110 MB; and thus setting lemmatizer_cache anywhere higher than that will not affect the memory use: even when 1024 MB is allowed for the cache, if only 110 MB is needed, it will only use those 110 MB.
 
@@ -167,7 +167,7 @@ max_file_field_buffer = 128M
 
 Maximum file field adaptive buffer size, bytes. Optional, default is 8MB, minimum is 1MB.
 
-File field buffer is used to load files referred to from [sql_file_field](Adding_data_from_external_storages/Fetching_from_databases/Indexing_fetched_data.md#sql_file_field) columns. This buffer is adaptive, starting at 1 MB at first allocation, and growing in 2x steps until either file contents can be loaded, or maximum buffer size, specified by `max_file_field_buffer` directive, is reached.
+File field buffer is used to load files referred to from [sql_file_field](../Adding_data_from_external_storages/Fetching_from_databases/Indexing_fetched_data.md#sql_file_field) columns. This buffer is adaptive, starting at 1 MB at first allocation, and growing in 2x steps until either file contents can be loaded, or maximum buffer size, specified by `max_file_field_buffer` directive, is reached.
 
 Thus, if there are no file fields are specified, no buffer is allocated at all. If all files loaded during indexing are under (for example) 2 MB in size, but `max_file_field_buffer` value is 128 MB, peak buffer usage would still be only 2 MB. However, files over 128 MB would be entirely skipped.
 
@@ -191,7 +191,7 @@ max_iosize = 1048576
 
 Maximum allowed I/O operation size, in bytes, for I/O throttling. Optional, default is 0 (unlimited).
 
-I/O throttling related option. It limits maximum file I/O operation (read or write) size for all operations performed by `indexer`. A value of 0 means that no limit is imposed. Reads or writes that are bigger than the limit will be split in several smaller operations, and counted as several operation by [max_iops](Adding_data_from_external_storages/Plain_indexes_creation.md#max_iops) setting. At the time of this writing, all I/O calls should be under 256 KB (default internal buffer size) anyway, so `max_iosize` values higher than 256 KB must not affect anything.
+I/O throttling related option. It limits maximum file I/O operation (read or write) size for all operations performed by `indexer`. A value of 0 means that no limit is imposed. Reads or writes that are bigger than the limit will be split in several smaller operations, and counted as several operation by [max_iops](../Adding_data_from_external_storages/Plain_indexes_creation.md#max_iops) setting. At the time of this writing, all I/O calls should be under 256 KB (default internal buffer size) anyway, so `max_iosize` values higher than 256 KB must not affect anything.
 
 #### max_xmlpipe2_field
 
@@ -220,7 +220,7 @@ on_file_field_error = skip_document
 ```
 
 How to handle IO errors in file fields. Optional, default is `ignore_field`.
-When there is a problem indexing a file referenced by a file field ([sql_file_field](Adding_data_from_external_storages/Fetching_from_databases/Indexing_fetched_data.md#sql_file_field)), `indexer` can either index the document, assuming empty content in this particular field, or skip the document, or fail indexing entirely. `on_file_field_error` directive controls that behavior. The values it takes are:
+When there is a problem indexing a file referenced by a file field ([sql_file_field](../Adding_data_from_external_storages/Fetching_from_databases/Indexing_fetched_data.md#sql_file_field)), `indexer` can either index the document, assuming empty content in this particular field, or skip the document, or fail indexing entirely. `on_file_field_error` directive controls that behavior. The values it takes are:
 * `ignore_field`, index the current document without field;
 * `skip_document`, skip the current document but continue indexing;
 * `fail_index`, fail indexing with an error message.
@@ -235,7 +235,7 @@ Note that with `on_file_field_error = skip_document` documents will only be igno
 write_buffer = 4M
 ```    
 
-Write buffer size, bytes. Optional, default is 1MB. Write buffers are used to write both temporary and final index files when indexing. Larger buffers reduce the number of required disk writes. Memory for the buffers is allocated in addition to [mem_limit](Adding_data_from_external_storages/Plain_indexes_creation.md#mem_limit). Note that several (currently up to 4) buffers for different files will be allocated, proportionally increasing the RAM usage.
+Write buffer size, bytes. Optional, default is 1MB. Write buffers are used to write both temporary and final index files when indexing. Larger buffers reduce the number of required disk writes. Memory for the buffers is allocated in addition to [mem_limit](../Adding_data_from_external_storages/Plain_indexes_creation.md#mem_limit). Note that several (currently up to 4) buffers for different files will be allocated, proportionally increasing the RAM usage.
 
 #### ignore_non_plain
 

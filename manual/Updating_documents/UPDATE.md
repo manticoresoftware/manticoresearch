@@ -2,7 +2,7 @@
 
 <!-- example update -->
 
-UPDATE changes attribute values of existing documents in a specified index with new values. Note that you can't update contents of a fulltext field. If there's a need to change contents of a full-text field, use [REPLACE](Updating_documents/REPLACE.md).
+UPDATE changes attribute values of existing documents in a specified index with new values. Note that you can't update contents of a fulltext field. If there's a need to change contents of a full-text field, use [REPLACE](../Updating_documents/REPLACE.md).
 
 Attribute updates are supported for RT, PQ and plain indexes. All attribute types can be updated.
 
@@ -597,7 +597,7 @@ class UpdateResponse {
 
 <!-- example cluster update -->
 
-When using replication, index name should be prepended with `cluster_name:` (in SQL) so that updates will be propagated to all nodes in the cluster. For queries via HTTP you should set a `cluster` property. See [setting up replication](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) for more info.
+When using replication, index name should be prepended with `cluster_name:` (in SQL) so that updates will be propagated to all nodes in the cluster. For queries via HTTP you should set a `cluster` property. See [setting up replication](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md) for more info.
 
 ```json
 {
@@ -699,7 +699,7 @@ UPDATE index SET col1 = newval1 [, ...] WHERE where_condition [OPTION opt_name =
 ```
 
 
-`where_condition` has the same syntax as in the [SELECT](Searching/Full_text_matching/Basic_usage.md#SQL) statement.
+`where_condition` has the same syntax as in the [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) statement.
 
 <!-- example MVA empty update -->
 
@@ -825,7 +825,7 @@ class UpdateResponse {
 OPTION <optionname>=<value> [ , ... ]
 ```
 
-The options are the same as for [SELECT](Searching/Full_text_matching/Basic_usage.md#SQL) statement. Specifically for `UPDATE` statement you can use these options:
+The options are the same as for [SELECT](../Searching/Full_text_matching/Basic_usage.md#SQL) statement. Specifically for `UPDATE` statement you can use these options:
 
 *   'ignore_nonexistent_columns' - If set to **1** points that the update will silently ignore any warnings about trying to update a column which is not exists in current index schema. Default value is  **0**.
 *   'strict' - this option is used in partial JSON attribute updates. By default (strict=1), `UPDATE` will end in an error if the `UPDATE` query tries to perform an update on non-numeric properties. With strict=0 if multiple properties are updated and some are not allowed, the `UPDATE` will not end in error and will perform the changes only on allowed properties (with the rest being ignored). If none of the `SET` changes of the `UPDATE` are not permitted, the command will end in an error even with strict=0.
@@ -835,7 +835,7 @@ In rare cases Manticore's built-in query analyzer can be wrong in understanding 
 
 ## Updates via HTTP
 
-Updates using HTTP protocol are performed via the `/update` endpoint. Syntax is similar to the [/insert endpoint](Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md), but this time the `doc` property is mandatory.
+Updates using HTTP protocol are performed via the `/update` endpoint. Syntax is similar to the [/insert endpoint](../Adding_documents_to_an_index/Adding_documents_to_a_real-time_index.md), but this time the `doc` property is mandatory.
 
 The server will respond with a JSON object stating if the operation was successful or not.
 
@@ -906,7 +906,7 @@ POST /update
 
 <!-- end -->
 
-Query syntax is the same as in the [/search endpoint](Searching/Full_text_matching/Basic_usage.md#HTTP). Note that you can't specify `id` and `query` at the same time.
+Query syntax is the same as in the [/search endpoint](../Searching/Full_text_matching/Basic_usage.md#HTTP). Note that you can't specify `id` and `query` at the same time.
 
 ## Flushing attributes
 
@@ -928,7 +928,7 @@ mysql> FLUSH ATTRIBUTES;
 +------+
 1 row in set (0.19 sec)
 ```
-See also [attr_flush_period](Updating_documents/UPDATE.md#attr_flush_period) setting. 
+See also [attr_flush_period](../Updating_documents/UPDATE.md#attr_flush_period) setting. 
 
 
 ## Bulk updates
@@ -980,12 +980,12 @@ POST /bulk
 
 `/bulk` endpoint supports inserts, replaces and deletes. Each statement starts with an action type (in this case, `update`). Here's a list of the supported actions:
 
-* `insert`: Inserts a document. Syntax is the same as in the [/insert endpoint](Quick_start_guide.md#Add-documents).
+* `insert`: Inserts a document. Syntax is the same as in the [/insert endpoint](../Quick_start_guide.md#Add-documents).
 * `create`: a synonym for `insert`
-* `replace`: Replaces a document. Syntax is the same as in the [/replace](Updating_documents/REPLACE.md#HTTP:).
+* `replace`: Replaces a document. Syntax is the same as in the [/replace](../Updating_documents/REPLACE.md#HTTP:).
 * `index`: a synonym for `replace`
-* `update`: Updates a document. Syntax is the same as in [/update](Updating_documents/UPDATE.md#Updates-via-HTTP).
-* `delete`: Deletes a document. Syntax is the same as in [/delete endpoint](Deleting_documents.md).
+* `update`: Updates a document. Syntax is the same as in [/update](../Updating_documents/UPDATE.md#Updates-via-HTTP).
+* `delete`: Deletes a document. Syntax is the same as in [/delete endpoint](../Deleting_documents.md).
 
 Updates by query and deletes by query are also supported.
 

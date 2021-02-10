@@ -16,7 +16,7 @@ SELECT REGEX(j.color, 'red | pink') FROM test;
 ```
 
 ### SNIPPET()
-`SNIPPET()` can be used to highlight search results in a given text. The first two arguments are: the text to highlight, and a query. It's possible to pass [options](Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#options) to function as third, fourth and so on arguments. `SNIPPET()` can fetch the text to use in highlighting from index itself. First argument in this case is field name:
+`SNIPPET()` can be used to highlight search results in a given text. The first two arguments are: the text to highlight, and a query. It's possible to pass [options](../Creating_a_cluster/Setting_up_replication/Setting_up_replication.md#options) to function as third, fourth and so on arguments. `SNIPPET()` can fetch the text to use in highlighting from index itself. First argument in this case is field name:
 
 ```sql         
 SELECT SNIPPET(body,QUERY()) FROM myIndex WHERE MATCH('my.query')   

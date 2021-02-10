@@ -10,7 +10,7 @@ The syntax is:
 SHOW INDEX index_name[.N | CHUNK N] SETTINGS
 ```
 
-Output is similar to the [--dumpconfig](Miscellaneous_tools.md#indextool) option of the [indextool](Miscellaneous_tools.md#indextool) utility. The report provides a breakdown of all the index settings, including tokenizer and dictionary options.
+Output is similar to the [--dumpconfig](../../Miscellaneous_tools.md#indextool) option of the [indextool](../../Miscellaneous_tools.md#indextool) utility. The report provides a breakdown of all the index settings, including tokenizer and dictionary options.
 
 <!-- intro -->
 ##### SQL:

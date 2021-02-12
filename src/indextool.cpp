@@ -21,6 +21,80 @@
 #include <time.h>
 
 static CSphString g_sDataDir;
+static bool g_bConfigless = false;
+
+static bool IsConfigless()
+{
+	return g_bConfigless;
+}
+
+static CSphString GetPathForNewIndex ( const CSphString & sIndexName )
+{
+	CSphString sRes;
+	if ( g_sDataDir.Length() && !g_sDataDir.Ends("/") && !g_sDataDir.Ends("\\") )
+		sRes.SetSprintf ( "%s/%s", g_sDataDir.cstr(), sIndexName.cstr() );
+	else
+		sRes.SetSprintf ( "%s%s", g_sDataDir.cstr(), sIndexName.cstr() );
+
+	return sRes;
+}
+
+void MakeRelativePath ( CSphString & sPath )
+{
+	bool bAbsolute = strchr ( sPath.cstr(), '/' ) || strchr ( sPath.cstr(), '\\' );
+	if ( !bAbsolute )
+		sPath.SetSprintf ( "%s/%s/%s", g_sDataDir.cstr(), sPath.cstr(), sPath.cstr() );
+}
+
+class FilenameBuilder_c : public FilenameBuilder_i
+{
+public:
+					FilenameBuilder_c ( const char * szIndex );
+
+	CSphString		GetFullPath ( const CSphString & sName ) const final;
+
+private:
+	const CSphString		m_sIndex;
+};
+
+
+FilenameBuilder_c::FilenameBuilder_c ( const char * szIndex )
+	: m_sIndex ( szIndex )
+{}
+
+
+CSphString FilenameBuilder_c::GetFullPath ( const CSphString & sName ) const
+{
+	if ( !IsConfigless() || !sName.Length() )
+		return sName;
+
+	CSphString sPath = GetPathForNewIndex ( m_sIndex );
+
+	StrVec_t dFiles;
+	StringBuilder_c sNewValue = " ";
+
+	// we assume that path has been stripped before
+	StrVec_t dValues = sphSplit ( sName.cstr(), sName.Length(), " \t," );
+	for ( auto & i : dValues )
+	{
+		if ( !i.Length() )
+			continue;
+
+		CSphString & sNew = dFiles.Add();
+		sNew.SetSprintf ( "%s/%s", sPath.cstr(), i.Trim().cstr() );
+		sNewValue << sNew;
+	}
+
+	return sNewValue.cstr();
+}
+
+static FilenameBuilder_i * CreateFilenameBuilder ( const char * szIndex )
+{
+	if ( IsConfigless() )
+		return new FilenameBuilder_c(szIndex);
+
+	return nullptr;
+}
 
 void StripStdin ( const char * sIndexAttrs, const char * sRemoveElements )
 {
@@ -1038,6 +1112,7 @@ bool ReadJsonConfig ( const CSphString & sConfigPath, CSphConfig & hConf, CSphSt
 		if ( !i.FetchStrItem ( sType, "type", sError ) )
 			return false;
 
+		MakeRelativePath ( sPath );
 		tSec.AddEntry ( "path", sPath.cstr() );
 		tSec.AddEntry ( "type", sType.cstr() );
 		tSec.AddEntry ( "from_json", "1" );
@@ -1071,6 +1146,8 @@ static bool LoadJsonConfig ( CSphConfig & hConf, const CSphString & sConfigFile 
 		return false;
 	}
 
+	g_bConfigless = true;
+
 	CSphString sConfigPath;
 	sConfigPath.SetSprintf ( "%s/manticore.json", g_sDataDir.cstr() );
 	if ( !ReadJsonConfig ( sConfigPath, hConf, sError ) )
@@ -1079,6 +1156,32 @@ static bool LoadJsonConfig ( CSphConfig & hConf, const CSphString & sConfigFile 
 	return true;
 }
 
+static CSphIndex * CreateIndex ( CSphConfig & hConf, const CSphString & sIndex, bool bDictKeywords, bool bRotate, CSphString & sError )
+{
+	// don't expect complete index declarations from indexes created with CREATE TABLE
+	bool bFromJson = !!hConf["index"][sIndex]("from_json");
+
+	if ( hConf["index"][sIndex]("type") && hConf["index"][sIndex]["type"]=="rt" )
+	{
+		CSphSchema tSchema;
+		if ( bFromJson || sphRTSchemaConfigure ( hConf["index"][sIndex], tSchema, sError, false ) )
+			return sphCreateIndexRT ( tSchema, sIndex.cstr(), 32*1024*1024, hConf["index"][sIndex]["path"].cstr(), bDictKeywords );
+	} else
+	{
+		StringBuilder_c tPath;
+		tPath << hConf["index"][sIndex]["path"] << ( bRotate ? ".tmp" : nullptr );
+		return sphCreateIndexPhrase ( sIndex.cstr(), tPath.cstr() );
+	}
+
+	return nullptr;
+}
+
+static void PreallocIndex ( const CSphString & sIndex, bool bStripPath, CSphIndex * pIndex )
+{
+	CSphScopedPtr<FilenameBuilder_i> pFilenameBuilder ( CreateFilenameBuilder ( sIndex.cstr() ) );
+	if ( !pIndex->Prealloc ( bStripPath, pFilenameBuilder.Ptr() ) )
+		sphDie ( "index '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
+}
 
 int main ( int argc, char ** argv )
 {
@@ -1335,20 +1438,7 @@ int main ( int argc, char ** argv )
 		if ( hConf["index"][sIndex].Exists ( "dict" ) )
 			bDictKeywords = ( hConf["index"][sIndex]["dict"]!="crc" );
 
-		// don't expect complete index declarations from indexes created with CREATE TABLE
-		bool bFromJson = !!hConf["index"][sIndex]("from_json");
-
-		if ( hConf["index"][sIndex]("type") && hConf["index"][sIndex]["type"]=="rt" )
-		{
-			CSphSchema tSchema;
-			if ( bFromJson || sphRTSchemaConfigure ( hConf["index"][sIndex], tSchema, sError, false ) )
-				pIndex = sphCreateIndexRT ( tSchema, sIndex.cstr(), 32*1024*1024, hConf["index"][sIndex]["path"].cstr(), bDictKeywords );
-		} else
-		{
-			StringBuilder_c tPath;
-			tPath << hConf["index"][sIndex]["path"] << ( bRotate ? ".tmp" : nullptr );
-			pIndex = sphCreateIndexPhrase ( sIndex.cstr(), tPath.cstr() );
-		}
+		pIndex = CreateIndex ( hConf, sIndex, bDictKeywords, bRotate, sError );
 
 		if ( !pIndex )
 			sphDie ( "index '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
@@ -1356,9 +1446,7 @@ int main ( int argc, char ** argv )
 		if ( g_eCommand==IndextoolCmd_e::CHECK )
 			pIndex->SetDebugCheck ( bCheckIdDups, iCheckChunk );
 
-		CSphString sWarn;
-		if ( !pIndex->Prealloc ( bStripPath, nullptr ) )
-			sphDie ( "index '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
+		PreallocIndex ( sIndex, bStripPath, pIndex );
 
 		if ( g_eCommand==IndextoolCmd_e::MORPH )
 			break;

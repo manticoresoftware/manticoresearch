@@ -25,6 +25,7 @@ Query OK, 1 row affected (0.00 sec)
 
 ```http
 POST /replace
+-H "Content-Type: application/x-ndjson" -d '
 {
   "index":"products",
   "id":1,
@@ -34,6 +35,7 @@ POST /replace
     "price":10
   }
 }
+'
 ```
 
 <!-- response HTTP -->
@@ -165,9 +167,10 @@ Query OK, 2 rows affected (0.00 sec)
 
 ```json
 POST /bulk
-
+-H "Content-Type: application/x-ndjson" -d '
 { "replace" : { "index" : "products", "id":1, "doc": { "title": "doc one", "tag" : 10 } } }
 { "replace" : { "index" : "products", "id":2, "doc": { "title": "doc two", "tag" : 20 } } }
+'
 ```
 
 <!-- response HTTP -->

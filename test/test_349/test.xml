@@ -88,6 +88,14 @@ index idx3
 	source			= src36
 	path			= <data_path/>/idx3
 }
+
+index pq1
+{
+	type = percolate
+	path			= <data_path/>/pq1
+	rt_field = title
+}
+
 </config>
 
 <sphqueries>
@@ -136,6 +144,10 @@ index idx3
 
 <!-- regression crash on tail hit -->
 <sphinxql>select * from idx3 where match ('beach NOTNEAR/1 hut') order by id asc</sphinxql>
+
+<!-- regression daemon infinite loop on fetching hits -->
+<sphinxql>insert into pq1 (id, query) values(1, ' a1 NOTNEAR/1 z1 ')</sphinxql>
+<sphinxql>CALL PQ('pq1', ('[{"id":101, "title": "dummy1 a1 dummy2 dummy 2 dumm2 a1 dummy3 dummy3 dummy3 a1 dummy4 dummy4 dummy4 dummy4 z1 dummy5 dummy5 dummy5 a1 dummy6 dummy6 dummy6 z1 dummy7 dummy7 dummy7 a1 dummy8 dummy8 dummy8  a1 dummy8 dummy8 dummy8 dummy8 a1 dummy10 dummy10 "}]'), 1 AS docs_json, 1 as docs); </sphinxql>
 </sphqueries>
 
 <db_create>

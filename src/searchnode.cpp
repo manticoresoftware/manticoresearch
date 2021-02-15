@@ -5327,6 +5327,10 @@ ExtNotNear_c::ExtNotNear_c ( ExtNode_i * pMust, ExtNode_i * pNot, const ISphQwor
 	, m_iDist ( iDist )
 {
 	m_sNodeName.SetSprintf ( "NOTNEAR/%d", m_iDist );
+
+	// need hits from both nodes
+	pMust->SetCollectHits();
+	pNot->SetCollectHits();
 }
 
 

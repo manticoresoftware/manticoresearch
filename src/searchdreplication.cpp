@@ -272,7 +272,7 @@ static bool IsUpdateCommand ( const RtAccum_t & tAcc );
 
 static void SaveUpdate ( const CSphAttrUpdate & tUpd, CSphVector<BYTE> & dOut );
 
-static int LoadUpdate ( const BYTE * pBuf, int iLen, CSphAttrUpdate & tUpd, bool & bBlob );
+static int LoadUpdate ( const BYTE * pBuf, int iLen, CSphAttrUpdate & tUpd );
 
 static void SaveUpdate ( const CSphQuery & tQuery, CSphVector<BYTE> & dOut );
 
@@ -1539,7 +1539,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 			break;
 
 		case ReplicationCommand_e::UPDATE_API:
-			LoadUpdate ( pRequest, iRequestLen, tUpd, pCmd->m_bBlobUpdate );
+			LoadUpdate ( pRequest, iRequestLen, tUpd );
 			pCmd->m_pUpdateAPI = &tUpd;
 			sphLogDebugRpl ( "update, index '%s'", pCmd->m_sIndex.cstr() );
 			break;
@@ -1550,7 +1550,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 			// can not handle multiple updates - only one update at time
 			assert ( !tQuery.m_dFilters.GetLength() );
 
-			int iGot = LoadUpdate ( pRequest, iRequestLen, tUpd, pCmd->m_bBlobUpdate );
+			int iGot = LoadUpdate ( pRequest, iRequestLen, tUpd );
 			assert ( iGot<iRequestLen );
 			LoadUpdate ( pRequest + iGot, iRequestLen - iGot, tQuery );
 			pCmd->m_pUpdateAPI = &tUpd;
@@ -2022,16 +2022,16 @@ bool CommitMonitor_c::CommitTOI ( ServedDesc_t * pDesc, CSphString & sError ) EX
 	return true;
 }
 
-static bool UpdateAPI ( const CSphAttrUpdate & tUpd, const ServedDesc_t * pDesc, CSphString & sError, CSphString & sWarning, int & iUpdate )
+static bool UpdateAPI ( AttrUpdateArgs& tUpd, int & iUpdate )
 {
-	if ( !pDesc )
+	if ( !tUpd.m_pDesc )
 	{
-		sError = "index not available";
+		*tUpd.m_pError = "index not available";
 		return false;
 	}
 
 	bool bCritical = false;
-	iUpdate = pDesc->m_pIndex->UpdateAttributes ( tUpd, -1, bCritical, sError, sWarning );
+	iUpdate = tUpd.m_pDesc->m_pIndex->UpdateAttributes ( *tUpd.m_pUpdate, -1, bCritical, tUpd.m_fnLocker, *tUpd.m_pError, *tUpd.m_pWarning );
 	return ( iUpdate>=0 );
 }
 
@@ -2056,43 +2056,35 @@ bool CommitMonitor_c::Update ( CSphString & sError )
 	assert ( m_pWarning );
 	assert ( tCmd.m_pUpdateAPI );
 
+	AttrUpdateArgs tUpd;
+	tUpd.m_pUpdate = tCmd.m_pUpdateAPI;
+	tUpd.m_pError = &sError;
+	tUpd.m_pWarning = m_pWarning;
+	tUpd.m_pQuery = tCmd.m_pUpdateCond;
+	tUpd.m_pIndexName = &tCmd.m_sIndex;
+	tUpd.m_bJson = ( tCmd.m_eCommand==ReplicationCommand_e::UPDATE_JSON );
+	ServedDescRPtr_c tDesc ( pServed );
+	tUpd.m_pDesc = tDesc.Ptr ();
+
+	// that might be called when blob updates necessary, however we don't need to call it actually more than once
+	bool bWlocked = false;
+	tUpd.m_fnLocker = [&bWlocked, &tDesc] {
+		if (!bWlocked)
+		{
+			tDesc.UpgradeLock();
+			bWlocked = true;
+		}
+	};
+
 	if ( tCmd.m_eCommand==ReplicationCommand_e::UPDATE_API )
-	{
-		if ( tCmd.m_bBlobUpdate )
-		{
-			return UpdateAPI ( *tCmd.m_pUpdateAPI, ServedDescWPtr_c ( pServed ), sError, *m_pWarning, *m_pUpdated );
-		} else
-		{
-			return UpdateAPI ( *tCmd.m_pUpdateAPI, ServedDescRPtr_c ( pServed ), sError, *m_pWarning, *m_pUpdated );
-		}
-	} else
-	{
-		assert ( tCmd.m_pUpdateCond );
+		return UpdateAPI ( tUpd, *m_pUpdated );
 
-		AttrUpdateArgs tUpd;
-		tUpd.m_pUpdate = tCmd.m_pUpdateAPI;
-		tUpd.m_pError = &sError;
-		tUpd.m_pWarning = m_pWarning;
-		tUpd.m_pQuery = tCmd.m_pUpdateCond;
-		tUpd.m_pIndexName = &tCmd.m_sIndex;
-		tUpd.m_bJson = ( tCmd.m_eCommand==ReplicationCommand_e::UPDATE_JSON );
+	assert ( tCmd.m_pUpdateCond );
+	HandleMySqlExtendedUpdate ( tUpd );
+	if ( sError.IsEmpty() )
+		*m_pUpdated += tUpd.m_iAffected;
 
-		if ( tCmd.m_bBlobUpdate )
-		{
-			ServedDescWPtr_c tDesc ( pServed );
-			tUpd.m_pDesc = tDesc.Ptr();
-			HandleMySqlExtendedUpdate ( tUpd );
-		} else
-		{
-			ServedDescRPtr_c tDesc ( pServed );
-			tUpd.m_pDesc = tDesc.Ptr();
-			HandleMySqlExtendedUpdate ( tUpd );
-		}
-		if ( sError.IsEmpty() )
-			*m_pUpdated += tUpd.m_iAffected;
-
-		return ( sError.IsEmpty() );
-	}
+	return ( sError.IsEmpty() );
 }
 
 CommitMonitor_c::~CommitMonitor_c()
@@ -4912,20 +4904,18 @@ void SaveUpdate ( const CSphAttrUpdate & tUpd, CSphVector<BYTE> & dOut )
 	SaveArray ( tUpd.m_dPool, tWriter );
 }
 
-int LoadUpdate ( const BYTE * pBuf, int iLen, CSphAttrUpdate & tUpd, bool & bBlob )
+int LoadUpdate ( const BYTE * pBuf, int iLen, CSphAttrUpdate & tUpd )
 {
 	MemoryReader_c tIn ( pBuf, iLen );
 	
 	tUpd.m_bIgnoreNonexistent = !!tIn.GetByte();
 	tUpd.m_bStrict = !!tIn.GetByte();
 
-	bBlob = false;
 	tUpd.m_dAttributes.Resize ( tIn.GetDword() );
 	for ( TypedAttribute_t & tElem : tUpd.m_dAttributes )
 	{
 		tElem.m_sName = tIn.GetString();
 		tElem.m_eType = (ESphAttr)tIn.GetDword();
-		bBlob |= ( tElem.m_eType==SPH_ATTR_UINT32SET || tElem.m_eType==SPH_ATTR_INT64SET || tElem.m_eType==SPH_ATTR_JSON || tElem.m_eType==SPH_ATTR_STRING );
 	}
 
 	GetArray ( tUpd.m_dDocids, tIn );

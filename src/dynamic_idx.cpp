@@ -521,7 +521,7 @@ public:
 	bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult* , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const final;
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const final { return false; }
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const final { return true; }
-	int					UpdateAttributes ( const CSphAttrUpdate & , int , bool &, CSphString & , CSphString & ) final { return -1; }
+	int					UpdateAttributes ( const CSphAttrUpdate & , int , bool &, FNLOCKER, CSphString & , CSphString & ) final { return -1; }
 	bool				SaveAttributes ( CSphString & ) const final { return true; }
 	DWORD				GetAttributeStatus () const final { return 0; }
 	bool				AddRemoveAttribute ( bool, const CSphString &, ESphAttr, CSphString & ) final { return true; }

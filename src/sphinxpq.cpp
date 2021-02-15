@@ -124,7 +124,7 @@ public:
 	void				GetStatus ( CSphIndexStatus* pRes ) const override;
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & , CSphString * pError ) const override { return NotImplementedError(pError); }
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const override { return false; }
-	int					UpdateAttributes ( const CSphAttrUpdate & /*tUpd*/, int /*iIndex*/, bool & /*bCritical*/, CSphString & sError, CSphString & /*sWarning*/ ) override { NotImplementedError ( &sError ); return -1; }
+	int					UpdateAttributes ( const CSphAttrUpdate & /*tUpd*/, int /*iIndex*/, bool & /*bCritical*/, FNLOCKER, CSphString & sError, CSphString & /*sWarning*/ ) override { NotImplementedError ( &sError ); return -1; }
 	bool				SaveAttributes ( CSphString & ) const override { return true; }
 	DWORD				GetAttributeStatus () const override { return 0; }
 

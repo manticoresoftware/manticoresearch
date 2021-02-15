@@ -985,7 +985,7 @@ public:
 	void				PostSetup() final;
 	bool				IsRT() const final { return true; }
 
-	int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, CSphString & sError, CSphString & sWarning ) final;
+	int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) final;
 	bool				SaveAttributes ( CSphString & sError ) const final;
 	DWORD				GetAttributeStatus () const final { return m_uDiskAttrStatus; }
 	bool				AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError ) final;
@@ -6983,7 +6983,7 @@ bool RtIndex_c::Update_DiskChunks ( UpdateContext_t & tCtx, const SphChunkGuard_
 			// FIXME! might be inefficient in case of big batches (redundant allocs in disk update)
 			bool bCritical = false;
 			CSphString sWarning;
-			int iRes = const_cast<CSphIndex *>( tGuard.m_dDiskChunks[iChunk] )->UpdateAttributes ( tCtx.m_tUpd, iUpd, bCritical, sError, sWarning );
+			int iRes = const_cast<CSphIndex *>( tGuard.m_dDiskChunks[iChunk] )->UpdateAttributes ( tCtx.m_tUpd, iUpd, bCritical, tCtx.m_fnBlobsLocker, sError, sWarning );
 
 			// FIXME! need to handle critical failures here (chunk is unusable at this point)
 			assert ( !bCritical );
@@ -7041,7 +7041,7 @@ bool RtIndex_c::Update_WriteBlobRow ( UpdateContext_t & tCtx, int iUpd, CSphRowi
 
 
 // FIXME! might be inconsistent in case disk chunk update fails
-int RtIndex_c::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, CSphString & sError, CSphString & sWarning )
+int RtIndex_c::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning )
 {
 	assert ( tUpd.m_dDocids.GetLength()==tUpd.m_dRowOffset.GetLength() );
 	DWORD uRows = tUpd.m_dDocids.GetLength();
@@ -7049,7 +7049,7 @@ int RtIndex_c::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool 
 	if ( ( !m_dRamChunks.GetLength() && !m_dDiskChunks.GetLength() ) || !uRows )
 		return 0;
 
-	UpdateContext_t tCtx ( tUpd, m_tSchema, nullptr, ( iIndex<0 ) ? 0 : iIndex, ( iIndex<0 ) ? uRows : iIndex+1 );
+	UpdateContext_t tCtx ( tUpd, m_tSchema, nullptr, ( iIndex<0 ) ? 0 : iIndex, ( iIndex<0 ) ? uRows : iIndex+1, std::move (fnLocker) );
 
 	// FIXME!!! grab Writer lock to prevent segments retirement during commit(merge)
 
@@ -9734,7 +9734,7 @@ bool RtBinlog_c::ReplayUpdateAttributes ( int iBinlog, BinlogReader_c & tReader 
 
 		CSphString sError, sWarning;
 		bool bCritical = false;
-		tIndex.m_pIndex->UpdateAttributes ( tUpd, -1, bCritical, sError, sWarning ); // FIXME! check for errors
+		tIndex.m_pIndex->UpdateAttributes ( tUpd, -1, bCritical, nullptr, sError, sWarning ); // FIXME! check for errors
 		assert ( !bCritical ); // fixme! handle this
 
 		// update committed tid on replay in case of unexpected / mismatched tid

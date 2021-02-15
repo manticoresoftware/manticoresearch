@@ -975,6 +975,7 @@ class CSphUpdateQueue final : public ISphMatchSorter, ISphNoncopyable
 	CSphString *		m_pError;
 	CSphString *		m_pWarning;
 	int *				m_pAffected;
+	FNLOCKER			m_fnLocker;
 
 	const int			m_iCount = 0;
 	DocID_t				m_iLastID = 0;
@@ -996,6 +997,7 @@ public:
 		m_pError = pUpdate->m_pError;
 		m_pWarning = pUpdate->m_pWarning;
 		m_pAffected = &pUpdate->m_iAffected;
+		m_fnLocker = pUpdate->m_fnLocker;
 	}
 
 	/// stub
@@ -1090,7 +1092,7 @@ private:
 		m_tWorkSet.m_dRowOffset.Resize ( m_tWorkSet.m_dDocids.GetLength() );
 
 		bool bCritical = false;
-		*m_pAffected += m_pIndex->UpdateAttributes ( m_tWorkSet, -1, bCritical, *m_pError, *m_pWarning );
+		*m_pAffected += m_pIndex->UpdateAttributes ( m_tWorkSet, -1, bCritical, m_fnLocker, *m_pError, *m_pWarning );
 		assert ( !bCritical ); // fixme! handle this
 
 		m_tWorkSet.m_dDocids.Resize ( 0 );

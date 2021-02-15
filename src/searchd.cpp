@@ -8074,9 +8074,8 @@ void UpdateRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOutp
 	}
 }
 
-static void DoCommandUpdate ( const CSphString & sIndex, const char * sDistributed, const CSphAttrUpdate & tUpd, bool bBlobUpdate,
-	int & iSuccesses, int & iUpdated,
-	SearchFailuresLog_c & dFails, ServedIndexRefPtr_c & pServed )
+static void DoCommandUpdate ( const CSphString & sIndex, const char * sDistributed, const CSphAttrUpdate & tUpd,
+	int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, ServedIndexRefPtr_c & pServed )
 {
 	CSphString sCluster;
 	{
@@ -8096,7 +8095,6 @@ static void DoCommandUpdate ( const CSphString & sIndex, const char * sDistribut
 	ReplicationCommand_t * pCmd = tAcc.AddCommand ( ReplicationCommand_e::UPDATE_API, sCluster, sIndex );
 	assert ( pCmd );
 	pCmd->m_pUpdateAPI = &tUpd;
-	pCmd->m_bBlobUpdate = bBlobUpdate;
 
 	HandleCmdReplicate ( tAcc, sError, sWarning, iUpd );
 
@@ -8152,7 +8150,6 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	if ( iVer>=0x103 )
 		tUpd.m_bIgnoreNonexistent = ( tReq.GetDword() & 1 )!=0;
 
-	bool bBlobUpdate = false;
 	for ( auto & i : tUpd.m_dAttributes )
 	{
 		i.m_sName = tReq.GetString();
@@ -8170,13 +8167,11 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 			{
 			case UPDATE_MVA32:
 				i.m_eType = SPH_ATTR_UINT32SET;
-				bBlobUpdate = true;
 				break;
 
 			case UPDATE_STRING:
 			case UPDATE_JSON:
 				i.m_eType = SPH_ATTR_STRING;
-				bBlobUpdate = true;
 				break;
 
 			default:
@@ -8289,7 +8284,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 		auto pLocal = GetServed ( sReqIndex );
 		if ( pLocal )
 		{
-			DoCommandUpdate ( sReqIndex, nullptr, tUpd, bBlobUpdate, iSuccesses, iUpdated, dFails, pLocal );
+			DoCommandUpdate ( sReqIndex, nullptr, tUpd, iSuccesses, iUpdated, dFails, pLocal );
 
 		} else if ( dDistributed[iIdx] )
 		{
@@ -8303,7 +8298,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 				if ( !pServed )
 					continue;
 
-				DoCommandUpdate ( sLocal, sReqIndex.cstr(), tUpd, bBlobUpdate, iSuccesses, iUpdated, dFails, pServed );
+				DoCommandUpdate ( sLocal, sReqIndex.cstr(), tUpd, iSuccesses, iUpdated, dFails, pServed );
 			}
 
 			// update remote agents
@@ -11886,7 +11881,7 @@ void SphinxqlRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOu
 //////////////////////////////////////////////////////////////////////////
 
 static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sIndex, const char * sDistributed,
-	bool bBlobUpdate, int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, CSphString & sWarning,
+	int & iSuccesses, int & iUpdated, SearchFailuresLog_c & dFails, CSphString & sWarning,
 	const ServedIndexRefPtr_c & tServed )
 {
 	CSphString sError;
@@ -11910,7 +11905,6 @@ static void DoExtendedUpdate ( const SqlStmt_t & tStmt, const CSphString & sInde
 	ReplicationCommand_t * pCmd = tAcc.AddCommand ( tStmt.m_bJson ? ReplicationCommand_e::UPDATE_JSON : ReplicationCommand_e::UPDATE_QL, tStmt.m_sCluster, sIndex );
 	assert ( pCmd );
 	pCmd->m_pUpdateAPI = &tStmt.m_tUpdate;
-	pCmd->m_bBlobUpdate = bBlobUpdate;
 	pCmd->m_pUpdateCond = &tStmt.m_tQuery;
 
 	HandleCmdReplicate ( tAcc, sError, sWarning, iUpdated );
@@ -11976,7 +11970,6 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	int iUpdated = 0;
 	int iWarns = 0;
 
-	bool bBlobUpdate = false;
 	for ( const auto & i : tStmt.m_tUpdate.m_dAttributes )
 	{
 		if ( i.m_sName==sphGetDocidName() )
@@ -11984,8 +11977,6 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			tOut.Error ( "'id' attribute cannot be updated" );
 			return;
 		}
-
-		bBlobUpdate |= sphIsBlobAttr ( i.m_eType );
 	}
 
 	ARRAY_FOREACH ( iIdx, dIndexNames )
@@ -11994,7 +11985,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		auto pLocked = GetServed ( sReqIndex );
 		if ( pLocked )
 		{
-			DoExtendedUpdate ( tStmt, sReqIndex, nullptr, bBlobUpdate, iSuccesses, iUpdated, dFails, sWarning, pLocked );
+			DoExtendedUpdate ( tStmt, sReqIndex, nullptr, iSuccesses, iUpdated, dFails, sWarning, pLocked );
 
 		} else if ( dDistributed[iIdx] )
 		{
@@ -12005,7 +11996,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			{
 				const char * sLocal = dLocal[i].cstr();
 				auto pServed = GetServed ( sLocal );
-				DoExtendedUpdate ( tStmt, sLocal, sReqIndex, bBlobUpdate, iSuccesses, iUpdated, dFails, sWarning, pServed );
+				DoExtendedUpdate ( tStmt, sLocal, sReqIndex, iSuccesses, iUpdated, dFails, sWarning, pServed );
 			}
 		}
 

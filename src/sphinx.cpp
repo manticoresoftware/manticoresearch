@@ -1086,7 +1086,7 @@ public:
 	bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult* , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const final { return false; }
 	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const final ;
 	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const final { return true; }
-	int					UpdateAttributes ( const CSphAttrUpdate & , int , bool &, CSphString & , CSphString & ) final { return -1; }
+	int					UpdateAttributes ( const CSphAttrUpdate & , int , bool &, FNLOCKER, CSphString & , CSphString & ) final { return -1; }
 	bool				SaveAttributes ( CSphString & ) const final { return true; }
 	DWORD				GetAttributeStatus () const final { return 0; }
 	bool				AddRemoveAttribute ( bool, const CSphString &, ESphAttr, CSphString & ) final { return true; }
@@ -1206,7 +1206,8 @@ Bson_t CSphTokenizerIndex::ExplainQuery ( const CSphString & sQuery ) const
 
 //////////////////////////////////////////////////////////////////////////
 
-UpdateContext_t::UpdateContext_t ( const CSphAttrUpdate & tUpd, const ISphSchema & tSchema, const HistogramContainer_c * pHistograms, int iFirst, int iLast )
+UpdateContext_t::UpdateContext_t ( const CSphAttrUpdate & tUpd, const ISphSchema & tSchema,
+		const HistogramContainer_c * pHistograms, int iFirst, int iLast, FNLOCKER fnLocker )
 	: m_tUpd ( tUpd )
 	, m_tSchema ( tSchema )
 	, m_pHistograms ( pHistograms )
@@ -1215,6 +1216,7 @@ UpdateContext_t::UpdateContext_t ( const CSphAttrUpdate & tUpd, const ISphSchema
 	, m_dSchemaUpdateMask ( tSchema.GetAttrsCount() )
 	, m_iFirst ( iFirst )
 	, m_iLast ( iLast )
+	, m_fnBlobsLocker { std::move (fnLocker) }
 {}
 
 
@@ -1445,6 +1447,7 @@ bool IndexUpdateHelper_c::Update_Blobs ( UpdateContext_t & tCtx, bool & bCritica
 
 	CSphTightVector<BYTE> tBlobPool;
 	CSphScopedPtr<BlobRowBuilder_i> pBlobRowBuilder ( sphCreateBlobRowBuilderUpdate ( tCtx.m_tSchema, tBlobPool, tCtx.m_dSchemaUpdateMask ) );
+	bool bBlobsLocked = false;
 
 	for ( int iUpd=tCtx.m_iFirst; iUpd<tCtx.m_iLast; iUpd++ )
 	{
@@ -1517,6 +1520,13 @@ bool IndexUpdateHelper_c::Update_Blobs ( UpdateContext_t & tCtx, bool & bCritica
 		}
 
 		pBlobRowBuilder->Flush();
+
+		// ensure nobody uses segment/index before we continue
+		if ( !bBlobsLocked && tCtx.m_fnBlobsLocker )
+		{
+			tCtx.m_fnBlobsLocker();
+			bBlobsLocked = true;
+		}
 
 		if ( !Update_WriteBlobRow ( tCtx, iUpd, tRow.m_pRow, tBlobPool.Begin(), tBlobPool.GetLength(), iBlobAttrId, bCritical, sError ) )
 			return false;
@@ -1930,7 +1940,7 @@ public:
 	static bool					MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, const CSphVector<RowID_t> & dDstRows, const CSphVector<RowID_t> & dSrcRows, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, CSphIndexProgress & tProgress, volatile bool * pLocalStop );
 	static bool					DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, volatile bool * pLocalStop, bool bSrcSettings, bool bSupressDstDocids );
 
-	int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, CSphString & sError, CSphString & sWarning ) final;
+	int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) final;
 	bool				SaveAttributes ( CSphString & sError ) const final;
 	DWORD				GetAttributeStatus () const final;
 
@@ -8458,7 +8468,7 @@ void CSphIndex_VLN::Update_MinMax ( UpdateContext_t & tCtx )
 }
 
 
-int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, CSphString & sError, CSphString & sWarning )
+int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning )
 {
 	assert ( tUpd.m_dDocids.GetLength()==tUpd.m_dRowOffset.GetLength() );
 	DWORD uRows = tUpd.m_dDocids.GetLength();
@@ -8467,7 +8477,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, b
 	if ( !m_iDocinfo || !uRows )
 		return 0;
 
-	UpdateContext_t tCtx ( tUpd, m_tSchema, m_pHistograms, ( iIndex<0 ) ? 0 : iIndex, ( iIndex<0 ) ? uRows : iIndex+1 );
+	UpdateContext_t tCtx ( tUpd, m_tSchema, m_pHistograms, ( iIndex<0 ) ? 0 : iIndex, ( iIndex<0 ) ? uRows : iIndex+1, std::move(fnLocker) );
 	Update_CollectRowPtrs ( tCtx );
 	if ( !Update_FixupData ( tCtx, sError ) )
 		return -1;

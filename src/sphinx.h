@@ -3116,6 +3116,7 @@ struct UpdatedAttribute_t
 	int					m_iSchemaAttr = -1;
 };
 
+using FNLOCKER = std::function<void()>;
 
 struct UpdateContext_t
 {
@@ -3131,11 +3132,12 @@ struct UpdateContext_t
 
 	int					m_iFirst {0};
 	int					m_iLast {0};
+	FNLOCKER			m_fnBlobsLocker;
 	bool				m_bBlobUpdate {false};
 	int					m_iJsonWarnings {0};
 
 
-						UpdateContext_t ( const CSphAttrUpdate & tUpd, const ISphSchema & tSchema, const HistogramContainer_c * pHistograms, int iFirst, int iLast );
+						UpdateContext_t ( const CSphAttrUpdate & tUpd, const ISphSchema & tSchema, const HistogramContainer_c * pHistograms, int iFirst, int iLast, FNLOCKER fnLocker );
 
 	UpdatedRowData_t &	GetRowData ( int iUpd );
 };
@@ -3320,7 +3322,8 @@ public:
 public:
 	/// returns non-negative amount of actually found and updated records on success
 	/// on failure, -1 is returned and GetLastError() contains error message
-	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, CSphString & sError, CSphString & sWarning ) = 0;
+	/// fnLocker, if provided, used to lock affected row during update for exclusive access
+	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, bool & bCritical, FNLOCKER fnLocker, CSphString & sError, CSphString & sWarning ) = 0;
 
 	/// saves memory-cached attributes, if there were any updates to them
 	/// on failure, false is returned and GetLastError() contains error message
@@ -3433,6 +3436,7 @@ struct CSphAttrUpdateEx
 	CSphString *			m_pError = nullptr;		///< the error, if any
 	CSphString *			m_pWarning = nullptr;	///< the warning, if any
 	int						m_iAffected = 0;		///< num of updated rows.
+	FNLOCKER				m_fnLocker;
 };
 
 struct SphQueueSettings_t

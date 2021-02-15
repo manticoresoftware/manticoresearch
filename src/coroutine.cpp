@@ -838,12 +838,12 @@ bool Threads::CoroRWLock_c::Unlock ()
 	return true;
 }
 
-Threads::CoroMutex_c::~CoroMutex_c ()
+Threads::CoroSpinlock_c::~CoroSpinlock_c ()
 {
 	assert ( !m_bLocked.load ( std::memory_order_relaxed ) );
 }
 
-void Threads::CoroMutex_c::Lock()
+void Threads::CoroSpinlock_c::Lock()
 {
 	assert ( Threads::IsInsideCoroutine () );
 	while ( true )
@@ -855,7 +855,7 @@ void Threads::CoroMutex_c::Lock()
 	}
 }
 
-void Threads::CoroMutex_c::Unlock()
+void Threads::CoroSpinlock_c::Unlock()
 {
 	assert ( Threads::IsInsideCoroutine () );
 	m_bLocked.store ( false, std::memory_order_release );

@@ -27,7 +27,7 @@ static CSphString	g_sDataDir;
 static CSphString	g_sConfigPath;
 static bool			g_bConfigless = false;
 
-static CoroMutex_c	g_tSaveInProgress;
+static CoroSpinlock_c	g_tSaveInProgress;
 
 extern ISphBinlog * g_pBinlog;
 
@@ -764,7 +764,7 @@ bool SaveConfigInt ( CSphString & sError )
 	return Threads::CallCoroutineRes ( [&sError]
 	{
 
-	ScopedCoroMutex_t tSaving ( g_tSaveInProgress );
+	ScopedCoroSpinlock_t tSaving ( g_tSaveInProgress );
 
 	if ( !ReplicationIsEnabled() && !IsConfigless() )
 		return true;

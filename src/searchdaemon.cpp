@@ -1258,6 +1258,17 @@ void ServedIndex_c::Unlock() const
 	Release();
 }
 
+void ServedIndex_c::UpgradeLock () const
+{
+	if ( m_tLock.UpgradeLock () )
+		sphLogDebugvv( "Lock %p upgraded to w-lock", this );
+	else
+	{
+		sphLogDebug( "Upgrade of lock %p failed", this );
+		assert ( false );
+	}
+}
+
 ServedIndex_c::ServedIndex_c( const ServedDesc_t& tDesc )
 //	: m_tLock( ServedDesc_t::IsMutable( &tDesc ))
 {

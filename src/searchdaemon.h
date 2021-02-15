@@ -760,6 +760,7 @@ private:
 	const ServedDesc_t * ReadLock () const ACQUIRE_SHARED( m_tLock );
 	ServedDesc_t * WriteLock () const ACQUIRE( m_tLock );
 	void Unlock () const UNLOCK_FUNCTION( m_tLock );
+	void UpgradeLock() const RELEASE (m_tLock) ACQUIRE (m_tLock);
 
 protected:
 	// no manual deletion; lifetime managed by AddRef/Release()
@@ -812,6 +813,12 @@ public:
 
 	const ServedDesc_t * Ptr () const
 	{ return m_pCore; }
+
+	void UpgradeLock() const NO_THREAD_SAFETY_ANALYSIS
+	{
+		if ( m_pLock )
+			m_pLock->UpgradeLock();
+	}
 
 private:
 	const ServedDesc_t * m_pCore = nullptr;

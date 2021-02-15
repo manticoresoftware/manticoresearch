@@ -337,6 +337,7 @@ class CAPABILITY ( "mutex" ) CoroRWLock_c : public ISphNoncopyable
 
 public:
 	bool WriteLock() ACQUIRE();
+	bool UpgradeLock() RELEASE() ACQUIRE();
 	bool ReadLock() ACQUIRE_SHARED();
 	bool Unlock() UNLOCK_FUNCTION();
 };

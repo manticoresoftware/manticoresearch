@@ -307,6 +307,10 @@ Blended characters list. Optional, default is empty.
 
 Blended characters are indexed both as separators and valid characters. For instance, assume that `&` is configured as blended and `AT&T` occurs in an indexed document. Three different keywords will get indexed, namely `at&t`, treating blended characters as valid, plus `at` and `t`, treating them as separators.
 
+Blended characters should be used carefully:
+* since as soon as a character is defined as blended it is not a separator any more which can affect search. For example if you put a comma to the `blend_chars` and then search for `dog,cat` it will treat that as a single token `dog,cat` and if during indexation you **didn't** index `dog,cat` as `dog,cat`, but left only `dog cat` then it won't be matched.
+* therefore you need to make sure that this behaviour is desired and control it with help of another setting [blend_mode](../../Creating_an_index/NLP_and_tokenization/Low-level_tokenization.md#blend_mode)
+
 Positions for tokens obtained by replacing blended characters with whitespace are assigned as usual, so regular keywords will be indexed just as if there was no `blend_chars` specified at all. An additional token that mixes blended and non-blended characters will be put at the starting position. For instance, if `AT&T company` occurs in the very beginning of the text field, `at` will be given position 1, `t` position 2, `company` position 3, and `AT&T` will also be given position 1 ("blending" with the opening regular keyword). Thus, querying for either `AT&T` or just `AT` will match that document, and querying for `"AT T"` as a phrase will also match it. Last but not least, phrase query for `"AT&T company"` will *also* match it, despite the position.
 
 Blended characters can overlap with special characters used in query syntax (think of `T-Mobile` or `@twitter`). Where possible, query parser will automatically handle blended character as blended. For instance, `"hello @twitter"` within quotes (a phrase operator) would handle @-sign as blended, because @-syntax for field operator is not allowed within phrases. Otherwise, the character would be handled as an operator. So you might want to escape the keywords.
@@ -393,7 +397,7 @@ By default, tokens that mix blended and non-blended characters get indexed in th
 
 `blend_mode` directive adds flexibility to this indexing behavior. It takes a comma-separated list of options.
 
-Options specify token indexing variants. If multiple options are specified, multiple variants of the same token will be indexed. Regular keywords (resulting from that token by replacing blended with whitespace) are always be indexed.
+Options specify token indexing variants. If multiple options are specified, multiple variants of the same token will be indexed. Regular keywords (resulting from that token by replacing blended with a separator) are always indexed.
 
 * `trim_none` - Index the entire token
 * `trim_head` - Trim heading blended characters, and index the resulting token
@@ -404,6 +408,12 @@ Options specify token indexing variants. If multiple options are specified, mult
 Returning to the `@dude!` example above, setting `blend_mode = trim_head, trim_tail` will result in two tokens being indexed, `@dude` and `dude!`. In this particular example, `trim_both` would have no effect, because trimming both blended characters results in `dude` which is already indexed as a regular keyword. Indexing `@U.S.A.` with `trim_both` (and assuming that dot is blended two) would result in `U.S.A` being indexed. Last but not least, `skip_pure` enables you to fully ignore sequences of blended characters only. For example, `one @@@ two` would be indexed exactly as `one two`, and match that as a phrase. That is not the case by default because a fully blended token gets indexed and offsets the second keyword position.
 
 Default behavior is to index the entire token, equivalent to `blend_mode = trim_none`.
+
+Make sure you undestand that either of the blend modes limits your search, even the default one `trim_none` as with it and assuming `.` is a blended char:
+* `.dog.` will become `.dog. dog` during indexation
+* and you won't be able to find it by `dog.`. 
+
+The more modes you use, the higher the chance your keyword will match something. 
 
 <!-- request SQL -->
 

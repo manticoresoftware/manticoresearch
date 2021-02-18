@@ -44,3 +44,40 @@ OPTIMIZE INDEX rt;
 Query OK, 0 rows affected (0.00 sec)
 ```
 <!-- end -->
+
+
+### Optimizing clustered indexes
+
+Currently indexes cannot be optimized directly while are being part of a cluster.
+
+The following procedure should be used:
+
+
+On one of the nodes drop the index from the cluster:
+
+```sql
+mysql> ALTER CLUSTER mycluster DROP myindex;
+```
+
+Optimize the index:
+
+```sql
+mysql> OPTIMIZE INDEX myindex;
+```
+
+
+Add back the index to the cluster:
+
+```sql
+mysql> ALTER CLUSTER mycluster ADD myindex;
+```
+
+When the index is added back, the new files created by the optimize process will be replicated to the other nodes in the cluster. 
+Any changes made locally to the index on other nodes will be lost.
+
+Writes on the index should either be **stopped** or directed to the node were the optimize process is running. 
+Note that after the index is out of the cluster, writes must be made locally and the index name must not contain the cluster name as prefix (for SQL statements or cluster property for HTTP requests).
+As soon as the index is added back to the cluster, writes can be resumed. At this point the writes operations on the index must include (again) the cluster prefix (for SQL statements or cluster property for HTTP requests).
+Searches will be available as usual during the process on any of the nodes.
+
+In future releases it's expected to remove the need of this process and simply perform OPTIMIZE without the need to take the index out of the cluster.

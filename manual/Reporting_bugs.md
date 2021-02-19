@@ -56,6 +56,8 @@ nm -n indexer > indexer.sym
 
 Attach this file to a bug report along with backtrace. You should however ensure that the binary is not stripped. Our official binary packages should be fine. However, if you built Manticore manually from sources, do not run `strip` utility on that binary, and/or do not let your build/packaging system do that, otherwise the symbols will be lost completely.
 
+In some cases crashes can happen, because the index files have a corruption. **It's highly recommended to use [indextool --check](../Miscellaneous_tools.md#indextool) and add the output to the bug report you will create on Github.**
+
 ### Core dumps
 
 > A core dump is a file containing a process's address space (memory) when the process terminates unexpectedly.

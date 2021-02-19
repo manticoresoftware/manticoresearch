@@ -268,7 +268,7 @@ When assigning out-of-range values to 32-bit attributes, they will be trimmed to
 
 <!-- example partial JSON update -->
  
-`UPDATE` can be used to perform partial JSON updates on numeric data types or arrays of numeric data types. 
+`UPDATE` can be used to perform partial JSON updates on numeric data types or arrays of numeric data types. Just make sure you don't update an integer value with a float value as it will be rounded off.
 
 <!-- intro -->
 ##### SQL:

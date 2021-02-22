@@ -2,6 +2,8 @@
 
 Compiling from sources can be used for custom build configurations, such as disabling some features, adding new or testing patches, if you want to contribute. For example, you can compile from sources disabling embedded ICU, if you want to replace it with another one installed in your system with possibility to upgrade it independently from Manticore.
 
+In our CI/CD pipeline Manticore Search is compiled using [these docker images](https://github.com/manticoresoftware/manticoresearch/tree/master/dist/build_dockers), so instead of reading all the below you might want to master them and make the modifications that are important for you.
+
 ## Required tools 
 
 * C++ compiler

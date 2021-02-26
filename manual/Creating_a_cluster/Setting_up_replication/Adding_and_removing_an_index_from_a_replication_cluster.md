@@ -3,6 +3,8 @@
 <!-- example adding and removing an index from a replication cluster 1 -->
 `ALTER CLUSTER <cluster_name> ADD <index_name>` adds an existing local index to the cluster. The node which receives the ALTER query sends the index to the other nodes in the cluster. All the local indexes with the same name on the other nodes of the cluster get replaced with the new index.
 
+After the index is replicated, write statements can be performed on any node but index name must be prefixed with the cluster name like `INSERT INTO <clusterName>:<indexName>`.
+
 
 <!-- intro -->
 ##### SQL:
@@ -76,6 +78,8 @@ utilsApi.sql("mode=raw&query=ALTER CLUSTER click_query ADD clicks_daily_index");
 
 <!-- example adding and removing an index from a replication cluster 2 -->
 `ALTER CLUSTER <cluster_name> DROP <index_name>` forgets about a local index, i.e., it doesn't remove the index files on the nodes but just makes it an active non-replicated index.
+
+After an index is removed from a cluster, it becomes a 'local' index and write statements must use just the index name as `INSERT INTO <indexName>`, without the cluster prefix.
 
 
 <!-- intro -->

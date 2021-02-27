@@ -1439,6 +1439,32 @@ static bool SetIndexCluster ( const CSphString & sIndex, const CSphString & sClu
 	return true;
 }
 
+// lock or unlock write operations to disk chunks of index
+static bool ControlIndexWrite ( const CSphString & sIndex, bool bEnableWrite, CSphString & sError )
+{
+	ServedIndexRefPtr_c pServed = GetServed ( sIndex );
+	if ( !pServed )
+	{
+		sError.SetSprintf ( "unknown index '%s'", sIndex.cstr() );
+		return false;
+	}
+
+	ServedDescRPtr_c pDesc ( pServed );
+	if ( !ServedDesc_t::IsMutable ( pDesc ) )
+	{
+		sError.SetSprintf ( "wrong type of index '%s'", sIndex.cstr() );
+		return false;
+	}
+
+	auto * pIndex = (RtIndex_i*)pDesc->m_pIndex;
+	if ( bEnableWrite )
+		pIndex->EnableSave();
+	else
+		pIndex->ProhibitSave();
+
+	return true;
+}
+
 // callback for Galera apply_cb to parse replicated commands
 bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CSphString & sCluster, RtAccum_t & tAcc, CSphAttrUpdate & tUpd, CSphQuery & tQuery )
 {
@@ -2190,9 +2216,16 @@ static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes, co
 		}
 	}
 
+	bool bOk = true;
 	for ( const CSphString & sIndex : dIndexes )
-		if ( !SetIndexCluster ( sIndex, sCluster, sError ) )
-			return false;
+		bOk &= SetIndexCluster ( sIndex, sCluster, sError );
+
+	// need to enable back local index write
+	for ( const CSphString & sIndex : dIndexes )
+		bOk &= ControlIndexWrite ( sIndex, true, sError );
+
+	if ( !bOk )
+		return false;
 
 	// scope for modify cluster data
 	{

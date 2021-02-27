@@ -70,6 +70,31 @@ searchd
 <sphinxql d="1">DROP TABLE rt1</sphinxql>
 <sphinxql d="0">DROP TABLE rt2</sphinxql>
 <sphinxql d="1">DROP TABLE rt2</sphinxql>
+<sphinxql d="0">DELETE CLUSTER test</sphinxql>
+
+<!-- regression joiner hung whole cluster and joiner index for the existed local index -->
+
+<!-- create same table at both nodes -->
+<sphinxql d="0">create table rt1 (title text indexed, mva1 multi, gid int, j1 json) rt_mem_limit='128k'</sphinxql>
+<sphinxql d="1">create table rt1 (title text indexed, mva1 multi, gid int, j1 json) rt_mem_limit='128k'</sphinxql>
+
+<!-- create cluster with the table -->
+<sphinxql d="0">create cluster loc</sphinxql>
+<sphinxql d="0">ALTER CLUSTER loc ADD rt1</sphinxql>
+<sphinxql d="1" cluster_connect="0">join cluster loc at '%addr_connect%'</sphinxql>
+
+<sphinxql d="0">insert into loc:rt1 (id,title,mva1) values (10, 'test 10', (110,120,130))</sphinxql>
+
+<sphinxql d="1" system="wait-status" status="cluster_loc_last_committed" wait_value="2"/>
+<sphinxql d="1">SELECT * FROM loc:rt1</sphinxql>
+<sphinxql d="1">flush ramchunk rt1</sphinxql>
+<sphinxql d="1">SHOW INDEX rt1 STATUS LIKE 'disk_chunks'</sphinxql>
+
+<!-- cleanup -->
+<sphinxql d="0">ALTER CLUSTER loc DROP rt1</sphinxql>
+<sphinxql d="0">DELETE CLUSTER loc</sphinxql>
+<sphinxql d="0">DROP TABLE rt1</sphinxql>
+<sphinxql d="1">DROP TABLE rt1</sphinxql>
 
 </sphqueries>
 

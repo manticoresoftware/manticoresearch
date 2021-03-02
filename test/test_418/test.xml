@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>indexer error from tail of xml pipe</name>
+
+<requires>
+<non-rt/>
+</requires>
+
+<skip_indexer/>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test_1
+{
+    type = xmlpipe2
+    xmlpipe_command = cat <this_test/>/data1.xml
+}
+
+index test_1
+{
+    source = test_1
+    type = plain
+    path = <data_path/>/test_1
+    dict = keywords
+}
+</config>
+
+<custom_test><![CDATA[
+$results = [];
+global $g_locals;
+exec ( $g_locals['indexer']." -c ".testdir('config.conf')." test_1", $out, $retval );
+foreach ($out as $line) if (strstr($line, 'ERROR')) $results[] = $line;
+$results[] = "exit code: $retval";
+]]></custom_test>
+
+</test>

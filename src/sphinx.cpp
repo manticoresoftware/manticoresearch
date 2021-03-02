@@ -22219,7 +22219,7 @@ bool CSphSource_Document::IterateDocument ( bool & bEOF, CSphString & sError )
 	{
 		m_tState.m_dFields = NextDocument ( bEOF, sError );
 		if ( bEOF )
-			return true;
+			return ( sError.IsEmpty() );
 
 		if ( !m_tState.m_dFields )
 			return false;

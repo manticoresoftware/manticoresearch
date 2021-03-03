@@ -597,6 +597,7 @@ TEST_F ( RT, SendVsMerge )
 			break;
 
 		pIndex->AddDocument ( pSrc->GetFields (), pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
+		sError = ""; // need to reset error message
 		if ( pSrc->m_iDocsCounter==350 )
 		{
 			pIndex->Commit ( NULL, NULL );

@@ -4030,7 +4030,7 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		// get token
 		const char * pStart = m_pCur++;
 		if ( bBackQuote )
-			pStart++;
+			++pStart;
 
 		while ( sphIsAttr ( *m_pCur ) ) m_pCur++;
 
@@ -4227,12 +4227,12 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 				// for cases like jsoncol.keyname
 				if ( !bDigit )
 				{
-					m_pCur++;
+					++m_pCur;
 					while ( isspace ( *m_pCur ) )
-						m_pCur++;
+						++m_pCur;
 					iBeg = (int)( m_pCur-m_sExpr );
 					while ( sphIsAttr(*m_pCur) )
-						m_pCur++;
+						++m_pCur;
 				}
 
 				// return packed string after the dot
@@ -5007,13 +5007,13 @@ ISphExpr * ExprParser_t::CreateExistNode ( const ExprNode_t & tNode )
 	while ( m_sExpr[iNameStart]!='\0' && ( m_sExpr[iNameStart]=='\'' || m_sExpr[iNameStart]==' ' ) && iNameLen )
 	{
 		iNameStart++;
-		iNameLen--;
+		--iNameLen;
 	}
 	while ( m_sExpr[iNameStart+iNameLen-1]!='\0'
 		&& ( m_sExpr[iNameStart+iNameLen-1]=='\'' || m_sExpr[iNameStart+iNameLen-1]==' ' )
 		&& iNameLen )
 	{
-		iNameLen--;
+		--iNameLen;
 	}
 
 	if ( iNameLen<=0 )

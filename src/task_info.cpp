@@ -15,26 +15,31 @@ namespace { // static
 	const size_t NINFOS = 256;
 	RenderFnPtr pInfos[NINFOS] = { nullptr };
 	std::atomic<int> dCounters[NINFOS];
-	BYTE uFreeInfoSlot = 1; // 0-th slot is a mark of 'invalid'
+	std::atomic<BYTE> uFreeInfoSlot {1}; // 0-th slot is a mark of 'invalid'
 }
 
 BYTE RegisterRenderer ( RenderFnPtr pFunc )
 {
-	pInfos[uFreeInfoSlot] = pFunc;
-	if ( uFreeInfoSlot==1 ) // that is first one
-		for ( auto & i : dCounters )
-			i.store ( 0, std::memory_order_relaxed );
-	return uFreeInfoSlot++;
+	BYTE uRender = uFreeInfoSlot.fetch_add ( 1, std::memory_order_relaxed );
+	pInfos[uRender] = pFunc;
+	dCounters[uRender].store ( 0 );
+	return uRender;
 }
 
 void internal_myinfo::RefCountInc ( BYTE eType )
 {
+	if ( eType >= uFreeInfoSlot )
+		sphWarning ( "Wrong RefCountInc slot! type=%d, free slot = %d", eType, uFreeInfoSlot.load() );
+
 	assert ( eType<uFreeInfoSlot );
 	dCounters[eType].fetch_add ( 1, std::memory_order_relaxed );
 }
 
 void internal_myinfo::RefCountDec ( BYTE eType )
 {
+	if ( eType>=uFreeInfoSlot )
+		sphWarning ( "Wrong RefCountDec slot! type=%d, free slot = %d", eType, uFreeInfoSlot.load () );
+
 	assert ( eType<uFreeInfoSlot );
 	dCounters[eType].fetch_sub ( 1, std::memory_order_relaxed );
 }
@@ -48,8 +53,8 @@ int myinfo::Count ( BYTE eType )
 int myinfo::CountAll ()
 {
 	int iRes = 0;
-	for ( const auto & i : dCounters )
-		iRes += i.load ( std::memory_order_relaxed );
+	for ( int i = 1, iLast = uFreeInfoSlot.load ( std::memory_order_relaxed ); i<iLast; ++i )
+		iRes += dCounters[i].load ( std::memory_order_relaxed );
 	return iRes;
 }
 

@@ -92,6 +92,7 @@ ALPHA				[a-zA-Z_]+
 
 {ID}				{ YYSTOREBOUNDS; return TOK_IDENT; }
 `{ID}`				{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; return TOK_IDENT; }
+`{DIGIT}+{ID}`		{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; return TOK_IDENT; } // allow `123xyz` column names
 [a-zA-Z_0-9]+		{ YYSTOREBOUNDS; return TOK_BAD_NUMERIC; }
 
 {SPACE}+			{ ; }

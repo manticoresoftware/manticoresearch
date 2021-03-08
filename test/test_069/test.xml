@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>Backticks in ddl columns</name>
+<requires>
+	<force-rt/>
+</requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+	<sphinxql>
+		CREATE TABLE test (title text, `123abc` integer);
+		desc test;
+		insert into test (id,title,`123abc`) values (1,'bla',10),(2,'bla',20);
+		select * from test;
+		select `123abc` from test;
+		select 123abc from test;
+		select * from test where 123abc>10;
+		select * from test where `123abc`>10;
+		drop table test;
+
+		create table pq (`json` json) type='pq';
+		INSERT INTO pq (query, filters) VALUES ('', 'json.target==10');
+		call pq ('pq', '{"json":{"target":10}}', 1 as docs_json);
+		call pq ('pq', '{"json":{"target":20}}', 1 as docs_json);
+		drop table pq
+	</sphinxql>
+</queries>
+</test>

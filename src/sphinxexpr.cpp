@@ -3270,10 +3270,11 @@ class ExprParser_t;
 #endif
 
 
-/// known functions
-enum Func_e
+/// known operations, columns and functions
+enum Tokh_e : BYTE
 {
-	FUNC_NOW=0,
+	// functions came first
+	FUNC_NOW = 0,
 
 	FUNC_ABS,
 	FUNC_CEIL,
@@ -3322,7 +3323,6 @@ enum Func_e
 	FUNC_CONCAT,
 	FUNC_TO_STRING,
 	FUNC_RANKFACTORS,
-	FUNC_PACKEDFACTORS,
 	FUNC_FACTORS,
 	FUNC_BM25F,
 	FUNC_INTEGER,
@@ -3353,230 +3353,376 @@ enum Func_e
 
 	FUNC_SUBSTRING_INDEX,
 
-	FUNC_LAST_INSERT_ID
+	FUNC_LAST_INSERT_ID,
+
+	FUNC_FUNCS_COUNT, // insert any new functions ABOVE this one
+	TOKH_TOKH_OFFSET = FUNC_FUNCS_COUNT,
+
+	// general operations and operators
+	TOKH_COUNT = TOKH_TOKH_OFFSET,  // check m.b. column with name 'count' exists, and override, if so
+	TOKH_WEIGHT,
+	TOKH_GROUPBY,
+	TOKH_DISTINCT,
+	TOKH_AND,
+	TOKH_OR,
+	TOKH_NOT,
+	TOKH_DIV,
+	TOKH_MOD,
+	TOKH_FOR,
+	TOKH_IS,
+	TOKH_NULL,
+
+	TOKH_TOKH_COUNT,
+	TOKH_UNKNOWN = TOKH_TOKH_COUNT
 };
 
+// dHash2Op [i-FUNC_FUNCS_COUNT] returns 1:1 mapping from hash to the token
+const static int dHash2Op[TOKH_TOKH_COUNT-TOKH_TOKH_OFFSET] = { TOK_COUNT, TOK_WEIGHT,
+		TOK_GROUPBY, TOK_DISTINCT, TOK_AND, TOK_OR, TOK_NOT, TOK_DIV, TOK_MOD, TOK_FOR, TOK_IS, TOK_NULL, };
 
-struct FuncDesc_t
+using TokhKeyVal_t = std::pair<const char*, Tokh_e>;
+
+const static TokhKeyVal_t g_dKeyValTokens[] = // no order is necessary, but created hash may depend from it a bit
 {
-	const char *	m_sName;
-	int				m_iArgs;
-	Func_e			m_eFunc;
-	ESphAttr		m_eRet;
-};
+	// functions
+	{ "now",			FUNC_NOW			},
 
+	{ "abs",			FUNC_ABS			},
+	{ "ceil",			FUNC_CEIL			},
+	{ "floor",			FUNC_FLOOR			},
+	{ "sin",			FUNC_SIN			},
+	{ "cos",			FUNC_COS			},
+	{ "ln",				FUNC_LN				},
+	{ "log2",			FUNC_LOG2			},
+	{ "log10",			FUNC_LOG10			},
+	{ "exp",			FUNC_EXP			},
+	{ "sqrt",			FUNC_SQRT			},
+	{ "bigint",			FUNC_BIGINT			},	// type-enforcer special as-if-function
+	{ "sint",			FUNC_SINT			},	// type-enforcer special as-if-function
+	{ "crc32",			FUNC_CRC32			},
+	{ "fibonacci",		FUNC_FIBONACCI		},
 
-static FuncDesc_t g_dFuncs[] =
-{
-	{ "now",			0,	FUNC_NOW,			SPH_ATTR_INTEGER },
+	{ "day",			FUNC_DAY			},
+	{ "month",			FUNC_MONTH			},
+	{ "year",			FUNC_YEAR			},
+	{ "yearmonth",		FUNC_YEARMONTH		},
+	{ "yearmonthday",	FUNC_YEARMONTHDAY	},
+	{ "hour",			FUNC_HOUR			},
+	{ "minute",			FUNC_MINUTE			},
+	{ "second",			FUNC_SECOND			},
 
-	{ "abs",			1,	FUNC_ABS,			SPH_ATTR_NONE },
-	{ "ceil",			1,	FUNC_CEIL,			SPH_ATTR_BIGINT },
-	{ "floor",			1,	FUNC_FLOOR,			SPH_ATTR_BIGINT },
-	{ "sin",			1,	FUNC_SIN,			SPH_ATTR_FLOAT },
-	{ "cos",			1,	FUNC_COS,			SPH_ATTR_FLOAT },
-	{ "ln",				1,	FUNC_LN,			SPH_ATTR_FLOAT },
-	{ "log2",			1,	FUNC_LOG2,			SPH_ATTR_FLOAT },
-	{ "log10",			1,	FUNC_LOG10,			SPH_ATTR_FLOAT },
-	{ "exp",			1,	FUNC_EXP,			SPH_ATTR_FLOAT },
-	{ "sqrt",			1,	FUNC_SQRT,			SPH_ATTR_FLOAT },
-	{ "bigint",			1,	FUNC_BIGINT,		SPH_ATTR_BIGINT },	// type-enforcer special as-if-function
-	{ "sint",			1,	FUNC_SINT,			SPH_ATTR_BIGINT },	// type-enforcer special as-if-function
-	{ "crc32",			1,	FUNC_CRC32,			SPH_ATTR_INTEGER },
-	{ "fibonacci",		1,	FUNC_FIBONACCI,		SPH_ATTR_INTEGER },
+	{ "min",			FUNC_MIN			},
+	{ "max",			FUNC_MAX			},
+	{ "pow",			FUNC_POW			},
+	{ "idiv",			FUNC_IDIV			},
 
-	{ "day",			1,	FUNC_DAY,			SPH_ATTR_INTEGER },
-	{ "month",			1,	FUNC_MONTH,			SPH_ATTR_INTEGER },
-	{ "year",			1,	FUNC_YEAR,			SPH_ATTR_INTEGER },
-	{ "yearmonth",		1,	FUNC_YEARMONTH,		SPH_ATTR_INTEGER },
-	{ "yearmonthday",	1,	FUNC_YEARMONTHDAY,	SPH_ATTR_INTEGER },
-	{ "hour",			1,	FUNC_HOUR,			SPH_ATTR_INTEGER },
-	{ "minute",			1,	FUNC_MINUTE,		SPH_ATTR_INTEGER },
-	{ "second",			1,	FUNC_SECOND,		SPH_ATTR_INTEGER },
+	{ "if",				FUNC_IF				},
+	{ "madd",			FUNC_MADD			},
+	{ "mul3",			FUNC_MUL3			},
 
-	{ "min",			2,	FUNC_MIN,			SPH_ATTR_NONE },
-	{ "max",			2,	FUNC_MAX,			SPH_ATTR_NONE },
-	{ "pow",			2,	FUNC_POW,			SPH_ATTR_FLOAT },
-	{ "idiv",			2,	FUNC_IDIV,			SPH_ATTR_NONE },
+	{ "interval",		FUNC_INTERVAL		},
+	{ "in",				FUNC_IN				},
+	{ "bitdot",			FUNC_BITDOT			},
+	{ "remap",			FUNC_REMAP			},
 
-	{ "if",				3,	FUNC_IF,			SPH_ATTR_NONE },
-	{ "madd",			3,	FUNC_MADD,			SPH_ATTR_NONE },
-	{ "mul3",			3,	FUNC_MUL3,			SPH_ATTR_NONE },
+	{ "geodist",		FUNC_GEODIST		},
+	{ "exist",			FUNC_EXIST			},
+	{ "poly2d",			FUNC_POLY2D			},
+	{ "geopoly2d",		FUNC_GEOPOLY2D		},
+	{ "contains",		FUNC_CONTAINS		},
+	{ "zonespanlist",	FUNC_ZONESPANLIST	},
+	{ "concat",			FUNC_CONCAT			},
+	{ "to_string",		FUNC_TO_STRING		},
+	{ "rankfactors",	FUNC_RANKFACTORS	},
+	{ "packedfactors",	FUNC_FACTORS		},
+	{ "factors",		FUNC_FACTORS		}, // just an alias for PACKEDFACTORS()
+	{ "bm25f",			FUNC_BM25F			},
+	{ "integer",		FUNC_INTEGER		},
+	{ "double",			FUNC_DOUBLE			},
+	{ "length",			FUNC_LENGTH			},
+	{ "least",			FUNC_LEAST			},
+	{ "greatest",		FUNC_GREATEST		},
+	{ "uint",			FUNC_UINT			},
+	{ "query",			FUNC_QUERY			 },
 
-	{ "interval",		-2,	FUNC_INTERVAL,		SPH_ATTR_INTEGER },
-	{ "in",				-1, FUNC_IN,			SPH_ATTR_INTEGER },
-	{ "bitdot",			-1, FUNC_BITDOT,		SPH_ATTR_NONE },
-	{ "remap",			4,	FUNC_REMAP,			SPH_ATTR_INTEGER },
+	{ "curtime",		FUNC_CURTIME		 },
+	{ "utc_time",		FUNC_UTC_TIME		 },
+	{ "utc_timestamp",	FUNC_UTC_TIMESTAMP	 },
+	{ "timediff",		FUNC_TIMEDIFF		 },
+	{ "current_user",	FUNC_CURRENT_USER	 },
+	{ "connection_id",	FUNC_CONNECTION_ID	 },
+	{ "all",			FUNC_ALL			 },
+	{ "any",			FUNC_ANY			 },
+	{ "indexof",		FUNC_INDEXOF		 },
 
-	{ "geodist",		-4,	FUNC_GEODIST,		SPH_ATTR_FLOAT },
-	{ "exist",			2,	FUNC_EXIST,			SPH_ATTR_NONE },
-	{ "poly2d",			-1,	FUNC_POLY2D,		SPH_ATTR_POLY2D },
-	{ "geopoly2d",		-1,	FUNC_GEOPOLY2D,		SPH_ATTR_POLY2D },
-	{ "contains",		3,	FUNC_CONTAINS,		SPH_ATTR_INTEGER },
-	{ "zonespanlist",	0,	FUNC_ZONESPANLIST,	SPH_ATTR_STRINGPTR },
-	{ "concat",			-1,	FUNC_CONCAT,		SPH_ATTR_STRINGPTR },
-	{ "to_string",		1,	FUNC_TO_STRING,		SPH_ATTR_STRINGPTR },
-	{ "rankfactors",	0,	FUNC_RANKFACTORS,	SPH_ATTR_STRINGPTR },
-	{ "packedfactors",	0,	FUNC_PACKEDFACTORS, SPH_ATTR_FACTORS },
-	{ "factors",		0,	FUNC_FACTORS,		SPH_ATTR_FACTORS }, // just an alias for PACKEDFACTORS()
-	{ "bm25f",			-2,	FUNC_BM25F,			SPH_ATTR_FLOAT },
-	{ "integer",		1,	FUNC_INTEGER,		SPH_ATTR_BIGINT },
-	{ "double",			1,	FUNC_DOUBLE,		SPH_ATTR_FLOAT },
-	{ "length",			1,	FUNC_LENGTH,		SPH_ATTR_INTEGER },
-	{ "least",			1,	FUNC_LEAST,			SPH_ATTR_STRINGPTR },
-	{ "greatest",		1,	FUNC_GREATEST,		SPH_ATTR_STRINGPTR },
-	{ "uint",			1,	FUNC_UINT,			SPH_ATTR_INTEGER },
-	{ "query",			0,	FUNC_QUERY,			SPH_ATTR_STRINGPTR },
+	{ "min_top_weight",	FUNC_MIN_TOP_WEIGHT	 },
+	{ "min_top_sortval",FUNC_MIN_TOP_SORTVAL },
 
-	{ "curtime",		0,	FUNC_CURTIME,		SPH_ATTR_STRINGPTR },
-	{ "utc_time",		0,	FUNC_UTC_TIME,		SPH_ATTR_STRINGPTR },
-	{ "utc_timestamp",	0,	FUNC_UTC_TIMESTAMP,	SPH_ATTR_STRINGPTR },
-	{ "timediff",		2,	FUNC_TIMEDIFF,		SPH_ATTR_STRINGPTR },
-	{ "current_user",	0,	FUNC_CURRENT_USER,	SPH_ATTR_STRINGPTR },
-	{ "connection_id",	0,	FUNC_CONNECTION_ID,	SPH_ATTR_INTEGER },
-	{ "all",			-1,	FUNC_ALL,			SPH_ATTR_INTEGER },
-	{ "any",			-1,	FUNC_ANY,			SPH_ATTR_INTEGER },
-	{ "indexof",		-1,	FUNC_INDEXOF,		SPH_ATTR_BIGINT },
+	{ "atan2",			FUNC_ATAN2			 },
+	{ "rand",			FUNC_RAND			 },
 
-	{ "min_top_weight",		0,	FUNC_MIN_TOP_WEIGHT,	SPH_ATTR_INTEGER },
-	{ "min_top_sortval",	0,	FUNC_MIN_TOP_SORTVAL,	SPH_ATTR_FLOAT },
+	{ "regex",			FUNC_REGEX			 },
 
-	{ "atan2",			2,	FUNC_ATAN2,			SPH_ATTR_FLOAT },
-	{ "rand",			-1,	FUNC_RAND,			SPH_ATTR_FLOAT },
+	{ "substring_index",FUNC_SUBSTRING_INDEX },
 
-	{ "regex",			2,	FUNC_REGEX,			SPH_ATTR_INTEGER },
+	{ "last_insert_id",	FUNC_LAST_INSERT_ID	 },
 
-	{ "substring_index",	3,	FUNC_SUBSTRING_INDEX,	SPH_ATTR_STRINGPTR },
-
-	{ "last_insert_id",	0,	FUNC_LAST_INSERT_ID,	SPH_ATTR_STRINGPTR }
+	// other reserved (operators, columns, etc.)
+	{ "count",			TOKH_COUNT			},
+	{ "weight",			TOKH_WEIGHT			},
+	{ "groupby",		TOKH_GROUPBY		},
+	{ "distinct",		TOKH_DISTINCT		},
+	{ "and",			TOKH_AND			},
+	{ "or",				TOKH_OR				},
+	{ "not",			TOKH_NOT			},
+	{ "div",			TOKH_DIV			},
+	{ "mod",			TOKH_MOD			},
+	{ "for",			TOKH_FOR			},
+	{ "is",				TOKH_IS				},
+	{ "null",			TOKH_NULL			},
 };
 
 
 // helper to generate input data for gperf
-// run this, run gperf, that will generate a C program
+// change #if 0 to #if 1. Compile and run any code includes this file (for example, searchd or gmanticoretests)
+// grap output and place to file '1.p'. Execute command printed at the end of 1.p.
 // copy dAsso from asso_values in that C source
 // modify iHash switch according to that C source, if needed
-// copy dIndexes from the program output
+// compile and run the program and copy dIndexes from the output
+// to ignore case: in asso table values 65..90 (A..Z) copy from 97..122 (a..z), and change strcmp to strcasecmp
 #if 0
 int HashGen()
 {
 	printf ( "struct func { char *name; int num; };\n%%%%\n" );
-	for ( int i=0; i<int( sizeof ( g_dFuncs )/sizeof ( g_dFuncs[0] )); i++ )
-		printf ( "%s, %d\n", g_dFuncs[i].m_sName, i );
+	for ( int i=0; i<int( sizeof ( g_dKeyValTokens )/sizeof ( g_dKeyValTokens[0] )); ++i )
+	printf ( "%s, %d\n", g_dKeyValTokens[i].first, i );
 	printf ( "%%%%\n" );
 	printf ( "void main()\n" );
 	printf ( "{\n" );
 	printf ( "\tint i;\n" );
-	printf ( "\tfor ( i=0; i<=MAX_HASH_VALUE; i++ )\n" );
+	printf ( "\tfor ( i=0; i<=MAX_HASH_VALUE; ++i )\n" );
 	printf ( "\t\tprintf ( \"%%d,%%s\", wordlist[i].name[0] ? wordlist[i].num : -1, (i%%10)==9 ? \"\\n\" : \" \" );\n" );
 	printf ( "}\n" );
-	printf ( "// gperf -Gt 1.p > 1.c\n" );
-	exit ( 0 );
-	return 0;
+	printf ( "// gperf -Gt -tm5000 1.p > 1.c\n" );
+	exit(0);
+//	sphDie ( "INTERNAL: HashGen() finished. Grab result, then change #if 1 to #if 0 few lines above %s:%d", __FILE__, __LINE__ );
 }
 
 static int G_HASHGEN = HashGen();
 #endif
 
-
-// FIXME? can remove this by preprocessing the assoc table
-static inline BYTE FuncHashLower ( BYTE u )
+static Tokh_e TokHashLookup ( Str_t sKey )
 {
-	return ( u>='A' && u<='Z' ) ? ( u | 0x20 ) : u;
-}
+	assert ( sKey.first && sKey.second && sKey.first[0] );
 
-
-static int FuncHashLookup ( const char * sKey )
-{
-	assert ( sKey && sKey[0] );
-
-	static BYTE dAsso[] =
+	const static BYTE dAsso[] = // values 66..91 (A..Z) copy from 98..123 (a..z),
     {
-		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-		40, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-		124, 124, 124, 124, 124,   5, 124,  15,   5,   5,
-		65,   0,  85,  20,  50,   0, 124, 124,  20,   0,
-		10,   0,  40,  25,   5,  40,   0,  25, 124,  70,
-		60,  40,   0, 124, 124, 124, 124, 124, 124, 124,
-		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-		124, 124, 124, 124, 124, 124, 124, 124, 124, 124,
-		124, 124, 124, 124, 124, 124
+      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+      118, 118, 118, 118, 118, 118, 118, 118,  13, 118,
+       24,  14, 118, 118, 118, 118, 118, 118, 118, 118,
+      118, 118, 118, 118, 118,  44,  33,   9,   3,  16,
+       40,  51,  37,  27, 118, 118,   6,  15,   5,   7,
+       23,  24,  20,   4,   3,  31,  15,  45,  28,  22,
+       15, 118, 118, 118, 118,   8, 118,  44,  33,   9,
+        3,  16,  40,  51,  37,  27, 118, 118,   6,  15,
+        5,   7,  23,  24,  20,   4,   3,  31,  15,  45,
+       28,  22,  15, 118, 118, 118, 118, 118, 118, 118,
+      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+      118, 118, 118, 118, 118, 118, 118, 118, 118, 118,
+      118, 118, 118, 118, 118, 118
 	};
 
-	auto * s = (const BYTE*) sKey;
-	auto iHash = strlen ( sKey );
+	const static short dIndexes[] =
+	{
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, 6, 75, -1, 12, 4, 72, -1,
+		5, 80, 22, 40, 77, 28, 38, 68, 23, 74,
+		58, 10, 65, 79, 31, 39, 76, 62, 36, 29,
+		42, 63, 21, 51, 30, 32, 2, 13, 69, 43,
+		15, 35, 53, 73, 48, 1, 47, 46, 49, 59,
+		44, 57, 16, 33, 54, 9, 56, 52, 34, 27,
+		37, 41, 3, 26, 24, 8, 55, 61, 50, -1,
+		67, 70, -1, 78, -1, 7, -1, 71, -1, -1,
+		17, 60, 20, 11, -1, -1, -1, -1, 0, -1,
+		19, -1, 45, -1, 66, -1, -1, -1, -1, 14,
+		-1, -1, 18, -1, -1, -1, 25, 64,
+	};
+
+	auto * s = (const BYTE*) sKey.first;
+	auto iLen = sKey.second;
+	auto iHash = iLen;
+
 	switch ( iHash )
-	{
-		default:		iHash += dAsso [ FuncHashLower ( s[2] ) ];
-		case 2:			iHash += dAsso [ FuncHashLower ( s[1] ) ];
-		case 1:			iHash += dAsso [ FuncHashLower ( s[0] ) ];
-	}
-
-	static int dIndexes[] =
-	{
-		-1, -1, -1, -1, -1, -1, -1, -1, 56, 2,
-		33, 32, 31, 23, 41, 16, 21, 46, 30, -1,
-		13, 40, 39, 38, 62, 63, -1, 34, 58, 37,
-		66, 11, 6, 50, 65, 64, 48, -1, 54, 51,
-		49, 42, 53, 55, 7, 8, -1, 57, 5, 29,
-		45, 22, -1, 4, 12, 52, -1, -1, 59, 17,
-		-1, -1, -1, 1, 18, 35, 36, 19, 60, 26,
-		-1, -1, -1, 43, 10, -1, -1, -1, 24, 20,
-		-1, -1, 61, 0, 28, 67, -1, 27, -1, 68,
-		-1, -1, -1, -1, -1, -1, 47, -1, -1, 14,
-		-1, -1, -1, 9, -1, -1, -1, -1, -1, -1,
-		3, -1, 44, 25, -1, -1, -1, -1, -1, -1,
-		-1, -1, -1, 15,
-	};
+    {
+      default:
+        iHash += dAsso[(unsigned char) s[2]];
+      /*FALLTHROUGH*/
+      case 2:
+      case 1:
+        iHash += dAsso[(unsigned char) s[0]];
+        break;
+    }
+	iHash += dAsso[(unsigned char) s[iLen-1]];
 
 	if ( iHash>=(int)(sizeof(dIndexes)/sizeof(dIndexes[0])) )
-		return -1;
+		return TOKH_UNKNOWN;
 
-	int iFunc = dIndexes[iHash];
-	if ( iFunc>=0 && strcasecmp ( g_dFuncs[iFunc].m_sName, sKey )==0 )
-		return iFunc;
-	return -1;
+	auto iFunc = dIndexes[iHash];
+	if ( iFunc>=0 && strncasecmp ( g_dKeyValTokens[iFunc].first, sKey.first, iLen )==0 )
+		return g_dKeyValTokens[iFunc].second;
+	return TOKH_UNKNOWN;
 }
 
-
-static int FuncHashCheck()
+static int TokHashCheck()
 {
-	for ( int i=0; i<(int)(sizeof(g_dFuncs)/sizeof(g_dFuncs[0])); i++ )
+	for ( const auto & kv : g_dKeyValTokens )
 	{
-		CSphString sKey ( g_dFuncs[i].m_sName );
-		sKey.ToLower();
-		if ( FuncHashLookup ( sKey.cstr() )!=i )
-			sphDie ( "INTERNAL ERROR: lookup for %s() failed, rebuild function hash", sKey.cstr() );
-		sKey.ToUpper();
-		if ( FuncHashLookup ( sKey.cstr() )!=i )
-			sphDie ( "INTERNAL ERROR: lookup for %s() failed, rebuild function hash", sKey.cstr() );
-		if ( g_dFuncs[i].m_eFunc!=i )
-			sphDie ( "INTERNAL ERROR: function hash entry %s() at index %d maps to Func_e entry %d, sync Func_e and g_dFuncs",
-				sKey.cstr(), i, g_dFuncs[i].m_eFunc );
+		CSphString sKey ( kv.first );
+		sKey.ToLower ();
+		Str_t sKeyStr { sKey.cstr (), sKey.Length () };
+		auto uHash = TokHashLookup ( sKeyStr );
+		if ( uHash!=kv.second )
+			sphDie ( "INTERNAL ERROR: lookup for %s failed, got %d, expected %d, rebuild token hash", sKey.cstr ()
+					 , uHash, kv.second );
+		sKey.ToUpper ();
+		uHash = TokHashLookup ( sKeyStr );
+		if ( uHash!=kv.second )
+			sphDie ( "INTERNAL ERROR: lookup for %s failed, got %d, expected %d, rebuild token hash", sKey.cstr ()
+					 , uHash, kv.second );
 	}
-	if ( FuncHashLookup("A")!=-1 )
-		sphDie ( "INTERNAL ERROR: lookup for A() succeeded, rebuild function hash" );
+	if ( TokHashLookup ( { "A", 1 } )!=TOKH_UNKNOWN )
+		sphDie ( "INTERNAL ERROR: lookup for A() succeeded, rebuild token hash" );
 	return 1;
 }
 
-static int VARIABLE_IS_NOT_USED G_FUNC_HASH_CHECK = FuncHashCheck();
+static int VARIABLE_IS_NOT_USED G_FUNC_HASH_CHECK = TokHashCheck();
+
+// additional functions traits
+
+struct FuncDesc_t
+{
+	//const char *	m_sName;
+	int				m_iArgs;
+	int				m_iNodeType; // usually TOK_FUNC, but sometimes not
+	//	Tokh_e			m_eFunc;
+	ESphAttr		m_eRet;
+};
+
+static FuncDesc_t g_dFuncs[FUNC_FUNCS_COUNT] = // Keep same order as in Tokh_e
+{
+	{ /*"now",			*/		0,	TOK_FUNC,		/*FUNC_NOW,				*/	SPH_ATTR_INTEGER },
+
+	{ /*"abs",			*/		1,	TOK_FUNC,		/*FUNC_ABS,				*/	SPH_ATTR_NONE },
+	{ /*"ceil",			*/		1,	TOK_FUNC,		/*FUNC_CEIL,			*/	SPH_ATTR_BIGINT },
+	{ /*"floor",		*/		1,	TOK_FUNC,		/*FUNC_FLOOR,			*/	SPH_ATTR_BIGINT },
+	{ /*"sin",			*/		1,	TOK_FUNC,		/*FUNC_SIN,				*/	SPH_ATTR_FLOAT },
+	{ /*"cos",			*/		1,	TOK_FUNC,		/*FUNC_COS,				*/	SPH_ATTR_FLOAT },
+	{ /*"ln",			*/		1,	TOK_FUNC,		/*FUNC_LN,				*/	SPH_ATTR_FLOAT },
+	{ /*"log2",			*/		1,	TOK_FUNC,		/*FUNC_LOG2,			*/	SPH_ATTR_FLOAT },
+	{ /*"log10",		*/		1,	TOK_FUNC,		/*FUNC_LOG10,			*/	SPH_ATTR_FLOAT },
+	{ /*"exp",			*/		1,	TOK_FUNC,		/*FUNC_EXP,				*/	SPH_ATTR_FLOAT },
+	{ /*"sqrt",			*/		1,	TOK_FUNC,		/*FUNC_SQRT,			*/	SPH_ATTR_FLOAT },
+	{ /*"bigint",		*/		1,	TOK_FUNC,		/*FUNC_BIGINT,			*/	SPH_ATTR_BIGINT },	// type-enforcer special as-if-function
+	{ /*"sint",			*/		1,	TOK_FUNC,		/*FUNC_SINT,			*/	SPH_ATTR_BIGINT },	// type-enforcer special as-if-function
+	{ /*"crc32",		*/		1,	TOK_FUNC,		/*FUNC_CRC32,			*/	SPH_ATTR_INTEGER },
+	{ /*"fibonacci",	*/		1,	TOK_FUNC,		/*FUNC_FIBONACCI,		*/	SPH_ATTR_INTEGER },
+
+	{ /*"day",			*/		1,	TOK_FUNC,		/*FUNC_DAY,				*/	SPH_ATTR_INTEGER },
+	{ /*"month",		*/		1,	TOK_FUNC,		/*FUNC_MONTH,			*/	SPH_ATTR_INTEGER },
+	{ /*"year",			*/		1,	TOK_FUNC,		/*FUNC_YEAR,			*/	SPH_ATTR_INTEGER },
+	{ /*"yearmonth",	*/		1,	TOK_FUNC,		/*FUNC_YEARMONTH,		*/	SPH_ATTR_INTEGER },
+	{ /*"yearmonthday",	*/		1,	TOK_FUNC,		/*FUNC_YEARMONTHDAY,	*/	SPH_ATTR_INTEGER },
+	{ /*"hour",			*/		1,	TOK_FUNC,		/*FUNC_HOUR,			*/	SPH_ATTR_INTEGER },
+	{ /*"minute",		*/		1,	TOK_FUNC,		/*FUNC_MINUTE,			*/	SPH_ATTR_INTEGER },
+	{ /*"second",		*/		1,	TOK_FUNC,		/*FUNC_SECOND,			*/	SPH_ATTR_INTEGER },
+
+	{ /*"min",			*/		2,	TOK_FUNC,		/*FUNC_MIN,				*/	SPH_ATTR_NONE },
+	{ /*"max",			*/		2,	TOK_FUNC,		/*FUNC_MAX,				*/	SPH_ATTR_NONE },
+	{ /*"pow",			*/		2,	TOK_FUNC,		/*FUNC_POW,				*/	SPH_ATTR_FLOAT },
+	{ /*"idiv",			*/		2,	TOK_FUNC,		/*FUNC_IDIV,			*/	SPH_ATTR_NONE },
+
+	{ /*"if",			*/		3,	TOK_FUNC,		/*FUNC_IF,				*/	SPH_ATTR_NONE },
+	{ /*"madd",			*/		3,	TOK_FUNC,		/*FUNC_MADD,			*/	SPH_ATTR_NONE },
+	{ /*"mul3",			*/		3,	TOK_FUNC,		/*FUNC_MUL3,			*/	SPH_ATTR_NONE },
+
+	{ /*"interval",		*/		-2,	TOK_FUNC,		/*FUNC_INTERVAL,		*/	SPH_ATTR_INTEGER },
+	{ /*"in",			*/		-1,	TOK_FUNC_IN,	/*FUNC_IN,				*/	SPH_ATTR_INTEGER },
+	{ /*"bitdot",		*/		-1, TOK_FUNC,		/*FUNC_BITDOT,			*/	SPH_ATTR_NONE },
+	{ /*"remap",		*/		4,	TOK_FUNC_REMAP,	/*FUNC_REMAP,			*/	SPH_ATTR_INTEGER },
+
+	{ /*"geodist",		*/		-4,	TOK_FUNC,		/*FUNC_GEODIST,			*/	SPH_ATTR_FLOAT },
+	{ /*"exist",		*/		2,	TOK_FUNC,		/*FUNC_EXIST,			*/	SPH_ATTR_NONE },
+	{ /*"poly2d",		*/		-1,	TOK_FUNC,		/*FUNC_POLY2D,			*/	SPH_ATTR_POLY2D },
+	{ /*"geopoly2d",	*/		-1,	TOK_FUNC,		/*FUNC_GEOPOLY2D,		*/	SPH_ATTR_POLY2D },
+	{ /*"contains",		*/		3,	TOK_FUNC,		/*FUNC_CONTAINS,		*/	SPH_ATTR_INTEGER },
+	{ /*"zonespanlist",	*/		0,	TOK_FUNC,		/*FUNC_ZONESPANLIST,	*/	SPH_ATTR_STRINGPTR },
+	{ /*"concat",		*/		-1,	TOK_FUNC,		/*FUNC_CONCAT,			*/	SPH_ATTR_STRINGPTR },
+	{ /*"to_string",	*/		1,	TOK_FUNC,		/*FUNC_TO_STRING,		*/	SPH_ATTR_STRINGPTR },
+	{ /*"rankfactors",	*/		0,	TOK_FUNC,		/*FUNC_RANKFACTORS,		*/	SPH_ATTR_STRINGPTR },
+	{ /*"packedfactors",*/		0,	TOK_FUNC_PF,	/*FUNC_FACTORS, 		*/	SPH_ATTR_FACTORS }, // and also 'factors'
+	{ /*"bm25f",		*/		-2,	TOK_FUNC,		/*FUNC_BM25F,			*/	SPH_ATTR_FLOAT },
+	{ /*"integer",		*/		1,	TOK_FUNC,		/*FUNC_INTEGER,			*/	SPH_ATTR_BIGINT },
+	{ /*"double",		*/		1,	TOK_FUNC,		/*FUNC_DOUBLE,			*/	SPH_ATTR_FLOAT },
+	{ /*"length",		*/		1,	TOK_FUNC,		/*FUNC_LENGTH,			*/	SPH_ATTR_INTEGER },
+	{ /*"least",		*/		1,	TOK_FUNC,		/*FUNC_LEAST,			*/	SPH_ATTR_STRINGPTR },
+	{ /*"greatest",		*/		1,	TOK_FUNC,		/*FUNC_GREATEST,		*/	SPH_ATTR_STRINGPTR },
+	{ /*"uint",			*/		1,	TOK_FUNC,		/*FUNC_UINT,			*/	SPH_ATTR_INTEGER },
+	{ /*"query",		*/		0,	TOK_FUNC,		/*FUNC_QUERY,			*/	SPH_ATTR_STRINGPTR },
+
+	{ /*"curtime",		*/		0,	TOK_FUNC,		/*FUNC_CURTIME,			*/	SPH_ATTR_STRINGPTR },
+	{ /*"utc_time",		*/		0,	TOK_FUNC,		/*FUNC_UTC_TIME,		*/	SPH_ATTR_STRINGPTR },
+	{ /*"utc_timestamp",*/		0,	TOK_FUNC,		/*FUNC_UTC_TIMESTAMP,	*/	SPH_ATTR_STRINGPTR },
+	{ /*"timediff",		*/		2,	TOK_FUNC,		/*FUNC_TIMEDIFF,		*/	SPH_ATTR_STRINGPTR },
+	{ /*"current_user",	*/		0,	TOK_FUNC,		/*FUNC_CURRENT_USER,	*/	SPH_ATTR_STRINGPTR },
+	{ /*"connection_id",*/		0,	TOK_FUNC,		/*FUNC_CONNECTION_ID,	*/	SPH_ATTR_INTEGER },
+	{ /*"all",			*/		-1,	TOK_FUNC_JA,	/*FUNC_ALL,				*/	SPH_ATTR_INTEGER },
+	{ /*"any",			*/		-1,	TOK_FUNC_JA,	/*FUNC_ANY,				*/	SPH_ATTR_INTEGER },
+	{ /*"indexof",		*/		-1,	TOK_FUNC_JA,	/*FUNC_INDEXOF,			*/	SPH_ATTR_BIGINT },
+
+	{ /*"min_top_weight",*/		0,	TOK_FUNC,		/*FUNC_MIN_TOP_WEIGHT,	*/	SPH_ATTR_INTEGER },
+	{ /*"min_top_sortval",*/	0,	TOK_FUNC,		/*FUNC_MIN_TOP_SORTVAL,	*/	SPH_ATTR_FLOAT },
+
+	{ /*"atan2",		*/		2,	TOK_FUNC,		/*FUNC_ATAN2,			*/	SPH_ATTR_FLOAT },
+	{ /*"rand",		*/			-1,	TOK_FUNC_RAND,	/*FUNC_RAND,			*/	SPH_ATTR_FLOAT },
+
+	{  /*"regex",		*/		2,	TOK_FUNC,		/*FUNC_REGEX,			*/	SPH_ATTR_INTEGER },
+
+	{  /*"substring_index",*/	3,	TOK_FUNC,		/*FUNC_SUBSTRING_INDEX,	*/	SPH_ATTR_STRINGPTR },
+
+	{  /*"last_insert_id",*/	0,	TOK_FUNC,		/*FUNC_LAST_INSERT_ID,	*/	SPH_ATTR_STRINGPTR }
+};
+
+
+static inline const char* FuncNameByHash ( int iFunc )
+{
+	if ( iFunc<0 || iFunc >=FUNC_FUNCS_COUNT )
+		return ( "unknown");
+
+	static const char * dNames[FUNC_FUNCS_COUNT] =
+		{ "now", "abs", "ceil", "floor", "sin", "cos", "ln", "log2", "log10", "exp", "sqrt", "bigint", "sint"
+		, "crc32", "fibonacci", "day", "month", "year", "yearmonth", "yearmonthday", "hour", "minute"
+		, "second", "min", "max", "pow", "idiv", "if", "madd", "mul3", "interval", "in", "bitdot", "remap"
+		, "geodist", "exist", "poly2d", "geopoly2d", "contains", "zonespanlist", "concat", "to_string"
+		, "rankfactors", "packedfactors", "bm25f", "integer", "double", "length", "least", "greatest"
+		, "uint", "query", "curtime", "utc_time", "utc_timestamp", "timediff", "current_user"
+		, "connection_id", "all", "any", "indexof", "min_top_weight", "min_top_sortval", "atan2", "rand"
+		, "regex", "substring_index", "last_insert_id", };
+
+	return dNames[iFunc];
+}
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -3626,7 +3772,7 @@ public:
 	CSphVector<int64_t>		m_dInts;		///< dword/int64 storage
 	CSphVector<float>		m_dFloats;		///< float storage
 	ESphAttr				m_eRetType { SPH_ATTR_INTEGER };		///< SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_STRING, or SPH_ATTR_FLOAT
-	CSphString				m_sExpr;		///< m_sExpr copy for TOK_CONST_STRING evaluation
+	Str_t					m_sExpr;					///< pointer to original whole expr. Not owned.
 	bool					m_bPackedStrings = false; // packed string are offset:len from m_dInts over m_sExpr
 
 public:
@@ -3715,6 +3861,8 @@ struct StackNode_t
 /// expression parser
 class ExprParser_t
 {
+	friend int				yy1lex ( YYSTYPE * lvalp, void * yyscanner, ExprParser_t * pParser );
+	friend int				yy1lex ( YYSTYPE *, ExprParser_t * );
 	friend int				yylex ( YYSTYPE * lvalp, ExprParser_t * pParser );
 	friend int				yyparse ( ExprParser_t * pParser );
 	friend void				yyerror ( ExprParser_t * pParser, const char * sMessage );
@@ -3729,7 +3877,7 @@ public:
 	}
 
 							~ExprParser_t ();
-	ISphExpr *				Parse ( const char * sExpr, const ISphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError );
+	ISphExpr *				Parse ( const char * szExpr, const ISphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError );
 
 protected:
 	int						m_iParsed = 0;	///< filled by yyparse() at the very end
@@ -3775,9 +3923,8 @@ protected:
 	int						AddNodeIdent ( const char * sKey, int iLeft );
 
 private:
-	const char *			m_sExpr = nullptr;
-	const char *			m_pCur = nullptr;
-	const char *			m_pLastTokenStart = nullptr;
+	void *					m_pScanner = nullptr;
+	Str_t					m_sExpr;
 	const ISphSchema *		m_pSchema = nullptr;
 	CSphVector<ExprNode_t>	m_dNodes;
 	StrVec_t				m_dUservars;
@@ -3795,6 +3942,11 @@ public:
 
 private:
 	int						GetToken ( YYSTYPE * lvalp );
+	bool					CheckGeodist ( YYSTYPE * lvalp );
+	void					AddUservar (  const char * sBegin, int iLen, YYSTYPE * lvalp );
+	int						ProcessRawToken (  const char * sBegin, int iLen, YYSTYPE * lvalp );
+	int						ProcessAtRawToken (  const char * sBegin, int iLen, YYSTYPE * lvalp );
+	int						ErrLex ( const char * sTemplate, ...); // issue lexer error
 
 	void					GatherArgTypes ( int iNode, CSphVector<int> & dTypes );
 	void					GatherArgNodes ( int iNode, CSphVector<int> & dNodes );
@@ -3805,6 +3957,7 @@ private:
 	bool					CheckForConstSet ( int iArgsNode, int iSkip );
 	int						ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp );
 	static int				ParseField ( int iField, const char* sTok, YYSTYPE * lvalp );
+	int						ParseAttrsAndFields ( const char * szTok, YYSTYPE * lvalp );
 
 	template < typename T >
 	void					WalkTree ( int iRoot, T & FUNCTOR );
@@ -3838,39 +3991,6 @@ private:
 };
 
 //////////////////////////////////////////////////////////////////////////
-
-/// parse that numeric constant (e.g. "123", ".03")
-static int ParseNumeric ( YYSTYPE * lvalp, const char ** ppStr )
-{
-	assert ( lvalp && ppStr && *ppStr );
-
-	// try float route
-	char * pEnd = nullptr;
-	auto fRes = (float) strtod ( *ppStr, &pEnd );
-
-	// try int route
-	uint64_t uRes = 0; // unsigned overflow is better than signed overflow
-	bool bInt = true;
-	for ( const char * p=(*ppStr); p<pEnd; p++ && bInt )
-	{
-		if ( isdigit(*p) )
-			uRes = uRes*10 + (int)( (*p)-'0' ); // FIXME! missing overflow check, missing octal/hex handling
-		else
-			bInt = false;
-	}
-
-	// choose your destiny
-	*ppStr = pEnd;
-	if ( bInt )
-	{
-		lvalp->iConst = (int64_t)uRes;
-		return TOK_CONST_INT;
-	} else
-	{
-		lvalp->fConst = fRes;
-		return TOK_CONST_FLOAT;
-	}
-}
 
 // used to store in 8 bytes in Bison lvalp variable
 static uint64_t sphPackAttrLocator ( const CSphAttrLocator & tLoc, int iLocator )
@@ -3943,6 +4063,15 @@ static int GetConstStrLength ( const ExprNode_t & tNode )
 	return GetConstStrLength ( tNode.m_iConst );
 }
 
+/// format error
+int ExprParser_t::ErrLex ( const char * sTemplate, ... )
+{
+	va_list ap;
+	va_start ( ap, sTemplate );
+	m_sLexerError.SetSprintfVa ( sTemplate, ap );
+	va_end ( ap );
+	return -1;
+}
 
 int ExprParser_t::ParseAttr ( int iAttr, const char* sTok, YYSTYPE * lvalp )
 {
@@ -4005,270 +4134,144 @@ int ExprParser_t::ParseField ( int iField, const char* sTok, YYSTYPE * lvalp )
 	return TOK_FIELD;
 }
 
-
-/// a lexer of my own
-/// returns token id and fills lvalp on success
-/// returns -1 and fills sError on failure
-int ExprParser_t::GetToken ( YYSTYPE * lvalp )
+bool ExprParser_t::CheckGeodist ( YYSTYPE * lvalp )
 {
-	// skip whitespace, check eof
-	while ( isspace ( *m_pCur ) ) m_pCur++;
-	m_pLastTokenStart = m_pCur;
-	if ( !*m_pCur ) return 0;
+	int iGeodist = m_pSchema->GetAttrIndex ( "@geodist" );
+	if ( iGeodist==-1 )
+		return false;
+	const CSphAttrLocator & tLoc = m_pSchema->GetAttr ( iGeodist ).m_tLocator;
+	lvalp->iAttrLocator = sphPackAttrLocator ( tLoc, iGeodist );
+	return true;
+}
 
-	// check for constant
-	if ( isdigit ( m_pCur[0] ) )
-		return ParseNumeric ( lvalp, &m_pCur );
+void ExprParser_t::AddUservar ( const char* sBegin, int iLen, YYSTYPE * lvalp )
+{
+	lvalp->iNode = m_dUservars.GetLength ();
+	CSphString sTok { sBegin, iLen };
+	m_dUservars.Add ( sTok );
+}
 
-	bool bBackQuote = m_pCur[0]=='`';
+int ExprParser_t::ParseAttrsAndFields ( const char * szTok, YYSTYPE * lvalp )
+{
+	// check for attribute
+	int iCol = m_pSchema->GetAttrIndex ( szTok );
+	if ( iCol>=0 )
+		return ParseAttr ( iCol, szTok, lvalp );
 
-	// check for field, function, or magic name
-	if ( sphIsAttr ( m_pCur[0] )
-		|| ( m_pCur[0]=='@' && sphIsAttr ( m_pCur[1] ) && !isdigit ( m_pCur[1] ) )
-		|| ( bBackQuote && sphIsAttr ( m_pCur[1] ) ) )
-	{
-		// get token
-		const char * pStart = m_pCur++;
-		if ( bBackQuote )
-			++pStart;
-
-		while ( sphIsAttr ( *m_pCur ) ) m_pCur++;
-
-		CSphString sTok;
-		sTok.SetBinary ( pStart, m_pCur-pStart );
-		CSphString sTokMixedCase = sTok;
-		sTok.ToLower ();
-
-		if ( bBackQuote )
-		{
-			if ( *m_pCur!='`' )
-			{
-				m_sLexerError.SetSprintf ( "expected '`' near '%s'", m_pCur );
-				return -1;
-			}
-
-			m_pCur++;
-		}
-
-		// check for magic name
-		if ( sTok=="@id" )
-			sTok = "id";
-
-		if ( sTok=="@weight" )		return TOK_ATWEIGHT;
-		if ( sTok=="weight" )		return TOK_WEIGHT;
-		if ( sTok=="groupby" )		return TOK_GROUPBY;
-		if ( sTok=="distinct" )		return TOK_DISTINCT;
-		if ( sTok=="@geodist" )
-		{
-			int iGeodist = m_pSchema->GetAttrIndex("@geodist");
-			if ( iGeodist==-1 )
-			{
-				m_sLexerError = "geoanchor is not set, @geodist expression unavailable";
-				return -1;
-			}
-			const CSphAttrLocator & tLoc = m_pSchema->GetAttr ( iGeodist ).m_tLocator;
-			lvalp->iAttrLocator = sphPackAttrLocator ( tLoc, iGeodist );
-			return TOK_ATTR_FLOAT;
-		}
-
-		// check for uservar
-		if ( sTok.cstr()[0]=='@' )
-		{
-			lvalp->iNode = m_dUservars.GetLength();
-			m_dUservars.Add ( sTok );
-			return TOK_USERVAR;
-		}
-
-		// check for keyword
-		if ( sTok=="and" )		{ return TOK_AND; }
-		if ( sTok=="or" )		{ return TOK_OR; }
-		if ( sTok=="not" )		{ return TOK_NOT; }
-		if ( sTok=="div" )		{ return TOK_DIV; }
-		if ( sTok=="mod" )		{ return TOK_MOD; }
-		if ( sTok=="for" )		{ return TOK_FOR; }
-		if ( sTok=="is" )		{ return TOK_IS; }
-		if ( sTok=="null" )		{ return TOK_NULL; }
-
-		// in case someone used 'count' as a name for an attribute
-		if ( sTok=="count" )
-		{
-			int iAttr = m_pSchema->GetAttrIndex ( "count" );
-			if ( iAttr>=0 )
-				ParseAttr ( iAttr, sTok.cstr(), lvalp );
-			return TOK_COUNT;
-		}
-
-		// check for attribute
-		int iAttr = m_pSchema->GetAttrIndex ( sTok.cstr() );
-		if ( iAttr>=0 )
-			return ParseAttr ( iAttr, sTok.cstr(), lvalp );
-
-		// check for field
-		int iField = m_pSchema->GetFieldIndex ( sTok.cstr() );
-		if ( iField>=0 )
-			return ParseField ( iField, sTok.cstr(), lvalp );
-
-		// hook might replace built-in function
-		int iHookFunc = -1;
-		if ( m_pHook )
-			iHookFunc = m_pHook->IsKnownFunc ( sTok.cstr() );
-
-		// check for function
-		int iFunc = FuncHashLookup ( sTok.cstr() );
-		if ( iFunc>=0 && iHookFunc==-1 )
-		{
-			assert ( !strcasecmp ( g_dFuncs[iFunc].m_sName, sTok.cstr() ) );
-			lvalp->iFunc = iFunc;
-			switch ( iFunc )
-			{
-			case FUNC_IN: return TOK_FUNC_IN;
-			case FUNC_REMAP : return TOK_FUNC_REMAP;
-			case FUNC_PACKEDFACTORS:
-			case FUNC_FACTORS: return TOK_FUNC_PF;
-			case FUNC_RAND: return TOK_FUNC_RAND;
-			case FUNC_ALL:
-			case FUNC_ANY:
-			case FUNC_INDEXOF: return TOK_FUNC_JA; // json aggrs
-			default: return TOK_FUNC;
-			}
-		}
-
-		// ask hook
-		if ( m_pHook )
-		{
-			int iID = m_pHook->IsKnownIdent ( sTok.cstr() );
-			if ( iID>=0 )
-			{
-				lvalp->iNode = iID;
-				return TOK_HOOK_IDENT;
-			}
-
-			iID = iHookFunc;
-			if ( iID>=0 )
-			{
-				lvalp->iNode = iID;
-				return TOK_HOOK_FUNC;
-			}
-		}
-
-		// check for UDF
-		auto * pUdf = (const PluginUDF_c *) sphPluginGet ( PLUGIN_FUNCTION, sTok.cstr() );
-		if ( pUdf )
-		{
-			lvalp->iNode = m_dUdfCalls.GetLength();
-			m_dUdfCalls.Add ( new UdfCall_t() );
-			m_dUdfCalls.Last()->m_pUdf = pUdf;
-			return TOK_UDF;
-		}
-
-		// arbitrary identifier, then
-		m_dIdents.Add ( sTokMixedCase.Leak() );
-		lvalp->sIdent = m_dIdents.Last();
-		return TOK_IDENT;
-	}
-
-	// check for known operators, then
-	switch ( *m_pCur )
-	{
-		case '+':
-		case '-':
-		case '*':
-		case '/':
-		case '(':
-		case ')':
-		case ',':
-		case '&':
-		case '|':
-		case '%':
-		case '{':
-		case '}':
-		case '[':
-		case ']':
-		case '`':
-			return *m_pCur++;
-
-		case '<':
-			m_pCur++;
-			if ( *m_pCur=='>' ) { m_pCur++; return TOK_NE; }
-			if ( *m_pCur=='=' ) { m_pCur++; return TOK_LTE; }
-			return '<';
-
-		case '>':
-			m_pCur++;
-			if ( *m_pCur=='=' ) { m_pCur++; return TOK_GTE; }
-			return '>';
-
-		case '=':
-			m_pCur++;
-			if ( *m_pCur=='=' ) m_pCur++;
-			return TOK_EQ;
-
-		// special case for leading dots (float values without leading zero, JSON key names, etc)
-		case '.':
-			{
-				auto iBeg = (int)( m_pCur-m_sExpr+1 );
-				bool bDigit = isdigit ( m_pCur[1] )!=0;
-
-				// handle dots followed by a digit
-				// aka, a float value without leading zero
-				if ( bDigit )
-				{
-					char * pEnd = nullptr;
-					auto fValue = (float) strtod ( m_pCur, &pEnd );
-					lvalp->fConst = fValue;
-
-					if ( pEnd && !sphIsAttr(*pEnd) )
-						m_pCur = pEnd;
-					else // fallback to subkey (e.g. ".1234a")
-						bDigit = false;
-				}
-
-				// handle dots followed by a non-digit
-				// for cases like jsoncol.keyname
-				if ( !bDigit )
-				{
-					++m_pCur;
-					while ( isspace ( *m_pCur ) )
-						++m_pCur;
-					iBeg = (int)( m_pCur-m_sExpr );
-					while ( sphIsAttr(*m_pCur) )
-						++m_pCur;
-				}
-
-				// return packed string after the dot
-				int iLen = (int)( m_pCur-m_sExpr ) - iBeg;
-				lvalp->iConst = ( int64_t(iBeg)<<32 ) + iLen;
-				return bDigit ? TOK_DOT_NUMBER : TOK_SUBKEY;
-			}
-
-		case '\'':
-		case '"':
-			{
-				const char cEnd = *m_pCur;
-				for ( const char * s = m_pCur+1; *s; s++ )
-				{
-					if ( *s==cEnd )
-					{
-						auto iBeg = (int)( m_pCur-m_sExpr );
-						int iLen = (int)( s-m_sExpr ) - iBeg + 1;
-						lvalp->iConst = ( int64_t(iBeg)<<32 ) + iLen;
-						m_pCur = s+1;
-						return TOK_CONST_STRING;
-
-					} else if ( *s=='\\' )
-					{
-						s++;
-						if ( !*s )
-							break;
-					}
-				}
-				m_sLexerError.SetSprintf ( "unterminated string constant near '%s'", m_pCur );
-				return -1;
-			}
-	}
-
-	m_sLexerError.SetSprintf ( "unknown operator '%c' near '%s'", *m_pCur, m_pCur );
+	// check for field
+	iCol = m_pSchema->GetFieldIndex ( szTok );
+	if ( iCol>=0 )
+		return ParseField ( iCol, szTok, lvalp );
 	return -1;
+}
+
+// process tokens starting with @
+int ExprParser_t::ProcessAtRawToken ( const char * sBegin, int iLen, YYSTYPE * lvalp )
+{
+	int iRes = -1;
+	if ( strncasecmp ( sBegin, "@id", iLen )==0 )
+		return ParseAttrsAndFields ( "id", lvalp );
+	else if ( strncasecmp ( sBegin, "@geodist", iLen )==0 )
+	{
+		iRes = ParseAttrsAndFields ( "@geodist", lvalp );
+		if (iRes<0)
+			m_sLexerError = "geoanchor is not set, @geodist expression unavailable";
+		return iRes;
+	} else if ( strncasecmp ( sBegin, "@weight", iLen )==0 )
+		return TOK_ATWEIGHT;
+
+	CSphString sTok { sBegin, iLen };
+	lvalp->iNode = m_dUservars.GetLength ();
+	m_dUservars.Add ( sTok );
+	return TOK_USERVAR;
+}
+
+inline static bool IsFunc ( Tokh_e e )
+{
+	return e<FUNC_FUNCS_COUNT;
+}
+
+inline static bool IsTok ( Tokh_e e )
+{
+	return e<TOKH_TOKH_COUNT && e>=FUNC_FUNCS_COUNT;
+}
+
+// general flow: flex parser do most generic tokenization, and provides raw token.
+// here we look it in the schema, perfect hash, overrides, udfs, etc. and provide concrete result
+int ExprParser_t::ProcessRawToken ( const char * sToken, int iLen, YYSTYPE * lvalp )
+{
+	int iRes = -1;
+
+	auto eTok = TokHashLookup ( { sToken, iLen } );
+	if ( IsTok(eTok) )
+	{
+		if ( eTok==TOKH_COUNT ) // in case someone used 'count' as a name for an attribute
+		{
+			iRes = ParseAttrsAndFields ("count", lvalp);
+			if ( iRes>=0 )
+				return iRes;
+		}
+		return dHash2Op[eTok-FUNC_FUNCS_COUNT];
+	}
+
+	CSphString sTok;
+	sTok.SetBinary ( sToken, iLen );
+	sTok.ToLower ();
+	// check for attributes and fields
+	iRes = ParseAttrsAndFields ( sTok.cstr(), lvalp );
+	if ( iRes>=0 )
+		return iRes;
+
+	// ask hook func, it may override
+	if ( m_pHook && eTok==FUNC_BM25F ) // tiny ad-hoc - as only known override bm25f, so hardcode it
+	{
+		int iID = m_pHook->IsKnownFunc ( sTok.cstr () );
+		if ( iID>=0 )
+		{
+			lvalp->iFunc = iID;
+			return TOK_HOOK_FUNC;
+		}
+	}
+
+	// check for function
+	if ( IsFunc ( eTok ) )
+	{
+		lvalp->iFunc = eTok;
+		return g_dFuncs[eTok].m_iNodeType;
+	}
+
+	// ask hook ident
+	if ( m_pHook )
+	{
+		int iID = m_pHook->IsKnownFunc ( sTok.cstr () );
+		if ( iID>=0 )
+		{
+			lvalp->iFunc = iID;
+			return TOK_HOOK_FUNC;
+		}
+		iID = m_pHook->IsKnownIdent ( sTok.cstr () );
+		if ( iID>=0 )
+		{
+			lvalp->iNode = iID;
+			return TOK_HOOK_IDENT;
+		}
+	}
+
+	// check for UDF
+	auto * pUdf = (const PluginUDF_c *) sphPluginGet ( PLUGIN_FUNCTION, sTok.cstr() );
+	if ( pUdf )
+	{
+		lvalp->iNode = m_dUdfCalls.GetLength();
+		m_dUdfCalls.Add ( new UdfCall_t() );
+		m_dUdfCalls.Last()->m_pUdf = pUdf;
+		return TOK_UDF;
+	}
+
+	// arbitrary identifier, then
+	CSphString sTokMixed { sToken, iLen };
+	m_dIdents.Add ( sTokMixed.Leak() );
+	lvalp->sIdent = m_dIdents.Last();
+	return TOK_IDENT;
 }
 
 /// is add/sub?
@@ -5004,13 +5007,14 @@ ISphExpr * ExprParser_t::CreateExistNode ( const ExprNode_t & tNode )
 	auto iNameStart = GetConstStrOffset ( m_dNodes[iAttrName] );
 	auto iNameLen = GetConstStrLength ( m_dNodes[iAttrName] );
 	// skip head and tail non attribute name symbols
-	while ( m_sExpr[iNameStart]!='\0' && ( m_sExpr[iNameStart]=='\'' || m_sExpr[iNameStart]==' ' ) && iNameLen )
+	const char* sExpr = m_sExpr.first;
+	while ( sExpr[iNameStart]!='\0' && ( sExpr[iNameStart]=='\'' || sExpr[iNameStart]==' ' ) && iNameLen )
 	{
 		iNameStart++;
 		--iNameLen;
 	}
-	while ( m_sExpr[iNameStart+iNameLen-1]!='\0'
-		&& ( m_sExpr[iNameStart+iNameLen-1]=='\'' || m_sExpr[iNameStart+iNameLen-1]==' ' )
+	while ( sExpr[iNameStart+iNameLen-1]!='\0'
+		&& ( sExpr[iNameStart+iNameLen-1]=='\'' || sExpr[iNameStart+iNameLen-1]==' ' )
 		&& iNameLen )
 	{
 		--iNameLen;
@@ -5022,9 +5026,9 @@ ISphExpr * ExprParser_t::CreateExistNode ( const ExprNode_t & tNode )
 		return nullptr;
 	}
 
-	assert ( iNameStart>=0 && iNameLen>0 && iNameStart+iNameLen<=(int)strlen ( m_sExpr ) );
+	assert ( iNameStart>=0 && iNameLen>0 && iNameStart+iNameLen<=m_sExpr.second );
 
-	CSphString sAttr ( m_sExpr+iNameStart, iNameLen );
+	CSphString sAttr ( sExpr+iNameStart, iNameLen );
 	sphColumnToLowercase ( const_cast<char *>( sAttr.cstr() ) );
 	int iLoc = m_pSchema->GetAttrIndex ( sAttr.cstr() );
 
@@ -5913,7 +5917,6 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case FUNC_CONTAINS:
 		case FUNC_ZONESPANLIST:
 		case FUNC_RANKFACTORS:
-		case FUNC_PACKEDFACTORS:
 		case FUNC_FACTORS:
 		case FUNC_BM25F:
 		case FUNC_CURTIME:
@@ -5980,9 +5983,9 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 				return new Expr_GetConst_c ( float(tNode.m_iConst) );
 			break;
 		case TOK_CONST_STRING:
-			return new Expr_GetStrConst_c ( m_sExpr+GetConstStrOffset(tNode), GetConstStrLength(tNode), true );
+			return new Expr_GetStrConst_c ( m_sExpr.first+GetConstStrOffset(tNode), GetConstStrLength(tNode), true );
 		case TOK_SUBKEY:
-			return new Expr_GetStrConst_c ( m_sExpr+GetConstStrOffset(tNode), GetConstStrLength(tNode), false );
+			return new Expr_GetStrConst_c ( m_sExpr.first+GetConstStrOffset(tNode), GetConstStrLength(tNode), false );
 
 		case TOK_WEIGHT:		return new Expr_GetWeight_c ();
 
@@ -6026,8 +6029,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_FUNC:
 			{
 				// fold arglist to array
-				auto eFunc = (Func_e)tNode.m_iFunc;
-				assert ( g_dFuncs[tNode.m_iFunc].m_eFunc==eFunc );
+				auto eFunc = (Tokh_e)tNode.m_iFunc;
+//				assert ( g_dFuncs[tNode.m_iFunc].m_eFunc==eFunc );
 
 				VecRefPtrs_t<ISphExpr*> dArgs;
 				if ( !bSkipLeft )
@@ -6133,7 +6136,6 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_RANKFACTORS:
 						m_eEvalStage = SPH_EVAL_PRESORT;
 						return new Expr_GetRankFactors_c();
-					case FUNC_PACKEDFACTORS:
 					case FUNC_FACTORS:
 						return CreatePFNode ( tNode.m_iLeft );
 					case FUNC_BM25F:
@@ -6810,8 +6812,8 @@ public:
 	{
 		assert ( pConsts );
 
-		const char * sExpr = pConsts->m_sExpr.cstr();
-		int iExprLen = pConsts->m_sExpr.Length();
+		const char * szExpr = pConsts->m_sExpr.first;
+		int iExprLen = pConsts->m_sExpr.second;
 
 		if ( pConsts->m_bPackedStrings )
 		{
@@ -6821,7 +6823,7 @@ public:
 				auto iLen = GetConstStrLength ( iVal );
 				if ( iOfs>0 && iLen>0 && iOfs+iLen<=iExprLen )
 				{
-					auto sRes = SqlUnescape ( sExpr + iOfs, iLen );
+					auto sRes = SqlUnescape ( szExpr + iOfs, iLen );
 					m_dHashes.Add ( sphFNV64 ( sRes.cstr(), sRes.Length() ) );
 				}
 			}
@@ -7038,8 +7040,8 @@ public:
 
 		m_fnStrCmp = GetStringCmpFunc ( eCollation );
 
-		const char * sExpr = pConsts->m_sExpr.cstr ();
-		int iExprLen = pConsts->m_sExpr.Length ();
+		const char * sExpr = pConsts->m_sExpr.first;
+		int iExprLen = pConsts->m_sExpr.second;
 
 		for ( int64_t iVal : m_dValues  )
 		{
@@ -8085,15 +8087,39 @@ ISphExpr * ExprParser_t::CreateConcatNode ( int iArgsNode, CSphVector<ISphExpr *
 
 
 //////////////////////////////////////////////////////////////////////////
+#define YY_DECL inline int yy1lex ( YYSTYPE * lvalp, void * yyscanner, ExprParser_t * pParser )
 
-int yylex ( YYSTYPE * lvalp, ExprParser_t * pParser )
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsign-compare"
+#pragma GCC diagnostic ignored "-Wpragmas"
+#endif
+
+#include "flexsphinxexpr.c"
+
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
+
+#ifndef NDEBUG
+// using a proxy to be possible to debug inside yylex
+inline int yylex ( YYSTYPE * lvalp, ExprParser_t * pParser )
 {
-	return pParser->GetToken ( lvalp );
+	int res = yy1lex ( lvalp, pParser->m_pScanner, pParser );
+	return res;
 }
+#else
+inline int yylex ( YYSTYPE * lvalp, ExprParser_t * pParser )
+{
+	return yy1lex ( lvalp, pParser->m_pScanner, pParser );
+}
+#endif
 
 void yyerror ( ExprParser_t * pParser, const char * sMessage )
 {
-	pParser->m_sParserError.SetSprintf ( "Sphinx expr: %s near '%s'", sMessage, pParser->m_pLastTokenStart );
+	// flex put a zero at last token boundary; make it undo that
+	const auto* szToken = yy1lex_unhold ( pParser->m_pScanner );
+	pParser->m_sParserError.SetSprintf ( "Sphinx expr: %s near '%s'", sMessage, szToken );
 }
 
 #if USE_WINDOWS
@@ -8316,14 +8342,13 @@ int ExprParser_t::AddNodeFunc0 ( int iFunc )
 	// special case for IN(), iFirst is arg, iSecond is constlist
 	// special case for REMAP(), iFirst and iSecond are expressions, iThird and iFourth are constlists
 	assert ( iFunc>=0 && iFunc<int ( sizeof ( g_dFuncs ) / sizeof ( g_dFuncs[0] ) ) );
-	assert ( g_dFuncs[iFunc].m_eFunc==( Func_e ) iFunc );
-	const char * sFuncName = g_dFuncs[iFunc].m_sName;
+//	assert ( g_dFuncs[iFunc].m_eFunc==(Tokh_e ) iFunc );
 
 	// check args count
 	int iExpectedArgc = g_dFuncs[iFunc].m_iArgs;
 	if ( iExpectedArgc )
 	{
-		m_sParserError.SetSprintf ( "%s() called without args, %d args expected", sFuncName, iExpectedArgc );
+		m_sParserError.SetSprintf ( "%s() called without args, %d args expected", FuncNameByHash(iFunc), iExpectedArgc );
 		return -1;
 	}
 	// do add
@@ -8347,9 +8372,9 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 	// special case for IN(), iFirst is arg, iSecond is constlist
 	// special case for REMAP(), iFirst and iSecond are expressions, iThird and iFourth are constlists
 	assert ( iFunc>=0 && iFunc< int ( sizeof ( g_dFuncs )/sizeof ( g_dFuncs[0]) ) );
-	auto eFunc = (Func_e)iFunc;
-	assert ( g_dFuncs [ iFunc ].m_eFunc==eFunc );
-	const char * sFuncName = g_dFuncs [ iFunc ].m_sName;
+	auto eFunc = (Tokh_e)iFunc;
+//	assert ( g_dFuncs [ iFunc ].m_eFunc==eFunc );
+	const char * sFuncName = FuncNameByHash ( iFunc );
 
 	// check args count
 	int iExpectedArgc = g_dFuncs [ iFunc ].m_iArgs;
@@ -8645,8 +8670,8 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 int ExprParser_t::AddNodeFor ( int iFunc, int iExpr, int iLoop )
 {
 	assert ( iFunc>=0 && iFunc<int ( sizeof ( g_dFuncs ) / sizeof ( g_dFuncs[0] ) ) );
-	assert ( g_dFuncs[iFunc].m_eFunc==( Func_e ) iFunc );
-	const char * sFuncName = g_dFuncs[iFunc].m_sName;
+//	assert ( g_dFuncs [ iFunc ].m_eFunc==eFunc );
+	const char * sFuncName = FuncNameByHash ( iFunc );
 
 	// check args count
 	if ( iLoop<0 )
@@ -8674,13 +8699,12 @@ int ExprParser_t::AddNodeFor ( int iFunc, int iExpr, int iLoop )
 
 int ExprParser_t::AddNodeIn ( int iArg, int iList )
 {
-	assert ( g_dFuncs[FUNC_IN].m_eFunc==FUNC_IN );
-	const char * sFuncName = g_dFuncs[FUNC_IN].m_sName;
+//	assert ( g_dFuncs[FUNC_IN].m_eFunc==FUNC_IN );
 
 	// check args count
 	if ( iList<0 )
 	{
-		m_sParserError.SetSprintf ( "%s() called with <2 args, at least 2 args expected", sFuncName );
+		m_sParserError.SetSprintf ( "in() called with <2 args, at least 2 args expected" );
 		return -1;
 	}
 
@@ -8700,30 +8724,29 @@ int ExprParser_t::AddNodeIn ( int iArg, int iList )
 
 int ExprParser_t::AddNodeRemap ( int iExpr1, int iExpr2, int iList1, int iList2 )
 {
-	assert ( g_dFuncs[FUNC_REMAP].m_eFunc==FUNC_REMAP );
-	const char * sFuncName = g_dFuncs[FUNC_REMAP].m_sName;
+	//assert ( g_dFuncs[FUNC_REMAP].m_eFunc==FUNC_REMAP );
 
 	if ( m_dNodes[iExpr1].m_iToken==TOK_IDENT )
 	{
-		m_sParserError.SetSprintf ( "%s() incorrect first argument (not integer?)", sFuncName );
+		m_sParserError.SetSprintf ( "remap() incorrect first argument (not integer?)" );
 		return 1;
 	}
 	if ( m_dNodes[iExpr2].m_iToken==TOK_IDENT )
 	{
-		m_sParserError.SetSprintf ( "%s() incorrect second argument (not integer/float?)", sFuncName );
+		m_sParserError.SetSprintf ( "remap() incorrect second argument (not integer/float?)" );
 		return 1;
 	}
 
 	if ( !IsInt ( m_dNodes[iExpr1].m_eRetType ) )
 	{
-		m_sParserError.SetSprintf ( "%s() first argument should result in integer value", sFuncName );
+		m_sParserError.SetSprintf ( "remap() first argument should result in integer value" );
 		return -1;
 	}
 
 	ESphAttr eSecondRet = m_dNodes[iExpr2].m_eRetType;
 	if ( !IsNumeric ( eSecondRet ) )
 	{
-		m_sParserError.SetSprintf ( "%s() second argument should result in integer or float value", sFuncName );
+		m_sParserError.SetSprintf ( "remap() second argument should result in integer or float value" );
 		return -1;
 	}
 
@@ -8731,24 +8754,24 @@ int ExprParser_t::AddNodeRemap ( int iExpr1, int iExpr2, int iList1, int iList2 
 	ConstList_c &tSecondList = *m_dNodes[iList2].m_pConsts;
 	if ( tFirstList.m_dInts.GetLength ()==0 )
 	{
-		m_sParserError.SetSprintf ( "%s() first constlist should consist of integer values", sFuncName );
+		m_sParserError.SetSprintf ( "remap() first constlist should consist of integer values" );
 		return -1;
 	}
 	if ( tFirstList.m_dInts.GetLength ()!=tSecondList.m_dInts.GetLength () &&
 		tFirstList.m_dInts.GetLength ()!=tSecondList.m_dFloats.GetLength () )
 	{
-		m_sParserError.SetSprintf ( "%s() both constlists should have the same length", sFuncName );
+		m_sParserError.SetSprintf ( "remap() both constlists should have the same length" );
 		return -1;
 	}
 
 	if ( eSecondRet==SPH_ATTR_FLOAT && tSecondList.m_dFloats.GetLength ()==0 )
 	{
-		m_sParserError.SetSprintf ( "%s() second argument results in float value and thus fourth argument should be a list of floats" , sFuncName );
+		m_sParserError.SetSprintf ( "remap() second argument results in float value and thus fourth argument should be a list of floats" );
 		return -1;
 	}
 	if ( eSecondRet!=SPH_ATTR_FLOAT && tSecondList.m_dInts.GetLength ()==0 )
 	{
-		m_sParserError.SetSprintf ("%s() second argument results in integer value and thus fourth argument should be a list of integers", sFuncName );
+		m_sParserError.SetSprintf ("remap() second argument results in integer value and thus fourth argument should be a list of integers" );
 		return -1;
 	}
 
@@ -8766,20 +8789,19 @@ int ExprParser_t::AddNodeRemap ( int iExpr1, int iExpr2, int iList1, int iList2 
 // functions RAND with 0 or 1 arg
 int ExprParser_t::AddNodeRand ( int iArg )
 {
-	assert ( g_dFuncs[FUNC_RAND].m_eFunc==FUNC_RAND );
-	const char * sFuncName = g_dFuncs[FUNC_RAND].m_sName;
+//	assert ( g_dFuncs[FUNC_RAND].m_eFunc==FUNC_RAND );
 
 	if ( iArg>=0 )
 	{
 		if ( !IsNumeric ( m_dNodes[iArg].m_eRetType ) )
 		{
-			m_sParserError.SetSprintf ( "%s() argument must be numeric", sFuncName );
+			m_sParserError.SetSprintf ( "rand() argument must be numeric" );
 			return -1;
 		}
 		int iArgc = ( m_dNodes[iArg].m_iToken==',' ) ? m_dNodes[iArg].m_iArgs : 1;
 		if ( iArgc>1 )
 		{
-			m_sParserError.SetSprintf ( "%s() called with %d args, either 0 or 1 args expected", sFuncName, iArgc );
+			m_sParserError.SetSprintf ( "rand() called with %d args, either 0 or 1 args expected", iArgc );
 			return -1;
 		}
 	}
@@ -8817,7 +8839,7 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 			if ( m_dNodes[iCur].m_iToken!=',' )
 			{
 				const ExprNode_t & tNode = m_dNodes[iCur];
-				if ( tNode.m_iToken==TOK_FUNC && ( tNode.m_iFunc==FUNC_PACKEDFACTORS || tNode.m_iFunc==FUNC_RANKFACTORS || tNode.m_iFunc==FUNC_FACTORS ) )
+				if ( tNode.m_iToken==TOK_FUNC && ( tNode.m_iFunc==FUNC_RANKFACTORS || tNode.m_iFunc==FUNC_FACTORS ) )
 					pCall->m_dArgs2Free.Add ( dArgTypes.GetLength() );
 				if ( tNode.m_eRetType==SPH_ATTR_JSON || tNode.m_eRetType==SPH_ATTR_JSON_FIELD )
 					pCall->m_dArgs2Free.Add ( dArgTypes.GetLength() );
@@ -8830,7 +8852,7 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 			{
 				const ExprNode_t & tNode = m_dNodes[iRight];
 				assert ( tNode.m_iToken!=',' );
-				if ( tNode.m_iToken==TOK_FUNC && ( tNode.m_iFunc==FUNC_PACKEDFACTORS || tNode.m_iFunc==FUNC_RANKFACTORS || tNode.m_iFunc==FUNC_FACTORS) )
+				if ( tNode.m_iToken==TOK_FUNC && ( tNode.m_iFunc==FUNC_RANKFACTORS || tNode.m_iFunc==FUNC_FACTORS) )
 					pCall->m_dArgs2Free.Add ( dArgTypes.GetLength() );
 				if ( tNode.m_eRetType==SPH_ATTR_JSON || tNode.m_eRetType==SPH_ATTR_JSON_FIELD )
 					pCall->m_dArgs2Free.Add ( dArgTypes.GetLength() );
@@ -8917,7 +8939,7 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 int	ExprParser_t::AddNodePF ( int iFunc, int iArg )
 {
 	assert ( iFunc>=0 && iFunc< int ( sizeof ( g_dFuncs )/sizeof ( g_dFuncs[0]) ) );
-	const char * sFuncName = g_dFuncs [ iFunc ].m_sName;
+	const char * sFuncName = FuncNameByHash ( iFunc );
 
 	CSphVector<ESphAttr> dRetTypes;
 	GatherArgRetTypes ( iArg, dRetTypes );
@@ -9038,7 +9060,7 @@ int ExprParser_t::AddNodeMapArg ( const char * szKey, const char * szValue, int6
 	{
 		if ( bConstStr )
 		{
-			sValue = SqlUnescape ( m_sExpr + GetConstStrOffset(iValue), GetConstStrLength(iValue) );
+			sValue = SqlUnescape ( m_sExpr.first + GetConstStrOffset(iValue), GetConstStrLength(iValue) );
 			szValue = sValue.cstr();
 		}
 
@@ -9055,7 +9077,7 @@ void ExprParser_t::AppendToMapArg ( int iNode, const char * szKey, const char * 
 	CSphString sValue;
 	if ( bConstStr )
 	{
-		sValue = SqlUnescape ( m_sExpr + GetConstStrOffset(iValue), GetConstStrLength(iValue) );
+		sValue = SqlUnescape ( m_sExpr.first + GetConstStrOffset(iValue), GetConstStrLength(iValue) );
 		szValue = sValue.cstr();
 	}
 
@@ -9107,7 +9129,7 @@ int ExprParser_t::AddNodeDotNumber ( int64_t iValue )
 	ExprNode_t & tNode = m_dNodes.Add ();
 	tNode.m_iToken = TOK_CONST_FLOAT;
 	tNode.m_eRetType = SPH_ATTR_FLOAT;
-	const char * pCur = m_sExpr + (int)( iValue>>32 );
+	const char * pCur = m_sExpr.first + (int)( iValue>>32 );
 	tNode.m_fConst = (float) strtod ( pCur-1, nullptr );
 	return m_dNodes.GetLength()-1;
 }
@@ -9247,17 +9269,20 @@ struct ExprNodeHeight_t
 	ExprNodeHeight_t() = default;
 };
 
-
 ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 	ESphAttr * pAttrType, bool * pUsesWeight, CSphString & sError )
 {
-	m_sLexerError = "";
+	const char* szExpr = sExpr;
+
+	// fixme! provide shared access to semi-parsed items.
+	CSphString sCopy ( sExpr ); szExpr = sCopy.cstr();
+
+	m_sLexerError = ""; //lexer
 	m_sParserError = "";
 	m_sCreateError = "";
 
 	// setup lexer
-	m_sExpr = sExpr;
-	m_pCur = sExpr;
+	m_sExpr = { szExpr, strlen (szExpr) };
 	m_pSchema = &tSchema;
 
 	// setup constant functions
@@ -9265,7 +9290,23 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 
 	// build abstract syntax tree
 	m_iParsed = -1;
+
+	// alternative parser
+	yy1lex_init ( &m_pScanner );
+
+	char * sEnd = const_cast<char *>( szExpr+m_sExpr.second );
+	char cMemLast = sEnd[1];
+	if ( cMemLast )
+		sEnd[1] = 0; // this is ok because string allocates a small gap
+
+	YY_BUFFER_STATE tLexerBuffer = yy1_scan_buffer ( const_cast<char*>(szExpr), m_sExpr.second+2, m_pScanner );
+
 	yyparse ( this );
+	yy1_delete_buffer ( tLexerBuffer, m_pScanner );
+	yy1lex_destroy ( m_pScanner );
+
+	if ( cMemLast )
+		sEnd[1] = cMemLast; // this is ok because string allocates a small gap
 
 	// handle errors
 	if ( m_iParsed<0 || !m_sLexerError.IsEmpty() || !m_sParserError.IsEmpty() )

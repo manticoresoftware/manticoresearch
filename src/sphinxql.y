@@ -21,6 +21,7 @@
 %token	TOK_CONST_STRINGS 269	// not a real token, only placeholder
 %token	TOK_BAD_NUMERIC
 %token	TOK_SUBKEY
+%token	TOK_BACKTICKED_SUBKEY
 %token	TOK_DOT_NUMBER ".number"
 
 %token	TOK_AGENT
@@ -1845,6 +1846,7 @@ subscript:
 
 subkey:
 	TOK_SUBKEY
+	| TOK_BACKTICKED_SUBKEY
 	| TOK_DOT_NUMBER
 	| '[' expr ']'				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| '[' TOK_QUOTED_STRING ']'		{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }

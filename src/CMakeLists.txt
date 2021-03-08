@@ -37,7 +37,7 @@ set ( TESTS_SRCS tests.cpp )
 set ( WORDBREAKER_SRCS sphinxstd.cpp wordbreaker.cpp)
 set ( INDEX_CONVERTER_SRCS sphinxstd.cpp index_converter.cpp)
 set ( LIBSPHINX_BISON sphinxexpr.y sphinxselect.y sphinxquery.y sphinxjson.y )
-set ( LIBSPHINX_FLEX sphinxjson.l )
+set ( LIBSPHINX_FLEX sphinxjson.l sphinxexpr.l)
 set ( SEARCHD_BISON sphinxql.y sphinxql_debug.y ddl.y )
 set ( SEARCHD_FLEX sphinxql.l sphinxql_debug.l ddl.l )
 set ( INDEX_CONV_SRCS index_converter.cpp )
@@ -150,6 +150,7 @@ if ( USE_FLEX )
 
 	FLEX_TARGET ( SQLlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql.l" ${FLEX_DIR}/flexsphinxql.c )
 	FLEX_TARGET ( Jsonlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxjson.l" ${FLEX_DIR}/flexsphinxjson.c )
+	FLEX_TARGET ( Exprlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxexpr.l" ${FLEX_DIR}/flexsphinxexpr.c )
 	FLEX_TARGET ( DDLlex "${CMAKE_CURRENT_SOURCE_DIR}/ddl.l" ${FLEX_DIR}/flexddl.c )
 	FLEX_TARGET ( SQLDebuglex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql_debug.l" ${FLEX_DIR}/flexsphinxqldebug.c )
 
@@ -159,6 +160,8 @@ if ( USE_FLEX )
 			OBJECT_DEPENDS ${FLEX_DDLlex_OUTPUTS} )
 	set_property ( SOURCE sphinxjson.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${FLEX_Jsonlex_OUTPUTS} )
+	set_property ( SOURCE sphinxexpr.cpp APPEND PROPERTY
+			OBJECT_DEPENDS ${FLEX_Exprlex_OUTPUTS} )
 	set_property(SOURCE sphinxql_debug.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${FLEX_SQLDebuglex_OUTPUTS})
 
@@ -167,6 +170,7 @@ if ( USE_FLEX )
 	list ( APPEND TARBALLDEPENDS ${FLEX_SQLlex_OUTPUTS} )
 	list ( APPEND TARBALLDEPENDS ${FLEX_DDLlex_OUTPUTS} )
 	list ( APPEND TARBALLDEPENDS ${FLEX_Jsonlex_OUTPUTS} )
+	list ( APPEND TARBALLDEPENDS ${FLEX_Exprlex_OUTPUTS} )
 else ()
 	if ( NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/llsphinxql.c" )
 		message ( SEND_ERROR "FLEX is not active, and pre-generated parsers not found. Either install/activate flex, or build from 'tarball' generated on machine with flex installed" )

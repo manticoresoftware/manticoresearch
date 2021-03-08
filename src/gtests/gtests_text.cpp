@@ -16,6 +16,7 @@
 #include "fileutils.h"
 #include "sphinxutils.h"
 #include "sphinxstem.h"
+#include <cmath>
 
 
 // Miscelaneous tests mostly processing texts with many test cases: HTML Stripper, levenstein,
@@ -417,12 +418,141 @@ TEST ( Text, expression_parser )
 		CSphString sError;
 		ExprParseArgs_t tExprArgs;
 		ISphExprRefPtr_c pExpr ( sphExprParse ( dTest.m_sExpr, tSchema, sError, tExprArgs ) );
-		ASSERT_TRUE ( pExpr.Ptr () ) << sError.cstr ();
+		ASSERT_TRUE ( pExpr.Ptr () ) << "parsing " << dTest.m_sExpr << ":" << sError.cstr ();
 		ASSERT_FLOAT_EQ ( dTest.m_fValue, pExpr->Eval ( tMatch ) );
 	}
 
 	SafeDeleteArray ( pRow );
 }
+
+TEST ( Text, DISABLED_bench_expression_parser )
+{
+	CSphColumnInfo tCol;
+
+	CSphSchema tSchema;
+	tCol.m_sName = "id";
+	tCol.m_eAttrType = SPH_ATTR_BIGINT;
+	tSchema.AddAttr ( tCol, false );
+
+	tCol.m_sName = "aaa";
+	tCol.m_eAttrType = SPH_ATTR_INTEGER;
+	tSchema.AddAttr ( tCol, false );
+
+	tCol.m_sName = "bbb";
+	tCol.m_eAttrType = SPH_ATTR_INTEGER;
+	tSchema.AddAttr ( tCol, false );
+
+	tCol.m_sName = "ccc";
+	tCol.m_eAttrType = SPH_ATTR_INTEGER;
+	tSchema.AddAttr ( tCol, false );
+
+	auto * pRow = new CSphRowitem[tSchema.GetRowSize ()];
+	for ( int i = 1; i<tSchema.GetAttrsCount(); i++ )
+		sphSetRowAttr ( pRow, tSchema.GetAttr(i).m_tLocator, i );
+
+	sphSetRowAttr ( pRow, tSchema.GetAttr(0).m_tLocator, 123 );
+
+	CSphMatch tMatch;
+	tMatch.m_tRowID = 123;
+	tMatch.m_iWeight = 456;
+	tMatch.m_pStatic = pRow;
+
+	const char* ppTests[] =
+		{
+			"ccc/2+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40"
+			, "1*2*3*4*5*6*7*8*9*10+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40"
+			, "aaa+bbb*sin(0)*ccc+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40"
+			, "if(pow(sqrt(2),2)=2,123,456)+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40"
+			, "if(2<2,3,4)+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40"
+			, "if(2>=2,3,4)+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40"
+			, "pow(7,5)+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40"
+			, "sqrt(3)+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40"
+			, "log2((2+2)*(2+2))+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40"
+			, "min(3,15)+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40"
+			, "max(3,15)+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40"
+			, "if(3<15,bbb,ccc)+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40"
+			, "id+@weight+if(3<15,bbb,ccc)+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa"
+			, "abs(-3-ccc)+id+@weight+if(3<15,bbb,ccc)+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa"
+			, "(aaa+bbb)*(ccc-aaa)+abs(-3-ccc)+id+@weight+if(3<15,bbb,ccc)+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()"
+			, "(((aaa)))+(aaa+bbb)*(ccc-aaa)+abs(-3-ccc)+id+@weight+if(3<15,bbb,ccc)+aaa+bbb+rand()+ccc+id+12*1562 mod 40+aaa+bbb+rand()"
+			, "aaa-bbb*ccc+(((aaa)))+(aaa+bbb)*(ccc-aaa)+abs(-3-ccc)+id+@weight+if(3<15,bbb,ccc)+aaa+bbb+rand()+ccc+id+12*1562"
+			, " aaa    -\tbbb *\t\t\tccc + aaa-bbb*ccc+(((aaa)))+(aaa+bbb)*(ccc-aaa)+abs(-3-ccc)+id+@weight+if(3<15,bbb,ccc)+aaa+bbb"
+			, "bbb+123*aaa+ aaa    -\tbbb *\t\t\tccc + aaa-bbb*ccc+(((aaa)))+(aaa+bbb)*(ccc-aaa)+abs(-3-ccc)+id+@weight"
+			, "2.000*2e+1+2+bbb+123*aaa+ aaa    -\tbbb *\t\t\tccc + aaa-bbb*ccc+(((aaa)))+(aaa+bbb)*(ccc-aaa)+abs(-3-ccc)+id+@weight"
+			, "3<5+2.000*2e+1+2+bbb+123*aaa+ aaa    -\tbbb *\t\t\tccc + aaa-bbb*ccc+(((aaa)))+(aaa+bbb)*(ccc-aaa)+abs(-3-ccc)+id+@weight"
+			, "1 + 2*3 > 4*4+3<5+2.000*2e+1+2+bbb+123*aaa+ aaa    -\tbbb *\t\t\tccc + aaa-bbb*ccc+(((aaa)))+(aaa+bbb)*(ccc-aaa)"
+			, "aaa/-bbb+1 + 2*3 > 4*4+3<5+2.000*2e+1+2+bbb+123*aaa+ aaa    -\tbbb *\t\t\tccc + aaa-bbb*ccc+(((aaa)))+(aaa+bbb)*(ccc-aaa)"
+			, "-10*-10+aaa/-bbb+1 + 2*3 > 4*4+3<5+2.000*2e+1+2+bbb+123*aaa+ aaa    -\tbbb *\t\t\tccc + aaa-bbb*ccc"
+			, "aaa+-bbb*-5+-10*-10+aaa/-bbb+1 + 2*3 > 4*4+3<5+2.000*2e+1+2+bbb+123*aaa+ aaa    -\tbbb *\t\t\tccc + aaa-bbb*ccc"
+			, "-aaa>-bbb+aaa+-bbb*-5+-10*-10+aaa/-bbb+1 + 2*3 > 4*4+3<5+2.000*2e+1+2+bbb+123*aaa+ aaa    -\tbbb *\t\t\tccc"
+			, "1-aaa+2-3+4-aaa>-bbb+aaa+-bbb*-5+-10*-10+aaa/-bbb+1 + 2*3 > 4*4+3<5+2.000*2e+1+2+bbb+123*aaa+ aaa    -\tbbb *\t\t\tccc"
+			, "bbb/1*2/6*3+1-aaa+2-3+4-aaa>-bbb+aaa+-bbb*-5+-10*-10+aaa/-bbb+1 + 2*3 > 4*4+3<5+2.000*2e+1+2+bbb+123*aaa+ aaa   "
+			, "(aaa+bbb)/sqrt(3)/sqrt(3)+bbb/1*2/6*3+1-aaa+2-3+4-aaa>-bbb+aaa+-bbb*-5+-10*-10+aaa/-bbb+1 + 2*3 > 4*4+3<5+2.000"
+			, "aaa-bbb-2+(aaa+bbb)/sqrt(3)/sqrt(3)+bbb/1*2/6*3+1-aaa+2-3+4-aaa>-bbb+aaa+-bbb*-5+-10*-10+aaa/-bbb+1 + 2*3"
+			, "ccc mod 10+aaa-bbb-2+(aaa+bbb)/sqrt(3)/sqrt(3)+bbb/1*2/6*3+1-aaa+2-3+4-aaa>-bbb+aaa+-bbb*-5+-10*-10+aaa/-bbb+1 + 2*3"
+			, "ccc/2*4/bbb+ccc mod 10+aaa-bbb-2+(aaa+bbb)/sqrt(3)/sqrt(3)+bbb/1*2/6*3+1-aaa+2-3+4-aaa>-bbb+aaa+-bbb*-5"
+			, "(2+(aaa*bbb))+3+ccc/2*4/bbb+ccc mod 10+aaa-bbb-2+(aaa+bbb)/sqrt(3)/sqrt(3)+bbb/1*2/6*3+1-aaa+2-3+4-aaa>-bbb+aaa+-bbb*-5"
+			, "aaa+bbb*(ccc)-1+(2+(aaa*bbb))+3+ccc/2*4/bbb+ccc mod 10+aaa-bbb-2+(aaa+bbb)/sqrt(3)/sqrt(3)+bbb/1*2/6*3+1"
+			, "aaa+bbb*ccc*2-3/4*5/6*bbb+aaa+bbb*(ccc)-1+(2+(aaa*bbb))+3+ccc/2*4/bbb+ccc mod 10+aaa-bbb-2+(aaa+bbb)/sqrt(3)/sqrt(3)"
+			, "sqrt(2)+aaa+bbb*ccc*2-3/4*5/6*bbb+aaa+bbb*(ccc)-1+(2+(aaa*bbb))+3+ccc/2*4/bbb+ccc mod 10+aaa-bbb-2"
+			, "rand()+sqrt(2)+aaa+bbb*ccc*2-3/4*5/6*bbb+aaa+bbb*(ccc)-1+(2+(aaa*bbb))+3+ccc/2*4/bbb+ccc mod 10+aaa-bbb-2"
+			, "rand()+sqrt(2)+aaa+bbb*ccc*2-3/4*5/6*bbb+aaa+bbb*(ccc)-1+(2+(aaa*bbb))+3+ccc/2*4/bbb+ccc mod 10+aaa-bbb-2"
+			, "FIBONACCI(4)+rand()+sqrt(2)+aaa+bbb*ccc*2-3/4*5/6*bbb+aaa+bbb*(ccc)-1+(2+(aaa*bbb))+3+ccc/2*4/bbb+ccc mod 10+aaa-bbb-2"
+	};
+
+	CSphVector<CSphString> dTests;
+
+	for ( const auto* szTest :  ppTests )
+		dTests.Add ( szTest );
+
+	int NRUNS = 10000;
+	for ( int i = 0; i<100; ++i )
+		for ( const auto & sTest : dTests )
+		{
+			CSphString sError;
+			ExprParseArgs_t tExprArgs;
+			ISphExprRefPtr_c pExpr ( sphExprParse ( sTest.cstr (), tSchema, sError, tExprArgs ) );
+			ASSERT_TRUE ( pExpr.Ptr () ) << sError.cstr () << ": " << sTest.cstr();
+		}
+
+
+	int64_t tmTime = sphMicroTimer ();
+
+	for ( int i = 0; i<NRUNS; ++i )
+		for ( const auto & sTest : dTests )
+		{
+			CSphString sError;
+			ExprParseArgs_t tExprArgs;
+			ISphExprRefPtr_c pExpr ( sphExprParse ( sTest.cstr (), tSchema, sError, tExprArgs ) );
+			ASSERT_TRUE ( pExpr.Ptr () ) << sError.cstr ();
+		}
+
+	int64_t tmTimeNew = sphMicroTimer ();
+
+	// sphExprParseOld is removed and mo more available; this test still usable as general bench
+/*	for ( int i = 0; i<NRUNS; ++i )
+		for ( const auto & sTest : dTests )
+		{
+			CSphString sError;
+			ExprParseArgs_t tExprArgs;
+			ISphExprRefPtr_c pExpr ( sphExprParseOld ( sTest.cstr (), tSchema, sError, tExprArgs ) );
+			ASSERT_TRUE ( pExpr.Ptr () ) << sError.cstr ();
+		} */
+
+	int64_t tmTimeOld = sphMicroTimer ();
+
+
+	tmTimeOld -= tmTimeNew;
+	tmTimeNew -= tmTime;
+
+	NRUNS = NRUNS*dTests.GetLength();
+
+	std::cout << "new-eval  " << float ( NRUNS ) / tmTimeNew << "M/sec, old " << float ( NRUNS ) / tmTimeOld
+			  << "M/sec\n";
+
+	SafeDeleteArray ( pRow );
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 

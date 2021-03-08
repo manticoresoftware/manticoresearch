@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>Backticks in json columns </name>
+<requires>
+	<force-rt/>
+</requires>
+<skip_indexer/>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	data_dir = <data_path path="data0"/>
+}
+</config>
+
+<queries>
+	<sphinxql>
+		CREATE TABLE test (title text, j json);
+		desc test;
+		insert into test (id,title,j) values (1,'bla','{x:[1,10,100]}'),(2,'bla','{"bo:a":[4,10]}'),(3,'bla','{"be:o":3}');
+		select * from test;
+		select j.x from test;
+		select j. x from test;
+		select j.`x` from test;
+		select j. `x` from test;
+		select j.`bo:a` from test;
+		select j. `bo:a` from test;
+		select * from test where j.`bo:a`[1]>10;
+		select * from test where j.`bo:a`[1]>9;
+		drop table test;
+
+		create table pq2 (j json) type='pq';
+		INSERT INTO pq2 (id, query, filters) VALUES ( 1, 'filter test', 'j.x>10' );
+		INSERT INTO pq2 (id, query, filters) VALUES ( 2, 'filter test', 'j.x>10' );
+		INSERT INTO pq2 (id, query, filters) VALUES ( 3, 'filter test', 'j.`bo:a`[1]>10' );
+		INSERT INTO pq2 (id, query, filters) VALUES ( 4, 'filter test', 'j.`bo:a`[2].`ha-ha-ha`>10' );
+		select * from pq2;
+		call pq ('pq2', '{"text":"filter test", "j":{"bo:a":[20,11,{"ha-ha-ha":3}]}}', 1 as docs_json);
+		call pq ('pq2', '{"text":"filter test", "j":{"bo:a":[20,11,{"ha-ha-ha":11}]}}', 1 as docs_json);
+		call pq ('pq2', '{"text":"filter test", "j":{"bo:a":[20,10,{"ha-ha-ha":11}]}}', 1 as docs_json);
+		drop table pq2;
+
+		create table pq (`json` json) type='pq';
+		INSERT INTO pq (query, filters) VALUES ('', 'json.target.`wpcom:blog_id` == \'\'');
+		INSERT INTO pq (query, filters) VALUES ('', 'json.target.`wpcom:blog_id`=\'\'');
+		call pq ('pq', '{"text":"filter test", "json":{"target":{"wpcom:blog_id":"a"}}}', 1 as docs_json);
+		call pq ('pq', '{"text":"filter test", "json":{"target":{"wpcom:blog_id":""}}}', 1 as docs_json);
+		call pq ('pq', '{"text":"filter test", "json":{"target":{"wpcom:blog_id":true}}}', 1 as docs_json);
+		drop table pq;
+
+		CREATE TABLE testj (title text, `1j` json);
+		desc testj;
+		insert into testj (id,title,`1j`) values
+		(1,'bla','{x:[1,10,100]}'),(2,'bla','{"bo:a":[4,10]}'),(3,'bla','{"be:o":3}');
+		select * from testj;
+		select `1j`.x from testj;
+		select `1j`. x from testj;
+		select `1j`.`x` from testj;
+		select `1j`. `x` from testj;
+		select `1j`.`bo:a` from testj;
+		select `1j`. `bo:a` from testj;
+		select * from testj where `1j`.`bo:a`[1]>10;
+		select * from testj where `1j`.`bo:a`[1]>9;
+		drop table testj
+	</sphinxql>
+</queries>
+</test>

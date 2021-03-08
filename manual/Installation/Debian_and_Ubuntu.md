@@ -20,7 +20,7 @@ Supported platforms:
 You can install Manticore by adding Manticore's APT repository to your repositories:
 
 ```bash
-apt-key adv --fetch-keys 'https://repo.manticoresearch.com/GPG-KEY-manticore'
+apt-key adv --fetch-keys 'http://repo.manticoresearch.com/GPG-KEY-manticore'
 wget https://repo.manticoresearch.com/manticore-repo.noarch.deb
 dpkg -i manticore-repo.noarch.deb
 apt update
@@ -34,7 +34,7 @@ apt install manticore
 
 In case you want to install "Nightly" (development) version:
 ```bash
-apt-key adv --fetch-keys 'https://repo.manticoresearch.com/GPG-KEY-manticore'
+apt-key adv --fetch-keys 'http://repo.manticoresearch.com/GPG-KEY-manticore'
 wget https://repo.manticoresearch.com/manticore-dev-repo.noarch.deb
 dpkg -i manticore-dev-repo.noarch.deb
 apt update

@@ -1469,7 +1469,7 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 		// all queries have only plain AND filters - no need for filter tree
 		if ( iFilterCount && tParser.m_bGotFilterOr )
 			CreateFilterTree ( tParser.m_dFilterTree, iFilterStart, iFilterCount, tQuery );
-		iFilterStart += iFilterCount;
+		iFilterStart = iFilterCount;
 
 		// fixup hints
 		if ( !CheckQueryHints ( tQuery.m_dIndexHints, sError ) )

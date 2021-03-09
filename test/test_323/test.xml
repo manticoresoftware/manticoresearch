@@ -176,7 +176,12 @@ INSERT INTO rt2 ( id, title, user_id, added_at, upped_at ) VALUES
 SELECT * FROM rt2 WHERE (user_id = 203469) AND (match('test')) AND (added_at &lt; 1558324538 or upped_at &lt; 1558324538);
 SELECT * FROM rt2 WHERE (match('test')) AND (added_at &lt; 1558324538 or upped_at &lt; 1558324538) and (user_id = 203469);
 SELECT * FROM rt2 WHERE (user_id = 74861) AND (match('test')) AND (added_at &lt; 1558324538 or upped_at &lt; 1558324538);
-SELECT * FROM rt2 WHERE (match('test')) AND (user_id = 74861) AND (added_at &lt; 1558324538 or upped_at &lt; 1558324538)
+SELECT * FROM rt2 WHERE (match('test')) AND (user_id = 74861) AND (added_at &lt; 1558324538 or upped_at &lt; 1558324538);
+
+<!-- wrong step over filters losing last one -->
+SELECT * FROM facet1 WHERE price=12 OR brand_id=12;SELECT * FROM facet1 WHERE price=12 OR brand_id=12;SELECT * FROM facet1 WHERE price=12 OR brand_id=12;
+SELECT * FROM rt2 WHERE user_id=74861 OR added_at=1519972227;SELECT * FROM rt2 WHERE user_id=74861 OR added_at=1519972227;SELECT * FROM rt2 WHERE user_id=74861 OR added_at=1519972227;
+SELECT * FROM dist WHERE gid=11 OR pid=303;SELECT * FROM dist WHERE gid=11 OR pid=303;SELECT * FROM dist WHERE gid=11 OR pid=303
 
 </sphinxql>
 </sphqueries>

@@ -127,6 +127,7 @@ static int				g_iQueryLogMinMs	= 0;				// log 'slow' threshold for query
 static char				g_sLogFilter[SPH_MAX_FILENAME_LEN+1] = "\0";
 static int				g_iLogFilterLen = 0;
 static int				g_iLogFileMode = 0;
+static CSphBitvec		g_tLogStatements;
 
 int						g_iReadTimeoutS		= 5;	// sec
 int						g_iWriteTimeoutS	= 5;	// sec
@@ -3135,6 +3136,18 @@ static void LogStatementSphinxql ( Str_t sQuery, int iRealTime )
 
 	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
 	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
+}
+
+
+static void LogFilterStatementSphinxql ( Str_t sQuery, SqlStmt_e eStmt )
+{
+	if ( g_tLogStatements.IsEmpty() )
+		return;
+
+	if ( !g_tLogStatements.BitGet ( eStmt ) )
+		return;
+
+	LogStatementSphinxql ( sQuery, 0 );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -15213,6 +15226,8 @@ public:
 
 		myinfo::SetCommand ( g_dSqlStmts[eStmt] );
 
+		LogFilterStatementSphinxql ( sQuery, eStmt );
+
 		if ( bParsedOK && m_bFederatedUser )
 		{
 			if ( !FixupFederatedQuery ( m_tVars.m_eCollation, dStmt,  m_sError, m_sFederatedQuery ) )
@@ -18157,6 +18172,70 @@ static void CheckSystemTFO ()
 #endif
 }
 
+static void ConfigureDaemonLog ( const CSphString & sMode )
+{
+	if ( sMode.IsEmpty() )
+		return;
+
+	StrVec_t dOpts = sphSplit ( sMode.cstr(), "," );
+
+	SmallStringHash_T<int> hStmt;
+	for ( int i=0; i<(int)( sizeof(g_dSqlStmts)/sizeof(g_dSqlStmts[0]) ); i++ )
+		hStmt.Add ( i, g_dSqlStmts[i] );
+
+	CSphBitvec tLogStatements ( STMT_TOTAL );
+	StringBuilder_c sWrongModes ( "," );
+
+	for ( const CSphString & sMode : dOpts )
+	{
+		if ( sMode=="0" ) // emplicitly disable all statements
+			return;
+
+		if ( sMode=="1" || sMode=="*" ) // enable all statements
+		{
+			tLogStatements.Set();
+			g_tLogStatements = tLogStatements;
+			return;
+		}
+
+		// check for whole statement enumerated
+		int * pMode = hStmt ( sMode );
+		if ( pMode )
+		{
+			tLogStatements.BitSet ( *pMode );
+			continue;
+		}
+
+		bool bHasWild = false;
+		for ( const char * s = sMode.cstr(); *s && !bHasWild; s++ )
+			bHasWild = sphIsWild ( *s );
+
+		if ( bHasWild )
+		{
+			bool bMatched = false;
+			for ( int i=0; i<(int)( sizeof(g_dSqlStmts)/sizeof(g_dSqlStmts[0]) ); i++ )
+			{
+				if ( sphWildcardMatch ( g_dSqlStmts[i], sMode.cstr() ) )
+				{
+					tLogStatements.BitSet ( i );
+					bMatched = true;
+					break;
+				}
+			}
+
+			if ( bMatched )
+				continue;
+		}
+
+		sWrongModes += sMode.cstr();
+	}
+
+	if ( tLogStatements.BitCount() )
+		g_tLogStatements = tLogStatements;
+
+	if ( !sWrongModes.IsEmpty() )
+		sphWarning ( "query_log_statements invalid values: %s", sWrongModes.cstr() );
+}
 
 void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMode ) REQUIRES ( MainThread )
 {
@@ -18366,6 +18445,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile, bool bTestMo
 	g_sMySQLVersion = hSearchd.GetStr ( "mysql_version_string", szMANTICORE_VERSION );
 
 	AllowOnlyNot ( hSearchd.GetInt ( "not_terms_only_allowed", 0 )!=0 );
+	ConfigureDaemonLog ( hSearchd.GetStr ( "query_log_commands" ) );
 }
 
 // ServiceMain -> ConfigureAndPreload -> ConfigureAndPreloadIndex

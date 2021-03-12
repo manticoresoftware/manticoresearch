@@ -26,6 +26,7 @@ index test
 {
 	source			= src
 	path			= <data_path/>/test
+	stored_fields	= title
 }
 </config>
 
@@ -111,6 +112,8 @@ INSERT INTO test VALUES
 <sphinxql>select id from test where id>0</sphinxql>
 <sphinxql>select id from test where id>0 force index(id)</sphinxql>
 <sphinxql>select id from test where id>0 ignore index(id)</sphinxql>
+
+<sphinxql>select * from test where id>60</sphinxql>
 
 </sphqueries>
 

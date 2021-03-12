@@ -157,7 +157,7 @@ public:
 		if ( tCurDocID==tDocID )
 			return tRowID;
 
-		int iDocsInCheckpoint = IsLastCheckpoint(pFound) ? m_nDocs % m_nDocsPerCheckpoint : m_nDocsPerCheckpoint;
+		int iDocsInCheckpoint = GetNumDocsInCheckpoint(pFound);
 		for ( int i = 1; i < iDocsInCheckpoint; i++ )
 		{
 			DocID_t tDeltaDocID = sphUnzipOffset(pCur);
@@ -207,6 +207,15 @@ protected:
 	inline bool IsLastCheckpoint ( const DocidLookupCheckpoint_t * pCheckpoint ) const
 	{
 		return pCheckpoint==m_pCheckpoints+m_nCheckpoints-1;
+	}
+
+	inline int GetNumDocsInCheckpoint ( const DocidLookupCheckpoint_t * pCheckpoint ) const
+	{
+		if ( !IsLastCheckpoint(pCheckpoint) )
+			return m_nDocsPerCheckpoint;
+
+		int iLeftover = m_nDocs % m_nDocsPerCheckpoint;
+		return iLeftover ? iLeftover : m_nDocsPerCheckpoint;
 	}
 };
 
@@ -304,14 +313,7 @@ private:
 			return;
 
 		m_iProcessedDocs = 0;
-		if ( IsLastCheckpoint() )
-		{
-			int iLeftover = m_nDocs % m_nDocsPerCheckpoint;
-			m_iCheckpointDocs = iLeftover ? iLeftover : m_nDocsPerCheckpoint;
-		}
-		else
-			m_iCheckpointDocs = m_nDocsPerCheckpoint;
-
+		m_iCheckpointDocs = GetNumDocsInCheckpoint(m_pCurCheckpoint);
 		m_pCur = m_pData + m_pCurCheckpoint->m_tOffset;
 		m_tCurDocID = m_pCurCheckpoint->m_tBaseDocID;
 	}

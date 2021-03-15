@@ -51,3 +51,17 @@ mysql> select LAST_INSERT_ID();
 +------------------+
 1 rows in set   
 ```
+
+### CONNECTION_ID()
+
+Returns current connection id.
+
+```sql
+mysql> select CONNECTION_ID();
++-----------------+
+| CONNECTION_ID() |
++-----------------+
+| 6               |
++-----------------+
+1 row in set (0.00 sec)
+```

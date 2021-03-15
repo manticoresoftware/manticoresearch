@@ -1549,7 +1549,7 @@ POST /search
   "query":
   {
     "match_all": {},
-    "equals" : { "any(product_codes)": 3 } }
+    "equals" : { "any(product_codes)": 3 }
   }
 }
 ```

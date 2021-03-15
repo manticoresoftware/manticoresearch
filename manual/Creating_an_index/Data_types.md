@@ -1528,7 +1528,7 @@ index products
 
 
 <!-- example for any/all MVA -->
-It supports filtering and aggregation, but not sorting. Filtering can made of condition that requires at least one element to pass (using [ANY()](../Functions/Arrays_and_conditions_functions.md#ANY%28%29)) or all ([ALL()](../Functions/Arrays_and_conditions_functions.md#ALL%28%29)).
+It supports filtering and aggregation, but not sorting. Filtering can be made of a condition that requires at least one element to pass (using [ANY()](../Functions/Arrays_and_conditions_functions.md#ANY%28%29)) or all ([ALL()](../Functions/Arrays_and_conditions_functions.md#ALL%28%29)).
 
 <!-- intro -->
 ##### SQL:

@@ -4,7 +4,7 @@
 
  The following characters should be escaped using backslash (`\`):
 
- ```
+```
 !    "    $    '    (    )    -    /    <    @    \    ^    |    ~
 ```
 
@@ -37,7 +37,7 @@ Since these functions will escape backslash for you, you only need to add one ba
 
 This also applies for the drivers that support (client-side) prepared statements. For example for PHP PDO prepared statements, you need to add a backslash for `$` character:
 
-```
+```php
 $statement = $ln_sph->prepare( "SELECT * FROM index WHERE MATCH(:match)");
 $match = '\$manticore';
 $statement->bindParam(':match',$match,PDO::PARAM_STR);
@@ -56,8 +56,7 @@ If using JSON libraries/functions that convert data structures to JSON strings t
 
 ## In clients
 
-The new official clients (which use HTTP as protocol) are using under the hood common JSON libraries/functions available on the respective programming language. Same rules of escaping as above are applied.
-
+The [new official clients](https://github.com/manticoresoftware/) (which use HTTP as protocol) are using under the hood common JSON libraries/functions available on the respective programming language. Same rules of escaping as above are applied.
 
 
 ## Escaping asterisk
@@ -68,3 +67,23 @@ Unlike the other special characters that are operators, the asterisk cannot be e
 In non-wildcard queries, the asterisk doesn't require escaping, regardless if it's in the charset_table or not.
 
 In wildcard queries, asterisk in the middle of a word doesn't require escaping. As a wildcard operator (either at start or end of the word), the asterisk will always be interpreted as the wildcard operator even if escaping is applied.
+
+## Escaping json node names in SQL
+
+To escape special characters in json nodes use a backtick. For example:
+
+```sql
+MySQL [(none)]> select * from t where json.`a=b`=234;
++---------------------+-------------+------+
+| id                  | json        | text |
++---------------------+-------------+------+
+| 8215557549554925578 | {"a=b":234} |      |
++---------------------+-------------+------+
+
+MySQL [(none)]> select * from t where json.`a:b`=123;
++---------------------+-------------+------+
+| id                  | json        | text |
++---------------------+-------------+------+
+| 8215557549554925577 | {"a:b":123} |      |
++---------------------+-------------+------+
+```

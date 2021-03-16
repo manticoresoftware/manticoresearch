@@ -25248,6 +25248,8 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( bool & bEOF, CSphString & sError )
 		for ( int i = 0; i < nAttrs; i++ )
 		{
 			const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
+			if ( sphIsInternalAttr(tAttr) )
+				continue;
 
 			// reset, and the value will be filled by IterateHits()
 			if ( i>=iFirstFieldLenAttr && i<=iLastFieldLenAttr )
